@@ -62,6 +62,38 @@ impl<V: Vertex, E: Edge<V>, F: Face<V, E>> CellComplex3d<V, E, F> {
 		incident_faces
 	}
 
+	/// Computes those faces which are two incident on all edges
+	pub fn two_incident_faces(&self) -> HashSet<&F> {
+		let mut two_incident_faces = HashSet::new();
+		for face in self.unique_faces() {
+			let mut all_two_incident = true;
+			for edge in face.edges() {
+				if self.edge_to_incident_faces(&edge).len() < 2 {
+					all_two_incident = false;
+					break;
+				}
+			}
+			if all_two_incident {
+				two_incident_faces.insert(face);
+			}
+		}
+		two_incident_faces
+	}
+
+	/// Computes those faces which are only incident to two-incident faces.
+	pub fn hyper_two_incident_faces(&self) -> HashSet<&F> {
+		let mut hyper_two_incident_faces = HashSet::new();
+		let two_incident_faces = self.two_incident_faces();
+		for incident_face in &two_incident_faces {
+			for incident_face in self.face_to_incident_faces(incident_face) {
+				if two_incident_faces.contains(incident_face) {
+					hyper_two_incident_faces.insert(incident_face);
+				}
+			}
+		}
+		hyper_two_incident_faces
+	}
+
 	pub fn build(&mut self, builder: &mut impl CellComplex3dBuilder<V, E, F>) {
 		let mut last_face = None;
 		while let Some(face) = builder.next_face(self, last_face) {

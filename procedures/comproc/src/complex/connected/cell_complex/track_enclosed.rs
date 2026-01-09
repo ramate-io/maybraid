@@ -8,29 +8,33 @@ pub struct TrackEnclosedFaces<V: Vertex, E: Edge<V>, F: Face<V, E>> {
 	//
 	// Because you can only add to the cell complex, this is safe to fill once the condition is met.
 	two_incident_edges: HashSet<E>,
-	// All of the faces which are completely made of two incident edges, i.e., enclosed.
+	// All of the faces which are completely made of two incident edges.
 	//
 	// Because you can only add to the cell complex, this is safe to fill once the condition is met.
-	enclosed_faces: HashSet<F>,
+	all_two_incident_faces: HashSet<F>,
 }
 
 impl<V: Vertex, E: Edge<V>, F: Face<V, E>> TrackEnclosedFaces<V, E, F> {
-	/// Creates a new track enclosed faces builder.
+	/// Creates a new track enclosed faces structure.
 	///
 	/// Note that because the user can provide a cell complex, you may miss faces.
 	/// Later, we implement [SafeTrackEnclosedFaces] which will ensure that all faces are tracked.
 	/// However, a user may want to build a cell complex only tracking enclosed faces from
 	/// a later point, so this API is public.
 	pub fn new(cell_complex: CellComplex3d<V, E, F>) -> Self {
-		Self { cell_complex, two_incident_edges: HashSet::new(), enclosed_faces: HashSet::new() }
+		Self {
+			cell_complex,
+			two_incident_edges: HashSet::new(),
+			all_two_incident_faces: HashSet::new(),
+		}
 	}
 
 	/// Adds a face to the track enclosed faces builder, tracking enclosed faces as a side effect.
 	pub fn add_face(&mut self, face: F) {
-		// add the face to the cell complex
+		// Add the face to the cell complex.
 		self.cell_complex.add_face(face.clone());
 
-		// compute the incident faces
+		// Compute the incident faces.
 		let incident_faces = self.cell_complex.face_to_incident_faces(&face);
 
 		// check if there are at least two incident edges for each incident face
@@ -42,14 +46,14 @@ impl<V: Vertex, E: Edge<V>, F: Face<V, E>> TrackEnclosedFaces<V, E, F> {
 			}
 		}
 
-		// for incident face, check if all of the edges are two incident edges
+		// For incident face, check if all of the edges are two incident edges.
 		for incident_face in incident_faces {
 			for edge in incident_face.edges() {
 				if !self.two_incident_edges.contains(&edge) {
-					return;
+					break;
 				}
 			}
-			self.enclosed_faces.insert(incident_face.clone());
+			self.all_two_incident_faces.insert(incident_face.clone());
 		}
 	}
 }
