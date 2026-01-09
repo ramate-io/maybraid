@@ -1,3 +1,5 @@
+pub mod track_enclosed;
+
 use bevy::prelude::*;
 use std::collections::{HashMap, HashSet};
 use std::fmt::Debug;
@@ -45,6 +47,21 @@ impl<O, V: Vertex, E: Edge<O, V>, F: Face<O, V, E>> CellComplex3d<O, V, E, F> {
 
 	pub fn unique_faces(&self) -> HashSet<&F> {
 		self.e_to_f.values().flat_map(|e| e.iter()).collect()
+	}
+
+	pub fn edge_to_incident_faces(&self, edge: &E) -> HashSet<&F> {
+		self.e_to_f.get(edge).map(|e| e.iter()).unwrap_or_default().collect()
+	}
+
+	/// Gets all the faces that are incident to a given face.
+	pub fn face_to_incident_faces(&self, face: &F, on: &O) -> HashSet<&F> {
+		let mut incident_faces = HashSet::new();
+		for edge in face.edges(on) {
+			for face in self.edge_to_incident_faces(&edge) {
+				incident_faces.insert(face);
+			}
+		}
+		incident_faces
 	}
 
 	pub fn build(&mut self, builder: &mut impl CellComplex3dBuilder<O, V, E, F>, on: &O) {
