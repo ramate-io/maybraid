@@ -1,3 +1,4 @@
+pub mod builders;
 pub mod track_enclosed;
 
 use bevy::prelude::*;
@@ -10,9 +11,17 @@ pub trait Vertex: Hash + Eq + Clone + Debug {
 }
 pub trait Edge<V: Vertex>: Hash + Eq + Clone + Debug {
 	fn vertices(&self) -> Vec<V>;
+
+	fn points(&self) -> Vec<Vec3> {
+		self.vertices().iter().map(|v| v.point()).collect()
+	}
 }
 pub trait Face<V: Vertex, E: Edge<V>>: Hash + Eq + Clone + Debug {
 	fn edges(&self) -> Vec<E>;
+
+	fn points(&self) -> Vec<Vec3> {
+		self.edges().iter().flat_map(|e| e.points()).collect()
+	}
 }
 
 pub struct CellComplex3d<V: Vertex, E: Edge<V>, F: Face<V, E>> {
