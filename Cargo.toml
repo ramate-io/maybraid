@@ -10,12 +10,14 @@ members = [
   # playgrounds
   "playgrounds/terrain",
   "playgrounds/objects",
+  "playgrounds/skill-map",
 
   # proceudres
   "procedures/terrain",
   "procedures/vegetation",
   "procedures/buildings",
   "procedures/comproc",
+  "procedures/skill-map",
 
   # util
   ## sdf

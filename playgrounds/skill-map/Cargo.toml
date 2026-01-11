@@ -1,0 +1,37 @@
+[package]
+name = "skill-map-playground"
+version = { workspace = true }
+edition  = { workspace = true }
+license  = { workspace = true }
+authors = { workspace = true }
+repository = { workspace = true }
+homepage = { workspace = true }
+publish = { workspace = true }
+rust-version = { workspace = true }
+
+[dependencies]
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+serde = { workspace = true }
+chrono = { workspace = true }
+log = { workspace = true }
+rayon = { workspace = true }
+
+# Bevy core dependencies
+bevy = { workspace = true }
+
+# Procedural generation
+noise = "0.9"
+bytemuck = { version = "1.14", features = ["derive"] }
+
+# sdf
+sdf = { workspace = true }
+render-item = { workspace = true }
+engine = { workspace = true }
+terrain-sdf = { workspace = true }
+vegetation-sdf = { workspace = true }
+chunk = { workspace = true }
+buildings = { workspace = true }
+
+[lints]
+workspace = true
