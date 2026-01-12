@@ -1,5 +1,4 @@
 use bevy::asset::RenderAssetUsages;
-use bevy::camera::visibility::RenderLayers;
 use bevy::camera::RenderTarget;
 use bevy::prelude::*;
 use bevy::render::render_resource::{TextureDimension, TextureFormat, TextureUsages};
@@ -97,24 +96,20 @@ impl SkillMapViewportPlugin {
 				};
 
 			// Update the camera render layer
-			commands.entity(camera).remove::<RenderLayers>();
 			commands.entity(camera).insert(render_layer.0.clone());
 
 			// Update the camera transform if there is one
 			if let Some(transform) = transform {
-				commands.entity(camera).remove::<Transform>();
 				commands.entity(camera).insert(*transform);
 			}
 
 			// Update the the viewport node if there is one
 			if let Some(node) = node {
-				commands.entity(viewport).remove::<Node>();
 				commands.entity(viewport).insert(node.clone());
 			}
 
 			// Update the the viewport border color if there is one
 			if let Some(border_color) = border_color {
-				commands.entity(viewport).remove::<BorderColor>();
 				commands.entity(viewport).insert(*border_color);
 			}
 		}

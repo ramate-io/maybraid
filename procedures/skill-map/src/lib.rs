@@ -1,14 +1,8 @@
 pub mod viewport;
 
-use bevy::asset::RenderAssetUsages;
 use bevy::camera::visibility::RenderLayers;
-use bevy::camera::RenderTarget;
 use bevy::prelude::*;
-use bevy::render::render_resource::{
-	Extent3d, TextureDescriptor, TextureDimension, TextureFormat, TextureUsages,
-};
 use std::collections::HashMap;
-use std::marker::PhantomData;
 use std::ops::Range;
 
 pub trait SkillmapInput: Component {}
@@ -65,7 +59,7 @@ impl SkillMapRenderLayers {
 			.map(|render_layer| (render_layer, ReifiedSkillMapId(skill_map_id.clone())))
 	}
 
-	fn get(&self, skill_map_id: SkillMapId) -> Option<SkillMapRenderLayer> {
+	fn get(&self, skill_map_id: &SkillMapId) -> Option<SkillMapRenderLayer> {
 		self.render_layers
 			.get(&skill_map_id)
 			.map(|render_layers| SkillMapRenderLayer(render_layers.clone()))
@@ -75,9 +69,8 @@ impl SkillMapRenderLayers {
 		&self,
 		skill_map_id: SkillMapId,
 	) -> Option<(SkillMapRenderLayer, ReifiedSkillMapId)> {
-		self.render_layers.get(&skill_map_id).map(|render_layers| {
-			(SkillMapRenderLayer(render_layers.clone()), ReifiedSkillMapId(skill_map_id.clone()))
-		})
+		self.get(&skill_map_id)
+			.map(|render_layers| (render_layers, ReifiedSkillMapId(skill_map_id.clone())))
 	}
 }
 
@@ -85,7 +78,7 @@ pub struct LazySkillMapRegistrationPlugin;
 
 impl LazySkillMapRegistrationPlugin {
 	/// Determines if a SkillMap has been reified, and if not, registers it as unreified.
-	fn register_skill_map(
+	pub fn register_skill_map(
 		&self,
 		mut commands: Commands,
 		skillmap_render_layers: Res<SkillMapRenderLayers>,
@@ -104,7 +97,7 @@ impl LazySkillMapRegistrationPlugin {
 	}
 
 	/// Reifies a SkillMap by mapping it to a render layer.
-	fn reify_skill_map(
+	pub fn reify_skill_map(
 		&self,
 		mut commands: Commands,
 		mut skillmap_render_layers: ResMut<SkillMapRenderLayers>,
