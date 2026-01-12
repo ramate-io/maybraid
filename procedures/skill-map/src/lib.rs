@@ -1,106 +1,122 @@
+pub mod viewport;
+
 use bevy::asset::RenderAssetUsages;
-use bevy::camera::ImageRenderTarget;
+use bevy::camera::visibility::RenderLayers;
 use bevy::camera::RenderTarget;
 use bevy::prelude::*;
 use bevy::render::render_resource::{
 	Extent3d, TextureDescriptor, TextureDimension, TextureFormat, TextureUsages,
 };
+use std::collections::HashMap;
+use std::marker::PhantomData;
+use std::ops::Range;
 
-#[derive(Component, Clone)]
-pub struct SkillMapRenderTarget(pub Handle<Image>);
+pub trait SkillmapInput: Component {}
 
-#[derive(Resource, Clone)]
-pub struct SkillMapPlugin {
-	skill_map_label: String,
+pub trait SkillmapOutput: Component {}
+
+/// The user facing SkillMap identifier.
+#[derive(Component, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct SkillMapId(pub u32);
+
+/// The internal SkillMap identifier, indicates the SkillMap id has been mapped to a render layer.
+#[derive(Component, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct ReifiedSkillMapId(SkillMapId);
+
+/// The SkillMap identifier that needs to be mapped to a render layer.
+#[derive(Component, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct UnreifiedSkillMapId(SkillMapId);
+
+/// The render layer for a given SkillMap.
+#[derive(Component, Clone, PartialEq, Eq)]
+pub struct SkillMapRenderLayer(pub RenderLayers);
+
+#[derive(Resource)]
+pub struct SkillMapRenderLayers {
+	render_layers: HashMap<SkillMapId, RenderLayers>,
+	range: Range<u32>,
 }
 
-impl SkillMapPlugin {
-	fn create_skillmap_render_target(mut images: ResMut<Assets<Image>>, mut commands: Commands) {
-		let size = Extent3d { width: 512, height: 512, depth_or_array_layers: 1 };
-
-		let mut image = Image {
-			texture_descriptor: TextureDescriptor {
-				label: Some("skillmap_render_target"),
-				size,
-				dimension: TextureDimension::D2,
-				format: TextureFormat::Bgra8UnormSrgb,
-				mip_level_count: 1,
-				sample_count: 1,
-				usage: TextureUsages::TEXTURE_BINDING
-					| TextureUsages::COPY_DST
-					| TextureUsages::RENDER_ATTACHMENT,
-				view_formats: &[TextureFormat::Bgra8UnormSrgb].as_slice(),
-			},
-			..default()
-		};
-
-		image.resize(size);
-		let handle = images.add(image);
-
-		commands.spawn(SkillMapRenderTarget(handle));
+impl SkillMapRenderLayers {
+	pub fn new() -> Self {
+		Self { render_layers: HashMap::new(), range: 0xcafe..0xdead }
 	}
 
-	fn create_skillmap_camera(
+	fn insert(&mut self, skill_map_id: SkillMapId) -> Option<SkillMapRenderLayer> {
+		match self.render_layers.get(&skill_map_id) {
+			Some(render_layers) => Some(SkillMapRenderLayer(render_layers.clone())),
+			None => {
+				if let Some(next) = self.range.next() {
+					let render_layers = RenderLayers::layer(next as usize);
+					self.render_layers.insert(skill_map_id, render_layers.clone());
+					Some(SkillMapRenderLayer(render_layers))
+				} else {
+					None
+				}
+			}
+		}
+	}
+
+	fn insert_reified(
+		&mut self,
+		skill_map_id: SkillMapId,
+	) -> Option<(SkillMapRenderLayer, ReifiedSkillMapId)> {
+		self.insert(skill_map_id.clone())
+			.map(|render_layer| (render_layer, ReifiedSkillMapId(skill_map_id.clone())))
+	}
+
+	fn get(&self, skill_map_id: SkillMapId) -> Option<SkillMapRenderLayer> {
+		self.render_layers
+			.get(&skill_map_id)
+			.map(|render_layers| SkillMapRenderLayer(render_layers.clone()))
+	}
+
+	fn get_reified(
+		&self,
+		skill_map_id: SkillMapId,
+	) -> Option<(SkillMapRenderLayer, ReifiedSkillMapId)> {
+		self.render_layers.get(&skill_map_id).map(|render_layers| {
+			(SkillMapRenderLayer(render_layers.clone()), ReifiedSkillMapId(skill_map_id.clone()))
+		})
+	}
+}
+
+pub struct LazySkillMapRegistrationPlugin;
+
+impl LazySkillMapRegistrationPlugin {
+	/// Determines if a SkillMap has been reified, and if not, registers it as unreified.
+	fn register_skill_map(
+		&self,
 		mut commands: Commands,
-		mut images: ResMut<Assets<Image>>,
-		query: Query<&SkillMapRenderTarget>,
+		skillmap_render_layers: Res<SkillMapRenderLayers>,
+		query: Query<(Entity, &SkillMapId), Added<SkillMapId>>,
 	) {
-		let mut image = Image::new_uninit(
-			default(),
-			TextureDimension::D2,
-			TextureFormat::Bgra8UnormSrgb,
-			RenderAssetUsages::all(),
-		);
-		image.texture_descriptor.usage = TextureUsages::TEXTURE_BINDING
-			| TextureUsages::COPY_DST
-			| TextureUsages::RENDER_ATTACHMENT;
-		let image_handle = images.add(image);
-
-		let camera = commands
-			.spawn((
-				Camera2d::default(),
-				Camera {
-					// Render this camera before our UI camera
-					order: -1,
-					target: RenderTarget::Image(image_handle.clone().into()),
-					..default()
-				},
-			))
-			.id();
-
-		commands.spawn((
-			Node {
-				position_type: PositionType::Absolute,
-				top: px(50),
-				left: px(50),
-				width: px(200),
-				height: px(200),
-				border: UiRect::all(px(5)),
-				..default()
-			},
-			BorderColor::all(Color::WHITE),
-			ViewportNode::new(camera),
-		));
+		for (entity, skill_map_id) in &query {
+			if let Some((render_layer, reified_skill_map_id)) =
+				skillmap_render_layers.get_reified(skill_map_id.clone())
+			{
+				commands.entity(entity).insert(reified_skill_map_id);
+				commands.entity(entity).insert(render_layer);
+			} else {
+				commands.entity(entity).insert(UnreifiedSkillMapId(skill_map_id.clone()));
+			}
+		}
 	}
 
-	fn build_skillmap_subapp(app: &mut App) {
-		let mut sub_app = SubApp::new();
-
-		sub_app
-			.add_plugins(MinimalPlugins)
-			.add_plugins(AssetPlugin::default()) // needed for sprite textures
-			.add_systems(Startup, skillmap_setup)
-			.add_systems(Update, skillmap_update);
-
-		app.add_sub_app("skillmap", sub_app);
+	/// Reifies a SkillMap by mapping it to a render layer.
+	fn reify_skill_map(
+		&self,
+		mut commands: Commands,
+		mut skillmap_render_layers: ResMut<SkillMapRenderLayers>,
+		query: Query<(Entity, &SkillMapId, &UnreifiedSkillMapId), Added<UnreifiedSkillMapId>>,
+	) {
+		for (entity, _skill_map_id, unreified_skill_map_id) in &query {
+			if let Some((render_layer, reified_skill_map_id)) =
+				skillmap_render_layers.insert_reified(unreified_skill_map_id.0.clone())
+			{
+				commands.entity(entity).insert(reified_skill_map_id);
+				commands.entity(entity).insert(render_layer);
+			}
+		}
 	}
-}
-
-fn main() {
-	App::new()
-		.add_plugins(DefaultPlugins)
-		.add_systems(Startup, create_skillmap_render_target)
-		.add_systems(Startup, build_skillmap_subapp)
-		.add_systems(Startup, setup_ui)
-		.run();
 }
