@@ -15,15 +15,18 @@ pub struct SkillMapViewport;
 #[derive(Component)]
 pub struct SkillMapViewportCamera;
 
-#[derive(Resource)]
+#[derive(Resource, Default)]
 pub struct SkillMapViewports {
 	/// We store the SkillMap to viewport entity mapping.
 	viewport_id_to_entities: HashMap<SkillMapViewportId, (Entity, Entity)>,
 }
 
-pub struct SkillMapViewportPlugin {}
+pub struct SkillMapViewportPlugin;
 
 impl SkillMapViewportPlugin {
+	/// When spawned, this function is called to register a skillmap to a viewport.
+	///
+	/// It can also be called to update the viewport to point to a new skillmap.
 	pub fn register_skillmap_to_viewport(
 		mut commands: Commands,
 		mut images: ResMut<Assets<Image>>,
@@ -113,5 +116,12 @@ impl SkillMapViewportPlugin {
 				commands.entity(viewport).insert(*border_color);
 			}
 		}
+	}
+}
+
+impl Plugin for SkillMapViewportPlugin {
+	fn build(&self, app: &mut App) {
+		app.world_mut().commands().insert_resource(SkillMapViewports::default());
+		app.add_systems(Update, Self::register_skillmap_to_viewport);
 	}
 }

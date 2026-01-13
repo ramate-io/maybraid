@@ -5,6 +5,8 @@ use bevy::prelude::*;
 use std::collections::HashMap;
 use std::ops::Range;
 
+use viewport::SkillMapViewportPlugin;
+
 pub trait SkillmapInput: Component {}
 
 pub trait SkillmapOutput: Component {}
@@ -24,6 +26,9 @@ pub struct UnreifiedSkillMapId(SkillMapId);
 /// The render layer for a given SkillMap.
 #[derive(Component, Clone, PartialEq, Eq)]
 pub struct SkillMapRenderLayer(pub RenderLayers);
+
+#[derive(Component, Clone, PartialEq, Eq)]
+pub struct SkillMapRenderTarget;
 
 #[derive(Resource)]
 pub struct SkillMapRenderLayers {
@@ -79,7 +84,6 @@ pub struct LazySkillMapRegistrationPlugin;
 impl LazySkillMapRegistrationPlugin {
 	/// Determines if a SkillMap has been reified, and if not, registers it as unreified.
 	pub fn register_skill_map(
-		&self,
 		mut commands: Commands,
 		skillmap_render_layers: Res<SkillMapRenderLayers>,
 		query: Query<(Entity, &SkillMapId), Added<SkillMapId>>,
@@ -98,7 +102,6 @@ impl LazySkillMapRegistrationPlugin {
 
 	/// Reifies a SkillMap by mapping it to a render layer.
 	pub fn reify_skill_map(
-		&self,
 		mut commands: Commands,
 		mut skillmap_render_layers: ResMut<SkillMapRenderLayers>,
 		query: Query<(Entity, &SkillMapId, &UnreifiedSkillMapId), Added<UnreifiedSkillMapId>>,
@@ -111,5 +114,36 @@ impl LazySkillMapRegistrationPlugin {
 				commands.entity(entity).insert(render_layer);
 			}
 		}
+	}
+
+	/// Unpacks the render layer for anything that has a SkillMapRenderTarget component.
+	pub fn unpack_render_layer(
+		mut commands: Commands,
+		query: Query<
+			(Entity, &SkillMapRenderTarget, &ReifiedSkillMapId, &SkillMapRenderLayer),
+			(Added<ReifiedSkillMapId>, Added<SkillMapRenderTarget>),
+		>,
+	) {
+		for (entity, _skill_map_render_target, _reified_skill_map_id, render_layer) in &query {
+			commands.entity(entity).insert(render_layer.0.clone());
+		}
+	}
+}
+
+impl Plugin for LazySkillMapRegistrationPlugin {
+	fn build(&self, app: &mut App) {
+		app.world_mut().commands().insert_resource(SkillMapRenderLayers::new());
+		app.add_systems(Update, Self::register_skill_map);
+		app.add_systems(Update, Self::reify_skill_map);
+		app.add_systems(Update, Self::unpack_render_layer);
+	}
+}
+
+pub struct SkillMapPlugin;
+
+impl Plugin for SkillMapPlugin {
+	fn build(&self, app: &mut App) {
+		app.add_plugins(LazySkillMapRegistrationPlugin);
+		app.add_plugins(SkillMapViewportPlugin);
 	}
 }
