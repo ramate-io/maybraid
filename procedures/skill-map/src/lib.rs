@@ -38,7 +38,11 @@ pub struct SkillMapRenderLayers {
 
 impl SkillMapRenderLayers {
 	pub fn new() -> Self {
-		Self { render_layers: HashMap::new(), range: 0xcafe..0xdead }
+		Self {
+			render_layers: HashMap::new(),
+			// Currently, the render layer cannot be greater than 64 in bevy's RenderLayers implementation.
+			range: 24..34,
+		}
 	}
 
 	fn insert(&mut self, skill_map_id: SkillMapId) -> Option<SkillMapRenderLayer> {
@@ -140,6 +144,12 @@ impl Plugin for LazySkillMapRegistrationPlugin {
 }
 
 pub struct SkillMapPlugin;
+
+impl Default for SkillMapPlugin {
+	fn default() -> Self {
+		Self {}
+	}
+}
 
 impl Plugin for SkillMapPlugin {
 	fn build(&self, app: &mut App) {

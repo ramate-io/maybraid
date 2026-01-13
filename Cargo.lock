@@ -4269,6 +4269,7 @@ dependencies = [
  "render-item",
  "sdf",
  "serde",
+ "skill-map",
  "terrain-sdf",
  "thiserror 1.0.69",
  "vegetation-sdf",

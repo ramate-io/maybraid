@@ -32,6 +32,7 @@ terrain-sdf = { workspace = true }
 vegetation-sdf = { workspace = true }
 chunk = { workspace = true }
 buildings = { workspace = true }
+skill-map = { workspace = true }
 
 [lints]
 workspace = true

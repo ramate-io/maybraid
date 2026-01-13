@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use crate::{ReifiedSkillMapId, SkillMapRenderLayer};
 
 #[derive(Component, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct SkillMapViewportId(u32);
+pub struct SkillMapViewportId(pub u32);
 
 #[derive(Component)]
 pub struct SkillMapViewport;
@@ -79,8 +79,8 @@ impl SkillMapViewportPlugin {
 						let viewport = commands.spawn((
 							Node {
 								position_type: PositionType::Absolute,
-								top: px(50),
-								left: px(50),
+								bottom: px(50),
+								right: px(50),
 								width: px(200),
 								height: px(200),
 								border: UiRect::all(px(5)),

@@ -5,6 +5,7 @@ pub mod buildings_playground;
 mod camera;
 mod checkerboard_material;
 mod ground;
+pub mod skill_map_playground;
 pub mod tree;
 mod ui;
 
@@ -40,6 +41,9 @@ impl Plugin for SkillMapPlugin {
 			bevy::pbr::MaterialPlugin::<checkerboard_material::CheckerboardMaterial>::default(),
 		);
 
+		// Plugins for the skill map playground
+		app.add_plugins(skill_map::SkillMapPlugin::default());
+
 		app.insert_resource(ClearColor(Color::hsla(201.0, 0.69, 0.62, 1.0)))
 			.insert_resource(ground::CheckerSize::default())
 			.add_systems(
@@ -73,6 +77,7 @@ impl Plugin for SkillMapPlugin {
 							resource_exists::<buildings_playground::BuildingMaterial<EdgeMaterial>>,
 						)
 						.run_if(run_once),
+					skill_map_playground::skill_map_playground.run_if(run_once),
 				),
 			);
 	}
