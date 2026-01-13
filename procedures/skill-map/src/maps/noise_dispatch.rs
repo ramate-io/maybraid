@@ -35,9 +35,26 @@ impl<T: NoiseDispatchItem> NoiseDispatch<T> {
 
 #[derive(Component, Clone)]
 pub struct NoiseSkillMapExtents {
-	min: Vec2,
-	max: Vec2,
-	steps: u32,
+	pub min: Vec2,
+	pub max: Vec2,
+	pub steps: u32,
+}
+
+impl NoiseSkillMapExtents {
+	pub fn width(&self) -> f32 {
+		self.max.x - self.min.x
+	}
+
+	pub fn height(&self) -> f32 {
+		self.max.y - self.min.y
+	}
+
+	pub fn x_step_size(&self) -> f32 {
+		self.width() / self.steps as f32
+	}
+	pub fn y_step_size(&self) -> f32 {
+		self.height() / self.steps as f32
+	}
 }
 
 impl Default for NoiseSkillMapExtents {

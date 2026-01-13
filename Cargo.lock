@@ -4262,6 +4262,7 @@ dependencies = [
  "bytemuck",
  "chrono",
  "chunk",
+ "comproc",
  "engine",
  "log",
  "noise",

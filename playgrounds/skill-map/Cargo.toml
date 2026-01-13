@@ -33,6 +33,7 @@ vegetation-sdf = { workspace = true }
 chunk = { workspace = true }
 buildings = { workspace = true }
 skill-map = { workspace = true }
+comproc = { workspace = true }
 
 [lints]
 workspace = true
