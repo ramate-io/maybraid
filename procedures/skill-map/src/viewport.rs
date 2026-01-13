@@ -79,8 +79,8 @@ impl SkillMapViewportPlugin {
 						let viewport = commands.spawn((
 							Node {
 								position_type: PositionType::Absolute,
-								bottom: px(50),
-								right: px(50),
+								bottom: px(10),
+								right: px(10),
 								width: px(200),
 								height: px(200),
 								border: UiRect::all(px(5)),

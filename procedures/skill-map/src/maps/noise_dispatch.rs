@@ -140,7 +140,9 @@ impl<T: NoiseDispatchItem, N: NoiseFn<f64, 2> + Seedable + Send + Sync + 'static
 			Added<SkillMapRenderLayer>,
 		>,
 	) {
+		log::info!("Spawning noise skill map");
 		for (noise_skill_map, transform, render_layer) in &query {
+			log::info!("Spawning noise skill map at {:?}", transform.translation);
 			noise_skill_map.spawn_noise_skill_map(
 				&mut commands,
 				transform.translation,

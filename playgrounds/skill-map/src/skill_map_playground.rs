@@ -30,13 +30,18 @@ impl NoiseDispatchItem for DemoNoiseDispatchItem {
 		// Spawn a colored square sprite the width and height of one extent step and the color based on the value
 		let width = extents.max.x - extents.min.x;
 		let height = extents.max.y - extents.min.y;
-		let color = Color::srgb(self.value, self.value, self.value);
+
+		// pink if values greater than 0, blue if less than 0
+		let color =
+			if self.value > 0.0 { Color::srgb(1.0, 0.0, 1.0) } else { Color::srgb(0.0, 0.0, 1.0) };
 
 		let entity = commands.spawn((
 			Sprite { custom_size: Some(Vec2::new(width, height)), color: color, ..default() },
 			Transform::from_translation(position),
 			render_layer,
 		));
+
+		log::info!("Spawned noise dispatched item at {:?}", position);
 
 		entity.id()
 	}
@@ -48,6 +53,7 @@ pub fn skill_map_playground(mut commands: Commands) {
 	commands.spawn((
 		SkillMapId(0),
 		SkillMapViewportId(0),
+		Transform::from_translation(Vec3::new(0.0, 0.0, 0.0)),
 		DispatchNoiseSkillMap::<DemoNoiseDispatchItem, Perlin>::new(
 			NoiseConfig::<2, Perlin>::new(Perlin::new(0)),
 			NoiseSkillMapExtents::default(),
@@ -61,6 +67,6 @@ impl Plugin for SkillMapPlaygroundPlugin {
 	fn build(&self, app: &mut App) {
 		app.add_plugins(SkillMapPlugin::default());
 		app.add_plugins(NoiseSkillMapPlugin::<DemoNoiseDispatchItem, Perlin>::default());
-		app.add_systems(Update, skill_map_playground);
+		app.add_systems(Update, skill_map_playground.run_if(run_once));
 	}
 }

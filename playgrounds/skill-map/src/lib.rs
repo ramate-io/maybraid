@@ -26,6 +26,7 @@ use vegetation_sdf::{
 pub use camera::CameraController;
 
 pub use sdf;
+pub use skill_map_playground::SkillMapPlaygroundPlugin;
 
 pub struct SkillMapPlugin {
 	pub seed: u32,
@@ -42,7 +43,7 @@ impl Plugin for SkillMapPlugin {
 		);
 
 		// Plugins for the skill map playground
-		app.add_plugins(skill_map::SkillMapPlugin::default());
+		app.add_plugins(SkillMapPlaygroundPlugin);
 
 		app.insert_resource(ClearColor(Color::hsla(201.0, 0.69, 0.62, 1.0)))
 			.insert_resource(ground::CheckerSize::default())
@@ -77,7 +78,6 @@ impl Plugin for SkillMapPlugin {
 							resource_exists::<buildings_playground::BuildingMaterial<EdgeMaterial>>,
 						)
 						.run_if(run_once),
-					skill_map_playground::skill_map_playground.run_if(run_once),
 				),
 			);
 	}
