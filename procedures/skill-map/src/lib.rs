@@ -1,3 +1,4 @@
+pub mod maps;
 pub mod viewport;
 
 use bevy::camera::visibility::RenderLayers;

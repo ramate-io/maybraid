@@ -23,7 +23,7 @@ bevy = { workspace = true }
 noise = "0.9"
 
 # Procedural generation
-sdf = { workspace = true }
+comproc = { workspace = true }
 
 [lints]
 workspace = true
