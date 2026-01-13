@@ -14,6 +14,7 @@ pub trait NoiseDispatchItem: Component + Send + Sync + Debug {
 		commands: &mut Commands,
 		position: Vec3,
 		render_layer: RenderLayers,
+		extents: &NoiseSkillMapExtents,
 	) -> Entity;
 }
 
@@ -87,6 +88,7 @@ impl<T: NoiseDispatchItem, N: NoiseFn<f64, 2> + Seedable + Send + Sync>
 					commands,
 					position.extend(0.0),
 					render_layer.clone(),
+					&self.extents,
 				);
 				entities.push(entity);
 			}
