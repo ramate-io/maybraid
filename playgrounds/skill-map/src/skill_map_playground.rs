@@ -3,9 +3,11 @@ use bevy::prelude::*;
 use comproc::noise::config::NoiseConfig;
 use noise::Perlin;
 use skill_map::{
-	maps::noise_dispatch::{DispatchNoiseSkillMap, NoiseDispatchItem, NoiseSkillMapExtents},
+	maps::noise_dispatch::{
+		DispatchNoiseSkillMap, NoiseDispatchItem, NoiseSkillMapExtents, NoiseSkillMapPlugin,
+	},
 	viewport::SkillMapViewportId,
-	SkillMapId,
+	SkillMapId, SkillMapPlugin,
 };
 
 #[derive(Component, Debug, Clone)]
@@ -51,4 +53,14 @@ pub fn skill_map_playground(mut commands: Commands) {
 			NoiseSkillMapExtents::default(),
 		),
 	));
+}
+
+pub struct SkillMapPlaygroundPlugin;
+
+impl Plugin for SkillMapPlaygroundPlugin {
+	fn build(&self, app: &mut App) {
+		app.add_plugins(SkillMapPlugin::default());
+		app.add_plugins(NoiseSkillMapPlugin::<DemoNoiseDispatchItem, Perlin>::default());
+		app.add_systems(Update, skill_map_playground);
+	}
 }

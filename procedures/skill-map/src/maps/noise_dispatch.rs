@@ -114,9 +114,20 @@ impl<T: NoiseDispatchItem, N: NoiseFn<f64, 2> + Seedable + Send + Sync>
 	}
 }
 
-#[derive(Debug, Clone, Default)]
-pub struct NoiseSkillMapPlugin<T: NoiseDispatchItem, N: NoiseFn<f64, 2> + Seedable + Send + Sync> {
+#[derive(Debug, Clone)]
+pub struct NoiseSkillMapPlugin<
+	T: NoiseDispatchItem,
+	N: NoiseFn<f64, 2> + Seedable + Send + Sync + 'static,
+> {
 	__marker: PhantomData<(T, N)>,
+}
+
+impl<T: NoiseDispatchItem, N: NoiseFn<f64, 2> + Seedable + Send + Sync + 'static> Default
+	for NoiseSkillMapPlugin<T, N>
+{
+	fn default() -> Self {
+		Self { __marker: PhantomData }
+	}
 }
 
 impl<T: NoiseDispatchItem, N: NoiseFn<f64, 2> + Seedable + Send + Sync + 'static>
@@ -136,5 +147,13 @@ impl<T: NoiseDispatchItem, N: NoiseFn<f64, 2> + Seedable + Send + Sync + 'static
 				render_layer.0.clone(),
 			);
 		}
+	}
+}
+
+impl<T: NoiseDispatchItem, N: NoiseFn<f64, 2> + Seedable + Send + Sync + 'static> Plugin
+	for NoiseSkillMapPlugin<T, N>
+{
+	fn build(&self, app: &mut App) {
+		app.add_systems(Update, Self::spawn_noise_skill_map);
 	}
 }
