@@ -49,6 +49,14 @@ impl NoiseSkillMapExtents {
 		self.max.y - self.min.y
 	}
 
+	pub fn center(&self) -> Vec2 {
+		Vec2::new(self.min.x + self.width() / 2.0, self.min.y + self.height() / 2.0)
+	}
+
+	pub fn half_size(&self) -> Vec2 {
+		Vec2::new(self.width() / 2.0, self.height() / 2.0)
+	}
+
 	pub fn x_step_size(&self) -> f32 {
 		self.width() / self.steps as f32
 	}
@@ -140,7 +148,6 @@ impl<T: NoiseDispatchItem, N: NoiseFn<f64, 2> + Seedable + Send + Sync + 'static
 			Added<SkillMapRenderLayer>,
 		>,
 	) {
-		log::info!("Spawning noise skill map");
 		for (noise_skill_map, transform, render_layer) in &query {
 			log::info!("Spawning noise skill map at {:?}", transform.translation);
 			noise_skill_map.spawn_noise_skill_map(
