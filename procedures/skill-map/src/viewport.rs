@@ -24,6 +24,12 @@ pub struct SkillMapViewports {
 #[derive(Component)]
 pub struct TrackCameraTransform;
 
+#[derive(Component)]
+pub enum ApplyCameraTransform {
+	Change2d,
+	Value,
+}
+
 pub struct SkillMapViewportPlugin;
 
 impl SkillMapViewportPlugin {
@@ -146,12 +152,46 @@ impl SkillMapViewportPlugin {
 				if let Ok((_camera_entity, camera_transform, _skillmap_viewport_camera)) =
 					camera_query.get(camera.clone())
 				{
-					log::info!(
-						"Tracking camera transform for viewport {:?} for entity {:?}",
-						viewport_id,
-						tracking_request_entity
-					);
 					commands.entity(tracking_request_entity).insert(*camera_transform);
+				}
+			}
+		}
+	}
+
+	pub fn apply_camera_transform(
+		mut commands: Commands,
+		skillmap_viewports: Res<SkillMapViewports>,
+		applying_request_query: Query<
+			(Entity, &ApplyCameraTransform, &SkillMapViewportId, &Transform),
+			Changed<Transform>,
+		>,
+		camera_query: Query<(Entity, &Transform, &SkillMapViewportCamera), With<Camera2d>>,
+	) {
+		for (_applying_request_entity, apply_camera_transform, viewport_id, transform) in
+			applying_request_query.iter()
+		{
+			if let Some((camera, _viewport)) =
+				skillmap_viewports.viewport_id_to_entities.get(viewport_id)
+			{
+				if let Ok((camera_entity, camera_transform, _skillmap_viewport_camera)) =
+					camera_query.get(camera.clone())
+				{
+					log::info!(
+						"Applying camera transform for viewport {:?} for entity {:?}",
+						viewport_id,
+						camera_entity
+					);
+
+					match apply_camera_transform {
+						ApplyCameraTransform::Change2d => {
+							let mut new_transform = camera_transform.clone();
+							new_transform.translation += transform.translation;
+							commands.entity(camera_entity).insert(new_transform);
+						}
+						ApplyCameraTransform::Value => {
+							commands.entity(camera_entity).insert(*transform);
+						}
+					}
 				}
 			}
 		}
@@ -163,5 +203,6 @@ impl Plugin for SkillMapViewportPlugin {
 		app.world_mut().commands().insert_resource(SkillMapViewports::default());
 		app.add_systems(Update, Self::register_skillmap_to_viewport);
 		app.add_systems(Update, Self::track_camera_transform);
+		app.add_systems(Update, Self::apply_camera_transform);
 	}
 }

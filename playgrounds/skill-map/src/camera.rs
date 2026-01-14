@@ -1,4 +1,6 @@
 use bevy::prelude::*;
+use skill_map::viewport::{ApplyCameraTransform, SkillMapViewportId};
+
 use std::f32::consts::PI;
 
 #[derive(Component)]
@@ -65,6 +67,7 @@ pub fn setup_camera(mut commands: Commands) {
 }
 
 pub fn camera_controller(
+	mut commands: Commands,
 	keyboard_input: Res<ButtonInput<KeyCode>>,
 	mut mouse_motion: MessageReader<bevy::input::mouse::MouseMotion>,
 	time: Res<Time>,
@@ -109,12 +112,34 @@ pub fn camera_controller(
 	if keyboard_input.pressed(KeyCode::Space) {
 		movement += Vec3::Y;
 	}
-	if keyboard_input.pressed(KeyCode::ShiftLeft) {
-		movement -= Vec3::Y;
-	}
 
 	if movement.length() > 0.0 {
 		movement = movement.normalize() * controller.speed * time.delta_secs();
 		transform.translation += movement;
+	}
+
+	if keyboard_input.pressed(KeyCode::ShiftLeft) || keyboard_input.pressed(KeyCode::ShiftRight) {
+		let mut movement_2d = Vec3::ZERO;
+		if keyboard_input.pressed(KeyCode::KeyW) {
+			movement_2d.y += 10.0;
+		}
+		if keyboard_input.pressed(KeyCode::KeyS) {
+			movement_2d.y -= 10.0;
+		}
+		if keyboard_input.pressed(KeyCode::KeyA) {
+			movement_2d.x -= 10.0;
+		}
+		if keyboard_input.pressed(KeyCode::KeyD) {
+			movement_2d.x += 10.0;
+		}
+
+		let transform_2d = Transform::from_translation(movement_2d);
+		commands.spawn((SkillMapViewportId(0), ApplyCameraTransform::Change2d, transform_2d));
+	} else {
+		commands.spawn((
+			SkillMapViewportId(0),
+			ApplyCameraTransform::Value,
+			Transform::from_translation(Vec3::new(0.0, 0.0, 1.000)),
+		));
 	}
 }
