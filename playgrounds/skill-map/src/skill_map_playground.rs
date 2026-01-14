@@ -36,14 +36,18 @@ pub fn skill_map_playground(mut commands: Commands) {
 	));
 
 	// add a white dot to track the camera transform
-	commands.spawn((
-		SkillMapId(0),
-		SkillMapViewportId(0),
-		SkillMapRenderTarget,
-		TrackCameraTransform,
-		Sprite { custom_size: Some(Vec2::new(100.0, 100.0)), color: Color::WHITE, ..default() },
-		Transform::from_translation(Vec3::new(0.0, 0.0, 0.0)),
-	));
+	let id = commands
+		.spawn((
+			SkillMapId(0),
+			SkillMapViewportId(0),
+			SkillMapRenderTarget,
+			TrackCameraTransform,
+			Sprite { custom_size: Some(Vec2::new(10.0, 10.0)), color: Color::WHITE, ..default() },
+			Transform::from_translation(Vec3::new(0.0, 0.0, 0.001)),
+		))
+		.id();
+
+	log::info!("Track camera transform entity: {:?}", id);
 }
 
 #[derive(Component, Debug, Clone)]

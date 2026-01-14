@@ -127,10 +127,11 @@ impl LazySkillMapRegistrationPlugin {
 		mut commands: Commands,
 		query: Query<
 			(Entity, &SkillMapRenderTarget, &ReifiedSkillMapId, &SkillMapRenderLayer),
-			(Added<ReifiedSkillMapId>, Added<SkillMapRenderTarget>),
+			Added<ReifiedSkillMapId>,
 		>,
 	) {
 		for (entity, _skill_map_render_target, _reified_skill_map_id, render_layer) in &query {
+			log::info!("Unpacking render layer for entity {:?}", entity);
 			commands.entity(entity).insert(render_layer.0.clone());
 		}
 	}

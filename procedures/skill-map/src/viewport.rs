@@ -6,7 +6,7 @@ use std::collections::HashMap;
 
 use crate::{ReifiedSkillMapId, SkillMapRenderLayer};
 
-#[derive(Component, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct SkillMapViewportId(pub u32);
 
 #[derive(Component)]
@@ -146,6 +146,11 @@ impl SkillMapViewportPlugin {
 				if let Ok((_camera_entity, camera_transform, _skillmap_viewport_camera)) =
 					camera_query.get(camera.clone())
 				{
+					log::info!(
+						"Tracking camera transform for viewport {:?} for entity {:?}",
+						viewport_id,
+						tracking_request_entity
+					);
 					commands.entity(tracking_request_entity).insert(*camera_transform);
 				}
 			}
