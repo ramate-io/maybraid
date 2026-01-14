@@ -1,3 +1,4 @@
+pub mod interaction;
 pub mod maps;
 pub mod viewport;
 
