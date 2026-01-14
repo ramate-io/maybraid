@@ -2,9 +2,9 @@ use bevy::camera::visibility::RenderLayers;
 use bevy::math::bounding::Aabb2d;
 use bevy::prelude::*;
 use comproc::noise::config::NoiseConfig;
-use noise::Perlin;
+use noise::{Fbm, OpenSimplex};
 use skill_map::{
-	interaction::{CollisionLayer, LeftCollidable, RightCollidable, RightCollider},
+	interaction::{CollisionLayer, RightCollidable, RightCollider},
 	maps::noise_dispatch::{
 		DispatchNoiseSkillMap, NoiseDispatchItem, NoiseSkillMapExtents, NoiseSkillMapPlugin,
 	},
@@ -17,7 +17,7 @@ pub struct SkillMapPlaygroundPlugin;
 impl Plugin for SkillMapPlaygroundPlugin {
 	fn build(&self, app: &mut App) {
 		app.add_plugins(SkillMapPlugin::default());
-		app.add_plugins(NoiseSkillMapPlugin::<Tile, Perlin>::default());
+		app.add_plugins(NoiseSkillMapPlugin::<Tile, Fbm<OpenSimplex>>::default());
 		app.add_systems(Update, skill_map_playground.run_if(run_once));
 	}
 }
@@ -29,8 +29,8 @@ pub fn skill_map_playground(mut commands: Commands) {
 		SkillMapId(0),
 		SkillMapViewportId(0),
 		Transform::from_translation(Vec3::new(0.0, 0.0, 0.0)),
-		DispatchNoiseSkillMap::<Tile, Perlin>::new(
-			NoiseConfig::<2, Perlin>::new(Perlin::new(0)),
+		DispatchNoiseSkillMap::<Tile, Fbm<OpenSimplex>>::new(
+			NoiseConfig::<2, Fbm<OpenSimplex>>::new(Fbm::new(0)).with_frequency(0.1),
 			NoiseSkillMapExtents::default(),
 		),
 	));
@@ -42,7 +42,9 @@ pub struct InteractionLayer;
 impl CollisionLayer for InteractionLayer {}
 
 #[derive(Component, Debug, Clone, Default)]
-pub struct Water {}
+pub struct Water {
+	value: f32,
+}
 
 impl RightCollidable for Water {
 	fn spawn_right_collision_entity(&self, commands: &mut Commands, _left: Entity) -> Entity {
@@ -51,8 +53,8 @@ impl RightCollidable for Water {
 }
 
 impl NoiseDispatchItem for Water {
-	fn from_noise_dispatch_value(_value: f32) -> Self {
-		Self::default()
+	fn from_noise_dispatch_value(value: f32) -> Self {
+		Self { value }
 	}
 
 	fn spawn_noise_dispatched_item(
@@ -68,17 +70,24 @@ impl NoiseDispatchItem for Water {
 		// color is blue
 		let color = Color::srgb(0.0, 0.0, 1.0);
 
-		let entity = commands.spawn((
-			Sprite { custom_size: Some(Vec2::new(width, height)), color: color, ..default() },
-			Transform::from_translation(position),
-			render_layer,
-			RightCollider::new(self.clone(), Aabb2d::new(extents.center(), extents.half_size())),
+		let entity = commands
+			.spawn((
+				Sprite { custom_size: Some(Vec2::new(width, height)), color: color, ..default() },
+				Transform::from_translation(position),
+				render_layer.clone(),
+			))
+			.id();
+
+		// spawn a small dot at the center of the sprite
+		let _collision_entity = commands.spawn((
+			RightCollider::new(
+				self.clone(),
+				Aabb2d::new(extents.center(), extents.half_size()), // incorrect
+			),
 			InteractionLayer,
 		));
 
-		log::info!("Spawned noise dispatched item at {:?}", position);
-
-		entity.id()
+		entity
 	}
 }
 
@@ -109,17 +118,21 @@ impl NoiseDispatchItem for Land {
 		// color is brown
 		let color = Color::srgb(0.5, 0.25, 0.0);
 
-		let entity = commands.spawn((
-			Sprite { custom_size: Some(Vec2::new(width, height)), color: color, ..default() },
-			Transform::from_translation(position),
-			render_layer,
+		let entity = commands
+			.spawn((
+				Sprite { custom_size: Some(Vec2::new(width, height)), color: color, ..default() },
+				Transform::from_translation(position),
+				render_layer,
+			))
+			.id();
+
+		// todo: debug why spawning alongside sprite fails
+		let _collision_entity = commands.spawn((
 			RightCollider::new(self.clone(), Aabb2d::new(extents.center(), extents.half_size())),
 			InteractionLayer,
 		));
 
-		log::info!("Spawned noise dispatched item at {:?}", position);
-
-		entity.id()
+		entity
 	}
 }
 
@@ -150,17 +163,20 @@ impl NoiseDispatchItem for PowerUp {
 		// color is purple
 		let color = Color::srgb(1.0, 0.0, 1.0);
 
-		let entity = commands.spawn((
-			Sprite { custom_size: Some(Vec2::new(width, height)), color: color, ..default() },
-			Transform::from_translation(position),
-			render_layer,
+		let entity = commands
+			.spawn((
+				Sprite { custom_size: Some(Vec2::new(width, height)), color: color, ..default() },
+				Transform::from_translation(position),
+				render_layer,
+			))
+			.id();
+
+		let _collision_entity = commands.spawn((
 			RightCollider::new(self.clone(), Aabb2d::new(extents.center(), extents.half_size())),
 			InteractionLayer,
 		));
 
-		log::info!("Spawned noise dispatched item at {:?}", position);
-
-		entity.id()
+		entity
 	}
 }
 
@@ -183,9 +199,9 @@ impl RightCollidable for Tile {
 
 impl NoiseDispatchItem for Tile {
 	fn from_noise_dispatch_value(value: f32) -> Self {
-		if value < -0.5 {
-			Tile::Water(Water::default())
-		} else if value > 0.8 {
+		if value < -0.1 {
+			Tile::Water(Water::from_noise_dispatch_value(value))
+		} else if value > 0.1 {
 			Tile::PowerUp(PowerUp::default())
 		} else {
 			Tile::Land(Land::default())

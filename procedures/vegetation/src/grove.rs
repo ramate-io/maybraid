@@ -33,7 +33,7 @@ impl<T: Material, L: Material> GroveBuilder<T, L> {
 			threshold: 0.5,
 			anchor: Vec3::ZERO,
 			step_size: 4.0,
-			count: 64,
+			count: 16,
 			trunk_material,
 			leaf_material,
 			tree_cache: HandleMap::new(),

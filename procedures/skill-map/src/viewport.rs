@@ -64,6 +64,8 @@ impl SkillMapViewportPlugin {
 							| TextureUsages::COPY_DST
 							| TextureUsages::RENDER_ATTACHMENT;
 						let image_handle = images.add(image);
+						let mut projection = OrthographicProjection::default_2d();
+						projection.scale = 1.0;
 						let camera = commands
 							.spawn((
 								Camera2d::default(),
@@ -73,6 +75,8 @@ impl SkillMapViewportPlugin {
 									target: RenderTarget::Image(image_handle.clone().into()),
 									..default()
 								},
+								Projection::Orthographic(projection),
+								Transform::from_translation(Vec3::new(0.0, 0.0, 0.0)),
 							))
 							.id();
 
