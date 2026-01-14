@@ -120,21 +120,28 @@ pub fn camera_controller(
 
 	if keyboard_input.pressed(KeyCode::ShiftLeft) || keyboard_input.pressed(KeyCode::ShiftRight) {
 		let mut movement_2d = Vec3::ZERO;
+		let mut movement_flag = false;
 		if keyboard_input.pressed(KeyCode::KeyW) {
 			movement_2d.y += 10.0;
+			movement_flag = true;
 		}
 		if keyboard_input.pressed(KeyCode::KeyS) {
 			movement_2d.y -= 10.0;
+			movement_flag = true;
 		}
 		if keyboard_input.pressed(KeyCode::KeyA) {
 			movement_2d.x -= 10.0;
+			movement_flag = true;
 		}
 		if keyboard_input.pressed(KeyCode::KeyD) {
 			movement_2d.x += 10.0;
+			movement_flag = true;
 		}
 
-		let transform_2d = Transform::from_translation(movement_2d);
-		commands.spawn((SkillMapViewportId(0), ApplyCameraTransform::Change2d, transform_2d));
+		if movement_flag {
+			let transform_2d = Transform::from_translation(movement_2d);
+			commands.spawn((SkillMapViewportId(0), ApplyCameraTransform::Change2d, transform_2d));
+		}
 	} else {
 		commands.spawn((
 			SkillMapViewportId(0),

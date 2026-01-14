@@ -63,9 +63,11 @@ impl<L: LeftCollidable, R: RightCollidable, C: CollisionLayer> Default
 impl<L: LeftCollidable, R: RightCollidable, C: CollisionLayer> CollisionPlugin<L, R, C> {
 	pub fn left_right_collisions(
 		mut commands: Commands,
-		left_query: Query<(Entity, &LeftCollider<L>, &C, &Transform)>,
+		left_query: Query<(Entity, &LeftCollider<L>, &C, &Transform), Changed<Transform>>,
 		right_query: Query<(Entity, &RightCollider<R>, &C, &Transform)>,
 	) {
+		// log::info!("Checking left right collisions for type {:?}", std::any::type_name::<L>());
+		// log::info!("Checking right left collisions for type {:?}", std::any::type_name::<R>());
 		for (left_entity, left_collider, _layer, left_transform) in left_query.iter() {
 			for (right_entity, right_collider, _layer, right_transform) in right_query.iter() {
 				if left_entity == right_entity {
@@ -83,6 +85,14 @@ impl<L: LeftCollidable, R: RightCollidable, C: CollisionLayer> CollisionPlugin<L
 				);
 
 				if left_bounds.intersects(&right_bounds) {
+					log::info!("Left size max: {:?}", left_collider.size_max);
+					log::info!("Right size max: {:?}", right_collider.size_max);
+					log::info!(
+						"Left transform: {:?} and right transform: {:?}",
+						left_transform.translation,
+						right_transform.translation,
+					);
+					log::info!("Left bounds: {:?} Right bounds: {:?}", left_bounds, right_bounds);
 					left_collider
 						.collidable()
 						.spawn_left_collision_entity(&mut commands, right_entity);

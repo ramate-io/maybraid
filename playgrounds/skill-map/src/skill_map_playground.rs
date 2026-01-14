@@ -20,7 +20,7 @@ impl Plugin for SkillMapPlaygroundPlugin {
 	fn build(&self, app: &mut App) {
 		app.add_plugins(SkillMapPlugin::default());
 		app.add_plugins(NoiseSkillMapPlugin::<Tile, Fbm<OpenSimplex>>::default());
-		app.add_plugins(CollisionPlugin::<Player, Tile, InteractionLayer>::default());
+		app.add_plugins(CollisionPlugin::<Player, PowerUp, InteractionLayer>::default());
 		app.add_systems(Update, skill_map_playground.run_if(run_once));
 	}
 }
@@ -47,6 +47,7 @@ pub fn skill_map_playground(mut commands: Commands) {
 			TrackCameraTransform,
 			Sprite { custom_size: Some(Vec2::new(10.0, 10.0)), color: Color::WHITE, ..default() },
 			LeftCollider::new(Player::default(), Vec2::new(10.0, 10.0)),
+			InteractionLayer,
 			Transform::from_translation(Vec3::new(0.0, 0.0, 0.001)),
 		))
 		.id();
@@ -102,8 +103,8 @@ impl NoiseDispatchItem for Water {
 		render_layer: RenderLayers,
 		extents: &NoiseSkillMapExtents,
 	) -> Entity {
-		let width = extents.max.x - extents.min.x;
-		let height = extents.max.y - extents.min.y;
+		let width = extents.x_step_size();
+		let height = extents.y_step_size();
 
 		// color is blue
 		let color = Color::srgb(0.0, 0.0, 1.0);
@@ -113,12 +114,14 @@ impl NoiseDispatchItem for Water {
 				Sprite { custom_size: Some(Vec2::new(width, height)), color: color, ..default() },
 				Transform::from_translation(position),
 				render_layer.clone(),
+				RightCollider::new(self.clone(), Vec2::new(width, height)),
+				InteractionLayer,
 			))
 			.id();
 
 		// spawn a small dot at the center of the sprite
-		let _collision_entity = commands
-			.spawn((RightCollider::new(self.clone(), Vec2::new(width, height)), InteractionLayer));
+		/*let _collision_entity = commands
+		.spawn((RightCollider::new(self.clone(), Vec2::new(width, height)), InteractionLayer));*/
 
 		entity
 	}
@@ -145,8 +148,8 @@ impl NoiseDispatchItem for Land {
 		render_layer: RenderLayers,
 		extents: &NoiseSkillMapExtents,
 	) -> Entity {
-		let width = extents.max.x - extents.min.x;
-		let height = extents.max.y - extents.min.y;
+		let width = extents.x_step_size();
+		let height = extents.y_step_size();
 
 		// color is brown
 		let color = Color::srgb(0.5, 0.25, 0.0);
@@ -188,22 +191,27 @@ impl NoiseDispatchItem for PowerUp {
 		render_layer: RenderLayers,
 		extents: &NoiseSkillMapExtents,
 	) -> Entity {
-		let width = extents.max.x - extents.min.x;
-		let height = extents.max.y - extents.min.y;
+		let width = extents.x_step_size();
+		let height = extents.y_step_size();
 
 		// color is purple
 		let color = Color::srgb(1.0, 0.0, 1.0);
 
+		let transform = Transform::from_translation(position);
+
 		let entity = commands
 			.spawn((
 				Sprite { custom_size: Some(Vec2::new(width, height)), color: color, ..default() },
-				Transform::from_translation(position),
+				transform.clone(),
 				render_layer,
 			))
 			.id();
 
-		let _collision_entity = commands
-			.spawn((RightCollider::new(self.clone(), Vec2::new(width, height)), InteractionLayer));
+		let _collision_entity = commands.spawn((
+			RightCollider::new(self.clone(), Vec2::new(width, height)),
+			InteractionLayer,
+			transform,
+		));
 
 		entity
 	}
