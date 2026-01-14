@@ -53,6 +53,11 @@ impl<T: Material, L: Material> GroveBuilder<T, L> {
 		self
 	}
 
+	pub fn with_anchor(mut self, anchor: Vec3) -> Self {
+		self.anchor = anchor;
+		self
+	}
+
 	pub fn meets_threshold(&self, position: Vec3) -> bool {
 		let noise = self.noise_config_3d.vec3_on_unit(position);
 		noise as f32 > self.threshold

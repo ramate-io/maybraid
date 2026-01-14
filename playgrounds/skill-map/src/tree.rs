@@ -46,13 +46,14 @@ pub fn tree_playground<T: Material, L: Material>(
 		MeshMaterial3d(leaf_material.0.clone()),
 	)
 	.with_tree_cache(tree_cache)
-	.with_leaf_cache(leaf_cache);
+	.with_leaf_cache(leaf_cache)
+	.with_anchor(Vec3::new(0.0, 0.0, 40.0));
 	let grove = grove_builder.build();
 
 	commands.spawn((
 		CascadeChunk::unit_center_chunk().with_res_2(3),
 		DispatchRenderItem::new(grove),
-		Transform::from_translation(Vec3::ZERO),
+		Transform::from_translation(Vec3::new(0.0, 0.0, 400.0)),
 	));
 }
 

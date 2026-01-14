@@ -1,10 +1,12 @@
 use bevy::camera::visibility::RenderLayers;
-use bevy::math::bounding::Aabb2d;
 use bevy::prelude::*;
 use comproc::noise::config::NoiseConfig;
 use noise::{Fbm, OpenSimplex};
 use skill_map::{
-	interaction::{CollisionLayer, RightCollidable, RightCollider},
+	interaction::{
+		CollisionLayer, CollisionPlugin, LeftCollidable, LeftCollider, RightCollidable,
+		RightCollider,
+	},
 	maps::noise_dispatch::{
 		DispatchNoiseSkillMap, NoiseDispatchItem, NoiseSkillMapExtents, NoiseSkillMapPlugin,
 	},
@@ -18,6 +20,7 @@ impl Plugin for SkillMapPlaygroundPlugin {
 	fn build(&self, app: &mut App) {
 		app.add_plugins(SkillMapPlugin::default());
 		app.add_plugins(NoiseSkillMapPlugin::<Tile, Fbm<OpenSimplex>>::default());
+		app.add_plugins(CollisionPlugin::<Player, Tile, InteractionLayer>::default());
 		app.add_systems(Update, skill_map_playground.run_if(run_once));
 	}
 }
@@ -43,6 +46,7 @@ pub fn skill_map_playground(mut commands: Commands) {
 			SkillMapRenderTarget,
 			TrackCameraTransform,
 			Sprite { custom_size: Some(Vec2::new(10.0, 10.0)), color: Color::WHITE, ..default() },
+			LeftCollider::new(Player::default(), Vec2::new(10.0, 10.0)),
 			Transform::from_translation(Vec3::new(0.0, 0.0, 0.001)),
 		))
 		.id();
@@ -54,6 +58,16 @@ pub fn skill_map_playground(mut commands: Commands) {
 pub struct InteractionLayer;
 
 impl CollisionLayer for InteractionLayer {}
+
+#[derive(Component, Debug, Clone, Default)]
+pub struct Player;
+
+impl LeftCollidable for Player {
+	fn spawn_left_collision_entity(&self, commands: &mut Commands, _right: Entity) -> Entity {
+		log::info!("Spawning left collision entity");
+		commands.spawn(()).id()
+	}
+}
 
 #[derive(Component, Debug, Clone, Default)]
 pub struct Water {
@@ -103,13 +117,8 @@ impl NoiseDispatchItem for Water {
 			.id();
 
 		// spawn a small dot at the center of the sprite
-		let _collision_entity = commands.spawn((
-			RightCollider::new(
-				self.clone(),
-				Aabb2d::new(extents.center(), extents.half_size()), // incorrect
-			),
-			InteractionLayer,
-		));
+		let _collision_entity = commands
+			.spawn((RightCollider::new(self.clone(), Vec2::new(width, height)), InteractionLayer));
 
 		entity
 	}
@@ -151,10 +160,8 @@ impl NoiseDispatchItem for Land {
 			.id();
 
 		// todo: debug why spawning alongside sprite fails
-		let _collision_entity = commands.spawn((
-			RightCollider::new(self.clone(), Aabb2d::new(extents.center(), extents.half_size())),
-			InteractionLayer,
-		));
+		let _collision_entity = commands
+			.spawn((RightCollider::new(self.clone(), Vec2::new(width, height)), InteractionLayer));
 
 		entity
 	}
@@ -195,10 +202,8 @@ impl NoiseDispatchItem for PowerUp {
 			))
 			.id();
 
-		let _collision_entity = commands.spawn((
-			RightCollider::new(self.clone(), Aabb2d::new(extents.center(), extents.half_size())),
-			InteractionLayer,
-		));
+		let _collision_entity = commands
+			.spawn((RightCollider::new(self.clone(), Vec2::new(width, height)), InteractionLayer));
 
 		entity
 	}

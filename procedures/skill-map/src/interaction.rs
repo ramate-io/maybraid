@@ -18,12 +18,12 @@ pub trait RightCollidable: Component {
 #[derive(Component)]
 pub struct LeftCollider<T: LeftCollidable> {
 	collidable: T,
-	bounds: Aabb2d,
+	size_max: Vec2,
 }
 
 impl<T: LeftCollidable> LeftCollider<T> {
-	pub fn new(collidable: T, bounds: Aabb2d) -> Self {
-		Self { collidable, bounds }
+	pub fn new(collidable: T, size_max: Vec2) -> Self {
+		Self { collidable, size_max }
 	}
 
 	pub fn collidable(&self) -> &T {
@@ -35,12 +35,12 @@ impl<T: LeftCollidable> LeftCollider<T> {
 #[derive(Component)]
 pub struct RightCollider<T: RightCollidable> {
 	collidable: T,
-	bounds: Aabb2d,
+	size_max: Vec2,
 }
 
 impl<T: RightCollidable> RightCollider<T> {
-	pub fn new(collidable: T, bounds: Aabb2d) -> Self {
-		Self { collidable, bounds }
+	pub fn new(collidable: T, size_max: Vec2) -> Self {
+		Self { collidable, size_max }
 	}
 
 	pub fn collidable(&self) -> &T {
@@ -52,19 +52,37 @@ pub struct CollisionPlugin<L: LeftCollidable, R: RightCollidable, C: CollisionLa
 	__marker: PhantomData<(L, R, C)>,
 }
 
+impl<L: LeftCollidable, R: RightCollidable, C: CollisionLayer> Default
+	for CollisionPlugin<L, R, C>
+{
+	fn default() -> Self {
+		Self { __marker: PhantomData }
+	}
+}
+
 impl<L: LeftCollidable, R: RightCollidable, C: CollisionLayer> CollisionPlugin<L, R, C> {
 	pub fn left_right_collisions(
 		mut commands: Commands,
-		left_query: Query<(Entity, &LeftCollider<L>, &C)>,
-		right_query: Query<(Entity, &RightCollider<R>, &C)>,
+		left_query: Query<(Entity, &LeftCollider<L>, &C, &Transform)>,
+		right_query: Query<(Entity, &RightCollider<R>, &C, &Transform)>,
 	) {
-		for (left_entity, left_collider, _layer) in left_query.iter() {
-			for (right_entity, right_collider, _layer) in right_query.iter() {
+		for (left_entity, left_collider, _layer, left_transform) in left_query.iter() {
+			for (right_entity, right_collider, _layer, right_transform) in right_query.iter() {
 				if left_entity == right_entity {
 					continue;
 				}
 
-				if left_collider.bounds.intersects(&right_collider.bounds) {
+				let left_bounds = Aabb2d::new(
+					left_transform.translation.xy() + left_collider.size_max / 2.0,
+					left_collider.size_max / 2.0,
+				);
+
+				let right_bounds = Aabb2d::new(
+					right_transform.translation.xy() + right_collider.size_max / 2.0,
+					right_collider.size_max / 2.0,
+				);
+
+				if left_bounds.intersects(&right_bounds) {
 					left_collider
 						.collidable()
 						.spawn_left_collision_entity(&mut commands, right_entity);

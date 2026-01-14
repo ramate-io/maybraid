@@ -176,12 +176,6 @@ impl SkillMapViewportPlugin {
 				if let Ok((camera_entity, camera_transform, _skillmap_viewport_camera)) =
 					camera_query.get(camera.clone())
 				{
-					log::info!(
-						"Applying camera transform for viewport {:?} for entity {:?}",
-						viewport_id,
-						camera_entity
-					);
-
 					match apply_camera_transform {
 						ApplyCameraTransform::Change2d => {
 							let mut new_transform = camera_transform.clone();
