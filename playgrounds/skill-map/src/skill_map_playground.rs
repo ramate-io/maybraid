@@ -8,8 +8,8 @@ use skill_map::{
 	maps::noise_dispatch::{
 		DispatchNoiseSkillMap, NoiseDispatchItem, NoiseSkillMapExtents, NoiseSkillMapPlugin,
 	},
-	viewport::SkillMapViewportId,
-	SkillMapId, SkillMapPlugin,
+	viewport::{SkillMapViewportId, TrackCameraTransform},
+	SkillMapId, SkillMapPlugin, SkillMapRenderTarget,
 };
 
 pub struct SkillMapPlaygroundPlugin;
@@ -34,6 +34,16 @@ pub fn skill_map_playground(mut commands: Commands) {
 			NoiseSkillMapExtents::default(),
 		),
 	));
+
+	// add a white dot to track the camera transform
+	commands.spawn((
+		SkillMapId(0),
+		SkillMapViewportId(0),
+		SkillMapRenderTarget,
+		TrackCameraTransform,
+		Sprite { custom_size: Some(Vec2::new(100.0, 100.0)), color: Color::WHITE, ..default() },
+		Transform::from_translation(Vec3::new(0.0, 0.0, 0.0)),
+	));
 }
 
 #[derive(Component, Debug, Clone)]
@@ -44,6 +54,16 @@ impl CollisionLayer for InteractionLayer {}
 #[derive(Component, Debug, Clone, Default)]
 pub struct Water {
 	value: f32,
+}
+
+impl Water {
+	pub fn new(value: f32) -> Self {
+		Self { value }
+	}
+
+	pub fn value(&self) -> f32 {
+		self.value
+	}
 }
 
 impl RightCollidable for Water {

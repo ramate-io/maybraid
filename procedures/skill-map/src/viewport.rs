@@ -21,6 +21,9 @@ pub struct SkillMapViewports {
 	viewport_id_to_entities: HashMap<SkillMapViewportId, (Entity, Entity)>,
 }
 
+#[derive(Component)]
+pub struct TrackCameraTransform;
+
 pub struct SkillMapViewportPlugin;
 
 impl SkillMapViewportPlugin {
@@ -77,6 +80,7 @@ impl SkillMapViewportPlugin {
 								},
 								Projection::Orthographic(projection),
 								Transform::from_translation(Vec3::new(0.0, 0.0, 0.0)),
+								SkillMapViewportCamera,
 							))
 							.id();
 
@@ -92,6 +96,7 @@ impl SkillMapViewportPlugin {
 							},
 							BorderColor::all(Color::WHITE),
 							ViewportNode::new(camera),
+							SkillMapViewport,
 						));
 
 						skillmap_viewports
@@ -121,11 +126,37 @@ impl SkillMapViewportPlugin {
 			}
 		}
 	}
+
+	pub fn track_camera_transform(
+		mut commands: Commands,
+		skillmap_viewports: Res<SkillMapViewports>,
+		tracking_request_query: Query<
+			(Entity, &SkillMapViewportId, &ReifiedSkillMapId),
+			With<TrackCameraTransform>,
+		>,
+		camera_query: Query<
+			(Entity, &Transform, &SkillMapViewportCamera),
+			(With<Camera2d>, Changed<Transform>),
+		>,
+	) {
+		for (tracking_request_entity, viewport_id, _skillmap_id) in tracking_request_query.iter() {
+			if let Some((camera, _viewport)) =
+				skillmap_viewports.viewport_id_to_entities.get(viewport_id)
+			{
+				if let Ok((_camera_entity, camera_transform, _skillmap_viewport_camera)) =
+					camera_query.get(camera.clone())
+				{
+					commands.entity(tracking_request_entity).insert(*camera_transform);
+				}
+			}
+		}
+	}
 }
 
 impl Plugin for SkillMapViewportPlugin {
 	fn build(&self, app: &mut App) {
 		app.world_mut().commands().insert_resource(SkillMapViewports::default());
 		app.add_systems(Update, Self::register_skillmap_to_viewport);
+		app.add_systems(Update, Self::track_camera_transform);
 	}
 }
