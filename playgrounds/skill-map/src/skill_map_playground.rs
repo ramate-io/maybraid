@@ -205,11 +205,11 @@ impl RightCollidable for PowerUp {
 		commands
 			.spawn((
 				DispatchCameraFireball(Fireball::new(
-					5.0 * 1000.0, // 3 seconds
+					5.0, // 5 seconds
 					1.0,
-					0.0 / 1000.0,                       // 0.25 seconds,
-					Vec3::new(0.0, 30.0, 0.0) / 1000.0, // 30 meters per second,
-					0.0 / 1000.0,
+					0.0,                       // 0.25 seconds,
+					Vec3::new(0.0, 30.0, 0.0), // 30 meters per second,
+					0.0,
 				)),
 				InteractionLayer,
 			))

@@ -45,7 +45,7 @@ impl Fireball {
 		let gravity = -Vec3::Y * gravity_strength;
 
 		// 1) Accelerate velocity by gravity
-		let mut velocity = self.velocity + gravity * (dt / (1000.0 * 1000.0));
+		let mut velocity = self.velocity + gravity * dt;
 
 		// 2) Apply drag (linear air resistance, stable & framerate independent)
 		// velocity_decay is in 1/sec
@@ -88,7 +88,7 @@ impl FireballPlugin {
 		for (entity, fireball, transform) in query.iter() {
 			log::info!("Rendering fireball");
 			if let Some((fireball, position)) =
-				fireball.next(time.elapsed_secs(), transform.translation)
+				fireball.next(time.delta_secs(), transform.translation)
 			{
 				// translate the fireball
 				log::info!("Translating fireball to: {:?}", position);
