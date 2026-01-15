@@ -105,10 +105,10 @@ impl FireballPlugin {
 
 	pub fn dispatch_camera_fireball(
 		mut commands: Commands,
-		dispatch_query: Query<&DispatchCameraFireball, Added<DispatchCameraFireball>>,
+		dispatch_query: Query<(Entity, &DispatchCameraFireball), Added<DispatchCameraFireball>>,
 		camera_query: Query<&Transform, With<Camera3d>>,
 	) {
-		for dispatch in dispatch_query.iter() {
+		for (entity, dispatch) in dispatch_query.iter() {
 			if let Ok(camera) = camera_query.single() {
 				let mut fireball = dispatch.0.clone();
 
@@ -120,8 +120,16 @@ impl FireballPlugin {
 				let velocity = direction * velocity_magnitude;
 				fireball.velocity = velocity;
 
-				commands.spawn((fireball, Transform::from_translation(camera.translation)));
+				commands.entity(entity).insert(fireball);
+				commands.entity(entity).insert(Transform::from_translation(camera.translation));
 			}
 		}
+	}
+}
+
+impl Plugin for FireballPlugin {
+	fn build(&self, app: &mut App) {
+		app.add_systems(Update, Self::render_fireball);
+		app.add_systems(Update, Self::dispatch_camera_fireball);
 	}
 }
