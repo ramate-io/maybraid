@@ -1,3 +1,4 @@
+use bevy::input::gamepad::{GamepadAxis, GamepadButton};
 use bevy::prelude::*;
 use skill_map::viewport::{ApplyCameraTransform, SkillMapViewportId};
 
@@ -66,10 +67,57 @@ pub fn setup_camera(mut commands: Commands) {
 	));
 }
 
+/// Apply deadzone to analog stick input to prevent drift
+fn apply_deadzone(value: f32, deadzone: f32) -> f32 {
+	if value.abs() < deadzone {
+		0.0
+	} else {
+		// Scale so output starts from zero after deadzone
+		let sign = value.signum();
+		(value - sign * deadzone) / (1.0 - deadzone)
+	}
+}
+
+/// Get gamepad movement input from left stick
+fn get_gamepad_movement(gamepad_axis: &Axis<GamepadAxis>, deadzone: f32) -> Vec2 {
+	let left_stick_x = gamepad_axis.get(GamepadAxis::LeftStickX).unwrap_or(0.0);
+	let left_stick_y = gamepad_axis.get(GamepadAxis::LeftStickY).unwrap_or(0.0);
+
+	Vec2::new(
+		apply_deadzone(left_stick_x, deadzone),
+		apply_deadzone(-left_stick_y, deadzone), // Invert Y for standard gamepad behavior
+	)
+}
+
+/// Get gamepad camera look input from right stick
+fn get_gamepad_look(gamepad_axis: &Axis<GamepadAxis>, deadzone: f32) -> Vec2 {
+	let right_stick_x = gamepad_axis.get(GamepadAxis::RightStickX).unwrap_or(0.0);
+	let right_stick_y = gamepad_axis.get(GamepadAxis::RightStickY).unwrap_or(0.0);
+
+	Vec2::new(
+		apply_deadzone(right_stick_x, deadzone),
+		apply_deadzone(-right_stick_y, deadzone), // Invert Y for standard camera look
+	)
+}
+
+/// Get vertical movement from gamepad triggers or buttons
+/// Returns positive for up, negative for down
+fn get_gamepad_vertical_movement(gamepad_buttons: &ButtonInput<GamepadButton>) -> f32 {
+	let mut vertical = 0.0;
+
+	if gamepad_buttons.pressed(GamepadButton::South) {
+		vertical += 1.0;
+	}
+
+	vertical
+}
+
 pub fn camera_controller(
 	mut commands: Commands,
 	keyboard_input: Res<ButtonInput<KeyCode>>,
 	mut mouse_motion: MessageReader<bevy::input::mouse::MouseMotion>,
+	gamepad_axis: Res<Axis<GamepadAxis>>,
+	gamepad_buttons: Res<ButtonInput<GamepadButton>>,
 	time: Res<Time>,
 	mut query: Query<(&mut Transform, &mut CameraController), With<Camera3d>>,
 ) {
@@ -77,12 +125,33 @@ pub fn camera_controller(
 		return;
 	};
 
+	const GAMEPAD_DEADZONE: f32 = 0.15;
+	const GAMEPAD_LOOK_SENSITIVITY: f32 = 2.0; // Multiplier for gamepad look sensitivity
+
 	// Handle mouse look
 	let mut mouse_delta = Vec2::ZERO;
 	for event in mouse_motion.read() {
 		mouse_delta += event.delta;
 	}
 
+	// Handle gamepad look (right stick)
+
+	let gamepad_look = get_gamepad_look(gamepad_axis.as_ref(), GAMEPAD_DEADZONE);
+	if gamepad_look.length() > 0.0 {
+		// Gamepad look uses delta time for smooth movement
+		controller.yaw -= gamepad_look.x
+			* controller.sensitivity
+			* GAMEPAD_LOOK_SENSITIVITY
+			* time.delta_secs()
+			* 60.0;
+		controller.pitch -= gamepad_look.y
+			* controller.sensitivity
+			* GAMEPAD_LOOK_SENSITIVITY
+			* time.delta_secs()
+			* 60.0;
+	}
+
+	// Apply mouse look (if any)
 	controller.yaw -= mouse_delta.x * controller.sensitivity;
 	controller.pitch -= mouse_delta.y * controller.sensitivity;
 	controller.pitch = controller.pitch.clamp(-PI / 2.0 + 0.1, PI / 2.0 - 0.1);
@@ -97,6 +166,7 @@ pub fn camera_controller(
 	let forward = transform.forward();
 	let right = transform.right();
 
+	// Keyboard movement
 	if keyboard_input.pressed(KeyCode::KeyW) {
 		movement += *forward;
 	}
@@ -113,6 +183,20 @@ pub fn camera_controller(
 		movement += Vec3::Y;
 	}
 
+	// Gamepad movement (left stick)
+	let gamepad_movement = get_gamepad_movement(gamepad_axis.as_ref(), GAMEPAD_DEADZONE);
+	if gamepad_movement.length() > 0.0 {
+		// Apply movement relative to camera orientation
+		movement += *forward * gamepad_movement.y;
+		movement += *right * gamepad_movement.x;
+	}
+
+	// Gamepad vertical movement (triggers)
+	let vertical = get_gamepad_vertical_movement(gamepad_buttons.as_ref());
+	if vertical.abs() > 0.01 {
+		movement += Vec3::Y * vertical;
+	}
+
 	if movement.length() > 0.0 {
 		movement = movement.normalize() * controller.speed * time.delta_secs();
 		transform.translation += movement;
@@ -120,6 +204,8 @@ pub fn camera_controller(
 
 	if keyboard_input.pressed(KeyCode::ShiftLeft) || keyboard_input.pressed(KeyCode::ShiftRight) {
 		let mut movement_2d = Vec3::ZERO;
+		movement_2d.x += gamepad_movement.x;
+		movement_2d.y += gamepad_movement.y;
 		let mut movement_flag = false;
 		if keyboard_input.pressed(KeyCode::KeyW) {
 			movement_2d.y += 10.0;
