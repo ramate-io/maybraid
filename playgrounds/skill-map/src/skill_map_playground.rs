@@ -3,6 +3,7 @@ pub mod fireball;
 use bevy::camera::visibility::RenderLayers;
 use bevy::prelude::*;
 use comproc::noise::config::NoiseConfig;
+use fireball::{DispatchCameraFireball, Fireball, FireballPlugin};
 use noise::{Fbm, OpenSimplex};
 use skill_map::{
 	interaction::{
@@ -23,6 +24,7 @@ impl Plugin for SkillMapPlaygroundPlugin {
 		app.add_plugins(SkillMapPlugin::default());
 		app.add_plugins(NoiseSkillMapPlugin::<Tile, Fbm<OpenSimplex>>::default());
 		app.add_plugins(CollisionPlugin::<Player, PowerUp, InteractionLayer>::default());
+		app.add_plugins(FireballPlugin);
 		app.add_systems(Update, skill_map_playground.run_if(run_once));
 	}
 }
@@ -66,7 +68,12 @@ impl CollisionLayer for InteractionLayer {}
 pub struct Player;
 
 impl LeftCollidable for Player {
-	fn spawn_left_collision_entity(&self, commands: &mut Commands, _right: Entity) -> Entity {
+	fn spawn_left_collision_entity(
+		&self,
+		commands: &mut Commands,
+		_left: Entity,
+		_right: Entity,
+	) -> Entity {
 		log::info!("Spawning left collision entity");
 		commands.spawn(()).id()
 	}
@@ -88,7 +95,12 @@ impl Water {
 }
 
 impl RightCollidable for Water {
-	fn spawn_right_collision_entity(&self, commands: &mut Commands, _left: Entity) -> Entity {
+	fn spawn_right_collision_entity(
+		&self,
+		commands: &mut Commands,
+		_left: Entity,
+		_right: Entity,
+	) -> Entity {
 		commands.spawn(()).id()
 	}
 }
@@ -133,7 +145,12 @@ impl NoiseDispatchItem for Water {
 pub struct Land {}
 
 impl RightCollidable for Land {
-	fn spawn_right_collision_entity(&self, commands: &mut Commands, _right: Entity) -> Entity {
+	fn spawn_right_collision_entity(
+		&self,
+		commands: &mut Commands,
+		_left: Entity,
+		_right: Entity,
+	) -> Entity {
 		commands.spawn(()).id()
 	}
 }
@@ -176,8 +193,27 @@ impl NoiseDispatchItem for Land {
 pub struct PowerUp {}
 
 impl RightCollidable for PowerUp {
-	fn spawn_right_collision_entity(&self, commands: &mut Commands, _left: Entity) -> Entity {
-		commands.spawn(()).id()
+	fn spawn_right_collision_entity(
+		&self,
+		commands: &mut Commands,
+		_left: Entity,
+		right: Entity,
+	) -> Entity {
+		log::info!("Spawning power up");
+
+		commands.entity(right).despawn();
+		commands
+			.spawn((
+				DispatchCameraFireball(Fireball::new(
+					5.0 * 1000.0, // 3 seconds
+					1.0,
+					0.0 / 1000.0,                       // 0.25 seconds,
+					Vec3::new(0.0, 30.0, 0.0) / 1000.0, // 30 meters per second,
+					0.0 / 1000.0,
+				)),
+				InteractionLayer,
+			))
+			.id()
 	}
 }
 
@@ -206,14 +242,10 @@ impl NoiseDispatchItem for PowerUp {
 				Sprite { custom_size: Some(Vec2::new(width, height)), color: color, ..default() },
 				transform.clone(),
 				render_layer,
+				RightCollider::new(self.clone(), Vec2::new(width, height)),
+				InteractionLayer,
 			))
 			.id();
-
-		let _collision_entity = commands.spawn((
-			RightCollider::new(self.clone(), Vec2::new(width, height)),
-			InteractionLayer,
-			transform,
-		));
 
 		entity
 	}
@@ -227,11 +259,18 @@ pub enum Tile {
 }
 
 impl RightCollidable for Tile {
-	fn spawn_right_collision_entity(&self, commands: &mut Commands, _left: Entity) -> Entity {
+	fn spawn_right_collision_entity(
+		&self,
+		commands: &mut Commands,
+		_left: Entity,
+		_right: Entity,
+	) -> Entity {
 		match self {
-			Tile::Water(water) => water.spawn_right_collision_entity(commands, _left),
-			Tile::Land(land) => land.spawn_right_collision_entity(commands, _left),
-			Tile::PowerUp(power_up) => power_up.spawn_right_collision_entity(commands, _left),
+			Tile::Water(water) => water.spawn_right_collision_entity(commands, _left, _right),
+			Tile::Land(land) => land.spawn_right_collision_entity(commands, _left, _right),
+			Tile::PowerUp(power_up) => {
+				power_up.spawn_right_collision_entity(commands, _left, _right)
+			}
 		}
 	}
 }

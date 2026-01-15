@@ -6,12 +6,22 @@ pub trait CollisionLayer: Component {}
 
 pub trait LeftCollidable: Component {
 	/// Spawns the left-sided response to a collision with the right entity.
-	fn spawn_left_collision_entity(&self, commands: &mut Commands, right: Entity) -> Entity;
+	fn spawn_left_collision_entity(
+		&self,
+		commands: &mut Commands,
+		left: Entity,
+		right: Entity,
+	) -> Entity;
 }
 
 pub trait RightCollidable: Component {
 	/// Spawns the right-sided response to a collision with the left entity.
-	fn spawn_right_collision_entity(&self, commands: &mut Commands, left: Entity) -> Entity;
+	fn spawn_right_collision_entity(
+		&self,
+		commands: &mut Commands,
+		left: Entity,
+		right: Entity,
+	) -> Entity;
 }
 
 /// This can collide with something.
@@ -93,12 +103,16 @@ impl<L: LeftCollidable, R: RightCollidable, C: CollisionLayer> CollisionPlugin<L
 						right_transform.translation,
 					);
 					log::info!("Left bounds: {:?} Right bounds: {:?}", left_bounds, right_bounds);
-					left_collider
-						.collidable()
-						.spawn_left_collision_entity(&mut commands, right_entity);
-					right_collider
-						.collidable()
-						.spawn_right_collision_entity(&mut commands, left_entity);
+					left_collider.collidable().spawn_left_collision_entity(
+						&mut commands,
+						left_entity,
+						right_entity,
+					);
+					right_collider.collidable().spawn_right_collision_entity(
+						&mut commands,
+						left_entity,
+						right_entity,
+					);
 				}
 			}
 		}
