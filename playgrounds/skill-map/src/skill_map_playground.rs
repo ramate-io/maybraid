@@ -1,3 +1,5 @@
+pub mod fireball;
+
 use bevy::camera::visibility::RenderLayers;
 use bevy::prelude::*;
 use comproc::noise::config::NoiseConfig;
