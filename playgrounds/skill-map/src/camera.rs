@@ -10,6 +10,12 @@ pub struct CameraController {
 	pub sensitivity: f32,
 	pub yaw: f32,
 	pub pitch: f32,
+	pub lock_skillmap_movement_time_remaining: f32,
+}
+
+#[derive(Component)]
+pub struct LockSkillmapMovement {
+	pub time_remaining: f32,
 }
 
 pub fn setup_camera(mut commands: Commands) {
@@ -63,6 +69,7 @@ pub fn setup_camera(mut commands: Commands) {
 			sensitivity: 0.005,
 			yaw,
 			pitch,
+			lock_skillmap_movement_time_remaining: 0.0,
 		},
 	));
 }
@@ -125,6 +132,11 @@ pub fn camera_controller(
 	let Ok((mut transform, mut controller)) = query.single_mut() else {
 		return;
 	};
+
+	controller.lock_skillmap_movement_time_remaining -= time.delta_secs();
+	if controller.lock_skillmap_movement_time_remaining < 0.0 {
+		controller.lock_skillmap_movement_time_remaining = 0.0;
+	}
 
 	const GAMEPAD_DEADZONE: f32 = 0.15;
 	const GAMEPAD_LOOK_SENSITIVITY: f32 = 3.0; // Multiplier for gamepad look sensitivity
@@ -213,9 +225,10 @@ pub fn camera_controller(
 		transform.translation += movement;
 	}
 
-	if keyboard_input.pressed(KeyCode::ShiftLeft)
-		|| keyboard_input.pressed(KeyCode::ShiftRight)
-		|| left_bumper_pressed
+	if controller.lock_skillmap_movement_time_remaining <= 0.0
+		&& (keyboard_input.pressed(KeyCode::ShiftLeft)
+			|| keyboard_input.pressed(KeyCode::ShiftRight)
+			|| left_bumper_pressed)
 	{
 		// mark the skillmap viewport with a burnt orange border color
 		if let Ok(skillmap_viewport) = skillmap_viewport_query.single() {
@@ -265,5 +278,20 @@ pub fn camera_controller(
 			ApplyCameraTransform::Value,
 			Transform::from_translation(Vec3::new(0.0, 0.0, 1.000)),
 		));
+	}
+}
+
+pub fn lock_skillmap_movement(
+	mut commands: Commands,
+	query: Query<(Entity, &LockSkillmapMovement), Added<LockSkillmapMovement>>,
+	mut camera_query: Query<&mut CameraController, With<Camera3d>>,
+) {
+	let Ok(mut controller) = camera_query.single_mut() else {
+		return;
+	};
+
+	for (entity, lock_skillmap_movement) in query.iter() {
+		controller.lock_skillmap_movement_time_remaining = lock_skillmap_movement.time_remaining;
+		commands.entity(entity).despawn();
 	}
 }

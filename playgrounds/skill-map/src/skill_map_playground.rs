@@ -1,5 +1,6 @@
 pub mod fireball;
 
+use crate::camera::LockSkillmapMovement;
 use bevy::camera::visibility::RenderLayers;
 use bevy::prelude::*;
 use comproc::noise::config::NoiseConfig;
@@ -108,7 +109,11 @@ impl RightCollidable for Water {
 			ApplyCameraTransform::Value,
 			Transform::from_translation(Vec3::new(0.0, 0.0, 1.000)),
 		));
-		log::info!("Spawning right collision entity for water");
+
+		// lock the camera movement for 2 seconds
+		commands.spawn(LockSkillmapMovement { time_remaining: 2.0 });
+
+		// spawn a debraid for 2 seconds
 		commands.spawn((Debraid::new(2.0), SkillMapViewportId(0))).id()
 	}
 }

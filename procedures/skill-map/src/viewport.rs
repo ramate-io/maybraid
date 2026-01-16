@@ -239,6 +239,7 @@ impl SkillMapViewportPlugin {
 			{
 				log::info!("Spawning debraid for viewport: {:?}", viewport_id);
 				let rebraid = debraid.to_rebraid();
+
 				// render a red square with white text "DEBRAID" over the top of the viewport
 				commands.entity(*viewport).with_children(|parent| {
 					parent
@@ -280,10 +281,8 @@ impl SkillMapViewportPlugin {
 	) {
 		for (entity, rebraid) in rebraid_query.iter() {
 			if let Some(next_rebraid) = rebraid.next(time.delta_secs()) {
-				log::info!("Next rebraid: {:?}", next_rebraid);
 				commands.entity(entity).insert(next_rebraid);
 			} else {
-				log::info!("Removing rebraid");
 				// remove the debraid child node
 				commands.entity(entity).despawn();
 			}

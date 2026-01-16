@@ -62,6 +62,7 @@ impl Plugin for SkillMapPlugin {
 				Update,
 				(
 					camera::camera_controller,
+					camera::lock_skillmap_movement,
 					ground::update_checker_size,
 					ui::update_coordinate_display,
 					render_items::<TreeRenderItem<EdgeMaterial, LeafMaterial>>,
