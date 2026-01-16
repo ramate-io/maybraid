@@ -29,15 +29,21 @@ pub trait RightCollidable: Component {
 pub struct LeftCollider<T: LeftCollidable> {
 	collidable: T,
 	size_max: Vec2,
+	adjustment: Vec2,
 }
 
 impl<T: LeftCollidable> LeftCollider<T> {
 	pub fn new(collidable: T, size_max: Vec2) -> Self {
-		Self { collidable, size_max }
+		Self { collidable, size_max, adjustment: Vec2::ZERO }
 	}
 
 	pub fn collidable(&self) -> &T {
 		&self.collidable
+	}
+
+	pub fn with_adjustment(mut self, adjustment: Vec2) -> Self {
+		self.adjustment = adjustment;
+		self
 	}
 }
 
@@ -85,7 +91,8 @@ impl<L: LeftCollidable, R: RightCollidable, C: CollisionLayer> CollisionPlugin<L
 				}
 
 				let left_bounds = Aabb2d::new(
-					left_transform.translation.xy() + left_collider.size_max / 2.0,
+					(left_transform.translation.xy() + left_collider.size_max / 2.0)
+						+ left_collider.adjustment,
 					left_collider.size_max / 2.0,
 				);
 
@@ -95,14 +102,6 @@ impl<L: LeftCollidable, R: RightCollidable, C: CollisionLayer> CollisionPlugin<L
 				);
 
 				if left_bounds.intersects(&right_bounds) {
-					log::info!("Left size max: {:?}", left_collider.size_max);
-					log::info!("Right size max: {:?}", right_collider.size_max);
-					log::info!(
-						"Left transform: {:?} and right transform: {:?}",
-						left_transform.translation,
-						right_transform.translation,
-					);
-					log::info!("Left bounds: {:?} Right bounds: {:?}", left_bounds, right_bounds);
 					left_collider.collidable().spawn_left_collision_entity(
 						&mut commands,
 						left_entity,

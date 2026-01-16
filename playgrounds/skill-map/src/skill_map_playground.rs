@@ -13,7 +13,7 @@ use skill_map::{
 	maps::noise_dispatch::{
 		DispatchNoiseSkillMap, NoiseDispatchItem, NoiseSkillMapExtents, NoiseSkillMapPlugin,
 	},
-	viewport::{Debraid, SkillMapViewportId, TrackCameraTransform},
+	viewport::{ApplyCameraTransform, Debraid, SkillMapViewportId, TrackCameraTransform},
 	SkillMapId, SkillMapPlugin, SkillMapRenderTarget,
 };
 
@@ -51,7 +51,8 @@ pub fn skill_map_playground(mut commands: Commands) {
 			SkillMapRenderTarget,
 			TrackCameraTransform,
 			Sprite { custom_size: Some(Vec2::new(10.0, 10.0)), color: Color::WHITE, ..default() },
-			LeftCollider::new(Player::default(), Vec2::new(10.0, 10.0)),
+			LeftCollider::new(Player::default(), Vec2::new(10.0, 10.0))
+				.with_adjustment(Vec2::new(5.0, 5.0)), // accounts for sprite centering
 			InteractionLayer,
 			Transform::from_translation(Vec3::new(0.0, 0.0, 0.001)),
 		))
@@ -101,8 +102,14 @@ impl RightCollidable for Water {
 		_left: Entity,
 		_right: Entity,
 	) -> Entity {
+		// Reset the camera transform
+		commands.spawn((
+			SkillMapViewportId(0),
+			ApplyCameraTransform::Value,
+			Transform::from_translation(Vec3::new(0.0, 0.0, 1.000)),
+		));
 		log::info!("Spawning right collision entity for water");
-		commands.spawn(()).id()
+		commands.spawn((Debraid::new(2.0), SkillMapViewportId(0))).id()
 	}
 }
 

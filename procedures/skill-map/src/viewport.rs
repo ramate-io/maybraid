@@ -20,6 +20,9 @@ pub struct Debraid {
 	duration: f32,
 }
 
+#[derive(Component)]
+pub struct DebraidEffect;
+
 impl Debraid {
 	pub fn new(duration: f32) -> Self {
 		Self { duration }
@@ -30,7 +33,7 @@ impl Debraid {
 	}
 }
 
-#[derive(Component)]
+#[derive(Component, Debug, Clone)]
 pub struct Rebraid {
 	time_remaining: f32,
 }
@@ -40,8 +43,12 @@ impl Rebraid {
 		Self { time_remaining }
 	}
 
-	pub fn next(&self, dt: f32) -> Self {
-		Self { time_remaining: self.time_remaining - dt }
+	pub fn next(&self, dt: f32) -> Option<Self> {
+		if self.time_remaining - dt <= 0.0 {
+			return None;
+		}
+
+		Some(Self { time_remaining: self.time_remaining - dt })
 	}
 }
 
@@ -224,35 +231,61 @@ impl SkillMapViewportPlugin {
 	pub fn debraid(
 		mut commands: Commands,
 		skillmap_viewports: Res<SkillMapViewports>,
-		debraid_query: Query<(&Debraid, &SkillMapViewportId), Changed<Debraid>>,
+		debraid_query: Query<(&Debraid, &SkillMapViewportId), Added<Debraid>>,
 	) {
-		for (_debraid, viewport_id) in debraid_query.iter() {
+		for (debraid, viewport_id) in debraid_query.iter() {
 			if let Some((_camera, viewport)) =
 				skillmap_viewports.viewport_id_to_entities.get(viewport_id)
 			{
+				log::info!("Spawning debraid for viewport: {:?}", viewport_id);
+				let rebraid = debraid.to_rebraid();
 				// render a red square with white text "DEBRAID" over the top of the viewport
-				commands
-					.entity(*viewport)
-					.with_children(|parent| {
-						parent.spawn((
+				commands.entity(*viewport).with_children(|parent| {
+					parent
+						.spawn((
+							DebraidEffect,
+							rebraid,
+							viewport_id.clone(),
 							Node {
 								position_type: PositionType::Absolute,
+								flex_direction: FlexDirection::Column,
+								justify_content: JustifyContent::Center,
+								align_items: AlignItems::Center,
 								left: px(0),
 								right: px(0),
 								top: px(0),
 								bottom: px(0),
 								..default()
 							},
-							BackgroundColor(Color::srgb(1.0, 0.0, 0.0)),
-						));
-					})
-					.with_children(|overlay| {
-						overlay.spawn((
-							Text::new("DEBRAID"),
-							TextColor(Color::WHITE),
-							TextFont { font_size: 32.0, ..default() },
-						));
-					});
+							BackgroundColor(Color::srgba(1.0, 0.0, 0.0, 0.5)),
+						))
+						.with_children(|overlay| {
+							overlay.spawn((
+								Text::new("DEBRAID"),
+								TextColor(Color::WHITE),
+								TextFont { font_size: 32.0, ..default() },
+								// center the text
+								TextLayout::new_with_justify(Justify::Center),
+							));
+						});
+				});
+			}
+		}
+	}
+
+	pub fn rebraid(
+		mut commands: Commands,
+		time: Res<Time>,
+		rebraid_query: Query<(Entity, &Rebraid), Changed<Rebraid>>,
+	) {
+		for (entity, rebraid) in rebraid_query.iter() {
+			if let Some(next_rebraid) = rebraid.next(time.delta_secs()) {
+				log::info!("Next rebraid: {:?}", next_rebraid);
+				commands.entity(entity).insert(next_rebraid);
+			} else {
+				log::info!("Removing rebraid");
+				// remove the debraid child node
+				commands.entity(entity).despawn();
 			}
 		}
 	}
@@ -265,5 +298,6 @@ impl Plugin for SkillMapViewportPlugin {
 		app.add_systems(Update, Self::track_camera_transform);
 		app.add_systems(Update, Self::apply_camera_transform);
 		app.add_systems(Update, Self::debraid);
+		app.add_systems(Update, Self::rebraid);
 	}
 }
