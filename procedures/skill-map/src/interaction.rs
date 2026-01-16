@@ -32,6 +32,9 @@ pub struct LeftCollider<T: LeftCollidable> {
 	adjustment: Vec2,
 }
 
+#[derive(Component)]
+pub struct IgnoreLeftCollisions;
+
 impl<T: LeftCollidable> LeftCollider<T> {
 	pub fn new(collidable: T, size_max: Vec2) -> Self {
 		Self { collidable, size_max, adjustment: Vec2::ZERO }
@@ -64,6 +67,9 @@ impl<T: RightCollidable> RightCollider<T> {
 	}
 }
 
+#[derive(Component)]
+pub struct IgnoreRightCollisions;
+
 pub struct CollisionPlugin<L: LeftCollidable, R: RightCollidable, C: CollisionLayer> {
 	__marker: PhantomData<(L, R, C)>,
 }
@@ -79,8 +85,14 @@ impl<L: LeftCollidable, R: RightCollidable, C: CollisionLayer> Default
 impl<L: LeftCollidable, R: RightCollidable, C: CollisionLayer> CollisionPlugin<L, R, C> {
 	pub fn left_right_collisions(
 		mut commands: Commands,
-		left_query: Query<(Entity, &LeftCollider<L>, &C, &Transform), Changed<Transform>>,
-		right_query: Query<(Entity, &RightCollider<R>, &C, &Transform)>,
+		left_query: Query<
+			(Entity, &LeftCollider<L>, &C, &Transform),
+			(Changed<Transform>, Without<IgnoreLeftCollisions>),
+		>,
+		right_query: Query<
+			(Entity, &RightCollider<R>, &C, &Transform),
+			Without<IgnoreRightCollisions>,
+		>,
 	) {
 		// log::info!("Checking left right collisions for type {:?}", std::any::type_name::<L>());
 		// log::info!("Checking right left collisions for type {:?}", std::any::type_name::<R>());

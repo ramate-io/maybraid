@@ -8,8 +8,8 @@ use fireball::{DispatchCameraFireball, Fireball, FireballPlugin};
 use noise::{Fbm, OpenSimplex};
 use skill_map::{
 	interaction::{
-		CollisionLayer, CollisionPlugin, LeftCollidable, LeftCollider, RightCollidable,
-		RightCollider,
+		CollisionLayer, CollisionPlugin, IgnoreRightCollisions, LeftCollidable, LeftCollider,
+		RightCollidable, RightCollider,
 	},
 	maps::noise_dispatch::{
 		DispatchNoiseSkillMap, NoiseDispatchItem, NoiseSkillMapExtents, NoiseSkillMapPlugin,
@@ -210,7 +210,8 @@ impl RightCollidable for PowerUp {
 	) -> Entity {
 		log::info!("Spawning power up");
 
-		commands.entity(right).despawn();
+		commands.entity(right).insert(Visibility::Hidden);
+		commands.entity(right).insert(IgnoreRightCollisions);
 		commands
 			.spawn((
 				DispatchCameraFireball(Fireball::new(
