@@ -252,7 +252,8 @@
         "Dioxus",
         "Roadline",
         "toolchain",
-        "Leptos"
+        "Leptos",
+        "Maybraid"
       ]
     },
     "bibtex": {
