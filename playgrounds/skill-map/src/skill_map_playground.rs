@@ -28,6 +28,7 @@ impl Plugin for SkillMapPlaygroundPlugin {
 		app.add_plugins(CollisionPlugin::<Player, Water, InteractionLayer>::default());
 		app.add_plugins(FireballPlugin);
 		app.add_systems(Update, skill_map_playground.run_if(run_once));
+		app.add_systems(Update, restore_power_ups);
 	}
 }
 
@@ -112,6 +113,9 @@ impl RightCollidable for Water {
 
 		// lock the camera movement for 2 seconds
 		commands.spawn(LockSkillmapMovement { time_remaining: 2.0 });
+
+		// Restore power ups
+		commands.spawn(RestorePowerUps);
 
 		// spawn a debraid for 2 seconds
 		commands.spawn((Debraid::new(2.0), SkillMapViewportId(0))).id()
@@ -258,6 +262,7 @@ impl NoiseDispatchItem for PowerUp {
 
 		let entity = commands
 			.spawn((
+				self.clone(),
 				Sprite { custom_size: Some(Vec2::new(width, height)), color: color, ..default() },
 				transform.clone(),
 				render_layer,
@@ -323,5 +328,26 @@ impl NoiseDispatchItem for Tile {
 				power_up.spawn_noise_dispatched_item(commands, position, render_layer, extents)
 			}
 		}
+	}
+}
+
+#[derive(Component)]
+pub struct RestorePowerUps;
+
+pub fn restore_power_ups(
+	mut commands: Commands,
+	dispatch_query: Query<&RestorePowerUps, Added<RestorePowerUps>>,
+	query: Query<(Entity, &PowerUp), With<IgnoreRightCollisions>>,
+) {
+	if dispatch_query.is_empty() {
+		return;
+	}
+
+	log::info!("Restoring power ups");
+
+	for (entity, _power_up) in query.iter() {
+		log::info!("Restoring power up: {:?}", entity);
+		commands.entity(entity).insert(Visibility::Visible);
+		commands.entity(entity).remove::<IgnoreRightCollisions>();
 	}
 }

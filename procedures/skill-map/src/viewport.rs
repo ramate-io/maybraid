@@ -237,7 +237,6 @@ impl SkillMapViewportPlugin {
 			if let Some((_camera, viewport)) =
 				skillmap_viewports.viewport_id_to_entities.get(viewport_id)
 			{
-				log::info!("Spawning debraid for viewport: {:?}", viewport_id);
 				let rebraid = debraid.to_rebraid();
 
 				// render a red square with white text "DEBRAID" over the top of the viewport
