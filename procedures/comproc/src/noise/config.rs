@@ -77,6 +77,15 @@ impl<const D: usize, N: NoiseFn<f64, D> + Seedable> NoiseConfig<D, N> {
 	}
 }
 
+impl<N: NoiseFn<f64, 2> + Seedable> NoiseConfig<2, N> {
+	pub fn vec2_freqo(&self, position: Vec2) -> f64 {
+		self.noise.get([
+			position.x as f64 * self.frequency as f64,
+			position.y as f64 * self.frequency as f64,
+		])
+	}
+}
+
 impl<N: NoiseFn<f64, 3> + Seedable> NoiseConfig<3, N> {
 	/// Gets on vec3 only applies frequency
 	pub fn vec3_freqo(&self, position: Vec3) -> f64 {

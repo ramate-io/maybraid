@@ -33,7 +33,7 @@ impl<T: Material, L: Material> GroveBuilder<T, L> {
 			threshold: 0.5,
 			anchor: Vec3::ZERO,
 			step_size: 4.0,
-			count: 64,
+			count: 16,
 			trunk_material,
 			leaf_material,
 			tree_cache: HandleMap::new(),
@@ -50,6 +50,11 @@ impl<T: Material, L: Material> GroveBuilder<T, L> {
 
 	pub fn with_leaf_cache(mut self, leaf_cache: HandleMap<NoisyBall>) -> Self {
 		self.leaf_cache = leaf_cache;
+		self
+	}
+
+	pub fn with_anchor(mut self, anchor: Vec3) -> Self {
+		self.anchor = anchor;
 		self
 	}
 

@@ -10,12 +10,14 @@ members = [
   # playgrounds
   "playgrounds/terrain",
   "playgrounds/objects",
+  "playgrounds/skill-map",
 
   # proceudres
   "procedures/terrain",
   "procedures/vegetation",
   "procedures/buildings",
   "procedures/comproc",
+  "procedures/skill-map",
 
   # util
   ## sdf
@@ -112,6 +114,7 @@ vegetation-sdf = { path = "procedures/vegetation" }
 buildings = { path = "procedures/buildings" }
 engine = { path = "engine" }
 comproc = { "path" = "procedures/comproc" }
+skill-map = {"path" = "procedures/skill-map" }
 
 [workspace.lints.clippy]
 debug_assert_with_mut_call = "deny"

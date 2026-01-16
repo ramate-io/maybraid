@@ -4238,6 +4238,45 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d66dc143e6b11c1eddc06d5c423cfc97062865baf299914ab64caa38182078fe"
 
 [[package]]
+name = "skill-map"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "chrono",
+ "comproc",
+ "log",
+ "noise",
+ "rayon",
+ "serde",
+ "thiserror 1.0.69",
+]
+
+[[package]]
+name = "skill-map-playground"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "buildings",
+ "bytemuck",
+ "chrono",
+ "chunk",
+ "comproc",
+ "engine",
+ "log",
+ "noise",
+ "rayon",
+ "render-item",
+ "sdf",
+ "serde",
+ "skill-map",
+ "terrain-sdf",
+ "thiserror 1.0.69",
+ "vegetation-sdf",
+]
+
+[[package]]
 name = "skrifa"
 version = "0.31.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
