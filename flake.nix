@@ -51,6 +51,9 @@
           frameworks.CoreServices
           frameworks.SystemConfiguration
           frameworks.AppKit
+          frameworks.IOKit
+          frameworks.CoreFoundation
+          frameworks.Foundation
           libelf
         ] ++ lib.optionals stdenv.isLinux [
           udev

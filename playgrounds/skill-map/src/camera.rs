@@ -1,4 +1,4 @@
-use bevy::input::gamepad::{GamepadAxis, GamepadButton};
+use bevy::input::gamepad::{GamepadAxis, GamepadButton, GamepadEvent};
 use bevy::prelude::*;
 use skill_map::viewport::{ApplyCameraTransform, SkillMapViewportId};
 
@@ -79,20 +79,20 @@ fn apply_deadzone(value: f32, deadzone: f32) -> f32 {
 }
 
 /// Get gamepad movement input from left stick
-fn get_gamepad_movement(gamepad_axis: &Axis<GamepadAxis>, deadzone: f32) -> Vec2 {
-	let left_stick_x = gamepad_axis.get(GamepadAxis::LeftStickX).unwrap_or(0.0);
-	let left_stick_y = gamepad_axis.get(GamepadAxis::LeftStickY).unwrap_or(0.0);
+fn get_gamepad_movement(gamepad: &Gamepad, deadzone: f32) -> Vec2 {
+	let left_stick_x = gamepad.get(GamepadAxis::LeftStickX).unwrap_or(0.0);
+	let left_stick_y = gamepad.get(GamepadAxis::LeftStickY).unwrap_or(0.0);
 
 	Vec2::new(
 		apply_deadzone(left_stick_x, deadzone),
-		apply_deadzone(-left_stick_y, deadzone), // Invert Y for standard gamepad behavior
+		apply_deadzone(left_stick_y, deadzone), // Invert Y for standard gamepad behavior
 	)
 }
 
 /// Get gamepad camera look input from right stick
-fn get_gamepad_look(gamepad_axis: &Axis<GamepadAxis>, deadzone: f32) -> Vec2 {
-	let right_stick_x = gamepad_axis.get(GamepadAxis::RightStickX).unwrap_or(0.0);
-	let right_stick_y = gamepad_axis.get(GamepadAxis::RightStickY).unwrap_or(0.0);
+fn get_gamepad_look(gamepad: &Gamepad, deadzone: f32) -> Vec2 {
+	let right_stick_x = gamepad.get(GamepadAxis::RightStickX).unwrap_or(0.0);
+	let right_stick_y = gamepad.get(GamepadAxis::RightStickY).unwrap_or(0.0);
 
 	Vec2::new(
 		apply_deadzone(right_stick_x, deadzone),
@@ -102,10 +102,11 @@ fn get_gamepad_look(gamepad_axis: &Axis<GamepadAxis>, deadzone: f32) -> Vec2 {
 
 /// Get vertical movement from gamepad triggers or buttons
 /// Returns positive for up, negative for down
-fn get_gamepad_vertical_movement(gamepad_buttons: &ButtonInput<GamepadButton>) -> f32 {
+fn get_gamepad_vertical_movement(gamepad: &Gamepad) -> f32 {
 	let mut vertical = 0.0;
 
-	if gamepad_buttons.pressed(GamepadButton::South) {
+	if gamepad.pressed(GamepadButton::South) {
+		log::info!("South button pressed");
 		vertical += 1.0;
 	}
 
@@ -116,8 +117,7 @@ pub fn camera_controller(
 	mut commands: Commands,
 	keyboard_input: Res<ButtonInput<KeyCode>>,
 	mut mouse_motion: MessageReader<bevy::input::mouse::MouseMotion>,
-	gamepad_axis: Res<Axis<GamepadAxis>>,
-	gamepad_buttons: Res<ButtonInput<GamepadButton>>,
+	gamepad_query: Query<(&Name, &Gamepad)>,
 	time: Res<Time>,
 	mut query: Query<(&mut Transform, &mut CameraController), With<Camera3d>>,
 ) {
@@ -126,7 +126,7 @@ pub fn camera_controller(
 	};
 
 	const GAMEPAD_DEADZONE: f32 = 0.15;
-	const GAMEPAD_LOOK_SENSITIVITY: f32 = 2.0; // Multiplier for gamepad look sensitivity
+	const GAMEPAD_LOOK_SENSITIVITY: f32 = 3.0; // Multiplier for gamepad look sensitivity
 
 	// Handle mouse look
 	let mut mouse_delta = Vec2::ZERO;
@@ -136,19 +136,21 @@ pub fn camera_controller(
 
 	// Handle gamepad look (right stick)
 
-	let gamepad_look = get_gamepad_look(gamepad_axis.as_ref(), GAMEPAD_DEADZONE);
-	if gamepad_look.length() > 0.0 {
-		// Gamepad look uses delta time for smooth movement
-		controller.yaw -= gamepad_look.x
-			* controller.sensitivity
-			* GAMEPAD_LOOK_SENSITIVITY
-			* time.delta_secs()
-			* 60.0;
-		controller.pitch -= gamepad_look.y
-			* controller.sensitivity
-			* GAMEPAD_LOOK_SENSITIVITY
-			* time.delta_secs()
-			* 60.0;
+	if let Ok((_name, gamepad)) = gamepad_query.single() {
+		let gamepad_look = get_gamepad_look(gamepad, GAMEPAD_DEADZONE);
+		if gamepad_look.length() > 0.0 {
+			// Gamepad look uses delta time for smooth movement
+			controller.yaw -= gamepad_look.x
+				* controller.sensitivity
+				* GAMEPAD_LOOK_SENSITIVITY
+				* time.delta_secs()
+				* 60.0;
+			controller.pitch -= gamepad_look.y
+				* controller.sensitivity
+				* GAMEPAD_LOOK_SENSITIVITY
+				* time.delta_secs()
+				* 60.0;
+		}
 	}
 
 	// Apply mouse look (if any)
@@ -183,18 +185,27 @@ pub fn camera_controller(
 		movement += Vec3::Y;
 	}
 
-	// Gamepad movement (left stick)
-	let gamepad_movement = get_gamepad_movement(gamepad_axis.as_ref(), GAMEPAD_DEADZONE);
-	if gamepad_movement.length() > 0.0 {
-		// Apply movement relative to camera orientation
-		movement += *forward * gamepad_movement.y;
-		movement += *right * gamepad_movement.x;
-	}
+	let mut gamepad_movement = Vec2::ZERO;
+	let mut left_bumper_pressed = false;
+	if let Ok((_name, gamepad)) = gamepad_query.single() {
+		// Gamepad movement (left stick)
+		gamepad_movement = get_gamepad_movement(gamepad, GAMEPAD_DEADZONE);
+		if gamepad_movement.length() > 0.0 {
+			// Apply movement relative to camera orientation
+			movement += *forward * gamepad_movement.y * 5.0;
+			movement += *right * gamepad_movement.x * 5.0;
+		}
 
-	// Gamepad vertical movement (triggers)
-	let vertical = get_gamepad_vertical_movement(gamepad_buttons.as_ref());
-	if vertical.abs() > 0.01 {
-		movement += Vec3::Y * vertical;
+		// Gamepad vertical movement (triggers)
+		let vertical = get_gamepad_vertical_movement(gamepad);
+		if vertical.abs() > 0.01 {
+			movement += Vec3::Y * vertical;
+		}
+
+		if gamepad.pressed(GamepadButton::LeftTrigger) {
+			log::info!("Left bumper pressed");
+			left_bumper_pressed = true;
+		}
 	}
 
 	if movement.length() > 0.0 {
@@ -202,11 +213,20 @@ pub fn camera_controller(
 		transform.translation += movement;
 	}
 
-	if keyboard_input.pressed(KeyCode::ShiftLeft) || keyboard_input.pressed(KeyCode::ShiftRight) {
+	if keyboard_input.pressed(KeyCode::ShiftLeft)
+		|| keyboard_input.pressed(KeyCode::ShiftRight)
+		|| left_bumper_pressed
+	{
+		log::info!("Tracking skill map viewport");
 		let mut movement_2d = Vec3::ZERO;
 		movement_2d.x += gamepad_movement.x;
 		movement_2d.y += gamepad_movement.y;
 		let mut movement_flag = false;
+
+		if gamepad_movement.length() > 0.0 {
+			movement_flag = true;
+		}
+
 		if keyboard_input.pressed(KeyCode::KeyW) {
 			movement_2d.y += 10.0;
 			movement_flag = true;
@@ -229,6 +249,7 @@ pub fn camera_controller(
 			commands.spawn((SkillMapViewportId(0), ApplyCameraTransform::Change2d, transform_2d));
 		}
 	} else {
+		log::info!("Not tracking skill map viewport");
 		commands.spawn((
 			SkillMapViewportId(0),
 			ApplyCameraTransform::Value,
