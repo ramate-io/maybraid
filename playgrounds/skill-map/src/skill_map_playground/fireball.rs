@@ -86,12 +86,10 @@ impl FireballPlugin {
 		query: Query<(Entity, &Fireball, &Transform)>,
 	) {
 		for (entity, fireball, transform) in query.iter() {
-			log::info!("Rendering fireball");
 			if let Some((fireball, position)) =
 				fireball.next(time.delta_secs(), transform.translation)
 			{
 				// translate the fireball
-				log::info!("Translating fireball to: {:?}", position);
 				commands.entity(entity).insert(Transform::from_translation(position));
 
 				// update the rendering

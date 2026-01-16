@@ -13,7 +13,7 @@ use skill_map::{
 	maps::noise_dispatch::{
 		DispatchNoiseSkillMap, NoiseDispatchItem, NoiseSkillMapExtents, NoiseSkillMapPlugin,
 	},
-	viewport::{SkillMapViewportId, TrackCameraTransform},
+	viewport::{Debraid, SkillMapViewportId, TrackCameraTransform},
 	SkillMapId, SkillMapPlugin, SkillMapRenderTarget,
 };
 
@@ -24,6 +24,7 @@ impl Plugin for SkillMapPlaygroundPlugin {
 		app.add_plugins(SkillMapPlugin::default());
 		app.add_plugins(NoiseSkillMapPlugin::<Tile, Fbm<OpenSimplex>>::default());
 		app.add_plugins(CollisionPlugin::<Player, PowerUp, InteractionLayer>::default());
+		app.add_plugins(CollisionPlugin::<Player, Water, InteractionLayer>::default());
 		app.add_plugins(FireballPlugin);
 		app.add_systems(Update, skill_map_playground.run_if(run_once));
 	}
@@ -74,7 +75,6 @@ impl LeftCollidable for Player {
 		_left: Entity,
 		_right: Entity,
 	) -> Entity {
-		log::info!("Spawning left collision entity");
 		commands.spawn(()).id()
 	}
 }
@@ -101,6 +101,7 @@ impl RightCollidable for Water {
 		_left: Entity,
 		_right: Entity,
 	) -> Entity {
+		log::info!("Spawning right collision entity for water");
 		commands.spawn(()).id()
 	}
 }
@@ -132,10 +133,6 @@ impl NoiseDispatchItem for Water {
 				InteractionLayer,
 			))
 			.id();
-
-		// spawn a small dot at the center of the sprite
-		/*let _collision_entity = commands
-		.spawn((RightCollider::new(self.clone(), Vec2::new(width, height)), InteractionLayer));*/
 
 		entity
 	}
@@ -229,13 +226,22 @@ impl NoiseDispatchItem for PowerUp {
 		render_layer: RenderLayers,
 		extents: &NoiseSkillMapExtents,
 	) -> Entity {
+		// spawn land underneath
+		Land::from_noise_dispatch_value(0.0).spawn_noise_dispatched_item(
+			commands,
+			position,
+			render_layer.clone(),
+			extents,
+		);
+
 		let width = extents.x_step_size();
 		let height = extents.y_step_size();
 
 		// color is purple
 		let color = Color::srgb(1.0, 0.0, 1.0);
 
-		let transform = Transform::from_translation(position);
+		let mut transform = Transform::from_translation(position);
+		transform.translation.z = 0.002;
 
 		let entity = commands
 			.spawn((

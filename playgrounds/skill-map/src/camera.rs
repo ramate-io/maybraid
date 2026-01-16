@@ -1,6 +1,6 @@
-use bevy::input::gamepad::{GamepadAxis, GamepadButton, GamepadEvent};
+use bevy::input::gamepad::{GamepadAxis, GamepadButton};
 use bevy::prelude::*;
-use skill_map::viewport::{ApplyCameraTransform, SkillMapViewportId};
+use skill_map::viewport::{ApplyCameraTransform, SkillMapViewport, SkillMapViewportId};
 
 use std::f32::consts::PI;
 
@@ -120,6 +120,7 @@ pub fn camera_controller(
 	gamepad_query: Query<(&Name, &Gamepad)>,
 	time: Res<Time>,
 	mut query: Query<(&mut Transform, &mut CameraController), With<Camera3d>>,
+	skillmap_viewport_query: Query<Entity, With<SkillMapViewport>>,
 ) {
 	let Ok((mut transform, mut controller)) = query.single_mut() else {
 		return;
@@ -203,7 +204,6 @@ pub fn camera_controller(
 		}
 
 		if gamepad.pressed(GamepadButton::LeftTrigger) {
-			log::info!("Left bumper pressed");
 			left_bumper_pressed = true;
 		}
 	}
@@ -217,7 +217,13 @@ pub fn camera_controller(
 		|| keyboard_input.pressed(KeyCode::ShiftRight)
 		|| left_bumper_pressed
 	{
-		log::info!("Tracking skill map viewport");
+		// mark the skillmap viewport with a burnt orange border color
+		if let Ok(skillmap_viewport) = skillmap_viewport_query.single() {
+			commands
+				.entity(skillmap_viewport)
+				.insert(BorderColor::all(Color::srgb(1.0, 0.5, 0.0)));
+		}
+
 		let mut movement_2d = Vec3::ZERO;
 		movement_2d.x += gamepad_movement.x;
 		movement_2d.y += gamepad_movement.y;
@@ -228,19 +234,19 @@ pub fn camera_controller(
 		}
 
 		if keyboard_input.pressed(KeyCode::KeyW) {
-			movement_2d.y += 10.0;
+			movement_2d.y += 2.0;
 			movement_flag = true;
 		}
 		if keyboard_input.pressed(KeyCode::KeyS) {
-			movement_2d.y -= 10.0;
+			movement_2d.y -= 2.0;
 			movement_flag = true;
 		}
 		if keyboard_input.pressed(KeyCode::KeyA) {
-			movement_2d.x -= 10.0;
+			movement_2d.x -= 2.0;
 			movement_flag = true;
 		}
 		if keyboard_input.pressed(KeyCode::KeyD) {
-			movement_2d.x += 10.0;
+			movement_2d.x += 2.0;
 			movement_flag = true;
 		}
 
@@ -249,7 +255,11 @@ pub fn camera_controller(
 			commands.spawn((SkillMapViewportId(0), ApplyCameraTransform::Change2d, transform_2d));
 		}
 	} else {
-		log::info!("Not tracking skill map viewport");
+		// unmark the skillmap viewport with a white border color
+		if let Ok(skillmap_viewport) = skillmap_viewport_query.single() {
+			commands.entity(skillmap_viewport).insert(BorderColor::all(Color::WHITE));
+		}
+
 		commands.spawn((
 			SkillMapViewportId(0),
 			ApplyCameraTransform::Value,

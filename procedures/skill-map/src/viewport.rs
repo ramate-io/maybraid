@@ -15,6 +15,36 @@ pub struct SkillMapViewport;
 #[derive(Component)]
 pub struct SkillMapViewportCamera;
 
+#[derive(Component)]
+pub struct Debraid {
+	duration: f32,
+}
+
+impl Debraid {
+	pub fn new(duration: f32) -> Self {
+		Self { duration }
+	}
+
+	pub fn to_rebraid(&self) -> Rebraid {
+		Rebraid::new(self.duration)
+	}
+}
+
+#[derive(Component)]
+pub struct Rebraid {
+	time_remaining: f32,
+}
+
+impl Rebraid {
+	pub fn new(time_remaining: f32) -> Self {
+		Self { time_remaining }
+	}
+
+	pub fn next(&self, dt: f32) -> Self {
+		Self { time_remaining: self.time_remaining - dt }
+	}
+}
+
 #[derive(Resource, Default)]
 pub struct SkillMapViewports {
 	/// We store the SkillMap to viewport entity mapping.
@@ -190,6 +220,42 @@ impl SkillMapViewportPlugin {
 			}
 		}
 	}
+
+	pub fn debraid(
+		mut commands: Commands,
+		skillmap_viewports: Res<SkillMapViewports>,
+		debraid_query: Query<(&Debraid, &SkillMapViewportId), Changed<Debraid>>,
+	) {
+		for (_debraid, viewport_id) in debraid_query.iter() {
+			if let Some((_camera, viewport)) =
+				skillmap_viewports.viewport_id_to_entities.get(viewport_id)
+			{
+				// render a red square with white text "DEBRAID" over the top of the viewport
+				commands
+					.entity(*viewport)
+					.with_children(|parent| {
+						parent.spawn((
+							Node {
+								position_type: PositionType::Absolute,
+								left: px(0),
+								right: px(0),
+								top: px(0),
+								bottom: px(0),
+								..default()
+							},
+							BackgroundColor(Color::srgb(1.0, 0.0, 0.0)),
+						));
+					})
+					.with_children(|overlay| {
+						overlay.spawn((
+							Text::new("DEBRAID"),
+							TextColor(Color::WHITE),
+							TextFont { font_size: 32.0, ..default() },
+						));
+					});
+			}
+		}
+	}
 }
 
 impl Plugin for SkillMapViewportPlugin {
@@ -198,5 +264,6 @@ impl Plugin for SkillMapViewportPlugin {
 		app.add_systems(Update, Self::register_skillmap_to_viewport);
 		app.add_systems(Update, Self::track_camera_transform);
 		app.add_systems(Update, Self::apply_camera_transform);
+		app.add_systems(Update, Self::debraid);
 	}
 }
