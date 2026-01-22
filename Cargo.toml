@@ -23,7 +23,10 @@ members = [
   ## sdf
   "util/sdf",
   "util/chunk",
-  "util/render-item"
+  "util/render-item",
+
+  # demos
+  "demos/naturescapes"
 
 ]
 
