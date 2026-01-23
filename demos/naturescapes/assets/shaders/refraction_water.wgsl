@@ -37,22 +37,19 @@ fn saturate(x: f32) -> f32 {
     return clamp(x, 0.0, 1.0);
 }
 
+fn posterize3(c: vec3<f32>, steps: f32) -> vec3<f32> {
+    let s = max(steps, 1.0);
+    return floor(c * s) / s;
+}
 
 @fragment
 fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
     // Screen UV in [0,1]
     var viewport_uv = coords_to_viewport_uv(in.position.xy, view.viewport);
 
-    // Force vec3 world/camera positions (VertexOutput world_position is often vec4)
+    // vec3 world/camera positions
     let cam_pos = view.world_position.xyz;
     let world_pos = in.world_position.xyz;
-
-    // Sample the already-rendered opaque scene
-    let behind = textureSample(
-        view_transmission_texture,
-        view_transmission_sampler,
-        viewport_uv
-    ).rgb;
 
     // Depth difference: scene behind minus water surface depth
     let depth_raw = textureLoad(depth_prepass_texture, vec2<i32>(in.position.xy), 0);
@@ -63,17 +60,16 @@ fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
     // Normal
     let n = normalize(in.world_normal);
 
-    // Fade distortion near the camera to avoid shimmer
+    // Fade distortion near camera (reduces shimmer)
     let dist_to_cam = length(world_pos - cam_pos);
-
-    // This ramps from 0 at ~2m to 1 at ~8m (tweak if desired)
     let close_fade = saturate((dist_to_cam - 2.0) / 6.0);
     let fade = mix(1.0, close_fade, saturate(close_fade_strength));
 
-    // Refraction: offset UVs by normal XZ
+    // Distort UV (tiny)
     viewport_uv += n.xz * distortion_strength * fade;
 
-    let refracted = textureSample(
+    // ONE sample only (this is the big perf win)
+    let scene_col = textureSample(
         view_transmission_texture,
         view_transmission_sampler,
         viewport_uv
@@ -83,20 +79,23 @@ fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
     let deepness = saturate(depth / max(depth_scale, 0.0001));
     let tint = mix(shallow_color.rgb, deep_color.rgb, deepness);
 
-    // Manual compositing: more tinted as depth increases
+    // Manual compositing (fake transparency)
     let base_opacity = saturate(water_color.a);
     let opacity = saturate(base_opacity * (0.25 + deepness * 0.75));
 
-    var col = mix(refracted, tint, opacity);
+    var col = mix(scene_col, tint, opacity);
 
-    // Apply overall water tint (subtle)
-    col = mix(col, col * water_color.rgb, 0.35);
+    // Stylize: multiply tint + posterize
+    col = mix(col, col * water_color.rgb, 0.45);
 
-    // Tiny rim boost (cheap, optional but helps readability)
+    // Simple ink rim darken (cheap, no pow)
     let V = normalize(world_pos - cam_pos);
     let NoV = saturate(dot(n, V));
-    col += (1.0 - NoV) * 0.05;
+    let rim = saturate((1.0 - NoV) * 1.1);
+    col *= (1.0 - rim * 0.25);
 
-    // Opaque output: we already composited manually
+    // Toon-ish steps
+    col = posterize3(col, 6.0);
+
     return vec4<f32>(col, 1.0);
 }

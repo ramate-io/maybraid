@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use naturescapes_demo::TerrainPlugin;
+use naturescapes_demo::NatureScapesPlugin;
 
 fn main() {
 	// Parse seed from command line or use default
@@ -16,6 +16,6 @@ fn main() {
 			}),
 			..default()
 		}))
-		.add_plugins(TerrainPlugin { seed })
+		.add_plugins(NatureScapesPlugin)
 		.run();
 }

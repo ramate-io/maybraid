@@ -6,24 +6,15 @@ use bevy::prelude::*;
 use std::f32::consts::PI;
 
 mod camera;
-mod terrain;
 mod ui;
 
-use engine::{
-	manage_chunks, shaders::outline::EdgeMaterial, ChunkConfig, ChunkResolutionConfig,
-	LoadedChunks, SdfResource,
-};
-
 pub use camera::CameraController;
-pub use terrain::TerrainConfig;
 
 pub use sdf;
 
-pub struct TerrainPlugin {
-	pub seed: u32,
-}
+pub struct NatureScapesPlugin;
 
-impl Plugin for TerrainPlugin {
+impl Plugin for NatureScapesPlugin {
 	fn build(&self, app: &mut App) {
 		// Register EdgeMaterial plugin
 		app.add_plugins(FrameTimeDiagnosticsPlugin::default());

@@ -18,10 +18,12 @@ pub struct RefractionWater {
 	pub deep_color: LinearRgba,
 
 	/// UV distortion strength (refraction amount)
+	/// keep small for performance
 	#[uniform(3)]
 	pub distortion_strength: f32,
 
 	/// Depth scale in view-space units (bigger = stays shallow longer)
+	/// Higher is smoother
 	#[uniform(4)]
 	pub depth_scale: f32,
 
@@ -37,8 +39,8 @@ impl Default for RefractionWater {
 			water_color: LinearRgba::new(0.05, 0.35, 0.45, 0.35),
 			shallow_color: LinearRgba::new(0.15, 0.55, 0.60, 1.0),
 			deep_color: LinearRgba::new(0.02, 0.08, 0.18, 1.0),
-			distortion_strength: 0.015,
-			depth_scale: 8.0,
+			distortion_strength: 0.006, // keep small for performance
+			depth_scale: 10.0,          // higher is smoother
 			close_fade_strength: 1.0,
 		}
 	}

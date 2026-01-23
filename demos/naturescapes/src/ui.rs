@@ -1,5 +1,4 @@
 use bevy::prelude::*;
-use engine::LoadedChunks;
 
 #[derive(Component)]
 pub struct CoordinateDisplay;
