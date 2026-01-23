@@ -85,14 +85,6 @@ impl Plugin for SkillMapPlugin {
 }
 
 fn setup_lighting(mut commands: Commands) {
-	// Ambient light - significantly increased to simulate global illumination
-	// This provides base lighting for all surfaces, including back faces
-	commands.insert_resource(AmbientLight {
-		color: Color::WHITE,
-		brightness: 2.0, // Much higher for better back-face illumination (simulates bounced light)
-		affects_lightmapped_meshes: true,
-	});
-
 	// Main directional light (sun) - primary light source
 	commands.spawn((
 		DirectionalLight { illuminance: 10000.0, shadows_enabled: true, ..default() },

@@ -325,7 +325,7 @@ impl BallStick {
 		self.nodes.keys().collect::<Vec<&BallStickNode>>().into_iter()
 	}
 
-	pub fn segments(&self) -> impl Iterator<Item = BallStickSegment> {
+	pub fn segments<'a>(&'a self) -> impl Iterator<Item = BallStickSegment<'a>> {
 		self.nodes
 			.iter()
 			.map(|(node, children)| {

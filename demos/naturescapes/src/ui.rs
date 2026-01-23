@@ -1,5 +1,4 @@
 use bevy::prelude::*;
-use engine::LoadedChunks;
 
 #[derive(Component)]
 pub struct CoordinateDisplay;
@@ -33,7 +32,6 @@ pub fn update_coordinate_display(
 	mut text_query: Query<&mut Text>,
 	coordinate_display_query: Query<Entity, With<CoordinateDisplay>>,
 	children_query: Query<&Children>,
-	loaded_chunks: Res<LoadedChunks>,
 ) {
 	if let Ok(transform) = camera_query.single() {
 		let pos = transform.translation;
@@ -42,13 +40,7 @@ pub fn update_coordinate_display(
 			if let Ok(children) = children_query.get(display_entity) {
 				if let Some(&text_entity) = children.first() {
 					if let Ok(mut text) = text_query.get_mut(text_entity) {
-						text.0 = format!(
-							"Position: ({:.2}, {:.2}, {:.2})\nChunks loaded: {}",
-							pos.x,
-							pos.y,
-							pos.z,
-							loaded_chunks.chunks.len()
-						);
+						text.0 = format!("Position: ({:.2}, {:.2}, {:.2})", pos.x, pos.y, pos.z,);
 					}
 				}
 			}
