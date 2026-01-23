@@ -1,4 +1,4 @@
-use crate::terrain::TerrainSdf;
+use crate::terrain::Terrain;
 use bevy::prelude::*;
 use engine::SdfResource;
 use std::f32::consts::PI;
@@ -42,7 +42,7 @@ pub fn camera_controller(
 	keyboard_input: Res<ButtonInput<KeyCode>>,
 	mut mouse_motion: MessageReader<bevy::input::mouse::MouseMotion>,
 	time: Res<Time>,
-	terrain_sdf: Res<SdfResource<TerrainSdf>>,
+	terrain_sdf: Res<SdfResource<Terrain>>,
 	mut query: Query<(&mut Transform, &mut CameraController), With<Camera3d>>,
 ) {
 	let Ok((mut transform, mut controller)) = query.single_mut() else {
@@ -131,7 +131,7 @@ fn free_fly_movement(
 fn character_mode_movement(
 	keyboard_input: &Res<ButtonInput<KeyCode>>,
 	time: &Res<Time>,
-	terrain_sdf: &Res<SdfResource<TerrainSdf>>,
+	terrain_sdf: &Res<SdfResource<Terrain>>,
 	transform: &mut Transform,
 	controller: &mut CameraController,
 ) {

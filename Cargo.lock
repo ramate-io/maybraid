@@ -4638,6 +4638,7 @@ dependencies = [
  "log",
  "noise",
  "rayon",
+ "render-item",
  "sdf",
  "serde",
  "thiserror 1.0.69",

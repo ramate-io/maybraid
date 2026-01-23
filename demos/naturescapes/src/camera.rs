@@ -1,4 +1,7 @@
-use bevy::{core_pipeline::prepass::DepthPrepass, prelude::*};
+use bevy::{
+	core_pipeline::prepass::{DeferredPrepass, DepthPrepass},
+	prelude::*,
+};
 use std::f32::consts::PI;
 
 #[derive(Component)]
@@ -47,6 +50,7 @@ pub fn setup_camera(mut commands: Commands) {
 
 	commands.spawn((
 		Camera3d::default(),
+		Msaa::Off,
 		transform,
 		Projection::Perspective(PerspectiveProjection {
 			near: 0.0001, // 10 cm
@@ -62,6 +66,7 @@ pub fn setup_camera(mut commands: Commands) {
 			velocity: Vec3::ZERO,
 		},
 		DepthPrepass,
+		DeferredPrepass,
 	));
 }
 

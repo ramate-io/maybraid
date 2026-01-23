@@ -10,7 +10,7 @@ use std::fmt::Debug;
 pub trait ElevationModulation: Send + Sync + Debug {
 	fn modify_elevation(
 		&self,
-		perlin_terrain: &PerlinTerrainSdf,
+		perlin_terrain: &TerrainSdf,
 		elevation: f32,
 		x: f32,
 		z: f32,
@@ -20,7 +20,7 @@ pub trait ElevationModulation: Send + Sync + Debug {
 
 /// SDF representation of Perlin noise-based terrain
 /// Converts the heightfield `y = height(x, z)` into an SDF: `f(p) = p.y - height(p.x, p.z)`
-pub struct PerlinTerrainSdf {
+pub struct TerrainSdf {
 	/// The Perlin noise generator
 	perlin: Perlin,
 	/// The height scale
@@ -31,7 +31,7 @@ pub struct PerlinTerrainSdf {
 	bounds: Option<[Vec2; 4]>,
 }
 
-impl PerlinTerrainSdf {
+impl TerrainSdf {
 	pub fn new(seed: u32, height_scale: f32) -> Self {
 		Self {
 			perlin: Perlin::new(seed),
@@ -104,7 +104,7 @@ impl PerlinTerrainSdf {
 	}
 }
 
-impl Sdf for PerlinTerrainSdf {
+impl Sdf for TerrainSdf {
 	fn distance(&self, p: Vec3) -> f32 {
 		// Apply elevation modulations (2.5D height offsets)
 		let mut terrain_height = self.height_at_with_all_modulations(p.x, p.z);
