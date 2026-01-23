@@ -118,9 +118,9 @@ impl SkillMapViewportPlugin {
 								Camera {
 									// Render this camera before our UI camera
 									order: -1,
-									target: RenderTarget::Image(image_handle.clone().into()),
 									..default()
 								},
+								RenderTarget::Image(image_handle.clone().into()),
 								Projection::Orthographic(projection),
 								Transform::from_translation(Vec3::new(0.0, 0.0, 0.0)),
 								SkillMapViewportCamera,

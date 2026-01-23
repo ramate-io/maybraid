@@ -1,3 +1,7 @@
+pub mod shaders;
+pub mod water;
+
+use bevy::diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin};
 use bevy::prelude::*;
 use std::f32::consts::PI;
 
@@ -22,44 +26,18 @@ pub struct TerrainPlugin {
 impl Plugin for TerrainPlugin {
 	fn build(&self, app: &mut App) {
 		// Register EdgeMaterial plugin
-		app.add_plugins(bevy::pbr::MaterialPlugin::<EdgeMaterial>::default());
+		app.add_plugins(FrameTimeDiagnosticsPlugin::default());
+		app.add_plugins(LogDiagnosticsPlugin::default());
+		app.add_plugins(water::WaterPlaygroundPlugin);
 
-		// Set up geographic features
-		let terrain_chunk_config = ChunkConfig::<terrain::TerrainSdf>::default();
-		let terrain_resolution_config = ChunkResolutionConfig::<terrain::TerrainSdf>::default();
-		let terrain_config = TerrainConfig::new(self.seed);
-		let terrain_sdf = terrain::TerrainSdf { sdf: terrain::create_terrain_sdf(&terrain_config) };
-		let terrain_sdf_resource = SdfResource::new(terrain_sdf);
-
-		app.insert_resource(terrain_config)
-			.insert_resource(ClearColor(Color::hsla(201.0, 0.69, 0.62, 1.0)))
-			.insert_resource(LoadedChunks::default())
-			// terrain
-			.insert_resource(terrain_chunk_config)
-			.insert_resource(terrain_resolution_config)
-			.insert_resource(terrain_sdf_resource)
+		app.insert_resource(ClearColor(Color::hsla(201.0, 0.69, 0.62, 1.0)))
 			// forest
 			.add_systems(Startup, (camera::setup_camera, setup_lighting, ui::setup_debug_ui))
-			.add_systems(
-				Update,
-				(
-					camera::camera_controller,
-					manage_chunks::<terrain::TerrainSdf>,
-					ui::update_coordinate_display,
-				),
-			);
+			.add_systems(Update, (camera::camera_controller, ui::update_coordinate_display));
 	}
 }
 
 fn setup_lighting(mut commands: Commands) {
-	// Ambient light - significantly increased to simulate global illumination
-	// This provides base lighting for all surfaces, including back faces
-	commands.insert_resource(AmbientLight {
-		color: Color::WHITE,
-		brightness: 2.0, // Much higher for better back-face illumination (simulates bounced light)
-		affects_lightmapped_meshes: true,
-	});
-
 	// Main directional light (sun) - primary light source
 	commands.spawn((
 		DirectionalLight { illuminance: 10000.0, shadows_enabled: true, ..default() },
