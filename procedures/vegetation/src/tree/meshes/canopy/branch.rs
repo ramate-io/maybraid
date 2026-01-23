@@ -255,7 +255,7 @@ impl Branch {
 		self.nodes.keys().collect::<Vec<&BranchNode>>().into_iter()
 	}
 
-	pub fn segments(&self) -> impl Iterator<Item = BranchSegment> {
+	pub fn segments<'a>(&'a self) -> impl Iterator<Item = BranchSegment<'a>> {
 		self.nodes
 			.iter()
 			.map(|(node, children)| {

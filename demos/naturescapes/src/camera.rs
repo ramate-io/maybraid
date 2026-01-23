@@ -12,7 +12,7 @@ pub struct CameraController {
 }
 
 pub fn setup_camera(mut commands: Commands) {
-	let camera_pos = Vec3::new(0.0, 20.0, 0.0);
+	let camera_pos = Vec3::new(20.0, 20.0, 20.0);
 	let look_at = Vec3::new(0.0, 0.0, 0.0);
 
 	log::info!("Setting up camera at position: {:?}, looking at: {:?}", camera_pos, look_at);
