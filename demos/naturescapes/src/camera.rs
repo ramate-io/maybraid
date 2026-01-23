@@ -13,13 +13,41 @@ pub struct CameraController {
 
 pub fn setup_camera(mut commands: Commands) {
 	let camera_pos = Vec3::new(20.0, 20.0, 20.0);
-	let look_at = Vec3::new(0.0, 0.0, 0.0);
+	let target = Vec3::ZERO;
 
-	log::info!("Setting up camera at position: {:?}, looking at: {:?}", camera_pos, look_at);
+	let look_at = (target - camera_pos).normalize();
+
+	let transform = Transform::from_translation(camera_pos).looking_at(look_at, Vec3::Y);
+
+	// Extract yaw and pitch from the transform's rotation quaternion
+	// We'll extract Euler angles from the quaternion
+	let rotation = transform.rotation;
+
+	// Extract Euler angles (ZYX order: yaw around Y, pitch around X, roll around Z)
+	// Bevy uses ZYX Euler order by default
+	let (x, y, z, w) = (rotation.x, rotation.y, rotation.z, rotation.w);
+
+	// Calculate yaw (rotation around Y axis)
+	// yaw = atan2(2*(w*y + x*z), 1 - 2*(y*y + z*z))
+	let sin_yaw = 2.0 * (w * y + x * z);
+	let cos_yaw = 1.0 - 2.0 * (y * y + z * z);
+	let yaw = sin_yaw.atan2(cos_yaw);
+
+	// Calculate pitch (rotation around X axis)
+	// pitch = asin(2*(w*x - y*z))
+	let sin_pitch = 2.0 * (w * x - y * z);
+	let pitch = sin_pitch.asin();
+
+	log::info!(
+		"Camera rotation: {:?}, yaw: {}°, pitch: {}°",
+		rotation,
+		yaw.to_degrees(),
+		pitch.to_degrees()
+	);
 
 	commands.spawn((
 		Camera3d::default(),
-		Transform::from_xyz(camera_pos.x, camera_pos.y, camera_pos.z).looking_at(look_at, Vec3::Y),
+		transform,
 		Projection::Perspective(PerspectiveProjection {
 			near: 0.0001, // 10 cm
 			far: 2.0,     // 2000 km
@@ -28,8 +56,8 @@ pub fn setup_camera(mut commands: Commands) {
 		CameraController {
 			speed: 20.0,
 			sensitivity: 0.005,
-			yaw: -90.0_f32.to_radians(),
-			pitch: -20.0_f32.to_radians(),
+			yaw,
+			pitch,
 			character_mode: false,
 			velocity: Vec3::ZERO,
 		},
