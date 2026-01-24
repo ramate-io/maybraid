@@ -1,3 +1,5 @@
+pub mod lod;
+
 pub mod mesh;
 // Early development caches to be reused by RenderItem developers.
 pub mod sdf;
@@ -16,7 +18,7 @@ pub trait RenderItem: Clone {
 }
 
 /// Signals an intent to render an item into the world.
-#[derive(Component)]
+#[derive(Component, Clone)]
 pub struct DispatchRenderItem<T: RenderItem> {
 	item: T,
 }
@@ -55,6 +57,7 @@ pub fn render_items<T: RenderItem + Send + Sync + 'static>(
 	>,
 ) {
 	for (_entity, dispatch, chunk, transform) in &query {
+		log::info!("Spawning render items for entity: {}", _entity);
 		dispatch.spawn_render_items(&mut commands, chunk, *transform);
 	}
 }

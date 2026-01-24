@@ -76,7 +76,7 @@ impl TerrainSdf {
 		// Generate height using multiple octaves of noise
 		let mut height = 0.0;
 		let mut amplitude = 1.0;
-		let mut frequency = 0.05;
+		let mut frequency = 0.0005;
 		// let max_value = 0.0;
 
 		for _ in 0..4 {
@@ -176,19 +176,5 @@ impl IdentifiedMesh for TerrainSdf {
 	fn id(&self) -> MeshId {
 		let debug_string = format!("{:?}", self);
 		MeshId::new(debug_string)
-	}
-}
-
-impl RenderItem for TerrainSdf {
-	fn spawn_render_items(
-		&self,
-		commands: &mut Commands,
-		cascade_chunk: &CascadeChunk,
-		transform: Transform,
-	) -> Vec<Entity> {
-		// just spawn the entity
-		let mesh_handle = MeshHandle::new(self.clone());
-		commands.spawn((cascade_chunk.clone(), MeshDispatch::new(mesh_handle), transform));
-		vec![]
 	}
 }

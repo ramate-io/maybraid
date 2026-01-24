@@ -1,62 +1,29 @@
-use crate::TerrainSdf;
+use crate::render::TerrainRenderItem;
 use bevy::prelude::*;
-use chunk::{
-	cascade::{Cascade, CascadeChunk, ResolutionMap},
-	system::{Lod, LodChild, LodPlugin},
-};
-use render_item::DispatchRenderItem;
-use std::marker::PhantomData;
+use chunk::cascade::ResolutionMap;
+use render_item::lod::LodPlugin;
+use std::{hash::Hash, marker::PhantomData};
 
 #[derive(Component)]
 pub struct Terrain;
 
 #[derive(Debug, Clone)]
-pub struct TerrainPlugin<R: ResolutionMap + Send + Sync + 'static> {
-	__marker: PhantomData<R>,
+pub struct TerrainPlugin<R: ResolutionMap + Send + Sync + 'static, M: Material> {
+	__marker: PhantomData<(R, M)>,
 }
 
-impl<R: ResolutionMap + Send + Sync + 'static> Default for TerrainPlugin<R> {
+impl<R: ResolutionMap + Send + Sync + 'static, M: Material> Default for TerrainPlugin<R, M> {
 	fn default() -> Self {
 		Self { __marker: PhantomData }
 	}
 }
 
-impl<R: ResolutionMap + Send + Sync + 'static> TerrainPlugin<R> {
-	pub fn new() -> Self {
-		Self { __marker: PhantomData }
-	}
-
-	pub fn downlevel_lod_items(
-		mut commands: Commands,
-		parent_query: Query<
-			(Entity, &DispatchRenderItem<TerrainSdf>, &Cascade<R>, &Children, &Transform),
-			(With<Terrain>, With<Lod>, Added<DispatchRenderItem<TerrainSdf>>),
-		>,
-		children_query: Query<Entity, (With<LodChild>, With<CascadeChunk>)>,
-	) {
-		// for each parent
-		for (_entity, dispatch, _cascade, children, transform) in parent_query.iter() {
-			// for each child
-			for child in children.iter() {
-				// if the child has the CascadeChunk and LodChild components
-				if let Ok(child_entity) = children_query.get(child) {
-					// First insert the render item, the cascade chunk should already be inserted.
-					commands
-						.entity(child_entity)
-						.insert(DispatchRenderItem::new(dispatch.item().clone()));
-
-					// Then insert the transform as it is needed for the render item system to trigger
-					// For now, the transform will largely be irrelevant.
-					commands.entity(child_entity).insert(transform.clone());
-				}
-			}
-		}
-	}
-}
-
-impl<R: ResolutionMap + Send + Sync + 'static> Plugin for TerrainPlugin<R> {
+impl<R: ResolutionMap + Send + Sync + 'static, M: Material> Plugin for TerrainPlugin<R, M>
+where
+	M::Data: PartialEq + Eq + Hash + Clone,
+{
 	fn build(&self, app: &mut App) {
-		app.add_plugins(LodPlugin::<R>::default());
-		app.add_systems(Update, Self::downlevel_lod_items);
+		app.add_plugins(LodPlugin::<R, TerrainRenderItem<M>>::default());
+		app.add_plugins(MaterialPlugin::<M>::default());
 	}
 }

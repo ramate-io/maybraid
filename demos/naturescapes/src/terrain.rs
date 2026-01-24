@@ -1,9 +1,11 @@
 use bevy::prelude::*;
 use chunk::cascade::Cascade;
 use chunk::cascade::ConstantResolutionMap;
-use chunk::system::Lod;
 use noise::Perlin;
+use render_item::lod::Lod;
 use render_item::mesh::cache::handle::map::HandleMap;
+use render_item::mesh::fetch_meshes;
+use render_item::mesh::handle::MeshHandle;
 use render_item::DispatchRenderItem;
 use std::hash::Hash;
 use terrain_sdf::region::affine::RegionAffineModulation;
@@ -46,7 +48,7 @@ impl<M: Material> TerrainPlaygroundPlugin<M> {
 
 	pub fn setup_terrain(mut commands: Commands, terrain_material: Res<TerrainMaterial<M>>) {
 		// Create base terrain SDF
-		let mut sdf = TerrainSdf::new(42, 5.0);
+		let mut sdf = TerrainSdf::new(42, 500.0);
 
 		let big_valley_sdf = RegionAffineModulation::new(
 			Region2D::Rect(RectRegion {
@@ -120,10 +122,10 @@ impl<M: Material> TerrainPlaygroundPlugin<M> {
 		// Set up the cascade
 		let cascade = Cascade::<ConstantResolutionMap> {
 			min_size: 10.0,
-			number_of_rings: 10,
-			resolution_map: ConstantResolutionMap { res_2: 10 },
-			grid_radius: 10,
-			grid_multiple_2: 10,
+			number_of_rings: 5,
+			resolution_map: ConstantResolutionMap { res_2: 7 },
+			grid_radius: 2,
+			grid_multiple_2: 3,
 		};
 
 		let handle_map = HandleMap::<TerrainSdf>::new();
@@ -131,11 +133,12 @@ impl<M: Material> TerrainPlaygroundPlugin<M> {
 			.with_handle_map(handle_map);
 
 		commands.spawn((
-			Lod,
 			Terrain,
+			Lod,
+			cascade,
 			Transform::from_translation(Vec3::ZERO),
 			DispatchRenderItem::new(render_item),
-			cascade,
+			Children::default(),
 		));
 	}
 }
@@ -145,8 +148,9 @@ where
 	M::Data: PartialEq + Eq + Hash + Clone,
 {
 	fn build(&self, app: &mut App) {
-		app.add_plugins(MaterialPlugin::<M>::default());
 		app.add_systems(Startup, self.build_setup_terrain_material());
-		app.add_plugins(TerrainPlugin::<ConstantResolutionMap>::default());
+		app.add_plugins(TerrainPlugin::<ConstantResolutionMap, M>::default());
+		app.add_systems(Update, Self::setup_terrain.run_if(run_once));
+		app.add_systems(Update, fetch_meshes::<MeshHandle<TerrainSdf>, M>);
 	}
 }

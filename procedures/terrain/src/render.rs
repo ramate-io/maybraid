@@ -28,8 +28,11 @@ impl<M: Material> RenderItem for TerrainRenderItem<M> {
 		&self,
 		commands: &mut Commands,
 		cascade_chunk: &CascadeChunk,
-		transform: Transform,
+		_transform: Transform,
 	) -> Vec<Entity> {
+		log::info!("Spawning terrain render items for cascade chunk: {:?}", cascade_chunk);
+
+		let transform = Transform::from_translation(cascade_chunk.origin);
 		let mesh_handle =
 			MeshHandle::new(self.sdf.clone()).with_handle_cache(self.handle_map.clone());
 		commands.spawn((
