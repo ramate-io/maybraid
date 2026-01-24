@@ -2,7 +2,7 @@ use crate::TerrainSdf;
 use bevy::prelude::*;
 use chunk::{
 	cascade::{Cascade, CascadeChunk, ResolutionMap},
-	system::{LodChild, LodPlugin},
+	system::{Lod, LodChild, LodPlugin},
 };
 use render_item::DispatchRenderItem;
 use std::marker::PhantomData;
@@ -26,11 +26,11 @@ impl<R: ResolutionMap + Send + Sync + 'static> TerrainPlugin<R> {
 		Self { __marker: PhantomData }
 	}
 
-	pub fn compute_lod_chunks(
+	pub fn downlevel_lod_items(
 		mut commands: Commands,
 		parent_query: Query<
 			(Entity, &DispatchRenderItem<TerrainSdf>, &Cascade<R>, &Children, &Transform),
-			(With<Terrain>, Added<DispatchRenderItem<TerrainSdf>>),
+			(With<Terrain>, With<Lod>, Added<DispatchRenderItem<TerrainSdf>>),
 		>,
 		children_query: Query<Entity, (With<LodChild>, With<CascadeChunk>)>,
 	) {
@@ -57,6 +57,6 @@ impl<R: ResolutionMap + Send + Sync + 'static> TerrainPlugin<R> {
 impl<R: ResolutionMap + Send + Sync + 'static> Plugin for TerrainPlugin<R> {
 	fn build(&self, app: &mut App) {
 		app.add_plugins(LodPlugin::<R>::default());
-		app.add_systems(Update, Self::compute_lod_chunks);
+		app.add_systems(Update, Self::downlevel_lod_items);
 	}
 }

@@ -1,6 +1,7 @@
 use bevy::prelude::*;
 use chunk::cascade::Cascade;
 use chunk::cascade::ConstantResolutionMap;
+use chunk::system::Lod;
 use noise::Perlin;
 use render_item::mesh::cache::handle::map::HandleMap;
 use render_item::DispatchRenderItem;
@@ -9,7 +10,7 @@ use terrain_sdf::region::affine::RegionAffineModulation;
 use terrain_sdf::region::CircleRegion;
 use terrain_sdf::region::RectRegion;
 use terrain_sdf::{
-	plugin::TerrainPlugin,
+	plugin::{Terrain, TerrainPlugin},
 	region::branching::BranchingPlan,
 	region::grading::RegionGradingModulation,
 	region::rounding::RegionRoundingModulation,
@@ -130,6 +131,8 @@ impl<M: Material> TerrainPlaygroundPlugin<M> {
 			.with_handle_map(handle_map);
 
 		commands.spawn((
+			Lod,
+			Terrain,
 			Transform::from_translation(Vec3::ZERO),
 			DispatchRenderItem::new(render_item),
 			cascade,
