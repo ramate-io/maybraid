@@ -1,5 +1,6 @@
 pub mod plugin;
 pub mod region;
+pub mod render;
 
 use bevy::prelude::*;
 use chunk::cascade::CascadeChunk;

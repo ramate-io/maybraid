@@ -4,6 +4,7 @@ pub mod water;
 
 use bevy::diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin};
 use bevy::prelude::*;
+use engine::shaders::outline::EdgeMaterial;
 use std::f32::consts::PI;
 
 mod camera;
@@ -21,6 +22,7 @@ impl Plugin for NatureScapesPlugin {
 		app.add_plugins(FrameTimeDiagnosticsPlugin::default());
 		app.add_plugins(LogDiagnosticsPlugin::default());
 		app.add_plugins(water::WaterPlaygroundPlugin);
+		app.add_plugins(terrain::TerrainPlaygroundPlugin { material: EdgeMaterial::default() });
 
 		app.insert_resource(ClearColor(Color::hsla(201.0, 0.69, 0.62, 1.0)))
 			// forest

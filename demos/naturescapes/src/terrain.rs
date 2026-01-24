@@ -2,7 +2,9 @@ use bevy::prelude::*;
 use chunk::cascade::Cascade;
 use chunk::cascade::ConstantResolutionMap;
 use noise::Perlin;
+use render_item::mesh::cache::handle::map::HandleMap;
 use render_item::DispatchRenderItem;
+use std::hash::Hash;
 use terrain_sdf::region::affine::RegionAffineModulation;
 use terrain_sdf::region::CircleRegion;
 use terrain_sdf::region::RectRegion;
@@ -12,19 +14,36 @@ use terrain_sdf::{
 	region::grading::RegionGradingModulation,
 	region::rounding::RegionRoundingModulation,
 	region::{Region2D, RegionNoise},
+	render::TerrainRenderItem,
 	TerrainSdf,
 };
 
-pub struct TerrainPlaygroundPlugin;
+#[derive(Resource, Clone)]
+pub struct TerrainMaterial<M: Material>(pub Handle<M>);
 
-impl Default for TerrainPlaygroundPlugin {
-	fn default() -> Self {
-		Self {}
-	}
+#[derive(Clone)]
+pub struct TerrainPlaygroundPlugin<M: Material> {
+	pub material: M,
 }
 
-impl TerrainPlaygroundPlugin {
-	pub fn setup_terrain(mut commands: Commands) {
+impl<M: Material> TerrainPlaygroundPlugin<M> {
+	pub fn impl_setup_terrain_material(
+		terrain_plaground_plugin: Self,
+		mut commands: Commands,
+		mut materials: ResMut<Assets<M>>,
+	) {
+		let material_handle = materials.add(terrain_plaground_plugin.material);
+		commands.insert_resource(TerrainMaterial(material_handle));
+	}
+
+	pub fn build_setup_terrain_material(&self) -> impl FnMut(Commands, ResMut<Assets<M>>) {
+		let me = self.clone();
+		move |commands: Commands, materials: ResMut<Assets<M>>| {
+			Self::impl_setup_terrain_material(me.clone(), commands, materials);
+		}
+	}
+
+	pub fn setup_terrain(mut commands: Commands, terrain_material: Res<TerrainMaterial<M>>) {
 		// Create base terrain SDF
 		let mut sdf = TerrainSdf::new(42, 5.0);
 
@@ -106,16 +125,25 @@ impl TerrainPlaygroundPlugin {
 			grid_multiple_2: 10,
 		};
 
+		let handle_map = HandleMap::<TerrainSdf>::new();
+		let render_item = TerrainRenderItem::new(sdf, MeshMaterial3d(terrain_material.0.clone()))
+			.with_handle_map(handle_map);
+
 		commands.spawn((
 			Transform::from_translation(Vec3::ZERO),
-			DispatchRenderItem::new(sdf),
+			DispatchRenderItem::new(render_item),
 			cascade,
 		));
 	}
 }
 
-impl Plugin for TerrainPlaygroundPlugin {
+impl<M: Material> Plugin for TerrainPlaygroundPlugin<M>
+where
+	M::Data: PartialEq + Eq + Hash + Clone,
+{
 	fn build(&self, app: &mut App) {
+		app.add_plugins(MaterialPlugin::<M>::default());
+		app.add_systems(Startup, self.build_setup_terrain_material());
 		app.add_plugins(TerrainPlugin::<ConstantResolutionMap>::default());
 	}
 }
