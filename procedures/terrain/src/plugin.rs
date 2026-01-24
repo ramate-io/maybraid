@@ -5,19 +5,25 @@ use chunk::{
 	system::{LodChild, LodPlugin},
 };
 use render_item::DispatchRenderItem;
+use std::marker::PhantomData;
 
 #[derive(Component)]
 pub struct Terrain;
 
 #[derive(Debug, Clone)]
 pub struct TerrainPlugin<R: ResolutionMap + Send + Sync + 'static> {
-	pub seed: u32,
-	pub cascade: Cascade<R>,
+	__marker: PhantomData<R>,
+}
+
+impl<R: ResolutionMap + Send + Sync + 'static> Default for TerrainPlugin<R> {
+	fn default() -> Self {
+		Self { __marker: PhantomData }
+	}
 }
 
 impl<R: ResolutionMap + Send + Sync + 'static> TerrainPlugin<R> {
-	pub fn new(seed: u32, cascade: Cascade<R>) -> Self {
-		Self { seed, cascade }
+	pub fn new() -> Self {
+		Self { __marker: PhantomData }
 	}
 
 	pub fn compute_lod_chunks(
@@ -51,5 +57,6 @@ impl<R: ResolutionMap + Send + Sync + 'static> TerrainPlugin<R> {
 impl<R: ResolutionMap + Send + Sync + 'static> Plugin for TerrainPlugin<R> {
 	fn build(&self, app: &mut App) {
 		app.add_plugins(LodPlugin::<R>::default());
+		app.add_systems(Update, Self::compute_lod_chunks);
 	}
 }

@@ -1,4 +1,5 @@
 pub mod shaders;
+pub mod terrain;
 pub mod water;
 
 use bevy::diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin};

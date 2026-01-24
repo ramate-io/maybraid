@@ -27,8 +27,10 @@ bytemuck = { version = "1.14", features = ["derive"] }
 # sdf
 sdf = { workspace = true }
 engine = { workspace = true }
+chunk = { workspace = true }
 terrain-sdf = { workspace = true }
 vegetation-sdf = { workspace = true }
+render-item = { workspace = true }
 
 [lints]
 workspace = true
