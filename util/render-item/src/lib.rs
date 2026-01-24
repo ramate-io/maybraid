@@ -27,6 +27,10 @@ impl<T: RenderItem> DispatchRenderItem<T> {
 		Self { item }
 	}
 
+	pub fn item(&self) -> &T {
+		&self.item
+	}
+
 	pub fn spawn_render_items(
 		&self,
 		commands: &mut Commands,

@@ -1,5 +1,6 @@
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
+use std::collections::HashSet;
 use std::fmt::Debug;
 use std::hash::Hash;
 use std::hash::Hasher;
@@ -173,7 +174,7 @@ impl Ord for CascadeChunk {
 	}
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Component, Debug, Clone, Copy)]
 pub struct Cascade<R: ResolutionMap> {
 	/// The minimum size of the chunk used in the interior of the cascade
 	pub min_size: f32,
@@ -187,10 +188,10 @@ pub struct Cascade<R: ResolutionMap> {
 	pub grid_multiple_2: u8,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CascadeOutput {
-	pub cascade_chunks: Vec<CascadeChunk>,
-	pub grid_chunks: Vec<CascadeChunk>,
+	pub cascade_chunks: HashSet<CascadeChunk>,
+	pub grid_chunks: HashSet<CascadeChunk>,
 }
 
 impl CascadeOutput {
@@ -201,12 +202,16 @@ impl CascadeOutput {
 		chunks
 	}
 
-	pub fn cascade(&self) -> Vec<CascadeChunk> {
-		self.cascade_chunks.clone()
+	pub fn cascade(&self) -> &HashSet<CascadeChunk> {
+		&self.cascade_chunks
 	}
 
-	pub fn grid(&self) -> Vec<CascadeChunk> {
-		self.grid_chunks.clone()
+	pub fn grid(&self) -> &HashSet<CascadeChunk> {
+		&self.grid_chunks
+	}
+
+	pub fn contains(&self, chunk: &CascadeChunk) -> bool {
+		self.cascade_chunks.contains(chunk) || self.grid_chunks.contains(chunk)
 	}
 }
 
@@ -313,9 +318,32 @@ impl<R: ResolutionMap> Cascade<R> {
 	}
 
 	pub fn chunks(&self, position: Vec3) -> Result<CascadeOutput, String> {
-		let cascade_chunks = self.cascade_chunks(position)?;
-		let grid_chunks = self.grid_chunks(position)?;
+		let cascade_chunks = self.cascade_chunks(position)?.into_iter().collect();
+		let grid_chunks = self.grid_chunks(position)?.into_iter().collect();
 		Ok(CascadeOutput { cascade_chunks, grid_chunks })
+	}
+
+	pub fn new_chunks(
+		&self,
+		prev: Vec3,
+		new: Vec3,
+	) -> Result<(CascadeOutput, CascadeOutput), String> {
+		// compute the new chunks
+		let new_chunks = self.chunks(new)?;
+
+		// compute the previous chunks
+		let prev_chunks = self.chunks(prev)?;
+
+		// compute the new chunks that are not in the previous chunks
+		let cascade_chunks = new_chunks
+			.cascade_chunks
+			.difference(&prev_chunks.cascade_chunks)
+			.cloned()
+			.collect();
+		let grid_chunks =
+			new_chunks.grid_chunks.difference(&prev_chunks.grid_chunks).cloned().collect();
+
+		Ok((CascadeOutput { cascade_chunks, grid_chunks }, new_chunks))
 	}
 
 	pub fn needs_new_chunks(&self, prev: Vec3, new: Vec3) -> bool {
@@ -572,7 +600,10 @@ mod tests {
 			grid_radius: 1,
 			grid_multiple_2: 0,
 		};
-		let chunks = cascade.chunks(Vec3::new(0.0, 0.0, 0.0))?.cascade();
+
+		let position = Vec3::new(0.0, 0.0, 0.0);
+		let chunks = cascade.chunks(position)?;
+		let chunks = chunks.cascade();
 
 		// the zero chunk and the 26 chunks in the first ring
 		assert_eq!(chunks.len(), 27);
@@ -580,7 +611,7 @@ mod tests {
 		// put the chunks in a BTreeSet to sort them
 		let mut chunks_sorted = BTreeSet::new();
 		for chunk in chunks {
-			chunks_sorted.insert(chunk);
+			chunks_sorted.insert(chunk.clone());
 		}
 
 		// make sure there are 27 unique chunks
@@ -613,7 +644,9 @@ mod tests {
 			grid_radius: 1,
 			grid_multiple_2: 0,
 		};
-		let chunks = cascade.chunks(Vec3::new(0.0, 0.0, 0.0))?.cascade();
+		let position = Vec3::new(0.0, 0.0, 0.0);
+		let chunks = cascade.chunks(position)?;
+		let chunks = chunks.cascade();
 
 		// Center chunk + 26 chunks from ring 0 + 26 chunks from ring 1 = 53 chunks
 		assert_eq!(chunks.len(), 53);
@@ -630,7 +663,7 @@ mod tests {
 		let ring0_lower_left_bottom = Vec3::new(0.0, 0.0, 0.0) - Vec3::new(1.0, 1.0, 1.0);
 		let ring0_chunks = nth_ring(1.0, 0, ring0_lower_left_bottom);
 		for chunk in ring0_chunks {
-			expected_chunks.insert(chunk);
+			expected_chunks.insert(chunk.clone());
 		}
 
 		// Ring 1: size = 3, lower_left_bottom = ring0_lower_left_bottom - (3, 3, 3)
@@ -644,7 +677,7 @@ mod tests {
 		// Convert actual chunks to BTreeSet
 		let mut chunks_sorted = BTreeSet::new();
 		for chunk in chunks {
-			chunks_sorted.insert(chunk);
+			chunks_sorted.insert(chunk.clone());
 		}
 
 		assert_eq!(chunks_sorted, expected_chunks);
@@ -661,7 +694,9 @@ mod tests {
 			grid_radius: 1,
 			grid_multiple_2: 0,
 		};
-		let chunks = cascade.chunks(Vec3::new(0.0, 0.0, 0.0))?.cascade();
+		let position = Vec3::new(0.0, 0.0, 0.0);
+		let chunks = cascade.chunks(position)?;
+		let chunks = chunks.cascade();
 
 		// Center chunk + 26 chunks from ring 0 = 27 chunks
 		assert_eq!(chunks.len(), 27);
@@ -678,13 +713,13 @@ mod tests {
 		let ring0_lower_left_bottom = Vec3::new(0.0, 0.0, 0.0) - Vec3::new(2.5, 2.5, 2.5);
 		let ring0_chunks = nth_ring(2.5, 1, ring0_lower_left_bottom);
 		for chunk in ring0_chunks {
-			expected_chunks.insert(chunk);
+			expected_chunks.insert(chunk.clone());
 		}
 
 		// Convert actual chunks to BTreeSet
 		let mut chunks_sorted = BTreeSet::new();
 		for chunk in chunks {
-			chunks_sorted.insert(chunk);
+			chunks_sorted.insert(chunk.clone());
 		}
 
 		assert_eq!(chunks_sorted, expected_chunks);
@@ -701,7 +736,9 @@ mod tests {
 			grid_radius: 1,
 			grid_multiple_2: 0,
 		};
-		let chunks = cascade.chunks(Vec3::new(0.0, 0.0, 0.0))?.cascade();
+		let position = Vec3::new(0.0, 0.0, 0.0);
+		let chunks = cascade.chunks(position)?;
+		let chunks = chunks.cascade();
 
 		// Center chunk + 26 chunks from ring 0 = 27 chunks
 		assert_eq!(chunks.len(), 27);
@@ -712,19 +749,19 @@ mod tests {
 		// Center chunk
 		let center_chunk =
 			CascadeChunk { origin: Vec3::new(0.0, 0.0, 0.0), size: 0.5, res_2: 2, omit: None };
-		expected_chunks.insert(center_chunk);
+		expected_chunks.insert(center_chunk.clone());
 
 		// Ring 0: lower_left_bottom = center - (min_size, min_size, min_size)
 		let ring0_lower_left_bottom = Vec3::new(0.0, 0.0, 0.0) - Vec3::new(0.5, 0.5, 0.5);
 		let ring0_chunks = nth_ring(0.5, 2, ring0_lower_left_bottom);
 		for chunk in ring0_chunks {
-			expected_chunks.insert(chunk);
+			expected_chunks.insert(chunk.clone());
 		}
 
 		// Convert actual chunks to BTreeSet
 		let mut chunks_sorted = BTreeSet::new();
 		for chunk in chunks {
-			chunks_sorted.insert(chunk);
+			chunks_sorted.insert(chunk.clone());
 		}
 
 		assert_eq!(chunks_sorted, expected_chunks);
