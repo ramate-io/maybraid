@@ -1,6 +1,7 @@
 use crate::{render_items, DispatchRenderItem, RenderItem};
 use bevy::prelude::*;
 use chunk::cascade::{Cascade, CascadeChunk, ResolutionMap};
+use std::any::type_name;
 use std::marker::PhantomData;
 
 #[derive(Component, Debug)]
@@ -46,7 +47,7 @@ impl<R: ResolutionMap + Send + Sync + 'static, I: RenderItem + Send + Sync + 'st
 		children_query: Query<&CascadeChunk, With<LodChild>>,
 	) {
 		for (entity, render_item, cascade, transform, children, record) in parent_query.iter() {
-			log::info!("Computing lod chunks for entity: {}", entity);
+			log::info!("Computing lod chunks for entity: {} {}", type_name::<I>(), entity);
 			// Handle the new chunks and cull the old chunks
 			if let Some(record) = record {
 				// Short circuit if the chunks are the same.
@@ -80,10 +81,9 @@ impl<R: ResolutionMap + Send + Sync + 'static, I: RenderItem + Send + Sync + 'st
 				}
 			} else {
 				if let Ok(new_chunks) = cascade.chunks(transform.translation) {
-					log::info!("Spawning new chunks for entity: {}", entity);
 					// spawn the new chunks as children of the parent
 					for chunk in new_chunks.all() {
-						log::info!("Spawning new chunk {:?}", chunk);
+						log::debug!("Spawning new chunk {} {:?}", type_name::<I>(), chunk);
 						commands.entity(entity).with_children(|parent| {
 							parent.spawn((LodChild, chunk, render_item.clone(), transform.clone()));
 						});

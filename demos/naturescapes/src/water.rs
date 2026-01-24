@@ -2,6 +2,13 @@ use crate::shaders::refraction_water::RefractionWater;
 use crate::shaders::water_material::WaterMaterial;
 use bevy::pbr::DefaultOpaqueRendererMethod;
 use bevy::prelude::*;
+use chunk::cascade::Cascade;
+use chunk::cascade::ConstantResolutionMap;
+use render_item::lod::Lod;
+use render_item::mesh::fetch_meshes;
+use render_item::mesh::handle::MeshHandle;
+use render_item::DispatchRenderItem;
+use terrain_sdf::ocean::{Ocean, OceanMesh, OceanPlugin};
 
 #[derive(Resource, Clone)]
 pub struct WaterMaterialHandle<M: Material>(pub Handle<M>);
@@ -44,6 +51,24 @@ pub fn water_playground(
 			}),
 		),
 	));
+
+	// spawn an ocean cascade chunk at the origin
+	let cascade = Cascade::<ConstantResolutionMap> {
+		min_size: 10.0,
+		number_of_rings: 5,
+		resolution_map: ConstantResolutionMap { res_2: 7 },
+		grid_radius: 2,
+		grid_multiple_2: 3,
+	};
+
+	commands.spawn((
+		Lod,
+		cascade,
+		Transform::from_translation(Vec3::ZERO),
+		DispatchRenderItem::new(Ocean::new(MeshMaterial3d::<RefractionWater>(
+			refraction_material.0.clone(),
+		))),
+	));
 }
 
 pub struct WaterPlaygroundPlugin;
@@ -60,5 +85,7 @@ impl Plugin for WaterPlaygroundPlugin {
 				.run_if(resource_exists::<WaterMaterialHandle<WaterMaterial>>)
 				.run_if(resource_exists::<WaterMaterialHandle<RefractionWater>>),
 		);
+		app.add_plugins(OceanPlugin::<ConstantResolutionMap, RefractionWater>::default());
+		app.add_systems(Update, fetch_meshes::<MeshHandle<OceanMesh>, RefractionWater>);
 	}
 }

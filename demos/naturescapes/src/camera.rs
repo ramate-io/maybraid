@@ -41,13 +41,6 @@ pub fn setup_camera(mut commands: Commands) {
 	let sin_pitch = 2.0 * (w * x - y * z);
 	let pitch = sin_pitch.asin();
 
-	log::info!(
-		"Camera rotation: {:?}, yaw: {}°, pitch: {}°",
-		rotation,
-		yaw.to_degrees(),
-		pitch.to_degrees()
-	);
-
 	commands.spawn((
 		Camera3d::default(),
 		Msaa::Off,
@@ -84,11 +77,9 @@ pub fn camera_controller(
 	if keyboard_input.just_pressed(KeyCode::KeyC) {
 		controller.character_mode = !controller.character_mode;
 		if controller.character_mode {
-			log::info!("Character mode enabled");
 			// When entering character mode, drop to terrain
 			controller.velocity = Vec3::ZERO;
 		} else {
-			log::info!("Character mode disabled");
 			controller.velocity = Vec3::ZERO;
 		}
 	}

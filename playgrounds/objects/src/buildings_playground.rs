@@ -27,8 +27,6 @@ pub fn building_playground<F: Material, P: Material>(
 	_floor_material: Res<BuildingMaterial<F>>,
 	partition_material: Res<BuildingMaterial<P>>,
 ) {
-	log::info!("Spawning building playground");
-
 	let partition_cache = HandleMap::<WallMesh>::new();
 	let mut scratchpad_filler = ScratchpadFiller::new(MeshMaterial3d(partition_material.0.clone()))
 		.with_wall_cache(partition_cache)

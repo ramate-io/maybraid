@@ -30,7 +30,7 @@ impl<M: Material> RenderItem for TerrainRenderItem<M> {
 		cascade_chunk: &CascadeChunk,
 		_transform: Transform,
 	) -> Vec<Entity> {
-		log::info!("Spawning terrain render items for cascade chunk: {:?}", cascade_chunk);
+		log::debug!("Spawning terrain render items for cascade chunk: {:?}", cascade_chunk);
 
 		let transform = Transform::from_translation(cascade_chunk.origin);
 		let mesh_handle =

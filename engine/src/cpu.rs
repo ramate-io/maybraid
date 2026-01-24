@@ -436,7 +436,6 @@ impl CpuMeshGenerator {
 		// Use cascade chunk origin for world position
 		// Note: mesh vertices are in local space relative to chunk origin
 		let world_pos = cascade_chunk.origin + sdf.translation();
-		log::info!("Typename: {:?}, Translation: {:?}", std::any::type_name::<S>(), sdf.translation());
 
 		let entity = commands
 			.spawn((
@@ -478,7 +477,7 @@ impl CpuMeshGenerator {
 		};
 		let end_time = std::time::Instant::now();
 		let duration = end_time.duration_since(start_time);
-		log::info!("Mesh time: {:?}", duration);
+		log::debug!("Mesh time: {:?}", duration);
 
 		// Default to grid (brown) for backward compatibility when called directly
 		Self::spawn_chunk_with_mesh(&sdf, commands, meshes, materials, cascade_chunk, mesh, false)

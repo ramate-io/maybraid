@@ -57,7 +57,6 @@ pub fn render_items<T: RenderItem + Send + Sync + 'static>(
 	>,
 ) {
 	for (_entity, dispatch, chunk, transform) in &query {
-		log::info!("Spawning render items for entity: {}", _entity);
 		dispatch.spawn_render_items(&mut commands, chunk, *transform);
 	}
 }

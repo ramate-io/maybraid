@@ -64,14 +64,14 @@ impl<T: MeshBuilder + MeshCache + MeshHandleCache> MeshFetcher for T {
 		} else {
 			self.build_mesh(cascade_chunk).map(|mesh| {
 				self.cache_mesh(&mesh, &normalized_cascade_chunk);
-				log::info!("Adding mesh to assets");
+				log::debug!("Adding mesh to assets");
 				meshes.add(mesh)
 			})
 		};
 
 		mesh_handle.map(|handle| {
 			self.cache_mesh_handle(handle.clone(), &normalized_cascade_chunk);
-			log::info!("Caching mesh handle");
+			log::debug!("Caching mesh handle");
 			handle
 		})
 	}

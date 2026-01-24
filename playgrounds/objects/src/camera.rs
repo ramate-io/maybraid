@@ -15,8 +15,6 @@ pub fn setup_camera(mut commands: Commands) {
 	let camera_pos = Vec3::new(0.0, 10.0, 20.0); // 10m up, 20m back
 	let look_at = Vec3::ZERO; // Look at origin
 
-	log::info!("Setting up camera at position: {:?}, looking at: {:?}", camera_pos, look_at);
-
 	// Create transform that looks at origin
 	let transform =
 		Transform::from_xyz(camera_pos.x, camera_pos.y, camera_pos.z).looking_at(look_at, Vec3::Y);
