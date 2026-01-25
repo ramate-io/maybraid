@@ -32,14 +32,6 @@ pub fn water_playground(
 	refraction_material: Res<WaterMaterialHandle<RefractionWater>>,
 	mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-	// spawn a big cube of water at the origin
-	commands.spawn((
-		Transform::from_translation(Vec3::ZERO),
-		Mesh3d(meshes.add(Cuboid::new(10.0, 10.0, 10.0))),
-		// MeshMaterial3d::<WaterMaterial>(water_material.0.clone()),
-		MeshMaterial3d::<RefractionWater>(refraction_material.0.clone()),
-	));
-
 	// spawn a brown ball in standard material at the origin in the middle of the water
 	commands.spawn((
 		Transform::from_translation(Vec3::ZERO),
@@ -55,9 +47,9 @@ pub fn water_playground(
 	// spawn an ocean cascade chunk at the origin
 	let cascade = Cascade::<ConstantResolutionMap> {
 		min_size: 10.0,
-		number_of_rings: 5,
+		number_of_rings: 0,
 		resolution_map: ConstantResolutionMap { res_2: 7 },
-		grid_radius: 2,
+		grid_radius: 8,
 		grid_multiple_2: 3,
 	};
 
@@ -75,7 +67,7 @@ pub struct WaterPlaygroundPlugin;
 
 impl Plugin for WaterPlaygroundPlugin {
 	fn build(&self, app: &mut App) {
-		app.insert_resource(DefaultOpaqueRendererMethod::deferred());
+		// app.insert_resource(DefaultOpaqueRendererMethod::deferred());
 		app.add_plugins(bevy::pbr::MaterialPlugin::<RefractionWater>::default());
 		app.add_plugins(bevy::pbr::MaterialPlugin::<WaterMaterial>::default());
 		app.add_systems(Startup, setup_water);

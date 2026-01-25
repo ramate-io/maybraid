@@ -47,7 +47,7 @@ impl<R: ResolutionMap + Send + Sync + 'static, I: RenderItem + Send + Sync + 'st
 		children_query: Query<&CascadeChunk, With<LodChild>>,
 	) {
 		for (entity, render_item, cascade, transform, children, record) in parent_query.iter() {
-			log::info!("Computing lod chunks for entity: {} {}", type_name::<I>(), entity);
+			log::debug!("Computing lod chunks for entity: {} {}", type_name::<I>(), entity);
 			// Handle the new chunks and cull the old chunks
 			if let Some(record) = record {
 				// Short circuit if the chunks are the same.
@@ -60,7 +60,7 @@ impl<R: ResolutionMap + Send + Sync + 'static, I: RenderItem + Send + Sync + 'st
 				{
 					// Spawn the chunks that didn't appear before.
 					for chunk in new_chunks.all() {
-						log::info!("chunk: {:?}", chunk);
+						log::debug!("chunk: {:?}", chunk);
 						commands.entity(entity).with_children(|parent| {
 							parent.spawn((LodChild, chunk, render_item.clone(), transform.clone()));
 						});

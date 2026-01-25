@@ -4,6 +4,7 @@ pub mod water;
 
 use bevy::diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin};
 use bevy::prelude::*;
+use bevy::render::globals::GlobalsPlugin;
 use engine::shaders::outline::EdgeMaterial;
 use std::f32::consts::PI;
 
@@ -19,6 +20,7 @@ pub struct NatureScapesPlugin;
 impl Plugin for NatureScapesPlugin {
 	fn build(&self, app: &mut App) {
 		// Register EdgeMaterial plugin
+		app.add_plugins(bevy::pbr::MaterialPlugin::<EdgeMaterial>::default());
 		app.add_plugins(FrameTimeDiagnosticsPlugin::default());
 		app.add_plugins(LogDiagnosticsPlugin::default());
 		app.add_plugins(water::WaterPlaygroundPlugin);
@@ -34,36 +36,14 @@ impl Plugin for NatureScapesPlugin {
 fn setup_lighting(mut commands: Commands) {
 	// Main directional light (sun) - primary light source
 	commands.spawn((
-		DirectionalLight { illuminance: 10000.0, shadows_enabled: true, ..default() },
-		Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, -PI / 4.0, PI / 4.0, 0.0)),
-	));
-
-	// Fill light from opposite direction - reduces harsh shadows
-	commands.spawn((
-		DirectionalLight {
-			illuminance: 500.0,     // Increased fill light
-			shadows_enabled: false, // No shadows for fill light
+		PointLight {
+			radius: 20.0,
+			intensity: 10000000000.0,
+			range: 100000.0,
+			shadows_enabled: true,
 			..default()
 		},
-		Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, PI / 4.0, -PI / 4.0, 0.0)),
-	));
-
-	// Additional fill lights from sides for omnidirectional illumination
-	// Left side
-	commands.spawn((
-		DirectionalLight { illuminance: 500.0, shadows_enabled: false, ..default() },
-		Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, 0.0, PI / 2.0, 0.0)),
-	));
-
-	// Right side
-	commands.spawn((
-		DirectionalLight { illuminance: 500.0, shadows_enabled: false, ..default() },
-		Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, 0.0, -PI / 2.0, 0.0)),
-	));
-
-	// Top-down fill light
-	commands.spawn((
-		DirectionalLight { illuminance: 500.0, shadows_enabled: false, ..default() },
-		Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, -PI / 2.0, 0.0, 0.0)),
+		// high in the sky
+		Transform::from_xyz(100.0, 100.0, 100.0),
 	));
 }

@@ -121,10 +121,10 @@ impl<M: Material> TerrainPlaygroundPlugin<M> {
 
 		// Set up the cascade
 		let cascade = Cascade::<ConstantResolutionMap> {
-			min_size: 10.0,
+			min_size: 20.0,
 			number_of_rings: 0,
-			resolution_map: ConstantResolutionMap { res_2: 7 },
-			grid_radius: 8,
+			resolution_map: ConstantResolutionMap { res_2: 5 },
+			grid_radius: 12,
 			grid_multiple_2: 3,
 		};
 

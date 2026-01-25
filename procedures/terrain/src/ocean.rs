@@ -90,7 +90,6 @@ impl<T: Material> RenderItem for Ocean<T> {
 		cascade_chunk: &CascadeChunk,
 		_transform: Transform,
 	) -> Vec<Entity> {
-		log::info!("Spawning ocean render items for cascade chunk: {:?}", cascade_chunk);
 		let mut render_items = Vec::new();
 
 		let mesh_handle =

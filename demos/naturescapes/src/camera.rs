@@ -43,13 +43,7 @@ pub fn setup_camera(mut commands: Commands) {
 
 	commands.spawn((
 		Camera3d::default(),
-		Msaa::Off,
 		transform,
-		Projection::Perspective(PerspectiveProjection {
-			near: 0.0001, // 10 cm
-			far: 2.0,     // 2000 km
-			..default()
-		}),
 		CameraController {
 			speed: 20.0,
 			sensitivity: 0.005,
@@ -58,8 +52,9 @@ pub fn setup_camera(mut commands: Commands) {
 			character_mode: false,
 			velocity: Vec3::ZERO,
 		},
+		Msaa::Off,
 		DepthPrepass,
-		DeferredPrepass,
+		// DeferredPrepass,
 	));
 }
 

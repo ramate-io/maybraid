@@ -24,6 +24,5 @@ where
 {
 	fn build(&self, app: &mut App) {
 		app.add_plugins(LodPlugin::<R, TerrainRenderItem<M>>::default());
-		app.add_plugins(MaterialPlugin::<M>::default());
 	}
 }
