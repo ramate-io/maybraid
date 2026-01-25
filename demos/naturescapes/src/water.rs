@@ -1,6 +1,5 @@
 use crate::shaders::refraction_water::RefractionWater;
 use crate::shaders::water_material::WaterMaterial;
-use bevy::pbr::DefaultOpaqueRendererMethod;
 use bevy::prelude::*;
 use chunk::cascade::Cascade;
 use chunk::cascade::ConstantResolutionMap;
@@ -67,7 +66,6 @@ pub struct WaterPlaygroundPlugin;
 
 impl Plugin for WaterPlaygroundPlugin {
 	fn build(&self, app: &mut App) {
-		// app.insert_resource(DefaultOpaqueRendererMethod::deferred());
 		app.add_plugins(bevy::pbr::MaterialPlugin::<RefractionWater>::default());
 		app.add_plugins(bevy::pbr::MaterialPlugin::<WaterMaterial>::default());
 		app.add_systems(Startup, setup_water);

@@ -4,9 +4,7 @@ pub mod water;
 
 use bevy::diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin};
 use bevy::prelude::*;
-use bevy::render::globals::GlobalsPlugin;
 use engine::shaders::outline::EdgeMaterial;
-use std::f32::consts::PI;
 
 mod camera;
 mod ui;
@@ -38,12 +36,12 @@ fn setup_lighting(mut commands: Commands) {
 	commands.spawn((
 		PointLight {
 			radius: 20.0,
-			intensity: 10000000000.0,
+			intensity: 100000000000.0,
 			range: 100000.0,
 			shadows_enabled: true,
 			..default()
 		},
 		// high in the sky
-		Transform::from_xyz(100.0, 100.0, 100.0),
+		Transform::from_xyz(1000.0, 1000.0, 1000.0),
 	));
 }

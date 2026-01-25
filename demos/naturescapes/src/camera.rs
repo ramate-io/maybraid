@@ -1,7 +1,4 @@
-use bevy::{
-	core_pipeline::prepass::{DeferredPrepass, DepthPrepass},
-	prelude::*,
-};
+use bevy::{core_pipeline::prepass::DepthPrepass, prelude::*};
 use std::f32::consts::PI;
 
 #[derive(Component)]
@@ -54,7 +51,6 @@ pub fn setup_camera(mut commands: Commands) {
 		},
 		Msaa::Off,
 		DepthPrepass,
-		// DeferredPrepass,
 	));
 }
 
