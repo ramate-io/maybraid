@@ -43,47 +43,24 @@ fn sanitize_depth(d: f32) -> f32 {
     return d;
 }
 
-// Returns the max positive depth jump in a 4-neighborhood.
-// (Only counts jumps where neighbor is farther away)
-fn max_positive_depth_jump_4(pos: vec4<f32>) -> f32 {
-    let d0 = depth_at(pos);
-
-    let dx1 = sanitize_depth(depth_at(pos + vec4<f32>( 0.0, 1.0 - (1000.0 * d0), 0.0, 0.0)));
-
-    return dx1 - d0;
-
-}
-
 // Edge strength from depth *curvature* (second derivative), not slope.
 fn depth_edge_laplacian(pos: vec4<f32>, strength: f32) -> f32 {
     let d0 = depth_at(pos);
 
-    let dR = depth_at(pos + vec4<f32>( 1.0,  0.0, 0.0, 0.0));
+    let dR = depth_at(pos + vec4<f32>(1.0,  0.0, 0.0, 0.0));
     let dL = depth_at(pos + vec4<f32>(-1.0,  0.0, 0.0, 0.0));
-    let dU = depth_at(pos + vec4<f32>( 0.0,  0.0, 1.0, 0.0));
-    let dD = depth_at(pos + vec4<f32>( 0.0, 0.0, -1.0, 0.0));
+    let dU = depth_at(pos + vec4<f32>( 0.0,  1.0, 0.0, 0.0));
+    let dD = depth_at(pos + vec4<f32>( 0.0, -1.0, 0.0, 0.0));
 
     // Discontinuity measure (2nd derivative)
     let lap = abs((dR + dL + dU + dD) - (4.0 * d0));
 
     // Normalize by distance so it doesn't vanish far away,
     // and doesn't explode up close.
-    let scale = max(0.05, 0.01 * abs(d0));
+    let scale = max(0.05, abs(1000.0 * d0));
 
     // Strength is your artistic knob
     return saturate((lap / scale) * strength);
-}
-
-// Produces an edge mask in [0,1] based on depth discontinuity.
-fn depth_edge_mask(pos: vec4<f32>, strength: f32) -> f32 {
-    let d0 = depth_at(pos);
-    let jump = max_positive_depth_jump_4(pos);
-
-    // Scale with distance so far edges don't disappear
-    let scale = max(0.15, 0.02 * d0);
-
-    // strength is your artistic multiplier
-    return saturate(jump * strength);
 }
 
 
