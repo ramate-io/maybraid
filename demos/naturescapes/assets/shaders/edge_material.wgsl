@@ -60,8 +60,8 @@ fn depth_edge_laplacian(pos: vec4<f32>, strength: f32) -> f32 {
 
     let dR = depth_at(pos + vec4<f32>( 1.0,  0.0, 0.0, 0.0));
     let dL = depth_at(pos + vec4<f32>(-1.0,  0.0, 0.0, 0.0));
-    let dU = depth_at(pos + vec4<f32>( 0.0,  1.0, 0.0, 0.0));
-    let dD = depth_at(pos + vec4<f32>( 0.0, -1.0, 0.0, 0.0));
+    let dU = depth_at(pos + vec4<f32>( 0.0,  0.0, 1.0, 0.0));
+    let dD = depth_at(pos + vec4<f32>( 0.0, 0.0, -1.0, 0.0));
 
     // Discontinuity measure (2nd derivative)
     let lap = abs((dR + dL + dU + dD) - (4.0 * d0));
