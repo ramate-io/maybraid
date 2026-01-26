@@ -1,6 +1,13 @@
 use crate::shaders::refraction_water::RefractionWater;
 use crate::shaders::water_material::WaterMaterial;
 use bevy::prelude::*;
+use chunk::cascade::Cascade;
+use chunk::cascade::ConstantResolutionMap;
+use render_item::lod::Lod;
+use render_item::mesh::fetch_meshes;
+use render_item::mesh::handle::MeshHandle;
+use render_item::DispatchRenderItem;
+use terrain_sdf::ocean::{Ocean, OceanMesh, OceanPlugin};
 
 #[derive(Resource, Clone)]
 pub struct WaterMaterialHandle<M: Material>(pub Handle<M>);
@@ -24,14 +31,6 @@ pub fn water_playground(
 	refraction_material: Res<WaterMaterialHandle<RefractionWater>>,
 	mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-	// spawn a big cube of water at the origin
-	commands.spawn((
-		Transform::from_translation(Vec3::ZERO),
-		Mesh3d(meshes.add(Cuboid::new(10.0, 10.0, 10.0))),
-		// MeshMaterial3d::<WaterMaterial>(water_material.0.clone()),
-		MeshMaterial3d::<RefractionWater>(refraction_material.0.clone()),
-	));
-
 	// spawn a brown ball in standard material at the origin in the middle of the water
 	commands.spawn((
 		Transform::from_translation(Vec3::ZERO),
@@ -42,6 +41,24 @@ pub fn water_playground(
 				..default()
 			}),
 		),
+	));
+
+	// spawn an ocean cascade chunk at the origin
+	let cascade = Cascade::<ConstantResolutionMap> {
+		min_size: 10.0,
+		number_of_rings: 0,
+		resolution_map: ConstantResolutionMap { res_2: 7 },
+		grid_radius: 8,
+		grid_multiple_2: 3,
+	};
+
+	commands.spawn((
+		Lod,
+		cascade,
+		Transform::from_translation(Vec3::ZERO),
+		DispatchRenderItem::new(Ocean::new(MeshMaterial3d::<RefractionWater>(
+			refraction_material.0.clone(),
+		))),
 	));
 }
 
@@ -58,5 +75,7 @@ impl Plugin for WaterPlaygroundPlugin {
 				.run_if(resource_exists::<WaterMaterialHandle<WaterMaterial>>)
 				.run_if(resource_exists::<WaterMaterialHandle<RefractionWater>>),
 		);
+		app.add_plugins(OceanPlugin::<ConstantResolutionMap, RefractionWater>::default());
+		app.add_systems(Update, fetch_meshes::<MeshHandle<OceanMesh>, RefractionWater>);
 	}
 }

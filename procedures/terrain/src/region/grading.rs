@@ -1,5 +1,5 @@
 use crate::region::{Region2D, RegionNoise};
-use crate::{ElevationModulation, PerlinTerrainSdf};
+use crate::{ElevationModulation, TerrainSdf};
 use bevy::prelude::*;
 
 /// Rounds the terrain height to the nearest unit amount.
@@ -69,7 +69,7 @@ impl RegionGradingModulation {
 impl ElevationModulation for RegionGradingModulation {
 	fn modify_elevation(
 		&self,
-		_perlin_terrain: &PerlinTerrainSdf,
+		_perlin_terrain: &TerrainSdf,
 		elevation: f32,
 		x: f32,
 		z: f32,

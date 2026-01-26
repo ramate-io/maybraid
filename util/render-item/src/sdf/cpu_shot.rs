@@ -409,7 +409,7 @@ impl <T: Sdf + Clone> CpuShotSdf for T {}
 
 impl <T: CpuShotSdf + NormalizeChunk> MeshBuilder for T {
 	fn build_mesh_impl(&self, cascade_chunk: &CascadeChunk) -> Option<Mesh> {
-		log::info!("Building mesh for chunk: {:?}", cascade_chunk);
+		log::debug!("Building mesh for chunk: {:?}", cascade_chunk);
 		self.cpu_chunk_mesh(cascade_chunk)
 	}
 }

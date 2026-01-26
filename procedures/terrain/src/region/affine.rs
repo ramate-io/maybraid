@@ -1,5 +1,5 @@
 use crate::region::{Region2D, RegionNoise};
-use crate::{ElevationModulation, PerlinTerrainSdf};
+use crate::{ElevationModulation, TerrainSdf};
 use bevy::prelude::*;
 
 /// A unified modulation: applies both scaling (`a`) and offset (`b`) inside a smooth region.
@@ -100,7 +100,7 @@ impl RegionAffineModulation {
 impl ElevationModulation for RegionAffineModulation {
 	fn modify_elevation(
 		&self,
-		_perlin_terrain: &PerlinTerrainSdf,
+		_perlin_terrain: &TerrainSdf,
 		elevation: f32,
 		x: f32,
 		z: f32,

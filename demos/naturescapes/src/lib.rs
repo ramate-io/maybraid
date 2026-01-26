@@ -1,9 +1,10 @@
 pub mod shaders;
+pub mod terrain;
 pub mod water;
 
 use bevy::diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin};
 use bevy::prelude::*;
-use std::f32::consts::PI;
+use engine::shaders::outline::EdgeMaterial;
 
 mod camera;
 mod ui;
@@ -17,9 +18,11 @@ pub struct NatureScapesPlugin;
 impl Plugin for NatureScapesPlugin {
 	fn build(&self, app: &mut App) {
 		// Register EdgeMaterial plugin
+		app.add_plugins(bevy::pbr::MaterialPlugin::<EdgeMaterial>::default());
 		app.add_plugins(FrameTimeDiagnosticsPlugin::default());
 		app.add_plugins(LogDiagnosticsPlugin::default());
 		app.add_plugins(water::WaterPlaygroundPlugin);
+		app.add_plugins(terrain::TerrainPlaygroundPlugin { material: EdgeMaterial::default() });
 
 		app.insert_resource(ClearColor(Color::hsla(201.0, 0.69, 0.62, 1.0)))
 			// forest
@@ -31,36 +34,14 @@ impl Plugin for NatureScapesPlugin {
 fn setup_lighting(mut commands: Commands) {
 	// Main directional light (sun) - primary light source
 	commands.spawn((
-		DirectionalLight { illuminance: 10000.0, shadows_enabled: true, ..default() },
-		Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, -PI / 4.0, PI / 4.0, 0.0)),
-	));
-
-	// Fill light from opposite direction - reduces harsh shadows
-	commands.spawn((
-		DirectionalLight {
-			illuminance: 500.0,     // Increased fill light
-			shadows_enabled: false, // No shadows for fill light
+		PointLight {
+			radius: 20.0,
+			intensity: 100000000000.0,
+			range: 100000.0,
+			shadows_enabled: true,
 			..default()
 		},
-		Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, PI / 4.0, -PI / 4.0, 0.0)),
-	));
-
-	// Additional fill lights from sides for omnidirectional illumination
-	// Left side
-	commands.spawn((
-		DirectionalLight { illuminance: 500.0, shadows_enabled: false, ..default() },
-		Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, 0.0, PI / 2.0, 0.0)),
-	));
-
-	// Right side
-	commands.spawn((
-		DirectionalLight { illuminance: 500.0, shadows_enabled: false, ..default() },
-		Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, 0.0, -PI / 2.0, 0.0)),
-	));
-
-	// Top-down fill light
-	commands.spawn((
-		DirectionalLight { illuminance: 500.0, shadows_enabled: false, ..default() },
-		Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, -PI / 2.0, 0.0, 0.0)),
+		// high in the sky
+		Transform::from_xyz(1000.0, 1000.0, 1000.0),
 	));
 }

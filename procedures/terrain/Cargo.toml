@@ -24,6 +24,8 @@ noise = "0.9"
 
 # Procedural generation
 sdf = { workspace = true }
+chunk = { workspace = true }
+render-item = { workspace = true }
 
 [lints]
 workspace = true

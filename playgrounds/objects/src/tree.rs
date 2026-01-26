@@ -36,8 +36,6 @@ pub fn tree_playground<T: Material, L: Material>(
 	trunk_material: Res<TreeMaterial<T>>,
 	leaf_material: Res<TreeMaterial<L>>,
 ) {
-	log::info!("Spawning tree playground");
-
 	let tree_cache = HandleMap::<SimpleTrunkSegment>::new();
 	let leaf_cache = HandleMap::<NoisyBall>::new();
 
@@ -61,8 +59,6 @@ pub fn square_tree_playground<T: Material, L: Material>(
 	trunk_material: Res<TreeMaterial<T>>,
 	leaf_material: Res<TreeMaterial<L>>,
 ) {
-	log::info!("Spawning tree playground");
-
 	let tree_cache = HandleMap::<SimpleTrunkSegment>::new();
 	let leaf_cache = HandleMap::<NoisyBall>::new();
 

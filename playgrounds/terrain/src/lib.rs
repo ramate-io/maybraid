@@ -25,10 +25,10 @@ impl Plugin for TerrainPlugin {
 		app.add_plugins(bevy::pbr::MaterialPlugin::<EdgeMaterial>::default());
 
 		// Set up geographic features
-		let terrain_chunk_config = ChunkConfig::<terrain::TerrainSdf>::default();
-		let terrain_resolution_config = ChunkResolutionConfig::<terrain::TerrainSdf>::default();
+		let terrain_chunk_config = ChunkConfig::<terrain::Terrain>::default();
+		let terrain_resolution_config = ChunkResolutionConfig::<terrain::Terrain>::default();
 		let terrain_config = TerrainConfig::new(self.seed);
-		let terrain_sdf = terrain::TerrainSdf { sdf: terrain::create_terrain_sdf(&terrain_config) };
+		let terrain_sdf = terrain::Terrain { sdf: terrain::create_terrain_sdf(&terrain_config) };
 		let terrain_sdf_resource = SdfResource::new(terrain_sdf);
 
 		app.insert_resource(terrain_config)
@@ -44,7 +44,7 @@ impl Plugin for TerrainPlugin {
 				Update,
 				(
 					camera::camera_controller,
-					manage_chunks::<terrain::TerrainSdf>,
+					manage_chunks::<terrain::Terrain>,
 					ui::update_coordinate_display,
 				),
 			);
