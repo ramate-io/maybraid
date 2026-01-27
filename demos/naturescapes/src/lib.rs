@@ -3,7 +3,7 @@ pub mod terrain;
 pub mod vegetation;
 pub mod water;
 
-use bevy::diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin};
+// use bevy::diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin};
 use bevy::prelude::*;
 use engine::shaders::{leaf_material::LeafMaterial, outline::EdgeMaterial};
 use terrain::TerrainSdf;

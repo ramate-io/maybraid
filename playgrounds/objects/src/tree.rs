@@ -43,6 +43,7 @@ pub fn tree_playground<T: Material, L: Material>(
 	let grove_builder = GroveBuilder::new(
 		MeshMaterial3d(trunk_material.0.clone()),
 		MeshMaterial3d(leaf_material.0.clone()),
+		NullTerrain,
 	)
 	.with_tree_cache(tree_cache)
 	.with_leaf_cache(leaf_cache);

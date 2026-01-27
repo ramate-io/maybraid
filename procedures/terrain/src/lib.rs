@@ -177,6 +177,7 @@ impl IdentifiedMesh for TerrainSdf {
 	}
 }
 
+#[derive(Debug, Clone)]
 pub struct NullTerrain;
 
 impl Terrain for NullTerrain {
