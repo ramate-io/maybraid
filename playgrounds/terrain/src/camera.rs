@@ -17,7 +17,7 @@ pub fn setup_camera(mut commands: Commands) {
 	let camera_pos = Vec3::new(0.0, 20.0, 30.0);
 	let look_at = Vec3::new(0.0, 0.0, 0.0);
 
-	log::info!("Setting up camera at position: {:?}, looking at: {:?}", camera_pos, look_at);
+	log::debug!("Setting up camera at position: {:?}, looking at: {:?}", camera_pos, look_at);
 
 	commands.spawn((
 		Camera3d::default(),
@@ -53,11 +53,11 @@ pub fn camera_controller(
 	if keyboard_input.just_pressed(KeyCode::KeyC) {
 		controller.character_mode = !controller.character_mode;
 		if controller.character_mode {
-			log::info!("Character mode enabled");
+			log::debug!("Character mode enabled");
 			// When entering character mode, drop to terrain
 			controller.velocity = Vec3::ZERO;
 		} else {
-			log::info!("Character mode disabled");
+			log::debug!("Character mode disabled");
 			controller.velocity = Vec3::ZERO;
 		}
 	}

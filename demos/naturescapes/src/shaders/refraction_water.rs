@@ -62,4 +62,8 @@ impl Material for RefractionWater {
 	fn enable_shadows() -> bool {
 		false
 	}
+
+	fn alpha_mode(&self) -> AlphaMode {
+		AlphaMode::Opaque
+	}
 }

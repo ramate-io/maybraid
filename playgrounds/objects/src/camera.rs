@@ -38,7 +38,7 @@ pub fn setup_camera(mut commands: Commands) {
 	let sin_pitch = 2.0 * (w * x - y * z);
 	let pitch = sin_pitch.asin();
 
-	log::info!(
+	log::debug!(
 		"Camera rotation: {:?}, yaw: {}°, pitch: {}°",
 		rotation,
 		yaw.to_degrees(),

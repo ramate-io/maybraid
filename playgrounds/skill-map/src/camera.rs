@@ -24,7 +24,7 @@ pub fn setup_camera(mut commands: Commands) {
 	let camera_pos = Vec3::new(0.0, 10.0, 20.0); // 10m up, 20m back
 	let look_at = Vec3::ZERO; // Look at origin
 
-	log::info!("Setting up camera at position: {:?}, looking at: {:?}", camera_pos, look_at);
+	log::debug!("Setting up camera at position: {:?}, looking at: {:?}", camera_pos, look_at);
 
 	// Create transform that looks at origin
 	let transform =
@@ -49,7 +49,7 @@ pub fn setup_camera(mut commands: Commands) {
 	let sin_pitch = 2.0 * (w * x - y * z);
 	let pitch = sin_pitch.asin();
 
-	log::info!(
+	log::debug!(
 		"Camera rotation: {:?}, yaw: {}°, pitch: {}°",
 		rotation,
 		yaw.to_degrees(),
@@ -113,7 +113,7 @@ fn get_gamepad_vertical_movement(gamepad: &Gamepad) -> f32 {
 	let mut vertical = 0.0;
 
 	if gamepad.pressed(GamepadButton::South) {
-		log::info!("South button pressed");
+		log::debug!("South button pressed");
 		vertical += 1.0;
 	}
 
