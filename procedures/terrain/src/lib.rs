@@ -117,19 +117,7 @@ impl TerrainSdf {
 impl Sdf for TerrainSdf {
 	fn distance(&self, p: Vec3) -> f32 {
 		// Apply elevation modulations (2.5D height offsets)
-		let mut terrain_height = self.height_at_with_all_modulations(p.x, p.z);
-
-		// This keeps the terrain height within a max.
-		// TODO: make this configurable via the TerrainConfig.
-		// Note, if you were to make the coefficient negative, you end up with ridges,
-		// though for the most part they will be very sharp unless the coefficient is very small.
-		// And, with simply the coefficient, and no base addend, you end up with all ridges peaking at the same height.
-		// So, really, the ideal model is to have a coefficient for ridge and plateau effects.
-		if terrain_height > 10.0 {
-			terrain_height = 10.0 + (0.75 * (terrain_height - 10.0));
-		} else if terrain_height < -10.0 {
-			terrain_height = -10.0 - (0.75 * (terrain_height + 10.0));
-		}
+		let terrain_height = self.height_at_with_all_modulations(p.x, p.z);
 
 		// Define bedrock level (bottom of world)
 		let bedrock_level = -self.height_scale * 4.0;

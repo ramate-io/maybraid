@@ -124,7 +124,7 @@ impl<M: Material> TerrainPlaygroundPlugin<M> {
 			min_size: 20.0,
 			number_of_rings: 0,
 			resolution_map: ConstantResolutionMap { res_2: 5 },
-			grid_radius: 12,
+			grid_radius: (12, 6, 12),
 			grid_multiple_2: 3,
 		};
 
