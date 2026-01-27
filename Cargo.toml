@@ -104,6 +104,7 @@ lychee-lib = { git = "https://github.com/lycheeverse/lychee", rev = "d6c2bbe6f1e
 comrak = { version = "0.43.0" }
 pulldown-cmark = "0.13.0"
 rayon = { version = "1.11.0" }
+noise = { version = "0.9" }
 
 # docs
 clap-markdown-ext = { git = "https://github.com/movementlabsxyz/clap-markdown-ext.git", rev = "8f54fe424504bf37fb01dc69aaed8166e429fe6a"}
@@ -112,7 +113,7 @@ sdf = { path = "util/sdf" }
 render-item = { path = "util/render-item" }
 chunk = { path = "util/chunk" }
 
-terrain-sdf = { path = "procedures/terrain" }
+terrain = { path = "procedures/terrain" }
 vegetation-sdf = { path = "procedures/vegetation" }
 buildings = { path = "procedures/buildings" }
 engine = { path = "engine" }

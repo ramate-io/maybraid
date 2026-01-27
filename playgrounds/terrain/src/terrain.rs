@@ -2,7 +2,7 @@
 use crate::sdf::{Bounds, Difference, Ellipse3d, Sdf, SignUniformIntervals, TubeSdf};
 use bevy::prelude::*;
 use noise::Perlin;
-use terrain_sdf::{
+use terrain::{
 	region::affine::RegionAffineModulation,
 	region::branching::BranchingPlan,
 	region::grading::RegionGradingModulation,
@@ -32,7 +32,7 @@ impl Sdf for Terrain {
 }
 
 /// Create the terrain SDF with all modulations
-pub fn create_terrain_sdf(config: &TerrainConfig) -> Box<dyn Sdf> {
+pub fn create_terrain(config: &TerrainConfig) -> Box<dyn Sdf> {
 	// Create base terrain SDF
 	let mut sdf = TerrainSdf::new(config.seed, config.height_scale);
 

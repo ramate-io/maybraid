@@ -21,7 +21,7 @@ rayon = { workspace = true }
 bevy = { workspace = true }
 
 # Procedural generation
-noise = "0.9"
+noise = { workspace = true }
 bytemuck = { version = "1.14", features = ["derive"] }
 
 [lints]

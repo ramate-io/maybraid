@@ -1,3 +1,4 @@
+use crate::vegetation::ReadyForVegetation;
 use bevy::prelude::*;
 use chunk::cascade::Cascade;
 use chunk::cascade::ConstantResolutionMap;
@@ -8,21 +9,26 @@ use render_item::mesh::fetch_meshes;
 use render_item::mesh::handle::MeshHandle;
 use render_item::DispatchRenderItem;
 use std::hash::Hash;
-use terrain_sdf::region::affine::RegionAffineModulation;
-use terrain_sdf::region::CircleRegion;
-use terrain_sdf::region::RectRegion;
-use terrain_sdf::{
+use terrain::region::affine::RegionAffineModulation;
+use terrain::region::CircleRegion;
+use terrain::region::RectRegion;
+use terrain::{
 	plugin::{Terrain, TerrainPlugin},
 	region::branching::BranchingPlan,
 	region::grading::RegionGradingModulation,
 	region::rounding::RegionRoundingModulation,
 	region::{Region2D, RegionNoise},
 	render::TerrainRenderItem,
-	TerrainSdf,
+	Terrain as Terrainlike,
 };
+
+pub use terrain::TerrainSdf;
 
 #[derive(Resource, Clone)]
 pub struct TerrainMaterial<M: Material>(pub Handle<M>);
+
+#[derive(Resource, Clone)]
+pub struct TerrainResource<T: Terrainlike + Clone>(pub T);
 
 #[derive(Clone)]
 pub struct TerrainPlaygroundPlugin<M: Material> {
@@ -118,6 +124,9 @@ impl<M: Material> TerrainPlaygroundPlugin<M> {
 		);
 
 		sdf.add_elevation_modulation(Box::new(graded_road));
+
+		// insert the terrain resource so that dependendent systems can access it
+		commands.spawn((ReadyForVegetation(sdf.clone()),));
 
 		// Set up the cascade
 		let cascade = Cascade::<ConstantResolutionMap> {

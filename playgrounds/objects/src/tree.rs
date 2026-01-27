@@ -2,6 +2,7 @@ use bevy::prelude::*;
 use chunk::cascade::CascadeChunk;
 use engine::shaders::{leaf_material::LeafMaterial, outline::EdgeMaterial};
 use render_item::{mesh::cache::handle::map::HandleMap, DispatchRenderItem};
+use terrain::NullTerrain;
 use vegetation_sdf::{
 	grove::GroveBuilder,
 	tree::{

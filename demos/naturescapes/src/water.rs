@@ -6,7 +6,7 @@ use render_item::lod::Lod;
 use render_item::mesh::fetch_meshes;
 use render_item::mesh::handle::MeshHandle;
 use render_item::DispatchRenderItem;
-use terrain_sdf::ocean::{Ocean, OceanMesh, OceanPlugin};
+use terrain::ocean::{Ocean, OceanMesh, OceanPlugin};
 
 #[derive(Resource, Clone)]
 pub struct WaterMaterialHandle<M: Material>(pub Handle<M>);
