@@ -183,7 +183,7 @@ pub struct Cascade<R: ResolutionMap> {
 	/// The resolution map for the cascade and grid.
 	pub resolution_map: R,
 	/// The Manhattan radius of the grid in the cascade
-	pub grid_radius: usize,
+	pub grid_radius: (usize, usize, usize),
 	/// The base two power of the multiple of the size of the largest ring in the cascade.
 	pub grid_multiple_2: u8,
 }
@@ -295,22 +295,26 @@ impl<R: ResolutionMap> Cascade<R> {
 		let origin = Vec3::new(origin_x, origin_y, origin_z);
 		let mut chunks = Vec::new();
 
+		let (x_radius, y_radius, z_radius) = self.grid_radius;
+
 		// construct the 2D grid of chunks
-		for x in -(self.grid_radius as i32)..=(self.grid_radius as i32) {
-			for z in -(self.grid_radius as i32)..=(self.grid_radius as i32) {
-				let chunk_origin = origin
-					+ Vec3::new(
-						x as f32 * self.grid_chunk_size(),
-						0.0,
-						z as f32 * self.grid_chunk_size(),
-					);
-				let chunk = CascadeChunk {
-					origin: chunk_origin,
-					size: self.grid_chunk_size(),
-					res_2: self.resolution_map.ring_to_power_of_2(self.number_of_rings),
-					omit,
-				};
-				chunks.push(chunk);
+		for x in -(x_radius as i32)..=(x_radius as i32) {
+			for z in -(z_radius as i32)..=(z_radius as i32) {
+				for y in -(y_radius as i32)..=(y_radius as i32) {
+					let chunk_origin = origin
+						+ Vec3::new(
+							x as f32 * self.grid_chunk_size(),
+							y as f32 * self.grid_chunk_size(),
+							z as f32 * self.grid_chunk_size(),
+						);
+					let chunk = CascadeChunk {
+						origin: chunk_origin,
+						size: self.grid_chunk_size(),
+						res_2: self.resolution_map.ring_to_power_of_2(self.number_of_rings),
+						omit,
+					};
+					chunks.push(chunk);
+				}
 			}
 		}
 
@@ -597,7 +601,7 @@ mod tests {
 			min_size: 1.0,
 			number_of_rings: 1,
 			resolution_map: ConstantResolutionMap { res_2: 0 },
-			grid_radius: 1,
+			grid_radius: (1, 1, 1),
 			grid_multiple_2: 0,
 		};
 
@@ -641,7 +645,7 @@ mod tests {
 			min_size: 1.0,
 			number_of_rings: 2,
 			resolution_map: ConstantResolutionMap { res_2: 0 },
-			grid_radius: 1,
+			grid_radius: (1, 1, 1),
 			grid_multiple_2: 0,
 		};
 		let position = Vec3::new(0.0, 0.0, 0.0);
@@ -691,7 +695,7 @@ mod tests {
 			min_size: 2.5,
 			number_of_rings: 1,
 			resolution_map: ConstantResolutionMap { res_2: 1 },
-			grid_radius: 1,
+			grid_radius: (1, 1, 1),
 			grid_multiple_2: 0,
 		};
 		let position = Vec3::new(0.0, 0.0, 0.0);
@@ -733,7 +737,7 @@ mod tests {
 			min_size: 0.5,
 			number_of_rings: 1,
 			resolution_map: ConstantResolutionMap { res_2: 2 },
-			grid_radius: 1,
+			grid_radius: (1, 1, 1),
 			grid_multiple_2: 0,
 		};
 		let position = Vec3::new(0.0, 0.0, 0.0);

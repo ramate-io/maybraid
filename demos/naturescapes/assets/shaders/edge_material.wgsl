@@ -117,12 +117,12 @@ fn fragment(
     // 4. Mix: apply edges on top of PBR lighting
     //-----------------------------------------------------
     let shaded = lit_color.rgb * intensity;
-    let final_color = shaded * 0.75 + base_color.rgb * 0.25;
 
     //-----------------------------------------------------
     // 5. Apply tonemapping, color grading, exposure
-    let output = tone_mapping(vec4<f32>(final_color, 1.0), view.color_grading);
+    let toned = tone_mapping(vec4<f32>(shaded, 1.0), view.color_grading);
 
+    let final_color = base_color.rgb * 0.3 + shaded * 0.4 + toned.rgb * 0.4;
 
-    return output;
+    return vec4<f32>(final_color, 1.0);
 }
