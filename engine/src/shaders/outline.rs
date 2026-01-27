@@ -14,6 +14,12 @@ impl Default for EdgeMaterial {
 	}
 }
 
+impl EdgeMaterial {
+	pub fn with_base_color(self, base_color: Vec4) -> Self {
+		Self { base_color }
+	}
+}
+
 impl Material for EdgeMaterial {
 	fn fragment_shader() -> ShaderRef {
 		"shaders/edge_material.wgsl".into()

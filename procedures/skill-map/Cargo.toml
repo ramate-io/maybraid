@@ -20,7 +20,7 @@ rayon = { workspace = true }
 # Bevy core dependencies
 bevy = { workspace = true }
 
-noise = "0.9"
+noise = { workspace = true }
 
 # Procedural generation
 comproc = { workspace = true }

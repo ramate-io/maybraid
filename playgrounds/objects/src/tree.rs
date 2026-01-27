@@ -2,6 +2,7 @@ use bevy::prelude::*;
 use chunk::cascade::CascadeChunk;
 use engine::shaders::{leaf_material::LeafMaterial, outline::EdgeMaterial};
 use render_item::{mesh::cache::handle::map::HandleMap, DispatchRenderItem};
+use terrain::NullTerrain;
 use vegetation_sdf::{
 	grove::GroveBuilder,
 	tree::{
@@ -42,6 +43,7 @@ pub fn tree_playground<T: Material, L: Material>(
 	let grove_builder = GroveBuilder::new(
 		MeshMaterial3d(trunk_material.0.clone()),
 		MeshMaterial3d(leaf_material.0.clone()),
+		NullTerrain,
 	)
 	.with_tree_cache(tree_cache)
 	.with_leaf_cache(leaf_cache);

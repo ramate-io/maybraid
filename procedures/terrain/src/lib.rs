@@ -14,6 +14,10 @@ use sdf::{Sdf, Sign, SignBoundary, SignUniformIntervals};
 use std::fmt::Debug;
 use std::sync::Arc;
 
+pub trait Terrain {
+	fn composed_height_at(&self, x: f32, z: f32) -> f32;
+}
+
 /// Trait for elevation modulations that modify terrain height in 2.5D
 /// Returns the height offset at a given (x, z) position (Y is ignored)
 pub trait ElevationModulation: Send + Sync + Debug {
@@ -114,6 +118,12 @@ impl TerrainSdf {
 	}
 }
 
+impl Terrain for TerrainSdf {
+	fn composed_height_at(&self, x: f32, z: f32) -> f32 {
+		self.height_at_with_all_modulations(x, z)
+	}
+}
+
 impl Sdf for TerrainSdf {
 	fn distance(&self, p: Vec3) -> f32 {
 		// Apply elevation modulations (2.5D height offsets)
@@ -164,5 +174,20 @@ impl IdentifiedMesh for TerrainSdf {
 	fn id(&self) -> MeshId {
 		let debug_string = format!("{:?}", self);
 		MeshId::new(debug_string)
+	}
+}
+
+#[derive(Debug, Clone)]
+pub struct NullTerrain;
+
+impl Terrain for NullTerrain {
+	fn composed_height_at(&self, _x: f32, _z: f32) -> f32 {
+		0.0
+	}
+}
+
+impl Default for NullTerrain {
+	fn default() -> Self {
+		Self {}
 	}
 }

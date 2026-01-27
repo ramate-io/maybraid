@@ -6,11 +6,12 @@ use chunk::cascade::CascadeChunk;
 use comproc::noise::config::NoiseConfig;
 use render_item::mesh::cache::handle::map::HandleMap;
 use render_item::RenderItem;
+use terrain::Terrain;
 
 use noise::Perlin;
 
 #[derive(Component, Clone)]
-pub struct GroveBuilder<T: Material, L: Material> {
+pub struct GroveBuilder<T: Material, L: Material, E: Terrain + Clone> {
 	noise_config_3d: NoiseConfig<3, Perlin>,
 	noise_config_4d: NoiseConfig<4, Perlin>,
 	threshold: f32,
@@ -23,10 +24,15 @@ pub struct GroveBuilder<T: Material, L: Material> {
 	leaf_cache: HandleMap<NoisyBall>,
 	min_height: f32,
 	max_height: f32,
+	terrain: E,
 }
 
-impl<T: Material, L: Material> GroveBuilder<T, L> {
-	pub fn new(trunk_material: MeshMaterial3d<T>, leaf_material: MeshMaterial3d<L>) -> Self {
+impl<T: Material, L: Material, E: Terrain + Clone> GroveBuilder<T, L, E> {
+	pub fn new(
+		trunk_material: MeshMaterial3d<T>,
+		leaf_material: MeshMaterial3d<L>,
+		terrain: E,
+	) -> Self {
 		Self {
 			noise_config_3d: NoiseConfig::default(),
 			noise_config_4d: NoiseConfig::default(),
@@ -40,6 +46,7 @@ impl<T: Material, L: Material> GroveBuilder<T, L> {
 			leaf_cache: HandleMap::new(),
 			min_height: 2.0,
 			max_height: 6.0,
+			terrain,
 		}
 	}
 
@@ -67,7 +74,11 @@ impl<T: Material, L: Material> GroveBuilder<T, L> {
 		self.noise_config_3d.vec3_amp(position) as f32 * self.step_size / 2.0
 	}
 
-	pub fn get_height(&self, position: Vec3) -> f32 {
+	pub fn get_terrain_height(&self, x: f32, z: f32) -> f32 {
+		self.terrain.composed_height_at(x, z)
+	}
+
+	pub fn get_tree_height(&self, position: Vec3) -> f32 {
 		let noise = self.noise_config_3d.vec3_on_unit(position);
 		noise as f32 * (self.max_height - self.min_height) + self.min_height
 	}
@@ -77,19 +88,28 @@ impl<T: Material, L: Material> GroveBuilder<T, L> {
 		for i in 0..self.count {
 			for j in 0..self.count {
 				let pre_position = self.anchor
-					+ Vec3::new(i as f32 * self.step_size, 0.0, j as f32 * self.step_size);
+					+ Vec3::new(
+						self.anchor.x + i as f32 * self.step_size,
+						self.get_terrain_height(
+							self.anchor.x + i as f32 * self.step_size,
+							self.anchor.z + j as f32 * self.step_size,
+						),
+						self.anchor.z + j as f32 * self.step_size,
+					);
 
-				let position = pre_position
+				// Glue the position to the terrain
+				let mut position = pre_position
 					+ Vec3::new(
 						self.inner_noise(pre_position),
 						0.0,
 						self.inner_noise(pre_position),
 					);
+				position.y = self.get_terrain_height(position.x, position.z);
 
 				if self.meets_threshold(position) {
 					let tree_builder = TreeBuilder {
 						anchor: position,
-						height: self.get_height(position),
+						height: self.get_tree_height(position),
 						branch_count: 4,
 						leaf_ball_scale: Vec3::new(1.0, 1.0, 1.0),
 						noise_config_3d: self.noise_config_3d.clone(),

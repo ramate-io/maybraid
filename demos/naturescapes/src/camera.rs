@@ -124,9 +124,6 @@ fn free_fly_movement(
 	if keyboard_input.pressed(KeyCode::Space) {
 		movement += Vec3::Y;
 	}
-	if keyboard_input.pressed(KeyCode::ShiftLeft) {
-		movement -= Vec3::Y;
-	}
 
 	if movement.length() > 0.0 {
 		movement = movement.normalize() * controller.speed * time.delta_secs();
