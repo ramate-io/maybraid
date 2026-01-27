@@ -39,7 +39,11 @@ pub fn setup_camera(mut commands: Commands) {
 	let pitch = sin_pitch.asin();
 
 	commands.spawn((
-		Camera3d::default(),
+		Camera3d {
+			screen_space_specular_transmission_quality:
+				bevy::camera::ScreenSpaceTransmissionQuality::Low,
+			..default()
+		},
 		transform,
 		CameraController {
 			speed: 20.0,

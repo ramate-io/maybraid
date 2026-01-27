@@ -1,5 +1,4 @@
 use crate::shaders::refraction_water::RefractionWater;
-use crate::shaders::water_material::WaterMaterial;
 use bevy::prelude::*;
 use chunk::cascade::Cascade;
 use chunk::cascade::ConstantResolutionMap;
@@ -14,12 +13,8 @@ pub struct WaterMaterialHandle<M: Material>(pub Handle<M>);
 
 pub fn setup_water(
 	mut commands: Commands,
-	mut water_materials: ResMut<Assets<WaterMaterial>>,
 	mut refraction_materials: ResMut<Assets<RefractionWater>>,
 ) {
-	let water_material_handle = water_materials.add(WaterMaterial::default());
-	commands.insert_resource(WaterMaterialHandle(water_material_handle));
-
 	let refraction_material_handle = refraction_materials.add(RefractionWater::default());
 	commands.insert_resource(WaterMaterialHandle(refraction_material_handle));
 }
@@ -27,7 +22,6 @@ pub fn setup_water(
 pub fn water_playground(
 	mut commands: Commands,
 	mut meshes: ResMut<Assets<Mesh>>,
-	_water_material: Res<WaterMaterialHandle<WaterMaterial>>,
 	refraction_material: Res<WaterMaterialHandle<RefractionWater>>,
 	mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
@@ -67,13 +61,12 @@ pub struct WaterPlaygroundPlugin;
 impl Plugin for WaterPlaygroundPlugin {
 	fn build(&self, app: &mut App) {
 		app.add_plugins(bevy::pbr::MaterialPlugin::<RefractionWater>::default());
-		app.add_plugins(bevy::pbr::MaterialPlugin::<WaterMaterial>::default());
 		app.add_systems(Startup, setup_water);
 		app.add_systems(
 			Update,
 			water_playground
-				.run_if(resource_exists::<WaterMaterialHandle<WaterMaterial>>)
-				.run_if(resource_exists::<WaterMaterialHandle<RefractionWater>>),
+				.run_if(resource_exists::<WaterMaterialHandle<RefractionWater>>)
+				.run_if(run_once),
 		);
 		app.add_plugins(OceanPlugin::<ConstantResolutionMap, RefractionWater>::default());
 		app.add_systems(Update, fetch_meshes::<MeshHandle<OceanMesh>, RefractionWater>);

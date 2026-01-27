@@ -76,13 +76,13 @@ pub fn update_checker_size(
 	if keyboard_input.just_pressed(KeyCode::Equal) {
 		checker_size.increase();
 		changed = true;
-		log::info!("Checker size increased to {} meters", checker_size.size_meters);
+		log::debug!("Checker size increased to {} meters", checker_size.size_meters);
 	}
 
 	if keyboard_input.just_pressed(KeyCode::Minus) {
 		checker_size.decrease();
 		changed = true;
-		log::info!("Checker size decreased to {} meters", checker_size.size_meters);
+		log::debug!("Checker size decreased to {} meters", checker_size.size_meters);
 	}
 
 	if changed {

@@ -18,4 +18,8 @@ impl Material for EdgeMaterial {
 	fn fragment_shader() -> ShaderRef {
 		"shaders/edge_material.wgsl".into()
 	}
+
+	fn alpha_mode(&self) -> AlphaMode {
+		AlphaMode::Opaque
+	}
 }

@@ -121,7 +121,7 @@ impl FireballPlugin {
 	) {
 		for (entity, dispatch) in dispatch_query.iter() {
 			if let Ok(camera) = camera_query.single() {
-				log::info!("Dispatching camera fireball");
+				log::debug!("Dispatching camera fireball");
 				let mut fireball = dispatch.0.clone();
 
 				// the velocity magnitude of the fireball is the length of the given fireball velocity vector

@@ -5,7 +5,7 @@ use engine::LoadedChunks;
 pub struct CoordinateDisplay;
 
 pub fn setup_debug_ui(mut commands: Commands) {
-	log::info!("Setting up debug UI");
+	log::debug!("Setting up debug UI");
 
 	commands
 		.spawn((

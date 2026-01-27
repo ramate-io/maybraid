@@ -131,7 +131,7 @@ impl LazySkillMapRegistrationPlugin {
 		>,
 	) {
 		for (entity, _skill_map_render_target, _reified_skill_map_id, render_layer) in &query {
-			log::info!("Unpacking render layer for entity {:?}", entity);
+			log::debug!("Unpacking render layer for entity {:?}", entity);
 			commands.entity(entity).insert(render_layer.0.clone());
 		}
 	}

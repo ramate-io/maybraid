@@ -33,7 +33,7 @@ impl Plugin for SkillMapPlaygroundPlugin {
 }
 
 pub fn skill_map_playground(mut commands: Commands) {
-	log::info!("Spawning skill map playground");
+	log::debug!("Spawning skill map playground");
 
 	commands.spawn((
 		SkillMapId(0),
@@ -60,7 +60,7 @@ pub fn skill_map_playground(mut commands: Commands) {
 		))
 		.id();
 
-	log::info!("Track camera transform entity: {:?}", id);
+	log::debug!("Track camera transform entity: {:?}", id);
 }
 
 #[derive(Component, Debug, Clone)]
@@ -212,7 +212,7 @@ impl RightCollidable for PowerUp {
 		_left: Entity,
 		right: Entity,
 	) -> Entity {
-		log::info!("Spawning power up");
+		log::debug!("Spawning power up");
 
 		commands.entity(right).insert(Visibility::Hidden);
 		commands.entity(right).insert(IgnoreRightCollisions);
@@ -343,10 +343,10 @@ pub fn restore_power_ups(
 		return;
 	}
 
-	log::info!("Restoring power ups");
+	log::debug!("Restoring power ups");
 
 	for (entity, _power_up) in query.iter() {
-		log::info!("Restoring power up: {:?}", entity);
+		log::debug!("Restoring power up: {:?}", entity);
 		commands.entity(entity).insert(Visibility::Visible);
 		commands.entity(entity).remove::<IgnoreRightCollisions>();
 	}
