@@ -1,4 +1,5 @@
 use bevy::math::bounding::Aabb3d;
+use bevy::math::bounding::BoundingVolume;
 use bevy::prelude::*;
 use std::collections::HashSet;
 use std::fmt::Debug;
@@ -101,6 +102,34 @@ impl Hash for CascadeChunk {
 }
 
 impl CascadeChunk {
+	pub fn contains_point(&self, point: Vec3) -> bool {
+		if let Some(omit) = self.omit {
+			if omit.closest_point(point) == point.into() {
+				return false;
+			}
+		}
+
+		point.x >= self.origin.x
+			&& point.x <= self.origin.x + self.size
+			&& point.y >= self.origin.y
+			&& point.y <= self.origin.y + self.size
+			&& point.z >= self.origin.z
+			&& point.z <= self.origin.z + self.size
+	}
+
+	pub fn column_contains_point(&self, point: Vec3) -> bool {
+		if let Some(omit) = self.omit {
+			if omit.closest_point(point) == point.into() {
+				return false;
+			}
+		}
+
+		point.x >= self.origin.x
+			&& point.x <= self.origin.x + self.size
+			&& point.z >= self.origin.z
+			&& point.z <= self.origin.z + self.size
+	}
+
 	pub fn resolution(&self) -> usize {
 		2_usize.pow(self.res_2 as u32)
 	}
@@ -185,7 +214,7 @@ pub struct Cascade<R: ResolutionMap> {
 	/// The resolution map for the cascade and grid.
 	pub resolution_map: R,
 	/// The Manhattan radius of the grid in the cascade
-	pub grid_radius: (usize, usize, usize),
+	pub grid_radius: Option<(usize, usize, usize)>,
 	/// The base two power of the multiple of the size of the largest ring in the cascade.
 	pub grid_multiple_2: u8,
 }
@@ -291,14 +320,17 @@ impl<R: ResolutionMap> Cascade<R> {
 	/// This allows for low-cost distant features over a tight high-resolution cascade.
 	/// You don't always have to cascade out to the general world resolution that you want.
 	pub fn grid_chunks(&self, position: Vec3) -> Result<Vec<CascadeChunk>, String> {
+		let (x_radius, y_radius, z_radius) = match self.grid_radius {
+			Some(grid_radius) => grid_radius,
+			None => return Ok(vec![]),
+		};
+
 		let omit = Some(self.cascade_aabb(position));
 		let origin_x = (position.x / self.grid_chunk_size()).floor() * self.grid_chunk_size();
 		let origin_y = self.grid_chunk_size() / -2.0;
 		let origin_z = (position.z / self.grid_chunk_size()).floor() * self.grid_chunk_size();
 		let origin = Vec3::new(origin_x, origin_y, origin_z);
 		let mut chunks = Vec::new();
-
-		let (x_radius, y_radius, z_radius) = self.grid_radius;
 
 		// construct the 2D grid of chunks
 		for x in -(x_radius as i32)..=(x_radius as i32) {
@@ -398,6 +430,19 @@ pub struct ConstantResolutionMap {
 impl ResolutionMap for ConstantResolutionMap {
 	fn ring_to_power_of_2(&self, _ring: u8) -> u8 {
 		self.res_2
+	}
+}
+
+#[derive(Component, Debug, Clone, Copy)]
+pub struct DecreasingResolutionMap {
+	pub from_res_2: u8,
+	pub by: u8,
+	pub min_res_2: u8,
+}
+
+impl ResolutionMap for DecreasingResolutionMap {
+	fn ring_to_power_of_2(&self, ring: u8) -> u8 {
+		self.min_res_2.max(self.from_res_2 - ring * self.by)
 	}
 }
 
@@ -633,7 +678,7 @@ mod tests {
 			min_size: 1.0,
 			number_of_rings: 1,
 			resolution_map: ConstantResolutionMap { res_2: 0 },
-			grid_radius: (1, 1, 1),
+			grid_radius: Some((1, 1, 1)),
 			grid_multiple_2: 0,
 		};
 
@@ -677,7 +722,7 @@ mod tests {
 			min_size: 1.0,
 			number_of_rings: 2,
 			resolution_map: ConstantResolutionMap { res_2: 0 },
-			grid_radius: (1, 1, 1),
+			grid_radius: Some((1, 1, 1)),
 			grid_multiple_2: 0,
 		};
 		let position = Vec3::new(0.0, 0.0, 0.0);
@@ -732,7 +777,7 @@ mod tests {
 			min_size: 2.5,
 			number_of_rings: 1,
 			resolution_map: ConstantResolutionMap { res_2: 1 },
-			grid_radius: (1, 1, 1),
+			grid_radius: Some((1, 1, 1)),
 			grid_multiple_2: 0,
 		};
 		let position = Vec3::new(0.0, 0.0, 0.0);
@@ -779,7 +824,7 @@ mod tests {
 			min_size: 0.5,
 			number_of_rings: 1,
 			resolution_map: ConstantResolutionMap { res_2: 2 },
-			grid_radius: (1, 1, 1),
+			grid_radius: Some((1, 1, 1)),
 			grid_multiple_2: 0,
 		};
 		let position = Vec3::new(0.0, 0.0, 0.0);

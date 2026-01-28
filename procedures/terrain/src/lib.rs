@@ -16,6 +16,33 @@ use std::sync::Arc;
 
 pub trait Terrain {
 	fn composed_height_at(&self, x: f32, z: f32) -> f32;
+
+	fn laplacian_at(&self, x: f32, z: f32, step: f32) -> f32 {
+		let h0 = self.composed_height_at(x, z);
+		let h1 = self.composed_height_at(x + step, z);
+		let h2 = self.composed_height_at(x, z + step);
+		let h3 = self.composed_height_at(x - step, z);
+		let h4 = self.composed_height_at(x, z - step);
+		(h1 + h2 + h3 + h4 - 4.0 * h0) / step / step
+	}
+
+	fn slope_mag(&self, x: f32, z: f32, step: f32) -> f32 {
+		let hx1 = self.composed_height_at(x + step, z);
+		let hx0 = self.composed_height_at(x - step, z);
+
+		let hz1 = self.composed_height_at(x, z + step);
+		let hz0 = self.composed_height_at(x, z - step);
+
+		let dx = (hx1 - hx0) / (2.0 * step);
+		let dz = (hz1 - hz0) / (2.0 * step);
+
+		(dx * dx + dz * dz).sqrt()
+	}
+
+	fn slope_angle_deg(&self, x: f32, z: f32, step: f32) -> f32 {
+		let s = self.slope_mag(x, z, step);
+		s.atan().to_degrees()
+	}
 }
 
 /// Trait for elevation modulations that modify terrain height in 2.5D

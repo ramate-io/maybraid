@@ -1,6 +1,7 @@
 use bevy::prelude::*;
-use chunk::cascade::CascadeChunk;
-use chunk::cascade::ConstantResolutionMap;
+use chunk::cascade::Cascade;
+use chunk::cascade::{ConstantResolutionMap, DecreasingResolutionMap};
+use render_item::lod::Lod;
 use render_item::lod::LodPlugin;
 use render_item::mesh::cache::handle::map::HandleMap;
 use render_item::mesh::cache::mesh::disk::DiskMeshCache;
@@ -75,7 +76,7 @@ impl<T: Material, L: Material, E: Terrainlike + Clone + Send + Sync + 'static>
 
 			let stick_mesh_cache = DiskMeshCache::try_default().ok();
 			let ball_mesh_cache = DiskMeshCache::try_default().ok();
-			let grove_builder = GroveBuilder::new(
+			let grove1_builder = GroveBuilder::new(
 				MeshMaterial3d(trunk_material.0.clone()),
 				MeshMaterial3d(leaf_material.0.clone()),
 				ready_for_vegetation.0.clone(),
@@ -83,12 +84,25 @@ impl<T: Material, L: Material, E: Terrainlike + Clone + Send + Sync + 'static>
 			.with_tree_cache(tree_cache)
 			.with_leaf_cache(leaf_cache)
 			.with_stick_mesh_cache(stick_mesh_cache)
-			.with_ball_mesh_cache(ball_mesh_cache);
+			.with_ball_mesh_cache(ball_mesh_cache)
+			.with_count(256)
+			.with_step_size(8.0)
+			.with_anchor(Vec3::new(-800.0, 0.0, -800.0));
+
+			let cascade = Cascade {
+				min_size: 20.0,
+				number_of_rings: 5,
+				resolution_map: DecreasingResolutionMap { from_res_2: 6, by: 1, min_res_2: 3 },
+				grid_radius: None,
+				grid_multiple_2: 0,
+			};
 
 			commands.spawn((
-				CascadeChunk::unit_center_chunk().with_res_2(3),
-				DispatchRenderItem::new(grove_builder.build()),
+				Lod,
+				cascade.clone(),
+				DispatchRenderItem::new(grove1_builder.build()),
 				Transform::from_translation(Vec3::ZERO),
+				Children::default(),
 			));
 		}
 	}
@@ -102,7 +116,7 @@ where
 {
 	fn build(&self, app: &mut App) {
 		app.add_systems(Startup, self.build_setup_vegetation_materials());
-		app.add_plugins(LodPlugin::<ConstantResolutionMap, Grove<T, L>>::default());
+		app.add_plugins(LodPlugin::<DecreasingResolutionMap, Grove<T, L>>::default());
 		app.add_systems(Update, Self::place_vegetation);
 		app.add_systems(Update, fetch_meshes::<MeshHandle<SimpleTrunkSegment>, T>);
 		app.add_systems(Update, fetch_meshes::<MeshHandle<NoisyBall>, L>);

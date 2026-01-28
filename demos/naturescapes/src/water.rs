@@ -42,7 +42,7 @@ pub fn water_playground(
 		min_size: 1000.0,
 		number_of_rings: 0,
 		resolution_map: ConstantResolutionMap { res_2: 7 },
-		grid_radius: (8, 8, 8),
+		grid_radius: Some((8, 8, 8)),
 		grid_multiple_2: 3,
 	};
 

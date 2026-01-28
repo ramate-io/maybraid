@@ -1,5 +1,8 @@
+use bevy::pbr::{MaterialPipeline, MaterialPipelineKey};
+use bevy::render::render_resource::*;
 use bevy::{
-	prelude::*, reflect::TypePath, render::render_resource::AsBindGroup, shader::ShaderRef,
+	mesh::MeshVertexBufferLayoutRef, prelude::*, reflect::TypePath,
+	render::render_resource::AsBindGroup, shader::ShaderRef,
 };
 
 #[derive(Asset, TypePath, AsBindGroup, Debug, Clone)]
@@ -23,5 +26,17 @@ impl Material for LeafMaterial {
 	// This allows the leaf shape alpha to create see-through areas
 	fn alpha_mode(&self) -> AlphaMode {
 		AlphaMode::AlphaToCoverage
+	}
+
+	fn specialize(
+		_pipeline: &MaterialPipeline,
+		descriptor: &mut RenderPipelineDescriptor,
+		_layout: &MeshVertexBufferLayoutRef,
+		_key: MaterialPipelineKey<Self>,
+	) -> Result<(), SpecializedMeshPipelineError> {
+		// ✅ Disable backface culling → renders both sides
+		descriptor.primitive.cull_mode = None;
+
+		Ok(())
 	}
 }

@@ -41,7 +41,7 @@ impl<T: Material, L: Material, E: Terrain + Clone> GroveBuilder<T, L, E> {
 			noise_config_4d: NoiseConfig::default(),
 			threshold: 0.5,
 			anchor: Vec3::ZERO,
-			step_size: 4.0,
+			step_size: 6.0,
 			count: 16,
 			trunk_material,
 			leaf_material,
@@ -53,6 +53,16 @@ impl<T: Material, L: Material, E: Terrain + Clone> GroveBuilder<T, L, E> {
 			max_height: 6.0,
 			terrain,
 		}
+	}
+
+	pub fn with_step_size(mut self, step_size: f32) -> Self {
+		self.step_size = step_size;
+		self
+	}
+
+	pub fn with_count(mut self, count: usize) -> Self {
+		self.count = count;
+		self
 	}
 
 	pub fn with_tree_cache(mut self, tree_cache: HandleMap<SimpleTrunkSegment>) -> Self {
@@ -99,6 +109,18 @@ impl<T: Material, L: Material, E: Terrain + Clone> GroveBuilder<T, L, E> {
 		self.terrain.composed_height_at(x, z)
 	}
 
+	pub fn get_terrain_laplacian(&self, x: f32, z: f32, step: f32) -> f32 {
+		self.terrain.laplacian_at(x, z, step)
+	}
+
+	pub fn get_terrain_slope_mag(&self, x: f32, z: f32, step: f32) -> f32 {
+		self.terrain.slope_mag(x, z, step)
+	}
+
+	pub fn get_terrain_slope_angle_deg(&self, x: f32, z: f32, step: f32) -> f32 {
+		self.terrain.slope_angle_deg(x, z, step)
+	}
+
 	pub fn get_tree_height(&self, position: Vec3) -> f32 {
 		let noise = self.noise_config_3d.vec3_on_unit(position);
 		noise as f32 * (self.max_height - self.min_height) + self.min_height
@@ -126,6 +148,16 @@ impl<T: Material, L: Material, E: Terrain + Clone> GroveBuilder<T, L, E> {
 						self.inner_noise(pre_position),
 					);
 				position.y = self.get_terrain_height(position.x, position.z);
+
+				if self.get_terrain_height(position.x, position.z) < 0.25 {
+					continue;
+				}
+
+				if self.get_terrain_slope_angle_deg(position.x, position.z, self.step_size * 2.0)
+					> 10.0
+				{
+					continue;
+				}
 
 				if self.meets_threshold(position) {
 					let tree_builder = TreeBuilder {
@@ -169,10 +201,16 @@ impl<T: Material, L: Material> RenderItem for Grove<T, L> {
 		cascade_chunk: &CascadeChunk,
 		transform: Transform,
 	) -> Vec<Entity> {
+		if cascade_chunk.res_2 < 1 {
+			return vec![];
+		}
+
 		let mut entities = Vec::new();
 		for (position, tree) in &self.trees {
-			let transform = transform.with_translation(*position);
-			entities.extend(tree.spawn_render_items(commands, cascade_chunk, transform));
+			if cascade_chunk.contains_point(*position) {
+				let transform = transform.with_translation(*position);
+				entities.extend(tree.spawn_render_items(commands, cascade_chunk, transform));
+			}
 		}
 		entities
 	}

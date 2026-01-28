@@ -100,7 +100,17 @@ enum ShapeType {
 }
 
 impl MeshBuilder for NoisyBall {
-	fn build_mesh_impl(&self, _cascade_chunk: &CascadeChunk) -> Option<Mesh> {
+	fn build_mesh_impl(&self, cascade_chunk: &CascadeChunk) -> Option<Mesh> {
+		// if the resolution is less than 1 just return nothing
+		if cascade_chunk.res_2 < 1 {
+			return None;
+		}
+
+		// if the resolution is less than 5 just spawn a unit sphere
+		if cascade_chunk.res_2 < 5 {
+			return Some(Mesh::from(Sphere::new(1.0)));
+		}
+
 		// Generate a mix of 8 plane meshes (discs, triangles, rectangles) intersecting at the origin
 		let num_planes = 8;
 		let size = 1.0; // Unit-sized shapes
@@ -143,7 +153,7 @@ impl MeshBuilder for NoisyBall {
 			// Generate geometry based on shape type
 			let (mut plane_vertices, plane_normals, plane_uvs, plane_indices) = match shape_types[i]
 			{
-				ShapeType::Disk => generate_unit_disk(radius, segments),
+				ShapeType::Disk => generate_unit_triangle(size),
 				ShapeType::Rectangle => generate_unit_triangle(size),
 				ShapeType::Triangle => generate_unit_triangle(size),
 			};
