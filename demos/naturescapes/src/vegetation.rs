@@ -3,6 +3,7 @@ use chunk::cascade::CascadeChunk;
 use chunk::cascade::ConstantResolutionMap;
 use render_item::lod::LodPlugin;
 use render_item::mesh::cache::handle::map::HandleMap;
+use render_item::mesh::cache::mesh::disk::DiskMeshCache;
 use render_item::mesh::fetch_meshes;
 use render_item::mesh::handle::MeshHandle;
 use render_item::DispatchRenderItem;
@@ -72,13 +73,17 @@ impl<T: Material, L: Material, E: Terrainlike + Clone + Send + Sync + 'static>
 			let tree_cache = HandleMap::<SimpleTrunkSegment>::new();
 			let leaf_cache = HandleMap::<NoisyBall>::new();
 
+			let stick_mesh_cache = DiskMeshCache::try_default().ok();
+			let ball_mesh_cache = DiskMeshCache::try_default().ok();
 			let grove_builder = GroveBuilder::new(
 				MeshMaterial3d(trunk_material.0.clone()),
 				MeshMaterial3d(leaf_material.0.clone()),
 				ready_for_vegetation.0.clone(),
 			)
 			.with_tree_cache(tree_cache)
-			.with_leaf_cache(leaf_cache);
+			.with_leaf_cache(leaf_cache)
+			.with_stick_mesh_cache(stick_mesh_cache)
+			.with_ball_mesh_cache(ball_mesh_cache);
 
 			commands.spawn((
 				CascadeChunk::unit_center_chunk().with_res_2(3),

@@ -5,6 +5,7 @@ use chunk::cascade::ConstantResolutionMap;
 use noise::Perlin;
 use render_item::lod::Lod;
 use render_item::mesh::cache::handle::map::HandleMap;
+use render_item::mesh::cache::mesh::disk::DiskMeshCache;
 use render_item::mesh::fetch_meshes;
 use render_item::mesh::handle::MeshHandle;
 use render_item::DispatchRenderItem;
@@ -139,7 +140,8 @@ impl<M: Material> TerrainPlaygroundPlugin<M> {
 
 		let handle_map = HandleMap::<TerrainSdf>::new();
 		let render_item = TerrainRenderItem::new(sdf, MeshMaterial3d(terrain_material.0.clone()))
-			.with_handle_map(handle_map);
+			.with_handle_map(handle_map)
+			.with_mesh_cache(DiskMeshCache::try_default().ok());
 
 		commands.spawn((
 			Terrain,

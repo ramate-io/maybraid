@@ -5,6 +5,7 @@ use bevy::prelude::*;
 use chunk::cascade::CascadeChunk;
 use comproc::noise::config::NoiseConfig;
 use render_item::mesh::cache::handle::map::HandleMap;
+use render_item::mesh::cache::mesh::disk::DiskMeshCache;
 use render_item::RenderItem;
 use terrain::Terrain;
 
@@ -21,6 +22,8 @@ pub struct GroveBuilder<T: Material, L: Material, E: Terrain + Clone> {
 	trunk_material: MeshMaterial3d<T>,
 	leaf_material: MeshMaterial3d<L>,
 	tree_cache: HandleMap<SimpleTrunkSegment>,
+	ball_mesh_cache: Option<DiskMeshCache<NoisyBall>>,
+	stick_mesh_cache: Option<DiskMeshCache<SimpleTrunkSegment>>,
 	leaf_cache: HandleMap<NoisyBall>,
 	min_height: f32,
 	max_height: f32,
@@ -43,6 +46,8 @@ impl<T: Material, L: Material, E: Terrain + Clone> GroveBuilder<T, L, E> {
 			trunk_material,
 			leaf_material,
 			tree_cache: HandleMap::new(),
+			stick_mesh_cache: None,
+			ball_mesh_cache: None,
 			leaf_cache: HandleMap::new(),
 			min_height: 2.0,
 			max_height: 6.0,
@@ -52,6 +57,22 @@ impl<T: Material, L: Material, E: Terrain + Clone> GroveBuilder<T, L, E> {
 
 	pub fn with_tree_cache(mut self, tree_cache: HandleMap<SimpleTrunkSegment>) -> Self {
 		self.tree_cache = tree_cache;
+		self
+	}
+
+	pub fn with_stick_mesh_cache(
+		mut self,
+		stick_mesh_cache: Option<DiskMeshCache<SimpleTrunkSegment>>,
+	) -> Self {
+		self.stick_mesh_cache = stick_mesh_cache;
+		self
+	}
+
+	pub fn with_ball_mesh_cache(
+		mut self,
+		ball_mesh_cache: Option<DiskMeshCache<NoisyBall>>,
+	) -> Self {
+		self.ball_mesh_cache = ball_mesh_cache;
 		self
 	}
 
@@ -116,8 +137,10 @@ impl<T: Material, L: Material, E: Terrain + Clone> GroveBuilder<T, L, E> {
 						noise_config_4d: self.noise_config_4d.clone(),
 						ball_variety: 0,
 						ball_cache: self.leaf_cache.clone(),
+						ball_mesh_cache: self.ball_mesh_cache.clone(),
 						stick_variety: 1,
 						stick_cache: self.tree_cache.clone(),
+						stick_mesh_cache: self.stick_mesh_cache.clone(),
 						leaf_variety: 1,
 						leaf_cache: self.leaf_cache.clone(),
 						stick_material: self.trunk_material.clone(),

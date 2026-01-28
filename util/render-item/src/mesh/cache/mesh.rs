@@ -1,3 +1,5 @@
+pub mod disk;
+
 use crate::mesh::IdentifiedMesh;
 use bevy::prelude::*;
 use chunk::cascade::CascadeChunk;
