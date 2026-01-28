@@ -1,5 +1,4 @@
 use bevy::math::bounding::Aabb3d;
-use bevy::math::bounding::BoundingVolume;
 use bevy::prelude::*;
 use std::collections::HashSet;
 use std::fmt::Debug;

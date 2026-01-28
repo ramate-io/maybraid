@@ -9,11 +9,27 @@ use bevy::{
 pub struct LeafMaterial {
 	#[uniform(0)]
 	pub base_color: Vec4, // HSL or RGB in a vec4
+	#[uniform(1)]
+	pub drop_color: Vec4,
 }
 
 impl Default for LeafMaterial {
 	fn default() -> Self {
-		Self { base_color: Vec4::new(0.2, 0.8, 0.3, 1.0) }
+		Self {
+			base_color: Vec4::new(0.2, 0.8, 0.3, 1.0),
+			// dark brown color
+			drop_color: Vec4::new(0.1, 0.15, 0.1, 0.2),
+		}
+	}
+}
+
+impl LeafMaterial {
+	pub fn with_base_color(self, base_color: Vec4) -> Self {
+		Self { base_color, ..self }
+	}
+
+	pub fn with_drop_color(self, drop_color: Vec4) -> Self {
+		Self { drop_color, ..self }
 	}
 }
 
@@ -25,7 +41,7 @@ impl Material for LeafMaterial {
 	// Enable alpha blending for transparency
 	// This allows the leaf shape alpha to create see-through areas
 	fn alpha_mode(&self) -> AlphaMode {
-		AlphaMode::AlphaToCoverage
+		AlphaMode::Opaque
 	}
 
 	fn specialize(

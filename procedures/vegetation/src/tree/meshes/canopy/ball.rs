@@ -8,7 +8,7 @@ use render_item::{
 	mesh::{IdentifiedMesh, MeshBuilder, MeshId},
 	NormalizeChunk,
 };
-use scratchpad::{generate_unit_disk, generate_unit_triangle};
+use scratchpad::generate_unit_triangle;
 use std::f32::consts::PI;
 
 /// Configuration for a noisy sphere/ball
@@ -114,7 +114,6 @@ impl MeshBuilder for NoisyBall {
 		// Generate a mix of 8 plane meshes (discs, triangles, rectangles) intersecting at the origin
 		let num_planes = 8;
 		let size = 1.0; // Unit-sized shapes
-		let radius = 1.0; // For discs
 		let segments = 32; // For discs
 		let edge_noise_amplitude = 0.15; // How much to perturb edges
 		let edge_noise_frequency = 8.0; // Frequency of edge noise

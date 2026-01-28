@@ -23,6 +23,9 @@
 @group(#{MATERIAL_BIND_GROUP}) @binding(0)
 var<uniform> base_color: vec4<f32>;
 
+@group(#{MATERIAL_BIND_GROUP}) @binding(1)
+var<uniform> drop_color: vec4<f32>;
+
 
 //---------------------------------------------------------
 // Perlin Noise
@@ -117,7 +120,7 @@ fn fragment(
     
     // Early exit optimization: if fully transparent, skip lighting
     if (alpha < 0.001) {
-        return vec4<f32>(0.0, 0.0, 0.0, 0.0);
+        return drop_color;
     }
 
 

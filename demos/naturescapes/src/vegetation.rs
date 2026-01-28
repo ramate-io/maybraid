@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 use chunk::cascade::Cascade;
-use chunk::cascade::{ConstantResolutionMap, DecreasingResolutionMap};
+use chunk::cascade::DecreasingResolutionMap;
 use render_item::lod::Lod;
 use render_item::lod::LodPlugin;
 use render_item::mesh::cache::handle::map::HandleMap;
