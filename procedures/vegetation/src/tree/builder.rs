@@ -8,6 +8,7 @@ use comproc::{
 	noise::config::NoiseConfig,
 };
 use noise::{NoiseFn, Seedable};
+use render_item::mesh::cache::mesh::disk::DiskMeshCache;
 use render_item::{
 	mesh::{
 		cache::handle::map::HandleMap, handle::MeshHandle, IdentifiedMesh, MeshBuilder,
@@ -145,8 +146,10 @@ pub struct TreeBuilder<
 	pub noise_config_4d: NoiseConfig<4, N>,
 	pub ball_variety: u32,
 	pub ball_cache: HandleMap<BallMesh>,
+	pub ball_mesh_cache: Option<DiskMeshCache<BallMesh>>,
 	pub stick_variety: u32,
 	pub stick_cache: HandleMap<StickMesh>,
+	pub stick_mesh_cache: Option<DiskMeshCache<StickMesh>>,
 	pub leaf_variety: u32,
 	pub leaf_cache: HandleMap<LeafMesh>,
 	pub stick_material: MeshMaterial3d<StickMaterial>,
@@ -219,6 +222,7 @@ impl<
 			.map(|i| {
 				MeshHandle::new(StickMesh::from_tree_num(tree_num + i as f32))
 					.with_handle_cache(self.stick_cache.clone())
+					.with_mesh_cache(self.stick_mesh_cache.clone())
 			})
 			.collect();
 
@@ -226,6 +230,7 @@ impl<
 			.map(|i| {
 				MeshHandle::new(BallMesh::from_tree_num(tree_num + i as f32))
 					.with_handle_cache(self.ball_cache.clone())
+					.with_mesh_cache(self.ball_mesh_cache.clone())
 			})
 			.collect();
 

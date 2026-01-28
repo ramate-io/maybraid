@@ -52,7 +52,7 @@ impl<T: Clone + IdentifiedMesh> DiskMeshCache<T> {
 		let mut hasher = DefaultHasher::new();
 		name_string.hash(&mut hasher);
 		let hash = hasher.finish();
-		format!("{:x}", hash)
+		format!("{:x}_{:?}", hash, cascade_chunk)
 	}
 
 	pub fn path_for_cascade_chunk(
