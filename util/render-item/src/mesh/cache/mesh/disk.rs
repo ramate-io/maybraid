@@ -43,19 +43,44 @@ impl<T: Clone + IdentifiedMesh> DiskMeshCache<T> {
 		Self::try_new(PathBuf::from(Self::DEFAULT_CACHE_DIR), Self::DEFAULT_MAX_CACHED_MESHES)
 	}
 
-	pub fn name_for_cascade_chunk(
+	pub fn base_filename_for_cascade_chunk(
 		&self,
 		identified_mesh: &T,
 		cascade_chunk: &CascadeChunk,
 	) -> String {
-		let name_string = format!("{:?}_{:?}.mesh", identified_mesh.id(), cascade_chunk);
+		let name_string = format!("{:?}_{:?}", identified_mesh.id(), cascade_chunk);
 		let mut hasher = DefaultHasher::new();
 		name_string.hash(&mut hasher);
 		let hash = hasher.finish();
-		format!("{:x}_{:?}", hash, cascade_chunk)
+		format!("{:x}", hash)
 	}
 
-	pub fn path_for_cascade_chunk(
+	pub fn value_string_for_cascade_chunk(
+		&self,
+		identified_mesh: &T,
+		cascade_chunk: &CascadeChunk,
+	) -> String {
+		format!("{:?}_{:?}", identified_mesh.id(), cascade_chunk).to_string()
+	}
+
+	pub fn mesh_filename_for_cascade_chunk(
+		&self,
+		identified_mesh: &T,
+		cascade_chunk: &CascadeChunk,
+	) -> String {
+		format!("{}.mesh", self.base_filename_for_cascade_chunk(identified_mesh, cascade_chunk),)
+	}
+
+	pub fn value_filename_for_cascade_chunk_mesh(
+		&self,
+		identified_mesh: &T,
+		cascade_chunk: &CascadeChunk,
+	) -> String {
+		format!("{}.value", self.base_filename_for_cascade_chunk(identified_mesh, cascade_chunk))
+			.to_string()
+	}
+
+	pub fn path_for_cascade_chunk_mesh(
 		&self,
 		identified_mesh: &T,
 		cascade_chunk: &CascadeChunk,
@@ -64,11 +89,24 @@ impl<T: Clone + IdentifiedMesh> DiskMeshCache<T> {
 		self.cache_dir
 			.join(version)
 			.join(std::any::type_name::<T>())
-			.join(self.name_for_cascade_chunk(identified_mesh, cascade_chunk))
+			.join(self.mesh_filename_for_cascade_chunk(identified_mesh, cascade_chunk))
+	}
+
+	pub fn path_for_cascade_chunk_value(
+		&self,
+		identified_mesh: &T,
+		cascade_chunk: &CascadeChunk,
+	) -> PathBuf {
+		let version = env!("CARGO_PKG_VERSION");
+		self.cache_dir
+			.join(version)
+			.join(std::any::type_name::<T>())
+			.join(self.value_filename_for_cascade_chunk_mesh(identified_mesh, cascade_chunk))
 	}
 
 	pub fn save_mesh(&self, identified_mesh: &T, mesh: &Mesh, cascade_chunk: &CascadeChunk) {
-		let cache_path = self.path_for_cascade_chunk(identified_mesh, cascade_chunk);
+		// write the mesh to the cache
+		let cache_path = self.path_for_cascade_chunk_mesh(identified_mesh, cascade_chunk);
 
 		if let Some(parent) = cache_path.parent() {
 			if let Err(err) = fs::create_dir_all(parent) {
@@ -89,10 +127,28 @@ impl<T: Clone + IdentifiedMesh> DiskMeshCache<T> {
 		if let Err(err) = fs::write(&cache_path, compressed) {
 			log::warn!("Failed to write mesh cache {:?}: {}", cache_path, err);
 		}
+
+		// write the value to the cache
+		let value = self.value_string_for_cascade_chunk(identified_mesh, cascade_chunk);
+		let cache_path = self.path_for_cascade_chunk_value(identified_mesh, cascade_chunk);
+
+		if let Err(err) = fs::write(&cache_path, value) {
+			log::warn!("Failed to write value cache {:?}: {}", cache_path, err);
+		}
 	}
 
 	pub fn load_mesh(&self, identified_mesh: &T, cascade_chunk: &CascadeChunk) -> Option<Mesh> {
-		let cache_path = self.path_for_cascade_chunk(identified_mesh, cascade_chunk);
+		// check if the value matches the expected value, this is a Hash + Eq implementation for the CascadeChunk
+		let expected_value = self.value_string_for_cascade_chunk(identified_mesh, cascade_chunk);
+		let actual_value =
+			fs::read_to_string(self.path_for_cascade_chunk_value(identified_mesh, cascade_chunk))
+				.ok()?;
+		if expected_value != actual_value {
+			return None;
+		}
+
+		// load the mesh from the cache
+		let cache_path = self.path_for_cascade_chunk_mesh(identified_mesh, cascade_chunk);
 
 		let compressed = fs::read(cache_path).ok()?;
 		let raw = decompress_size_prepended(&compressed).ok()?;
