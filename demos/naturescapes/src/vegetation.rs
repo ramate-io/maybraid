@@ -85,12 +85,12 @@ impl<T: Material, L: Material, E: Terrainlike + Clone + Send + Sync + 'static>
 			.with_leaf_cache(leaf_cache)
 			.with_stick_mesh_cache(stick_mesh_cache)
 			.with_ball_mesh_cache(ball_mesh_cache)
-			.with_count(256)
-			.with_step_size(8.0)
+			.with_count(312)
+			.with_step_size(10.0)
 			.with_anchor(Vec3::new(-800.0, 0.0, -800.0));
 
 			let cascade = Cascade {
-				min_size: 20.0,
+				min_size: 30.0,
 				number_of_rings: 5,
 				resolution_map: DecreasingResolutionMap { from_res_2: 6, by: 1, min_res_2: 3 },
 				grid_radius: None,

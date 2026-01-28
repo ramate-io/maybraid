@@ -13,6 +13,10 @@
     pbr_types::{PbrInput, pbr_input_new, STANDARD_MATERIAL_FLAGS_DOUBLE_SIDED_BIT},
     pbr_functions as fns,
     pbr_bindings,
+    mesh_view_bindings::view_transmission_texture,
+    mesh_view_bindings::view_transmission_sampler,
+    prepass_utils::prepass_depth,
+    mesh_view_bindings::globals,
 }
 #import bevy_core_pipeline::tonemapping::tone_mapping
 
