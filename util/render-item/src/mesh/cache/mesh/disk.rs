@@ -9,6 +9,8 @@ use std::path::PathBuf;
 
 use bevy::mesh::Mesh;
 use lz4_flex::{compress_prepend_size, decompress_size_prepended};
+use std::hash::DefaultHasher;
+use std::hash::{Hash, Hasher};
 use std::time::SystemTime;
 
 #[derive(Debug, Clone)]
@@ -46,7 +48,11 @@ impl<T: Clone + IdentifiedMesh> DiskMeshCache<T> {
 		identified_mesh: &T,
 		cascade_chunk: &CascadeChunk,
 	) -> String {
-		format!("{:?}_{:?}.mesh", identified_mesh.id(), cascade_chunk)
+		let name_string = format!("{:?}_{:?}.mesh", identified_mesh.id(), cascade_chunk);
+		let mut hasher = DefaultHasher::new();
+		name_string.hash(&mut hasher);
+		let hash = hasher.finish();
+		format!("{:x}", hash)
 	}
 
 	pub fn path_for_cascade_chunk(

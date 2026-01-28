@@ -28,8 +28,8 @@ impl<T: MeshBuilder + IdentifiedMesh + Clone> MeshHandle<T> {
 	}
 
 	/// Adds a mesh cache to the mesh handle.
-	pub fn with_mesh_cache(mut self, mesh_cache: DiskMeshCache<T>) -> Self {
-		self.mesh_cache = Some(mesh_cache);
+	pub fn with_mesh_cache(mut self, mesh_cache: Option<DiskMeshCache<T>>) -> Self {
+		self.mesh_cache = mesh_cache;
 		self
 	}
 }
