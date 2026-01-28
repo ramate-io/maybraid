@@ -23,6 +23,10 @@ name = "accesskit"
 version = "0.21.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf203f9d3bd8f29f98833d1fbef628df18f759248a547e7e01cfbf63cda36a99"
+dependencies = [
+ "enumn",
+ "serde",
+]
 
 [[package]]
 name = "accesskit_consumer"
@@ -346,6 +350,7 @@ dependencies = [
  "bevy_derive",
  "bevy_ecs",
  "bevy_reflect",
+ "serde",
 ]
 
 [[package]]
@@ -848,6 +853,7 @@ dependencies = [
  "bevy_reflect",
  "derive_more",
  "log",
+ "serde",
  "smol_str",
  "thiserror 2.0.16",
 ]
@@ -1014,6 +1020,7 @@ dependencies = [
  "bytemuck",
  "derive_more",
  "hexasphere",
+ "serde",
  "thiserror 2.0.16",
  "tracing",
  "wgpu-types",
@@ -1475,6 +1482,7 @@ dependencies = [
  "bevy_utils",
  "bevy_window",
  "derive_more",
+ "serde",
  "smallvec",
  "taffy",
  "thiserror 2.0.16",
@@ -1575,6 +1583,15 @@ dependencies = [
  "web-sys",
  "wgpu-types",
  "winit",
+]
+
+[[package]]
+name = "bincode"
+version = "1.3.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b1f45e9417d87227c7a56d22e471c6206462cba514c7590c09aff4cf6d1ddcad"
+dependencies = [
+ "serde",
 ]
 
 [[package]]
@@ -2277,6 +2294,17 @@ dependencies = [
  "serde",
  "terrain",
  "thiserror 1.0.69",
+]
+
+[[package]]
+name = "enumn"
+version = "0.1.14"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2f9ed6b3789237c8a0c1c505af1c7eb2c560df6186f01b098c3a1064ea532f38"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
 ]
 
 [[package]]
@@ -3100,6 +3128,15 @@ name = "log"
 version = "0.4.27"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "13dc2df351e3202783a1fe0d44375f7295ffb4049267b0f3018346dc122a1d94"
+
+[[package]]
+name = "lz4_flex"
+version = "0.11.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "08ab2867e3eeeca90e844d1940eab391c9dc5228783db2ed999acbc0a9ed375a"
+dependencies = [
+ "twox-hash",
+]
 
 [[package]]
 name = "mach2"
@@ -4155,9 +4192,11 @@ version = "0.0.1"
 dependencies = [
  "anyhow",
  "bevy",
+ "bincode",
  "chrono",
  "chunk",
  "log",
+ "lz4_flex",
  "rayon",
  "sdf",
  "serde",
@@ -4462,6 +4501,9 @@ name = "smallvec"
 version = "1.15.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "67b1b7a3b5fe4f1376887184045fcf45c69e92af734b7aaddc05fb777b6fbd03"
+dependencies = [
+ "serde",
+]
 
 [[package]]
 name = "smithay-client-toolkit"

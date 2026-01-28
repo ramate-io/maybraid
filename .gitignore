@@ -5,3 +5,4 @@ venv
 target
 *.tracy
 macos-15
+.maybraid
