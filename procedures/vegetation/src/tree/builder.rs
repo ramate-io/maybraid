@@ -104,7 +104,7 @@ where
 		transform: Transform,
 	) -> Vec<Entity> {
 		let mut entities = Vec::new();
-		if cascade_chunk.res_2 < 5 {
+		if cascade_chunk.res_2 < 6 {
 			// just spawn one big leaf ball for the canopy
 			let mesh = LeafMesh::from_tree_num(0.0);
 			let mesh_handle = MeshHandle::new(mesh);
@@ -121,27 +121,34 @@ where
 				MeshMaterial3d(self.leaf_material.0.clone()),
 			));
 		} else {
+			// down level the resolution by 1
+			let branch_cascade_chunk = cascade_chunk.with_res_2((cascade_chunk.res_2 - 3).max(2));
+			let leaf_cascade_chunk = cascade_chunk.with_res_2((cascade_chunk.res_2 - 1).max(2));
+
 			for branch in &self.branch_ball_sticks {
+				// branch
 				let branch_render_item =
 					BallStickRenderItem::new(branch.clone(), self.branch_spawner.clone());
 				entities.extend(branch_render_item.spawn_render_items(
 					commands,
-					cascade_chunk,
+					&branch_cascade_chunk,
 					transform,
 				));
 
+				// leaves
 				let (ballstick, _spawner) = branch_render_item.into_parts();
 				let leaf_render_item =
 					BallStickRenderItem::new(ballstick.clone(), self.leaf_spawner.clone());
 				entities.extend(leaf_render_item.spawn_render_items(
 					commands,
-					cascade_chunk,
+					&leaf_cascade_chunk,
 					transform,
 				));
 			}
 		}
 
-		self.spawn_trunk(commands, cascade_chunk);
+		let cascade_chunk = cascade_chunk.with_res_2((cascade_chunk.res_2 - 3).max(2));
+		self.spawn_trunk(commands, &cascade_chunk);
 
 		entities
 	}

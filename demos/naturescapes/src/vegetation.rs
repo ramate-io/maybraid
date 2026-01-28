@@ -92,7 +92,7 @@ impl<T: Material, L: Material, E: Terrainlike + Clone + Send + Sync + 'static>
 			let cascade = Cascade {
 				min_size: 30.0,
 				number_of_rings: 5,
-				resolution_map: DecreasingResolutionMap { from_res_2: 6, by: 1, min_res_2: 3 },
+				resolution_map: DecreasingResolutionMap { from_res_2: 7, by: 1, min_res_2: 2 },
 				grid_radius: None,
 				grid_multiple_2: 0,
 			};

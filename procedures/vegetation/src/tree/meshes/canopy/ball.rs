@@ -106,13 +106,13 @@ impl MeshBuilder for NoisyBall {
 			return None;
 		}
 
-		// if the resolution is less than 5 just spawn a unit sphere
-		if cascade_chunk.res_2 < 5 {
+		// if the resolution is less than 6 just spawn a unit sphere
+		if cascade_chunk.res_2 < 6 {
 			return Some(Mesh::from(Sphere::new(1.0)));
 		}
 
 		// Generate a mix of 8 plane meshes (discs, triangles, rectangles) intersecting at the origin
-		let num_planes = 8;
+		let num_planes = if cascade_chunk.res_2 > 5 { 6 } else { 4 };
 		let size = 1.0; // Unit-sized shapes
 		let segments = 32; // For discs
 		let edge_noise_amplitude = 0.15; // How much to perturb edges
