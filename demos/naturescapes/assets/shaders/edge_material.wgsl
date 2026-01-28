@@ -86,6 +86,8 @@ fn fragment(
     let double_sided = (pbr_input.material.flags & STANDARD_MATERIAL_FLAGS_DOUBLE_SIDED_BIT) != 0u;
 
     // basic PBR required fields
+    pbr_input.material.metallic = 0.0;
+    pbr_input.material.perceptual_roughness = 1.0;
     pbr_input.frag_coord = mesh.position;
     pbr_input.world_position = mesh.world_position;
     pbr_input.world_normal = fns::prepare_world_normal(

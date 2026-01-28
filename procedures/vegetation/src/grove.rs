@@ -102,7 +102,7 @@ impl<T: Material, L: Material, E: Terrain + Clone> GroveBuilder<T, L, E> {
 	}
 
 	pub fn inner_noise(&self, position: Vec3) -> f32 {
-		self.noise_config_3d.vec3_amp(position) as f32 * self.step_size / 2.0
+		self.noise_config_3d.vec3_amp(position) as f32 * self.step_size * 2.0
 	}
 
 	pub fn get_terrain_height(&self, x: f32, z: f32) -> f32 {

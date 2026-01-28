@@ -47,13 +47,13 @@ fn setup_lighting(mut commands: Commands) {
 	// Main directional light (sun) - primary light source
 	commands.spawn((
 		PointLight {
-			radius: 20.0,
-			intensity: 100000000000.0,
-			range: 100000.0,
+			radius: 200.0,
+			intensity: 1000000000000000.0,
+			range: 1_000_000.0,
 			shadows_enabled: true,
 			..default()
 		},
 		// high in the sky
-		Transform::from_xyz(1000.0, 1000.0, 1000.0),
+		Transform::from_xyz(100_000.0, 100_000.0, 100_000.0),
 	));
 }
