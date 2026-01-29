@@ -31,6 +31,8 @@ impl Plugin for NatureScapesPlugin {
 				.with_base_color(Vec4::new(0.2, 0.1, 0.1, 1.0)), // reddish brown base color
 			second_rock_detail_material: EdgeMaterial::default()
 				.with_base_color(Vec4::new(0.5, 0.5, 0.5, 1.0)), // gray base color
+			tuft_detail_material: EdgeMaterial::default()
+				.with_base_color(Vec4::new(0.2, 0.8, 0.3, 1.0)), // green base color
 		});
 		app.add_plugins(vegetation::VegetationPlaygroundPlugin::<
 			EdgeMaterial,

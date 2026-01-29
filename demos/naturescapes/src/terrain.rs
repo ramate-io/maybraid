@@ -17,6 +17,7 @@ use terrain::region::CircleRegion;
 use terrain::region::RectRegion;
 use terrain::{
 	detail::meshes::rock::RockSpheroid,
+	detail::meshes::tuft::GrassTuft,
 	detail::terrain_detail::TerrainDetail,
 	plugin::{Terrain, TerrainPlugin},
 	region::branching::BranchingPlan,
@@ -41,6 +42,9 @@ pub struct RockDetailMaterial<M: Material>(pub Handle<M>);
 #[derive(Resource, Clone)]
 pub struct SecondRockDetailMaterial<M: Material>(pub Handle<M>);
 
+#[derive(Resource, Clone)]
+pub struct TuftDetailMaterial<M: Material>(pub Handle<M>);
+
 #[derive(Component, Clone)]
 pub struct ReadyForRockDetail<T: Terrainlike + Clone>(pub T);
 
@@ -49,6 +53,7 @@ pub struct TerrainPlaygroundPlugin<M: Material> {
 	pub material: M,
 	pub rock_detail_material: M,
 	pub second_rock_detail_material: M,
+	pub tuft_detail_material: M,
 }
 
 impl<M: Material> TerrainPlaygroundPlugin<M> {
@@ -67,6 +72,10 @@ impl<M: Material> TerrainPlaygroundPlugin<M> {
 		let second_rock_detail_material_handle =
 			materials.add(terrain_plaground_plugin.second_rock_detail_material);
 		commands.insert_resource(SecondRockDetailMaterial(second_rock_detail_material_handle));
+
+		let tuft_detail_material_handle =
+			materials.add(terrain_plaground_plugin.tuft_detail_material);
+		commands.insert_resource(TuftDetailMaterial(tuft_detail_material_handle));
 	}
 
 	pub fn build_setup_terrain_material(&self) -> impl FnMut(Commands, ResMut<Assets<M>>) {
@@ -233,6 +242,48 @@ impl<M: Material> TerrainPlaygroundPlugin<M> {
 			));
 		}
 	}
+
+	pub fn place_tuft_detail(
+		mut commands: Commands,
+		tuft_detail_material: Res<TuftDetailMaterial<M>>,
+		ready_for_vegetation: Query<
+			(Entity, &ReadyForVegetation<TerrainSdf>),
+			Changed<ReadyForVegetation<TerrainSdf>>,
+		>,
+	) {
+		for (_entity, ready_for_vegetation) in ready_for_vegetation.iter() {
+			log::info!("Placing tufts");
+			let tuft_detail_cache = HandleMap::<GrassTuft>::new();
+			let tuft_detail_mesh_cache = DiskMeshCache::try_default().ok();
+
+			let cascade = Cascade {
+				min_size: 15.0,
+				number_of_rings: 5,
+				resolution_map: DecreasingResolutionMap { from_res_2: 4, by: 1, min_res_2: 2 },
+				grid_radius: None,
+				grid_multiple_2: 0,
+			};
+
+			let terrain_detail = TerrainDetail::new(
+				MeshMaterial3d(tuft_detail_material.0.clone()),
+				ready_for_vegetation.0.clone(),
+			)
+			.with_detail_handle_cache(tuft_detail_cache.clone())
+			.with_detail_mesh_cache(tuft_detail_mesh_cache.clone())
+			.with_sink_bias(2.0)
+			.with_min_radii(Vec3::new(1.5, 2.5, 1.5))
+			.with_max_radii(Vec3::new(3.0, 6.0, 3.0))
+			.with_step_size(Vec2::new(1.0, 1.0));
+
+			commands.spawn((
+				Lod,
+				cascade.clone(),
+				DispatchRenderItem::new(terrain_detail),
+				Transform::from_translation(Vec3::ZERO),
+				Children::default(),
+			));
+		}
+	}
 }
 
 impl<M: Material> Plugin for TerrainPlaygroundPlugin<M>
@@ -252,5 +303,13 @@ where
 		>::default());
 		app.add_systems(Update, Self::place_rock_detail);
 		app.add_systems(Update, fetch_meshes::<MeshHandle<RockSpheroid>, M>);
+
+		// tuft detail
+		app.add_plugins(LodPlugin::<
+			DecreasingResolutionMap,
+			TerrainDetail<GrassTuft, M, TerrainSdf>,
+		>::default());
+		app.add_systems(Update, Self::place_tuft_detail);
+		app.add_systems(Update, fetch_meshes::<MeshHandle<GrassTuft>, M>);
 	}
 }

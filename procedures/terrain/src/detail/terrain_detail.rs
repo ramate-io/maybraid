@@ -49,6 +49,11 @@ impl<D: MeshFromTerrainDetailNum, M: Material, E: Terrain + Clone> TerrainDetail
 		self
 	}
 
+	pub fn with_sink_bias(mut self, sink_bias: f32) -> Self {
+		self.sink_bias = sink_bias;
+		self
+	}
+
 	pub fn with_min_radii(mut self, min_radii: Vec3) -> Self {
 		self.min_radii = min_radii;
 		self
@@ -145,6 +150,12 @@ where
 			return vec![];
 		}
 
+		let (z_increment, x_increment) = if cascade_chunk.res_2 < 4 {
+			(self.step_size.y * 2.0, self.step_size.x * 2.0)
+		} else {
+			(self.step_size.y, self.step_size.x)
+		};
+
 		// iterate through every step within the bounds of the
 		let mut x = cascade_chunk.origin.x;
 		while x <= cascade_chunk.origin.x + cascade_chunk.size {
@@ -170,9 +181,9 @@ where
 						self.detail_material.clone(),
 					));
 				}
-				z += self.step_size.y;
+				z += z_increment;
 			}
-			x += self.step_size.x;
+			x += x_increment;
 		}
 		vec![]
 	}
