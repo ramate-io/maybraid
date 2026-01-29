@@ -17,15 +17,14 @@ pub trait MeshFromTerrainDetailNum: MeshBuilder + IdentifiedMesh {
 #[derive(Component, Clone)]
 pub struct TerrainDetail<D: MeshFromTerrainDetailNum, M: Material, E: Terrain + Clone> {
 	noise_config_3d: NoiseConfig<3, Perlin>,
-	noise_config_4d: NoiseConfig<4, Perlin>,
 	threshold: f32,
-	anchor: Vec3,
 	step_size: Vec2,
 	detail_material: MeshMaterial3d<M>,
 	detail_handle_cache: HandleMap<D>,
 	detail_mesh_cache: Option<DiskMeshCache<D>>,
 	min_radii: Vec3,
 	max_radii: Vec3,
+	sink_bias: f32,
 	terrain: E,
 }
 
@@ -33,21 +32,30 @@ impl<D: MeshFromTerrainDetailNum, M: Material, E: Terrain + Clone> TerrainDetail
 	pub fn new(detail_material: MeshMaterial3d<M>, terrain: E) -> Self {
 		Self {
 			noise_config_3d: NoiseConfig::default(),
-			noise_config_4d: NoiseConfig::default(),
-			threshold: 0.5,
-			anchor: Vec3::ZERO,
+			threshold: 0.8,
 			step_size: Vec2::new(6.0, 6.0),
 			detail_material,
 			detail_handle_cache: HandleMap::new(),
 			detail_mesh_cache: None,
 			min_radii: Vec3::new(0.5, 0.5, 0.5),
-			max_radii: Vec3::new(6.0, 6.0, 6.0),
+			max_radii: Vec3::new(9.0, 6.0, 9.0),
+			sink_bias: 2.0,
 			terrain,
 		}
 	}
 
 	pub fn with_step_size(mut self, step_size: Vec2) -> Self {
 		self.step_size = step_size;
+		self
+	}
+
+	pub fn with_min_radii(mut self, min_radii: Vec3) -> Self {
+		self.min_radii = min_radii;
+		self
+	}
+
+	pub fn with_max_radii(mut self, max_radii: Vec3) -> Self {
+		self.max_radii = max_radii;
 		self
 	}
 
@@ -58,11 +66,6 @@ impl<D: MeshFromTerrainDetailNum, M: Material, E: Terrain + Clone> TerrainDetail
 
 	pub fn with_detail_mesh_cache(mut self, detail_mesh_cache: Option<DiskMeshCache<D>>) -> Self {
 		self.detail_mesh_cache = detail_mesh_cache;
-		self
-	}
-
-	pub fn with_anchor(mut self, anchor: Vec3) -> Self {
-		self.anchor = anchor;
 		self
 	}
 
@@ -92,21 +95,38 @@ impl<D: MeshFromTerrainDetailNum, M: Material, E: Terrain + Clone> TerrainDetail
 	}
 
 	pub fn get_scale(&self, position: Vec3) -> Vec3 {
-		let noise = self.noise_config_3d.vec3_on_unit(position);
+		let noise_x =
+			self.noise_config_3d.vec3_on_unit(Vec3::new(position.x, position.y, position.z));
+		let noise_y =
+			self.noise_config_3d.vec3_on_unit(Vec3::new(position.y, position.z, position.x));
+		let noise_z =
+			self.noise_config_3d.vec3_on_unit(Vec3::new(position.z, position.x, position.y));
 		Vec3::new(
-			noise as f32 * (self.max_radii.x - self.min_radii.x) + self.min_radii.x,
-			noise as f32 * (self.max_radii.y - self.min_radii.y) + self.min_radii.y,
-			noise as f32 * (self.max_radii.z - self.min_radii.z) + self.min_radii.z,
+			noise_x as f32 * (self.max_radii.x - self.min_radii.x) + self.min_radii.x,
+			noise_y as f32 * (self.max_radii.y - self.min_radii.y) + self.min_radii.y,
+			noise_z as f32 * (self.max_radii.z - self.min_radii.z) + self.min_radii.z,
 		)
 	}
 
-	pub fn get_x_z_noisy_position(&self, xz: Vec2) -> Vec2 {
-		let noise = self.noise_config_3d.vec3_on_unit(Vec3::new(xz.x, xz.x + xz.y, xz.y));
-		Vec2::new(xz.x + noise as f32 * self.step_size.x, xz.y + noise as f32 * self.step_size.y)
+	pub fn get_noisy_position(&self, position: Vec3, scale: Vec3) -> Vec3 {
+		let noise_x =
+			self.noise_config_3d.vec3_on_unit(Vec3::new(position.x, position.y, position.z));
+		let x = position.x + noise_x as f32 * scale.x;
+		let noise_y =
+			self.noise_config_3d.vec3_on_unit(Vec3::new(position.y, position.z, position.x));
+		let noise_z =
+			self.noise_config_3d.vec3_on_unit(Vec3::new(position.z, position.x, position.y));
+		let z = position.z + noise_z as f32 * scale.z;
+
+		let elevation = self.get_terrain_height(x, z);
+
+		let y = elevation - (noise_y as f32 * scale.y * self.sink_bias);
+
+		Vec3::new(x, y, z)
 	}
 
-	pub fn get_noise_num(&self, xz: Vec3) -> f32 {
-		self.noise_config_3d.vec3_on_unit(xz) as f32
+	pub fn get_noise_num(&self, position: Vec3) -> f32 {
+		self.noise_config_3d.vec3_on_unit(position) as f32
 	}
 }
 
@@ -119,7 +139,7 @@ where
 		&self,
 		commands: &mut Commands,
 		cascade_chunk: &CascadeChunk,
-		transform: Transform,
+		_transform: Transform,
 	) -> Vec<Entity> {
 		if cascade_chunk.res_2 < 1 {
 			return vec![];
@@ -131,10 +151,11 @@ where
 			let mut z = cascade_chunk.origin.z;
 			while z <= cascade_chunk.origin.z + cascade_chunk.size {
 				let elevation = self.get_terrain_height(x, z);
-				let noisy_position = self.get_x_z_noisy_position(Vec2::new(x, z));
-				let position = Vec3::new(noisy_position.x, elevation, noisy_position.y);
+				let pre_position = Vec3::new(x, elevation, z);
 
-				if self.meets_threshold(position) {
+				if self.meets_threshold(pre_position) {
+					let position =
+						self.get_noisy_position(pre_position, self.get_scale(pre_position));
 					let scale = self.get_scale(position);
 					let transform = Transform::from_translation(position).with_scale(scale);
 
