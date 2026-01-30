@@ -128,13 +128,13 @@ fn fragment(
     let noise = 0.2;
     let sway_distance = 0.5;
 
-    let location_sim = 0.001;
-    let location_constant = (mesh.position.x + mesh.position.y + mesh.position.z) * location_sim;
+    let location_sim = 0.01;
+    let location_constant = (mesh.world_position.x + mesh.world_position.y + mesh.world_position.z) * location_sim;
 
     let part_see_saw_time = (cur_time * (base - noise)) + (fractal_noise(mesh.uv) * noise) + location_constant;
     var see_saw_time = sin(part_see_saw_time) * sway_distance;
 
-    let dist_decay = 100.0;
+    let dist_decay = 20.0;
     if dist > dist_decay {
         see_saw_time = see_saw_time / (dist / dist_decay);
     }
