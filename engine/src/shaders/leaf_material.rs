@@ -42,6 +42,14 @@ impl Material for LeafMaterial {
 		AlphaMode::Opaque
 	}
 
+	fn reads_view_transmission_texture(&self) -> bool {
+		true
+	}
+
+	fn enable_prepass() -> bool {
+		false
+	}
+
 	fn specialize(
 		_pipeline: &MaterialPipeline,
 		descriptor: &mut RenderPipelineDescriptor,

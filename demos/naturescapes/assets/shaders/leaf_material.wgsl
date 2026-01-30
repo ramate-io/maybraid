@@ -13,6 +13,7 @@
     pbr_types::{PbrInput, pbr_input_new, STANDARD_MATERIAL_FLAGS_DOUBLE_SIDED_BIT},
     pbr_functions as fns,
     pbr_bindings,
+    mesh_view_bindings::depth_prepass_texture,
     mesh_view_bindings::view_transmission_texture,
     mesh_view_bindings::view_transmission_sampler,
     prepass_utils::prepass_depth,
@@ -109,12 +110,36 @@ fn fragment(
     mesh: VertexOutput
 ) -> @location(0) vec4<f32> {
 
+    let world_pos = mesh.world_position.xyz;
+    let cam_pos = view.world_position;
+    let dist = distance(world_pos, cam_pos);
+
+
     //-----------------------------------------------------
     // 1. Calculate leaf shape alpha from noise
     //-----------------------------------------------------
     // Sample noise at UV coordinates
     let noise_scale = 6.0;
-    let noise_value = fractal_noise(mesh.uv * noise_scale);
+
+    let speed = 0.75;
+    let cur_time = globals.time * speed;
+
+    let base = 1.0;
+    let noise = 0.2;
+    let sway_distance = 0.5;
+
+    let location_sim = 0.001;
+    let location_constant = (mesh.position.x + mesh.position.y + mesh.position.z) * location_sim;
+
+    let part_see_saw_time = (cur_time * (base - noise)) + (fractal_noise(mesh.uv) * noise) + location_constant;
+    var see_saw_time = sin(part_see_saw_time) * sway_distance;
+
+    let dist_decay = 100.0;
+    if dist > dist_decay {
+        see_saw_time = see_saw_time / (dist / dist_decay);
+    }
+
+    let noise_value = fractal_noise(mesh.uv * noise_scale + vec2<f32>(see_saw_time, see_saw_time));
     
     // Threshold: above = visible, below = transparent
     let threshold = 0.5;
@@ -124,9 +149,8 @@ fn fragment(
     
     // Early exit optimization: if fully transparent, skip lighting
     if (alpha < 0.001) {
-        return drop_color;
+        discard;
     }
-
 
     //-----------------------------------------------------
     // 2. Build PBR input (same way StandardMaterial does)
@@ -156,13 +180,7 @@ fn fragment(
     //-----------------------------------------------------
     let lit_color = fns::apply_pbr_lighting(pbr_input);
 
-
-    //-----------------------------------------------------
-    // 4. Apply alpha and output
-    //-----------------------------------------------------
-    let output_color = vec4<f32>(lit_color.rgb, base_color.a * alpha);
-
     // Apply tonemapping, color grading, exposure
-    return tone_mapping(output_color, view.color_grading);
+    return tone_mapping(lit_color, view.color_grading);
 }
 
