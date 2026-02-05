@@ -2919,6 +2919,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "intelligence"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "chrono",
+ "chunk",
+ "log",
+ "noise",
+ "rayon",
+ "render-item",
+ "sdf",
+ "serde",
+ "thiserror 1.0.69",
+]
+
+[[package]]
 name = "inventory"
 version = "0.3.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"

@@ -18,6 +18,7 @@ members = [
   "procedures/buildings",
   "procedures/comproc",
   "procedures/skill-map",
+  "procedures/intelligence",
 
   # util
   ## sdf

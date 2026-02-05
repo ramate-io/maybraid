@@ -1,0 +1,30 @@
+[package]
+name = "intelligence"
+version = { workspace = true }
+edition  = { workspace = true }
+license  = { workspace = true }
+authors = { workspace = true }
+repository = { workspace = true }
+homepage = { workspace = true }
+publish = { workspace = true }
+rust-version = { workspace = true }
+
+[dependencies]
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+serde = { workspace = true }
+chrono = { workspace = true }
+log = { workspace = true }
+rayon = { workspace = true }
+
+# Bevy core dependencies
+bevy = { workspace = true }
+
+# Procedural generation
+sdf = { workspace = true }
+chunk = { workspace = true }
+render-item = { workspace = true }
+noise = { workspace = true }
+
+[lints]
+workspace = true
