@@ -24,6 +24,7 @@
 
         # An LLVM build environment
         dependencies = with pkgs; [
+          gh
           protobuf
           grpcurl
           grpcui
