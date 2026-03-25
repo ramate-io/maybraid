@@ -3,6 +3,8 @@
 #[cfg(test)]
 pub mod testing;
 
+pub mod plugin;
+
 use bevy::prelude::*;
 
 /// A path through a local pathfinding surface.
@@ -251,9 +253,9 @@ impl<F: LocalPathFindingFanout, S: LocalPathfindingSurface> LocalPathfinding<F, 
 mod simple_tests {
 	use bevy::prelude::*;
 
+	use super::testing::utils::{CardinalFanout, OpenGround};
 	use super::LocalPath;
 	use super::LocalPathfinding;
-	use super::testing::utils::{CardinalFanout, OpenGround};
 
 	#[test]
 	fn new_pathfinder_default_depth_is_three() {
@@ -263,9 +265,7 @@ mod simple_tests {
 
 	#[test]
 	fn local_path_clones_positions() {
-		let a = LocalPath {
-			positions: vec![Vec3::ZERO, Vec3::ONE],
-		};
+		let a = LocalPath { positions: vec![Vec3::ZERO, Vec3::ONE] };
 		let b = a.clone();
 		assert_eq!(a.positions, b.positions);
 	}
