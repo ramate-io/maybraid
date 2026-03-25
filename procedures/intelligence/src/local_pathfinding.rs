@@ -244,3 +244,27 @@ impl<F: LocalPathFindingFanout, S: LocalPathfindingSurface> LocalPathfinding<F, 
 		results
 	}
 }
+
+#[cfg(test)]
+mod simple_tests {
+	use bevy::prelude::*;
+
+	use super::LocalPath;
+	use super::LocalPathfinding;
+	use super::testing::utils::{CardinalFanout, OpenGround};
+
+	#[test]
+	fn new_pathfinder_default_depth_is_three() {
+		let pf = LocalPathfinding::new(CardinalFanout { step: 1.0 }, OpenGround);
+		assert_eq!(pf.depth, 3);
+	}
+
+	#[test]
+	fn local_path_clones_positions() {
+		let a = LocalPath {
+			positions: vec![Vec3::ZERO, Vec3::ONE],
+		};
+		let b = a.clone();
+		assert_eq!(a.positions, b.positions);
+	}
+}
