@@ -113,7 +113,7 @@ fn height_at(
 // ----------------------------------------------------------------------------
 // Terrain SDF (top surface + bedrock clamp)
 // ----------------------------------------------------------------------------
-fn terrain_sdf(
+fn terrain(
     p      : vec3<f32>,
     config : TerrainConfig,
     bounds : Bounds,
@@ -143,5 +143,5 @@ fn sdf(
     bounds : Bounds,
     seed   : i32
 ) -> f32 {
-    return terrain_sdf(p, config, bounds, seed);
+    return terrain(p, config, bounds, seed);
 }

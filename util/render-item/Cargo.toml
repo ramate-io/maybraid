@@ -16,9 +16,11 @@ serde = { workspace = true }
 chrono = { workspace = true }
 log = { workspace = true }
 rayon = { workspace = true }
+lz4_flex = { workspace = true }
+bincode = { workspace = true }
 
 # Bevy core dependencies
-bevy = { workspace = true }
+bevy = { workspace = true, features = ["serialize"] }
 
 sdf = { workspace = true }
 chunk = { workspace = true }

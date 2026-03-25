@@ -8,6 +8,7 @@ use comproc::{
 	noise::config::NoiseConfig,
 };
 use noise::{NoiseFn, Seedable};
+use render_item::mesh::cache::mesh::disk::DiskMeshCache;
 use render_item::{
 	mesh::{
 		cache::handle::map::HandleMap, handle::MeshHandle, IdentifiedMesh, MeshBuilder,
@@ -103,26 +104,51 @@ where
 		transform: Transform,
 	) -> Vec<Entity> {
 		let mut entities = Vec::new();
-		for branch in &self.branch_ball_sticks {
-			let branch_render_item =
-				BallStickRenderItem::new(branch.clone(), self.branch_spawner.clone());
-			entities.extend(branch_render_item.spawn_render_items(
-				commands,
-				cascade_chunk,
-				transform,
-			));
+		if cascade_chunk.res_2 < 6 {
+			// just spawn one big leaf ball for the canopy
+			let mesh = LeafMesh::from_tree_num(0.0);
+			let mesh_handle = MeshHandle::new(mesh);
 
-			let (ballstick, _spawner) = branch_render_item.into_parts();
-			let leaf_render_item =
-				BallStickRenderItem::new(ballstick.clone(), self.leaf_spawner.clone());
-			entities.extend(leaf_render_item.spawn_render_items(
-				commands,
-				cascade_chunk,
-				transform,
+			let ball_transform = Transform::from_translation(
+				transform.translation + Vec3::new(0.0, self.height * 0.75, 0.0),
+			)
+			.with_scale(Vec3::new(self.height * 0.6, self.height * 0.5, self.height * 0.6));
+
+			commands.spawn((
+				cascade_chunk.clone(),
+				MeshDispatch::new(mesh_handle.clone()),
+				ball_transform,
+				MeshMaterial3d(self.leaf_material.0.clone()),
 			));
+		} else {
+			// down level the resolution by 1
+			let branch_cascade_chunk = cascade_chunk.with_res_2((cascade_chunk.res_2 - 3).max(2));
+			let leaf_cascade_chunk = cascade_chunk.with_res_2((cascade_chunk.res_2 - 1).max(2));
+
+			for branch in &self.branch_ball_sticks {
+				// branch
+				let branch_render_item =
+					BallStickRenderItem::new(branch.clone(), self.branch_spawner.clone());
+				entities.extend(branch_render_item.spawn_render_items(
+					commands,
+					&branch_cascade_chunk,
+					transform,
+				));
+
+				// leaves
+				let (ballstick, _spawner) = branch_render_item.into_parts();
+				let leaf_render_item =
+					BallStickRenderItem::new(ballstick.clone(), self.leaf_spawner.clone());
+				entities.extend(leaf_render_item.spawn_render_items(
+					commands,
+					&leaf_cascade_chunk,
+					transform,
+				));
+			}
 		}
 
-		self.spawn_trunk(commands, cascade_chunk);
+		let cascade_chunk = cascade_chunk.with_res_2((cascade_chunk.res_2 - 3).max(2));
+		self.spawn_trunk(commands, &cascade_chunk);
 
 		entities
 	}
@@ -145,8 +171,10 @@ pub struct TreeBuilder<
 	pub noise_config_4d: NoiseConfig<4, N>,
 	pub ball_variety: u32,
 	pub ball_cache: HandleMap<BallMesh>,
+	pub ball_mesh_cache: Option<DiskMeshCache<BallMesh>>,
 	pub stick_variety: u32,
 	pub stick_cache: HandleMap<StickMesh>,
+	pub stick_mesh_cache: Option<DiskMeshCache<StickMesh>>,
 	pub leaf_variety: u32,
 	pub leaf_cache: HandleMap<LeafMesh>,
 	pub stick_material: MeshMaterial3d<StickMaterial>,
@@ -165,7 +193,7 @@ impl<
 {
 	pub fn get_branch_height(&self, last_position: Vec3) -> f32 {
 		let noise_value = self.noise_config_3d.vec3_on_unit(last_position) as f32;
-		noise_value * self.height
+		(noise_value * self.height).min(self.height)
 	}
 
 	pub fn branch_builder(&self, anchor: Vec3, initial_ray: Vec3) -> BallStickBuilder<N, M> {
@@ -200,8 +228,9 @@ impl<
 			let branch = branch_builder.build();
 			branches.push(branch);
 
-			let biased_height = (self.anchor.y + height).max(last_position.y - height);
+			let biased_height = height.max(last_position.y - height);
 			last_position = self.anchor + Vec3::new(0.0, biased_height, 0.0);
+			last_position.y = last_position.y.min(self.height);
 		}
 
 		branches
@@ -219,6 +248,7 @@ impl<
 			.map(|i| {
 				MeshHandle::new(StickMesh::from_tree_num(tree_num + i as f32))
 					.with_handle_cache(self.stick_cache.clone())
+					.with_mesh_cache(self.stick_mesh_cache.clone())
 			})
 			.collect();
 
@@ -226,6 +256,7 @@ impl<
 			.map(|i| {
 				MeshHandle::new(BallMesh::from_tree_num(tree_num + i as f32))
 					.with_handle_cache(self.ball_cache.clone())
+					.with_mesh_cache(self.ball_mesh_cache.clone())
 			})
 			.collect();
 

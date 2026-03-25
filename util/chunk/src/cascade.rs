@@ -1,5 +1,6 @@
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
+use std::collections::HashSet;
 use std::fmt::Debug;
 use std::hash::Hash;
 use std::hash::Hasher;
@@ -35,6 +36,7 @@ impl Ring {
 					}
 
 					chunks.push(CascadeChunk {
+						world: 0,
 						origin: self.lower_left_bottom
 							+ Vec3::new(
 								x as f32 * self.size,
@@ -81,6 +83,7 @@ fn lex_cmp(a: &Vec3, b: &Vec3) -> std::cmp::Ordering {
 
 #[derive(Component, Debug, Clone, Copy, PartialEq)]
 pub struct CascadeChunk {
+	pub world: u32,
 	pub origin: Vec3,
 	pub size: f32,
 	pub res_2: u8,
@@ -98,30 +101,58 @@ impl Hash for CascadeChunk {
 }
 
 impl CascadeChunk {
+	pub fn contains_point(&self, point: Vec3) -> bool {
+		if let Some(omit) = self.omit {
+			if omit.closest_point(point) == point.into() {
+				return false;
+			}
+		}
+
+		point.x >= self.origin.x
+			&& point.x <= self.origin.x + self.size
+			&& point.y >= self.origin.y
+			&& point.y <= self.origin.y + self.size
+			&& point.z >= self.origin.z
+			&& point.z <= self.origin.z + self.size
+	}
+
+	pub fn column_contains_point(&self, point: Vec3) -> bool {
+		if let Some(omit) = self.omit {
+			if omit.closest_point(point) == point.into() {
+				return false;
+			}
+		}
+
+		point.x >= self.origin.x
+			&& point.x <= self.origin.x + self.size
+			&& point.z >= self.origin.z
+			&& point.z <= self.origin.z + self.size
+	}
+
 	pub fn resolution(&self) -> usize {
 		2_usize.pow(self.res_2 as u32)
 	}
 
 	/// Creates a chunk with a bottom left corner at the origin and a size of 1.0.
 	pub fn unit_chunk() -> Self {
-		Self { origin: Vec3::ZERO, size: 1.0, res_2: 0, omit: None }
+		Self { world: 0, origin: Vec3::ZERO, size: 1.0, res_2: 0, omit: None }
 	}
 
 	/// Creates a chunk with the center at the origin and diameters of 1.0.
 	pub fn unit_center_chunk() -> Self {
-		Self { origin: Vec3::new(-0.5, 0.0, -0.5), size: 1.0, res_2: 0, omit: None }
+		Self { world: 0, origin: Vec3::new(-0.5, 0.0, -0.5), size: 1.0, res_2: 0, omit: None }
 	}
 
 	/// Creates a chunk with the center at the origin and a size of 1.0.
 	pub fn unit_3d_center_chunk() -> Self {
-		Self { origin: Vec3::new(-0.5, -0.5, -0.5), size: 1.0, res_2: 0, omit: None }
+		Self { world: 0, origin: Vec3::new(-0.5, -0.5, -0.5), size: 1.0, res_2: 0, omit: None }
 	}
 
 	/// Updates a chunk with some Mu for the geometry that goes slightly beyond the unit.
 	pub fn with_mu(self, mu: f32) -> Self {
 		let origin = self.origin + Vec3::new(-mu, -mu, -mu);
 		let size = self.size + 2.0 * mu;
-		Self { origin, size, res_2: self.res_2, omit: self.omit }
+		Self { world: self.world, origin, size, res_2: self.res_2, omit: self.omit }
 	}
 
 	pub fn with_res_2(mut self, res_2: u8) -> Self {
@@ -173,7 +204,7 @@ impl Ord for CascadeChunk {
 	}
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Component, Debug, Clone, Copy)]
 pub struct Cascade<R: ResolutionMap> {
 	/// The minimum size of the chunk used in the interior of the cascade
 	pub min_size: f32,
@@ -182,15 +213,15 @@ pub struct Cascade<R: ResolutionMap> {
 	/// The resolution map for the cascade and grid.
 	pub resolution_map: R,
 	/// The Manhattan radius of the grid in the cascade
-	pub grid_radius: usize,
+	pub grid_radius: Option<(usize, usize, usize)>,
 	/// The base two power of the multiple of the size of the largest ring in the cascade.
 	pub grid_multiple_2: u8,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CascadeOutput {
-	pub cascade_chunks: Vec<CascadeChunk>,
-	pub grid_chunks: Vec<CascadeChunk>,
+	pub cascade_chunks: HashSet<CascadeChunk>,
+	pub grid_chunks: HashSet<CascadeChunk>,
 }
 
 impl CascadeOutput {
@@ -201,12 +232,16 @@ impl CascadeOutput {
 		chunks
 	}
 
-	pub fn cascade(&self) -> Vec<CascadeChunk> {
-		self.cascade_chunks.clone()
+	pub fn cascade(&self) -> &HashSet<CascadeChunk> {
+		&self.cascade_chunks
 	}
 
-	pub fn grid(&self) -> Vec<CascadeChunk> {
-		self.grid_chunks.clone()
+	pub fn grid(&self) -> &HashSet<CascadeChunk> {
+		&self.grid_chunks
+	}
+
+	pub fn contains(&self, chunk: &CascadeChunk) -> bool {
+		self.cascade_chunks.contains(chunk) || self.grid_chunks.contains(chunk)
 	}
 }
 
@@ -225,6 +260,7 @@ impl<R: ResolutionMap> Cascade<R> {
 	pub fn center_chunk(&self, position: Vec3) -> CascadeChunk {
 		let origin = self.position_to_origin(position);
 		CascadeChunk {
+			world: 0,
 			origin,
 			size: self.min_size,
 			res_2: self.resolution_map.ring_to_power_of_2(0),
@@ -283,6 +319,11 @@ impl<R: ResolutionMap> Cascade<R> {
 	/// This allows for low-cost distant features over a tight high-resolution cascade.
 	/// You don't always have to cascade out to the general world resolution that you want.
 	pub fn grid_chunks(&self, position: Vec3) -> Result<Vec<CascadeChunk>, String> {
+		let (x_radius, y_radius, z_radius) = match self.grid_radius {
+			Some(grid_radius) => grid_radius,
+			None => return Ok(vec![]),
+		};
+
 		let omit = Some(self.cascade_aabb(position));
 		let origin_x = (position.x / self.grid_chunk_size()).floor() * self.grid_chunk_size();
 		let origin_y = self.grid_chunk_size() / -2.0;
@@ -291,21 +332,24 @@ impl<R: ResolutionMap> Cascade<R> {
 		let mut chunks = Vec::new();
 
 		// construct the 2D grid of chunks
-		for x in -(self.grid_radius as i32)..=(self.grid_radius as i32) {
-			for z in -(self.grid_radius as i32)..=(self.grid_radius as i32) {
-				let chunk_origin = origin
-					+ Vec3::new(
-						x as f32 * self.grid_chunk_size(),
-						0.0,
-						z as f32 * self.grid_chunk_size(),
-					);
-				let chunk = CascadeChunk {
-					origin: chunk_origin,
-					size: self.grid_chunk_size(),
-					res_2: self.resolution_map.ring_to_power_of_2(self.number_of_rings),
-					omit,
-				};
-				chunks.push(chunk);
+		for x in -(x_radius as i32)..=(x_radius as i32) {
+			for z in -(z_radius as i32)..=(z_radius as i32) {
+				for y in -(y_radius as i32)..=(y_radius as i32) {
+					let chunk_origin = origin
+						+ Vec3::new(
+							x as f32 * self.grid_chunk_size(),
+							y as f32 * self.grid_chunk_size(),
+							z as f32 * self.grid_chunk_size(),
+						);
+					let chunk = CascadeChunk {
+						world: 0,
+						origin: chunk_origin,
+						size: self.grid_chunk_size(),
+						res_2: self.resolution_map.ring_to_power_of_2(self.number_of_rings),
+						omit,
+					};
+					chunks.push(chunk);
+				}
 			}
 		}
 
@@ -313,9 +357,32 @@ impl<R: ResolutionMap> Cascade<R> {
 	}
 
 	pub fn chunks(&self, position: Vec3) -> Result<CascadeOutput, String> {
-		let cascade_chunks = self.cascade_chunks(position)?;
-		let grid_chunks = self.grid_chunks(position)?;
+		let cascade_chunks = self.cascade_chunks(position)?.into_iter().collect();
+		let grid_chunks = self.grid_chunks(position)?.into_iter().collect();
 		Ok(CascadeOutput { cascade_chunks, grid_chunks })
+	}
+
+	pub fn new_chunks(
+		&self,
+		prev: Vec3,
+		new: Vec3,
+	) -> Result<(CascadeOutput, CascadeOutput), String> {
+		// compute the new chunks
+		let new_chunks = self.chunks(new)?;
+
+		// compute the previous chunks
+		let prev_chunks = self.chunks(prev)?;
+
+		// compute the new chunks that are not in the previous chunks
+		let cascade_chunks = new_chunks
+			.cascade_chunks
+			.difference(&prev_chunks.cascade_chunks)
+			.cloned()
+			.collect();
+		let grid_chunks =
+			new_chunks.grid_chunks.difference(&prev_chunks.grid_chunks).cloned().collect();
+
+		Ok((CascadeOutput { cascade_chunks, grid_chunks }, new_chunks))
 	}
 
 	pub fn needs_new_chunks(&self, prev: Vec3, new: Vec3) -> bool {
@@ -365,6 +432,19 @@ impl ResolutionMap for ConstantResolutionMap {
 	}
 }
 
+#[derive(Component, Debug, Clone, Copy)]
+pub struct DecreasingResolutionMap {
+	pub from_res_2: u8,
+	pub by: u8,
+	pub min_res_2: u8,
+}
+
+impl ResolutionMap for DecreasingResolutionMap {
+	fn ring_to_power_of_2(&self, ring: u8) -> u8 {
+		self.min_res_2.max(self.from_res_2 - ring * self.by)
+	}
+}
+
 #[cfg(test)]
 mod tests {
 	use super::*;
@@ -377,54 +457,63 @@ mod tests {
 		vec![
 			// z = 0 level (9 chunks)
 			CascadeChunk {
+				world: 0,
 				origin: lower_left_bottom + Vec3::new(0.0 * size, 0.0 * size, 0.0 * size),
 				size,
 				res_2,
 				omit: None,
 			},
 			CascadeChunk {
+				world: 0,
 				origin: lower_left_bottom + Vec3::new(1.0 * size, 0.0 * size, 0.0 * size),
 				size,
 				res_2,
 				omit: None,
 			},
 			CascadeChunk {
+				world: 0,
 				origin: lower_left_bottom + Vec3::new(2.0 * size, 0.0 * size, 0.0 * size),
 				size,
 				res_2,
 				omit: None,
 			},
 			CascadeChunk {
+				world: 0,
 				origin: lower_left_bottom + Vec3::new(0.0 * size, 1.0 * size, 0.0 * size),
 				size,
 				res_2,
 				omit: None,
 			},
 			CascadeChunk {
+				world: 0,
 				origin: lower_left_bottom + Vec3::new(1.0 * size, 1.0 * size, 0.0 * size),
 				size,
 				res_2,
 				omit: None,
 			}, // center
 			CascadeChunk {
+				world: 0,
 				origin: lower_left_bottom + Vec3::new(2.0 * size, 1.0 * size, 0.0 * size),
 				size,
 				res_2,
 				omit: None,
 			},
 			CascadeChunk {
+				world: 0,
 				origin: lower_left_bottom + Vec3::new(0.0 * size, 2.0 * size, 0.0 * size),
 				size,
 				res_2,
 				omit: None,
 			},
 			CascadeChunk {
+				world: 0,
 				origin: lower_left_bottom + Vec3::new(1.0 * size, 2.0 * size, 0.0 * size),
 				size,
 				res_2,
 				omit: None,
 			},
 			CascadeChunk {
+				world: 0,
 				origin: lower_left_bottom + Vec3::new(2.0 * size, 2.0 * size, 0.0 * size),
 				size,
 				res_2,
@@ -432,54 +521,63 @@ mod tests {
 			},
 			// z = 1 level (9 chunks)
 			CascadeChunk {
+				world: 0,
 				origin: lower_left_bottom + Vec3::new(0.0 * size, 0.0 * size, 1.0 * size),
 				size,
 				res_2,
 				omit: None,
 			},
 			CascadeChunk {
+				world: 0,
 				origin: lower_left_bottom + Vec3::new(1.0 * size, 0.0 * size, 1.0 * size),
 				size,
 				res_2,
 				omit: None,
 			},
 			CascadeChunk {
+				world: 0,
 				origin: lower_left_bottom + Vec3::new(2.0 * size, 0.0 * size, 1.0 * size),
 				size,
 				res_2,
 				omit: None,
 			},
 			CascadeChunk {
+				world: 0,
 				origin: lower_left_bottom + Vec3::new(0.0 * size, 1.0 * size, 1.0 * size),
 				size,
 				res_2,
 				omit: None,
 			},
 			CascadeChunk {
+				world: 0,
 				origin: lower_left_bottom + Vec3::new(1.0 * size, 1.0 * size, 1.0 * size),
 				size,
 				res_2,
 				omit: None,
 			},
 			CascadeChunk {
+				world: 0,
 				origin: lower_left_bottom + Vec3::new(2.0 * size, 1.0 * size, 1.0 * size),
 				size,
 				res_2,
 				omit: None,
 			},
 			CascadeChunk {
+				world: 0,
 				origin: lower_left_bottom + Vec3::new(0.0 * size, 2.0 * size, 1.0 * size),
 				size,
 				res_2,
 				omit: None,
 			},
 			CascadeChunk {
+				world: 0,
 				origin: lower_left_bottom + Vec3::new(1.0 * size, 2.0 * size, 1.0 * size),
 				size,
 				res_2,
 				omit: None,
 			},
 			CascadeChunk {
+				world: 0,
 				origin: lower_left_bottom + Vec3::new(2.0 * size, 2.0 * size, 1.0 * size),
 				size,
 				res_2,
@@ -487,54 +585,63 @@ mod tests {
 			},
 			// z = 2 level (9 chunks)
 			CascadeChunk {
+				world: 0,
 				origin: lower_left_bottom + Vec3::new(0.0 * size, 0.0 * size, 2.0 * size),
 				size,
 				res_2,
 				omit: None,
 			},
 			CascadeChunk {
+				world: 0,
 				origin: lower_left_bottom + Vec3::new(1.0 * size, 0.0 * size, 2.0 * size),
 				size,
 				res_2,
 				omit: None,
 			},
 			CascadeChunk {
+				world: 0,
 				origin: lower_left_bottom + Vec3::new(2.0 * size, 0.0 * size, 2.0 * size),
 				size,
 				res_2,
 				omit: None,
 			},
 			CascadeChunk {
+				world: 0,
 				origin: lower_left_bottom + Vec3::new(0.0 * size, 1.0 * size, 2.0 * size),
 				size,
 				res_2,
 				omit: None,
 			},
 			CascadeChunk {
+				world: 0,
 				origin: lower_left_bottom + Vec3::new(1.0 * size, 1.0 * size, 2.0 * size),
 				size,
 				res_2,
 				omit: None,
 			},
 			CascadeChunk {
+				world: 0,
 				origin: lower_left_bottom + Vec3::new(2.0 * size, 1.0 * size, 2.0 * size),
 				size,
 				res_2,
 				omit: None,
 			},
 			CascadeChunk {
+				world: 0,
 				origin: lower_left_bottom + Vec3::new(0.0 * size, 2.0 * size, 2.0 * size),
 				size,
 				res_2,
 				omit: None,
 			},
 			CascadeChunk {
+				world: 0,
 				origin: lower_left_bottom + Vec3::new(1.0 * size, 2.0 * size, 2.0 * size),
 				size,
 				res_2,
 				omit: None,
 			},
 			CascadeChunk {
+				world: 0,
 				origin: lower_left_bottom + Vec3::new(2.0 * size, 2.0 * size, 2.0 * size),
 				size,
 				res_2,
@@ -552,6 +659,7 @@ mod tests {
 
 		// Remove the middle chunk (center is at lower_left_bottom + (1*size, 1*size, 1*size))
 		let center_chunk = CascadeChunk {
+			world: 0,
 			origin: lower_left_bottom + Vec3::new(1.0 * size, 1.0 * size, 1.0 * size),
 			size,
 			res_2,
@@ -569,10 +677,13 @@ mod tests {
 			min_size: 1.0,
 			number_of_rings: 1,
 			resolution_map: ConstantResolutionMap { res_2: 0 },
-			grid_radius: 1,
+			grid_radius: Some((1, 1, 1)),
 			grid_multiple_2: 0,
 		};
-		let chunks = cascade.chunks(Vec3::new(0.0, 0.0, 0.0))?.cascade();
+
+		let position = Vec3::new(0.0, 0.0, 0.0);
+		let chunks = cascade.chunks(position)?;
+		let chunks = chunks.cascade();
 
 		// the zero chunk and the 26 chunks in the first ring
 		assert_eq!(chunks.len(), 27);
@@ -580,7 +691,7 @@ mod tests {
 		// put the chunks in a BTreeSet to sort them
 		let mut chunks_sorted = BTreeSet::new();
 		for chunk in chunks {
-			chunks_sorted.insert(chunk);
+			chunks_sorted.insert(chunk.clone());
 		}
 
 		// make sure there are 27 unique chunks
@@ -610,10 +721,12 @@ mod tests {
 			min_size: 1.0,
 			number_of_rings: 2,
 			resolution_map: ConstantResolutionMap { res_2: 0 },
-			grid_radius: 1,
+			grid_radius: Some((1, 1, 1)),
 			grid_multiple_2: 0,
 		};
-		let chunks = cascade.chunks(Vec3::new(0.0, 0.0, 0.0))?.cascade();
+		let position = Vec3::new(0.0, 0.0, 0.0);
+		let chunks = cascade.chunks(position)?;
+		let chunks = chunks.cascade();
 
 		// Center chunk + 26 chunks from ring 0 + 26 chunks from ring 1 = 53 chunks
 		assert_eq!(chunks.len(), 53);
@@ -622,15 +735,20 @@ mod tests {
 		let mut expected_chunks = BTreeSet::new();
 
 		// Center chunk
-		let center_chunk =
-			CascadeChunk { origin: Vec3::new(0.0, 0.0, 0.0), size: 1.0, res_2: 0, omit: None };
+		let center_chunk = CascadeChunk {
+			world: 0,
+			origin: Vec3::new(0.0, 0.0, 0.0),
+			size: 1.0,
+			res_2: 0,
+			omit: None,
+		};
 		expected_chunks.insert(center_chunk);
 
 		// Ring 0: lower_left_bottom = center - (min_size, min_size, min_size)
 		let ring0_lower_left_bottom = Vec3::new(0.0, 0.0, 0.0) - Vec3::new(1.0, 1.0, 1.0);
 		let ring0_chunks = nth_ring(1.0, 0, ring0_lower_left_bottom);
 		for chunk in ring0_chunks {
-			expected_chunks.insert(chunk);
+			expected_chunks.insert(chunk.clone());
 		}
 
 		// Ring 1: size = 3, lower_left_bottom = ring0_lower_left_bottom - (3, 3, 3)
@@ -644,7 +762,7 @@ mod tests {
 		// Convert actual chunks to BTreeSet
 		let mut chunks_sorted = BTreeSet::new();
 		for chunk in chunks {
-			chunks_sorted.insert(chunk);
+			chunks_sorted.insert(chunk.clone());
 		}
 
 		assert_eq!(chunks_sorted, expected_chunks);
@@ -658,10 +776,12 @@ mod tests {
 			min_size: 2.5,
 			number_of_rings: 1,
 			resolution_map: ConstantResolutionMap { res_2: 1 },
-			grid_radius: 1,
+			grid_radius: Some((1, 1, 1)),
 			grid_multiple_2: 0,
 		};
-		let chunks = cascade.chunks(Vec3::new(0.0, 0.0, 0.0))?.cascade();
+		let position = Vec3::new(0.0, 0.0, 0.0);
+		let chunks = cascade.chunks(position)?;
+		let chunks = chunks.cascade();
 
 		// Center chunk + 26 chunks from ring 0 = 27 chunks
 		assert_eq!(chunks.len(), 27);
@@ -670,21 +790,26 @@ mod tests {
 		let mut expected_chunks = BTreeSet::new();
 
 		// Center chunk
-		let center_chunk =
-			CascadeChunk { origin: Vec3::new(0.0, 0.0, 0.0), size: 2.5, res_2: 1, omit: None };
+		let center_chunk = CascadeChunk {
+			world: 0,
+			origin: Vec3::new(0.0, 0.0, 0.0),
+			size: 2.5,
+			res_2: 1,
+			omit: None,
+		};
 		expected_chunks.insert(center_chunk);
 
 		// Ring 0: lower_left_bottom = center - (min_size, min_size, min_size)
 		let ring0_lower_left_bottom = Vec3::new(0.0, 0.0, 0.0) - Vec3::new(2.5, 2.5, 2.5);
 		let ring0_chunks = nth_ring(2.5, 1, ring0_lower_left_bottom);
 		for chunk in ring0_chunks {
-			expected_chunks.insert(chunk);
+			expected_chunks.insert(chunk.clone());
 		}
 
 		// Convert actual chunks to BTreeSet
 		let mut chunks_sorted = BTreeSet::new();
 		for chunk in chunks {
-			chunks_sorted.insert(chunk);
+			chunks_sorted.insert(chunk.clone());
 		}
 
 		assert_eq!(chunks_sorted, expected_chunks);
@@ -698,10 +823,12 @@ mod tests {
 			min_size: 0.5,
 			number_of_rings: 1,
 			resolution_map: ConstantResolutionMap { res_2: 2 },
-			grid_radius: 1,
+			grid_radius: Some((1, 1, 1)),
 			grid_multiple_2: 0,
 		};
-		let chunks = cascade.chunks(Vec3::new(0.0, 0.0, 0.0))?.cascade();
+		let position = Vec3::new(0.0, 0.0, 0.0);
+		let chunks = cascade.chunks(position)?;
+		let chunks = chunks.cascade();
 
 		// Center chunk + 26 chunks from ring 0 = 27 chunks
 		assert_eq!(chunks.len(), 27);
@@ -710,21 +837,26 @@ mod tests {
 		let mut expected_chunks = BTreeSet::new();
 
 		// Center chunk
-		let center_chunk =
-			CascadeChunk { origin: Vec3::new(0.0, 0.0, 0.0), size: 0.5, res_2: 2, omit: None };
-		expected_chunks.insert(center_chunk);
+		let center_chunk = CascadeChunk {
+			world: 0,
+			origin: Vec3::new(0.0, 0.0, 0.0),
+			size: 0.5,
+			res_2: 2,
+			omit: None,
+		};
+		expected_chunks.insert(center_chunk.clone());
 
 		// Ring 0: lower_left_bottom = center - (min_size, min_size, min_size)
 		let ring0_lower_left_bottom = Vec3::new(0.0, 0.0, 0.0) - Vec3::new(0.5, 0.5, 0.5);
 		let ring0_chunks = nth_ring(0.5, 2, ring0_lower_left_bottom);
 		for chunk in ring0_chunks {
-			expected_chunks.insert(chunk);
+			expected_chunks.insert(chunk.clone());
 		}
 
 		// Convert actual chunks to BTreeSet
 		let mut chunks_sorted = BTreeSet::new();
 		for chunk in chunks {
-			chunks_sorted.insert(chunk);
+			chunks_sorted.insert(chunk.clone());
 		}
 
 		assert_eq!(chunks_sorted, expected_chunks);

@@ -2,6 +2,7 @@ use bevy::prelude::*;
 use chunk::cascade::CascadeChunk;
 use engine::shaders::{leaf_material::LeafMaterial, outline::EdgeMaterial};
 use render_item::{mesh::cache::handle::map::HandleMap, DispatchRenderItem};
+use terrain::NullTerrain;
 use vegetation_sdf::{
 	grove::GroveBuilder,
 	tree::{
@@ -25,7 +26,7 @@ pub fn setup_tree_edge_material(
 
 	// green color
 	let leaf_material_handle =
-		leaf_materials.add(LeafMaterial { base_color: Vec4::new(0.2, 0.8, 0.3, 1.0) });
+		leaf_materials.add(LeafMaterial::default().with_base_color(Vec4::new(0.2, 0.8, 0.3, 1.0)));
 
 	commands.insert_resource(TreeMaterial(material_handle));
 	commands.insert_resource(TreeMaterial(leaf_material_handle));
@@ -36,14 +37,13 @@ pub fn tree_playground<T: Material, L: Material>(
 	trunk_material: Res<TreeMaterial<T>>,
 	leaf_material: Res<TreeMaterial<L>>,
 ) {
-	log::info!("Spawning tree playground");
-
 	let tree_cache = HandleMap::<SimpleTrunkSegment>::new();
 	let leaf_cache = HandleMap::<NoisyBall>::new();
 
 	let grove_builder = GroveBuilder::new(
 		MeshMaterial3d(trunk_material.0.clone()),
 		MeshMaterial3d(leaf_material.0.clone()),
+		NullTerrain,
 	)
 	.with_tree_cache(tree_cache)
 	.with_leaf_cache(leaf_cache);
@@ -61,8 +61,6 @@ pub fn square_tree_playground<T: Material, L: Material>(
 	trunk_material: Res<TreeMaterial<T>>,
 	leaf_material: Res<TreeMaterial<L>>,
 ) {
-	log::info!("Spawning tree playground");
-
 	let tree_cache = HandleMap::<SimpleTrunkSegment>::new();
 	let leaf_cache = HandleMap::<NoisyBall>::new();
 

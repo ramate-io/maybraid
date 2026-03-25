@@ -1,5 +1,5 @@
 [package]
-name = "terrain-sdf"
+name = "terrain"
 version = { workspace = true }
 edition  = { workspace = true }
 license  = { workspace = true }
@@ -20,10 +20,13 @@ rayon = { workspace = true }
 # Bevy core dependencies
 bevy = { workspace = true }
 
-noise = "0.9"
+noise = { workspace = true }
 
 # Procedural generation
 sdf = { workspace = true }
+chunk = { workspace = true }
+render-item = { workspace = true }
+comproc = { workspace = true }
 
 [lints]
 workspace = true

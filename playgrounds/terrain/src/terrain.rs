@@ -2,22 +2,22 @@
 use crate::sdf::{Bounds, Difference, Ellipse3d, Sdf, SignUniformIntervals, TubeSdf};
 use bevy::prelude::*;
 use noise::Perlin;
-use terrain_sdf::{
+use terrain::{
 	region::affine::RegionAffineModulation,
 	region::branching::BranchingPlan,
 	region::grading::RegionGradingModulation,
 	region::rounding::RegionRoundingModulation,
 	region::{CircleRegion, RectRegion, Region2D, RegionNoise},
-	PerlinTerrainSdf,
+	TerrainSdf,
 };
 
 /// Resource containing the terrain SDF for runtime queries
 #[derive(Resource)]
-pub struct TerrainSdf {
+pub struct Terrain {
 	pub sdf: Box<dyn Sdf>,
 }
 
-impl Sdf for TerrainSdf {
+impl Sdf for Terrain {
 	fn distance(&self, p: Vec3) -> f32 {
 		self.sdf.distance(p)
 	}
@@ -32,9 +32,9 @@ impl Sdf for TerrainSdf {
 }
 
 /// Create the terrain SDF with all modulations
-pub fn create_terrain_sdf(config: &TerrainConfig) -> Box<dyn Sdf> {
+pub fn create_terrain(config: &TerrainConfig) -> Box<dyn Sdf> {
 	// Create base terrain SDF
-	let mut sdf = PerlinTerrainSdf::new(config.seed, config.height_scale);
+	let mut sdf = TerrainSdf::new(config.seed, config.height_scale);
 
 	let big_valley_sdf = RegionAffineModulation::new(
 		Region2D::Rect(RectRegion {

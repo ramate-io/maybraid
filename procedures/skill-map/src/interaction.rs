@@ -94,8 +94,8 @@ impl<L: LeftCollidable, R: RightCollidable, C: CollisionLayer> CollisionPlugin<L
 			Without<IgnoreRightCollisions>,
 		>,
 	) {
-		// log::info!("Checking left right collisions for type {:?}", std::any::type_name::<L>());
-		// log::info!("Checking right left collisions for type {:?}", std::any::type_name::<R>());
+		// log::debug!("Checking left right collisions for type {:?}", std::any::type_name::<L>());
+		// log::debug!("Checking right left collisions for type {:?}", std::any::type_name::<R>());
 		for (left_entity, left_collider, _layer, left_transform) in left_query.iter() {
 			for (right_entity, right_collider, _layer, right_transform) in right_query.iter() {
 				if left_entity == right_entity {

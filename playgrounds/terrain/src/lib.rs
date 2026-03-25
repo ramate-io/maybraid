@@ -25,11 +25,11 @@ impl Plugin for TerrainPlugin {
 		app.add_plugins(bevy::pbr::MaterialPlugin::<EdgeMaterial>::default());
 
 		// Set up geographic features
-		let terrain_chunk_config = ChunkConfig::<terrain::TerrainSdf>::default();
-		let terrain_resolution_config = ChunkResolutionConfig::<terrain::TerrainSdf>::default();
+		let terrain_chunk_config = ChunkConfig::<terrain::Terrain>::default();
+		let terrain_resolution_config = ChunkResolutionConfig::<terrain::Terrain>::default();
 		let terrain_config = TerrainConfig::new(self.seed);
-		let terrain_sdf = terrain::TerrainSdf { sdf: terrain::create_terrain_sdf(&terrain_config) };
-		let terrain_sdf_resource = SdfResource::new(terrain_sdf);
+		let terrain = terrain::Terrain { sdf: terrain::create_terrain(&terrain_config) };
+		let terrain_resource = SdfResource::new(terrain);
 
 		app.insert_resource(terrain_config)
 			.insert_resource(ClearColor(Color::hsla(201.0, 0.69, 0.62, 1.0)))
@@ -37,14 +37,14 @@ impl Plugin for TerrainPlugin {
 			// terrain
 			.insert_resource(terrain_chunk_config)
 			.insert_resource(terrain_resolution_config)
-			.insert_resource(terrain_sdf_resource)
+			.insert_resource(terrain_resource)
 			// forest
 			.add_systems(Startup, (camera::setup_camera, setup_lighting, ui::setup_debug_ui))
 			.add_systems(
 				Update,
 				(
 					camera::camera_controller,
-					manage_chunks::<terrain::TerrainSdf>,
+					manage_chunks::<terrain::Terrain>,
 					ui::update_coordinate_display,
 				),
 			);
@@ -52,14 +52,6 @@ impl Plugin for TerrainPlugin {
 }
 
 fn setup_lighting(mut commands: Commands) {
-	// Ambient light - significantly increased to simulate global illumination
-	// This provides base lighting for all surfaces, including back faces
-	commands.insert_resource(AmbientLight {
-		color: Color::WHITE,
-		brightness: 2.0, // Much higher for better back-face illumination (simulates bounced light)
-		affects_lightmapped_meshes: true,
-	});
-
 	// Main directional light (sun) - primary light source
 	commands.spawn((
 		DirectionalLight { illuminance: 10000.0, shadows_enabled: true, ..default() },

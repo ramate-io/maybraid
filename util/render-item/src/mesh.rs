@@ -55,23 +55,25 @@ impl<T: MeshBuilder + MeshCache + MeshHandleCache> MeshFetcher for T {
 
 		// Check if the mesh handle is already cached.
 		if let Some(mesh) = self.fetch_cached_mesh_handle(&normalized_cascade_chunk) {
+			log::debug!("Using cached mesh handle for type: {}", std::any::type_name::<Self>());
 			return Some(mesh);
 		}
 
 		// Check if the mesh is already cached (this will most often get hit when the mesh is on disk).
 		let mesh_handle = if let Some(mesh) = self.fetch_cached_mesh(&normalized_cascade_chunk) {
+			log::debug!("Using cached mesh for type: {}", std::any::type_name::<Self>());
 			Some(meshes.add(mesh))
 		} else {
 			self.build_mesh(cascade_chunk).map(|mesh| {
 				self.cache_mesh(&mesh, &normalized_cascade_chunk);
-				log::info!("Adding mesh to assets");
+				log::debug!("Adding mesh to assets for type: {}", std::any::type_name::<Self>());
 				meshes.add(mesh)
 			})
 		};
 
 		mesh_handle.map(|handle| {
 			self.cache_mesh_handle(handle.clone(), &normalized_cascade_chunk);
-			log::info!("Caching mesh handle");
+			log::debug!("Caching mesh handle for type: {}", std::any::type_name::<Self>());
 			handle
 		})
 	}

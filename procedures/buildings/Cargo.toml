@@ -24,7 +24,7 @@ bevy = { workspace = true }
 sdf = { workspace = true }
 chunk = { workspace = true }
 render-item = { workspace = true }
-noise = "0.9"
+noise = { workspace = true }
 
 [lints]
 workspace = true

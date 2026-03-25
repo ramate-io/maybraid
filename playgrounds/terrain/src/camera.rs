@@ -1,4 +1,4 @@
-use crate::terrain::TerrainSdf;
+use crate::terrain::Terrain;
 use bevy::prelude::*;
 use engine::SdfResource;
 use std::f32::consts::PI;
@@ -17,7 +17,7 @@ pub fn setup_camera(mut commands: Commands) {
 	let camera_pos = Vec3::new(0.0, 20.0, 30.0);
 	let look_at = Vec3::new(0.0, 0.0, 0.0);
 
-	log::info!("Setting up camera at position: {:?}, looking at: {:?}", camera_pos, look_at);
+	log::debug!("Setting up camera at position: {:?}, looking at: {:?}", camera_pos, look_at);
 
 	commands.spawn((
 		Camera3d::default(),
@@ -42,7 +42,7 @@ pub fn camera_controller(
 	keyboard_input: Res<ButtonInput<KeyCode>>,
 	mut mouse_motion: MessageReader<bevy::input::mouse::MouseMotion>,
 	time: Res<Time>,
-	terrain_sdf: Res<SdfResource<TerrainSdf>>,
+	terrain: Res<SdfResource<Terrain>>,
 	mut query: Query<(&mut Transform, &mut CameraController), With<Camera3d>>,
 ) {
 	let Ok((mut transform, mut controller)) = query.single_mut() else {
@@ -53,11 +53,11 @@ pub fn camera_controller(
 	if keyboard_input.just_pressed(KeyCode::KeyC) {
 		controller.character_mode = !controller.character_mode;
 		if controller.character_mode {
-			log::info!("Character mode enabled");
+			log::debug!("Character mode enabled");
 			// When entering character mode, drop to terrain
 			controller.velocity = Vec3::ZERO;
 		} else {
-			log::info!("Character mode disabled");
+			log::debug!("Character mode disabled");
 			controller.velocity = Vec3::ZERO;
 		}
 	}
@@ -79,13 +79,7 @@ pub fn camera_controller(
 
 	if controller.character_mode {
 		// Character mode: gravity and terrain sticking
-		character_mode_movement(
-			&keyboard_input,
-			&time,
-			&terrain_sdf,
-			&mut transform,
-			&mut controller,
-		);
+		character_mode_movement(&keyboard_input, &time, &terrain, &mut transform, &mut controller);
 	} else {
 		// Free-fly mode: normal movement
 		free_fly_movement(&keyboard_input, &time, &mut transform, &mut controller);
@@ -131,7 +125,7 @@ fn free_fly_movement(
 fn character_mode_movement(
 	keyboard_input: &Res<ButtonInput<KeyCode>>,
 	time: &Res<Time>,
-	terrain_sdf: &Res<SdfResource<TerrainSdf>>,
+	terrain: &Res<SdfResource<Terrain>>,
 	transform: &mut Transform,
 	controller: &mut CameraController,
 ) {
@@ -146,7 +140,7 @@ fn character_mode_movement(
 	let pos = transform.translation;
 
 	// Sample terrain height at current position (Box implements Deref, so we can call distance directly)
-	let terrain_distance = terrain_sdf.sdf.sdf.distance(pos);
+	let terrain_distance = terrain.sdf.sdf.distance(pos);
 	let is_on_ground = terrain_distance <= GROUND_STICK_DISTANCE;
 
 	// Apply gravity
@@ -197,7 +191,7 @@ fn character_mode_movement(
 	let new_pos = pos + controller.velocity * dt;
 
 	// Find terrain height at new position
-	let new_terrain_distance = terrain_sdf.sdf.sdf.distance(new_pos);
+	let new_terrain_distance = terrain.sdf.sdf.distance(new_pos);
 
 	// If we're going to be below ground or too close to it, stick to surface
 	// Check if we're below surface (negative distance) or within character height
