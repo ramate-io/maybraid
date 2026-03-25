@@ -1,5 +1,5 @@
 #[cfg(test)]
-pub mod complex_tests;
+pub mod testing;
 
 use bevy::prelude::*;
 
