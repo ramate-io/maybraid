@@ -1,3 +1,6 @@
+#[cfg(test)]
+pub mod complex_tests;
+
 use bevy::prelude::*;
 
 /// A path through a local pathfinding surface.
