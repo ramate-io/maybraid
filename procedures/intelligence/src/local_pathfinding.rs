@@ -1,3 +1,5 @@
+#![doc = include_str!("local_pathfinding/README.md")]
+
 #[cfg(test)]
 pub mod testing;
 

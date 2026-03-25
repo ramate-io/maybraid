@@ -254,7 +254,9 @@
         "toolchain",
         "Leptos",
         "Maybraid",
-        "naturescapes"
+        "naturescapes",
+        "fanout",
+        "fanouts"
       ]
     },
     "bibtex": {
