@@ -20,6 +20,7 @@ jobs:
           {"name": "release-candidate", "color": "25c2b5", "description": "An intended update to software, documentation, or similar which constitutes a new usable version."},
           {"name": "feature", "color": "85c98e", "description": "Describes new behavior."},
           {"name": "bug", "color": "c98f85", "description": "Describes behavior which needs to be fixed."},
+          {"name": "proposal", "color": "b3e8e5", "description": "A detailed proposal (RFC)."},
           {"name": "docs", "color": "85b0c9", "description": "Describes important updates to documentation."},
           {"name": "delivery", "color": "85c9b9", "description": "Describes important updates to delivery mechanisms."},
           {"name": "validation", "color": "b785c9", "description": "Describes important updates to validation mechanisms."},
