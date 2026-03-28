@@ -11,6 +11,7 @@ members = [
   "playgrounds/terrain",
   "playgrounds/objects",
   "playgrounds/skill-map",
+  "playgrounds/pathfinding",
 
   # proceudres
   "procedures/terrain",
