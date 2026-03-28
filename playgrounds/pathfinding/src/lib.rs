@@ -7,11 +7,49 @@ use intelligence::local_pathfinding::{
 	respond_to_find_path_requests,
 };
 
-// --- Pathfinding surface: floor z = 0, infinite wall on the Y axis at x = 0 ---
+// --- Pathfinding surface: floor z = 0, finite wall as an axis-aligned box in XY ---
 
 #[derive(Clone, Copy, Debug)]
 struct PlaygroundSurface {
-	wall_x: f32,
+	/// Inclusive AABB in the z = 0 plane (min.x ≤ x ≤ max.x, min.y ≤ y ≤ max.y).
+	wall_min: Vec2,
+	wall_max: Vec2,
+}
+
+/// Segment `start + u (end - start)`, u ∈ [0, 1], vs closed AABB. Returns overlap of u with [0, 1].
+fn segment_aabb_u_interval(start: Vec2, end: Vec2, min_b: Vec2, max_b: Vec2) -> Option<(f32, f32)> {
+	let d = end - start;
+	let mut u0 = 0.0_f32;
+	let mut u1 = 1.0_f32;
+
+	for axis in 0..2 {
+		let (p, delta, mn, mx) = if axis == 0 {
+			(start.x, d.x, min_b.x, max_b.x)
+		} else {
+			(start.y, d.y, min_b.y, max_b.y)
+		};
+
+		if delta.abs() < 1e-8 {
+			if p < mn || p > mx {
+				return None;
+			}
+			continue;
+		}
+
+		let inv = 1.0 / delta;
+		let mut t0 = (mn - p) * inv;
+		let mut t1 = (mx - p) * inv;
+		if t0 > t1 {
+			core::mem::swap(&mut t0, &mut t1);
+		}
+		u0 = u0.max(t0);
+		u1 = u1.min(t1);
+		if u0 > u1 {
+			return None;
+		}
+	}
+
+	Some((u0, u1))
 }
 
 impl LocalPathfindingSurface for PlaygroundSurface {
@@ -25,14 +63,26 @@ impl LocalPathfindingSurface for PlaygroundSurface {
 		if len < 1e-12 {
 			return len;
 		}
-		if d.x.abs() < 1e-6 {
+
+		let s2 = start.xy();
+		let e2 = end.xy();
+		let Some((t0, t1)) = segment_aabb_u_interval(s2, e2, self.wall_min, self.wall_max) else {
+			return len;
+		};
+
+		// No intersection with the actual segment.
+		if t1 < 0.0 || t0 > 1.0 {
 			return len;
 		}
-		let u = (self.wall_x - start.x) / d.x;
-		if u <= 0.0 || u >= 1.0 {
+
+		// First contact along the segment from `start` (u = 0 at start, u = 1 at end).
+		let u_hit = t0.max(0.0);
+		if u_hit > 1.0 {
 			return len;
 		}
-		-(u * len)
+
+		let dist = u_hit * len;
+		-dist
 	}
 }
 
@@ -95,7 +145,12 @@ fn setup_scene(
 	commands.spawn(Camera2d);
 
 	let fanout = PlaygroundFanout { step: 28.0 };
-	let surface = PlaygroundSurface { wall_x: 0.0 };
+	// Centered vertical slab: finite in Y so the agent can plan over/under the ends visually.
+	const WALL_HALF_W: f32 = 16.0;
+	const WALL_HALF_H: f32 = 140.0;
+	let wall_min = Vec2::new(-WALL_HALF_W, -WALL_HALF_H);
+	let wall_max = Vec2::new(WALL_HALF_W, WALL_HALF_H);
+	let surface = PlaygroundSurface { wall_min, wall_max };
 	let mut pathfinder = LocalPathfinding::new(fanout, surface);
 	pathfinder.depth = 4;
 	pathfinder.agent_radius = 12.0;
@@ -120,13 +175,17 @@ fn setup_scene(
 		CursorVisual,
 	));
 
-	// Vertical wall slab (visual only; collision matches surface.wall_x)
-	let wall_mesh = meshes.add(Rectangle::new(18.0, 520.0));
+	// Wall mesh matches `PlaygroundSurface` AABB (same center and width/height).
+	let wall_w = wall_max.x - wall_min.x;
+	let wall_h = wall_max.y - wall_min.y;
+	let wall_cx = 0.5 * (wall_min.x + wall_max.x);
+	let wall_cy = 0.5 * (wall_min.y + wall_max.y);
+	let wall_mesh = meshes.add(Rectangle::new(wall_w, wall_h));
 	let wall_mat = materials.add(Color::srgb(0.35, 0.35, 0.38));
 	commands.spawn((
 		Mesh2d(wall_mesh),
 		MeshMaterial2d(wall_mat),
-		Transform::from_xyz(0.0, 0.0, 1.0),
+		Transform::from_xyz(wall_cx, wall_cy, 1.0),
 		WallVisual,
 	));
 }
