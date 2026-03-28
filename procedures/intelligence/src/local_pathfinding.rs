@@ -5,6 +5,10 @@ pub mod testing;
 
 pub mod plugin;
 
+pub use plugin::{
+	FindPath, LocalPathPlan, LocalPathfindingPlugin, respond_to_find_path_requests,
+};
+
 use bevy::prelude::*;
 
 /// A path through a local pathfinding surface.
@@ -39,8 +43,16 @@ struct RolloutNode {
 	last_direction: Option<Vec3>,
 }
 
-/// Local rollout-based pathfinder
-pub struct LocalPathfinding<F: LocalPathFindingFanout, S: LocalPathfindingSurface> {
+/// Local rollout-based pathfinder.
+///
+/// When used with [`FindPath`], attach this as a [`Component`] on the same entity (with a
+/// [`Transform`]) so each agent can carry its own fanout, surface, and tuning.
+#[derive(Clone, Component)]
+pub struct LocalPathfinding<F, S>
+where
+	F: LocalPathFindingFanout + Clone + Send + Sync + 'static,
+	S: LocalPathfindingSurface + Clone + Send + Sync + 'static,
+{
 	pub fanout: F,
 	pub surface: S,
 
@@ -60,7 +72,11 @@ pub struct LocalPathfinding<F: LocalPathFindingFanout, S: LocalPathfindingSurfac
 	pub weight_progress: f32,
 }
 
-impl<F: LocalPathFindingFanout, S: LocalPathfindingSurface> LocalPathfinding<F, S> {
+impl<F, S> LocalPathfinding<F, S>
+where
+	F: LocalPathFindingFanout + Clone + Send + Sync + 'static,
+	S: LocalPathfindingSurface + Clone + Send + Sync + 'static,
+{
 	pub fn new(fanout: F, surface: S) -> Self {
 		Self {
 			fanout,

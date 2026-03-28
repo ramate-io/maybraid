@@ -1,8 +1,5 @@
-use bevy::prelude::*;
-
 pub mod local_pathfinding;
 
-#[derive(Component)]
-pub struct Move {
-	pub to_position: Vec3,
-}
+pub use local_pathfinding::{
+	FindPath, LocalPathPlan, LocalPathfindingPlugin, respond_to_find_path_requests,
+};
