@@ -3,8 +3,8 @@
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 use intelligence::local_pathfinding::{
-	FindPath, LocalPathPlan, LocalPathfinding, LocalPathFindingFanout, LocalPathfindingSurface,
-	respond_to_find_path_requests,
+	respond_to_find_path_requests, FindPath, LocalPathFindingFanout, LocalPathPlan,
+	LocalPathfinding, LocalPathfindingSurface,
 };
 
 // --- Pathfinding surface: floor z = 0, finite wall as an axis-aligned box in XY ---
@@ -94,11 +94,16 @@ struct PlaygroundFanout {
 impl LocalPathFindingFanout for PlaygroundFanout {
 	fn local_path_fanout(&self, position: Vec3) -> Vec<Vec3> {
 		let s = self.step;
+
 		vec![
 			position + Vec3::X * s,
 			position - Vec3::X * s,
 			position + Vec3::Y * s,
 			position - Vec3::Y * s,
+			position + Vec3::X * s + Vec3::Y * s,
+			position + Vec3::X * s - Vec3::Y * s,
+			position - Vec3::X * s + Vec3::Y * s,
+			position - Vec3::X * s - Vec3::Y * s,
 		]
 	}
 }
@@ -144,7 +149,7 @@ fn setup_scene(
 ) {
 	commands.spawn(Camera2d);
 
-	let fanout = PlaygroundFanout { step: 28.0 };
+	let fanout = PlaygroundFanout { step: 60.0 };
 	// Centered vertical slab: finite in Y so the agent can plan over/under the ends visually.
 	const WALL_HALF_W: f32 = 16.0;
 	const WALL_HALF_H: f32 = 140.0;
@@ -236,9 +241,9 @@ fn queue_find_path_to_cursor(
 	let Ok(entity) = chasers.single() else {
 		return;
 	};
-	commands.entity(entity).insert(FindPath {
-		to_position: Vec3::new(cursor_world.0.x, cursor_world.0.y, 0.0),
-	});
+	commands
+		.entity(entity)
+		.insert(FindPath { to_position: Vec3::new(cursor_world.0.x, cursor_world.0.y, 0.0) });
 }
 
 fn move_chaser_toward_plan(
@@ -249,12 +254,13 @@ fn move_chaser_toward_plan(
 	let dt = time.delta_secs();
 
 	for (mut transform, plan) in &mut q {
-		let Some(target) = plan.path.positions.get(1).copied().or_else(|| {
-			plan.path
-				.positions
-				.last()
-				.copied()
-		}) else {
+		let Some(target) = plan
+			.path
+			.positions
+			.get(1)
+			.copied()
+			.or_else(|| plan.path.positions.last().copied())
+		else {
 			continue;
 		};
 		let current = transform.translation;
