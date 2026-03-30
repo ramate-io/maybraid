@@ -1,24 +1,24 @@
 # RFC-N: Bevy Multi-mesh
 
-## Table of contents
+## 1. Table of contents
 
-- [Motivation](#motivation)
-- [Prior art](#prior-art)
-    - [In general](#in-general)
-    - [Within `bevy`](#within-bevy)
-- [Approaches considered](#approaches-considered)
-- [Proposed design](#proposed-design)
-    - [1. Core types (illustrative)](#1-core-types-illustrative)
-    - [2. Why not write `Transform` directly?](#2-why-not-write-transform-directly)
-    - [3. `EntityEvent`, observers, and aggregation](#3-entityevent-observers-and-aggregation)
-    - [4. Schedule shape (system piping), traversal, and aggregation](#4-schedule-shape-system-piping-traversal-and-aggregation)
-    - [5. From spawn to trigger (end-to-end sketch)](#5-from-spawn-to-trigger-end-to-end-sketch)
-    - [6. Making the schedule easy for developers](#6-making-the-schedule-easy-for-developers)
-    - [7. Generality](#7-generality)
-    - [8. Physics (optional lane)](#8-physics-optional-lane)
-- [References](#references)
+- [2. Motivation](#2-motivation)
+- [3. Prior art](#3-prior-art)
+    - [3.1 In general](#31-in-general)
+    - [3.2 Within `bevy`](#32-within-bevy)
+- [4. Approaches considered](#4-approaches-considered)
+- [5. Proposed design](#5-proposed-design)
+    - [5.1 Core types (illustrative)](#51-core-types-illustrative)
+    - [5.2 Why not write `Transform` directly?](#52-why-not-write-transform-directly)
+    - [5.3 `EntityEvent`, observers, and aggregation](#53-entityevent-observers-and-aggregation)
+    - [5.4 Schedule shape (system piping), traversal, and aggregation](#54-schedule-shape-system-piping-traversal-and-aggregation)
+    - [5.5 From spawn to trigger (end-to-end sketch)](#55-from-spawn-to-trigger-end-to-end-sketch)
+    - [5.6 Making the schedule easy for developers](#56-making-the-schedule-easy-for-developers)
+    - [5.7 Generality](#57-generality)
+    - [5.8 Physics (optional lane)](#58-physics-optional-lane)
+- [6. References](#6-references)
 
-## Motivation
+## 2. Motivation
 
 > [!NOTE]
 > Below are some relevant references to this concept which preceded this proposal:
@@ -29,9 +29,9 @@ This RFC is about composing mesh generation, gameplay motion, and future animati
 
 Game code should be able to move an assembly by updating a [`Transform`](https://docs.rs/bevy/latest/bevy/prelude/struct.Transform.html) on the **`MultiMesh` entity that owns that motion** (nested assemblies may have several such nodes), while **part-local** state (for example leg angle from kinematics) still merges cleanly. We avoid a single central writer overwriting every child’s final pose. Instead, children receive **suggestions** in a **mailbox**, run **reconciliation** (policy per entity: translation only, preserve rotation, and so on), and only then treat [`Transform`](https://docs.rs/bevy/latest/bevy/prelude/struct.Transform.html) as authoritative for rendering.
 
-## Prior art
+## 3. Prior art
 
-### In general
+### 3.1 In general
 
 Industry practice almost always factors **pose** into a **tree of transforms** (a [scene graph](https://en.wikipedia.org/wiki/Scene_graph)): each node has a local matrix; world matrices multiply down branches.
 
@@ -48,11 +48,11 @@ Industry practice almost always factors **pose** into a **tree of transforms** (
 > **Tangent — local frame vs “ray only”**  
 > A useful parent anchor is an **oriented plane / orthonormal frame**: origin + two in-plane axes; the third axis is the cross product (handedness fixed in code). Children store **local coordinates** in that frame; when the parent frame rotates, children move consistently. A bare **ray + uniform scale** under-specifies **roll** in the perpendicular plane unless the child supplies a reference direction or stores a full local pose.
 
-### Within `bevy`
+### 3.2 Within `bevy`
 
 Bevy documents hierarchy and animation through [`Transform`](https://docs.rs/bevy/latest/bevy/prelude/struct.Transform.html), [`GlobalTransform`](https://docs.rs/bevy/latest/bevy/prelude/struct.GlobalTransform.html), [`bevy_animation`](https://docs.rs/bevy/latest/bevy/animation/index.html), and examples such as [transform](https://bevy.org/examples/transforms/transform/) and [animated transform](https://bevy.org/examples/animation/animated-transform/). The engine already provides `ChildOf` / `Children`, transform propagation, and glTF scenes with optional skinned rigs. It does **not** define a standard **procedural `MultiMesh`** contract or a **multi-writer suggestion** path; this RFC fills that gap.
 
-## Approaches Considered
+## 4. Approaches considered
 
 Parented [`Transform`](https://docs.rs/bevy/latest/bevy/prelude/struct.Transform.html) alone is enough when one system owns each entity and there is only one writer per tick. It breaks down when several sources suggest motion for the same part, or when nested assemblies need to preserve **who** suggested what.
 
@@ -66,9 +66,9 @@ Parented [`Transform`](https://docs.rs/bevy/latest/bevy/prelude/struct.Transform
 > **Observer ordering**  
 > Observers run when the event fires. You order behavior with **system** scheduling (`chain`, `before` / `after`), not with observer-to-observer ordering ([bevy#14890](https://github.com/bevyengine/bevy/issues/14890)).
 
-## Proposed Design
+## 5. Proposed design
 
-### 1. Core types (illustrative)
+### 5.1 Core types (illustrative)
 
 Each mailbox entry records **who** emitted the suggestion and a **depth** hint along the multi-mesh graph, so one child can merge contributions from an ancestor and an intermediate `MultiMesh` in the same frame without last-write-wins.
 
@@ -111,11 +111,11 @@ impl Mailbox {
 > **Tangent — epochs / eviction**  
 > Optional `tick: u32` (or epoch) on each entry supports **staleness** rules on drain: drop contributions from an old propagation wave or superseded pass without keyed lookup if we **always drain**.
 
-### 2. Why not write `Transform` directly?
+### 5.2 Why not write `Transform` directly?
 
 After reconciliation, [`Transform`](https://docs.rs/bevy/latest/bevy/prelude/struct.Transform.html) stays the **authoritative** pose for rendering. **Suggestions** live in a separate channel, so each child can decide how to combine translation, rotation, and scale before committing.
 
-### 3. `EntityEvent`, observers, and aggregation
+### 5.3 `EntityEvent`, observers, and aggregation
 
 We define a(n) [`EntityEvent`](https://docs.rs/bevy/latest/bevy/ecs/event/trait.EntityEvent.html), so Bevy can route a trigger to a target entity and, with **`#[entity_event(propagate = …)]`**, walk the multi-mesh relationship **downward from that target**. Each firing delivers one `TransformSuggestion`; repeated firings in the same frame **append** to the target’s `Mailbox`. [`On<E>`](https://docs.rs/bevy/latest/bevy/ecs/observer/struct.On.html) behaves like a normal system parameter and derefs to `E`, so observers may use `Query`, `Commands`, and the rest of the usual toolkit.
 
@@ -186,7 +186,7 @@ struct Click {
 
 [Observers](https://bevy.org/examples/ecs-entity-component-system/observers/) perform entity-targeted delivery. The global observer appends each payload to the target `Mailbox`. **`#[entity_event(propagate = …)]`** fans out **from the entity that was triggered** (the `MultiMesh` whose **`Transform` changed**, or the explicit `trigger` target) **down** the multi-mesh relationship, so each wave carries **that** node’s suggestion to **its** members only. Nested `MultiMesh` nodes therefore issue **separate** waves when their own transforms change; gameplay never implements a manual “for each child” loop.
 
-### 4. Schedule shape (system piping), traversal, and aggregation
+### 5.4 Schedule shape (system piping), traversal, and aggregation
 
 [`Commands::trigger`](https://docs.rs/bevy/latest/bevy/prelude/struct.Commands.html) and [`World::trigger`](https://docs.rs/bevy/latest/bevy/prelude/struct.World.html) are **immediate**: the mailbox observer runs as soon as the trigger fires. Each **`Transform`** change on a given **`MultiMesh`** produces a **trigger on that same entity**; propagation then visits **that entity’s** members (for example **B** and **C** after **A** moves, and **C** again after **B** moves—see the diagram below). Mailboxes still end up **complete** before reconcile because **nothing drains** them until the **Apply** phase, and every producer (including per-`MultiMesh` **`Transform`** watchers) runs in **Collect**, which is ordered **before** **Apply** via [`SystemSet`](https://docs.rs/bevy/latest/bevy/ecs/schedule/trait.SystemSet.html).
 
@@ -235,11 +235,11 @@ flowchart LR
     B -.->|"propagation: Transform on B"| C
 ```
 
-The next section describes **what** is spawned and how the primary `Transform` path ties to `trigger`. The section after that describes **where** systems sit in the schedule.
+Section **5.5** describes **what** is spawned and how the primary `Transform` path ties to `trigger`. Section **5.6** describes **where** systems sit in the schedule.
 
-### 5. From spawn to trigger (end-to-end sketch)
+### 5.5 From spawn to trigger (end-to-end sketch)
 
-Tag assembly roots and nested nodes with **`MultiMesh`**. Every entity that accumulates suggestions needs a **`Mailbox`**. Rendering can keep using [`ChildOf`](https://docs.rs/bevy/latest/bevy/prelude/struct.ChildOf.html) / [`Children`](https://docs.rs/bevy/latest/bevy/prelude/struct.Children.html) while **`MultiMeshContains` / `MultiMeshMemberOf`** (see the code in **`EntityEvent`, observers, and aggregation**) define the graph that **`EntityEvent` propagation** follows. That graph may differ from `ChildOf` if the design requires it.
+Tag assembly roots and nested nodes with **`MultiMesh`**. Every entity that accumulates suggestions needs a **`Mailbox`**. Rendering can keep using [`ChildOf`](https://docs.rs/bevy/latest/bevy/prelude/struct.ChildOf.html) / [`Children`](https://docs.rs/bevy/latest/bevy/prelude/struct.Children.html) while **`MultiMeshContains` / `MultiMeshMemberOf`** (see **5.3**) define the graph that **`EntityEvent` propagation** follows. That graph may differ from `ChildOf` if the design requires it.
 
 The **primary path** is that **when a given `MultiMesh` entity’s `Transform` changes**, the multi-mesh crate reacts (system, observer on change, or equivalent hook) and calls **`commands.trigger(MultiMeshTransformSuggested { … })`** **on that same entity**, with a `TransformSuggestion` that describes the motion attributable to **that** node. Bevy then propagates **that** event **down** the multi-mesh relationship, so **only that node’s subtree** receives this wave: members run **`Mailbox::push`** for the suggestion tied to **A’s** transform, **B’s** transform, and so on independently. Gameplay usually **only** edits `Transform` on the `MultiMesh` that should move; it does not enumerate children.
 
@@ -299,7 +299,7 @@ fn reconcile_mailboxes_into_transforms(mut q: Query<(&mut Mailbox, &mut Transfor
 
 Reconciliation can live entirely inside `reconcile_mailboxes_into_transforms` or split into a small follow-up system for entities with a dedicated policy component.
 
-### 6. Making the schedule easy for developers
+### 5.6 Making the schedule easy for developers
 
 The multi-mesh crate should own **observer registration** and the **Collect / Apply** split, so game crates only register producers into the right set instead of hand-wiring long `before` / `after` chains.
 
@@ -315,12 +315,12 @@ enum MultiMeshSet {
     /// All systems that may trigger suggestions or append to staging.
     Collect,
     /// Staging drain (optional) + reconcile + placement — one coherent “apply” block.
-    /// Downward fan-out uses `EntityEvent` propagation (see sections 3 and 5), not a user traversal system.
+    /// Downward fan-out uses `EntityEvent` propagation (see sections 5.3 and 5.5), not a user traversal system.
     Apply,
 }
 
 fn multimesh_plugin(app: &mut App) {
-    // Register the mailbox observer once per app (see “EntityEvent, observers, and aggregation” above).
+    // Register the mailbox observer once per app (see section 5.3).
     app.add_observer(append_suggestion_to_mailbox)
         .configure_sets(
             Update,
@@ -358,15 +358,15 @@ During **Collect**, every `trigger` (including the one issued after a **`Transfo
 > **Tangent — nested `MultiMesh` and overwrite**  
 > A single `Transform` slot on a child would **lose** contributions when both **A’s** and **B’s** `Transform` updates fire in the same tick (as in the **A–B–C** diagram: **C** may get one suggestion wave from **Transform on A** and another from **Transform on B**). The **mailbox + `(FromEntity, Depth)`** (and a defined **merge order**) preserves provenance, so reconciliation can compose rather than overwrite.
 
-### 7. Generality
+### 5.7 Generality
 
 The same **push / drain / reconcile** pattern generalizes to a generic **`Mailbox<T>`** (or a small family of types) for other multi-source effects such as forces, damage, or animation hints. Multi-mesh transforms are the first use case.
 
-### 8. Physics (optional lane)
+### 5.8 Physics (optional lane)
 
 Physics-based **forces** or **placement** helpers can coexist with this design: impulses stay in the physics world while **kinematic** assembly motion continues to flow through **mailbox suggestions**, so nothing forces every motion through the solver.
 
-## References
+## 6. References
 
 - [`maybraid`#86 — Multi-mesh manipulation](https://github.com/ramate-io/maybraid/issues/86)
 - [Bevy `EntityEvent`](https://docs.rs/bevy/latest/bevy/ecs/event/trait.EntityEvent.html)
