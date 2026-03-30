@@ -1,4 +1,12 @@
 # Maybraid
+
+- [General use](#general-use)
+- [Demos](#demos)
+    - [Navigable](#navigable)
+    - [Playable](#playable)
+- [Playgrounds](#playgrounds)
+- [Organization](#organization)
+
 A game of procedural generation and peer-based state. 
 
 > [!NOTE]
@@ -24,7 +32,6 @@ Demos that you can navigate, but can't play as a character.
 ```shell
 cargo run --release -p naturescapes-demo
 ```
-
 
 ### Playable
 > [!NOTE]
@@ -52,3 +59,10 @@ cargo run --release -p objects-playground
 ```shell
 cargo run --release -p terrain-playground`
 ```
+
+## Organization
+
+- **[`rfc`](./rfc/):** proposals and specifications providing both institutional memory of the project and the latest designs. 
+- **[`procedures`](./procedures/):** procedural generation primitives and routines, also currently houses the core rendering engine. 
+- **[`playground`](./playgrounds/):** applications for developers to run while playing with their systems.
+- **[`demos`](./demos/):** demonstrations of features intended for a particular audience. 
