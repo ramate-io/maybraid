@@ -156,28 +156,179 @@ fn emit_suggestion_to(mut commands: Commands, target: Entity, suggestion: Transf
 
 Use [Observers](https://bevy.org/examples/ecs-entity-component-system/observers/) for **entity-targeted** delivery; the observer **aggregates** by pushing into `Mailbox`. **Propagation** along a custom `MultiMesh` graph can use `#[entity_event(propagate = …)]` with a **relationship** component (see examples in the [`EntityEvent` docs](https://docs.rs/bevy/latest/bevy/ecs/event/trait.EntityEvent.html)).
 
-### 4. Schedule shape (system piping)
+### 4. Schedule shape (system piping), traversal, and aggregation
 
-Typical **single-frame** pipeline (names illustrative):
+[`Commands::trigger`](https://docs.rs/bevy/latest/bevy/prelude/struct.Commands.html) is **immediate**: the mailbox observer runs **as soon as** the producer calls `trigger`. The “aggregation” guarantee is **scheduling**, not deferred triggers: **every system that may push suggestions runs in an earlier [`SystemSet`](https://docs.rs/bevy/latest/bevy/ecs/schedule/trait.SystemSet.html) than the single reconcile pass**, so each `Mailbox` reflects **all** contributions for that frame before placement runs.
 
-1. **Producers** — gameplay, animation, parent `MultiMesh` pass: `trigger` suggestions (or append to a **staging `Resource`** if many parallel writers must avoid `&mut` clashes).
-2. **Optional: drain staging queue → mailboxes** — single system if using that resource for parallelism.
-3. **Reconcile** — `Query<(Entity, &mut Mailbox, /* child policy components */)>`: `drain()`, merge by `(depth, from, …)` policy, write **final** `Transform` or intermediate components.
-4. **Propagate** — walk `MultiMesh` children (explicit traversal or relationship walk), emit **next** round of `MultiMeshTransformSuggested` if needed.
+Illustrative **information flow** (producers fill mailboxes mid-frame; one late pass reconciles into `Transform` and optional propagation):
+
+```mermaid
+flowchart TB
+    subgraph early [Update — MultiMeshCollect]
+        G[Gameplay / explosion / steering]
+        A[Animation or procedural pose]
+        T0[Traversal: parent MultiMesh pushes to children]
+    end
+    subgraph immediate [Same frame — on each trigger]
+        TR["commands.trigger(MultiMeshTransformSuggested)"]
+        OB[Observer: Mailbox::push]
+    end
+    subgraph buffers [Per-entity accumulation]
+        MB[(Mailbox on each part)]
+    end
+    subgraph late [Update — MultiMeshApply — runs last]
+        ST[Optional: drain staging Resource into Mailbox]
+        RC[reconcile_mailboxes_into_transforms]
+        PL[Per-entity placement policy writes Transform]
+        PR[Optional: propagate_multimesh_to_children]
+    end
+    G --> TR
+    A --> TR
+    T0 --> TR
+    TR --> OB
+    OB --> MB
+    ST --> MB
+    MB --> RC
+    RC --> PL
+    PL --> PR
+```
+
+**`MultiMesh` graph + why mailboxes exist** (nested assemblies: several sources may target the same part in one tick; reconcile merges by policy):
+
+```mermaid
+flowchart LR
+    R[Assembly root A]
+    M[MultiMesh B]
+    P[Part C]
+    R --> M
+    M --> P
+    R -.->|"MultiMeshTransformSuggested (from A)"| M
+    R -.->|"suggestion for subtree"| P
+    M -.->|"MultiMeshTransformSuggested (from B)"| P
+```
+
+#### 4a. From spawn to trigger (end-to-end sketch)
+
+Markers like `MultiMeshRoot` / `MultiMeshPart` are illustrative; the important part is **every entity that receives suggestions has a `Mailbox`**, and producers never write that part’s **final** `Transform` directly if policy should merge multiple sources.
 
 ```rust
-// Illustrative plugin ordering — exact sets TBD.
-app.add_systems(
-    Update,
-    (
-        emit_multimesh_suggestions,
-        drain_staging_queue_into_mailboxes, // optional
-        reconcile_mailboxes_into_transforms,
-        propagate_multimesh_to_children,
-    )
-        .chain(),
-);
+use bevy::prelude::*;
+
+#[derive(Component)]
+struct MultiMeshRoot;
+
+/// Entity participates in suggestion + reconcile pipeline.
+#[derive(Component)]
+struct MultiMeshPart;
+
+fn spawn_assembly(mut commands: Commands) {
+    let root = commands.spawn((MultiMeshRoot, Transform::default())).id();
+
+    let _torso = commands
+        .spawn((
+            MultiMeshPart,
+            Mailbox::default(),
+            Transform::default(),
+            ChildOf(root),
+        ))
+        .id();
+
+    // More parts: same pattern — Mailbox + Transform + graph edges.
+}
+
+/// Producer (runs in `MultiMeshCollect`): reacts to world state, pushes suggestions only.
+/// Does not assign the part’s final Transform; reconcile does that later.
+fn explosion_suggests_knockback(
+    mut commands: Commands,
+    parts: Query<Entity, With<MultiMeshPart>>,
+    roots: Query<Entity, With<MultiMeshRoot>>,
+) {
+    let Ok(from) = roots.single() else {
+        return;
+    };
+    for entity in &parts {
+        commands.trigger(MultiMeshTransformSuggested {
+            entity,
+            suggestion: TransformSuggestion {
+                from, // or each hit’s true source (explosion entity, buff giver, …)
+                depth: 0,
+                transform: Transform::from_translation(Vec3::Y), // illustrative delta
+            },
+        });
+    }
+}
+
+/// Late pass (runs in `MultiMeshApply`): drain mailbox, merge, write Transform (or ignore channels).
+fn reconcile_mailboxes_into_transforms(mut q: Query<(&mut Mailbox, &mut Transform)>) {
+    for (mut mailbox, mut transform) in &mut q {
+        let batch = mailbox.drain();
+        // Sort/filter by (depth, from); compose; then:
+        // *transform = composed;
+        let _ = batch;
+    }
+}
 ```
+
+Placement policy can live **inside** `reconcile_mailboxes_into_transforms` or in a follow-up system that only runs on entities with a `Policy` component; the RFC only requires **one ordered reconcile** after all producers.
+
+#### 4b. Making the schedule easy for developers
+
+**Goal:** game and animation crates register systems that **only** emit suggestions; the multi-mesh crate owns **observer + reconcile order**. Developers should not hand-wire `before`/`after` chains per game system.
+
+Conventions:
+
+1. **Two sets on `Update` (or your schedule of choice), strictly chained** — e.g. `MultiMeshCollect` then `MultiMeshApply`. Names are examples.
+2. **Document:** “Any system that calls `trigger(MultiMeshTransformSuggested { … })` must be in `MultiMeshCollect`.” Optional: **debug** assertion or CI lint later.
+3. *Optional:* a **`MultiMeshPlugin::register_producer`** helper that only adds the system into the collect set, so authors cannot forget the set.
+
+Illustrative registration ([`configure_sets`](https://docs.rs/bevy/latest/bevy/prelude/struct.App.html#method.configure_sets), [`in_set`](https://docs.rs/bevy/latest/bevy/prelude/trait.IntoScheduleConfigs.html)):
+
+```rust
+use bevy::prelude::*;
+
+#[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
+enum MultiMeshSet {
+    /// All systems that may trigger suggestions or append to staging.
+    Collect,
+    /// Staging drain (optional), reconcile, propagate — one coherent “apply” block.
+    Apply,
+}
+
+fn multimesh_plugin(app: &mut App) {
+    // Same observer as in §3 — register once per app.
+    app.add_observer(append_suggestion_to_mailbox)
+        .configure_sets(
+            Update,
+            (MultiMeshSet::Collect, MultiMeshSet::Apply).chain(),
+        )
+        // Gameplay / animation plugins add their producers with `.in_set(MultiMeshSet::Collect)`:
+        .add_systems(Update, explosion_suggests_knockback.in_set(MultiMeshSet::Collect))
+        // Multimesh crate owns apply block — single place, runs late within Update:
+        .add_systems(
+            Update,
+            (
+                drain_staging_queue_into_mailboxes, // optional; no-op if unused
+                reconcile_mailboxes_into_transforms,
+                propagate_multimesh_to_children, // optional second wave of triggers
+            )
+                .chain()
+                .in_set(MultiMeshSet::Apply),
+        );
+}
+```
+
+**Why “late” still works with immediate `trigger`:** during `MultiMeshCollect`, each `trigger` **instantly** appends to `Mailbox`. Nothing clears the mailbox until **`reconcile_mailboxes_into_transforms`** in `MultiMeshApply`, so the reconcile system sees the **union** of every producer that ran earlier in the frame.
+
+> [!NOTE]
+> **Tangent — second propagation wave**  
+> If `propagate_multimesh_to_children` **triggers** new suggestions, those run **observers immediately**—still in `Apply`. Either order **propagate before reconcile** (two-phase within `Apply`) or **restrict** propagation to emitting only for children that reconcile on the **next** frame; pick one rule and document it to avoid infinite loops.
+
+Stage list (names stay illustrative):
+
+1. **`MultiMeshSet::Collect`** — gameplay, animation, traversal that **only** `trigger` (or append staging).
+2. **Optional** — `drain_staging_queue_into_mailboxes` at the **start** of `Apply`.
+3. **`reconcile_mailboxes_into_transforms`** — `drain()`, merge by `(depth, from, …)`, write **`Transform`** (or intermediates).
+4. **Optional** — `propagate_multimesh_to_children` — walk graph, **next** round of `MultiMeshTransformSuggested` (see NOTE above).
 
 > [!TIP]
 > **Tangent — nested `MultiMesh` and overwrite**  
