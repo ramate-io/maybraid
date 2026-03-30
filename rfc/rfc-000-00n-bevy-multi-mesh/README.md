@@ -230,9 +230,9 @@ flowchart LR
     P[member C]
     R --> M
     M --> P
-    R -.->|event propagation| M
-    R -.->|event propagation| P
-    M -.->|event propagation| P
+    R -.->|event propagation for Transform on A| M
+    R -.->|event propagation for Transform on A| P
+    M -.->|event propagation for Transform on B| P
 ```
 
 The next section describes **what** is spawned and how the primary `Transform` path ties to `trigger`. The section after that describes **where** systems sit in the schedule.
