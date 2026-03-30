@@ -13,14 +13,16 @@ This will eventually need to play nicely with animation systems. For example, an
 
 ## Prior art
 
-**From Bevy itself**
+### In general
 
+### Within `bevy`
+
+#### `bevy` API
 - **Entity hierarchy** (`ChildOf` / `Children`): child `Transform` is local to its parent; `GlobalTransform` is derived. Moving an ancestor moves the whole subtree—this is the usual way to compose “whole body” motion with “part-local” pose.
 - **Scene and glTF loading**: imported scenes are often a tree of entities with meshes, materials, and transforms—multi-mesh assemblies are already a first-class import path.
 - **`bevy_animation`**: clips target entities by paths; skinned meshes use joint hierarchies. Even without full skeletal pipelines, the same hierarchy idea applies to procedural parts.
 
-**From the wider Bevy ecosystem**
-
+#### `bevy` Community
 - **Physics (Rapier, Avian, etc.)**: compound colliders and rigid-body children are typically parented, so sync rules match rendering—patterns for “one logical object, many pieces.”
 - **Community examples**: tutorials and crates that build vehicles, doors, or characters as parented meshes rather than merging geometry—favor updating a few nodes over rebaking one mesh.
 
