@@ -262,7 +262,9 @@
         "Prior Art",
         "glTF",
         "rebaking",
-        "IK"
+        "IK",
+        "derefs",
+        "knockback"
       ]
     },
     "bibtex": {
