@@ -266,7 +266,8 @@
         "derefs",
         "knockback",
         "Crozon",
-        "Malo"
+        "Malo",
+        "art-directable"
       ]
     },
     "bibtex": {

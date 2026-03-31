@@ -14,6 +14,24 @@ Animations of the characters will also be subject to slight variation via proced
 
 ## 2: Prior Art
 
+Procedural character generation usually combines a few layers, rather than one monolithic algorithm:
+
+- **Template + parameter variation**: start from a hand-authored base topology and vary scale, proportions, feature toggles, and material palettes. This is common in games because it is stable, art-directable, and easy to constrain.
+- **Part library assembly (modular kits)**: generate characters by composing reusable parts (head, torso, limbs, ears, horns, tails), then enforce compatibility constraints. This aligns well with our multi-mesh-first approach.
+- **Rule/grammar-driven generation**: encode allowed combinations and dependencies as rules (for example, species trait implies a family of limb and skull shapes). This is often used to keep outputs coherent while preserving variety.
+- **Morph/blend-space variation**: blend between shape keys or latent feature sliders to produce smooth families of forms. This is powerful for continuity, but can be heavier than needed for low-poly, rigid-part pipelines.
+- **Skeleton-aware proceduralization**: generate or adjust meshes with explicit awareness of target rig constraints (joint limits, attachment sockets, gait assumptions), so downstream animation remains viable.
+
+For low-poly styles, teams commonly favor **modular assembly + constrained variation** over heavy skinning. Intersections, silhouette readability, and discrete part transitions are often acceptable or stylistically desirable, as long as rig anchors and motion envelopes are consistent.
+
+Typical production pattern is:
+
+1. Define a **canonical anatomy schema** (named slots/anchors and species constraints).
+2. Author **variant libraries** per slot.
+3. Add **compatibility rules** and weighted sampling.
+4. Validate against **rig/animation constraints**.
+5. Expose generation as deterministic routines (seeded) for reproducibility.
+
 ## 3: Proposed Design
 
 ### 3.1: Species Desiderata
