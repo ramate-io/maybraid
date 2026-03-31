@@ -71,6 +71,45 @@ The initial offering of species is called Crozon. Subspecies should follow from 
 > [!TIP]
 > Concept art for the multi-meshes is linked by section to subdirectories under this folder. 
 
+#### 3.2.1: Crozon Head Shape Variant Multi-meshes
+- Concept set: [`crozon-head-shape-variants/README.md`](./crozon-head-shape-variants/README.md)
+
+#### 3.2.2: Crozon Ear Variant Multi-meshes
+- Concept set: [`crozon-ear-variants/README.md`](./crozon-ear-variants/README.md)
+
+#### 3.2.3: Crozon Horn Variant Multi-meshes
+- Concept set: [`crozon-horn-variants/README.md`](./crozon-horn-variants/README.md)
+
+#### 3.2.4: Crozon Eye Variant Multi-meshes
+- Concept set: [`crozon-eye-variants/README.md`](./crozon-eye-variants/README.md)
+
+#### 3.2.5: Crozon Nose and Snout Variant Multi-meshes
+- Concept set: [`crozon-nose-snout-variants/README.md`](./crozon-nose-snout-variants/README.md)
+
+#### 3.2.6: Crozon Mouth Variant Multi-meshes
+- Concept set: [`crozon-mouth-variants/README.md`](./crozon-mouth-variants/README.md)
+
+#### 3.2.7: Crozon Head Assembly Variant Multi-meshes
+- Concept set: [`crozon-head-assembly-variants/README.md`](./crozon-head-assembly-variants/README.md)
+
+#### 3.2.8: Crozon Neck Variant Multi-meshes
+- Concept set: [`crozon-neck-variants/README.md`](./crozon-neck-variants/README.md)
+
+#### 3.2.9: Crozon Lower Limb Variant Multi-meshes
+- Concept set: [`crozon-lower-limb-variants/README.md`](./crozon-lower-limb-variants/README.md)
+
+#### 3.2.10: Crozon Upper Limb Variant Multi-meshes
+- Concept set: [`crozon-upper-limb-variants/README.md`](./crozon-upper-limb-variants/README.md)
+
+#### 3.2.11: Crozon Hand and Foot Variant Multi-meshes
+- Concept set: [`crozon-hand-foot-variants/README.md`](./crozon-hand-foot-variants/README.md)
+
+#### 3.2.12: Crozon Torso Variant Multi-meshes
+- Concept set: [`crozon-torso-variants/README.md`](./crozon-torso-variants/README.md)
+
+#### 3.2.13: Crozon Tail Variant Multi-meshes
+- Concept set: [`crozon-tail-variants/README.md`](./crozon-tail-variants/README.md)
+
 ### 3.3: Animations
 
 Initial Animations will be delivered under the title Malo. 
