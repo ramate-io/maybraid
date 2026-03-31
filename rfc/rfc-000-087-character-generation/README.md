@@ -48,7 +48,28 @@ Representative references and talks:
 
 ## 3: Proposed Design
 
-### 3.1: Species Desiderata
+### 3.1: Species
+
+#### 3.1.1: Crozon Species Design
+
+A species consists of the following:
+
+1. A set of features.
+2. A mapping of features to allowed seed-able multi-meshes.
+3. A mapping of features to allowed parameters: pattern and dimension.
+
+An individual in a species narrows this space:
+
+1. Selects all features in the set
+2. In a pre-determined order, chooses a single seeded multi-mesh per feature.
+3. Chooses parameters for pattern and dimension. 
+
+Drawing from an L-Grammar, when an individual selects a given multi-mesh for a feature, it may remove options or otherwise impose constraints on other mappings. For example, after choosing a certain pattern for the head, it may impose this pattern on the rest of the body. 
+
+Most species will choose to encode symmetrical components as one feature. For example, left and right limbs will use the same multi-mesh-pattern-dimension mapping--producing the separate limbs only at assembly time. 
+
+
+#### 3.1.2: Crozon Species Diversity
 
 > [!NOTE]
 > In RFC-87, we do not provide strict species definitions. We leave this for future RFCs. We do provide desiderata for the species and concept art for various limb parts. 
