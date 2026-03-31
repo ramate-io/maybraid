@@ -270,7 +270,9 @@
         "art-directable",
         "Mixamo",
         "MetaHuman",
-        "SIGGRAPH"
+        "SIGGRAPH",
+        "histogramming",
+        "bitvector"
       ]
     },
     "bibtex": {

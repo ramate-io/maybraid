@@ -68,6 +68,103 @@ Drawing from an L-Grammar, when an individual selects a given multi-mesh for a f
 
 Most species will choose to encode symmetrical components as one feature. For example, left and right limbs will use the same multi-mesh-pattern-dimension mapping--producing the separate limbs only at assembly time. 
 
+As a first construction pass, this is a strong baseline. Three design risks follow from the same ingredients (ordered features, propagating constraints, and bilateral assembly). Treat them as requirements, not footnotes.
+
+**Feature order and sampling bias.** A fixed global order interacts with constraint propagation: early choices can shrink later option sets unevenly, so marginal distributions over full individuals need not match naive per-feature weights. Mitigations: (1) sample meshes and parameters with weights conditioned on current state $\sigma$, not only on the slot; (2) derive the visit order from the seed (e.g. a species-defined partial order with a topological shuffle, or random permutation among compatible layers) when order is not semantically fixed; (3) validate empirically by histogramming accepted individuals and adjusting weights or order priors until targets are met.
+
+**Dead-ends, retries, and backtracking.** When choices restrict later slots, greedy commitment can reach a state with no valid completion. The implementation should not assume the first walk succeeds. Prefer **forward checking** after each commit: compute $\mathrm{Remaining}(f,\sigma)$ for not-yet-assigned features and reject a candidate early if any future slot becomes empty. When the generator still fails, use a bounded **retry** with deterministic salt $s' = s \oplus k$, or **backtrack** (undo last assignment and try the next candidate). Keep retry/backtrack policies explicit in the species spec so determinism and worst-case cost are clear.
+
+**Symmetry as explicit policy.** Encoding left and right as one logical feature and instantiating mirrored geometry at assembly is efficient, but “symmetry” still needs a first-class rule: **perfect mirror** (same mesh, mirrored transform), **near-mirror** (shared pattern with independent small jitter on scale or attach for organic asymmetry), or **asymmetric override** (independent choices per side when the species allows). Record that policy per bilateral pair (or globally per species) so tooling, QA, and constraint code do not implicitly assume perfect mirroring.
+
+Formally, model a species as follows. Let $F = (f_1, \ldots, f_n)$ be a **finite, ordered** sequence of features. For each $f \in F$, let $\mathcal{M}_f$ be the set of allowed multi-meshes and $\mathcal{P}_f$ the domain of allowed parameters (pattern and dimension). A species defines a constraint predicate or relation $C$ over tuples $(f, m, p)$ with $m \in \mathcal{M}_f$ and $p \in \mathcal{P}_f$.
+
+An individual with seed $s \in \mathbb{N}$ (or a bitvector) instantiates deterministic maps on a mutable state $\sigma \in \Sigma$:
+
+$$
+\mathrm{chooseMesh}_s : F \times \Sigma \to \bigcup_{f \in F} \mathcal{M}_f, \qquad
+\mathrm{chooseParams}_s : F \times \mathcal{M}_f \times \Sigma \to \mathcal{P}_f,
+$$
+
+$$
+\sigma' = \mathrm{apply}_C(f, m, p, \sigma).
+$$
+
+At each step $i$, after committing $(f_i, m_i, p_i)$, require non-emptiness of remaining feasible choices for the next feature:
+
+$$
+\mathrm{Remaining}(f_{i+1}, \sigma_i) \neq \varnothing.
+$$
+
+If the invariant fails, retry with a deterministic salt $s' = s \oplus k$ for $k \in \mathbb{N}$, or backtrack.
+
+```rust
+// Pseudocode: types intentionally simplified.
+type Seed = u64;
+
+#[derive(Clone, Copy, Hash, Eq, PartialEq, Debug)]
+enum Feature {
+    HeadShape,
+    Ear,
+    Horn,
+    Eye,
+    NoseSnout,
+    Mouth,
+    Neck,
+    LowerLimb,
+    UpperLimb,
+    HandFoot,
+    Torso,
+    Tail,
+}
+
+#[derive(Clone, Debug)]
+struct SpeciesSpec {
+    order: Vec<Feature>,
+    meshes_by_feature: HashMap<Feature, Vec<MeshId>>,
+    params_by_feature: HashMap<Feature, ParamDomain>,
+    constraints: Vec<ConstraintRule>,
+    symmetry: SymmetryPolicy,
+}
+
+#[derive(Clone, Debug, Default)]
+struct BuildState {
+    chosen: HashMap<Feature, (MeshId, Params)>,
+    forbidden: HashMap<Feature, HashSet<MeshId>>,
+}
+
+fn generate_individual(spec: &SpeciesSpec, seed: Seed) -> Result<BuildState, GenError> {
+    for retry in 0..MAX_RETRIES {
+        let mut rng = SeedRng::new(seed ^ retry as u64);
+        let mut state = BuildState::default();
+        let mut ok = true;
+
+        for &feature in &spec.order {
+            let mesh_opts = allowed_meshes(spec, feature, &state);
+            if mesh_opts.is_empty() {
+                ok = false;
+                break;
+            }
+            let mesh = sample_weighted(&mesh_opts, &mut rng);
+            let params = sample_params(spec, feature, mesh, &state, &mut rng)?;
+
+            state.chosen.insert(feature, (mesh, params));
+            apply_rules(spec, feature, &mut state);
+
+            if violates_future_viability(spec, &state) {
+                ok = false;
+                break;
+            }
+        }
+
+        if ok {
+            apply_symmetry(spec.symmetry, &mut state);
+            return Ok(state);
+        }
+    }
+    Err(GenError::NoValidAssembly)
+}
+```
+
 
 #### 3.1.2: Crozon Species Diversity
 
