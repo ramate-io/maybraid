@@ -272,7 +272,8 @@
         "MetaHuman",
         "SIGGRAPH",
         "histogramming",
-        "bitvector"
+        "bitvector",
+        "bulbus"
       ]
     },
     "bibtex": {
