@@ -267,7 +267,10 @@
         "knockback",
         "Crozon",
         "Malo",
-        "art-directable"
+        "art-directable",
+        "Mixamo",
+        "MetaHuman",
+        "SIGGRAPH"
       ]
     },
     "bibtex": {

@@ -14,13 +14,20 @@ Animations of the characters will also be subject to slight variation via proced
 
 ## 2: Prior Art
 
+> [!NOTE]
+> Because Maybraid is developed without a dedicated art team, our goal may differ from some studios. Instead of working backwards from lore-based concepts or complete character impressions, we are trying somewhat to work up from components.
+>
+> We want to design compelling components that we assemble into multi-meshes. 
+>
+> We allow our artistic direction to emerge with constraints. 
+
 Procedural character generation usually combines a few layers, rather than one monolithic algorithm:
 
-- **Template + parameter variation**: start from a hand-authored base topology and vary scale, proportions, feature toggles, and material palettes. This is common in games because it is stable, art-directable, and easy to constrain.
-- **Part library assembly (modular kits)**: generate characters by composing reusable parts (head, torso, limbs, ears, horns, tails), then enforce compatibility constraints. This aligns well with our multi-mesh-first approach.
-- **Rule/grammar-driven generation**: encode allowed combinations and dependencies as rules (for example, species trait implies a family of limb and skull shapes). This is often used to keep outputs coherent while preserving variety.
-- **Morph/blend-space variation**: blend between shape keys or latent feature sliders to produce smooth families of forms. This is powerful for continuity, but can be heavier than needed for low-poly, rigid-part pipelines.
-- **Skeleton-aware proceduralization**: generate or adjust meshes with explicit awareness of target rig constraints (joint limits, attachment sockets, gait assumptions), so downstream animation remains viable.
+- **Template + parameter variation**: start from a hand-authored base topology and vary scale, proportions, feature toggles, and material palettes. This is common in games because it is stable, art-directable, and easy to constrain (for a production example, see [MetaHuman](https://www.metahuman.com/)).
+- **Part library assembly (modular kits)**: generate characters by composing reusable parts (head, torso, limbs, ears, horns, tails), then enforce compatibility constraints. This aligns well with our multi-mesh-first approach (see [MB-Lab](https://github.com/animate1978/MB-Lab)).
+- **Rule/grammar-driven generation**: encode allowed combinations and dependencies as rules (for example, species trait implies a family of limb and skull shapes). This is often used to keep outputs coherent while preserving variety (see [Shape Grammars](https://en.wikipedia.org/wiki/Shape_grammar) and [L-systems](https://en.wikipedia.org/wiki/L-system)).
+- **Morph/blend-space variation**: blend between shape keys or latent feature sliders to produce smooth families of forms. This is powerful for continuity, but can be heavier than needed for low-poly, rigid-part pipelines (see [SMPL](https://smpl.is.tue.mpg.de/)).
+- **Skeleton-aware proceduralization**: generate or adjust meshes with explicit awareness of target rig constraints (joint limits, attachment sockets, gait assumptions), so downstream animation remains viable (see [Mixamo auto-rig](https://www.mixamo.com/#/) and [SIGGRAPH 2010: Example-Based Facial Rigging](https://www.hao-li.com/publications/papers/siggraph2010EBFR.pdf)).
 
 For low-poly styles, teams commonly favor **modular assembly + constrained variation** over heavy skinning. Intersections, silhouette readability, and discrete part transitions are often acceptable or stylistically desirable, as long as rig anchors and motion envelopes are consistent.
 
@@ -31,6 +38,13 @@ Typical production pattern is:
 3. Add **compatibility rules** and weighted sampling.
 4. Validate against **rig/animation constraints**.
 5. Expose generation as deterministic routines (seeded) for reproducibility.
+
+Representative references and talks:
+
+- [No Man's Sky - Procedural Generation Toolkit (GDC)](https://www.youtube.com/watch?v=sCRzxEEcO2Y)
+- [Spore Creature Creator (overview)](https://en.wikipedia.org/wiki/Spore_Creature_Creator)
+- [SMPL: A Skinned Multi-Person Linear Model](https://smpl.is.tue.mpg.de/)
+- [MB-Lab (Blender procedural human add-on)](https://github.com/animate1978/MB-Lab)
 
 ## 3: Proposed Design
 
