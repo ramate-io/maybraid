@@ -273,7 +273,9 @@
         "SIGGRAPH",
         "histogramming",
         "bitvector",
-        "bulbus"
+        "bulbus",
+        "bicylinder",
+        "bicylinders"
       ]
     },
     "bibtex": {
