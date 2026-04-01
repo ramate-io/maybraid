@@ -7,7 +7,7 @@ These folders hold **feature-agnostic** definitions: semantics, parameters, and 
 | [Bicylinder](./bicylinder/README.md) | Twin shafts merged–diverge–merge | [Lower limb](../lower-limb/bicylinder/README.md) |
 | [Bow](./bow/README.md) | Curved spine with width profile | [Lower limb](../lower-limb/bow/README.md) |
 | [Chain of pearls](./chain-of-pearls/README.md) | Spheroids on a spine | [Lower limb](../lower-limb/chain-of-pearls/README.md) |
-| [Cylinder](./cylinder/README.md) | Straight extrusion | [Lower limb](../lower-limb/cylinder/README.md) |
+| [Cylinder](./cylinder/README.md) | Straight extrusion; optional lateral wall pinch/flare | [Lower limb](../lower-limb/cylinder/README.md), [Neck](../neck/cylinder/README.md) |
 | [Drum prong](./drum-prong/README.md) | Drumstick trunk + forked distal prongs | [Lower limb](../lower-limb/drum-prong/README.md) |
 | [Drumstick](./drumstick/README.md) | Cylinder + bulbous region | [Lower limb](../lower-limb/drumstick/README.md) |
 | [Square pyramid](./square-pyramid/README.md) | Square base → apex | [Lower limb](../lower-limb/square-pyramid/README.md) |
