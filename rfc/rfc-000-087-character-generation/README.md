@@ -187,13 +187,13 @@ The initial offering of species is called Crozon. Subspecies should follow from 
 ### 3.2: Multi-meshes
 
 > [!TIP]
-> Concept art for the multi-meshes is linked by section to subdirectories under this folder. 
+> Concept art for the multi-meshes is linked by section to [`variants/crozon/`](./variants/crozon/). **Shared shape primitives** (cylinder, drumstick, bow, etc.) live under [`variants/crozon/common/`](./variants/crozon/common/README.md); each **feature** folder (lower limb, horn, …) links to those definitions and adds embedding notes for that slot.
 
 #### 3.2.1: Crozon Head Shape Variant Multi-meshes
-- Concept set: [`head-shape/README.md`](./variants/crozon/head-shape/README.md)
+- Concept set: [`head-shape`](./variants/crozon/head-shape/README.md)
 
 #### 3.2.2: Crozon Ear Variant Multi-meshes
-- Concept set: [`ear](./variants/crozon/ear/README.md)
+- Concept set: [`ear`](./variants/crozon/ear/README.md)
 
 #### 3.2.3: Crozon Horn Variant Multi-meshes
 - Concept set: [`horn`](./variants/crozon/horn/README.md)
@@ -211,10 +211,10 @@ The initial offering of species is called Crozon. Subspecies should follow from 
 - Concept set: [`neck`](./variants/crozon/neck/README.md)
 
 #### 3.2.8: Crozon Lower Limb Variant Multi-meshes
-- Concept set: [`lower-limb`](./variants/crozon/lower-limb/README.md)
+- Concept set: [`lower-limb`](./variants/crozon/lower-limb/README.md) (primitives: [`common`](./variants/crozon/common/README.md))
 
 #### 3.2.9: Crozon Upper Limb Variant Multi-meshes
-- Concept set: [`upper-limbg`](./variants/crozon/uppler-limb/README.md)
+- Concept set: [`upper-limb`](./variants/crozon/upper-limb/README.md)
 
 #### 3.2.10: Crozon Hand and Foot Variant Multi-meshes
 - Concept set: [`hand-foot`](./variants/crozon/hand-foot/README.md)
