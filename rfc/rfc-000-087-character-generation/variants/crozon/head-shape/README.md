@@ -1,3 +1,12 @@
-# Crozon Head Shape Variant Multi-meshes
+# Crozon head shape variant multi-meshes
 
-Placeholder for concept art, references, and notes for Crozon head shape variants.
+Macro **cranium / face block** silhouettes (often one multi-mesh parent with optional children in [mouth](../mouth/README.md), [nose-snout](../nose-snout/README.md), etc.). Primitives from [`../common/`](../common/README.md):
+
+| Variant | Common definition | Head shape (Crozon) |
+|---------|-------------------|---------------------|
+| Spheroid | [`common/spheroid`](../common/spheroid/README.md) | [`head-shape/spheroid`](./spheroid/README.md) |
+| Tapered cuboid | [`common/tapered-cuboid`](../common/tapered-cuboid/README.md) | [`head-shape/tapered-cuboid`](./tapered-cuboid/README.md) |
+| Cylinder | [`common/cylinder`](../common/cylinder/README.md) | [`head-shape/cylinder`](./cylinder/README.md) |
+| Square pyramid | [`common/square-pyramid`](../common/square-pyramid/README.md) | [`head-shape/square-pyramid`](./square-pyramid/README.md) |
+| Dish | [`common/dish`](../common/dish/README.md) | [`head-shape/dish`](./dish/README.md) |
+| Egg | [`common/egg`](../common/egg/README.md) | [`head-shape/egg`](./egg/README.md) |

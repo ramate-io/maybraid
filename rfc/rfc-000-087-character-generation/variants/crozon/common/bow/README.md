@@ -22,3 +22,8 @@ An elongated volume whose **spine curves** between two end caps (arc or S-shaped
 ## Crozon feature uses
 
 - [Lower limb](../../lower-limb/bow/README.md)
+- [Upper limb](../../upper-limb/bow/README.md)
+- [Horn](../../horn/bow/README.md)
+- [Mouth](../../mouth/bow/README.md)
+- [Neck](../../neck/bow/README.md)
+- [Tail](../../tail/bow/README.md)

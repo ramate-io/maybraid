@@ -23,4 +23,13 @@ A straight **right circular or elliptical cylinder** (or box-prism stand-in) alo
 ## Crozon feature uses
 
 - [Lower limb](../../lower-limb/cylinder/README.md)
+- [Upper limb](../../upper-limb/cylinder/README.md)
 - [Neck](../../neck/cylinder/README.md) (pinched / straight / flared column)
+- [Head shape](../../head-shape/cylinder/README.md)
+- [Ear](../../ear/cylinder/README.md)
+- [Horn](../../horn/cylinder/README.md)
+- [Eye](../../eye/cylinder/README.md)
+- [Mouth](../../mouth/cylinder/README.md)
+- [Nose and snout](../../nose-snout/cylinder/README.md)
+- [Tail](../../tail/cylinder/README.md)
+- [Hand and foot](../../hand-foot/cylinder/README.md)

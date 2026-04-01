@@ -5,5 +5,5 @@ Neck volumes often reuse primitives from [`../common/`](../common/README.md). Li
 | Primitive | Common definition | Neck (Crozon) |
 |-----------|-------------------|---------------|
 | Cylinder | [`common/cylinder`](../common/cylinder/README.md) | [`neck/cylinder`](./cylinder/README.md) |
-
-Add rows as you introduce additional neck kits (e.g. chain-of-pearls, bow spine).
+| Bow | [`common/bow`](../common/bow/README.md) | [`neck/bow`](./bow/README.md) |
+| Chain of pearls | [`common/chain-of-pearls`](../common/chain-of-pearls/README.md) | [`neck/chain-of-pearls`](./chain-of-pearls/README.md) |

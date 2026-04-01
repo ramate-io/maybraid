@@ -190,40 +190,40 @@ The initial offering of species is called Crozon. Subspecies should follow from 
 > Concept art for the multi-meshes is linked by section to [`variants/crozon/`](./variants/crozon/). **Shared shape primitives** (cylinder, drumstick, bow, etc.) live under [`variants/crozon/common/`](./variants/crozon/common/README.md); each **feature** folder (lower limb, horn, …) links to those definitions and adds embedding notes for that slot.
 
 #### 3.2.1: Crozon Head Shape Variant Multi-meshes
-- Concept set: [`head-shape`](./variants/crozon/head-shape/README.md)
+- Concept set: [`head-shape`](./variants/crozon/head-shape/README.md) (primitives: [`common`](./variants/crozon/common/README.md))
 
 #### 3.2.2: Crozon Ear Variant Multi-meshes
-- Concept set: [`ear`](./variants/crozon/ear/README.md)
+- Concept set: [`ear`](./variants/crozon/ear/README.md) (primitives: [`common`](./variants/crozon/common/README.md))
 
 #### 3.2.3: Crozon Horn Variant Multi-meshes
-- Concept set: [`horn`](./variants/crozon/horn/README.md)
+- Concept set: [`horn`](./variants/crozon/horn/README.md) (primitives: [`common`](./variants/crozon/common/README.md))
 
 #### 3.2.4: Crozon Eye Variant Multi-meshes
-- Concept set: [`eye`](./variants/crozon/eye/README.md)
+- Concept set: [`eye`](./variants/crozon/eye/README.md) (primitives: [`common`](./variants/crozon/common/README.md))
 
 #### 3.2.5: Crozon Nose and Snout Variant Multi-meshes
 - Concept set: [`nose-snout`](./variants/crozon/nose-snout/README.md) (primitives: [`common`](./variants/crozon/common/README.md))
 
 #### 3.2.6: Crozon Mouth Variant Multi-meshes
-- Concept set: [`mouth`](./variants/crozon/mouth/README.md)
+- Concept set: [`mouth`](./variants/crozon/mouth/README.md) (primitives: [`common`](./variants/crozon/common/README.md))
 
 #### 3.2.7: Crozon Neck Variant Multi-meshes
-- Concept set: [`neck`](./variants/crozon/neck/README.md)
+- Concept set: [`neck`](./variants/crozon/neck/README.md) (primitives: [`common`](./variants/crozon/common/README.md))
 
 #### 3.2.8: Crozon Lower Limb Variant Multi-meshes
 - Concept set: [`lower-limb`](./variants/crozon/lower-limb/README.md) (primitives: [`common`](./variants/crozon/common/README.md))
 
 #### 3.2.9: Crozon Upper Limb Variant Multi-meshes
-- Concept set: [`upper-limb`](./variants/crozon/upper-limb/README.md)
+- Concept set: [`upper-limb`](./variants/crozon/upper-limb/README.md) (primitives: [`common`](./variants/crozon/common/README.md))
 
 #### 3.2.10: Crozon Hand and Foot Variant Multi-meshes
-- Concept set: [`hand-foot`](./variants/crozon/hand-foot/README.md)
+- Concept set: [`hand-foot`](./variants/crozon/hand-foot/README.md) (primitives: [`common`](./variants/crozon/common/README.md))
 
 #### 3.2.11: Crozon Torso Variant Multi-meshes
 - Concept set: [`torso`](./variants/crozon/torso/README.md) (primitives: [`common`](./variants/crozon/common/README.md))
 
 #### 3.2.12: Crozon Tail Variant Multi-meshes
-- Concept set: [`tail`](./variants/crozon/tail/README.md)
+- Concept set: [`tail`](./variants/crozon/tail/README.md) (primitives: [`common`](./variants/crozon/common/README.md))
 
 ### 3.3: Animations
 

@@ -277,7 +277,25 @@
         "bicylinder",
         "bicylinders",
         "normals",
-        "icosphere"
+        "icosphere",
+        "antihelix",
+        "bovid",
+        "canthus",
+        "concha",
+        "meatus",
+        "Multimesh",
+        "multimesh",
+        "N-gon",
+        "ommatidium",
+        "pinna",
+        "prolate",
+        "radula",
+        "READMEs",
+        "readmes",
+        "multi-mesh",
+        "sagitta",
+        "stand-ins",
+        "tragus"
       ]
     },
     "bibtex": {

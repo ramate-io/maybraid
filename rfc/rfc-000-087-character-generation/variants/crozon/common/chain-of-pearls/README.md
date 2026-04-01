@@ -23,3 +23,7 @@ A **sequence of spheroids** (or near-spheroids) centered on a spine—beads on a
 ## Crozon feature uses
 
 - [Lower limb](../../lower-limb/chain-of-pearls/README.md)
+- [Ear](../../ear/chain-of-pearls/README.md)
+- [Mouth](../../mouth/chain-of-pearls/README.md)
+- [Neck](../../neck/chain-of-pearls/README.md)
+- [Tail](../../tail/chain-of-pearls/README.md)

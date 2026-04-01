@@ -1,5 +1,11 @@
 # Crozon upper limb variant multi-meshes
 
-Upper-limb slots can reuse primitives from [`../common/`](../common/README.md). Add a stub under this folder for each use (same pattern as [`../lower-limb/`](../lower-limb/README.md): link to the common definition, then document orientation, anchors, and silhouette for **arms**).
+Upper limbs mirror [lower limb](../lower-limb/README.md) primitives with **shoulder → elbow → wrist** embedding and **shorter** typical `height` scales. All definitions live in [`../common/`](../common/README.md).
 
-Placeholder for concept art and species-specific notes.
+| Variant | Common definition | Upper limb (Crozon) |
+|---------|-------------------|---------------------|
+| Drumstick | [`common/drumstick`](../common/drumstick/README.md) | [`upper-limb/drumstick`](./drumstick/README.md) |
+| Cylinder | [`common/cylinder`](../common/cylinder/README.md) | [`upper-limb/cylinder`](./cylinder/README.md) |
+| Bow | [`common/bow`](../common/bow/README.md) | [`upper-limb/bow`](./bow/README.md) |
+
+Add more rows when you promote [bicylinder](../common/bicylinder/README.md), [chain-of-pearls](../common/chain-of-pearls/README.md), etc., to arms.

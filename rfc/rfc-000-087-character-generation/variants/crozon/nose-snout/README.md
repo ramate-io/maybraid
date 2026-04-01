@@ -5,5 +5,5 @@ Nose and snout kits reuse primitives from [`../common/`](../common/README.md). E
 | Primitive | Common definition | Nose–snout (Crozon) |
 |-----------|-------------------|----------------------|
 | Square pyramid | [`common/square-pyramid`](../common/square-pyramid/README.md) | [`nose-snout/square-pyramid`](./square-pyramid/README.md) |
-
-Add rows as you attach more common shapes (e.g. [Cylinder](../common/cylinder/README.md) for soft muzzles).
+| Cylinder | [`common/cylinder`](../common/cylinder/README.md) | [`nose-snout/cylinder`](./cylinder/README.md) |
+| Drumstick | [`common/drumstick`](../common/drumstick/README.md) | [`nose-snout/drumstick`](./drumstick/README.md) |

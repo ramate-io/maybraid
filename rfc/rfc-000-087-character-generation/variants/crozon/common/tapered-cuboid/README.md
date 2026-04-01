@@ -26,3 +26,4 @@ Shared vocabulary with drumstick: axial **bulge length** vs **shaft** length can
 ## Crozon feature uses
 
 - [Torso](../../torso/tapered-cuboid/README.md)
+- [Head shape](../../head-shape/tapered-cuboid/README.md)

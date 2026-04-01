@@ -25,4 +25,7 @@ Treat the segment as a **bulge** run plus a **non-bulge** (**shaft**) run along 
 ## Crozon feature uses
 
 - [Lower limb](../../lower-limb/drumstick/README.md)
+- [Upper limb](../../upper-limb/drumstick/README.md)
 - [Torso](../../torso/drumstick/README.md)
+- [Nose and snout](../../nose-snout/drumstick/README.md)
+- [Eye](../../eye/drumstick/README.md)
