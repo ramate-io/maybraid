@@ -275,7 +275,8 @@
         "bitvector",
         "bulbus",
         "bicylinder",
-        "bicylinders"
+        "bicylinders",
+        "normals"
       ]
     },
     "bibtex": {
