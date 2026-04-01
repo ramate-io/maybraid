@@ -276,7 +276,8 @@
         "bulbus",
         "bicylinder",
         "bicylinders",
-        "normals"
+        "normals",
+        "icosphere"
       ]
     },
     "bibtex": {

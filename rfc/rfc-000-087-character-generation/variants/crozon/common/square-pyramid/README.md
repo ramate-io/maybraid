@@ -4,7 +4,7 @@
 
 A **square pyramid**: square **base**, four triangular faces, one **apex**. This is not a regular **tetrahedron** (four triangular faces only). Use anywhere a form should **taper** from a broad base to a point or small cap.
 
-**Semantics.** In local space, **`height`** is apex-to-base distance along the pyramid axis. **Base** dimensions (`base_width`, `base_depth`, or `base_size` if square) lie in the base plane. **Top** / **bottom** can label base vs apex according to embedding; for limbs, a common choice is **base** = proximal / thick end and **apex** = distal / narrow end (document per species).
+**Semantics.** In local space, **`height`** is apex-to-base distance along the pyramid axis. **Base** dimensions (`base_width`, `base_depth`, or `base_size` if square) lie in the base plane. **Top** / **bottom** can label base vs apex according to embedding; for limbs, a common choice is **base** = proximal / thick end and **apex** = distal / narrow end (document per species). For **nose / snout**, the same taper often reads as a **beak**, **horn-snout**, or **wedge muzzle**: attach the **base** at the nasal bridge or upper jaw socket and point the **apex** forward/down along the facial forward axis.
 
 ## Parameters
 
@@ -20,3 +20,4 @@ A **square pyramid**: square **base**, four triangular faces, one **apex**. This
 ## Crozon feature uses
 
 - [Lower limb](../../lower-limb/square-pyramid/README.md)
+- [Nose and snout](../../nose-snout/square-pyramid/README.md) (beak, wedge snout, hard taper)

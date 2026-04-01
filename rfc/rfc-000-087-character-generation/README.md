@@ -202,7 +202,7 @@ The initial offering of species is called Crozon. Subspecies should follow from 
 - Concept set: [`eye`](./variants/crozon/eye/README.md)
 
 #### 3.2.5: Crozon Nose and Snout Variant Multi-meshes
-- Concept set: [`nose-snout`](./variants/crozon/nose-snout/README.md)
+- Concept set: [`nose-snout`](./variants/crozon/nose-snout/README.md) (primitives: [`common`](./variants/crozon/common/README.md))
 
 #### 3.2.6: Crozon Mouth Variant Multi-meshes
 - Concept set: [`mouth`](./variants/crozon/mouth/README.md)
@@ -220,7 +220,7 @@ The initial offering of species is called Crozon. Subspecies should follow from 
 - Concept set: [`hand-foot`](./variants/crozon/hand-foot/README.md)
 
 #### 3.2.11: Crozon Torso Variant Multi-meshes
-- Concept set: [`torso`](./variants/crozon/torso/README.md)
+- Concept set: [`torso`](./variants/crozon/torso/README.md) (primitives: [`common`](./variants/crozon/common/README.md))
 
 #### 3.2.12: Crozon Tail Variant Multi-meshes
 - Concept set: [`tail`](./variants/crozon/tail/README.md)
