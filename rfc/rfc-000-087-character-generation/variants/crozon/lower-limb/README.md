@@ -11,5 +11,6 @@ Lower-limb variants are built from **shared primitives** under [`../common/`](..
 | Chain of pearls | [`common/chain-of-pearls`](../common/chain-of-pearls/README.md) | [`lower-limb/chain-of-pearls`](./chain-of-pearls/README.md) |
 | Cylinder | [`common/cylinder`](../common/cylinder/README.md) | [`lower-limb/cylinder`](./cylinder/README.md) |
 | Square pyramid | [`common/square-pyramid`](../common/square-pyramid/README.md) | [`lower-limb/square-pyramid`](./square-pyramid/README.md) |
+| Rounded cone | [`common/rounded-cone`](../common/rounded-cone/README.md) | [`lower-limb/rounded-cone`](./rounded-cone/README.md) |
 
 Concept art and sketches can live beside either the common folder (shared reference) or the limb stub (pose-on-leg context).

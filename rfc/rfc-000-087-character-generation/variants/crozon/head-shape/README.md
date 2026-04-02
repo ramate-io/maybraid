@@ -13,3 +13,4 @@ Macro **cranium / face block** silhouettes (often one multi-mesh parent with opt
 | Hex notch | [`common/hex-notch`](../common/hex-notch/README.md) | [`head-shape/hex-notch`](./hex-notch/README.md) |
 | Rounded cuboid | [`common/rounded-cuboid`](../common/rounded-cuboid/README.md) | [`head-shape/rounded-cuboid`](./rounded-cuboid/README.md) |
 | Ellipsoid-capped square pyramid | [`common/ellipsoid-capped-square-pyramid`](../common/ellipsoid-capped-square-pyramid/README.md) | [`head-shape/ellipsoid-capped-square-pyramid`](./ellipsoid-capped-square-pyramid/README.md) |
+| Rounded cone | [`common/rounded-cone`](../common/rounded-cone/README.md) | [`head-shape/rounded-cone`](./rounded-cone/README.md) |

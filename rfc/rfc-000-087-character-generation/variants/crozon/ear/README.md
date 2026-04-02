@@ -11,3 +11,4 @@ Ears are often **multi-mesh**: lobe + cartilage fold + optional fur strip. Basel
 | Cylinder | [`common/cylinder`](../common/cylinder/README.md) | [`ear/cylinder`](./cylinder/README.md) |
 | Spheroid | [`common/spheroid`](../common/spheroid/README.md) | [`ear/spheroid`](./spheroid/README.md) |
 | Square pyramid | [`common/square-pyramid`](../common/square-pyramid/README.md) | [`ear/square-pyramid`](./square-pyramid/README.md) |
+| Rounded cone | [`common/rounded-cone`](../common/rounded-cone/README.md) | [`ear/rounded-cone`](./rounded-cone/README.md) |
