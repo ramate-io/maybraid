@@ -293,9 +293,12 @@
         "READMEs",
         "readmes",
         "multi-mesh",
+        "Reuleaux",
         "sagitta",
         "stand-ins",
-        "tragus"
+        "tragus",
+        "Reuleaux-like",
+        "chamfered"
       ]
     },
     "bibtex": {
