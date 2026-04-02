@@ -10,3 +10,4 @@ Macro **cranium / face block** silhouettes (often one multi-mesh parent with opt
 | Square pyramid | [`common/square-pyramid`](../common/square-pyramid/README.md) | [`head-shape/square-pyramid`](./square-pyramid/README.md) |
 | Dish | [`common/dish`](../common/dish/README.md) | [`head-shape/dish`](./dish/README.md) |
 | Egg | [`common/egg`](../common/egg/README.md) | [`head-shape/egg`](./egg/README.md) |
+| Hex notch | [`common/hex-notch`](../common/hex-notch/README.md) | [`head-shape/hex-notch`](./hex-notch/README.md) |
