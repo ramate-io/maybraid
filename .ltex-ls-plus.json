@@ -298,7 +298,13 @@
         "stand-ins",
         "tragus",
         "Reuleaux-like",
-        "chamfered"
+        "chamfered",
+        "IK",
+        "IK-adjusted",
+        "IK-driven",
+        "cinematics",
+        "wingbeat",
+        "downstroke"
       ]
     },
     "bibtex": {

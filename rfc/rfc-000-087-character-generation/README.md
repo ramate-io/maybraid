@@ -251,7 +251,46 @@ Tails are modeled as **chains** or **tapered extrusions** along a **caudal** axi
 
 ### 3.3: Animations
 
-Initial Animations will be delivered under the title Malo. 
+> [!NOTE]
+> The specifics of these animations are left to future RFCs; this section states **design intent** and **scope** for Malo only (curves, constraints, and engine integration).
+
+**Malo** is the first animation pass for Crozon characters: **looping gaits**, **short locomotion bursts**, **IK-driven interaction**, and **minimal facial motion** on top of the biped and quadruped skeletons in [Section 4](#4-milestones). Clips should **retarget** or **parameterize** across species where proportions differ, rather than duplicating bespoke animation per mesh. Root motion vs in-place variants should be explicit per clip family so gameplay and cinematics can choose consistently.
+
+#### 3.3.1: Malo Biped Walk
+
+A **cycle** with clear **contact** and **passing** poses, **weight shift** over the supporting foot, and subtle **counter-rotation** on the pelvis and shoulders. Prefer a neutral, forward-facing stride that reads on stylized Crozon bipeds without extreme personality keys. Deliver both **in-place** and **root-motion** versions if downstream systems require both.
+
+#### 3.3.2: Malo Biped Run
+
+A faster **cadence** than walk, with a short **flight phase** (both feet off the ground) where species leg length allows, and slightly larger **vertical displacement** than walk for readability at speed. Keep spine pitch and arm swing in a tunable range, so the same clip family can be scaled per archetype. Document foot slip tolerance and any mandatory speed range for blending.
+
+#### 3.3.3: Malo Biped Leap
+
+A **short hop** or **forward leap**: **anticipation**, **takeoff**, **airborne** hold, and **landing** with recovery frames; landing should absorb impact in hips and knees without popping the root. Support **directional** variants (forward vs vertical emphasis) only if they share the same timing structure for blend trees. Root motion should match horizontal travel unless explicitly marked as in-place.
+
+#### 3.3.4: Malo Quadruped Walk
+
+A **quadruped walk cycle** with believable **footfall order** (e.g. walk or amble pattern—pick one canonical pattern for Malo and document it). Include **spine** and **tail** follow-through only at the level of a simple secondary motion pass; avoid species-specific quirks in the baseline clip. Same **in-place** vs **root-motion** policy as biped walk.
+
+#### 3.3.5: Malo Quadruped Run
+
+A **gallop- or canter-like** simplified run: clear **suspension** phases where appropriate, faster stride than walk, and stable spine orientation so the read survives low-poly silhouettes. Parameters or alternate timing slots can distinguish **large** vs **small** quadrupeds without separate art direction per species. Align foot timing with the chosen quadruped skeleton ([Section 4.15](#415-quadruped-skeleton)).
+
+#### 3.3.6: Malo Quadruped Leap
+
+A **forward or upward leap** from four limbs: **compression** before push, **extension**, short **airborne** pose, and **four-foot** or staggered landing as appropriate to the skeleton. Keep landing recovery short enough to chain into walk or run blends. Mark whether the clip assumes **symmetric** push or allows front/rear asymmetry as a later extension.
+
+#### 3.3.7: Malo Biped IK Carry
+
+**Inverse kinematics** layer (or IK-adjusted animation) so **hands** reach **grasp targets** in world or attachment space, with **torso** and **shoulder** compensation to avoid hyperextension. Include a **neutral carry** pose and transitions into/out of idle or walk; **grasp** shapes should match generic held props before hero-specific props. Coordinate with the multi-mesh / rigging story in [RFC-88](../rfc-000-088-bevy-multi-mesh/README.md) for socket naming and hand bones.
+
+#### 3.3.8: Malo Biped Fly
+
+**Winged biped** flight: a **wingbeat cycle** (upstroke/downstroke), optional **glide** or **soar** hold with slower secondary motion, and clear **body pitch** relative to velocity. Distinguish **hover** vs **forward flight** only if both can share blend infrastructure; otherwise ship one canonical forward-flight loop first. Feathered vs membrane wings may share the same timing with different amplitudes.
+
+#### 3.3.9: Malo Facial Expressions
+
+**Facial motion** for **smile**, **grimace**, **talking** (jaw and mouth corners), and **gaze / peering** (eyes or eye sockets), implemented as **blend shapes**, **bone-driven** rigs, or a documented mix. Keep the set **minimal** for Malo: enough to sell emotion and lip sync at low fidelity, without a full FACS pass. Expression clips should blend cleanly with full-body locomotion without fighting neck or spine overrides.
 
 ## 4: Milestones
 
@@ -322,8 +361,16 @@ Develop the multi-mesh API for rigging skeletons as described in [RFC-88](../rfc
 
 ### 4.18: Malo Gait Animation for Bipeds
 
+Implement biped **walk**, **run**, and **leap** per [3.3.1: Malo Biped Walk](#331-malo-biped-walk), [3.3.2: Malo Biped Run](#332-malo-biped-run), and [3.3.3: Malo Biped Leap](#333-malo-biped-leap), on the [biped skeleton](#414-biped-skeleton) with Crozon species assembly as the validation target. When flyer species are in scope for the same release, add **winged flight** per [3.3.8: Malo Biped Fly](#338-malo-biped-fly) in the same milestone or as an immediate follow-on, so locomotion coverage matches Crozon’s flying buckets.
+
 ### 4.19: Malo Gait Animation for Quadrupeds
+
+Implement quadruped **walk**, **run**, and **leap** per [3.3.4: Malo Quadruped Walk](#334-malo-quadruped-walk), [3.3.5: Malo Quadruped Run](#335-malo-quadruped-run), and [3.3.6: Malo Quadruped Leap](#336-malo-quadruped-leap), on the [quadruped skeleton](#415-quadruped-skeleton) with the same retargeting and root-motion conventions as biped Malo clips.
 
 ### 4.20: Malo Carrying and Grasping Animation for Bipeds
 
+Implement biped **carry and grasp** IK animation per [3.3.7: Malo Biped IK Carry](#337-malo-biped-ik-carry), including reach, hold, and transitions that work with generic grasp targets and the rigging assumptions in [RFC-88](../rfc-000-088-bevy-multi-mesh/README.md).
+
 ### 4.21: Malo Expressions Animations
+
+Implement the Malo **facial expression** set per [3.3.9: Malo Facial Expressions](#339-malo-facial-expressions), blend-compatible with full-body states and scoped to the minimal smile / grimace / speech / gaze reads described there.
