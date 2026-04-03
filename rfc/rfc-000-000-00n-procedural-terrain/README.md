@@ -254,3 +254,100 @@ Parameterize the **thalweg or road** as a plane curve with coordinate `s` (arc l
 
 ## 4: Milestones
 
+Milestones below are **planning hooks**, not dated commitments. Except for [Section 4.3](#43-jersey-stamp-milestones), they are **suggestive**: this RFC does not lock engine layout, crate boundaries, or BVH APIs—teams should adapt wording to whatever design documents and codebases they adopt.
+
+### 4.1: Noise and stamping abstraction (suggestive)
+
+- **Height oracle contract:** callable **elevation** (and optional **derivatives**) from `(x, z)` plus **seed / LOD or chunk context**, with tests that the same query is stable across reloads ([Section 3.1](#31-core-concepts), [Section 3.2](#32-noise-base)).
+- **Noise base pipeline:** documented **build order** (global base before stamps), **fBm-style** stack plus optional spectral shaping hooks, and a path to **swap** noise implementations without changing callers.
+- **Stamp core:** **footprint** types (hard mask, falloff, SDF blend), **parameter** bundle, and a **documented composition policy** (stack, DAG, or buckets) with deterministic overlap resolution ([Section 3.1](#31-core-concepts)).
+- **Fractal vs cellular:** at least one **fractal-driven** placement path and one **cell PRNG** path, both feeding the same stamp evaluator ([Section 3.3](#33-cellular-stamping), [Section 3.4](#34-fractal-stamping)).
+- **Reproducibility:** randomness keyed by an agreed tuple (e.g. seed, region, stamp ID, sub-stamp index) verified in **streaming** and **replay** scenarios ([Section 3.5](#35-stamp-generation)).
+- **Semantics v0:** stamps can attach **queryable** payloads (tags, masks, sparse graph edges); at least one **hydrology-shaped** example end-to-end ([Section 3.6](#36-stamp-semantics)).
+
+### 4.2: MVP BVH implementation (suggestive)
+
+- **Spatial index v0:** a **bounding-volume hierarchy** (or equivalent) over **terrain chunks**, **stamp macro regions**, or **both**, sufficient for **frustum / distance** rejection in a demo scene.
+- **Single-writer rule:** document how **generation** and **culling** agree on **node bounds** and **versioning** when terrain updates (even if updates are rare in the MVP).
+- **Coarse LOD linkage:** MVP may use **one or two** discrete LODs; milestones should still record **which oracle parameters** change per level, so Jersey stamps can be tested against **pop** and **shift** behavior ([Section 3.7.4](#374-higher-order-patterns-and-the-power-of-large-extents)).
+- **Debug visibility:** draw or log **BVH nodes** (optional overlay) to validate **hierarchy depth** and **overlap** against stamp footprints.
+
+### 4.3: Jersey stamp milestones
+
+Each milestone below maps to **one** Jersey family in [Section 3.8](#38-jersey-stamps). **Done when** means: behavior matches that family’s **Purpose** and **Semantics** bullets, respects **Look and layering** (noise-on-base), and stays **deterministic** under [Section 4.1](#41-noise-and-stamping-abstraction-suggestive).
+
+**Suggested sequencing:** **4.3.1**–**4.3.3** and **4.3.11** can land early. **4.3.4**–**4.3.8** need **chain + semantics** maturity. **4.3.9**–**4.3.10** need the chosen **SDF / volume** path.
+
+#### 4.3.1: Milestone — Jersey Valley Basins (Unchained)
+
+**Spec:** [Section 3.8.1](#381-jersey-valley-basins-unchained).
+
+**Done when:** Fractal-driven **valley** depression with parameterized **cross-section**, **width**, **axis**, and **bank falloff**; **bank** (and optional arroyo vs spillway-ready) **semantics**; **thalweg** stable across **LOD** reloads.
+
+#### 4.3.2: Milestone — Jersey Plateau Caps (Unchained)
+
+**Spec:** [Section 3.8.2](#382-jersey-plateau-caps-unchained).
+
+**Done when:** **Tableland** interior with rim **escarpment** and controlled corners; **noise-warped**, blob, or polygon **footprints**; **surface class** semantic for materials or props.
+
+#### 4.3.3: Milestone — Jersey Rugged Massifs (Unchained)
+
+**Spec:** [Section 3.8.3](#383-jersey-rugged-massifs-unchained).
+
+**Done when:** **Ridged / cliff-banded** high terrain consistent with [Section 3.4](#34-fractal-stamping) ridge-style noise; stacks sensibly **after** coarse envelopes; optional **exposure** or **rockiness** mask.
+
+#### 4.3.4: Milestone — Jersey Pocket Waters (Small Hydrology Chains)
+
+**Spec:** [Section 3.8.4](#384-jersey-pocket-waters-small-hydrology-chains).
+
+**Done when:** **Chain** of small hydrology stamps (pond or tarn, outlet, short run, termination) sharing one **drainage ID**; **water-surface** targets where needed; **reach graph**, **flow direction**, **bank** or **littoral** masks per §3.8.4.
+
+#### 4.3.5: Milestone — Jersey Basin Waters (Large Hydrology Chains)
+
+**Spec:** [Section 3.8.5](#385-jersey-basin-waters-large-hydrology-chains).
+
+**Done when:** **Macro** lake or reservoir body with **branched** outlets and tributary or confluence nodes driven from a **coarse drainage graph**; **reach IDs**, **junction** records, and **pour-point** targets **stable** as chunks stream.
+
+#### 4.3.6: Milestone — Jersey Valley Trains (Chained Valleys)
+
+**Spec:** [Section 3.8.6](#386-jersey-valley-trains-chained-valleys).
+
+**Done when:** **Ordered** valley stamps on one **horizontal spine** with **endpoint** heights from **macro planner** or oracle ([Section 3.7.3](#373-fractal-paths)); per-segment **active channel** vs **floodplain-only** tags for hydrology overlays.
+
+#### 4.3.7: Milestone — Jersey Canyons (Confined Incision)
+
+**Spec:** [Section 3.8.7](#387-jersey-canyons-confined-incision).
+
+**Done when:** **Confined incision** (unchained or **chained** gorge segments) with **wall height** and **confinement** tooling; **wall** / **cliff**, **floor** / **ledge** semantics; optional **thalweg** or **dry-channel** spine for binding **Pocket** or **Basin** water later.
+
+#### 4.3.8: Milestone — Jersey Hydrology Complexes (Multi-Part Landforms)
+
+**Spec:** [Section 3.8.8](#388-jersey-hydrology-complexes-multi-part-landforms).
+
+**Done when:** **Multi-part** stamp group under one **complex ID**; **chain** or **DAG** child arrangement; **complex type**, **constituent roles**, and **reach** or **segment** edges; optional **seasonal** routing hints per §3.8.8.
+
+#### 4.3.9: Milestone — Jersey Karst Pockets (Small Caves, Unchained)
+
+**Spec:** [Section 3.8.9](#389-jersey-karst-pockets-small-caves-unchained).
+
+**Done when:** **Localized** cavity or sink **entrance** via **SDF-local** carve and/or **height-oracle** dip plus **volumetric tag**; **cavity mask**, **entrance** geometry, **navigation** class semantic.
+
+#### 4.3.10: Milestone — Jersey Cave Networks (Chained Caves)
+
+**Spec:** [Section 3.8.10](#3810-jersey-cave-networks-chained-caves).
+
+**Done when:** **Chained** passage stamps on a **3D spine** with shared **tunnel graph ID**; **branch**, **air vs flooded**, and **graph edge** semantics for downstream systems ([Section 3.5](#35-stamp-generation) sub-stamp keys).
+
+#### 4.3.11: Milestone — Jersey Rolling Ground (Unchained)
+
+**Spec:** [Section 3.8.11](#3811-jersey-rolling-ground-unchained).
+
+**Done when:** **Mid-frequency** swell and swale that does not overpower **valley** or **plateau** stamps; optional **pasture / agriculture suitability** or generic **detail** mask.
+
+### 4.4: Full BVH and streaming (suggestive)
+
+- **Shared hierarchy:** **culling** and **terrain generation** consume the **same** BVH (or strictly synchronized mirrors), so invisible regions do not schedule expensive stamp work ([Section 3.7.4](#374-higher-order-patterns-and-the-power-of-large-extents)).
+- **Streaming correctness:** chunk **load / unload** does not change **deterministic** height or **semantic IDs** for regions that remain loaded; document **handshake** between **macro-stamps** and **fine** local passes when new neighbors appear.
+- **Multi-resolution BVH:** **coarse-to-fine** nodes aligned with **LOD** rings or clipmap-style bands; **semantic IDs** stable from coarse to fine.
+- **Scale stress:** targets for **node count**, **refit** cost, and **worst-case** depth on **discovery-scale** worlds (numbers left to engine RFCs).
+- **Failure modes:** defined behavior when **planner data** arrives late (fallback height, **degraded** semantics, or **explicit** “not ready” query), without silent graph corruption.
