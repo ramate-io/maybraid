@@ -20,7 +20,7 @@ Maybraid relies heavily on procedural generation, including for terrain. Because
 
 Summing noise at multiple scales produces **fractional Brownian motion (fBm)**-like relief; see [fractional Brownian motion](https://en.wikipedia.org/wiki/Fractional_Brownian_motion) and the intuition of **fractal terrain** in Mandelbrot’s [The Fractal Geometry of Nature](https://en.wikipedia.org/wiki/The_Fractal_Geometry_of_Nature).
 
-**In games**, multi-octave sums are the standard way to get **foothills → ridges → micro-roughness** from a single seed; many titles add **ridging**, **warp**, or **curve remapping** on top of the same stack.
+**In games**, multi-octave sums are the standard way to get **foothills, ridges, and micro-roughness** from a single seed; many titles add **ridging**, **warp**, or **curve remapping** on top of the same stack.
 
 **Maybraid:** Aligns directly with a **stampable** pipeline: the global base can stay fBm-like while **stamps** inject valleys, roads, and hero features. We should keep **spectral** choices (how many octaves, how much high frequency) compatible with **chunk LOD**, so distant terrain does not shimmer or diverge from near terrain.
 
@@ -98,69 +98,75 @@ That code is **not** the specification for this RFC: it may be replaced, re-scop
 
 ## 3: Design
 
-The following sections state **normative intent** for Maybraid procedural terrain: vocabulary, composition patterns, and constraints. They do **not** prescribe a particular crate layout or the exploratory code in [Section 2.3](#23-exploratory-code-non-normative).
+This section specifies **how Maybraid should assemble procedural terrain going forward**: contracts between a noise base, stamps, stamp semantics, and chains. Nothing here asserts that a given subsystem already exists or matches exploratory code in [Section 2.3](#23-exploratory-code-non-normative); implementers should treat this as the target architecture and migrate toward it. It does **not** mandate crate layout.
 
 ### 3.1: Core Concepts
 
-- **Height oracle:** A well-defined way to evaluate **elevation** (and optionally **derivatives**) at horizontal coordinates `(x, z)` for a given world seed or LOD context. Callers that need ground height should use this oracle (or an approved cache), not reimplement ad hoc noise.
-- **Stamp:** A **local operator** on the oracle: a **footprint** in the plane (hard mask, smooth falloff, or signed-distance blend) plus **parameters** (strength, orientation, path anchors, noise seeds). Stamps **compose** under a documented **policy** (sequential stack, DAG, priority buckets—choose per pipeline and document).
-- **Fractal stamping:** Drive stamp **presence, type, or parameters** from **continuous** noise fields, so structure is **spatially correlated** across many samples. Suited to ridges, basins, and features that should not break on a rigid cell grid.
-- **Cellular stamping:** Drive stamps from a **discrete cell key** and a **deterministic PRNG** when **local independence** is acceptable.
-- **Semantics:** Optional **non-geometric** outputs co-emitted with a stamp (tags, spawn masks, hydrology hints). Semantics should be **queryable** without inferring them only from final height ([Section 3.6](#36-stamp-semantics)).
+- **Height oracle:** Maybraid should expose **one** elevation API for horizontal coordinates `(x, z)` (and optionally **slopes or normals**) keyed by **world seed** and **LOD or chunk context**. Gameplay, physics, foliage, and procedural stamps that need ground height should call this oracle or a **documented cache** derived from it, instead of sampling noise ad hoc, so every system agrees after streaming and LOD changes.
+- **Stamp:** A stamp is a **local operator**: a **footprint** in the plane (hard mask, smooth falloff, or signed-distance blend) plus **parameters** (strength, orientation, path anchors, noise seeds). Pipelines should pick and document a **composition policy** (ordered stack, DAG with priorities, or buckets), so evaluation order is not ambiguous when several stamps overlap.
+- **Fractal stamping:** Use **continuous** noise (or derived fields) to drive whether a stamp applies, **which** stamp type runs, or **numeric parameters**, so landforms stay **spatially correlated** across many samples. Prefer this for **drainage valleys, mountain fronts, and ridge lines** that would look tiled or broken under independent cell dice.
+- **Cellular stamping:** Use a **fixed cell grid** and a **PRNG keyed by cell coordinates** when **per-cell independence** is acceptable (scatter rocks, small hollows). Do **not** rely on cellular dice alone for **long reaches** that must line up (see hydrology under [Section 3.7](#37-stamp-chains)).
+- **Stamp semantics:** Stamps that affect gameplay or simulation should emit **structured, non-geometric data** alongside height (tags, masks, graph hooks). **Hydrology is the reference example** throughout this RFC: a channel stamp should be able to expose **reach identity, flow direction, bank masks, and adjacency** to the next stamp downstream without forcing callers to infer water from height alone ([Section 3.6](#36-stamp-semantics)).
 
 ### 3.2: Noise Base
 
-The **global base** before stamps is typically a **multi-octave** sum of smooth noise (fBm-style), optionally followed by **spectral shaping** (ridged variants, **domain warp**) or **iterative erosion-like** passes ([Section 2.1](#21-theory)). The base must be **deterministic** from world coordinates and seed, so streaming and LOD stay consistent.
+**Build order:** evaluate a **global base** first, then apply stamps. The base should normally be a **multi-octave** smooth-noise stack (fBm-style), optionally followed by **spectral shaping** (ridged noise, **domain warp**) or **lightweight erosion-like** passes as described in [Section 2.1](#21-theory). **Determinism:** the base **must** be a pure function of **world coordinates, seed, and LOD parameters**, so the same query after a chunk reload or at a coarser ring returns the same elevation and downstream hydrology stamps do not fight a shifting substrate.
 
 ### 3.3: Cellular Stamping
 
-For a fixed **cell size**, decide whether a cell receives a stamp (and which type) using a **PRNG keyed by cell coordinates**. Use this when stamps **do not** need correlated structure across neighbors. For features that **must** span many cells (rivers, ranges, valley trains), prefer **fractal** (noise-driven) or **higher-order** planning ([Section 3.7.4](#374-higher-order-patterns-and-the-power-of-large-extents)).
+**Procedure:** fix a **cell size**; for each cell, hash `(cell_i, cell_j, world_seed)` into a PRNG; decide **boolean presence** and **stamp type** from that stream. **When to use:** props, potholes, and other features that do not need to **align across cell borders**. **When to avoid:** main-stem rivers, continuous ridges, or any feature whose **centerline or banks** must meet across streamed boundaries; those require **fractal** fields and/or **planned graphs** ([Section 3.7.4](#374-higher-order-patterns-and-the-power-of-large-extents)).
 
 ### 3.4: Fractal Stamping
 
-Use **low-, mid-, and high-frequency** noise (or derived fields) to control **where** stamps apply and **how strong** they are. Initial guidance by stamp family:
+Use **low-, mid-, and high-frequency** noise to choose **stamp influence masks** and **strength**. Tie frequency bands to physical scale, so LOD can drop high bands without changing where major valleys sit.
 
 | Stamp family | Suggested noise role | Notes |
 |--------------|----------------------|--------|
-| Large landform (basin, plateau) | Low-frequency fBm / gradient noise | Strong spatial correlation; stable under LOD. |
-| Ridge / cliff line | Ridged or absolute-value variants of smooth noise | Often needs **directional** bias or domain warp. |
-| Valley / channel | Curve- or graph-guided field + detail noise | Pair with **path-consistent grade** ([Section 3.7.3](#373-fractal-paths)) where water should read correctly. |
-| Scatter (boulders, small dips) | Mid-frequency noise + thresholds | Combine with cellular rules for variety. |
-| Wobbly footprint | Noise **modulating a 2D distance field** | Perturbs stamp boundaries without hand-authored splines. |
+| Large landform (basin, plateau) | Low-frequency fBm / gradient noise | Establishes **watershed-scale** bowls and barriers before channel stamps run. |
+| Ridge / cliff line | Ridged or absolute-value variants of smooth noise | Often needs **directional** bias or domain warp, so divides stay coherent. |
+| Valley / channel | Curve- or graph-guided field plus detail noise | **Hydrology:** pair with **path-consistent grade** ([Section 3.7.3](#373-fractal-paths)), so pools and runs read as downhill. |
+| Scatter (boulders, small dips) | Mid-frequency noise plus thresholds | Mix with cellular rules where independence is fine. |
+| Wobbly footprint | Noise **modulating a 2D distance field** | Irregular bank lines without hand-authored splines. |
 
-**Recursive / multiscale** placement (one stamp spawning families of related stamps) can reuse the **same noise family** at shifted seeds or scales for **self-similar** layouts.
+**Recursive / multiscale placement:** allow a stamp to **spawn child stamps** (e.g. main channel spawns **bars, cutbanks, and confluence pockets**) by reusing the **same noise family** at **offset seeds or scales**, so detail stays **self-similar** but still deterministic.
 
 ### 3.5: Stamp Generation
 
-Stamps may **jitter** parameters, **noise-distort** footprints, or **subdivide** into child stamps. Randomness must be **reproducible** from `(seed, cell id, stamp id)` (or equivalent), so **streaming, replay, and LOD** agree.
+Stamps may **jitter** parameters, **noise-distort** footprints, or **subdivide** into children. **Reproducibility:** any randomness must be keyed by **`(world_seed, cell_or_region_id, stamp_id, sub_stamp_index)`** (or an equivalent tuple you document), so **streaming, replay, and LOD** all see the same geometry and the same **semantic payloads** (e.g. the same reach ID before and after a chunk boundary).
 
 ### 3.6: Stamp Semantics
 
-Some stamps should both **deform** the surface and **declare meaning**—for example, a riverbed that enforces grade **and** marks volume for aquatic spawns.
+**Goal:** stamps that carve **channels, lakeshores, or engineered grades** should both **move height** and **publish facts** downstream systems need. **Hydrology-first examples:**
 
-**Target:** keep **geometry** and **semantic payloads** in one evaluation episode but **logically separate** (height delta vs. tag set, mask, or graph edge), so downstream systems consume semantics without fragile height inversion.
+- A **riverbed** stamp should be able to emit **wet mask**, **thalweg polyline or raster spine**, **flow direction**, and **optional graph edges** (“this reach continues to stamp instance *k*” or “confluence with reach *m*”).
+- A **waterfall or grade break** stamp should record **drop height**, **overflow lip geometry**, and **upstream/downstream reach IDs**, so audio, particles, and fish spawning do not re-derive topology from triangles.
+- **Consumers** (spawning, buoyancy, quest triggers, future flow solvers) should read these fields from a **query API**, not by thresholding final height (“blue below *z*”) unless you explicitly document that as a fallback.
+
+Keep **geometry deltas** and **semantic records** in the **same evaluation pass** but **separate in data** (height change vs. tag set, masks, edges), so changing how height is blended does not silently erase **which cells belong to which reach**.
 
 ### 3.7: Stamp Chains
 
-Chains express **ordered or adjacent** stamp types (riverbed → waterfall → riverbed, ridge → saddle → ridge).
+Chains are **ordered sequences** of stamp types applied along a **shared spatial or logical spine**. **Hydrology is the primary motivating pattern:** e.g. **meandering low-gradient bed**, then **falls or cascade**, then **bedrock slot**, then **low-gradient bed** again, all sharing one **centerline or drainage ID**. Non-hydrology chains (e.g. **ridge line, saddle, ridge line**) use the same machinery.
 
 #### 3.7.1: Common Noise Chains
 
-Drive chained stamps from a **shared low-dimensional field** (single or few noise images). **Discrete:** map value bands to stamp types. **Continuous:** interpolate parameters along isolines or along a scalar progression.
+Drive several stamp types from **one low-dimensional field** (one or a few noise images or 1D curves along arc length). **Discrete:** map value bands to types (**pool, riffle, glide, fall**) along a reach. **Continuous:** interpolate **depth, width, or roughness** along **isolines** of that field or along **monotone distance-from-source**. The field should be **shared**, so transitions do not reset unrelated random state at segment boundaries.
 
 #### 3.7.2: Fractal Neighborhood Stamps (FNS)
 
-**FNS** consults **neighboring samples** (grid or graph) of a field when deciding local stamp behavior, so **connectivity** (notches, aligned gaps, tunnel mouths) emerges without a full global solve. FNS does **not** replace **global** constraints (e.g. monotonic grade along a long reach); combine with paths or planners when needed.
+When choosing parameters for a stamp in cell *C*, **read neighboring samples** of the same underlying field (grid neighbors or graph neighbors along the channel). Use that to align **bank height, undercut notches, and confluence mouths**, so they **line up across cells** without a full global solver. **FNS does not replace** **global** constraints: if the **main stem must lose elevation monotonically from headwater to pour point**, still enforce that with a **path planner or stored graph** from [Section 3.7.4](#374-higher-order-patterns-and-the-power-of-large-extents); FNS only **dresses** local connectivity.
 
 #### 3.7.3: Fractal Paths
 
-For **consistent deformation along a path**, parameterize a curve in the plane (`s` = arc length or similar) and drive height or blend weights with **1D noise, splines, or analytic grade**. **Endpoint constraints** (heights fixed by the oracle or by a planner at junctions) should be explicit, so paths **meet** the rest of the landscape.
+Parameterize the **thalweg or road** as a plane curve with coordinate `s` (arc length). Drive **bed elevation or blend weights** with **1D noise, splines, or analytic grade** along `s`. **Endpoints:** fix heights at **junctions, lakes, and pour points** using the oracle or a **macro planner**, and document those constraints, **so** the path **meets** surrounding terrain without jumps. **Hydrology:** this is how you keep **pools and riffles** coherent while still hitting **required water-surface targets** at dams, confluences, and outlets.
 
 #### 3.7.4: Higher-order Patterns and the Power of Large Extents
 
-Purely **local** rules struggle with **global** consistency (e.g. a river that must meet distant pour points). Accept **multi-resolution** workflows: **coarse** plans (drainage graphs, mountain envelopes) **constrain** **fine** stamps.
+**Problem:** purely **local** per-chunk rules cannot guarantee that a **river meets a distant lake outlet** or that **parallel tributaries** drain to the same trunk. **Approach:** adopt **multi-resolution** workflows—**coarse** artifacts first, **fine** stamps inside them.
 
-**Macro-stamps** span many future streamed regions; loading a cell runs **local** routines **parameterized** by the macro stamp (nested grids, inner noise, inner chains). **Composing** macro layers aligns with **spatial hierarchies** (BVH-style LOD, coarse-to-fine generation): coarse nodes carry intent; leaves carry detail. **Culling** and **generation** should share hierarchy where practical.
+- **Coarse layer:** build a **drainage graph** (or skeleton field): trunk, tributaries, pour points, and **target elevations** at key nodes. This layer can be **sparse** and **computed infrequently**.
+- **Fine layer:** when a chunk loads, run **local** stamp routines **parameterized** by the **macro reach** that crosses that chunk (inner noise, inner chains from [Section 3.7.1](#371-common-noise-chains) through [Section 3.7.3](#373-fractal-paths)). **Macro-stamps** therefore **apply across many chunks as they stream over time**; cell work is **interpolation and detail**, not re-deciding where the main stem goes.
+- **Engine alignment:** **culling** and **generation** should share **the same spatial hierarchy** (BVH-style LOD, coarse-to-fine) where practical, so invisible work is not scheduled, and **semantic IDs** stay stable from coarse to fine.
 
 ### 3.8: Jersey Stamps
 

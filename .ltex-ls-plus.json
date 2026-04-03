@@ -335,6 +335,8 @@
         "quadtrees",
         "stampable",
         "Strahler",
+        "thalweg",
+        "thresholding",
         "Voronoi-like",
         "Worley",
         "Worley-style"
