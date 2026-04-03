@@ -304,7 +304,15 @@
         "IK-driven",
         "cinematics",
         "wingbeat",
-        "downstroke"
+        "downstroke",
+        "maybraid",
+        "heightfield",
+        "heightfields",
+        "heightmap",
+        "multiscale",
+        "clipmaps",
+        "bitmask",
+        "Perlin-seeded"
       ]
     },
     "bibtex": {
