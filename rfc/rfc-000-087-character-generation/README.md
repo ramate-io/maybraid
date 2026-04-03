@@ -405,13 +405,19 @@ Implement [3.2.12: Crozon Tail Variant Multi-meshes](#3212-crozon-tail-variant-m
 
 ### 4.14: Biped Skeleton
 
+Implement the **canonical biped skeleton** (joint hierarchy, rest pose, limits, and skin/bind conventions) used by Crozon **bipedal** species, including humanoids and **flying bipeds** from [Section 3.1.2: Crozon Species Diversity](#312-crozon-species-diversity). Naming and attachment sockets should match the rigging assumptions in [RFC-88](../rfc-000-088-bevy-multi-mesh/README.md) so assembled multi-meshes from [Section 3.2](#32-multi-meshes) snap to a single stable rig. This milestone unblocks [Section 4.18: Malo Gait Animation for Bipeds](#418-malo-gait-animation-for-bipeds), [Section 4.20: Malo Carrying and Grasping Animation for Bipeds](#420-malo-carrying-and-grasping-animation-for-bipeds), and [Section 4.21: Malo Expressions Animations](#421-malo-expressions-animations).
+
 ### 4.15: Quadruped Skeleton
+
+Implement the **canonical quadruped skeleton** for Crozon **quadruped** routines (grazing, predators, small land animals, swimmers, and related buckets) per [Section 3.1.2: Crozon Species Diversity](#312-crozon-species-diversity), with spine and limb chains suited to the limb and tail variants in [Section 3.2](#32-multi-meshes). Keep joint layout and socket naming consistent with [RFC-88](../rfc-000-088-bevy-multi-mesh/README.md) so the same assembly pipeline as bipeds applies. This milestone unblocks [Section 4.19: Malo Gait Animation for Quadrupeds](#419-malo-gait-animation-for-quadrupeds).
 
 ### 4.16: Develop Multi-mesh API
 
-Develop the multi-mesh API for rigging skeletons as described in [RFC-88](../rfc-000-088-bevy-multi-mesh/README.md)
+Develop the multi-mesh API for rigging skeletons as described in [RFC-88](../rfc-000-088-bevy-multi-mesh/README.md). Treat this as the **contract** between assembled Crozon parts ([Section 4.1](#41-crozon-head-shape-variant-multi-meshes)–[4.13](#413-crozon-tail-variant-multi-meshes)) and the biped / quadruped skeletons ([Section 4.14](#414-biped-skeleton), [Section 4.15](#415-quadruped-skeleton)); it should land before or in lockstep with [Section 4.17: Crozon Species Assembly](#417-crozon-species-assembly).
 
 ### 4.17: Crozon Species Assembly
+
+Implement **deterministic Crozon species assembly**: given a species spec in the sense of [Section 3.1.1: Crozon Species Design](#311-crozon-species-design) (feature order, allowed meshes and parameters, constraints, symmetry policy), produce a full character instance parented to the correct skeleton ([Section 4.14](#414-biped-skeleton) or [Section 4.15](#415-quadruped-skeleton)) via [Section 4.16: Develop Multi-mesh API](#416-develop-multi-mesh-api). Validate forward-checking / retry behavior against empty option sets, so generation remains reproducible from seed. This milestone integrates the per-feature mesh milestones [Section 4.1](#41-crozon-head-shape-variant-multi-meshes)–[Section 4.13](#413-crozon-tail-variant-multi-meshes) and is the default **validation target** for Malo animation milestones.
 
 ### 4.18: Malo Gait Animation for Bipeds
 
