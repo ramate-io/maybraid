@@ -178,6 +178,8 @@ Parameterize the **thalweg or road** as a plane curve with coordinate `s` (arc l
 
 **Jersey** is the working name for the **first curated bundle** of terrain stamp families aimed at demos and vertical slices. Names below are **product-facing** groupings; one family may compile to several internal stamp types. Together they exercise **fractal** and **chained** patterns from [Sections 3.4](#34-fractal-stamping)–[3.7](#37-stamp-chains), plus **localized volume** work aligned with the SDF discussion in [Section 2.1.3](#213-implicit-surfaces-marching-cubes-and-csg). **Hydrology-aware** work appears both as **lake-and-stream chains** (**Jersey Pocket Waters**, **Jersey Basin Waters**) and as **separate Jersey lines** for **canyons** and **hydrology-related landform complexes**, so authoring and docs stay simple even when the underlying math overlaps.
 
+**Look and layering:** Every Jersey family is meant to run **on top of** the **noise base** ([Section 3.2](#32-noise-base)), not on a flat synthetic plane. Stamps should lean on **noise** for **placement, strength, footprint warp, and micro-breakup** ([Section 3.4](#34-fractal-stamping), [Section 3.5](#35-stamp-generation)), so the result stays **rough and natural-looking**—strong landforms read clearly, but they still **inherit the fractal grain** of the base instead of looking like smooth CAD inserts.
+
 #### 3.8.1: Jersey Valley Basins (Unchained)
 
 **Purpose:** Single-region **valley** depressions with parameterized **cross-section** (V-shaped, U-shaped, or asymmetric), **width**, **axis curvature**, and **bank falloff**. Placement and strength should be **fractal-driven** ([Section 3.4](#34-fractal-stamping)), so long valleys do not tile like independent cellular tiles.
