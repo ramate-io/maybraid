@@ -192,38 +192,62 @@ The initial offering of species is called Crozon. Subspecies should follow from 
 #### 3.2.1: Crozon Head Shape Variant Multi-meshes
 - Concept set: [`head-shape`](./variants/crozon/head-shape/README.md) (primitives: [`common`](./variants/crozon/common/README.md))
 
+Head shape variants model the macro **cranium / face block** as one or a few solids chosen from shared primitives. The usual pattern is a **parent** head mass with **optional child** meshes for mouth, nose–snout, and other features parented in place. Embedding notes describe orientation and scale, so the silhouette reads correctly for the species without over-specifying anatomy.
+
 #### 3.2.2: Crozon Ear Variant Multi-meshes
 - Concept set: [`ear`](./variants/crozon/ear/README.md) (primitives: [`common`](./variants/crozon/common/README.md))
+
+Ears are treated as **composable multi-mesh** kits: for example lobe, cartilage fold, and optional fur or detail strips as separate meshes or instances. Each variant row ties a common primitive to **ear-specific** placement and pairing rules (left/right, alertness). The goal is reusable ear recipes that still read clearly at low poly counts.
 
 #### 3.2.3: Crozon Horn Variant Multi-meshes
 - Concept set: [`horn`](./variants/crozon/horn/README.md) (primitives: [`common`](./variants/crozon/common/README.md))
 
+Horns are typically **one multi-mesh per horn** or **paired instances** of the same spec for symmetry. Variants differ by taper, curvature, and cross-section (cone-like, cylindrical, bowed, and so on) while sharing the same attachment semantics at the skull. Species rules decide count, mirroring, and seed jitter rather than duplicating primitive definitions.
+
 #### 3.2.4: Crozon Eye Variant Multi-meshes
 - Concept set: [`eye`](./variants/crozon/eye/README.md) (primitives: [`common`](./variants/crozon/common/README.md))
+
+Eyes are almost always **multi-mesh**: a **globe**, a **socket** or rim volume, and optional **lid** or related strips. Primitives supply the underlying solids; feature stubs describe how those pieces stack and align for blink, gaze, and stylized reads. The assembly stays small enough to rig and instance consistently across species.
 
 #### 3.2.5: Crozon Nose and Snout Variant Multi-meshes
 - Concept set: [`nose-snout`](./variants/crozon/nose-snout/README.md) (primitives: [`common`](./variants/crozon/common/README.md))
 
+Nose and snout kits reuse the same **common** primitives as elsewhere but document **face-forward** embedding: bridge, muzzle length, and taper relative to the head block. A variant is often a single primary snout mesh plus optional add-ons where species need them. The emphasis is on readable silhouette and clean seams to head shape and mouth.
+
 #### 3.2.6: Crozon Mouth Variant Multi-meshes
 - Concept set: [`mouth`](./variants/crozon/mouth/README.md) (primitives: [`common`](./variants/crozon/common/README.md))
+
+Mouth variants combine an **opening volume** with **lip**, **beak**, or transition geometry, and may add **teeth** or other rows as separate meshes. Chains and bowed primitives support curved jaw lines and stylized muzzles without a single monolithic mouth mesh. Child meshes are typically parented so jaw motion and attachment to head shape stay predictable.
 
 #### 3.2.7: Crozon Neck Variant Multi-meshes
 - Concept set: [`neck`](./variants/crozon/neck/README.md) (primitives: [`common`](./variants/crozon/common/README.md))
 
+Neck volumes bridge **head** and **torso** using cylinders, bows, or pearl chains with explicit **attachment** and **bow-plane** notes. Multi-mesh use is lighter than for hands or eyes but still allows stacked segments when the silhouette needs a curved or articulated column. Embedding focuses on length, thickness profile, and where the neck meets clavicle and skull sockets.
+
 #### 3.2.8: Crozon Lower Limb Variant Multi-meshes
 - Concept set: [`lower-limb`](./variants/crozon/lower-limb/README.md) (primitives: [`common`](./variants/crozon/common/README.md))
+
+Lower limbs are specified as **shared primitives** plus **limb-only** embedding from hip to ankle (or equivalent), including taper, bow, and multi-segment options like drum prongs or pearl chains. One variant recipe can cover a full leg by composing length-scaled instances along the skeleton. Concept art may live on the common primitive or on the limb stub for pose-on-leg context.
 
 #### 3.2.9: Crozon Upper Limb Variant Multi-meshes
 - Concept set: [`upper-limb`](./variants/crozon/upper-limb/README.md) (primitives: [`common`](./variants/crozon/common/README.md))
 
+Upper limbs follow the same primitive vocabulary as lower limbs but with **shoulder → elbow → wrist** embedding and typically **shorter** axial scales. Multi-mesh composition mirrors the lower limb (drumstick, cylinder, bow, and future promoted primitives) with arm-specific orientation defaults. The pattern keeps arm and leg pipelines aligned for tooling and species parameterization.
+
 #### 3.2.10: Crozon Hand and Foot Variant Multi-meshes
 - Concept set: [`hand-foot`](./variants/crozon/hand-foot/README.md) (primitives: [`common`](./variants/crozon/common/README.md))
+
+Hands and feet are **multi-mesh by design**: a **palm or sole** pad, **per-digit** extrusions (often one primitive chain per digit), and optional **wrist or ankle** cuffs. Instancing the same digit spec several times still counts as one variant recipe; species rules carry count, layout, and symmetry. The docs recommend a small ordered recipe (pad, optional wedge, digits) so assembly stays repeatable.
 
 #### 3.2.11: Crozon Torso Variant Multi-meshes
 - Concept set: [`torso`](./variants/crozon/torso/README.md) (primitives: [`common`](./variants/crozon/common/README.md))
 
+Torso variants describe the **primary trunk mass** from shoulders to pelvis using spheroids, drumsticks, tapered or rounded cuboids, and related solids. Each row links the common definition to **torso-only** notes for chest–waist taper, bulge placement, and attachment to neck and limbs. Additional primitives are added to this table when they are wired into torso assembly rules.
+
 #### 3.2.12: Crozon Tail Variant Multi-meshes
 - Concept set: [`tail`](./variants/crozon/tail/README.md) (primitives: [`common`](./variants/crozon/common/README.md))
+
+Tails are modeled as **chains** or **tapered extrusions** along a **caudal** axis: pearl chains, bows, cylinders, or stacked segments with decreasing radius. Multi-mesh setups parent segments along a spline or spine so taper and curl read clearly in motion. The same primitive family can express both thin whips and thicker tapered tails by parameter and segment count.
 
 ### 3.3: Animations
 
