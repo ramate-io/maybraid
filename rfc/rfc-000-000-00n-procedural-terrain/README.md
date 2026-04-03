@@ -2,9 +2,13 @@
 
 ## 1: Motivation
 
-Maybraid relies heavily on procedural generation, including for terrain. Because its world is arbitrarily large it also requires globally consistent terrain. We propose strategies focused on use of fractal noise, stamps, semantics, and chaining, in a way that scales to demos and downstream systems (watershed, vegetation, LOD). It tracks the open proposal [maybraid#55 — Procedural terrain generation proposal](https://github.com/ramate-io/maybraid/issues/55).
+Maybraid aims for **large, lightly authored** worlds. Terrain must stay **globally consistent** under **streaming** and **LOD**: the same horizontal coordinates should yield the same **elevation** (and compatible macro shape) whenever a chunk loads or a coarser ring replaces a finer one.
+
+We treat terrain as a **noise base** accessed through one **height oracle**, then **deformed by stamps**—**fractal stamping** where landforms must correlate across many samples (valleys, ranges, **hydrology**), **cellular stamping** where **per-cell** independence is enough (scatter, small relief). **Stamp semantics** expose **non-geometric** facts to gameplay and simulation; **stamp chains** order stamp types along a shared spine (again with **rivers and reaches** as the lead example). [Section 2](#2-prior-art) surveys theory and engine practice against that vocabulary; [Section 3](#3-design) says how Maybraid should implement the stack. Open context: [maybraid#55 — Procedural terrain generation proposal](https://github.com/ramate-io/maybraid/issues/55).
 
 ## 2: Prior Art
+
+What follows maps textbook methods and commercial patterns onto the same terms as [Section 1](#1-motivation): **noise base**, **height oracle**, **stamps** (fractal vs cellular), **stamp semantics**, **stamp chains**, **deterministic** evaluation, **streaming**, and **LOD**. Each **Maybraid** note is a fit judgment for that target stack, not a claim that the engine already implements it end to end.
 
 ### 2.1: Theory
 
@@ -30,7 +34,7 @@ Summing noise at multiple scales produces **fractional Brownian motion (fBm)**-l
 
 **In games**, voxels (e.g. Minecraft-like) and some **SDF** pipelines use this for **diggable** worlds or cinematic rocks; full **isosurface** extraction every frame is often reserved for mods, tools, or hybrid meshes (surface + volume holes).
 
-**Maybraid:** **Conceptual fit** is good: the motivation mentions **subterranean** exploration and downstream systems; a **3D SDF or hybrid** representation (Section 2.3 exploratory direction) keeps **caves** in scope without committing every ship target to marching cubes. **Cost and tooling** are the tension: low-poly + Bevy favors **simple meshes**; volumetric composition may stay **optional** or **localized** (stamps that carve holes) rather than global voxel worlds.
+**Maybraid:** **Strong fit.** The **SDF engine is 3D from the outset**—**caves**, **overhangs**, and **tunnels** are not an afterthought bolted onto a heightmap; they live in the same signed-distance story as exterior form. Pipelines can use **function analysis** on the implicit definitions—special cases, bounds, cheaper evaluators—where that applies, to **accelerate queries** rather than assuming "real 3D" always means brute-force voxels or full marching-cubes cost on every code path. Exploratory terrain hooks are in [Section 2.3](#23-exploratory-code-non-normative). **Scope tension** is still real: **Bevy** and low-poly art tend to favor **simple extracted meshes** for much of what ships in a demo; how much of the world is **SDF-primary** versus **height-oracle-first** is a **product and budget** choice, not a hard limit of the representation.
 
 #### 2.1.4: Hydraulic and thermal erosion
 
@@ -167,6 +171,8 @@ Parameterize the **thalweg or road** as a plane curve with coordinate `s` (arc l
 - **Coarse layer:** build a **drainage graph** (or skeleton field): trunk, tributaries, pour points, and **target elevations** at key nodes. This layer can be **sparse** and **computed infrequently**.
 - **Fine layer:** when a chunk loads, run **local** stamp routines **parameterized** by the **macro reach** that crosses that chunk (inner noise, inner chains from [Section 3.7.1](#371-common-noise-chains) through [Section 3.7.3](#373-fractal-paths)). **Macro-stamps** therefore **apply across many chunks as they stream over time**; cell work is **interpolation and detail**, not re-deciding where the main stem goes.
 - **Engine alignment:** **culling** and **generation** should share **the same spatial hierarchy** (BVH-style LOD, coarse-to-fine) where practical, so invisible work is not scheduled, and **semantic IDs** stay stable from coarse to fine.
+
+W.l.o.g, this method can be used to create fractals on higher-order patterns of terrain stamping. 
 
 ### 3.8: Jersey Stamps
 
