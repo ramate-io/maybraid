@@ -256,33 +256,59 @@ Initial Animations will be delivered under the title Malo.
 ## 4: Milestones
 
 > [!NOTE]
-> The milestones below are not intended to cover the entire duration of the project. This is intended with minimal speculation.
+> The milestones below are not intended to cover the entire duration of the project. This is intended with minimal speculation. Species- or type-specific delivery is usually **thin wrappers** (defaults, attachment, allowed primitive mixes) on the reusable multi-mesh definitions in [Section 3.2](#32-multi-meshes) and [`variants/crozon/common/`](./variants/crozon/common/README.md).
 
 ### 4.1: Crozon Head Shape Variant Multi-meshes
 
+Implement [3.2.1: Crozon Head Shape Variant Multi-meshes](#321-crozon-head-shape-variant-multi-meshes).
+
 ### 4.2: Crozon Ear Variant Multi-meshes
+
+Implement [3.2.2: Crozon Ear Variant Multi-meshes](#322-crozon-ear-variant-multi-meshes).
 
 ### 4.3: Crozon Horn Variant Multi-meshes
 
+Implement [3.2.3: Crozon Horn Variant Multi-meshes](#323-crozon-horn-variant-multi-meshes).
+
 ### 4.4: Crozon Eye Variant Multi-meshes
+
+Implement [3.2.4: Crozon Eye Variant Multi-meshes](#324-crozon-eye-variant-multi-meshes).
 
 ### 4.5: Crozon Nose and Snout Variant Multi-meshes
 
+Implement [3.2.5: Crozon Nose and Snout Variant Multi-meshes](#325-crozon-nose-and-snout-variant-multi-meshes).
+
 ### 4.6: Crozon Mouth Variant Multi-meshes
+
+Implement [3.2.6: Crozon Mouth Variant Multi-meshes](#326-crozon-mouth-variant-multi-meshes).
 
 ### 4.7: Crozon Head Assembly Variant Multi-meshes
 
+Implement composed head assemblies per [Section 3.2: Multi-meshes](#32-multi-meshes) ([3.2.1](#321-crozon-head-shape-variant-multi-meshes)–[3.2.6](#326-crozon-mouth-variant-multi-meshes)).
+
 ### 4.8: Crozon Neck Variant Multi-meshes
+
+Implement [3.2.7: Crozon Neck Variant Multi-meshes](#327-crozon-neck-variant-multi-meshes).
 
 ### 4.9: Crozon Lower Limb Variant Multi-meshes
 
+Implement [3.2.8: Crozon Lower Limb Variant Multi-meshes](#328-crozon-lower-limb-variant-multi-meshes).
+
 ### 4.10: Crozon Upper Limb Variant Multi-meshes
+
+Implement [3.2.9: Crozon Upper Limb Variant Multi-meshes](#329-crozon-upper-limb-variant-multi-meshes).
 
 ### 4.11: Crozon Hand and Foot Variant Multi-meshes
 
+Implement [3.2.10: Crozon Hand and Foot Variant Multi-meshes](#3210-crozon-hand-and-foot-variant-multi-meshes).
+
 ### 4.12: Crozon Torso Variant Multi-meshes
 
+Implement [3.2.11: Crozon Torso Variant Multi-meshes](#3211-crozon-torso-variant-multi-meshes).
+
 ### 4.13: Crozon Tail Variant Multi-meshes
+
+Implement [3.2.12: Crozon Tail Variant Multi-meshes](#3212-crozon-tail-variant-multi-meshes).
 
 ### 4.14: Biped Skeleton
 
