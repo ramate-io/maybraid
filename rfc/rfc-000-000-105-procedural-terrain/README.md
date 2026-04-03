@@ -1,4 +1,4 @@
-# RFC-N: Procedural Terrain Generation
+# RFC-105: Procedural Terrain Generation
 
 ## 1: Motivation
 
