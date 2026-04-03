@@ -172,11 +172,83 @@ Parameterize the **thalweg or road** as a plane curve with coordinate `s` (arc l
 - **Fine layer:** when a chunk loads, run **local** stamp routines **parameterized** by the **macro reach** that crosses that chunk (inner noise, inner chains from [Section 3.7.1](#371-common-noise-chains) through [Section 3.7.3](#373-fractal-paths)). **Macro-stamps** therefore **apply across many chunks as they stream over time**; cell work is **interpolation and detail**, not re-deciding where the main stem goes.
 - **Engine alignment:** **culling** and **generation** should share **the same spatial hierarchy** (BVH-style LOD, coarse-to-fine) where practical, so invisible work is not scheduled, and **semantic IDs** stay stable from coarse to fine.
 
-W.l.o.g, this method can be used to create fractals on higher-order patterns of terrain stamping. 
+**W.l.o.g.,** the same **coarse-then-finer** recipe is not limited to one split: you can **nest it arbitrarily**—a layer that was "fine" relative to its parent can itself become the **coarse** scaffold for another inner pass—so **higher-order** terrain structure and **fractal** refinement of stamping are the same mechanism **applied recursively**, subject to the usual **determinism** and **semantic ID** rules ([Section 3.5](#35-stamp-generation)).
 
 ### 3.8: Jersey Stamps
 
-We propose the following stamps be released under the Jersey edition of Maybraid terrain.
+**Jersey** is the working name for the **first curated bundle** of terrain stamp families aimed at demos and vertical slices. Names below are **product-facing** groupings; one family may compile to several internal stamp types. Together they exercise **fractal** and **chained** patterns from [Sections 3.4](#34-fractal-stamping)–[3.7](#37-stamp-chains), plus **localized volume** work aligned with the SDF discussion in [Section 2.1.3](#213-implicit-surfaces-marching-cubes-and-csg). **Hydrology-aware** work appears both as **lake-and-stream chains** (**Jersey Pocket Waters**, **Jersey Basin Waters**) and as **separate Jersey lines** for **canyons** and **hydrology-related landform complexes**, so authoring and docs stay simple even when the underlying math overlaps.
+
+#### 3.8.1: Jersey Valley Basins (Unchained)
+
+**Purpose:** Single-region **valley** depressions with parameterized **cross-section** (V-shaped, U-shaped, or asymmetric), **width**, **axis curvature**, and **bank falloff**. Placement and strength should be **fractal-driven** ([Section 3.4](#34-fractal-stamping)), so long valleys do not tile like independent cellular tiles.
+
+**Semantics (recommended):** **bank mask** for foliage and splats; optional tags distinguishing **dry arroyo** profiles from **spillway-ready** floors that a later hydrology stamp can occupy.
+
+**LOD:** fix **macro axis and depth** early; treat **micro bank breakup** as a high-frequency layer that can weaken at distance without moving the thalweg.
+
+#### 3.8.2: Jersey Plateau Caps (Unchained)
+
+**Purpose:** **Tablelands** and **mesa-style caps**: raised interior with gentle **tilt**, **escarpment** strength at the rim, and controlled **corner behavior**. Footprints can be **convex polygons**, smooth **blobs**, or **noise-warped** boundaries using the “wobbly footprint” idea from [Section 3.4](#34-fractal-stamping).
+
+**Semantics (recommended):** **surface class** (e.g. exposed cap rock vs soil mantle) for materials and props.
+
+#### 3.8.3: Jersey Rugged Massifs (Unchained)
+
+**Purpose:** **Ridged**, **serrated**, or **cliff-banded** high terrain—peaks, **arêtes**, and broken crests—using the same spectral toolkit as the ridge row in [Section 3.4](#34-fractal-stamping). Often stacked **after** coarse envelope stamps, so **crests** inherit watershed-scale context.
+
+**Semantics (optional):** **exposure** or **rockiness** masks for scree and cliff props.
+
+#### 3.8.4: Jersey Pocket Waters (Small Hydrology Chains)
+
+**Purpose:** **Stamp chains** for **small** closed systems: a **pond or tarn** body, optional **outlet lip**, a short **run or riffle**, and a documented **termination** (another sink, marsh hint, or hand-off tag). All instances along the chain share one **drainage ID** ([Section 3.7](#37-stamp-chains), [Section 3.6](#36-stamp-semantics)).
+
+**Semantics (required for water gameplay):** **water-surface target** where applicable; **reach graph** (typically a handful of edges); **flow direction** on the run; **bank** or **littoral** masks.
+
+#### 3.8.5: Jersey Basin Waters (Large Hydrology Chains)
+
+**Purpose:** **Macro hydrology** bundles: **lake or reservoir-scale** water bodies, **branched outlet systems**, and **tributary stubs** or **confluence nodes**, parameterized from a **coarse drainage graph** ([Section 3.7.4](#374-higher-order-patterns-and-the-power-of-large-extents)). Designed so **macro reaches** stay stable as chunks stream.
+
+**Semantics (required):** **reach IDs**, **junction records**, **pour-point** or **outlet** targets for downstream systems; optional **seasonal** or **regulated** level hints.
+
+#### 3.8.6: Jersey Valley Trains (Chained Valleys)
+
+**Purpose:** **Ordered** valley stamps along a **shared horizontal spine** (headwater to base level): for example **upper gorge**, **middle glide**, **lower widened floor**. Segment heights obey **endpoint constraints** from a **macro planner** or oracle ([Section 3.7.3](#373-fractal-paths)).
+
+**Semantics (recommended):** per-segment tags indicating **active channel** vs **floodplain-only**, so hydrology overlays know where to bind running water.
+
+#### 3.8.7: Jersey Canyons (Confined Incision)
+
+**Purpose:** **Morphology-first** stamps for **confined** terrain: **slots**, **narrows**, **gorge walls**, and **vertical relief** along a **spine** (dry or wet). This is **hydrology-adjacent**—many canyons host **ephemeral or perennial** channels—but Jersey treats **canyons** as their own product line so tooling emphasizes **wall height**, **confinement ratio**, **bench** shelves, and **overhang** risk rather than only **water-surface** targets.
+
+**Variants:** **unchained** (single enclosed reach of incision) or **chained** segments (**upper slot**, **wider box canyon**, **exit ramp**) along one **centerline**, using [Section 3.7.3](#373-fractal-paths) endpoint discipline.
+
+**Semantics (recommended):** **wall** or **cliff** masks; **floor** vs **ledge** classification; optional **thalweg** or **dry-channel** spine for downstream **Pocket** or **Basin** water stamps to bind without re-deriving confinement from height alone.
+
+#### 3.8.8: Jersey Hydrology Complexes (Multi-Part Landforms)
+
+**Purpose:** **Packaged** stamp groups that describe a **single named geomorphic system** made of several interacting pieces—still **grounded in drainage logic**, but **not** sold as the same SKU as **Pocket Waters** or **Basin Waters** (those focus on **graph-like** lake–stream–pour-point networks). Examples: **alluvial fan head + incised distributaries + toe**; **sink–polje–resurgence**-style stepped flats; **plunge–pool + rapid ladder + glide pool** along one **macro reach**; **terrace stair** with **paired** cutbanks.
+
+**Authoring:** either a **macro footprint** or a **graph seed** drives child stamps arranged as a **chain** (sequential) or **DAG** (parallel), with a shared **complex ID**, so consumers see **one** logical feature.
+
+**Semantics (required):** **complex type** tag; **constituent** roles (fan apex, main stem, overflow sill, etc.); **reach** or **segment edges** where water could attach; optional **seasonal** routing hints.
+
+#### 3.8.9: Jersey Karst Pockets (Small Caves, Unchained)
+
+**Purpose:** **Localized** cavities: **sinkhole mouths**, short **alcoves**, or **rubble-choked** pockets. Implementation may be **SDF-local** (native 3D, [Section 2.1.3](#213-implicit-surfaces-marching-cubes-and-csg)) or a **height-oracle** dip plus **volumetric tag** when caves are represented lightly.
+
+**Semantics (recommended):** **cavity mask**, **entrance** curve or portal disk, **navigation** class (passable, crawl-only, hazard).
+
+#### 3.8.10: Jersey Cave Networks (Chained Caves)
+
+**Purpose:** **Chains** of **passage** stamps along a **3D spine** (mouth, slot, chamber, sump or daylight exit), analogous to hydrology chains but in **tunnel parameter** space. Reuses chain discipline from [Section 3.7](#37-stamp-chains): shared **tunnel graph ID**, deterministic **sub-stamp** keys ([Section 3.5](#35-stamp-generation)).
+
+**Semantics (recommended):** **branch nodes**, **air vs flooded** segments, **graph edges** for audio, lighting, and spawn zoning.
+
+#### 3.8.11: Jersey Rolling Ground (Unchained)
+
+**Purpose:** **Gentle** swell and swale on **valley floors**, **plateau interiors**, or **piedmont** surfaces without opening new primary drainages. Use **mid-frequency** fractal modulation chosen, so it **does not fight** larger valley or plateau stamps.
+
+**Semantics (optional):** **pasture / agriculture suitability** or generic **detail** mask for scatter rules.
 
 ## 4: Milestones
 
