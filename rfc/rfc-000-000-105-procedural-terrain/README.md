@@ -1,7 +1,5 @@
 # RFC-105: Procedural Terrain Generation
 
-## Table of contents
-
 - [1: Motivation](#1-motivation)
 - [2: Prior Art](#2-prior-art)
     - [2.1: Theory](#21-theory)
