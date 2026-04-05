@@ -42,9 +42,9 @@
         - [3.8.10: Jersey Cave Networks (Chained Caves)](#3810-jersey-cave-networks-chained-caves)
         - [3.8.11: Jersey Rolling Ground (Unchained)](#3811-jersey-rolling-ground-unchained)
 - [4: Milestones](#4-milestones)
-    - [4.1: Noise and stamping abstraction (suggestive)](#41-noise-and-stamping-abstraction-suggestive)
-    - [4.2: MVP BVH implementation (suggestive)](#42-mvp-bvh-implementation-suggestive)
-    - [4.3: Jersey stamp milestones](#43-jersey-stamp-milestones)
+    - [4.1: Alpha Noise and Stamping Abstraction API]()
+    - [4.2: Alpha BVH API]()
+    - [4.3: Jersey Stamp Milestones](#43-jersey-stamp-milestones)
         - [4.3.1: Milestone — Jersey Valley Basins (Unchained)](#431-milestone--jersey-valley-basins-unchained)
         - [4.3.2: Milestone — Jersey Plateau Caps (Unchained)](#432-milestone--jersey-plateau-caps-unchained)
         - [4.3.3: Milestone — Jersey Rugged Massifs (Unchained)](#433-milestone--jersey-rugged-massifs-unchained)
@@ -56,13 +56,13 @@
         - [4.3.9: Milestone — Jersey Karst Pockets (Small Caves, Unchained)](#439-milestone--jersey-karst-pockets-small-caves-unchained)
         - [4.3.10: Milestone — Jersey Cave Networks (Chained Caves)](#4310-milestone--jersey-cave-networks-chained-caves)
         - [4.3.11: Milestone — Jersey Rolling Ground (Unchained)](#4311-milestone--jersey-rolling-ground-unchained)
-    - [4.4: Full BVH and streaming (suggestive)](#44-full-bvh-and-streaming-suggestive)
+    - [4.4: Full BVH and Streaming Spec]()
 
 ## 1: Motivation
 
 Maybraid aims for large, lightly authored worlds. Terrain must stay globally consistent under streaming and level-of-detail (LOD): the same horizontal coordinates should yield the same elevation (and compatible macro shape) whenever a chunk loads or a coarser ring replaces a finer one.
 
-We treat terrain as a noise base accessed through one height oracle, then deformed by stamps--(1) fractal stamping where landforms must correlate across many samples (valleys, ranges, hydrology) and (2) cellular stamping where per-cell independence is enough (scatter, small relief). Stamp semantics expose non-geometric facts to gameplay and simulation; stamp chains order stamp types along a shared spine (again with rivers and reaches as the lead example). [Section 2](#2-prior-art) surveys theory and engine practice against that vocabulary; [Section 3](#3-design) says how Maybraid should implement the stack. Open context: [maybraid#55 — Procedural terrain generation proposal](https://github.com/ramate-io/maybraid/issues/55).
+We treat terrain as a noise base accessed through one height oracle, then deformed by stamps--(1) fractal stamping where landforms must correlate across many samples (valleys, ranges, hydrology) and (2) cellular stamping where per-cell independence is enough (scatter, small relief). Stamp semantics expose non-geometric facts to gameplay and simulation; stamp graphs relate stamps along a shared spine or hydrology graph (again with rivers and reaches as the lead example). [Section 2](#2-prior-art) surveys theory and engine practice against that vocabulary; [Section 3](#3-design) says how Maybraid should implement the stack. Open context: [maybraid#55 — Procedural terrain generation proposal](https://github.com/ramate-io/maybraid/issues/55).
 
 ## 2: Prior Art
 
@@ -72,7 +72,7 @@ What follows maps textbook methods and commercial patterns onto the same terms a
 
 Elsewhere in games and tooling it is normal to start from cheap continuous noise (gradient noise in the Perlin tradition, or fBm) for a broad base, then stack streamable, deterministic passes for specific needs: river carves, road or trail grades, biome masks, hero landmarks, or Houdini-style exports keyed to tiles. Those passes behave like our stamps: local footprints, parameters tied to world or chunk coordinates, and a need to compose cleanly when neighbors stream in. Not every pipeline uses the word “stamp,” but the noise-then-targeted-features pattern is common.
 
-Spatial indexing, lazy structures, and BVH-shaped cells. Large outdoor worlds pair procedural tiles with spatial acceleration—bounding-volume hierarchies, uniform grids, quad trees, or clipmap rings—so culling and generation scale with what is visible rather than with the entire world. Macro regions (chunk bounds, stamp influence volumes, hydrology skeletons) are often stored or derived as hierarchical cells; that is the same family of ideas as the BVH milestones in [Section 4.2](#42-mvp-bvh-implementation-suggestive) and [Section 4.4](#44-full-bvh-and-streaming-suggestive), even when the exact tree format is engine-specific.
+Spatial indexing, lazy structures, and BVH-shaped cells. Large outdoor worlds pair procedural tiles with spatial acceleration—bounding-volume hierarchies, uniform grids, quad trees, or clipmap rings—so culling and generation scale with what is visible rather than with the entire world. Macro regions (chunk bounds, stamp influence volumes, hydrology skeletons) are often stored or derived as hierarchical cells; that is the same family of ideas as the BVH milestones in [Section 4.2](#42-mvp-bvh-implementation-suggestive) and [Section 4.4](), even when the exact tree format is engine-specific.
 
 Industry and research pipelines also use those hierarchies to gate expensive procedural structure: nothing pays for a full hydrology solve or hero landmark until a query or volume intersects the node that owns it. For example, coarse world cells can be chosen (deterministically from seed) to contain or omit a “river complex”; only when the player’s bounds or a streamed chunk intersects such a cell does the pipeline instantiate a denser graph—tributaries, pour points, reach IDs—over smaller sub-cells. Unreal-style world partition, planet-scale quad trees, and many open-world streaming designs follow the same pattern: coarse bounds first, then deferred refinement. In Maybraid, macro-stamps and stamp chains ([Section 3.7](#37-stamp-graphs)) target that lazy, intersection-driven workflow, not evaluating every structure everywhere every frame.
 
@@ -122,7 +122,7 @@ In Maybraid, vegetation and detail layers already sit beside macro terrain in ou
 
 [Geometry clipmaps](https://en.wikipedia.org/wiki/Clipmap) (Losasso & Hoppe, [author project page](https://hhoppe.com/proj/geomclipmap/) and [paper PDF](https://hhoppe.com/geomclipmap.pdf)) use nested regular grids centered on the camera, so high resolution sits near the player and coarser rings fill the horizon, with streaming and stitching rules that avoid cracks.
 
-In production, those tiles or rings are almost always scheduled through a spatial index—commonly a BVH or quad tree over chunk axis-aligned bounding boxes—so culling and terrain jobs scale with visibility rather than world diameter (same family of ideas as in [Section 2.1](#21-theory) and [Section 4.4](#44-full-bvh-and-streaming-suggestive)).
+In production, those tiles or rings are almost always scheduled through a spatial index—commonly a BVH or quad tree over chunk axis-aligned bounding boxes—so culling and terrain jobs scale with visibility rather than world diameter (same family of ideas as in [Section 2.1](#21-theory) and [Section 4.4]()).
 
 In procedurally generated games, clipmaps and close cousins (chunked heightfields, CDLOD, planet quad trees) are how open-world and flight titles keep frame cost bounded while the world is infinite or huge. Generation runs per chunk or per ring, keyed by world coordinates and LOD level.
 
@@ -168,7 +168,7 @@ LOD/chunk scheduling is [`util/chunk/src/cascade.rs`](../../util/chunk/src/casca
 
 ## 3: Design
 
-This section specifies how Maybraid should assemble procedural terrain going forward: contracts between a noise base, stamps, stamp semantics, and chains. Nothing here asserts that a given subsystem already exists or matches exploratory code in [Section 2.3](#23-in-maybraid-already); implementers should treat this as the target architecture and migrate toward it. It does not mandate crate layout.
+This section specifies how Maybraid should assemble procedural terrain going forward: contracts between a noise base, stamps, stamp semantics, and stamp graphs. Nothing here asserts that a given subsystem already exists or matches exploratory code in [Section 2.3](#23-in-maybraid-already); implementers should treat this as the target architecture and migrate toward it. It does not mandate crate layout.
 
 ### 3.1: Core Concepts
 
@@ -270,7 +270,9 @@ The tradeoff is explicit state: you must record the current committed phase (whi
 
 ### 3.8: Jersey Stamps
 
-Jersey is the working name for the first curated bundle of terrain stamp families aimed at demos and vertical slices. Names below are product-facing groupings; one family may compile to several internal stamp types. Together they exercise fractal and chained patterns from [Sections 3.4](#34-fractal-stamping)–[3.7](#37-stamp-graphs), plus localized volume work where the stack embeds terrain in a 3D signed-distance field (see exploratory wiring in [Section 2.3](#23-in-maybraid-already)). Hydrology-aware work appears both as lake-and-stream chains (Jersey Pocket Waters, Jersey Basin Waters) and as separate Jersey lines for canyons and hydrology-related landform complexes, so authoring and docs stay simple even when the underlying math overlaps.
+Jersey is the working name for the first curated bundle of terrain stamp families aimed at demos and vertical slices. Names below are product-facing groupings; one family may compile to several internal stamp types. Together they stress-test [fractal stamping](#34-fractal-stamping)—noise-driven correlation across procedural boundaries, recursive parent-to-child stamps, and multiscale reuse of the same noise family—and [stamp graphs](#37-stamp-graphs), where hydrology and tunnels are built as related stamps with shared graph identity, higher-order boundary agreements across streamed cells, and directional-bias machinery when a reach needs a preferred bearing. Volume-local work follows the same 3D signed-distance embedding described in [Section 2.3](#23-in-maybraid-already).
+
+Hydrology-heavy lines (Jersey Pocket Waters, Jersey Basin Waters, Jersey Valley Trains, Jersey Hydrology Complexes) are the primary graph-shaped SKUs; Jersey Canyons and the karst or cave families are separate product lines—morphology-first incision or tunnel parameter space—even when the underlying math touches water or graphs. Where gameplay or simulation consumes terrain, Jersey stamps should publish the structured fields called for in [Section 3.6](#36-stamp-semantics) and stay deterministic under streaming and LOD as in [Section 3.5](#35-stamp-generation).
 
 Look and layering: every Jersey family is meant to run on top of the noise base ([Section 3.2](#32-noise-base)), not on a flat synthetic plane. Stamps should lean on noise for placement, strength, footprint warp, and micro-breakup ([Section 3.4](#34-fractal-stamping), [Section 3.5](#35-stamp-generation)), so the result stays rough and natural-looking—strong landforms read clearly, but they still inherit the fractal grain of the base instead of looking like smooth CAD inserts.
 
@@ -438,10 +440,14 @@ Spec: [Section 3.8.11](#3811-jersey-rolling-ground-unchained).
 
 Done when: mid-frequency swell and swale that does not overpower valley or plateau stamps; optional pasture / agriculture suitability or generic detail mask.
 
-### 4.4: Full BVH and streaming (suggestive)
+### 4.4: Revised BVH and Streaming Spec
 
 - Shared hierarchy: culling and terrain generation consume the same BVH (or strictly synchronized mirrors), so invisible regions do not schedule expensive stamp work.
 - Streaming correctness: chunk load / unload does not change deterministic height or semantic IDs for regions that remain loaded; document handshake between macro-stamps and fine local passes when new neighbors appear.
 - Multi-resolution BVH: coarse-to-fine nodes aligned with LOD rings or clipmap-style bands; semantic IDs stable from coarse to fine.
 - Scale stress: targets for node count, refit cost, and worst-case depth on discovery-scale worlds (numbers left to engine RFCs).
 - Failure modes: defined behavior when planner data arrives late (fallback height, degraded semantics, or explicit “not ready” query), without silent graph corruption.
+
+### 4.5: Spec Spine Stamps API
+
+A generalized API for building spine stamps. 
