@@ -42,21 +42,26 @@
         - [3.8.10: Jersey Cave Networks (Chained Caves)](#3810-jersey-cave-networks-chained-caves)
         - [3.8.11: Jersey Rolling Ground (Unchained)](#3811-jersey-rolling-ground-unchained)
 - [4: Milestones](#4-milestones)
-    - [4.1: Alpha Noise and Stamping Abstraction API]()
-    - [4.2: Alpha BVH API]()
-    - [4.3: Jersey Stamp Milestones](#43-jersey-stamp-milestones)
-        - [4.3.1: Milestone — Jersey Valley Basins (Unchained)](#431-milestone--jersey-valley-basins-unchained)
-        - [4.3.2: Milestone — Jersey Plateau Caps (Unchained)](#432-milestone--jersey-plateau-caps-unchained)
-        - [4.3.3: Milestone — Jersey Rugged Massifs (Unchained)](#433-milestone--jersey-rugged-massifs-unchained)
-        - [4.3.4: Milestone — Jersey Pocket Waters (Small Hydrology Chains)](#434-milestone--jersey-pocket-waters-small-hydrology-chains)
-        - [4.3.5: Milestone — Jersey Basin Waters (Large Hydrology Chains)](#435-milestone--jersey-basin-waters-large-hydrology-chains)
-        - [4.3.6: Milestone — Jersey Valley Trains (Chained Valleys)](#436-milestone--jersey-valley-trains-chained-valleys)
-        - [4.3.7: Milestone — Jersey Canyons (Confined Incision)](#437-milestone--jersey-canyons-confined-incision)
-        - [4.3.8: Milestone — Jersey Hydrology Complexes (Multi-Part Landforms)](#438-milestone--jersey-hydrology-complexes-multi-part-landforms)
-        - [4.3.9: Milestone — Jersey Karst Pockets (Small Caves, Unchained)](#439-milestone--jersey-karst-pockets-small-caves-unchained)
-        - [4.3.10: Milestone — Jersey Cave Networks (Chained Caves)](#4310-milestone--jersey-cave-networks-chained-caves)
-        - [4.3.11: Milestone — Jersey Rolling Ground (Unchained)](#4311-milestone--jersey-rolling-ground-unchained)
-    - [4.4: Full BVH and Streaming Spec]()
+    - [4.1: Alpha noise and stamping abstraction spec](#41-alpha-noise-and-stamping-abstraction-spec)
+    - [4.2: Alpha noise and stamping API](#42-alpha-noise-and-stamping-api)
+    - [4.3: Alpha BVH spec](#43-alpha-bvh-spec)
+    - [4.4: Alpha BVH API](#44-alpha-bvh-api)
+    - [4.5: Jersey stamp milestones](#45-jersey-stamp-milestones)
+        - [4.5.1: Milestone — Jersey Valley Basins (Unchained)](#451-milestone--jersey-valley-basins-unchained)
+        - [4.5.2: Milestone — Jersey Plateau Caps (Unchained)](#452-milestone--jersey-plateau-caps-unchained)
+        - [4.5.3: Milestone — Jersey Rugged Massifs (Unchained)](#453-milestone--jersey-rugged-massifs-unchained)
+        - [4.5.4: Milestone — Jersey Pocket Waters (Small Hydrology Chains)](#454-milestone--jersey-pocket-waters-small-hydrology-chains)
+        - [4.5.5: Milestone — Jersey Basin Waters (Large Hydrology Chains)](#455-milestone--jersey-basin-waters-large-hydrology-chains)
+        - [4.5.6: Milestone — Jersey Valley Trains (Chained Valleys)](#456-milestone--jersey-valley-trains-chained-valleys)
+        - [4.5.7: Milestone — Jersey Canyons (Confined Incision)](#457-milestone--jersey-canyons-confined-incision)
+        - [4.5.8: Milestone — Jersey Hydrology Complexes (Multi-Part Landforms)](#458-milestone--jersey-hydrology-complexes-multi-part-landforms)
+        - [4.5.9: Milestone — Jersey Karst Pockets (Small Caves, Unchained)](#459-milestone--jersey-karst-pockets-small-caves-unchained)
+        - [4.5.10: Milestone — Jersey Cave Networks (Chained Caves)](#4510-milestone--jersey-cave-networks-chained-caves)
+        - [4.5.11: Milestone — Jersey Rolling Ground (Unchained)](#4511-milestone--jersey-rolling-ground-unchained)
+    - [4.6: Revised BVH and streaming spec](#46-revised-bvh-and-streaming-spec)
+    - [4.7: Revised noise and stamping abstraction spec](#47-revised-noise-and-stamping-abstraction-spec)
+    - [4.8: Revised BVH API](#48-revised-bvh-api)
+    - [4.9: Revised noise and stamping API](#49-revised-noise-and-stamping-api)
 
 ## 1: Motivation
 
@@ -66,15 +71,15 @@ We treat terrain as a noise base accessed through one height oracle, then deform
 
 ## 2: Prior Art
 
-What follows maps textbook methods and commercial patterns onto the same terms as [Section 1](#1-motivation): noise base, height oracle, stamps (fractal vs cellular), stamp semantics, stamp chains, deterministic evaluation, streaming, and LOD. Paragraphs that describe how Maybraid fits each topic are written in ordinary prose below; they are judgments about the target stack, not claims that the engine already implements it end to end.
+What follows maps textbook methods and commercial patterns onto the same terms as [Section 1](#1-motivation): noise base, height oracle, stamps (fractal vs cellular), stamp semantics, stamp graphs, deterministic evaluation, streaming, and LOD. Paragraphs that describe how Maybraid fits each topic are written in ordinary prose below; they are judgments about the target stack, not claims that the engine already implements it end to end.
 
 ### 2.1: Theory
 
 Elsewhere in games and tooling it is normal to start from cheap continuous noise (gradient noise in the Perlin tradition, or fBm) for a broad base, then stack streamable, deterministic passes for specific needs: river carves, road or trail grades, biome masks, hero landmarks, or Houdini-style exports keyed to tiles. Those passes behave like our stamps: local footprints, parameters tied to world or chunk coordinates, and a need to compose cleanly when neighbors stream in. Not every pipeline uses the word “stamp,” but the noise-then-targeted-features pattern is common.
 
-Spatial indexing, lazy structures, and BVH-shaped cells. Large outdoor worlds pair procedural tiles with spatial acceleration—bounding-volume hierarchies, uniform grids, quad trees, or clipmap rings—so culling and generation scale with what is visible rather than with the entire world. Macro regions (chunk bounds, stamp influence volumes, hydrology skeletons) are often stored or derived as hierarchical cells; that is the same family of ideas as the BVH milestones in [Section 4.2](#42-mvp-bvh-implementation-suggestive) and [Section 4.4](), even when the exact tree format is engine-specific.
+Spatial indexing, lazy structures, and BVH-shaped cells. Large outdoor worlds pair procedural tiles with spatial acceleration—bounding-volume hierarchies, uniform grids, quad trees, or clipmap rings—so culling and generation scale with what is visible rather than with the entire world. Macro regions (chunk bounds, stamp influence volumes, hydrology skeletons) are often stored or derived as hierarchical cells; that is the same family of ideas as the BVH milestones in [Section 4.3](#43-alpha-bvh-spec) (alpha spec) and [Section 4.6](#46-revised-bvh-and-streaming-spec) (revised spec), even when the exact tree format is engine-specific.
 
-Industry and research pipelines also use those hierarchies to gate expensive procedural structure: nothing pays for a full hydrology solve or hero landmark until a query or volume intersects the node that owns it. For example, coarse world cells can be chosen (deterministically from seed) to contain or omit a “river complex”; only when the player’s bounds or a streamed chunk intersects such a cell does the pipeline instantiate a denser graph—tributaries, pour points, reach IDs—over smaller sub-cells. Unreal-style world partition, planet-scale quad trees, and many open-world streaming designs follow the same pattern: coarse bounds first, then deferred refinement. In Maybraid, macro-stamps and stamp chains ([Section 3.7](#37-stamp-graphs)) target that lazy, intersection-driven workflow, not evaluating every structure everywhere every frame.
+Industry and research pipelines also use those hierarchies to gate expensive procedural structure: nothing pays for a full hydrology solve or hero landmark until a query or volume intersects the node that owns it. For example, coarse world cells can be chosen (deterministically from seed) to contain or omit a “river complex”; only when the player’s bounds or a streamed chunk intersects such a cell does the pipeline instantiate a denser graph—tributaries, pour points, reach IDs—over smaller sub-cells. Unreal-style world partition, planet-scale quad trees, and many open-world streaming designs follow the same pattern: coarse bounds first, then deferred refinement. In Maybraid, macro-stamps and stamp graphs ([Section 3.7](#37-stamp-graphs)) target that lazy, intersection-driven workflow, not evaluating every structure everywhere every frame.
 
 #### 2.1.1: Gradient noise (Perlin and relatives)
 
@@ -122,7 +127,7 @@ In Maybraid, vegetation and detail layers already sit beside macro terrain in ou
 
 [Geometry clipmaps](https://en.wikipedia.org/wiki/Clipmap) (Losasso & Hoppe, [author project page](https://hhoppe.com/proj/geomclipmap/) and [paper PDF](https://hhoppe.com/geomclipmap.pdf)) use nested regular grids centered on the camera, so high resolution sits near the player and coarser rings fill the horizon, with streaming and stitching rules that avoid cracks.
 
-In production, those tiles or rings are almost always scheduled through a spatial index—commonly a BVH or quad tree over chunk axis-aligned bounding boxes—so culling and terrain jobs scale with visibility rather than world diameter (same family of ideas as in [Section 2.1](#21-theory) and [Section 4.4]()).
+In production, those tiles or rings are almost always scheduled through a spatial index—commonly a BVH or quad tree over chunk axis-aligned bounding boxes—so culling and terrain jobs scale with visibility rather than world diameter (same family of ideas as in [Section 2.1](#21-theory) and [Section 4.6](#46-revised-bvh-and-streaming-spec)).
 
 In procedurally generated games, clipmaps and close cousins (chunked heightfields, CDLOD, planet quad trees) are how open-world and flight titles keep frame cost bounded while the world is infinite or huge. Generation runs per chunk or per ring, keyed by world coordinates and LOD level.
 
@@ -350,9 +355,11 @@ Semantics (optional): pasture / agriculture suitability or generic detail mask f
 
 ## 4: Milestones
 
-Milestones below are planning hooks, not dated commitments. Except for [Section 4.3](#43-jersey-stamp-milestones), they are suggestive: this RFC does not lock engine layout, crate boundaries, or BVH APIs—teams should adapt wording to whatever design documents and codebases they adopt.
+Milestones below are planning hooks, not dated commitments. This RFC separates spec milestones (what contracts and documents must say) from API milestones (what ships in code), for both the alpha cut and a later revised cut. Except for [Section 4.5](#45-jersey-stamp-milestones), wording is suggestive: engine layout, crate boundaries, and exact APIs remain adaptable.
 
-### 4.1: Noise and stamping abstraction (suggestive)
+### 4.1: Alpha noise and stamping abstraction spec
+
+Document the target contracts from [Sections 3.1](#31-core-concepts)–[3.6](#36-stamp-semantics), so implementers can build against a single source of truth:
 
 - Height oracle contract: callable elevation (and optional derivatives) from `(x, z)` plus seed / LOD or chunk context, with tests that the same query is stable across reloads ([Section 3.1](#31-core-concepts), [Section 3.2](#32-noise-base)).
 - Noise base pipeline: documented build order (global base before stamps), fBm-style stack plus optional spectral shaping hooks, and a path to swap noise implementations without changing callers.
@@ -361,86 +368,98 @@ Milestones below are planning hooks, not dated commitments. Except for [Section 
 - Reproducibility: randomness keyed by an agreed tuple (e.g. seed, region, stamp ID, sub-stamp index) verified in streaming and replay scenarios ([Section 3.5](#35-stamp-generation)).
 - Semantics v0: stamps can attach queryable payloads (tags, masks, sparse graph edges); at least one hydrology-shaped example end-to-end ([Section 3.6](#36-stamp-semantics)).
 
-### 4.2: MVP BVH implementation (suggestive)
+### 4.2: Alpha noise and stamping API
+
+Done when: a concrete API surface (traits, types, or equivalent) implements [Section 4.1](#41-alpha-noise-and-stamping-abstraction-spec): callers can obtain oracle samples with documented LOD/chunk keys, run fractal and cellular placement into one evaluator, and read semantics payloads from at least one hydrology-shaped stamp. Automated tests cover reload stability and one streaming-style scenario; composition and tuple-keying rules from [Section 3.5](#35-stamp-generation) are enforced in code or asserted in tests.
+
+### 4.3: Alpha BVH spec
+
+Document the first spatial-index story for terrain and stamp macro work:
 
 - Spatial index v0: a bounding-volume hierarchy (or equivalent) over terrain chunks, stamp macro regions, or both, sufficient for frustum / distance rejection in a demo scene.
-- Single-writer rule: document how generation and culling agree on node bounds and versioning when terrain updates (even if updates are rare in the MVP).
-- Coarse LOD linkage: MVP may use one or two discrete LODs; milestones should still record which oracle parameters change per level, so Jersey stamps can be tested against pop and shift behavior.
-- Debug visibility: draw or log BVH nodes (optional overlay) to validate hierarchy depth and overlap against stamp footprints.
+- Single-writer rule: how generation and culling agree on node bounds and versioning when terrain updates (even if updates are rare in the MVP).
+- Coarse LOD linkage: MVP may use one or two discrete LODs; the spec records which oracle parameters change per level, so Jersey stamps can be tested against pop and shift behavior.
+- Debug visibility: optional overlay or logging format for BVH nodes to validate hierarchy depth and overlap against stamp footprints.
 
-### 4.3: Jersey stamp milestones
+### 4.4: Alpha BVH API
 
-Each milestone below maps to one Jersey family in [Section 3.8](#38-jersey-stamps). “Done when” means: behavior matches that family’s Purpose and Semantics bullets, respects Look and layering (noise-on-base), and stays deterministic under [Section 4.1](#41-noise-and-stamping-abstraction-suggestive).
+Done when: the engine path used by a demo performs frustum/distance queries against the structure described in [Section 4.3](#43-alpha-bvh-spec), with the single-writer/versioning story exercised (even minimally). Optional debug draw or logging matches the spec. Integration points with chunk scheduling or terrain jobs are documented so [Section 4.2](#42-alpha-noise-and-stamping-api) and Jersey work can depend on them.
 
-Suggested sequencing: 4.3.1–4.3.3 and 4.3.11 can land early. 4.3.4–4.3.8 need chain + semantics maturity. 4.3.9–4.3.10 need the chosen SDF / volume path.
+### 4.5: Jersey stamp milestones
 
-#### 4.3.1: Milestone — Jersey Valley Basins (Unchained)
+Each milestone below maps to one Jersey family in [Section 3.8](#38-jersey-stamps). “Done when” means: behavior matches that family’s Purpose and Semantics bullets, respects Look and layering (noise-on-base), and stays deterministic under the alpha contracts ([Section 4.1](#41-alpha-noise-and-stamping-abstraction-spec), [Section 4.2](#42-alpha-noise-and-stamping-api)).
+
+Suggested sequencing: 4.5.1–4.5.3 and 4.5.11 can land early. 4.5.4–4.5.8 need stamp-graph and semantics maturity ([Section 3.7](#37-stamp-graphs)). 4.5.9–4.5.10 need the chosen SDF / volume path.
+
+#### 4.5.1: Milestone — Jersey Valley Basins (Unchained)
 
 Spec: [Section 3.8.1](#381-jersey-valley-basins-unchained).
 
 Done when: fractal-driven valley depression with parameterized cross-section, width, axis, and bank falloff; bank (and optional arroyo vs spillway-ready) semantics; thalweg stable across LOD reloads.
 
-#### 4.3.2: Milestone — Jersey Plateau Caps (Unchained)
+#### 4.5.2: Milestone — Jersey Plateau Caps (Unchained)
 
 Spec: [Section 3.8.2](#382-jersey-plateau-caps-unchained).
 
 Done when: tableland interior with rim escarpment and controlled corners; noise-warped, blob, or polygon footprints; surface class semantic for materials or props.
 
-#### 4.3.3: Milestone — Jersey Rugged Massifs (Unchained)
+#### 4.5.3: Milestone — Jersey Rugged Massifs (Unchained)
 
 Spec: [Section 3.8.3](#383-jersey-rugged-massifs-unchained).
 
 Done when: ridged / cliff-banded high terrain consistent with [Section 3.4](#34-fractal-stamping) ridge-style noise; stacks sensibly after coarse envelopes; optional exposure or rockiness mask.
 
-#### 4.3.4: Milestone — Jersey Pocket Waters (Small Hydrology Chains)
+#### 4.5.4: Milestone — Jersey Pocket Waters (Small Hydrology Chains)
 
 Spec: [Section 3.8.4](#384-jersey-pocket-waters-small-hydrology-chains).
 
 Done when: chain of small hydrology stamps (pond or tarn, outlet, short run, termination) sharing one drainage ID; water-surface targets where needed; reach graph, flow direction, bank or littoral masks per §3.8.4.
 
-#### 4.3.5: Milestone — Jersey Basin Waters (Large Hydrology Chains)
+#### 4.5.5: Milestone — Jersey Basin Waters (Large Hydrology Chains)
 
 Spec: [Section 3.8.5](#385-jersey-basin-waters-large-hydrology-chains).
 
 Done when: macro lake or reservoir body with branched outlets and tributary or confluence nodes driven from a coarse drainage graph; reach IDs, junction records, and pour-point targets stable as chunks stream.
 
-#### 4.3.6: Milestone — Jersey Valley Trains (Chained Valleys)
+#### 4.5.6: Milestone — Jersey Valley Trains (Chained Valleys)
 
 Spec: [Section 3.8.6](#386-jersey-valley-trains-chained-valleys).
 
 Done when: ordered valley stamps on one horizontal spine with endpoint heights from macro planner or oracle; per-segment active channel vs floodplain-only tags for hydrology overlays.
 
-#### 4.3.7: Milestone — Jersey Canyons (Confined Incision)
+#### 4.5.7: Milestone — Jersey Canyons (Confined Incision)
 
 Spec: [Section 3.8.7](#387-jersey-canyons-confined-incision).
 
 Done when: confined incision (unchained or chained gorge segments) with wall height and confinement tooling; wall / cliff, floor / ledge semantics; optional thalweg or dry-channel spine for binding Pocket or Basin water later.
 
-#### 4.3.8: Milestone — Jersey Hydrology Complexes (Multi-Part Landforms)
+#### 4.5.8: Milestone — Jersey Hydrology Complexes (Multi-Part Landforms)
 
 Spec: [Section 3.8.8](#388-jersey-hydrology-complexes-multi-part-landforms).
 
 Done when: multipart stamp group under one complex ID; chain or DAG child arrangement; complex type, constituent roles, and reach or segment edges; optional seasonal routing hints per §3.8.8.
 
-#### 4.3.9: Milestone — Jersey Karst Pockets (Small Caves, Unchained)
+#### 4.5.9: Milestone — Jersey Karst Pockets (Small Caves, Unchained)
 
 Spec: [Section 3.8.9](#389-jersey-karst-pockets-small-caves-unchained).
 
 Done when: localized cavity or sink entrance via SDF-local carve and/or height-oracle dip plus volumetric tag; cavity mask, entrance geometry, navigation class semantic.
 
-#### 4.3.10: Milestone — Jersey Cave Networks (Chained Caves)
+#### 4.5.10: Milestone — Jersey Cave Networks (Chained Caves)
 
 Spec: [Section 3.8.10](#3810-jersey-cave-networks-chained-caves).
 
 Done when: chained passage stamps on a 3D spine with shared tunnel graph ID; branch, air vs flooded, and graph edge semantics for downstream systems ([Section 3.5](#35-stamp-generation) sub-stamp keys).
 
-#### 4.3.11: Milestone — Jersey Rolling Ground (Unchained)
+#### 4.5.11: Milestone — Jersey Rolling Ground (Unchained)
 
 Spec: [Section 3.8.11](#3811-jersey-rolling-ground-unchained).
 
 Done when: mid-frequency swell and swale that does not overpower valley or plateau stamps; optional pasture / agriculture suitability or generic detail mask.
 
-### 4.4: Revised BVH and Streaming Spec
+### 4.6: Revised BVH and streaming spec
+
+Update the BVH/streaming document to match production-scale goals and coarse-to-fine stamp graph discipline ([Section 3.7](#37-stamp-graphs), especially higher-order boundary agreements):
 
 - Shared hierarchy: culling and terrain generation consume the same BVH (or strictly synchronized mirrors), so invisible regions do not schedule expensive stamp work.
 - Streaming correctness: chunk load / unload does not change deterministic height or semantic IDs for regions that remain loaded; document handshake between macro-stamps and fine local passes when new neighbors appear.
@@ -448,6 +467,19 @@ Done when: mid-frequency swell and swale that does not overpower valley or plate
 - Scale stress: targets for node count, refit cost, and worst-case depth on discovery-scale worlds (numbers left to engine RFCs).
 - Failure modes: defined behavior when planner data arrives late (fallback height, degraded semantics, or explicit “not ready” query), without silent graph corruption.
 
-### 4.5: Spec Spine Stamps API
+### 4.7: Revised noise and stamping abstraction spec
 
-A generalized API for building spine stamps. 
+Revise the noise/stamp specification using field experience from alpha and alignment with [Section 4.6](#46-revised-bvh-and-streaming-spec):
+
+- Oracle and stamp evaluation are keyed consistently with BVH LOD bands and chunk cascade parameters; document which queries are valid before macro graph data is resident.
+- Stamp graphs ([Section 3.7](#37-stamp-graphs)): boundary agreements, directional bias, and hysteresis rules appear in the spec where they affect determinism or query contracts—not only in narrative sections.
+- Intersection-gated refinement: macro regions and hydrology skeletons define when fine graphs may be instantiated; lazy evaluation semantics match [Section 2.1](#21-theory) prior-art discussion.
+- Migration notes from [Section 4.1](#41-alpha-noise-and-stamping-abstraction-spec): deprecated assumptions, new required semantics fields, and compatibility guarantees for saved seeds or replays.
+
+### 4.8: Revised BVH API
+
+Done when: the implementation matches [Section 4.6](#46-revised-bvh-and-streaming-spec): multi-resolution tree (or equivalent) refits within agreed budgets, culling and terrain generation share one hierarchy or a provably synchronized pair, and stress targets are measurable. Release notes describe behavioral changes relative to [Section 4.4](#44-alpha-bvh-api).
+
+### 4.9: Revised noise and stamping API
+
+Done when: public surfaces match [Section 4.7](#47-revised-noise-and-stamping-abstraction-spec), including graph and semantics hooks needed for revised BVH scheduling. Migration guidance ships for consumers of the alpha API ([Section 4.2](#42-alpha-noise-and-stamping-api)); batching or job interfaces align with how the revised BVH drives work, without breaking deterministic replay unless explicitly versioned.
