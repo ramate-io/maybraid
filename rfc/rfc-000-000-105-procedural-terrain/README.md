@@ -225,7 +225,7 @@ Keep geometry deltas and semantic records in the same evaluation pass but separa
 
 A common object is to relate adjacent stamps. For example, we might want to create a hydrology complex with a reliable downhill gradient from sources to sinks. 
 
-[Fractal Stamping](#34-fractal-stamping) gets of most of the way there. We can sample noise to tell us there should be a hydrology complex over a large region running from a given elevation to another. We can apply this recursively to break the hydrology elevation requirements over piece-wise cells. Then, we can break these cells into complete graphs and finally generate the elevation requirements for various features along the graphs. 
+[Fractal Stamping](#34-fractal-stamping) gets most of the way there. We can sample noise to tell us there should be a hydrology complex over a large region running from a given elevation to another. We can apply this recursively to break the hydrology elevation requirements over piece-wise cells. Then, we can break these cells into complete graphs and finally generate the elevation requirements for various features along the graphs. 
 
 At a high-level, the [Fractal Stamping](#34-fractal-stamping) framework gives us the tools to build these complexes. However, often, we will need to use cleverer patterns--as described in this section--to accomplish the intended chain. 
 
@@ -254,15 +254,19 @@ Scalar Projective Fields are useful when you want to describe complex objects wi
 
 ##### 3.7.2.2: Vector Fields
 
-Vector fields are good for both pathfinding and complex geometry, though for the latter they are less directly interpretable than [Scalar Project Fields](#3721-scalar-projective-fields). 
+Vector fields are good for both pathfinding and complex geometry, though for the latter they are less directly interpretable than [Scalar Projective Fields](#3721-scalar-projective-fields). 
 
 When pathfinding, given a starting point in a vector field, one can simply trace the vectors through to an end point.
 
-When building complex geometry, one can either build cells that take sampled vectors as inputs or take some norm of the vectors and use an approach similar to [Scalar Project Fields](#3721-scalar-projective-fields).
+When building complex geometry, one can either build cells that take sampled vectors as inputs or take some norm of the vectors and use an approach similar to [Scalar Projective Fields](#3721-scalar-projective-fields).
 
 ##### 3.7.2.3: Hysteresis 
 
-Hysteresis is particularly good for pathfinding procedures...
+Hysteresis is particularly good for pathfinding and graph-growth procedures when the underlying field is noisy or when evidence arrives piecemeal as chunks stream in. Instead of flipping a decision the moment a scalar crosses one cut, you separate an *enter* threshold from an *exit* threshold (or an equivalent lag): the trace “commits” to a corridor, branch, or flow direction until the field pushes far enough past the second boundary to justify a change. That behavior matches hydrology-shaped Stamp Graphs—a reach or thalweg should not renegotiate its identity every time a neighbor cell loads or a new sample nudges a cost slightly.
+
+It pairs naturally with [vector fields](#3722-vector-fields): once integration has progressed far enough along a biased direction, you can tighten or loosen the cone of acceptable tangents so small perpendicular components do not tear the path apart. It also sits beside [Higher-order Boundary Agreements](#371-higher-order-boundary-agreements): at a shared face between cells, you can require a sustained mismatch before reopening junction heights or graph edges, rather than reacting to the first disagreeing sample—reducing oscillation without giving up the ability to correct real errors when the macro model updates.
+
+The tradeoff is explicit state: you must record the current committed phase (which edge set, which branch, which “locked” boundary values) and document deterministic rules for when new data may override it, consistent with [Section 3.5](#35-stamp-generation). Without clear release conditions, hysteresis can mask bugs—paths that never unlock--so treat those conditions as part of the terrain contract, not a hidden implementation detail.
 
 ### 3.8: Jersey Stamps
 
