@@ -206,11 +206,11 @@ Allowing a stamp to spawn child stamps, e.g. main channel spawns bars, cutbanks,
 
 ### 3.5: Stamp Generation
 
-Stamps may jitter parameters, noise-distort footprints, or subdivide into children. Reproducibility: any randomness must be keyed by `(world_seed, cell_or_region_id, stamp_id, sub_stamp_index)` (or an equivalent tuple you document), so streaming, replay, and LOD all see the same geometry and the same semantic payloads (e.g. the same reach ID before and after a chunk boundary).
+As referenced above and expanded upon in [3.7.2: Fractal Neighborhood Stamps](#372-fractal-neighborhood-stamps-fns), stamps themselves should often be written to construct from a seed themselves. 
 
 ### 3.6: Stamp Semantics
 
-Goal: stamps that carve channels, lakeshores, or engineered grades should both move height and publish facts downstream systems need. Hydrology-first examples:
+Stamps that influence later world construction and interaction layers beyond terrain specification should be marked in their extents. For example, stamps that carve channels, lakeshores, or engineered grades should both move height and publish facts downstream systems need. Hydrology-first examples:
 
 - A riverbed stamp should be able to emit wet mask, thalweg polyline or raster spine, flow direction, and optional graph edges (“this reach continues to stamp instance *k*” or “confluence with reach *m*”).
 - A waterfall or grade break stamp should record drop height, overflow lip geometry, and upstream/downstream reach IDs, so audio, particles, and fish spawning do not re-derive topology from triangles.
@@ -220,11 +220,11 @@ Keep geometry deltas and semantic records in the same evaluation pass but separa
 
 ### 3.7: Stamp Chains
 
-Chains are ordered sequences of stamp types applied along a shared spatial or logical spine. Hydrology is the primary motivating pattern: e.g. meandering low-gradient bed, then falls or stepped rapids, then bedrock slot, then low-gradient bed again, all sharing one centerline or drainage ID. Non-hydrology chains (e.g. ridge line, saddle, ridge line) use the same machinery.
+Chains are ordered sequences of stamp types applied along a shared spatial or logical spine. Hydrology is the primary motivating pattern: e.g. meandering low-gradient bed, then falls or stepped rapids, then bedrock slot, then low-gradient bed again, all sharing one centerline or hydrology graph. Non-hydrology chains (e.g. ridge line, saddle, ridge line) use the same machinery.
 
 #### 3.7.1: Common Noise Chains
 
-Drive several stamp types from one low-dimensional field (one or a few noise images or 1D curves along arc length). Discrete: map value bands to types (pool, riffle, glide, fall) along a reach. Continuous: interpolate depth, width, or roughness along isolines of that field or along monotone distance-from-source. The field should be shared, so transitions do not reset unrelated random state at segment boundaries.
+To ensure spatial correlation of stamp chains, we can drive several stamp types from one low-dimensional field (one or a few noise images or 1D curves along arc length). In the discrete case, we can map value bands to different stamp types. In the continuous case, we can use the noise value as a semantically meaningful alteration of stamp construction, e.g., pitching a ridgeline.  The field should be shared, so transitions do not reset unrelated random state at segment boundaries.
 
 #### 3.7.2: Fractal Neighborhood Stamps (FNS)
 
