@@ -343,7 +343,12 @@
         "thresholding",
         "Voronoi-like",
         "Worley",
-        "Worley-style"
+        "Worley-style",
+        "Perlin-style",
+        "quadtree",
+        "AABBs",
+        "AABB",
+        "transvoxel"
       ]
     },
     "bibtex": {
