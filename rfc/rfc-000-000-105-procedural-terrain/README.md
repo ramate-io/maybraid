@@ -204,6 +204,8 @@ Below are example noise algorithms and stamp families they suit:
 
 Allowing a stamp to spawn child stamps, e.g. main channel spawns bars, cutbanks, and confluence pockets, introduces recursive structure mimicking the nature of fractal itself. Taken further, by reusing the same noise family at offset seeds or scales, we can accomplish a sampling of the original fractal noise that interprets finer sample decisions as finer game world structures. 
 
+![Fractal Stamping](./assets/fractal-stamping.png)
+
 ### 3.5: Stamp Generation
 
 As referenced above and expanded upon in [3.7.2: Fractal Neighborhood Stamps](#372-fractal-neighborhood-stamps-fns), stamps themselves should often be written to construct from a seed themselves. 
