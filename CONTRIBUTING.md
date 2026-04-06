@@ -125,17 +125,24 @@ Common external knowledge bases include:
     - Proposal issue would be closed with a corresponding spec.
 
 > [!TIP]
-> After `gh issue create`, **attach the release candidate as the parent** (sub-issue in the UI is not the same as a Markdown link) and add **`Ramate`**, **`Maybraid`** via Projects (new). `gh issue create -p …` often fails for org projects; use `gh project item-add` (needs `gh auth refresh -s project -s read:project`).
+> **Preferred:** use [`bin/publish-gh-issue.sh`](bin/publish-gh-issue.sh) with a small JSON manifest next to your Markdown body—see [`bin/publish-gh-issue.md`](bin/publish-gh-issue.md). That covers **`gh issue create`**, **sub-issue parent** (UI relationship—not the same as linking in the body), and **`Ramate` / `Maybraid` org projects** (defaults: project **2** and **17** on `ramate-io`). `gh issue create -p …` often fails for org projects; the script uses `gh project item-add` instead (needs `gh auth refresh -s project -s read:project`).
 >
 > ```bash
-> # 1) Create issue (title + body file; labels as needed)
-> gh issue create -R ramate-io/gwrdfa --title "…" --body-file body.md -l proposal -l priority:low
+> ./bin/publish-gh-issue.sh issues/your-scope/issue.json
+> ```
 >
-> # 2) Link new issue as sub-issue of the RC (parent = RC, child = new)
-> PARENT_NODE=$(gh api repos/ramate-io/maybraid/issues/<RC#> -q .node_id)
+> **Manual sequence** (same end state as the script):
+>
+> ```bash
+> # 1) Create issue (repo, title, body, labels—maybraid unless you override in JSON)
+> gh issue create -R ramate-io/maybraid --title '…' --body-file body.md -l feature -l priority:medium
+>
+> # 2) Link new issue as sub-issue of the parent (parent = RC or Jersey epic, child = new)
+> PARENT_NODE=$(gh api repos/ramate-io/maybraid/issues/<PARENT#> -q .node_id)
 > CHILD_NODE=$(gh api repos/ramate-io/maybraid/issues/<NEW#> -q .node_id)
 > gh api graphql -f query='mutation($i: ID!, $s: ID!) { addSubIssue(input: {issueId: $i, subIssueId: $s}) { issue { number } subIssue { number } } }' -f i="$PARENT_NODE" -f s="$CHILD_NODE"
 >
-> # 3) Add to each org project (numbers match the list under “All issues should tag…” above)
-> for n in 1 2 3 4; do gh project item-add "$n" --owner ramate-io --url https://github.com/ramate-io/maybraid/issues/<NEW#>; done
+> # 3) Org projects (numbers match “All issues should tag…” above: Ramate 2, Maybraid 17)
+> gh project item-add 2 --owner ramate-io --url https://github.com/ramate-io/maybraid/issues/<NEW#>
+> gh project item-add 17 --owner ramate-io --url https://github.com/ramate-io/maybraid/issues/<NEW#>
 > ```
