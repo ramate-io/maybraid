@@ -36,7 +36,7 @@ Paths are usually next to draft bodies under [`issues/`]()--which is not tracked
 ```json
 {
   "repo": "ramate-io/maybraid",
-  "title": "[RC][RFC-105] Implement 4.2 alpha noise and stamping API",
+  "title": "Implement 4.2 alpha noise and stamping API",
   "body_file": "body.md",
   "labels": ["feature", "priority:medium"],
   "parent": 72,
