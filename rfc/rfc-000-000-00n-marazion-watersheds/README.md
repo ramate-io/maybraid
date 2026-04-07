@@ -30,17 +30,50 @@ To ensure reliable rims, all construction rely on creating a plateau, then depre
 
 ##### 3.1.3.1: Lake
 
-1. Sample the noise to offset the centroid of the lake from the centroid of the cell. 
-2. Compute the elevation of the surface of the lake by adding some positive or negative noise generated value to the elevation of the current centroid. Compute the depth from the noise generated value.
-3. Then, compute the $\text{ pre-radius }$ of the lake by taking the distance from the offset centroid to the nearest boundary of the cell and subtract some $\mu$. 
-4. When sampling, the $\text{ radius } = \text{ pre-radius } - \text{ noise }$ will be treated noisily. Points will be allowed to fall inside. 
-5. Raise all points within the $\text{ radius }$ to the surface elevation **plus** some noise value. 
-6. Raise all points within the $\text{ radius } + \alpha * \text{ noise } * \mu$ where $\alpha, \text{ noise } \in [0, 1]$ to the surface elevation **plus or minus** some noise. 
-7. Depress all points within $\text{ radius } - \alpha * \text{ noise } * \mu$ by subtracting $\text{ dist to centroid } * \text{ noise } * \text{ depth }$ from the current elevation. 
+The **default** lake footprint is an **offset centroid** and a **noisy circular radius** inside the pocket water cell (steps 1–7). Elevation follows the usual plateau-then-depress rim recipe from the introduction to §3.1.3.
 
-In Rust pseudocode, the elevation modulation to the original SDF would look something like the following: 
+1. Sample noise to offset the lake **centroid** $(x_c, z_c)$ from the cell centroid. 
+2. Compute **lake surface** elevation at $(x_c, z_c)$: add a signed noise value to the terrain height there. Derive a **depth** scale from noise (same anchor as the rest of the cell).
+3. Compute **pre-radius:** distance from $(x_c, z_c)$ to the nearest point on the cell boundary, minus a margin $\mu$.
+4. At each sample, **radius** $=$ pre-radius minus a noisy term (keyed, so the disc stays inside the cell). Points with horizontal distance to $(x_c, z_c)$ below that radius count as **inside the water disc** for the steps below.
+5. Raise all points **inside** the radius to the lake surface elevation **plus** a noise value.
+6. Raise all points inside **radius** $+\,\alpha \cdot \text{noise} \cdot \mu$ (with $\alpha,\, \text{noise} \in [0,1]$) to the surface elevation **plus or minus** noise (rim / transition band).
+7. Depress all points inside **radius** $-\,\alpha \cdot \text{noise} \cdot \mu$ by subtracting $\text{dist to }(x_c,z_c) \cdot \text{noise} \cdot \text{depth}$ from the current elevation (bowl).
+
+> [!NOTE]
+> **Suggested alternative — inscribed footprint:** if the cell is long or thin, a circle around a centroid wastes extent. Use axis-aligned bounds $[x_0,x_1]\times[z_0,z_1]$, inward clearance $d_\cap(x,z)=\min(x-x_0,\,x_1-x,\,z-z_0,\,z_1-z)$, margin $m=\mu+\text{noise}(\text{anchor})$. **Water:** $d_\cap\ge m$; **shore:** $d_\cap=m$. Replace **dist to centroid** and **radius** bands in steps 5–7 with **depth from shore** monotone in $g=d_\cap-m$ (or the per-edge rectangle variant from the same section).
+
+Rust pseudocode (default circular footprint; `g` hook matches the NOTE alternative):
 
 ```rust
+// Pocket water cell AABB in xz; sample at (x, z). `base_h` is pre-stamp height.
+// `n2`, `n01` = deterministic noise fns in [0,1] keyed by (anchor, salt).
+
+let (xc, zc) = cell_centroid + noise_offset_xz(anchor);
+let surface = base_h_at(xc, zc) + surface_noise(anchor);
+let depth = depth_from_noise(anchor);
+let pre_r = dist_to_rect_boundary(xc, zc, cell) - mu;
+let r = pre_r - radius_jitter(x, z, anchor); // keep r positive inside cell
+
+let d = hypot(x - xc, z - zc);
+let inner = d < r;
+let outer_band = d < r + alpha * n01(x, z, anchor) * mu;
+let bowl = d < r - alpha * n01(x, z, anchor) * mu;
+
+let mut h = base_h;
+if inner {
+    h = h.max(surface + n2(x, z, anchor) * rim_lift);
+}
+if outer_band {
+    h = h.max(surface + rim_noise(x, z, anchor)); // ± noise per step 6
+}
+if bowl {
+    h -= d * n2(x, z, anchor) * depth;
+}
+
+// Inscribed alternative: g = d_cap(x,z, cell) - m; use g instead of (r - d) for bands:
+// let g = inward_clearance(x, z, cell) - m;
+// same structure: inner = g > 0, outer_band = g > -..., bowl = g > +...
 ```
 
 ##### 3.1.3.2: Stream
