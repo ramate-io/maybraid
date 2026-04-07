@@ -15,12 +15,75 @@ Marazion Pocket Waters are used to satisfy the [Jersey Pocket Waters requirement
 Marazion pocket waters rely on three levels of cellular stamping hierarchy:
 
 1. **[Pre-pocket Cells](#311-pre-pocket-cells):** the base parent cells representing the extents within which **Pocket Cells** are generated. For simplicity, they are a grid of fixed-size AABB cells and each fixes one cell size for all **Pocket Cells** contained within it, creating an internal grid. The role of **Pre-pocket Cell:** is to vary the extents of **Pocket Cells** over the game world, while keeping regional correlations. The noise value for the Pocket Cell size is given by the lower-left coordinate of Pre-pocket Cell, floored to a reasonable multiple.
-2. **[Pocket Cells](#312-pocket-cells):** the cells within which certain simple hydrology types are selected. A **Pocket Cell** use a pseudo-random Guillotine cuts, with bounded depth. The noise value for the Guillotine cuts is given by the lower-left coordinate of the Pocket Cell. 
+2. **[Pocket Cells](#312-pocket-cells):** the cells within which certain simple hydrology types are selected. A **Pocket Cell** uses pseudo-random **Guillotine cuts** with bounded depth. The noise value for the Guillotine cuts is given by the lower-left coordinate of the Pocket Cell. 
 3. **[Pocket Water Cells](#313-pocket-water-cells):** the cells within which independent pocket water types are generated. 
 
 #### 3.1.1: Pre-pocket Cells
 
+Pre-pocket cells tile the horizontal plane on a **world-anchored** axis-aligned grid, so streaming agrees across chunk boundaries.
+
+- **Grid:** fix a **pre-pocket pitch** $W_{\text{pre}}$ (world units) and origin $(O_x, O_z)$. Any world point $(x,z)$ lies in the cell with indices
+  $$
+  i = \left\lfloor \frac{x - O_x}{W_{\text{pre}}} \right\rfloor,\qquad
+  j = \left\lfloor \frac{z - O_z}{W_{\text{pre}}} \right\rfloor.
+  $$
+  The **anchor** for that pre-pocket is its **lower-left corner** $(O_x + i W_{\text{pre}},\, O_z + j W_{\text{pre}})$.
+- **Pocket pitch inside the pre-pocket:** sample deterministic noise at the anchor (and a fixed salt). Map it to a **discrete** pocket pitch $W_{\text{pocket}}$ from a small allowed set (e.g. powers of two or fixed quanta). Require $W_{\text{pocket}}$ to **divide** $W_{\text{pre}}$ on both axes (or define a rule for leftover margin at the max- $x$ / max- $z$ edges). That yields an integer **$n_x \times n_z$** grid of **Pocket Cells** inside each pre-pocket.
+- **Role:** $W_{\text{pocket}}$ is **constant** within one pre-pocket but **varies** between pre-pockets, so changes in pocket size over the world while staying **regionally correlated** along the pre-pocket grid.
+
+```rust
+// World xz. Pre-pocket containing (x, z):
+let i = floor((x - ox) / w_pre);
+let j = floor((z - oz) / w_pre);
+let anchor_x = ox + i * w_pre;
+let anchor_z = oz + j * w_pre;
+let w_pocket = choose_pocket_pitch(anchor_x, anchor_z); // from noise, discrete set; divides w_pre
+let nx = w_pre / w_pocket;
+let nz = w_pre / w_pocket;
+
+// Pocket cell indices inside this pre-pocket (0..nx, 0..nz):
+let px = floor((x - anchor_x) / w_pocket).clamp(0, nx - 1);
+let pz = floor((z - anchor_z) / w_pocket).clamp(0, nz - 1);
+let pocket_rect = Rect::new(
+    anchor_x + px * w_pocket,
+    anchor_z + pz * w_pocket,
+    w_pocket,
+    w_pocket,
+);
+```
+
 #### 3.1.2: Pocket Cells
+
+Each **Pocket Cell** is one tile of the $n_x \times n_z$ grid inside its pre-pocket (see [3.1.1](#311-pre-pocket-cells)). Its footprint is the axis-aligned square $[x_p,\, x_p + W_{\text{pocket}}] \times [z_p,\, z_p + W_{\text{pocket}}]$.
+
+Within that footprint, Marazion applies a **Guillotine partition** with **bounded depth** so you get **variable rectangular sub-regions** (the layout stage before **Pocket Water Cells** in [3.1.3](#313-pocket-water-cells)). Each cut is an axis-aligned line spanning the **full** width or height of the **current** piece; children tile the parent with no gaps.
+
+- **Seed:** noise is keyed by the **lower-left** of the **current** sub-rectangle (and split depth / index), in the same deterministic style as the pre-pocket anchor.
+- **Stop rule:** stop when `depth >= max_depth`, or when the next cut would leave a child smaller than a **minimum span** (world units or a fraction of $W_{\text{pocket}}$), or when the leaf is already at target granularity for hydrology typing—pick and document one scheme.
+- **Split rule:** choose **vertical vs horizontal** from noise; choose **cut position** along that axis (optionally snap to a **sub-quantum** for stable BVH / hashing). Recurse on the two children.
+- **Leaves:** each leaf is an axis-aligned **sub-rectangle** of the Pocket Cell; [3.1.3](#313-pocket-water-cells) treats each as a **Pocket Water Cell** for hydrology typing (lake, stream, …) and elevation stamps.
+
+```rust
+// pocket_rect from pre-pocket grid (3.1.1); lower-left (xp, zp) = (x_p, z_p).
+fn guillotine_partition(rect: Rect, anchor_ll: (f64, f64), depth: u8) -> Vec<Rect> {
+    if depth >= MAX_DEPTH || rect_too_small(rect, MIN_SUB_SPAN) {
+        return vec![rect];
+    }
+    let vertical = n01(anchor_ll, depth, SPLIT_SALT) < 0.5;
+    let t = choose_cut_ratio(anchor_ll, depth, vertical); // e.g. in [0.25, 0.75]
+    let (a, b) = if vertical {
+        guillotine_vertical(rect, t)
+    } else {
+        guillotine_horizontal(rect, t)
+    };
+    let mut out = Vec::new();
+    out.extend(guillotine_partition(a, a.lower_left(), depth + 1));
+    out.extend(guillotine_partition(b, b.lower_left(), depth + 1));
+    out
+}
+
+// let leaves = guillotine_partition(pocket_rect, pocket_rect.lower_left(), 0);
+```
 
 #### 3.1.3: Pocket Water Cells
 
@@ -30,7 +93,7 @@ To ensure reliable rims, all construction rely on creating a plateau, then depre
 
 ##### 3.1.3.1: Lake
 
-The **default** lake footprint is an **offset centroid** and a **noisy circular radius** inside the pocket water cell (steps 1–7). Elevation follows the usual plateau-then-depress rim recipe from the introduction to §3.1.3.
+The **default** lake footprint is an **offset centroid** and a **noisy circular radius** inside the pocket water cell (steps 1–7). Elevation follows the usual plateau-then-depress rim recipe from the introduction to [3.1.3](#313-pocket-water-cells).
 
 1. Sample noise to offset the lake **centroid** $(x_c, z_c)$ from the cell centroid. 
 2. Compute **lake surface** elevation at $(x_c, z_c)$: add a signed noise value to the terrain height there. Derive a **depth** scale from noise (same anchor as the rest of the cell).

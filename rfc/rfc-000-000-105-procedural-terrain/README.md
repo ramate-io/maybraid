@@ -413,7 +413,7 @@ Done when: ridged / cliff-banded high terrain consistent with [Section 3.4](#34-
 
 Spec: [Section 3.8.4](#384-jersey-pocket-waters-small-hydrology-chains).
 
-Done when: chain of small hydrology stamps (pond or tarn, outlet, short run, termination) sharing one drainage ID; water-surface targets where needed; reach graph, flow direction, bank or littoral masks per §3.8.4.
+Done when: chain of small hydrology stamps (pond or tarn, outlet, short run, termination) sharing one drainage ID; water-surface targets where needed; reach graph, flow direction, bank or littoral masks per [Section 3.8.4](#384-jersey-pocket-waters-small-hydrology-chains).
 
 #### 4.5.5: Milestone — Jersey Basin Waters (Large Hydrology Chains)
 
@@ -437,7 +437,7 @@ Done when: confined incision (unchained or chained gorge segments) with wall hei
 
 Spec: [Section 3.8.8](#388-jersey-hydrology-complexes-multi-part-landforms).
 
-Done when: multipart stamp group under one complex ID; chain or DAG child arrangement; complex type, constituent roles, and reach or segment edges; optional seasonal routing hints per §3.8.8.
+Done when: multipart stamp group under one complex ID; chain or DAG child arrangement; complex type, constituent roles, and reach or segment edges; optional seasonal routing hints per [Section 3.8.8](#388-jersey-hydrology-complexes-multi-part-landforms).
 
 #### 4.5.9: Milestone — Jersey Karst Pockets (Small Caves, Unchained)
 
