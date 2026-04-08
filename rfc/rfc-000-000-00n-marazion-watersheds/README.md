@@ -141,14 +141,99 @@ if bowl {
 
 ##### 3.1.3.2: Stream
 
-Stream construction is similar to the lake, but relying on a radius from a line as opposed to a point. In fact, large, flat streams can be used to build long lakes.
+Stream construction is similar to the lake, but uses a **distance to path** (polyline) rather than distance to a point.
 
-Streams additionally pick endpoints and midpoints within a cell. The endpoints are chosen from simple noise sampling over the cell dimensions. Points in between are formed from a noisy hysteresis search from endpoint to endpoint, connecting to the endpoint when sufficiently close. 
+1. Pick two endpoints in the pocket-water cell from deterministic noise (optionally constrained away from very steep source terrain).
+2. Choose an initial heading from start to end and a target segment length in world units.
+3. Build a polyline from start to end with a **noisy hysteresis** walk: at each step, blend the previous heading and the direct heading to the endpoint, then add bounded angular jitter. This keeps coherent turns and avoids white-noise zigzags.
+4. Stop when either: (a) the walk comes within a snap radius of the endpoint and connects directly, (b) max segment count is reached, or (c) the next step exits the cell and cannot be projected back safely.
+5. Define stream width from noise (base half-width plus variation), then compute band masks by distance to the polyline: thalweg, wet channel, and skirt or rim.
+6. Set surface grade along path arc length from upstream to downstream. The monotone drop can be made slightly noisy, as long as the max elevation added is significantly less than the depth of the stream. 
+7. Raise the skirt band toward bank grade, keep channel near water surface, and depress the thalweg by depth profile.
 
-Instead of a flat plateau, a stream raises a consistent grade downward along its path and depresses the thalweg within it. 
+Hysteresis path search pseudocode:
+
+```rust
+// Build a deterministic stream centerline in one cell.
+fn build_stream_path(cell: Rect, anchor: Seed, start: Vec2, end: Vec2) -> Vec<Vec2> {
+    let mut p = start;
+    let mut dir_prev = (end - start).normalize_or_zero();
+    let mut out = vec![start];
+
+    for k in 0..MAX_SEGMENTS {
+        let to_end = end - p;
+        if to_end.length() <= SNAP_RADIUS {
+            out.push(end);
+            break;
+        }
+
+        let dir_goal = to_end.normalize_or_zero();
+        let theta = angle_jitter(anchor, k) * MAX_TURN_RADIANS; // in [-max,+max]
+        let blended = normalize(lerp(dir_goal, dir_prev, HYSTERESIS));
+        let dir = rotate(blended, theta);
+
+        let mut q = p + dir * STEP_LEN;
+        if !cell.contains(q) {
+            q = project_to_rect(q, cell);
+            if distance(q, p) < MIN_PROGRESS {
+                break;
+            }
+        }
+
+        out.push(q);
+        p = q;
+        dir_prev = dir;
+    }
+
+    // Ensure endpoint closure if still reasonably close.
+    if distance(*out.last().unwrap_or(&start), end) <= CONNECT_RADIUS {
+        out.push(end);
+    }
+    out
+}
+```
+
+Elevation modulation pseudocode:
+
+```rust
+// Modulate terrain at sample (x,z) from stream polyline and graded surface.
+fn stamp_stream_height(base_h: f32, x: f32, z: f32, path: &[Vec2], anchor: Seed) -> f32 {
+    let (d, s) = distance_and_arclen_to_polyline(vec2(x, z), path);
+    // d = shortest distance to centerline, s = arc length coordinate of closest point.
+
+    let half_w = BASE_HALF_WIDTH + width_noise(anchor, x, z);
+    let thalweg_w = THALWEG_RATIO * half_w;
+    let skirt_w = half_w + SKIRT_EXTRA;
+
+    // Monotone downstream grade along path.
+    let surface = surface_at_head(anchor) - GRADE_PER_METER * s;
+    let depth = depth_profile(anchor, s);
+
+    let mut h = base_h;
+
+    // Outer skirt / bank shaping.
+    if d < skirt_w {
+        let t = smoothstep(skirt_w, half_w, d);
+        h = h.max(lerp(base_h, surface + bank_noise(anchor, x, z), t));
+    }
+
+    // Wet channel near surface.
+    if d < half_w {
+        h = h.min(surface + channel_noise(anchor, x, z));
+    }
+
+    // Thalweg depression.
+    if d < thalweg_w {
+        let u = 1.0 - (d / thalweg_w).clamp(0.0, 1.0);
+        h -= u * depth;
+    }
+
+    h
+}
+```
 
 > [!NOTE]
-> If stream construction raises too many unnatural ridges, it can be further constrained by either expanding the skirt size or avoiding the selection of endpoints that are on steep terrain. 
+> If stream construction raises too many unnatural ridges, constrain it by increasing skirt width, lowering bank lift, reducing max turn per step, or rejecting start and end seeds on steep terrain.
 
 ##### 3.1.3.3: Bog
 
