@@ -310,12 +310,71 @@ fn stamp_bog_height(base_h: f32, x: f32, z: f32, cell: Rect, anchor: Seed) -> f3
 
 ##### 3.1.3.4: Pocket Complex
 
-A pocket complex is a relatively simple combination over a [Lake](#3131-lake), [Streams](#3132-stream), and a [Bog](#3133-bog).
+A pocket complex is a deterministic composition of [Lake](#3131-lake), [Stream](#3132-stream), and [Bog](#3133-bog) constructions inside one pocket-water cell. The goal is to produce small mixed hydrology motifs (lake with inflows/outflows and nearby wet ground) without requiring cross-cell graph plumbing.
 
-1. The cell decides whether it will contain a Lake construction based on some noise. 
-2. Regardless of whether the cell contains a Lake, use the would-be offset centroid of the lake as an endpoint for a bounded number of streams, $n$. 
-3. For each of the streams, select from noise including the stream index the other endpoint. 
-4. The cell decides whether it will contain a Bog construction based on some noise. 
+1. Sample control noise at the cell anchor to decide feature toggles: `has_lake`, `has_bog`, stream count `n_streams` (bounded), and composition weights.
+2. Compute the **would-be lake centroid** `(x_c, z_c)` from the same offset rule as [Lake](#3131-lake), even if `has_lake == false`. This is the stream hub.
+3. If `has_lake`, stamp the lake base first (surface, rim, bowl) and cache lake shoreline parameters for stream-mouth blending.
+4. For each stream `k in 0..n_streams`, choose endpoint role by noise (`inflow` or `outflow`) and sample the far endpoint from cell-edge-aware noise.
+5. Build each stream polyline with the [Stream](#3132-stream) hysteresis walk, forcing one endpoint at `(x_c, z_c)` (or nearest shoreline point if lake exists) and the other at the sampled far endpoint.
+6. Stamp stream elevation bands in stable order (sorted by stream index), with a blend mode that avoids double-carving at overlaps (e.g. min for channel floor, max for skirts, capped additive for soft masks).
+7. If `has_bog`, stamp bog micro-basins last, but attenuate bog carve depth near active stream channels and inside the lake interior, so water bodies do not fight each other.
+8. Run a final composition pass that enforces invariants: monotone local drainage from stream head to outlet, no uphill stream mouths at lake contact, and bounded rim uplift.
+
+Pocket complex orchestration pseudocode:
+
+```rust
+fn stamp_pocket_complex(base_h: f32, x: f32, z: f32, cell: Rect, anchor: Seed) -> f32 {
+    // 1) Cell-level control toggles.
+    let has_lake = n01(anchor, 10, 0) < P_LAKE;
+    let has_bog = n01(anchor, 11, 0) < P_BOG;
+    let n_streams = stream_count_from_noise(anchor).min(MAX_STREAMS);
+
+    // 2) Shared hub from the lake centroid rule (even if lake is off).
+    let lake_center = cell.centroid() + noise_offset_xz(anchor);
+
+    let mut h = base_h;
+
+    // 3) Optional lake base.
+    let lake_ctx = if has_lake {
+        let ctx = build_lake_context(cell, anchor, lake_center); // radius/surface/depth params
+        h = stamp_lake_height(h, x, z, &ctx, anchor);
+        Some(ctx)
+    } else {
+        None
+    };
+
+    // 4-6) Streams composed deterministically by index.
+    for k in 0..n_streams {
+        let far = sample_stream_endpoint(cell, anchor, k);
+        let role = sample_stream_role(anchor, k); // inflow / outflow
+
+        let hub = match (&lake_ctx, role) {
+            (Some(ctx), _) => nearest_point_on_lake_shore(vec2(x, z), ctx),
+            (None, _) => lake_center,
+        };
+
+        let (start, end) = if role == StreamRole::Inflow { (far, hub) } else { (hub, far) };
+        let path = build_stream_path(cell, stream_seed(anchor, k), start, end);
+
+        let hs = stamp_stream_height(base_h, x, z, &path, stream_seed(anchor, k));
+        h = compose_stream_layers(h, hs); // stable overlap policy
+    }
+
+    // 7) Optional bog, attenuated near channel/lake interior.
+    if has_bog {
+        let hb = stamp_bog_height(base_h, x, z, cell, anchor);
+        let att = complex_attenuation(x, z, &lake_ctx); // less bog carve in lake/channel cores
+        h = lerp(h, hb, att);
+    }
+
+    // 8) Final invariant pass (local corrections / clamps).
+    enforce_complex_invariants(h, x, z, cell, anchor)
+}
+```
+
+> [!NOTE]
+> Keep composition deterministic by fixing pass order (`Lake -> Streams[k] -> Bog -> Invariants`) and by keying every stochastic choice with `(cell_anchor, feature_kind, feature_index)`.
 
 ### 3.2: Marazion Basin Water Stamping
 
