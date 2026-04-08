@@ -237,6 +237,10 @@ fn stamp_stream_height(base_h: f32, x: f32, z: f32, path: &[Vec2], anchor: Seed)
 
 ##### 3.1.3.3: Bog
 
+Bogs consist of a series of small lake-like constructions. Describe as sampling, a point is determined skirt or basin based on its distance to candidate centroid points--given by floor and ceiling rounding operations on the sampled point--and whether the closest centroid point reaches a certain threshold value.
+
+Once the point is mapped to a candidate centroid, the construction is almost identical to a lake. 
+
 ##### 3.1.3.4: Lake into Stream
 
 ##### 3.1.3.5: Stream into Lake
