@@ -308,9 +308,14 @@ fn stamp_bog_height(base_h: f32, x: f32, z: f32, cell: Rect, anchor: Seed) -> f3
 > [!NOTE]
 > To avoid grid artifacts, keep centroid jitter at a meaningful fraction of `W_BOG`, avoid binary activation near threshold (use a small smooth band), and randomize bog pitch between neighboring pocket-water cells only at discrete, deterministic levels.
 
-##### 3.1.3.4: Lake into Stream
+##### 3.1.3.4: Pocket Complex
 
-##### 3.1.3.5: Stream into Lake
+A pocket complex is a relatively simple combination over a [Lake](#3131-lake), [Streams](#3132-stream), and a [Bog](#3133-bog).
+
+1. The cell decides whether it will contain a Lake construction based on some noise. 
+2. Regardless of whether the cell contains a Lake, use the would-be offset centroid of the lake as an endpoint for a bounded number of streams, $n$. 
+3. For each of the streams, select from noise including the stream index the other endpoint. 
+4. The cell decides whether it will contain a Bog construction based on some noise. 
 
 ### 3.2: Marazion Basin Water Stamping
 
