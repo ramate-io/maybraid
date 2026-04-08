@@ -237,9 +237,76 @@ fn stamp_stream_height(base_h: f32, x: f32, z: f32, path: &[Vec2], anchor: Seed)
 
 ##### 3.1.3.3: Bog
 
-Bogs consist of a series of small lake-like constructions. Describe as sampling, a point is determined skirt or basin based on its distance to candidate centroid points--given by floor and ceiling rounding operations on the sampled point--and whether the closest centroid point reaches a certain threshold value.
+Bogs are a **cluster of small lake-like basins** generated from local candidate centroids on a coarse lattice. Compared to a lake, bogs favor many shallow pockets and wetter interstitial ground.
 
-Once the point is mapped to a candidate centroid, the construction is almost identical to a lake. 
+1. Choose a bog lattice pitch $W_{\text{bog}}$ and anchor from the pocket-water cell lower-left corner.
+2. For each sample $(x,z)$, map into bog-lattice coordinates and gather nearby centroid candidates from floor and ceiling lattice corners (2x2 set around the sample).
+3. Jitter each candidate centroid deterministically from its lattice coordinate; evaluate an activation threshold (noise + optional slope filter) so only some centroids are active.
+4. Select the nearest active centroid. If none is active, we may treat the sample as bog fringe--i.e., no deep basin carve; optional slight wetting and flattening only.
+5. For the chosen centroid, build a small basin exactly like Lake with local parameters (surface, depth, radius, rim widths), but with shallower depth and tighter radius ranges.
+6. Blend overlapping candidate influence softly so transitions between adjacent micro-basins do not create hard seams.
+7. Apply final bog mask noise to keep edges ragged and avoid a regular checker appearance from the lattice.
+
+Bog centroid selection and elevation pseudocode:
+
+```rust
+// Returns modified height for one sample (x, z) inside a pocket-water cell.
+fn stamp_bog_height(base_h: f32, x: f32, z: f32, cell: Rect, anchor: Seed) -> f32 {
+    let mut best: Option<(Vec2, f32)> = None; // (centroid, distance)
+
+    let uv = (vec2(x, z) - cell.min()) / W_BOG;
+    let i0 = uv.x.floor() as i32;
+    let j0 = uv.y.floor() as i32;
+
+    // 2x2 floor/ceil candidate set around sample.
+    for di in 0..=1 {
+        for dj in 0..=1 {
+            let gi = i0 + di;
+            let gj = j0 + dj;
+            let g_anchor = lattice_anchor(cell.min(), gi, gj, W_BOG);
+
+            if !centroid_active(g_anchor, anchor) {
+                continue;
+            }
+
+            let c = g_anchor + centroid_jitter(g_anchor, anchor);
+            let d = distance(vec2(x, z), c);
+            if best.map(|(_, bd)| d < bd).unwrap_or(true) {
+                best = Some((c, d));
+            }
+        }
+    }
+
+    let Some((c, d)) = best else {
+        // Fringe wetting only (optional): flatten slightly toward local mean.
+        return base_h + fringe_wet_lift(anchor, x, z);
+    };
+
+    // Lake-like local basin, but shallow and small.
+    let surface = base_h_at(c.x, c.y) + bog_surface_noise(anchor, c);
+    let depth = BOG_DEPTH_SCALE * depth_from_noise(anchor, c);
+    let pre_r = dist_to_rect_boundary(c.x, c.y, cell) - BOG_MU;
+    let r = (pre_r - bog_radius_jitter(anchor, x, z)).max(BOG_MIN_R);
+
+    let inner = d < r;
+    let outer = d < r + BOG_SKIRT;
+    let bowl  = d < r - BOG_THALWEG_PAD;
+
+    let mut h = base_h;
+    if inner { h = h.max(surface + bog_rim_noise(anchor, x, z)); }
+    if outer { h = h.max(surface + bog_skirt_noise(anchor, x, z)); }
+    if bowl {
+        let u = 1.0 - (d / r).clamp(0.0, 1.0);
+        h -= u * depth;
+    }
+
+    // Optional final ragged mask to break lattice regularity.
+    h + bog_edge_mask_noise(anchor, x, z)
+}
+```
+
+> [!NOTE]
+> To avoid grid artifacts, keep centroid jitter at a meaningful fraction of `W_BOG`, avoid binary activation near threshold (use a small smooth band), and randomize bog pitch between neighboring pocket-water cells only at discrete, deterministic levels.
 
 ##### 3.1.3.4: Lake into Stream
 
