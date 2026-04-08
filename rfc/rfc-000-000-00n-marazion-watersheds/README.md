@@ -141,6 +141,15 @@ if bowl {
 
 ##### 3.1.3.2: Stream
 
+Stream construction is similar to the lake, but relying on a radius from a line as opposed to a point. In fact, large, flat streams can be used to build long lakes.
+
+Streams additionally pick endpoints and midpoints within a cell. The endpoints are chosen from simple noise sampling over the cell dimensions. Points in between are formed from a noisy hysteresis search from endpoint to endpoint, connecting to the endpoint when sufficiently close. 
+
+Instead of a flat plateau, a stream raises a consistent grade downward along its path and depresses the thalweg within it. 
+
+> [!NOTE]
+> If stream construction raises too many unnatural ridges, it can be further constrained by either expanding the skirt size or avoiding the selection of endpoints that are on steep terrain. 
+
 ##### 3.1.3.3: Bog
 
 ##### 3.1.3.4: Lake into Stream
