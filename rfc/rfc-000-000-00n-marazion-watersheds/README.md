@@ -711,8 +711,13 @@ fn inject_tributaries(
 
 ### 3.4: Marazion Global Ocean
 
-Once all terrain modulations--except sub-sea-level valleys and hydrology--define the SDF for the Ocean as the region not below world elevation 0 and above terrain. 
+Once all terrain modulations have been computed, you may apply the Marazion Global Ocean. 
 
-Fix a large grid over the world. Each **Ocean Cell** in the grid will decide whether that cell masks to the global ocean, or not. If the cell is 
+Fix a large-celled grid over the world. Each **Ocean Cell** in the grid will decide whether that cell masks to the global ocean, or not. 
+
+If the cell is not in the ocean, ensure push a noisy rim up at its boundaries, s.t. at the boundary, the points will be at or noisily slightly above sea level. This ensures that we do not have ocean walls against non ocean cells. Points which are already above sea level do not need to be modulated. 
+
+> [!WARNING]
+> This should only be a few of floating point operations that is manageable within the context of well-baked terrain and cautious LOD. 
 
 ## 4: Milestones
