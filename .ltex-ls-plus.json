@@ -352,7 +352,8 @@
         "transvoxel",
         "recurse",
         "pocket size",
-        "adjacencies"
+        "adjacencies",
+        "monotonicity"
       ]
     },
     "bibtex": {
