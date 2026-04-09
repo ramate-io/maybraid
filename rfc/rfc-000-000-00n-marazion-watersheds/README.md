@@ -378,7 +378,7 @@ fn stamp_pocket_complex(base_h: f32, x: f32, z: f32, cell: Rect, anchor: Seed) -
 
 ### 3.2: Marazion Basin Water Stamping
 
-Basin construction is effectively a step-up in hydrological realism from pocket waters. It is designed to sit over larger regions and shape terrain sloping consistently down towards a zeroth-order basin (described below).
+Marazion basin construction is effectively a step-up in hydrological realism from pocket waters, responding to [RFC-105.3.8.5: Jersey Basin Waters (Large Hydrology Chains)](https://github.com/ramate-io/maybraid/tree/main/rfc/rfc-000-000-105-procedural-terrain#385-jersey-basin-waters-large-hydrology-chains). It is designed to sit over larger regions and shape terrain sloping consistently down towards a zeroth-order basin (described below).
 
 Marazion basins are constructed via a method we refer to as Fixed Grid Concentric Point Candidacy (FGCPC). A **Basin Cell** will have a bounded number of concentric regions within which it generates basin points. These concentric regions are discovered by sampling a new noise-determined point with hysteresis from an existing point in an adjacent **Basin Point Cell**. If the **Basin Point Cell** is already occupied, we discard. FGCPC not only builds the rings, but describes the highest-order hydrology graph. 
 
