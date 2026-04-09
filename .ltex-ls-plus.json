@@ -353,7 +353,12 @@
         "recurse",
         "pocket size",
         "adjacencies",
-        "monotonicity"
+        "monotonicity",
+        "upslope",
+        "Whitebox",
+        "TauDEM",
+        "rasters",
+        "PDE"
       ]
     },
     "bibtex": {

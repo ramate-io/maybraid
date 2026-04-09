@@ -2,11 +2,21 @@
 
 ## 1: Motivation
 
+Marazion Watersheds are a response to the Jersey terrain stamp requirements from [RFC-105](https://github.com/ramate-io/maybraid/tree/main/rfc/rfc-000-000-105-procedural-terrain).
+
 ## 2: Prior Art
+
+Raster hydrology on [digital elevation models](https://en.wikipedia.org/wiki/Digital_elevation_model) is a long-standing practice in geomorphology and GIS. Classic work assigns **flow direction** per cell (e.g. [**D8**](https://en.wikipedia.org/wiki/Watershed_delineation) on eight neighbors, or [**D-INF**](https://scispace.com/pdf/a-new-method-for-the-determination-of-flow-directions-and-2i6svcbkhe.pdf) on facets for smoother aspect), accumulates **upslope contributing area** (flow accumulation), and derives **catchments** and **stream networks** from thresholds on accumulation or from pour points. [**Strahler**](https://en.wikipedia.org/wiki/Strahler_number) (and related) **stream order** gives a standard lexicon for tributary hierarchy. Operational pipelines also spend effort on **depressions** (sinks), [**fill**](https://pro.arcgis.com/en/pro-app/latest/tool-reference/spatial-analyst/fill.htm)-and-burn or [**priority-flood**](https://doi.org/10.1016/j.cageo.2013.04.030) style treatments, and **handling flats**, so drainage graphs are well-defined—ideas any game-scale heightfield tool implicitly echoes when it “fixes” water flow.
+
+Industry tooling implements the same family of ideas at map scale: desktop GIS [**hydrology toolboxes**](https://pro.arcgis.com/en/pro-app/latest/tool-reference/spatial-analyst/an-overview-of-the-hydrology-tools.htm) (e.g. Esri’s Spatial Analyst hydrology set), open stacks such as [**GRASS**](https://grass.osgeo.org/grass-stable/manuals/r.watershed.html) (`r.watershed` and friends), [**Whitebox Tools**](https://www.whiteboxgeo.com/manual/wbt_book/preface.html), and [**TauDEM**](https://hydrology.usu.edu/taudem/taudem5/) expose watershed delineation, stream order, and basin boundaries as batch operations on rasters. Those systems optimize for **correctness** and **analysis** on static terrain, not for authoring infinite, streamed worlds in milliseconds.
+
+Games and real-time procedural terrain usually trade physical fidelity for **art direction** and **budget**. Common patterns include [**hydraulic**](https://en.wikipedia.org/wiki/Terrain_rendering#Erosion_simulation) or **particle-based erosion** on heightfields, **river curves** carved along valleys after a coarse drainage solve, and **mask-driven** water bodies. Middleware and DCC workflows--e.g. terrain builders that stack noise, erosion, and river masks--favor **repeatable recipes** and artist control over a single global PDE solve.
+
+Marazion does not attempt to reproduce full GIS hydrology or landscape-evolution models. It borrows the **language** of drainage, basins, and tributaries, but implements them as **stamped, deterministic constructions** aligned with [RFC-105](https://github.com/ramate-io/maybraid/tree/main/rfc/rfc-000-000-105-procedural-terrain).
 
 ## 3: Design
 
-The watershed designs proposed in this RFC are referred to as Marazion watersheds. All following the stamping framework proposed in [RFC-105](https://github.com/ramate-io/maybraid/tree/main/rfc/rfc-000-000-105-procedural-terrain). 
+The watershed designs proposed in this RFC are referred to as Marazion watersheds. They all follow the stamping framework proposed in [RFC-105](https://github.com/ramate-io/maybraid/tree/main/rfc/rfc-000-000-105-procedural-terrain). The design is **cell-focused**: hierarchy, seeds, and boundaries are expressed as nested grids and axis-aligned regions so that each construction step has a **bounded scope**, a **clear inputs and outputs contract**, and **streaming-safe** replay. That trades some of the global coupling of a full raster flow solve for **simplicity** and **manageability**—easier to reason about, test, and extend without turning the whole world into one mutable heightfield solve every frame.
 
 ### 3.1: Marazion Pocket Water Stamping
 
