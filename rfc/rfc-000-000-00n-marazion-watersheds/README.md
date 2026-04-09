@@ -380,16 +380,24 @@ fn stamp_pocket_complex(base_h: f32, x: f32, z: f32, cell: Rect, anchor: Seed) -
 
 Basin construction is effectively a step-up in hydrological realism from pocket waters. It is designed to sit over larger regions and shape terrain sloping consistently down towards a zeroth-order basin (described below).
 
-Marazion basins are constructed via a method we refer to as Concentric Point Candidacy. A basin cell will have a bounded number of concentric regions within which it generates basin points. These concentric regions are discovered by sampling a new noise-determined point with hysteresis from an existing point. We then check whether it is far enough away from any other existing basin points, discarding if it is too near. 
+Marazion basins are constructed via a method we refer to as Fixed Grid Concentric Point Candidacy (FGCPC). A **Basin Cell** will have a bounded number of concentric regions within which it generates basin points. These concentric regions are discovered by sampling a new noise-determined point with hysteresis from an existing point in an adjacent **Basin Point Cell**. If the **Basin Point Cell** is already occupied, we discard. FGCPC not only builds the rings, but describes the highest-order hydrology graph. 
 
 > [!NOTE]
 > For best effects over existing terrain, it may help to discard points at which the original elevation is too far below the zeroth-order ring. Otherwise, you can risk creating extended spines, which may or may not match the intended look. 
 
-The zeroth ring is the ring containing the points included in the zeroth-order basin. These must all describe an equal surface level which their elevation sits below by some noise-determined amount. 
+The zeroth ring is the ring containing the points included in the zeroth-order basin. These must all describe an equal surface level at which their elevation sits below by some noise-determined amount. 
 
-Concentrically, each basin point in the `n+1` ring will sit higher than any basin point in the `n` ring. Constructing in this manner preserves the greatest candidacy for later connecting the hydrology graph. However, outer rings may vary the surface levels of their points.
+Each basin point in the `n+1` ring will sit higher than any basin point in the `n` ring. Constructing in this manner preserves the greatest candidacy for later connecting the hydrology graph. However, outer rings may vary the surface levels of their points.
 
-Each point in the Marazion basin cell will be modulated by a distance-weighted average between its original elevation and the intended elevation of the closest basin point. For this reason, we recommend keeping the number of total basin points low (< 2^8) and storing in an accelerated structure, e.g., a quadtree, k-d tree, or ball tree.
+Each point in a Marazion **Basin Point Cell** will be modulated by a distance-weighted average between its original elevation, the elevation of its basin point, and the elevation of connected basin points--both down and upstream. This construction provides higher-order shaping of hydrological realism. However, lower-order stamps will be used to ensure actual downhill flow. 
+
+> [!NOTE]
+> Because the adjacency set is already known, at sampling time we do not need to search amongst candidate basin points. This avoids creating the need to store in an accelerated structure, e.g., a quadtree, k-d tree, or ball tree.
+
+Once the higher-order graph is determined, a series of lower-order cellular layers are used to perform the full modulation:
+
+The complete flow of data is thus:
+
 
 ### 3.3: Marazion Hydrology Complex Stamping
 
