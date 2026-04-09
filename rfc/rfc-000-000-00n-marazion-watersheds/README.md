@@ -396,8 +396,40 @@ Each point in a Marazion **Basin Point Cell** will be modulated by a distance-we
 
 Once the higher-order graph is determined, a series of lower-order cellular layers are used to perform the full modulation:
 
+1. **Basin Cell:** determines whether there will be a basin, and generates the **Basin Points** and graph. Contains a fixed grid of **Basin Point Cells**.
+2. **Basin Point Cell:** modulates elevation w.r.t. contained Basin Points and adjacencies, and chooses **Basin Path Boundary Points** via noisy projection of straight line path to each connection onto boundary. Contains a fixed grid of **Thalweg Cells**. May decide if it wants to stamp a potentially large lake at its Basin Point.
+3. **Thalweg Cell:** noisily projects paths between **Basin Path Boundary Points** onto an internal grid, then uses a hysteresis search within a given cell to generate **Thalweg Points**, constituting a finer downward path between boundary points. May generate waterfall locations--points where elevation should drop off abruptly in an x-z oriented cone. May also choose to decide any non-waterfall Thalweg Point should stamp a moderate-size lake. Contains a grid of **Basin Feature Cells**.
+4. **Basin Feature Cell:** uses [Stream](#3132-stream) construction from [Marazion Pocket Waters](#31-marazion-pocket-water-stamping) to connect **Thalweg Points**. Any unbounded **Thalweg Segments** are projected noisily onto the boundary. May also decide to stamp a lake at a noisy offset from its centroid via borrowing from [Lake](#3131-lake) and/or stamp a bog via borrowing from [Bog](#3133-bog). 
+
 The complete flow of data is thus:
 
+```mermaid
+flowchart TD
+    BCS["Basin Cell Seed Point"] --> BC["Basin Cell"]
+    BC --> BP["Basin Points"]
+    BC --> HG["Hydrology Graph"]
+    BP --> BPC["Basin Point Cell"]
+    HG --> BPC
+
+    BPCS["Basin Point Cell Seed Point"] --> BPC
+    BPC --> BPBP["Basin Path Boundary Points"]
+    BPC --> BPL["Basin Point Lake Decision"]
+    BPBP --> TC["Thalweg Cell"]
+    BPL --> TC
+
+    TCS["Thalweg Cell Seed Point"] --> TC
+    TC --> TP["Thalweg Points"]
+    TC --> TW["Thalweg Waterfall Decisions"]
+    TC --> TL["Thalweg Point Lake Decisions"]
+    TP --> BFC["Basin Feature Cell"]
+    TW --> BFC
+    TL --> BFC
+
+    BFCS["Basin Feature Cell Seed Point"] --> BFC
+```
+
+> [!NOTE]
+> When a special query trips an BVH intersection, it will generate down the hierarchy--excluding lower-order cells that do not yet intersect. Upon generation, a given level of the hierarchy will be fully-determined or "baked." It can pass on all of its information to arbitrary cells bound within it. To avoid repeat work, it should then be kept in spatial storage. 
 
 ### 3.3: Marazion Hydrology Complex Stamping
 
