@@ -759,85 +759,85 @@ fn ocean_cell_height(
 
 Milestones below are planning hooks, not dated commitments. Each item maps to a subsection of [Section 3](#3-design) and, where relevant, to a Jersey stamp family in [RFC-105](https://github.com/ramate-io/maybraid/tree/main/rfc/rfc-000-000-105-procedural-terrain). Ordering here is **implementation-oriented**: [global ocean](#34-marazion-global-ocean) runs after other Marazion stamps in the spec, but it is listed **first** so the coarse mask and rim contract are explicit before pocket and basin work. Wording is suggestive until engine layout and bake formats are fixed.
 
-#### 4.1: Milestone — Marazion Global Ocean
+#### 4.1: Alpha Marazion Global Ocean
 
 Spec: [Section 3.4](#34-marazion-global-ocean).
 
 Done when: a coarse **Ocean Cell** grid yields a deterministic **host vs not-host** mask per cell; ocean footprints use project **sea level** \(H_{\text{sl}}\); non-host cells apply the **coastal rim** only along edges facing host neighbors, with cheap evaluation (distance to segments, smooth blend, `max`), without lowering terrain already above \(H_{\text{sl}}\).
 
-#### 4.2: Milestone — Pre-pocket Cells
+#### 4.2: Pre-pocket Cells
 
 Spec: [Section 3.1.1](#311-pre-pocket-cells).
 
 Done when: a **world-anchored** pre-pocket grid with pitch \(W_{\text{pre}}\) picks a **discrete** pocket pitch \(W_{\text{pocket}}\) per cell from noise at the anchor, with \(W_{\text{pocket}}\) dividing \(W_{\text{pre}}\) so **Pocket Cells** tile deterministically and agree across chunk boundaries.
 
-#### 4.3: Milestone — Pocket Cells
+#### 4.3: Pocket Cells
 
 Spec: [Section 3.1.2](#312-pocket-cells).
 
 Done when: each pocket footprint supports a **bounded-depth guillotine** partition into leaves with deterministic seeds per sub-rectangle, producing axis-aligned **Pocket Water Cell** regions without gaps.
 
-#### 4.4: Milestone — Pocket Water — Lake
+#### 4.4: Lake Pocket Water
 
 Spec: [Section 3.1.3.1](#3131-lake). Jersey alignment: [RFC-105 §3.8.4 Pocket Waters](https://github.com/ramate-io/maybraid/tree/main/rfc/rfc-000-000-105-procedural-terrain#384-jersey-pocket-waters-small-hydrology-chains) (lake-style bodies in chains).
 
 Done when: default **plateau-then-depress** lake construction (or the inscribed **\(d_\cap\)** variant) stamps a stable water disc with surface, rim, and bowl inside a leaf, keyed to the pocket-water anchor.
 
-#### 4.5: Milestone — Pocket Water — Stream
+#### 4.5: Stream Pocket Water
 
 Spec: [Section 3.1.3.2](#3132-stream).
 
 Done when: a **hysteresis** polyline connects chosen endpoints inside the cell, with graded **surface** and **thalweg** bands by distance to the path, monotone along arc length where the spec requires it.
 
-#### 4.6: Milestone — Pocket Water — Bog
+#### 4.6: Bog Pocket Water
 
 Spec: [Section 3.1.3.3](#3133-bog).
 
 Done when: a bog lattice yields **jittered centroids**, shallow **lake-like** micro-basins, soft overlap blending, and optional fringe behavior without obvious grid artifacts.
 
-#### 4.7: Milestone — Pocket Water — Pocket Complex
+#### 4.7: Pocket Complex
 
 Spec: [Section 3.1.3.4](#3134-pocket-complex).
 
 Done when: deterministic **composition order** (e.g. optional lake hub, ordered streams, optional bog with attenuation) and overlap policy produce mixed pocket hydrology in one cell without breaking monotonicity or double-carving invariants.
 
-#### 4.8: Milestone — Basin Cell and FGCPC
+#### 4.8: Basin Cell and FGCPC
 
 Spec: [Section 3.2.1](#321-basin-cell), [Section 3.2.1.1](#3211-fixed-grid-concentric-point-candidacy-fgcpc). Jersey alignment: [RFC-105 §3.8.5 Basin Waters](https://github.com/ramate-io/maybraid/tree/main/rfc/rfc-000-000-105-procedural-terrain#385-jersey-basin-waters-large-hydrology-chains).
 
 Done when: **Basin Cell** activation and **Basin Point Cell** grid are fixed; **FGCPC** fills rings with **one basin point per occupied slot**, ring monotonicity and zeroth-ring **shared surface** discipline; the **hydrology graph** and per-slot bake (occupied or vacant) are emitted for downstream layers.
 
-#### 4.9: Milestone — Basin Point Cell
+#### 4.9: Basin Point Cell
 
 Spec: [Section 3.2.2](#322-basin-point-cell).
 
 Done when: **macro elevation** blend uses baked graph adjacency; **Basin Path Boundary Points** come from segment–AABB intersection plus **noisy slide** along edges; **Thalweg Cell** grid is specified; optional basin-point **lake** respects macro blend.
 
-#### 4.10: Milestone — Thalweg Cell
+#### 4.10: Thalweg Cell
 
 Spec: [Section 3.2.3](#323-thalweg-cell).
 
 Done when: **hysteresis** paths join boundary points with downstream grade, emit **Thalweg Points**, optional **waterfall** sites and moderate **lake** stamps, and hand off a **Basin Feature Cell** grid.
 
-#### 4.11: Milestone — Basin Feature Cell
+#### 4.11: Basin Feature Cell
 
 Spec: [Section 3.2.4](#324-basin-feature-cell).
 
 Done when: **Stream** construction connects **Thalweg Points**; open segments use **noisy boundary projection**; optional **Lake** / **Bog** borrow pocket recipes at basin-appropriate scale.
 
-#### 4.12: Milestone — Waterfall Stamp
+#### 4.12: Waterfall Stamp
 
 Spec: [Section 3.2.5](#325-waterfall-stamp).
 
 Done when: a **cone in x-z** fall profile from a baked apex applies **sharp drop**, lateral mask, and **noisy** cone boundary without unbounded bleed past the stamp extent.
 
-#### 4.13: Milestone — Hydrology Graph and Basin Caps
+#### 4.13: Hydrology Graph and Basin Caps
 
 Spec: [Section 3.3.1](#331-hydrology-graph-and-basin-caps). Jersey alignment: [RFC-105 §3.8.8 Hydrology Complexes](https://github.com/ramate-io/maybraid/tree/main/rfc/rfc-000-000-105-procedural-terrain#388-jersey-hydrology-complexes-multi-part-landforms).
 
 Done when: a directed **Hydrology graph** between **Hydrology Cells** is baked with **elevation caps** (height ceilings for downhill adjacency, not basin-point counts); per-basin pipeline runs with **shared** boundary data where basins meet.
 
-#### 4.14: Milestone — Tributary Injection
+#### 4.14: Tributary Injection
 
 Spec: [Section 3.3.2](#332-tributary-injection).
 
