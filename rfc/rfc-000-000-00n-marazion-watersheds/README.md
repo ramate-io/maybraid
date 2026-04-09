@@ -514,6 +514,91 @@ fn run_fgcpc(
 
 #### 3.2.2: Basin Point Cell
 
+A **Basin Point Cell** is one tile in the **Basin Cell** lattice. It **does not** rediscover the hydrology graph: it reads the **baked** record from [3.2.1](#321-basin-cell)—either **vacant** (skip or pass-through) or **occupied** with a **Basin Point** $(x_b,z_b)$, ring index, target elevation band, and **known** adjacency to neighboring basin points. Sampling never needs a spatial search over unknown candidates (see the NOTE in the introduction to [3.2](#32-marazion-basin-water-stamping)).
+
+1. **Inputs:** basin anchor, slot indices $(i,j)$, the local **Basin Point** payload (if any), and the **edge list** touching this slot (each edge names the **neighbor slot** and the neighbor’s basin point ID).
+2. **Macro elevation:** for each terrain sample $(x,z)$ in the cell, form a **distance-weighted** blend of (a) **original** height, (b) height implied by **this** basin point’s targets, and (c) heights implied by **connected** basin points upstream and downstream along the baked graph. Weights come from horizontal distance to $(x_b,z_b)$, to neighbor anchors, and from a small noise term, so the field is not perfectly radial. This is **large-scale** shaping; it need not enforce meter-scale downhill everywhere—that is left to [Thalweg Cell](#323-thalweg-cell) and below.
+3. **Basin Path Boundary Points:** for each graph edge from this slot to a neighbor slot, take the **straight segment** from this basin point to the neighbor’s basin point. **Intersect** that segment with this Basin Point Cell’s **AABB boundary**; that gives one or two exit/entry locations. **Jitter** each intersection along the boundary edge (noise keyed by `(anchor, edge_id)`) to get **Basin Path Boundary Points**—the anchors [Thalweg Cell](#323-thalweg-cell) uses to thread finer paths without searching the cell interior blindly.
+4. **Thalweg grid:** partition the Basin Point Cell footprint into a **fixed** lattice of **[Thalweg Cells](#323-thalweg-cell)** (counts and pitch from noise at the **Basin Point Cell seed**, same deterministic pattern as elsewhere).
+5. **Basin Point lake (optional):** if noise at the Basin Point Cell seed exceeds a threshold, stamp a **large** [Lake](#3131-lake)-style footprint centered near $(x_b,z_b)$ (reuse pocket lake construction with parameters scaled to basin scope). The lake must **respect** the macro elevation blend, so rims do not fight the ring structure.
+6. **Output:** **modulated height field** rule (or baked samples for the cell), **Basin Path Boundary Points** per outward edge, **Thalweg Cell** grid spec, and optional **basin-point lake** mask—everything downstream needs to pick up without recomputing FGCPC.
+
+##### 3.2.2.1: Elevation blend (pseudocode)
+
+```rust
+// One sample (x, z) inside this Basin Point Cell; `bp` is None if vacant.
+fn macro_height(
+    x: f32,
+    z: f32,
+    base_h: f32,
+    bp: Option<&BasinPointBaked>,
+    neighbors: &[NeighborEdge],
+    anchor: Seed,
+) -> f32 {
+    let Some(p) = bp else {
+        return base_h;
+    };
+
+    let d0 = hypot(x - p.xz.x, z - p.xz.y);
+    let mut acc = 0.0;
+    let mut wsum = 0.0;
+
+    let w_orig = weight_orig(d0, anchor);
+    acc += w_orig * base_h;
+    wsum += w_orig;
+
+    let w_self = weight_self(d0, anchor);
+    acc += w_self * height_from_basin_target(p);
+    wsum += w_self;
+
+    for n in neighbors {
+        let d1 = hypot(x - n.other_xz.x, z - n.other_xz.y);
+        let w = weight_neighbor(d0, d1, n, anchor);
+        acc += w * height_from_basin_target(n.other);
+        wsum += w;
+    }
+
+    acc / wsum.max(1e-6)
+}
+```
+
+##### 3.2.2.2: Boundary points (pseudocode)
+
+**Why this is streamable.** Boundary projection uses only what lower layers already have: the **baked graph** (this basin point, neighbor basin point, and which **Basin Point Cell** edge you exit) and the **cell lattice** (the Basin Point Cell AABB, known from indices and pitches). No global search: intersect the straight **connector segment** with the cell’s axis-aligned boundary to get a **linear intersection** point. That point is a pure function of **geometry + graph**—the same inputs any streaming chunk can reconstruct from the same bake.
+
+**Noisy shift along the boundary.** Jitter does **not** move the point into the cell interior or into an adjacent Basin Point Cell. It **slides** the intersection along the **boundary edge** it landed on: parameterize the edge by arc length $t \in [0,L]$, sample deterministic noise from $(\text{anchor}, \text{edge\_id}, t)$ (or from the intersection coordinates quantized to a stable step), and add a signed offset $\Delta t$ along that edge. Reuse this same pattern anywhere you need **noisy boundary projection** (Basin Point Cell, Thalweg Cell, feature boundaries) so behavior stays consistent.
+
+**Corner cap.** Clamp $\Delta t$, so the final point stays **bounded away from the cell corners** (a minimum distance along the edge from each vertex). That preserves **which edge** the point belongs to, avoids ambiguous “corner” labels when handing work to [Thalweg Cell](#323-thalweg-cell), and keeps **cell logic** (edge ownership, neighbor adjacency) intact.
+
+```rust
+fn basin_path_boundary_points(
+    cell: Rect,
+    p: Vec2,
+    neighbor: Vec2,
+    edge_id: u32,
+    anchor: Seed,
+) -> Vec<Vec2> {
+    let seg = LineSegment::new(p, neighbor);
+    let hits = intersect_segment_aabb_boundary(seg, cell);
+    hits
+        .into_iter()
+        .map(|q0| slide_along_boundary(q0, cell, anchor, edge_id))
+        .collect()
+}
+
+/// Intersection `q0` lies on one edge of `cell`; slide along that edge only.
+fn slide_along_boundary(q0: Vec2, cell: Rect, anchor: Seed, edge_id: u32) -> Vec2 {
+    let (edge, t0) = edge_and_param_of_point_on_boundary(q0, cell);
+    let t_max = edge.length() - 2.0 * CORNER_MARGIN; // stay away from corners
+    let delta = boundary_noise(anchor, edge_id, t0) * MAX_SLIDE; // [-1,1] scaled
+    let t1 = (t0 + delta).clamp(CORNER_MARGIN, edge.length() - CORNER_MARGIN);
+    edge.point_at(t1)
+}
+```
+
+> [!NOTE]
+> Keep **one** boundary point per directed edge you hand to thalweg construction, or a deterministic pair (entry/exit) if you split upstream vs downstream—document which convention you use, so [Thalweg Cell](#323-thalweg-cell) can connect segments without ambiguity.
+
 #### 3.2.3: Thalweg Cell
 
 #### 3.2.4: Basin Feature Cell
