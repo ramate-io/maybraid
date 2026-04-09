@@ -623,6 +623,31 @@ A **Basin Feature Cell** is the **finest** basin layer: it turns **Thalweg Point
 
 #### 3.2.5: Waterfall Stamp
 
+A **Waterfall Stamp** is triggered where [Thalweg Cell](#323-thalweg-cell) marks a **fall site** on the thalweg. It only needs what is already baked: the **apex** $(x_w, z_w)$, a **downstream axis**, and a **source width** (channel half-width at the fall—how wide the water is before it drops).
+
+1. **Cone in $xz$:** treat the fall as a **noisy cone** rooted at the apex. In a local frame, let $s$ be signed distance **along** the downstream axis and $l$ be distance **across** (lateral). Use an **initial radius** $r_0$ tied to **source width**, so the footprint matches a broad sheet vs a narrow knife-edge.
+2. **Fan-out:** the affected region **widens** with $s$ (e.g. linear cone growth) so the stamp **fans** downstream from the brink.
+3. **Noisy boundary:** wobble the cone **radius** and/or opening with noise keyed by $(\text{anchor}, \phi, s)$ where $\phi$ is azimuth around the axis—edges stay organic but **clamped**, so the stamp does not bleed past the cell or tile you are stamping (same discipline as [3.2.2.2](#3222-boundary-points-pseudocode)).
+4. **Elevation:** apply a **sharp drop** inside the cone: height falls off with **fall profile** along $s$ and a **lateral mask** in $l$; add small **lip noise**, so the top of the fall is not perfectly straight.
+
+```rust
+// Local frame: +s downstream, +l lateral. Apex at origin.
+fn waterfall_height_delta(
+    s: f32,
+    l: f32,
+    phi: f32,
+    r0: f32, // source half-width at apex
+    anchor: Seed,
+) -> f32 {
+    let spread = r0 + cone_growth(s) * (1.0 + boundary_noise(anchor, phi, s));
+    if l.abs() > spread {
+        return 0.0;
+    }
+    let drop = fall_profile(s) * lateral_mask(l / spread);
+    -drop - lip_noise(anchor, s, l)
+}
+```
+
 ### 3.3: Marazion Hydrology Complex Stamping
 
 ### 3.4: Marazion Global Ocean
