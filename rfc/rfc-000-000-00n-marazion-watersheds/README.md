@@ -430,26 +430,27 @@ flowchart TD
 
 #### 3.2.1: Basin Cell
 
-A **Basin Cell** is the top layer of basin stamping. It answers whether this region hosts a Marazion basin at all, lays down a **fixed grid of [Basin Point Cells](#322-basin-point-cell)** over its footprint, and—when enabled—runs **FGCPC** to place **Basin Points** on that grid and build the **highest-order hydrology graph** (ring index, adjacency, and downstream relations). Everything here is keyed off the **Basin Cell seed** so streaming and replay stay deterministic.
+A **Basin Cell** is the top layer of basin stamping. It answers whether this region hosts a Marazion basin at all, lays down a **fixed grid of [Basin Point Cells](#322-basin-point-cell)** over its footprint, and—when enabled—runs **FGCPC** to place **Basin Points** on that grid and build the **highest-order hydrology graph** (ring index, adjacency, and downstream relations). One **Basin Cell** generation pass is responsible for **resolving every Basin Point Cell** it contains: each slot ends up **occupied** (with a point and targets) or **explicitly vacant**, so the graph and slot table can be **baked once** and handed to lower layers. Everything here is keyed off the **Basin Cell seed** so streaming and replay stay deterministic.
 
 1. **Extent and anchor:** take an axis-aligned **Basin Cell** AABB in the horizontal plane, with a stable anchor (typically lower-left + pitch, same spirit as pocket cells).
 2. **Activation:** sample noise at the anchor. If below a threshold, **no basin**—skip basin stamping for this cell.
 3. **Basin Point Cell grid:** choose integers $(N_x, N_z)$ and pitches so the Basin Cell partitions into a **regular lattice** of **Basin Point Cell** slots. Each slot has indices $(i,j)$ and a deterministic seed derived from `(basin_anchor, i, j)`.
 4. **FGCPC:** if active, populate **Basin Points** ring-by-ring and record **edges** between neighboring basin points where the construction allows (see below). Enforce: **zeroth ring** shares one target **water surface** elevation; ring $n{+}1$ basin points sit **above** ring $n$; cap the **maximum ring count** and **maximum points** so work stays bounded.
-5. **Output:** emit **Basin Points** (position, ring, target elevation band), **graph** (adjacency + downstream), and **Basin Point Cell** occupancy so lower layers never need a spatial search over unknown candidates.
+5. **Output:** when this pass completes, the **Basin Cell** has assigned a **Basin Point** (or explicit **empty**) to **every [Basin Point Cell](#322-basin-point-cell) slot** it contains. The **hydrology graph** and per-point targets are **fully baked** here; lower layers **receive** that artifact (query by slot and seed) instead of rediscovering topology.
 
 ##### 3.2.1.1: Fixed Grid Concentric Point Candidacy (FGCPC)
 
-FGCPC grows **concentric rings** of basin points on the **Basin Point Cell** grid without scanning the whole world: new points are proposed only from **adjacent** slots to points already accepted in the previous ring, with **hysteresis** on the proposed coordinates inside the new slot, and **collision discard** if that slot is already occupied.
+FGCPC grows **concentric rings** of basin points on the **Basin Point Cell** grid (at most **one basin point per occupied slot**) without scanning the whole world: new slots are **candidacy-expanded** only from **cardinally adjacent** slots to points already accepted in the previous ring, with **collision discard** if a slot is already taken.
 
-**Initialization (ring 0).** Choose one or more **seed slots** $(i_0, j_0)$ from noise (e.g. near the cell center of mass of the grid). For each accepted seed, place a **Basin Point** with a small **deterministic jitter** inside the slot’s footprint. Assign ring $= 0$. All ring-0 points share the same **target water surface** $S_0$; their terrain targets sit **below** $S_0$ by a noise-determined offset (see the introduction to [3.2](#32-marazion-basin-water-stamping)). Optionally **reject** seeds whose **original terrain** lies far below $S_0$ to avoid long spines (same concern as the NOTE there).
+**Horizontal placement** inside a Basin Point Cell is **noise-driven**: sample $(x,z)$ deterministically within that slot’s AABB from `(basin_anchor, slot_i, slot_j, salt)`. **Hysteresis applies to elevation only**, e.g. blending the parent’s target band with the nominal step for the new ring so ring-to-ring height changes stay smooth and coherent.
+
+**Initialization (ring 0).** Choose one or more **seed slots** $(i_0, j_0)$ from noise (e.g. near the cell center of mass of the grid). For each accepted seed, place a **Basin Point** at **noise-chosen** $(x,z)$ inside the slot’s footprint. Assign ring $= 0$. All ring-0 points share the same **target water surface** $S_0$; their terrain targets sit **below** $S_0$ by a noise-determined offset (see the introduction to [3.2](#32-marazion-basin-water-stamping)). Optionally **reject** seeds whose **original terrain** lies far below $S_0$ to avoid long spines (same concern as the NOTE there).
 
 **Expansion (ring $n \to n{+}1$).** For each basin point accepted in ring $n$, consider **cardinally adjacent** Basin Point Cells (four neighbors on the grid). For each neighbor slot that is **not yet occupied**:
 
-1. Propose a point inside that slot using **hysteresis**: blend the vector from parent point toward the slot center with the previous step direction, add bounded angular noise, snap or clamp to the slot AABB (same family of move as [Stream](#3132-stream) hysteresis, but on a cell-local step budget).
-2. If the proposal exits the slot, **project** back; if progress stalls, **discard** this candidate for that parent/slot pair.
-3. If the slot is still free, **accept**: mark as occupied, assign ring $= n{+}1$, set elevation target **strictly above** every accepted point in ring $n$ (noise gives the step height). Add **graph edges** parent $\to$ child consistent with outward flow (direction fixed by construction policy, e.g. downhill from high ring to low ring toward ring 0).
-4. If the slot is **already occupied**, **discard** (no double booking).
+1. Propose **horizontal** coordinates inside that slot using **noise** only (same deterministic rule as ring 0).
+2. If the slot is still free, **accept**: mark as occupied, assign ring $= n{+}1$, set **elevation targets** using **hysteresis** from the parent point’s elevation band, so the child sits **strictly above** ring $n$ (noise gives the nominal step; hysteresis smooths parent/child coupling). Add **graph edges** parent $\to$ child consistent with outward flow (direction fixed by construction policy, e.g. downhill from high ring to low ring toward ring 0).
+3. If the slot is **already occupied**, **discard** (no double booking).
 
 Stop when **no new slots** accept, **ring cap** is hit, or **point budget** is exhausted.
 
@@ -487,13 +488,14 @@ fn run_fgcpc(
                 if occupied.contains(&slot) {
                     continue;
                 }
-                if let Some(q) = hysteresis_place_in_slot(p, slot, grid, anchor, ring) {
-                    let id = points.len();
-                    points.push(q);
-                    graph.add_edge(pid, id);
-                    occupied.insert(slot);
-                    next_frontier.push((id, Ring(ring + 1)));
-                }
+                let xz = noise_xz_in_slot(slot, grid, anchor, ring);
+                let elev = hysteresis_elevation_from_parent(&points[pid], ring, anchor);
+                let q = BasinPoint { slot, xz, elev, ring: ring + 1 };
+                let id = points.len();
+                points.push(q);
+                graph.add_edge(pid, id);
+                occupied.insert(slot);
+                next_frontier.push((id, Ring(ring + 1)));
             }
         }
         if next_frontier.is_empty() {
@@ -508,7 +510,7 @@ fn run_fgcpc(
 ```
 
 > [!NOTE]
-> FGCPC only **candidacy** on the fixed grid: final **flow** and fine carving still belong to [Basin Point Cell](#322-basin-point-cell) and below. Keep ring monotonicity and zeroth-ring surface discipline, so downstream layers can rely on the graph without global retuning.
+> FGCPC only **candidacy** on the fixed grid: final **flow** and fine carving still belong to [Basin Point Cell](#322-basin-point-cell) and below. Keep ring monotonicity and zeroth-ring surface discipline, so downstream layers can rely on the graph without global retuning. The **baked** slot table (point or vacant) is what you store or stream alongside the graph.
 
 #### 3.2.2: Basin Point Cell
 
