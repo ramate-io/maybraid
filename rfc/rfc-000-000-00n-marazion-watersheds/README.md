@@ -652,9 +652,67 @@ fn waterfall_height_delta(
 
 Marazion hydrology complexes are intended to satisfy [RFC-105: Jersey Hydrology Complexes (Multi-part Landforms)](https://github.com/ramate-io/maybraid/tree/main/rfc/rfc-000-000-105-procedural-terrain#388-jersey-hydrology-complexes-multi-part-landforms). They extend [Marazion Basins](#32-marazion-basin-water-stamping) in two ways:
 
-1. They connect multiple basins by deciding an even higher-order hydrology graph between **Hydrology Cells**. This graph also enforces a ceiling on **Basin Points** within a Marazion Basin. 
-2. They inject tributary modulations at all points in the Marazion Basin hierarchy, i.e., adding a few cell-scale stream stamps connecting to each point. 
+1. They connect multiple basins by deciding an even higher-order hydrology graph between **Hydrology Cells**. That graph, together with **per-basin elevation ceilings**, keeps the whole complex able to drain **downhill** along adjacency to the right sinks.
+2. They inject tributary modulations at all points in the Marazion Basin hierarchy, i.e., adding a few cell-scale [Stream](#3132-stream) stamps connecting into or out of existing graph nodes.
+
+At RFC level, a complex is a **DAG or chain** of parts under one **complex ID**; Marazion mirrors that with a **baked inter-basin graph** plus **local** tributary passes that do not replace the basin pipeline—they **refine** it.
+
+#### 3.3.1: Hydrology Graph and Basin Caps
+
+Tile the landscape (or the complex footprint) into **Hydrology Cells**—coarse axis-aligned regions, each with a deterministic seed. Between those cells, build a **directed graph** of intended flow: which cell drains to which, optional **spill** edges, and **pour** edges into downstream basins. That graph is the **highest-order** hydrology structure for the complex.
+
+```mermaid
+flowchart TD
+    HG["Hydrology graph between Hydrology Cells"]
+    HC["Hydrology Cell"]
+    HPC["Hydrology Point Cell (= Basin Cell)"]
+    CAP["Elevation caps (height bands)"]
+    FGCPC["FGCPC: Basin Points + ring elevations"]
+    PIPE["Basin pipeline: Basin Point Cell through Basin Feature Cell"]
+
+    HG --> HC
+    HC --> HPC
+    HG --> CAP
+    CAP --> FGCPC
+    HPC --> FGCPC
+    FGCPC --> PIPE
+```
+
+1. **Hydrology Cell:** owns the inter-basin graph edges and the **elevation budget** that downstream basins must respect.
+2. **Hydrology Point Cell:** same structural role as a [Basin Cell](#321-basin-cell) in [Marazion Basin Water Stamping](#32-marazion-basin-water-stamping): one footprint per tile. The Basin Cell pass decides **whether** that footprint hosts a basin; **[FGCPC](#3211-fixed-grid-concentric-point-candidacy-fgcpc)** then places **Basin Points** and ring **elevations** on the Basin Point Cell grid. **Hydrology-complex caps** bound the **maximum height** of those basin points (not the count) so the macro graph can still drain **downhill**—see below.
+
+**Caps (elevation, not basin-point count):** caps are **not** a direct limit on how many **Basin Points** FGCPC may create. Instead, they bound the **maximum height** of basin points (per ring and in aggregate) so that, taken with the **Hydrology graph**, water can always run **downhill** along the intended adjacency to the next cell or sink. The tightest ceiling typically comes from the **downstream** neighbor’s allowed surface band and the **edge** you want water to cross. Express caps as height bands keyed by `(complex_anchor, hydrology_cell_id, edge_id)` so large complexes can still allocate vertical range where the graph allocates capacity.
+
+**Order of work:** resolve the **Hydrology graph** and **elevation ceilings** first (or in the same bake pass as basin activation). Then run the full basin pipeline for each active basin: **Basin Cell**, then each layer through **Basin Feature Cell**, using those ceilings and **shared** boundary data where two basins meet (same edge agreement as between [Basin Point Cells](#322-basin-point-cell)).
+
+#### 3.3.2: Tributary injection
+
+After the basin hierarchy is **baked** for a region, **optionally** inject **small** stream stamps—**short** polylines keyed off `(anchor, node_kind, node_id)` where `node_kind` is one of: **Basin Point**, **Thalweg Point**, **Basin Feature** sample, etc. Each tributary has a **budget** (max length, max width) so it cannot dominate the macro basin shape. Use the same [Stream](#3132-stream) construction as pocket water, with endpoints snapped to the **already-known** graph geometry (no new search).
+
+```rust
+fn inject_tributaries(
+    baked: &BasinHierarchyBake,
+    complex_anchor: Seed,
+    hydrology: &HydrologyGraph,
+) {
+    for node in baked.tributary_attachment_nodes() {
+        if !tributary_enabled(complex_anchor, node) {
+            continue;
+        }
+        let (a, b) = tributary_endpoints(node, hydrology); // short segment
+        let path = build_stream_path(node.cell_rect, tributary_seed(complex_anchor, node), a, b);
+        stamp_stream_overlay(&path, TRIBUTARY_BUDGET);
+    }
+}
+```
+
+> [!NOTE]
+> Tributaries are **additive detail**: if they fight the basin grade, reduce budget or run them only at **outer** rings. The inter-basin **Hydrology graph** remains authoritative for where water is allowed to leave one basin and enter another.
 
 ### 3.4: Marazion Global Ocean
+
+Once all terrain modulations--except sub-sea-level valleys and hydrology--define the SDF for the Ocean as the region not below world elevation 0 and above terrain. 
+
+Fix a large grid over the world. Each **Ocean Cell** in the grid will decide whether that cell masks to the global ocean, or not. If the cell is 
 
 ## 4: Milestones
