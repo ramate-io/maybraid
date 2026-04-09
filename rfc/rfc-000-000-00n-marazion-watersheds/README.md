@@ -428,6 +428,9 @@ flowchart TD
     BFCS["Basin Feature Cell Seed Point"] --> BFC
 ```
 
+> [!NOTE]
+> When a special query trips an BVH intersection, it will generate down the hierarchy--excluding lower-order cells that do not yet intersect. Upon generation, a given level of the hierarchy will be fully-determined or "baked." It can pass on all of its information to arbitrary cells bound within it. To avoid repeat work, it should then be kept in spatial storage. 
+
 #### 3.2.1: Basin Cell
 
 A **Basin Cell** is the top layer of basin stamping. It answers whether this region hosts a Marazion basin at all, lays down a **fixed grid of [Basin Point Cells](#322-basin-point-cell)** over its footprint, and—when enabled—runs **FGCPC** to place **Basin Points** on that grid and build the **highest-order hydrology graph** (ring index, adjacency, and downstream relations). One **Basin Cell** generation pass is responsible for **resolving every Basin Point Cell** it contains: each slot ends up **occupied** (with a point and targets) or **explicitly vacant**, so the graph and slot table can be **baked once** and handed to lower layers. Everything here is keyed off the **Basin Cell seed** so streaming and replay stay deterministic.
@@ -601,12 +604,24 @@ fn slide_along_boundary(q0: Vec2, cell: Rect, anchor: Seed, edge_id: u32) -> Vec
 
 #### 3.2.3: Thalweg Cell
 
+A **Thalweg Cell** is one tile in the **Basin Point Cell** [thalweg grid](#322-basin-point-cell). It receives **Basin Path Boundary Points** for edges that cross this footprint and builds **finer** centerline geometry between them.
+
+1. **Polyline seed:** for each pair of boundary points this cell must join (upstream/downstream policy from the baked graph), take the straight segment and **snap** its endpoints to the Thalweg Cell’s internal grid with **bounded noise** (same spirit as noisy projection in [3.2.2.2](#3222-boundary-points-pseudocode), but inside the cell).
+2. **Hysteresis path:** run a short **in-plane** walk (as in [Stream](#3132-stream)) from entry to exit, so the thalweg does not zigzag; **elevation** along the path follows the **downstream grade** implied by basin targets.
+3. **Thalweg Points:** emit samples along the path (arc-length spaced) for downstream layers.
+4. **Waterfalls:** where grade change or noise exceeds a threshold, mark a **Waterfall** site and hand off to [Waterfall Stamp](#325-waterfall-stamp).
+5. **Moderate lake:** optional [Lake](#3131-lake)-style stamp at a thalweg sample (smaller than the Basin Point Cell lake).
+6. **Output:** thalweg polyline + flags, and a grid of **[Basin Feature Cells](#324-basin-feature-cell)** for detail stamping.
+
 #### 3.2.4: Basin Feature Cell
 
-#### 3.2.5: Waterfall Stamp
+A **Basin Feature Cell** is the **finest** basin layer: it turns **Thalweg Points** into terrain detail using the same **pocket** machinery as [Marazion Pocket Waters](#31-marazion-pocket-water-stamping).
 
-> [!NOTE]
-> When a special query trips an BVH intersection, it will generate down the hierarchy--excluding lower-order cells that do not yet intersect. Upon generation, a given level of the hierarchy will be fully-determined or "baked." It can pass on all of its information to arbitrary cells bound within it. To avoid repeat work, it should then be kept in spatial storage. 
+1. **Streams:** connect consecutive **Thalweg Points** with [Stream](#3132-stream) construction (segment per pair or chained polyline per cell).
+2. **Open segments:** if a stream segment leaves the cell before terminating, **project** the exit onto this cell’s boundary with the same **noisy slide** pattern as [3.2.2.2](#3222-boundary-points-pseudocode), so the next cell can continue deterministically.
+3. **Lakes and bog:** optionally stamp [Lake](#3131-lake) and/or [Bog](#3133-bog) at **noise offsets** from the cell centroid (parameters scaled down from basin-scale lakes).
+
+#### 3.2.5: Waterfall Stamp
 
 ### 3.3: Marazion Hydrology Complex Stamping
 
