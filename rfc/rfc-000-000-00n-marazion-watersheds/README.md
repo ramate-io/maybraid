@@ -1,5 +1,47 @@
 # RFC-n: Marazion Watersheds
 
+## Table of contents
+
+- [1: Motivation](#1-motivation)
+- [2: Prior Art](#2-prior-art)
+- [3: Design](#3-design)
+    - [3.1: Marazion Pocket Water Stamping](#31-marazion-pocket-water-stamping)
+        - [3.1.1: Pre-pocket Cells](#311-pre-pocket-cells)
+        - [3.1.2: Pocket Cells](#312-pocket-cells)
+        - [3.1.3: Pocket Water Cells](#313-pocket-water-cells)
+            - [3.1.3.1: Lake](#3131-lake)
+            - [3.1.3.2: Stream](#3132-stream)
+            - [3.1.3.3: Bog](#3133-bog)
+            - [3.1.3.4: Pocket Complex](#3134-pocket-complex)
+    - [3.2: Marazion Basin Water Stamping](#32-marazion-basin-water-stamping)
+        - [3.2.1: Basin Cell](#321-basin-cell)
+            - [3.2.1.1: Fixed Grid Concentric Point Candidacy (FGCPC)](#3211-fixed-grid-concentric-point-candidacy-fgcpc)
+        - [3.2.2: Basin Point Cell](#322-basin-point-cell)
+            - [3.2.2.1: Elevation blend (pseudocode)](#3221-elevation-blend-pseudocode)
+            - [3.2.2.2: Boundary points (pseudocode)](#3222-boundary-points-pseudocode)
+        - [3.2.3: Thalweg Cell](#323-thalweg-cell)
+        - [3.2.4: Basin Feature Cell](#324-basin-feature-cell)
+        - [3.2.5: Waterfall Stamp](#325-waterfall-stamp)
+    - [3.3: Marazion Hydrology Complex Stamping](#33-marazion-hydrology-complex-stamping)
+        - [3.3.1: Hydrology Graph and Basin Caps](#331-hydrology-graph-and-basin-caps)
+        - [3.3.2: Tributary injection](#332-tributary-injection)
+    - [3.4: Marazion Global Ocean](#34-marazion-global-ocean)
+- [4: Milestones](#4-milestones)
+    - [4.1: Alpha Marazion Global Ocean](#41-alpha-marazion-global-ocean)
+    - [4.2: Pre-pocket Cells](#42-pre-pocket-cells)
+    - [4.3: Pocket Cells](#43-pocket-cells)
+    - [4.4: Lake Pocket Water](#44-lake-pocket-water)
+    - [4.5: Stream Pocket Water](#45-stream-pocket-water)
+    - [4.6: Bog Pocket Water](#46-bog-pocket-water)
+    - [4.7: Pocket Complex](#47-pocket-complex)
+    - [4.8: Basin Cell and FGCPC](#48-basin-cell-and-fgcpc)
+    - [4.9: Basin Point Cell](#49-basin-point-cell)
+    - [4.10: Thalweg Cell](#410-thalweg-cell)
+    - [4.11: Basin Feature Cell](#411-basin-feature-cell)
+    - [4.12: Waterfall Stamp](#412-waterfall-stamp)
+    - [4.13: Hydrology Graph and Basin Caps](#413-hydrology-graph-and-basin-caps)
+    - [4.14: Tributary Injection](#414-tributary-injection)
+
 ## 1: Motivation
 
 Marazion Watersheds are a response to the Jersey terrain stamp requirements from [RFC-105](https://github.com/ramate-io/maybraid/tree/main/rfc/rfc-000-000-105-procedural-terrain).
