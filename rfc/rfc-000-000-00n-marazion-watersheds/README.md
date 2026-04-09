@@ -396,10 +396,10 @@ Each point in a Marazion **Basin Point Cell** will be modulated by a distance-we
 
 Once the higher-order graph is determined, a series of lower-order cellular layers are used to perform the full modulation:
 
-1. **Basin Cell:** determines whether there will be a basin, and generates the **Basin Points** and graph. Contains a fixed grid of **Basin Point Cells**.
-2. **Basin Point Cell:** modulates elevation w.r.t. contained Basin Points and adjacencies, and chooses **Basin Path Boundary Points** via noisy projection of straight line path to each connection onto boundary. Contains a fixed grid of **Thalweg Cells**. May decide if it wants to stamp a potentially large lake at its Basin Point.
-3. **Thalweg Cell:** noisily projects paths between **Basin Path Boundary Points** onto an internal grid, then uses a hysteresis search within a given cell to generate **Thalweg Points**, constituting a finer downward path between boundary points. May generate waterfall locations--points where elevation should drop off abruptly in an x-z oriented cone. May also choose to decide any non-waterfall Thalweg Point should stamp a moderate-size lake. Contains a grid of **Basin Feature Cells**.
-4. **Basin Feature Cell:** uses [Stream](#3132-stream) construction from [Marazion Pocket Waters](#31-marazion-pocket-water-stamping) to connect **Thalweg Points**. Any unbounded **Thalweg Segments** are projected noisily onto the boundary. May also decide to stamp a lake at a noisy offset from its centroid via borrowing from [Lake](#3131-lake) and/or stamp a bog via borrowing from [Bog](#3133-bog). 
+1. **[Basin Cell](#321-basin-cell):** determines whether there will be a basin, and generates the **Basin Points** and graph. Contains a fixed grid of **Basin Point Cells**.
+2. **[Basin Point Cell](#322-basin-point-cell):** modulates elevation w.r.t. contained Basin Points and adjacencies, and chooses **Basin Path Boundary Points** via noisy projection of straight line path to each connection onto boundary. Contains a fixed grid of **Thalweg Cells**. May decide if it wants to stamp a potentially large lake at its Basin Point.
+3. **[Thalweg Cell](#323-thalweg-cell):** noisily projects paths between **Basin Path Boundary Points** onto an internal grid, then uses a hysteresis search within a given cell to generate **Thalweg Points**, constituting a finer downward path between boundary points. May generate waterfall locations--points where elevation should drop off abruptly in an x-z oriented cone given in [Waterfall Stamp](#325-waterfall-stamp). May also choose to decide any non-waterfall Thalweg Point should stamp a moderate-size lake. Contains a grid of **Basin Feature Cells**.
+4. **[Basin Feature Cell](#324-basin-feature-cell):** uses [Stream](#3132-stream) construction from [Marazion Pocket Waters](#31-marazion-pocket-water-stamping) to connect **Thalweg Points**. Any unbounded **Thalweg Segments** are projected noisily onto the boundary. May also decide to stamp a lake at a noisy offset from its centroid via borrowing from [Lake](#3131-lake) and/or stamp a bog via borrowing from [Bog](#3133-bog). 
 
 The complete flow of data is thus:
 
@@ -427,6 +427,16 @@ flowchart TD
 
     BFCS["Basin Feature Cell Seed Point"] --> BFC
 ```
+
+#### 3.2.1: Basin Cell
+
+#### 3.2.2: Basin Point Cell
+
+#### 3.2.3: Thalweg Cell
+
+#### 3.2.4: Basin Feature Cell
+
+#### 3.2.5: Waterfall Stamp
 
 > [!NOTE]
 > When a special query trips an BVH intersection, it will generate down the hierarchy--excluding lower-order cells that do not yet intersect. Upon generation, a given level of the hierarchy will be fully-determined or "baked." It can pass on all of its information to arbitrary cells bound within it. To avoid repeat work, it should then be kept in spatial storage. 
