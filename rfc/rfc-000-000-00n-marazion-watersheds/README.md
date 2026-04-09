@@ -711,13 +711,38 @@ fn inject_tributaries(
 
 ### 3.4: Marazion Global Ocean
 
-Once all terrain modulations have been computed, you may apply the Marazion Global Ocean. 
+Apply this after the rest of Marazion is baked. Tile the horizontal world on a single coarse, world-anchored grid; every tile is an **Ocean Cell**. There is no separate land cell type: each Ocean Cell independently chooses whether it **hosts** the global ocean (open water at the project-wide sea level \(H_{\text{sl}}\)) or **does not** host it, leaving the baked terrain underneath as-is except for the rim rule below.
 
-Fix a large-celled grid over the world. Each **Ocean Cell** in the grid will decide whether that cell masks to the global ocean, or not. 
+The mask must be deterministic from the cell anchor so streaming chunks and neighbors agree—same spirit as the floor-index anchors in [Pre-pocket Cells](#311-pre-pocket-cells), but with a much larger pitch \(W_{\text{ocean}}\).
 
-If the cell is not in the ocean, ensure push a noisy rim up at its boundaries, s.t. at the boundary, the points will be at or noisily slightly above sea level. This ensures that we do not have ocean walls against non ocean cells. Points which are already above sea level do not need to be modulated. 
+Where an Ocean Cell **does** host global ocean, treat its footprint as covered by the ocean surface at \(H_{\text{sl}}\); samples below that height are underwater. Where an Ocean Cell **does not** host global ocean, you still may need a **coastal rim** wherever that cell touches a neighbor that **does** host ocean along a shared edge. In a narrowband measured by distance inward from those ocean-facing edges, raise elevation so that on the boundary itself height is at least \(H_{\text{sl}}\) plus a small signed noise (never dipping meaningfully below \(H_{\text{sl}}\) on the edge). Blend that constraint smoothly to zero influence by the time you reach a small maximum distance \(d_{\max}\) into the cell so you do not flatten interiors. Use `max(h, h_{\text{required}})` so terrain that is already above \(H_{\text{sl}}\) is never pushed down—only lifted where the rim needs support.
+
+Flat ocean rendering against higher baked land can look like a vertical wall if the first samples inland are still below \(H_{\text{sl}}\); the rim exists only to soften that transition between two Ocean Cells that made different hosting choices.
+
+```rust
+// `hosts_ocean`: this cell. `edge_faces_ocean`: per edge, whether the neighbor Ocean Cell hosts ocean.
+fn ocean_cell_height(
+    x: f64,
+    z: f64,
+    anchor: (f64, f64),
+    hosts_ocean: bool,
+    edge_faces_ocean: &[bool; 4],
+    h: f64,
+) -> f64 {
+    if hosts_ocean {
+        return h; // water surface handled by renderer / mask; terrain stays baked below H_sl
+    }
+    let d = dist_to_edges_where_neighbor_hosts_ocean(x, z, edge_faces_ocean);
+    if d >= D_MAX {
+        return h;
+    }
+    let t = smoothstep(0.0, D_MAX, d);
+    let h_req = lerp(sea_level() + edge_epsilon(anchor, /* edge */), h, t);
+    h.max(h_req)
+}
+```
 
 > [!WARNING]
-> This should only be a few of floating point operations that is manageable within the context of well-baked terrain and cautious LOD. 
+> Keep the rim evaluation to a few floating-point operations per sample (distance to a few segments, one smooth blend, one `max`), which stays manageable on well-baked terrain with cautious LOD.
 
 ## 4: Milestones
