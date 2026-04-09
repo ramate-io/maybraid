@@ -650,6 +650,11 @@ fn waterfall_height_delta(
 
 ### 3.3: Marazion Hydrology Complex Stamping
 
+Marazion hydrology complexes are intended to satisfy [RFC-105: Jersey Hydrology Complexes (Multi-part Landforms)](https://github.com/ramate-io/maybraid/tree/main/rfc/rfc-000-000-105-procedural-terrain#388-jersey-hydrology-complexes-multi-part-landforms). They extend [Marazion Basins](#32-marazion-basin-water-stamping) in two ways:
+
+1. They connect multiple basins by deciding an even higher-order hydrology graph between **Hydrology Cells**. This graph also enforces a ceiling on **Basin Points** within a Marazion Basin. 
+2. They inject tributary modulations at all points in the Marazion Basin hierarchy, i.e., adding a few cell-scale stream stamps connecting to each point. 
+
 ### 3.4: Marazion Global Ocean
 
 ## 4: Milestones
