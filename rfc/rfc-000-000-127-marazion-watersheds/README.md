@@ -75,10 +75,12 @@ Marazion pocket waters rely on three levels of cellular stamping hierarchy:
 Pre-pocket cells tile the horizontal plane on a **world-anchored** axis-aligned grid, so streaming agrees across chunk boundaries.
 
 - **Grid:** fix a **pre-pocket pitch** $W_{\text{pre}}$ (world units) and origin $(O_x, O_z)$. Any world point $(x,z)$ lies in the cell with indices
-  $$
+
+```math
   i = \left\lfloor \frac{x - O_x}{W_{\text{pre}}} \right\rfloor,\qquad
-  j = \left\lfloor \frac{z - O_z}{W_{\text{pre}}} \right\rfloor.
-  $$
+  j = \left\lfloor \frac{z - O_z}{W_{\text{pre}}} \right\rfloor
+```
+
   The **anchor** for that pre-pocket is its **lower-left corner** $(O_x + i W_{\text{pre}},\, O_z + j W_{\text{pre}})$.
 - **Pocket pitch inside the pre-pocket:** sample deterministic noise at the anchor (and a fixed salt). Map it to a **discrete** pocket pitch $W_{\text{pocket}}$ from a small allowed set (e.g. powers of two or fixed quanta). Require $W_{\text{pocket}}$ to **divide** $W_{\text{pre}}$ on both axes (or define a rule for leftover margin at the max- $x$ / max- $z$ edges). That yields an integer **$n_x \times n_z$** grid of **Pocket Cells** inside each pre-pocket.
 - **Role:** $W_{\text{pocket}}$ is **constant** within one pre-pocket but **varies** between pre-pockets, so changes in pocket size over the world while staying **regionally correlated** along the pre-pocket grid.
