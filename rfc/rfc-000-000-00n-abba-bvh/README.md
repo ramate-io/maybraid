@@ -50,6 +50,8 @@ impl <O: BvhObject<Self>> Bvh<O> {
 }
 ```
 
+However, in order to handle more complex queries, asynchronicity, object movement subtleties, and first-class Bevy support, we provide a more intricate design. 
+
 ## 2: Prior Art
 
 ## 3: Design
