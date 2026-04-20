@@ -146,9 +146,8 @@ impl SpatialIndex<ObjectId> {
         &self,
         region: AaBb,
         levels: impl Iterator<Item = D>,
-    ) -> Vec<ObjectId> {
-        let mut result = Vec::new();
-        let mut seen = HashSet::new();
+    ) -> HashSet<ObjectId> {
+        let mut result = HashSet::new();
 
         for d in levels {
             let cell_size = scale_to_cell_size(d);
@@ -163,11 +162,10 @@ impl SpatialIndex<ObjectId> {
 
                         if let Some(bucket) = self.cells.get(&key) {
                             for &id in bucket {
-                                if seen.insert(id) {
-                                    // Optional exact check (recommended)
+                                if !result.contains(id) {
                                     if let Some(aabb) = self.values.get(&id) {
                                         if aabb.intersects(&region) {
-                                            result.push(id);
+                                            result.add(id);
                                         }
                                     }
                                 }
