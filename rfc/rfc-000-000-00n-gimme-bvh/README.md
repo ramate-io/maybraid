@@ -197,7 +197,7 @@ This implies using an identifier such as Bevy's `Entity` as the spatially indexe
 ```rust
 ```
 
-Such a type-agnostic approach will naturally cause over-fetching. For the most part, this should be reasonable. However, re-use of [3.2.1.2: Optimistic Drafts](#3211-optimistic-drafts) is advised.
+Such a type-agnostic approach will naturally cause over-fetching. For the most part, this should be reasonable. However, re-use of [3.2.1.2: Optimistic Drafts](#3212-optimistic-drafts) is advised.
 
 ### 3.2: Concurrency
 
@@ -308,7 +308,11 @@ impl BimmodalSpatialIndex<Entity> {
 
 ##### 3.2.1.1: Exclusive Writes
 
-##### 3.2.1.1: Optimistic Drafts
+##### 3.2.1.2: Optimistic Drafts
+
+##### 3.2.1.3: Intermodal Fairness
+
+The base API has an aggressive preference for the Exclusive Writes mode. While this is often the intended circumstance, there are several extensions of the base API which can be used for fairness between the modes. 
 
 #### 3.2.2: Ground and State Indexes
 
