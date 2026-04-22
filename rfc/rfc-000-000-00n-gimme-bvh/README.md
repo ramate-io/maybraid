@@ -199,123 +199,353 @@ This implies using an identifier such as Bevy's `Entity` as the spatially indexe
 
 Such a type-agnostic approach will naturally cause over-fetching. For the most part, this should be reasonable. However, re-use of [3.2.1.2: Optimistic Drafts](#3212-optimistic-drafts) is advised.
 
+Here is a cleaned-up and tightened version with clearer semantics, simpler wording, and filled subsections.
+
 ### 3.2: Concurrency
 
-For basic usages the user may be able to rely on synchronization primitives, such as Bevy's resource and query APIs or standard library locks. However, Gimme's spatial index will often be used heavily for both reads and writes. To account for this contention, we propose two distinct write APIs: exclusive writes and optimistic drafts. Additionally, we suggest a two-layer spatial indexing model.
+For basic usage, developers may rely on existing synchronization primitives such as Bevy resources, queries, or standard library locks. However, Gimme’s spatial index is often accessed heavily for both reads and writes. To manage contention without over-constraining performance, we provide two distinct write modes:
+
+- **Exclusive writes** for correctness-critical updates
+- **Optimistic drafts** for parallel, mostly-independent updates
+
+Additionally, we recommend structuring spatial data into multiple layers, e.g., static vs. stateful, to further reduce contention.
+
 
 #### 3.2.1: Write APIs
 
-We identify two common cases for writing to a spatial index:
+We identify two common categories of writes:
 
-1. **Mutual exclusion:** when writing, all other readers and writers must be excluded for the update to be correct. This is most common in stateful or non-streamable systems. 
-2. **Optimistic independence** when writing, most updates do not touch the same entities. And, if they do, they either write the same value or can be sequenced for correctness by information passed down from the caller. 
+1. **Mutual exclusion:**
+   Updates that must observe and modify the current authoritative state without interference. These are typical for stateful gameplay logic and tightly coupled systems.
 
-Importantly, a spatial index cannot operate in both modes at once. These modes must be mutually exclusive. 
+2. **Optimistic independence:**
+   Updates that are mostly independent, or whose correctness can be resolved through caller-provided ordering (e.g., sequence numbers). These are common in procedural generation, streaming, and asynchronous workflows.
 
-To accomplish this, we compose the following type from the spatial index:
+These modes are intentionally **mutually exclusive at the point of access**. A caller must explicitly choose between exclusive access and draft-based updates, and committing drafts which were held over an exclusive lock is invalid. 
 
 ```rust
 pub struct ExclusiveVersion(u64);
-
 pub struct DraftVersion(u64);
 
-/// The version of the spatial index.
-/// Underlying value incremented when [ExclusiveSpatialIndex] dropped or [DraftSpatialIndex] applied. 
-pub struct Version {
-    /// [ExclusiveSpatialIndex] writes a a version marked Exclusive.
-    /// Draft versions lower than this will not be applied. 
-    /// This invalidates an drafts that were held over the exclusive write borrow. 
+/// Global version of the spatial index.
+pub enum Version {
+    /// Set after an exclusive write. Invalidates older drafts.
     Exclusive(ExclusiveVersion),
-    /// Draft versions only affect whether a draft can be applied if the 
-    /// latest version of the spatial index is from an exclusive write. 
-    Draft(DraftVersion)
+    /// Set after draft application.
+    Draft(DraftVersion),
 }
 
-pub struct SequenceNumber {
-    /// Writes regardless of stored sequence number.
+pub enum SequenceNumber {
+    /// Always applies.
     Agnostic,
-    /// Writes only if value is greater than stored sequence number.
-    /// This helps avoid stale writes for asynchronous processes. 
-    Number(u64)
-};
+    /// Applies only if newer than the stored value.
+    Number(u64),
+}
 
 pub struct BimodalSpatialIndex<Entity> {
-    /// The core underlying spatial index.
     spatial_index: SpatialIndex<Entity>,
-    /// The sequence numbers for entities in the spatial index.
     sequence_numbers: HashMap<Entity, SequenceNumber>,
-    /// The latest version of the spatial index
-    version: Version
+    version: Version,
 }
 
-pub struct ExclusiveSpatialIndex<Entity> {
-    /// The underlying spatial index. 
-    index: &mut BimodalSpatialIndex<Entity>,
-    /// The underlying spatial index queried to a given region. 
-    /// Mutation methods are not publicly available on the spatial index. 
+pub struct ExclusiveSpatialIndex<'a, Entity> {
+    index: &'a mut BimodalSpatialIndex<Entity>,
     sub_index: SpatialIndex<Entity>,
 }
 
 pub struct DraftSpatialIndex<Entity> {
-    /// The underlying spacial index queried to a region (this is a copy).
     sub_index: SpatialIndex<Entity>,
-    /// When we update a spatial inde via a draft,
-    /// sequence numbers are respected. 
-    /// Effectively, compaction occurs respecting "latest sequence number writes" semantics. 
-    /// Note that the presence of a sequence number also indicates that an edit was made. 
     draft_sequence_numbers: HashMap<Entity, SequenceNumber>,
-    /// The version of the draft. This should not be tampered-with. 
-    /// Previous designs featured a one-shot system. 
-    /// We argued that this helped be able to handle draft rejection
-    /// and rescheduling at the call site. 
-    /// But, this is actually not true. You could send the draft and have it evicted later without any reporting back. 
-    /// Instead, for rescheduling purpose, we recommend type-specific [apply] systems. Therein, you can detect the draft apply condition and reschedule. 
-    /// We elaborate on this more in the "In Bevy" section.
-    /// This is also lighter and draft writers can ensure logical sequence. 
-    version: DraftVersion
+    version: DraftVersion,
 }
 
-impl BimmodalSpatialIndex<Entity> {
-    
-    /// Constructs the exclusive spatial index 
-    /// Clears all active drafts. 
-    /// 
-    /// Note: we could explore some fairness designs. 
-    /// We could make the force optional and place something like a
-    /// "no new drafts" lock on this. But, maybe that overcomplicates. 
-    /// Often where we have contention is going to be a loading screen anyways and the data we need to materialize will often be stored. 
+impl<Entity> BimodalSpatialIndex<Entity> {
     fn exclusive(
-        &mut self, 
-        region: AaBb, 
-        levels: impl Iter<Item = D>
+        &mut self,
+        region: AaBb,
+        levels: impl Iterator<Item = D>,
     ) -> ExclusiveSpatialIndex<'_, Entity>;
 
-    /// Constructs the draft spatial index
     fn draft(
         &mut self,
-        region: AaBb, 
-        level: impl Iter<Item = D>
+        region: AaBb,
+        levels: impl Iterator<Item = D>,
     ) -> DraftSpatialIndex<Entity>;
 
-    /// Applies a draft
     fn apply_draft(
         &mut self,
-        draft: DraftSpatialIndex<Entity>
-    ) -> Result<(), ApplyError>; 
-
+        draft: DraftSpatialIndex<Entity>,
+    ) -> Result<(), ApplyError>;
 }
 ```
 
 ##### 3.2.1.1: Exclusive Writes
 
+Exclusive writes provide **full, immediate authority** over the spatial index.
+
+When `exclusive` is called:
+
+- All in-flight drafts are **logically invalidated**
+- The spatial index enters an **exclusive version**
+- The caller obtains a mutable view over a queried region
+
+This ensures:
+
+- No concurrent draft can apply stale updates
+- The caller observes and mutates a **consistent, current state**
+- Complex or stateful operations can be performed safely
+
+Exclusive writes are appropriate for:
+
+- Stateful gameplay updates (e.g., entity movement, inventory, quest state)
+- Coherent transformations (e.g., replacing structures or regions)
+- Systems that cannot tolerate stale reads
+
+This model is intentionally **forceful**. It prioritizes correctness over fairness, under the assumption that exclusive writes are relatively rare or occur during controlled phases (e.g., loading, synchronization).
+
 ##### 3.2.1.2: Optimistic Drafts
+
+Drafts provide a **parallel, non-blocking write model**.
+
+A draft:
+
+- Is created from a snapshot of the spatial index at a `DraftVersion`
+- Contains a local `sub_index` representing a region
+- Tracks edits via `draft_sequence_numbers`
+
+When `apply_draft` is called:
+
+- The draft is applied only if it is not invalidated by a newer `Exclusive` version
+- Writes are merged using **sequence number semantics**
+
+Sequence numbers enable **freshness control**:
+
+- `Agnostic` writes always apply
+- `Number(n)` writes apply only if `n` is greater than the stored value
+
+This allows safe handling of:
+
+- Asynchronous operations, e.g., network requests
+- Parallel generation pipelines
+- Out-of-order completion
+
+Drafts are appropriate for:
+
+- Procedural generation
+- Streaming and LOD systems
+- Cache construction
+- Background tasks
+
+Importantly, drafts do **not guarantee application**. They are optimistic:
+
+- They may be invalidated by exclusive writes
+- They may be superseded by newer sequence numbers
+
+Failure handling is expected to be **externalized**, e.g., via ECS systems that detect stale or missing results when `draft_apply` returns a(n) `Err`. 
 
 ##### 3.2.1.3: Intermodal Fairness
 
-The base API has an aggressive preference for the Exclusive Writes mode. While this is often the intended circumstance, there are several extensions of the base API which can be used for fairness between the modes. 
+The base API **favors exclusive writes**:
+
+- Exclusive access immediately invalidates drafts
+- And, drafts never block exclusive writes
+
+This bias reflects the assumption that correctness-critical operations must not be delayed.
+
+However, this can lead to contention if exclusive writes are frequent.
+
+Several extensions can improve fairness:
+
+**1. Layered Spatial Indices**
+
+Split data into multiple indices, e.g., static vs. dynamic, as we elaborate upon in [3.2.2: Ground and State](#322-ground-and-state-indexes):
+
+- Static/generative layers primarily use drafts
+- Dynamic/stateful layers may use exclusive writes more often
+
+Queries are composed via read-through:
+
+1. Query stateful layer
+2. Query static layer
+3. Merge results, with stateful overriding static
+
+This reduces cross-system interference.
+
+**2. Sequence-Based Freshness**
+
+Instead of enforcing ordering globally, drafts use sequence numbers to resolve conflicts locally.
+
+This avoids:
+
+- Global queues
+- Blocking on slow operations
+- Stale overwrites from asynchronous work
+
+**3. Optional Admission Control (Future Work)**
+
+A softer model could allow:
+
+- Temporarily preventing new drafts during exclusive phases
+- Allowing existing drafts to complete
+
+This improves fairness but increases complexity and is not part of the base design.
 
 #### 3.2.2: Ground and State Indexes
 
+In practice, contention can often be reduced further by separating the spatial index into two logical layers: **Ground** and **State**.
+
+- **Ground:** stores the base spatial data for the world. This is typically the output of generation, loading, streaming, or other environment-construction processes. Ground is often relatively stable, but it is **not required to be immutable**. Rather, Ground is the layer whose contents are not primarily driven by live agent actions.
+- **State:** stores the spatial data most directly affected by characters, game agents, simulation, or other decision systems. This includes dynamic repositioning, transient objects, and modifications to previously generated artifacts.
+
+This distinction is semantic rather than absolute. An artifact may first be constructed by an operation over the Ground index and later be moved, replaced, or otherwise updated through the State index. In this sense, State acts as the more immediate and authoritative layer for live gameplay.
+
+The two layers are each implemented as a `BimodalSpatialIndex<Entity>`:
+
+```rust
+pub struct HierarchicalSpatialIndex<Entity> {
+    ground: BimodalSpatialIndex<Entity>,
+    state: BimodalSpatialIndex<Entity>,
+}
+```
+
+The intended use is:
+
+- **Ground** favors optimistic drafts, generation, and background construction
+- **State** favors exclusive writes or other correctness-sensitive updates
+- Queries are composed through a read-through process
+
+When querying, the State layer is consulted first, then the Ground layer. If both layers contain the same logical entity, the State layer is treated as authoritative for the purposes of exact value lookup.
+
+This avoids forcing all systems into the same contention regime. Generation systems can mostly interact with Ground, while live gameplay systems interact with State.
+
+##### 3.2.2.1: Read-through Queries
+
+A read-through query composes the two layers into a single result set. At a high level:
+
+1. Query the State index and collect candidate entities
+2. Query the Ground index and collect candidate entities
+3. Deduplicate the combined result
+4. When resolving exact values, prefer State to Ground.
+
+In pseudocode:
+
+```rust
+impl<Entity> HierarchicalSpatialIndex<Entity> {
+    fn query(
+        &self,
+        region: AaBb,
+        levels: impl Iterator<Item = D> + Clone,
+    ) -> Vec<Entity> {
+        let mut result = Vec::new();
+        let mut seen = HashSet::new();
+
+        self.state.spatial_index.query(region, levels.clone(), |entity| {
+            if seen.insert(entity) {
+                result.push(entity);
+            }
+        });
+
+        self.ground.spatial_index.query(region, levels, |entity| {
+            if seen.insert(entity) {
+                result.push(entity);
+            }
+        });
+
+        result
+    }
+
+    fn get_aabb(&self, entity: &Entity) -> Option<AaBb> {
+        self.state
+            .spatial_index
+            .values
+            .get(entity)
+            .copied()
+            .or_else(|| self.ground.spatial_index.values.get(entity).copied())
+    }
+}
+```
+
+This composition is side effect free. Querying Ground does not imply promotion into State.
+
+##### 3.2.2.2: Drafting by Layer
+
+Because the two layers are separate bimodal indices, either write mode may be used at either layer:
+
+- `ground.draft(...)`
+- `ground.exclusive(...)`
+- `state.draft(...)`
+- `state.exclusive(...)`
+
+However, the intended pattern is that:
+
+- Ground is primarily updated through drafts and asynchronous generation.
+- State is primarily updated through a greater use of controlled exclusive updates. 
+
+This is a usage guideline, not a type-level restriction.
+
+In pseudocode:
+
+```rust id="bn5r0x"
+impl<Entity> HierarchicalSpatialIndex<Entity> {
+    fn ground_draft(
+        &mut self,
+        region: AaBb,
+        levels: impl Iterator<Item = D>,
+    ) -> DraftSpatialIndex<Entity> {
+        self.ground.draft(region, levels)
+    }
+
+    fn state_exclusive(
+        &mut self,
+        region: AaBb,
+        levels: impl Iterator<Item = D>,
+    ) -> ExclusiveSpatialIndex<'_, Entity> {
+        self.state.exclusive(region, levels)
+    }
+}
+```
+
+##### 3.2.2.3: Promotion from Ground to State
+
+It is common for an artifact to be first created in Ground and later be modified through State. For example:
+
+- a generated structure is created in Ground
+- a character moves, damages, or repurposes it
+- the updated representation is written into State
+
+This does not require removing the original value from Ground. Instead, State may simply shadow Ground for the affected entity.
+
+In pseudocode:
+
+```rust
+impl<Entity> HierarchicalSpatialIndex<Entity> {
+    fn promote_to_state(
+        &mut self,
+        entity: Entity,
+        new_aabb: AaBb,
+    ) {
+        let mut state = self.state.exclusive(new_aabb, std::iter::empty());
+        state.insert(entity, new_aabb);
+    }
+}
+```
+
+More generally, the same logical entity may exist in both layers, but State is treated as the authoritative layer for live queries and exact-value resolution.
+
+##### 3.2.2.4: Contention Reduction
+
+This layered model reduces logical contention by separating systems with different mutation profiles:
+
+- **Ground** absorbs long-lived generation and streaming work
+- **State** absorbs immediate gameplay and simulation updates
+
+Without this split, exclusive writes from dynamic systems may repeatedly invalidate long-running generative drafts. With the split, most such interference disappears, since the systems are no longer writing against the same underlying index.
+
+This model is therefore especially suitable when:
+
+- generated world content is relatively independent of moment-to-moment simulation
+- dynamic gameplay objects require stricter update semantics
+- asynchronous generation should not be repeatedly invalidated by live entity movement
 
 ### 3.3: Generation
 
