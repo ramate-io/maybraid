@@ -215,6 +215,22 @@ Importantly, a spatial index cannot operate in both modes at once. These modes m
 To accomplish this, we compose the following type from the spatial index:
 
 ```rust
+pub struct ExclusiveVersion(u64);
+
+pub struct DraftVersion(u64);
+
+/// The version of the spatial index.
+/// Underlying value incremented when [ExclusiveSpatialIndex] dropped or [DraftSpatialIndex] applied. 
+pub struct Version {
+    /// [ExclusiveSpatialIndex] writes a a version marked Exclusive.
+    /// Draft versions lower than this will not be applied. 
+    /// This invalidates an drafts that were held over the exclusive write borrow. 
+    Exclusive(ExclusiveVersion),
+    /// Draft versions only affect whether a draft can be applied if the 
+    /// latest version of the spatial index is from an exclusive write. 
+    Draft(DraftVersion)
+}
+
 pub struct SequenceNumber {
     /// Writes regardless of stored sequence number.
     Agnostic,
@@ -228,8 +244,8 @@ pub struct BimodalSpatialIndex<Entity> {
     spatial_index: SpatialIndex<Entity>,
     /// The sequence numbers for entities in the spatial index.
     sequence_numbers: HashMap<Entity, SequenceNumber>,
-    /// The queue of oneshot receivers of drafts. 
-    draft_queue: VecDeque<OneshotReceiver<DraftSpatialIndex>>
+    /// The latest version of the spatial index
+    version: Version
 }
 
 pub struct ExclusiveSpatialIndex<Entity> {
@@ -246,9 +262,17 @@ pub struct DraftSpatialIndex<Entity> {
     /// When we update a spatial inde via a draft,
     /// sequence numbers are respected. 
     /// Effectively, compaction occurs respecting "latest sequence number writes" semantics. 
+    /// Note that the presence of a sequence number also indicates that an edit was made. 
     draft_sequence_numbers: HashMap<Entity, SequenceNumber>,
-    // fix: this needs to be non-circular
-    self_sender: OneshotSender<Self>
+    /// The version of the draft. This should not be tampered-with. 
+    /// Previous designs featured a one-shot system. 
+    /// We argued that this helped be able to handle draft rejection
+    /// and rescheduling at the call site. 
+    /// But, this is actually not true. You could send the draft and have it evicted later without any reporting back. 
+    /// Instead, for rescheduling purpose, we recommend type-specific [apply] systems. Therein, you can detect the draft apply condition and reschedule. 
+    /// We elaborate on this more in the "In Bevy" section.
+    /// This is also lighter and draft writers can ensure logical sequence. 
+    version: DraftVersion
 }
 
 impl BimmodalSpatialIndex<Entity> {
@@ -272,6 +296,12 @@ impl BimmodalSpatialIndex<Entity> {
         region: AaBb, 
         level: impl Iter<Item = D>
     ) -> DraftSpatialIndex<Entity>;
+
+    /// Applies a draft
+    fn apply_draft(
+        &mut self,
+        draft: DraftSpatialIndex<Entity>
+    ) -> Result<(), ApplyError>; 
 
 }
 ```
