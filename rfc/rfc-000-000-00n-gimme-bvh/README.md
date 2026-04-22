@@ -197,51 +197,91 @@ This implies using an identifier such as Bevy's `Entity` as the spatially indexe
 ```rust
 ```
 
-Such a type-agnostic approach will naturally cause over-fetching. For the most part, this should be negligible. However, re-use of [Snapshots](#321-snapshots) is advised. Additionally, we suggest more complex patterns in [3.2: Concurrency](#32-concurrency).
+Such a type-agnostic approach will naturally cause over-fetching. For the most part, this should be reasonable. However, re-use of [3.2.1.2: Optimistic Drafts](#3211-optimistic-drafts) is advised.
 
 ### 3.2: Concurrency
 
-For basic usages the user may be able to rely on synchronization primitives, such as Bevy's resource and query APIs or standard library locks. However, Gimme's spatial index often be used heavily for both reads and writes. To account for this contention, we describe a snapshotting and drafting API. 
+For basic usages the user may be able to rely on synchronization primitives, such as Bevy's resource and query APIs or standard library locks. However, Gimme's spatial index will often be used heavily for both reads and writes. To account for this contention, we propose two distinct write APIs: exclusive writes and optimistic drafts. Additionally, we suggest a two-layer spatial indexing model.
 
-The drafting API described is generally intended to admit select classes of race conditions. In particular, when a user does not force non-concurrent writes with `WriteLock` on a given object, later drafts may overwrite previous drafts without considering their state. Even when `WriteLock` is enabled, readers and writers are not mutually exclusive over the state. Instead, semantically, the reader views a version of the state and performs some action while writers may continue to write. 
+#### 3.2.1: Write APIs
 
-We deem this API to be generally suitable for most game systems. Most of the time, systems should be logically exclusive and/or concerned only with specific versions of game state. When a developer encounters the case wherein they need true mutual exclusion, they can opt into directly accessing the resource. Further, since draft construction requires a mutable reference to the underlying spatial index, it is safe to use both strict concurrency models--with logical critical sections--alongside draft commitments. 
+We identify two common cases for writing to a spatial index:
 
-#### 3.2.1: Snapshots
+1. **Mutual exclusion:** when writing, all other readers and writers must be excluded for the update to be correct. This is most common in stateful or non-streamable systems. 
+2. **Optimistic independence** when writing, most updates do not touch the same entities. And, if they do, they either write the same value or can be sequenced for correctness by information passed down from the caller. 
 
-A snapshot is a fixed view into a spatial index at a specific version:
+Importantly, a spatial index cannot operate in both modes at once. These modes must be mutually exclusive. 
+
+To accomplish this, we compose the following type from the spatial index:
 
 ```rust
-pub struct VersionedSpatialIndex<Entity> {
+pub struct SequenceNumber {
+    /// Writes regardless of stored sequence number.
+    Agnostic,
+    /// Writes only if value is greater than stored sequence number.
+    /// This helps avoid stale writes for asynchronous processes. 
+    Number(u64)
+};
+
+pub struct BimodalSpatialIndex<Entity> {
+    /// The core underlying spatial index.
     spatial_index: SpatialIndex<Entity>,
-    version: AtomicU32,
-    // ...draft API fields go here. 
+    /// The sequence numbers for entities in the spatial index.
+    sequence_numbers: HashMap<Entity, SequenceNumber>,
+    /// The queue of oneshot receivers of drafts. 
+    draft_queue: VecDeque<OneshotReceiver<DraftSpatialIndex>>
 }
 
-pub struct SpatialIndexSnapshot<Entity> {
-    spatial_index: SpatialIndex<Entity>,
-    version: u32
+pub struct ExclusiveSpatialIndex<Entity> {
+    /// The underlying spatial index. 
+    index: &mut BimodalSpatialIndex<Entity>,
+    /// The underlying spatial index queried to a given region. 
+    /// Mutation methods are not publicly available on the spatial index. 
+    sub_index: SpatialIndex<Entity>,
 }
 
-impl VersionedSpatialIndex<Entity> {
+pub struct DraftSpatialIndex<Entity> {
+    /// The underlying spacial index queried to a region (this is a copy).
+    sub_index: SpatialIndex<Entity>,
+    /// When we update a spatial inde via a draft,
+    /// sequence numbers are respected. 
+    /// Effectively, compaction occurs respecting "latest sequence number writes" semantics. 
+    draft_sequence_numbers: HashMap<Entity, SequenceNumber>,
+    // fix: this needs to be non-circular
+    self_sender: OneshotSender<Self>
+}
 
-    pub fn snapshot(
-        &self, 
-        region: AaBb,
-        levels: impl Iterator<Item = D>,
-    ) -> SpatialIndexSnapshot<Entity>;
+impl BimmodalSpatialIndex<Entity> {
+    
+    /// Constructs the exclusive spatial index 
+    /// Clears all active drafts. 
+    /// 
+    /// Note: we could explore some fairness designs. 
+    /// We could make the force optional and place something like a
+    /// "no new drafts" lock on this. But, maybe that overcomplicates. 
+    /// Often where we have contention is going to be a loading screen anyways and the data we need to materialize will often be stored. 
+    fn exclusive(
+        &mut self, 
+        region: AaBb, 
+        levels: impl Iter<Item = D>
+    ) -> ExclusiveSpatialIndex<'_, Entity>;
+
+    /// Constructs the draft spatial index
+    fn draft(
+        &mut self,
+        region: AaBb, 
+        level: impl Iter<Item = D>
+    ) -> DraftSpatialIndex<Entity>;
 
 }
 ```
 
-Snapshots are ideal for read-only workflows. In practice, the version will often be irrelevant to the user. However, we build on this in [3.2.2: Drafts](#322-drafts) and describe several valuable patters in [3.4: In Bevy](#34-in-bevy).
+##### 3.2.1.1: Exclusive Writes
 
-#### 3.2.2: Drafts
+##### 3.2.1.1: Optimistic Drafts
 
-Drafts build on snapshots to provide a mutations API over the spatial index.
+#### 3.2.2: Ground and State Indexes
 
-```rust
-```
 
 ### 3.3: Generation
 
