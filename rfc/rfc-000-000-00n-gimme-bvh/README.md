@@ -201,24 +201,47 @@ Such a type-agnostic approach will naturally cause over-fetching. For the most p
 
 ### 3.2: Concurrency
 
-In most cases, Gimme's spatial index will be used heavily for both reads and writes. For basic usages, the user may be able to rely on a synchronization primitive such as Bevy's resource and query APIs or standard library locks. However, to account for heavier workloads we describe a snapshotting and drafting API. 
+For basic usages the user may be able to rely on synchronization primitives, such as Bevy's resource and query APIs or standard library locks. However, Gimme's spatial index often be used heavily for both reads and writes. To account for this contention, we describe a snapshotting and drafting API. 
+
+The drafting API described is generally intended to admit select classes of race conditions. In particular, when a user does not force non-concurrent writes with `WriteLock` on a given object, later drafts may overwrite previous drafts without considering their state. Even when `WriteLock` is enabled, readers and writers are not mutually exclusive over the state. Instead, semantically, the reader views a version of the state and performs some action while writers may continue to write. 
+
+We deem this API to be generally suitable for most game systems. Most of the time, systems should be logically exclusive and/or concerned only with specific versions of game state. When a developer encounters the case wherein they need true mutual exclusion, they can opt into directly accessing the resource. Further, since draft construction requires a mutable reference to the underlying spatial index, it is safe to use both strict concurrency models--with logical critical sections--alongside draft commitments. 
 
 #### 3.2.1: Snapshots
 
-A snapshot is a fixed,
+A snapshot is a fixed view into a spatial index at a specific version:
 
 ```rust
-pub struct VersionedSpatialIndex {
-    spatial_index: SpatialIndex,
-    version: AtomicU32
+pub struct VersionedSpatialIndex<Entity> {
+    spatial_index: SpatialIndex<Entity>,
+    version: AtomicU32,
+    // ...draft API fields go here. 
 }
 
-pub struct SpatialIndexSnapshot {
-    spatial_index: SpatialIndex
+pub struct SpatialIndexSnapshot<Entity> {
+    spatial_index: SpatialIndex<Entity>,
+    version: u32
+}
+
+impl VersionedSpatialIndex<Entity> {
+
+    pub fn snapshot(
+        &self, 
+        region: AaBb,
+        levels: impl Iterator<Item = D>,
+    ) -> SpatialIndexSnapshot<Entity>;
+
 }
 ```
 
+Snapshots are ideal for read-only workflows. In practice, the version will often be irrelevant to the user. However, we build on this in [3.2.2: Drafts](#322-drafts) and describe several valuable patters in [3.4: In Bevy](#34-in-bevy).
+
 #### 3.2.2: Drafts
+
+Drafts build on snapshots to provide a mutations API over the spatial index.
+
+```rust
+```
 
 ### 3.3: Generation
 
