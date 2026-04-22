@@ -192,7 +192,7 @@ The Gimme spatial index is designed to provide a broadphase, type-agnostic index
 1. The ability to ergonomically identify intersections across different types. 
 2. The ability narrow types for particular spatial queries. 
 
-This implies using an identifier such as Bevy's `Entity` as the spatially indexed object. We can then reify queries into types against a Bevy `Query` object, as is elaborated up in [3.2: Concurrency](#32-concurrency) and [3.3](#33-generation). Where entities may be multiple types, we can use `Option` query fields, `Or` queries, or simply multiple `Query` objects.  
+This implies using an identifier such as Bevy's `Entity` as the spatially indexed object. We can then reify queries into types against a Bevy `Query` object, as is elaborated up in [3.2: Concurrency](#32-concurrency) and [3.3](#34-generation). Where entities may be multiple types, we can use `Option` query fields, `Or` queries, or simply multiple `Query` objects.  
 
 ```rust
 ```
@@ -547,8 +547,38 @@ This model is therefore especially suitable when:
 - dynamic gameplay objects require stricter update semantics
 - asynchronous generation should not be repeatedly invalidated by live entity movement
 
-### 3.3: Generation
+### 3.3: Materialization and Persistence
 
-### 3.4: In Bevy
+We will often want to store both the spatial index and the objects generated or otherwise indexed. This may be to the file system, a database, or even a multiplayer network. In this section, we cover recommendations for handling both. 
+
+#### 3.3.1: Materialization
+
+As mentioned in [3.1.3: Typing](#313-typing), the spatial index is intentionally type-agonistic and should be used with identifiers. The main use case for this is multi-type systems over the spatial index. When reifying these systems, there are two main patterns:
+
+1. **Type Segregation:** for each required type, rebuild a unique spatial index for the type by filtering over the original agnostic index. This is $O(\text{types} * \text{objects})$ at construction. 
+2. **Type Unification:** for each required type, unify objects under an enum if disjoint, or type-flag construct otherwise. This is $O(\text{objects})$ at construction and each access is $O(\text{types})$, though compiler tricks can make enum matching faster. 
+
+We generally recommend type-segregation, as it is simpler and more flexible. 
+
+> [!NOTE]
+> We suggest a means of tying the patterns up nicely for higher order APIs in [3.4: Generation](#34-generation).
+
+#### 3.3.2: Persistence
+
+1. Each live `Entity` that we wish to persist must map to a(n) `Id`. 
+2. Each `Id` that we wish to persist may map to multiple types. (This induces a mapping from `Entity` to types thought such was already implied in [Materialization](#331-materialization).)
+3. When persisting, we use the mapping from `Entity` to `Id` available in the game world to update and store an out-of-memory spatial index over `Id`.
+4. We load portions of the out-of-memory spatial index by queries over AaBb regions. 
+5. We then materialize by querying for stored types and inserting into the game world. 
+6. The entities given by the game world are then inserted into the in-memory spatial index. 
+
+```mermaid
+```
+
+### 3.4: Generation
+
+
+
+### 3.5: In Bevy
 
 ## 4: Milestones
