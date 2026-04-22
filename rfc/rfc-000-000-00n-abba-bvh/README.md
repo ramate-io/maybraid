@@ -1,10 +1,13 @@
-# RFC-N: ABBA BVH
+# RFC-N: Gimme BVH
 
 ## Table of Contents
 
 ## 1: Motivation
 
-ABBA BVH is a simple AaBb-based BVH system proposed for spatial storage, querying, and retrieval system for Maybraid. It seeks to address the needs to efficiently determine spatial entities available within an AaBb region, as well as to handle generation. The API is roughly intended to handle the following operations:
+Gimme BVH is a simple AaBb-based BVH system proposed for spatial storage, querying, and retrieval system for Maybraid. It seeks to address the needs to efficiently determine spatial entities available within an AaBb region, as well as to handle generation. The API is designed with Bevy in mind and is intended to roughly intended to handle the following operations:
+
+> [!NOTE]
+> The name is a play on words. AaBb is an anagram for the band ABBA. ABBA has a song called "Gimme! Gimme! Gimme!" The system is also concerned with "giving me" spatially indexed objects. 
 
 ```rust
 pub trait BvhObject<B: Bvh> {
@@ -57,9 +60,9 @@ However, in order to handle more complex queries, asynchronicity, object movemen
 
 ## 3: Design
 
-### 3.1: Spatial Storage
+### 3.1: Spatial Index
 
-ABBA BVH uses a simple hierarchical spatial index for storing BVH objects. The structure is an implicit, multi-resolution grid where each level defines a uniform subdivision of space, and objects are indexed by the cells they intersect at an appropriate scale.
+Gimme BVH uses a simple hierarchical spatial index for storing BVH objects. The structure is an implicit, multi-resolution grid where each level defines a uniform subdivision of space, and objects are indexed by the cells they intersect at an appropriate scale.
 
 #### 3.1.1: Insertion
 
@@ -106,13 +109,14 @@ C_d(e) = \{ (i, j, k) \in \mathbb{Z}^3 \mid c_d(e_{\min}) \le (i, j, k) \le c_d(
 The object (or its identifier) is inserted into each such cell.
 
 ```rust
-struct SpatialIndex<ObjectId> { 
-    cells: HashMap<(D, Cell), HashSet<ObjectId>>, 
-    values: HashMap<ObjectId, AaBb>
+struct SpatialIndex<Entity> { 
+    cells: HashMap<(D, Cell), HashSet<Entity>>, 
+    values: HashMap<Entity, AaBb>
 }
 ```
 
----
+> [!NOTE]
+> We use `Entity` above in reference to Bevy's entities. As described in [3.1.3](#313-typing), the primary use of the Gimme spatial index is over entities in the Bevy ECS. 
 
 #### 3.1.2: Querying
 
@@ -141,12 +145,12 @@ Each candidate should then be filtered via exact AaBb intersection to remove fal
 In pseudocode:
 
 ```rust
-impl SpatialIndex<ObjectId> {
+impl SpatialIndex<Entity> {
     fn query(
         &self,
         region: AaBb,
         levels: impl Iterator<Item = D>,
-    ) -> HashSet<ObjectId> {
+    ) -> HashSet<Entity> {
         let mut result = HashSet::new();
 
         for d in levels {
@@ -181,5 +185,43 @@ impl SpatialIndex<ObjectId> {
 }
 ```
 
+#### 3.1.3: Typing
+
+The Gimme spatial index is designed to provide a broadphase, type-agnostic index on game entities. In particular, we want:
+
+1. The ability to ergonomically identify intersections across different types. 
+2. The ability narrow types for particular spatial queries. 
+
+This implies using an identifier such as Bevy's `Entity` as the spatially indexed object. We can then reify queries into types against a Bevy `Query` object, as is elaborated up in [3.2: Concurrency](#32-concurrency) and [3.3](#33-generation). Where entities may be multiple types, we can use `Option` query fields, `Or` queries, or simply multiple `Query` objects.  
+
+```rust
+```
+
+Such a type-agnostic approach will naturally cause over-fetching. For the most part, this should be negligible. However, re-use of [Snapshots](#321-snapshots) is advised. Additionally, we suggest more complex patterns in [3.2: Concurrency](#32-concurrency).
+
+### 3.2: Concurrency
+
+In most cases, Gimme's spatial index will be used heavily for both reads and writes. For basic usages, the user may be able to rely on a synchronization primitive such as Bevy's resource and query APIs or standard library locks. However, to account for heavier workloads we describe a snapshotting and drafting API. 
+
+#### 3.2.1: Snapshots
+
+A snapshot is a fixed,
+
+```rust
+pub struct VersionedSpatialIndex {
+    spatial_index: SpatialIndex,
+    version: AtomicU32
+}
+
+pub struct SpatialIndexSnapshot {
+    spatial_index: SpatialIndex
+}
+```
+
+#### 3.2.2: Drafts
+
+### 3.3: Generation
+
+### 3.4: In Bevy
 
 ## 4: Milestones
