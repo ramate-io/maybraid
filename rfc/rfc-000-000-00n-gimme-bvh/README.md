@@ -577,7 +577,98 @@ We generally recommend type-segregation, as it is simpler and more flexible.
 
 ### 3.4: Generation
 
+#### 3.4.1: Hierarchical Generation
 
+
+```rust
+pub struct Top;
+pub struct Middle;
+pub struct Bottom;
+
+pub trait Generator<Index> {
+
+    fn generate_and_insert(
+        index: &mut Index,
+        requested_region: AaBb
+    );
+
+}
+
+pub trait GeneratorChild<Index> {
+    type Root: Generator<Index>;
+}
+
+impl<Index, Child: GeneratorChild<Index>> Generator for Child {
+
+    fn generate_and_insert(
+        index: &mut Index,
+        requested_region: AaBB
+    ) {
+        Root::generate_and_insert(index, requested_region)
+    }
+
+}
+
+impl<Index> Generator for Top
+    where Index: SpatialIndex<Top> + SpatialIndex<Middle> + SpatialIndex<Bottom> {
+
+    // These are the independent generation steps for each layer in the hierarchy. 
+    // If a higher order 
+    fn generate_and_insert(
+        index: &mut SpatialIndex,
+        requested_region: AaBb
+    ) {
+
+        // This pattern uses explicit layering to better enforce type-correctness
+        for (
+            top_cell, // the top cell
+            top_cell_intersection // the region of the top cell that intersects with the original request
+        ) in Self::intersecting_cells(requested_region) {
+
+            // First compute yourself
+            let top = Self::get_or_compute(index, top_cell);
+
+            for (
+                middle_cell, // the middle cell
+                middle_cell_intersection // the region of the middle cell that intersects with the top cell and the original request
+            ) in Middle::intersecting_cells(top_cell_intersection) {
+
+                // Compute the middle
+                let middle = Self::get_or_compute(index, middle_cell, &top);
+
+                for (
+                    bottom_cell, // the bottom cell
+                    bottom_cell_interesection, // the region of the bottom cell that intersects with the top cell
+                ) in Bottom::intersecting_cells(middle_cell_intersection) {
+
+                    let bottom = Self::get_or_compute(
+                        index, 
+                        bottom_cell, 
+                        &top, 
+                        &middle
+                    );
+
+                }
+
+            }
+
+        }
+        
+
+    }
+
+}
+
+// Is there a non-macro related pattern we can use to avoid tying these in manually?
+// This setup leaves the possibility of user error when the different orders in the hierarchy define different types. 
+impl GeneratorRoot for Middle {
+    type Root = Top;
+}
+
+impl GeneratorRoot for Bottom {
+    type Root = Top;
+}
+```
 
 ### 3.5: In Bevy
 
