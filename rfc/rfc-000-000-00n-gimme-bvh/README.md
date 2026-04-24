@@ -579,96 +579,118 @@ We generally recommend type-segregation, as it is simpler and more flexible.
 
 #### 3.4.1: Hierarchical Generation
 
+The simplest and most flexible way to perform hierarchical generation is to generate from the bottom up--checking requirements and using the spatial index for fetching results. 
+
+The simplest pattern within this context is often to perform cellular generation. That is, to identify disjoint cells and generate values within them. We show this pattern below.
+
 
 ```rust
+/// The base generator trait simply asks for a the implementer to provide a method for get or generating types within a requested region.
+pub trait Generator<T>: SpatialIndex<T> {
+
+    /// Generates and inserts type instances intersecting with the region.  
+    fn get_or_generate(
+        &mut self,
+        requested_region: AaBb
+    ) -> Result<impl Iter<Item = T>, GenerationError>;
+}
+
+/// A cellular generator narrows this by enforcing that each cell has only one value for the type.
+pub trait CellGenerator<T>: SpatialIndex<T> {
+
+    /// Gets all of the cells that would intersecting with the region for the type. 
+    fn intersecting_cells(&self, region: AaBb) -> impl Iter<Item = Cell>;
+
+    /// Generates one instance on a cell. 
+    fn generate_cell(&mut self, cell: Cell) -> Result<T, GenerationError>; 
+
+    /// Gets or generates one instance on a cell
+    fn get_or_generate_cell(
+        &mut self,
+        cell: Cell
+    ) -> Result<T, GenerationError> {
+
+        // Read one is from the spatial index and should error if the index fails to provide just one type. Otherwise, returns an option fo the type. 
+        // The idea here is that if read_one is None or fails with too many,
+        // we can correct it by regenerating. 
+        self.read_one(cell.as_region())?.ok_or(|| {
+            let cell_value = self.generate_cell(cell);
+            self.insert(cell_value.clone());
+            cell_value
+        })
+    }
+}
+
+/// If we have a cell generator, we automatically have a generator. 
+impl<Index: CellGenerator<T>> Generator<T> for Index {
+
+    for cell in self.intersecting_cells(requested_region) {
+        self.get_or_generate_cell(cell)?;
+    }
+
+}
+
+/// Now an example hierarchy
 pub struct Top;
 pub struct Middle;
 pub struct Bottom;
 
-pub trait Generator<Index> {
+impl<Index> CellGenerator<Bottom> for Index
+    // We specifically enforce tha Top and Middle are cell generators as opposed to general [Generator] types. 
+    // This allows us to ensure one-to-one cell mappings. 
+    where Index: CellGenerator<Top> + CellGenerator<Middle> 
+{
 
-    fn generate_and_insert(
-        index: &mut Index,
-        requested_region: AaBb
-    );
-
-}
-
-pub trait GeneratorChild<Index> {
-    type Root: Generator<Index>;
-}
-
-impl<Index, Child: GeneratorChild<Index>> Generator for Child {
-
-    fn generate_and_insert(
-        index: &mut Index,
-        requested_region: AaBB
-    ) {
-        Root::generate_and_insert(index, requested_region)
+    fn intersecting_cells(&self, region: AaBb) -> impl Iter<Item = Cell> {
+        // ...
     }
 
-}
+    fn generate_cell(
+        &mut self, 
+        cell: Cell
+    ) -> Result<Bottom, GenerationError> {
 
-impl<Index> Generator for Top
-    where Index: SpatialIndex<Top> + SpatialIndex<Middle> + SpatialIndex<Bottom> {
+        // One Bottom cell should be within one Top cell.
+        let top: Top = self.get_or_generate_cell(cell)?;
+        // One Bottom cell should be within one Middle cell.
+        let middle: Middle = self.get_or_generate_cell(cell)?;
 
-    // These are the independent generation steps for each layer in the hierarchy. 
-    // If a higher order 
-    fn generate_and_insert(
-        index: &mut SpatialIndex,
-        requested_region: AaBb
-    ) {
-
-        // This pattern uses explicit layering to better enforce type-correctness
-        for (
-            top_cell, // the top cell
-            top_cell_intersection // the region of the top cell that intersects with the original request
-        ) in Self::intersecting_cells(requested_region) {
-
-            // First compute yourself
-            let top = Self::get_or_compute(index, top_cell);
-
-            for (
-                middle_cell, // the middle cell
-                middle_cell_intersection // the region of the middle cell that intersects with the top cell and the original request
-            ) in Middle::intersecting_cells(top_cell_intersection) {
-
-                // Compute the middle
-                let middle = Self::get_or_compute(index, middle_cell, &top);
-
-                for (
-                    bottom_cell, // the bottom cell
-                    bottom_cell_interesection, // the region of the bottom cell that intersects with the top cell
-                ) in Bottom::intersecting_cells(middle_cell_intersection) {
-
-                    let bottom = Self::get_or_compute(
-                        index, 
-                        bottom_cell, 
-                        &top, 
-                        &middle
-                    );
-
-                }
-
-            }
-
-        }
-        
+        // Custom constructor
+        Bottom::from_cell_and_parents(cell, top, middle)
 
     }
 
 }
 
-// Is there a non-macro related pattern we can use to avoid tying these in manually?
-// This setup leaves the possibility of user error when the different orders in the hierarchy define different types. 
-impl GeneratorRoot for Middle {
-    type Root = Top;
-}
+/// The middle layer might only consider top. 
+impl<Index> Generator<Middle> for Index
+    where Index: CellGenerator<Top> 
+{
 
-impl GeneratorRoot for Bottom {
-    type Root = Top;
+    
+    fn generate_cell(
+        &mut self, 
+        cell: Cell
+    ) -> Result<Bottom, GenerationError> {
+
+        // One Middle cell should be within one Top cell.
+        let top: Top = self.get_or_generate_cell(cell)?;
+
+        // Custom constructor
+        Middle::from_cell_and_parents(cell, top)
+
+    }
+
 }
 ```
+
+> [!WARNING]
+> Circumventing the hierarchy generator traits to insert higher order types can produce unequal paths through the hierarchy. You should fetch requirements. 
+
+> [!WARNING]
+> Generally, you should only fetch up the hierarchy. Trying to fetch siblings can create circular dependencies. 
+
+This bottom-up approach allows systems to discover minimal generation paths, preventing overfetching. Conversely, the approach also allows systems to generate whatever they specifically need, while respecting a requirement hierarchy. 
 
 ### 3.5: In Bevy
 
