@@ -109,14 +109,11 @@ C_d(e) = \{ (i, j, k) \in \mathbb{Z}^3 \mid c_d(e_{\min}) \le (i, j, k) \le c_d(
 The object (or its identifier) is inserted into each such cell.
 
 ```rust
-struct SpatialIndex<Entity> { 
-    cells: HashMap<(D, Cell), HashSet<Entity>>, 
-    values: HashMap<Entity, AaBb>
+struct SpatialIndex<Id> { 
+    cells: HashMap<(D, Cell), HashSet<Id>>, 
+    values: HashMap<Id, AaBb>
 }
 ```
-
-> [!NOTE]
-> We use `Entity` above in reference to Bevy's entities. As described in [3.1.3](#313-typing), the primary use of the Gimme spatial index is over entities in the Bevy ECS. 
 
 #### 3.1.2: Querying
 
@@ -145,13 +142,21 @@ Each candidate should then be filtered via exact AaBb intersection to remove fal
 In pseudocode:
 
 ```rust
-impl SpatialIndex<Entity> {
-    fn query(
-        &self,
+impl<Id> SpatialIndex<Id>
+where
+    Id: Copy + Eq + std::hash::Hash,
+{
+    pub fn iter_all(&self) -> impl Iterator<Item = (Id, AaBb)> + '_ {
+        self.values.iter().map(|(&id, &aabb)| (id, aabb))
+    }
+
+    pub fn query_iter<'a>(
+        &'a self,
         region: AaBb,
         levels: impl Iterator<Item = D>,
-    ) -> HashSet<Entity> {
-        let mut result = HashSet::new();
+    ) -> impl Iterator<Item = (Id, AaBb)> + 'a {
+        let mut seen = HashSet::new();
+        let mut result = Vec::new();
 
         for d in levels {
             let cell_size = scale_to_cell_size(d);
@@ -166,10 +171,10 @@ impl SpatialIndex<Entity> {
 
                         if let Some(bucket) = self.cells.get(&key) {
                             for &id in bucket {
-                                if !result.contains(id) {
-                                    if let Some(aabb) = self.values.get(&id) {
+                                if seen.insert(id) {
+                                    if let Some(&aabb) = self.values.get(&id) {
                                         if aabb.intersects(&region) {
-                                            result.add(id);
+                                            result.push((id, aabb));
                                         }
                                     }
                                 }
@@ -180,26 +185,161 @@ impl SpatialIndex<Entity> {
             }
         }
 
-        result
+        result.into_iter()
+    }
+
+    pub fn sub_index(
+        &self,
+        region: AaBb,
+        levels: impl Iterator<Item = D>,
+    ) -> SpatialIndex<Id> {
+        let mut sub = SpatialIndex {
+            cells: HashMap::new(),
+            values: HashMap::new(),
+        };
+
+        for (id, aabb) in self.query_iter(region, levels) {
+            sub.insert(id, aabb);
+        }
+
+        sub
     }
 }
 ```
 
+
+We can further optimize sub-index construction by using a "view", keeping references to matching `(D, Cell)` pairs:
+
+```rust
+struct SpatialIndexView<'a, Id> {
+    cells: HashMap<(D, Cell), &'a HashSet<Id>>,
+    values: &'a HashMap<Id, AaBb>,
+}
+
+pub struct SpatialIndexViewMut<'a, Id> {
+    cells: HashMap<(D, Cell), &'a HashSet<Id>>,
+    values: &'a HashMap<Id, AaBb>,
+
+    // Local mutable overlay.
+    overlay: SpatialIndex<Id>,
+}
+
+impl<Id> SpatialIndex<Id>
+where
+    Id: Copy + Eq + Hash,
+{
+    pub fn view<'a>(
+        &'a self,
+        region: AaBb,
+        levels: impl Iterator<Item = D>,
+    ) -> SpatialIndexView<'a, Id> {
+        let mut cells = HashMap::new();
+
+        for d in levels {
+            let cell_size = scale_to_cell_size(d);
+
+            let min = region.min / cell_size;
+            let max = region.max / cell_size;
+
+            for x in min.x..=max.x {
+                for y in min.y..=max.y {
+                    for z in min.z..=max.z {
+                        let key = (d, Cell { x, y, z });
+
+                        if let Some(bucket) = self.cells.get(&key) {
+                            cells.insert(key, bucket);
+                        }
+                    }
+                }
+            }
+        }
+
+        SpatialIndexView {
+            cells,
+            values: &self.values,
+        }
+    }
+
+    pub fn view_mut<'a>(
+        &'a self,
+        region: AaBb,
+        levels: impl Iterator<Item = D>,
+    ) -> SpatialIndexViewMut<'a, Id> {
+        let view = self.view(region, levels);
+
+        SpatialIndexViewMut {
+            cells: view.cells,
+            values: view.values,
+            overlay: SpatialIndex {
+                cells: HashMap::new(),
+                values: HashMap::new(),
+            },
+        }
+    }
+}
+```
+
+This view tends to most useful after materialization on a single thread, e.g., spawning components. 
+
 #### 3.1.3: Typing
 
-The Gimme spatial index is designed to provide a broadphase, type-agnostic index on game entities. In particular, we want:
+The Gimme spatial index is designed to provide a broadphase, type-agnostic index on globally identified game entities. In particular, we want:
 
 1. The ability to ergonomically identify intersections across different types. 
 2. The ability narrow types for particular spatial queries. 
 
-This implies using an identifier such as Bevy's `Entity` as the spatially indexed object. We can then reify queries into types against a Bevy `Query` object, as is elaborated up in [3.2: Concurrency](#32-concurrency) and [3.3](#34-generation). Where entities may be multiple types, we can use `Option` query fields, `Or` queries, or simply multiple `Query` objects.  
+Identifiers can hold for arbitrary types and only need be materialized from backing storage when needed. 
+
+Within a game world, spatial identifiers often need to be mapped to spawned entities. For example, a(n) `Id` stored in the spatial index may correspond to a Bevy `Entity`. A spatial query can then be reified into typed values by looking up the entity through one or more Bevy `Query` objects.
+
+When entities may support multiple materialized views, the reification system can use optional query fields, `Or` filters, or multiple specialized queries.
 
 ```rust
+fn perform_materialized_action(
+    spatial_index: Res<SpatialIndex<Id>>,
+    id_to_entity: Res<HashMap<Id, Entity>>,
+    regions: Query<&AaBb, With<NeedsMyAction>>,
+    objects: Query<(
+        Entity,
+        &Id,
+        &MyType,
+        Option<&MyOtherType>,
+        Option<&MyOptionalType>,
+    )>,
+) {
+    for region in &regions {
+        let view = spatial_index.view(*region, relevant_levels());
+
+        let mut materialized = MaterializedView::new();
+
+        for (id, bounds) in view.query_iter(*region) {
+            let Some(&entity) = id_to_entity.get(&id) else {
+                continue;
+            };
+
+            let Ok((_, id, my_type, maybe_other, maybe_optional)) = objects.get(entity) else {
+                continue;
+            };
+
+            let value = MaterializedType::from_parts(
+                *id,
+                bounds,
+                my_type,
+                maybe_other,
+                maybe_optional,
+            );
+
+            materialized.insert(*id, value);
+        }
+
+        run_action_over_materialized_view(materialized);
+    }
+}
 ```
 
-Such a type-agnostic approach will naturally cause over-fetching. For the most part, this should be reasonable. However, re-use of [3.2.1.2: Optimistic Drafts](#3212-optimistic-drafts) is advised.
+This pattern keeps the spatial index type-agnostic while allowing systems to construct typed working sets as needed. The spatial index answers only **which identifiers may be relevant**; Bevy queries determine **what those identifiers currently are**.
 
-Here is a cleaned-up and tightened version with clearer semantics, simpler wording, and filled subsections.
+Such a type-agnostic approach will naturally cause over-fetching. For the most part, this should be reasonable. However, re-use of [3.2.1.2: Optimistic Drafts](#3212-optimistic-drafts) is advised.
 
 ### 3.2: Concurrency
 
@@ -485,7 +625,7 @@ This is a usage guideline, not a type-level restriction.
 
 In pseudocode:
 
-```rust id="bn5r0x"
+```rust
 impl<Entity> HierarchicalSpatialIndex<Entity> {
     fn ground_draft(
         &mut self,
@@ -553,15 +693,138 @@ We will often want to store both the spatial index and the objects generated or 
 
 #### 3.3.1: Materialization
 
-As mentioned in [3.1.3: Typing](#313-typing), the spatial index is intentionally type-agonistic and should be used with identifiers. The main use case for this is multi-type systems over the spatial index. When reifying these systems, there are two main patterns:
+As mentioned in [3.1.3: Typing](#313-typing), the spatial index is intentionally type-agnostic. It stores identifiers and AaBb bounds, not concrete domain objects. Systems that need typed values should therefore **materialize** a spatial result into one or more typed working sets.
 
-1. **Type Segregation:** for each required type, rebuild a unique spatial index for the type by filtering over the original agnostic index. This is $O(\text{types} * \text{objects})$ at construction. 
-2. **Type Unification:** for each required type, unify objects under an enum if disjoint, or type-flag construct otherwise. This is $O(\text{objects})$ at construction and each access is $O(\text{types})$, though compiler tricks can make enum matching faster. 
+There are two common patterns:
 
-We generally recommend type-segregation, as it is simpler and more flexible. 
+1. **Type Segregation:** build one materialized spatial index per required type by filtering over the agnostic spatial draft. Construction is roughly $O(\text{types} \cdot \text{objects})$, but each typed index is simple and direct to use.
+2. **Type Unification:** build one materialized index over an enum or tagged value containing all relevant types. Construction is roughly $O(\text{objects})$, but typed access requires matching or filtering.
 
-> [!NOTE]
-> We suggest a means of tying the patterns up nicely for higher order APIs in [3.4: Generation](#34-generation).
+> [!NOTE]  
+> We generally recommend **type segregation**. It is simpler, more flexible, and composes cleanly with Bevy queries and draft-based generation.
+
+A materialized spatial index can be represented by a small trait:
+
+```rust
+pub trait MaterializedSpatialIndex<T> {
+    type Id;
+
+    fn get(&self, region: AaBb) -> impl Iterator<Item = (Self::Id, &T)>;
+
+    fn insert(
+        &mut self,
+        id: Self::Id,
+        value: T,
+        region: AaBb,
+    );
+}
+```
+
+One possible implementation is a typed wrapper over a draft:
+
+```rust
+pub struct TypedDraft<Id, T> {
+    spatial: DraftSpatialIndex<Id>,
+    values: HashMap<Id, T>,
+}
+
+impl<Id, T> MaterializedSpatialIndex<T> for TypedDraft<Id, T>
+where
+    Id: Copy + Eq + std::hash::Hash,
+{
+    type Id = Id;
+
+    fn get(&self, region: AaBb) -> impl Iterator<Item = (Id, &T)> {
+        self.spatial
+            .sub_index
+            .query_iter(region, all_relevant_levels())
+            .filter_map(|(id, _bounds)| {
+                self.values.get(&id).map(|value| (id, value))
+            })
+    }
+
+    fn insert(
+        &mut self,
+        id: Id,
+        value: T,
+        region: AaBb,
+    ) {
+        self.spatial.sub_index.insert(id, region);
+        self.spatial
+            .draft_sequence_numbers
+            .insert(id, SequenceNumber::Agnostic);
+        self.values.insert(id, value);
+    }
+}
+```
+
+For type segregation, a materialization pass builds multiple typed drafts from the same underlying spatial draft:
+
+```rust
+pub struct SegregatedDraft<Id> {
+    source: DraftSpatialIndex<Id>,
+
+    terrain: TypedDraft<Id, TerrainTile>,
+    structures: TypedDraft<Id, Structure>,
+    actors: TypedDraft<Id, ActorProxy>,
+}
+```
+
+In Bevy, this can be produced by querying the type tables separately:
+
+```rust
+fn build_segregated_draft(
+    mut spatial: ResMut<BimodalSpatialIndex<Id>>,
+    id_to_entity: Res<HashMap<Id, Entity>>,
+    terrain_query: Query<(&Id, &TerrainTile)>,
+    structure_query: Query<(&Id, &Structure)>,
+    actor_query: Query<(&Id, &ActorProxy)>,
+    requests: Query<&AaBb, With<NeedsGenerationDraft>>,
+) {
+    for region in &requests {
+        let source = spatial.draft(*region, relevant_levels());
+
+        let mut draft = SegregatedDraft {
+            terrain: TypedDraft {
+                spatial: source.clone_empty(),
+                values: HashMap::new(),
+            },
+            structures: TypedDraft {
+                spatial: source.clone_empty(),
+                values: HashMap::new(),
+            },
+            actors: TypedDraft {
+                spatial: source.clone_empty(),
+                values: HashMap::new(),
+            },
+            source,
+        };
+
+        for (id, bounds) in draft.source.sub_index.query_iter(*region, relevant_levels()) {
+            let Some(&entity) = id_to_entity.get(&id) else {
+                continue;
+            };
+
+            if let Ok((_, terrain)) = terrain_query.get(entity) {
+                draft.terrain.insert(id, terrain.clone(), bounds);
+            }
+
+            if let Ok((_, structure)) = structure_query.get(entity) {
+                draft.structures.insert(id, structure.clone(), bounds);
+            }
+
+            if let Ok((_, actor)) = actor_query.get(entity) {
+                draft.actors.insert(id, actor.clone(), bounds);
+            }
+        }
+
+        run_generation_over_segregated_draft(draft);
+    }
+}
+```
+
+This pattern keeps the base spatial index type-agnostic while allowing generation systems to work against strongly typed spatial views. Each typed draft can be queried and mutated independently, then compacted back into the underlying draft or applied through a type-specific synchronization system.
+
 
 #### 3.3.2: Persistence
 
@@ -610,14 +873,17 @@ pub trait CellGenerator<T>: SpatialIndex<T> {
         cell: Cell
     ) -> Result<T, GenerationError> {
 
-        // Read one is from the spatial index and should error if the index fails to provide just one type. Otherwise, returns an option fo the type. 
-        // The idea here is that if read_one is None or fails with too many,
-        // we can correct it by regenerating. 
-        self.read_one(cell.as_region())?.ok_or(|| {
-            let cell_value = self.generate_cell(cell);
-            self.insert(cell_value.clone());
-            cell_value
-        })
+        fn get_or_generate_cell(
+    &mut self,
+    cell: Cell,
+) -> Result<T, GenerationError> {
+        if let Some(value) = self.read_one(cell.as_region())? {
+            return Ok(value);
+        }
+
+        let value = self.generate_cell(cell)?;
+        self.insert(value.clone())?;
+        Ok(value)
     }
 }
 
