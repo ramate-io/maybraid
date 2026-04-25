@@ -501,7 +501,7 @@ Several extensions can improve fairness:
 
 **1. Layered Spatial Indices**
 
-Split data into multiple indices, e.g., static vs. dynamic, as we elaborate upon in [3.2.2: Ground and State](#322-ground-and-state-indexes):
+Split data into multiple indices, e.g., static vs. dynamic, as we elaborate upon in [3.2.2: Hierarchical Indices](#322-hierarchical-indices):
 
 - Static/generative layers primarily use drafts
 - Dynamic/stateful layers may use exclusive writes more often
@@ -533,47 +533,43 @@ A softer model could allow:
 
 This improves fairness but increases complexity and is not part of the base design.
 
-#### 3.2.2: Ground and State Indexes
+#### 3.2.2: Hierarchical Indices
 
-In practice, contention can often be reduced further by separating the spatial index into two logical layers: **Ground** and **State**.
+Contention can often be reduced by structuring spatial data as a **hierarchy of indices**, where each layer represents a different semantic class of world data.
 
-- **Ground:** stores the base spatial data for the world. This is typically the output of generation, loading, streaming, or other environment-construction processes. Ground is often relatively stable, but it is **not required to be immutable**. Rather, Ground is the layer whose contents are not primarily driven by live agent actions.
-- **State:** stores the spatial data most directly affected by characters, game agents, simulation, or other decision systems. This includes dynamic repositioning, transient objects, and modifications to previously generated artifacts.
-
-This distinction is semantic rather than absolute. An artifact may first be constructed by an operation over the Ground index and later be moved, replaced, or otherwise updated through the State index. In this sense, State acts as the more immediate and authoritative layer for live gameplay.
-
-The two layers are each implemented as a `BimodalSpatialIndex<Entity>`:
+In the most general form, layers are keyed by any ordered type:
 
 ```rust
-pub struct HierarchicalSpatialIndex<Entity> {
-    ground: BimodalSpatialIndex<Entity>,
-    state: BimodalSpatialIndex<Entity>,
+pub struct HierarchicalSpatialIndex<Layer, Entity>
+where
+    Layer: Ord,
+{
+    layers: BTreeMap<Layer, BimodalSpatialIndex<Entity>>,
 }
 ```
 
-The intended use is:
-
-- **Ground** favors optimistic drafts, generation, and background construction
-- **State** favors exclusive writes or other correctness-sensitive updates
-- Queries are composed through a read-through process
-
-When querying, the State layer is consulted first, then the Ground layer. If both layers contain the same logical entity, the State layer is treated as authoritative for the purposes of exact value lookup.
-
-This avoids forcing all systems into the same contention regime. Generation systems can mostly interact with Ground, while live gameplay systems interact with State.
-
-##### 3.2.2.1: Read-through Queries
-
-A read-through query composes the two layers into a single result set. At a high level:
-
-1. Query the State index and collect candidate entities
-2. Query the Ground index and collect candidate entities
-3. Deduplicate the combined result
-4. When resolving exact values, prefer State to Ground.
-
-In pseudocode:
+For example, a simple numeric layer key may be used:
 
 ```rust
-impl<Entity> HierarchicalSpatialIndex<Entity> {
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
+pub struct Layer(pub u32);
+```
+
+The ordering of `Layer` defines precedence. Higher-priority layers shadow lower-priority layers when the same logical object appears in multiple indices.
+
+A query proceeds by:
+
+1. Iterating layers in precedence order
+2. Collecting identifiers from each layer
+3. Deduplicating results
+4. Resolving values from the highest-priority layer in which they appear
+
+```rust
+impl<Layer, Entity> HierarchicalSpatialIndex<Layer, Entity>
+where
+    Layer: Ord,
+    Entity: Copy + Eq + Hash,
+{
     fn query(
         &self,
         region: AaBb,
@@ -582,113 +578,34 @@ impl<Entity> HierarchicalSpatialIndex<Entity> {
         let mut result = Vec::new();
         let mut seen = HashSet::new();
 
-        self.state.spatial_index.query(region, levels.clone(), |entity| {
-            if seen.insert(entity) {
-                result.push(entity);
-            }
-        });
-
-        self.ground.spatial_index.query(region, levels, |entity| {
-            if seen.insert(entity) {
-                result.push(entity);
-            }
-        });
+        for (_key, layer) in self.layers.iter().rev() {
+            layer.spatial_index.query(region, levels.clone(), |entity| {
+                if seen.insert(entity) {
+                    result.push(entity);
+                }
+            });
+        }
 
         result
     }
-
-    fn get_aabb(&self, entity: &Entity) -> Option<AaBb> {
-        self.state
-            .spatial_index
-            .values
-            .get(entity)
-            .copied()
-            .or_else(|| self.ground.spatial_index.values.get(entity).copied())
-    }
 }
 ```
 
-This composition is side effect free. Querying Ground does not imply promotion into State.
+This reduces contention by separating systems with different mutation patterns. For example, generation systems can write to one layer while gameplay systems update another. Exclusive writes in one layer only invalidate drafts in that same layer, rather than invalidating all spatial work globally.
 
-##### 3.2.2.2: Drafting by Layer
+A useful starting point is a two-layer hierarchy:
 
-Because the two layers are separate bimodal indices, either write mode may be used at either layer:
+- **Ground:** base/generated content, usually updated through drafts
+- **State:** dynamic or agent-influenced content, usually updated through controlled or exclusive writes
 
-- `ground.draft(...)`
-- `ground.exclusive(...)`
-- `state.draft(...)`
-- `state.exclusive(...)`
-
-However, the intended pattern is that:
-
-- Ground is primarily updated through drafts and asynchronous generation.
-- State is primarily updated through a greater use of controlled exclusive updates. 
-
-This is a usage guideline, not a type-level restriction.
-
-In pseudocode:
+For example:
 
 ```rust
-impl<Entity> HierarchicalSpatialIndex<Entity> {
-    fn ground_draft(
-        &mut self,
-        region: AaBb,
-        levels: impl Iterator<Item = D>,
-    ) -> DraftSpatialIndex<Entity> {
-        self.ground.draft(region, levels)
-    }
-
-    fn state_exclusive(
-        &mut self,
-        region: AaBb,
-        levels: impl Iterator<Item = D>,
-    ) -> ExclusiveSpatialIndex<'_, Entity> {
-        self.state.exclusive(region, levels)
-    }
-}
+Layer(0) => Ground
+Layer(1) => State
 ```
 
-##### 3.2.2.3: Promotion from Ground to State
-
-It is common for an artifact to be first created in Ground and later be modified through State. For example:
-
-- a generated structure is created in Ground
-- a character moves, damages, or repurposes it
-- the updated representation is written into State
-
-This does not require removing the original value from Ground. Instead, State may simply shadow Ground for the affected entity.
-
-In pseudocode:
-
-```rust
-impl<Entity> HierarchicalSpatialIndex<Entity> {
-    fn promote_to_state(
-        &mut self,
-        entity: Entity,
-        new_aabb: AaBb,
-    ) {
-        let mut state = self.state.exclusive(new_aabb, std::iter::empty());
-        state.insert(entity, new_aabb);
-    }
-}
-```
-
-More generally, the same logical entity may exist in both layers, but State is treated as the authoritative layer for live queries and exact-value resolution.
-
-##### 3.2.2.4: Contention Reduction
-
-This layered model reduces logical contention by separating systems with different mutation profiles:
-
-- **Ground** absorbs long-lived generation and streaming work
-- **State** absorbs immediate gameplay and simulation updates
-
-Without this split, exclusive writes from dynamic systems may repeatedly invalidate long-running generative drafts. With the split, most such interference disappears, since the systems are no longer writing against the same underlying index.
-
-This model is therefore especially suitable when:
-
-- generated world content is relatively independent of moment-to-moment simulation
-- dynamic gameplay objects require stricter update semantics
-- asynchronous generation should not be repeatedly invalidated by live entity movement
+In this arrangement, State shadows Ground. A generated artifact may first exist in Ground, then later be repositioned, damaged, or otherwise modified in State without mutating the original Ground representation.
 
 ### 3.3: Materialization and Persistence
 
