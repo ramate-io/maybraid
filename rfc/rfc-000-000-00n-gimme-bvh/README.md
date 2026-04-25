@@ -341,6 +341,9 @@ This pattern keeps the spatial index type-agnostic while allowing systems to con
 
 Such a type-agnostic approach will naturally cause over-fetching. For the most part, this should be reasonable. However, re-use of [3.2.1.2: Optimistic Drafts](#3212-optimistic-drafts) is advised.
 
+> [!TIP]
+> We expand upon typing patterns in [3.3.1: Materialization](#331-materialization)
+
 ### 3.2: Concurrency
 
 For basic usage, developers may rely on existing synchronization primitives such as Bevy resources, queries, or standard library locks. However, Gimme’s spatial index is often accessed heavily for both reads and writes. To manage contention without over-constraining performance, we provide two distinct write modes:
