@@ -2,6 +2,41 @@
 
 ## Table of Contents
 
+- [1: Motivation](#1-motivation)
+- [2: Prior Art](#2-prior-art)
+- [3: Design](#3-design)
+  - [3.1: Spatial Index](#31-spatial-index)
+    - [3.1.1: Insertion](#311-insertion)
+    - [3.1.2: Querying](#312-querying)
+    - [3.1.3: Typing](#313-typing)
+  - [3.2: Concurrency](#32-concurrency)
+    - [3.2.1: Write APIs](#321-write-apis)
+      - [3.2.1.1: Exclusive Writes](#3211-exclusive-writes)
+      - [3.2.1.2: Optimistic Drafts](#3212-optimistic-drafts)
+      - [3.2.1.3: Intermodal Fairness](#3213-intermodal-fairness)
+    - [3.2.2: Hierarchical Indices](#322-hierarchical-indices)
+  - [3.3: Materialization and Persistence](#33-materialization-and-persistence)
+    - [3.3.1: Materialization](#331-materialization)
+    - [3.3.2: Persistence](#332-persistence)
+      - [3.3.2.1: File Persistence](#3321-file-persistence)
+      - [3.3.2.2: Databases](#3322-databases)
+      - [3.3.2.3: Persistence Hierarchy](#3323-persistence-hierarchy)
+  - [3.4: Hierarchical Generation](#34-hierarchical-generation)
+- [4: Milestones](#4-milestones)
+  - [4.1: Core API Milestones](#41-core-api-milestones)
+    - [4.1.1: Spatial Index API Alpha](#411-spatial-index-api-alpha)
+    - [4.1.2: Concurrency API Alpha](#412-concurrency-api-alpha)
+    - [4.1.3: Layered Index API](#413-layered-index-api)
+    - [4.1.4: Materialization and File Persistence API](#414-materialization-and-file-persistence-api)
+    - [4.1.5: Generation API](#415-generation-api)
+  - [4.2: Maybraid Adoption Milestones](#42-maybraid-adoption-milestones)
+    - [4.2.1: Engine Integration Baseline](#421-engine-integration-baseline)
+    - [4.2.2: Terrain and Vegetation Integration](#422-terrain-and-vegetation-integration)
+    - [4.2.3: Character Generation and Spawning Integration](#423-character-generation-and-spawning-integration)
+    - [4.2.4: Collision and Broadphase Integration](#424-collision-and-broadphase-integration)
+    - [4.2.5: Streaming and Persistence Adoption](#425-streaming-and-persistence-adoption)
+    - [4.2.6: Production Readiness](#426-production-readiness)
+
 ## 1: Motivation
 
 Gimme Spatial Storage is a simple AaBb-based spatial storage querying, and retrieval system for Maybraid. It seeks to address the needs to efficiently determine spatial entities available within an AaBb region, as well as to handle generation. The API is designed with Bevy in mind and is intended to roughly intended to handle the following operations:
