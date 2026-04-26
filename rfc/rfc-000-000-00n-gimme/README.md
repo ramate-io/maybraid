@@ -1,10 +1,10 @@
-# RFC-N: Gimme BVH
+# RFC-N: Gimme (Spatial Storage)
 
 ## Table of Contents
 
 ## 1: Motivation
 
-Gimme BVH is a simple AaBb-based BVH system proposed for spatial storage, querying, and retrieval system for Maybraid. It seeks to address the needs to efficiently determine spatial entities available within an AaBb region, as well as to handle generation. The API is designed with Bevy in mind and is intended to roughly intended to handle the following operations:
+Gimme Spatial Storage is a simple AaBb-based spatial storage querying, and retrieval system for Maybraid. It seeks to address the needs to efficiently determine spatial entities available within an AaBb region, as well as to handle generation. The API is designed with Bevy in mind and is intended to roughly intended to handle the following operations:
 
 > [!NOTE]
 > The name is a play on words. AaBb is an anagram for the band ABBA. ABBA has a song called "Gimme! Gimme! Gimme!" The system is also concerned with "giving me" spatially indexed objects. 
@@ -43,7 +43,6 @@ impl <O: BvhObject<Self>> Bvh<O> {
     /// Gets some kind of itertable to ids reflecting all AaBb
     /// objects which intersect with the bounding region. 
     /// For performance considerations, this may be best as a more complex query type. 
-    /// Often BVH will be an enum, and we will want to retrieve the 
     fn query_ids(&self, region: AaBb) -> impl Iter<Item = Id>;
 
     /// Generates new objects for the region
@@ -62,7 +61,7 @@ However, in order to handle more complex queries, asynchronicity, object movemen
 
 ### 3.1: Spatial Index
 
-Gimme BVH uses a simple hierarchical spatial index for storing BVH objects. The structure is an implicit, multi-resolution grid where each level defines a uniform subdivision of space, and objects are indexed by the cells they intersect at an appropriate scale.
+Gimme uses a simple hierarchical spatial index for storing BVH objects. The structure is an implicit, multi-resolution grid where each level defines a uniform subdivision of space, and objects are indexed by the cells they intersect at an appropriate scale.
 
 #### 3.1.1: Insertion
 
@@ -814,7 +813,7 @@ In practice:
 - **Embedded / analytical DBs (SQLite, DuckDB)** are better for local persistence and chunked loading.  
 - **Key-value stores** can also be used by directly implementing `{D}/{Cell} -> Ids`, matching the in-memory layout.
 
-The ABBA BVH model maps naturally onto all of these, since it already exposes a grid-based spatial decomposition and identifier-based lookup.
+The Gimme model maps naturally onto all of these, since it already exposes a grid-based spatial decomposition and identifier-based lookup.
 
 ##### 3.3.2.3: Persistence Hierarchy
 
