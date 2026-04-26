@@ -57,6 +57,10 @@ However, in order to handle more complex queries, asynchronicity, object movemen
 
 ## 2: Prior Art
 
+Real-time games and physics stacks almost always use a **broadphase** spatial index to cut down candidate pairs before exact tests. The usual toolbox includes **uniform** / **hierarchical grids** (see [regular grid](https://en.wikipedia.org/wiki/Regular_grid)), **spatial hashing** (bucket IDs by quantized cell coordinates; standard game-engine broadphase background in [Ericson’s collision detection notes](https://realtimecollisiondetection.net/)), [**quadtrees**](https://en.wikipedia.org/wiki/Quadtree) and [**octrees**](https://en.wikipedia.org/wiki/Octree) (including *loose* variants for dynamic objects), **sweep-and-prune** / sort-and-sweep on axes, and tree broadphases built from [**axis-aligned bounding boxes**](https://en.wikipedia.org/wiki/Minimum_bounding_box#Axis-aligned_minimum_bounding_box)—notably [**BVHs**](https://en.wikipedia.org/wiki/Bounding_volume_hierarchy) and dynamic AABB trees as used in middleware such as [**Bullet**](https://github.com/bulletphysics/bullet3) ([manual index](https://pybullet.org/Bullet/BulletFull/)) and [**PhysX**](https://nvidia-omniverse.github.io/PhysX/physx/5.4.1/docs/Geometry.html#axis-aligned-bounding-boxes) (AABB-centric geometry and scene queries). Engines then layer **streaming** and **world subdivision** on top of the same ideas—for example Unreal’s [**World Partition**](https://dev.epicgames.com/documentation/en-us/unreal-engine/world-partition-in-unreal-engine) for large worlds.
+
+Gimme sits in that lineage: identifier-centric **AaBb** indexing and multi-resolution **grid** addressing are well-trodden; the RFC’s contribution is how that index is **typed**, **concurrent**, and **materialized** in a Bevy-shaped pipeline (see [Section 3](#3-design)), not the invention of spatial search itself.
+
 ## 3: Design
 
 ### 3.1: Spatial Index

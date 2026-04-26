@@ -364,10 +364,14 @@
         "asynchronicity",
         "snapshotting",
         "broadphase",
+        "broadphases",
         "overfetching",
         "DuckDB",
         "SpatiaLite",
-        "GiST"
+        "GiST",
+        "octrees",
+        "PhysX",
+        "AABB-centric"
       ]
     },
     "bibtex": {
