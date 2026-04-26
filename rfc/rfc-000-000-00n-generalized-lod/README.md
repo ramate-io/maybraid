@@ -6,7 +6,7 @@
 
 To this point, Maybraid has used its cascade-based LOD system in an ad hoc manner. While we propose maintaining the base cascade, we provide a common pattern for its intended usage. Namely: 
 
-1. A variably-typed `CascadeTracker` system is responsible for updating a `CascadePosition` on tracked entities, respecting updates in the game world. The tracked `CascadePosition` is the prompt for `CascadeChunk` production. 
+1. A variably-typed `CascadePosition` system is responsible for updating a `CascadePosition` on tracked entities, respecting updates in the game world. The tracked `CascadePosition` is the prompt for `CascadeChunk` production. 
 2. A variably-typed `CascadeProduction` system is responsible for responding to changes in `CascadePositions` and spawning `CascadeChunks` with a `CascadeRequirement` level as children. It also updates a table mapping `CascadeChunks` to child entities. When a chunk needs to be culled, the `CascadeProduction` system acts directly, either marking `Hidden` or removing the chunk entity and all of its children. However, it also spawns `(CascadeChunk, ChunkCulling)` entity, for `ChunkTracker` systems which respond indirectly. 
 3. A variably-typed `ChunkTracker` system is responsible for responding to new chunks and chunk culling, and dispatching tasks to meet chunk requirements. Usually, these will be tasks querying or generating over a spatial index, e.g., [RFC-142: Gimme](/rfc/rfc-000-000-142-gimme/README.md). When a `ChunkTracker` system wishes to respond directly to `ChunkProduction`, it should insert its results as children--allowing `ChunkProduction` to manage culling. Otherwise, it should not insert is results as children and should manage culling itself. 
 4. A variably-typed `ChunkEntityTracker` system is responsible for responding to updates in the position of `ChunkManaged` entities--mainly so that the entities are not prematurely culled. `ChunkEntityTracker` systems use lookups to a parent `CascadeProduction` node to identify the appropriate chunk to which the child should be reattached.
@@ -94,38 +94,82 @@ if needs(p_old, p_new) {
 
 This accomplishes a **nested shell LOD** at $s_0, 3s_0, 9s_0, \ldots$ and, if we ask for it, a **coarse band** with a **single hull-shaped hole**—tight detail near $\mathbf{p}$, cheaper stuff far away, without stamping the hull twice. Resolution is a **separate** knob we turn when we actually consume $\mathcal{W}$, not when we build the shells.
 
-### 3.2: `CascadeTracker`
+### 3.2: `CascadePosition`
 
 ```rust
+use bevy::prelude::*;
+
+#[derive(Component)]
 pub struct CascadePosition<T> {
-    position: Vec3,
-    data: T
+    pub position: Vec3,
+    pub data: T,
 }
 
-pub trait CascadePositionSource<M> {
+pub trait CascadePositionSource {
+    type Data: Send + Sync + 'static;
+
     type QueryData: QueryData;
+    type QueryFilter: QueryFilter = ();
 
     fn entity(item: &<Self::QueryData as QueryData>::Item<'_, '_>) -> Entity;
 
     fn cascade_position(
         item: &<Self::QueryData as QueryData>::Item<'_, '_>,
-    ) -> CascadePosition<M>;
+    ) -> CascadePosition<Self::Data>;
 }
 
-pub fn track_cascade_position<M, S>(
+pub fn track_cascade_position<S>(
     mut commands: Commands,
-    query: Query<S::QueryData>,
+    query: Query<S::QueryData, S::QueryFilter>,
 )
 where
-    M: Send + Sync + 'static,
-    S: CascadePositionSource<M> + Send + Sync + 'static,
+    S: CascadePositionSource + Send + Sync + 'static,
+    S::Data: Send + Sync + 'static,
     S::QueryData: QueryData,
-    CascadePosition<M>: Component,
+    S::QueryFilter: QueryFilter,
+    CascadePosition<S::Data>: Component,
 {
     for item in &query {
         commands
             .entity(S::entity(&item))
             .insert(S::cascade_position(&item));
+    }
+}
+```
+
+As a plugin:
+
+```rust
+pub struct CascadePositionPlugin<S> {
+    schedule: InternedScheduleLabel,
+    _marker: std::marker::PhantomData<S>,
+}
+
+impl<S> Default for CascadePositionPlugin<S> {
+    fn default() -> Self {
+        Self {
+            schedule: Update.intern(),
+            _marker: std::marker::PhantomData,
+        }
+    }
+}
+
+impl<S> CascadePositionPlugin<S> {
+    pub fn new(schedule: impl ScheduleLabel) -> Self {
+        Self {
+            schedule: schedule.intern(),
+            _marker: std::marker::PhantomData,
+        }
+    }
+}
+
+impl<S> Plugin for CascadePositionPlugin<S>
+where
+    S: CascadePositionSource,
+    CascadePosition<S::Data>: Component,
+{
+    fn build(&self, app: &mut App) {
+        app.add_systems(self.schedule, track_cascade_position::<S>);
     }
 }
 ```
