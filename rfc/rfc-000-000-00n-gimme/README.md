@@ -954,3 +954,63 @@ impl<Index> Generator<Middle> for Index
 This bottom-up approach allows systems to discover minimal generation paths, preventing overfetching. Conversely, the approach also allows systems to generate whatever they specifically need, while respecting a requirement hierarchy. 
 
 ## 4: Milestones
+
+Milestones below are planning hooks, not dated commitments. They are split between core API delivery and Maybraid adoption.
+
+### 4.1: Core API Milestones
+
+#### 4.1.1: Spatial Index API Alpha
+
+Spec: [Section 3.1](#31-spatial-index).
+
+Done when: insertion and query semantics, level selection, and exact AaBb post filtering are implemented and tested for deterministic results.
+
+#### 4.1.2: Concurrency API Alpha
+
+Spec: [Section 3.2](#32-concurrency).
+
+Done when: exclusive writes, optimistic drafts, draft application and invalidation, and sequence number conflict rules are implemented with race focused tests.
+
+#### 4.1.3: Layered Index API
+
+Spec: [Section 3.2.2](#322-hierarchical-indices).
+
+Done when: hierarchical layered querying is available with deterministic layer precedence and per layer contention isolation.
+
+#### 4.1.4: Materialization and File Persistence API
+
+Spec: [Section 3.3](#33-materialization-and-persistence).
+
+Done when: typed materialization over an ID based index and file persistence are documented and exercised end to end, including write, load, and region query behavior from persisted files.
+
+#### 4.1.5: Generation API
+
+Spec: [Section 3.4](#34-hierarchical-generation).
+
+Done when: `Generator` and `CellGenerator` get or generate paths support dependency safe bottom up generation without circular fetches.
+
+### 4.2: Maybraid Adoption Milestones
+
+#### 4.2.1: Engine Integration Baseline
+
+Done when: Gimme replaces or fronts current ad hoc spatial lookup in at least one runtime path, with profiling and parity checks.
+
+#### 4.2.2: Terrain and Vegetation Integration
+
+Done when: terrain and vegetation generation use Gimme backed regional queries and drafts for spawn and lookup, with chunk boundary determinism validated.
+
+#### 4.2.3: Character Generation and Spawning Integration
+
+Done when: character generation and spawn systems resolve spatial dependencies through Gimme IDs and materialization, including load and unload and respawn behavior.
+
+#### 4.2.4: Collision and Broadphase Integration
+
+Done when: collision candidate retrieval uses Gimme broadphase queries or mirrored feed and demonstrates acceptable correctness and performance against current behavior.
+
+#### 4.2.5: Streaming and Persistence Adoption
+
+Done when: persisted cells and IDs reload into live indices across sessions, and draft and exclusive semantics remain stable under streaming churn.
+
+#### 4.2.6: Production Readiness
+
+Done when: observability through metrics and debug views, migration notes, and failure mode handling are documented for Maybraid maintainers.
