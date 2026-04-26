@@ -96,6 +96,40 @@ This accomplishes a **nested shell LOD** at $s_0, 3s_0, 9s_0, \ldots$ and, if we
 
 ### 3.2: `CascadeTracker`
 
+```rust
+pub struct CascadePosition<T> {
+    position: Vec3,
+    data: T
+}
+
+pub trait CascadePositionSource<M> {
+    type QueryData: QueryData;
+
+    fn entity(item: &<Self::QueryData as QueryData>::Item<'_, '_>) -> Entity;
+
+    fn cascade_position(
+        item: &<Self::QueryData as QueryData>::Item<'_, '_>,
+    ) -> CascadePosition<M>;
+}
+
+pub fn track_cascade_position<M, S>(
+    mut commands: Commands,
+    query: Query<S::QueryData>,
+)
+where
+    M: Send + Sync + 'static,
+    S: CascadePositionSource<M> + Send + Sync + 'static,
+    S::QueryData: QueryData,
+    CascadePosition<M>: Component,
+{
+    for item in &query {
+        commands
+            .entity(S::entity(&item))
+            .insert(S::cascade_position(&item));
+    }
+}
+```
+
 ### 3.3: `CascadeProduction`
 
 ### 3.4: `ChunkTracker`
