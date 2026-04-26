@@ -540,11 +540,11 @@ Contention can often be reduced by structuring spatial data as a **hierarchy of 
 In the most general form, layers are keyed by any ordered type:
 
 ```rust
-pub struct HierarchicalSpatialIndex<Layer, Entity>
+pub struct HierarchicalSpatialIndex<Layer, Id>
 where
     Layer: Ord,
 {
-    layers: BTreeMap<Layer, BimodalSpatialIndex<Entity>>,
+    layers: BTreeMap<Layer, BimodalSpatialIndex<Id>>,
 }
 ```
 
@@ -565,7 +565,7 @@ A query proceeds by:
 4. Resolving values from the highest-priority layer in which they appear
 
 ```rust
-impl<Layer, Entity> HierarchicalSpatialIndex<Layer, Entity>
+impl<Layer, Entity> HierarchicalSpatialIndex<Layer, Id>
 where
     Layer: Ord,
     Entity: Copy + Eq + Hash,
@@ -626,10 +626,9 @@ There are two common patterns:
 A materialized spatial index can be represented by a small trait:
 
 ```rust
-pub trait MaterializedSpatialIndex<T> {
-    type Id;
+pub trait MaterializedSpatialIndex<Id, T> {
 
-    fn get(&self, region: AaBb) -> impl Iterator<Item = (Self::Id, &T)>;
+    fn get(&self, region: AaBb) -> impl Iterator<Item = (Id, &T)>;
 
     fn insert(
         &mut self,
@@ -648,11 +647,10 @@ pub struct TypedDraft<Id, T> {
     values: HashMap<Id, T>,
 }
 
-impl<Id, T> MaterializedSpatialIndex<T> for TypedDraft<Id, T>
+impl<Id, T> MaterializedSpatialIndex<Id, T> for TypedDraft<Id, T>
 where
     Id: Copy + Eq + std::hash::Hash,
 {
-    type Id = Id;
 
     fn get(&self, region: AaBb) -> impl Iterator<Item = (Id, &T)> {
         self.spatial
@@ -748,19 +746,93 @@ This pattern keeps the base spatial index type-agnostic while allowing generatio
 
 #### 3.3.2: Persistence
 
-1. Each live `Entity` that we wish to persist must map to a(n) `Id`. 
-2. Each `Id` that we wish to persist may map to multiple types. (This induces a mapping from `Entity` to types thought such was already implied in [Materialization](#331-materialization).)
-3. When persisting, we use the mapping from `Entity` to `Id` available in the game world to update and store an out-of-memory spatial index over `Id`.
-4. We load portions of the out-of-memory spatial index by queries over AaBb regions. 
-5. We then materialize by querying for stored types and inserting into the game world. 
-6. The entities given by the game world are then inserted into the in-memory spatial index. 
+Persistence is performed over identifiers (e.g., `Id`), not entities. The `SpatialIndex<Id>` and the type tables are persisted separately:
+
+- The **spatial index** stores where identifiers exist.
+- The **type tables** store what those identifiers are.
+
+At load time, we query the persisted spatial index for relevant `Id`s, then fetch only the needed typed records.
 
 ```mermaid
+flowchart LR
+    A[Persisted SpatialIndex&lt;Id&gt;] -->|AaBb Query| B[Ids]
+    B -->|Lookup by Id| C[Type Tables]
+    C -->|Materialize| D[Entities]
+    D -->|Insert| E[In-memory SpatialIndex]
 ```
 
-### 3.4: Generation
+When the persisted `SpatialIndex` is queryable in-place, it does not need to be fully loaded into memory.
 
-#### 3.4.1: Hierarchical Generation
+##### 3.3.2.1: File Persistence
+
+A simple file-based model is to serialize each spatial cell independently:
+
+```text
+{D}/{Cell} -> HashSet<Id>
+```
+
+Loading a region then mirrors the in-memory query algorithm:
+
+1. Compute intersecting `(D, Cell)` keys.
+2. Load the corresponding files.
+3. Merge and deduplicate identifiers.
+4. Fetch required type records by `Id`.
+
+This is simple, inspectable, and works well for chunk-like worlds.
+
+##### 3.3.2.2: Databases
+
+Several databases provide spatial indexing support compatible with this model:
+
+- **PostgreSQL + PostGIS**  
+  Spatial indexing is implemented using GiST (often R-tree–like structures).  
+  Documentation: [PostGIS Spatial Indexing Guide](https://postgis.net/workshops/postgis-intro/indexing.html?utm_source=chatgpt.com)  
+  PostGIS uses spatial indices to reduce query cost from full table scans to tree-based lookups.
+
+- **SQLite + R*Tree / SpatiaLite**  
+  SQLite provides an R-tree virtual table for multidimensional indexing.  
+  Documentation: [SQLite R-Tree Spatial Index Overview](https://deepwiki.com/sqlite/sqlite/3.5-r-tree-spatial-index?utm_source=chatgpt.com)  
+  This module enables efficient bounding-box queries and spatial filtering.
+
+  For higher-level GIS features:  
+  [SpatiaLite Documentation](https://www.gaia-gis.it/fossil/libspatialite/index?utm_source=chatgpt.com)  
+  SpatiaLite extends SQLite into a full spatial database comparable to PostGIS.
+
+- **DuckDB (Spatial Extension)**  
+  Supports spatial types and experimental R-tree indexing.  
+  Documentation: [DuckDB Spatial Extension Overview](https://duckdb.org/docs/current/core_extensions/spatial/overview.html?utm_source=chatgpt.com)  
+  Spatial queries can be accelerated using R-tree or other indexing schemes.
+
+- **General Spatial Index Background**  
+  Overview of spatial index types (R-tree, BVH, grids, etc.):  
+  [Spatial Database Indexing Overview](https://en.wikipedia.org/wiki/Spatial_database?utm_source=chatgpt.com)  
+  R-trees and related structures are the most common approach for bounding-box queries.
+
+In practice:
+
+- **Relational spatial DBs (PostGIS, SpatiaLite)** are best when you want expressive queries and joins.  
+- **Embedded / analytical DBs (SQLite, DuckDB)** are better for local persistence and chunked loading.  
+- **Key-value stores** can also be used by directly implementing `{D}/{Cell} -> Ids`, matching the in-memory layout.
+
+The ABBA BVH model maps naturally onto all of these, since it already exposes a grid-based spatial decomposition and identifier-based lookup.
+
+##### 3.3.2.3: Persistence Hierarchy
+
+Most persisted sources are loaded once and then modified in memory. However, some systems, such as multiplayer, may need ongoing updates from external sources.
+
+This can be modeled using the hierarchical index system:
+
+```rust
+Layer(0) => Local cache
+Layer(1) => Runtime state
+Layer(2) => Unconfirmed network state
+Layer(3) => Confirmed persisted/network state
+```
+
+Higher layers shadow lower layers. This allows remote or persisted updates to participate in spatial queries without forcing unrelated local systems to block or invalidate their drafts.
+
+
+### 3.4: Hierarchical Generation
 
 The simplest and most flexible way to perform hierarchical generation is to generate from the bottom up--checking requirements and using the spatial index for fetching results. 
 
@@ -877,7 +949,5 @@ impl<Index> Generator<Middle> for Index
 > Generally, you should only fetch up the hierarchy. Trying to fetch siblings can create circular dependencies. 
 
 This bottom-up approach allows systems to discover minimal generation paths, preventing overfetching. Conversely, the approach also allows systems to generate whatever they specifically need, while respecting a requirement hierarchy. 
-
-### 3.5: In Bevy
 
 ## 4: Milestones
