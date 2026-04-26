@@ -17,6 +17,11 @@ To this point, Maybraid has used its cascade-based LOD system in an ad hoc manne
 
 ### 3.1: Cascade
 
+
+![LOD Cascade](./assets/lod-cascade.png)
+
+We adopt much of the cascade design from commit [`28b8a11`](https://github.com/ramate-io/maybraid/blob/28b8a11d59244d7826b5634387b13a1b94fc9454/util/chunk/src/cascade.rs) in Maybraid's exploratory phase. We remove, however, the embedded resolution design, preferring to delegate the task of assigning resolutions to chunks to the `ChunkTracker`, if such is fit. 
+
 We fix a **leaf scale** $s_0 > 0$ and **depth** $K \in \mathbb{N}$. Given a focal $\mathbf{p} \in \mathbb{R}^3$, we want a **finite** set of axis-aligned **chunks**—abstractly $(B, r, O)$: a cube $B \subset \mathbb{R}^3$, a resolution tag $r$, and an optional AABB subtraction $O$ so we really work on $B \setminus O$ when $O$ is set.
 
 We snap $\mathbf{p}$ to the $s_0$-lattice for the innermost cell:
