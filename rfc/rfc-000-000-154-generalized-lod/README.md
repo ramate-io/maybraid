@@ -340,7 +340,7 @@ CascadePosition<Bar>
 
 Each `CascadeProduction<S>` owns its own concrete `Cascade` and its own `CascadeTable`.
 
-## 3.2.5: Signal Entities
+#### 3.2.5: Signal Entities
 
 When a chunk is hidden or removed, production acts directly on the chunk entity and also spawns:
 
