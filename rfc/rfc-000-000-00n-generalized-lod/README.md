@@ -94,9 +94,7 @@ if needs(p_old, p_new) {
 
 This accomplishes a **nested shell LOD** at $s_0, 3s_0, 9s_0, \ldots$ and, if we ask for it, a **coarse band** with a **single hull-shaped hole**—tight detail near $\mathbf{p}$, cheaper stuff far away, without stamping the hull twice. Resolution is a **separate** knob we turn when we actually consume $\mathcal{W}$, not when we build the shells.
 
-Updated sketch, staying within the attached format. This revises the prior `CascadeProduction` proposal in the directions you listed. 
-
-### 3.2: `CascadeProduction`
+### 3.3.2: `CascadeProduction`
 
 `CascadeProduction<S>` owns a concrete `Cascade`, maintains its local chunk table, and listens to source data selected by `S::QueryData`. On update, it:
 
@@ -104,7 +102,8 @@ Updated sketch, staying within the attached format. This revises the prior `Casc
 2. Uses `Cascade::new_chunks(previous, current)` to identify newly relevant chunks.
 3. Runs the requirement builder over both new chunks and existing chunks.
 4. Uses the requirement’s signal to decide whether each chunk should be visible, hidden, or removed.
-5. Spawns culling marker entities for indirect listeners when chunks are hidden or removed.
+5. Spawns short-lived signal entities for indirect listeners as `(Chunk, RequirementSignal, S::PositionData)`.
+6. Garbage-collects previous-frame signal entities before producing the next cascade update.
 
 #### 3.2.1: Core Components
 
@@ -135,6 +134,7 @@ pub struct CascadePosition<S> {
 Requirements are inserted directly as components. They also describe the desired endemic action for a chunk.
 
 ```rust
+#[derive(Component, Clone, Copy, PartialEq, Eq)]
 pub enum RequirementSignal {
     Visible,
     Hidden,
@@ -146,7 +146,13 @@ pub trait CascadeRequirement: Component + Clone {
 }
 ```
 
-The name `RequirementSignal` is probably clearer than `Signal`, because it avoids colliding with broader engine/event terminology.
+`RequirementSignal` is itself a component because production emits short-lived signal entities of the form:
+
+```rust
+(chunk, signal, position_data)
+```
+
+...for indirect `ChunkTracker` listeners.
 
 #### 3.2.3: Requirement Builder
 
@@ -165,11 +171,13 @@ where
 
 The builder receives both the current cascade position and the chunk, so requirements can depend on metadata in `CascadePosition<S>` as well as spatial chunk identity.
 
+If a producer entity has no builder, the system inserts `S::Builder::default()` and uses that default builder immediately.
+
 #### 3.2.4: Source Trait
 
 ```rust
 pub trait CascadeProductionSource: Send + Sync + 'static {
-    type PositionData: Clone + Send + Sync + 'static;
+    type PositionData: Component + Clone + Send + Sync + 'static;
     type Requirement: CascadeRequirement;
     type Builder: RequirementBuilder<Self::Requirement>;
 
@@ -188,22 +196,29 @@ pub trait CascadeProductionSource: Send + Sync + 'static {
 }
 ```
 
-#### 3.2.5: Culling Marker
+`S` is the type marker distinguishing one production flow from another. This allows the same entity to hold multiple independent flows like:
 
 ```rust
-#[derive(Component)]
-pub struct ChunkCulling {
-    pub signal: RequirementSignal,
-}
+CascadeProduction<Foo>
+CascadePosition<Foo>
+
+CascadeProduction<Bar>
+CascadePosition<Bar>
 ```
 
-When a chunk is hidden or removed, production acts directly and also spawns:
+Each `CascadeProduction<S>` owns its own concrete `Cascade` and its own `CascadeTable`.
+
+## 3.2.5: Signal Entities
+
+When a chunk is hidden or removed, production acts directly on the chunk entity and also spawns:
 
 ```rust
-(chunk, ChunkCulling { signal })
+(Chunk, RequirementSignal, S::PositionData)
 ```
 
-...for indirect `ChunkTracker` listeners.
+These entities are intentionally frame-local. They allow indirect systems to observe chunk visibility/removal decisions without requiring production to know about those systems.
+
+Signal entities are garbage-collected before the next cascade production pass.
 
 #### 3.2.6: System
 
@@ -242,6 +257,7 @@ where
         update_cascade_chunks::<S>(
             &mut commands,
             entity,
+            &item,
             &mut production,
             &position,
             &builder,
@@ -276,6 +292,8 @@ where
 }
 ```
 
+`previous` is derived from the prior stored `CascadePosition<S::PositionData>`. `current` is derived from the source query item.
+
 #### 3.2.8: Phase 2: Resolve Builder
 
 ```rust
@@ -304,6 +322,7 @@ where
 fn update_cascade_chunks<S>(
     commands: &mut Commands,
     producer: Entity,
+    item: &<S::QueryData as QueryData>::Item<'_, '_>,
     production: &mut CascadeProduction<S>,
     position: &CascadePosition<S::PositionData>,
     builder: &S::Builder,
@@ -319,6 +338,7 @@ where
     apply_requirements_to_new_chunks::<S>(
         commands,
         producer,
+        item,
         production,
         position,
         builder,
@@ -327,6 +347,7 @@ where
 
     apply_requirements_to_existing_chunks::<S>(
         commands,
+        item,
         production,
         position,
         builder,
@@ -334,12 +355,20 @@ where
 }
 ```
 
+The system runs the requirement builder over both:
+
+1. `Chunks` newly reported by `Cascade::new_chunks`, and
+2. `Chunks` already present in `production.table`.
+
+The requirement’s signal determines the endemic action.
+
 #### 3.2.10: Apply Requirements to New Chunks
 
 ```rust
 fn apply_requirements_to_new_chunks<S>(
     commands: &mut Commands,
     producer: Entity,
+    item: &<S::QueryData as QueryData>::Item<'_, '_>,
     production: &mut CascadeProduction<S>,
     position: &CascadePosition<S::PositionData>,
     builder: &S::Builder,
@@ -350,8 +379,9 @@ where
 {
     for &chunk in new_chunks {
         let requirement = builder.build(position, chunk);
+        let signal = requirement.signal();
 
-        match requirement.signal() {
+        match signal {
             RequirementSignal::Visible => {
                 let chunk_entity = production
                     .table
@@ -387,32 +417,35 @@ where
                     .entity(chunk_entity)
                     .insert((requirement, Visibility::Hidden));
 
-                commands.spawn((
+                spawn_requirement_signal::<S>(
+                    commands,
+                    item,
                     chunk,
-                    ChunkCulling {
-                        signal: RequirementSignal::Hidden,
-                    },
-                ));
+                    signal,
+                );
             }
 
             RequirementSignal::Remove => {
-                commands.spawn((
+                spawn_requirement_signal::<S>(
+                    commands,
+                    item,
                     chunk,
-                    ChunkCulling {
-                        signal: RequirementSignal::Remove,
-                    },
-                ));
+                    signal,
+                );
             }
         }
     }
 }
 ```
 
+For new chunks, `Visible` and `Hidden` both ensure a chunk entity exists. `Remove` does not spawn the chunk entity; it only emits the signal entity.
+
 #### 3.2.11: Apply Requirements to Existing Chunks
 
 ```rust
 fn apply_requirements_to_existing_chunks<S>(
     commands: &mut Commands,
+    item: &<S::QueryData as QueryData>::Item<'_, '_>,
     production: &mut CascadeProduction<S>,
     position: &CascadePosition<S::PositionData>,
     builder: &S::Builder,
@@ -429,8 +462,9 @@ where
 
     for (chunk, entity) in existing {
         let requirement = builder.build(position, chunk);
+        let signal = requirement.signal();
 
-        match requirement.signal() {
+        match signal {
             RequirementSignal::Visible => {
                 commands
                     .entity(entity)
@@ -442,12 +476,12 @@ where
                     .entity(entity)
                     .insert((requirement, Visibility::Hidden));
 
-                commands.spawn((
+                spawn_requirement_signal::<S>(
+                    commands,
+                    item,
                     chunk,
-                    ChunkCulling {
-                        signal: RequirementSignal::Hidden,
-                    },
-                ));
+                    signal,
+                );
             }
 
             RequirementSignal::Remove => {
@@ -455,19 +489,68 @@ where
 
                 commands.entity(entity).despawn_recursive();
 
-                commands.spawn((
+                spawn_requirement_signal::<S>(
+                    commands,
+                    item,
                     chunk,
-                    ChunkCulling {
-                        signal: RequirementSignal::Remove,
-                    },
-                ));
+                    signal,
+                );
             }
         }
     }
 }
 ```
 
-#### 3.2.12: Plugin
+For existing chunks, `Remove` removes the table entry and despawns the chunk entity recursively.
+
+#### 3.2.12: Spawn Requirement Signal
+
+```rust
+fn spawn_requirement_signal<S>(
+    commands: &mut Commands,
+    item: &<S::QueryData as QueryData>::Item<'_, '_>,
+    chunk: Chunk,
+    signal: RequirementSignal,
+)
+where
+    S: CascadeProductionSource,
+{
+    commands.spawn((
+        chunk,
+        signal,
+        S::position_data(item),
+    ));
+}
+```
+
+This keeps indirect notifications typed by the same `S::PositionData` used by the production flow.
+
+#### 3.2.13: Garbage Collect Requirement Signals
+
+```rust
+pub fn garbage_collect_requirement_signals<S>(
+    mut commands: Commands,
+    signals: Query<
+        Entity,
+        (
+            With<Chunk>,
+            With<RequirementSignal>,
+            With<S::PositionData>,
+        ),
+    >,
+)
+where
+    S: CascadeProductionSource,
+{
+    for entity in &signals {
+        commands.entity(entity).despawn();
+    }
+}
+```
+
+This system should run before `produce_cascade::<S>`. This gives downstream systems one frame to observe signal entities before they are removed.
+
+## 3.2.14: Plugin
 
 ```rust
 pub struct CascadeProductionPlugin<S> {
@@ -487,12 +570,26 @@ where
     S: CascadeProductionSource,
 {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, produce_cascade::<S>);
+        app.add_systems(
+            Update,
+            (
+                garbage_collect_requirement_signals::<S>,
+                produce_cascade::<S>,
+            )
+                .chain(),
+        );
     }
 }
 ```
 
-The main structural change is that `CascadeProduction<S>` is now the durable owner of both the concrete `Cascade` and the chunk table. That removes the optional table path entirely and makes each typed production flow self-contained.
+The important ordering constraint is:
+
+```rust
+garbage_collect_requirement_signals::<S>
+    .before(produce_cascade::<S>)
+```
+
+Using `.chain()` is the concise version when both systems are registered together.
 
 
 ### 3.3: `ChunkTracker`
