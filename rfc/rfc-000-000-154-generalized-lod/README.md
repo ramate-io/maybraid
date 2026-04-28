@@ -867,8 +867,6 @@ If a tracker wants production-managed culling, it should spawn results as childr
 
 The proposed spatial storage engine is currently [Gimme](/rfc/rfc-000-000-142-gimme/README.md). Accordingly, we have prepared an integration guide [here](./integration-with-gimme/README.md).
 
-Yes — agreed. `S` should remain the cascade/production marker, while `P` is the concrete component tracking entity bounds.
-
 ---
 
 ### 3.4: `ChunkEntityTracker`
