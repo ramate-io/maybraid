@@ -563,7 +563,7 @@ where
 
 This system should run before `produce_cascade::<S>`. This gives downstream systems one frame to observe signal entities before they are removed.
 
-## 3.2.14: Plugin
+#### 3.2.14: Plugin
 
 ```rust
 pub struct CascadeProductionPlugin<S> {
@@ -613,15 +613,197 @@ Simply listens for `Changed<RequirementSignal>` on an entity `With<(Chunk, Marke
 
 The proposed spatial storage engine is currently [Gimme](/rfc/rfc-000-000-142-gimme/README.md). Accordingly, we have prepared an integration guide [here](./integration-with-gimme/README.md).
 
+Yes — agreed. `S` should remain the cascade/production marker, while `P` is the concrete component tracking entity bounds.
+
 ### 3.4: `ChunkEntityTracker`
 
-The `ChunkEntityTracker` is responsible for changing the chunk parentage of objects as they move. An entity managed by a `ChunkEntityTracker` system is marked with a type implementing `ChunkEntityPosition`, where `ChunkEntityPosition::Data = S`. `ChunkEntityPosition` must be able to produce past and current AABB bounds. 
+`ChunkEntityTracker<P, S>` is responsible for maintaining the chunk parentage of entities whose spatial bounds change after they are spawned.
 
-When `Changed<ChunkEntityPosition>`, the `ChunkEntityTracker` looks up the grandparent which should contain `(CascadeProduction<S>, CascadePosition<S>)`. It calls `chunk_entity_position.select_chunk(parent: Entity, cascade_production: CascadeProduction<S>, cascade_position: CascadePosition<S>) -> Option<Entity>`. When the `Entity` is `None`, the `ChunkEntityPosition` despawns. 
-
-By default, the `select_chunk` method will call the `Cascade::all_possible_new_chunks` method, which produces a set of chunks for the `AaBb` that intersect on the rings and on the grid. It will choose the chunk with the most overlap that matches the chunk size of parent, looked up via the reverse mapping on the table. 
+`S` identifies the cascade production flow:
 
 ```rust
+CascadeProduction<S>
+CascadePosition<S::PositionData>
 ```
+
+`P` is the component placed on managed entities:
+
+```rust
+P: ChunkEntityPosition<S>
+```
+
+#### 3.4.1: Core Trait
+
+```rust
+pub trait ChunkEntityPosition<S>: Component {
+    fn previous(&self) -> Option<AaBb>;
+
+    fn current(&self) -> AaBb;
+
+    fn select_chunk(
+        &self,
+        current_parent_chunk: Chunk,
+        production: &CascadeProduction<S>,
+        position: &CascadePosition<S::PositionData>,
+    ) -> Option<Entity>
+    where
+        S: CascadeProductionSource,
+    {
+        select_best_overlapping_chunk::<S>(
+            current_parent_chunk,
+            production,
+            position,
+            self.previous(),
+            self.current(),
+        )
+    }
+}
+```
+
+#### 3.4.2: Parent Lookup
+
+The hierarchy is expected to be:
+
+```text
+CascadeProduction<S>
+└── Chunk
+    └── entity with P
+```
+
+The tracker performs a manual join:
+
+```rust
+managed entity -> parent chunk -> grandparent production
+```
+
+The grandparent should contain:
+
+```rust
+CascadeProduction<S>
+CascadePosition<S::PositionData>
+```
+
+#### 3.4.3: System
+
+```rust
+pub fn track_chunk_entities<P, S>(
+    mut commands: Commands,
+    managed: Query<
+        (Entity, &P, &Parent),
+        Changed<P>,
+    >,
+    chunks: Query<(&Chunk, &Parent)>,
+    productions: Query<(
+        &CascadeProduction<S>,
+        &CascadePosition<S::PositionData>,
+    )>,
+)
+where
+    S: CascadeProductionSource,
+    P: ChunkEntityPosition<S>,
+{
+    for (entity, chunk_entity_position, parent) in &managed {
+        let current_parent_entity = parent.get();
+
+        let Ok((current_parent_chunk, production_parent)) =
+            chunks.get(current_parent_entity)
+        else {
+            commands.entity(entity).despawn_recursive();
+            continue;
+        };
+
+        let production_entity = production_parent.get();
+
+        let Ok((production, cascade_position)) =
+            productions.get(production_entity)
+        else {
+            commands.entity(entity).despawn_recursive();
+            continue;
+        };
+
+        match chunk_entity_position.select_chunk(
+            *current_parent_chunk,
+            production,
+            cascade_position,
+        ) {
+            Some(new_chunk_entity) => {
+                if new_chunk_entity != current_parent_entity {
+                    commands
+                        .entity(new_chunk_entity)
+                        .add_child(entity);
+                }
+            }
+
+            None => {
+                commands.entity(entity).despawn_recursive();
+            }
+        }
+    }
+}
+```
+
+#### 3.4.4: Default Chunk Selection
+
+```rust
+fn select_best_overlapping_chunk<S>(
+    current_parent_chunk: Chunk,
+    production: &CascadeProduction<S>,
+    _position: &CascadePosition<S::PositionData>,
+    previous: Option<AaBb>,
+    current: AaBb,
+) -> Option<Entity>
+where
+    S: CascadeProductionSource,
+{
+    let candidates = production
+        .cascade
+        .all_possible_new_chunks(previous, current);
+
+    candidates
+        .into_iter()
+        .filter(|candidate| {
+            production.cascade.ring_count() == 0
+                || candidate.size() == current_parent_chunk.size()
+        })
+        .filter_map(|chunk| {
+            let entity = production.table.table.get(&chunk).copied()?;
+            let overlap = chunk.aabb().overlap_area(current);
+
+            Some((entity, overlap))
+        })
+        .max_by(|(_, a), (_, b)| a.total_cmp(b))
+        .map(|(entity, _)| entity)
+}
+```
+
+The default behavior is level-preserving: if the cascade has rings, the entity is reassigned only among chunks matching its current parent chunk’s size. If the cascade is grid-only, the size filter is skipped.
+
+#### 3.4.5: Plugin
+
+```rust
+pub struct ChunkEntityTrackerPlugin<P, S> {
+    marker: PhantomData<(P, S)>,
+}
+
+impl<P, S> Default for ChunkEntityTrackerPlugin<P, S> {
+    fn default() -> Self {
+        Self {
+            marker: PhantomData,
+        }
+    }
+}
+
+impl<P, S> Plugin for ChunkEntityTrackerPlugin<P, S>
+where
+    S: CascadeProductionSource,
+    P: ChunkEntityPosition<S>,
+{
+    fn build(&self, app: &mut App) {
+        app.add_systems(Update, track_chunk_entities::<P, S>);
+    }
+}
+```
+
+
 
 ## Milestones
