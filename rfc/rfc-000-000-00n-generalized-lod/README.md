@@ -607,9 +607,143 @@ Using `.chain()` is the concise version when both systems are registered togethe
 
 ### 3.3: `ChunkTracker`
 
-Simply listens for `Changed<RequirementSignal>` on an entity `With<(Chunk, Marker<S>)>`. The implementer of a `ChunkTracker` does not get additional query data and is responsible for dispatching handlers as they see fit. (Can it be argued this is a reactor pattern?)
+`ChunkTracker<T, S>` is a lightweight reactor system for chunk signal entities emitted by `CascadeProduction<S>`.
 
-#### 3.3.1: Integration with RFC-142: Gimme
+It listens for entities matching:
+
+```rust
+(
+    Chunk,
+    RequirementSignal,
+    S::PositionData,
+    Marker<S>,
+)
+```
+
+with:
+
+```rust
+Changed<RequirementSignal>
+```
+
+The tracker does not receive extra query data and does not return anything. It is simply handed `Commands` plus the chunk signal data and may react however it chooses.
+
+This is reasonably described as a **reactor pattern**: `CascadeProduction<S>` emits short-lived chunk state signals, and `ChunkTracker<T, S>` reacts to those signals without participating in cascade production itself.
+
+#### 3.3.1: Tracker Trait
+
+```rust
+pub trait ChunkTracker<S>: Send + Sync + 'static
+where
+    S: CascadeProductionSource,
+{
+    fn react(
+        commands: &mut Commands,
+        chunk: Chunk,
+        signal: RequirementSignal,
+        data: &S::PositionData,
+    );
+}
+```
+
+The trait intentionally has no return value. A tracker may:
+
+```rust
+commands.spawn(...);
+commands.entity(...).insert(...);
+commands.entity(...).despawn_recursive();
+```
+
+...or do nothing.
+
+If spawned entities should later participate in `ChunkEntityTracker`, the tracker must explicitly insert the appropriate `ChunkEntityPosition` component itself.
+
+#### 3.3.2: System
+
+```rust
+pub fn track_chunks<T, S>(
+    mut commands: Commands,
+    signals: Query<
+        (&Chunk, &RequirementSignal, &S::PositionData),
+        (
+            With<Marker<S>>,
+            Changed<RequirementSignal>,
+        ),
+    >,
+)
+where
+    S: CascadeProductionSource,
+    T: ChunkTracker<S>,
+{
+    for (chunk, signal, data) in &signals {
+        T::react(
+            &mut commands,
+            *chunk,
+            *signal,
+            data,
+        );
+    }
+}
+```
+
+#### 3.3.3: Closure-Based Alternative
+
+If we want the tracker to feel more like a handler than a trait object, the same pattern can be modeled as a function-like type:
+
+```rust
+pub trait ChunkTracker<S>: Send + Sync + 'static
+where
+    S: CascadeProductionSource,
+{
+    fn call(
+        commands: &mut Commands,
+        chunk: Chunk,
+        signal: RequirementSignal,
+        data: &S::PositionData,
+    );
+}
+```
+
+The trait form is probably preferable because Bevy plugins and systems need named, type-level registration:
+
+```rust
+app.add_systems(Update, track_chunks::<MyTracker, MyCascadeSource>);
+```
+
+#### 3.3.4: Plugin
+
+```rust
+pub struct ChunkTrackerPlugin<T, S> {
+    marker: PhantomData<(T, S)>,
+}
+
+impl<T, S> Default for ChunkTrackerPlugin<T, S> {
+    fn default() -> Self {
+        Self {
+            marker: PhantomData,
+        }
+    }
+}
+
+impl<T, S> Plugin for ChunkTrackerPlugin<T, S>
+where
+    S: CascadeProductionSource,
+    T: ChunkTracker<S>,
+{
+    fn build(&self, app: &mut App) {
+        app.add_systems(Update, track_chunks::<T, S>);
+    }
+}
+```
+
+#### 3.3.5: Design Notes
+
+`ChunkTracker` is intentionally minimal. It does not own chunk lifecycle, does not query the cascade table, and does not infer parentage.
+
+If a tracker wants production-managed culling, it should spawn results as children of the appropriate chunk entity. If it wants independent lifecycle management, it can spawn elsewhere and manage removal itself. Otherwise, if it wants moving entities to be re-parented as they cross chunk boundaries, it must insert the relevant `ChunkEntityPosition` component when spawning them.
+
+
+#### 3.3.6: Integration with RFC-142: Gimme
 
 The proposed spatial storage engine is currently [Gimme](/rfc/rfc-000-000-142-gimme/README.md). Accordingly, we have prepared an integration guide [here](./integration-with-gimme/README.md).
 
@@ -806,4 +940,4 @@ where
 
 
 
-## Milestones
+## 4: Milestones
