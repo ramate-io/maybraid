@@ -136,6 +136,7 @@ flowchart TD
     J --> V["Garbage collect signal entities<br/>before next CascadeProduction pass"]
 ```
 
+--- 
 
 ### 3.1: Cascade
 
@@ -225,6 +226,8 @@ if needs(p_old, p_new) {
 ```
 
 Net result: nested shells at $s_0,\,3s_0,\,9s_0,\,\ldots$ and an optional coarse band with a **single hull-shaped hole**—high detail near $\mathbf{p}$, cheaper coverage beyond, without double-covering $H(\mathbf{p})$. Resolution enters when consumers interpret $\mathcal{W}$, not when these footprints are generated.
+
+---
 
 ### 3.2: `CascadeProduction`
 
@@ -723,6 +726,7 @@ garbage_collect_requirement_signals::<S>
 
 Using `.chain()` is the concise version when both systems are registered together.
 
+---
 
 ### 3.3: `ChunkTracker`
 
@@ -864,6 +868,8 @@ If a tracker wants production-managed culling, it should spawn results as childr
 The proposed spatial storage engine is currently [Gimme](/rfc/rfc-000-000-142-gimme/README.md). Accordingly, we have prepared an integration guide [here](./integration-with-gimme/README.md).
 
 Yes — agreed. `S` should remain the cascade/production marker, while `P` is the concrete component tracking entity bounds.
+
+---
 
 ### 3.4: `ChunkEntityTracker`
 
