@@ -1,4 +1,4 @@
-# RFC-N: Generalized LOD
+# RFC-154: Generalized LOD
 
 ## Table of Contents
 
