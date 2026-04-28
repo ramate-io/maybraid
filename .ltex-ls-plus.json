@@ -371,7 +371,8 @@
         "GiST",
         "octrees",
         "PhysX",
-        "AABB-centric"
+        "AABB-centric",
+        "despawns"
       ]
     },
     "bibtex": {
