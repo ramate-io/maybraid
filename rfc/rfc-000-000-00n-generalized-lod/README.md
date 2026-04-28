@@ -7,16 +7,65 @@
 To this point, Maybraid has used its cascade-based LOD system in an ad hoc manner. While we propose maintaining the base cascade, we provide a common pattern for its intended usage. Namely: 
 
 
-1. A variably-typed `CascadeProduction<S>` system is responsible for both tracking spatial state and producing chunks. It computes and maintains a `CascadePosition<S>` on each tracked entity, capturing the transition between previous and current spatial regions. Using this position, it drives `Cascade` to determine relevant chunks and produces or updates child `Chunk` entities accordingly. Each chunk is assigned a requirement component built from the current `CascadePosition<S>`, which encodes both desired state and an associated `RequirementSignal` (`Visible`, `Hidden`, or `Remove`).
+1. `CascadeProduction<S>` tracks spatial state and produces chunk entities. It computes `CascadePosition<S>`, updates chunk children, and applies requirement-driven actions (`Visible`, `Hidden`, `Remove`). It also emits short-lived `(Chunk, RequirementSignal, S::PositionData)` signals for downstream systems.
 
-   `CascadeProduction<S>` also maintains an internal `CascadeTable` mapping chunks to their corresponding child entities. Based on the requirement’s signal, it applies the endemic action directly: ensuring visibility, hiding the chunk, or despawning it (including all children). In addition, for non-visible outcomes (`Hidden` or `Remove`), it emits short-lived signal entities of the form `(Chunk, RequirementSignal, S::PositionData)` to enable indirect downstream reactions by `ChunkTracker` systems.
+2. `ChunkTracker<T, S>` reacts to chunk signals and dispatches work (e.g., spatial queries or generation). It may attach results as chunk children (for production-managed culling) or manage them independently.
 
-2. A variably-typed `ChunkTracker` system is responsible for responding to new chunks and chunk culling, and dispatching tasks to meet chunk requirements. Usually, these will be tasks querying or generating over a spatial index, e.g., [RFC-142: Gimme](/rfc/rfc-000-000-142-gimme/README.md). When a `ChunkTracker` system wishes to respond directly to `ChunkProduction`, it should insert its results as children--allowing `ChunkProduction` to manage culling. Otherwise, it should not insert is results as children and should manage culling itself. 
-3. A variably-typed `ChunkEntityTracker` system is responsible for responding to updates in the position of `ChunkManaged` entities--mainly so that the entities are not prematurely culled. `ChunkEntityTracker` systems use lookups to a parent `CascadeProduction` node to identify the appropriate chunk to which the child should be reattached.
+3. `ChunkEntityTracker<P, S>` maintains correct chunk parentage for moving entities, reassigning them between chunks based on updated bounds to prevent premature culling.
 
 ## 2: Prior Art
 
 ## 3: Design
+
+1. A variably-typed `CascadeProduction<S>` system is responsible for both tracking spatial state and producing chunks. It computes and maintains a `CascadePosition<S>` on each tracked entity, capturing the transition between previous and current spatial regions. Using this position, it drives a concrete `Cascade` to determine relevant chunks and produces or updates child `Chunk` entities accordingly. Each chunk is assigned a requirement component built from the current `CascadePosition<S>`, which encodes both desired state and an associated `RequirementSignal` (`Visible`, `Hidden`, or `Remove`).
+
+   `CascadeProduction<S>` maintains an internal `CascadeTable` mapping chunks to their corresponding child entities. Based on the requirement’s signal, it applies the endemic action directly: ensuring visibility, hiding the chunk, or despawning it (including all children). For non-visible outcomes (`Hidden` or `Remove`), it also emits short-lived signal entities of the form `(Chunk, RequirementSignal, Marker<S>)`, which are consumed by downstream systems and garbage-collected on the following frame.
+
+2. A variably-typed `ChunkTracker<T, S>` system is responsible for reacting to chunk signals and dispatching work to satisfy chunk requirements. Typically, this involves querying or generating data over a spatial index (e.g., [RFC-142: Gimme]). A `ChunkTracker` receives only `(Chunk, RequirementSignal, Marker<S>)` and `Commands`, and may respond as it sees fit. When a `ChunkTracker` wishes to delegate lifecycle management to `CascadeProduction<S>`, it should insert results as children of the chunk entity. Otherwise, it may spawn entities independently and manage their lifecycle itself.
+
+3. A variably-typed `ChunkEntityTracker<P, S>` system is responsible for maintaining correct chunk parentage for moving entities. It responds to updates in components implementing `ChunkEntityPosition<S>` and uses the parent `CascadeProduction<S>` and its `CascadeTable` to determine the most appropriate chunk for the entity based on updated spatial bounds. This ensures that entities are reassigned between chunks as they move and are not prematurely culled due to stale parentage.
+
+```mermaid
+flowchart TD
+    A["Tracked entity<br/>with CascadeProduction&lt;S&gt;"] --> B["Compute CascadePosition&lt;S&gt;<br/>previous AaBb → current AaBb"]
+
+    B --> C["Cascade::new_chunks(previous, current)"]
+    C --> D["Build requirement for each chunk<br/>RequirementBuilder::build(position, chunk)"]
+
+    D --> E{"RequirementSignal"}
+
+    E -->|Visible| F["Spawn/update Chunk child<br/>insert requirement<br/>set Visibility::Visible"]
+    E -->|Hidden| G["Update Chunk child<br/>insert requirement<br/>set Visibility::Hidden"]
+    E -->|Remove| H["Remove from CascadeTable<br/>despawn Chunk recursively"]
+
+    F --> I["CascadeTable<br/>Chunk → Entity"]
+    G --> I
+    H --> I
+
+    G --> J["Emit signal entity<br/>(Chunk, RequirementSignal, S::PositionData)"]
+    H --> J
+
+    J --> K["ChunkTracker&lt;T, S&gt;<br/>reacts with Commands"]
+    K --> L{"Tracker spawn strategy"}
+
+    L -->|Production-managed culling| M["Spawn results as children<br/>of Chunk entity"]
+    L -->|Independent lifecycle| N["Spawn elsewhere<br/>manage culling itself"]
+
+    M --> O["Optional ChunkEntityPosition&lt;S&gt;"]
+    N --> O
+
+    O --> P["ChunkEntityTracker&lt;P, S&gt;<br/>on Changed&lt;P&gt;"]
+
+    P --> Q["Find parent Chunk<br/>then grandparent CascadeProduction&lt;S&gt;"]
+    Q --> R["Use CascadeTable + overlap<br/>to choose best Chunk"]
+    R --> S{"Selected chunk?"}
+
+    S -->|Some entity| T["Reparent moving entity<br/>under selected Chunk"]
+    S -->|None| U["Despawn moving entity"]
+
+    J --> V["Garbage collect signal entities<br/>before next CascadeProduction pass"]
+```
+
 
 ### 3.1: Cascade
 
@@ -615,7 +664,6 @@ It listens for entities matching:
 (
     Chunk,
     RequirementSignal,
-    S::PositionData,
     Marker<S>,
 )
 ```
@@ -641,7 +689,6 @@ where
         commands: &mut Commands,
         chunk: Chunk,
         signal: RequirementSignal,
-        data: &S::PositionData,
     );
 }
 ```
@@ -664,7 +711,7 @@ If spawned entities should later participate in `ChunkEntityTracker`, the tracke
 pub fn track_chunks<T, S>(
     mut commands: Commands,
     signals: Query<
-        (&Chunk, &RequirementSignal, &S::PositionData),
+        (&Chunk, &RequirementSignal),
         (
             With<Marker<S>>,
             Changed<RequirementSignal>,
@@ -699,7 +746,6 @@ where
         commands: &mut Commands,
         chunk: Chunk,
         signal: RequirementSignal,
-        data: &S::PositionData,
     );
 }
 ```
@@ -937,7 +983,5 @@ where
     }
 }
 ```
-
-
 
 ## 4: Milestones
