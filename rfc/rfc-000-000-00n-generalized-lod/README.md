@@ -6,7 +6,6 @@
 
 To this point, Maybraid has used its cascade-based LOD system in an ad hoc manner. While we propose maintaining the base cascade, we provide a common pattern for its intended usage. Namely: 
 
-
 1. `CascadeProduction<S>` tracks spatial state and produces chunk entities. It computes `CascadePosition<S>`, updates chunk children, and applies requirement-driven actions (`Visible`, `Hidden`, `Remove`). It also emits short-lived `(Chunk, RequirementSignal, S::PositionData)` signals for downstream systems.
 
 2. `ChunkTracker<T, S>` reacts to chunk signals and dispatches work (e.g., spatial queries or generation). It may attach results as chunk children (for production-managed culling) or manage them independently.
@@ -14,6 +13,29 @@ To this point, Maybraid has used its cascade-based LOD system in an ad hoc manne
 3. `ChunkEntityTracker<P, S>` maintains correct chunk parentage for moving entities, reassigning them between chunks based on updated bounds to prevent premature culling.
 
 ## 2: Prior Art
+
+This design builds on established approaches in spatial partitioning, chunk streaming, and ECS-driven world management, while extending them into a multi-resolution and multi-typed pipeline.
+
+- **Spatial partitioning systems:**
+  Classic approaches such as grids, quadtrees, and octrees partition space into manageable regions for culling and lookup. These are widely used across engines and are well described in *Game Programming Patterns* [https://gameprogrammingpatterns.com/spatial-partition.html](https://gameprogrammingpatterns.com/spatial-partition.html) and in octree implementations such as [https://github.com/michaelg29/yt-tutorials](https://github.com/michaelg29/yt-tutorials). These systems typically assume a single partition structure and a single ownership model.
+
+- **Chunk-based world streaming:**
+  Engines such as Minecraft and open-source voxel engines organize the world into chunks that are loaded, updated, and culled based on player position. See examples like Veloren [https://github.com/veloren/veloren](https://github.com/veloren/veloren) and Bevy voxel experiments [https://github.com/bonsairobo/building-blocks](https://github.com/bonsairobo/building-blocks). These systems establish the pattern of chunk ownership and spatially-driven lifecycle, but usually operate on a single grid resolution.
+
+- **Hierarchical and multi-resolution spatial structures:**
+  Systems such as clipmaps and cascaded shadow maps use multiple spatial layers at different resolutions to maintain detail near the viewer and coarser representation further away. See geometry clipmaps [https://developer.nvidia.com/gpugems/gpugems2/part-i-geometric-complexity/chapter-2-terrain-rendering-using-gpu-based-geometry](https://developer.nvidia.com/gpugems/gpugems2/part-i-geometric-complexity/chapter-2-terrain-rendering-using-gpu-based-geometry) and cascaded shadow maps [https://developer.nvidia.com/gpugems/GPUGems3/gpugems3_ch10.html](https://developer.nvidia.com/gpugems/GPUGems3/gpugems3_ch10.html). These introduce the idea of overlapping spatial regions with different levels of detail, which the cascade model generalizes for entity ownership and simulation.
+
+- **ECS-based streaming and region systems:**
+  Modern ECS engines such as Bevy [https://bevyengine.org](https://bevyengine.org) and Unity DOTS [https://docs.unity3d.com/Packages/com.unity.entities@6.5/manual/index.html](https://docs.unity3d.com/Packages/com.unity.entities@6.5/manual/index.html) use data-oriented pipelines where systems react to spatial changes rather than owning control flow. Bevy examples such as hierarchical transforms and scene spawning demonstrate parent-child ownership, while community projects extend this toward region-based streaming.
+
+- **Event-driven or reactive pipelines in ECS:**
+  ECS systems often decouple producers and consumers using events or transient entities. Bevy events [https://bevy-cheatbook.github.io/programming/events.html](https://bevy-cheatbook.github.io/programming/events.html) and signal-entity patterns in community projects show how systems can react without tight coupling. The `(Chunk, RequirementSignal, S::PositionData)` pattern follows this approach, but keeps everything in ECS storage rather than a separate event channel.
+
+- **Dynamic spatial reassignment for moving entities:**
+  Many engines must handle entities crossing region boundaries and reassigning ownership. This is commonly handled by reinsertion into spatial indices or manual region tracking. See discussions in spatial partitioning literature [https://gameprogrammingpatterns.com/spatial-partition.html](https://gameprogrammingpatterns.com/spatial-partition.html). The `ChunkEntityTracker` system formalizes this as an explicit ECS system using parent reassignment and a table lookup.
+
+Overall, existing systems typically combine one or two of these ideas: a single spatial partition, chunk streaming, or ECS-driven updates. This design combines all of them into a unified pipeline: multi-resolution cascades, type-separated flows, explicit ownership via chunk tables, and reactive systems connected through short-lived signal entities.
+
 
 ## 3: Design
 
