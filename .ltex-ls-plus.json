@@ -372,7 +372,8 @@
         "octrees",
         "PhysX",
         "AABB-centric",
-        "despawns"
+        "despawns",
+        "despawning"
       ]
     },
     "bibtex": {
