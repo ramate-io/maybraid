@@ -1007,3 +1007,87 @@ where
 ```
 
 ## 4: Milestones
+
+### 4.1: Cascade Core Extraction
+
+* Extract and stabilize `Cascade` geometry API from exploratory implementation
+* Implement `new_chunks`, `all_possible_new_chunks`, and grid integration
+* Validate correctness of hull, rings, and grid overlap behavior
+* Add deterministic identity and hashing for `Chunk`
+
+### 4.2: `CascadeProduction` API
+
+* Implement `CascadeProduction<S>` component with embedded `CascadeTable`
+* Implement `CascadePosition<S>` with `previous` and `current` `AaBb`
+* Implement `RequirementSignal` and `CascadeRequirement` traits
+* Implement `RequirementBuilder` interface
+* Implement full `produce_cascade<S>` system with:
+
+  * position tracking
+  * chunk spawn and update
+  * chunk removal and visibility handling
+* Implement signal emission `(Chunk, RequirementSignal, Marker<S>)`
+* Implement signal garbage collection system with correct ordering
+
+### 4.3: `ChunkTracker` API
+
+* Implement `ChunkTracker<T, S>` trait
+* Implement `track_chunks<T, S>` system with `Changed<RequirementSignal>`
+* Validate minimal reactor pattern with no additional query data
+* Provide example tracker implementations for:
+
+  * simple spawn and despawn
+  * production-managed children
+  * independent lifecycle management
+
+### 4.4: `ChunkEntityTracker` API
+
+* Implement `ChunkEntityPosition<S>` trait
+* Implement `track_chunk_entities<P, S>` system
+* Implement default `select_best_overlapping_chunk` behavior
+* Validate level-of-detail preservation via chunk size filtering
+* Validate correct re-parenting and despawn behavior under movement
+
+### 4.5: Integration: Terrain Loading
+
+* Implement terrain `ChunkTracker<Terrain, S>`
+* Integrate with heightmap or mesh generation pipeline
+* Ensure terrain entities are parented to chunk entities
+* Validate correct culling via `CascadeProduction<S>`
+
+### 4.6: Integration: Vegetation Loading
+
+* Implement vegetation `ChunkTracker<Vegetation, S>`
+* Integrate with procedural scattering or spatial queries
+* Validate density scaling across cascade levels
+* Validate correct culling and respawn behavior
+
+### 4.7: Integration: Urbanization Loading
+
+* Implement urban `ChunkTracker<Urban, S>`
+* Integrate with building generation or placement system
+* Validate stable placement across chunk boundaries
+* Validate chunk-level lifecycle and persistence assumptions
+
+### 4.8: Integration: NPC Spawning and Intelligence
+
+* Implement NPC `ChunkTracker<Npc, S>`
+* Integrate with spawning and despawn policies
+* Attach `ChunkEntityPosition<S>` to moving NPCs
+* Validate re-parenting via `ChunkEntityTracker<P, S>`
+* Ensure AI systems remain stable across chunk transitions
+
+### 4.9: End-to-End Validation
+
+* Run full pipeline with terrain, vegetation, urban, and NPC systems
+* Validate no double-spawn or orphan entities
+* Validate correct behavior under rapid movement
+* Validate signal lifecycle and ordering guarantees
+* Benchmark chunk churn and system scalability
+
+### 4.10: Tooling and Debugging
+
+* Add debug visualization for chunks and cascade rings
+* Add instrumentation for signal emission and consumption
+* Add metrics for chunk counts, spawn rates, and churn
+* Provide developer utilities for inspecting `CascadeTable` state

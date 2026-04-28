@@ -376,7 +376,8 @@
         "despawning",
         "octree",
         "Warpaint",
-        "Veloren"
+        "Veloren",
+        "despawn"
       ]
     },
     "bibtex": {
