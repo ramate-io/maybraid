@@ -162,10 +162,10 @@ pub trait CascadeRequirement: Component + Clone {
 `RequirementSignal` is itself a component because production emits short-lived signal entities of the form:
 
 ```rust
-(chunk, signal, position_data)
+(Chunk, RequirementSignal, Marker<S>)
 ```
 
-...for indirect `ChunkTracker` listeners.
+...for `ChunkTracker` listeners.
 
 #### 3.2.3: Requirement Builder
 
@@ -226,7 +226,7 @@ Each `CascadeProduction<S>` owns its own concrete `Cascade` and its own `Cascade
 When a chunk is hidden or removed, production acts directly on the chunk entity and also spawns:
 
 ```rust
-(Chunk, RequirementSignal, S::PositionData)
+(Chunk, RequirementSignal, Marker<S>)
 ```
 
 These entities are intentionally frame-local. They allow indirect systems to observe chunk visibility/removal decisions without requiring production to know about those systems.
@@ -548,7 +548,7 @@ pub fn garbage_collect_requirement_signals<S>(
         (
             With<Chunk>,
             With<RequirementSignal>,
-            With<S::PositionData>,
+            With<Marker<S>>,
         ),
     >,
 )
@@ -606,6 +606,8 @@ Using `.chain()` is the concise version when both systems are registered togethe
 
 
 ### 3.3: `ChunkTracker`
+
+Simply listens for `Changed<RequirementSignal>` on an entity `With<(Chunk, Marker<S>)>`. The implementer of a `ChunkTracker` does not get additional query data and is responsible for dispatching handlers as they see fit. (Can it be argued this is a reactor pattern?)
 
 #### 3.3.1: Integration with RFC-142: Gimme
 
