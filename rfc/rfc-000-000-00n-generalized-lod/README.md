@@ -615,4 +615,13 @@ The proposed spatial storage engine is currently [Gimme](/rfc/rfc-000-000-142-gi
 
 ### 3.4: `ChunkEntityTracker`
 
+The `ChunkEntityTracker` is responsible for changing the chunk parentage of objects as they move. An entity managed by a `ChunkEntityTracker` system is marked with a type implementing `ChunkEntityPosition`, where `ChunkEntityPosition::Data = S`. `ChunkEntityPosition` must be able to produce past and current AABB bounds. 
+
+When `Changed<ChunkEntityPosition>`, the `ChunkEntityTracker` looks up the grandparent which should contain `(CascadeProduction<S>, CascadePosition<S>)`. It calls `chunk_entity_position.select_chunk(parent: Entity, cascade_production: CascadeProduction<S>, cascade_position: CascadePosition<S>) -> Option<Entity>`. When the `Entity` is `None`, the `ChunkEntityPosition` despawns. 
+
+By default, the `select_chunk` method will call the `Cascade::all_possible_new_chunks` method, which produces a set of chunks for the `AaBb` that intersect on the rings and on the grid. It will choose the chunk with the most overlap that matches the chunk size of parent, looked up via the reverse mapping on the table. 
+
+```rust
+```
+
 ## Milestones
