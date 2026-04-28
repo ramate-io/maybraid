@@ -371,7 +371,13 @@
         "GiST",
         "octrees",
         "PhysX",
-        "AABB-centric"
+        "AABB-centric",
+        "despawns",
+        "despawning",
+        "octree",
+        "Warpaint",
+        "Veloren",
+        "despawn"
       ]
     },
     "bibtex": {
