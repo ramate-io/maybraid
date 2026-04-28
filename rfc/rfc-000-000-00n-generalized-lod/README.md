@@ -94,68 +94,83 @@ if needs(p_old, p_new) {
 
 This accomplishes a **nested shell LOD** at $s_0, 3s_0, 9s_0, \ldots$ and, if we ask for it, a **coarse band** with a **single hull-shaped hole**—tight detail near $\mathbf{p}$, cheaper stuff far away, without stamping the hull twice. Resolution is a **separate** knob we turn when we actually consume $\mathcal{W}$, not when we build the shells.
 
+Updated sketch, staying within the attached format. This revises the prior `CascadeProduction` proposal in the directions you listed. 
+
 ### 3.2: `CascadeProduction`
 
-`CascadeProduction<S>` owns a concrete `Cascade` and listens to source data selected by `S::QueryData`. On update, it:
+`CascadeProduction<S>` owns a concrete `Cascade`, maintains its local chunk table, and listens to source data selected by `S::QueryData`. On update, it:
 
 1. Computes and inserts/updates `CascadePosition<S::PositionData>`.
-2. Ensures a local `CascadeTable<S::PositionData>` exists.
-3. Asks the concrete `Cascade` which `Chunk`s should exist for the current position.
-4. Spawns, updates, hides, or despawns chunk entities.
-5. Emits culling marker entities for indirect listeners.
+2. Uses `Cascade::new_chunks(previous, current)` to identify newly relevant chunks.
+3. Runs the requirement builder over both new chunks and existing chunks.
+4. Uses the requirement’s signal to decide whether each chunk should be visible, hidden, or removed.
+5. Spawns culling marker entities for indirect listeners when chunks are hidden or removed.
 
-#### 3.2.1: Core components
+#### 3.2.1: Core Components
 
 ```rust
 #[derive(Component)]
 pub struct CascadeProduction<S> {
     pub cascade: Cascade,
+    pub table: CascadeTable,
     pub marker: PhantomData<S>,
+}
+
+pub struct CascadeTable {
+    pub table: HashMap<Chunk, Entity>,
 }
 
 #[derive(Component, Clone)]
 pub struct CascadePosition<S> {
-    pub position: Vec3,
+    pub previous: Option<AaBb>,
+    pub current: AaBb,
     pub data: S,
 }
-
-#[derive(Component)]
-pub struct CascadeTable<S> {
-    pub table: HashMap<Chunk, Entity>,
-    pub marker: PhantomData<S>,
-}
-
-impl<S> Default for CascadeTable<S> {
-    fn default() -> Self {
-        Self {
-            table: HashMap::default(),
-            marker: PhantomData,
-        }
-    }
-}
 ```
 
-`Chunk` is concrete and already exists. `Cascade` is also concrete and decides which chunks correspond to a position.
+`Chunk`, `Cascade`, and `AaBb` are concrete types. `S` is only used to distinguish typed production flows.
 
+#### 3.2.2: Requirement Signal
 
-#### 3.2.2: Requirements
-
-Requirements are inserted directly as components. No wrapper is needed.
+Requirements are inserted directly as components. They also describe the desired endemic action for a chunk.
 
 ```rust
-pub trait RequirementBuilder<R>: Component + Default + Clone {
-    fn build(&self, chunk: Chunk) -> R;
+pub enum RequirementSignal {
+    Visible,
+    Hidden,
+    Remove,
+}
+
+pub trait CascadeRequirement: Component + Clone {
+    fn signal(&self) -> RequirementSignal;
 }
 ```
 
-If a producer entity has no builder, the system inserts `S::Builder::default()` and uses that default builder immediately.
+The name `RequirementSignal` is probably clearer than `Signal`, because it avoids colliding with broader engine/event terminology.
 
-#### 3.2.3: Source Trait
+#### 3.2.3: Requirement Builder
+
+```rust
+pub trait RequirementBuilder<R>: Component + Default + Clone
+where
+    R: CascadeRequirement,
+{
+    fn build<S>(
+        &self,
+        position: &CascadePosition<S>,
+        chunk: Chunk,
+    ) -> R;
+}
+```
+
+The builder receives both the current cascade position and the chunk, so requirements can depend on metadata in `CascadePosition<S>` as well as spatial chunk identity.
+
+#### 3.2.4: Source Trait
 
 ```rust
 pub trait CascadeProductionSource: Send + Sync + 'static {
     type PositionData: Clone + Send + Sync + 'static;
-    type Requirement: Component + Clone;
+    type Requirement: CascadeRequirement;
     type Builder: RequirementBuilder<Self::Requirement>;
 
     type QueryData: QueryData;
@@ -163,53 +178,34 @@ pub trait CascadeProductionSource: Send + Sync + 'static {
 
     fn entity(item: &<Self::QueryData as QueryData>::Item<'_, '_>) -> Entity;
 
-    fn cascade_position(
+    fn current_position(
         item: &<Self::QueryData as QueryData>::Item<'_, '_>,
-    ) -> CascadePosition<Self::PositionData>;
+    ) -> AaBb;
 
-    fn cull_mode(_chunk: Chunk) -> CascadeCullMode {
-        CascadeCullMode::Despawn
-    }
+    fn position_data(
+        item: &<Self::QueryData as QueryData>::Item<'_, '_>,
+    ) -> Self::PositionData;
 }
 ```
 
-`S` is the type marker distinguishing one production flow from another. This allows the same entity to hold multiple independent pairs like:
+#### 3.2.5: Culling Marker
 
 ```rust
-CascadeProduction<Foo>
-CascadePosition<Foo>
-CascadeTable<Foo>
-
-CascadeProduction<Bar>
-CascadePosition<Bar>
-CascadeTable<Bar>
-```
-
-### 3.2.4: Culling Signal
-
-```rust
-#[derive(Clone, Copy)]
-pub enum CascadeCullMode {
-    Hide,
-    Despawn,
-}
-
 #[derive(Component)]
 pub struct ChunkCulling {
-    pub mode: CascadeCullMode,
+    pub signal: RequirementSignal,
 }
 ```
 
-When a chunk is culled, production acts directly on the chunk entity and also spawns:
+When a chunk is hidden or removed, production acts directly and also spawns:
 
 ```rust
-(chunk, ChunkCulling { mode })
+(chunk, ChunkCulling { signal })
 ```
 
-...for indirect listeners.
+...for indirect `ChunkTracker` listeners.
 
-
-### 3.2.5: System
+#### 3.2.6: System
 
 ```rust
 pub fn produce_cascade<S>(
@@ -217,9 +213,8 @@ pub fn produce_cascade<S>(
     mut query: Query<
         (
             S::QueryData,
-            &CascadeProduction<S>,
+            &mut CascadeProduction<S>,
             Option<&CascadePosition<S::PositionData>>,
-            Option<&mut CascadeTable<S::PositionData>>,
             Option<&S::Builder>,
         ),
         S::QueryFilter,
@@ -228,7 +223,7 @@ pub fn produce_cascade<S>(
 where
     S: CascadeProductionSource,
 {
-    for (item, production, old_position, table, builder) in &mut query {
+    for (item, mut production, old_position, builder) in &mut query {
         let entity = S::entity(&item);
 
         let position = update_cascade_position::<S>(
@@ -247,8 +242,7 @@ where
         update_cascade_chunks::<S>(
             &mut commands,
             entity,
-            production,
-            table,
+            &mut production,
             &position,
             &builder,
         );
@@ -256,7 +250,7 @@ where
 }
 ```
 
-#### 3.2.6: Phase 1: Update `CascadePosition`
+#### 3.2.7: Phase 1: Update `CascadePosition`
 
 ```rust
 fn update_cascade_position<S>(
@@ -268,22 +262,21 @@ fn update_cascade_position<S>(
 where
     S: CascadeProductionSource,
 {
-    let position = S::cascade_position(item);
+    let current = S::current_position(item);
 
-    if old_position
-        .map(|old| old.position != position.position)
-        .unwrap_or(true)
-    {
-        commands.entity(entity).insert(position.clone());
-    }
+    let position = CascadePosition {
+        previous: old_position.map(|old| old.current),
+        current,
+        data: S::position_data(item),
+    };
+
+    commands.entity(entity).insert(position.clone());
 
     position
 }
 ```
 
-You may want `PositionData: PartialEq` if you also want to skip inserts when only `data` is unchanged.
-
-#### 3.2.7: Phase 2: Resolve Builder
+#### 3.2.8: Phase 2: Resolve Builder
 
 ```rust
 fn resolve_requirement_builder<S>(
@@ -305,126 +298,176 @@ where
 }
 ```
 
-#### 3.2.8: Phase 3: Update Chunks
+#### 3.2.9: Phase 3: Update Chunks
 
 ```rust
 fn update_cascade_chunks<S>(
     commands: &mut Commands,
-    entity: Entity,
-    production: &CascadeProduction<S>,
-    table: Option<&mut <CascadeTable<S::PositionData>>>,
+    producer: Entity,
+    production: &mut CascadeProduction<S>,
     position: &CascadePosition<S::PositionData>,
     builder: &S::Builder,
 )
 where
     S: CascadeProductionSource,
 {
-
-    // todo: we actually want to put CascadeTable inside of CascadeProduction, we can thus remove the generic.
-    // this is because we always want there to be a table. 
-    let Some(mut table) = table else {
-        commands
-            .entity(entity)
-            .insert(CascadeTable::<S::PositionData>::default());
-        return;
-    };
-
-    let desired: Vec<Chunk> = production
+    let new_chunks: Vec<Chunk> = production
         .cascade
-        .chunks_for_position(position.position)
+        .new_chunks(position.previous, position.current)
         .collect();
 
-    spawn_or_update_chunks::<S>(
+    apply_requirements_to_new_chunks::<S>(
         commands,
-        entity,
-        &mut table,
-        &desired,
+        producer,
+        production,
+        position,
         builder,
+        &new_chunks,
     );
 
-    cull_stale_chunks::<S>(
+    apply_requirements_to_existing_chunks::<S>(
         commands,
-        &mut table,
-        &desired,
+        production,
+        position,
+        builder,
     );
 }
 ```
 
-#### 3.2.9: Spawn Update Chunks
+#### 3.2.10: Apply Requirements to New Chunks
 
 ```rust
-fn spawn_or_update_chunks<S>(
+fn apply_requirements_to_new_chunks<S>(
     commands: &mut Commands,
     producer: Entity,
-    table: &mut CascadeTable<S::PositionData>,
-    desired: &[Chunk],
+    production: &mut CascadeProduction<S>,
+    position: &CascadePosition<S::PositionData>,
+    builder: &S::Builder,
+    new_chunks: &[Chunk],
+)
+where
+    S: CascadeProductionSource,
+{
+    for &chunk in new_chunks {
+        let requirement = builder.build(position, chunk);
+
+        match requirement.signal() {
+            RequirementSignal::Visible => {
+                let chunk_entity = production
+                    .table
+                    .table
+                    .get(&chunk)
+                    .copied()
+                    .unwrap_or_else(|| {
+                        let entity = commands.spawn(chunk).id();
+                        commands.entity(producer).add_child(entity);
+                        production.table.table.insert(chunk, entity);
+                        entity
+                    });
+
+                commands
+                    .entity(chunk_entity)
+                    .insert((requirement, Visibility::Visible));
+            }
+
+            RequirementSignal::Hidden => {
+                let chunk_entity = production
+                    .table
+                    .table
+                    .get(&chunk)
+                    .copied()
+                    .unwrap_or_else(|| {
+                        let entity = commands.spawn(chunk).id();
+                        commands.entity(producer).add_child(entity);
+                        production.table.table.insert(chunk, entity);
+                        entity
+                    });
+
+                commands
+                    .entity(chunk_entity)
+                    .insert((requirement, Visibility::Hidden));
+
+                commands.spawn((
+                    chunk,
+                    ChunkCulling {
+                        signal: RequirementSignal::Hidden,
+                    },
+                ));
+            }
+
+            RequirementSignal::Remove => {
+                commands.spawn((
+                    chunk,
+                    ChunkCulling {
+                        signal: RequirementSignal::Remove,
+                    },
+                ));
+            }
+        }
+    }
+}
+```
+
+#### 3.2.11: Apply Requirements to Existing Chunks
+
+```rust
+fn apply_requirements_to_existing_chunks<S>(
+    commands: &mut Commands,
+    production: &mut CascadeProduction<S>,
+    position: &CascadePosition<S::PositionData>,
     builder: &S::Builder,
 )
 where
     S: CascadeProductionSource,
 {
-    for &chunk in desired {
-        let requirement = builder.build(chunk);
-
-        match table.table.get(&chunk).copied() {
-            Some(chunk_entity) => {
-                commands.entity(chunk_entity).insert(requirement);
-            }
-            None => {
-                let chunk_entity = commands
-                    .spawn((chunk, requirement))
-                    .id();
-
-                commands.entity(producer).add_child(chunk_entity);
-                table.table.insert(chunk, chunk_entity);
-            }
-        }
-    }
-}
-```
-
-#### 3.2.10: Cull stale chunks
-
-```rust
-fn cull_stale_chunks<S>(
-    commands: &mut Commands,
-    table: &mut CascadeTable<S::PositionData>,
-    desired: &[Chunk],
-)
-where
-    S: CascadeProductionSource,
-{
-    let desired: HashSet<Chunk> = desired.iter().copied().collect();
-
-    let stale: Vec<Chunk> = table
+    let existing: Vec<(Chunk, Entity)> = production
         .table
-        .keys()
-        .filter(|chunk| !desired.contains(chunk))
-        .copied()
+        .table
+        .iter()
+        .map(|(&chunk, &entity)| (chunk, entity))
         .collect();
 
-    for chunk in stale {
-        let Some(chunk_entity) = table.table.remove(&chunk) else {
-            continue;
-        };
+    for (chunk, entity) in existing {
+        let requirement = builder.build(position, chunk);
 
-        let mode = S::cull_mode(chunk);
-
-        match mode {
-            CascadeCullMode::Hide => {
-                commands.entity(chunk_entity).insert(Visibility::Hidden);
+        match requirement.signal() {
+            RequirementSignal::Visible => {
+                commands
+                    .entity(entity)
+                    .insert((requirement, Visibility::Visible));
             }
-            CascadeCullMode::Despawn => {
-                commands.entity(chunk_entity).despawn_recursive();
+
+            RequirementSignal::Hidden => {
+                commands
+                    .entity(entity)
+                    .insert((requirement, Visibility::Hidden));
+
+                commands.spawn((
+                    chunk,
+                    ChunkCulling {
+                        signal: RequirementSignal::Hidden,
+                    },
+                ));
+            }
+
+            RequirementSignal::Remove => {
+                production.table.table.remove(&chunk);
+
+                commands.entity(entity).despawn_recursive();
+
+                commands.spawn((
+                    chunk,
+                    ChunkCulling {
+                        signal: RequirementSignal::Remove,
+                    },
+                ));
             }
         }
-
-        commands.spawn((chunk, ChunkCulling { mode }));
     }
 }
 ```
 
-#### 3.2.11: Plugin
+#### 3.2.12: Plugin
 
 ```rust
 pub struct CascadeProductionPlugin<S> {
@@ -448,6 +491,9 @@ where
     }
 }
 ```
+
+The main structural change is that `CascadeProduction<S>` is now the durable owner of both the concrete `Cascade` and the chunk table. That removes the optional table path entirely and makes each typed production flow self-contained.
+
 
 ### 3.3: `ChunkTracker`
 
