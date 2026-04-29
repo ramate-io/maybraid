@@ -72,9 +72,67 @@ An arching series of triangles. Good for palms, bushes, and jungle growths.
 
 #### 3.1.6: Well-known Component Constructions
 
+We list some means of achieving less obvious constructions. 
+
+##### 3.1.6.1: Palm Crown
+
+Anchor a series of radially projecting frond rings in quick vertical succession. Give fronds at higher rings greater vertical bias, hence starting upwards at a slightly greater angle above lower fronds. 
+
+##### 3.1.6.2: Palm Trunk
+
+Do not allocate a stalk. Use canopy ball stick to build up from anchor, biasing roughly vertically. For consistent curve give slight angle bias and low variance. This will cause hysteresis to remain tight. 
+
+Additionally, invert the typical stick dimensions s.t. the radius of the bottom of each segment is slightly less than the top. This will give the palm segment impression. 
+
+##### 3.1.6.3: High-bushes and Shoots
+
+Do not allocate a stalk. Bias a single ring of radial projection roughly vertically. 
+
+##### 3.1.6.4: Jungle Growths
+
+At ball points, in addition to canopy, allocate a larger and darker ball and a tuft.
+
+##### 3.1.6.5: Banyan Trunk
+
+Use large radius and high noise value for stalk. 
+
 #### 3.1.7: Well-known Tree Constructions
 
+##### 3.1.7.1: Storybook Tree
+
+A general impression of a tree. 
+
+- Use fairly narrow stalk reaching far upwards to about 80% of the total height of the tree including the canopy. Use multiple rings of moderately-dense radial projection to construct the canopy. 
+- Start radial projections at roughly 15% of the height of the tree. 
+- Bias upper radial projections to be slightly shorter than lower ones. This tail-off like the logarithm approaching the axis from the positive side. (You should use this or something similar mathematically.)
+- Place radial projections roughly every 8% of the height of the tree and roughly every 60 degrees, i.e., 6 per ring. 
+- Allow total length of radial projections to range up to 60% of the height of the tree. 
+- Upper radial projections should be allowed moderate angular variance about a straight horizontal projection, about 15 degrees. 
+- Use 3-5 ball-stick segments per projection. Allowing branching between 1 and 3 with mean roughly 2. 
+- Allocate [Plane Splay](#3125-plane-splay) for leaves at highest LOD, programming strong preference for only allocating at the outer layers of the canopy. Use a radius of roughly 9% the height of the tree. 
+
+Good for many kinds of forests, particularly deciduous ones. 
+
+##### 3.1.7.1: Liam's Conifer
+
+A sparse conifer. 
+
+- Use a narrow stalk to reach to about 100% of the total height of the tree. 
+- Bias upper radial projections to reduce length linearly w.r.t. to lower ones. 
+- Start radial projections roughly 10% of the height of the tree. 
+- Place radial projections roughly every 4% of the height of the tree and roughly every 90 degrees, i.e., 4 per ring. 
+- Bias radial projections to angle slightly downward, -2 degrees from horizontal. Allow variance within 8 degrees. 
+- Use long first ball-stick segment, followed by two very short segments. Allow branching between 1 and 2 with mean closer to 1. 
+- Max length of radial projections should be about 5% the height of the tree.
+- Allocate [Tufts](#3126-tufts) for canopy at all ball joints. Use 2 to 3 tufts per joint. Allocate with scale proportional to roughly 2% the height of the tree.
+
+Good for drier deciduous forests. 
+
 #### 3.1.8: Tree LOD Tricks
+
+#### 3.1.9: Stick Shading
+
+#### 3.1.10: Leaf Shading
 
 ### 3.2: L-system Trees
 
@@ -82,7 +140,7 @@ An arching series of triangles. Good for palms, bushes, and jungle growths.
 
 ### 3.4: Cellular Groves
 
-General name for vegetation type allocation system. Unify exclusive types you want to plant in a grove. Groves are the level at which planting constraints are painted in. 
+General name for vegetation type allocation system. Unify exclusive types you want to plant in a grove. Groves are the level at which planting constraints are painted in.
 
 #### 3.4.1: Parameterization
 
