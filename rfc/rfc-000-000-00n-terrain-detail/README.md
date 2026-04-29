@@ -19,4 +19,12 @@ In response to [#57](https://github.com/ramate-io/maybraid/issues/57), we propos
 5. Use the noise to generate a boulder shape and scale as SDF and thus produce a mesh. Note that, typically, we use a unit SDF for mesh generation and apply the scale to the mesh once spawned and the SDF at physics time. 
 6. Place the boulder with some Z-offset, embedding it into the ground. 
 
+### 3.2: Crag Complexes 
+
+Apply parameters to decide whether cell should have a crag complex. Use a hysteresis pathfinding method similar to the [Stream](https://github.com/ramate-io/maybraid/tree/main/rfc/rfc-000-000-127-marazion-watersheds#3132-stream) construction in Marazion watersheds to build a polyline or graph along which boulders will be placed within a cell.
+
+### 3.3: 
+
+### 3.4: 
+
 ## 4: Milestones
