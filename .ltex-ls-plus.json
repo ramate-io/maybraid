@@ -377,7 +377,8 @@
         "octree",
         "Warpaint",
         "Veloren",
-        "despawn"
+        "despawn",
+        "LOD-safe"
       ]
     },
     "bibtex": {

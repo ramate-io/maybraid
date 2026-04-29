@@ -12,12 +12,120 @@ In response to [#57](https://github.com/ramate-io/maybraid/issues/57), we propos
 
 ### 3.1: Sparse Boulders
 
-1. Construct a first order grid which will bound boulder regions for LOD. All boulder placement must remain within the originating cell on this grid. 
-2. Construct a second order grid with cells the size of boulder separation, typically bounding boulder size. Parameterize by minimum and maximum steepness for boulder placement. 
-3. Sample over noise the cells to determine whether a cell may contain a boulder. 
-4. Use the noise to pick an offset in the cell from the cell origin. This may optionally exceed the cell bounds, hence second order cells will not be used for LOD control or will have the same bounds as the first-order cell. If the offset point exceeds the cell in the first order grid, exit. Check the steepness at the point via the Laplacian applied to the underlying terrain. If exceeding steepness bounds, exit. 
-5. Use the noise to generate a boulder shape and scale as SDF and thus produce a mesh. Note that, typically, we use a unit SDF for mesh generation and apply the scale to the mesh once spawned and the SDF at physics time. 
-6. Place the boulder with some Z-offset, embedding it into the ground. 
+Sparse boulders are generated as low-density, spatially stable features using a two-tier grid and deterministic noise. Ownership and LOD are governed strictly by the first-order grid.
+
+**High-level stages**
+
+1. Partition space into first-order cells for ownership and LOD.
+2. Subdivide each cell into second-order sampling regions.
+3. Activate candidate regions via deterministic noise.
+4. Select and validate positions against bounds and terrain steepness.
+5. Generate boulder geometry via SDF parameterization.
+6. Place and embed boulders into terrain.
+
+---
+
+#### 3.1.1: First-order grid (LOD ownership)
+
+Let $\mathcal{G}_1$ be a grid over $\mathbb{R}^3$ with cell size $L$. Each cell $C \in \mathcal{G}_1$ defines a **boulder ownership region**.
+
+All generated boulders must satisfy:
+
+$$
+\mathbf{x}_{\text{boulder}} \in C
+$$
+
+...and are spawned and managed exclusively by the chunk corresponding to $C$.
+
+---
+
+#### 3.1.2: Second-order grid (sampling)
+
+Within each $C \in \mathcal{G}_1$, define a finer grid $\mathcal{G}_2(C)$ with cell size $l \approx$ minimum boulder separation.
+
+Each $c \in \mathcal{G}_2(C)$ is a candidate sampling region.
+
+Parameters:
+
+* $s_{\min}, s_{\max}$: allowable terrain steepness
+
+Activation:
+
+```rust
+let seed = hash(c);
+if !noise_bool(seed) {
+    continue;
+}
+```
+
+---
+
+#### 3.1.3: Position selection and validation
+
+```rust
+let o = noise_vec3(seed); // ~ [-1, 1]^3
+let p = origin(c) + o * l;
+```
+
+Allow $p$ to exceed bounds of $c$.
+
+Validation:
+
+```rust
+if !contains(C, p) {
+    return None;
+}
+
+let k = laplacian(terrain, p);
+
+if k < s_min || k > s_max {
+    return None;
+}
+```
+
+> [!WARNING]
+> Second-order cells are **sampling-only** and must not define LOD.
+> Offsets may escape their cell.
+>
+> **All ownership, culling, and stability must derive from the first-order grid.**
+>
+> A common fallback is to align second-order bounds with their parent first-order cell.
+
+---
+
+#### 3.1.4: Shape and scale (SDF)
+
+```rust
+let params = noise_params(seed);
+let sdf = boulder_sdf(params); // unit
+let scale = noise_scale(seed);
+
+spawn_mesh(mesh_from_sdf(sdf), scale);
+```
+
+Mesh generation uses a unit SDF. Scaling is applied at spawn. Physics should use the scaled SDF.
+
+---
+
+#### 3.1.5: Placement
+
+```rust
+let z_offset = -embed_depth(seed);
+let position = Vec3::new(p.x, terrain_height(p), p.z)
+    + Vec3::Y * z_offset;
+```
+
+Embed slightly into terrain for grounding.
+
+---
+
+**Properties**
+
+* deterministic placement
+* LOD-safe ownership
+* controlled separation
+* independence from chunk boundaries beyond $\mathcal{G}_1$
+
 
 ### 3.2: Crag Complexes 
 
