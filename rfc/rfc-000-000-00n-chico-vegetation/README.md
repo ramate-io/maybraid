@@ -62,7 +62,7 @@ An arching series of triangles. Good for palms, bushes, and jungle growths.
 
 #### 3.1.2.8: Jessen's Icosahedron
 
-[Jessen's icosahedron](https://en.wikipedia.org/wiki/Jessen%27s_icosahedron) is a good replacement for [Icosahedra](#3121-icosahedron) when additional variety is desired. You can even build far LOD systems to choose between Jessen's icosahedron, the standard icosahedron, and icospheres when you want distant features to look variegated. This sort of construction is covered more completely in [LOD Tricks](#318-lod-tricks)
+[Jessen's icosahedron](https://en.wikipedia.org/wiki/Jessen%27s_icosahedron) is a good replacement for [Icosahedra](#3121-icosahedron) when additional variety is desired. You can even build far LOD systems to choose between Jessen's icosahedron, the standard icosahedron, and icospheres when you want distant features to look variegated. This sort of construction is covered more completely in [Tree LOD Tricks](#318-tree-lod-tricks).
 
 #### 3.1.3: Ball-stick Anchors
 
@@ -74,7 +74,7 @@ An arching series of triangles. Good for palms, bushes, and jungle growths.
 
 #### 3.1.7: Well-known Tree Constructions
 
-#### 3.1.8: LOD Tricks
+#### 3.1.8: Tree LOD Tricks
 
 ### 3.2: L-system Trees
 
@@ -82,11 +82,25 @@ An arching series of triangles. Good for palms, bushes, and jungle growths.
 
 ### 3.3: Cellular Groves
 
-General name for vegetation type allocation system. Unify types 
+General name for vegetation type allocation system. Unify exclusive types you want to plant in a grove.
 
 ### 3.5: Cellular Forests
 
-General name for top-level 
+General name for top-level grove allocation system. Split into several layers of groves. 
+
+#### 3.5.2: Forest Layers
+
+##### 3.5.2.1: Ground Cover Layer
+
+##### 3.5.2.2: Tufts Layer
+
+##### 3.5.2.3: Bush Layer
+
+##### 3.5.2.4: Tree Layer
+
+### 3.5.3: Well-known Forests
+
+### 3.5.4: Forest LOD Tricks
 
 ### 3.6: Elder Trees
 
