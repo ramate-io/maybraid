@@ -23,8 +23,26 @@ In response to [#57](https://github.com/ramate-io/maybraid/issues/57), we propos
 
 Apply parameters to decide whether cell should have a crag complex. Use a hysteresis pathfinding method similar to the [Stream](https://github.com/ramate-io/maybraid/tree/main/rfc/rfc-000-000-127-marazion-watersheds#3132-stream) construction in Marazion watersheds to build a polyline or graph along which boulders will be placed within a cell.
 
-### 3.3: 
+### 3.3: World Unit Varying Shader for Ground Color
 
-### 3.4: 
+### 3.4: Bump Outs
+
+"Bump Outs" refer to structures placed above the terrain which follow its contours. In Durham terrain detail, we build bump-outs simply by cloning the underlying terrain SDF and adding to its Z extents noisily within some boundary determined via a noisy radius. We provide the general cell and boundary generation description in [3.4.1](#341-cell-and-boundary-generation) and specify particular bump outs in the sections which follow.
+
+#### 3.4.1: Cell and Boundary Generation
+
+#### 3.4.2: Snow Bump Out
+
+1. Parameterize whether cell is snowy by underlying elevation and fractal noise sampling for local consistency.
+2. Standard bump out. 
+3. Use snow shader. 
+4. Don't worry about seasonality yet. 
+
+#### 3.4.3: Sand and Dunes Bump Out
+
+1. Parameterize by whether cell has sand dunes by steepness sampled at a few points and fractal noise sampling for local consistency. 
+2. Use inner grid to generate points at which elliptical dunes will exist. 
+3. Apply standard bump out noise plus dune "dome" noise around selected elliptical points. 
+4. Use sand shader. 
 
 ## 4: Milestones
