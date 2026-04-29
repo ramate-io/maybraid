@@ -1,6 +1,50 @@
 # RFC-N: Terrain Detail
 
-## Table of Contents
+## Table of contents
+
+- [1: Summary](#1-summary)
+- [2: Prior Art](#2-prior-art)
+- [3: Design](#3-design)
+    - [3.1: Sparse Boulders](#31-sparse-boulders)
+        - [3.1.1: First-order grid (LOD ownership)](#311-first-order-grid-lod-ownership)
+        - [3.1.2: Second-order grid (sampling)](#312-second-order-grid-sampling)
+        - [3.1.3: Position selection and validation](#313-position-selection-and-validation)
+        - [3.1.4: Shape and scale (SDF)](#314-shape-and-scale-sdf)
+        - [3.1.5: Placement](#315-placement)
+    - [3.2: Crag Complexes](#32-crag-complexes)
+        - [3.2.1: Cell activation](#321-cell-activation)
+        - [3.2.2: Path or graph construction](#322-path-or-graph-construction)
+        - [3.2.3: LOD units](#323-lod-units)
+        - [3.2.4: Candidate placement along path](#324-candidate-placement-along-path)
+        - [3.2.5: Terrain validation](#325-terrain-validation)
+        - [3.2.6: Shape and composition](#326-shape-and-composition)
+        - [3.2.7: Placement](#327-placement)
+    - [3.3: World-Space Ground Color Noise](#33-world-space-ground-color-noise)
+        - [3.3.1: World-space sampling](#331-world-space-sampling)
+        - [3.3.2: Color space variation](#332-color-space-variation)
+        - [3.3.3: Value and detail modulation](#333-value-and-detail-modulation)
+        - [3.3.4: WGSL sketch](#334-wgsl-sketch)
+        - [3.3.5: Notes](#335-notes)
+    - [3.4: Bump Outs](#34-bump-outs)
+        - [3.4.1: Cell and Boundary Generation](#341-cell-and-boundary-generation)
+        - [3.4.2: Snow Bump Out](#342-snow-bump-out)
+        - [3.4.3: Sand and Dunes Bump Out](#343-sand-and-dunes-bump-out)
+            - [Dune field construction](#dune-field-construction)
+            - [Elliptical dune shaping](#elliptical-dune-shaping)
+            - [Combined height field](#combined-height-field)
+            - [Shading](#shading)
+- [4: Milestones](#4-milestones)
+    - [4.1: Core Cell and Noise Infrastructure](#41-core-cell-and-noise-infrastructure)
+    - [4.2: Sparse Boulders](#42-sparse-boulders)
+    - [4.3: Crag Complexes](#43-crag-complexes)
+    - [4.4: Bump-Out Core](#44-bump-out-core)
+    - [4.5: Snow Bump Outs](#45-snow-bump-outs)
+    - [4.6: Sand and Dunes Bump Outs](#46-sand-and-dunes-bump-outs)
+    - [4.7: World-Space Ground Color Noise](#47-world-space-ground-color-noise)
+    - [4.8: Cascade Integration](#48-cascade-integration)
+    - [4.9: Performance and Stability](#49-performance-and-stability)
+    - [4.10: Tooling and Debugging](#410-tooling-and-debugging)
+    - [4.11: Initial Tuning Pass](#411-initial-tuning-pass)
 
 ## 1: Summary
 
@@ -690,8 +734,6 @@ Use sand shader with:
 * deterministic from seed
 * supports multiple material types via shared construction
 * allows structured features such as dunes to emerge from simple primitives
-
-## 4: Milestones
 
 ## 4: Milestones
 
