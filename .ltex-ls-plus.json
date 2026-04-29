@@ -378,7 +378,8 @@
         "Warpaint",
         "Veloren",
         "despawn",
-        "LOD-safe"
+        "LOD-safe",
+        "Perlin-style"
       ]
     },
     "bibtex": {

@@ -308,8 +308,159 @@ let position = Vec3::new(p.x, h, p.y) - terrain_normal(terrain, p) * embed;
 
 Embedding should be stronger than sparse boulders so clustered rocks appear grounded and partially fused into the terrain.
 
+### 3.3: World-Space Ground Color Noise
 
-### 3.3: World Unit Varying Shader for Ground Color
+Base terrain should exhibit smooth, large-scale color variation in world space, so nearby regions appear coherent while distant regions drift in tone. The goal is not just value variation but **hue and chroma variation**: browns shifting toward grays, reds, yellows, and darker mineral tones in a spatially stable way.
+
+Noise should be deterministic, continuous in world space, and evaluated in the shader. Fractal Brownian motion or Perlin-style noise is sufficient.
+
+---
+
+#### 3.3.1: World-space sampling
+
+Color variation is driven directly from world position:
+
+$$
+c = f(\mathbf{x}_{world})
+$$
+
+Sampling is done in shader space:
+
+```wgsl
+let n = fbm(world_position.xz * base_scale, seed);
+```
+
+Multiple bands may be used:
+
+```wgsl
+let regional = fbm(world_xz * base_scale, seed);
+let detail = fbm(world_xz * detail_scale, seed + 17u);
+```
+
+---
+
+#### 3.3.2: Color space variation
+
+Rather than scaling a single base color, map noise into a **palette or color basis**.
+
+Define a small set of ground tones:
+
+```rust
+let palette = [
+    vec3(0.36, 0.28, 0.20), // brown
+    vec3(0.42, 0.38, 0.32), // gray
+    vec3(0.45, 0.30, 0.22), // red-brown
+    vec3(0.48, 0.44, 0.26), // yellow-brown
+    vec3(0.20, 0.18, 0.16), // dark / black
+];
+```
+
+Use low-frequency noise to interpolate across this palette:
+
+```wgsl
+fn palette_sample(t: f32) -> vec3<f32> {
+    let x = t * 4.0;
+    let i = u32(floor(x));
+    let f = fract(x);
+
+    let c0 = palette[i];
+    let c1 = palette[min(i + 1u, 4u)];
+
+    return mix(c0, c1, f);
+}
+```
+
+Regional noise drives hue selection:
+
+```wgsl
+let hue_color = palette_sample(regional);
+```
+
+---
+
+#### 3.3.3: Value and detail modulation
+
+Apply higher-frequency noise as value modulation:
+
+```wgsl
+let value = mix(1.0 - value_strength, 1.0 + value_strength, detail);
+let color = hue_color * value;
+```
+
+This separates:
+
+* **regional noise → hue and tone shifts**
+* **detail noise → brightness variation**
+
+---
+
+#### 3.3.4: WGSL sketch
+
+```wgsl
+struct GroundNoiseParams {
+    seed: u32,
+    base_scale: f32,
+    detail_scale: f32,
+    value_strength: f32,
+    _pad: f32,
+};
+
+@group(1) @binding(0)
+var<uniform> ground_noise: GroundNoiseParams;
+
+fn fbm(p: vec2<f32>, seed: u32) -> f32 {
+    // assume standard Perlin or value-noise fbm
+    // omitted for brevity
+    return fract(sin(dot(p, vec2(12.9898,78.233))) * 43758.5453);
+}
+
+fn palette_sample(t: f32) -> vec3<f32> {
+    let palette = array<vec3<f32>, 5>(
+        vec3(0.36, 0.28, 0.20),
+        vec3(0.42, 0.38, 0.32),
+        vec3(0.45, 0.30, 0.22),
+        vec3(0.48, 0.44, 0.26),
+        vec3(0.20, 0.18, 0.16),
+    );
+
+    let x = t * 4.0;
+    let i = u32(floor(x));
+    let f = fract(x);
+
+    let c0 = palette[i];
+    let c1 = palette[min(i + 1u, 4u)];
+
+    return mix(c0, c1, f);
+}
+
+fn ground_color(world_position: vec3<f32>) -> vec3<f32> {
+    let xz = world_position.xz;
+
+    let regional = fbm(xz * ground_noise.base_scale, ground_noise.seed);
+    let detail = fbm(xz * ground_noise.detail_scale, ground_noise.seed + 101u);
+
+    let base = palette_sample(regional);
+
+    let value = mix(
+        1.0 - ground_noise.value_strength,
+        1.0 + ground_noise.value_strength,
+        detail,
+    );
+
+    return base * value;
+}
+```
+
+---
+
+#### 3.3.5: Notes
+
+* Palette-driven variation avoids flat “single-color terrain” artifacts.
+* World-space sampling ensures seamless behavior across chunks.
+* Separating regional hue from local value avoids muddy or noisy color blending.
+* Additional channels such as slope, moisture, or biome classification can bias palette selection for richer results.
+
+
 
 ### 3.4: Bump Outs
 
