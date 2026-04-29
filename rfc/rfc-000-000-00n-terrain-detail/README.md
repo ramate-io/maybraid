@@ -460,26 +460,192 @@ fn ground_color(world_position: vec3<f32>) -> vec3<f32> {
 * Separating regional hue from local value avoids muddy or noisy color blending.
 * Additional channels such as slope, moisture, or biome classification can bias palette selection for richer results.
 
-
-
 ### 3.4: Bump Outs
 
-"Bump Outs" refer to structures placed above the terrain which follow its contours. In Durham terrain detail, we build bump-outs simply by cloning the underlying terrain SDF and adding to its Z extents noisily within some boundary determined via a noisy radius. We provide the general cell and boundary generation description in [3.4.1](#341-cell-and-boundary-generation) and specify particular bump outs in the sections which follow.
+"Bump Outs" refer to structures placed above the terrain which follow its contours. In Durham terrain detail, bump-outs are constructed by cloning the underlying terrain SDF and extending it along the surface normal with noise, within a bounded region defined per cell. This produces features such as snow accumulation, sand drifts, and dunes that conform to terrain shape while adding volumetric variation.
+
+We describe shared cell and boundary construction in [3.4.1](#341-cell-and-boundary-generation), then specialize per material.
+
+---
 
 #### 3.4.1: Cell and Boundary Generation
 
+Bump-outs are generated per first-order cell $C \in \mathcal{G}_1$.
+
+**Activation**
+
+```rust
+let seed = hash(C);
+if !noise(seed, BUMP_OUT_SALT) {
+    return None;
+}
+```
+
+**Boundary**
+
+Define a bounded region $B \subseteq C$ via a noisy radius from a center point:
+
+```rust
+let center = sample_point_in_cell(seed, CENTER_SALT);
+let r_base = cell_size * radius_scale(seed);
+
+fn boundary(p: Vec2) -> bool {
+    let d = distance(p, center);
+    let r = r_base * (1.0 + noise(p * boundary_freq + seed) * boundary_variation);
+    d <= r
+}
+```
+
+This produces an irregular footprint that remains fully contained within $C$.
+
+**Base bump-out SDF**
+
+Given terrain SDF $S_{terrain}(\mathbf{x})$, define bump-out SDF:
+
+$$
+S_{bump}(\mathbf{x}) = S_{terrain}(\mathbf{x}) - h(\mathbf{x})
+$$
+
+where $h(\mathbf{x})$ is a height offset applied along the terrain normal:
+
+```rust
+let n = terrain_normal(x);
+let h = amplitude * noise(x * bump_freq + seed);
+let x_bumped = x + n * h;
+```
+
+Apply only when $\mathbf{x} \in B$.
+
+---
+
 #### 3.4.2: Snow Bump Out
 
-1. Parameterize whether cell is snowy by underlying elevation and fractal noise sampling for local consistency.
-2. Standard bump out. 
-3. Use snow shader. 
-4. Don't worry about seasonality yet. 
+Snow bump-outs represent accumulated snow following terrain contours.
+
+**Activation**
+
+```rust
+let elev = terrain_height(center);
+let snow_mask = noise(center * snow_freq + seed);
+
+if elev < snow_min_elevation || snow_mask < snow_threshold {
+    return None;
+}
+```
+
+**Construction**
+
+* Use standard bump-out SDF from [3.4.1](#341-cell-and-boundary-generation)
+* Bias height offset upward and smooth:
+
+```rust
+h = snow_amplitude * smooth_noise(x * snow_freq + seed);
+```
+
+* Prefer lower-frequency, rounded variation
+
+**Shading**
+
+* Use snow shader with:
+
+  * high albedo
+  * low roughness variation
+  * optional slope-based accumulation mask
+
+Seasonality is not considered at this stage.
+
+---
 
 #### 3.4.3: Sand and Dunes Bump Out
 
-1. Parameterize by whether cell has sand dunes by steepness sampled at a few points and fractal noise sampling for local consistency. 
-2. Use inner grid to generate points at which elliptical dunes will exist. 
-3. Apply standard bump out noise plus dune "dome" noise around selected elliptical points. 
-4. Use sand shader. 
+Sand bump-outs represent dune fields and drifted sand structures.
+
+**Activation**
+
+```rust
+let k = mean_laplacian(terrain, C);
+let mask = noise(center * sand_freq + seed);
+
+if k > sand_max_steepness || mask < sand_threshold {
+    return None;
+}
+```
+
+Prefer flatter regions.
+
+---
+
+##### Dune field construction
+
+Within $B$, define an inner sampling grid $\mathcal{G}_d$ with spacing $l_d$:
+
+```rust
+for c in dune_grid(C, l_d) {
+    let seed_c = hash(c);
+
+    if noise(seed_c) < dune_density {
+        dunes.push(sample_point_in_cell(seed_c));
+    }
+}
+```
+
+Each selected point becomes a dune center.
+
+---
+
+##### Elliptical dune shaping
+
+Each dune is modeled as an oriented elliptical dome:
+
+```rust
+let dir = wind_direction(seed);
+let a = dune_length(seed);
+let b = dune_width(seed);
+
+fn dune_height(p: Vec2, center: Vec2) -> f32 {
+    let q = rotate(p - center, -dir);
+    let d = (q.x*q.x)/(a*a) + (q.y*q.y)/(b*b);
+    return max(0.0, 1.0 - d);
+}
+```
+
+---
+
+##### Combined height field
+
+Final bump-out height is a combination of base noise and dune domes:
+
+```rust
+let h_base = sand_amplitude * noise(x * sand_freq + seed);
+
+let h_dunes = sum_over_dunes(
+    dune_height(xz, center_i) * dune_amplitude_i
+);
+
+let h = h_base + h_dunes;
+```
+
+Clamp to boundary $B$ and apply along terrain normal.
+
+---
+
+##### Shading
+
+Use sand shader with:
+
+* warm base tones
+* directional highlights aligned with dune orientation
+* optional wind streak noise for fine detail
+
+---
+
+**Properties**
+
+* conforms to terrain via SDF cloning
+* bounded within first-order cell
+* deterministic from seed
+* supports multiple material types via shared construction
+* allows structured features such as dunes to emerge from simple primitives
+
 
 ## 4: Milestones
