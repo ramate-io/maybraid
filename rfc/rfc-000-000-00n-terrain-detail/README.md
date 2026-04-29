@@ -4,9 +4,53 @@
 
 ## 1: Summary
 
-In response to [#57](https://github.com/ramate-io/maybraid/issues/57), we propose a several simple cellular terrain detail generation systems under the name Durham Terrain Detail. 
+In response to [#57](https://github.com/ramate-io/maybraid/issues/57), we propose a small set of initial, cellular terrain detail generation systems under the name **Durham Terrain Detail**.
+
+The motivation is to establish a **simple, composable baseline** for terrain detail that integrates cleanly with the cascade and chunk pipeline. Rather than introducing complex global systems, these constructions operate per cell, are deterministic from noise, and produce stable results under streaming and LOD.
+
+The initial focus is on a few representative feature types:
+
+* sparse, independent features such as boulders
+* structured clusters such as crag complexes
+* surface-following volumetric modifications such as snow and sand bump-outs
+
+Each construction is:
+
+* bounded by first-order cells for ownership and LOD stability
+* driven by deterministic noise for reproducibility
+* expressed in terms of simple geometric primitives or SDF composition
+
+This provides a foundation that is easy to extend while remaining compatible with chunk-based production and reactive systems.
+
+---
 
 ## 2: Prior Art
+
+Terrain detail generation is widely used across games and engines, typically combining noise, masks, and spatial partitioning.
+
+* **Minecraft and voxel engines**
+  Terrain detail such as ores, vegetation, and structures is generated per chunk using noise and deterministic seeds. See Minecraft-style generation in projects like Minetest [https://github.com/minetest/minetest](https://github.com/minetest/minetest) and voxel libraries such as Building Blocks [https://github.com/bonsairobo/building-blocks](https://github.com/bonsairobo/building-blocks). These systems emphasize chunk-local determinism and reproducibility.
+
+* **Procedural open-world terrain (e.g., Valheim, No Man’s Sky)**
+  These games layer multiple noise fields and masks to produce biomes, rocks, and surface features. Public discussions and reverse engineering show heavy use of noise-driven placement and region-based variation, often with clustering and filtering by slope or elevation.
+
+* **Unreal Engine foliage and landscape systems**
+  Unreal’s landscape and foliage tools [https://dev.epicgames.com/documentation/unreal-engine/unreal-engine-5-7-documentation](https://dev.epicgames.com/documentation/unreal-engine/unreal-engine-5-7-documentation) use density maps, noise, and slope filters to scatter meshes such as rocks and vegetation. Placement is typically driven by masks over a grid or landscape component, similar in spirit to the cell-based approach here.
+
+* **Horizon Zero Dawn terrain detail (Guerrilla Games)**
+  Guerrilla’s terrain pipeline uses layered procedural generation with masks, slope filters, and clustering to place rocks and surface features, as described in their GDC talks [https://80.lv/articles/the-procedural-nature-of-the-horizon-zero-dawn](https://80.lv/articles/the-procedural-nature-of-the-horizon-zero-dawn). This demonstrates structured clustering such as rock formations and terrain-aligned features.
+
+* **Noise-based terrain texturing and detail**
+  Fractal noise and domain warping are standard techniques for generating variation in terrain height and appearance. See references such as *GPU Gems* terrain chapters [https://developer.nvidia.com/gpugems](https://developer.nvidia.com/gpugems) and Inigo Quilez’s articles on noise and SDFs [https://iquilezles.org](https://iquilezles.org).
+
+Across these systems, common themes include:
+
+* deterministic, seed-based generation
+* spatial partitioning for stability and streaming
+* filtering by terrain properties such as slope and elevation
+* clustering or structured placement for realism
+
+Durham Terrain Detail adopts these ideas but emphasizes **cellular ownership, cascade compatibility, and explicit SDF-based construction**, providing a unified and extensible framework for terrain detail within an ECS-driven pipeline.
 
 ## 3: Design
 
@@ -646,6 +690,5 @@ Use sand shader with:
 * deterministic from seed
 * supports multiple material types via shared construction
 * allows structured features such as dunes to emerge from simple primitives
-
 
 ## 4: Milestones

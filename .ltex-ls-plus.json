@@ -379,7 +379,11 @@
         "Veloren",
         "despawn",
         "LOD-safe",
-        "Perlin-style"
+        "Perlin-style",
+        "Minetest",
+        "Valheim",
+        "Inigo",
+        "Quilez"
       ]
     },
     "bibtex": {
