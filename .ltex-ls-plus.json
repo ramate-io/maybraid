@@ -377,7 +377,13 @@
         "octree",
         "Warpaint",
         "Veloren",
-        "despawn"
+        "despawn",
+        "LOD-safe",
+        "Perlin-style",
+        "Minetest",
+        "Valheim",
+        "Inigo",
+        "Quilez"
       ]
     },
     "bibtex": {
