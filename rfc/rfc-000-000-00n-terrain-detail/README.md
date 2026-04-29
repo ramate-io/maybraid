@@ -692,3 +692,107 @@ Use sand shader with:
 * allows structured features such as dunes to emerge from simple primitives
 
 ## 4: Milestones
+
+## 4: Milestones
+
+### 4.1: Core Cell and Noise Infrastructure
+
+* Implement first-order cell utilities and helpers (sampling, bounds, hashing)
+* Standardize deterministic noise interface (seeded noise, FBM, domain transforms)
+* Provide shared utilities for terrain queries (height, normal, Laplacian)
+* Validate determinism and stability across chunk boundaries
+
+---
+
+### 4.2: Sparse Boulders
+
+* Implement two-tier grid sampling (`G1`, `G2`)
+* Implement candidate activation, placement, and steepness filtering
+* Integrate SDF-based boulder generation and mesh spawning
+* Validate separation guarantees and LOD stability
+
+---
+
+### 4.3: Crag Complexes
+
+* Implement hysteresis polyline construction
+* Add bounded graph extension (branching paths)
+* Implement path-based candidate placement and filtering
+* Validate clustering behavior and cell-bounded ownership
+* Optionally expose crag paths as LOD subunits
+
+---
+
+### 4.4: Bump-Out Core
+
+* Implement boundary generation for bump-out regions
+* Implement terrain SDF cloning and normal-based extrusion
+* Provide shared bump-out height function interface
+* Validate continuity with underlying terrain and absence of seams
+
+---
+
+### 4.5: Snow Bump Outs
+
+* Implement elevation and noise-based activation
+* Tune smooth accumulation height function
+* Integrate snow shader and shading parameters
+* Validate natural accumulation patterns on varied terrain
+
+---
+
+### 4.6: Sand and Dunes Bump Outs
+
+* Implement dune field activation and filtering
+* Implement inner sampling grid for dune centers
+* Implement elliptical dune primitives and orientation
+* Combine base sand noise with dune domes
+* Validate directional coherence and dune clustering
+
+---
+
+### 4.7: World-Space Ground Color Noise
+
+* Implement shader-side FBM or Perlin sampling
+* Implement palette-based color variation (hue and value)
+* Integrate into terrain material pipeline
+* Validate continuity across chunks and large-scale variation
+
+---
+
+### 4.8: Cascade Integration
+
+* Integrate all terrain detail systems with `CascadeProduction`
+* Ensure correct chunk ownership and spawning behavior
+* Validate compatibility with `ChunkTracker` systems
+* Ensure no cross-cell leakage or instability under streaming
+
+---
+
+### 4.9: Performance and Stability
+
+* Profile generation cost per cell and per chunk
+* Optimize noise sampling and SDF evaluation
+* Validate behavior under rapid movement and chunk churn
+* Ensure no flicker or popping across LOD transitions
+
+---
+
+### 4.10: Tooling and Debugging
+
+* Add debug visualization for:
+
+  * first-order and second-order grids
+  * crag paths and dune fields
+  * bump-out boundaries
+* Add toggles for enabling or disabling individual detail systems
+* Provide metrics for feature density and generation counts
+
+---
+
+### 4.11: Initial Tuning Pass
+
+* Tune noise parameters and thresholds for visual quality
+* Balance densities across feature types
+* Validate coherence across large terrain regions
+* Establish default parameter presets for future systems
