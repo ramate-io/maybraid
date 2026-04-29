@@ -78,15 +78,31 @@ An arching series of triangles. Good for palms, bushes, and jungle growths.
 
 ### 3.2: L-system Trees
 
-### 3.4: Ground Cover
+### 3.3: Ground Cover
 
-### 3.3: Cellular Groves
+### 3.4: Cellular Groves
 
-General name for vegetation type allocation system. Unify exclusive types you want to plant in a grove.
+General name for vegetation type allocation system. Unify exclusive types you want to plant in a grove. Groves are the level at which planting constraints are painted in. 
+
+#### 3.4.1: Parameterization
+
+#### 3.4.2: Cell Selection and Planting Constraints
+
+#### 3.4.3: Well-known Ground Cover Groves
+
+#### 3.4.4: Well-known Tufts Groves
+
+#### 3.4.5: Well-known Bush Groves
+
+#### 3.4.6: Well-known Tree Groves
+
+#### 3.4.7: Grove LOD Tricks
 
 ### 3.5: Cellular Forests
 
 General name for top-level grove allocation system. Split into several layers of groves. 
+
+### 3.5.1: Parameterization
 
 #### 3.5.2: Forest Layers
 
@@ -99,6 +115,34 @@ General name for top-level grove allocation system. Split into several layers of
 ##### 3.5.2.4: Tree Layer
 
 ### 3.5.3: Well-known Forests
+
+```rust
+pub enum ForestCell {
+    Riparian,
+    Chaparral,
+    Alpine,
+    TemperateConiferous,
+    Orchard,
+    Coniferous,
+    Jungle,
+    TropicalJungle,
+
+}
+```
+
+#### 3.5.3.1: Riparian 
+
+#### 3.5.3.2: Chaparral
+
+#### 3.5.3.3: Alpine
+
+#### 3.5.3.4: Temperate Coniferous
+
+#### 3.5.3.5: Orchard
+
+#### 3.5.3.6: Coniferous
+
+#### 
 
 ### 3.5.4: Forest LOD Tricks
 
