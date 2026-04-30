@@ -26,7 +26,7 @@ Key characteristics:
 * **stable**: tied to world-space coordinates
 * **biome-driven**: parameters vary with terrain conditions
 
-Detail is primarily expressed through [Leaf Shaders](../../README.md#3110-leaf-shading):
+Detail is primarily expressed through [Leaf Shaders](../../03-01-stalk-and-ball-stick-trees/03-01-10-leaf-shading/README.md):
 
 * color variation (greens, yellows, browns)
 * seasonal effects (drying, snow cover)
