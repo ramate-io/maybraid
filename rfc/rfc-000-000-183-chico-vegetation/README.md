@@ -3249,6 +3249,117 @@ These techniques combine to produce large, varied forests at low cost while pres
 
 ### 3.1.9: Stick Shading
 
+Stick shading covers trunks, branches, descenders, and exposed woody structures. The goal is to avoid flat bark color while allowing each tree species to define its own palette.
+
+This follows the same basic idea as [world-space ground color noise](https://github.com/ramate-io/maybraid/tree/main/rfc/rfc-000-000-170-terrain-detail#33-world-space-ground-color-noise): color variation is sampled in world space, so nearby points are visually related and variation remains stable across generated chunks.
+
+#### 3.1.9.1: Species Palette
+
+Each tree species provides a small ordered palette of stick colors.
+
+```rust
+pub struct StickPalette {
+    pub colors: [Vec3; 4],
+    pub regional_scale: f32,
+    pub detail_scale: f32,
+    pub value_strength: f32,
+}
+```
+
+Example palette:
+
+```rust
+let bark_palette = [
+    vec3(0.22, 0.15, 0.10), // dark brown
+    vec3(0.36, 0.26, 0.18), // warm bark
+    vec3(0.42, 0.36, 0.28), // gray bark
+    vec3(0.16, 0.12, 0.09), // dark crevice
+];
+```
+
+Species can bias toward gray, red, yellow, black, or pale bark tones.
+
+#### 3.1.9.2: World-space Variation
+
+Use low-frequency noise to choose a palette region and higher-frequency noise to modulate bark detail.
+
+```wgsl
+let regional = fbm(world_position.xz * stick.regional_scale, stick.seed);
+let detail = fbm(world_position.xyz * stick.detail_scale, stick.seed + 101u);
+```
+
+The regional sample drives broad color variation. The detail sample adds local bark irregularity.
+
+#### 3.1.9.3: WGSL Sketch
+
+```wgsl
+struct StickShaderParams {
+    seed: u32,
+    regional_scale: f32,
+    detail_scale: f32,
+    value_strength: f32,
+    color0: vec3<f32>,
+    _pad0: f32,
+    color1: vec3<f32>,
+    _pad1: f32,
+    color2: vec3<f32>,
+    _pad2: f32,
+    color3: vec3<f32>,
+    _pad3: f32,
+};
+
+@group(1) @binding(0)
+var<uniform> stick: StickShaderParams;
+
+fn fbm(p: vec3<f32>, seed: u32) -> f32 {
+    // Placeholder: use standard value noise, Perlin, or existing project fbm.
+    return fract(sin(dot(p, vec3<f32>(12.9898, 78.233, 37.719)) + f32(seed)) * 43758.5453);
+}
+
+fn palette_sample(t: f32) -> vec3<f32> {
+    let t = clamp(t, 0.0, 1.0);
+    let x = t * 3.0;
+    let i = u32(floor(x));
+    let f = fract(x);
+
+    if (i == 0u) {
+        return mix(stick.color0, stick.color1, f);
+    }
+    if (i == 1u) {
+        return mix(stick.color1, stick.color2, f);
+    }
+
+    return mix(stick.color2, stick.color3, f);
+}
+
+fn stick_color(world_position: vec3<f32>, normal: vec3<f32>) -> vec3<f32> {
+    let regional = fbm(world_position * stick.regional_scale, stick.seed);
+    let detail = fbm(world_position * stick.detail_scale, stick.seed + 101u);
+
+    let base = palette_sample(regional);
+
+    let value = mix(
+        1.0 - stick.value_strength,
+        1.0 + stick.value_strength,
+        detail,
+    );
+
+    // Optional: darken upward-facing creases less than side-facing bark.
+    let side = 1.0 - abs(normal.y);
+    let side_shade = mix(0.9, 1.05, side);
+
+    return base * value * side_shade;
+}
+```
+
+#### 3.1.9.4: Notes
+
+* Use world-space coordinates, not UVs, so bark color stays stable across generated meshes.
+* Use species palettes for broad identity and noise for local variation.
+* Low-frequency noise should shift between bark tones; high-frequency noise should only modulate value.
+* This can be shared by trunks, branches, descenders, and joint-concealing bark balls.
+
+
 ### 3.1.10: Leaf Shading
 
 ### 3.2: L-system Trees
