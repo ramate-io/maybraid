@@ -3977,6 +3977,9 @@ This produces:
 * gradual composition shifts
 * non-uniform but stable distributions
 
+> [!NOTE]
+> Canonically, the default mean is at 0.0 in bucket space.
+
 ---
 
 ### 3.4.2.2: Cell Activation
@@ -4052,47 +4055,225 @@ This structure intentionally mirrors terrain detail systems so that:
 > [!NOTE]
 > For bump outs, the internal cells tend to be a bit larger than other layers.
 
-#### 3.4.3.1: Huelgoat Pitch
+### 3.4.3.1: Huelgoat Pitch
 
-- Low and smooth bump out that closely follows the underlying terrain. Think 5-10cm. 
-- Typically, player should collide with this bump out, i.e., stand on top.
-- Good when paired with sparse tufting patterns.
-- Flecking should really only be snowfall. 
-- Moderate to high density (60% to 80%). 
-- Internal cell size typically around 50 to 100m. Fit, however, even subdivisions.  
-- Cell size at low LOD can be entirety of the grove cell. 
-- Minimal flecking.
+Huelgoat Pitch is a low, smooth ground-cover grove based on shallow [bump outs](#331-bump-outs). It should read as mossy, soft, and continuous, closely following the underlying terrain with only slight vertical lift.
 
-Good for...
+Good for damp forests, riparian shade, temperate groves, old stone regions, and sparse woodland understory.
 
-#### 3.4.3.2: Flecking Bed
+```rust
+pub enum HuelgoatPitchCell {
+    BumpOut(Bucket {
+        weight: 1.0,
+        item: BumpOut {
+            noise: NoiseProfile::LowSmooth,
+            height: 0.05..0.10,
+            collide: true,
+            palette_mix: [
+                dark_green..light_green,
+            ],
+            flecking_mix: [
+                Flecking {
+                    kind: FleckingKind::Snowfall,
+                    strength: Minimal,
+                    ..Snowfall::common_flecking(world_size)
+                },
+            ],
+        },
+    }),
+}
 
-- Moderate bump out with moderate noise that player sinks through, no collisions. 
-- Moderate to high density.
-- Good with strong seasonal flecking patterns for blooms. 
-- Internal cell size typically around 50 to 100m. Fit, however, even subdivisions. 
-- Cell size at low LOD can be entirety of the grove cell. 
-- Good with any kind of tufting pattern.
+impl CellGrove for HuelgoatPitch {
+    type Cell = HuelgoatPitchCell;
 
-Good for...
+    const CELL_SIZE_RANGE: Range<f32> = 50.0..100.0;
+    const DENSITY_RANGE: Range<f32> = 0.60..0.80;
 
-#### 3.4.2.3: Jim's Collage
+    const ELEVATION_RANGE: Range<f32> = 0.0..0.75; // elevation range as fraction of max world height or other normalized elevation
+    const STEEPNESS_RANGE: Range<f32> = 0.0..0.45;
 
-- A union of [Huelgoat Pitch](#3431-huelgoat-pitch) and [Flecking Bed](#3432-flecking-bed). 
-- Keep moderate to high density.
+    const OFFSET_RANGE: Range<f32> = 0.0..1.0;
 
-#### 3.4.3.4: Floor Scrub
+    const NOISE_AMPLITUDE_RANGE: Range<f32> = 0.10..0.25;
+    const NOISE_FREQUENCY_RANGE: Range<f32> = 0.005..0.020;
+}
+```
 
-- Low density variant of [Jim's Collage](#3423-jims-collage).
-- Good for arid areas or stripped back understory. 
-- Internal cell size typically around 15m. Fit, however, even subdivisions. 
-- Cell size at low LOD can be entirety of the grove cell. 
+**Construction**
 
-#### 3.4.3.5: Mounds
+* Use a low, smooth bump out with height around `5cm–10cm`.
+* Closely follow the underlying terrain normal and terrain SDF.
+* Player collision should use the bumped surface, so the player stands on the pitch rather than visually sinking into it.
+* Use moderate to high density: roughly `60%–80%` cell activation.
+* Use internal cells around `50m–100m`, preferably chosen as even subdivisions of the parent grove cell.
+* At low LOD, collapse the internal cell size to the full grove cell.
+* Pair with sparse [Tufts](#332-tufts) for additional volume detail.
+* Flecking should be minimal and generally limited to snowfall.
+
+
+### 3.4.3.2: Flecking Bed
+
+Flecking Bed is a soft, non-colliding ground-cover grove based on moderate [bump outs](#331-bump-outs). It should read as a visual vegetation layer rather than physical terrain, allowing the player to sink through it.
+
+Good for wildflower fields, meadow floors, heath, moss beds, flowering understory, and seasonal ground-cover blooms.
+
+```rust
+pub enum FleckingBedCell {
+    BumpOut(Bucket {
+        weight: 1.0,
+        item: BumpOut {
+            noise: NoiseProfile::Moderate,
+            height: 0.10..0.25,
+            collide: false,
+            palette_mix: [
+                dark_green..light_green,
+                yellow_green..dry_green,
+            ],
+            flecking_mix: [
+                Flecking {
+                    kind: FleckingKind::Bloom,
+                    strength: ModerateToHigh,
+                    season_weight: High,
+                    longitude_weight: Low,
+                    altitude_weight: LowToModerate,
+                    ..Default::default()
+                },
+            ],
+        },
+    }),
+}
+
+impl CellGrove for FleckingBed {
+    type Cell = FleckingBedCell;
+
+    const CELL_SIZE_RANGE: Range<f32> = 50.0..100.0;
+    const DENSITY_RANGE: Range<f32> = 0.60..0.85;
+
+    // Normalized fraction of max world height.
+    const ELEVATION_RANGE: Range<f32> = 0.0..0.80;
+    const STEEPNESS_RANGE: Range<f32> = 0.0..0.35;
+
+    const OFFSET_RANGE: Range<f32> = 0.0..1.0;
+
+    const NOISE_AMPLITUDE_RANGE: Range<f32> = 0.25..0.55;
+    const NOISE_FREQUENCY_RANGE: Range<f32> = 0.010..0.040;
+}
+```
+
+**Construction**
+
+* Use a moderate bump out with height around `10cm–25cm`.
+* Apply moderate noise, so the surface reads as uneven vegetation rather than smooth terrain.
+* Do not enable collision; the player should visually sink through this layer.
+* Use moderate to high density, roughly `60%–85%` cell activation.
+* Use internal cells around `50m–100m`, preferably even subdivisions of the parent grove cell.
+* At low LOD, collapse the internal cell size to the full grove cell.
+* Pair well with any tufting pattern, especially sparse flowering tufts or dry brush.
+
+**Flecking**
+
+* Strong seasonal flecking is encouraged.
+* Bloom colors may include white, yellow, pink, purple, orange, or pale blue.
+* Flecking strength should vary by season and optionally by longitude or altitude.
+* Snow flecking may be layered separately, but bloom flecking is the defining feature.
+
+### 3.4.3.3: Jim's Collage
+
+Jim's Collage is a mixed ground-cover grove that evenly blends [Huelgoat Pitch](#3431-huelgoat-pitch) and [Flecking Bed](#3432-flecking-bed). It provides both a grounded mossy layer and a more decorative, seasonal visual layer.
+
+Good for mixed woodland floors, meadow-forest transitions, garden-like groves, riparian clearings, and areas where ground cover should feel varied without introducing many distinct systems.
+
+```rust
+pub enum JimsCollageCell {
+    HuelgoatPitch(Bucket {
+        weight: 1.0,
+        item: HuelgoatPitchCell,
+    }),
+    FleckingBed(Bucket {
+        weight: 1.0,
+        item: FleckingBedCell,
+    }),
+}
+
+impl CellGrove for JimsCollage {
+    type Cell = JimsCollageCell;
+
+    const CELL_SIZE_RANGE: Range<f32> = 50.0..100.0;
+    const DENSITY_RANGE: Range<f32> = 0.60..0.85;
+
+    const ELEVATION_RANGE: Range<f32> = 0.0..0.80;
+    const STEEPNESS_RANGE: Range<f32> = 0.0..0.40;
+
+    const OFFSET_RANGE: Range<f32> = 0.0..1.0;
+
+    const NOISE_AMPLITUDE_RANGE: Range<f32> = 0.15..0.45;
+    const NOISE_FREQUENCY_RANGE: Range<f32> = 0.008..0.035;
+}
+```
+
+**Construction**
+
+* Use an even split between `HuelgoatPitch` and `FleckingBed`.
+* Maintain moderate to high density, roughly `60%–85%`.
+* Allow Huelgoat cells to provide low colliding ground softness.
+* Allow Flecking Bed cells to provide seasonal bloom and visual softness.
+* Use the same internal cell sizing strategy as both parent types: typically `50m–100m`, fit to even subdivisions.
+* At low LOD, collapse internal cell size to the full grove cell.
+
+
+### 3.4.3.4: Floor Scrub
+
+Floor Scrub is a low-density variant of [Jim's Collage](#3433-jims-collage). It uses the same basic split between [Huelgoat Pitch](#3431-huelgoat-pitch) and [Flecking Bed](#3432-flecking-bed), but reduces coverage and uses smaller internal cells for a patchier, more exposed ground layer.
+
+Good for arid regions, sparse woodland, stripped-back understory, chaparral edges, dry groves, and disturbed terrain.
+
+```rust
+pub enum FloorScrubCell {
+    HuelgoatPitch(Bucket {
+        weight: 1.0,
+        item: HuelgoatPitchCell,
+    }),
+    FleckingBed(Bucket {
+        weight: 1.0,
+        item: FleckingBedCell,
+    }),
+}
+
+impl CellGrove for FloorScrub {
+    type Cell = FloorScrubCell;
+
+    const CELL_SIZE_RANGE: Range<f32> = 15.0..20.0;
+    const DENSITY_RANGE: Range<f32> = 0.20..0.45;
+
+    const ELEVATION_RANGE: Range<f32> = 0.0..0.85;
+    const STEEPNESS_RANGE: Range<f32> = 0.0..0.45;
+
+    const OFFSET_RANGE: Range<f32> = 0.0..1.0;
+
+    const NOISE_AMPLITUDE_RANGE: Range<f32> = 0.10..0.35;
+    const NOISE_FREQUENCY_RANGE: Range<f32> = 0.015..0.050;
+}
+```
+
+**Construction**
+
+* Use a low-density split between `HuelgoatPitch` and `FleckingBed`.
+* Keep density around `20%–45%`.
+* Use internal cells around `15m`, fit to even subdivisions of the parent grove cell.
+* At low LOD, collapse internal cell size to the full grove cell.
+* Prefer weaker bump-out heights and lighter flecking than Jim's Collage.
+* Pair well with sparse tufts, dry brush, or exposed terrain detail.
+
+
+### 3.4.3.5: Grassy Mounds
 
 - Use [Sparse Boulder](https://github.com/ramate-io/maybraid/tree/main/rfc/rfc-000-000-170-terrain-detail#31-sparse-boulders) pattern with ground cover shaders, embed a bit more deeply than typical sparse boulders. 
 - Cell size typically around 5m
 - Boulder size typically 60% of cell. 
+
+#### 3.4.3.6: Allbed
+
+A wide birth of flecking and non-flecking and colliding and non-colliding bump outs as well as grassy mounds.
 
 ### 3.4.4: Well-known Tufts Groves
 
@@ -4126,6 +4307,8 @@ General name for top-level grove allocation system. Split into several layers of
 ### 3.5.2: Forest Layers
 
 ### 3.5.2.1: Ground Cover Layer
+
+The ground cover layer, unlike other layers is composed of two sublayers to enable a simple model of overlapping ground cover. The sublayers are referred to as Flip and Flop. 
 
 ### 3.5.2.2: Tufts Layer
 
