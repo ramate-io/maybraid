@@ -1526,7 +1526,7 @@ Descenders should usually receive sparse foliage or none, unless the goal is a v
 
 ##### 3.1.7.6: Sope's Banyan
 
-[! Sope's Banyan](./assets/sopes-banyan.png)
+![Sope's Banyan](./assets/sopes-banyan.png)
 
 Sope's Banyan is a banyan variant with a tall, vase-like crown. It begins from the [Honu Banyan](#3175-honu-banyan) construction, but moves the canopy lower and biases branch growth upward, closer to the [Penmarch Torch](#3174-penmarch-torch). The result is a mystical, vertically rising banyan form suited to jungle, riparian, and elder-tree contexts.
 
