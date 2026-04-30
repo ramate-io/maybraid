@@ -96,6 +96,10 @@ At ball points, in addition to canopy, allocate a larger and darker ball and a t
 
 Use large radius and high noise value for stalk. 
 
+##### 3.1.6.6: Banyan Descenders 
+
+Use a high radial projection segment count. Give a strong bias to grow vertically downward in excess of the height of the Banyan on every nth segment. 
+
 #### 3.1.7: Well-known Tree Constructions
 
 ##### 3.1.7.1: Storybook Tree
@@ -111,9 +115,9 @@ A general impression of a tree.
 - Use 3-5 ball-stick segments per projection. Allowing branching between 1 and 3 with mean roughly 2. 
 - Allocate [Plane Splay](#3125-plane-splay) for leaves at highest LOD, programming strong preference for only allocating at the outer layers of the canopy. Use a radius of roughly 9% the height of the tree. 
 
-Good for many kinds of forests, particularly deciduous ones. 
+Good for many kinds of forests, particularly deciduous ones. Accommodates all kinds of shaders for both sticks and leaves.
 
-##### 3.1.7.1: Liam's Conifer
+##### 3.1.7.2: Liam's Conifer
 
 A sparse conifer. 
 
@@ -126,7 +130,69 @@ A sparse conifer.
 - Max length of radial projections should be about 5% the height of the tree.
 - Allocate [Tufts](#3126-tufts) for canopy at all ball joints. Use 2 to 3 tufts per joint. Allocate with scale proportional to roughly 2% the height of the tree.
 
-Good for drier deciduous forests. 
+Good for drier deciduous forests. Better with lighter shaders for both sticks and leaves. 
+
+##### 3.1.7.3: Vase Tree
+
+A tree that gets wider towards the top, giving a unique head-trained appearance. 
+
+- Take the basic construction from [Storybook Tree](#3171-storybook-tree) but invert the radial projection length s.t. the width increases as you move up the tree. 
+- Give the radial projections a vertical bias of 45 degrees from horizontal, decrease the bias as the height increases. 
+
+Good for variety and mystical elements in deciduous forests. Can also be used for bushes and in urban settings. 
+
+##### 3.1.7.4: Penmarch Torch
+
+A tree that projects upwards like a torch. 
+
+- Take the basic construction from [Vase Tree](#3173-vase-tree) but increase the vertical bias as the height increases. 
+
+Good for chaparral, shorter conifers in arid regions, and urbanized settings. 
+
+##### 3.1.7.5: Honu Banyan
+
+A banyan-like tree, spreading its canopy far and wide, and descending some branches down. 
+
+- Use the [Banyan Trunk](#3165-banyan-trunk) construction.
+- Start the radial projections at roughly 80% of the total height of the tree. Do not use too many rings, 2 to 3. 
+- Use the [Banyan Descenders](#3166-banyan-descenders) construction, typically biasing the canopy towards near horizontal except for every third to fourth segment. 
+- Allocate leaf balls throughout the canopy. 
+
+Good for jungle and riparian regions.  
+
+##### 3.1.7.6: Sope's Banyan
+
+A banyan-like tree with a vase-like crown. 
+
+- Begin with the [Honu Banyan](#3175-honu-banyan) construction. 
+- Adjust the canopy to project up vertically a la [Penmarch Torch](#3174-penmarch-torch). Radial projections should now begin at something like 40% of the total height. Descenders will still occur every third to fourth segment. 
+
+Good for jungle and riparian regions. Adds a sense of mysticism. Often good as particularly tall, almost as if an [Elder Tree](#36-elder-trees). 
+
+##### 3.1.7.7: Rory's Head-trained 
+
+A stalk with a thin horizontal canopy at the top.
+
+- Use a standard stock. 
+- Begin radial projections at 90% or more of total height.
+- Bias radial projections to be nearly horizontal. 
+- Use moderate branching and segment length values, similar to [Storybook Tree](#3171-storybook-tree).
+
+Good as a tree in arid regions. Good as a bush, e.g., grape vine. Can be used in almost all groves, except for coniferous ones. 
+
+##### 3.1.7.8: Waialea Palm 
+
+##### 3.1.7.9: Date Palm
+
+##### 3.1.7.9: Palm Bush
+
+##### 3.1.7.10: Northern Conifer
+
+##### 3.1.7.11: Shoot
+
+- Using the 
+
+##### 3.1.7.12: 
 
 #### 3.1.8: Tree LOD Tricks
 
