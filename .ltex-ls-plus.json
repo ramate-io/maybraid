@@ -409,7 +409,8 @@
         "very-low-LOD",
         "Very-Low-LOD",
         "fronded",
-        "composability"
+        "composability",
+        "intra-cell"
       ]
     },
     "bibtex": {

@@ -3810,38 +3810,239 @@ This separation allows:
 
 Together, bump outs and tufts provide a scalable and performant ground cover system that integrates cleanly with terrain and vegetation layers.
 
+Good call — that linkage matters for consistency across systems. Here is the corrected and tightened version with proper references to RFC-170 where concepts are reused.
+
+---
+
 ### 3.4: Cellular Groves
 
-General name for vegetation type allocation system. Unify exclusive types you want to plant in a grove. Groves are the level at which planting constraints are painted in.
+Cellular Groves are the primary allocation unit for vegetation types. A grove defines a **locally coherent planting context**: it determines *what* can be planted, *how often*, and *under what constraints*. Groves unify a set of compatible vegetation types and expose parameter ranges that are instantiated by the parent [Forest](#35-cellular-forests).
+
+At a high level:
+
+* **Parameterization** defines the statistical and environmental character of the grove
+* **Selection and Placement** determines where and what is actually planted
+
+---
 
 ### 3.4.1: Parameterization
 
-Each grove should be able to receive the following parameters:
+Each grove receives a set of parameters. The grove defines ranges; the [Forest](#35-cellular-forests) resolves them via spatially coherent noise.
 
-- **Scale:** while specific trees will encode proportional values and constrain mins and maxes, the grove can provide a general scale which it noisily samples per tree cell. Specific grove types will have a scale range within which the [Forest](#35-cellular-forests) will choose a value. Because the values selected by the forest are based on FBM, nearby groves should have similar scales. 
-- **Density:** specific grove types will encode a range describing how frequently they place trees. The parent [Forest](#35-cellular-forests) will select values in this range. Because the values selected by forest are based on FBM, nearby groves should have similar densities. 
-- **Distribution:** the unified type of trees in a grove will implement a distribution, i.e., likelihood of selection various subtypes. This distribution can internally be perturbed, the weights changed, from some base by a noise value from the [Forest](#35-cellular-forests). The distribution is selected from via the [Bucket Throw](#3421-bucket-throw) algorithm.
-- **Offsets:** as discussed in [Cell Selection and Planting Constraints](#342-cell-selection-and-planting-constraints), planting placement uses a very similar approach to [terrain detail](https://github.com/ramate-io/maybraid/tree/main/rfc/rfc-000-000-170-terrain-detail#313-position-selection-and-validation). A given grove type will decide mins and maxes on the offset means. The [Forest](#35-cellular-forests) can select value within the range. 
-- **Elevation Constraints:** a given grove type will decide elevation constraints on each of the members in its unified tree type. (We should do this on the trees themselves, but we'd want base tree shapes to have wide or all-inclusive ranges and then only have types prepared with constraints for a specific grove unified type.) These ranges can be further narrowed by the [Forest](#35-cellular-forests). Generally, only extreme noise values should substantially affect this.
-- **Steepness Constraints:** similar to elevation, but for steepness. Generally, only extreme noise values should substantially affect this.
-- **Noise Amplitude and Frequency:** the grove gives a base noise amplitude and frequency. The [Forest](#35-cellular-forests) perturbs this. 
+### 3.4.1.1: Scale
+
+Controls overall tree size.
+
+* Grove defines `[min, max]`
+* Forest samples via FBM
+
+```rust
+let scale = fbm(world_pos * scale_freq).remap(min_scale, max_scale);
+```
+
+Nearby groves will have similar scales.
+
+---
+
+### 3.4.1.2: Density
+
+Controls planting frequency.
+
+* Grove defines `[min, max]`
+* Forest samples via FBM
+
+```rust
+let density = fbm(world_pos * density_freq).remap(min_density, max_density);
+```
+
+Used as the activation threshold for cells.
+
+---
+
+### 3.4.1.3: Distribution
+
+Defines the relative likelihood of selecting variants within the grove.
+
+* Grove defines base weights and ordering
+* Forest perturbs weights via noise
+
+Selection is performed via [Bucket Throw](#3421-bucket-throw), allowing smooth spatial shifts in composition.
+
+---
+
+### 3.4.1.4: Offsets
+
+Controls intra-cell placement.
+
+* Grove defines min and max offset ranges
+* Forest selects values within that range
+
+As discussed in [Cell Selection and Planting Constraints](#342-selection-and-placement), this follows the same approach as
+[RFC-170: Terrain Detail – Position Selection and Validation](https://github.com/ramate-io/maybraid/tree/main/rfc/rfc-000-000-170-terrain-detail#313-position-selection-and-validation).
+
+```rust
+let offset = noise_vec2(seed).remap(offset_min, offset_max);
+let position = cell_origin + offset;
+```
+
+Offsets may exceed sub-cell bounds, but ownership and stability are always derived from the parent cell.
+
+---
+
+### 3.4.1.5: Elevation Constraints
+
+Defines allowable elevation ranges per variant.
+
+* Base constraints live on tree variants
+* Grove may narrow these
+* Forest perturbs minimally
+
+These are evaluated exactly as in terrain detail placement in
+[RFC-170](https://github.com/ramate-io/maybraid/tree/main/rfc/rfc-000-000-170-terrain-detail#313-position-selection-and-validation).
+
+Only extreme noise values should substantially affect these constraints.
+
+---
+
+### 3.4.1.6: Steepness Constraints
+
+Similar to elevation, but based on terrain slope.
+
+```rust
+let steepness = laplacian(terrain, position);
+```
+
+* Grove defines acceptable range
+* Forest perturbs slightly
+
+As with elevation, this mirrors the validation step in RFC-170 terrain detail placement.
+
+---
+
+### 3.4.1.7: Noise Amplitude and Frequency
+
+Controls spatial variation.
+
+* Grove defines base amplitude and frequency
+* Forest perturbs
+
+```rust
+let noise = fbm(world_pos * freq) * amplitude;
+```
+
+---
 
 > [!NOTE]
-> There is no palette parameterization or perturbation. This is to keep from loading too many different materials. Instead, we simply rely on the word-space variation of the species material given in the shader.
+> There is no palette parameterization or perturbation.
+> This avoids excessive material variation and draw overhead.
+> Visual diversity is instead achieved through world-space shading variation in species shaders.
 
-### 3.4.2: Cell Selection and Planting Constraints
+---
 
-- Cells are selected for planting according to fractal noise and density. 
-- Their exact point is determined by an offset on the grid a la [RFC-170: Terrain Detail](https://github.com/ramate-io/maybraid/tree/main/rfc/rfc-000-000-170-terrain-detail#313-position-selection-and-validation).
-- Elevation and steepness constraints are then checked at these exact points. 
-- `selection(elevation: f32, steepness: f32, noise: f32)` will use a next fit algorithm to select the type closest on the distribution which fits constraints. Thus, unified grove tree types will have a statically known order amongst their variants. 
+### 3.4.2: Selection and Placement
 
-#### 3.4.2.1: Bucket Throw
+This stage determines where trees are placed and which variant is selected. It closely mirrors the sampling and validation flow used in
+[RFC-170: Terrain Detail](https://github.com/ramate-io/maybraid/tree/main/rfc/rfc-000-000-170-terrain-detail#313-position-selection-and-validation).
 
-- The bucket throw algorithm assumes that each variant is mapped to both a weight and a position. The weight describes the size of region over which the variant would be selected, while the position is its position as contiguous bucket of the size in a series. 
-- The bucket throw can be parameterized by a mean to which a value in the range [-total_order, total_order] is added in a wrapping add. $variant = bucket(mean + s([-total_order, total_order]))$. 
-- The value selection $s$ should typically be an FBM, Perlin, or other distribution with somewhat strong centrality, i.e., somewhat similar to a normal distribution. 
-- This allows the groves to shift their composition in more varied ways than simple uniform selection. 
+---
+
+### 3.4.2.1: Bucket Throw
+
+The bucket throw algorithm maps variants to contiguous weighted regions.
+
+* Each variant has a **weight** and **position**
+* Weights define region size
+* Positions define ordering
+
+Selection:
+
+$$
+variant = bucket(mean + s([-T, T]))
+$$
+
+where:
+
+* $T$ is total ordering span
+* $s$ is a centrally-biased noise sample
+
+```rust
+let shift = noise(seed).remap(-total_order, total_order);
+let idx = wrap(mean + shift, total_order);
+let variant = bucket_lookup(idx);
+```
+
+This produces:
+
+* locally coherent variation
+* gradual composition shifts
+* non-uniform but stable distributions
+
+---
+
+### 3.4.2.2: Cell Activation
+
+Cells are selected based on density and noise.
+
+```rust
+if fbm(cell_pos * density_freq) > density_threshold {
+    continue;
+}
+```
+
+---
+
+### 3.4.2.3: Position Selection
+
+Their exact point is determined by an offset on the grid, following
+[RFC-170: Terrain Detail – Position Selection and Validation](https://github.com/ramate-io/maybraid/tree/main/rfc/rfc-000-000-170-terrain-detail#313-position-selection-and-validation).
+
+```rust
+let p = cell_origin + offset;
+```
+
+---
+
+### 3.4.2.4: Constraint Evaluation
+
+Evaluate terrain at the selected point.
+
+```rust
+let elevation = terrain_height(p);
+let steepness = laplacian(terrain, p);
+```
+
+Reject placements that violate constraints.
+
+```rust
+if !within(elevation, elevation_range) { continue; }
+if !within(steepness, steepness_range) { continue; }
+```
+
+This is directly analogous to the validation phase in RFC-170 terrain detail.
+
+---
+
+### 3.4.2.5: Variant Selection
+
+Selection uses a next-fit approach over the ordered distribution:
+
+```rust
+selection(elevation, steepness, noise)
+```
+
+* start from a noise-derived index
+* select nearest valid variant
+* preserve distribution while respecting constraints
+
+---
+
+This structure intentionally mirrors terrain detail systems so that:
+
+* placement behavior is predictable
+* systems compose cleanly
+* spatial artifacts (flicker, migration) are avoided
+
+...while still allowing rich biome-level variation.
 
 ### 3.4.3: Well-known Ground Cover Groves
 
