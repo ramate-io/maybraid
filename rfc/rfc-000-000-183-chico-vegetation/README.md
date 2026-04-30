@@ -1183,9 +1183,43 @@ let anchors_per_ring = 6;
 
 Anchors should originate near the stalk radial centroid.
 
+Yes — you’re right. A normal sigmoid gives more of a **chalice** profile.
+
+For the vase, you want something closer to an **inverse sigmoid radius profile**: fast widening near the bottom, slower widening through the middle, then renewed flare near the rim.
+
+A clean construction is to use the **logit-like inverse sigmoid shape**, but keep it bounded:
+
+```rust
+fn vase_profile(u: f32, eps: f32) -> f32 {
+    let u = u.clamp(eps, 1.0 - eps);
+
+    let x = (u / (1.0 - u)).ln();
+
+    // remap from [-a, a] into [0, 1]
+    let a = ((1.0 - eps) / eps).ln();
+    (x + a) / (2.0 * a)
+}
+```
+
+Then:
+
+```rust
+let cup = vase_profile(u, 0.08);
+
+let projection_length = mix(
+    min_projection_length,
+    max_projection_length,
+    cup,
+);
+```
+
+Proposal wording:
+
+---
+
 **Projection Length**
 
-Invert the Storybook falloff so branch length increases with height.
+Use a bounded inverse-sigmoid profile over height. This gives the vase or calyx shape: rapid widening near the base of the crown, slower widening through the middle, and renewed flare near the rim.
 
 Let:
 
@@ -1193,21 +1227,50 @@ $$
 u = \frac{z - z_{\min}}{z_{\max} - z_{\min}}
 $$
 
-Use a softened increasing curve:
+Use a clamped inverse sigmoid:
 
 $$
-\ell(u) = \ell_{\min} + (\ell_{\max} - \ell_{\min}) \frac{\log(1 + \alpha u)}{\log(1 + \alpha)}
+v(u) =
+\frac{
+\log\left(\frac{u}{1-u}\right) + a
+}{
+2a
+}
 $$
 
-with:
+where:
+
+$$
+a = \log\left(\frac{1-\epsilon}{\epsilon}\right)
+$$
+
+...and $u$ is clamped to $[\epsilon, 1-\epsilon]$.
+
+Then:
+
+$$
+\ell(u) = \ell_{\min} + (\ell_{\max} - \ell_{\min})v(u)
+$$
 
 ```rust
-let min_projection_length = 0.15 * H;
-let max_projection_length = 0.60 * H;
-let alpha = 4.0;
+fn vase_profile(u: f32, eps: f32) -> f32 {
+    let u = u.clamp(eps, 1.0 - eps);
+    let a = ((1.0 - eps) / eps).ln();
+
+    ((u / (1.0 - u)).ln() + a) / (2.0 * a)
+}
+
+let projection_length = mix(
+    min_projection_length,
+    max_projection_length,
+    vase_profile(u, 0.08),
+);
 ```
 
-This creates short lower branches and broader upper spread.
+This produces the desired “flower cup” profile rather than the squared-off chalice profile of a direct sigmoid.
+
+> [!NOTE]
+> You can play with this inverse sigmoid shape at the Desmos plot [here](https://www.desmos.com/calculator/vvytytkb8u).
 
 **Chain Growth**
 
@@ -1264,7 +1327,6 @@ let leaf_radius = 0.08 * H;
 * Shorter stalk and denser upper branches produce a bush form.
 * Higher upward bias produces a flame-like ornamental tree.
 * Crook cylinders add a trained or sculpted garden appearance.
-
 
 ### 3.1.7.4: Penmarch Torch
 
