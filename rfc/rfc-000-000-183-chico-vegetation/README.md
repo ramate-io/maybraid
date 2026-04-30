@@ -4047,22 +4047,73 @@ This structure intentionally mirrors terrain detail systems so that:
 ### 3.4.3: Well-known Ground Cover Groves
 
 > [!NOTE]
-> Assume an empty grove. 
+> Assume an empty grove variant exists. 
+
+> [!NOTE]
+> For bump outs, the internal cells tend to be a bit larger than other layers.
+
+#### 3.4.3.1: Huelgoat Pitch
+
+- Low and smooth bump out that closely follows the underlying terrain. Think 5-10cm. 
+- Typically, player should collide with this bump out, i.e., stand on top.
+- Good when paired with sparse tufting patterns.
+- Flecking should really only be snowfall. 
+- Moderate to high density (60% to 80%). 
+- Internal cell size typically around 50 to 100m. Fit, however, even subdivisions.  
+- Cell size at low LOD can be entirety of the grove cell. 
+- Minimal flecking.
+
+Good for...
+
+#### 3.4.3.2: Flecking Bed
+
+- Moderate bump out with moderate noise that player sinks through, no collisions. 
+- Moderate to high density.
+- Good with strong seasonal flecking patterns for blooms. 
+- Internal cell size typically around 50 to 100m. Fit, however, even subdivisions. 
+- Cell size at low LOD can be entirety of the grove cell. 
+- Good with any kind of tufting pattern.
+
+Good for...
+
+#### 3.4.2.3: Jim's Collage
+
+- A union of [Huelgoat Pitch](#3431-huelgoat-pitch) and [Flecking Bed](#3432-flecking-bed). 
+- Keep moderate to high density.
+
+#### 3.4.3.4: Floor Scrub
+
+- Low density variant of [Jim's Collage](#3423-jims-collage).
+- Good for arid areas or stripped back understory. 
+- Internal cell size typically around 15m. Fit, however, even subdivisions. 
+- Cell size at low LOD can be entirety of the grove cell. 
+
+#### 3.4.3.5: Mounds
+
+- Use [Sparse Boulder](https://github.com/ramate-io/maybraid/tree/main/rfc/rfc-000-000-170-terrain-detail#31-sparse-boulders) pattern with ground cover shaders, embed a bit more deeply than typical sparse boulders. 
+- Cell size typically around 5m
+- Boulder size typically 60% of cell. 
 
 ### 3.4.4: Well-known Tufts Groves
 
 > [!NOTE]
-> Assume an empty grove. 
+> Assume an empty grove variant exists. 
 
-### 3.4.5: Well-known Bush Groves
-
-> [!NOTE]
-> Assume an empty grove. 
-
-### 3.4.6: Well-known Tree Groves
+### 3.4.5: Well-known Understory Groves
 
 > [!NOTE]
-> Assume an empty grove. 
+> Assume an empty grove variant exists. 
+
+### 3.4.6: Well-known Lower Canopy Groves
+
+> [!NOTE]
+> Assume an empty grove variant exists. 
+
+### 3.4.7: Well-known Upper Canopy Groves
+
+> [!NOTE]
+> Assume an empty grove variant exists. 
+
 
 ### 3.4.7: Grove LOD Tricks
 
