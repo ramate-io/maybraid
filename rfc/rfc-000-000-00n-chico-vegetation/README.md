@@ -637,33 +637,165 @@ The concrete component used at a selected node, such as noisy ball, plane splay,
 
 #### 3.1.6: Well-known Component Constructions
 
-We list some means of achieving less obvious constructions. 
+This section lists reusable component-level constructions. These are not complete tree recipes; they are smaller routines that named tree constructions can compose.
+
+---
 
 ##### 3.1.6.1: Palm Crown
 
-Anchor a series of radially projecting frond rings in quick vertical succession. Give fronds at higher rings greater vertical bias, hence starting upwards at a slightly greater angle above lower fronds. 
+A palm crown is built from several radially projecting frond rings placed in quick vertical succession.
+
+Each ring places frond anchors around a central crown point:
+
+```rust
+for ring in 0..ring_count {
+    let h = ring as f32 * ring_spacing;
+    let vertical_bias = base_bias + ring as f32 * bias_step;
+
+    for i in 0..fronds_per_ring {
+        let theta = TAU * i as f32 / fronds_per_ring as f32;
+        let radial = Vec3::new(theta.cos(), 0.0, theta.sin());
+
+        spawn_frond(
+            anchor = crown + Vec3::Y * h,
+            direction = normalize(radial + Vec3::Y * vertical_bias),
+        );
+    }
+}
+```
+
+Higher rings should start with greater upward bias. Lower rings may droop or project closer to horizontal. This produces the layered crown silhouette common to palms.
+
+---
 
 ##### 3.1.6.2: Palm Trunk
 
-Do not allocate a stalk. Use canopy ball stick to build up from anchor, biasing roughly vertically. For consistent curve give slight angle bias and low variance. This will cause hysteresis to remain tight. 
+A palm trunk should be built without allocating a separate stalk. Instead, use a tight ball-stick chain grown upward from a ground anchor.
 
-Additionally, invert the typical stick dimensions s.t. the radius of the bottom of each segment is slightly less than the top. This will give the palm segment impression. 
+The chain should have:
+
+* strong vertical bias
+* low angular variance
+* consistent slight directional bias for arching palms
+* tight hysteresis to preserve a smooth curve
+
+```rust
+let config = HysteresisConfig {
+    bias_ray: normalize(Vec3::Y + arch_bias),
+    bias_strength: high,
+    angle_tolerance: low,
+    child_count: 1..=1,
+    length_range: short..medium,
+    radius_range: trunk_radius..trunk_radius,
+};
+```
+
+Invert the usual tapering rule, so the bottom of each segment is slightly narrower than the top:
+
+```rust
+segment.base_radius = r * 0.92;
+segment.top_radius = r;
+```
+
+Repeated over many segments, this gives the impression of stacked palm trunk bands.
+
+---
 
 ##### 3.1.6.3: High-bushes and Shoots
 
-Do not allocate a stalk. Bias a single ring of radial projection roughly vertically. 
+High-bushes and shoots are trunkless radial constructions.
+
+Use a ground or near-ground anchor and emit a single ring of upward-biased radial projections:
+
+```rust
+for i in 0..shoot_count {
+    let theta = TAU * i as f32 / shoot_count as f32;
+    let radial = Vec3::new(theta.cos(), 0.0, theta.sin());
+
+    let dir = normalize(radial * radial_strength + Vec3::Y * vertical_bias);
+
+    grow_chain(anchor, dir);
+}
+```
+
+This construction is useful for bushes, young trees, tall grass-like woody growth, and vine-like shrubs. Leaf allocation is usually dense near terminal nodes.
+
+---
 
 ##### 3.1.6.4: Jungle Growths
 
-At ball points, in addition to canopy, allocate a larger and darker ball and a tuft.
+Jungle growths are secondary foliage allocations placed at selected ball points.
+
+At a selected canopy node:
+
+```rust
+spawn_canopy_ball(node);
+
+spawn_noisy_ball(
+    position = node.position,
+    radius = node.radius * jungle_growth_scale,
+    material = darker_leaf_material,
+);
+
+spawn_tuft(
+    position = node.position,
+    direction = outward_or_upward_bias(node),
+);
+```
+
+The larger, darker ball gives depth and density. The tuft adds protruding detail and a wet, overgrown silhouette.
+
+This construction is useful for tropical trees, banyans, branch epiphytes, and dense understory vegetation.
+
+---
 
 ##### 3.1.6.5: Banyan Trunk
 
-Use large radius and high noise value for stalk. 
+A banyan trunk is a thick, noisy stalk.
 
-##### 3.1.6.6: Banyan Descenders 
+Use a large radius and high surface noise:
 
-Use a high radial projection segment count. Give a strong bias to grow vertically downward in excess of the height of the Banyan on every nth segment. 
+```rust
+let trunk = NoisyCylinder {
+    base_radius: large,
+    top_radius: large * taper,
+    noise_amplitude: high,
+    noise_frequency: medium,
+};
+```
+
+Banyan trunks should appear irregular and rooted rather than smooth. Crook cylinders may be used for secondary trunk forms, but the primary impression should come from radius, noise, and mass.
+
+Joint-concealing balls using bark material may be allocated near major trunk or branch intersections.
+
+---
+
+##### 3.1.6.6: Banyan Descenders
+
+Banyan descenders are downward-growing branch chains emitted from the upper canopy.
+
+Use high radial projection segment count and a chain rule that periodically switches to a strong downward bias:
+
+```rust
+fn hysteresis_for(ctx: ChainContext) -> HysteresisConfig {
+    if ctx.segment_index % descender_period == 0 {
+        HysteresisConfig {
+            bias_ray: -Vec3::Y,
+            bias_strength: very_high,
+            angle_tolerance: low,
+            child_count: 1..=1,
+            length_range: long..very_long,
+            radius_range: thin..medium,
+        }
+    } else {
+        ordinary_canopy_config(ctx)
+    }
+}
+```
+
+Descenders should often extend below the canopy height and may approach or intersect the ground. When they reach the ground, they can be thickened or treated as secondary stalks.
+
+Use sparse foliage on descenders themselves; most foliage should remain attached to the upper canopy.
 
 #### 3.1.7: Well-known Tree Constructions
 
