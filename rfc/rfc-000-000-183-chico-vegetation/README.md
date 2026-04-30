@@ -1790,13 +1790,13 @@ This structure intentionally mirrors terrain detail systems so that:
 
 ##### [3.4.3.6: Allbed](./well-knowns/ground-cover-grove/allbed/README.md)
 
-##### [3.4.4: Well-known Tufts Groves](./well-knowns/tufts-grove/tufts-groves/README.md)
+### 3.4.4: Well-known Tufts Groves
 
-##### [3.4.5: Well-known Understory Groves](./well-knowns/understory-grove/understory-groves/README.md)
+### 3.4.5: Well-known Understory Groves
 
-##### [3.4.6: Well-known Lower Canopy Groves](./well-knowns/lower-canopy-grove/lower-canopy-groves/README.md)
+### 3.4.6: Well-known Lower Canopy Groves
 
-##### [3.4.7: Well-known Upper Canopy Groves](./well-knowns/upper-canopy-grove/upper-canopy-groves/README.md)
+### 3.4.7: Well-known Upper Canopy Groves
 
 ### 3.4.8: Grove LOD Tricks
 
