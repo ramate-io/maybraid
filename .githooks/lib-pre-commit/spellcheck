@@ -49,7 +49,7 @@ cleanup() {
 trap cleanup INT TERM
 
 # Run ltex-cli-plus in small batches (large invocations can hang or stall the LSP client).
-BATCH_SIZE=16
+BATCH_SIZE=32
 GRAMMAR_ISSUES=0
 BATCH_NUM=0
 : > "$TEMP_OUTPUT"
