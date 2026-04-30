@@ -1001,18 +1001,151 @@ Interior nodes should usually avoid foliage allocation unless a dense canopy is 
 
 ##### 3.1.7.2: Liam's Conifer
 
-A sparse conifer. 
+Liam's Conifer is a sparse, dry conifer silhouette: a narrow vertical stalk with many short, lightly downward-biased radial projections. It is useful for drier conifer stands, semi-arid forests, and lighter woodland edges.
 
-- Use a narrow stalk to reach to about 100% of the total height of the tree. 
-- Bias upper radial projections to reduce length linearly w.r.t. to lower ones. 
-- Start radial projections roughly 10% of the height of the tree. 
-- Place radial projections roughly every 4% of the height of the tree and roughly every 90 degrees, i.e., 4 per ring. 
-- Bias radial projections to angle slightly downward, -2 degrees from horizontal. Allow variance within 8 degrees. 
-- Use long first ball-stick segment, followed by two very short segments. Allow branching between 1 and 2 with mean closer to 1. 
-- Max length of radial projections should be about 5% the height of the tree.
-- Allocate [Tufts](#3126-tufts) for canopy at all ball joints. Use 2 to 3 tufts per joint. Allocate with scale proportional to roughly 2% the height of the tree.
+**Shape**
 
-Good for drier deciduous forests. Better with lighter shaders for both sticks and leaves. 
+* Tall, narrow central stalk
+* Short radial projections
+* Sparse branching
+* Tuft-based canopy at most ball-stick joints
+* Slight downward branch bias
+
+**Stalk**
+
+Let $H$ be total tree height.
+
+```rust
+let stalk_height = H;
+let stalk_radius = 0.025 * H;
+```
+
+Use a [Noisy Cylinder](#3111-noisy-cylinder) with modest taper and low to medium noise.
+
+```rust
+NoisyCylinder {
+    base_radius: stalk_radius,
+    top_radius: stalk_radius * 0.35,
+    noise_amplitude: 0.06 * stalk_radius,
+    noise_frequency: medium,
+}
+```
+
+**Anchor Rings**
+
+Radial projections begin at roughly $10%$ of height and continue nearly to the top.
+
+```rust
+let z_min = 0.10 * H;
+let z_max = 0.98 * H;
+let ring_spacing = 0.04 * H;
+let anchors_per_ring = 4;
+```
+
+Each ring places anchors roughly every $90^\circ$:
+
+```rust
+for z in steps(z_min, z_max, ring_spacing) {
+    for i in 0..anchors_per_ring {
+        let theta = TAU * i as f32 / anchors_per_ring as f32;
+        let radial = Vec3::new(theta.cos(), 0.0, theta.sin());
+
+        anchor(position = stalk_centroid(z), initial_ray = radial);
+    }
+}
+```
+
+**Projection Length**
+
+Upper projections shrink linearly relative to lower projections.
+
+Let:
+
+$$
+u = \frac{z - z_{\min}}{z_{\max} - z_{\min}}
+$$
+
+Then:
+
+$$
+\ell(u) = \ell_{\max}(1 - u)
+$$
+
+with:
+
+```rust
+let max_projection_length = 0.05 * H;
+```
+
+Optionally clamp to preserve a small top silhouette:
+
+```rust
+let length = max(0.20 * max_projection_length, max_projection_length * (1.0 - u));
+```
+
+**Chain Growth**
+
+Each projection uses a long first segment followed by two short segments.
+
+```rust
+BallStickChain {
+    segments: 3,
+    segment_lengths: [
+        0.70 * projection_length,
+        0.15 * projection_length,
+        0.15 * projection_length,
+    ],
+    child_count: 1..=2, // mean close to 1
+    angle_tolerance: radians(8.0),
+}
+```
+
+Bias the projection slightly downward:
+
+```rust
+let downward_bias = rotate_down(radial, radians(2.0));
+```
+
+Use tight hysteresis, so branches remain sparse and readable.
+
+```rust
+HysteresisConfig {
+    bias_ray: downward_bias,
+    bias_strength: high,
+    angle_tolerance: radians(8.0),
+    child_count: 1..=2,
+}
+```
+
+**Ball Selection**
+
+Allocate [Tufts](#3126-tufts) at all ball-stick joints.
+
+```rust
+fn should_allocate_ball(_ctx: BallSelectionContext) -> bool {
+    true
+}
+```
+
+Use two to three tufts per joint:
+
+```rust
+let tuft_count = 2..=3;
+let tuft_scale = 0.02 * H;
+```
+
+Tufts should follow the branch direction with mild upward spread to avoid a purely flat silhouette.
+
+**Materials**
+
+* Stick shader: lighter bark or dry trunk tones
+* Leaf shader: pale green, dusty green, or dry conifer tones
+
+**Variants**
+
+* Increasing ring density produces fuller conifers.
+* Replacing tufts with [Plane Splay](#3125-plane-splay) produces a northern conifer variant.
+* Increasing downward bias gives a drooping alpine silhouette.
 
 ##### 3.1.7.3: Vase Tree
 
