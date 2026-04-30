@@ -1856,7 +1856,7 @@ Avoid dense interior allocation, since this tree should read as a trained crown 
 * Add fruiting bodies for cultivated groves.
 * Use sparse tufts for arid scrub variants.
 
-##### 3.1.7.8: Waialea Palm
+### 3.1.7.8: Waialea Palm
 
 Waialea Palm is a gently arched palm with a light, layered crown. It is useful for tropical coastlines, riparian edges, resorts, gardens, and sparse warm-region groves.
 
@@ -1975,7 +1975,7 @@ spawn_tuft(
 * Reduce ring count for sparse decorative palms.
 * Add [Fruiting Bodies](#3167-fruiting-bodies) near the crown for coconut-like variants.
 
-##### 3.1.7.9: Date Palm
+### 3.1.7.9: Date Palm
 
 The Date Palm is a tall, vertical palm with a dense, layered crown. Compared to [Waialea Palm](#3178-waialea-palm), it is less arched, more columnar, and has a fuller, more structured canopy.
 
@@ -2093,7 +2093,7 @@ spawn_tuft(
 * Reduce ring count for younger palms.
 * Add [Fruiting Bodies](#3167-fruiting-bodies) beneath the crown for date clusters.
 
-##### 3.1.7.10: Palm Bush
+### 3.1.7.10: Palm Bush
 
 The Palm Bush is a trunkless palm form: a dense, ground-anchored cluster of fronds radiating outward. It is useful for understory tropical vegetation, coastal growth, decorative landscaping, and dense jungle edges.
 
@@ -2185,7 +2185,7 @@ spawn_tuft(
 * Increase droop for desert or coastal scrub variants.
 * Add [Fruiting Bodies](#3167-fruiting-bodies) near the base for decorative or exotic forms.
 
-##### 3.1.7.11: Northern Conifer
+### 3.1.7.11: Northern Conifer
 
 The Northern Conifer is a fuller, colder-climate variant of [Liam's Conifer](#3172-liams-conifer). It preserves the narrow stalk, dense vertical ringing, and short radial projections, but replaces tuft foliage with [Plane Splays](#3125-plane-splay) for broader, denser needle mass.
 
@@ -2282,7 +2282,7 @@ Plane splays should align broadly with the branch direction and slightly downwar
 * Use paler shaders for dry or alpine forms.
 * Add snow bump-out integration for winter biomes.
 
-##### 3.1.7.12: Common High Bush
+### 3.1.7.12: Common High Bush
 
 The Common High Bush is a trunkless or near-trunkless shrub form built from upward-biased radial shoots. It is useful as a bush, small tree, understory plant, hedge element, or filler vegetation in most biomes.
 
@@ -2371,7 +2371,7 @@ let leaf_radius = 0.05 * H;
 * Add [Fruiting Bodies](#3167-fruiting-bodies) for berry bushes.
 * Reduce height and increase shoot count for hedge-like forms.
 
-##### 3.1.7.13: Jungle Storybook Tree
+### 3.1.7.13: Jungle Storybook Tree
 
 The Jungle Storybook Tree is a dense, overgrown variant of the [Storybook Tree](#3171-storybook-tree). Rather than simply adding [Jungle Growths](#3164-jungle-growths), this construction increases canopy density, introduces layered foliage, and adds secondary growth behaviors to achieve a humid, entangled jungle appearance.
 
@@ -2514,9 +2514,134 @@ Optional additions:
 
 ### 3.1.7.13: Braid Oak
 
-- Start with something similar to the [Storybook Tree](#3171-storybook-tree).
-- Make biasing vary along the height, beginning with downward bias at low Z-value and upward bias at higher Z-values.
-- Use [Crook Cylinder](#3112-crook-cylinder) for segments. 
+The Braid Oak is a gnarled, expressive broadleaf tree with interweaving branch structure. It builds on the [Storybook Tree](#3171-storybook-tree) but introduces strong directional variation and curvature, producing a braided, organic canopy with rich silhouette complexity.
+
+**Shape**
+
+* Moderate-height, sturdy stalk
+* Lower branches droop and spread outward
+* Mid-branches level out
+* Upper branches rise and interweave
+* Overall canopy feels braided or layered rather than radial
+
+---
+
+**Stalk**
+
+Use a slightly thicker and more expressive stalk than Storybook.
+
+```rust
+let stalk_height = 0.75 * H;
+let stalk_radius = 0.045 * H;
+```
+
+Prefer [Crook Cylinder](#3112-crook-cylinder) for the stalk to introduce subtle curvature and age.
+
+---
+
+**Anchor Rings**
+
+Use Storybook-style rings.
+
+```rust
+let z_min = 0.15 * H;
+let z_max = stalk_height;
+let ring_spacing = 0.08 * H;
+let anchors_per_ring = 6;
+```
+
+Anchors should originate near the stalk centroid.
+
+---
+
+**Projection Length**
+
+Use a standard Storybook profile or slightly increased spread.
+
+```rust
+let min_projection_length = 0.15 * H;
+let max_projection_length = 0.60 * H;
+```
+
+---
+
+**Chain Growth**
+
+Use moderate branching, but apply **height-dependent bias**:
+
+Let:
+
+```rust
+let u = height_fraction;
+```
+
+Bias transitions from downward to upward:
+
+```rust
+let vertical_bias = mix(-0.35, 0.45, u);
+let bias_ray = normalize(radial + Vec3::Y * vertical_bias);
+```
+
+* Lower branches droop and spread
+* Mid0branches become more horizontal
+* Upper branches rise and interweave
+
+Use [Crook Cylinder](#3112-crook-cylinder) for all segments:
+
+```rust
+CrookCylinder {
+    bend_x: small_to_medium,
+    bend_z: small_to_medium,
+    noise_amplitude: medium,
+}
+```
+
+Increase angular variance slightly to encourage overlap and braiding:
+
+```rust
+angle_tolerance: radians(18.0),
+child_count: 2..=3,
+segments: 3..=6,
+```
+
+---
+
+**Ball Selection**
+
+Allocate foliage across mid-to-outer canopy, not strictly terminal.
+
+```rust
+fn should_allocate_ball(ctx: BallSelectionContext) -> bool {
+    ctx.is_terminal
+        || ctx.branch_order > 1
+        || ctx.height_fraction > 0.35
+}
+```
+
+Use a mix of:
+
+* [Plane Splay](#3125-plane-splay) for outer canopy
+* [Noisy Ball](#3122-noisy-ball) for interior mass
+
+```rust
+let leaf_radius = 0.085 * H;
+```
+
+---
+
+**Materials**
+
+* Stick shader: dark, aged bark with high variation
+* Leaf shader: broadleaf greens, autumn tones, or stylized variants
+
+---
+
+**Variants**
+
+* Increase crook amplitude for older, more twisted oaks
+* Add [Jungle Growths](#3164-jungle-growths) for overgrown variants
+* Add [Fruiting Bodies](#3167-fruiting-bodies) for acorns or stylized fruit
+* Reduce upward bias at top for flatter oak canopies
 
 ### 3.1.7.14: Friend's Conifer
 
