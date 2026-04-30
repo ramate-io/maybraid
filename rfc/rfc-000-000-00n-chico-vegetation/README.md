@@ -102,6 +102,8 @@ Use a high radial projection segment count. Give a strong bias to grow verticall
 
 #### 3.1.7: Well-known Tree Constructions
 
+We provided the intended tree shapes for Chico vegetation. Note that many of these shapes can be used with a variety of textures and scales to produce the impressions of different species. 
+
 ##### 3.1.7.1: Storybook Tree
 
 A general impression of a tree. 
@@ -182,17 +184,58 @@ Good as a tree in arid regions. Good as a bush, e.g., grape vine. Can be used in
 
 ##### 3.1.7.8: Waialea Palm 
 
+- Use the [Palm Trunk](#3162-palm-trunk) construction. Arch it gently. 
+- Use the [Palm Crown](#3161-palm-crown) construction with two to three layers. 
+
 ##### 3.1.7.9: Date Palm
+
+- Use the [Pam Trunk](#3162-palm-trunk) construction without arching. 
+- Use the [Palm Crown](#3161-palm-crown) construction with 6 to 10 layers. 
 
 ##### 3.1.7.9: Palm Bush
 
+- Use the [Palm Crown](#3161-palm-crown) construction with 6 to 10 layers. 
+- Do not add a trunk. 
+
 ##### 3.1.7.10: Northern Conifer
 
-##### 3.1.7.11: Shoot
+- Use [Liam's Conifer](#3172-liams-conifer) construction, but allocate [Plane Splays](#3125-plane-splay) for the leaf balls of the canopy.
 
-- Using the 
+##### 3.1.7.11: Common High Bush
 
-##### 3.1.7.12: 
+- Use the [High-bush and Shoots](#3163-high-bushes-and-shoots) construction.
+- Send up 7 to 10 vertically-biased radial projections. 
+
+Can be used as a bush or small tree in non-arid biomes. Takes any shader combination well.
+
+##### 3.1.7.12: Jungle Storybook Tree
+
+- Add [Jungle Growths](#3164-jungle-growths) to the [Storybook Tree](#3171-storybook-tree)
+
+##### 3.1.7.13: Braid Oak
+
+- Start with something similar to the [Storybook Tree](#3171-storybook-tree).
+- Make biasing vary along the height, beginning with downward bias at low Z-value and upward bias at higher Z-values.
+- Use [Crook Cylinder](#3112-crook-cylinder) for segments. 
+
+##### 3.1.7.14: Friend's Conifer
+
+- Start with the [Northern Conifer](#31710-northern-conifer) construction. 
+- Make radial projection segment length vary with log, keeping an almost consistent length for much of the length and rounding towards the top. 
+
+##### 3.1.7.15: Temperate Conifer
+
+- Use the [Friend's Conifer](#31714-friends-conifer) construction, but replace the leaf canopy balls with [Fronds](#3127-fronds).
+
+Good for strange bushes when scaled down. Otherwise, works well in semi-arid tropical regions where foliage is somewhat sparse. 
+
+##### 3.1.7.15: Simpleman's Hedge
+
+- No need for any ball stick here just use [Plane Splay](#3125-plane-splay) and place on the ground.
+
+##### 3.1.7.15: Simpleman's Tuft
+
+- Just the basic [Tuft](#3126-tufts).
 
 #### 3.1.8: Tree LOD Tricks
 
