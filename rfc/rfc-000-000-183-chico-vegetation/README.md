@@ -1,4 +1,4 @@
-# RFC-N: Chico Vegetation
+# RFC-183: Chico Vegetation
 
 ## Table of Contents
 
@@ -4264,16 +4264,171 @@ impl CellGrove for FloorScrub {
 * Prefer weaker bump-out heights and lighter flecking than Jim's Collage.
 * Pair well with sparse tufts, dry brush, or exposed terrain detail.
 
-
 ### 3.4.3.5: Grassy Mounds
 
-- Use [Sparse Boulder](https://github.com/ramate-io/maybraid/tree/main/rfc/rfc-000-000-170-terrain-detail#31-sparse-boulders) pattern with ground cover shaders, embed a bit more deeply than typical sparse boulders. 
-- Cell size typically around 5m
-- Boulder size typically 60% of cell. 
+Grassy Mounds are discrete rounded ground-cover features based on the [Sparse Boulder](https://github.com/ramate-io/maybraid/tree/main/rfc/rfc-000-000-170-terrain-detail#31-sparse-boulders) placement pattern, but shaded and embedded as vegetation rather than exposed rock.
 
-#### 3.4.3.6: Allbed
+Good for meadow irregularity, mossy hummocks, pasture texture, wetland edges, and soft terrain breakup.
 
-A wide birth of flecking and non-flecking and colliding and non-colliding bump outs as well as grassy mounds.
+```rust
+pub enum GrassyMoundsCell {
+    Mound(Bucket {
+        weight: 1.0,
+        item: Mound {
+            placement: SparseBoulderLike {
+                cell_size: 5.0,
+                object_scale: 0.60,
+                embed_depth: Deep,
+            },
+            shader: GroundCoverShader,
+            palette_mix: [
+                dark_green..light_green,
+                yellow_green..dry_green,
+            ],
+        },
+    }),
+}
+
+impl CellGrove for GrassyMounds {
+    type Cell = GrassyMoundsCell;
+
+    const CELL_SIZE_RANGE: Range<f32> = 5.0..6.0;
+    const DENSITY_RANGE: Range<f32> = 0.25..0.55;
+
+    const ELEVATION_RANGE: Range<f32> = 0.0..0.85;
+    const STEEPNESS_RANGE: Range<f32> = 0.0..0.35;
+
+    const OFFSET_RANGE: Range<f32> = 0.0..1.0;
+
+    const NOISE_AMPLITUDE_RANGE: Range<f32> = 0.15..0.40;
+    const NOISE_FREQUENCY_RANGE: Range<f32> = 0.02..0.06;
+}
+```
+
+**Construction**
+
+* Use Sparse Boulder-style cell placement.
+* Use internal cells around `5m`.
+* Set mound size to roughly `60%` of the cell.
+* Use rounded SDF forms rather than angular rock forms.
+* Embed more deeply than sparse boulders, so the mound reads as terrain growth, not an object sitting on top.
+* Use ground-cover or leaf shaders rather than stone shaders.
+* Collision may be enabled when mound height materially affects traversal.
+
+**Placement**
+
+```rust
+let cell_size = 5.0;
+let mound_radius = 0.60 * cell_size;
+let position = sparse_boulder_position(cell, seed);
+
+if !contains(parent_cell, position) {
+    return None;
+}
+
+spawn_mound(
+    position,
+    radius = mound_radius,
+    embed_depth = 0.25 * mound_radius,
+    shader = GroundCoverShader,
+);
+```
+
+### 3.4.3.6: Allbed
+
+Allbed is a broad, mixed ground-cover grove combining flecking and non-flecking bump outs, colliding and non-colliding surface layers, and [Grassy Mounds](#3435-grassy-mounds). It is the most general ground-cover bed and is useful when a region should feel lush, varied, and continuous without committing to a single ground-cover pattern.
+
+Good for rich forest floors, riparian understory, old gardens, meadow edges, fantasy groves, and high-detail mixed biomes.
+
+```rust
+pub enum AllbedCell {
+    HuelgoatPitch(Bucket {
+        weight: 2.0,
+        item: HuelgoatPitchCell,
+    }),
+    FleckingBed(Bucket {
+        weight: 2.0,
+        item: FleckingBedCell,
+    }),
+    GrassyMound(Bucket {
+        weight: 1.0,
+        item: GrassyMoundsCell,
+    }),
+    LowNonCollidingBumpOut(Bucket {
+        weight: 1.0,
+        item: BumpOut {
+            noise: NoiseProfile::LowSmooth,
+            height: 0.05..0.12,
+            collide: false,
+            palette_mix: [
+                dark_green..light_green,
+                yellow_green..dry_green,
+            ],
+            flecking_mix: [],
+        },
+    }),
+    CollidingFleckingBumpOut(Bucket {
+        weight: 1.0,
+        item: BumpOut {
+            noise: NoiseProfile::Moderate,
+            height: 0.08..0.18,
+            collide: true,
+            palette_mix: [
+                dark_green..light_green,
+                yellow_green..dry_green,
+            ],
+            flecking_mix: [
+                Flecking {
+                    kind: FleckingKind::Bloom,
+                    strength: LowToModerate,
+                    ..Default::default()
+                },
+                Flecking {
+                    kind: FleckingKind::Snowfall,
+                    strength: Minimal,
+                    ..Snowfall::common_flecking(world_size)
+                },
+            ],
+        },
+    }),
+}
+
+impl CellGrove for Allbed {
+    type Cell = AllbedCell;
+
+    const CELL_SIZE_RANGE: Range<f32> = 15.0..100.0;
+    const DENSITY_RANGE: Range<f32> = 0.10..0.90;
+
+    const ELEVATION_RANGE: Range<f32> = 0.0..0.85;
+    const STEEPNESS_RANGE: Range<f32> = 0.0..0.40;
+
+    const OFFSET_RANGE: Range<f32> = 0.0..1.0;
+
+    const NOISE_AMPLITUDE_RANGE: Range<f32> = 0.15..0.55;
+    const NOISE_FREQUENCY_RANGE: Range<f32> = 0.008..0.060;
+}
+```
+
+**Construction**
+
+* Mix multiple bump-out forms rather than enforcing a single bed type.
+* Include both colliding and non-colliding bump outs.
+* Include both flecking and non-flecking variants.
+* Add occasional grassy mounds for rounded volumetric breakup.
+* Use moderate to mixed density, roughly `10%–90%`.
+* Use larger cells for broad beds and smaller cells where more local variation is desired.
+* At low LOD, collapse internal cell size to the full grove cell.
+
+**Behavior**
+
+* Colliding bump outs provide physical surface variation.
+* Non-colliding bump outs provide visual softness without affecting traversal.
+* Flecking variants provide seasonal blooms or snow.
+* Grassy mounds add discrete rounded relief and break up continuous mats.
+
+**Use**
+
+Allbed is best treated as a high-variety default ground-cover grove. It should be used where the designer wants a rich floor texture but does not need a strong specific identity like pitch, scrub, or flowering bed.
 
 ### 3.4.4: Well-known Tufts Groves
 
@@ -4312,9 +4467,15 @@ The ground cover layer, unlike other layers is composed of two sublayers to enab
 
 ### 3.5.2.2: Tufts Layer
 
-### 3.5.2.3: Bush Layer
+### 3.5.2.3: Understory Layer 
 
 ### 3.5.2.4: Tree Layer
+
+### 3.5.3: Well-known Ground Cover Forest Layers
+
+### 3.5.4: Well-known Tuft Forest
+
+### 3.5.4: Well-known
 
 ### 3.5.3: Well-known Forests
 
