@@ -3719,8 +3719,8 @@ Ground cover is the lowest layer of vegetation detail: it fills terrain with gra
 
 Subsections:
 
-- [3.3.1: Bump Outs](./3-3-ground-cover/3-3-1-bump-outs/README.md)
-- [3.3.2: Tufts](./3-3-ground-cover/3-3-2-tufts/README.md)
+- [3.3.1: Bump Outs](./03-03-ground-cover/03-03-01-bump-outs/README.md)
+- [3.3.2: Tufts](./03-03-ground-cover/03-03-02-tufts/README.md)
 
 ---
 
@@ -3967,7 +3967,7 @@ This structure intentionally mirrors terrain detail systems so that:
 
 ### 3.4.3.1: Huelgoat Pitch
 
-Huelgoat Pitch is a low, smooth ground-cover grove based on shallow [bump outs](./3-3-ground-cover/3-3-1-bump-outs/README.md). It should read as mossy, soft, and continuous, closely following the underlying terrain with only slight vertical lift.
+Huelgoat Pitch is a low, smooth ground-cover grove based on shallow [bump outs](./03-03-ground-cover/03-03-01-bump-outs/README.md). It should read as mossy, soft, and continuous, closely following the underlying terrain with only slight vertical lift.
 
 Good for damp forests, riparian shade, temperate groves, old stone regions, and sparse woodland understory.
 
@@ -4017,13 +4017,13 @@ impl CellGrove for HuelgoatPitch {
 * Use moderate to high density: roughly `60%–80%` cell activation.
 * Use internal cells around `50m–100m`, preferably chosen as even subdivisions of the parent grove cell.
 * At low LOD, collapse the internal cell size to the full grove cell.
-* Pair with sparse [Tufts](./3-3-ground-cover/3-3-2-tufts/README.md) for additional volume detail.
+* Pair with sparse [Tufts](./03-03-ground-cover/03-03-02-tufts/README.md) for additional volume detail.
 * Flecking should be minimal and generally limited to snowfall.
 
 
 ### 3.4.3.2: Flecking Bed
 
-Flecking Bed is a soft, non-colliding ground-cover grove based on moderate [bump outs](./3-3-ground-cover/3-3-1-bump-outs/README.md). It should read as a visual vegetation layer rather than physical terrain, allowing the player to sink through it.
+Flecking Bed is a soft, non-colliding ground-cover grove based on moderate [bump outs](./03-03-ground-cover/03-03-01-bump-outs/README.md). It should read as a visual vegetation layer rather than physical terrain, allowing the player to sink through it.
 
 Good for wildflower fields, meadow floors, heath, moss beds, flowering understory, and seasonal ground-cover blooms.
 
