@@ -401,7 +401,14 @@
         "logarithmically",
         "stylization",
         "logit-like",
-        "near-trunkless"
+        "near-trunkless",
+        "low-LOD",
+        "Low-LOD",
+        "moderate-LOD",
+        "Moderate-LOD",
+        "very-low-LOD",
+        "Very-Low-LOD",
+        "fronded"
       ]
     },
     "bibtex": {

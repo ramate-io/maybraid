@@ -2645,24 +2645,607 @@ let leaf_radius = 0.085 * H;
 
 ### 3.1.7.14: Friend's Conifer
 
-- Start with the [Northern Conifer](#31711-northern-conifer) construction. 
-- Make radial projection segment length vary with log, keeping an almost consistent length for much of the length and rounding towards the top. 
+Friend's Conifer is a fuller, more naturally rounded variant of the [Northern Conifer](#31711-northern-conifer). It keeps the dense conifer ring structure and plane-splay foliage, but changes the projection-length profile so branch length remains nearly consistent through most of the tree before rounding inward near the top.
+
+**Shape**
+
+* Tall, narrow central stalk
+* Dense radial branch rings
+* Nearly consistent branch length through the lower and middle canopy
+* Softly rounded top
+* Fuller silhouette than [Liam's Conifer](#3172-liams-conifer)
+
+---
+
+**Stalk**
+
+Use the [Northern Conifer](#31711-northern-conifer) stalk.
+
+```rust
+let stalk_height = H;
+let stalk_radius = 0.025 * H;
+```
+
+---
+
+**Anchor Rings**
+
+Use the same dense conifer ring structure.
+
+```rust
+let z_min = 0.10 * H;
+let z_max = 0.98 * H;
+let ring_spacing = 0.04 * H;
+let anchors_per_ring = 4;
+```
+
+---
+
+**Projection Length**
+
+Use a logarithmic rounding profile. The projection length should stay close to its maximum for most of the canopy, then fall off near the top.
+
+Let:
+
+```rust
+let u = (z - z_min) / (z_max - z_min);
+```
+
+A useful profile is:
+
+$$
+\ell(u) = \ell_{\max}\left(1 - \frac{\log(1 + \alpha u^\beta)}{\log(1 + \alpha)}\right)
+$$
+
+...with $\beta > 1$ to delay the falloff.
+
+```rust
+let max_projection_length = 0.06 * H;
+let min_projection_length = 0.015 * H;
+
+let alpha = 8.0;
+let beta = 3.0;
+
+let falloff = (1.0 + alpha * u.powf(beta)).ln()
+    / (1.0 + alpha).ln();
+
+let projection_length = mix(
+    max_projection_length,
+    min_projection_length,
+    falloff,
+);
+```
+
+This keeps most branches similar in length, then rounds the upper canopy inward.
+
+---
+
+**Chain Growth**
+
+Use the [Northern Conifer](#31711-northern-conifer) branch structure, with short, slightly downward-biased projections.
+
+```rust
+BallStickChain {
+    segments: 3,
+    segment_lengths: [
+        0.70 * projection_length,
+        0.15 * projection_length,
+        0.15 * projection_length,
+    ],
+    child_count: 1..=2,
+    angle_tolerance: radians(8.0),
+}
+```
+
+```rust
+let bias_ray = rotate_down(radial, radians(2.0));
+```
+
+---
+
+**Ball Selection**
+
+Use [Plane Splay](#3125-plane-splay) at all ball-stick joints, as in [Northern Conifer](#31711-northern-conifer).
+
+```rust
+fn should_allocate_ball(_ctx: BallSelectionContext) -> bool {
+    true
+}
+```
+
+```rust
+let splay_radius = 0.018 * H;
+let splay_count = 2..=4;
+```
+
+---
+
+**Materials**
+
+* Stick shader: dark conifer bark or cold-region bark
+* Leaf shader: dark green, blue-green, snowy green, or alpine needle material
+
+---
+
+**Variants**
+
+* Increase `beta` for a more cylindrical body and sharper top rounding.
+* Lower `beta` for a more triangular conifer profile.
+* Increase plane-splay density for spruce-like trees.
 
 ### 3.1.7.15: Temperate Conifer
 
-- Use the [Friend's Conifer](#31714-friends-conifer) construction, but replace the leaf canopy balls with [Fronds](#3127-fronds).
+The Temperate Conifer is a sparse, fronded variant of [Friend's Conifer](#31714-friends-conifer). It keeps the rounded conifer profile but replaces plane-splay foliage with [Fronds](#3127-fronds), giving the canopy a lighter, more articulated texture.
 
-Good for strange bushes when scaled down. Otherwise, works well in semi-arid tropical regions where foliage is somewhat sparse. 
+**Shape**
 
-### 3.1.7.15: Simpleman's Hedge
+* Tall, narrow central stalk
+* Rounded conifer silhouette
+* Sparse frond-based foliage
+* Open branch visibility
+* Works well when scaled down into strange bushes
 
-- No need for any ball stick here just use [Plane Splay](#3125-plane-splay) and place on the ground.
+---
 
-### 3.1.7.15: Simpleman's Tuft
+**Stalk**
 
-- Just the basic [Tuft](#3126-tufts).
+Use the [Friend's Conifer](#31714-friends-conifer) stalk.
+
+```rust
+let stalk_height = H;
+let stalk_radius = 0.025 * H;
+```
+
+---
+
+**Anchor Rings**
+
+Use the same conifer ring structure.
+
+```rust
+let z_min = 0.10 * H;
+let z_max = 0.98 * H;
+let ring_spacing = 0.04 * H;
+let anchors_per_ring = 4;
+```
+
+---
+
+**Projection Length**
+
+Use the same logarithmic rounding profile from [Friend's Conifer](#31714-friends-conifer), preserving the almost cylindrical body and rounded top.
+
+```rust
+let max_projection_length = 0.06 * H;
+let min_projection_length = 0.015 * H;
+let alpha = 8.0;
+let beta = 3.0;
+```
+
+---
+
+**Chain Growth**
+
+Use the same short, slightly downward-biased conifer branch structure.
+
+```rust
+BallStickChain {
+    segments: 3,
+    segment_lengths: [
+        0.70 * projection_length,
+        0.15 * projection_length,
+        0.15 * projection_length,
+    ],
+    child_count: 1..=2,
+    angle_tolerance: radians(8.0),
+}
+```
+
+```rust
+let bias_ray = rotate_down(radial, radians(2.0));
+```
+
+---
+
+**Ball Selection**
+
+Allocate foliage at all ball-stick joints, but use [Fronds](#3127-fronds) instead of [Plane Splay](#3125-plane-splay).
+
+```rust
+fn should_allocate_ball(_ctx: BallSelectionContext) -> bool {
+    true
+}
+```
+
+Fronds should be short and narrow, oriented along or slightly below the branch direction.
+
+```rust
+FrondConfig {
+    segments: 5..=8,
+    length: 0.035 * H..0.07 * H,
+    width: 0.012 * H,
+    droop: low_to_medium,
+    twist: mild,
+    leaflet_count: 6..=10,
+}
+```
+
+Use fewer fronds per joint than a palm crown:
+
+```rust
+let fronds_per_joint = 1..=2;
+```
+
+---
+
+**Materials**
+
+* Stick shader: dry conifer bark or semi-arid bark
+* Leaf shader: muted green, dusty green, or tropical dry foliage
+
+---
+
+**Variants**
+
+* Scale down for strange bushes or ornamental shrubs.
+* Increase frond length for tropical or semi-arid variants.
+* Reduce frond count for sparse dryland silhouettes.
+
+
+### 3.1.7.16: Simpleman's Hedge
+
+Simpleman's Hedge is a minimal hedge construction that does not require ball-stick chains. It is built by placing [Plane Splay](#3125-plane-splay) components directly along the ground or along a hedge guide path.
+
+**Shape**
+
+* Low, dense foliage band
+* No explicit stalk or branch graph
+* Ground-aligned or path-aligned
+* Cheap to generate and suitable for urban or garden settings
+
+**Construction**
+
+```rust
+for p in hedge_samples(path_or_cell, spacing) {
+    spawn_plane_splay(
+        position = p,
+        radius = hedge_radius,
+        vertical_bias = Vec3::Y,
+    );
+}
+```
+
+Use overlapping splays to create a continuous hedge mass.
+
+```rust
+let spacing = 0.5 * hedge_radius;
+let hedge_radius = 0.08 * H;
+```
+
+**Materials**
+
+* Leaf shader: hedge green, ornamental foliage, flowering shrub variants
+
+**Variants**
+
+* Follow a line or polygon boundary for garden hedges.
+* Scatter in cell interiors for rough shrub masses.
+* Add sparse [Fruiting Bodies](#3167-fruiting-bodies) for berry hedges.
+
+---
+
+### 3.1.7.17: Simpleman's Tuft
+
+Simpleman's Tuft is the most basic ground vegetation construction. It consists of a single [Tuft](#3126-tufts) placed directly on terrain.
+
+**Shape**
+
+* Small jagged vegetation clump
+* No stalk or branch graph
+* SDF-backed tuft geometry
+* Suitable for ground cover and small plants
+
+**Construction**
+
+```rust
+spawn_tuft(
+    position = terrain_position,
+    direction = terrain_normal,
+    scale = tuft_scale,
+);
+```
+
+Use deterministic scale and rotation variation:
+
+```rust
+let scale = mix(min_scale, max_scale, noise(seed, SCALE_SALT));
+let yaw = TAU * noise(seed, ROTATION_SALT);
+```
+
+**Materials**
+
+* Leaf shader: grass, scrub, jungle undergrowth, dry brush, or flowering ground cover
+
+**Variants**
+
+* Increase scale for small bushes.
+* Use dense placement for ground cover.
+* Combine with [Simpleman's Hedge](#31716-simplemans-hedge) for layered shrubbery.
 
 ### 3.1.8: Tree LOD Tricks
+
+This section outlines simple, high-impact techniques for reducing geometry and draw cost while preserving silhouette and visual variety across distance. The general principle is:
+
+* preserve **silhouette first**
+* preserve **mass second**
+* drop **structure (branches) early**
+
+Where possible, prefer **fewer meshes, fewer draw calls, and simpler topology** over geometric fidelity.
+
+---
+
+### 3.1.8.1: Performant Very Low-LOD Canopy
+
+Use a single primitive to approximate canopy mass:
+
+* upside-down square pyramid
+* squashed tetrahedron
+
+These shapes:
+
+* approximate canopy taper
+* are extremely cheap (4–5 faces)
+* read well at distance when shaded correctly
+
+```rust
+spawn_mesh(upside_down_pyramid(scale));
+```
+
+Use slight vertical squash for broader canopies.
+
+---
+
+### 3.1.8.2: Performant Very Low-LOD Trunks
+
+Use a stretched tetrahedron or square pyramid.
+
+```rust
+spawn_mesh(stretched_pyramid(height, radius));
+```
+
+These give:
+
+* strong vertical read
+* minimal geometry
+* acceptable silhouette at long range
+
+---
+
+### 3.1.8.3: Performant Very Low-LOD Branches
+
+Do not allocate any branches.
+
+Branches do not contribute meaningfully at this distance and only add draw cost.
+
+---
+
+### 3.1.8.4: Performant Low-LOD Canopy
+
+Use stretched icosahedra to approximate canopy shape:
+
+* one vertical icosahedron for tall forms
+* one horizontal (squashed) icosahedron for wide forms
+* combine two for vase-like or complex shapes
+
+```rust
+spawn_mesh(icosahedron(scale));
+```
+
+This preserves:
+
+* rounded silhouette
+* better shading than pyramids
+* low triangle count
+
+---
+
+### 3.1.8.5: Performant Low-LOD Trunks
+
+Use a hexagonal prism.
+
+```rust
+spawn_mesh(hex_prism(height, radius));
+```
+
+This gives:
+
+* cylindrical impression
+* low polygon count
+* good normal interpolation
+
+---
+
+### 3.1.8.6: Performant Low-LOD Branches
+
+Do not allocate branch meshes.
+
+Branch silhouettes are implied by canopy shape at this level.
+
+---
+
+### 3.1.8.7: Performant Moderate-LOD Canopy
+
+Use:
+
+* icosahedra
+* icospheres (low subdivision)
+
+Mixing both helps preserve organic variation while keeping geometry simple.
+
+```rust
+spawn_mesh(icosphere(subdivisions = 1..2));
+```
+
+---
+
+### 3.1.8.8: Performant Moderate-LOD Trunks
+
+Use lower sample-rate [Noisy Cylinder](#3111-noisy-cylinder).
+
+```rust
+NoisyCylinder {
+    noise_frequency: lower,
+    mesh_resolution: reduced,
+}
+```
+
+This preserves trunk character while reducing vertex count.
+
+---
+
+### 3.1.8.9: Performant Moderate-LOD Branches
+
+Use low-resolution noisy cylinders for major branches only:
+
+* skip smaller branches
+* merge segments where possible
+
+```rust
+segments: 1..=2
+```
+
+---
+
+### 3.1.8.10: Varied Low-LOD Canopy
+
+Use noise to select between primitive types:
+
+* icosahedron
+* tetrahedron
+
+```rust
+if noise(seed) < 0.5 {
+    use_icosahedron();
+} else {
+    use_tetrahedron();
+}
+```
+
+This reduces repetition across distant forests.
+
+---
+
+### 3.1.8.11: Varied Moderate-LOD Canopy
+
+Use noise to vary between:
+
+* standard icosahedron
+* [Jessen's Icosahedron](https://en.wikipedia.org/wiki/Jessen%27s_icosahedron)
+
+```rust
+if noise(seed) < 0.5 {
+    use_icosahedron();
+} else {
+    use_jessen();
+}
+```
+
+This subtly breaks silhouette uniformity without increasing cost.
+
+---
+
+### 3.1.8.12: Silhouette-Preserving Scaling
+
+At lower LODs, slightly exaggerate large-scale proportions to preserve readability:
+
+* widen canopy by a small factor
+* slightly shorten trunk
+* reduce taper
+
+```rust
+let canopy_scale = 1.05..1.15;
+let trunk_scale = 0.9..0.95;
+```
+
+This compensates for the loss of fine structure and prevents trees from appearing thin or brittle at distance.
+
+---
+
+### 3.1.8.13: Random Rotation and Skew
+
+Introduce small deterministic variation in orientation and scale to break repetition across instances.
+
+**Rotation**
+
+Rotate around the vertical axis:
+
+```rust
+let yaw = TAU * noise(seed, ROT_SALT);
+transform.rotate_y(yaw);
+```
+
+This prevents aligned silhouettes across large forests.
+
+**Non-uniform scale (skew-like effect)**
+
+Apply slight variation in horizontal axes:
+
+```rust
+let sx = 0.9 + 0.2 * noise(seed, SCALE_X);
+let sz = 0.9 + 0.2 * noise(seed, SCALE_Z);
+
+transform.scale *= Vec3::new(sx, 1.0, sz);
+```
+
+This produces:
+
+* slight elongation or compression
+* variation in canopy footprint
+* reduced tiling artifacts
+
+**Optional lean (very subtle)**
+
+```rust
+let lean = 0.05 * noise(seed, LEAN_SALT);
+transform.rotate_axis(Vec3::Z, lean);
+```
+
+Use sparingly; excessive lean breaks vertical readability.
+
+These small variations are critical for avoiding visual repetition when using low-LOD primitives.
+
+---
+
+### 3.1.8.14: Vertical Color Gradient
+
+Apply a simple vertical gradient in the shader:
+
+* darker near trunk base
+* lighter near canopy top
+
+This simulates:
+
+* ambient occlusion
+* light falloff
+* canopy density
+
+...without adding geometry.
+
+---
+
+### 3.1.8.15: Material Simplification
+
+Reduce shader complexity at lower LODs:
+
+* remove normal maps
+* reduce texture lookups
+* flatten roughness variation
+
+This reduces GPU cost and improves batching while maintaining overall color and silhouette.
+
+---
+
+These techniques combine to produce large, varied forests at low cost while preserving convincing silhouettes and biome identity.
 
 ### 3.1.9: Stick Shading
 
