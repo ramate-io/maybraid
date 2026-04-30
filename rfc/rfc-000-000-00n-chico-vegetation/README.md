@@ -1524,15 +1524,145 @@ Descenders should usually receive sparse foliage or none, unless the goal is a v
 * Allow descenders to become secondary trunks when they reach the ground.
 * Add darker interior balls and tufts for dense jungle banyans.
 
-
 ##### 3.1.7.6: Sope's Banyan
 
-A banyan-like tree with a vase-like crown. 
+[! Sope's Banyan](./assets/sopes-banyan.png)
 
-- Begin with the [Honu Banyan](#3175-honu-banyan) construction. 
-- Adjust the canopy to project up vertically a la [Penmarch Torch](#3174-penmarch-torch). Radial projections should now begin at something like 40% of the total height. Descenders will still occur every third to fourth segment. 
+Sope's Banyan is a banyan variant with a tall, vase-like crown. It begins from the [Honu Banyan](#3175-honu-banyan) construction, but moves the canopy lower and biases branch growth upward, closer to the [Penmarch Torch](#3174-penmarch-torch). The result is a mystical, vertically rising banyan form suited to jungle, riparian, and elder-tree contexts.
 
-Good for jungle and riparian regions. Adds a sense of mysticism. Often good as particularly tall, almost as if an [Elder Tree](#36-elder-trees). 
+**Shape**
+
+* Thick banyan trunk
+* Canopy begins around mid-height
+* Wide but upward-projecting branch structure
+* Periodic downward descenders
+* Tall, vase-like silhouette
+
+**Stalk**
+
+Use the [Banyan Trunk](#3165-banyan-trunk) construction.
+
+```rust
+let stalk_height = 0.75 * H;
+let stalk_radius = 0.075 * H;
+```
+
+Use high-noise bark and strong trunk mass, as in [Honu Banyan](#3175-honu-banyan).
+
+**Anchor Rings**
+
+Radial projections begin much lower than Honu Banyan, around $40%$ of total height.
+
+```rust
+let z_min = 0.40 * H;
+let z_max = 0.90 * H;
+let ring_spacing = 0.08 * H;
+let anchors_per_ring = 6..=8;
+```
+
+Use several rings to build the rising crown:
+
+```rust
+let ring_count = 5..=7;
+```
+
+Anchors should originate near the stalk radial centroid, so the large upward limbs read as emerging from the trunk mass.
+
+**Projection Length**
+
+Use a vase-like widening profile. Let:
+
+$$
+u = \frac{z - z_{\min}}{z_{\max} - z_{\min}}
+$$
+
+Projection length increases with height:
+
+```rust
+let min_projection_length = 0.25 * H;
+let max_projection_length = 0.70 * H;
+let length = mix(min_projection_length, max_projection_length, sqrt(u));
+```
+
+This keeps the lower crown compact while allowing the upper canopy to spread dramatically.
+
+**Chain Growth**
+
+Use long banyan-like chains with upward torch bias.
+
+```rust
+BallStickChain {
+    segments: 5..=8,
+    child_count: 1..=3,
+    angle_tolerance: radians(12.0),
+}
+```
+
+Bias rises with height, as in [Penmarch Torch](#3174-penmarch-torch):
+
+```rust
+let vertical_angle = mix(
+    radians(25.0),
+    radians(70.0),
+    u,
+);
+
+let canopy_bias = rotate_up(radial, vertical_angle);
+```
+
+Descenders still occur every third to fourth segment:
+
+```rust
+fn hysteresis_for(ctx: ChainContext) -> HysteresisConfig {
+    if ctx.segment_index % 4 == 0 {
+        descender_config()
+    } else {
+        HysteresisConfig {
+            bias_ray: canopy_bias,
+            bias_strength: high,
+            angle_tolerance: radians(12.0),
+            child_count: 1..=3,
+            length_range: medium..long,
+            radius_range: medium..thin,
+        }
+    }
+}
+```
+
+Descenders should remain strongly downward-biased, but may be slightly less frequent than in Honu Banyan if the crown should read more vertical than tangled.
+
+**Ball Selection**
+
+Allocate foliage broadly throughout the rising crown.
+
+```rust
+fn should_allocate_ball(ctx: BallSelectionContext) -> bool {
+    ctx.height_fraction > 0.45
+        || ctx.is_terminal
+        || ctx.branch_order > 1
+}
+```
+
+Use [Noisy Ball](#3122-noisy-ball), [Plane Splay](#3125-plane-splay), and optional [Jungle Growths](#3164-jungle-growths) for dense variants.
+
+```rust
+let leaf_radius = 0.09 * H;
+```
+
+Descenders should receive sparse foliage, except where a denser mystical canopy is desired.
+
+**Materials**
+
+* Stick shader: dark banyan bark, wet bark, or high-contrast fantasy bark
+* Leaf shader: dense jungle green, deep riparian green, or saturated mystical foliage
+* Optional darker inner canopy balls for depth
+
+**Variants**
+
+* Increase total height and reduce descender frequency for an elder-tree silhouette.
+* Add [Fruiting Bodies](#3167-fruiting-bodies) for mystical or ancient variants.
+* Use [Crook Cylinder](#3112-crook-cylinder) on major limbs for a more twisted appearance.
+
 
 ##### 3.1.7.7: Rory's Head-trained 
 
@@ -1541,6 +1671,7 @@ A stalk with a thin horizontal canopy at the top.
 - Use a standard stock. 
 - Begin radial projections at 90% or more of total height.
 - Bias radial projections to be nearly horizontal. 
+- Use one ring layer.
 - Use moderate branching and segment length values, similar to [Storybook Tree](#3171-storybook-tree).
 
 Good as a tree in arid regions. Good as a bush, e.g., grape vine. Can be used in almost all groves, except for coniferous ones. 
