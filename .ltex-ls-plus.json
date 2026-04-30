@@ -17,7 +17,8 @@
         "ENGLISH_WORD_REPEAT_BEGINNING_RULE",
         "IN_THE_INTERNET",
         "CONSEQUENCES_OF_FOR",
-        "EN_COMPOUNDS_POCKET_SIZE"
+        "EN_COMPOUNDS_POCKET_SIZE",
+        "PHRASE_REPETITION"
       ]
     },
     "enabledRules": {
@@ -397,7 +398,8 @@
         "Simpleman",
         "UVs",
         "billboarded",
-        "logarithmically"
+        "logarithmically",
+        "stylization"
       ]
     },
     "bibtex": {

@@ -1149,12 +1149,122 @@ Tufts should follow the branch direction with mild upward spread to avoid a pure
 
 ##### 3.1.7.3: Vase Tree
 
-A tree that gets wider towards the top, giving a unique head-trained appearance. 
+The Vase Tree is a broad, upward-opening tree form. It starts from the [Storybook Tree](#3171-storybook-tree) construction but inverts the canopy profile, so radial projections grow wider toward the top. This gives a head-trained, vase-like silhouette useful for ornamental trees, mystical forests, bushes, and urban plantings.
 
-- Take the basic construction from [Storybook Tree](#3171-storybook-tree) but invert the radial projection length s.t. the width increases as you move up the tree. 
-- Give the radial projections a vertical bias of 45 degrees from horizontal, decrease the bias as the height increases. 
+**Shape**
 
-Good for variety and mystical elements in deciduous forests. Can also be used for bushes and in urban settings. 
+* Narrow to moderate stalk
+* Canopy opens upward and outward
+* Upper branches are longer than lower branches
+* Lower branches are strongly upward-biased
+* Bias relaxes closer to horizontal near the top
+
+**Stalk**
+
+Use the same stalk construction as [Storybook Tree](#3171-storybook-tree), optionally shortened slightly for bush or ornamental variants.
+
+```rust
+let stalk_height = 0.75 * H;
+let stalk_radius = 0.035 * H;
+```
+
+Use a [Noisy Cylinder](#3111-noisy-cylinder) or [Crook Cylinder](#3112-crook-cylinder) depending on desired stylization.
+
+**Anchor Rings**
+
+Use Storybook-style radial rings, but favor upper canopy density.
+
+```rust
+let z_min = 0.20 * H;
+let z_max = stalk_height;
+let ring_spacing = 0.08 * H;
+let anchors_per_ring = 6;
+```
+
+Anchors should originate near the stalk radial centroid.
+
+**Projection Length**
+
+Invert the Storybook falloff so branch length increases with height.
+
+Let:
+
+$$
+u = \frac{z - z_{\min}}{z_{\max} - z_{\min}}
+$$
+
+Use a softened increasing curve:
+
+$$
+\ell(u) = \ell_{\min} + (\ell_{\max} - \ell_{\min}) \frac{\log(1 + \alpha u)}{\log(1 + \alpha)}
+$$
+
+with:
+
+```rust
+let min_projection_length = 0.15 * H;
+let max_projection_length = 0.60 * H;
+let alpha = 4.0;
+```
+
+This creates short lower branches and broader upper spread.
+
+**Chain Growth**
+
+Use a Storybook-like chain with moderate branching.
+
+```rust
+BallStickChain {
+    segments: 3..=5,
+    child_count: 1..=3,
+    angle_tolerance: radians(15.0),
+}
+```
+
+Bias should start strongly upward and approach horizontal as height increases.
+
+```rust
+let vertical_angle = mix(
+    radians(45.0),
+    radians(5.0),
+    u,
+);
+
+let bias_ray = rotate_up(radial, vertical_angle);
+```
+
+This opens the canopy like a vase: lower branches climb sharply, while upper branches spread outward.
+
+**Ball Selection**
+
+Allocate foliage mostly on upper and outer nodes.
+
+```rust
+fn should_allocate_ball(ctx: BallSelectionContext) -> bool {
+    ctx.is_terminal
+        || ctx.height_fraction > 0.60
+        || ctx.distance_from_anchor > 0.60 * ctx.max_projection_length
+}
+```
+
+Use [Plane Splay](#3125-plane-splay) at high detail and [Noisy Ball](#3122-noisy-ball) or icospheres at lower detail.
+
+```rust
+let leaf_radius = 0.08 * H;
+```
+
+**Materials**
+
+* Stick shader: deciduous bark, ornamental bark, or stylized dark bark
+* Leaf shader: broadleaf, flowering, magical, or urban ornamental foliage
+* Optional [Fruiting Bodies](#3167-fruiting-bodies) for orchard-like variants
+
+**Variants**
+
+* Shorter stalk and denser upper branches produce a bush form.
+* Higher upward bias produces a flame-like ornamental tree.
+* Crook cylinders add a trained or sculpted garden appearance.
+
 
 ##### 3.1.7.4: Penmarch Torch
 
