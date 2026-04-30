@@ -3810,25 +3810,58 @@ This separation allows:
 
 Together, bump outs and tufts provide a scalable and performant ground cover system that integrates cleanly with terrain and vegetation layers.
 
-
 ### 3.4: Cellular Groves
 
 General name for vegetation type allocation system. Unify exclusive types you want to plant in a grove. Groves are the level at which planting constraints are painted in.
 
 ### 3.4.1: Parameterization
 
-- **Scale:** while specific trees will encode proportional values and constrain mins and maxes, the grove can provide a general scale which it noisily samples per tree cell. 
-- 
+Each grove should be able to receive the following parameters:
+
+- **Scale:** while specific trees will encode proportional values and constrain mins and maxes, the grove can provide a general scale which it noisily samples per tree cell. Specific grove types will have a scale range within which the [Forest](#35-cellular-forests) will choose a value. Because the values selected by the forest are based on FBM, nearby groves should have similar scales. 
+- **Density:** specific grove types will encode a range describing how frequently they place trees. The parent [Forest](#35-cellular-forests) will select values in this range. Because the values selected by forest are based on FBM, nearby groves should have similar densities. 
+- **Distribution:** the unified type of trees in a grove will implement a distribution, i.e., likelihood of selection various subtypes. This distribution can internally be perturbed, the weights changed, from some base by a noise value from the [Forest](#35-cellular-forests). The distribution is selected from via the [Bucket Throw](#3421-bucket-throw) algorithm.
+- **Offsets:** as discussed in [Cell Selection and Planting Constraints](#342-cell-selection-and-planting-constraints), planting placement uses a very similar approach to [terrain detail](https://github.com/ramate-io/maybraid/tree/main/rfc/rfc-000-000-170-terrain-detail#313-position-selection-and-validation). A given grove type will decide mins and maxes on the offset means. The [Forest](#35-cellular-forests) can select value within the range. 
+- **Elevation Constraints:** a given grove type will decide elevation constraints on each of the members in its unified tree type. (We should do this on the trees themselves, but we'd want base tree shapes to have wide or all-inclusive ranges and then only have types prepared with constraints for a specific grove unified type.) These ranges can be further narrowed by the [Forest](#35-cellular-forests). Generally, only extreme noise values should substantially affect this.
+- **Steepness Constraints:** similar to elevation, but for steepness. Generally, only extreme noise values should substantially affect this.
+- **Noise Amplitude and Frequency:** the grove gives a base noise amplitude and frequency. The [Forest](#35-cellular-forests) perturbs this. 
+
+> [!NOTE]
+> There is no palette parameterization or perturbation. This is to keep from loading too many different materials. Instead, we simply rely on the word-space variation of the species material given in the shader.
 
 ### 3.4.2: Cell Selection and Planting Constraints
 
+- Cells are selected for planting according to fractal noise and density. 
+- Their exact point is determined by an offset on the grid a la [RFC-170: Terrain Detail](https://github.com/ramate-io/maybraid/tree/main/rfc/rfc-000-000-170-terrain-detail#313-position-selection-and-validation).
+- Elevation and steepness constraints are then checked at these exact points. 
+- `selection(elevation: f32, steepness: f32, noise: f32)` will use a next fit algorithm to select the type closest on the distribution which fits constraints. Thus, unified grove tree types will have a statically known order amongst their variants. 
+
+#### 3.4.2.1: Bucket Throw
+
+- The bucket throw algorithm assumes that each variant is mapped to both a weight and a position. The weight describes the size of region over which the variant would be selected, while the position is its position as contiguous bucket of the size in a series. 
+- The bucket throw can be parameterized by a mean to which a value in the range [-total_order, total_order] is added in a wrapping add. $variant = bucket(mean + s([-total_order, total_order]))$. 
+- The value selection $s$ should typically be an FBM, Perlin, or other distribution with somewhat strong centrality, i.e., somewhat similar to a normal distribution. 
+- This allows the groves to shift their composition in more varied ways than simple uniform selection. 
+
 ### 3.4.3: Well-known Ground Cover Groves
+
+> [!NOTE]
+> Assume an empty grove. 
 
 ### 3.4.4: Well-known Tufts Groves
 
+> [!NOTE]
+> Assume an empty grove. 
+
 ### 3.4.5: Well-known Bush Groves
 
+> [!NOTE]
+> Assume an empty grove. 
+
 ### 3.4.6: Well-known Tree Groves
+
+> [!NOTE]
+> Assume an empty grove. 
 
 ### 3.4.7: Grove LOD Tricks
 
