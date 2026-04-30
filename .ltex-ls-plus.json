@@ -408,7 +408,8 @@
         "Moderate-LOD",
         "very-low-LOD",
         "Very-Low-LOD",
-        "fronded"
+        "fronded",
+        "composability"
       ]
     },
     "bibtex": {

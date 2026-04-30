@@ -3679,7 +3679,49 @@ Multiple flecks may overlap. Their `strength` controls how aggressively each fle
 
 ### 3.2: L-system Trees
 
+L-systems are a well-established method for generating botanical structures and offer a natural way to express recursive growth, branching grammars, and species variation. They are a strong candidate for future expansion of the vegetation system.
+
+However, we avoid adopting L-systems at this stage for a few practical reasons.
+
+Primarily, L-systems do not provide direct spatial implications. While they are excellent for describing *connectivity* and *growth rules*, they do not inherently encode:
+
+* world-space positioning
+* spatial ownership or containment
+* chunk alignment or LOD boundaries
+
+As a result, additional interpretation layers are required to map symbolic structures into spatial ones. This introduces a tradeoff:
+
+* **Composability**: combining multiple growth rules and structures cleanly
+* **Connectivity**: maintaining coherent, continuous geometry in world space
+
+Naive approaches tend to struggle to satisfy both simultaneously. Either the system becomes difficult to compose across species and features, or spatial coherence becomes fragile and expensive to maintain.
+
+In contrast, the ball-stick and radial projection constructions used here:
+
+* operate directly in world space
+* align naturally with chunking and LOD systems
+* provide predictable spatial ownership
+* remain easy to compose and parameterize
+
+While less expressive than full L-systems, they are significantly more practical for initial terrain-scale vegetation.
+
+L-systems remain an important area of future work. In particular, hybrid approaches that:
+
+* retain spatial grounding
+* incorporate limited grammar-based growth
+* or use L-systems as local refinements within existing structures
+
+...may offer a path to richer vegetation without sacrificing system ergonomics or performance.
+
 ### 3.3: Ground Cover
+
+### 3.3.1: Bump Outs
+
+Ground cover primarily relies on a similar [bump out](https://github.com/ramate-io/maybraid/tree/main/rfc/rfc-000-000-170-terrain-detail#34-bump-outs) method to RFC-170. We can then use [Leaf Shaders](#3110-leaf-shading), to provide detail. 
+
+### 3.3.2: Tufts
+
+Extra volume-detailed will typically be given by [Tufts](#332-tufts). However, as detailed in [Tufts](#3522-tufts-layer), we recommend handling these as a separate layer from the ground cover bump outs. 
 
 ### 3.4: Cellular Groves
 
