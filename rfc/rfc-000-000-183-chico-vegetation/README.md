@@ -1778,403 +1778,27 @@ This structure intentionally mirrors terrain detail systems so that:
 > [!NOTE]
 > For bump outs, the internal cells tend to be a bit larger than other layers.
 
-### 3.4.3.1: Huelgoat Pitch
+##### [3.4.3.1: Huelgoat Pitch](./well-knowns/ground-cover-grove/huelgoat-pitch/README.md)
 
-Huelgoat Pitch is a low, smooth ground-cover grove based on shallow [bump outs](#331-bump-outs). It should read as mossy, soft, and continuous, closely following the underlying terrain with only slight vertical lift.
+##### [3.4.3.2: Flecking Bed](./well-knowns/ground-cover-grove/flecking-bed/README.md)
 
-Good for damp forests, riparian shade, temperate groves, old stone regions, and sparse woodland understory.
+##### [3.4.3.3: Jim's Collage](./well-knowns/ground-cover-grove/jims-collage/README.md)
 
-```rust
-pub enum HuelgoatPitchCell {
-    BumpOut(Bucket {
-        weight: 1.0,
-        item: BumpOut {
-            noise: NoiseProfile::LowSmooth,
-            height: 0.05..0.10,
-            collide: true,
-            palette_mix: [
-                dark_green..light_green,
-            ],
-            flecking_mix: [
-                Flecking {
-                    kind: FleckingKind::Snowfall,
-                    strength: Minimal,
-                    ..Snowfall::common_flecking(world_size)
-                },
-            ],
-        },
-    }),
-}
+##### [3.4.3.4: Floor Scrub](./well-knowns/ground-cover-grove/floor-scrub/README.md)
 
-impl CellGrove for HuelgoatPitch {
-    type Cell = HuelgoatPitchCell;
+##### [3.4.3.5: Grassy Mounds](./well-knowns/ground-cover-grove/grassy-mounds/README.md)
 
-    const CELL_SIZE_RANGE: Range<f32> = 50.0..100.0;
-    const DENSITY_RANGE: Range<f32> = 0.60..0.80;
+##### [3.4.3.6: Allbed](./well-knowns/ground-cover-grove/allbed/README.md)
 
-    const ELEVATION_RANGE: Range<f32> = 0.0..0.75; // elevation range as fraction of max world height or other normalized elevation
-    const STEEPNESS_RANGE: Range<f32> = 0.0..0.45;
+##### [3.4.4: Well-known Tufts Groves](./well-knowns/tufts-grove/tufts-groves/README.md)
 
-    const OFFSET_RANGE: Range<f32> = 0.0..1.0;
+##### [3.4.5: Well-known Understory Groves](./well-knowns/understory-grove/understory-groves/README.md)
 
-    const NOISE_AMPLITUDE_RANGE: Range<f32> = 0.10..0.25;
-    const NOISE_FREQUENCY_RANGE: Range<f32> = 0.005..0.020;
-}
-```
+##### [3.4.6: Well-known Lower Canopy Groves](./well-knowns/lower-canopy-grove/lower-canopy-groves/README.md)
 
-**Construction**
+##### [3.4.7: Well-known Upper Canopy Groves](./well-knowns/upper-canopy-grove/upper-canopy-groves/README.md)
 
-* Use a low, smooth bump out with height around `5cm–10cm`.
-* Closely follow the underlying terrain normal and terrain SDF.
-* Player collision should use the bumped surface, so the player stands on the pitch rather than visually sinking into it.
-* Use moderate to high density: roughly `60%–80%` cell activation.
-* Use internal cells around `50m–100m`, preferably chosen as even subdivisions of the parent grove cell.
-* At low LOD, collapse the internal cell size to the full grove cell.
-* Pair with sparse [Tufts](#332-tufts) for additional volume detail.
-* Flecking should be minimal and generally limited to snowfall.
-
-
-### 3.4.3.2: Flecking Bed
-
-Flecking Bed is a soft, non-colliding ground-cover grove based on moderate [bump outs](#331-bump-outs). It should read as a visual vegetation layer rather than physical terrain, allowing the player to sink through it.
-
-Good for wildflower fields, meadow floors, heath, moss beds, flowering understory, and seasonal ground-cover blooms.
-
-```rust
-pub enum FleckingBedCell {
-    BumpOut(Bucket {
-        weight: 1.0,
-        item: BumpOut {
-            noise: NoiseProfile::Moderate,
-            height: 0.10..0.25,
-            collide: false,
-            palette_mix: [
-                dark_green..light_green,
-                yellow_green..dry_green,
-            ],
-            flecking_mix: [
-                Flecking {
-                    kind: FleckingKind::Bloom,
-                    strength: ModerateToHigh,
-                    season_weight: High,
-                    longitude_weight: Low,
-                    altitude_weight: LowToModerate,
-                    ..Default::default()
-                },
-            ],
-        },
-    }),
-}
-
-impl CellGrove for FleckingBed {
-    type Cell = FleckingBedCell;
-
-    const CELL_SIZE_RANGE: Range<f32> = 50.0..100.0;
-    const DENSITY_RANGE: Range<f32> = 0.60..0.85;
-
-    // Normalized fraction of max world height.
-    const ELEVATION_RANGE: Range<f32> = 0.0..0.80;
-    const STEEPNESS_RANGE: Range<f32> = 0.0..0.35;
-
-    const OFFSET_RANGE: Range<f32> = 0.0..1.0;
-
-    const NOISE_AMPLITUDE_RANGE: Range<f32> = 0.25..0.55;
-    const NOISE_FREQUENCY_RANGE: Range<f32> = 0.010..0.040;
-}
-```
-
-**Construction**
-
-* Use a moderate bump out with height around `10cm–25cm`.
-* Apply moderate noise, so the surface reads as uneven vegetation rather than smooth terrain.
-* Do not enable collision; the player should visually sink through this layer.
-* Use moderate to high density, roughly `60%–85%` cell activation.
-* Use internal cells around `50m–100m`, preferably even subdivisions of the parent grove cell.
-* At low LOD, collapse the internal cell size to the full grove cell.
-* Pair well with any tufting pattern, especially sparse flowering tufts or dry brush.
-
-**Flecking**
-
-* Strong seasonal flecking is encouraged.
-* Bloom colors may include white, yellow, pink, purple, orange, or pale blue.
-* Flecking strength should vary by season and optionally by longitude or altitude.
-* Snow flecking may be layered separately, but bloom flecking is the defining feature.
-
-### 3.4.3.3: Jim's Collage
-
-Jim's Collage is a mixed ground-cover grove that evenly blends [Huelgoat Pitch](#3431-huelgoat-pitch) and [Flecking Bed](#3432-flecking-bed). It provides both a grounded mossy layer and a more decorative, seasonal visual layer.
-
-Good for mixed woodland floors, meadow-forest transitions, garden-like groves, riparian clearings, and areas where ground cover should feel varied without introducing many distinct systems.
-
-```rust
-pub enum JimsCollageCell {
-    HuelgoatPitch(Bucket {
-        weight: 1.0,
-        item: HuelgoatPitchCell,
-    }),
-    FleckingBed(Bucket {
-        weight: 1.0,
-        item: FleckingBedCell,
-    }),
-}
-
-impl CellGrove for JimsCollage {
-    type Cell = JimsCollageCell;
-
-    const CELL_SIZE_RANGE: Range<f32> = 50.0..100.0;
-    const DENSITY_RANGE: Range<f32> = 0.60..0.85;
-
-    const ELEVATION_RANGE: Range<f32> = 0.0..0.80;
-    const STEEPNESS_RANGE: Range<f32> = 0.0..0.40;
-
-    const OFFSET_RANGE: Range<f32> = 0.0..1.0;
-
-    const NOISE_AMPLITUDE_RANGE: Range<f32> = 0.15..0.45;
-    const NOISE_FREQUENCY_RANGE: Range<f32> = 0.008..0.035;
-}
-```
-
-**Construction**
-
-* Use an even split between `HuelgoatPitch` and `FleckingBed`.
-* Maintain moderate to high density, roughly `60%–85%`.
-* Allow Huelgoat cells to provide low colliding ground softness.
-* Allow Flecking Bed cells to provide seasonal bloom and visual softness.
-* Use the same internal cell sizing strategy as both parent types: typically `50m–100m`, fit to even subdivisions.
-* At low LOD, collapse internal cell size to the full grove cell.
-
-
-### 3.4.3.4: Floor Scrub
-
-Floor Scrub is a low-density variant of [Jim's Collage](#3433-jims-collage). It uses the same basic split between [Huelgoat Pitch](#3431-huelgoat-pitch) and [Flecking Bed](#3432-flecking-bed), but reduces coverage and uses smaller internal cells for a patchier, more exposed ground layer.
-
-Good for arid regions, sparse woodland, stripped-back understory, chaparral edges, dry groves, and disturbed terrain.
-
-```rust
-pub enum FloorScrubCell {
-    HuelgoatPitch(Bucket {
-        weight: 1.0,
-        item: HuelgoatPitchCell,
-    }),
-    FleckingBed(Bucket {
-        weight: 1.0,
-        item: FleckingBedCell,
-    }),
-}
-
-impl CellGrove for FloorScrub {
-    type Cell = FloorScrubCell;
-
-    const CELL_SIZE_RANGE: Range<f32> = 15.0..20.0;
-    const DENSITY_RANGE: Range<f32> = 0.20..0.45;
-
-    const ELEVATION_RANGE: Range<f32> = 0.0..0.85;
-    const STEEPNESS_RANGE: Range<f32> = 0.0..0.45;
-
-    const OFFSET_RANGE: Range<f32> = 0.0..1.0;
-
-    const NOISE_AMPLITUDE_RANGE: Range<f32> = 0.10..0.35;
-    const NOISE_FREQUENCY_RANGE: Range<f32> = 0.015..0.050;
-}
-```
-
-**Construction**
-
-* Use a low-density split between `HuelgoatPitch` and `FleckingBed`.
-* Keep density around `20%–45%`.
-* Use internal cells around `15m`, fit to even subdivisions of the parent grove cell.
-* At low LOD, collapse internal cell size to the full grove cell.
-* Prefer weaker bump-out heights and lighter flecking than Jim's Collage.
-* Pair well with sparse tufts, dry brush, or exposed terrain detail.
-
-### 3.4.3.5: Grassy Mounds
-
-Grassy Mounds are discrete rounded ground-cover features based on the [Sparse Boulder](https://github.com/ramate-io/maybraid/tree/main/rfc/rfc-000-000-170-terrain-detail#31-sparse-boulders) placement pattern, but shaded and embedded as vegetation rather than exposed rock.
-
-Good for meadow irregularity, mossy hummocks, pasture texture, wetland edges, and soft terrain breakup.
-
-```rust
-pub enum GrassyMoundsCell {
-    Mound(Bucket {
-        weight: 1.0,
-        item: Mound {
-            placement: SparseBoulderLike {
-                cell_size: 5.0,
-                object_scale: 0.60,
-                embed_depth: Deep,
-            },
-            shader: GroundCoverShader,
-            palette_mix: [
-                dark_green..light_green,
-                yellow_green..dry_green,
-            ],
-        },
-    }),
-}
-
-impl CellGrove for GrassyMounds {
-    type Cell = GrassyMoundsCell;
-
-    const CELL_SIZE_RANGE: Range<f32> = 5.0..6.0;
-    const DENSITY_RANGE: Range<f32> = 0.25..0.55;
-
-    const ELEVATION_RANGE: Range<f32> = 0.0..0.85;
-    const STEEPNESS_RANGE: Range<f32> = 0.0..0.35;
-
-    const OFFSET_RANGE: Range<f32> = 0.0..1.0;
-
-    const NOISE_AMPLITUDE_RANGE: Range<f32> = 0.15..0.40;
-    const NOISE_FREQUENCY_RANGE: Range<f32> = 0.02..0.06;
-}
-```
-
-**Construction**
-
-* Use Sparse Boulder-style cell placement.
-* Use internal cells around `5m`.
-* Set mound size to roughly `60%` of the cell.
-* Use rounded SDF forms rather than angular rock forms.
-* Embed more deeply than sparse boulders, so the mound reads as terrain growth, not an object sitting on top.
-* Use ground-cover or leaf shaders rather than stone shaders.
-* Collision may be enabled when mound height materially affects traversal.
-
-**Placement**
-
-```rust
-let cell_size = 5.0;
-let mound_radius = 0.60 * cell_size;
-let position = sparse_boulder_position(cell, seed);
-
-if !contains(parent_cell, position) {
-    return None;
-}
-
-spawn_mound(
-    position,
-    radius = mound_radius,
-    embed_depth = 0.25 * mound_radius,
-    shader = GroundCoverShader,
-);
-```
-
-### 3.4.3.6: Allbed
-
-Allbed is a broad, mixed ground-cover grove combining flecking and non-flecking bump outs, colliding and non-colliding surface layers, and [Grassy Mounds](#3435-grassy-mounds). It is the most general ground-cover bed and is useful when a region should feel lush, varied, and continuous without committing to a single ground-cover pattern.
-
-Good for rich forest floors, riparian understory, old gardens, meadow edges, fantasy groves, and high-detail mixed biomes.
-
-```rust
-pub enum AllbedCell {
-    HuelgoatPitch(Bucket {
-        weight: 2.0,
-        item: HuelgoatPitchCell,
-    }),
-    FleckingBed(Bucket {
-        weight: 2.0,
-        item: FleckingBedCell,
-    }),
-    GrassyMound(Bucket {
-        weight: 1.0,
-        item: GrassyMoundsCell,
-    }),
-    LowNonCollidingBumpOut(Bucket {
-        weight: 1.0,
-        item: BumpOut {
-            noise: NoiseProfile::LowSmooth,
-            height: 0.05..0.12,
-            collide: false,
-            palette_mix: [
-                dark_green..light_green,
-                yellow_green..dry_green,
-            ],
-            flecking_mix: [],
-        },
-    }),
-    CollidingFleckingBumpOut(Bucket {
-        weight: 1.0,
-        item: BumpOut {
-            noise: NoiseProfile::Moderate,
-            height: 0.08..0.18,
-            collide: true,
-            palette_mix: [
-                dark_green..light_green,
-                yellow_green..dry_green,
-            ],
-            flecking_mix: [
-                Flecking {
-                    kind: FleckingKind::Bloom,
-                    strength: LowToModerate,
-                    ..Default::default()
-                },
-                Flecking {
-                    kind: FleckingKind::Snowfall,
-                    strength: Minimal,
-                    ..Snowfall::common_flecking(world_size)
-                },
-            ],
-        },
-    }),
-}
-
-impl CellGrove for Allbed {
-    type Cell = AllbedCell;
-
-    const CELL_SIZE_RANGE: Range<f32> = 15.0..100.0;
-    const DENSITY_RANGE: Range<f32> = 0.10..0.90;
-
-    const ELEVATION_RANGE: Range<f32> = 0.0..0.85;
-    const STEEPNESS_RANGE: Range<f32> = 0.0..0.40;
-
-    const OFFSET_RANGE: Range<f32> = 0.0..1.0;
-
-    const NOISE_AMPLITUDE_RANGE: Range<f32> = 0.15..0.55;
-    const NOISE_FREQUENCY_RANGE: Range<f32> = 0.008..0.060;
-}
-```
-
-**Construction**
-
-* Mix multiple bump-out forms rather than enforcing a single bed type.
-* Include both colliding and non-colliding bump outs.
-* Include both flecking and non-flecking variants.
-* Add occasional grassy mounds for rounded volumetric breakup.
-* Use moderate to mixed density, roughly `10%–90%`.
-* Use larger cells for broad beds and smaller cells where more local variation is desired.
-* At low LOD, collapse internal cell size to the full grove cell.
-
-**Behavior**
-
-* Colliding bump outs provide physical surface variation.
-* Non-colliding bump outs provide visual softness without affecting traversal.
-* Flecking variants provide seasonal blooms or snow.
-* Grassy mounds add discrete rounded relief and break up continuous mats.
-
-**Use**
-
-Allbed is best treated as a high-variety default ground-cover grove. It should be used where the designer wants a rich floor texture but does not need a strong specific identity like pitch, scrub, or flowering bed.
-
-### 3.4.4: Well-known Tufts Groves
-
-> [!NOTE]
-> Assume an empty grove variant exists. 
-
-### 3.4.5: Well-known Understory Groves
-
-> [!NOTE]
-> Assume an empty grove variant exists. 
-
-### 3.4.6: Well-known Lower Canopy Groves
-
-> [!NOTE]
-> Assume an empty grove variant exists. 
-
-### 3.4.7: Well-known Upper Canopy Groves
-
-> [!NOTE]
-> Assume an empty grove variant exists. 
-
-
-### 3.4.7: Grove LOD Tricks
+### 3.4.8: Grove LOD Tricks
 
 ### 3.5: Cellular Forests
 
@@ -2194,43 +1818,25 @@ The ground cover layer, unlike other layers is composed of two sublayers to enab
 
 ### 3.5.2.4: Tree Layer
 
-### 3.5.3: Well-known Ground Cover Forest Layers
+##### [3.5.3: Well-known Ground Cover Forest Layers](./well-knowns/forest-layer/ground-cover-forest-layers/README.md)
 
-### 3.5.4: Well-known Tuft Forest
+##### [3.5.4: Well-known Tuft Forest](./well-knowns/forest-layer/tuft-forest/README.md)
 
-### 3.5.4: Well-known
+##### [3.5.3: Well-known Forests](./well-knowns/cellular-forest/well-known-forests/README.md)
 
-### 3.5.3: Well-known Forests
+##### [3.5.3.1: Riparian](./well-knowns/cellular-forest/riparian/README.md)
 
-```rust
-pub enum ForestCell {
-    Riparian,
-    Chaparral,
-    Alpine,
-    TemperateConiferous,
-    Orchard,
-    Coniferous,
-    Jungle,
-    TropicalJungle,
+##### [3.5.3.2: Chaparral](./well-knowns/cellular-forest/chaparral/README.md)
 
-}
-```
+##### [3.5.3.3: Alpine](./well-knowns/cellular-forest/alpine/README.md)
 
-### 3.5.3.1: Riparian 
+##### [3.5.3.4: Temperate Coniferous](./well-knowns/cellular-forest/temperate-coniferous/README.md)
 
-### 3.5.3.2: Chaparral
+##### [3.5.3.5: Orchard](./well-knowns/cellular-forest/orchard/README.md)
 
-### 3.5.3.3: Alpine
+##### [3.5.3.6: Coniferous](./well-knowns/cellular-forest/coniferous/README.md)
 
-### 3.5.3.4: Temperate Coniferous
-
-### 3.5.3.5: Orchard
-
-### 3.5.3.6: Coniferous
-
-### 
-
-### 3.5.4: Forest LOD Tricks
+### 3.5.5: Forest LOD Tricks
 
 ### 3.6: Elder Trees
 
