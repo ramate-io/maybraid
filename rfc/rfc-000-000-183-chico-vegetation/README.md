@@ -3715,102 +3715,12 @@ L-systems remain an important area of future work. In particular, hybrid approac
 
 ### 3.3: Ground Cover
 
-Ground cover provides the lowest layer of vegetation detail and is responsible for visually filling terrain with grasses, moss, scrub, and low-lying plant matter. It should be:
+Ground cover is the lowest layer of vegetation detail: it fills terrain with grasses, moss, scrub, and low plant matter. It should stay **dense but inexpensive**, **spatially stable**, **driven by terrain** (elevation, slope, biome), and **composable** with higher-level vegetation. The design pairs **bump outs** (continuous SDF height variation, aligned with [RFC-170 bump outs](https://github.com/ramate-io/maybraid/tree/main/rfc/rfc-000-000-170-terrain-detail#34-bump-outs)) with **tufts** (sparse discrete clumps for breakup and silhouette).
 
-* dense but inexpensive
-* spatially stable
-* driven primarily by terrain properties (elevation, slope, biome)
-* composable with higher-level vegetation systems
+Subsections:
 
-The approach combines **continuous surface modification (bump outs)** with **discrete volumetric detail (tufts)**.
-
----
-
-### 3.3.1: Bump Outs
-
-Ground cover primarily relies on a similar [bump out](https://github.com/ramate-io/maybraid/tree/main/rfc/rfc-000-000-170-terrain-detail#34-bump-outs) method to RFC-170. These modify the underlying terrain SDF to introduce small-scale height variation representing grass beds, moss, soft soil, or low vegetation mats.
-
-Construction follows:
-
-* define a cell or region
-* sample noise to determine coverage
-* apply a bounded vertical displacement to the terrain SDF
-
-```rust
-let mask = noise(world_position * scale);
-
-if mask > threshold {
-    let height = amplitude * smooth(mask);
-    sdf += height;
-}
-```
-
-Key characteristics:
-
-* **continuous**: no discrete meshes required
-* **cheap**: operates in terrain generation phase
-* **stable**: tied to world-space coordinates
-* **biome-driven**: parameters vary with terrain conditions
-
-Detail is primarily expressed through [Leaf Shaders](#3110-leaf-shading):
-
-* color variation (greens, yellows, browns)
-* seasonal effects (drying, snow cover)
-* flecking (flowers, debris, moss variation)
-
-Bump outs provide the **base visual mass** of ground vegetation.
-
----
-
-### 3.3.2: Tufts
-
-Extra volumetric detail is provided by [Tufts](#332-tufts). These add discrete geometry to break up the flatness of bump-out-only surfaces.
-
-Tufts are:
-
-* SDF-based or mesh-based clumps
-* sparsely distributed over bump-out regions
-* oriented by terrain normal
-* scaled and rotated deterministically
-
-```rust
-if noise(seed) > placement_threshold {
-    spawn_tuft(
-        position = terrain_position,
-        direction = terrain_normal,
-        scale = tuft_scale,
-    );
-}
-```
-
-As detailed in [Tufts](#3522-tufts-layer), tufts should be handled as a **separate layer** from bump outs:
-
-* bump outs define coverage and base density
-* tufts provide localized vertical structure
-
-This separation allows:
-
-* independent LOD control
-* independent density tuning
-* better performance scaling
-
-**Placement considerations**
-
-* bias placement toward flatter regions or slight slopes
-* avoid excessive clustering unless biome requires it
-* reduce density near large vegetation or obstacles
-
-**Usage**
-
-* grasses and scrub
-* jungle undergrowth
-* dry brush
-* moss clumps
-* small flowering plants
-
-Together, bump outs and tufts provide a scalable and performant ground cover system that integrates cleanly with terrain and vegetation layers.
-
-Good call — that linkage matters for consistency across systems. Here is the corrected and tightened version with proper references to RFC-170 where concepts are reused.
+- [3.3.1: Bump Outs](./3-3-ground-cover/3-3-1-bump-outs/README.md)
+- [3.3.2: Tufts](./3-3-ground-cover/3-3-2-tufts/README.md)
 
 ---
 
@@ -4057,7 +3967,7 @@ This structure intentionally mirrors terrain detail systems so that:
 
 ### 3.4.3.1: Huelgoat Pitch
 
-Huelgoat Pitch is a low, smooth ground-cover grove based on shallow [bump outs](#331-bump-outs). It should read as mossy, soft, and continuous, closely following the underlying terrain with only slight vertical lift.
+Huelgoat Pitch is a low, smooth ground-cover grove based on shallow [bump outs](./3-3-ground-cover/3-3-1-bump-outs/README.md). It should read as mossy, soft, and continuous, closely following the underlying terrain with only slight vertical lift.
 
 Good for damp forests, riparian shade, temperate groves, old stone regions, and sparse woodland understory.
 
@@ -4107,13 +4017,13 @@ impl CellGrove for HuelgoatPitch {
 * Use moderate to high density: roughly `60%–80%` cell activation.
 * Use internal cells around `50m–100m`, preferably chosen as even subdivisions of the parent grove cell.
 * At low LOD, collapse the internal cell size to the full grove cell.
-* Pair with sparse [Tufts](#332-tufts) for additional volume detail.
+* Pair with sparse [Tufts](./3-3-ground-cover/3-3-2-tufts/README.md) for additional volume detail.
 * Flecking should be minimal and generally limited to snowfall.
 
 
 ### 3.4.3.2: Flecking Bed
 
-Flecking Bed is a soft, non-colliding ground-cover grove based on moderate [bump outs](#331-bump-outs). It should read as a visual vegetation layer rather than physical terrain, allowing the player to sink through it.
+Flecking Bed is a soft, non-colliding ground-cover grove based on moderate [bump outs](./3-3-ground-cover/3-3-1-bump-outs/README.md). It should read as a visual vegetation layer rather than physical terrain, allowing the player to sink through it.
 
 Good for wildflower fields, meadow floors, heath, moss beds, flowering understory, and seasonal ground-cover blooms.
 
