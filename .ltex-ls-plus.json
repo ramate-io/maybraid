@@ -394,7 +394,10 @@
         "Penmarch",
         "Honu",
         "Sope",
-        "Simpleman"
+        "Simpleman",
+        "UVs",
+        "billboarded",
+        "logarithmically"
       ]
     },
     "bibtex": {

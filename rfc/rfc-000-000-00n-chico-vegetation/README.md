@@ -171,52 +171,469 @@ This produces smoothly bent trunks and branches without introducing discontinuit
 
 Crook cylinders should be used deliberately, as they strongly influence silhouette and perceived species.
 
-
 #### 3.1.2: Ball Components
 
-Ball components are typically used for canopy. For the Chico vegetation, they do not need to be collision-supporting, hence they do not all have to have SDF backings. 
+Ball components are primarily used for canopy and foliage massing. Unlike stick components, they do not generally need to be collision-supporting, though some may retain SDF backings where useful for reuse or consistency.
+
+These components provide the visual mass of vegetation, while stick components define structure. Together, they enable a wide range of tree and plant forms through simple composition.
+
+---
 
 ##### 3.1.2.1: Icosahedron
 
-Good for filling out canopy shape at range. Generally should only be used for low LOD. Shading can be one-sided and opaque when used at range. 
+A low-poly convex canopy primitive used primarily at far range.
 
-Icospheres are also reasonable in moderate LOD contexts.
+**Construction**
 
-Note that icosahedrons and icospheres can also replace [Noisy Balls](#3122-noisy-ball) in [Plane Splays](#3125-plane-splay).
+* Static indexed mesh: 12 vertices, 20 faces
+* Can be precomputed or reused via asset handle
 
-##### 3.1.2.2: Noisy Ball 
+In Bevy:
 
-Good for filling out canopy at range or overlaying with [Plane Splay](#3125-plane-splay) for detail. Use one-sided shader at range, two-sided shader up close. 
+```rust
+let mesh = Mesh::from(shape::Icosahedron {
+    radius,
+    subdivisions: 0,
+});
+```
 
-#### 3.1.2.3: Octagonal Plane
+**Usage**
 
-Low triangle-count component of [Plane Splay](#3125-plane-splay)
+* far LOD canopy fill
+* silhouette preservation
+* cheap instancing across large forests
 
-#### 3.1.2.4: Triangular Plane
+**Notes**
 
-Low triangle-count component of [Plane Splay](#3125-plane-splay), also used for [Fronds](#3127-fronds) at moderate LOD. 
+* One-sided opaque shading is sufficient at distance
+* Icospheres (`subdivisions > 0`) may be used for moderate LOD
+* Can replace [Noisy Balls](#3122-noisy-ball) in [Plane Splays](#3125-plane-splay)
 
-#### 3.1.2.5: Plane Splay
+---
 
-A refinement of the original design given at the poorly named [`NoisyBall`](https://github.com/ramate-io/maybraid/blob/9c38f45cfd697a392e6114bbc6e67b50005b7f65/procedures/vegetation/src/tree/meshes/canopy/ball.rs#L102-L231). Uses new [3.1.2.2: Noisy Ball](#3122-noisy-ball), [Octagonal Planes](#3123-octagonal-plane), and [Triangular Plane](#3124-triangular-plane). Good for high levels of detail. Can be constructed as a multi-mesh or singular mesh depending on what best suits performance. 
+##### 3.1.2.2: Noisy Ball
 
-#### 3.1.2.6: Tufts
+An SDF-backed spherical canopy element with surface perturbation.
 
-A jagged-planar projecting type. Good for sprouting trees, jungle growths on branches, combining with other canopy types. Can use at all LOD when not obstructed or part of ensemble. Cull at low LOD when obstructed by greater canopy or part of ensemble. Tufts are also good for [Ground Cover](). 
+**Construction**
 
-#### 3.1.2.7: Fronds
+$$
+d(\mathbf{p}) = |\mathbf{p}| - r + \text{noise}(\mathbf{p})
+$$
 
-An arching series of triangles. Good for palms, bushes, and jungle growths. 
+```rust
+fn distance(p: Vec3) -> f32 {
+    let n = perlin(p * freq + seed) * amp;
+    p.length() - radius + n
+}
+```
 
-#### 3.1.2.8: Jessen's Icosahedron
+Mesh generation proceeds via marching cubes or dual contouring.
 
-[Jessen's icosahedron](https://en.wikipedia.org/wiki/Jessen%27s_icosahedron) is a good replacement for [Icosahedra](#3121-icosahedron) when additional variety is desired. You can even build far LOD systems to choose between Jessen's icosahedron, the standard icosahedron, and icospheres when you want distant features to look variegated. This sort of construction is covered more completely in [Tree LOD Tricks](#318-tree-lod-tricks).
+**Usage**
+
+* mid-range canopy fill
+* base layer for higher-detail canopy, e.g. [Plane Splay](#3125-plane-splay)
+
+**Notes**
+
+* One-sided shading at range
+* Two-sided shading up close
+* Can be replaced by icosahedra at low LOD
+
+---
+
+##### 3.1.2.3: Octagonal Plane
+
+A low triangle-count planar element used within splays.
+
+**Construction**
+
+* 8-sided polygon in local plane
+* UVs centered for radial leaf textures
+
+```rust
+let positions = regular_ngon(8, radius);
+```
+
+**Usage**
+
+* canopy layering in [Plane Splay](#3125-plane-splay)
+* mid-detail foliage clusters
+
+**Notes**
+
+* Billboarded or slightly tilted
+* Double-sided material recommended
+
+---
+
+##### 3.1.2.4: Triangular Plane
+
+Minimal planar primitive used for fine foliage and fronds.
+
+**Construction**
+
+```rust
+let positions = [
+    Vec3::new(0.0, 0.0, 0.0),
+    Vec3::new(w, 0.0, 0.0),
+    Vec3::new(0.0, h, 0.0),
+];
+```
+
+**Usage**
+
+* fronds
+* fine canopy breakup
+* edge detailing in splays
+
+**Notes**
+
+* Very low cost
+* Best used in groups, chains, or splayed clusters
+* Usually double-sided
+
+---
+
+##### 3.1.2.5: Plane Splay
+
+A high-detail canopy construction derived from the original [`NoisyBall`](https://github.com/ramate-io/maybraid/blob/9c38f45cfd697a392e6114bbc6e67b50005b7f65/procedures/vegetation/src/tree/meshes/canopy/ball.rs#L102-L231).
+
+Plane Splay combines:
+
+* a central noisy ball or implicit volume
+* multiple outward-facing planes
+* octagonal or triangular planar elements
+* radial or hemispherical distribution
+
+**Construction**
+
+```rust
+for i in 0..N {
+    let dir = sample_sphere(seed, i);
+    let pos = center + dir * radius;
+
+    spawn_plane(
+        position = pos,
+        normal = dir,
+        scale = plane_scale(seed, i),
+    );
+}
+```
+
+Planes may be emitted as independent meshes for instancing or merged into a single mesh for fewer draw calls.
+
+**Usage**
+
+* high LOD canopy
+* outer canopy layers
+* silhouette refinement
+* leaf clusters around ball-stick nodes
+
+**Notes**
+
+* Prefer placing planes near canopy surface
+* Avoid dense interior placement
+* Combine with noisy ball or icosphere for volume
+
+---
+
+##### 3.1.2.6: Tufts
+
+A jagged, outward-projecting canopy component with an SDF backing, based on the existing [tuft implementation](https://github.com/ramate-io/maybraid/blob/9c38f45cfd697a392e6114bbc6e67b50005b7f65/procedures/terrain/src/detail/meshes/tuft.rs#L27).
+
+**Construction**
+
+Tufts are composed as a cluster of projecting elements from a shared origin. They are SDF-generated rather than purely planar.
+
+```rust
+fn distance(p: Vec3) -> f32 {
+    let d = base_shape(p);
+    let spikes = directional_noise(p, seed) * amplitude;
+
+    d - spikes
+}
+```
+
+Mesh generation proceeds via standard SDF meshing.
+
+**Usage**
+
+* sprouting trees
+* jungle growths on branches
+* canopy detail layers
+* ground cover
+
+**Notes**
+
+* Can be used at all LOD when visible
+* Cull when occluded by larger canopy elements
+* Useful as both vegetation detail and terrain detail
+
+---
+
+##### 3.1.2.7: Fronds
+
+Fronds are mesh-based arching chains of triangular or narrow quad planes. They are used for palms, bushes, and jungle growth. They should not be SDF-backed unless collision is later required.
+
+**Construction**
+
+A frond is defined by a curved spine and a sequence of planar leaflets attached along it.
+
+```rust
+pub struct FrondConfig {
+    pub segments: usize,
+    pub length: f32,
+    pub width: f32,
+    pub droop: f32,
+    pub twist: f32,
+    pub leaflet_count: usize,
+}
+```
+
+A simple spine:
+
+```rust
+fn spine(t: f32, config: &FrondConfig) -> Vec3 {
+    let x = t * config.length;
+    let y = -config.droop * t * t;
+
+    Vec3::new(x, y, 0.0)
+}
+```
+
+Leaflets are placed along the spine:
+
+```rust
+for i in 0..config.leaflet_count {
+    let t = i as f32 / (config.leaflet_count - 1) as f32;
+
+    let p = spine(t, config);
+    let tangent = normalize(
+        spine(t + EPS, config) - spine(t - EPS, config)
+    );
+
+    let side = if i % 2 == 0 { 1.0 } else { -1.0 };
+    let width = config.width * (1.0 - t);
+    let lateral = side * width;
+
+    emit_triangle_or_quad(
+        root = p,
+        tangent = tangent,
+        lateral = lateral,
+        twist = config.twist * t,
+    );
+}
+```
+
+**Mesh strategy**
+
+Fronds should usually be emitted as one combined mesh per frond. For palm crowns, multiple fronds may be merged into one mesh per crown ring or one mesh per tree.
+
+**Usage**
+
+* palm crowns
+* fern-like bushes
+* jungle branch growth
+* sparse tropical canopy detail
+
+**Notes**
+
+* Use double-sided foliage materials
+* Taper leaflet size toward the tip
+* Add mild noise to spine droop and leaflet angle
+* Prefer mesh construction over SDF unless collision is needed
+
+---
+
+##### 3.1.2.8: Jessen's Icosahedron
+
+[Jessen's icosahedron](https://en.wikipedia.org/wiki/Jessen%27s_icosahedron) is a non-convex variation of the icosahedron used for additional visual variety.
+
+**Usage**
+
+* replace standard icosahedra at far LOD
+* introduce irregular silhouettes
+* mix with icospheres for variation
+* reduce repetition in distant forests
+
+**Notes**
+
+* Especially useful when many distant trees would otherwise share the same silhouette
+* Selection can be randomized per instance
+* Covered more completely in [Tree LOD Tricks](#318-tree-lod-tricks)
+
+Here’s a refined replacement for **3.1.3–3.1.5** incorporating those points.
+
+---
 
 #### 3.1.3: Ball-stick Anchors
 
+Ball-stick anchors define where a branch, canopy chain, or foliage complex begins. The current system does this implicitly through [radial projection from an ad hoc stalk](https://github.com/ramate-io/maybraid/blob/cebdaf75f0ce2d837ddc818a9a2658abb3d738dd/procedures/vegetation/src/tree.rs#L171), then passes the resulting start point and ray into a [`BallStick`](https://github.com/ramate-io/maybraid/blob/cebdaf75f0ce2d837ddc818a9a2658abb3d738dd/procedures/comproc/src/complex/chain/ball_stick/builder.rs) construction.
+
+The refinement is to treat anchoring as a named step. An anchor records the start position, initial growth direction, bias direction, and local scale for a branch or canopy chain.
+
+```rust
+pub struct BallStickAnchor {
+    pub position: Vec3,
+    pub initial_ray: Vec3,
+    pub bias_ray: Vec3,
+    pub radius: f32,
+}
+```
+
+Anchors are usually placed at or near the **stalk radial centroid** rather than directly on the visible stalk surface. This reduces the chance that branches appear detached or improperly projected. The branch mesh can still emerge visually from the stalk surface because the first stick segment projects outward from the centroid.
+
+Common anchor routines include:
+
+* stalk-height sampling for ordinary branches
+* radial rings around the stalk for canopies
+* crown-only rings for palms
+* node-derived anchors for secondary growth
+* downward-biased anchors for banyan descenders
+* ground anchors for bushes, shoots, and trunkless palms
+
+Tree recipes should compose these routines rather than hard-code anchor placement. For example:
+
+```rust
+let anchors = stalk_rings(...)
+    .with_height_bias(...)
+    .with_radial_count(...)
+    .with_direction_rule(...);
+```
+
+This makes constructions such as conifers, palms, banyans, and vase trees variations over anchor selection rather than separate systems.
+
+---
+
 #### 3.1.4: Ball-stick Chains
 
+Ball-stick chains describe the branching skeleton grown from an anchor. The existing [`BallStickBuilder`](https://github.com/ramate-io/maybraid/blob/cebdaf75f0ce2d837ddc818a9a2658abb3d738dd/procedures/comproc/src/complex/chain/ball_stick/builder.rs) already captures the core idea: extend from parent nodes, choose child count, sample direction, assign radii, and emit connected nodes.
+
+At a high level, a chain is a directed graph:
+
+```rust
+pub struct BallStickChain {
+    pub nodes: Vec<BallStickNode>,
+    pub segments: Vec<BallStickSegment>,
+}
+```
+
+Each segment becomes a stick component, usually a [noisy cylinder](#3111-noisy-cylinder) or [crook cylinder](#3112-crook-cylinder). Each node becomes a possible site for foliage, descenders, joint-concealing balls, or additional child chains.
+
+The key behavior to preserve is **directional hysteresis**. A segment should blend prior direction, bias direction, and bounded noise rather than sampling a fresh direction independently.
+
+```rust
+let mean = blend(previous_ray, bias_ray, bias_strength);
+let ray = perturb(mean, angle_tolerance, seed);
+let child = parent.position + ray * segment_length;
+```
+
+However, several intended tree constructions require the hysteresis behavior to vary across the graph. Banyan descenders need every nth segment to bias downward. Vase and torch trees need the bias to change with height. Conifers need radial projections to shorten and shift angle with vertical position.
+
+Accordingly, the refined chain model should allow a rule mapping node context to a hysteresis configuration:
+
+```rust
+pub struct ChainContext {
+    pub depth: usize,
+    pub branch_order: usize,
+    pub height_fraction: f32,
+    pub segment_index: usize,
+    pub parent_ray: Vec3,
+    pub anchor: BallStickAnchor,
+}
+
+pub struct HysteresisConfig {
+    pub bias_ray: Vec3,
+    pub bias_strength: f32,
+    pub angle_tolerance: f32,
+    pub length_range: Range<f32>,
+    pub radius_range: Range<f32>,
+    pub child_count: Range<usize>,
+}
+```
+
+Conceptually:
+
+```rust
+fn hysteresis_for(ctx: ChainContext) -> HysteresisConfig {
+    if ctx.segment_index % 4 == 0 {
+        downward_descender_config()
+    } else {
+        ordinary_canopy_config(ctx.height_fraction)
+    }
+}
+```
+
+This can be implemented as either:
+
+- (1) a vector of hysteresis configs indexed by depth or segment index, or
+- (2) a rule object that maps `ChainContext` to `HysteresisConfig`.
+
+The rule form is more expressive and better matches the proposed named trees. It allows the construction to say “bias upward near the top,” “bias downward every fourth segment,” or “reduce radial length logarithmically with height” without creating a new chain builder.
+
+When a chain is processed as a branch, nodes should optionally receive small noisy balls using the same material as the stick or stalk. These joint balls conceal intersections between cylinders and make the branch graph read as continuous organic growth rather than assembled tubes.
+
+```rust
+if render_joint_balls {
+    spawn_noisy_ball(
+        position = node.position,
+        radius = node.radius,
+        material = stick_material,
+    );
+}
+```
+
+---
+
 #### 3.1.5: Ball Selection
+
+Ball selection means deciding **which nodes in the ball-stick graph receive foliage or canopy mass**, not choosing the concrete ball mesh type. The current system effectively allocates canopy at branch nodes through the existing tree spawning flow and [planar canopy construction](https://github.com/ramate-io/maybraid/blob/9c38f45cfd697a392e6114bbc6e67b50005b7f65/procedures/vegetation/src/tree/meshes/canopy/ball.rs). The refinement is to make node selection an explicit policy of each tree construction.
+
+This policy is mostly recipe-specific. A tree recipe traverses the graph and marks nodes for canopy allocation according to its intended silhouette.
+
+Typical rules include:
+
+* allocate only at terminal nodes
+* allocate on outer canopy layers
+* skip hidden interior nodes
+* allocate more densely near the crown
+* allocate along every node for dense jungle growth
+* allocate sparse tufts on selected branch joints
+* allocate fronds only on crown-ring anchors
+
+A selector should use graph and anchor context:
+
+```rust
+pub struct BallSelectionContext {
+    pub depth: usize,
+    pub branch_order: usize,
+    pub height_fraction: f32,
+    pub distance_from_anchor: f32,
+    pub is_terminal: bool,
+    pub child_count: usize,
+}
+```
+
+Conceptually:
+
+```rust
+fn should_allocate_ball(ctx: BallSelectionContext) -> bool {
+    ctx.is_terminal || ctx.height_fraction > 0.65
+}
+```
+
+This supports the named constructions later in the proposal:
+
+* storybook trees favor outer and terminal canopy nodes
+* conifers favor small allocations along many short radial projections
+* banyans allocate broadly across upper canopy and descender nodes
+* palms allocate primarily from crown-ring anchors
+* jungle growths add secondary allocations at selected canopy nodes
+
+The concrete component used at a selected node, such as noisy ball, plane splay, tuft, or frond, is a separate decision handled by the tree recipe and eventual LOD strategy.
+
 
 #### 3.1.6: Well-known Component Constructions
 
