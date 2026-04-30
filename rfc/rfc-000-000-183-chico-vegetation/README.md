@@ -2093,21 +2093,283 @@ spawn_tuft(
 * Reduce ring count for younger palms.
 * Add [Fruiting Bodies](#3167-fruiting-bodies) beneath the crown for date clusters.
 
-### 3.1.7.9: Palm Bush
+##### 3.1.7.10: Palm Bush
 
-- Use the [Palm Crown](#3161-palm-crown) construction with 6 to 10 layers. 
-- Do not add a trunk. 
+The Palm Bush is a trunkless palm form: a dense, ground-anchored cluster of fronds radiating outward. It is useful for understory tropical vegetation, coastal growth, decorative landscaping, and dense jungle edges.
 
-### 3.1.7.10: Northern Conifer
+**Shape**
 
-- Use [Liam's Conifer](#3172-liams-conifer) construction, but allocate [Plane Splays](#3125-plane-splay) for the leaf balls of the canopy.
+* No visible trunk
+* Dense radial frond cluster from ground
+* Multi-layered crown
+* Lower fronds droop outward
+* Upper fronds rise slightly
 
-### 3.1.7.11: Common High Bush
+**Anchor**
 
-- Use the [High-bush and Shoots](#3163-high-bushes-and-shoots) construction.
-- Send up 7 to 10 vertically-biased radial projections. 
+Place the crown directly at or slightly above ground level.
 
-Can be used as a bush or small tree in non-arid biomes. Takes any shader combination well.
+```rust
+let crown = ground_position + Vec3::Y * (0.02 * H);
+```
+
+**Crown Construction**
+
+Use the [Palm Crown](#3161-palm-crown) construction with more layers to achieve density.
+
+```rust
+let ring_count = 6..=10;
+let fronds_per_ring = 10..=16;
+let ring_spacing = 0.01 * H;
+```
+
+```rust
+for ring in 0..ring_count {
+    let u = ring as f32 / (ring_count - 1) as f32;
+
+    let vertical_bias = mix(
+        -0.20, // lower rings droop strongly
+        0.35,  // upper rings slightly upward
+        u,
+    );
+
+    for i in 0..fronds_per_ring {
+        let theta = TAU * i as f32 / fronds_per_ring as f32;
+        let radial = Vec3::new(theta.cos(), 0.0, theta.sin());
+
+        spawn_frond(
+            anchor = crown + Vec3::Y * ring as f32 * ring_spacing,
+            direction = normalize(radial + Vec3::Y * vertical_bias),
+        );
+    }
+}
+```
+
+**Fronds**
+
+Use [Fronds](#3127-fronds) with moderate length and strong droop for lower layers.
+
+```rust
+FrondConfig {
+    segments: 8..=14,
+    length: 0.25 * H..0.40 * H,
+    width: 0.05 * H,
+    droop: medium_to_high,
+    twist: mild,
+    leaflet_count: 12..=20,
+}
+```
+
+Lower fronds should sweep outward and downward, forming a skirt. Upper fronds should provide some upward lift to avoid a flattened silhouette.
+
+**Ball Selection**
+
+Not applicable. Fronds are directly allocated from the crown anchor. Optionally, use a small central [Tuft](#3126-tufts) to conceal the origin point.
+
+```rust
+spawn_tuft(
+    position = crown,
+    direction = Vec3::Y,
+    scale = 0.04 * H,
+);
+```
+
+**Materials**
+
+* Leaf shader: tropical greens, dusty greens, or dry palm tones
+* Optional variation in leaf color across rings for natural variation
+
+**Variants**
+
+* Reduce height and increase frond count for dense ground cover.
+* Increase droop for desert or coastal scrub variants.
+* Add [Fruiting Bodies](#3167-fruiting-bodies) near the base for decorative or exotic forms.
+
+##### 3.1.7.11: Northern Conifer
+
+The Northern Conifer is a fuller, colder-climate variant of [Liam's Conifer](#3172-liams-conifer). It preserves the narrow stalk, dense vertical ringing, and short radial projections, but replaces tuft foliage with [Plane Splays](#3125-plane-splay) for broader, denser needle mass.
+
+**Shape**
+
+* Tall, narrow central stalk
+* Short radial projections
+* Dense layered conifer profile
+* Fuller canopy than Liam's Conifer
+* Needle-like or clustered planar foliage
+
+**Stalk**
+
+Use the [Liam's Conifer](#3172-liams-conifer) stalk.
+
+```rust
+let stalk_height = H;
+let stalk_radius = 0.025 * H;
+```
+
+**Anchor Rings**
+
+Use the same ring structure as Liam's Conifer.
+
+```rust
+let z_min = 0.10 * H;
+let z_max = 0.98 * H;
+let ring_spacing = 0.04 * H;
+let anchors_per_ring = 4;
+```
+
+**Projection Length**
+
+Use the same linear upper shortening profile.
+
+```rust
+let max_projection_length = 0.05 * H;
+let length = max(
+    0.20 * max_projection_length,
+    max_projection_length * (1.0 - u),
+);
+```
+
+**Chain Growth**
+
+Use the same sparse radial chain shape, but allow slightly more foliage density at each node.
+
+```rust
+BallStickChain {
+    segments: 3,
+    segment_lengths: [
+        0.70 * projection_length,
+        0.15 * projection_length,
+        0.15 * projection_length,
+    ],
+    child_count: 1..=2,
+    angle_tolerance: radians(8.0),
+}
+```
+
+Bias projections slightly downward:
+
+```rust
+let bias_ray = rotate_down(radial, radians(2.0));
+```
+
+**Ball Selection**
+
+Allocate foliage at all ball-stick joints, as in Liam's Conifer, but use [Plane Splay](#3125-plane-splay) instead of [Tufts](#3126-tufts).
+
+```rust
+fn should_allocate_ball(_ctx: BallSelectionContext) -> bool {
+    true
+}
+```
+
+Use small, narrow splays to imply needle clusters.
+
+```rust
+let splay_radius = 0.018 * H;
+let splay_count = 2..=4;
+```
+
+Plane splays should align broadly with the branch direction and slightly downward or outward.
+
+**Materials**
+
+* Stick shader: darker or colder conifer bark
+* Leaf shader: dark green, blue-green, or snow-tinted needle material
+
+**Variants**
+
+* Increase splay density for spruce-like forms.
+* Use paler shaders for dry or alpine forms.
+* Add snow bump-out integration for winter biomes.
+
+##### 3.1.7.12: Common High Bush
+
+The Common High Bush is a trunkless or near-trunkless shrub form built from upward-biased radial shoots. It is useful as a bush, small tree, understory plant, hedge element, or filler vegetation in most biomes.
+
+**Shape**
+
+* No dominant central trunk
+* Seven to ten upward radial shoots
+* Rounded or vase-like shrub silhouette
+* Dense foliage near outer and terminal nodes
+* Works with many bark and leaf shaders
+
+**Anchors**
+
+Use the [High-bushes and Shoots](#3163-high-bushes-and-shoots) construction from a ground or near-ground anchor.
+
+```rust
+let shoot_count = 7..=10;
+let anchor = ground_position + Vec3::Y * (0.02 * H);
+```
+
+Distribute shoots radially:
+
+```rust
+for i in 0..shoot_count {
+    let theta = TAU * i as f32 / shoot_count as f32;
+    let radial = Vec3::new(theta.cos(), 0.0, theta.sin());
+
+    let dir = normalize(radial * 0.45 + Vec3::Y * 0.75);
+
+    grow_chain(anchor, dir);
+}
+```
+
+**Chain Growth**
+
+Use short to moderate ball-stick chains with upward bias.
+
+```rust
+BallStickChain {
+    segments: 3..=5,
+    child_count: 1..=2,
+    angle_tolerance: radians(12.0),
+}
+```
+
+Keep branches readable but not too sparse:
+
+```rust
+HysteresisConfig {
+    bias_ray: dir,
+    bias_strength: high,
+    angle_tolerance: radians(12.0),
+    child_count: 1..=2,
+    length_range: 0.08 * H..0.16 * H,
+    radius_range: 0.012 * H..0.025 * H,
+}
+```
+
+**Ball Selection**
+
+Allocate foliage on terminal and upper nodes, with moderate interior fill for bush density.
+
+```rust
+fn should_allocate_ball(ctx: BallSelectionContext) -> bool {
+    ctx.is_terminal
+        || ctx.height_fraction > 0.45
+        || ctx.branch_order > 1
+}
+```
+
+Use [Plane Splay](#3125-plane-splay), [Noisy Ball](#3122-noisy-ball), or [Tufts](#3126-tufts) depending on style.
+
+```rust
+let leaf_radius = 0.05 * H;
+```
+
+**Materials**
+
+* Stick shader: shrub bark, green woody stems, dry brush, or stylized bark
+* Leaf shader: broadleaf, dry chaparral, jungle green, flowering, or ornamental foliage
+
+**Variants**
+
+* Use tufts for scrub or dry brush.
+* Use plane splays for leafy bushes.
+* Add [Fruiting Bodies](#3167-fruiting-bodies) for berry bushes.
+* Reduce height and increase shoot count for hedge-like forms.
 
 ### 3.1.7.12: Jungle Storybook Tree
 
@@ -2121,7 +2383,7 @@ Can be used as a bush or small tree in non-arid biomes. Takes any shader combina
 
 ### 3.1.7.14: Friend's Conifer
 
-- Start with the [Northern Conifer](#31710-northern-conifer) construction. 
+- Start with the [Northern Conifer](#31711-northern-conifer) construction. 
 - Make radial projection segment length vary with log, keeping an almost consistent length for much of the length and rounding towards the top. 
 
 ### 3.1.7.15: Temperate Conifer
