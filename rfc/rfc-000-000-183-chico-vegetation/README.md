@@ -3359,8 +3359,323 @@ fn stick_color(world_position: vec3<f32>, normal: vec3<f32>) -> vec3<f32> {
 * Low-frequency noise should shift between bark tones; high-frequency noise should only modulate value.
 * This can be shared by trunks, branches, descenders, and joint-concealing bark balls.
 
-
 ### 3.1.10: Leaf Shading
+
+Leaf shading follows the same world-space palette approach as [Stick Shading](#319-stick-shading), but adds time, longitude, and altitude controls. The goal is to support stable foliage variation, seasonal color changes, snow accumulation, spring buds, and localized flecking without changing the underlying vegetation geometry.
+
+#### 3.1.10.1: Base Leaf Palette
+
+Each species provides a base palette for foliage color.
+
+```rust
+pub struct LeafPalette {
+    pub colors: Vec<Vec3>,
+    pub regional_scale: f32,
+    pub detail_scale: f32,
+    pub value_strength: f32,
+}
+```
+
+World-space noise selects and modulates the base color:
+
+```wgsl
+let regional = fbm(world_position.xyz * leaf.regional_scale, leaf.seed);
+let detail = fbm(world_position.xyz * leaf.detail_scale, leaf.seed + 101u);
+
+let base = palette_sample(regional);
+let value = mix(1.0 - leaf.value_strength, 1.0 + leaf.value_strength, detail);
+```
+
+#### 3.1.10.2: Flecks
+
+A fleck is an additional color contribution applied over the base leaf color. Flecks are used for snow, buds, flowers, disease, dryness, or other localized seasonal effects.
+
+```rust
+pub struct LeafFleck {
+    pub color: Vec3,
+    pub strength: f32,
+
+    pub season_center: f32,
+    pub season_width: f32,
+    pub season_cutoff: f32,
+
+    pub longitude_divisor: f32,
+    pub altitude_divisor: f32,
+
+    pub season_weight: f32,
+    pub longitude_weight: f32,
+    pub altitude_weight: f32,
+
+    pub noise_scale: f32,
+    pub noise_cutoff: f32,
+}
+```
+
+Each fleck computes a likelihood or strength from:
+
+* season
+* longitude
+* altitude
+* local world-space noise
+
+The hard cutoff ensures the fleck can fully disappear rather than merely fade.
+
+#### 3.1.10.3: Season, Longitude, and Altitude Terms
+
+Season is cyclic over a normalized year:
+
+```rust
+let season: f32; // 0..1
+```
+
+A simple cyclic season response:
+
+```wgsl
+fn cyclic_window(t: f32, center: f32, width: f32) -> f32 {
+    let d = abs(fract(t - center + 0.5) - 0.5);
+    return smoothstep(width, 0.0, d);
+}
+```
+
+Longitude and altitude can be normalized into coarse environmental masks:
+
+```wgsl
+let lon_term = fbm(vec3<f32>(world_position.x / fleck.longitude_divisor, 0.0, 0.0), seed);
+let alt_term = smoothstep(alt_min, alt_max, world_position.y);
+```
+
+The combined fleck strength is:
+
+```wgsl
+let env =
+    fleck.season_weight * season_term +
+    fleck.longitude_weight * lon_term +
+    fleck.altitude_weight * alt_term;
+
+let env = env / max(
+    0.0001,
+    fleck.season_weight + fleck.longitude_weight + fleck.altitude_weight,
+);
+```
+
+Then apply local fleck noise:
+
+```wgsl
+let local = fbm(world_position.xyz * fleck.noise_scale, seed);
+let mask = env * local;
+```
+
+If `mask < fleck.noise_cutoff`, the fleck is absent.
+
+#### 3.1.10.4: WGSL Sketch
+
+```wgsl
+const MAX_LEAF_COLORS: u32 = 4u;
+const MAX_FLECKS: u32 = 4u;
+
+struct LeafFleck {
+    color: vec3<f32>,
+    strength: f32,
+
+    season_center: f32,
+    season_width: f32,
+    season_cutoff: f32,
+    longitude_divisor: f32,
+
+    altitude_start: f32,
+    altitude_end: f32,
+    altitude_divisor: f32,
+    noise_scale: f32,
+
+    season_weight: f32,
+    longitude_weight: f32,
+    altitude_weight: f32,
+    noise_cutoff: f32,
+};
+
+struct LeafShaderParams {
+    seed: u32,
+    color_count: u32,
+    fleck_count: u32,
+    _pad0: u32,
+
+    regional_scale: f32,
+    detail_scale: f32,
+    value_strength: f32,
+    _pad1: f32,
+
+    colors: array<vec4<f32>, 4>,
+    flecks: array<LeafFleck, 4>,
+};
+
+@group(1) @binding(0)
+var<uniform> leaf: LeafShaderParams;
+
+@group(1) @binding(1)
+var<uniform> season_time: f32;
+
+fn fbm(p: vec3<f32>, seed: u32) -> f32 {
+    // Placeholder: use standard value noise, Perlin, or project fbm.
+    return fract(sin(dot(p, vec3<f32>(12.9898, 78.233, 37.719)) + f32(seed)) * 43758.5453);
+}
+
+fn cyclic_window(t: f32, center: f32, width: f32) -> f32 {
+    let d = abs(fract(t - center + 0.5) - 0.5);
+    return smoothstep(width, 0.0, d);
+}
+
+fn palette_sample(t: f32) -> vec3<f32> {
+    let count = max(leaf.color_count, 1u);
+    let max_i = count - 1u;
+
+    let x = clamp(t, 0.0, 1.0) * f32(max_i);
+    let i = min(u32(floor(x)), max_i);
+    let j = min(i + 1u, max_i);
+    let f = fract(x);
+
+    return mix(
+        leaf.colors[i].rgb,
+        leaf.colors[j].rgb,
+        f,
+    );
+}
+
+fn fleck_mask(
+    fleck: LeafFleck,
+    world_position: vec3<f32>,
+    seed: u32,
+) -> f32 {
+    let season_term = cyclic_window(
+        season_time,
+        fleck.season_center,
+        fleck.season_width,
+    );
+
+    if (season_term < fleck.season_cutoff) {
+        return 0.0;
+    }
+
+    let lon_term = fbm(
+        vec3<f32>(
+            world_position.x / max(fleck.longitude_divisor, 0.0001),
+            0.0,
+            0.0,
+        ),
+        seed + 17u,
+    );
+
+    let alt_base = smoothstep(
+        fleck.altitude_start,
+        fleck.altitude_end,
+        world_position.y,
+    );
+
+    let alt_noise = fbm(
+        vec3<f32>(
+            0.0,
+            world_position.y / max(fleck.altitude_divisor, 0.0001),
+            0.0,
+        ),
+        seed + 31u,
+    );
+
+    let altitude_term = alt_base * alt_noise;
+
+    let denom = max(
+        0.0001,
+        fleck.season_weight
+            + fleck.longitude_weight
+            + fleck.altitude_weight,
+    );
+
+    let env = (
+        season_term * fleck.season_weight
+        + lon_term * fleck.longitude_weight
+        + altitude_term * fleck.altitude_weight
+    ) / denom;
+
+    let local = fbm(world_position * fleck.noise_scale, seed + 47u);
+    let mask = env * local;
+
+    if (mask < fleck.noise_cutoff) {
+        return 0.0;
+    }
+
+    return mask;
+}
+
+fn leaf_color(world_position: vec3<f32>, normal: vec3<f32>) -> vec3<f32> {
+    let regional = fbm(world_position * leaf.regional_scale, leaf.seed);
+    let detail = fbm(world_position * leaf.detail_scale, leaf.seed + 101u);
+
+    var color = palette_sample(regional);
+
+    let value = mix(
+        1.0 - leaf.value_strength,
+        1.0 + leaf.value_strength,
+        detail,
+    );
+
+    color = color * value;
+
+    for (var i = 0u; i < MAX_FLECKS; i = i + 1u) {
+        if (i >= leaf.fleck_count) {
+            break;
+        }
+
+        let fleck = leaf.flecks[i];
+        let mask = fleck_mask(fleck, world_position, leaf.seed + i * 131u);
+        let amount = clamp(mask * fleck.strength, 0.0, 1.0);
+
+        color = mix(color, fleck.color, amount);
+    }
+
+    return color;
+}
+```
+
+#### 3.1.10.5: Usage
+
+**Snow**
+
+Use white flecks with strong season, latitude or longitude, and altitude weighting.
+
+```rust
+LeafFleck {
+    color: Vec3::splat(0.95),
+    strength: 0.8,
+    season_center: winter,
+    season_width: winter_width,
+    season_cutoff: 0.2,
+    longitude_weight: 0.4,
+    altitude_weight: 0.6,
+    season_weight: 1.0,
+    noise_cutoff: 0.45,
+}
+```
+
+Trees in the same region should generally share similar snow fleck parameters regardless of species, unless understory shielding or grove-specific effects apply.
+
+**Spring buds**
+
+Use bright green, yellow, pink, or white flecks early in the season. Bias primarily by season with slight longitude variation.
+
+```rust
+LeafFleck {
+    color: bud_color,
+    strength: 0.5,
+    season_center: early_spring,
+    season_width: short,
+    season_weight: 1.0,
+    longitude_weight: 0.2,
+    altitude_weight: 0.1,
+    noise_cutoff: 0.55,
+}
+```
+
+**Overlapping flecks**
+
+Multiple flecks may overlap. Their `strength` controls how aggressively each fleck blends over the current color. This lets snow, buds, flowers, and leaf-color variation coexist without requiring separate materials.
 
 ### 3.2: L-system Trees
 
