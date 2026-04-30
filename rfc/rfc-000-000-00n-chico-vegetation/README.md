@@ -12,17 +12,165 @@ We propose the Chico vegetation system in response to [#61](https://github.com/r
 
 ### 3.1: Stalk and Ball-stick Trees
 
-Stalk ball and stick trees are based on current system which uses [an ad hoc stalk with radial projection](https://github.com/ramate-io/maybraid/blob/cebdaf75f0ce2d837ddc818a9a2658abb3d738dd/procedures/vegetation/src/tree.rs#L171), a [`BallStick`](https://github.com/ramate-io/maybraid/blob/cebdaf75f0ce2d837ddc818a9a2658abb3d738dd/procedures/comproc/src/complex/chain/ball_stick/builder.rs) complex for the canopy, a [noisy cylinder](https://github.com/ramate-io/maybraid/blob/cebdaf75f0ce2d837ddc818a9a2658abb3d738dd/procedures/vegetation/src/tree/meshes/trunk/segment.rs) for the trunk and branch segments, and a [planar canopy](https://github.com/ramate-io/maybraid/blob/9c38f45cfd697a392e6114bbc6e67b50005b7f65/procedures/vegetation/src/tree/meshes/canopy/ball.rs).
+Stalk and ball-stick trees form the core geometric system for Chico vegetation. The design refines the current system which uses [an ad hoc stalk with radial projection](https://github.com/ramate-io/maybraid/blob/cebdaf75f0ce2d837ddc818a9a2658abb3d738dd/procedures/vegetation/src/tree.rs#L171), a [`BallStick`](https://github.com/ramate-io/maybraid/blob/cebdaf75f0ce2d837ddc818a9a2658abb3d738dd/procedures/comproc/src/complex/chain/ball_stick/builder.rs) complex for the canopy, a [noisy cylinder](https://github.com/ramate-io/maybraid/blob/cebdaf75f0ce2d837ddc818a9a2658abb3d738dd/procedures/vegetation/src/tree/meshes/trunk/segment.rs) for trunk and branch segments, and a [planar canopy](https://github.com/ramate-io/maybraid/blob/9c38f45cfd697a392e6114bbc6e67b50005b7f65/procedures/vegetation/src/tree/meshes/canopy/ball.rs).
+
+The goal is to formalize this into a composable, parameterized system:
+
+* **Stalks** define primary vertical structure
+* **Sticks** define trunk and branch segments
+* **Balls and planes** define canopy and foliage
+* **Ball-stick chains** unify tree construction
+
+Tree types are then expressed as parameterized constructions over these primitives rather than bespoke implementations.
+
+---
 
 #### 3.1.1: Stick and Stalk Components
 
+Stick and stalk components define the structural backbone of trees. They should remain:
+
+* deterministic from seed
+* SDF-compatible for mesh and physics reuse
+* composable into chains and radial projections
+
+---
+
 ##### 3.1.1.1: Noisy Cylinder
 
-The original design. Good for most tree branches and trunks.
+The noisy cylinder is the default segment primitive and corresponds directly to the existing [noisy cylinder implementation](https://github.com/ramate-io/maybraid/blob/cebdaf75f0ce2d837ddc818a9a2658abb3d738dd/procedures/vegetation/src/tree/meshes/trunk/segment.rs).
+
+It defines a tapered cylinder along the $y$ axis with noise applied to its surface.
+
+```rust
+pub struct SegmentConfig {
+    pub seed: u32,
+    pub base_radius: f32,
+    pub top_radius: f32,
+    pub noise_amplitude: f32,
+    pub noise_frequency: f32,
+}
+```
+
+SDF sketch:
+
+```rust
+fn distance(&self, p: Vec3) -> f32 {
+    let y = p.y;
+    let t = y.clamp(0.0, 1.0);
+
+    let radius = mix(
+        self.base_radius,
+        self.top_radius,
+        t,
+    );
+
+    let radial = Vec2::new(p.x, p.z).length();
+    let mut d = radial - radius;
+
+    let n = perlin(
+        p * self.noise_frequency,
+        self.seed,
+    );
+
+    d += n * self.noise_amplitude;
+
+    if y < 0.0 {
+        d = d.max(-y);
+    } else if y > 1.0 {
+        d = d.max(y - 1.0);
+    }
+
+    d
+}
+```
+
+This component is suitable for:
+
+* trunks
+* straight or mildly irregular branches
+* most general-purpose segment usage
+
+---
 
 ##### 3.1.1.2: Crook Cylinder
 
-Adds a bends to the noisy cylinder. Good for variety. 
+The crook cylinder extends the noisy cylinder by introducing continuous curvature along the segment while preserving an SDF formulation.
+
+Instead of a straight axis, the cylinder is defined around a smooth centerline:
+
+$$
+\gamma(t) =
+\begin{bmatrix}
+a_x \sin(\pi t + \phi_x) \
+t \
+a_z \sin(\pi t + \phi_z)
+\end{bmatrix}
+$$
+
+...where $t \in [0,1]$ and $a_x, a_z$ control bend magnitude.
+
+```rust
+pub struct CrookConfig {
+    pub segment: SegmentConfig,
+    pub bend_x: f32,
+    pub bend_z: f32,
+    pub phase_x: f32,
+    pub phase_z: f32,
+}
+```
+
+SDF sketch:
+
+```rust
+fn centerline(&self, t: f32) -> Vec3 {
+    Vec3::new(
+        self.bend_x * (PI * t + self.phase_x).sin(),
+        t,
+        self.bend_z * (PI * t + self.phase_z).sin(),
+    )
+}
+
+fn distance(&self, p: Vec3) -> f32 {
+    let t = p.y.clamp(0.0, 1.0);
+
+    let c = self.centerline(t);
+    let q = p - c;
+
+    let radius = mix(
+        self.segment.base_radius,
+        self.segment.top_radius,
+        t,
+    );
+
+    let radial = Vec2::new(q.x, q.z).length();
+
+    let n = perlin(
+        p * self.segment.noise_frequency,
+        self.segment.seed,
+    );
+
+    let d = radial - radius + n * self.segment.noise_amplitude;
+
+    if p.y < 0.0 {
+        d.max(-p.y)
+    } else if p.y > 1.0 {
+        d.max(p.y - 1.0)
+    } else {
+        d
+    }
+}
+```
+
+This produces smoothly bent trunks and branches without introducing discontinuities.
+
+**Usage**
+
+* stylized or expressive trunks
+* bent or wind-shaped branches
+* palms, banyans, and irregular growth patterns
+
+Crook cylinders should be used deliberately, as they strongly influence silhouette and perceived species.
+
 
 #### 3.1.2: Ball Components
 
