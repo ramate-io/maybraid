@@ -3715,19 +3715,110 @@ L-systems remain an important area of future work. In particular, hybrid approac
 
 ### 3.3: Ground Cover
 
+Ground cover provides the lowest layer of vegetation detail and is responsible for visually filling terrain with grasses, moss, scrub, and low-lying plant matter. It should be:
+
+* dense but inexpensive
+* spatially stable
+* driven primarily by terrain properties (elevation, slope, biome)
+* composable with higher-level vegetation systems
+
+The approach combines **continuous surface modification (bump outs)** with **discrete volumetric detail (tufts)**.
+
+---
+
 ### 3.3.1: Bump Outs
 
-Ground cover primarily relies on a similar [bump out](https://github.com/ramate-io/maybraid/tree/main/rfc/rfc-000-000-170-terrain-detail#34-bump-outs) method to RFC-170. We can then use [Leaf Shaders](#3110-leaf-shading), to provide detail. 
+Ground cover primarily relies on a similar [bump out](https://github.com/ramate-io/maybraid/tree/main/rfc/rfc-000-000-170-terrain-detail#34-bump-outs) method to RFC-170. These modify the underlying terrain SDF to introduce small-scale height variation representing grass beds, moss, soft soil, or low vegetation mats.
+
+Construction follows:
+
+* define a cell or region
+* sample noise to determine coverage
+* apply a bounded vertical displacement to the terrain SDF
+
+```rust
+let mask = noise(world_position * scale);
+
+if mask > threshold {
+    let height = amplitude * smooth(mask);
+    sdf += height;
+}
+```
+
+Key characteristics:
+
+* **continuous**: no discrete meshes required
+* **cheap**: operates in terrain generation phase
+* **stable**: tied to world-space coordinates
+* **biome-driven**: parameters vary with terrain conditions
+
+Detail is primarily expressed through [Leaf Shaders](#3110-leaf-shading):
+
+* color variation (greens, yellows, browns)
+* seasonal effects (drying, snow cover)
+* flecking (flowers, debris, moss variation)
+
+Bump outs provide the **base visual mass** of ground vegetation.
+
+---
 
 ### 3.3.2: Tufts
 
-Extra volume-detailed will typically be given by [Tufts](#332-tufts). However, as detailed in [Tufts](#3522-tufts-layer), we recommend handling these as a separate layer from the ground cover bump outs. 
+Extra volumetric detail is provided by [Tufts](#332-tufts). These add discrete geometry to break up the flatness of bump-out-only surfaces.
+
+Tufts are:
+
+* SDF-based or mesh-based clumps
+* sparsely distributed over bump-out regions
+* oriented by terrain normal
+* scaled and rotated deterministically
+
+```rust
+if noise(seed) > placement_threshold {
+    spawn_tuft(
+        position = terrain_position,
+        direction = terrain_normal,
+        scale = tuft_scale,
+    );
+}
+```
+
+As detailed in [Tufts](#3522-tufts-layer), tufts should be handled as a **separate layer** from bump outs:
+
+* bump outs define coverage and base density
+* tufts provide localized vertical structure
+
+This separation allows:
+
+* independent LOD control
+* independent density tuning
+* better performance scaling
+
+**Placement considerations**
+
+* bias placement toward flatter regions or slight slopes
+* avoid excessive clustering unless biome requires it
+* reduce density near large vegetation or obstacles
+
+**Usage**
+
+* grasses and scrub
+* jungle undergrowth
+* dry brush
+* moss clumps
+* small flowering plants
+
+Together, bump outs and tufts provide a scalable and performant ground cover system that integrates cleanly with terrain and vegetation layers.
+
 
 ### 3.4: Cellular Groves
 
 General name for vegetation type allocation system. Unify exclusive types you want to plant in a grove. Groves are the level at which planting constraints are painted in.
 
 ### 3.4.1: Parameterization
+
+- **Scale:** while specific trees will encode proportional values and constrain mins and maxes, the grove can provide a general scale which it noisily samples per tree cell. 
+- 
 
 ### 3.4.2: Cell Selection and Planting Constraints
 
