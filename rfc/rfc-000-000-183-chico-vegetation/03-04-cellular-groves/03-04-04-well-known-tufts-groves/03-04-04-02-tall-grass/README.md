@@ -39,7 +39,11 @@ pub enum TallGrassCell {
         item: Tuft {
             height: 0.70..1.00,
             width: 0.18..0.40,
-            palette_mix: [red_brown..deep_rust],
+            palette_mix: [
+                [red_brown..deep_rust],
+                [light_brown..dark_brown],
+                [yellow_green..dark_green]
+            ],
         },
     }),
 }
