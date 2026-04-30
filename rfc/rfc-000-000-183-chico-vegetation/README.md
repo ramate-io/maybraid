@@ -25,7 +25,7 @@ Tree types are then expressed as parameterized constructions over these primitiv
 
 ---
 
-#### 3.1.1: Stick and Stalk Components
+### 3.1.1: Stick and Stalk Components
 
 Stick and stalk components define the structural backbone of trees. They should remain:
 
@@ -35,7 +35,7 @@ Stick and stalk components define the structural backbone of trees. They should 
 
 ---
 
-##### 3.1.1.1: Noisy Cylinder
+### 3.1.1.1: Noisy Cylinder
 
 The noisy cylinder is the default segment primitive and corresponds directly to the existing [noisy cylinder implementation](https://github.com/ramate-io/maybraid/blob/cebdaf75f0ce2d837ddc818a9a2658abb3d738dd/procedures/vegetation/src/tree/meshes/trunk/segment.rs).
 
@@ -92,7 +92,7 @@ This component is suitable for:
 
 ---
 
-##### 3.1.1.2: Crook Cylinder
+### 3.1.1.2: Crook Cylinder
 
 The crook cylinder extends the noisy cylinder by introducing continuous curvature along the segment while preserving an SDF formulation.
 
@@ -171,7 +171,7 @@ This produces smoothly bent trunks and branches without introducing discontinuit
 
 Crook cylinders should be used deliberately, as they strongly influence silhouette and perceived species.
 
-#### 3.1.2: Ball Components
+### 3.1.2: Ball Components
 
 Ball components are primarily used for canopy and foliage massing. Unlike stick components, they do not generally need to be collision-supporting, though some may retain SDF backings where useful for reuse or consistency.
 
@@ -179,7 +179,7 @@ These components provide the visual mass of vegetation, while stick components d
 
 ---
 
-##### 3.1.2.1: Icosahedron
+### 3.1.2.1: Icosahedron
 
 A low-poly convex canopy primitive used primarily at far range.
 
@@ -211,7 +211,7 @@ let mesh = Mesh::from(shape::Icosahedron {
 
 ---
 
-##### 3.1.2.2: Noisy Ball
+### 3.1.2.2: Noisy Ball
 
 An SDF-backed spherical canopy element with surface perturbation.
 
@@ -243,7 +243,7 @@ Mesh generation proceeds via marching cubes or dual contouring.
 
 ---
 
-##### 3.1.2.3: Octagonal Plane
+### 3.1.2.3: Octagonal Plane
 
 A low triangle-count planar element used within splays.
 
@@ -268,7 +268,7 @@ let positions = regular_ngon(8, radius);
 
 ---
 
-##### 3.1.2.4: Triangular Plane
+### 3.1.2.4: Triangular Plane
 
 Minimal planar primitive used for fine foliage and fronds.
 
@@ -296,7 +296,7 @@ let positions = [
 
 ---
 
-##### 3.1.2.5: Plane Splay
+### 3.1.2.5: Plane Splay
 
 A high-detail canopy construction derived from the original [`NoisyBall`](https://github.com/ramate-io/maybraid/blob/9c38f45cfd697a392e6114bbc6e67b50005b7f65/procedures/vegetation/src/tree/meshes/canopy/ball.rs#L102-L231).
 
@@ -339,7 +339,7 @@ Planes may be emitted as independent meshes for instancing or merged into a sing
 
 ---
 
-##### 3.1.2.6: Tufts
+### 3.1.2.6: Tufts
 
 A jagged, outward-projecting canopy component with an SDF backing, based on the existing [tuft implementation](https://github.com/ramate-io/maybraid/blob/9c38f45cfd697a392e6114bbc6e67b50005b7f65/procedures/terrain/src/detail/meshes/tuft.rs#L27).
 
@@ -373,7 +373,7 @@ Mesh generation proceeds via standard SDF meshing.
 
 ---
 
-##### 3.1.2.7: Fronds
+### 3.1.2.7: Fronds
 
 Fronds are mesh-based arching chains of triangular or narrow quad planes. They are used for palms, bushes, and jungle growth. They should not be SDF-backed unless collision is later required.
 
@@ -447,7 +447,7 @@ Fronds should usually be emitted as one combined mesh per frond. For palm crowns
 
 ---
 
-##### 3.1.2.8: Jessen's Icosahedron
+### 3.1.2.8: Jessen's Icosahedron
 
 [Jessen's icosahedron](https://en.wikipedia.org/wiki/Jessen%27s_icosahedron) is a non-convex variation of the icosahedron used for additional visual variety.
 
@@ -468,7 +468,7 @@ Here’s a refined replacement for **3.1.3–3.1.5** incorporating those points.
 
 ---
 
-#### 3.1.3: Ball-stick Anchors
+### 3.1.3: Ball-stick Anchors
 
 Ball-stick anchors define where a branch, canopy chain, or foliage complex begins. The current system does this implicitly through [radial projection from an ad hoc stalk](https://github.com/ramate-io/maybraid/blob/cebdaf75f0ce2d837ddc818a9a2658abb3d738dd/procedures/vegetation/src/tree.rs#L171), then passes the resulting start point and ray into a [`BallStick`](https://github.com/ramate-io/maybraid/blob/cebdaf75f0ce2d837ddc818a9a2658abb3d738dd/procedures/comproc/src/complex/chain/ball_stick/builder.rs) construction.
 
@@ -507,7 +507,7 @@ This makes constructions such as conifers, palms, banyans, and vase trees variat
 
 ---
 
-#### 3.1.4: Ball-stick Chains
+### 3.1.4: Ball-stick Chains
 
 Ball-stick chains describe the branching skeleton grown from an anchor. The existing [`BallStickBuilder`](https://github.com/ramate-io/maybraid/blob/cebdaf75f0ce2d837ddc818a9a2658abb3d738dd/procedures/comproc/src/complex/chain/ball_stick/builder.rs) already captures the core idea: extend from parent nodes, choose child count, sample direction, assign radii, and emit connected nodes.
 
@@ -587,7 +587,7 @@ if render_joint_balls {
 
 ---
 
-#### 3.1.5: Ball Selection
+### 3.1.5: Ball Selection
 
 Ball selection means deciding **which nodes in the ball-stick graph receive foliage or canopy mass**, not choosing the concrete ball mesh type. The current system effectively allocates canopy at branch nodes through the existing tree spawning flow and [planar canopy construction](https://github.com/ramate-io/maybraid/blob/9c38f45cfd697a392e6114bbc6e67b50005b7f65/procedures/vegetation/src/tree/meshes/canopy/ball.rs). The refinement is to make node selection an explicit policy of each tree construction.
 
@@ -635,13 +635,13 @@ This supports the named constructions later in the proposal:
 The concrete component used at a selected node, such as noisy ball, plane splay, tuft, or frond, is a separate decision handled by the tree recipe and eventual LOD strategy.
 
 
-#### 3.1.6: Well-known Component Constructions
+### 3.1.6: Well-known Component Constructions
 
 This section lists reusable component-level constructions. These are not complete tree recipes; they are smaller routines that named tree constructions can compose.
 
 ---
 
-##### 3.1.6.1: Palm Crown
+### 3.1.6.1: Palm Crown
 
 A palm crown is built from several radially projecting frond rings placed in quick vertical succession.
 
@@ -668,7 +668,7 @@ Higher rings should start with greater upward bias. Lower rings may droop or pro
 
 ---
 
-##### 3.1.6.2: Palm Trunk
+### 3.1.6.2: Palm Trunk
 
 A palm trunk should be built without allocating a separate stalk. Instead, use a tight ball-stick chain grown upward from a ground anchor.
 
@@ -701,7 +701,7 @@ Repeated over many segments, this gives the impression of stacked palm trunk ban
 
 ---
 
-##### 3.1.6.3: High-bushes and Shoots
+### 3.1.6.3: High-bushes and Shoots
 
 High-bushes and shoots are trunkless radial constructions.
 
@@ -722,7 +722,7 @@ This construction is useful for bushes, young trees, tall grass-like woody growt
 
 ---
 
-##### 3.1.6.4: Jungle Growths
+### 3.1.6.4: Jungle Growths
 
 Jungle growths are secondary foliage allocations placed at selected ball points.
 
@@ -749,7 +749,7 @@ This construction is useful for tropical trees, banyans, branch epiphytes, and d
 
 ---
 
-##### 3.1.6.5: Banyan Trunk
+### 3.1.6.5: Banyan Trunk
 
 A banyan trunk is a thick, noisy stalk.
 
@@ -770,7 +770,7 @@ Joint-concealing balls using bark material may be allocated near major trunk or 
 
 ---
 
-##### 3.1.6.6: Banyan Descenders
+### 3.1.6.6: Banyan Descenders
 
 Banyan descenders are downward-growing branch chains emitted from the upper canopy.
 
@@ -797,7 +797,7 @@ Descenders should often extend below the canopy height and may approach or inter
 
 Use sparse foliage on descenders themselves; most foliage should remain attached to the upper canopy.
 
-##### 3.1.6.7: Fruiting Bodies
+### 3.1.6.7: Fruiting Bodies
 
 Fruiting bodies are optional canopy details: small, brightly colored ellipsoidal volumes placed on or near the radius of canopy components. They are useful for fruit trees, jungle growths, magical trees, and seasonal variation.
 
@@ -869,11 +869,11 @@ let visible = maturity > visibility_threshold;
 
 This allows fruit to emerge, grow, ripen, and disappear over time without changing the underlying tree construction. Color may also vary with maturity, for example green to yellow to red.
 
-#### 3.1.7: Well-known Tree Constructions
+### 3.1.7: Well-known Tree Constructions
 
 We provided the intended tree shapes for Chico vegetation. Note that many of these shapes can be used with a variety of textures and scales to produce the impressions of different species. 
 
-##### 3.1.7.1: Storybook Tree
+### 3.1.7.1: Storybook Tree
 
 The Storybook Tree is the default broadleaf silhouette: a narrow central stalk with a rounded canopy assembled from moderately dense radial ball-stick projections. It is useful for deciduous forests, orchards, parks, and general-purpose background trees.
 
@@ -999,7 +999,7 @@ Interior nodes should usually avoid foliage allocation unless a dense canopy is 
 * Smaller projection length and darker materials produce compact forest trees.
 * Higher angular variance and [Crook Cylinder](#3112-crook-cylinder) segments produce older or more whimsical silhouettes.
 
-##### 3.1.7.2: Liam's Conifer
+### 3.1.7.2: Liam's Conifer
 
 Liam's Conifer is a sparse, dry conifer silhouette: a narrow vertical stalk with many short, lightly downward-biased radial projections. It is useful for drier conifer stands, semi-arid forests, and lighter woodland edges.
 
@@ -1147,7 +1147,7 @@ Tufts should follow the branch direction with mild upward spread to avoid a pure
 * Replacing tufts with [Plane Splay](#3125-plane-splay) produces a northern conifer variant.
 * Increasing downward bias gives a drooping alpine silhouette.
 
-##### 3.1.7.3: Vase Tree
+### 3.1.7.3: Vase Tree
 
 The Vase Tree is a broad, upward-opening tree form. It starts from the [Storybook Tree](#3171-storybook-tree) construction but inverts the canopy profile, so radial projections grow wider toward the top. This gives a head-trained, vase-like silhouette useful for ornamental trees, mystical forests, bushes, and urban plantings.
 
@@ -1266,7 +1266,7 @@ let leaf_radius = 0.08 * H;
 * Crook cylinders add a trained or sculpted garden appearance.
 
 
-##### 3.1.7.4: Penmarch Torch
+### 3.1.7.4: Penmarch Torch
 
 The Penmarch Torch is an upward-projecting variant of the [Vase Tree](#3173-vase-tree). Instead of relaxing toward horizontal near the top, its branches become increasingly vertical, producing a flame-like or torch-like silhouette.
 
@@ -1374,7 +1374,7 @@ let leaf_radius = 0.06 * H;
 * Use tufts instead of broadleaf splays for short dry conifers.
 * Increase vertical bias and use saturated leaves for stylized urban trees.
 
-##### 3.1.7.5: Honu Banyan
+### 3.1.7.5: Honu Banyan
 
 The Honu Banyan is a wide, spreading banyan-like tree with a heavy trunk, broad upper canopy, and occasional downward-descending branches. It is useful for jungle, riparian, and mystical forest regions.
 
@@ -1524,7 +1524,7 @@ Descenders should usually receive sparse foliage or none, unless the goal is a v
 * Allow descenders to become secondary trunks when they reach the ground.
 * Add darker interior balls and tufts for dense jungle banyans.
 
-##### 3.1.7.6: Sope's Banyan
+### 3.1.7.6: Sope's Banyan
 
 ![Sope's Banyan](./assets/sopes-banyan.png)
 
@@ -1664,7 +1664,7 @@ Descenders should receive sparse foliage, except where a denser mystical canopy 
 * Use [Crook Cylinder](#3112-crook-cylinder) on major limbs for a more twisted appearance.
 
 
-##### 3.1.7.7: Rory's Head-trained
+### 3.1.7.7: Rory's Head-trained
 
 Rory's Head-trained is a top-heavy, trained tree form: a simple stalk with a thin, mostly horizontal canopy near the top. It is useful for arid trees, grape-vine-like bushes, ornamental plantings, and non-coniferous groves.
 
@@ -1794,67 +1794,66 @@ Avoid dense interior allocation, since this tree should read as a trained crown 
 * Add fruiting bodies for cultivated groves.
 * Use sparse tufts for arid scrub variants.
 
-
-##### 3.1.7.8: Waialea Palm 
+### 3.1.7.8: Waialea Palm 
 
 - Use the [Palm Trunk](#3162-palm-trunk) construction. Arch it gently. 
 - Use the [Palm Crown](#3161-palm-crown) construction with two to three layers. 
 
-##### 3.1.7.9: Date Palm
+### 3.1.7.9: Date Palm
 
 - Use the [Pam Trunk](#3162-palm-trunk) construction without arching. 
 - Use the [Palm Crown](#3161-palm-crown) construction with 6 to 10 layers. 
 
-##### 3.1.7.9: Palm Bush
+### 3.1.7.9: Palm Bush
 
 - Use the [Palm Crown](#3161-palm-crown) construction with 6 to 10 layers. 
 - Do not add a trunk. 
 
-##### 3.1.7.10: Northern Conifer
+### 3.1.7.10: Northern Conifer
 
 - Use [Liam's Conifer](#3172-liams-conifer) construction, but allocate [Plane Splays](#3125-plane-splay) for the leaf balls of the canopy.
 
-##### 3.1.7.11: Common High Bush
+### 3.1.7.11: Common High Bush
 
 - Use the [High-bush and Shoots](#3163-high-bushes-and-shoots) construction.
 - Send up 7 to 10 vertically-biased radial projections. 
 
 Can be used as a bush or small tree in non-arid biomes. Takes any shader combination well.
 
-##### 3.1.7.12: Jungle Storybook Tree
+### 3.1.7.12: Jungle Storybook Tree
 
 - Add [Jungle Growths](#3164-jungle-growths) to the [Storybook Tree](#3171-storybook-tree)
 
-##### 3.1.7.13: Braid Oak
+### 3.1.7.13: Braid Oak
 
 - Start with something similar to the [Storybook Tree](#3171-storybook-tree).
 - Make biasing vary along the height, beginning with downward bias at low Z-value and upward bias at higher Z-values.
 - Use [Crook Cylinder](#3112-crook-cylinder) for segments. 
 
-##### 3.1.7.14: Friend's Conifer
+### 3.1.7.14: Friend's Conifer
 
 - Start with the [Northern Conifer](#31710-northern-conifer) construction. 
 - Make radial projection segment length vary with log, keeping an almost consistent length for much of the length and rounding towards the top. 
 
-##### 3.1.7.15: Temperate Conifer
+### 3.1.7.15: Temperate Conifer
 
 - Use the [Friend's Conifer](#31714-friends-conifer) construction, but replace the leaf canopy balls with [Fronds](#3127-fronds).
 
 Good for strange bushes when scaled down. Otherwise, works well in semi-arid tropical regions where foliage is somewhat sparse. 
 
-##### 3.1.7.15: Simpleman's Hedge
+### 3.1.7.15: Simpleman's Hedge
 
 - No need for any ball stick here just use [Plane Splay](#3125-plane-splay) and place on the ground.
 
-##### 3.1.7.15: Simpleman's Tuft
+### 3.1.7.15: Simpleman's Tuft
 
 - Just the basic [Tuft](#3126-tufts).
 
-#### 3.1.8: Tree LOD Tricks
+### 3.1.8: Tree LOD Tricks
 
-#### 3.1.9: Stick Shading
+### 3.1.9: Stick Shading
 
-#### 3.1.10: Leaf Shading
+### 3.1.10: Leaf Shading
 
 ### 3.2: L-system Trees
 
@@ -1864,19 +1863,19 @@ Good for strange bushes when scaled down. Otherwise, works well in semi-arid tro
 
 General name for vegetation type allocation system. Unify exclusive types you want to plant in a grove. Groves are the level at which planting constraints are painted in.
 
-#### 3.4.1: Parameterization
+### 3.4.1: Parameterization
 
-#### 3.4.2: Cell Selection and Planting Constraints
+### 3.4.2: Cell Selection and Planting Constraints
 
-#### 3.4.3: Well-known Ground Cover Groves
+### 3.4.3: Well-known Ground Cover Groves
 
-#### 3.4.4: Well-known Tufts Groves
+### 3.4.4: Well-known Tufts Groves
 
-#### 3.4.5: Well-known Bush Groves
+### 3.4.5: Well-known Bush Groves
 
-#### 3.4.6: Well-known Tree Groves
+### 3.4.6: Well-known Tree Groves
 
-#### 3.4.7: Grove LOD Tricks
+### 3.4.7: Grove LOD Tricks
 
 ### 3.5: Cellular Forests
 
@@ -1884,15 +1883,15 @@ General name for top-level grove allocation system. Split into several layers of
 
 ### 3.5.1: Parameterization
 
-#### 3.5.2: Forest Layers
+### 3.5.2: Forest Layers
 
-##### 3.5.2.1: Ground Cover Layer
+### 3.5.2.1: Ground Cover Layer
 
-##### 3.5.2.2: Tufts Layer
+### 3.5.2.2: Tufts Layer
 
-##### 3.5.2.3: Bush Layer
+### 3.5.2.3: Bush Layer
 
-##### 3.5.2.4: Tree Layer
+### 3.5.2.4: Tree Layer
 
 ### 3.5.3: Well-known Forests
 
@@ -1910,19 +1909,19 @@ pub enum ForestCell {
 }
 ```
 
-#### 3.5.3.1: Riparian 
+### 3.5.3.1: Riparian 
 
-#### 3.5.3.2: Chaparral
+### 3.5.3.2: Chaparral
 
-#### 3.5.3.3: Alpine
+### 3.5.3.3: Alpine
 
-#### 3.5.3.4: Temperate Coniferous
+### 3.5.3.4: Temperate Coniferous
 
-#### 3.5.3.5: Orchard
+### 3.5.3.5: Orchard
 
-#### 3.5.3.6: Coniferous
+### 3.5.3.6: Coniferous
 
-#### 
+### 
 
 ### 3.5.4: Forest LOD Tricks
 
