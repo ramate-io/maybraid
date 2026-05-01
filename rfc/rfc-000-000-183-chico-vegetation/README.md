@@ -85,7 +85,6 @@ Subsections:
 - [3.4.5: Well-known Understory Groves](./03-04-cellular-groves/03-04-05-well-known-understory-groves/README.md)
 - [3.4.6: Well-known Lower Canopy Groves](./03-04-cellular-groves/03-04-06-well-known-lower-canopy-groves/README.md)
 - [3.4.7: Well-known Upper Canopy Groves](./03-04-cellular-groves/03-04-07-well-known-upper-canopy-groves/README.md)
-- [3.4.7: Grove LOD Tricks](./03-04-cellular-groves/03-04-07-grove-lod-tricks/README.md)
 
 ---
 
