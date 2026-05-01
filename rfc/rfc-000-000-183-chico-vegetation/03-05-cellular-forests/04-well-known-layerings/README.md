@@ -24,3 +24,6 @@ Subsections:
 * [3.5.4.16: Old Nevada](./16-old-nevada/README.md): sparse dry conifer layering with common Arid Conifer Sapling and Grassy Mounds.
 * [3.5.4.17: Storybook](./17-storybook/README.md): whimsical mixed layering with common Riparian Mix and less common colorful canopy options.
 * [3.5.4.18: Meadowland](./18-meadowland/README.md): open meadow layering with common Huelgoat Pitch and rare canopy events.
+* [3.5.4.19: Fruit Plains](./19-fruit-plains/README.md): open cultivated plain with common Huelgoat Pitch and Allbed plus less common fruiting canopy groves.
+* [3.5.4.20: Damas Edge](./20-damas-edge/README.md): dry-tropical transition with less common Levantine Scrub and Date Grove plus rare oasis and tropical pockets.
+* [3.5.4.21: Open Tropics](./21-open-tropics/README.md): sparse tropical layering with common Huelgoat Pitch and less common Trade Winds canopy.
