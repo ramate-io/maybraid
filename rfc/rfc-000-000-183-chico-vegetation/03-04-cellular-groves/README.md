@@ -21,5 +21,5 @@ Subsections:
 - [3.4.5: Well-known Understory Groves](./05-well-known-understory-groves/README.md)
 - [3.4.6: Well-known Lower Canopy Groves](./06-well-known-lower-canopy-groves/README.md)
 - [3.4.7: Well-known Upper Canopy Groves](./07-well-known-upper-canopy-groves/README.md)
-- [3.4.8: Grove LOD Tricks]()
+- [3.4.8: Grove LOD Tricks](./08-grove-lod-tricks/README.md)
 
