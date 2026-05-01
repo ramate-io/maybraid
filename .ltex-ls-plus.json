@@ -414,7 +414,9 @@
         "Huelgoat",
         "Allbed",
         "sublayer",
-        "sublayers"
+        "sublayers",
+        "sightlines",
+        "sightline"
       ]
     },
     "bibtex": {
