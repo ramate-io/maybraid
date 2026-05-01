@@ -15,4 +15,8 @@ Subsections:
 - [3.4.5.4: High Bush](./03-04-05-04-high-bush/README.md): moderate-density Common High Bush forms at `1m–2.5m`, useful for substantial shrub masses and soft barriers.
 - [3.4.5.5: Tropical Undergrowth](./03-04-05-05-tropical-undergrowth/README.md): mixed tropical mid-layer with tufts, palm bushes, common mini Rory's Head-trained forms, and rare mini Vase or sparse-canopy Storybook forms.
 - [3.4.5.6: Tropical Thicket](./03-04-05-06-tropical-thicket/README.md): dense tropical thicket with larger palm bushes, rare mini Honu Banyan forms, and moderate-size Common High Bush structure.
+- [3.4.5.7: Jerry's Chaparral](./03-04-05-07-jerry-s-chaparral/README.md): moderately dense dry scrub with Rory's Head-trained, High Bush, and occasional small Friend's Conifer forms.
+- [3.4.5.8: Levantine Scrub](./03-04-05-08-levantine-scrub/README.md): dry Mediterranean scrub using Rory's Head-trained, small Vase Tree, High Bush, Penmarch Torch, and Simpleman's Hedge forms.
+- [3.4.5.9: Spotty Bushes](./03-04-05-09-spotty-bushes/README.md): very sparse placement of varied High Bush forms for open terrain and transitional shrub punctuation.
+- [3.4.5.10: Riverine Green](./03-04-05-10-riverine-green/README.md): sparse wet green High Bush variants for riverbanks, damp hollows, and riparian edges.
 
