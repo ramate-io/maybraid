@@ -2,11 +2,32 @@
 
 ## Table of Contents
 
+- [1: Summary](#1-summary)
+- [2: Prior Art](#2-prior-art)
+- [3: Design](#3-design)
+  - [3.1: Stalk and Ball-stick Trees](#31-stalk-and-ball-stick-trees)
+  - [3.2: L-system Trees](#32-l-system-trees)
+  - [3.3: Ground Cover](#33-ground-cover)
+  - [3.4: Cellular Groves](#34-cellular-groves)
+  - [3.5: Cellular Forests](#35-cellular-forests)
+  - [3.6: Elder Trees](#36-elder-trees)
+- [4: Milestone](#4-milestone)
+
 ## 1: Summary
 
-We propose the Chico vegetation system in response to [#61](https://github.com/ramate-io/maybraid/issues/61).
+We propose the Chico vegetation system in response to [#61](https://github.com/ramate-io/maybraid/issues/61). Chico defines a layered, deterministic vegetation pipeline that evaluates from large forest cells down to individual plant constructions while keeping placement coherent with terrain, biome identity, and level-of-detail constraints.
+
+The system is built around a few reusable pieces: ball-stick tree constructions for individual plants, ground-cover primitives for low vegetation, cellular groves for local planting recipes, cellular forests for large-scale layering, and elder trees for rare urban landmarks. Forests select layerings with Hopscotch, layers select groves with Bucket Throw, and groves select individual variants with first-fit placement constraints.
+
+The goal is not botanical simulation for its own sake. The goal is an authorable procedural vegetation system that can produce recognizable forest, scrub, grassland, orchard, jungle, and landmark-tree identities while remaining chunk-stable, scalable, and practical for runtime generation.
 
 ## 2: Prior Art
+
+Industry vegetation systems tend to combine authored species assets with procedural distribution, terrain masks, and aggressive LOD. [SpeedTree](https://docs8.speedtree.com/modeler/doku.php?id=modeling_approach) is the most visible middleware example: it uses procedural generators for branches, fronds, leaves, and variation, while still giving artists direct control over the final plant models. [GPU Gems 3: Next-Generation SpeedTree Rendering](https://developer.nvidia.com/gpugems/GPUGems3/gpugems3_ch04.html) also illustrates the rendering side of this problem, especially leaf lighting, silhouettes, billboards, and distant tree representation.
+
+Open-world games show the importance of procedural placement at terrain scale. Ubisoft's [Far Cry 5 procedural world generation](https://www.youtube.com/watch?v=JBp8zvLVsgg) pipeline used biome recipes and deterministic content generation to keep vegetation coherent as terrain changed during production. Ubisoft's [Ghost Recon Wildlands vegetation generation](https://80.lv/articles/vegetation-generation-in-ghost-recon-wildlands) similarly combined terrain materials, slope, density, spacing, exclusion masks, cascading tree-to-bush placement, and location-sensitive LOD to populate a very large world.
+
+Academically, [*The Algorithmic Beauty of Plants*](http://www.springer.com/la/book/9780387946764) and related [Algorithmic Botany](http://www.algorithmicbotany.org/papers/) work establish L-systems as a foundation for procedural plant structure. [Realistic Modeling and Rendering of Plant Ecosystems](http://www.graphics.stanford.edu/papers/ecosys/) extends the problem to ecosystem-scale placement, combining terrain editing, procedural plant models, plant distribution, and geometric simplification for large natural scenes. Chico borrows the broad lesson from these systems, but favors spatially grounded, chunk-friendly constructions over a full L-system-first design.
 
 ## 3: Design
 
@@ -17,12 +38,12 @@ graph TD
     Terrain["Terrain / world seed"]
     ForestGrid["Forest cell grid<br/>all cells active"]
     Hopscotch["Hopscotch selection<br/>choose forest layering"]
-    ForestParams["Forest parameterization<br/>sample grove modifiers"]
+    ForestParams["Forest parameterization<br/>sample grove biases"]
     Layers["Forest layers<br/>ground cover, tufts, understory,<br/>lower canopy, upper canopy"]
     LayerThrow["Bucket Throw per layer<br/>choose grove or None"]
     GroveGrid["Grove cell grid<br/>all cells active"]
     GroveThrow["Bucket Throw / first-fit<br/>choose grove variant"]
-    Placement["Placement constraints<br/>elevation, steepness, perturbation"]
+    Placement["Placement constraints<br/>elevation, steepness, placement noise"]
     TreeCells["Individual vegetation cells<br/>trees, bushes, tufts, ground cover"]
 
     Terrain --> ForestGrid
@@ -72,7 +93,7 @@ Subsections:
 
 L-systems are a well-established method for generating botanical structures and offer a natural way to express recursive growth, branching grammars, and species variation. They are a strong candidate for future expansion of the vegetation system.
 
-Subsections:
+Details:
 
 - [3.2: L-system Trees](./03-02-l-system-trees/README.md)
 
@@ -111,23 +132,31 @@ Subsections:
 - [3.4.5: Well-known Understory Groves](./03-04-cellular-groves/05-well-known-understory-groves/README.md)
 - [3.4.6: Well-known Lower Canopy Groves](./03-04-cellular-groves/06-well-known-lower-canopy-groves/README.md)
 - [3.4.7: Well-known Upper Canopy Groves](./03-04-cellular-groves/07-well-known-upper-canopy-groves/README.md)
+- [3.4.8: Grove LOD Tricks](./03-04-cellular-groves/08-grove-lod-tricks/README.md)
 
 ---
 
 ### 3.5: Cellular Forests
 
 
-General name for top-level grove allocation system. Split into several layers of groves. 
+Cellular Forests are the top-level allocation system for Chico vegetation. They select coherent forest layerings over large forest cells, pass forest-scale parameter biases down to groves, and instantiate compatible grove layers inside each selected cell. A reasonable starting scale is `1600m x 1600m` forest cells with a(n) `8 x 8` grid of `200m x 200m` grove cells inside each forest cell.
 
 Subsections:
 
+- [3.5.1: Parameterization](./03-05-cellular-forests/01-parameterization/README.md)
+- [3.5.2: Selection and Construction](./03-05-cellular-forests/02-selection/README.md)
+- [3.5.3: Forest Layers](./03-05-cellular-forests/03-forest-layers/README.md)
+- [3.5.4: Well-known Layerings](./03-05-cellular-forests/04-well-known-layerings/README.md)
+- [3.5.5: Chico Vegetation](./03-05-cellular-forests/05-chico-vegetation/README.md)
+- [3.5.6: Forest LOD Tricks](./03-05-cellular-forests/06-lod-tricks/README.md)
 
 ---
 
 ### 3.6: Elder Trees
 
+Elder Trees are massive ball-stick tree constructions intended to pair tightly with urbanization. They use a separate allocation grid from forests and act as living landmarks for platforms, paths, shrines, homes, bridges, and other built features.
 
-Subsections:
+Details:
 
 - [3.6: Elder Trees](./03-06-elder-trees/README.md)
 

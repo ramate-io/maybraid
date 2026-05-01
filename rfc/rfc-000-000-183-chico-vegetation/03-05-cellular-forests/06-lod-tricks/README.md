@@ -1,6 +1,6 @@
-# 3.5.5: Forest LOD Tricks
+# 3.5.6: Forest LOD Tricks
 
-This page is subsection **3.5.5** of [RFC-183: Chico Vegetation](../../README.md)
+This page is subsection **3.5.6** of [RFC-183: Chico Vegetation](../../README.md)
 
 Forest LOD tricks reduce the number of active layers and grove grids while preserving the large-scale impression of a forest. At forest scale, the goal is to keep the base colors and tree-line shape that identify a biome, not to preserve every layer equally.
 

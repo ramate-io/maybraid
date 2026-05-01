@@ -14,3 +14,9 @@ Each forest cell chooses a forest layering through Hopscotch, samples forest-lev
 
 Subsections:
 
+- [3.5.1: Parameterization](./01-parameterization/README.md)
+- [3.5.2: Selection and Construction](./02-selection/README.md)
+- [3.5.3: Forest Layers](./03-forest-layers/README.md)
+- [3.5.4: Well-known Layerings](./04-well-known-layerings/README.md)
+- [3.5.5: Chico Vegetation](./05-chico-vegetation/README.md)
+- [3.5.6: Forest LOD Tricks](./06-lod-tricks/README.md)
