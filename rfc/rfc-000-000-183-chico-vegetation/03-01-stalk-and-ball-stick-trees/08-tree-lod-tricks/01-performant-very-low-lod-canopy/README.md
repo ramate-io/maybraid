@@ -4,9 +4,9 @@ This page is subsection **3.1.8.1** of [RFC-183: Chico Vegetation](../../../READ
 
 
 Use a single primitive to approximate canopy mass:
-
 * upside-down square pyramid
 * squashed tetrahedron
+* scaled and rotated triangle.
 
 These shapes:
 

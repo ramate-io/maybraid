@@ -3,7 +3,7 @@
 This page is subsection **3.1.8.2** of [RFC-183: Chico Vegetation](../../../README.md)
 
 
-Use a stretched tetrahedron or square pyramid.
+Use a stretched tetrahedron, square pyramid, or single rotated and scaled triangle.
 
 ```rust
 spawn_mesh(stretched_pyramid(height, radius));

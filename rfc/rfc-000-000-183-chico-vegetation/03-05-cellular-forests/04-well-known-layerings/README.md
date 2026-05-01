@@ -2,7 +2,7 @@
 
 This page is subsection **3.5.4** of [RFC-183: Chico Vegetation](../../README.md)
 
-Well-known layerings are reusable forest-cell recipes. Each layering defines compatible distributions for the ground cover, tufts, understory, lower canopy, and upper canopy layers. These are selected by forest-level [Hopscotch](../02-selection/README.md#3521-hopscotch), then each layer selects its grove with [Bucket Throw](../../03-04-cellular-groves/02-selection-and-placement/01-bucket-throw/README.md).
+Well-known layerings are reusable forest-cell recipes. Each layering defines compatible distributions for the ground cover, tufts, understory, lower canopy, and upper canopy layers. These are selected by forest-level [Hopscotch](../02-selection/README.md#3522-hopscotch), then each layer selects its grove with [Bucket Throw](../../03-04-cellular-groves/02-selection-and-placement/01-bucket-throw/README.md).
 
 Subsections:
 

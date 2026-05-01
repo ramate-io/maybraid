@@ -10,6 +10,32 @@ We propose the Chico vegetation system in response to [#61](https://github.com/r
 
 ## 3: Design
 
+At runtime, Chico vegetation evaluates from coarse forest cells down to individual vegetation constructions:
+
+```mermaid
+graph TD
+    Terrain["Terrain / world seed"]
+    ForestGrid["Forest cell grid<br/>all cells active"]
+    Hopscotch["Hopscotch selection<br/>choose forest layering"]
+    ForestParams["Forest parameterization<br/>sample grove modifiers"]
+    Layers["Forest layers<br/>ground cover, tufts, understory,<br/>lower canopy, upper canopy"]
+    LayerThrow["Bucket Throw per layer<br/>choose grove or None"]
+    GroveGrid["Grove cell grid<br/>all cells active"]
+    GroveThrow["Bucket Throw / first-fit<br/>choose grove variant"]
+    Placement["Placement constraints<br/>elevation, steepness, perturbation"]
+    TreeCells["Individual vegetation cells<br/>trees, bushes, tufts, ground cover"]
+
+    Terrain --> ForestGrid
+    ForestGrid --> Hopscotch
+    Hopscotch --> ForestParams
+    ForestParams --> Layers
+    Layers --> LayerThrow
+    LayerThrow --> GroveGrid
+    GroveGrid --> GroveThrow
+    GroveThrow --> Placement
+    Placement --> TreeCells
+```
+
 ### 3.1: Stalk and Ball-stick Trees
 
 

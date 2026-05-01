@@ -1,8 +1,22 @@
-# 3.5.2: Selection
+# 3.5.2: Selection and Construction
 
-Cellular forest selection chooses which forest layering should control a forest cell. It operates one level above [Cellular Groves](../../03-04-cellular-groves/README.md): groves decide what to place inside a layer, while forest selection decides which coherent stack of grove layers belongs at a point.
+Cellular forest selection chooses which forest layering controls each forest cell, then constructs the selected layers by instantiating grove grids inside that forest cell. It operates one level above [Cellular Groves](../../03-04-cellular-groves/README.md): forests choose coherent stacks of grove layers, while groves choose individual grove cells and vegetation variants.
 
-## 3.5.2.1: Hopscotch
+Every forest cell is active. There is no forest-level activation test. Each forest cell selects a forest layering through Hopscotch, then evaluates the layer distributions inside that layering.
+
+Every grove cell is also active. There is no grove-level activation test. Each grove cell chooses a grove variant through Bucket Throw; `None` is represented explicitly as a possible selected item in the layer or grove distribution when emptiness is desired.
+
+## 3.5.2.1: Forest Cells
+
+The world is divided into a grid of forest cells. Each forest cell owns:
+
+* A selected forest layering.
+* A set of sampled [forest parameter modifiers](../01-parameterization/README.md).
+* One grove grid per selected layer.
+
+The forest cell is the coherence unit for broad biome identity. Neighboring forest cells may select related layerings through Hopscotch adjacency, but each forest cell still has a single resolved layering.
+
+## 3.5.2.2: Hopscotch
 
 Hopscotch is the forest-level counterpart to [Bucket Throw](../../03-04-cellular-groves/02-selection-and-placement/01-bucket-throw/README.md). Bucket Throw preserves local coherence by moving through adjacent buckets in a one-dimensional distribution. Hopscotch generalizes that idea to a directed graph, so each forest type can choose its own compatible neighbors instead of only having a left and right neighbor.
 
@@ -75,9 +89,45 @@ pub enum MyHopscotch {
 > [!NOTE]
 > A loop-back edge is useful when a type should tend to remain self-same after traversal reaches it. This is separate from node weight: `weight` controls anchor likelihood and traversal cost, while a loop-back controls edge choice from that node.
 
-## 3.5.2.2: Determinism
+## 3.5.2.3: Layer Selection
 
-Hopscotch selection must be deterministic for a given world seed, forest cell, and distribution. Different noise salts should be used for anchor selection, hop budget selection, and each hop step, so changing the number of hops does not also change the initial anchor.
+After Hopscotch selects the forest layering, each layer in that layering selects one grove or `None` with [Bucket Throw](../../03-04-cellular-groves/02-selection-and-placement/01-bucket-throw/README.md).
+
+```rust
+let layering = hopscotch_select(forest_distribution, forest_cell);
+let modifiers = sample_forest_modifiers(forest_cell);
+
+let ground_cover = bucket_throw(layering.ground_cover, forest_cell);
+let tufts = bucket_throw(layering.tufts, forest_cell);
+let understory = bucket_throw(layering.understory, forest_cell);
+let lower_canopy = bucket_throw(layering.lower_canopy, forest_cell);
+let upper_canopy = bucket_throw(layering.upper_canopy, forest_cell);
+```
+
+The forest layer distribution is the place where emptiness is authored. If the upper canopy should be absent, the upper-canopy layer selects `None`. The forest system should not skip cells through a separate activation rule.
+
+## 3.5.2.4: Grove Grid Construction
+
+Each selected grove creates a grid of grove cells inside the forest cell. The grove grid uses the selected grove's own cell size, offset, density, noise, and placement rules, after applying any forest-level parameter modifiers.
+
+```rust
+for selected_grove in selected_layer_groves {
+    let grove_parameters = selected_grove
+        .parameters()
+        .with_forest_modifiers(modifiers);
+
+    for grove_cell in grid_inside(forest_cell, grove_parameters.cell_size) {
+        let grove_variant = bucket_throw(selected_grove.distribution, grove_cell);
+        construct_grove_variant(grove_variant, grove_cell, grove_parameters);
+    }
+}
+```
+
+All grove cells are active. If a grove wants empty outcomes, `None` must be present in the grove distribution. If a grove variant cannot be placed at a sampled point because of per-variant constraints, the grove-level first-fit behavior chooses another valid variant as described in [Variant Selection](../../03-04-cellular-groves/02-selection-and-placement/05-variant-selection/README.md).
+
+## 3.5.2.5: Determinism
+
+Selection and construction must be deterministic for a given world seed, forest cell, grove cell, and distribution. Different noise salts should be used for forest anchor selection, forest hop budget selection, layer selection, grove parameter sampling, grove variant selection, and placement perturbation.
 
 ```rust
 let anchor = weighted_throw(distribution.nodes, anchor_noise(cell, seed));
@@ -95,9 +145,9 @@ while budget >= current.weight && !current.adjacencies.is_empty() {
 return current.item;
 ```
 
-The result should be stable under camera movement and frame timing. It may change when the forest distribution, world seed, or forest-cell coordinate changes.
+The result should be stable under camera movement and frame timing. It may change when the forest distribution, world seed, forest-cell coordinate, or grove-cell coordinate changes.
 
-## 3.5.2.3: Authoring Guidance
+## 3.5.2.6: Authoring Guidance
 
 Use Hopscotch when forest layerings should vary coherently across space but should not be arranged on a simple linear spectrum.
 

@@ -72,10 +72,12 @@ pub struct ExampleForestLayering {
 
 For each forest cell:
 
-1. Use [Hopscotch](../02-selection/README.md#3521-hopscotch) to select a forest layering.
+1. Use [Hopscotch](../02-selection/README.md#3522-hopscotch) to select a forest layering.
 2. For each layer in that layering, use Bucket Throw to select a grove or `None`.
 3. Instantiate the selected groves independently, using each grove's own cell size, density, offset, noise, and placement constraints.
 4. Allow groves from different layers to overlap when their vertical role permits it.
+
+All forest cells participate in this process. All grove cells inside a selected grove also participate. Open space is authored with `None` choices in layer or grove distributions, not with a separate activation pass.
 
 The forest layer system should not try to deduplicate individual plants across layers. Avoiding bad overlap is the job of layer authoring, grove placement constraints, and later LOD or collision rules where needed.
 
@@ -86,66 +88,3 @@ Subsections:
 * [3.5.3.3: Understory Layer](./03-understory-layer/README.md)
 * [3.5.3.4: Lower Canopy Layer](./04-lower-canopy-layer/README.md)
 * [3.5.3.5: Upper Canopy Layer](./05-upper-canopy-layer/README.md)
-# 3.5.2: Forest Layers
-
-Forest cells are composed of:
-
-1. Ground cover layers.
-2. Tufts layers. 
-3. Understory layers. 
-4. Lower canopy layers. 
-5. Upper canopy layers. 
-
-...defining compatibility. 
-
-Selection of the particular grove within a layer is given by the [Bucket Throw](../../03-04-cellular-groves/02-selection-and-placement/01-bucket-throw/README.md) algorithm.
-
-A forest cell is thus defined something like:
-
-```rust
-pub struct LushJungle {
-    ground_cover: GroundCover {
-        flip: [
-            (None, 1.0),
-            (HuelgoatPitch, 1.0),
-            (FleckingBed, 1.0),
-            (Allbed, 2.0)
-        ],
-        flop: [
-            (None, 4.0),
-            (GrassyMounds, 1.0)
-        ],
-    },
-    tufts: [
-        (None, 2.0),
-        (TallGrass, 1.0),
-        (WildGrass, 1.0),
-        (TropicalTufts, 1.0),
-    ],
-    understory: [
-        (None, 1.0),
-        (BraidGrass, 0.5),
-        (MonsterGrass, 0.1),
-        (TropicalUndergrowth, 1.0),
-        (TropicalThicket, 1.0),
-        (SpottyBushes, 1.0)
-    ],
-    lower_canopy: [
-        (None, 2.0),
-        (UnendingJungle, 2.0),
-        (Shamanhome, 0.5),
-        (LowerJungleMassives, 0.2)
-    ],
-    upper_canopy: [
-        (None, 2.0),
-        (TradeWinds, 4.0),
-        (PalmShade, 2.0),
-        (RiparianGeneral, 2.0),
-        (Leeward, 1.0)
-        (JungleMassives, 0.2)
-    ]
-}
-```
-
-
-Subsections:
