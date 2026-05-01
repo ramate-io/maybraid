@@ -15,4 +15,7 @@ Subsections:
 - [3.4.6.4: Goettingen Follow](./03-04-06-04-goettingen-follow/README.md): low-density temperate follow-layer with common Braid Oak and Storybook Tree variants.
 - [3.4.6.5: Conifer Sapling](./03-04-06-05-conifer-sapling/README.md): moderate-density young conifer lower canopy with common Friend's Conifer and Northern Conifer variants.
 - [3.4.6.6: Arid Conifer Sapling](./03-04-06-06-arid-conifer-sapling/README.md): low-density dry conifer lower canopy with compact Friend's Conifer and Northern Conifer variants.
+- [3.4.6.7: Jungle Lower Massives](./03-04-06-07-jungle-lower-massives/README.md): moderate-density massive jungle lower canopy for forests dominated by very tall upper-canopy trees.
+- [3.4.6.8: Conifer Lower Massives](./03-04-06-08-conifer-lower-massives/README.md): low-density massive conifer lower canopy for oversized evergreen forests.
+- [3.4.6.9: Temperate Lower Massives](./03-04-06-09-temperate-lower-massives/README.md): low-density massive temperate lower canopy with Braid Oak, Storybook Tree, and rare Rory forms.
 
