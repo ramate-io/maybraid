@@ -1,5 +1,6 @@
-# 3.5.2.4: Tree Layer
+# 3.5.2.4: Lower Canopy Layer
 
 This page is subsection **3.5.2.4** of [RFC-183: Chico Vegetation](../../../README.md)
 
 
+No sublayers. Selects from lower canopy groves.

@@ -15,7 +15,7 @@ pub enum MonsterGrassCell {
             steepness: 0.0..0.25,
         },
         item: MonsterGrass {
-            height: 2.00..4.00,
+            height: 2.00..6.00,
             width: 0.70..1.60,
             blade_count: 8..=18,
             droop: 0.25..0.70,
