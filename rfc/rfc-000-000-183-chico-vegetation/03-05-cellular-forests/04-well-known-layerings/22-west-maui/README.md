@@ -8,7 +8,6 @@ pub struct WestMaui {
         flip: [
             (None, 1.0),
             (FloorScrub, 2.0),
-            (Allbed, 0.5),
         ],
         flop: [
             (None, 4.0),
@@ -24,8 +23,6 @@ pub struct WestMaui {
     ],
     understory: UnderstoryLayer [
         (None, 5.0),
-        (LowBush, 0.5),
-        (SpottyBushes, 0.35),
     ],
     lower_canopy: LowerCanopyLayer [
         (None, 8.0),
