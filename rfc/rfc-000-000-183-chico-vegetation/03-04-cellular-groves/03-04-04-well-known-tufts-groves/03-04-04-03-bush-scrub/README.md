@@ -74,31 +74,7 @@ impl CellGrove for BushScrub {
   * low projection count
   * sparse branching
   * small leaf radius
-* Use deterministic yaw, scale, and varietal selection.
-
-```rust
-let p = cell_origin + offset;
-let normal = terrain_normal(p);
-
-match selected {
-    BushScrubCell::DryTuft(_) | BushScrubCell::GreenTuft(_) => {
-        spawn_tuft(
-            position = p,
-            direction = normalize(mix(Vec3::Y, normal, 0.35)),
-            scale = sampled_height,
-            yaw = TAU * noise(seed, ROTATION_SALT),
-        );
-    }
-    BushScrubCell::SmallBush(_) | BushScrubCell::SaplingBush(_) => {
-        spawn_common_high_bush(
-            position = p,
-            height = sampled_height,
-            shoot_count = sampled_shoot_count,
-            branching = sampled_branching,
-        );
-    }
-}
-```
+* Use [Bucket Throw](../../03-04-02-selection-and-placement/03-04-02-01-bucket-throw/README.md) varietal selection
 
 ## Usage
 
