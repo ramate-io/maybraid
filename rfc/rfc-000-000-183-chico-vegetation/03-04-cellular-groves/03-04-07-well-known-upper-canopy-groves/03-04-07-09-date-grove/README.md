@@ -11,7 +11,7 @@ pub enum DateGroveCell {
             steepness: 0.0..0.30,
         },
         item: DatePalm {
-            height: 5.0..14.0,
+            height: 5.0..8.0,
             crown_density: Moderate,
             stick_palette_mix: [[palm_bark..tan_bark], [date_trunk..dry_brown]],
             canopy_palette_mix: [[palm_green..olive_green], [fresh_green..yellow_green]],

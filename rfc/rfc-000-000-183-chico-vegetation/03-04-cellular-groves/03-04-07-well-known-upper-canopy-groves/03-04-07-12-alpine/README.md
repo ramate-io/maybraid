@@ -4,17 +4,30 @@ Alpine is a moderate-density upper-canopy grove for cold uplands. It uses common
 
 ```rust
 pub enum AlpineCell {
-    AlpineFriendsConifer(Bucket {
-        weight: 2.0,
+    TallAlpineFriendsConifer(Bucket {
+        weight: 1.5,
         placement_constraints: PlacementConstraints {
             elevation: 0.42..1.0,
-            steepness: 0.0..0.78,
+            steepness: 0.0..0.68,
         },
         item: FriendsConifer {
-            height: 10.0..40.0,
+            height: 18.0..40.0,
             canopy_density: Dense,
             stick_palette_mix: [[cold_bark..dark_bark], [gray_brown..moss_bark]],
             canopy_palette_mix: [[cold_green..blue_green], [deep_green..dark_green]],
+        },
+    }),
+    WindlineFriendsConifer(Bucket {
+        weight: 0.75,
+        placement_constraints: PlacementConstraints {
+            elevation: 0.62..1.0,
+            steepness: 0.0..0.86,
+        },
+        item: FriendsConifer {
+            height: 10.0..22.0,
+            canopy_density: Sparse,
+            stick_palette_mix: [[wind_barked..cold_bark], [gray_brown..dark_bark]],
+            canopy_palette_mix: [[cold_green..blue_green], [dark_green..deep_green]],
         },
     }),
     AlpineLiamsConifer(Bucket {
@@ -28,6 +41,19 @@ pub enum AlpineCell {
             canopy_density: Moderate,
             stick_palette_mix: [[cold_bark..dark_bark], [gray_brown..conifer_bark]],
             canopy_palette_mix: [[cold_green..blue_green], [deep_green..dark_green]],
+        },
+    }),
+    NeedleSpireLiamsConifer(Bucket {
+        weight: 0.45,
+        placement_constraints: PlacementConstraints {
+            elevation: 0.58..1.0,
+            steepness: 0.0..0.92,
+        },
+        item: LiamsConifer {
+            height: 16.0..32.0,
+            canopy_density: Sparse,
+            stick_palette_mix: [[cold_bark..dark_bark], [stone_gray..conifer_bark]],
+            canopy_palette_mix: [[blue_green..dark_green], [cold_green..deep_green]],
         },
     }),
 }
@@ -48,6 +74,7 @@ impl CellGrove for Alpine {
 ## Construction
 
 * Use moderate-density placement, roughly `18%-38%`.
-* Keep Friend's Conifer common and Liam's Conifer less common.
+* Keep tall Friend's Conifer common and Liam's Conifer less common.
+* Add shorter windline Friend's Conifer and narrow Liam's Conifer spires for exposed ridges.
 * Bias strongly toward high elevation and tolerate steep slopes.
 * Use cold bark and blue-green needle palettes.

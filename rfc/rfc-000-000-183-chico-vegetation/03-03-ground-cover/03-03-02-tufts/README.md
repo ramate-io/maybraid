@@ -21,7 +21,7 @@ if noise(seed) > placement_threshold {
 }
 ```
 
-As detailed in the [Tufts layer](../../03-05-cellular-forests/03-05-02-forest-layers/03-05-02-02-tufts-layer/README.md) of cellular forests, tufts should be handled as a **separate layer** from bump outs:
+As detailed in the [Tufts layer](../../03-05-cellular-forests/03-forest-layers/02-tufts-layer/README.md) of cellular forests, tufts should be handled as a **separate layer** from bump outs:
 
 * bump outs define coverage and base density
 * tufts provide localized vertical structure

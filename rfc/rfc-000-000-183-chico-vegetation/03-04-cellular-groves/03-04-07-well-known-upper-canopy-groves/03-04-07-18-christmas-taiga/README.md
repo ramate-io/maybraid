@@ -17,7 +17,7 @@ pub enum ChristmasTaigaCell {
             canopy_palette_mix: [[christmas_green..deep_green], [blue_green..dark_green]],
         },
     }),
-    FrostedNorthernConifer(Bucket {
+    HighBandNorthernConifer(Bucket {
         weight: 0.5,
         placement_constraints: PlacementConstraints {
             elevation: 0.42..1.0,
@@ -27,7 +27,7 @@ pub enum ChristmasTaigaCell {
             height: 8.0..20.0,
             canopy_density: Dense,
             stick_palette_mix: [[cold_bark..dark_bark], [gray_brown..conifer_bark]],
-            canopy_palette_mix: [[frost_green..blue_green], [deep_green..snow_tint]],
+            canopy_palette_mix: [[cold_green..blue_green], [deep_green..dark_green]],
         },
     }),
 }
@@ -48,6 +48,7 @@ impl CellGrove for ChristmasTaiga {
 ## Construction
 
 * Use moderate-density placement, roughly `20%-42%`.
-* Keep Northern Conifer common, with optional frosted variants for colder bands.
-* Bias toward high elevation, cold terrain, and snow-friendly palettes.
+* Keep Northern Conifer common, with a colder high-band variant for upper elevations.
+* Bias toward high elevation and cold terrain.
+* Keep canopy mixes on base tree colors; snow or frost should come from separate flecking concerns.
 * Pair with alpine ground cover, moss, rocks, and sparse understory.

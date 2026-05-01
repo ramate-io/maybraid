@@ -4,15 +4,28 @@ Palm Shade is a low-density upper-canopy grove using common [Waialea Palm](../..
 
 ```rust
 pub enum PalmShadeCell {
-    TallWaialeaPalm(Bucket {
-        weight: 1.0,
+    TowerWaialeaPalm(Bucket {
+        weight: 0.8,
         placement_constraints: PlacementConstraints {
             elevation: 0.0..0.46,
             steepness: 0.0..0.56,
         },
         item: WaialeaPalm {
-            height: 8.0..40.0,
+            height: 20.0..40.0,
             crown_density: Moderate,
+            stick_palette_mix: [[palm_bark..tan_bark], [wet_brown..green_brown]],
+            canopy_palette_mix: [[lush_green..bright_green], [wet_green..lime_green]],
+        },
+    }),
+    LowerWaialeaPalm(Bucket {
+        weight: 0.8,
+        placement_constraints: PlacementConstraints {
+            elevation: 0.0..0.50,
+            steepness: 0.0..0.62,
+        },
+        item: WaialeaPalm {
+            height: 8.0..20.0,
+            crown_density: Dense,
             stick_palette_mix: [[palm_bark..tan_bark], [wet_brown..green_brown]],
             canopy_palette_mix: [[lush_green..bright_green], [wet_green..lime_green]],
         },
@@ -28,6 +41,19 @@ pub enum PalmShadeCell {
             crown_density: Moderate,
             stick_palette_mix: [[palm_bark..date_trunk], [tan_bark..dry_brown]],
             canopy_palette_mix: [[palm_green..olive_green], [fresh_green..yellow_green]],
+        },
+    }),
+    ClusterDatePalm(Bucket {
+        weight: 0.6,
+        placement_constraints: PlacementConstraints {
+            elevation: 0.0..0.44,
+            steepness: 0.0..0.36,
+        },
+        item: DatePalm {
+            height: 6.0..12.0,
+            crown_density: Dense,
+            stick_palette_mix: [[date_trunk..dry_brown], [tan_bark..palm_bark]],
+            canopy_palette_mix: [[palm_green..olive_green], [yellow_green..fresh_green]],
         },
     }),
 }
@@ -48,6 +74,6 @@ impl CellGrove for PalmShade {
 ## Construction
 
 * Use low-density placement, roughly `8%-24%`.
-* Keep Waialea Palm and Date Palm evenly common.
-* Let Waialea Palm provide the tall shade columns and Date Palm provide lower oasis mass.
+* Keep Waialea Palm and Date Palm evenly common overall.
+* Use tower Waialea Palms for shade columns, lower dense Waialea Palms for mid-height crowns, and clustered Date Palms for lower oasis mass.
 * Favor warm, wet, coastal, oasis, or tropical margins.
