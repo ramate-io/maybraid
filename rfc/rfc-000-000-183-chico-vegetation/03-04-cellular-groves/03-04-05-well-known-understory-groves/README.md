@@ -14,4 +14,5 @@ Subsections:
 - [3.4.5.3: Low Bush](./03-04-05-03-low-bush/README.md): moderate-density [Common High Bush](../../03-01-stalk-and-ball-stick-trees/03-01-07-well-known-tree-constructions/03-01-07-12-common-high-bush/README.md) forms at `50cm–1.5m`.
 - [3.4.5.4: High Bush](./03-04-05-04-high-bush/README.md): moderate-density Common High Bush forms at `1m–2.5m`, useful for substantial shrub masses and soft barriers.
 - [3.4.5.5: Tropical Undergrowth](./03-04-05-05-tropical-undergrowth/README.md): mixed tropical mid-layer with tufts, palm bushes, common mini Rory's Head-trained forms, and rare mini Vase or sparse-canopy Storybook forms.
+- [3.4.5.6: Tropical Thicket](./03-04-05-06-tropical-thicket/README.md): dense tropical thicket with larger palm bushes, rare mini Honu Banyan forms, and moderate-size Common High Bush structure.
 
