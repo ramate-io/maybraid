@@ -11,7 +11,7 @@
   - [3.4: Cellular Groves](#34-cellular-groves)
   - [3.5: Cellular Forests](#35-cellular-forests)
   - [3.6: Elder Trees](#36-elder-trees)
-- [4: Milestone](#4-milestone)
+- [4: Milestones](#4-milestones)
 
 ## 1: Summary
 
@@ -161,5 +161,104 @@ Details:
 
 - [3.6: Elder Trees](./03-06-elder-trees/README.md)
 
-## 4: Milestone
+## 4: Milestones
+
+> [!NOTE]
+> These milestones are implementation planning hooks, not dated commitments. Most map directly to Section 3 subsections; later milestones cover integration with [RFC-142: Gimme](../rfc-000-000-142-gimme/README.md), [RFC-127: Marazion Watersheds](../rfc-000-000-127-marazion-watersheds/README.md), and [RFC-154: Generalized LOD](../rfc-000-000-154-generalized-lod/README.md).
+
+### 4.1: Ball-stick Primitive API
+
+Implement the reusable tree-construction primitives from [3.1.1](./03-01-stalk-and-ball-stick-trees/01-stick-and-stalk-components/README.md) through [3.1.5](./03-01-stalk-and-ball-stick-trees/05-ball-selection/README.md): stalks, sticks, balls, planes, anchors, chains, and ball selection.
+
+### 4.2: Proto Tree Constructions
+
+Implement flexible `Proto*` tree construction types and constrain them into the well-known component and tree constructions in [3.1.6](./03-01-stalk-and-ball-stick-trees/06-well-known-component-constructions/README.md) and [3.1.7](./03-01-stalk-and-ball-stick-trees/07-well-known-tree-constructions/README.md).
+
+### 4.3: Tree Shading Pipeline
+
+Implement world-space [stick shading](./03-01-stalk-and-ball-stick-trees/09-stick-shading/README.md) and [leaf shading](./03-01-stalk-and-ball-stick-trees/10-leaf-shading/README.md), including species palettes, stable individual variation, flecks, season, longitude, and altitude terms.
+
+### 4.4: Tree LOD Tricks
+
+Implement the [tree LOD tricks](./03-01-stalk-and-ball-stick-trees/08-tree-lod-tricks/README.md): silhouette-preserving canopy and trunk simplification, branch dropout, rotation/skew variation, vertical gradients, and material simplification.
+
+### 4.5: Ball-stick Playground
+
+Build a developer playground for inspecting ball-stick chains, component mixes, tree variants, shader palettes, and LOD transitions in isolation before connecting them to terrain or grove allocation.
+
+### 4.6: Ground Cover Primitives
+
+Implement [ground cover](./03-03-ground-cover/README.md), including bump outs, tufts, flecking, grassy mounds, and low-cost terrain-hugging variation suitable for later grove and forest layering.
+
+### 4.7: Grove Core Selection
+
+Implement [cellular grove parameterization](./03-04-cellular-groves/01-parameterization/README.md) and [selection and placement](./03-04-cellular-groves/02-selection-and-placement/README.md): Bucket Throw, explicit `None` outcomes, position selection, per-variant constraints, and first-fit fallback.
+
+### 4.8: Proto Grove Types
+
+Build flexible `ProtoGrove` and `ProtoGroveCell` tooling that can express scale, density, offsets, placement constraints, palette mixes, and ordered bucket distributions before the full well-known grove library is locked down.
+
+### 4.9: Well-known Grove Library
+
+Implement the well-known grove families from [3.4.3](./03-04-cellular-groves/03-well-known-ground-cover-groves/README.md) through [3.4.7](./03-04-cellular-groves/07-well-known-upper-canopy-groves/README.md), starting with a thin subset and expanding toward the full ground-cover, tufts, understory, lower-canopy, and upper-canopy catalog.
+
+### 4.10: Grove Playground
+
+Build a developer playground for sampling one grove against a terrain model, inspecting bucket selection, `None` outcomes, first-fit fallback, placement constraints, palette mixes, and grove LOD behavior.
+
+### 4.11: Grove LOD
+
+Implement [grove LOD tricks](./03-04-cellular-groves/08-grove-lod-tricks/README.md), especially reduced instance counts with increased horizontal scale, so distant groves preserve footprint and treeline impression.
+
+### 4.12: Forest Cell Core
+
+Implement [cellular forest parameterization](./03-05-cellular-forests/01-parameterization/README.md) and [selection and construction](./03-05-cellular-forests/02-selection/README.md): forest cells, Hopscotch selection, forest-level grove biases, layer selection, grove grid construction, and deterministic salts.
+
+### 4.13: Forest Layers and Layerings
+
+Implement [forest layers](./03-05-cellular-forests/03-forest-layers/README.md) and the initial [well-known layerings](./03-05-cellular-forests/04-well-known-layerings/README.md), including `None` semantics per layer and ground-cover flip/flop behavior.
+
+### 4.14: Chico Hopscotch Graph
+
+Implement the [Chico Vegetation](./03-05-cellular-forests/05-chico-vegetation/README.md) Hopscotch graph over well-known layerings, with node weights, adjacency weights, loop-backs, and deterministic traversal.
+
+### 4.15: Forest LOD
+
+Implement [forest LOD tricks](./03-05-cellular-forests/06-lod-tricks/README.md): selective layer dropout, canopy preservation, ground-cover impressions, per-forest dropout policy, and integration with generalized LOD requirements.
+
+### 4.16: Forest Cell Playground
+
+Build a developer playground for one forest cell: visualize selected layering, per-layer grove choices, grove grids, forest bias values, `None` outcomes, and LOD dropout masks.
+
+### 4.17: Gimme-backed Vegetation Queries
+
+Integrate vegetation generation with [Gimme](../rfc-000-000-142-gimme/README.md) by querying terrain and generated vegetation through AaBb regions on the spatial index. Start with terrain-height and steepness queries; later add typed materialized views for vegetation, water, urban features, and blockers.
+
+### 4.18: Surface Water Avoidance
+
+Integrate with [Marazion Watersheds](../rfc-000-000-127-marazion-watersheds/README.md) by rejecting or adjusting candidate tree and grove placements whose AaBb intersects a common `SurfaceWater` type in the spatial index. This may land after the first terrain-only grove implementation.
+
+### 4.19: Vegetation Loading via Generalized LOD
+
+Implement a vegetation `ChunkTracker` for [Generalized LOD](../rfc-000-000-154-generalized-lod/README.md). Visible chunks should request or materialize vegetation through Gimme; hidden and removed chunks should preserve deterministic regeneration and avoid double-spawn or orphan entity behavior.
+
+### 4.20: Elder Trees
+
+Implement [Elder Trees](./03-06-elder-trees/README.md) on a separate allocation grid from cellular forests, using ball-stick constructions, ordinary tree/grove LOD techniques, and explicit urban attachment affordances.
+
+### 4.21: Tree Playground
+
+Build a developer playground focused on complete well-known tree constructions: tree recipes, scale envelopes, palettes, fruiting bodies, flecks, and per-tree LOD swaps.
+
+### 4.22: Vegetation Playground
+
+Build an end-to-end developer playground that runs terrain queries, forest-cell selection, grove selection, individual placement, shading, and LOD in one inspectable scene.
+
+### 4.23: End-to-End Gimme Draft Generation
+
+Run vegetation generation through Gimme draft-style regional writes, validating deterministic IDs, region materialization, persistence boundaries, and repeatable get-or-generate behavior across chunk loads.
+
+### 4.24: Cross-system Validation
+
+Validate vegetation against terrain, water, urbanization, and elder-tree allocation: no surface-water tree placements where disabled, no major forest/elder conflicts, stable chunk boundaries, and readable biome identity under low LOD.
 
