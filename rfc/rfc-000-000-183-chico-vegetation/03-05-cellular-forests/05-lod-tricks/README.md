@@ -2,11 +2,11 @@
 
 This page is subsection **3.5.5** of [RFC-183: Chico Vegetation](../../README.md)
 
-Forest LOD tricks reduce the number of active layers and grove grids while preserving the large-scale impression of a forest. At forest scale, the goal is to keep the silhouette and low-lying color mass that identify a biome, not to preserve every layer equally.
+Forest LOD tricks reduce the number of active layers and grove grids while preserving the large-scale impression of a forest. At forest scale, the goal is to keep the base colors and tree-line shape that identify a biome, not to preserve every layer equally.
 
 ## Selective Layer Dropout
 
-At low LOD, forest cells may drop layers selectively after the forest layering has been selected.
+At low LOD, forest cells may drop layers selectively after the forest layering has been selected. Particular forest cells may use different dropout policies according to their layering: a meadow, jungle, orchard, desert, and taiga should not all simplify in the same way.
 
 Common dropout order:
 
@@ -16,7 +16,7 @@ Common dropout order:
 4. **Ground cover** remains as low-lying color or texture impression.
 5. **Upper canopy** remains longest because it preserves skyline and forest mass.
 
-This keeps distant forests readable: ground cover supplies broad terrain color, while canopy layers supply height and silhouette.
+This keeps distant forests readable: ground cover supplies broad terrain color, while canopy layers supply height and silhouette. Base color and tree-line shape are usually the highest-value signals.
 
 ```rust
 pub struct ForestLodMask {
@@ -65,4 +65,4 @@ Layer dropout should be authored conservatively:
 * Orchard or vineyard may keep cultivated upper-canopy rows longer than wild undergrowth.
 * Desert may drop almost everything and keep only ground-cover impressions.
 
-LOD should not change the selected forest layering. It only changes which selected layers are evaluated or simplified at a given distance.
+LOD should not change the selected forest layering. It only changes which selected layers are evaluated or simplified at a given distance. The dropout mask can vary by forest cell or forest layering, but should preserve the cell's broad color impression and canopy outline whenever possible.
