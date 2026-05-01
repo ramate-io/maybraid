@@ -10,6 +10,10 @@ Good for riverbanks, humid valleys, jungle margins, overgrown clearings, abandon
 pub enum BraidGrassCell {
     DeepGreenBlade(Bucket {
         weight: 2.0,
+        placement_constraints: PlacementConstraints {
+            elevation: 0.0..0.75,
+            steepness: 0.0..0.60,
+        },
         item: BraidGrass {
             height: 1.00..2.20,
             width: 0.35..0.85,
@@ -24,6 +28,10 @@ pub enum BraidGrassCell {
     }),
     PaleReedBlade(Bucket {
         weight: 1.0,
+        placement_constraints: PlacementConstraints {
+            elevation: 0.0..0.75,
+            steepness: 0.0..0.60,
+        },
         item: BraidGrass {
             height: 1.20..2.60,
             width: 0.30..0.70,
@@ -38,6 +46,10 @@ pub enum BraidGrassCell {
     }),
     JungleBlade(Bucket {
         weight: 1.0,
+        placement_constraints: PlacementConstraints {
+            elevation: 0.0..0.45,
+            steepness: 0.0..0.30,
+        },
         item: BraidGrass {
             height: 1.60..3.00,
             width: 0.45..1.00,
@@ -52,6 +64,10 @@ pub enum BraidGrassCell {
     }),
     RedEdgeBlade(Bucket {
         weight: 0.5,
+        placement_constraints: PlacementConstraints {
+            elevation: 0.0..0.45,
+            steepness: 0.0..0.60,
+        },
         item: BraidGrass {
             height: 1.00..2.00,
             width: 0.30..0.75,
@@ -71,9 +87,6 @@ impl CellGrove for BraidGrass {
 
     const CELL_SIZE_RANGE: Range<f32> = 2.5..6.0;
     const DENSITY_RANGE: Range<f32> = 0.35..0.75;
-
-    const ELEVATION_RANGE: Range<f32> = 0.0..0.75;
-    const STEEPNESS_RANGE: Range<f32> = 0.0..0.30;
 
     const OFFSET_RANGE: Range<f32> = 0.0..1.0;
 

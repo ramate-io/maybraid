@@ -11,18 +11,34 @@ Good for rich forest floors, riparian understory, old gardens, meadow edges, fan
 pub enum AllbedCell {
     HuelgoatPitch(Bucket {
         weight: 2.0,
+        placement_constraints: PlacementConstraints {
+            elevation: 0.0..0.85,
+            steepness: 0.0..0.40,
+        },
         item: HuelgoatPitchCell,
     }),
     FleckingBed(Bucket {
         weight: 2.0,
+        placement_constraints: PlacementConstraints {
+            elevation: 0.0..0.85,
+            steepness: 0.0..0.40,
+        },
         item: FleckingBedCell,
     }),
     GrassyMound(Bucket {
         weight: 1.0,
+        placement_constraints: PlacementConstraints {
+            elevation: 0.0..0.85,
+            steepness: 0.0..0.40,
+        },
         item: GrassyMoundsCell,
     }),
     LowNonCollidingBumpOut(Bucket {
         weight: 1.0,
+        placement_constraints: PlacementConstraints {
+            elevation: 0.0..0.85,
+            steepness: 0.0..0.40,
+        },
         item: BumpOut {
             noise: NoiseProfile::LowSmooth,
             height: 0.05..0.12,
@@ -36,6 +52,10 @@ pub enum AllbedCell {
     }),
     CollidingFleckingBumpOut(Bucket {
         weight: 1.0,
+        placement_constraints: PlacementConstraints {
+            elevation: 0.0..0.85,
+            steepness: 0.0..0.40,
+        },
         item: BumpOut {
             noise: NoiseProfile::Moderate,
             height: 0.08..0.18,
@@ -65,9 +85,6 @@ impl CellGrove for Allbed {
 
     const CELL_SIZE_RANGE: Range<f32> = 15.0..100.0;
     const DENSITY_RANGE: Range<f32> = 0.10..0.90;
-
-    const ELEVATION_RANGE: Range<f32> = 0.0..0.85;
-    const STEEPNESS_RANGE: Range<f32> = 0.0..0.40;
 
     const OFFSET_RANGE: Range<f32> = 0.0..1.0;
 

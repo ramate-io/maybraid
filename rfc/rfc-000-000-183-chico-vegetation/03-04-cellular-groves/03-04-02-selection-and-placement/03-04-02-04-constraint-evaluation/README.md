@@ -13,11 +13,26 @@ let steepness = laplacian(terrain, p);
 Reject placements that violate constraints.
 
 ```rust
-if !within(elevation, elevation_range) { continue; }
-if !within(steepness, steepness_range) { continue; }
+fn valid_at(p: Vec3, variant: &GroveVariant) -> bool {
+    let c = variant.placement_constraints;
+
+    within(elevation, c.elevation)
+        && within(steepness, c.steepness)
+}
 ```
 
-This is directly analogous to the validation phase in RFC-170 terrain detail.
+Constraints are evaluated against the **candidate variant**, not the grove as a whole. If the starting variant fails, selection advances to the adjacent bucketed variant and tries again at the same candidate point:
+
+```rust
+for variant in distribution.first_fit_from(start_bucket) {
+    if valid_at(p, variant) {
+        place(variant, p);
+        break;
+    }
+}
+```
+
+This is directly analogous to the validation phase in RFC-170 terrain detail, but the failure path stays inside the grove distribution before the point is rejected.
 
 ---
 

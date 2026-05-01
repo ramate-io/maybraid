@@ -8,6 +8,10 @@ Good for valleys, prairies, tropical fields, meadow edges, and open terrain.
 pub enum WildGrassCell {
     MeadowGreen(Bucket {
         weight: 2.0,
+        placement_constraints: PlacementConstraints {
+            elevation: 0.0..0.60,
+            steepness: 0.0..0.65,
+        },
         item: Tuft {
             height: 0.50..0.90,
             width: 0.15..0.35,
@@ -20,6 +24,10 @@ pub enum WildGrassCell {
     }),
     GoldenGrass(Bucket {
         weight: 1.5,
+        placement_constraints: PlacementConstraints {
+            elevation: 0.0..0.70,
+            steepness: 0.0..0.55,
+        },
         item: Tuft {
             height: 0.60..1.00,
             width: 0.12..0.30,
@@ -32,6 +40,10 @@ pub enum WildGrassCell {
     }),
     RedPrairie(Bucket {
         weight: 1.0,
+        placement_constraints: PlacementConstraints {
+            elevation: 0.0..0.40,
+            steepness: 0.0..0.35,
+        },
         item: Tuft {
             height: 0.60..1.00,
             width: 0.15..0.35,
@@ -44,6 +56,10 @@ pub enum WildGrassCell {
     }),
     BlueTropical(Bucket {
         weight: 0.8,
+        placement_constraints: PlacementConstraints {
+            elevation: 0.0..0.40,
+            steepness: 0.0..0.35,
+        },
         item: Tuft {
             height: 0.60..0.95,
             width: 0.15..0.35,
@@ -56,6 +72,10 @@ pub enum WildGrassCell {
     }),
     PaleField(Bucket {
         weight: 1.0,
+        placement_constraints: PlacementConstraints {
+            elevation: 0.0..0.60,
+            steepness: 0.0..0.35,
+        },
         item: Tuft {
             height: 0.50..0.85,
             width: 0.12..0.28,
@@ -68,6 +88,10 @@ pub enum WildGrassCell {
     }),
     BloomingGrass(Bucket {
         weight: 0.7,
+        placement_constraints: PlacementConstraints {
+            elevation: 0.0..0.70,
+            steepness: 0.0..0.35,
+        },
         item: Tuft {
             height: 0.50..0.90,
             width: 0.15..0.35,
@@ -86,9 +110,6 @@ impl CellGrove for WildGrass {
 
     const CELL_SIZE_RANGE: Range<f32> = 1.0..2.5;
     const DENSITY_RANGE: Range<f32> = 0.65..0.90;
-
-    const ELEVATION_RANGE: Range<f32> = 0.0..0.80;
-    const STEEPNESS_RANGE: Range<f32> = 0.0..0.35;
 
     const OFFSET_RANGE: Range<f32> = 0.0..1.0;
 

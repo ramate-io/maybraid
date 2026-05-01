@@ -11,6 +11,10 @@ Good for damp forests, riparian shade, temperate groves, old stone regions, and 
 pub enum HuelgoatPitchCell {
     BumpOut(Bucket {
         weight: 1.0,
+        placement_constraints: PlacementConstraints {
+            elevation: 0.0..0.75,
+            steepness: 0.0..0.45,
+        },
         item: BumpOut {
             noise: NoiseProfile::LowSmooth,
             height: 0.05..0.10,
@@ -34,9 +38,6 @@ impl CellGrove for HuelgoatPitch {
 
     const CELL_SIZE_RANGE: Range<f32> = 50.0..100.0;
     const DENSITY_RANGE: Range<f32> = 0.60..0.80;
-
-    const ELEVATION_RANGE: Range<f32> = 0.0..0.75; // elevation range as fraction of max world height or other normalized elevation
-    const STEEPNESS_RANGE: Range<f32> = 0.0..0.45;
 
     const OFFSET_RANGE: Range<f32> = 0.0..1.0;
 

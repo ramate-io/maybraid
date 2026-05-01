@@ -11,10 +11,18 @@ Good for mixed woodland floors, meadow-forest transitions, garden-like groves, r
 pub enum JimsCollageCell {
     HuelgoatPitch(Bucket {
         weight: 1.0,
+        placement_constraints: PlacementConstraints {
+            elevation: 0.0..0.80,
+            steepness: 0.0..0.40,
+        },
         item: HuelgoatPitchCell,
     }),
     FleckingBed(Bucket {
         weight: 1.0,
+        placement_constraints: PlacementConstraints {
+            elevation: 0.0..0.80,
+            steepness: 0.0..0.40,
+        },
         item: FleckingBedCell,
     }),
 }
@@ -24,9 +32,6 @@ impl CellGrove for JimsCollage {
 
     const CELL_SIZE_RANGE: Range<f32> = 50.0..100.0;
     const DENSITY_RANGE: Range<f32> = 0.60..0.85;
-
-    const ELEVATION_RANGE: Range<f32> = 0.0..0.80;
-    const STEEPNESS_RANGE: Range<f32> = 0.0..0.40;
 
     const OFFSET_RANGE: Range<f32> = 0.0..1.0;
 

@@ -11,10 +11,18 @@ Good for arid regions, sparse woodland, stripped-back understory, chaparral edge
 pub enum FloorScrubCell {
     HuelgoatPitch(Bucket {
         weight: 1.0,
+        placement_constraints: PlacementConstraints {
+            elevation: 0.0..0.85,
+            steepness: 0.0..0.45,
+        },
         item: HuelgoatPitchCell,
     }),
     FleckingBed(Bucket {
         weight: 1.0,
+        placement_constraints: PlacementConstraints {
+            elevation: 0.0..0.85,
+            steepness: 0.0..0.45,
+        },
         item: FleckingBedCell,
     }),
 }
@@ -24,9 +32,6 @@ impl CellGrove for FloorScrub {
 
     const CELL_SIZE_RANGE: Range<f32> = 15.0..20.0;
     const DENSITY_RANGE: Range<f32> = 0.20..0.45;
-
-    const ELEVATION_RANGE: Range<f32> = 0.0..0.85;
-    const STEEPNESS_RANGE: Range<f32> = 0.0..0.45;
 
     const OFFSET_RANGE: Range<f32> = 0.0..1.0;
 

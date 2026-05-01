@@ -11,6 +11,10 @@ Good for meadow irregularity, mossy hummocks, pasture texture, wetland edges, an
 pub enum GrassyMoundsCell {
     Mound(Bucket {
         weight: 1.0,
+        placement_constraints: PlacementConstraints {
+            elevation: 0.0..0.85,
+            steepness: 0.0..0.35,
+        },
         item: Mound {
             placement: SparseBoulderLike {
                 cell_size: 5.0,
@@ -31,9 +35,6 @@ impl CellGrove for GrassyMounds {
 
     const CELL_SIZE_RANGE: Range<f32> = 5.0..6.0;
     const DENSITY_RANGE: Range<f32> = 0.25..0.55;
-
-    const ELEVATION_RANGE: Range<f32> = 0.0..0.85;
-    const STEEPNESS_RANGE: Range<f32> = 0.0..0.35;
 
     const OFFSET_RANGE: Range<f32> = 0.0..1.0;
 

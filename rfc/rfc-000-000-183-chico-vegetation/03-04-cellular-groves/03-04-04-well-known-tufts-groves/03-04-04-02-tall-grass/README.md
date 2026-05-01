@@ -12,6 +12,10 @@ Good for tropical grasslands, riverine edges, wet meadows, and lush transitional
 pub enum TallGrassCell {
     RiverGreen(Bucket {
         weight: 2.0,
+        placement_constraints: PlacementConstraints {
+            elevation: 0.0..0.50,
+            steepness: 0.0..0.30,
+        },
         item: Tuft {
             height: 0.50..0.90,
             width: 0.15..0.35,
@@ -20,6 +24,10 @@ pub enum TallGrassCell {
     }),
     PaleReed(Bucket {
         weight: 1.0,
+        placement_constraints: PlacementConstraints {
+            elevation: 0.0..0.55,
+            steepness: 0.0..0.30,
+        },
         item: Tuft {
             height: 0.60..1.00,
             width: 0.12..0.30,
@@ -28,6 +36,10 @@ pub enum TallGrassCell {
     }),
     TropicalBlade(Bucket {
         weight: 1.0,
+        placement_constraints: PlacementConstraints {
+            elevation: 0.0..0.45,
+            steepness: 0.0..0.30,
+        },
         item: Tuft {
             height: 0.70..1.00,
             width: 0.18..0.40,
@@ -36,6 +48,10 @@ pub enum TallGrassCell {
     }),
     HawaiianRed(Bucket {
         weight: 1.0,
+        placement_constraints: PlacementConstraints {
+            elevation: 0.0..0.65,
+            steepness: 0.0..0.70,
+        },
         item: Tuft {
             height: 0.70..1.00,
             width: 0.18..0.40,
@@ -55,9 +71,6 @@ impl CellGrove for TallGrass {
 
     const CELL_SIZE_RANGE: Range<f32> = 1.0..2.5;
     const DENSITY_RANGE: Range<f32> = 0.55..0.85;
-
-    const ELEVATION_RANGE: Range<f32> = 0.0..0.75;
-    const STEEPNESS_RANGE: Range<f32> = 0.0..0.30;
 
     const OFFSET_RANGE: Range<f32> = 0.0..1.0;
 

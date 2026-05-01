@@ -10,6 +10,10 @@ Good for jungle clearings, tropical forest edges, coastal lowlands, riverbanks, 
 pub enum TropicalTuftsCell {
     BrightTuft(Bucket {
         weight: 2.0,
+        placement_constraints: PlacementConstraints {
+            elevation: 0.0..0.65,
+            steepness: 0.0..0.35,
+        },
         item: Tuft {
             height: 0.25..0.50,
             width: 0.14..0.34,
@@ -22,6 +26,10 @@ pub enum TropicalTuftsCell {
     }),
     DeepTuft(Bucket {
         weight: 1.5,
+        placement_constraints: PlacementConstraints {
+            elevation: 0.0..0.65,
+            steepness: 0.0..0.75,
+        },
         item: Tuft {
             height: 0.30..0.55,
             width: 0.16..0.38,
@@ -34,6 +42,10 @@ pub enum TropicalTuftsCell {
     }),
     YellowGreenTuft(Bucket {
         weight: 1.0,
+        placement_constraints: PlacementConstraints {
+            elevation: 0.0..0.65,
+            steepness: 0.0..0.75,
+        },
         item: Tuft {
             height: 0.25..0.45,
             width: 0.12..0.30,
@@ -46,6 +58,10 @@ pub enum TropicalTuftsCell {
     }),
     SmallPalmBush(Bucket {
         weight: 0.75,
+        placement_constraints: PlacementConstraints {
+            elevation: 0.0..0.65,
+            steepness: 0.0..0.75,
+        },
         item: PalmBush {
             height: 0.35..0.80,
             frond_count: 4..=7,
@@ -60,6 +76,10 @@ pub enum TropicalTuftsCell {
     }),
     JuvenilePalmBush(Bucket {
         weight: 0.35,
+        placement_constraints: PlacementConstraints {
+            elevation: 0.0..0.55,
+            steepness: 0.0..0.75,
+        },
         item: PalmBush {
             height: 0.50..1.10,
             frond_count: 3..=5,
@@ -79,9 +99,6 @@ impl CellGrove for TropicalTufts {
 
     const CELL_SIZE_RANGE: Range<f32> = 2.0..4.5;
     const DENSITY_RANGE: Range<f32> = 0.08..0.24;
-
-    const ELEVATION_RANGE: Range<f32> = 0.0..0.65;
-    const STEEPNESS_RANGE: Range<f32> = 0.0..0.35;
 
     const OFFSET_RANGE: Range<f32> = 0.0..1.0;
 

@@ -10,6 +10,10 @@ Good for arid regions, woodland edges, transitional understory, disturbed terrai
 pub enum BushScrubCell {
     DryTuft(Bucket {
         weight: 2.0,
+        placement_constraints: PlacementConstraints {
+            elevation: 0.0..0.85,
+            steepness: 0.0..0.75,
+        },
         item: Tuft {
             height: 0.25..0.45,
             width: 0.12..0.30,
@@ -18,6 +22,10 @@ pub enum BushScrubCell {
     }),
     GreenTuft(Bucket {
         weight: 1.5,
+        placement_constraints: PlacementConstraints {
+            elevation: 0.0..0.85,
+            steepness: 0.0..0.45,
+        },
         item: Tuft {
             height: 0.25..0.50,
             width: 0.12..0.35,
@@ -26,6 +34,10 @@ pub enum BushScrubCell {
     }),
     SmallBush(Bucket {
         weight: 1.0,
+        placement_constraints: PlacementConstraints {
+            elevation: 0.0..0.85,
+            steepness: 0.0..0.65,
+        },
         item: CommonHighBush {
             height: 0.35..0.80,
             shoot_count: 4..=7,
@@ -37,6 +49,10 @@ pub enum BushScrubCell {
     }),
     SaplingBush(Bucket {
         weight: 0.5,
+        placement_constraints: PlacementConstraints {
+            elevation: 0.0..0.65,
+            steepness: 0.0..0.45,
+        },
         item: CommonHighBush {
             height: 0.50..1.20,
             shoot_count: 3..=5,
@@ -53,9 +69,6 @@ impl CellGrove for BushScrub {
 
     const CELL_SIZE_RANGE: Range<f32> = 2.0..5.0;
     const DENSITY_RANGE: Range<f32> = 0.10..0.30;
-
-    const ELEVATION_RANGE: Range<f32> = 0.0..0.85;
-    const STEEPNESS_RANGE: Range<f32> = 0.0..0.45;
 
     const OFFSET_RANGE: Range<f32> = 0.0..1.0;
 

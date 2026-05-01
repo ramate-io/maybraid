@@ -10,6 +10,10 @@ Good for dense woodland understory, riparian margins, jungle edges, old gardens,
 pub enum HighBushCell {
     GreenHighBush(Bucket {
         weight: 2.0,
+        placement_constraints: PlacementConstraints {
+            elevation: 0.0..0.40,
+            steepness: 0.0..0.32,
+        },
         item: CommonHighBush {
             height: 1.00..2.20,
             shoot_count: 7..=10,
@@ -25,6 +29,10 @@ pub enum HighBushCell {
     }),
     DenseHighBush(Bucket {
         weight: 1.25,
+        placement_constraints: PlacementConstraints {
+            elevation: 0.0..0.40,
+            steepness: 0.0..0.32,
+        },
         item: CommonHighBush {
             height: 1.40..2.50,
             shoot_count: 8..=12,
@@ -40,6 +48,10 @@ pub enum HighBushCell {
     }),
     DryHighBush(Bucket {
         weight: 0.75,
+        placement_constraints: PlacementConstraints {
+            elevation: 0.0..0.40,
+            steepness: 0.0..0.32,
+        },
         item: CommonHighBush {
             height: 1.00..2.00,
             shoot_count: 6..=9,
@@ -55,6 +67,10 @@ pub enum HighBushCell {
     }),
     BerryHighBush(Bucket {
         weight: 0.35,
+        placement_constraints: PlacementConstraints {
+            elevation: 0.0..0.40,
+            steepness: 0.0..0.32,
+        },
         item: CommonHighBush {
             height: 1.20..2.20,
             shoot_count: 7..=10,
@@ -75,9 +91,6 @@ impl CellGrove for HighBush {
 
     const CELL_SIZE_RANGE: Range<f32> = 3.5..8.0;
     const DENSITY_RANGE: Range<f32> = 0.16..0.42;
-
-    const ELEVATION_RANGE: Range<f32> = 0.0..0.80;
-    const STEEPNESS_RANGE: Range<f32> = 0.0..0.32;
 
     const OFFSET_RANGE: Range<f32> = 0.0..1.0;
 

@@ -11,6 +11,10 @@ Good for wildflower fields, meadow floors, heath, moss beds, flowering understor
 pub enum FleckingBedCell {
     BumpOut(Bucket {
         weight: 1.0,
+        placement_constraints: PlacementConstraints {
+            elevation: 0.0..0.80,
+            steepness: 0.0..0.35,
+        },
         item: BumpOut {
             noise: NoiseProfile::Moderate,
             height: 0.10..0.25,
@@ -38,10 +42,6 @@ impl CellGrove for FleckingBed {
 
     const CELL_SIZE_RANGE: Range<f32> = 50.0..100.0;
     const DENSITY_RANGE: Range<f32> = 0.60..0.85;
-
-    // Normalized fraction of max world height.
-    const ELEVATION_RANGE: Range<f32> = 0.0..0.80;
-    const STEEPNESS_RANGE: Range<f32> = 0.0..0.35;
 
     const OFFSET_RANGE: Range<f32> = 0.0..1.0;
 

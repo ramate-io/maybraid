@@ -8,6 +8,10 @@ Good for overlaying detail on existing ground cover where ground-cover likelihoo
 pub enum CommonTuftsCell {
     ShortGreen(Bucket {
         weight: 2.0,
+        placement_constraints: PlacementConstraints {
+            elevation: 0.0..0.80,
+            steepness: 0.0..0.70,
+        },
         item: Tuft {
             height: 0.10..0.25,
             width: 0.08..0.20,
@@ -16,6 +20,10 @@ pub enum CommonTuftsCell {
     }),
     DryScrub(Bucket {
         weight: 1.0,
+        placement_constraints: PlacementConstraints {
+            elevation: 0.0..0.90,
+            steepness: 0.0..0.70,
+        },
         item: Tuft {
             height: 0.15..0.40,
             width: 0.08..0.25,
@@ -24,6 +32,10 @@ pub enum CommonTuftsCell {
     }),
     TallWild(Bucket {
         weight: 1.0,
+        placement_constraints: PlacementConstraints {
+            elevation: 0.0..0.60,
+            steepness: 0.0..0.70,
+        },
         item: Tuft {
             height: 0.30..0.50,
             width: 0.12..0.30,
@@ -37,9 +49,6 @@ impl CellGrove for CommonTufts {
 
     const CELL_SIZE_RANGE: Range<f32> = 1.0..3.0;
     const DENSITY_RANGE: Range<f32> = 0.10..0.35;
-
-    const ELEVATION_RANGE: Range<f32> = 0.0..0.90;
-    const STEEPNESS_RANGE: Range<f32> = 0.0..0.45;
 
     const OFFSET_RANGE: Range<f32> = 0.0..1.0;
 

@@ -10,8 +10,12 @@ Good for jungle margins, humid forest paths, riverbanks, coastal lowlands, canop
 pub enum TropicalUndergrowthCell {
     BrightTuft(Bucket {
         weight: 2.0,
+        placement_constraints: PlacementConstraints {
+            elevation: 0.0..0.40,
+            steepness: 0.0..0.70,
+        },
         item: Tuft {
-            height: 0.30..0.70,
+            height: 0.30..1.50,
             width: 0.16..0.42,
             palette_mix: [
                 [bright_green..lime_green],
@@ -22,6 +26,10 @@ pub enum TropicalUndergrowthCell {
     }),
     DeepTuft(Bucket {
         weight: 1.5,
+        placement_constraints: PlacementConstraints {
+            elevation: 0.0..0.40,
+            steepness: 0.0..0.70,
+        },
         item: Tuft {
             height: 0.40..0.90,
             width: 0.18..0.50,
@@ -34,6 +42,10 @@ pub enum TropicalUndergrowthCell {
     }),
     SmallPalmBush(Bucket {
         weight: 1.0,
+        placement_constraints: PlacementConstraints {
+            elevation: 0.0..0.40,
+            steepness: 0.0..0.60,
+        },
         item: PalmBush {
             height: 0.50..1.40,
             frond_count: 5..=9,
@@ -48,6 +60,10 @@ pub enum TropicalUndergrowthCell {
     }),
     MiniRoryHeadTrained(Bucket {
         weight: 0.85,
+        placement_constraints: PlacementConstraints {
+            elevation: 0.0..0.40,
+            steepness: 0.0..0.70,
+        },
         item: RoryHeadTrained {
             height: 0.80..1.80,
             stalk_radius: 0.025,
@@ -62,6 +78,10 @@ pub enum TropicalUndergrowthCell {
     }),
     MiniVaseTree(Bucket {
         weight: 0.20,
+        placement_constraints: PlacementConstraints {
+            elevation: 0.0..0.40,
+            steepness: 0.0..0.50,
+        },
         item: VaseTree {
             height: 1.00..2.30,
             stalk_radius: 0.030,
@@ -76,6 +96,10 @@ pub enum TropicalUndergrowthCell {
     }),
     MiniSparseStorybook(Bucket {
         weight: 0.15,
+        placement_constraints: PlacementConstraints {
+            elevation: 0.0..0.40,
+            steepness: 0.0..0.50,
+        },
         item: StorybookTree {
             height: 1.20..2.50,
             stalk_radius: 0.030,
@@ -95,9 +119,6 @@ impl CellGrove for TropicalUndergrowth {
 
     const CELL_SIZE_RANGE: Range<f32> = 3.0..7.0;
     const DENSITY_RANGE: Range<f32> = 0.22..0.58;
-
-    const ELEVATION_RANGE: Range<f32> = 0.0..0.70;
-    const STEEPNESS_RANGE: Range<f32> = 0.0..0.30;
 
     const OFFSET_RANGE: Range<f32> = 0.0..1.0;
 

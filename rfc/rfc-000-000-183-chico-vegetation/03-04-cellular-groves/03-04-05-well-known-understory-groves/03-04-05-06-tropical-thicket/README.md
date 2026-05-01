@@ -10,6 +10,10 @@ Good for jungle edges, riverine thickets, humid ravines, dense coastal forest, y
 pub enum TropicalThicketCell {
     LargePalmBush(Bucket {
         weight: 2.0,
+        placement_constraints: PlacementConstraints {
+            elevation: 0.0..0.45,
+            steepness: 0.0..0.28,
+        },
         item: PalmBush {
             height: 1.00..2.20,
             frond_count: 7..=12,
@@ -24,6 +28,10 @@ pub enum TropicalThicketCell {
     }),
     BroadWetPalmBush(Bucket {
         weight: 1.25,
+        placement_constraints: PlacementConstraints {
+            elevation: 0.0..0.45,
+            steepness: 0.0..0.68,
+        },
         item: PalmBush {
             height: 1.20..2.60,
             frond_count: 8..=14,
@@ -38,6 +46,10 @@ pub enum TropicalThicketCell {
     }),
     MiniHonuBanyan(Bucket {
         weight: 0.45,
+        placement_constraints: PlacementConstraints {
+            elevation: 0.0..0.45,
+            steepness: 0.0..0.28,
+        },
         item: HonuBanyan {
             height: 1.80..3.80,
             stalk_radius: 0.2,
@@ -53,6 +65,10 @@ pub enum TropicalThicketCell {
     }),
     ModerateHighBush(Bucket {
         weight: 1.0,
+        placement_constraints: PlacementConstraints {
+            elevation: 0.0..0.45,
+            steepness: 0.0..0.28,
+        },
         item: CommonHighBush {
             height: 1.20..2.40,
             shoot_count: 7..=11,
@@ -68,6 +84,10 @@ pub enum TropicalThicketCell {
     }),
     FloweringHighBush(Bucket {
         weight: 0.30,
+        placement_constraints: PlacementConstraints {
+            elevation: 0.0..0.45,
+            steepness: 0.0..0.78,
+        },
         item: CommonHighBush {
             height: 1.00..2.20,
             shoot_count: 7..=10,
@@ -88,9 +108,6 @@ impl CellGrove for TropicalThicket {
 
     const CELL_SIZE_RANGE: Range<f32> = 4.0..9.0;
     const DENSITY_RANGE: Range<f32> = 0.24..0.62;
-
-    const ELEVATION_RANGE: Range<f32> = 0.0..0.65;
-    const STEEPNESS_RANGE: Range<f32> = 0.0..0.28;
 
     const OFFSET_RANGE: Range<f32> = 0.0..1.0;
 

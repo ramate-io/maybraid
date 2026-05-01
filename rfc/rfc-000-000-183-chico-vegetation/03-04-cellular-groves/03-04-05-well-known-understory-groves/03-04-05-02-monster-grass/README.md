@@ -10,6 +10,10 @@ Good for giant jungle clearings, fantasy wetlands, elder-tree understory, hidden
 pub enum MonsterGrassCell {
     GiantWetBlade(Bucket {
         weight: 2.0,
+        placement_constraints: PlacementConstraints {
+            elevation: 0.0..0.55,
+            steepness: 0.0..0.25,
+        },
         item: MonsterGrass {
             height: 2.00..4.00,
             width: 0.70..1.60,
@@ -24,6 +28,10 @@ pub enum MonsterGrassCell {
     }),
     BroadJungleBlade(Bucket {
         weight: 1.5,
+        placement_constraints: PlacementConstraints {
+            elevation: 0.0..0.55,
+            steepness: 0.0..0.25,
+        },
         item: MonsterGrass {
             height: 2.50..5.00,
             width: 0.90..2.20,
@@ -38,6 +46,10 @@ pub enum MonsterGrassCell {
     }),
     PaleGiantReed(Bucket {
         weight: 0.75,
+        placement_constraints: PlacementConstraints {
+            elevation: 0.0..0.55,
+            steepness: 0.0..0.25,
+        },
         item: MonsterGrass {
             height: 2.00..4.50,
             width: 0.60..1.40,
@@ -52,6 +64,10 @@ pub enum MonsterGrassCell {
     }),
     RedRibbedBlade(Bucket {
         weight: 0.35,
+        placement_constraints: PlacementConstraints {
+            elevation: 0.0..0.55,
+            steepness: 0.0..0.45,
+        },
         item: MonsterGrass {
             height: 2.20..4.20,
             width: 0.75..1.80,
@@ -71,9 +87,6 @@ impl CellGrove for MonsterGrass {
 
     const CELL_SIZE_RANGE: Range<f32> = 4.0..9.0;
     const DENSITY_RANGE: Range<f32> = 0.18..0.55;
-
-    const ELEVATION_RANGE: Range<f32> = 0.0..0.65;
-    const STEEPNESS_RANGE: Range<f32> = 0.0..0.25;
 
     const OFFSET_RANGE: Range<f32> = 0.0..1.0;
 
