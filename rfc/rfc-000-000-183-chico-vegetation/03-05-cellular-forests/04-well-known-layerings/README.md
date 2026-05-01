@@ -27,3 +27,6 @@ Subsections:
 * [3.5.4.19: Fruit Plains](./19-fruit-plains/README.md): open cultivated plain with common Huelgoat Pitch and Allbed plus less common fruiting canopy groves.
 * [3.5.4.20: Damas Edge](./20-damas-edge/README.md): dry-tropical transition with less common Levantine Scrub and Date Grove plus rare oasis and tropical pockets.
 * [3.5.4.21: Open Tropics](./21-open-tropics/README.md): sparse tropical layering with common Huelgoat Pitch and less common Trade Winds canopy.
+* [3.5.4.22: West Maui](./22-west-maui/README.md): open tropical scrub layering with common Floor Scrub, Wild Grass, Bush Scrub, and Tropical Tufts.
+* [3.5.4.23: Upper Park](./23-upper-park/README.md): open parkland scrub layering with common Floor Scrub, Wild Grass, and Bush Scrub plus less common Rolling Oaks.
+* [3.5.4.24: Steppe Down](./24-steppe-down/README.md): simple open steppe layering with common Floor Scrub, Wild Grass, and Bush Scrub.
