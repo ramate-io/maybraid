@@ -14,12 +14,12 @@ At a high level:
 
 Subsections:
 
-- [3.4.1: Parameterization](./03-04-01-parameterization/README.md)
-- [3.4.2: Selection and Placement](./03-04-02-selection-and-placement/README.md)
-- [3.4.3: Well-known Ground Cover Groves](./03-04-03-well-known-ground-cover-groves/README.md)
-- [3.4.4: Well-known Tufts Groves](./03-04-04-well-known-tufts-groves/README.md)
-- [3.4.5: Well-known Understory Groves](./03-04-05-well-known-understory-groves/README.md)
-- [3.4.6: Well-known Lower Canopy Groves](./03-04-06-well-known-lower-canopy-groves/README.md)
-- [3.4.7: Well-known Upper Canopy Groves](./03-04-07-well-known-upper-canopy-groves/README.md)
+- [3.4.1: Parameterization](./01-parameterization/README.md)
+- [3.4.2: Selection and Placement](./02-selection-and-placement/README.md)
+- [3.4.3: Well-known Ground Cover Groves](./03-well-known-ground-cover-groves/README.md)
+- [3.4.4: Well-known Tufts Groves](./04-well-known-tufts-groves/README.md)
+- [3.4.5: Well-known Understory Groves](./05-well-known-understory-groves/README.md)
+- [3.4.6: Well-known Lower Canopy Groves](./06-well-known-lower-canopy-groves/README.md)
+- [3.4.7: Well-known Upper Canopy Groves](./07-well-known-upper-canopy-groves/README.md)
 - [3.4.8: Grove LOD Tricks]()
 

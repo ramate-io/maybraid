@@ -7,8 +7,8 @@ Ground cover is the lowest layer of vegetation detail: it fills terrain with gra
 
 Subsections:
 
-- [3.3.1: Bump Outs](./03-03-01-bump-outs/README.md)
-- [3.3.2: Tufts](./03-03-02-tufts/README.md)
+- [3.3.1: Bump Outs](./01-bump-outs/README.md)
+- [3.3.2: Tufts](./02-tufts/README.md)
 
 ---
 

@@ -4,7 +4,7 @@ Cellular forest selection chooses which forest layering should control a forest 
 
 ## 3.5.2.1: Hopscotch
 
-Hopscotch is the forest-level counterpart to [Bucket Throw](../../03-04-cellular-groves/03-04-02-selection-and-placement/03-04-02-01-bucket-throw/README.md). Bucket Throw preserves local coherence by moving through adjacent buckets in a one-dimensional distribution. Hopscotch generalizes that idea to a directed graph, so each forest type can choose its own compatible neighbors instead of only having a left and right neighbor.
+Hopscotch is the forest-level counterpart to [Bucket Throw](../../03-04-cellular-groves/02-selection-and-placement/01-bucket-throw/README.md). Bucket Throw preserves local coherence by moving through adjacent buckets in a one-dimensional distribution. Hopscotch generalizes that idea to a directed graph, so each forest type can choose its own compatible neighbors instead of only having a left and right neighbor.
 
 A Hopscotch distribution is made from nodes. Each node represents a candidate forest layering and provides:
 

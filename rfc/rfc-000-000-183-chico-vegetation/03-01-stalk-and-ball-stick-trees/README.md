@@ -18,14 +18,14 @@ Tree types are then expressed as parameterized constructions over these primitiv
 
 Subsections:
 
-- [3.1.1: Stick and Stalk Components](./03-01-01-stick-and-stalk-components/README.md)
-- [3.1.2: Ball Components](./03-01-02-ball-components/README.md)
-- [3.1.3: Ball-stick Anchors](./03-01-03-ball-stick-anchors/README.md)
-- [3.1.4: Ball-stick Chains](./03-01-04-ball-stick-chains/README.md)
-- [3.1.5: Ball Selection](./03-01-05-ball-selection/README.md)
-- [3.1.6: Well-known Component Constructions](./03-01-06-well-known-component-constructions/README.md)
-- [3.1.7: Well-known Tree Constructions](./03-01-07-well-known-tree-constructions/README.md)
-- [3.1.8: Tree LOD Tricks](./03-01-08-tree-lod-tricks/README.md)
-- [3.1.9: Stick Shading](./03-01-09-stick-shading/README.md)
-- [3.1.10: Leaf Shading](./03-01-10-leaf-shading/README.md)
+- [3.1.1: Stick and Stalk Components](./01-stick-and-stalk-components/README.md)
+- [3.1.2: Ball Components](./02-ball-components/README.md)
+- [3.1.3: Ball-stick Anchors](./03-ball-stick-anchors/README.md)
+- [3.1.4: Ball-stick Chains](./04-ball-stick-chains/README.md)
+- [3.1.5: Ball Selection](./05-ball-selection/README.md)
+- [3.1.6: Well-known Component Constructions](./06-well-known-component-constructions/README.md)
+- [3.1.7: Well-known Tree Constructions](./07-well-known-tree-constructions/README.md)
+- [3.1.8: Tree LOD Tricks](./08-tree-lod-tricks/README.md)
+- [3.1.9: Stick Shading](./09-stick-shading/README.md)
+- [3.1.10: Leaf Shading](./10-leaf-shading/README.md)
 

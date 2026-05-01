@@ -12,7 +12,7 @@ The standard forest layers are:
 4. [Lower Canopy Layer](./04-lower-canopy-layer/README.md)
 5. [Upper Canopy Layer](./05-upper-canopy-layer/README.md)
 
-A forest layering does not place vegetation directly. Instead, it says which groves are allowed in each layer, how likely each grove is, and whether that layer is allowed to be empty. The actual grove within a layer is selected with [Bucket Throw](../../03-04-cellular-groves/03-04-02-selection-and-placement/03-04-02-01-bucket-throw/README.md).
+A forest layering does not place vegetation directly. Instead, it says which groves are allowed in each layer, how likely each grove is, and whether that layer is allowed to be empty. The actual grove within a layer is selected with [Bucket Throw](../../03-04-cellular-groves/02-selection-and-placement/01-bucket-throw/README.md).
 
 ## Compatibility
 
@@ -98,7 +98,7 @@ Forest cells are composed of:
 
 ...defining compatibility. 
 
-Selection of the particular grove within a layer is given by the [Bucket Throw](../../03-04-cellular-groves/03-04-02-selection-and-placement/03-04-02-01-bucket-throw/README.md) algorithm.
+Selection of the particular grove within a layer is given by the [Bucket Throw](../../03-04-cellular-groves/02-selection-and-placement/01-bucket-throw/README.md) algorithm.
 
 A forest cell is thus defined something like:
 

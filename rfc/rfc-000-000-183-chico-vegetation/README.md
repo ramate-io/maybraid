@@ -28,16 +28,16 @@ Tree types are then expressed as parameterized constructions over these primitiv
 
 Subsections:
 
-- [3.1.1: Stick and Stalk Components](./03-01-stalk-and-ball-stick-trees/03-01-01-stick-and-stalk-components/README.md)
-- [3.1.2: Ball Components](./03-01-stalk-and-ball-stick-trees/03-01-02-ball-components/README.md)
-- [3.1.3: Ball-stick Anchors](./03-01-stalk-and-ball-stick-trees/03-01-03-ball-stick-anchors/README.md)
-- [3.1.4: Ball-stick Chains](./03-01-stalk-and-ball-stick-trees/03-01-04-ball-stick-chains/README.md)
-- [3.1.5: Ball Selection](./03-01-stalk-and-ball-stick-trees/03-01-05-ball-selection/README.md)
-- [3.1.6: Well-known Component Constructions](./03-01-stalk-and-ball-stick-trees/03-01-06-well-known-component-constructions/README.md)
-- [3.1.7: Well-known Tree Constructions](./03-01-stalk-and-ball-stick-trees/03-01-07-well-known-tree-constructions/README.md)
-- [3.1.8: Tree LOD Tricks](./03-01-stalk-and-ball-stick-trees/03-01-08-tree-lod-tricks/README.md)
-- [3.1.9: Stick Shading](./03-01-stalk-and-ball-stick-trees/03-01-09-stick-shading/README.md)
-- [3.1.10: Leaf Shading](./03-01-stalk-and-ball-stick-trees/03-01-10-leaf-shading/README.md)
+- [3.1.1: Stick and Stalk Components](./03-01-stalk-and-ball-stick-trees/01-stick-and-stalk-components/README.md)
+- [3.1.2: Ball Components](./03-01-stalk-and-ball-stick-trees/02-ball-components/README.md)
+- [3.1.3: Ball-stick Anchors](./03-01-stalk-and-ball-stick-trees/03-ball-stick-anchors/README.md)
+- [3.1.4: Ball-stick Chains](./03-01-stalk-and-ball-stick-trees/04-ball-stick-chains/README.md)
+- [3.1.5: Ball Selection](./03-01-stalk-and-ball-stick-trees/05-ball-selection/README.md)
+- [3.1.6: Well-known Component Constructions](./03-01-stalk-and-ball-stick-trees/06-well-known-component-constructions/README.md)
+- [3.1.7: Well-known Tree Constructions](./03-01-stalk-and-ball-stick-trees/07-well-known-tree-constructions/README.md)
+- [3.1.8: Tree LOD Tricks](./03-01-stalk-and-ball-stick-trees/08-tree-lod-tricks/README.md)
+- [3.1.9: Stick Shading](./03-01-stalk-and-ball-stick-trees/09-stick-shading/README.md)
+- [3.1.10: Leaf Shading](./03-01-stalk-and-ball-stick-trees/10-leaf-shading/README.md)
 
 ---
 
@@ -59,8 +59,8 @@ Ground cover is the lowest layer of vegetation detail: it fills terrain with gra
 
 Subsections:
 
-- [3.3.1: Bump Outs](./03-03-ground-cover/03-03-01-bump-outs/README.md)
-- [3.3.2: Tufts](./03-03-ground-cover/03-03-02-tufts/README.md)
+- [3.3.1: Bump Outs](./03-03-ground-cover/01-bump-outs/README.md)
+- [3.3.2: Tufts](./03-03-ground-cover/02-tufts/README.md)
 
 ---
 
@@ -78,13 +78,13 @@ At a high level:
 
 Subsections:
 
-- [3.4.1: Parameterization](./03-04-cellular-groves/03-04-01-parameterization/README.md)
-- [3.4.2: Selection and Placement](./03-04-cellular-groves/03-04-02-selection-and-placement/README.md)
-- [3.4.3: Well-known Ground Cover Groves](./03-04-cellular-groves/03-04-03-well-known-ground-cover-groves/README.md)
-- [3.4.4: Well-known Tufts Groves](./03-04-cellular-groves/03-04-04-well-known-tufts-groves/README.md)
-- [3.4.5: Well-known Understory Groves](./03-04-cellular-groves/03-04-05-well-known-understory-groves/README.md)
-- [3.4.6: Well-known Lower Canopy Groves](./03-04-cellular-groves/03-04-06-well-known-lower-canopy-groves/README.md)
-- [3.4.7: Well-known Upper Canopy Groves](./03-04-cellular-groves/03-04-07-well-known-upper-canopy-groves/README.md)
+- [3.4.1: Parameterization](./03-04-cellular-groves/01-parameterization/README.md)
+- [3.4.2: Selection and Placement](./03-04-cellular-groves/02-selection-and-placement/README.md)
+- [3.4.3: Well-known Ground Cover Groves](./03-04-cellular-groves/03-well-known-ground-cover-groves/README.md)
+- [3.4.4: Well-known Tufts Groves](./03-04-cellular-groves/04-well-known-tufts-groves/README.md)
+- [3.4.5: Well-known Understory Groves](./03-04-cellular-groves/05-well-known-understory-groves/README.md)
+- [3.4.6: Well-known Lower Canopy Groves](./03-04-cellular-groves/06-well-known-lower-canopy-groves/README.md)
+- [3.4.7: Well-known Upper Canopy Groves](./03-04-cellular-groves/07-well-known-upper-canopy-groves/README.md)
 
 ---
 
