@@ -17,7 +17,21 @@ pub enum ShamanhomeCell {
         item: BraidOak {
             height: 4.0..7.0,
             canopy_density: Moderate,
-            palette_mix: [[deep_green..fresh_green], [dark_bark..moss_green]],
+            stick_palette_mix: [[dark_bark..moss_bark], [gnarled_brown..gray_brown]],
+            canopy_palette_mix: [[deep_green..fresh_green], [moss_green..light_green]],
+        },
+    }),
+    RedRitualBraidOak(Bucket {
+        weight: 0.45,
+        placement_constraints: PlacementConstraints {
+            elevation: 0.05..0.58,
+            steepness: 0.0..0.45,
+        },
+        item: BraidOak {
+            height: 4.0..7.0,
+            canopy_density: Moderate,
+            stick_palette_mix: [[ritual_red_bark..copper_red], [dark_bark..moss_bark]],
+            canopy_palette_mix: [[deep_green..fresh_green], [flower_red..moss_green]],
         },
     }),
     RitualDatePalm(Bucket {
@@ -29,7 +43,8 @@ pub enum ShamanhomeCell {
         item: DatePalm {
             height: 4.0..6.0,
             crown_density: Moderate,
-            palette_mix: [[deep_green..date_green], [yellow_green..fresh_green]],
+            stick_palette_mix: [[palm_bark..tan_bark], [dry_brown..gray_brown]],
+            canopy_palette_mix: [[deep_green..date_green], [yellow_green..fresh_green]],
         },
     }),
     SmallSopeBanyan(Bucket {
@@ -42,7 +57,8 @@ pub enum ShamanhomeCell {
             height: 5.0..7.0,
             canopy_density: Moderate,
             descender_frequency: Sparse,
-            palette_mix: [[dark_green..wet_green], [blue_green..deep_green]],
+            stick_palette_mix: [[banyan_bark..dark_bark], [wet_brown..gray_brown]],
+            canopy_palette_mix: [[dark_green..wet_green], [blue_green..deep_green]],
         },
     }),
 }
@@ -66,6 +82,7 @@ impl CellGrove for Shamanhome {
 * Make Braid Oak common at `4m–7m`; it should define the grove's structure.
 * Use Date Palm less commonly at `4m–6m`.
 * Use Sope's Banyan less commonly at `5m–7m`.
+* Include rare red-barked Braid Oak variants for ritual color punctuation.
 * Keep banyan descenders sparse so lower canopy does not become full banyan forest.
 * Prefer deep greens, mossy bark, and occasional ritual or cultivated palette accents.
 * Use [Bucket Throw](../../03-04-02-selection-and-placement/03-04-02-01-bucket-throw/README.md) varietal selection.

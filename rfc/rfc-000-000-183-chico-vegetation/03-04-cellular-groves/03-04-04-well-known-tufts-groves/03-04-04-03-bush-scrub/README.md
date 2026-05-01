@@ -44,7 +44,8 @@ pub enum BushScrubCell {
             projection_count: Low,
             branching: 1..=2,
             leaf_radius: 0.04..0.08,
-            palette_mix: [scrub_green..dry_green],
+            stick_palette_mix: [dry_bark..gray_brown],
+            canopy_palette_mix: [scrub_green..dry_green],
         },
     }),
     SaplingBush(Bucket {
@@ -59,7 +60,8 @@ pub enum BushScrubCell {
             projection_count: VeryLow,
             branching: 1..=1,
             leaf_radius: 0.03..0.06,
-            palette_mix: [young_green..light_green],
+            stick_palette_mix: [young_bark..green_brown],
+            canopy_palette_mix: [young_green..light_green],
         },
     }),
 }

@@ -67,7 +67,11 @@ pub enum TropicalTuftsCell {
             frond_count: 4..=7,
             frond_length: 0.18..0.45,
             crown_spread: 0.25..0.55,
-            palette_mix: [
+            stick_palette_mix: [
+                [palm_bark..tan_bark],
+                [green_stem..wet_brown],
+            ],
+            canopy_palette_mix: [
                 [lush_green..bright_green],
                 [deep_green..fresh_green],
                 [wet_green..lime_green],
@@ -85,7 +89,11 @@ pub enum TropicalTuftsCell {
             frond_count: 3..=5,
             frond_length: 0.25..0.60,
             crown_spread: 0.30..0.70,
-            palette_mix: [
+            stick_palette_mix: [
+                [young_palm_bark..tan_bark],
+                [green_stem..wet_brown],
+            ],
+            canopy_palette_mix: [
                 [young_green..lime_green],
                 [fresh_green..light_green],
                 [bright_green..yellow_green],

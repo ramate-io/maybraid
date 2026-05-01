@@ -20,7 +20,11 @@ pub enum SpottyBushesCell {
             projection_count: Moderate,
             branching: 2..=4,
             leaf_radius: 0.05..0.12,
-            palette_mix: [
+            stick_palette_mix: [
+                [shrub_bark..green_brown],
+                [dark_bark..gray_brown],
+            ],
+            canopy_palette_mix: [
                 [deep_green..fresh_green],
                 [dark_green..light_green],
                 [scrub_green..yellow_green],
@@ -39,7 +43,11 @@ pub enum SpottyBushesCell {
             projection_count: Low..Moderate,
             branching: 1..=3,
             leaf_radius: 0.04..0.09,
-            palette_mix: [
+            stick_palette_mix: [
+                [dry_bark..tan_brown],
+                [gray_brown..straw_brown],
+            ],
+            canopy_palette_mix: [
                 [dry_green..olive_green],
                 [tan_green..pale_green],
                 [straw_brown..green],
@@ -58,7 +66,11 @@ pub enum SpottyBushesCell {
             projection_count: Moderate,
             branching: 3..=5,
             leaf_radius: 0.07..0.14,
-            palette_mix: [
+            stick_palette_mix: [
+                [shrub_bark..dark_bark],
+                [green_brown..wet_brown],
+            ],
+            canopy_palette_mix: [
                 [lush_green..bright_green],
                 [deep_green..fresh_green],
                 [blue_green..light_green],
@@ -77,7 +89,11 @@ pub enum SpottyBushesCell {
             projection_count: Moderate,
             branching: 2..=4,
             leaf_radius: 0.05..0.11,
-            palette_mix: [
+            stick_palette_mix: [
+                [shrub_bark..tan_brown],
+                [green_brown..dark_bark],
+            ],
+            canopy_palette_mix: [
                 [dark_green..leaf_green],
                 [flower_white..fresh_green],
                 [flower_pink..light_green],

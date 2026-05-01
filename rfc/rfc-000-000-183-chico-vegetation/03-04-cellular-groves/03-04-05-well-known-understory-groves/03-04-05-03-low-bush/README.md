@@ -20,7 +20,11 @@ pub enum LowBushCell {
             projection_count: Low,
             branching: 1..=2,
             leaf_radius: 0.04..0.08,
-            palette_mix: [
+            stick_palette_mix: [
+                [shrub_bark..green_brown],
+                [dark_bark..gray_brown],
+            ],
+            canopy_palette_mix: [
                 [dark_green..light_green],
                 [scrub_green..fresh_green],
                 [deep_green..yellow_green],
@@ -39,7 +43,11 @@ pub enum LowBushCell {
             projection_count: Low,
             branching: 1..=2,
             leaf_radius: 0.03..0.07,
-            palette_mix: [
+            stick_palette_mix: [
+                [dry_bark..tan_brown],
+                [gray_brown..straw_brown],
+            ],
+            canopy_palette_mix: [
                 [dry_green..straw_brown],
                 [olive_green..tan_green],
                 [pale_green..dry_yellow_green],
@@ -58,7 +66,11 @@ pub enum LowBushCell {
             projection_count: Moderate,
             branching: 2..=3,
             leaf_radius: 0.05..0.10,
-            palette_mix: [
+            stick_palette_mix: [
+                [shrub_bark..dark_bark],
+                [green_brown..wet_brown],
+            ],
+            canopy_palette_mix: [
                 [lush_green..bright_green],
                 [deep_green..fresh_green],
                 [blue_green..light_green],
@@ -77,10 +89,37 @@ pub enum LowBushCell {
             projection_count: Low,
             branching: 1..=2,
             leaf_radius: 0.04..0.08,
-            palette_mix: [
+            stick_palette_mix: [
+                [shrub_bark..tan_brown],
+                [green_brown..dark_bark],
+            ],
+            canopy_palette_mix: [
                 [green..light_green],
                 [flower_pink..leaf_green],
                 [flower_white..fresh_green],
+            ],
+        },
+    }),
+    RedStemLowBush(Bucket {
+        weight: 0.25,
+        placement_constraints: PlacementConstraints {
+            elevation: 0.05..0.45,
+            steepness: 0.0..0.70,
+        },
+        item: CommonHighBush {
+            height: 0.60..1.30,
+            shoot_count: 5..=9,
+            projection_count: Low,
+            branching: 1..=3,
+            leaf_radius: 0.04..0.09,
+            stick_palette_mix: [
+                [red_bark..copper_red],
+                [burgundy_brown..dark_bark],
+            ],
+            canopy_palette_mix: [
+                [dark_green..fresh_green],
+                [yellow_green..light_green],
+                [flower_pink..leaf_green],
             ],
         },
     }),
@@ -106,6 +145,7 @@ impl CellGrove for LowBush {
 * Keep shoot count and projection count lower than full bush constructions.
 * Favor rounded, low silhouettes that leave gaps between neighboring bushes.
 * Use multiple palette ranges, so repeated bushes do not read as cloned shrubs.
+* Include rare red-stem variants for visible color punctuation in otherwise low shrub layers.
 * Use deterministic yaw, scale, shoot count, and branch density sampling.
 * Use [Bucket Throw](../../03-04-02-selection-and-placement/03-04-02-01-bucket-throw/README.md) varietal selection.
 

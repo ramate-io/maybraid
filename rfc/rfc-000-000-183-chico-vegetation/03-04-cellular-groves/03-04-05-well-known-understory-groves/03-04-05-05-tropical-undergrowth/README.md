@@ -51,7 +51,11 @@ pub enum TropicalUndergrowthCell {
             frond_count: 5..=9,
             frond_length: 0.25..0.70,
             crown_spread: 0.35..0.90,
-            palette_mix: [
+            stick_palette_mix: [
+                [palm_bark..tan_bark],
+                [green_stem..wet_brown],
+            ],
+            canopy_palette_mix: [
                 [lush_green..bright_green],
                 [deep_green..fresh_green],
                 [wet_green..lime_green],
@@ -69,7 +73,11 @@ pub enum TropicalUndergrowthCell {
             stalk_radius: 0.025,
             canopy_spread: 0.50..1.20,
             canopy_density: Sparse..Moderate,
-            palette_mix: [
+            stick_palette_mix: [
+                [tropical_bark..dark_bark],
+                [green_brown..wet_brown],
+            ],
+            canopy_palette_mix: [
                 [deep_green..fresh_green],
                 [blue_green..wet_green],
                 [yellow_green..lime_green],
@@ -87,7 +95,11 @@ pub enum TropicalUndergrowthCell {
             stalk_radius: 0.030,
             canopy_spread: 0.70..1.50,
             canopy_density: Sparse,
-            palette_mix: [
+            stick_palette_mix: [
+                [dark_bark..tropical_bark],
+                [green_brown..wet_brown],
+            ],
+            canopy_palette_mix: [
                 [lush_green..bright_green],
                 [dark_green..emerald_green],
                 [flower_white..fresh_green],
@@ -105,7 +117,11 @@ pub enum TropicalUndergrowthCell {
             stalk_radius: 0.030,
             canopy_spread: 0.60..1.40,
             canopy_density: Sparse,
-            palette_mix: [
+            stick_palette_mix: [
+                [tropical_bark..dark_bark],
+                [green_brown..wet_brown],
+            ],
+            canopy_palette_mix: [
                 [deep_green..light_green],
                 [wet_green..fresh_green],
                 [blue_green..yellow_green],

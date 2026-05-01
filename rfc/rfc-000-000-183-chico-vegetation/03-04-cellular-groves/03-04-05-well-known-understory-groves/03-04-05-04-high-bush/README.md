@@ -20,7 +20,11 @@ pub enum HighBushCell {
             projection_count: Moderate,
             branching: 2..=4,
             leaf_radius: 0.06..0.12,
-            palette_mix: [
+            stick_palette_mix: [
+                [shrub_bark..green_brown],
+                [dark_bark..gray_brown],
+            ],
+            canopy_palette_mix: [
                 [deep_green..fresh_green],
                 [dark_green..light_green],
                 [blue_green..emerald_green],
@@ -39,7 +43,11 @@ pub enum HighBushCell {
             projection_count: Moderate,
             branching: 3..=5,
             leaf_radius: 0.07..0.14,
-            palette_mix: [
+            stick_palette_mix: [
+                [dark_bark..wet_brown],
+                [green_brown..shrub_bark],
+            ],
+            canopy_palette_mix: [
                 [lush_green..bright_green],
                 [wet_green..fresh_green],
                 [deep_green..yellow_green],
@@ -58,7 +66,11 @@ pub enum HighBushCell {
             projection_count: Moderate,
             branching: 2..=3,
             leaf_radius: 0.05..0.10,
-            palette_mix: [
+            stick_palette_mix: [
+                [dry_bark..tan_brown],
+                [gray_brown..straw_brown],
+            ],
+            canopy_palette_mix: [
                 [olive_green..dry_green],
                 [tan_green..pale_green],
                 [straw_brown..green],
@@ -77,10 +89,37 @@ pub enum HighBushCell {
             projection_count: Moderate,
             branching: 2..=4,
             leaf_radius: 0.06..0.12,
-            palette_mix: [
+            stick_palette_mix: [
+                [shrub_bark..dark_bark],
+                [green_brown..wet_brown],
+            ],
+            canopy_palette_mix: [
                 [dark_green..leaf_green],
                 [berry_red..deep_green],
                 [berry_blue..fresh_green],
+            ],
+        },
+    }),
+    CopperCaneHighBush(Bucket {
+        weight: 0.30,
+        placement_constraints: PlacementConstraints {
+            elevation: 0.05..0.45,
+            steepness: 0.0..0.58,
+        },
+        item: CommonHighBush {
+            height: 1.20..2.50,
+            shoot_count: 7..=11,
+            projection_count: Moderate,
+            branching: 2..=4,
+            leaf_radius: 0.06..0.12,
+            stick_palette_mix: [
+                [copper_red..orange_bark],
+                [red_brown..dark_bark],
+            ],
+            canopy_palette_mix: [
+                [deep_green..fresh_green],
+                [yellow_green..light_green],
+                [berry_red..leaf_green],
             ],
         },
     }),
@@ -106,6 +145,7 @@ impl CellGrove for HighBush {
 * Use more shoot and branch complexity than Low Bush, but keep silhouettes distinct rather than merged into a hedge.
 * Allow occasional dense variants to shape sightlines, especially near forest edges or paths.
 * Include broadleaf, dry, lush, and fruiting palette variants where biome-appropriate.
+* Include rare copper-cane variants where the understory needs a brighter bark accent.
 * Use deterministic yaw, scale, shoot count, branch density, and foliage size sampling.
 * Use [Bucket Throw](../../03-04-02-selection-and-placement/03-04-02-01-bucket-throw/README.md) varietal selection.
 

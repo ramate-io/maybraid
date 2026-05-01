@@ -19,7 +19,11 @@ pub enum LevantineScrubCell {
             stalk_radius: 0.030,
             canopy_spread: 0.80..2.20,
             canopy_density: Sparse,
-            palette_mix: [
+            stick_palette_mix: [
+                [dry_bark..gray_brown],
+                [vine_bark..olive_brown],
+            ],
+            canopy_palette_mix: [
                 [olive_green..dry_green],
                 [silver_green..pale_green],
                 [dark_green..yellow_green],
@@ -37,7 +41,11 @@ pub enum LevantineScrubCell {
             stalk_radius: 0.030,
             canopy_spread: 0.70..1.80,
             canopy_density: Sparse..Moderate,
-            palette_mix: [
+            stick_palette_mix: [
+                [ornamental_bark..gray_brown],
+                [dry_bark..tan_brown],
+            ],
+            canopy_palette_mix: [
                 [olive_green..light_green],
                 [dry_green..flower_white],
                 [dark_green..silver_green],
@@ -56,7 +64,11 @@ pub enum LevantineScrubCell {
             projection_count: Moderate,
             branching: 2..=4,
             leaf_radius: 0.05..0.11,
-            palette_mix: [
+            stick_palette_mix: [
+                [dry_bark..tan_brown],
+                [gray_brown..straw_brown],
+            ],
+            canopy_palette_mix: [
                 [olive_green..dry_green],
                 [scrub_green..tan_green],
                 [pale_green..yellow_green],
@@ -74,10 +86,36 @@ pub enum LevantineScrubCell {
             stalk_radius: 0.030,
             canopy_spread: 0.50..1.30,
             canopy_density: Sparse..Moderate,
-            palette_mix: [
+            stick_palette_mix: [
+                [dry_bark..dark_bark],
+                [ornamental_bark..gray_brown],
+            ],
+            canopy_palette_mix: [
                 [dark_green..olive_green],
                 [dry_green..light_green],
                 [flower_yellow..pale_green],
+            ],
+        },
+    }),
+    RedOliveTorch(Bucket {
+        weight: 0.25,
+        placement_constraints: PlacementConstraints {
+            elevation: 0.10..0.68,
+            steepness: 0.0..0.60,
+        },
+        item: PenmarchTorch {
+            height: 1.60..3.40,
+            stalk_radius: 0.030,
+            canopy_spread: 0.55..1.35,
+            canopy_density: Sparse,
+            stick_palette_mix: [
+                [copper_red..orange_bark],
+                [red_brown..dark_bark],
+            ],
+            canopy_palette_mix: [
+                [olive_green..silver_green],
+                [flower_yellow..light_green],
+                [dark_green..pale_green],
             ],
         },
     }),
@@ -119,6 +157,7 @@ impl CellGrove for LevantineScrub {
 * Use High Bush as the dominant scrub mass.
 * Mix in Rory's Head-trained and small Vase Tree forms for cultivated, trained, or wind-shaped silhouettes.
 * Add small Penmarch Torch variants sparingly for upright flame-like accents.
+* Use rare red-stick torch variants as Mediterranean color punctuation.
 * Use Simpleman's Hedge variants where the scrub should imply terrace edges, old gardens, or low barriers.
 * Prefer dry Mediterranean palettes: olive, silver-green, pale green, yellow-green, tan-green, and occasional flowering highlights.
 * Use deterministic yaw, scale, canopy spread, hedge width, and branch density sampling.

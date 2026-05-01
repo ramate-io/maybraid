@@ -19,7 +19,11 @@ pub enum JerrysChaparralCell {
             stalk_radius: 0.030,
             canopy_spread: 0.80..2.00,
             canopy_density: Sparse..Moderate,
-            palette_mix: [
+            stick_palette_mix: [
+                [dry_bark..gray_brown],
+                [vine_bark..tan_brown],
+            ],
+            canopy_palette_mix: [
                 [olive_green..dry_green],
                 [scrub_green..pale_green],
                 [dark_green..yellow_green],
@@ -38,7 +42,11 @@ pub enum JerrysChaparralCell {
             projection_count: Moderate,
             branching: 2..=4,
             leaf_radius: 0.05..0.11,
-            palette_mix: [
+            stick_palette_mix: [
+                [dry_bark..tan_brown],
+                [gray_brown..straw_brown],
+            ],
+            canopy_palette_mix: [
                 [dry_green..olive_green],
                 [scrub_green..tan_green],
                 [dark_green..pale_green],
@@ -56,10 +64,36 @@ pub enum JerrysChaparralCell {
             stalk_radius: 0.025,
             canopy_spread: 0.50..1.40,
             canopy_density: Sparse..Moderate,
-            palette_mix: [
+            stick_palette_mix: [
+                [conifer_bark..dark_bark],
+                [gray_brown..dry_bark],
+            ],
+            canopy_palette_mix: [
                 [dark_green..blue_green],
                 [dry_green..deep_green],
                 [olive_green..needle_green],
+            ],
+        },
+    }),
+    ManzanitaRory(Bucket {
+        weight: 0.35,
+        placement_constraints: PlacementConstraints {
+            elevation: 0.15..0.70,
+            steepness: 0.0..0.72,
+        },
+        item: RoryHeadTrained {
+            height: 1.40..3.00,
+            stalk_radius: 0.030,
+            canopy_spread: 0.90..2.10,
+            canopy_density: Sparse,
+            stick_palette_mix: [
+                [manzanita_red..copper_red],
+                [smooth_burgundy..orange_bark],
+            ],
+            canopy_palette_mix: [
+                [olive_green..pale_green],
+                [flower_white..dry_green],
+                [dark_green..yellow_green],
             ],
         },
     }),
@@ -84,6 +118,7 @@ impl CellGrove for JerrysChaparral {
 * Use Rory's Head-trained forms as dry, flattened crown accents.
 * Use High Bush variants as the primary chaparral mass.
 * Add small Friend's Conifer variants rarely; keep them below `6m`.
+* Add rare red-barked trained forms for Manzanita-like chaparral color pops.
 * Prefer dry palettes: olive, scrub green, pale green, tan-green, and dark blue-green conifer accents.
 * Let variants tolerate more slope than lush understory groves, but keep tree-like variants slightly stricter than bushes.
 * Use deterministic yaw, scale, canopy spread, branch density, and conifer height sampling.

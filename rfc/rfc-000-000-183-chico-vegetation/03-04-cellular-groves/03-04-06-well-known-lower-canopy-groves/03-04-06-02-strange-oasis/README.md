@@ -17,7 +17,8 @@ pub enum StrangeOasisCell {
         item: DatePalm {
             height: 3.0..5.0,
             crown_density: Moderate,
-            palette_mix: [[deep_green..fresh_green], [yellow_green..date_green]],
+            stick_palette_mix: [[palm_bark..tan_bark], [dry_brown..gray_brown]],
+            canopy_palette_mix: [[deep_green..fresh_green], [yellow_green..date_green]],
         },
     }),
     TorchAccent(Bucket {
@@ -29,7 +30,21 @@ pub enum StrangeOasisCell {
         item: PenmarchTorch {
             height: 3.0..7.0,
             canopy_density: Sparse..Moderate,
-            palette_mix: [[dark_green..olive_green], [flower_yellow..fresh_green]],
+            stick_palette_mix: [[dry_bark..ornamental_bark], [gray_brown..tan_brown]],
+            canopy_palette_mix: [[dark_green..olive_green], [flower_yellow..fresh_green]],
+        },
+    }),
+    RedTorchAccent(Bucket {
+        weight: 0.18,
+        placement_constraints: PlacementConstraints {
+            elevation: 0.0..0.40,
+            steepness: 0.0..0.40,
+        },
+        item: PenmarchTorch {
+            height: 3.0..6.5,
+            canopy_density: Sparse,
+            stick_palette_mix: [[desert_red_bark..copper_red], [orange_bark..dark_bark]],
+            canopy_palette_mix: [[olive_green..fresh_green], [flower_yellow..light_green]],
         },
     }),
     OasisStorybook(Bucket {
@@ -41,7 +56,8 @@ pub enum StrangeOasisCell {
         item: StorybookTree {
             height: 4.0..6.0,
             canopy_density: Sparse..Moderate,
-            palette_mix: [[green..light_green], [olive_green..fresh_green]],
+            stick_palette_mix: [[dry_bark..brown_bark], [gray_brown..tan_brown]],
+            canopy_palette_mix: [[green..light_green], [olive_green..fresh_green]],
         },
     }),
 }
@@ -65,6 +81,7 @@ impl CellGrove for StrangeOasis {
 * Make Date Palm variants common and keep them compact at `3m–5m`.
 * Use Storybook variants less commonly at `4m–6m`.
 * Use Penmarch Torch variants rarely at `3m–7m`.
+* Add very rare red-torch variants for uncanny oasis color contrast.
 * Keep elevation constraints low, so the grove prefers oasis floors, washes, and sheltered wet pockets.
 * Use dry-to-wet contrast palettes: deep palm greens, olive greens, pale flowering accents, and bright oasis growth.
 * Use [Bucket Throw](../../03-04-02-selection-and-placement/03-04-02-01-bucket-throw/README.md) varietal selection.

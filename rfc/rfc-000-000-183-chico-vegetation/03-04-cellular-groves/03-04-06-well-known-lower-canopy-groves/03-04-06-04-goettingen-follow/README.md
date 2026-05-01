@@ -17,7 +17,21 @@ pub enum GoettingenFollowCell {
         item: BraidOak {
             height: 4.0..7.0,
             canopy_density: Moderate,
-            palette_mix: [[deep_green..fresh_green], [dark_green..light_green]],
+            stick_palette_mix: [[oak_bark..dark_bark], [gray_brown..moss_bark]],
+            canopy_palette_mix: [[deep_green..fresh_green], [dark_green..light_green]],
+        },
+    }),
+    RedBranchBraidOak(Bucket {
+        weight: 0.35,
+        placement_constraints: PlacementConstraints {
+            elevation: 0.05..0.62,
+            steepness: 0.0..0.48,
+        },
+        item: BraidOak {
+            height: 4.0..7.0,
+            canopy_density: Moderate,
+            stick_palette_mix: [[red_oak_bark..copper_red], [dark_bark..gray_brown]],
+            canopy_palette_mix: [[deep_green..fresh_green], [yellow_green..light_green]],
         },
     }),
     FollowStorybook(Bucket {
@@ -29,7 +43,8 @@ pub enum GoettingenFollowCell {
         item: StorybookTree {
             height: 4.0..7.0,
             canopy_density: Moderate,
-            palette_mix: [[broadleaf_green..light_green], [deep_green..yellow_green]],
+            stick_palette_mix: [[broadleaf_bark..brown_bark], [gray_brown..dark_bark]],
+            canopy_palette_mix: [[broadleaf_green..light_green], [deep_green..yellow_green]],
         },
     }),
 }
@@ -51,6 +66,7 @@ impl CellGrove for GoettingenFollow {
 
 * Use low-density placement, roughly `10%–28%`.
 * Use Braid Oak and Storybook Tree evenly at `4m–7m`.
+* Add rare red-branch Braid Oak variants for visible path-following accents.
 * Keep canopy density moderate; this grove should fill the lower canopy without becoming a full tree layer.
 * Use temperate broadleaf palettes with subtle variation rather than strong tropical or dry scrub colors.
 * Let variants tolerate moderate slope, but avoid extreme steepness where lower canopy would feel unstable.

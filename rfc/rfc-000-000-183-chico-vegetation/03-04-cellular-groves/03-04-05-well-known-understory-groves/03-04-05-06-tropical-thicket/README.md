@@ -19,7 +19,11 @@ pub enum TropicalThicketCell {
             frond_count: 7..=12,
             frond_length: 0.55..1.30,
             crown_spread: 0.80..1.80,
-            palette_mix: [
+            stick_palette_mix: [
+                [palm_bark..tan_bark],
+                [green_stem..wet_brown],
+            ],
+            canopy_palette_mix: [
                 [lush_green..bright_green],
                 [deep_green..fresh_green],
                 [wet_green..lime_green],
@@ -37,7 +41,11 @@ pub enum TropicalThicketCell {
             frond_count: 8..=14,
             frond_length: 0.70..1.60,
             crown_spread: 1.00..2.20,
-            palette_mix: [
+            stick_palette_mix: [
+                [palm_bark..dark_bark],
+                [wet_brown..green_brown],
+            ],
+            canopy_palette_mix: [
                 [blue_green..deep_green],
                 [emerald_green..wet_green],
                 [yellow_green..fresh_green],
@@ -56,7 +64,11 @@ pub enum TropicalThicketCell {
             canopy_spread: 1.20..2.80,
             descender_frequency: Sparse,
             canopy_density: Sparse..Moderate,
-            palette_mix: [
+            stick_palette_mix: [
+                [banyan_bark..dark_bark],
+                [wet_brown..gray_brown],
+            ],
+            canopy_palette_mix: [
                 [dark_green..deep_green],
                 [wet_green..blue_green],
                 [emerald_green..fresh_green],
@@ -75,7 +87,11 @@ pub enum TropicalThicketCell {
             projection_count: Moderate,
             branching: 2..=4,
             leaf_radius: 0.06..0.13,
-            palette_mix: [
+            stick_palette_mix: [
+                [shrub_bark..green_brown],
+                [dark_bark..wet_brown],
+            ],
+            canopy_palette_mix: [
                 [deep_green..fresh_green],
                 [lush_green..bright_green],
                 [blue_green..light_green],
@@ -94,10 +110,36 @@ pub enum TropicalThicketCell {
             projection_count: Moderate,
             branching: 2..=4,
             leaf_radius: 0.06..0.12,
-            palette_mix: [
+            stick_palette_mix: [
+                [shrub_bark..dark_bark],
+                [green_brown..wet_brown],
+            ],
+            canopy_palette_mix: [
                 [dark_green..leaf_green],
                 [flower_white..fresh_green],
                 [flower_yellow..lime_green],
+            ],
+        },
+    }),
+    RedStemPalmBush(Bucket {
+        weight: 0.25,
+        placement_constraints: PlacementConstraints {
+            elevation: 0.0..0.42,
+            steepness: 0.0..0.60,
+        },
+        item: PalmBush {
+            height: 1.00..2.30,
+            frond_count: 6..=11,
+            frond_length: 0.55..1.35,
+            crown_spread: 0.80..1.80,
+            stick_palette_mix: [
+                [red_palm_stem..copper_red],
+                [wet_burgundy..dark_bark],
+            ],
+            canopy_palette_mix: [
+                [deep_green..bright_green],
+                [lime_green..fresh_green],
+                [blue_green..wet_green],
             ],
         },
     }),
@@ -122,6 +164,7 @@ impl CellGrove for TropicalThicket {
 * Use larger Palm Bush variants as the common structural base.
 * Use moderate-size Common High Bush forms around `1.2m–2.4m` to fill gaps and round out the thicket.
 * Rarely add mini Honu Banyan forms around `1.8m–3.8m`; keep descenders sparse so they read as thicket texture rather than mature banyan structure.
+* Include rare red-stem palm bush variants for saturated tropical color accents.
 * Let palm fronds overlap enough to create a thick tropical read, but keep enough gaps for navigation and silhouette readability.
 * Prefer wet tropical palettes: deep green, blue-green, emerald, lime, fresh yellow-green, and occasional flowering highlights.
 * Use deterministic yaw, scale, frond count, canopy spread, descender frequency, and bush branching sampling.

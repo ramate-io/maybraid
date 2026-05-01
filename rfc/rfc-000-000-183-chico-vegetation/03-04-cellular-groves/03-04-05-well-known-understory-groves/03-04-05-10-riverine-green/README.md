@@ -20,7 +20,11 @@ pub enum RiverineGreenCell {
             projection_count: Moderate,
             branching: 2..=4,
             leaf_radius: 0.06..0.13,
-            palette_mix: [
+            stick_palette_mix: [
+                [wet_bark..dark_bark],
+                [green_brown..wet_brown],
+            ],
+            canopy_palette_mix: [
                 [wet_green..fresh_green],
                 [deep_green..light_green],
                 [blue_green..emerald_green],
@@ -39,7 +43,11 @@ pub enum RiverineGreenCell {
             projection_count: Moderate,
             branching: 2..=3,
             leaf_radius: 0.05..0.11,
-            palette_mix: [
+            stick_palette_mix: [
+                [young_bark..green_brown],
+                [wet_brown..tan_bark],
+            ],
+            canopy_palette_mix: [
                 [bright_green..light_green],
                 [yellow_green..fresh_green],
                 [lush_green..lime_green],
@@ -58,7 +66,11 @@ pub enum RiverineGreenCell {
             projection_count: Moderate,
             branching: 3..=5,
             leaf_radius: 0.07..0.14,
-            palette_mix: [
+            stick_palette_mix: [
+                [dark_bark..wet_brown],
+                [green_brown..gray_brown],
+            ],
+            canopy_palette_mix: [
                 [dark_green..deep_green],
                 [blue_green..wet_green],
                 [emerald_green..fresh_green],
@@ -77,10 +89,37 @@ pub enum RiverineGreenCell {
             projection_count: Moderate,
             branching: 2..=4,
             leaf_radius: 0.05..0.12,
-            palette_mix: [
+            stick_palette_mix: [
+                [wet_bark..gray_brown],
+                [green_brown..tan_bark],
+            ],
+            canopy_palette_mix: [
                 [pale_green..fresh_green],
                 [silver_green..light_green],
                 [yellow_green..wet_green],
+            ],
+        },
+    }),
+    RedTwigRiverBush(Bucket {
+        weight: 0.25,
+        placement_constraints: PlacementConstraints {
+            elevation: 0.00..0.38,
+            steepness: 0.0..0.55,
+        },
+        item: CommonHighBush {
+            height: 0.90..1.90,
+            shoot_count: 7..=11,
+            projection_count: Moderate,
+            branching: 2..=4,
+            leaf_radius: 0.05..0.12,
+            stick_palette_mix: [
+                [red_twig..copper_red],
+                [wet_burgundy..dark_bark],
+            ],
+            canopy_palette_mix: [
+                [wet_green..fresh_green],
+                [bright_green..yellow_green],
+                [silver_green..light_green],
             ],
         },
     }),
@@ -103,6 +142,7 @@ impl CellGrove for RiverineGreen {
 
 * Use sparse placement, roughly `8%–24%`.
 * Use only green, wet, riparian High Bush variants; avoid dry scrub palettes.
+* Allow rare red-twig variants for wetland edge color pop without breaking the green identity.
 * Keep elevation constraints low, so these variants prefer valley floors, banks, and damp lowlands.
 * Allow moderate slope, so shrubs can climb small stream banks and ravine edges.
 * Use deterministic yaw, scale, shoot count, branch density, and leaf-size sampling.
