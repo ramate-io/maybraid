@@ -17,7 +17,7 @@
 
 We propose the Chico vegetation system in response to [#61](https://github.com/ramate-io/maybraid/issues/61). Chico defines a layered, deterministic vegetation pipeline that evaluates from large forest cells down to individual plant constructions while keeping placement coherent with terrain, biome identity, and level-of-detail constraints.
 
-The system is built around a few reusable pieces: ball-stick tree constructions for individual plants, ground-cover primitives for low vegetation, cellular groves for local planting recipes, cellular forests for large-scale layering, and elder trees for rare urban landmarks. Forests select layerings with Hopscotch, layers select groves with Bucket Throw, and groves select individual variants with first-fit placement constraints.
+The system is built around a few reusable pieces: ball-stick tree constructions for individual plants, world-space stick and leaf shaders for stable within-species variation, ground-cover primitives for low vegetation, cellular groves for local planting recipes, cellular forests for large-scale layering, and elder trees for rare urban landmarks. Forests select layerings with Hopscotch, layers select groves with Bucket Throw, and groves select individual variants with first-fit placement constraints.
 
 The goal is not botanical simulation for its own sake. The goal is an authorable procedural vegetation system that can produce recognizable forest, scrub, grassland, orchard, jungle, and landmark-tree identities while remaining chunk-stable, scalable, and practical for runtime generation.
 
@@ -68,8 +68,9 @@ The goal is to formalize this into a composable, parameterized system:
 * **Sticks** define trunk and branch segments
 * **Balls and planes** define canopy and foliage
 * **Ball-stick chains** unify tree construction
+* **World-space stick and leaf shaders** provide stable color variation within a species
 
-Tree types are then expressed as parameterized constructions over these primitives rather than bespoke implementations.
+Tree types are then expressed as parameterized constructions over these primitives rather than bespoke implementations, with shader-side palettes providing individual variation without changing the underlying geometry.
 
 ---
 

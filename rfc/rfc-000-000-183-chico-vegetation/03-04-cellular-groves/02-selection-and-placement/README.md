@@ -11,7 +11,7 @@ This stage determines where trees are placed and which variant is selected. It c
 Subsections:
 
 - [3.4.2.1: Bucket Throw](./01-bucket-throw/README.md)
-- [3.4.2.2: Cell Activation](./02-cell-activation/README.md)
+- [3.4.2.2: Cell Participation](./02-cell-participation/README.md)
 - [3.4.2.3: Position Selection](./03-position-selection/README.md)
 - [3.4.2.4: Constraint Evaluation](./04-constraint-evaluation/README.md)
 - [3.4.2.5: Variant Selection](./05-variant-selection/README.md)

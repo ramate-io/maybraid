@@ -2,7 +2,7 @@
 
 This page is subsection **3.5.6** of [RFC-183: Chico Vegetation](../../README.md)
 
-Forest LOD tricks reduce the number of active layers and grove grids while preserving the large-scale impression of a forest. At forest scale, the goal is to keep the base colors and tree-line shape that identify a biome, not to preserve every layer equally.
+Forest LOD tricks reduce the number of active layers and grove grids while preserving the large-scale impression of a forest. At forest scale, the goal is to keep the base colors and treeline shape that identify a biome, not to preserve every layer equally.
 
 ## Selective Layer Dropout
 
@@ -16,7 +16,7 @@ Common dropout order:
 4. **Ground cover** remains as low-lying color or texture impression.
 5. **Upper canopy** remains longest because it preserves skyline and forest mass.
 
-This keeps distant forests readable: ground cover supplies broad terrain color, while canopy layers supply height and silhouette. Base color and tree-line shape are usually the highest-value signals.
+This keeps distant forests readable: ground cover supplies broad terrain color, while canopy layers supply height and silhouette. Base color and treeline shape are usually the highest-value signals.
 
 ```rust
 pub struct ForestLodMask {

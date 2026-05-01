@@ -51,7 +51,7 @@ impl CellGrove for HuelgoatPitch {
 * Use a low, smooth bump out with height around `5cm–10cm`.
 * Closely follow the underlying terrain normal and terrain SDF.
 * Player collision should use the bumped surface, so the player stands on the pitch rather than visually sinking into it.
-* Use moderate to high density: roughly `60%–80%` cell activation.
+* Use moderate to high coverage: roughly `60%–80%` non-`None` outcomes.
 * Use internal cells around `50m–100m`, preferably chosen as even subdivisions of the parent grove cell.
 * At low LOD, collapse the internal cell size to the full grove cell.
 * Pair with sparse [Tufts](../../../03-03-ground-cover/02-tufts/README.md) for additional volume detail.

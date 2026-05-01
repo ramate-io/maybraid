@@ -17,9 +17,3 @@ pub type UpperCanopyLayer = [
 Selection uses [Bucket Throw](../../../03-04-cellular-groves/02-selection-and-placement/01-bucket-throw/README.md). If the result is `None`, the forest cell remains open above the lower layers. Otherwise, the selected upper canopy grove provides the largest vertical structure in the cell.
 
 This layer should generally be the highest ecological commitment in a forest layering. Once an upper canopy type is chosen, lower canopy, understory, tufts, and ground cover should be authored to support it rather than contradict it.
-# 3.5.2.4: Upper Canopy Layer
-
-This page is subsection **3.5.2.4** of [RFC-183: Chico Vegetation](../../../README.md)
-
-
-No sublayers. Selects from upper canopy groves.

@@ -49,7 +49,7 @@ var<uniform> leaf: LeafShaderParams;
 var<uniform> season_time: f32;
 
 fn fbm(p: vec3<f32>, seed: u32) -> f32 {
-    // Placeholder: use standard value noise, Perlin, or project fbm.
+    // Use standard value noise, Perlin, or the existing project fbm.
     return fract(sin(dot(p, vec3<f32>(12.9898, 78.233, 37.719)) + f32(seed)) * 43758.5453);
 }
 

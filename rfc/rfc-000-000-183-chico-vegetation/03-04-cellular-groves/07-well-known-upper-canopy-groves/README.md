@@ -5,7 +5,7 @@ This page is subsection **3.4.7** of [RFC-183: Chico Vegetation](../../README.md
 Well-known upper-canopy groves define the dominant tree layer: skyline forests, cultivated tree rows, sparse savanna trees, palms, riparian corridors, and giant canopy systems that can sit above lower-canopy massives.
 
 > [!NOTE]
-> Assume an empty grove variant exists. 
+> Assume `None` is available in each grove distribution when empty cells are needed.
 
 Subsections:
 

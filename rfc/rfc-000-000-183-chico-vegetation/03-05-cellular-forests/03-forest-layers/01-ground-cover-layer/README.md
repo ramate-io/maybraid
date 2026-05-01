@@ -28,11 +28,3 @@ pub struct GroundCoverLayer {
 Both sublayers use [Bucket Throw](../../../03-04-cellular-groves/02-selection-and-placement/01-bucket-throw/README.md) independently. `None` should usually be more common in `flop` than in `flip`, because the secondary pass is for accents and overlap rather than mandatory coverage.
 
 Ground cover should not be used for upright grasses or bushes. Those belong in the [Tufts Layer](../02-tufts-layer/README.md) or [Understory Layer](../03-understory-layer/README.md).
-# 3.5.2.1: Ground Cover Layer
-
-This page is subsection **3.5.2.1** of [RFC-183: Chico Vegetation](../../../README.md)
-
-
-The ground cover layer, unlike other layers is composed of two sublayers to enable a simple model of overlapping ground cover. The sublayers are referred to as Flip and Flop. 
-
-Selects from [Ground Cover Groves](../../../03-04-cellular-groves/03-well-known-ground-cover-groves/README.md).

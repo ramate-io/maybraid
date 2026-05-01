@@ -4,7 +4,7 @@ This page is subsection **3.4.3** of [RFC-183: Chico Vegetation](../../README.md
 
 
 > [!NOTE]
-> Assume an empty grove variant exists. 
+> Assume `None` is available in each grove distribution when empty cells are needed.
 
 > [!NOTE]
 > For bump outs, the internal cells tend to be a bit larger than other layers.

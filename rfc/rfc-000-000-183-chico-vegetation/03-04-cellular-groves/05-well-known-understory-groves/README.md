@@ -5,7 +5,7 @@ This page is subsection **3.4.5** of [RFC-183: Chico Vegetation](../../README.md
 Well-known understory groves are ready-made recipes for vegetation that sits above ground cover and tuft layers but below tree canopy. They provide navigational texture, sightline shaping, and biome identity through tall grasses, shrubs, and bush masses.
 
 > [!NOTE]
-> Assume an empty grove variant exists.
+> Assume `None` is available in each grove distribution when empty cells are needed.
 
 Subsections:
 

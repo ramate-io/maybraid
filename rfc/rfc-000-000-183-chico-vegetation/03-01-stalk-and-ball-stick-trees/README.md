@@ -11,8 +11,9 @@ The goal is to formalize this into a composable, parameterized system:
 * **Sticks** define trunk and branch segments
 * **Balls and planes** define canopy and foliage
 * **Ball-stick chains** unify tree construction
+* **World-space stick and leaf shaders** provide stable color variation within a species
 
-Tree types are then expressed as parameterized constructions over these primitives rather than bespoke implementations.
+Tree types are then expressed as parameterized constructions over these primitives rather than bespoke implementations, with shader-side palettes providing individual variation without changing the underlying geometry.
 
 ---
 

@@ -3,7 +3,7 @@
 This page is subsection **3.4.1** of [RFC-183: Chico Vegetation](../../README.md)
 
 
-Each grove receives a set of parameters. The grove defines ranges; the [Forest](../../03-05-cellular-forests/README.md#35-cellular-forests) resolves them via spatially coherent noise.
+Each grove defines authored parameter ranges for scale, density, distribution, offsets, constraints, and noise. A parent [Forest](../../03-05-cellular-forests/README.md#35-cellular-forests) may pass sampled bias values that choose preferred means inside those ranges, but the grove keeps ownership of its minimums, maximums, and placement invariants.
 
 Subsections:
 

@@ -5,7 +5,7 @@ This page is subsection **3.4.6** of [RFC-183: Chico Vegetation](../../README.md
 Well-known lower-canopy groves fill the height band beneath tall tree layers. They are useful when upper-canopy or elder trees define the forest, but the space below them still needs young trees, palms, subcanopy crowns, or cultural grove structure.
 
 > [!NOTE]
-> Assume an empty grove variant exists.
+> Assume `None` is available in each grove distribution when empty cells are needed.
 
 Subsections:
 

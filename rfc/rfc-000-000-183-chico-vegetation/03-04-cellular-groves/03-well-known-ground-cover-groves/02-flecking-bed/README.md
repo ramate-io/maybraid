@@ -55,7 +55,7 @@ impl CellGrove for FleckingBed {
 * Use a moderate bump out with height around `10cm–25cm`.
 * Apply moderate noise, so the surface reads as uneven vegetation rather than smooth terrain.
 * Do not enable collision; the player should visually sink through this layer.
-* Use moderate to high density, roughly `60%–85%` cell activation.
+* Use moderate to high coverage, roughly `60%–85%` non-`None` outcomes.
 * Use internal cells around `50m–100m`, preferably even subdivisions of the parent grove cell.
 * At low LOD, collapse the internal cell size to the full grove cell.
 * Pair well with any tufting pattern, especially sparse flowering tufts or dry brush.

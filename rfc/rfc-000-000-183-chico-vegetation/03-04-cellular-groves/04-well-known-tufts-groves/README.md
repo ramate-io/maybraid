@@ -5,7 +5,7 @@ This page is subsection **3.4.4** of [RFC-183: Chico Vegetation](../../README.md
 Well-known tufts groves are ready-made **tuft-layer** recipes: each combines the shared [Tuft](../../03-01-stalk-and-ball-stick-trees/02-ball-components/06-tufts/README.md) construction with density, height, palette, and optional companion constructions for recognizable grass and scrub identities.
 
 > [!NOTE]
-> Assume an empty grove variant exists.
+> Assume `None` is available in each grove distribution when empty cells are needed.
 
 Subsections:
 

@@ -11,7 +11,7 @@ Every grove cell is also active. There is no grove-level activation test. Each g
 The world is divided into a grid of forest cells. Each forest cell owns:
 
 * A selected forest layering.
-* A set of sampled [forest parameter modifiers](../01-parameterization/README.md).
+* A set of sampled [forest parameter biases](../01-parameterization/README.md).
 * One grove grid per selected layer.
 
 The forest cell is the coherence unit for broad biome identity. Neighboring forest cells may select related layerings through Hopscotch adjacency, but each forest cell still has a single resolved layering.
@@ -95,7 +95,7 @@ After Hopscotch selects the forest layering, each layer in that layering selects
 
 ```rust
 let layering = hopscotch_select(forest_distribution, forest_cell);
-let modifiers = sample_forest_modifiers(forest_cell);
+let biases = sample_forest_biases(forest_cell);
 
 let ground_cover = bucket_throw(layering.ground_cover, forest_cell);
 let tufts = bucket_throw(layering.tufts, forest_cell);
@@ -108,13 +108,13 @@ The forest layer distribution is the place where emptiness is authored. If the u
 
 ## 3.5.2.4: Grove Grid Construction
 
-Each selected grove creates a grid of grove cells inside the forest cell. The grove grid uses the selected grove's own cell size, offset, density, noise, and placement rules, after applying any forest-level parameter modifiers.
+Each selected grove creates a grid of grove cells inside the forest cell. The grove grid uses the selected grove's own cell size, offset, density, noise, and placement rules, after applying any forest-level parameter biases.
 
 ```rust
 for selected_grove in selected_layer_groves {
     let grove_parameters = selected_grove
         .parameters()
-        .with_forest_modifiers(modifiers);
+        .with_forest_biases(biases);
 
     for grove_cell in grid_inside(forest_cell, grove_parameters.cell_size) {
         let grove_variant = bucket_throw(selected_grove.distribution, grove_cell);
