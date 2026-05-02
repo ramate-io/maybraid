@@ -113,6 +113,9 @@
               cp $(pwd)/.githooks/pre-commit $(pwd)/.git/hooks/pre-commit
               chmod +x $(pwd)/.git/hooks/pre-commit
 
+              # Include repository-local Git aliases
+              git config --local include.path ../.gitconfig
+
               # chafa --size 30x30 --animate false --colors 8 --center true ./assets/ramate-transparent.png
 
               echo ""
