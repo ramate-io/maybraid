@@ -1,0 +1,3 @@
+[alias]
+	commit-std = "!f() { branch=$(git branch --show-current); head=$(git rev-parse HEAD); file=\"commits/${branch}/${head}\"; if [ ! -f \"$file\" ]; then echo \"missing commit message file: $file\" >&2; exit 1; fi; git commit -F \"$file\" \"$@\"; }; f"
+	commit-prune-std = "!f() { keep=\"commits/$(git branch --show-current)/$(git rev-parse HEAD)\"; if [ ! -d commits ]; then exit 0; fi; find commits -type f | while IFS= read -r file; do if [ \"$file\" != \"$keep\" ]; then printf '%s\n' \"$file\"; rm -f \"$file\"; fi; done; }; f"
