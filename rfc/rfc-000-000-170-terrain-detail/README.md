@@ -1,4 +1,4 @@
-# RFC-N: Terrain Detail
+# RFC-170: Terrain Detail
 
 ## Table of contents
 

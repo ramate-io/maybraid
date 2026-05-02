@@ -48,35 +48,60 @@ cleanup() {
 }
 trap cleanup INT TERM
 
-# Run ltex-cli-plus on all files at once for better performance
-echo "  Checking all files with ltex-cli-plus..."
+# Run ltex-cli-plus in small batches (large invocations can hang or stall the LSP client).
+BATCH_SIZE=32
+GRAMMAR_ISSUES=0
+BATCH_NUM=0
+: > "$TEMP_OUTPUT"
 
-if ltex-cli-plus --client-configuration=.ltex-ls-plus.json $FILES > "$TEMP_OUTPUT" 2>&1; then
-    echo "✅ No grammar issues found in any files"
-    GRAMMAR_ISSUES=0
-else
+run_ltex_batch() {
+    if [ "$#" -eq 0 ]; then
+        return 0
+    fi
+    BATCH_NUM=$((BATCH_NUM + 1))
+    echo "  Batch $BATCH_NUM: checking $# file(s) with ltex-cli-plus..."
+    if ltex-cli-plus --client-configuration=.ltex-ls-plus.json "$@" >>"$TEMP_OUTPUT" 2>&1; then
+        return 0
+    fi
     exit_code=$?
-    if [ $exit_code -eq 3 ]; then
-        echo "❌ Grammar issues found"
-        echo ""
-        echo "Grammar issues detected:"
-        cat "$TEMP_OUTPUT"
+    if [ "$exit_code" -eq 3 ]; then
         GRAMMAR_ISSUES=1
-    elif [ $exit_code -eq 130 ]; then
-        # Interrupted by signal
+        return 3
+    elif [ "$exit_code" -eq 130 ]; then
         echo "⚠️  Grammar check was interrupted"
         exit 130
     else
-        echo "⚠️  Error running grammar check (exit code: $exit_code)"
-        echo "Output:"
-        cat "$TEMP_OUTPUT"
         GRAMMAR_ISSUES=1
+        return "$exit_code"
     fi
+}
+
+batch=()
+while IFS= read -r f || [ -n "$f" ]; do
+    [ -z "$f" ] && continue
+    batch+=("$f")
+    if [ "${#batch[@]}" -ge "$BATCH_SIZE" ]; then
+        run_ltex_batch "${batch[@]}" || true
+        batch=()
+    fi
+done <<< "$FILES"
+
+if [ "${#batch[@]}" -gt 0 ]; then
+    run_ltex_batch "${batch[@]}" || true
 fi
 
-if [ $GRAMMAR_ISSUES -gt 0 ]; then
+if [ "$GRAMMAR_ISSUES" -eq 0 ]; then
+    echo "✅ No grammar issues found in any files"
+else
+    echo "❌ Grammar issues found"
     echo ""
-    echo "❌ Found grammar issues in $GRAMMAR_ISSUES file(s)."
+    echo "Grammar issues detected:"
+    cat "$TEMP_OUTPUT"
+fi
+
+if [ "$GRAMMAR_ISSUES" -gt 0 ]; then
+    echo ""
+    echo "❌ Grammar check failed (see output above)."
     echo "💡 Tips:"
     echo "   - Review subject-verb agreement"
     echo "   - Check for sentence fragments"
