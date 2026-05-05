@@ -32,5 +32,7 @@ terrain = { workspace = true }
 vegetation-sdf = { workspace = true }
 render-item = { workspace = true }
 
+durham-terrain = { workspace = true }
+
 [lints]
 workspace = true

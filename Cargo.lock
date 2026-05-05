@@ -2243,6 +2243,20 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d8b14ccef22fc6f5a8f4d7d768562a182c04ce9a3b3157b91390b52ddfdf1a76"
 
 [[package]]
+name = "durham-terrain"
+version = "0.0.1"
+dependencies = [
+ "durham-terrain-shaders",
+]
+
+[[package]]
+name = "durham-terrain-shaders"
+version = "0.0.1"
+dependencies = [
+ "bevy",
+]
+
+[[package]]
 name = "either"
 version = "1.15.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3291,6 +3305,7 @@ dependencies = [
  "bytemuck",
  "chrono",
  "chunk",
+ "durham-terrain",
  "engine",
  "log",
  "noise",

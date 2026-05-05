@@ -1,5 +1,5 @@
 //---------------------------------------------------------
-// PBR terrain shader with world-space palette noise.
+// Durham terrain: PBR with world-space palette noise.
 //---------------------------------------------------------
 #import bevy_pbr::{
     forward_io::VertexOutput,
