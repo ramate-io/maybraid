@@ -53,41 +53,42 @@ fn value_noise(p: vec3<f32>, seed: f32) -> f32 {
     return mix(mix(mix(a, b, u.x), mix(c, d, u.x), u.y), mix(mix(e, f, u.x), mix(g, h, u.x), u.y), u.z);
 }
 
-fn fbm(p: vec3<f32>, seed: f32) -> f32 {
+fn fbm(p: vec3<f32>, seed: f32, amp: f32, freq: f32) -> f32 {
+
     var sum = 0.0;
-    var amp = 0.5;
-    var freq = 0.0001;
+    var _amp = amp;
+    var _freq = freq;
 
     for (var octave = 0; octave < 5; octave = octave + 1) {
-        sum += value_noise(p * freq, seed + f32(octave) * 19.17) * amp;
-        freq *= 2.03;
-        amp *= 0.5;
+        sum += value_noise(p * _freq, seed + f32(octave) * 19.17) * _amp;
+        _freq *= 2.03;
+        _amp *= 0.5;
     }
 
     return saturate(sum);
 }
 
 // Low-frequency control modulates local frequency (~0.35x–4x) for spatially varying dominant scale.
-fn fbm_continuous_scaled(p: vec3<f32>, seed: f32) -> f32 {
-    let c = fbm(p * 0.06, seed + 91.0);
+fn fbm_continuous_scaled(p: vec3<f32>, seed: f32,  amp: f32, freq: f32) -> f32 {
+    let c = fbm(p * 0.06, seed + 91.0, amp, freq);
     let local_scale = exp2(mix(-1.5, 2.0, c));
-    return fbm(p * local_scale, seed + 12.0);
+    return fbm(p * local_scale, seed + 12.0, amp, freq);
 }
 
 // Two-channel low FBM offsets the domain before the scaled FBM (multifractal / non-uniform hierarchy).
-fn domain_warp_offset(p: vec3<f32>, seed: f32) -> vec3<f32> {
+fn domain_warp_offset(p: vec3<f32>, seed: f32, amp: f32, freq: f32) -> vec3<f32> {
     let q = vec3<f32>(
-        fbm(p * 0.35 + vec3<f32>(17.1, 3.7, 1.0), seed + 10.0),
-        fbm(p * 0.35 + vec3<f32>(8.3, 29.4, 1.0), seed + 20.0),
-        fbm(p * 0.35 + vec3<f32>(1.0, 1.0, 1.0), seed + 30.0)
+        fbm(p * 0.35 + vec3<f32>(17.1, 3.7, 1.0), seed + 10.0, amp, freq),
+        fbm(p * 0.35 + vec3<f32>(8.3, 29.4, 1.0), seed + 20.0, amp, freq),
+        fbm(p * 0.35 + vec3<f32>(1.0, 1.0, 1.0), seed + 30.0, amp, freq)
     );
     return (q - vec3<f32>(0.5)) * 4.0;
 }
 
-fn warped_scaled_fbm(p: vec3<f32>, seed: f32) -> f32 {
-    let warp = domain_warp_offset(p, seed);
+fn warped_scaled_fbm(p: vec3<f32>, seed: f32, amp: f32, freq: f32) -> f32 {
+    let warp = domain_warp_offset(p, seed, amp, freq);
     let p_warped = p + warp;
-    return fbm_continuous_scaled(p_warped, seed + 3.0);
+    return fbm_continuous_scaled(p_warped, seed + 3.0, amp, freq);
 }
 
 // Sinusoidal folds before palette: continuous, periodic-ish mineral bands.
@@ -122,20 +123,28 @@ fn palette_sample(t: f32) -> vec3<f32> {
     return mix(yellow_brown, dark_mineral, f);
 }
 
+fn ground_color_at_scale(p: vec3<f32>, seed: f32, amp: f32, scale: f32) -> vec3<f32> {
+    let composed = warped_scaled_fbm(p, seed, amp, scale);
+    let t = chaotic_periodic(composed, seed);
+    return palette_sample(t);
+}
+
+// The detailed noise laid on broader regions
+fn ground_color_detail(p: vec3<f32>, seed: f32) -> vec3<f32> {
+    return ground_color_at_scale(p, seed, 0.5, 0.01);
+}
+
+// The broad noise that controls the regional palette
+fn ground_color_regional(p: vec3<f32>, seed: f32) -> vec3<f32> {
+    return ground_color_at_scale(p, seed, 0.5, 0.0001);
+}
+
 fn ground_color(world_position: vec3<f32>) -> vec3<f32> {
     let seed = noise_params.x;
     let p = world_position;
-    let composed = warped_scaled_fbm(p, seed);
-    let t = chaotic_periodic(composed, seed);
-    let detail = fbm(p * noise_params.z + vec3<f32>(11.7, -5.3, 1.0), seed + 101.0);
-    let broad_shadow = fbm(p * 0.33 + vec3<f32>(41.0, 7.0, 1.0), seed + 211.0);
-
-    let palette_color = palette_sample(t);
-    let value = mix(1.0 - noise_params.w, 1.0 + noise_params.w, detail);
-    let mineral_drift = mix(0.88, 1.12, broad_shadow);
-    let noisy_color = palette_color * value * mineral_drift;
-
-    return mix(base_color.rgb, noisy_color, saturate(style_params.x));
+    let regional = ground_color_regional(p, seed);
+    let detail = ground_color_detail(p, seed);
+    return mix(regional, detail, 0.4);
 }
 
 fn depth_at(pos: vec4<f32>) -> f32 {
