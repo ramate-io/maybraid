@@ -1,7 +1,10 @@
 //! Durham terrain material with world-space palette noise ([RFC-170 4.7](https://github.com/ramate-io/maybraid/issues/178)).
 
 use bevy::{
-	asset::embedded_asset, prelude::*, reflect::TypePath, render::render_resource::AsBindGroup,
+	asset::embedded_asset,
+	prelude::*,
+	reflect::TypePath,
+	render::render_resource::{AsBindGroup, ShaderType},
 	shader::ShaderRef,
 };
 
@@ -15,14 +18,55 @@ impl Plugin for DurhamTerrainShaderPlugin {
 	}
 }
 
+/// GPU layout for [`DurhamTerrainShader`] binding 1; must match `DurhamTerrainNoise` in WGSL.
+///
+/// Each **band** is `vec4(frequency, amplitude, blend_weight, unused)`.
+/// Each **palette** entry is `vec4(rgb, weight)`; weights need not sum to 1 (normalized in shader).
+#[derive(Clone, Copy, Debug, ShaderType)]
+pub struct DurhamTerrainNoiseUniform {
+	/// `x` = noise seed, `y` = mix factor for procedural color vs [`DurhamTerrainShader::base_color`] (0–1).
+	pub config: Vec4,
+	pub band0: Vec4,
+	pub band1: Vec4,
+	pub band2: Vec4,
+	pub band3: Vec4,
+	pub palette0: Vec4,
+	pub palette1: Vec4,
+	pub palette2: Vec4,
+	pub palette3: Vec4,
+	pub palette4: Vec4,
+	pub palette5: Vec4,
+	pub palette6: Vec4,
+	pub palette7: Vec4,
+}
+
+impl Default for DurhamTerrainNoiseUniform {
+	fn default() -> Self {
+		Self {
+			config: Vec4::new(42.0, 0.88, 0.0, 0.0),
+			band0: Vec4::new(0.0001, 0.5, 0.35, 0.0),
+			band1: Vec4::new(0.001, 0.5, 0.25, 0.0),
+			band2: Vec4::new(0.01, 0.5, 0.25, 0.0),
+			band3: Vec4::new(0.05, 0.4, 0.15, 0.0),
+			palette0: Vec4::new(0.36, 0.28, 0.20, 1.0),
+			palette1: Vec4::new(0.42, 0.38, 0.32, 1.0),
+			palette2: Vec4::new(0.45, 0.30, 0.22, 1.0),
+			palette3: Vec4::new(0.48, 0.44, 0.26, 1.0),
+			palette4: Vec4::new(0.20, 0.18, 0.16, 1.0),
+			palette5: Vec4::new(0.39, 0.33, 0.26, 0.5),
+			palette6: Vec4::new(0.435, 0.34, 0.24, 0.5),
+			palette7: Vec4::new(0.34, 0.31, 0.21, 0.5),
+		}
+	}
+}
+
 #[derive(Asset, TypePath, AsBindGroup, Debug, Clone)]
 pub struct DurhamTerrainShader {
 	#[uniform(0)]
 	pub base_color: Vec4,
-	/// x = seed, y = regional scale, z = detail scale, w = value strength.
 	#[uniform(1)]
-	pub noise_params: Vec4,
-	/// x = palette strength, y = edge strength, z = edge darkness, w = lit mix.
+	pub terrain_noise: DurhamTerrainNoiseUniform,
+	/// `x` = reserved, `y` = edge strength, `z` = edge darkness, `w` = lit mix.
 	#[uniform(2)]
 	pub style_params: Vec4,
 }
@@ -31,8 +75,8 @@ impl Default for DurhamTerrainShader {
 	fn default() -> Self {
 		Self {
 			base_color: Vec4::new(0.89, 0.886, 0.604, 1.0),
-			noise_params: Vec4::new(42.0, 0.012, 0.11, 0.24),
-			style_params: Vec4::new(0.88, 2.0, 0.05, 0.72),
+			terrain_noise: DurhamTerrainNoiseUniform::default(),
+			style_params: Vec4::new(0.0, 2.0, 0.05, 0.72),
 		}
 	}
 }
@@ -67,8 +111,9 @@ mod tests {
 		let m = DurhamTerrainShader::default();
 		assert!((m.base_color.w - 1.0).abs() < f32::EPSILON);
 		assert!((m.base_color.x - 0.89).abs() < 1e-5);
-		assert!((m.noise_params.x - 42.0).abs() < 1e-5);
-		assert!((m.style_params.x - 0.88).abs() < 1e-5);
+		assert!((m.terrain_noise.config.x - 42.0).abs() < 1e-5);
+		assert!((m.terrain_noise.config.y - 0.88).abs() < 1e-5);
+		assert!((m.style_params.w - 0.72).abs() < 1e-5);
 	}
 
 	#[test]
@@ -77,7 +122,7 @@ mod tests {
 		let m = DurhamTerrainShader::default().with_base_color(base);
 		assert_eq!(m.base_color, base);
 		let d = DurhamTerrainShader::default();
-		assert_eq!(m.noise_params, d.noise_params);
+		assert_eq!(m.terrain_noise.config, d.terrain_noise.config);
 		assert_eq!(m.style_params, d.style_params);
 	}
 

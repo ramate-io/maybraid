@@ -2,4 +2,6 @@
 
 mod durham_terrain_shader;
 
-pub use durham_terrain_shader::{DurhamTerrainShader, DurhamTerrainShaderPlugin};
+pub use durham_terrain_shader::{
+	DurhamTerrainNoiseUniform, DurhamTerrainShader, DurhamTerrainShaderPlugin,
+};

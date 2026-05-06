@@ -7,18 +7,35 @@
     prepass_utils::prepass_depth,
     pbr_types::{PbrInput, pbr_input_new, STANDARD_MATERIAL_FLAGS_DOUBLE_SIDED_BIT},
     pbr_functions as fns,
-    pbr_bindings,
 }
 #import bevy_core_pipeline::tonemapping::tone_mapping
 
 @group(#{MATERIAL_BIND_GROUP}) @binding(0)
 var<uniform> base_color: vec4<f32>;
 
-// x = seed, y = regional scale, z = detail scale, w = value strength.
-@group(#{MATERIAL_BIND_GROUP}) @binding(1)
-var<uniform> noise_params: vec4<f32>;
+struct DurhamTerrainNoise {
+    // x = seed, y = procedural vs base_color mix [0,1], zw unused
+    config: vec4<f32>,
+    // xyzw = frequency, amplitude, blend_weight, unused (per band)
+    band0: vec4<f32>,
+    band1: vec4<f32>,
+    band2: vec4<f32>,
+    band3: vec4<f32>,
+    // rgb = color, w = segment weight
+    palette0: vec4<f32>,
+    palette1: vec4<f32>,
+    palette2: vec4<f32>,
+    palette3: vec4<f32>,
+    palette4: vec4<f32>,
+    palette5: vec4<f32>,
+    palette6: vec4<f32>,
+    palette7: vec4<f32>,
+}
 
-// x = palette strength, y = edge strength, z = edge darkness, w = lit mix.
+@group(#{MATERIAL_BIND_GROUP}) @binding(1)
+var<uniform> terrain_noise: DurhamTerrainNoise;
+
+// x unused, y edge strength, z edge darkness, w lit mix
 @group(#{MATERIAL_BIND_GROUP}) @binding(2)
 var<uniform> style_params: vec4<f32>;
 
@@ -26,7 +43,7 @@ fn saturate(x: f32) -> f32 {
     return clamp(x, 0.0, 1.0);
 }
 
-fn hash21(p: vec3<f32>) -> f32 {
+fn hash31(p: vec3<f32>) -> f32 {
     let q = vec3<f32>(
         dot(p, vec3<f32>(127.1, 311.7, 269.5)),
         dot(p, vec3<f32>(269.5, 183.3, 127.1)),
@@ -41,110 +58,122 @@ fn value_noise(p: vec3<f32>, seed: f32) -> f32 {
     let u = nf * nf * (3.0 - 2.0 * nf);
     let s = vec3<f32>(seed * 17.13, seed * 31.71, seed * 12.34);
 
-    let a = hash21(i + vec3<f32>(0.0, 0.0, 0.0) + s);
-    let b = hash21(i + vec3<f32>(1.0, 0.0, 0.0) + s);
-    let c = hash21(i + vec3<f32>(0.0, 1.0, 0.0) + s);
-    let d = hash21(i + vec3<f32>(1.0, 1.0, 0.0) + s);
-    let e = hash21(i + vec3<f32>(0.0, 0.0, 1.0) + s);
-    let f = hash21(i + vec3<f32>(1.0, 0.0, 1.0) + s);
-    let g = hash21(i + vec3<f32>(0.0, 1.0, 1.0) + s);
-    let h = hash21(i + vec3<f32>(1.0, 1.0, 1.0) + s);
+    let a = hash31(i + vec3<f32>(0.0, 0.0, 0.0) + s);
+    let b = hash31(i + vec3<f32>(1.0, 0.0, 0.0) + s);
+    let c = hash31(i + vec3<f32>(0.0, 1.0, 0.0) + s);
+    let d = hash31(i + vec3<f32>(1.0, 1.0, 0.0) + s);
+    let e = hash31(i + vec3<f32>(0.0, 0.0, 1.0) + s);
+    let f = hash31(i + vec3<f32>(1.0, 0.0, 1.0) + s);
+    let g = hash31(i + vec3<f32>(0.0, 1.0, 1.0) + s);
+    let h = hash31(i + vec3<f32>(1.0, 1.0, 1.0) + s);
 
     return mix(mix(mix(a, b, u.x), mix(c, d, u.x), u.y), mix(mix(e, f, u.x), mix(g, h, u.x), u.y), u.z);
 }
 
 fn fbm(p: vec3<f32>, seed: f32, amp: f32, freq: f32) -> f32 {
-
     var sum = 0.0;
-    var _amp = amp;
-    var _freq = freq;
-
-    for (var octave = 0; octave < 5; octave = octave + 1) {
-        sum += value_noise(p * _freq, seed + f32(octave) * 19.17) * _amp;
-        _freq *= 2.03;
-        _amp *= 0.5;
+    var a = amp;
+    var f = freq;
+    for (var octave = 0; octave < 4; octave = octave + 1) {
+        sum += value_noise(p * f, seed + f32(octave) * 19.17) * a;
+        f *= 2.03;
+        a *= 0.5;
     }
-
     return saturate(sum);
 }
 
-// Low-frequency control modulates local frequency (~0.35x–4x) for spatially varying dominant scale.
-fn fbm_continuous_scaled(p: vec3<f32>, seed: f32,  amp: f32, freq: f32) -> f32 {
+fn fbm_continuous_scaled(p: vec3<f32>, seed: f32, amp: f32, freq: f32) -> f32 {
     let c = fbm(p * 0.06, seed + 91.0, amp, freq);
     let local_scale = exp2(mix(-1.5, 2.0, c));
     return fbm(p * local_scale, seed + 12.0, amp, freq);
 }
 
-// Two-channel low FBM offsets the domain before the scaled FBM (multifractal / non-uniform hierarchy).
+// Two low FBMs warp XY only (cheaper than a third octave on Z).
 fn domain_warp_offset(p: vec3<f32>, seed: f32, amp: f32, freq: f32) -> vec3<f32> {
-    let q = vec3<f32>(
-        fbm(p * 0.35 + vec3<f32>(17.1, 3.7, 1.0), seed + 10.0, amp, freq),
-        fbm(p * 0.35 + vec3<f32>(8.3, 29.4, 1.0), seed + 20.0, amp, freq),
-        fbm(p * 0.35 + vec3<f32>(1.0, 1.0, 1.0), seed + 30.0, amp, freq)
-    );
-    return (q - vec3<f32>(0.5)) * 4.0;
+    let qx = fbm(p * 0.35 + vec3<f32>(17.1, 3.7, 1.0), seed + 10.0, amp, freq);
+    let qy = fbm(p * 0.35 + vec3<f32>(8.3, 29.4, 1.0), seed + 20.0, amp, freq);
+    return vec3<f32>((qx - 0.5) * 4.0, (qy - 0.5) * 4.0, 0.0);
 }
 
 fn warped_scaled_fbm(p: vec3<f32>, seed: f32, amp: f32, freq: f32) -> f32 {
     let warp = domain_warp_offset(p, seed, amp, freq);
-    let p_warped = p + warp;
-    return fbm_continuous_scaled(p_warped, seed + 3.0, amp, freq);
+    return fbm_continuous_scaled(p + warp, seed + 3.0, amp, freq);
 }
 
-// Sinusoidal folds before palette: continuous, periodic-ish mineral bands.
 fn chaotic_periodic(t: f32, seed: f32) -> f32 {
     var x = t;
     x = x + 0.18 * sin(6.28318 * (x * 2.0 + seed * 0.13));
     x = x + 0.10 * sin(6.28318 * (x * 5.0 + seed * 0.31));
-    x = x + 0.06 * sin(6.28318 * (x * 11.0 + seed * 0.57));
     return saturate(x);
 }
 
-fn palette_sample(t: f32) -> vec3<f32> {
-    let brown = vec3<f32>(0.36, 0.28, 0.20);
-    let gray = vec3<f32>(0.42, 0.38, 0.32);
-    let red_brown = vec3<f32>(0.45, 0.30, 0.22);
-    let yellow_brown = vec3<f32>(0.48, 0.44, 0.26);
-    let dark_mineral = vec3<f32>(0.20, 0.18, 0.16);
-
-    let x = saturate(t) * 4.0;
-    let band = floor(x);
-    let f = smoothstep(0.0, 1.0, fract(x));
-
-    if band < 1.0 {
-        return mix(brown, gray, f);
+fn palette_rgba(i: i32) -> vec4<f32> {
+    switch i {
+        case 0: { return terrain_noise.palette0; }
+        case 1: { return terrain_noise.palette1; }
+        case 2: { return terrain_noise.palette2; }
+        case 3: { return terrain_noise.palette3; }
+        case 4: { return terrain_noise.palette4; }
+        case 5: { return terrain_noise.palette5; }
+        case 6: { return terrain_noise.palette6; }
+        case 7: { return terrain_noise.palette7; }
+        default: { return vec4<f32>(0.0); }
     }
-    if band < 2.0 {
-        return mix(gray, red_brown, f);
-    }
-    if band < 3.0 {
-        return mix(red_brown, yellow_brown, f);
-    }
-    return mix(yellow_brown, dark_mineral, f);
 }
 
-fn ground_color_at_scale(p: vec3<f32>, seed: f32, amp: f32, scale: f32) -> vec3<f32> {
-    let composed = warped_scaled_fbm(p, seed, amp, scale);
+fn palette_rgb_at(t: f32) -> vec3<f32> {
+    var w_sum = 0.0;
+    for (var i = 0; i < 8; i = i + 1) {
+        w_sum += max(palette_rgba(i).w, 1e-6);
+    }
+    let u = saturate(t) * w_sum;
+    var acc = 0.0;
+    for (var i = 0; i < 8; i = i + 1) {
+        let e = palette_rgba(i);
+        let wi = max(e.w, 1e-6);
+        if (u <= acc + wi) {
+            let f = saturate((u - acc) / wi);
+            let c0 = e.xyz;
+            let c1 = palette_rgba(min(i + 1, 7)).xyz;
+            return mix(c0, c1, smoothstep(0.0, 1.0, f));
+        }
+        acc += wi;
+    }
+    return palette_rgba(7).xyz;
+}
+
+fn band_color(p: vec3<f32>, seed: f32, band: vec4<f32>) -> vec3<f32> {
+    let composed = warped_scaled_fbm(p, seed, band.y, band.x);
     let t = chaotic_periodic(composed, seed);
-    return palette_sample(t);
-}
-
-// The detailed noise laid on broader regions
-fn ground_color_detail(p: vec3<f32>, seed: f32) -> vec3<f32> {
-    return ground_color_at_scale(p, seed, 0.5, 0.01);
-}
-
-// The broad noise that controls the regional palette
-fn ground_color_regional(p: vec3<f32>, seed: f32) -> vec3<f32> {
-    return ground_color_at_scale(p, seed, 0.5, 0.0001);
+    return palette_rgb_at(t);
 }
 
 fn ground_color(world_position: vec3<f32>) -> vec3<f32> {
-    let seed = noise_params.x;
+    let cfg = terrain_noise.config;
+    let seed = cfg.x;
     let p = world_position;
-    let regional = ground_color_regional(p, seed);
-    let detail = ground_color_detail(p, seed);
-    return mix(regional, detail, 0.4);
+
+    var acc = vec3<f32>(0.0);
+    var wsum = 0.0;
+
+    let w0 = max(terrain_noise.band0.z, 0.0);
+    acc += band_color(p, seed, terrain_noise.band0) * w0;
+    wsum += w0;
+
+    let w1 = max(terrain_noise.band1.z, 0.0);
+    acc += band_color(p, seed, terrain_noise.band1) * w1;
+    wsum += w1;
+
+    let w2 = max(terrain_noise.band2.z, 0.0);
+    acc += band_color(p, seed, terrain_noise.band2) * w2;
+    wsum += w2;
+
+    let w3 = max(terrain_noise.band3.z, 0.0);
+    acc += band_color(p, seed, terrain_noise.band3) * w3;
+    wsum += w3;
+
+    let mixed = acc / max(wsum, 1e-6);
+    return mix(base_color.rgb, mixed, saturate(cfg.y));
 }
 
 fn depth_at(pos: vec4<f32>) -> f32 {
