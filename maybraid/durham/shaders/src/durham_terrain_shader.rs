@@ -18,44 +18,105 @@ impl Plugin for DurhamTerrainShaderPlugin {
 	}
 }
 
-/// GPU layout for [`DurhamTerrainShader`] binding 1; must match `DurhamTerrainNoise` in WGSL.
-///
-/// Each **band** is `vec4(frequency, amplitude, blend_weight, unused)`.
-/// Each **palette** entry is `vec4(rgb, weight)`; weights need not sum to 1 (normalized in shader).
+/// One palette swatch: blend **`left.xyz` → `right.xyz`**; **`swatch_meta.x`** = fold-in weight (0–1).
+/// `swatch_meta.yzw` unused.
+#[derive(Clone, Copy, Debug, ShaderType)]
+pub struct DurhamSwatchUniform {
+	pub left: Vec4,
+	pub right: Vec4,
+	pub swatch_meta: Vec4,
+}
+
+/// Per-frequency band: own FBM scale, blend weight vs other bands, and **8 swatches** (independent palette).
+#[derive(Clone, Copy, Debug, ShaderType)]
+pub struct DurhamTerrainBandUniform {
+	/// `x` = noise seed for this band; `yzw` unused.
+	pub config: Vec4,
+	/// `x` = frequency, `y` = amplitude, `z` = weight vs other bands, `w` unused.
+	pub band_scale: Vec4,
+	pub swatches: [DurhamSwatchUniform; 8],
+}
+
+/// Full terrain noise config: **regional blend driver** + **4 bands** with swatch tables.
 #[derive(Clone, Copy, Debug, ShaderType)]
 pub struct DurhamTerrainNoiseUniform {
-	/// `x` = noise seed, `y` = mix factor for procedural color vs [`DurhamTerrainShader::base_color`] (0–1).
-	pub config: Vec4,
-	pub band0: Vec4,
-	pub band1: Vec4,
-	pub band2: Vec4,
-	pub band3: Vec4,
-	pub palette0: Vec4,
-	pub palette1: Vec4,
-	pub palette2: Vec4,
-	pub palette3: Vec4,
-	pub palette4: Vec4,
-	pub palette5: Vec4,
-	pub palette6: Vec4,
-	pub palette7: Vec4,
+	/// `x` = **frequency**, `y` = **amplitude** for the broadest FBM that perturbs inter-band blend weights (`t_warp`); `zw` unused.
+	pub regional_blend: Vec4,
+	pub bands: [DurhamTerrainBandUniform; 4],
+}
+
+fn default_swatches() -> [DurhamSwatchUniform; 8] {
+	[
+		DurhamSwatchUniform {
+			left: Vec4::new(0.36, 0.28, 0.20, 0.0),
+			right: Vec4::new(0.42, 0.38, 0.32, 0.0),
+			swatch_meta: Vec4::new(1.0, 0.0, 0.0, 0.0),
+		},
+		DurhamSwatchUniform {
+			left: Vec4::new(0.42, 0.38, 0.32, 0.0),
+			right: Vec4::new(0.45, 0.30, 0.22, 0.0),
+			swatch_meta: Vec4::new(1.0, 0.0, 0.0, 0.0),
+		},
+		DurhamSwatchUniform {
+			left: Vec4::new(0.45, 0.30, 0.22, 0.0),
+			right: Vec4::new(0.48, 0.44, 0.26, 0.0),
+			swatch_meta: Vec4::new(1.0, 0.0, 0.0, 0.0),
+		},
+		DurhamSwatchUniform {
+			left: Vec4::new(0.48, 0.44, 0.26, 0.0),
+			right: Vec4::new(0.20, 0.18, 0.16, 0.0),
+			swatch_meta: Vec4::new(1.0, 0.0, 0.0, 0.0),
+		},
+		DurhamSwatchUniform {
+			left: Vec4::new(0.20, 0.18, 0.16, 0.0),
+			right: Vec4::new(0.36, 0.28, 0.20, 0.0),
+			swatch_meta: Vec4::new(0.5, 0.0, 0.0, 0.0),
+		},
+		DurhamSwatchUniform {
+			left: Vec4::new(0.39, 0.33, 0.26, 0.0),
+			right: Vec4::new(0.435, 0.34, 0.24, 0.0),
+			swatch_meta: Vec4::new(0.5, 0.0, 0.0, 0.0),
+		},
+		DurhamSwatchUniform {
+			left: Vec4::new(0.435, 0.34, 0.24, 0.0),
+			right: Vec4::new(0.34, 0.31, 0.21, 0.0),
+			swatch_meta: Vec4::new(0.5, 0.0, 0.0, 0.0),
+		},
+		DurhamSwatchUniform {
+			left: Vec4::new(0.34, 0.31, 0.21, 0.0),
+			right: Vec4::new(0.42, 0.38, 0.32, 0.0),
+			swatch_meta: Vec4::new(0.5, 0.0, 0.0, 0.0),
+		},
+	]
 }
 
 impl Default for DurhamTerrainNoiseUniform {
 	fn default() -> Self {
+		let swatches = default_swatches();
 		Self {
-			config: Vec4::new(42.0, 0.88, 0.0, 0.0),
-			band0: Vec4::new(0.0001, 0.5, 0.35, 0.0),
-			band1: Vec4::new(0.001, 0.5, 0.25, 0.0),
-			band2: Vec4::new(0.01, 0.5, 0.25, 0.0),
-			band3: Vec4::new(0.05, 0.4, 0.15, 0.0),
-			palette0: Vec4::new(0.36, 0.28, 0.20, 1.0),
-			palette1: Vec4::new(0.42, 0.38, 0.32, 1.0),
-			palette2: Vec4::new(0.45, 0.30, 0.22, 1.0),
-			palette3: Vec4::new(0.48, 0.44, 0.26, 1.0),
-			palette4: Vec4::new(0.20, 0.18, 0.16, 1.0),
-			palette5: Vec4::new(0.39, 0.33, 0.26, 0.5),
-			palette6: Vec4::new(0.435, 0.34, 0.24, 0.5),
-			palette7: Vec4::new(0.34, 0.31, 0.21, 0.5),
+			regional_blend: Vec4::new(0.00015, 0.5, 0.0, 0.0),
+			bands: [
+				DurhamTerrainBandUniform {
+					config: Vec4::new(42.0, 0.0, 0.0, 0.0),
+					band_scale: Vec4::new(0.0001, 0.5, 0.35, 0.0),
+					swatches,
+				},
+				DurhamTerrainBandUniform {
+					config: Vec4::new(42.0, 0.0, 0.0, 0.0),
+					band_scale: Vec4::new(0.001, 0.5, 0.25, 0.0),
+					swatches,
+				},
+				DurhamTerrainBandUniform {
+					config: Vec4::new(42.0, 0.0, 0.0, 0.0),
+					band_scale: Vec4::new(0.01, 0.5, 0.25, 0.0),
+					swatches,
+				},
+				DurhamTerrainBandUniform {
+					config: Vec4::new(42.0, 0.0, 0.0, 0.0),
+					band_scale: Vec4::new(0.05, 0.4, 0.15, 0.0),
+					swatches,
+				},
+			],
 		}
 	}
 }
@@ -63,27 +124,18 @@ impl Default for DurhamTerrainNoiseUniform {
 #[derive(Asset, TypePath, AsBindGroup, Debug, Clone)]
 pub struct DurhamTerrainShader {
 	#[uniform(0)]
-	pub base_color: Vec4,
-	#[uniform(1)]
 	pub terrain_noise: DurhamTerrainNoiseUniform,
 	/// `x` = reserved, `y` = edge strength, `z` = edge darkness, `w` = lit mix.
-	#[uniform(2)]
+	#[uniform(1)]
 	pub style_params: Vec4,
 }
 
 impl Default for DurhamTerrainShader {
 	fn default() -> Self {
 		Self {
-			base_color: Vec4::new(0.89, 0.886, 0.604, 1.0),
 			terrain_noise: DurhamTerrainNoiseUniform::default(),
 			style_params: Vec4::new(0.0, 2.0, 0.05, 0.72),
 		}
-	}
-}
-
-impl DurhamTerrainShader {
-	pub fn with_base_color(self, base_color: Vec4) -> Self {
-		Self { base_color, ..self }
 	}
 }
 
@@ -109,21 +161,10 @@ mod tests {
 	#[test]
 	fn default_material_uniforms() {
 		let m = DurhamTerrainShader::default();
-		assert!((m.base_color.w - 1.0).abs() < f32::EPSILON);
-		assert!((m.base_color.x - 0.89).abs() < 1e-5);
-		assert!((m.terrain_noise.config.x - 42.0).abs() < 1e-5);
-		assert!((m.terrain_noise.config.y - 0.88).abs() < 1e-5);
+		assert!((m.terrain_noise.bands[0].config.x - 42.0).abs() < 1e-5);
+		assert!((m.terrain_noise.regional_blend.x - 0.00015).abs() < 1e-8);
+		assert!((m.terrain_noise.regional_blend.y - 0.5).abs() < 1e-8);
 		assert!((m.style_params.w - 0.72).abs() < 1e-5);
-	}
-
-	#[test]
-	fn with_base_color_overrides_base_only() {
-		let base = Vec4::new(0.1, 0.2, 0.3, 0.4);
-		let m = DurhamTerrainShader::default().with_base_color(base);
-		assert_eq!(m.base_color, base);
-		let d = DurhamTerrainShader::default();
-		assert_eq!(m.terrain_noise.config, d.terrain_noise.config);
-		assert_eq!(m.style_params, d.style_params);
 	}
 
 	#[test]
@@ -143,7 +184,6 @@ mod tests {
 		}
 	}
 
-	/// Covers the `embedded_asset!` step from [`DurhamTerrainShaderPlugin`] without requiring a GPU.
 	#[test]
 	fn embedded_wgsl_registers_with_asset_plugin() {
 		let mut app = App::new();
@@ -153,9 +193,6 @@ mod tests {
 		app.update();
 	}
 
-	/// Full [`DurhamTerrainShaderPlugin`] (including [`MaterialPlugin`]) needs a wgpu adapter.
-	/// Skipped in headless CI; run locally with:
-	/// `cargo test -p durham-terrain-shaders durham_terrain_shader_plugin_smoke_gpu -- --ignored --nocapture`
 	#[test]
 	#[ignore = "requires GPU / wgpu adapter"]
 	fn durham_terrain_shader_plugin_smoke_gpu() {

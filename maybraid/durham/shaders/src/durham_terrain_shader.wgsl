@@ -10,33 +10,32 @@
 }
 #import bevy_core_pipeline::tonemapping::tone_mapping
 
-@group(#{MATERIAL_BIND_GROUP}) @binding(0)
-var<uniform> base_color: vec4<f32>;
-
-struct DurhamTerrainNoise {
-    // x = seed, y = procedural vs base_color mix [0,1], zw unused
-    config: vec4<f32>,
-    // xyzw = frequency, amplitude, blend_weight, unused (per band)
-    band0: vec4<f32>,
-    band1: vec4<f32>,
-    band2: vec4<f32>,
-    band3: vec4<f32>,
-    // rgb = color, w = segment weight
-    palette0: vec4<f32>,
-    palette1: vec4<f32>,
-    palette2: vec4<f32>,
-    palette3: vec4<f32>,
-    palette4: vec4<f32>,
-    palette5: vec4<f32>,
-    palette6: vec4<f32>,
-    palette7: vec4<f32>,
+// `left`/`right` = RGB endpoints (w unused). `swatch_meta.x` = fold-in weight.
+struct DurhamSwatch {
+    left: vec4<f32>,
+    right: vec4<f32>,
+    swatch_meta: vec4<f32>,
 }
 
-@group(#{MATERIAL_BIND_GROUP}) @binding(1)
+struct DurhamTerrainBand {
+    // x = seed for this band's FBM; yzw unused
+    config: vec4<f32>,
+    // x = frequency, y = amplitude, z = weight vs other bands, w unused
+    band_scale: vec4<f32>,
+    swatches: array<DurhamSwatch, 8>,
+}
+
+struct DurhamTerrainNoise {
+    // x = t_warp FBM frequency, y = t_warp FBM amplitude (broadest regional scale for blend perturbation); zw unused
+    regional_blend: vec4<f32>,
+    bands: array<DurhamTerrainBand, 4>,
+}
+
+@group(#{MATERIAL_BIND_GROUP}) @binding(0)
 var<uniform> terrain_noise: DurhamTerrainNoise;
 
 // x unused, y edge strength, z edge darkness, w lit mix
-@group(#{MATERIAL_BIND_GROUP}) @binding(2)
+@group(#{MATERIAL_BIND_GROUP}) @binding(1)
 var<uniform> style_params: vec4<f32>;
 
 fn saturate(x: f32) -> f32 {
@@ -88,7 +87,6 @@ fn fbm_continuous_scaled(p: vec3<f32>, seed: f32, amp: f32, freq: f32) -> f32 {
     return fbm(p * local_scale, seed + 12.0, amp, freq);
 }
 
-// Two low FBMs warp XY only (cheaper than a third octave on Z).
 fn domain_warp_offset(p: vec3<f32>, seed: f32, amp: f32, freq: f32) -> vec3<f32> {
     let qx = fbm(p * 0.35 + vec3<f32>(17.1, 3.7, 1.0), seed + 10.0, amp, freq);
     let qy = fbm(p * 0.35 + vec3<f32>(8.3, 29.4, 1.0), seed + 20.0, amp, freq);
@@ -107,73 +105,48 @@ fn chaotic_periodic(t: f32, seed: f32) -> f32 {
     return saturate(x);
 }
 
-fn palette_rgba(i: i32) -> vec4<f32> {
-    switch i {
-        case 0: { return terrain_noise.palette0; }
-        case 1: { return terrain_noise.palette1; }
-        case 2: { return terrain_noise.palette2; }
-        case 3: { return terrain_noise.palette3; }
-        case 4: { return terrain_noise.palette4; }
-        case 5: { return terrain_noise.palette5; }
-        case 6: { return terrain_noise.palette6; }
-        case 7: { return terrain_noise.palette7; }
-        default: { return vec4<f32>(0.0); }
-    }
-}
-
-fn palette_rgb_at(t: f32) -> vec3<f32> {
-    var w_sum = 0.0;
+fn swatch_blend(t_noise: f32, band: DurhamTerrainBand) -> vec3<f32> {
+    let t = saturate(t_noise);
+    var blended = vec3<f32>(0.0);
     for (var i = 0; i < 8; i = i + 1) {
-        w_sum += max(palette_rgba(i).w, 1e-6);
-    }
-    let u = saturate(t) * w_sum;
-    var acc = 0.0;
-    for (var i = 0; i < 8; i = i + 1) {
-        let e = palette_rgba(i);
-        let wi = max(e.w, 1e-6);
-        if (u <= acc + wi) {
-            let f = saturate((u - acc) / wi);
-            let c0 = e.xyz;
-            let c1 = palette_rgba(min(i + 1, 7)).xyz;
-            return mix(c0, c1, smoothstep(0.0, 1.0, f));
+        let f = fract(t * 1.618 + f32(i) * 0.37 + f32(i * i) * 0.03);
+        let sel = min(i32(f * 8.0), 7);
+        let sw = band.swatches[sel];
+        let u = saturate(fract(t + f32(sel) * 0.123 + f32(i) * 0.05));
+        let sampled = mix(sw.left.xyz, sw.right.xyz, u);
+        let bw = saturate(sw.swatch_meta.x);
+        if (i == 0) {
+            blended = sampled;
+        } else {
+            blended = mix(blended, sampled, bw);
         }
-        acc += wi;
     }
-    return palette_rgba(7).xyz;
+    return blended;
 }
 
-fn band_color(p: vec3<f32>, seed: f32, band: vec4<f32>) -> vec3<f32> {
-    let composed = warped_scaled_fbm(p, seed, band.y, band.x);
+fn band_color(p: vec3<f32>, band: DurhamTerrainBand) -> vec3<f32> {
+    let seed = band.config.x;
+    let composed = warped_scaled_fbm(p, seed, band.band_scale.y, band.band_scale.x);
     let t = chaotic_periodic(composed, seed);
-    return palette_rgb_at(t);
+    return swatch_blend(t, band);
 }
 
 fn ground_color(world_position: vec3<f32>) -> vec3<f32> {
-    let cfg = terrain_noise.config;
-    let seed = cfg.x;
     let p = world_position;
+    let master_seed = terrain_noise.bands[0].config.x;
+    let rb = terrain_noise.regional_blend;
+    let t_warp = fract(warped_scaled_fbm(p, master_seed, rb.y, rb.x) * 3.7);
 
     var acc = vec3<f32>(0.0);
     var wsum = 0.0;
-
-    let w0 = max(terrain_noise.band0.z, 0.0);
-    acc += band_color(p, seed, terrain_noise.band0) * w0;
-    wsum += w0;
-
-    let w1 = max(terrain_noise.band1.z, 0.0);
-    acc += band_color(p, seed, terrain_noise.band1) * w1;
-    wsum += w1;
-
-    let w2 = max(terrain_noise.band2.z, 0.0);
-    acc += band_color(p, seed, terrain_noise.band2) * w2;
-    wsum += w2;
-
-    let w3 = max(terrain_noise.band3.z, 0.0);
-    acc += band_color(p, seed, terrain_noise.band3) * w3;
-    wsum += w3;
-
-    let mixed = acc / max(wsum, 1e-6);
-    return mix(base_color.rgb, mixed, saturate(cfg.y));
+    for (var bi = 0; bi < 4; bi = bi + 1) {
+        let band = terrain_noise.bands[bi];
+        let base_w = max(band.band_scale.z, 0.0);
+        let w = base_w * (0.5 + 0.5 * fract(t_warp * 19.0 + f32(bi) * 9.17));
+        acc += band_color(p, band) * w;
+        wsum += w;
+    }
+    return acc / max(wsum, 1e-6);
 }
 
 fn depth_at(pos: vec4<f32>) -> f32 {
@@ -201,7 +174,7 @@ fn fragment(
     var pbr_input: PbrInput = pbr_input_new();
     let world_ground_color = ground_color(mesh.world_position.xyz);
 
-    pbr_input.material.base_color = vec4<f32>(world_ground_color, base_color.a);
+    pbr_input.material.base_color = vec4<f32>(world_ground_color, 1.0);
     pbr_input.material.metallic = 0.0;
     pbr_input.material.perceptual_roughness = 1.0;
     pbr_input.frag_coord = mesh.position;

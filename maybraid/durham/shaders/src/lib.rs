@@ -3,5 +3,6 @@
 mod durham_terrain_shader;
 
 pub use durham_terrain_shader::{
-	DurhamTerrainNoiseUniform, DurhamTerrainShader, DurhamTerrainShaderPlugin,
+	DurhamSwatchUniform, DurhamTerrainBandUniform, DurhamTerrainNoiseUniform,
+	DurhamTerrainShader, DurhamTerrainShaderPlugin,
 };

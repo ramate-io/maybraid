@@ -29,12 +29,9 @@ impl Plugin for NatureScapesPlugin {
 		app.add_plugins(water::WaterPlaygroundPlugin);
 		app.add_plugins(terrain::TerrainPlaygroundPlugin {
 			material: DurhamTerrainShader::default(),
-			rock_detail_material: DurhamTerrainShader::default()
-				.with_base_color(Vec4::new(0.2, 0.1, 0.1, 1.0)), // reddish brown base color
-			second_rock_detail_material: DurhamTerrainShader::default()
-				.with_base_color(Vec4::new(0.5, 0.5, 0.5, 1.0)), // gray base color
-			tuft_detail_material: DurhamTerrainShader::default()
-				.with_base_color(Vec4::new(0.2, 0.8, 0.3, 1.0)), // green base color
+			rock_detail_material: DurhamTerrainShader::default(),
+			second_rock_detail_material: DurhamTerrainShader::default(),
+			tuft_detail_material: DurhamTerrainShader::default(),
 		});
 		app.add_plugins(vegetation::VegetationPlaygroundPlugin::<
 			EdgeMaterial,
