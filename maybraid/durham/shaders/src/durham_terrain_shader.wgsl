@@ -26,32 +26,37 @@ fn saturate(x: f32) -> f32 {
     return clamp(x, 0.0, 1.0);
 }
 
-fn hash21(p: vec2<f32>) -> f32 {
-    let q = vec2<f32>(
-        dot(p, vec2<f32>(127.1, 311.7)),
-        dot(p, vec2<f32>(269.5, 183.3))
+fn hash21(p: vec3<f32>) -> f32 {
+    let q = vec3<f32>(
+        dot(p, vec3<f32>(127.1, 311.7, 269.5)),
+        dot(p, vec3<f32>(269.5, 183.3, 127.1)),
+        dot(p, vec3<f32>(183.3, 127.1, 311.7))
     );
-    return fract(sin(q.x + q.y) * 43758.5453123);
+    return fract(sin(q.x + q.y + q.z) * 43758.5453123);
 }
 
-fn value_noise(p: vec2<f32>, seed: f32) -> f32 {
+fn value_noise(p: vec3<f32>, seed: f32) -> f32 {
     let i = floor(p);
-    let f = fract(p);
-    let u = f * f * (3.0 - 2.0 * f);
-    let s = vec2<f32>(seed * 17.13, seed * 31.71);
+    let nf = fract(p);
+    let u = nf * nf * (3.0 - 2.0 * nf);
+    let s = vec3<f32>(seed * 17.13, seed * 31.71, seed * 12.34);
 
-    let a = hash21(i + vec2<f32>(0.0, 0.0) + s);
-    let b = hash21(i + vec2<f32>(1.0, 0.0) + s);
-    let c = hash21(i + vec2<f32>(0.0, 1.0) + s);
-    let d = hash21(i + vec2<f32>(1.0, 1.0) + s);
+    let a = hash21(i + vec3<f32>(0.0, 0.0, 0.0) + s);
+    let b = hash21(i + vec3<f32>(1.0, 0.0, 0.0) + s);
+    let c = hash21(i + vec3<f32>(0.0, 1.0, 0.0) + s);
+    let d = hash21(i + vec3<f32>(1.0, 1.0, 0.0) + s);
+    let e = hash21(i + vec3<f32>(0.0, 0.0, 1.0) + s);
+    let f = hash21(i + vec3<f32>(1.0, 0.0, 1.0) + s);
+    let g = hash21(i + vec3<f32>(0.0, 1.0, 1.0) + s);
+    let h = hash21(i + vec3<f32>(1.0, 1.0, 1.0) + s);
 
-    return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
+    return mix(mix(mix(a, b, u.x), mix(c, d, u.x), u.y), mix(mix(e, f, u.x), mix(g, h, u.x), u.y), u.z);
 }
 
-fn fbm(p: vec2<f32>, seed: f32) -> f32 {
+fn fbm(p: vec3<f32>, seed: f32) -> f32 {
     var sum = 0.0;
     var amp = 0.5;
-    var freq = 1.0;
+    var freq = 0.0001;
 
     for (var octave = 0; octave < 5; octave = octave + 1) {
         sum += value_noise(p * freq, seed + f32(octave) * 19.17) * amp;
@@ -60,6 +65,38 @@ fn fbm(p: vec2<f32>, seed: f32) -> f32 {
     }
 
     return saturate(sum);
+}
+
+// Low-frequency control modulates local frequency (~0.35x–4x) for spatially varying dominant scale.
+fn fbm_continuous_scaled(p: vec3<f32>, seed: f32) -> f32 {
+    let c = fbm(p * 0.06, seed + 91.0);
+    let local_scale = exp2(mix(-1.5, 2.0, c));
+    return fbm(p * local_scale, seed + 12.0);
+}
+
+// Two-channel low FBM offsets the domain before the scaled FBM (multifractal / non-uniform hierarchy).
+fn domain_warp_offset(p: vec3<f32>, seed: f32) -> vec3<f32> {
+    let q = vec3<f32>(
+        fbm(p * 0.35 + vec3<f32>(17.1, 3.7, 1.0), seed + 10.0),
+        fbm(p * 0.35 + vec3<f32>(8.3, 29.4, 1.0), seed + 20.0),
+        fbm(p * 0.35 + vec3<f32>(1.0, 1.0, 1.0), seed + 30.0)
+    );
+    return (q - vec3<f32>(0.5)) * 4.0;
+}
+
+fn warped_scaled_fbm(p: vec3<f32>, seed: f32) -> f32 {
+    let warp = domain_warp_offset(p, seed);
+    let p_warped = p + warp;
+    return fbm_continuous_scaled(p_warped, seed + 3.0);
+}
+
+// Sinusoidal folds before palette: continuous, periodic-ish mineral bands.
+fn chaotic_periodic(t: f32, seed: f32) -> f32 {
+    var x = t;
+    x = x + 0.18 * sin(6.28318 * (x * 2.0 + seed * 0.13));
+    x = x + 0.10 * sin(6.28318 * (x * 5.0 + seed * 0.31));
+    x = x + 0.06 * sin(6.28318 * (x * 11.0 + seed * 0.57));
+    return saturate(x);
 }
 
 fn palette_sample(t: f32) -> vec3<f32> {
@@ -86,13 +123,14 @@ fn palette_sample(t: f32) -> vec3<f32> {
 }
 
 fn ground_color(world_position: vec3<f32>) -> vec3<f32> {
-    let world_xz = world_position.xz;
     let seed = noise_params.x;
-    let regional = fbm(world_xz * noise_params.y, seed);
-    let detail = fbm(world_xz * noise_params.z + vec2<f32>(11.7, -5.3), seed + 101.0);
-    let broad_shadow = fbm(world_xz * noise_params.y * 0.33 + vec2<f32>(41.0, 7.0), seed + 211.0);
+    let p = world_position;
+    let composed = warped_scaled_fbm(p, seed);
+    let t = chaotic_periodic(composed, seed);
+    let detail = fbm(p * noise_params.z + vec3<f32>(11.7, -5.3, 1.0), seed + 101.0);
+    let broad_shadow = fbm(p * 0.33 + vec3<f32>(41.0, 7.0, 1.0), seed + 211.0);
 
-    let palette_color = palette_sample(regional);
+    let palette_color = palette_sample(t);
     let value = mix(1.0 - noise_params.w, 1.0 + noise_params.w, detail);
     let mineral_drift = mix(0.88, 1.12, broad_shadow);
     let noisy_color = palette_color * value * mineral_drift;
