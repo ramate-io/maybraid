@@ -1,10 +1,20 @@
 //! Durham terrain material with world-space palette noise ([RFC-170 4.7](https://github.com/ramate-io/maybraid/issues/178)).
 
+mod band;
+mod noise_uniform;
+mod palettes;
+mod swatch;
+
+pub use band::DurhamTerrainBandUniform;
+pub use noise_uniform::{DurhamTerrainNoiseUniform, EVEN_BAND_BLEND_WEIGHT};
+pub use palettes::{macro_region_palette, micro_region_palette, EVEN_SWATCH_FOLD_WEIGHT};
+pub use swatch::DurhamSwatchUniform;
+
 use bevy::{
 	asset::embedded_asset,
 	prelude::*,
 	reflect::TypePath,
-	render::render_resource::{AsBindGroup, ShaderType},
+	render::render_resource::AsBindGroup,
 	shader::ShaderRef,
 };
 
@@ -15,109 +25,6 @@ impl Plugin for DurhamTerrainShaderPlugin {
 	fn build(&self, app: &mut App) {
 		embedded_asset!(app, "durham_terrain_shader.wgsl");
 		app.add_plugins(MaterialPlugin::<DurhamTerrainShader>::default());
-	}
-}
-
-/// One palette swatch: blend **`left.xyz` → `right.xyz`**; **`swatch_meta.x`** = fold-in weight (0–1).
-/// `swatch_meta.yzw` unused.
-#[derive(Clone, Copy, Debug, ShaderType)]
-pub struct DurhamSwatchUniform {
-	pub left: Vec4,
-	pub right: Vec4,
-	pub swatch_meta: Vec4,
-}
-
-/// Per-frequency band: own FBM scale, blend weight vs other bands, and **8 swatches** (independent palette).
-#[derive(Clone, Copy, Debug, ShaderType)]
-pub struct DurhamTerrainBandUniform {
-	/// `x` = noise seed for this band; `yzw` unused.
-	pub config: Vec4,
-	/// `x` = frequency, `y` = amplitude, `z` = weight vs other bands, `w` unused.
-	pub band_scale: Vec4,
-	pub swatches: [DurhamSwatchUniform; 8],
-}
-
-/// Full terrain noise config: **regional blend driver** + **4 bands** with swatch tables.
-#[derive(Clone, Copy, Debug, ShaderType)]
-pub struct DurhamTerrainNoiseUniform {
-	/// `x` = **frequency**, `y` = **amplitude** for the broadest FBM that perturbs inter-band blend weights (`t_warp`); `zw` unused.
-	pub regional_blend: Vec4,
-	pub bands: [DurhamTerrainBandUniform; 4],
-}
-
-fn default_swatches() -> [DurhamSwatchUniform; 8] {
-	[
-		DurhamSwatchUniform {
-			left: Vec4::new(0.36, 0.28, 0.20, 0.0),
-			right: Vec4::new(0.42, 0.38, 0.32, 0.0),
-			swatch_meta: Vec4::new(1.0, 0.0, 0.0, 0.0),
-		},
-		DurhamSwatchUniform {
-			left: Vec4::new(0.42, 0.38, 0.32, 0.0),
-			right: Vec4::new(0.45, 0.30, 0.22, 0.0),
-			swatch_meta: Vec4::new(1.0, 0.0, 0.0, 0.0),
-		},
-		DurhamSwatchUniform {
-			left: Vec4::new(0.45, 0.30, 0.22, 0.0),
-			right: Vec4::new(0.48, 0.44, 0.26, 0.0),
-			swatch_meta: Vec4::new(1.0, 0.0, 0.0, 0.0),
-		},
-		DurhamSwatchUniform {
-			left: Vec4::new(0.48, 0.44, 0.26, 0.0),
-			right: Vec4::new(0.20, 0.18, 0.16, 0.0),
-			swatch_meta: Vec4::new(1.0, 0.0, 0.0, 0.0),
-		},
-		DurhamSwatchUniform {
-			left: Vec4::new(0.20, 0.18, 0.16, 0.0),
-			right: Vec4::new(0.36, 0.28, 0.20, 0.0),
-			swatch_meta: Vec4::new(0.5, 0.0, 0.0, 0.0),
-		},
-		DurhamSwatchUniform {
-			left: Vec4::new(0.39, 0.33, 0.26, 0.0),
-			right: Vec4::new(0.435, 0.34, 0.24, 0.0),
-			swatch_meta: Vec4::new(0.5, 0.0, 0.0, 0.0),
-		},
-		DurhamSwatchUniform {
-			left: Vec4::new(0.435, 0.34, 0.24, 0.0),
-			right: Vec4::new(0.34, 0.31, 0.21, 0.0),
-			swatch_meta: Vec4::new(0.5, 0.0, 0.0, 0.0),
-		},
-		DurhamSwatchUniform {
-			left: Vec4::new(0.34, 0.31, 0.21, 0.0),
-			right: Vec4::new(0.42, 0.38, 0.32, 0.0),
-			swatch_meta: Vec4::new(0.5, 0.0, 0.0, 0.0),
-		},
-	]
-}
-
-impl Default for DurhamTerrainNoiseUniform {
-	fn default() -> Self {
-		let swatches = default_swatches();
-		Self {
-			regional_blend: Vec4::new(0.00015, 0.5, 0.0, 0.0),
-			bands: [
-				DurhamTerrainBandUniform {
-					config: Vec4::new(42.0, 0.0, 0.0, 0.0),
-					band_scale: Vec4::new(0.0001, 0.5, 0.35, 0.0),
-					swatches,
-				},
-				DurhamTerrainBandUniform {
-					config: Vec4::new(42.0, 0.0, 0.0, 0.0),
-					band_scale: Vec4::new(0.001, 0.5, 0.25, 0.0),
-					swatches,
-				},
-				DurhamTerrainBandUniform {
-					config: Vec4::new(42.0, 0.0, 0.0, 0.0),
-					band_scale: Vec4::new(0.01, 0.5, 0.25, 0.0),
-					swatches,
-				},
-				DurhamTerrainBandUniform {
-					config: Vec4::new(42.0, 0.0, 0.0, 0.0),
-					band_scale: Vec4::new(0.05, 0.4, 0.15, 0.0),
-					swatches,
-				},
-			],
-		}
 	}
 }
 
@@ -165,6 +72,15 @@ mod tests {
 		assert!((m.terrain_noise.regional_blend.x - 0.00015).abs() < 1e-8);
 		assert!((m.terrain_noise.regional_blend.y - 0.5).abs() < 1e-8);
 		assert!((m.style_params.w - 0.72).abs() < 1e-5);
+	}
+
+	#[test]
+	fn macro_band_uses_macro_palette_first_swatch_differs_from_micro() {
+		let m = DurhamTerrainShader::default();
+		assert_ne!(
+			m.terrain_noise.bands[0].swatches[0].left,
+			m.terrain_noise.bands[1].swatches[0].left
+		);
 	}
 
 	#[test]

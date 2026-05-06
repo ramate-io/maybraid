@@ -26,7 +26,7 @@ struct DurhamTerrainBand {
 }
 
 struct DurhamTerrainNoise {
-    // x = t_warp FBM frequency, y = t_warp FBM amplitude (broadest regional scale for blend perturbation); zw unused
+    // Reserved: x = regional FBM frequency, y = amplitude (e.g. future swatch/band selection warp); zw unused
     regional_blend: vec4<f32>,
     bands: array<DurhamTerrainBand, 4>,
 }
@@ -108,7 +108,7 @@ fn chaotic_periodic(t: f32, seed: f32) -> f32 {
 fn swatch_blend(t_noise: f32, band: DurhamTerrainBand) -> vec3<f32> {
     let t = saturate(t_noise);
     var blended = vec3<f32>(0.0);
-    for (var i = 0; i < 8; i = i + 1) {
+    for (var i = 0; i < 3; i = i + 1) {
         let f = fract(t * 1.618 + f32(i) * 0.37 + f32(i * i) * 0.03);
         let sel = min(i32(f * 8.0), 7);
         let sw = band.swatches[sel];
