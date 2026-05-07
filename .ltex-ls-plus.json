@@ -433,7 +433,9 @@
         "authorable",
         "SpeedTree",
         "Wildlands",
-        "MathJax"
+        "MathJax",
+        "accessor",
+        "accessors"
       ]
     },
     "bibtex": {
