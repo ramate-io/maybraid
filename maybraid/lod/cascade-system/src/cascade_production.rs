@@ -9,8 +9,8 @@ use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 use lod_cascade::{Cascade, Chunk};
 
-/// Axis-aligned bounds used for cascade motion (`AaBb` in the RFC).
-pub type CascadeBounds = Aabb3d;
+/// Axis-aligned bounds of the **track** entity whose snapshot drives cascade focal updates (`AaBb` in the RFC).
+pub type TrackBounds = Aabb3d;
 
 /// [`Chunk`](lod_cascade::Chunk) footprint stored on entities (production chunks and transient signals).
 #[derive(Component, Clone, Copy, PartialEq, Eq, Hash)]
@@ -47,8 +47,8 @@ impl<S: CascadeProductionSource> CascadeProduction<S> {
 /// Snapshot of focal bounds used to drive cascade deltas.
 #[derive(Component, Clone)]
 pub struct CascadePosition<D: Component + Clone + Send + Sync + 'static> {
-	pub previous: Option<CascadeBounds>,
-	pub current: CascadeBounds,
+	pub previous: Option<TrackBounds>,
+	pub current: TrackBounds,
 	pub data: D,
 }
 
@@ -83,7 +83,8 @@ pub trait RequirementBuilder: Component + Clone + Send + Sync + 'static + Defaul
 
 /// Typed production flow: query wiring + bounds accessors.
 ///
-/// Implement `QueryFilter` as `()` when no filter is needed.
+/// Implement `QueryFilter` as **`()`** if you need every-frame scheduling; [`StandardFlow`] defaults to
+/// **`Changed<MarkedBounds<T>>`** so producers run when the track [`MarkedBounds`] component changes.
 pub trait CascadeProductionSource: Send + Sync + 'static {
 	type PositionData: Component + Clone + Send + Sync + 'static;
 	type Builder: RequirementBuilder + Default;
@@ -92,7 +93,7 @@ pub trait CascadeProductionSource: Send + Sync + 'static {
 
 	fn entity(item: &<Self::QueryData as QueryData>::Item<'_, '_>) -> Entity;
 
-	fn current_position(item: &<Self::QueryData as QueryData>::Item<'_, '_>) -> CascadeBounds;
+	fn current_position(item: &<Self::QueryData as QueryData>::Item<'_, '_>) -> TrackBounds;
 
 	fn position_data(item: &<Self::QueryData as QueryData>::Item<'_, '_>) -> Self::PositionData;
 }
@@ -304,10 +305,10 @@ impl<S: CascadeProductionSource> Plugin for CascadeProductionPlugin<S> {
 	}
 }
 
-mod standard_marker;
+mod marked_bounds;
 mod standard_requirement;
 
-pub use standard_marker::{StandardBounds, StandardFlow, StandardMarker};
+pub use marked_bounds::{MarkedBounds, StandardFlow};
 pub use standard_requirement::StandardRequirement;
 
 #[cfg(test)]

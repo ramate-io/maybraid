@@ -6,8 +6,7 @@ use lod_cascade::{Cascade, Chunk};
 
 use super::super::{
 	CascadeChunk, CascadeProduction, CascadeProductionPlugin, CascadeProductionSignalMarker,
-	CascadeProductionSource, RequirementSignal, StandardBounds, StandardFlow, StandardMarker,
-	StandardRequirement,
+	CascadeProductionSource, MarkedBounds, RequirementSignal, StandardFlow, StandardRequirement,
 };
 
 /// Type tag for [`StandardFlow`] tests (flow A).
@@ -25,8 +24,11 @@ pub fn leaf_only_cascade() -> Cascade {
 	Cascade::new(Vec3::ONE, 0, None)
 }
 
-pub fn bounds_from_center_half_extents(center: Vec3, half_extents: Vec3) -> StandardBounds {
-	StandardBounds(Aabb3d::new(center, half_extents))
+pub fn marked_bounds_at_center_half_extents<T: Send + Sync + 'static>(
+	center: Vec3,
+	half_extents: Vec3,
+) -> MarkedBounds<T> {
+	MarkedBounds::new(Aabb3d::new(center, half_extents))
 }
 
 pub fn app_with_flow<T: Send + Sync + 'static>() -> App {
@@ -51,14 +53,13 @@ pub fn app_dual_flow() -> App {
 pub fn spawn_standard_producer<T: Send + Sync + 'static>(
 	world: &mut World,
 	cascade: Cascade,
-	bounds: StandardBounds,
+	marked_bounds: MarkedBounds<T>,
 	requirement: StandardRequirement,
 ) -> Entity {
 	world
 		.spawn((
 			CascadeProduction::<StandardFlow<T, StandardRequirement>>::new(cascade),
-			bounds,
-			StandardMarker::<T>::default(),
+			marked_bounds,
 			requirement,
 		))
 		.id()
@@ -70,43 +71,59 @@ pub fn expected_leaf_chunk_for_focal(focal: Vec3, cascade: &Cascade) -> Chunk {
 	Chunk::from_min_max(o, o + cascade.leaf_scale(), None)
 }
 
+pub fn chunk_footprint(world: &World, entity: Entity) -> Chunk {
+	let Some(cc) = world.entity(entity).get::<CascadeChunk>() else {
+		panic!("entity {entity:?} should carry CascadeChunk");
+	};
+	cc.0
+}
+
+pub fn producer_children<'w>(world: &'w World, producer: Entity) -> &'w Children {
+	let Some(children) = world.entity(producer).get::<Children>() else {
+		panic!("producer {producer:?} should own chunk children");
+	};
+	children
+}
+
 pub fn producer_table_entries<T: Send + Sync + 'static>(
 	world: &World,
 	producer: Entity,
 ) -> Vec<(Chunk, Entity)> {
-	world
+	let Some(prod) = world
 		.entity(producer)
 		.get::<CascadeProduction<StandardFlow<T, StandardRequirement>>>()
-		.expect("producer missing CascadeProduction")
-		.table
-		.table
-		.iter()
-		.map(|(&chunk, &entity)| (chunk, entity))
-		.collect()
+	else {
+		panic!("producer {producer:?} missing CascadeProduction");
+	};
+	prod.table.table.iter().map(|(&chunk, &entity)| (chunk, entity)).collect()
 }
 
 pub fn producer_chunk_table_len<T: Send + Sync + 'static>(
 	world: &World,
 	producer: Entity,
 ) -> usize {
-	world
+	let Some(prod) = world
 		.entity(producer)
 		.get::<CascadeProduction<StandardFlow<T, StandardRequirement>>>()
-		.expect("producer missing CascadeProduction")
-		.table
-		.table
-		.len()
+	else {
+		panic!("producer {producer:?} missing CascadeProduction");
+	};
+	prod.table.table.len()
 }
 
 pub fn producer_first_chunk_entity<T: Send + Sync + 'static>(
 	world: &World,
 	producer: Entity,
 ) -> Entity {
-	let prod = world
+	let Some(prod) = world
 		.entity(producer)
 		.get::<CascadeProduction<StandardFlow<T, StandardRequirement>>>()
-		.expect("producer missing CascadeProduction");
-	let (&_chunk, &entity) = prod.table.table.iter().next().expect("non-empty table");
+	else {
+		panic!("producer {producer:?} missing CascadeProduction");
+	};
+	let Some((&_chunk, &entity)) = prod.table.table.iter().next() else {
+		panic!("producer {producer:?} chunk table unexpectedly empty");
+	};
 	entity
 }
 
@@ -130,7 +147,7 @@ pub fn spawn_orphan_signal<T: Send + Sync + 'static>(
 		.spawn((
 			CascadeChunk(chunk),
 			signal,
-			StandardMarker::<T>::default(),
+			MarkedBounds::<T>::signal_placeholder(),
 			CascadeProductionSignalMarker::<StandardFlow<T, StandardRequirement>>::default(),
 		))
 		.id()

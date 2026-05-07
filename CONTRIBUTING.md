@@ -112,6 +112,10 @@ Any other description as the writer sees fit.
 
 Proposals will generally be satisfied by additions to repository documentation or inclusion of a written proposal in another knowledge base.
 
+## Rust tests
+
+Do **not** use [`.unwrap()`](https://doc.rust-lang.org/std/option/enum.Option.html#method.unwrap) or [`.expect(...)`](https://doc.rust-lang.org/std/option/enum.Option.html#method.expect) in test bodies: snippets are often copied into production code and the panicking accessors survive the paste. Prefer explicit control flow—`if let` / `match`, `let Some(x) = ... else { panic!(...) }`, or assertions that keep fallible access visible (`assert_eq!(opt, Some(...))`, etc.).
+
 Common external knowledge bases include:
 
 - [OAC](https://github.com/ramate-io/oac)

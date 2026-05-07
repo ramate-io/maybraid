@@ -1,13 +1,14 @@
 //! Different [`StandardFlow`] instantiations use disjoint marker components so garbage collection and
 //! production queries do not cross wires.
 
-use bevy::prelude::{Children, Vec3};
+use bevy::prelude::Vec3;
 use lod_cascade::Chunk;
 
-use super::super::{CascadeChunk, RequirementSignal, StandardRequirement};
+use super::super::{RequirementSignal, StandardRequirement};
 use super::test_utils::{
-	app_alpha_only, app_dual_flow, bounds_from_center_half_extents, expected_leaf_chunk_for_focal,
-	leaf_only_cascade, producer_chunk_table_len, producer_first_chunk_entity, spawn_orphan_signal,
+	app_alpha_only, app_dual_flow, chunk_footprint, expected_leaf_chunk_for_focal,
+	leaf_only_cascade, marked_bounds_at_center_half_extents, producer_children,
+	producer_chunk_table_len, producer_first_chunk_entity, spawn_orphan_signal,
 	spawn_standard_producer, typed_signal_count, AlphaFlow, BetaFlow, FlowAlpha, FlowBeta,
 };
 
@@ -57,8 +58,10 @@ fn dual_flows_spawn_distinct_leaf_chunks_matching_geometry() {
 	let alpha_center = Vec3::new(0.5, 0.5, 0.5);
 	let beta_center = Vec3::new(10.5, 0.5, 0.5);
 
-	let alpha_bounds = bounds_from_center_half_extents(alpha_center, Vec3::splat(10.0));
-	let beta_bounds = bounds_from_center_half_extents(beta_center, Vec3::splat(10.0));
+	let alpha_bounds =
+		marked_bounds_at_center_half_extents::<FlowAlpha>(alpha_center, Vec3::splat(10.0));
+	let beta_bounds =
+		marked_bounds_at_center_half_extents::<FlowBeta>(beta_center, Vec3::splat(10.0));
 
 	let alpha_prod = spawn_standard_producer::<FlowAlpha>(
 		app.world_mut(),
@@ -86,22 +89,32 @@ fn dual_flows_spawn_distinct_leaf_chunks_matching_geometry() {
 		"fixture focal cells should disagree so flows stay distinguishable",
 	);
 
+	let alpha_work = cascade.cascade_footprints(alpha_center);
+	let beta_work = cascade.cascade_footprints(beta_center);
+	assert!(
+		alpha_work.contains(&expected_alpha),
+		"alpha expected chunk must appear in cascade footprint set at alpha focal",
+	);
+	assert!(
+		beta_work.contains(&expected_beta),
+		"beta expected chunk must appear in cascade footprint set at beta focal",
+	);
+
 	let alpha_chunk_ent = producer_first_chunk_entity::<FlowAlpha>(world, alpha_prod);
 	let beta_chunk_ent = producer_first_chunk_entity::<FlowBeta>(world, beta_prod);
 
 	assert_ne!(alpha_chunk_ent, beta_chunk_ent);
 
-	assert_eq!(world.entity(alpha_chunk_ent).get::<CascadeChunk>().unwrap().0, expected_alpha);
-	assert_eq!(world.entity(beta_chunk_ent).get::<CascadeChunk>().unwrap().0, expected_beta);
+	let alpha_fp = chunk_footprint(world, alpha_chunk_ent);
+	let beta_fp = chunk_footprint(world, beta_chunk_ent);
 
-	let alpha_children = world
-		.entity(alpha_prod)
-		.get::<Children>()
-		.expect("alpha producer should own chunk children");
-	let beta_children = world
-		.entity(beta_prod)
-		.get::<Children>()
-		.expect("beta producer should own chunk children");
+	assert_eq!(alpha_fp, expected_alpha);
+	assert_eq!(beta_fp, expected_beta);
+	assert_eq!(alpha_fp.extent(), cascade.leaf_scale());
+	assert_eq!(beta_fp.extent(), cascade.leaf_scale());
+
+	let alpha_children = producer_children(world, alpha_prod);
+	let beta_children = producer_children(world, beta_prod);
 
 	assert!(alpha_children.iter().any(|c| *c == alpha_chunk_ent));
 	assert!(beta_children.iter().any(|c| *c == beta_chunk_ent));
