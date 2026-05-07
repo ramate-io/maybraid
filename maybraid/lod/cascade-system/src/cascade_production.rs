@@ -1,5 +1,5 @@
-//! [`CascadeProduction`] / [`produce_cascade`] from [RFC-154 §3.2](https://github.com/ramate-io/maybraid/blob/main/rfc/rfc-000-000-154-generalized-lod/README.md#32-cascadeproduction)
-//! ([issue #159](https://github.com/ramate-io/maybraid/issues/159)).
+//! [`CascadeProduction`] / [`produce_cascade`]: geometry deltas (**[`lod_cascade::Cascade::new_chunks`]** /
+//! **[`lod_cascade::Cascade::expired_chunks`]**) plus a context-aware [`RequirementBuilder`].
 
 use std::collections::HashMap;
 use std::marker::PhantomData;
@@ -30,7 +30,7 @@ pub struct CascadeTable {
 	pub table: HashMap<Chunk, Entity>,
 }
 
-/// Producer component: geometry kernel plus chunk entity table ([RFC §3.2.1](https://github.com/ramate-io/maybraid/blob/main/rfc/rfc-000-000-154-generalized-lod/README.md#321-core-components)).
+/// Producer component: geometry kernel plus chunk entity table.
 #[derive(Component)]
 pub struct CascadeProduction<S: CascadeProductionSource> {
 	pub cascade: Cascade,
@@ -48,7 +48,7 @@ impl<S: CascadeProductionSource> CascadeProduction<S> {
 	}
 }
 
-/// Snapshot of focal bounds used to drive [`Cascade::new_chunks`].
+/// Snapshot of focal bounds used to drive cascade deltas.
 #[derive(Component, Clone)]
 pub struct CascadePosition<D: Component + Clone + Send + Sync + 'static> {
 	pub previous: Option<CascadeBounds>,
@@ -56,7 +56,6 @@ pub struct CascadePosition<D: Component + Clone + Send + Sync + 'static> {
 	pub data: D,
 }
 
-/// Endemic chunk outcome carried as its own component on signal entities ([RFC §3.2.2](https://github.com/ramate-io/maybraid/blob/main/rfc/rfc-000-000-154-generalized-lod/README.md#322-requirement-signal)).
 #[derive(Component, Clone, Copy, PartialEq, Eq, Debug)]
 pub enum RequirementSignal {
 	Visible,
@@ -64,28 +63,34 @@ pub enum RequirementSignal {
 	Remove,
 }
 
-/// Requirement placed on chunk entities; exposes the desired [`RequirementSignal`].
-pub trait CascadeRequirement: Component + Clone + Send + Sync + 'static {
-	fn signal(&self) -> RequirementSignal;
+/// Policy for footprint transitions. Only **`signal_for_new`** and **`signal_for_expired`** run each tick;
+/// chunks that remain inside both snapshots are left unchanged.
+pub trait RequirementBuilder: Component + Clone + Send + Sync + 'static + Default {
+	fn signal_for_new<D: Component + Clone + Send + Sync + 'static>(
+		&self,
+		_cascade: &Cascade,
+		_position: &CascadePosition<D>,
+		_chunk: Chunk,
+	) -> RequirementSignal {
+		RequirementSignal::Visible
+	}
+
+	fn signal_for_expired<D: Component + Clone + Send + Sync + 'static>(
+		&self,
+		_cascade: &Cascade,
+		_position: &CascadePosition<D>,
+		_chunk: Chunk,
+	) -> RequirementSignal {
+		RequirementSignal::Remove
+	}
 }
 
-/// Builds per-footprint requirements from the current [`CascadePosition`].
-pub trait RequirementBuilder<R>: Component + Clone + Send + Sync + 'static
-where
-	R: CascadeRequirement,
-{
-	fn build<D>(&self, position: &CascadePosition<D>, chunk: Chunk) -> R
-	where
-		D: Component + Clone + Send + Sync + 'static;
-}
-
-/// Typed production flow: query wiring + bounds accessors ([RFC §3.2.4](https://github.com/ramate-io/maybraid/blob/main/rfc/rfc-000-000-154-generalized-lod/README.md#324-source-trait)).
+/// Typed production flow: query wiring + bounds accessors.
 ///
 /// Implement `QueryFilter` as `()` when no filter is needed.
 pub trait CascadeProductionSource: Send + Sync + 'static {
 	type PositionData: Component + Clone + Send + Sync + 'static;
-	type Requirement: CascadeRequirement;
-	type Builder: RequirementBuilder<Self::Requirement> + Default;
+	type Builder: RequirementBuilder + Default;
 	type QueryData: QueryData;
 	type QueryFilter: QueryFilter + Send + Sync + 'static;
 
@@ -96,7 +101,7 @@ pub trait CascadeProductionSource: Send + Sync + 'static {
 	fn position_data(item: &<Self::QueryData as QueryData>::Item<'_, '_>) -> Self::PositionData;
 }
 
-/// ZST marker on transient `(chunk, signal, …)` entities so garbage collection can target them ([RFC §3.2.5](https://github.com/ramate-io/maybraid/blob/main/rfc/rfc-000-000-154-generalized-lod/README.md#325-signal-entities)).
+/// ZST marker on transient signal entities so garbage collection can target them.
 #[derive(Component)]
 pub struct CascadeProductionSignalMarker<S>(PhantomData<S>);
 
@@ -106,7 +111,7 @@ impl<S> Default for CascadeProductionSignalMarker<S> {
 	}
 }
 
-/// Runs **`before`** [`produce_cascade`] ([RFC §3.2.13](https://github.com/ramate-io/maybraid/blob/main/rfc/rfc-000-000-154-generalized-lod/README.md#3213-garbage-collect-requirement-signals)).
+/// Runs **`before`** [`produce_cascade`].
 pub fn garbage_collect_requirement_signals<S: CascadeProductionSource>(
 	mut commands: Commands,
 	signals: Query<
@@ -123,7 +128,6 @@ pub fn garbage_collect_requirement_signals<S: CascadeProductionSource>(
 	}
 }
 
-/// Full production tick ([RFC §3.2.6](https://github.com/ramate-io/maybraid/blob/main/rfc/rfc-000-000-154-generalized-lod/README.md#326-system)).
 pub fn produce_cascade<S: CascadeProductionSource>(
 	mut commands: Commands,
 	mut query: Query<
@@ -195,11 +199,20 @@ fn update_cascade_chunks<S: CascadeProductionSource>(
 	position: &CascadePosition<S::PositionData>,
 	builder: &S::Builder,
 ) {
-	let new_chunks = production
-		.cascade
-		.new_chunks(position.previous, position.current);
+	let cascade = production.cascade;
 
-	apply_requirements_to_new_chunks::<S>(
+	let expired_chunks = cascade.expired_chunks(position.previous, position.current);
+	apply_expired_chunks::<S>(
+		commands,
+		item,
+		production,
+		position,
+		builder,
+		&expired_chunks,
+	);
+
+	let new_chunks = cascade.new_chunks(position.previous, position.current);
+	apply_new_chunks::<S>(
 		commands,
 		producer,
 		item,
@@ -208,17 +221,41 @@ fn update_cascade_chunks<S: CascadeProductionSource>(
 		builder,
 		&new_chunks,
 	);
-
-	apply_requirements_to_existing_chunks::<S>(
-		commands,
-		item,
-		production,
-		position,
-		builder,
-	);
 }
 
-fn apply_requirements_to_new_chunks<S: CascadeProductionSource>(
+fn apply_expired_chunks<S: CascadeProductionSource>(
+	commands: &mut Commands,
+	item: &<S::QueryData as QueryData>::Item<'_, '_>,
+	production: &mut CascadeProduction<S>,
+	position: &CascadePosition<S::PositionData>,
+	builder: &S::Builder,
+	expired_chunks: &[Chunk],
+) {
+	for &chunk in expired_chunks {
+		let Some(chunk_entity) = production.table.table.get(&chunk).copied() else {
+			continue;
+		};
+
+		let signal = builder.signal_for_expired(&production.cascade, position, chunk);
+
+		match signal {
+			RequirementSignal::Visible => {
+				commands.entity(chunk_entity).insert(Visibility::Visible);
+			}
+			RequirementSignal::Hidden => {
+				commands.entity(chunk_entity).insert(Visibility::Hidden);
+				spawn_requirement_signal::<S>(commands, item, chunk, signal);
+			}
+			RequirementSignal::Remove => {
+				production.table.table.remove(&chunk);
+				commands.entity(chunk_entity).despawn();
+				spawn_requirement_signal::<S>(commands, item, chunk, signal);
+			}
+		}
+	}
+}
+
+fn apply_new_chunks<S: CascadeProductionSource>(
 	commands: &mut Commands,
 	producer: Entity,
 	item: &<S::QueryData as QueryData>::Item<'_, '_>,
@@ -228,87 +265,34 @@ fn apply_requirements_to_new_chunks<S: CascadeProductionSource>(
 	new_chunks: &[Chunk],
 ) {
 	for &chunk in new_chunks {
-		let requirement = builder.build(position, chunk);
-		let signal = requirement.signal();
+		let signal = builder.signal_for_new(&production.cascade, position, chunk);
 
 		match signal {
 			RequirementSignal::Visible => {
-				let chunk_entity = *production
-					.table
-					.table
-					.entry(chunk)
-					.or_insert_with(|| {
-						let e = commands
-							.spawn((CascadeChunk(chunk), Visibility::Visible))
-							.id();
-						commands.entity(producer).add_child(e);
-						e
-					});
+				let chunk_entity = *production.table.table.entry(chunk).or_insert_with(|| {
+					let e = commands
+						.spawn((CascadeChunk(chunk), Visibility::Visible))
+						.id();
+					commands.entity(producer).add_child(e);
+					e
+				});
 
-				commands
-					.entity(chunk_entity)
-					.insert((requirement, Visibility::Visible));
+				commands.entity(chunk_entity).insert(Visibility::Visible);
 			}
 			RequirementSignal::Hidden => {
-				let chunk_entity = *production
-					.table
-					.table
-					.entry(chunk)
-					.or_insert_with(|| {
-						let e = commands
-							.spawn((CascadeChunk(chunk), Visibility::Hidden))
-							.id();
-						commands.entity(producer).add_child(e);
-						e
-					});
+				let chunk_entity = *production.table.table.entry(chunk).or_insert_with(|| {
+					let e = commands
+						.spawn((CascadeChunk(chunk), Visibility::Hidden))
+						.id();
+					commands.entity(producer).add_child(e);
+					e
+				});
 
-				commands
-					.entity(chunk_entity)
-					.insert((requirement, Visibility::Hidden));
+				commands.entity(chunk_entity).insert(Visibility::Hidden);
 
 				spawn_requirement_signal::<S>(commands, item, chunk, signal);
 			}
 			RequirementSignal::Remove => {
-				spawn_requirement_signal::<S>(commands, item, chunk, signal);
-			}
-		}
-	}
-}
-
-fn apply_requirements_to_existing_chunks<S: CascadeProductionSource>(
-	commands: &mut Commands,
-	item: &<S::QueryData as QueryData>::Item<'_, '_>,
-	production: &mut CascadeProduction<S>,
-	position: &CascadePosition<S::PositionData>,
-	builder: &S::Builder,
-) {
-	let existing: Vec<(Chunk, Entity)> = production
-		.table
-		.table
-		.iter()
-		.map(|(&chunk, &entity)| (chunk, entity))
-		.collect();
-
-	for (chunk, entity) in existing {
-		let requirement = builder.build(position, chunk);
-		let signal = requirement.signal();
-
-		match signal {
-			RequirementSignal::Visible => {
-				commands
-					.entity(entity)
-					.insert((requirement, Visibility::Visible));
-			}
-			RequirementSignal::Hidden => {
-				commands
-					.entity(entity)
-					.insert((requirement, Visibility::Hidden));
-
-				spawn_requirement_signal::<S>(commands, item, chunk, signal);
-			}
-			RequirementSignal::Remove => {
-				production.table.table.remove(&chunk);
-				commands.entity(entity).despawn();
 				spawn_requirement_signal::<S>(commands, item, chunk, signal);
 			}
 		}
@@ -330,7 +314,6 @@ fn spawn_requirement_signal<S: CascadeProductionSource>(
 	));
 }
 
-/// Registers [`garbage_collect_requirement_signals`] → [`produce_cascade`] on [`Update`] ([RFC §3.2.14](https://github.com/ramate-io/maybraid/blob/main/rfc/rfc-000-000-154-generalized-lod/README.md#3214-plugin)).
 #[derive(Default)]
 pub struct CascadeProductionPlugin<S>(PhantomData<S>);
 

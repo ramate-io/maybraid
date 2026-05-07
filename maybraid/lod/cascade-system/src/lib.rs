@@ -7,6 +7,6 @@ pub mod cascade_production;
 pub use cascade_production::{
 	garbage_collect_requirement_signals, produce_cascade, CascadeBounds, CascadeChunk,
 	CascadePosition, CascadeProduction, CascadeProductionPlugin,
-	CascadeProductionSignalMarker, CascadeProductionSource, CascadeRequirement, CascadeTable,
-	RequirementBuilder, RequirementSignal,
+	CascadeProductionSignalMarker, CascadeProductionSource, CascadeTable, RequirementBuilder,
+	RequirementSignal,
 };
