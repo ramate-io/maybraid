@@ -67,12 +67,12 @@ impl Chunk {
 	}
 
 	#[inline]
-	pub fn min(&self) -> Vec3 {
+	pub fn bounds_min(&self) -> Vec3 {
 		self.bounds.min.into()
 	}
 
 	#[inline]
-	pub fn max(&self) -> Vec3 {
+	pub fn bounds_max(&self) -> Vec3 {
 		self.bounds.max.into()
 	}
 
@@ -93,9 +93,10 @@ impl Chunk {
 	pub fn overlap_volume(&self, query: &Aabb3d) -> f32 {
 		let v = intersection_volume(&self.bounds, query);
 		if let Some(omit) = self.omit {
-			let omit_in_outer = aabb_intersect(self.bounds, omit);
-			let v_omit = intersection_volume(&omit_in_outer, query);
-			return (v - v_omit).max(0.0);
+			if let Some(omit_in_outer) = non_empty_aabb_intersect(self.bounds, omit) {
+				let v_omit = intersection_volume(&omit_in_outer, query);
+				return (v - v_omit).max(0.0);
+			}
 		}
 		v
 	}
@@ -124,8 +125,15 @@ fn hash_aabb(a: Aabb3d, state: &mut impl Hasher) {
 	hash_vec3a(a.max, state);
 }
 
-fn aabb_intersect(a: Aabb3d, b: Aabb3d) -> Aabb3d {
-	Aabb3d::from_min_max(a.min.max(b.min), a.max.min(b.max))
+/// Non-empty intersection of two axis-aligned boxes, if any.
+fn non_empty_aabb_intersect(a: Aabb3d, b: Aabb3d) -> Option<Aabb3d> {
+	let min = a.min.max(b.min);
+	let max = a.max.min(b.max);
+	if min.x <= max.x && min.y <= max.y && min.z <= max.z {
+		Some(Aabb3d::from_min_max(min, max))
+	} else {
+		None
+	}
 }
 
 fn intersection_volume(a: &Aabb3d, b: &Aabb3d) -> f32 {

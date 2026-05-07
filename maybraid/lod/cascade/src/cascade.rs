@@ -104,6 +104,26 @@ impl Cascade {
 		self.grid.as_mut()
 	}
 
+	/// Hollow \(3 \times 3 \times 3\) shell at `anchor`: 26 axis-aligned cells sharing extent `cell_extent`, omitting the center cell.
+	pub fn hollow_shell(anchor: Vec3, cell_extent: Vec3) -> impl Iterator<Item = Chunk> {
+		(0_u32..3).flat_map(move |x| {
+			(0_u32..3).flat_map(move |y| {
+				(0_u32..3).filter_map(move |z| {
+					if x == 1 && y == 1 && z == 1 {
+						return None;
+					}
+					let corner = anchor
+						+ Vec3::new(
+							x as f32 * cell_extent.x,
+							y as f32 * cell_extent.y,
+							z as f32 * cell_extent.z,
+						);
+					Some(Chunk::from_min_max(corner, corner + cell_extent, None))
+				})
+			})
+		})
+	}
+
 	/// Ring shell cell extent \(\mathbf s_k = \mathbf s_0\,3^k\) per axis.
 	#[inline]
 	pub fn ring_cell_extent(&self, ring: u8) -> Vec3 {
@@ -170,7 +190,7 @@ impl Cascade {
 		let mut anchor = leaf_origin - self.leaf_scale;
 		for k in 0..self.rings {
 			let extent = self.ring_cell_extent(k);
-			out.extend(hollow_shell(anchor, extent));
+			out.extend(Self::hollow_shell(anchor, extent));
 			anchor -= self.ring_cell_extent(k + 1);
 		}
 		out
@@ -244,21 +264,148 @@ impl Cascade {
 	}
 }
 
-fn hollow_shell(anchor: Vec3, extent: Vec3) -> impl Iterator<Item = Chunk> {
-	(0_u32..3).flat_map(move |x| {
-		(0_u32..3).flat_map(move |y| {
-			(0_u32..3).filter_map(move |z| {
-				if x == 1 && y == 1 && z == 1 {
-					return None;
-				}
-				let corner = anchor
-					+ Vec3::new(
-						x as f32 * extent.x,
-						y as f32 * extent.y,
-						z as f32 * extent.z,
-					);
-				Some(Chunk::from_min_max(corner, corner + extent, None))
-			})
-		})
-	})
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use std::collections::hash_map::DefaultHasher;
+	use std::collections::BTreeSet;
+	use std::hash::{Hash, Hasher};
+
+	fn cubic(s: f32, rings: u8, grid: Option<GridConfig>) -> Cascade {
+		Cascade::new(Vec3::splat(s), rings, grid)
+	}
+
+	fn cube_bb(center: Vec3, half: f32) -> Aabb3d {
+		Aabb3d::from_min_max(center - Vec3::splat(half), center + Vec3::splat(half))
+	}
+
+	#[test]
+	fn one_ring_is_leaf_plus_hollow_shell() {
+		let c = cubic(1.0, 1, None);
+		let p = Vec3::ZERO;
+		let leaf = Chunk::cube(Vec3::ZERO, 1.0, None);
+		let anchor = Vec3::splat(-1.0);
+		let mut expected = HashSet::new();
+		expected.insert(leaf);
+		expected.extend(Cascade::hollow_shell(anchor, Vec3::ONE));
+		let actual = c.cascade_footprints(p);
+		assert_eq!(actual.len(), 27);
+		assert_eq!(actual, expected);
+	}
+
+	#[test]
+	fn two_rings_shell_anchors_match_legacy_chunk_tests() {
+		let c = cubic(1.0, 2, None);
+		let mut expected = HashSet::new();
+		expected.insert(Chunk::cube(Vec3::ZERO, 1.0, None));
+		expected.extend(Cascade::hollow_shell(Vec3::splat(-1.0), Vec3::ONE));
+		expected.extend(Cascade::hollow_shell(Vec3::new(-4.0, -4.0, -4.0), Vec3::splat(3.0)));
+		let actual = c.cascade_footprints(Vec3::ZERO);
+		assert_eq!(actual.len(), 53);
+		assert_eq!(actual, expected);
+	}
+
+	#[test]
+	fn ring_sizes_other_than_one() {
+		for &(scale, rings) in &[(2.5_f32, 1_u8), (0.5_f32, 1_u8)] {
+			let c = cubic(scale, rings, None);
+			let leaf = Chunk::cube(Vec3::ZERO, scale, None);
+			let anchor = Vec3::splat(-scale);
+			let ext = Vec3::splat(scale);
+			let mut expected = HashSet::new();
+			expected.insert(leaf);
+			expected.extend(Cascade::hollow_shell(anchor, ext));
+			let actual = c.cascade_footprints(Vec3::ZERO);
+			assert_eq!(actual.len(), 27, "scale={scale}");
+			assert_eq!(actual, expected);
+		}
+	}
+
+	#[test]
+	fn grid_tiles_carry_hull_omission_and_cover_focal() {
+		let grid = Some(GridConfig::new(0, [0, 0, 0]));
+		let c = cubic(1.0, 1, grid);
+		let focal = Vec3::ZERO;
+		let hull = c.hull(focal);
+		let tiles = c.grid_footprints(focal);
+		assert_eq!(tiles.len(), 1);
+		let tile = tiles.into_iter().next().unwrap();
+		assert_eq!(tile.omit(), Some(hull));
+		let g = c.grid_chunk_edge().unwrap();
+		assert!((tile.max_extent_component() - g).abs() < 1e-5);
+	}
+
+	#[test]
+	fn grid_tile_overlap_outside_hull_is_positive() {
+		let c = cubic(1.0, 1, Some(GridConfig::new(0, [1, 1, 1])));
+		let focal = Vec3::ZERO;
+		let hull = c.hull(focal);
+		let hx = hull.max.x;
+		let skirt_tile = c
+			.grid_footprints(focal)
+			.into_iter()
+			.find(|ch| ch.bounds_min().x >= hx - 1e-5)
+			.expect("expected a grid tile beyond +x hull face");
+		let center = (skirt_tile.bounds_min() + skirt_tile.bounds_max()) * 0.5;
+		let query = cube_bb(center, 0.25);
+		assert!(
+			skirt_tile.overlap_volume(&query) > 0.0,
+			"skirt footprint should overlap an interior probe away from the hull hole"
+		);
+	}
+
+	#[test]
+	fn new_chunks_empty_when_focal_unchanged_across_snapshots() {
+		let c = cubic(1.0, 1, None);
+		let bb = cube_bb(Vec3::ZERO, 0.25);
+		let delta = c.new_chunks(Some(bb), bb);
+		assert!(
+			delta.is_empty(),
+			"same work set should yield no new footprints"
+		);
+	}
+
+	#[test]
+	fn new_chunks_nonempty_when_leaf_cell_changes() {
+		let c = cubic(1.0, 1, None);
+		let prev = cube_bb(Vec3::new(0.25, 0.0, 0.0), 0.05);
+		let curr = cube_bb(Vec3::new(2.5, 0.0, 0.0), 0.05);
+		let delta = c.new_chunks(Some(prev), curr);
+		assert!(
+			!delta.is_empty(),
+			"crossing a leaf boundary should introduce new chunks"
+		);
+	}
+
+	#[test]
+	fn all_possible_new_chunks_unions_work_sets() {
+		let c = cubic(1.0, 1, None);
+		let a = cube_bb(Vec3::ZERO, 0.2);
+		let b = cube_bb(Vec3::new(5.0, 0.0, 0.0), 0.2);
+		let union_keys: HashSet<Chunk> = c.all_possible_new_chunks(Some(a), b).into_iter().collect();
+		let wa = c.work_set_at_focal(a.center().into());
+		let wb = c.work_set_at_focal(b.center().into());
+		let mut manual = wa;
+		manual.extend(wb);
+		assert_eq!(union_keys, manual);
+	}
+
+	#[test]
+	fn chunk_hash_stable_for_identical_geometry() {
+		let ch = Chunk::cube(Vec3::new(1.0, -2.0, 3.0), 4.0, None);
+		let mut h1 = DefaultHasher::new();
+		let mut h2 = DefaultHasher::new();
+		ch.hash(&mut h1);
+		ch.hash(&mut h2);
+		assert_eq!(h1.finish(), h2.finish());
+	}
+
+	#[test]
+	fn chunk_sort_order_deterministic() {
+		let c = cubic(1.0, 1, None);
+		let set = c.cascade_footprints(Vec3::ZERO);
+		let v1: Vec<_> = set.iter().copied().collect::<BTreeSet<_>>().into_iter().collect();
+		let v2: Vec<_> = set.iter().copied().collect::<BTreeSet<_>>().into_iter().collect();
+		assert_eq!(v1, v2);
+	}
 }
