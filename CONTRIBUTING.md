@@ -112,12 +112,6 @@ Any other description as the writer sees fit.
 
 Proposals will generally be satisfied by additions to repository documentation or inclusion of a written proposal in another knowledge base.
 
-## Rust tests
-
-Do **not** use [`.unwrap()`](https://doc.rust-lang.org/std/option/enum.Option.html#method.unwrap), [`.expect(...)`](https://doc.rust-lang.org/std/option/enum.Option.html#method.expect), or [`panic!(...)`](https://doc.rust-lang.org/std/macro.panic.html) in test bodies—those snippets are often copied into production code and keep failing habits.
-
-Prefer **`Result`** propagation instead: write helpers that return something like **`anyhow::Result`** (or your crate’s error type), use **`?`**, and declare **`#[test] fn case() -> anyhow::Result<()>`**, so harness failures surface structured errors. [`assert!`](https://doc.rust-lang.org/std/macro.assert.html) / [`assert_eq!`](https://doc.rust-lang.org/std/macro.assert_eq.html) remain appropriate for expectations.
-
 Common external knowledge bases include:
 
 - [OAC](https://github.com/ramate-io/oac)
@@ -152,3 +146,9 @@ Common external knowledge bases include:
 > gh project item-add 2 --owner ramate-io --url https://github.com/ramate-io/maybraid/issues/<NEW#>
 > gh project item-add 17 --owner ramate-io --url https://github.com/ramate-io/maybraid/issues/<NEW#>
 > ```
+
+## Rust tests
+
+Do **not** use [`.unwrap()`](https://doc.rust-lang.org/std/option/enum.Option.html#method.unwrap), [`.expect(...)`](https://doc.rust-lang.org/std/option/enum.Option.html#method.expect), or [`panic!(...)`](https://doc.rust-lang.org/std/macro.panic.html) in test bodies—those snippets are often copied into production code and keep failing habits.
+
+Prefer **`Result`** propagation instead: write helpers that return something like **`anyhow::Result`** (or your crate’s error type), use **`?`**, and declare **`#[test] fn case() -> anyhow::Result<()>`**, so harness failures surface structured errors. [`assert!`](https://doc.rust-lang.org/std/macro.assert.html) / [`assert_eq!`](https://doc.rust-lang.org/std/macro.assert_eq.html) remain appropriate for expectations.
