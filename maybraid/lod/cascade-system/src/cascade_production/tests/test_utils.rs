@@ -52,15 +52,37 @@ pub fn spawn_standard_producer<T: Send + Sync + 'static>(
 	world: &mut World,
 	cascade: Cascade,
 	bounds: StandardBounds,
+	requirement: StandardRequirement,
 ) -> Entity {
 	world
 		.spawn((
 			CascadeProduction::<StandardFlow<T, StandardRequirement>>::new(cascade),
 			bounds,
 			StandardMarker::<T>::default(),
-			StandardRequirement,
+			requirement,
 		))
 		.id()
+}
+
+/// Leaf footprint at `focal` for `cascade` (`rings == 0` ⇒ one cube per focal).
+pub fn expected_leaf_chunk_for_focal(focal: Vec3, cascade: &Cascade) -> Chunk {
+	let o = cascade.leaf_origin(focal);
+	Chunk::from_min_max(o, o + cascade.leaf_scale(), None)
+}
+
+pub fn producer_table_entries<T: Send + Sync + 'static>(
+	world: &World,
+	producer: Entity,
+) -> Vec<(Chunk, Entity)> {
+	world
+		.entity(producer)
+		.get::<CascadeProduction<StandardFlow<T, StandardRequirement>>>()
+		.expect("producer missing CascadeProduction")
+		.table
+		.table
+		.iter()
+		.map(|(&chunk, &entity)| (chunk, entity))
+		.collect()
 }
 
 pub fn producer_chunk_table_len<T: Send + Sync + 'static>(

@@ -4,6 +4,7 @@ use bevy::prelude::*;
 use lod_cascade::Chunk;
 
 use super::super::CascadeChunk;
+use super::super::StandardRequirement;
 use super::test_utils::{
 	app_with_flow, bounds_from_center_half_extents, chunk_entity_alive, leaf_only_cascade,
 	producer_chunk_table_len, producer_first_chunk_entity, spawn_standard_producer, FlowAlpha,
@@ -15,7 +16,12 @@ fn leaf_only_cascade_spawns_single_chunk_and_parents_under_producer() {
 	let cascade = leaf_only_cascade();
 	let bounds = bounds_from_center_half_extents(Vec3::splat(0.5), Vec3::splat(50.0));
 
-	let producer = spawn_standard_producer::<FlowAlpha>(app.world_mut(), cascade, bounds);
+	let producer = spawn_standard_producer::<FlowAlpha>(
+		app.world_mut(),
+		cascade,
+		bounds,
+		StandardRequirement::default(),
+	);
 
 	app.update();
 
@@ -48,7 +54,12 @@ fn unchanged_bounds_second_tick_keeps_same_chunk_entity() {
 	let cascade = leaf_only_cascade();
 	let bounds = bounds_from_center_half_extents(Vec3::new(0.5, 0.5, 0.5), Vec3::splat(10.0));
 
-	let producer = spawn_standard_producer::<FlowAlpha>(app.world_mut(), cascade, bounds);
+	let producer = spawn_standard_producer::<FlowAlpha>(
+		app.world_mut(),
+		cascade,
+		bounds,
+		StandardRequirement::default(),
+	);
 
 	app.update();
 	let chunk_after_first = producer_first_chunk_entity::<FlowAlpha>(app.world(), producer);
