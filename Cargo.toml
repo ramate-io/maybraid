@@ -12,6 +12,15 @@ members = [
   "maybraid/lod/cascade",
   "maybraid/lod/cascade-system",
 
+  "maybraid/sdf/common",
+
+  "maybraid/chico/lib",
+  "maybraid/chico/sbs-trees",
+  "maybraid/chico/sdf",
+  "maybraid/chico/ball-components",
+  "maybraid/chico/stick-components",
+  "maybraid/chico/tree-components",
+  "maybraid/chico/sbs-geometry",
 
   # legacy still being refactored out: engine
   "engine",
@@ -140,6 +149,16 @@ durham-terrain-shaders = { path = "maybraid/durham/shaders" }
 lod = { path = "maybraid/lod/lib" }
 lod-cascade = { path = "maybraid/lod/cascade" }
 lod-cascade-system = { path = "maybraid/lod/cascade-system" }
+
+sdf-common = { path = "maybraid/sdf/common" }
+
+chico = { path = "maybraid/chico/lib" }
+chico-sbs-trees = { path = "maybraid/chico/sbs-trees" }
+chico-sdf = { path = "maybraid/chico/sdf" }
+chico-ball-components = { path = "maybraid/chico/ball-components" }
+chico-stick-components = { path = "maybraid/chico/stick-components" }
+chico-tree-components = { path = "maybraid/chico/tree-components" }
+chico-sbs-geometry = { path = "maybraid/chico/sbs-geometry" }
 
 [workspace.lints.clippy]
 debug_assert_with_mut_call = "deny"

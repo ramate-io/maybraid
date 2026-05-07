@@ -1810,6 +1810,57 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "613afe47fcd5fac7ccf1db93babcb082c5994d996f20b8b159f2ad1658eb5724"
 
 [[package]]
+name = "chico"
+version = "0.0.1"
+dependencies = [
+ "chico-sbs-trees",
+ "chico-sdf",
+]
+
+[[package]]
+name = "chico-ball-components"
+version = "0.0.1"
+dependencies = [
+ "chico-sdf",
+]
+
+[[package]]
+name = "chico-sbs-geometry"
+version = "0.0.1"
+
+[[package]]
+name = "chico-sbs-trees"
+version = "0.0.1"
+dependencies = [
+ "chico-ball-components",
+ "chico-sbs-geometry",
+ "chico-sdf",
+ "chico-stick-components",
+ "chico-tree-components",
+]
+
+[[package]]
+name = "chico-sdf"
+version = "0.0.1"
+dependencies = [
+ "sdf-common",
+]
+
+[[package]]
+name = "chico-stick-components"
+version = "0.0.1"
+dependencies = [
+ "chico-sdf",
+]
+
+[[package]]
+name = "chico-tree-components"
+version = "0.0.1"
+dependencies = [
+ "chico-sdf",
+]
+
+[[package]]
 name = "chrono"
 version = "0.4.41"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4409,6 +4460,13 @@ dependencies = [
  "rayon",
  "serde",
  "thiserror 1.0.69",
+]
+
+[[package]]
+name = "sdf-common"
+version = "0.0.1"
+dependencies = [
+ "sdf",
 ]
 
 [[package]]
