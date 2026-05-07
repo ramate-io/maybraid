@@ -3165,6 +3165,9 @@ dependencies = [
 [[package]]
 name = "lod-cascade"
 version = "0.0.1"
+dependencies = [
+ "bevy_math",
+]
 
 [[package]]
 name = "lod-cascade-system"
