@@ -10,7 +10,11 @@ publish = { workspace = true }
 rust-version = { workspace = true }
 
 [dependencies]
+bevy = { workspace = true }
 lod-cascade = { workspace = true }
+
+[dev-dependencies]
+anyhow = { workspace = true }
 
 [lints]
 workspace = true

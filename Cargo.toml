@@ -118,6 +118,7 @@ rayon = { version = "1.11.0" }
 noise = { version = "0.9" }
 lz4_flex = "0.11"
 bincode = "1.3.3"
+bevy_math = "0.18.0"
 
 # docs
 clap-markdown-ext = { git = "https://github.com/movementlabsxyz/clap-markdown-ext.git", rev = "8f54fe424504bf37fb01dc69aaed8166e429fe6a"}
