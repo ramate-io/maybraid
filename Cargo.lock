@@ -3155,6 +3155,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "lod"
+version = "0.0.1"
+dependencies = [
+ "lod-cascade",
+ "lod-cascade-system",
+]
+
+[[package]]
+name = "lod-cascade"
+version = "0.0.1"
+
+[[package]]
+name = "lod-cascade-system"
+version = "0.0.1"
+dependencies = [
+ "lod-cascade",
+]
+
+[[package]]
 name = "log"
 version = "0.4.27"
 source = "registry+https://github.com/rust-lang/crates.io-index"
