@@ -107,14 +107,28 @@ fn swatch_linear(sw: DurhamSwatch, along: f32) -> vec3<f32> {
     return mix(sw.left.xyz, sw.right.xyz, saturate(along));
 }
 
+/// Fraction of each **`t*8`** bucket (in **`fract(x)`** space) used to ease swatch **i−1 / i+1** cross-fades.
+const SWATCH_INDEX_SOFTNESS: f32 = 0.12;
+
 fn swatch_sample(t_noise: f32, band: DurhamTerrainBand) -> vec3<f32> {
     let t = saturate(t_noise);
     let x = t * 8.0;
+    let i = min(i32(floor(x)), 7);
+    let f = fract(x);
+    let e = SWATCH_INDEX_SOFTNESS;
 
-    let sel = min(i32(floor(x)), 7);
-    let along = fract(x);
+    let c_mid = swatch_linear(band.swatches[i], f);
+    var out = c_mid;
 
-    return swatch_linear(band.swatches[sel], along);
+    if (i > 0) {
+        let lo = swatch_linear(band.swatches[i - 1], saturate(1.0 - f / e));
+        out = mix(lo, out, smoothstep(0.0, e, f));
+    }
+    if (i < 7) {
+        let hi = swatch_linear(band.swatches[i + 1], saturate((f - (1.0 - e)) / e));
+        out = mix(out, hi, smoothstep(1.0 - e, 1.0, f));
+    }
+    return out;
 }
 
 fn band_color(p: vec3<f32>, band: DurhamTerrainBand) -> vec3<f32> {
