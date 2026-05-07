@@ -2,13 +2,11 @@
 
 mod band;
 mod noise_uniform;
-mod palettes;
 mod swatch;
 
 pub use band::DurhamTerrainBandUniform;
 pub use noise_uniform::{DurhamTerrainNoiseUniform, EVEN_BAND_BLEND_WEIGHT};
-pub use palettes::{macro_region_palette, micro_region_palette, EVEN_SWATCH_FOLD_WEIGHT};
-pub use swatch::DurhamSwatchUniform;
+pub use swatch::{DurhamSwatchUniform, EVEN_SWATCH_FOLD_WEIGHT};
 
 use bevy::{
 	asset::embedded_asset,
@@ -46,6 +44,22 @@ impl Default for DurhamTerrainShader {
 	}
 }
 
+impl DurhamTerrainShader {
+	/// Sets [`DurhamTerrainNoiseUniform::global_seed`] **x** only; per-band seeds unchanged.
+	#[inline]
+	pub fn with_noise_global_seed(mut self, seed: f32) -> Self {
+		self.terrain_noise.set_global_seed(seed);
+		self
+	}
+
+	/// Sets global and every band FBM seed to **`seed`** ([`DurhamTerrainNoiseUniform::with_seed_uniform_across_bands`]).
+	pub fn with_noise_seed_uniform(mut self, seed: f32) -> Self {
+		self.terrain_noise = self.terrain_noise.with_seed_uniform_across_bands(seed);
+		self
+	}
+
+}
+
 impl Material for DurhamTerrainShader {
 	fn fragment_shader() -> ShaderRef {
 		concat!("embedded://", env!("CARGO_CRATE_NAME"), "/", "durham_terrain_shader.wgsl",).into()
@@ -68,10 +82,33 @@ mod tests {
 	#[test]
 	fn default_material_uniforms() {
 		let m = DurhamTerrainShader::default();
-		assert!((m.terrain_noise.bands[0].config.x - 42.0).abs() < 1e-5);
+		assert!((m.terrain_noise.seed() - 42.0).abs() < 1e-5);
+		assert!((m.terrain_noise.bands[0].config.x - 120_079.0).abs() < 1e-3);
 		assert!((m.terrain_noise.regional_blend.x - 0.00015).abs() < 1e-8);
 		assert!((m.terrain_noise.regional_blend.y - 0.5).abs() < 1e-8);
 		assert!((m.style_params.w - 0.72).abs() < 1e-5);
+	}
+
+	#[test]
+	fn noise_uniform_global_seed_helpers() {
+		let n = DurhamTerrainNoiseUniform::default()
+			.with_global_seed(7.0)
+			.with_band_seed(1, 99.0);
+		assert!((n.seed() - 7.0).abs() < 1e-5);
+		assert!((n.bands[0].config.x - 120_079.0).abs() < 1e-3);
+		assert!((n.bands[1].config.x - 99.0).abs() < 1e-5);
+
+		let n2 = DurhamTerrainNoiseUniform::default().with_seed_uniform_across_bands(3.0);
+		assert!((n2.seed() - 3.0).abs() < 1e-5);
+		for b in &n2.bands {
+			assert!((b.config.x - 3.0).abs() < 1e-5);
+		}
+
+		let m = DurhamTerrainShader::default().with_noise_global_seed(11.0);
+		assert!((m.terrain_noise.seed() - 11.0).abs() < 1e-5);
+		let m2 = DurhamTerrainShader::default().with_noise_seed_uniform(13.0);
+		assert!((m2.terrain_noise.seed() - 13.0).abs() < 1e-5);
+		assert!((m2.terrain_noise.bands[3].config.x - 13.0).abs() < 1e-5);
 	}
 
 	#[test]

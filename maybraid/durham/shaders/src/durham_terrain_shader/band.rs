@@ -27,6 +27,46 @@ impl DurhamTerrainBandUniform {
 		}
 	}
 
+	pub fn from_macro_scale(seed: f32, frequency: f32, amplitude: f32, blend_weight: f32) -> Self {
+		Self::new(
+			seed,
+			frequency,
+			amplitude,
+			blend_weight,
+			DurhamSwatchUniform::palette_macro_scale(),
+		)
+	}
+
+	pub fn from_meso_high_contrast(seed: f32, frequency: f32, amplitude: f32, blend_weight: f32) -> Self {
+		Self::new(
+			seed,
+			frequency,
+			amplitude,
+			blend_weight,
+			DurhamSwatchUniform::palette_meso_high_contrast(),
+		)
+	}
+
+	pub fn from_finer_high_contrast(seed: f32, frequency: f32, amplitude: f32, blend_weight: f32) -> Self {
+		Self::new(
+			seed,
+			frequency,
+			amplitude,
+			blend_weight,
+			DurhamSwatchUniform::palette_finer_high_contrast(),
+		)
+	}
+
+	pub fn from_detail_fun(seed: f32, frequency: f32, amplitude: f32, blend_weight: f32) -> Self {
+		Self::new(
+			seed,
+			frequency,
+			amplitude,
+			blend_weight,
+			DurhamSwatchUniform::palette_detail_fun(),
+		)
+	}
+
 	pub fn with_seed(mut self, seed: f32) -> Self {
 		self.config.x = seed;
 		self
