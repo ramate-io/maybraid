@@ -4325,6 +4325,22 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "19b30a45b0cd0bcca8037f3d0dc3421eaf95327a17cad11964fb8179b4fc4832"
 
 [[package]]
+name = "renderit"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "bincode",
+ "chrono",
+ "log",
+ "lz4_flex",
+ "rayon",
+ "sdf",
+ "serde",
+ "thiserror 1.0.69",
+]
+
+[[package]]
 name = "rodio"
 version = "0.20.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"

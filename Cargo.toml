@@ -22,6 +22,8 @@ members = [
   "maybraid/chico/tree-components",
   "maybraid/chico/sbs-geometry",
 
+  "maybraid/rendering/renderit",
+
   # legacy still being refactored out: engine
   "engine",
 
@@ -159,6 +161,8 @@ chico-ball-components = { path = "maybraid/chico/ball-components" }
 chico-stick-components = { path = "maybraid/chico/stick-components" }
 chico-tree-components = { path = "maybraid/chico/tree-components" }
 chico-sbs-geometry = { path = "maybraid/chico/sbs-geometry" }
+
+renderit = { path = "maybraid/rendering/renderit" }
 
 [workspace.lints.clippy]
 debug_assert_with_mut_call = "deny"

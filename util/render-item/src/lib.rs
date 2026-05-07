@@ -1,3 +1,8 @@
+//! Legacy render dispatch tied to `chunk::CascadeChunk` and optional LOD (`lod` module).
+//!
+//! New work should use the **`renderit`** crate (`maybraid/rendering/renderit`): generic
+//! `RenderItem<Ctx>`, `RenderDispatchSource`, and child-spawning under the dispatch entity.
+
 pub mod lod;
 
 pub mod mesh;

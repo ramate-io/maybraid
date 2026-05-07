@@ -2,6 +2,7 @@ use crate::Sdf;
 use bevy::prelude::*;
 
 /// A sphere SDF
+#[derive(Clone, Copy, Debug)]
 pub struct SphereSdf {
 	pub center: Vec3,
 	pub radius: f32,
@@ -18,4 +19,3 @@ impl Sdf for SphereSdf {
 		(p - self.center).length() - self.radius
 	}
 }
-
