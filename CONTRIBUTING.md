@@ -114,7 +114,9 @@ Proposals will generally be satisfied by additions to repository documentation o
 
 ## Rust tests
 
-Do **not** use [`.unwrap()`](https://doc.rust-lang.org/std/option/enum.Option.html#method.unwrap) or [`.expect(...)`](https://doc.rust-lang.org/std/option/enum.Option.html#method.expect) in test bodies: snippets are often copied into production code and the panicking accessors survive the paste. Prefer explicit control flow—`if let` / `match`, `let Some(x) = ... else { panic!(...) }`, or assertions that keep fallible access visible (`assert_eq!(opt, Some(...))`, etc.).
+Do **not** use [`.unwrap()`](https://doc.rust-lang.org/std/option/enum.Option.html#method.unwrap), [`.expect(...)`](https://doc.rust-lang.org/std/option/enum.Option.html#method.expect), or [`panic!(...)`](https://doc.rust-lang.org/std/macro.panic.html) in test bodies—those snippets are often copied into production code and keep failing habits.
+
+Prefer **`Result`** propagation instead: write helpers that return something like **`anyhow::Result`** (or your crate’s error type), use **`?`**, and declare **`#[test] fn case() -> anyhow::Result<()>`**, so harness failures surface structured errors. [`assert!`](https://doc.rust-lang.org/std/macro.assert.html) / [`assert_eq!`](https://doc.rust-lang.org/std/macro.assert_eq.html) remain appropriate for expectations.
 
 Common external knowledge bases include:
 

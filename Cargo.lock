@@ -3173,6 +3173,7 @@ dependencies = [
 name = "lod-cascade-system"
 version = "0.0.1"
 dependencies = [
+ "anyhow",
  "bevy",
  "lod-cascade",
 ]

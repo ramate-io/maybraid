@@ -3,15 +3,15 @@
 
 use bevy::prelude::{Vec3, Visibility};
 
-use super::super::{RequirementSignal, StandardRequirement};
-use super::test_utils::{
+use crate::cascade_production::tests::test_utils::{
 	app_with_flow, chunk_entity_alive, expected_leaf_chunk_for_focal, leaf_only_cascade,
 	marked_bounds_at_center_half_extents, producer_chunk_table_len, producer_first_chunk_entity,
 	producer_table_entries, spawn_standard_producer, typed_signal_count, AlphaFlow, FlowAlpha,
 };
+use crate::cascade_production::{RequirementSignal, StandardRequirement};
 
 #[test]
-fn leaf_recenters_expire_old_chunk_and_swap_table_entity() {
+fn leaf_recenters_expire_old_chunk_and_swap_table_entity() -> anyhow::Result<()> {
 	let mut app = app_with_flow::<FlowAlpha>();
 	let cascade = leaf_only_cascade();
 
@@ -28,8 +28,8 @@ fn leaf_recenters_expire_old_chunk_and_swap_table_entity() {
 
 	app.update();
 
-	let chunk_entity_first = producer_first_chunk_entity::<FlowAlpha>(app.world(), producer);
-	assert_eq!(producer_chunk_table_len::<FlowAlpha>(app.world(), producer), 1);
+	let chunk_entity_first = producer_first_chunk_entity::<FlowAlpha>(app.world(), producer)?;
+	assert_eq!(producer_chunk_table_len::<FlowAlpha>(app.world(), producer)?, 1);
 
 	let bounds_b = marked_bounds_at_center_half_extents::<FlowAlpha>(
 		Vec3::new(2.5, 0.5, 0.5),
@@ -44,9 +44,9 @@ fn leaf_recenters_expire_old_chunk_and_swap_table_entity() {
 		!chunk_entity_alive(world, chunk_entity_first),
 		"expired chunk entity should despawn on Remove",
 	);
-	assert_eq!(producer_chunk_table_len::<FlowAlpha>(world, producer), 1);
+	assert_eq!(producer_chunk_table_len::<FlowAlpha>(world, producer)?, 1);
 
-	let chunk_entity_second = producer_first_chunk_entity::<FlowAlpha>(world, producer);
+	let chunk_entity_second = producer_first_chunk_entity::<FlowAlpha>(world, producer)?;
 	assert_ne!(chunk_entity_first, chunk_entity_second);
 
 	let world_mut = app.world_mut();
@@ -66,10 +66,11 @@ fn leaf_recenters_expire_old_chunk_and_swap_table_entity() {
 	);
 	let world = app.world();
 	assert!(chunk_entity_alive(world, chunk_entity_second));
+	Ok(())
 }
 
 #[test]
-fn leaf_recenters_expire_hidden_keeps_entity_and_sets_visibility_hidden() {
+fn leaf_recenters_expire_hidden_keeps_entity_and_sets_visibility_hidden() -> anyhow::Result<()> {
 	let mut app = app_with_flow::<FlowAlpha>();
 	let cascade = leaf_only_cascade();
 
@@ -87,7 +88,7 @@ fn leaf_recenters_expire_hidden_keeps_entity_and_sets_visibility_hidden() {
 
 	app.update();
 
-	let chunk_entity_first = producer_first_chunk_entity::<FlowAlpha>(app.world(), producer);
+	let chunk_entity_first = producer_first_chunk_entity::<FlowAlpha>(app.world(), producer)?;
 
 	let bounds_b = marked_bounds_at_center_half_extents::<FlowAlpha>(
 		Vec3::new(2.5, 0.5, 0.5),
@@ -105,7 +106,7 @@ fn leaf_recenters_expire_hidden_keeps_entity_and_sets_visibility_hidden() {
 	assert_eq!(world.entity(chunk_entity_first).get::<Visibility>(), Some(&Visibility::Hidden),);
 
 	assert_eq!(
-		producer_chunk_table_len::<FlowAlpha>(world, producer),
+		producer_chunk_table_len::<FlowAlpha>(world, producer)?,
 		2,
 		"previous footprint stays in the table while the new leaf is added",
 	);
@@ -124,7 +125,7 @@ fn leaf_recenters_expire_hidden_keeps_entity_and_sets_visibility_hidden() {
 
 	let world = app.world();
 	let mut found_visible_new_leaf = false;
-	for (chunk_key, entity) in producer_table_entries::<FlowAlpha>(world, producer) {
+	for (chunk_key, entity) in producer_table_entries::<FlowAlpha>(world, producer)? {
 		if entity == chunk_entity_first {
 			continue;
 		}
@@ -138,4 +139,5 @@ fn leaf_recenters_expire_hidden_keeps_entity_and_sets_visibility_hidden() {
 		found_visible_new_leaf = true;
 	}
 	assert!(found_visible_new_leaf, "expected a second chunk entity for the new focal cell",);
+	Ok(())
 }

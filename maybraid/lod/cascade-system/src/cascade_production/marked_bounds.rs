@@ -6,7 +6,7 @@ use std::marker::PhantomData;
 use bevy::ecs::query::{QueryData, QueryFilter};
 use bevy::prelude::*;
 
-use super::{CascadeProductionSource, TrackBounds};
+use crate::cascade_production::{CascadeProductionSource, RequirementBuilder, TrackBounds};
 
 /// Bounds of the **track** entity that drives cascade focal motion, tagged by independent flow `T`.
 ///
@@ -66,7 +66,7 @@ impl<T, B, QF> StandardFlow<T, B, QF> {
 impl<T, B, QF> CascadeProductionSource for StandardFlow<T, B, QF>
 where
 	T: Send + Sync + 'static,
-	B: super::RequirementBuilder + Clone + Send + Sync + 'static,
+	B: RequirementBuilder + Clone + Send + Sync + 'static,
 	QF: QueryFilter + Send + Sync + 'static,
 {
 	type PositionData = MarkedBounds<T>;

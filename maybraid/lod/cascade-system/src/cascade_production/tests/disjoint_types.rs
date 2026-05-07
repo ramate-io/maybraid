@@ -4,16 +4,16 @@
 use bevy::prelude::Vec3;
 use lod_cascade::Chunk;
 
-use super::super::{RequirementSignal, StandardRequirement};
-use super::test_utils::{
+use crate::cascade_production::tests::test_utils::{
 	app_alpha_only, app_dual_flow, chunk_footprint, expected_leaf_chunk_for_focal,
 	leaf_only_cascade, marked_bounds_at_center_half_extents, producer_children,
 	producer_chunk_table_len, producer_first_chunk_entity, spawn_orphan_signal,
 	spawn_standard_producer, typed_signal_count, AlphaFlow, BetaFlow, FlowAlpha, FlowBeta,
 };
+use crate::cascade_production::{RequirementSignal, StandardRequirement};
 
 #[test]
-fn beta_marked_signal_survives_when_only_alpha_plugin_registered() {
+fn beta_marked_signal_survives_when_only_alpha_plugin_registered() -> anyhow::Result<()> {
 	let mut app = app_alpha_only();
 	let chunk = Chunk::from_min_max(Vec3::ZERO, Vec3::ONE, None);
 
@@ -29,10 +29,11 @@ fn beta_marked_signal_survives_when_only_alpha_plugin_registered() {
 	);
 	assert_eq!(typed_signal_count::<BetaFlow>(world), 1);
 	assert_eq!(typed_signal_count::<AlphaFlow>(world), 0);
+	Ok(())
 }
 
 #[test]
-fn dual_plugins_collect_each_flow_independently() {
+fn dual_plugins_collect_each_flow_independently() -> anyhow::Result<()> {
 	let mut app = app_dual_flow();
 	let chunk = Chunk::from_min_max(Vec3::ZERO, Vec3::ONE, None);
 
@@ -48,10 +49,11 @@ fn dual_plugins_collect_each_flow_independently() {
 	assert!(world.get_entity(beta_entity).is_err());
 	assert_eq!(typed_signal_count::<AlphaFlow>(world), 0);
 	assert_eq!(typed_signal_count::<BetaFlow>(world), 0);
+	Ok(())
 }
 
 #[test]
-fn dual_flows_spawn_distinct_leaf_chunks_matching_geometry() {
+fn dual_flows_spawn_distinct_leaf_chunks_matching_geometry() -> anyhow::Result<()> {
 	let mut app = app_dual_flow();
 	let cascade = leaf_only_cascade();
 
@@ -79,8 +81,8 @@ fn dual_flows_spawn_distinct_leaf_chunks_matching_geometry() {
 	app.update();
 
 	let world = app.world();
-	assert_eq!(producer_chunk_table_len::<FlowAlpha>(world, alpha_prod), 1);
-	assert_eq!(producer_chunk_table_len::<FlowBeta>(world, beta_prod), 1);
+	assert_eq!(producer_chunk_table_len::<FlowAlpha>(world, alpha_prod)?, 1);
+	assert_eq!(producer_chunk_table_len::<FlowBeta>(world, beta_prod)?, 1);
 
 	let expected_alpha = expected_leaf_chunk_for_focal(alpha_center, &cascade);
 	let expected_beta = expected_leaf_chunk_for_focal(beta_center, &cascade);
@@ -100,22 +102,23 @@ fn dual_flows_spawn_distinct_leaf_chunks_matching_geometry() {
 		"beta expected chunk must appear in cascade footprint set at beta focal",
 	);
 
-	let alpha_chunk_ent = producer_first_chunk_entity::<FlowAlpha>(world, alpha_prod);
-	let beta_chunk_ent = producer_first_chunk_entity::<FlowBeta>(world, beta_prod);
+	let alpha_chunk_ent = producer_first_chunk_entity::<FlowAlpha>(world, alpha_prod)?;
+	let beta_chunk_ent = producer_first_chunk_entity::<FlowBeta>(world, beta_prod)?;
 
 	assert_ne!(alpha_chunk_ent, beta_chunk_ent);
 
-	let alpha_fp = chunk_footprint(world, alpha_chunk_ent);
-	let beta_fp = chunk_footprint(world, beta_chunk_ent);
+	let alpha_fp = chunk_footprint(world, alpha_chunk_ent)?;
+	let beta_fp = chunk_footprint(world, beta_chunk_ent)?;
 
 	assert_eq!(alpha_fp, expected_alpha);
 	assert_eq!(beta_fp, expected_beta);
 	assert_eq!(alpha_fp.extent(), cascade.leaf_scale());
 	assert_eq!(beta_fp.extent(), cascade.leaf_scale());
 
-	let alpha_children = producer_children(world, alpha_prod);
-	let beta_children = producer_children(world, beta_prod);
+	let alpha_children = producer_children(world, alpha_prod)?;
+	let beta_children = producer_children(world, beta_prod)?;
 
 	assert!(alpha_children.iter().any(|c| *c == alpha_chunk_ent));
 	assert!(beta_children.iter().any(|c| *c == beta_chunk_ent));
+	Ok(())
 }

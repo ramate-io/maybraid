@@ -1,10 +1,11 @@
 //! Shared [`App`] wiring and spawn helpers for cascade production tests.
 
+use anyhow::{anyhow, Result};
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 use lod_cascade::{Cascade, Chunk};
 
-use super::super::{
+use crate::cascade_production::{
 	CascadeChunk, CascadeProduction, CascadeProductionPlugin, CascadeProductionSignalMarker,
 	CascadeProductionSource, MarkedBounds, RequirementSignal, StandardFlow, StandardRequirement,
 };
@@ -71,60 +72,58 @@ pub fn expected_leaf_chunk_for_focal(focal: Vec3, cascade: &Cascade) -> Chunk {
 	Chunk::from_min_max(o, o + cascade.leaf_scale(), None)
 }
 
-pub fn chunk_footprint(world: &World, entity: Entity) -> Chunk {
-	let Some(cc) = world.entity(entity).get::<CascadeChunk>() else {
-		panic!("entity {entity:?} should carry CascadeChunk");
-	};
-	cc.0
+pub fn chunk_footprint(world: &World, entity: Entity) -> Result<Chunk> {
+	world
+		.entity(entity)
+		.get::<CascadeChunk>()
+		.map(|cc| cc.0)
+		.ok_or_else(|| anyhow!("entity {entity:?} missing CascadeChunk"))
 }
 
-pub fn producer_children<'w>(world: &'w World, producer: Entity) -> &'w Children {
-	let Some(children) = world.entity(producer).get::<Children>() else {
-		panic!("producer {producer:?} should own chunk children");
-	};
-	children
+pub fn producer_children<'w>(world: &'w World, producer: Entity) -> Result<&'w Children> {
+	world
+		.entity(producer)
+		.get::<Children>()
+		.ok_or_else(|| anyhow!("producer {producer:?} missing Children"))
 }
 
 pub fn producer_table_entries<T: Send + Sync + 'static>(
 	world: &World,
 	producer: Entity,
-) -> Vec<(Chunk, Entity)> {
-	let Some(prod) = world
+) -> Result<Vec<(Chunk, Entity)>> {
+	let prod = world
 		.entity(producer)
 		.get::<CascadeProduction<StandardFlow<T, StandardRequirement>>>()
-	else {
-		panic!("producer {producer:?} missing CascadeProduction");
-	};
-	prod.table.table.iter().map(|(&chunk, &entity)| (chunk, entity)).collect()
+		.ok_or_else(|| anyhow!("producer {producer:?} missing CascadeProduction"))?;
+	Ok(prod.table.table.iter().map(|(&chunk, &entity)| (chunk, entity)).collect())
 }
 
 pub fn producer_chunk_table_len<T: Send + Sync + 'static>(
 	world: &World,
 	producer: Entity,
-) -> usize {
-	let Some(prod) = world
+) -> Result<usize> {
+	let prod = world
 		.entity(producer)
 		.get::<CascadeProduction<StandardFlow<T, StandardRequirement>>>()
-	else {
-		panic!("producer {producer:?} missing CascadeProduction");
-	};
-	prod.table.table.len()
+		.ok_or_else(|| anyhow!("producer {producer:?} missing CascadeProduction"))?;
+	Ok(prod.table.table.len())
 }
 
 pub fn producer_first_chunk_entity<T: Send + Sync + 'static>(
 	world: &World,
 	producer: Entity,
-) -> Entity {
-	let Some(prod) = world
+) -> Result<Entity> {
+	let prod = world
 		.entity(producer)
 		.get::<CascadeProduction<StandardFlow<T, StandardRequirement>>>()
-	else {
-		panic!("producer {producer:?} missing CascadeProduction");
-	};
-	let Some((&_chunk, &entity)) = prod.table.table.iter().next() else {
-		panic!("producer {producer:?} chunk table unexpectedly empty");
-	};
-	entity
+		.ok_or_else(|| anyhow!("producer {producer:?} missing CascadeProduction"))?;
+	let (&_chunk, &entity) = prod
+		.table
+		.table
+		.iter()
+		.next()
+		.ok_or_else(|| anyhow!("producer {producer:?} chunk table unexpectedly empty"))?;
+	Ok(entity)
 }
 
 pub fn typed_signal_count<S: CascadeProductionSource>(world: &mut World) -> usize {

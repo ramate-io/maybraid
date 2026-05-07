@@ -1,4 +1,4 @@
-//! Integration-style unit tests for [`super::produce_cascade`] and [`super::CascadeProductionPlugin`].
+//! Integration-style unit tests for [`crate::cascade_production::produce_cascade`] and [`crate::cascade_production::CascadeProductionPlugin`].
 
 mod basic_production;
 mod despawn;

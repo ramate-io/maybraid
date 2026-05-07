@@ -28,7 +28,11 @@ Because commit files are expected to preserve useful dialogue context, `git blam
 
 ## Rust tests
 
-Avoid `.unwrap()` and `.expect(...)` in Rust test code (copied snippets tend to land in production). See [CONTRIBUTING.md § Rust tests](CONTRIBUTING.md#rust-tests).
+Avoid `.unwrap()`, `.expect(...)`, and `panic!(...)` in Rust test code (copied snippets tend to land in production). Prefer `Result`, `?`, and **`#[test] fn … -> anyhow::Result<()>`** as described in [CONTRIBUTING.md § Rust tests](CONTRIBUTING.md#rust-tests). **`assert!` / `assert_eq!`** are still encouraged.
+
+## Rust modules
+
+Prefer **`use crate::…`** / concrete paths instead of stitching **`super::`** chains unless there is a compelling reason (e.g., deliberate coupling to an immediate parent in a macro-heavy submodule).
 
 ## Prompting GitHub Actions
 

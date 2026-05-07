@@ -4,7 +4,7 @@
 use bevy::prelude::Component;
 use lod_cascade::{Cascade, Chunk};
 
-use super::{CascadePosition, RequirementBuilder, RequirementSignal};
+use crate::cascade_production::{CascadePosition, RequirementBuilder, RequirementSignal};
 
 /// [`RequirementBuilder`] that returns configured signals for newly entered vs expired footprints.
 ///
