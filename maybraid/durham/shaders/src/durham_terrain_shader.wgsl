@@ -107,28 +107,30 @@ fn swatch_linear(sw: DurhamSwatch, along: f32) -> vec3<f32> {
     return mix(sw.left.xyz, sw.right.xyz, saturate(along));
 }
 
-/// Fraction of each **`t*8`** bucket (in **`fract(x)`** space) used to ease swatch **i−1 / i+1** cross-fades.
+/// Half-width in **continuous** `u = t*8` around each integer seam for joint-only blending.
 const SWATCH_INDEX_SOFTNESS: f32 = 0.12;
 
 fn swatch_sample(t_noise: f32, band: DurhamTerrainBand) -> vec3<f32> {
-    let t = saturate(t_noise);
-    let x = t * 8.0;
-    let i = min(i32(floor(x)), 7);
-    let f = fract(x);
+    let u = min(saturate(t_noise) * 8.0, 8.0 - 1e-4);
     let e = SWATCH_INDEX_SOFTNESS;
 
-    let c_mid = swatch_linear(band.swatches[i], f);
-    var out = c_mid;
+    // `floor(u)` / `fract(u)` jump at swatch seams; per-cell `f` made left/right limits disagree.
+    // In `|u - s| <= e` around seam **s**, blend only **sw[s-1](1)** → **sw[s](0)** in **u** (same
+    // expression from both sides of **s**).
+    for (var s = 1; s < 8; s = s + 1) {
+        let du = u - f32(s);
+        if (abs(du) <= e) {
+            let t = smoothstep(0.0, 1.0, (du + e) / (2.0 * e));
+            return mix(
+                swatch_linear(band.swatches[s - 1], 1.0),
+                swatch_linear(band.swatches[s], 0.0),
+                t
+            );
+        }
+    }
 
-    if (i > 0) {
-        let lo = swatch_linear(band.swatches[i - 1], saturate(1.0 - f / e));
-        out = mix(lo, out, smoothstep(0.0, e, f));
-    }
-    if (i < 7) {
-        let hi = swatch_linear(band.swatches[i + 1], saturate((f - (1.0 - e)) / e));
-        out = mix(out, hi, smoothstep(1.0 - e, 1.0, f));
-    }
-    return out;
+    let i = min(i32(floor(u)), 7);
+    return swatch_linear(band.swatches[i], fract(u));
 }
 
 fn band_color(p: vec3<f32>, band: DurhamTerrainBand) -> vec3<f32> {

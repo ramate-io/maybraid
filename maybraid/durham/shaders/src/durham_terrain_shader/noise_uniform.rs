@@ -78,8 +78,8 @@ impl Default for DurhamTerrainNoiseUniform {
 			regional_blend: Vec4::new(0.00015, 0.5, 0.0, 0.0),
 			global_seed: Vec4::new(42.0, 0.0, 0.0, 0.0),
 			bands: [
-				DurhamTerrainBandUniform::from_macro_scale(120_079.0, 0.00001, 0.5, 0.35),
-				DurhamTerrainBandUniform::from_meso_high_contrast(42.0, 0.0001, 0.5, 0.35),
+				DurhamTerrainBandUniform::from_macro_scale(120_079.0, 0.00001, 0.5, 0.25),
+				DurhamTerrainBandUniform::from_meso_high_contrast(42.0, 0.0001, 0.5, 0.45),
 				DurhamTerrainBandUniform::from_finer_high_contrast(42.0, 0.01, 0.5, 0.15),
 				DurhamTerrainBandUniform::from_detail_fun(42.0, 0.1, 0.5, 0.15),
 			],
