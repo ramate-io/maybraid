@@ -325,3 +325,9 @@ impl<S: CascadeProductionSource> Plugin for CascadeProductionPlugin<S> {
 		);
 	}
 }
+
+mod standard_marker;
+mod standard_requirement;
+
+pub use standard_marker::{StandardBounds, StandardFlow, StandardMarker};
+pub use standard_requirement::StandardRequirement;
