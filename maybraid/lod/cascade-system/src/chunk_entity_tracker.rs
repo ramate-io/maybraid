@@ -150,3 +150,6 @@ where
 		app.add_systems(Update, track_chunk_entities::<P, S>);
 	}
 }
+
+#[cfg(test)]
+mod tests;
