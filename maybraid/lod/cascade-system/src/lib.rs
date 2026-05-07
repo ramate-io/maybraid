@@ -14,3 +14,10 @@ pub use cascade_production::{
 pub mod chunk_tracker;
 
 pub use chunk_tracker::{track_chunks, ChunkTracker, ChunkTrackerPlugin};
+
+pub mod chunk_entity_tracker;
+
+pub use chunk_entity_tracker::{
+	select_best_overlapping_chunk, track_chunk_entities, ChunkEntityPosition,
+	ChunkEntityTrackerPlugin,
+};
