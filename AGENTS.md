@@ -26,6 +26,14 @@ Use those fresh values for all subsequent commit-file reads and writes. Do not r
 
 Because commit files are expected to preserve useful dialogue context, `git blame` can be especially helpful when trying to understand why code is shaped the way it is. Use it when history would clarify intent before changing nearby code.
 
+## Rust tests
+
+Avoid `.unwrap()`, `.expect(...)`, and `panic!(...)` in Rust test code (copied snippets tend to land in production). Prefer `Result`, `?`, and **`#[test] fn … -> anyhow::Result<()>`** as described in [CONTRIBUTING.md § Rust tests](CONTRIBUTING.md#rust-tests). **`assert!` / `assert_eq!`** are still encouraged.
+
+## Rust modules
+
+Prefer **`use crate::…`** / concrete paths instead of stitching **`super::`** chains unless there is a compelling reason (e.g., deliberate coupling to an immediate parent in a macro-heavy submodule).
+
 ## Prompting GitHub Actions
 
 We currently use GitHub for source control. When work relates to a clear GitHub thread, such as an issue, pull request, or discussion, the Agent should consider whether a written GitHub update would help preserve context.

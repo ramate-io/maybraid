@@ -250,6 +250,19 @@ impl Cascade {
 		}
 	}
 
+	/// Footprints that left the active set when bounds moved from `previous` to `current`:
+	/// \(\mathcal W(\mathrm{prev}) \setminus \mathcal W(\mathrm{current})\).
+	pub fn expired_chunks(&self, previous: Option<Aabb3d>, current: Aabb3d) -> Vec<Chunk> {
+		match previous {
+			None => Vec::new(),
+			Some(prev) => {
+				let prev_set = self.work_set_at_bounds(&prev);
+				let curr_set = self.work_set_at_bounds(&current);
+				prev_set.difference(&curr_set).copied().collect()
+			}
+		}
+	}
+
 	/// Candidate chunks for overlap queries when an entity’s bounds move (RFC §3.4.4).
 	pub fn all_possible_new_chunks(
 		&self,
@@ -352,6 +365,22 @@ mod tests {
 			skirt_tile.overlap_volume(&query) > 0.0,
 			"skirt footprint should overlap an interior probe away from the hull hole"
 		);
+	}
+
+	#[test]
+	fn new_and_expired_are_disjoint_and_cover_set_difference() {
+		let c = cubic(1.0, 1, None);
+		let prev = cube_bb(Vec3::new(0.25, 0.0, 0.0), 0.05);
+		let curr = cube_bb(Vec3::new(2.5, 0.0, 0.0), 0.05);
+		let new_set: HashSet<_> = c.new_chunks(Some(prev), curr).into_iter().collect();
+		let expired_set: HashSet<_> = c.expired_chunks(Some(prev), curr).into_iter().collect();
+		assert!(new_set.is_disjoint(&expired_set));
+		let wp = c.work_set_at_focal(Vec3::from(prev.center()));
+		let wc = c.work_set_at_focal(Vec3::from(curr.center()));
+		let diff_new: HashSet<_> = wc.difference(&wp).copied().collect();
+		let diff_exp: HashSet<_> = wp.difference(&wc).copied().collect();
+		assert_eq!(new_set, diff_new);
+		assert_eq!(expired_set, diff_exp);
 	}
 
 	#[test]
