@@ -10,3 +10,7 @@ pub use cascade_production::{
 	CascadeProductionSource, CascadeTable, MarkedBounds, RequirementBuilder, RequirementSignal,
 	StandardFlow, StandardRequirement, TrackBounds,
 };
+
+pub mod chunk_tracker;
+
+pub use chunk_tracker::{track_chunks, ChunkTracker, ChunkTrackerPlugin};
