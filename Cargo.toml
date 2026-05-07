@@ -4,7 +4,11 @@ resolver = "2"
 
 members = [
 
-  # engine
+  # maybraid game crates, typically following rfcs
+  "maybraid/durham/lib",
+  "maybraid/durham/shaders",
+
+  # legacy still being refactored out: engine
   "engine",
 
   # playgrounds
@@ -13,7 +17,7 @@ members = [
   "playgrounds/skill-map",
   "playgrounds/pathfinding",
 
-  # proceudres
+  # legacy still being refactored out: proceudres
   "procedures/terrain",
   "procedures/vegetation",
   "procedures/buildings",
@@ -21,7 +25,7 @@ members = [
   "procedures/skill-map",
   "procedures/intelligence",
 
-  # util
+  # general utilities
   ## sdf
   "util/sdf",
   "util/chunk",
@@ -123,6 +127,9 @@ buildings = { path = "procedures/buildings" }
 engine = { path = "engine" }
 comproc = { "path" = "procedures/comproc" }
 skill-map = {"path" = "procedures/skill-map" }
+
+durham-terrain = { path = "maybraid/durham/lib" }
+durham-terrain-shaders = { path = "maybraid/durham/shaders" }
 
 [workspace.lints.clippy]
 debug_assert_with_mut_call = "deny"

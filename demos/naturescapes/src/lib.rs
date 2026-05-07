@@ -5,6 +5,7 @@ pub mod water;
 
 // use bevy::diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin};
 use bevy::prelude::*;
+use durham_terrain::shaders::{DurhamTerrainShader, DurhamTerrainShaderPlugin};
 use engine::shaders::{leaf_material::LeafMaterial, outline::EdgeMaterial};
 use terrain::TerrainSdf;
 
@@ -19,20 +20,18 @@ pub struct NatureScapesPlugin;
 
 impl Plugin for NatureScapesPlugin {
 	fn build(&self, app: &mut App) {
-		// Register EdgeMaterial plugin
+		// Register material plugins
 		app.add_plugins(bevy::pbr::MaterialPlugin::<EdgeMaterial>::default());
+		app.add_plugins(DurhamTerrainShaderPlugin);
 		app.add_plugins(bevy::pbr::MaterialPlugin::<LeafMaterial>::default());
 		// app.add_plugins(FrameTimeDiagnosticsPlugin::default());
 		// app.add_plugins(LogDiagnosticsPlugin::default());
 		app.add_plugins(water::WaterPlaygroundPlugin);
 		app.add_plugins(terrain::TerrainPlaygroundPlugin {
-			material: EdgeMaterial::default(),
-			rock_detail_material: EdgeMaterial::default()
-				.with_base_color(Vec4::new(0.2, 0.1, 0.1, 1.0)), // reddish brown base color
-			second_rock_detail_material: EdgeMaterial::default()
-				.with_base_color(Vec4::new(0.5, 0.5, 0.5, 1.0)), // gray base color
-			tuft_detail_material: EdgeMaterial::default()
-				.with_base_color(Vec4::new(0.2, 0.8, 0.3, 1.0)), // green base color
+			material: DurhamTerrainShader::default(),
+			rock_detail_material: DurhamTerrainShader::default(),
+			second_rock_detail_material: DurhamTerrainShader::default(),
+			tuft_detail_material: DurhamTerrainShader::default(),
 		});
 		app.add_plugins(vegetation::VegetationPlaygroundPlugin::<
 			EdgeMaterial,
