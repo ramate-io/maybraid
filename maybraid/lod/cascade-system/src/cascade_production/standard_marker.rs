@@ -55,11 +55,7 @@ where
 {
 	type PositionData = StandardMarker<T>;
 	type Builder = B;
-	type QueryData = (
-		Entity,
-		&'static StandardBounds,
-		&'static StandardMarker<T>,
-	);
+	type QueryData = (Entity, &'static StandardBounds, &'static StandardMarker<T>);
 	type QueryFilter = QF;
 
 	fn entity(item: &<Self::QueryData as QueryData>::Item<'_, '_>) -> Entity {

@@ -40,11 +40,7 @@ pub struct CascadeProduction<S: CascadeProductionSource> {
 
 impl<S: CascadeProductionSource> CascadeProduction<S> {
 	pub fn new(cascade: Cascade) -> Self {
-		Self {
-			cascade,
-			table: CascadeTable::default(),
-			marker: PhantomData,
-		}
+		Self { cascade, table: CascadeTable::default(), marker: PhantomData }
 	}
 }
 
@@ -116,11 +112,7 @@ pub fn garbage_collect_requirement_signals<S: CascadeProductionSource>(
 	mut commands: Commands,
 	signals: Query<
 		Entity,
-		(
-			With<CascadeChunk>,
-			With<RequirementSignal>,
-			With<CascadeProductionSignalMarker<S>>,
-		),
+		(With<CascadeChunk>, With<RequirementSignal>, With<CascadeProductionSignalMarker<S>>),
 	>,
 ) {
 	for entity in &signals {
@@ -202,25 +194,10 @@ fn update_cascade_chunks<S: CascadeProductionSource>(
 	let cascade = production.cascade;
 
 	let expired_chunks = cascade.expired_chunks(position.previous, position.current);
-	apply_expired_chunks::<S>(
-		commands,
-		item,
-		production,
-		position,
-		builder,
-		&expired_chunks,
-	);
+	apply_expired_chunks::<S>(commands, item, production, position, builder, &expired_chunks);
 
 	let new_chunks = cascade.new_chunks(position.previous, position.current);
-	apply_new_chunks::<S>(
-		commands,
-		producer,
-		item,
-		production,
-		position,
-		builder,
-		&new_chunks,
-	);
+	apply_new_chunks::<S>(commands, producer, item, production, position, builder, &new_chunks);
 }
 
 fn apply_expired_chunks<S: CascadeProductionSource>(
@@ -270,9 +247,7 @@ fn apply_new_chunks<S: CascadeProductionSource>(
 		match signal {
 			RequirementSignal::Visible => {
 				let chunk_entity = *production.table.table.entry(chunk).or_insert_with(|| {
-					let e = commands
-						.spawn((CascadeChunk(chunk), Visibility::Visible))
-						.id();
+					let e = commands.spawn((CascadeChunk(chunk), Visibility::Visible)).id();
 					commands.entity(producer).add_child(e);
 					e
 				});
@@ -281,9 +256,7 @@ fn apply_new_chunks<S: CascadeProductionSource>(
 			}
 			RequirementSignal::Hidden => {
 				let chunk_entity = *production.table.table.entry(chunk).or_insert_with(|| {
-					let e = commands
-						.spawn((CascadeChunk(chunk), Visibility::Hidden))
-						.id();
+					let e = commands.spawn((CascadeChunk(chunk), Visibility::Hidden)).id();
 					commands.entity(producer).add_child(e);
 					e
 				});
@@ -314,8 +287,13 @@ fn spawn_requirement_signal<S: CascadeProductionSource>(
 	));
 }
 
-#[derive(Default)]
 pub struct CascadeProductionPlugin<S>(PhantomData<S>);
+
+impl<S> Default for CascadeProductionPlugin<S> {
+	fn default() -> Self {
+		Self(PhantomData)
+	}
+}
 
 impl<S: CascadeProductionSource> Plugin for CascadeProductionPlugin<S> {
 	fn build(&self, app: &mut App) {
@@ -331,3 +309,6 @@ mod standard_requirement;
 
 pub use standard_marker::{StandardBounds, StandardFlow, StandardMarker};
 pub use standard_requirement::StandardRequirement;
+
+#[cfg(test)]
+mod tests;
