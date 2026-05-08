@@ -18,9 +18,9 @@ use crate::cylinder::TaperedCylinder;
 
 /// Extra horizontal half-extent (beyond `|bend| + max_radius`) so tilted tube cross-sections and the
 /// approximate closest-spine field do not clip marching-cubes meshes.
-const BOUNDS_XZ_SLACK_PER_RADIUS: f32 = 0.55;
+const BOUNDS_XZ_SLACK_PER_RADIUS: f32 = 0.0;
 /// Additional slack on **each** of X and Z tied to total bend magnitude (coupled bulge).
-const BOUNDS_XZ_SLACK_PER_BEND_SUM: f32 = 0.2;
+const BOUNDS_XZ_SLACK_PER_BEND_SUM: f32 = 0.0;
 
 /// [`CascadeChunk::unit_center_chunk`] spans XZ ∈ [−0.5, 0.5] before [`CascadeChunk::with_mu`].
 const UNIT_CENTER_CHUNK_XZ_HALF: f32 = 0.5;

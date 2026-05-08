@@ -7,7 +7,10 @@ use render_item::{
 	NormalizeChunk, RenderItem,
 };
 use sdf::{Bounds, Sdf};
-use sdf_common::{CrookCylinder, NoisyCylinder, NoisySurface, TaperedCylinder};
+use sdf_common::{
+	CrookCylinder, NoisyCylinder, NoisyCrookCylinder, NoisySurface, TaperedCylinder,
+	UnitCylinderNoiseParams,
+};
 
 /// Concrete SDF variants previewed in this playground.
 #[derive(Clone)]
@@ -15,6 +18,7 @@ pub enum PlaygroundPrimitive {
 	TaperedCylinder(TaperedCylinder),
 	NoisyCylinder(NoisyCylinder),
 	CrookCylinder(CrookCylinder),
+	NoisyCrookCylinder(NoisyCrookCylinder),
 }
 
 impl PlaygroundPrimitive {
@@ -40,16 +44,35 @@ impl PlaygroundPrimitive {
 		})
 	}
 
+	/// Same crook as [`Self::crook_cylinder_default`] with [`UnitCylinderNoiseParams`] surface noise.
+	pub fn noisy_crook_cylinder_default() -> Self {
+		let crook = CrookCylinder {
+			bend_x: 0.12,
+			bend_z: 0.08,
+			..CrookCylinder::unit_segment(0.5, 0.4)
+		};
+		Self::NoisyCrookCylinder(NoisySurface::from_params(
+			crook,
+			UnitCylinderNoiseParams.into(),
+		))
+	}
+
 	pub fn variant_key(&self) -> &'static str {
 		match self {
 			Self::TaperedCylinder(_) => "tapered-cylinder",
 			Self::NoisyCylinder(_) => "noisy-cylinder",
 			Self::CrookCylinder(_) => "crook-cylinder",
+			Self::NoisyCrookCylinder(_) => "noisy-crook-cylinder",
 		}
 	}
 
 	pub fn all_variant_keys() -> &'static [&'static str] {
-		&["tapered-cylinder", "noisy-cylinder", "crook-cylinder"]
+		&[
+			"tapered-cylinder",
+			"noisy-cylinder",
+			"crook-cylinder",
+			"noisy-crook-cylinder",
+		]
 	}
 
 	pub fn from_name(name: &str) -> Option<Self> {
@@ -59,6 +82,9 @@ impl PlaygroundPrimitive {
 			}
 			"noisy-cylinder" | "noisy" | "nc" | "2" => Some(Self::noisy_cylinder_default()),
 			"crook-cylinder" | "crook" | "cc" | "3" => Some(Self::crook_cylinder_default()),
+			"noisy-crook-cylinder" | "noisy-crook" | "ncc" | "4" => {
+				Some(Self::noisy_crook_cylinder_default())
+			}
 			_ => None,
 		}
 	}
@@ -70,6 +96,7 @@ impl std::fmt::Debug for PlaygroundPrimitive {
 			Self::TaperedCylinder(c) => f.debug_tuple("TaperedCylinder").field(c).finish(),
 			Self::NoisyCylinder(_) => f.write_str("NoisyCylinder(...)"),
 			Self::CrookCylinder(c) => f.debug_tuple("CrookCylinder").field(c).finish(),
+			Self::NoisyCrookCylinder(_) => f.write_str("NoisyCrookCylinder(...)"),
 		}
 	}
 }
@@ -80,6 +107,7 @@ impl std::fmt::Display for PlaygroundPrimitive {
 			Self::TaperedCylinder(_) => write!(f, "TaperedCylinder"),
 			Self::NoisyCylinder(_) => write!(f, "NoisyCylinder"),
 			Self::CrookCylinder(_) => write!(f, "CrookCylinder"),
+			Self::NoisyCrookCylinder(_) => write!(f, "NoisyCrookCylinder"),
 		}
 	}
 }
@@ -90,6 +118,7 @@ impl Sdf for PlaygroundPrimitive {
 			Self::TaperedCylinder(c) => c.distance(p),
 			Self::NoisyCylinder(n) => n.distance(p),
 			Self::CrookCylinder(c) => c.distance(p),
+			Self::NoisyCrookCylinder(n) => n.distance(p),
 		}
 	}
 
@@ -98,6 +127,7 @@ impl Sdf for PlaygroundPrimitive {
 			Self::TaperedCylinder(c) => c.bounds(),
 			Self::NoisyCylinder(n) => n.bounds(),
 			Self::CrookCylinder(c) => c.bounds(),
+			Self::NoisyCrookCylinder(n) => n.bounds(),
 		}
 	}
 }
@@ -108,6 +138,7 @@ impl NormalizeChunk for PlaygroundPrimitive {
 			Self::TaperedCylinder(c) => c.normalize_chunk(cascade_chunk),
 			Self::NoisyCylinder(n) => n.normalize_chunk(cascade_chunk),
 			Self::CrookCylinder(c) => c.normalize_chunk(cascade_chunk),
+			Self::NoisyCrookCylinder(n) => n.normalize_chunk(cascade_chunk),
 		}
 	}
 }
@@ -146,6 +177,27 @@ impl IdentifiedMesh for PlaygroundPrimitive {
 				c.phase_x.to_bits(),
 				c.phase_z.to_bits(),
 			)),
+			Self::NoisyCrookCylinder(n) => {
+				let c = &n.inner;
+				let p = &n.noise;
+				MeshId::new(format!(
+					"playground.NoisyCrookCylinder:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{:?}",
+					c.base_radius.to_bits(),
+					c.top_radius.to_bits(),
+					c.y_min.to_bits(),
+					c.height.to_bits(),
+					c.bounds_margin.to_bits(),
+					c.bend_x.to_bits(),
+					c.bend_z.to_bits(),
+					c.phase_x.to_bits(),
+					c.phase_z.to_bits(),
+					p.seed,
+					p.frequency.to_bits(),
+					p.amplitude.to_bits(),
+					p.octaves,
+					p.noise_type,
+				))
+			}
 		}
 	}
 }

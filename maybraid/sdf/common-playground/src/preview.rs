@@ -34,6 +34,9 @@ fn preview_sync_key(config: &PreviewConfig) -> String {
 		PlaygroundPrimitive::TaperedCylinder(c) => format!("t:{c:?}"),
 		PlaygroundPrimitive::NoisyCylinder(n) => format!("n:{:?}|{:?}", n.inner, n.noise),
 		PlaygroundPrimitive::CrookCylinder(c) => format!("k:{c:?}"),
+		PlaygroundPrimitive::NoisyCrookCylinder(n) => {
+			format!("nk:{:?}|{:?}", n.inner, n.noise)
+		}
 	};
 	format!(
 		"{geom}|{}|{:?}|{:?}",
@@ -68,6 +71,10 @@ pub fn keyboard_preview(
 		config.primitive = PlaygroundPrimitive::crook_cylinder_default();
 		changed = true;
 	}
+	if keyboard.just_pressed(KeyCode::Digit4) {
+		config.primitive = PlaygroundPrimitive::noisy_crook_cylinder_default();
+		changed = true;
+	}
 	if keyboard.just_pressed(KeyCode::Equal) {
 		config.res_2 = (config.res_2 + 1).min(8);
 		changed = true;
@@ -90,7 +97,8 @@ fn next_primitive(current: &PlaygroundPrimitive) -> PlaygroundPrimitive {
 	match current {
 		PlaygroundPrimitive::TaperedCylinder(_) => PlaygroundPrimitive::noisy_cylinder_default(),
 		PlaygroundPrimitive::NoisyCylinder(_) => PlaygroundPrimitive::crook_cylinder_default(),
-		PlaygroundPrimitive::CrookCylinder(_) => PlaygroundPrimitive::tapered_cylinder_default(),
+		PlaygroundPrimitive::CrookCylinder(_) => PlaygroundPrimitive::noisy_crook_cylinder_default(),
+		PlaygroundPrimitive::NoisyCrookCylinder(_) => PlaygroundPrimitive::tapered_cylinder_default(),
 	}
 }
 
