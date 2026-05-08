@@ -40,7 +40,15 @@ fn preview_sync_key(config: &PreviewConfig) -> String {
 	)
 }
 
-pub fn keyboard_preview(mut config: ResMut<PreviewConfig>, keyboard: Res<ButtonInput<KeyCode>>) {
+pub fn keyboard_preview(
+	mut config: ResMut<PreviewConfig>,
+	keyboard: Res<ButtonInput<KeyCode>>,
+	text_focus: Res<crate::input::TextEntryFocus>,
+) {
+	if text_focus.0 {
+		return;
+	}
+
 	let mut changed = false;
 
 	if keyboard.just_pressed(KeyCode::Tab) {

@@ -34,6 +34,7 @@ impl Plugin for SdfCommonPlaygroundPlugin {
 		app.init_resource::<PlaygroundSettings>()
 			.init_resource::<PreviewConfig>()
 			.add_plugins(PlaygroundCommandsPlugin)
+			.add_observer(ui::on_console_viewport_scroll)
 			.add_plugins(bevy::pbr::MaterialPlugin::<checkerboard_material::CheckerboardMaterial>::default())
 			.init_resource::<input::TypedCommandLine>()
 			.init_resource::<input::TextEntryFocus>()
@@ -55,6 +56,8 @@ impl Plugin for SdfCommonPlaygroundPlugin {
 					keyboard_preview,
 					input::toggle_text_entry_focus,
 					input::capture_command_line_input,
+					ui::send_console_ui_scroll_events,
+					ui::scroll_console_viewport_keyboard,
 					sync_sdf_preview.after(react_playground_command_root),
 					ui::update_debug_ui,
 					render_items::<PlaygroundRenderItem<StandardMaterial>>,
