@@ -1,6 +1,6 @@
 //! Interactive viewer for [`sdf_common`] primitives via marching-cubes meshing.
 //!
-//! Commands are typed in-game after **`/`** (see [`commands::PlaygroundCommand::parse_line`]).
+//! Commands are typed in-game after **`/`** (see [`commands::PlaygroundCommand::parse_line`]) or passed on the process command line (see [`commands::PlaygroundCommand::parse_startup_command`] and [`PendingStartupCommand`]).
 
 pub mod camera;
 pub mod checkerboard_material;
@@ -8,12 +8,14 @@ pub mod commands;
 mod ground;
 mod input;
 mod preview;
+mod startup;
 pub mod primitive;
 mod ui;
 
 pub use camera::CameraController;
 pub use commands::{PlaygroundCommand, PlaygroundCommandsPlugin};
 pub use ground::PlaygroundSettings;
+pub use startup::PendingStartupCommand;
 pub use preview::{PreviewConfig, SdfPreviewRoot};
 
 use bevy::prelude::*;
@@ -33,7 +35,9 @@ impl Plugin for SdfCommonPlaygroundPlugin {
 	fn build(&self, app: &mut App) {
 		app.init_resource::<PlaygroundSettings>()
 			.init_resource::<PreviewConfig>()
+			.init_resource::<PendingStartupCommand>()
 			.add_plugins(PlaygroundCommandsPlugin)
+			.add_plugins(startup::StartupPlugin)
 			.add_observer(ui::on_console_viewport_scroll)
 			.add_plugins(bevy::pbr::MaterialPlugin::<checkerboard_material::CheckerboardMaterial>::default())
 			.init_resource::<input::TypedCommandLine>()

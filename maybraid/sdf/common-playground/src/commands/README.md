@@ -10,11 +10,13 @@
 
 ## React flow
 
-1. **Input** calls [`PlaygroundCommand::parse_line`](../commands.rs) then [`PlaygroundCommand::react`](../commands.rs).
-2. **Root** spawns a [`PlaygroundCommand`](../commands.rs) entity and delegates:
+1. **Input** calls [`PlaygroundCommand::parse_line`](../commands.rs) then [`PlaygroundCommand::react_with_console`](../commands.rs) (or [`react`](../commands.rs) when no HUD sink is needed).
+2. **Argv startup** uses [`PlaygroundCommand::parse_startup_command`](../commands.rs) then [`PendingStartupCommand`](../startup.rs) + [`run_pending_startup_command`](../startup.rs) on the first frame (same `dispatch_react` path).
+3. **`script --path FILE`** ([`script.rs`](script.rs)): read lines → `parse_line` → `dispatch_react` per line (also available in-game).
+4. **Root** spawns a [`PlaygroundCommand`](../commands.rs) entity (except `script`, which only runs the file) and delegates:
    - `Render` → [`Render::react`](render.rs) spawns [`Render`](render.rs) then the appropriate helper.
    - `Settings` → [`Settings::react`](settings.rs) spawns [`Settings`](settings.rs) then leaf components ([`SettingsCheckerSize`](settings/react_checker_size.rs), [`SettingsSeed`](settings/react_seed.rs)).
-3. **Systems** (registered by plugins, ordered after [`capture_command_line_input`](../input.rs)):
+5. **Systems** (registered by plugins, ordered after [`capture_command_line_input`](../input.rs)):
    - **Render**: [`TaperedCylinderRenderPlugin`](render/tapered_cylinder/plugin.rs), [`NoisyCylinderRenderPlugin`](render/noisy_cylinder/plugin.rs), then [`despawn_render_command_announcer`](render/plugin/announcer.rs) from [`RenderCommandsPlugin`](render/plugin.rs).
    - **Settings**: checker → seed → announcer via [`SettingsCommandsPlugin`](settings/plugin.rs).
    - [`react_playground_command_root`](root.rs): `help` + despawn root [`PlaygroundCommand`](../commands.rs).
@@ -27,6 +29,7 @@ commands/
   README.md
   plugin.rs
   root.rs
+  script.rs
   render.rs
   render/
     plugin.rs              # RenderCommandsPlugin: child plugins + announcer

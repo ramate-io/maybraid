@@ -1,8 +1,16 @@
 use bevy::prelude::*;
-use sdf_common_playground::SdfCommonPlaygroundPlugin;
+use sdf_common_playground::{PendingStartupCommand, PlaygroundCommand, SdfCommonPlaygroundPlugin};
 
 fn main() {
-	println!("SDF playground — press / then e.g. `render tapered-cylinder` or `settings checker-size --meters 5`");
+	let startup = PlaygroundCommand::parse_startup_command().unwrap_or_else(|e| {
+		eprintln!("{e}");
+		std::process::exit(2);
+	});
+	if startup.is_some() {
+		println!("Startup command from argv (same as in-game / text).");
+	} else {
+		println!("SDF playground — press / for commands (optional argv: any `PlaygroundCommand`).");
+	}
 
 	App::new()
 		.add_plugins(DefaultPlugins.set(WindowPlugin {
@@ -14,6 +22,7 @@ fn main() {
 			..default()
 		}))
 		.insert_resource(ClearColor(Color::hsla(201.0, 0.69, 0.62, 1.0)))
+		.insert_resource(PendingStartupCommand(startup))
 		.add_plugins(SdfCommonPlaygroundPlugin)
 		.run();
 }
