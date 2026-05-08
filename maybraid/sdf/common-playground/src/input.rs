@@ -1,16 +1,19 @@
-//! Typed primitive selection (`from_name`) via [`KeyboardInput`](bevy::input::keyboard::KeyboardInput) text.
+//! In-game command line after **`/`**: parses [`crate::PlaygroundCommand`] on Enter.
 
 use bevy::input::keyboard::KeyboardInput;
 use bevy::input::ButtonState;
 use bevy::prelude::*;
-use sdf_common::SdfCommonPrimitive;
 
-use crate::preview::PreviewConfig;
+use crate::commands::PlaygroundCommand;
 
 #[derive(Resource, Default)]
-pub struct TypedSdfName(pub String);
+pub struct TypedCommandLine(pub String);
 
-/// When true, letter keys append to [`TypedSdfName`] instead of only moving the camera (press `/` to toggle).
+/// Last command result / `help` output for the in-game console (HUD).
+#[derive(Resource, Default)]
+pub struct CommandConsoleOutput(pub String);
+
+/// When true, keys append to [`TypedCommandLine`] instead of only moving the camera (press `/` to toggle).
 #[derive(Resource, Default)]
 pub struct TextEntryFocus(pub bool);
 
@@ -24,20 +27,29 @@ pub fn toggle_text_entry_focus(
 	}
 }
 
-pub fn capture_sdf_name_input(
-	mut buffer: ResMut<TypedSdfName>,
+pub fn capture_command_line_input(
+	mut commands: Commands,
+	mut buffer: ResMut<TypedCommandLine>,
 	mut reader: MessageReader<KeyboardInput>,
 	keyboard: Res<ButtonInput<KeyCode>>,
-	mut config: ResMut<PreviewConfig>,
+	mut console: ResMut<CommandConsoleOutput>,
 	focus: Res<TextEntryFocus>,
 ) {
 	if !focus.0 {
 		return;
 	}
 	if keyboard.just_pressed(KeyCode::Enter) {
-		if let Some(p) = SdfCommonPrimitive::from_name(&buffer.0) {
-			config.primitive = p;
-			log::debug!("typed SDF selection: {}", buffer.0);
+		let line = buffer.0.trim();
+		if !line.is_empty() {
+			match PlaygroundCommand::parse_line(line) {
+				Ok(cmd) => {
+					cmd.react(&mut commands);
+				}
+				Err(e) => {
+					log::debug!("command parse error (HUD): {e}");
+					console.0 = e;
+				}
+			}
 		}
 		buffer.0.clear();
 		return;
@@ -62,7 +74,11 @@ pub fn capture_sdf_name_input(
 			if ch == '\r' || ch == '\n' {
 				continue;
 			}
-			if ch.is_ascii_graphic() || ch == '_' {
+			// `/` toggles focus; do not treat it as part of the command.
+			if ch == '/' {
+				continue;
+			}
+			if ch.is_ascii_graphic() || ch == '_' || ch == '-' || ch == ' ' {
 				buffer.0.push(ch);
 			}
 		}

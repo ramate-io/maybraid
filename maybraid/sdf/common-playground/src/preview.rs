@@ -4,7 +4,8 @@ use render_item::{
 	mesh::{handle::MeshHandle, MeshDispatch},
 	DispatchRenderItem,
 };
-use sdf_common::{SdfCommonPrimitive, SdfCommonRenderItem};
+
+use crate::primitive::{PlaygroundPrimitive, PlaygroundRenderItem};
 
 use crate::{ground::GroundPlane, PlaygroundMaterial};
 
@@ -13,8 +14,30 @@ pub struct SdfPreviewRoot;
 
 #[derive(Resource, Clone)]
 pub struct PreviewConfig {
-	pub primitive: SdfCommonPrimitive,
+	pub primitive: PlaygroundPrimitive,
 	pub res_2: u8,
+	pub transform: Transform,
+}
+
+impl Default for PreviewConfig {
+	fn default() -> Self {
+		Self {
+			primitive: PlaygroundPrimitive::tapered_cylinder_default(),
+			res_2: 4,
+			transform: Transform::default(),
+		}
+	}
+}
+
+fn preview_sync_key(config: &PreviewConfig) -> String {
+	let geom = match &config.primitive {
+		PlaygroundPrimitive::TaperedCylinder(c) => format!("t:{c:?}"),
+		PlaygroundPrimitive::NoisyCylinder(n) => format!("n:{:?}|{:?}", n.inner, n.noise),
+	};
+	format!(
+		"{geom}|{}|{:?}|{:?}",
+		config.res_2, config.transform.translation, config.transform.scale
+	)
 }
 
 pub fn keyboard_preview(mut config: ResMut<PreviewConfig>, keyboard: Res<ButtonInput<KeyCode>>) {
@@ -25,11 +48,11 @@ pub fn keyboard_preview(mut config: ResMut<PreviewConfig>, keyboard: Res<ButtonI
 		changed = true;
 	}
 	if keyboard.just_pressed(KeyCode::Digit1) {
-		config.primitive = SdfCommonPrimitive::tapered_cylinder_default();
+		config.primitive = PlaygroundPrimitive::tapered_cylinder_default();
 		changed = true;
 	}
 	if keyboard.just_pressed(KeyCode::Digit2) {
-		config.primitive = SdfCommonPrimitive::noisy_cylinder_default();
+		config.primitive = PlaygroundPrimitive::noisy_cylinder_default();
 		changed = true;
 	}
 	if keyboard.just_pressed(KeyCode::Equal) {
@@ -50,25 +73,25 @@ pub fn keyboard_preview(mut config: ResMut<PreviewConfig>, keyboard: Res<ButtonI
 	}
 }
 
-fn next_primitive(current: &SdfCommonPrimitive) -> SdfCommonPrimitive {
+fn next_primitive(current: &PlaygroundPrimitive) -> PlaygroundPrimitive {
 	match current {
-		SdfCommonPrimitive::TaperedCylinder(_) => SdfCommonPrimitive::noisy_cylinder_default(),
-		SdfCommonPrimitive::NoisyCylinder(_) => SdfCommonPrimitive::tapered_cylinder_default(),
+		PlaygroundPrimitive::TaperedCylinder(_) => PlaygroundPrimitive::noisy_cylinder_default(),
+		PlaygroundPrimitive::NoisyCylinder(_) => PlaygroundPrimitive::tapered_cylinder_default(),
 	}
 }
 
-/// Respawns the marching-cubes preview whenever [`PreviewConfig`] changes (variant or resolution).
+/// Respawns the marching-cubes preview whenever [`PreviewConfig`] changes.
 pub fn sync_sdf_preview(
 	mut commands: Commands,
 	config: Res<PreviewConfig>,
-	mut synced: Local<Option<(String, u8)>>,
+	mut synced: Local<Option<String>>,
 	material: Res<PlaygroundMaterial>,
 	root_q: Query<Entity, With<SdfPreviewRoot>>,
-	dispatch_q: Query<Entity, With<MeshDispatch<MeshHandle<SdfCommonPrimitive>>>>,
+	dispatch_q: Query<Entity, With<MeshDispatch<MeshHandle<PlaygroundPrimitive>>>>,
 	mesh_q: Query<Entity, (With<Mesh3d>, Without<GroundPlane>)>,
 ) {
-	let key = (config.primitive.variant_key().to_string(), config.res_2);
-	if synced.as_ref() == Some(&key) {
+	let key = preview_sync_key(&config);
+	if synced.as_deref() == Some(&key) {
 		return;
 	}
 
@@ -87,10 +110,10 @@ pub fn sync_sdf_preview(
 	commands.spawn((
 		SdfPreviewRoot,
 		CascadeChunk::unit_center_chunk().with_res_2(config.res_2),
-		DispatchRenderItem::new(SdfCommonRenderItem::new(
+		DispatchRenderItem::new(PlaygroundRenderItem::new(
 			config.primitive.clone(),
 			MeshMaterial3d(material.0.clone()),
 		)),
-		Transform::IDENTITY,
+		config.transform,
 	));
 }

@@ -1,8 +1,7 @@
 //! Compositional **surface noise** for any [`Sdf`]: `distance(p) + noise.sample_3d_world(p)`.
 //!
-//! Sampling uses [`NoiseConfig`](procedural_common::NoiseConfig) from **`procedural-common`**
-//! (shared FastNoise Lite generator plus [`NoiseParams`](procedural_common::NoiseParams), including
-//! [`NoiseParams::domain_weights`] for per-axis domain masking).
+//! [`NoisySurface`] stores authoring [`NoiseParams`] (CLI / serde friendly) and keeps a private
+//! [`NoiseConfig`] built from those params for sampling.
 
 use bevy::math::bounding::Aabb3d;
 use bevy::math::Vec3A;
@@ -20,19 +19,47 @@ fn inflate_cuboid_bounds(aabb: Aabb3d, margin: f32) -> Aabb3d {
 	Aabb3d::from_min_max(aabb.min - pad, aabb.max + pad)
 }
 
-/// Wraps an inner SDF and offsets its field using [`NoiseConfig::sample_3d_world`].
+/// Wraps an inner SDF and offsets its field using [`NoiseConfig::sample_3d_world`] built from [`NoiseParams`].
 pub struct NoisySurface<S> {
 	pub inner: S,
-	pub noise: NoiseConfig,
+	pub noise: NoiseParams,
+	config: NoiseConfig,
+}
+
+#[cfg(feature = "serde")]
+impl<S: serde::Serialize> serde::Serialize for NoisySurface<S> {
+	fn serialize<Ser: serde::Serializer>(&self, serializer: Ser) -> Result<Ser::Ok, Ser::Error> {
+		use serde::Serialize;
+		#[derive(Serialize)]
+		struct NoisySurfaceRef<'a, T: serde::Serialize> {
+			inner: &'a T,
+			noise: &'a NoiseParams,
+		}
+		NoisySurfaceRef { inner: &self.inner, noise: &self.noise }.serialize(serializer)
+	}
+}
+
+#[cfg(feature = "serde")]
+impl<'de, S: serde::Deserialize<'de>> serde::Deserialize<'de> for NoisySurface<S> {
+	fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+		#[derive(serde::Deserialize)]
+		struct NoisySurfaceData<S> {
+			inner: S,
+			noise: NoiseParams,
+		}
+		let NoisySurfaceData { inner, noise } = NoisySurfaceData::deserialize(deserializer)?;
+		Ok(Self::new(inner, noise))
+	}
 }
 
 impl<S> NoisySurface<S> {
-	pub fn new(inner: S, noise: NoiseConfig) -> Self {
-		Self { inner, noise }
+	pub fn new(inner: S, noise: NoiseParams) -> Self {
+		let config = NoiseConfig::new(noise);
+		Self { inner, noise, config }
 	}
 
 	pub fn from_params(inner: S, params: NoiseParams) -> Self {
-		Self::new(inner, NoiseConfig::new(params))
+		Self::new(inner, params)
 	}
 
 	/// Convenience for tests and legacy call sites: Perlin, single octave, given seed / frequency / amplitude.
@@ -49,18 +76,23 @@ impl<S> NoisySurface<S> {
 			},
 		)
 	}
+
+	pub fn set_noise(&mut self, params: NoiseParams) {
+		self.noise = params;
+		self.config = NoiseConfig::new(self.noise);
+	}
 }
 
 impl<S: Sdf> Sdf for NoisySurface<S> {
 	fn distance(&self, p: Vec3) -> f32 {
 		let base = self.inner.distance(p);
-		let n = self.noise.sample_3d_world(p);
+		let n = self.config.sample_3d_world(p);
 		base + n
 	}
 
 	fn bounds(&self) -> Bounds {
 		let inner = self.inner.bounds();
-		let m = sdf_band_margin(self.noise.params());
+		let m = sdf_band_margin(&self.noise);
 		match inner {
 			Bounds::Cuboid(a) => Bounds::Cuboid(inflate_cuboid_bounds(a, m)),
 			Bounds::Unbounded => inner,
@@ -70,7 +102,7 @@ impl<S: Sdf> Sdf for NoisySurface<S> {
 
 impl<S: Clone> Clone for NoisySurface<S> {
 	fn clone(&self) -> Self {
-		Self { inner: self.inner.clone(), noise: self.noise.clone() }
+		Self::new(self.inner.clone(), self.noise)
 	}
 }
 
@@ -79,7 +111,7 @@ pub type NoisyCylinder = NoisySurface<TaperedCylinder>;
 
 impl NormalizeChunk for NoisyCylinder {
 	fn normalize_chunk(&self, cascade_chunk: &CascadeChunk) -> CascadeChunk {
-		let mu = sdf_band_margin(self.noise.params());
+		let mu = sdf_band_margin(&self.noise);
 		CascadeChunk::unit_center_chunk().with_res_2(cascade_chunk.res_2).with_mu(mu)
 	}
 }
@@ -131,7 +163,6 @@ mod tests {
 			domain_weights: Vec3::new(1.0, 1.0, 0.0),
 		};
 		let n = NoisySurface::from_params(c, params);
-		// Same lateral radius from Y and same height → same inner SDF; noise samples ignore Z.
 		let p0 = Vec3::new(0.2, 0.3, 0.0);
 		let p1 = Vec3::new(0.0, 0.3, 0.2);
 		assert_eq!(n.distance(p0), n.distance(p1));

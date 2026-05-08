@@ -3,10 +3,10 @@
 //! This crate layers reusable geometry on top of workspace [`sdf`] ([`sdf::Sdf`]):
 //!
 //! - [`TaperedCylinder`](crate::cylinder::TaperedCylinder) — tapered capped cylinder (stick / trunk segment).
-//! - [`NoisySurface`](crate::noisy::NoisySurface) — displacement via [`procedural_common::NoiseConfig::sample_3d_world`] and [`NoiseParams::domain_weights`](procedural_common::NoiseParams).
+//! - [`NoisySurface`](crate::noisy::NoisySurface) — displacement from [`NoiseParams`](procedural_common::NoiseParams) via FastNoise Lite.
 //! - [`NoisyCylinder`](crate::noisy::NoisyCylinder) — convenience alias for a noisy tapered cylinder ([#210](https://github.com/ramate-io/maybraid/issues/210)).
 //!
-//! - [`SdfCommonPrimitive`](crate::primitive::SdfCommonPrimitive) — unified enum + [`SdfCommonRenderItem`](crate::primitive::SdfCommonRenderItem) for rendering / playgrounds.
+//! Optional **`clap`** / **`serde`** features add CLI and serialization derives on geometry and noise params.
 
 pub use sdf;
 
@@ -14,8 +14,6 @@ pub use procedural_common::{FromScalarNoise, NoiseConfig, NoiseParams, sdf_band_
 
 pub mod cylinder;
 pub mod noisy;
-pub mod primitive;
 
 pub use cylinder::TaperedCylinder;
 pub use noisy::{NoisyCylinder, NoisySurface};
-pub use primitive::{SdfCommonPrimitive, SdfCommonRenderItem};

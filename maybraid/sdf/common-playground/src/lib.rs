@@ -1,44 +1,48 @@
-//! Interactive viewer for [`sdf_common::SdfCommonPrimitive`] via marching-cubes meshing.
+//! Interactive viewer for [`sdf_common`] primitives via marching-cubes meshing.
+//!
+//! Commands are typed in-game after **`/`** (see [`commands::PlaygroundCommand::parse_line`]).
 
 pub mod camera;
+pub mod checkerboard_material;
 pub mod commands;
 mod ground;
 mod input;
 mod preview;
+pub mod primitive;
 mod ui;
 
 pub use camera::CameraController;
+pub use commands::PlaygroundCommand;
+pub use ground::PlaygroundSettings;
 pub use preview::{PreviewConfig, SdfPreviewRoot};
 
 use bevy::prelude::*;
+use ground::setup_ground;
+use commands::react::{react_playground_command_root, react_render_to_preview, react_settings_to_playground};
 use preview::{keyboard_preview, sync_sdf_preview};
 use render_item::{mesh::fetch_meshes, mesh::handle::MeshHandle, render_items};
-use sdf_common::{SdfCommonPrimitive, SdfCommonRenderItem};
+use primitive::{PlaygroundPrimitive, PlaygroundRenderItem};
 
 /// Brown-ish default material for SDF previews (similar stick/trunk tone in objects playground).
 #[derive(Resource, Clone)]
 pub struct PlaygroundMaterial(pub Handle<StandardMaterial>);
 
-pub struct SdfCommonPlaygroundPlugin {
-	#[allow(dead_code)]
-	pub seed: u32,
-}
+pub struct SdfCommonPlaygroundPlugin;
 
 impl Plugin for SdfCommonPlaygroundPlugin {
 	fn build(&self, app: &mut App) {
-		app.insert_resource(ClearColor(Color::hsla(201.0, 0.69, 0.62, 1.0)))
-			.insert_resource(PreviewConfig {
-				primitive: SdfCommonPrimitive::tapered_cylinder_default(),
-				res_2: 4,
-			})
-			.init_resource::<input::TypedSdfName>()
+		app.init_resource::<PlaygroundSettings>()
+			.init_resource::<PreviewConfig>()
+			.add_plugins(bevy::pbr::MaterialPlugin::<checkerboard_material::CheckerboardMaterial>::default())
+			.init_resource::<input::TypedCommandLine>()
 			.init_resource::<input::TextEntryFocus>()
+			.init_resource::<input::CommandConsoleOutput>()
 			.add_systems(
 				Startup,
 				(
 					camera::setup_camera,
 					setup_lighting,
-					ground::setup_ground,
+					setup_ground,
 					setup_preview_material,
 					ui::setup_debug_ui,
 				),
@@ -49,11 +53,14 @@ impl Plugin for SdfCommonPlaygroundPlugin {
 					camera::camera_controller,
 					keyboard_preview,
 					input::toggle_text_entry_focus,
-					input::capture_sdf_name_input,
+					input::capture_command_line_input,
+					react_playground_command_root,
+					react_render_to_preview,
+					react_settings_to_playground,
 					sync_sdf_preview,
 					ui::update_debug_ui,
-					render_items::<SdfCommonRenderItem<StandardMaterial>>,
-					fetch_meshes::<MeshHandle<SdfCommonPrimitive>, StandardMaterial>,
+					render_items::<PlaygroundRenderItem<StandardMaterial>>,
+					fetch_meshes::<MeshHandle<PlaygroundPrimitive>, StandardMaterial>,
 				),
 			);
 	}

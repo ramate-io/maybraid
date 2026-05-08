@@ -11,21 +11,101 @@ use std::sync::Arc;
 use bevy_math::Vec3;
 use fastnoise_lite::{FastNoiseLite, FractalType, NoiseType};
 
+/// Parse [`NoiseType`] from CLI / config strings (kebab-case or snake_case).
+pub fn noise_type_from_str(s: &str) -> Result<NoiseType, String> {
+	match s.trim().to_ascii_lowercase().replace('_', "-").as_str() {
+		"perlin" => Ok(NoiseType::Perlin),
+		"open-simplex-2" | "open-simplex2" => Ok(NoiseType::OpenSimplex2),
+		"open-simplex-2s" | "open-simplex2s" => Ok(NoiseType::OpenSimplex2S),
+		"cellular" => Ok(NoiseType::Cellular),
+		"value-cubic" | "valuecubic" => Ok(NoiseType::ValueCubic),
+		"value" => Ok(NoiseType::Value),
+		other => Err(format!(
+			"unknown noise type {other:?} (expected perlin, open-simplex-2, …)"
+		)),
+	}
+}
+
+/// Parse comma-separated domain weights `x,y,z` for [`NoiseParams::domain_weights`].
+pub fn domain_weights_from_str(s: &str) -> Result<Vec3, String> {
+	let parts: Vec<&str> = s.split(',').map(str::trim).filter(|p| !p.is_empty()).collect();
+	if parts.len() != 3 {
+		return Err(format!("expected three comma-separated floats, got {s:?}"));
+	}
+	let x: f32 = parts[0].parse::<f32>().map_err(|e| e.to_string())?;
+	let y: f32 = parts[1].parse::<f32>().map_err(|e| e.to_string())?;
+	let z: f32 = parts[2].parse::<f32>().map_err(|e| e.to_string())?;
+	Ok(Vec3::new(x, y, z))
+}
+
+#[cfg(feature = "serde")]
+mod noise_type_serde {
+	use super::{noise_type_from_str, NoiseType};
+	use serde::{Deserialize, Deserializer, Serializer};
+
+	pub fn serialize<S>(v: &NoiseType, serializer: S) -> Result<S::Ok, S::Error>
+	where
+		S: Serializer,
+	{
+		let name = match v {
+			NoiseType::OpenSimplex2 => "open-simplex-2",
+			NoiseType::OpenSimplex2S => "open-simplex-2s",
+			NoiseType::Cellular => "cellular",
+			NoiseType::Perlin => "perlin",
+			NoiseType::ValueCubic => "value-cubic",
+			NoiseType::Value => "value",
+		};
+		serializer.serialize_str(name)
+	}
+
+	pub fn deserialize<'de, D>(deserializer: D) -> Result<NoiseType, D::Error>
+	where
+		D: Deserializer<'de>,
+	{
+		let s = String::deserialize(deserializer)?;
+		noise_type_from_str(&s).map_err(serde::de::Error::custom)
+	}
+}
+
 /// Authoring parameters: spatial frequency (coordinate multiplier), output amplitude, fractal octaves, seed, noise kind,
 /// plus per-axis domain scaling for 3D sampling.
 #[derive(Clone, Copy, Debug, PartialEq)]
+#[cfg_attr(feature = "clap", derive(clap::Args))]
+#[cfg_attr(feature = "clap", command(rename_all = "kebab-case"))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct NoiseParams {
 	/// Passed through to [`FastNoiseLite::with_seed`].
+	#[cfg_attr(feature = "clap", arg(long, default_value_t = 1337))]
 	pub seed: i32,
 	/// Multiplies coordinates **before** sampling (see [`NoiseConfig::sample_1d`] … [`NoiseConfig::sample_4d`]).
+	#[cfg_attr(feature = "clap", arg(long, default_value_t = 1.0))]
 	pub frequency: f32,
 	/// Multiplies sampled noise after octaves / fractal processing (output gain).
+	#[cfg_attr(feature = "clap", arg(long, default_value_t = 1.0))]
 	pub amplitude: f32,
 	/// `1` → no fractal combine; `> 1` → FBm with this octave count on the underlying generator.
+	#[cfg_attr(feature = "clap", arg(long, default_value_t = 1))]
 	pub octaves: u32,
+	#[cfg_attr(feature = "serde", serde(with = "noise_type_serde"))]
+	#[cfg_attr(
+		feature = "clap",
+		arg(
+			long,
+			value_parser = noise_type_from_str,
+			default_value = "open-simplex-2"
+		)
+	)]
 	pub noise_type: NoiseType,
 	/// Per-axis multipliers on **world position** before frequency scaling in [`NoiseConfig::sample_3d_world`].
 	/// Does not affect [`NoiseConfig::sample_3d`] `(x, y, z)` or [`NoiseConfig::raw_3d`].
+	#[cfg_attr(
+		feature = "clap",
+		arg(
+			long,
+			value_parser = domain_weights_from_str,
+			default_value = "1,1,1"
+		)
+	)]
 	pub domain_weights: Vec3,
 }
 

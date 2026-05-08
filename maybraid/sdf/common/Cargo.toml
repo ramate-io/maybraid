@@ -12,7 +12,7 @@ rust-version = { workspace = true }
 [dependencies]
 bevy = { workspace = true }
 chunk = { workspace = true }
-procedural-common = { workspace = true }
+procedural-common = { workspace = true, features = ["clap", "serde"] }
 render-item = { workspace = true }
 sdf = { workspace = true }
 clap = { workspace = true, optional = true }

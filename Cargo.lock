@@ -4210,7 +4210,9 @@ version = "0.0.1"
 dependencies = [
  "anyhow",
  "bevy_math",
+ "clap",
  "fastnoise-lite",
+ "serde",
 ]
 
 [[package]]
@@ -4618,6 +4620,7 @@ dependencies = [
  "clap",
  "log",
  "render-item",
+ "sdf",
  "sdf-common",
 ]
 

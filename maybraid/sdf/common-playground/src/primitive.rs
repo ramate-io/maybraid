@@ -1,4 +1,4 @@
-//! Unified mesh/render surface for every [`crate::TaperedCylinder`] / [`crate::NoisyCylinder`] primitive.
+//! Playground-only union of [`sdf_common`] mesh primitives for marching-cubes + [`RenderItem`].
 
 use bevy::prelude::*;
 use chunk::cascade::CascadeChunk;
@@ -7,17 +7,16 @@ use render_item::{
 	NormalizeChunk, RenderItem,
 };
 use sdf::{Bounds, Sdf};
+use sdf_common::{NoisyCylinder, NoisySurface, TaperedCylinder};
 
-use crate::{NoisyCylinder, NoisySurface, TaperedCylinder};
-
-/// Every concrete SDF primitive exposed by **`sdf-common`**, for authoring / playgrounds / dispatch.
+/// Concrete SDF variants previewed in this playground.
 #[derive(Clone)]
-pub enum SdfCommonPrimitive {
+pub enum PlaygroundPrimitive {
 	TaperedCylinder(TaperedCylinder),
 	NoisyCylinder(NoisyCylinder),
 }
 
-impl SdfCommonPrimitive {
+impl PlaygroundPrimitive {
 	pub fn tapered_cylinder_default() -> Self {
 		Self::TaperedCylinder(TaperedCylinder::default())
 	}
@@ -33,28 +32,27 @@ impl SdfCommonPrimitive {
 
 	pub fn variant_key(&self) -> &'static str {
 		match self {
-			Self::TaperedCylinder(_) => "tapered_cylinder",
-			Self::NoisyCylinder(_) => "noisy_cylinder",
+			Self::TaperedCylinder(_) => "tapered-cylinder",
+			Self::NoisyCylinder(_) => "noisy-cylinder",
 		}
 	}
 
 	pub fn all_variant_keys() -> &'static [&'static str] {
-		&["tapered_cylinder", "noisy_cylinder"]
+		&["tapered-cylinder", "noisy-cylinder"]
 	}
 
-	/// Resolve a user-typed or UI-selected label (case-insensitive).
 	pub fn from_name(name: &str) -> Option<Self> {
-		match name.trim().to_ascii_lowercase().as_str() {
-			"tapered_cylinder" | "cylinder" | "tapered" | "tc" | "1" => {
+		match name.trim().to_ascii_lowercase().replace('_', "-").as_str() {
+			"tapered-cylinder" | "cylinder" | "tapered" | "tc" | "1" => {
 				Some(Self::tapered_cylinder_default())
 			}
-			"noisy_cylinder" | "noisy" | "nc" | "2" => Some(Self::noisy_cylinder_default()),
+			"noisy-cylinder" | "noisy" | "nc" | "2" => Some(Self::noisy_cylinder_default()),
 			_ => None,
 		}
 	}
 }
 
-impl std::fmt::Debug for SdfCommonPrimitive {
+impl std::fmt::Debug for PlaygroundPrimitive {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		match self {
 			Self::TaperedCylinder(c) => f.debug_tuple("TaperedCylinder").field(c).finish(),
@@ -63,7 +61,7 @@ impl std::fmt::Debug for SdfCommonPrimitive {
 	}
 }
 
-impl std::fmt::Display for SdfCommonPrimitive {
+impl std::fmt::Display for PlaygroundPrimitive {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		match self {
 			Self::TaperedCylinder(_) => write!(f, "TaperedCylinder"),
@@ -72,7 +70,7 @@ impl std::fmt::Display for SdfCommonPrimitive {
 	}
 }
 
-impl Sdf for SdfCommonPrimitive {
+impl Sdf for PlaygroundPrimitive {
 	fn distance(&self, p: Vec3) -> f32 {
 		match self {
 			Self::TaperedCylinder(c) => c.distance(p),
@@ -88,7 +86,7 @@ impl Sdf for SdfCommonPrimitive {
 	}
 }
 
-impl NormalizeChunk for SdfCommonPrimitive {
+impl NormalizeChunk for PlaygroundPrimitive {
 	fn normalize_chunk(&self, cascade_chunk: &CascadeChunk) -> CascadeChunk {
 		match self {
 			Self::TaperedCylinder(c) => c.normalize_chunk(cascade_chunk),
@@ -97,11 +95,11 @@ impl NormalizeChunk for SdfCommonPrimitive {
 	}
 }
 
-impl IdentifiedMesh for SdfCommonPrimitive {
+impl IdentifiedMesh for PlaygroundPrimitive {
 	fn id(&self) -> MeshId {
 		match self {
 			Self::TaperedCylinder(c) => MeshId::new(format!(
-				"sdf_common.TaperedCylinder:{}:{}:{}:{}:{}",
+				"playground.TaperedCylinder:{}:{}:{}:{}:{}",
 				c.base_radius.to_bits(),
 				c.top_radius.to_bits(),
 				c.y_min.to_bits(),
@@ -109,9 +107,9 @@ impl IdentifiedMesh for SdfCommonPrimitive {
 				c.bounds_margin.to_bits(),
 			)),
 			Self::NoisyCylinder(n) => {
-				let p = n.noise.params();
+				let p = &n.noise;
 				MeshId::new(format!(
-					"sdf_common.NoisyCylinder:{}:{}:{}:{}:{:?}",
+					"playground.NoisyCylinder:{}:{}:{}:{}:{:?}",
 					p.seed,
 					p.frequency.to_bits(),
 					p.amplitude.to_bits(),
@@ -123,22 +121,21 @@ impl IdentifiedMesh for SdfCommonPrimitive {
 	}
 }
 
-/// Standard [`RenderItem`] for marching-cubes meshing of [`SdfCommonPrimitive`] with a Bevy material.
 #[derive(Clone)]
-pub struct SdfCommonRenderItem<M: Material> {
-	pub primitive: SdfCommonPrimitive,
+pub struct PlaygroundRenderItem<M: Material> {
+	pub primitive: PlaygroundPrimitive,
 	pub material: MeshMaterial3d<M>,
 }
 
-impl<M: Material + Clone> SdfCommonRenderItem<M> {
-	pub fn new(primitive: SdfCommonPrimitive, material: MeshMaterial3d<M>) -> Self {
+impl<M: Material + Clone> PlaygroundRenderItem<M> {
+	pub fn new(primitive: PlaygroundPrimitive, material: MeshMaterial3d<M>) -> Self {
 		Self { primitive, material }
 	}
 }
 
-impl<M: Material + Clone> RenderItem for SdfCommonRenderItem<M>
+impl<M: Material + Clone> RenderItem for PlaygroundRenderItem<M>
 where
-	(CascadeChunk, MeshDispatch<MeshHandle<SdfCommonPrimitive>>, Transform, MeshMaterial3d<M>): Bundle,
+	(CascadeChunk, MeshDispatch<MeshHandle<PlaygroundPrimitive>>, Transform, MeshMaterial3d<M>): Bundle,
 {
 	fn spawn_render_items(
 		&self,

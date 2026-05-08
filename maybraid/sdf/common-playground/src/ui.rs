@@ -1,80 +1,109 @@
 use bevy::prelude::*;
 
-use crate::{input::TypedSdfName, PreviewConfig};
-
+use crate::input::CommandConsoleOutput;
 use crate::input::TextEntryFocus;
-use sdf_common::SdfCommonPrimitive;
-
+use crate::input::TypedCommandLine;
+use crate::preview::PreviewConfig;
 #[derive(Component)]
 pub struct DebugHudRoot;
 
+#[derive(Component)]
+pub(crate) struct HudStatusLine;
+
+#[derive(Component)]
+pub(crate) struct HudConsoleBlock;
+
 pub fn setup_debug_ui(mut commands: Commands) {
+	let status_size = 12.0;
+	let console_size = 11.0;
+
 	commands
 		.spawn((
 			Node {
 				position_type: PositionType::Absolute,
-				top: Val::Px(10.0),
-				left: Val::Px(10.0),
-				padding: UiRect::all(Val::Px(10.0)),
+				bottom: Val::Px(6.0),
+				left: Val::Px(8.0),
+				right: Val::Px(8.0),
+				padding: UiRect::axes(Val::Px(8.0), Val::Px(6.0)),
+				flex_direction: FlexDirection::Column,
+				row_gap: Val::Px(4.0),
+				align_items: AlignItems::Stretch,
 				..default()
 			},
-			BackgroundColor(Color::hsla(201.0, 0.69, 0.62, 0.75)),
+			BackgroundColor(Color::hsla(201.0, 0.69, 0.62, 0.82)),
 			DebugHudRoot,
 		))
 		.with_children(|parent| {
 			parent.spawn((
-				Text::new(
-					"SDF Common Playground\n\nKeys: Tab cycle · 1 / 2 · +/- resolution · / text mode · WASD fly",
-				),
-				TextFont { font_size: 18.0, ..default() },
+				Text::new("SDF playground · Tab/1/2 · +/- res · / cmd · WASD"),
+				TextFont { font_size: status_size, ..default() },
 				TextColor(Color::WHITE),
+				HudStatusLine,
 			));
+			parent.spawn((
+				Node {
+					max_height: Val::Px(200.0),
+					overflow: Overflow::clip(),
+					..default()
+				},
+				BackgroundColor(Color::NONE),
+			))
+			.with_children(|row| {
+				row.spawn((
+					Text::new(""),
+					TextFont { font_size: console_size, ..default() },
+					TextColor(Color::srgba(0.95, 0.98, 1.0, 1.0)),
+					HudConsoleBlock,
+				));
+			});
 		});
 }
 
-fn panel_body(config: &PreviewConfig, typed: &TypedSdfName, text_focus: &TextEntryFocus) -> String {
+fn panel_status(config: &PreviewConfig, line: &TypedCommandLine, text_focus: &TextEntryFocus) -> String {
 	format!(
-		"SDF: {} ({})\nres_2: {}  |  variants: {}\n\n[/] text mode: {} — Type name + Enter: {}\n(Esc clear · aliases: tapered_cylinder, noisy_cylinder, …)",
+		"{} ({})  res_2={}  |  [/] {}  |  buf: {}",
 		config.primitive,
 		config.primitive.variant_key(),
 		config.res_2,
-		SdfCommonPrimitive::all_variant_keys().join(", "),
-		if text_focus.0 { "ON" } else { "OFF" },
-		if typed.0.is_empty() {
+		if text_focus.0 { "cmd ON" } else { "cmd off" },
+		if line.0.is_empty() {
 			"_".into()
 		} else {
-			typed.0.clone()
+			line.0.clone()
 		},
 	)
 }
 
-pub fn update_debug_ui(
+pub(crate) fn update_debug_ui(
 	camera_query: Query<&Transform, With<Camera3d>>,
-	mut text_query: Query<&mut Text>,
-	hud_query: Query<Entity, With<DebugHudRoot>>,
-	children_query: Query<&Children>,
+	mut hud_text: ParamSet<(
+		Query<&mut Text, With<HudStatusLine>>,
+		Query<&mut Text, With<HudConsoleBlock>>,
+	)>,
 	config: Res<PreviewConfig>,
-	typed: Res<TypedSdfName>,
+	typed: Res<TypedCommandLine>,
 	text_focus: Res<TextEntryFocus>,
+	console: Res<CommandConsoleOutput>,
 ) {
 	let Ok(transform) = camera_query.single() else {
 		return;
 	};
 	let pos = transform.translation;
 
-	if let Ok(display_entity) = hud_query.single() {
-		if let Ok(children) = children_query.get(display_entity) {
-			if let Some(&text_entity) = children.first() {
-				if let Ok(mut text) = text_query.get_mut(text_entity) {
-					text.0 = format!(
-						"{}\n\nCamera: ({:.1}, {:.1}, {:.1})",
-						panel_body(&config, &typed, &text_focus),
-						pos.x,
-						pos.y,
-						pos.z
-					);
-				}
-			}
-		}
+	if let Ok(mut status) = hud_text.p0().single_mut() {
+		status.0 = format!(
+			"{}\nCam {:.1}, {:.1}, {:.1}   ·   help + Enter → HUD",
+			panel_status(&config, &typed, &text_focus),
+			pos.x,
+			pos.y,
+			pos.z
+		);
+	}
+	if let Ok(mut block) = hud_text.p1().single_mut() {
+		block.0 = if console.0.is_empty() {
+			"Console: (errors & `help` output)".into()
+		} else {
+			console.0.clone()
+		};
 	}
 }

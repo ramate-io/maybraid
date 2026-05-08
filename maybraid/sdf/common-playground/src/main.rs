@@ -2,9 +2,7 @@ use bevy::prelude::*;
 use sdf_common_playground::SdfCommonPlaygroundPlugin;
 
 fn main() {
-	let seed = std::env::args().nth(1).and_then(|s| s.parse::<u32>().ok()).unwrap_or(12345);
-
-	println!("Starting sdf-common playground (seed arg reserved for future noise variants): {seed}");
+	println!("SDF playground — press / then e.g. `render tapered-cylinder` or `settings checker-size --meters 5`");
 
 	App::new()
 		.add_plugins(DefaultPlugins.set(WindowPlugin {
@@ -15,6 +13,7 @@ fn main() {
 			}),
 			..default()
 		}))
-		.add_plugins(SdfCommonPlaygroundPlugin { seed })
+		.insert_resource(ClearColor(Color::hsla(201.0, 0.69, 0.62, 1.0)))
+		.add_plugins(SdfCommonPlaygroundPlugin)
 		.run();
 }

@@ -17,23 +17,24 @@ use sdf::{Bounds, Sdf};
 
 /// Tapered cylinder segment aligned with **+Y**, capped at both ends.
 #[derive(Clone, Copy, Debug, PartialEq)]
-#[cfg_attr(feature = "clap", derive(clap::Parser))]
+#[cfg_attr(feature = "clap", derive(clap::Args))]
+#[cfg_attr(feature = "clap", command(rename_all = "kebab-case"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct TaperedCylinder {
 	/// Radius at `y = y_min` (bottom of the segment).
-	#[cfg_attr(feature = "clap", arg(long, default_value = "0.5"))]
+	#[cfg_attr(feature = "clap", arg(long, default_value_t = 0.5))]
 	pub base_radius: f32,
 	/// Radius at `y = y_min + height` (top of the segment).
-	#[cfg_attr(feature = "clap", arg(long, default_value = "0.4"))]
+	#[cfg_attr(feature = "clap", arg(long, default_value_t = 0.4))]
 	pub top_radius: f32,
 	/// Lower extent of the finite cylinder along Y.
-	#[cfg_attr(feature = "clap", arg(long, default_value = "0.0"))]
+	#[cfg_attr(feature = "clap", arg(long, default_value_t = 0.0))]
 	pub y_min: f32,
 	/// Segment length along Y (must be positive).
-	#[cfg_attr(feature = "clap", arg(long, default_value = "1.0"))]
+	#[cfg_attr(feature = "clap", arg(long, default_value_t = 1.0))]
 	pub height: f32,
 	/// Extra **uniform** padding on the axis-aligned bounds (e.g. match chunk **mu** or mesh band).
-	#[cfg_attr(feature = "clap", arg(long, default_value = "0.0"))]
+	#[cfg_attr(feature = "clap", arg(long, default_value_t = 0.0))]
 	pub bounds_margin: f32,
 }
 
