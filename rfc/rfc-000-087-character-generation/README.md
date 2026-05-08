@@ -77,7 +77,7 @@ Animations of the characters will also be subject to slight variation via proced
 
 Procedural character generation usually combines a few layers, rather than one monolithic algorithm:
 
-- **Template + parameter variation**: start from a hand-authored base topology and vary scale, proportions, feature toggles, and material palettes. This is common in games because it is stable, art-directable, and easy to constrain (for a production example, see [MetaHuman](https://www.metahuman.com/)).
+- **Template + parameter variation**: start from a hand-authored base topology and vary scale, proportions, feature toggles, and material palettes. This is common in games because it is stable, art-directable, and easy to constrain (for a production example, see `MetaHuman`).
 - **Part library assembly (modular kits)**: generate characters by composing reusable parts (head, torso, limbs, ears, horns, tails), then enforce compatibility constraints. This aligns well with our multi-mesh-first approach (see [MB-Lab](https://github.com/animate1978/MB-Lab)).
 - **Rule/grammar-driven generation**: encode allowed combinations and dependencies as rules (for example, species trait implies a family of limb and skull shapes). This is often used to keep outputs coherent while preserving variety (see [Shape Grammars](https://en.wikipedia.org/wiki/Shape_grammar) and [L-systems](https://en.wikipedia.org/wiki/L-system)).
 - **Morph/blend-space variation**: blend between shape keys or latent feature sliders to produce smooth families of forms. This is powerful for continuity, but can be heavier than needed for low-poly, rigid-part pipelines (see [SMPL](https://smpl.is.tue.mpg.de/)).

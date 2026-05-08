@@ -13,6 +13,9 @@ members = [
   "maybraid/lod/cascade-system",
 
   "maybraid/sdf/common",
+  "maybraid/sdf/common-playground",
+
+  "maybraid/procedural/common",
 
   "maybraid/chico/lib",
   "maybraid/chico/sbs-trees",
@@ -125,6 +128,7 @@ comrak = { version = "0.43.0" }
 pulldown-cmark = "0.13.0"
 rayon = { version = "1.11.0" }
 noise = { version = "0.9" }
+fastnoise-lite = "1.1.1"
 lz4_flex = "0.11"
 bincode = "1.3.3"
 bevy_math = "0.18.0"
@@ -151,6 +155,8 @@ lod-cascade = { path = "maybraid/lod/cascade" }
 lod-cascade-system = { path = "maybraid/lod/cascade-system" }
 
 sdf-common = { path = "maybraid/sdf/common" }
+sdf-common-playground = { path = "maybraid/sdf/common-playground" }
+procedural-common = { path = "maybraid/procedural/common" }
 
 chico = { path = "maybraid/chico/lib" }
 chico-sbs-trees = { path = "maybraid/chico/sbs-trees" }

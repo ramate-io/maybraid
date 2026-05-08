@@ -1,5 +1,5 @@
 [package]
-name = "sdf-common"
+name = "sdf-common-playground"
 version = { workspace = true }
 edition  = { workspace = true }
 license  = { workspace = true }
@@ -12,19 +12,14 @@ rust-version = { workspace = true }
 [dependencies]
 bevy = { workspace = true }
 chunk = { workspace = true }
-procedural-common = { workspace = true, features = ["clap", "serde"] }
+log = { workspace = true }
 render-item = { workspace = true }
 sdf = { workspace = true }
-clap = { workspace = true, optional = true }
-serde = { workspace = true, optional = true }
+sdf-common = { workspace = true }
+clap = { workspace = true }
 
 [dev-dependencies]
 anyhow = { workspace = true }
-
-[features]
-default = [ "clap", "serde" ]
-clap = [ "dep:clap" ]
-serde = [ "dep:serde" ]
 
 [lints]
 workspace = true

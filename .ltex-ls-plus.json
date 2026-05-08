@@ -18,7 +18,8 @@
         "IN_THE_INTERNET",
         "CONSEQUENCES_OF_FOR",
         "EN_COMPOUNDS_POCKET_SIZE",
-        "PHRASE_REPETITION"
+        "PHRASE_REPETITION",
+        "NUMBERS_IN_WORDS"
       ]
     },
     "enabledRules": {
@@ -435,7 +436,8 @@
         "Wildlands",
         "MathJax",
         "accessor",
-        "accessors"
+        "accessors",
+        "Argv"
       ]
     },
     "bibtex": {

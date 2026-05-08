@@ -1,5 +1,5 @@
 [package]
-name = "sdf-common"
+name = "procedural-common"
 version = { workspace = true }
 edition  = { workspace = true }
 license  = { workspace = true }
@@ -9,22 +9,19 @@ homepage = { workspace = true }
 publish = { workspace = true }
 rust-version = { workspace = true }
 
+[features]
+default = []
+clap = ["dep:clap"]
+serde = ["dep:serde", "bevy_math/serialize"]
+
 [dependencies]
-bevy = { workspace = true }
-chunk = { workspace = true }
-procedural-common = { workspace = true, features = ["clap", "serde"] }
-render-item = { workspace = true }
-sdf = { workspace = true }
+bevy_math = { workspace = true }
 clap = { workspace = true, optional = true }
-serde = { workspace = true, optional = true }
+fastnoise-lite = { workspace = true }
+serde = { workspace = true, optional = true, features = ["derive"] }
 
 [dev-dependencies]
 anyhow = { workspace = true }
-
-[features]
-default = [ "clap", "serde" ]
-clap = [ "dep:clap" ]
-serde = [ "dep:serde" ]
 
 [lints]
 workspace = true
