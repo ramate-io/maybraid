@@ -1,6 +1,7 @@
 //! Interactive viewer for [`sdf_common::SdfCommonPrimitive`] via marching-cubes meshing.
 
 pub mod camera;
+pub mod commands;
 mod ground;
 mod input;
 mod preview;
@@ -58,14 +59,9 @@ impl Plugin for SdfCommonPlaygroundPlugin {
 	}
 }
 
-fn setup_preview_material(
-	mut commands: Commands,
-	mut materials: ResMut<Assets<StandardMaterial>>,
-) {
-	let handle = materials.add(StandardMaterial {
-		base_color: Color::srgb(0.89, 0.886, 0.604),
-		..default()
-	});
+fn setup_preview_material(mut commands: Commands, mut materials: ResMut<Assets<StandardMaterial>>) {
+	let handle = materials
+		.add(StandardMaterial { base_color: Color::srgb(0.89, 0.886, 0.604), ..default() });
 	commands.insert_resource(PlaygroundMaterial(handle));
 }
 

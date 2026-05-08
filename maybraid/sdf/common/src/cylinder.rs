@@ -17,16 +17,23 @@ use sdf::{Bounds, Sdf};
 
 /// Tapered cylinder segment aligned with **+Y**, capped at both ends.
 #[derive(Clone, Copy, Debug, PartialEq)]
+#[cfg_attr(feature = "clap", derive(clap::Parser))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct TaperedCylinder {
 	/// Radius at `y = y_min` (bottom of the segment).
+	#[cfg_attr(feature = "clap", arg(long, default_value = "0.5"))]
 	pub base_radius: f32,
 	/// Radius at `y = y_min + height` (top of the segment).
+	#[cfg_attr(feature = "clap", arg(long, default_value = "0.4"))]
 	pub top_radius: f32,
 	/// Lower extent of the finite cylinder along Y.
+	#[cfg_attr(feature = "clap", arg(long, default_value = "0.0"))]
 	pub y_min: f32,
 	/// Segment length along Y (must be positive).
+	#[cfg_attr(feature = "clap", arg(long, default_value = "1.0"))]
 	pub height: f32,
 	/// Extra **uniform** padding on the axis-aligned bounds (e.g. match chunk **mu** or mesh band).
+	#[cfg_attr(feature = "clap", arg(long, default_value = "0.0"))]
 	pub bounds_margin: f32,
 }
 
@@ -80,9 +87,7 @@ impl Sdf for TaperedCylinder {
 impl NormalizeChunk for TaperedCylinder {
 	fn normalize_chunk(&self, cascade_chunk: &CascadeChunk) -> CascadeChunk {
 		let mu = self.bounds_margin + NUMERIC_SURFACE_EPSILON;
-		CascadeChunk::unit_center_chunk()
-			.with_res_2(cascade_chunk.res_2)
-			.with_mu(mu)
+		CascadeChunk::unit_center_chunk().with_res_2(cascade_chunk.res_2).with_mu(mu)
 	}
 }
 

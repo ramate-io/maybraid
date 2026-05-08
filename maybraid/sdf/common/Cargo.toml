@@ -15,9 +15,16 @@ chunk = { workspace = true }
 procedural-common = { workspace = true }
 render-item = { workspace = true }
 sdf = { workspace = true }
+clap = { workspace = true, optional = true }
+serde = { workspace = true, optional = true }
 
 [dev-dependencies]
 anyhow = { workspace = true }
+
+[features]
+default = [ "clap", "serde" ]
+clap = [ "dep:clap" ]
+serde = [ "dep:serde" ]
 
 [lints]
 workspace = true
