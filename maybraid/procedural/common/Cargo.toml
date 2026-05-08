@@ -1,5 +1,5 @@
 [package]
-name = "sdf-common"
+name = "procedural-common"
 version = { workspace = true }
 edition  = { workspace = true }
 license  = { workspace = true }
@@ -10,9 +10,8 @@ publish = { workspace = true }
 rust-version = { workspace = true }
 
 [dependencies]
-bevy = { workspace = true }
-procedural-common = { workspace = true }
-sdf = { workspace = true }
+bevy_math = { workspace = true }
+fastnoise-lite = { workspace = true }
 
 [dev-dependencies]
 anyhow = { workspace = true }

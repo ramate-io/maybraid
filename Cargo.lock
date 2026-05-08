@@ -2429,6 +2429,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "fastnoise-lite"
+version = "1.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3e5f3c3cc9081e5d0e18bcd50e80cd33cba47fc22f88a9da9c33ecd1c87ea5c0"
+dependencies = [
+ "num-traits",
+]
+
+[[package]]
 name = "fastrand"
 version = "2.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4082,6 +4091,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "procedural-common"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "bevy_math",
+ "fastnoise-lite",
+]
+
+[[package]]
 name = "profiling"
 version = "1.0.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4466,6 +4484,9 @@ dependencies = [
 name = "sdf-common"
 version = "0.0.1"
 dependencies = [
+ "anyhow",
+ "bevy",
+ "procedural-common",
  "sdf",
 ]
 
