@@ -1,10 +1,15 @@
 //! In-game command line after **`/`**: parses [`crate::PlaygroundCommand`] on Enter.
 
+use std::collections::VecDeque;
+
 use bevy::input::keyboard::KeyboardInput;
 use bevy::input::ButtonState;
 use bevy::prelude::*;
 
 use crate::commands::PlaygroundCommand;
+
+/// Maximum submitted lines kept for ↑ / ↓ recall (oldest dropped first).
+pub const COMMAND_HISTORY_MAX: usize = 1024;
 
 #[derive(Resource, Default)]
 pub struct TypedCommandLine(pub String);
@@ -16,6 +21,62 @@ pub struct CommandConsoleOutput(pub String);
 /// When true, keys append to [`TypedCommandLine`] instead of only moving the camera (press `/` to toggle).
 #[derive(Resource, Default)]
 pub struct TextEntryFocus(pub bool);
+
+#[derive(Resource, Default)]
+pub struct CommandHistory {
+	/// Oldest at front, newest at back.
+	pub entries: VecDeque<String>,
+	/// `None` = editing a fresh line; `Some(i)` = viewing `entries[i]`.
+	pub browse: Option<usize>,
+	/// Line being edited before first ↑ in this “session”.
+	pub draft: String,
+}
+
+impl CommandHistory {
+	fn push_submitted(&mut self, line: String) {
+		self.entries.push_back(line);
+		while self.entries.len() > COMMAND_HISTORY_MAX {
+			self.entries.pop_front();
+			match self.browse {
+				None => {}
+				Some(0) => self.browse = None,
+				Some(i) => self.browse = Some(i - 1),
+			}
+		}
+	}
+
+	fn navigate_up(&mut self, buffer: &mut String) {
+		if self.entries.is_empty() {
+			return;
+		}
+		if self.browse.is_none() {
+			self.draft.clone_from(buffer);
+			self.browse = Some(self.entries.len() - 1);
+		} else if let Some(i) = self.browse {
+			if i > 0 {
+				self.browse = Some(i - 1);
+			}
+		}
+		if let Some(i) = self.browse {
+			buffer.clone_from(&self.entries[i]);
+		}
+	}
+
+	fn navigate_down(&mut self, buffer: &mut String) {
+		match self.browse {
+			None => {}
+			Some(i) => {
+				if i + 1 < self.entries.len() {
+					self.browse = Some(i + 1);
+					buffer.clone_from(&self.entries[i + 1]);
+				} else {
+					self.browse = None;
+					buffer.clone_from(&self.draft);
+				}
+			}
+		}
+	}
+}
 
 pub fn toggle_text_entry_focus(
 	keyboard: Res<ButtonInput<KeyCode>>,
@@ -30,6 +91,7 @@ pub fn toggle_text_entry_focus(
 pub fn capture_command_line_input(
 	mut commands: Commands,
 	mut buffer: ResMut<TypedCommandLine>,
+	mut history: ResMut<CommandHistory>,
 	mut reader: MessageReader<KeyboardInput>,
 	keyboard: Res<ButtonInput<KeyCode>>,
 	mut console: ResMut<CommandConsoleOutput>,
@@ -38,10 +100,23 @@ pub fn capture_command_line_input(
 	if !focus.0 {
 		return;
 	}
+
+	let shift = keyboard.any_pressed([KeyCode::ShiftLeft, KeyCode::ShiftRight]);
+
+	if !shift && keyboard.just_pressed(KeyCode::ArrowUp) {
+		history.navigate_up(&mut buffer.0);
+		return;
+	}
+	if !shift && keyboard.just_pressed(KeyCode::ArrowDown) {
+		history.navigate_down(&mut buffer.0);
+		return;
+	}
+
 	if keyboard.just_pressed(KeyCode::Enter) {
-		let line = buffer.0.trim();
+		let line = buffer.0.trim().to_string();
 		if !line.is_empty() {
-			match PlaygroundCommand::parse_line(line) {
+			history.push_submitted(line.clone());
+			match PlaygroundCommand::parse_line(&line) {
 				Ok(cmd) => {
 					cmd.react(&mut commands);
 				}
@@ -52,6 +127,8 @@ pub fn capture_command_line_input(
 			}
 		}
 		buffer.0.clear();
+		history.browse = None;
+		history.draft.clear();
 		return;
 	}
 	if keyboard.just_pressed(KeyCode::Backspace) {
@@ -60,6 +137,8 @@ pub fn capture_command_line_input(
 	}
 	if keyboard.just_pressed(KeyCode::Escape) {
 		buffer.0.clear();
+		history.browse = None;
+		history.draft.clear();
 		return;
 	}
 
@@ -78,7 +157,12 @@ pub fn capture_command_line_input(
 			if ch == '/' {
 				continue;
 			}
-			if ch.is_ascii_graphic() || ch == '_' || ch == '-' || ch == ' ' {
+			if ch.is_ascii_graphic() || ch == '_' || ch == '-' || ch == ' ' || ch == ',' || ch == '.' {
+				// Typing clears “browsing” mode so we edit a new line derived from history.
+				if history.browse.is_some() {
+					history.browse = None;
+					history.draft.clear();
+				}
 				buffer.0.push(ch);
 			}
 		}

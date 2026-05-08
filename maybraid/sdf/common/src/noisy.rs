@@ -14,6 +14,10 @@ use sdf::Sdf;
 
 use crate::cylinder::TaperedCylinder;
 
+pub mod unit_cylinder;
+
+pub use unit_cylinder::UnitCylinderNoiseParams;
+
 fn inflate_cuboid_bounds(aabb: Aabb3d, margin: f32) -> Aabb3d {
 	let pad = Vec3A::splat(margin);
 	Aabb3d::from_min_max(aabb.min - pad, aabb.max + pad)
@@ -122,6 +126,16 @@ mod tests {
 	use anyhow::Result;
 	use bevy::math::bounding::BoundingVolume;
 	use procedural_common::NUMERIC_SURFACE_EPSILON;
+
+	#[test]
+	fn unit_cylinder_noise_preset() -> Result<()> {
+		let p: NoiseParams = UnitCylinderNoiseParams.into();
+		assert_eq!(p.amplitude, 0.05);
+		assert_eq!(p.frequency, 5.0);
+		assert_eq!(p.octaves, 1);
+		assert_eq!(p.noise_type, NoiseType::Perlin);
+		Ok(())
+	}
 
 	#[test]
 	fn same_seed_same_distance() -> Result<()> {

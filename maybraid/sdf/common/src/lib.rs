@@ -16,4 +16,4 @@ pub mod cylinder;
 pub mod noisy;
 
 pub use cylinder::TaperedCylinder;
-pub use noisy::{NoisyCylinder, NoisySurface};
+pub use noisy::{NoisyCylinder, NoisySurface, UnitCylinderNoiseParams};

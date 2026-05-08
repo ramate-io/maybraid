@@ -60,7 +60,7 @@ pub fn setup_debug_ui(mut commands: Commands) {
 		))
 		.with_children(|parent| {
 			parent.spawn((
-				Text::new("SDF playground · Tab/1/2 · +/- res · / cmd · WASD"),
+				Text::new("SDF playground · Tab/1/2 · +/- res · / cmd · WASD · ↑↓ history · ⇧↑↓ scroll"),
 				TextFont { font_size: status_size, ..default() },
 				TextColor(Color::WHITE),
 				HudStatusLine,
@@ -176,11 +176,18 @@ pub fn scroll_console_viewport_keyboard(
 	let max_offset = (computed.content_size() - computed.size()) * computed.inverse_scale_factor();
 	let max_y = max_offset.y.max(0.);
 	let step = SCROLL_LINE_PX * 3.0;
+	let shift = keyboard.any_pressed([KeyCode::ShiftLeft, KeyCode::ShiftRight]);
 	if keyboard.just_pressed(KeyCode::PageUp) {
 		scroll_position.y = (scroll_position.y - step * 4.0).max(0.);
 	}
 	if keyboard.just_pressed(KeyCode::PageDown) {
 		scroll_position.y = (scroll_position.y + step * 4.0).min(max_y);
+	}
+	if shift && keyboard.just_pressed(KeyCode::ArrowUp) {
+		scroll_position.y = (scroll_position.y - step).max(0.);
+	}
+	if shift && keyboard.just_pressed(KeyCode::ArrowDown) {
+		scroll_position.y = (scroll_position.y + step).min(max_y);
 	}
 }
 
@@ -224,7 +231,7 @@ pub(crate) fn update_debug_ui(
 
 	if let Ok(mut status) = hud_text.p0().single_mut() {
 		status.0 = format!(
-			"{}\nCam {:.1}, {:.1}, {:.1}   ·   help + Enter → HUD · PgUp/PgDn scroll",
+			"{}\nCam {:.1}, {:.1}, {:.1}   ·   help · Enter · ↑↓ hist · PgUp/PgDn · ⇧↑↓",
 			panel_status(&config, &typed, &text_focus),
 			pos.x,
 			pos.y,

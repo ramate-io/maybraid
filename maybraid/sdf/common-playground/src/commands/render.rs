@@ -1,6 +1,7 @@
 pub mod noisy_cylinder;
 pub mod plugin;
 pub mod tapered_cylinder;
+mod vec3_args;
 
 use bevy::prelude::*;
 use clap::Subcommand;
@@ -12,6 +13,8 @@ use crate::primitive::PlaygroundPrimitive;
 pub use noisy_cylinder::{NoisyCylinderArgs, NoisyCylinderHelper};
 pub use tapered_cylinder::TaperedCylinderHelper;
 
+use vec3_args::parse_vec3_csv;
+
 /// Shared chunk / transform flags for any geometry variant (flatten inner SDF args + optional noise).
 #[derive(Debug, Clone, clap::Args, Component)]
 #[command(rename_all = "kebab-case")]
@@ -19,32 +22,33 @@ pub struct RenderHelper<T: clap::Args> {
 	#[command(flatten)]
 	pub inner: T,
 
-	#[arg(long, default_value_t = 4)]
+	#[arg(long, default_value_t = 5)]
 	pub res_2: u8,
 
-	#[arg(long, default_value_t = 1.0)]
-	pub scale_x: f32,
+	/// Uniform scale factors `x,y,z` (e.g. `1.0,2.0,3.0`).
+	#[arg(long, default_value = "1,1,1", value_parser = parse_vec3_csv)]
+	pub scale: Vec3,
 
-	#[arg(long, default_value_t = 1.0)]
-	pub scale_y: f32,
+	/// Translation `x,y,z` in world units.
+	#[arg(long, default_value = "0,0,0", value_parser = parse_vec3_csv)]
+	pub translate: Vec3,
 
-	#[arg(long, default_value_t = 1.0)]
-	pub scale_z: f32,
-
-	#[arg(long, default_value_t = 0.0)]
-	pub translate_x: f32,
-
-	#[arg(long, default_value_t = 0.0)]
-	pub translate_y: f32,
-
-	#[arg(long, default_value_t = 0.0)]
-	pub translate_z: f32,
+	/// Euler rotation in **degrees** around X, then Y, then Z ([`EulerRot::XYZ`]).
+	#[arg(long, default_value = "0,0,0", value_parser = parse_vec3_csv)]
+	pub rotate_euler: Vec3,
 }
 
 impl<T: clap::Args> RenderHelper<T> {
 	pub fn preview_transform(&self) -> Transform {
-		Transform::from_translation(Vec3::new(self.translate_x, self.translate_y, self.translate_z))
-			.with_scale(Vec3::new(self.scale_x, self.scale_y, self.scale_z))
+		let rot = Quat::from_euler(
+			EulerRot::XYZ,
+			self.rotate_euler.x.to_radians(),
+			self.rotate_euler.y.to_radians(),
+			self.rotate_euler.z.to_radians(),
+		);
+		Transform::from_translation(self.translate)
+			.with_rotation(rot)
+			.with_scale(self.scale)
 	}
 }
 
@@ -76,9 +80,11 @@ impl Render {
 			},
 			Self::NoisyCylinder(h) => {
 				let cyl = h.inner.cylinder;
-				let noise = h.inner.noise;
+				let noise = h.inner.resolved_noise();
 				PreviewConfig {
-					primitive: PlaygroundPrimitive::NoisyCylinder(NoisySurface::from_params(cyl, noise)),
+					primitive: PlaygroundPrimitive::NoisyCylinder(NoisySurface::from_params(
+						cyl, noise,
+					)),
 					res_2: h.res_2,
 					transform: h.preview_transform(),
 				}

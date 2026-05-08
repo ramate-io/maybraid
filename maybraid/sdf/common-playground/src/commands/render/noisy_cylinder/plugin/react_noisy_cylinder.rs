@@ -17,7 +17,7 @@ pub fn react_render_helper_noisy_cylinder(
 ) {
 	for (entity, helper) in &q {
 		let cyl = helper.inner.cylinder;
-		let noise = helper.inner.noise;
+		let noise = helper.inner.resolved_noise();
 		*preview = PreviewConfig {
 			primitive: PlaygroundPrimitive::NoisyCylinder(NoisySurface::from_params(cyl, noise)),
 			res_2: helper.res_2,

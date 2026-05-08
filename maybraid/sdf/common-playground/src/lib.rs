@@ -39,6 +39,7 @@ impl Plugin for SdfCommonPlaygroundPlugin {
 			.init_resource::<input::TypedCommandLine>()
 			.init_resource::<input::TextEntryFocus>()
 			.init_resource::<input::CommandConsoleOutput>()
+			.init_resource::<input::CommandHistory>()
 			.add_systems(
 				Startup,
 				(
