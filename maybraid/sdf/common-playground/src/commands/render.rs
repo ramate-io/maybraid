@@ -1,4 +1,6 @@
+pub mod ball;
 pub mod crook_cylinder;
+pub mod noisy_ball;
 pub mod noisy_cylinder;
 pub mod noisy_crook_cylinder;
 pub mod plugin;
@@ -12,7 +14,9 @@ use sdf_common::NoisySurface;
 use crate::preview::PreviewConfig;
 use crate::primitive::PlaygroundPrimitive;
 
+pub use ball::BallHelper;
 pub use crook_cylinder::CrookCylinderHelper;
+pub use noisy_ball::{NoisyBallArgs, NoisyBallHelper};
 pub use noisy_cylinder::{NoisyCylinderArgs, NoisyCylinderHelper};
 pub use noisy_crook_cylinder::{NoisyCrookCylinderArgs, NoisyCrookCylinderHelper};
 pub use tapered_cylinder::TaperedCylinderHelper;
@@ -57,6 +61,7 @@ impl<T: clap::Args> RenderHelper<T> {
 }
 
 #[derive(Debug, Clone, Subcommand, Component)]
+#[command(rename_all = "kebab-case")]
 pub enum Render {
 	/// Smooth tapered cylinder (no procedural surface displacement).
 	TaperedCylinder(TaperedCylinderHelper),
@@ -66,6 +71,10 @@ pub enum Render {
 	CrookCylinder(CrookCylinderHelper),
 	/// Crook cylinder with [`sdf_common::NoiseParams`] surface displacement.
 	NoisyCrookCylinder(NoisyCrookCylinderHelper),
+	/// Solid sphere centered at the origin ([RFC-183 3.1.2.2](https://github.com/ramate-io/maybraid/tree/main/rfc/rfc-000-000-183-chico-vegetation/03-01-stalk-and-ball-stick-trees/02-ball-components/02-noisy-ball/README.md)).
+	Ball(BallHelper),
+	/// Sphere with [`sdf_common::NoiseParams`] surface displacement.
+	NoisyBall(NoisyBallHelper),
 }
 
 impl Render {
@@ -78,6 +87,8 @@ impl Render {
 			Self::NoisyCylinder(render_helper) => commands.spawn(render_helper),
 			Self::CrookCylinder(render_helper) => commands.spawn(render_helper),
 			Self::NoisyCrookCylinder(render_helper) => commands.spawn(render_helper),
+			Self::Ball(render_helper) => commands.spawn(render_helper),
+			Self::NoisyBall(render_helper) => commands.spawn(render_helper),
 		};
 	}
 
@@ -110,6 +121,22 @@ impl Render {
 				PreviewConfig {
 					primitive: PlaygroundPrimitive::NoisyCrookCylinder(NoisySurface::from_params(
 						crook, noise,
+					)),
+					res_2: h.res_2,
+					transform: h.preview_transform(),
+				}
+			}
+			Self::Ball(h) => PreviewConfig {
+				primitive: PlaygroundPrimitive::Ball(h.inner),
+				res_2: h.res_2,
+				transform: h.preview_transform(),
+			},
+			Self::NoisyBall(h) => {
+				let ball = h.inner.ball;
+				let noise = h.inner.resolved_noise();
+				PreviewConfig {
+					primitive: PlaygroundPrimitive::NoisyBall(NoisySurface::from_params(
+						ball, noise,
 					)),
 					res_2: h.res_2,
 					transform: h.preview_transform(),

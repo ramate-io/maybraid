@@ -8,8 +8,8 @@ use render_item::{
 };
 use sdf::{Bounds, Sdf};
 use sdf_common::{
-	CrookCylinder, NoisyCylinder, NoisyCrookCylinder, NoisySurface, TaperedCylinder,
-	UnitCylinderNoiseParams,
+	Ball, CrookCylinder, NoisyBall, NoisyCylinder, NoisyCrookCylinder, NoisySurface,
+	TaperedCylinder, UnitCylinderNoiseParams,
 };
 
 /// Concrete SDF variants previewed in this playground.
@@ -19,6 +19,8 @@ pub enum PlaygroundPrimitive {
 	NoisyCylinder(NoisyCylinder),
 	CrookCylinder(CrookCylinder),
 	NoisyCrookCylinder(NoisyCrookCylinder),
+	Ball(Ball),
+	NoisyBall(NoisyBall),
 }
 
 impl PlaygroundPrimitive {
@@ -57,12 +59,23 @@ impl PlaygroundPrimitive {
 		))
 	}
 
+	pub fn ball_default() -> Self {
+		Self::Ball(Ball::unit_sphere())
+	}
+
+	/// [`Ball::unit_sphere`] with Perlin noise (seed **42**, freq **5**, amp **0.05**) like [`Self::noisy_cylinder_default`].
+	pub fn noisy_ball_default() -> Self {
+		Self::NoisyBall(NoisySurface::new_perlin(Ball::unit_sphere(), 42, 5.0, 0.05))
+	}
+
 	pub fn variant_key(&self) -> &'static str {
 		match self {
 			Self::TaperedCylinder(_) => "tapered-cylinder",
 			Self::NoisyCylinder(_) => "noisy-cylinder",
 			Self::CrookCylinder(_) => "crook-cylinder",
 			Self::NoisyCrookCylinder(_) => "noisy-crook-cylinder",
+			Self::Ball(_) => "ball",
+			Self::NoisyBall(_) => "noisy-ball",
 		}
 	}
 
@@ -72,6 +85,8 @@ impl PlaygroundPrimitive {
 			"noisy-cylinder",
 			"crook-cylinder",
 			"noisy-crook-cylinder",
+			"ball",
+			"noisy-ball",
 		]
 	}
 
@@ -85,6 +100,8 @@ impl PlaygroundPrimitive {
 			"noisy-crook-cylinder" | "noisy-crook" | "ncc" | "4" => {
 				Some(Self::noisy_crook_cylinder_default())
 			}
+			"ball" | "sphere" | "b" | "5" => Some(Self::ball_default()),
+			"noisy-ball" | "noisy-sphere" | "nb" | "6" => Some(Self::noisy_ball_default()),
 			_ => None,
 		}
 	}
@@ -97,6 +114,8 @@ impl std::fmt::Debug for PlaygroundPrimitive {
 			Self::NoisyCylinder(_) => f.write_str("NoisyCylinder(...)"),
 			Self::CrookCylinder(c) => f.debug_tuple("CrookCylinder").field(c).finish(),
 			Self::NoisyCrookCylinder(_) => f.write_str("NoisyCrookCylinder(...)"),
+			Self::Ball(b) => f.debug_tuple("Ball").field(b).finish(),
+			Self::NoisyBall(_) => f.write_str("NoisyBall(...)"),
 		}
 	}
 }
@@ -108,6 +127,8 @@ impl std::fmt::Display for PlaygroundPrimitive {
 			Self::NoisyCylinder(_) => write!(f, "NoisyCylinder"),
 			Self::CrookCylinder(_) => write!(f, "CrookCylinder"),
 			Self::NoisyCrookCylinder(_) => write!(f, "NoisyCrookCylinder"),
+			Self::Ball(_) => write!(f, "Ball"),
+			Self::NoisyBall(_) => write!(f, "NoisyBall"),
 		}
 	}
 }
@@ -119,6 +140,8 @@ impl Sdf for PlaygroundPrimitive {
 			Self::NoisyCylinder(n) => n.distance(p),
 			Self::CrookCylinder(c) => c.distance(p),
 			Self::NoisyCrookCylinder(n) => n.distance(p),
+			Self::Ball(b) => b.distance(p),
+			Self::NoisyBall(n) => n.distance(p),
 		}
 	}
 
@@ -128,6 +151,8 @@ impl Sdf for PlaygroundPrimitive {
 			Self::NoisyCylinder(n) => n.bounds(),
 			Self::CrookCylinder(c) => c.bounds(),
 			Self::NoisyCrookCylinder(n) => n.bounds(),
+			Self::Ball(b) => b.bounds(),
+			Self::NoisyBall(n) => n.bounds(),
 		}
 	}
 }
@@ -139,6 +164,8 @@ impl NormalizeChunk for PlaygroundPrimitive {
 			Self::NoisyCylinder(n) => n.normalize_chunk(cascade_chunk),
 			Self::CrookCylinder(c) => c.normalize_chunk(cascade_chunk),
 			Self::NoisyCrookCylinder(n) => n.normalize_chunk(cascade_chunk),
+			Self::Ball(b) => b.normalize_chunk(cascade_chunk),
+			Self::NoisyBall(n) => n.normalize_chunk(cascade_chunk),
 		}
 	}
 }
@@ -191,6 +218,25 @@ impl IdentifiedMesh for PlaygroundPrimitive {
 					c.bend_z.to_bits(),
 					c.phase_x.to_bits(),
 					c.phase_z.to_bits(),
+					p.seed,
+					p.frequency.to_bits(),
+					p.amplitude.to_bits(),
+					p.octaves,
+					p.noise_type,
+				))
+			}
+			Self::Ball(b) => MeshId::new(format!(
+				"playground.Ball:{}:{}",
+				b.radius.to_bits(),
+				b.bounds_margin.to_bits(),
+			)),
+			Self::NoisyBall(n) => {
+				let b = &n.inner;
+				let p = &n.noise;
+				MeshId::new(format!(
+					"playground.NoisyBall:{}:{}:{}:{}:{}:{}:{:?}",
+					b.radius.to_bits(),
+					b.bounds_margin.to_bits(),
 					p.seed,
 					p.frequency.to_bits(),
 					p.amplitude.to_bits(),

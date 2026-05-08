@@ -272,16 +272,15 @@ mod tests {
 	}
 
 	#[test]
-	fn bounds_xz_liberal_vs_tight_envelope() -> Result<()> {
+	fn bounds_xz_match_bend_plus_radius() -> Result<()> {
 		let c =
 			CrookCylinder { bend_x: 0.15, bend_z: 0.1, ..CrookCylinder::unit_segment(0.5, 0.4) };
 		let r = c.base_radius.max(c.top_radius);
-		let tight = r + c.bend_x.abs() + c.bounds_margin;
-		let (half_x, _) = c.bounds_xz_half_extents();
-		assert!(
-			half_x > tight + r * 0.4,
-			"expected liberal XZ bounds (got {half_x}, tight spine+radius {tight})"
-		);
+		let (half_x, half_z) = c.bounds_xz_half_extents();
+		let ex = c.bend_x.abs() + r + c.bounds_margin;
+		let ez = c.bend_z.abs() + r + c.bounds_margin;
+		assert!((half_x - ex).abs() < 1e-5, "half_x={half_x} ex={ex}");
+		assert!((half_z - ez).abs() < 1e-5, "half_z={half_z} ez={ez}");
 		Ok(())
 	}
 

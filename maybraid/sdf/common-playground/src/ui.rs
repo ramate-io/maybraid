@@ -60,7 +60,7 @@ pub fn setup_debug_ui(mut commands: Commands) {
 		))
 		.with_children(|parent| {
 			parent.spawn((
-				Text::new("SDF playground · Tab/1/2/3/4 · +/- res · / cmd · WASD · ↑↓ history · ⇧↑↓ scroll"),
+				Text::new("SDF playground · Tab/1–6 · +/- res · / cmd · WASD · ↑↓ history · ⇧↑↓ scroll"),
 				TextFont { font_size: status_size, ..default() },
 				TextColor(Color::WHITE),
 				HudStatusLine,

@@ -14,11 +14,14 @@ use render_item::NormalizeChunk;
 use sdf::Bounds;
 use sdf::Sdf;
 
+use crate::ball::Ball;
 use crate::crook_cylinder::CrookCylinder;
 use crate::cylinder::TaperedCylinder;
 
+pub mod unit_ball;
 pub mod unit_cylinder;
 
+pub use unit_ball::UnitBallNoiseParams;
 pub use unit_cylinder::UnitCylinderNoiseParams;
 
 fn inflate_cuboid_bounds(aabb: Aabb3d, margin: f32) -> Aabb3d {
@@ -135,6 +138,19 @@ impl NormalizeChunk for NoisyCrookCylinder {
 	}
 }
 
+/// [`NoisySurface`] over [`Ball`] — RFC-183 **noisy ball** primitive ([#213](https://github.com/ramate-io/maybraid/issues/213)).
+pub type NoisyBall = NoisySurface<Ball>;
+
+impl NormalizeChunk for NoisyBall {
+	fn normalize_chunk(&self, cascade_chunk: &CascadeChunk) -> CascadeChunk {
+		let m = sdf_band_margin(&self.noise);
+		let h = self.inner.radius + self.inner.bounds_margin + m;
+		let half = 0.5_f32;
+		let mu = (h - half).max(0.0) + NUMERIC_SURFACE_EPSILON;
+		CascadeChunk::unit_3d_center_chunk().with_res_2(cascade_chunk.res_2).with_mu(mu)
+	}
+}
+
 #[cfg(test)]
 mod tests {
 	use super::*;
@@ -145,6 +161,16 @@ mod tests {
 	#[test]
 	fn unit_cylinder_noise_preset() -> Result<()> {
 		let p: NoiseParams = UnitCylinderNoiseParams.into();
+		assert_eq!(p.amplitude, 0.05);
+		assert_eq!(p.frequency, 5.0);
+		assert_eq!(p.octaves, 1);
+		assert_eq!(p.noise_type, NoiseType::Perlin);
+		Ok(())
+	}
+
+	#[test]
+	fn unit_ball_noise_preset() -> Result<()> {
+		let p: NoiseParams = UnitBallNoiseParams.into();
 		assert_eq!(p.amplitude, 0.05);
 		assert_eq!(p.frequency, 5.0);
 		assert_eq!(p.octaves, 1);
