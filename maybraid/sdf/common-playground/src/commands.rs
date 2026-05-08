@@ -1,9 +1,13 @@
-pub mod react;
+//! In-game clap command hierarchy and plugins. Organization: see [`commands/README.md`](commands/README.md).
+
+pub mod plugin;
 pub mod render;
 pub mod settings;
+pub(crate) mod root;
 
 use bevy::prelude::*;
 use clap::{CommandFactory, Parser};
+pub use plugin::PlaygroundCommandsPlugin;
 pub use render::Render;
 pub use settings::Settings;
 
@@ -40,7 +44,7 @@ impl PlaygroundCommand {
 		Self::command().render_long_help().to_string()
 	}
 
-	/// Spawn this command (and nested subcommands) so [`crate::commands::react`] systems can respond.
+	/// Spawn this command and nested subcommands (see [`README.md`](README.md)).
 	pub fn react(self, commands: &mut Commands) {
 		commands.spawn(self.clone());
 		match self {

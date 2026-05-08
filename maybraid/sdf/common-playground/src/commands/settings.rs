@@ -1,3 +1,13 @@
+//! `settings` clap subcommand: checker size, seed, etc.
+
+pub mod plugin;
+mod react_checker_size;
+mod react_seed;
+pub(crate) mod react_settings_announcer;
+
+pub use react_checker_size::SettingsCheckerSize;
+pub use react_seed::SettingsSeed;
+
 use bevy::prelude::*;
 
 /// Playground options (no “global” flags — invoked as `settings <subcommand>` from text mode).
@@ -17,8 +27,16 @@ pub enum Settings {
 }
 
 impl Settings {
-	/// Spawn a [`Settings`] entity for systems that react to [`Added<Settings>`](bevy::prelude::Added).
+	/// Spawn this announcement plus leaf entities for [`Added`]-based reactors.
 	pub fn react(self, commands: &mut Commands) {
 		commands.spawn(self);
+		match self {
+			Settings::CheckerSize { meters } => {
+				commands.spawn(SettingsCheckerSize { meters });
+			}
+			Settings::Seed { value } => {
+				commands.spawn(SettingsSeed { value });
+			}
+		}
 	}
 }

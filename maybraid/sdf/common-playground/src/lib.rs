@@ -12,13 +12,13 @@ pub mod primitive;
 mod ui;
 
 pub use camera::CameraController;
-pub use commands::PlaygroundCommand;
+pub use commands::{PlaygroundCommand, PlaygroundCommandsPlugin};
 pub use ground::PlaygroundSettings;
 pub use preview::{PreviewConfig, SdfPreviewRoot};
 
 use bevy::prelude::*;
 use ground::setup_ground;
-use commands::react::{react_playground_command_root, react_render_to_preview, react_settings_to_playground};
+use commands::root::react_playground_command_root;
 use preview::{keyboard_preview, sync_sdf_preview};
 use render_item::{mesh::fetch_meshes, mesh::handle::MeshHandle, render_items};
 use primitive::{PlaygroundPrimitive, PlaygroundRenderItem};
@@ -33,6 +33,7 @@ impl Plugin for SdfCommonPlaygroundPlugin {
 	fn build(&self, app: &mut App) {
 		app.init_resource::<PlaygroundSettings>()
 			.init_resource::<PreviewConfig>()
+			.add_plugins(PlaygroundCommandsPlugin)
 			.add_plugins(bevy::pbr::MaterialPlugin::<checkerboard_material::CheckerboardMaterial>::default())
 			.init_resource::<input::TypedCommandLine>()
 			.init_resource::<input::TextEntryFocus>()
@@ -54,10 +55,7 @@ impl Plugin for SdfCommonPlaygroundPlugin {
 					keyboard_preview,
 					input::toggle_text_entry_focus,
 					input::capture_command_line_input,
-					react_playground_command_root,
-					react_render_to_preview,
-					react_settings_to_playground,
-					sync_sdf_preview,
+					sync_sdf_preview.after(react_playground_command_root),
 					ui::update_debug_ui,
 					render_items::<PlaygroundRenderItem<StandardMaterial>>,
 					fetch_meshes::<MeshHandle<PlaygroundPrimitive>, StandardMaterial>,
