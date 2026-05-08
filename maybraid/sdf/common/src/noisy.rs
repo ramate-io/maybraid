@@ -7,7 +7,9 @@ use bevy::math::bounding::Aabb3d;
 use bevy::math::Vec3A;
 use bevy::prelude::*;
 use chunk::cascade::CascadeChunk;
-use procedural_common::{sdf_band_margin, NoiseConfig, NoiseParams, NoiseType};
+use procedural_common::{
+	sdf_band_margin, NoiseConfig, NoiseParams, NoiseType, NUMERIC_SURFACE_EPSILON,
+};
 use render_item::NormalizeChunk;
 use sdf::Bounds;
 use sdf::Sdf;
@@ -126,8 +128,10 @@ pub type NoisyCrookCylinder = NoisySurface<CrookCylinder>;
 
 impl NormalizeChunk for NoisyCrookCylinder {
 	fn normalize_chunk(&self, cascade_chunk: &CascadeChunk) -> CascadeChunk {
-		let mu = sdf_band_margin(&self.noise);
-		CascadeChunk::unit_center_chunk().with_res_2(cascade_chunk.res_2).with_mu(mu)
+		let m = sdf_band_margin(&self.noise);
+		let mu_xz = self.inner.chunk_mu_xz_pad() + m;
+		let mu_y = m + self.inner.bounds_margin + NUMERIC_SURFACE_EPSILON;
+		CascadeChunk::unit_center_chunk_with_mu_xz_y(mu_xz, mu_y).with_res_2(cascade_chunk.res_2)
 	}
 }
 

@@ -5,15 +5,15 @@ use chunk::cascade::CascadeChunk;
 use sdf::{Sign, Sdf};
 use std::sync::Arc;
 use rayon::prelude::*;
-use marching_cubes::{get_cube_index, interpolate_vertex, TRIANGULATIONS};
+use marching_cubes::{get_cube_index, interpolate_vertex_cell, TRIANGULATIONS};
 use crate::mesh::MeshBuilder;
 use crate::NormalizeChunk;
 pub trait CpuShotSdf: Sdf + Clone {
 	fn cpu_chunk_mesh(&self, cascade_chunk: &CascadeChunk) -> Option<Mesh> {
         // ---------- grid setup ---------------------------------------------------
-		let chunk_size = cascade_chunk.size;
+		let extent = cascade_chunk.extent_vec();
 		let res = cascade_chunk.resolution();
-		let cube_size = chunk_size / res as f32;
+		let cube_cell = extent / res as f32;
 		let chunk_origin = cascade_chunk.origin;
 
 		// ---------- grid setup ---------------------------------------------------
@@ -39,12 +39,12 @@ pub trait CpuShotSdf: Sdf + Clone {
 		let z_slices: Vec<_> = (0..nz)
 			.into_par_iter()
 			.map(|z| {
-				let wz = chunk_origin.z + z as f32 * cube_size;
+				let wz = chunk_origin.z + z as f32 * cube_cell.z;
 				let mut slice = vec![0.0f32; nx * ny];
 
 				// For each x position, compute intervals and sample sparsely
 				for x in 0..nx {
-					let wx = chunk_origin.x + x as f32 * cube_size;
+					let wx = chunk_origin.x + x as f32 * cube_cell.x;
 					// Get intervals for this (x, z) position
 					let intervals = sdf_clone.sign_uniform_on_y(wx, wz);
 
@@ -63,11 +63,11 @@ pub trait CpuShotSdf: Sdf + Clone {
 						// Convert world Y coordinates to grid indices
 						// Clamp to chunk bounds
 						let y_start_world = y_min_world.max(chunk_origin.y);
-						let y_end_world = y_max_world.min(chunk_origin.y + chunk_size);
+						let y_end_world = y_max_world.min(chunk_origin.y + extent.y);
 
 						let y_start =
-							((y_start_world - chunk_origin.y) / cube_size).floor() as usize;
-						let y_end = ((y_end_world - chunk_origin.y) / cube_size)
+							((y_start_world - chunk_origin.y) / cube_cell.y).floor() as usize;
+						let y_end = ((y_end_world - chunk_origin.y) / cube_cell.y)
 							.ceil()
 							.min(ny as f32) as usize;
 
@@ -86,7 +86,7 @@ pub trait CpuShotSdf: Sdf + Clone {
 								Sign::Top | Sign::Bottom => {
 									// Unknown/undefined sign - need to sample normally
 									for yi in y_begin..y_finish {
-										let wy = chunk_origin.y + yi as f32 * cube_size;
+										let wy = chunk_origin.y + yi as f32 * cube_cell.y;
 										let distance = sdf_clone.distance(Vec3::new(wx, wy, wz));
 										slice[yi * nx + x] = distance;
 									}
@@ -100,7 +100,7 @@ pub trait CpuShotSdf: Sdf + Clone {
 									// If interval is small, just sample everything
 									if interval_size <= TRANSITION_VOXELS * 2 {
 										for yi in y_begin..y_finish {
-											let wy = chunk_origin.y + yi as f32 * cube_size;
+											let wy = chunk_origin.y + yi as f32 * cube_cell.y;
 											let distance = sdf_clone.distance(Vec3::new(wx, wy, wz));
 											slice[yi * nx + x] = distance;
 										}
@@ -108,7 +108,7 @@ pub trait CpuShotSdf: Sdf + Clone {
 										// Sample at START boundary (where surface transition might be)
 										let start_sample_end = (y_begin + TRANSITION_VOXELS).min(y_finish);
 										for yi in y_begin..start_sample_end {
-											let wy = chunk_origin.y + yi as f32 * cube_size;
+											let wy = chunk_origin.y + yi as f32 * cube_cell.y;
 											let distance = sdf_clone.distance(Vec3::new(wx, wy, wz));
 											slice[yi * nx + x] = distance;
 										}
@@ -129,7 +129,7 @@ pub trait CpuShotSdf: Sdf + Clone {
 										
 										// Sample at END boundary (where next interval starts = surface transition)
 										for yi in fill_end.max(fill_start)..y_finish {
-											let wy = chunk_origin.y + yi as f32 * cube_size;
+											let wy = chunk_origin.y + yi as f32 * cube_cell.y;
 											let distance = sdf_clone.distance(Vec3::new(wx, wy, wz));
 											slice[yi * nx + x] = distance;
 										}
@@ -157,7 +157,7 @@ pub trait CpuShotSdf: Sdf + Clone {
 					if y_current < ny {
 						// Treat remaining as Top (unknown) and sample
 						for yi in y_current..ny {
-							let wy = chunk_origin.y + yi as f32 * cube_size;
+							let wy = chunk_origin.y + yi as f32 * cube_cell.y;
 							let distance = sdf_clone.distance(Vec3::new(wx, wy, wz));
 							slice[yi * nx + x] = distance;
 						}
@@ -209,8 +209,11 @@ pub trait CpuShotSdf: Sdf + Clone {
 			.into_par_iter()
 			.filter_map(|(x, y, z)| {
 				// Local-space cube origin (all dimensions relative to chunk origin)
-				let cube_pos_local =
-					Vec3::new(x as f32 * cube_size, y as f32 * cube_size, z as f32 * cube_size);
+				let cube_pos_local = Vec3::new(
+					x as f32 * cube_cell.x,
+					y as f32 * cube_cell.y,
+					z as f32 * cube_cell.z,
+				);
 				
 				
 				// Corner scalar values (standard MC corner ordering assumed by your helpers)
@@ -258,7 +261,7 @@ pub trait CpuShotSdf: Sdf + Clone {
 							return v;
 						}
 						let pos_local =
-							interpolate_vertex(edge, cube_pos_local, cube_size, corners);
+							interpolate_vertex_cell(edge, cube_pos_local, cube_cell, corners);
 						let v_index = cube_vertices.len() as u32;
 						cube_vertices.push([pos_local.x, pos_local.y, pos_local.z]);
 						edge_vert[edge] = Some(v_index);
@@ -304,13 +307,16 @@ pub trait CpuShotSdf: Sdf + Clone {
 		// Normals: compute from voxel grid using finite differences
 		// Vertices are in local space (relative to chunk_origin)
 		let grid_slice: &[f32] = &grid;
+		let hx = cube_cell.x.max(1e-20);
+		let hy = cube_cell.y.max(1e-20);
+		let hz = cube_cell.z.max(1e-20);
 		let normals: Vec<[f32; 3]> = vertices
 			.par_iter()
 			.map(|v| {
 				// Convert vertex local position to grid coordinates
-				let gx = (v[0] / cube_size).clamp(0.0, (nx - 1) as f32);
-				let gy = (v[1] / cube_size).clamp(0.0, (ny - 1) as f32);
-				let gz = (v[2] / cube_size).clamp(0.0, (nz - 1) as f32);
+				let gx = (v[0] / hx).clamp(0.0, (nx - 1) as f32);
+				let gy = (v[1] / hy).clamp(0.0, (ny - 1) as f32);
+				let gz = (v[2] / hz).clamp(0.0, (nz - 1) as f32);
 
 				// Get integer grid indices (truncate for now, could interpolate)
 				let ix = gx as usize;
@@ -318,55 +324,46 @@ pub trait CpuShotSdf: Sdf + Clone {
 				let iz = gz as usize;
 
 				// Compute finite differences using central differences where possible
-				// ∂f/∂x = (f(x+1) - f(x-1)) / (2 * cube_size)
 				let dx = if ix > 0 && ix < nx - 1 {
 					let f_xp1 = grid_slice[idx(ix + 1, iy, iz)];
 					let f_xm1 = grid_slice[idx(ix - 1, iy, iz)];
-					(f_xp1 - f_xm1) / (2.0 * cube_size)
+					(f_xp1 - f_xm1) / (2.0 * hx)
 				} else if ix < nx - 1 {
-					// Forward difference at left boundary
 					let f_xp1 = grid_slice[idx(ix + 1, iy, iz)];
 					let f_x = grid_slice[idx(ix, iy, iz)];
-					(f_xp1 - f_x) / cube_size
+					(f_xp1 - f_x) / hx
 				} else {
-					// Backward difference at right boundary
 					let f_x = grid_slice[idx(ix, iy, iz)];
 					let f_xm1 = grid_slice[idx(ix - 1, iy, iz)];
-					(f_x - f_xm1) / cube_size
+					(f_x - f_xm1) / hx
 				};
 
-				// ∂f/∂y = (f(y+1) - f(y-1)) / (2 * cube_size)
 				let dy = if iy > 0 && iy < ny - 1 {
 					let f_yp1 = grid_slice[idx(ix, iy + 1, iz)];
 					let f_ym1 = grid_slice[idx(ix, iy - 1, iz)];
-					(f_yp1 - f_ym1) / (2.0 * cube_size)
+					(f_yp1 - f_ym1) / (2.0 * hy)
 				} else if iy < ny - 1 {
-					// Forward difference at bottom boundary
 					let f_yp1 = grid_slice[idx(ix, iy + 1, iz)];
 					let f_y = grid_slice[idx(ix, iy, iz)];
-					(f_yp1 - f_y) / cube_size
+					(f_yp1 - f_y) / hy
 				} else {
-					// Backward difference at top boundary
 					let f_y = grid_slice[idx(ix, iy, iz)];
 					let f_ym1 = grid_slice[idx(ix, iy - 1, iz)];
-					(f_y - f_ym1) / cube_size
+					(f_y - f_ym1) / hy
 				};
 
-				// ∂f/∂z = (f(z+1) - f(z-1)) / (2 * cube_size)
 				let dz = if iz > 0 && iz < nz - 1 {
 					let f_zp1 = grid_slice[idx(ix, iy, iz + 1)];
 					let f_zm1 = grid_slice[idx(ix, iy, iz - 1)];
-					(f_zp1 - f_zm1) / (2.0 * cube_size)
+					(f_zp1 - f_zm1) / (2.0 * hz)
 				} else if iz < nz - 1 {
-					// Forward difference at front boundary
 					let f_zp1 = grid_slice[idx(ix, iy, iz + 1)];
 					let f_z = grid_slice[idx(ix, iy, iz)];
-					(f_zp1 - f_z) / cube_size
+					(f_zp1 - f_z) / hz
 				} else {
-					// Backward difference at back boundary
 					let f_z = grid_slice[idx(ix, iy, iz)];
 					let f_zm1 = grid_slice[idx(ix, iy, iz - 1)];
-					(f_z - f_zm1) / cube_size
+					(f_z - f_zm1) / hz
 				};
 
 				// Normalize the gradient to get the normal
@@ -385,8 +382,10 @@ pub trait CpuShotSdf: Sdf + Clone {
 
 		// Simple tiled UVs (local X/Z across the chunk)
 		let start_time = std::time::Instant::now();
+		let u_scale = extent.x.max(1e-20);
+		let v_scale = extent.z.max(1e-20);
 		let uvs: Vec<[f32; 2]> =
-			vertices.par_iter().map(|v| [v[0] / chunk_size, v[2] / chunk_size]).collect();
+			vertices.par_iter().map(|v| [v[0] / u_scale, v[2] / v_scale]).collect();
 		let end_time = std::time::Instant::now();
 		let duration = end_time.duration_since(start_time);
 		log::debug!("UVs time: {:?}", duration);

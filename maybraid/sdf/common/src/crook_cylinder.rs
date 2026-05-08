@@ -22,6 +22,9 @@ const BOUNDS_XZ_SLACK_PER_RADIUS: f32 = 0.55;
 /// Additional slack on **each** of X and Z tied to total bend magnitude (coupled bulge).
 const BOUNDS_XZ_SLACK_PER_BEND_SUM: f32 = 0.2;
 
+/// [`CascadeChunk::unit_center_chunk`] spans XZ ∈ [−0.5, 0.5] before [`CascadeChunk::with_mu`].
+const UNIT_CENTER_CHUNK_XZ_HALF: f32 = 0.5;
+
 /// Tapered cylinder segment with a smooth bent centerline (capped in **world Y** like [`TaperedCylinder`]).
 #[derive(Clone, Copy, Debug, PartialEq)]
 #[cfg_attr(feature = "clap", derive(clap::Args))]
@@ -44,10 +47,10 @@ pub struct CrookCylinder {
 	#[cfg_attr(feature = "clap", arg(long, default_value_t = 0.0))]
 	pub bounds_margin: f32,
 	/// Bend amplitude in **X** (same units as radius; multiplies `sin(π t + phase_x)`).
-	#[cfg_attr(feature = "clap", arg(long, default_value_t = 0.0))]
+	#[cfg_attr(feature = "clap", arg(long, default_value_t = 0.15))]
 	pub bend_x: f32,
 	/// Bend amplitude in **Z**.
-	#[cfg_attr(feature = "clap", arg(long, default_value_t = 0.0))]
+	#[cfg_attr(feature = "clap", arg(long, default_value_t = 0.1))]
 	pub bend_z: f32,
 	/// Phase offset for the X bend (radians).
 	#[cfg_attr(feature = "clap", arg(long, default_value_t = 0.0))]
@@ -90,7 +93,13 @@ impl CrookCylinder {
 	}
 
 	/// Same radii / height / `y_min` / margin as `taper`, with explicit bend parameters.
-	pub fn from_tapered(taper: TaperedCylinder, bend_x: f32, bend_z: f32, phase_x: f32, phase_z: f32) -> Self {
+	pub fn from_tapered(
+		taper: TaperedCylinder,
+		bend_x: f32,
+		bend_z: f32,
+		phase_x: f32,
+		phase_z: f32,
+	) -> Self {
 		Self {
 			base_radius: taper.base_radius,
 			top_radius: taper.top_radius,
@@ -117,17 +126,23 @@ impl CrookCylinder {
 		(half_x, half_z)
 	}
 
+	/// Extra `μ` for [`CascadeChunk::with_mu`] so marching cubes sample past the default unit-center
+	/// XZ half-width ([`UNIT_CENTER_CHUNK_XZ_HALF`]) when the crook bulges beyond ±0.5.
+	///
+	/// [`Sdf::bounds`] does not resize the extraction grid; only [`NormalizeChunk`] does.
+	pub fn chunk_mu_xz_pad(&self) -> f32 {
+		let (hx, hz) = self.bounds_xz_half_extents();
+		let max_half = hx.max(hz);
+		(max_half - UNIT_CENTER_CHUNK_XZ_HALF).max(0.0) + NUMERIC_SURFACE_EPSILON
+	}
+
 	/// Centerline position in world space for normalized parameter `t ∈ [0, 1]`.
 	#[inline]
 	pub fn centerline(&self, t: f32) -> Vec3 {
 		let u = t.clamp(0.0, 1.0);
 		let y = self.y_min + u * self.height;
 		let a = PI * u;
-		Vec3::new(
-			self.bend_x * (a + self.phase_x).sin(),
-			y,
-			self.bend_z * (a + self.phase_z).sin(),
-		)
+		Vec3::new(self.bend_x * (a + self.phase_x).sin(), y, self.bend_z * (a + self.phase_z).sin())
 	}
 
 	/// Derivative `dγ/du` for `u ∈ [0, 1]`.
@@ -201,8 +216,10 @@ impl Sdf for CrookCylinder {
 
 impl NormalizeChunk for CrookCylinder {
 	fn normalize_chunk(&self, cascade_chunk: &CascadeChunk) -> CascadeChunk {
-		let mu = self.bounds_margin + NUMERIC_SURFACE_EPSILON;
-		CascadeChunk::unit_center_chunk().with_res_2(cascade_chunk.res_2).with_mu(mu)
+		let mu_xz = self.chunk_mu_xz_pad();
+		// Keep Y padding small so the segment stays grounded near **y = 0**; XZ use [`chunk_mu_xz_pad`].
+		let mu_y = self.bounds_margin + NUMERIC_SURFACE_EPSILON;
+		CascadeChunk::unit_center_chunk_with_mu_xz_y(mu_xz, mu_y).with_res_2(cascade_chunk.res_2)
 	}
 }
 
@@ -233,11 +250,7 @@ mod tests {
 		let u = 0.5_f32;
 		let spine = c.centerline(u);
 		let g = c.centerline_dt(u);
-		let t = if g.length_squared() > 1e-12 {
-			g.normalize()
-		} else {
-			Vec3::Y
-		};
+		let t = if g.length_squared() > 1e-12 { g.normalize() } else { Vec3::Y };
 		let mut perp = t.cross(Vec3::Y);
 		if perp.length_squared() < 1e-12 {
 			perp = t.cross(Vec3::X);
@@ -260,17 +273,26 @@ mod tests {
 
 	#[test]
 	fn bounds_xz_liberal_vs_tight_envelope() -> Result<()> {
-		let c = CrookCylinder {
-			bend_x: 0.15,
-			bend_z: 0.1,
-			..CrookCylinder::unit_segment(0.5, 0.4)
-		};
+		let c =
+			CrookCylinder { bend_x: 0.15, bend_z: 0.1, ..CrookCylinder::unit_segment(0.5, 0.4) };
 		let r = c.base_radius.max(c.top_radius);
 		let tight = r + c.bend_x.abs() + c.bounds_margin;
 		let (half_x, _) = c.bounds_xz_half_extents();
 		assert!(
 			half_x > tight + r * 0.4,
 			"expected liberal XZ bounds (got {half_x}, tight spine+radius {tight})"
+		);
+		Ok(())
+	}
+
+	#[test]
+	fn chunk_mu_expands_when_bulge_exceeds_unit_cube() -> Result<()> {
+		let straight = CrookCylinder::unit_segment(0.5, 0.4);
+		let bent =
+			CrookCylinder { bend_x: 0.2, bend_z: 0.15, ..CrookCylinder::unit_segment(0.5, 0.4) };
+		assert!(
+			bent.chunk_mu_xz_pad() > straight.chunk_mu_xz_pad() + 0.05,
+			"bent crook should need larger chunk mu than straight"
 		);
 		Ok(())
 	}
