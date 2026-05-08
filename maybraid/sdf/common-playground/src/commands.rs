@@ -23,6 +23,7 @@ pub const PLAYGROUND_CLI_NAME: &str = "sdf-common";
 /// - `script --path ./setup.txt`
 /// - `render tapered-cylinder --res-2 5`
 /// - `render noisy-cylinder --noise-amplitude 0.08`
+/// - `render crook-cylinder --bend-x 0.15 --bend-z 0.1`
 /// - `settings checker-size --meters 5`
 /// - `settings seed --value 42`
 #[derive(Debug, Clone, Parser, Component)]

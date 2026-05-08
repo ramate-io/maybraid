@@ -6,7 +6,7 @@
 - **Hierarchical `.react(commands)`**: Each command level spawns itself, then spawns children, so deeper types are plain `Component`s for Bevy queries.
 - **Plugins mirror the CLI tree**: A command’s **`plugin.rs`** only composes **child plugins** and registers **systems for that same level** (e.g. announcer). Leaf commands own **`their_dir/plugin.rs`** and optional **`their_dir/plugin/react_*.rs`**.
 - **No `mod.rs`**: Use `feature.rs` + `feature/` for children (Rust 2018 path clarity).
-- **Split types by leaf**: e.g. [`render/tapered_cylinder.rs`](render/tapered_cylinder.rs), [`render/noisy_cylinder.rs`](render/noisy_cylinder.rs) with `TaperedCylinderHelper` / `NoisyCylinderHelper`.
+- **Split types by leaf**: e.g. [`render/tapered_cylinder.rs`](render/tapered_cylinder.rs), [`render/noisy_cylinder.rs`](render/noisy_cylinder.rs), [`render/crook_cylinder.rs`](render/crook_cylinder.rs) with `*Helper` types.
 
 ## React flow
 
@@ -17,7 +17,7 @@
    - `Render` → [`Render::react`](render.rs) spawns [`Render`](render.rs) then the appropriate helper.
    - `Settings` → [`Settings::react`](settings.rs) spawns [`Settings`](settings.rs) then leaf components ([`SettingsCheckerSize`](settings/react_checker_size.rs), [`SettingsSeed`](settings/react_seed.rs)).
 5. **Systems** (registered by plugins, ordered after [`capture_command_line_input`](../input.rs)):
-   - **Render**: [`TaperedCylinderRenderPlugin`](render/tapered_cylinder/plugin.rs), [`NoisyCylinderRenderPlugin`](render/noisy_cylinder/plugin.rs), then [`despawn_render_command_announcer`](render/plugin/announcer.rs) from [`RenderCommandsPlugin`](render/plugin.rs).
+   - **Render**: [`TaperedCylinderRenderPlugin`](render/tapered_cylinder/plugin.rs), [`NoisyCylinderRenderPlugin`](render/noisy_cylinder/plugin.rs), [`CrookCylinderRenderPlugin`](render/crook_cylinder/plugin.rs), then [`despawn_render_command_announcer`](render/plugin/announcer.rs) from [`RenderCommandsPlugin`](render/plugin.rs).
    - **Settings**: checker → seed → announcer via [`SettingsCommandsPlugin`](settings/plugin.rs).
    - [`react_playground_command_root`](root.rs): `help` + despawn root [`PlaygroundCommand`](../commands.rs).
 
@@ -45,6 +45,11 @@ commands/
       plugin.rs
       plugin/
         react_noisy_cylinder.rs
+    crook_cylinder.rs
+    crook_cylinder/
+      plugin.rs
+      plugin/
+        react_crook_cylinder.rs
   settings.rs
   settings/
     plugin.rs

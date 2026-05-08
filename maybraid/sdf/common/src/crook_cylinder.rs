@@ -16,6 +16,12 @@ use sdf::{Bounds, Sdf};
 
 use crate::cylinder::TaperedCylinder;
 
+/// Extra horizontal half-extent (beyond `|bend| + max_radius`) so tilted tube cross-sections and the
+/// approximate closest-spine field do not clip marching-cubes meshes.
+const BOUNDS_XZ_SLACK_PER_RADIUS: f32 = 0.55;
+/// Additional slack on **each** of X and Z tied to total bend magnitude (coupled bulge).
+const BOUNDS_XZ_SLACK_PER_BEND_SUM: f32 = 0.2;
+
 /// Tapered cylinder segment with a smooth bent centerline (capped in **world Y** like [`TaperedCylinder`]).
 #[derive(Clone, Copy, Debug, PartialEq)]
 #[cfg_attr(feature = "clap", derive(clap::Args))]
@@ -98,6 +104,19 @@ impl CrookCylinder {
 		}
 	}
 
+	/// Axis-aligned half-width in **X** and **Z** for [`Sdf::bounds`] (liberal envelope around the bent tube).
+	fn bounds_xz_half_extents(&self) -> (f32, f32) {
+		let r = self.base_radius.max(self.top_radius);
+		let m = self.bounds_margin;
+		let bx = self.bend_x.abs();
+		let bz = self.bend_z.abs();
+		let slack_r = r * BOUNDS_XZ_SLACK_PER_RADIUS;
+		let slack_bend = BOUNDS_XZ_SLACK_PER_BEND_SUM * (bx + bz);
+		let half_x = bx + r + slack_r + slack_bend + m;
+		let half_z = bz + r + slack_r + slack_bend + m;
+		(half_x, half_z)
+	}
+
 	/// Centerline position in world space for normalized parameter `t ∈ [0, 1]`.
 	#[inline]
 	pub fn centerline(&self, t: f32) -> Vec3 {
@@ -172,12 +191,10 @@ impl Sdf for CrookCylinder {
 	}
 
 	fn bounds(&self) -> Bounds {
-		let r = self.base_radius.max(self.top_radius);
 		let m = self.bounds_margin;
-		let bx = self.bend_x.abs();
-		let bz = self.bend_z.abs();
-		let min = Vec3::new(-r - bx - m, self.y_min - m, -r - bz - m);
-		let max = Vec3::new(r + bx + m, self.y_min + self.height + m, r + bz + m);
+		let (half_x, half_z) = self.bounds_xz_half_extents();
+		let min = Vec3::new(-half_x, self.y_min - m, -half_z);
+		let max = Vec3::new(half_x, self.y_min + self.height + m, half_z);
 		Bounds::Cuboid(Aabb3d::from_min_max(min, max))
 	}
 }
@@ -238,6 +255,23 @@ mod tests {
 		let c = CrookCylinder::unit_segment(0.5, 0.4);
 		let d = c.distance(Vec3::new(50.0, 0.5, 0.0));
 		assert!(d > 0.0);
+		Ok(())
+	}
+
+	#[test]
+	fn bounds_xz_liberal_vs_tight_envelope() -> Result<()> {
+		let c = CrookCylinder {
+			bend_x: 0.15,
+			bend_z: 0.1,
+			..CrookCylinder::unit_segment(0.5, 0.4)
+		};
+		let r = c.base_radius.max(c.top_radius);
+		let tight = r + c.bend_x.abs() + c.bounds_margin;
+		let (half_x, _) = c.bounds_xz_half_extents();
+		assert!(
+			half_x > tight + r * 0.4,
+			"expected liberal XZ bounds (got {half_x}, tight spine+radius {tight})"
+		);
 		Ok(())
 	}
 }

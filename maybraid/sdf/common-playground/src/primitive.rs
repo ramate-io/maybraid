@@ -7,13 +7,14 @@ use render_item::{
 	NormalizeChunk, RenderItem,
 };
 use sdf::{Bounds, Sdf};
-use sdf_common::{NoisyCylinder, NoisySurface, TaperedCylinder};
+use sdf_common::{CrookCylinder, NoisyCylinder, NoisySurface, TaperedCylinder};
 
 /// Concrete SDF variants previewed in this playground.
 #[derive(Clone)]
 pub enum PlaygroundPrimitive {
 	TaperedCylinder(TaperedCylinder),
 	NoisyCylinder(NoisyCylinder),
+	CrookCylinder(CrookCylinder),
 }
 
 impl PlaygroundPrimitive {
@@ -30,15 +31,25 @@ impl PlaygroundPrimitive {
 		))
 	}
 
+	/// Visible bend for Tab cycling / key `3` (same radii as default taper).
+	pub fn crook_cylinder_default() -> Self {
+		Self::CrookCylinder(CrookCylinder {
+			bend_x: 0.12,
+			bend_z: 0.08,
+			..CrookCylinder::unit_segment(0.5, 0.4)
+		})
+	}
+
 	pub fn variant_key(&self) -> &'static str {
 		match self {
 			Self::TaperedCylinder(_) => "tapered-cylinder",
 			Self::NoisyCylinder(_) => "noisy-cylinder",
+			Self::CrookCylinder(_) => "crook-cylinder",
 		}
 	}
 
 	pub fn all_variant_keys() -> &'static [&'static str] {
-		&["tapered-cylinder", "noisy-cylinder"]
+		&["tapered-cylinder", "noisy-cylinder", "crook-cylinder"]
 	}
 
 	pub fn from_name(name: &str) -> Option<Self> {
@@ -47,6 +58,7 @@ impl PlaygroundPrimitive {
 				Some(Self::tapered_cylinder_default())
 			}
 			"noisy-cylinder" | "noisy" | "nc" | "2" => Some(Self::noisy_cylinder_default()),
+			"crook-cylinder" | "crook" | "cc" | "3" => Some(Self::crook_cylinder_default()),
 			_ => None,
 		}
 	}
@@ -57,6 +69,7 @@ impl std::fmt::Debug for PlaygroundPrimitive {
 		match self {
 			Self::TaperedCylinder(c) => f.debug_tuple("TaperedCylinder").field(c).finish(),
 			Self::NoisyCylinder(_) => f.write_str("NoisyCylinder(...)"),
+			Self::CrookCylinder(c) => f.debug_tuple("CrookCylinder").field(c).finish(),
 		}
 	}
 }
@@ -66,6 +79,7 @@ impl std::fmt::Display for PlaygroundPrimitive {
 		match self {
 			Self::TaperedCylinder(_) => write!(f, "TaperedCylinder"),
 			Self::NoisyCylinder(_) => write!(f, "NoisyCylinder"),
+			Self::CrookCylinder(_) => write!(f, "CrookCylinder"),
 		}
 	}
 }
@@ -75,6 +89,7 @@ impl Sdf for PlaygroundPrimitive {
 		match self {
 			Self::TaperedCylinder(c) => c.distance(p),
 			Self::NoisyCylinder(n) => n.distance(p),
+			Self::CrookCylinder(c) => c.distance(p),
 		}
 	}
 
@@ -82,6 +97,7 @@ impl Sdf for PlaygroundPrimitive {
 		match self {
 			Self::TaperedCylinder(c) => c.bounds(),
 			Self::NoisyCylinder(n) => n.bounds(),
+			Self::CrookCylinder(c) => c.bounds(),
 		}
 	}
 }
@@ -91,6 +107,7 @@ impl NormalizeChunk for PlaygroundPrimitive {
 		match self {
 			Self::TaperedCylinder(c) => c.normalize_chunk(cascade_chunk),
 			Self::NoisyCylinder(n) => n.normalize_chunk(cascade_chunk),
+			Self::CrookCylinder(c) => c.normalize_chunk(cascade_chunk),
 		}
 	}
 }
@@ -117,6 +134,18 @@ impl IdentifiedMesh for PlaygroundPrimitive {
 					p.noise_type,
 				))
 			}
+			Self::CrookCylinder(c) => MeshId::new(format!(
+				"playground.CrookCylinder:{}:{}:{}:{}:{}:{}:{}:{}:{}",
+				c.base_radius.to_bits(),
+				c.top_radius.to_bits(),
+				c.y_min.to_bits(),
+				c.height.to_bits(),
+				c.bounds_margin.to_bits(),
+				c.bend_x.to_bits(),
+				c.bend_z.to_bits(),
+				c.phase_x.to_bits(),
+				c.phase_z.to_bits(),
+			)),
 		}
 	}
 }

@@ -1,3 +1,4 @@
+pub mod crook_cylinder;
 pub mod noisy_cylinder;
 pub mod plugin;
 pub mod tapered_cylinder;
@@ -10,6 +11,7 @@ use sdf_common::NoisySurface;
 use crate::preview::PreviewConfig;
 use crate::primitive::PlaygroundPrimitive;
 
+pub use crook_cylinder::CrookCylinderHelper;
 pub use noisy_cylinder::{NoisyCylinderArgs, NoisyCylinderHelper};
 pub use tapered_cylinder::TaperedCylinderHelper;
 
@@ -58,6 +60,8 @@ pub enum Render {
 	TaperedCylinder(TaperedCylinderHelper),
 	/// Tapered cylinder with [`sdf_common::NoiseParams`] surface displacement.
 	NoisyCylinder(NoisyCylinderHelper),
+	/// Tapered segment with smooth sinusoidal centerline ([RFC-183 3.1.1.2](https://github.com/ramate-io/maybraid/tree/main/rfc/rfc-000-000-183-chico-vegetation/03-01-stalk-and-ball-stick-trees/01-stick-and-stalk-components/02-crook-cylinder/README.md)).
+	CrookCylinder(CrookCylinderHelper),
 }
 
 impl Render {
@@ -68,6 +72,7 @@ impl Render {
 		match self {
 			Self::TaperedCylinder(render_helper) => commands.spawn(render_helper),
 			Self::NoisyCylinder(render_helper) => commands.spawn(render_helper),
+			Self::CrookCylinder(render_helper) => commands.spawn(render_helper),
 		};
 	}
 
@@ -89,6 +94,11 @@ impl Render {
 					transform: h.preview_transform(),
 				}
 			}
+			Self::CrookCylinder(h) => PreviewConfig {
+				primitive: PlaygroundPrimitive::CrookCylinder(h.inner),
+				res_2: h.res_2,
+				transform: h.preview_transform(),
+			},
 		}
 	}
 }
