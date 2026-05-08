@@ -27,33 +27,20 @@ pub fn read_script_lines(path: &Path) -> Result<Vec<String>, String> {
 		.collect())
 }
 
-/// Parse each line and call [`PlaygroundCommand::dispatch_react`]; parse failures go to `console` or `log::warn`.
-pub(crate) fn run_script_file(
-	path: &Path,
-	commands: &mut Commands,
-	console: &mut Option<&mut String>,
-) {
+/// Parse each line and call [`PlaygroundCommand::react`]; parse / IO failures overwrite `console`.
+pub(crate) fn run_script_file(path: &Path, commands: &mut Commands, console: &mut String) {
 	let lines = match read_script_lines(path) {
 		Ok(l) => l,
 		Err(e) => {
-			if let Some(c) = console.as_mut() {
-				**c = e.clone();
-			} else {
-				log::warn!("{e}");
-			}
+			*console = e;
 			return;
 		}
 	};
 	for (idx, line) in lines.iter().enumerate() {
 		match PlaygroundCommand::parse_line(line) {
-			Ok(cmd) => cmd.dispatch_react(commands, console),
+			Ok(cmd) => cmd.react(commands, console),
 			Err(e) => {
-				let msg = format!("{} line {}: {e}", path.display(), idx + 1);
-				if let Some(c) = console.as_mut() {
-					**c = msg.clone();
-				} else {
-					log::warn!("{msg}");
-				}
+				*console = format!("{} line {}: {e}", path.display(), idx + 1);
 			}
 		}
 	}

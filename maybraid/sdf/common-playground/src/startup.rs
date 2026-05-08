@@ -23,7 +23,7 @@ pub fn run_pending_startup_command(
 	let Some(cmd) = pending.0.take() else {
 		return;
 	};
-	cmd.react_with_console(&mut commands, &mut console.0);
+	cmd.react(&mut commands, &mut console.0);
 }
 
 pub struct StartupPlugin;

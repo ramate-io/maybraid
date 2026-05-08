@@ -13,7 +13,7 @@ pub mod primitive;
 mod ui;
 
 pub use camera::CameraController;
-pub use commands::{PlaygroundCommand, PlaygroundCommandsPlugin};
+pub use commands::{PlaygroundCommand, PlaygroundCommandsPlugin, PLAYGROUND_CLI_NAME};
 pub use ground::PlaygroundSettings;
 pub use startup::PendingStartupCommand;
 pub use preview::{PreviewConfig, SdfPreviewRoot};

@@ -13,6 +13,9 @@ pub use render::Render;
 pub use script::Script;
 pub use settings::Settings;
 
+/// Synthetic `argv[0]` for [`parse_line`] and [`parse_startup_from_argv_tail`]; must match `#[command(name = …)]` on [`PlaygroundCommand`].
+pub const PLAYGROUND_CLI_NAME: &str = "sdf-common";
+
 /// Root command: in-game after `/` ([`parse_line`]) or process argv ([`parse_startup_command`]).
 ///
 /// Examples (typed + Enter, or same tokens after `cargo run -p sdf-common-playground --`):
@@ -24,9 +27,9 @@ pub use settings::Settings;
 /// - `settings seed --value 42`
 #[derive(Debug, Clone, Parser, Component)]
 #[command(
-	name = "sdf",
+	name = "sdf-common",
 	version,
-	about = "In-game sdf-common playground commands",
+	about = "sdf-common playground commands (in-game after `/` or process argv)",
 	rename_all = "kebab-case",
 	disable_help_subcommand = true
 )]
@@ -60,29 +63,15 @@ impl PlaygroundCommand {
 		if tail.is_empty() {
 			return Ok(None);
 		}
-		let mut args = vec![std::ffi::OsString::from("sdf")];
+		let mut args = vec![std::ffi::OsString::from(PLAYGROUND_CLI_NAME)];
 		args.extend(tail);
 		Self::try_parse_from(args).map(Some).map_err(|e| e.to_string())
 	}
 
 	/// Spawn this command and nested subcommands (see [`README.md`](README.md)).
-	pub fn react(self, commands: &mut Commands) {
-		let mut console = None;
-		self.dispatch_react(commands, &mut console);
-	}
-
-	/// Like [`react`], but script parse errors and IO errors are written to the HUD console string.
-	pub fn react_with_console(self, commands: &mut Commands, console: &mut String) {
-		let mut holder = Some(console);
-		self.dispatch_react(commands, &mut holder);
-	}
-
-	/// Shared by in-game input, startup, and [`script::run_script_file`](script::run_script_file).
-	pub(crate) fn dispatch_react(
-		self,
-		commands: &mut Commands,
-		console: &mut Option<&mut String>,
-	) {
+	///
+	/// Script / IO / per-line parse errors are written to `console` (HUD string). Other variants may leave `console` unchanged; `help` still updates the HUD via [`crate::commands::root::react_playground_command_root`].
+	pub fn react(self, commands: &mut Commands, console: &mut String) {
 		if let PlaygroundCommand::Script(s) = &self {
 			script::run_script_file(&s.path, commands, console);
 			return;
@@ -100,7 +89,7 @@ impl PlaygroundCommand {
 	/// A leading `/` (from the toggle key) is ignored.
 	pub fn parse_line(line: &str) -> Result<Self, String> {
 		let line = line.trim().trim_start_matches('/').trim();
-		let mut args: Vec<String> = vec!["sdf".to_string()];
+		let mut args: Vec<String> = vec![PLAYGROUND_CLI_NAME.to_string()];
 		for w in line.split_whitespace() {
 			if !w.is_empty() {
 				args.push(w.to_string());

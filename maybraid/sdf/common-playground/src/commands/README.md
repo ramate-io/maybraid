@@ -10,9 +10,9 @@
 
 ## React flow
 
-1. **Input** calls [`PlaygroundCommand::parse_line`](../commands.rs) then [`PlaygroundCommand::react_with_console`](../commands.rs) (or [`react`](../commands.rs) when no HUD sink is needed).
-2. **Argv startup** uses [`PlaygroundCommand::parse_startup_command`](../commands.rs) then [`PendingStartupCommand`](../startup.rs) + [`run_pending_startup_command`](../startup.rs) on the first frame (same `dispatch_react` path).
-3. **`script --path FILE`** ([`script.rs`](script.rs)): read lines → `parse_line` → `dispatch_react` per line (also available in-game).
+1. **Input** calls [`PlaygroundCommand::parse_line`](../commands.rs) then [`PlaygroundCommand::react`](../commands.rs) with the HUD console string (script / IO errors write there too).
+2. **Argv startup** uses [`PlaygroundCommand::parse_startup_command`](../commands.rs) then [`PendingStartupCommand`](../startup.rs) + [`run_pending_startup_command`](../startup.rs) on the first frame (same `react` path).
+3. **`script --path FILE`** ([`script.rs`](script.rs)): read lines → `parse_line` → `react` per line (also available in-game).
 4. **Root** spawns a [`PlaygroundCommand`](../commands.rs) entity (except `script`, which only runs the file) and delegates:
    - `Render` → [`Render::react`](render.rs) spawns [`Render`](render.rs) then the appropriate helper.
    - `Settings` → [`Settings::react`](settings.rs) spawns [`Settings`](settings.rs) then leaf components ([`SettingsCheckerSize`](settings/react_checker_size.rs), [`SettingsSeed`](settings/react_seed.rs)).

@@ -118,7 +118,7 @@ pub fn capture_command_line_input(
 			history.push_submitted(line.clone());
 			match PlaygroundCommand::parse_line(&line) {
 				Ok(cmd) => {
-					cmd.react_with_console(&mut commands, &mut console.0);
+					cmd.react(&mut commands, &mut console.0);
 				}
 				Err(e) => {
 					log::debug!("command parse error (HUD): {e}");
