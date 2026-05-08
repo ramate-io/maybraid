@@ -4486,8 +4486,22 @@ version = "0.0.1"
 dependencies = [
  "anyhow",
  "bevy",
+ "chunk",
  "procedural-common",
+ "render-item",
  "sdf",
+]
+
+[[package]]
+name = "sdf-common-playground"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "chunk",
+ "log",
+ "render-item",
+ "sdf-common",
 ]
 
 [[package]]

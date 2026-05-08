@@ -7,7 +7,9 @@
 use bevy::math::bounding::Aabb3d;
 use bevy::math::Vec3A;
 use bevy::prelude::*;
+use chunk::cascade::CascadeChunk;
 use procedural_common::{sdf_band_margin, NoiseConfig, NoiseParams, NoiseType};
+use render_item::NormalizeChunk;
 use sdf::Bounds;
 use sdf::Sdf;
 
@@ -74,6 +76,15 @@ impl<S: Clone> Clone for NoisySurface<S> {
 
 /// [`NoisySurface`] over [`TaperedCylinder`] — RFC-183 **noisy cylinder** primitive ([#210](https://github.com/ramate-io/maybraid/issues/210)).
 pub type NoisyCylinder = NoisySurface<TaperedCylinder>;
+
+impl NormalizeChunk for NoisyCylinder {
+	fn normalize_chunk(&self, cascade_chunk: &CascadeChunk) -> CascadeChunk {
+		let mu = sdf_band_margin(self.noise.params());
+		CascadeChunk::unit_center_chunk()
+			.with_res_2(cascade_chunk.res_2)
+			.with_mu(mu)
+	}
+}
 
 #[cfg(test)]
 mod tests {

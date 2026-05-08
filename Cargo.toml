@@ -13,6 +13,8 @@ members = [
   "maybraid/lod/cascade-system",
 
   "maybraid/sdf/common",
+  "maybraid/sdf/common-playground",
+
   "maybraid/procedural/common",
 
   "maybraid/chico/lib",
@@ -153,6 +155,7 @@ lod-cascade = { path = "maybraid/lod/cascade" }
 lod-cascade-system = { path = "maybraid/lod/cascade-system" }
 
 sdf-common = { path = "maybraid/sdf/common" }
+sdf-common-playground = { path = "maybraid/sdf/common-playground" }
 procedural-common = { path = "maybraid/procedural/common" }
 
 chico = { path = "maybraid/chico/lib" }

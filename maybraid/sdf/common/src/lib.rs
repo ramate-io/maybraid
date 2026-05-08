@@ -6,7 +6,7 @@
 //! - [`NoisySurface`](crate::noisy::NoisySurface) — displacement via [`procedural_common::NoiseConfig::sample_3d_world`] and [`NoiseParams::domain_weights`](procedural_common::NoiseParams).
 //! - [`NoisyCylinder`](crate::noisy::NoisyCylinder) — convenience alias for a noisy tapered cylinder ([#210](https://github.com/ramate-io/maybraid/issues/210)).
 //!
-//! Game crates can convert from their local configs via `From` / constructors as migration proceeds.
+//! - [`SdfCommonPrimitive`](crate::primitive::SdfCommonPrimitive) — unified enum + [`SdfCommonRenderItem`](crate::primitive::SdfCommonRenderItem) for rendering / playgrounds.
 
 pub use sdf;
 
@@ -14,6 +14,8 @@ pub use procedural_common::{FromScalarNoise, NoiseConfig, NoiseParams, sdf_band_
 
 pub mod cylinder;
 pub mod noisy;
+pub mod primitive;
 
 pub use cylinder::TaperedCylinder;
 pub use noisy::{NoisyCylinder, NoisySurface};
+pub use primitive::{SdfCommonPrimitive, SdfCommonRenderItem};

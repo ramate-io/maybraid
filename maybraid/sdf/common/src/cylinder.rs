@@ -10,6 +10,9 @@
 
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
+use chunk::cascade::CascadeChunk;
+use procedural_common::NUMERIC_SURFACE_EPSILON;
+use render_item::NormalizeChunk;
 use sdf::{Bounds, Sdf};
 
 /// Tapered cylinder segment aligned with **+Y**, capped at both ends.
@@ -71,6 +74,15 @@ impl Sdf for TaperedCylinder {
 		let min = Vec3::new(-r - m, self.y_min - m, -r - m);
 		let max = Vec3::new(r + m, self.y_min + self.height + m, r + m);
 		Bounds::Cuboid(Aabb3d::from_min_max(min, max))
+	}
+}
+
+impl NormalizeChunk for TaperedCylinder {
+	fn normalize_chunk(&self, cascade_chunk: &CascadeChunk) -> CascadeChunk {
+		let mu = self.bounds_margin + NUMERIC_SURFACE_EPSILON;
+		CascadeChunk::unit_center_chunk()
+			.with_res_2(cascade_chunk.res_2)
+			.with_mu(mu)
 	}
 }
 
