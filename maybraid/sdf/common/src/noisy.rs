@@ -12,6 +12,7 @@ use render_item::NormalizeChunk;
 use sdf::Bounds;
 use sdf::Sdf;
 
+use crate::crook_cylinder::CrookCylinder;
 use crate::cylinder::TaperedCylinder;
 
 pub mod unit_cylinder;
@@ -114,6 +115,16 @@ impl<S: Clone> Clone for NoisySurface<S> {
 pub type NoisyCylinder = NoisySurface<TaperedCylinder>;
 
 impl NormalizeChunk for NoisyCylinder {
+	fn normalize_chunk(&self, cascade_chunk: &CascadeChunk) -> CascadeChunk {
+		let mu = sdf_band_margin(&self.noise);
+		CascadeChunk::unit_center_chunk().with_res_2(cascade_chunk.res_2).with_mu(mu)
+	}
+}
+
+/// [`NoisySurface`] over [`CrookCylinder`] — RFC-183 **noisy crook cylinder** ([#211](https://github.com/ramate-io/maybraid/issues/211)).
+pub type NoisyCrookCylinder = NoisySurface<CrookCylinder>;
+
+impl NormalizeChunk for NoisyCrookCylinder {
 	fn normalize_chunk(&self, cascade_chunk: &CascadeChunk) -> CascadeChunk {
 		let mu = sdf_band_margin(&self.noise);
 		CascadeChunk::unit_center_chunk().with_res_2(cascade_chunk.res_2).with_mu(mu)
