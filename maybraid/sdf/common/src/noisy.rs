@@ -7,15 +7,21 @@ use bevy::math::bounding::Aabb3d;
 use bevy::math::Vec3A;
 use bevy::prelude::*;
 use chunk::cascade::CascadeChunk;
-use procedural_common::{sdf_band_margin, NoiseConfig, NoiseParams, NoiseType};
+use procedural_common::{
+	sdf_band_margin, NoiseConfig, NoiseParams, NoiseType, NUMERIC_SURFACE_EPSILON,
+};
 use render_item::NormalizeChunk;
 use sdf::Bounds;
 use sdf::Sdf;
 
+use crate::ball::Ball;
+use crate::crook_cylinder::CrookCylinder;
 use crate::cylinder::TaperedCylinder;
 
+pub mod unit_ball;
 pub mod unit_cylinder;
 
+pub use unit_ball::UnitBallNoiseParams;
 pub use unit_cylinder::UnitCylinderNoiseParams;
 
 fn inflate_cuboid_bounds(aabb: Aabb3d, margin: f32) -> Aabb3d {
@@ -120,6 +126,31 @@ impl NormalizeChunk for NoisyCylinder {
 	}
 }
 
+/// [`NoisySurface`] over [`CrookCylinder`] — RFC-183 **noisy crook cylinder** ([#211](https://github.com/ramate-io/maybraid/issues/211)).
+pub type NoisyCrookCylinder = NoisySurface<CrookCylinder>;
+
+impl NormalizeChunk for NoisyCrookCylinder {
+	fn normalize_chunk(&self, cascade_chunk: &CascadeChunk) -> CascadeChunk {
+		let m = sdf_band_margin(&self.noise);
+		let mu_xz = self.inner.chunk_mu_xz_pad() + m;
+		let mu_y = m + self.inner.bounds_margin + NUMERIC_SURFACE_EPSILON;
+		CascadeChunk::unit_center_chunk_with_mu_xz_y(mu_xz, mu_y).with_res_2(cascade_chunk.res_2)
+	}
+}
+
+/// [`NoisySurface`] over [`Ball`] — RFC-183 **noisy ball** primitive ([#213](https://github.com/ramate-io/maybraid/issues/213)).
+pub type NoisyBall = NoisySurface<Ball>;
+
+impl NormalizeChunk for NoisyBall {
+	fn normalize_chunk(&self, cascade_chunk: &CascadeChunk) -> CascadeChunk {
+		let m = sdf_band_margin(&self.noise);
+		let h = self.inner.radius + self.inner.bounds_margin + m;
+		let half = 0.5_f32;
+		let mu = (h - half).max(0.0) + NUMERIC_SURFACE_EPSILON;
+		CascadeChunk::unit_3d_center_chunk().with_res_2(cascade_chunk.res_2).with_mu(mu)
+	}
+}
+
 #[cfg(test)]
 mod tests {
 	use super::*;
@@ -130,6 +161,16 @@ mod tests {
 	#[test]
 	fn unit_cylinder_noise_preset() -> Result<()> {
 		let p: NoiseParams = UnitCylinderNoiseParams.into();
+		assert_eq!(p.amplitude, 0.05);
+		assert_eq!(p.frequency, 5.0);
+		assert_eq!(p.octaves, 1);
+		assert_eq!(p.noise_type, NoiseType::Perlin);
+		Ok(())
+	}
+
+	#[test]
+	fn unit_ball_noise_preset() -> Result<()> {
+		let p: NoiseParams = UnitBallNoiseParams.into();
 		assert_eq!(p.amplitude, 0.05);
 		assert_eq!(p.frequency, 5.0);
 		assert_eq!(p.octaves, 1);
