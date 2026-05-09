@@ -1,3 +1,5 @@
+pub mod sopes_banyan;
+
 use std::collections::VecDeque;
 use std::ops::Range;
 
@@ -53,36 +55,26 @@ impl BallStickChain {
 	}
 
 	pub fn segments<'a>(&'a self) -> impl Iterator<Item = BallStickSegment<'a>> {
-		self.children
-			.iter()
-			.enumerate()
-			.flat_map(move |(parent_idx, children)| {
-				let start = &self.nodes[parent_idx];
-				children.iter().map(move |child_idx| BallStickSegment {
-					start,
-					end: &self.nodes[*child_idx],
-				})
-			})
+		self.children.iter().enumerate().flat_map(move |(parent_idx, children)| {
+			let start = &self.nodes[parent_idx];
+			children
+				.iter()
+				.map(move |child_idx| BallStickSegment { start, end: &self.nodes[*child_idx] })
+		})
 	}
 
 	/// Each graph edge with hysteresis at the parent (start) and child (end) nodes.
 	pub fn segments_with_hysteresis<'a>(
 		&'a self,
 	) -> impl Iterator<Item = (BallStickSegment<'a>, &'a Hysteresis, &'a Hysteresis)> + 'a {
-		self.children
-			.iter()
-			.enumerate()
-			.flat_map(move |(parent_idx, children)| {
-				let start = &self.nodes[parent_idx];
-				let parent_h = &self.hysteresis[parent_idx];
-				children.iter().map(move |child_idx| {
-					let seg = BallStickSegment {
-						start,
-						end: &self.nodes[*child_idx],
-					};
-					(seg, parent_h, &self.hysteresis[*child_idx])
-				})
+		self.children.iter().enumerate().flat_map(move |(parent_idx, children)| {
+			let start = &self.nodes[parent_idx];
+			let parent_h = &self.hysteresis[parent_idx];
+			children.iter().map(move |child_idx| {
+				let seg = BallStickSegment { start, end: &self.nodes[*child_idx] };
+				(seg, parent_h, &self.hysteresis[*child_idx])
 			})
+		})
 	}
 
 	pub fn build<R: ChainHysteresisRule + ?Sized>(
@@ -301,11 +293,11 @@ mod tests {
 	fn rule() -> PeriodicHysteresisRule {
 		PeriodicHysteresisRule {
 			noise: NoiseConfig::new(NoiseParams {
-			seed: 42,
-			frequency: 2.0,
-			amplitude: 1.0,
-			octaves: 1,
-			..Default::default()
+				seed: 42,
+				frequency: 2.0,
+				amplitude: 1.0,
+				octaves: 1,
+				..Default::default()
 			}),
 			..Default::default()
 		}

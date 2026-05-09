@@ -6,5 +6,7 @@ pub use chain::{
 	PeriodicHysteresisRule,
 };
 
+pub mod anchors;
+
 #[cfg(feature = "render")]
 pub mod render;
