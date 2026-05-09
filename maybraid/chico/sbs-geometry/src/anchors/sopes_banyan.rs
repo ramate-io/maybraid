@@ -4,7 +4,7 @@
 //!
 //! Anchoring follows [§3.1.3 Ball-stick anchors](https://github.com/ramate-io/maybraid/tree/main/rfc/rfc-000-000-183-chico-vegetation/03-01-stalk-and-ball-stick-trees/03-ball-stick-anchors/README.md): positions, initial rays, bias directions, and local scale for each canopy chain, usually emitted from the **stalk radial centroid** so limbs read as emerging from trunk mass.
 //!
-//! Compared to [Honu Banyan](https://github.com/ramate-io/maybraid/tree/main/rfc/rfc-000-000-183-chico-vegetation/03-01-stalk-and-ball-stick-trees/07-well-known-tree-constructions/05-honu-banyan/README.md), Sope's places rings **much lower**: radial work begins around **40%** of total height \(z_{\min} \approx 0.40 H\), extending to ~**90%** with **5–7** rings at spacing ~**0.08 H**, **6–8** anchors per ring. **Projection length** uses a **vase-like widening**: compact near the bottom of the anchor band, then **`mix` toward longer projections** with normalized height \(u\) (RFC uses `sqrt(u)` between min/max lengths ~**0.25 H** and **0.70 H**).
+//! Compared to [Honu Banyan](https://github.com/ramate-io/maybraid/tree/main/rfc/rfc-000-000-183-chico-vegetation/03-01-stalk-and-ball-stick-trees/07-well-known-tree-constructions/05-honu-banyan/README.md), Sope's places rings **much lower**: radial work begins around **40%** of total height \(z_{\min} \approx 0.40 H\), extending to ~**90%** with **5–7** rings at spacing ~**0.08 H**, **6–8** anchors per ring. **Projection length** uses a bounded **logit vase profile** over normalized height \(u\), mixed between min/max projection fractions.
 //!
 //! # Same ball-stick graph as the stalk
 //!
@@ -29,9 +29,11 @@ pub struct SopesBanyanAnchors {
 	pub last_ring_unit_height: f32,
 	pub ring_count: u32,
 	pub anchors_per_ring: u32,
-	/// Vase mix endpoints as fractions of stalk height: `length ≈ H * mix(min, max, sqrt(u))` with ring index `u`.
+	/// Vase mix endpoints as fractions of stalk height: `length ≈ H * mix(min, max, vase_profile(u))`.
 	pub projection_min_fraction_of_height: f32,
 	pub projection_max_fraction_of_height: f32,
+	/// Clamp epsilon for bounded logit vase profile.
+	pub vase_profile_epsilon: f32,
 	/// [`Hysteresis::max_depth`] at the first ring (RFC limb depth ~5 segments).
 	pub max_depth_first_ring: usize,
 	/// [`Hysteresis::max_depth`] at the last ring (~8).
@@ -52,6 +54,7 @@ impl Default for SopesBanyanAnchors {
 			anchors_per_ring: 7,
 			projection_min_fraction_of_height: 0.25,
 			projection_max_fraction_of_height: 0.70,
+			vase_profile_epsilon: 0.08,
 			max_depth_first_ring: 5,
 			max_depth_last_ring: 8,
 		}
@@ -70,10 +73,18 @@ impl SopesBanyanAnchors {
 	/// Vase-shaped projection length for this ring (world units).
 	fn projection_length(&self, u: f32) -> f32 {
 		let h = self.stalk.height.max(1e-6);
-		let t = u.sqrt();
+		let t = Self::vase_profile(u, self.vase_profile_epsilon);
 		let f = self.projection_min_fraction_of_height
 			+ (self.projection_max_fraction_of_height - self.projection_min_fraction_of_height) * t;
 		h * f
+	}
+
+	/// Bounded inverse-sigmoid mapping in `[0, 1]` for cup-like vase widening.
+	fn vase_profile(u: f32, eps: f32) -> f32 {
+		let eps = eps.clamp(1e-4, 0.49);
+		let u = u.clamp(eps, 1.0 - eps);
+		let a = ((1.0 - eps) / eps).ln();
+		(((u / (1.0 - u)).ln() + a) / (2.0 * a)).clamp(0.0, 1.0)
 	}
 
 	fn max_depth_for_ring(&self, u: f32) -> usize {

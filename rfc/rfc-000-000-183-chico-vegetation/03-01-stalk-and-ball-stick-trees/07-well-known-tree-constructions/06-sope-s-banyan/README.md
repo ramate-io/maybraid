@@ -53,15 +53,26 @@ $$
 u = \frac{z - z_{\min}}{z_{\max} - z_{\min}}
 $$
 
-Projection length increases with height:
+Projection length follows a bounded vase profile (inverse sigmoid / logit over normalized height):
 
 ```rust
 let min_projection_length = 0.25 * H;
 let max_projection_length = 0.70 * H;
-let length = mix(min_projection_length, max_projection_length, sqrt(u));
+
+fn vase_profile(u: f32, eps: f32) -> f32 {
+    let u = u.clamp(eps, 1.0 - eps);
+    let a = ((1.0 - eps) / eps).ln();
+    ((u / (1.0 - u)).ln() + a) / (2.0 * a)
+}
+
+let length = mix(
+    min_projection_length,
+    max_projection_length,
+    vase_profile(u, 0.08),
+);
 ```
 
-This keeps the lower crown compact while allowing the upper canopy to spread dramatically.
+This keeps the lower crown compact, opens quickly into a cup, then keeps widening toward the rim (more vase-like than a simple `sqrt(u)` ramp).
 
 **Chain Growth**
 

@@ -437,7 +437,8 @@
         "MathJax",
         "accessor",
         "accessors",
-        "Argv"
+        "Argv",
+        "logit"
       ]
     },
     "bibtex": {
