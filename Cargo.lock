@@ -1877,6 +1877,11 @@ dependencies = [
 [[package]]
 name = "chico-sbs-geometry"
 version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "bevy_math",
+ "procedural-common",
+]
 
 [[package]]
 name = "chico-sbs-trees"

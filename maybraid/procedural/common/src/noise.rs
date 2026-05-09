@@ -226,6 +226,51 @@ impl NoiseConfig {
 		self.gain(self.generator.get_noise_3d((x + w) * f, y * f, z * f))
 	}
 
+	/// Sample 4D and remap from `[-1, 1]` to `[0, 1]`.
+	pub fn sample_unit01_4d(&self, x: f32, y: f32, z: f32, w: f32) -> f32 {
+		(self.sample_4d(x, y, z, w) * 0.5 + 0.5).clamp(0.0, 1.0)
+	}
+
+	/// Sample 4D and clamp to signed unit range.
+	pub fn sample_signed_4d(&self, x: f32, y: f32, z: f32, w: f32) -> f32 {
+		self.sample_4d(x, y, z, w).clamp(-1.0, 1.0)
+	}
+
+	/// Deterministically map a 4D sample to a half-open integer range `[lo, hi)`.
+	pub fn sample_range_usize_4d(
+		&self,
+		lo: usize,
+		hi: usize,
+		x: f32,
+		y: f32,
+		z: f32,
+		w: f32,
+	) -> usize {
+		if hi <= lo {
+			return lo;
+		}
+		let u = self.sample_unit01_4d(x, y, z, w);
+		let span = hi - lo;
+		lo + ((u * span as f32).floor() as usize).min(span - 1)
+	}
+
+	/// Deterministically map a 4D sample to a float range.
+	pub fn sample_range_f32_4d(
+		&self,
+		lo: f32,
+		hi: f32,
+		x: f32,
+		y: f32,
+		z: f32,
+		w: f32,
+	) -> f32 {
+		if hi <= lo {
+			return lo;
+		}
+		let u = self.sample_unit01_4d(x, y, z, w);
+		lo + u * (hi - lo)
+	}
+
 	/// **[0, 1]** inputs mapped to **[-1, 1]** per axis before [`NoiseConfig::sample_1d`].
 	pub fn sample_unit_1d(&self, u: f32) -> f32 {
 		let x = u * 2.0 - 1.0;
