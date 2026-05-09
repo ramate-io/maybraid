@@ -19,6 +19,7 @@ members = [
 
   "maybraid/chico/lib",
   "maybraid/chico/sbs-trees",
+  "maybraid/chico/sbs-trees-playground",
   "maybraid/chico/sdf",
   "maybraid/chico/ball-components",
   "maybraid/chico/stick-components",
