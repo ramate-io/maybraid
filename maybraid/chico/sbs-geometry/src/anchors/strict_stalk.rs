@@ -5,9 +5,14 @@
 use bevy_math::Vec3;
 
 #[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "clap", derive(clap::Args))]
+#[cfg_attr(feature = "clap", command(rename_all = "kebab-case"))]
 pub struct StrictStalk {
+	#[cfg_attr(feature = "clap", arg(long, default_value_t = 10.0))]
 	pub height: f32,
+	#[cfg_attr(feature = "clap", arg(skip))]
 	pub base_anchor: Vec3,
+	#[cfg_attr(feature = "clap", arg(long, default_value_t = 0.75))]
 	pub base_radius: f32,
 }
 

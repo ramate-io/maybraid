@@ -10,7 +10,10 @@ publish = { workspace = true }
 rust-version = { workspace = true }
 
 [dependencies]
+bevy = { workspace = true }
 chico-sdf = { workspace = true }
+procedural-common = { workspace = true }
+render-item = { workspace = true }
 
 [lints]
 workspace = true

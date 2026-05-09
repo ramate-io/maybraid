@@ -20,23 +20,35 @@ use crate::{BallStickNode, Hysteresis, SopesBanyanChainRule};
 
 /// RFC-style ring band and vase profile over [`StrictStalk::height`].
 #[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "clap", derive(clap::Args))]
+#[cfg_attr(feature = "clap", command(rename_all = "kebab-case"))]
 pub struct SopesBanyanAnchors {
 	/// Vertical extent and base for ring placement.
+	#[cfg_attr(feature = "clap", command(flatten))]
 	pub stalk: StrictStalk,
 	/// First ring height as a fraction of [`StrictStalk::height`] above [`StrictStalk::base_anchor`] (RFC ~0.4).
+	#[cfg_attr(feature = "clap", arg(long, default_value_t = 0.40))]
 	pub first_ring_unit_height: f32,
 	/// Last ring height fraction (RFC ~0.9).
+	#[cfg_attr(feature = "clap", arg(long, default_value_t = 0.90))]
 	pub last_ring_unit_height: f32,
+	#[cfg_attr(feature = "clap", arg(long, default_value_t = 6))]
 	pub ring_count: u32,
+	#[cfg_attr(feature = "clap", arg(long, default_value_t = 7))]
 	pub anchors_per_ring: u32,
 	/// Vase mix endpoints as fractions of stalk height: `length ≈ H * mix(min, max, vase_profile(u))`.
+	#[cfg_attr(feature = "clap", arg(long, default_value_t = 0.25))]
 	pub projection_min_fraction_of_height: f32,
+	#[cfg_attr(feature = "clap", arg(long, default_value_t = 0.70))]
 	pub projection_max_fraction_of_height: f32,
 	/// Clamp epsilon for bounded logit vase profile.
+	#[cfg_attr(feature = "clap", arg(long, default_value_t = 0.08))]
 	pub vase_profile_epsilon: f32,
 	/// [`Hysteresis::max_depth`] at the first ring (RFC limb depth ~5 segments).
+	#[cfg_attr(feature = "clap", arg(long, default_value_t = 5))]
 	pub max_depth_first_ring: usize,
 	/// [`Hysteresis::max_depth`] at the last ring (~8).
+	#[cfg_attr(feature = "clap", arg(long, default_value_t = 8))]
 	pub max_depth_last_ring: usize,
 }
 
