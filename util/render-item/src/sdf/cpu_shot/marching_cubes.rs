@@ -91,6 +91,42 @@ pub fn interpolate_vertex(
 	cube_origin + pos_local * cube_size
 }
 
+/// Like [`interpolate_vertex`], but with an **axis-aligned** cell size (non-cubic voxels).
+#[inline]
+pub fn interpolate_vertex_cell(
+	edge: usize,
+	cube_origin: Vec3,
+	cube_cell: Vec3,
+	corner_values: [f32; 8],
+) -> Vec3 {
+	const CUBE_CORNERS: [Vec3; 8] = [
+		Vec3::new(0.0, 0.0, 0.0),
+		Vec3::new(1.0, 0.0, 0.0),
+		Vec3::new(1.0, 0.0, 1.0),
+		Vec3::new(0.0, 0.0, 1.0),
+		Vec3::new(0.0, 1.0, 0.0),
+		Vec3::new(1.0, 1.0, 0.0),
+		Vec3::new(1.0, 1.0, 1.0),
+		Vec3::new(0.0, 1.0, 1.0),
+	];
+
+	let (a, b) = EDGE_VERTEX_INDICES[edge];
+	let v1 = CUBE_CORNERS[a];
+	let v2 = CUBE_CORNERS[b];
+	let val1 = corner_values[a];
+	let val2 = corner_values[b];
+
+	if (val1 - val2).abs() < 1e-6 {
+		return cube_origin + (v1 + v2) * 0.5 * cube_cell;
+	}
+
+	let t = (-val1) / (val2 - val1);
+	let t = t.clamp(0.0, 1.0);
+
+	let pos_local = v1 + (v2 - v1) * t;
+	cube_origin + pos_local * cube_cell
+}
+
 // Full triangulation table - 256 entries, one for each possible cube configuration
 // Each entry is a list of edge indices forming triangles, terminated by -1
 // Based on: https://gist.github.com/dwilliamson/c041e3454a713e58baf6e4f8e5fffecd

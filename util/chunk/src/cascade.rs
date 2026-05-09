@@ -44,6 +44,7 @@ impl Ring {
 								z as f32 * self.size,
 							),
 						size: self.size,
+						extent: None,
 						res_2: self.res_2,
 						omit: None,
 					});
@@ -86,6 +87,10 @@ pub struct CascadeChunk {
 	pub world: u32,
 	pub origin: Vec3,
 	pub size: f32,
+	/// When `Some`, axis-aligned box from [`Self::origin`] with edge lengths `extent` (X, Y, Z).
+	/// [`Self::size`] should be `extent.x.max(extent.y).max(extent.z)` for ordering / caches.
+	/// When `None`, a cube with edge length [`Self::size`].
+	pub extent: Option<Vec3>,
 	pub res_2: u8,
 	pub omit: Option<Aabb3d>,
 }
@@ -95,12 +100,24 @@ impl Hash for CascadeChunk {
 		self.origin.x.to_bits().hash(state);
 		self.origin.y.to_bits().hash(state);
 		self.origin.z.to_bits().hash(state);
-		self.size.to_bits().hash(state);
+		let e = self.extent_vec();
+		e.x.to_bits().hash(state);
+		e.y.to_bits().hash(state);
+		e.z.to_bits().hash(state);
 		self.res_2.hash(state);
 	}
 }
 
 impl CascadeChunk {
+	/// Edge lengths (X, Y, Z) of this chunk’s axis-aligned sampling box.
+	#[inline]
+	pub fn extent_vec(&self) -> Vec3 {
+		match self.extent {
+			Some(e) => e,
+			None => Vec3::splat(self.size),
+		}
+	}
+
 	pub fn contains_point(&self, point: Vec3) -> bool {
 		if let Some(omit) = self.omit {
 			if omit.closest_point(point) == point.into() {
@@ -108,12 +125,13 @@ impl CascadeChunk {
 			}
 		}
 
+		let e = self.extent_vec();
 		point.x >= self.origin.x
-			&& point.x <= self.origin.x + self.size
+			&& point.x <= self.origin.x + e.x
 			&& point.y >= self.origin.y
-			&& point.y <= self.origin.y + self.size
+			&& point.y <= self.origin.y + e.y
 			&& point.z >= self.origin.z
-			&& point.z <= self.origin.z + self.size
+			&& point.z <= self.origin.z + e.z
 	}
 
 	pub fn column_contains_point(&self, point: Vec3) -> bool {
@@ -123,10 +141,11 @@ impl CascadeChunk {
 			}
 		}
 
+		let e = self.extent_vec();
 		point.x >= self.origin.x
-			&& point.x <= self.origin.x + self.size
+			&& point.x <= self.origin.x + e.x
 			&& point.z >= self.origin.z
-			&& point.z <= self.origin.z + self.size
+			&& point.z <= self.origin.z + e.z
 	}
 
 	pub fn resolution(&self) -> usize {
@@ -135,24 +154,62 @@ impl CascadeChunk {
 
 	/// Creates a chunk with a bottom left corner at the origin and a size of 1.0.
 	pub fn unit_chunk() -> Self {
-		Self { world: 0, origin: Vec3::ZERO, size: 1.0, res_2: 0, omit: None }
+		Self { world: 0, origin: Vec3::ZERO, size: 1.0, extent: None, res_2: 0, omit: None }
 	}
 
 	/// Creates a chunk with the center at the origin and diameters of 1.0.
 	pub fn unit_center_chunk() -> Self {
-		Self { world: 0, origin: Vec3::new(-0.5, 0.0, -0.5), size: 1.0, res_2: 0, omit: None }
+		Self {
+			world: 0,
+			origin: Vec3::new(-0.5, 0.0, -0.5),
+			size: 1.0,
+			extent: None,
+			res_2: 0,
+			omit: None,
+		}
 	}
 
 	/// Creates a chunk with the center at the origin and a size of 1.0.
 	pub fn unit_3d_center_chunk() -> Self {
-		Self { world: 0, origin: Vec3::new(-0.5, -0.5, -0.5), size: 1.0, res_2: 0, omit: None }
+		Self {
+			world: 0,
+			origin: Vec3::new(-0.5, -0.5, -0.5),
+			size: 1.0,
+			extent: None,
+			res_2: 0,
+			omit: None,
+		}
+	}
+
+	/// [`unit_center_chunk`] with anisotropic padding: **X/Z** by `μ_xz`, **Y** by `μ_y` (keeps the
+	/// nominal segment near **y ∈ [0, 1]** with only small cap padding when `μ_y` is small).
+	pub fn unit_center_chunk_with_mu_xz_y(mu_xz: f32, mu_y: f32) -> Self {
+		let ex = 1.0 + 2.0 * mu_xz;
+		let ey = 1.0 + 2.0 * mu_y;
+		let ez = 1.0 + 2.0 * mu_xz;
+		let extent = Vec3::new(ex, ey, ez);
+		Self {
+			world: 0,
+			origin: Vec3::new(-0.5 - mu_xz, -mu_y, -0.5 - mu_xz),
+			size: ex.max(ey).max(ez),
+			extent: Some(extent),
+			res_2: 0,
+			omit: None,
+		}
 	}
 
 	/// Updates a chunk with some Mu for the geometry that goes slightly beyond the unit.
 	pub fn with_mu(self, mu: f32) -> Self {
 		let origin = self.origin + Vec3::new(-mu, -mu, -mu);
 		let size = self.size + 2.0 * mu;
-		Self { world: self.world, origin, size, res_2: self.res_2, omit: self.omit }
+		Self {
+			world: self.world,
+			origin,
+			size,
+			extent: None,
+			res_2: self.res_2,
+			omit: self.omit,
+		}
 	}
 
 	pub fn with_res_2(mut self, res_2: u8) -> Self {
@@ -263,6 +320,7 @@ impl<R: ResolutionMap> Cascade<R> {
 			world: 0,
 			origin,
 			size: self.min_size,
+			extent: None,
 			res_2: self.resolution_map.ring_to_power_of_2(0),
 			omit: None,
 		}
@@ -345,6 +403,7 @@ impl<R: ResolutionMap> Cascade<R> {
 						world: 0,
 						origin: chunk_origin,
 						size: self.grid_chunk_size(),
+						extent: None,
 						res_2: self.resolution_map.ring_to_power_of_2(self.number_of_rings),
 						omit,
 					};
@@ -460,6 +519,7 @@ mod tests {
 				world: 0,
 				origin: lower_left_bottom + Vec3::new(0.0 * size, 0.0 * size, 0.0 * size),
 				size,
+				extent: None,
 				res_2,
 				omit: None,
 			},
@@ -467,6 +527,7 @@ mod tests {
 				world: 0,
 				origin: lower_left_bottom + Vec3::new(1.0 * size, 0.0 * size, 0.0 * size),
 				size,
+				extent: None,
 				res_2,
 				omit: None,
 			},
@@ -474,6 +535,7 @@ mod tests {
 				world: 0,
 				origin: lower_left_bottom + Vec3::new(2.0 * size, 0.0 * size, 0.0 * size),
 				size,
+				extent: None,
 				res_2,
 				omit: None,
 			},
@@ -481,6 +543,7 @@ mod tests {
 				world: 0,
 				origin: lower_left_bottom + Vec3::new(0.0 * size, 1.0 * size, 0.0 * size),
 				size,
+				extent: None,
 				res_2,
 				omit: None,
 			},
@@ -488,6 +551,7 @@ mod tests {
 				world: 0,
 				origin: lower_left_bottom + Vec3::new(1.0 * size, 1.0 * size, 0.0 * size),
 				size,
+				extent: None,
 				res_2,
 				omit: None,
 			}, // center
@@ -495,6 +559,7 @@ mod tests {
 				world: 0,
 				origin: lower_left_bottom + Vec3::new(2.0 * size, 1.0 * size, 0.0 * size),
 				size,
+				extent: None,
 				res_2,
 				omit: None,
 			},
@@ -502,6 +567,7 @@ mod tests {
 				world: 0,
 				origin: lower_left_bottom + Vec3::new(0.0 * size, 2.0 * size, 0.0 * size),
 				size,
+				extent: None,
 				res_2,
 				omit: None,
 			},
@@ -509,6 +575,7 @@ mod tests {
 				world: 0,
 				origin: lower_left_bottom + Vec3::new(1.0 * size, 2.0 * size, 0.0 * size),
 				size,
+				extent: None,
 				res_2,
 				omit: None,
 			},
@@ -516,6 +583,7 @@ mod tests {
 				world: 0,
 				origin: lower_left_bottom + Vec3::new(2.0 * size, 2.0 * size, 0.0 * size),
 				size,
+				extent: None,
 				res_2,
 				omit: None,
 			},
@@ -524,6 +592,7 @@ mod tests {
 				world: 0,
 				origin: lower_left_bottom + Vec3::new(0.0 * size, 0.0 * size, 1.0 * size),
 				size,
+				extent: None,
 				res_2,
 				omit: None,
 			},
@@ -531,6 +600,7 @@ mod tests {
 				world: 0,
 				origin: lower_left_bottom + Vec3::new(1.0 * size, 0.0 * size, 1.0 * size),
 				size,
+				extent: None,
 				res_2,
 				omit: None,
 			},
@@ -538,6 +608,7 @@ mod tests {
 				world: 0,
 				origin: lower_left_bottom + Vec3::new(2.0 * size, 0.0 * size, 1.0 * size),
 				size,
+				extent: None,
 				res_2,
 				omit: None,
 			},
@@ -545,6 +616,7 @@ mod tests {
 				world: 0,
 				origin: lower_left_bottom + Vec3::new(0.0 * size, 1.0 * size, 1.0 * size),
 				size,
+				extent: None,
 				res_2,
 				omit: None,
 			},
@@ -552,6 +624,7 @@ mod tests {
 				world: 0,
 				origin: lower_left_bottom + Vec3::new(1.0 * size, 1.0 * size, 1.0 * size),
 				size,
+				extent: None,
 				res_2,
 				omit: None,
 			},
@@ -559,6 +632,7 @@ mod tests {
 				world: 0,
 				origin: lower_left_bottom + Vec3::new(2.0 * size, 1.0 * size, 1.0 * size),
 				size,
+				extent: None,
 				res_2,
 				omit: None,
 			},
@@ -566,6 +640,7 @@ mod tests {
 				world: 0,
 				origin: lower_left_bottom + Vec3::new(0.0 * size, 2.0 * size, 1.0 * size),
 				size,
+				extent: None,
 				res_2,
 				omit: None,
 			},
@@ -573,6 +648,7 @@ mod tests {
 				world: 0,
 				origin: lower_left_bottom + Vec3::new(1.0 * size, 2.0 * size, 1.0 * size),
 				size,
+				extent: None,
 				res_2,
 				omit: None,
 			},
@@ -580,6 +656,7 @@ mod tests {
 				world: 0,
 				origin: lower_left_bottom + Vec3::new(2.0 * size, 2.0 * size, 1.0 * size),
 				size,
+				extent: None,
 				res_2,
 				omit: None,
 			},
@@ -588,6 +665,7 @@ mod tests {
 				world: 0,
 				origin: lower_left_bottom + Vec3::new(0.0 * size, 0.0 * size, 2.0 * size),
 				size,
+				extent: None,
 				res_2,
 				omit: None,
 			},
@@ -595,6 +673,7 @@ mod tests {
 				world: 0,
 				origin: lower_left_bottom + Vec3::new(1.0 * size, 0.0 * size, 2.0 * size),
 				size,
+				extent: None,
 				res_2,
 				omit: None,
 			},
@@ -602,6 +681,7 @@ mod tests {
 				world: 0,
 				origin: lower_left_bottom + Vec3::new(2.0 * size, 0.0 * size, 2.0 * size),
 				size,
+				extent: None,
 				res_2,
 				omit: None,
 			},
@@ -609,6 +689,7 @@ mod tests {
 				world: 0,
 				origin: lower_left_bottom + Vec3::new(0.0 * size, 1.0 * size, 2.0 * size),
 				size,
+				extent: None,
 				res_2,
 				omit: None,
 			},
@@ -616,6 +697,7 @@ mod tests {
 				world: 0,
 				origin: lower_left_bottom + Vec3::new(1.0 * size, 1.0 * size, 2.0 * size),
 				size,
+				extent: None,
 				res_2,
 				omit: None,
 			},
@@ -623,6 +705,7 @@ mod tests {
 				world: 0,
 				origin: lower_left_bottom + Vec3::new(2.0 * size, 1.0 * size, 2.0 * size),
 				size,
+				extent: None,
 				res_2,
 				omit: None,
 			},
@@ -630,6 +713,7 @@ mod tests {
 				world: 0,
 				origin: lower_left_bottom + Vec3::new(0.0 * size, 2.0 * size, 2.0 * size),
 				size,
+				extent: None,
 				res_2,
 				omit: None,
 			},
@@ -637,6 +721,7 @@ mod tests {
 				world: 0,
 				origin: lower_left_bottom + Vec3::new(1.0 * size, 2.0 * size, 2.0 * size),
 				size,
+				extent: None,
 				res_2,
 				omit: None,
 			},
@@ -644,6 +729,7 @@ mod tests {
 				world: 0,
 				origin: lower_left_bottom + Vec3::new(2.0 * size, 2.0 * size, 2.0 * size),
 				size,
+				extent: None,
 				res_2,
 				omit: None,
 			},
@@ -662,6 +748,7 @@ mod tests {
 			world: 0,
 			origin: lower_left_bottom + Vec3::new(1.0 * size, 1.0 * size, 1.0 * size),
 			size,
+			extent: None,
 			res_2,
 			omit: None,
 		};
@@ -739,6 +826,7 @@ mod tests {
 			world: 0,
 			origin: Vec3::new(0.0, 0.0, 0.0),
 			size: 1.0,
+			extent: None,
 			res_2: 0,
 			omit: None,
 		};
@@ -794,6 +882,7 @@ mod tests {
 			world: 0,
 			origin: Vec3::new(0.0, 0.0, 0.0),
 			size: 2.5,
+			extent: None,
 			res_2: 1,
 			omit: None,
 		};
@@ -841,6 +930,7 @@ mod tests {
 			world: 0,
 			origin: Vec3::new(0.0, 0.0, 0.0),
 			size: 0.5,
+			extent: None,
 			res_2: 2,
 			omit: None,
 		};
