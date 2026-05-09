@@ -5,7 +5,7 @@ pub mod mesh;
 pub mod sdf;
 
 use bevy::prelude::*;
-use chunk::cascade::CascadeChunk;
+pub use chunk::cascade::CascadeChunk;
 
 /// Used for logical items that can will spawn their constituens into the world.
 pub trait RenderItem: Clone {
