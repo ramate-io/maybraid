@@ -5,6 +5,7 @@ pub use chain::{
 	BallStickChain, BallStickNode, BallStickSegment, ChainHysteresisRule, Hysteresis,
 	PeriodicHysteresisRule,
 };
+pub use chain::sopes_banyan::SopesBanyanChainRule;
 
 pub mod anchors;
 

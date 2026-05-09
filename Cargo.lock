@@ -1881,6 +1881,7 @@ dependencies = [
  "anyhow",
  "bevy",
  "bevy_math",
+ "clap",
  "procedural-common",
  "render-item",
 ]
