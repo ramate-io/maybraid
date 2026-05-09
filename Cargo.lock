@@ -1879,8 +1879,10 @@ name = "chico-sbs-geometry"
 version = "0.0.1"
 dependencies = [
  "anyhow",
+ "bevy",
  "bevy_math",
  "procedural-common",
+ "render-item",
 ]
 
 [[package]]

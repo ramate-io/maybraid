@@ -65,6 +65,26 @@ impl BallStickChain {
 			})
 	}
 
+	/// Each graph edge with hysteresis at the parent (start) and child (end) nodes.
+	pub fn segments_with_hysteresis<'a>(
+		&'a self,
+	) -> impl Iterator<Item = (BallStickSegment<'a>, &'a Hysteresis, &'a Hysteresis)> + 'a {
+		self.children
+			.iter()
+			.enumerate()
+			.flat_map(move |(parent_idx, children)| {
+				let start = &self.nodes[parent_idx];
+				let parent_h = &self.hysteresis[parent_idx];
+				children.iter().map(move |child_idx| {
+					let seg = BallStickSegment {
+						start,
+						end: &self.nodes[*child_idx],
+					};
+					(seg, parent_h, &self.hysteresis[*child_idx])
+				})
+			})
+	}
+
 	pub fn build<R: ChainHysteresisRule + ?Sized>(
 		start_nodes: Vec<(BallStickNode, Hysteresis)>,
 		rule: &R,

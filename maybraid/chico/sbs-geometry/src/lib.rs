@@ -5,3 +5,6 @@ pub use chain::{
 	BallStickChain, BallStickNode, BallStickSegment, ChainHysteresisRule, Hysteresis,
 	PeriodicHysteresisRule,
 };
+
+#[cfg(feature = "render")]
+pub mod render;

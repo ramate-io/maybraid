@@ -12,9 +12,15 @@ rust-version = { workspace = true }
 [dependencies]
 bevy_math = { workspace = true }
 procedural-common = { workspace = true }
+bevy = { workspace = true, optional = true }
+render-item = { workspace = true, optional = true  }
 
 [dev-dependencies]
 anyhow = { workspace = true }
+
+[features]
+default = [ "render" ]
+render = [ "dep:bevy", "dep:render-item" ]
 
 [lints]
 workspace = true
