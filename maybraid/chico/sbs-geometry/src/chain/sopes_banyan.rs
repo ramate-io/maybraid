@@ -1,7 +1,6 @@
 //! Sope's Banyan canopy as a **phase machine** on [`super::Hysteresis`] ([#252](https://github.com/ramate-io/maybraid/issues/252)).
 
-use bevy_math::Vec3;
-use procedural_common::{NoiseConfig, NoiseParams};
+use procedural_common::NoiseConfig;
 
 use crate::BallStickNode;
 
@@ -12,107 +11,32 @@ use super::Hysteresis;
 /// Canonical name for consumers that only need the hysteresis type (render, anchors).
 pub type SopesBanyanHysteresis = SopesBanyanChain;
 
-/// Noise + descender tuning used when [`SopesBanyanAnchors`](crate::anchors::sopes_banyan::SopesBanyanAnchors) build seeds.
-#[derive(Clone)]
-pub struct SopesBanyanChainRule {
-	pub noise: NoiseConfig,
-	pub banyan_height: f32,
-	pub descender_threshold: f32,
-}
-
-impl Default for SopesBanyanChainRule {
-	fn default() -> Self {
-		Self {
-			noise: NoiseConfig::new(NoiseParams::default()),
-			banyan_height: 20.0,
-			descender_threshold: 0.12,
-		}
-	}
-}
-
-impl SopesBanyanChainRule {
-	/// Hook for callers that refresh procedural state before [`crate::BallStickChain::build`] (default no-op).
-	pub fn sync_noise_engine(&mut self) {}
-
-	pub fn seed_hysteresis(&self, node: BallStickNode, max_depth: usize) -> SopesBanyanChain {
-		let inner = BranchOut::up(node);
-		SopesBanyanChain {
-			noise: self.noise.clone(),
-			banyan_height: self.banyan_height,
-			descender_threshold: self.descender_threshold,
-			max_depth,
-			branch: inner.clone(),
-			phase: SopesBanyanPhase::BranchOut(DepthBudget { inner, remaining: max_depth }),
-			segment_index: 0,
-			incoming_ray: Vec3::Y,
-		}
-	}
-}
-
-/// CLI-parseable fields for [`SopesBanyanChainRule`] (noise params flatten here).
-#[cfg(feature = "clap")]
-#[derive(Clone, Debug, clap::Args)]
-#[command(rename_all = "kebab-case")]
-pub struct SopesBanyanChainRuleArgs {
-	#[command(flatten)]
-	pub noise: NoiseParams,
-	#[arg(long, default_value_t = 20.0)]
-	pub banyan_height: f32,
-	#[arg(long, default_value_t = 0.12)]
-	pub descender_threshold: f32,
-}
-
-#[cfg(feature = "clap")]
-impl Default for SopesBanyanChainRuleArgs {
-	fn default() -> Self {
-		Self {
-			noise: NoiseParams::default(),
-			banyan_height: 20.0,
-			descender_threshold: 0.12,
-		}
-	}
-}
-
-#[cfg(feature = "clap")]
-impl From<SopesBanyanChainRuleArgs> for SopesBanyanChainRule {
-	fn from(a: SopesBanyanChainRuleArgs) -> Self {
-		Self {
-			noise: NoiseConfig::new(a.noise),
-			banyan_height: a.banyan_height,
-			descender_threshold: a.descender_threshold,
-		}
-	}
-}
-
 /// Flair-up segment: one biased [`BranchOut`] step from the current joint.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone)]
 pub struct StartFlairUp {
 	pub projection: BranchOut,
 }
 
 impl StartFlairUp {
-	pub fn sample_from_candidate(candidate: SopesBanyanPhase, noise: &NoiseConfig) -> SopesBanyanPhase {
-		let _ = noise;
-		if candidate.is_branch_out() && candidate.budget_remaining() < 2 {
-			let node = *candidate.branch_node();
-			let dof = candidate.ray_degrees_of_freedom().unwrap_or(0.14);
-			SopesBanyanPhase::StartFlairUp(StartFlairUp {
-				projection: BranchOut::up(node)
-					.with_ray_degrees_of_freedom(dof * 0.35)
-					.single_child(),
-			})
-		} else {
-			candidate
+	pub fn sample_from_candidate(phase: SopesBanyanPhase, _noise: &NoiseConfig) -> SopesBanyanPhase {
+		match phase {
+			SopesBanyanPhase::BranchOut(budget) if budget.remaining < 2 => {
+				let inner = &budget.inner;
+				let node = inner.node;
+				let dof = inner.ray_degrees_of_freedom;
+				SopesBanyanPhase::StartFlairUp(StartFlairUp {
+					projection: BranchOut::up(node)
+						.with_hysteresis_context(inner.noise.clone(), inner.segment_index, inner.incoming_ray)
+						.with_ray_degrees_of_freedom(dof * 0.35)
+						.single_child(),
+				})
+			}
+			other => other,
 		}
 	}
 
-	pub fn project_to_end(
-		&self,
-		noise: &NoiseConfig,
-		segment_index: usize,
-		incoming_ray: Vec3,
-	) -> EndFlairUp {
-		EndFlairUp { node: self.projection.project_tip(noise, segment_index, incoming_ray) }
+	pub fn project_to_end(&self) -> SopesBanyanPhase {
+		SopesBanyanPhase::EndFlairUp(EndFlairUp { node: self.projection.project_tip() })
 	}
 }
 
@@ -122,41 +46,47 @@ pub struct EndFlairUp {
 }
 
 /// Descender segment: one downward-biased step.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone)]
 pub struct StartDescender {
 	pub projection: BranchOut,
 }
 
 impl StartDescender {
 	pub fn sample_from_candidate(
-		candidate: SopesBanyanPhase,
+		phase: SopesBanyanPhase,
 		noise: &NoiseConfig,
 		banyan_height: f32,
 		descender_threshold: f32,
 	) -> SopesBanyanPhase {
-		let node = *candidate.branch_node();
-		if candidate.is_branch_out()
-			&& noise.sample_unit_3d(node.position.x, node.position.y, node.position.z) < descender_threshold
-		{
-			let drop_len = (banyan_height * 2.0).max(candidate.length_range_end().unwrap_or(0.5));
-			SopesBanyanPhase::StartDescender(StartDescender {
-				projection: BranchOut::down(node)
-					.with_ray_degrees_of_freedom(0.0)
-					.single_child()
-					.with_length(drop_len * 0.92..drop_len * 1.08),
-			})
-		} else {
-			candidate
+		match phase {
+			SopesBanyanPhase::BranchOut(budget) => {
+				let inner = &budget.inner;
+				let node = inner.node;
+				if noise.sample_unit_3d(node.position.x, node.position.y, node.position.z)
+					< descender_threshold
+				{
+					let drop_len = (banyan_height * 2.0).max(inner.length.end);
+					SopesBanyanPhase::StartDescender(StartDescender {
+						projection: BranchOut::down(node)
+							.with_hysteresis_context(
+								inner.noise.clone(),
+								inner.segment_index,
+								inner.incoming_ray,
+							)
+							.with_ray_degrees_of_freedom(0.0)
+							.single_child()
+							.with_length(drop_len * 0.92..drop_len * 1.08),
+					})
+				} else {
+					SopesBanyanPhase::BranchOut(budget)
+				}
+			}
+			other => other,
 		}
 	}
 
-	pub fn project_to_end(
-		&self,
-		noise: &NoiseConfig,
-		segment_index: usize,
-		incoming_ray: Vec3,
-	) -> EndDescender {
-		EndDescender { node: self.projection.project_tip(noise, segment_index, incoming_ray) }
+	pub fn project_to_end(&self) -> SopesBanyanPhase {
+		SopesBanyanPhase::EndDescender(EndDescender { node: self.projection.project_tip() })
 	}
 }
 
@@ -165,7 +95,7 @@ pub struct EndDescender {
 	pub node: BallStickNode,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone)]
 pub enum SopesBanyanPhase {
 	BranchOut(DepthBudget<BranchOut>),
 	StartFlairUp(StartFlairUp),
@@ -185,59 +115,47 @@ impl SopesBanyanPhase {
 		}
 	}
 
-	fn is_branch_out(&self) -> bool {
-		matches!(self, Self::BranchOut(_))
-	}
-
-	fn budget_remaining(&self) -> usize {
+	/// Flair / descender phase swaps after a mechanical [`DepthBudget`] expansion step.
+	pub fn candidate_into(self, noise: &NoiseConfig, banyan_height: f32, descender_threshold: f32) -> Self {
 		match self {
-			Self::BranchOut(b) => b.remaining,
-			_ => 0,
+			Self::BranchOut(b) => {
+				let p = StartFlairUp::sample_from_candidate(Self::BranchOut(b.clone()), noise);
+				StartDescender::sample_from_candidate(p, noise, banyan_height, descender_threshold)
+			}
+			other => other,
 		}
-	}
-
-	fn branch_node(&self) -> &BallStickNode {
-		self.node()
-	}
-
-	fn ray_degrees_of_freedom(&self) -> Option<f32> {
-		match self {
-			Self::BranchOut(b) => Some(b.inner.ray_degrees_of_freedom),
-			_ => None,
-		}
-	}
-
-	fn length_range_end(&self) -> Option<f32> {
-		match self {
-			Self::BranchOut(b) => Some(b.inner.length.end),
-			_ => None,
-		}
-	}
-
-	fn after_branch_sampling(
-		phase: SopesBanyanPhase,
-		noise: &NoiseConfig,
-		banyan_height: f32,
-		descender_threshold: f32,
-	) -> SopesBanyanPhase {
-		let p = StartFlairUp::sample_from_candidate(phase, noise);
-		StartDescender::sample_from_candidate(p, noise, banyan_height, descender_threshold)
 	}
 }
 
-/// One limb of Sope's Banyan: [`SopesBanyanPhase`] plus shared noise and segment context for sampling.
+/// One canopy limb: shared noise, vase/descender tuning, and [`SopesBanyanPhase`].
 #[derive(Clone)]
 pub struct SopesBanyanChain {
 	pub noise: NoiseConfig,
 	pub banyan_height: f32,
 	pub descender_threshold: f32,
-	/// Original depth cap from anchors (render / tuning).
-	pub max_depth: usize,
-	/// Latest [`BranchOut`] parameters for consumers that read bias, ranges, etc.
-	pub branch: BranchOut,
 	pub phase: SopesBanyanPhase,
-	pub segment_index: usize,
-	pub incoming_ray: Vec3,
+}
+
+impl SopesBanyanChain {
+	/// [`BranchOut`] profile for render / tuning (current joint bias when in flair or descender).
+	pub fn active_branch_profile(&self) -> Option<&BranchOut> {
+		match &self.phase {
+			SopesBanyanPhase::BranchOut(b) => Some(&b.inner),
+			SopesBanyanPhase::StartFlairUp(s) => Some(&s.projection),
+			SopesBanyanPhase::StartDescender(s) => Some(&s.projection),
+			_ => None,
+		}
+	}
+
+	/// Rough segment index along the limb (for coarse render heuristics).
+	pub fn segment_depth_hint(&self) -> usize {
+		match &self.phase {
+			SopesBanyanPhase::BranchOut(b) => b.inner.segment_index.saturating_add(b.remaining),
+			SopesBanyanPhase::StartFlairUp(s) => s.projection.segment_index,
+			SopesBanyanPhase::StartDescender(s) => s.projection.segment_index,
+			SopesBanyanPhase::EndFlairUp(_) | SopesBanyanPhase::EndDescender(_) => 0,
+		}
+	}
 }
 
 impl Hysteresis for SopesBanyanChain {
@@ -248,86 +166,40 @@ impl Hysteresis for SopesBanyanChain {
 	fn next_hysteresis(&self) -> Vec<Self> {
 		match &self.phase {
 			SopesBanyanPhase::BranchOut(budget) => {
-				if budget.remaining == 0 {
-					return Vec::new();
-				}
-				let p0 = SopesBanyanPhase::BranchOut(budget.clone());
-				let p = SopesBanyanPhase::after_branch_sampling(
-					p0,
-					&self.noise,
-					self.banyan_height,
-					self.descender_threshold,
-				);
-				match p {
-					SopesBanyanPhase::BranchOut(b2) => {
-						let parent = b2.inner.node;
-						let n = b2.inner.sample_child_count(&self.noise, &parent, self.segment_index);
-						let mut out = Vec::new();
-						for ci in 0..n {
-							let ray = b2.inner.sample_ray(
-								&self.noise,
-								&parent,
-								self.segment_index,
-								ci as u32,
-								self.incoming_ray,
-							);
-							let rad = b2.inner.sample_child_radius(
-								&self.noise,
-								&parent,
-								self.segment_index,
-								ci as u32,
-							);
-							let child_node = BallStickNode::new(parent.position + ray, rad);
-							let mut inner = b2.inner.clone();
-							inner.node = child_node;
-							let nb = DepthBudget {
-								inner,
-								remaining: b2.remaining.saturating_sub(1),
-							};
-							out.push(SopesBanyanChain {
-								phase: SopesBanyanPhase::BranchOut(nb.clone()),
-								branch: nb.inner.clone(),
-								segment_index: self.segment_index + 1,
-								incoming_ray: child_node.position - parent.position,
-								..self.clone()
-							});
-						}
-						out
-					}
-					SopesBanyanPhase::StartFlairUp(s) => vec![SopesBanyanChain {
-						phase: SopesBanyanPhase::StartFlairUp(s.clone()),
-						branch: s.projection.clone(),
-						..self.clone()
-					}],
-					SopesBanyanPhase::StartDescender(s) => vec![SopesBanyanChain {
-						phase: SopesBanyanPhase::StartDescender(s.clone()),
-						branch: s.projection.clone(),
-						..self.clone()
-					}],
-					_ => Vec::new(),
-				}
+				let mut synced = budget.clone();
+				synced.inner.noise = self.noise.clone();
+				synced
+					.next_hysteresis()
+					.into_iter()
+					.map(|b| {
+						SopesBanyanPhase::candidate_into(
+							SopesBanyanPhase::BranchOut(b),
+							&self.noise,
+							self.banyan_height,
+							self.descender_threshold,
+						)
+					})
+					.map(|phase| Self {
+						phase,
+						noise: self.noise.clone(),
+						banyan_height: self.banyan_height,
+						descender_threshold: self.descender_threshold,
+					})
+					.collect()
 			}
-			SopesBanyanPhase::StartFlairUp(s) => {
-				let end_flair = s.project_to_end(&self.noise, self.segment_index, self.incoming_ray);
-				let inc = end_flair.node.position - s.projection.node.position;
-				vec![SopesBanyanChain {
-					phase: SopesBanyanPhase::EndFlairUp(end_flair),
-					segment_index: self.segment_index + 1,
-					incoming_ray: inc,
-					..self.clone()
-				}]
-			}
+			SopesBanyanPhase::StartFlairUp(s) => vec![Self {
+				phase: s.project_to_end(),
+				noise: self.noise.clone(),
+				banyan_height: self.banyan_height,
+				descender_threshold: self.descender_threshold,
+			}],
 			SopesBanyanPhase::EndFlairUp(_) => Vec::new(),
-			SopesBanyanPhase::StartDescender(s) => {
-				let end_d = s.project_to_end(&self.noise, self.segment_index, self.incoming_ray);
-				let inc = end_d.node.position - s.projection.node.position;
-				vec![SopesBanyanChain {
-					phase: SopesBanyanPhase::EndDescender(end_d),
-					segment_index: self.segment_index + 1,
-					incoming_ray: inc,
-					..self.clone()
-				}]
-			}
+			SopesBanyanPhase::StartDescender(s) => vec![Self {
+				phase: s.project_to_end(),
+				noise: self.noise.clone(),
+				banyan_height: self.banyan_height,
+				descender_threshold: self.descender_threshold,
+			}],
 			SopesBanyanPhase::EndDescender(_) => Vec::new(),
 		}
 	}
@@ -336,11 +208,22 @@ impl Hysteresis for SopesBanyanChain {
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use bevy_math::Vec3;
+	use procedural_common::NoiseParams;
 
 	#[test]
 	fn build_produces_graph() -> anyhow::Result<()> {
-		let rule = SopesBanyanChainRule::default();
-		let seed = rule.seed_hysteresis(BallStickNode::new(Vec3::ZERO, 0.05), 3);
+		let noise = NoiseConfig::new(NoiseParams::default());
+		let seed = SopesBanyanChain {
+			noise: noise.clone(),
+			banyan_height: 20.0,
+			descender_threshold: 0.12,
+			phase: SopesBanyanPhase::BranchOut(DepthBudget {
+				inner: BranchOut::up(BallStickNode::new(Vec3::ZERO, 0.05))
+					.with_hysteresis_context(noise, 0, Vec3::Y),
+				remaining: 3,
+			}),
+		};
 		let chain = crate::BallStickChain::build(vec![seed]);
 		assert!(chain.nodes.len() > 1);
 		Ok(())

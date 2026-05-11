@@ -1,11 +1,13 @@
 //! **Branch-out** state: joint [`BallStickNode`] plus noisy fan-out, child radius, and stick projection (bias, DOF, length).
 //!
 //! Sampling uses the small helpers in [`super::child_count`], [`super::radius_range`], [`super::length_range`], and [`super::degree_range`].
+//!
+//! For [`super::Hysteresis`], this type carries its own [`NoiseConfig`] and segment context so [`Self::next_hysteresis`] can sample children without external rule types.
 
 use std::ops::Range;
 
 use bevy_math::Vec3;
-use procedural_common::NoiseConfig;
+use procedural_common::{NoiseConfig, NoiseParams};
 
 use crate::BallStickNode;
 
@@ -16,9 +18,12 @@ use super::radius_range;
 use super::Hysteresis;
 
 /// Picks number of children, lengths, directions, of branches
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone)]
 pub struct BranchOut {
 	pub node: BallStickNode,
+	pub noise: NoiseConfig,
+	pub segment_index: usize,
+	pub incoming_ray: Vec3,
 	/// Half-open range for noisy child count.
 	pub child_count: Range<usize>,
 	/// Half-open range for noisy radius at each child joint.
@@ -38,6 +43,9 @@ impl Default for BranchOut {
 	fn default() -> Self {
 		Self {
 			node: BallStickNode::new(Vec3::ZERO, 0.05),
+			noise: NoiseConfig::new(NoiseParams::default()),
+			segment_index: 0,
+			incoming_ray: Vec3::Y,
 			child_count: 1..3,
 			radius_range: 0.02..0.08,
 			length: 0.2..0.5,
@@ -52,6 +60,9 @@ impl BranchOut {
 	pub fn up(node: BallStickNode) -> Self {
 		Self {
 			node,
+			noise: NoiseConfig::new(NoiseParams::default()),
+			segment_index: 0,
+			incoming_ray: Vec3::Y,
 			child_count: 1..3,
 			radius_range: 0.02..0.08,
 			length: 0.2..0.5,
@@ -61,10 +72,12 @@ impl BranchOut {
 		}
 	}
 
-	/// Downward-biased profile (banyan descenders).
 	pub fn down(node: BallStickNode) -> Self {
 		Self {
 			node,
+			noise: NoiseConfig::new(NoiseParams::default()),
+			segment_index: 0,
+			incoming_ray: Vec3::Y,
 			child_count: 1..3,
 			radius_range: 0.02..0.08,
 			length: 0.2..0.5,
@@ -72,6 +85,18 @@ impl BranchOut {
 			bias_ray: -Vec3::Y,
 			bias_blend: 0.5,
 		}
+	}
+
+	pub fn with_noise(mut self, noise: NoiseConfig) -> Self {
+		self.noise = noise;
+		self
+	}
+
+	pub fn with_hysteresis_context(mut self, noise: NoiseConfig, segment_index: usize, incoming_ray: Vec3) -> Self {
+		self.noise = noise;
+		self.segment_index = segment_index;
+		self.incoming_ray = incoming_ray;
+		self
 	}
 
 	pub fn with_child_count(mut self, child_count: Range<usize>) -> Self {
@@ -84,34 +109,47 @@ impl BranchOut {
 		self
 	}
 
-	pub fn with_bias_ray(mut self, bias_ray: Vec3, bias_blend: f32) -> Self {
-		self.bias_ray = bias_ray;
-		self.bias_blend = bias_blend;
-		self
-	}
-
 	pub fn with_length(mut self, length: Range<f32>) -> Self {
 		self.length = length;
 		self
 	}
 
-	/// Exactly one child (`1..2`).
 	pub fn single_child(mut self) -> Self {
 		self.child_count = 1..2;
 		self
 	}
 
-	/// Sample one stick step from this joint (child index `0`).
-	pub fn project_tip(
-		&self,
-		noise: &NoiseConfig,
-		segment_index: usize,
-		incoming_ray: Vec3,
-	) -> BallStickNode {
+	/// One noisy stick step from this joint (child index `0`), using this profile's segment context.
+	pub fn project_tip(&self) -> BallStickNode {
 		let parent = self.node;
-		let ray = self.sample_ray(noise, &parent, segment_index, 0, incoming_ray);
-		let r = self.sample_child_radius(noise, &parent, segment_index, 0);
+		let ray = self.sample_ray(&self.noise, &parent, self.segment_index, 0, self.incoming_ray);
+		let r = self.sample_child_radius(&self.noise, &parent, self.segment_index, 0);
 		BallStickNode::new(parent.position + ray, r)
+	}
+
+	fn expand_children(&self) -> Vec<BranchOut> {
+		let parent = self.node;
+		let n = self.sample_child_count(&self.noise, &parent, self.segment_index);
+		(0..n)
+			.map(|ci| {
+				let ray = self.sample_ray(&self.noise, &parent, self.segment_index, ci as u32, self.incoming_ray);
+				let rad = self.sample_child_radius(&self.noise, &parent, self.segment_index, ci as u32);
+				let child_node = BallStickNode::new(parent.position + ray, rad);
+				let inc = child_node.position - parent.position;
+				Self {
+					node: child_node,
+					noise: self.noise.clone(),
+					segment_index: self.segment_index + 1,
+					incoming_ray: inc,
+					child_count: self.child_count.clone(),
+					radius_range: self.radius_range.clone(),
+					length: self.length.clone(),
+					ray_degrees_of_freedom: self.ray_degrees_of_freedom,
+					bias_ray: self.bias_ray,
+					bias_blend: self.bias_blend,
+				}
+			})
+			.collect()
 	}
 
 	pub fn sample_child_count(
@@ -182,8 +220,7 @@ impl Hysteresis for BranchOut {
 		self.node
 	}
 
-	/// Noisy fan-out is driven by recipe types (e.g. [`super::sopes_banyan::SopesBanyanChain`]) that hold [`NoiseConfig`].
 	fn next_hysteresis(&self) -> Vec<Self> {
-		Vec::new()
+		self.expand_children()
 	}
 }

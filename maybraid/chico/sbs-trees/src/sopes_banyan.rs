@@ -16,12 +16,8 @@ use chico_sbs_geometry::render::stick::{StickRenderHelper, StickRenderRule};
 use chico_sbs_geometry::{
 	BallStickChain, BallStickNode, BallStickSegment, SopesBanyanAnchors, SopesBanyanHysteresis,
 };
-#[cfg(feature = "clap")]
-use chico_sbs_geometry::SopesBanyanChainRuleArgs;
-#[cfg(not(feature = "clap"))]
-use chico_sbs_geometry::SopesBanyanChainRule;
 use chico_stick_components::chico_stick::ChicoStick;
-use procedural_common::FromScalarNoise;
+use procedural_common::{FromScalarNoise, NoiseConfig, NoiseParams};
 use render_item::{CascadeChunk, RenderItem};
 
 #[derive(Clone)]
@@ -30,11 +26,12 @@ use render_item::{CascadeChunk, RenderItem};
 pub struct SopesBanyan {
 	#[cfg_attr(feature = "clap", command(flatten))]
 	pub anchors: SopesBanyanAnchors,
-	#[cfg(not(feature = "clap"))]
-	pub chain_rule: SopesBanyanChainRule,
-	#[cfg(feature = "clap")]
 	#[cfg_attr(feature = "clap", command(flatten))]
-	pub chain_rule: SopesBanyanChainRuleArgs,
+	pub canopy_noise: NoiseParams,
+	#[cfg_attr(feature = "clap", arg(long, default_value_t = 20.0))]
+	pub banyan_height: f32,
+	#[cfg_attr(feature = "clap", arg(long, default_value_t = 0.12))]
+	pub descender_threshold: f32,
 	#[cfg_attr(feature = "clap", arg(long, default_value_t = 0.0))]
 	pub stick_seed_scalar: f32,
 	#[cfg_attr(feature = "clap", arg(long, default_value_t = 1.0))]
@@ -55,10 +52,9 @@ impl Default for SopesBanyan {
 	fn default() -> Self {
 		Self {
 			anchors: SopesBanyanAnchors::default(),
-			#[cfg(not(feature = "clap"))]
-			chain_rule: SopesBanyanChainRule::default(),
-			#[cfg(feature = "clap")]
-			chain_rule: SopesBanyanChainRuleArgs::default(),
+			canopy_noise: NoiseParams::default(),
+			banyan_height: 20.0,
+			descender_threshold: 0.12,
 			stick_seed_scalar: 0.0,
 			stick_frequency: 1.0,
 			stick_amplitude: 0.05,
@@ -72,16 +68,15 @@ impl Default for SopesBanyan {
 
 impl SopesBanyan {
 	pub fn build_chain(&self) -> BallStickChain<SopesBanyanHysteresis> {
+		let noise = NoiseConfig::new(self.canopy_noise);
 		let mut starts = self.anchors.anchors();
-		#[cfg(not(feature = "clap"))]
-		let mut rule = self.chain_rule.clone();
-		#[cfg(feature = "clap")]
-		let mut rule: chico_sbs_geometry::SopesBanyanChainRule = self.chain_rule.clone().into();
-		rule.sync_noise_engine();
 		for s in &mut starts {
-			s.noise = rule.noise.clone();
-			s.banyan_height = rule.banyan_height;
-			s.descender_threshold = rule.descender_threshold;
+			s.noise = noise.clone();
+			s.banyan_height = self.banyan_height;
+			s.descender_threshold = self.descender_threshold;
+			if let chico_sbs_geometry::SopesBanyanPhase::BranchOut(ref mut b) = s.phase {
+				b.inner.noise = noise.clone();
+			}
 		}
 		BallStickChain::build(starts)
 	}
@@ -120,13 +115,14 @@ impl BallRenderRule<SopesBanyanBallItem, SopesBanyanHysteresis> for SopesBanyanB
 		node: &BallStickNode,
 		hysteresis: &SopesBanyanHysteresis,
 	) -> Option<SopesBanyanBallItem> {
-		// Sparse balls on strong descenders, richer allocation on rising crown.
-		if hysteresis.branch.bias_ray.y < -0.8 {
+		if hysteresis
+			.active_branch_profile()
+			.is_some_and(|b| b.bias_ray.y < -0.8)
+		{
 			return None;
 		}
-		// let seed = node.position.x * 13.0 + node.position.y * 7.0 + node.position.z * 5.0;
 		let seed = 0.0;
-		if node.position.y > 0.6 * hysteresis.max_depth as f32 {
+		if node.position.y > 0.6 * hysteresis.segment_depth_hint() as f32 {
 			Some(SopesBanyanBallItem::Plane(PlaneSplay::from_scalar(
 				seed,
 				self.frequency,

@@ -16,7 +16,10 @@ use bevy_math::Vec3;
 
 use super::strict_stalk::StrictStalk;
 use super::Anchors;
-use crate::{BallStickNode, SopesBanyanChainRule, SopesBanyanHysteresis};
+use procedural_common::{NoiseConfig, NoiseParams};
+
+use crate::chain::sopes_banyan::{SopesBanyanChain, SopesBanyanPhase};
+use crate::{BallStickNode, SopesBanyanHysteresis};
 
 /// RFC-style ring band and vase profile over [`StrictStalk::height`].
 #[derive(Clone, Debug, PartialEq)]
@@ -47,10 +50,10 @@ pub struct SopesBanyanAnchors {
 	/// Center of the vase profile.
 	#[cfg_attr(feature = "clap", arg(long, default_value_t = 0.5))]
 	pub projection_center_fraction: f32,
-	/// [`SopesBanyanHysteresis::max_depth`] at the first ring (RFC limb depth ~5 segments).
+	/// Initial [`crate::DepthBudget::remaining`] at the first ring (RFC limb depth ~5 segments).
 	#[cfg_attr(feature = "clap", arg(long, default_value_t = 5))]
 	pub max_depth_first_ring: usize,
-	/// [`SopesBanyanHysteresis::max_depth`] at the last ring (~8).
+	/// Initial depth budget at the last ring (~8).
 	#[cfg_attr(feature = "clap", arg(long, default_value_t = 8))]
 	pub max_depth_last_ring: usize,
 }
@@ -136,12 +139,21 @@ impl Anchors<SopesBanyanHysteresis> for SopesBanyanAnchors {
 
 				let radius = (self.stalk.base_radius * (0.02 + 0.03 * u)).max(1e-4);
 				let seed_node = BallStickNode::new(pos, radius);
-				let mut h = SopesBanyanChainRule::default().seed_hysteresis(seed_node, max_depth);
+				let noise = NoiseConfig::new(NoiseParams::default());
+				let mut h = SopesBanyanChain {
+					noise: noise.clone(),
+					banyan_height: self.stalk.height,
+					descender_threshold: 0.12,
+					phase: SopesBanyanPhase::BranchOut(crate::DepthBudget {
+						inner: crate::BranchOut::up(seed_node)
+							.with_hysteresis_context(noise, 0, Vec3::Y),
+						remaining: max_depth,
+					}),
+				};
 				let lo = proj * 0.97;
 				let hi = proj * 1.03;
-				if let crate::chain::sopes_banyan::SopesBanyanPhase::BranchOut(ref mut d) = &mut h.phase {
-					d.inner.length = lo..hi;
-					h.branch = d.inner.clone();
+				if let SopesBanyanPhase::BranchOut(ref mut w) = &mut h.phase {
+					w.inner.length = lo..hi;
 				}
 
 				out.push(h);
