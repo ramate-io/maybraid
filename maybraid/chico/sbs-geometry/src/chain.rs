@@ -1,16 +1,17 @@
 //! Ball-stick **chain** graph: nodes, edges, and pluggable [`Hysteresis`] state per node.
 
+pub mod branch_out;
 pub mod child_count;
 pub mod degree_range;
+pub mod depth_budget;
 pub mod length_range;
 pub mod radius_range;
 pub mod sopes_banyan;
 
-use std::collections::VecDeque;
-use std::ops::Range;
-
 use bevy_math::Vec3;
-use procedural_common::{NoiseConfig, NoiseParams};
+
+pub use branch_out::BranchOut;
+pub use depth_budget::DepthBudget;
 
 /// One vertex in the ball-stick graph (position + ball radius at that joint).
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -32,36 +33,10 @@ pub trait Hysteresis: Clone {
 	/// Geometry for this state (typically a [`BallStickNode`] field on the implementing struct).
 	fn ball_stick_node(&self) -> BallStickNode;
 
-	/// Optional hook for algorithms that expand a tree **without** materializing a full [`BallStickChain`].
-	/// [`BallStickChain::build`] and [`ChainHysteresisRule`] drive growth instead; most implementations return an empty list.
+	/// Generates the list of states to which this state transitions.
+	/// This is the fan out.
 	fn next_hysteresis(&self) -> Vec<Self>;
 }
-
-/// Methods required to grow a [`BallStickChain`] from seed hysteresis states.
-pub trait BallStickGrowth: Hysteresis {
-	fn depth(&self) -> usize;
-	fn max_depth(&self) -> usize;
-
-	fn with_ball_stick_node(self, node: BallStickNode) -> Self;
-
-	fn sample_child_count(&self, parent: &BallStickNode, noise: &NoiseConfig) -> usize;
-
-	fn project_ith_child_radius(
-		&self,
-		child_index: u32,
-		parent: &BallStickNode,
-		noise: &NoiseConfig,
-	) -> f32;
-
-	fn project_ith_child_ray(
-		&self,
-		child_index: u32,
-		parent: &BallStickNode,
-		incoming_ray: Vec3,
-		noise: &NoiseConfig,
-	) -> Vec3;
-}
-
 #[derive(Debug, Clone)]
 pub struct BallStickSegment<'a> {
 	pub start: &'a BallStickNode,

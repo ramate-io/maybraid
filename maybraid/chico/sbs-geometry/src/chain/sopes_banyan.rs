@@ -1,12 +1,9 @@
-use crate::{chain::Hysteresis, BallStickNode};
+use crate::{chain::{BranchOut, DepthBudget, Hysteresis}, BallStickNode};
 use procedural_common::NoiseConfig;
 
 /// Marks a flair up segment.
 pub struct StartFlairUp {
-	projection: ProjectionHelper,
-	/// When projection helper is already implemented we won't need a ball stick node,
-	/// Projection helper should embed one as field.
-	node: BallStickNode,
+	projection: BranchOut,
 }
 
 impl StartFlairUp {
@@ -16,8 +13,9 @@ impl StartFlairUp {
 	) -> SopesBanyanPhase {
 		if candidate.is_branch_out() && candidate.budget_remaining() < 2 {
 			SopesBanyanPhase::StartFlairUp(StartFlairUp {
-				projection: ProjectionHelper::up()
-					.with_degrees_freedom(candidate.degrees_freedom()),
+				projection: BranchOut::up(candidate.node().clone())
+					.with_degrees_freedom(candidate.degrees_freedom())
+                    .only_one_child(),
 				node: candidate.clone(),
 			})
 		} else {
@@ -39,8 +37,7 @@ pub struct EndFlairUp {
 
 /// Marks a node that has been descended (as part of a banyan descender)
 pub struct StartDescender {
-	projection: ProjectionHelper,
-	node: BallStickNode,
+	projection: BranchOut,
 }
 
 impl StartDescender {
@@ -56,7 +53,7 @@ impl StartDescender {
 				< descender_threshold
 		{
 			SopesBanyanPhase::StartDescender(StartDescender {
-				projection: ProjectionHelper::straight_down(node.position, banyan_height * 2.0),
+				projection: ProjectionHelper::down(candid),
 				node: node.clone(),
 			})
 		} else {
@@ -74,16 +71,6 @@ impl StartDescender {
 /// Simply marks the node at which a descender segment ends.
 pub struct EndDescender {
 	node: BallStickNode,
-}
-
-impl SopesBanyanDescender {
-	pub fn sample_from_candidate(
-		candidate: &BallStickNode,
-		banyan_height: f32,
-		descender_threshold: f32,
-	) -> Self {
-		Self { node: candidate.clone() }
-	}
 }
 
 pub enum SopesBanyanPhase {
