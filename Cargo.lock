@@ -1936,6 +1936,7 @@ dependencies = [
  "chico-sdf",
  "procedural-common",
  "render-item",
+ "sdf-common",
 ]
 
 [[package]]

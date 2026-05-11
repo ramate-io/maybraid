@@ -11,8 +11,8 @@ mod ui;
 
 pub use camera::CameraController;
 pub use commands::{PlaygroundCommand, PlaygroundCommandsPlugin, PLAYGROUND_CLI_NAME};
-pub use startup::PendingStartupCommand;
 pub use preview::{PreviewConfig, SbsPreviewRoot};
+pub use startup::PendingStartupCommand;
 
 use bevy::prelude::*;
 use commands::root::react_playground_command_root;
@@ -28,7 +28,9 @@ impl Plugin for SbsTreesPlaygroundPlugin {
 			.init_resource::<PendingStartupCommand>()
 			.add_plugins(PlaygroundCommandsPlugin)
 			.add_plugins(startup::StartupPlugin)
-			.add_plugins(bevy::pbr::MaterialPlugin::<checkerboard_material::CheckerboardMaterial>::default())
+			.add_plugins(
+				bevy::pbr::MaterialPlugin::<checkerboard_material::CheckerboardMaterial>::default(),
+			)
 			.add_observer(ui::on_console_viewport_scroll)
 			.init_resource::<input::TypedCommandLine>()
 			.init_resource::<input::TextEntryFocus>()
@@ -36,12 +38,7 @@ impl Plugin for SbsTreesPlaygroundPlugin {
 			.init_resource::<input::CommandHistory>()
 			.add_systems(
 				Startup,
-				(
-					camera::setup_camera,
-					setup_lighting,
-					setup_ground,
-					ui::setup_debug_ui,
-				),
+				(camera::setup_camera, setup_lighting, setup_ground, ui::setup_debug_ui),
 			)
 			.add_systems(
 				Update,

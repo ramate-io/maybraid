@@ -14,8 +14,8 @@ use chico_sbs_geometry::anchors::Anchors;
 use chico_sbs_geometry::render::ball::{BallRenderHelper, BallRenderRule};
 use chico_sbs_geometry::render::stick::{StickRenderHelper, StickRenderRule};
 use chico_sbs_geometry::{
-	BallStickChain, BallStickNode, BallStickSegment, Hysteresis, SopesBanyanAnchors,
-	SopesBanyanChainRule,
+	BallStickChain, BallStickNode, BallStickSegment, SopesBanyanAnchors, SopesBanyanChainRule,
+	SopesBanyanHysteresis,
 };
 use chico_stick_components::chico_stick::ChicoStick;
 use procedural_common::FromScalarNoise;
@@ -52,17 +52,17 @@ impl Default for SopesBanyan {
 			chain_rule: SopesBanyanChainRule::default(),
 			stick_seed_scalar: 0.0,
 			stick_frequency: 1.0,
-			stick_amplitude: 1.0,
+			stick_amplitude: 0.05,
 			stick_octaves: 1,
 			ball_frequency: 1.0,
-			ball_amplitude: 1.0,
+			ball_amplitude: 0.05,
 			ball_octaves: 1,
 		}
 	}
 }
 
 impl SopesBanyan {
-	pub fn build_chain(&self) -> BallStickChain {
+	pub fn build_chain(&self) -> BallStickChain<SopesBanyanHysteresis> {
 		let starts = self.anchors.anchors();
 		let mut rule = self.chain_rule.clone();
 		rule.sync_noise_engine();
@@ -97,17 +97,18 @@ struct SopesBanyanBallRule {
 	octaves: u32,
 }
 
-impl BallRenderRule<SopesBanyanBallItem> for SopesBanyanBallRule {
+impl BallRenderRule<SopesBanyanBallItem, SopesBanyanHysteresis> for SopesBanyanBallRule {
 	fn ball_render_item_for(
 		&self,
 		node: &BallStickNode,
-		hysteresis: &Hysteresis,
+		hysteresis: &SopesBanyanHysteresis,
 	) -> Option<SopesBanyanBallItem> {
 		// Sparse balls on strong descenders, richer allocation on rising crown.
 		if hysteresis.bias_ray.y < -0.8 {
 			return None;
 		}
-		let seed = node.position.x * 13.0 + node.position.y * 7.0 + node.position.z * 5.0;
+		// let seed = node.position.x * 13.0 + node.position.y * 7.0 + node.position.z * 5.0;
+		let seed = 0.0;
 		if node.position.y > 0.6 * hysteresis.max_depth as f32 {
 			Some(SopesBanyanBallItem::Plane(PlaneSplay::from_scalar(
 				seed,
@@ -134,20 +135,16 @@ struct SopesBanyanStickRule {
 	octaves: u32,
 }
 
-impl StickRenderRule<ChicoStick> for SopesBanyanStickRule {
+impl StickRenderRule<ChicoStick, SopesBanyanHysteresis> for SopesBanyanStickRule {
 	fn stick_render_item_for(
 		&self,
 		segment: &BallStickSegment<'_>,
-		_parent_hysteresis: &Hysteresis,
-		_child_hysteresis: &Hysteresis,
+		_parent_hysteresis: &SopesBanyanHysteresis,
+		_child_hysteresis: &SopesBanyanHysteresis,
 	) -> Option<ChicoStick> {
-		let seed = self.seed_scalar + segment.start.position.length() + segment.end.position.length();
-		Some(ChicoStick::from_scalar(
-			seed,
-			self.frequency,
-			self.amplitude,
-			self.octaves,
-		))
+		let seed =
+			self.seed_scalar + segment.start.position.length() + segment.end.position.length();
+		Some(ChicoStick::from_scalar(seed, self.frequency, self.amplitude, self.octaves))
 	}
 }
 
@@ -166,25 +163,22 @@ impl RenderItem for SopesBanyan {
 			amplitude: self.stick_amplitude,
 			octaves: self.stick_octaves,
 		};
-		let mut out =
-			StickRenderHelper::new(chain.clone(), stick_rule).spawn_render_items(
-				commands,
-				cascade_chunk,
-				transform,
-			);
+		let mut out = StickRenderHelper::new(chain.clone(), stick_rule).spawn_render_items(
+			commands,
+			cascade_chunk,
+			transform,
+		);
 
 		let ball_rule = SopesBanyanBallRule {
 			frequency: self.ball_frequency,
 			amplitude: self.ball_amplitude,
 			octaves: self.ball_octaves,
 		};
-		out.extend(
-			BallRenderHelper::new(chain, ball_rule).spawn_render_items(
-				commands,
-				cascade_chunk,
-				transform,
-			),
-		);
+		out.extend(BallRenderHelper::new(chain, ball_rule).spawn_render_items(
+			commands,
+			cascade_chunk,
+			transform,
+		));
 		out
 	}
 }

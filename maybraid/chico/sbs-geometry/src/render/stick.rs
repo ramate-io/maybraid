@@ -4,12 +4,12 @@ use procedural_common::FromScalarNoise;
 use render_item::{CascadeChunk, RenderItem};
 use std::marker::PhantomData;
 
-pub trait StickRenderRule<R: RenderItem>: Clone {
+pub trait StickRenderRule<R: RenderItem, H: Hysteresis>: Clone {
 	fn stick_render_item_for(
 		&self,
 		segment: &BallStickSegment<'_>,
-		parent_hysteresis: &Hysteresis,
-		child_hysteresis: &Hysteresis,
+		parent_hysteresis: &H,
+		child_hysteresis: &H,
 	) -> Option<R>;
 }
 
@@ -18,14 +18,14 @@ pub trait StickRenderRule<R: RenderItem>: Clone {
 /// Assumes each [`RenderItem`] is authored as a **unit cylinder along +Y** from `y = 0` to `y = 1`
 /// so the helper can scale by segment length and place the base at the parent node.
 #[derive(Clone)]
-pub struct StickRenderHelper<Item: RenderItem, Rule: StickRenderRule<Item>> {
+pub struct StickRenderHelper<Item: RenderItem, Rule: StickRenderRule<Item, H>, H: Hysteresis> {
 	rule: Rule,
-	chain: BallStickChain,
+	chain: BallStickChain<H>,
 	__marker: PhantomData<Item>,
 }
 
-impl<Item: RenderItem, Rule: StickRenderRule<Item>> StickRenderHelper<Item, Rule> {
-	pub fn new(chain: BallStickChain, rule: Rule) -> Self {
+impl<Item: RenderItem, Rule: StickRenderRule<Item, H>, H: Hysteresis> StickRenderHelper<Item, Rule, H> {
+	pub fn new(chain: BallStickChain<H>, rule: Rule) -> Self {
 		Self { chain, rule, __marker: PhantomData }
 	}
 
@@ -34,9 +34,7 @@ impl<Item: RenderItem, Rule: StickRenderRule<Item>> StickRenderHelper<Item, Rule
 			.segments_with_hysteresis()
 			.filter_map(|(segment, parent_h, child_h)| {
 				let inner = stick_transform(&segment)?;
-				let item = self
-					.rule
-					.stick_render_item_for(&segment, parent_h, child_h)?;
+				let item = self.rule.stick_render_item_for(&segment, parent_h, child_h)?;
 				Some((item, inner))
 			})
 			.collect()
@@ -47,13 +45,15 @@ impl<Item: RenderItem, Rule: StickRenderRule<Item>> StickRenderHelper<Item, Rule
 		commands: &mut Commands,
 		cascade_chunk: &CascadeChunk,
 		transform: Transform,
-	) -> BallStickChain {
+	) -> BallStickChain<H> {
 		self.spawn_render_items(commands, cascade_chunk, transform);
 		self.chain
 	}
 }
 
-impl<Item: RenderItem, Rule: StickRenderRule<Item>> RenderItem for StickRenderHelper<Item, Rule> {
+impl<Item: RenderItem, Rule: StickRenderRule<Item, H>, H: Hysteresis> RenderItem
+	for StickRenderHelper<Item, Rule, H>
+{
 	fn spawn_render_items(
 		&self,
 		commands: &mut Commands,
@@ -73,9 +73,11 @@ impl<Item: RenderItem, Rule: StickRenderRule<Item>> RenderItem for StickRenderHe
 	}
 }
 
-impl<Item: RenderItem, Rule: StickRenderRule<Item> + FromScalarNoise> StickRenderHelper<Item, Rule> {
+impl<Item: RenderItem, Rule: StickRenderRule<Item, H> + FromScalarNoise, H: Hysteresis>
+	StickRenderHelper<Item, Rule, H>
+{
 	pub fn new_from_noise(
-		chain: BallStickChain,
+		chain: BallStickChain<H>,
 		scalar: f32,
 		amplitude: f32,
 		frequency: f32,

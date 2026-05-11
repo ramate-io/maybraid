@@ -1,3 +1,9 @@
+//! Ball-stick **chain** graph: nodes, edges, and pluggable [`Hysteresis`] state per node.
+
+pub mod child_count;
+pub mod degree_range;
+pub mod length_range;
+pub mod radius_range;
 pub mod sopes_banyan;
 
 use std::collections::VecDeque;
@@ -6,7 +12,8 @@ use std::ops::Range;
 use bevy_math::Vec3;
 use procedural_common::{NoiseConfig, NoiseParams};
 
-#[derive(Clone, Debug, PartialEq)]
+/// One vertex in the ball-stick graph (position + ball radius at that joint).
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct BallStickNode {
 	pub position: Vec3,
 	pub radius: f32,
@@ -16,6 +23,43 @@ impl BallStickNode {
 	pub fn new(position: Vec3, radius: f32) -> Self {
 		Self { position, radius }
 	}
+}
+
+/// Hysteresis state carried per chain node: minimal surface for non-builder consumers.
+///
+/// Heavy expansion (noisy child counts, rays, radii) lives on [`BallStickGrowth`]; [`BallStickChain::build`] uses that supertrait.
+pub trait Hysteresis: Clone {
+	/// Geometry for this state (typically a [`BallStickNode`] field on the implementing struct).
+	fn ball_stick_node(&self) -> BallStickNode;
+
+	/// Optional hook for algorithms that expand a tree **without** materializing a full [`BallStickChain`].
+	/// [`BallStickChain::build`] and [`ChainHysteresisRule`] drive growth instead; most implementations return an empty list.
+	fn next_hysteresis(&self) -> Vec<Self>;
+}
+
+/// Methods required to grow a [`BallStickChain`] from seed hysteresis states.
+pub trait BallStickGrowth: Hysteresis {
+	fn depth(&self) -> usize;
+	fn max_depth(&self) -> usize;
+
+	fn with_ball_stick_node(self, node: BallStickNode) -> Self;
+
+	fn sample_child_count(&self, parent: &BallStickNode, noise: &NoiseConfig) -> usize;
+
+	fn project_ith_child_radius(
+		&self,
+		child_index: u32,
+		parent: &BallStickNode,
+		noise: &NoiseConfig,
+	) -> f32;
+
+	fn project_ith_child_ray(
+		&self,
+		child_index: u32,
+		parent: &BallStickNode,
+		incoming_ray: Vec3,
+		noise: &NoiseConfig,
+	) -> Vec3;
 }
 
 #[derive(Debug, Clone)]
@@ -30,15 +74,24 @@ impl<'a> BallStickSegment<'a> {
 	}
 }
 
-#[derive(Clone, Debug, Default, PartialEq)]
-pub struct BallStickChain {
+#[derive(Clone, Debug)]
+pub struct BallStickChain<H>
+where
+	H: Hysteresis,
+{
 	pub nodes: Vec<BallStickNode>,
 	pub children: Vec<Vec<usize>>,
-	pub hysteresis: Vec<Hysteresis>,
+	pub hysteresis: Vec<H>,
 }
 
-impl BallStickChain {
-	fn push_node(&mut self, node: BallStickNode, h: Hysteresis) -> usize {
+impl<H: Hysteresis> Default for BallStickChain<H> {
+	fn default() -> Self {
+		Self { nodes: Vec::new(), children: Vec::new(), hysteresis: Vec::new() }
+	}
+}
+
+impl<H: Hysteresis> BallStickChain<H> {
+	fn push_node(&mut self, node: BallStickNode, h: H) -> usize {
 		let i = self.nodes.len();
 		self.nodes.push(node);
 		self.children.push(Vec::new());
@@ -54,7 +107,12 @@ impl BallStickChain {
 		self.nodes.iter()
 	}
 
-	pub fn segments<'a>(&'a self) -> impl Iterator<Item = BallStickSegment<'a>> {
+	/// Parallel walk of built geometry and per-node hysteresis (same order as [`Self::nodes`]).
+	pub fn nodes_with_hysteresis(&self) -> impl Iterator<Item = (&BallStickNode, &H)> {
+		self.nodes.iter().zip(self.hysteresis.iter())
+	}
+
+	pub fn segments<'a>(&'a self) -> impl Iterator<Item = BallStickSegment<'a>> + 'a {
 		self.children.iter().enumerate().flat_map(move |(parent_idx, children)| {
 			let start = &self.nodes[parent_idx];
 			children
@@ -66,7 +124,7 @@ impl BallStickChain {
 	/// Each graph edge with hysteresis at the parent (start) and child (end) nodes.
 	pub fn segments_with_hysteresis<'a>(
 		&'a self,
-	) -> impl Iterator<Item = (BallStickSegment<'a>, &'a Hysteresis, &'a Hysteresis)> + 'a {
+	) -> impl Iterator<Item = (BallStickSegment<'a>, &'a H, &'a H)> + 'a {
 		self.children.iter().enumerate().flat_map(move |(parent_idx, children)| {
 			let start = &self.nodes[parent_idx];
 			let parent_h = &self.hysteresis[parent_idx];
@@ -77,21 +135,22 @@ impl BallStickChain {
 		})
 	}
 
-	pub fn build<R: ChainHysteresisRule + ?Sized>(
-		start_nodes: Vec<(BallStickNode, Hysteresis)>,
-		rule: &R,
-	) -> Self {
+	pub fn build<R: ChainHysteresisRule<H> + ?Sized>(start: Vec<H>, rule: &R) -> Self
+	where
+		H: BallStickGrowth,
+	{
 		let mut chain = Self::default();
-		let mut queue: VecDeque<(usize, Hysteresis, Vec3)> = VecDeque::new();
+		let mut queue: VecDeque<(usize, H, Vec3)> = VecDeque::new();
 		let noise = rule.noise();
 
-		for (node, h) in start_nodes {
+		for h in start {
+			let node = h.ball_stick_node();
 			let idx = chain.push_node(node, h.clone());
 			queue.push_back((idx, h, Vec3::Y));
 		}
 
 		while let Some((parent_idx, parent_h, incoming_ray)) = queue.pop_front() {
-			if parent_h.depth >= parent_h.max_depth {
+			if parent_h.depth() >= parent_h.max_depth() {
 				continue;
 			}
 
@@ -100,11 +159,13 @@ impl BallStickChain {
 
 			for i in 0..n_children {
 				let child_index = i as u32;
-				let child_h = rule.generate_ith_child_hysteresis(child_index, &parent, &parent_h);
+				let mut child_h =
+					rule.generate_ith_child_hysteresis(child_index, &parent, &parent_h);
 				let ray = child_h.project_ith_child_ray(child_index, &parent, incoming_ray, noise);
 				let radius = child_h.project_ith_child_radius(child_index, &parent, noise);
-				let child = BallStickNode::new(parent.position + ray, radius);
-				let child_idx = chain.push_node(child, child_h.clone());
+				let child_node = BallStickNode::new(parent.position + ray, radius);
+				child_h = child_h.with_ball_stick_node(child_node);
+				let child_idx = chain.push_node(child_node, child_h.clone());
 				chain.add_child(parent_idx, child_idx);
 				queue.push_back((child_idx, child_h, ray));
 			}
@@ -114,8 +175,10 @@ impl BallStickChain {
 	}
 }
 
+/// Default ball-stick hysteresis: ranges + bias ray, suitable for tests and simple rules (e.g. [`PeriodicHysteresisRule`]).
 #[derive(Clone, Debug, PartialEq)]
-pub struct Hysteresis {
+pub struct BallStickHysteresis {
+	pub node: BallStickNode,
 	pub depth: usize,
 	pub max_depth: usize,
 	pub segment_index: usize,
@@ -124,11 +187,14 @@ pub struct Hysteresis {
 	pub radius: Range<f32>,
 	pub ray_degrees_of_freedom: f32,
 	pub bias_ray: Vec3,
+	/// Weight for blending incoming direction into [`Self::bias_ray`] (see [`degree_range::blend_direction`]).
+	pub bias_blend: f32,
 }
 
-impl Default for Hysteresis {
+impl Default for BallStickHysteresis {
 	fn default() -> Self {
 		Self {
+			node: BallStickNode::new(Vec3::ZERO, 0.05),
 			depth: 0,
 			max_depth: 4,
 			segment_index: 0,
@@ -137,71 +203,62 @@ impl Default for Hysteresis {
 			radius: 0.02..0.08,
 			ray_degrees_of_freedom: 0.14,
 			bias_ray: Vec3::Y,
+			bias_blend: 0.5,
 		}
 	}
 }
 
-impl Hysteresis {
-	/// How many children to spawn at this node (noise-driven, half-open range on [`Self::child_count`]).
-	pub fn sample_child_count(&self, parent: &BallStickNode, noise: &NoiseConfig) -> usize {
-		noise.sample_range_usize_4d(
-			self.child_count.start,
-			self.child_count.end,
-			parent.position.x,
-			parent.position.y,
-			parent.position.z,
-			self.segment_index as f32,
-		)
+impl Hysteresis for BallStickHysteresis {
+	fn ball_stick_node(&self) -> BallStickNode {
+		self.node
 	}
 
-	pub fn blend_direction(&self, incoming_ray: Vec3) -> Vec3 {
-		let prev = incoming_ray.normalize_or_zero();
-		let prev = if prev.length_squared() < 1e-12 { Vec3::Y } else { prev };
-		let bias = self.bias_ray.normalize_or_zero();
-		let bias = if bias.length_squared() < 1e-12 { Vec3::Y } else { bias };
-		prev.slerp(bias, 0.5).normalize_or_zero()
+	fn next_hysteresis(&self) -> Vec<Self> {
+		Vec::new()
+	}
+}
+
+impl BallStickGrowth for BallStickHysteresis {
+	fn depth(&self) -> usize {
+		self.depth
 	}
 
-	pub fn project_ith_child_length(
+	fn max_depth(&self) -> usize {
+		self.max_depth
+	}
+
+	fn with_ball_stick_node(mut self, node: BallStickNode) -> Self {
+		self.node = node;
+		self
+	}
+
+	fn sample_child_count(&self, parent: &BallStickNode, noise: &NoiseConfig) -> usize {
+		child_count::sample_usize(noise, self.child_count.clone(), parent, self.segment_index)
+	}
+
+	fn project_ith_child_radius(
 		&self,
 		child_index: u32,
 		parent: &BallStickNode,
 		noise: &NoiseConfig,
 	) -> f32 {
-		noise.sample_range_f32_4d(
-			self.length.start,
-			self.length.end,
-			parent.position.x + 3.0,
-			parent.position.y,
-			parent.position.z,
-			self.segment_index as f32 + child_index as f32 * 0.19,
+		radius_range::sample_f32(
+			noise,
+			self.radius.clone(),
+			parent,
+			self.segment_index,
+			child_index,
 		)
 	}
 
-	pub fn project_ith_child_radius(
-		&self,
-		child_index: u32,
-		parent: &BallStickNode,
-		noise: &NoiseConfig,
-	) -> f32 {
-		noise.sample_range_f32_4d(
-			self.radius.start,
-			self.radius.end,
-			parent.position.x,
-			parent.position.y + 5.0,
-			parent.position.z,
-			self.segment_index as f32 + child_index as f32 * 0.23,
-		)
-	}
-
-	pub fn project_ith_child_ray(
+	fn project_ith_child_ray(
 		&self,
 		child_index: u32,
 		parent: &BallStickNode,
 		incoming_ray: Vec3,
 		noise: &NoiseConfig,
 	) -> Vec3 {
-		let mean = self.blend_direction(incoming_ray);
+		let mean = degree_range::blend_direction(incoming_ray, self.bias_ray, self.bias_blend);
 		let u = noise.sample_signed_4d(
 			parent.position.x + child_index as f32 * 0.37,
 			parent.position.y,
@@ -214,20 +271,26 @@ impl Hysteresis {
 			parent.position.z,
 			self.segment_index as f32 + 13.0,
 		);
-		let dir = perturb_direction(mean, self.ray_degrees_of_freedom, u, v);
-		dir * self.project_ith_child_length(child_index, parent, noise)
+		let dir = degree_range::perturb_direction(mean, self.ray_degrees_of_freedom, u, v);
+		dir * length_range::sample_f32(
+			noise,
+			self.length.clone(),
+			parent,
+			self.segment_index,
+			child_index,
+		)
 	}
 }
 
-pub trait ChainHysteresisRule {
+pub trait ChainHysteresisRule<H: BallStickGrowth> {
 	fn noise(&self) -> &NoiseConfig;
 
 	fn generate_ith_child_hysteresis(
 		&self,
 		child_index: u32,
 		parent: &BallStickNode,
-		parent_hysteresis: &Hysteresis,
-	) -> Hysteresis;
+		parent_hysteresis: &H,
+	) -> H;
 }
 
 #[derive(Clone)]
@@ -249,7 +312,7 @@ impl Default for PeriodicHysteresisRule {
 	}
 }
 
-impl ChainHysteresisRule for PeriodicHysteresisRule {
+impl ChainHysteresisRule<BallStickHysteresis> for PeriodicHysteresisRule {
 	fn noise(&self) -> &NoiseConfig {
 		&self.noise
 	}
@@ -258,8 +321,8 @@ impl ChainHysteresisRule for PeriodicHysteresisRule {
 		&self,
 		_child_index: u32,
 		_parent: &BallStickNode,
-		parent_hysteresis: &Hysteresis,
-	) -> Hysteresis {
+		parent_hysteresis: &BallStickHysteresis,
+	) -> BallStickHysteresis {
 		let mut h = parent_hysteresis.clone();
 		h.depth = parent_hysteresis.depth + 1;
 		h.segment_index = parent_hysteresis.segment_index + 1;
@@ -268,20 +331,6 @@ impl ChainHysteresisRule for PeriodicHysteresisRule {
 		}
 		h
 	}
-}
-
-fn perturb_direction(mean: Vec3, dof_rad: f32, u: f32, v: f32) -> Vec3 {
-	let mean = mean.normalize_or_zero();
-	let mean = if mean.length_squared() < 1e-12 { Vec3::Y } else { mean };
-	let up = if mean.y.abs() < 0.99 { Vec3::Y } else { Vec3::X };
-	let mut tangent = mean.cross(up);
-	if tangent.length_squared() < 1e-12 {
-		tangent = mean.cross(Vec3::Z);
-	}
-	tangent = tangent.normalize_or_zero();
-	let bitangent = mean.cross(tangent).normalize_or_zero();
-	let d = dof_rad.max(0.0);
-	(mean + tangent * (d * u) + bitangent * (d * v)).normalize_or_zero()
 }
 
 #[cfg(test)]
@@ -304,11 +353,17 @@ mod tests {
 	}
 
 	#[test]
+	fn bias_blend_one_uses_bias_only() {
+		let mut h = BallStickHysteresis::default();
+		h.bias_ray = Vec3::NEG_Y;
+		h.bias_blend = 1.0;
+		let blended = degree_range::blend_direction(Vec3::X, h.bias_ray, h.bias_blend);
+		assert!((blended - Vec3::NEG_Y).length() < 1e-4, "expected pure -Y, got {blended:?}");
+	}
+
+	#[test]
 	fn build_chain_and_iterators_work() -> Result<()> {
-		let start = vec![(
-			BallStickNode::new(Vec3::ZERO, 0.05),
-			Hysteresis { child_count: 1..2, ..Default::default() },
-		)];
+		let start = vec![BallStickHysteresis { child_count: 1..2, ..Default::default() }];
 		let chain = BallStickChain::build(start, &rule());
 		assert!(chain.nodes().count() > 0);
 		assert!(chain.segments().count() > 0);

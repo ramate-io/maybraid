@@ -4,35 +4,33 @@ use procedural_common::FromScalarNoise;
 use render_item::{CascadeChunk, RenderItem};
 use std::marker::PhantomData;
 
-pub trait BallRenderRule<R: RenderItem>: Clone {
-	fn ball_render_item_for(&self, node: &BallStickNode, hysteresis: &Hysteresis) -> Option<R>;
+pub trait BallRenderRule<R: RenderItem, H: Hysteresis>: Clone {
+	fn ball_render_item_for(&self, node: &BallStickNode, hysteresis: &H) -> Option<R>;
 }
 
 /// A useful common helper for rendering balls.
 /// The plan right not to have someone spawn this type directly,
 /// but rather as an internal type used in a render item spawn tree.
 #[derive(Clone)]
-pub struct BallRenderHelper<Item: RenderItem, Rule: BallRenderRule<Item>> {
+pub struct BallRenderHelper<Item: RenderItem, Rule: BallRenderRule<Item, H>, H: Hysteresis> {
 	rule: Rule,
-	chain: BallStickChain,
+	chain: BallStickChain<H>,
 	__marker: PhantomData<Item>,
 }
 
-impl<Item: RenderItem, Rule: BallRenderRule<Item>> BallRenderHelper<Item, Rule> {
-	pub fn new(chain: BallStickChain, rule: Rule) -> Self {
+impl<Item: RenderItem, Rule: BallRenderRule<Item, H>, H: Hysteresis> BallRenderHelper<Item, Rule, H> {
+	pub fn new(chain: BallStickChain<H>, rule: Rule) -> Self {
 		Self { chain, rule, __marker: PhantomData }
 	}
 
 	pub fn render_balls(&self) -> Vec<(Item, Transform)> {
 		self.chain
-			.nodes()
-			.map(|node| {
-				(
-					self.rule.ball_render_item_for(node, &Hysteresis::default()),
-					Transform::from_translation(node.position),
-				)
+			.nodes_with_hysteresis()
+			.filter_map(|(node, h)| {
+				self.rule.ball_render_item_for(node, h).map(|item| {
+					(item, Transform::from_translation(node.position))
+				})
 			})
-			.filter_map(|(item, transform)| item.map(|item| (item, transform)))
 			.collect()
 	}
 
@@ -42,19 +40,19 @@ impl<Item: RenderItem, Rule: BallRenderRule<Item>> BallRenderHelper<Item, Rule> 
 		commands: &mut Commands,
 		cascade_chunk: &CascadeChunk,
 		transform: Transform,
-	) -> BallStickChain {
+	) -> BallStickChain<H> {
 		self.spawn_render_items(commands, cascade_chunk, transform);
 		self.chain
 	}
 }
 
-impl<Item: RenderItem, Rule: BallRenderRule<Item>> RenderItem for BallRenderHelper<Item, Rule> {
+impl<Item: RenderItem, Rule: BallRenderRule<Item, H>, H: Hysteresis> RenderItem
+	for BallRenderHelper<Item, Rule, H>
+{
 	fn spawn_render_items(
 		&self,
 		commands: &mut Commands,
 		cascade_chunk: &CascadeChunk,
-		// For now, we typically assume the balls are in world space with respect to some origin.
-		// Hence, the transform here is an offset on world space coordinates
 		transform: Transform,
 	) -> Vec<Entity> {
 		self.render_balls()
@@ -73,13 +71,15 @@ impl<Item: RenderItem, Rule: BallRenderRule<Item>> RenderItem for BallRenderHelp
 	}
 }
 
-impl<Item: RenderItem, Rule: BallRenderRule<Item> + FromScalarNoise> BallRenderHelper<Item, Rule> {
+impl<Item: RenderItem, Rule: BallRenderRule<Item, H> + FromScalarNoise, H: Hysteresis>
+	BallRenderHelper<Item, Rule, H>
+{
 	/// Construct a ball renderer from a scalar noise value.
 	///
 	/// NOTE: this isn't pulled into the scalar hierarchy directly
 	/// because BallRenderHelper is a helper, it still needs a particular BallStickChain
 	pub fn new_from_noise(
-		chain: BallStickChain,
+		chain: BallStickChain<H>,
 		scalar: f32,
 		amplitude: f32,
 		frequency: f32,

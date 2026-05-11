@@ -16,7 +16,7 @@ use bevy_math::Vec3;
 
 use super::strict_stalk::StrictStalk;
 use super::Anchors;
-use crate::{BallStickNode, Hysteresis, SopesBanyanChainRule};
+use crate::{BallStickNode, SopesBanyanChainRule, SopesBanyanHysteresis};
 
 /// RFC-style ring band and vase profile over [`StrictStalk::height`].
 #[derive(Clone, Debug, PartialEq)]
@@ -44,10 +44,13 @@ pub struct SopesBanyanAnchors {
 	/// Clamp epsilon for bounded logit vase profile.
 	#[cfg_attr(feature = "clap", arg(long, default_value_t = 0.08))]
 	pub vase_profile_epsilon: f32,
-	/// [`Hysteresis::max_depth`] at the first ring (RFC limb depth ~5 segments).
+	/// Center of the vase profile.
+	#[cfg_attr(feature = "clap", arg(long, default_value_t = 0.5))]
+	pub projection_center_fraction: f32,
+	/// [`SopesBanyanHysteresis::max_depth`] at the first ring (RFC limb depth ~5 segments).
 	#[cfg_attr(feature = "clap", arg(long, default_value_t = 5))]
 	pub max_depth_first_ring: usize,
-	/// [`Hysteresis::max_depth`] at the last ring (~8).
+	/// [`SopesBanyanHysteresis::max_depth`] at the last ring (~8).
 	#[cfg_attr(feature = "clap", arg(long, default_value_t = 8))]
 	pub max_depth_last_ring: usize,
 }
@@ -55,18 +58,15 @@ pub struct SopesBanyanAnchors {
 impl Default for SopesBanyanAnchors {
 	fn default() -> Self {
 		Self {
-			stalk: StrictStalk {
-				height: 10.0,
-				base_anchor: Vec3::ZERO,
-				base_radius: 0.75,
-			},
+			stalk: StrictStalk { height: 20.0, base_anchor: Vec3::ZERO, base_radius: 0.75 },
 			first_ring_unit_height: 0.40,
 			last_ring_unit_height: 0.90,
 			ring_count: 6,
 			anchors_per_ring: 7,
 			projection_min_fraction_of_height: 0.25,
-			projection_max_fraction_of_height: 0.70,
-			vase_profile_epsilon: 0.08,
+			projection_max_fraction_of_height: 0.80,
+			vase_profile_epsilon: 0.4,
+			projection_center_fraction: 0.5,
 			max_depth_first_ring: 5,
 			max_depth_last_ring: 8,
 		}
@@ -85,18 +85,22 @@ impl SopesBanyanAnchors {
 	/// Vase-shaped projection length for this ring (world units).
 	fn projection_length(&self, u: f32) -> f32 {
 		let h = self.stalk.height.max(1e-6);
-		let t = Self::vase_profile(u, self.vase_profile_epsilon);
+		let t = Self::vase_profile(u, self.vase_profile_epsilon, self.projection_center_fraction);
 		let f = self.projection_min_fraction_of_height
 			+ (self.projection_max_fraction_of_height - self.projection_min_fraction_of_height) * t;
 		h * f
 	}
 
-	/// Bounded inverse-sigmoid mapping in `[0, 1]` for cup-like vase widening.
-	fn vase_profile(u: f32, eps: f32) -> f32 {
+	fn vase_profile(u: f32, eps: f32, center: f32) -> f32 {
 		let eps = eps.clamp(1e-4, 0.49);
 		let u = u.clamp(eps, 1.0 - eps);
-		let a = ((1.0 - eps) / eps).ln();
-		(((u / (1.0 - u)).ln() + a) / (2.0 * a)).clamp(0.0, 1.0)
+		let center = center.clamp(eps, 1.0 - eps);
+
+		let steepness = ((1.0 - eps) / eps).ln();
+		let x = (u / (1.0 - u)).ln();
+		let c = (center / (1.0 - center)).ln();
+
+		((x - c) / (2.0 * steepness) + 0.5).clamp(0.0, 1.0)
 	}
 
 	fn max_depth_for_ring(&self, u: f32) -> usize {
@@ -112,8 +116,8 @@ impl SopesBanyanAnchors {
 	}
 }
 
-impl Anchors for SopesBanyanAnchors {
-	fn anchors(&self) -> Vec<(BallStickNode, Hysteresis)> {
+impl Anchors<SopesBanyanHysteresis> for SopesBanyanAnchors {
+	fn anchors(&self) -> Vec<SopesBanyanHysteresis> {
 		let mut out = Vec::new();
 		let n = self.ring_count.max(1);
 		let k = self.anchors_per_ring.max(1);
@@ -130,13 +134,14 @@ impl Anchors for SopesBanyanAnchors {
 				let offset = Vec3::new(theta.cos(), 0.0, theta.sin()) * radial_eps;
 				let pos = self.stalk.centroid_at_height_fraction(y_frac) + offset;
 
-				let mut h = SopesBanyanChainRule::seed_hysteresis(pos, max_depth);
+				let radius = (self.stalk.base_radius * (0.02 + 0.03 * u)).max(1e-4);
+				let seed_node = BallStickNode::new(pos, radius);
+				let mut h = SopesBanyanChainRule::seed_hysteresis(seed_node, max_depth);
 				let lo = proj * 0.97;
 				let hi = proj * 1.03;
 				h.length = lo..hi;
 
-				let radius = (self.stalk.base_radius * (0.02 + 0.03 * u)).max(1e-4);
-				out.push((BallStickNode::new(pos, radius), h));
+				out.push(h);
 			}
 		}
 
@@ -151,11 +156,7 @@ mod tests {
 	#[test]
 	fn vase_projection_grows_with_ring_height() {
 		let a = SopesBanyanAnchors {
-			stalk: StrictStalk {
-				height: 10.0,
-				base_anchor: Vec3::ZERO,
-				base_radius: 0.5,
-			},
+			stalk: StrictStalk { height: 10.0, base_anchor: Vec3::ZERO, base_radius: 0.5 },
 			ring_count: 5,
 			..Default::default()
 		};
@@ -170,11 +171,7 @@ mod tests {
 
 	#[test]
 	fn anchors_count_matches_rings_times_spokes() {
-		let a = SopesBanyanAnchors {
-			ring_count: 3,
-			anchors_per_ring: 4,
-			..Default::default()
-		};
+		let a = SopesBanyanAnchors { ring_count: 3, anchors_per_ring: 4, ..Default::default() };
 		assert_eq!(a.anchors().len(), 12);
 	}
 }
