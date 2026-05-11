@@ -98,10 +98,7 @@ impl BallRenderRule<SopesBanyanBallItem, SopesBanyanHysteresis> for SopesBanyanB
 		node: &BallStickNode,
 		hysteresis: &SopesBanyanHysteresis,
 	) -> Option<SopesBanyanBallItem> {
-		if hysteresis
-			.active_branch_profile()
-			.is_some_and(|b| b.bias_ray.y < -0.8)
-		{
+		if hysteresis.active_branch_profile().is_some_and(|b| b.bias_ray.y < -0.8) {
 			return None;
 		}
 		let seed = 0.0;
@@ -159,6 +156,7 @@ impl RenderItem for SopesBanyan {
 			amplitude: self.stick_amplitude,
 			octaves: self.stick_octaves,
 		};
+
 		let mut out = StickRenderHelper::new(chain.clone(), stick_rule).spawn_render_items(
 			commands,
 			cascade_chunk,

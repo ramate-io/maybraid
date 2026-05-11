@@ -52,6 +52,7 @@ impl<T: MeshBuilder + MeshCache + MeshHandleCache> MeshFetcher for T {
 		meshes: &mut ResMut<Assets<Mesh>>,
 		cascade_chunk: &CascadeChunk,
 	) -> Option<Handle<Mesh>> {
+		log::info!("Fetching mesh for type: {}", std::any::type_name::<Self>());
 		let normalized_cascade_chunk = self.normalize_chunk(cascade_chunk);
 
 		// Check if the mesh handle is already cached.

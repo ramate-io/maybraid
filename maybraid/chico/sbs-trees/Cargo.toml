@@ -19,6 +19,7 @@ chico-tree-components = { workspace = true }
 chico-sbs-geometry = { workspace = true }
 procedural-common = { workspace = true }
 render-item = { workspace = true }
+log = { workspace = true }
 
 [features]
 default = []

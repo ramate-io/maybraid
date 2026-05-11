@@ -146,6 +146,12 @@ impl<T: MeshBuilder + IdentifiedMesh + Clone + Send + Sync + 'static, M: Materia
 	for EnforceCachingPlugin<T, M>
 {
 	fn build(&self, app: &mut App) {
+		log::info!(
+			"Adding enforced caching plugin for {:?} {:?}",
+			std::any::type_name::<T>(),
+			std::any::type_name::<M>()
+		);
+
 		// insert the enforced caches resource
 		app.insert_resource(EnforcedCaches::<T> {
 			handle_map: HandleMap::new(),
@@ -153,6 +159,9 @@ impl<T: MeshBuilder + IdentifiedMesh + Clone + Send + Sync + 'static, M: Materia
 		});
 
 		// enforce caching before fetching meshes
-		app.add_systems(Update, fetch_meshes::<MeshHandle<T>, M>.after(enforce_caching::<T, M>));
+		app.add_systems(
+			Update,
+			(enforce_caching::<T, M>, fetch_meshes::<MeshHandle<T>, M>).chain(),
+		);
 	}
 }

@@ -15,6 +15,7 @@ chico-sdf = { workspace = true }
 procedural-common = { workspace = true }
 render-item = { workspace = true }
 sdf-common = { workspace = true }
+log = { workspace = true }
 
 [lints]
 workspace = true

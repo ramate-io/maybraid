@@ -9,10 +9,7 @@ pub mod render_item_plugin;
 use bevy::prelude::*;
 use chico_sdf::{NoisySurface, TaperedCylinder};
 use procedural_common::{FromScalarNoise, NoiseParams};
-use render_item::{
-	mesh::handle::Cached,
-	CascadeChunk, RenderItem,
-};
+use render_item::{mesh::handle::Cached, CascadeChunk, RenderItem};
 
 /// First-pass stick marker.
 #[derive(Component, Clone, Debug, PartialEq)]
@@ -40,7 +37,12 @@ impl ChicoStick {
 	pub fn noisy_cylinder(&self) -> chico_sdf::NoisyCylinder {
 		NoisySurface::from_params(
 			TaperedCylinder::unit_segment(0.5, 0.4),
-			NoiseParams::from_scalar(self.seed_scalar, self.frequency, self.amplitude, self.octaves),
+			NoiseParams::from_scalar(
+				self.seed_scalar,
+				self.frequency,
+				self.amplitude,
+				self.octaves,
+			),
 		)
 	}
 }

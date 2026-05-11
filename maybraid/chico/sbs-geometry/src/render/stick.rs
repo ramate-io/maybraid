@@ -24,7 +24,9 @@ pub struct StickRenderHelper<Item: RenderItem, Rule: StickRenderRule<Item, H>, H
 	__marker: PhantomData<Item>,
 }
 
-impl<Item: RenderItem, Rule: StickRenderRule<Item, H>, H: Hysteresis> StickRenderHelper<Item, Rule, H> {
+impl<Item: RenderItem, Rule: StickRenderRule<Item, H>, H: Hysteresis>
+	StickRenderHelper<Item, Rule, H>
+{
 	pub fn new(chain: BallStickChain<H>, rule: Rule) -> Self {
 		Self { chain, rule, __marker: PhantomData }
 	}
