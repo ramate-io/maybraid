@@ -10,7 +10,10 @@ use bevy_math::Vec3;
 pub struct StrictStalk {
 	#[cfg_attr(feature = "clap", arg(long, default_value_t = 10.0))]
 	pub height: f32,
-	#[cfg_attr(feature = "clap", arg(skip))]
+	#[cfg_attr(
+		feature = "clap",
+		arg(long, default_value = "0,0,0", value_parser = crate::vec3_args::parse_vec3_csv)
+	)]
 	pub base_anchor: Vec3,
 	#[cfg_attr(feature = "clap", arg(long, default_value_t = 0.75))]
 	pub base_radius: f32,

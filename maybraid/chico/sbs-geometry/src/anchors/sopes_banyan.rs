@@ -119,8 +119,14 @@ impl SopesBanyanAnchors {
 	}
 }
 
-impl Anchors<SopesBanyanHysteresis> for SopesBanyanAnchors {
-	fn anchors(&self) -> Vec<SopesBanyanHysteresis> {
+impl SopesBanyanAnchors {
+	/// Ring spokes as [`SopesBanyanChain`] seeds with explicit chain noise and vase/descender tuning.
+	pub fn hysteresis_seeds(
+		&self,
+		chain_noise: NoiseConfig,
+		banyan_height: f32,
+		descender_threshold: f32,
+	) -> Vec<SopesBanyanHysteresis> {
 		let mut out = Vec::new();
 		let n = self.ring_count.max(1);
 		let k = self.anchors_per_ring.max(1);
@@ -139,14 +145,17 @@ impl Anchors<SopesBanyanHysteresis> for SopesBanyanAnchors {
 
 				let radius = (self.stalk.base_radius * (0.02 + 0.03 * u)).max(1e-4);
 				let seed_node = BallStickNode::new(pos, radius);
-				let noise = NoiseConfig::new(NoiseParams::default());
+				let noise = chain_noise.clone();
 				let mut h = SopesBanyanChain {
 					noise: noise.clone(),
-					banyan_height: self.stalk.height,
-					descender_threshold: 0.12,
+					banyan_height,
+					descender_threshold,
 					phase: SopesBanyanPhase::BranchOut(crate::DepthBudget {
-						inner: crate::BranchOut::up(seed_node)
-							.with_hysteresis_context(noise, 0, Vec3::Y),
+						inner: crate::BranchOut::up(seed_node).with_hysteresis_context(
+							noise,
+							0,
+							Vec3::Y,
+						),
 						remaining: max_depth,
 					}),
 				};
@@ -161,6 +170,16 @@ impl Anchors<SopesBanyanHysteresis> for SopesBanyanAnchors {
 		}
 
 		out
+	}
+}
+
+impl Anchors<SopesBanyanHysteresis> for SopesBanyanAnchors {
+	fn anchors(&self) -> Vec<SopesBanyanHysteresis> {
+		self.hysteresis_seeds(
+			NoiseConfig::new(NoiseParams::default()),
+			self.stalk.height,
+			0.12,
+		)
 	}
 }
 

@@ -10,28 +10,22 @@
 
 use bevy::prelude::*;
 use chico_ball_components::{chico_ball::ChicoBall, plane_splay::PlaneSplay};
-use chico_sbs_geometry::anchors::Anchors;
 use chico_sbs_geometry::render::ball::{BallRenderHelper, BallRenderRule};
 use chico_sbs_geometry::render::stick::{StickRenderHelper, StickRenderRule};
 use chico_sbs_geometry::{
-	BallStickChain, BallStickNode, BallStickSegment, SopesBanyanAnchors, SopesBanyanHysteresis,
+	BallStickChain, BallStickNode, BallStickSegment, SopesBanyanHysteresis, SopesBanyanSbs,
 };
 use chico_stick_components::chico_stick::ChicoStick;
-use procedural_common::{FromScalarNoise, NoiseConfig, NoiseParams};
+use procedural_common::FromScalarNoise;
 use render_item::{CascadeChunk, RenderItem};
 
 #[derive(Clone)]
 #[cfg_attr(feature = "clap", derive(clap::Args))]
 #[cfg_attr(feature = "clap", command(rename_all = "kebab-case"))]
 pub struct SopesBanyan {
+	/// Stalk, rings, and canopy chain noise in one flattened group (no duplicate `NoiseParams` keys).
 	#[cfg_attr(feature = "clap", command(flatten))]
-	pub anchors: SopesBanyanAnchors,
-	#[cfg_attr(feature = "clap", command(flatten))]
-	pub canopy_noise: NoiseParams,
-	#[cfg_attr(feature = "clap", arg(long, default_value_t = 20.0))]
-	pub banyan_height: f32,
-	#[cfg_attr(feature = "clap", arg(long, default_value_t = 0.12))]
-	pub descender_threshold: f32,
+	pub geometry: SopesBanyanSbs,
 	#[cfg_attr(feature = "clap", arg(long, default_value_t = 0.0))]
 	pub stick_seed_scalar: f32,
 	#[cfg_attr(feature = "clap", arg(long, default_value_t = 1.0))]
@@ -51,10 +45,7 @@ pub struct SopesBanyan {
 impl Default for SopesBanyan {
 	fn default() -> Self {
 		Self {
-			anchors: SopesBanyanAnchors::default(),
-			canopy_noise: NoiseParams::default(),
-			banyan_height: 20.0,
-			descender_threshold: 0.12,
+			geometry: SopesBanyanSbs::default(),
 			stick_seed_scalar: 0.0,
 			stick_frequency: 1.0,
 			stick_amplitude: 0.05,
@@ -68,17 +59,7 @@ impl Default for SopesBanyan {
 
 impl SopesBanyan {
 	pub fn build_chain(&self) -> BallStickChain<SopesBanyanHysteresis> {
-		let noise = NoiseConfig::new(self.canopy_noise);
-		let mut starts = self.anchors.anchors();
-		for s in &mut starts {
-			s.noise = noise.clone();
-			s.banyan_height = self.banyan_height;
-			s.descender_threshold = self.descender_threshold;
-			if let chico_sbs_geometry::SopesBanyanPhase::BranchOut(ref mut b) = s.phase {
-				b.inner.noise = noise.clone();
-			}
-		}
-		BallStickChain::build(starts)
+		BallStickChain::build(self.geometry.hysteresis_seeds())
 	}
 }
 
