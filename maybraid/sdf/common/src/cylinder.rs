@@ -8,11 +8,16 @@
 //! Pair with [`NoisySurface`](crate::noisy::NoisySurface) and [`NoiseParams`](procedural_common::NoiseParams)
 //! from **`procedural-common`** for the RFC-183 noisy-cylinder composition ([#210](https://github.com/ramate-io/maybraid/issues/210)).
 
+pub mod render_item_plugin;
+
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 use chunk::cascade::CascadeChunk;
 use procedural_common::NUMERIC_SURFACE_EPSILON;
-use render_item::NormalizeChunk;
+use render_item::{
+	mesh::{IdentifiedMesh, MeshId},
+	NormalizeChunk,
+};
 use sdf::{Bounds, Sdf};
 
 /// Tapered cylinder segment aligned with **+Y**, capped at both ends.
@@ -89,6 +94,12 @@ impl NormalizeChunk for TaperedCylinder {
 	fn normalize_chunk(&self, cascade_chunk: &CascadeChunk) -> CascadeChunk {
 		let mu = self.bounds_margin + NUMERIC_SURFACE_EPSILON;
 		CascadeChunk::unit_center_chunk().with_res_2(cascade_chunk.res_2).with_mu(mu)
+	}
+}
+
+impl IdentifiedMesh for TaperedCylinder {
+	fn id(&self) -> MeshId {
+		MeshId::new(format!("{self:?}"))
 	}
 }
 

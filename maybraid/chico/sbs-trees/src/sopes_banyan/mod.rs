@@ -8,6 +8,8 @@
 //!
 //! Everything that parameterizes height, rings, chain phases, materials, and optional fruiting ([§3.1.6.7](https://github.com/ramate-io/maybraid/tree/main/rfc/rfc-000-000-183-chico-vegetation/03-01-stalk-and-ball-stick-trees/06-well-known-component-constructions/07-fruiting-bodies/README.md)) should be exposed **under feature flags** as **`clap`-parseable** types so a future playground can drive the same recipe as production.
 
+pub mod render_item_plugin;
+
 use bevy::prelude::*;
 use chico_ball_components::{chico_ball::ChicoBall, plane_splay::PlaneSplay};
 use chico_sbs_geometry::render::ball::{BallRenderHelper, BallRenderRule};

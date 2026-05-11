@@ -5,13 +5,18 @@
 //!
 //! Pair with [`crate::noisy::NoisySurface`] for the RFC **noisy crook cylinder** composition ([`NoisyCrookCylinder`](crate::noisy::NoisyCrookCylinder)).
 
+pub mod render_item_plugin;
+
 use std::f32::consts::PI;
 
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 use chunk::cascade::CascadeChunk;
 use procedural_common::NUMERIC_SURFACE_EPSILON;
-use render_item::NormalizeChunk;
+use render_item::{
+	mesh::{IdentifiedMesh, MeshId},
+	NormalizeChunk,
+};
 use sdf::{Bounds, Sdf};
 
 use crate::cylinder::TaperedCylinder;
@@ -220,6 +225,12 @@ impl NormalizeChunk for CrookCylinder {
 		// Keep Y padding small so the segment stays grounded near **y = 0**; XZ use [`chunk_mu_xz_pad`].
 		let mu_y = self.bounds_margin + NUMERIC_SURFACE_EPSILON;
 		CascadeChunk::unit_center_chunk_with_mu_xz_y(mu_xz, mu_y).with_res_2(cascade_chunk.res_2)
+	}
+}
+
+impl IdentifiedMesh for CrookCylinder {
+	fn id(&self) -> MeshId {
+		MeshId::new(format!("{self:?}"))
 	}
 }
 

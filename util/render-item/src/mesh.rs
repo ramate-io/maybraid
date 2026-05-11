@@ -6,6 +6,7 @@ use bevy::prelude::*;
 use cache::{handle::MeshHandleCache, mesh::MeshCache};
 use chunk::cascade::CascadeChunk;
 use std::hash::Hash;
+use std::marker::PhantomData;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct MeshId(String);
@@ -108,5 +109,21 @@ pub fn fetch_meshes<T: MeshFetcher + Send + Sync + 'static, M: Material>(
 		if let Some(mesh) = mesh_dispatch.fetcher.fetch_mesh(&mut meshes, cascade_chunk) {
 			commands.spawn((Mesh3d(mesh), *transform, material.clone()));
 		}
+	}
+}
+
+pub struct MeshDispatchPlugin<T: MeshFetcher + Send + Sync + 'static, M: Material> {
+	__marker: PhantomData<(T, M)>,
+}
+
+impl<T: MeshFetcher + Send + Sync + 'static, M: Material> Default for MeshDispatchPlugin<T, M> {
+	fn default() -> Self {
+		Self { __marker: PhantomData }
+	}
+}
+
+impl<T: MeshFetcher + Send + Sync + 'static, M: Material> Plugin for MeshDispatchPlugin<T, M> {
+	fn build(&self, app: &mut App) {
+		app.add_systems(Update, fetch_meshes::<T, M>);
 	}
 }

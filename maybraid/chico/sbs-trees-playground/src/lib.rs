@@ -15,6 +15,7 @@ pub use preview::{PreviewConfig, SbsPreviewRoot};
 pub use startup::PendingStartupCommand;
 
 use bevy::prelude::*;
+use chico_sbs_trees::sopes_banyan::render_item_plugin::SopesBanyanRenderItemPlugin;
 use commands::root::react_playground_command_root;
 use ground::setup_ground;
 use preview::sync_tree_preview;
@@ -26,6 +27,7 @@ impl Plugin for SbsTreesPlaygroundPlugin {
 	fn build(&self, app: &mut App) {
 		app.init_resource::<PreviewConfig>()
 			.init_resource::<PendingStartupCommand>()
+			.add_plugins(SopesBanyanRenderItemPlugin::default())
 			.add_plugins(PlaygroundCommandsPlugin)
 			.add_plugins(startup::StartupPlugin)
 			.add_plugins(

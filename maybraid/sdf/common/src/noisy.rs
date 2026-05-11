@@ -10,7 +10,10 @@ use chunk::cascade::CascadeChunk;
 use procedural_common::{
 	sdf_band_margin, NoiseConfig, NoiseParams, NoiseType, NUMERIC_SURFACE_EPSILON,
 };
-use render_item::NormalizeChunk;
+use render_item::{
+	mesh::{IdentifiedMesh, MeshId},
+	NormalizeChunk,
+};
 use sdf::Bounds;
 use sdf::Sdf;
 
@@ -113,6 +116,12 @@ impl<S: Sdf> Sdf for NoisySurface<S> {
 impl<S: Clone> Clone for NoisySurface<S> {
 	fn clone(&self) -> Self {
 		Self::new(self.inner.clone(), self.noise)
+	}
+}
+
+impl<S: IdentifiedMesh + Clone> IdentifiedMesh for NoisySurface<S> {
+	fn id(&self) -> MeshId {
+		self.inner.id().with_suffix(&format!("|noise:{:?}", self.noise))
 	}
 }
 

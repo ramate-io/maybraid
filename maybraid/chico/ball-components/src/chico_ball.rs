@@ -1,8 +1,14 @@
 //! Chico ball component.
 //! Simply wraps the noisy ball and provides a [FromScalarNoise] impl.
 
+pub mod render_item_plugin;
+
+mod mesh_dispatch_spawn;
+
 use bevy::prelude::*;
-use procedural_common::FromScalarNoise;
+use chico_sdf::{Ball, NoisySurface};
+use mesh_dispatch_spawn::SpawnChicoBallMeshCommand;
+use procedural_common::{FromScalarNoise, NoiseParams};
 use render_item::{CascadeChunk, RenderItem};
 
 /// Simple canopy ball marker item for first-pass tree assembly.
@@ -26,13 +32,28 @@ impl FromScalarNoise for ChicoBall {
 	}
 }
 
+impl ChicoBall {
+	/// Unit sphere with surface noise from [`FromScalarNoise`] fields.
+	pub fn noisy_ball(&self) -> chico_sdf::NoisyBall {
+		NoisySurface::from_params(
+			Ball::unit_sphere(),
+			NoiseParams::from_scalar(self.seed_scalar, self.frequency, self.amplitude, self.octaves),
+		)
+	}
+}
+
 impl RenderItem for ChicoBall {
 	fn spawn_render_items(
 		&self,
 		commands: &mut Commands,
-		_cascade_chunk: &CascadeChunk,
+		cascade_chunk: &CascadeChunk,
 		transform: Transform,
 	) -> Vec<Entity> {
-		vec![commands.spawn((self.clone(), transform)).id()]
+		commands.add(SpawnChicoBallMeshCommand {
+			ball: self.clone(),
+			chunk: cascade_chunk.clone(),
+			transform,
+		});
+		vec![]
 	}
 }

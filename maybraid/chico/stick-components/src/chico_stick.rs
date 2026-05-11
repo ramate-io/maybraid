@@ -4,8 +4,14 @@
 //!
 //! Sticks are the mesh primitive for each graph edge between parent and child nodes once a `BallStickChain` (and render helpers in `chico-sbs-geometry`) supply segment transforms. Bark-facing materials in the RFC (dark / wet / high-contrast fantasy bark) attach at the tree or playground layer; this crate stays the **reusable stick component** with a `FromScalarNoise` implementation for procedural variation.
 
+pub mod render_item_plugin;
+
+mod mesh_dispatch_spawn;
+
 use bevy::prelude::*;
-use procedural_common::FromScalarNoise;
+use chico_sdf::{NoisySurface, TaperedCylinder};
+use mesh_dispatch_spawn::SpawnChicoStickMeshCommand;
+use procedural_common::{FromScalarNoise, NoiseParams};
 use render_item::{CascadeChunk, RenderItem};
 
 /// First-pass stick marker.
@@ -29,13 +35,28 @@ impl FromScalarNoise for ChicoStick {
 	}
 }
 
+impl ChicoStick {
+	/// Unit-height tapered segment with surface noise from [`FromScalarNoise`] fields (RFC stick / trunk convention).
+	pub fn noisy_cylinder(&self) -> chico_sdf::NoisyCylinder {
+		NoisySurface::from_params(
+			TaperedCylinder::unit_segment(0.5, 0.4),
+			NoiseParams::from_scalar(self.seed_scalar, self.frequency, self.amplitude, self.octaves),
+		)
+	}
+}
+
 impl RenderItem for ChicoStick {
 	fn spawn_render_items(
 		&self,
 		commands: &mut Commands,
-		_cascade_chunk: &CascadeChunk,
+		cascade_chunk: &CascadeChunk,
 		transform: Transform,
 	) -> Vec<Entity> {
-		vec![commands.spawn((self.clone(), transform)).id()]
+		commands.add(SpawnChicoStickMeshCommand {
+			stick: self.clone(),
+			chunk: cascade_chunk.clone(),
+			transform,
+		});
+		vec![]
 	}
 }

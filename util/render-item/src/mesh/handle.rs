@@ -2,12 +2,13 @@ use crate::mesh::cache::mesh::disk::DiskMeshCache;
 use crate::{
 	mesh::{
 		cache::handle::map::HandleMap, cache::handle::MeshHandleCache, cache::mesh::MeshCache,
-		IdentifiedMesh, MeshBuilder, MeshId,
+		fetch_meshes, IdentifiedMesh, MeshBuilder, MeshDispatch, MeshId,
 	},
 	NormalizeChunk,
 };
 use bevy::prelude::*;
 use chunk::cascade::CascadeChunk;
+use std::marker::PhantomData;
 
 #[derive(Debug, Clone, Component)]
 pub struct MeshHandle<T: MeshBuilder + IdentifiedMesh + Clone> {
@@ -87,3 +88,57 @@ impl<T: MeshBuilder + IdentifiedMesh + Clone> MeshHandleCache for MeshHandle<T> 
 }
 
 // We now get the blanket implementation of MeshFetcher for MeshHandle<T>.
+
+pub struct MeshHandlePlugin<
+	T: MeshBuilder + IdentifiedMesh + Clone + Send + Sync + 'static,
+	M: Material,
+> {
+	__marker: PhantomData<(T, M)>,
+}
+
+#[derive(Resource, Clone)]
+pub struct EnforcedCaches<T: MeshBuilder + IdentifiedMesh + Clone + Send + Sync + 'static> {
+	handle_map: HandleMap<T>,
+	disk_cache: Option<DiskMeshCache<T>>,
+}
+
+#[derive(Component, Clone)]
+pub struct Cached<T: MeshBuilder + IdentifiedMesh + Clone + Send + Sync + 'static> {
+	builder: T,
+}
+
+/// Bevy system that simply rewraps the vanilla type dispathc with a mesh handle,
+/// enforcing caching.
+pub fn enforce_caching<
+	T: MeshBuilder + IdentifiedMesh + Clone + Send + Sync + 'static,
+	M: Material,
+>(
+	mut commands: Commands,
+	enforced_caches: Res<EnforcedCaches<T>>,
+	query: Query<
+		(Entity, &Cached<T>, &CascadeChunk, &Transform, &MeshMaterial3d<M>),
+		Added<Cached<T>>,
+	>,
+) {
+	for (entity, cached, _cascade_chunk, _transform, _material) in &query {
+		// build a mesh handle dispatch from and insert on the entity
+		let mesh_handle = MeshHandle::new(cached.builder.clone())
+			.with_handle_cache(enforced_caches.handle_map.clone())
+			.with_mesh_cache(enforced_caches.disk_cache.clone());
+		commands.entity(entity).insert(MeshDispatch::new(mesh_handle));
+	}
+}
+impl<T: MeshBuilder + IdentifiedMesh + Clone + Send + Sync + 'static, M: Material> Plugin
+	for MeshHandlePlugin<T, M>
+{
+	fn build(&self, app: &mut App) {
+		// insert the enforced caches resource
+		app.insert_resource(EnforcedCaches::<T> {
+			handle_map: HandleMap::new(),
+			disk_cache: DiskMeshCache::try_default().ok(),
+		});
+
+		// enforce caching before fetching meshes
+		app.add_systems(Update, fetch_meshes::<MeshHandle<T>, M>.after(enforce_caching::<T, M>));
+	}
+}
