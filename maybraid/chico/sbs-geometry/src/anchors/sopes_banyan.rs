@@ -19,6 +19,8 @@ use super::Anchors;
 use procedural_common::{NoiseConfig, NoiseParams};
 
 use crate::chain::sopes_banyan::{SopesBanyanChain, SopesBanyanPhase};
+use crate::chain::BranchOut;
+use crate::DepthBudget;
 use crate::{BallStickNode, SopesBanyanHysteresis};
 
 /// RFC-style ring band and vase profile over [`StrictStalk::height`].
@@ -56,12 +58,14 @@ pub struct SopesBanyanAnchors {
 	/// Initial depth budget at the last ring (~8).
 	#[cfg_attr(feature = "clap", arg(long, default_value_t = 8))]
 	pub max_depth_last_ring: usize,
+	#[cfg_attr(feature = "clap", arg(long, default_value_t = 0.12))]
+	pub descender_threshold: f32,
 }
 
 impl Default for SopesBanyanAnchors {
 	fn default() -> Self {
 		Self {
-			stalk: StrictStalk { height: 20.0, base_anchor: Vec3::ZERO, base_radius: 0.75 },
+			stalk: StrictStalk { height: 100.0, base_anchor: Vec3::ZERO, base_radius: 0.75 },
 			first_ring_unit_height: 0.40,
 			last_ring_unit_height: 0.90,
 			ring_count: 6,
@@ -72,6 +76,7 @@ impl Default for SopesBanyanAnchors {
 			projection_center_fraction: 0.5,
 			max_depth_first_ring: 5,
 			max_depth_last_ring: 8,
+			descender_threshold: 0.03,
 		}
 	}
 }
@@ -140,22 +145,22 @@ impl SopesBanyanAnchors {
 
 			for i in 0..k {
 				let theta = TAU * (i as f32) / (k as f32);
-				let offset = Vec3::new(theta.cos(), 0.0, theta.sin()) * radial_eps;
+				let radial = Vec3::new(theta.cos(), 0.0, theta.sin());
+				let offset = radial * radial_eps;
 				let pos = self.stalk.centroid_at_height_fraction(y_frac) + offset;
 
-				let radius = (self.stalk.base_radius * (0.02 + 0.03 * u)).max(1e-4);
-				let seed_node = BallStickNode::new(pos, radius);
+				let seed_node = BallStickNode::new(pos, 0.1);
 				let noise = chain_noise.clone();
 				let mut h = SopesBanyanChain {
 					noise: noise.clone(),
 					banyan_height,
 					descender_threshold,
-					phase: SopesBanyanPhase::BranchOut(crate::DepthBudget {
-						inner: crate::BranchOut::up(seed_node).with_hysteresis_context(
-							noise,
-							0,
-							Vec3::Y,
-						),
+					phase: SopesBanyanPhase::BranchOut(DepthBudget {
+						inner: BranchOut::radial_out_horizontal(seed_node, radial)
+							.with_hysteresis_context(noise, 0, radial)
+							.with_radius_range(0.05..0.2)
+							.with_child_count(1..5)
+							.with_ray_degrees_of_freedom(0.2),
 						remaining: max_depth,
 					}),
 				};
@@ -178,7 +183,7 @@ impl Anchors<SopesBanyanHysteresis> for SopesBanyanAnchors {
 		self.hysteresis_seeds(
 			NoiseConfig::new(NoiseParams::default()),
 			self.stalk.height,
-			0.12,
+			self.descender_threshold,
 		)
 	}
 }

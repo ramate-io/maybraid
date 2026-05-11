@@ -100,10 +100,11 @@ fn stick_transform(segment: &BallStickSegment<'_>) -> Option<Transform> {
 	let len = len_sq.sqrt();
 	let dir = ray / len;
 	let rotation = align_positive_y_to(dir);
+	let radius = segment.start.radius;
 	Some(Transform {
 		translation: segment.start.position,
 		rotation,
-		scale: Vec3::new(1.0, len, 1.0),
+		scale: Vec3::new(radius, len, radius),
 	})
 }
 

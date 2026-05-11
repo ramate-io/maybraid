@@ -18,13 +18,13 @@ pub struct SopesBanyanSbs {
 	pub stalk: StrictStalk,
 	#[cfg_attr(feature = "clap", command(flatten))]
 	pub canopy_noise: NoiseParams,
-	#[cfg_attr(feature = "clap", arg(long, default_value_t = 20.0))]
+	#[cfg_attr(feature = "clap", arg(long, default_value_t = 40.0))]
 	pub banyan_height: f32,
 	#[cfg_attr(feature = "clap", arg(long, default_value_t = 0.12))]
 	pub descender_threshold: f32,
 	#[cfg_attr(feature = "clap", arg(long, default_value_t = 0.40))]
 	pub first_ring_unit_height: f32,
-	#[cfg_attr(feature = "clap", arg(long, default_value_t = 0.90))]
+	#[cfg_attr(feature = "clap", arg(long, default_value_t = 0.95))]
 	pub last_ring_unit_height: f32,
 	#[cfg_attr(feature = "clap", arg(long, default_value_t = 6))]
 	pub ring_count: u32,
@@ -49,17 +49,17 @@ impl Default for SopesBanyanSbs {
 		Self {
 			stalk: StrictStalk { height: 20.0, base_anchor: Vec3::ZERO, base_radius: 0.75 },
 			canopy_noise: NoiseParams::default(),
-			banyan_height: 20.0,
-			descender_threshold: 0.12,
+			banyan_height: 40.0,
+			descender_threshold: 0.01,
 			first_ring_unit_height: 0.40,
-			last_ring_unit_height: 0.90,
-			ring_count: 6,
+			last_ring_unit_height: 0.95,
+			ring_count: 8,
 			anchors_per_ring: 7,
-			projection_min_fraction_of_height: 0.25,
-			projection_max_fraction_of_height: 0.80,
+			projection_min_fraction_of_height: 0.1,
+			projection_max_fraction_of_height: 0.2,
 			vase_profile_epsilon: 0.4,
 			projection_center_fraction: 0.5,
-			max_depth_first_ring: 5,
+			max_depth_first_ring: 4,
 			max_depth_last_ring: 8,
 		}
 	}
@@ -70,6 +70,7 @@ impl SopesBanyanSbs {
 	pub fn to_anchors(&self) -> SopesBanyanAnchors {
 		SopesBanyanAnchors {
 			stalk: self.stalk.clone(),
+			descender_threshold: self.descender_threshold,
 			first_ring_unit_height: self.first_ring_unit_height,
 			last_ring_unit_height: self.last_ring_unit_height,
 			ring_count: self.ring_count,
@@ -86,6 +87,7 @@ impl SopesBanyanSbs {
 	/// Canopy [`SopesBanyanHysteresis`] seeds using this struct’s shared [`NoiseParams`].
 	pub fn hysteresis_seeds(&self) -> Vec<SopesBanyanHysteresis> {
 		let noise = NoiseConfig::new(self.canopy_noise);
-		self.to_anchors().hysteresis_seeds(noise, self.banyan_height, self.descender_threshold)
+		self.to_anchors()
+			.hysteresis_seeds(noise, self.banyan_height, self.descender_threshold)
 	}
 }

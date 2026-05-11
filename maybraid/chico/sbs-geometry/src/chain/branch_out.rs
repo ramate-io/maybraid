@@ -47,7 +47,7 @@ impl Default for BranchOut {
 			segment_index: 0,
 			incoming_ray: Vec3::Y,
 			child_count: 1..3,
-			radius_range: 0.02..0.08,
+			radius_range: 0.05..0.2,
 			length: 0.2..0.5,
 			ray_degrees_of_freedom: 0.14,
 			bias_ray: Vec3::Y,
@@ -64,7 +64,7 @@ impl BranchOut {
 			segment_index: 0,
 			incoming_ray: Vec3::Y,
 			child_count: 1..3,
-			radius_range: 0.02..0.08,
+			radius_range: 0.05..0.2,
 			length: 0.2..0.5,
 			ray_degrees_of_freedom: 0.14,
 			bias_ray: Vec3::Y,
@@ -72,18 +72,42 @@ impl BranchOut {
 		}
 	}
 
+	pub fn with_radius_range(mut self, radius_range: Range<f32>) -> Self {
+		self.radius_range = radius_range;
+		self
+	}
+
 	pub fn down(node: BallStickNode) -> Self {
 		Self {
 			node,
 			noise: NoiseConfig::new(NoiseParams::default()),
 			segment_index: 0,
-			incoming_ray: Vec3::Y,
+			incoming_ray: -Vec3::Y,
 			child_count: 1..3,
-			radius_range: 0.02..0.08,
+			radius_range: 0.05..0.2,
 			length: 0.2..0.5,
 			ray_degrees_of_freedom: 0.14,
 			bias_ray: -Vec3::Y,
-			bias_blend: 0.5,
+			bias_blend: 1.0,
+		}
+	}
+
+	/// Outward in the horizontal plane (XZ), for ring-canopy seeds: bias and incoming ray align with `direction_xz`.
+	pub fn radial_out_horizontal(node: BallStickNode, mut direction_xz: Vec3) -> Self {
+		direction_xz.y = 0.0;
+		let radial = direction_xz.normalize_or_zero();
+		let radial = if radial.length_squared() < 1e-12 { Vec3::X } else { radial };
+		Self {
+			node,
+			noise: NoiseConfig::new(NoiseParams::default()),
+			segment_index: 0,
+			incoming_ray: radial,
+			child_count: 1..4,
+			radius_range: 0.05..0.2,
+			length: 0.2..0.5,
+			ray_degrees_of_freedom: 0.08,
+			bias_ray: radial,
+			bias_blend: 0.88,
 		}
 	}
 
@@ -92,7 +116,12 @@ impl BranchOut {
 		self
 	}
 
-	pub fn with_hysteresis_context(mut self, noise: NoiseConfig, segment_index: usize, incoming_ray: Vec3) -> Self {
+	pub fn with_hysteresis_context(
+		mut self,
+		noise: NoiseConfig,
+		segment_index: usize,
+		incoming_ray: Vec3,
+	) -> Self {
 		self.noise = noise;
 		self.segment_index = segment_index;
 		self.incoming_ray = incoming_ray;
@@ -130,10 +159,18 @@ impl BranchOut {
 	fn expand_children(&self) -> Vec<BranchOut> {
 		let parent = self.node;
 		let n = self.sample_child_count(&self.noise, &parent, self.segment_index);
+		log::info!("expanding children: {} {}", n, self.child_count.start);
 		(0..n)
 			.map(|ci| {
-				let ray = self.sample_ray(&self.noise, &parent, self.segment_index, ci as u32, self.incoming_ray);
-				let rad = self.sample_child_radius(&self.noise, &parent, self.segment_index, ci as u32);
+				let ray = self.sample_ray(
+					&self.noise,
+					&parent,
+					self.segment_index,
+					ci as u32,
+					self.incoming_ray,
+				);
+				let rad =
+					self.sample_child_radius(&self.noise, &parent, self.segment_index, ci as u32);
 				let child_node = BallStickNode::new(parent.position + ray, rad);
 				let inc = child_node.position - parent.position;
 				Self {
