@@ -4,7 +4,7 @@
 //!
 //! We do **not** split stalk and canopy into separate builders. The trunk is part of the **same** ball-stick graph as the crown: a vertical run of nodes with **strict** (zero–DOF) hysteresis forms the stalk; **ring** seeds at the stalk **radial centroid** start canopy chains. [`Anchors::anchors`] emits one [`Hysteresis`] value per seed (carrying the root [`BallStickNode`] and growth parameters).
 //!
-//! Downstream [`crate::ChainHysteresisRule`] (e.g. Sope's Banyan) then grows branches from those seeds.
+//! Downstream [`Hysteresis`] implementations (e.g. Sope's Banyan) then grow branches from those seeds via [`Hysteresis::next_hysteresis`].
 
 pub mod sopes_banyan;
 pub mod strict_stalk;

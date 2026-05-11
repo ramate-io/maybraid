@@ -14,9 +14,12 @@ use chico_sbs_geometry::anchors::Anchors;
 use chico_sbs_geometry::render::ball::{BallRenderHelper, BallRenderRule};
 use chico_sbs_geometry::render::stick::{StickRenderHelper, StickRenderRule};
 use chico_sbs_geometry::{
-	BallStickChain, BallStickNode, BallStickSegment, SopesBanyanAnchors, SopesBanyanChainRule,
-	SopesBanyanHysteresis,
+	BallStickChain, BallStickNode, BallStickSegment, SopesBanyanAnchors, SopesBanyanHysteresis,
 };
+#[cfg(feature = "clap")]
+use chico_sbs_geometry::SopesBanyanChainRuleArgs;
+#[cfg(not(feature = "clap"))]
+use chico_sbs_geometry::SopesBanyanChainRule;
 use chico_stick_components::chico_stick::ChicoStick;
 use procedural_common::FromScalarNoise;
 use render_item::{CascadeChunk, RenderItem};
@@ -27,8 +30,11 @@ use render_item::{CascadeChunk, RenderItem};
 pub struct SopesBanyan {
 	#[cfg_attr(feature = "clap", command(flatten))]
 	pub anchors: SopesBanyanAnchors,
-	#[cfg_attr(feature = "clap", command(flatten))]
+	#[cfg(not(feature = "clap"))]
 	pub chain_rule: SopesBanyanChainRule,
+	#[cfg(feature = "clap")]
+	#[cfg_attr(feature = "clap", command(flatten))]
+	pub chain_rule: SopesBanyanChainRuleArgs,
 	#[cfg_attr(feature = "clap", arg(long, default_value_t = 0.0))]
 	pub stick_seed_scalar: f32,
 	#[cfg_attr(feature = "clap", arg(long, default_value_t = 1.0))]
@@ -49,7 +55,10 @@ impl Default for SopesBanyan {
 	fn default() -> Self {
 		Self {
 			anchors: SopesBanyanAnchors::default(),
+			#[cfg(not(feature = "clap"))]
 			chain_rule: SopesBanyanChainRule::default(),
+			#[cfg(feature = "clap")]
+			chain_rule: SopesBanyanChainRuleArgs::default(),
 			stick_seed_scalar: 0.0,
 			stick_frequency: 1.0,
 			stick_amplitude: 0.05,
@@ -63,10 +72,18 @@ impl Default for SopesBanyan {
 
 impl SopesBanyan {
 	pub fn build_chain(&self) -> BallStickChain<SopesBanyanHysteresis> {
-		let starts = self.anchors.anchors();
+		let mut starts = self.anchors.anchors();
+		#[cfg(not(feature = "clap"))]
 		let mut rule = self.chain_rule.clone();
+		#[cfg(feature = "clap")]
+		let mut rule: chico_sbs_geometry::SopesBanyanChainRule = self.chain_rule.clone().into();
 		rule.sync_noise_engine();
-		BallStickChain::build(starts, &rule)
+		for s in &mut starts {
+			s.noise = rule.noise.clone();
+			s.banyan_height = rule.banyan_height;
+			s.descender_threshold = rule.descender_threshold;
+		}
+		BallStickChain::build(starts)
 	}
 }
 
@@ -104,7 +121,7 @@ impl BallRenderRule<SopesBanyanBallItem, SopesBanyanHysteresis> for SopesBanyanB
 		hysteresis: &SopesBanyanHysteresis,
 	) -> Option<SopesBanyanBallItem> {
 		// Sparse balls on strong descenders, richer allocation on rising crown.
-		if hysteresis.bias_ray.y < -0.8 {
+		if hysteresis.branch.bias_ray.y < -0.8 {
 			return None;
 		}
 		// let seed = node.position.x * 13.0 + node.position.y * 7.0 + node.position.z * 5.0;

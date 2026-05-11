@@ -1,6 +1,6 @@
 //! **Strict stalk** segments in the **shared** [`crate::BallStickChain`]: hysteresis that keeps growth collinear (no lateral branch wander) so the trunk reads as a straight run from ground toward the anchor band.
 //!
-//! Used when [`super::Anchors`] emits the vertical chain of seed nodes along the stalk **radial centroid**; canopy ring seeds on that same axis then branch under the normal [`crate::ChainHysteresisRule`].
+//! Used when [`super::Anchors`] emits the vertical chain of seed nodes along the stalk **radial centroid**; canopy ring seeds on that same axis then branch under the canopy [`crate::Hysteresis`] recipe.
 
 use bevy_math::Vec3;
 

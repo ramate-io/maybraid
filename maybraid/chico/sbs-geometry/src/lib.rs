@@ -1,10 +1,11 @@
 //! Stalk and ball-stick geometry for Chico vegetation.
 pub mod chain;
 
-pub use chain::sopes_banyan::{SopesBanyanChainRule, SopesBanyanHysteresis};
+pub use chain::sopes_banyan::{SopesBanyanChain, SopesBanyanChainRule, SopesBanyanHysteresis};
+#[cfg(feature = "clap")]
+pub use chain::sopes_banyan::SopesBanyanChainRuleArgs;
 pub use chain::{
-	BallStickChain, BallStickGrowth, BallStickHysteresis, BallStickNode, BallStickSegment,
-	ChainHysteresisRule, Hysteresis, PeriodicHysteresisRule,
+	BallStickChain, BallStickNode, BallStickSegment, BranchOut, DepthBudget, Hysteresis,
 };
 
 pub mod anchors;

@@ -17,6 +17,6 @@ impl<H: Hysteresis> Hysteresis for DepthBudget<H> {
 	}
 
 	fn next_hysteresis(&self) -> Vec<Self> {
-		todo!()
+		Vec::new()
 	}
 }

@@ -8,6 +8,8 @@ pub mod length_range;
 pub mod radius_range;
 pub mod sopes_banyan;
 
+use std::collections::VecDeque;
+
 use bevy_math::Vec3;
 
 pub use branch_out::BranchOut;
@@ -28,7 +30,7 @@ impl BallStickNode {
 
 /// Hysteresis state carried per chain node: minimal surface for non-builder consumers.
 ///
-/// Heavy expansion (noisy child counts, rays, radii) lives on [`BallStickGrowth`]; [`BallStickChain::build`] uses that supertrait.
+/// [`BallStickChain::build`] walks [`Self::next_hysteresis`] breadth-first from anchor seeds.
 pub trait Hysteresis: Clone {
 	/// Geometry for this state (typically a [`BallStickNode`] field on the implementing struct).
 	fn ball_stick_node(&self) -> BallStickNode;
@@ -66,6 +68,29 @@ impl<H: Hysteresis> Default for BallStickChain<H> {
 }
 
 impl<H: Hysteresis> BallStickChain<H> {
+	/// Grow a directed graph from seeds by repeatedly calling [`Hysteresis::next_hysteresis`].
+	pub fn build(seeds: Vec<H>) -> Self {
+		let mut chain = Self::default();
+		let mut queue = VecDeque::new();
+
+		for seed in seeds {
+			let idx = chain.push_node(seed.ball_stick_node(), seed);
+			queue.push_back(idx);
+		}
+
+		while let Some(parent_idx) = queue.pop_front() {
+			let parent_state = chain.hysteresis[parent_idx].clone();
+			for child_state in parent_state.next_hysteresis() {
+				let child_node = child_state.ball_stick_node();
+				let child_idx = chain.push_node(child_node, child_state);
+				chain.add_child(parent_idx, child_idx);
+				queue.push_back(child_idx);
+			}
+		}
+
+		chain
+	}
+
 	fn push_node(&mut self, node: BallStickNode, h: H) -> usize {
 		let i = self.nodes.len();
 		self.nodes.push(node);

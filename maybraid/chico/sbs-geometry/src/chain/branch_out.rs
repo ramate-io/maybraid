@@ -61,6 +61,59 @@ impl BranchOut {
 		}
 	}
 
+	/// Downward-biased profile (banyan descenders).
+	pub fn down(node: BallStickNode) -> Self {
+		Self {
+			node,
+			child_count: 1..3,
+			radius_range: 0.02..0.08,
+			length: 0.2..0.5,
+			ray_degrees_of_freedom: 0.14,
+			bias_ray: -Vec3::Y,
+			bias_blend: 0.5,
+		}
+	}
+
+	pub fn with_child_count(mut self, child_count: Range<usize>) -> Self {
+		self.child_count = child_count;
+		self
+	}
+
+	pub fn with_ray_degrees_of_freedom(mut self, ray_degrees_of_freedom: f32) -> Self {
+		self.ray_degrees_of_freedom = ray_degrees_of_freedom;
+		self
+	}
+
+	pub fn with_bias_ray(mut self, bias_ray: Vec3, bias_blend: f32) -> Self {
+		self.bias_ray = bias_ray;
+		self.bias_blend = bias_blend;
+		self
+	}
+
+	pub fn with_length(mut self, length: Range<f32>) -> Self {
+		self.length = length;
+		self
+	}
+
+	/// Exactly one child (`1..2`).
+	pub fn single_child(mut self) -> Self {
+		self.child_count = 1..2;
+		self
+	}
+
+	/// Sample one stick step from this joint (child index `0`).
+	pub fn project_tip(
+		&self,
+		noise: &NoiseConfig,
+		segment_index: usize,
+		incoming_ray: Vec3,
+	) -> BallStickNode {
+		let parent = self.node;
+		let ray = self.sample_ray(noise, &parent, segment_index, 0, incoming_ray);
+		let r = self.sample_child_radius(noise, &parent, segment_index, 0);
+		BallStickNode::new(parent.position + ray, r)
+	}
+
 	pub fn sample_child_count(
 		&self,
 		noise: &NoiseConfig,
@@ -129,7 +182,8 @@ impl Hysteresis for BranchOut {
 		self.node
 	}
 
+	/// Noisy fan-out is driven by recipe types (e.g. [`super::sopes_banyan::SopesBanyanChain`]) that hold [`NoiseConfig`].
 	fn next_hysteresis(&self) -> Vec<Self> {
-		todo!()
+		Vec::new()
 	}
 }

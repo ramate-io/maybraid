@@ -136,10 +136,13 @@ impl Anchors<SopesBanyanHysteresis> for SopesBanyanAnchors {
 
 				let radius = (self.stalk.base_radius * (0.02 + 0.03 * u)).max(1e-4);
 				let seed_node = BallStickNode::new(pos, radius);
-				let mut h = SopesBanyanChainRule::seed_hysteresis(seed_node, max_depth);
+				let mut h = SopesBanyanChainRule::default().seed_hysteresis(seed_node, max_depth);
 				let lo = proj * 0.97;
 				let hi = proj * 1.03;
-				h.length = lo..hi;
+				if let crate::chain::sopes_banyan::SopesBanyanPhase::BranchOut(ref mut d) = &mut h.phase {
+					d.inner.length = lo..hi;
+					h.branch = d.inner.clone();
+				}
 
 				out.push(h);
 			}
