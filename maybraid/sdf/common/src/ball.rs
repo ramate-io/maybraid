@@ -2,11 +2,16 @@
 //!
 //! Pair with [`crate::noisy::NoisySurface`] for the RFC **noisy ball** composition ([`NoisyBall`](crate::noisy::NoisyBall)).
 
+pub mod render_item_plugin;
+
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 use chunk::cascade::CascadeChunk;
 use procedural_common::NUMERIC_SURFACE_EPSILON;
-use render_item::NormalizeChunk;
+use render_item::{
+	mesh::{IdentifiedMesh, MeshId},
+	NormalizeChunk,
+};
 use sdf::{Bounds, Sdf};
 
 /// Half-edge of [`CascadeChunk::unit_3d_center_chunk`] before [`CascadeChunk::with_mu`].
@@ -60,6 +65,12 @@ impl NormalizeChunk for Ball {
 	}
 }
 
+impl IdentifiedMesh for Ball {
+	fn id(&self) -> MeshId {
+		MeshId::new(format!("{:?}", self))
+	}
+}
+
 #[cfg(test)]
 mod tests {
 	use super::*;
@@ -75,10 +86,7 @@ mod tests {
 
 	#[test]
 	fn bounds_cube_half_size() -> Result<()> {
-		let b = Ball {
-			radius: 0.4,
-			bounds_margin: 0.02,
-		};
+		let b = Ball { radius: 0.4, bounds_margin: 0.02 };
 		if let Bounds::Cuboid(a) = b.bounds() {
 			let e = 0.42;
 			assert!((a.min.x + e).abs() < 1e-5);
