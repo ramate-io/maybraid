@@ -3,13 +3,13 @@
 
 pub mod render_item_plugin;
 
-mod mesh_dispatch_spawn;
-
 use bevy::prelude::*;
 use chico_sdf::{Ball, NoisySurface};
-use mesh_dispatch_spawn::SpawnChicoBallMeshCommand;
 use procedural_common::{FromScalarNoise, NoiseParams};
-use render_item::{CascadeChunk, RenderItem};
+use render_item::{
+	mesh::handle::Cached,
+	CascadeChunk, RenderItem,
+};
 
 /// Simple canopy ball marker item for first-pass tree assembly.
 #[derive(Component, Clone, Debug, PartialEq)]
@@ -49,11 +49,13 @@ impl RenderItem for ChicoBall {
 		cascade_chunk: &CascadeChunk,
 		transform: Transform,
 	) -> Vec<Entity> {
-		commands.add(SpawnChicoBallMeshCommand {
-			ball: self.clone(),
-			chunk: cascade_chunk.clone(),
-			transform,
-		});
-		vec![]
+		vec![commands
+			.spawn((
+				Cached::new(self.noisy_ball()),
+				cascade_chunk.clone(),
+				transform,
+				MeshMaterial3d::<StandardMaterial>::default(),
+			))
+			.id()]
 	}
 }

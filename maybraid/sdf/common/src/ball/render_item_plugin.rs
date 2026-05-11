@@ -1,6 +1,6 @@
 use super::Ball;
 use bevy::prelude::*;
-use render_item::mesh::{handle::MeshHandle, MeshDispatchPlugin};
+use render_item::mesh::handle::EnforceCachingPlugin;
 use std::marker::PhantomData;
 
 pub struct BallRenderItemPlugin<M: Material> {
@@ -10,8 +10,8 @@ pub struct BallRenderItemPlugin<M: Material> {
 impl<M: Material> Plugin for BallRenderItemPlugin<M> {
 	fn build(&self, app: &mut App) {
 		// add mesh dispatch plugin if not already added
-		if !app.is_plugin_added::<MeshDispatchPlugin<MeshHandle<Ball>, M>>() {
-			app.add_plugins(MeshDispatchPlugin::<MeshHandle<Ball>, M>::default());
+		if !app.is_plugin_added::<EnforceCachingPlugin<Ball, M>>() {
+			app.add_plugins(EnforceCachingPlugin::<Ball, M>::default());
 		}
 	}
 }

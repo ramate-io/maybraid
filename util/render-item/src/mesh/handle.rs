@@ -89,11 +89,19 @@ impl<T: MeshBuilder + IdentifiedMesh + Clone> MeshHandleCache for MeshHandle<T> 
 
 // We now get the blanket implementation of MeshFetcher for MeshHandle<T>.
 
-pub struct MeshHandlePlugin<
+pub struct EnforceCachingPlugin<
 	T: MeshBuilder + IdentifiedMesh + Clone + Send + Sync + 'static,
 	M: Material,
 > {
 	__marker: PhantomData<(T, M)>,
+}
+
+impl<T: MeshBuilder + IdentifiedMesh + Clone + Send + Sync + 'static, M: Material> Default
+	for EnforceCachingPlugin<T, M>
+{
+	fn default() -> Self {
+		Self { __marker: PhantomData }
+	}
 }
 
 #[derive(Resource, Clone)]
@@ -105,6 +113,12 @@ pub struct EnforcedCaches<T: MeshBuilder + IdentifiedMesh + Clone + Send + Sync 
 #[derive(Component, Clone)]
 pub struct Cached<T: MeshBuilder + IdentifiedMesh + Clone + Send + Sync + 'static> {
 	builder: T,
+}
+
+impl<T: MeshBuilder + IdentifiedMesh + Clone + Send + Sync + 'static> Cached<T> {
+	pub fn new(builder: T) -> Self {
+		Self { builder }
+	}
 }
 
 /// Bevy system that simply rewraps the vanilla type dispathc with a mesh handle,
@@ -129,7 +143,7 @@ pub fn enforce_caching<
 	}
 }
 impl<T: MeshBuilder + IdentifiedMesh + Clone + Send + Sync + 'static, M: Material> Plugin
-	for MeshHandlePlugin<T, M>
+	for EnforceCachingPlugin<T, M>
 {
 	fn build(&self, app: &mut App) {
 		// insert the enforced caches resource

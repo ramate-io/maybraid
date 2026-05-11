@@ -6,13 +6,13 @@
 
 pub mod render_item_plugin;
 
-mod mesh_dispatch_spawn;
-
 use bevy::prelude::*;
 use chico_sdf::{NoisySurface, TaperedCylinder};
-use mesh_dispatch_spawn::SpawnChicoStickMeshCommand;
 use procedural_common::{FromScalarNoise, NoiseParams};
-use render_item::{CascadeChunk, RenderItem};
+use render_item::{
+	mesh::handle::Cached,
+	CascadeChunk, RenderItem,
+};
 
 /// First-pass stick marker.
 #[derive(Component, Clone, Debug, PartialEq)]
@@ -52,11 +52,13 @@ impl RenderItem for ChicoStick {
 		cascade_chunk: &CascadeChunk,
 		transform: Transform,
 	) -> Vec<Entity> {
-		commands.add(SpawnChicoStickMeshCommand {
-			stick: self.clone(),
-			chunk: cascade_chunk.clone(),
-			transform,
-		});
-		vec![]
+		vec![commands
+			.spawn((
+				Cached::new(self.noisy_cylinder()),
+				cascade_chunk.clone(),
+				transform,
+				MeshMaterial3d::<StandardMaterial>::default(),
+			))
+			.id()]
 	}
 }
