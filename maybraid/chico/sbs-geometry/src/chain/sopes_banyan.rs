@@ -4,6 +4,7 @@ use procedural_common::NoiseConfig;
 
 use crate::BallStickNode;
 
+use super::point_to_point::PointToPoint;
 use super::BranchOut;
 use super::DepthBudget;
 use super::Hysteresis;
@@ -105,6 +106,7 @@ pub struct EndDescender {
 
 #[derive(Clone)]
 pub enum SopesBanyanPhase {
+	Stalk(PointToPoint),
 	BranchOut(DepthBudget<BranchOut>),
 	StartFlairUp(StartFlairUp),
 	EndFlairUp(EndFlairUp),
@@ -115,6 +117,7 @@ pub enum SopesBanyanPhase {
 impl SopesBanyanPhase {
 	pub fn node(&self) -> &BallStickNode {
 		match self {
+			Self::Stalk(p) => &p.start,
 			Self::BranchOut(b) => &b.inner.node,
 			Self::StartFlairUp(s) => &s.projection.node,
 			Self::EndFlairUp(e) => &e.node,
@@ -163,6 +166,7 @@ impl SopesBanyanChain {
 	/// Rough segment index along the limb (for coarse render heuristics).
 	pub fn segment_depth_hint(&self) -> usize {
 		match &self.phase {
+			SopesBanyanPhase::Stalk(_p) => 0,
 			SopesBanyanPhase::BranchOut(b) => b.inner.segment_index.saturating_add(b.remaining),
 			SopesBanyanPhase::StartFlairUp(s) => s.projection.segment_index,
 			SopesBanyanPhase::StartDescender(s) => s.projection.segment_index,
@@ -178,6 +182,16 @@ impl Hysteresis for SopesBanyanChain {
 
 	fn next_hysteresis(&self) -> Vec<Self> {
 		match &self.phase {
+			SopesBanyanPhase::Stalk(p) => p
+				.next_hysteresis()
+				.into_iter()
+				.map(|p| Self {
+					phase: SopesBanyanPhase::Stalk(p),
+					noise: self.noise.clone(),
+					banyan_height: self.banyan_height,
+					descender_threshold: self.descender_threshold,
+				})
+				.collect(),
 			SopesBanyanPhase::BranchOut(budget) => {
 				let mut synced = budget.clone();
 				synced.inner.noise = self.noise.clone();

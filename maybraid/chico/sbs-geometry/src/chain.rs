@@ -5,6 +5,7 @@ pub mod child_count;
 pub mod degree_range;
 pub mod depth_budget;
 pub mod length_range;
+pub mod point_to_point;
 pub mod radius_range;
 pub mod sopes_banyan;
 

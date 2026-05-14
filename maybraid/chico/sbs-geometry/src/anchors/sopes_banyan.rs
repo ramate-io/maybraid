@@ -175,6 +175,15 @@ impl SopesBanyanAnchors {
 			}
 		}
 
+		// add in the stalk anchor
+		let stalk_anchors = self.stalk.point_to_point_anchors();
+		out.extend(stalk_anchors.into_iter().map(|a| SopesBanyanChain {
+			noise: chain_noise.clone(),
+			banyan_height,
+			descender_threshold,
+			phase: SopesBanyanPhase::Stalk(a),
+		}));
+
 		out
 	}
 }

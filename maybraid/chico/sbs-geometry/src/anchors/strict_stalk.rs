@@ -2,6 +2,9 @@
 //!
 //! Used when [`super::Anchors`] emits the vertical chain of seed nodes along the stalk **radial centroid**; canopy ring seeds on that same axis then branch under the canopy [`crate::Hysteresis`] recipe.
 
+use crate::anchors::Anchors;
+use crate::chain::point_to_point::PointToPoint;
+use crate::Hysteresis;
 use bevy_math::Vec3;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -24,5 +27,22 @@ impl StrictStalk {
 	pub fn centroid_at_height_fraction(&self, t: f32) -> Vec3 {
 		let t = t.clamp(0.0, 1.0);
 		self.base_anchor + Vec3::Y * (t * self.height)
+	}
+
+	pub fn point_to_point_anchors(&self) -> Vec<PointToPoint> {
+		vec![PointToPoint::new_from_vec3(
+			self.centroid_at_height_fraction(0.0),
+			self.centroid_at_height_fraction(1.0),
+			self.base_radius,
+		)]
+	}
+}
+
+impl<T> Anchors<T> for StrictStalk
+where
+	T: Hysteresis + From<PointToPoint>,
+{
+	fn anchors(&self) -> Vec<T> {
+		self.point_to_point_anchors().into_iter().map(|p| p.into()).collect()
 	}
 }
