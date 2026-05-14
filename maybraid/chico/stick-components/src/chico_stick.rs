@@ -56,6 +56,8 @@ impl RenderItem for ChicoStick {
 	) -> Vec<Entity> {
 		vec![commands
 			.spawn((
+				// marker for debugging
+				self.clone(),
 				Cached::new(self.noisy_cylinder()),
 				cascade_chunk.clone(),
 				transform,

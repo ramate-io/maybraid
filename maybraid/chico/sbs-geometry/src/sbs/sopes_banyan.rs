@@ -20,25 +20,25 @@ pub struct SopesBanyanSbs {
 	pub canopy_noise: NoiseParams,
 	#[cfg_attr(feature = "clap", arg(long, default_value_t = 40.0))]
 	pub banyan_height: f32,
-	#[cfg_attr(feature = "clap", arg(long, default_value_t = 0.12))]
+	#[cfg_attr(feature = "clap", arg(long, default_value_t = 0.01))]
 	pub descender_threshold: f32,
 	#[cfg_attr(feature = "clap", arg(long, default_value_t = 0.40))]
 	pub first_ring_unit_height: f32,
 	#[cfg_attr(feature = "clap", arg(long, default_value_t = 0.95))]
 	pub last_ring_unit_height: f32,
-	#[cfg_attr(feature = "clap", arg(long, default_value_t = 6))]
+	#[cfg_attr(feature = "clap", arg(long, default_value_t = 8))]
 	pub ring_count: u32,
 	#[cfg_attr(feature = "clap", arg(long, default_value_t = 7))]
 	pub anchors_per_ring: u32,
-	#[cfg_attr(feature = "clap", arg(long, default_value_t = 0.25))]
+	#[cfg_attr(feature = "clap", arg(long, default_value_t = 0.1))]
 	pub projection_min_fraction_of_height: f32,
-	#[cfg_attr(feature = "clap", arg(long, default_value_t = 0.70))]
+	#[cfg_attr(feature = "clap", arg(long, default_value_t = 0.2))]
 	pub projection_max_fraction_of_height: f32,
-	#[cfg_attr(feature = "clap", arg(long, default_value_t = 0.08))]
+	#[cfg_attr(feature = "clap", arg(long, default_value_t = 0.4))]
 	pub vase_profile_epsilon: f32,
 	#[cfg_attr(feature = "clap", arg(long, default_value_t = 0.5))]
 	pub projection_center_fraction: f32,
-	#[cfg_attr(feature = "clap", arg(long, default_value_t = 5))]
+	#[cfg_attr(feature = "clap", arg(long, default_value_t = 4))]
 	pub max_depth_first_ring: usize,
 	#[cfg_attr(feature = "clap", arg(long, default_value_t = 8))]
 	pub max_depth_last_ring: usize,

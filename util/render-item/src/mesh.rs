@@ -105,9 +105,15 @@ pub fn fetch_meshes<T: MeshFetcher + Send + Sync + 'static, M: Material>(
 		Added<MeshDispatch<T>>,
 	>,
 ) {
-	for (_entity, mesh_dispatch, cascade_chunk, transform, material) in &query {
+	for (parent_entity, mesh_dispatch, cascade_chunk, _transform, material) in &query {
 		if let Some(mesh) = mesh_dispatch.fetcher.fetch_mesh(&mut meshes, cascade_chunk) {
-			commands.spawn((Mesh3d(mesh), *transform, material.clone()));
+			commands.entity(parent_entity).with_children(|parent| {
+				parent.spawn((
+					Mesh3d(mesh),
+					MeshMaterial3d(material.0.clone()),
+					Transform::default(), // local to parent, no extra offset/scale/rotation
+				));
+			});
 		}
 	}
 }

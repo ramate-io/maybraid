@@ -32,13 +32,13 @@ pub struct SopesBanyan {
 	pub stick_seed_scalar: f32,
 	#[cfg_attr(feature = "clap", arg(long, default_value_t = 1.0))]
 	pub stick_frequency: f32,
-	#[cfg_attr(feature = "clap", arg(long, default_value_t = 1.0))]
+	#[cfg_attr(feature = "clap", arg(long, default_value_t = 0.05))]
 	pub stick_amplitude: f32,
 	#[cfg_attr(feature = "clap", arg(long, default_value_t = 1))]
 	pub stick_octaves: u32,
 	#[cfg_attr(feature = "clap", arg(long, default_value_t = 1.0))]
 	pub ball_frequency: f32,
-	#[cfg_attr(feature = "clap", arg(long, default_value_t = 1.0))]
+	#[cfg_attr(feature = "clap", arg(long, default_value_t = 0.05))]
 	pub ball_amplitude: f32,
 	#[cfg_attr(feature = "clap", arg(long, default_value_t = 1))]
 	pub ball_octaves: u32,
