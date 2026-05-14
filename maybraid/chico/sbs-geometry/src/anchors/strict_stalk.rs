@@ -11,29 +11,40 @@ use bevy_math::Vec3;
 #[cfg_attr(feature = "clap", derive(clap::Args))]
 #[cfg_attr(feature = "clap", command(rename_all = "kebab-case"))]
 pub struct StrictStalk {
+	/// Height of the stalk.
+	///
+	/// NOTE: we prefix this with stalk for flattening.
 	#[cfg_attr(feature = "clap", arg(long, default_value_t = 10.0))]
-	pub height: f32,
+	pub stalk_height: f32,
+
+	/// Base anchor of the stalk.
+	///
+	/// NOTE: we prefix this with stalk for flattening.
 	#[cfg_attr(
 		feature = "clap",
 		arg(long, default_value = "0,0,0", value_parser = crate::vec3_args::parse_vec3_csv)
 	)]
-	pub base_anchor: Vec3,
+	pub stalk_base_anchor: Vec3,
+
+	/// Base radius of the stalk.
+	///
+	/// NOTE: we prefix this with stalk for flattening.
 	#[cfg_attr(feature = "clap", arg(long, default_value_t = 0.75))]
-	pub base_radius: f32,
+	pub stalk_base_radius: f32,
 }
 
 impl StrictStalk {
 	/// Stalk radial centroid at height `t * height` above [`Self::base_anchor`], with `t` in `[0, 1]`.
 	pub fn centroid_at_height_fraction(&self, t: f32) -> Vec3 {
 		let t = t.clamp(0.0, 1.0);
-		self.base_anchor + Vec3::Y * (t * self.height)
+		self.stalk_base_anchor + Vec3::Y * (t * self.stalk_height)
 	}
 
 	pub fn point_to_point_anchors(&self) -> Vec<PointToPoint> {
 		vec![PointToPoint::new_from_vec3(
 			self.centroid_at_height_fraction(0.0),
 			self.centroid_at_height_fraction(1.0),
-			self.base_radius,
+			self.stalk_base_radius,
 		)]
 	}
 }

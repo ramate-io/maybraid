@@ -47,7 +47,11 @@ pub struct SopesBanyanSbs {
 impl Default for SopesBanyanSbs {
 	fn default() -> Self {
 		Self {
-			stalk: StrictStalk { height: 20.0, base_anchor: Vec3::ZERO, base_radius: 0.75 },
+			stalk: StrictStalk {
+				stalk_height: 20.0,
+				stalk_base_anchor: Vec3::ZERO,
+				stalk_base_radius: 0.75,
+			},
 			canopy_noise: NoiseParams::default(),
 			banyan_height: 40.0,
 			descender_threshold: 0.01,

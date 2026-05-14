@@ -73,8 +73,13 @@ impl BranchOut {
 			length: 0.2..0.5,
 			ray_degrees_of_freedom: 0.14,
 			bias_ray: Vec3::Y,
-			bias_blend: 0.5,
+			bias_blend: 1.0,
 		}
+	}
+
+	pub fn with_ball_radius(mut self, radius: f32) -> Self {
+		self.node.radius = radius;
+		self
 	}
 
 	pub fn with_radius_range(mut self, radius_range: Range<f32>) -> Self {
@@ -152,6 +157,11 @@ impl BranchOut {
 
 	pub fn with_length(mut self, length: Range<f32>) -> Self {
 		self.length = length;
+		self
+	}
+
+	pub fn with_bias_blend(mut self, bias_blend: f32) -> Self {
+		self.bias_blend = bias_blend;
 		self
 	}
 

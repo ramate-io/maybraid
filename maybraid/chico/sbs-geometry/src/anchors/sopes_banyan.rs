@@ -65,7 +65,11 @@ pub struct SopesBanyanAnchors {
 impl Default for SopesBanyanAnchors {
 	fn default() -> Self {
 		Self {
-			stalk: StrictStalk { height: 100.0, base_anchor: Vec3::ZERO, base_radius: 0.75 },
+			stalk: StrictStalk {
+				stalk_height: 100.0,
+				stalk_base_anchor: Vec3::ZERO,
+				stalk_base_radius: 0.75,
+			},
 			first_ring_unit_height: 0.40,
 			last_ring_unit_height: 0.90,
 			ring_count: 6,
@@ -92,7 +96,7 @@ impl SopesBanyanAnchors {
 
 	/// Vase-shaped projection length for this ring (world units).
 	fn projection_length(&self, u: f32) -> f32 {
-		let h = self.stalk.height.max(1e-6);
+		let h = self.stalk.stalk_height.max(1e-6);
 		let t = Self::vase_profile(u, self.vase_profile_epsilon, self.projection_center_fraction);
 		let f = self.projection_min_fraction_of_height
 			+ (self.projection_max_fraction_of_height - self.projection_min_fraction_of_height) * t;
@@ -135,7 +139,7 @@ impl SopesBanyanAnchors {
 		let mut out = Vec::new();
 		let n = self.ring_count.max(1);
 		let k = self.anchors_per_ring.max(1);
-		let radial_eps = (self.stalk.base_radius * 0.08).max(1e-4);
+		let radial_eps = (self.stalk.stalk_base_radius * 0.08).max(1e-4);
 
 		for r in 0..n {
 			let u = Self::ring_mix_u(r, n);
@@ -158,8 +162,9 @@ impl SopesBanyanAnchors {
 					phase: SopesBanyanPhase::BranchOut(DepthBudget {
 						inner: BranchOut::radial_out_horizontal(seed_node, radial)
 							.with_hysteresis_context(noise, 0, radial)
-							.with_radius_range(0.19..0.2)
-							.with_radius_range_child_scale((0.8, 0.9))
+							.with_ball_radius(0.25)
+							.with_radius_range(0.24..0.28)
+							.with_radius_range_child_scale((0.9, 0.95))
 							.with_child_count(1..5)
 							.with_ray_degrees_of_freedom(0.2),
 						remaining: max_depth,
@@ -192,7 +197,7 @@ impl Anchors<SopesBanyanHysteresis> for SopesBanyanAnchors {
 	fn anchors(&self) -> Vec<SopesBanyanHysteresis> {
 		self.hysteresis_seeds(
 			NoiseConfig::new(NoiseParams::default()),
-			self.stalk.height,
+			self.stalk.stalk_height,
 			self.descender_threshold,
 		)
 	}
@@ -205,7 +210,11 @@ mod tests {
 	#[test]
 	fn vase_projection_grows_with_ring_height() {
 		let a = SopesBanyanAnchors {
-			stalk: StrictStalk { height: 10.0, base_anchor: Vec3::ZERO, base_radius: 0.5 },
+			stalk: StrictStalk {
+				stalk_height: 10.0,
+				stalk_base_anchor: Vec3::ZERO,
+				stalk_base_radius: 0.5,
+			},
 			ring_count: 5,
 			..Default::default()
 		};

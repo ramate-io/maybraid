@@ -54,13 +54,25 @@ impl RenderItem for ChicoStick {
 		cascade_chunk: &CascadeChunk,
 		transform: Transform,
 	) -> Vec<Entity> {
+		// noisy_cylinder is authored from lower-left:
+		// local x: [0, scale.x]
+		// local y: [0, scale.y]
+		// local z: [0, scale.z]
+		//
+		// We want the provided transform.translation to refer to the xz centroid
+		// at the stick's lower anchor, then offset to the mesh's authored origin.
+		let local_offset =
+			Vec3::new(-0.5 * transform.scale.x, -0.5 * transform.scale.y, -0.5 * transform.scale.z);
+
+		let centroid_offset = transform.rotation * local_offset;
+		let translation = transform.translation + centroid_offset;
+
 		vec![commands
 			.spawn((
-				// marker for debugging
 				self.clone(),
 				Cached::new(self.noisy_cylinder()),
 				cascade_chunk.clone(),
-				transform,
+				transform.with_translation(translation),
 				MeshMaterial3d::<StandardMaterial>::default(),
 			))
 			.id()]

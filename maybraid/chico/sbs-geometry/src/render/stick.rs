@@ -15,8 +15,13 @@ pub trait StickRenderRule<R: RenderItem, H: Hysteresis>: Clone {
 
 /// Renders sticks (edges) of a [`BallStickChain`].
 ///
-/// Assumes each [`RenderItem`] is authored as a **unit cylinder along +Y** from `y = 0` to `y = 1`
-/// so the helper can scale by segment length and place the base at the parent node.
+/// Assumes each [`RenderItem`] is authored as a **unit cylinder along +Y centered at the origin**:
+///
+/// - local `y = -0.5` to `y = 0.5`
+/// - local center at `(0, 0, 0)`
+///
+/// The helper scales `Y` by segment length, rotates +Y onto the segment direction,
+/// and places the transform at the segment midpoint.
 #[derive(Clone)]
 pub struct StickRenderHelper<Item: RenderItem, Rule: StickRenderRule<Item, H>, H: Hysteresis> {
 	rule: Rule,
@@ -90,19 +95,22 @@ impl<Item: RenderItem, Rule: StickRenderRule<Item, H> + FromScalarNoise, H: Hyst
 	}
 }
 
-/// Local transform: base at parent, +Y along the segment, `scale.y` = length.
+/// Local transform: centered at segment midpoint, +Y along the segment, `scale.y` = length.
 fn stick_transform(segment: &BallStickSegment<'_>) -> Option<Transform> {
 	let ray = segment.ray();
 	let len_sq = ray.length_squared();
+
 	if len_sq < 1e-12 {
 		return None;
 	}
+
 	let len = len_sq.sqrt();
 	let dir = ray / len;
 	let rotation = align_positive_y_to(dir);
 	let radius = segment.start.radius;
+
 	Some(Transform {
-		translation: segment.start.position,
+		translation: segment.start.position + ray * 0.5,
 		rotation,
 		scale: Vec3::new(radius, len, radius),
 	})

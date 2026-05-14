@@ -36,6 +36,9 @@ impl StartFlairUp {
 							inner.incoming_ray,
 						)
 						.with_ray_degrees_of_freedom(dof * 0.35)
+						.with_radius_range(0.11..0.12)
+						.with_length(1.0..4.0)
+						.with_bias_blend(0.7)
 						.single_child(),
 				})
 			}

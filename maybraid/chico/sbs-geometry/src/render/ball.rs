@@ -18,7 +18,9 @@ pub struct BallRenderHelper<Item: RenderItem, Rule: BallRenderRule<Item, H>, H: 
 	__marker: PhantomData<Item>,
 }
 
-impl<Item: RenderItem, Rule: BallRenderRule<Item, H>, H: Hysteresis> BallRenderHelper<Item, Rule, H> {
+impl<Item: RenderItem, Rule: BallRenderRule<Item, H>, H: Hysteresis>
+	BallRenderHelper<Item, Rule, H>
+{
 	pub fn new(chain: BallStickChain<H>, rule: Rule) -> Self {
 		Self { chain, rule, __marker: PhantomData }
 	}
@@ -28,7 +30,11 @@ impl<Item: RenderItem, Rule: BallRenderRule<Item, H>, H: Hysteresis> BallRenderH
 			.nodes_with_hysteresis()
 			.filter_map(|(node, h)| {
 				self.rule.ball_render_item_for(node, h).map(|item| {
-					(item, Transform::from_translation(node.position))
+					(
+						item,
+						Transform::from_translation(node.position)
+							.with_scale(Vec3::splat(node.radius)),
+					)
 				})
 			})
 			.collect()
@@ -61,9 +67,7 @@ impl<Item: RenderItem, Rule: BallRenderRule<Item, H>, H: Hysteresis> RenderItem
 				item.spawn_render_items(
 					commands,
 					cascade_chunk,
-					Transform::from_translation(
-						transform.translation + inner_transform.translation,
-					),
+					inner_transform.mul_transform(transform),
 				)
 			})
 			.flatten()

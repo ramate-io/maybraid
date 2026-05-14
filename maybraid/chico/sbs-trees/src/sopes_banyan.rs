@@ -95,28 +95,15 @@ struct SopesBanyanBallRule {
 impl BallRenderRule<SopesBanyanBallItem, SopesBanyanHysteresis> for SopesBanyanBallRule {
 	fn ball_render_item_for(
 		&self,
-		node: &BallStickNode,
-		hysteresis: &SopesBanyanHysteresis,
+		_node: &BallStickNode,
+		_hysteresis: &SopesBanyanHysteresis,
 	) -> Option<SopesBanyanBallItem> {
-		if hysteresis.active_branch_profile().is_some_and(|b| b.bias_ray.y < -0.8) {
-			return None;
-		}
-		let seed = 0.0;
-		if node.position.y > 0.6 * hysteresis.segment_depth_hint() as f32 {
-			Some(SopesBanyanBallItem::Plane(PlaneSplay::from_scalar(
-				seed,
-				self.frequency,
-				self.amplitude,
-				self.octaves,
-			)))
-		} else {
-			Some(SopesBanyanBallItem::Chico(ChicoBall::from_scalar(
-				seed,
-				self.frequency,
-				self.amplitude,
-				self.octaves,
-			)))
-		}
+		Some(SopesBanyanBallItem::Chico(ChicoBall::from_scalar(
+			0.0,
+			self.frequency,
+			self.amplitude,
+			self.octaves,
+		)))
 	}
 }
 
