@@ -9,9 +9,27 @@
 pub mod sopes_banyan;
 pub mod strict_stalk;
 
-use crate::Hysteresis;
+use crate::{BallStickChain, Hysteresis};
 
 /// Produces seed hysteresis for one [`BallStickChain::build`] call (one state per chain arm).
 pub trait Anchors<T: Hysteresis> {
 	fn anchors(&self) -> Vec<T>;
+}
+
+/// Common workflow for builders that emit hysteresis seeds for one ball-stick chain.
+pub trait AnchorsToChain<T: Hysteresis>: Anchors<T> {
+	fn build_chain(&self) -> BallStickChain<T> {
+		BallStickChain::build(self.anchors())
+	}
+
+	fn chains(&self) -> Vec<BallStickChain<T>> {
+		vec![self.build_chain()]
+	}
+}
+
+impl<A, T> AnchorsToChain<T> for A
+where
+	A: Anchors<T>,
+	T: Hysteresis,
+{
 }

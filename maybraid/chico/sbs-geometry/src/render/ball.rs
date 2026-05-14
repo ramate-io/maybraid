@@ -1,11 +1,38 @@
 use crate::{BallStickChain, BallStickNode, Hysteresis};
 use bevy::prelude::*;
-use procedural_common::FromScalarNoise;
+use procedural_common::{FromScalarNoise, ScalarNoiseParams};
 use render_item::{CascadeChunk, RenderItem};
 use std::marker::PhantomData;
 
 pub trait BallRenderRule<R: RenderItem, H: Hysteresis>: Clone {
 	fn ball_render_item_for(&self, node: &BallStickNode, hysteresis: &H) -> Option<R>;
+}
+
+#[derive(Clone)]
+pub struct AlwaysBallRenderRule<Item> {
+	item: Item,
+}
+
+impl<Item> AlwaysBallRenderRule<Item> {
+	pub fn new(item: Item) -> Self {
+		Self { item }
+	}
+}
+
+impl<Item: FromScalarNoise> AlwaysBallRenderRule<Item> {
+	pub fn from_scalar_noise(params: ScalarNoiseParams) -> Self {
+		Self::new(params.build())
+	}
+}
+
+impl<Item, H> BallRenderRule<Item, H> for AlwaysBallRenderRule<Item>
+where
+	Item: RenderItem + Clone,
+	H: Hysteresis,
+{
+	fn ball_render_item_for(&self, _node: &BallStickNode, _hysteresis: &H) -> Option<Item> {
+		Some(self.item.clone())
+	}
 }
 
 /// A useful common helper for rendering balls.
