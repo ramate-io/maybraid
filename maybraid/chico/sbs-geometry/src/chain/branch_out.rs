@@ -28,6 +28,9 @@ pub struct BranchOut {
 	pub child_count: Range<usize>,
 	/// Half-open range for noisy radius at each child joint.
 	pub radius_range: Range<f32>,
+	/// Multipliers for the next hysteresis step: child [`Self::radius_range`] is
+	/// `(parent.start * .0)..(parent.end * .1)`.
+	pub radius_range_child_scale: (f32, f32),
 	/// Half-open range for noisy segment length toward each child.
 	pub length: Range<f32>,
 	/// Degrees of freedom for noisy ray direction.
@@ -48,6 +51,7 @@ impl Default for BranchOut {
 			incoming_ray: Vec3::Y,
 			child_count: 1..3,
 			radius_range: 0.05..0.2,
+			radius_range_child_scale: (1.0, 1.0),
 			length: 0.2..0.5,
 			ray_degrees_of_freedom: 0.14,
 			bias_ray: Vec3::Y,
@@ -65,6 +69,7 @@ impl BranchOut {
 			incoming_ray: Vec3::Y,
 			child_count: 1..3,
 			radius_range: 0.05..0.2,
+			radius_range_child_scale: (1.0, 1.0),
 			length: 0.2..0.5,
 			ray_degrees_of_freedom: 0.14,
 			bias_ray: Vec3::Y,
@@ -77,6 +82,11 @@ impl BranchOut {
 		self
 	}
 
+	pub fn with_radius_range_child_scale(mut self, radius_range_child_scale: (f32, f32)) -> Self {
+		self.radius_range_child_scale = radius_range_child_scale;
+		self
+	}
+
 	pub fn down(node: BallStickNode) -> Self {
 		Self {
 			node,
@@ -85,6 +95,7 @@ impl BranchOut {
 			incoming_ray: -Vec3::Y,
 			child_count: 1..3,
 			radius_range: 0.05..0.2,
+			radius_range_child_scale: (1.0, 1.0),
 			length: 0.2..0.5,
 			ray_degrees_of_freedom: 0.14,
 			bias_ray: -Vec3::Y,
@@ -104,6 +115,7 @@ impl BranchOut {
 			incoming_ray: radial,
 			child_count: 1..4,
 			radius_range: 0.05..0.2,
+			radius_range_child_scale: (1.0, 1.0),
 			length: 0.2..0.5,
 			ray_degrees_of_freedom: 0.08,
 			bias_ray: radial,
@@ -173,13 +185,17 @@ impl BranchOut {
 					self.sample_child_radius(&self.noise, &parent, self.segment_index, ci as u32);
 				let child_node = BallStickNode::new(parent.position + ray, rad);
 				let inc = child_node.position - parent.position;
+				let (s_lo, s_hi) = self.radius_range_child_scale;
+				let rr = &self.radius_range;
+				let child_radius_range = (rr.start * s_lo)..(rr.end * s_hi);
 				Self {
 					node: child_node,
 					noise: self.noise.clone(),
 					segment_index: self.segment_index + 1,
 					incoming_ray: inc,
 					child_count: self.child_count.clone(),
-					radius_range: self.radius_range.clone(),
+					radius_range: child_radius_range,
+					radius_range_child_scale: self.radius_range_child_scale,
 					length: self.length.clone(),
 					ray_degrees_of_freedom: self.ray_degrees_of_freedom,
 					bias_ray: self.bias_ray,

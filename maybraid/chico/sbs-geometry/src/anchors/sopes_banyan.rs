@@ -158,7 +158,8 @@ impl SopesBanyanAnchors {
 					phase: SopesBanyanPhase::BranchOut(DepthBudget {
 						inner: BranchOut::radial_out_horizontal(seed_node, radial)
 							.with_hysteresis_context(noise, 0, radial)
-							.with_radius_range(0.05..0.2)
+							.with_radius_range(0.19..0.2)
+							.with_radius_range_child_scale((0.8, 0.9))
 							.with_child_count(1..5)
 							.with_ray_degrees_of_freedom(0.2),
 						remaining: max_depth,
