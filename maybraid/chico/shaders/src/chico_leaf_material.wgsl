@@ -1,7 +1,8 @@
 //---------------------------------------------------------
-// Chico canopy leaf: stylized UV noise silhouettes + PBR lighting.
-// Adapted from `playgrounds/objects/assets/shaders/leaf_material.wgsl`.
+// Chico canopy leaf: opaque world-space volumetric canopy
+// breakup + fake surface bumping + PBR lighting.
 //---------------------------------------------------------
+
 #import bevy_pbr::{
     forward_io::VertexOutput,
     mesh_view_bindings::view,
@@ -11,103 +12,180 @@
 }
 #import bevy_core_pipeline::tonemapping::tone_mapping
 
-
 @group(#{MATERIAL_BIND_GROUP}) @binding(0)
 var<uniform> base_color: vec4<f32>;
 
+// --------------------------------------------------------
+// Hash / noise
+// --------------------------------------------------------
 
-fn hash22(p: vec2<f32>) -> vec2<f32> {
-    let p3 = fract(vec3<f32>(p.xyx) * vec3<f32>(0.1031, 0.1030, 0.0973));
-    let dot_val = dot(p3, p3 + 33.33);
-    let p3_xy = vec2<f32>(p3.x, p3.y);
-    let p3_yz = vec2<f32>(p3.y, p3.z);
-    return fract((p3_xy + p3_yz) * vec2<f32>(dot_val, dot_val * 1.618));
+fn hash13(p: vec3<f32>) -> f32 {
+    let p3 = fract(p * vec3<f32>(0.1031, 0.1030, 0.0973));
+    let d = dot(p3, p3.yzx + vec3<f32>(33.33, 33.33, 33.33));
+    return fract((p3.x + p3.y) * p3.z + d);
 }
 
-fn grad(p: vec2<f32>) -> vec2<f32> {
-    let h = hash22(p);
-    let angle = h.x * 6.28318;
-    return vec2<f32>(cos(angle), sin(angle));
-}
-
-fn perlin_noise(p: vec2<f32>) -> f32 {
+fn value_noise_3d(p: vec3<f32>) -> f32 {
     let i = floor(p);
-    var f = fract(p);
+    let f0 = fract(p);
+    let f = f0 * f0 * (vec3<f32>(3.0, 3.0, 3.0) - 2.0 * f0);
 
-    f = f * f * (3.0 - 2.0 * f);
+    let n000 = hash13(i + vec3<f32>(0.0, 0.0, 0.0));
+    let n100 = hash13(i + vec3<f32>(1.0, 0.0, 0.0));
+    let n010 = hash13(i + vec3<f32>(0.0, 1.0, 0.0));
+    let n110 = hash13(i + vec3<f32>(1.0, 1.0, 0.0));
 
-    let g00 = grad(i);
-    let g10 = grad(i + vec2<f32>(1.0, 0.0));
-    let g01 = grad(i + vec2<f32>(0.0, 1.0));
-    let g11 = grad(i + vec2<f32>(1.0, 1.0));
+    let n001 = hash13(i + vec3<f32>(0.0, 0.0, 1.0));
+    let n101 = hash13(i + vec3<f32>(1.0, 0.0, 1.0));
+    let n011 = hash13(i + vec3<f32>(0.0, 1.0, 1.0));
+    let n111 = hash13(i + vec3<f32>(1.0, 1.0, 1.0));
 
-    let d00 = f;
-    let d10 = f - vec2<f32>(1.0, 0.0);
-    let d01 = f - vec2<f32>(0.0, 1.0);
-    let d11 = f - vec2<f32>(1.0, 1.0);
+    let nx00 = mix(n000, n100, f.x);
+    let nx10 = mix(n010, n110, f.x);
+    let nx01 = mix(n001, n101, f.x);
+    let nx11 = mix(n011, n111, f.x);
 
-    let n00 = dot(g00, d00);
-    let n10 = dot(g10, d10);
-    let n01 = dot(g01, d01);
-    let n11 = dot(g11, d11);
+    let nxy0 = mix(nx00, nx10, f.y);
+    let nxy1 = mix(nx01, nx11, f.y);
 
-    let nx0 = mix(n00, n10, f.x);
-    let nx1 = mix(n01, n11, f.x);
-    return mix(nx0, nx1, f.y);
+    return mix(nxy0, nxy1, f.z);
 }
 
-fn fractal_noise(p: vec2<f32>) -> f32 {
+fn fbm_3d(p: vec3<f32>) -> f32 {
     var value = 0.0;
     var amplitude = 0.5;
-    var frequency = 10.0;
+    var frequency = 1.0;
+    var norm = 0.0;
 
     for (var i = 0; i < 5; i++) {
-        value += perlin_noise(p * frequency) * amplitude;
-        frequency *= 2.0;
+        value += value_noise_3d(p * frequency) * amplitude;
+        norm += amplitude;
+        frequency *= 2.03;
         amplitude *= 0.5;
     }
 
-    return value * 0.5 + 0.5;
+    return value / norm;
 }
 
+fn ridged_3d(p: vec3<f32>) -> f32 {
+    let n = fbm_3d(p);
+    return 1.0 - abs(n * 2.0 - 1.0);
+}
+
+// --------------------------------------------------------
+// Fragment
+// --------------------------------------------------------
 
 @fragment
 fn fragment(
     @builtin(front_facing) is_front: bool,
-    mesh: VertexOutput
+    mesh: VertexOutput,
 ) -> @location(0) vec4<f32> {
+    var pbr_input: PbrInput = pbr_input_new();
 
-    let noise_scale = 6.0;
-    let noise_value = fractal_noise(mesh.world_position.xz * noise_scale);
+    let world_pos = vec3<f32>(
+        mesh.world_position.x,
+        mesh.world_position.y,
+        mesh.world_position.z,
+    );
 
-    let threshold = 0.54;
+    // ----------------------------------------------------
+    // World-space canopy silhouette breakup
+    // ----------------------------------------------------
 
-    let alpha = step(threshold, noise_value);
+    let coarse = fbm_3d(world_pos * 0.85);
+    let medium = fbm_3d(world_pos * 2.25);
+    let fine = fbm_3d(world_pos * 7.50);
+    let ridge = ridged_3d(world_pos * 3.25);
 
-    if (alpha < 0.001) {
+    let canopy_field =
+        coarse * 0.48 +
+        medium * 0.27 +
+        fine * 0.15 +
+        ridge * 0.10;
+
+    let threshold = 0.58;
+
+    if (canopy_field < threshold) {
         discard;
     }
 
-    var pbr_input: PbrInput = pbr_input_new();
+    // ----------------------------------------------------
+    // Color variation
+    // ----------------------------------------------------
 
-    pbr_input.material.base_color = base_color;
+    let tint_noise = fbm_3d(world_pos * 1.75);
+    let speckle = fbm_3d(world_pos * 12.0);
 
-    let double_sided = (pbr_input.material.flags & STANDARD_MATERIAL_FLAGS_DOUBLE_SIDED_BIT) != 0u;
+    let warm_cool = mix(
+        vec3<f32>(0.82, 0.95, 0.72),
+        vec3<f32>(1.12, 1.04, 0.78),
+        tint_noise,
+    );
+
+    let brightness = mix(0.78, 1.18, speckle);
+
+    let base_rgb = vec3<f32>(
+        base_color.x,
+        base_color.y,
+        base_color.z,
+    );
+
+    pbr_input.material.base_color = vec4<f32>(
+        base_rgb * warm_cool * brightness,
+        1.0,
+    );
+
+    // ----------------------------------------------------
+    // PBR setup
+    // ----------------------------------------------------
+
+    let double_sided =
+        (pbr_input.material.flags & STANDARD_MATERIAL_FLAGS_DOUBLE_SIDED_BIT) != 0u;
 
     pbr_input.frag_coord = mesh.position;
     pbr_input.world_position = mesh.world_position;
-    pbr_input.world_normal = fns::prepare_world_normal(
+    pbr_input.is_orthographic = view.clip_from_view[3].w == 1.0;
+    pbr_input.V = fns::calculate_view(mesh.world_position, pbr_input.is_orthographic);
+
+    let prepared_normal_raw = fns::prepare_world_normal(
         mesh.world_normal,
         double_sided,
         is_front,
     );
-    pbr_input.is_orthographic = view.clip_from_view[3].w == 1.0;
-    pbr_input.N = normalize(pbr_input.world_normal);
-    pbr_input.V = fns::calculate_view(mesh.world_position, pbr_input.is_orthographic);
+
+    let prepared_normal = vec3<f32>(
+        prepared_normal_raw.x,
+        prepared_normal_raw.y,
+        prepared_normal_raw.z,
+    );
+
+    // ----------------------------------------------------
+    // Fake world-space bump
+    // ----------------------------------------------------
+
+    let bump_scale = 5.0;
+    let eps = 0.055;
+
+    let bp = world_pos * bump_scale;
+    let b0 = fbm_3d(bp);
+    let bx = fbm_3d(bp + vec3<f32>(eps, 0.0, 0.0));
+    let by = fbm_3d(bp + vec3<f32>(0.0, eps, 0.0));
+    let bz = fbm_3d(bp + vec3<f32>(0.0, 0.0, eps));
+
+    let bump_gradient = normalize(vec3<f32>(
+        bx - b0,
+        by - b0,
+        bz - b0,
+    ));
+
+    let bump_strength = 0.16;
+    let bumped_normal = normalize(prepared_normal + bump_gradient * bump_strength);
+
+    pbr_input.world_normal = bumped_normal;
+    pbr_input.N = bumped_normal;
 
     let lit_color = fns::apply_pbr_lighting(pbr_input);
 
-    let output_color = vec4<f32>(lit_color.rgb, base_color.a * alpha);
-
-    return tone_mapping(output_color, view.color_grading);
+    return tone_mapping(vec4<f32>(lit_color.rgb, 1.0), view.color_grading);
 }
