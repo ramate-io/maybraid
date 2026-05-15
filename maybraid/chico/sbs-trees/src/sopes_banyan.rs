@@ -7,7 +7,7 @@
 //! # Rendering split
 //!
 //! - **Stick material** — [`ChicoStick`] segments plus [`ChicoBall`] markers at **internal joints** (nodes with at least one child edge): bark-colored joints between sticks.
-//! - **Leaf material** — At terminals above the crown floor: **[`ChicoBall`]** (noisy sphere) or **[`PlaneSplay`](chico_ball_components::plane_splay::PlaneSplay)** (radial blade meshes), selected per-node for silhouette variegation; uniform scale uses [`Self::leaf_ball_radius_scale`] / [`BallStickNode::radius`].
+//! - **Leaf material** — At terminals above the crown floor: **[`ChicoBall`]** (noisy sphere) or **[`PlaneSplay`](chico_ball_components::plane_splay::PlaneSplay)** (radial blade meshes), selected per-node for silhouette variegation; uniform scale uses [`SopesBanyanSbs::leaf_ball_size`] (from [`SopesBanyan::geometry`]) / [`BallStickNode::radius`].
 //!
 //! # Playground / CLI
 //!
@@ -65,11 +65,6 @@ where
 	#[command(flatten, next_help_heading = "Leaf Material")]
 	pub leaf_material: LeafS,
 
-	/// Uniform scale on [`chico_sbs_geometry::BallStickNode::radius`] for terminal canopy (noisy ball or plane splay root); joint balls stay at `1.0`.
-	#[arg(long, default_value_t = 6.0)]
-	#[arg(help_heading = "Canopy")]
-	pub leaf_ball_radius_scale: f32,
-
 	/// Stick surface noise as `seed,frequency,amplitude,octaves`.
 	#[arg(
 		long,
@@ -106,7 +101,6 @@ where
 			geometry: SopesBanyanSbs::default(),
 			stick_material: StickS::default(),
 			leaf_material: LeafS::default(),
-			leaf_ball_radius_scale: 6.0,
 			stick_surface_noise: NoiseParams::from_scalar(0.0, 1.0, 0.05, 1),
 			leaf_surface_noise: NoiseParams::from_scalar(0.0, 1.0, 0.05, 1),
 			__marker: PhantomData,
@@ -168,11 +162,10 @@ where
 		let mut leaf_splay = PlaneSplay::<LeafM, LeafS>::default();
 		leaf_splay.material = self.leaf_material.clone();
 		let leaf_rule = SopesBanyanLeafCanopyRule {
-			min_height: self.geometry.scale.base_anchor.y
-				+ self.geometry.scale.stalk_height * self.geometry.rings.height_range.start,
+			min_height: self.geometry.crown_floor_world_y(),
 			leaf_ball,
 			leaf_splay,
-			leaf_radius_world: self.leaf_ball_radius_scale,
+			leaf_radius_world: self.geometry.leaf_ball_size(),
 		};
 
 		out.extend(BallRenderHelper::new(chain, leaf_rule).spawn_render_items(

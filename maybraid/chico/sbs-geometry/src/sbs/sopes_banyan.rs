@@ -3,9 +3,10 @@
 use bevy_math::Vec3;
 #[cfg(any(feature = "clap", test))]
 use procedural_common::{
-	noise_params_from_scalar_str, parse_count_pair as parse_ring_layout, parse_unit_range,
-	parse_usize_range as parse_depth_range,
+	parse_count_pair as parse_ring_layout, parse_unit_range, parse_usize_range as parse_depth_range,
 };
+#[cfg(feature = "clap")]
+use procedural_common::noise_params_from_scalar_str;
 use procedural_common::{
 	CountPair as RingLayout, NoiseConfig, NoiseParams, SetNoiseParams, UnitRange,
 	UsizeRange as DepthRange,
@@ -248,6 +249,12 @@ pub struct SopesBanyanSbs {
 	/// Chain depth and descender controls.
 	#[cfg_attr(feature = "clap", command(flatten, next_help_heading = "Growth"))]
 	pub growth: CanopyGrowthParams,
+	/// Dimensionless terminal leaf scale; world radius from [`Self::leaf_ball_size`].
+	#[cfg_attr(
+		feature = "clap",
+		arg(long, default_value_t = 0.15, help_heading = "Terminal canopy")
+	)]
+	pub leaf_ball_factor: f32,
 	/// Perturbation applied to non-stalk anchors after deterministic ring generation.
 	#[cfg_attr(feature = "clap", command(flatten, next_help_heading = "Anchor Perturbation"))]
 	pub anchor_perturbation: AnchorPerturbationParams,
@@ -263,6 +270,7 @@ impl Default for SopesBanyanSbs {
 			rings: RingAnchorParams::default(),
 			projection: VaseProjectionParams::default(),
 			growth: CanopyGrowthParams::default(),
+			leaf_ball_factor: 0.15,
 			anchor_perturbation: AnchorPerturbationParams::default(),
 			canopy_noise: NoiseParams::default(),
 		}
@@ -270,6 +278,25 @@ impl Default for SopesBanyanSbs {
 }
 
 impl SopesBanyanSbs {
+	/// World `y` of the crown floor (first ring height), matching terminal foliage cut-in for render.
+	pub fn crown_floor_world_y(&self) -> f32 {
+		self.scale.base_anchor.y + self.scale.stalk_height * self.rings.height_range.start
+	}
+
+	/// Suggested world-space radius for terminal leaf balls / splays (uniform scale numerator = this / [`crate::BallStickNode::radius`]).
+	///
+	/// Uses `leaf_ball_factor × canopy_height` and a fixed in-crown height weight (smoothstep) so the same factor stays in a sensible range when [`SopesBanyanScale::canopy_height`] changes.
+	pub fn leaf_ball_size(&self) -> f32 {
+		const HEIGHT_WEIGHT_FLOOR: f32 = 0.42;
+		/// Normalized height above the crown floor at which the height weight is evaluated.
+		const REPRESENTATIVE_CANOPY_U: f32 = 0.6;
+		let span = self.scale.canopy_height.max(1e-3);
+		let u = REPRESENTATIVE_CANOPY_U.clamp(0.0, 1.0);
+		let g = u * u * (3.0 - 2.0 * u);
+		let height_weight = HEIGHT_WEIGHT_FLOOR + (1.0 - HEIGHT_WEIGHT_FLOOR) * g;
+		self.leaf_ball_factor * span * height_weight
+	}
+
 	/// Full anchor recipe (stalk + rings); chain noise is applied when emitting seeds.
 	pub fn to_anchors(&self) -> SopesBanyanAnchors {
 		SopesBanyanAnchors::new(SopesBanyanProtoAnchors {
@@ -333,7 +360,7 @@ mod tests {
 		);
 		assert_eq!(
 			parse_depth_range("4..6").map_err(|e| anyhow::anyhow!("{e}"))?,
-			DepthRange::new(4, 8)
+			DepthRange::new(4, 6)
 		);
 		Ok(())
 	}
@@ -387,5 +414,27 @@ mod tests {
 		let params = NoiseParams { seed: 99, ..Default::default() };
 		let sbs = SopesBanyanSbs::default().with_noise_params(params);
 		assert_eq!(sbs.canopy_noise.seed, 99);
+	}
+
+	#[test]
+	fn leaf_ball_size_scales_with_canopy_height() {
+		let low = SopesBanyanSbs {
+			scale: SopesBanyanScale {
+				canopy_height: 20.0,
+				..Default::default()
+			},
+			leaf_ball_factor: 0.2,
+			..Default::default()
+		};
+		let high = SopesBanyanSbs {
+			scale: SopesBanyanScale {
+				canopy_height: 40.0,
+				..Default::default()
+			},
+			leaf_ball_factor: 0.2,
+			..Default::default()
+		};
+		assert!(low.leaf_ball_size() > 0.0);
+		assert!(high.leaf_ball_size() > low.leaf_ball_size());
 	}
 }

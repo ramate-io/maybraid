@@ -79,7 +79,7 @@ mod tests {
 		);
 		assert_eq!(
 			parse_usize_range("4..6").map_err(|e| anyhow::anyhow!("{e}"))?,
-			UsizeRange::new(4, 8)
+			UsizeRange::new(4, 6)
 		);
 		Ok(())
 	}
