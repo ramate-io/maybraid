@@ -20,8 +20,7 @@ impl<H: Hysteresis> Hysteresis for DepthBudget<H> {
 		if self.remaining == 0 {
 			return Vec::new();
 		}
-		self
-			.inner
+		self.inner
 			.next_hysteresis()
 			.into_iter()
 			.map(|inner| Self { inner, remaining: self.remaining.saturating_sub(1) })
