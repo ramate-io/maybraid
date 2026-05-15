@@ -66,7 +66,7 @@ where
 	pub leaf_material: LeafS,
 
 	/// Uniform scale on [`chico_sbs_geometry::BallStickNode::radius`] for terminal canopy (noisy ball or plane splay root); joint balls stay at `1.0`.
-	#[arg(long, default_value_t = 2.0)]
+	#[arg(long, default_value_t = 6.0)]
 	#[arg(help_heading = "Canopy")]
 	pub leaf_ball_radius_scale: f32,
 
@@ -106,7 +106,7 @@ where
 			geometry: SopesBanyanSbs::default(),
 			stick_material: StickS::default(),
 			leaf_material: LeafS::default(),
-			leaf_ball_radius_scale: 8.0,
+			leaf_ball_radius_scale: 6.0,
 			stick_surface_noise: NoiseParams::from_scalar(0.0, 1.0, 0.05, 1),
 			leaf_surface_noise: NoiseParams::from_scalar(0.0, 1.0, 0.05, 1),
 			__marker: PhantomData,
@@ -175,13 +175,11 @@ where
 			leaf_radius_world: self.leaf_ball_radius_scale,
 		};
 
-		out.extend(
-			BallRenderHelper::new(chain, leaf_rule).spawn_render_items(
-				commands,
-				cascade_chunk,
-				transform,
-			),
-		);
+		out.extend(BallRenderHelper::new(chain, leaf_rule).spawn_render_items(
+			commands,
+			cascade_chunk,
+			transform,
+		));
 
 		out
 	}
