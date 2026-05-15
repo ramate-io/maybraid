@@ -10,7 +10,7 @@ use procedural_common::{
 	UsizeRange as DepthRange,
 };
 
-use crate::anchors::sopes_banyan::SopesBanyanAnchors;
+use crate::anchors::sopes_banyan::{SopesBanyanAnchors, SopesBanyanProtoAnchors};
 use crate::anchors::strict_stalk::StrictStalk;
 use crate::anchors::{Anchors, AnchorsToChain};
 use crate::{BallStickChain, SopesBanyanChain};
@@ -193,7 +193,7 @@ impl Default for SopesBanyanSbs {
 impl SopesBanyanSbs {
 	/// Full anchor recipe (stalk + rings); chain noise is applied when emitting seeds.
 	pub fn to_anchors(&self) -> SopesBanyanAnchors {
-		SopesBanyanAnchors {
+		SopesBanyanAnchors::new(SopesBanyanProtoAnchors {
 			stalk: self.scale.to_stalk(),
 			descender_threshold: self.growth.descender_threshold,
 			first_ring_unit_height: self.rings.height_range.start,
@@ -206,7 +206,7 @@ impl SopesBanyanSbs {
 			projection_center_fraction: self.projection.center_fraction,
 			max_depth_first_ring: self.growth.depth.start,
 			max_depth_last_ring: self.growth.depth.end,
-		}
+		})
 	}
 
 	/// Canopy [`SopesBanyanChain`] seeds using this struct's shared [`NoiseParams`].
@@ -262,22 +262,23 @@ mod tests {
 	fn default_frontend_converts_to_anchor_recipe() {
 		let sbs = SopesBanyanSbs::default();
 		let anchors = sbs.to_anchors();
+		let proto = anchors.proto();
 
-		assert_eq!(anchors.stalk, sbs.scale.to_stalk());
-		assert_eq!(anchors.ring_count, sbs.rings.layout.first);
-		assert_eq!(anchors.anchors_per_ring, sbs.rings.layout.second);
-		assert_eq!(anchors.first_ring_unit_height, sbs.rings.height_range.start);
-		assert_eq!(anchors.last_ring_unit_height, sbs.rings.height_range.end);
+		assert_eq!(proto.stalk, sbs.scale.to_stalk());
+		assert_eq!(proto.ring_count, sbs.rings.layout.first);
+		assert_eq!(proto.anchors_per_ring, sbs.rings.layout.second);
+		assert_eq!(proto.first_ring_unit_height, sbs.rings.height_range.start);
+		assert_eq!(proto.last_ring_unit_height, sbs.rings.height_range.end);
 		assert_eq!(
-			anchors.projection_min_fraction_of_height,
+			proto.projection_min_fraction_of_height,
 			sbs.projection.length_fraction_of_height.start
 		);
 		assert_eq!(
-			anchors.projection_max_fraction_of_height,
+			proto.projection_max_fraction_of_height,
 			sbs.projection.length_fraction_of_height.end
 		);
-		assert_eq!(anchors.max_depth_first_ring, sbs.growth.depth.start);
-		assert_eq!(anchors.max_depth_last_ring, sbs.growth.depth.end);
+		assert_eq!(proto.max_depth_first_ring, sbs.growth.depth.start);
+		assert_eq!(proto.max_depth_last_ring, sbs.growth.depth.end);
 	}
 
 	#[test]
@@ -292,7 +293,7 @@ mod tests {
 		};
 		let seeds = sbs.hysteresis_seeds();
 
-		assert_eq!(sbs.to_anchors().stalk.stalk_height, 12.0);
+		assert_eq!(sbs.to_anchors().proto().stalk.stalk_height, 12.0);
 		assert!(seeds.iter().all(|seed| seed.banyan_height == 30.0));
 	}
 

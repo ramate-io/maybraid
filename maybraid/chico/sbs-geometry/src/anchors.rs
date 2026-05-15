@@ -7,6 +7,7 @@
 //! Downstream [`Hysteresis`] implementations (e.g. Sope's Banyan) then grow branches from those seeds via [`Hysteresis::next_hysteresis`].
 
 pub mod sopes_banyan;
+pub mod stalk_perturbation;
 pub mod strict_stalk;
 
 use crate::{BallStickChain, Hysteresis};

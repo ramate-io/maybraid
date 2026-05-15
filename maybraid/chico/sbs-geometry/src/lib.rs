@@ -11,7 +11,10 @@ pub use chain::{
 
 pub mod anchors;
 
-pub use anchors::sopes_banyan::SopesBanyanAnchors;
+pub use anchors::sopes_banyan::{SopesBanyanAnchors, SopesBanyanProtoAnchors};
+pub use anchors::stalk_perturbation::{
+	AnchorPerturbation, HasStrictStalk, PerturbAnchor, StalkPerturbation,
+};
 pub use anchors::strict_stalk::StrictStalk;
 pub use anchors::{Anchors, AnchorsToChain};
 pub use sbs::sopes_banyan::SopesBanyanSbs;

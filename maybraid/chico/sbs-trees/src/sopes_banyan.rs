@@ -106,7 +106,8 @@ impl RenderItem for SopesBanyan {
 			transform,
 		);
 
-		let ball_rule = AlwaysBallRenderRule::<ChicoBall>::from_noise_params(self.ball_surface_noise);
+		let ball_rule =
+			AlwaysBallRenderRule::<ChicoBall>::from_noise_params(self.ball_surface_noise);
 		out.extend(BallRenderHelper::new(chain, ball_rule).spawn_render_items(
 			commands,
 			cascade_chunk,
