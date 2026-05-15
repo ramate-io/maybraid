@@ -139,7 +139,9 @@ pub fn enforce_caching<
 		let mesh_handle = MeshHandle::new(cached.builder.clone())
 			.with_handle_cache(enforced_caches.handle_map.clone())
 			.with_mesh_cache(enforced_caches.disk_cache.clone());
-		commands.entity(entity).insert(MeshDispatch::new(mesh_handle));
+		commands
+			.entity(entity)
+			.insert((MeshDispatch::new(mesh_handle), Visibility::default()));
 	}
 }
 impl<T: MeshBuilder + IdentifiedMesh + Clone + Send + Sync + 'static, M: Material> Plugin

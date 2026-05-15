@@ -181,7 +181,6 @@ impl BranchOut {
 	fn expand_children(&self) -> Vec<BranchOut> {
 		let parent = self.node;
 		let n = self.sample_child_count(&self.noise, &parent, self.segment_index);
-		log::info!("expanding children: {} {}", n, self.child_count.start);
 		(0..n)
 			.map(|ci| {
 				let ray = self.sample_ray(

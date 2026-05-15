@@ -71,9 +71,10 @@ impl StartDescender {
 			SopesBanyanPhase::BranchOut(budget) => {
 				let inner = &budget.inner;
 				let node = inner.node;
-				if noise.sample_unit_3d(node.position.x, node.position.y, node.position.z)
-					< descender_threshold
-				{
+				let sample =
+					noise.sample_unit_3d(node.position.x, node.position.y, node.position.z);
+				log::info!("descender sample: {}", sample);
+				if sample < descender_threshold {
 					let drop_len = (banyan_height * 2.0).max(inner.length.end);
 					SopesBanyanPhase::StartDescender(StartDescender {
 						projection: BranchOut::down(node)

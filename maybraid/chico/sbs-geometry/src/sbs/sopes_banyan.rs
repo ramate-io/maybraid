@@ -149,13 +149,13 @@ pub struct CanopyGrowthParams {
 	)]
 	pub depth: DepthRange,
 	/// Noise threshold below which branch candidates become descenders.
-	#[cfg_attr(feature = "clap", arg(long, default_value_t = 0.01))]
+	#[cfg_attr(feature = "clap", arg(long, default_value_t = 0.15))]
 	pub descender_threshold: f32,
 }
 
 impl Default for CanopyGrowthParams {
 	fn default() -> Self {
-		Self { depth: DepthRange::new(4, 8), descender_threshold: 0.01 }
+		Self { depth: DepthRange::new(4, 8), descender_threshold: 0.15 }
 	}
 }
 

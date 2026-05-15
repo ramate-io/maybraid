@@ -149,7 +149,7 @@ impl SopesBanyanProtoAnchors {
 				let seed_node = BallStickNode::new(pos, 0.1);
 				let noise = chain_noise.clone();
 				let mut h = SopesBanyanChain::new(
-					noise.clone(),
+					noise.clone().with_frequency(noise.params().frequency * 10.0),
 					banyan_height,
 					descender_threshold,
 					SopesBanyanPhase::BranchOut(DepthBudget {
@@ -158,8 +158,8 @@ impl SopesBanyanProtoAnchors {
 							.with_ball_radius(0.25)
 							.with_radius_range(0.24..0.28)
 							.with_radius_range_child_scale((0.9, 0.95))
-							.with_child_count(1..5)
-							.with_ray_degrees_of_freedom(0.2),
+							.with_child_count(1..2)
+							.with_ray_degrees_of_freedom(0.3),
 						remaining: max_depth,
 					}),
 				);

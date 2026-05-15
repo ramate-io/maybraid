@@ -157,6 +157,11 @@ impl NoiseConfig {
 		Self { generator, params }
 	}
 
+	pub fn with_frequency(mut self, frequency: f32) -> Self {
+		self.params.frequency = frequency;
+		self
+	}
+
 	pub fn params(&self) -> &NoiseParams {
 		&self.params
 	}
@@ -261,22 +266,21 @@ impl NoiseConfig {
 		lo + u * (hi - lo)
 	}
 
-	/// **[0, 1]** inputs mapped to **[-1, 1]** per axis before [`NoiseConfig::sample_1d`].
-	pub fn sample_unit_1d(&self, u: f32) -> f32 {
-		let x = u * 2.0 - 1.0;
-		self.sample_1d(x)
+	/// World-space input mapped to [0, 1] range.
+	pub fn sample_unit_1d(&self, x: f32) -> f32 {
+		(self.sample_1d(x) + 1.0) * 0.5
 	}
 
-	pub fn sample_unit_2d(&self, u: f32, v: f32) -> f32 {
-		self.sample_2d(u * 2.0 - 1.0, v * 2.0 - 1.0)
+	pub fn sample_unit_2d(&self, x: f32, y: f32) -> f32 {
+		(self.sample_2d(x, y) + 1.0) * 0.5
 	}
 
-	pub fn sample_unit_3d(&self, u: f32, v: f32, w: f32) -> f32 {
-		self.sample_3d(u * 2.0 - 1.0, v * 2.0 - 1.0, w * 2.0 - 1.0)
+	pub fn sample_unit_3d(&self, x: f32, y: f32, z: f32) -> f32 {
+		(self.sample_3d(x, y, z) + 1.0) * 0.5
 	}
 
-	pub fn sample_unit_4d(&self, u: f32, v: f32, w: f32, t: f32) -> f32 {
-		self.sample_4d(u * 2.0 - 1.0, v * 2.0 - 1.0, w * 2.0 - 1.0, t * 2.0 - 1.0)
+	pub fn sample_unit_4d(&self, x: f32, y: f32, z: f32, w: f32) -> f32 {
+		(self.sample_4d(x, y, z, w) + 1.0) * 0.5
 	}
 }
 
