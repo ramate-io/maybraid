@@ -6,6 +6,7 @@ pub mod commands;
 mod ground;
 mod input;
 mod preview;
+mod preview_materials;
 mod startup;
 mod ui;
 
@@ -16,10 +17,11 @@ pub use startup::PendingStartupCommand;
 
 use bevy::prelude::*;
 use chico_sbs_trees::sopes_banyan::render_item_plugin::SopesBanyanRenderItemPlugin;
-use commands::root::react_playground_command_root;
+use commands::render::sopes_banyan::plugin::react_render_helper_sopes_banyan;
 use game_commands::ui::GameCommandUiPlugin;
 use ground::setup_ground;
 use preview::sync_tree_preview;
+use preview_materials::{setup_preview_tree_materials, sync_preview_tree_material_handles};
 use render_item::render_items;
 
 pub struct SbsTreesPlaygroundPlugin;
@@ -39,14 +41,20 @@ impl Plugin for SbsTreesPlaygroundPlugin {
 			.init_resource::<input::TextEntryFocus>()
 			.init_resource::<input::CommandConsoleOutput>()
 			.init_resource::<input::CommandHistory>()
-			.add_systems(Startup, (camera::setup_camera, setup_lighting, setup_ground))
+			.add_systems(
+				Startup,
+				(camera::setup_camera, setup_lighting, setup_ground, setup_preview_tree_materials),
+			)
 			.add_systems(
 				Update,
 				(
 					camera::camera_controller,
 					input::toggle_text_entry_focus,
 					input::capture_command_line_input,
-					sync_tree_preview.after(react_playground_command_root),
+					sync_preview_tree_material_handles
+						.after(react_render_helper_sopes_banyan)
+						.before(sync_tree_preview),
+					sync_tree_preview.after(sync_preview_tree_material_handles),
 					ui::update_debug_ui,
 					render_items::<chico_sbs_trees::sopes_banyan::SopesBanyanStd>,
 				),
