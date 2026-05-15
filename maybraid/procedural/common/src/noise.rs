@@ -292,44 +292,8 @@ pub trait SetNoiseParams {
 	fn with_noise_params(self, params: NoiseParams) -> Self;
 }
 
-/// Compact scalar-noise authoring group for render surfaces and other scalar seed lanes.
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct ScalarNoiseParams {
-	pub seed_scalar: f32,
-	pub frequency: f32,
-	pub amplitude: f32,
-	pub octaves: u32,
-}
-
-impl Default for ScalarNoiseParams {
-	fn default() -> Self {
-		Self { seed_scalar: 0.0, frequency: 1.0, amplitude: 1.0, octaves: 1 }
-	}
-}
-
-impl ScalarNoiseParams {
-	pub fn new(seed_scalar: f32, frequency: f32, amplitude: f32, octaves: u32) -> Self {
-		Self { seed_scalar, frequency, amplitude, octaves }
-	}
-
-	pub fn with_seed_scalar(mut self, seed_scalar: f32) -> Self {
-		self.seed_scalar = seed_scalar;
-		self
-	}
-
-	pub fn build<T: FromScalarNoise>(&self) -> T {
-		T::from_scalar(self.seed_scalar, self.frequency, self.amplitude, self.octaves)
-	}
-}
-
-impl FromScalarNoise for ScalarNoiseParams {
-	fn from_scalar(seed_scalar: f32, frequency: f32, amplitude: f32, octaves: u32) -> Self {
-		Self::new(seed_scalar, frequency, amplitude, octaves)
-	}
-}
-
-/// Parse `seed,frequency,amplitude,octaves` scalar noise tuples.
-pub fn scalar_noise_params_from_str(s: &str) -> Result<ScalarNoiseParams, String> {
+/// Parse compact `seed,frequency,amplitude,octaves` tuples into [`NoiseParams`].
+pub fn noise_params_from_scalar_str(s: &str) -> Result<NoiseParams, String> {
 	let parts: Vec<&str> = s.split(',').map(str::trim).filter(|p| !p.is_empty()).collect();
 	if parts.len() != 4 {
 		return Err(format!("expected seed,frequency,amplitude,octaves, got {s:?}"));
@@ -339,12 +303,23 @@ pub fn scalar_noise_params_from_str(s: &str) -> Result<ScalarNoiseParams, String
 	let frequency = parts[1].parse::<f32>().map_err(|e| e.to_string())?;
 	let amplitude = parts[2].parse::<f32>().map_err(|e| e.to_string())?;
 	let octaves = parts[3].parse::<u32>().map_err(|e| e.to_string())?;
-	Ok(ScalarNoiseParams::new(seed_scalar, frequency, amplitude, octaves))
+	Ok(NoiseParams::from_scalar(seed_scalar, frequency, amplitude, octaves))
 }
 
 impl FromScalarNoise for NoiseParams {
 	fn from_scalar(seed_scalar: f32, frequency: f32, amplitude: f32, octaves: u32) -> Self {
 		Self { seed: seed_scalar as i32, frequency, amplitude, octaves, ..Default::default() }
+	}
+}
+
+impl NoiseParams {
+	pub fn with_seed(mut self, seed: i32) -> Self {
+		self.seed = seed;
+		self
+	}
+
+	pub fn build_scalar<T: FromScalarNoise>(&self) -> T {
+		T::from_scalar(self.seed as f32, self.frequency, self.amplitude, self.octaves)
 	}
 }
 

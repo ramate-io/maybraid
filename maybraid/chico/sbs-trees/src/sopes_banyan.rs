@@ -17,43 +17,49 @@ use chico_sbs_geometry::render::stick::{StickRenderHelper, StickRenderRule};
 use chico_sbs_geometry::{BallStickChain, BallStickSegment, SopesBanyanChain, SopesBanyanSbs};
 use chico_stick_components::chico_stick::ChicoStick;
 #[cfg(feature = "clap")]
-use procedural_common::scalar_noise_params_from_str;
-use procedural_common::ScalarNoiseParams;
+use procedural_common::noise_params_from_scalar_str;
+use procedural_common::{FromScalarNoise, NoiseParams};
 use render_item::{CascadeChunk, RenderItem};
 
 #[derive(Clone)]
 #[cfg_attr(feature = "clap", derive(clap::Args))]
 #[cfg_attr(feature = "clap", command(rename_all = "kebab-case"))]
 pub struct SopesBanyan {
-	/// Stalk, rings, and canopy chain noise in one flattened group (no duplicate `NoiseParams` keys).
-	#[cfg_attr(feature = "clap", command(flatten))]
+	/// Scale, anchors, growth, and topology noise for the ball-stick geometry.
+	#[cfg_attr(feature = "clap", command(flatten, next_help_heading = "Geometry"))]
 	pub geometry: SopesBanyanSbs,
+	/// Stick surface noise as `seed,frequency,amplitude,octaves`.
 	#[cfg_attr(
 		feature = "clap",
 		arg(
 			long,
 			default_value = "0,1,0.05,1",
-			value_parser = scalar_noise_params_from_str
+			value_parser = noise_params_from_scalar_str,
+			value_name = "SEED,FREQUENCY,AMPLITUDE,OCTAVES",
+			help_heading = "Surface Noise"
 		)
 	)]
-	pub stick_surface_noise: ScalarNoiseParams,
+	pub stick_surface_noise: NoiseParams,
+	/// Ball surface noise as `seed,frequency,amplitude,octaves`.
 	#[cfg_attr(
 		feature = "clap",
 		arg(
 			long,
 			default_value = "0,1,0.05,1",
-			value_parser = scalar_noise_params_from_str
+			value_parser = noise_params_from_scalar_str,
+			value_name = "SEED,FREQUENCY,AMPLITUDE,OCTAVES",
+			help_heading = "Surface Noise"
 		)
 	)]
-	pub ball_surface_noise: ScalarNoiseParams,
+	pub ball_surface_noise: NoiseParams,
 }
 
 impl Default for SopesBanyan {
 	fn default() -> Self {
 		Self {
 			geometry: SopesBanyanSbs::default(),
-			stick_surface_noise: ScalarNoiseParams::new(0.0, 1.0, 0.05, 1),
-			ball_surface_noise: ScalarNoiseParams::new(0.0, 1.0, 0.05, 1),
+			stick_surface_noise: NoiseParams::from_scalar(0.0, 1.0, 0.05, 1),
+			ball_surface_noise: NoiseParams::from_scalar(0.0, 1.0, 0.05, 1),
 		}
 	}
 }
@@ -66,7 +72,7 @@ impl SopesBanyan {
 
 #[derive(Clone)]
 struct SopesBanyanStickRule {
-	surface_noise: ScalarNoiseParams,
+	surface_noise: NoiseParams,
 }
 
 impl StickRenderRule<ChicoStick, SopesBanyanChain> for SopesBanyanStickRule {
@@ -76,10 +82,10 @@ impl StickRenderRule<ChicoStick, SopesBanyanChain> for SopesBanyanStickRule {
 		_parent_hysteresis: &SopesBanyanChain,
 		_child_hysteresis: &SopesBanyanChain,
 	) -> Option<ChicoStick> {
-		let seed = self.surface_noise.seed_scalar
-			+ segment.start.position.length()
-			+ segment.end.position.length();
-		Some(self.surface_noise.with_seed_scalar(seed).build())
+		let seed = self.surface_noise.seed
+			+ segment.start.position.length() as i32
+			+ segment.end.position.length() as i32;
+		Some(self.surface_noise.with_seed(seed).build_scalar())
 	}
 }
 
@@ -100,8 +106,7 @@ impl RenderItem for SopesBanyan {
 			transform,
 		);
 
-		let ball_rule =
-			AlwaysBallRenderRule::<ChicoBall>::from_scalar_noise(self.ball_surface_noise);
+		let ball_rule = AlwaysBallRenderRule::<ChicoBall>::from_noise_params(self.ball_surface_noise);
 		out.extend(BallRenderHelper::new(chain, ball_rule).spawn_render_items(
 			commands,
 			cascade_chunk,

@@ -12,14 +12,16 @@ impl Plugin for SopesBanyanRenderPlugin {
 }
 
 pub fn react_render_helper_sopes_banyan(
+	mut commands: Commands,
 	mut config: ResMut<PreviewConfig>,
-	q: Query<&SopesBanyanRenderHelper, Added<SopesBanyanRenderHelper>>,
+	q: Query<(Entity, &SopesBanyanRenderHelper), Added<SopesBanyanRenderHelper>>,
 	render_q: Query<&Render, Added<Render>>,
 ) {
-	for helper in &q {
+	for (entity, helper) in &q {
 		config.tree = helper.inner.clone();
 		config.res_2 = helper.res_2;
 		config.transform = helper.preview_transform();
+		commands.entity(entity).despawn();
 	}
 	for render in &render_q {
 		let _ = render;

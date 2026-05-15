@@ -1,6 +1,6 @@
 use crate::{BallStickChain, BallStickNode, Hysteresis};
 use bevy::prelude::*;
-use procedural_common::{FromScalarNoise, ScalarNoiseParams};
+use procedural_common::{FromScalarNoise, NoiseParams};
 use render_item::{CascadeChunk, RenderItem};
 use std::marker::PhantomData;
 
@@ -20,8 +20,8 @@ impl<Item> AlwaysBallRenderRule<Item> {
 }
 
 impl<Item: FromScalarNoise> AlwaysBallRenderRule<Item> {
-	pub fn from_scalar_noise(params: ScalarNoiseParams) -> Self {
-		Self::new(params.build())
+	pub fn from_noise_params(params: NoiseParams) -> Self {
+		Self::new(params.build_scalar())
 	}
 }
 

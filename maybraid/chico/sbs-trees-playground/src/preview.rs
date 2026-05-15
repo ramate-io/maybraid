@@ -22,22 +22,16 @@ impl Default for PreviewConfig {
 	}
 }
 
-fn preview_sync_key(config: &PreviewConfig) -> String {
-	format!("{:?}|{}|{:?}", config.transform.translation, config.res_2, config.transform.scale)
-}
-
 /// Respawns preview whenever [`PreviewConfig`] changes.
 pub fn sync_tree_preview(
 	mut commands: Commands,
 	config: Res<PreviewConfig>,
-	mut synced: Local<Option<String>>,
 	root_q: Query<Entity, With<SbsPreviewRoot>>,
 	stick_q: Query<Entity, With<ChicoStick>>,
 	ball_q: Query<Entity, With<ChicoBall>>,
 	splay_q: Query<Entity, With<PlaneSplay>>,
 ) {
-	let key = preview_sync_key(&config);
-	if synced.as_deref() == Some(&key) {
+	if !config.is_changed() {
 		return;
 	}
 
@@ -53,8 +47,6 @@ pub fn sync_tree_preview(
 	for e in splay_q.iter() {
 		commands.entity(e).despawn();
 	}
-
-	*synced = Some(key);
 
 	commands.spawn((
 		SbsPreviewRoot,

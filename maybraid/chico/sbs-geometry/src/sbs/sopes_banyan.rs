@@ -20,15 +20,24 @@ use crate::{BallStickChain, SopesBanyanChain};
 #[cfg_attr(feature = "clap", derive(clap::Args))]
 #[cfg_attr(feature = "clap", command(rename_all = "kebab-case"))]
 pub struct SopesBanyanScale {
+	/// Height of the strict vertical stalk in world units.
 	#[cfg_attr(feature = "clap", arg(long, default_value_t = 20.0))]
 	pub stalk_height: f32,
+	/// Height used by canopy phases for descender length and overall banyan scale.
 	#[cfg_attr(feature = "clap", arg(long, default_value_t = 40.0))]
 	pub canopy_height: f32,
+	/// Radius of the stalk base and radial scale for anchor offsets.
 	#[cfg_attr(feature = "clap", arg(long, default_value_t = 0.75))]
 	pub stalk_base_radius: f32,
+	/// Base anchor of the stalk as `x,y,z`.
 	#[cfg_attr(
 		feature = "clap",
-		arg(long, default_value = "0,0,0", value_parser = crate::vec3_args::parse_vec3_csv)
+		arg(
+			long,
+			default_value = "0,0,0",
+			value_parser = crate::vec3_args::parse_vec3_csv,
+			value_name = "X,Y,Z"
+		)
 	)]
 	pub base_anchor: Vec3,
 }
@@ -58,14 +67,26 @@ impl SopesBanyanScale {
 #[cfg_attr(feature = "clap", derive(clap::Args))]
 #[cfg_attr(feature = "clap", command(rename_all = "kebab-case"))]
 pub struct RingAnchorParams {
+	/// Ring count and anchors per ring as `ringsxanchors`.
 	#[cfg_attr(
 		feature = "clap",
-		arg(long = "rings", default_value = "8x7", value_parser = parse_ring_layout)
+		arg(
+			long = "rings",
+			default_value = "8x7",
+			value_parser = parse_ring_layout,
+			value_name = "RINGSXANCHORS"
+		)
 	)]
 	pub layout: RingLayout,
+	/// First and last ring heights as fractions of the stalk height: `first..last`.
 	#[cfg_attr(
 		feature = "clap",
-		arg(long = "ring-heights", default_value = "0.40..0.95", value_parser = parse_unit_range)
+		arg(
+			long = "ring-heights",
+			default_value = "0.40..0.95",
+			value_parser = parse_unit_range,
+			value_name = "FIRST..LAST"
+		)
 	)]
 	pub height_range: UnitRange,
 }
@@ -80,13 +101,21 @@ impl Default for RingAnchorParams {
 #[cfg_attr(feature = "clap", derive(clap::Args))]
 #[cfg_attr(feature = "clap", command(rename_all = "kebab-case"))]
 pub struct VaseProjectionParams {
+	/// Min and max projection length as fractions of stalk height: `min..max`.
 	#[cfg_attr(
 		feature = "clap",
-		arg(long = "projection", default_value = "0.10..0.20", value_parser = parse_unit_range)
+		arg(
+			long = "projection",
+			default_value = "0.10..0.20",
+			value_parser = parse_unit_range,
+			value_name = "MIN..MAX"
+		)
 	)]
 	pub length_fraction_of_height: UnitRange,
+	/// Clamp epsilon for the bounded logit vase profile.
 	#[cfg_attr(feature = "clap", arg(long, default_value_t = 0.4))]
 	pub profile_epsilon: f32,
+	/// Center point of the vase projection profile in normalized ring height.
 	#[cfg_attr(feature = "clap", arg(long, default_value_t = 0.5))]
 	pub center_fraction: f32,
 }
@@ -105,11 +134,18 @@ impl Default for VaseProjectionParams {
 #[cfg_attr(feature = "clap", derive(clap::Args))]
 #[cfg_attr(feature = "clap", command(rename_all = "kebab-case"))]
 pub struct CanopyGrowthParams {
+	/// First and last ring depth budgets as `first..last`.
 	#[cfg_attr(
 		feature = "clap",
-		arg(long = "depth", default_value = "4..8", value_parser = parse_depth_range)
+		arg(
+			long = "depth",
+			default_value = "4..8",
+			value_parser = parse_depth_range,
+			value_name = "FIRST..LAST"
+		)
 	)]
 	pub depth: DepthRange,
+	/// Noise threshold below which branch candidates become descenders.
 	#[cfg_attr(feature = "clap", arg(long, default_value_t = 0.01))]
 	pub descender_threshold: f32,
 }
@@ -125,15 +161,20 @@ impl Default for CanopyGrowthParams {
 #[cfg_attr(feature = "clap", derive(clap::Args))]
 #[cfg_attr(feature = "clap", command(rename_all = "kebab-case"))]
 pub struct SopesBanyanSbs {
-	#[cfg_attr(feature = "clap", command(flatten))]
+	/// High-level world-space scale controls.
+	#[cfg_attr(feature = "clap", command(flatten, next_help_heading = "Scale"))]
 	pub scale: SopesBanyanScale,
-	#[cfg_attr(feature = "clap", command(flatten))]
+	/// Ring count, spoke count, and vertical ring band.
+	#[cfg_attr(feature = "clap", command(flatten, next_help_heading = "Anchors"))]
 	pub rings: RingAnchorParams,
-	#[cfg_attr(feature = "clap", command(flatten))]
+	/// Vase projection profile for initial canopy spokes.
+	#[cfg_attr(feature = "clap", command(flatten, next_help_heading = "Projection"))]
 	pub projection: VaseProjectionParams,
-	#[cfg_attr(feature = "clap", command(flatten))]
+	/// Chain depth and descender controls.
+	#[cfg_attr(feature = "clap", command(flatten, next_help_heading = "Growth"))]
 	pub growth: CanopyGrowthParams,
-	#[cfg_attr(feature = "clap", command(flatten))]
+	/// Structural canopy noise used by branch and descender decisions.
+	#[cfg_attr(feature = "clap", command(flatten, next_help_heading = "Canopy Noise"))]
 	pub canopy_noise: NoiseParams,
 }
 

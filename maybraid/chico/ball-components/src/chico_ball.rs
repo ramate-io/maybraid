@@ -58,6 +58,8 @@ impl RenderItem for ChicoBall {
 
 		vec![commands
 			.spawn((
+				self.clone(), // TODO: this is just a marker to help with despawning for now
+				// we ill be transitioning to a better render system soon.
 				Cached::new(self.noisy_ball()),
 				cascade_chunk.clone(),
 				transform.with_translation(translation),
