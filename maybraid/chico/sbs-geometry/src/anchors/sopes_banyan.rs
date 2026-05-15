@@ -209,6 +209,14 @@ impl SopesBanyanAnchors {
 		Self { perturbation: StalkPerturbation::new(proto) }
 	}
 
+	pub fn with_perturbation(mut self, perturbation: SopesBanyanAnchorPerturbation) -> Self {
+		self.perturbation.noise = perturbation.noise;
+		self.perturbation.vertical_offset = perturbation.vertical_offset;
+		self.perturbation.angular_scale = perturbation.angular_scale;
+		self.perturbation.radius_offset = perturbation.radius_offset;
+		self
+	}
+
 	pub fn proto(&self) -> &SopesBanyanProtoAnchors {
 		&self.perturbation.inner
 	}
@@ -226,6 +234,26 @@ impl SopesBanyanAnchors {
 	) -> Vec<SopesBanyanChain> {
 		let seeds = self.proto().hysteresis_seeds(chain_noise, banyan_height, descender_threshold);
 		self.perturbation.perturb_anchors(seeds)
+	}
+}
+
+/// Public Sope-specific knobs for non-stalk anchor perturbation.
+#[derive(Clone, Debug, PartialEq)]
+pub struct SopesBanyanAnchorPerturbation {
+	pub noise: NoiseParams,
+	pub vertical_offset: std::ops::Range<f32>,
+	pub angular_scale: std::ops::Range<f32>,
+	pub radius_offset: std::ops::Range<f32>,
+}
+
+impl Default for SopesBanyanAnchorPerturbation {
+	fn default() -> Self {
+		Self {
+			noise: NoiseParams::default(),
+			vertical_offset: -1.0..1.0,
+			angular_scale: 0.0..0.5,
+			radius_offset: -0.05..0.05,
+		}
 	}
 }
 

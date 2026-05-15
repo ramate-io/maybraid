@@ -2,14 +2,12 @@
 
 use std::ops::Range;
 
-use bevy_math::{Quat, Vec3};
+use bevy_math::Vec3;
 use procedural_common::{NoiseConfig, NoiseParams};
 
 use crate::anchors::strict_stalk::StrictStalk;
 use crate::anchors::Anchors;
 use crate::chain::point_to_point::PointToPoint;
-use crate::chain::sopes_banyan::{SopesBanyanChain, SopesBanyanPhase};
-use crate::chain::BranchOut;
 use crate::{BallStickNode, Hysteresis};
 
 /// Provides the stalk reference used to identify the unperturbed base anchor.
@@ -22,7 +20,9 @@ pub trait HasStrictStalk {
 pub struct AnchorPerturbation {
 	pub stalk_base_anchor: Vec3,
 	pub vertical_offset: f32,
-	pub angular_offset_radians: f32,
+	pub angular_scale: f32,
+	pub angular_u: f32,
+	pub angular_v: f32,
 	pub radius_offset: f32,
 }
 
@@ -37,7 +37,7 @@ pub struct StalkPerturbation<A> {
 	pub inner: A,
 	pub noise: NoiseParams,
 	pub vertical_offset: Range<f32>,
-	pub angular_offset_radians: Range<f32>,
+	pub angular_scale: Range<f32>,
 	pub radius_offset: Range<f32>,
 }
 
@@ -46,9 +46,9 @@ impl<A> StalkPerturbation<A> {
 		Self {
 			inner,
 			noise: NoiseParams::default(),
-			vertical_offset: 0.0..0.0,
-			angular_offset_radians: 0.0..0.0,
-			radius_offset: 0.0..0.0,
+			vertical_offset: -1.0..1.0,
+			angular_scale: 0.0..0.5,
+			radius_offset: -0.05..0.05,
 		}
 	}
 }
@@ -59,7 +59,7 @@ impl<A: Default> Default for StalkPerturbation<A> {
 			inner: A::default(),
 			noise: NoiseParams::default(),
 			vertical_offset: 0.0..0.0,
-			angular_offset_radians: 0.0..0.0,
+			angular_scale: 0.0..0.0,
 			radius_offset: 0.0..0.0,
 		}
 	}
@@ -110,13 +110,9 @@ where
 						i,
 						0.0,
 					),
-					angular_offset_radians: sample_range(
-						&noise,
-						self.angular_offset_radians.clone(),
-						&node,
-						i,
-						17.0,
-					),
+					angular_scale: sample_range(&noise, self.angular_scale.clone(), &node, i, 17.0),
+					angular_u: sample_signed(&noise, &node, i, 23.0),
+					angular_v: sample_signed(&noise, &node, i, 29.0),
 					radius_offset: sample_range(&noise, self.radius_offset.clone(), &node, i, 31.0),
 				};
 				anchor.perturb_anchor(perturbation)
@@ -133,60 +129,8 @@ impl PerturbAnchor for PointToPoint {
 	}
 }
 
-impl PerturbAnchor for SopesBanyanChain {
-	fn perturb_anchor(mut self, perturbation: AnchorPerturbation) -> Self {
-		self.phase = perturb_sopes_phase(self.phase, perturbation);
-		self
-	}
-}
-
-fn perturb_sopes_phase(
-	phase: SopesBanyanPhase,
-	perturbation: AnchorPerturbation,
-) -> SopesBanyanPhase {
-	match phase {
-		SopesBanyanPhase::Stalk(mut p) => {
-			p.start = perturb_node(p.start, perturbation);
-			SopesBanyanPhase::Stalk(p)
-		}
-		SopesBanyanPhase::BranchOut(mut b) => {
-			b.inner = perturb_branch_out(b.inner, perturbation);
-			SopesBanyanPhase::BranchOut(b)
-		}
-		SopesBanyanPhase::StartFlairUp(mut s) => {
-			s.projection = perturb_branch_out(s.projection, perturbation);
-			SopesBanyanPhase::StartFlairUp(s)
-		}
-		SopesBanyanPhase::EndFlairUp(mut e) => {
-			e.node = perturb_node(e.node, perturbation);
-			SopesBanyanPhase::EndFlairUp(e)
-		}
-		SopesBanyanPhase::StartDescender(mut s) => {
-			s.projection = perturb_branch_out(s.projection, perturbation);
-			SopesBanyanPhase::StartDescender(s)
-		}
-		SopesBanyanPhase::EndDescender(mut e) => {
-			e.node = perturb_node(e.node, perturbation);
-			SopesBanyanPhase::EndDescender(e)
-		}
-	}
-}
-
-fn perturb_branch_out(mut branch: BranchOut, perturbation: AnchorPerturbation) -> BranchOut {
-	branch.node = perturb_node(branch.node, perturbation);
-	let rotation = Quat::from_rotation_y(perturbation.angular_offset_radians);
-	branch.incoming_ray = rotation * branch.incoming_ray;
-	branch.bias_ray = rotation * branch.bias_ray;
-	branch.radius_range = (branch.radius_range.start + perturbation.radius_offset).max(1e-4)
-		..(branch.radius_range.end + perturbation.radius_offset).max(1e-4);
-	branch
-}
-
-fn perturb_node(mut node: BallStickNode, perturbation: AnchorPerturbation) -> BallStickNode {
-	let rel = node.position - perturbation.stalk_base_anchor;
-	let rotation = Quat::from_rotation_y(perturbation.angular_offset_radians);
-	node.position =
-		perturbation.stalk_base_anchor + rotation * rel + Vec3::Y * perturbation.vertical_offset;
+pub fn perturb_node(mut node: BallStickNode, perturbation: AnchorPerturbation) -> BallStickNode {
+	node.position += Vec3::Y * perturbation.vertical_offset;
 	node.radius = (node.radius + perturbation.radius_offset).max(1e-4);
 	node
 }
@@ -209,6 +153,15 @@ fn sample_range(
 	lo + t * (hi - lo)
 }
 
+fn sample_signed(noise: &NoiseConfig, node: &BallStickNode, anchor_index: usize, lane: f32) -> f32 {
+	noise.sample_4d(
+		node.position.x + lane,
+		node.position.y + anchor_index as f32,
+		node.position.z,
+		lane,
+	)
+}
+
 fn is_stalk_base(position: Vec3, stalk_base_anchor: Vec3) -> bool {
 	position.distance_squared(stalk_base_anchor) <= 1e-8
 }
@@ -226,7 +179,7 @@ mod tests {
 			inner: anchors,
 			noise: NoiseParams::default(),
 			vertical_offset: 1.0..1.0,
-			angular_offset_radians: 0.5..0.5,
+			angular_scale: 0.0..0.0,
 			radius_offset: 0.2..0.2,
 		};
 
@@ -235,12 +188,44 @@ mod tests {
 
 		let branch_node = seeds[0].ball_stick_node();
 		assert!((branch_node.position.y - 9.0).abs() < 1e-4);
-		assert!(branch_node.position.z.abs() > 1e-4);
 		assert!((branch_node.radius - 0.45).abs() < 1e-4);
 
 		let stalk_node = seeds[1].ball_stick_node();
 		assert_eq!(stalk_node.position, Vec3::ZERO);
 		assert_eq!(stalk_node.radius, 0.75);
+		Ok(())
+	}
+
+	#[test]
+	fn angular_perturbation_changes_non_stalk_anchor_direction() -> anyhow::Result<()> {
+		let anchors =
+			SopesBanyanProtoAnchors { ring_count: 1, anchors_per_ring: 1, ..Default::default() };
+		let original_seed = anchors.anchors()[0].clone();
+		let original_node = original_seed.ball_stick_node();
+		let Some(original_profile) = original_seed.active_branch_profile() else {
+			return Err(anyhow::anyhow!("expected branch seed profile"));
+		};
+		let original_incoming_ray = original_profile.incoming_ray;
+		let original_bias_ray = original_profile.bias_ray;
+		let perturbation = StalkPerturbation {
+			inner: anchors,
+			noise: NoiseParams::default(),
+			vertical_offset: 0.0..0.0,
+			angular_scale: 0.5..0.5,
+			radius_offset: 0.0..0.0,
+		};
+
+		let perturbed_seed = perturbation.anchors()[0].clone();
+		let perturbed_node = perturbed_seed.ball_stick_node();
+		let Some(perturbed_profile) = perturbed_seed.active_branch_profile() else {
+			return Err(anyhow::anyhow!("expected perturbed branch seed profile"));
+		};
+
+		assert_eq!(perturbed_node.position, original_node.position);
+		assert!(
+			perturbed_profile.incoming_ray.distance_squared(original_incoming_ray) > 1e-8
+				|| perturbed_profile.bias_ray.distance_squared(original_bias_ray) > 1e-8
+		);
 		Ok(())
 	}
 }

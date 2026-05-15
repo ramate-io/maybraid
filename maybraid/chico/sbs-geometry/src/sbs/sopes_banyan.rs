@@ -3,14 +3,17 @@
 use bevy_math::Vec3;
 #[cfg(any(feature = "clap", test))]
 use procedural_common::{
-	parse_count_pair as parse_ring_layout, parse_unit_range, parse_usize_range as parse_depth_range,
+	noise_params_from_scalar_str, parse_count_pair as parse_ring_layout, parse_unit_range,
+	parse_usize_range as parse_depth_range,
 };
 use procedural_common::{
 	CountPair as RingLayout, NoiseConfig, NoiseParams, SetNoiseParams, UnitRange,
 	UsizeRange as DepthRange,
 };
 
-use crate::anchors::sopes_banyan::{SopesBanyanAnchors, SopesBanyanProtoAnchors};
+use crate::anchors::sopes_banyan::{
+	SopesBanyanAnchorPerturbation, SopesBanyanAnchors, SopesBanyanProtoAnchors,
+};
 use crate::anchors::strict_stalk::StrictStalk;
 use crate::anchors::{Anchors, AnchorsToChain};
 use crate::{BallStickChain, SopesBanyanChain};
@@ -156,6 +159,78 @@ impl Default for CanopyGrowthParams {
 	}
 }
 
+#[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "clap", derive(clap::Args))]
+#[cfg_attr(feature = "clap", command(rename_all = "kebab-case"))]
+pub struct AnchorPerturbationParams {
+	/// Vertical anchor offset in world units as `min..max`.
+	#[cfg_attr(
+		feature = "clap",
+		arg(
+			long = "anchor-vertical-perturbation",
+			default_value = "-1.0..1.0",
+			value_parser = parse_unit_range,
+			value_name = "MIN..MAX"
+		)
+	)]
+	pub vertical_offset: UnitRange,
+	/// Direction perturbation scale as `min..max` passed through the shared degree-range perturbation.
+	#[cfg_attr(
+		feature = "clap",
+		arg(
+			long = "anchor-angular-perturbation",
+			default_value = "0.0..0.5",
+			value_parser = parse_unit_range,
+			value_name = "MIN..MAX"
+		)
+	)]
+	pub angular_scale: UnitRange,
+	/// Anchor radius offset in world units as `min..max`.
+	#[cfg_attr(
+		feature = "clap",
+		arg(
+			long = "anchor-radius-perturbation",
+			default_value = "-0.05..0.05",
+			value_parser = parse_unit_range,
+			value_name = "MIN..MAX"
+		)
+	)]
+	pub radius_offset: UnitRange,
+	/// Noise used only for anchor perturbation sampling as `seed,frequency,amplitude,octaves`.
+	#[cfg_attr(
+		feature = "clap",
+		arg(
+			long = "anchor-perturbation-noise",
+			default_value = "1337,1,1,1",
+			value_parser = noise_params_from_scalar_str,
+			value_name = "SEED,FREQUENCY,AMPLITUDE,OCTAVES"
+		)
+	)]
+	pub noise: NoiseParams,
+}
+
+impl Default for AnchorPerturbationParams {
+	fn default() -> Self {
+		Self {
+			vertical_offset: UnitRange::new(-1.0, 1.0),
+			angular_scale: UnitRange::new(0.0, 0.5),
+			radius_offset: UnitRange::new(-0.05, 0.05),
+			noise: NoiseParams::default(),
+		}
+	}
+}
+
+impl AnchorPerturbationParams {
+	pub fn to_perturbation(&self) -> SopesBanyanAnchorPerturbation {
+		SopesBanyanAnchorPerturbation {
+			noise: self.noise,
+			vertical_offset: self.vertical_offset.start..self.vertical_offset.end,
+			angular_scale: self.angular_scale.start..self.angular_scale.end,
+			radius_offset: self.radius_offset.start..self.radius_offset.end,
+		}
+	}
+}
+
 /// Art-directed front-end: scale + rings + projection + growth + one structural canopy noise.
 #[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "clap", derive(clap::Args))]
@@ -173,6 +248,9 @@ pub struct SopesBanyanSbs {
 	/// Chain depth and descender controls.
 	#[cfg_attr(feature = "clap", command(flatten, next_help_heading = "Growth"))]
 	pub growth: CanopyGrowthParams,
+	/// Perturbation applied to non-stalk anchors after deterministic ring generation.
+	#[cfg_attr(feature = "clap", command(flatten, next_help_heading = "Anchor Perturbation"))]
+	pub anchor_perturbation: AnchorPerturbationParams,
 	/// Structural canopy noise used by branch and descender decisions.
 	#[cfg_attr(feature = "clap", command(flatten, next_help_heading = "Canopy Noise"))]
 	pub canopy_noise: NoiseParams,
@@ -185,6 +263,7 @@ impl Default for SopesBanyanSbs {
 			rings: RingAnchorParams::default(),
 			projection: VaseProjectionParams::default(),
 			growth: CanopyGrowthParams::default(),
+			anchor_perturbation: AnchorPerturbationParams::default(),
 			canopy_noise: NoiseParams::default(),
 		}
 	}
@@ -207,6 +286,7 @@ impl SopesBanyanSbs {
 			max_depth_first_ring: self.growth.depth.start,
 			max_depth_last_ring: self.growth.depth.end,
 		})
+		.with_perturbation(self.anchor_perturbation.to_perturbation())
 	}
 
 	/// Canopy [`SopesBanyanChain`] seeds using this struct's shared [`NoiseParams`].
@@ -279,6 +359,11 @@ mod tests {
 		);
 		assert_eq!(proto.max_depth_first_ring, sbs.growth.depth.start);
 		assert_eq!(proto.max_depth_last_ring, sbs.growth.depth.end);
+		assert_eq!(
+			anchors.perturbation.vertical_offset,
+			sbs.anchor_perturbation.vertical_offset.start
+				..sbs.anchor_perturbation.vertical_offset.end
+		);
 	}
 
 	#[test]
