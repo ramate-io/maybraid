@@ -16,12 +16,15 @@ pub use preview::{PreviewConfig, SbsPreviewRoot};
 pub use startup::PendingStartupCommand;
 
 use bevy::prelude::*;
+use chico_sdf::{NoisyBall, NoisyCylinder};
 use chico_sbs_trees::sopes_banyan::render_item_plugin::SopesBanyanRenderItemPlugin;
+use chico_vegetation_shaders::{ChicoLeafMaterial, ChicoStickMaterial, ChicoVegetationShadersPlugin};
 use commands::render::sopes_banyan::plugin::react_render_helper_sopes_banyan;
 use game_commands::ui::GameCommandUiPlugin;
 use ground::setup_ground;
 use preview::sync_tree_preview;
 use preview_materials::{setup_preview_tree_materials, sync_preview_tree_material_handles};
+use render_item::mesh::handle::EnforceCachingPlugin;
 use render_item::render_items;
 
 pub struct SbsTreesPlaygroundPlugin;
@@ -31,6 +34,9 @@ impl Plugin for SbsTreesPlaygroundPlugin {
 		app.init_resource::<PreviewConfig>()
 			.init_resource::<PendingStartupCommand>()
 			.add_plugins(SopesBanyanRenderItemPlugin::default())
+			.add_plugins(ChicoVegetationShadersPlugin)
+			.add_plugins(EnforceCachingPlugin::<NoisyCylinder, ChicoStickMaterial>::default())
+			.add_plugins(EnforceCachingPlugin::<NoisyBall, ChicoLeafMaterial>::default())
 			.add_plugins(PlaygroundCommandsPlugin)
 			.add_plugins(GameCommandUiPlugin { config: ui::ui_config() })
 			.add_plugins(startup::StartupPlugin)
@@ -56,7 +62,7 @@ impl Plugin for SbsTreesPlaygroundPlugin {
 						.before(sync_tree_preview),
 					sync_tree_preview.after(sync_preview_tree_material_handles),
 					ui::update_debug_ui,
-					render_items::<chico_sbs_trees::sopes_banyan::SopesBanyanStd>,
+					render_items::<crate::preview::PreviewSopesBanyan>,
 				),
 			);
 	}

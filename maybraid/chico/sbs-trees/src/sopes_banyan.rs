@@ -210,7 +210,7 @@ where
 		_hysteresis: &SopesBanyanChain,
 		_chain: &BallStickChain<SopesBanyanChain>,
 	) -> Option<(ChicoBall<LeafM, LeafS>, f32)> {
-		const BALL_SIZE: f32 = 8.0;
+		const BALL_SIZE: f32 = 6.0;
 
 		if node.position.y < self.min_height {
 			return None;

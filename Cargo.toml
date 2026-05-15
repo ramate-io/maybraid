@@ -18,6 +18,7 @@ members = [
   "maybraid/procedural/common",
 
   "maybraid/chico/lib",
+  "maybraid/chico/shaders",
   "maybraid/chico/sbs-trees",
   "maybraid/chico/sbs-trees-playground",
   "maybraid/chico/sdf",
@@ -168,6 +169,7 @@ chico-ball-components = { path = "maybraid/chico/ball-components" }
 chico-stick-components = { path = "maybraid/chico/stick-components" }
 chico-tree-components = { path = "maybraid/chico/tree-components" }
 chico-sbs-geometry = { path = "maybraid/chico/sbs-geometry" }
+chico-vegetation-shaders = { path = "maybraid/chico/shaders" }
 
 [workspace.lints.clippy]
 debug_assert_with_mut_call = "deny"

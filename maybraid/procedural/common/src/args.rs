@@ -78,7 +78,7 @@ mod tests {
 			CountPair::new(8, 7)
 		);
 		assert_eq!(
-			parse_usize_range("4..8").map_err(|e| anyhow::anyhow!("{e}"))?,
+			parse_usize_range("4..6").map_err(|e| anyhow::anyhow!("{e}"))?,
 			UsizeRange::new(4, 8)
 		);
 		Ok(())

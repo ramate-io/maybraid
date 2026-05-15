@@ -1,8 +1,8 @@
 pub mod plugin;
 
-use chico_sbs_trees::sopes_banyan::SopesBanyanStd;
+use crate::preview::PreviewSopesBanyan;
 
 use super::RenderHelper;
 
 /// Renders the current Sope's Banyan assembly into the preview scene.
-pub type SopesBanyanRenderHelper = RenderHelper<SopesBanyanStd>;
+pub type SopesBanyanRenderHelper = RenderHelper<PreviewSopesBanyan>;

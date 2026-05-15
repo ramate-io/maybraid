@@ -109,7 +109,7 @@ pub struct VaseProjectionParams {
 		feature = "clap",
 		arg(
 			long = "projection",
-			default_value = "0.10..0.20",
+			default_value = "0.10..0.15",
 			value_parser = parse_unit_range,
 			value_name = "MIN..MAX"
 		)
@@ -142,7 +142,7 @@ pub struct CanopyGrowthParams {
 		feature = "clap",
 		arg(
 			long = "depth",
-			default_value = "4..8",
+			default_value = "4..6",
 			value_parser = parse_depth_range,
 			value_name = "FIRST..LAST"
 		)
@@ -155,7 +155,7 @@ pub struct CanopyGrowthParams {
 
 impl Default for CanopyGrowthParams {
 	fn default() -> Self {
-		Self { depth: DepthRange::new(4, 8), descender_threshold: 0.15 }
+		Self { depth: DepthRange::new(4, 6), descender_threshold: 0.15 }
 	}
 }
 
@@ -332,7 +332,7 @@ mod tests {
 			UnitRange::new(0.40, 0.95)
 		);
 		assert_eq!(
-			parse_depth_range("4..8").map_err(|e| anyhow::anyhow!("{e}"))?,
+			parse_depth_range("4..6").map_err(|e| anyhow::anyhow!("{e}"))?,
 			DepthRange::new(4, 8)
 		);
 		Ok(())

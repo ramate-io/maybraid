@@ -20,7 +20,9 @@ sdf = { workspace = true }
 chico-sbs-trees = { workspace = true }
 chico-sbs-geometry = { workspace = true, features = ["clap"] }
 chico-ball-components = { workspace = true }
+chico-sdf = { workspace = true }
 chico-stick-components = { workspace = true }
+chico-vegetation-shaders = { workspace = true }
 
 [dev-dependencies]
 anyhow = { workspace = true }

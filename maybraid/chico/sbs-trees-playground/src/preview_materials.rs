@@ -1,41 +1,38 @@
-//! Preview-only [`StandardMaterial`] handles for Sope's Banyan bark vs canopy reads.
+//! Preview vegetation [`Material`] handles (embedded WGSL from `chico-vegetation-shaders`).
 
 use bevy::prelude::*;
+
+use chico_vegetation_shaders::{ChicoLeafMaterial, ChicoStickMaterial};
 
 use crate::preview::PreviewConfig;
 
 /// Stable bark / foliage materials reused whenever [`PreviewConfig::tree`] is rebuilt from CLI defaults.
 #[derive(Resource, Clone)]
 pub struct PreviewTreeMaterials {
-	pub stick: Handle<StandardMaterial>,
-	pub leaf: Handle<StandardMaterial>,
+	pub stick: Handle<ChicoStickMaterial>,
+	pub leaf: Handle<ChicoLeafMaterial>,
 }
 
-fn dark_banyan_wood() -> StandardMaterial {
-	StandardMaterial {
-		base_color: Color::srgb(0.13, 0.085, 0.055),
-		perceptual_roughness: 0.88,
-		metallic: 0.03,
-		..default()
+fn preview_stick_colors() -> ChicoStickMaterial {
+	ChicoStickMaterial {
+		base_color: Vec4::new(0.13, 0.085, 0.055, 1.0),
 	}
 }
 
-fn mid_canopy_green() -> StandardMaterial {
-	StandardMaterial {
-		base_color: Color::srgb(0.22, 0.5, 0.29),
-		perceptual_roughness: 0.52,
-		metallic: 0.0,
-		..default()
+fn preview_leaf_colors() -> ChicoLeafMaterial {
+	ChicoLeafMaterial {
+		base_color: Vec4::new(0.22, 0.5, 0.29, 1.0),
 	}
 }
 
 pub fn setup_preview_tree_materials(
 	mut commands: Commands,
-	mut materials: ResMut<Assets<StandardMaterial>>,
+	mut stick_assets: ResMut<Assets<ChicoStickMaterial>>,
+	mut leaf_assets: ResMut<Assets<ChicoLeafMaterial>>,
 	mut config: ResMut<PreviewConfig>,
 ) {
-	let stick = materials.add(dark_banyan_wood());
-	let leaf = materials.add(mid_canopy_green());
+	let stick = stick_assets.add(preview_stick_colors());
+	let leaf = leaf_assets.add(preview_leaf_colors());
 
 	commands.insert_resource(PreviewTreeMaterials { stick: stick.clone(), leaf: leaf.clone() });
 
