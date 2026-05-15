@@ -1,4 +1,4 @@
-//! Registers mesh-dispatch plugins for Sope's Banyan stick and ball [`RenderItem`](render_item::RenderItem) types (see [`ChicoStickRenderItemPlugin`](chico_stick_components::chico_stick::render_item_plugin::ChicoStickRenderItemPlugin) / [`ChicoBallRenderItemPlugin`](chico_ball_components::chico_ball::render_item_plugin::ChicoBallRenderItemPlugin)).
+//! Registers mesh dispatch for Sope's Banyan [`ChicoStick`](chico_stick_components::chico_stick::ChicoStick) and [`ChicoBall`](chico_ball_components::chico_ball::ChicoBall) render items. [`PlaneSplay`](chico_ball_components::plane_splay::PlaneSplay) terminals spawn [`Mesh3d`](bevy::prelude::Mesh3d) children directly and do not use the noisy-ball cache.
 
 use bevy::prelude::*;
 use chico_ball_components::chico_ball::render_item_plugin::ChicoBallRenderItemPlugin;

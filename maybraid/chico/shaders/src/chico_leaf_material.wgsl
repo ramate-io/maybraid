@@ -78,9 +78,9 @@ fn fragment(
 ) -> @location(0) vec4<f32> {
 
     let noise_scale = 6.0;
-    let noise_value = fractal_noise(mesh.uv * noise_scale);
+    let noise_value = fractal_noise(mesh.world_position.xz * noise_scale);
 
-    let threshold = 0.5;
+    let threshold = 0.54;
 
     let alpha = step(threshold, noise_value);
 

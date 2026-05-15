@@ -20,6 +20,8 @@ pub type PreviewStick = ChicoStick<ChicoStickMaterial, SkippedMeshMaterial<Chico
 pub type PreviewJointBall =
 	ChicoBall<ChicoStickMaterial, SkippedMeshMaterial<ChicoStickMaterial>>;
 pub type PreviewLeafBall = ChicoBall<ChicoLeafMaterial, SkippedMeshMaterial<ChicoLeafMaterial>>;
+pub type PreviewPlaneSplay =
+	PlaneSplay<ChicoLeafMaterial, SkippedMeshMaterial<ChicoLeafMaterial>>;
 
 #[derive(Component)]
 pub struct SbsPreviewRoot;
@@ -45,7 +47,7 @@ pub fn sync_tree_preview(
 	stick_q: Query<Entity, With<PreviewStick>>,
 	joint_ball_q: Query<Entity, With<PreviewJointBall>>,
 	leaf_ball_q: Query<Entity, With<PreviewLeafBall>>,
-	splay_q: Query<Entity, With<PlaneSplay>>,
+	splay_q: Query<Entity, With<PreviewPlaneSplay>>,
 ) {
 	if !config.is_changed() {
 		return;
