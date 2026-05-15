@@ -1918,6 +1918,7 @@ dependencies = [
  "chico-stick-components",
  "chunk",
  "clap",
+ "game-commands",
  "log",
  "render-item",
  "sdf",
@@ -2752,6 +2753,13 @@ dependencies = [
  "pin-project-lite",
  "pin-utils",
  "slab",
+]
+
+[[package]]
+name = "game-commands"
+version = "0.0.1"
+dependencies = [
+ "bevy",
 ]
 
 [[package]]
@@ -4657,6 +4665,7 @@ dependencies = [
  "bevy",
  "chunk",
  "clap",
+ "game-commands",
  "log",
  "render-item",
  "sdf",

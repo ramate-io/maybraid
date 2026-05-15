@@ -17,6 +17,7 @@ pub use startup::PendingStartupCommand;
 use bevy::prelude::*;
 use chico_sbs_trees::sopes_banyan::render_item_plugin::SopesBanyanRenderItemPlugin;
 use commands::root::react_playground_command_root;
+use game_commands::ui::GameCommandUiPlugin;
 use ground::setup_ground;
 use preview::sync_tree_preview;
 use render_item::render_items;
@@ -29,27 +30,22 @@ impl Plugin for SbsTreesPlaygroundPlugin {
 			.init_resource::<PendingStartupCommand>()
 			.add_plugins(SopesBanyanRenderItemPlugin::default())
 			.add_plugins(PlaygroundCommandsPlugin)
+			.add_plugins(GameCommandUiPlugin { config: ui::ui_config() })
 			.add_plugins(startup::StartupPlugin)
 			.add_plugins(
 				bevy::pbr::MaterialPlugin::<checkerboard_material::CheckerboardMaterial>::default(),
 			)
-			.add_observer(ui::on_console_viewport_scroll)
 			.init_resource::<input::TypedCommandLine>()
 			.init_resource::<input::TextEntryFocus>()
 			.init_resource::<input::CommandConsoleOutput>()
 			.init_resource::<input::CommandHistory>()
-			.add_systems(
-				Startup,
-				(camera::setup_camera, setup_lighting, setup_ground, ui::setup_debug_ui),
-			)
+			.add_systems(Startup, (camera::setup_camera, setup_lighting, setup_ground))
 			.add_systems(
 				Update,
 				(
 					camera::camera_controller,
 					input::toggle_text_entry_focus,
 					input::capture_command_line_input,
-					ui::send_console_ui_scroll_events,
-					ui::scroll_console_viewport_keyboard,
 					sync_tree_preview.after(react_playground_command_root),
 					ui::update_debug_ui,
 					render_items::<chico_sbs_trees::sopes_banyan::SopesBanyan>,

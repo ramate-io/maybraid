@@ -47,6 +47,7 @@ members = [
   ## sdf
   "util/sdf",
   "util/chunk",
+  "util/game-commands",
   "util/render-item",
 
   # demos
@@ -140,6 +141,7 @@ clap-markdown-ext = { git = "https://github.com/movementlabsxyz/clap-markdown-ex
 sdf = { path = "util/sdf" }
 render-item = { path = "util/render-item" }
 chunk = { path = "util/chunk" }
+game-commands = { path = "util/game-commands" }
 
 terrain = { path = "procedures/terrain" }
 vegetation-sdf = { path = "procedures/vegetation" }
