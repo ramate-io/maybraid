@@ -141,7 +141,11 @@ pub fn capture_command_line_input(
 			if ch == '\r' || ch == '\n' || ch == '/' {
 				continue;
 			}
-			if ch.is_ascii_graphic() || ch == '_' || ch == '-' || ch == ' ' || ch == ',' || ch == '.' {
+			if ch.is_ascii_graphic()
+				|| ch == '_' || ch == '-'
+				|| ch == ' ' || ch == ','
+				|| ch == '.'
+			{
 				if history.browse.is_some() {
 					history.browse = None;
 					history.draft.clear();

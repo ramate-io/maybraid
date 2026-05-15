@@ -48,7 +48,7 @@ impl Plugin for SbsTreesPlaygroundPlugin {
 					input::capture_command_line_input,
 					sync_tree_preview.after(react_playground_command_root),
 					ui::update_debug_ui,
-					render_items::<chico_sbs_trees::sopes_banyan::SopesBanyan>,
+					render_items::<chico_sbs_trees::sopes_banyan::SopesBanyanStd>,
 				),
 			);
 	}

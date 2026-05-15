@@ -25,11 +25,7 @@ pub fn setup_camera(mut commands: Commands) {
 	commands.spawn((
 		Camera3d::default(),
 		transform,
-		Projection::Perspective(PerspectiveProjection {
-			near: 0.1,
-			far: 4000.0,
-			..default()
-		}),
+		Projection::Perspective(PerspectiveProjection { near: 0.1, far: 4000.0, ..default() }),
 		CameraController { speed: 18.0, sensitivity: 0.005, yaw, pitch },
 	));
 }

@@ -3,7 +3,7 @@ name = "chico-sbs-trees"
 version = { workspace = true }
 edition  = { workspace = true }
 license  = { workspace = true }
-authors = { workspace = true }
+authors  = { workspace = true }
 repository = { workspace = true }
 homepage = { workspace = true }
 publish = { workspace = true }
@@ -11,19 +11,15 @@ rust-version = { workspace = true }
 
 [dependencies]
 bevy = { workspace = true }
-clap = { workspace = true, optional = true }
+clap = { workspace = true }
 chico-sdf = { workspace = true }
 chico-ball-components = { workspace = true }
 chico-stick-components = { workspace = true }
 chico-tree-components = { workspace = true }
-chico-sbs-geometry = { workspace = true }
-procedural-common = { workspace = true }
+chico-sbs-geometry = { workspace = true, features = ["clap"] }
+procedural-common = { workspace = true, features = ["clap"] }
 render-item = { workspace = true }
 log = { workspace = true }
-
-[features]
-default = []
-clap = ["dep:clap", "chico-sbs-geometry/clap"]
 
 [lints]
 workspace = true
