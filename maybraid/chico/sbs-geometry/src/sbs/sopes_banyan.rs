@@ -1,12 +1,12 @@
 //! Restricted **Sope's Banyan** geometry for CLI and playgrounds.
 
 use bevy_math::Vec3;
+#[cfg(feature = "clap")]
+use procedural_common::noise_params_from_scalar_str;
 #[cfg(any(feature = "clap", test))]
 use procedural_common::{
 	parse_count_pair as parse_ring_layout, parse_unit_range, parse_usize_range as parse_depth_range,
 };
-#[cfg(feature = "clap")]
-use procedural_common::noise_params_from_scalar_str;
 use procedural_common::{
 	CountPair as RingLayout, NoiseConfig, NoiseParams, SetNoiseParams, UnitRange,
 	UsizeRange as DepthRange,
@@ -110,7 +110,7 @@ pub struct VaseProjectionParams {
 		feature = "clap",
 		arg(
 			long = "projection",
-			default_value = "0.10..0.15",
+			default_value = "0.05..0.18",
 			value_parser = parse_unit_range,
 			value_name = "MIN..MAX"
 		)
@@ -127,7 +127,7 @@ pub struct VaseProjectionParams {
 impl Default for VaseProjectionParams {
 	fn default() -> Self {
 		Self {
-			length_fraction_of_height: UnitRange::new(0.10, 0.20),
+			length_fraction_of_height: UnitRange::new(0.05, 0.18),
 			profile_epsilon: 0.4,
 			center_fraction: 0.5,
 		}
@@ -143,7 +143,7 @@ pub struct CanopyGrowthParams {
 		feature = "clap",
 		arg(
 			long = "depth",
-			default_value = "4..6",
+			default_value = "1..8",
 			value_parser = parse_depth_range,
 			value_name = "FIRST..LAST"
 		)
@@ -156,7 +156,7 @@ pub struct CanopyGrowthParams {
 
 impl Default for CanopyGrowthParams {
 	fn default() -> Self {
-		Self { depth: DepthRange::new(4, 6), descender_threshold: 0.15 }
+		Self { depth: DepthRange::new(1, 8), descender_threshold: 0.15 }
 	}
 }
 
@@ -419,18 +419,12 @@ mod tests {
 	#[test]
 	fn leaf_ball_size_scales_with_canopy_height() {
 		let low = SopesBanyanSbs {
-			scale: SopesBanyanScale {
-				canopy_height: 20.0,
-				..Default::default()
-			},
+			scale: SopesBanyanScale { canopy_height: 20.0, ..Default::default() },
 			leaf_ball_factor: 0.2,
 			..Default::default()
 		};
 		let high = SopesBanyanSbs {
-			scale: SopesBanyanScale {
-				canopy_height: 40.0,
-				..Default::default()
-			},
+			scale: SopesBanyanScale { canopy_height: 40.0, ..Default::default() },
 			leaf_ball_factor: 0.2,
 			..Default::default()
 		};
