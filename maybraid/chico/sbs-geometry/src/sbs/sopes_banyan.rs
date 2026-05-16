@@ -252,7 +252,7 @@ pub struct SopesBanyanSbs {
 	/// Dimensionless terminal leaf scale; world radius from [`Self::leaf_ball_size`].
 	#[cfg_attr(
 		feature = "clap",
-		arg(long, default_value_t = 0.15, help_heading = "Terminal canopy")
+		arg(long, default_value_t = 0.4, help_heading = "Terminal canopy")
 	)]
 	pub leaf_ball_factor: f32,
 	/// Perturbation applied to non-stalk anchors after deterministic ring generation.
@@ -270,7 +270,7 @@ impl Default for SopesBanyanSbs {
 			rings: RingAnchorParams::default(),
 			projection: VaseProjectionParams::default(),
 			growth: CanopyGrowthParams::default(),
-			leaf_ball_factor: 0.15,
+			leaf_ball_factor: 0.4,
 			anchor_perturbation: AnchorPerturbationParams::default(),
 			canopy_noise: NoiseParams::default(),
 		}
@@ -287,14 +287,7 @@ impl SopesBanyanSbs {
 	///
 	/// Uses `leaf_ball_factor × canopy_height` and a fixed in-crown height weight (smoothstep) so the same factor stays in a sensible range when [`SopesBanyanScale::canopy_height`] changes.
 	pub fn leaf_ball_size(&self) -> f32 {
-		const HEIGHT_WEIGHT_FLOOR: f32 = 0.42;
-		/// Normalized height above the crown floor at which the height weight is evaluated.
-		const REPRESENTATIVE_CANOPY_U: f32 = 0.6;
-		let span = self.scale.canopy_height.max(1e-3);
-		let u = REPRESENTATIVE_CANOPY_U.clamp(0.0, 1.0);
-		let g = u * u * (3.0 - 2.0 * u);
-		let height_weight = HEIGHT_WEIGHT_FLOOR + (1.0 - HEIGHT_WEIGHT_FLOOR) * g;
-		self.leaf_ball_factor * span * height_weight
+		self.scale.stalk_height * self.leaf_ball_factor
 	}
 
 	/// Full anchor recipe (stalk + rings); chain noise is applied when emitting seeds.
