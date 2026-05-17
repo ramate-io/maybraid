@@ -412,12 +412,12 @@ mod tests {
 	#[test]
 	fn leaf_ball_size_scales_with_canopy_height() {
 		let low = SopesBanyanSbs {
-			scale: SopesBanyanScale { canopy_height: 20.0, ..Default::default() },
+			scale: SopesBanyanScale { stalk_height: 20.0, ..Default::default() },
 			leaf_ball_factor: 0.2,
 			..Default::default()
 		};
 		let high = SopesBanyanSbs {
-			scale: SopesBanyanScale { canopy_height: 40.0, ..Default::default() },
+			scale: SopesBanyanScale { stalk_height: 40.0, ..Default::default() },
 			leaf_ball_factor: 0.2,
 			..Default::default()
 		};
