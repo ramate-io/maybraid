@@ -1,7 +1,7 @@
 use bevy::prelude::*;
+use game_commands::command::{CommandConsoleOutput, TextEntryFocus, TypedCommandLine};
 use game_commands::ui::{GameCommandUiConfig, HudConsoleBlock, HudConsoleViewport, HudStatusLine};
 
-use crate::input::{CommandConsoleOutput, TextEntryFocus, TypedCommandLine};
 use crate::preview::PreviewConfig;
 
 pub fn ui_config() -> GameCommandUiConfig {

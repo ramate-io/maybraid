@@ -1,5 +1,5 @@
-use crate::input::TextEntryFocus;
 use bevy::prelude::*;
+use game_commands::command::TextEntryFocus;
 use std::f32::consts::PI;
 
 #[derive(Component)]

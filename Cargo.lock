@@ -2768,7 +2768,9 @@ dependencies = [
 name = "game-commands"
 version = "0.0.1"
 dependencies = [
+ "anyhow",
  "bevy",
+ "clap",
 ]
 
 [[package]]

@@ -3,9 +3,9 @@
 use bevy::prelude::*;
 
 use crate::commands::render::crook_cylinder::CrookCylinderHelper;
-use crate::input::CommandConsoleOutput;
 use crate::preview::PreviewConfig;
 use crate::primitive::PlaygroundPrimitive;
+use game_commands::command::CommandConsoleOutput;
 
 pub fn react_render_helper_crook_cylinder(
 	mut commands: Commands,

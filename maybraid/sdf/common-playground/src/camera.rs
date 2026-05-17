@@ -1,5 +1,5 @@
-use crate::input::TextEntryFocus;
 use bevy::prelude::*;
+use game_commands::command::TextEntryFocus;
 use std::f32::consts::PI;
 
 #[derive(Component)]
@@ -26,11 +26,7 @@ pub fn setup_camera(mut commands: Commands) {
 	commands.spawn((
 		Camera3d::default(),
 		transform,
-		Projection::Perspective(PerspectiveProjection {
-			near: 0.1,
-			far: 2000.0,
-			..default()
-		}),
+		Projection::Perspective(PerspectiveProjection { near: 0.1, far: 2000.0, ..default() }),
 		CameraController { speed: 10.0, sensitivity: 0.005, yaw, pitch },
 	));
 }

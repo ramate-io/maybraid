@@ -2,19 +2,18 @@
 
 pub mod plugin;
 pub mod render;
-pub(crate) mod root;
-pub mod script;
 pub mod settings;
 
 use bevy::prelude::*;
-use clap::{CommandFactory, Parser};
+use clap::Parser;
+use game_commands::command::{CommandScript, GameCommand};
 pub use plugin::PlaygroundCommandsPlugin;
 pub use render::Render;
-pub use script::Script;
 pub use settings::Settings;
 
 /// Synthetic `argv[0]` for [`parse_line`] and [`parse_startup_from_argv_tail`]; must match `#[command(name = …)]` on [`PlaygroundCommand`].
 pub const PLAYGROUND_CLI_NAME: &str = "sdf-common";
+pub type Script = CommandScript<PlaygroundCommand>;
 
 /// Root command: in-game after `/` ([`parse_line`]) or process argv ([`parse_startup_command`]).
 ///
@@ -53,37 +52,28 @@ pub enum PlaygroundCommand {
 impl PlaygroundCommand {
 	/// Full `--help`-style text for the HUD.
 	pub fn long_help_string() -> String {
-		Self::command().render_long_help().to_string()
+		<Self as GameCommand>::long_help_string()
 	}
 
 	/// Parse `std::env::args_os()` after the program name, using the same clap tree as [`parse_line`].
 	pub fn parse_startup_command() -> Result<Option<Self>, String> {
-		let tail: Vec<std::ffi::OsString> = std::env::args_os().skip(1).collect();
-		Self::parse_startup_from_argv_tail(tail)
+		<Self as GameCommand>::parse_startup_command()
 	}
 
 	/// Same as startup parsing after the binary: `tail` is every `OsString` that follows the program name.
-	pub fn parse_startup_from_argv_tail(tail: Vec<std::ffi::OsString>) -> Result<Option<Self>, String> {
-		if tail.is_empty() {
-			return Ok(None);
-		}
-		let mut args = vec![std::ffi::OsString::from(PLAYGROUND_CLI_NAME)];
-		args.extend(tail);
-		Self::try_parse_from(args).map(Some).map_err(|e| e.to_string())
+	pub fn parse_startup_from_argv_tail(
+		tail: Vec<std::ffi::OsString>,
+	) -> Result<Option<Self>, String> {
+		<Self as GameCommand>::parse_startup_from_argv_tail(tail)
 	}
 
 	/// Spawn this command and nested subcommands (see [`README.md`](README.md)).
 	///
-	/// Script / IO / per-line parse errors are written to `console` (HUD string). Other variants may leave `console` unchanged; `help` still updates the HUD via [`crate::commands::root::react_playground_command_root`].
+	/// Script / IO / per-line parse errors and `help` output are written to `console` (HUD string).
 	pub fn react(self, commands: &mut Commands, console: &mut String) {
-		if let PlaygroundCommand::Script(s) = &self {
-			script::run_script_file(&s.path, commands, console);
-			return;
-		}
-		commands.spawn(self.clone());
 		match self {
-			PlaygroundCommand::Help => {}
-			PlaygroundCommand::Script(_) => {}
+			PlaygroundCommand::Help => *console = Self::long_help_string(),
+			PlaygroundCommand::Script(s) => s.run(commands, console),
 			PlaygroundCommand::Render(r) => r.react(commands),
 			PlaygroundCommand::Settings(s) => s.react(commands),
 		}
@@ -92,17 +82,15 @@ impl PlaygroundCommand {
 	/// Parse a line from text mode: split on whitespace, no shell quoting yet.
 	/// A leading `/` (from the toggle key) is ignored.
 	pub fn parse_line(line: &str) -> Result<Self, String> {
-		let line = line.trim().trim_start_matches('/').trim();
-		let mut args: Vec<String> = vec![PLAYGROUND_CLI_NAME.to_string()];
-		for w in line.split_whitespace() {
-			if !w.is_empty() {
-				args.push(w.to_string());
-			}
-		}
-		if args.len() <= 1 {
-			return Err("empty command".into());
-		}
-		Self::try_parse_from(args).map_err(|e| e.to_string())
+		<Self as GameCommand>::parse_line(line)
+	}
+}
+
+impl GameCommand for PlaygroundCommand {
+	const CLI_NAME: &'static str = PLAYGROUND_CLI_NAME;
+
+	fn react(self, commands: &mut Commands, console: &mut String) {
+		Self::react(self, commands, console);
 	}
 }
 
@@ -128,7 +116,8 @@ mod tests {
 
 	#[test]
 	fn parse_line_script_matches_startup() -> anyhow::Result<()> {
-		let a = PlaygroundCommand::parse_line("script --path ./foo.txt").map_err(|e| anyhow::anyhow!("{e}"))?;
+		let a = PlaygroundCommand::parse_line("script --path ./foo.txt")
+			.map_err(|e| anyhow::anyhow!("{e}"))?;
 		let b = PlaygroundCommand::parse_startup_from_argv_tail(vec![
 			OsString::from("script"),
 			OsString::from("--path"),
@@ -143,7 +132,8 @@ mod tests {
 
 	#[test]
 	fn parse_startup_empty_tail() -> anyhow::Result<()> {
-		let o = PlaygroundCommand::parse_startup_from_argv_tail(vec![]).map_err(|e| anyhow::anyhow!("{e}"))?;
+		let o = PlaygroundCommand::parse_startup_from_argv_tail(vec![])
+			.map_err(|e| anyhow::anyhow!("{e}"))?;
 		assert!(o.is_none());
 		Ok(())
 	}

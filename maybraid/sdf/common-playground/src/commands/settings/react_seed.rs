@@ -3,7 +3,7 @@
 use bevy::prelude::*;
 
 use crate::ground::PlaygroundSettings;
-use crate::input::CommandConsoleOutput;
+use game_commands::command::CommandConsoleOutput;
 
 #[derive(Component, Clone, Copy, Debug)]
 pub struct SettingsSeed {

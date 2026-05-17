@@ -1,5 +1,6 @@
 use bevy::prelude::*;
 use chunk::cascade::CascadeChunk;
+use game_commands::command::TextEntryFocus;
 use render_item::{
 	mesh::{handle::MeshHandle, MeshDispatch},
 	DispatchRenderItem,
@@ -49,7 +50,7 @@ fn preview_sync_key(config: &PreviewConfig) -> String {
 pub fn keyboard_preview(
 	mut config: ResMut<PreviewConfig>,
 	keyboard: Res<ButtonInput<KeyCode>>,
-	text_focus: Res<crate::input::TextEntryFocus>,
+	text_focus: Res<TextEntryFocus>,
 ) {
 	if text_focus.0 {
 		return;
@@ -95,11 +96,7 @@ pub fn keyboard_preview(
 	}
 
 	if changed {
-		log::debug!(
-			"sdf preview: {:?} res_2={}",
-			config.primitive.variant_key(),
-			config.res_2
-		);
+		log::debug!("sdf preview: {:?} res_2={}", config.primitive.variant_key(), config.res_2);
 	}
 }
 
@@ -107,7 +104,9 @@ fn next_primitive(current: &PlaygroundPrimitive) -> PlaygroundPrimitive {
 	match current {
 		PlaygroundPrimitive::TaperedCylinder(_) => PlaygroundPrimitive::noisy_cylinder_default(),
 		PlaygroundPrimitive::NoisyCylinder(_) => PlaygroundPrimitive::crook_cylinder_default(),
-		PlaygroundPrimitive::CrookCylinder(_) => PlaygroundPrimitive::noisy_crook_cylinder_default(),
+		PlaygroundPrimitive::CrookCylinder(_) => {
+			PlaygroundPrimitive::noisy_crook_cylinder_default()
+		}
 		PlaygroundPrimitive::NoisyCrookCylinder(_) => PlaygroundPrimitive::ball_default(),
 		PlaygroundPrimitive::Ball(_) => PlaygroundPrimitive::noisy_ball_default(),
 		PlaygroundPrimitive::NoisyBall(_) => PlaygroundPrimitive::tapered_cylinder_default(),

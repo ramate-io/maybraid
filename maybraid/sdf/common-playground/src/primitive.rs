@@ -8,7 +8,7 @@ use render_item::{
 };
 use sdf::{Bounds, Sdf};
 use sdf_common::{
-	Ball, CrookCylinder, NoisyBall, NoisyCylinder, NoisyCrookCylinder, NoisySurface,
+	Ball, CrookCylinder, NoisyBall, NoisyCrookCylinder, NoisyCylinder, NoisySurface,
 	TaperedCylinder, UnitCylinderNoiseParams,
 };
 
@@ -29,12 +29,7 @@ impl PlaygroundPrimitive {
 	}
 
 	pub fn noisy_cylinder_default() -> Self {
-		Self::NoisyCylinder(NoisySurface::new_perlin(
-			TaperedCylinder::default(),
-			42,
-			5.0,
-			0.05,
-		))
+		Self::NoisyCylinder(NoisySurface::new_perlin(TaperedCylinder::default(), 42, 5.0, 0.05))
 	}
 
 	/// Visible bend for Tab cycling / key `3` (same radii as default taper).
@@ -48,15 +43,9 @@ impl PlaygroundPrimitive {
 
 	/// Same crook as [`Self::crook_cylinder_default`] with [`UnitCylinderNoiseParams`] surface noise.
 	pub fn noisy_crook_cylinder_default() -> Self {
-		let crook = CrookCylinder {
-			bend_x: 0.12,
-			bend_z: 0.08,
-			..CrookCylinder::unit_segment(0.5, 0.4)
-		};
-		Self::NoisyCrookCylinder(NoisySurface::from_params(
-			crook,
-			UnitCylinderNoiseParams.into(),
-		))
+		let crook =
+			CrookCylinder { bend_x: 0.12, bend_z: 0.08, ..CrookCylinder::unit_segment(0.5, 0.4) };
+		Self::NoisyCrookCylinder(NoisySurface::from_params(crook, UnitCylinderNoiseParams.into()))
 	}
 
 	pub fn ball_default() -> Self {
@@ -262,7 +251,8 @@ impl<M: Material + Clone> PlaygroundRenderItem<M> {
 
 impl<M: Material + Clone> RenderItem for PlaygroundRenderItem<M>
 where
-	(CascadeChunk, MeshDispatch<MeshHandle<PlaygroundPrimitive>>, Transform, MeshMaterial3d<M>): Bundle,
+	(CascadeChunk, MeshDispatch<MeshHandle<PlaygroundPrimitive>>, Transform, MeshMaterial3d<M>):
+		Bundle,
 {
 	fn spawn_render_items(
 		&self,

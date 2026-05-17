@@ -3,9 +3,9 @@
 use bevy::prelude::*;
 
 use crate::commands::render::ball::BallHelper;
-use crate::input::CommandConsoleOutput;
 use crate::preview::PreviewConfig;
 use crate::primitive::PlaygroundPrimitive;
+use game_commands::command::CommandConsoleOutput;
 
 pub fn react_render_helper_ball(
 	mut commands: Commands,

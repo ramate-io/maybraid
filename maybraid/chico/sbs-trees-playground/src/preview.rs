@@ -1,8 +1,8 @@
 use bevy::prelude::*;
 use chico_ball_components::chico_ball::ChicoBall;
 use chico_ball_components::plane_splay::PlaneSplay;
-use chico_sbs_trees::SkippedMeshMaterial;
 use chico_sbs_trees::sopes_banyan::SopesBanyan;
+use chico_sbs_trees::SkippedMeshMaterial;
 use chico_stick_components::chico_stick::ChicoStick;
 use chico_vegetation_shaders::{ChicoLeafMaterial, ChicoStickMaterial};
 use chunk::cascade::CascadeChunk;
@@ -17,11 +17,9 @@ pub type PreviewSopesBanyan = SopesBanyan<
 >;
 
 pub type PreviewStick = ChicoStick<ChicoStickMaterial, SkippedMeshMaterial<ChicoStickMaterial>>;
-pub type PreviewJointBall =
-	ChicoBall<ChicoStickMaterial, SkippedMeshMaterial<ChicoStickMaterial>>;
+pub type PreviewJointBall = ChicoBall<ChicoStickMaterial, SkippedMeshMaterial<ChicoStickMaterial>>;
 pub type PreviewLeafBall = ChicoBall<ChicoLeafMaterial, SkippedMeshMaterial<ChicoLeafMaterial>>;
-pub type PreviewPlaneSplay =
-	PlaneSplay<ChicoLeafMaterial, SkippedMeshMaterial<ChicoLeafMaterial>>;
+pub type PreviewPlaneSplay = PlaneSplay<ChicoLeafMaterial, SkippedMeshMaterial<ChicoLeafMaterial>>;
 
 #[derive(Component)]
 pub struct SbsPreviewRoot;

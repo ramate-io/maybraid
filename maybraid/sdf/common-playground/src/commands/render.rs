@@ -1,8 +1,8 @@
 pub mod ball;
 pub mod crook_cylinder;
 pub mod noisy_ball;
-pub mod noisy_cylinder;
 pub mod noisy_crook_cylinder;
+pub mod noisy_cylinder;
 pub mod plugin;
 pub mod tapered_cylinder;
 mod vec3_args;
@@ -17,8 +17,8 @@ use crate::primitive::PlaygroundPrimitive;
 pub use ball::BallHelper;
 pub use crook_cylinder::CrookCylinderHelper;
 pub use noisy_ball::{NoisyBallArgs, NoisyBallHelper};
-pub use noisy_cylinder::{NoisyCylinderArgs, NoisyCylinderHelper};
 pub use noisy_crook_cylinder::{NoisyCrookCylinderArgs, NoisyCrookCylinderHelper};
+pub use noisy_cylinder::{NoisyCylinderArgs, NoisyCylinderHelper};
 pub use tapered_cylinder::TaperedCylinderHelper;
 
 use vec3_args::parse_vec3_csv;

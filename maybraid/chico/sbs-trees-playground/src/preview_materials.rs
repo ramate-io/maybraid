@@ -14,15 +14,11 @@ pub struct PreviewTreeMaterials {
 }
 
 fn preview_stick_colors() -> ChicoStickMaterial {
-	ChicoStickMaterial {
-		base_color: Vec4::new(0.13, 0.085, 0.055, 1.0),
-	}
+	ChicoStickMaterial { base_color: Vec4::new(0.13, 0.085, 0.055, 1.0) }
 }
 
 fn preview_leaf_colors() -> ChicoLeafMaterial {
-	ChicoLeafMaterial {
-		base_color: Vec4::new(0.22, 0.5, 0.29, 1.0),
-	}
+	ChicoLeafMaterial { base_color: Vec4::new(0.22, 0.5, 0.29, 1.0) }
 }
 
 pub fn setup_preview_tree_materials(

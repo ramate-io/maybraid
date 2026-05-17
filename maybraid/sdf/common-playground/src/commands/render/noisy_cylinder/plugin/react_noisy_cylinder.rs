@@ -5,9 +5,9 @@ use bevy::prelude::*;
 use sdf_common::NoisySurface;
 
 use crate::commands::render::noisy_cylinder::NoisyCylinderHelper;
-use crate::input::CommandConsoleOutput;
 use crate::preview::PreviewConfig;
 use crate::primitive::PlaygroundPrimitive;
+use game_commands::command::CommandConsoleOutput;
 
 pub fn react_render_helper_noisy_cylinder(
 	mut commands: Commands,
