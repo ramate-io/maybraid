@@ -3,6 +3,8 @@ use bevy::input::mouse::{MouseScrollUnit, MouseWheel};
 use bevy::picking::hover::HoverMap;
 use bevy::prelude::*;
 
+use crate::command::{CommandConsoleOutput, TextEntryFocus, TypedCommandLine};
+
 const HUD_ROOT_HEIGHT_PX: f32 = 276.0;
 const HUD_CONSOLE_VIEWPORT_PX: f32 = 200.0;
 const SCROLL_LINE_PX: f32 = 14.0;
@@ -12,6 +14,7 @@ pub struct GameCommandUiConfig {
 	pub title: String,
 	pub empty_console_text: String,
 	pub root_background: Color,
+	pub controls_hint: String,
 }
 
 impl Default for GameCommandUiConfig {
@@ -20,9 +23,14 @@ impl Default for GameCommandUiConfig {
 			title: "Game commands - / cmd - WASD - up/down history - PgUp/PgDn scroll".into(),
 			empty_console_text: "Console: (errors & `help` output) - wheel or PgUp/PgDn".into(),
 			root_background: Color::srgba(0.1, 0.2, 0.24, 0.82),
+			controls_hint: "help - Enter - up/down history - PgUp/PgDn - Shift+up/down scroll"
+				.into(),
 		}
 	}
 }
+
+#[derive(Resource, Clone, Default)]
+pub struct GameCommandStatusText(pub String);
 
 #[derive(Component)]
 pub struct DebugHudRoot;
@@ -56,9 +64,13 @@ impl Default for GameCommandUiPlugin {
 impl Plugin for GameCommandUiPlugin {
 	fn build(&self, app: &mut App) {
 		app.insert_resource(self.config.clone())
+			.init_resource::<GameCommandStatusText>()
 			.add_observer(on_console_viewport_scroll)
 			.add_systems(Startup, setup_debug_ui)
-			.add_systems(Update, (send_console_ui_scroll_events, scroll_console_viewport_keyboard));
+			.add_systems(
+				Update,
+				(update_debug_ui, send_console_ui_scroll_events, scroll_console_viewport_keyboard),
+			);
 	}
 }
 
@@ -130,6 +142,54 @@ pub fn setup_debug_ui(mut commands: Commands, config: Res<GameCommandUiConfig>) 
 						});
 				});
 		});
+}
+
+pub fn update_debug_ui(
+	camera_query: Query<&Transform, With<Camera3d>>,
+	mut hud_text: ParamSet<(
+		Query<&mut Text, With<HudStatusLine>>,
+		Query<&mut Text, With<HudConsoleBlock>>,
+	)>,
+	mut console_scroll: Query<&mut ScrollPosition, With<HudConsoleViewport>>,
+	config: Res<GameCommandUiConfig>,
+	status_text: Res<GameCommandStatusText>,
+	typed: Res<TypedCommandLine>,
+	text_focus: Res<TextEntryFocus>,
+	console: Res<CommandConsoleOutput>,
+) {
+	if console.is_changed() {
+		for mut sp in &mut console_scroll {
+			sp.0 = Vec2::ZERO;
+		}
+	}
+
+	if let Ok(mut status) = hud_text.p0().single_mut() {
+		let command_status = format!(
+			"[/] {}  |  buf: {}",
+			if text_focus.0 { "cmd ON" } else { "cmd off" },
+			if typed.0.is_empty() { "_".into() } else { typed.0.clone() },
+		);
+		let playground_status =
+			if status_text.0.is_empty() { config.title.as_str() } else { status_text.0.as_str() };
+
+		status.0 = if let Ok(transform) = camera_query.single() {
+			let pos = transform.translation;
+			format!(
+				"{playground_status}  |  {command_status}\nCam {:.1}, {:.1}, {:.1}   -   {}",
+				pos.x, pos.y, pos.z, config.controls_hint
+			)
+		} else {
+			format!("{playground_status}  |  {command_status}\n{}", config.controls_hint)
+		};
+	}
+
+	if let Ok(mut block) = hud_text.p1().single_mut() {
+		block.0 = if console.0.is_empty() {
+			config.empty_console_text.clone()
+		} else {
+			console.0.clone()
+		};
+	}
 }
 
 pub fn send_console_ui_scroll_events(

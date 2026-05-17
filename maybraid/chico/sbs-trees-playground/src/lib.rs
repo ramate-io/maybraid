@@ -53,7 +53,7 @@ impl Plugin for SbsTreesPlaygroundPlugin {
 						.after(react_render_helper_sopes_banyan)
 						.before(sync_tree_preview),
 					sync_tree_preview.after(sync_preview_tree_material_handles),
-					ui::update_debug_ui,
+					ui::sync_command_status_text.before(game_commands::ui::update_debug_ui),
 					render_items::<crate::preview::PreviewSopesBanyan>,
 				),
 			);

@@ -49,7 +49,7 @@ impl Plugin for SdfCommonPlaygroundPlugin {
 					camera::camera_controller,
 					keyboard_preview,
 					sync_sdf_preview.after(despawn_settings_command_announcer),
-					ui::update_debug_ui,
+					ui::sync_command_status_text.before(game_commands::ui::update_debug_ui),
 					render_items::<PlaygroundRenderItem<StandardMaterial>>,
 					fetch_meshes::<MeshHandle<PlaygroundPrimitive>, StandardMaterial>,
 				),
