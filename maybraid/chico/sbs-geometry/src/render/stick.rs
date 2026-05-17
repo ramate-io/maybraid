@@ -1,6 +1,6 @@
 use crate::{BallStickChain, BallStickSegment, Hysteresis};
 use bevy::prelude::*;
-use procedural_common::FromScalarNoise;
+use procedural_common::{FromScalarNoise, NoiseParams};
 use render_item::{CascadeChunk, RenderItem};
 use std::marker::PhantomData;
 
@@ -11,6 +11,38 @@ pub trait StickRenderRule<R: RenderItem, H: Hysteresis>: Clone {
 		parent_hysteresis: &H,
 		child_hysteresis: &H,
 	) -> Option<R>;
+}
+
+#[derive(Clone)]
+pub struct AlwaysStickRenderRule<Item> {
+	item: Item,
+}
+
+impl<Item> AlwaysStickRenderRule<Item> {
+	pub fn new(item: Item) -> Self {
+		Self { item }
+	}
+}
+
+impl<Item: FromScalarNoise> AlwaysStickRenderRule<Item> {
+	pub fn from_noise_params(params: NoiseParams) -> Self {
+		Self::new(params.build_scalar())
+	}
+}
+
+impl<Item, H> StickRenderRule<Item, H> for AlwaysStickRenderRule<Item>
+where
+	Item: RenderItem + Clone,
+	H: Hysteresis,
+{
+	fn stick_render_item_for(
+		&self,
+		_segment: &BallStickSegment<'_>,
+		_parent_hysteresis: &H,
+		_child_hysteresis: &H,
+	) -> Option<Item> {
+		Some(self.item.clone())
+	}
 }
 
 /// Renders sticks (edges) of a [`BallStickChain`].

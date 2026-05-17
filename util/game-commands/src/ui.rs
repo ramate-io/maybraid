@@ -1,0 +1,213 @@
+use bevy::ecs::event::EntityEvent;
+use bevy::input::mouse::{MouseScrollUnit, MouseWheel};
+use bevy::picking::hover::HoverMap;
+use bevy::prelude::*;
+
+const HUD_ROOT_HEIGHT_PX: f32 = 276.0;
+const HUD_CONSOLE_VIEWPORT_PX: f32 = 200.0;
+const SCROLL_LINE_PX: f32 = 14.0;
+
+#[derive(Resource, Clone)]
+pub struct GameCommandUiConfig {
+	pub title: String,
+	pub empty_console_text: String,
+	pub root_background: Color,
+}
+
+impl Default for GameCommandUiConfig {
+	fn default() -> Self {
+		Self {
+			title: "Game commands - / cmd - WASD - up/down history - PgUp/PgDn scroll".into(),
+			empty_console_text: "Console: (errors & `help` output) - wheel or PgUp/PgDn".into(),
+			root_background: Color::srgba(0.1, 0.2, 0.24, 0.82),
+		}
+	}
+}
+
+#[derive(Component)]
+pub struct DebugHudRoot;
+
+#[derive(Component)]
+pub struct HudStatusLine;
+
+#[derive(Component)]
+pub struct HudConsoleBlock;
+
+#[derive(Component)]
+pub struct HudConsoleViewport;
+
+#[derive(EntityEvent, Debug)]
+#[entity_event(propagate, auto_propagate)]
+pub struct ConsoleUiScroll {
+	pub entity: Entity,
+	pub delta: Vec2,
+}
+
+pub struct GameCommandUiPlugin {
+	pub config: GameCommandUiConfig,
+}
+
+impl Default for GameCommandUiPlugin {
+	fn default() -> Self {
+		Self { config: GameCommandUiConfig::default() }
+	}
+}
+
+impl Plugin for GameCommandUiPlugin {
+	fn build(&self, app: &mut App) {
+		app.insert_resource(self.config.clone())
+			.add_observer(on_console_viewport_scroll)
+			.add_systems(Startup, setup_debug_ui)
+			.add_systems(Update, (send_console_ui_scroll_events, scroll_console_viewport_keyboard));
+	}
+}
+
+pub fn setup_debug_ui(mut commands: Commands, config: Res<GameCommandUiConfig>) {
+	let status_size = 12.0;
+	let console_size = 11.0;
+
+	commands
+		.spawn((
+			Node {
+				position_type: PositionType::Absolute,
+				bottom: Val::Px(6.0),
+				left: Val::Px(8.0),
+				right: Val::Px(8.0),
+				height: Val::Px(HUD_ROOT_HEIGHT_PX),
+				min_height: Val::Px(HUD_ROOT_HEIGHT_PX),
+				max_height: Val::Px(HUD_ROOT_HEIGHT_PX),
+				padding: UiRect::axes(Val::Px(8.0), Val::Px(6.0)),
+				flex_direction: FlexDirection::Column,
+				row_gap: Val::Px(4.0),
+				align_items: AlignItems::Stretch,
+				flex_shrink: 0.0,
+				..default()
+			},
+			BackgroundColor(config.root_background),
+			DebugHudRoot,
+		))
+		.with_children(|parent| {
+			parent.spawn((
+				Text::new(config.title.clone()),
+				TextFont { font_size: status_size, ..default() },
+				TextColor(Color::WHITE),
+				HudStatusLine,
+			));
+			parent
+				.spawn((
+					Node {
+						width: Val::Percent(100.0),
+						height: Val::Px(HUD_CONSOLE_VIEWPORT_PX),
+						min_height: Val::Px(HUD_CONSOLE_VIEWPORT_PX),
+						max_height: Val::Px(HUD_CONSOLE_VIEWPORT_PX),
+						flex_shrink: 0.0,
+						overflow: Overflow::scroll_y(),
+						..default()
+					},
+					ScrollPosition::default(),
+					BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.12)),
+					Pickable::default(),
+					HudConsoleViewport,
+				))
+				.with_children(|viewport| {
+					viewport
+						.spawn((
+							Node {
+								width: Val::Percent(100.0),
+								flex_direction: FlexDirection::Column,
+								..default()
+							},
+							Pickable::IGNORE,
+						))
+						.with_children(|col| {
+							col.spawn((
+								Text::new(""),
+								TextFont { font_size: console_size, ..default() },
+								TextColor(Color::srgba(0.95, 0.98, 1.0, 1.0)),
+								Pickable::IGNORE,
+								HudConsoleBlock,
+							));
+						});
+				});
+		});
+}
+
+pub fn send_console_ui_scroll_events(
+	mut mouse_wheel_reader: MessageReader<MouseWheel>,
+	hover_map: Res<HoverMap>,
+	mut commands: Commands,
+) {
+	for mouse_wheel in mouse_wheel_reader.read() {
+		let mut delta = -Vec2::new(mouse_wheel.x, mouse_wheel.y);
+		if mouse_wheel.unit == MouseScrollUnit::Line {
+			delta *= SCROLL_LINE_PX;
+		}
+		for pointer_map in hover_map.values() {
+			for entity in pointer_map.keys().copied() {
+				commands.trigger(ConsoleUiScroll { entity, delta });
+			}
+		}
+	}
+}
+
+pub fn on_console_viewport_scroll(
+	mut scroll: On<ConsoleUiScroll>,
+	mut query: Query<(&mut ScrollPosition, &Node, &ComputedNode), With<HudConsoleViewport>>,
+) {
+	let Ok((mut scroll_position, node, computed)) = query.get_mut(scroll.entity) else {
+		return;
+	};
+
+	let max_offset = (computed.content_size() - computed.size()) * computed.inverse_scale_factor();
+	let delta = &mut scroll.delta;
+
+	if node.overflow.x == OverflowAxis::Scroll && delta.x != 0. {
+		let max =
+			if delta.x > 0. { scroll_position.x >= max_offset.x } else { scroll_position.x <= 0. };
+		if !max {
+			scroll_position.x += delta.x;
+			delta.x = 0.;
+		}
+	}
+
+	if node.overflow.y == OverflowAxis::Scroll && delta.y != 0. {
+		let max =
+			if delta.y > 0. { scroll_position.y >= max_offset.y } else { scroll_position.y <= 0. };
+		if !max {
+			scroll_position.y += delta.y;
+			delta.y = 0.;
+		}
+	}
+
+	if *delta == Vec2::ZERO {
+		scroll.propagate(false);
+	}
+}
+
+pub fn scroll_console_viewport_keyboard(
+	keyboard: Res<ButtonInput<KeyCode>>,
+	mut q: Query<(&mut ScrollPosition, &Node, &ComputedNode), With<HudConsoleViewport>>,
+) {
+	let Ok((mut scroll_position, node, computed)) = q.single_mut() else {
+		return;
+	};
+	if node.overflow.y != OverflowAxis::Scroll {
+		return;
+	}
+	let max_offset = (computed.content_size() - computed.size()) * computed.inverse_scale_factor();
+	let max_y = max_offset.y.max(0.);
+	let step = SCROLL_LINE_PX * 3.0;
+	let shift = keyboard.any_pressed([KeyCode::ShiftLeft, KeyCode::ShiftRight]);
+	if keyboard.just_pressed(KeyCode::PageUp) {
+		scroll_position.y = (scroll_position.y - step * 4.0).max(0.);
+	}
+	if keyboard.just_pressed(KeyCode::PageDown) {
+		scroll_position.y = (scroll_position.y + step * 4.0).min(max_y);
+	}
+	if shift && keyboard.just_pressed(KeyCode::ArrowUp) {
+		scroll_position.y = (scroll_position.y - step).max(0.);
+	}
+	if shift && keyboard.just_pressed(KeyCode::ArrowDown) {
+		scroll_position.y = (scroll_position.y + step).min(max_y);
+	}
+}

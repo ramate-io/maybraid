@@ -14,78 +14,71 @@ use std::f32::consts::TAU;
 
 use bevy_math::Vec3;
 
+use super::stalk_perturbation::{HasStrictStalk, StalkPerturbation};
 use super::strict_stalk::StrictStalk;
 use super::Anchors;
 use procedural_common::{NoiseConfig, NoiseParams};
 
 use crate::chain::sopes_banyan::{SopesBanyanChain, SopesBanyanPhase};
 use crate::chain::BranchOut;
+use crate::BallStickNode;
 use crate::DepthBudget;
-use crate::{BallStickNode, SopesBanyanHysteresis};
 
 /// RFC-style ring band and vase profile over [`StrictStalk::height`].
 #[derive(Clone, Debug, PartialEq)]
-#[cfg_attr(feature = "clap", derive(clap::Args))]
-#[cfg_attr(feature = "clap", command(rename_all = "kebab-case"))]
-pub struct SopesBanyanAnchors {
+pub struct SopesBanyanProtoAnchors {
 	/// Vertical extent and base for ring placement.
-	#[cfg_attr(feature = "clap", command(flatten))]
 	pub stalk: StrictStalk,
 	/// First ring height as a fraction of [`StrictStalk::height`] above [`StrictStalk::base_anchor`] (RFC ~0.4).
-	#[cfg_attr(feature = "clap", arg(long, default_value_t = 0.40))]
 	pub first_ring_unit_height: f32,
 	/// Last ring height fraction (RFC ~0.9).
-	#[cfg_attr(feature = "clap", arg(long, default_value_t = 0.90))]
 	pub last_ring_unit_height: f32,
-	#[cfg_attr(feature = "clap", arg(long, default_value_t = 6))]
 	pub ring_count: u32,
-	#[cfg_attr(feature = "clap", arg(long, default_value_t = 7))]
 	pub anchors_per_ring: u32,
 	/// Vase mix endpoints as fractions of stalk height: `length ≈ H * mix(min, max, vase_profile(u))`.
-	#[cfg_attr(feature = "clap", arg(long, default_value_t = 0.25))]
 	pub projection_min_fraction_of_height: f32,
-	#[cfg_attr(feature = "clap", arg(long, default_value_t = 0.70))]
 	pub projection_max_fraction_of_height: f32,
 	/// Clamp epsilon for bounded logit vase profile.
-	#[cfg_attr(feature = "clap", arg(long, default_value_t = 0.08))]
 	pub vase_profile_epsilon: f32,
 	/// Center of the vase profile.
-	#[cfg_attr(feature = "clap", arg(long, default_value_t = 0.5))]
 	pub projection_center_fraction: f32,
 	/// Initial [`crate::DepthBudget::remaining`] at the first ring (RFC limb depth ~5 segments).
-	#[cfg_attr(feature = "clap", arg(long, default_value_t = 5))]
 	pub max_depth_first_ring: usize,
 	/// Initial depth budget at the last ring (~8).
-	#[cfg_attr(feature = "clap", arg(long, default_value_t = 8))]
 	pub max_depth_last_ring: usize,
-	#[cfg_attr(feature = "clap", arg(long, default_value_t = 0.12))]
 	pub descender_threshold: f32,
 }
 
-impl Default for SopesBanyanAnchors {
+impl Default for SopesBanyanProtoAnchors {
 	fn default() -> Self {
 		Self {
 			stalk: StrictStalk {
-				stalk_height: 100.0,
+				stalk_height: 20.0,
 				stalk_base_anchor: Vec3::ZERO,
 				stalk_base_radius: 0.75,
 			},
 			first_ring_unit_height: 0.40,
-			last_ring_unit_height: 0.90,
-			ring_count: 6,
+			last_ring_unit_height: 0.95,
+			ring_count: 8,
 			anchors_per_ring: 7,
-			projection_min_fraction_of_height: 0.25,
-			projection_max_fraction_of_height: 0.80,
+			projection_min_fraction_of_height: 0.10,
+			projection_max_fraction_of_height: 0.20,
 			vase_profile_epsilon: 0.4,
 			projection_center_fraction: 0.5,
-			max_depth_first_ring: 5,
+			max_depth_first_ring: 4,
 			max_depth_last_ring: 8,
-			descender_threshold: 0.03,
+			descender_threshold: 0.01,
 		}
 	}
 }
 
-impl SopesBanyanAnchors {
+impl HasStrictStalk for SopesBanyanProtoAnchors {
+	fn strict_stalk(&self) -> &StrictStalk {
+		&self.stalk
+	}
+}
+
+impl SopesBanyanProtoAnchors {
 	/// Normalized index along rings in `[0, 1]` (0 = lowest ring, 1 = highest).
 	fn ring_mix_u(ring_index: u32, ring_count: u32) -> f32 {
 		if ring_count <= 1 {
@@ -128,14 +121,14 @@ impl SopesBanyanAnchors {
 	}
 }
 
-impl SopesBanyanAnchors {
+impl SopesBanyanProtoAnchors {
 	/// Ring spokes as [`SopesBanyanChain`] seeds with explicit chain noise and vase/descender tuning.
 	pub fn hysteresis_seeds(
 		&self,
 		chain_noise: NoiseConfig,
 		banyan_height: f32,
 		descender_threshold: f32,
-	) -> Vec<SopesBanyanHysteresis> {
+	) -> Vec<SopesBanyanChain> {
 		let mut out = Vec::new();
 		let n = self.ring_count.max(1);
 		let k = self.anchors_per_ring.max(1);
@@ -155,21 +148,21 @@ impl SopesBanyanAnchors {
 
 				let seed_node = BallStickNode::new(pos, 0.1);
 				let noise = chain_noise.clone();
-				let mut h = SopesBanyanChain {
-					noise: noise.clone(),
+				let mut h = SopesBanyanChain::new(
+					noise.clone().with_frequency(noise.params().frequency * 10.0),
 					banyan_height,
 					descender_threshold,
-					phase: SopesBanyanPhase::BranchOut(DepthBudget {
+					SopesBanyanPhase::BranchOut(DepthBudget {
 						inner: BranchOut::radial_out_horizontal(seed_node, radial)
 							.with_hysteresis_context(noise, 0, radial)
 							.with_ball_radius(0.25)
 							.with_radius_range(0.24..0.28)
 							.with_radius_range_child_scale((0.9, 0.95))
-							.with_child_count(1..5)
-							.with_ray_degrees_of_freedom(0.2),
+							.with_child_count(1..2)
+							.with_ray_degrees_of_freedom(0.3),
 						remaining: max_depth,
 					}),
-				};
+				);
 				let lo = proj * 0.97;
 				let hi = proj * 1.03;
 				if let SopesBanyanPhase::BranchOut(ref mut w) = &mut h.phase {
@@ -182,23 +175,106 @@ impl SopesBanyanAnchors {
 
 		// add in the stalk anchor
 		let stalk_anchors = self.stalk.point_to_point_anchors();
-		out.extend(stalk_anchors.into_iter().map(|a| SopesBanyanChain {
-			noise: chain_noise.clone(),
-			banyan_height,
-			descender_threshold,
-			phase: SopesBanyanPhase::Stalk(a),
+		out.extend(stalk_anchors.into_iter().map(|a| {
+			SopesBanyanChain::new(
+				chain_noise.clone(),
+				banyan_height,
+				descender_threshold,
+				SopesBanyanPhase::Stalk(a),
+			)
 		}));
 
 		out
 	}
 }
 
-impl Anchors<SopesBanyanHysteresis> for SopesBanyanAnchors {
-	fn anchors(&self) -> Vec<SopesBanyanHysteresis> {
+impl Anchors<SopesBanyanChain> for SopesBanyanProtoAnchors {
+	fn anchors(&self) -> Vec<SopesBanyanChain> {
 		self.hysteresis_seeds(
 			NoiseConfig::new(NoiseParams::default()),
 			self.stalk.stalk_height,
 			self.descender_threshold,
+		)
+	}
+}
+
+/// Perturbing Sope's Banyan anchor recipe used by the public SBS front-end.
+#[derive(Clone, Debug, PartialEq)]
+pub struct SopesBanyanAnchors {
+	pub perturbation: StalkPerturbation<SopesBanyanProtoAnchors>,
+}
+
+impl SopesBanyanAnchors {
+	pub fn new(proto: SopesBanyanProtoAnchors) -> Self {
+		Self { perturbation: StalkPerturbation::new(proto) }
+	}
+
+	pub fn with_perturbation(mut self, perturbation: SopesBanyanAnchorPerturbation) -> Self {
+		self.perturbation.noise = perturbation.noise;
+		self.perturbation.vertical_offset = perturbation.vertical_offset;
+		self.perturbation.angular_scale = perturbation.angular_scale;
+		self.perturbation.radius_offset = perturbation.radius_offset;
+		self
+	}
+
+	pub fn proto(&self) -> &SopesBanyanProtoAnchors {
+		&self.perturbation.inner
+	}
+
+	pub fn proto_mut(&mut self) -> &mut SopesBanyanProtoAnchors {
+		&mut self.perturbation.inner
+	}
+
+	/// Ring spokes as [`SopesBanyanChain`] seeds with explicit chain noise and stalk perturbation.
+	pub fn hysteresis_seeds(
+		&self,
+		chain_noise: NoiseConfig,
+		banyan_height: f32,
+		descender_threshold: f32,
+	) -> Vec<SopesBanyanChain> {
+		let seeds = self.proto().hysteresis_seeds(chain_noise, banyan_height, descender_threshold);
+		self.perturbation.perturb_anchors(seeds)
+	}
+}
+
+/// Public Sope-specific knobs for non-stalk anchor perturbation.
+#[derive(Clone, Debug, PartialEq)]
+pub struct SopesBanyanAnchorPerturbation {
+	pub noise: NoiseParams,
+	pub vertical_offset: std::ops::Range<f32>,
+	pub angular_scale: std::ops::Range<f32>,
+	pub radius_offset: std::ops::Range<f32>,
+}
+
+impl Default for SopesBanyanAnchorPerturbation {
+	fn default() -> Self {
+		Self {
+			noise: NoiseParams::default(),
+			vertical_offset: -1.0..1.0,
+			angular_scale: 0.0..0.5,
+			radius_offset: -0.05..0.05,
+		}
+	}
+}
+
+impl HasStrictStalk for SopesBanyanAnchors {
+	fn strict_stalk(&self) -> &StrictStalk {
+		self.proto().strict_stalk()
+	}
+}
+
+impl Default for SopesBanyanAnchors {
+	fn default() -> Self {
+		Self::new(SopesBanyanProtoAnchors::default())
+	}
+}
+
+impl Anchors<SopesBanyanChain> for SopesBanyanAnchors {
+	fn anchors(&self) -> Vec<SopesBanyanChain> {
+		self.hysteresis_seeds(
+			NoiseConfig::new(NoiseParams::default()),
+			self.proto().stalk.stalk_height,
+			self.proto().descender_threshold,
 		)
 	}
 }
@@ -209,7 +285,7 @@ mod tests {
 
 	#[test]
 	fn vase_projection_grows_with_ring_height() {
-		let a = SopesBanyanAnchors {
+		let a = SopesBanyanProtoAnchors {
 			stalk: StrictStalk {
 				stalk_height: 10.0,
 				stalk_base_anchor: Vec3::ZERO,
@@ -218,8 +294,8 @@ mod tests {
 			ring_count: 5,
 			..Default::default()
 		};
-		let l0 = a.projection_length(SopesBanyanAnchors::ring_mix_u(0, 5));
-		let l1 = a.projection_length(SopesBanyanAnchors::ring_mix_u(4, 5));
+		let l0 = a.projection_length(SopesBanyanProtoAnchors::ring_mix_u(0, 5));
+		let l1 = a.projection_length(SopesBanyanProtoAnchors::ring_mix_u(4, 5));
 		assert!(l1 > l0, "upper rings should get longer vase projections");
 
 		let d0 = a.max_depth_for_ring(0.0);
@@ -229,7 +305,11 @@ mod tests {
 
 	#[test]
 	fn anchors_count_matches_rings_times_spokes() {
-		let a = SopesBanyanAnchors { ring_count: 3, anchors_per_ring: 4, ..Default::default() };
-		assert_eq!(a.anchors().len(), 12);
+		let a = SopesBanyanAnchors::new(SopesBanyanProtoAnchors {
+			ring_count: 3,
+			anchors_per_ring: 4,
+			..Default::default()
+		});
+		assert_eq!(a.anchors().len(), 13);
 	}
 }

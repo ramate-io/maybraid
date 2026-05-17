@@ -30,9 +30,6 @@ pub struct StartupPlugin;
 
 impl Plugin for StartupPlugin {
 	fn build(&self, app: &mut App) {
-		app.add_systems(
-			Update,
-			run_pending_startup_command.before(react_playground_command_root),
-		);
+		app.add_systems(Update, run_pending_startup_command.before(react_playground_command_root));
 	}
 }

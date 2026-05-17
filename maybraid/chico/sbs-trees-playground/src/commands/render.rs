@@ -13,19 +13,24 @@ pub struct RenderHelper<T: clap::Args + Clone> {
 	#[command(flatten)]
 	pub inner: T,
 
+	/// Preview cascade resolution exponent.
 	#[arg(long, default_value_t = 5)]
+	#[arg(help_heading = "Preview")]
 	pub res_2: u8,
 
-	/// Uniform scale factors `x,y,z`.
+	/// Scale factors `x,y,z`.
 	#[arg(long, default_value = "1,1,1", value_parser = parse_vec3_csv)]
+	#[arg(value_name = "X,Y,Z", help_heading = "Preview Transform")]
 	pub scale: Vec3,
 
 	/// Translation `x,y,z` in world units.
 	#[arg(long, default_value = "0,0,0", value_parser = parse_vec3_csv)]
+	#[arg(value_name = "X,Y,Z", help_heading = "Preview Transform")]
 	pub translate: Vec3,
 
 	/// Euler rotation in degrees around X, then Y, then Z.
 	#[arg(long, default_value = "0,0,0", value_parser = parse_vec3_csv)]
+	#[arg(value_name = "X,Y,Z", help_heading = "Preview Transform")]
 	pub rotate_euler: Vec3,
 }
 

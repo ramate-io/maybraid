@@ -1915,9 +1915,12 @@ dependencies = [
  "chico-ball-components",
  "chico-sbs-geometry",
  "chico-sbs-trees",
+ "chico-sdf",
  "chico-stick-components",
+ "chico-vegetation-shaders",
  "chunk",
  "clap",
+ "game-commands",
  "log",
  "render-item",
  "sdf",
@@ -1947,6 +1950,13 @@ name = "chico-tree-components"
 version = "0.0.1"
 dependencies = [
  "chico-sdf",
+]
+
+[[package]]
+name = "chico-vegetation-shaders"
+version = "0.0.1"
+dependencies = [
+ "bevy",
 ]
 
 [[package]]
@@ -2752,6 +2762,13 @@ dependencies = [
  "pin-project-lite",
  "pin-utils",
  "slab",
+]
+
+[[package]]
+name = "game-commands"
+version = "0.0.1"
+dependencies = [
+ "bevy",
 ]
 
 [[package]]
@@ -4657,6 +4674,7 @@ dependencies = [
  "bevy",
  "chunk",
  "clap",
+ "game-commands",
  "log",
  "render-item",
  "sdf",

@@ -6,6 +6,7 @@ pub mod commands;
 mod ground;
 mod input;
 mod preview;
+mod preview_materials;
 mod startup;
 mod ui;
 
@@ -15,10 +16,15 @@ pub use preview::{PreviewConfig, SbsPreviewRoot};
 pub use startup::PendingStartupCommand;
 
 use bevy::prelude::*;
+use chico_sdf::{NoisyBall, NoisyCylinder};
 use chico_sbs_trees::sopes_banyan::render_item_plugin::SopesBanyanRenderItemPlugin;
-use commands::root::react_playground_command_root;
+use chico_vegetation_shaders::{ChicoLeafMaterial, ChicoStickMaterial, ChicoVegetationShadersPlugin};
+use commands::render::sopes_banyan::plugin::react_render_helper_sopes_banyan;
+use game_commands::ui::GameCommandUiPlugin;
 use ground::setup_ground;
 use preview::sync_tree_preview;
+use preview_materials::{setup_preview_tree_materials, sync_preview_tree_material_handles};
+use render_item::mesh::handle::EnforceCachingPlugin;
 use render_item::render_items;
 
 pub struct SbsTreesPlaygroundPlugin;
@@ -28,19 +34,22 @@ impl Plugin for SbsTreesPlaygroundPlugin {
 		app.init_resource::<PreviewConfig>()
 			.init_resource::<PendingStartupCommand>()
 			.add_plugins(SopesBanyanRenderItemPlugin::default())
+			.add_plugins(ChicoVegetationShadersPlugin)
+			.add_plugins(EnforceCachingPlugin::<NoisyCylinder, ChicoStickMaterial>::default())
+			.add_plugins(EnforceCachingPlugin::<NoisyBall, ChicoLeafMaterial>::default())
 			.add_plugins(PlaygroundCommandsPlugin)
+			.add_plugins(GameCommandUiPlugin { config: ui::ui_config() })
 			.add_plugins(startup::StartupPlugin)
 			.add_plugins(
 				bevy::pbr::MaterialPlugin::<checkerboard_material::CheckerboardMaterial>::default(),
 			)
-			.add_observer(ui::on_console_viewport_scroll)
 			.init_resource::<input::TypedCommandLine>()
 			.init_resource::<input::TextEntryFocus>()
 			.init_resource::<input::CommandConsoleOutput>()
 			.init_resource::<input::CommandHistory>()
 			.add_systems(
 				Startup,
-				(camera::setup_camera, setup_lighting, setup_ground, ui::setup_debug_ui),
+				(camera::setup_camera, setup_lighting, setup_ground, setup_preview_tree_materials),
 			)
 			.add_systems(
 				Update,
@@ -48,11 +57,12 @@ impl Plugin for SbsTreesPlaygroundPlugin {
 					camera::camera_controller,
 					input::toggle_text_entry_focus,
 					input::capture_command_line_input,
-					ui::send_console_ui_scroll_events,
-					ui::scroll_console_viewport_keyboard,
-					sync_tree_preview.after(react_playground_command_root),
+					sync_preview_tree_material_handles
+						.after(react_render_helper_sopes_banyan)
+						.before(sync_tree_preview),
+					sync_tree_preview.after(sync_preview_tree_material_handles),
 					ui::update_debug_ui,
-					render_items::<chico_sbs_trees::sopes_banyan::SopesBanyan>,
+					render_items::<crate::preview::PreviewSopesBanyan>,
 				),
 			);
 	}

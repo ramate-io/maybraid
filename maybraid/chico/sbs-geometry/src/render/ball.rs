@@ -1,11 +1,52 @@
 use crate::{BallStickChain, BallStickNode, Hysteresis};
 use bevy::prelude::*;
-use procedural_common::FromScalarNoise;
+use procedural_common::{FromScalarNoise, NoiseParams};
 use render_item::{CascadeChunk, RenderItem};
 use std::marker::PhantomData;
 
 pub trait BallRenderRule<R: RenderItem, H: Hysteresis>: Clone {
-	fn ball_render_item_for(&self, node: &BallStickNode, hysteresis: &H) -> Option<R>;
+	/// Returns the render item for this graph vertex and a **radius scale** applied to [`BallStickNode::radius`]
+	/// when building the spawn transform (typically `1.0`; canopy foliage may use `> 1.0`).
+	fn ball_render_item_for(
+		&self,
+		node_idx: usize,
+		node: &BallStickNode,
+		hysteresis: &H,
+		chain: &BallStickChain<H>,
+	) -> Option<(R, f32)>;
+}
+
+#[derive(Clone)]
+pub struct AlwaysBallRenderRule<Item> {
+	item: Item,
+}
+
+impl<Item> AlwaysBallRenderRule<Item> {
+	pub fn new(item: Item) -> Self {
+		Self { item }
+	}
+}
+
+impl<Item: FromScalarNoise> AlwaysBallRenderRule<Item> {
+	pub fn from_noise_params(params: NoiseParams) -> Self {
+		Self::new(params.build_scalar())
+	}
+}
+
+impl<Item, H> BallRenderRule<Item, H> for AlwaysBallRenderRule<Item>
+where
+	Item: RenderItem + Clone,
+	H: Hysteresis,
+{
+	fn ball_render_item_for(
+		&self,
+		_node_idx: usize,
+		_node: &BallStickNode,
+		_hysteresis: &H,
+		_chain: &BallStickChain<H>,
+	) -> Option<(Item, f32)> {
+		Some((self.item.clone(), 1.0))
+	}
 }
 
 /// A useful common helper for rendering balls.
@@ -27,15 +68,17 @@ impl<Item: RenderItem, Rule: BallRenderRule<Item, H>, H: Hysteresis>
 
 	pub fn render_balls(&self) -> Vec<(Item, Transform)> {
 		self.chain
-			.nodes_with_hysteresis()
-			.filter_map(|(node, h)| {
-				self.rule.ball_render_item_for(node, h).map(|item| {
-					(
-						item,
-						Transform::from_translation(node.position)
-							.with_scale(Vec3::splat(node.radius)),
-					)
-				})
+			.nodes_with_hysteresis_enumerated()
+			.filter_map(|(node_idx, node, h)| {
+				self.rule.ball_render_item_for(node_idx, node, h, &self.chain).map(
+					|(item, radius_scale)| {
+						(
+							item,
+							Transform::from_translation(node.position)
+								.with_scale(Vec3::splat(node.radius * radius_scale)),
+						)
+					},
+				)
 			})
 			.collect()
 	}

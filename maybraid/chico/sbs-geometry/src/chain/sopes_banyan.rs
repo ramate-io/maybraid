@@ -1,16 +1,14 @@
 //! Sope's Banyan canopy as a **phase machine** on [`super::Hysteresis`] ([#252](https://github.com/ramate-io/maybraid/issues/252)).
 
-use procedural_common::NoiseConfig;
+use procedural_common::{NoiseConfig, NoiseParams, SetNoiseParams};
 
+use crate::anchors::stalk_perturbation::{perturb_node, AnchorPerturbation, PerturbAnchor};
 use crate::BallStickNode;
 
 use super::point_to_point::PointToPoint;
 use super::BranchOut;
 use super::DepthBudget;
 use super::Hysteresis;
-
-/// Canonical name for consumers that only need the hysteresis type (render, anchors).
-pub type SopesBanyanHysteresis = SopesBanyanChain;
 
 /// Flair-up segment: one biased [`BranchOut`] step from the current joint.
 #[derive(Clone)]
@@ -73,9 +71,10 @@ impl StartDescender {
 			SopesBanyanPhase::BranchOut(budget) => {
 				let inner = &budget.inner;
 				let node = inner.node;
-				if noise.sample_unit_3d(node.position.x, node.position.y, node.position.z)
-					< descender_threshold
-				{
+				let sample =
+					noise.sample_unit_3d(node.position.x, node.position.y, node.position.z);
+				log::info!("descender sample: {}", sample);
+				if sample < descender_threshold {
 					let drop_len = (banyan_height * 2.0).max(inner.length.end);
 					SopesBanyanPhase::StartDescender(StartDescender {
 						projection: BranchOut::down(node)
@@ -129,6 +128,24 @@ impl SopesBanyanPhase {
 		}
 	}
 
+	pub fn with_noise(self, noise: NoiseConfig) -> Self {
+		match self {
+			Self::BranchOut(mut b) => {
+				b.inner = b.inner.with_noise(noise);
+				Self::BranchOut(b)
+			}
+			Self::StartFlairUp(mut s) => {
+				s.projection = s.projection.with_noise(noise);
+				Self::StartFlairUp(s)
+			}
+			Self::StartDescender(mut s) => {
+				s.projection = s.projection.with_noise(noise);
+				Self::StartDescender(s)
+			}
+			other => other,
+		}
+	}
+
 	/// Flair / descender phase swaps after a mechanical [`DepthBudget`] expansion step.
 	pub fn candidate_into(
 		self,
@@ -156,6 +173,38 @@ pub struct SopesBanyanChain {
 }
 
 impl SopesBanyanChain {
+	pub fn new(
+		noise: NoiseConfig,
+		banyan_height: f32,
+		descender_threshold: f32,
+		phase: SopesBanyanPhase,
+	) -> Self {
+		Self { noise, banyan_height, descender_threshold, phase }
+	}
+
+	fn with_phase(&self, phase: SopesBanyanPhase) -> Self {
+		Self {
+			phase,
+			noise: self.noise.clone(),
+			banyan_height: self.banyan_height,
+			descender_threshold: self.descender_threshold,
+		}
+	}
+
+	fn branch_children(&self, budget: &DepthBudget<BranchOut>) -> Vec<Self> {
+		let mut synced = budget.clone();
+		synced.inner.noise = self.noise.clone();
+		synced
+			.next_hysteresis()
+			.into_iter()
+			.map(SopesBanyanPhase::BranchOut)
+			.map(|phase| {
+				phase.candidate_into(&self.noise, self.banyan_height, self.descender_threshold)
+			})
+			.map(|phase| self.with_phase(phase))
+			.collect()
+	}
+
 	/// [`BranchOut`] profile for render / tuning (current joint bias when in flair or descender).
 	pub fn active_branch_profile(&self) -> Option<&BranchOut> {
 		match &self.phase {
@@ -188,51 +237,81 @@ impl Hysteresis for SopesBanyanChain {
 			SopesBanyanPhase::Stalk(p) => p
 				.next_hysteresis()
 				.into_iter()
-				.map(|p| Self {
-					phase: SopesBanyanPhase::Stalk(p),
-					noise: self.noise.clone(),
-					banyan_height: self.banyan_height,
-					descender_threshold: self.descender_threshold,
-				})
+				.map(|p| self.with_phase(SopesBanyanPhase::Stalk(p)))
 				.collect(),
-			SopesBanyanPhase::BranchOut(budget) => {
-				let mut synced = budget.clone();
-				synced.inner.noise = self.noise.clone();
-				synced
-					.next_hysteresis()
-					.into_iter()
-					.map(|b| {
-						SopesBanyanPhase::candidate_into(
-							SopesBanyanPhase::BranchOut(b),
-							&self.noise,
-							self.banyan_height,
-							self.descender_threshold,
-						)
-					})
-					.map(|phase| Self {
-						phase,
-						noise: self.noise.clone(),
-						banyan_height: self.banyan_height,
-						descender_threshold: self.descender_threshold,
-					})
-					.collect()
-			}
-			SopesBanyanPhase::StartFlairUp(s) => vec![Self {
-				phase: s.project_to_end(),
-				noise: self.noise.clone(),
-				banyan_height: self.banyan_height,
-				descender_threshold: self.descender_threshold,
-			}],
+			SopesBanyanPhase::BranchOut(budget) => self.branch_children(budget),
+			SopesBanyanPhase::StartFlairUp(s) => vec![self.with_phase(s.project_to_end())],
 			SopesBanyanPhase::EndFlairUp(_) => Vec::new(),
-			SopesBanyanPhase::StartDescender(s) => vec![Self {
-				phase: s.project_to_end(),
-				noise: self.noise.clone(),
-				banyan_height: self.banyan_height,
-				descender_threshold: self.descender_threshold,
-			}],
+			SopesBanyanPhase::StartDescender(s) => vec![self.with_phase(s.project_to_end())],
 			SopesBanyanPhase::EndDescender(_) => Vec::new(),
 		}
 	}
+}
+
+impl SetNoiseParams for SopesBanyanChain {
+	fn with_noise_params(mut self, params: NoiseParams) -> Self {
+		let noise = NoiseConfig::new(params);
+		self.phase = self.phase.with_noise(noise.clone());
+		self.noise = noise;
+		self
+	}
+}
+
+impl PerturbAnchor for SopesBanyanChain {
+	fn perturb_anchor(mut self, perturbation: AnchorPerturbation) -> Self {
+		self.phase = self.phase.perturb_anchor(perturbation);
+		self
+	}
+}
+
+impl SopesBanyanPhase {
+	fn perturb_anchor(self, perturbation: AnchorPerturbation) -> Self {
+		match self {
+			Self::Stalk(mut p) => {
+				p.start = perturb_node(p.start, perturbation);
+				Self::Stalk(p)
+			}
+			Self::BranchOut(mut b) => {
+				b.inner = perturb_branch_out(b.inner, perturbation);
+				Self::BranchOut(b)
+			}
+			Self::StartFlairUp(mut s) => {
+				s.projection = perturb_branch_out(s.projection, perturbation);
+				Self::StartFlairUp(s)
+			}
+			Self::EndFlairUp(mut e) => {
+				e.node = perturb_node(e.node, perturbation);
+				Self::EndFlairUp(e)
+			}
+			Self::StartDescender(mut s) => {
+				s.projection = perturb_branch_out(s.projection, perturbation);
+				Self::StartDescender(s)
+			}
+			Self::EndDescender(mut e) => {
+				e.node = perturb_node(e.node, perturbation);
+				Self::EndDescender(e)
+			}
+		}
+	}
+}
+
+fn perturb_branch_out(mut branch: BranchOut, perturbation: AnchorPerturbation) -> BranchOut {
+	branch.node = perturb_node(branch.node, perturbation);
+	branch.incoming_ray = super::degree_range::perturb_direction(
+		branch.incoming_ray,
+		perturbation.angular_scale,
+		perturbation.angular_u,
+		perturbation.angular_v,
+	);
+	branch.bias_ray = super::degree_range::perturb_direction(
+		branch.bias_ray,
+		perturbation.angular_scale,
+		perturbation.angular_u,
+		perturbation.angular_v,
+	);
+	branch.radius_range = (branch.radius_range.start + perturbation.radius_offset).max(1e-4)
+		..(branch.radius_range.end + perturbation.radius_offset).max(1e-4);
+	branch
 }
 
 #[cfg(test)]
@@ -245,16 +324,16 @@ mod tests {
 	fn build_produces_graph() -> anyhow::Result<()> {
 		let noise = NoiseConfig::new(NoiseParams::default());
 		let seed =
-			SopesBanyanChain {
-				noise: noise.clone(),
-				banyan_height: 20.0,
-				descender_threshold: 0.12,
-				phase: SopesBanyanPhase::BranchOut(DepthBudget {
+			SopesBanyanChain::new(
+				noise.clone(),
+				20.0,
+				0.12,
+				SopesBanyanPhase::BranchOut(DepthBudget {
 					inner: BranchOut::up(BallStickNode::new(Vec3::ZERO, 0.05))
 						.with_hysteresis_context(noise, 0, Vec3::Y),
 					remaining: 3,
 				}),
-			};
+			);
 		let chain = crate::BallStickChain::build(vec![seed]);
 		assert!(chain.nodes.len() > 1);
 		Ok(())

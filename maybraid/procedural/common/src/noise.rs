@@ -20,9 +20,7 @@ pub fn noise_type_from_str(s: &str) -> Result<NoiseType, String> {
 		"cellular" => Ok(NoiseType::Cellular),
 		"value-cubic" | "valuecubic" => Ok(NoiseType::ValueCubic),
 		"value" => Ok(NoiseType::Value),
-		other => Err(format!(
-			"unknown noise type {other:?} (expected perlin, open-simplex-2, …)"
-		)),
+		other => Err(format!("unknown noise type {other:?} (expected perlin, open-simplex-2, …)")),
 	}
 }
 
@@ -159,6 +157,11 @@ impl NoiseConfig {
 		Self { generator, params }
 	}
 
+	pub fn with_frequency(mut self, frequency: f32) -> Self {
+		self.params.frequency = frequency;
+		self
+	}
+
 	pub fn params(&self) -> &NoiseParams {
 		&self.params
 	}
@@ -255,15 +258,7 @@ impl NoiseConfig {
 	}
 
 	/// Deterministically map a 4D sample to a float range.
-	pub fn sample_range_f32_4d(
-		&self,
-		lo: f32,
-		hi: f32,
-		x: f32,
-		y: f32,
-		z: f32,
-		w: f32,
-	) -> f32 {
+	pub fn sample_range_f32_4d(&self, lo: f32, hi: f32, x: f32, y: f32, z: f32, w: f32) -> f32 {
 		if hi <= lo {
 			return lo;
 		}
@@ -271,22 +266,21 @@ impl NoiseConfig {
 		lo + u * (hi - lo)
 	}
 
-	/// **[0, 1]** inputs mapped to **[-1, 1]** per axis before [`NoiseConfig::sample_1d`].
-	pub fn sample_unit_1d(&self, u: f32) -> f32 {
-		let x = u * 2.0 - 1.0;
-		self.sample_1d(x)
+	/// World-space input mapped to [0, 1] range.
+	pub fn sample_unit_1d(&self, x: f32) -> f32 {
+		(self.sample_1d(x) + 1.0) * 0.5
 	}
 
-	pub fn sample_unit_2d(&self, u: f32, v: f32) -> f32 {
-		self.sample_2d(u * 2.0 - 1.0, v * 2.0 - 1.0)
+	pub fn sample_unit_2d(&self, x: f32, y: f32) -> f32 {
+		(self.sample_2d(x, y) + 1.0) * 0.5
 	}
 
-	pub fn sample_unit_3d(&self, u: f32, v: f32, w: f32) -> f32 {
-		self.sample_3d(u * 2.0 - 1.0, v * 2.0 - 1.0, w * 2.0 - 1.0)
+	pub fn sample_unit_3d(&self, x: f32, y: f32, z: f32) -> f32 {
+		(self.sample_3d(x, y, z) + 1.0) * 0.5
 	}
 
-	pub fn sample_unit_4d(&self, u: f32, v: f32, w: f32, t: f32) -> f32 {
-		self.sample_4d(u * 2.0 - 1.0, v * 2.0 - 1.0, w * 2.0 - 1.0, t * 2.0 - 1.0)
+	pub fn sample_unit_4d(&self, x: f32, y: f32, z: f32, w: f32) -> f32 {
+		(self.sample_4d(x, y, z, w) + 1.0) * 0.5
 	}
 }
 
@@ -297,15 +291,57 @@ pub trait FromScalarNoise {
 	fn from_scalar(seed_scalar: f32, frequency: f32, amplitude: f32, octaves: u32) -> Self;
 }
 
+/// Override structural noise params on a composable builder.
+pub trait SetNoiseParams {
+	fn with_noise_params(self, params: NoiseParams) -> Self;
+}
+
+/// Parse compact `seed,frequency,amplitude,octaves` tuples into [`NoiseParams`].
+pub fn noise_params_from_scalar_str(s: &str) -> Result<NoiseParams, String> {
+	let parts: Vec<&str> = s.split(',').map(str::trim).filter(|p| !p.is_empty()).collect();
+	if parts.len() != 4 {
+		return Err(format!("expected seed,frequency,amplitude,octaves, got {s:?}"));
+	}
+
+	let seed_scalar = parts[0].parse::<f32>().map_err(|e| e.to_string())?;
+	let frequency = parts[1].parse::<f32>().map_err(|e| e.to_string())?;
+	let amplitude = parts[2].parse::<f32>().map_err(|e| e.to_string())?;
+	let octaves = parts[3].parse::<u32>().map_err(|e| e.to_string())?;
+	Ok(NoiseParams::from_scalar(seed_scalar, frequency, amplitude, octaves))
+}
+
 impl FromScalarNoise for NoiseParams {
 	fn from_scalar(seed_scalar: f32, frequency: f32, amplitude: f32, octaves: u32) -> Self {
 		Self { seed: seed_scalar as i32, frequency, amplitude, octaves, ..Default::default() }
 	}
 }
 
+impl NoiseParams {
+	pub fn with_seed(mut self, seed: i32) -> Self {
+		self.seed = seed;
+		self
+	}
+
+	pub fn build_scalar<T: FromScalarNoise>(&self) -> T {
+		T::from_scalar(self.seed as f32, self.frequency, self.amplitude, self.octaves)
+	}
+}
+
+impl SetNoiseParams for NoiseParams {
+	fn with_noise_params(self, params: NoiseParams) -> Self {
+		params
+	}
+}
+
 impl FromScalarNoise for NoiseConfig {
 	fn from_scalar(seed_scalar: f32, frequency: f32, amplitude: f32, octaves: u32) -> Self {
 		Self::new(NoiseParams::from_scalar(seed_scalar, frequency, amplitude, octaves))
+	}
+}
+
+impl SetNoiseParams for NoiseConfig {
+	fn with_noise_params(self, params: NoiseParams) -> Self {
+		Self::new(params)
 	}
 }
 

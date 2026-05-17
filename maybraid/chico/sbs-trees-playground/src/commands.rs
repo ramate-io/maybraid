@@ -38,7 +38,9 @@ impl PlaygroundCommand {
 		Self::parse_startup_from_argv_tail(tail)
 	}
 
-	pub fn parse_startup_from_argv_tail(tail: Vec<std::ffi::OsString>) -> Result<Option<Self>, String> {
+	pub fn parse_startup_from_argv_tail(
+		tail: Vec<std::ffi::OsString>,
+	) -> Result<Option<Self>, String> {
 		if tail.is_empty() {
 			return Ok(None);
 		}

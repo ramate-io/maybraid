@@ -2,133 +2,131 @@
 //!
 //! # Intent
 //!
-//! Wire the vertical **vase banyan** recipe: [Banyan Trunk §3.1.6.5](https://github.com/ramate-io/maybraid/tree/main/rfc/rfc-000-000-183-chico-vegetation/03-01-stalk-and-ball-stick-trees/06-well-known-component-constructions/05-banyan-trunk/README.md) stalk (`chico_sdf` / stalk height and radius fractions from the RFC), `chico-sbs-geometry` anchor rings plus [`chico_sbs_geometry::chain::sopes_banyan`](chico_sbs_geometry::chain::sopes_banyan) hysteresis, segment meshes via `chico-stick` ([noisy tapered cylinder](https://github.com/ramate-io/maybraid/tree/main/rfc/rfc-000-000-183-chico-vegetation/03-01-stalk-and-ball-stick-trees/01-stick-and-stalk-components/README.md)), and canopy balls via `chico-ball` and `plane-splay` with RFC ball selection (foliage broadly in the rising crown; sparse on descenders unless tuning for denser mystique). Optional `tree-components` / jungle growth (tufts) comes later for dense variants per [§3.1.6.4 Jungle growths](https://github.com/ramate-io/maybraid/tree/main/rfc/rfc-000-000-183-chico-vegetation/03-01-stalk-and-ball-stick-trees/06-well-known-component-constructions/04-jungle-growths/README.md).
+//! Wire the vertical **vase banyan** recipe: [Banyan Trunk §3.1.6.5](https://github.com/ramate-io/maybraid/tree/main/rfc/rfc-000-000-183-chico-vegetation/03-01-stalk-and-ball-stick-trees/06-well-known-component-constructions/05-banyan-trunk/README.md) stalk (`chico_sdf` / stalk height and radius fractions from the RFC), `chico-sbs-geometry` anchor rings plus [`chico_sbs_geometry::chain::sopes_banyan`](chico_sbs_geometry::chain::sopes_banyan) hysteresis, segment meshes via `chico-stick` ([noisy tapered cylinder](https://github.com/ramate-io/maybraid/tree/main/rfc/rfc-000-000-183-chico-vegetation/03-01-stalk-and-ball-stick-trees/01-stick-and-stalk-components/README.md)), and canopy via `chico-ball` **noisy balls** plus [`chico_ball_components::plane_splay`](chico_ball_components::plane_splay) **plane splays** with RFC-style mixing (dense variegation in the rising crown; sparser splays on descenders). Optional `tree-components` / jungle growth (tufts) comes later for dense variants per [§3.1.6.4 Jungle growths](https://github.com/ramate-io/maybraid/tree/main/rfc/rfc-000-000-183-chico-vegetation/03-01-stalk-and-ball-stick-trees/06-well-known-component-constructions/04-jungle-growths/README.md).
+//!
+//! # Rendering split
+//!
+//! - **Stick material** — [`ChicoStick`] segments plus [`ChicoBall`] markers at **internal joints** (nodes with at least one child edge): bark-colored joints between sticks.
+//! - **Leaf material** — At terminals above the crown floor: **[`ChicoBall`]** (noisy sphere) or **[`PlaneSplay`](chico_ball_components::plane_splay::PlaneSplay)** (radial blade meshes), selected per-node for silhouette variegation; uniform scale uses [`SopesBanyanSbs::leaf_ball_size`] (from [`SopesBanyan::geometry`]) / [`BallStickNode::radius`].
 //!
 //! # Playground / CLI
 //!
 //! Everything that parameterizes height, rings, chain phases, materials, and optional fruiting ([§3.1.6.7](https://github.com/ramate-io/maybraid/tree/main/rfc/rfc-000-000-183-chico-vegetation/03-01-stalk-and-ball-stick-trees/06-well-known-component-constructions/07-fruiting-bodies/README.md)) should be exposed **under feature flags** as **`clap`-parseable** types so a future playground can drive the same recipe as production.
 
+mod canopy;
+mod joint_ball;
 pub mod render_item_plugin;
+mod stick;
+
+use std::marker::PhantomData;
 
 use bevy::prelude::*;
-use chico_ball_components::{chico_ball::ChicoBall, plane_splay::PlaneSplay};
-use chico_sbs_geometry::render::ball::{BallRenderHelper, BallRenderRule};
-use chico_sbs_geometry::render::stick::{StickRenderHelper, StickRenderRule};
-use chico_sbs_geometry::{
-	BallStickChain, BallStickNode, BallStickSegment, SopesBanyanHysteresis, SopesBanyanSbs,
-};
-use chico_stick_components::chico_stick::ChicoStick;
-use procedural_common::FromScalarNoise;
+use chico_ball_components::chico_ball::ChicoBall;
+use chico_ball_components::plane_splay::PlaneSplay;
+use chico_sbs_geometry::render::ball::BallRenderHelper;
+use chico_sbs_geometry::render::stick::StickRenderHelper;
+use chico_sbs_geometry::{BallStickChain, SopesBanyanChain, SopesBanyanSbs};
+use clap::Args;
+use procedural_common::noise_params_from_scalar_str;
+use procedural_common::{FromScalarNoise, NoiseParams};
 use render_item::{CascadeChunk, RenderItem};
 
-#[derive(Clone)]
-#[cfg_attr(feature = "clap", derive(clap::Args))]
-#[cfg_attr(feature = "clap", command(rename_all = "kebab-case"))]
-pub struct SopesBanyan {
-	/// Stalk, rings, and canopy chain noise in one flattened group (no duplicate `NoiseParams` keys).
-	#[cfg_attr(feature = "clap", command(flatten))]
+use crate::skipped_mesh_material::SkippedMeshMaterial;
+use canopy::SopesBanyanLeafCanopyRule;
+use joint_ball::SopesBanyanJointBallRule;
+use stick::SopesBanyanStickRule;
+
+/// Typical [`StandardMaterial`] tree using CLI-skipped handles for both bark (`stick_material`) and foliage (`leaf_material`).
+pub type SopesBanyanStd = SopesBanyan<
+	StandardMaterial,
+	SkippedMeshMaterial<StandardMaterial>,
+	StandardMaterial,
+	SkippedMeshMaterial<StandardMaterial>,
+>;
+
+#[derive(Clone, Args)]
+#[command(rename_all = "kebab-case")]
+pub struct SopesBanyan<StickM, StickS, LeafM, LeafS>
+where
+	StickM: Material,
+	StickS: Clone + Into<MeshMaterial3d<StickM>> + Args,
+	LeafM: Material,
+	LeafS: Clone + Into<MeshMaterial3d<LeafM>> + Args,
+{
+	/// Scale, anchors, growth, and topology noise for the ball-stick geometry.
+	#[command(flatten, next_help_heading = "Geometry")]
 	pub geometry: SopesBanyanSbs,
-	#[cfg_attr(feature = "clap", arg(long, default_value_t = 0.0))]
-	pub stick_seed_scalar: f32,
-	#[cfg_attr(feature = "clap", arg(long, default_value_t = 1.0))]
-	pub stick_frequency: f32,
-	#[cfg_attr(feature = "clap", arg(long, default_value_t = 0.05))]
-	pub stick_amplitude: f32,
-	#[cfg_attr(feature = "clap", arg(long, default_value_t = 1))]
-	pub stick_octaves: u32,
-	#[cfg_attr(feature = "clap", arg(long, default_value_t = 1.0))]
-	pub ball_frequency: f32,
-	#[cfg_attr(feature = "clap", arg(long, default_value_t = 0.05))]
-	pub ball_amplitude: f32,
-	#[cfg_attr(feature = "clap", arg(long, default_value_t = 1))]
-	pub ball_octaves: u32,
+
+	/// Bark / wood mesh material for [`ChicoStick`] segments and joint [`ChicoBall`] markers.
+	#[command(flatten, next_help_heading = "Stick Material")]
+	pub stick_material: StickS,
+
+	/// Foliage mesh material for terminal canopy ([`ChicoBall`] and [`PlaneSplay`]).
+	#[command(flatten, next_help_heading = "Leaf Material")]
+	pub leaf_material: LeafS,
+
+	/// Stick surface noise as `seed,frequency,amplitude,octaves`.
+	#[arg(
+		long,
+		default_value = "0,1,0.05,1",
+		value_parser = noise_params_from_scalar_str,
+		value_name = "SEED,FREQUENCY,AMPLITUDE,OCTAVES",
+		help_heading = "Surface Noise"
+	)]
+	pub stick_surface_noise: NoiseParams,
+
+	/// Leaf canopy ball surface noise as `seed,frequency,amplitude,octaves` (used for [`ChicoBall`] terminals; plane splays use the same material handle).
+	#[arg(
+		long,
+		default_value = "0,1,0.05,1",
+		value_parser = noise_params_from_scalar_str,
+		value_name = "SEED,FREQUENCY,AMPLITUDE,OCTAVES",
+		help_heading = "Surface Noise"
+	)]
+	pub leaf_surface_noise: NoiseParams,
+
+	#[arg(skip)]
+	__marker: PhantomData<(fn() -> StickM, fn() -> LeafM)>,
 }
 
-impl Default for SopesBanyan {
+impl<StickM, StickS, LeafM, LeafS> Default for SopesBanyan<StickM, StickS, LeafM, LeafS>
+where
+	StickM: Material,
+	StickS: Clone + Into<MeshMaterial3d<StickM>> + Args + Default,
+	LeafM: Material,
+	LeafS: Clone + Into<MeshMaterial3d<LeafM>> + Args + Default,
+{
 	fn default() -> Self {
 		Self {
 			geometry: SopesBanyanSbs::default(),
-			stick_seed_scalar: 0.0,
-			stick_frequency: 1.0,
-			stick_amplitude: 0.05,
-			stick_octaves: 1,
-			ball_frequency: 1.0,
-			ball_amplitude: 0.05,
-			ball_octaves: 1,
+			stick_material: StickS::default(),
+			leaf_material: LeafS::default(),
+			stick_surface_noise: NoiseParams::from_scalar(0.0, 1.0, 0.05, 1),
+			leaf_surface_noise: NoiseParams::from_scalar(0.0, 1.0, 0.05, 1),
+			__marker: PhantomData,
 		}
 	}
 }
 
-impl SopesBanyan {
-	pub fn build_chain(&self) -> BallStickChain<SopesBanyanHysteresis> {
-		BallStickChain::build(self.geometry.hysteresis_seeds())
+impl<StickM, StickS, LeafM, LeafS> SopesBanyan<StickM, StickS, LeafM, LeafS>
+where
+	StickM: Material,
+	StickS: Clone + Into<MeshMaterial3d<StickM>> + Args,
+	LeafM: Material,
+	LeafS: Clone + Into<MeshMaterial3d<LeafM>> + Args,
+{
+	pub fn build_chain(&self) -> BallStickChain<SopesBanyanChain> {
+		self.geometry.build_chain()
 	}
 }
 
-#[derive(Clone)]
-enum SopesBanyanBallItem {
-	Chico(ChicoBall),
-	Plane(PlaneSplay),
-}
-
-impl RenderItem for SopesBanyanBallItem {
-	fn spawn_render_items(
-		&self,
-		commands: &mut Commands,
-		cascade_chunk: &CascadeChunk,
-		transform: Transform,
-	) -> Vec<Entity> {
-		match self {
-			Self::Chico(item) => item.spawn_render_items(commands, cascade_chunk, transform),
-			Self::Plane(item) => item.spawn_render_items(commands, cascade_chunk, transform),
-		}
-	}
-}
-
-#[derive(Clone)]
-struct SopesBanyanBallRule {
-	frequency: f32,
-	amplitude: f32,
-	octaves: u32,
-}
-
-impl BallRenderRule<SopesBanyanBallItem, SopesBanyanHysteresis> for SopesBanyanBallRule {
-	fn ball_render_item_for(
-		&self,
-		_node: &BallStickNode,
-		_hysteresis: &SopesBanyanHysteresis,
-	) -> Option<SopesBanyanBallItem> {
-		Some(SopesBanyanBallItem::Chico(ChicoBall::from_scalar(
-			0.0,
-			self.frequency,
-			self.amplitude,
-			self.octaves,
-		)))
-	}
-}
-
-#[derive(Clone)]
-struct SopesBanyanStickRule {
-	seed_scalar: f32,
-	frequency: f32,
-	amplitude: f32,
-	octaves: u32,
-}
-
-impl StickRenderRule<ChicoStick, SopesBanyanHysteresis> for SopesBanyanStickRule {
-	fn stick_render_item_for(
-		&self,
-		segment: &BallStickSegment<'_>,
-		_parent_hysteresis: &SopesBanyanHysteresis,
-		_child_hysteresis: &SopesBanyanHysteresis,
-	) -> Option<ChicoStick> {
-		let seed =
-			self.seed_scalar + segment.start.position.length() + segment.end.position.length();
-		Some(ChicoStick::from_scalar(seed, self.frequency, self.amplitude, self.octaves))
-	}
-}
-
-impl RenderItem for SopesBanyan {
+impl<StickM, StickS, LeafM, LeafS> RenderItem for SopesBanyan<StickM, StickS, LeafM, LeafS>
+where
+	StickM: Material + Send + Sync + 'static,
+	StickS: Clone + Into<MeshMaterial3d<StickM>> + Args + Send + Sync + 'static + Default,
+	LeafM: Material + Send + Sync + 'static,
+	LeafS: Clone + Into<MeshMaterial3d<LeafM>> + Args + Send + Sync + 'static + Default,
+{
 	fn spawn_render_items(
 		&self,
 		commands: &mut Commands,
@@ -137,11 +135,10 @@ impl RenderItem for SopesBanyan {
 	) -> Vec<Entity> {
 		let chain = self.build_chain();
 
-		let stick_rule = SopesBanyanStickRule {
-			seed_scalar: self.stick_seed_scalar,
-			frequency: self.stick_frequency,
-			amplitude: self.stick_amplitude,
-			octaves: self.stick_octaves,
+		let stick_rule = SopesBanyanStickRule::<StickM, StickS> {
+			surface_noise: self.stick_surface_noise,
+			stick_material: self.stick_material.clone(),
+			__marker: PhantomData,
 		};
 
 		let mut out = StickRenderHelper::new(chain.clone(), stick_rule).spawn_render_items(
@@ -150,16 +147,33 @@ impl RenderItem for SopesBanyan {
 			transform,
 		);
 
-		let ball_rule = SopesBanyanBallRule {
-			frequency: self.ball_frequency,
-			amplitude: self.ball_amplitude,
-			octaves: self.ball_octaves,
-		};
-		out.extend(BallRenderHelper::new(chain, ball_rule).spawn_render_items(
+		let mut joint_ball = self.stick_surface_noise.build_scalar::<ChicoBall<StickM, StickS>>();
+		joint_ball.material = self.stick_material.clone();
+		let joint_rule = SopesBanyanJointBallRule { joint_ball };
+
+		out.extend(BallRenderHelper::new(chain.clone(), joint_rule).spawn_render_items(
 			commands,
 			cascade_chunk,
 			transform,
 		));
+
+		let mut leaf_ball = self.leaf_surface_noise.build_scalar::<ChicoBall<LeafM, LeafS>>();
+		leaf_ball.material = self.leaf_material.clone();
+		let mut leaf_splay = PlaneSplay::<LeafM, LeafS>::default();
+		leaf_splay.material = self.leaf_material.clone();
+		let leaf_rule = SopesBanyanLeafCanopyRule {
+			min_height: self.geometry.crown_floor_world_y(),
+			leaf_ball,
+			leaf_splay,
+			leaf_radius_world: self.geometry.leaf_ball_size(),
+		};
+
+		out.extend(BallRenderHelper::new(chain, leaf_rule).spawn_render_items(
+			commands,
+			cascade_chunk,
+			transform,
+		));
+
 		out
 	}
 }

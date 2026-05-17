@@ -7,7 +7,7 @@
 use std::ops::Range;
 
 use bevy_math::Vec3;
-use procedural_common::{NoiseConfig, NoiseParams};
+use procedural_common::{NoiseConfig, NoiseParams, SetNoiseParams};
 
 use crate::BallStickNode;
 
@@ -181,7 +181,6 @@ impl BranchOut {
 	fn expand_children(&self) -> Vec<BranchOut> {
 		let parent = self.node;
 		let n = self.sample_child_count(&self.noise, &parent, self.segment_index);
-		log::info!("expanding children: {} {}", n, self.child_count.start);
 		(0..n)
 			.map(|ci| {
 				let ray = self.sample_ray(
@@ -275,6 +274,13 @@ impl BranchOut {
 	/// Blend incoming growth toward `bias_ray` with weight `t` in `[0, 1]`.
 	pub fn blend_direction(incoming_ray: Vec3, bias_ray: Vec3, t: f32) -> Vec3 {
 		degree_range::blend_direction(incoming_ray, bias_ray, t)
+	}
+}
+
+impl SetNoiseParams for BranchOut {
+	fn with_noise_params(mut self, params: NoiseParams) -> Self {
+		self.noise = NoiseConfig::new(params);
+		self
 	}
 }
 

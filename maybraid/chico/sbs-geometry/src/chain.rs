@@ -113,6 +113,17 @@ impl<H: Hysteresis> BallStickChain<H> {
 		self.nodes.iter().zip(self.hysteresis.iter())
 	}
 
+	/// Same as [`Self::nodes_with_hysteresis`], plus each node's graph index (for adjacency via [`Self::children`]).
+	pub fn nodes_with_hysteresis_enumerated(
+		&self,
+	) -> impl Iterator<Item = (usize, &BallStickNode, &H)> {
+		self.nodes
+			.iter()
+			.enumerate()
+			.zip(self.hysteresis.iter())
+			.map(|((idx, node), h)| (idx, node, h))
+	}
+
 	pub fn segments<'a>(&'a self) -> impl Iterator<Item = BallStickSegment<'a>> + 'a {
 		self.children.iter().enumerate().flat_map(move |(parent_idx, children)| {
 			let start = &self.nodes[parent_idx];
