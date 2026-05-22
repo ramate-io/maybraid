@@ -16,5 +16,5 @@ pub(crate) fn sync_command_status_text(
 	config: Res<PreviewConfig>,
 	mut status: ResMut<GameCommandStatusText>,
 ) {
-	status.0 = format!("SopesBanyan preview  res_2={}", config.res_2);
+	status.0 = format!("{} preview  res_2={}", config.tree.label(), config.res_2);
 }

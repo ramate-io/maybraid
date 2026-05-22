@@ -14,7 +14,11 @@ impl Default for SopesBanyanRenderItemPlugin {
 
 impl Plugin for SopesBanyanRenderItemPlugin {
 	fn build(&self, app: &mut App) {
-		app.add_plugins(ChicoStickRenderItemPlugin::default());
-		app.add_plugins(ChicoBallRenderItemPlugin::default());
+		if !app.is_plugin_added::<ChicoStickRenderItemPlugin>() {
+			app.add_plugins(ChicoStickRenderItemPlugin::default());
+		}
+		if !app.is_plugin_added::<ChicoBallRenderItemPlugin>() {
+			app.add_plugins(ChicoBallRenderItemPlugin::default());
+		}
 	}
 }

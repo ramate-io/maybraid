@@ -14,11 +14,13 @@ pub use game_commands::command::PendingStartupCommand;
 pub use preview::{PreviewConfig, SbsPreviewRoot};
 
 use bevy::prelude::*;
+use chico_sbs_trees::liams_conifer::render_item_plugin::LiamsConiferRenderItemPlugin;
 use chico_sbs_trees::sopes_banyan::render_item_plugin::SopesBanyanRenderItemPlugin;
 use chico_sdf::{NoisyBall, NoisyCylinder};
 use chico_vegetation_shaders::{
 	ChicoLeafMaterial, ChicoStickMaterial, ChicoVegetationShadersPlugin,
 };
+use commands::render::liams_conifer::plugin::react_render_helper_liams_conifer;
 use commands::render::sopes_banyan::plugin::react_render_helper_sopes_banyan;
 use game_commands::command::GameCommandPlugin;
 use ground::setup_ground;
@@ -32,7 +34,10 @@ pub struct SbsTreesPlaygroundPlugin;
 impl Plugin for SbsTreesPlaygroundPlugin {
 	fn build(&self, app: &mut App) {
 		app.init_resource::<PreviewConfig>()
-			.add_plugins(SopesBanyanRenderItemPlugin::default())
+			.add_plugins((
+				SopesBanyanRenderItemPlugin::default(),
+				LiamsConiferRenderItemPlugin::default(),
+			))
 			.add_plugins(ChicoVegetationShadersPlugin)
 			.add_plugins(EnforceCachingPlugin::<NoisyCylinder, ChicoStickMaterial>::default())
 			.add_plugins(EnforceCachingPlugin::<NoisyBall, ChicoLeafMaterial>::default())
@@ -51,10 +56,15 @@ impl Plugin for SbsTreesPlaygroundPlugin {
 					camera::camera_controller,
 					sync_preview_tree_material_handles
 						.after(react_render_helper_sopes_banyan)
+						.after(react_render_helper_liams_conifer)
 						.before(sync_tree_preview),
 					sync_tree_preview.after(sync_preview_tree_material_handles),
+					(
+						render_items::<crate::preview::PreviewSopesBanyan>,
+						render_items::<crate::preview::PreviewLiamsConifer>,
+					)
+						.after(sync_tree_preview),
 					ui::sync_command_status_text.before(game_commands::ui::update_debug_ui),
-					render_items::<crate::preview::PreviewSopesBanyan>,
 				),
 			);
 	}

@@ -1,10 +1,12 @@
+pub mod liams_conifer;
 pub mod plugin;
 pub mod sopes_banyan;
 
 use bevy::prelude::*;
 use clap::Subcommand;
 
-use crate::preview::PreviewConfig;
+use crate::preview::{PreviewConfig, PreviewTree};
+pub use liams_conifer::LiamsConiferRenderHelper;
 pub use sopes_banyan::SopesBanyanRenderHelper;
 
 #[derive(Clone, clap::Args, Component)]
@@ -52,6 +54,7 @@ impl<T: clap::Args + Clone> RenderHelper<T> {
 #[command(rename_all = "kebab-case")]
 pub enum Render {
 	SopesBanyan(SopesBanyanRenderHelper),
+	LiamsConifer(LiamsConiferRenderHelper),
 }
 
 impl Render {
@@ -61,13 +64,21 @@ impl Render {
 			Self::SopesBanyan(h) => {
 				commands.spawn(h);
 			}
+			Self::LiamsConifer(h) => {
+				commands.spawn(h);
+			}
 		}
 	}
 
 	pub fn into_preview_config(&self) -> PreviewConfig {
 		match self {
 			Self::SopesBanyan(h) => PreviewConfig {
-				tree: h.inner.clone(),
+				tree: PreviewTree::SopesBanyan(h.inner.clone()),
+				res_2: h.res_2,
+				transform: h.preview_transform(),
+			},
+			Self::LiamsConifer(h) => PreviewConfig {
+				tree: PreviewTree::LiamsConifer(h.inner.clone()),
 				res_2: h.res_2,
 				transform: h.preview_transform(),
 			},
