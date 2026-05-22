@@ -1,13 +1,14 @@
 //! Restricted **Liam's Conifer** geometry for CLI and playgrounds ([#244](https://github.com/ramate-io/maybraid/issues/244)).
+//!
+//! Flattened argument groups map into [`crate::anchors::liams_conifer::LiamsConiferProtoAnchors`], then
+//! [`AnchorsToChain::build_chain`] grows the shared ball-stick graph.
 
 use bevy_math::Vec3;
 #[cfg(feature = "clap")]
 use procedural_common::noise_params_from_scalar_str;
 #[cfg(feature = "clap")]
 use procedural_common::parse_unit_range;
-use procedural_common::{
-	NoiseConfig, NoiseParams, SetNoiseParams, UnitRange,
-};
+use procedural_common::{NoiseConfig, NoiseParams, SetNoiseParams, UnitRange};
 
 use crate::anchors::liams_conifer::{
 	LiamsConiferAnchorPerturbation, LiamsConiferAnchors, LiamsConiferProtoAnchors,
@@ -42,11 +43,7 @@ pub struct LiamsConiferScale {
 
 impl Default for LiamsConiferScale {
 	fn default() -> Self {
-		Self {
-			stalk_height: 30.0,
-			stalk_base_radius: None,
-			base_anchor: Vec3::ZERO,
-		}
+		Self { stalk_height: 30.0, stalk_base_radius: None, base_anchor: Vec3::ZERO }
 	}
 }
 
@@ -89,11 +86,7 @@ pub struct RingAnchorParams {
 
 impl Default for RingAnchorParams {
 	fn default() -> Self {
-		Self {
-			height_range: UnitRange::new(0.10, 0.98),
-			spacing: 0.03,
-			anchors_per_ring: 6,
-		}
+		Self { height_range: UnitRange::new(0.10, 0.98), spacing: 0.03, anchors_per_ring: 6 }
 	}
 }
 
@@ -106,7 +99,7 @@ pub struct ConiferProjectionParams {
 		feature = "clap",
 		arg(
 			long = "projection",
-			default_value = "0.15..0.20",
+			default_value = "0.20..0.30",
 			value_parser = parse_unit_range,
 			value_name = "MAX_FRAC..MIN_FRAC_OF_MAX"
 		)
@@ -116,7 +109,7 @@ pub struct ConiferProjectionParams {
 
 impl Default for ConiferProjectionParams {
 	fn default() -> Self {
-		Self { length_fraction_of_height: UnitRange::new(0.15, 0.20) }
+		Self { length_fraction_of_height: UnitRange::new(0.20, 0.30) }
 	}
 }
 
@@ -137,11 +130,7 @@ pub struct ConiferGrowthParams {
 
 impl Default for ConiferGrowthParams {
 	fn default() -> Self {
-		Self {
-			branch_depth: 3,
-			downward_bias_degrees: 2.0,
-			angle_tolerance_degrees: 8.0,
-		}
+		Self { branch_depth: 3, downward_bias_degrees: 2.0, angle_tolerance_degrees: 8.0 }
 	}
 }
 
@@ -258,6 +247,7 @@ impl LiamsConiferSbs {
 		self.scale.stalk_height * self.tuft_scale_factor
 	}
 
+	/// Anchor recipe used by [`Self::build_chain`] / [`Anchors::anchors`].
 	pub fn to_anchors(&self) -> LiamsConiferAnchors {
 		LiamsConiferAnchors::new(LiamsConiferProtoAnchors {
 			stalk: self.scale.to_stalk(),
@@ -270,8 +260,8 @@ impl LiamsConiferSbs {
 			downward_bias_radians: self.growth.downward_bias_degrees.to_radians(),
 			branch_angle_tolerance: self.growth.angle_tolerance_degrees.to_radians(),
 			branch_depth: self.growth.branch_depth,
-			branch_base_radius_fraction_of_stalk: 0.40,
-			branch_tip_radius_fraction_of_stalk: 0.16,
+			// Limb thickness: base radius at ring + down-step only (see proto docs).
+			branch_base_radius_fraction_of_stalk: 0.1,
 			branch_radius_child_scale: (0.72, 0.80),
 		})
 		.with_perturbation(self.anchor_perturbation.to_perturbation())

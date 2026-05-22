@@ -1,4 +1,21 @@
-//! Liam's Conifer canopy: fixed three-segment sparse [`BranchOut`] ([#244](https://github.com/ramate-io/maybraid/issues/244)).
+//! Liam's Conifer canopy as a **fixed-depth** [`BranchOut`] phase machine ([#244](https://github.com/ramate-io/maybraid/issues/244)).
+//!
+//! # Phases
+//!
+//! - [`LiamsConiferPhase::Stalk`] — vertical trunk segment(s) via [`super::point_to_point::PointToPoint`].
+//! - [`LiamsConiferPhase::BranchOut`] — sparse canopy limb with [`super::DepthBudget`].
+//!
+//! # Segment lengths
+//!
+//! Each limb carries a world [`LiamsConiferChain::projection_length`] from its anchor ring.
+//! On each hop, [`Self::branch_children`] sets [`BranchOut::length`] to
+//! `projection_length * SEGMENT_FRACS[segment_index]` before calling [`DepthBudget::next_hysteresis`].
+//!
+//! # Segment radii
+//!
+//! Anchor seeds set a thick base radius and collapsed [`BranchOut::radius_range`]; thinning is
+//! **not** reconfigured here — it follows [`BranchOut::radius_range_child_scale`] in
+//! [`super::branch_out::BranchOut::expand_children`].
 
 use procedural_common::{NoiseConfig, NoiseParams, SetNoiseParams};
 
@@ -8,7 +25,7 @@ use crate::BallStickNode;
 use super::point_to_point::PointToPoint;
 use super::{BranchOut, DepthBudget, Hysteresis};
 
-/// RFC segment fractions of total projection length.
+/// RFC segment fractions of total projection length (sum to 1.0).
 pub const SEGMENT_FRACS: [f32; 3] = [0.70, 0.15, 0.15];
 
 #[derive(Clone)]
@@ -17,12 +34,13 @@ pub enum LiamsConiferPhase {
 	BranchOut(DepthBudget<BranchOut>),
 }
 
+/// One canopy limb (or the stalk): shared noise, projection budget, and phase state.
 #[derive(Clone)]
 pub struct LiamsConiferChain {
 	pub noise: NoiseConfig,
-	/// World length budget for this limb (from anchor taper at ring height).
+	/// Total limb length budget from the anchor ring (world units).
 	pub projection_length: f32,
-	/// Segment budget for [`SEGMENT_FRACS`] (RFC default 3).
+	/// Hops remaining; should match [`SEGMENT_FRACS`].len() at the ring seed.
 	pub branch_depth: usize,
 	pub phase: LiamsConiferPhase,
 }
@@ -46,12 +64,14 @@ impl LiamsConiferChain {
 		}
 	}
 
+	/// Maps [`DepthBudget::remaining`] to a [`SEGMENT_FRACS`] entry (`remaining == depth` → first segment).
 	fn segment_fraction(&self, remaining: usize) -> f32 {
 		let depth = self.branch_depth.max(1).min(SEGMENT_FRACS.len());
 		let seg_idx = depth.saturating_sub(remaining).min(SEGMENT_FRACS.len() - 1);
 		SEGMENT_FRACS[seg_idx]
 	}
 
+	/// Apply this hop's length fraction, then fan out via [`DepthBudget`].
 	fn branch_children(&self, budget: &DepthBudget<BranchOut>) -> Vec<Self> {
 		let frac = self.segment_fraction(budget.remaining);
 		let len = self.projection_length * frac;

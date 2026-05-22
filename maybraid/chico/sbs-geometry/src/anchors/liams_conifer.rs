@@ -1,6 +1,14 @@
 //! **Stalk anchor rings** for **Liam's Conifer** ([RFC-183 §3.1.7.2](https://github.com/ramate-io/maybraid/tree/main/rfc/rfc-000-000-183-chico-vegetation/03-01-stalk-and-ball-stick-trees/07-well-known-tree-constructions/02-liam-s-conifer/README.md), [#244](https://github.com/ramate-io/maybraid/issues/244)).
 //!
-//! Dense vertical rings from ~10% to ~98% of stalk height with linearly tapering projection length.
+//! # Layout
+//!
+//! One shared [`crate::BallStickChain`] per tree:
+//!
+//! - **Stalk** — a single [`crate::chain::point_to_point::PointToPoint`] seed from ground to crown.
+//! - **Canopy** — many ring seeds on the stalk radial centroid; each becomes a [`LiamsConiferChain`] limb.
+//!
+//! Ring density and projection taper are art-directed here; segment growth and radius down-stepping
+//! live in [`crate::chain::liams_conifer`].
 
 use std::f32::consts::TAU;
 
@@ -11,7 +19,7 @@ use super::strict_stalk::StrictStalk;
 use super::Anchors;
 use procedural_common::{NoiseConfig, NoiseParams};
 
-use crate::chain::liams_conifer::{LiamsConiferChain, LiamsConiferPhase};
+use crate::chain::liams_conifer::{LiamsConiferChain, LiamsConiferPhase, SEGMENT_FRACS};
 use crate::chain::BranchOut;
 use crate::chain::DepthBudget;
 use crate::BallStickNode;
@@ -27,6 +35,7 @@ fn downward_biased_radial(radial_xz: Vec3, bias_radians: f32) -> Vec3 {
 	Vec3::new(radial.x * cos, -sin, radial.z * cos).normalize_or_zero()
 }
 
+/// Deterministic ring + stalk parameters before optional [`StalkPerturbation`].
 #[derive(Clone, Debug, PartialEq)]
 pub struct LiamsConiferProtoAnchors {
 	pub stalk: StrictStalk,
@@ -37,18 +46,22 @@ pub struct LiamsConiferProtoAnchors {
 	/// Vertical spacing between rings as a fraction of stalk height (RFC ~0.04).
 	pub ring_spacing_unit_height: f32,
 	pub anchors_per_ring: u32,
-	/// Max projection as a fraction of stalk height (RFC `0.05 * H`).
+	/// Max projection length as a fraction of stalk height (RFC example `0.05 * H`; playground defaults higher).
 	pub max_projection_fraction_of_height: f32,
-	/// Floor as a fraction of max projection (RFC `0.20 * ell_max`).
+	/// Floor on [`Self::projection_length`] as a fraction of the ring's max projection.
 	pub min_projection_fraction_of_max: f32,
 	pub downward_bias_radians: f32,
+	/// [`BranchOut::ray_degrees_of_freedom`] at canopy seeds (RFC ~8°).
 	pub branch_angle_tolerance: f32,
+	/// [`DepthBudget::remaining`] at each ring seed; must match [`SEGMENT_FRACS`].len()].
 	pub branch_depth: usize,
-	/// Limb joint radius at the ring anchor as a fraction of [`StrictStalk::stalk_base_radius`].
+	/// Ball radius at the ring anchor and initial [`BranchOut::radius_range`] (both ends).
+	///
+	/// Limb thinning along the chain comes only from [`Self::branch_radius_child_scale`], which
+	/// multiplies `radius_range` on each [`BranchOut`] hop (see `expand_children` in
+	/// [`crate::chain::branch_out`]).
 	pub branch_base_radius_fraction_of_stalk: f32,
-	/// Smallest sampled child radius as a fraction of stalk base radius.
-	pub branch_tip_radius_fraction_of_stalk: f32,
-	/// Per-segment down-step on [`BranchOut::radius_range`] (lo, hi multipliers).
+	/// Per-segment multipliers on child [`BranchOut::radius_range`]: `(lo, hi)`.
 	pub branch_radius_child_scale: (f32, f32),
 }
 
@@ -62,7 +75,7 @@ impl Default for LiamsConiferProtoAnchors {
 				stalk_base_radius: 0.025 * h,
 			},
 			first_ring_unit_height: 0.10,
-			last_ring_unit_height: 0.98,
+			last_ring_unit_height: 1.0,
 			ring_spacing_unit_height: 0.03,
 			anchors_per_ring: 6,
 			max_projection_fraction_of_height: 0.15,
@@ -70,8 +83,7 @@ impl Default for LiamsConiferProtoAnchors {
 			downward_bias_radians: 2.0_f32.to_radians(),
 			branch_angle_tolerance: 8.0_f32.to_radians(),
 			branch_depth: 3,
-			branch_base_radius_fraction_of_stalk: 0.40,
-			branch_tip_radius_fraction_of_stalk: 0.16,
+			branch_base_radius_fraction_of_stalk: 0.1,
 			branch_radius_child_scale: (0.72, 0.80),
 		}
 	}
@@ -84,6 +96,7 @@ impl HasStrictStalk for LiamsConiferProtoAnchors {
 }
 
 impl LiamsConiferProtoAnchors {
+	/// Ring center heights as fractions of [`StrictStalk::stalk_height`], stepping by [`Self::ring_spacing_unit_height`].
 	pub fn ring_height_fractions(&self) -> Vec<f32> {
 		let mut out = Vec::new();
 		let mut z = self.first_ring_unit_height;
@@ -94,6 +107,7 @@ impl LiamsConiferProtoAnchors {
 		out
 	}
 
+	/// Normalized index along the ring band: `0` = lowest ring, `1` = highest.
 	fn ring_mix_u(&self, z_frac: f32) -> f32 {
 		let a = self.first_ring_unit_height;
 		let b = self.last_ring_unit_height;
@@ -103,6 +117,7 @@ impl LiamsConiferProtoAnchors {
 		((z_frac - a) / (b - a)).clamp(0.0, 1.0)
 	}
 
+	/// RFC linear taper: \(\ell(u) = \ell_{\max}(1-u)\) with optional floor on the top rings.
 	pub fn projection_length(&self, u: f32) -> f32 {
 		let h = self.stalk.stalk_height.max(1e-6);
 		let ell_max = h * self.max_projection_fraction_of_height;
@@ -110,17 +125,24 @@ impl LiamsConiferProtoAnchors {
 		raw.max(ell_max * self.min_projection_fraction_of_max)
 	}
 
-	fn limb_radius_range(&self) -> (f32, f32) {
+	/// Joint radius at a ring spoke before any [`BranchOut`] down-stepping.
+	fn limb_base_radius(&self) -> f32 {
 		let base = self.stalk.stalk_base_radius.max(1e-4);
-		let lo = (base * self.branch_tip_radius_fraction_of_stalk).max(0.035);
-		let hi = (base * self.branch_base_radius_fraction_of_stalk).max(lo + 0.02);
-		(lo, hi)
+		(base * self.branch_base_radius_fraction_of_stalk).max(0.035)
+	}
+
+	/// Approximate terminal joint radius after `branch_depth` down-steps (for tests / tuning).
+	pub fn limb_terminal_radius_estimate(&self) -> f32 {
+		let r = self.limb_base_radius();
+		let (_s_lo, s_hi) = self.branch_radius_child_scale;
+		r * s_hi.powi(self.branch_depth as i32)
 	}
 
 	pub fn hysteresis_seeds(&self, chain_noise: NoiseConfig) -> Vec<LiamsConiferChain> {
 		let mut out = Vec::new();
 		let k = self.anchors_per_ring.max(1);
 		let radial_eps = (self.stalk.stalk_base_radius * 0.05).max(1e-4);
+		let limb_r = self.limb_base_radius();
 
 		for z_frac in self.ring_height_fractions() {
 			let u = self.ring_mix_u(z_frac);
@@ -132,16 +154,15 @@ impl LiamsConiferProtoAnchors {
 				let bias = downward_biased_radial(radial, self.downward_bias_radians);
 				let pos = self.stalk.centroid_at_height_fraction(z_frac) + radial * radial_eps;
 
-				let (rad_lo, rad_hi) = self.limb_radius_range();
-				let seed_node = BallStickNode::new(pos, rad_hi);
-				let first_frac = crate::chain::liams_conifer::SEGMENT_FRACS[0];
-				let first_len = proj * first_frac;
+				let seed_node = BallStickNode::new(pos, limb_r);
+				let first_len = proj * SEGMENT_FRACS[0];
+				// Collapsed range at the anchor: thickness is limb_r; child_scale thins each hop.
 				let branch = BranchOut::radial_out_horizontal(seed_node, radial)
 					.with_hysteresis_context(chain_noise.clone(), 0, bias)
 					.with_bias_blend(0.92)
 					.with_ray_degrees_of_freedom(self.branch_angle_tolerance)
 					.with_child_count(1..2)
-					.with_radius_range(rad_lo..rad_hi)
+					.with_radius_range(limb_r..limb_r)
 					.with_radius_range_child_scale(self.branch_radius_child_scale)
 					.with_length(first_len * 0.97..first_len * 1.03)
 					.single_child();
@@ -177,6 +198,7 @@ impl Anchors<LiamsConiferChain> for LiamsConiferProtoAnchors {
 	}
 }
 
+/// Perturbing wrapper used by [`crate::sbs::liams_conifer::LiamsConiferSbs`].
 #[derive(Clone, Debug, PartialEq)]
 pub struct LiamsConiferAnchors {
 	pub perturbation: StalkPerturbation<LiamsConiferProtoAnchors>,
@@ -284,10 +306,8 @@ mod tests {
 
 	#[test]
 	fn anchors_count_matches_rings_times_spokes_plus_stalk() {
-		let proto = LiamsConiferProtoAnchors {
-			ring_spacing_unit_height: 0.20,
-			..Default::default()
-		};
+		let proto =
+			LiamsConiferProtoAnchors { ring_spacing_unit_height: 0.20, ..Default::default() };
 		let ring_count = proto.ring_height_fractions().len();
 		let spokes = proto.anchors_per_ring as usize;
 		let a = LiamsConiferAnchors::new(proto);
@@ -295,12 +315,10 @@ mod tests {
 	}
 
 	#[test]
-	fn limb_radii_taper_down_chain_steps() {
+	fn limb_radius_tapers_via_child_scale_only() {
 		let a = LiamsConiferProtoAnchors::default();
-		let (lo, hi) = a.limb_radius_range();
-		let (_s_lo, s_hi) = a.branch_radius_child_scale;
-		assert!(hi > lo);
-		let step1_hi = hi * s_hi;
-		assert!(step1_hi < hi, "down-stepping should thin limbs along the chain");
+		let base = a.limb_base_radius();
+		let terminal = a.limb_terminal_radius_estimate();
+		assert!(terminal < base, "down-stepping should thin limbs toward tips");
 	}
 }
