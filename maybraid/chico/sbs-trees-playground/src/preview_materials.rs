@@ -49,6 +49,7 @@ pub fn setup_preview_tree_materials(
 		}
 		PreviewTree::LiamsConifer(tree) => {
 			tree.stick_material.mesh = MeshMaterial3d(conifer_stick);
+			tree.leaf_material.mesh = MeshMaterial3d(leaf);
 		}
 	}
 }
@@ -70,8 +71,9 @@ pub fn sync_preview_tree_material_handles(
 		}
 		PreviewTree::LiamsConifer(tree) => {
 			let conifer = MeshMaterial3d(mats.conifer_stick.clone());
-			if tree.stick_material.mesh != conifer {
+			if tree.stick_material.mesh != conifer || tree.leaf_material.mesh != leaf {
 				tree.stick_material.mesh = conifer;
+				tree.leaf_material.mesh = leaf;
 			}
 		}
 	}

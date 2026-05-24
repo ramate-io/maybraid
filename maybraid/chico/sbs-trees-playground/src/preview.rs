@@ -1,9 +1,10 @@
 use bevy::prelude::*;
 use chico_ball_components::chico_ball::ChicoBall;
 use chico_ball_components::plane_splay::PlaneSplay;
+use chico_ball_components::tuft::ChicoTuft;
 use chico_sbs_trees::liams_conifer::LiamsConifer;
 use chico_sbs_trees::sopes_banyan::SopesBanyan;
-use chico_sbs_trees::SkippedMeshMaterial;
+use chico_sbs_trees::{SkippedLeafMeshMaterial, SkippedStickMeshMaterial};
 use chico_stick_components::chico_stick::ChicoStick;
 use chico_vegetation_shaders::{ChicoLeafMaterial, ChicoStickMaterial};
 use chunk::cascade::CascadeChunk;
@@ -12,21 +13,26 @@ use render_item::DispatchRenderItem;
 /// [`SopesBanyan`] configured for this playground.
 pub type PreviewSopesBanyan = SopesBanyan<
 	ChicoStickMaterial,
-	SkippedMeshMaterial<ChicoStickMaterial>,
+	SkippedStickMeshMaterial<ChicoStickMaterial>,
 	ChicoLeafMaterial,
-	SkippedMeshMaterial<ChicoLeafMaterial>,
+	SkippedLeafMeshMaterial<ChicoLeafMaterial>,
 >;
 
-/// [`LiamsConifer`] configured for this playground (sticks only until tufts land).
+/// [`LiamsConifer`] configured for this playground.
 pub type PreviewLiamsConifer = LiamsConifer<
 	ChicoStickMaterial,
-	SkippedMeshMaterial<ChicoStickMaterial>,
+	SkippedStickMeshMaterial<ChicoStickMaterial>,
+	ChicoLeafMaterial,
+	SkippedLeafMeshMaterial<ChicoLeafMaterial>,
 >;
 
-pub type PreviewStick = ChicoStick<ChicoStickMaterial, SkippedMeshMaterial<ChicoStickMaterial>>;
-pub type PreviewJointBall = ChicoBall<ChicoStickMaterial, SkippedMeshMaterial<ChicoStickMaterial>>;
-pub type PreviewLeafBall = ChicoBall<ChicoLeafMaterial, SkippedMeshMaterial<ChicoLeafMaterial>>;
-pub type PreviewPlaneSplay = PlaneSplay<ChicoLeafMaterial, SkippedMeshMaterial<ChicoLeafMaterial>>;
+pub type PreviewStick = ChicoStick<ChicoStickMaterial, SkippedStickMeshMaterial<ChicoStickMaterial>>;
+pub type PreviewJointBall =
+	ChicoBall<ChicoStickMaterial, SkippedStickMeshMaterial<ChicoStickMaterial>>;
+pub type PreviewLeafBall = ChicoBall<ChicoLeafMaterial, SkippedLeafMeshMaterial<ChicoLeafMaterial>>;
+pub type PreviewPlaneSplay =
+	PlaneSplay<ChicoLeafMaterial, SkippedLeafMeshMaterial<ChicoLeafMaterial>>;
+pub type PreviewTuft = ChicoTuft<ChicoLeafMaterial, SkippedLeafMeshMaterial<ChicoLeafMaterial>>;
 
 #[derive(Clone)]
 pub enum PreviewTree {
@@ -83,6 +89,7 @@ pub fn sync_tree_preview(
 	joint_ball_q: Query<Entity, With<PreviewJointBall>>,
 	leaf_ball_q: Query<Entity, With<PreviewLeafBall>>,
 	splay_q: Query<Entity, With<PreviewPlaneSplay>>,
+	tuft_q: Query<Entity, With<PreviewTuft>>,
 ) {
 	let key = preview_sync_key(&config);
 	if synced.as_deref() == Some(&key) {
@@ -102,6 +109,9 @@ pub fn sync_tree_preview(
 		commands.entity(e).despawn();
 	}
 	for e in splay_q.iter() {
+		commands.entity(e).despawn();
+	}
+	for e in tuft_q.iter() {
 		commands.entity(e).despawn();
 	}
 

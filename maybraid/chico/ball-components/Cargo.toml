@@ -12,8 +12,13 @@ rust-version = { workspace = true }
 [dependencies]
 bevy = { workspace = true }
 chico-sdf = { workspace = true }
+chunk = { workspace = true }
 procedural-common = { workspace = true }
 render-item = { workspace = true }
+sdf = { workspace = true }
+
+[dev-dependencies]
+anyhow = { workspace = true }
 
 [lints]
 workspace = true
