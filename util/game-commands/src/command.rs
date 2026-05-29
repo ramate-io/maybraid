@@ -288,16 +288,15 @@ impl<T: GameCommand> Plugin for GameCommandPlugin<T> {
 		app.init_resource::<TypedCommandLine>()
 			.init_resource::<TextEntryFocus>()
 			.init_resource::<CommandConsoleOutput>()
-			.init_resource::<CommandHistory>()
-			.init_resource::<PendingStartupCommand<T>>()
-			.add_plugins(GameCommandUiPlugin { config: self.ui_config.clone() })
+			.init_resource::<CommandHistory>();
+		if !app.world().contains_resource::<PendingStartupCommand<T>>() {
+			app.init_resource::<PendingStartupCommand<T>>();
+		}
+		app.add_plugins(GameCommandUiPlugin { config: self.ui_config.clone() })
+			.add_systems(Startup, run_pending_startup_command::<T>)
 			.add_systems(
 				Update,
-				(
-					toggle_text_entry_focus,
-					capture_command_line_input::<T>,
-					run_pending_startup_command::<T>,
-				),
+				(toggle_text_entry_focus, capture_command_line_input::<T>),
 			);
 	}
 }

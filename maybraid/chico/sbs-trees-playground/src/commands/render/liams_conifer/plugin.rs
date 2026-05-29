@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 
-use crate::commands::render::{Render, LiamsConiferRenderHelper};
+use crate::commands::render::{LiamsConiferRenderHelper, Render};
 use crate::render::{RenderConfig, RenderSubject};
 
 pub struct LiamsConiferRenderPlugin;
