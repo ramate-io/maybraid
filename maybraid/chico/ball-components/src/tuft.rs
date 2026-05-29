@@ -1,15 +1,16 @@
 //! Tuft component ([RFC-183 §3.1.2.6](https://github.com/ramate-io/maybraid/tree/main/rfc/rfc-000-000-183-chico-vegetation/03-01-stalk-and-ball-stick-trees/02-ball-components/06-tufts/README.md)).
 //!
-//! A tuft is several **spear-like cones** sharing one anchor: each child mesh grows from the joint
-//! origin and radiates outward (mostly upward). Orientation of the whole cluster is applied on the
-//! root [`Transform`] only.
+//! Several **noisy low-poly blades** share one anchor: bent tapered prisms (terrain-style sway) radiate
+//! from the joint origin. One merged mesh per tuft keeps draw calls and triangle count down.
+
+mod blade_mesh;
 
 pub mod render_item_plugin;
 
 use std::marker::PhantomData;
 
-use bevy::mesh::primitives::{ConeAnchor, Meshable};
 use bevy::prelude::*;
+use blade_mesh::build_tuft_mesh;
 use procedural_common::FromScalarNoise;
 use render_item::{CascadeChunk, RenderItem};
 
@@ -24,17 +25,49 @@ pub fn spear_directions(count: u32, seed: i32, max_tilt_radians: f32) -> Vec<Vec
 		.map(|i| {
 			let fi = i as f32;
 			let azimuth = GOLDEN_ANGLE.mul_add(fi, phase);
-			let tilt = max_tilt_radians * (0.55 + 0.45 * ((seed.wrapping_add(i as i32) as f32) * 0.31).sin().abs());
+			let tilt = max_tilt_radians
+				* (0.55 + 0.45 * ((seed.wrapping_add(i as i32) as f32) * 0.31).sin().abs());
 			Vec3::new(tilt.sin() * azimuth.cos(), tilt.cos(), tilt.sin() * azimuth.sin())
 				.normalize_or_zero()
 		})
 		.collect()
 }
 
-/// Per-spear length multiplier in `[min, max]` (deterministic from seed).
+/// Per-blade length multiplier in `[min, max]` (deterministic from seed).
 pub fn spear_length_scale(index: u32, seed: i32, min: f32, max: f32) -> f32 {
 	let t = ((seed.wrapping_add(index as i32) as f32) * 0.47).sin().abs();
 	min + (max - min) * t
+}
+
+/// Stable +Y → `dir` rotation (avoids `from_rotation_arc` blow-ups near parallel/anti-parallel).
+pub(crate) fn align_blade_direction(dir: Vec3) -> Quat {
+	let up = Vec3::Y;
+	let d = dir.normalize_or_zero();
+	if d.length_squared() < 1e-12 {
+		return Quat::IDENTITY;
+	}
+	let dot = up.dot(d);
+	if dot > 1.0 - 1e-5 {
+		return Quat::IDENTITY;
+	}
+	if dot < -1.0 + 1e-5 {
+		return Quat::from_axis_angle(Vec3::X, std::f32::consts::PI);
+	}
+	Quat::from_rotation_arc(up, d)
+}
+
+/// Strip non-uniform scale from the spawn transform; return uniform factor for mesh authoring.
+pub fn tuft_spawn_transform(transform: Transform) -> (Transform, f32) {
+	let s = transform.scale;
+	let uniform = s.x.abs().max(s.y.abs()).max(s.z.abs()).max(1e-8);
+	(
+		Transform {
+			translation: transform.translation,
+			rotation: transform.rotation,
+			scale: Vec3::ONE,
+		},
+		uniform,
+	)
 }
 
 /// [`StandardMaterial`] tuft using explicit mesh materials (common default).
@@ -46,14 +79,19 @@ pub struct ChicoTuft<M: Material, S>
 where
 	S: Clone + Into<MeshMaterial3d<M>>,
 {
-	/// Number of spear meshes sharing this anchor.
+	/// Number of blades sharing this anchor.
 	pub spear_count: u32,
-	/// Unit spear length before root [`Transform::scale`].
+	/// Unit blade length before root [`Transform::scale`].
 	pub spear_length: f32,
-	/// Cone base radius in unit space (tip is a point).
+	/// Base cross-section radius in unit space.
 	pub base_radius: f32,
+	/// Tip radius as a fraction of [`Self::base_radius`].
+	pub tip_radius_fraction: f32,
 	/// Max polar angle from world-up in the root's local space (radians).
 	pub max_tilt_radians: f32,
+	/// Terrain-style lateral sway (`sway * noise_amplitude` on the blade centerline).
+	pub noise_amplitude: f32,
+	pub noise_frequency: f32,
 	pub seed: i32,
 	pub material: S,
 	pub(crate) __marker: PhantomData<fn() -> M>,
@@ -67,8 +105,11 @@ where
 		Self {
 			spear_count: 8,
 			spear_length: 1.0,
-			base_radius: 0.09,
+			base_radius: 0.07,
+			tip_radius_fraction: 0.12,
 			max_tilt_radians: 0.42,
+			noise_amplitude: 0.08,
+			noise_frequency: 4.0,
 			seed: 0,
 			material: S::default(),
 			__marker: PhantomData,
@@ -80,8 +121,13 @@ impl<M: Material, S> FromScalarNoise for ChicoTuft<M, S>
 where
 	S: Clone + Into<MeshMaterial3d<M>> + Default,
 {
-	fn from_scalar(seed_scalar: f32, _frequency: f32, _amplitude: f32, _octaves: u32) -> Self {
-		Self { seed: seed_scalar as i32, ..Self::default() }
+	fn from_scalar(seed_scalar: f32, frequency: f32, amplitude: f32, _octaves: u32) -> Self {
+		Self {
+			seed: seed_scalar as i32,
+			noise_frequency: frequency,
+			noise_amplitude: amplitude,
+			..Self::default()
+		}
 	}
 }
 
@@ -96,47 +142,25 @@ where
 		cascade_chunk: &CascadeChunk,
 		transform: Transform,
 	) -> Vec<Entity> {
+		let (root_transform, world_uniform_scale) = tuft_spawn_transform(transform);
 		let root = commands
 			.spawn((
 				self.clone(),
 				cascade_chunk.clone(),
-				transform,
+				root_transform,
 				Visibility::default(),
 			))
 			.id();
 
 		let tuft = self.clone();
 		commands.queue(move |world: &mut World| {
-			let spear_mesh = Cone {
-				radius: tuft.base_radius,
-				height: tuft.spear_length,
-			}
-			.mesh()
-			.anchor(ConeAnchor::Base)
-			.build();
-
+			let mesh = build_tuft_mesh(&tuft, world_uniform_scale);
 			let mesh_handle = {
 				let mut meshes = world.resource_mut::<Assets<Mesh>>();
-				meshes.add(spear_mesh)
+				meshes.add(mesh)
 			};
-
 			let material: MeshMaterial3d<M> = tuft.material.clone().into();
-			let directions =
-				spear_directions(tuft.spear_count, tuft.seed, tuft.max_tilt_radians);
-
-			for (i, dir) in directions.into_iter().enumerate() {
-				if dir.length_squared() < 1e-10 {
-					continue;
-				}
-				let length_scale = spear_length_scale(i as u32, tuft.seed, 0.72, 1.0);
-				let rotation = Quat::from_rotation_arc(Vec3::Y, dir);
-				world.spawn((
-					ChildOf(root),
-					Mesh3d(mesh_handle.clone()),
-					material.clone(),
-					Transform::from_rotation(rotation).with_scale(Vec3::new(1.0, length_scale, 1.0)),
-				));
-			}
+			world.spawn((ChildOf(root), Mesh3d(mesh_handle), material, Transform::IDENTITY));
 		});
 
 		vec![root]
