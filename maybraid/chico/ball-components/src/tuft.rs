@@ -1,115 +1,60 @@
 //! Tuft component ([RFC-183 §3.1.2.6](https://github.com/ramate-io/maybraid/tree/main/rfc/rfc-000-000-183-chico-vegetation/03-01-stalk-and-ball-stick-trees/02-ball-components/06-tufts/README.md)).
 //!
-//! A tuft is a cluster of vertical noisy capsules: several spikes radiate from a shared base in the
-//! **+Y** direction of local space, with procedural sway on each spike.
+//! A tuft is several **spear-like cones** sharing one anchor: each child mesh grows from the joint
+//! origin and radiates outward (mostly upward). Orientation of the whole cluster is applied on the
+//! root [`Transform`] only.
 
 pub mod render_item_plugin;
 
 use std::marker::PhantomData;
 
+use bevy::mesh::primitives::{ConeAnchor, Meshable};
 use bevy::prelude::*;
-use chico_sdf::sdf::Sdf;
-use chunk::cascade::CascadeChunk;
-use procedural_common::{
-	sdf_band_margin, FromScalarNoise, NoiseConfig, NoiseParams, NUMERIC_SURFACE_EPSILON,
-};
-use render_item::{
-	mesh::{handle::Cached, IdentifiedMesh, MeshId},
-	NormalizeChunk, RenderItem,
-};
+use procedural_common::FromScalarNoise;
+use render_item::{CascadeChunk, RenderItem};
 
-/// Unit-space tuft SDF: union of noisy vertical capsules on a ring.
-#[derive(Clone, Debug)]
-pub struct TuftCluster {
-	pub spike_count: u32,
-	pub spike_height: f32,
-	pub spike_radius: f32,
-	pub cluster_radius: f32,
-	pub seed: i32,
-	pub sway: NoiseParams,
-}
+/// Golden-angle step for even azimuth spacing on the tuft hemisphere.
+const GOLDEN_ANGLE: f32 = 2.399_963_229_728_653_32;
 
-impl Default for TuftCluster {
-	fn default() -> Self {
-		Self {
-			spike_count: 6,
-			spike_height: 0.75,
-			spike_radius: 0.04,
-			cluster_radius: 0.22,
-			seed: 0,
-			sway: NoiseParams {
-				frequency: 6.0,
-				amplitude: 0.06,
-				octaves: 1,
-				..Default::default()
-			},
-		}
-	}
-}
-
-impl TuftCluster {
-	fn capsule_distance(p: Vec3, height: f32, radius: f32) -> f32 {
-		let y = p.y.clamp(0.0, height);
-		let closest = Vec3::new(0.0, y, 0.0);
-		(p - closest).length() - radius
-	}
-}
-
-impl Sdf for TuftCluster {
-	fn distance(&self, p: Vec3) -> f32 {
-		let noise = NoiseConfig::new(self.sway.with_seed(self.seed));
-		let count = self.spike_count.max(1);
-		let mut min_dist = f32::MAX;
-
-		for i in 0..count {
+/// Unit directions for [`ChicoTuft::spear_count`] spears radiating from a shared origin (mostly +Y).
+pub fn spear_directions(count: u32, seed: i32, max_tilt_radians: f32) -> Vec<Vec3> {
+	let n = count.max(1);
+	let phase = (seed as f32).mul_add(0.173, 0.0);
+	(0..n)
+		.map(|i| {
 			let fi = i as f32;
-			let angle = fi * std::f32::consts::TAU / count as f32;
-			let offset =
-				Vec3::new(angle.cos() * self.cluster_radius, 0.0, angle.sin() * self.cluster_radius);
-
-			let mut spike_p = p - offset;
-			let sway = noise.sample_3d(spike_p.x, spike_p.y, spike_p.z);
-			spike_p.x += sway;
-			spike_p.z += sway;
-
-			let d = Self::capsule_distance(spike_p, self.spike_height, self.spike_radius);
-			min_dist = min_dist.min(d);
-		}
-
-		min_dist
-	}
+			let azimuth = GOLDEN_ANGLE.mul_add(fi, phase);
+			let tilt = max_tilt_radians * (0.55 + 0.45 * ((seed.wrapping_add(i as i32) as f32) * 0.31).sin().abs());
+			Vec3::new(tilt.sin() * azimuth.cos(), tilt.cos(), tilt.sin() * azimuth.sin())
+				.normalize_or_zero()
+		})
+		.collect()
 }
 
-impl IdentifiedMesh for TuftCluster {
-	fn id(&self) -> MeshId {
-		MeshId::new(format!("{self:?}"))
-	}
-}
-
-impl NormalizeChunk for TuftCluster {
-	fn normalize_chunk(&self, cascade_chunk: &CascadeChunk) -> CascadeChunk {
-		let m = sdf_band_margin(&self.sway);
-		let mu_xz = self.cluster_radius + self.spike_radius + m;
-		let mu_y = self.spike_height + self.spike_radius + m + NUMERIC_SURFACE_EPSILON;
-		CascadeChunk::unit_center_chunk_with_mu_xz_y(mu_xz, mu_y).with_res_2(cascade_chunk.res_2)
-	}
+/// Per-spear length multiplier in `[min, max]` (deterministic from seed).
+pub fn spear_length_scale(index: u32, seed: i32, min: f32, max: f32) -> f32 {
+	let t = ((seed.wrapping_add(index as i32) as f32) * 0.47).sin().abs();
+	min + (max - min) * t
 }
 
 /// [`StandardMaterial`] tuft using explicit mesh materials (common default).
 pub type ChicoTuftStd = ChicoTuft<StandardMaterial, MeshMaterial3d<StandardMaterial>>;
 
-/// Marker plus embedded material for a single tuft instance at a ball-stick joint.
+/// Marker plus embedded material for one tuft cluster at a ball-stick joint.
 #[derive(Component, Clone, Debug, PartialEq)]
 pub struct ChicoTuft<M: Material, S>
 where
 	S: Clone + Into<MeshMaterial3d<M>>,
 {
-	pub spike_count: u32,
-	pub spike_height: f32,
-	pub spike_radius: f32,
-	pub cluster_radius: f32,
+	/// Number of spear meshes sharing this anchor.
+	pub spear_count: u32,
+	/// Unit spear length before root [`Transform::scale`].
+	pub spear_length: f32,
+	/// Cone base radius in unit space (tip is a point).
+	pub base_radius: f32,
+	/// Max polar angle from world-up in the root's local space (radians).
+	pub max_tilt_radians: f32,
 	pub seed: i32,
-	pub sway: NoiseParams,
 	pub material: S,
 	pub(crate) __marker: PhantomData<fn() -> M>,
 }
@@ -120,12 +65,11 @@ where
 {
 	fn default() -> Self {
 		Self {
-			spike_count: TuftCluster::default().spike_count,
-			spike_height: TuftCluster::default().spike_height,
-			spike_radius: TuftCluster::default().spike_radius,
-			cluster_radius: TuftCluster::default().cluster_radius,
+			spear_count: 8,
+			spear_length: 1.0,
+			base_radius: 0.09,
+			max_tilt_radians: 0.42,
 			seed: 0,
-			sway: TuftCluster::default().sway,
 			material: S::default(),
 			__marker: PhantomData,
 		}
@@ -136,28 +80,8 @@ impl<M: Material, S> FromScalarNoise for ChicoTuft<M, S>
 where
 	S: Clone + Into<MeshMaterial3d<M>> + Default,
 {
-	fn from_scalar(seed_scalar: f32, frequency: f32, amplitude: f32, octaves: u32) -> Self {
-		Self {
-			seed: seed_scalar as i32,
-			sway: NoiseParams::from_scalar(seed_scalar, frequency, amplitude, octaves),
-			..Self::default()
-		}
-	}
-}
-
-impl<M: Material, S> ChicoTuft<M, S>
-where
-	S: Clone + Into<MeshMaterial3d<M>>,
-{
-	pub fn tuft_cluster(&self) -> TuftCluster {
-		TuftCluster {
-			spike_count: self.spike_count,
-			spike_height: self.spike_height,
-			spike_radius: self.spike_radius,
-			cluster_radius: self.cluster_radius,
-			seed: self.seed,
-			sway: self.sway,
-		}
+	fn from_scalar(seed_scalar: f32, _frequency: f32, _amplitude: f32, _octaves: u32) -> Self {
+		Self { seed: seed_scalar as i32, ..Self::default() }
 	}
 }
 
@@ -172,21 +96,50 @@ where
 		cascade_chunk: &CascadeChunk,
 		transform: Transform,
 	) -> Vec<Entity> {
-		// Unit tuft is authored with spikes rising from local y = 0; anchor is the xz centroid at the base.
-		let local_offset =
-			Vec3::new(-0.5 * transform.scale.x, 0.0, -0.5 * transform.scale.z);
-		let translation = transform.translation + transform.rotation * local_offset;
-		let mesh_material: MeshMaterial3d<M> = self.material.clone().into();
-
-		vec![commands
+		let root = commands
 			.spawn((
 				self.clone(),
-				Cached::new(self.tuft_cluster()),
 				cascade_chunk.clone(),
-				transform.with_translation(translation),
-				mesh_material,
+				transform,
+				Visibility::default(),
 			))
-			.id()]
+			.id();
+
+		let tuft = self.clone();
+		commands.queue(move |world: &mut World| {
+			let spear_mesh = Cone {
+				radius: tuft.base_radius,
+				height: tuft.spear_length,
+			}
+			.mesh()
+			.anchor(ConeAnchor::Base)
+			.build();
+
+			let mesh_handle = {
+				let mut meshes = world.resource_mut::<Assets<Mesh>>();
+				meshes.add(spear_mesh)
+			};
+
+			let material: MeshMaterial3d<M> = tuft.material.clone().into();
+			let directions =
+				spear_directions(tuft.spear_count, tuft.seed, tuft.max_tilt_radians);
+
+			for (i, dir) in directions.into_iter().enumerate() {
+				if dir.length_squared() < 1e-10 {
+					continue;
+				}
+				let length_scale = spear_length_scale(i as u32, tuft.seed, 0.72, 1.0);
+				let rotation = Quat::from_rotation_arc(Vec3::Y, dir);
+				world.spawn((
+					ChildOf(root),
+					Mesh3d(mesh_handle.clone()),
+					material.clone(),
+					Transform::from_rotation(rotation).with_scale(Vec3::new(1.0, length_scale, 1.0)),
+				));
+			}
+		});
+
+		vec![root]
 	}
 }
 
@@ -196,20 +149,23 @@ mod tests {
 	use anyhow::Result;
 
 	#[test]
-	fn same_seed_same_distance() -> Result<()> {
-		let a = TuftCluster { seed: 42, ..TuftCluster::default() };
-		let b = TuftCluster { seed: 42, ..TuftCluster::default() };
-		let p = Vec3::new(0.1, 0.4, -0.2);
-		assert_eq!(a.distance(p), b.distance(p));
+	fn spear_directions_are_unit_and_mostly_up() -> Result<()> {
+		let dirs = spear_directions(8, 42, 0.4);
+		assert_eq!(dirs.len(), 8);
+		for d in dirs {
+			assert!((d.length() - 1.0).abs() < 1e-4);
+			assert!(d.y > 0.5, "spears should bias upward: {d:?}");
+		}
 		Ok(())
 	}
 
 	#[test]
-	fn different_seed_can_differ() -> Result<()> {
-		let a = TuftCluster { seed: 1, ..TuftCluster::default() };
-		let b = TuftCluster { seed: 2, ..TuftCluster::default() };
-		let p = Vec3::new(0.05, 0.5, 0.05);
-		assert_ne!(a.distance(p), b.distance(p));
+	fn same_seed_same_directions() -> Result<()> {
+		let a = spear_directions(6, 7, 0.35);
+		let b = spear_directions(6, 7, 0.35);
+		for (da, db) in a.iter().zip(b.iter()) {
+			assert_eq!(da, db);
+		}
 		Ok(())
 	}
 }

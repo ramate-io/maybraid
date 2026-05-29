@@ -1,9 +1,6 @@
-//! Registers enforced-caching mesh dispatch for [`super::TuftCluster`] used by [`super::ChicoTuft`].
+//! Tuft render items spawn [`Mesh3d`](bevy::prelude::Mesh3d) children directly (no SDF cache).
 
 use bevy::prelude::*;
-use render_item::mesh::handle::EnforceCachingPlugin;
-
-use super::TuftCluster;
 
 pub struct ChicoTuftRenderItemPlugin;
 
@@ -17,9 +14,6 @@ impl Plugin for ChicoTuftRenderItemPlugin {
 	fn build(&self, app: &mut App) {
 		if !app.is_plugin_added::<MaterialPlugin<StandardMaterial>>() {
 			app.add_plugins(MaterialPlugin::<StandardMaterial>::default());
-		}
-		if !app.is_plugin_added::<EnforceCachingPlugin<TuftCluster, StandardMaterial>>() {
-			app.add_plugins(EnforceCachingPlugin::<TuftCluster, StandardMaterial>::default());
 		}
 	}
 }

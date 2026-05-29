@@ -18,12 +18,12 @@ pub type PreviewSopesBanyan = SopesBanyan<
 	SkippedLeafMeshMaterial<ChicoLeafMaterial>,
 >;
 
-/// [`LiamsConifer`] configured for this playground.
+/// [`LiamsConifer`] configured for this playground (green [`StandardMaterial`] tufts for shape debugging).
 pub type PreviewLiamsConifer = LiamsConifer<
 	ChicoStickMaterial,
 	SkippedStickMeshMaterial<ChicoStickMaterial>,
-	ChicoLeafMaterial,
-	SkippedLeafMeshMaterial<ChicoLeafMaterial>,
+	StandardMaterial,
+	SkippedLeafMeshMaterial<StandardMaterial>,
 >;
 
 pub type PreviewStick = ChicoStick<ChicoStickMaterial, SkippedStickMeshMaterial<ChicoStickMaterial>>;
@@ -32,7 +32,7 @@ pub type PreviewJointBall =
 pub type PreviewLeafBall = ChicoBall<ChicoLeafMaterial, SkippedLeafMeshMaterial<ChicoLeafMaterial>>;
 pub type PreviewPlaneSplay =
 	PlaneSplay<ChicoLeafMaterial, SkippedLeafMeshMaterial<ChicoLeafMaterial>>;
-pub type PreviewTuft = ChicoTuft<ChicoLeafMaterial, SkippedLeafMeshMaterial<ChicoLeafMaterial>>;
+pub type PreviewTuft = ChicoTuft<StandardMaterial, SkippedLeafMeshMaterial<StandardMaterial>>;
 
 #[derive(Clone)]
 pub enum PreviewTree {

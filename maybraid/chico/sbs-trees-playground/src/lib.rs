@@ -16,7 +16,6 @@ pub use preview::{PreviewConfig, SbsPreviewRoot};
 use bevy::prelude::*;
 use chico_sbs_trees::liams_conifer::render_item_plugin::ensure_registered as ensure_liams_conifer_render_plugins;
 use chico_sbs_trees::sopes_banyan::render_item_plugin::ensure_registered as ensure_sopes_banyan_render_plugins;
-use chico_ball_components::tuft::TuftCluster;
 use chico_sdf::{NoisyBall, NoisyCylinder};
 use chico_vegetation_shaders::{
 	ChicoLeafMaterial, ChicoStickMaterial, ChicoVegetationShadersPlugin,
@@ -40,7 +39,9 @@ impl Plugin for SbsTreesPlaygroundPlugin {
 		app.add_plugins(ChicoVegetationShadersPlugin);
 		ensure_enforce_caching_plugin::<NoisyCylinder, ChicoStickMaterial>(app);
 		ensure_enforce_caching_plugin::<NoisyBall, ChicoLeafMaterial>(app);
-		ensure_enforce_caching_plugin::<TuftCluster, ChicoLeafMaterial>(app);
+		if !app.is_plugin_added::<MaterialPlugin<StandardMaterial>>() {
+			app.add_plugins(MaterialPlugin::<StandardMaterial>::default());
+		}
 		app
 			.add_plugins(PlaygroundCommandsPlugin)
 			.add_plugins(GameCommandPlugin::<PlaygroundCommand>::with_config(ui::ui_config()))

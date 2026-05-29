@@ -1874,10 +1874,8 @@ dependencies = [
  "anyhow",
  "bevy",
  "chico-sdf",
- "chunk",
  "procedural-common",
  "render-item",
- "sdf",
 ]
 
 [[package]]

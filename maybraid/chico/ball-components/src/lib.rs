@@ -7,4 +7,4 @@ pub mod chico_ball;
 pub mod plane_splay;
 pub mod tuft;
 
-pub use tuft::{ChicoTuft, ChicoTuftStd, TuftCluster};
+pub use tuft::{ChicoTuft, ChicoTuftStd};
