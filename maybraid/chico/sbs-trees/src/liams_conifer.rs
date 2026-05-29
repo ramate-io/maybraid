@@ -2,7 +2,7 @@
 //!
 //! # Intent
 //!
-//! Narrow vertical stalk plus dense anchor rings and three-segment sparse canopy chains from [`chico_sbs_geometry`](chico_sbs_geometry). Segment meshes use [`ChicoStick`](chico_stick_components::chico_stick::ChicoStick); [tufts](https://github.com/ramate-io/maybraid/tree/main/rfc/rfc-000-000-183-chico-vegetation/03-01-stalk-and-ball-stick-trees/02-ball-components/06-tufts/README.md) at every ball-stick joint via [`ChicoTuft`](chico_ball_components::tuft::ChicoTuft).
+//! Narrow vertical stalk plus dense anchor rings and three-segment sparse canopy chains from [`chico_sbs_geometry`](chico_sbs_geometry). Segment meshes use [`ChicoStick`](chico_stick_components::chico_stick::ChicoStick); [`SucculentTuft`](chico_ball_components::tuft::SucculentTuft) at every ball-stick joint.
 //!
 //! # Rendering split
 //!

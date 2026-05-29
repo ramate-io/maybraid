@@ -1,7 +1,7 @@
 use std::marker::PhantomData;
 
 use bevy::prelude::*;
-use chico_ball_components::tuft::ChicoTuft;
+use chico_ball_components::tuft::SucculentTuft;
 use chico_sbs_geometry::render::tuft::{tuft_mix_seed, tuft_transform_at_joint, TuftRenderRule};
 use chico_sbs_geometry::{BallStickChain, BallStickNode, LiamsConiferChain};
 use procedural_common::NoiseParams;
@@ -18,7 +18,7 @@ where
 	pub(crate) __marker: PhantomData<fn() -> LeafM>,
 }
 
-impl<LeafM, LeafS> TuftRenderRule<ChicoTuft<LeafM, LeafS>, LiamsConiferChain>
+impl<LeafM, LeafS> TuftRenderRule<SucculentTuft<LeafM, LeafS>, LiamsConiferChain>
 	for LiamsConiferTuftRule<LeafM, LeafS>
 where
 	LeafM: Material + Send + Sync + 'static,
@@ -30,12 +30,15 @@ where
 		node: &BallStickNode,
 		_hysteresis: &LiamsConiferChain,
 		_chain: &BallStickChain<LiamsConiferChain>,
-	) -> Vec<(ChicoTuft<LeafM, LeafS>, Transform)> {
+	) -> Vec<(SucculentTuft<LeafM, LeafS>, Transform)> {
 		let seed = tuft_mix_seed(node_idx, node.position) as i32;
-		let spear_count = 6 + (tuft_mix_seed(node_idx, node.position) % 3) as u32;
+		let element_count = 6 + (tuft_mix_seed(node_idx, node.position) % 3) as u32;
 
-		let mut tuft = self.leaf_surface_noise.with_seed(seed).build_scalar::<ChicoTuft<LeafM, LeafS>>();
-		tuft.spear_count = spear_count;
+		let mut tuft = self
+			.leaf_surface_noise
+			.with_seed(seed)
+			.build_scalar::<SucculentTuft<LeafM, LeafS>>();
+		tuft.shape.element_count = element_count;
 		tuft.material = self.leaf_material.clone();
 
 		vec![(

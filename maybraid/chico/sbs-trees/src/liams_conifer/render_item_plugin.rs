@@ -1,7 +1,7 @@
 //! Registers mesh dispatch for Liam's Conifer sticks and tufts.
 
 use bevy::prelude::*;
-use chico_ball_components::tuft::render_item_plugin::ChicoTuftRenderItemPlugin;
+use chico_ball_components::tuft::render_item_plugin::TuftRenderItemPlugin;
 use chico_stick_components::chico_stick::render_item_plugin::ChicoStickRenderItemPlugin;
 
 pub struct LiamsConiferRenderItemPlugin;
@@ -25,8 +25,8 @@ impl Plugin for LiamsConiferRenderItemPlugin {
 		if !app.is_plugin_added::<ChicoStickRenderItemPlugin>() {
 			app.add_plugins(ChicoStickRenderItemPlugin::default());
 		}
-		if !app.is_plugin_added::<ChicoTuftRenderItemPlugin>() {
-			app.add_plugins(ChicoTuftRenderItemPlugin::default());
+		if !app.is_plugin_added::<TuftRenderItemPlugin>() {
+			app.add_plugins(TuftRenderItemPlugin::default());
 		}
 	}
 }

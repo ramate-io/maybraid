@@ -7,4 +7,7 @@ pub mod chico_ball;
 pub mod plane_splay;
 pub mod tuft;
 
-pub use tuft::{ChicoTuft, ChicoTuftStd};
+pub use tuft::{
+	BladeTuft, BladeTuftShape, BladeTuftStd, SucculentTuft, SucculentTuftShape, SucculentTuftStd,
+	WeepingTuft, WeepingTuftShape, WeepingTuftStd,
+};

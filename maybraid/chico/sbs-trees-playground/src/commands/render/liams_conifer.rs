@@ -1,8 +1,8 @@
 pub mod plugin;
 
-use crate::preview::PreviewLiamsConifer;
+use crate::render::RenderLiamsConifer;
 
 use super::RenderHelper;
 
-/// Renders Liam's Conifer into the preview scene.
-pub type LiamsConiferRenderHelper = RenderHelper<PreviewLiamsConifer>;
+/// Renders Liam's Conifer into the scene.
+pub type LiamsConiferRenderHelper = RenderHelper<RenderLiamsConifer>;

@@ -1,180 +1,66 @@
-//! Tuft component ([RFC-183 §3.1.2.6](https://github.com/ramate-io/maybraid/tree/main/rfc/rfc-000-000-183-chico-vegetation/03-01-stalk-and-ball-stick-trees/02-ball-components/06-tufts/README.md)).
+//! Tuft components ([RFC-183 §3.1.2.6](https://github.com/ramate-io/maybraid/tree/main/rfc/rfc-000-000-183-chico-vegetation/03-01-stalk-and-ball-stick-trees/02-ball-components/06-tufts/README.md)).
 //!
-//! Several **noisy low-poly blades** share one anchor: bent tapered prisms (terrain-style sway) radiate
-//! from the joint origin. One merged mesh per tuft keeps draw calls and triangle count down.
+//! Several specialized tuft kinds share placement helpers and a low-poly prismatic mesh builder:
+//!
+//! - [`SucculentTuft`] — thick upward spears (dry conifers, succulents)
+//! - [`BladeTuft`] — thin flat grass-like blades (sketch)
+//! - [`WeepingTuft`] — downward drooping strands (sketch)
 
-mod blade_mesh;
+mod blade;
+mod directions;
+mod prism;
+mod spawn;
+mod succulent;
+mod weeping;
 
 pub mod render_item_plugin;
 
-use std::marker::PhantomData;
-
-use bevy::prelude::*;
-use blade_mesh::build_tuft_mesh;
-use procedural_common::FromScalarNoise;
-use render_item::{CascadeChunk, RenderItem};
-
-/// Golden-angle step for even azimuth spacing on the tuft hemisphere.
-const GOLDEN_ANGLE: f32 = 2.399_963_229_728_653_32;
-
-/// Unit directions for [`ChicoTuft::spear_count`] spears radiating from a shared origin (mostly +Y).
-pub fn spear_directions(count: u32, seed: i32, max_tilt_radians: f32) -> Vec<Vec3> {
-	let n = count.max(1);
-	let phase = (seed as f32).mul_add(0.173, 0.0);
-	(0..n)
-		.map(|i| {
-			let fi = i as f32;
-			let azimuth = GOLDEN_ANGLE.mul_add(fi, phase);
-			let tilt = max_tilt_radians
-				* (0.55 + 0.45 * ((seed.wrapping_add(i as i32) as f32) * 0.31).sin().abs());
-			Vec3::new(tilt.sin() * azimuth.cos(), tilt.cos(), tilt.sin() * azimuth.sin())
-				.normalize_or_zero()
-		})
-		.collect()
-}
-
-/// Per-blade length multiplier in `[min, max]` (deterministic from seed).
-pub fn spear_length_scale(index: u32, seed: i32, min: f32, max: f32) -> f32 {
-	let t = ((seed.wrapping_add(index as i32) as f32) * 0.47).sin().abs();
-	min + (max - min) * t
-}
-
-/// Stable +Y → `dir` rotation (avoids `from_rotation_arc` blow-ups near parallel/anti-parallel).
-pub(crate) fn align_blade_direction(dir: Vec3) -> Quat {
-	let up = Vec3::Y;
-	let d = dir.normalize_or_zero();
-	if d.length_squared() < 1e-12 {
-		return Quat::IDENTITY;
-	}
-	let dot = up.dot(d);
-	if dot > 1.0 - 1e-5 {
-		return Quat::IDENTITY;
-	}
-	if dot < -1.0 + 1e-5 {
-		return Quat::from_axis_angle(Vec3::X, std::f32::consts::PI);
-	}
-	Quat::from_rotation_arc(up, d)
-}
-
-/// Strip non-uniform scale from the spawn transform; return uniform factor for mesh authoring.
-pub fn tuft_spawn_transform(transform: Transform) -> (Transform, f32) {
-	let s = transform.scale;
-	let uniform = s.x.abs().max(s.y.abs()).max(s.z.abs()).max(1e-8);
-	(
-		Transform {
-			translation: transform.translation,
-			rotation: transform.rotation,
-			scale: Vec3::ONE,
-		},
-		uniform,
-	)
-}
-
-/// [`StandardMaterial`] tuft using explicit mesh materials (common default).
-pub type ChicoTuftStd = ChicoTuft<StandardMaterial, MeshMaterial3d<StandardMaterial>>;
-
-/// Marker plus embedded material for one tuft cluster at a ball-stick joint.
-#[derive(Component, Clone, Debug, PartialEq)]
-pub struct ChicoTuft<M: Material, S>
-where
-	S: Clone + Into<MeshMaterial3d<M>>,
-{
-	/// Number of blades sharing this anchor.
-	pub spear_count: u32,
-	/// Unit blade length before root [`Transform::scale`].
-	pub spear_length: f32,
-	/// Base cross-section radius in unit space.
-	pub base_radius: f32,
-	/// Tip radius as a fraction of [`Self::base_radius`].
-	pub tip_radius_fraction: f32,
-	/// Max polar angle from world-up in the root's local space (radians).
-	pub max_tilt_radians: f32,
-	/// Terrain-style lateral sway (`sway * noise_amplitude` on the blade centerline).
-	pub noise_amplitude: f32,
-	pub noise_frequency: f32,
-	pub seed: i32,
-	pub material: S,
-	pub(crate) __marker: PhantomData<fn() -> M>,
-}
-
-impl<M: Material, S> Default for ChicoTuft<M, S>
-where
-	S: Clone + Into<MeshMaterial3d<M>> + Default,
-{
-	fn default() -> Self {
-		Self {
-			spear_count: 8,
-			spear_length: 1.0,
-			base_radius: 0.07,
-			tip_radius_fraction: 0.12,
-			max_tilt_radians: 0.42,
-			noise_amplitude: 0.08,
-			noise_frequency: 4.0,
-			seed: 0,
-			material: S::default(),
-			__marker: PhantomData,
-		}
-	}
-}
-
-impl<M: Material, S> FromScalarNoise for ChicoTuft<M, S>
-where
-	S: Clone + Into<MeshMaterial3d<M>> + Default,
-{
-	fn from_scalar(seed_scalar: f32, frequency: f32, amplitude: f32, _octaves: u32) -> Self {
-		Self {
-			seed: seed_scalar as i32,
-			noise_frequency: frequency,
-			noise_amplitude: amplitude,
-			..Self::default()
-		}
-	}
-}
-
-impl<M: Material, S> RenderItem for ChicoTuft<M, S>
-where
-	M: Send + Sync + 'static,
-	S: Clone + Into<MeshMaterial3d<M>> + Send + Sync + 'static,
-{
-	fn spawn_render_items(
-		&self,
-		commands: &mut Commands,
-		cascade_chunk: &CascadeChunk,
-		transform: Transform,
-	) -> Vec<Entity> {
-		let (root_transform, world_uniform_scale) = tuft_spawn_transform(transform);
-		let root = commands
-			.spawn((
-				self.clone(),
-				cascade_chunk.clone(),
-				root_transform,
-				Visibility::default(),
-			))
-			.id();
-
-		let tuft = self.clone();
-		commands.queue(move |world: &mut World| {
-			let mesh = build_tuft_mesh(&tuft, world_uniform_scale);
-			let mesh_handle = {
-				let mut meshes = world.resource_mut::<Assets<Mesh>>();
-				meshes.add(mesh)
-			};
-			let material: MeshMaterial3d<M> = tuft.material.clone().into();
-			world.spawn((ChildOf(root), Mesh3d(mesh_handle), material, Transform::IDENTITY));
-		});
-
-		vec![root]
-	}
-}
+pub use blade::{BladeTuft, BladeTuftShape, BladeTuftStd};
+pub use succulent::{SucculentTuft, SucculentTuftShape, SucculentTuftStd};
+pub use weeping::{WeepingTuft, WeepingTuftShape, WeepingTuftStd};
 
 #[cfg(test)]
 mod tests {
 	use super::*;
 	use anyhow::Result;
+	use bevy::mesh::VertexAttributeValues;
+	use bevy::prelude::*;
+	use spawn::TuftSpawnTransform;
+
+	fn test_succulent(seed: i32, amplitude: f32) -> SucculentTuft<StandardMaterial, MeshMaterial3d<StandardMaterial>> {
+		SucculentTuft {
+			shape: SucculentTuftShape {
+				seed,
+				noise_amplitude: amplitude,
+				noise_frequency: 4.0,
+				element_count: 6,
+				..SucculentTuftShape::default()
+			},
+			..SucculentTuft::default()
+		}
+	}
+
+	fn max_triangle_edge(pos: &[[f32; 3]], indices: &[u32]) -> f32 {
+		let mut max_len = 0.0_f32;
+		for tri in indices.chunks_exact(3) {
+			for i in 0..3 {
+				let a = Vec3::from_array(pos[tri[i] as usize]);
+				let b = Vec3::from_array(pos[tri[(i + 1) % 3] as usize]);
+				max_len = max_len.max(a.distance(b));
+			}
+		}
+		max_len
+	}
 
 	#[test]
-	fn spear_directions_are_unit_and_mostly_up() -> Result<()> {
-		let dirs = spear_directions(8, 42, 0.4);
+	fn upward_directions_are_unit_and_mostly_up() -> Result<()> {
+		let tuft =
+			SucculentTuft::<StandardMaterial, MeshMaterial3d<StandardMaterial>>::default();
+		let dirs = directions::CapDirections::upward(
+			tuft.shape.element_count,
+			tuft.shape.seed,
+			tuft.shape.max_tilt_radians,
+		);
 		assert_eq!(dirs.len(), 8);
 		for d in dirs {
 			assert!((d.length() - 1.0).abs() < 1e-4);
@@ -184,12 +70,84 @@ mod tests {
 	}
 
 	#[test]
-	fn same_seed_same_directions() -> Result<()> {
-		let a = spear_directions(6, 7, 0.35);
-		let b = spear_directions(6, 7, 0.35);
+	fn same_seed_same_upward_directions() -> Result<()> {
+		let a = directions::CapDirections::upward(6, 7, 0.35);
+		let b = directions::CapDirections::upward(6, 7, 0.35);
 		for (da, db) in a.iter().zip(b.iter()) {
 			assert_eq!(da, db);
 		}
+		Ok(())
+	}
+
+	#[test]
+	fn succulent_mesh_is_low_poly() -> Result<()> {
+		let mesh = test_succulent(1, 0.08).build_mesh(1.0);
+		let Some(VertexAttributeValues::Float32x3(pos)) = mesh.attribute(Mesh::ATTRIBUTE_POSITION) else {
+			anyhow::bail!("expected float positions");
+		};
+		let Some(bevy::mesh::Indices::U32(indices)) = mesh.indices() else {
+			anyhow::bail!("expected u32 indices");
+		};
+		assert!(pos.len() <= 6 * 5 * 3);
+		assert!(indices.len() <= 6 * 4 * 3 * 6);
+		Ok(())
+	}
+
+	#[test]
+	fn succulent_noise_bends_vertices() -> Result<()> {
+		let flat = test_succulent(9, 0.0).build_mesh(1.0);
+		let wavy = test_succulent(9, 0.12).build_mesh(1.0);
+		let Some(VertexAttributeValues::Float32x3(flat_p)) = flat.attribute(Mesh::ATTRIBUTE_POSITION)
+		else {
+			anyhow::bail!("expected flat positions");
+		};
+		let Some(VertexAttributeValues::Float32x3(wavy_p)) = wavy.attribute(Mesh::ATTRIBUTE_POSITION)
+		else {
+			anyhow::bail!("expected wavy positions");
+		};
+		assert_eq!(flat_p.len(), wavy_p.len());
+		let max_delta: f32 = flat_p
+			.iter()
+			.zip(wavy_p.iter())
+			.map(|(a, b)| (a[0] - b[0]).abs() + (a[2] - b[2]).abs())
+			.fold(0.0_f32, f32::max);
+		assert!(max_delta > 1e-3);
+		Ok(())
+	}
+
+	#[test]
+	fn no_degenerate_long_edges_for_many_seeds() -> Result<()> {
+		for seed in 0..512_i32 {
+			let mesh = test_succulent(seed, 0.08).build_mesh(0.6);
+			let Some(VertexAttributeValues::Float32x3(pos)) = mesh.attribute(Mesh::ATTRIBUTE_POSITION)
+			else {
+				anyhow::bail!("expected float positions");
+			};
+			for p in pos {
+				assert!(p[0].is_finite() && p[1].is_finite() && p[2].is_finite(), "seed {seed}");
+			}
+			let Some(bevy::mesh::Indices::U32(indices)) = mesh.indices() else {
+				anyhow::bail!("expected u32 indices");
+			};
+			if pos.is_empty() {
+				continue;
+			}
+			let max_edge = max_triangle_edge(pos, indices);
+			assert!(max_edge < 1.5, "seed {seed} produced long edge {max_edge}");
+		}
+		Ok(())
+	}
+
+	#[test]
+	fn spawn_transform_strips_non_uniform_scale() -> Result<()> {
+		let (t, u) = Transform {
+			translation: Vec3::new(1.0, 2.0, 3.0),
+			rotation: Quat::from_rotation_y(0.5),
+			scale: Vec3::new(0.5, 2.0, 0.25),
+		}
+		.tuft_spawn_uniform();
+		assert_eq!(t.scale, Vec3::ONE);
+		assert!((u - 2.0).abs() < 1e-5);
 		Ok(())
 	}
 }

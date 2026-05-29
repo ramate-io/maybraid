@@ -1,19 +1,23 @@
-//! Tuft render items spawn [`Mesh3d`](bevy::prelude::Mesh3d) children directly (no SDF cache).
+//! Registers [`StandardMaterial`] for tuft [`RenderItem`] types (merged [`Mesh3d`] children).
 
 use bevy::prelude::*;
 
-pub struct ChicoTuftRenderItemPlugin;
+pub struct TuftRenderItemPlugin;
 
-impl Default for ChicoTuftRenderItemPlugin {
+impl Default for TuftRenderItemPlugin {
 	fn default() -> Self {
 		Self
 	}
 }
 
-impl Plugin for ChicoTuftRenderItemPlugin {
+impl Plugin for TuftRenderItemPlugin {
 	fn build(&self, app: &mut App) {
 		if !app.is_plugin_added::<MaterialPlugin<StandardMaterial>>() {
 			app.add_plugins(MaterialPlugin::<StandardMaterial>::default());
 		}
 	}
 }
+
+/// Alias kept for tree assembly plugins that register succulent tufts today.
+pub type SucculentTuftRenderItemPlugin = TuftRenderItemPlugin;
+pub type ChicoTuftRenderItemPlugin = TuftRenderItemPlugin;
