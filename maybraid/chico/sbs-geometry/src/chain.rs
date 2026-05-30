@@ -7,6 +7,7 @@ pub mod depth_budget;
 pub mod length_range;
 pub mod point_to_point;
 pub mod radius_range;
+pub mod liams_conifer;
 pub mod sopes_banyan;
 
 use std::collections::VecDeque;

@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use game_commands::ui::{GameCommandStatusText, GameCommandUiConfig};
 
-use crate::preview::PreviewConfig;
+use crate::render::RenderConfig;
 
 pub fn ui_config() -> GameCommandUiConfig {
 	GameCommandUiConfig {
@@ -13,8 +13,8 @@ pub fn ui_config() -> GameCommandUiConfig {
 }
 
 pub(crate) fn sync_command_status_text(
-	config: Res<PreviewConfig>,
+	config: Res<RenderConfig>,
 	mut status: ResMut<GameCommandStatusText>,
 ) {
-	status.0 = format!("SopesBanyan preview  res_2={}", config.res_2);
+	status.0 = format!("{} render  res_2={}", config.subject.label(), config.res_2);
 }

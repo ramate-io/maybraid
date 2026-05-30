@@ -12,9 +12,21 @@ impl Default for SopesBanyanRenderItemPlugin {
 	}
 }
 
+/// Idempotent registration (safe when the playground and CLI both wire the same tree).
+pub fn ensure_registered(app: &mut App) {
+	if app.is_plugin_added::<SopesBanyanRenderItemPlugin>() {
+		return;
+	}
+	app.add_plugins(SopesBanyanRenderItemPlugin::default());
+}
+
 impl Plugin for SopesBanyanRenderItemPlugin {
 	fn build(&self, app: &mut App) {
-		app.add_plugins(ChicoStickRenderItemPlugin::default());
-		app.add_plugins(ChicoBallRenderItemPlugin::default());
+		if !app.is_plugin_added::<ChicoStickRenderItemPlugin>() {
+			app.add_plugins(ChicoStickRenderItemPlugin::default());
+		}
+		if !app.is_plugin_added::<ChicoBallRenderItemPlugin>() {
+			app.add_plugins(ChicoBallRenderItemPlugin::default());
+		}
 	}
 }

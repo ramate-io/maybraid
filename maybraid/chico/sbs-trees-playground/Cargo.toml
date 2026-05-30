@@ -19,7 +19,7 @@ render-item = { workspace = true }
 sdf = { workspace = true }
 chico-sbs-trees = { workspace = true }
 chico-sbs-geometry = { workspace = true, features = ["clap"] }
-chico-ball-components = { workspace = true }
+chico-ball-components = { workspace = true, features = ["clap"] }
 chico-sdf = { workspace = true }
 chico-stick-components = { workspace = true }
 chico-vegetation-shaders = { workspace = true }

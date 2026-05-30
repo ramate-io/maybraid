@@ -1,8 +1,12 @@
 //! Stalk and ball-stick trees for Chico vegetation.
 pub use chico_sdf;
 
+pub mod liams_conifer;
 pub mod skipped_mesh_material;
 pub mod sopes_banyan;
 
-pub use skipped_mesh_material::SkippedMeshMaterial;
+pub use liams_conifer::LiamsConiferStd;
+pub use skipped_mesh_material::{
+	SkippedLeafMeshMaterial, SkippedMeshMaterial, SkippedStickMeshMaterial,
+};
 pub use sopes_banyan::SopesBanyanStd;
