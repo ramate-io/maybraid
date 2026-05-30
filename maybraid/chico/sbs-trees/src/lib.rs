@@ -6,5 +6,7 @@ pub mod skipped_mesh_material;
 pub mod sopes_banyan;
 
 pub use liams_conifer::LiamsConiferStd;
-pub use skipped_mesh_material::SkippedMeshMaterial;
+pub use skipped_mesh_material::{
+	SkippedLeafMeshMaterial, SkippedMeshMaterial, SkippedStickMeshMaterial,
+};
 pub use sopes_banyan::SopesBanyanStd;

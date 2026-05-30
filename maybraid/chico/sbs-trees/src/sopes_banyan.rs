@@ -31,7 +31,7 @@ use procedural_common::noise_params_from_scalar_str;
 use procedural_common::{FromScalarNoise, NoiseParams};
 use render_item::{CascadeChunk, RenderItem};
 
-use crate::skipped_mesh_material::SkippedMeshMaterial;
+use crate::skipped_mesh_material::{SkippedLeafMeshMaterial, SkippedStickMeshMaterial};
 use canopy::SopesBanyanLeafCanopyRule;
 use joint_ball::SopesBanyanJointBallRule;
 use stick::SopesBanyanStickRule;
@@ -39,9 +39,9 @@ use stick::SopesBanyanStickRule;
 /// Typical [`StandardMaterial`] tree using CLI-skipped handles for both bark (`stick_material`) and foliage (`leaf_material`).
 pub type SopesBanyanStd = SopesBanyan<
 	StandardMaterial,
-	SkippedMeshMaterial<StandardMaterial>,
+	SkippedStickMeshMaterial<StandardMaterial>,
 	StandardMaterial,
-	SkippedMeshMaterial<StandardMaterial>,
+	SkippedLeafMeshMaterial<StandardMaterial>,
 >;
 
 #[derive(Clone, Args)]

@@ -1,0 +1,199 @@
+use bevy::prelude::*;
+use chico_ball_components::tuft::{
+	BuddhaHandTuft, BladeTuft, SpearTuft, SucculentTuft, WeepingTuft,
+};
+use chico_sbs_trees::liams_conifer::LiamsConifer;
+use chico_sbs_trees::sopes_banyan::SopesBanyan;
+use chico_sbs_trees::SkippedLeafMeshMaterial;
+use chico_sbs_trees::SkippedStickMeshMaterial;
+use chico_vegetation_shaders::{ChicoLeafMaterial, ChicoStickMaterial};
+use chunk::cascade::CascadeChunk;
+use render_item::{DispatchRenderItem, RenderItem};
+
+/// [`SopesBanyan`] configured for this playground.
+pub type RenderSopesBanyan = SopesBanyan<
+	ChicoStickMaterial,
+	SkippedStickMeshMaterial<ChicoStickMaterial>,
+	ChicoLeafMaterial,
+	SkippedLeafMeshMaterial<ChicoLeafMaterial>,
+>;
+
+/// [`LiamsConifer`] configured for this playground (green [`StandardMaterial`] tufts for shape debugging).
+pub type RenderLiamsConifer = LiamsConifer<
+	ChicoStickMaterial,
+	SkippedStickMeshMaterial<ChicoStickMaterial>,
+	StandardMaterial,
+	SkippedLeafMeshMaterial<StandardMaterial>,
+>;
+
+pub type RenderSucculentTuft =
+	SucculentTuft<StandardMaterial, SkippedLeafMeshMaterial<StandardMaterial>>;
+pub type RenderBladeTuft = BladeTuft<StandardMaterial, SkippedLeafMeshMaterial<StandardMaterial>>;
+pub type RenderSpearTuft = SpearTuft<StandardMaterial, SkippedLeafMeshMaterial<StandardMaterial>>;
+pub type RenderBuddhaHandTuft =
+	BuddhaHandTuft<StandardMaterial, SkippedLeafMeshMaterial<StandardMaterial>>;
+pub type RenderWeepingTuft =
+	WeepingTuft<StandardMaterial, SkippedLeafMeshMaterial<StandardMaterial>>;
+
+#[derive(Clone)]
+pub enum RenderSubject {
+	SopesBanyan(RenderSopesBanyan),
+	LiamsConifer(RenderLiamsConifer),
+	SucculentTuft(RenderSucculentTuft),
+	BladeTuft(RenderBladeTuft),
+	SpearTuft(RenderSpearTuft),
+	BuddhaHandTuft(RenderBuddhaHandTuft),
+	WeepingTuft(RenderWeepingTuft),
+}
+
+impl RenderSubject {
+	pub fn label(&self) -> &'static str {
+		match self {
+			Self::SopesBanyan(_) => "SopesBanyan",
+			Self::LiamsConifer(_) => "LiamsConifer",
+			Self::SucculentTuft(_) => "SucculentTuft",
+			Self::BladeTuft(_) => "BladeTuft",
+			Self::SpearTuft(_) => "SpearTuft",
+			Self::BuddhaHandTuft(_) => "BuddhaHandTuft",
+			Self::WeepingTuft(_) => "WeepingTuft",
+		}
+	}
+
+	/// CLI / shape parameters that should trigger a mesh rebuild.
+	pub fn sync_param_key(&self) -> String {
+		match self {
+			Self::SopesBanyan(t) => format!("{:?}", t.geometry),
+			Self::LiamsConifer(t) => format!("{:?}", t.geometry),
+			Self::SucculentTuft(t) => format!("{:?}", t.shape),
+			Self::BladeTuft(t) => format!("{:?}", t.shape),
+			Self::SpearTuft(t) => format!("{:?}", t.shape),
+			Self::BuddhaHandTuft(t) => format!("{:?}", t.shape),
+			Self::WeepingTuft(t) => format!("{:?}", t.shape),
+		}
+	}
+
+	fn dispatch_item(&self) -> RenderDispatch {
+		match self {
+			Self::SopesBanyan(tree) => RenderDispatch::SopesBanyan(tree.clone()),
+			Self::LiamsConifer(tree) => RenderDispatch::LiamsConifer(tree.clone()),
+			Self::SucculentTuft(tuft) => RenderDispatch::SucculentTuft(tuft.clone()),
+			Self::BladeTuft(tuft) => RenderDispatch::BladeTuft(tuft.clone()),
+			Self::SpearTuft(tuft) => RenderDispatch::SpearTuft(tuft.clone()),
+			Self::BuddhaHandTuft(tuft) => RenderDispatch::BuddhaHandTuft(tuft.clone()),
+			Self::WeepingTuft(tuft) => RenderDispatch::WeepingTuft(tuft.clone()),
+		}
+	}
+}
+
+#[derive(Clone)]
+enum RenderDispatch {
+	SopesBanyan(RenderSopesBanyan),
+	LiamsConifer(RenderLiamsConifer),
+	SucculentTuft(RenderSucculentTuft),
+	BladeTuft(RenderBladeTuft),
+	SpearTuft(RenderSpearTuft),
+	BuddhaHandTuft(RenderBuddhaHandTuft),
+	WeepingTuft(RenderWeepingTuft),
+}
+
+/// Dispatch anchor for the active `/render` command.
+#[derive(Component)]
+pub struct SbsRenderRoot;
+
+/// Top-level entity spawned by the render pipeline (dispatch root or [`RenderItem::spawn_render_items`] return).
+#[derive(Component)]
+pub struct SbsRenderItem;
+
+#[derive(Resource, Clone)]
+pub struct RenderConfig {
+	pub subject: RenderSubject,
+	pub res_2: u8,
+	pub transform: Transform,
+}
+
+impl Default for RenderConfig {
+	fn default() -> Self {
+		Self {
+			subject: RenderSubject::LiamsConifer(RenderLiamsConifer::default()),
+			res_2: 4,
+			transform: Transform::default(),
+		}
+	}
+}
+
+fn render_sync_key(config: &RenderConfig) -> String {
+	format!(
+		"{}|params={}|res_2={}|t={:?}|s={:?}|r={:?}",
+		config.subject.label(),
+		config.subject.sync_param_key(),
+		config.res_2,
+		config.transform.translation,
+		config.transform.scale,
+		config.transform.rotation,
+	)
+}
+
+/// Despawns the previous scene and spawns a fresh dispatch entity when [`RenderConfig`] changes.
+pub fn sync_render(
+	mut commands: Commands,
+	config: Res<RenderConfig>,
+	mut synced: Local<Option<String>>,
+	item_q: Query<Entity, (With<SbsRenderItem>, Without<ChildOf>)>,
+) {
+	let key = render_sync_key(&config);
+	if synced.as_deref() == Some(&key) {
+		return;
+	}
+
+	for entity in &item_q {
+		commands.entity(entity).despawn();
+	}
+
+	let bundle = (
+		SbsRenderRoot,
+		SbsRenderItem,
+		CascadeChunk::unit_center_chunk().with_res_2(config.res_2),
+		config.transform,
+	);
+
+	match config.subject.dispatch_item() {
+		RenderDispatch::SopesBanyan(tree) => {
+			commands.spawn((bundle, DispatchRenderItem::new(tree)));
+		}
+		RenderDispatch::LiamsConifer(tree) => {
+			commands.spawn((bundle, DispatchRenderItem::new(tree)));
+		}
+		RenderDispatch::SucculentTuft(tuft) => {
+			commands.spawn((bundle, DispatchRenderItem::new(tuft)));
+		}
+		RenderDispatch::BladeTuft(tuft) => {
+			commands.spawn((bundle, DispatchRenderItem::new(tuft)));
+		}
+		RenderDispatch::SpearTuft(tuft) => {
+			commands.spawn((bundle, DispatchRenderItem::new(tuft)));
+		}
+		RenderDispatch::BuddhaHandTuft(tuft) => {
+			commands.spawn((bundle, DispatchRenderItem::new(tuft)));
+		}
+		RenderDispatch::WeepingTuft(tuft) => {
+			commands.spawn((bundle, DispatchRenderItem::new(tuft)));
+		}
+	}
+
+	*synced = Some(key);
+}
+
+/// Runs [`RenderItem::spawn_render_items`] for new dispatch roots and tags top-level spawned entities.
+pub fn dispatch_render_items<T: RenderItem + Send + Sync + 'static>(
+	mut commands: Commands,
+	query: Query<
+		(Entity, &DispatchRenderItem<T>, &CascadeChunk, &Transform),
+		(Added<DispatchRenderItem<T>>, With<SbsRenderRoot>, With<SbsRenderItem>),
+	>,
+) {
+	for (_root, dispatch, chunk, transform) in &query {
+		for entity in dispatch.spawn_render_items(&mut commands, chunk, *transform) {
+			commands.entity(entity).insert(SbsRenderItem);
+		}
+	}
+}

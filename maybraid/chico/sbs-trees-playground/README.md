@@ -9,7 +9,7 @@
 cargo run -p chico-sbs-trees-playground
 ```
 
-The default preview is **Liam's Conifer** (sticks only until tufts are wired). Press **`/`** for the command console.
+The default preview is **Liam's Conifer** (sticks plus tuft foliage at each joint). Press **`/`** for the command console.
 
 ### Examples
 

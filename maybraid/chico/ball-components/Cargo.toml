@@ -14,6 +14,14 @@ bevy = { workspace = true }
 chico-sdf = { workspace = true }
 procedural-common = { workspace = true }
 render-item = { workspace = true }
+clap = { workspace = true, optional = true }
+
+[dev-dependencies]
+anyhow = { workspace = true }
+
+[features]
+default = []
+clap = ["dep:clap"]
 
 [lints]
 workspace = true

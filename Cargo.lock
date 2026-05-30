@@ -1871,8 +1871,10 @@ dependencies = [
 name = "chico-ball-components"
 version = "0.0.1"
 dependencies = [
+ "anyhow",
  "bevy",
  "chico-sdf",
+ "clap",
  "procedural-common",
  "render-item",
 ]

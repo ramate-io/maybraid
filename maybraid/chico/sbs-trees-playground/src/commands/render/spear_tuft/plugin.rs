@@ -1,24 +1,24 @@
 use bevy::prelude::*;
 
-use crate::commands::render::{LiamsConiferRenderHelper, Render};
+use crate::commands::render::{Render, SpearTuftRenderHelper};
 use crate::render::{RenderConfig, RenderSubject};
 
-pub struct LiamsConiferRenderPlugin;
+pub struct SpearTuftRenderPlugin;
 
-impl Plugin for LiamsConiferRenderPlugin {
+impl Plugin for SpearTuftRenderPlugin {
 	fn build(&self, app: &mut App) {
-		app.add_systems(Update, react_render_helper_liams_conifer);
+		app.add_systems(Update, react_render_helper_spear_tuft);
 	}
 }
 
-pub fn react_render_helper_liams_conifer(
+pub fn react_render_helper_spear_tuft(
 	mut commands: Commands,
 	mut config: ResMut<RenderConfig>,
-	q: Query<(Entity, &LiamsConiferRenderHelper), Added<LiamsConiferRenderHelper>>,
+	q: Query<(Entity, &SpearTuftRenderHelper), Added<SpearTuftRenderHelper>>,
 	render_q: Query<&Render, Added<Render>>,
 ) {
 	for (entity, helper) in &q {
-		config.subject = RenderSubject::LiamsConifer(helper.inner.clone());
+		config.subject = RenderSubject::SpearTuft(helper.inner.clone().into());
 		config.res_2 = helper.res_2;
 		config.transform = helper.render_transform();
 		commands.entity(entity).despawn();
