@@ -22,12 +22,7 @@ use chico_sdf::{NoisyBall, NoisyCylinder};
 use chico_vegetation_shaders::{
 	ChicoLeafMaterial, ChicoStickMaterial, ChicoVegetationShadersPlugin,
 };
-use commands::render::blade_tuft::plugin::react_render_helper_blade_tuft;
-use commands::render::liams_conifer::plugin::react_render_helper_liams_conifer;
-use commands::render::sopes_banyan::plugin::react_render_helper_sopes_banyan;
-use commands::render::succulent_tuft::plugin::react_render_helper_succulent_tuft;
-use commands::render::weeping_tuft::plugin::react_render_helper_weeping_tuft;
-use game_commands::command::GameCommandPlugin;
+use game_commands::command::{capture_command_line_input, GameCommandPlugin};
 use ground::setup_ground;
 use render::{dispatch_render_items, sync_render};
 use render_materials::{setup_render_materials, sync_render_material_handles};
@@ -64,18 +59,18 @@ impl Plugin for SbsTreesPlaygroundPlugin {
 				(
 					camera::camera_controller,
 					sync_render_material_handles
-						.after(react_render_helper_sopes_banyan)
-						.after(react_render_helper_liams_conifer)
-						.after(react_render_helper_succulent_tuft)
-						.after(react_render_helper_blade_tuft)
-						.after(react_render_helper_weeping_tuft)
+						.after(capture_command_line_input::<PlaygroundCommand>)
 						.before(sync_render),
-					sync_render.after(sync_render_material_handles),
+					sync_render
+						.after(capture_command_line_input::<PlaygroundCommand>)
+						.after(sync_render_material_handles),
 					(
 						dispatch_render_items::<render::RenderSopesBanyan>,
 						dispatch_render_items::<render::RenderLiamsConifer>,
 						dispatch_render_items::<render::RenderSucculentTuft>,
 						dispatch_render_items::<render::RenderBladeTuft>,
+						dispatch_render_items::<render::RenderSpearTuft>,
+						dispatch_render_items::<render::RenderBuddhaHandTuft>,
 						dispatch_render_items::<render::RenderWeepingTuft>,
 					)
 						.after(sync_render),

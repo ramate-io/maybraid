@@ -1,4 +1,8 @@
-//! **Weeping tuft** — downward drooping strands (sketch; [#217](https://github.com/ramate-io/maybraid/issues/217)).
+//! **Weeping tuft** — upward curving bush clump (sketch; [#217](https://github.com/ramate-io/maybraid/issues/217)).
+//!
+//! **Note:** Current implementation still uses downward draping geometry. Intended semantics
+//! (palm-bush style upward curving tufts) are tracked in
+//! `issues/chico-tufts/weeping-semantics/` — defer aesthetic work until that redesign lands.
 
 use std::marker::PhantomData;
 
@@ -140,7 +144,7 @@ where
 			})
 			.collect();
 
-		PrismaticCluster::new(
+		PrismaticCluster::new_draping(
 			elements,
 			HEIGHT_SEGMENTS,
 			SIDE_COUNT,
@@ -194,6 +198,55 @@ mod tests {
 		for d in tuft.strand_directions() {
 			assert!(d.y < -0.2, "strands should droop: {d:?}");
 		}
+		Ok(())
+	}
+
+	#[test]
+	fn weeping_rotation_maps_local_y_to_direction() -> Result<()> {
+		use super::super::prism::PrismaticElement;
+
+		let tuft = WeepingTuft::<StandardMaterial, MeshMaterial3d<StandardMaterial>>::default();
+		for (i, direction) in tuft.strand_directions().into_iter().enumerate() {
+			let element = PrismaticElement {
+				direction,
+				length: 1.25,
+				base_radius: 0.04,
+				tip_radius: 0.01,
+				seed: i as i32,
+			};
+			let rotation = element.draping_rotation();
+			let mapped = rotation * (-Vec3::Y);
+			assert!(
+				(mapped - direction).length() < 1e-4,
+				"rotation should map −Y to direction; got {mapped:?} want {direction:?}"
+			);
+			let tip = rotation * Vec3::new(0.0, -element.length, 0.0);
+			assert!(tip.y < -0.2, "tip should hang below anchor: {tip:?}");
+		}
+		Ok(())
+	}
+
+	#[test]
+	fn weeping_mesh_extends_below_anchor() -> Result<()> {
+		use bevy::mesh::VertexAttributeValues;
+
+		let tuft = WeepingTuft::<StandardMaterial, MeshMaterial3d<StandardMaterial>>::default();
+		let mesh = tuft.build_mesh(1.0);
+		let Some(VertexAttributeValues::Float32x3(positions)) =
+			mesh.attribute(Mesh::ATTRIBUTE_POSITION)
+		else {
+			anyhow::bail!("missing positions");
+		};
+		let max_y = positions.iter().map(|p| p[1]).fold(f32::NEG_INFINITY, f32::max);
+		let min_y = positions.iter().map(|p| p[1]).fold(f32::INFINITY, f32::min);
+		assert!(
+			max_y < 0.15,
+			"anchor should stay near origin; mesh max_y={max_y}"
+		);
+		assert!(
+			min_y < -0.35,
+			"strands should hang below anchor; mesh min_y={min_y}"
+		);
 		Ok(())
 	}
 }

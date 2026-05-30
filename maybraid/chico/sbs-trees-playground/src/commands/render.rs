@@ -1,7 +1,11 @@
 pub mod blade_tuft;
+pub mod buddha_hand_tuft;
 pub mod liams_conifer;
 pub mod plugin;
+
+pub use plugin::RenderCommandsPlugin;
 pub mod sopes_banyan;
+pub mod spear_tuft;
 pub mod succulent_tuft;
 pub mod weeping_tuft;
 
@@ -10,8 +14,10 @@ use clap::Subcommand;
 
 use crate::render::{RenderConfig, RenderSubject};
 pub use blade_tuft::BladeTuftRenderHelper;
+pub use buddha_hand_tuft::BuddhaHandTuftRenderHelper;
 pub use liams_conifer::LiamsConiferRenderHelper;
 pub use sopes_banyan::SopesBanyanRenderHelper;
+pub use spear_tuft::SpearTuftRenderHelper;
 pub use succulent_tuft::SucculentTuftRenderHelper;
 pub use weeping_tuft::WeepingTuftRenderHelper;
 
@@ -63,29 +69,17 @@ pub enum Render {
 	LiamsConifer(LiamsConiferRenderHelper),
 	SucculentTuft(SucculentTuftRenderHelper),
 	BladeTuft(BladeTuftRenderHelper),
+	SpearTuft(SpearTuftRenderHelper),
+	BuddhaHandTuft(BuddhaHandTuftRenderHelper),
 	WeepingTuft(WeepingTuftRenderHelper),
 }
 
 impl Render {
 	pub fn react(self, commands: &mut Commands) {
-		commands.spawn(self.clone());
-		match self {
-			Self::SopesBanyan(h) => {
-				commands.spawn(h);
-			}
-			Self::LiamsConifer(h) => {
-				commands.spawn(h);
-			}
-			Self::SucculentTuft(h) => {
-				commands.spawn(h);
-			}
-			Self::BladeTuft(h) => {
-				commands.spawn(h);
-			}
-			Self::WeepingTuft(h) => {
-				commands.spawn(h);
-			}
-		}
+		let config = self.into_render_config();
+		commands.queue(move |world: &mut World| {
+			*world.resource_mut::<RenderConfig>() = config;
+		});
 	}
 
 	pub fn into_render_config(&self) -> RenderConfig {
@@ -110,6 +104,16 @@ impl Render {
 				res_2: h.res_2,
 				transform: h.render_transform(),
 			},
+			Self::SpearTuft(h) => RenderConfig {
+				subject: RenderSubject::SpearTuft(h.inner.clone().into()),
+				res_2: h.res_2,
+				transform: h.render_transform(),
+			},
+			Self::BuddhaHandTuft(h) => RenderConfig {
+				subject: RenderSubject::BuddhaHandTuft(h.inner.clone().into()),
+				res_2: h.res_2,
+				transform: h.render_transform(),
+			},
 			Self::WeepingTuft(h) => RenderConfig {
 				subject: RenderSubject::WeepingTuft(h.inner.clone().into()),
 				res_2: h.res_2,
@@ -128,4 +132,26 @@ fn parse_vec3_csv(s: &str) -> Result<Vec3, String> {
 	let y = parts[1].parse::<f32>().map_err(|e| e.to_string())?;
 	let z = parts[2].parse::<f32>().map_err(|e| e.to_string())?;
 	Ok(Vec3::new(x, y, z))
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use anyhow::Result;
+
+	#[test]
+	fn spear_tuft_command_preserves_shape_params() -> Result<()> {
+		let cmd = crate::commands::PlaygroundCommand::parse_line("render spear-tuft --spear-count 20")
+			.map_err(|e| anyhow::anyhow!("{e}"))?;
+		let crate::commands::PlaygroundCommand::Render(Render::SpearTuft(helper)) = cmd else {
+			anyhow::bail!("expected spear-tuft render command");
+		};
+		assert_eq!(helper.inner.shape.spear_count, 20);
+		let cfg = Render::SpearTuft(helper).into_render_config();
+		let RenderSubject::SpearTuft(tuft) = cfg.subject else {
+			anyhow::bail!("expected spear subject");
+		};
+		assert_eq!(tuft.shape.spear_count, 20);
+		Ok(())
+	}
 }

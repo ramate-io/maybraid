@@ -4,18 +4,29 @@
 //!
 //! - [`SucculentTuft`] — thick upward spears (dry conifers, succulents)
 //! - [`BladeTuft`] — thin flat grass-like blades (sketch)
-//! - [`WeepingTuft`] — downward drooping strands (sketch)
+//! - [`SpearTuft`] — flat 2D grass blades (belly→tip ribbon profile)
+//! - [`BuddhaHandTuft`] — clustered widening diamond fingers (palm-hand silhouette)
+//! - [`WeepingTuft`] — upward curving bush tuft (sketch; semantics tracked in issues)
 
 mod blade;
+mod buddha_hand;
 mod directions;
 mod prism;
+mod profile;
 mod spawn;
+mod spear;
+mod sway;
 mod succulent;
 mod weeping;
 
 pub mod render_item_plugin;
 
 pub use blade::{BladeTuft, BladeTuftShape, BladeTuftStd};
+pub use buddha_hand::{
+	BuddhaHandCluster, BuddhaHandElement, BuddhaHandTuft, BuddhaHandTuftShape, BuddhaHandTuftStd,
+};
+pub use profile::BellyTipProfile;
+pub use spear::{SpearCluster, SpearElement, SpearTuft, SpearTuftShape, SpearTuftStd};
 pub use succulent::{SucculentTuft, SucculentTuftShape, SucculentTuftStd};
 pub use weeping::{WeepingTuft, WeepingTuftShape, WeepingTuftStd};
 

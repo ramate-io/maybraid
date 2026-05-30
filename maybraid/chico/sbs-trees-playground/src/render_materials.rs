@@ -79,6 +79,12 @@ fn attach_render_materials(
 		RenderSubject::BladeTuft(t) => {
 			t.material.mesh = MeshMaterial3d(tuft.clone());
 		}
+		RenderSubject::SpearTuft(t) => {
+			t.material.mesh = MeshMaterial3d(tuft.clone());
+		}
+		RenderSubject::BuddhaHandTuft(t) => {
+			t.material.mesh = MeshMaterial3d(tuft.clone());
+		}
 		RenderSubject::WeepingTuft(t) => {
 			t.material.mesh = MeshMaterial3d(tuft.clone());
 		}

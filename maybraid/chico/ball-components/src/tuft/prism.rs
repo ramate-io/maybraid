@@ -4,8 +4,18 @@ use bevy::mesh::{Indices, Mesh, PrimitiveTopology};
 use bevy::prelude::*;
 use procedural_common::{NoiseConfig, NoiseParams, NoiseType};
 
+use super::sway::strand_sway_at;
+
 const MIN_ELEMENT_LENGTH: f32 = 1e-4;
 const MAX_SWAY_FRACTION_OF_LENGTH: f32 = 0.35;
+
+/// Whether prisms grow from the anchor along +local Y (upward tufts) or −local Y (draping).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) enum GrowthPolarity {
+	#[default]
+	Upward,
+	Draping,
+}
 
 /// One prismatic element in a tuft cluster.
 pub(crate) struct PrismaticElement {
@@ -17,21 +27,29 @@ pub(crate) struct PrismaticElement {
 }
 
 impl PrismaticElement {
-	/// Stable +Y → [`Self::direction`] rotation (avoids arc blow-ups near parallel/anti-parallel).
+	/// Stable +Y → [`Self::direction`] rotation (upward tufts).
 	pub(crate) fn rotation(&self) -> Quat {
-		let up = Vec3::Y;
-		let d = self.direction.normalize_or_zero();
+		Self::rotation_from_axis(Vec3::Y, self.direction)
+	}
+
+	/// Stable −Y → [`Self::direction`] rotation (draping / weeping tufts).
+	pub(crate) fn draping_rotation(&self) -> Quat {
+		Self::rotation_from_axis(-Vec3::Y, self.direction)
+	}
+
+	fn rotation_from_axis(axis: Vec3, direction: Vec3) -> Quat {
+		let d = direction.normalize_or_zero();
 		if d.length_squared() < 1e-12 {
 			return Quat::IDENTITY;
 		}
-		let dot = up.dot(d);
+		let dot = axis.dot(d);
 		if dot > 1.0 - 1e-5 {
 			return Quat::IDENTITY;
 		}
 		if dot < -1.0 + 1e-5 {
 			return Quat::from_axis_angle(Vec3::X, std::f32::consts::PI);
 		}
-		Quat::from_rotation_arc(up, d)
+		Quat::from_rotation_arc(axis, d)
 	}
 }
 
@@ -42,6 +60,7 @@ pub(crate) struct PrismaticCluster {
 	side_count: u32,
 	noise_frequency: f32,
 	noise_amplitude: f32,
+	growth: GrowthPolarity,
 }
 
 impl PrismaticCluster {
@@ -58,6 +77,25 @@ impl PrismaticCluster {
 			side_count,
 			noise_frequency,
 			noise_amplitude,
+			growth: GrowthPolarity::Upward,
+		}
+	}
+
+	/// Draping strands: anchor at the joint, tips hang along [`PrismaticElement::direction`].
+	pub(crate) fn new_draping(
+		elements: Vec<PrismaticElement>,
+		height_segments: u32,
+		side_count: u32,
+		noise_frequency: f32,
+		noise_amplitude: f32,
+	) -> Self {
+		Self {
+			elements,
+			height_segments,
+			side_count,
+			noise_frequency,
+			noise_amplitude,
+			growth: GrowthPolarity::Draping,
 		}
 	}
 
@@ -70,7 +108,10 @@ impl PrismaticCluster {
 				continue;
 			}
 			let length = element.length.max(MIN_ELEMENT_LENGTH);
-			let rotation = element.rotation();
+			let rotation = match self.growth {
+				GrowthPolarity::Upward => element.rotation(),
+				GrowthPolarity::Draping => element.draping_rotation(),
+			};
 			if !rotation.is_finite() {
 				continue;
 			}
@@ -117,19 +158,22 @@ impl PrismaticCluster {
 
 		for ring in 0..=rings {
 			let t = ring as f32 / rings as f32;
-			let y = t * length;
+			let y = match self.growth {
+				GrowthPolarity::Upward => t * length,
+				GrowthPolarity::Draping => -t * length,
+			};
 			let radius = element.base_radius + (element.tip_radius - element.base_radius) * t;
 
-			let nx = element.seed as f32 + 0.13;
-			let nz = element.seed as f32 + 29.7;
-			let mut sway_x =
-				noise.raw_3d(nx, y * self.noise_frequency, nz) * self.noise_amplitude;
-			let mut sway_z = noise.raw_3d(nx + 5.1, y * self.noise_frequency, nz + 2.3)
-				* self.noise_amplitude;
-			sway_x = sway_x.clamp(-max_sway, max_sway);
-			sway_z = sway_z.clamp(-max_sway, max_sway);
+			let sway = strand_sway_at(
+				&noise,
+				element.seed,
+				t,
+				self.noise_frequency,
+				self.noise_amplitude,
+				max_sway,
+			);
 
-			let center = Vec3::new(sway_x, y, sway_z);
+			let center = Vec3::new(sway.right, y, sway.forward);
 			for side in 0..sides {
 				let angle = side as f32 * std::f32::consts::TAU / sides as f32;
 				let local = center + Vec3::new(angle.cos() * radius, 0.0, angle.sin() * radius);
@@ -147,14 +191,25 @@ impl PrismaticCluster {
 				let i1 = base_vertex + ring * sides + (side + 1) % sides;
 				let i2 = base_vertex + (ring + 1) * sides + side;
 				let i3 = base_vertex + (ring + 1) * sides + (side + 1) % sides;
-				indices.extend_from_slice(&[
-					i0 as u32,
-					i2 as u32,
-					i1 as u32,
-					i1 as u32,
-					i2 as u32,
-					i3 as u32,
-				]);
+				if self.growth == GrowthPolarity::Draping {
+					indices.extend_from_slice(&[
+						i0 as u32,
+						i1 as u32,
+						i2 as u32,
+						i1 as u32,
+						i3 as u32,
+						i2 as u32,
+					]);
+				} else {
+					indices.extend_from_slice(&[
+						i0 as u32,
+						i2 as u32,
+						i1 as u32,
+						i1 as u32,
+						i2 as u32,
+						i3 as u32,
+					]);
+				}
 			}
 		}
 	}

@@ -1,5 +1,7 @@
 use bevy::prelude::*;
-use chico_ball_components::tuft::{BladeTuft, SucculentTuft, WeepingTuft};
+use chico_ball_components::tuft::{
+	BuddhaHandTuft, BladeTuft, SpearTuft, SucculentTuft, WeepingTuft,
+};
 use chico_sbs_trees::liams_conifer::LiamsConifer;
 use chico_sbs_trees::sopes_banyan::SopesBanyan;
 use chico_sbs_trees::SkippedLeafMeshMaterial;
@@ -27,6 +29,9 @@ pub type RenderLiamsConifer = LiamsConifer<
 pub type RenderSucculentTuft =
 	SucculentTuft<StandardMaterial, SkippedLeafMeshMaterial<StandardMaterial>>;
 pub type RenderBladeTuft = BladeTuft<StandardMaterial, SkippedLeafMeshMaterial<StandardMaterial>>;
+pub type RenderSpearTuft = SpearTuft<StandardMaterial, SkippedLeafMeshMaterial<StandardMaterial>>;
+pub type RenderBuddhaHandTuft =
+	BuddhaHandTuft<StandardMaterial, SkippedLeafMeshMaterial<StandardMaterial>>;
 pub type RenderWeepingTuft =
 	WeepingTuft<StandardMaterial, SkippedLeafMeshMaterial<StandardMaterial>>;
 
@@ -36,6 +41,8 @@ pub enum RenderSubject {
 	LiamsConifer(RenderLiamsConifer),
 	SucculentTuft(RenderSucculentTuft),
 	BladeTuft(RenderBladeTuft),
+	SpearTuft(RenderSpearTuft),
+	BuddhaHandTuft(RenderBuddhaHandTuft),
 	WeepingTuft(RenderWeepingTuft),
 }
 
@@ -46,7 +53,22 @@ impl RenderSubject {
 			Self::LiamsConifer(_) => "LiamsConifer",
 			Self::SucculentTuft(_) => "SucculentTuft",
 			Self::BladeTuft(_) => "BladeTuft",
+			Self::SpearTuft(_) => "SpearTuft",
+			Self::BuddhaHandTuft(_) => "BuddhaHandTuft",
 			Self::WeepingTuft(_) => "WeepingTuft",
+		}
+	}
+
+	/// CLI / shape parameters that should trigger a mesh rebuild.
+	pub fn sync_param_key(&self) -> String {
+		match self {
+			Self::SopesBanyan(t) => format!("{:?}", t.geometry),
+			Self::LiamsConifer(t) => format!("{:?}", t.geometry),
+			Self::SucculentTuft(t) => format!("{:?}", t.shape),
+			Self::BladeTuft(t) => format!("{:?}", t.shape),
+			Self::SpearTuft(t) => format!("{:?}", t.shape),
+			Self::BuddhaHandTuft(t) => format!("{:?}", t.shape),
+			Self::WeepingTuft(t) => format!("{:?}", t.shape),
 		}
 	}
 
@@ -56,6 +78,8 @@ impl RenderSubject {
 			Self::LiamsConifer(tree) => RenderDispatch::LiamsConifer(tree.clone()),
 			Self::SucculentTuft(tuft) => RenderDispatch::SucculentTuft(tuft.clone()),
 			Self::BladeTuft(tuft) => RenderDispatch::BladeTuft(tuft.clone()),
+			Self::SpearTuft(tuft) => RenderDispatch::SpearTuft(tuft.clone()),
+			Self::BuddhaHandTuft(tuft) => RenderDispatch::BuddhaHandTuft(tuft.clone()),
 			Self::WeepingTuft(tuft) => RenderDispatch::WeepingTuft(tuft.clone()),
 		}
 	}
@@ -67,6 +91,8 @@ enum RenderDispatch {
 	LiamsConifer(RenderLiamsConifer),
 	SucculentTuft(RenderSucculentTuft),
 	BladeTuft(RenderBladeTuft),
+	SpearTuft(RenderSpearTuft),
+	BuddhaHandTuft(RenderBuddhaHandTuft),
 	WeepingTuft(RenderWeepingTuft),
 }
 
@@ -97,11 +123,13 @@ impl Default for RenderConfig {
 
 fn render_sync_key(config: &RenderConfig) -> String {
 	format!(
-		"{}|res_2={}|t={:?}|s={:?}",
+		"{}|params={}|res_2={}|t={:?}|s={:?}|r={:?}",
 		config.subject.label(),
+		config.subject.sync_param_key(),
 		config.res_2,
 		config.transform.translation,
-		config.transform.scale
+		config.transform.scale,
+		config.transform.rotation,
 	)
 }
 
@@ -139,6 +167,12 @@ pub fn sync_render(
 			commands.spawn((bundle, DispatchRenderItem::new(tuft)));
 		}
 		RenderDispatch::BladeTuft(tuft) => {
+			commands.spawn((bundle, DispatchRenderItem::new(tuft)));
+		}
+		RenderDispatch::SpearTuft(tuft) => {
+			commands.spawn((bundle, DispatchRenderItem::new(tuft)));
+		}
+		RenderDispatch::BuddhaHandTuft(tuft) => {
 			commands.spawn((bundle, DispatchRenderItem::new(tuft)));
 		}
 		RenderDispatch::WeepingTuft(tuft) => {
