@@ -10,7 +10,19 @@ publish = { workspace = true }
 rust-version = { workspace = true }
 
 [dependencies]
-chico-sdf = { workspace = true }
+bevy = { workspace = true }
+chico-ball-components = { workspace = true }
+chico-sbs-geometry = { workspace = true, features = ["render"] }
+procedural-common = { workspace = true }
+render-item = { workspace = true }
+clap = { workspace = true, optional = true }
+
+[dev-dependencies]
+anyhow = { workspace = true }
+
+[features]
+default = []
+clap = ["dep:clap", "chico-ball-components/clap", "procedural-common/clap"]
 
 [lints]
 workspace = true
