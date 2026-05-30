@@ -88,6 +88,12 @@ fn attach_render_materials(
 		RenderSubject::WeepingTuft(t) => {
 			t.material.mesh = MeshMaterial3d(tuft.clone());
 		}
+		RenderSubject::FrondCrown(c) => {
+			c.material.mesh = MeshMaterial3d(tuft.clone());
+		}
+		RenderSubject::ModerateLodFrondCrown(c) => {
+			c.material.mesh = MeshMaterial3d(tuft.clone());
+		}
 	}
 }
 

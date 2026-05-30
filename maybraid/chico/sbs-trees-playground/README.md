@@ -16,6 +16,10 @@ The default preview is **Liam's Conifer** (sticks plus tuft foliage at each join
 ```text
 /render liams-conifer
 /render liams-conifer --stalk-height 40 --res-2 5
+/render spear-tuft
+/render frond-crown
+/render frond-crown --translate 0,2,0 --spine-segments 16
+/render moderate-lod-frond-crown --translate 0,2,0
 /render sopes-banyan
 /help
 ```
@@ -23,5 +27,6 @@ The default preview is **Liam's Conifer** (sticks plus tuft foliage at each join
 Startup argv uses the same `chico-sbs` CLI (no leading slash):
 
 ```bash
+cargo run -p chico-sbs-trees-playground -- render frond-crown --translate 0,2,0
 cargo run -p chico-sbs-trees-playground -- render liams-conifer --stalk-height 35
 ``` 

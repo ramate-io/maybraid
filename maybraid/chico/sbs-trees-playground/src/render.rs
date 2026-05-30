@@ -1,4 +1,5 @@
 use bevy::prelude::*;
+use chico_ball_components::{FrondCrown, ModerateLodFrondCrown};
 use chico_ball_components::tuft::{
 	BuddhaHandTuft, BladeTuft, SpearTuft, SucculentTuft, WeepingTuft,
 };
@@ -34,6 +35,10 @@ pub type RenderBuddhaHandTuft =
 	BuddhaHandTuft<StandardMaterial, SkippedLeafMeshMaterial<StandardMaterial>>;
 pub type RenderWeepingTuft =
 	WeepingTuft<StandardMaterial, SkippedLeafMeshMaterial<StandardMaterial>>;
+pub type RenderFrondCrown =
+	FrondCrown<StandardMaterial, SkippedLeafMeshMaterial<StandardMaterial>>;
+pub type RenderModerateLodFrondCrown =
+	ModerateLodFrondCrown<StandardMaterial, SkippedLeafMeshMaterial<StandardMaterial>>;
 
 #[derive(Clone)]
 pub enum RenderSubject {
@@ -44,6 +49,8 @@ pub enum RenderSubject {
 	SpearTuft(RenderSpearTuft),
 	BuddhaHandTuft(RenderBuddhaHandTuft),
 	WeepingTuft(RenderWeepingTuft),
+	FrondCrown(RenderFrondCrown),
+	ModerateLodFrondCrown(RenderModerateLodFrondCrown),
 }
 
 impl RenderSubject {
@@ -56,6 +63,8 @@ impl RenderSubject {
 			Self::SpearTuft(_) => "SpearTuft",
 			Self::BuddhaHandTuft(_) => "BuddhaHandTuft",
 			Self::WeepingTuft(_) => "WeepingTuft",
+			Self::FrondCrown(_) => "FrondCrown",
+			Self::ModerateLodFrondCrown(_) => "ModerateLodFrondCrown",
 		}
 	}
 
@@ -69,6 +78,8 @@ impl RenderSubject {
 			Self::SpearTuft(t) => format!("{:?}", t.shape),
 			Self::BuddhaHandTuft(t) => format!("{:?}", t.shape),
 			Self::WeepingTuft(t) => format!("{:?}", t.shape),
+			Self::FrondCrown(t) => format!("{:?}", t.shape),
+			Self::ModerateLodFrondCrown(t) => format!("{:?}", t.shape),
 		}
 	}
 
@@ -81,6 +92,8 @@ impl RenderSubject {
 			Self::SpearTuft(tuft) => RenderDispatch::SpearTuft(tuft.clone()),
 			Self::BuddhaHandTuft(tuft) => RenderDispatch::BuddhaHandTuft(tuft.clone()),
 			Self::WeepingTuft(tuft) => RenderDispatch::WeepingTuft(tuft.clone()),
+			Self::FrondCrown(crown) => RenderDispatch::FrondCrown(crown.clone()),
+			Self::ModerateLodFrondCrown(crown) => RenderDispatch::ModerateLodFrondCrown(crown.clone()),
 		}
 	}
 }
@@ -94,6 +107,8 @@ enum RenderDispatch {
 	SpearTuft(RenderSpearTuft),
 	BuddhaHandTuft(RenderBuddhaHandTuft),
 	WeepingTuft(RenderWeepingTuft),
+	FrondCrown(RenderFrondCrown),
+	ModerateLodFrondCrown(RenderModerateLodFrondCrown),
 }
 
 /// Dispatch anchor for the active `/render` command.
@@ -177,6 +192,12 @@ pub fn sync_render(
 		}
 		RenderDispatch::WeepingTuft(tuft) => {
 			commands.spawn((bundle, DispatchRenderItem::new(tuft)));
+		}
+		RenderDispatch::FrondCrown(crown) => {
+			commands.spawn((bundle, DispatchRenderItem::new(crown)));
+		}
+		RenderDispatch::ModerateLodFrondCrown(crown) => {
+			commands.spawn((bundle, DispatchRenderItem::new(crown)));
 		}
 	}
 
