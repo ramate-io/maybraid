@@ -184,6 +184,27 @@ where
 		)
 		.into_mesh()
 	}
+
+	/// Spawn as a child of `parent` using assembly-local `local_transform` (scale sizes the mesh).
+	pub fn spawn_render_items_under(
+		&self,
+		commands: &mut Commands,
+		cascade_chunk: &CascadeChunk,
+		local_transform: Transform,
+		parent: Option<Entity>,
+	) -> Vec<Entity>
+	where
+		M: Send + Sync + 'static,
+		S: Send + Sync + 'static,
+	{
+		MergedFrond::spawn_render_items_under(
+			self,
+			commands,
+			cascade_chunk,
+			local_transform,
+			parent,
+		)
+	}
 }
 
 /// Single frond strand (one combined spine + leaflet mesh).

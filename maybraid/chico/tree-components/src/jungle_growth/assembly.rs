@@ -16,7 +16,7 @@ use super::config::JungleGrowthShape;
 /// The composing tree chooses **where** to place instances; this type builds and spawns the
 /// inner dirt/wood mass plus a **frond crown** (outward arching shoots) mixed with a central
 /// **Buddha's-hand tuft** (upward fingers at the anchor).
-#[derive(Clone)]
+#[derive(Component, Clone)]
 pub struct JungleGrowth<BodyM, BodyS, FoliageM, FoliageS>
 where
 	BodyM: Material,
@@ -88,17 +88,46 @@ where
 		tuft
 	}
 
-	/// Arching frond crown mesh at [`JungleGrowthShape::foliage_world_scale`].
+	/// Arching frond crown mesh at unit scale (apply [`JungleGrowthShape::local_frond_transform`] scale).
 	pub fn build_frond_mesh(&self) -> Mesh {
-		self.frond_crown()
-			.build_mesh(self.shape.foliage_world_scale.max(1e-8))
+		self.frond_crown().build_mesh(1.0)
 	}
 
-	/// Spawn body + foliage at `transform`.
+	fn spawn_parts_under(
+		&self,
+		commands: &mut Commands,
+		assembly: Entity,
+		cascade_chunk: &CascadeChunk,
+	) where
+		BodyM: Send + Sync + 'static,
+		BodyS: Send + Sync + 'static,
+		FoliageM: Send + Sync + 'static,
+		FoliageS: Send + Sync + 'static,
+	{
+		let _ = self.inner_ball().spawn_render_items_under(
+			commands,
+			cascade_chunk,
+			self.shape.local_body_transform(),
+			Some(assembly),
+		);
+		let _ = self.frond_crown().spawn_render_items_under(
+			commands,
+			cascade_chunk,
+			self.shape.local_frond_transform(),
+			Some(assembly),
+		);
+		let _ = self.buddha_hand().spawn_render_items_under(
+			commands,
+			cascade_chunk,
+			self.shape.local_buddha_transform(),
+			Some(assembly),
+		);
+	}
+
+	/// Spawn body + foliage under one assembly root at `transform`.
 	///
-	/// Uniform scale on `transform` is treated as the anchor node radius for the inner ball.
-	/// Frond crown and Buddha's-hand tuft are lifted along local +Y by [`JungleGrowthShape::frond_crown_lift`]
-	/// and [`JungleGrowthShape::buddha_hand_lift`] (fractions of inner ball radius).
+	/// Uniform scale on `transform` is the anchor node radius. All parts are [`ChildOf`] the
+	/// assembly root with local transforms so the cluster repositions as one unit.
 	pub fn spawn_at(
 		&self,
 		commands: &mut Commands,
@@ -119,42 +148,22 @@ where
 			.max(transform.scale.z.abs())
 			.max(1e-8);
 
-		let body_transform = Transform {
-			translation: transform.translation,
-			rotation: transform.rotation,
-			scale: Vec3::splat(self.shape.ball_radius(node_radius)),
-		};
+		let assembly = commands
+			.spawn((
+				self.clone(),
+				cascade_chunk.clone(),
+				Transform {
+					translation: transform.translation,
+					rotation: transform.rotation,
+					scale: Vec3::splat(node_radius),
+				},
+				Visibility::default(),
+			))
+			.id();
 
-		let ball_radius = self.shape.ball_radius(node_radius);
-		let local_up = transform.rotation * Vec3::Y;
+		self.spawn_parts_under(commands, assembly, cascade_chunk);
 
-		let frond_transform = Transform {
-			translation: transform.translation
-				+ local_up * (ball_radius * self.shape.frond_crown_lift),
-			rotation: transform.rotation,
-			scale: Vec3::splat(self.shape.foliage_world_scale),
-		};
-
-		let buddha_scale = self.shape.foliage_world_scale * self.shape.buddha_hand_scale;
-		let buddha_transform = Transform {
-			translation: transform.translation
-				+ local_up * (ball_radius * self.shape.buddha_hand_lift),
-			rotation: transform.rotation,
-			scale: Vec3::splat(buddha_scale),
-		};
-
-		let mut out = self
-			.inner_ball()
-			.spawn_render_items(commands, cascade_chunk, body_transform);
-		out.extend(
-			self.frond_crown()
-				.spawn_render_items(commands, cascade_chunk, frond_transform),
-		);
-		out.extend(
-			self.buddha_hand()
-				.spawn_render_items(commands, cascade_chunk, buddha_transform),
-		);
-		out
+		vec![assembly]
 	}
 }
 

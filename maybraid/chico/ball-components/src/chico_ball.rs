@@ -65,6 +65,48 @@ impl<M: Material, S> ChicoBall<M, S>
 where
 	S: Clone + Into<MeshMaterial3d<M>>,
 {
+	/// Spawn under `parent` with `local_transform` relative to the parent (assembly-local placement).
+	pub fn spawn_render_items_under(
+		&self,
+		commands: &mut Commands,
+		cascade_chunk: &CascadeChunk,
+		local_transform: Transform,
+		parent: Option<Entity>,
+	) -> Vec<Entity>
+	where
+		M: Send + Sync + 'static,
+		S: Send + Sync + 'static,
+	{
+		let centroid_offset = Vec3::new(
+			-local_transform.scale.x * 0.5,
+			-local_transform.scale.y * 0.5,
+			-local_transform.scale.z * 0.5,
+		);
+		let transform =
+			local_transform.with_translation(local_transform.translation + centroid_offset);
+		let mesh_material: MeshMaterial3d<M> = self.material.clone().into();
+		let bundle = (
+			self.clone(),
+			Cached::new(self.noisy_ball()),
+			cascade_chunk.clone(),
+			transform,
+			mesh_material,
+		);
+
+		let entity = match parent {
+			Some(parent) => {
+				let mut entity = Entity::PLACEHOLDER;
+				commands.entity(parent).with_children(|parent_cmd| {
+					entity = parent_cmd.spawn(bundle).id();
+				});
+				entity
+			}
+			None => commands.spawn(bundle).id(),
+		};
+
+		vec![entity]
+	}
+
 	/// Unit sphere with surface noise from [`FromScalarNoise`] fields.
 	pub fn noisy_ball(&self) -> chico_sdf::NoisyBall {
 		NoisySurface::from_params(
@@ -90,22 +132,6 @@ where
 		cascade_chunk: &CascadeChunk,
 		transform: Transform,
 	) -> Vec<Entity> {
-		// compute unit scale offset
-		let centroid_offset =
-			Vec3::new(-transform.scale.x * 0.5, -transform.scale.y * 0.5, -transform.scale.z * 0.5);
-		let translation = transform.translation + centroid_offset;
-
-		let mesh_material: MeshMaterial3d<M> = self.material.clone().into();
-
-		vec![commands
-			.spawn((
-				self.clone(), // TODO: this is just a marker to help with despawning for now
-				// we ill be transitioning to a better render system soon.
-				Cached::new(self.noisy_ball()),
-				cascade_chunk.clone(),
-				transform.with_translation(translation),
-				mesh_material,
-			))
-			.id()]
+		self.spawn_render_items_under(commands, cascade_chunk, transform, None)
 	}
 }
