@@ -1,4 +1,5 @@
 use bevy::prelude::*;
+use chico_ball_components::{FrondCrown, ModerateLodFrondCrown};
 use chico_ball_components::tuft::{
 	BuddhaHandTuft, BladeTuft, SpearTuft, SucculentTuft, WeepingTuft,
 };
@@ -37,6 +38,10 @@ pub type RenderBuddhaHandTuft =
 	BuddhaHandTuft<StandardMaterial, SkippedLeafMeshMaterial<StandardMaterial>>;
 pub type RenderWeepingTuft =
 	WeepingTuft<StandardMaterial, SkippedLeafMeshMaterial<StandardMaterial>>;
+pub type RenderFrondCrown =
+	FrondCrown<StandardMaterial, SkippedLeafMeshMaterial<StandardMaterial>>;
+pub type RenderModerateLodFrondCrown =
+	ModerateLodFrondCrown<StandardMaterial, SkippedLeafMeshMaterial<StandardMaterial>>;
 
 /// [`JungleGrowth`] — bark/dirt inner mass + drooping tuft foliage ([#226](https://github.com/ramate-io/maybraid/issues/226)).
 pub type RenderJungleGrowth = JungleGrowth<
@@ -56,6 +61,8 @@ pub enum RenderSubject {
 	BuddhaHandTuft(RenderBuddhaHandTuft),
 	WeepingTuft(RenderWeepingTuft),
 	JungleGrowth(RenderJungleGrowth),
+	FrondCrown(RenderFrondCrown),
+	ModerateLodFrondCrown(RenderModerateLodFrondCrown),
 }
 
 impl RenderSubject {
@@ -69,6 +76,8 @@ impl RenderSubject {
 			Self::BuddhaHandTuft(_) => "BuddhaHandTuft",
 			Self::WeepingTuft(_) => "WeepingTuft",
 			Self::JungleGrowth(_) => "JungleGrowth",
+			Self::FrondCrown(_) => "FrondCrown",
+			Self::ModerateLodFrondCrown(_) => "ModerateLodFrondCrown",
 		}
 	}
 
@@ -83,6 +92,8 @@ impl RenderSubject {
 			Self::BuddhaHandTuft(t) => format!("{:?}", t.shape),
 			Self::WeepingTuft(t) => format!("{:?}", t.shape),
 			Self::JungleGrowth(t) => format!("{:?}", t.shape),
+			Self::FrondCrown(t) => format!("{:?}", t.shape),
+			Self::ModerateLodFrondCrown(t) => format!("{:?}", t.shape),
 		}
 	}
 
@@ -96,6 +107,8 @@ impl RenderSubject {
 			Self::BuddhaHandTuft(tuft) => RenderDispatch::BuddhaHandTuft(tuft.clone()),
 			Self::WeepingTuft(tuft) => RenderDispatch::WeepingTuft(tuft.clone()),
 			Self::JungleGrowth(growth) => RenderDispatch::JungleGrowth(growth.clone()),
+			Self::FrondCrown(crown) => RenderDispatch::FrondCrown(crown.clone()),
+			Self::ModerateLodFrondCrown(crown) => RenderDispatch::ModerateLodFrondCrown(crown.clone()),
 		}
 	}
 }
@@ -110,6 +123,8 @@ enum RenderDispatch {
 	BuddhaHandTuft(RenderBuddhaHandTuft),
 	WeepingTuft(RenderWeepingTuft),
 	JungleGrowth(RenderJungleGrowth),
+	FrondCrown(RenderFrondCrown),
+	ModerateLodFrondCrown(RenderModerateLodFrondCrown),
 }
 
 /// Dispatch anchor for the active `/render` command.
@@ -196,6 +211,12 @@ pub fn sync_render(
 		}
 		RenderDispatch::JungleGrowth(growth) => {
 			commands.spawn((bundle, DispatchRenderItem::new(growth)));
+		}
+		RenderDispatch::FrondCrown(crown) => {
+			commands.spawn((bundle, DispatchRenderItem::new(crown)));
+		}
+		RenderDispatch::ModerateLodFrondCrown(crown) => {
+			commands.spawn((bundle, DispatchRenderItem::new(crown)));
 		}
 	}
 

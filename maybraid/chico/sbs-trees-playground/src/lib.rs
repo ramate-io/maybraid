@@ -3,8 +3,10 @@
 pub mod camera;
 pub mod checkerboard_material;
 pub mod commands;
+mod frond_render_params;
 mod ground;
 mod jungle_growth_render_params;
+mod moderate_lod_frond_render_params;
 mod render;
 mod render_materials;
 mod tuft_render_params;
@@ -16,7 +18,6 @@ pub use game_commands::command::PendingStartupCommand;
 pub use render::{RenderConfig, RenderSubject, SbsRenderRoot};
 
 use bevy::prelude::*;
-use chico_ball_components::chico_ball::render_item_plugin::ChicoBallRenderItemPlugin;
 use chico_ball_components::frond::FrondRenderItemPlugin;
 use chico_ball_components::tuft::render_item_plugin::TuftRenderItemPlugin;
 use chico_sbs_trees::liams_conifer::render_item_plugin::ensure_registered as ensure_liams_conifer_render_plugins;
@@ -40,9 +41,6 @@ impl Plugin for SbsTreesPlaygroundPlugin {
 		ensure_liams_conifer_render_plugins(app);
 		if !app.is_plugin_added::<TuftRenderItemPlugin>() {
 			app.add_plugins(TuftRenderItemPlugin::default());
-		}
-		if !app.is_plugin_added::<ChicoBallRenderItemPlugin>() {
-			app.add_plugins(ChicoBallRenderItemPlugin::default());
 		}
 		if !app.is_plugin_added::<FrondRenderItemPlugin>() {
 			app.add_plugins(FrondRenderItemPlugin::default());
@@ -83,6 +81,8 @@ impl Plugin for SbsTreesPlaygroundPlugin {
 						dispatch_render_items::<render::RenderBuddhaHandTuft>,
 						dispatch_render_items::<render::RenderWeepingTuft>,
 						dispatch_render_items::<render::RenderJungleGrowth>,
+						dispatch_render_items::<render::RenderFrondCrown>,
+						dispatch_render_items::<render::RenderModerateLodFrondCrown>,
 					)
 						.after(sync_render),
 					ui::sync_command_status_text.before(game_commands::ui::update_debug_ui),

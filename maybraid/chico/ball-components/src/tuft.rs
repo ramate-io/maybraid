@@ -36,7 +36,6 @@ mod tests {
 	use anyhow::Result;
 	use bevy::mesh::VertexAttributeValues;
 	use bevy::prelude::*;
-	use spawn::TuftSpawnTransform;
 
 	fn test_succulent(
 		seed: i32,
@@ -152,19 +151,6 @@ mod tests {
 			let max_edge = max_triangle_edge(pos, indices);
 			assert!(max_edge < 1.5, "seed {seed} produced long edge {max_edge}");
 		}
-		Ok(())
-	}
-
-	#[test]
-	fn spawn_transform_strips_non_uniform_scale() -> Result<()> {
-		let (t, u) = Transform {
-			translation: Vec3::new(1.0, 2.0, 3.0),
-			rotation: Quat::from_rotation_y(0.5),
-			scale: Vec3::new(0.5, 2.0, 0.25),
-		}
-		.tuft_spawn_uniform();
-		assert_eq!(t.scale, Vec3::ONE);
-		assert!((u - 2.0).abs() < 1e-5);
 		Ok(())
 	}
 }

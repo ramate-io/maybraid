@@ -92,6 +92,12 @@ fn attach_render_materials(
 			g.body_material.mesh = MeshMaterial3d(stick.clone());
 			g.foliage_material.mesh = MeshMaterial3d(tuft.clone());
 		}
+		RenderSubject::FrondCrown(c) => {
+			c.material.mesh = MeshMaterial3d(tuft.clone());
+		}
+		RenderSubject::ModerateLodFrondCrown(c) => {
+			c.material.mesh = MeshMaterial3d(tuft.clone());
+		}
 	}
 }
 
