@@ -3,6 +3,7 @@
 use bevy::prelude::*;
 use chico_ball_components::frond::FrondCrownShape;
 use chico_ball_components::tuft::BuddhaHandTuftShape;
+use procedural_common::NoiseParams;
 
 /// Epiphyte-scale defaults for [`FrondCrownShape`] (outward arching shoots).
 fn default_jungle_frond() -> FrondCrownShape {
@@ -52,7 +53,7 @@ pub struct JungleGrowthShape {
 	#[cfg_attr(feature = "clap", arg(long, default_value_t = 0.72))]
 	pub inner_ball_scale: f32,
 	/// Uniform scale for the arching frond crown in world units.
-	#[cfg_attr(feature = "clap", arg(long, default_value_t = 0.5))]
+	#[cfg_attr(feature = "clap", arg(long, default_value_t = 0.6))]
 	pub foliage_world_scale: f32,
 	/// Buddha's-hand tuft scale relative to [`foliage_world_scale`].
 	#[cfg_attr(feature = "clap", arg(long, default_value_t = 0.8))]
@@ -70,7 +71,7 @@ impl Default for JungleGrowthShape {
 	fn default() -> Self {
 		Self {
 			inner_ball_scale: 0.72,
-			foliage_world_scale: 0.5,
+			foliage_world_scale: 0.6,
 			buddha_hand_scale: 0.8,
 			seed: 0,
 			frond: default_jungle_frond(),
@@ -111,15 +112,21 @@ impl JungleGrowthShape {
 		}
 	}
 
-	pub fn frond_shape(&self) -> FrondCrownShape {
+	/// Jungle frond crown geometry with [`foliage_noise`] and [`Self::seed`] applied.
+	pub fn frond_shape(&self, foliage_noise: &NoiseParams) -> FrondCrownShape {
 		let mut frond = self.frond.clone();
-		frond.seed = self.seed;
+		let noise = foliage_noise.with_seed(self.seed.wrapping_add(31));
+		frond.seed = noise.seed;
 		frond
 	}
 
-	pub fn buddha_hand_shape(&self) -> BuddhaHandTuftShape {
+	/// Jungle Buddha's-hand geometry with [`foliage_noise`] and a derived seed applied.
+	pub fn buddha_hand_shape(&self, foliage_noise: &NoiseParams) -> BuddhaHandTuftShape {
 		let mut buddha = self.buddha_hand.clone();
-		buddha.seed = self.seed.wrapping_add(31);
+		let noise = foliage_noise.with_seed(self.seed.wrapping_add(31));
+		buddha.seed = noise.seed;
+		buddha.noise_frequency = noise.frequency;
+		buddha.noise_amplitude = noise.amplitude;
 		buddha
 	}
 }
@@ -128,6 +135,7 @@ impl JungleGrowthShape {
 mod tests {
 	use super::*;
 	use anyhow::Result;
+	use procedural_common::FromScalarNoise;
 
 	#[test]
 	fn foliage_anchors_track_inner_ball_scale() -> Result<()> {
@@ -145,6 +153,19 @@ mod tests {
 				(buddha.scale.x - shape.foliage_world_scale * shape.buddha_hand_scale).abs() < 1e-5
 			);
 		}
+		Ok(())
+	}
+
+	#[test]
+	fn frond_and_buddha_shapes_take_foliage_noise() -> Result<()> {
+		let shape = JungleGrowthShape { seed: 42, ..JungleGrowthShape::default() };
+		let foliage_noise = NoiseParams::from_scalar(0.0, 3.5, 0.12, 2);
+		let frond = shape.frond_shape(&foliage_noise);
+		assert_eq!(frond.seed, 42);
+		let buddha = shape.buddha_hand_shape(&foliage_noise);
+		assert_eq!(buddha.seed, 42_i32.wrapping_add(31));
+		assert!((buddha.noise_frequency - 3.5).abs() < 1e-5);
+		assert!((buddha.noise_amplitude - 0.12).abs() < 1e-5);
 		Ok(())
 	}
 }

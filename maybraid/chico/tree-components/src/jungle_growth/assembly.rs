@@ -68,24 +68,17 @@ where
 	}
 
 	pub fn frond_crown(&self) -> FrondCrown<FoliageM, FoliageS> {
-		let mut crown = self
-			.foliage_noise
-			.with_seed(self.shape.seed)
-			.build_scalar::<FrondCrown<FoliageM, FoliageS>>();
-		crown.shape = self.shape.frond_shape();
-		crown.material = self.foliage_material.clone();
-		crown
+		FrondCrown::from_shape(
+			self.shape.frond_shape(&self.foliage_noise),
+			self.foliage_material.clone(),
+		)
 	}
 
 	pub fn buddha_hand(&self) -> BuddhaHandTuft<FoliageM, FoliageS> {
-		let seed = self.shape.seed.wrapping_add(31);
-		let mut tuft = self
-			.foliage_noise
-			.with_seed(seed)
-			.build_scalar::<BuddhaHandTuft<FoliageM, FoliageS>>();
-		tuft.shape = self.shape.buddha_hand_shape();
-		tuft.material = self.foliage_material.clone();
-		tuft
+		BuddhaHandTuft::from_shape(
+			self.shape.buddha_hand_shape(&self.foliage_noise),
+			self.foliage_material.clone(),
+		)
 	}
 
 	/// Arching frond crown mesh at unit scale (apply [`JungleGrowthShape::local_frond_transform`] scale).
@@ -181,5 +174,30 @@ where
 		transform: Transform,
 	) -> Vec<Entity> {
 		self.spawn_at(commands, cascade_chunk, transform)
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use anyhow::Result;
+
+	#[test]
+	fn foliage_components_use_shape_noise() -> Result<()> {
+		let mut growth = JungleGrowth::<
+			StandardMaterial,
+			MeshMaterial3d<StandardMaterial>,
+			StandardMaterial,
+			MeshMaterial3d<StandardMaterial>,
+		>::default();
+		growth.shape.seed = 17;
+		growth.foliage_noise = NoiseParams::from_scalar(0.0, 4.25, 0.09, 1);
+		let crown = growth.frond_crown();
+		assert_eq!(crown.shape.seed, 17);
+		let tuft = growth.buddha_hand();
+		assert_eq!(tuft.shape.seed, 17_i32.wrapping_add(31));
+		assert!((tuft.shape.noise_frequency - 4.25).abs() < 1e-5);
+		assert!((tuft.shape.noise_amplitude - 0.09).abs() < 1e-5);
+		Ok(())
 	}
 }
