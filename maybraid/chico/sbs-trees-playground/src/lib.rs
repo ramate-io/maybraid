@@ -4,6 +4,7 @@ pub mod camera;
 pub mod checkerboard_material;
 pub mod commands;
 mod ground;
+mod jungle_growth_render_params;
 mod render;
 mod render_materials;
 mod tuft_render_params;
@@ -15,6 +16,8 @@ pub use game_commands::command::PendingStartupCommand;
 pub use render::{RenderConfig, RenderSubject, SbsRenderRoot};
 
 use bevy::prelude::*;
+use chico_ball_components::chico_ball::render_item_plugin::ChicoBallRenderItemPlugin;
+use chico_ball_components::frond::FrondRenderItemPlugin;
 use chico_ball_components::tuft::render_item_plugin::TuftRenderItemPlugin;
 use chico_sbs_trees::liams_conifer::render_item_plugin::ensure_registered as ensure_liams_conifer_render_plugins;
 use chico_sbs_trees::sopes_banyan::render_item_plugin::ensure_registered as ensure_sopes_banyan_render_plugins;
@@ -38,9 +41,16 @@ impl Plugin for SbsTreesPlaygroundPlugin {
 		if !app.is_plugin_added::<TuftRenderItemPlugin>() {
 			app.add_plugins(TuftRenderItemPlugin::default());
 		}
+		if !app.is_plugin_added::<ChicoBallRenderItemPlugin>() {
+			app.add_plugins(ChicoBallRenderItemPlugin::default());
+		}
+		if !app.is_plugin_added::<FrondRenderItemPlugin>() {
+			app.add_plugins(FrondRenderItemPlugin::default());
+		}
 		app.add_plugins(ChicoVegetationShadersPlugin);
 		ensure_enforce_caching_plugin::<NoisyCylinder, ChicoStickMaterial>(app);
 		ensure_enforce_caching_plugin::<NoisyBall, ChicoLeafMaterial>(app);
+		ensure_enforce_caching_plugin::<NoisyBall, ChicoStickMaterial>(app);
 		if !app.is_plugin_added::<MaterialPlugin<StandardMaterial>>() {
 			app.add_plugins(MaterialPlugin::<StandardMaterial>::default());
 		}
@@ -72,6 +82,7 @@ impl Plugin for SbsTreesPlaygroundPlugin {
 						dispatch_render_items::<render::RenderSpearTuft>,
 						dispatch_render_items::<render::RenderBuddhaHandTuft>,
 						dispatch_render_items::<render::RenderWeepingTuft>,
+						dispatch_render_items::<render::RenderJungleGrowth>,
 					)
 						.after(sync_render),
 					ui::sync_command_status_text.before(game_commands::ui::update_debug_ui),

@@ -4,8 +4,9 @@ Secondary foliage at **one canopy anchor** ([#226](https://github.com/ramate-io/
 
 Each [`JungleGrowth`] instance spawns:
 
-1. A **scaled darker [`ChicoBall`](../../ball-components)** — inner dirt/wood mass (`inner-ball-scale` × node radius), [`SkippedBodyMeshMaterial`].
-2. A **[`WeepingTuft`](../../ball-components)** — protruding wet/overgrown foliage, [`SkippedFoliageMeshMaterial`].
+1. A **scaled [`ChicoBall`](../../ball-components)** — inner dirt/wood mass (`inner-ball-scale` × node radius), [`SkippedBodyMeshMaterial`].
+2. A **[`FrondCrown`](../../ball-components/src/frond.rs)** — outward arching shoots, lifted atop the ball ([`frond_crown_lift`](config.rs)).
+3. A **[`BuddhaHandTuft`](../../ball-components)** — upward fingers poking above the crown ([`buddha_hand_lift`](config.rs)).
 
 **Node selection** (which anchors receive growth) is owned by the composing tree recipe, not this module.
 
@@ -29,10 +30,9 @@ JungleGrowth {
 
 | File | Role |
 |------|------|
-| [`config.rs`](config.rs) | `JungleGrowthShape` — scales, seed, embedded tuft shape |
+| [`config.rs`](config.rs) | `JungleGrowthShape` — scales, seed, frond + Buddha's-hand defaults |
 | [`assembly.rs`](assembly.rs) | `JungleGrowth` mesh builders + `RenderItem` spawn |
 
 ## Follow-up
 
 - Wire into [`SopesBanyan`](../../sbs-trees/src/sopes_banyan.rs) behind a dense-variant flag
-- Playground toggle / clap on tree commands

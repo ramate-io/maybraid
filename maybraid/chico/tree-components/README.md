@@ -6,4 +6,4 @@ Depends on **`chico-sdf`** for geometry continuity with **`chico-stick-component
 
 ## Jungle growths ([#226](https://github.com/ramate-io/maybraid/issues/226))
 
-[`jungle_growth`](src/jungle_growth/README.md) — inner dirt/wood mass + drooping tuft foliage at one anchor (RFC-183 §3.1.6.4). Node selection is owned by the composing tree recipe.
+[`jungle_growth`](src/jungle_growth/README.md) — inner dirt/wood mass plus frond crown + Buddha's-hand tuft at one anchor (RFC-183 §3.1.6.4). Node selection is owned by the composing tree recipe.

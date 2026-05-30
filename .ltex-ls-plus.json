@@ -439,7 +439,8 @@
         "accessors",
         "Argv",
         "logit",
-        "argv"
+        "argv",
+        "rachis"
       ]
     },
     "bibtex": {

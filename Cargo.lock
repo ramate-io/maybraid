@@ -1919,6 +1919,7 @@ dependencies = [
  "chico-sbs-trees",
  "chico-sdf",
  "chico-stick-components",
+ "chico-tree-components",
  "chico-vegetation-shaders",
  "chunk",
  "clap",

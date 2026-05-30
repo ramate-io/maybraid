@@ -1,5 +1,6 @@
 pub mod blade_tuft;
 pub mod buddha_hand_tuft;
+pub mod jungle_growth;
 pub mod liams_conifer;
 pub mod plugin;
 
@@ -15,6 +16,7 @@ use clap::Subcommand;
 use crate::render::{RenderConfig, RenderSubject};
 pub use blade_tuft::BladeTuftRenderHelper;
 pub use buddha_hand_tuft::BuddhaHandTuftRenderHelper;
+pub use jungle_growth::JungleGrowthRenderHelper;
 pub use liams_conifer::LiamsConiferRenderHelper;
 pub use sopes_banyan::SopesBanyanRenderHelper;
 pub use spear_tuft::SpearTuftRenderHelper;
@@ -72,6 +74,7 @@ pub enum Render {
 	SpearTuft(SpearTuftRenderHelper),
 	BuddhaHandTuft(BuddhaHandTuftRenderHelper),
 	WeepingTuft(WeepingTuftRenderHelper),
+	JungleGrowth(JungleGrowthRenderHelper),
 }
 
 impl Render {
@@ -119,6 +122,11 @@ impl Render {
 				res_2: h.res_2,
 				transform: h.render_transform(),
 			},
+			Self::JungleGrowth(h) => RenderConfig {
+				subject: RenderSubject::JungleGrowth(h.inner.clone().into()),
+				res_2: h.res_2,
+				transform: h.render_transform(),
+			},
 		}
 	}
 }
@@ -152,6 +160,26 @@ mod tests {
 			anyhow::bail!("expected spear subject");
 		};
 		assert_eq!(tuft.shape.spear_count, 20);
+		Ok(())
+	}
+
+	#[test]
+	fn jungle_growth_command_preserves_shape_params() -> Result<()> {
+		let cmd = crate::commands::PlaygroundCommand::parse_line(
+			"render jungle-growth --inner-ball-scale 0.9 --seed 42",
+		)
+		.map_err(|e| anyhow::anyhow!("{e}"))?;
+		let crate::commands::PlaygroundCommand::Render(Render::JungleGrowth(helper)) = cmd else {
+			anyhow::bail!("expected jungle-growth render command");
+		};
+		assert!((helper.inner.shape.inner_ball_scale - 0.9).abs() < 1e-5);
+		assert_eq!(helper.inner.shape.seed, 42);
+		let cfg = Render::JungleGrowth(helper).into_render_config();
+		let RenderSubject::JungleGrowth(growth) = cfg.subject else {
+			anyhow::bail!("expected jungle growth subject");
+		};
+		assert!((growth.shape.inner_ball_scale - 0.9).abs() < 1e-5);
+		assert_eq!(growth.shape.seed, 42);
 		Ok(())
 	}
 }
