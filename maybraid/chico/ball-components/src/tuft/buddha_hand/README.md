@@ -20,4 +20,4 @@ Compact ornamental clumps (palm-bush massing before dedicated fronds). Each fing
 ## See also
 
 - [Spear tuft](../spear/README.md) — thin 2D grass blades
-- [Succulent tuft](../succulent/README.md)
+- [Succulent tuft](../succulent.rs) — thick upward prisms
