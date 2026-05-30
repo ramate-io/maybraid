@@ -23,4 +23,4 @@ Distinct from [Buddha's-hand tuft](../buddha_hand/README.md), which uses a 4-cor
 ## See also
 
 - [Buddha's-hand tuft](../buddha_hand/README.md) — widening diamond fingers
-- [Blade tuft](../blade/README.md) — uniform-width ribbon prisms
+- [Blade tuft](../blade.rs) — uniform-width ribbon prisms

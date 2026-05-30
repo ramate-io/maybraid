@@ -15,8 +15,8 @@ mod prism;
 mod profile;
 mod spawn;
 mod spear;
-mod sway;
 mod succulent;
+mod sway;
 mod weeping;
 
 pub mod render_item_plugin;
@@ -38,7 +38,10 @@ mod tests {
 	use bevy::prelude::*;
 	use spawn::TuftSpawnTransform;
 
-	fn test_succulent(seed: i32, amplitude: f32) -> SucculentTuft<StandardMaterial, MeshMaterial3d<StandardMaterial>> {
+	fn test_succulent(
+		seed: i32,
+		amplitude: f32,
+	) -> SucculentTuft<StandardMaterial, MeshMaterial3d<StandardMaterial>> {
 		SucculentTuft {
 			shape: SucculentTuftShape {
 				seed,
@@ -65,8 +68,7 @@ mod tests {
 
 	#[test]
 	fn upward_directions_are_unit_and_mostly_up() -> Result<()> {
-		let tuft =
-			SucculentTuft::<StandardMaterial, MeshMaterial3d<StandardMaterial>>::default();
+		let tuft = SucculentTuft::<StandardMaterial, MeshMaterial3d<StandardMaterial>>::default();
 		let dirs = directions::CapDirections::upward(
 			tuft.shape.element_count,
 			tuft.shape.seed,
@@ -93,7 +95,8 @@ mod tests {
 	#[test]
 	fn succulent_mesh_is_low_poly() -> Result<()> {
 		let mesh = test_succulent(1, 0.08).build_mesh(1.0);
-		let Some(VertexAttributeValues::Float32x3(pos)) = mesh.attribute(Mesh::ATTRIBUTE_POSITION) else {
+		let Some(VertexAttributeValues::Float32x3(pos)) = mesh.attribute(Mesh::ATTRIBUTE_POSITION)
+		else {
 			anyhow::bail!("expected float positions");
 		};
 		let Some(bevy::mesh::Indices::U32(indices)) = mesh.indices() else {
@@ -108,11 +111,13 @@ mod tests {
 	fn succulent_noise_bends_vertices() -> Result<()> {
 		let flat = test_succulent(9, 0.0).build_mesh(1.0);
 		let wavy = test_succulent(9, 0.12).build_mesh(1.0);
-		let Some(VertexAttributeValues::Float32x3(flat_p)) = flat.attribute(Mesh::ATTRIBUTE_POSITION)
+		let Some(VertexAttributeValues::Float32x3(flat_p)) =
+			flat.attribute(Mesh::ATTRIBUTE_POSITION)
 		else {
 			anyhow::bail!("expected flat positions");
 		};
-		let Some(VertexAttributeValues::Float32x3(wavy_p)) = wavy.attribute(Mesh::ATTRIBUTE_POSITION)
+		let Some(VertexAttributeValues::Float32x3(wavy_p)) =
+			wavy.attribute(Mesh::ATTRIBUTE_POSITION)
 		else {
 			anyhow::bail!("expected wavy positions");
 		};
@@ -130,7 +135,8 @@ mod tests {
 	fn no_degenerate_long_edges_for_many_seeds() -> Result<()> {
 		for seed in 0..512_i32 {
 			let mesh = test_succulent(seed, 0.08).build_mesh(0.6);
-			let Some(VertexAttributeValues::Float32x3(pos)) = mesh.attribute(Mesh::ATTRIBUTE_POSITION)
+			let Some(VertexAttributeValues::Float32x3(pos)) =
+				mesh.attribute(Mesh::ATTRIBUTE_POSITION)
 			else {
 				anyhow::bail!("expected float positions");
 			};
