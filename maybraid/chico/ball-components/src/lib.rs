@@ -10,7 +10,8 @@ pub mod tuft;
 
 pub use frond::{
 	Frond, FrondCluster, FrondCrown, FrondCrownShape, FrondCrownStd, FrondElement, FrondGeometry,
-	FrondRenderItemPlugin,
+	FrondRenderItemPlugin, ModerateLodFrondCrown, ModerateLodFrondCrownShape, ModerateLodFrondCrownStd,
+	ModerateLodPalmFrond, ModerateLodPalmFrondCluster, ModerateLodPalmFrondElement,
 };
 pub use tuft::{
 	BellyTipProfile, BladeTuft, BladeTuftShape, BladeTuftStd, BuddhaHandCluster, BuddhaHandElement,

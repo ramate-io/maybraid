@@ -1,67 +1,78 @@
-//! Leaflet quads along a frond spine.
+//! High-LOD frond mesh: shoot tube + densely sampled lateral leaflet pairs.
 
 use bevy::prelude::*;
 
 use super::config::FrondConfig;
+use super::shoot::append_shoot_tube;
 use super::spine::{frame_at, spine_at};
 
-/// Emit one tapered leaflet as two triangles (single-sided; use double-sided foliage material).
-pub fn append_leaflet(
+const MIN_HALF: f32 = 1e-6;
+
+/// Leaflet pair projecting laterally from a spine sample (± lateral).
+pub fn append_lateral_leaflet_pair(
 	positions: &mut Vec<[f32; 3]>,
 	indices: &mut Vec<u32>,
 	root: Vec3,
-	tangent: Vec3,
 	lateral: Vec3,
+	binormal: Vec3,
 	half_width: f32,
 	leaflet_length: f32,
 ) {
-	if half_width < 1e-8 || leaflet_length < 1e-8 {
-		return;
-	}
-	if !root.is_finite() || !tangent.is_finite() || !lateral.is_finite() {
-		return;
-	}
-
-	let tip = root + tangent * leaflet_length;
-	let left = root - lateral * half_width;
-	let right = root + lateral * half_width;
-	let tip_left = tip - lateral * half_width * 0.35;
-	let tip_right = tip + lateral * half_width * 0.35;
-
-	let base = positions.len() as u32;
-	for v in [left, right, tip_left, tip_right] {
-		if !v.is_finite() {
-			return;
+	let half_w = half_width.max(MIN_HALF);
+	let length = leaflet_length.max(MIN_HALF);
+	for side in [-1.0_f32, 1.0] {
+		let lat = lateral * side;
+		let tip = root + lat * length;
+		let lo = root - binormal * half_w;
+		let hi = root + binormal * half_w;
+		let tip_lo = tip - binormal * half_w * 0.2;
+		let tip_hi = tip + binormal * half_w * 0.2;
+		let base = positions.len() as u32;
+		for v in [lo, hi, tip_lo, tip_hi] {
+			if !v.is_finite() {
+				return;
+			}
+			positions.push(v.to_array());
 		}
-		positions.push(v.to_array());
+		indices.extend_from_slice(&[base, base + 1, base + 2, base + 1, base + 3, base + 2]);
 	}
-	indices.extend_from_slice(&[base, base + 1, base + 2, base + 1, base + 3, base + 2]);
 }
 
-/// Place alternating leaflets along the spine per RFC §3.1.2.7.
-pub fn append_leaflets_along_spine(
+/// Shoot tube plus leaflet pairs at evenly spaced heights along the spine.
+pub fn append_spine_shoot_and_leaflets(
 	positions: &mut Vec<[f32; 3]>,
 	indices: &mut Vec<u32>,
 	config: &FrondConfig,
+	shoot_half_radius: f32,
+	shoot_sides: u32,
+	leaflet_length_scale: f32,
 ) {
+	append_shoot_tube(positions, indices, config, shoot_half_radius, shoot_sides);
+
 	let count = config.leaflet_count.max(2);
 	let span = config.length / count as f32;
 
 	for i in 0..count {
 		let t = i as f32 / (count - 1) as f32;
-		let root = spine_at(config, t);
-		let (tangent, lateral, _binormal) =
+		let center = spine_at(config, t);
+		let (_tangent, lateral, binormal) =
 			frame_at(config, t, config.twist * t * std::f32::consts::TAU);
-		let side = if i % 2 == 0 { 1.0 } else { -1.0 };
-		let half_width = config.width * (1.0 - t) * 0.5;
-		let leaflet_length = span * 1.15;
+		if !center.is_finite() {
+			continue;
+		}
 
-		append_leaflet(
+		let taper = (1.0 - t).max(0.0);
+		let half_width = config.width * taper * 0.55;
+		let leaflet_length = (config.width * taper * leaflet_length_scale)
+			.max(span * 1.05)
+			.max(config.width * 0.45 * taper);
+
+		append_lateral_leaflet_pair(
 			positions,
 			indices,
-			root,
-			tangent,
-			lateral * side,
+			center,
+			lateral,
+			binormal,
 			half_width,
 			leaflet_length,
 		);

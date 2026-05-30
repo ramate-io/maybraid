@@ -1,5 +1,7 @@
 pub mod blade_tuft;
 pub mod buddha_hand_tuft;
+pub mod frond_crown;
+pub mod moderate_lod_frond_crown;
 pub mod liams_conifer;
 pub mod plugin;
 
@@ -15,6 +17,8 @@ use clap::Subcommand;
 use crate::render::{RenderConfig, RenderSubject};
 pub use blade_tuft::BladeTuftRenderHelper;
 pub use buddha_hand_tuft::BuddhaHandTuftRenderHelper;
+pub use frond_crown::FrondCrownRenderHelper;
+pub use moderate_lod_frond_crown::ModerateLodFrondCrownRenderHelper;
 pub use liams_conifer::LiamsConiferRenderHelper;
 pub use sopes_banyan::SopesBanyanRenderHelper;
 pub use spear_tuft::SpearTuftRenderHelper;
@@ -72,6 +76,8 @@ pub enum Render {
 	SpearTuft(SpearTuftRenderHelper),
 	BuddhaHandTuft(BuddhaHandTuftRenderHelper),
 	WeepingTuft(WeepingTuftRenderHelper),
+	FrondCrown(FrondCrownRenderHelper),
+	ModerateLodFrondCrown(ModerateLodFrondCrownRenderHelper),
 }
 
 impl Render {
@@ -119,6 +125,16 @@ impl Render {
 				res_2: h.res_2,
 				transform: h.render_transform(),
 			},
+			Self::FrondCrown(h) => RenderConfig {
+				subject: RenderSubject::FrondCrown(h.inner.clone().into()),
+				res_2: h.res_2,
+				transform: h.render_transform(),
+			},
+			Self::ModerateLodFrondCrown(h) => RenderConfig {
+				subject: RenderSubject::ModerateLodFrondCrown(h.inner.clone().into()),
+				res_2: h.res_2,
+				transform: h.render_transform(),
+			},
 		}
 	}
 }
@@ -152,6 +168,23 @@ mod tests {
 			anyhow::bail!("expected spear subject");
 		};
 		assert_eq!(tuft.shape.spear_count, 20);
+		Ok(())
+	}
+
+	#[test]
+	fn frond_crown_command_preserves_shape_params() -> Result<()> {
+		let cmd =
+			crate::commands::PlaygroundCommand::parse_line("render frond-crown --frond-count 15")
+				.map_err(|e| anyhow::anyhow!("{e}"))?;
+		let crate::commands::PlaygroundCommand::Render(Render::FrondCrown(helper)) = cmd else {
+			anyhow::bail!("expected frond-crown render command");
+		};
+		assert_eq!(helper.inner.shape.frond_count, 15);
+		let cfg = Render::FrondCrown(helper).into_render_config();
+		let RenderSubject::FrondCrown(crown) = cfg.subject else {
+			anyhow::bail!("expected frond crown subject");
+		};
+		assert_eq!(crown.shape.frond_count, 15);
 		Ok(())
 	}
 }

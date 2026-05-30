@@ -1,44 +1,24 @@
-//! **Frond crown** — arching leaflet chains for palms and ferns ([#218](https://github.com/ramate-io/maybraid/issues/218)).
-//!
-//! - [`FrondCrown`] — segmented rachis with lateral leaflet pairs along each shoot
-//! - [`ModerateLodFrondCrown`] — shoot tube + lateral cards for ~30–50 m viewing (see [`moderate_lod`])
-
-pub mod config;
-pub mod construction;
-pub mod crown;
-pub mod leaflet;
-pub mod moderate_lod;
-pub mod render_item_plugin;
-pub mod shoot;
-pub mod spawn;
-pub mod spine;
+//! Moderate-LOD frond crown and single-strand components.
 
 use std::marker::PhantomData;
 
 use bevy::prelude::*;
-use procedural_common::FromScalarNoise;
 use render_item::{CascadeChunk, RenderItem};
 
-use config::FrondConfig;
-use crown::{crown_directions, length_scale};
-use spawn::MergedFrond;
+use super::construction::{ModerateLodPalmFrondCluster, ModerateLodPalmFrondElement};
+use super::super::config::FrondConfig;
+use super::super::crown::{crown_directions, length_scale};
+use super::super::spawn::MergedFrond;
 
-pub use config::FrondConfig as FrondGeometry;
-pub use construction::{FrondCluster, FrondElement};
-pub use moderate_lod::{
-	ModerateLodFrondCrown, ModerateLodFrondCrownShape, ModerateLodFrondCrownStd, ModerateLodPalmFrond,
-	ModerateLodPalmFrondCluster, ModerateLodPalmFrondElement,
-};
-pub use render_item_plugin::FrondRenderItemPlugin;
+/// [`StandardMaterial`] moderate-LOD frond crown.
+pub type ModerateLodFrondCrownStd =
+	ModerateLodFrondCrown<StandardMaterial, MeshMaterial3d<StandardMaterial>>;
 
-/// [`StandardMaterial`] frond crown (common default).
-pub type FrondCrownStd = FrondCrown<StandardMaterial, MeshMaterial3d<StandardMaterial>>;
-
-/// CLI / shape parameters for [`FrondCrown`].
+/// CLI / shape parameters for [`ModerateLodFrondCrown`].
 #[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "clap", derive(clap::Args))]
 #[cfg_attr(feature = "clap", command(rename_all = "kebab-case"))]
-pub struct FrondCrownShape {
+pub struct ModerateLodFrondCrownShape {
 	#[cfg_attr(feature = "clap", arg(long, default_value_t = 9))]
 	pub frond_count: u32,
 	#[cfg_attr(feature = "clap", arg(long, default_value_t = 1.4))]
@@ -49,15 +29,13 @@ pub struct FrondCrownShape {
 	pub droop: f32,
 	#[cfg_attr(feature = "clap", arg(long, default_value_t = 0.35))]
 	pub twist: f32,
-	#[cfg_attr(feature = "clap", arg(long, default_value_t = 36))]
+	#[cfg_attr(feature = "clap", arg(long, default_value_t = 28))]
 	pub leaflet_count: u32,
-	#[cfg_attr(feature = "clap", arg(long, default_value_t = 20))]
+	#[cfg_attr(feature = "clap", arg(long, default_value_t = 14))]
 	pub spine_segments: u32,
-	#[cfg_attr(feature = "clap", arg(long, default_value_t = 0.022))]
+	#[cfg_attr(feature = "clap", arg(long, default_value_t = 0.028))]
 	pub shoot_half_radius: f32,
-	#[cfg_attr(feature = "clap", arg(long, default_value_t = 0.008))]
-	pub rachis_half_thickness: f32,
-	#[cfg_attr(feature = "clap", arg(long, default_value_t = 3.2))]
+	#[cfg_attr(feature = "clap", arg(long, default_value_t = 2.8))]
 	pub leaflet_length_scale: f32,
 	#[cfg_attr(feature = "clap", arg(long, default_value_t = 0.62))]
 	pub downward_tilt_radians: f32,
@@ -67,7 +45,7 @@ pub struct FrondCrownShape {
 	pub seed: i32,
 }
 
-impl Default for FrondCrownShape {
+impl Default for ModerateLodFrondCrownShape {
 	fn default() -> Self {
 		Self {
 			frond_count: 9,
@@ -75,11 +53,10 @@ impl Default for FrondCrownShape {
 			width: 0.18,
 			droop: 0.55,
 			twist: 0.35,
-			leaflet_count: 36,
-			spine_segments: 20,
-			shoot_half_radius: 0.022,
-			rachis_half_thickness: 0.008,
-			leaflet_length_scale: 3.2,
+			leaflet_count: 28,
+			spine_segments: 14,
+			shoot_half_radius: 0.028,
+			leaflet_length_scale: 2.8,
 			downward_tilt_radians: 0.62,
 			outward_spread_radians: 0.48,
 			seed: 0,
@@ -87,7 +64,7 @@ impl Default for FrondCrownShape {
 	}
 }
 
-impl FrondCrownShape {
+impl ModerateLodFrondCrownShape {
 	pub fn frond_config(&self, scale: f32) -> FrondConfig {
 		FrondConfig {
 			segments: self.spine_segments.max(1),
@@ -100,51 +77,35 @@ impl FrondCrownShape {
 	}
 }
 
-/// Palm- or fern-like crown: segmented rachis with lateral leaflet pairs on each shoot.
+/// Palm-like crown using connected rachis strips and lateral leaflet cards.
 #[derive(Component, Clone, Debug, PartialEq)]
-pub struct FrondCrown<M: Material, S>
+pub struct ModerateLodFrondCrown<M: Material, S>
 where
 	S: Clone + Into<MeshMaterial3d<M>>,
 {
-	pub shape: FrondCrownShape,
+	pub shape: ModerateLodFrondCrownShape,
 	pub material: S,
 	pub(crate) __marker: PhantomData<fn() -> M>,
 }
 
-impl<M: Material, S> Default for FrondCrown<M, S>
+impl<M: Material, S> Default for ModerateLodFrondCrown<M, S>
 where
 	S: Clone + Into<MeshMaterial3d<M>> + Default,
 {
 	fn default() -> Self {
 		Self {
-			shape: FrondCrownShape::default(),
+			shape: ModerateLodFrondCrownShape::default(),
 			material: S::default(),
 			__marker: PhantomData,
 		}
 	}
 }
 
-impl<M: Material, S> FromScalarNoise for FrondCrown<M, S>
-where
-	S: Clone + Into<MeshMaterial3d<M>> + Default,
-{
-	fn from_scalar(seed_scalar: f32, _frequency: f32, _amplitude: f32, _octaves: u32) -> Self {
-		Self {
-			shape: FrondCrownShape {
-				seed: seed_scalar as i32,
-				..FrondCrownShape::default()
-			},
-			material: S::default(),
-			__marker: PhantomData,
-		}
-	}
-}
-
-impl<M: Material, S> FrondCrown<M, S>
+impl<M: Material, S> ModerateLodFrondCrown<M, S>
 where
 	S: Clone + Into<MeshMaterial3d<M>>,
 {
-	pub fn from_shape(shape: FrondCrownShape, material: S) -> Self {
+	pub fn from_shape(shape: ModerateLodFrondCrownShape, material: S) -> Self {
 		Self { shape, material, __marker: PhantomData }
 	}
 
@@ -160,8 +121,9 @@ where
 	pub fn build_mesh(&self, world_uniform_scale: f32) -> Mesh {
 		let scale = world_uniform_scale.max(1e-8);
 		let config = self.shape.frond_config(scale);
+		let shoot = (self.shape.shoot_half_radius * scale).max(1e-6);
 
-		let elements: Vec<FrondElement> = self
+		let elements: Vec<ModerateLodPalmFrondElement> = self
 			.frond_directions()
 			.into_iter()
 			.enumerate()
@@ -169,7 +131,7 @@ where
 				let mut element_config = config;
 				element_config.length *=
 					length_scale(i as u32, self.shape.seed, 0.82, 1.08);
-				FrondElement {
+				ModerateLodPalmFrondElement {
 					direction,
 					config: element_config,
 					seed: self.shape.seed.wrapping_add(i as i32),
@@ -177,18 +139,13 @@ where
 			})
 			.collect();
 
-		FrondCluster::new(
-			elements,
-			self.shape.shoot_half_radius,
-			self.shape.leaflet_length_scale,
-		)
-		.into_mesh()
+		ModerateLodPalmFrondCluster::new(elements, shoot, self.shape.leaflet_length_scale).into_mesh()
 	}
 }
 
-/// Single frond strand (one combined spine + leaflet mesh).
+/// Single low-LOD palm frond strand.
 #[derive(Component, Clone, Debug, PartialEq)]
-pub struct Frond<M: Material, S>
+pub struct ModerateLodPalmFrond<M: Material, S>
 where
 	S: Clone + Into<MeshMaterial3d<M>>,
 {
@@ -196,12 +153,11 @@ where
 	pub direction: Vec3,
 	pub shoot_half_radius: f32,
 	pub leaflet_length_scale: f32,
-	pub seed: i32,
 	pub material: S,
 	pub(crate) __marker: PhantomData<fn() -> M>,
 }
 
-impl<M: Material, S> Frond<M, S>
+impl<M: Material, S> ModerateLodPalmFrond<M, S>
 where
 	S: Clone + Into<MeshMaterial3d<M>>,
 {
@@ -213,11 +169,11 @@ where
 		config.droop *= scale;
 		let shoot = (self.shoot_half_radius * scale).max(1e-6);
 
-		FrondCluster::new(
-			vec![FrondElement {
+		ModerateLodPalmFrondCluster::new(
+			vec![ModerateLodPalmFrondElement {
 				direction: self.direction,
 				config,
-				seed: self.seed,
+				seed: 0,
 			}],
 			shoot,
 			self.leaflet_length_scale,
@@ -226,7 +182,7 @@ where
 	}
 }
 
-impl<M: Material, S> MergedFrond for FrondCrown<M, S>
+impl<M: Material, S> MergedFrond for ModerateLodFrondCrown<M, S>
 where
 	M: Send + Sync + 'static,
 	S: Clone + Into<MeshMaterial3d<M>> + Send + Sync + 'static,
@@ -243,7 +199,7 @@ where
 	}
 }
 
-impl<M: Material, S> MergedFrond for Frond<M, S>
+impl<M: Material, S> MergedFrond for ModerateLodPalmFrond<M, S>
 where
 	M: Send + Sync + 'static,
 	S: Clone + Into<MeshMaterial3d<M>> + Send + Sync + 'static,
@@ -260,7 +216,7 @@ where
 	}
 }
 
-impl<M: Material, S> RenderItem for FrondCrown<M, S>
+impl<M: Material, S> RenderItem for ModerateLodFrondCrown<M, S>
 where
 	M: Send + Sync + 'static,
 	S: Clone + Into<MeshMaterial3d<M>> + Send + Sync + 'static,
@@ -275,7 +231,7 @@ where
 	}
 }
 
-impl<M: Material, S> RenderItem for Frond<M, S>
+impl<M: Material, S> RenderItem for ModerateLodPalmFrond<M, S>
 where
 	M: Send + Sync + 'static,
 	S: Clone + Into<MeshMaterial3d<M>> + Send + Sync + 'static,
@@ -287,33 +243,5 @@ where
 		transform: Transform,
 	) -> Vec<Entity> {
 		self.spawn_render_entities(commands, cascade_chunk, transform)
-	}
-}
-
-#[cfg(test)]
-mod tests {
-	use super::*;
-	use anyhow::Result;
-	use bevy::mesh::VertexAttributeValues;
-
-	#[test]
-	fn crown_defaults_droop_outward() -> Result<()> {
-		let crown = FrondCrown::<StandardMaterial, MeshMaterial3d<StandardMaterial>>::default();
-		for d in crown.frond_directions() {
-			assert!(d.y < 0.0, "palm fronds should droop downward: {d:?}");
-		}
-		Ok(())
-	}
-
-	#[test]
-	fn crown_mesh_is_non_empty() -> Result<()> {
-		let crown = FrondCrown::<StandardMaterial, MeshMaterial3d<StandardMaterial>>::default();
-		let mesh = crown.build_mesh(1.0);
-		let Some(VertexAttributeValues::Float32x3(pos)) = mesh.attribute(Mesh::ATTRIBUTE_POSITION)
-		else {
-			anyhow::bail!("expected positions");
-		};
-		assert!(!pos.is_empty());
-		Ok(())
 	}
 }
