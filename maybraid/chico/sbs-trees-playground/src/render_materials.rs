@@ -73,6 +73,10 @@ fn attach_render_materials(
 			tree.stick_material.mesh = MeshMaterial3d(conifer_stick.clone());
 			tree.leaf_material.mesh = MeshMaterial3d(tuft.clone());
 		}
+		RenderSubject::DatePalm(tree) => {
+			tree.stick_material.mesh = MeshMaterial3d(stick.clone());
+			tree.leaf_material.mesh = MeshMaterial3d(leaf.clone());
+		}
 		RenderSubject::SucculentTuft(t) => {
 			t.material.mesh = MeshMaterial3d(tuft.clone());
 		}
