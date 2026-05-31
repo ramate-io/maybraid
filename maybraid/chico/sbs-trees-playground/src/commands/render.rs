@@ -1,6 +1,7 @@
 pub mod blade_tuft;
 pub mod buddha_hand_tuft;
 pub mod date_palm;
+pub mod waialea_palm;
 pub mod frond_crown;
 pub mod jungle_growth;
 pub mod liams_conifer;
@@ -20,6 +21,7 @@ use crate::render::{RenderConfig, RenderSubject};
 pub use blade_tuft::BladeTuftRenderHelper;
 pub use buddha_hand_tuft::BuddhaHandTuftRenderHelper;
 pub use date_palm::DatePalmRenderHelper;
+pub use waialea_palm::WaialeaPalmRenderHelper;
 pub use frond_crown::FrondCrownRenderHelper;
 pub use jungle_growth::JungleGrowthRenderHelper;
 pub use liams_conifer::LiamsConiferRenderHelper;
@@ -76,6 +78,7 @@ pub enum Render {
 	SopesBanyan(SopesBanyanRenderHelper),
 	LiamsConifer(LiamsConiferRenderHelper),
 	DatePalm(DatePalmRenderHelper),
+	WaialeaPalm(WaialeaPalmRenderHelper),
 	SucculentTuft(SucculentTuftRenderHelper),
 	BladeTuft(BladeTuftRenderHelper),
 	SpearTuft(SpearTuftRenderHelper),
@@ -108,6 +111,11 @@ impl Render {
 			},
 			Self::DatePalm(h) => RenderConfig {
 				subject: RenderSubject::DatePalm(h.inner.clone()),
+				res_2: h.res_2,
+				transform: h.render_transform(),
+			},
+			Self::WaialeaPalm(h) => RenderConfig {
+				subject: RenderSubject::WaialeaPalm(h.inner.clone()),
 				res_2: h.res_2,
 				transform: h.render_transform(),
 			},
@@ -220,6 +228,22 @@ mod tests {
 			anyhow::bail!("expected date palm subject");
 		};
 		assert_eq!(palm.geometry.crown.ring_count, 8);
+		Ok(())
+	}
+
+	#[test]
+	fn waialea_palm_command_preserves_shape_params() -> Result<()> {
+		let cmd = crate::commands::PlaygroundCommand::parse_line("render waialea-palm --ring-count 3")
+			.map_err(|e| anyhow::anyhow!("{e}"))?;
+		let crate::commands::PlaygroundCommand::Render(Render::WaialeaPalm(helper)) = cmd else {
+			anyhow::bail!("expected waialea-palm render command");
+		};
+		assert_eq!(helper.inner.geometry.crown.ring_count, 3);
+		let cfg = Render::WaialeaPalm(helper).into_render_config();
+		let RenderSubject::WaialeaPalm(palm) = cfg.subject else {
+			anyhow::bail!("expected waialea palm subject");
+		};
+		assert_eq!(palm.geometry.crown.ring_count, 3);
 		Ok(())
 	}
 

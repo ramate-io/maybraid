@@ -21,6 +21,7 @@ use bevy::prelude::*;
 use chico_ball_components::frond::FrondRenderItemPlugin;
 use chico_ball_components::tuft::render_item_plugin::TuftRenderItemPlugin;
 use chico_sbs_trees::date_palm::render_item_plugin::ensure_registered as ensure_date_palm_render_plugins;
+use chico_sbs_trees::waialea_palm::render_item_plugin::ensure_registered as ensure_waialea_palm_render_plugins;
 use chico_sbs_trees::liams_conifer::render_item_plugin::ensure_registered as ensure_liams_conifer_render_plugins;
 use chico_sbs_trees::sopes_banyan::render_item_plugin::ensure_registered as ensure_sopes_banyan_render_plugins;
 use chico_sdf::{NoisyBall, NoisyCylinder};
@@ -41,6 +42,7 @@ impl Plugin for SbsTreesPlaygroundPlugin {
 		ensure_sopes_banyan_render_plugins(app);
 		ensure_liams_conifer_render_plugins(app);
 		ensure_date_palm_render_plugins(app);
+		ensure_waialea_palm_render_plugins(app);
 		if !app.is_plugin_added::<TuftRenderItemPlugin>() {
 			app.add_plugins(TuftRenderItemPlugin::default());
 		}
@@ -78,6 +80,7 @@ impl Plugin for SbsTreesPlaygroundPlugin {
 						dispatch_render_items::<render::RenderSopesBanyan>,
 						dispatch_render_items::<render::RenderLiamsConifer>,
 						dispatch_render_items::<render::RenderDatePalm>,
+						dispatch_render_items::<render::RenderWaialeaPalm>,
 						dispatch_render_items::<render::RenderSucculentTuft>,
 						dispatch_render_items::<render::RenderBladeTuft>,
 						dispatch_render_items::<render::RenderSpearTuft>,
