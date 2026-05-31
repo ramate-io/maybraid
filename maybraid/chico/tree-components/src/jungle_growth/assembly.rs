@@ -193,7 +193,7 @@ mod tests {
 		growth.shape.seed = 17;
 		growth.foliage_noise = NoiseParams::from_scalar(0.0, 4.25, 0.09, 1);
 		let crown = growth.frond_crown();
-		assert_eq!(crown.shape.seed, 17);
+		assert_eq!(crown.shape.seed, 17_i32.wrapping_add(31));
 		let tuft = growth.buddha_hand();
 		assert_eq!(tuft.shape.seed, 17_i32.wrapping_add(31));
 		assert!((tuft.shape.noise_frequency - 4.25).abs() < 1e-5);

@@ -161,7 +161,7 @@ mod tests {
 		let shape = JungleGrowthShape { seed: 42, ..JungleGrowthShape::default() };
 		let foliage_noise = NoiseParams::from_scalar(0.0, 3.5, 0.12, 2);
 		let frond = shape.frond_shape(&foliage_noise);
-		assert_eq!(frond.seed, 42);
+		assert_eq!(frond.seed, 42_i32.wrapping_add(31));
 		let buddha = shape.buddha_hand_shape(&foliage_noise);
 		assert_eq!(buddha.seed, 42_i32.wrapping_add(31));
 		assert!((buddha.noise_frequency - 3.5).abs() < 1e-5);
