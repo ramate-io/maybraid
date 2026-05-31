@@ -88,6 +88,10 @@ fn attach_render_materials(
 		RenderSubject::WeepingTuft(t) => {
 			t.material.mesh = MeshMaterial3d(tuft.clone());
 		}
+		RenderSubject::JungleGrowth(g) => {
+			g.body_material.mesh = MeshMaterial3d(stick.clone());
+			g.foliage_material.mesh = MeshMaterial3d(tuft.clone());
+		}
 		RenderSubject::FrondCrown(c) => {
 			c.material.mesh = MeshMaterial3d(tuft.clone());
 		}

@@ -7,6 +7,9 @@ use chico_sbs_trees::liams_conifer::LiamsConifer;
 use chico_sbs_trees::sopes_banyan::SopesBanyan;
 use chico_sbs_trees::SkippedLeafMeshMaterial;
 use chico_sbs_trees::SkippedStickMeshMaterial;
+use chico_tree_components::{
+	JungleGrowth, SkippedBodyMeshMaterial, SkippedFoliageMeshMaterial,
+};
 use chico_vegetation_shaders::{ChicoLeafMaterial, ChicoStickMaterial};
 use chunk::cascade::CascadeChunk;
 use render_item::{DispatchRenderItem, RenderItem};
@@ -40,6 +43,14 @@ pub type RenderFrondCrown =
 pub type RenderModerateLodFrondCrown =
 	ModerateLodFrondCrown<StandardMaterial, SkippedLeafMeshMaterial<StandardMaterial>>;
 
+/// [`JungleGrowth`] — bark/dirt inner mass + drooping tuft foliage ([#226](https://github.com/ramate-io/maybraid/issues/226)).
+pub type RenderJungleGrowth = JungleGrowth<
+	ChicoStickMaterial,
+	SkippedBodyMeshMaterial<ChicoStickMaterial>,
+	StandardMaterial,
+	SkippedFoliageMeshMaterial<StandardMaterial>,
+>;
+
 #[derive(Clone)]
 pub enum RenderSubject {
 	SopesBanyan(RenderSopesBanyan),
@@ -49,6 +60,7 @@ pub enum RenderSubject {
 	SpearTuft(RenderSpearTuft),
 	BuddhaHandTuft(RenderBuddhaHandTuft),
 	WeepingTuft(RenderWeepingTuft),
+	JungleGrowth(RenderJungleGrowth),
 	FrondCrown(RenderFrondCrown),
 	ModerateLodFrondCrown(RenderModerateLodFrondCrown),
 }
@@ -63,6 +75,7 @@ impl RenderSubject {
 			Self::SpearTuft(_) => "SpearTuft",
 			Self::BuddhaHandTuft(_) => "BuddhaHandTuft",
 			Self::WeepingTuft(_) => "WeepingTuft",
+			Self::JungleGrowth(_) => "JungleGrowth",
 			Self::FrondCrown(_) => "FrondCrown",
 			Self::ModerateLodFrondCrown(_) => "ModerateLodFrondCrown",
 		}
@@ -78,6 +91,7 @@ impl RenderSubject {
 			Self::SpearTuft(t) => format!("{:?}", t.shape),
 			Self::BuddhaHandTuft(t) => format!("{:?}", t.shape),
 			Self::WeepingTuft(t) => format!("{:?}", t.shape),
+			Self::JungleGrowth(t) => format!("{:?}", t.shape),
 			Self::FrondCrown(t) => format!("{:?}", t.shape),
 			Self::ModerateLodFrondCrown(t) => format!("{:?}", t.shape),
 		}
@@ -92,6 +106,7 @@ impl RenderSubject {
 			Self::SpearTuft(tuft) => RenderDispatch::SpearTuft(tuft.clone()),
 			Self::BuddhaHandTuft(tuft) => RenderDispatch::BuddhaHandTuft(tuft.clone()),
 			Self::WeepingTuft(tuft) => RenderDispatch::WeepingTuft(tuft.clone()),
+			Self::JungleGrowth(growth) => RenderDispatch::JungleGrowth(growth.clone()),
 			Self::FrondCrown(crown) => RenderDispatch::FrondCrown(crown.clone()),
 			Self::ModerateLodFrondCrown(crown) => RenderDispatch::ModerateLodFrondCrown(crown.clone()),
 		}
@@ -107,6 +122,7 @@ enum RenderDispatch {
 	SpearTuft(RenderSpearTuft),
 	BuddhaHandTuft(RenderBuddhaHandTuft),
 	WeepingTuft(RenderWeepingTuft),
+	JungleGrowth(RenderJungleGrowth),
 	FrondCrown(RenderFrondCrown),
 	ModerateLodFrondCrown(RenderModerateLodFrondCrown),
 }
@@ -192,6 +208,9 @@ pub fn sync_render(
 		}
 		RenderDispatch::WeepingTuft(tuft) => {
 			commands.spawn((bundle, DispatchRenderItem::new(tuft)));
+		}
+		RenderDispatch::JungleGrowth(growth) => {
+			commands.spawn((bundle, DispatchRenderItem::new(growth)));
 		}
 		RenderDispatch::FrondCrown(crown) => {
 			commands.spawn((bundle, DispatchRenderItem::new(crown)));

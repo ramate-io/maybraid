@@ -1919,6 +1919,7 @@ dependencies = [
  "chico-sbs-trees",
  "chico-sdf",
  "chico-stick-components",
+ "chico-tree-components",
  "chico-vegetation-shaders",
  "chunk",
  "clap",
@@ -1951,7 +1952,13 @@ dependencies = [
 name = "chico-tree-components"
 version = "0.0.1"
 dependencies = [
- "chico-sdf",
+ "anyhow",
+ "bevy",
+ "chico-ball-components",
+ "chico-sbs-geometry",
+ "clap",
+ "procedural-common",
+ "render-item",
 ]
 
 [[package]]

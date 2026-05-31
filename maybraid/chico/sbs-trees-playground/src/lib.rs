@@ -5,6 +5,7 @@ pub mod checkerboard_material;
 pub mod commands;
 mod frond_render_params;
 mod ground;
+mod jungle_growth_render_params;
 mod moderate_lod_frond_render_params;
 mod render;
 mod render_materials;
@@ -17,8 +18,8 @@ pub use game_commands::command::PendingStartupCommand;
 pub use render::{RenderConfig, RenderSubject, SbsRenderRoot};
 
 use bevy::prelude::*;
+use chico_ball_components::frond::FrondRenderItemPlugin;
 use chico_ball_components::tuft::render_item_plugin::TuftRenderItemPlugin;
-use chico_ball_components::FrondRenderItemPlugin;
 use chico_sbs_trees::liams_conifer::render_item_plugin::ensure_registered as ensure_liams_conifer_render_plugins;
 use chico_sbs_trees::sopes_banyan::render_item_plugin::ensure_registered as ensure_sopes_banyan_render_plugins;
 use chico_sdf::{NoisyBall, NoisyCylinder};
@@ -47,6 +48,7 @@ impl Plugin for SbsTreesPlaygroundPlugin {
 		app.add_plugins(ChicoVegetationShadersPlugin);
 		ensure_enforce_caching_plugin::<NoisyCylinder, ChicoStickMaterial>(app);
 		ensure_enforce_caching_plugin::<NoisyBall, ChicoLeafMaterial>(app);
+		ensure_enforce_caching_plugin::<NoisyBall, ChicoStickMaterial>(app);
 		if !app.is_plugin_added::<MaterialPlugin<StandardMaterial>>() {
 			app.add_plugins(MaterialPlugin::<StandardMaterial>::default());
 		}
@@ -78,6 +80,7 @@ impl Plugin for SbsTreesPlaygroundPlugin {
 						dispatch_render_items::<render::RenderSpearTuft>,
 						dispatch_render_items::<render::RenderBuddhaHandTuft>,
 						dispatch_render_items::<render::RenderWeepingTuft>,
+						dispatch_render_items::<render::RenderJungleGrowth>,
 						dispatch_render_items::<render::RenderFrondCrown>,
 						dispatch_render_items::<render::RenderModerateLodFrondCrown>,
 					)
