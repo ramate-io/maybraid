@@ -11,6 +11,8 @@ Mesh-based arching frond chains ([#218](https://github.com/ramate-io/maybraid/is
 
 Shared: [`config.rs`](config.rs), [`spine.rs`](spine.rs), [`crown.rs`](crown.rs).
 
+[`FrondCrownShape`](../frond.rs) uses `emission_lift_radians` + `downward_tilt_radians` for outward pitch (spread wobbles azimuth only) and `arch_lift` + `droop` on the spine for up-and-over strands (date palm defaults in `chico-sbs-trees`).
+
 ## Playground
 
 ```bash

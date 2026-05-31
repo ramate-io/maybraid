@@ -47,6 +47,9 @@ pub struct FrondCrownShape {
 	pub width: f32,
 	#[cfg_attr(feature = "clap", arg(long, default_value_t = 0.55))]
 	pub droop: f32,
+	/// Mid-span arch along each frond before tip droop (0 = droop-only spine).
+	#[cfg_attr(feature = "clap", arg(long, default_value_t = 0.0))]
+	pub arch_lift: f32,
 	#[cfg_attr(feature = "clap", arg(long, default_value_t = 0.35))]
 	pub twist: f32,
 	#[cfg_attr(feature = "clap", arg(long, default_value_t = 36))]
@@ -63,6 +66,9 @@ pub struct FrondCrownShape {
 	pub downward_tilt_radians: f32,
 	#[cfg_attr(feature = "clap", arg(long, default_value_t = 0.48))]
 	pub outward_spread_radians: f32,
+	/// Initial emission pitch above horizontal (pairs with [`Self::arch_lift`] for up-and-over palms).
+	#[cfg_attr(feature = "clap", arg(long, default_value_t = 0.0))]
+	pub emission_lift_radians: f32,
 	#[cfg_attr(feature = "clap", arg(long, default_value_t = 0))]
 	pub seed: i32,
 }
@@ -74,6 +80,7 @@ impl Default for FrondCrownShape {
 			length: 1.4,
 			width: 0.18,
 			droop: 0.55,
+			arch_lift: 0.0,
 			twist: 0.35,
 			leaflet_count: 36,
 			spine_segments: 20,
@@ -82,6 +89,7 @@ impl Default for FrondCrownShape {
 			leaflet_length_scale: 3.2,
 			downward_tilt_radians: 0.62,
 			outward_spread_radians: 0.48,
+			emission_lift_radians: 0.0,
 			seed: 0,
 		}
 	}
@@ -94,6 +102,7 @@ impl FrondCrownShape {
 			length: (self.length * scale).max(1e-4),
 			width: (self.width * scale).max(1e-6),
 			droop: self.droop * scale,
+			arch_lift: self.arch_lift * scale,
 			twist: self.twist,
 			leaflet_count: self.leaflet_count.max(2),
 		}
@@ -154,6 +163,7 @@ where
 			self.shape.seed,
 			self.shape.downward_tilt_radians,
 			self.shape.outward_spread_radians,
+			self.shape.emission_lift_radians,
 		)
 	}
 
@@ -232,6 +242,7 @@ where
 		config.length = (config.length * scale).max(1e-4);
 		config.width = (config.width * scale).max(1e-6);
 		config.droop *= scale;
+		config.arch_lift *= scale;
 		let shoot = (self.shoot_half_radius * scale).max(1e-6);
 
 		FrondCluster::new(

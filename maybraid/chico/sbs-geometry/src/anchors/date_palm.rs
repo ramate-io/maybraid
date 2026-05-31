@@ -52,7 +52,7 @@ impl Default for DatePalmProtoAnchors {
 			segment_length_fraction: (0.05, 0.08),
 			angle_tolerance_radians: 2.0_f32.to_radians(),
 			ring_count: 10,
-			fronds_per_ring: 14,
+			fronds_per_ring: 15,
 			crown_stack_down_fraction: 0.30,
 			crown_vertical_bias_low: -0.10,
 			crown_vertical_bias_high: 0.60,

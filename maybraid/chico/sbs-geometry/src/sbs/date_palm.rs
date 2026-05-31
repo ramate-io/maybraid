@@ -63,13 +63,13 @@ impl DatePalmScale {
 pub struct DatePalmCrownParams {
 	#[cfg_attr(feature = "clap", arg(long, default_value_t = 10))]
 	pub ring_count: u32,
-	#[cfg_attr(feature = "clap", arg(long, default_value_t = 14))]
+	#[cfg_attr(feature = "clap", arg(long, default_value_t = 15))]
 	pub fronds_per_ring: u32,
 }
 
 impl Default for DatePalmCrownParams {
 	fn default() -> Self {
-		Self { ring_count: 10, fronds_per_ring: 14 }
+		Self { ring_count: 10, fronds_per_ring: 15 }
 	}
 }
 
@@ -83,7 +83,7 @@ pub struct DatePalmSbs {
 	#[cfg_attr(feature = "clap", command(flatten, next_help_heading = "Crown"))]
 	pub crown: DatePalmCrownParams,
 	/// Uniform world scale for each [`FrondCrown`] ring at the trunk tip.
-	#[cfg_attr(feature = "clap", arg(long, default_value_t = 0.62))]
+	#[cfg_attr(feature = "clap", arg(long, default_value_t = 0.68))]
 	pub frond_world_scale: f32,
 	/// World scale for the optional concealment tuft at the crown base.
 	#[cfg_attr(feature = "clap", arg(long, default_value_t = 0.06))]
@@ -97,7 +97,7 @@ impl Default for DatePalmSbs {
 		Self {
 			scale: DatePalmScale::default(),
 			crown: DatePalmCrownParams::default(),
-			frond_world_scale: 0.62,
+			frond_world_scale: 0.68,
 			crown_tuft_scale_factor: 0.06,
 			trunk_noise: NoiseParams::default(),
 		}
