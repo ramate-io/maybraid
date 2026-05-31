@@ -12,6 +12,7 @@ fn default_jungle_frond() -> FrondCrownShape {
 		length: 0.72,
 		width: 0.11,
 		droop: 0.42,
+		arch_lift: 0.0,
 		twist: 0.28,
 		leaflet_count: 22,
 		spine_segments: 12,
@@ -20,6 +21,7 @@ fn default_jungle_frond() -> FrondCrownShape {
 		leaflet_length_scale: 1.7,
 		downward_tilt_radians: 0.48,
 		outward_spread_radians: 0.58,
+		emission_lift_radians: 0.0,
 		seed: 0,
 	}
 }

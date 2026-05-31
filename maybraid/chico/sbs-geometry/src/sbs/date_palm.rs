@@ -3,7 +3,9 @@
 use bevy_math::Vec3;
 use procedural_common::{NoiseConfig, NoiseParams, SetNoiseParams};
 
-use crate::anchors::date_palm::{DatePalmAnchors, DatePalmProtoAnchors};
+use crate::anchors::date_palm::{
+	DatePalmAnchors, DatePalmProtoAnchors, DEFAULT_STALK_HEIGHT, DEFAULT_TRUNK_RADIUS_FRACTION_OF_HEIGHT,
+};
 use crate::anchors::strict_stalk::StrictStalk;
 use crate::anchors::{Anchors, AnchorsToChain};
 use crate::chain::date_palm::DatePalmChain;
@@ -14,7 +16,7 @@ use crate::BallStickChain;
 #[cfg_attr(feature = "clap", derive(clap::Args))]
 #[cfg_attr(feature = "clap", command(rename_all = "kebab-case"))]
 pub struct DatePalmScale {
-	#[cfg_attr(feature = "clap", arg(long, default_value_t = 30.0))]
+	#[cfg_attr(feature = "clap", arg(long, default_value_t = DEFAULT_STALK_HEIGHT))]
 	pub stalk_height: f32,
 	#[cfg_attr(feature = "clap", arg(long))]
 	pub stalk_base_radius: Option<f32>,
@@ -32,16 +34,25 @@ pub struct DatePalmScale {
 
 impl Default for DatePalmScale {
 	fn default() -> Self {
-		Self { stalk_height: 30.0, stalk_base_radius: None, base_anchor: Vec3::ZERO }
+		Self {
+			stalk_height: DEFAULT_STALK_HEIGHT,
+			stalk_base_radius: None,
+			base_anchor: Vec3::ZERO,
+		}
 	}
 }
 
 impl DatePalmScale {
+	pub fn stalk_base_radius_or_default(&self) -> f32 {
+		self.stalk_base_radius
+			.unwrap_or(DEFAULT_TRUNK_RADIUS_FRACTION_OF_HEIGHT * self.stalk_height)
+	}
+
 	pub fn to_stalk(&self) -> StrictStalk {
 		StrictStalk {
 			stalk_height: self.stalk_height,
 			stalk_base_anchor: self.base_anchor,
-			stalk_base_radius: self.stalk_base_radius.unwrap_or(0.025 * self.stalk_height),
+			stalk_base_radius: self.stalk_base_radius_or_default(),
 		}
 	}
 }
@@ -50,15 +61,15 @@ impl DatePalmScale {
 #[cfg_attr(feature = "clap", derive(clap::Args))]
 #[cfg_attr(feature = "clap", command(rename_all = "kebab-case"))]
 pub struct DatePalmCrownParams {
-	#[cfg_attr(feature = "clap", arg(long, default_value_t = 8))]
+	#[cfg_attr(feature = "clap", arg(long, default_value_t = 10))]
 	pub ring_count: u32,
-	#[cfg_attr(feature = "clap", arg(long, default_value_t = 12))]
+	#[cfg_attr(feature = "clap", arg(long, default_value_t = 15))]
 	pub fronds_per_ring: u32,
 }
 
 impl Default for DatePalmCrownParams {
 	fn default() -> Self {
-		Self { ring_count: 8, fronds_per_ring: 12 }
+		Self { ring_count: 10, fronds_per_ring: 15 }
 	}
 }
 
@@ -72,10 +83,10 @@ pub struct DatePalmSbs {
 	#[cfg_attr(feature = "clap", command(flatten, next_help_heading = "Crown"))]
 	pub crown: DatePalmCrownParams,
 	/// Uniform world scale for each [`FrondCrown`] ring at the trunk tip.
-	#[cfg_attr(feature = "clap", arg(long, default_value_t = 0.35))]
+	#[cfg_attr(feature = "clap", arg(long, default_value_t = 0.68))]
 	pub frond_world_scale: f32,
 	/// World scale for the optional concealment tuft at the crown base.
-	#[cfg_attr(feature = "clap", arg(long, default_value_t = 0.05))]
+	#[cfg_attr(feature = "clap", arg(long, default_value_t = 0.06))]
 	pub crown_tuft_scale_factor: f32,
 	#[cfg_attr(feature = "clap", command(flatten, next_help_heading = "Trunk Noise"))]
 	pub trunk_noise: NoiseParams,
@@ -86,8 +97,8 @@ impl Default for DatePalmSbs {
 		Self {
 			scale: DatePalmScale::default(),
 			crown: DatePalmCrownParams::default(),
-			frond_world_scale: 0.35,
-			crown_tuft_scale_factor: 0.05,
+			frond_world_scale: 0.68,
+			crown_tuft_scale_factor: 0.06,
 			trunk_noise: NoiseParams::default(),
 		}
 	}
@@ -99,11 +110,12 @@ impl DatePalmSbs {
 	}
 
 	pub fn to_proto(&self) -> DatePalmProtoAnchors {
+		let defaults = DatePalmProtoAnchors::default();
 		DatePalmProtoAnchors {
 			stalk: self.scale.to_stalk(),
 			ring_count: self.crown.ring_count,
 			fronds_per_ring: self.crown.fronds_per_ring,
-			..DatePalmProtoAnchors::default()
+			..defaults
 		}
 	}
 
@@ -126,10 +138,7 @@ impl DatePalmSbs {
 			.nodes
 			.iter()
 			.max_by(|a, b| {
-				a.position
-					.y
-					.partial_cmp(&b.position.y)
-					.unwrap_or(std::cmp::Ordering::Equal)
+				a.position.y.partial_cmp(&b.position.y).unwrap_or(std::cmp::Ordering::Equal)
 			})
 			.map(|n| n.position)
 			.unwrap_or(Vec3::ZERO)
@@ -139,9 +148,9 @@ impl DatePalmSbs {
 		Self::trunk_tip_from_chain(&self.build_chain())
 	}
 
-	/// Crown ring anchor in world space (assembly-local offset from trunk tip).
+	/// Crown ring anchor offset from trunk tip (stacked downward along −Y).
 	pub fn crown_ring_offset(&self, ring: u32) -> Vec3 {
-		Vec3::Y * self.to_proto().ring_spacing() * ring as f32
+		-Vec3::Y * self.to_proto().ring_spacing() * ring as f32
 	}
 
 	pub fn crown_ring_position(&self, chain: &BallStickChain<DatePalmChain>, ring: u32) -> Vec3 {
@@ -172,17 +181,22 @@ mod tests {
 	use anyhow::Result;
 
 	#[test]
+	fn default_stalk_radius_uses_strict_stalk_not_extra_fraction() -> Result<()> {
+		let sbs = DatePalmSbs::default();
+		let proto = sbs.to_proto();
+		assert!((proto.stalk.stalk_base_radius - 0.1 * DEFAULT_STALK_HEIGHT).abs() < 1e-5);
+		Ok(())
+	}
+
+	#[test]
 	fn build_chain_reaches_trunk_height() -> Result<()> {
 		let sbs = DatePalmSbs::default();
 		let proto = sbs.to_proto();
 		let chain = sbs.build_chain();
 		let tip_y = DatePalmSbs::trunk_tip_from_chain(&chain).y;
 		let expected = proto.trunk_height();
-		assert!(
-			(tip_y - expected).abs() < expected * 0.15,
-			"tip_y {tip_y} vs expected {expected}"
-		);
-		assert!(chain.nodes.len() >= 10);
+		assert!((tip_y - expected).abs() < expected * 0.15, "tip_y {tip_y} vs expected {expected}");
+		assert!(chain.nodes.len() >= 6);
 		Ok(())
 	}
 

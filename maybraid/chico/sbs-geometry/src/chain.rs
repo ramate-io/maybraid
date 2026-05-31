@@ -7,14 +7,20 @@ pub mod depth_budget;
 pub mod length_range;
 pub mod point_to_point;
 pub mod radius_range;
+pub mod arch_trunk;
 pub mod date_palm;
 pub mod liams_conifer;
 pub mod sopes_banyan;
+pub mod waialea_palm;
 
 use std::collections::VecDeque;
 
 use bevy_math::Vec3;
 
+pub use arch_trunk::{
+	arch_horizontal_direction_from_yaw_degrees, arch_point, arch_point_from_params,
+	normalize_arch_horizontal_direction, ArchTrunk, ArchTrunkParams,
+};
 pub use branch_out::BranchOut;
 pub use depth_budget::DepthBudget;
 

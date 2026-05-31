@@ -4,7 +4,12 @@ pub use vec3_args::parse_vec3_csv;
 
 pub mod chain;
 
+pub use chain::arch_trunk::{
+	arch_horizontal_direction_from_yaw_degrees, arch_point, arch_point_from_params,
+	normalize_arch_horizontal_direction, ArchTrunk, ArchTrunkParams,
+};
 pub use chain::date_palm::{DatePalmChain, DatePalmPhase};
+pub use chain::waialea_palm::{WaialeaPalmChain, WaialeaPalmPhase};
 pub use chain::liams_conifer::{LiamsConiferChain, LiamsConiferPhase};
 pub use chain::sopes_banyan::{SopesBanyanChain, SopesBanyanPhase};
 pub use chain::{
@@ -14,6 +19,7 @@ pub use chain::{
 pub mod anchors;
 
 pub use anchors::date_palm::{DatePalmAnchors, DatePalmProtoAnchors};
+pub use anchors::waialea_palm::{WaialeaPalmAnchors, WaialeaPalmProtoAnchors};
 pub use anchors::liams_conifer::{LiamsConiferAnchors, LiamsConiferProtoAnchors};
 pub use anchors::sopes_banyan::{SopesBanyanAnchors, SopesBanyanProtoAnchors};
 pub use anchors::stalk_perturbation::{
@@ -22,6 +28,7 @@ pub use anchors::stalk_perturbation::{
 pub use anchors::strict_stalk::StrictStalk;
 pub use anchors::{Anchors, AnchorsToChain};
 pub use sbs::date_palm::DatePalmSbs;
+pub use sbs::waialea_palm::WaialeaPalmSbs;
 pub use sbs::liams_conifer::LiamsConiferSbs;
 pub use sbs::sopes_banyan::SopesBanyanSbs;
 
