@@ -6,34 +6,31 @@ use chico_sbs_geometry::{BallStickChain, DatePalmChain, DatePalmSbs};
 use procedural_common::NoiseParams;
 use render_item::{CascadeChunk, RenderItem};
 
+/// Frond spine length in world units (`shape.length * frond_world_scale`).
+const FROND_LENGTH_FRACTION_OF_HEIGHT: f32 = 0.44;
+/// Rachis width in world units before crown uniform scale.
+const FROND_WIDTH_FRACTION_OF_HEIGHT: f32 = 0.058;
+
 /// RFC-aligned frond crown defaults scaled to tree height `H`.
 pub fn frond_shape_for_ring(geometry: &DatePalmSbs, ring: u32, foliage_seed: i32) -> FrondCrownShape {
 	let h = geometry.height();
 	let scale = geometry.frond_world_scale.max(1e-8);
 	let proto = geometry.to_proto();
-	let n = proto.ring_count.max(1);
-	let u = if n <= 1 {
-		0.0
-	} else {
-		ring as f32 / (n - 1) as f32
-	};
-	let droop_high = 0.62_f32;
-	let droop_low = 0.38_f32;
-	let downward_tilt = droop_high + (droop_low - droop_high) * u;
+	let downward_tilt = 0.30 + proto.ring_vertical_bias(ring) * 0.26;
 
 	FrondCrownShape {
 		frond_count: proto.fronds_per_ring,
-		length: (0.42 * h) / scale,
-		width: (0.05 * h) / scale,
-		droop: 0.48,
-		twist: 0.22,
-		leaflet_count: 18,
-		spine_segments: 14,
+		length: (FROND_LENGTH_FRACTION_OF_HEIGHT * h) / scale,
+		width: (FROND_WIDTH_FRACTION_OF_HEIGHT * h) / scale,
+		droop: 0.36,
+		twist: 0.21,
+		leaflet_count: 16,
+		spine_segments: 11,
 		shoot_half_radius: 0.018,
 		rachis_half_thickness: 0.007,
-		leaflet_length_scale: 2.4,
+		leaflet_length_scale: 2.5,
 		downward_tilt_radians: downward_tilt,
-		outward_spread_radians: 0.52,
+		outward_spread_radians: 0.78,
 		seed: foliage_seed.wrapping_add(ring as i32),
 	}
 }
