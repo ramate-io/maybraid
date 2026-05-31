@@ -17,7 +17,10 @@ use std::collections::VecDeque;
 
 use bevy_math::Vec3;
 
-pub use arch_trunk::{arch_point, ArchTrunk};
+pub use arch_trunk::{
+	arch_horizontal_direction_from_yaw_degrees, arch_point, arch_point_from_params,
+	normalize_arch_horizontal_direction, ArchTrunk, ArchTrunkParams,
+};
 pub use branch_out::BranchOut;
 pub use depth_budget::DepthBudget;
 

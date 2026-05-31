@@ -4,7 +4,8 @@ use bevy_math::Vec3;
 use procedural_common::{NoiseConfig, NoiseParams, SetNoiseParams};
 
 use crate::anchors::waialea_palm::{
-	WaialeaPalmAnchors, WaialeaPalmProtoAnchors, DEFAULT_STALK_HEIGHT, DEFAULT_TRUNK_RADIUS_FRACTION_OF_HEIGHT,
+	WaialeaPalmAnchors, WaialeaPalmProtoAnchors, DEFAULT_ARCH_LATERAL_FRACTION, DEFAULT_ARCH_YAW_DEGREES,
+	DEFAULT_STALK_HEIGHT, DEFAULT_TRUNK_HEIGHT_FRACTION, DEFAULT_TRUNK_RADIUS_FRACTION_OF_HEIGHT,
 };
 use crate::anchors::strict_stalk::StrictStalk;
 use crate::anchors::{Anchors, AnchorsToChain};
@@ -73,6 +74,30 @@ impl Default for WaialeaPalmCrownParams {
 	}
 }
 
+/// Trunk height and arch controls for playground iteration.
+#[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "clap", derive(clap::Args))]
+#[cfg_attr(feature = "clap", command(rename_all = "kebab-case"))]
+pub struct WaialeaPalmTrunkParams {
+	#[cfg_attr(feature = "clap", arg(long, default_value_t = DEFAULT_TRUNK_HEIGHT_FRACTION))]
+	pub trunk_height_fraction: f32,
+	#[cfg_attr(feature = "clap", arg(long, default_value_t = DEFAULT_ARCH_LATERAL_FRACTION))]
+	pub arch_lateral_fraction: f32,
+	/// Horizontal lean direction as yaw about world +Y in degrees (`0` → +X).
+	#[cfg_attr(feature = "clap", arg(long, default_value_t = DEFAULT_ARCH_YAW_DEGREES))]
+	pub arch_yaw_degrees: f32,
+}
+
+impl Default for WaialeaPalmTrunkParams {
+	fn default() -> Self {
+		Self {
+			trunk_height_fraction: DEFAULT_TRUNK_HEIGHT_FRACTION,
+			arch_lateral_fraction: DEFAULT_ARCH_LATERAL_FRACTION,
+			arch_yaw_degrees: DEFAULT_ARCH_YAW_DEGREES,
+		}
+	}
+}
+
 /// Art-directed front-end for Waialea Palm.
 #[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "clap", derive(clap::Args))]
@@ -80,6 +105,8 @@ impl Default for WaialeaPalmCrownParams {
 pub struct WaialeaPalmSbs {
 	#[cfg_attr(feature = "clap", command(flatten, next_help_heading = "Scale"))]
 	pub scale: WaialeaPalmScale,
+	#[cfg_attr(feature = "clap", command(flatten, next_help_heading = "Trunk"))]
+	pub trunk: WaialeaPalmTrunkParams,
 	#[cfg_attr(feature = "clap", command(flatten, next_help_heading = "Crown"))]
 	pub crown: WaialeaPalmCrownParams,
 	/// Uniform world scale for each [`FrondCrown`] ring at the trunk tip.
@@ -96,6 +123,7 @@ impl Default for WaialeaPalmSbs {
 	fn default() -> Self {
 		Self {
 			scale: WaialeaPalmScale::default(),
+			trunk: WaialeaPalmTrunkParams::default(),
 			crown: WaialeaPalmCrownParams::default(),
 			frond_world_scale: 0.55,
 			crown_tuft_scale_factor: 0.04,
@@ -113,6 +141,9 @@ impl WaialeaPalmSbs {
 		let defaults = WaialeaPalmProtoAnchors::default();
 		WaialeaPalmProtoAnchors {
 			stalk: self.scale.to_stalk(),
+			trunk_height_fraction: self.trunk.trunk_height_fraction,
+			arch_lateral_fraction: self.trunk.arch_lateral_fraction,
+			arch_yaw_degrees: self.trunk.arch_yaw_degrees,
 			ring_count: self.crown.ring_count,
 			fronds_per_ring: self.crown.fronds_per_ring,
 			..defaults
@@ -148,13 +179,37 @@ impl WaialeaPalmSbs {
 		Self::trunk_tip_from_chain(&self.build_chain())
 	}
 
-	/// Crown ring anchor offset from trunk tip (stacked upward along +Y per RFC).
-	pub fn crown_ring_offset(&self, ring: u32) -> Vec3 {
-		Vec3::Y * self.to_proto().ring_spacing() * ring as f32
+	/// Direction of the final trunk segment (unit); falls back to +Y.
+	pub fn trunk_tip_tangent_from_chain(chain: &BallStickChain<WaialeaPalmChain>) -> Vec3 {
+		let mut ray = Vec3::Y;
+		for (seg, _, _) in chain.segments_with_hysteresis() {
+			let r = seg.ray();
+			if r.length_squared() > 1e-8 {
+				ray = r.normalize();
+			}
+		}
+		ray
+	}
+
+	/// Blend of world up and tip tangent so crown rings follow a gentle arch without lying flat.
+	pub fn crown_stack_direction(chain: &BallStickChain<WaialeaPalmChain>) -> Vec3 {
+		const UP_BIAS: f32 = 0.55;
+		let tangent = Self::trunk_tip_tangent_from_chain(chain);
+		let blended = Vec3::Y * UP_BIAS + tangent * (1.0 - UP_BIAS);
+		if blended.length_squared() < 1e-8 {
+			Vec3::Y
+		} else {
+			blended.normalize()
+		}
+	}
+
+	/// Crown ring anchor offset from trunk tip (stacked along [`Self::crown_stack_direction`]).
+	pub fn crown_ring_offset(&self, ring: u32, chain: &BallStickChain<WaialeaPalmChain>) -> Vec3 {
+		Self::crown_stack_direction(chain) * self.to_proto().ring_spacing() * ring as f32
 	}
 
 	pub fn crown_ring_position(&self, chain: &BallStickChain<WaialeaPalmChain>, ring: u32) -> Vec3 {
-		Self::trunk_tip_from_chain(chain) + self.crown_ring_offset(ring)
+		Self::trunk_tip_from_chain(chain) + self.crown_ring_offset(ring, chain)
 	}
 
 	pub fn crown_tuft_world_scale(&self) -> f32 {
@@ -196,13 +251,41 @@ mod tests {
 		let tip = WaialeaPalmSbs::trunk_tip_from_chain(&chain);
 		let expected_y = proto.trunk_height();
 		assert!((tip.y - expected_y).abs() < expected_y * 0.12, "tip_y {} vs {expected_y}", tip.y);
+		let dir = proto.arch_direction();
+		let expected_lean = proto.arch_lateral_fraction * expected_y;
+		let lateral = tip - Vec3::Y * tip.y;
 		assert!(
-			(tip.x - proto.arch_lateral_fraction * expected_y).abs() < expected_y * 0.15,
-			"tip_x {} vs {}",
-			tip.x,
-			proto.arch_lateral_fraction * expected_y
+			(lateral.length() - expected_lean).abs() < expected_y * 0.15,
+			"tip lateral {} vs {expected_lean}",
+			lateral.length()
 		);
+		assert!(lateral.dot(dir) > 0.0, "lean should follow arch direction");
 		assert!(chain.nodes.len() >= 8);
+		Ok(())
+	}
+
+	#[test]
+	fn sbs_trunk_params_flow_to_proto() -> Result<()> {
+		let mut sbs = WaialeaPalmSbs::default();
+		sbs.trunk.arch_lateral_fraction = 0.2;
+		sbs.trunk.arch_yaw_degrees = 90.0;
+		sbs.trunk.trunk_height_fraction = 0.75;
+		let proto = sbs.to_proto();
+		assert!((proto.arch_lateral_fraction - 0.2).abs() < 1e-5);
+		assert!((proto.arch_yaw_degrees - 90.0).abs() < 1e-5);
+		assert!((proto.trunk_height_fraction - 0.75).abs() < 1e-5);
+		Ok(())
+	}
+
+	#[test]
+	fn mid_chain_segment_leans_along_arch() -> Result<()> {
+		let sbs = WaialeaPalmSbs::default();
+		let chain = sbs.build_chain();
+		let dir = sbs.to_proto().arch_direction();
+		let mid_idx = chain.nodes.len() / 2;
+		let mid = chain.nodes[mid_idx].position;
+		let along = Vec3::new(mid.x, 0.0, mid.z).dot(dir);
+		assert!(along > 0.05, "mid-chain should lean along arch, got {mid:?}");
 		Ok(())
 	}
 

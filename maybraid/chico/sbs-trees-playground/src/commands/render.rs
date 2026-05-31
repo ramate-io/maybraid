@@ -248,6 +248,20 @@ mod tests {
 	}
 
 	#[test]
+	fn waialea_palm_command_preserves_arch_params() -> Result<()> {
+		let cmd = crate::commands::PlaygroundCommand::parse_line(
+			"render waialea-palm --arch-lateral-fraction 0.18 --arch-yaw-degrees 45",
+		)
+		.map_err(|e| anyhow::anyhow!("{e}"))?;
+		let crate::commands::PlaygroundCommand::Render(Render::WaialeaPalm(helper)) = cmd else {
+			anyhow::bail!("expected waialea-palm render command");
+		};
+		assert!((helper.inner.geometry.trunk.arch_lateral_fraction - 0.18).abs() < 1e-5);
+		assert!((helper.inner.geometry.trunk.arch_yaw_degrees - 45.0).abs() < 1e-5);
+		Ok(())
+	}
+
+	#[test]
 	fn frond_crown_command_preserves_shape_params() -> Result<()> {
 		let cmd =
 			crate::commands::PlaygroundCommand::parse_line("render frond-crown --frond-count 15")

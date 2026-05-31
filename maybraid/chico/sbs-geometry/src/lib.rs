@@ -4,7 +4,10 @@ pub use vec3_args::parse_vec3_csv;
 
 pub mod chain;
 
-pub use chain::arch_trunk::{arch_point, ArchTrunk};
+pub use chain::arch_trunk::{
+	arch_horizontal_direction_from_yaw_degrees, arch_point, arch_point_from_params,
+	normalize_arch_horizontal_direction, ArchTrunk, ArchTrunkParams,
+};
 pub use chain::date_palm::{DatePalmChain, DatePalmPhase};
 pub use chain::waialea_palm::{WaialeaPalmChain, WaialeaPalmPhase};
 pub use chain::liams_conifer::{LiamsConiferChain, LiamsConiferPhase};

@@ -8,14 +8,22 @@ use procedural_common::NoiseConfig;
 use super::strict_stalk::StrictStalk;
 use super::Anchors;
 use crate::chain::waialea_palm::{WaialeaPalmChain, WaialeaPalmPhase};
-use crate::chain::ArchTrunk;
-use crate::chain::DepthBudget;
+use crate::chain::{arch_horizontal_direction_from_yaw_degrees, ArchTrunk, ArchTrunkParams, DepthBudget};
 
 /// Default stalk height for playground Waialea palms.
 pub const DEFAULT_STALK_HEIGHT: f32 = 12.0;
 
 /// RFC slender trunk radius as a fraction of stalk height.
 pub const DEFAULT_TRUNK_RADIUS_FRACTION_OF_HEIGHT: f32 = 0.025;
+
+/// RFC trunk height as a fraction of stalk height.
+pub const DEFAULT_TRUNK_HEIGHT_FRACTION: f32 = 0.85;
+
+/// RFC tip lateral offset as a fraction of trunk height.
+pub const DEFAULT_ARCH_LATERAL_FRACTION: f32 = 0.12;
+
+/// Default arch yaw about +Y (`0` → lean toward +X).
+pub const DEFAULT_ARCH_YAW_DEGREES: f32 = 0.0;
 
 /// Trunk and crown layout before [`WaialeaPalmAnchors::hysteresis_seeds`].
 #[derive(Clone, Debug, PartialEq)]
@@ -25,6 +33,8 @@ pub struct WaialeaPalmProtoAnchors {
 	pub trunk_height_fraction: f32,
 	/// Tip lateral offset as a fraction of trunk height (RFC `0.12`).
 	pub arch_lateral_fraction: f32,
+	/// Horizontal lean direction as yaw about world +Y in degrees (`0` → +X).
+	pub arch_yaw_degrees: f32,
 	/// Per-segment length as fractions of stalk height (RFC `0.05..0.08`).
 	pub segment_length_fraction: (f32, f32),
 	/// Stacked frond rings at the crown (RFC `2..3`).
@@ -47,8 +57,9 @@ impl Default for WaialeaPalmProtoAnchors {
 				stalk_base_anchor: Vec3::ZERO,
 				stalk_base_radius: DEFAULT_TRUNK_RADIUS_FRACTION_OF_HEIGHT * h,
 			},
-			trunk_height_fraction: 0.85,
-			arch_lateral_fraction: 0.12,
+			trunk_height_fraction: DEFAULT_TRUNK_HEIGHT_FRACTION,
+			arch_lateral_fraction: DEFAULT_ARCH_LATERAL_FRACTION,
+			arch_yaw_degrees: DEFAULT_ARCH_YAW_DEGREES,
 			segment_length_fraction: (0.05, 0.08),
 			ring_count: 3,
 			fronds_per_ring: 10,
@@ -80,28 +91,35 @@ impl WaialeaPalmProtoAnchors {
 		self.crown_vertical_bias_base + ring as f32 * self.crown_vertical_bias_step
 	}
 
+	pub fn arch_direction(&self) -> Vec3 {
+		arch_horizontal_direction_from_yaw_degrees(self.arch_yaw_degrees)
+	}
+
 	pub fn hysteresis_seeds(&self, chain_noise: NoiseConfig) -> Vec<WaialeaPalmChain> {
 		let h = self.stalk.stalk_height.max(1e-6);
 		let trunk_h = self.trunk_height();
-		let r = self.stalk.stalk_base_radius;
 		let base = self.stalk.stalk_base_anchor;
+		let steps = self.trunk_segment_count();
 
-		let arch = ArchTrunk::new(
-			base,
-			trunk_h,
-			self.arch_lateral_fraction,
-			r,
+		let arch = ArchTrunk::from_params(
+			ArchTrunkParams {
+				base,
+				trunk_height: trunk_h,
+				arch_lateral_fraction: self.arch_lateral_fraction,
+				arch_direction: self.arch_direction(),
+				radius: self.stalk.stalk_base_radius,
+				stalk_height: h,
+				segment_length_fraction: self.segment_length_fraction,
+				total_steps: steps,
+			},
 			chain_noise.clone(),
-			h,
-			self.segment_length_fraction,
-			self.trunk_segment_count(),
 		);
 
 		vec![WaialeaPalmChain::new(
 			chain_noise,
 			WaialeaPalmPhase::Trunk(DepthBudget {
 				inner: arch,
-				remaining: self.trunk_segment_count(),
+				remaining: steps,
 			}),
 		)]
 	}
