@@ -3,6 +3,7 @@ use chico_ball_components::{FrondCrown, ModerateLodFrondCrown};
 use chico_ball_components::tuft::{
 	BuddhaHandTuft, BladeTuft, SpearTuft, SucculentTuft, WeepingTuft,
 };
+use chico_sbs_trees::date_palm::DatePalm;
 use chico_sbs_trees::liams_conifer::LiamsConifer;
 use chico_sbs_trees::sopes_banyan::SopesBanyan;
 use chico_sbs_trees::SkippedLeafMeshMaterial;
@@ -30,6 +31,14 @@ pub type RenderLiamsConifer = LiamsConifer<
 	SkippedLeafMeshMaterial<StandardMaterial>,
 >;
 
+/// [`DatePalm`] — columnar trunk + stacked frond crown ([#256](https://github.com/ramate-io/maybraid/issues/256)).
+pub type RenderDatePalm = DatePalm<
+	ChicoStickMaterial,
+	SkippedStickMeshMaterial<ChicoStickMaterial>,
+	ChicoLeafMaterial,
+	SkippedLeafMeshMaterial<ChicoLeafMaterial>,
+>;
+
 pub type RenderSucculentTuft =
 	SucculentTuft<StandardMaterial, SkippedLeafMeshMaterial<StandardMaterial>>;
 pub type RenderBladeTuft = BladeTuft<StandardMaterial, SkippedLeafMeshMaterial<StandardMaterial>>;
@@ -55,6 +64,7 @@ pub type RenderJungleGrowth = JungleGrowth<
 pub enum RenderSubject {
 	SopesBanyan(RenderSopesBanyan),
 	LiamsConifer(RenderLiamsConifer),
+	DatePalm(RenderDatePalm),
 	SucculentTuft(RenderSucculentTuft),
 	BladeTuft(RenderBladeTuft),
 	SpearTuft(RenderSpearTuft),
@@ -70,6 +80,7 @@ impl RenderSubject {
 		match self {
 			Self::SopesBanyan(_) => "SopesBanyan",
 			Self::LiamsConifer(_) => "LiamsConifer",
+			Self::DatePalm(_) => "DatePalm",
 			Self::SucculentTuft(_) => "SucculentTuft",
 			Self::BladeTuft(_) => "BladeTuft",
 			Self::SpearTuft(_) => "SpearTuft",
@@ -86,6 +97,7 @@ impl RenderSubject {
 		match self {
 			Self::SopesBanyan(t) => format!("{:?}", t.geometry),
 			Self::LiamsConifer(t) => format!("{:?}", t.geometry),
+			Self::DatePalm(t) => format!("{:?}", t.geometry),
 			Self::SucculentTuft(t) => format!("{:?}", t.shape),
 			Self::BladeTuft(t) => format!("{:?}", t.shape),
 			Self::SpearTuft(t) => format!("{:?}", t.shape),
@@ -101,6 +113,7 @@ impl RenderSubject {
 		match self {
 			Self::SopesBanyan(tree) => RenderDispatch::SopesBanyan(tree.clone()),
 			Self::LiamsConifer(tree) => RenderDispatch::LiamsConifer(tree.clone()),
+			Self::DatePalm(tree) => RenderDispatch::DatePalm(tree.clone()),
 			Self::SucculentTuft(tuft) => RenderDispatch::SucculentTuft(tuft.clone()),
 			Self::BladeTuft(tuft) => RenderDispatch::BladeTuft(tuft.clone()),
 			Self::SpearTuft(tuft) => RenderDispatch::SpearTuft(tuft.clone()),
@@ -117,6 +130,7 @@ impl RenderSubject {
 enum RenderDispatch {
 	SopesBanyan(RenderSopesBanyan),
 	LiamsConifer(RenderLiamsConifer),
+	DatePalm(RenderDatePalm),
 	SucculentTuft(RenderSucculentTuft),
 	BladeTuft(RenderBladeTuft),
 	SpearTuft(RenderSpearTuft),
@@ -192,6 +206,9 @@ pub fn sync_render(
 			commands.spawn((bundle, DispatchRenderItem::new(tree)));
 		}
 		RenderDispatch::LiamsConifer(tree) => {
+			commands.spawn((bundle, DispatchRenderItem::new(tree)));
+		}
+		RenderDispatch::DatePalm(tree) => {
 			commands.spawn((bundle, DispatchRenderItem::new(tree)));
 		}
 		RenderDispatch::SucculentTuft(tuft) => {

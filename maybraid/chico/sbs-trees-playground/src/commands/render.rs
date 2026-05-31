@@ -1,5 +1,6 @@
 pub mod blade_tuft;
 pub mod buddha_hand_tuft;
+pub mod date_palm;
 pub mod frond_crown;
 pub mod jungle_growth;
 pub mod liams_conifer;
@@ -18,6 +19,7 @@ use clap::Subcommand;
 use crate::render::{RenderConfig, RenderSubject};
 pub use blade_tuft::BladeTuftRenderHelper;
 pub use buddha_hand_tuft::BuddhaHandTuftRenderHelper;
+pub use date_palm::DatePalmRenderHelper;
 pub use frond_crown::FrondCrownRenderHelper;
 pub use jungle_growth::JungleGrowthRenderHelper;
 pub use liams_conifer::LiamsConiferRenderHelper;
@@ -73,6 +75,7 @@ impl<T: clap::Args + Clone> RenderHelper<T> {
 pub enum Render {
 	SopesBanyan(SopesBanyanRenderHelper),
 	LiamsConifer(LiamsConiferRenderHelper),
+	DatePalm(DatePalmRenderHelper),
 	SucculentTuft(SucculentTuftRenderHelper),
 	BladeTuft(BladeTuftRenderHelper),
 	SpearTuft(SpearTuftRenderHelper),
@@ -100,6 +103,11 @@ impl Render {
 			},
 			Self::LiamsConifer(h) => RenderConfig {
 				subject: RenderSubject::LiamsConifer(h.inner.clone()),
+				res_2: h.res_2,
+				transform: h.render_transform(),
+			},
+			Self::DatePalm(h) => RenderConfig {
+				subject: RenderSubject::DatePalm(h.inner.clone()),
 				res_2: h.res_2,
 				transform: h.render_transform(),
 			},
@@ -196,6 +204,22 @@ mod tests {
 		};
 		assert!((growth.shape.inner_ball_scale - 0.9).abs() < 1e-5);
 		assert_eq!(growth.shape.seed, 42);
+		Ok(())
+	}
+
+	#[test]
+	fn date_palm_command_preserves_shape_params() -> Result<()> {
+		let cmd = crate::commands::PlaygroundCommand::parse_line("render date-palm --ring-count 8")
+			.map_err(|e| anyhow::anyhow!("{e}"))?;
+		let crate::commands::PlaygroundCommand::Render(Render::DatePalm(helper)) = cmd else {
+			anyhow::bail!("expected date-palm render command");
+		};
+		assert_eq!(helper.inner.geometry.crown.ring_count, 8);
+		let cfg = Render::DatePalm(helper).into_render_config();
+		let RenderSubject::DatePalm(palm) = cfg.subject else {
+			anyhow::bail!("expected date palm subject");
+		};
+		assert_eq!(palm.geometry.crown.ring_count, 8);
 		Ok(())
 	}
 
