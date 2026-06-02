@@ -1,5 +1,6 @@
 //! Tuft placement helpers for ball-stick graphs.
 
+use crate::render::mix_seed::node_mix_seed;
 use crate::{BallStickChain, BallStickNode, Hysteresis};
 use bevy::prelude::*;
 use render_item::{CascadeChunk, RenderItem};
@@ -7,11 +8,7 @@ use std::marker::PhantomData;
 
 /// Stable mixing key from graph index and node position.
 pub fn tuft_mix_seed(node_idx: usize, position: Vec3) -> u32 {
-	(node_idx as u32)
-		.wrapping_mul(0x9E37_79B9)
-		.wrapping_add(position.x.to_bits())
-		.wrapping_add(position.y.to_bits().rotate_left(3))
-		.wrapping_add(position.z.to_bits().rotate_left(7))
+	node_mix_seed(node_idx, position)
 }
 
 /// One tuft cluster rooted at the joint, growing in world +Y (scale sets world size).

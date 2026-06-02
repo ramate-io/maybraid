@@ -34,6 +34,7 @@ pub use anchors::{Anchors, AnchorsToChain};
 pub use sbs::date_palm::DatePalmSbs;
 pub use sbs::waialea_palm::WaialeaPalmSbs;
 pub use sbs::storybook_tree::StorybookTreeSbs;
+pub use sbs::jungle_storybook_tree::JungleStorybookTreeSbs;
 pub use sbs::liams_conifer::LiamsConiferSbs;
 pub use sbs::sopes_banyan::SopesBanyanSbs;
 

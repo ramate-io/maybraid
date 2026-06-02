@@ -127,11 +127,32 @@ pub struct StorybookGrowthParams {
 	pub angle_tolerance_degrees: f32,
 	#[cfg_attr(feature = "clap", arg(long, default_value_t = 4.0))]
 	pub ring_tilt_degrees: f32,
+	#[cfg_attr(feature = "clap", arg(long, default_value_t = 1))]
+	pub child_count_min: u32,
+	#[cfg_attr(feature = "clap", arg(long, default_value_t = 3))]
+	pub child_count_max: u32,
+	/// Limb radius at the ring anchor as a fraction of stalk base radius.
+	#[cfg_attr(feature = "clap", arg(long, default_value_t = 0.12))]
+	pub branch_base_radius_fraction_of_stalk: f32,
+	/// Per-hop radius scale range (lo..hi) applied down each limb.
+	#[cfg_attr(feature = "clap", arg(long, default_value_t = 0.75))]
+	pub branch_radius_child_scale_lo: f32,
+	#[cfg_attr(feature = "clap", arg(long, default_value_t = 0.82))]
+	pub branch_radius_child_scale_hi: f32,
 }
 
 impl Default for StorybookGrowthParams {
 	fn default() -> Self {
-		Self { branch_depth: 4, angle_tolerance_degrees: 26.0, ring_tilt_degrees: 4.0 }
+		Self {
+			branch_depth: 4,
+			angle_tolerance_degrees: 26.0,
+			ring_tilt_degrees: 4.0,
+			child_count_min: 1,
+			child_count_max: 3,
+			branch_base_radius_fraction_of_stalk: 0.12,
+			branch_radius_child_scale_lo: 0.75,
+			branch_radius_child_scale_hi: 0.82,
+		}
 	}
 }
 
@@ -282,7 +303,14 @@ impl StorybookTreeSbs {
 			branch_angle_tolerance: self.growth.angle_tolerance_degrees.to_radians(),
 			bias_blend: 0.88,
 			branch_depth: self.growth.branch_depth,
+			child_count_min: self.growth.child_count_min,
+			child_count_max: self.growth.child_count_max.max(self.growth.child_count_min),
 			outer_foliage_distance_fraction: self.canopy.outer_foliage_distance_fraction,
+			branch_base_radius_fraction_of_stalk: self.growth.branch_base_radius_fraction_of_stalk,
+			branch_radius_child_scale: (
+				self.growth.branch_radius_child_scale_lo,
+				self.growth.branch_radius_child_scale_hi,
+			),
 			..StorybookTreeProtoAnchors::default()
 		}
 	}

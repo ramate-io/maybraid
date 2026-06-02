@@ -3,6 +3,7 @@ pub mod buddha_hand_tuft;
 pub mod date_palm;
 pub mod waialea_palm;
 pub mod storybook_tree;
+pub mod jungle_storybook_tree;
 pub mod frond_crown;
 pub mod jungle_growth;
 pub mod liams_conifer;
@@ -24,6 +25,7 @@ pub use buddha_hand_tuft::BuddhaHandTuftRenderHelper;
 pub use date_palm::DatePalmRenderHelper;
 pub use waialea_palm::WaialeaPalmRenderHelper;
 pub use storybook_tree::StorybookTreeRenderHelper;
+pub use jungle_storybook_tree::JungleStorybookTreeRenderHelper;
 pub use frond_crown::FrondCrownRenderHelper;
 pub use jungle_growth::JungleGrowthRenderHelper;
 pub use liams_conifer::LiamsConiferRenderHelper;
@@ -82,6 +84,7 @@ pub enum Render {
 	DatePalm(DatePalmRenderHelper),
 	WaialeaPalm(WaialeaPalmRenderHelper),
 	StorybookTree(StorybookTreeRenderHelper),
+	JungleStorybookTree(JungleStorybookTreeRenderHelper),
 	SucculentTuft(SucculentTuftRenderHelper),
 	BladeTuft(BladeTuftRenderHelper),
 	SpearTuft(SpearTuftRenderHelper),
@@ -124,6 +127,11 @@ impl Render {
 			},
 			Self::StorybookTree(h) => RenderConfig {
 				subject: RenderSubject::StorybookTree(h.inner.clone()),
+				res_2: h.res_2,
+				transform: h.render_transform(),
+			},
+			Self::JungleStorybookTree(h) => RenderConfig {
+				subject: RenderSubject::JungleStorybookTree(h.inner.clone()),
 				res_2: h.res_2,
 				transform: h.render_transform(),
 			},
@@ -286,6 +294,20 @@ mod tests {
 		};
 		assert!((tree.geometry.scale.tree_height - 18.0).abs() < 1e-5);
 		assert_eq!(tree.geometry.growth.branch_depth, 4);
+		Ok(())
+	}
+
+	#[test]
+	fn jungle_storybook_tree_command_preserves_shape_params() -> Result<()> {
+		let cmd = crate::commands::PlaygroundCommand::parse_line(
+			"render jungle-storybook-tree --tree-height 18 --branch-depth 4",
+		)
+		.map_err(|e| anyhow::anyhow!("{e}"))?;
+		let crate::commands::PlaygroundCommand::Render(Render::JungleStorybookTree(helper)) = cmd else {
+			anyhow::bail!("expected jungle-storybook-tree render command");
+		};
+		assert!((helper.inner.geometry.storybook.scale.tree_height - 18.0).abs() < 1e-5);
+		assert_eq!(helper.inner.geometry.storybook.growth.branch_depth, 4);
 		Ok(())
 	}
 

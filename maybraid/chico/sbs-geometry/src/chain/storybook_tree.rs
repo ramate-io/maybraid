@@ -109,6 +109,19 @@ impl StorybookTreeChain {
 			_ => None,
 		}
 	}
+
+	/// Hop index from the ring anchor along this limb (`0` at the spoke).
+	pub fn branch_order(&self) -> usize {
+		match &self.phase {
+			StorybookTreePhase::BranchOut(b) => self.branch_depth.saturating_sub(b.remaining),
+			StorybookTreePhase::Stalk(_) => 0,
+		}
+	}
+}
+
+/// Whether `node_idx` has no children in a built [`crate::BallStickChain`].
+pub fn is_graph_terminal<H: Hysteresis>(chain: &crate::BallStickChain<H>, node_idx: usize) -> bool {
+	chain.children.get(node_idx).is_some_and(|c| c.is_empty())
 }
 
 impl StorybookTreePhase {

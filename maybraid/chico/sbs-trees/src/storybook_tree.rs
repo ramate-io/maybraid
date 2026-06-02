@@ -4,7 +4,7 @@
 
 mod canopy;
 pub mod render_item_plugin;
-mod stick;
+pub(crate) mod stick;
 
 use std::marker::PhantomData;
 

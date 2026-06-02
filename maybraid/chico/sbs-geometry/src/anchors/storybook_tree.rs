@@ -74,6 +74,8 @@ pub struct StorybookTreeProtoAnchors {
 	pub branch_angle_tolerance: f32,
 	pub bias_blend: f32,
 	pub branch_depth: usize,
+	pub child_count_min: u32,
+	pub child_count_max: u32,
 	pub outer_foliage_distance_fraction: f32,
 	pub branch_base_radius_fraction_of_stalk: f32,
 	pub branch_radius_child_scale: (f32, f32),
@@ -100,6 +102,8 @@ impl Default for StorybookTreeProtoAnchors {
 			branch_angle_tolerance: 26.0_f32.to_radians(),
 			bias_blend: 0.88,
 			branch_depth: 4,
+			child_count_min: 1,
+			child_count_max: 3,
 			outer_foliage_distance_fraction: DEFAULT_OUTER_FOLIAGE_DISTANCE_FRACTION,
 			branch_base_radius_fraction_of_stalk: 0.12,
 			branch_radius_child_scale: (0.75, 0.82),
@@ -162,7 +166,9 @@ impl StorybookTreeProtoAnchors {
 					.with_hysteresis_context(noise.clone(), 0, bias)
 					.with_bias_blend(self.bias_blend)
 					.with_ray_degrees_of_freedom(self.branch_angle_tolerance)
-					.with_child_count(1..3)
+					.with_child_count(
+						self.child_count_min as usize..(self.child_count_max as usize).saturating_add(1),
+					)
 					.with_radius_range(limb_r..limb_r)
 					.with_radius_range_child_scale(self.branch_radius_child_scale)
 					.with_length(first_len * 0.97..first_len * 1.03);
