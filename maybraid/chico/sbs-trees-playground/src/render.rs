@@ -6,6 +6,7 @@ use chico_ball_components::tuft::{
 use chico_sbs_trees::date_palm::DatePalm;
 use chico_sbs_trees::waialea_palm::WaialeaPalm;
 use chico_sbs_trees::liams_conifer::LiamsConifer;
+use chico_sbs_trees::storybook_tree::StorybookTree;
 use chico_sbs_trees::sopes_banyan::SopesBanyan;
 use chico_sbs_trees::SkippedLeafMeshMaterial;
 use chico_sbs_trees::SkippedStickMeshMaterial;
@@ -48,6 +49,14 @@ pub type RenderWaialeaPalm = WaialeaPalm<
 	SkippedLeafMeshMaterial<ChicoLeafMaterial>,
 >;
 
+/// [`StorybookTree`] — default broadleaf stalk + log-tapered radial canopy ([#230](https://github.com/ramate-io/maybraid/issues/230)).
+pub type RenderStorybookTree = StorybookTree<
+	ChicoStickMaterial,
+	SkippedStickMeshMaterial<ChicoStickMaterial>,
+	ChicoLeafMaterial,
+	SkippedLeafMeshMaterial<ChicoLeafMaterial>,
+>;
+
 pub type RenderSucculentTuft =
 	SucculentTuft<StandardMaterial, SkippedLeafMeshMaterial<StandardMaterial>>;
 pub type RenderBladeTuft = BladeTuft<StandardMaterial, SkippedLeafMeshMaterial<StandardMaterial>>;
@@ -75,6 +84,7 @@ pub enum RenderSubject {
 	LiamsConifer(RenderLiamsConifer),
 	DatePalm(RenderDatePalm),
 	WaialeaPalm(RenderWaialeaPalm),
+	StorybookTree(RenderStorybookTree),
 	SucculentTuft(RenderSucculentTuft),
 	BladeTuft(RenderBladeTuft),
 	SpearTuft(RenderSpearTuft),
@@ -92,6 +102,7 @@ impl RenderSubject {
 			Self::LiamsConifer(_) => "LiamsConifer",
 			Self::DatePalm(_) => "DatePalm",
 			Self::WaialeaPalm(_) => "WaialeaPalm",
+			Self::StorybookTree(_) => "StorybookTree",
 			Self::SucculentTuft(_) => "SucculentTuft",
 			Self::BladeTuft(_) => "BladeTuft",
 			Self::SpearTuft(_) => "SpearTuft",
@@ -110,6 +121,7 @@ impl RenderSubject {
 			Self::LiamsConifer(t) => format!("{:?}", t.geometry),
 			Self::DatePalm(t) => format!("{:?}", t.geometry),
 			Self::WaialeaPalm(t) => format!("{:?}", t.geometry),
+			Self::StorybookTree(t) => format!("{:?}", t.geometry),
 			Self::SucculentTuft(t) => format!("{:?}", t.shape),
 			Self::BladeTuft(t) => format!("{:?}", t.shape),
 			Self::SpearTuft(t) => format!("{:?}", t.shape),
@@ -127,6 +139,7 @@ impl RenderSubject {
 			Self::LiamsConifer(tree) => RenderDispatch::LiamsConifer(tree.clone()),
 			Self::DatePalm(tree) => RenderDispatch::DatePalm(tree.clone()),
 			Self::WaialeaPalm(tree) => RenderDispatch::WaialeaPalm(tree.clone()),
+			Self::StorybookTree(tree) => RenderDispatch::StorybookTree(tree.clone()),
 			Self::SucculentTuft(tuft) => RenderDispatch::SucculentTuft(tuft.clone()),
 			Self::BladeTuft(tuft) => RenderDispatch::BladeTuft(tuft.clone()),
 			Self::SpearTuft(tuft) => RenderDispatch::SpearTuft(tuft.clone()),
@@ -145,6 +158,7 @@ enum RenderDispatch {
 	LiamsConifer(RenderLiamsConifer),
 	DatePalm(RenderDatePalm),
 	WaialeaPalm(RenderWaialeaPalm),
+	StorybookTree(RenderStorybookTree),
 	SucculentTuft(RenderSucculentTuft),
 	BladeTuft(RenderBladeTuft),
 	SpearTuft(RenderSpearTuft),
@@ -226,6 +240,9 @@ pub fn sync_render(
 			commands.spawn((bundle, DispatchRenderItem::new(tree)));
 		}
 		RenderDispatch::WaialeaPalm(tree) => {
+			commands.spawn((bundle, DispatchRenderItem::new(tree)));
+		}
+		RenderDispatch::StorybookTree(tree) => {
 			commands.spawn((bundle, DispatchRenderItem::new(tree)));
 		}
 		RenderDispatch::SucculentTuft(tuft) => {

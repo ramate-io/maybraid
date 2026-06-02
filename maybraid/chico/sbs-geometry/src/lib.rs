@@ -10,6 +10,7 @@ pub use chain::arch_trunk::{
 };
 pub use chain::date_palm::{DatePalmChain, DatePalmPhase};
 pub use chain::waialea_palm::{WaialeaPalmChain, WaialeaPalmPhase};
+pub use chain::storybook_tree::{segment_fracs, StorybookTreeChain, StorybookTreePhase};
 pub use chain::liams_conifer::{LiamsConiferChain, LiamsConiferPhase};
 pub use chain::sopes_banyan::{SopesBanyanChain, SopesBanyanPhase};
 pub use chain::{
@@ -20,6 +21,9 @@ pub mod anchors;
 
 pub use anchors::date_palm::{DatePalmAnchors, DatePalmProtoAnchors};
 pub use anchors::waialea_palm::{WaialeaPalmAnchors, WaialeaPalmProtoAnchors};
+pub use anchors::storybook_tree::{
+	dome_projection_length, StorybookTreeAnchors, StorybookTreeProtoAnchors,
+};
 pub use anchors::liams_conifer::{LiamsConiferAnchors, LiamsConiferProtoAnchors};
 pub use anchors::sopes_banyan::{SopesBanyanAnchors, SopesBanyanProtoAnchors};
 pub use anchors::stalk_perturbation::{
@@ -29,6 +33,7 @@ pub use anchors::strict_stalk::StrictStalk;
 pub use anchors::{Anchors, AnchorsToChain};
 pub use sbs::date_palm::DatePalmSbs;
 pub use sbs::waialea_palm::WaialeaPalmSbs;
+pub use sbs::storybook_tree::StorybookTreeSbs;
 pub use sbs::liams_conifer::LiamsConiferSbs;
 pub use sbs::sopes_banyan::SopesBanyanSbs;
 

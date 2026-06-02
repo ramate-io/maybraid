@@ -2,6 +2,7 @@ pub mod blade_tuft;
 pub mod buddha_hand_tuft;
 pub mod date_palm;
 pub mod waialea_palm;
+pub mod storybook_tree;
 pub mod frond_crown;
 pub mod jungle_growth;
 pub mod liams_conifer;
@@ -22,6 +23,7 @@ pub use blade_tuft::BladeTuftRenderHelper;
 pub use buddha_hand_tuft::BuddhaHandTuftRenderHelper;
 pub use date_palm::DatePalmRenderHelper;
 pub use waialea_palm::WaialeaPalmRenderHelper;
+pub use storybook_tree::StorybookTreeRenderHelper;
 pub use frond_crown::FrondCrownRenderHelper;
 pub use jungle_growth::JungleGrowthRenderHelper;
 pub use liams_conifer::LiamsConiferRenderHelper;
@@ -79,6 +81,7 @@ pub enum Render {
 	LiamsConifer(LiamsConiferRenderHelper),
 	DatePalm(DatePalmRenderHelper),
 	WaialeaPalm(WaialeaPalmRenderHelper),
+	StorybookTree(StorybookTreeRenderHelper),
 	SucculentTuft(SucculentTuftRenderHelper),
 	BladeTuft(BladeTuftRenderHelper),
 	SpearTuft(SpearTuftRenderHelper),
@@ -116,6 +119,11 @@ impl Render {
 			},
 			Self::WaialeaPalm(h) => RenderConfig {
 				subject: RenderSubject::WaialeaPalm(h.inner.clone()),
+				res_2: h.res_2,
+				transform: h.render_transform(),
+			},
+			Self::StorybookTree(h) => RenderConfig {
+				subject: RenderSubject::StorybookTree(h.inner.clone()),
 				res_2: h.res_2,
 				transform: h.render_transform(),
 			},
@@ -258,6 +266,26 @@ mod tests {
 		};
 		assert!((helper.inner.geometry.trunk.arch_lateral_fraction - 0.18).abs() < 1e-5);
 		assert!((helper.inner.geometry.trunk.arch_yaw_degrees - 45.0).abs() < 1e-5);
+		Ok(())
+	}
+
+	#[test]
+	fn storybook_tree_command_preserves_shape_params() -> Result<()> {
+		let cmd = crate::commands::PlaygroundCommand::parse_line(
+			"render storybook-tree --tree-height 18 --branch-depth 4 --ring-heights 0.30..1.0",
+		)
+		.map_err(|e| anyhow::anyhow!("{e}"))?;
+		let crate::commands::PlaygroundCommand::Render(Render::StorybookTree(helper)) = cmd else {
+			anyhow::bail!("expected storybook-tree render command");
+		};
+		assert!((helper.inner.geometry.scale.tree_height - 18.0).abs() < 1e-5);
+		assert_eq!(helper.inner.geometry.growth.branch_depth, 4);
+		let cfg = Render::StorybookTree(helper).into_render_config();
+		let RenderSubject::StorybookTree(tree) = cfg.subject else {
+			anyhow::bail!("expected storybook tree subject");
+		};
+		assert!((tree.geometry.scale.tree_height - 18.0).abs() < 1e-5);
+		assert_eq!(tree.geometry.growth.branch_depth, 4);
 		Ok(())
 	}
 
