@@ -1,11 +1,9 @@
 //! **Jungle Storybook Tree** — dense Storybook construction ([#235](https://github.com/ramate-io/maybraid/issues/235), [RFC §3.1.7.13](https://github.com/ramate-io/maybraid/tree/main/rfc/rfc-000-000-183-chico-vegetation/03-01-stalk-and-ball-stick-trees/07-well-known-tree-constructions/13-jungle-storybook-tree/README.md)).
 
-//! Same [`StorybookTreeChain`] geometry as [#230](https://github.com/ramate-io/maybraid/issues/230); layered foliage, dual leaf materials, and [`JungleGrowth`](chico_tree_components::JungleGrowth) clusters.
+//! Same [`StorybookTreeChain`] geometry as [#230](https://github.com/ramate-io/maybraid/issues/230); layered canopy foliage and [`JungleGrowth`](chico_tree_components::JungleGrowth) clusters (no separate joint tufts).
 
 mod canopy;
-mod jungle_growth;
 pub mod render_item_plugin;
-mod tuft;
 
 use std::marker::PhantomData;
 
@@ -25,9 +23,7 @@ use crate::skipped_mesh_material::{
 	SkippedInnerLeafMeshMaterial, SkippedOuterLeafMeshMaterial, SkippedStickMeshMaterial,
 };
 use crate::storybook_tree::stick::StorybookTreeStickRule;
-use canopy::{JungleStorybookInnerCanopyRule, JungleStorybookOuterCanopyRule};
-use jungle_growth::JungleStorybookGrowthRule;
-use tuft::JungleStorybookTuftRule;
+use canopy::JungleStorybookFoliageRule;
 
 /// Typical [`StandardMaterial`] jungle storybook with CLI-skipped handles.
 pub type JungleStorybookTreeStd = JungleStorybookTree<
@@ -48,13 +44,11 @@ pub type JungleStorybookTreeStd = JungleStorybookTree<
 pub struct JungleStorybookConstructionParams {
 	#[arg(long, default_value_t = 0.65)]
 	pub growth_spawn_fraction: f32,
-	#[arg(long, default_value_t = 0.06)]
-	pub tuft_spawn_fraction: f32,
 }
 
 impl Default for JungleStorybookConstructionParams {
 	fn default() -> Self {
-		Self { growth_spawn_fraction: 0.65, tuft_spawn_fraction: 0.06 }
+		Self { growth_spawn_fraction: 0.65 }
 	}
 }
 
@@ -225,7 +219,6 @@ where
 		let geometry = self.geometry_for_render();
 		let chain = geometry.build_chain();
 		let leaf_radius = geometry.leaf_radius_world();
-		let tuft_scale = leaf_radius * 0.35;
 
 		let stick_rule = StorybookTreeStickRule::<StickM, StickS> {
 			surface_noise: self.stick_surface_noise,
@@ -238,50 +231,20 @@ where
 
 		let mut inner_ball = self.inner_leaf_surface_noise.build_scalar::<ChicoBall<InnerLeafM, InnerLeafS>>();
 		inner_ball.material = self.inner_leaf_material.clone();
-		let inner_rule = JungleStorybookInnerCanopyRule {
-			leaf_ball: inner_ball,
-			leaf_radius_world: leaf_radius,
-		};
-		out.extend(BallRenderHelper::new(chain.clone(), inner_rule).spawn_render_items(
-			commands,
-			cascade_chunk,
-			transform,
-		));
-
 		let mut outer_splay = PlaneSplay::<OuterLeafM, OuterLeafS>::default();
 		outer_splay.material = self.outer_leaf_material.clone();
-		let outer_rule = JungleStorybookOuterCanopyRule {
-			leaf_splay: outer_splay,
-			leaf_radius_world: leaf_radius,
-		};
-		out.extend(BallRenderHelper::new(chain.clone(), outer_rule).spawn_render_items(
-			commands,
-			cascade_chunk,
-			transform,
-		));
-
-		let tuft_rule = JungleStorybookTuftRule::<OuterLeafM, OuterLeafS> {
-			tuft_world_scale: tuft_scale,
-			tuft_spawn_fraction: self.construction.tuft_spawn_fraction,
-			leaf_surface_noise: self.outer_leaf_surface_noise,
-			leaf_material: self.outer_leaf_material.clone(),
-			__marker: PhantomData,
-		};
-		out.extend(BallRenderHelper::new(chain.clone(), tuft_rule).spawn_render_items(
-			commands,
-			cascade_chunk,
-			transform,
-		));
-
-		let growth_rule = JungleStorybookGrowthRule::<BodyM, BodyS, FoliageM, FoliageS> {
+		let foliage_rule = JungleStorybookFoliageRule {
 			growth_spawn_fraction: self.construction.growth_spawn_fraction,
+			inner_ball,
+			outer_splay,
+			leaf_radius_world: leaf_radius,
 			body_noise: self.growth_body_noise,
 			foliage_noise: self.growth_foliage_noise,
 			body_material: self.growth_body_material.clone(),
 			foliage_material: self.growth_foliage_material.clone(),
 			__marker: PhantomData,
 		};
-		out.extend(BallRenderHelper::new(chain, growth_rule).spawn_render_items(
+		out.extend(BallRenderHelper::new(chain, foliage_rule).spawn_render_items(
 			commands,
 			cascade_chunk,
 			transform,

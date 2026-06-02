@@ -19,14 +19,20 @@ use crate::{BallStickChain, StorybookTreeChain};
 /// Jungle stalk base radius as a fraction of `H` (storybook [`DEFAULT_STALK_BASE_RADIUS_FRACTION`]).
 ///
 /// Used by [`Default`] and [`JungleStorybookTreeSbs::apply_jungle_preset`], not by flattened clap defaults.
-pub const JUNGLE_STALK_BASE_RADIUS_FRACTION: f32 = 0.055;
+pub const JUNGLE_STALK_BASE_RADIUS_FRACTION: f32 = 0.065;
 
 /// Limb girth at ring anchors relative to stalk base (storybook growth default `0.12`).
 ///
 /// Used by [`Default`] and [`JungleStorybookTreeSbs::apply_jungle_preset`], not by flattened clap defaults.
 pub const JUNGLE_BRANCH_BASE_RADIUS_FRACTION_OF_STALK: f32 = 0.30;
 
-/// Jungle variant: flattens [`StorybookTreeSbs`] with denser rings and wider branch fan-out.
+/// Unit-height spacing between stalk ring planes (storybook SBS default `0.10`).
+pub const JUNGLE_RING_SPACING_UNIT_HEIGHT: f32 = 0.14;
+
+/// Radial spokes per ring (storybook default `6`).
+pub const JUNGLE_ANCHORS_PER_RING: u32 = 5;
+
+/// Jungle variant: flattens [`StorybookTreeSbs`] with sparser rings and wider branch fan-out.
 #[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "clap", derive(clap::Args))]
 #[cfg_attr(feature = "clap", command(rename_all = "kebab-case"))]
@@ -48,26 +54,26 @@ impl Default for JungleStorybookTreeSbs {
 				},
 				rings: StorybookRingParams {
 					height_range: UnitRange::new(DEFAULT_FIRST_RING_UNIT_HEIGHT, 1.0),
-					spacing: 0.08,
-					anchors_per_ring: 7,
+					spacing: JUNGLE_RING_SPACING_UNIT_HEIGHT,
+					anchors_per_ring: JUNGLE_ANCHORS_PER_RING,
 				},
 				projection: StorybookProjectionParams {
 					max_projection_fraction: 0.58,
 					projection_end_fraction: DEFAULT_PROJECTION_END_FRACTION,
 				},
 				growth: StorybookGrowthParams {
-					branch_depth: 4,
+					branch_depth: 3,
 					angle_tolerance_degrees: 33.0,
 					ring_tilt_degrees: 4.0,
-					child_count_min: 2,
-					child_count_max: 3,
+					child_count_min: 1,
+					child_count_max: 2,
 					branch_base_radius_fraction_of_stalk:
 						JUNGLE_BRANCH_BASE_RADIUS_FRACTION_OF_STALK,
-					branch_radius_child_scale_lo: 0.82,
-					branch_radius_child_scale_hi: 0.90,
+					branch_radius_child_scale_lo: 0.72,
+					branch_radius_child_scale_hi: 0.80,
 				},
 				canopy: StorybookCanopyParams {
-					leaf_radius_fraction: 0.09,
+					leaf_radius_fraction: 0.12,
 					outer_foliage_distance_fraction: DEFAULT_OUTER_FOLIAGE_DISTANCE_FRACTION,
 				},
 				..StorybookTreeSbs::default()
@@ -173,7 +179,8 @@ mod tests {
 			proto.branch_base_radius_fraction_of_stalk
 				> story_proto.branch_base_radius_fraction_of_stalk
 		);
-		assert!(proto.anchors_per_ring >= story_proto.anchors_per_ring);
+		assert!(proto.ring_spacing_unit_height > story_proto.ring_spacing_unit_height);
+		assert!(proto.anchors_per_ring <= story_proto.anchors_per_ring);
 		Ok(())
 	}
 
@@ -184,8 +191,10 @@ mod tests {
 		let jungle_proto = jungle.storybook.to_proto();
 		let story_proto = story.to_proto();
 		assert!(jungle_proto.branch_angle_tolerance > story_proto.branch_angle_tolerance);
-		assert!(jungle_proto.child_count_min >= story_proto.child_count_min);
-		assert!(jungle_proto.anchors_per_ring >= story_proto.anchors_per_ring);
+		assert!(jungle_proto.ring_spacing_unit_height > story_proto.ring_spacing_unit_height);
+		assert!(jungle_proto.anchors_per_ring < story_proto.anchors_per_ring);
+		assert!(jungle_proto.branch_depth < story_proto.branch_depth);
+		assert!(jungle_proto.child_count_max <= story_proto.child_count_max);
 		assert!(
 			jungle_proto.stalk.stalk_base_radius > story_proto.stalk.stalk_base_radius,
 			"stalk {} vs {}",
@@ -197,8 +206,7 @@ mod tests {
 				> story_proto.branch_base_radius_fraction_of_stalk
 		);
 		let jungle_nodes = jungle.build_chain().nodes.len();
-		let story_nodes = story.build_chain().nodes.len();
-		assert!(jungle_nodes >= story_nodes, "{jungle_nodes} vs {story_nodes}");
+		assert!(jungle_nodes > 30, "nodes {jungle_nodes}");
 		Ok(())
 	}
 }
