@@ -126,6 +126,7 @@ impl Default for StorybookProjectionParams {
 #[cfg_attr(feature = "clap", derive(clap::Args))]
 #[cfg_attr(feature = "clap", command(rename_all = "kebab-case"))]
 pub struct StorybookGrowthParams {
+	/// Limb segment hops (`3`–`5`); must match a [`segment_fracs`](crate::segment_fracs) table ([`storybook_branch_depth`](crate::chain::storybook_tree::storybook_branch_depth) coerces out-of-range CLI values at anchor build).
 	#[cfg_attr(feature = "clap", arg(long, default_value_t = 4))]
 	pub branch_depth: usize,
 	#[cfg_attr(feature = "clap", arg(long, default_value_t = 26.0))]

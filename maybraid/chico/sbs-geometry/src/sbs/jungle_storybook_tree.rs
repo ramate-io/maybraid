@@ -1,14 +1,14 @@
-//! **Jungle Storybook Tree** SBS frontend ([#235](https://github.com/ramate-io/maybraid/issues/235)) — same geometry as Storybook with wider-branching defaults.
+//! **Jungle Storybook Tree** SBS frontend ([#235](https://github.com/ramate-io/maybraid/issues/235)).
+//!
+//! Wraps [`StorybookTreeSbs`] with jungle art-direction defaults. Flattened clap still exposes storybook
+//! field defaults; call [`JungleStorybookTreeSbs::apply_jungle_preset`] after CLI parse (see
+//! [`chico_sbs_trees::jungle_storybook_tree`](../../sbs-trees/src/jungle_storybook_tree.rs)).
 
 use std::ops::{Deref, DerefMut};
 
 use procedural_common::{NoiseParams, SetNoiseParams, UnitRange};
 
-use crate::anchors::storybook_tree::{
-	DEFAULT_FIRST_RING_UNIT_HEIGHT, DEFAULT_OUTER_FOLIAGE_DISTANCE_FRACTION,
-	DEFAULT_PROJECTION_END_FRACTION, DEFAULT_STALK_BASE_RADIUS_FRACTION,
-	DEFAULT_STALK_HEIGHT_FRACTION, DEFAULT_TREE_HEIGHT,
-};
+use crate::anchors::storybook_tree::DEFAULT_OUTER_FOLIAGE_DISTANCE_FRACTION;
 use crate::anchors::Anchors;
 use crate::sbs::storybook_tree::{
 	StorybookCanopyParams, StorybookGrowthParams, StorybookProjectionParams, StorybookRingParams,
@@ -16,23 +16,38 @@ use crate::sbs::storybook_tree::{
 };
 use crate::{BallStickChain, StorybookTreeChain};
 
-/// Jungle stalk base radius as a fraction of `H` (storybook [`DEFAULT_STALK_BASE_RADIUS_FRACTION`]).
-///
-/// Used by [`Default`] and [`JungleStorybookTreeSbs::apply_jungle_preset`], not by flattened clap defaults.
+// -----------------------------------------------------------------------------
+// Jungle preset constants (not applied by flattened clap — use `apply_jungle_preset`)
+// -----------------------------------------------------------------------------
+
+/// Stalk base radius as a fraction of total height `H`.
 pub const JUNGLE_STALK_BASE_RADIUS_FRACTION: f32 = 0.065;
 
-/// Limb girth at ring anchors relative to stalk base (storybook growth default `0.12`).
-///
-/// Used by [`Default`] and [`JungleStorybookTreeSbs::apply_jungle_preset`], not by flattened clap defaults.
+/// Limb radius at ring anchors as a fraction of stalk base radius (storybook: `0.12`).
 pub const JUNGLE_BRANCH_BASE_RADIUS_FRACTION_OF_STALK: f32 = 0.30;
 
-/// Unit-height spacing between stalk ring planes (storybook SBS default `0.10`).
+/// Lowest canopy ring as a unit-height fraction along the stalk (storybook: `0.30`).
+pub const JUNGLE_FIRST_RING_UNIT_HEIGHT: f32 = 0.40;
+
+/// Vertical spacing between ring planes as a fraction of stalk height (storybook SBS: `0.10`).
 pub const JUNGLE_RING_SPACING_UNIT_HEIGHT: f32 = 0.14;
 
-/// Radial spokes per ring (storybook default `6`).
+/// Radial spokes per ring (storybook: `6`).
 pub const JUNGLE_ANCHORS_PER_RING: u32 = 5;
 
-/// Jungle variant: flattens [`StorybookTreeSbs`] with sparser rings and wider branch fan-out.
+/// [`BranchOut`](crate::chain::BranchOut) hops per limb projection (storybook: `4`).
+pub const JUNGLE_BRANCH_DEPTH: usize = 5;
+
+/// Max limb projection length as a fraction of `H` (storybook: `0.50`).
+pub const JUNGLE_MAX_PROJECTION_FRACTION: f32 = 0.58;
+
+/// Wider branch fan-out than storybook (`26°` default).
+pub const JUNGLE_ANGLE_TOLERANCE_DEGREES: f32 = 33.0;
+
+/// World leaf radius for inner-ball / outer-splay canopy (not [`JungleGrowth`](../../tree-components) clusters).
+pub const JUNGLE_LEAF_RADIUS_FRACTION: f32 = 0.15;
+
+/// Flattens [`StorybookTreeSbs`] with the constants above.
 #[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "clap", derive(clap::Args))]
 #[cfg_attr(feature = "clap", command(rename_all = "kebab-case"))]
@@ -41,51 +56,83 @@ pub struct JungleStorybookTreeSbs {
 	pub storybook: StorybookTreeSbs,
 }
 
+fn jungle_storybook_fields(h: f32) -> StorybookTreeSbs {
+	StorybookTreeSbs {
+		scale: StorybookTreeScale {
+			tree_height: h,
+			stalk_height_fraction: crate::anchors::storybook_tree::DEFAULT_STALK_HEIGHT_FRACTION,
+			stalk_base_radius: Some(JUNGLE_STALK_BASE_RADIUS_FRACTION * h),
+			..StorybookTreeScale::default()
+		},
+		rings: StorybookRingParams {
+			height_range: UnitRange::new(JUNGLE_FIRST_RING_UNIT_HEIGHT, 1.0),
+			spacing: JUNGLE_RING_SPACING_UNIT_HEIGHT,
+			anchors_per_ring: JUNGLE_ANCHORS_PER_RING,
+		},
+		projection: StorybookProjectionParams {
+			max_projection_fraction: JUNGLE_MAX_PROJECTION_FRACTION,
+			projection_end_fraction:
+				crate::anchors::storybook_tree::DEFAULT_PROJECTION_END_FRACTION,
+		},
+		growth: StorybookGrowthParams {
+			branch_depth: JUNGLE_BRANCH_DEPTH,
+			branch_base_radius_fraction_of_stalk: JUNGLE_BRANCH_BASE_RADIUS_FRACTION_OF_STALK,
+			angle_tolerance_degrees: JUNGLE_ANGLE_TOLERANCE_DEGREES,
+			child_count_min: 1,
+			child_count_max: 2,
+			branch_radius_child_scale_lo: 0.72,
+			branch_radius_child_scale_hi: 0.80,
+			..StorybookGrowthParams::default()
+		},
+		canopy: StorybookCanopyParams {
+			leaf_radius_fraction: JUNGLE_LEAF_RADIUS_FRACTION,
+			outer_foliage_distance_fraction: DEFAULT_OUTER_FOLIAGE_DISTANCE_FRACTION,
+			..StorybookCanopyParams::default()
+		},
+		..StorybookTreeSbs::default()
+	}
+}
+
 impl Default for JungleStorybookTreeSbs {
 	fn default() -> Self {
-		let h = DEFAULT_TREE_HEIGHT;
 		Self {
-			storybook: StorybookTreeSbs {
-				scale: StorybookTreeScale {
-					tree_height: h,
-					stalk_height_fraction: DEFAULT_STALK_HEIGHT_FRACTION,
-					stalk_base_radius: Some(JUNGLE_STALK_BASE_RADIUS_FRACTION * h),
-					..StorybookTreeScale::default()
-				},
-				rings: StorybookRingParams {
-					height_range: UnitRange::new(DEFAULT_FIRST_RING_UNIT_HEIGHT, 1.0),
-					spacing: JUNGLE_RING_SPACING_UNIT_HEIGHT,
-					anchors_per_ring: JUNGLE_ANCHORS_PER_RING,
-				},
-				projection: StorybookProjectionParams {
-					max_projection_fraction: 0.58,
-					projection_end_fraction: DEFAULT_PROJECTION_END_FRACTION,
-				},
-				growth: StorybookGrowthParams {
-					branch_depth: 3,
-					angle_tolerance_degrees: 33.0,
-					ring_tilt_degrees: 4.0,
-					child_count_min: 1,
-					child_count_max: 2,
-					branch_base_radius_fraction_of_stalk:
-						JUNGLE_BRANCH_BASE_RADIUS_FRACTION_OF_STALK,
-					branch_radius_child_scale_lo: 0.72,
-					branch_radius_child_scale_hi: 0.80,
-				},
-				canopy: StorybookCanopyParams {
-					leaf_radius_fraction: 0.12,
-					outer_foliage_distance_fraction: DEFAULT_OUTER_FOLIAGE_DISTANCE_FRACTION,
-				},
-				..StorybookTreeSbs::default()
-			},
+			storybook: jungle_storybook_fields(crate::anchors::storybook_tree::DEFAULT_TREE_HEIGHT),
 		}
 	}
 }
 
+/// Copy `jungle` field values onto `current` when `current` still matches storybook defaults.
 fn apply_if_storybook_default<T: Clone + PartialEq>(current: &mut T, story: &T, jungle: &T) {
 	if *current == *story {
 		*current = jungle.clone();
 	}
+}
+
+fn apply_jungle_ring_preset(
+	current: &mut StorybookRingParams,
+	story: &StorybookRingParams,
+	jungle: &StorybookRingParams,
+) {
+	if current.height_range == story.height_range {
+		current.height_range = jungle.height_range;
+	} else {
+		apply_if_storybook_default(
+			&mut current.height_range.start,
+			&story.height_range.start,
+			&jungle.height_range.start,
+		);
+		apply_if_storybook_default(
+			&mut current.height_range.end,
+			&story.height_range.end,
+			&jungle.height_range.end,
+		);
+	}
+	apply_if_storybook_default(&mut current.spacing, &story.spacing, &jungle.spacing);
+	apply_if_storybook_default(
+		&mut current.anchors_per_ring,
+		&story.anchors_per_ring,
+		&jungle.anchors_per_ring,
+	);
 }
 
 impl Deref for JungleStorybookTreeSbs {
@@ -103,18 +150,17 @@ impl DerefMut for JungleStorybookTreeSbs {
 }
 
 impl JungleStorybookTreeSbs {
-	/// Reapply jungle art-direction on a flattened [`StorybookTreeSbs`] (e.g. after CLI parse).
+	/// Reapply jungle preset after flattened clap parse.
 	///
-	/// Clap fills nested storybook fields with storybook defaults; this restores jungle preset values
-	/// for fields that still match the storybook default so explicit CLI overrides are kept.
+	/// Only fields that still equal [`StorybookTreeSbs::default`] are overwritten, so explicit CLI
+	/// overrides (e.g. `--tree-height`) are preserved.
 	pub fn apply_jungle_preset(&mut self) {
-		let preset = Self::default();
+		let jungle = Self::default().storybook;
 		let story = StorybookTreeSbs::default();
 		let s = &mut self.storybook;
-		let p = &preset.storybook;
 		let h = s.scale.tree_height.max(1e-6);
 
-		let story_stalk = DEFAULT_STALK_BASE_RADIUS_FRACTION * h;
+		let story_stalk = crate::anchors::storybook_tree::DEFAULT_STALK_BASE_RADIUS_FRACTION * h;
 		let jungle_stalk = JUNGLE_STALK_BASE_RADIUS_FRACTION * h;
 		match s.scale.stalk_base_radius {
 			None => s.scale.stalk_base_radius = Some(jungle_stalk),
@@ -124,10 +170,10 @@ impl JungleStorybookTreeSbs {
 			_ => {}
 		}
 
-		apply_if_storybook_default(&mut s.rings, &story.rings, &p.rings);
-		apply_if_storybook_default(&mut s.projection, &story.projection, &p.projection);
-		apply_if_storybook_default(&mut s.growth, &story.growth, &p.growth);
-		apply_if_storybook_default(&mut s.canopy, &story.canopy, &p.canopy);
+		apply_jungle_ring_preset(&mut s.rings, &story.rings, &jungle.rings);
+		apply_if_storybook_default(&mut s.projection, &story.projection, &jungle.projection);
+		apply_if_storybook_default(&mut s.growth, &story.growth, &jungle.growth);
+		apply_if_storybook_default(&mut s.canopy, &story.canopy, &jungle.canopy);
 	}
 
 	pub fn height(&self) -> f32 {
@@ -161,6 +207,20 @@ mod tests {
 	use super::*;
 	use anyhow::Result;
 
+	fn assert_jungle_preset(
+		proto: &crate::StorybookTreeProtoAnchors,
+		story: &crate::StorybookTreeProtoAnchors,
+	) {
+		assert!(proto.stalk.stalk_base_radius > story.stalk.stalk_base_radius);
+		assert!(
+			proto.branch_base_radius_fraction_of_stalk > story.branch_base_radius_fraction_of_stalk
+		);
+		assert!(proto.first_ring_unit_height > story.first_ring_unit_height);
+		assert!(proto.ring_spacing_unit_height > story.ring_spacing_unit_height);
+		assert!(proto.anchors_per_ring <= story.anchors_per_ring);
+		assert_eq!(proto.branch_depth, JUNGLE_BRANCH_DEPTH);
+	}
+
 	#[test]
 	fn default_builds_chain() -> Result<()> {
 		let chain = JungleStorybookTreeSbs::default().build_chain();
@@ -172,41 +232,25 @@ mod tests {
 	fn apply_jungle_preset_after_storybook_cli_defaults() -> Result<()> {
 		let mut geometry = JungleStorybookTreeSbs { storybook: StorybookTreeSbs::default() };
 		geometry.apply_jungle_preset();
-		let proto = geometry.storybook.to_proto();
-		let story_proto = StorybookTreeSbs::default().to_proto();
-		assert!(proto.stalk.stalk_base_radius > story_proto.stalk.stalk_base_radius);
+		let story = StorybookTreeSbs::default().to_proto();
+		assert_jungle_preset(&geometry.storybook.to_proto(), &story);
 		assert!(
-			proto.branch_base_radius_fraction_of_stalk
-				> story_proto.branch_base_radius_fraction_of_stalk
+			(geometry.storybook.canopy.leaf_radius_fraction - JUNGLE_LEAF_RADIUS_FRACTION).abs()
+				< 1e-6
 		);
-		assert!(proto.ring_spacing_unit_height > story_proto.ring_spacing_unit_height);
-		assert!(proto.anchors_per_ring <= story_proto.anchors_per_ring);
 		Ok(())
 	}
 
 	#[test]
-	fn jungle_has_wider_branching_than_storybook() -> Result<()> {
+	fn jungle_differs_from_storybook() -> Result<()> {
 		let jungle = JungleStorybookTreeSbs::default();
 		let story = StorybookTreeSbs::default();
-		let jungle_proto = jungle.storybook.to_proto();
-		let story_proto = story.to_proto();
-		assert!(jungle_proto.branch_angle_tolerance > story_proto.branch_angle_tolerance);
-		assert!(jungle_proto.ring_spacing_unit_height > story_proto.ring_spacing_unit_height);
-		assert!(jungle_proto.anchors_per_ring < story_proto.anchors_per_ring);
-		assert!(jungle_proto.branch_depth < story_proto.branch_depth);
-		assert!(jungle_proto.child_count_max <= story_proto.child_count_max);
+		assert_jungle_preset(&jungle.storybook.to_proto(), &story.to_proto());
 		assert!(
-			jungle_proto.stalk.stalk_base_radius > story_proto.stalk.stalk_base_radius,
-			"stalk {} vs {}",
-			jungle_proto.stalk.stalk_base_radius,
-			story_proto.stalk.stalk_base_radius
+			(jungle.storybook.canopy.leaf_radius_fraction - JUNGLE_LEAF_RADIUS_FRACTION).abs()
+				< 1e-6
 		);
-		assert!(
-			jungle_proto.branch_base_radius_fraction_of_stalk
-				> story_proto.branch_base_radius_fraction_of_stalk
-		);
-		let jungle_nodes = jungle.build_chain().nodes.len();
-		assert!(jungle_nodes > 30, "nodes {jungle_nodes}");
+		assert!(jungle.build_chain().nodes.len() > 30);
 		Ok(())
 	}
 }

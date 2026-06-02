@@ -1,4 +1,8 @@
-//! Per-node foliage for the Jungle Storybook Tree ([#235](https://github.com/ramate-io/maybraid/issues/235)).
+//! Per-node foliage payload for the Jungle Storybook Tree ([#235](https://github.com/ramate-io/maybraid/issues/235)).
+//!
+//! [`JungleStorybookCanopyFoliage`] is the [`RenderItem`] stored on each qualifying
+//! [`BallStickNode`](chico_sbs_geometry::BallStickNode). Allocation logic lives in
+//! [`chico_sbs_trees::jungle_storybook_tree::canopy`](../../sbs-trees/src/jungle_storybook_tree/canopy.rs).
 
 use bevy::prelude::*;
 use chico_ball_components::chico_ball::ChicoBall;
@@ -7,7 +11,7 @@ use render_item::{CascadeChunk, RenderItem};
 
 use crate::JungleGrowth;
 
-/// Exactly one mesh cluster per canopy graph node: inner ball, outer splay, or jungle growth.
+/// Exactly one mesh cluster per canopy graph node (mutually exclusive variants).
 #[derive(Clone)]
 pub enum JungleStorybookCanopyFoliage<InnerM, InnerS, OuterM, OuterS, BodyM, BodyS, FoliageM, FoliageS>
 where
@@ -20,8 +24,11 @@ where
 	FoliageM: Material,
 	FoliageS: Clone + Into<MeshMaterial3d<FoliageM>>,
 {
+	/// Noisy inner-canopy sphere (lower ring-u, non-terminal limbs).
 	InnerBall(ChicoBall<InnerM, InnerS>),
+	/// Disc splay at limb tips and far along projections (outer shell).
 	OuterSplay(PlaneSplay<OuterM, OuterS>),
+	/// Epiphyte assembly (inner ball + frond crown + buddha-hand); replaces canopy meshes on that node.
 	Growth(JungleGrowth<BodyM, BodyS, FoliageM, FoliageS>),
 }
 

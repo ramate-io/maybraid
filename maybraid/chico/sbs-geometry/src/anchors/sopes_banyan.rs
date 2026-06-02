@@ -18,9 +18,7 @@ use super::stalk_perturbation::{
 	AnchorPerturbation, HasStrictStalk, PerturbAnchor, StalkPerturbation, perturb_branch_out,
 	perturb_node,
 };
-use crate::chain::sopes_banyan::{
-	EndDescender, EndFlairUp, StartDescender, StartFlairUp, SopesBanyanChain, SopesBanyanPhase,
-};
+use crate::chain::sopes_banyan::{SopesBanyanChain, SopesBanyanPhase};
 use super::strict_stalk::StrictStalk;
 use super::Anchors;
 use procedural_common::{NoiseConfig, NoiseParams};

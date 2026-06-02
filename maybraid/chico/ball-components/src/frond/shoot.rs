@@ -7,7 +7,9 @@ use super::spine::{frame_at, spine_at};
 
 const MIN_RADIUS: f32 = 1e-6;
 
-/// Prism tube (`sides` = 4 or 6) following the spine; radius tapers toward the tip.
+/// Prism tube following the spine; radius tapers toward the tip.
+///
+/// `sides` is clamped to `3..=8` so ring stitching stays valid (callers normally pass `4` or `6`).
 pub fn append_shoot_tube(
 	positions: &mut Vec<[f32; 3]>,
 	indices: &mut Vec<u32>,

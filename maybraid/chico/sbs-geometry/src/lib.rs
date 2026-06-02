@@ -10,7 +10,10 @@ pub use chain::arch_trunk::{
 };
 pub use chain::date_palm::{DatePalmChain, DatePalmPhase};
 pub use chain::waialea_palm::{WaialeaPalmChain, WaialeaPalmPhase};
-pub use chain::storybook_tree::{segment_fracs, StorybookTreeChain, StorybookTreePhase};
+pub use chain::storybook_tree::{
+	segment_fracs, storybook_branch_depth, StorybookTreeChain, StorybookTreePhase,
+	STORYBOOK_BRANCH_DEPTH_MAX, STORYBOOK_BRANCH_DEPTH_MIN,
+};
 pub use chain::liams_conifer::{LiamsConiferChain, LiamsConiferPhase};
 pub use chain::sopes_banyan::{SopesBanyanChain, SopesBanyanPhase};
 pub use chain::{

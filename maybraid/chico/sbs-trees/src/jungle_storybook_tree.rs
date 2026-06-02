@@ -39,9 +39,11 @@ pub type JungleStorybookTreeStd = JungleStorybookTree<
 	SkippedFoliageMeshMaterial<StandardMaterial>,
 >;
 
+/// Render-time knobs not encoded in SBS geometry.
 #[derive(Clone, Args)]
 #[command(rename_all = "kebab-case")]
 pub struct JungleStorybookConstructionParams {
+	/// Share of foliage-eligible nodes that spawn [`JungleGrowth`](chico_tree_components::JungleGrowth) instead of inner/outer canopy meshes.
 	#[arg(long, default_value_t = 0.65)]
 	pub growth_spawn_fraction: f32,
 }
@@ -67,7 +69,7 @@ where
 	FoliageM: Material,
 	FoliageS: Clone + Into<MeshMaterial3d<FoliageM>> + Args,
 {
-	/// Flattened storybook SBS (CLI uses storybook defaults). [`Self::geometry_for_render`] applies the jungle preset.
+	/// Flattened [`StorybookTreeSbs`] (clap defaults are storybook, not jungle). [`Self::geometry_for_render`] calls [`JungleStorybookTreeSbs::apply_jungle_preset`].
 	#[command(flatten, next_help_heading = "Geometry")]
 	pub geometry: JungleStorybookTreeSbs,
 
@@ -185,6 +187,7 @@ where
 	FoliageM: Material,
 	FoliageS: Clone + Into<MeshMaterial3d<FoliageM>> + Args,
 {
+	/// SBS snapshot with jungle preset applied (safe to call after CLI parse).
 	pub fn geometry_for_render(&self) -> JungleStorybookTreeSbs {
 		let mut geometry = self.geometry.clone();
 		geometry.apply_jungle_preset();

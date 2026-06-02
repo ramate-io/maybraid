@@ -27,6 +27,11 @@ use super::{BranchOut, DepthBudget, Hysteresis};
 /// RFC segment fractions of total projection length (sum to 1.0).
 pub const SEGMENT_FRACS: [f32; 3] = [0.70, 0.15, 0.15];
 
+/// Coerce proto/SBS `branch_depth` to `1..=[`SEGMENT_FRACS`].len()` (RFC default `3`).
+pub fn liams_conifer_branch_depth(depth: usize) -> usize {
+	depth.clamp(1, SEGMENT_FRACS.len())
+}
+
 #[derive(Clone)]
 pub enum LiamsConiferPhase {
 	Stalk(PointToPoint),
@@ -65,7 +70,7 @@ impl LiamsConiferChain {
 
 	/// Maps [`DepthBudget::remaining`] to a [`SEGMENT_FRACS`] entry (`remaining == depth` → first segment).
 	fn segment_fraction(&self, remaining: usize) -> f32 {
-		let depth = self.branch_depth.max(1).min(SEGMENT_FRACS.len());
+		let depth = liams_conifer_branch_depth(self.branch_depth);
 		let seg_idx = depth.saturating_sub(remaining).min(SEGMENT_FRACS.len() - 1);
 		SEGMENT_FRACS[seg_idx]
 	}

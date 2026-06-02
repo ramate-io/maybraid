@@ -6,16 +6,17 @@ use bevy_math::Vec3;
 use procedural_common::NoiseConfig;
 
 use super::stalk_perturbation::{
-	AnchorPerturbation, HasStrictStalk, PerturbAnchor, StalkPerturbation, perturb_branch_out,
-	perturb_node,
+	perturb_branch_out, perturb_node, AnchorPerturbation, HasStrictStalk, PerturbAnchor,
+	StalkPerturbation,
 };
-use crate::chain::point_to_point::PointToPoint;
 use super::strict_stalk::StrictStalk;
 use super::Anchors;
-use procedural_common::NoiseParams;
-use crate::chain::storybook_tree::{segment_fracs, StorybookTreeChain, StorybookTreePhase};
+use crate::chain::storybook_tree::{
+	segment_fracs, storybook_branch_depth, StorybookTreeChain, StorybookTreePhase,
+};
 use crate::chain::{BranchOut, DepthBudget};
 use crate::BallStickNode;
+use procedural_common::NoiseParams;
 
 /// Default total tree height `H` for playground Storybook trees.
 pub const DEFAULT_TREE_HEIGHT: f32 = 18.0;
@@ -77,6 +78,7 @@ pub struct StorybookTreeProtoAnchors {
 	pub ring_tilt_degrees: f32,
 	pub branch_angle_tolerance: f32,
 	pub bias_blend: f32,
+	/// Limb hop count; coerced to `3..=5` via [`storybook_branch_depth`](crate::chain::storybook_tree::storybook_branch_depth) when building seeds (must match [`segment_fracs`](crate::segment_fracs)).
 	pub branch_depth: usize,
 	pub child_count_min: u32,
 	pub child_count_max: u32,
@@ -140,6 +142,7 @@ impl StorybookTreeProtoAnchors {
 		dome_projection_length(ell_max, self.projection_end_fraction, u)
 	}
 
+	/// Limb radius at ring anchors; floored so degenerate SBS fractions still produce visible sticks.
 	fn limb_base_radius(&self) -> f32 {
 		let base = self.stalk.stalk_base_radius.max(1e-4);
 		(base * self.branch_base_radius_fraction_of_stalk).max(0.02)
@@ -150,7 +153,7 @@ impl StorybookTreeProtoAnchors {
 		let k = self.anchors_per_ring.max(1);
 		let radial_eps = (self.stalk.stalk_base_radius * 0.05).max(1e-4);
 		let limb_r = self.limb_base_radius();
-		let depth = self.branch_depth.clamp(3, 5);
+		let depth = storybook_branch_depth(self.branch_depth);
 		let fracs = segment_fracs(depth);
 
 		for z_frac in self.ring_height_fractions() {
@@ -171,7 +174,8 @@ impl StorybookTreeProtoAnchors {
 					.with_bias_blend(self.bias_blend)
 					.with_ray_degrees_of_freedom(self.branch_angle_tolerance)
 					.with_child_count(
-						self.child_count_min as usize..(self.child_count_max as usize).saturating_add(1),
+						self.child_count_min as usize
+							..(self.child_count_max as usize).saturating_add(1),
 					)
 					.with_radius_range(limb_r..limb_r)
 					.with_radius_range_child_scale(self.branch_radius_child_scale)
@@ -184,10 +188,7 @@ impl StorybookTreeProtoAnchors {
 					0.0,
 					u,
 					self.outer_foliage_distance_fraction,
-					StorybookTreePhase::BranchOut(DepthBudget {
-						inner: branch,
-						remaining: depth,
-					}),
+					StorybookTreePhase::BranchOut(DepthBudget { inner: branch, remaining: depth }),
 				));
 			}
 		}
@@ -337,11 +338,24 @@ mod tests {
 	}
 
 	#[test]
+	fn branch_depth_coerced_at_hysteresis_seed() {
+		let mut proto = StorybookTreeProtoAnchors::default();
+		proto.branch_depth = 99;
+		let seeds = proto.hysteresis_seeds(NoiseConfig::new(NoiseParams::default()));
+		let branch = seeds
+			.iter()
+			.find(|s| matches!(s.phase, StorybookTreePhase::BranchOut(_)))
+			.expect("branch seed");
+		assert_eq!(branch.branch_depth, 5);
+		if let StorybookTreePhase::BranchOut(b) = &branch.phase {
+			assert_eq!(b.remaining, 5);
+		}
+	}
+
+	#[test]
 	fn anchors_count_matches_rings_times_spokes_plus_stalk() {
-		let proto = StorybookTreeProtoAnchors {
-			ring_spacing_unit_height: 0.20,
-			..Default::default()
-		};
+		let proto =
+			StorybookTreeProtoAnchors { ring_spacing_unit_height: 0.20, ..Default::default() };
 		let ring_count = proto.ring_height_fractions().len();
 		let spokes = proto.anchors_per_ring as usize;
 		let a = StorybookTreeAnchors::new(proto);

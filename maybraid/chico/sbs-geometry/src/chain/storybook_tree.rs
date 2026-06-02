@@ -1,4 +1,9 @@
 //! Storybook Tree canopy as a variable-depth [`BranchOut`] phase machine ([#230](https://github.com/ramate-io/maybraid/issues/230)).
+//!
+//! Limb hop count is not a free parameter: [`segment_fracs`] only defines length tables for
+//! [`STORYBOOK_BRANCH_DEPTH_MIN`]..=[`STORYBOOK_BRANCH_DEPTH_MAX`]. Coerce out-of-range values with
+//! [`storybook_branch_depth`] at the anchor/SBS boundary so [`DepthBudget::remaining`] and
+//! [`StorybookTreeChain::branch_depth`] stay aligned.
 
 use procedural_common::{NoiseConfig, NoiseParams, SetNoiseParams};
 
@@ -7,9 +12,19 @@ use crate::BallStickNode;
 use super::point_to_point::PointToPoint;
 use super::{BranchOut, DepthBudget, Hysteresis};
 
-/// RFC segment fractions of total projection length (sum to 1.0) for `3..=5` hops.
+/// Minimum [`StorybookTreeChain::branch_depth`] / [`DepthBudget::remaining`] at a ring seed (RFC).
+pub const STORYBOOK_BRANCH_DEPTH_MIN: usize = 3;
+/// Maximum supported hops; [`segment_fracs`] has no table beyond this.
+pub const STORYBOOK_BRANCH_DEPTH_MAX: usize = 5;
+
+/// Coerce CLI/proto `branch_depth` to a hop count with a matching [`segment_fracs`] row.
+pub fn storybook_branch_depth(depth: usize) -> usize {
+	depth.clamp(STORYBOOK_BRANCH_DEPTH_MIN, STORYBOOK_BRANCH_DEPTH_MAX)
+}
+
+/// RFC segment fractions of total projection length (sum to 1.0) for [`storybook_branch_depth`].
 pub fn segment_fracs(depth: usize) -> Vec<f32> {
-	match depth.clamp(3, 5) {
+	match storybook_branch_depth(depth) {
 		3 => vec![0.50, 0.30, 0.20],
 		4 => vec![0.50, 0.22, 0.18, 0.10],
 		_ => vec![0.42, 0.22, 0.18, 0.10, 0.08],
@@ -51,7 +66,7 @@ impl StorybookTreeChain {
 		Self {
 			noise,
 			projection_length,
-			branch_depth: branch_depth.clamp(3, 5),
+			branch_depth: storybook_branch_depth(branch_depth),
 			distance_from_anchor,
 			ring_u,
 			outer_foliage_distance_fraction,
@@ -173,6 +188,14 @@ mod tests {
 	use super::*;
 	use bevy_math::Vec3;
 	use procedural_common::NoiseParams;
+
+	#[test]
+	fn storybook_branch_depth_coerces_out_of_range() -> anyhow::Result<()> {
+		assert_eq!(storybook_branch_depth(0), STORYBOOK_BRANCH_DEPTH_MIN);
+		assert_eq!(storybook_branch_depth(4), 4);
+		assert_eq!(storybook_branch_depth(99), STORYBOOK_BRANCH_DEPTH_MAX);
+		Ok(())
+	}
 
 	#[test]
 	fn segment_fracs_sum_to_one() -> anyhow::Result<()> {
