@@ -3,7 +3,9 @@
 use bevy::prelude::*;
 use chico_ball_components::chico_ball::ChicoBall;
 use chico_ball_components::plane_splay::PlaneSplay;
-use chico_sbs_geometry::chain::storybook_tree::{is_graph_terminal, StorybookTreeChain, StorybookTreePhase};
+use chico_sbs_geometry::chain::storybook_tree::{
+	is_graph_terminal, StorybookTreeChain, StorybookTreePhase,
+};
 use chico_sbs_geometry::render::ball::BallRenderRule;
 use chico_sbs_geometry::{BallStickChain, BallStickNode};
 
@@ -19,9 +21,7 @@ pub(crate) fn should_allocate_jungle_foliage(
 	if !matches!(hysteresis.phase, StorybookTreePhase::BranchOut(_)) {
 		return false;
 	}
-	hysteresis.ring_u > 0.40
-		|| is_graph_terminal(chain, node_idx)
-		|| hysteresis.branch_order() > 1
+	hysteresis.ring_u > 0.40 || is_graph_terminal(chain, node_idx) || hysteresis.branch_order() > 1
 }
 
 pub(crate) fn prefers_outer_splay(
@@ -30,8 +30,7 @@ pub(crate) fn prefers_outer_splay(
 	node_idx: usize,
 ) -> bool {
 	let is_terminal = is_graph_terminal(chain, node_idx);
-	let outer = hysteresis.distance_from_anchor
-		> 0.55 * hysteresis.projection_length.max(1e-6);
+	let outer = hysteresis.distance_from_anchor > 0.55 * hysteresis.projection_length.max(1e-6);
 	is_terminal || outer
 }
 
@@ -92,6 +91,8 @@ where
 		hysteresis: &StorybookTreeChain,
 		chain: &BallStickChain<StorybookTreeChain>,
 	) -> Option<(PlaneSplay<LeafM, LeafS>, f32)> {
+		return None;
+
 		if !should_allocate_jungle_foliage(hysteresis, chain, node_idx) {
 			return None;
 		}

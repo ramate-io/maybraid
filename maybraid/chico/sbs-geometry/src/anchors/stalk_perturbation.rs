@@ -8,6 +8,7 @@ use procedural_common::{NoiseConfig, NoiseParams};
 use crate::anchors::strict_stalk::StrictStalk;
 use crate::anchors::Anchors;
 use crate::chain::point_to_point::PointToPoint;
+use crate::chain::BranchOut;
 use crate::{BallStickNode, Hysteresis};
 
 /// Provides the stalk reference used to identify the unperturbed base anchor.
@@ -133,6 +134,26 @@ pub fn perturb_node(mut node: BallStickNode, perturbation: AnchorPerturbation) -
 	node.position += Vec3::Y * perturbation.vertical_offset;
 	node.radius = (node.radius + perturbation.radius_offset).max(1e-4);
 	node
+}
+
+/// Apply vertical, angular, and radius perturbation to a [`BranchOut`] limb profile.
+pub fn perturb_branch_out(mut branch: BranchOut, perturbation: AnchorPerturbation) -> BranchOut {
+	branch.node = perturb_node(branch.node, perturbation);
+	branch.incoming_ray = crate::chain::degree_range::perturb_direction(
+		branch.incoming_ray,
+		perturbation.angular_scale,
+		perturbation.angular_u,
+		perturbation.angular_v,
+	);
+	branch.bias_ray = crate::chain::degree_range::perturb_direction(
+		branch.bias_ray,
+		perturbation.angular_scale,
+		perturbation.angular_u,
+		perturbation.angular_v,
+	);
+	branch.radius_range = (branch.radius_range.start + perturbation.radius_offset).max(1e-4)
+		..(branch.radius_range.end + perturbation.radius_offset).max(1e-4);
+	branch
 }
 
 fn sample_range(

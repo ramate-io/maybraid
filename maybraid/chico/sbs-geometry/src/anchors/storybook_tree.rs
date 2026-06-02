@@ -5,7 +5,11 @@ use std::f32::consts::TAU;
 use bevy_math::Vec3;
 use procedural_common::NoiseConfig;
 
-use super::stalk_perturbation::{HasStrictStalk, StalkPerturbation};
+use super::stalk_perturbation::{
+	AnchorPerturbation, HasStrictStalk, PerturbAnchor, StalkPerturbation, perturb_branch_out,
+	perturb_node,
+};
+use crate::chain::point_to_point::PointToPoint;
 use super::strict_stalk::StrictStalk;
 use super::Anchors;
 use procedural_common::NoiseParams;
@@ -279,6 +283,22 @@ impl Anchors<StorybookTreeChain> for StorybookTreeAnchors {
 impl Anchors<StorybookTreeChain> for StorybookTreeProtoAnchors {
 	fn anchors(&self) -> Vec<StorybookTreeChain> {
 		self.hysteresis_seeds(NoiseConfig::new(procedural_common::NoiseParams::default()))
+	}
+}
+
+impl PerturbAnchor for StorybookTreeChain {
+	fn perturb_anchor(mut self, perturbation: AnchorPerturbation) -> Self {
+		self.phase = match self.phase {
+			StorybookTreePhase::Stalk(mut p) => {
+				p.start = perturb_node(p.start, perturbation);
+				StorybookTreePhase::Stalk(p)
+			}
+			StorybookTreePhase::BranchOut(mut b) => {
+				b.inner = perturb_branch_out(b.inner, perturbation);
+				StorybookTreePhase::BranchOut(b)
+			}
+		};
+		self
 	}
 }
 

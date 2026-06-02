@@ -14,12 +14,17 @@ use std::f32::consts::TAU;
 
 use bevy_math::Vec3;
 
-use super::stalk_perturbation::{HasStrictStalk, StalkPerturbation};
+use super::stalk_perturbation::{
+	AnchorPerturbation, HasStrictStalk, PerturbAnchor, StalkPerturbation, perturb_branch_out,
+	perturb_node,
+};
+use crate::chain::sopes_banyan::{
+	EndDescender, EndFlairUp, StartDescender, StartFlairUp, SopesBanyanChain, SopesBanyanPhase,
+};
 use super::strict_stalk::StrictStalk;
 use super::Anchors;
 use procedural_common::{NoiseConfig, NoiseParams};
 
-use crate::chain::sopes_banyan::{SopesBanyanChain, SopesBanyanPhase};
 use crate::chain::BranchOut;
 use crate::BallStickNode;
 use crate::DepthBudget;
@@ -276,6 +281,38 @@ impl Anchors<SopesBanyanChain> for SopesBanyanAnchors {
 			self.proto().stalk.stalk_height,
 			self.proto().descender_threshold,
 		)
+	}
+}
+
+impl PerturbAnchor for SopesBanyanChain {
+	fn perturb_anchor(mut self, perturbation: AnchorPerturbation) -> Self {
+		self.phase = match self.phase {
+			SopesBanyanPhase::Stalk(mut p) => {
+				p.start = perturb_node(p.start, perturbation);
+				SopesBanyanPhase::Stalk(p)
+			}
+			SopesBanyanPhase::BranchOut(mut b) => {
+				b.inner = perturb_branch_out(b.inner, perturbation);
+				SopesBanyanPhase::BranchOut(b)
+			}
+			SopesBanyanPhase::StartFlairUp(mut s) => {
+				s.projection = perturb_branch_out(s.projection, perturbation);
+				SopesBanyanPhase::StartFlairUp(s)
+			}
+			SopesBanyanPhase::EndFlairUp(mut e) => {
+				e.node = perturb_node(e.node, perturbation);
+				SopesBanyanPhase::EndFlairUp(e)
+			}
+			SopesBanyanPhase::StartDescender(mut s) => {
+				s.projection = perturb_branch_out(s.projection, perturbation);
+				SopesBanyanPhase::StartDescender(s)
+			}
+			SopesBanyanPhase::EndDescender(mut e) => {
+				e.node = perturb_node(e.node, perturbation);
+				SopesBanyanPhase::EndDescender(e)
+			}
+		};
+		self
 	}
 }
 

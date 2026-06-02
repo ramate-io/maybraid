@@ -14,7 +14,11 @@ use std::f32::consts::TAU;
 
 use bevy_math::Vec3;
 
-use super::stalk_perturbation::{HasStrictStalk, StalkPerturbation};
+use super::stalk_perturbation::{
+	AnchorPerturbation, HasStrictStalk, PerturbAnchor, StalkPerturbation, perturb_branch_out,
+	perturb_node,
+};
+use crate::chain::point_to_point::PointToPoint;
 use super::strict_stalk::StrictStalk;
 use super::Anchors;
 use procedural_common::{NoiseConfig, NoiseParams};
@@ -261,6 +265,22 @@ impl Default for LiamsConiferAnchors {
 impl Anchors<LiamsConiferChain> for LiamsConiferAnchors {
 	fn anchors(&self) -> Vec<LiamsConiferChain> {
 		self.hysteresis_seeds(NoiseConfig::new(NoiseParams::default()))
+	}
+}
+
+impl PerturbAnchor for LiamsConiferChain {
+	fn perturb_anchor(mut self, perturbation: AnchorPerturbation) -> Self {
+		self.phase = match self.phase {
+			LiamsConiferPhase::Stalk(mut p) => {
+				p.start = perturb_node(p.start, perturbation);
+				LiamsConiferPhase::Stalk(p)
+			}
+			LiamsConiferPhase::BranchOut(mut b) => {
+				b.inner = perturb_branch_out(b.inner, perturbation);
+				LiamsConiferPhase::BranchOut(b)
+			}
+		};
+		self
 	}
 }
 

@@ -4,14 +4,16 @@ use std::marker::PhantomData;
 
 use bevy::prelude::*;
 use chico_sbs_geometry::chain::storybook_tree::StorybookTreeChain;
+use chico_sbs_geometry::render::ball::BallRenderRule;
 use chico_sbs_geometry::render::mix_seed::mix_seed_below_fraction;
 use chico_sbs_geometry::{BallStickChain, BallStickNode};
 use chico_tree_components::{JungleGrowth, JungleGrowthShape};
 use procedural_common::NoiseParams;
 
-use crate::node_growth::NodeGrowthRule;
-
 use super::canopy::should_allocate_jungle_foliage;
+
+/// Spawn transform scale relative to the graph node's branch radius.
+pub const JUNGLE_GROWTH_RADIUS_SCALE: f32 = 3.0;
 
 #[derive(Clone)]
 pub(crate) struct JungleStorybookGrowthRule<BodyM, BodyS, FoliageM, FoliageS>
@@ -31,7 +33,7 @@ where
 }
 
 impl<BodyM, BodyS, FoliageM, FoliageS>
-	NodeGrowthRule<JungleGrowth<BodyM, BodyS, FoliageM, FoliageS>, StorybookTreeChain>
+	BallRenderRule<JungleGrowth<BodyM, BodyS, FoliageM, FoliageS>, StorybookTreeChain>
 	for JungleStorybookGrowthRule<BodyM, BodyS, FoliageM, FoliageS>
 where
 	BodyM: Material + Send + Sync + 'static,
@@ -39,14 +41,14 @@ where
 	FoliageM: Material + Send + Sync + 'static,
 	FoliageS: Clone + Into<MeshMaterial3d<FoliageM>> + Send + Sync + 'static + Default,
 {
-	fn growth_at_node(
+	fn ball_render_item_for(
 		&self,
 		node_idx: usize,
 		node: &BallStickNode,
 		hysteresis: &StorybookTreeChain,
 		chain: &BallStickChain<StorybookTreeChain>,
-	) -> Option<(JungleGrowth<BodyM, BodyS, FoliageM, FoliageS>, Transform)> {
-		/*if !should_allocate_jungle_foliage(hysteresis, chain, node_idx) {
+	) -> Option<(JungleGrowth<BodyM, BodyS, FoliageM, FoliageS>, f32)> {
+		if !should_allocate_jungle_foliage(hysteresis, chain, node_idx) {
 			return None;
 		}
 		if hysteresis.ring_u < 0.28 {
@@ -54,7 +56,7 @@ where
 		}
 		if !mix_seed_below_fraction(node_idx, node.position, self.growth_spawn_fraction) {
 			return None;
-		}*/
+		}
 
 		let mut shape = self.shape.clone();
 		shape.seed = (node_idx as i32)
@@ -67,9 +69,6 @@ where
 		growth.foliage_noise = self.foliage_noise;
 		growth.body_material = self.body_material.clone();
 		growth.foliage_material = self.foliage_material.clone();
-		Some((
-			growth,
-			Transform { translation: node.position, scale: Vec3::splat(node.radius), ..default() },
-		))
+		Some((growth, JUNGLE_GROWTH_RADIUS_SCALE))
 	}
 }

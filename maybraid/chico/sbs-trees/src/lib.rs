@@ -5,7 +5,6 @@ pub mod date_palm;
 pub mod jungle_storybook_tree;
 pub mod layered_canopy;
 pub mod liams_conifer;
-pub mod node_growth;
 pub mod skipped_mesh_material;
 pub mod sopes_banyan;
 pub mod storybook_tree;

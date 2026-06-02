@@ -14,7 +14,6 @@ use chico_ball_components::chico_ball::ChicoBall;
 use chico_ball_components::plane_splay::PlaneSplay;
 use chico_sbs_geometry::render::ball::BallRenderHelper;
 use chico_sbs_geometry::render::stick::StickRenderHelper;
-use chico_sbs_geometry::render::tuft::TuftRenderHelper;
 use chico_sbs_geometry::{BallStickChain, JungleStorybookTreeSbs, StorybookTreeChain};
 use clap::Args;
 use chico_tree_components::{
@@ -24,7 +23,6 @@ use procedural_common::noise_params_from_scalar_str;
 use procedural_common::{FromScalarNoise, NoiseParams};
 use render_item::{CascadeChunk, RenderItem};
 
-use crate::node_growth::NodeGrowthRenderHelper;
 use crate::skipped_mesh_material::{
 	SkippedInnerLeafMeshMaterial, SkippedOuterLeafMeshMaterial, SkippedStickMeshMaterial,
 };
@@ -267,7 +265,7 @@ where
 			leaf_material: self.outer_leaf_material.clone(),
 			__marker: PhantomData,
 		};
-		out.extend(TuftRenderHelper::new(chain.clone(), tuft_rule).spawn_render_items(
+		out.extend(BallRenderHelper::new(chain.clone(), tuft_rule).spawn_render_items(
 			commands,
 			cascade_chunk,
 			transform,
@@ -282,7 +280,7 @@ where
 			foliage_material: self.growth_foliage_material.clone(),
 			__marker: PhantomData,
 		};
-		out.extend(NodeGrowthRenderHelper::new(chain, growth_rule).spawn_render_items(
+		out.extend(BallRenderHelper::new(chain, growth_rule).spawn_render_items(
 			commands,
 			cascade_chunk,
 			transform,

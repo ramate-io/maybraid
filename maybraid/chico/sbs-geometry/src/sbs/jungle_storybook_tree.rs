@@ -4,23 +4,22 @@ use std::ops::{Deref, DerefMut};
 
 use procedural_common::{NoiseParams, SetNoiseParams, UnitRange};
 
-use crate::anchors::Anchors;
 use crate::anchors::storybook_tree::{
 	DEFAULT_FIRST_RING_UNIT_HEIGHT, DEFAULT_OUTER_FOLIAGE_DISTANCE_FRACTION,
-	DEFAULT_PROJECTION_END_FRACTION, DEFAULT_STALK_HEIGHT_FRACTION,
-	DEFAULT_TREE_HEIGHT,
+	DEFAULT_PROJECTION_END_FRACTION, DEFAULT_STALK_HEIGHT_FRACTION, DEFAULT_TREE_HEIGHT,
 };
+use crate::anchors::Anchors;
 use crate::sbs::storybook_tree::{
 	StorybookCanopyParams, StorybookGrowthParams, StorybookProjectionParams, StorybookRingParams,
-	StorybookTreeScale, StorybookTreeSbs,
+	StorybookTreeSbs, StorybookTreeScale,
 };
 
 /// Stalk base radius as a fraction of `H` (storybook uses
 /// [`DEFAULT_STALK_BASE_RADIUS_FRACTION`](crate::anchors::storybook_tree::DEFAULT_STALK_BASE_RADIUS_FRACTION)).
-pub const JUNGLE_STALK_BASE_RADIUS_FRACTION: f32 = 0.048;
+pub const JUNGLE_STALK_BASE_RADIUS_FRACTION: f32 = 0.085;
 
 /// Limb girth at ring anchors relative to stalk base (storybook default `0.12`).
-pub const JUNGLE_BRANCH_BASE_RADIUS_FRACTION_OF_STALK: f32 = 0.20;
+pub const JUNGLE_BRANCH_BASE_RADIUS_FRACTION_OF_STALK: f32 = 1.0;
 use crate::{BallStickChain, StorybookTreeChain};
 
 /// Jungle variant: flattens [`StorybookTreeSbs`] with denser rings and wider branch fan-out.
@@ -58,7 +57,8 @@ impl Default for JungleStorybookTreeSbs {
 					ring_tilt_degrees: 4.0,
 					child_count_min: 2,
 					child_count_max: 3,
-					branch_base_radius_fraction_of_stalk: JUNGLE_BRANCH_BASE_RADIUS_FRACTION_OF_STALK,
+					branch_base_radius_fraction_of_stalk:
+						JUNGLE_BRANCH_BASE_RADIUS_FRACTION_OF_STALK,
 					branch_radius_child_scale_lo: 0.82,
 					branch_radius_child_scale_hi: 0.90,
 				},
