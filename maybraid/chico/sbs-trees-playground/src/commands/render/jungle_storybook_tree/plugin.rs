@@ -18,7 +18,9 @@ pub fn react_render_helper_jungle_storybook_tree(
 	render_q: Query<&Render, Added<Render>>,
 ) {
 	for (entity, helper) in &q {
-		config.subject = RenderSubject::JungleStorybookTree(helper.inner.clone());
+		let mut tree = helper.inner.clone();
+		tree.geometry.apply_jungle_preset();
+		config.subject = RenderSubject::JungleStorybookTree(tree);
 		config.res_2 = helper.res_2;
 		config.transform = helper.render_transform();
 		commands.entity(entity).despawn();

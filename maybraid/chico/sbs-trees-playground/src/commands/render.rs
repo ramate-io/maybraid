@@ -308,6 +308,12 @@ mod tests {
 		};
 		assert!((helper.inner.geometry.storybook.scale.tree_height - 18.0).abs() < 1e-5);
 		assert_eq!(helper.inner.geometry.storybook.growth.branch_depth, 4);
+		let mut geometry = helper.inner.geometry.clone();
+		geometry.apply_jungle_preset();
+		assert!((geometry.storybook.growth.branch_base_radius_fraction_of_stalk
+			- chico_sbs_geometry::sbs::jungle_storybook_tree::JUNGLE_BRANCH_BASE_RADIUS_FRACTION_OF_STALK)
+			.abs()
+			< 1e-5);
 		Ok(())
 	}
 

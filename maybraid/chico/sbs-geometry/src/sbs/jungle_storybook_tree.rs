@@ -6,21 +6,25 @@ use procedural_common::{NoiseParams, SetNoiseParams, UnitRange};
 
 use crate::anchors::storybook_tree::{
 	DEFAULT_FIRST_RING_UNIT_HEIGHT, DEFAULT_OUTER_FOLIAGE_DISTANCE_FRACTION,
-	DEFAULT_PROJECTION_END_FRACTION, DEFAULT_STALK_HEIGHT_FRACTION, DEFAULT_TREE_HEIGHT,
+	DEFAULT_PROJECTION_END_FRACTION, DEFAULT_STALK_BASE_RADIUS_FRACTION,
+	DEFAULT_STALK_HEIGHT_FRACTION, DEFAULT_TREE_HEIGHT,
 };
 use crate::anchors::Anchors;
 use crate::sbs::storybook_tree::{
 	StorybookCanopyParams, StorybookGrowthParams, StorybookProjectionParams, StorybookRingParams,
 	StorybookTreeSbs, StorybookTreeScale,
 };
-
-/// Stalk base radius as a fraction of `H` (storybook uses
-/// [`DEFAULT_STALK_BASE_RADIUS_FRACTION`](crate::anchors::storybook_tree::DEFAULT_STALK_BASE_RADIUS_FRACTION)).
-pub const JUNGLE_STALK_BASE_RADIUS_FRACTION: f32 = 0.085;
-
-/// Limb girth at ring anchors relative to stalk base (storybook default `0.12`).
-pub const JUNGLE_BRANCH_BASE_RADIUS_FRACTION_OF_STALK: f32 = 1.0;
 use crate::{BallStickChain, StorybookTreeChain};
+
+/// Jungle stalk base radius as a fraction of `H` (storybook [`DEFAULT_STALK_BASE_RADIUS_FRACTION`]).
+///
+/// Used by [`Default`] and [`JungleStorybookTreeSbs::apply_jungle_preset`], not by flattened clap defaults.
+pub const JUNGLE_STALK_BASE_RADIUS_FRACTION: f32 = 0.055;
+
+/// Limb girth at ring anchors relative to stalk base (storybook growth default `0.12`).
+///
+/// Used by [`Default`] and [`JungleStorybookTreeSbs::apply_jungle_preset`], not by flattened clap defaults.
+pub const JUNGLE_BRANCH_BASE_RADIUS_FRACTION_OF_STALK: f32 = 0.30;
 
 /// Jungle variant: flattens [`StorybookTreeSbs`] with denser rings and wider branch fan-out.
 #[derive(Clone, Debug, PartialEq)]
@@ -72,6 +76,12 @@ impl Default for JungleStorybookTreeSbs {
 	}
 }
 
+fn apply_if_storybook_default<T: Clone + PartialEq>(current: &mut T, story: &T, jungle: &T) {
+	if *current == *story {
+		*current = jungle.clone();
+	}
+}
+
 impl Deref for JungleStorybookTreeSbs {
 	type Target = StorybookTreeSbs;
 
@@ -87,6 +97,33 @@ impl DerefMut for JungleStorybookTreeSbs {
 }
 
 impl JungleStorybookTreeSbs {
+	/// Reapply jungle art-direction on a flattened [`StorybookTreeSbs`] (e.g. after CLI parse).
+	///
+	/// Clap fills nested storybook fields with storybook defaults; this restores jungle preset values
+	/// for fields that still match the storybook default so explicit CLI overrides are kept.
+	pub fn apply_jungle_preset(&mut self) {
+		let preset = Self::default();
+		let story = StorybookTreeSbs::default();
+		let s = &mut self.storybook;
+		let p = &preset.storybook;
+		let h = s.scale.tree_height.max(1e-6);
+
+		let story_stalk = DEFAULT_STALK_BASE_RADIUS_FRACTION * h;
+		let jungle_stalk = JUNGLE_STALK_BASE_RADIUS_FRACTION * h;
+		match s.scale.stalk_base_radius {
+			None => s.scale.stalk_base_radius = Some(jungle_stalk),
+			Some(r) if (r - story_stalk).abs() < 1e-4 => {
+				s.scale.stalk_base_radius = Some(jungle_stalk);
+			}
+			_ => {}
+		}
+
+		apply_if_storybook_default(&mut s.rings, &story.rings, &p.rings);
+		apply_if_storybook_default(&mut s.projection, &story.projection, &p.projection);
+		apply_if_storybook_default(&mut s.growth, &story.growth, &p.growth);
+		apply_if_storybook_default(&mut s.canopy, &story.canopy, &p.canopy);
+	}
+
 	pub fn height(&self) -> f32 {
 		self.storybook.height()
 	}
@@ -122,6 +159,21 @@ mod tests {
 	fn default_builds_chain() -> Result<()> {
 		let chain = JungleStorybookTreeSbs::default().build_chain();
 		assert!(chain.nodes.len() > 50, "nodes {}", chain.nodes.len());
+		Ok(())
+	}
+
+	#[test]
+	fn apply_jungle_preset_after_storybook_cli_defaults() -> Result<()> {
+		let mut geometry = JungleStorybookTreeSbs { storybook: StorybookTreeSbs::default() };
+		geometry.apply_jungle_preset();
+		let proto = geometry.storybook.to_proto();
+		let story_proto = StorybookTreeSbs::default().to_proto();
+		assert!(proto.stalk.stalk_base_radius > story_proto.stalk.stalk_base_radius);
+		assert!(
+			proto.branch_base_radius_fraction_of_stalk
+				> story_proto.branch_base_radius_fraction_of_stalk
+		);
+		assert!(proto.anchors_per_ring >= story_proto.anchors_per_ring);
 		Ok(())
 	}
 

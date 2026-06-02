@@ -13,7 +13,7 @@ use procedural_common::NoiseParams;
 use super::canopy::should_allocate_jungle_foliage;
 
 /// Spawn transform scale relative to the graph node's branch radius.
-pub const JUNGLE_GROWTH_RADIUS_SCALE: f32 = 3.0;
+pub const JUNGLE_GROWTH_RADIUS_SCALE: f32 = 1.2;
 
 #[derive(Clone)]
 pub(crate) struct JungleStorybookGrowthRule<BodyM, BodyS, FoliageM, FoliageS>
@@ -24,7 +24,6 @@ where
 	FoliageS: Clone + Into<MeshMaterial3d<FoliageM>>,
 {
 	pub growth_spawn_fraction: f32,
-	pub shape: JungleGrowthShape,
 	pub body_noise: NoiseParams,
 	pub foliage_noise: NoiseParams,
 	pub body_material: BodyS,
@@ -58,7 +57,7 @@ where
 			return None;
 		}
 
-		let mut shape = self.shape.clone();
+		let mut shape = JungleGrowthShape::default();
 		shape.seed = (node_idx as i32)
 			.wrapping_add(node.position.x.to_bits() as i32)
 			.wrapping_add(node.position.y.to_bits().rotate_left(5) as i32);

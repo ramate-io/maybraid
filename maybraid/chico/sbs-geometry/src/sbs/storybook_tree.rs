@@ -7,25 +7,30 @@ use procedural_common::{NoiseConfig, NoiseParams, SetNoiseParams, UnitRange};
 
 use crate::anchors::storybook_tree::{
 	StorybookTreeAnchorPerturbation, StorybookTreeAnchors, StorybookTreeProtoAnchors,
-	DEFAULT_FIRST_RING_UNIT_HEIGHT, DEFAULT_OUTER_FOLIAGE_DISTANCE_FRACTION,
-	DEFAULT_PROJECTION_END_FRACTION, DEFAULT_STALK_BASE_RADIUS_FRACTION, DEFAULT_STALK_HEIGHT_FRACTION,
-	DEFAULT_TREE_HEIGHT, DEFAULT_MAX_PROJECTION_FRACTION,
+	DEFAULT_FIRST_RING_UNIT_HEIGHT, DEFAULT_MAX_PROJECTION_FRACTION,
+	DEFAULT_OUTER_FOLIAGE_DISTANCE_FRACTION, DEFAULT_PROJECTION_END_FRACTION,
+	DEFAULT_STALK_BASE_RADIUS_FRACTION, DEFAULT_STALK_HEIGHT_FRACTION, DEFAULT_TREE_HEIGHT,
 };
 use crate::anchors::strict_stalk::StrictStalk;
 use crate::anchors::{Anchors, AnchorsToChain};
-use crate::StorybookTreeChain;
 use crate::BallStickChain;
+use crate::StorybookTreeChain;
 
 #[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "clap", derive(clap::Args))]
 #[cfg_attr(feature = "clap", command(rename_all = "kebab-case"))]
 pub struct StorybookTreeScale {
+	/// Total tree height `H` in world units. Drives stalk dimensions, ring placement, and projection budgets.
 	#[cfg_attr(feature = "clap", arg(long, default_value_t = DEFAULT_TREE_HEIGHT))]
 	pub tree_height: f32,
+	/// Stalk length as a fraction of [`Self::tree_height`] (RFC default [`DEFAULT_STALK_HEIGHT_FRACTION`]).
 	#[cfg_attr(feature = "clap", arg(long, default_value_t = DEFAULT_STALK_HEIGHT_FRACTION))]
 	pub stalk_height_fraction: f32,
+	/// Trunk base radius in world units. When `None`, [`Self::stalk_base_radius_or_default`] uses
+	/// [`DEFAULT_STALK_BASE_RADIUS_FRACTION`] × [`Self::tree_height`].
 	#[cfg_attr(feature = "clap", arg(long))]
 	pub stalk_base_radius: Option<f32>,
+	/// World position of the stalk base anchor (graph root). Ring centroids are offset from this point.
 	#[cfg_attr(
 		feature = "clap",
 		arg(
@@ -353,7 +358,10 @@ mod tests {
 		let sbs = StorybookTreeSbs::default();
 		let proto = sbs.to_proto();
 		assert!((proto.tree_height - DEFAULT_TREE_HEIGHT).abs() < 1e-5);
-		assert!((proto.stalk.stalk_height - DEFAULT_TREE_HEIGHT * DEFAULT_STALK_HEIGHT_FRACTION).abs() < 1e-4);
+		assert!(
+			(proto.stalk.stalk_height - DEFAULT_TREE_HEIGHT * DEFAULT_STALK_HEIGHT_FRACTION).abs()
+				< 1e-4
+		);
 		assert_eq!(proto.branch_depth, 4);
 		assert_eq!(proto.anchors_per_ring, 6);
 		assert!(

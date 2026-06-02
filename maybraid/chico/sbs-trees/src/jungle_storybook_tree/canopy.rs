@@ -91,8 +91,6 @@ where
 		hysteresis: &StorybookTreeChain,
 		chain: &BallStickChain<StorybookTreeChain>,
 	) -> Option<(PlaneSplay<LeafM, LeafS>, f32)> {
-		return None;
-
 		if !should_allocate_jungle_foliage(hysteresis, chain, node_idx) {
 			return None;
 		}

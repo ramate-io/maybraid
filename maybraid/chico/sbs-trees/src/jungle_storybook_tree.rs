@@ -16,9 +16,7 @@ use chico_sbs_geometry::render::ball::BallRenderHelper;
 use chico_sbs_geometry::render::stick::StickRenderHelper;
 use chico_sbs_geometry::{BallStickChain, JungleStorybookTreeSbs, StorybookTreeChain};
 use clap::Args;
-use chico_tree_components::{
-	JungleGrowthShape, SkippedBodyMeshMaterial, SkippedFoliageMeshMaterial,
-};
+use chico_tree_components::{SkippedBodyMeshMaterial, SkippedFoliageMeshMaterial};
 use procedural_common::noise_params_from_scalar_str;
 use procedural_common::{FromScalarNoise, NoiseParams};
 use render_item::{CascadeChunk, RenderItem};
@@ -75,14 +73,12 @@ where
 	FoliageM: Material,
 	FoliageS: Clone + Into<MeshMaterial3d<FoliageM>> + Args,
 {
+	/// Flattened storybook SBS (CLI uses storybook defaults). [`Self::geometry_for_render`] applies the jungle preset.
 	#[command(flatten, next_help_heading = "Geometry")]
 	pub geometry: JungleStorybookTreeSbs,
 
 	#[command(flatten, next_help_heading = "Construction")]
 	pub construction: JungleStorybookConstructionParams,
-
-	#[arg(skip)]
-	pub jungle_growth_shape: JungleGrowthShape,
 
 	#[command(flatten, next_help_heading = "Stick Material")]
 	pub stick_material: StickS,
@@ -166,7 +162,6 @@ where
 		Self {
 			geometry: JungleStorybookTreeSbs::default(),
 			construction: JungleStorybookConstructionParams::default(),
-			jungle_growth_shape: JungleGrowthShape::default(),
 			stick_material: StickS::default(),
 			inner_leaf_material: InnerLeafS::default(),
 			outer_leaf_material: OuterLeafS::default(),
@@ -196,8 +191,14 @@ where
 	FoliageM: Material,
 	FoliageS: Clone + Into<MeshMaterial3d<FoliageM>> + Args,
 {
+	pub fn geometry_for_render(&self) -> JungleStorybookTreeSbs {
+		let mut geometry = self.geometry.clone();
+		geometry.apply_jungle_preset();
+		geometry
+	}
+
 	pub fn build_chain(&self) -> BallStickChain<StorybookTreeChain> {
-		self.geometry.build_chain()
+		self.geometry_for_render().build_chain()
 	}
 }
 
@@ -221,8 +222,9 @@ where
 		cascade_chunk: &CascadeChunk,
 		transform: Transform,
 	) -> Vec<Entity> {
-		let chain = self.build_chain();
-		let leaf_radius = self.geometry.leaf_radius_world();
+		let geometry = self.geometry_for_render();
+		let chain = geometry.build_chain();
+		let leaf_radius = geometry.leaf_radius_world();
 		let tuft_scale = leaf_radius * 0.35;
 
 		let stick_rule = StorybookTreeStickRule::<StickM, StickS> {
@@ -273,7 +275,6 @@ where
 
 		let growth_rule = JungleStorybookGrowthRule::<BodyM, BodyS, FoliageM, FoliageS> {
 			growth_spawn_fraction: self.construction.growth_spawn_fraction,
-			shape: self.jungle_growth_shape.clone(),
 			body_noise: self.growth_body_noise,
 			foliage_noise: self.growth_foliage_noise,
 			body_material: self.growth_body_material.clone(),
