@@ -165,6 +165,11 @@ impl BranchOut {
 		self
 	}
 
+	pub fn with_bias_ray(mut self, bias_ray: Vec3) -> Self {
+		self.bias_ray = bias_ray;
+		self
+	}
+
 	pub fn single_child(mut self) -> Self {
 		self.child_count = 1..2;
 		self

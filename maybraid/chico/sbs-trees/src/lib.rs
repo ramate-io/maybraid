@@ -8,6 +8,8 @@ pub mod layered_canopy;
 pub mod liams_conifer;
 mod conifer_canopy_apex;
 pub mod friends_conifer;
+pub mod penmarch_torch;
+pub mod kamakura_torch;
 pub mod temperate_conifer;
 pub mod skipped_mesh_material;
 pub mod sopes_banyan;
@@ -26,4 +28,6 @@ pub use skipped_mesh_material::{
 };
 pub use sopes_banyan::SopesBanyanStd;
 pub use storybook_tree::StorybookTreeStd;
+pub use penmarch_torch::PenmarchTorchStd;
+pub use kamakura_torch::KamakuraTorchStd;
 pub use waialea_palm::WaialeaPalmStd;

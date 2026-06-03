@@ -13,6 +13,8 @@ pub mod braid_oak;
 pub mod liams_conifer;
 pub mod friends_conifer;
 pub mod sopes_banyan;
+pub mod penmarch_torch;
+pub mod kamakura_torch;
 pub mod stalk_perturbation;
 pub mod strict_stalk;
 

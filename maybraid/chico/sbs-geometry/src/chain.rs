@@ -13,6 +13,8 @@ pub mod liams_conifer;
 pub mod sopes_banyan;
 pub mod waialea_palm;
 pub mod storybook_tree;
+pub mod penmarch_torch;
+pub mod kamakura_torch;
 
 use std::collections::VecDeque;
 
