@@ -16,6 +16,7 @@ pub mod storybook_tree;
 pub mod penmarch_torch;
 pub mod kamakura_torch;
 pub mod rorys_head_trained;
+pub mod vase_tree;
 
 use std::collections::VecDeque;
 

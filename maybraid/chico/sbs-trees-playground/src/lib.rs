@@ -26,6 +26,7 @@ use chico_sbs_trees::storybook_tree::render_item_plugin::ensure_registered as en
 use chico_sbs_trees::penmarch_torch::render_item_plugin::ensure_registered as ensure_penmarch_torch_render_plugins;
 use chico_sbs_trees::kamakura_torch::render_item_plugin::ensure_registered as ensure_kamakura_torch_render_plugins;
 use chico_sbs_trees::rorys_head_trained::render_item_plugin::ensure_registered as ensure_rorys_head_trained_render_plugins;
+use chico_sbs_trees::vase_tree::render_item_plugin::ensure_registered as ensure_vase_tree_render_plugins;
 use chico_sbs_trees::braid_oak_tree::render_item_plugin::ensure_registered as ensure_braid_oak_tree_render_plugins;
 use chico_sbs_trees::jungle_storybook_tree::render_item_plugin::ensure_registered as ensure_jungle_storybook_tree_render_plugins;
 use chico_sbs_trees::liams_conifer::render_item_plugin::ensure_registered as ensure_liams_conifer_render_plugins;
@@ -57,6 +58,7 @@ impl Plugin for SbsTreesPlaygroundPlugin {
 		ensure_penmarch_torch_render_plugins(app);
 		ensure_kamakura_torch_render_plugins(app);
 		ensure_rorys_head_trained_render_plugins(app);
+		ensure_vase_tree_render_plugins(app);
 		ensure_braid_oak_tree_render_plugins(app);
 		ensure_jungle_storybook_tree_render_plugins(app);
 		if !app.is_plugin_added::<TuftRenderItemPlugin>() {
@@ -94,26 +96,31 @@ impl Plugin for SbsTreesPlaygroundPlugin {
 						.after(capture_command_line_input::<PlaygroundCommand>)
 						.after(sync_render_material_handles),
 					(
-						dispatch_render_items::<render::RenderSopesBanyan>,
-						dispatch_render_items::<render::RenderLiamsConifer>,
-						dispatch_render_items::<render::RenderFriendsConifer>,
-						dispatch_render_items::<render::RenderTemperateConifer>,
-						dispatch_render_items::<render::RenderDatePalm>,
-						dispatch_render_items::<render::RenderWaialeaPalm>,
-						dispatch_render_items::<render::RenderStorybookTree>,
-						dispatch_render_items::<render::RenderPenmarchTorch>,
-						dispatch_render_items::<render::RenderKamakuraTorch>,
-						dispatch_render_items::<render::RenderRorysHeadTrained>,
-						dispatch_render_items::<render::RenderBraidOakTree>,
-						dispatch_render_items::<render::RenderJungleStorybookTree>,
-						dispatch_render_items::<render::RenderSucculentTuft>,
-						dispatch_render_items::<render::RenderBladeTuft>,
-						dispatch_render_items::<render::RenderSpearTuft>,
-						dispatch_render_items::<render::RenderBuddhaHandTuft>,
-						dispatch_render_items::<render::RenderWeepingTuft>,
-						dispatch_render_items::<render::RenderJungleGrowth>,
-						dispatch_render_items::<render::RenderFrondCrown>,
-						dispatch_render_items::<render::RenderModerateLodFrondCrown>,
+						(
+							dispatch_render_items::<render::RenderSopesBanyan>,
+							dispatch_render_items::<render::RenderLiamsConifer>,
+							dispatch_render_items::<render::RenderFriendsConifer>,
+							dispatch_render_items::<render::RenderTemperateConifer>,
+							dispatch_render_items::<render::RenderDatePalm>,
+							dispatch_render_items::<render::RenderWaialeaPalm>,
+							dispatch_render_items::<render::RenderStorybookTree>,
+							dispatch_render_items::<render::RenderPenmarchTorch>,
+							dispatch_render_items::<render::RenderKamakuraTorch>,
+							dispatch_render_items::<render::RenderRorysHeadTrained>,
+							dispatch_render_items::<render::RenderVaseTree>,
+						),
+						(
+							dispatch_render_items::<render::RenderBraidOakTree>,
+							dispatch_render_items::<render::RenderJungleStorybookTree>,
+							dispatch_render_items::<render::RenderSucculentTuft>,
+							dispatch_render_items::<render::RenderBladeTuft>,
+							dispatch_render_items::<render::RenderSpearTuft>,
+							dispatch_render_items::<render::RenderBuddhaHandTuft>,
+							dispatch_render_items::<render::RenderWeepingTuft>,
+							dispatch_render_items::<render::RenderJungleGrowth>,
+							dispatch_render_items::<render::RenderFrondCrown>,
+							dispatch_render_items::<render::RenderModerateLodFrondCrown>,
+						),
 					)
 						.after(sync_render),
 					ui::sync_command_status_text.before(game_commands::ui::update_debug_ui),

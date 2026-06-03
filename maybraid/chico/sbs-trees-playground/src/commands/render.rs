@@ -13,6 +13,7 @@ pub mod temperate_conifer;
 pub mod penmarch_torch;
 pub mod kamakura_torch;
 pub mod rorys_head_trained;
+pub mod vase_tree;
 pub mod moderate_lod_frond_crown;
 pub mod plugin;
 
@@ -41,6 +42,7 @@ pub use temperate_conifer::TemperateConiferRenderHelper;
 pub use penmarch_torch::PenmarchTorchRenderHelper;
 pub use kamakura_torch::KamakuraTorchRenderHelper;
 pub use rorys_head_trained::RorysHeadTrainedRenderHelper;
+pub use vase_tree::VaseTreeRenderHelper;
 pub use moderate_lod_frond_crown::ModerateLodFrondCrownRenderHelper;
 pub use sopes_banyan::SopesBanyanRenderHelper;
 pub use spear_tuft::SpearTuftRenderHelper;
@@ -101,6 +103,7 @@ pub enum Render {
 	PenmarchTorch(PenmarchTorchRenderHelper),
 	KamakuraTorch(KamakuraTorchRenderHelper),
 	RorysHeadTrained(RorysHeadTrainedRenderHelper),
+	VaseTree(VaseTreeRenderHelper),
 	BraidOakTree(BraidOakTreeRenderHelper),
 	JungleStorybookTree(JungleStorybookTreeRenderHelper),
 	SucculentTuft(SucculentTuftRenderHelper),
@@ -170,6 +173,11 @@ impl Render {
 			},
 			Self::RorysHeadTrained(h) => RenderConfig {
 				subject: RenderSubject::RorysHeadTrained(h.inner.clone()),
+				res_2: h.res_2,
+				transform: h.render_transform(),
+			},
+			Self::VaseTree(h) => RenderConfig {
+				subject: RenderSubject::VaseTree(h.inner.clone()),
 				res_2: h.res_2,
 				transform: h.render_transform(),
 			},
@@ -420,6 +428,20 @@ mod tests {
 		assert!((helper.inner.geometry.scale.tree_height - 20.0).abs() < 1e-5);
 		assert!((helper.inner.geometry.projection.span_fraction_of_height.start - 0.35).abs() < 1e-5);
 		assert!((helper.inner.geometry.rings.canopy_ring_unit_height - 1.0).abs() < 1e-5);
+		Ok(())
+	}
+
+	#[test]
+	fn vase_tree_command_preserves_shape_params() -> Result<()> {
+		let cmd = crate::commands::PlaygroundCommand::parse_line(
+			"render vase-tree --tree-height 20 --branch-depth 4 --bias-elevation-lo-degrees 40",
+		)
+		.map_err(|e| anyhow::anyhow!("{e}"))?;
+		let crate::commands::PlaygroundCommand::Render(Render::VaseTree(helper)) = cmd else {
+			anyhow::bail!("expected vase-tree render command");
+		};
+		assert!((helper.inner.geometry.scale.tree_height - 20.0).abs() < 1e-5);
+		assert!((helper.inner.geometry.growth.bias_elevation_lo_degrees - 40.0).abs() < 1e-5);
 		Ok(())
 	}
 

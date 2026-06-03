@@ -14,6 +14,7 @@ use chico_sbs_trees::storybook_tree::StorybookTree;
 use chico_sbs_trees::penmarch_torch::PenmarchTorch;
 use chico_sbs_trees::kamakura_torch::KamakuraTorch;
 use chico_sbs_trees::rorys_head_trained::RorysHeadTrained;
+use chico_sbs_trees::vase_tree::VaseTree;
 use chico_sbs_trees::sopes_banyan::SopesBanyan;
 use chico_sbs_trees::SkippedLeafMeshMaterial;
 use chico_sbs_trees::SkippedStickMeshMaterial;
@@ -104,6 +105,16 @@ pub type RenderRorysHeadTrained = RorysHeadTrained<
 	SkippedLeafMeshMaterial<ChicoLeafMaterial>,
 >;
 
+/// [`VaseTree`] — upward-opening vase-profile broadleaf ([#246](https://github.com/ramate-io/maybraid/issues/246)).
+pub type RenderVaseTree = VaseTree<
+	ChicoStickMaterial,
+	SkippedStickMeshMaterial<ChicoStickMaterial>,
+	ChicoLeafMaterial,
+	SkippedInnerLeafMeshMaterial<ChicoLeafMaterial>,
+	ChicoLeafMaterial,
+	SkippedOuterLeafMeshMaterial<ChicoLeafMaterial>,
+>;
+
 /// [`BraidOakTree`] — gnarled broadleaf with crook-cylinder branches ([#234](https://github.com/ramate-io/maybraid/issues/234)).
 pub type RenderBraidOakTree = BraidOakTree<
 	ChicoStickMaterial,
@@ -165,6 +176,7 @@ pub enum RenderSubject {
 	PenmarchTorch(RenderPenmarchTorch),
 	KamakuraTorch(RenderKamakuraTorch),
 	RorysHeadTrained(RenderRorysHeadTrained),
+	VaseTree(RenderVaseTree),
 	BraidOakTree(RenderBraidOakTree),
 	JungleStorybookTree(RenderJungleStorybookTree),
 	SucculentTuft(RenderSucculentTuft),
@@ -190,6 +202,7 @@ impl RenderSubject {
 			Self::PenmarchTorch(_) => "PenmarchTorch",
 			Self::KamakuraTorch(_) => "KamakuraTorch",
 			Self::RorysHeadTrained(_) => "RorysHeadTrained",
+			Self::VaseTree(_) => "VaseTree",
 			Self::BraidOakTree(_) => "BraidOakTree",
 			Self::JungleStorybookTree(_) => "JungleStorybookTree",
 			Self::SucculentTuft(_) => "SucculentTuft",
@@ -229,6 +242,7 @@ impl RenderSubject {
 			Self::PenmarchTorch(t) => format!("{:?}", t.geometry),
 			Self::KamakuraTorch(t) => format!("{:?}", t.geometry),
 			Self::RorysHeadTrained(t) => format!("{:?}", t.geometry),
+			Self::VaseTree(t) => format!("{:?}", t.geometry),
 			Self::BraidOakTree(t) => format!("{:?}", t.geometry),
 			Self::JungleStorybookTree(t) => format!("{:?}", t.geometry),
 			Self::SucculentTuft(t) => format!("{:?}", t.shape),
@@ -254,6 +268,7 @@ impl RenderSubject {
 			Self::PenmarchTorch(tree) => RenderDispatch::PenmarchTorch(tree.clone()),
 			Self::KamakuraTorch(tree) => RenderDispatch::KamakuraTorch(tree.clone()),
 			Self::RorysHeadTrained(tree) => RenderDispatch::RorysHeadTrained(tree.clone()),
+			Self::VaseTree(tree) => RenderDispatch::VaseTree(tree.clone()),
 			Self::BraidOakTree(tree) => RenderDispatch::BraidOakTree(tree.clone()),
 			Self::JungleStorybookTree(tree) => RenderDispatch::JungleStorybookTree(tree.clone()),
 			Self::SucculentTuft(tuft) => RenderDispatch::SucculentTuft(tuft.clone()),
@@ -280,6 +295,7 @@ enum RenderDispatch {
 	PenmarchTorch(RenderPenmarchTorch),
 	KamakuraTorch(RenderKamakuraTorch),
 	RorysHeadTrained(RenderRorysHeadTrained),
+	VaseTree(RenderVaseTree),
 	BraidOakTree(RenderBraidOakTree),
 	JungleStorybookTree(RenderJungleStorybookTree),
 	SucculentTuft(RenderSucculentTuft),
@@ -381,6 +397,9 @@ pub fn sync_render(
 			commands.spawn((bundle, DispatchRenderItem::new(tree)));
 		}
 		RenderDispatch::RorysHeadTrained(tree) => {
+			commands.spawn((bundle, DispatchRenderItem::new(tree)));
+		}
+		RenderDispatch::VaseTree(tree) => {
 			commands.spawn((bundle, DispatchRenderItem::new(tree)));
 		}
 		RenderDispatch::BraidOakTree(tree) => {

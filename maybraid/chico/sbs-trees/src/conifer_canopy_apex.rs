@@ -4,7 +4,9 @@ use bevy::prelude::*;
 use chico_ball_components::chico_ball::ChicoBall;
 use chico_ball_components::frond::{align_frond_direction, FrondCrown, FrondCrownShape};
 use chico_sbs_geometry::render::mix_seed::mix_seed_below_fraction;
-use chico_sbs_geometry::{BallStickChain, BallStickNode, FriendsConiferChain, FriendsConiferSbs, stalk_tip_from_chain};
+use chico_sbs_geometry::{
+	liams_stalk_tip_from_chain, BallStickChain, BallStickNode, FriendsConiferChain, FriendsConiferSbs,
+};
 use procedural_common::NoiseParams;
 use render_item::CascadeChunk;
 
@@ -42,6 +44,30 @@ fn local_transform_at_tip(
 	}
 }
 
+/// [`ChicoBall`] at a crown tip (always spawned).
+pub fn spawn_apex_chico_ball_at_tip<LeafM, LeafS>(
+	tree_height: f32,
+	tip: &BallStickNode,
+	commands: &mut Commands,
+	cascade_chunk: &CascadeChunk,
+	root_transform: Transform,
+	leaf_noise: &NoiseParams,
+	apex_ball_radius_fraction: f32,
+	leaf_material: LeafS,
+) -> Vec<Entity>
+where
+	LeafM: Material + Send + Sync + 'static,
+	LeafS: Clone + Into<MeshMaterial3d<LeafM>> + Send + Sync + 'static + Default,
+{
+	let world_radius = tree_height * apex_ball_radius_fraction;
+	let apex_noise = leaf_noise.with_seed(leaf_noise.seed.wrapping_add(0xA3E7));
+	let mut ball = apex_noise.build_scalar::<ChicoBall<LeafM, LeafS>>();
+	ball.material = leaf_material;
+
+	let transform = local_transform_at_tip(root_transform, tip, world_radius, Quat::IDENTITY);
+	ball.spawn_render_items_under(commands, cascade_chunk, transform, None)
+}
+
 /// Optional [`ChicoBall`] at the stalk crown ([#236](https://github.com/ramate-io/maybraid/issues/236)).
 pub fn spawn_apex_chico_ball<LeafM, LeafS>(
 	geometry: &FriendsConiferSbs,
@@ -58,18 +84,21 @@ where
 	LeafM: Material + Send + Sync + 'static,
 	LeafS: Clone + Into<MeshMaterial3d<LeafM>> + Send + Sync + 'static + Default,
 {
-	let tip = stalk_tip_from_chain(chain);
+	let tip = liams_stalk_tip_from_chain(chain);
 	if !sample_apex_canopy_spawn(leaf_noise, &tip, apex_spawn_fraction) {
 		return Vec::new();
 	}
 
-	let world_radius = geometry.height() * apex_ball_radius_fraction;
-	let apex_noise = leaf_noise.with_seed(leaf_noise.seed.wrapping_add(0xA3E7));
-	let mut ball = apex_noise.build_scalar::<ChicoBall<LeafM, LeafS>>();
-	ball.material = leaf_material;
-
-	let transform = local_transform_at_tip(root_transform, &tip, world_radius, Quat::IDENTITY);
-	ball.spawn_render_items_under(commands, cascade_chunk, transform, None)
+	spawn_apex_chico_ball_at_tip(
+		geometry.height(),
+		&tip,
+		commands,
+		cascade_chunk,
+		root_transform,
+		leaf_noise,
+		apex_ball_radius_fraction,
+		leaf_material,
+	)
 }
 
 /// Optional downward [`FrondCrown`] at the stalk crown ([#238](https://github.com/ramate-io/maybraid/issues/238)).
@@ -88,7 +117,7 @@ where
 	LeafM: Material + Send + Sync + 'static,
 	LeafS: Clone + Into<MeshMaterial3d<LeafM>> + Send + Sync + 'static,
 {
-	let tip = stalk_tip_from_chain(chain);
+	let tip = liams_stalk_tip_from_chain(chain);
 	if !sample_apex_canopy_spawn(leaf_noise, &tip, apex_spawn_fraction) {
 		return Vec::new();
 	}
@@ -152,7 +181,7 @@ mod tests {
 	#[test]
 	fn stalk_tip_from_built_friends_chain() {
 		let chain = FriendsConiferSbs::default().build_chain();
-		let tip = stalk_tip_from_chain(&chain);
+		let tip = liams_stalk_tip_from_chain(&chain);
 		assert!(tip.position.y > 20.0);
 	}
 }
