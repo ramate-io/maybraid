@@ -1,0 +1,32 @@
+use bevy::prelude::*;
+
+use crate::commands::render::{Render, JungleStorybookTreeRenderHelper};
+use crate::render::{RenderConfig, RenderSubject};
+
+pub struct JungleStorybookTreeRenderPlugin;
+
+impl Plugin for JungleStorybookTreeRenderPlugin {
+	fn build(&self, app: &mut App) {
+		app.add_systems(Update, react_render_helper_jungle_storybook_tree);
+	}
+}
+
+pub fn react_render_helper_jungle_storybook_tree(
+	mut commands: Commands,
+	mut config: ResMut<RenderConfig>,
+	q: Query<(Entity, &JungleStorybookTreeRenderHelper), Added<JungleStorybookTreeRenderHelper>>,
+	render_q: Query<&Render, Added<Render>>,
+) {
+	for (entity, helper) in &q {
+		let mut tree = helper.inner.clone();
+		tree.geometry.apply_jungle_preset();
+		config.subject = RenderSubject::JungleStorybookTree(tree);
+		config.res_2 = helper.res_2;
+		config.transform = helper.render_transform();
+		commands.entity(entity).despawn();
+	}
+	for render in &render_q {
+		let _ = render;
+		*config = render.into_render_config();
+	}
+}

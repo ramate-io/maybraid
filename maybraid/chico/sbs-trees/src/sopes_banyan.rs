@@ -33,6 +33,7 @@ use render_item::{CascadeChunk, RenderItem};
 
 use crate::skipped_mesh_material::{SkippedLeafMeshMaterial, SkippedStickMeshMaterial};
 use canopy::SopesBanyanLeafCanopyRule;
+use crate::layered_canopy::LayeredTerminalCanopy;
 use joint_ball::SopesBanyanJointBallRule;
 use stick::SopesBanyanStickRule;
 
@@ -163,8 +164,7 @@ where
 		leaf_splay.material = self.leaf_material.clone();
 		let leaf_rule = SopesBanyanLeafCanopyRule {
 			min_height: self.geometry.crown_floor_world_y(),
-			leaf_ball,
-			leaf_splay,
+			canopy: LayeredTerminalCanopy::new(leaf_ball, leaf_splay),
 			leaf_radius_world: self.geometry.leaf_ball_size(),
 		};
 

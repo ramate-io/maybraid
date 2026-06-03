@@ -117,7 +117,7 @@ impl Default for ConiferProjectionParams {
 #[cfg_attr(feature = "clap", derive(clap::Args))]
 #[cfg_attr(feature = "clap", command(rename_all = "kebab-case"))]
 pub struct ConiferGrowthParams {
-	/// Branch segment count (RFC fixed at 3).
+	/// Limb hops (`1`–`3`); RFC table is [`SEGMENT_FRACS`](crate::chain::liams_conifer::SEGMENT_FRACS) (default `3`, coerced at anchor build).
 	#[cfg_attr(feature = "clap", arg(long, default_value_t = 3))]
 	pub branch_depth: usize,
 	/// Downward radial bias in degrees.

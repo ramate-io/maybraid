@@ -54,10 +54,10 @@ pub struct JungleGrowthShape {
 	/// Inner noisy-ball radius multiplier relative to spawn transform uniform scale (node radius).
 	#[cfg_attr(feature = "clap", arg(long, default_value_t = 0.72))]
 	pub inner_ball_scale: f32,
-	/// Uniform scale for the arching frond crown in world units.
-	#[cfg_attr(feature = "clap", arg(long, default_value_t = 0.6))]
-	pub foliage_world_scale: f32,
-	/// Buddha's-hand tuft scale relative to [`foliage_world_scale`].
+	/// Frond crown scale relative to the assembly root (anchor spawn uniform scale).
+	#[cfg_attr(feature = "clap", arg(long, default_value_t = 1.0))]
+	pub foliage_scale: f32,
+	/// Buddha's-hand tuft scale relative to [`foliage_scale`].
 	#[cfg_attr(feature = "clap", arg(long, default_value_t = 0.8))]
 	pub buddha_hand_scale: f32,
 	/// Deterministic seed for body and foliage noise at this anchor.
@@ -73,7 +73,7 @@ impl Default for JungleGrowthShape {
 	fn default() -> Self {
 		Self {
 			inner_ball_scale: 0.72,
-			foliage_world_scale: 0.6,
+			foliage_scale: 1.0,
 			buddha_hand_scale: 0.8,
 			seed: 0,
 			frond: default_jungle_frond(),
@@ -100,7 +100,7 @@ impl JungleGrowthShape {
 	pub fn local_frond_transform(&self) -> Transform {
 		Transform {
 			translation: Vec3::Y * self.foliage_anchor_y(FROND_CROWN_Y_FRACTION),
-			scale: Vec3::splat(self.foliage_world_scale),
+			scale: Vec3::splat(self.foliage_scale),
 			..default()
 		}
 	}
@@ -109,7 +109,7 @@ impl JungleGrowthShape {
 	pub fn local_buddha_transform(&self) -> Transform {
 		Transform {
 			translation: Vec3::Y * self.foliage_anchor_y(BUDDHA_HAND_Y_FRACTION),
-			scale: Vec3::splat(self.foliage_world_scale * self.buddha_hand_scale),
+			scale: Vec3::splat(self.foliage_scale * self.buddha_hand_scale),
 			..default()
 		}
 	}
@@ -150,9 +150,9 @@ mod tests {
 				(buddha.translation.y - inner_ball_scale * BUDDHA_HAND_Y_FRACTION).abs() < 1e-5
 			);
 			assert!(buddha.translation.y < frond.translation.y);
-			assert!((frond.scale.x - shape.foliage_world_scale).abs() < 1e-5);
+			assert!((frond.scale.x - shape.foliage_scale).abs() < 1e-5);
 			assert!(
-				(buddha.scale.x - shape.foliage_world_scale * shape.buddha_hand_scale).abs() < 1e-5
+				(buddha.scale.x - shape.foliage_scale * shape.buddha_hand_scale).abs() < 1e-5
 			);
 		}
 		Ok(())

@@ -2,6 +2,7 @@
 
 mod assembly;
 mod config;
+pub mod render_item_plugin;
 
 pub use assembly::JungleGrowth;
 pub use config::JungleGrowthShape;

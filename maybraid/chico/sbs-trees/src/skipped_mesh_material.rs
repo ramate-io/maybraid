@@ -37,6 +37,8 @@ macro_rules! define_skipped_mesh_material {
 
 define_skipped_mesh_material!(SkippedStickMeshMaterial, "stick-mesh-material");
 define_skipped_mesh_material!(SkippedLeafMeshMaterial, "leaf-mesh-material");
+define_skipped_mesh_material!(SkippedInnerLeafMeshMaterial, "inner-leaf-mesh-material");
+define_skipped_mesh_material!(SkippedOuterLeafMeshMaterial, "outer-leaf-mesh-material");
 
 /// Alias for single-material commands (same clap group as [`SkippedStickMeshMaterial`]).
 pub type SkippedMeshMaterial<M> = SkippedStickMeshMaterial<M>;

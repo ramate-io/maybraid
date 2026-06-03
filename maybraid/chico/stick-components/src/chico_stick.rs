@@ -30,6 +30,8 @@ where
 	pub segment_base_radius: f32,
 	/// Unit-segment top radius for [`Self::noisy_cylinder`] (default `0.4`).
 	pub segment_top_radius: f32,
+	/// Extra padding on the tapered-cylinder SDF bounds / cascade **mu** (thin sticks need more).
+	pub cylinder_bounds_margin: f32,
 	/// Converts into [`MeshMaterial3d`] at spawn (see [`Into`]).
 	pub material: S,
 	pub(crate) __marker: PhantomData<fn() -> M>,
@@ -47,6 +49,7 @@ where
 			octaves: 1,
 			segment_base_radius: 0.5,
 			segment_top_radius: 0.4,
+			cylinder_bounds_margin: 0.0,
 			material: S::default(),
 			__marker: PhantomData,
 		}
@@ -65,6 +68,7 @@ where
 			octaves,
 			segment_base_radius: 0.5,
 			segment_top_radius: 0.4,
+			cylinder_bounds_margin: 0.0,
 			material: S::default(),
 			__marker: PhantomData,
 		}
@@ -82,8 +86,10 @@ where
 
 	/// Palm-trunk banding: narrower at the segment base, wider at the top ([RFC §3.1.6.2](https://github.com/ramate-io/maybraid/tree/main/rfc/rfc-000-000-183-chico-vegetation/03-01-stalk-and-ball-stick-trees/06-well-known-component-constructions/02-palm-trunk/README.md)).
 	pub fn noisy_cylinder_taper(&self, base_radius: f32, top_radius: f32) -> chico_sdf::NoisyCylinder {
+		let mut inner = TaperedCylinder::unit_segment(base_radius, top_radius);
+		inner.bounds_margin = self.cylinder_bounds_margin;
 		NoisySurface::from_params(
-			TaperedCylinder::unit_segment(base_radius, top_radius),
+			inner,
 			NoiseParams::from_scalar(
 				self.seed_scalar,
 				self.frequency,
@@ -96,6 +102,11 @@ where
 	/// Inverted palm-trunk taper on a unit segment (`0.92×0.5` base, `0.5` top).
 	pub fn palm_trunk_taper() -> (f32, f32) {
 		(0.46, 0.5)
+	}
+
+	/// Storybook stalk taper in **unit** radii; world girth is applied via segment transform scale.
+	pub fn storybook_stalk_unit_taper() -> (f32, f32) {
+		(0.5, 0.5 * 0.55)
 	}
 }
 

@@ -14,12 +14,17 @@ use std::f32::consts::TAU;
 
 use bevy_math::Vec3;
 
-use super::stalk_perturbation::{HasStrictStalk, StalkPerturbation};
+use super::stalk_perturbation::{
+	AnchorPerturbation, HasStrictStalk, PerturbAnchor, StalkPerturbation, perturb_branch_out,
+	perturb_node,
+};
 use super::strict_stalk::StrictStalk;
 use super::Anchors;
 use procedural_common::{NoiseConfig, NoiseParams};
 
-use crate::chain::liams_conifer::{LiamsConiferChain, LiamsConiferPhase, SEGMENT_FRACS};
+use crate::chain::liams_conifer::{
+	liams_conifer_branch_depth, LiamsConiferChain, LiamsConiferPhase, SEGMENT_FRACS,
+};
 use crate::chain::BranchOut;
 use crate::chain::DepthBudget;
 use crate::BallStickNode;
@@ -53,7 +58,7 @@ pub struct LiamsConiferProtoAnchors {
 	pub downward_bias_radians: f32,
 	/// [`BranchOut::ray_degrees_of_freedom`] at canopy seeds (RFC ~8°).
 	pub branch_angle_tolerance: f32,
-	/// [`DepthBudget::remaining`] at each ring seed; must match [`SEGMENT_FRACS`].len()].
+	/// Limb hops at each ring seed; coerced via [`liams_conifer_branch_depth`](crate::chain::liams_conifer::liams_conifer_branch_depth) (`1..=3`, RFC default `3`).
 	pub branch_depth: usize,
 	/// Ball radius at the ring anchor and initial [`BranchOut::radius_range`] (both ends).
 	///
@@ -167,23 +172,25 @@ impl LiamsConiferProtoAnchors {
 					.with_length(first_len * 0.97..first_len * 1.03)
 					.single_child();
 
+				let depth = liams_conifer_branch_depth(self.branch_depth);
 				out.push(LiamsConiferChain::new(
 					chain_noise.clone(),
 					proj,
-					self.branch_depth,
+					depth,
 					LiamsConiferPhase::BranchOut(DepthBudget {
 						inner: branch,
-						remaining: self.branch_depth,
+						remaining: depth,
 					}),
 				));
 			}
 		}
 
+		let depth = liams_conifer_branch_depth(self.branch_depth);
 		for a in self.stalk.point_to_point_anchors() {
 			out.push(LiamsConiferChain::new(
 				chain_noise.clone(),
 				0.0,
-				self.branch_depth,
+				depth,
 				LiamsConiferPhase::Stalk(a),
 			));
 		}
@@ -261,6 +268,22 @@ impl Default for LiamsConiferAnchors {
 impl Anchors<LiamsConiferChain> for LiamsConiferAnchors {
 	fn anchors(&self) -> Vec<LiamsConiferChain> {
 		self.hysteresis_seeds(NoiseConfig::new(NoiseParams::default()))
+	}
+}
+
+impl PerturbAnchor for LiamsConiferChain {
+	fn perturb_anchor(mut self, perturbation: AnchorPerturbation) -> Self {
+		self.phase = match self.phase {
+			LiamsConiferPhase::Stalk(mut p) => {
+				p.start = perturb_node(p.start, perturbation);
+				LiamsConiferPhase::Stalk(p)
+			}
+			LiamsConiferPhase::BranchOut(mut b) => {
+				b.inner = perturb_branch_out(b.inner, perturbation);
+				LiamsConiferPhase::BranchOut(b)
+			}
+		};
+		self
 	}
 }
 

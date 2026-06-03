@@ -19,7 +19,6 @@
 
 use procedural_common::{NoiseConfig, NoiseParams, SetNoiseParams};
 
-use crate::anchors::stalk_perturbation::{perturb_node, AnchorPerturbation, PerturbAnchor};
 use crate::BallStickNode;
 
 use super::point_to_point::PointToPoint;
@@ -27,6 +26,11 @@ use super::{BranchOut, DepthBudget, Hysteresis};
 
 /// RFC segment fractions of total projection length (sum to 1.0).
 pub const SEGMENT_FRACS: [f32; 3] = [0.70, 0.15, 0.15];
+
+/// Coerce proto/SBS `branch_depth` to `1..=[`SEGMENT_FRACS`].len()` (RFC default `3`).
+pub fn liams_conifer_branch_depth(depth: usize) -> usize {
+	depth.clamp(1, SEGMENT_FRACS.len())
+}
 
 #[derive(Clone)]
 pub enum LiamsConiferPhase {
@@ -66,7 +70,7 @@ impl LiamsConiferChain {
 
 	/// Maps [`DepthBudget::remaining`] to a [`SEGMENT_FRACS`] entry (`remaining == depth` → first segment).
 	fn segment_fraction(&self, remaining: usize) -> f32 {
-		let depth = self.branch_depth.max(1).min(SEGMENT_FRACS.len());
+		let depth = liams_conifer_branch_depth(self.branch_depth);
 		let seg_idx = depth.saturating_sub(remaining).min(SEGMENT_FRACS.len() - 1);
 		SEGMENT_FRACS[seg_idx]
 	}
@@ -142,47 +146,6 @@ impl SetNoiseParams for LiamsConiferChain {
 		self.noise = noise;
 		self
 	}
-}
-
-impl PerturbAnchor for LiamsConiferChain {
-	fn perturb_anchor(mut self, perturbation: AnchorPerturbation) -> Self {
-		self.phase = self.phase.perturb_anchor(perturbation);
-		self
-	}
-}
-
-impl LiamsConiferPhase {
-	fn perturb_anchor(self, perturbation: AnchorPerturbation) -> Self {
-		match self {
-			Self::Stalk(mut p) => {
-				p.start = perturb_node(p.start, perturbation);
-				Self::Stalk(p)
-			}
-			Self::BranchOut(mut b) => {
-				b.inner = perturb_branch_out(b.inner, perturbation);
-				Self::BranchOut(b)
-			}
-		}
-	}
-}
-
-fn perturb_branch_out(mut branch: BranchOut, perturbation: AnchorPerturbation) -> BranchOut {
-	branch.node = perturb_node(branch.node, perturbation);
-	branch.incoming_ray = super::degree_range::perturb_direction(
-		branch.incoming_ray,
-		perturbation.angular_scale,
-		perturbation.angular_u,
-		perturbation.angular_v,
-	);
-	branch.bias_ray = super::degree_range::perturb_direction(
-		branch.bias_ray,
-		perturbation.angular_scale,
-		perturbation.angular_u,
-		perturbation.angular_v,
-	);
-	branch.radius_range = (branch.radius_range.start + perturbation.radius_offset).max(1e-4)
-		..(branch.radius_range.end + perturbation.radius_offset).max(1e-4);
-	branch
 }
 
 #[cfg(test)]

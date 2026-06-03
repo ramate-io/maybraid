@@ -2,7 +2,6 @@
 
 use procedural_common::{NoiseConfig, NoiseParams, SetNoiseParams};
 
-use crate::anchors::stalk_perturbation::{perturb_node, AnchorPerturbation, PerturbAnchor};
 use crate::BallStickNode;
 
 use super::point_to_point::PointToPoint;
@@ -255,63 +254,6 @@ impl SetNoiseParams for SopesBanyanChain {
 		self.noise = noise;
 		self
 	}
-}
-
-impl PerturbAnchor for SopesBanyanChain {
-	fn perturb_anchor(mut self, perturbation: AnchorPerturbation) -> Self {
-		self.phase = self.phase.perturb_anchor(perturbation);
-		self
-	}
-}
-
-impl SopesBanyanPhase {
-	fn perturb_anchor(self, perturbation: AnchorPerturbation) -> Self {
-		match self {
-			Self::Stalk(mut p) => {
-				p.start = perturb_node(p.start, perturbation);
-				Self::Stalk(p)
-			}
-			Self::BranchOut(mut b) => {
-				b.inner = perturb_branch_out(b.inner, perturbation);
-				Self::BranchOut(b)
-			}
-			Self::StartFlairUp(mut s) => {
-				s.projection = perturb_branch_out(s.projection, perturbation);
-				Self::StartFlairUp(s)
-			}
-			Self::EndFlairUp(mut e) => {
-				e.node = perturb_node(e.node, perturbation);
-				Self::EndFlairUp(e)
-			}
-			Self::StartDescender(mut s) => {
-				s.projection = perturb_branch_out(s.projection, perturbation);
-				Self::StartDescender(s)
-			}
-			Self::EndDescender(mut e) => {
-				e.node = perturb_node(e.node, perturbation);
-				Self::EndDescender(e)
-			}
-		}
-	}
-}
-
-fn perturb_branch_out(mut branch: BranchOut, perturbation: AnchorPerturbation) -> BranchOut {
-	branch.node = perturb_node(branch.node, perturbation);
-	branch.incoming_ray = super::degree_range::perturb_direction(
-		branch.incoming_ray,
-		perturbation.angular_scale,
-		perturbation.angular_u,
-		perturbation.angular_v,
-	);
-	branch.bias_ray = super::degree_range::perturb_direction(
-		branch.bias_ray,
-		perturbation.angular_scale,
-		perturbation.angular_u,
-		perturbation.angular_v,
-	);
-	branch.radius_range = (branch.radius_range.start + perturbation.radius_offset).max(1e-4)
-		..(branch.radius_range.end + perturbation.radius_offset).max(1e-4);
-	branch
 }
 
 #[cfg(test)]
