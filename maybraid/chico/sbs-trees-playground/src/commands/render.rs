@@ -8,6 +8,7 @@ pub mod jungle_storybook_tree;
 pub mod frond_crown;
 pub mod jungle_growth;
 pub mod liams_conifer;
+pub mod temperate_conifer;
 pub mod moderate_lod_frond_crown;
 pub mod plugin;
 
@@ -31,6 +32,7 @@ pub use jungle_storybook_tree::JungleStorybookTreeRenderHelper;
 pub use frond_crown::FrondCrownRenderHelper;
 pub use jungle_growth::JungleGrowthRenderHelper;
 pub use liams_conifer::LiamsConiferRenderHelper;
+pub use temperate_conifer::TemperateConiferRenderHelper;
 pub use moderate_lod_frond_crown::ModerateLodFrondCrownRenderHelper;
 pub use sopes_banyan::SopesBanyanRenderHelper;
 pub use spear_tuft::SpearTuftRenderHelper;
@@ -83,6 +85,7 @@ impl<T: clap::Args + Clone> RenderHelper<T> {
 pub enum Render {
 	SopesBanyan(SopesBanyanRenderHelper),
 	LiamsConifer(LiamsConiferRenderHelper),
+	TemperateConifer(TemperateConiferRenderHelper),
 	DatePalm(DatePalmRenderHelper),
 	WaialeaPalm(WaialeaPalmRenderHelper),
 	StorybookTree(StorybookTreeRenderHelper),
@@ -115,6 +118,11 @@ impl Render {
 			},
 			Self::LiamsConifer(h) => RenderConfig {
 				subject: RenderSubject::LiamsConifer(h.inner.clone()),
+				res_2: h.res_2,
+				transform: h.render_transform(),
+			},
+			Self::TemperateConifer(h) => RenderConfig {
+				subject: RenderSubject::TemperateConifer(h.inner.clone()),
 				res_2: h.res_2,
 				transform: h.render_transform(),
 			},
@@ -349,6 +357,28 @@ mod tests {
 			- chico_sbs_geometry::sbs::jungle_storybook_tree::JUNGLE_BRANCH_BASE_RADIUS_FRACTION_OF_STALK)
 			.abs()
 			< 1e-5);
+		Ok(())
+	}
+
+	#[test]
+	fn temperate_conifer_command_preserves_shape_params() -> Result<()> {
+		let cmd = crate::commands::PlaygroundCommand::parse_line(
+			"render temperate-conifer --stalk-height 18 --fronds-per-joint 1..2 --frond-length-fraction 0.04..0.06 --frond-spawn-fraction 0.7",
+		)
+		.map_err(|e| anyhow::anyhow!("{e}"))?;
+		let crate::commands::PlaygroundCommand::Render(Render::TemperateConifer(helper)) = cmd else {
+			anyhow::bail!("expected temperate-conifer render command");
+		};
+		assert!((helper.inner.geometry.scale.stalk_height - 18.0).abs() < 1e-5);
+		assert!((helper.inner.fronds_per_joint.start - 1.0).abs() < 1e-5);
+		assert!((helper.inner.frond_length_fraction.start - 0.04).abs() < 1e-5);
+		assert!((helper.inner.frond_spawn_fraction - 0.7).abs() < 1e-5);
+		let cfg = Render::TemperateConifer(helper).into_render_config();
+		let RenderSubject::TemperateConifer(tree) = cfg.subject else {
+			anyhow::bail!("expected temperate conifer subject");
+		};
+		assert!((tree.geometry.scale.stalk_height - 18.0).abs() < 1e-5);
+		assert!((tree.frond_spawn_fraction - 0.7).abs() < 1e-5);
 		Ok(())
 	}
 

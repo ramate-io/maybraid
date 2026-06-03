@@ -30,7 +30,7 @@ use crate::chain::DepthBudget;
 use crate::BallStickNode;
 
 /// Tilt horizontal radial slightly toward −Y (RFC ~2° downward bias).
-fn downward_biased_radial(radial_xz: Vec3, bias_radians: f32) -> Vec3 {
+pub(crate) fn downward_biased_radial(radial_xz: Vec3, bias_radians: f32) -> Vec3 {
 	let radial = Vec3::new(radial_xz.x, 0.0, radial_xz.z).normalize_or_zero();
 	if radial.length_squared() < 1e-12 {
 		return Vec3::NEG_Y;
