@@ -263,6 +263,7 @@ impl LiamsConiferSbs {
 			// Limb thickness: base radius at ring + down-step only (see proto docs).
 			branch_base_radius_fraction_of_stalk: 0.1,
 			branch_radius_child_scale: (0.72, 0.80),
+			linear_projection_taper: false,
 		})
 		.with_perturbation(self.anchor_perturbation.to_perturbation())
 	}

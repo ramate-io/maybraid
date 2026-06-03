@@ -486,10 +486,18 @@ mod tests {
 		let crate::commands::PlaygroundCommand::Render(Render::NorthernConifer(helper)) = cmd else {
 			anyhow::bail!("expected northern-conifer render command");
 		};
-		assert!((helper.inner.geometry.inner.scale.stalk_height - 28.0).abs() < 1e-5);
-		assert!((helper.inner.geometry.inner.rings.height_range.start - 0.12).abs() < 1e-5);
-		assert!((helper.inner.geometry.inner.rings.height_range.end - 0.95).abs() < 1e-5);
+		assert!((helper.inner.geometry.scale.stalk_height - 28.0).abs() < 1e-5);
+		assert!((helper.inner.geometry.rings.height_range.start - 0.12).abs() < 1e-5);
+		assert!((helper.inner.geometry.rings.height_range.end - 0.95).abs() < 1e-5);
 		assert!((helper.inner.splay_radius_fraction_of_height - 0.02).abs() < 1e-5);
+		let mut geometry = helper.inner.geometry.clone();
+		geometry.apply_northern_preset();
+		assert!(
+			(geometry.liams.projection.length_fraction_of_height.start
+				- chico_sbs_geometry::sbs::northern_conifer::NORTHERN_MAX_PROJECTION_FRACTION_OF_HEIGHT)
+				.abs()
+				< 1e-5
+		);
 		Ok(())
 	}
 

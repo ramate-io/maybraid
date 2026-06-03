@@ -1,8 +1,8 @@
 //! **Northern Conifer** — Liam's geometry with plane-splay foliage ([#232](https://github.com/ramate-io/maybraid/issues/232),
 //! [RFC-183 §3.1.7.11](https://github.com/ramate-io/maybraid/tree/main/rfc/rfc-000-000-183-chico-vegetation/03-01-stalk-and-ball-stick-trees/07-well-known-tree-constructions/11-northern-conifer/README.md)).
 //!
-//! Geometry from [`LiamsConiferSbs`](chico_sbs_geometry::LiamsConiferSbs) with Northern ring/projection presets;
-//! [`PlaneSplay`](chico_ball_components::plane_splay::PlaneSplay) at joints and an optional crown [`ChicoBall`](chico_ball_components::chico_ball::ChicoBall).
+//! Geometry from [`NorthernConiferSbs`](chico_sbs_geometry::NorthernConiferSbs) (flattened clap uses Liam defaults;
+//! [`Self::geometry_for_render`] applies the Northern preset). [`PlaneSplay`](chico_ball_components::plane_splay::PlaneSplay) at joints and an optional crown [`ChicoBall`](chico_ball_components::chico_ball::ChicoBall).
 
 mod canopy;
 pub mod render_item_plugin;
@@ -13,14 +13,14 @@ use bevy::prelude::*;
 use chico_ball_components::plane_splay::PlaneSplay;
 use chico_sbs_geometry::render::ball::BallRenderHelper;
 use chico_sbs_geometry::render::stick::StickRenderHelper;
-use chico_sbs_geometry::{BallStickChain, LiamsConiferChain, LiamsConiferSbs};
+use chico_sbs_geometry::{BallStickChain, LiamsConiferChain, NorthernConiferSbs};
 use clap::Args;
 use procedural_common::noise_params_from_scalar_str;
-use procedural_common::{FromScalarNoise, NoiseParams, UnitRange};
+use procedural_common::{FromScalarNoise, NoiseParams};
 use render_item::{CascadeChunk, RenderItem};
 
 use crate::conifer_canopy_apex::{
-	spawn_apex_chico_ball_liams, NORTHERN_APEX_BALL_RADIUS_FRACTION_OF_HEIGHT,
+	spawn_apex_chico_ball_northern, NORTHERN_APEX_BALL_RADIUS_FRACTION_OF_HEIGHT,
 };
 use crate::liams_conifer::stick::LiamsConiferStickRule;
 use crate::skipped_mesh_material::{SkippedLeafMeshMaterial, SkippedStickMeshMaterial};
@@ -28,47 +28,6 @@ use canopy::{
 	NorthernConiferCanopyRule, NORTHERN_SPLAY_CORE_RADIUS, NORTHERN_SPLAY_LEAF_DISC_RADIUS,
 	NORTHERN_SPLAY_RADIUS_FRACTION_OF_HEIGHT,
 };
-
-/// Default ring band: higher start, rings through the crown.
-pub const NORTHERN_DEFAULT_RING_HEIGHTS_START: f32 = 0.38;
-pub const NORTHERN_DEFAULT_RING_HEIGHTS_END: f32 = 1.0;
-
-/// Downward tilt on radial seeds (stronger than Liam's default 2°).
-pub const NORTHERN_DEFAULT_DOWNWARD_BIAS_DEGREES: f32 = 10.0;
-
-/// [`LiamsConiferSbs`] with Northern Conifer geometry defaults (clap `flatten` base).
-#[derive(Clone, Debug, PartialEq, Args)]
-#[command(rename_all = "kebab-case")]
-pub struct NorthernConiferGeometry {
-	#[command(flatten)]
-	pub inner: LiamsConiferSbs,
-}
-
-impl NorthernConiferGeometry {
-	pub fn apply_northern_preset(inner: &mut LiamsConiferSbs) {
-		inner.rings.height_range =
-			UnitRange::new(NORTHERN_DEFAULT_RING_HEIGHTS_START, NORTHERN_DEFAULT_RING_HEIGHTS_END);
-		inner.rings.spacing = 0.035;
-		// Keep limb length near max through the crown (linear taper floor near 1.0).
-		inner.projection.length_fraction_of_height = UnitRange::new(0.15, 0.95);
-		inner.growth.downward_bias_degrees = NORTHERN_DEFAULT_DOWNWARD_BIAS_DEGREES;
-	}
-}
-
-impl Default for NorthernConiferGeometry {
-	fn default() -> Self {
-		let mut inner = LiamsConiferSbs::default();
-		Self::apply_northern_preset(&mut inner);
-		Self { inner }
-	}
-}
-
-impl std::ops::Deref for NorthernConiferGeometry {
-	type Target = LiamsConiferSbs;
-	fn deref(&self) -> &Self::Target {
-		&self.inner
-	}
-}
 
 pub type NorthernConiferStd = NorthernConifer<
 	StandardMaterial,
@@ -86,8 +45,9 @@ where
 	LeafM: Material,
 	LeafS: Clone + Into<MeshMaterial3d<LeafM>> + Args,
 {
+	/// Flattened [`LiamsConiferSbs`] (clap defaults are Liam's, not Northern). [`Self::geometry_for_render`] calls [`NorthernConiferSbs::apply_northern_preset`].
 	#[command(flatten, next_help_heading = "Geometry")]
-	pub geometry: NorthernConiferGeometry,
+	pub geometry: NorthernConiferSbs,
 
 	#[command(flatten, next_help_heading = "Stick Material")]
 	pub stick_material: StickS,
@@ -150,7 +110,7 @@ where
 {
 	fn default() -> Self {
 		Self {
-			geometry: NorthernConiferGeometry::default(),
+			geometry: NorthernConiferSbs::default(),
 			stick_material: StickS::default(),
 			leaf_material: LeafS::default(),
 			splay_radius_fraction_of_height: NORTHERN_SPLAY_RADIUS_FRACTION_OF_HEIGHT,
@@ -171,12 +131,19 @@ where
 	LeafM: Material,
 	LeafS: Clone + Into<MeshMaterial3d<LeafM>> + Args,
 {
+	/// SBS snapshot with Northern preset applied (safe to call after CLI parse).
+	pub fn geometry_for_render(&self) -> NorthernConiferSbs {
+		let mut geometry = self.geometry.clone();
+		geometry.apply_northern_preset();
+		geometry
+	}
+
 	pub fn build_chain(&self) -> BallStickChain<LiamsConiferChain> {
-		self.geometry.inner.build_chain()
+		self.geometry_for_render().build_chain()
 	}
 
 	pub fn splay_radius_world(&self) -> f32 {
-		self.geometry.inner.scale.stalk_height * self.splay_radius_fraction_of_height
+		self.geometry_for_render().height() * self.splay_radius_fraction_of_height
 	}
 }
 
@@ -193,7 +160,8 @@ where
 		cascade_chunk: &CascadeChunk,
 		transform: Transform,
 	) -> Vec<Entity> {
-		let chain = self.build_chain();
+		let geometry = self.geometry_for_render();
+		let chain = geometry.build_chain();
 
 		let stick_rule = LiamsConiferStickRule::<StickM, StickS> {
 			surface_noise: self.stick_surface_noise,
@@ -224,8 +192,8 @@ where
 			transform,
 		));
 
-		out.extend(spawn_apex_chico_ball_liams::<LeafM, _>(
-			&self.geometry.inner,
+		out.extend(spawn_apex_chico_ball_northern::<LeafM, _>(
+			&geometry,
 			&chain,
 			commands,
 			cascade_chunk,

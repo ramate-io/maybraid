@@ -6,8 +6,8 @@ use chico_sbs_geometry::render::ball::BallRenderRule;
 use chico_sbs_geometry::render::mix_seed::{mix_seed_below_fraction, node_mix_seed};
 use chico_sbs_geometry::{BallStickChain, BallStickNode, LiamsConiferChain};
 
-/// Needle-cluster world radius as a fraction of stalk height (RFC `0.018 * H`).
-pub const NORTHERN_SPLAY_RADIUS_FRACTION_OF_HEIGHT: f32 = 0.04;
+/// Needle-cluster world radius as a fraction of stalk height (RFC `0.018 * H`; playground default wider).
+pub const NORTHERN_SPLAY_RADIUS_FRACTION_OF_HEIGHT: f32 = 0.048;
 
 /// Local icosphere/plate sizing before joint scale (narrow needle clusters).
 pub const NORTHERN_SPLAY_CORE_RADIUS: f32 = 0.75;

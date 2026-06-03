@@ -68,6 +68,8 @@ pub struct LiamsConiferProtoAnchors {
 	pub branch_base_radius_fraction_of_stalk: f32,
 	/// Per-segment multipliers on child [`BranchOut::radius_range`]: `(lo, hi)`.
 	pub branch_radius_child_scale: (f32, f32),
+	/// When true, [`Self::projection_length`] is \(\ell_{\max}(1-u)\) only (no [`Self::min_projection_fraction_of_max`] floor).
+	pub linear_projection_taper: bool,
 }
 
 impl Default for LiamsConiferProtoAnchors {
@@ -90,6 +92,7 @@ impl Default for LiamsConiferProtoAnchors {
 			branch_depth: 3,
 			branch_base_radius_fraction_of_stalk: 0.1,
 			branch_radius_child_scale: (0.72, 0.80),
+			linear_projection_taper: false,
 		}
 	}
 }
@@ -122,12 +125,16 @@ impl LiamsConiferProtoAnchors {
 		((z_frac - a) / (b - a)).clamp(0.0, 1.0)
 	}
 
-	/// RFC linear taper: \(\ell(u) = \ell_{\max}(1-u)\) with optional floor on the top rings.
+	/// Ring projection budget: \(\ell_{\max}(1-u)\), optionally floored at [`Self::min_projection_fraction_of_max`].
 	pub fn projection_length(&self, u: f32) -> f32 {
 		let h = self.stalk.stalk_height.max(1e-6);
 		let ell_max = h * self.max_projection_fraction_of_height;
 		let raw = ell_max * (1.0 - u.clamp(0.0, 1.0));
-		raw.max(ell_max * self.min_projection_fraction_of_max)
+		if self.linear_projection_taper {
+			raw
+		} else {
+			raw.max(ell_max * self.min_projection_fraction_of_max)
+		}
 	}
 
 	/// Joint radius at a ring spoke before any [`BranchOut`] down-stepping.

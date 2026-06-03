@@ -259,7 +259,7 @@ impl RenderSubject {
 			Self::NorthernConifer(t) => {
 				format!(
 					"{:?}|splay={}|spawn={}|apex={}",
-					t.geometry.inner,
+					t.geometry,
 					t.splay_radius_fraction_of_height,
 					t.splay_spawn_fraction,
 					t.apex_canopy_spawn_fraction

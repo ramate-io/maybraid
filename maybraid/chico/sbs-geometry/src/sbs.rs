@@ -2,6 +2,7 @@
 pub mod date_palm;
 pub mod waialea_palm;
 pub mod liams_conifer;
+pub mod northern_conifer;
 pub mod friends_conifer;
 pub mod sopes_banyan;
 pub mod honu_banyan;
