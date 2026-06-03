@@ -3,6 +3,9 @@ use chico_ball_components::chico_ball::ChicoBall;
 use chico_sbs_geometry::render::ball::BallRenderRule;
 use chico_sbs_geometry::{BallStickChain, BallStickNode, StorybookTreeChain};
 
+/// Slightly smaller than node balls so joints stay visible but gaps are covered.
+const JOINT_BALL_SCALE: f32 = 0.88;
+
 /// Stick-material [`ChicoBall`] at every graph node to hide crook-cylinder segment gaps.
 #[derive(Clone)]
 pub(crate) struct BraidOakJointBallRule<StickM, StickS>
@@ -26,6 +29,6 @@ where
 		_hysteresis: &StorybookTreeChain,
 		_chain: &BallStickChain<StorybookTreeChain>,
 	) -> Option<(ChicoBall<StickM, StickS>, f32)> {
-		Some((self.joint_ball.clone(), 0.88))
+		Some((self.joint_ball.clone(), JOINT_BALL_SCALE))
 	}
 }

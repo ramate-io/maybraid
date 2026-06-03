@@ -2,9 +2,9 @@
 //!
 //! Unlike [`ChicoStick`](crate::chico_stick::ChicoStick), this uses a bent centerline without surface noise.
 //!
-//! [`ChicoCrookStick::bend_strength`] is the intended **world** lateral XZ displacement per unit Y. SDF radius is
-//! **`1 / bend_strength`** (thin radii like `0.05` yield strong visible bends); XZ entity scale is
-//! **`target_radius / sdf_radius`** so world girth stays at the unit taper target.
+//! [`ChicoCrookStick::bend_strength`] sets intended lateral curvature. SDF radius is **`1 / bend_strength`**
+//! (thin values like `0.05` read strongly); XZ entity scale is **`target_radius / sdf_radius`** so world
+//! girth stays at the unit taper target.
 
 pub mod render_item_plugin;
 
@@ -19,10 +19,15 @@ use render_item::{mesh::handle::Cached, CascadeChunk, RenderItem};
 const SDF_BEND_X: f32 = 0.12;
 const SDF_BEND_Z: f32 = 0.08;
 
-/// Unit-stick base/top radii the mesh must hit in world space (`node_radius ×` these fractions).
-/// Fixing these helpes with cahcing. You can apply scaling to get the effect.
+/// Unit-stick radii the mesh must hit in world space (`node_radius ×` these fractions).
+/// Kept fixed for mesh caching; [`RenderItem`] spawn applies XZ scale for bend strength.
 const UNIT_TARGET_BASE_RADIUS: f32 = 0.5;
 const UNIT_TARGET_TOP_RADIUS: f32 = 0.42;
+
+const MIN_BEND_STRENGTH: f32 = 1e-4;
+const MIN_BOUNDS_MARGIN: f32 = 0.06;
+/// Separate [`segment_key`] bits for Z phase so X/Z flip independently.
+const PHASE_Z_KEY_ROTATE: u32 = 7;
 
 /// [`StandardMaterial`] crook stick using explicit mesh materials.
 pub type ChicoCrookStickStd = ChicoCrookStick<StandardMaterial, MeshMaterial3d<StandardMaterial>>;
@@ -33,9 +38,9 @@ pub struct ChicoCrookStick<M: Material, S>
 where
 	S: Clone + Into<MeshMaterial3d<M>>,
 {
-	/// World lateral XZ displacement per unit Y along the segment.
+	/// Lateral curvature control: higher ⇒ thinner SDF radius and larger XZ scale.
 	pub bend_strength: f32,
-	/// Deterministic phase variation for this segment (typically hashed from segment geometry).
+	/// Picks joint-aligned bend phase (`0` or `π`) per axis.
 	pub segment_key: u32,
 	/// Converts into [`MeshMaterial3d`] at spawn (see [`Into`]).
 	pub material: S,
@@ -46,22 +51,20 @@ impl<M: Material, S> ChicoCrookStick<M, S>
 where
 	S: Clone + Into<MeshMaterial3d<M>>,
 {
-	/// Build a crook stick at the given lateral bend strength (XZ units per unit Y).
+	/// Build a crook stick at the given bend strength and deterministic phase key.
 	pub fn new(bend_strength: f32, segment_key: u32, material: S) -> Self {
 		Self {
-			bend_strength: bend_strength.max(1e-4),
+			bend_strength: bend_strength.max(MIN_BEND_STRENGTH),
 			segment_key,
 			material,
 			__marker: PhantomData,
 		}
 	}
 
-	/// SDF base radius inversely proportional to bend strength (`≈ 1 / strength`).
 	fn sdf_base_radius(&self) -> f32 {
 		1.0 / self.bend_strength
 	}
 
-	/// XZ scale restores unit taper girth: `target_radius / sdf_radius`.
 	fn xz_crook_scale(&self) -> f32 {
 		UNIT_TARGET_BASE_RADIUS / self.sdf_base_radius()
 	}
@@ -72,10 +75,14 @@ where
 		(base, top)
 	}
 
-	/// Joint-aligned bend phases: `0` or `π` so the centerline passes through both ball joints.
+	/// `sin(πt + φ)` is zero at both segment ends when `φ ∈ {0, π}`.
 	fn bend_phases(&self) -> (f32, f32) {
 		let phase_x = if self.segment_key & 1 == 0 { 0.0 } else { PI };
-		let phase_z = if self.segment_key.rotate_left(7) & 1 == 0 { 0.0 } else { PI };
+		let phase_z = if self.segment_key.rotate_left(PHASE_Z_KEY_ROTATE) & 1 == 0 {
+			0.0
+		} else {
+			PI
+		};
 		(phase_x, phase_z)
 	}
 
@@ -94,12 +101,11 @@ where
 			phase_x,
 			phase_z,
 		};
-		let xz_pad = cyl.chunk_mu_xz_pad();
-		cyl.bounds_margin = xz_pad.max(0.06);
+		cyl.bounds_margin = cyl.chunk_mu_xz_pad().max(MIN_BOUNDS_MARGIN);
 		cyl
 	}
 
-	/// Effective world base radius: `node_radius * 0.5` at unit taper.
+	/// Effective world base radius at the unit taper target.
 	pub fn visible_base_radius(&self, node_radius: f32) -> f32 {
 		node_radius * UNIT_TARGET_BASE_RADIUS
 	}
@@ -116,20 +122,18 @@ where
 		cascade_chunk: &CascadeChunk,
 		transform: Transform,
 	) -> Vec<Entity> {
-		let s = self.xz_crook_scale();
+		let xz_scale = self.xz_crook_scale();
 		let mut mesh_transform = transform;
-		mesh_transform.scale.x *= s;
-		mesh_transform.scale.z *= s;
+		mesh_transform.scale.x *= xz_scale;
+		mesh_transform.scale.z *= xz_scale;
 
+		// Lower-left anchor offset (same convention as [`ChicoStick`]).
 		let local_offset = Vec3::new(
 			-0.5 * mesh_transform.scale.x,
 			-0.5 * mesh_transform.scale.y,
 			-0.5 * mesh_transform.scale.z,
 		);
-		let centroid_offset = mesh_transform.rotation * local_offset;
-		let translation = mesh_transform.translation + centroid_offset;
-
-		let mesh_material: MeshMaterial3d<M> = self.material.clone().into();
+		let translation = mesh_transform.translation + mesh_transform.rotation * local_offset;
 
 		vec![commands
 			.spawn((
@@ -137,7 +141,7 @@ where
 				Cached::new(self.crook_cylinder()),
 				cascade_chunk.clone(),
 				mesh_transform.with_translation(translation),
-				mesh_material,
+				self.material.clone().into(),
 			))
 			.id()]
 	}
@@ -171,8 +175,7 @@ mod tests {
 			MeshMaterial3d::<StandardMaterial>::default(),
 		);
 		let base = stick.crook_cylinder().base_radius;
-		let xz = UNIT_TARGET_BASE_RADIUS / base;
-		assert!((xz * base - UNIT_TARGET_BASE_RADIUS).abs() < 1e-5);
+		assert!((UNIT_TARGET_BASE_RADIUS / base * base - UNIT_TARGET_BASE_RADIUS).abs() < 1e-5);
 		assert!((base - 1.0 / 12.0).abs() < 1e-5);
 	}
 
@@ -201,7 +204,6 @@ mod tests {
 			1,
 			MeshMaterial3d::<StandardMaterial>::default(),
 		);
-		let node_r = 0.8;
-		assert!((stick.visible_base_radius(node_r) - node_r * 0.5).abs() < 1e-5);
+		assert!((stick.visible_base_radius(0.8) - 0.4).abs() < 1e-5);
 	}
 }

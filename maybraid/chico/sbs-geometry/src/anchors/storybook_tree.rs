@@ -50,6 +50,19 @@ pub fn dome_projection_length(ell_max: f32, ell_min: f32, u: f32) -> f32 {
 	ell_min + (ell_max - ell_min) * bell
 }
 
+/// Storybook dome projection at ring mix `u`, from tree height and min/max fractions of `H`.
+pub fn storybook_dome_projection_length(
+	tree_height: f32,
+	max_fraction_of_height: f32,
+	min_fraction_of_height: f32,
+	u: f32,
+) -> f32 {
+	let h = tree_height.max(1e-6);
+	let ell_max = h * max_fraction_of_height;
+	let ell_min = h * min_fraction_of_height.min(max_fraction_of_height);
+	dome_projection_length(ell_max, ell_min, u)
+}
+
 /// Tilt horizontal radial: lower rings slightly downward, upper rings slightly upward.
 fn ring_biased_radial(radial_xz: Vec3, ring_u: f32, max_tilt_degrees: f32) -> Vec3 {
 	let radial = Vec3::new(radial_xz.x, 0.0, radial_xz.z).normalize_or_zero();
@@ -137,13 +150,12 @@ impl StorybookTreeProtoAnchors {
 	}
 
 	pub fn projection_length(&self, u: f32) -> f32 {
-		let h = self.tree_height.max(1e-6);
-		let ell_max = h * self.max_projection_fraction_of_height;
-		let ell_min = h
-			* self
-				.projection_min_fraction_of_height
-				.min(self.max_projection_fraction_of_height);
-		dome_projection_length(ell_max, ell_min, u)
+		storybook_dome_projection_length(
+			self.tree_height,
+			self.max_projection_fraction_of_height,
+			self.projection_min_fraction_of_height,
+			u,
+		)
 	}
 
 	/// Limb radius at ring anchors; floored so degenerate SBS fractions still produce visible sticks.

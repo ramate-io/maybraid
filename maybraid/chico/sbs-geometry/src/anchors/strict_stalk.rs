@@ -8,6 +8,11 @@ use crate::BallStickNode;
 use crate::Hysteresis;
 use bevy_math::Vec3;
 
+/// Linear radius taper from base toward the crown on a multi-hop stalk.
+const SEGMENTED_STALK_TAPER_RATE: f32 = 0.38;
+/// Floor on crown radius as a fraction of [`StrictStalk::stalk_base_radius`].
+const SEGMENTED_STALK_MIN_RADIUS_FRACTION: f32 = 0.58;
+
 #[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "clap", derive(clap::Args))]
 #[cfg_attr(feature = "clap", command(rename_all = "kebab-case"))]
@@ -49,13 +54,14 @@ impl StrictStalk {
 		)]
 	}
 
-	/// Multi-hop stalk along the centroid: `section_count` segments with tapering node radii.
+	/// Multi-hop stalk along the centroid with tapering node radii.
 	pub fn segmented_point_to_point(&self, section_count: u32) -> PointToPoint {
 		let n = section_count.max(2) as usize;
 		let nodes: Vec<BallStickNode> = (0..=n)
 			.map(|i| {
 				let t = i as f32 / n as f32;
-				let r = self.stalk_base_radius * (1.0 - 0.38 * t).max(0.58);
+				let r = self.stalk_base_radius
+					* (1.0 - SEGMENTED_STALK_TAPER_RATE * t).max(SEGMENTED_STALK_MIN_RADIUS_FRACTION);
 				BallStickNode::new(self.centroid_at_height_fraction(t), r)
 			})
 			.collect();

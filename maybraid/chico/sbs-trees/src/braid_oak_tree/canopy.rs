@@ -1,4 +1,4 @@
-//! Braid Oak foliage allocation ([#234](https://github.com/ramate-io/maybraid/issues/234)).
+//! Braid Oak foliage: inner balls and outer splay by node context ([#234](https://github.com/ramate-io/maybraid/issues/234)).
 
 use bevy::prelude::*;
 use chico_ball_components::chico_ball::ChicoBall;
@@ -10,7 +10,10 @@ use chico_sbs_geometry::render::ball::BallRenderRule;
 use chico_sbs_geometry::{BallStickChain, BallStickNode};
 use chico_tree_components::BraidOakCanopyFoliage;
 
-const MIN_RING_U_FOR_FOLIAGE: f32 = 0.45;
+/// Inner foliage allowed once the ring is above the lower trunk belt (RFC `height_fraction > 0.35`).
+const MIN_RING_U_FOR_INNER_FOLIAGE: f32 = 0.45;
+/// Mid-limb nodes qualify without waiting for a terminal hop.
+const MIN_BRANCH_ORDER_FOR_FOLIAGE: usize = 2;
 
 fn qualifies_for_foliage(
 	node_idx: usize,
@@ -24,8 +27,8 @@ fn qualifies_for_foliage(
 		return false;
 	}
 	is_graph_terminal(chain, node_idx)
-		|| hysteresis.branch_order() > 2
-		|| hysteresis.ring_u > MIN_RING_U_FOR_FOLIAGE
+		|| hysteresis.branch_order() > MIN_BRANCH_ORDER_FOR_FOLIAGE
+		|| hysteresis.ring_u > MIN_RING_U_FOR_INNER_FOLIAGE
 }
 
 fn is_outer_foliage(

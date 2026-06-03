@@ -1,3 +1,5 @@
+//! Crook-cylinder stick rule for Braid Oak ([#234](https://github.com/ramate-io/maybraid/issues/234)).
+
 use std::marker::PhantomData;
 
 use bevy::prelude::*;
@@ -5,6 +7,15 @@ use chico_sbs_geometry::render::stick::StickRenderRule;
 use chico_sbs_geometry::{BallStickSegment, StorybookTreeChain, StorybookTreePhase};
 use chico_stick_components::chico_crook_stick::ChicoCrookStick;
 use procedural_common::{NoiseConfig, NoiseParams};
+
+/// Base crook strength on the stalk (maps to ~`0.10` SDF radius via [`ChicoCrookStick`]).
+const STALK_BEND_STRENGTH: f32 = 10.0;
+/// Branch base strength at the lowest ring; rises with [`StorybookTreeChain::ring_u`].
+const BRANCH_BEND_STRENGTH_BASE: f32 = 14.0;
+const BRANCH_BEND_STRENGTH_RING_GAIN: f32 = 10.0;
+/// Multiplier on signed stick-surface noise sample.
+const BEND_STRENGTH_NOISE_GAIN: f32 = 0.40;
+const MIN_BEND_STRENGTH: f32 = 4.0;
 
 fn segment_key(segment: &BallStickSegment<'_>) -> u32 {
 	(segment.start.position.x.to_bits() as u32)
@@ -33,11 +44,11 @@ where
 		segment: &BallStickSegment<'_>,
 		parent_hysteresis: &StorybookTreeChain,
 	) -> f32 {
-		let is_stalk = matches!(parent_hysteresis.phase, StorybookTreePhase::Stalk(_));
-		let base = if is_stalk {
-			10.0
+		let base = if matches!(parent_hysteresis.phase, StorybookTreePhase::Stalk(_)) {
+			STALK_BEND_STRENGTH
 		} else {
-			14.0 + 10.0 * parent_hysteresis.ring_u.clamp(0.0, 1.0)
+			let u = parent_hysteresis.ring_u.clamp(0.0, 1.0);
+			BRANCH_BEND_STRENGTH_BASE + BRANCH_BEND_STRENGTH_RING_GAIN * u
 		};
 
 		let mid = (segment.start.position + segment.end.position) * 0.5;
@@ -46,7 +57,7 @@ where
 			+ segment.end.position.length() as i32;
 		let noise = NoiseConfig::new(self.stick_surface_noise.with_seed(seed));
 		let n = noise.sample_3d(mid.x, mid.y, mid.z).clamp(-1.0, 1.0);
-		(base * (1.0 + 0.40 * n)).max(4.0)
+		(base * (1.0 + BEND_STRENGTH_NOISE_GAIN * n)).max(MIN_BEND_STRENGTH)
 	}
 }
 
@@ -62,9 +73,8 @@ where
 		parent_hysteresis: &StorybookTreeChain,
 		_child_hysteresis: &StorybookTreeChain,
 	) -> Option<ChicoCrookStick<StickM, StickS>> {
-		let strength = self.bend_strength(segment, parent_hysteresis);
 		Some(ChicoCrookStick::new(
-			strength,
+			self.bend_strength(segment, parent_hysteresis),
 			segment_key(segment),
 			self.stick_material.clone(),
 		))
@@ -78,6 +88,24 @@ mod tests {
 	use chico_sbs_geometry::BallStickNode;
 	use procedural_common::FromScalarNoise;
 
+	fn branch_chain(ring_u: f32) -> StorybookTreeChain {
+		StorybookTreeChain::new(
+			procedural_common::NoiseConfig::new(NoiseParams::default()),
+			6.0,
+			3,
+			0.0,
+			ring_u,
+			0.65,
+			StorybookTreePhase::BranchOut(chico_sbs_geometry::DepthBudget {
+				inner: chico_sbs_geometry::BranchOut::radial_out_horizontal(
+					BallStickNode::new(Vec3::ZERO, 0.04),
+					Vec3::X,
+				),
+				remaining: 3,
+			}),
+		)
+	}
+
 	#[test]
 	fn branch_bend_strength_grows_with_ring_height() {
 		let rule = BraidOakTreeStickRule::<StandardMaterial, MeshMaterial3d<StandardMaterial>> {
@@ -89,38 +117,8 @@ mod tests {
 			start: &BallStickNode::new(Vec3::ZERO, 0.4),
 			end: &BallStickNode::new(Vec3::new(0.0, 2.0, 0.0), 0.35),
 		};
-		let low = StorybookTreeChain::new(
-			procedural_common::NoiseConfig::new(NoiseParams::default()),
-			6.0,
-			3,
-			0.0,
-			0.1,
-			0.65,
-			StorybookTreePhase::BranchOut(chico_sbs_geometry::DepthBudget {
-				inner: chico_sbs_geometry::BranchOut::radial_out_horizontal(
-					BallStickNode::new(Vec3::ZERO, 0.04),
-					Vec3::X,
-				),
-				remaining: 3,
-			}),
-		);
-		let high = StorybookTreeChain::new(
-			procedural_common::NoiseConfig::new(NoiseParams::default()),
-			6.0,
-			3,
-			0.0,
-			0.9,
-			0.65,
-			StorybookTreePhase::BranchOut(chico_sbs_geometry::DepthBudget {
-				inner: chico_sbs_geometry::BranchOut::radial_out_horizontal(
-					BallStickNode::new(Vec3::ZERO, 0.04),
-					Vec3::X,
-				),
-				remaining: 3,
-			}),
-		);
-		let s_lo = rule.bend_strength(&segment, &low);
-		let s_hi = rule.bend_strength(&segment, &high);
+		let s_lo = rule.bend_strength(&segment, &branch_chain(0.1));
+		let s_hi = rule.bend_strength(&segment, &branch_chain(0.9));
 		assert!(s_hi > s_lo);
 	}
 }

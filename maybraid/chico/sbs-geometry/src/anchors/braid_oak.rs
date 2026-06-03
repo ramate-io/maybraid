@@ -7,7 +7,7 @@ use procedural_common::NoiseConfig;
 
 use super::stalk_perturbation::{HasStrictStalk, StalkPerturbation};
 use super::storybook_tree::{
-	dome_projection_length, StorybookTreeAnchorPerturbation,
+	storybook_dome_projection_length, StorybookTreeAnchorPerturbation,
 	DEFAULT_OUTER_FOLIAGE_DISTANCE_FRACTION, DEFAULT_TREE_HEIGHT,
 };
 use super::strict_stalk::StrictStalk;
@@ -52,8 +52,26 @@ pub const BRAID_PROJECTION_MIN_FRACTION: f32 = 0.15;
 /// Stalk segments along the centroid (multi-hop [`PointToPoint`]).
 pub const BRAID_STALK_SECTION_COUNT: u32 = 5;
 
-/// RFC branch fan-out (`18°`).
+/// Vertical bias at the lowest rings (RFC `mix(-0.35, …, u)`).
+pub const BRAID_VERTICAL_BIAS_LOW: f32 = -0.35;
+/// Vertical bias at the highest rings (RFC `mix(…, 0.45, u)`).
+pub const BRAID_VERTICAL_BIAS_HIGH: f32 = 0.45;
+
+/// [`BranchOut::with_bias_blend`] for braid limbs.
+pub const BRAID_BIAS_BLEND: f32 = 0.88;
+
+/// Fixed child count at ring seeds (RFC `2..=3`; art-direction: always `2`).
+pub const BRAID_CHILD_COUNT: u32 = 2;
+
+/// Per-hop radius scale range on canopy limbs.
+pub const BRAID_BRANCH_RADIUS_CHILD_SCALE_LO: f32 = 0.82;
+pub const BRAID_BRANCH_RADIUS_CHILD_SCALE_HI: f32 = 0.90;
+
+/// Wider branch fan-out than RFC `18°` for expressive braiding.
 pub const BRAID_ANGLE_TOLERANCE_DEGREES: f32 = 32.0;
+
+/// Noise lane for per-ring spoke sampling ([`NoiseConfig::sample_range_usize_4d`]).
+const BRAID_SPOKE_SAMPLE_LANE: f32 = 11.0;
 
 /// World leaf radius fraction of `H`.
 pub const BRAID_LEAF_RADIUS_FRACTION: f32 = 0.085;
@@ -65,7 +83,8 @@ pub fn braid_vertical_bias_radial(radial_xz: Vec3, ring_u: f32) -> Vec3 {
 		return Vec3::Y;
 	}
 	let u = ring_u.clamp(0.0, 1.0);
-	let vertical_bias = -0.35 + (0.45 - (-0.35)) * u;
+	let vertical_bias =
+		BRAID_VERTICAL_BIAS_LOW + (BRAID_VERTICAL_BIAS_HIGH - BRAID_VERTICAL_BIAS_LOW) * u;
 	(radial + Vec3::Y * vertical_bias).normalize_or_zero()
 }
 
@@ -107,13 +126,13 @@ impl Default for BraidOakTreeProtoAnchors {
 			max_projection_fraction_of_height: BRAID_MAX_PROJECTION_FRACTION,
 			projection_min_fraction_of_height: BRAID_PROJECTION_MIN_FRACTION,
 			branch_angle_tolerance: BRAID_ANGLE_TOLERANCE_DEGREES.to_radians(),
-			bias_blend: 0.88,
+			bias_blend: BRAID_BIAS_BLEND,
 			branch_depth: BRAID_BRANCH_DEPTH,
-			child_count_min: 2,
-			child_count_max: 2,
+			child_count_min: BRAID_CHILD_COUNT,
+			child_count_max: BRAID_CHILD_COUNT,
 			outer_foliage_distance_fraction: DEFAULT_OUTER_FOLIAGE_DISTANCE_FRACTION,
 			branch_base_radius_fraction_of_stalk: BRAID_BRANCH_BASE_RADIUS_FRACTION_OF_STALK,
-			branch_radius_child_scale: (0.82, 0.90),
+			branch_radius_child_scale: (BRAID_BRANCH_RADIUS_CHILD_SCALE_LO, BRAID_BRANCH_RADIUS_CHILD_SCALE_HI),
 		}
 	}
 }
@@ -139,13 +158,12 @@ impl BraidOakTreeProtoAnchors {
 	}
 
 	pub fn projection_length(&self, u: f32) -> f32 {
-		let h = self.tree_height.max(1e-6);
-		let ell_max = h * self.max_projection_fraction_of_height;
-		let ell_min = h
-			* self
-				.projection_min_fraction_of_height
-				.min(self.max_projection_fraction_of_height);
-		dome_projection_length(ell_max, ell_min, u)
+		storybook_dome_projection_length(
+			self.tree_height,
+			self.max_projection_fraction_of_height,
+			self.projection_min_fraction_of_height,
+			u,
+		)
 	}
 
 	fn limb_base_radius(&self) -> f32 {
@@ -170,7 +188,7 @@ impl BraidOakTreeProtoAnchors {
 			z_frac,
 			ring_index as f32,
 			self.tree_height,
-			11.0,
+			BRAID_SPOKE_SAMPLE_LANE,
 		) as u32
 	}
 

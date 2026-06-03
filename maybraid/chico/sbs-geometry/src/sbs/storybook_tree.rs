@@ -141,6 +141,31 @@ impl Default for StorybookProjectionParams {
 	}
 }
 
+/// Overwrite `current` with `preset` when it still matches storybook defaults (CLI merge helper).
+pub(crate) fn apply_storybook_field_preset<T: Clone + PartialEq>(
+	current: &mut T,
+	story: &T,
+	preset: &T,
+) {
+	if *current == *story {
+		*current = preset.clone();
+	}
+}
+
+/// Merge a [`UnitRange`] preset field-by-field when the user did not replace the whole range.
+pub(crate) fn apply_unit_range_preset(
+	current: &mut UnitRange,
+	story: &UnitRange,
+	preset: &UnitRange,
+) {
+	if *current == *story {
+		*current = preset.clone();
+		return;
+	}
+	apply_storybook_field_preset(&mut current.start, &story.start, &preset.start);
+	apply_storybook_field_preset(&mut current.end, &story.end, &preset.end);
+}
+
 #[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "clap", derive(clap::Args))]
 #[cfg_attr(feature = "clap", command(rename_all = "kebab-case"))]
