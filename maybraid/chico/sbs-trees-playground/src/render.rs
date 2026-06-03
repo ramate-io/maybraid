@@ -14,7 +14,9 @@ use chico_sbs_trees::storybook_tree::StorybookTree;
 use chico_sbs_trees::penmarch_torch::PenmarchTorch;
 use chico_sbs_trees::kamakura_torch::KamakuraTorch;
 use chico_sbs_trees::rorys_head_trained::RorysHeadTrained;
+use chico_sbs_trees::vase_tree::VaseTree;
 use chico_sbs_trees::sopes_banyan::SopesBanyan;
+use chico_sbs_trees::honu_banyan::HonuBanyan;
 use chico_sbs_trees::SkippedLeafMeshMaterial;
 use chico_sbs_trees::SkippedStickMeshMaterial;
 use chico_tree_components::{
@@ -30,6 +32,20 @@ pub type RenderSopesBanyan = SopesBanyan<
 	SkippedStickMeshMaterial<ChicoStickMaterial>,
 	ChicoLeafMaterial,
 	SkippedLeafMeshMaterial<ChicoLeafMaterial>,
+>;
+
+/// [`HonuBanyan`] — wide spreading banyan ([#250](https://github.com/ramate-io/maybraid/issues/250)).
+pub type RenderHonuBanyan = HonuBanyan<
+	ChicoStickMaterial,
+	SkippedStickMeshMaterial<ChicoStickMaterial>,
+	ChicoLeafMaterial,
+	SkippedInnerLeafMeshMaterial<ChicoLeafMaterial>,
+	ChicoLeafMaterial,
+	SkippedOuterLeafMeshMaterial<ChicoLeafMaterial>,
+	ChicoStickMaterial,
+	SkippedBodyMeshMaterial<ChicoStickMaterial>,
+	StandardMaterial,
+	SkippedFoliageMeshMaterial<StandardMaterial>,
 >;
 
 /// [`LiamsConifer`] configured for this playground (green [`StandardMaterial`] tufts for shape debugging).
@@ -104,6 +120,16 @@ pub type RenderRorysHeadTrained = RorysHeadTrained<
 	SkippedLeafMeshMaterial<ChicoLeafMaterial>,
 >;
 
+/// [`VaseTree`] — upward-opening vase-profile broadleaf ([#246](https://github.com/ramate-io/maybraid/issues/246)).
+pub type RenderVaseTree = VaseTree<
+	ChicoStickMaterial,
+	SkippedStickMeshMaterial<ChicoStickMaterial>,
+	ChicoLeafMaterial,
+	SkippedInnerLeafMeshMaterial<ChicoLeafMaterial>,
+	ChicoLeafMaterial,
+	SkippedOuterLeafMeshMaterial<ChicoLeafMaterial>,
+>;
+
 /// [`BraidOakTree`] — gnarled broadleaf with crook-cylinder branches ([#234](https://github.com/ramate-io/maybraid/issues/234)).
 pub type RenderBraidOakTree = BraidOakTree<
 	ChicoStickMaterial,
@@ -156,6 +182,7 @@ pub type RenderJungleGrowth = JungleGrowth<
 #[derive(Clone)]
 pub enum RenderSubject {
 	SopesBanyan(RenderSopesBanyan),
+	HonuBanyan(RenderHonuBanyan),
 	LiamsConifer(RenderLiamsConifer),
 	FriendsConifer(RenderFriendsConifer),
 	TemperateConifer(RenderTemperateConifer),
@@ -165,6 +192,7 @@ pub enum RenderSubject {
 	PenmarchTorch(RenderPenmarchTorch),
 	KamakuraTorch(RenderKamakuraTorch),
 	RorysHeadTrained(RenderRorysHeadTrained),
+	VaseTree(RenderVaseTree),
 	BraidOakTree(RenderBraidOakTree),
 	JungleStorybookTree(RenderJungleStorybookTree),
 	SucculentTuft(RenderSucculentTuft),
@@ -181,6 +209,7 @@ impl RenderSubject {
 	pub fn label(&self) -> &'static str {
 		match self {
 			Self::SopesBanyan(_) => "SopesBanyan",
+			Self::HonuBanyan(_) => "HonuBanyan",
 			Self::LiamsConifer(_) => "LiamsConifer",
 			Self::FriendsConifer(_) => "FriendsConifer",
 			Self::TemperateConifer(_) => "TemperateConifer",
@@ -190,6 +219,7 @@ impl RenderSubject {
 			Self::PenmarchTorch(_) => "PenmarchTorch",
 			Self::KamakuraTorch(_) => "KamakuraTorch",
 			Self::RorysHeadTrained(_) => "RorysHeadTrained",
+			Self::VaseTree(_) => "VaseTree",
 			Self::BraidOakTree(_) => "BraidOakTree",
 			Self::JungleStorybookTree(_) => "JungleStorybookTree",
 			Self::SucculentTuft(_) => "SucculentTuft",
@@ -207,6 +237,7 @@ impl RenderSubject {
 	pub fn sync_param_key(&self) -> String {
 		match self {
 			Self::SopesBanyan(t) => format!("{:?}", t.geometry),
+			Self::HonuBanyan(t) => format!("{:?}", t.geometry),
 			Self::LiamsConifer(t) => format!("{:?}", t.geometry),
 			Self::FriendsConifer(t) => {
 				format!(
@@ -229,6 +260,7 @@ impl RenderSubject {
 			Self::PenmarchTorch(t) => format!("{:?}", t.geometry),
 			Self::KamakuraTorch(t) => format!("{:?}", t.geometry),
 			Self::RorysHeadTrained(t) => format!("{:?}", t.geometry),
+			Self::VaseTree(t) => format!("{:?}", t.geometry),
 			Self::BraidOakTree(t) => format!("{:?}", t.geometry),
 			Self::JungleStorybookTree(t) => format!("{:?}", t.geometry),
 			Self::SucculentTuft(t) => format!("{:?}", t.shape),
@@ -245,6 +277,7 @@ impl RenderSubject {
 	fn dispatch_item(&self) -> RenderDispatch {
 		match self {
 			Self::SopesBanyan(tree) => RenderDispatch::SopesBanyan(tree.clone()),
+			Self::HonuBanyan(tree) => RenderDispatch::HonuBanyan(tree.clone()),
 			Self::LiamsConifer(tree) => RenderDispatch::LiamsConifer(tree.clone()),
 			Self::FriendsConifer(tree) => RenderDispatch::FriendsConifer(tree.clone()),
 			Self::TemperateConifer(tree) => RenderDispatch::TemperateConifer(tree.clone()),
@@ -254,6 +287,7 @@ impl RenderSubject {
 			Self::PenmarchTorch(tree) => RenderDispatch::PenmarchTorch(tree.clone()),
 			Self::KamakuraTorch(tree) => RenderDispatch::KamakuraTorch(tree.clone()),
 			Self::RorysHeadTrained(tree) => RenderDispatch::RorysHeadTrained(tree.clone()),
+			Self::VaseTree(tree) => RenderDispatch::VaseTree(tree.clone()),
 			Self::BraidOakTree(tree) => RenderDispatch::BraidOakTree(tree.clone()),
 			Self::JungleStorybookTree(tree) => RenderDispatch::JungleStorybookTree(tree.clone()),
 			Self::SucculentTuft(tuft) => RenderDispatch::SucculentTuft(tuft.clone()),
@@ -271,6 +305,7 @@ impl RenderSubject {
 #[derive(Clone)]
 enum RenderDispatch {
 	SopesBanyan(RenderSopesBanyan),
+	HonuBanyan(RenderHonuBanyan),
 	LiamsConifer(RenderLiamsConifer),
 	FriendsConifer(RenderFriendsConifer),
 	TemperateConifer(RenderTemperateConifer),
@@ -280,6 +315,7 @@ enum RenderDispatch {
 	PenmarchTorch(RenderPenmarchTorch),
 	KamakuraTorch(RenderKamakuraTorch),
 	RorysHeadTrained(RenderRorysHeadTrained),
+	VaseTree(RenderVaseTree),
 	BraidOakTree(RenderBraidOakTree),
 	JungleStorybookTree(RenderJungleStorybookTree),
 	SucculentTuft(RenderSucculentTuft),
@@ -356,6 +392,9 @@ pub fn sync_render(
 		RenderDispatch::SopesBanyan(tree) => {
 			commands.spawn((bundle, DispatchRenderItem::new(tree)));
 		}
+		RenderDispatch::HonuBanyan(tree) => {
+			commands.spawn((bundle, DispatchRenderItem::new(tree)));
+		}
 		RenderDispatch::LiamsConifer(tree) => {
 			commands.spawn((bundle, DispatchRenderItem::new(tree)));
 		}
@@ -381,6 +420,9 @@ pub fn sync_render(
 			commands.spawn((bundle, DispatchRenderItem::new(tree)));
 		}
 		RenderDispatch::RorysHeadTrained(tree) => {
+			commands.spawn((bundle, DispatchRenderItem::new(tree)));
+		}
+		RenderDispatch::VaseTree(tree) => {
 			commands.spawn((bundle, DispatchRenderItem::new(tree)));
 		}
 		RenderDispatch::BraidOakTree(tree) => {

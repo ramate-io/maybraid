@@ -12,7 +12,7 @@ pub use chain::arch_trunk::{
 pub use chain::date_palm::{DatePalmChain, DatePalmPhase};
 pub use chain::waialea_palm::{WaialeaPalmChain, WaialeaPalmPhase};
 pub use chain::storybook_tree::{
-	segment_fracs, storybook_branch_depth, StorybookTreeChain, StorybookTreePhase,
+	segment_fracs, stalk_tip_from_chain, storybook_branch_depth, StorybookTreeChain, StorybookTreePhase,
 	STORYBOOK_BRANCH_DEPTH_MAX, STORYBOOK_BRANCH_DEPTH_MIN,
 };
 pub use chain::penmarch_torch::{
@@ -24,8 +24,13 @@ pub use chain::kamakura_torch::{
 pub use chain::rorys_head_trained::{
 	is_graph_terminal as rorys_head_trained_is_graph_terminal, RorysHeadTrainedChain,
 };
-pub use chain::liams_conifer::{liams_conifer_branch_depth, stalk_tip_from_chain, LiamsConiferChain, LiamsConiferPhase, SEGMENT_FRACS};
+pub use chain::vase_tree::{is_graph_terminal as vase_tree_is_graph_terminal, VaseTreeChain};
+pub use chain::liams_conifer::{
+	liams_conifer_branch_depth, stalk_tip_from_chain as liams_stalk_tip_from_chain, LiamsConiferChain,
+	LiamsConiferPhase, SEGMENT_FRACS,
+};
 pub use chain::sopes_banyan::{SopesBanyanChain, SopesBanyanPhase};
+pub use chain::honu_banyan::{is_graph_terminal as honu_banyan_is_graph_terminal, HonuBanyanChain, HonuBanyanPhase};
 pub use chain::{
 	BallStickChain, BallStickNode, BallStickSegment, BranchOut, DepthBudget, Hysteresis,
 };
@@ -57,7 +62,14 @@ pub use anchors::rorys_head_trained::{
 	rorys_flat_projection_length, rorys_head_trained_branch_direction, RorysHeadTrainedAnchors,
 	RorysHeadTrainedProtoAnchors,
 };
+pub use anchors::vase_tree::{
+	vase_tree_branch_direction, VaseTreeAnchors, VaseTreeProtoAnchors,
+	DEFAULT_APEX_BALL_RADIUS_FRACTION_OF_HEIGHT,
+};
 pub use anchors::sopes_banyan::{SopesBanyanAnchors, SopesBanyanProtoAnchors};
+pub use anchors::honu_banyan::{
+	honu_canopy_bias, honu_projection_length, HonuBanyanAnchors, HonuBanyanProtoAnchors,
+};
 pub use anchors::stalk_perturbation::{
 	AnchorPerturbation, HasStrictStalk, PerturbAnchor, StalkPerturbation,
 };
@@ -71,9 +83,11 @@ pub use sbs::braid_oak_tree::BraidOakTreeSbs;
 pub use sbs::liams_conifer::LiamsConiferSbs;
 pub use sbs::friends_conifer::FriendsConiferSbs;
 pub use sbs::sopes_banyan::SopesBanyanSbs;
+pub use sbs::honu_banyan::HonuBanyanSbs;
 pub use sbs::penmarch_torch::PenmarchTorchSbs;
 pub use sbs::kamakura_torch::KamakuraTorchSbs;
 pub use sbs::rorys_head_trained::RorysHeadTrainedSbs;
+pub use sbs::vase_tree::VaseTreeSbs;
 
 #[cfg(feature = "render")]
 pub mod render;

@@ -13,11 +13,13 @@ pub mod temperate_conifer;
 pub mod penmarch_torch;
 pub mod kamakura_torch;
 pub mod rorys_head_trained;
+pub mod vase_tree;
 pub mod moderate_lod_frond_crown;
 pub mod plugin;
 
 pub use plugin::RenderCommandsPlugin;
 pub mod sopes_banyan;
+pub mod honu_banyan;
 pub mod spear_tuft;
 pub mod succulent_tuft;
 pub mod weeping_tuft;
@@ -41,8 +43,10 @@ pub use temperate_conifer::TemperateConiferRenderHelper;
 pub use penmarch_torch::PenmarchTorchRenderHelper;
 pub use kamakura_torch::KamakuraTorchRenderHelper;
 pub use rorys_head_trained::RorysHeadTrainedRenderHelper;
+pub use vase_tree::VaseTreeRenderHelper;
 pub use moderate_lod_frond_crown::ModerateLodFrondCrownRenderHelper;
 pub use sopes_banyan::SopesBanyanRenderHelper;
+pub use honu_banyan::HonuBanyanRenderHelper;
 pub use spear_tuft::SpearTuftRenderHelper;
 pub use succulent_tuft::SucculentTuftRenderHelper;
 pub use weeping_tuft::WeepingTuftRenderHelper;
@@ -92,6 +96,7 @@ impl<T: clap::Args + Clone> RenderHelper<T> {
 #[command(rename_all = "kebab-case")]
 pub enum Render {
 	SopesBanyan(SopesBanyanRenderHelper),
+	HonuBanyan(HonuBanyanRenderHelper),
 	LiamsConifer(LiamsConiferRenderHelper),
 	FriendsConifer(FriendsConiferRenderHelper),
 	TemperateConifer(TemperateConiferRenderHelper),
@@ -101,6 +106,7 @@ pub enum Render {
 	PenmarchTorch(PenmarchTorchRenderHelper),
 	KamakuraTorch(KamakuraTorchRenderHelper),
 	RorysHeadTrained(RorysHeadTrainedRenderHelper),
+	VaseTree(VaseTreeRenderHelper),
 	BraidOakTree(BraidOakTreeRenderHelper),
 	JungleStorybookTree(JungleStorybookTreeRenderHelper),
 	SucculentTuft(SucculentTuftRenderHelper),
@@ -125,6 +131,11 @@ impl Render {
 		match self {
 			Self::SopesBanyan(h) => RenderConfig {
 				subject: RenderSubject::SopesBanyan(h.inner.clone()),
+				res_2: h.res_2,
+				transform: h.render_transform(),
+			},
+			Self::HonuBanyan(h) => RenderConfig {
+				subject: RenderSubject::HonuBanyan(h.inner.clone()),
 				res_2: h.res_2,
 				transform: h.render_transform(),
 			},
@@ -170,6 +181,11 @@ impl Render {
 			},
 			Self::RorysHeadTrained(h) => RenderConfig {
 				subject: RenderSubject::RorysHeadTrained(h.inner.clone()),
+				res_2: h.res_2,
+				transform: h.render_transform(),
+			},
+			Self::VaseTree(h) => RenderConfig {
+				subject: RenderSubject::VaseTree(h.inner.clone()),
 				res_2: h.res_2,
 				transform: h.render_transform(),
 			},
@@ -424,6 +440,20 @@ mod tests {
 	}
 
 	#[test]
+	fn vase_tree_command_preserves_shape_params() -> Result<()> {
+		let cmd = crate::commands::PlaygroundCommand::parse_line(
+			"render vase-tree --tree-height 20 --branch-depth 4 --bias-elevation-lo-degrees 40",
+		)
+		.map_err(|e| anyhow::anyhow!("{e}"))?;
+		let crate::commands::PlaygroundCommand::Render(Render::VaseTree(helper)) = cmd else {
+			anyhow::bail!("expected vase-tree render command");
+		};
+		assert!((helper.inner.geometry.scale.tree_height - 20.0).abs() < 1e-5);
+		assert!((helper.inner.geometry.growth.bias_elevation_lo_degrees - 40.0).abs() < 1e-5);
+		Ok(())
+	}
+
+	#[test]
 	fn penmarch_torch_command_preserves_shape_params() -> Result<()> {
 		let cmd = crate::commands::PlaygroundCommand::parse_line(
 			"render penmarch-torch --tree-height 24 --projection 0.10..0.45",
@@ -502,6 +532,24 @@ mod tests {
 			anyhow::bail!("expected frond crown subject");
 		};
 		assert_eq!(crown.shape.frond_count, 15);
+		Ok(())
+	}
+
+	#[test]
+	fn render_honu_banyan_parses_geometry_flags() -> anyhow::Result<()> {
+		let cmd = crate::commands::PlaygroundCommand::parse_line(
+			"render honu-banyan --tree-height 20 --rings 2x6",
+		)
+		.map_err(|e| anyhow::anyhow!("{e}"))?;
+		let crate::commands::PlaygroundCommand::Render(Render::HonuBanyan(helper)) = cmd else {
+			anyhow::bail!("expected honu banyan render");
+		};
+		let cfg = Render::HonuBanyan(helper).into_render_config();
+		let RenderSubject::HonuBanyan(tree) = cfg.subject else {
+			anyhow::bail!("expected honu banyan subject");
+		};
+		assert_eq!(tree.geometry.scale.tree_height, 20.0);
+		assert_eq!(tree.geometry.rings.layout.first, 2);
 		Ok(())
 	}
 }

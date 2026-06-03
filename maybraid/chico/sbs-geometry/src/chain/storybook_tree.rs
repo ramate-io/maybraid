@@ -135,6 +135,17 @@ impl StorybookTreeChain {
 	}
 }
 
+/// Highest [`BallStickNode`] on the vertical stalk phase (crown / ring anchor height).
+pub fn stalk_tip_from_chain(chain: &crate::BallStickChain<StorybookTreeChain>) -> BallStickNode {
+	let mut tip = chain.nodes[0];
+	for (node, h) in chain.nodes_with_hysteresis() {
+		if matches!(h.phase, StorybookTreePhase::Stalk(_)) && node.position.y >= tip.position.y {
+			tip = *node;
+		}
+	}
+	tip
+}
+
 /// Whether `node_idx` has no children in a built [`crate::BallStickChain`].
 pub fn is_graph_terminal<H: Hysteresis>(chain: &crate::BallStickChain<H>, node_idx: usize) -> bool {
 	chain.children.get(node_idx).is_some_and(|c| c.is_empty())
@@ -242,6 +253,28 @@ mod tests {
 			.map(|n| n.position.distance(root))
 			.fold(0.0f32, f32::max);
 		assert!(max_dist > proj * 0.7, "limb span {max_dist} vs projection {proj}");
+		Ok(())
+	}
+
+	#[test]
+	fn stalk_tip_is_highest_stalk_phase_node() -> anyhow::Result<()> {
+		let noise = NoiseConfig::new(NoiseParams::default());
+		let seed = StorybookTreeChain::new(
+			noise,
+			0.0,
+			4,
+			0.0,
+			0.0,
+			0.65,
+			StorybookTreePhase::Stalk(PointToPoint::new_from_vec3(
+				Vec3::ZERO,
+				Vec3::new(0.0, 22.0, 0.0),
+				0.5,
+			)),
+		);
+		let chain = crate::BallStickChain::build(vec![seed]);
+		let tip = stalk_tip_from_chain(&chain);
+		assert!((tip.position.y - 22.0).abs() < 1e-3);
 		Ok(())
 	}
 }

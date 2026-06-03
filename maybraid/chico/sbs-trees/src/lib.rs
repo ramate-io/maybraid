@@ -11,9 +11,11 @@ pub mod friends_conifer;
 pub mod penmarch_torch;
 pub mod kamakura_torch;
 pub mod rorys_head_trained;
+pub mod vase_tree;
 pub mod temperate_conifer;
 pub mod skipped_mesh_material;
 pub mod sopes_banyan;
+pub mod honu_banyan;
 pub mod storybook_tree;
 pub mod waialea_palm;
 
@@ -28,8 +30,10 @@ pub use skipped_mesh_material::{
 	SkippedOuterLeafMeshMaterial, SkippedStickMeshMaterial,
 };
 pub use sopes_banyan::SopesBanyanStd;
+pub use honu_banyan::HonuBanyanStd;
 pub use storybook_tree::StorybookTreeStd;
 pub use penmarch_torch::PenmarchTorchStd;
 pub use kamakura_torch::KamakuraTorchStd;
 pub use rorys_head_trained::RorysHeadTrainedStd;
+pub use vase_tree::VaseTreeStd;
 pub use waialea_palm::WaialeaPalmStd;
