@@ -7,6 +7,7 @@ use chico_sbs_trees::date_palm::DatePalm;
 use chico_sbs_trees::waialea_palm::WaialeaPalm;
 use chico_sbs_trees::liams_conifer::LiamsConifer;
 use chico_sbs_trees::friends_conifer::FriendsConifer;
+use chico_sbs_trees::northern_conifer::NorthernConifer;
 use chico_sbs_trees::temperate_conifer::TemperateConifer;
 use chico_sbs_trees::jungle_storybook_tree::JungleStorybookTree;
 use chico_sbs_trees::braid_oak_tree::BraidOakTree;
@@ -58,6 +59,14 @@ pub type RenderLiamsConifer = LiamsConifer<
 
 /// [`FriendsConifer`] — log-profile conifer with plane-splay foliage ([#236](https://github.com/ramate-io/maybraid/issues/236)).
 pub type RenderFriendsConifer = FriendsConifer<
+	ChicoStickMaterial,
+	SkippedStickMeshMaterial<ChicoStickMaterial>,
+	ChicoLeafMaterial,
+	SkippedLeafMeshMaterial<ChicoLeafMaterial>,
+>;
+
+/// [`NorthernConifer`] — Liam's geometry with plane-splay foliage ([#232](https://github.com/ramate-io/maybraid/issues/232)).
+pub type RenderNorthernConifer = NorthernConifer<
 	ChicoStickMaterial,
 	SkippedStickMeshMaterial<ChicoStickMaterial>,
 	ChicoLeafMaterial,
@@ -185,6 +194,7 @@ pub enum RenderSubject {
 	HonuBanyan(RenderHonuBanyan),
 	LiamsConifer(RenderLiamsConifer),
 	FriendsConifer(RenderFriendsConifer),
+	NorthernConifer(RenderNorthernConifer),
 	TemperateConifer(RenderTemperateConifer),
 	DatePalm(RenderDatePalm),
 	WaialeaPalm(RenderWaialeaPalm),
@@ -212,6 +222,7 @@ impl RenderSubject {
 			Self::HonuBanyan(_) => "HonuBanyan",
 			Self::LiamsConifer(_) => "LiamsConifer",
 			Self::FriendsConifer(_) => "FriendsConifer",
+			Self::NorthernConifer(_) => "NorthernConifer",
 			Self::TemperateConifer(_) => "TemperateConifer",
 			Self::DatePalm(_) => "DatePalm",
 			Self::WaialeaPalm(_) => "WaialeaPalm",
@@ -243,6 +254,15 @@ impl RenderSubject {
 				format!(
 					"{:?}|splay={}",
 					t.geometry, t.splay_radius_fraction_of_height
+				)
+			}
+			Self::NorthernConifer(t) => {
+				format!(
+					"{:?}|splay={}|spawn={}|apex={}",
+					t.geometry.inner,
+					t.splay_radius_fraction_of_height,
+					t.splay_spawn_fraction,
+					t.apex_canopy_spawn_fraction
 				)
 			}
 			Self::TemperateConifer(t) => {
@@ -280,6 +300,7 @@ impl RenderSubject {
 			Self::HonuBanyan(tree) => RenderDispatch::HonuBanyan(tree.clone()),
 			Self::LiamsConifer(tree) => RenderDispatch::LiamsConifer(tree.clone()),
 			Self::FriendsConifer(tree) => RenderDispatch::FriendsConifer(tree.clone()),
+			Self::NorthernConifer(tree) => RenderDispatch::NorthernConifer(tree.clone()),
 			Self::TemperateConifer(tree) => RenderDispatch::TemperateConifer(tree.clone()),
 			Self::DatePalm(tree) => RenderDispatch::DatePalm(tree.clone()),
 			Self::WaialeaPalm(tree) => RenderDispatch::WaialeaPalm(tree.clone()),
@@ -308,6 +329,7 @@ enum RenderDispatch {
 	HonuBanyan(RenderHonuBanyan),
 	LiamsConifer(RenderLiamsConifer),
 	FriendsConifer(RenderFriendsConifer),
+	NorthernConifer(RenderNorthernConifer),
 	TemperateConifer(RenderTemperateConifer),
 	DatePalm(RenderDatePalm),
 	WaialeaPalm(RenderWaialeaPalm),
@@ -399,6 +421,9 @@ pub fn sync_render(
 			commands.spawn((bundle, DispatchRenderItem::new(tree)));
 		}
 		RenderDispatch::FriendsConifer(tree) => {
+			commands.spawn((bundle, DispatchRenderItem::new(tree)));
+		}
+		RenderDispatch::NorthernConifer(tree) => {
 			commands.spawn((bundle, DispatchRenderItem::new(tree)));
 		}
 		RenderDispatch::TemperateConifer(tree) => {

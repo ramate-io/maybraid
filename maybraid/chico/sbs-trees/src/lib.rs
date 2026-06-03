@@ -8,6 +8,7 @@ pub mod layered_canopy;
 pub mod liams_conifer;
 mod conifer_canopy_apex;
 pub mod friends_conifer;
+pub mod northern_conifer;
 pub mod penmarch_torch;
 pub mod kamakura_torch;
 pub mod rorys_head_trained;
@@ -24,6 +25,7 @@ pub use date_palm::DatePalmStd;
 pub use jungle_storybook_tree::JungleStorybookTreeStd;
 pub use liams_conifer::LiamsConiferStd;
 pub use friends_conifer::FriendsConiferStd;
+pub use northern_conifer::NorthernConiferStd;
 pub use temperate_conifer::TemperateConiferStd;
 pub use skipped_mesh_material::{
 	SkippedInnerLeafMeshMaterial, SkippedLeafMeshMaterial, SkippedMeshMaterial,

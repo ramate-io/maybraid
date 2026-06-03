@@ -6,6 +6,7 @@ use chico_ball_components::frond::{align_frond_direction, FrondCrown, FrondCrown
 use chico_sbs_geometry::render::mix_seed::mix_seed_below_fraction;
 use chico_sbs_geometry::{
 	liams_stalk_tip_from_chain, BallStickChain, BallStickNode, FriendsConiferChain, FriendsConiferSbs,
+	LiamsConiferChain, LiamsConiferSbs,
 };
 use procedural_common::NoiseParams;
 use render_item::CascadeChunk;
@@ -15,6 +16,9 @@ pub const DEFAULT_APEX_CANOPY_SPAWN_FRACTION: f32 = 0.72;
 
 /// Friend's apex [`ChicoBall`] world radius as a fraction of stalk height.
 pub const FRIENDS_APEX_BALL_RADIUS_FRACTION_OF_HEIGHT: f32 = 0.024;
+
+/// Northern Conifer apex [`ChicoBall`] world radius as a fraction of stalk height.
+pub const NORTHERN_APEX_BALL_RADIUS_FRACTION_OF_HEIGHT: f32 = 0.022;
 
 /// Gate apex foliage from leaf noise and stalk-tip position.
 pub fn sample_apex_canopy_spawn(
@@ -91,6 +95,39 @@ where
 
 	spawn_apex_chico_ball_at_tip(
 		geometry.height(),
+		&tip,
+		commands,
+		cascade_chunk,
+		root_transform,
+		leaf_noise,
+		apex_ball_radius_fraction,
+		leaf_material,
+	)
+}
+
+/// Optional [`ChicoBall`] at the stalk crown for Northern Conifer ([#232](https://github.com/ramate-io/maybraid/issues/232)).
+pub fn spawn_apex_chico_ball_liams<LeafM, LeafS>(
+	geometry: &LiamsConiferSbs,
+	chain: &BallStickChain<LiamsConiferChain>,
+	commands: &mut Commands,
+	cascade_chunk: &CascadeChunk,
+	root_transform: Transform,
+	leaf_noise: &NoiseParams,
+	apex_spawn_fraction: f32,
+	apex_ball_radius_fraction: f32,
+	leaf_material: LeafS,
+) -> Vec<Entity>
+where
+	LeafM: Material + Send + Sync + 'static,
+	LeafS: Clone + Into<MeshMaterial3d<LeafM>> + Send + Sync + 'static + Default,
+{
+	let tip = liams_stalk_tip_from_chain(chain);
+	if !sample_apex_canopy_spawn(leaf_noise, &tip, apex_spawn_fraction) {
+		return Vec::new();
+	}
+
+	spawn_apex_chico_ball_at_tip(
+		geometry.scale.stalk_height,
 		&tip,
 		commands,
 		cascade_chunk,
