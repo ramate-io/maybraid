@@ -16,6 +16,7 @@ The default preview is **Liam's Conifer** (sticks plus tuft foliage at each join
 ```text
 /render liams-conifer
 /render liams-conifer --stalk-height 40 --res-2 5
+/render friends-conifer --stalk-height 30 --projection 0.12..0.03
 /render temperate-conifer --stalk-height 12 --frond-spawn-fraction 0.6
 /render spear-tuft
 /render frond-crown

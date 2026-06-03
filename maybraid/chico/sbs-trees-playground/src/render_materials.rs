@@ -139,6 +139,10 @@ fn attach_render_materials(
 			tree.stick_material.mesh = MeshMaterial3d(conifer_stick.clone());
 			tree.leaf_material.mesh = MeshMaterial3d(tuft.clone());
 		}
+		RenderSubject::FriendsConifer(tree) => {
+			tree.stick_material.mesh = MeshMaterial3d(conifer_stick.clone());
+			tree.leaf_material.mesh = MeshMaterial3d(leaf.clone());
+		}
 		RenderSubject::TemperateConifer(tree) => {
 			tree.stick_material.mesh = MeshMaterial3d(conifer_stick.clone());
 			tree.leaf_material.mesh = MeshMaterial3d(leaf.clone());

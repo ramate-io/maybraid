@@ -6,6 +6,7 @@ use chico_ball_components::tuft::{
 use chico_sbs_trees::date_palm::DatePalm;
 use chico_sbs_trees::waialea_palm::WaialeaPalm;
 use chico_sbs_trees::liams_conifer::LiamsConifer;
+use chico_sbs_trees::friends_conifer::FriendsConifer;
 use chico_sbs_trees::temperate_conifer::TemperateConifer;
 use chico_sbs_trees::jungle_storybook_tree::JungleStorybookTree;
 use chico_sbs_trees::braid_oak_tree::BraidOakTree;
@@ -34,6 +35,14 @@ pub type RenderLiamsConifer = LiamsConifer<
 	SkippedStickMeshMaterial<ChicoStickMaterial>,
 	StandardMaterial,
 	SkippedLeafMeshMaterial<StandardMaterial>,
+>;
+
+/// [`FriendsConifer`] — log-profile conifer with plane-splay foliage ([#236](https://github.com/ramate-io/maybraid/issues/236)).
+pub type RenderFriendsConifer = FriendsConifer<
+	ChicoStickMaterial,
+	SkippedStickMeshMaterial<ChicoStickMaterial>,
+	ChicoLeafMaterial,
+	SkippedLeafMeshMaterial<ChicoLeafMaterial>,
 >;
 
 /// [`TemperateConifer`] — Friend's log-profile conifer with joint fronds ([#238](https://github.com/ramate-io/maybraid/issues/238)).
@@ -121,6 +130,7 @@ pub type RenderJungleGrowth = JungleGrowth<
 pub enum RenderSubject {
 	SopesBanyan(RenderSopesBanyan),
 	LiamsConifer(RenderLiamsConifer),
+	FriendsConifer(RenderFriendsConifer),
 	TemperateConifer(RenderTemperateConifer),
 	DatePalm(RenderDatePalm),
 	WaialeaPalm(RenderWaialeaPalm),
@@ -142,6 +152,7 @@ impl RenderSubject {
 		match self {
 			Self::SopesBanyan(_) => "SopesBanyan",
 			Self::LiamsConifer(_) => "LiamsConifer",
+			Self::FriendsConifer(_) => "FriendsConifer",
 			Self::TemperateConifer(_) => "TemperateConifer",
 			Self::DatePalm(_) => "DatePalm",
 			Self::WaialeaPalm(_) => "WaialeaPalm",
@@ -164,10 +175,19 @@ impl RenderSubject {
 		match self {
 			Self::SopesBanyan(t) => format!("{:?}", t.geometry),
 			Self::LiamsConifer(t) => format!("{:?}", t.geometry),
+			Self::FriendsConifer(t) => {
+				format!(
+					"{:?}|splay={}",
+					t.geometry, t.splay_radius_fraction_of_height
+				)
+			}
 			Self::TemperateConifer(t) => {
 				format!(
 					"{:?}|fronds={:?}|len={:?}|spawn={}",
-					t.geometry, t.fronds_per_joint, t.frond_length_fraction, t.frond_spawn_fraction
+					t.geometry.inner,
+					t.fronds_per_joint,
+					t.frond_length_fraction,
+					t.frond_spawn_fraction
 				)
 			}
 			Self::DatePalm(t) => format!("{:?}", t.geometry),
@@ -190,6 +210,7 @@ impl RenderSubject {
 		match self {
 			Self::SopesBanyan(tree) => RenderDispatch::SopesBanyan(tree.clone()),
 			Self::LiamsConifer(tree) => RenderDispatch::LiamsConifer(tree.clone()),
+			Self::FriendsConifer(tree) => RenderDispatch::FriendsConifer(tree.clone()),
 			Self::TemperateConifer(tree) => RenderDispatch::TemperateConifer(tree.clone()),
 			Self::DatePalm(tree) => RenderDispatch::DatePalm(tree.clone()),
 			Self::WaialeaPalm(tree) => RenderDispatch::WaialeaPalm(tree.clone()),
@@ -212,6 +233,7 @@ impl RenderSubject {
 enum RenderDispatch {
 	SopesBanyan(RenderSopesBanyan),
 	LiamsConifer(RenderLiamsConifer),
+	FriendsConifer(RenderFriendsConifer),
 	TemperateConifer(RenderTemperateConifer),
 	DatePalm(RenderDatePalm),
 	WaialeaPalm(RenderWaialeaPalm),
@@ -293,6 +315,9 @@ pub fn sync_render(
 			commands.spawn((bundle, DispatchRenderItem::new(tree)));
 		}
 		RenderDispatch::LiamsConifer(tree) => {
+			commands.spawn((bundle, DispatchRenderItem::new(tree)));
+		}
+		RenderDispatch::FriendsConifer(tree) => {
 			commands.spawn((bundle, DispatchRenderItem::new(tree)));
 		}
 		RenderDispatch::TemperateConifer(tree) => {

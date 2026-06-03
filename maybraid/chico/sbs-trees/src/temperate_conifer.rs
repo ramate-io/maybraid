@@ -14,6 +14,29 @@ use bevy::prelude::*;
 use chico_sbs_geometry::render::stick::StickRenderHelper;
 use chico_sbs_geometry::FriendsConiferSbs;
 use clap::Args;
+
+/// [`FriendsConiferSbs`] with Temperate Conifer limb/ray defaults (clap `flatten` base).
+#[derive(Clone, Debug, PartialEq, Args)]
+#[command(rename_all = "kebab-case")]
+pub struct TemperateConiferGeometry {
+	#[command(flatten)]
+	pub inner: FriendsConiferSbs,
+}
+
+impl Default for TemperateConiferGeometry {
+	fn default() -> Self {
+		let mut inner = FriendsConiferSbs::default();
+		inner.apply_temperate_preset();
+		Self { inner }
+	}
+}
+
+impl std::ops::Deref for TemperateConiferGeometry {
+	type Target = FriendsConiferSbs;
+	fn deref(&self) -> &Self::Target {
+		&self.inner
+	}
+}
 use procedural_common::noise_params_from_scalar_str;
 use procedural_common::parse_unit_range;
 use procedural_common::{FromScalarNoise, NoiseParams, UnitRange};
@@ -41,7 +64,7 @@ where
 	LeafS: Clone + Into<MeshMaterial3d<LeafM>> + Args,
 {
 	#[command(flatten, next_help_heading = "Geometry")]
-	pub geometry: FriendsConiferSbs,
+	pub geometry: TemperateConiferGeometry,
 
 	#[command(flatten, next_help_heading = "Stick Material")]
 	pub stick_material: StickS,
@@ -108,7 +131,7 @@ where
 {
 	fn default() -> Self {
 		Self {
-			geometry: FriendsConiferSbs::default(),
+			geometry: TemperateConiferGeometry::default(),
 			stick_material: StickS::default(),
 			leaf_material: LeafS::default(),
 			frond_world_scale: 1.0,
@@ -130,7 +153,9 @@ where
 	LeafS: Clone + Into<MeshMaterial3d<LeafM>> + Args,
 {
 	pub fn build_chain(&self) -> chico_sbs_geometry::BallStickChain<chico_sbs_geometry::FriendsConiferChain> {
-		self.geometry.build_chain()
+		let mut geometry = self.geometry.inner.clone();
+		geometry.apply_temperate_preset();
+		geometry.build_chain()
 	}
 }
 
@@ -161,8 +186,10 @@ where
 			transform,
 		);
 
+		let mut geometry = self.geometry.inner.clone();
+		geometry.apply_temperate_preset();
 		out.extend(spawn_joint_fronds::<LeafM, _>(
-			&self.geometry,
+			&geometry,
 			self.frond_world_scale,
 			&chain,
 			commands,
