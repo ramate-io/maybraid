@@ -25,6 +25,7 @@ use chico_sbs_trees::waialea_palm::render_item_plugin::ensure_registered as ensu
 use chico_sbs_trees::storybook_tree::render_item_plugin::ensure_registered as ensure_storybook_tree_render_plugins;
 use chico_sbs_trees::penmarch_torch::render_item_plugin::ensure_registered as ensure_penmarch_torch_render_plugins;
 use chico_sbs_trees::kamakura_torch::render_item_plugin::ensure_registered as ensure_kamakura_torch_render_plugins;
+use chico_sbs_trees::rorys_head_trained::render_item_plugin::ensure_registered as ensure_rorys_head_trained_render_plugins;
 use chico_sbs_trees::braid_oak_tree::render_item_plugin::ensure_registered as ensure_braid_oak_tree_render_plugins;
 use chico_sbs_trees::jungle_storybook_tree::render_item_plugin::ensure_registered as ensure_jungle_storybook_tree_render_plugins;
 use chico_sbs_trees::liams_conifer::render_item_plugin::ensure_registered as ensure_liams_conifer_render_plugins;
@@ -55,6 +56,7 @@ impl Plugin for SbsTreesPlaygroundPlugin {
 		ensure_storybook_tree_render_plugins(app);
 		ensure_penmarch_torch_render_plugins(app);
 		ensure_kamakura_torch_render_plugins(app);
+		ensure_rorys_head_trained_render_plugins(app);
 		ensure_braid_oak_tree_render_plugins(app);
 		ensure_jungle_storybook_tree_render_plugins(app);
 		if !app.is_plugin_added::<TuftRenderItemPlugin>() {
@@ -101,6 +103,7 @@ impl Plugin for SbsTreesPlaygroundPlugin {
 						dispatch_render_items::<render::RenderStorybookTree>,
 						dispatch_render_items::<render::RenderPenmarchTorch>,
 						dispatch_render_items::<render::RenderKamakuraTorch>,
+						dispatch_render_items::<render::RenderRorysHeadTrained>,
 						dispatch_render_items::<render::RenderBraidOakTree>,
 						dispatch_render_items::<render::RenderJungleStorybookTree>,
 						dispatch_render_items::<render::RenderSucculentTuft>,

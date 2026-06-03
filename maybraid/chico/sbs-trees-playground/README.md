@@ -20,6 +20,8 @@ The default preview is **Liam's Conifer** (sticks plus tuft foliage at each join
 /render temperate-conifer --stalk-height 12 --frond-spawn-fraction 0.6
 /render penmarch-torch --tree-height 24
 /render kamakura-torch --tree-height 24
+/render rorys-head-trained --tree-height 18
+/render rorys-head-trained --tree-height 12 --projection 0.60..0.60
 /render spear-tuft
 /render frond-crown
 /render frond-crown --translate 0,2,0 --spine-segments 16

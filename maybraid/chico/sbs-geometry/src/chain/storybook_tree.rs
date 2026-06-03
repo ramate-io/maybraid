@@ -15,7 +15,7 @@ use super::{BranchOut, DepthBudget, Hysteresis};
 /// Minimum [`StorybookTreeChain::branch_depth`] / [`DepthBudget::remaining`] at a ring seed (RFC).
 pub const STORYBOOK_BRANCH_DEPTH_MIN: usize = 3;
 /// Maximum supported hops; [`segment_fracs`] has no table beyond this.
-pub const STORYBOOK_BRANCH_DEPTH_MAX: usize = 5;
+pub const STORYBOOK_BRANCH_DEPTH_MAX: usize = 7;
 
 /// Coerce CLI/proto `branch_depth` to a hop count with a matching [`segment_fracs`] row.
 pub fn storybook_branch_depth(depth: usize) -> usize {
@@ -27,7 +27,9 @@ pub fn segment_fracs(depth: usize) -> Vec<f32> {
 	match storybook_branch_depth(depth) {
 		3 => vec![0.50, 0.30, 0.20],
 		4 => vec![0.50, 0.22, 0.18, 0.10],
-		_ => vec![0.42, 0.22, 0.18, 0.10, 0.08],
+		5 => vec![0.42, 0.22, 0.18, 0.10, 0.08],
+		6 => vec![0.30, 0.20, 0.18, 0.14, 0.10, 0.08],
+		_ => vec![0.26, 0.18, 0.16, 0.14, 0.12, 0.08, 0.06],
 	}
 }
 
@@ -199,7 +201,7 @@ mod tests {
 
 	#[test]
 	fn segment_fracs_sum_to_one() -> anyhow::Result<()> {
-		for depth in 3..=5 {
+		for depth in 3..=STORYBOOK_BRANCH_DEPTH_MAX {
 			let fracs = segment_fracs(depth);
 			assert_eq!(fracs.len(), depth);
 			let sum: f32 = fracs.iter().sum();

@@ -21,6 +21,9 @@ pub use chain::penmarch_torch::{
 pub use chain::kamakura_torch::{
 	is_graph_terminal as kamakura_is_graph_terminal, KamakuraTorchChain,
 };
+pub use chain::rorys_head_trained::{
+	is_graph_terminal as rorys_head_trained_is_graph_terminal, RorysHeadTrainedChain,
+};
 pub use chain::liams_conifer::{liams_conifer_branch_depth, stalk_tip_from_chain, LiamsConiferChain, LiamsConiferPhase, SEGMENT_FRACS};
 pub use chain::sopes_banyan::{SopesBanyanChain, SopesBanyanPhase};
 pub use chain::{
@@ -50,6 +53,10 @@ pub use anchors::penmarch_torch::{
 pub use anchors::kamakura_torch::{
 	kamakura_torch_branch_direction, KamakuraTorchAnchors, KamakuraTorchProtoAnchors,
 };
+pub use anchors::rorys_head_trained::{
+	rorys_flat_projection_length, rorys_head_trained_branch_direction, RorysHeadTrainedAnchors,
+	RorysHeadTrainedProtoAnchors,
+};
 pub use anchors::sopes_banyan::{SopesBanyanAnchors, SopesBanyanProtoAnchors};
 pub use anchors::stalk_perturbation::{
 	AnchorPerturbation, HasStrictStalk, PerturbAnchor, StalkPerturbation,
@@ -66,6 +73,7 @@ pub use sbs::friends_conifer::FriendsConiferSbs;
 pub use sbs::sopes_banyan::SopesBanyanSbs;
 pub use sbs::penmarch_torch::PenmarchTorchSbs;
 pub use sbs::kamakura_torch::KamakuraTorchSbs;
+pub use sbs::rorys_head_trained::RorysHeadTrainedSbs;
 
 #[cfg(feature = "render")]
 pub mod render;
