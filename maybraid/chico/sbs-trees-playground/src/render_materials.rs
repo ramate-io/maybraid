@@ -15,6 +15,7 @@ pub struct RenderMaterials {
 	pub stick: Handle<ChicoStickMaterial>,
 	pub conifer_stick: Handle<ChicoStickMaterial>,
 	pub leaf: Handle<ChicoLeafMaterial>,
+	pub northern_leaf: Handle<ChicoLeafMaterial>,
 	pub jungle_inner_leaf: Handle<ChicoLeafMaterial>,
 	pub jungle_outer_leaf: Handle<ChicoLeafMaterial>,
 	pub braid_inner_leaf: Handle<ChicoLeafMaterial>,
@@ -29,6 +30,10 @@ fn render_stick_colors() -> ChicoStickMaterial {
 
 fn render_leaf_colors() -> ChicoLeafMaterial {
 	ChicoLeafMaterial { base_color: Vec4::new(0.22, 0.5, 0.29, 1.0) }
+}
+
+fn render_northern_leaf_colors() -> ChicoLeafMaterial {
+	ChicoLeafMaterial { base_color: Vec4::new(0.14, 0.38, 0.34, 1.0) }
 }
 
 fn render_jungle_inner_leaf_colors() -> ChicoLeafMaterial {
@@ -73,6 +78,7 @@ pub fn setup_render_materials(
 	let stick = stick_assets.add(render_stick_colors());
 	let conifer_stick = stick_assets.add(render_conifer_stick_colors());
 	let leaf = leaf_assets.add(render_leaf_colors());
+	let northern_leaf = leaf_assets.add(render_northern_leaf_colors());
 	let jungle_inner_leaf = leaf_assets.add(render_jungle_inner_leaf_colors());
 	let jungle_outer_leaf = leaf_assets.add(render_jungle_outer_leaf_colors());
 	let braid_inner_leaf = leaf_assets.add(render_braid_inner_leaf_colors());
@@ -84,6 +90,7 @@ pub fn setup_render_materials(
 		stick: stick.clone(),
 		conifer_stick: conifer_stick.clone(),
 		leaf: leaf.clone(),
+		northern_leaf: northern_leaf.clone(),
 		jungle_inner_leaf: jungle_inner_leaf.clone(),
 		jungle_outer_leaf: jungle_outer_leaf.clone(),
 		braid_inner_leaf: braid_inner_leaf.clone(),
@@ -96,6 +103,7 @@ pub fn setup_render_materials(
 		stick: stick.clone(),
 		conifer_stick: conifer_stick.clone(),
 		leaf: leaf.clone(),
+		northern_leaf: northern_leaf.clone(),
 		jungle_inner_leaf: jungle_inner_leaf.clone(),
 		jungle_outer_leaf: jungle_outer_leaf.clone(),
 		braid_inner_leaf: braid_inner_leaf.clone(),
@@ -103,7 +111,14 @@ pub fn setup_render_materials(
 		jungle_stick: jungle_stick.clone(),
 		tuft: tuft.clone(),
 	};
-	attach_render_materials(&mut config.subject, &stick, &conifer_stick, &leaf, &tuft);
+	attach_render_materials(
+		&mut config.subject,
+		&stick,
+		&conifer_stick,
+		&leaf,
+		&northern_leaf,
+		&tuft,
+	);
 	if let RenderSubject::JungleStorybookTree(tree) = &mut config.subject {
 		attach_jungle_storybook_materials(tree, &mats_snapshot);
 	}
@@ -151,6 +166,7 @@ fn attach_render_materials(
 	stick: &Handle<ChicoStickMaterial>,
 	conifer_stick: &Handle<ChicoStickMaterial>,
 	leaf: &Handle<ChicoLeafMaterial>,
+	northern_leaf: &Handle<ChicoLeafMaterial>,
 	tuft: &Handle<StandardMaterial>,
 ) {
 	match subject {
@@ -165,6 +181,10 @@ fn attach_render_materials(
 		RenderSubject::FriendsConifer(tree) => {
 			tree.stick_material.mesh = MeshMaterial3d(conifer_stick.clone());
 			tree.leaf_material.mesh = MeshMaterial3d(leaf.clone());
+		}
+		RenderSubject::NorthernConifer(tree) => {
+			tree.stick_material.mesh = MeshMaterial3d(conifer_stick.clone());
+			tree.leaf_material.mesh = MeshMaterial3d(northern_leaf.clone());
 		}
 		RenderSubject::TemperateConifer(tree) => {
 			tree.stick_material.mesh = MeshMaterial3d(conifer_stick.clone());
@@ -234,8 +254,9 @@ pub fn sync_render_material_handles(
 	let stick = mats.stick.clone();
 	let conifer_stick = mats.conifer_stick.clone();
 	let leaf = mats.leaf.clone();
+	let northern_leaf = mats.northern_leaf.clone();
 	let tuft = mats.tuft.clone();
-	attach_render_materials(&mut config.subject, &stick, &conifer_stick, &leaf, &tuft);
+	attach_render_materials(&mut config.subject, &stick, &conifer_stick, &leaf, &northern_leaf, &tuft);
 	if let RenderSubject::JungleStorybookTree(tree) = &mut config.subject {
 		attach_jungle_storybook_materials(tree, &mats);
 	}

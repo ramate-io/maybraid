@@ -81,6 +81,7 @@ pub use sbs::storybook_tree::StorybookTreeSbs;
 pub use sbs::jungle_storybook_tree::JungleStorybookTreeSbs;
 pub use sbs::braid_oak_tree::BraidOakTreeSbs;
 pub use sbs::liams_conifer::LiamsConiferSbs;
+pub use sbs::northern_conifer::NorthernConiferSbs;
 pub use sbs::friends_conifer::FriendsConiferSbs;
 pub use sbs::sopes_banyan::SopesBanyanSbs;
 pub use sbs::honu_banyan::HonuBanyanSbs;

@@ -31,6 +31,7 @@ use chico_sbs_trees::braid_oak_tree::render_item_plugin::ensure_registered as en
 use chico_sbs_trees::jungle_storybook_tree::render_item_plugin::ensure_registered as ensure_jungle_storybook_tree_render_plugins;
 use chico_sbs_trees::liams_conifer::render_item_plugin::ensure_registered as ensure_liams_conifer_render_plugins;
 use chico_sbs_trees::friends_conifer::render_item_plugin::ensure_registered as ensure_friends_conifer_render_plugins;
+use chico_sbs_trees::northern_conifer::render_item_plugin::ensure_registered as ensure_northern_conifer_render_plugins;
 use chico_sbs_trees::temperate_conifer::render_item_plugin::ensure_registered as ensure_temperate_conifer_render_plugins;
 use chico_sbs_trees::sopes_banyan::render_item_plugin::ensure_registered as ensure_sopes_banyan_render_plugins;
 use chico_sbs_trees::honu_banyan::render_item_plugin::ensure_registered as ensure_honu_banyan_render_plugins;
@@ -53,6 +54,7 @@ impl Plugin for SbsTreesPlaygroundPlugin {
 		ensure_honu_banyan_render_plugins(app);
 		ensure_liams_conifer_render_plugins(app);
 		ensure_friends_conifer_render_plugins(app);
+		ensure_northern_conifer_render_plugins(app);
 		ensure_temperate_conifer_render_plugins(app);
 		ensure_date_palm_render_plugins(app);
 		ensure_waialea_palm_render_plugins(app);
@@ -103,6 +105,7 @@ impl Plugin for SbsTreesPlaygroundPlugin {
 							dispatch_render_items::<render::RenderHonuBanyan>,
 							dispatch_render_items::<render::RenderLiamsConifer>,
 							dispatch_render_items::<render::RenderFriendsConifer>,
+							dispatch_render_items::<render::RenderNorthernConifer>,
 							dispatch_render_items::<render::RenderTemperateConifer>,
 							dispatch_render_items::<render::RenderDatePalm>,
 							dispatch_render_items::<render::RenderWaialeaPalm>,
