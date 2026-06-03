@@ -8,7 +8,7 @@
 
 pub mod render_item_plugin;
 
-use std::f32::consts::TAU;
+use std::f32::consts::PI;
 use std::marker::PhantomData;
 
 use bevy::prelude::*;
@@ -20,6 +20,7 @@ const SDF_BEND_X: f32 = 0.12;
 const SDF_BEND_Z: f32 = 0.08;
 
 /// Unit-stick base/top radii the mesh must hit in world space (`node_radius ×` these fractions).
+/// Fixing these helpes with cahcing. You can apply scaling to get the effect.
 const UNIT_TARGET_BASE_RADIUS: f32 = 0.5;
 const UNIT_TARGET_TOP_RADIUS: f32 = 0.42;
 
@@ -71,11 +72,11 @@ where
 		(base, top)
 	}
 
+	/// Joint-aligned bend phases: `0` or `π` so the centerline passes through both ball joints.
 	fn bend_phases(&self) -> (f32, f32) {
-		let k = self.segment_key;
-		let t0 = k as f32 / u32::MAX as f32;
-		let t1 = k.wrapping_mul(2_654_435_761) as f32 / u32::MAX as f32;
-		(t0 * TAU, t1 * TAU)
+		let phase_x = if self.segment_key & 1 == 0 { 0.0 } else { PI };
+		let phase_z = if self.segment_key.rotate_left(7) & 1 == 0 { 0.0 } else { PI };
+		(phase_x, phase_z)
 	}
 
 	/// Unit-height crook segment in local stick space.
@@ -173,6 +174,24 @@ mod tests {
 		let xz = UNIT_TARGET_BASE_RADIUS / base;
 		assert!((xz * base - UNIT_TARGET_BASE_RADIUS).abs() < 1e-5);
 		assert!((base - 1.0 / 12.0).abs() < 1e-5);
+	}
+
+	#[test]
+	fn bend_phases_are_joint_aligned() {
+		for key in [0_u32, 1, 42, 0xdead_beef] {
+			let stick = ChicoCrookStick::<StandardMaterial, MeshMaterial3d<StandardMaterial>>::new(
+				12.0,
+				key,
+				MeshMaterial3d::<StandardMaterial>::default(),
+			);
+			let cyl = stick.crook_cylinder();
+			assert!((cyl.phase_x.rem_euclid(PI)).abs() < 1e-5, "phase_x {}", cyl.phase_x);
+			assert!((cyl.phase_z.rem_euclid(PI)).abs() < 1e-5, "phase_z {}", cyl.phase_z);
+			assert!((cyl.centerline(0.0).x).abs() < 1e-5);
+			assert!((cyl.centerline(0.0).z).abs() < 1e-5);
+			assert!((cyl.centerline(1.0).x).abs() < 1e-5);
+			assert!((cyl.centerline(1.0).z).abs() < 1e-5);
+		}
 	}
 
 	#[test]

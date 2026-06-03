@@ -70,9 +70,10 @@ fn jungle_storybook_fields(h: f32) -> StorybookTreeSbs {
 			anchors_per_ring: JUNGLE_ANCHORS_PER_RING,
 		},
 		projection: StorybookProjectionParams {
-			max_projection_fraction: JUNGLE_MAX_PROJECTION_FRACTION,
-			projection_end_fraction:
-				crate::anchors::storybook_tree::DEFAULT_PROJECTION_END_FRACTION,
+			span_fraction_of_height: UnitRange::new(
+				crate::anchors::storybook_tree::DEFAULT_PROJECTION_MIN_FRACTION_OF_HEIGHT,
+				JUNGLE_MAX_PROJECTION_FRACTION,
+			),
 		},
 		growth: StorybookGrowthParams {
 			branch_depth: JUNGLE_BRANCH_DEPTH,
@@ -105,6 +106,27 @@ impl Default for JungleStorybookTreeSbs {
 fn apply_if_storybook_default<T: Clone + PartialEq>(current: &mut T, story: &T, jungle: &T) {
 	if *current == *story {
 		*current = jungle.clone();
+	}
+}
+
+fn apply_jungle_projection_preset(
+	current: &mut StorybookProjectionParams,
+	story: &StorybookProjectionParams,
+	jungle: &StorybookProjectionParams,
+) {
+	if current.span_fraction_of_height == story.span_fraction_of_height {
+		current.span_fraction_of_height = jungle.span_fraction_of_height;
+	} else {
+		apply_if_storybook_default(
+			&mut current.span_fraction_of_height.start,
+			&story.span_fraction_of_height.start,
+			&jungle.span_fraction_of_height.start,
+		);
+		apply_if_storybook_default(
+			&mut current.span_fraction_of_height.end,
+			&story.span_fraction_of_height.end,
+			&jungle.span_fraction_of_height.end,
+		);
 	}
 }
 
@@ -171,7 +193,7 @@ impl JungleStorybookTreeSbs {
 		}
 
 		apply_jungle_ring_preset(&mut s.rings, &story.rings, &jungle.rings);
-		apply_if_storybook_default(&mut s.projection, &story.projection, &jungle.projection);
+		apply_jungle_projection_preset(&mut s.projection, &story.projection, &jungle.projection);
 		apply_if_storybook_default(&mut s.growth, &story.growth, &jungle.growth);
 		apply_if_storybook_default(&mut s.canopy, &story.canopy, &jungle.canopy);
 	}

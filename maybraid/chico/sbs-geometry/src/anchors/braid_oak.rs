@@ -44,10 +44,10 @@ pub const BRAID_FIRST_RING_UNIT_HEIGHT: f32 = 0.28;
 pub const BRAID_RING_SPACING_UNIT_HEIGHT: f32 = 0.11;
 
 /// Max projection at the crown belt as a fraction of `H`.
-pub const BRAID_MAX_PROJECTION_FRACTION: f32 = 0.55;
+pub const BRAID_MAX_PROJECTION_FRACTION: f32 = 0.60;
 
-/// Projection length at the lowest/highest rings as a fraction of the belt maximum.
-pub const BRAID_PROJECTION_END_FRACTION: f32 = 0.35;
+/// End-ring minimum projection as a fraction of `H` (RFC `0.15 * H`).
+pub const BRAID_PROJECTION_MIN_FRACTION: f32 = 0.15;
 
 /// Stalk segments along the centroid (multi-hop [`PointToPoint`]).
 pub const BRAID_STALK_SECTION_COUNT: u32 = 5;
@@ -78,7 +78,7 @@ pub struct BraidOakTreeProtoAnchors {
 	pub ring_spacing_unit_height: f32,
 	pub anchors_per_ring: u32,
 	pub max_projection_fraction_of_height: f32,
-	pub projection_end_fraction: f32,
+	pub projection_min_fraction_of_height: f32,
 	pub branch_angle_tolerance: f32,
 	pub bias_blend: f32,
 	pub branch_depth: usize,
@@ -105,7 +105,7 @@ impl Default for BraidOakTreeProtoAnchors {
 			ring_spacing_unit_height: BRAID_RING_SPACING_UNIT_HEIGHT,
 			anchors_per_ring: BRAID_ANCHORS_PER_RING_MAX,
 			max_projection_fraction_of_height: BRAID_MAX_PROJECTION_FRACTION,
-			projection_end_fraction: BRAID_PROJECTION_END_FRACTION,
+			projection_min_fraction_of_height: BRAID_PROJECTION_MIN_FRACTION,
 			branch_angle_tolerance: BRAID_ANGLE_TOLERANCE_DEGREES.to_radians(),
 			bias_blend: 0.88,
 			branch_depth: BRAID_BRANCH_DEPTH,
@@ -139,8 +139,13 @@ impl BraidOakTreeProtoAnchors {
 	}
 
 	pub fn projection_length(&self, u: f32) -> f32 {
-		let ell_max = self.tree_height.max(1e-6) * self.max_projection_fraction_of_height;
-		dome_projection_length(ell_max, self.projection_end_fraction, u)
+		let h = self.tree_height.max(1e-6);
+		let ell_max = h * self.max_projection_fraction_of_height;
+		let ell_min = h
+			* self
+				.projection_min_fraction_of_height
+				.min(self.max_projection_fraction_of_height);
+		dome_projection_length(ell_max, ell_min, u)
 	}
 
 	fn limb_base_radius(&self) -> f32 {

@@ -11,7 +11,7 @@ use crate::anchors::braid_oak::{
 	BraidOakTreeAnchors, BraidOakTreeProtoAnchors, BRAID_ANCHORS_PER_RING_MAX,
 	BRAID_ANGLE_TOLERANCE_DEGREES, BRAID_BRANCH_BASE_RADIUS_FRACTION_OF_STALK, BRAID_BRANCH_DEPTH,
 	BRAID_FIRST_RING_UNIT_HEIGHT, BRAID_LEAF_RADIUS_FRACTION, BRAID_MAX_PROJECTION_FRACTION,
-	BRAID_PROJECTION_END_FRACTION, BRAID_RING_SPACING_UNIT_HEIGHT, BRAID_STALK_BASE_RADIUS_FRACTION,
+	BRAID_PROJECTION_MIN_FRACTION, BRAID_RING_SPACING_UNIT_HEIGHT, BRAID_STALK_BASE_RADIUS_FRACTION,
 	BRAID_STALK_HEIGHT_FRACTION,
 };
 use crate::anchors::storybook_tree::DEFAULT_OUTER_FOLIAGE_DISTANCE_FRACTION;
@@ -36,8 +36,10 @@ fn braid_oak_fields(h: f32) -> StorybookTreeSbs {
 			anchors_per_ring: BRAID_ANCHORS_PER_RING_MAX,
 		},
 		projection: StorybookProjectionParams {
-			max_projection_fraction: BRAID_MAX_PROJECTION_FRACTION,
-			projection_end_fraction: BRAID_PROJECTION_END_FRACTION,
+			span_fraction_of_height: UnitRange::new(
+				BRAID_PROJECTION_MIN_FRACTION,
+				BRAID_MAX_PROJECTION_FRACTION,
+			),
 		},
 		growth: StorybookGrowthParams {
 			branch_depth: BRAID_BRANCH_DEPTH,
@@ -79,6 +81,27 @@ impl Default for BraidOakTreeSbs {
 fn apply_if_storybook_default<T: Clone + PartialEq>(current: &mut T, story: &T, braid: &T) {
 	if *current == *story {
 		*current = braid.clone();
+	}
+}
+
+fn apply_braid_projection_preset(
+	current: &mut StorybookProjectionParams,
+	story: &StorybookProjectionParams,
+	braid: &StorybookProjectionParams,
+) {
+	if current.span_fraction_of_height == story.span_fraction_of_height {
+		current.span_fraction_of_height = braid.span_fraction_of_height;
+	} else {
+		apply_if_storybook_default(
+			&mut current.span_fraction_of_height.start,
+			&story.span_fraction_of_height.start,
+			&braid.span_fraction_of_height.start,
+		);
+		apply_if_storybook_default(
+			&mut current.span_fraction_of_height.end,
+			&story.span_fraction_of_height.end,
+			&braid.span_fraction_of_height.end,
+		);
 	}
 }
 
@@ -148,7 +171,7 @@ impl BraidOakTreeSbs {
 		}
 
 		apply_braid_ring_preset(&mut s.rings, &story.rings, &braid.rings);
-		apply_if_storybook_default(&mut s.projection, &story.projection, &braid.projection);
+		apply_braid_projection_preset(&mut s.projection, &story.projection, &braid.projection);
 		apply_if_storybook_default(&mut s.growth, &story.growth, &braid.growth);
 		apply_if_storybook_default(&mut s.canopy, &story.canopy, &braid.canopy);
 	}
@@ -169,8 +192,8 @@ impl BraidOakTreeSbs {
 			last_ring_unit_height: self.rings.height_range.end,
 			ring_spacing_unit_height: self.rings.spacing,
 			anchors_per_ring: self.rings.anchors_per_ring,
-			max_projection_fraction_of_height: self.projection.max_projection_fraction,
-			projection_end_fraction: self.projection.projection_end_fraction,
+			max_projection_fraction_of_height: self.projection.max_fraction(),
+			projection_min_fraction_of_height: self.projection.min_fraction(),
 			branch_angle_tolerance: self.growth.angle_tolerance_degrees.to_radians(),
 			bias_blend: 0.88,
 			branch_depth: self.growth.branch_depth,
@@ -212,6 +235,9 @@ impl SetNoiseParams for BraidOakTreeSbs {
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use crate::anchors::braid_oak::{
+		BRAID_MAX_PROJECTION_FRACTION, BRAID_PROJECTION_MIN_FRACTION,
+	};
 	use anyhow::Result;
 
 	#[test]
@@ -228,6 +254,8 @@ mod tests {
 		let proto = geometry.to_proto();
 		assert!((proto.stalk.stalk_height - geometry.height() * BRAID_STALK_HEIGHT_FRACTION).abs() < 1e-3);
 		assert!((proto.first_ring_unit_height - BRAID_FIRST_RING_UNIT_HEIGHT).abs() < 1e-4);
+		assert!((proto.max_projection_fraction_of_height - BRAID_MAX_PROJECTION_FRACTION).abs() < 1e-4);
+		assert!((proto.projection_min_fraction_of_height - BRAID_PROJECTION_MIN_FRACTION).abs() < 1e-4);
 		assert_eq!(proto.child_count_min, 2);
 		assert_eq!(proto.child_count_max, 2);
 		assert_eq!(proto.branch_depth, BRAID_BRANCH_DEPTH);

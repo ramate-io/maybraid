@@ -8,7 +8,7 @@ use procedural_common::{NoiseConfig, NoiseParams, SetNoiseParams, UnitRange};
 use crate::anchors::storybook_tree::{
 	StorybookTreeAnchorPerturbation, StorybookTreeAnchors, StorybookTreeProtoAnchors,
 	DEFAULT_FIRST_RING_UNIT_HEIGHT, DEFAULT_MAX_PROJECTION_FRACTION,
-	DEFAULT_OUTER_FOLIAGE_DISTANCE_FRACTION, DEFAULT_PROJECTION_END_FRACTION,
+	DEFAULT_OUTER_FOLIAGE_DISTANCE_FRACTION, DEFAULT_PROJECTION_MIN_FRACTION_OF_HEIGHT,
 	DEFAULT_STALK_BASE_RADIUS_FRACTION, DEFAULT_STALK_HEIGHT_FRACTION, DEFAULT_TREE_HEIGHT,
 };
 use crate::anchors::strict_stalk::StrictStalk;
@@ -107,17 +107,36 @@ impl Default for StorybookRingParams {
 #[cfg_attr(feature = "clap", derive(clap::Args))]
 #[cfg_attr(feature = "clap", command(rename_all = "kebab-case"))]
 pub struct StorybookProjectionParams {
-	#[cfg_attr(feature = "clap", arg(long, default_value_t = DEFAULT_MAX_PROJECTION_FRACTION))]
-	pub max_projection_fraction: f32,
-	#[cfg_attr(feature = "clap", arg(long, default_value_t = DEFAULT_PROJECTION_END_FRACTION))]
-	pub projection_end_fraction: f32,
+	/// End-ring minimum and mid-canopy maximum limb projection as fractions of tree height `H` (`min..max`).
+	#[cfg_attr(
+		feature = "clap",
+		arg(
+			long = "projection",
+			default_value = "0.20..0.50",
+			value_parser = parse_unit_range,
+			value_name = "MIN..MAX"
+		)
+	)]
+	pub span_fraction_of_height: UnitRange,
+}
+
+impl StorybookProjectionParams {
+	pub fn min_fraction(&self) -> f32 {
+		self.span_fraction_of_height.start.min(self.span_fraction_of_height.end)
+	}
+
+	pub fn max_fraction(&self) -> f32 {
+		self.span_fraction_of_height.start.max(self.span_fraction_of_height.end)
+	}
 }
 
 impl Default for StorybookProjectionParams {
 	fn default() -> Self {
 		Self {
-			max_projection_fraction: DEFAULT_MAX_PROJECTION_FRACTION,
-			projection_end_fraction: DEFAULT_PROJECTION_END_FRACTION,
+			span_fraction_of_height: UnitRange::new(
+				DEFAULT_PROJECTION_MIN_FRACTION_OF_HEIGHT,
+				DEFAULT_MAX_PROJECTION_FRACTION,
+			),
 		}
 	}
 }
@@ -303,8 +322,8 @@ impl StorybookTreeSbs {
 			last_ring_unit_height: self.rings.height_range.end,
 			ring_spacing_unit_height: self.rings.spacing,
 			anchors_per_ring: self.rings.anchors_per_ring,
-			max_projection_fraction_of_height: self.projection.max_projection_fraction,
-			projection_end_fraction: self.projection.projection_end_fraction,
+			max_projection_fraction_of_height: self.projection.max_fraction(),
+			projection_min_fraction_of_height: self.projection.min_fraction(),
 			ring_tilt_degrees: self.growth.ring_tilt_degrees,
 			branch_angle_tolerance: self.growth.angle_tolerance_degrees.to_radians(),
 			bias_blend: 0.88,
@@ -378,6 +397,20 @@ mod tests {
 		let sbs = StorybookTreeSbs::default();
 		let chain = sbs.build_chain();
 		assert!(chain.nodes.len() > 50, "nodes {}", chain.nodes.len());
+		Ok(())
+	}
+
+	#[test]
+	fn projection_span_defaults_match_legacy_dome() -> Result<()> {
+		let sbs = StorybookTreeSbs::default();
+		assert!((sbs.projection.max_fraction() - DEFAULT_MAX_PROJECTION_FRACTION).abs() < 1e-5);
+		assert!(
+			(sbs.projection.min_fraction() - DEFAULT_PROJECTION_MIN_FRACTION_OF_HEIGHT).abs() < 1e-5
+		);
+		let proto = sbs.to_proto();
+		let h = proto.tree_height;
+		let l_end = proto.projection_length(proto.ring_mix_u(proto.first_ring_unit_height));
+		assert!((l_end - h * DEFAULT_PROJECTION_MIN_FRACTION_OF_HEIGHT).abs() < 1e-3);
 		Ok(())
 	}
 
