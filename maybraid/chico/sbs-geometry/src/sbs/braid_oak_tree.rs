@@ -8,7 +8,7 @@ use std::ops::{Deref, DerefMut};
 use procedural_common::{NoiseParams, SetNoiseParams, UnitRange};
 
 use crate::anchors::braid_oak::{
-	BraidOakTreeAnchors, BraidOakTreeProtoAnchors, BRAID_ANCHORS_PER_RING,
+	BraidOakTreeAnchors, BraidOakTreeProtoAnchors, BRAID_ANCHORS_PER_RING_MAX,
 	BRAID_ANGLE_TOLERANCE_DEGREES, BRAID_BRANCH_BASE_RADIUS_FRACTION_OF_STALK, BRAID_BRANCH_DEPTH,
 	BRAID_FIRST_RING_UNIT_HEIGHT, BRAID_LEAF_RADIUS_FRACTION, BRAID_MAX_PROJECTION_FRACTION,
 	BRAID_PROJECTION_END_FRACTION, BRAID_RING_SPACING_UNIT_HEIGHT, BRAID_STALK_BASE_RADIUS_FRACTION,
@@ -33,7 +33,7 @@ fn braid_oak_fields(h: f32) -> StorybookTreeSbs {
 		rings: StorybookRingParams {
 			height_range: UnitRange::new(BRAID_FIRST_RING_UNIT_HEIGHT, 1.0),
 			spacing: BRAID_RING_SPACING_UNIT_HEIGHT,
-			anchors_per_ring: BRAID_ANCHORS_PER_RING,
+			anchors_per_ring: BRAID_ANCHORS_PER_RING_MAX,
 		},
 		projection: StorybookProjectionParams {
 			max_projection_fraction: BRAID_MAX_PROJECTION_FRACTION,

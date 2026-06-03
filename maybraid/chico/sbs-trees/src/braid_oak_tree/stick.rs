@@ -35,9 +35,9 @@ where
 	) -> f32 {
 		let is_stalk = matches!(parent_hysteresis.phase, StorybookTreePhase::Stalk(_));
 		let base = if is_stalk {
-			0.10
+			10.0
 		} else {
-			0.14 + 0.10 * parent_hysteresis.ring_u.clamp(0.0, 1.0)
+			14.0 + 10.0 * parent_hysteresis.ring_u.clamp(0.0, 1.0)
 		};
 
 		let mid = (segment.start.position + segment.end.position) * 0.5;
@@ -46,7 +46,7 @@ where
 			+ segment.end.position.length() as i32;
 		let noise = NoiseConfig::new(self.stick_surface_noise.with_seed(seed));
 		let n = noise.sample_3d(mid.x, mid.y, mid.z).clamp(-1.0, 1.0);
-		(base * (1.0 + 0.35 * n)).max(0.04)
+		(base * (1.0 + 0.40 * n)).max(4.0)
 	}
 }
 

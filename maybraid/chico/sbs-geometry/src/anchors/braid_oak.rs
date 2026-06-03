@@ -28,8 +28,11 @@ pub const BRAID_STALK_BASE_RADIUS_FRACTION: f32 = 0.06;
 /// Limb radius at ring anchors as a fraction of stalk base radius (storybook: `0.12`).
 pub const BRAID_BRANCH_BASE_RADIUS_FRACTION_OF_STALK: f32 = 0.20;
 
-/// Radial spokes per ring (storybook / RFC default: `6`).
-pub const BRAID_ANCHORS_PER_RING: u32 = 4;
+/// Minimum radial spokes sampled per ring.
+pub const BRAID_ANCHORS_PER_RING_MIN: u32 = 3;
+
+/// Maximum radial spokes sampled per ring (RFC / storybook: up to `6`).
+pub const BRAID_ANCHORS_PER_RING_MAX: u32 = 6;
 
 /// [`BranchOut`](crate::chain::BranchOut) hops per limb (storybook: `4`).
 pub const BRAID_BRANCH_DEPTH: usize = 3;
@@ -41,16 +44,16 @@ pub const BRAID_FIRST_RING_UNIT_HEIGHT: f32 = 0.28;
 pub const BRAID_RING_SPACING_UNIT_HEIGHT: f32 = 0.11;
 
 /// Max projection at the crown belt as a fraction of `H`.
-pub const BRAID_MAX_PROJECTION_FRACTION: f32 = 0.60;
+pub const BRAID_MAX_PROJECTION_FRACTION: f32 = 0.55;
 
 /// Projection length at the lowest/highest rings as a fraction of the belt maximum.
-pub const BRAID_PROJECTION_END_FRACTION: f32 = 0.25;
+pub const BRAID_PROJECTION_END_FRACTION: f32 = 0.35;
 
 /// Stalk segments along the centroid (multi-hop [`PointToPoint`]).
 pub const BRAID_STALK_SECTION_COUNT: u32 = 5;
 
 /// RFC branch fan-out (`18°`).
-pub const BRAID_ANGLE_TOLERANCE_DEGREES: f32 = 18.0;
+pub const BRAID_ANGLE_TOLERANCE_DEGREES: f32 = 32.0;
 
 /// World leaf radius fraction of `H`.
 pub const BRAID_LEAF_RADIUS_FRACTION: f32 = 0.085;
@@ -100,7 +103,7 @@ impl Default for BraidOakTreeProtoAnchors {
 			first_ring_unit_height: BRAID_FIRST_RING_UNIT_HEIGHT,
 			last_ring_unit_height: 1.0,
 			ring_spacing_unit_height: BRAID_RING_SPACING_UNIT_HEIGHT,
-			anchors_per_ring: BRAID_ANCHORS_PER_RING,
+			anchors_per_ring: BRAID_ANCHORS_PER_RING_MAX,
 			max_projection_fraction_of_height: BRAID_MAX_PROJECTION_FRACTION,
 			projection_end_fraction: BRAID_PROJECTION_END_FRACTION,
 			branch_angle_tolerance: BRAID_ANGLE_TOLERANCE_DEGREES.to_radians(),
@@ -145,17 +148,40 @@ impl BraidOakTreeProtoAnchors {
 		(base * self.branch_base_radius_fraction_of_stalk).max(0.02)
 	}
 
+	fn sample_anchors_per_ring(
+		&self,
+		chain_noise: &NoiseConfig,
+		z_frac: f32,
+		ring_index: u32,
+	) -> u32 {
+		let min = BRAID_ANCHORS_PER_RING_MIN;
+		let max = self.anchors_per_ring.clamp(min, BRAID_ANCHORS_PER_RING_MAX);
+		if max <= min {
+			return max.max(1);
+		}
+		chain_noise.sample_range_usize_4d(
+			min as usize,
+			(max as usize).saturating_add(1),
+			z_frac,
+			ring_index as f32,
+			self.tree_height,
+			11.0,
+		) as u32
+	}
+
 	pub fn hysteresis_seeds(&self, chain_noise: NoiseConfig) -> Vec<StorybookTreeChain> {
 		let mut out = Vec::new();
-		let k = self.anchors_per_ring.max(1);
 		let radial_eps = (self.stalk.stalk_base_radius * 0.05).max(1e-4);
 		let limb_r = self.limb_base_radius();
 		let depth = storybook_branch_depth(self.branch_depth);
 		let fracs = segment_fracs(depth);
 
-		for z_frac in self.ring_height_fractions() {
+		for (ring_index, z_frac) in self.ring_height_fractions().into_iter().enumerate() {
 			let u = self.ring_mix_u(z_frac);
 			let proj = self.projection_length(u);
+			let k = self
+				.sample_anchors_per_ring(&chain_noise, z_frac, ring_index as u32)
+				.max(1);
 
 			for i in 0..k {
 				let theta = TAU * (i as f32) / (k as f32);
@@ -311,12 +337,17 @@ mod tests {
 	}
 
 	#[test]
-	fn anchors_count_matches_rings_times_spokes_plus_stalk() {
+	fn anchors_count_within_sampled_spoke_range() {
 		let proto =
 			BraidOakTreeProtoAnchors { ring_spacing_unit_height: 0.20, ..Default::default() };
 		let ring_count = proto.ring_height_fractions().len();
-		let spokes = proto.anchors_per_ring as usize;
 		let a = BraidOakTreeAnchors::new(proto);
-		assert_eq!(a.anchors().len(), ring_count * spokes + 1);
+		let n = a.anchors().len();
+		let min_anchors = ring_count * BRAID_ANCHORS_PER_RING_MIN as usize + 1;
+		let max_anchors = ring_count * BRAID_ANCHORS_PER_RING_MAX as usize + 1;
+		assert!(
+			(n >= min_anchors) && (n <= max_anchors),
+			"anchor count {n} not in [{min_anchors}, {max_anchors}]"
+		);
 	}
 }

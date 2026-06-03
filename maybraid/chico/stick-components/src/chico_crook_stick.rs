@@ -2,8 +2,9 @@
 //!
 //! Unlike [`ChicoStick`](crate::chico_stick::ChicoStick), this uses a bent centerline without surface noise.
 //!
-//! [`ChicoCrookStick::bend_strength`] is the intended **world** lateral XZ displacement per unit Y. The scale trick
-//! (thin SDF radii + amplified XZ entity scale) is applied internally so callers only set strength.
+//! [`ChicoCrookStick::bend_strength`] is the intended **world** lateral XZ displacement per unit Y. SDF radius is
+//! **`1 / bend_strength`** (thin radii like `0.05` yield strong visible bends); XZ entity scale is
+//! **`target_radius / sdf_radius`** so world girth stays at the unit taper target.
 
 pub mod render_item_plugin;
 
@@ -17,8 +18,10 @@ use render_item::{mesh::handle::Cached, CascadeChunk, RenderItem};
 /// Fixed SDF bend magnitudes (small; visible curvature comes from XZ mesh scale).
 const SDF_BEND_X: f32 = 0.12;
 const SDF_BEND_Z: f32 = 0.08;
-/// Reference lateral offset at unit height with [`SDF_BEND_X`] and XZ scale 1.
-const SDF_BEND_REFERENCE: f32 = SDF_BEND_X;
+
+/// Unit-stick base/top radii the mesh must hit in world space (`node_radius ×` these fractions).
+const UNIT_TARGET_BASE_RADIUS: f32 = 0.5;
+const UNIT_TARGET_TOP_RADIUS: f32 = 0.42;
 
 /// [`StandardMaterial`] crook stick using explicit mesh materials.
 pub type ChicoCrookStickStd = ChicoCrookStick<StandardMaterial, MeshMaterial3d<StandardMaterial>>;
@@ -45,25 +48,27 @@ where
 	/// Build a crook stick at the given lateral bend strength (XZ units per unit Y).
 	pub fn new(bend_strength: f32, segment_key: u32, material: S) -> Self {
 		Self {
-			bend_strength: bend_strength.max(0.0),
+			bend_strength: bend_strength.max(1e-4),
 			segment_key,
 			material,
 			__marker: PhantomData,
 		}
 	}
 
-	fn xz_crook_scale(&self) -> f32 {
-		(self.bend_strength / SDF_BEND_REFERENCE).max(1.0)
+	/// SDF base radius inversely proportional to bend strength (`≈ 1 / strength`).
+	fn sdf_base_radius(&self) -> f32 {
+		1.0 / self.bend_strength
 	}
 
-	fn unit_taper_radii(&self) -> (f32, f32) {
-		(0.5, 0.42)
+	/// XZ scale restores unit taper girth: `target_radius / sdf_radius`.
+	fn xz_crook_scale(&self) -> f32 {
+		UNIT_TARGET_BASE_RADIUS / self.sdf_base_radius()
 	}
 
 	fn sdf_radii(&self) -> (f32, f32) {
-		let s = self.xz_crook_scale().max(1e-4);
-		let (base, top) = self.unit_taper_radii();
-		(base / s, top / s)
+		let base = self.sdf_base_radius();
+		let top = base * (UNIT_TARGET_TOP_RADIUS / UNIT_TARGET_BASE_RADIUS);
+		(base, top)
 	}
 
 	fn bend_phases(&self) -> (f32, f32) {
@@ -95,7 +100,7 @@ where
 
 	/// Effective world base radius: `node_radius * 0.5` at unit taper.
 	pub fn visible_base_radius(&self, node_radius: f32) -> f32 {
-		node_radius * 0.5
+		node_radius * UNIT_TARGET_BASE_RADIUS
 	}
 }
 
@@ -142,24 +147,38 @@ mod tests {
 	use super::*;
 
 	#[test]
-	fn xz_scale_tracks_bend_strength() {
+	fn stronger_bend_uses_thinner_sdf_radius() {
 		let lo = ChicoCrookStick::<StandardMaterial, MeshMaterial3d<StandardMaterial>>::new(
-			0.12,
+			8.0,
 			0,
 			MeshMaterial3d::<StandardMaterial>::default(),
 		);
 		let hi = ChicoCrookStick::<StandardMaterial, MeshMaterial3d<StandardMaterial>>::new(
-			0.36,
+			20.0,
 			0,
 			MeshMaterial3d::<StandardMaterial>::default(),
 		);
 		assert!(lo.crook_cylinder().base_radius > hi.crook_cylinder().base_radius);
+		assert!((hi.crook_cylinder().base_radius - 0.05).abs() < 1e-5);
+	}
+
+	#[test]
+	fn xz_scale_times_sdf_base_matches_unit_target() {
+		let stick = ChicoCrookStick::<StandardMaterial, MeshMaterial3d<StandardMaterial>>::new(
+			12.0,
+			0,
+			MeshMaterial3d::<StandardMaterial>::default(),
+		);
+		let base = stick.crook_cylinder().base_radius;
+		let xz = UNIT_TARGET_BASE_RADIUS / base;
+		assert!((xz * base - UNIT_TARGET_BASE_RADIUS).abs() < 1e-5);
+		assert!((base - 1.0 / 12.0).abs() < 1e-5);
 	}
 
 	#[test]
 	fn visible_radius_matches_node_radius_for_unit_taper() {
 		let stick = ChicoCrookStick::<StandardMaterial, MeshMaterial3d<StandardMaterial>>::new(
-			0.24,
+			15.0,
 			1,
 			MeshMaterial3d::<StandardMaterial>::default(),
 		);
