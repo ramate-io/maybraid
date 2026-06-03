@@ -7,3 +7,5 @@ pub mod sopes_banyan;
 pub mod storybook_tree;
 pub mod jungle_storybook_tree;
 pub mod braid_oak_tree;
+pub mod penmarch_torch;
+pub mod kamakura_torch;

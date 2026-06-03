@@ -15,6 +15,12 @@ pub use chain::storybook_tree::{
 	segment_fracs, storybook_branch_depth, StorybookTreeChain, StorybookTreePhase,
 	STORYBOOK_BRANCH_DEPTH_MAX, STORYBOOK_BRANCH_DEPTH_MIN,
 };
+pub use chain::penmarch_torch::{
+	is_graph_terminal as penmarch_is_graph_terminal, PenmarchTorchChain,
+};
+pub use chain::kamakura_torch::{
+	is_graph_terminal as kamakura_is_graph_terminal, KamakuraTorchChain,
+};
 pub use chain::liams_conifer::{liams_conifer_branch_depth, stalk_tip_from_chain, LiamsConiferChain, LiamsConiferPhase, SEGMENT_FRACS};
 pub use chain::sopes_banyan::{SopesBanyanChain, SopesBanyanPhase};
 pub use chain::{
@@ -35,7 +41,15 @@ pub use anchors::liams_conifer::{LiamsConiferAnchors, LiamsConiferProtoAnchors};
 pub use anchors::friends_conifer::{
 	FriendsConiferAnchors, FriendsConiferChain, FriendsConiferProtoAnchors,
 };
-pub use projection::logarithmic_rounding_projection;
+pub use projection::{
+	logarithmic_rounding_projection, vase_profile, vase_projection_length,
+};
+pub use anchors::penmarch_torch::{
+	penmarch_torch_branch_direction, PenmarchTorchAnchors, PenmarchTorchProtoAnchors,
+};
+pub use anchors::kamakura_torch::{
+	kamakura_torch_branch_direction, KamakuraTorchAnchors, KamakuraTorchProtoAnchors,
+};
 pub use anchors::sopes_banyan::{SopesBanyanAnchors, SopesBanyanProtoAnchors};
 pub use anchors::stalk_perturbation::{
 	AnchorPerturbation, HasStrictStalk, PerturbAnchor, StalkPerturbation,
@@ -50,6 +64,8 @@ pub use sbs::braid_oak_tree::BraidOakTreeSbs;
 pub use sbs::liams_conifer::LiamsConiferSbs;
 pub use sbs::friends_conifer::FriendsConiferSbs;
 pub use sbs::sopes_banyan::SopesBanyanSbs;
+pub use sbs::penmarch_torch::PenmarchTorchSbs;
+pub use sbs::kamakura_torch::KamakuraTorchSbs;
 
 #[cfg(feature = "render")]
 pub mod render;

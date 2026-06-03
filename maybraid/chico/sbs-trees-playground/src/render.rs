@@ -11,6 +11,8 @@ use chico_sbs_trees::temperate_conifer::TemperateConifer;
 use chico_sbs_trees::jungle_storybook_tree::JungleStorybookTree;
 use chico_sbs_trees::braid_oak_tree::BraidOakTree;
 use chico_sbs_trees::storybook_tree::StorybookTree;
+use chico_sbs_trees::penmarch_torch::PenmarchTorch;
+use chico_sbs_trees::kamakura_torch::KamakuraTorch;
 use chico_sbs_trees::sopes_banyan::SopesBanyan;
 use chico_sbs_trees::SkippedLeafMeshMaterial;
 use chico_sbs_trees::SkippedStickMeshMaterial;
@@ -77,6 +79,22 @@ pub type RenderStorybookTree = StorybookTree<
 	SkippedLeafMeshMaterial<ChicoLeafMaterial>,
 >;
 
+/// [`PenmarchTorch`] — vase-profile upward flame tree ([#248](https://github.com/ramate-io/maybraid/issues/248)).
+pub type RenderPenmarchTorch = PenmarchTorch<
+	ChicoStickMaterial,
+	SkippedStickMeshMaterial<ChicoStickMaterial>,
+	ChicoLeafMaterial,
+	SkippedLeafMeshMaterial<ChicoLeafMaterial>,
+>;
+
+/// [`KamakuraTorch`] — stashed near-vertical flame (linear crown bias).
+pub type RenderKamakuraTorch = KamakuraTorch<
+	ChicoStickMaterial,
+	SkippedStickMeshMaterial<ChicoStickMaterial>,
+	ChicoLeafMaterial,
+	SkippedLeafMeshMaterial<ChicoLeafMaterial>,
+>;
+
 /// [`BraidOakTree`] — gnarled broadleaf with crook-cylinder branches ([#234](https://github.com/ramate-io/maybraid/issues/234)).
 pub type RenderBraidOakTree = BraidOakTree<
 	ChicoStickMaterial,
@@ -135,6 +153,8 @@ pub enum RenderSubject {
 	DatePalm(RenderDatePalm),
 	WaialeaPalm(RenderWaialeaPalm),
 	StorybookTree(RenderStorybookTree),
+	PenmarchTorch(RenderPenmarchTorch),
+	KamakuraTorch(RenderKamakuraTorch),
 	BraidOakTree(RenderBraidOakTree),
 	JungleStorybookTree(RenderJungleStorybookTree),
 	SucculentTuft(RenderSucculentTuft),
@@ -157,6 +177,8 @@ impl RenderSubject {
 			Self::DatePalm(_) => "DatePalm",
 			Self::WaialeaPalm(_) => "WaialeaPalm",
 			Self::StorybookTree(_) => "StorybookTree",
+			Self::PenmarchTorch(_) => "PenmarchTorch",
+			Self::KamakuraTorch(_) => "KamakuraTorch",
 			Self::BraidOakTree(_) => "BraidOakTree",
 			Self::JungleStorybookTree(_) => "JungleStorybookTree",
 			Self::SucculentTuft(_) => "SucculentTuft",
@@ -193,6 +215,8 @@ impl RenderSubject {
 			Self::DatePalm(t) => format!("{:?}", t.geometry),
 			Self::WaialeaPalm(t) => format!("{:?}", t.geometry),
 			Self::StorybookTree(t) => format!("{:?}", t.geometry),
+			Self::PenmarchTorch(t) => format!("{:?}", t.geometry),
+			Self::KamakuraTorch(t) => format!("{:?}", t.geometry),
 			Self::BraidOakTree(t) => format!("{:?}", t.geometry),
 			Self::JungleStorybookTree(t) => format!("{:?}", t.geometry),
 			Self::SucculentTuft(t) => format!("{:?}", t.shape),
@@ -215,6 +239,8 @@ impl RenderSubject {
 			Self::DatePalm(tree) => RenderDispatch::DatePalm(tree.clone()),
 			Self::WaialeaPalm(tree) => RenderDispatch::WaialeaPalm(tree.clone()),
 			Self::StorybookTree(tree) => RenderDispatch::StorybookTree(tree.clone()),
+			Self::PenmarchTorch(tree) => RenderDispatch::PenmarchTorch(tree.clone()),
+			Self::KamakuraTorch(tree) => RenderDispatch::KamakuraTorch(tree.clone()),
 			Self::BraidOakTree(tree) => RenderDispatch::BraidOakTree(tree.clone()),
 			Self::JungleStorybookTree(tree) => RenderDispatch::JungleStorybookTree(tree.clone()),
 			Self::SucculentTuft(tuft) => RenderDispatch::SucculentTuft(tuft.clone()),
@@ -238,6 +264,8 @@ enum RenderDispatch {
 	DatePalm(RenderDatePalm),
 	WaialeaPalm(RenderWaialeaPalm),
 	StorybookTree(RenderStorybookTree),
+	PenmarchTorch(RenderPenmarchTorch),
+	KamakuraTorch(RenderKamakuraTorch),
 	BraidOakTree(RenderBraidOakTree),
 	JungleStorybookTree(RenderJungleStorybookTree),
 	SucculentTuft(RenderSucculentTuft),
@@ -330,6 +358,12 @@ pub fn sync_render(
 			commands.spawn((bundle, DispatchRenderItem::new(tree)));
 		}
 		RenderDispatch::StorybookTree(tree) => {
+			commands.spawn((bundle, DispatchRenderItem::new(tree)));
+		}
+		RenderDispatch::PenmarchTorch(tree) => {
+			commands.spawn((bundle, DispatchRenderItem::new(tree)));
+		}
+		RenderDispatch::KamakuraTorch(tree) => {
 			commands.spawn((bundle, DispatchRenderItem::new(tree)));
 		}
 		RenderDispatch::BraidOakTree(tree) => {

@@ -24,6 +24,7 @@ use super::Anchors;
 use procedural_common::{NoiseConfig, NoiseParams};
 
 use crate::chain::BranchOut;
+use crate::projection::vase_projection_length;
 use crate::BallStickNode;
 use crate::DepthBudget;
 
@@ -92,23 +93,14 @@ impl SopesBanyanProtoAnchors {
 
 	/// Vase-shaped projection length for this ring (world units).
 	fn projection_length(&self, u: f32) -> f32 {
-		let h = self.stalk.stalk_height.max(1e-6);
-		let t = Self::vase_profile(u, self.vase_profile_epsilon, self.projection_center_fraction);
-		let f = self.projection_min_fraction_of_height
-			+ (self.projection_max_fraction_of_height - self.projection_min_fraction_of_height) * t;
-		h * f
-	}
-
-	fn vase_profile(u: f32, eps: f32, center: f32) -> f32 {
-		let eps = eps.clamp(1e-4, 0.49);
-		let u = u.clamp(eps, 1.0 - eps);
-		let center = center.clamp(eps, 1.0 - eps);
-
-		let steepness = ((1.0 - eps) / eps).ln();
-		let x = (u / (1.0 - u)).ln();
-		let c = (center / (1.0 - center)).ln();
-
-		((x - c) / (2.0 * steepness) + 0.5).clamp(0.0, 1.0)
+		vase_projection_length(
+			self.stalk.stalk_height,
+			self.projection_min_fraction_of_height,
+			self.projection_max_fraction_of_height,
+			u,
+			self.vase_profile_epsilon,
+			self.projection_center_fraction,
+		)
 	}
 
 	fn max_depth_for_ring(&self, u: f32) -> usize {

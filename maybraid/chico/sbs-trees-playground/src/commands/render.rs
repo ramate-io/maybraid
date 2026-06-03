@@ -10,6 +10,8 @@ pub mod jungle_growth;
 pub mod liams_conifer;
 pub mod friends_conifer;
 pub mod temperate_conifer;
+pub mod penmarch_torch;
+pub mod kamakura_torch;
 pub mod moderate_lod_frond_crown;
 pub mod plugin;
 
@@ -35,6 +37,8 @@ pub use jungle_growth::JungleGrowthRenderHelper;
 pub use liams_conifer::LiamsConiferRenderHelper;
 pub use friends_conifer::FriendsConiferRenderHelper;
 pub use temperate_conifer::TemperateConiferRenderHelper;
+pub use penmarch_torch::PenmarchTorchRenderHelper;
+pub use kamakura_torch::KamakuraTorchRenderHelper;
 pub use moderate_lod_frond_crown::ModerateLodFrondCrownRenderHelper;
 pub use sopes_banyan::SopesBanyanRenderHelper;
 pub use spear_tuft::SpearTuftRenderHelper;
@@ -92,6 +96,8 @@ pub enum Render {
 	DatePalm(DatePalmRenderHelper),
 	WaialeaPalm(WaialeaPalmRenderHelper),
 	StorybookTree(StorybookTreeRenderHelper),
+	PenmarchTorch(PenmarchTorchRenderHelper),
+	KamakuraTorch(KamakuraTorchRenderHelper),
 	BraidOakTree(BraidOakTreeRenderHelper),
 	JungleStorybookTree(JungleStorybookTreeRenderHelper),
 	SucculentTuft(SucculentTuftRenderHelper),
@@ -146,6 +152,16 @@ impl Render {
 			},
 			Self::StorybookTree(h) => RenderConfig {
 				subject: RenderSubject::StorybookTree(h.inner.clone()),
+				res_2: h.res_2,
+				transform: h.render_transform(),
+			},
+			Self::PenmarchTorch(h) => RenderConfig {
+				subject: RenderSubject::PenmarchTorch(h.inner.clone()),
+				res_2: h.res_2,
+				transform: h.render_transform(),
+			},
+			Self::KamakuraTorch(h) => RenderConfig {
+				subject: RenderSubject::KamakuraTorch(h.inner.clone()),
 				res_2: h.res_2,
 				transform: h.render_transform(),
 			},
@@ -366,6 +382,37 @@ mod tests {
 			- chico_sbs_geometry::sbs::jungle_storybook_tree::JUNGLE_BRANCH_BASE_RADIUS_FRACTION_OF_STALK)
 			.abs()
 			< 1e-5);
+		Ok(())
+	}
+
+	#[test]
+	fn kamakura_torch_command_preserves_shape_params() -> Result<()> {
+		let cmd = crate::commands::PlaygroundCommand::parse_line(
+			"render kamakura-torch --tree-height 20 --torch-bias-low-degrees 50 --torch-bias-high-degrees 72",
+		)
+		.map_err(|e| anyhow::anyhow!("{e}"))?;
+		let crate::commands::PlaygroundCommand::Render(Render::KamakuraTorch(helper)) = cmd else {
+			anyhow::bail!("expected kamakura-torch render command");
+		};
+		assert!((helper.inner.geometry.scale.tree_height - 20.0).abs() < 1e-5);
+		assert!((helper.inner.geometry.growth.torch_bias_low_degrees - 50.0).abs() < 1e-5);
+		assert!((helper.inner.geometry.growth.torch_bias_high_degrees - 72.0).abs() < 1e-5);
+		Ok(())
+	}
+
+	#[test]
+	fn penmarch_torch_command_preserves_shape_params() -> Result<()> {
+		let cmd = crate::commands::PlaygroundCommand::parse_line(
+			"render penmarch-torch --tree-height 24 --projection 0.10..0.45",
+		)
+		.map_err(|e| anyhow::anyhow!("{e}"))?;
+		let crate::commands::PlaygroundCommand::Render(Render::PenmarchTorch(helper)) = cmd else {
+			anyhow::bail!("expected penmarch-torch render command");
+		};
+		assert!((helper.inner.geometry.scale.tree_height - 24.0).abs() < 1e-5);
+		assert!(
+			(helper.inner.geometry.projection.span_fraction_of_height.start - 0.10).abs() < 1e-5
+		);
 		Ok(())
 	}
 
