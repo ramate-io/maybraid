@@ -3,6 +3,7 @@ pub mod buddha_hand_tuft;
 pub mod date_palm;
 pub mod waialea_palm;
 pub mod storybook_tree;
+pub mod braid_oak_tree;
 pub mod jungle_storybook_tree;
 pub mod frond_crown;
 pub mod jungle_growth;
@@ -25,6 +26,7 @@ pub use buddha_hand_tuft::BuddhaHandTuftRenderHelper;
 pub use date_palm::DatePalmRenderHelper;
 pub use waialea_palm::WaialeaPalmRenderHelper;
 pub use storybook_tree::StorybookTreeRenderHelper;
+pub use braid_oak_tree::BraidOakTreeRenderHelper;
 pub use jungle_storybook_tree::JungleStorybookTreeRenderHelper;
 pub use frond_crown::FrondCrownRenderHelper;
 pub use jungle_growth::JungleGrowthRenderHelper;
@@ -84,6 +86,7 @@ pub enum Render {
 	DatePalm(DatePalmRenderHelper),
 	WaialeaPalm(WaialeaPalmRenderHelper),
 	StorybookTree(StorybookTreeRenderHelper),
+	BraidOakTree(BraidOakTreeRenderHelper),
 	JungleStorybookTree(JungleStorybookTreeRenderHelper),
 	SucculentTuft(SucculentTuftRenderHelper),
 	BladeTuft(BladeTuftRenderHelper),
@@ -127,6 +130,11 @@ impl Render {
 			},
 			Self::StorybookTree(h) => RenderConfig {
 				subject: RenderSubject::StorybookTree(h.inner.clone()),
+				res_2: h.res_2,
+				transform: h.render_transform(),
+			},
+			Self::BraidOakTree(h) => RenderConfig {
+				subject: RenderSubject::BraidOakTree(h.inner.clone()),
 				res_2: h.res_2,
 				transform: h.render_transform(),
 			},
@@ -294,6 +302,33 @@ mod tests {
 		};
 		assert!((tree.geometry.scale.tree_height - 18.0).abs() < 1e-5);
 		assert_eq!(tree.geometry.growth.branch_depth, 4);
+		Ok(())
+	}
+
+	#[test]
+	fn braid_oak_tree_command_preserves_shape_params() -> Result<()> {
+		let cmd = crate::commands::PlaygroundCommand::parse_line(
+			"render braid-oak-tree --tree-height 18 --branch-depth 4 --ring-heights 0.20..1.0",
+		)
+		.map_err(|e| anyhow::anyhow!("{e}"))?;
+		let crate::commands::PlaygroundCommand::Render(Render::BraidOakTree(helper)) = cmd else {
+			anyhow::bail!("expected braid-oak-tree render command");
+		};
+		assert!((helper.inner.geometry.storybook.scale.tree_height - 18.0).abs() < 1e-5);
+		assert_eq!(helper.inner.geometry.storybook.growth.branch_depth, 4);
+		let mut geometry = helper.inner.geometry.clone();
+		geometry.apply_braid_preset();
+		assert!(
+			(geometry.storybook.scale.stalk_height_fraction
+				- chico_sbs_geometry::anchors::braid_oak::BRAID_STALK_HEIGHT_FRACTION)
+				.abs()
+				< 1e-5
+		);
+		let cfg = Render::BraidOakTree(helper).into_render_config();
+		let RenderSubject::BraidOakTree(tree) = cfg.subject else {
+			anyhow::bail!("expected braid oak tree subject");
+		};
+		assert!((tree.geometry.storybook.scale.tree_height - 18.0).abs() < 1e-5);
 		Ok(())
 	}
 

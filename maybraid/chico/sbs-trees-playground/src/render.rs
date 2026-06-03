@@ -7,6 +7,7 @@ use chico_sbs_trees::date_palm::DatePalm;
 use chico_sbs_trees::waialea_palm::WaialeaPalm;
 use chico_sbs_trees::liams_conifer::LiamsConifer;
 use chico_sbs_trees::jungle_storybook_tree::JungleStorybookTree;
+use chico_sbs_trees::braid_oak_tree::BraidOakTree;
 use chico_sbs_trees::storybook_tree::StorybookTree;
 use chico_sbs_trees::sopes_banyan::SopesBanyan;
 use chico_sbs_trees::SkippedLeafMeshMaterial;
@@ -58,6 +59,16 @@ pub type RenderStorybookTree = StorybookTree<
 	SkippedLeafMeshMaterial<ChicoLeafMaterial>,
 >;
 
+/// [`BraidOakTree`] — gnarled broadleaf with crook-cylinder branches ([#234](https://github.com/ramate-io/maybraid/issues/234)).
+pub type RenderBraidOakTree = BraidOakTree<
+	ChicoStickMaterial,
+	SkippedStickMeshMaterial<ChicoStickMaterial>,
+	ChicoLeafMaterial,
+	SkippedInnerLeafMeshMaterial<ChicoLeafMaterial>,
+	ChicoLeafMaterial,
+	SkippedOuterLeafMeshMaterial<ChicoLeafMaterial>,
+>;
+
 /// [`JungleStorybookTree`] — dense Storybook construction ([#235](https://github.com/ramate-io/maybraid/issues/235)).
 pub type RenderJungleStorybookTree = JungleStorybookTree<
 	ChicoStickMaterial,
@@ -104,6 +115,7 @@ pub enum RenderSubject {
 	DatePalm(RenderDatePalm),
 	WaialeaPalm(RenderWaialeaPalm),
 	StorybookTree(RenderStorybookTree),
+	BraidOakTree(RenderBraidOakTree),
 	JungleStorybookTree(RenderJungleStorybookTree),
 	SucculentTuft(RenderSucculentTuft),
 	BladeTuft(RenderBladeTuft),
@@ -123,6 +135,7 @@ impl RenderSubject {
 			Self::DatePalm(_) => "DatePalm",
 			Self::WaialeaPalm(_) => "WaialeaPalm",
 			Self::StorybookTree(_) => "StorybookTree",
+			Self::BraidOakTree(_) => "BraidOakTree",
 			Self::JungleStorybookTree(_) => "JungleStorybookTree",
 			Self::SucculentTuft(_) => "SucculentTuft",
 			Self::BladeTuft(_) => "BladeTuft",
@@ -143,6 +156,7 @@ impl RenderSubject {
 			Self::DatePalm(t) => format!("{:?}", t.geometry),
 			Self::WaialeaPalm(t) => format!("{:?}", t.geometry),
 			Self::StorybookTree(t) => format!("{:?}", t.geometry),
+			Self::BraidOakTree(t) => format!("{:?}", t.geometry),
 			Self::JungleStorybookTree(t) => format!("{:?}", t.geometry),
 			Self::SucculentTuft(t) => format!("{:?}", t.shape),
 			Self::BladeTuft(t) => format!("{:?}", t.shape),
@@ -162,6 +176,7 @@ impl RenderSubject {
 			Self::DatePalm(tree) => RenderDispatch::DatePalm(tree.clone()),
 			Self::WaialeaPalm(tree) => RenderDispatch::WaialeaPalm(tree.clone()),
 			Self::StorybookTree(tree) => RenderDispatch::StorybookTree(tree.clone()),
+			Self::BraidOakTree(tree) => RenderDispatch::BraidOakTree(tree.clone()),
 			Self::JungleStorybookTree(tree) => RenderDispatch::JungleStorybookTree(tree.clone()),
 			Self::SucculentTuft(tuft) => RenderDispatch::SucculentTuft(tuft.clone()),
 			Self::BladeTuft(tuft) => RenderDispatch::BladeTuft(tuft.clone()),
@@ -182,6 +197,7 @@ enum RenderDispatch {
 	DatePalm(RenderDatePalm),
 	WaialeaPalm(RenderWaialeaPalm),
 	StorybookTree(RenderStorybookTree),
+	BraidOakTree(RenderBraidOakTree),
 	JungleStorybookTree(RenderJungleStorybookTree),
 	SucculentTuft(RenderSucculentTuft),
 	BladeTuft(RenderBladeTuft),
@@ -267,6 +283,9 @@ pub fn sync_render(
 			commands.spawn((bundle, DispatchRenderItem::new(tree)));
 		}
 		RenderDispatch::StorybookTree(tree) => {
+			commands.spawn((bundle, DispatchRenderItem::new(tree)));
+		}
+		RenderDispatch::BraidOakTree(tree) => {
 			commands.spawn((bundle, DispatchRenderItem::new(tree)));
 		}
 		RenderDispatch::JungleStorybookTree(tree) => {

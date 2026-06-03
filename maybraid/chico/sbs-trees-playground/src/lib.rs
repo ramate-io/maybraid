@@ -23,10 +23,11 @@ use chico_ball_components::tuft::render_item_plugin::TuftRenderItemPlugin;
 use chico_sbs_trees::date_palm::render_item_plugin::ensure_registered as ensure_date_palm_render_plugins;
 use chico_sbs_trees::waialea_palm::render_item_plugin::ensure_registered as ensure_waialea_palm_render_plugins;
 use chico_sbs_trees::storybook_tree::render_item_plugin::ensure_registered as ensure_storybook_tree_render_plugins;
+use chico_sbs_trees::braid_oak_tree::render_item_plugin::ensure_registered as ensure_braid_oak_tree_render_plugins;
 use chico_sbs_trees::jungle_storybook_tree::render_item_plugin::ensure_registered as ensure_jungle_storybook_tree_render_plugins;
 use chico_sbs_trees::liams_conifer::render_item_plugin::ensure_registered as ensure_liams_conifer_render_plugins;
 use chico_sbs_trees::sopes_banyan::render_item_plugin::ensure_registered as ensure_sopes_banyan_render_plugins;
-use chico_sdf::{NoisyBall, NoisyCylinder};
+use chico_sdf::{CrookCylinder, NoisyBall, NoisyCylinder};
 use chico_vegetation_shaders::{
 	ChicoLeafMaterial, ChicoStickMaterial, ChicoVegetationShadersPlugin,
 };
@@ -46,6 +47,7 @@ impl Plugin for SbsTreesPlaygroundPlugin {
 		ensure_date_palm_render_plugins(app);
 		ensure_waialea_palm_render_plugins(app);
 		ensure_storybook_tree_render_plugins(app);
+		ensure_braid_oak_tree_render_plugins(app);
 		ensure_jungle_storybook_tree_render_plugins(app);
 		if !app.is_plugin_added::<TuftRenderItemPlugin>() {
 			app.add_plugins(TuftRenderItemPlugin::default());
@@ -55,6 +57,7 @@ impl Plugin for SbsTreesPlaygroundPlugin {
 		}
 		app.add_plugins(ChicoVegetationShadersPlugin);
 		ensure_enforce_caching_plugin::<NoisyCylinder, ChicoStickMaterial>(app);
+		ensure_enforce_caching_plugin::<CrookCylinder, ChicoStickMaterial>(app);
 		ensure_enforce_caching_plugin::<NoisyBall, ChicoLeafMaterial>(app);
 		ensure_enforce_caching_plugin::<NoisyBall, ChicoStickMaterial>(app);
 		if !app.is_plugin_added::<MaterialPlugin<StandardMaterial>>() {
@@ -86,6 +89,7 @@ impl Plugin for SbsTreesPlaygroundPlugin {
 						dispatch_render_items::<render::RenderDatePalm>,
 						dispatch_render_items::<render::RenderWaialeaPalm>,
 						dispatch_render_items::<render::RenderStorybookTree>,
+						dispatch_render_items::<render::RenderBraidOakTree>,
 						dispatch_render_items::<render::RenderJungleStorybookTree>,
 						dispatch_render_items::<render::RenderSucculentTuft>,
 						dispatch_render_items::<render::RenderBladeTuft>,

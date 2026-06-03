@@ -30,8 +30,8 @@ pub const DEFAULT_STALK_BASE_RADIUS_FRACTION: f32 = 0.035;
 /// Max projection at the crown belt as a fraction of `H`.
 pub const DEFAULT_MAX_PROJECTION_FRACTION: f32 = 0.50;
 
-/// Projection length at the lowest/highest rings as a fraction of the belt maximum.
-pub const DEFAULT_PROJECTION_END_FRACTION: f32 = 0.40;
+/// End-ring minimum projection as a fraction of `H` (storybook dome floor; mid-canopy uses [`DEFAULT_MAX_PROJECTION_FRACTION`]).
+pub const DEFAULT_PROJECTION_MIN_FRACTION_OF_HEIGHT: f32 = 0.20;
 
 /// RFC outer foliage distance threshold as a fraction of limb projection.
 pub const DEFAULT_OUTER_FOLIAGE_DISTANCE_FRACTION: f32 = 0.65;
@@ -41,14 +41,26 @@ pub const DEFAULT_FIRST_RING_UNIT_HEIGHT: f32 = 0.30;
 
 /// Dome/bell profile: low at the trunk base and tip, longest near mid-canopy.
 ///
-/// \(\ell(u) = \ell_{\min} + (\ell_{\max} - \ell_{\min}) \sin(\pi u)\) with
-/// \(\ell_{\min} = \ell_{\max} \cdot \text{end\_fraction}\).
-pub fn dome_projection_length(ell_max: f32, end_fraction: f32, u: f32) -> f32 {
+/// \(\ell(u) = \ell_{\min} + (\ell_{\max} - \ell_{\min}) \sin(\pi u)\).
+pub fn dome_projection_length(ell_max: f32, ell_min: f32, u: f32) -> f32 {
 	let u = u.clamp(0.0, 1.0);
-	let end_fraction = end_fraction.clamp(0.0, 1.0);
-	let ell_min = ell_max * end_fraction;
+	let ell_max = ell_max.max(ell_min);
+	let ell_min = ell_min.min(ell_max);
 	let bell = (std::f32::consts::PI * u).sin();
 	ell_min + (ell_max - ell_min) * bell
+}
+
+/// Storybook dome projection at ring mix `u`, from tree height and min/max fractions of `H`.
+pub fn storybook_dome_projection_length(
+	tree_height: f32,
+	max_fraction_of_height: f32,
+	min_fraction_of_height: f32,
+	u: f32,
+) -> f32 {
+	let h = tree_height.max(1e-6);
+	let ell_max = h * max_fraction_of_height;
+	let ell_min = h * min_fraction_of_height.min(max_fraction_of_height);
+	dome_projection_length(ell_max, ell_min, u)
 }
 
 /// Tilt horizontal radial: lower rings slightly downward, upper rings slightly upward.
@@ -73,8 +85,8 @@ pub struct StorybookTreeProtoAnchors {
 	pub ring_spacing_unit_height: f32,
 	pub anchors_per_ring: u32,
 	pub max_projection_fraction_of_height: f32,
-	/// Limb length at `u = 0` and `u = 1` as a fraction of the mid-canopy maximum.
-	pub projection_end_fraction: f32,
+	/// End-ring minimum projection as a fraction of [`Self::tree_height`] (dome floor at `u ∈ {0, 1}`).
+	pub projection_min_fraction_of_height: f32,
 	pub ring_tilt_degrees: f32,
 	pub branch_angle_tolerance: f32,
 	pub bias_blend: f32,
@@ -103,7 +115,7 @@ impl Default for StorybookTreeProtoAnchors {
 			ring_spacing_unit_height: 0.08 / DEFAULT_STALK_HEIGHT_FRACTION,
 			anchors_per_ring: 6,
 			max_projection_fraction_of_height: DEFAULT_MAX_PROJECTION_FRACTION,
-			projection_end_fraction: DEFAULT_PROJECTION_END_FRACTION,
+			projection_min_fraction_of_height: DEFAULT_PROJECTION_MIN_FRACTION_OF_HEIGHT,
 			ring_tilt_degrees: 4.0,
 			branch_angle_tolerance: 26.0_f32.to_radians(),
 			bias_blend: 0.88,
@@ -138,8 +150,12 @@ impl StorybookTreeProtoAnchors {
 	}
 
 	pub fn projection_length(&self, u: f32) -> f32 {
-		let ell_max = self.tree_height.max(1e-6) * self.max_projection_fraction_of_height;
-		dome_projection_length(ell_max, self.projection_end_fraction, u)
+		storybook_dome_projection_length(
+			self.tree_height,
+			self.max_projection_fraction_of_height,
+			self.projection_min_fraction_of_height,
+			u,
+		)
 	}
 
 	/// Limb radius at ring anchors; floored so degenerate SBS fractions still produce visible sticks.
@@ -310,12 +326,12 @@ mod tests {
 	#[test]
 	fn dome_projection_low_at_ends_high_at_mid() {
 		let ell_max = 10.0;
-		let end = 0.4;
-		let l0 = dome_projection_length(ell_max, end, 0.0);
-		let l1 = dome_projection_length(ell_max, end, 1.0);
-		let mid = dome_projection_length(ell_max, end, 0.5);
-		assert!((l0 - ell_max * end).abs() < 1e-4);
-		assert!((l1 - ell_max * end).abs() < 1e-4);
+		let ell_min = 4.0;
+		let l0 = dome_projection_length(ell_max, ell_min, 0.0);
+		let l1 = dome_projection_length(ell_max, ell_min, 1.0);
+		let mid = dome_projection_length(ell_max, ell_min, 0.5);
+		assert!((l0 - ell_min).abs() < 1e-4);
+		assert!((l1 - ell_min).abs() < 1e-4);
 		assert!(mid > l0 * 1.5);
 		assert!(mid > l1 * 1.5);
 	}

@@ -11,8 +11,9 @@ use procedural_common::{NoiseParams, SetNoiseParams, UnitRange};
 use crate::anchors::storybook_tree::DEFAULT_OUTER_FOLIAGE_DISTANCE_FRACTION;
 use crate::anchors::Anchors;
 use crate::sbs::storybook_tree::{
-	StorybookCanopyParams, StorybookGrowthParams, StorybookProjectionParams, StorybookRingParams,
-	StorybookTreeSbs, StorybookTreeScale,
+	apply_storybook_field_preset, apply_unit_range_preset, StorybookCanopyParams,
+	StorybookGrowthParams, StorybookProjectionParams, StorybookRingParams, StorybookTreeSbs,
+	StorybookTreeScale,
 };
 use crate::{BallStickChain, StorybookTreeChain};
 
@@ -70,9 +71,10 @@ fn jungle_storybook_fields(h: f32) -> StorybookTreeSbs {
 			anchors_per_ring: JUNGLE_ANCHORS_PER_RING,
 		},
 		projection: StorybookProjectionParams {
-			max_projection_fraction: JUNGLE_MAX_PROJECTION_FRACTION,
-			projection_end_fraction:
-				crate::anchors::storybook_tree::DEFAULT_PROJECTION_END_FRACTION,
+			span_fraction_of_height: UnitRange::new(
+				crate::anchors::storybook_tree::DEFAULT_PROJECTION_MIN_FRACTION_OF_HEIGHT,
+				JUNGLE_MAX_PROJECTION_FRACTION,
+			),
 		},
 		growth: StorybookGrowthParams {
 			branch_depth: JUNGLE_BRANCH_DEPTH,
@@ -101,34 +103,14 @@ impl Default for JungleStorybookTreeSbs {
 	}
 }
 
-/// Copy `jungle` field values onto `current` when `current` still matches storybook defaults.
-fn apply_if_storybook_default<T: Clone + PartialEq>(current: &mut T, story: &T, jungle: &T) {
-	if *current == *story {
-		*current = jungle.clone();
-	}
-}
-
 fn apply_jungle_ring_preset(
 	current: &mut StorybookRingParams,
 	story: &StorybookRingParams,
 	jungle: &StorybookRingParams,
 ) {
-	if current.height_range == story.height_range {
-		current.height_range = jungle.height_range;
-	} else {
-		apply_if_storybook_default(
-			&mut current.height_range.start,
-			&story.height_range.start,
-			&jungle.height_range.start,
-		);
-		apply_if_storybook_default(
-			&mut current.height_range.end,
-			&story.height_range.end,
-			&jungle.height_range.end,
-		);
-	}
-	apply_if_storybook_default(&mut current.spacing, &story.spacing, &jungle.spacing);
-	apply_if_storybook_default(
+	apply_unit_range_preset(&mut current.height_range, &story.height_range, &jungle.height_range);
+	apply_storybook_field_preset(&mut current.spacing, &story.spacing, &jungle.spacing);
+	apply_storybook_field_preset(
 		&mut current.anchors_per_ring,
 		&story.anchors_per_ring,
 		&jungle.anchors_per_ring,
@@ -171,9 +153,13 @@ impl JungleStorybookTreeSbs {
 		}
 
 		apply_jungle_ring_preset(&mut s.rings, &story.rings, &jungle.rings);
-		apply_if_storybook_default(&mut s.projection, &story.projection, &jungle.projection);
-		apply_if_storybook_default(&mut s.growth, &story.growth, &jungle.growth);
-		apply_if_storybook_default(&mut s.canopy, &story.canopy, &jungle.canopy);
+		apply_unit_range_preset(
+			&mut s.projection.span_fraction_of_height,
+			&story.projection.span_fraction_of_height,
+			&jungle.projection.span_fraction_of_height,
+		);
+		apply_storybook_field_preset(&mut s.growth, &story.growth, &jungle.growth);
+		apply_storybook_field_preset(&mut s.canopy, &story.canopy, &jungle.canopy);
 	}
 
 	pub fn height(&self) -> f32 {
