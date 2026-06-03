@@ -8,11 +8,18 @@ use procedural_common::{NoiseConfig, NoiseParams, SetNoiseParams, UnitRange};
 use crate::anchors::kamakura_torch::{
 	KamakuraTorchAnchorPerturbation, KamakuraTorchAnchors, KamakuraTorchProtoAnchors,
 	DEFAULT_FIRST_RING_UNIT_HEIGHT, DEFAULT_OUTER_FOLIAGE_DISTANCE_FRACTION,
-	DEFAULT_PROJECTION_MAX_FRACTION_OF_HEIGHT, DEFAULT_PROJECTION_MIN_FRACTION_OF_HEIGHT,
-	DEFAULT_STALK_BASE_RADIUS_FRACTION, DEFAULT_STALK_HEIGHT_FRACTION, DEFAULT_TREE_HEIGHT,
-	DEFAULT_BRANCH_ANGLE_TOLERANCE_DEGREES,
-	DEFAULT_TORCH_BIAS_HIGH_DEGREES, DEFAULT_TORCH_BIAS_LOW_DEGREES,
-	DEFAULT_VASE_PROFILE_EPSILON,
+	DEFAULT_PROJECTION_CENTER_FRACTION, DEFAULT_PROJECTION_MAX_FRACTION_OF_HEIGHT,
+	DEFAULT_PROJECTION_MIN_FRACTION_OF_HEIGHT, DEFAULT_STALK_BASE_RADIUS_FRACTION,
+	DEFAULT_STALK_HEIGHT_FRACTION, DEFAULT_TREE_HEIGHT, DEFAULT_BRANCH_ANGLE_TOLERANCE_DEGREES,
+	DEFAULT_TORCH_BIAS_HIGH_DEGREES, DEFAULT_TORCH_BIAS_LOW_DEGREES, DEFAULT_VASE_PROFILE_EPSILON,
+};
+use crate::anchors::torch_tree::{
+	torch_ring_spacing_unit_height, TORCH_ANCHOR_ANGULAR_SCALE_HI, TORCH_ANCHOR_ANGULAR_SCALE_LO,
+	TORCH_ANCHOR_RADIUS_OFFSET_HI, TORCH_ANCHOR_RADIUS_OFFSET_LO, TORCH_ANCHOR_VERTICAL_OFFSET_HI,
+	TORCH_ANCHOR_VERTICAL_OFFSET_LO, TORCH_ANCHORS_PER_RING, TORCH_BIAS_BLEND,
+	TORCH_BRANCH_BASE_RADIUS_FRACTION_OF_STALK, TORCH_BRANCH_DEPTH,
+	TORCH_BRANCH_RADIUS_CHILD_SCALE_HI, TORCH_BRANCH_RADIUS_CHILD_SCALE_LO, TORCH_CHILD_COUNT_MAX,
+	TORCH_CHILD_COUNT_MIN, TORCH_LAST_RING_UNIT_HEIGHT, TORCH_LEAF_RADIUS_FRACTION,
 };
 use crate::anchors::strict_stalk::StrictStalk;
 use crate::anchors::{Anchors, AnchorsToChain};
@@ -94,9 +101,9 @@ pub struct KamakuraTorchRingParams {
 impl Default for KamakuraTorchRingParams {
 	fn default() -> Self {
 		Self {
-			height_range: UnitRange::new(DEFAULT_FIRST_RING_UNIT_HEIGHT, 1.0),
-			spacing: 0.08 / DEFAULT_STALK_HEIGHT_FRACTION,
-			anchors_per_ring: 6,
+			height_range: UnitRange::new(DEFAULT_FIRST_RING_UNIT_HEIGHT, TORCH_LAST_RING_UNIT_HEIGHT),
+			spacing: torch_ring_spacing_unit_height(DEFAULT_STALK_HEIGHT_FRACTION),
+			anchors_per_ring: TORCH_ANCHORS_PER_RING,
 		}
 	}
 }
@@ -145,7 +152,7 @@ impl Default for KamakuraTorchProjectionParams {
 #[cfg_attr(feature = "clap", derive(clap::Args))]
 #[cfg_attr(feature = "clap", command(rename_all = "kebab-case"))]
 pub struct KamakuraTorchGrowthParams {
-	#[cfg_attr(feature = "clap", arg(long, default_value_t = 4))]
+	#[cfg_attr(feature = "clap", arg(long, default_value_t = TORCH_BRANCH_DEPTH))]
 	pub branch_depth: usize,
 	#[cfg_attr(feature = "clap", arg(long, default_value_t = DEFAULT_BRANCH_ANGLE_TOLERANCE_DEGREES))]
 	pub angle_tolerance_degrees: f32,
@@ -153,30 +160,33 @@ pub struct KamakuraTorchGrowthParams {
 	pub torch_bias_low_degrees: f32,
 	#[cfg_attr(feature = "clap", arg(long, default_value_t = DEFAULT_TORCH_BIAS_HIGH_DEGREES))]
 	pub torch_bias_high_degrees: f32,
-	#[cfg_attr(feature = "clap", arg(long, default_value_t = 1))]
+	#[cfg_attr(feature = "clap", arg(long, default_value_t = TORCH_CHILD_COUNT_MIN))]
 	pub child_count_min: u32,
-	#[cfg_attr(feature = "clap", arg(long, default_value_t = 3))]
+	#[cfg_attr(feature = "clap", arg(long, default_value_t = TORCH_CHILD_COUNT_MAX))]
 	pub child_count_max: u32,
-	#[cfg_attr(feature = "clap", arg(long, default_value_t = 0.12))]
+	#[cfg_attr(
+		feature = "clap",
+		arg(long, default_value_t = TORCH_BRANCH_BASE_RADIUS_FRACTION_OF_STALK)
+	)]
 	pub branch_base_radius_fraction_of_stalk: f32,
-	#[cfg_attr(feature = "clap", arg(long, default_value_t = 0.75))]
+	#[cfg_attr(feature = "clap", arg(long, default_value_t = TORCH_BRANCH_RADIUS_CHILD_SCALE_LO))]
 	pub branch_radius_child_scale_lo: f32,
-	#[cfg_attr(feature = "clap", arg(long, default_value_t = 0.82))]
+	#[cfg_attr(feature = "clap", arg(long, default_value_t = TORCH_BRANCH_RADIUS_CHILD_SCALE_HI))]
 	pub branch_radius_child_scale_hi: f32,
 }
 
 impl Default for KamakuraTorchGrowthParams {
 	fn default() -> Self {
 		Self {
-			branch_depth: 4,
+			branch_depth: TORCH_BRANCH_DEPTH,
 			angle_tolerance_degrees: DEFAULT_BRANCH_ANGLE_TOLERANCE_DEGREES,
 			torch_bias_low_degrees: DEFAULT_TORCH_BIAS_LOW_DEGREES,
 			torch_bias_high_degrees: DEFAULT_TORCH_BIAS_HIGH_DEGREES,
-			child_count_min: 1,
-			child_count_max: 3,
-			branch_base_radius_fraction_of_stalk: 0.12,
-			branch_radius_child_scale_lo: 0.75,
-			branch_radius_child_scale_hi: 0.82,
+			child_count_min: TORCH_CHILD_COUNT_MIN,
+			child_count_max: TORCH_CHILD_COUNT_MAX,
+			branch_base_radius_fraction_of_stalk: TORCH_BRANCH_BASE_RADIUS_FRACTION_OF_STALK,
+			branch_radius_child_scale_lo: TORCH_BRANCH_RADIUS_CHILD_SCALE_LO,
+			branch_radius_child_scale_hi: TORCH_BRANCH_RADIUS_CHILD_SCALE_HI,
 		}
 	}
 }
@@ -185,7 +195,7 @@ impl Default for KamakuraTorchGrowthParams {
 #[cfg_attr(feature = "clap", derive(clap::Args))]
 #[cfg_attr(feature = "clap", command(rename_all = "kebab-case"))]
 pub struct KamakuraTorchCanopyParams {
-	#[cfg_attr(feature = "clap", arg(long, default_value_t = 0.06))]
+	#[cfg_attr(feature = "clap", arg(long, default_value_t = TORCH_LEAF_RADIUS_FRACTION))]
 	pub leaf_radius_fraction: f32,
 	#[cfg_attr(
 		feature = "clap",
@@ -197,7 +207,7 @@ pub struct KamakuraTorchCanopyParams {
 impl Default for KamakuraTorchCanopyParams {
 	fn default() -> Self {
 		Self {
-			leaf_radius_fraction: 0.06,
+			leaf_radius_fraction: TORCH_LEAF_RADIUS_FRACTION,
 			outer_foliage_distance_fraction: DEFAULT_OUTER_FOLIAGE_DISTANCE_FRACTION,
 		}
 	}
@@ -252,9 +262,18 @@ pub struct KamakuraTorchAnchorPerturbationParams {
 impl Default for KamakuraTorchAnchorPerturbationParams {
 	fn default() -> Self {
 		Self {
-			vertical_offset: UnitRange::new(-1.0, 1.0),
-			angular_scale: UnitRange::new(0.0, 0.5),
-			radius_offset: UnitRange::new(-0.05, 0.05),
+			vertical_offset: UnitRange::new(
+				TORCH_ANCHOR_VERTICAL_OFFSET_LO,
+				TORCH_ANCHOR_VERTICAL_OFFSET_HI,
+			),
+			angular_scale: UnitRange::new(
+				TORCH_ANCHOR_ANGULAR_SCALE_LO,
+				TORCH_ANCHOR_ANGULAR_SCALE_HI,
+			),
+			radius_offset: UnitRange::new(
+				TORCH_ANCHOR_RADIUS_OFFSET_LO,
+				TORCH_ANCHOR_RADIUS_OFFSET_HI,
+			),
 			noise: NoiseParams::default(),
 		}
 	}
@@ -325,11 +344,11 @@ impl KamakuraTorchSbs {
 			projection_min_fraction_of_height: self.projection.min_fraction(),
 			projection_max_fraction_of_height: self.projection.max_fraction(),
 			vase_profile_epsilon: self.projection.vase_profile_epsilon,
-			projection_center_fraction: 0.5,
+			projection_center_fraction: DEFAULT_PROJECTION_CENTER_FRACTION,
 			torch_bias_low_degrees: self.growth.torch_bias_low_degrees,
 			torch_bias_high_degrees: self.growth.torch_bias_high_degrees,
 			branch_angle_tolerance: self.growth.angle_tolerance_degrees.to_radians(),
-			bias_blend: 1.0,
+			bias_blend: TORCH_BIAS_BLEND,
 			branch_depth: self.growth.branch_depth,
 			child_count_min: self.growth.child_count_min,
 			child_count_max: self.growth.child_count_max.max(self.growth.child_count_min),
@@ -385,8 +404,8 @@ mod tests {
 			(proto.stalk.stalk_height - DEFAULT_TREE_HEIGHT * DEFAULT_STALK_HEIGHT_FRACTION).abs()
 				< 1e-4
 		);
-		assert_eq!(proto.branch_depth, 4);
-		assert_eq!(proto.anchors_per_ring, 6);
+		assert_eq!(proto.branch_depth, TORCH_BRANCH_DEPTH);
+		assert_eq!(proto.anchors_per_ring, TORCH_ANCHORS_PER_RING);
 		assert!(
 			(proto.projection_max_fraction_of_height - DEFAULT_PROJECTION_MAX_FRACTION_OF_HEIGHT)
 				.abs()

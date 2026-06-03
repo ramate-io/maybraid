@@ -10,6 +10,18 @@ use procedural_common::NoiseConfig;
 
 use super::stalk_perturbation::{HasStrictStalk, StalkPerturbation};
 use super::strict_stalk::StrictStalk;
+use super::torch_tree::{
+	torch_ring_spacing_unit_height, TORCH_ANCHOR_ANGULAR_SCALE_HI, TORCH_ANCHOR_ANGULAR_SCALE_LO,
+	TORCH_ANCHOR_RADIUS_OFFSET_HI, TORCH_ANCHOR_RADIUS_OFFSET_LO, TORCH_ANCHOR_VERTICAL_OFFSET_HI,
+	TORCH_ANCHOR_VERTICAL_OFFSET_LO, TORCH_ANCHORS_PER_RING, TORCH_BIAS_BLEND,
+	TORCH_BRANCH_BASE_RADIUS_FRACTION_OF_STALK, TORCH_BRANCH_DEPTH,
+	TORCH_BRANCH_HYSTERESIS_FREQUENCY_SCALE, TORCH_BRANCH_RADIUS_CHILD_SCALE_HI,
+	TORCH_BRANCH_RADIUS_CHILD_SCALE_LO, TORCH_CHILD_COUNT_MAX, TORCH_CHILD_COUNT_MIN,
+	TORCH_FIRST_SEGMENT_LENGTH_HI, TORCH_FIRST_SEGMENT_LENGTH_LO, TORCH_LAST_RING_UNIT_HEIGHT,
+	TORCH_LIMB_BASE_RADIUS_FLOOR, TORCH_RADIAL_DIRECTION_EPSILON,
+	TORCH_RADIAL_OFFSET_FRACTION_OF_STALK_BASE, TORCH_RING_HEIGHT_EPSILON,
+	TORCH_STALK_RADIUS_EPSILON,
+};
 use super::Anchors;
 use crate::chain::storybook_tree::{
 	segment_fracs, storybook_branch_depth, StorybookTreeChain, StorybookTreePhase,
@@ -42,9 +54,27 @@ pub const DEFAULT_CROWN_FLIP_RING_U: f32 = 0.72;
 /// Fraction of trees that steepen only the top ring (others use gradual flip).
 pub const DEFAULT_APEX_ONLY_FLIP_FRACTION: f32 = 0.35;
 
+/// Exponent on the post-flip segment (`t^exp`); values > 1 keep the crown flip late and sharp.
+pub const PENMARCH_CROWN_FLIP_EASE_EXPONENT: f32 = 3.0;
+
+/// `ring_u` match tolerance when detecting the apex ring in apex-only mode.
+pub const PENMARCH_LAST_RING_Z_MATCH_EPSILON: f32 = 1e-5;
+
+/// Lower clamp for [`DEFAULT_CROWN_FLIP_RING_U`] in gradual-flip mode.
+pub const PENMARCH_FLIP_RING_U_CLAMP_LO: f32 = 1e-4;
+/// Upper clamp for gradual flip (keeps `t = (u - flip) / (1 - flip)` defined).
+pub const PENMARCH_FLIP_RING_U_CLAMP_HI_GRADUAL: f32 = 0.999;
+/// Upper clamp when only the flare→shoulder ramp runs below the flip line.
+pub const PENMARCH_FLIP_RING_U_CLAMP_HI_APEX_ONLY: f32 = 1.0;
+
+/// Stalk height fraction used when mixing per-tree apex-only flip from canopy noise.
+pub const PENMARCH_APEX_ONLY_FLIP_MIX_HEIGHT_FRACTION: f32 = 0.5;
+/// Salt mixed into the canopy seed before [`mix_seed_below_fraction`].
+pub const PENMARCH_APEX_ONLY_FLIP_SEED_SALT: i32 = 0xA11E;
+
 fn direction_from_elevation(radial_xz: Vec3, elevation_degrees: f32) -> Vec3 {
 	let radial = Vec3::new(radial_xz.x, 0.0, radial_xz.z).normalize_or_zero();
-	if radial.length_squared() < 1e-12 {
+	if radial.length_squared() < TORCH_RADIAL_DIRECTION_EPSILON {
 		return Vec3::Y;
 	}
 	let y = elevation_degrees.to_radians().tan();
@@ -62,23 +92,23 @@ pub fn penmarch_elevation_degrees(
 	flip_start_u: f32,
 	apex_only_flip: bool,
 ) -> f32 {
-	let on_last_ring = (z_frac - last_ring_z).abs() < 1e-5;
+	let on_last_ring = (z_frac - last_ring_z).abs() < PENMARCH_LAST_RING_Z_MATCH_EPSILON;
 	if apex_only_flip {
 		if on_last_ring {
 			return crown;
 		}
 		let u = ring_u.clamp(0.0, 1.0);
-		let flip = flip_start_u.clamp(1e-4, 1.0);
+		let flip = flip_start_u.clamp(PENMARCH_FLIP_RING_U_CLAMP_LO, PENMARCH_FLIP_RING_U_CLAMP_HI_APEX_ONLY);
 		return flare + (shoulder - flare) * (u / flip).min(1.0);
 	}
 
 	let u = ring_u.clamp(0.0, 1.0);
-	let flip = flip_start_u.clamp(1e-4, 0.999);
+	let flip = flip_start_u.clamp(PENMARCH_FLIP_RING_U_CLAMP_LO, PENMARCH_FLIP_RING_U_CLAMP_HI_GRADUAL);
 	if u < flip {
 		return flare + (shoulder - flare) * (u / flip);
 	}
 	let t = ((u - flip) / (1.0 - flip)).clamp(0.0, 1.0);
-	shoulder + (crown - shoulder) * t.powf(3.0)
+	shoulder + (crown - shoulder) * t.powf(PENMARCH_CROWN_FLIP_EASE_EXPONENT)
 }
 
 pub fn penmarch_torch_branch_direction(
@@ -143,9 +173,9 @@ impl Default for PenmarchTorchProtoAnchors {
 				stalk_base_radius: DEFAULT_STALK_BASE_RADIUS_FRACTION * h,
 			},
 			first_ring_unit_height: DEFAULT_FIRST_RING_UNIT_HEIGHT,
-			last_ring_unit_height: 1.0,
-			ring_spacing_unit_height: 0.08 / DEFAULT_STALK_HEIGHT_FRACTION,
-			anchors_per_ring: 6,
+			last_ring_unit_height: TORCH_LAST_RING_UNIT_HEIGHT,
+			ring_spacing_unit_height: torch_ring_spacing_unit_height(DEFAULT_STALK_HEIGHT_FRACTION),
+			anchors_per_ring: TORCH_ANCHORS_PER_RING,
 			projection_min_fraction_of_height: DEFAULT_PROJECTION_MIN_FRACTION_OF_HEIGHT,
 			projection_max_fraction_of_height: DEFAULT_PROJECTION_MAX_FRACTION_OF_HEIGHT,
 			vase_profile_epsilon: DEFAULT_VASE_PROFILE_EPSILON,
@@ -156,12 +186,15 @@ impl Default for PenmarchTorchProtoAnchors {
 			crown_flip_ring_u: DEFAULT_CROWN_FLIP_RING_U,
 			apex_only_flip_fraction: DEFAULT_APEX_ONLY_FLIP_FRACTION,
 			branch_angle_tolerance: DEFAULT_BRANCH_ANGLE_TOLERANCE_DEGREES.to_radians(),
-			branch_depth: 4,
-			child_count_min: 1,
-			child_count_max: 3,
+			branch_depth: TORCH_BRANCH_DEPTH,
+			child_count_min: TORCH_CHILD_COUNT_MIN,
+			child_count_max: TORCH_CHILD_COUNT_MAX,
 			outer_foliage_distance_fraction: DEFAULT_OUTER_FOLIAGE_DISTANCE_FRACTION,
-			branch_base_radius_fraction_of_stalk: 0.12,
-			branch_radius_child_scale: (0.75, 0.82),
+			branch_base_radius_fraction_of_stalk: TORCH_BRANCH_BASE_RADIUS_FRACTION_OF_STALK,
+			branch_radius_child_scale: (
+				TORCH_BRANCH_RADIUS_CHILD_SCALE_LO,
+				TORCH_BRANCH_RADIUS_CHILD_SCALE_HI,
+			),
 		}
 	}
 }
@@ -170,7 +203,7 @@ impl PenmarchTorchProtoAnchors {
 	pub fn ring_height_fractions(&self) -> Vec<f32> {
 		let mut out = Vec::new();
 		let mut z = self.first_ring_unit_height;
-		while z <= self.last_ring_unit_height + 1e-6 {
+		while z <= self.last_ring_unit_height + TORCH_RING_HEIGHT_EPSILON {
 			out.push(z);
 			z += self.ring_spacing_unit_height;
 		}
@@ -180,7 +213,7 @@ impl PenmarchTorchProtoAnchors {
 	pub fn ring_mix_u(&self, z_frac: f32) -> f32 {
 		let a = self.first_ring_unit_height;
 		let b = self.last_ring_unit_height;
-		if (b - a).abs() < 1e-6 {
+		if (b - a).abs() < TORCH_RING_HEIGHT_EPSILON {
 			return 0.0;
 		}
 		((z_frac - a) / (b - a)).clamp(0.0, 1.0)
@@ -198,22 +231,25 @@ impl PenmarchTorchProtoAnchors {
 	}
 
 	fn limb_base_radius(&self) -> f32 {
-		let base = self.stalk.stalk_base_radius.max(1e-4);
-		(base * self.branch_base_radius_fraction_of_stalk).max(0.02)
+		let base = self.stalk.stalk_base_radius.max(TORCH_STALK_RADIUS_EPSILON);
+		(base * self.branch_base_radius_fraction_of_stalk).max(TORCH_LIMB_BASE_RADIUS_FLOOR)
 	}
 
 	pub fn hysteresis_seeds(&self, chain_noise: NoiseConfig) -> Vec<StorybookTreeChain> {
 		let mut out = Vec::new();
 		let k = self.anchors_per_ring.max(1);
-		let radial_eps = (self.stalk.stalk_base_radius * 0.05).max(1e-4);
+		let radial_eps = (self.stalk.stalk_base_radius * TORCH_RADIAL_OFFSET_FRACTION_OF_STALK_BASE)
+			.max(TORCH_STALK_RADIUS_EPSILON);
 		let limb_r = self.limb_base_radius();
 		let depth = storybook_branch_depth(self.branch_depth);
 		let fracs = segment_fracs(depth);
 		let last_ring_z = self.last_ring_unit_height;
-		let seed_lane = chain_noise.params().seed.wrapping_mul(0xA11E) as usize;
+		let seed_lane =
+			chain_noise.params().seed.wrapping_mul(PENMARCH_APEX_ONLY_FLIP_SEED_SALT) as usize;
 		let apex_only_flip = mix_seed_below_fraction(
 			seed_lane,
-			self.stalk.centroid_at_height_fraction(0.5),
+			self.stalk
+				.centroid_at_height_fraction(PENMARCH_APEX_ONLY_FLIP_MIX_HEIGHT_FRACTION),
 			self.apex_only_flip_fraction,
 		);
 
@@ -243,7 +279,7 @@ impl PenmarchTorchProtoAnchors {
 				let branch = BranchOut::radial_out_horizontal(seed_node, radial)
 					.with_hysteresis_context(noise.clone(), 0, dir)
 					.with_bias_ray(dir)
-					.with_bias_blend(1.0)
+					.with_bias_blend(TORCH_BIAS_BLEND)
 					.with_ray_degrees_of_freedom(self.branch_angle_tolerance)
 					.with_child_count(
 						self.child_count_min as usize
@@ -251,10 +287,15 @@ impl PenmarchTorchProtoAnchors {
 					)
 					.with_radius_range(limb_r..limb_r)
 					.with_radius_range_child_scale(self.branch_radius_child_scale)
-					.with_length(first_len * 0.97..first_len * 1.03);
+					.with_length(
+						first_len * TORCH_FIRST_SEGMENT_LENGTH_LO
+							..first_len * TORCH_FIRST_SEGMENT_LENGTH_HI,
+					);
 
 				out.push(StorybookTreeChain::new(
-					noise.clone().with_frequency(noise.params().frequency * 10.0),
+					noise.clone().with_frequency(
+						noise.params().frequency * TORCH_BRANCH_HYSTERESIS_FREQUENCY_SCALE,
+					),
 					proj,
 					depth,
 					0.0,
@@ -327,9 +368,9 @@ impl Default for PenmarchTorchAnchorPerturbation {
 	fn default() -> Self {
 		Self {
 			noise: NoiseParams::default(),
-			vertical_offset: -1.0..1.0,
-			angular_scale: 0.0..0.5,
-			radius_offset: -0.05..0.05,
+			vertical_offset: TORCH_ANCHOR_VERTICAL_OFFSET_LO..TORCH_ANCHOR_VERTICAL_OFFSET_HI,
+			angular_scale: TORCH_ANCHOR_ANGULAR_SCALE_LO..TORCH_ANCHOR_ANGULAR_SCALE_HI,
+			radius_offset: TORCH_ANCHOR_RADIUS_OFFSET_LO..TORCH_ANCHOR_RADIUS_OFFSET_HI,
 		}
 	}
 }
@@ -362,6 +403,9 @@ impl Anchors<StorybookTreeChain> for PenmarchTorchProtoAnchors {
 mod tests {
 	use super::*;
 
+	const TEST_CROWN_ELEVATION_SLACK_DEGREES: f32 = 7.0;
+	const TEST_APEX_MID_SLACK_DEGREES: f32 = 5.0;
+
 	#[test]
 	fn vase_projection_rim_longer_than_base() {
 		let a = PenmarchTorchProtoAnchors::default();
@@ -373,25 +417,55 @@ mod tests {
 	#[test]
 	fn crown_flip_is_much_steeper_than_flare() {
 		let elev = |u: f32| {
-			penmarch_elevation_degrees(u, u, 1.0, 28.0, 40.0, 82.0, 0.72, false)
+			penmarch_elevation_degrees(
+				u,
+				u,
+				TORCH_LAST_RING_UNIT_HEIGHT,
+				DEFAULT_FLARE_ELEVATION_DEGREES,
+				DEFAULT_SHOULDER_ELEVATION_DEGREES,
+				DEFAULT_CROWN_ELEVATION_DEGREES,
+				DEFAULT_CROWN_FLIP_RING_U,
+				false,
+			)
 		};
-		assert!(elev(0.0) < 35.0);
-		assert!(elev(1.0) > 75.0);
+		assert!(elev(0.0) < DEFAULT_SHOULDER_ELEVATION_DEGREES);
+		assert!(elev(1.0) > DEFAULT_CROWN_ELEVATION_DEGREES - TEST_CROWN_ELEVATION_SLACK_DEGREES);
 		assert!(elev(1.0) - elev(0.5) > elev(0.5) - elev(0.0));
 	}
 
 	#[test]
 	fn apex_only_mode_steepens_last_ring_only() {
-		let last = penmarch_elevation_degrees(1.0, 1.0, 1.0, 28.0, 40.0, 82.0, 0.72, true);
-		let mid = penmarch_elevation_degrees(0.5, 0.5, 1.0, 28.0, 40.0, 82.0, 0.72, true);
-		assert!(last > 75.0);
-		assert!(mid < 45.0);
+		let last = penmarch_elevation_degrees(
+			1.0,
+			1.0,
+			TORCH_LAST_RING_UNIT_HEIGHT,
+			DEFAULT_FLARE_ELEVATION_DEGREES,
+			DEFAULT_SHOULDER_ELEVATION_DEGREES,
+			DEFAULT_CROWN_ELEVATION_DEGREES,
+			DEFAULT_CROWN_FLIP_RING_U,
+			true,
+		);
+		let mid = penmarch_elevation_degrees(
+			0.5,
+			0.5,
+			TORCH_LAST_RING_UNIT_HEIGHT,
+			DEFAULT_FLARE_ELEVATION_DEGREES,
+			DEFAULT_SHOULDER_ELEVATION_DEGREES,
+			DEFAULT_CROWN_ELEVATION_DEGREES,
+			DEFAULT_CROWN_FLIP_RING_U,
+			true,
+		);
+		assert!(last > DEFAULT_CROWN_ELEVATION_DEGREES - TEST_CROWN_ELEVATION_SLACK_DEGREES);
+		assert!(mid < DEFAULT_SHOULDER_ELEVATION_DEGREES + TEST_APEX_MID_SLACK_DEGREES);
 	}
 
 	#[test]
 	fn anchors_count_matches_rings_times_spokes_plus_stalk() {
-		let proto =
-			PenmarchTorchProtoAnchors { ring_spacing_unit_height: 0.20, ..Default::default() };
+		const TEST_RING_SPACING: f32 = 0.20;
+		let proto = PenmarchTorchProtoAnchors {
+			ring_spacing_unit_height: TEST_RING_SPACING,
+			..Default::default()
+		};
 		let ring_count = proto.ring_height_fractions().len();
 		let spokes = proto.anchors_per_ring as usize;
 		assert_eq!(
