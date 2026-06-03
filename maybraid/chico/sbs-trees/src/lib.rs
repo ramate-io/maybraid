@@ -1,6 +1,7 @@
 //! Stalk and ball-stick trees for Chico vegetation.
 pub use chico_sdf;
 
+pub mod braid_oak_tree;
 pub mod date_palm;
 pub mod jungle_storybook_tree;
 pub mod layered_canopy;
@@ -10,6 +11,7 @@ pub mod sopes_banyan;
 pub mod storybook_tree;
 pub mod waialea_palm;
 
+pub use braid_oak_tree::BraidOakTreeStd;
 pub use date_palm::DatePalmStd;
 pub use jungle_storybook_tree::JungleStorybookTreeStd;
 pub use liams_conifer::LiamsConiferStd;

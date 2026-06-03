@@ -4,6 +4,7 @@
 
 use crate::anchors::Anchors;
 use crate::chain::point_to_point::PointToPoint;
+use crate::BallStickNode;
 use crate::Hysteresis;
 use bevy_math::Vec3;
 
@@ -46,6 +47,26 @@ impl StrictStalk {
 			self.centroid_at_height_fraction(1.0),
 			self.stalk_base_radius,
 		)]
+	}
+
+	/// Multi-hop stalk along the centroid: `section_count` segments with tapering node radii.
+	pub fn segmented_point_to_point(&self, section_count: u32) -> PointToPoint {
+		let n = section_count.max(2) as usize;
+		let nodes: Vec<BallStickNode> = (0..=n)
+			.map(|i| {
+				let t = i as f32 / n as f32;
+				let r = self.stalk_base_radius * (1.0 - 0.38 * t).max(0.58);
+				BallStickNode::new(self.centroid_at_height_fraction(t), r)
+			})
+			.collect();
+		let start = nodes[0];
+		let end = nodes.get(1).copied();
+		let tail: Vec<_> = nodes.into_iter().skip(2).collect();
+		PointToPoint { start, end, radius: start.radius, tail }
+	}
+
+	pub fn segmented_point_to_point_anchors(&self, section_count: u32) -> Vec<PointToPoint> {
+		vec![self.segmented_point_to_point(section_count)]
 	}
 }
 

@@ -9,6 +9,7 @@
 pub mod date_palm;
 pub mod waialea_palm;
 pub mod storybook_tree;
+pub mod braid_oak;
 pub mod liams_conifer;
 pub mod sopes_banyan;
 pub mod stalk_perturbation;

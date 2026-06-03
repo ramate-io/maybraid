@@ -4,7 +4,7 @@ use bevy::prelude::*;
 
 use chico_vegetation_shaders::{ChicoLeafMaterial, ChicoStickMaterial};
 
-use crate::render::{RenderConfig, RenderJungleStorybookTree, RenderSubject};
+use crate::render::{RenderBraidOakTree, RenderConfig, RenderJungleStorybookTree, RenderSubject};
 
 /// Stable bark / foliage materials reused whenever [`RenderConfig::subject`] is rebuilt from CLI defaults.
 #[derive(Resource, Clone)]
@@ -14,6 +14,8 @@ pub struct RenderMaterials {
 	pub leaf: Handle<ChicoLeafMaterial>,
 	pub jungle_inner_leaf: Handle<ChicoLeafMaterial>,
 	pub jungle_outer_leaf: Handle<ChicoLeafMaterial>,
+	pub braid_inner_leaf: Handle<ChicoLeafMaterial>,
+	pub braid_outer_leaf: Handle<ChicoLeafMaterial>,
 	pub jungle_stick: Handle<ChicoStickMaterial>,
 	pub tuft: Handle<StandardMaterial>,
 }
@@ -32,6 +34,14 @@ fn render_jungle_inner_leaf_colors() -> ChicoLeafMaterial {
 
 fn render_jungle_outer_leaf_colors() -> ChicoLeafMaterial {
 	ChicoLeafMaterial { base_color: Vec4::new(0.18, 0.58, 0.32, 1.0) }
+}
+
+fn render_braid_inner_leaf_colors() -> ChicoLeafMaterial {
+	ChicoLeafMaterial { base_color: Vec4::new(0.14, 0.32, 0.18, 1.0) }
+}
+
+fn render_braid_outer_leaf_colors() -> ChicoLeafMaterial {
+	ChicoLeafMaterial { base_color: Vec4::new(0.20, 0.52, 0.28, 1.0) }
 }
 
 fn render_jungle_stick_colors() -> ChicoStickMaterial {
@@ -62,6 +72,8 @@ pub fn setup_render_materials(
 	let leaf = leaf_assets.add(render_leaf_colors());
 	let jungle_inner_leaf = leaf_assets.add(render_jungle_inner_leaf_colors());
 	let jungle_outer_leaf = leaf_assets.add(render_jungle_outer_leaf_colors());
+	let braid_inner_leaf = leaf_assets.add(render_braid_inner_leaf_colors());
+	let braid_outer_leaf = leaf_assets.add(render_braid_outer_leaf_colors());
 	let jungle_stick = stick_assets.add(render_jungle_stick_colors());
 	let tuft = standard_assets.add(render_tuft_standard_material());
 
@@ -71,6 +83,8 @@ pub fn setup_render_materials(
 		leaf: leaf.clone(),
 		jungle_inner_leaf: jungle_inner_leaf.clone(),
 		jungle_outer_leaf: jungle_outer_leaf.clone(),
+		braid_inner_leaf: braid_inner_leaf.clone(),
+		braid_outer_leaf: braid_outer_leaf.clone(),
 		jungle_stick: jungle_stick.clone(),
 		tuft: tuft.clone(),
 	});
@@ -81,6 +95,8 @@ pub fn setup_render_materials(
 		leaf: leaf.clone(),
 		jungle_inner_leaf: jungle_inner_leaf.clone(),
 		jungle_outer_leaf: jungle_outer_leaf.clone(),
+		braid_inner_leaf: braid_inner_leaf.clone(),
+		braid_outer_leaf: braid_outer_leaf.clone(),
 		jungle_stick: jungle_stick.clone(),
 		tuft: tuft.clone(),
 	};
@@ -88,6 +104,15 @@ pub fn setup_render_materials(
 	if let RenderSubject::JungleStorybookTree(tree) = &mut config.subject {
 		attach_jungle_storybook_materials(tree, &mats_snapshot);
 	}
+	if let RenderSubject::BraidOakTree(tree) = &mut config.subject {
+		attach_braid_oak_materials(tree, &mats_snapshot);
+	}
+}
+
+pub fn attach_braid_oak_materials(tree: &mut RenderBraidOakTree, mats: &RenderMaterials) {
+	tree.stick_material.mesh = MeshMaterial3d(mats.stick.clone());
+	tree.inner_leaf_material.mesh = MeshMaterial3d(mats.braid_inner_leaf.clone());
+	tree.outer_leaf_material.mesh = MeshMaterial3d(mats.braid_outer_leaf.clone());
 }
 
 pub fn attach_jungle_storybook_materials(tree: &mut RenderJungleStorybookTree, mats: &RenderMaterials) {
@@ -126,6 +151,7 @@ fn attach_render_materials(
 			tree.stick_material.mesh = MeshMaterial3d(stick.clone());
 			tree.leaf_material.mesh = MeshMaterial3d(leaf.clone());
 		}
+		RenderSubject::BraidOakTree(_) => {}
 		RenderSubject::JungleStorybookTree(_) => {}
 		RenderSubject::SucculentTuft(t) => {
 			t.material.mesh = MeshMaterial3d(tuft.clone());
@@ -167,5 +193,8 @@ pub fn sync_render_material_handles(
 	attach_render_materials(&mut config.subject, &stick, &conifer_stick, &leaf, &tuft);
 	if let RenderSubject::JungleStorybookTree(tree) = &mut config.subject {
 		attach_jungle_storybook_materials(tree, &mats);
+	}
+	if let RenderSubject::BraidOakTree(tree) = &mut config.subject {
+		attach_braid_oak_materials(tree, &mats);
 	}
 }

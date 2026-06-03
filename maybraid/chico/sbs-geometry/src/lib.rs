@@ -27,6 +27,9 @@ pub use anchors::waialea_palm::{WaialeaPalmAnchors, WaialeaPalmProtoAnchors};
 pub use anchors::storybook_tree::{
 	dome_projection_length, StorybookTreeAnchors, StorybookTreeProtoAnchors,
 };
+pub use anchors::braid_oak::{
+	braid_vertical_bias_radial, BraidOakTreeAnchors, BraidOakTreeProtoAnchors,
+};
 pub use anchors::liams_conifer::{LiamsConiferAnchors, LiamsConiferProtoAnchors};
 pub use anchors::sopes_banyan::{SopesBanyanAnchors, SopesBanyanProtoAnchors};
 pub use anchors::stalk_perturbation::{
@@ -38,6 +41,7 @@ pub use sbs::date_palm::DatePalmSbs;
 pub use sbs::waialea_palm::WaialeaPalmSbs;
 pub use sbs::storybook_tree::StorybookTreeSbs;
 pub use sbs::jungle_storybook_tree::JungleStorybookTreeSbs;
+pub use sbs::braid_oak_tree::BraidOakTreeSbs;
 pub use sbs::liams_conifer::LiamsConiferSbs;
 pub use sbs::sopes_banyan::SopesBanyanSbs;
 
