@@ -322,6 +322,7 @@ impl PerturbAnchor for StorybookTreeChain {
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use crate::chain::storybook_tree::STORYBOOK_BRANCH_DEPTH_MAX;
 
 	#[test]
 	fn dome_projection_low_at_ends_high_at_mid() {
@@ -362,9 +363,9 @@ mod tests {
 			.iter()
 			.find(|s| matches!(s.phase, StorybookTreePhase::BranchOut(_)))
 			.expect("branch seed");
-		assert_eq!(branch.branch_depth, 5);
+		assert_eq!(branch.branch_depth, STORYBOOK_BRANCH_DEPTH_MAX);
 		if let StorybookTreePhase::BranchOut(b) = &branch.phase {
-			assert_eq!(b.remaining, 5);
+			assert_eq!(b.remaining, STORYBOOK_BRANCH_DEPTH_MAX);
 		}
 	}
 

@@ -12,6 +12,7 @@ pub mod friends_conifer;
 pub mod temperate_conifer;
 pub mod penmarch_torch;
 pub mod kamakura_torch;
+pub mod rorys_head_trained;
 pub mod moderate_lod_frond_crown;
 pub mod plugin;
 
@@ -39,6 +40,7 @@ pub use friends_conifer::FriendsConiferRenderHelper;
 pub use temperate_conifer::TemperateConiferRenderHelper;
 pub use penmarch_torch::PenmarchTorchRenderHelper;
 pub use kamakura_torch::KamakuraTorchRenderHelper;
+pub use rorys_head_trained::RorysHeadTrainedRenderHelper;
 pub use moderate_lod_frond_crown::ModerateLodFrondCrownRenderHelper;
 pub use sopes_banyan::SopesBanyanRenderHelper;
 pub use spear_tuft::SpearTuftRenderHelper;
@@ -98,6 +100,7 @@ pub enum Render {
 	StorybookTree(StorybookTreeRenderHelper),
 	PenmarchTorch(PenmarchTorchRenderHelper),
 	KamakuraTorch(KamakuraTorchRenderHelper),
+	RorysHeadTrained(RorysHeadTrainedRenderHelper),
 	BraidOakTree(BraidOakTreeRenderHelper),
 	JungleStorybookTree(JungleStorybookTreeRenderHelper),
 	SucculentTuft(SucculentTuftRenderHelper),
@@ -162,6 +165,11 @@ impl Render {
 			},
 			Self::KamakuraTorch(h) => RenderConfig {
 				subject: RenderSubject::KamakuraTorch(h.inner.clone()),
+				res_2: h.res_2,
+				transform: h.render_transform(),
+			},
+			Self::RorysHeadTrained(h) => RenderConfig {
+				subject: RenderSubject::RorysHeadTrained(h.inner.clone()),
 				res_2: h.res_2,
 				transform: h.render_transform(),
 			},
@@ -397,6 +405,21 @@ mod tests {
 		assert!((helper.inner.geometry.scale.tree_height - 20.0).abs() < 1e-5);
 		assert!((helper.inner.geometry.growth.torch_bias_low_degrees - 50.0).abs() < 1e-5);
 		assert!((helper.inner.geometry.growth.torch_bias_high_degrees - 72.0).abs() < 1e-5);
+		Ok(())
+	}
+
+	#[test]
+	fn rorys_head_trained_command_preserves_shape_params() -> Result<()> {
+		let cmd = crate::commands::PlaygroundCommand::parse_line(
+			"render rorys-head-trained --tree-height 20 --projection 0.35..0.50 --canopy-ring-unit-height 1.0",
+		)
+		.map_err(|e| anyhow::anyhow!("{e}"))?;
+		let crate::commands::PlaygroundCommand::Render(Render::RorysHeadTrained(helper)) = cmd else {
+			anyhow::bail!("expected rorys-head-trained render command");
+		};
+		assert!((helper.inner.geometry.scale.tree_height - 20.0).abs() < 1e-5);
+		assert!((helper.inner.geometry.projection.span_fraction_of_height.start - 0.35).abs() < 1e-5);
+		assert!((helper.inner.geometry.rings.canopy_ring_unit_height - 1.0).abs() < 1e-5);
 		Ok(())
 	}
 
