@@ -46,7 +46,7 @@ pub(crate) fn length_scale(index: u32, seed: i32, min: f32, max: f32) -> f32 {
 }
 
 /// Align frond-local +X to the crown emission direction.
-pub(crate) fn align_frond_direction(direction: Vec3) -> Quat {
+pub fn align_frond_direction(direction: Vec3) -> Quat {
 	let axis = Vec3::X;
 	let d = direction.normalize_or_zero();
 	if d.length_squared() < 1e-12 {

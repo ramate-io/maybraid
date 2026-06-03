@@ -10,9 +10,10 @@ pub mod plane_splay;
 pub mod tuft;
 
 pub use frond::{
-	Frond, FrondCluster, FrondCrown, FrondCrownShape, FrondCrownStd, FrondElement, FrondGeometry,
-	FrondRenderItemPlugin, ModerateLodFrondCrown, ModerateLodFrondCrownShape, ModerateLodFrondCrownStd,
-	ModerateLodPalmFrond, ModerateLodPalmFrondCluster, ModerateLodPalmFrondElement,
+	align_frond_direction, Frond, FrondCluster, FrondCrown, FrondCrownShape, FrondCrownStd,
+	FrondElement, FrondGeometry, FrondRenderItemPlugin, ModerateLodFrondCrown,
+	ModerateLodFrondCrownShape, ModerateLodFrondCrownStd, ModerateLodPalmFrond,
+	ModerateLodPalmFrondCluster, ModerateLodPalmFrondElement,
 };
 pub use tuft::{
 	BellyTipProfile, BladeTuft, BladeTuftShape, BladeTuftStd, BuddhaHandCluster, BuddhaHandElement,

@@ -21,6 +21,8 @@ use render_item::{CascadeChunk, RenderItem};
 
 use config::FrondConfig;
 use crown::{crown_directions, length_scale};
+
+pub use crown::align_frond_direction;
 use spawn::MergedFrond;
 
 pub use config::FrondConfig as FrondGeometry;

@@ -133,6 +133,16 @@ impl<H: Hysteresis> BallStickChain<H> {
 			.map(|((idx, node), h)| (idx, node, h))
 	}
 
+	/// Parent node index for `node_idx`, if this node is not a root seed.
+	pub fn parent_index(&self, node_idx: usize) -> Option<usize> {
+		for (parent, children) in self.children.iter().enumerate() {
+			if children.contains(&node_idx) {
+				return Some(parent);
+			}
+		}
+		None
+	}
+
 	pub fn segments<'a>(&'a self) -> impl Iterator<Item = BallStickSegment<'a>> + 'a {
 		self.children.iter().enumerate().flat_map(move |(parent_idx, children)| {
 			let start = &self.nodes[parent_idx];

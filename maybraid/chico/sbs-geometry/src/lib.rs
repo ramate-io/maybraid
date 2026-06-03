@@ -1,4 +1,5 @@
 //! Stalk and ball-stick geometry for Chico vegetation.
+pub mod projection;
 pub mod vec3_args;
 pub use vec3_args::parse_vec3_csv;
 
@@ -31,6 +32,10 @@ pub use anchors::braid_oak::{
 	braid_vertical_bias_radial, BraidOakTreeAnchors, BraidOakTreeProtoAnchors,
 };
 pub use anchors::liams_conifer::{LiamsConiferAnchors, LiamsConiferProtoAnchors};
+pub use anchors::friends_conifer::{
+	FriendsConiferAnchors, FriendsConiferChain, FriendsConiferProtoAnchors,
+};
+pub use projection::logarithmic_rounding_projection;
 pub use anchors::sopes_banyan::{SopesBanyanAnchors, SopesBanyanProtoAnchors};
 pub use anchors::stalk_perturbation::{
 	AnchorPerturbation, HasStrictStalk, PerturbAnchor, StalkPerturbation,
@@ -43,6 +48,7 @@ pub use sbs::storybook_tree::StorybookTreeSbs;
 pub use sbs::jungle_storybook_tree::JungleStorybookTreeSbs;
 pub use sbs::braid_oak_tree::BraidOakTreeSbs;
 pub use sbs::liams_conifer::LiamsConiferSbs;
+pub use sbs::friends_conifer::FriendsConiferSbs;
 pub use sbs::sopes_banyan::SopesBanyanSbs;
 
 #[cfg(feature = "render")]

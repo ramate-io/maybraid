@@ -26,6 +26,7 @@ use chico_sbs_trees::storybook_tree::render_item_plugin::ensure_registered as en
 use chico_sbs_trees::braid_oak_tree::render_item_plugin::ensure_registered as ensure_braid_oak_tree_render_plugins;
 use chico_sbs_trees::jungle_storybook_tree::render_item_plugin::ensure_registered as ensure_jungle_storybook_tree_render_plugins;
 use chico_sbs_trees::liams_conifer::render_item_plugin::ensure_registered as ensure_liams_conifer_render_plugins;
+use chico_sbs_trees::temperate_conifer::render_item_plugin::ensure_registered as ensure_temperate_conifer_render_plugins;
 use chico_sbs_trees::sopes_banyan::render_item_plugin::ensure_registered as ensure_sopes_banyan_render_plugins;
 use chico_sdf::{CrookCylinder, NoisyBall, NoisyCylinder};
 use chico_vegetation_shaders::{
@@ -44,6 +45,7 @@ impl Plugin for SbsTreesPlaygroundPlugin {
 		app.init_resource::<RenderConfig>();
 		ensure_sopes_banyan_render_plugins(app);
 		ensure_liams_conifer_render_plugins(app);
+		ensure_temperate_conifer_render_plugins(app);
 		ensure_date_palm_render_plugins(app);
 		ensure_waialea_palm_render_plugins(app);
 		ensure_storybook_tree_render_plugins(app);
@@ -86,6 +88,7 @@ impl Plugin for SbsTreesPlaygroundPlugin {
 					(
 						dispatch_render_items::<render::RenderSopesBanyan>,
 						dispatch_render_items::<render::RenderLiamsConifer>,
+						dispatch_render_items::<render::RenderTemperateConifer>,
 						dispatch_render_items::<render::RenderDatePalm>,
 						dispatch_render_items::<render::RenderWaialeaPalm>,
 						dispatch_render_items::<render::RenderStorybookTree>,
