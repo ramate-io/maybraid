@@ -4,7 +4,10 @@ use bevy::prelude::*;
 
 use chico_vegetation_shaders::{ChicoLeafMaterial, ChicoStickMaterial};
 
-use crate::render::{RenderBraidOakTree, RenderConfig, RenderJungleStorybookTree, RenderSubject, RenderVaseTree};
+use crate::render::{
+	RenderBraidOakTree, RenderConfig, RenderHonuBanyan, RenderJungleStorybookTree, RenderSubject,
+	RenderVaseTree,
+};
 
 /// Stable bark / foliage materials reused whenever [`RenderConfig::subject`] is rebuilt from CLI defaults.
 #[derive(Resource, Clone)]
@@ -104,6 +107,9 @@ pub fn setup_render_materials(
 	if let RenderSubject::JungleStorybookTree(tree) = &mut config.subject {
 		attach_jungle_storybook_materials(tree, &mats_snapshot);
 	}
+	if let RenderSubject::HonuBanyan(tree) = &mut config.subject {
+		attach_honu_banyan_materials(tree, &mats_snapshot);
+	}
 	if let RenderSubject::BraidOakTree(tree) = &mut config.subject {
 		attach_braid_oak_materials(tree, &mats_snapshot);
 	}
@@ -125,6 +131,14 @@ pub fn attach_braid_oak_materials(tree: &mut RenderBraidOakTree, mats: &RenderMa
 }
 
 pub fn attach_jungle_storybook_materials(tree: &mut RenderJungleStorybookTree, mats: &RenderMaterials) {
+	tree.stick_material.mesh = MeshMaterial3d(mats.jungle_stick.clone());
+	tree.inner_leaf_material.mesh = MeshMaterial3d(mats.jungle_inner_leaf.clone());
+	tree.outer_leaf_material.mesh = MeshMaterial3d(mats.jungle_outer_leaf.clone());
+	tree.growth_body_material.mesh = MeshMaterial3d(mats.jungle_stick.clone());
+	tree.growth_foliage_material.mesh = MeshMaterial3d(mats.tuft.clone());
+}
+
+pub fn attach_honu_banyan_materials(tree: &mut RenderHonuBanyan, mats: &RenderMaterials) {
 	tree.stick_material.mesh = MeshMaterial3d(mats.jungle_stick.clone());
 	tree.inner_leaf_material.mesh = MeshMaterial3d(mats.jungle_inner_leaf.clone());
 	tree.outer_leaf_material.mesh = MeshMaterial3d(mats.jungle_outer_leaf.clone());
@@ -183,6 +197,7 @@ fn attach_render_materials(
 		RenderSubject::BraidOakTree(_) => {}
 		RenderSubject::VaseTree(_) => {}
 		RenderSubject::JungleStorybookTree(_) => {}
+		RenderSubject::HonuBanyan(_) => {}
 		RenderSubject::SucculentTuft(t) => {
 			t.material.mesh = MeshMaterial3d(tuft.clone());
 		}
@@ -223,6 +238,9 @@ pub fn sync_render_material_handles(
 	attach_render_materials(&mut config.subject, &stick, &conifer_stick, &leaf, &tuft);
 	if let RenderSubject::JungleStorybookTree(tree) = &mut config.subject {
 		attach_jungle_storybook_materials(tree, &mats);
+	}
+	if let RenderSubject::HonuBanyan(tree) = &mut config.subject {
+		attach_honu_banyan_materials(tree, &mats);
 	}
 	if let RenderSubject::VaseTree(tree) = &mut config.subject {
 		attach_vase_tree_materials(tree, &mats);

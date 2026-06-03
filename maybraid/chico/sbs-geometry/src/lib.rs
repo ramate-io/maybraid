@@ -30,6 +30,7 @@ pub use chain::liams_conifer::{
 	LiamsConiferPhase, SEGMENT_FRACS,
 };
 pub use chain::sopes_banyan::{SopesBanyanChain, SopesBanyanPhase};
+pub use chain::honu_banyan::{is_graph_terminal as honu_banyan_is_graph_terminal, HonuBanyanChain, HonuBanyanPhase};
 pub use chain::{
 	BallStickChain, BallStickNode, BallStickSegment, BranchOut, DepthBudget, Hysteresis,
 };
@@ -66,6 +67,9 @@ pub use anchors::vase_tree::{
 	DEFAULT_APEX_BALL_RADIUS_FRACTION_OF_HEIGHT,
 };
 pub use anchors::sopes_banyan::{SopesBanyanAnchors, SopesBanyanProtoAnchors};
+pub use anchors::honu_banyan::{
+	honu_canopy_bias, honu_projection_length, HonuBanyanAnchors, HonuBanyanProtoAnchors,
+};
 pub use anchors::stalk_perturbation::{
 	AnchorPerturbation, HasStrictStalk, PerturbAnchor, StalkPerturbation,
 };
@@ -79,6 +83,7 @@ pub use sbs::braid_oak_tree::BraidOakTreeSbs;
 pub use sbs::liams_conifer::LiamsConiferSbs;
 pub use sbs::friends_conifer::FriendsConiferSbs;
 pub use sbs::sopes_banyan::SopesBanyanSbs;
+pub use sbs::honu_banyan::HonuBanyanSbs;
 pub use sbs::penmarch_torch::PenmarchTorchSbs;
 pub use sbs::kamakura_torch::KamakuraTorchSbs;
 pub use sbs::rorys_head_trained::RorysHeadTrainedSbs;

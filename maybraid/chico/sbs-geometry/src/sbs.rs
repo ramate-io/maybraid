@@ -4,6 +4,7 @@ pub mod waialea_palm;
 pub mod liams_conifer;
 pub mod friends_conifer;
 pub mod sopes_banyan;
+pub mod honu_banyan;
 pub mod storybook_tree;
 pub mod jungle_storybook_tree;
 pub mod braid_oak_tree;

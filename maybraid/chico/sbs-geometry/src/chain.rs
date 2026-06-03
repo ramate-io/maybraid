@@ -11,6 +11,7 @@ pub mod arch_trunk;
 pub mod date_palm;
 pub mod liams_conifer;
 pub mod sopes_banyan;
+pub mod honu_banyan;
 pub mod waialea_palm;
 pub mod storybook_tree;
 pub mod penmarch_torch;
