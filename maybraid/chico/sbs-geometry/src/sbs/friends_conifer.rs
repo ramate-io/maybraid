@@ -1,4 +1,4 @@
-//! Restricted **Friend's Conifer** geometry for CLI and temperate trees ([#238](https://github.com/ramate-io/maybraid/issues/238)).
+//! Restricted **Friend's Conifer** geometry for CLI and tree recipes ([#236](https://github.com/ramate-io/maybraid/issues/236), [#238](https://github.com/ramate-io/maybraid/issues/238)).
 //!
 //! Flattened argument groups map into [`crate::anchors::friends_conifer::FriendsConiferProtoAnchors`].
 
@@ -13,6 +13,8 @@ use crate::anchors::friends_conifer::{
 	FriendsConiferAnchorPerturbation, FriendsConiferAnchors, FriendsConiferProtoAnchors,
 	FRIENDS_BRANCH_BASE_RADIUS_FRACTION_OF_STALK, FRIENDS_BRANCH_RADIUS_CHILD_SCALE,
 	FRIENDS_MAX_PROJECTION_FRACTION_OF_HEIGHT, FRIENDS_MIN_PROJECTION_FRACTION_OF_HEIGHT,
+	TEMPERATE_BRANCH_ANGLE_TOLERANCE_RADIANS, TEMPERATE_MAX_PROJECTION_FRACTION_OF_HEIGHT,
+	TEMPERATE_MIN_PROJECTION_FRACTION_OF_HEIGHT,
 };
 use crate::anchors::strict_stalk::StrictStalk;
 use crate::anchors::{Anchors, AnchorsToChain};
@@ -95,7 +97,7 @@ pub struct FriendsLogProjectionParams {
 		feature = "clap",
 		arg(
 			long = "projection",
-			default_value = "0.10..0.025",
+			default_value = "0.12..0.03",
 			value_parser = parse_unit_range,
 			value_name = "MAX_FRAC..MIN_FRAC"
 		)
@@ -128,7 +130,7 @@ pub struct FriendsConiferGrowthParams {
 	pub branch_depth: usize,
 	#[cfg_attr(feature = "clap", arg(long, default_value_t = 12.0))]
 	pub downward_bias_degrees: f32,
-	#[cfg_attr(feature = "clap", arg(long, default_value_t = 40.0))]
+	#[cfg_attr(feature = "clap", arg(long, default_value_t = 32.0))]
 	pub angle_tolerance_degrees: f32,
 }
 
@@ -137,7 +139,7 @@ impl Default for FriendsConiferGrowthParams {
 		Self {
 			branch_depth: 3,
 			downward_bias_degrees: 12.0,
-			angle_tolerance_degrees: 40.0,
+			angle_tolerance_degrees: 32.0,
 		}
 	}
 }
@@ -245,6 +247,15 @@ impl Default for FriendsConiferSbs {
 impl FriendsConiferSbs {
 	pub fn height(&self) -> f32 {
 		self.scale.stalk_height
+	}
+
+	/// Shorter limbs and wider ray cone for [Temperate Conifer §3.1.7.15](https://github.com/ramate-io/maybraid/tree/main/rfc/rfc-000-000-183-chico-vegetation/03-01-stalk-and-ball-stick-trees/07-well-known-tree-constructions/15-temperate-conifer/README.md) ([#238](https://github.com/ramate-io/maybraid/issues/238)).
+	pub fn apply_temperate_preset(&mut self) {
+		self.projection.length_fraction_of_height = UnitRange::new(
+			TEMPERATE_MAX_PROJECTION_FRACTION_OF_HEIGHT,
+			TEMPERATE_MIN_PROJECTION_FRACTION_OF_HEIGHT,
+		);
+		self.growth.angle_tolerance_degrees = TEMPERATE_BRANCH_ANGLE_TOLERANCE_RADIANS.to_degrees();
 	}
 
 	pub fn to_anchors(&self) -> FriendsConiferAnchors {

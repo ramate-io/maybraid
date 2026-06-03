@@ -14,12 +14,36 @@ use bevy::prelude::*;
 use chico_sbs_geometry::render::stick::StickRenderHelper;
 use chico_sbs_geometry::FriendsConiferSbs;
 use clap::Args;
+
+/// [`FriendsConiferSbs`] with Temperate Conifer limb/ray defaults (clap `flatten` base).
+#[derive(Clone, Debug, PartialEq, Args)]
+#[command(rename_all = "kebab-case")]
+pub struct TemperateConiferGeometry {
+	#[command(flatten)]
+	pub inner: FriendsConiferSbs,
+}
+
+impl Default for TemperateConiferGeometry {
+	fn default() -> Self {
+		let mut inner = FriendsConiferSbs::default();
+		inner.apply_temperate_preset();
+		Self { inner }
+	}
+}
+
+impl std::ops::Deref for TemperateConiferGeometry {
+	type Target = FriendsConiferSbs;
+	fn deref(&self) -> &Self::Target {
+		&self.inner
+	}
+}
 use procedural_common::noise_params_from_scalar_str;
 use procedural_common::parse_unit_range;
 use procedural_common::{FromScalarNoise, NoiseParams, UnitRange};
 use render_item::{CascadeChunk, RenderItem};
 
 use crate::skipped_mesh_material::{SkippedLeafMeshMaterial, SkippedStickMeshMaterial};
+use crate::conifer_canopy_apex::{spawn_apex_frond_crown, DEFAULT_APEX_CANOPY_SPAWN_FRACTION};
 use foliage::spawn_joint_fronds;
 use stick::TemperateConiferStickRule;
 
@@ -41,7 +65,7 @@ where
 	LeafS: Clone + Into<MeshMaterial3d<LeafM>> + Args,
 {
 	#[command(flatten, next_help_heading = "Geometry")]
-	pub geometry: FriendsConiferSbs,
+	pub geometry: TemperateConiferGeometry,
 
 	#[command(flatten, next_help_heading = "Stick Material")]
 	pub stick_material: StickS,
@@ -77,6 +101,10 @@ where
 	#[arg(long, default_value_t = 1.0, help_heading = "Foliage")]
 	pub frond_spawn_fraction: f32,
 
+	/// Fraction of trees that spawn a downward frond crown at the stalk tip (noise-gated).
+	#[arg(long, default_value_t = DEFAULT_APEX_CANOPY_SPAWN_FRACTION, help_heading = "Foliage")]
+	pub apex_canopy_spawn_fraction: f32,
+
 	#[arg(
 		long,
 		default_value = "0,1,0.05,1",
@@ -108,13 +136,14 @@ where
 {
 	fn default() -> Self {
 		Self {
-			geometry: FriendsConiferSbs::default(),
+			geometry: TemperateConiferGeometry::default(),
 			stick_material: StickS::default(),
 			leaf_material: LeafS::default(),
 			frond_world_scale: 1.0,
 			fronds_per_joint: UnitRange::new(1.0, 2.0),
 			frond_length_fraction: UnitRange::new(0.035, 0.07),
 			frond_spawn_fraction: 1.0,
+			apex_canopy_spawn_fraction: DEFAULT_APEX_CANOPY_SPAWN_FRACTION,
 			stick_surface_noise: NoiseParams::from_scalar(0.0, 1.0, 0.05, 1),
 			leaf_surface_noise: NoiseParams::from_scalar(0.0, 1.0, 0.06, 1),
 			__marker: PhantomData,
@@ -130,7 +159,9 @@ where
 	LeafS: Clone + Into<MeshMaterial3d<LeafM>> + Args,
 {
 	pub fn build_chain(&self) -> chico_sbs_geometry::BallStickChain<chico_sbs_geometry::FriendsConiferChain> {
-		self.geometry.build_chain()
+		let mut geometry = self.geometry.inner.clone();
+		geometry.apply_temperate_preset();
+		geometry.build_chain()
 	}
 }
 
@@ -161,8 +192,10 @@ where
 			transform,
 		);
 
+		let mut geometry = self.geometry.inner.clone();
+		geometry.apply_temperate_preset();
 		out.extend(spawn_joint_fronds::<LeafM, _>(
-			&self.geometry,
+			&geometry,
 			self.frond_world_scale,
 			&chain,
 			commands,
@@ -171,6 +204,18 @@ where
 			&self.fronds_per_joint,
 			&self.frond_length_fraction,
 			self.frond_spawn_fraction,
+			self.leaf_material.clone(),
+		));
+
+		out.extend(spawn_apex_frond_crown::<LeafM, _>(
+			&geometry,
+			self.frond_world_scale,
+			&chain,
+			commands,
+			cascade_chunk,
+			transform,
+			&self.leaf_surface_noise,
+			self.apex_canopy_spawn_fraction,
 			self.leaf_material.clone(),
 		));
 

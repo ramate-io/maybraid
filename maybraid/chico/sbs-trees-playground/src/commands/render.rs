@@ -8,6 +8,7 @@ pub mod jungle_storybook_tree;
 pub mod frond_crown;
 pub mod jungle_growth;
 pub mod liams_conifer;
+pub mod friends_conifer;
 pub mod temperate_conifer;
 pub mod moderate_lod_frond_crown;
 pub mod plugin;
@@ -32,6 +33,7 @@ pub use jungle_storybook_tree::JungleStorybookTreeRenderHelper;
 pub use frond_crown::FrondCrownRenderHelper;
 pub use jungle_growth::JungleGrowthRenderHelper;
 pub use liams_conifer::LiamsConiferRenderHelper;
+pub use friends_conifer::FriendsConiferRenderHelper;
 pub use temperate_conifer::TemperateConiferRenderHelper;
 pub use moderate_lod_frond_crown::ModerateLodFrondCrownRenderHelper;
 pub use sopes_banyan::SopesBanyanRenderHelper;
@@ -85,6 +87,7 @@ impl<T: clap::Args + Clone> RenderHelper<T> {
 pub enum Render {
 	SopesBanyan(SopesBanyanRenderHelper),
 	LiamsConifer(LiamsConiferRenderHelper),
+	FriendsConifer(FriendsConiferRenderHelper),
 	TemperateConifer(TemperateConiferRenderHelper),
 	DatePalm(DatePalmRenderHelper),
 	WaialeaPalm(WaialeaPalmRenderHelper),
@@ -118,6 +121,11 @@ impl Render {
 			},
 			Self::LiamsConifer(h) => RenderConfig {
 				subject: RenderSubject::LiamsConifer(h.inner.clone()),
+				res_2: h.res_2,
+				transform: h.render_transform(),
+			},
+			Self::FriendsConifer(h) => RenderConfig {
+				subject: RenderSubject::FriendsConifer(h.inner.clone()),
 				res_2: h.res_2,
 				transform: h.render_transform(),
 			},
@@ -210,6 +218,7 @@ fn parse_vec3_csv(s: &str) -> Result<Vec3, String> {
 mod tests {
 	use super::*;
 	use anyhow::Result;
+	use chico_sbs_geometry::FriendsConiferSbs;
 
 	#[test]
 	fn spear_tuft_command_preserves_shape_params() -> Result<()> {
@@ -361,6 +370,21 @@ mod tests {
 	}
 
 	#[test]
+	fn friends_conifer_command_preserves_shape_params() -> Result<()> {
+		let cmd = crate::commands::PlaygroundCommand::parse_line(
+			"render friends-conifer --stalk-height 22 --angle-tolerance-degrees 32 --projection 0.12..0.03",
+		)
+		.map_err(|e| anyhow::anyhow!("{e}"))?;
+		let crate::commands::PlaygroundCommand::Render(Render::FriendsConifer(helper)) = cmd else {
+			anyhow::bail!("expected friends-conifer render command");
+		};
+		assert!((helper.inner.geometry.scale.stalk_height - 22.0).abs() < 1e-5);
+		assert!((helper.inner.geometry.growth.angle_tolerance_degrees - 32.0).abs() < 1e-5);
+		assert!((helper.inner.geometry.projection.length_fraction_of_height.start - 0.12).abs() < 1e-5);
+		Ok(())
+	}
+
+	#[test]
 	fn temperate_conifer_command_preserves_shape_params() -> Result<()> {
 		let cmd = crate::commands::PlaygroundCommand::parse_line(
 			"render temperate-conifer --stalk-height 18 --fronds-per-joint 1..2 --frond-length-fraction 0.04..0.06 --frond-spawn-fraction 0.7",
@@ -369,7 +393,7 @@ mod tests {
 		let crate::commands::PlaygroundCommand::Render(Render::TemperateConifer(helper)) = cmd else {
 			anyhow::bail!("expected temperate-conifer render command");
 		};
-		assert!((helper.inner.geometry.scale.stalk_height - 18.0).abs() < 1e-5);
+		assert!((helper.inner.geometry.inner.scale.stalk_height - 18.0).abs() < 1e-5);
 		assert!((helper.inner.fronds_per_joint.start - 1.0).abs() < 1e-5);
 		assert!((helper.inner.frond_length_fraction.start - 0.04).abs() < 1e-5);
 		assert!((helper.inner.frond_spawn_fraction - 0.7).abs() < 1e-5);
@@ -377,9 +401,21 @@ mod tests {
 		let RenderSubject::TemperateConifer(tree) = cfg.subject else {
 			anyhow::bail!("expected temperate conifer subject");
 		};
-		assert!((tree.geometry.scale.stalk_height - 18.0).abs() < 1e-5);
+		assert!((tree.geometry.inner.scale.stalk_height - 18.0).abs() < 1e-5);
 		assert!((tree.frond_spawn_fraction - 0.7).abs() < 1e-5);
 		Ok(())
+	}
+
+	#[test]
+	fn temperate_preset_shortens_limbs_vs_friends() {
+		let friends = FriendsConiferSbs::default();
+		let mut temperate = FriendsConiferSbs::default();
+		temperate.apply_temperate_preset();
+		assert!(
+			temperate.projection.length_fraction_of_height.start
+				< friends.projection.length_fraction_of_height.start
+		);
+		assert!(temperate.growth.angle_tolerance_degrees > friends.growth.angle_tolerance_degrees);
 	}
 
 	#[test]
