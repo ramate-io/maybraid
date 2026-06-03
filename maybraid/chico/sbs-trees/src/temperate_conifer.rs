@@ -43,6 +43,7 @@ use procedural_common::{FromScalarNoise, NoiseParams, UnitRange};
 use render_item::{CascadeChunk, RenderItem};
 
 use crate::skipped_mesh_material::{SkippedLeafMeshMaterial, SkippedStickMeshMaterial};
+use crate::conifer_canopy_apex::{spawn_apex_frond_crown, DEFAULT_APEX_CANOPY_SPAWN_FRACTION};
 use foliage::spawn_joint_fronds;
 use stick::TemperateConiferStickRule;
 
@@ -100,6 +101,10 @@ where
 	#[arg(long, default_value_t = 1.0, help_heading = "Foliage")]
 	pub frond_spawn_fraction: f32,
 
+	/// Fraction of trees that spawn a downward frond crown at the stalk tip (noise-gated).
+	#[arg(long, default_value_t = DEFAULT_APEX_CANOPY_SPAWN_FRACTION, help_heading = "Foliage")]
+	pub apex_canopy_spawn_fraction: f32,
+
 	#[arg(
 		long,
 		default_value = "0,1,0.05,1",
@@ -138,6 +143,7 @@ where
 			fronds_per_joint: UnitRange::new(1.0, 2.0),
 			frond_length_fraction: UnitRange::new(0.035, 0.07),
 			frond_spawn_fraction: 1.0,
+			apex_canopy_spawn_fraction: DEFAULT_APEX_CANOPY_SPAWN_FRACTION,
 			stick_surface_noise: NoiseParams::from_scalar(0.0, 1.0, 0.05, 1),
 			leaf_surface_noise: NoiseParams::from_scalar(0.0, 1.0, 0.06, 1),
 			__marker: PhantomData,
@@ -198,6 +204,18 @@ where
 			&self.fronds_per_joint,
 			&self.frond_length_fraction,
 			self.frond_spawn_fraction,
+			self.leaf_material.clone(),
+		));
+
+		out.extend(spawn_apex_frond_crown::<LeafM, _>(
+			&geometry,
+			self.frond_world_scale,
+			&chain,
+			commands,
+			cascade_chunk,
+			transform,
+			&self.leaf_surface_noise,
+			self.apex_canopy_spawn_fraction,
 			self.leaf_material.clone(),
 		));
 

@@ -148,6 +148,17 @@ impl SetNoiseParams for LiamsConiferChain {
 	}
 }
 
+/// Highest [`BallStickNode`] on the vertical stalk phase (tree crown).
+pub fn stalk_tip_from_chain(chain: &crate::BallStickChain<LiamsConiferChain>) -> crate::BallStickNode {
+	let mut tip = chain.nodes[0];
+	for (node, h) in chain.nodes_with_hysteresis() {
+		if matches!(h.phase, LiamsConiferPhase::Stalk(_)) && node.position.y >= tip.position.y {
+			tip = *node;
+		}
+	}
+	tip
+}
+
 #[cfg(test)]
 mod tests {
 	use super::*;
@@ -208,6 +219,24 @@ mod tests {
 		);
 		let chain = crate::BallStickChain::build(vec![seed]);
 		assert!(chain.nodes.len() > 1);
+		Ok(())
+	}
+
+	#[test]
+	fn stalk_tip_is_highest_stalk_phase_node() -> anyhow::Result<()> {
+		let seed = LiamsConiferChain::new(
+			NoiseConfig::new(NoiseParams::default()),
+			0.0,
+			3,
+			LiamsConiferPhase::Stalk(PointToPoint::new_from_vec3(
+				Vec3::ZERO,
+				Vec3::new(0.0, 30.0, 0.0),
+				0.5,
+			)),
+		);
+		let chain = crate::BallStickChain::build(vec![seed]);
+		let tip = stalk_tip_from_chain(&chain);
+		assert!((tip.position.y - 30.0).abs() < 1e-3);
 		Ok(())
 	}
 }

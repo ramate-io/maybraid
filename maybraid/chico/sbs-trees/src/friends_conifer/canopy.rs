@@ -6,8 +6,24 @@ use chico_sbs_geometry::render::ball::BallRenderRule;
 use chico_sbs_geometry::render::mix_seed::node_mix_seed;
 use chico_sbs_geometry::{BallStickChain, BallStickNode, FriendsConiferChain};
 
-/// RFC needle-cluster radius as a fraction of stalk height (`0.018 * H`).
-pub const FRIENDS_SPLAY_RADIUS_FRACTION_OF_HEIGHT: f32 = 0.018;
+/// Needle-cluster world radius as a fraction of stalk height (RFC `0.018 * H`; denser than RFC for fuller Friend's silhouette).
+pub const FRIENDS_SPLAY_RADIUS_FRACTION_OF_HEIGHT: f32 = 0.028;
+
+/// Local icosphere/plate sizing before joint scale (slightly larger plates than [`PlaneSplay`] defaults).
+pub const FRIENDS_SPLAY_CORE_RADIUS: f32 = 0.85;
+pub const FRIENDS_SPLAY_LEAF_DISC_RADIUS: f32 = 1.05;
+
+/// Map RFC `splay_count` 2..4 to icosphere subdivision (`0` = 20 faces, `1` = 80, `2` = 320).
+fn icosphere_subdivisions_for_node(node_idx: usize, position: Vec3) -> u32 {
+	let t = (node_mix_seed(node_idx, position) as f32) / (u32::MAX as f32);
+	if t < 0.25 {
+		1
+	} else if t < 0.55 {
+		2
+	} else {
+		1
+	}
+}
 
 #[derive(Clone)]
 pub(crate) struct FriendsConiferCanopyRule<LeafM, LeafS>
@@ -33,9 +49,8 @@ where
 		_chain: &BallStickChain<FriendsConiferChain>,
 	) -> Option<(PlaneSplay<LeafM, LeafS>, f32)> {
 		let mut splay = self.leaf_splay.clone();
-		let t = (node_mix_seed(node_idx, node.position) as f32) / (u32::MAX as f32);
-		// RFC `splay_count` 2..4 → vary icosphere subdivision for needle density.
-		splay.icosphere_subdivisions = if t < 0.33 { 0 } else if t < 0.66 { 1 } else { 0 };
+		splay.icosphere_subdivisions =
+			icosphere_subdivisions_for_node(node_idx, node.position);
 		let scale = self.splay_radius_world / node.radius.max(1e-4);
 		Some((splay, scale))
 	}

@@ -6,6 +6,7 @@ pub mod date_palm;
 pub mod jungle_storybook_tree;
 pub mod layered_canopy;
 pub mod liams_conifer;
+mod conifer_canopy_apex;
 pub mod friends_conifer;
 pub mod temperate_conifer;
 pub mod skipped_mesh_material;

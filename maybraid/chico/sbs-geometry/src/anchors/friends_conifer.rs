@@ -32,7 +32,7 @@ pub const FRIENDS_BRANCH_ANGLE_TOLERANCE_RADIANS: f32 = 32.0_f32.to_radians();
 /// Blend toward [`downward_biased_radial`] at canopy seeds (`1.0` = fully biased ray).
 pub const FRIENDS_BIAS_BLEND: f32 = 0.96;
 /// Max / min projection length as fractions of stalk height (longer than Temperate `0.10` / `0.025`).
-pub const FRIENDS_MAX_PROJECTION_FRACTION_OF_HEIGHT: f32 = 0.12;
+pub const FRIENDS_MAX_PROJECTION_FRACTION_OF_HEIGHT: f32 = 0.16;
 pub const FRIENDS_MIN_PROJECTION_FRACTION_OF_HEIGHT: f32 = 0.03;
 /// Temperate Conifer ([#238](https://github.com/ramate-io/maybraid/issues/238)) uses shorter limbs and wider ray DOF.
 pub const TEMPERATE_MAX_PROJECTION_FRACTION_OF_HEIGHT: f32 = 0.10;
@@ -41,7 +41,7 @@ pub const TEMPERATE_BRANCH_ANGLE_TOLERANCE_RADIANS: f32 = 40.0_f32.to_radians();
 /// Limb joint radius at ring anchors relative to stalk base radius.
 pub const FRIENDS_BRANCH_BASE_RADIUS_FRACTION_OF_STALK: f32 = 0.20;
 /// Per-hop thinning on child [`BranchOut::radius_range`]: `(lo, hi)`.
-pub const FRIENDS_BRANCH_RADIUS_CHILD_SCALE: (f32, f32) = (0.82, 0.88);
+pub const FRIENDS_BRANCH_RADIUS_CHILD_SCALE: (f32, f32) = (0.84, 0.92);
 
 /// Deterministic ring + stalk parameters before optional [`StalkPerturbation`].
 #[derive(Clone, Debug, PartialEq)]
@@ -72,7 +72,7 @@ impl Default for FriendsConiferProtoAnchors {
 				stalk_base_radius: 0.025 * h,
 			},
 			first_ring_unit_height: 0.10,
-			last_ring_unit_height: 0.98,
+			last_ring_unit_height: 1.0,
 			ring_spacing_unit_height: 0.04,
 			anchors_per_ring: 4,
 			max_projection_fraction_of_height: FRIENDS_MAX_PROJECTION_FRACTION_OF_HEIGHT,
@@ -171,10 +171,7 @@ impl FriendsConiferProtoAnchors {
 					chain_noise.clone(),
 					proj,
 					depth,
-					LiamsConiferPhase::BranchOut(DepthBudget {
-						inner: branch,
-						remaining: depth,
-					}),
+					LiamsConiferPhase::BranchOut(DepthBudget { inner: branch, remaining: depth }),
 				));
 			}
 		}
@@ -306,10 +303,8 @@ mod tests {
 
 	#[test]
 	fn anchors_count_matches_rings_times_spokes_plus_stalk() {
-		let proto = FriendsConiferProtoAnchors {
-			ring_spacing_unit_height: 0.20,
-			..Default::default()
-		};
+		let proto =
+			FriendsConiferProtoAnchors { ring_spacing_unit_height: 0.20, ..Default::default() };
 		let ring_count = proto.ring_height_fractions().len();
 		let spokes = proto.anchors_per_ring as usize;
 		let a = FriendsConiferAnchors::new(proto);

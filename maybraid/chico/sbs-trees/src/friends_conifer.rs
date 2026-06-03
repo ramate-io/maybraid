@@ -5,6 +5,11 @@
 
 mod canopy;
 mod stick;
+
+use crate::conifer_canopy_apex::{
+	spawn_apex_chico_ball, DEFAULT_APEX_CANOPY_SPAWN_FRACTION,
+	FRIENDS_APEX_BALL_RADIUS_FRACTION_OF_HEIGHT,
+};
 pub mod render_item_plugin;
 
 use std::marker::PhantomData;
@@ -20,7 +25,10 @@ use procedural_common::{FromScalarNoise, NoiseParams};
 use render_item::{CascadeChunk, RenderItem};
 
 use crate::skipped_mesh_material::{SkippedLeafMeshMaterial, SkippedStickMeshMaterial};
-use canopy::{FriendsConiferCanopyRule, FRIENDS_SPLAY_RADIUS_FRACTION_OF_HEIGHT};
+use canopy::{
+	FriendsConiferCanopyRule, FRIENDS_SPLAY_CORE_RADIUS, FRIENDS_SPLAY_LEAF_DISC_RADIUS,
+	FRIENDS_SPLAY_RADIUS_FRACTION_OF_HEIGHT,
+};
 use stick::FriendsConiferStickRule;
 
 pub type FriendsConiferStd = FriendsConifer<
@@ -48,13 +56,25 @@ where
 	#[command(flatten, next_help_heading = "Leaf Material")]
 	pub leaf_material: LeafS,
 
-	/// Plane-splay world radius as a fraction of stalk height (RFC `0.018 * H`).
+	/// Plane-splay world radius as a fraction of stalk height (playground default [`FRIENDS_SPLAY_RADIUS_FRACTION_OF_HEIGHT`]).
 	#[arg(
 		long,
 		default_value_t = FRIENDS_SPLAY_RADIUS_FRACTION_OF_HEIGHT,
 		help_heading = "Foliage"
 	)]
 	pub splay_radius_fraction_of_height: f32,
+
+	/// Fraction of trees that spawn one [`chico_ball_components::chico_ball::ChicoBall`] at the stalk crown (noise-gated).
+	#[arg(long, default_value_t = DEFAULT_APEX_CANOPY_SPAWN_FRACTION, help_heading = "Foliage")]
+	pub apex_canopy_spawn_fraction: f32,
+
+	/// Apex ball world radius as a fraction of stalk height.
+	#[arg(
+		long,
+		default_value_t = FRIENDS_APEX_BALL_RADIUS_FRACTION_OF_HEIGHT,
+		help_heading = "Foliage"
+	)]
+	pub apex_ball_radius_fraction_of_height: f32,
 
 	#[arg(
 		long,
@@ -91,6 +111,8 @@ where
 			stick_material: StickS::default(),
 			leaf_material: LeafS::default(),
 			splay_radius_fraction_of_height: FRIENDS_SPLAY_RADIUS_FRACTION_OF_HEIGHT,
+			apex_canopy_spawn_fraction: DEFAULT_APEX_CANOPY_SPAWN_FRACTION,
+			apex_ball_radius_fraction_of_height: FRIENDS_APEX_BALL_RADIUS_FRACTION_OF_HEIGHT,
 			stick_surface_noise: NoiseParams::from_scalar(0.0, 1.0, 0.05, 1),
 			leaf_surface_noise: NoiseParams::from_scalar(0.0, 1.0, 0.06, 1),
 			__marker: PhantomData,
@@ -142,16 +164,31 @@ where
 		);
 
 		let mut leaf_splay = PlaneSplay::<LeafM, LeafS>::default();
+		leaf_splay.core_radius = FRIENDS_SPLAY_CORE_RADIUS;
+		leaf_splay.leaf_disc_radius = FRIENDS_SPLAY_LEAF_DISC_RADIUS;
+		leaf_splay.icosphere_subdivisions = 1;
 		leaf_splay.material = self.leaf_material.clone();
 		let leaf_rule = FriendsConiferCanopyRule {
 			leaf_splay,
 			splay_radius_world: self.splay_radius_world(),
 		};
 
-		out.extend(BallRenderHelper::new(chain, leaf_rule).spawn_render_items(
+		out.extend(BallRenderHelper::new(chain.clone(), leaf_rule).spawn_render_items(
 			commands,
 			cascade_chunk,
 			transform,
+		));
+
+		out.extend(spawn_apex_chico_ball::<LeafM, _>(
+			&self.geometry,
+			&chain,
+			commands,
+			cascade_chunk,
+			transform,
+			&self.leaf_surface_noise,
+			self.apex_canopy_spawn_fraction,
+			self.apex_ball_radius_fraction_of_height,
+			self.leaf_material.clone(),
 		));
 
 		out
