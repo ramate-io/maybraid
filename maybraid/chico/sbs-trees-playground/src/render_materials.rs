@@ -198,6 +198,9 @@ fn attach_render_materials(
 			tree.stick_material.mesh = MeshMaterial3d(stick.clone());
 			tree.leaf_material.mesh = MeshMaterial3d(leaf.clone());
 		}
+		RenderSubject::PalmBush(tree) => {
+			tree.leaf_material.mesh = MeshMaterial3d(tuft.clone());
+		}
 		RenderSubject::StorybookTree(tree) => {
 			tree.stick_material.mesh = MeshMaterial3d(stick.clone());
 			tree.leaf_material.mesh = MeshMaterial3d(leaf.clone());

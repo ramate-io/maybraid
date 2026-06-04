@@ -1,4 +1,5 @@
 //! Stalk and ball-stick geometry for Chico vegetation.
+pub mod palm_crown;
 pub mod projection;
 pub mod vec3_args;
 pub use vec3_args::parse_vec3_csv;
@@ -41,7 +42,13 @@ pub use chain::{
 
 pub mod anchors;
 
+pub use palm_crown::{ring_mix_u, ring_spacing_world, vertical_bias_mix};
 pub use anchors::date_palm::{DatePalmAnchors, DatePalmProtoAnchors};
+pub use anchors::palm_bush::{
+	PalmBushProtoAnchors, DEFAULT_CROWN_LIFT_FRACTION, DEFAULT_FRONDS_PER_RING,
+	DEFAULT_RING_COUNT, DEFAULT_RING_SPACING_FRACTION, DEFAULT_VERTICAL_BIAS_HIGH,
+	DEFAULT_VERTICAL_BIAS_LOW,
+};
 pub use anchors::waialea_palm::{WaialeaPalmAnchors, WaialeaPalmProtoAnchors};
 pub use anchors::storybook_tree::{
 	dome_projection_length, StorybookTreeAnchors, StorybookTreeProtoAnchors,
@@ -84,6 +91,7 @@ pub use anchors::stalk_perturbation::{
 pub use anchors::strict_stalk::StrictStalk;
 pub use anchors::{Anchors, AnchorsToChain};
 pub use sbs::date_palm::DatePalmSbs;
+pub use sbs::palm_bush::PalmBushSbs;
 pub use sbs::waialea_palm::WaialeaPalmSbs;
 pub use sbs::storybook_tree::StorybookTreeSbs;
 pub use sbs::jungle_storybook_tree::JungleStorybookTreeSbs;

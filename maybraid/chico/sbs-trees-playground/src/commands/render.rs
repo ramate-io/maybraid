@@ -1,6 +1,7 @@
 pub mod blade_tuft;
 pub mod buddha_hand_tuft;
 pub mod date_palm;
+pub mod palm_bush;
 pub mod waialea_palm;
 pub mod storybook_tree;
 pub mod braid_oak_tree;
@@ -34,6 +35,7 @@ use crate::render::{RenderConfig, RenderSubject};
 pub use blade_tuft::BladeTuftRenderHelper;
 pub use buddha_hand_tuft::BuddhaHandTuftRenderHelper;
 pub use date_palm::DatePalmRenderHelper;
+pub use palm_bush::PalmBushRenderHelper;
 pub use waialea_palm::WaialeaPalmRenderHelper;
 pub use storybook_tree::StorybookTreeRenderHelper;
 pub use braid_oak_tree::BraidOakTreeRenderHelper;
@@ -109,6 +111,7 @@ pub enum Render {
 	TemperateConifer(TemperateConiferRenderHelper),
 	DatePalm(DatePalmRenderHelper),
 	WaialeaPalm(WaialeaPalmRenderHelper),
+	PalmBush(PalmBushRenderHelper),
 	StorybookTree(StorybookTreeRenderHelper),
 	PenmarchTorch(PenmarchTorchRenderHelper),
 	KamakuraTorch(KamakuraTorchRenderHelper),
@@ -175,6 +178,11 @@ impl Render {
 			},
 			Self::WaialeaPalm(h) => RenderConfig {
 				subject: RenderSubject::WaialeaPalm(h.inner.clone()),
+				res_2: h.res_2,
+				transform: h.render_transform(),
+			},
+			Self::PalmBush(h) => RenderConfig {
+				subject: RenderSubject::PalmBush(h.inner.clone()),
 				res_2: h.res_2,
 				transform: h.render_transform(),
 			},
@@ -317,6 +325,26 @@ mod tests {
 		};
 		assert!((growth.shape.inner_ball_scale - 0.9).abs() < 1e-5);
 		assert_eq!(growth.shape.seed, 42);
+		Ok(())
+	}
+
+	#[test]
+	fn palm_bush_command_preserves_shape_params() -> Result<()> {
+		let cmd = crate::commands::PlaygroundCommand::parse_line(
+			"render palm-bush --ring-count 9 --fronds-per-ring 14",
+		)
+		.map_err(|e| anyhow::anyhow!("{e}"))?;
+		let crate::commands::PlaygroundCommand::Render(Render::PalmBush(helper)) = cmd else {
+			anyhow::bail!("expected palm-bush render command");
+		};
+		assert_eq!(helper.inner.geometry.crown.ring_count, 9);
+		assert_eq!(helper.inner.geometry.crown.fronds_per_ring, 14);
+		let cfg = Render::PalmBush(helper).into_render_config();
+		let RenderSubject::PalmBush(bush) = cfg.subject else {
+			anyhow::bail!("expected palm bush subject");
+		};
+		assert_eq!(bush.geometry.crown.ring_count, 9);
+		assert_eq!(bush.geometry.crown.fronds_per_ring, 14);
 		Ok(())
 	}
 

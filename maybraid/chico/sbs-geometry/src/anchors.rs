@@ -7,6 +7,7 @@
 //! Downstream [`Hysteresis`] implementations (e.g. Sope's Banyan) then grow branches from those seeds via [`Hysteresis::next_hysteresis`].
 
 pub mod date_palm;
+pub mod palm_bush;
 pub mod waialea_palm;
 pub mod storybook_tree;
 pub mod braid_oak;
