@@ -24,6 +24,10 @@ pub use chain::kamakura_torch::{
 pub use chain::rorys_head_trained::{
 	is_graph_terminal as rorys_head_trained_is_graph_terminal, RorysHeadTrainedChain,
 };
+pub use chain::high_bush::{
+	high_bush_branch_depth, is_graph_terminal as high_bush_is_graph_terminal, HighBushChain,
+	HighBushPhase, ShootSeedSpec, HIGH_BUSH_BRANCH_DEPTH_MAX, HIGH_BUSH_BRANCH_DEPTH_MIN,
+};
 pub use chain::vase_tree::{is_graph_terminal as vase_tree_is_graph_terminal, VaseTreeChain};
 pub use chain::liams_conifer::{
 	liams_conifer_branch_depth, stalk_tip_from_chain as liams_stalk_tip_from_chain, LiamsConiferChain,
@@ -61,6 +65,10 @@ pub use anchors::kamakura_torch::{
 pub use anchors::rorys_head_trained::{
 	rorys_flat_projection_length, rorys_head_trained_branch_direction, RorysHeadTrainedAnchors,
 	RorysHeadTrainedProtoAnchors,
+};
+pub use anchors::high_bush::{
+	high_bush_shoot_direction, HighBushAnchors, HighBushProtoAnchors,
+	DEFAULT_BIAS_BLEND, DEFAULT_BRANCH_ANGLE_TOLERANCE_DEGREES,
 };
 pub use anchors::vase_tree::{
 	vase_tree_branch_direction, VaseTreeAnchors, VaseTreeProtoAnchors,

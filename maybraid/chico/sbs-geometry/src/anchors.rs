@@ -18,6 +18,7 @@ pub mod torch_tree;
 pub mod penmarch_torch;
 pub mod kamakura_torch;
 pub mod rorys_head_trained;
+pub mod high_bush;
 pub mod vase_tree;
 pub mod stalk_perturbation;
 pub mod strict_stalk;

@@ -27,6 +27,9 @@ The default preview is **Liam's Conifer** (sticks plus tuft foliage at each join
 /render spear-tuft
 /render frond-crown
 /render frond-crown --translate 0,2,0 --spine-segments 16
+/render high-bush-shoots --height 12
+/render high-bush-shoots --height 12 --shoot-count 8 --foliage-style tuft
+/render common-high-bush --height 10
 /render moderate-lod-frond-crown --translate 0,2,0
 /render sopes-banyan
 /render honu-banyan

@@ -1925,6 +1925,7 @@ dependencies = [
  "clap",
  "game-commands",
  "log",
+ "procedural-common",
  "render-item",
  "sdf",
 ]
@@ -1956,6 +1957,7 @@ dependencies = [
  "bevy",
  "chico-ball-components",
  "chico-sbs-geometry",
+ "chico-stick-components",
  "clap",
  "procedural-common",
  "render-item",

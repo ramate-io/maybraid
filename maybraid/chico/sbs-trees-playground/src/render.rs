@@ -21,7 +21,7 @@ use chico_sbs_trees::honu_banyan::HonuBanyan;
 use chico_sbs_trees::SkippedLeafMeshMaterial;
 use chico_sbs_trees::SkippedStickMeshMaterial;
 use chico_tree_components::{
-	JungleGrowth, SkippedBodyMeshMaterial, SkippedFoliageMeshMaterial,
+	HighBushShoots, JungleGrowth, SkippedBodyMeshMaterial, SkippedFoliageMeshMaterial,
 };
 use chico_vegetation_shaders::{ChicoLeafMaterial, ChicoStickMaterial};
 use chunk::cascade::CascadeChunk;
@@ -180,6 +180,14 @@ pub type RenderFrondCrown =
 pub type RenderModerateLodFrondCrown =
 	ModerateLodFrondCrown<StandardMaterial, SkippedLeafMeshMaterial<StandardMaterial>>;
 
+/// [`HighBushShoots`] — trunkless radial shoots from a ground anchor ([#225](https://github.com/ramate-io/maybraid/issues/225)).
+pub type RenderHighBushShoots = HighBushShoots<
+	ChicoStickMaterial,
+	SkippedStickMeshMaterial<ChicoStickMaterial>,
+	StandardMaterial,
+	SkippedLeafMeshMaterial<StandardMaterial>,
+>;
+
 /// [`JungleGrowth`] — bark/dirt inner mass + drooping tuft foliage ([#226](https://github.com/ramate-io/maybraid/issues/226)).
 pub type RenderJungleGrowth = JungleGrowth<
 	ChicoStickMaterial,
@@ -210,6 +218,8 @@ pub enum RenderSubject {
 	SpearTuft(RenderSpearTuft),
 	BuddhaHandTuft(RenderBuddhaHandTuft),
 	WeepingTuft(RenderWeepingTuft),
+	HighBushShoots(RenderHighBushShoots),
+	CommonHighBush(RenderHighBushShoots),
 	JungleGrowth(RenderJungleGrowth),
 	FrondCrown(RenderFrondCrown),
 	ModerateLodFrondCrown(RenderModerateLodFrondCrown),
@@ -238,6 +248,8 @@ impl RenderSubject {
 			Self::SpearTuft(_) => "SpearTuft",
 			Self::BuddhaHandTuft(_) => "BuddhaHandTuft",
 			Self::WeepingTuft(_) => "WeepingTuft",
+			Self::HighBushShoots(_) => "HighBushShoots",
+			Self::CommonHighBush(_) => "CommonHighBush",
 			Self::JungleGrowth(_) => "JungleGrowth",
 			Self::FrondCrown(_) => "FrondCrown",
 			Self::ModerateLodFrondCrown(_) => "ModerateLodFrondCrown",
@@ -288,6 +300,9 @@ impl RenderSubject {
 			Self::SpearTuft(t) => format!("{:?}", t.shape),
 			Self::BuddhaHandTuft(t) => format!("{:?}", t.shape),
 			Self::WeepingTuft(t) => format!("{:?}", t.shape),
+			Self::HighBushShoots(t) | Self::CommonHighBush(t) => {
+				format!("{:?}|style={:?}", t.shape, t.shape.foliage_style)
+			}
 			Self::JungleGrowth(t) => format!("{:?}", t.shape),
 			Self::FrondCrown(t) => format!("{:?}", t.shape),
 			Self::ModerateLodFrondCrown(t) => format!("{:?}", t.shape),
@@ -316,6 +331,8 @@ impl RenderSubject {
 			Self::SpearTuft(tuft) => RenderDispatch::SpearTuft(tuft.clone()),
 			Self::BuddhaHandTuft(tuft) => RenderDispatch::BuddhaHandTuft(tuft.clone()),
 			Self::WeepingTuft(tuft) => RenderDispatch::WeepingTuft(tuft.clone()),
+			Self::HighBushShoots(shoots) => RenderDispatch::HighBushShoots(shoots.clone()),
+			Self::CommonHighBush(shoots) => RenderDispatch::CommonHighBush(shoots.clone()),
 			Self::JungleGrowth(growth) => RenderDispatch::JungleGrowth(growth.clone()),
 			Self::FrondCrown(crown) => RenderDispatch::FrondCrown(crown.clone()),
 			Self::ModerateLodFrondCrown(crown) => RenderDispatch::ModerateLodFrondCrown(crown.clone()),
@@ -345,6 +362,8 @@ enum RenderDispatch {
 	SpearTuft(RenderSpearTuft),
 	BuddhaHandTuft(RenderBuddhaHandTuft),
 	WeepingTuft(RenderWeepingTuft),
+	HighBushShoots(RenderHighBushShoots),
+	CommonHighBush(RenderHighBushShoots),
 	JungleGrowth(RenderJungleGrowth),
 	FrondCrown(RenderFrondCrown),
 	ModerateLodFrondCrown(RenderModerateLodFrondCrown),
@@ -470,6 +489,9 @@ pub fn sync_render(
 		}
 		RenderDispatch::WeepingTuft(tuft) => {
 			commands.spawn((bundle, DispatchRenderItem::new(tuft)));
+		}
+		RenderDispatch::HighBushShoots(shoots) | RenderDispatch::CommonHighBush(shoots) => {
+			commands.spawn((bundle, DispatchRenderItem::new(shoots)));
 		}
 		RenderDispatch::JungleGrowth(growth) => {
 			commands.spawn((bundle, DispatchRenderItem::new(growth)));

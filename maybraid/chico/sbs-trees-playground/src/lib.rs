@@ -4,6 +4,7 @@ pub mod camera;
 pub mod checkerboard_material;
 pub mod commands;
 mod frond_render_params;
+mod high_bush_shoots_render_params;
 mod ground;
 mod jungle_growth_render_params;
 mod moderate_lod_frond_render_params;
@@ -124,6 +125,7 @@ impl Plugin for SbsTreesPlaygroundPlugin {
 							dispatch_render_items::<render::RenderBuddhaHandTuft>,
 							dispatch_render_items::<render::RenderWeepingTuft>,
 							dispatch_render_items::<render::RenderJungleGrowth>,
+							dispatch_render_items::<render::RenderHighBushShoots>,
 							dispatch_render_items::<render::RenderFrondCrown>,
 							dispatch_render_items::<render::RenderModerateLodFrondCrown>,
 						),
