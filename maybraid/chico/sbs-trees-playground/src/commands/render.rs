@@ -7,6 +7,8 @@ pub mod braid_oak_tree;
 pub mod jungle_storybook_tree;
 pub mod frond_crown;
 pub mod jungle_growth;
+pub mod high_bush_shoots;
+pub mod common_high_bush;
 pub mod liams_conifer;
 pub mod friends_conifer;
 pub mod northern_conifer;
@@ -38,6 +40,8 @@ pub use braid_oak_tree::BraidOakTreeRenderHelper;
 pub use jungle_storybook_tree::JungleStorybookTreeRenderHelper;
 pub use frond_crown::FrondCrownRenderHelper;
 pub use jungle_growth::JungleGrowthRenderHelper;
+pub use high_bush_shoots::HighBushShootsRenderHelper;
+pub use common_high_bush::CommonHighBushRenderHelper;
 pub use liams_conifer::LiamsConiferRenderHelper;
 pub use friends_conifer::FriendsConiferRenderHelper;
 pub use northern_conifer::NorthernConiferRenderHelper;
@@ -118,6 +122,8 @@ pub enum Render {
 	BuddhaHandTuft(BuddhaHandTuftRenderHelper),
 	WeepingTuft(WeepingTuftRenderHelper),
 	JungleGrowth(JungleGrowthRenderHelper),
+	HighBushShoots(HighBushShootsRenderHelper),
+	CommonHighBush(CommonHighBushRenderHelper),
 	FrondCrown(FrondCrownRenderHelper),
 	ModerateLodFrondCrown(ModerateLodFrondCrownRenderHelper),
 }
@@ -234,6 +240,16 @@ impl Render {
 			},
 			Self::JungleGrowth(h) => RenderConfig {
 				subject: RenderSubject::JungleGrowth(h.inner.clone().into()),
+				res_2: h.res_2,
+				transform: h.render_transform(),
+			},
+			Self::HighBushShoots(h) => RenderConfig {
+				subject: RenderSubject::HighBushShoots(h.inner.clone().into()),
+				res_2: h.res_2,
+				transform: h.render_transform(),
+			},
+			Self::CommonHighBush(h) => RenderConfig {
+				subject: RenderSubject::CommonHighBush(h.inner.clone().into()),
 				res_2: h.res_2,
 				transform: h.render_transform(),
 			},
@@ -498,6 +514,26 @@ mod tests {
 				.abs()
 				< 1e-5
 		);
+		Ok(())
+	}
+
+	#[test]
+	fn high_bush_shoots_command_preserves_shape_params() -> Result<()> {
+		use chico_tree_components::HighBushFoliageStyle;
+
+		let cmd = crate::commands::PlaygroundCommand::parse_line(
+			"render high-bush-shoots --height 12 --shoot-count 8 --foliage-style tuft",
+		)
+		.map_err(|e| anyhow::anyhow!("{e}"))?;
+		let crate::commands::PlaygroundCommand::Render(Render::HighBushShoots(helper)) = cmd else {
+			anyhow::bail!("expected high-bush-shoots render command");
+		};
+		assert!((helper.inner.shape.height - 12.0).abs() < 1e-5);
+		assert_eq!(helper.inner.shape.shoot_count, 8);
+		assert_eq!(helper.inner.shape.foliage_style, HighBushFoliageStyle::Tuft);
+		let mut shape = helper.inner.shape.clone();
+		chico_tree_components::apply_common_high_bush_preset(&mut shape);
+		assert_eq!(shape.shoot_count, 8);
 		Ok(())
 	}
 

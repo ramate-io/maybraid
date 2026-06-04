@@ -12,6 +12,7 @@ rust-version = { workspace = true }
 [dependencies]
 bevy = { workspace = true }
 chico-ball-components = { workspace = true }
+chico-stick-components = { workspace = true }
 chico-sbs-geometry = { workspace = true, features = ["render"] }
 procedural-common = { workspace = true }
 render-item = { workspace = true }

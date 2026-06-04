@@ -24,6 +24,7 @@ chico-ball-components = { workspace = true, features = ["clap"] }
 chico-sdf = { workspace = true }
 chico-stick-components = { workspace = true }
 chico-vegetation-shaders = { workspace = true }
+procedural-common = { workspace = true, features = ["clap"] }
 
 [dev-dependencies]
 anyhow = { workspace = true }
