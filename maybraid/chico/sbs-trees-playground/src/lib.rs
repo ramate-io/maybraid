@@ -22,6 +22,7 @@ use bevy::prelude::*;
 use chico_ball_components::frond::FrondRenderItemPlugin;
 use chico_ball_components::tuft::render_item_plugin::TuftRenderItemPlugin;
 use chico_sbs_trees::date_palm::render_item_plugin::ensure_registered as ensure_date_palm_render_plugins;
+use chico_sbs_trees::palm_bush::render_item_plugin::ensure_registered as ensure_palm_bush_render_plugins;
 use chico_sbs_trees::waialea_palm::render_item_plugin::ensure_registered as ensure_waialea_palm_render_plugins;
 use chico_sbs_trees::storybook_tree::render_item_plugin::ensure_registered as ensure_storybook_tree_render_plugins;
 use chico_sbs_trees::penmarch_torch::render_item_plugin::ensure_registered as ensure_penmarch_torch_render_plugins;
@@ -58,6 +59,7 @@ impl Plugin for SbsTreesPlaygroundPlugin {
 		ensure_northern_conifer_render_plugins(app);
 		ensure_temperate_conifer_render_plugins(app);
 		ensure_date_palm_render_plugins(app);
+		ensure_palm_bush_render_plugins(app);
 		ensure_waialea_palm_render_plugins(app);
 		ensure_storybook_tree_render_plugins(app);
 		ensure_penmarch_torch_render_plugins(app);
@@ -110,6 +112,7 @@ impl Plugin for SbsTreesPlaygroundPlugin {
 							dispatch_render_items::<render::RenderTemperateConifer>,
 							dispatch_render_items::<render::RenderDatePalm>,
 							dispatch_render_items::<render::RenderWaialeaPalm>,
+							dispatch_render_items::<render::RenderPalmBush>,
 							dispatch_render_items::<render::RenderStorybookTree>,
 							dispatch_render_items::<render::RenderPenmarchTorch>,
 							dispatch_render_items::<render::RenderKamakuraTorch>,

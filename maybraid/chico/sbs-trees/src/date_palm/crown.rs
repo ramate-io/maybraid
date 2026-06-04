@@ -1,10 +1,12 @@
 //! Stacked [`FrondCrown`] rings at the trunk tip (RFC palm crown).
 
 use bevy::prelude::*;
-use chico_ball_components::frond::{FrondCrown, FrondCrownShape};
+use chico_ball_components::frond::FrondCrownShape;
 use chico_sbs_geometry::{BallStickChain, DatePalmChain, DatePalmSbs};
 use procedural_common::NoiseParams;
-use render_item::{CascadeChunk, RenderItem};
+use render_item::CascadeChunk;
+
+use crate::palm_crown::spawn_stacked_frond_crowns;
 
 /// Frond spine length in world units (`shape.length * frond_world_scale`).
 const FROND_LENGTH_FRACTION_OF_HEIGHT: f32 = 0.7;
@@ -56,25 +58,15 @@ where
 	LeafM: Material + Send + Sync + 'static,
 	LeafS: Clone + Into<MeshMaterial3d<LeafM>> + Send + Sync + 'static,
 {
-	let mut out = Vec::new();
-	let ring_count = geometry.crown.ring_count;
-	let uniform_scale = geometry.frond_world_scale;
-
-	for ring in 0..ring_count {
-		let world_pos = geometry.crown_ring_position(chain, ring);
-		let local = root_transform
-			.rotation
-			.inverse()
-			.mul_vec3(world_pos - root_transform.translation);
-		let local_transform =
-			Transform { translation: local, scale: Vec3::splat(uniform_scale), ..default() };
-		let seed = foliage_noise.seed.wrapping_add(ring as i32 * 17);
-		let crown = FrondCrown::from_shape(
-			frond_shape_for_ring(geometry, ring, seed),
-			leaf_material.clone(),
-		);
-		out.extend(crown.spawn_render_items(commands, cascade_chunk, local_transform));
-	}
-
-	out
+	spawn_stacked_frond_crowns::<LeafM, LeafS>(
+		geometry.crown.ring_count,
+		|ring| geometry.crown_ring_position(chain, ring),
+		|ring, seed| frond_shape_for_ring(geometry, ring, seed),
+		geometry.frond_world_scale,
+		foliage_noise,
+		leaf_material,
+		commands,
+		cascade_chunk,
+		root_transform,
+	)
 }

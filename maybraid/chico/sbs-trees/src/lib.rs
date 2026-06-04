@@ -1,6 +1,7 @@
 //! Stalk and ball-stick trees for Chico vegetation.
 pub use chico_sdf;
 
+pub mod palm_crown;
 pub mod braid_oak_tree;
 pub mod date_palm;
 pub mod jungle_storybook_tree;
@@ -18,6 +19,7 @@ pub mod skipped_mesh_material;
 pub mod sopes_banyan;
 pub mod honu_banyan;
 pub mod storybook_tree;
+pub mod palm_bush;
 pub mod waialea_palm;
 
 pub use braid_oak_tree::BraidOakTreeStd;
@@ -38,4 +40,5 @@ pub use penmarch_torch::PenmarchTorchStd;
 pub use kamakura_torch::KamakuraTorchStd;
 pub use rorys_head_trained::RorysHeadTrainedStd;
 pub use vase_tree::VaseTreeStd;
+pub use palm_bush::PalmBushStd;
 pub use waialea_palm::WaialeaPalmStd;

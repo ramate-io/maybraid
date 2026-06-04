@@ -1,5 +1,6 @@
 //! Restricted ball-stick **SBS** (stalk / branch / seed) configs for recipes and CLI.
 pub mod date_palm;
+pub mod palm_bush;
 pub mod waialea_palm;
 pub mod liams_conifer;
 pub mod northern_conifer;

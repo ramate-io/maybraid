@@ -8,6 +8,7 @@ use procedural_common::NoiseConfig;
 use super::strict_stalk::StrictStalk;
 use super::Anchors;
 use crate::chain::date_palm::{DatePalmChain, DatePalmPhase};
+use crate::palm_crown::vertical_bias_mix;
 use crate::chain::BranchOut;
 use crate::chain::DepthBudget;
 use crate::BallStickNode;
@@ -83,10 +84,12 @@ impl DatePalmProtoAnchors {
 
 	/// RFC `mix(low, high, u)` for ring index `ring` in `0..ring_count`.
 	pub fn ring_vertical_bias(&self, ring: u32) -> f32 {
-		let n = self.ring_count.max(1);
-		let u = if n <= 1 { 0.0 } else { ring as f32 / (n - 1) as f32 };
-		self.crown_vertical_bias_low
-			+ (self.crown_vertical_bias_high - self.crown_vertical_bias_low) * u
+		vertical_bias_mix(
+			ring,
+			self.ring_count,
+			self.crown_vertical_bias_low,
+			self.crown_vertical_bias_high,
+		)
 	}
 
 	pub fn hysteresis_seeds(&self, chain_noise: NoiseConfig) -> Vec<DatePalmChain> {

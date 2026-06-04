@@ -4,6 +4,7 @@ use chico_ball_components::tuft::{
 	BuddhaHandTuft, BladeTuft, SpearTuft, SucculentTuft, WeepingTuft,
 };
 use chico_sbs_trees::date_palm::DatePalm;
+use chico_sbs_trees::palm_bush::PalmBush;
 use chico_sbs_trees::waialea_palm::WaialeaPalm;
 use chico_sbs_trees::liams_conifer::LiamsConifer;
 use chico_sbs_trees::friends_conifer::FriendsConifer;
@@ -95,6 +96,12 @@ pub type RenderWaialeaPalm = WaialeaPalm<
 	SkippedStickMeshMaterial<ChicoStickMaterial>,
 	ChicoLeafMaterial,
 	SkippedLeafMeshMaterial<ChicoLeafMaterial>,
+>;
+
+/// [`PalmBush`] — trunkless ground-anchored frond cluster ([#231](https://github.com/ramate-io/maybraid/issues/231)).
+pub type RenderPalmBush = PalmBush<
+	StandardMaterial,
+	SkippedLeafMeshMaterial<StandardMaterial>,
 >;
 
 /// [`StorybookTree`] — default broadleaf stalk + log-tapered radial canopy ([#230](https://github.com/ramate-io/maybraid/issues/230)).
@@ -206,6 +213,7 @@ pub enum RenderSubject {
 	TemperateConifer(RenderTemperateConifer),
 	DatePalm(RenderDatePalm),
 	WaialeaPalm(RenderWaialeaPalm),
+	PalmBush(RenderPalmBush),
 	StorybookTree(RenderStorybookTree),
 	PenmarchTorch(RenderPenmarchTorch),
 	KamakuraTorch(RenderKamakuraTorch),
@@ -236,6 +244,7 @@ impl RenderSubject {
 			Self::TemperateConifer(_) => "TemperateConifer",
 			Self::DatePalm(_) => "DatePalm",
 			Self::WaialeaPalm(_) => "WaialeaPalm",
+			Self::PalmBush(_) => "PalmBush",
 			Self::StorybookTree(_) => "StorybookTree",
 			Self::PenmarchTorch(_) => "PenmarchTorch",
 			Self::KamakuraTorch(_) => "KamakuraTorch",
@@ -288,6 +297,7 @@ impl RenderSubject {
 			}
 			Self::DatePalm(t) => format!("{:?}", t.geometry),
 			Self::WaialeaPalm(t) => format!("{:?}", t.geometry),
+			Self::PalmBush(t) => format!("{:?}", t.geometry),
 			Self::StorybookTree(t) => format!("{:?}", t.geometry),
 			Self::PenmarchTorch(t) => format!("{:?}", t.geometry),
 			Self::KamakuraTorch(t) => format!("{:?}", t.geometry),
@@ -319,6 +329,7 @@ impl RenderSubject {
 			Self::TemperateConifer(tree) => RenderDispatch::TemperateConifer(tree.clone()),
 			Self::DatePalm(tree) => RenderDispatch::DatePalm(tree.clone()),
 			Self::WaialeaPalm(tree) => RenderDispatch::WaialeaPalm(tree.clone()),
+			Self::PalmBush(tree) => RenderDispatch::PalmBush(tree.clone()),
 			Self::StorybookTree(tree) => RenderDispatch::StorybookTree(tree.clone()),
 			Self::PenmarchTorch(tree) => RenderDispatch::PenmarchTorch(tree.clone()),
 			Self::KamakuraTorch(tree) => RenderDispatch::KamakuraTorch(tree.clone()),
@@ -350,6 +361,7 @@ enum RenderDispatch {
 	TemperateConifer(RenderTemperateConifer),
 	DatePalm(RenderDatePalm),
 	WaialeaPalm(RenderWaialeaPalm),
+	PalmBush(RenderPalmBush),
 	StorybookTree(RenderStorybookTree),
 	PenmarchTorch(RenderPenmarchTorch),
 	KamakuraTorch(RenderKamakuraTorch),
@@ -452,6 +464,9 @@ pub fn sync_render(
 			commands.spawn((bundle, DispatchRenderItem::new(tree)));
 		}
 		RenderDispatch::WaialeaPalm(tree) => {
+			commands.spawn((bundle, DispatchRenderItem::new(tree)));
+		}
+		RenderDispatch::PalmBush(tree) => {
 			commands.spawn((bundle, DispatchRenderItem::new(tree)));
 		}
 		RenderDispatch::StorybookTree(tree) => {
