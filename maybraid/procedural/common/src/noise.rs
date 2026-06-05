@@ -291,6 +291,26 @@ pub trait FromScalarNoise {
 	fn from_scalar(seed_scalar: f32, frequency: f32, amplitude: f32, octaves: u32) -> Self;
 }
 
+pub trait BuildWithNoise<T> {
+	/// Builds a resultant type from the noise params.
+	fn build_with_noise(self, noise: NoiseParams) -> T;
+}
+
+pub trait WithNoise {
+	/// Reconstructs an instance of self with give noise params.
+	fn with_noise(self, noise: NoiseParams) -> Self;
+}
+
+/// Implements `BuildWithNoise` for types that implement `WithNoise`.
+impl<T> BuildWithNoise<T> for T
+where
+	T: WithNoise,
+{
+	fn build_with_noise(self, noise: NoiseParams) -> T {
+		self.with_noise(noise)
+	}
+}
+
 /// Override structural noise params on a composable builder.
 pub trait SetNoiseParams {
 	fn with_noise_params(self, params: NoiseParams) -> Self;

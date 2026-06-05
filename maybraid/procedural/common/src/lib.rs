@@ -1,6 +1,7 @@
 //! Procedural primitives shared across Maybraid (noise, fields, …).
 
 pub mod args;
+pub mod distributions;
 pub mod mu;
 pub mod noise;
 
