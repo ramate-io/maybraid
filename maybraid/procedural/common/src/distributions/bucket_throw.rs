@@ -1,12 +1,30 @@
+//! Ordered weighted **bucket throw** selection ([RFC-183 3.4.2.1]).
+//!
+//! Variants sit in contiguous buckets on a wrapped number line; each bucket's **weight** sets its
+//! span and **order** is the vector index. Selection evaluates
+//!
+//! ```text
+//! idx = bucket_lookup(wrap(mean_anchor + shift + sample, total_weight))
+//! ```
+//!
+//! where `sample` is an independent noise draw mapped to `[-total_weight/2, total_weight/2]`
+//! (half span is enough to cover the full wrapped line when the draw is centered at zero).
+//! [`BucketThrow::select`] takes the combined `shift + sample`; [`BucketThrow::mean_anchor`]
+//! holds the authored center (default `0.0`). Parent **perturbation** of bucket sizes should
+//! produce a new distribution with reweighted buckets before lookup—this module does not mutate
+//! weights in place.
+//!
+//! [RFC-183 3.4.2.1]: https://github.com/ramate-io/maybraid/tree/main/rfc/rfc-000-000-183-chico-vegetation/03-04-cellular-groves/02-selection-and-placement/01-bucket-throw/README.md
+
 use crate::noise::{BuildWithNoise, NoiseConfig, NoiseParams};
 use bevy_math::{Vec2, Vec3};
 
+/// One ordered bucket in a [`BucketThrow`] distribution.
 #[derive(Debug, Clone)]
 pub struct Bucket {
 	weight: f32,
 }
 
-/// A bucket in a bucket throw distribution.
 impl Bucket {
 	pub fn new(weight: f32) -> Self {
 		Self { weight }
@@ -17,15 +35,21 @@ impl Bucket {
 	}
 }
 
-// A bucket throw distribution.
+/// Ordered weighted buckets on a wrapped line for locally coherent variant selection.
 #[derive(Debug, Clone)]
 pub struct BucketThrow {
 	/// Mostly, distributions are small, so it is cheaper to just iterate over a Vec.
 	buckets: Vec<Bucket>,
-	/// The mean anchor is the center of the throw.
+	/// Center of the throw in bucket space (default `0.0`; see [RFC-183 3.4.2.1.1]).
 	mean_anchor: f32,
-	/// The total weight of the distribution.
+	/// Sum of bucket weights; also the wrap modulus.
 	total_weight: f32,
+}
+
+impl Default for BucketThrow {
+	fn default() -> Self {
+		Self::new()
+	}
 }
 
 impl BucketThrow {
@@ -33,23 +57,49 @@ impl BucketThrow {
 		Self { buckets: vec![], mean_anchor: 0.0, total_weight: 0.0 }
 	}
 
-	/// The total weight of the distribution.
+	pub fn is_empty(&self) -> bool {
+		self.buckets.is_empty()
+	}
+
+	pub fn len(&self) -> usize {
+		self.buckets.len()
+	}
+
 	pub fn total_weight(&self) -> f32 {
 		self.total_weight
 	}
 
-	/// Adds a bucket to the distribution.
+	pub fn mean_anchor(&self) -> f32 {
+		self.mean_anchor
+	}
+
+	/// Replace the mean anchor (parent **shift** can also be passed into [`Self::select`]).
+	pub fn with_mean_anchor(mut self, mean_anchor: f32) -> Self {
+		self.mean_anchor = mean_anchor;
+		self
+	}
+
+	/// Append a bucket in order. Non-finite and non-positive weights are ignored.
 	pub fn add(&mut self, weight: f32) {
+		if !weight.is_finite() || weight <= 0.0 {
+			return;
+		}
 		self.buckets.push(Bucket::new(weight));
 		self.total_weight += weight;
 	}
 
-	/// Anchors the throw within the distribution according to the mean anchor.
+	/// Map `shift + sample` into `[0, total_weight)`.
 	pub fn anchored_throw(&self, throw: f32) -> f32 {
-		(self.mean_anchor + throw).rem_euclid(self.total_weight())
+		let total = self.total_weight();
+		if total <= 0.0 || !total.is_finite() {
+			return 0.0;
+		}
+		(self.mean_anchor + throw).rem_euclid(total)
 	}
 
-	/// Selects a bucket from the distribution.
+	/// Select a bucket index from `throw` (`shift + sample` in bucket space).
+	///
+	/// Buckets form half-open intervals `[0, w0), [w0, w0+w1), …` along the wrapped line.
 	pub fn select(&self, throw: f32) -> Option<usize> {
 		if self.buckets.is_empty() {
 			return None;
@@ -60,21 +110,21 @@ impl BucketThrow {
 			return None;
 		}
 
-		let mut throw = self.anchored_throw(throw);
+		let mut cursor = self.anchored_throw(throw);
 
 		for (index, bucket) in self.buckets.iter().enumerate() {
-			throw -= bucket.weight();
-			if throw <= 0.0 {
+			cursor -= bucket.weight();
+			if cursor < 0.0 {
 				return Some(index);
 			}
 		}
 
+		// Floating-point residue at the last bucket boundary.
 		Some(self.buckets.len() - 1)
 	}
 }
 
-/// The underlying implementation of a bucket distribution simply selects
-/// an instance stored in the distribution.
+/// [`BucketThrow`] plus stored variant values.
 #[derive(Debug, Clone)]
 pub struct TypedBucketThrow<T>
 where
@@ -82,6 +132,15 @@ where
 {
 	distribution: BucketThrow,
 	items: Vec<T>,
+}
+
+impl<T> Default for TypedBucketThrow<T>
+where
+	T: Sized,
+{
+	fn default() -> Self {
+		Self::new()
+	}
 }
 
 impl<T> TypedBucketThrow<T>
@@ -92,59 +151,154 @@ where
 		Self { distribution: BucketThrow::new(), items: vec![] }
 	}
 
-	/// Adds an item to the distribution.
+	pub fn len(&self) -> usize {
+		self.items.len()
+	}
+
+	pub fn is_empty(&self) -> bool {
+		self.items.is_empty()
+	}
+
+	pub fn with_mean_anchor(mut self, mean_anchor: f32) -> Self {
+		self.distribution = self.distribution.with_mean_anchor(mean_anchor);
+		self
+	}
+
 	pub fn add(&mut self, item: T, weight: f32) {
 		self.distribution.add(weight);
 		self.items.push(item);
 	}
 
-	/// Selects an item from the distribution.
 	pub fn select(&self, throw: f32) -> Option<&T> {
 		self.distribution.select(throw).map(|index| &self.items[index])
 	}
 
-	/// Builds a resultant type from the noise params.
 	pub fn build<S>(&self, throw: f32, noise: NoiseParams) -> Option<S>
 	where
 		T: BuildWithNoise<S>,
 	{
-		let builder = self.select(throw);
-		builder.map(|item| item.build_with_noise(noise))
+		self.select(throw).map(|item| item.build_with_noise(noise))
 	}
 
-	/// Selects from noise params in 2d
+	/// Independent centered noise sample scaled to `[-total_weight/2, total_weight/2]`.
+	fn selection_throw(&self, sample: f32) -> f32 {
+		sample * self.distribution.total_weight() * 0.5
+	}
+
 	pub fn select_from_noise_2d(&self, noise: NoiseParams, position: Vec2) -> Option<&T> {
-		let total_weight = self.distribution.total_weight();
-		let half_weight = total_weight / 2.0;
-		// Sample is centered around 0 in the distribution, so we need to scale it by half the total weight to get a value between -half_weight and half_weight
-		let throw = NoiseConfig::new(noise).sample_2d_world(position) * half_weight;
-		self.select(throw)
+		let sample = NoiseConfig::new(noise).sample_2d_world(position);
+		self.select(self.selection_throw(sample))
 	}
 
-	/// Selects from noise params in 3d
 	pub fn select_from_noise_3d(&self, noise: NoiseParams, position: Vec3) -> Option<&T> {
-		let total_weight = self.distribution.total_weight();
-		let half_weight = total_weight / 2.0;
-		// Sample is centered around 0 in the distribution, so we need to scale it by half the total weight to get a value between -half_weight and half_weight
-		let throw = NoiseConfig::new(noise).sample_3d_world(position) * half_weight;
-		self.select(throw)
+		let sample = NoiseConfig::new(noise).sample_3d_world(position);
+		self.select(self.selection_throw(sample))
 	}
 
-	/// Builds from noise params in 2d
 	pub fn build_from_noise_2d<S>(&self, noise: NoiseParams, position: Vec2) -> Option<S>
 	where
 		T: BuildWithNoise<S>,
 	{
-		let builder = self.select_from_noise_2d(noise, position);
-		builder.map(|item| item.build_with_noise(noise))
+		self.select_from_noise_2d(noise, position)
+			.map(|item| item.build_with_noise(noise))
 	}
 
-	/// Builds from noise params in 3d
 	pub fn build_from_noise_3d<S>(&self, noise: NoiseParams, position: Vec3) -> Option<S>
 	where
 		T: BuildWithNoise<S>,
 	{
-		let builder = self.select_from_noise_3d(noise, position);
-		builder.map(|item| item.build_with_noise(noise))
+		self.select_from_noise_3d(noise, position)
+			.map(|item| item.build_with_noise(noise))
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use anyhow::Result;
+
+	fn three_equal() -> BucketThrow {
+		let mut d = BucketThrow::new();
+		d.add(1.0);
+		d.add(1.0);
+		d.add(1.0);
+		d
+	}
+
+	#[test]
+	fn empty_distribution_returns_none() -> Result<()> {
+		let d = BucketThrow::new();
+		assert!(d.select(0.0).is_none());
+		Ok(())
+	}
+
+	#[test]
+	fn non_positive_total_weight_returns_none() -> Result<()> {
+		let mut d = BucketThrow::new();
+		d.add(-1.0);
+		assert_eq!(d.len(), 0);
+		assert!(d.select(0.0).is_none());
+		Ok(())
+	}
+
+	#[test]
+	fn equal_weights_select_by_half_open_intervals() -> Result<()> {
+		let d = three_equal();
+		assert_eq!(d.select(0.0), Some(0));
+		assert_eq!(d.select(0.999), Some(0));
+		assert_eq!(d.select(1.0), Some(1));
+		assert_eq!(d.select(2.0), Some(2));
+		assert_eq!(d.select(2.999), Some(2));
+		Ok(())
+	}
+
+	#[test]
+	fn weighted_buckets_scale_interval_width() -> Result<()> {
+		let mut d = BucketThrow::new();
+		d.add(3.0);
+		d.add(1.0);
+		assert_eq!(d.select(0.0), Some(0));
+		assert_eq!(d.select(2.999), Some(0));
+		assert_eq!(d.select(3.0), Some(1));
+		Ok(())
+	}
+
+	#[test]
+	fn anchored_throw_wraps() -> Result<()> {
+		let d = three_equal();
+		assert!((d.anchored_throw(3.5) - 0.5).abs() < 1e-5);
+		assert!((d.anchored_throw(-0.5) - 2.5).abs() < 1e-5);
+		Ok(())
+	}
+
+	#[test]
+	fn mean_anchor_shifts_selection() -> Result<()> {
+		let d = three_equal().with_mean_anchor(1.0);
+		assert_eq!(d.select(0.0), Some(1));
+		assert_eq!(d.select(-1.0), Some(0));
+		Ok(())
+	}
+
+	#[test]
+	fn typed_select_returns_matching_item() -> Result<()> {
+		let mut d = TypedBucketThrow::new();
+		d.add('a', 1.0);
+		d.add('b', 2.0);
+		assert_eq!(d.select(0.0), Some(&'a'));
+		assert_eq!(d.select(1.5), Some(&'b'));
+		Ok(())
+	}
+
+	#[test]
+	fn noise_selection_is_deterministic() -> Result<()> {
+		let mut d = TypedBucketThrow::new();
+		d.add(10_u32, 1.0);
+		d.add(20_u32, 1.0);
+		let noise = NoiseParams { seed: 99, frequency: 0.25, ..Default::default() };
+		let pos = Vec2::new(4.0, 7.0);
+		let a = d.select_from_noise_2d(noise, pos);
+		let b = d.select_from_noise_2d(noise, pos);
+		assert_eq!(a, b);
+		Ok(())
 	}
 }
