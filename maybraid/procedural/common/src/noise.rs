@@ -8,7 +8,7 @@
 
 use std::sync::Arc;
 
-use bevy_math::Vec3;
+use bevy_math::{Vec2, Vec3};
 use fastnoise_lite::{FastNoiseLite, FractalType, NoiseType};
 
 /// Parse [`NoiseType`] from CLI / config strings (kebab-case or snake_case).
@@ -205,6 +205,15 @@ impl NoiseConfig {
 		self.gain(self.generator.get_noise_2d(x * f, y * f))
 	}
 
+	pub fn sample_2d_world(&self, position: Vec2) -> f32 {
+		self.sample_2d_weighted(position, self.params.domain_weights.truncate())
+	}
+
+	pub fn sample_2d_weighted(&self, position: Vec2, domain_weights: Vec2) -> f32 {
+		let q = position * domain_weights;
+		self.sample_2d(q.x, q.y)
+	}
+
 	pub fn sample_3d(&self, x: f32, y: f32, z: f32) -> f32 {
 		let f = self.params.frequency;
 		self.gain(self.generator.get_noise_3d(x * f, y * f, z * f))
@@ -293,12 +302,12 @@ pub trait FromScalarNoise {
 
 pub trait BuildWithNoise<T> {
 	/// Builds a resultant type from the noise params.
-	fn build_with_noise(self, noise: NoiseParams) -> T;
+	fn build_with_noise(&self, noise: NoiseParams) -> T;
 }
 
 pub trait WithNoise {
 	/// Reconstructs an instance of self with give noise params.
-	fn with_noise(self, noise: NoiseParams) -> Self;
+	fn with_noise(&self, noise: NoiseParams) -> Self;
 }
 
 /// Implements `BuildWithNoise` for types that implement `WithNoise`.
@@ -306,7 +315,7 @@ impl<T> BuildWithNoise<T> for T
 where
 	T: WithNoise,
 {
-	fn build_with_noise(self, noise: NoiseParams) -> T {
+	fn build_with_noise(&self, noise: NoiseParams) -> T {
 		self.with_noise(noise)
 	}
 }

@@ -4,9 +4,9 @@ Secondary foliage at **one canopy anchor** ([#226](https://github.com/ramate-io/
 
 Each [`JungleGrowth`] instance spawns:
 
-1. A **scaled [`ChicoBall`](../../ball-components)** — inner dirt/wood mass (`inner-ball-scale` × node radius), [`SkippedBodyMeshMaterial`].
-2. A **[`FrondCrown`](../../ball-components/src/frond.rs)** — outward arching shoots anchored at the inner-ball apex, draping over the mass.
-3. A **[`BuddhaHandTuft`](../../ball-components)** — upward fingers buried below the crown to conceal the anchor (fixed offset, not configurable).
+1. A **scaled [`ChicoBall`](../../../ball-components/)** — inner dirt/wood mass (`inner-ball-scale` × node radius), [`SkippedBodyMeshMaterial`].
+2. A **[`FrondCrown`](../../../ball-components/src/frond.rs)** — outward arching shoots anchored at the inner-ball apex, draping over the mass.
+3. A **[`BuddhaHandTuft`](../../../ball-components)** — upward fingers buried below the crown to conceal the anchor (fixed offset, not configurable).
 
 **Node selection** (which anchors receive growth) is owned by the composing tree recipe, not this module.
 
@@ -37,4 +37,4 @@ Body, frond crown, and Buddha's-hand spawn as **children** of one assembly root 
 
 ## Follow-up
 
-- Wire into [`SopesBanyan`](../../sbs-trees/src/sopes_banyan.rs) behind a dense-variant flag
+- Wire into [`SopesBanyan`](../../../sbs-trees/src/sopes_banyan.rs) behind a dense-variant flag
