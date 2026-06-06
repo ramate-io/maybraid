@@ -60,12 +60,12 @@ impl<M: Material, S> FromScalarNoise for ChicoStick<M, S>
 where
 	S: Clone + Into<MeshMaterial3d<M>> + Default,
 {
-	fn from_scalar(seed_scalar: f32, frequency: f32, amplitude: f32, octaves: u32) -> Self {
+	fn from_scalar(noise: NoiseParams) -> Self {
 		Self {
-			seed_scalar,
-			frequency,
-			amplitude,
-			octaves,
+			seed_scalar: noise.seed as f32,
+			frequency: noise.frequency,
+			amplitude: noise.amplitude,
+			octaves: noise.octaves,
 			segment_base_radius: 0.5,
 			segment_top_radius: 0.4,
 			cylinder_bounds_margin: 0.0,

@@ -122,7 +122,9 @@ impl<Item: RenderItem, Rule: StickRenderRule<Item, H> + FromScalarNoise, H: Hyst
 		frequency: f32,
 		octaves: u32,
 	) -> Self {
-		let rule = Rule::from_scalar(scalar, frequency, amplitude, octaves);
+		let rule = Rule::from_scalar(NoiseParams::from_scalar(
+			scalar, frequency, amplitude, octaves,
+		));
 		Self::new(chain, rule)
 	}
 }

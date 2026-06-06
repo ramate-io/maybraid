@@ -16,6 +16,9 @@
 //!
 //! [RFC-183 3.4.2.1]: https://github.com/ramate-io/maybraid/tree/main/rfc/rfc-000-000-183-chico-vegetation/03-04-cellular-groves/02-selection-and-placement/01-bucket-throw/README.md
 
+#[macro_use]
+mod r#macro;
+
 use crate::noise::{BuildWithNoise, NoiseConfig, NoiseParams};
 use bevy_math::{Vec2, Vec3};
 
@@ -80,12 +83,13 @@ impl BucketThrow {
 	}
 
 	/// Append a bucket in order. Non-finite and non-positive weights are ignored.
-	pub fn add(&mut self, weight: f32) {
+	pub fn add(&mut self, weight: f32) -> bool {
 		if !weight.is_finite() || weight <= 0.0 {
-			return;
+			return false;
 		}
 		self.buckets.push(Bucket::new(weight));
 		self.total_weight += weight;
+		true
 	}
 
 	/// Map `shift + sample` into `[0, total_weight)`.
@@ -165,8 +169,9 @@ where
 	}
 
 	pub fn add(&mut self, item: T, weight: f32) {
-		self.distribution.add(weight);
-		self.items.push(item);
+		if self.distribution.add(weight) {
+			self.items.push(item);
+		}
 	}
 
 	pub fn select(&self, throw: f32) -> Option<&T> {
@@ -300,5 +305,58 @@ mod tests {
 		let b = d.select_from_noise_2d(noise, pos);
 		assert_eq!(a, b);
 		Ok(())
+	}
+
+	mod macro_tests {
+		use super::*;
+		use crate::FromScalarNoise;
+
+		#[derive(Debug, Clone, PartialEq)]
+		struct Oak {
+			seed: i32,
+		}
+
+		#[derive(Debug, Clone, PartialEq)]
+		struct Pine {
+			seed: i32,
+		}
+
+		impl FromScalarNoise for Oak {
+			fn from_scalar(noise: NoiseParams) -> Self {
+				Self { seed: noise.seed }
+			}
+		}
+
+		impl FromScalarNoise for Pine {
+			fn from_scalar(noise: NoiseParams) -> Self {
+				Self { seed: noise.seed + 1 }
+			}
+		}
+
+		crate::bucket_throw! {
+			#[derive(Debug, PartialEq)]
+			enum SampleTree {
+				Oak(Oak) => 1.0,
+				Pine(Pine) => 2.0,
+			}
+		}
+
+		#[test]
+		fn macro_declares_distribution_and_builds() -> Result<()> {
+			let dist = SampleTree::bucket_throw();
+			assert_eq!(dist.len(), 2);
+			let noise = NoiseParams { seed: 7, ..Default::default() };
+			let tree = dist.build(0.0, noise).expect("selection");
+			assert_eq!(tree, SampleTree::Oak(Oak { seed: 7 }));
+			Ok(())
+		}
+
+		#[test]
+		fn macro_respects_weights() -> Result<()> {
+			let dist = SampleTree::bucket_throw();
+			assert_eq!(dist.select(0.0), Some(&SampleTreeBuilder::Oak));
+			assert_eq!(dist.select(1.5), Some(&SampleTreeBuilder::Pine));
+			Ok(())
+		}
 	}
 }
