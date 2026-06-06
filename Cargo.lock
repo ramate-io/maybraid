@@ -2854,7 +2854,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "gimme"
+name = "gimme-core"
 version = "0.0.1"
 dependencies = [
  "anyhow",

@@ -27,7 +27,7 @@ members = [
   "maybraid/chico/tree-components",
   "maybraid/chico/sbs-geometry",
   "maybraid/chico/groves",
-  "maybraid/gimme",
+  "maybraid/gimme/core",
 
   # legacy still being refactored out: engine
   "engine",
