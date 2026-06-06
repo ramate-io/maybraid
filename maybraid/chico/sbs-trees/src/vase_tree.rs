@@ -13,7 +13,7 @@ use chico_sbs_geometry::render::stick::StickRenderHelper;
 use chico_sbs_geometry::{stalk_tip_from_chain, BallStickChain, StorybookTreeChain, VaseTreeSbs};
 use clap::Args;
 use procedural_common::noise_params_from_scalar_str;
-use procedural_common::{FromScalarNoise, NoiseParams};
+use procedural_common::NoiseParams;
 use render_item::{CascadeChunk, RenderItem};
 
 use chico_sbs_geometry::DEFAULT_APEX_BALL_RADIUS_FRACTION_OF_HEIGHT;

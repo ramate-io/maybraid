@@ -6,7 +6,7 @@ use bevy::prelude::*;
 use chico_ball_components::chico_ball::ChicoBall;
 use chico_ball_components::frond::FrondCrown;
 use chico_ball_components::tuft::BuddhaHandTuft;
-use procedural_common::{FromScalarNoise, NoiseParams};
+use procedural_common::NoiseParams;
 use render_item::{CascadeChunk, RenderItem};
 
 use super::config::JungleGrowthShape;

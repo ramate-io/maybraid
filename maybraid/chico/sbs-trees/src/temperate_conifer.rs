@@ -39,7 +39,7 @@ impl std::ops::Deref for TemperateConiferGeometry {
 }
 use procedural_common::noise_params_from_scalar_str;
 use procedural_common::parse_unit_range;
-use procedural_common::{FromScalarNoise, NoiseParams, UnitRange};
+use procedural_common::{NoiseParams, UnitRange};
 use render_item::{CascadeChunk, RenderItem};
 
 use crate::skipped_mesh_material::{SkippedLeafMeshMaterial, SkippedStickMeshMaterial};
