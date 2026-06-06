@@ -11,6 +11,8 @@ rust-version = { workspace = true }
 
 [dependencies]
 bevy_math = { workspace = true }
+gimme-core = { workspace = true }
+thiserror = { workspace = true }
 
 [dev-dependencies]
 anyhow = { workspace = true }
