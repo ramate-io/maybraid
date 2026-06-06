@@ -2854,6 +2854,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "gimme"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "bevy_math",
+]
+
+[[package]]
 name = "gl_generator"
 version = "0.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
