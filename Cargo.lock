@@ -1880,6 +1880,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "chico-groves"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "bevy_math",
+ "clap",
+ "log",
+ "procedural-common",
+ "render-item",
+]
+
+[[package]]
 name = "chico-sbs-geometry"
 version = "0.0.1"
 dependencies = [
