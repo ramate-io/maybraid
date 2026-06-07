@@ -11,7 +11,7 @@ pub enum SpatialIndexError {
 
 /// This is just a marker now for a typed spatial index.
 pub trait TypedSpatialIndex<T> {
-	fn read_one(&self, region: &Aabb3d) -> Result<Option<T>, SpatialIndexError>;
+	fn read_one(&self, region: &Aabb3d) -> Result<Option<&T>, SpatialIndexError>;
 
-	fn insert(&mut self, value: T) -> Result<(), SpatialIndexError>;
+	fn insert(&mut self, value: T, bounds: Aabb3d) -> Result<&T, SpatialIndexError>;
 }

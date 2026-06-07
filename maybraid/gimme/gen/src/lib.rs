@@ -22,6 +22,18 @@ impl Deref for Cell {
 	}
 }
 
+impl Cell {
+	/// Returns the cell as a region.
+	pub fn as_region(&self) -> &Aabb3d {
+		&self.0
+	}
+
+	/// Converts the cell to a region.
+	pub fn into_region(self) -> Aabb3d {
+		self.0
+	}
+}
+
 /// The base generator trait simply asks for a the implementer to provide a method for get or generating types within a requested region.
 pub trait Generator<T>: TypedSpatialIndex<T> {
 	/// Generates and inserts type instances intersecting with the region.  
@@ -42,13 +54,14 @@ where
 	/// Generates one instance on a cell.
 	fn generate_cell(&mut self, cell: &Cell) -> Result<T, GenerationError>;
 
-	fn get_or_generate_cell(&mut self, cell: &Cell) -> Result<T, GenerationError> {
-		if let Some(value) = self.read_one(cell)? {
-			return Ok(value);
+	fn get_or_generate_cell(&mut self, cell: &Cell) -> Result<&T, GenerationError> {
+		if self.read_one(cell)?.is_none() {
+			let value = self.generate_cell(cell)?;
+			self.insert(value, cell.into_region())?;
 		}
 
-		let value = self.generate_cell(cell)?;
-		self.insert(value.clone())?;
-		Ok(value)
+		self.read_one(cell)?.ok_or_else(|| {
+			GenerationError::GenerationFailed("inserted value could not be read back".into())
+		})
 	}
 }

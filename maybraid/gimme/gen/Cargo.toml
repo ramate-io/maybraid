@@ -1,5 +1,5 @@
 [package]
-name = "gimme-bevy"
+name = "gimme-gen"
 version = { workspace = true }
 edition  = { workspace = true }
 license  = { workspace = true }

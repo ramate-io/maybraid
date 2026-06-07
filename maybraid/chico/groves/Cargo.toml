@@ -16,6 +16,7 @@ procedural-common = { workspace = true }
 bevy = { workspace = true, optional = true }
 render-item = { workspace = true, optional = true  }
 log = { workspace = true }
+gimme-gen = { workspace = true }
 
 [dev-dependencies]
 anyhow = { workspace = true }

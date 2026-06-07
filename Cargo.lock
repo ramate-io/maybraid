@@ -1887,6 +1887,7 @@ dependencies = [
  "bevy",
  "bevy_math",
  "clap",
+ "gimme-gen",
  "log",
  "procedural-common",
  "render-item",
@@ -2854,21 +2855,21 @@ dependencies = [
 ]
 
 [[package]]
-name = "gimme-bevy"
-version = "0.0.1"
-dependencies = [
- "anyhow",
- "bevy_math",
- "gimme-core",
- "thiserror 1.0.69",
-]
-
-[[package]]
 name = "gimme-core"
 version = "0.0.1"
 dependencies = [
  "anyhow",
  "bevy_math",
+ "thiserror 1.0.69",
+]
+
+[[package]]
+name = "gimme-gen"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "bevy_math",
+ "gimme-core",
  "thiserror 1.0.69",
 ]
 
