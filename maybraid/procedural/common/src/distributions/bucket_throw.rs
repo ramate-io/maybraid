@@ -82,6 +82,19 @@ impl BucketThrow {
 		self
 	}
 
+	/// Build a distribution from ordered weights.
+	pub fn from_weights(weights: impl IntoIterator<Item = f32>, mean_anchor: f32) -> Self {
+		let mut distribution = Self::new().with_mean_anchor(mean_anchor);
+		for weight in weights {
+			distribution.add(weight);
+		}
+		distribution
+	}
+
+	pub fn weight_at(&self, index: usize) -> Option<f32> {
+		self.buckets.get(index).map(Bucket::weight)
+	}
+
 	/// Append a bucket in order. Non-finite and non-positive weights are ignored.
 	pub fn add(&mut self, weight: f32) -> bool {
 		if !weight.is_finite() || weight <= 0.0 {
