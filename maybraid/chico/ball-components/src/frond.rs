@@ -16,7 +16,7 @@ pub mod spine;
 use std::marker::PhantomData;
 
 use bevy::prelude::*;
-use procedural_common::FromScalarNoise;
+use procedural_common::{FromScalarNoise, NoiseParams};
 use render_item::{CascadeChunk, RenderItem};
 
 use config::FrondConfig;
@@ -139,10 +139,10 @@ impl<M: Material, S> FromScalarNoise for FrondCrown<M, S>
 where
 	S: Clone + Into<MeshMaterial3d<M>> + Default,
 {
-	fn from_scalar(seed_scalar: f32, _frequency: f32, _amplitude: f32, _octaves: u32) -> Self {
+	fn from_scalar(noise: NoiseParams) -> Self {
 		Self {
 			shape: FrondCrownShape {
-				seed: seed_scalar as i32,
+				seed: noise.seed,
 				..FrondCrownShape::default()
 			},
 			material: S::default(),

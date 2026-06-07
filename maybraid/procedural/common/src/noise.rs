@@ -8,7 +8,7 @@
 
 use std::sync::Arc;
 
-use bevy_math::Vec3;
+use bevy_math::{Vec2, Vec3};
 use fastnoise_lite::{FastNoiseLite, FractalType, NoiseType};
 
 /// Parse [`NoiseType`] from CLI / config strings (kebab-case or snake_case).
@@ -205,6 +205,15 @@ impl NoiseConfig {
 		self.gain(self.generator.get_noise_2d(x * f, y * f))
 	}
 
+	pub fn sample_2d_world(&self, position: Vec2) -> f32 {
+		self.sample_2d_weighted(position, self.params.domain_weights.truncate())
+	}
+
+	pub fn sample_2d_weighted(&self, position: Vec2, domain_weights: Vec2) -> f32 {
+		let q = position * domain_weights;
+		self.sample_2d(q.x, q.y)
+	}
+
 	pub fn sample_3d(&self, x: f32, y: f32, z: f32) -> f32 {
 		let f = self.params.frequency;
 		self.gain(self.generator.get_noise_3d(x * f, y * f, z * f))
@@ -284,11 +293,29 @@ impl NoiseConfig {
 	}
 }
 
-/// Build [`NoiseParams`] / [`NoiseConfig`] from a scalar seed lane plus **`frequency`**, **`amplitude`**, **`octaves`**.
-///
-/// The first argument is cast with `as i32` for [`NoiseParams::seed`].
+/// Build a value from procedural [`NoiseParams`] (seed lane, frequency, amplitude, octaves, …).
 pub trait FromScalarNoise {
-	fn from_scalar(seed_scalar: f32, frequency: f32, amplitude: f32, octaves: u32) -> Self;
+	fn from_scalar(noise: NoiseParams) -> Self;
+}
+
+pub trait BuildWithNoise<T> {
+	/// Builds a resultant type from the noise params.
+	fn build_with_noise(&self, noise: NoiseParams) -> T;
+}
+
+pub trait WithNoise {
+	/// Reconstructs an instance of self with give noise params.
+	fn with_noise(&self, noise: NoiseParams) -> Self;
+}
+
+/// Implements `BuildWithNoise` for types that implement `WithNoise`.
+impl<T> BuildWithNoise<T> for T
+where
+	T: WithNoise,
+{
+	fn build_with_noise(&self, noise: NoiseParams) -> T {
+		self.with_noise(noise)
+	}
 }
 
 /// Override structural noise params on a composable builder.
@@ -311,19 +338,26 @@ pub fn noise_params_from_scalar_str(s: &str) -> Result<NoiseParams, String> {
 }
 
 impl FromScalarNoise for NoiseParams {
-	fn from_scalar(seed_scalar: f32, frequency: f32, amplitude: f32, octaves: u32) -> Self {
-		Self { seed: seed_scalar as i32, frequency, amplitude, octaves, ..Default::default() }
+	fn from_scalar(noise: NoiseParams) -> Self {
+		noise
 	}
 }
 
 impl NoiseParams {
+	/// Build params from a scalar seed lane plus **`frequency`**, **`amplitude`**, **`octaves`**.
+	///
+	/// The seed lane is cast with `as i32` for [`Self::seed`].
+	pub fn from_scalar(seed_scalar: f32, frequency: f32, amplitude: f32, octaves: u32) -> Self {
+		Self { seed: seed_scalar as i32, frequency, amplitude, octaves, ..Default::default() }
+	}
+
 	pub fn with_seed(mut self, seed: i32) -> Self {
 		self.seed = seed;
 		self
 	}
 
 	pub fn build_scalar<T: FromScalarNoise>(&self) -> T {
-		T::from_scalar(self.seed as f32, self.frequency, self.amplitude, self.octaves)
+		T::from_scalar(*self)
 	}
 }
 
@@ -334,8 +368,8 @@ impl SetNoiseParams for NoiseParams {
 }
 
 impl FromScalarNoise for NoiseConfig {
-	fn from_scalar(seed_scalar: f32, frequency: f32, amplitude: f32, octaves: u32) -> Self {
-		Self::new(NoiseParams::from_scalar(seed_scalar, frequency, amplitude, octaves))
+	fn from_scalar(noise: NoiseParams) -> Self {
+		Self::new(noise)
 	}
 }
 

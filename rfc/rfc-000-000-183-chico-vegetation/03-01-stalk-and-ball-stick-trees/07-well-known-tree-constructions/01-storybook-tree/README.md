@@ -34,7 +34,7 @@ NoisyCylinder {
 
 **Anchor Rings**
 
-Radial projections begin around **30%** along the stalk (clear trunk below the canopy belt) and continue toward the top of the stalk. Ring anchors are perturbed in position and direction like Sope's Banyan ([`StalkPerturbation`](../../../../../../maybraid/chico/sbs-geometry/src/anchors/stalk_perturbation.rs)); chain growth uses elevated noise frequency on each limb.
+Radial projections begin around **30%** along the stalk (clear trunk below the canopy belt) and continue toward the top of the stalk. Ring anchors are perturbed in position and direction like Sope's Banyan.
 
 ```rust
 let z_min_frac = 0.30; // along stalk, 0 = base, 1 = tip

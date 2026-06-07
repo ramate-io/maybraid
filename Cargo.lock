@@ -4281,6 +4281,7 @@ dependencies = [
  "bevy_math",
  "clap",
  "fastnoise-lite",
+ "paste",
  "serde",
 ]
 

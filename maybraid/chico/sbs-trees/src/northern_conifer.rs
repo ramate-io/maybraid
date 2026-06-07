@@ -16,7 +16,7 @@ use chico_sbs_geometry::render::stick::StickRenderHelper;
 use chico_sbs_geometry::{BallStickChain, LiamsConiferChain, NorthernConiferSbs};
 use clap::Args;
 use procedural_common::noise_params_from_scalar_str;
-use procedural_common::{FromScalarNoise, NoiseParams};
+use procedural_common::NoiseParams;
 use render_item::{CascadeChunk, RenderItem};
 
 use crate::conifer_canopy_apex::{

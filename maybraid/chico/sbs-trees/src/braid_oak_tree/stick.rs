@@ -86,7 +86,6 @@ mod tests {
 	use super::*;
 	use bevy::prelude::Vec3;
 	use chico_sbs_geometry::BallStickNode;
-	use procedural_common::FromScalarNoise;
 
 	fn branch_chain(ring_u: f32) -> StorybookTreeChain {
 		StorybookTreeChain::new(

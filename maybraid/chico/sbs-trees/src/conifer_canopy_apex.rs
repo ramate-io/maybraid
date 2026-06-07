@@ -225,7 +225,6 @@ where
 mod tests {
 	use super::*;
 	use chico_sbs_geometry::FriendsConiferSbs;
-	use procedural_common::FromScalarNoise;
 
 	#[test]
 	fn apex_gate_is_deterministic() {

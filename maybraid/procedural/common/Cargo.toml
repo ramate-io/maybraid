@@ -18,6 +18,7 @@ serde = ["dep:serde", "bevy_math/serialize"]
 bevy_math = { workspace = true }
 clap = { workspace = true, optional = true }
 fastnoise-lite = { workspace = true }
+paste = { workspace = true }
 serde = { workspace = true, optional = true, features = ["derive"] }
 
 [dev-dependencies]

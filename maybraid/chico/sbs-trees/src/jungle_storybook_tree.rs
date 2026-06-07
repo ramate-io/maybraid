@@ -16,7 +16,7 @@ use chico_sbs_geometry::{BallStickChain, JungleStorybookTreeSbs, StorybookTreeCh
 use clap::Args;
 use chico_tree_components::{SkippedBodyMeshMaterial, SkippedFoliageMeshMaterial};
 use procedural_common::noise_params_from_scalar_str;
-use procedural_common::{FromScalarNoise, NoiseParams};
+use procedural_common::NoiseParams;
 use render_item::{CascadeChunk, RenderItem};
 
 use crate::skipped_mesh_material::{

@@ -5,7 +5,7 @@ use chico_sbs_trees::SkippedLeafMeshMaterial;
 use chico_sbs_trees::SkippedStickMeshMaterial;
 use chico_tree_components::{apply_common_high_bush_preset, HighBushShootsShape};
 use chico_vegetation_shaders::ChicoStickMaterial;
-use procedural_common::{FromScalarNoise, NoiseParams};
+use procedural_common::NoiseParams;
 
 use crate::render::RenderHighBushShoots;
 

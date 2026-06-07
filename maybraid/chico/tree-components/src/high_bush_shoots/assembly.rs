@@ -8,7 +8,7 @@ use chico_sbs_geometry::render::ball::BallRenderHelper;
 use chico_sbs_geometry::render::stick::StickRenderHelper;
 use chico_sbs_geometry::render::tuft::TuftRenderHelper;
 use chico_sbs_geometry::{BallStickChain, HighBushChain};
-use procedural_common::{FromScalarNoise, NoiseParams};
+use procedural_common::NoiseParams;
 use render_item::{CascadeChunk, RenderItem};
 
 use super::canopy::{HighBushSplayCanopyRule, HighBushTuftCanopyRule};

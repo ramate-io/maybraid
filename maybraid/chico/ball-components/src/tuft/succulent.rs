@@ -6,7 +6,7 @@
 use std::marker::PhantomData;
 
 use bevy::prelude::*;
-use procedural_common::FromScalarNoise;
+use procedural_common::{FromScalarNoise, NoiseParams};
 use render_item::{CascadeChunk, RenderItem};
 
 use super::directions::CapDirections;
@@ -85,12 +85,12 @@ impl<M: Material, S> FromScalarNoise for SucculentTuft<M, S>
 where
 	S: Clone + Into<MeshMaterial3d<M>> + Default,
 {
-	fn from_scalar(seed_scalar: f32, frequency: f32, amplitude: f32, _octaves: u32) -> Self {
+	fn from_scalar(noise: NoiseParams) -> Self {
 		Self {
 			shape: SucculentTuftShape {
-				seed: seed_scalar as i32,
-				noise_frequency: frequency,
-				noise_amplitude: amplitude,
+				seed: noise.seed,
+				noise_frequency: noise.frequency,
+				noise_amplitude: noise.amplitude,
 				..SucculentTuftShape::default()
 			},
 			material: S::default(),

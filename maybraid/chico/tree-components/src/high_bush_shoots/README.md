@@ -2,7 +2,7 @@
 
 Trunkless radial shoot construction at a ground anchor ([#225](https://github.com/ramate-io/maybraid/issues/225), [RFC §3.1.6.3](https://github.com/ramate-io/maybraid/tree/main/rfc/rfc-000-000-183-chico-vegetation/03-01-stalk-and-ball-stick-trees/06-well-known-component-constructions/03-high-bushes-and-shoots/README.md)).
 
-[`HighBushShoots`] builds one shared ball-stick graph from [`HighBushShootsShape`], spawns woody [`ChicoStick`](../../stick-components) segments, and allocates [`PlaneSplay`](../../ball-components) or [`SucculentTuft`](../../ball-components) foliage using the Common High Bush ball-selection rule ([#233](https://github.com/ramate-io/maybraid/issues/233)).
+[`HighBushShoots`] builds one shared ball-stick graph from [`HighBushShootsShape`], spawns woody [`ChicoStick`](../../../stick-components) segments, and allocates [`PlaneSplay`](../../../ball-components) or [`SucculentTuft`](../../../ball-components) foliage using the Common High Bush ball-selection rule ([#233](https://github.com/ramate-io/maybraid/issues/233)).
 
 ## Usage
 

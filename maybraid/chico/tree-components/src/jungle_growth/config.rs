@@ -137,7 +137,6 @@ impl JungleGrowthShape {
 mod tests {
 	use super::*;
 	use anyhow::Result;
-	use procedural_common::FromScalarNoise;
 
 	#[test]
 	fn foliage_anchors_track_inner_ball_scale() -> Result<()> {
