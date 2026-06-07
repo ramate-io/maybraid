@@ -1880,6 +1880,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "chico-groves"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "bevy_math",
+ "clap",
+ "gimme-gen",
+ "log",
+ "procedural-common",
+ "render-item",
+]
+
+[[package]]
 name = "chico-sbs-geometry"
 version = "0.0.1"
 dependencies = [
@@ -2838,6 +2852,25 @@ dependencies = [
  "wasm-bindgen",
  "web-sys",
  "windows 0.61.3",
+]
+
+[[package]]
+name = "gimme-core"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "bevy_math",
+ "thiserror 1.0.69",
+]
+
+[[package]]
+name = "gimme-gen"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "bevy_math",
+ "gimme-core",
+ "thiserror 1.0.69",
 ]
 
 [[package]]
