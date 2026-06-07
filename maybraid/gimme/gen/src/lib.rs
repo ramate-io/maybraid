@@ -1,6 +1,7 @@
+pub use gimme_core::Cell;
+
 use bevy_math::bounding::Aabb3d;
 use gimme_core::{SpatialIndexError, TypedSpatialIndex};
-use std::ops::Deref;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -9,29 +10,6 @@ pub enum GenerationError {
 	GenerationFailed(String),
 	#[error("Failed on core spatial index operation")]
 	SpatialIndexError(#[from] SpatialIndexError),
-}
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct Cell(pub Aabb3d);
-
-impl Deref for Cell {
-	type Target = Aabb3d;
-
-	fn deref(&self) -> &Self::Target {
-		&self.0
-	}
-}
-
-impl Cell {
-	/// Returns the cell as a region.
-	pub fn as_region(&self) -> &Aabb3d {
-		&self.0
-	}
-
-	/// Converts the cell to a region.
-	pub fn into_region(self) -> Aabb3d {
-		self.0
-	}
 }
 
 /// The base generator trait simply asks for a the implementer to provide a method for get or generating types within a requested region.
