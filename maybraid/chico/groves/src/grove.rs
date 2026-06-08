@@ -12,8 +12,16 @@ mod distribution;
 mod outcome;
 mod palette;
 mod params;
+mod frontend;
 mod placement;
 mod terrain;
+mod variant_weights;
+
+#[cfg(feature = "render")]
+mod vec3_args;
+
+#[cfg(feature = "render")]
+mod render_item;
 
 pub use biases::ForestGroveBiases;
 pub use bucket::Bucket;
@@ -22,13 +30,21 @@ pub use constraints::PlacementConstraints;
 pub use distribution::{
 	GroveBucket, GroveDistribution, GroveDistributionBuilder, PreparedGroveDistribution,
 };
+pub use frontend::GroveFrontend;
 pub use outcome::GroveCellOutcome;
 pub use palette::{PaletteColor, PaletteMix, PaletteSlot, WithPaletteMix};
 pub use params::{
 	biased_sample, sample_cell_params, GroveNoiseConfig, GroveParamRanges, SampledCellParams,
 };
 pub use placement::{candidate_position, cell_origin};
-pub use terrain::TerrainSample;
+pub use terrain::{FlatTerrainSample, TerrainSample};
+pub use variant_weights::{parse_variant_weights, VariantWeightOverrides};
+
+#[cfg(feature = "render")]
+pub use vec3_args::parse_vec3_csv;
+
+#[cfg(feature = "render")]
+pub use render_item::{GrovePlacedCell, GroveRenderHelper, GroveRenderRule};
 
 use bevy_math::Vec3;
 use gimme_gen::Cell;

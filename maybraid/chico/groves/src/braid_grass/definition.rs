@@ -1,4 +1,4 @@
-//! [`BraidGrassGrove`] — well-known understory grove ([RFC-183 §3.4.5.1], [#306](https://github.com/ramate-io/maybraid/issues/306)).
+//! [`BraidGrassDefinition`] — well-known understory grove ([RFC-183 §3.4.5.1], [#306](https://github.com/ramate-io/maybraid/issues/306)).
 
 use procedural_common::UnitRange;
 
@@ -7,18 +7,18 @@ use crate::grove::{CellGrove, GroveDistribution, GroveParamRanges};
 
 /// Authored Braid Grass grove definition.
 #[derive(Debug, Clone, PartialEq)]
-pub struct BraidGrassGrove {
+pub struct BraidGrassDefinition {
 	ranges: GroveParamRanges,
 	distribution: GroveDistribution<BraidGrassCell>,
 }
 
-impl Default for BraidGrassGrove {
+impl Default for BraidGrassDefinition {
 	fn default() -> Self {
 		Self::new()
 	}
 }
 
-impl BraidGrassGrove {
+impl BraidGrassDefinition {
 	/// RFC §3.4.5.1 grove-level parameter ranges.
 	pub const AUTHORED_RANGES: GroveParamRanges = GroveParamRanges::new(
 		UnitRange::new(2.5, 6.0),
@@ -40,9 +40,17 @@ impl BraidGrassGrove {
 		self.ranges = ranges;
 		self
 	}
+
+	pub fn with_variant_weights(
+		mut self,
+		overrides: &crate::grove::VariantWeightOverrides,
+	) -> Result<Self, String> {
+		overrides.apply_to(&mut self.distribution)?;
+		Ok(self)
+	}
 }
 
-impl CellGrove for BraidGrassGrove {
+impl CellGrove for BraidGrassDefinition {
 	type Variant = BraidGrassCell;
 
 	fn param_ranges(&self) -> GroveParamRanges {
@@ -59,7 +67,7 @@ mod tests {
 	use std::mem;
 
 	use super::*;
-	use crate::braid_grass::BraidGrass;
+	use crate::braid_grass::BraidGrassClump;
 	use crate::grove::{
 		candidate_position, sample_cell_params, ForestGroveBiases, Grove, GroveCellOutcome,
 		GroveNoiseConfig, PlacementConstraints, TerrainSample,
@@ -89,9 +97,9 @@ mod tests {
 		Cell(Aabb3d::from_min_max(Vec3::ZERO, Vec3::new(10.0, 1.0, 10.0)))
 	}
 
-	fn assembled_grove() -> Grove<BraidGrassGrove> {
+	fn assembled_grove() -> Grove<BraidGrassDefinition> {
 		Grove::assemble(
-			BraidGrassGrove::new(),
+			BraidGrassDefinition::new(),
 			ForestGroveBiases { bucket_mean_shift: 0.0, ..Default::default() },
 			GroveNoiseConfig::default(),
 			Vec3::ZERO,
@@ -100,7 +108,7 @@ mod tests {
 
 	#[test]
 	fn authored_ranges_match_rfc() -> Result<()> {
-		let grove = BraidGrassGrove::new();
+		let grove = BraidGrassDefinition::new();
 		let ranges = grove.param_ranges();
 		assert_eq!(ranges.cell_size, UnitRange::new(2.5, 6.0));
 		assert_eq!(ranges.density, UnitRange::new(0.35, 0.75));
@@ -136,7 +144,7 @@ mod tests {
 
 	#[test]
 	fn braid_grass_geometry_in_bucket() -> Result<()> {
-		assert!(mem::size_of::<BraidGrass>() > 0);
+		assert!(mem::size_of::<BraidGrassClump>() > 0);
 		let dist = BraidGrassCell::grove_distribution();
 		let Some(BraidGrassCell::DeepGreenBlade(bucket)) = dist.buckets[1].item.as_ref() else {
 			anyhow::bail!("expected DeepGreenBlade variant");
@@ -190,7 +198,7 @@ mod tests {
 
 	#[test]
 	fn none_bucket_yields_empty() -> Result<()> {
-		let mut grove = BraidGrassGrove::new();
+		let mut grove = BraidGrassDefinition::new();
 		let mut dist = GroveDistribution::new();
 		dist.push(crate::grove::GroveBucket {
 			weight: 100.0,

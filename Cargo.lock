@@ -1886,6 +1886,7 @@ dependencies = [
  "anyhow",
  "bevy",
  "bevy_math",
+ "chico-ball-components",
  "clap",
  "gimme-gen",
  "log",

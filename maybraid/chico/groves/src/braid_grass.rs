@@ -4,6 +4,18 @@ mod braid_grass;
 mod cell;
 mod definition;
 
-pub use braid_grass::BraidGrass;
+#[cfg(feature = "render")]
+mod sample;
+
+#[cfg(feature = "render")]
+pub mod render_item;
+
+pub use braid_grass::BraidGrassClump;
 pub use cell::BraidGrassCell;
-pub use definition::BraidGrassGrove;
+pub use definition::BraidGrassDefinition;
+
+#[cfg(feature = "render")]
+pub use render_item::{BraidGrass, BraidGrassRenderRule, BraidGrassStd};
+
+#[cfg(feature = "render")]
+pub use sample::{blade_tuft_shape_from, unit_from_position};

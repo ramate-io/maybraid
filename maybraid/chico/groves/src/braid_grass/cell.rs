@@ -1,6 +1,6 @@
 //! [`BraidGrassCell`] bucket enum ([RFC-183 §3.4.5.1]).
 
-use crate::braid_grass::BraidGrass;
+use crate::braid_grass::BraidGrassClump;
 use crate::grove::PlacementConstraints;
 use crate::{grove_buckets, unit_range};
 
@@ -18,7 +18,7 @@ grove_buckets! {
 				unit_range!(0.0..0.75),
 				unit_range!(0.0..0.60),
 			),
-			item: BraidGrass {
+			item: BraidGrassClump {
 				height: 1.0..2.2,
 				width: 0.35..0.85,
 				blade_count: 12..=28,
@@ -31,7 +31,7 @@ grove_buckets! {
 				unit_range!(0.0..0.75),
 				unit_range!(0.0..0.60),
 			),
-			item: BraidGrass {
+			item: BraidGrassClump {
 				height: 1.2..2.6,
 				width: 0.30..0.70,
 				blade_count: 10..=22,
@@ -44,7 +44,7 @@ grove_buckets! {
 				unit_range!(0.0..0.45),
 				unit_range!(0.0..0.30),
 			),
-			item: BraidGrass {
+			item: BraidGrassClump {
 				height: 1.6..3.0,
 				width: 0.45..1.00,
 				blade_count: 18..=36,
@@ -57,7 +57,7 @@ grove_buckets! {
 				unit_range!(0.0..0.45),
 				unit_range!(0.0..0.60),
 			),
-			item: BraidGrass {
+			item: BraidGrassClump {
 				height: 1.0..2.0,
 				width: 0.30..0.75,
 				blade_count: 10..=24,

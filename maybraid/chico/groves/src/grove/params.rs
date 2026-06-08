@@ -42,7 +42,18 @@ pub struct SampledCellParams {
 
 /// Shared noise seed/configuration for grove sampling channels.
 #[derive(Debug, Clone, Copy, PartialEq)]
+#[cfg_attr(feature = "render", derive(clap::Args))]
+#[cfg_attr(feature = "render", command(next_help_heading = "Grove Noise"))]
 pub struct GroveNoiseConfig {
+	#[cfg_attr(
+		feature = "render",
+		arg(
+			long = "grove-noise",
+			default_value = "0,1,0,1",
+			value_parser = procedural_common::noise_params_from_scalar_str,
+			value_name = "SEED,FREQUENCY,AMPLITUDE,OCTAVES",
+		)
+	)]
 	pub base: NoiseParams,
 }
 

@@ -6,7 +6,7 @@ use procedural_common::UnitRange;
 
 /// Authored geometry ranges for one braid-grass clump.
 #[derive(Debug, Clone, PartialEq)]
-pub struct BraidGrass {
+pub struct BraidGrassClump {
 	pub height: UnitRange,
 	pub width: UnitRange,
 	pub blade_count: RangeInclusive<u32>,

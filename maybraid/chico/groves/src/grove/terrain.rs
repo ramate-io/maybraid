@@ -7,3 +7,26 @@ pub trait TerrainSample {
 	fn elevation_at(&self, position: Vec3) -> f32;
 	fn steepness_at(&self, position: Vec3) -> f32;
 }
+
+/// Uniform terrain sample for CLI previews and isolation tests.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct FlatTerrainSample {
+	pub elevation: f32,
+	pub steepness: f32,
+}
+
+impl Default for FlatTerrainSample {
+	fn default() -> Self {
+		Self { elevation: 0.5, steepness: 0.1 }
+	}
+}
+
+impl TerrainSample for FlatTerrainSample {
+	fn elevation_at(&self, _position: Vec3) -> f32 {
+		self.elevation
+	}
+
+	fn steepness_at(&self, _position: Vec3) -> f32 {
+		self.steepness
+	}
+}
