@@ -3,6 +3,7 @@ use chico_ball_components::{FrondCrown, ModerateLodFrondCrown};
 use chico_ball_components::tuft::{
 	BuddhaHandTuft, BladeTuft, SpearTuft, SucculentTuft, WeepingTuft,
 };
+use chico_groves::braid_grass::BraidGrassStd;
 use chico_sbs_trees::date_palm::DatePalm;
 use chico_sbs_trees::palm_bush::PalmBush;
 use chico_sbs_trees::waialea_palm::WaialeaPalm;
@@ -203,6 +204,9 @@ pub type RenderJungleGrowth = JungleGrowth<
 	SkippedFoliageMeshMaterial<StandardMaterial>,
 >;
 
+/// [`BraidGrassStd`] — understory blade-tuft grove ([#306](https://github.com/ramate-io/maybraid/issues/306)).
+pub type RenderBraidGrass = BraidGrassStd;
+
 #[derive(Clone)]
 pub enum RenderSubject {
 	SopesBanyan(RenderSopesBanyan),
@@ -223,6 +227,7 @@ pub enum RenderSubject {
 	JungleStorybookTree(RenderJungleStorybookTree),
 	SucculentTuft(RenderSucculentTuft),
 	BladeTuft(RenderBladeTuft),
+	BraidGrass(RenderBraidGrass),
 	SpearTuft(RenderSpearTuft),
 	BuddhaHandTuft(RenderBuddhaHandTuft),
 	WeepingTuft(RenderWeepingTuft),
@@ -254,6 +259,7 @@ impl RenderSubject {
 			Self::JungleStorybookTree(_) => "JungleStorybookTree",
 			Self::SucculentTuft(_) => "SucculentTuft",
 			Self::BladeTuft(_) => "BladeTuft",
+			Self::BraidGrass(_) => "BraidGrass",
 			Self::SpearTuft(_) => "SpearTuft",
 			Self::BuddhaHandTuft(_) => "BuddhaHandTuft",
 			Self::WeepingTuft(_) => "WeepingTuft",
@@ -307,6 +313,12 @@ impl RenderSubject {
 			Self::JungleStorybookTree(t) => format!("{:?}", t.geometry),
 			Self::SucculentTuft(t) => format!("{:?}", t.shape),
 			Self::BladeTuft(t) => format!("{:?}", t.shape),
+			Self::BraidGrass(g) => {
+				format!(
+					"{:?}|cells={}|terrain={:?}|foliage={:?}",
+					g.grove, g.cells.len(), g.terrain, g.foliage_noise
+				)
+			}
 			Self::SpearTuft(t) => format!("{:?}", t.shape),
 			Self::BuddhaHandTuft(t) => format!("{:?}", t.shape),
 			Self::WeepingTuft(t) => format!("{:?}", t.shape),
@@ -339,6 +351,7 @@ impl RenderSubject {
 			Self::JungleStorybookTree(tree) => RenderDispatch::JungleStorybookTree(tree.clone()),
 			Self::SucculentTuft(tuft) => RenderDispatch::SucculentTuft(tuft.clone()),
 			Self::BladeTuft(tuft) => RenderDispatch::BladeTuft(tuft.clone()),
+			Self::BraidGrass(grove) => RenderDispatch::BraidGrass(grove.clone()),
 			Self::SpearTuft(tuft) => RenderDispatch::SpearTuft(tuft.clone()),
 			Self::BuddhaHandTuft(tuft) => RenderDispatch::BuddhaHandTuft(tuft.clone()),
 			Self::WeepingTuft(tuft) => RenderDispatch::WeepingTuft(tuft.clone()),
@@ -371,6 +384,7 @@ enum RenderDispatch {
 	JungleStorybookTree(RenderJungleStorybookTree),
 	SucculentTuft(RenderSucculentTuft),
 	BladeTuft(RenderBladeTuft),
+	BraidGrass(RenderBraidGrass),
 	SpearTuft(RenderSpearTuft),
 	BuddhaHandTuft(RenderBuddhaHandTuft),
 	WeepingTuft(RenderWeepingTuft),
@@ -495,6 +509,9 @@ pub fn sync_render(
 		}
 		RenderDispatch::BladeTuft(tuft) => {
 			commands.spawn((bundle, DispatchRenderItem::new(tuft)));
+		}
+		RenderDispatch::BraidGrass(grove) => {
+			commands.spawn((bundle, DispatchRenderItem::new(grove)));
 		}
 		RenderDispatch::SpearTuft(tuft) => {
 			commands.spawn((bundle, DispatchRenderItem::new(tuft)));

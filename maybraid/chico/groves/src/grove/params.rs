@@ -49,7 +49,7 @@ pub struct GroveNoiseConfig {
 		feature = "render",
 		arg(
 			long = "grove-noise",
-			default_value = "0,1,0,1",
+			default_value = "1337,1,1,1",
 			value_parser = procedural_common::noise_params_from_scalar_str,
 			value_name = "SEED,FREQUENCY,AMPLITUDE,OCTAVES",
 		)

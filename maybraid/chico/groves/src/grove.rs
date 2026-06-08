@@ -14,6 +14,7 @@ mod palette;
 mod params;
 mod frontend;
 mod placement;
+mod preview;
 mod terrain;
 mod variant_weights;
 
@@ -37,6 +38,7 @@ pub use params::{
 	biased_sample, sample_cell_params, GroveNoiseConfig, GroveParamRanges, SampledCellParams,
 };
 pub use placement::{candidate_position, cell_origin};
+pub use preview::{braid_grass_preview_cells, preview_cell_grid};
 pub use terrain::{FlatTerrainSample, TerrainSample};
 pub use variant_weights::{parse_variant_weights, VariantWeightOverrides};
 

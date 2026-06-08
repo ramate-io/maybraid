@@ -48,6 +48,15 @@ impl BraidGrassDefinition {
 		overrides.apply_to(&mut self.distribution)?;
 		Ok(self)
 	}
+
+	/// Authored bucket weights for CLI help (`None` bucket, then macro declaration order).
+	pub const VARIANT_WEIGHTS_CLI: &str = "2.5,2,1,1,0.5";
+
+	/// Typical cell footprint for playground preview grids (midpoint of authored `cell_size`).
+	pub fn preview_cell_extent() -> f32 {
+		let range = Self::AUTHORED_RANGES.cell_size;
+		(range.start + range.end) * 0.5
+	}
 }
 
 impl CellGrove for BraidGrassDefinition {

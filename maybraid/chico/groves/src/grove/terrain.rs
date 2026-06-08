@@ -10,14 +10,18 @@ pub trait TerrainSample {
 
 /// Uniform terrain sample for CLI previews and isolation tests.
 #[derive(Debug, Clone, Copy, PartialEq)]
+#[cfg_attr(feature = "render", derive(clap::Args))]
+#[cfg_attr(feature = "render", command(next_help_heading = "Terrain"))]
 pub struct FlatTerrainSample {
+	#[cfg_attr(feature = "render", arg(long, default_value_t = 0.4))]
 	pub elevation: f32,
+	#[cfg_attr(feature = "render", arg(long, default_value_t = 0.1))]
 	pub steepness: f32,
 }
 
 impl Default for FlatTerrainSample {
 	fn default() -> Self {
-		Self { elevation: 0.5, steepness: 0.1 }
+		Self { elevation: 0.4, steepness: 0.1 }
 	}
 }
 

@@ -5,6 +5,9 @@ mod cell;
 mod definition;
 
 #[cfg(feature = "render")]
+mod frontend;
+
+#[cfg(feature = "render")]
 mod sample;
 
 #[cfg(feature = "render")]
@@ -13,6 +16,9 @@ pub mod render_item;
 pub use braid_grass::BraidGrassClump;
 pub use cell::BraidGrassCell;
 pub use definition::BraidGrassDefinition;
+
+#[cfg(feature = "render")]
+pub use frontend::BraidGrassGroveFrontend;
 
 #[cfg(feature = "render")]
 pub use render_item::{BraidGrass, BraidGrassRenderRule, BraidGrassStd};

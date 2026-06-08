@@ -124,6 +124,7 @@ impl Plugin for SbsTreesPlaygroundPlugin {
 							dispatch_render_items::<render::RenderJungleStorybookTree>,
 							dispatch_render_items::<render::RenderSucculentTuft>,
 							dispatch_render_items::<render::RenderBladeTuft>,
+							dispatch_render_items::<render::RenderBraidGrass>,
 							dispatch_render_items::<render::RenderSpearTuft>,
 							dispatch_render_items::<render::RenderBuddhaHandTuft>,
 							dispatch_render_items::<render::RenderWeepingTuft>,

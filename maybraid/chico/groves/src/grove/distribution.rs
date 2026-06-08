@@ -2,7 +2,7 @@
 
 use bevy_math::Vec3;
 use gimme_gen::Cell;
-use procedural_common::{perturb_weights, BucketThrow, NoiseConfig, MIN_BUCKET_WEIGHT};
+use procedural_common::{perturb_weights, BucketThrow, FirstFitIndices, NoiseConfig, MIN_BUCKET_WEIGHT};
 
 use super::{
 	biases::ForestGroveBiases,
@@ -90,9 +90,13 @@ impl<V> GroveDistributionBuilder<V> {
 		noise: &GroveNoiseConfig,
 		perturbation_origin: Vec3,
 	) -> PreparedGroveDistribution<V> {
-		let bucket_throw =
+		let (bucket_throw, throw_bucket_indices) =
 			build_perturbed_bucket_throw(&self.distribution, biases, noise, perturbation_origin);
-		PreparedGroveDistribution { buckets: self.distribution.buckets, bucket_throw }
+		PreparedGroveDistribution {
+			buckets: self.distribution.buckets,
+			bucket_throw,
+			throw_bucket_indices,
+		}
 	}
 }
 
@@ -101,6 +105,8 @@ impl<V> GroveDistributionBuilder<V> {
 pub struct PreparedGroveDistribution<V> {
 	buckets: Vec<GroveBucket<V>>,
 	bucket_throw: BucketThrow,
+	/// Maps compressed [`BucketThrow`] indices to [`Self::buckets`] indices (zero-weight buckets omitted).
+	throw_bucket_indices: Vec<usize>,
 }
 
 impl<V> PreparedGroveDistribution<V> {
@@ -146,9 +152,14 @@ impl<V> PreparedGroveDistribution<V> {
 
 		let selection_noise = bucket_selection_noise(noise, position);
 		let throw = selection_noise * self.bucket_throw.total_weight() * 0.5;
-		let start = self.bucket_throw.select(throw).unwrap_or(0);
+		let throw_index = self.bucket_throw.select(throw).unwrap_or(0);
+		let start = self
+			.throw_bucket_indices
+			.get(throw_index)
+			.copied()
+			.unwrap_or(0);
 
-		for index in self.bucket_throw.first_fit_from(start) {
+		for index in FirstFitIndices::new(self.buckets.len(), start) {
 			let bucket = &self.buckets[index];
 			if !bucket.valid_at(position, terrain) {
 				continue;
@@ -181,7 +192,7 @@ impl<V> PreparedGroveDistribution<V> {
 			return GroveCellOutcome::Rejected { position };
 		}
 
-		for index in self.bucket_throw.first_fit_from(start) {
+		for index in FirstFitIndices::new(self.buckets.len(), start) {
 			let bucket = &self.buckets[index];
 			if !bucket.valid_at(position, terrain) {
 				continue;
@@ -205,28 +216,38 @@ fn build_perturbed_bucket_throw<V>(
 	biases: &ForestGroveBiases,
 	noise: &GroveNoiseConfig,
 	perturbation_origin: Vec3,
-) -> BucketThrow {
+) -> (BucketThrow, Vec<usize>) {
 	let mut base = BucketThrow::new();
-	for bucket in &distribution.buckets {
-		base.add(bucket.weight);
+	let mut throw_bucket_indices = Vec::new();
+	for (index, bucket) in distribution.buckets.iter().enumerate() {
+		if base.add(bucket.weight) {
+			throw_bucket_indices.push(index);
+		}
 	}
 
 	let strength =
 		distribution.base_bucket_perturbation_strength * (1.0 + biases.bucket_perturbation_bias);
 	let total = base.total_weight();
 	if strength.abs() <= f32::EPSILON || base.is_empty() {
-		return base.with_mean_anchor(bucket_mean_shift(biases, total));
+		return (
+			base.with_mean_anchor(bucket_mean_shift(biases, total)),
+			throw_bucket_indices,
+		);
 	}
 
 	let n = NoiseConfig::new(noise.base);
-	let bucket_noises: Vec<f32> = (0..distribution.buckets.len())
-		.map(|index| {
+	let bucket_noises: Vec<f32> = throw_bucket_indices
+		.iter()
+		.map(|&index| {
 			n.sample_3d_world(perturbation_origin + Vec3::new(20.0 + index as f32, 0.0, 0.0))
 		})
 		.collect();
 	let perturbed = perturb_weights(&base, strength, &bucket_noises, MIN_BUCKET_WEIGHT);
 	let total = perturbed.total_weight();
-	perturbed.with_mean_anchor(bucket_mean_shift(biases, total))
+	(
+		perturbed.with_mean_anchor(bucket_mean_shift(biases, total)),
+		throw_bucket_indices,
+	)
 }
 
 fn bucket_mean_shift(biases: &ForestGroveBiases, total_weight: f32) -> f32 {
@@ -331,6 +352,47 @@ mod tests {
 			GroveCellOutcome::Placed { variant, .. } => assert_eq!(variant, "flat"),
 			other => panic!("expected Placed flat, got {other:?}"),
 		}
+		Ok(())
+	}
+
+	#[test]
+	fn zero_weight_none_bucket_does_not_shadow_blade_variants() -> Result<()> {
+		use crate::BraidGrassCell;
+		use procedural_common::NoiseParams;
+
+		let mut dist = BraidGrassCell::grove_distribution();
+		dist.buckets[0].weight = 0.0;
+		dist.buckets[1].weight = 9.0;
+		let prepared = dist.builder().build(
+			&ForestGroveBiases::default(),
+			&GroveNoiseConfig::new(NoiseParams::from_scalar(0.0, 1.0, 0.0, 1)),
+			Vec3::ZERO,
+		);
+		let terrain = FlatTerrain { elevation: 0.4, steepness: 0.1 };
+		let braid_ranges = crate::braid_grass::BraidGrassDefinition::AUTHORED_RANGES;
+		let mut placed = 0usize;
+		for x in 0..3 {
+			for z in 0..3 {
+				let cell = Cell(Aabb3d::from_min_max(
+					Vec3::new(x as f32 * 4.25, 0.0, z as f32 * 4.25),
+					Vec3::new((x + 1) as f32 * 4.25, 1.0, (z + 1) as f32 * 4.25),
+				));
+				let outcome = prepared.select_cell(
+					&cell,
+					&braid_ranges,
+					&ForestGroveBiases::default(),
+					&GroveNoiseConfig::new(NoiseParams::from_scalar(0.0, 1.0, 0.0, 1)),
+					&terrain,
+				);
+				if matches!(outcome, GroveCellOutcome::Placed { .. }) {
+					placed += 1;
+				}
+			}
+		}
+		assert!(
+			placed > 0,
+			"expected blade placements when None weight is zero, got {placed} placed cells"
+		);
 		Ok(())
 	}
 

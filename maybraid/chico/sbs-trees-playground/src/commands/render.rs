@@ -1,4 +1,5 @@
 pub mod blade_tuft;
+pub mod braid_grass;
 pub mod buddha_hand_tuft;
 pub mod date_palm;
 pub mod palm_bush;
@@ -33,6 +34,7 @@ use clap::Subcommand;
 
 use crate::render::{RenderConfig, RenderSubject};
 pub use blade_tuft::BladeTuftRenderHelper;
+pub use braid_grass::BraidGrassRenderHelper;
 pub use buddha_hand_tuft::BuddhaHandTuftRenderHelper;
 pub use date_palm::DatePalmRenderHelper;
 pub use palm_bush::PalmBushRenderHelper;
@@ -100,6 +102,27 @@ impl<T: clap::Args + Clone> RenderHelper<T> {
 	}
 }
 
+/// Wraps [`RenderHelper`] with a square preview cell grid for grove [`RenderItem`] commands.
+#[derive(Clone, clap::Args, Component)]
+#[command(rename_all = "kebab-case")]
+pub struct CellRenderHelper<T: clap::Args + Clone> {
+	#[command(flatten)]
+	pub render: RenderHelper<T>,
+
+	#[arg(long, default_value_t = 5, help_heading = "Grove Preview")]
+	pub cells_per_axis: u32,
+}
+
+impl<T: clap::Args + Clone> CellRenderHelper<T> {
+	pub fn render_transform(&self) -> Transform {
+		self.render.render_transform()
+	}
+
+	pub fn res_2(&self) -> u8 {
+		self.render.res_2
+	}
+}
+
 #[derive(Clone, Subcommand, Component)]
 #[command(rename_all = "kebab-case")]
 pub enum Render {
@@ -121,6 +144,7 @@ pub enum Render {
 	JungleStorybookTree(JungleStorybookTreeRenderHelper),
 	SucculentTuft(SucculentTuftRenderHelper),
 	BladeTuft(BladeTuftRenderHelper),
+	BraidGrass(BraidGrassRenderHelper),
 	SpearTuft(SpearTuftRenderHelper),
 	BuddhaHandTuft(BuddhaHandTuftRenderHelper),
 	WeepingTuft(WeepingTuftRenderHelper),
@@ -229,6 +253,11 @@ impl Render {
 			Self::BladeTuft(h) => RenderConfig {
 				subject: RenderSubject::BladeTuft(h.inner.clone().into()),
 				res_2: h.res_2,
+				transform: h.render_transform(),
+			},
+			Self::BraidGrass(h) => RenderConfig {
+				subject: RenderSubject::BraidGrass(h.configured_braid_grass()),
+				res_2: h.res_2(),
 				transform: h.render_transform(),
 			},
 			Self::SpearTuft(h) => RenderConfig {
@@ -628,6 +657,48 @@ mod tests {
 			anyhow::bail!("expected frond crown subject");
 		};
 		assert_eq!(crown.shape.frond_count, 15);
+		Ok(())
+	}
+
+	#[test]
+	fn braid_grass_defaults_spawn_placements() -> Result<()> {
+		let cmd = crate::commands::PlaygroundCommand::parse_line("render braid-grass")
+			.map_err(|e| anyhow::anyhow!("{e}"))?;
+		let crate::commands::PlaygroundCommand::Render(Render::BraidGrass(helper)) = cmd else {
+			anyhow::bail!("expected braid-grass render command");
+		};
+		let grass = helper.configured_braid_grass();
+		assert!(grass.grove.variant_weights.is_none());
+		let placements = grass.placements();
+		assert_eq!(grass.cells.len(), 25);
+		assert!(
+			placements.len() >= 8,
+			"expected a visible braid-grass preview with default flags, got {} placements",
+			placements.len()
+		);
+		Ok(())
+	}
+
+	#[test]
+	fn braid_grass_command_preserves_grove_params() -> Result<()> {
+		let cmd = crate::commands::PlaygroundCommand::parse_line(
+			"render braid-grass --variant-weights 0.0,9.0,x,x,x --elevation 0.4 --cells-per-axis 3",
+		)
+		.map_err(|e| anyhow::anyhow!("{e}"))?;
+		let crate::commands::PlaygroundCommand::Render(Render::BraidGrass(helper)) = cmd else {
+			anyhow::bail!("expected braid-grass render command");
+		};
+		assert_eq!(helper.cells_per_axis, 3);
+		let grass = helper.configured_braid_grass();
+		assert_eq!(grass.cells.len(), 9);
+		assert!((grass.terrain.elevation - 0.4).abs() < 1e-5);
+		assert!(!grass.placements().is_empty());
+		let cfg = Render::BraidGrass(helper).into_render_config();
+		let RenderSubject::BraidGrass(subject) = cfg.subject else {
+			anyhow::bail!("expected braid grass subject");
+		};
+		assert_eq!(subject.cells.len(), 9);
+		assert!(!subject.placements().is_empty());
 		Ok(())
 	}
 

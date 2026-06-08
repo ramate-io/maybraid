@@ -1930,6 +1930,7 @@ dependencies = [
  "anyhow",
  "bevy",
  "chico-ball-components",
+ "chico-groves",
  "chico-sbs-geometry",
  "chico-sbs-trees",
  "chico-sdf",

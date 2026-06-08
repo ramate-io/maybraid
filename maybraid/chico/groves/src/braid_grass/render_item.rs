@@ -10,10 +10,11 @@ use procedural_common::{noise_params_from_scalar_str, NoiseParams};
 use render_item::{CascadeChunk, RenderItem};
 
 use crate::braid_grass::sample::blade_tuft_shape_from;
-use crate::braid_grass::{BraidGrassCell, BraidGrassClump, BraidGrassDefinition};
+use crate::braid_grass::{
+	BraidGrassCell, BraidGrassClump, BraidGrassDefinition, BraidGrassGroveFrontend,
+};
 use crate::grove::{
-	FlatTerrainSample, GroveFrontend, GrovePlacedCell, GroveRenderHelper, GroveRenderRule,
-	TerrainSample,
+	FlatTerrainSample, GrovePlacedCell, GroveRenderHelper, GroveRenderRule, TerrainSample,
 };
 use crate::skipped_mesh_material::{SkippedLeafMeshMaterial, SkippedStickMeshMaterial};
 
@@ -34,10 +35,10 @@ where
 	StickS: Clone + Into<MeshMaterial3d<StickM>> + Args + Send + Sync + 'static,
 	LeafM: Material,
 	LeafS: Clone + Into<MeshMaterial3d<LeafM>> + Args + Send + Sync + 'static,
-	Terrain: TerrainSample + Clone + Send + Sync + 'static,
+	Terrain: TerrainSample + Clone + Send + Sync + 'static + Default + clap::Args,
 {
 	#[command(flatten, next_help_heading = "Grove")]
-	pub grove: GroveFrontend,
+	pub grove: BraidGrassGroveFrontend,
 
 	#[command(flatten, next_help_heading = "Stick Material")]
 	pub stick_material: StickS,
@@ -57,8 +58,8 @@ where
 	#[arg(skip)]
 	pub cells: Vec<Cell>,
 
-	#[arg(skip)]
-	pub terrain: Option<Terrain>,
+	#[command(flatten, next_help_heading = "Terrain")]
+	pub terrain: Terrain,
 
 	/// Fixed outcomes when the grove is already resolved (replay, persistence, tests).
 	#[arg(skip)]
@@ -75,16 +76,16 @@ where
 	StickS: Clone + Into<MeshMaterial3d<StickM>> + Args + Send + Sync + 'static + Default,
 	LeafM: Material,
 	LeafS: Clone + Into<MeshMaterial3d<LeafM>> + Args + Send + Sync + 'static + Default,
-	Terrain: TerrainSample + Clone + Send + Sync + 'static + Default,
+	Terrain: TerrainSample + Clone + Send + Sync + 'static + Default + clap::Args,
 {
 	fn default() -> Self {
 		Self {
-			grove: GroveFrontend::default(),
+			grove: BraidGrassGroveFrontend::default(),
 			stick_material: StickS::default(),
 			leaf_material: LeafS::default(),
 			foliage_noise: NoiseParams::from_scalar(0.0, 1.0, 0.06, 1),
 			cells: Vec::new(),
-			terrain: Some(Terrain::default()),
+			terrain: Terrain::default(),
 			resolved_placements: None,
 			__marker: PhantomData,
 		}
@@ -97,7 +98,7 @@ where
 	StickS: Clone + Into<MeshMaterial3d<StickM>> + Args + Send + Sync + 'static,
 	LeafM: Material,
 	LeafS: Clone + Into<MeshMaterial3d<LeafM>> + Args + Send + Sync + 'static,
-	Terrain: TerrainSample + Clone + Send + Sync + 'static,
+	Terrain: TerrainSample + Clone + Send + Sync + 'static + Default + clap::Args,
 {
 	/// Carry forward resolved placements when the grove is already in a stateful condition.
 	///
@@ -105,17 +106,18 @@ where
 	/// and constraint outcomes without re-running live cell selection.
 	pub fn with_resolved_placements(
 		resolved_placements: Vec<GrovePlacedCell<BraidGrassCell>>,
+		terrain: Terrain,
 		foliage_noise: NoiseParams,
 		stick_material: StickS,
 		leaf_material: LeafS,
 	) -> Self {
 		Self {
-			grove: GroveFrontend::default(),
+			grove: BraidGrassGroveFrontend::default(),
 			stick_material,
 			leaf_material,
 			foliage_noise,
 			cells: Vec::new(),
-			terrain: None,
+			terrain,
 			resolved_placements: Some(resolved_placements),
 			__marker: PhantomData,
 		}
@@ -127,7 +129,7 @@ where
 	}
 
 	pub fn with_terrain(mut self, terrain: Terrain) -> Self {
-		self.terrain = Some(terrain);
+		self.terrain = terrain;
 		self
 	}
 
@@ -135,11 +137,7 @@ where
 		if let Some(ref resolved) = self.resolved_placements {
 			return resolved.clone();
 		}
-		let Some(ref terrain) = self.terrain else {
-			log::warn!("braid grass live selection skipped: no terrain sample");
-			return Vec::new();
-		};
-		self.assemble_grove().select_placements(&self.cells, terrain)
+		self.assemble_grove().select_placements(&self.cells, &self.terrain)
 	}
 
 	pub fn definition(&self) -> Result<BraidGrassDefinition, String> {
@@ -155,7 +153,7 @@ where
 			log::warn!("braid grass definition: {err}; using authored weights");
 			BraidGrassDefinition::new()
 		});
-		self.grove.assemble(definition)
+		self.grove.clone().assemble(definition)
 	}
 
 	fn render_rule(&self) -> BraidGrassRenderRule<LeafM, LeafS> {
@@ -182,7 +180,7 @@ where
 	StickS: Clone + Into<MeshMaterial3d<StickM>> + Args + Send + Sync + 'static,
 	LeafM: Material + Send + Sync + 'static,
 	LeafS: Clone + Into<MeshMaterial3d<LeafM>> + Args + Send + Sync + 'static,
-	Terrain: TerrainSample + Clone + Send + Sync + 'static,
+	Terrain: TerrainSample + Clone + Send + Sync + 'static + Default + clap::Args,
 {
 	fn spawn_render_items(
 		&self,
@@ -285,6 +283,7 @@ mod tests {
 		);
 		let item = BraidGrassStd::with_resolved_placements(
 			vec![placement.clone()],
+			FlatTerrainSample::default(),
 			NoiseParams::default(),
 			SkippedStickMeshMaterial::<StandardMaterial>::default(),
 			SkippedLeafMeshMaterial::<StandardMaterial>::default(),
@@ -298,7 +297,7 @@ mod tests {
 		use crate::grove::parse_variant_weights;
 
 		let item = BraidGrassStd {
-			grove: GroveFrontend {
+			grove: BraidGrassGroveFrontend {
 				variant_weights: Some(
 					parse_variant_weights("0.0,9.0,x,x,x").map_err(|e| anyhow::anyhow!("{e}"))?,
 				),
@@ -309,6 +308,61 @@ mod tests {
 		let definition = item.definition().map_err(|e| anyhow::anyhow!("{e}"))?;
 		assert_eq!(definition.distribution().buckets[0].weight, 0.0);
 		assert_eq!(definition.distribution().buckets[1].weight, 9.0);
+		Ok(())
+	}
+
+	#[test]
+	fn zero_none_weight_still_places_blades() -> Result<()> {
+		use crate::braid_grass::BraidGrassDefinition;
+		use crate::grove::{parse_variant_weights, preview_cell_grid};
+
+		let mut grass = BraidGrassStd {
+			grove: BraidGrassGroveFrontend {
+				variant_weights: Some(
+					parse_variant_weights("0.0,9.0,x,x,x").map_err(|e| anyhow::anyhow!("{e}"))?,
+				),
+				..Default::default()
+			},
+			terrain: FlatTerrainSample { elevation: 0.4, steepness: 0.1 },
+			..Default::default()
+		};
+		grass.cells = preview_cell_grid(3, BraidGrassDefinition::preview_cell_extent());
+		assert!(!grass.placements().is_empty());
+		Ok(())
+	}
+
+	#[test]
+	fn preview_cell_grid_yields_placements_with_default_weights() -> Result<()> {
+		use crate::braid_grass::BraidGrassDefinition;
+		use crate::grove::preview_cell_grid;
+
+		let mut grass = BraidGrassStd::default();
+		grass.cells = preview_cell_grid(5, BraidGrassDefinition::preview_cell_extent());
+		let placements = grass.placements();
+		assert!(
+			!placements.is_empty(),
+			"expected placed braid-grass cells with default weights, got {}",
+			placements.len()
+		);
+		Ok(())
+	}
+
+	#[test]
+	fn preview_cell_grid_yields_placements_with_authored_terrain() -> Result<()> {
+		use crate::braid_grass::BraidGrassDefinition;
+		use crate::grove::{parse_variant_weights, preview_cell_grid};
+
+		let mut grass = BraidGrassStd::default();
+		grass.grove.variant_weights = Some(
+			parse_variant_weights("0,3,2,2,1").map_err(|e| anyhow::anyhow!("{e}"))?,
+		);
+		grass.cells = preview_cell_grid(5, BraidGrassDefinition::preview_cell_extent());
+		let placements = grass.placements();
+		assert!(
+			!placements.is_empty(),
+			"expected placed braid-grass cells in preview grid, got {}",
+			placements.len()
+		);
 		Ok(())
 	}
 
