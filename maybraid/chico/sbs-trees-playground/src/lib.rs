@@ -4,8 +4,8 @@ pub mod camera;
 pub mod checkerboard_material;
 pub mod commands;
 mod frond_render_params;
-mod high_bush_shoots_render_params;
 mod ground;
+mod high_bush_shoots_render_params;
 mod jungle_growth_render_params;
 mod moderate_lod_frond_render_params;
 mod render;
@@ -21,22 +21,22 @@ pub use render::{RenderConfig, RenderSubject, SbsRenderRoot};
 use bevy::prelude::*;
 use chico_ball_components::frond::FrondRenderItemPlugin;
 use chico_ball_components::tuft::render_item_plugin::TuftRenderItemPlugin;
-use chico_sbs_trees::date_palm::render_item_plugin::ensure_registered as ensure_date_palm_render_plugins;
-use chico_sbs_trees::palm_bush::render_item_plugin::ensure_registered as ensure_palm_bush_render_plugins;
-use chico_sbs_trees::waialea_palm::render_item_plugin::ensure_registered as ensure_waialea_palm_render_plugins;
-use chico_sbs_trees::storybook_tree::render_item_plugin::ensure_registered as ensure_storybook_tree_render_plugins;
-use chico_sbs_trees::penmarch_torch::render_item_plugin::ensure_registered as ensure_penmarch_torch_render_plugins;
-use chico_sbs_trees::kamakura_torch::render_item_plugin::ensure_registered as ensure_kamakura_torch_render_plugins;
-use chico_sbs_trees::rorys_head_trained::render_item_plugin::ensure_registered as ensure_rorys_head_trained_render_plugins;
-use chico_sbs_trees::vase_tree::render_item_plugin::ensure_registered as ensure_vase_tree_render_plugins;
 use chico_sbs_trees::braid_oak_tree::render_item_plugin::ensure_registered as ensure_braid_oak_tree_render_plugins;
-use chico_sbs_trees::jungle_storybook_tree::render_item_plugin::ensure_registered as ensure_jungle_storybook_tree_render_plugins;
-use chico_sbs_trees::liams_conifer::render_item_plugin::ensure_registered as ensure_liams_conifer_render_plugins;
+use chico_sbs_trees::date_palm::render_item_plugin::ensure_registered as ensure_date_palm_render_plugins;
 use chico_sbs_trees::friends_conifer::render_item_plugin::ensure_registered as ensure_friends_conifer_render_plugins;
-use chico_sbs_trees::northern_conifer::render_item_plugin::ensure_registered as ensure_northern_conifer_render_plugins;
-use chico_sbs_trees::temperate_conifer::render_item_plugin::ensure_registered as ensure_temperate_conifer_render_plugins;
-use chico_sbs_trees::sopes_banyan::render_item_plugin::ensure_registered as ensure_sopes_banyan_render_plugins;
 use chico_sbs_trees::honu_banyan::render_item_plugin::ensure_registered as ensure_honu_banyan_render_plugins;
+use chico_sbs_trees::jungle_storybook_tree::render_item_plugin::ensure_registered as ensure_jungle_storybook_tree_render_plugins;
+use chico_sbs_trees::kamakura_torch::render_item_plugin::ensure_registered as ensure_kamakura_torch_render_plugins;
+use chico_sbs_trees::liams_conifer::render_item_plugin::ensure_registered as ensure_liams_conifer_render_plugins;
+use chico_sbs_trees::northern_conifer::render_item_plugin::ensure_registered as ensure_northern_conifer_render_plugins;
+use chico_sbs_trees::palm_bush::render_item_plugin::ensure_registered as ensure_palm_bush_render_plugins;
+use chico_sbs_trees::penmarch_torch::render_item_plugin::ensure_registered as ensure_penmarch_torch_render_plugins;
+use chico_sbs_trees::rorys_head_trained::render_item_plugin::ensure_registered as ensure_rorys_head_trained_render_plugins;
+use chico_sbs_trees::sopes_banyan::render_item_plugin::ensure_registered as ensure_sopes_banyan_render_plugins;
+use chico_sbs_trees::storybook_tree::render_item_plugin::ensure_registered as ensure_storybook_tree_render_plugins;
+use chico_sbs_trees::temperate_conifer::render_item_plugin::ensure_registered as ensure_temperate_conifer_render_plugins;
+use chico_sbs_trees::vase_tree::render_item_plugin::ensure_registered as ensure_vase_tree_render_plugins;
+use chico_sbs_trees::waialea_palm::render_item_plugin::ensure_registered as ensure_waialea_palm_render_plugins;
 use chico_sdf::{CrookCylinder, NoisyBall, NoisyCylinder};
 use chico_vegetation_shaders::{
 	ChicoLeafMaterial, ChicoStickMaterial, ChicoVegetationShadersPlugin,
@@ -44,8 +44,8 @@ use chico_vegetation_shaders::{
 use game_commands::command::{capture_command_line_input, GameCommandPlugin};
 use ground::setup_ground;
 use render::{dispatch_render_items, sync_render};
-use render_materials::{setup_render_materials, sync_render_material_handles};
 use render_item::mesh::handle::EnforceCachingPlugin;
+use render_materials::{setup_render_materials, sync_render_material_handles};
 
 pub struct SbsTreesPlaygroundPlugin;
 
@@ -82,8 +82,7 @@ impl Plugin for SbsTreesPlaygroundPlugin {
 		if !app.is_plugin_added::<MaterialPlugin<StandardMaterial>>() {
 			app.add_plugins(MaterialPlugin::<StandardMaterial>::default());
 		}
-		app
-			.add_plugins(PlaygroundCommandsPlugin)
+		app.add_plugins(PlaygroundCommandsPlugin)
 			.add_plugins(GameCommandPlugin::<PlaygroundCommand>::with_config(ui::ui_config()))
 			.add_plugins(
 				bevy::pbr::MaterialPlugin::<checkerboard_material::CheckerboardMaterial>::default(),

@@ -5,7 +5,6 @@ use std::marker::PhantomData;
 use bevy::prelude::*;
 use chico_ball_components::tuft::{BladeTuft, BladeTuftShape};
 use clap::Args;
-use gimme_gen::Cell;
 use procedural_common::{noise_params_from_scalar_str, NoiseConfig, NoiseParams};
 use render_item::{CascadeChunk, RenderItem};
 
@@ -13,8 +12,8 @@ use crate::braid_grass::{
 	BraidGrassCell, BraidGrassClump, BraidGrassDefinition, BraidGrassGroveFrontend,
 };
 use crate::grove::{
-	FlatTerrainSample, GrovePlacedCell, GroveRenderHelper, GroveRenderRule, TerrainSample,
-	WithPalette,
+	FlatTerrainSample, GroveExtent, GrovePlacedCell, GroveRenderHelper, GroveRenderRule,
+	TerrainSample, WithPalette,
 };
 use crate::skipped_mesh_material::{SkippedLeafMeshMaterial, SkippedStickMeshMaterial};
 
@@ -56,7 +55,10 @@ where
 	pub foliage_noise: NoiseParams,
 
 	#[arg(skip)]
-	pub cells: Vec<Cell>,
+	pub cells_per_axis: u32,
+
+	#[arg(skip)]
+	pub extent: GroveExtent,
 
 	#[command(flatten, next_help_heading = "Terrain")]
 	pub terrain: Terrain,
@@ -84,7 +86,8 @@ where
 			stick_material: StickS::default(),
 			leaf_material: LeafS::default(),
 			foliage_noise: NoiseParams::from_scalar(0.0, 1.0, 0.06, 1),
-			cells: Vec::new(),
+			cells_per_axis: 1,
+			extent: GroveExtent::new(Vec3::ZERO, Vec3::ZERO),
 			terrain: Terrain::default(),
 			resolved_placements: None,
 			__marker: PhantomData,
@@ -116,15 +119,17 @@ where
 			stick_material,
 			leaf_material,
 			foliage_noise,
-			cells: Vec::new(),
+			cells_per_axis: 1,
+			extent: GroveExtent::new(Vec3::ZERO, Vec3::ZERO),
 			terrain,
 			resolved_placements: Some(resolved_placements),
 			__marker: PhantomData,
 		}
 	}
 
-	pub fn with_cells(mut self, cells: Vec<Cell>) -> Self {
-		self.cells = cells;
+	pub fn with_grid(mut self, extent: GroveExtent, cells_per_axis: u32) -> Self {
+		self.extent = extent;
+		self.cells_per_axis = cells_per_axis.max(1);
 		self
 	}
 
@@ -137,7 +142,12 @@ where
 		if let Some(ref resolved) = self.resolved_placements {
 			return resolved.clone();
 		}
-		self.assemble_grove().select_placements(&self.cells, &self.terrain)
+		let cells = self.placement_cells();
+		self.assemble_grove().select_placements(&self.extent, &cells, &self.terrain)
+	}
+
+	pub fn placement_cells(&self) -> Vec<gimme_gen::Cell> {
+		self.extent.subdivide_xz(self.cells_per_axis)
 	}
 
 	pub fn definition(&self) -> Result<BraidGrassDefinition, String> {
@@ -419,7 +429,7 @@ mod tests {
 	#[test]
 	fn zero_none_weight_still_places_blades() -> Result<()> {
 		use crate::braid_grass::BraidGrassDefinition;
-		use crate::grove::{parse_variant_weights, preview_cell_grid};
+		use crate::grove::{parse_variant_weights, GroveExtent};
 
 		let mut grass = BraidGrassStd {
 			grove: BraidGrassGroveFrontend {
@@ -431,18 +441,22 @@ mod tests {
 			terrain: FlatTerrainSample { elevation: 0.4, steepness: 0.1 },
 			..Default::default()
 		};
-		grass.cells = preview_cell_grid(3, BraidGrassDefinition::preview_cell_extent());
+		let span = 3.0 * BraidGrassDefinition::cell_extent_xz_default();
+		let extent = GroveExtent::new(Vec3::ZERO, Vec3::new(span, 1.0, span));
+		grass = grass.with_grid(extent, 3);
 		assert!(!grass.placements().is_empty());
 		Ok(())
 	}
 
 	#[test]
-	fn preview_cell_grid_yields_placements_with_default_weights() -> Result<()> {
+	fn extent_subdivision_yields_placements_with_default_weights() -> Result<()> {
 		use crate::braid_grass::BraidGrassDefinition;
-		use crate::grove::preview_cell_grid;
+		use crate::grove::GroveExtent;
 
 		let mut grass = BraidGrassStd::default();
-		grass.cells = preview_cell_grid(5, BraidGrassDefinition::preview_cell_extent());
+		let span = 5.0 * BraidGrassDefinition::cell_extent_xz_default();
+		let extent = GroveExtent::new(Vec3::ZERO, Vec3::new(span, 1.0, span));
+		grass = grass.with_grid(extent, 5);
 		let placements = grass.placements();
 		assert!(
 			!placements.is_empty(),
@@ -453,14 +467,16 @@ mod tests {
 	}
 
 	#[test]
-	fn preview_cell_grid_yields_placements_with_authored_terrain() -> Result<()> {
+	fn extent_subdivision_yields_placements_with_authored_terrain() -> Result<()> {
 		use crate::braid_grass::BraidGrassDefinition;
-		use crate::grove::{parse_variant_weights, preview_cell_grid};
+		use crate::grove::{parse_variant_weights, GroveExtent};
 
 		let mut grass = BraidGrassStd::default();
 		grass.grove.variant_weights =
 			Some(parse_variant_weights("0,3,2,2,1").map_err(|e| anyhow::anyhow!("{e}"))?);
-		grass.cells = preview_cell_grid(5, BraidGrassDefinition::preview_cell_extent());
+		let span = 5.0 * BraidGrassDefinition::cell_extent_xz_default();
+		let extent = GroveExtent::new(Vec3::ZERO, Vec3::new(span, 1.0, span));
+		grass = grass.with_grid(extent, 5);
 		let placements = grass.placements();
 		assert!(
 			!placements.is_empty(),

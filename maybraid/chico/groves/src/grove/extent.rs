@@ -1,8 +1,8 @@
 //! Grove LOD footprint and overspill policy ([RFC-170 §3.1.3], [RFC-183 §3.4.2.3]).
 
+use bevy_math::bounding::Aabb3d;
 use bevy_math::Vec3;
 use gimme_gen::Cell;
-
 /// How candidate placements that exceed the grove LOD footprint are handled.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum GroveOverspillPolicy {
@@ -17,26 +17,15 @@ pub enum GroveOverspillPolicy {
 ///
 /// Vegetation cells may overspill their own bounds; ownership and culling derive from this
 /// footprint, not from per-instance placement cells.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct GroveExtent {
 	min: Vec3,
 	max: Vec3,
 }
 
 impl GroveExtent {
-	/// Union of all vegetation cell regions in one grove instance.
-	pub fn from_cells(cells: &[Cell]) -> Option<Self> {
-		let first = cells.first()?;
-		let mut min = Vec3::from(first.as_region().min);
-		let mut max = Vec3::from(first.as_region().max);
-		for cell in cells.iter().skip(1) {
-			let region = cell.as_region();
-			let region_min = Vec3::from(region.min);
-			let region_max = Vec3::from(region.max);
-			min = min.min(region_min);
-			max = max.max(region_max);
-		}
-		Some(Self { min, max })
+	pub fn new(min: Vec3, max: Vec3) -> Self {
+		Self { min: min.min(max), max: min.max(max) }
 	}
 
 	pub fn min(&self) -> Vec3 {
@@ -45,6 +34,27 @@ impl GroveExtent {
 
 	pub fn max(&self) -> Vec3 {
 		self.max
+	}
+
+	/// Uniform XZ sampling cells inside this grove extent.
+	pub fn subdivide_xz(&self, cells_per_axis: u32) -> Vec<Cell> {
+		let count = cells_per_axis.max(1);
+		let span = self.max - self.min;
+		let cell_x = span.x / count as f32;
+		let cell_z = span.z / count as f32;
+		let mut cells = Vec::with_capacity((count * count) as usize);
+		for x in 0..count {
+			for z in 0..count {
+				let min = Vec3::new(
+					self.min.x + x as f32 * cell_x,
+					self.min.y,
+					self.min.z + z as f32 * cell_z,
+				);
+				let max = Vec3::new(min.x + cell_x, self.max.y, min.z + cell_z);
+				cells.push(Cell(Aabb3d::from_min_max(min, max)));
+			}
+		}
+		cells
 	}
 
 	/// Whether `position` lies inside the grove footprint on XZ (Y is ignored).
@@ -99,18 +109,10 @@ fn reflect_scalar(value: f32, min: f32, max: f32) -> f32 {
 mod tests {
 	use super::*;
 	use anyhow::Result;
-	use bevy_math::bounding::Aabb3d;
-
-	fn cell_at(x: f32, z: f32, extent: f32) -> Cell {
-		let origin = Vec3::new(x, 0.0, z);
-		Cell(Aabb3d::from_min_max(origin, origin + Vec3::new(extent, 1.0, extent)))
-	}
 
 	#[test]
-	fn from_cells_unions_regions() -> Result<()> {
-		let cells = vec![cell_at(0.0, 0.0, 4.0), cell_at(4.0, 0.0, 4.0)];
-		let extent =
-			GroveExtent::from_cells(&cells).ok_or_else(|| anyhow::anyhow!("missing extent"))?;
+	fn new_orders_bounds() -> Result<()> {
+		let extent = GroveExtent::new(Vec3::new(8.0, 1.0, 4.0), Vec3::ZERO);
 		assert_eq!(extent.min(), Vec3::new(0.0, 0.0, 0.0));
 		assert_eq!(extent.max(), Vec3::new(8.0, 1.0, 4.0));
 		Ok(())
@@ -118,8 +120,7 @@ mod tests {
 
 	#[test]
 	fn discard_rejects_outside_extent() -> Result<()> {
-		let extent = GroveExtent::from_cells(&[cell_at(0.0, 0.0, 4.0)])
-			.ok_or_else(|| anyhow::anyhow!("missing extent"))?;
+		let extent = GroveExtent::new(Vec3::ZERO, Vec3::new(4.0, 1.0, 4.0));
 		let inside = Vec3::new(2.0, 0.0, 2.0);
 		let outside = Vec3::new(6.0, 0.0, 2.0);
 		assert_eq!(extent.resolve_xz(inside, GroveOverspillPolicy::Discard), Some(inside));
@@ -129,8 +130,7 @@ mod tests {
 
 	#[test]
 	fn reflect_folds_overspill_into_extent() -> Result<()> {
-		let extent = GroveExtent::from_cells(&[cell_at(0.0, 0.0, 4.0)])
-			.ok_or_else(|| anyhow::anyhow!("missing extent"))?;
+		let extent = GroveExtent::new(Vec3::ZERO, Vec3::new(4.0, 1.0, 4.0));
 		let reflected = extent
 			.resolve_xz(Vec3::new(6.0, 0.0, -1.0), GroveOverspillPolicy::Reflect)
 			.ok_or_else(|| anyhow::anyhow!("expected reflected position"))?;

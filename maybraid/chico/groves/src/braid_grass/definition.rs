@@ -67,8 +67,8 @@ impl BraidGrassDefinition {
 	/// Authored bucket weights for CLI help (`None` bucket, then macro declaration order).
 	pub const VARIANT_WEIGHTS_CLI: &str = "2.5,2,1,1,0.5";
 
-	/// Square cell footprint for playground preview grids.
-	pub fn preview_cell_extent() -> f32 {
+	/// Default square cell footprint for gridding this grove.
+	pub fn cell_extent_xz_default() -> f32 {
 		Self::AUTHORED_CELL_EXTENT_XZ
 	}
 }
@@ -122,6 +122,10 @@ mod tests {
 
 	fn test_cell() -> Cell {
 		Cell(Aabb3d::from_min_max(Vec3::ZERO, Vec3::new(10.0, 1.0, 10.0)))
+	}
+
+	fn test_extent() -> crate::grove::GroveExtent {
+		crate::grove::GroveExtent::new(Vec3::ZERO, Vec3::new(10.0, 1.0, 10.0))
 	}
 
 	fn assembled_grove() -> Grove<BraidGrassDefinition> {
@@ -246,7 +250,7 @@ mod tests {
 		);
 		let outcome = assembled.select_cell(
 			&test_cell(),
-			None,
+			&test_extent(),
 			&FlatTerrain { elevation: 0.5, steepness: 0.1 },
 		);
 		assert!(matches!(outcome, GroveCellOutcome::Empty { .. }));
@@ -258,8 +262,9 @@ mod tests {
 		let grove = assembled_grove();
 		let cell = test_cell();
 		let terrain = FlatTerrain { elevation: 0.35, steepness: 0.15 };
-		let a = grove.select_cell(&cell, None, &terrain);
-		let b = grove.select_cell(&cell, None, &terrain);
+		let extent = test_extent();
+		let a = grove.select_cell(&cell, &extent, &terrain);
+		let b = grove.select_cell(&cell, &extent, &terrain);
 		assert_eq!(a, b);
 		Ok(())
 	}

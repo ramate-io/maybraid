@@ -1,25 +1,25 @@
 use bevy::prelude::*;
-use chico_ball_components::{FrondCrown, ModerateLodFrondCrown};
 use chico_ball_components::tuft::{
-	BuddhaHandTuft, BladeTuft, SpearTuft, SucculentTuft, WeepingTuft,
+	BladeTuft, BuddhaHandTuft, SpearTuft, SucculentTuft, WeepingTuft,
 };
+use chico_ball_components::{FrondCrown, ModerateLodFrondCrown};
 use chico_groves::braid_grass::BraidGrassStd;
-use chico_sbs_trees::date_palm::DatePalm;
-use chico_sbs_trees::palm_bush::PalmBush;
-use chico_sbs_trees::waialea_palm::WaialeaPalm;
-use chico_sbs_trees::liams_conifer::LiamsConifer;
-use chico_sbs_trees::friends_conifer::FriendsConifer;
-use chico_sbs_trees::northern_conifer::NorthernConifer;
-use chico_sbs_trees::temperate_conifer::TemperateConifer;
-use chico_sbs_trees::jungle_storybook_tree::JungleStorybookTree;
 use chico_sbs_trees::braid_oak_tree::BraidOakTree;
-use chico_sbs_trees::storybook_tree::StorybookTree;
-use chico_sbs_trees::penmarch_torch::PenmarchTorch;
-use chico_sbs_trees::kamakura_torch::KamakuraTorch;
-use chico_sbs_trees::rorys_head_trained::RorysHeadTrained;
-use chico_sbs_trees::vase_tree::VaseTree;
-use chico_sbs_trees::sopes_banyan::SopesBanyan;
+use chico_sbs_trees::date_palm::DatePalm;
+use chico_sbs_trees::friends_conifer::FriendsConifer;
 use chico_sbs_trees::honu_banyan::HonuBanyan;
+use chico_sbs_trees::jungle_storybook_tree::JungleStorybookTree;
+use chico_sbs_trees::kamakura_torch::KamakuraTorch;
+use chico_sbs_trees::liams_conifer::LiamsConifer;
+use chico_sbs_trees::northern_conifer::NorthernConifer;
+use chico_sbs_trees::palm_bush::PalmBush;
+use chico_sbs_trees::penmarch_torch::PenmarchTorch;
+use chico_sbs_trees::rorys_head_trained::RorysHeadTrained;
+use chico_sbs_trees::sopes_banyan::SopesBanyan;
+use chico_sbs_trees::storybook_tree::StorybookTree;
+use chico_sbs_trees::temperate_conifer::TemperateConifer;
+use chico_sbs_trees::vase_tree::VaseTree;
+use chico_sbs_trees::waialea_palm::WaialeaPalm;
 use chico_sbs_trees::SkippedLeafMeshMaterial;
 use chico_sbs_trees::SkippedStickMeshMaterial;
 use chico_tree_components::{
@@ -100,10 +100,7 @@ pub type RenderWaialeaPalm = WaialeaPalm<
 >;
 
 /// [`PalmBush`] — trunkless ground-anchored frond cluster ([#231](https://github.com/ramate-io/maybraid/issues/231)).
-pub type RenderPalmBush = PalmBush<
-	StandardMaterial,
-	SkippedLeafMeshMaterial<StandardMaterial>,
->;
+pub type RenderPalmBush = PalmBush<StandardMaterial, SkippedLeafMeshMaterial<StandardMaterial>>;
 
 /// [`StorybookTree`] — default broadleaf stalk + log-tapered radial canopy ([#230](https://github.com/ramate-io/maybraid/issues/230)).
 pub type RenderStorybookTree = StorybookTree<
@@ -171,9 +168,7 @@ pub type RenderJungleStorybookTree = JungleStorybookTree<
 	SkippedFoliageMeshMaterial<StandardMaterial>,
 >;
 
-use chico_sbs_trees::{
-	SkippedInnerLeafMeshMaterial, SkippedOuterLeafMeshMaterial,
-};
+use chico_sbs_trees::{SkippedInnerLeafMeshMaterial, SkippedOuterLeafMeshMaterial};
 
 pub type RenderSucculentTuft =
 	SucculentTuft<StandardMaterial, SkippedLeafMeshMaterial<StandardMaterial>>;
@@ -183,8 +178,7 @@ pub type RenderBuddhaHandTuft =
 	BuddhaHandTuft<StandardMaterial, SkippedLeafMeshMaterial<StandardMaterial>>;
 pub type RenderWeepingTuft =
 	WeepingTuft<StandardMaterial, SkippedLeafMeshMaterial<StandardMaterial>>;
-pub type RenderFrondCrown =
-	FrondCrown<StandardMaterial, SkippedLeafMeshMaterial<StandardMaterial>>;
+pub type RenderFrondCrown = FrondCrown<StandardMaterial, SkippedLeafMeshMaterial<StandardMaterial>>;
 pub type RenderModerateLodFrondCrown =
 	ModerateLodFrondCrown<StandardMaterial, SkippedLeafMeshMaterial<StandardMaterial>>;
 
@@ -278,10 +272,7 @@ impl RenderSubject {
 			Self::HonuBanyan(t) => format!("{:?}", t.geometry),
 			Self::LiamsConifer(t) => format!("{:?}", t.geometry),
 			Self::FriendsConifer(t) => {
-				format!(
-					"{:?}|splay={}",
-					t.geometry, t.splay_radius_fraction_of_height
-				)
+				format!("{:?}|splay={}", t.geometry, t.splay_radius_fraction_of_height)
 			}
 			Self::NorthernConifer(t) => {
 				format!(
@@ -315,8 +306,8 @@ impl RenderSubject {
 			Self::BladeTuft(t) => format!("{:?}", t.shape),
 			Self::BraidGrass(g) => {
 				format!(
-					"{:?}|cells={}|terrain={:?}|foliage={:?}",
-					g.grove, g.cells.len(), g.terrain, g.foliage_noise
+					"{:?}|cells_per_axis={}|terrain={:?}|foliage={:?}",
+					g.grove, g.cells_per_axis, g.terrain, g.foliage_noise
 				)
 			}
 			Self::SpearTuft(t) => format!("{:?}", t.shape),
@@ -359,7 +350,9 @@ impl RenderSubject {
 			Self::CommonHighBush(shoots) => RenderDispatch::CommonHighBush(shoots.clone()),
 			Self::JungleGrowth(growth) => RenderDispatch::JungleGrowth(growth.clone()),
 			Self::FrondCrown(crown) => RenderDispatch::FrondCrown(crown.clone()),
-			Self::ModerateLodFrondCrown(crown) => RenderDispatch::ModerateLodFrondCrown(crown.clone()),
+			Self::ModerateLodFrondCrown(crown) => {
+				RenderDispatch::ModerateLodFrondCrown(crown.clone())
+			}
 		}
 	}
 }

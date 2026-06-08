@@ -1,30 +1,30 @@
 pub mod blade_tuft;
 pub mod braid_grass;
-pub mod buddha_hand_tuft;
-pub mod date_palm;
-pub mod palm_bush;
-pub mod waialea_palm;
-pub mod storybook_tree;
 pub mod braid_oak_tree;
-pub mod jungle_storybook_tree;
-pub mod frond_crown;
-pub mod jungle_growth;
-pub mod high_bush_shoots;
+pub mod buddha_hand_tuft;
 pub mod common_high_bush;
-pub mod liams_conifer;
+pub mod date_palm;
 pub mod friends_conifer;
-pub mod northern_conifer;
-pub mod temperate_conifer;
-pub mod penmarch_torch;
+pub mod frond_crown;
+pub mod high_bush_shoots;
+pub mod jungle_growth;
+pub mod jungle_storybook_tree;
 pub mod kamakura_torch;
-pub mod rorys_head_trained;
-pub mod vase_tree;
+pub mod liams_conifer;
 pub mod moderate_lod_frond_crown;
+pub mod northern_conifer;
+pub mod palm_bush;
+pub mod penmarch_torch;
 pub mod plugin;
+pub mod rorys_head_trained;
+pub mod storybook_tree;
+pub mod temperate_conifer;
+pub mod vase_tree;
+pub mod waialea_palm;
 
 pub use plugin::RenderCommandsPlugin;
-pub mod sopes_banyan;
 pub mod honu_banyan;
+pub mod sopes_banyan;
 pub mod spear_tuft;
 pub mod succulent_tuft;
 pub mod weeping_tuft;
@@ -35,30 +35,30 @@ use clap::Subcommand;
 use crate::render::{RenderConfig, RenderSubject};
 pub use blade_tuft::BladeTuftRenderHelper;
 pub use braid_grass::BraidGrassRenderHelper;
-pub use buddha_hand_tuft::BuddhaHandTuftRenderHelper;
-pub use date_palm::DatePalmRenderHelper;
-pub use palm_bush::PalmBushRenderHelper;
-pub use waialea_palm::WaialeaPalmRenderHelper;
-pub use storybook_tree::StorybookTreeRenderHelper;
 pub use braid_oak_tree::BraidOakTreeRenderHelper;
-pub use jungle_storybook_tree::JungleStorybookTreeRenderHelper;
-pub use frond_crown::FrondCrownRenderHelper;
-pub use jungle_growth::JungleGrowthRenderHelper;
-pub use high_bush_shoots::HighBushShootsRenderHelper;
+pub use buddha_hand_tuft::BuddhaHandTuftRenderHelper;
 pub use common_high_bush::CommonHighBushRenderHelper;
-pub use liams_conifer::LiamsConiferRenderHelper;
+pub use date_palm::DatePalmRenderHelper;
 pub use friends_conifer::FriendsConiferRenderHelper;
-pub use northern_conifer::NorthernConiferRenderHelper;
-pub use temperate_conifer::TemperateConiferRenderHelper;
-pub use penmarch_torch::PenmarchTorchRenderHelper;
-pub use kamakura_torch::KamakuraTorchRenderHelper;
-pub use rorys_head_trained::RorysHeadTrainedRenderHelper;
-pub use vase_tree::VaseTreeRenderHelper;
-pub use moderate_lod_frond_crown::ModerateLodFrondCrownRenderHelper;
-pub use sopes_banyan::SopesBanyanRenderHelper;
+pub use frond_crown::FrondCrownRenderHelper;
+pub use high_bush_shoots::HighBushShootsRenderHelper;
 pub use honu_banyan::HonuBanyanRenderHelper;
+pub use jungle_growth::JungleGrowthRenderHelper;
+pub use jungle_storybook_tree::JungleStorybookTreeRenderHelper;
+pub use kamakura_torch::KamakuraTorchRenderHelper;
+pub use liams_conifer::LiamsConiferRenderHelper;
+pub use moderate_lod_frond_crown::ModerateLodFrondCrownRenderHelper;
+pub use northern_conifer::NorthernConiferRenderHelper;
+pub use palm_bush::PalmBushRenderHelper;
+pub use penmarch_torch::PenmarchTorchRenderHelper;
+pub use rorys_head_trained::RorysHeadTrainedRenderHelper;
+pub use sopes_banyan::SopesBanyanRenderHelper;
 pub use spear_tuft::SpearTuftRenderHelper;
+pub use storybook_tree::StorybookTreeRenderHelper;
 pub use succulent_tuft::SucculentTuftRenderHelper;
+pub use temperate_conifer::TemperateConiferRenderHelper;
+pub use vase_tree::VaseTreeRenderHelper;
+pub use waialea_palm::WaialeaPalmRenderHelper;
 pub use weeping_tuft::WeepingTuftRenderHelper;
 
 #[derive(Clone, clap::Args, Component)]
@@ -102,14 +102,14 @@ impl<T: clap::Args + Clone> RenderHelper<T> {
 	}
 }
 
-/// Wraps [`RenderHelper`] with a square preview cell grid for grove [`RenderItem`] commands.
+/// Wraps [`RenderHelper`] with square grove grid settings for grove [`RenderItem`] commands.
 #[derive(Clone, clap::Args, Component)]
 #[command(rename_all = "kebab-case")]
 pub struct CellRenderHelper<T: clap::Args + Clone> {
 	#[command(flatten)]
 	pub render: RenderHelper<T>,
 
-	#[arg(long, default_value_t = 5, help_heading = "Grove Preview")]
+	#[arg(long, default_value_t = 5, help_heading = "Grove Grid")]
 	pub cells_per_axis: u32,
 }
 
@@ -323,8 +323,9 @@ mod tests {
 
 	#[test]
 	fn spear_tuft_command_preserves_shape_params() -> Result<()> {
-		let cmd = crate::commands::PlaygroundCommand::parse_line("render spear-tuft --spear-count 20")
-			.map_err(|e| anyhow::anyhow!("{e}"))?;
+		let cmd =
+			crate::commands::PlaygroundCommand::parse_line("render spear-tuft --spear-count 20")
+				.map_err(|e| anyhow::anyhow!("{e}"))?;
 		let crate::commands::PlaygroundCommand::Render(Render::SpearTuft(helper)) = cmd else {
 			anyhow::bail!("expected spear-tuft render command");
 		};
@@ -395,8 +396,9 @@ mod tests {
 
 	#[test]
 	fn waialea_palm_command_preserves_shape_params() -> Result<()> {
-		let cmd = crate::commands::PlaygroundCommand::parse_line("render waialea-palm --ring-count 3")
-			.map_err(|e| anyhow::anyhow!("{e}"))?;
+		let cmd =
+			crate::commands::PlaygroundCommand::parse_line("render waialea-palm --ring-count 3")
+				.map_err(|e| anyhow::anyhow!("{e}"))?;
 		let crate::commands::PlaygroundCommand::Render(Render::WaialeaPalm(helper)) = cmd else {
 			anyhow::bail!("expected waialea-palm render command");
 		};
@@ -459,8 +461,7 @@ mod tests {
 		assert!(
 			(geometry.storybook.scale.stalk_height_fraction
 				- chico_sbs_geometry::anchors::braid_oak::BRAID_STALK_HEIGHT_FRACTION)
-				.abs()
-				< 1e-5
+				.abs() < 1e-5
 		);
 		let cfg = Render::BraidOakTree(helper).into_render_config();
 		let RenderSubject::BraidOakTree(tree) = cfg.subject else {
@@ -476,7 +477,8 @@ mod tests {
 			"render jungle-storybook-tree --tree-height 18 --branch-depth 4",
 		)
 		.map_err(|e| anyhow::anyhow!("{e}"))?;
-		let crate::commands::PlaygroundCommand::Render(Render::JungleStorybookTree(helper)) = cmd else {
+		let crate::commands::PlaygroundCommand::Render(Render::JungleStorybookTree(helper)) = cmd
+		else {
 			anyhow::bail!("expected jungle-storybook-tree render command");
 		};
 		assert!((helper.inner.geometry.storybook.scale.tree_height - 18.0).abs() < 1e-5);
@@ -511,11 +513,14 @@ mod tests {
 			"render rorys-head-trained --tree-height 20 --projection 0.35..0.50 --canopy-ring-unit-height 1.0",
 		)
 		.map_err(|e| anyhow::anyhow!("{e}"))?;
-		let crate::commands::PlaygroundCommand::Render(Render::RorysHeadTrained(helper)) = cmd else {
+		let crate::commands::PlaygroundCommand::Render(Render::RorysHeadTrained(helper)) = cmd
+		else {
 			anyhow::bail!("expected rorys-head-trained render command");
 		};
 		assert!((helper.inner.geometry.scale.tree_height - 20.0).abs() < 1e-5);
-		assert!((helper.inner.geometry.projection.span_fraction_of_height.start - 0.35).abs() < 1e-5);
+		assert!(
+			(helper.inner.geometry.projection.span_fraction_of_height.start - 0.35).abs() < 1e-5
+		);
 		assert!((helper.inner.geometry.rings.canopy_ring_unit_height - 1.0).abs() < 1e-5);
 		Ok(())
 	}
@@ -556,7 +561,8 @@ mod tests {
 			"render northern-conifer --stalk-height 28 --ring-heights 0.12..0.95 --splay-radius-fraction-of-height 0.02",
 		)
 		.map_err(|e| anyhow::anyhow!("{e}"))?;
-		let crate::commands::PlaygroundCommand::Render(Render::NorthernConifer(helper)) = cmd else {
+		let crate::commands::PlaygroundCommand::Render(Render::NorthernConifer(helper)) = cmd
+		else {
 			anyhow::bail!("expected northern-conifer render command");
 		};
 		assert!((helper.inner.geometry.scale.stalk_height - 28.0).abs() < 1e-5);
@@ -605,7 +611,9 @@ mod tests {
 		};
 		assert!((helper.inner.geometry.scale.stalk_height - 22.0).abs() < 1e-5);
 		assert!((helper.inner.geometry.growth.angle_tolerance_degrees - 32.0).abs() < 1e-5);
-		assert!((helper.inner.geometry.projection.length_fraction_of_height.start - 0.12).abs() < 1e-5);
+		assert!(
+			(helper.inner.geometry.projection.length_fraction_of_height.start - 0.12).abs() < 1e-5
+		);
 		Ok(())
 	}
 
@@ -615,7 +623,8 @@ mod tests {
 			"render temperate-conifer --stalk-height 18 --fronds-per-joint 1..2 --frond-length-fraction 0.04..0.06 --frond-spawn-fraction 0.7",
 		)
 		.map_err(|e| anyhow::anyhow!("{e}"))?;
-		let crate::commands::PlaygroundCommand::Render(Render::TemperateConifer(helper)) = cmd else {
+		let crate::commands::PlaygroundCommand::Render(Render::TemperateConifer(helper)) = cmd
+		else {
 			anyhow::bail!("expected temperate-conifer render command");
 		};
 		assert!((helper.inner.geometry.inner.scale.stalk_height - 18.0).abs() < 1e-5);
@@ -670,7 +679,7 @@ mod tests {
 		let grass = helper.configured_braid_grass();
 		assert!(grass.grove.variant_weights.is_none());
 		let placements = grass.placements();
-		assert_eq!(grass.cells.len(), 25);
+		assert_eq!(grass.placement_cells().len(), 25);
 		assert!(
 			placements.len() >= 8,
 			"expected a visible braid-grass preview with default flags, got {} placements",
@@ -690,14 +699,14 @@ mod tests {
 		};
 		assert_eq!(helper.cells_per_axis, 3);
 		let grass = helper.configured_braid_grass();
-		assert_eq!(grass.cells.len(), 9);
+		assert_eq!(grass.placement_cells().len(), 9);
 		assert!((grass.terrain.elevation - 0.4).abs() < 1e-5);
 		assert!(!grass.placements().is_empty());
 		let cfg = Render::BraidGrass(helper).into_render_config();
 		let RenderSubject::BraidGrass(subject) = cfg.subject else {
 			anyhow::bail!("expected braid grass subject");
 		};
-		assert_eq!(subject.cells.len(), 9);
+		assert_eq!(subject.placement_cells().len(), 9);
 		assert!(!subject.placements().is_empty());
 		Ok(())
 	}

@@ -8,11 +8,11 @@ pub mod braid_grass;
 pub mod skipped_mesh_material;
 
 pub use grove::{
-	biased_sample, braid_grass_preview_cells, parse_variant_weights, preview_cell_grid, Bucket,
-	CellGrove, CellXzOffset, FlatTerrainSample, ForestGroveBiases, Grove, GroveBucket,
-	GroveCellOutcome, GroveDistribution, GroveFrontend, GroveNoiseConfig, GrovePlacementRanges,
-	PaletteColor, PaletteMix, PaletteSlot, PlacementConstraints, PreparedGroveDistribution,
-	SampledCellParams, TerrainSample, VariantWeightOverrides, WithPalette,
+	parse_variant_weights, Bucket, CellGrove, CellXzOffset, FlatTerrainSample, ForestGroveBiases,
+	Grove, GroveBucket, GroveCellOutcome, GroveCellPlacement, GroveDistribution, GroveExtent,
+	GroveFrontend, GroveNoiseConfig, GrovePlacedCell, GrovePlacementRanges, PaletteColor,
+	PaletteMix, PaletteSlot, PlacementConstraints, PreparedGroveDistribution, SampledCellParams,
+	TerrainSample, VariantWeightOverrides, WithPalette,
 };
 
 pub use braid_grass::{BraidGrassCell, BraidGrassClump, BraidGrassDefinition};
@@ -21,4 +21,4 @@ pub use braid_grass::{BraidGrassCell, BraidGrassClump, BraidGrassDefinition};
 pub use braid_grass::{BraidGrass, BraidGrassRenderRule, BraidGrassStd};
 
 #[cfg(feature = "render")]
-pub use grove::{GrovePlacedCell, GroveRenderHelper, GroveRenderRule};
+pub use grove::{GroveRenderHelper, GroveRenderRule};

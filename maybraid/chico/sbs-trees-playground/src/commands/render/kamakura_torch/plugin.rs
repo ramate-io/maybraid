@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 
-use crate::commands::render::{Render, KamakuraTorchRenderHelper};
+use crate::commands::render::{KamakuraTorchRenderHelper, Render};
 use crate::render::{RenderConfig, RenderSubject};
 
 pub struct KamakuraTorchRenderPlugin;

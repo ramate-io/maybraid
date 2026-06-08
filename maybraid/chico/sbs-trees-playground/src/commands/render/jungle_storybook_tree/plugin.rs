@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 
-use crate::commands::render::{Render, JungleStorybookTreeRenderHelper};
+use crate::commands::render::{JungleStorybookTreeRenderHelper, Render};
 use crate::render::{RenderConfig, RenderSubject};
 
 pub struct JungleStorybookTreeRenderPlugin;

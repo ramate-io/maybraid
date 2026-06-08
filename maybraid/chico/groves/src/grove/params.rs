@@ -51,27 +51,27 @@ impl GrovePlacementRanges {
 		cell_center: Vec3,
 	) -> SampledCellParams {
 		let n = NoiseConfig::new(noise.base);
-		let scale = biased_sample(
+		let scale = Self::biased_sample(
 			self.scale,
 			biases.scale_mean,
 			n.sample_3d_world(cell_center + Vec3::new(2.0, 0.0, 0.0)),
 		);
-		let amplitude = biased_sample(
+		let amplitude = Self::biased_sample(
 			self.noise_amplitude,
 			biases.noise_amplitude_mean,
 			n.sample_3d_world(cell_center + Vec3::new(4.0, 0.0, 0.0)),
 		);
-		let frequency = biased_sample(
+		let frequency = Self::biased_sample(
 			self.noise_frequency,
 			biases.noise_frequency_mean,
 			n.sample_3d_world(cell_center + Vec3::new(5.0, 0.0, 0.0)),
 		);
-		let offset_x = biased_sample(
+		let offset_x = Self::biased_sample(
 			self.offset,
 			biases.offset_mean,
 			n.sample_3d_world(cell_center + Vec3::new(6.0, 0.0, 0.0)),
 		);
-		let offset_z = biased_sample(
+		let offset_z = Self::biased_sample(
 			self.offset,
 			biases.offset_mean,
 			n.sample_3d_world(cell_center + Vec3::new(0.0, 0.0, 7.0)),
@@ -81,6 +81,15 @@ impl GrovePlacementRanges {
 			scale,
 			offset: CellXzOffset::new(offset_x, offset_z),
 		}
+	}
+
+	fn biased_sample(range: UnitRange, mean_unit: f32, noise: f32) -> f32 {
+		let mean_unit = mean_unit.clamp(0.0, 1.0);
+		let lo = range.start.min(range.end);
+		let hi = range.start.max(range.end);
+		let mean = lo + (hi - lo) * mean_unit;
+		let radius = (mean - lo).max(hi - mean);
+		(mean + noise * radius).clamp(lo, hi)
 	}
 }
 
@@ -128,16 +137,6 @@ impl GroveNoiseConfig {
 	}
 }
 
-/// Saturating scalar sample inside an authored range ([RFC-183 3.5.1.1]).
-pub fn biased_sample(range: UnitRange, mean_unit: f32, noise: f32) -> f32 {
-	let mean_unit = mean_unit.clamp(0.0, 1.0);
-	let lo = range.start.min(range.end);
-	let hi = range.start.max(range.end);
-	let mean = lo + (hi - lo) * mean_unit;
-	let radius = (mean - lo).max(hi - mean);
-	(mean + noise * radius).clamp(lo, hi)
-}
-
 #[cfg(test)]
 mod tests {
 	use super::*;
@@ -147,7 +146,7 @@ mod tests {
 	fn biased_sample_stays_in_range() -> Result<()> {
 		let range = UnitRange::new(0.2, 0.8);
 		for noise in [-1.0_f32, 0.0, 1.0] {
-			let v = biased_sample(range, 0.5, noise);
+			let v = GrovePlacementRanges::biased_sample(range, 0.5, noise);
 			assert!(v >= 0.2 && v <= 0.8);
 		}
 		Ok(())

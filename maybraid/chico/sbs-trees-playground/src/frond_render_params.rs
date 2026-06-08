@@ -17,10 +17,7 @@ pub struct FrondCrownRenderParams {
 
 impl Default for FrondCrownRenderParams {
 	fn default() -> Self {
-		Self {
-			shape: FrondCrownShape::default(),
-			material: SkippedLeafMeshMaterial::default(),
-		}
+		Self { shape: FrondCrownShape::default(), material: SkippedLeafMeshMaterial::default() }
 	}
 }
 
