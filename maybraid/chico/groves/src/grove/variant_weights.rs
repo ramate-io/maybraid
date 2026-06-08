@@ -59,12 +59,9 @@ mod tests {
 
 	#[test]
 	fn parse_variant_weights_accepts_defaults_and_overrides() -> Result<()> {
-		let overrides = parse_variant_weights("1.0,x,2.5,3.0,x")
-			.map_err(|e| anyhow::anyhow!("{e}"))?;
-		assert_eq!(
-			overrides.slots,
-			vec![Some(1.0), None, Some(2.5), Some(3.0), None]
-		);
+		let overrides =
+			parse_variant_weights("1.0,x,2.5,3.0,x").map_err(|e| anyhow::anyhow!("{e}"))?;
+		assert_eq!(overrides.slots, vec![Some(1.0), None, Some(2.5), Some(3.0), None]);
 		Ok(())
 	}
 
@@ -74,8 +71,8 @@ mod tests {
 		let authored_deep_green = distribution.buckets[1].weight;
 		let authored_jungle = distribution.buckets[3].weight;
 
-		let overrides = parse_variant_weights("0.1,x,4.0,x,x")
-			.map_err(|e| anyhow::anyhow!("{e}"))?;
+		let overrides =
+			parse_variant_weights("0.1,x,4.0,x,x").map_err(|e| anyhow::anyhow!("{e}"))?;
 		overrides.apply_to(&mut distribution).map_err(|e| anyhow::anyhow!("{e}"))?;
 
 		assert_eq!(distribution.buckets[0].weight, 0.1);

@@ -10,10 +10,10 @@ mod cell_grove;
 mod constraints;
 mod distribution;
 mod extent;
+mod frontend;
 mod outcome;
 mod palette;
 mod params;
-mod frontend;
 mod placement;
 mod preview;
 mod terrain;
@@ -29,17 +29,13 @@ pub use biases::ForestGroveBiases;
 pub use bucket::Bucket;
 pub use cell_grove::CellGrove;
 pub use constraints::PlacementConstraints;
-pub use distribution::{
-	GroveBucket, GroveDistribution, GroveDistributionBuilder, PreparedGroveDistribution,
-};
+pub use distribution::{GroveBucket, GroveDistribution, PreparedGroveDistribution};
 pub use extent::{GroveExtent, GroveOverspillPolicy};
 pub use frontend::GroveFrontend;
 pub use outcome::GroveCellOutcome;
 pub use palette::{PaletteColor, PaletteMix, PaletteSlot, WithPalette};
-pub use params::{
-	biased_sample, sample_cell_params, GroveNoiseConfig, GrovePlacementRanges, SampledCellParams,
-};
-pub use placement::{candidate_position, cell_origin, CellXzOffset};
+pub use params::{biased_sample, GroveNoiseConfig, GrovePlacementRanges, SampledCellParams};
+pub use placement::CellXzOffset;
 pub use preview::{braid_grass_preview_cells, preview_cell_grid};
 pub use terrain::{FlatTerrainSample, TerrainSample};
 pub use variant_weights::{parse_variant_weights, VariantWeightOverrides};
@@ -72,11 +68,8 @@ impl<G: CellGrove> Grove<G> {
 	where
 		G::Variant: Clone,
 	{
-		let prepared = definition
-			.distribution()
-			.clone()
-			.builder()
-			.build(&biases, &noise, perturbation_origin);
+		let prepared =
+			definition.distribution().clone().prepare(&biases, &noise, perturbation_origin);
 		Self { definition, biases, noise, prepared }
 	}
 
@@ -108,7 +101,7 @@ impl<G: CellGrove> Grove<G> {
 		&self.prepared
 	}
 
-	/// Run bucket throw, first-fit, and constraint validation for one cell.
+	/// Sample, place, validate, and choose a bucket for one vegetation cell.
 	pub fn select_cell(
 		&self,
 		cell: &Cell,
@@ -126,15 +119,16 @@ impl<G: CellGrove> Grove<G> {
 		overspill_policy: GroveOverspillPolicy,
 		terrain: &impl TerrainSample,
 	) -> GroveCellOutcome<G::Variant> {
-		self.prepared.select_cell(
-			cell,
-			grove_extent,
-			overspill_policy,
-			&self.definition.placement_ranges(),
-			&self.biases,
-			&self.noise,
-			terrain,
-		)
+		let sampled =
+			self.definition.placement_ranges().sample_cell(&self.biases, &self.noise, cell);
+		let candidate = sampled.position_in(cell);
+		let Some(position) = grove_extent
+			.map(|extent| extent.resolve_xz(candidate, overspill_policy))
+			.unwrap_or(Some(candidate))
+		else {
+			return GroveCellOutcome::Rejected { position: candidate };
+		};
+		self.prepared.select_at(position, sampled, &self.noise, terrain)
 	}
 }
 
@@ -210,8 +204,47 @@ mod tests {
 			bevy_math::Vec3::ZERO,
 			bevy_math::Vec3::new(10.0, 1.0, 10.0),
 		));
-		let outcome = grove.select_cell(&cell, None, &FlatTerrain { elevation: 0.4, steepness: 0.1 });
+		let outcome =
+			grove.select_cell(&cell, None, &FlatTerrain { elevation: 0.4, steepness: 0.1 });
 		assert!(matches!(outcome, GroveCellOutcome::Placed { variant: "tree", .. }));
+		Ok(())
+	}
+
+	#[test]
+	fn select_cell_rejects_placement_outside_grove_extent() -> Result<()> {
+		let mut distribution = GroveDistribution::new();
+		distribution.push(GroveBucket {
+			weight: 1.0,
+			constraints: PlacementConstraints::UNCONSTRAINED,
+			item: Some("tree"),
+		});
+		let grove = Grove::assemble(
+			MockGrove {
+				cell_extent_xz: 10.0,
+				placement: GrovePlacementRanges::new(
+					UnitRange::new(1.0, 1.0),
+					UnitRange::new(20.0, 20.0),
+					UnitRange::new(0.1, 0.1),
+					UnitRange::new(0.05, 0.05),
+				),
+				distribution,
+			},
+			ForestGroveBiases::default(),
+			GroveNoiseConfig::default(),
+			Vec3::ZERO,
+		);
+		let cell = Cell(Aabb3d::from_min_max(
+			bevy_math::Vec3::ZERO,
+			bevy_math::Vec3::new(10.0, 1.0, 10.0),
+		));
+		let extent = GroveExtent::from_cells(&[cell.clone()])
+			.ok_or_else(|| anyhow::anyhow!("missing extent"))?;
+		let outcome = grove.select_cell(
+			&cell,
+			Some(&extent),
+			&FlatTerrain { elevation: 0.4, steepness: 0.1 },
+		);
+		assert!(matches!(outcome, GroveCellOutcome::Rejected { .. }));
 		Ok(())
 	}
 }

@@ -77,7 +77,10 @@ impl From<BraidGrassGroveFrontend> for GroveFrontend {
 }
 
 impl BraidGrassGroveFrontend {
-	pub fn assemble(&self, definition: BraidGrassDefinition) -> crate::grove::Grove<BraidGrassDefinition> {
+	pub fn assemble(
+		&self,
+		definition: BraidGrassDefinition,
+	) -> crate::grove::Grove<BraidGrassDefinition> {
 		GroveFrontend::from(self.clone()).assemble(definition)
 	}
 }
@@ -95,11 +98,8 @@ mod tests {
 		assert!(frontend.variant_weights.is_none());
 		let definition = BraidGrassDefinition::new();
 		let authored = BraidGrassCell::grove_distribution();
-		for (bucket, authored_bucket) in definition
-			.distribution()
-			.buckets
-			.iter()
-			.zip(&authored.buckets)
+		for (bucket, authored_bucket) in
+			definition.distribution().buckets.iter().zip(&authored.buckets)
 		{
 			assert_eq!(bucket.weight, authored_bucket.weight);
 		}

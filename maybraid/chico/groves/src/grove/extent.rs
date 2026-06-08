@@ -103,16 +103,14 @@ mod tests {
 
 	fn cell_at(x: f32, z: f32, extent: f32) -> Cell {
 		let origin = Vec3::new(x, 0.0, z);
-		Cell(Aabb3d::from_min_max(
-			origin,
-			origin + Vec3::new(extent, 1.0, extent),
-		))
+		Cell(Aabb3d::from_min_max(origin, origin + Vec3::new(extent, 1.0, extent)))
 	}
 
 	#[test]
 	fn from_cells_unions_regions() -> Result<()> {
 		let cells = vec![cell_at(0.0, 0.0, 4.0), cell_at(4.0, 0.0, 4.0)];
-		let extent = GroveExtent::from_cells(&cells).ok_or_else(|| anyhow::anyhow!("missing extent"))?;
+		let extent =
+			GroveExtent::from_cells(&cells).ok_or_else(|| anyhow::anyhow!("missing extent"))?;
 		assert_eq!(extent.min(), Vec3::new(0.0, 0.0, 0.0));
 		assert_eq!(extent.max(), Vec3::new(8.0, 1.0, 4.0));
 		Ok(())
@@ -124,10 +122,7 @@ mod tests {
 			.ok_or_else(|| anyhow::anyhow!("missing extent"))?;
 		let inside = Vec3::new(2.0, 0.0, 2.0);
 		let outside = Vec3::new(6.0, 0.0, 2.0);
-		assert_eq!(
-			extent.resolve_xz(inside, GroveOverspillPolicy::Discard),
-			Some(inside)
-		);
+		assert_eq!(extent.resolve_xz(inside, GroveOverspillPolicy::Discard), Some(inside));
 		assert_eq!(extent.resolve_xz(outside, GroveOverspillPolicy::Discard), None);
 		Ok(())
 	}

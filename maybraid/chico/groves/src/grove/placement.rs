@@ -1,4 +1,4 @@
-//! Candidate position selection ([RFC-183 3.4.2.3]).
+//! Per-cell placement geometry ([RFC-183 3.4.2.3]).
 
 use bevy_math::{bounding::BoundingVolume, Vec3};
 use gimme_gen::Cell;
@@ -18,17 +18,17 @@ impl CellXzOffset {
 	}
 
 	pub const ZERO: Self = Self::new(0.0, 0.0);
-}
 
-/// Parent cell center used for placement ownership.
-pub fn cell_origin(cell: &Cell) -> Vec3 {
-	cell.as_region().center().into()
-}
+	/// Parent cell center used for placement ownership.
+	pub fn cell_center(cell: &Cell) -> Vec3 {
+		cell.as_region().center().into()
+	}
 
-/// Deterministic candidate point from cell center plus world-metre offset.
-pub fn candidate_position(cell: &Cell, offset: CellXzOffset) -> Vec3 {
-	let origin = cell_origin(cell);
-	Vec3::new(origin.x + offset.x, origin.y, origin.z + offset.z)
+	/// Candidate world point for this offset in `cell`.
+	pub fn place_in(self, cell: &Cell) -> Vec3 {
+		let center = Self::cell_center(cell);
+		Vec3::new(center.x + self.x, center.y, center.z + self.z)
+	}
 }
 
 #[cfg(test)]
@@ -41,7 +41,7 @@ mod tests {
 	#[test]
 	fn offset_shifts_from_cell_center() -> Result<()> {
 		let cell = Cell(Aabb3d::from_min_max(Vec3::new(0.0, 0.0, 0.0), Vec3::new(10.0, 1.0, 10.0)));
-		let p = candidate_position(&cell, CellXzOffset::new(1.0, -2.0));
+		let p = CellXzOffset::new(1.0, -2.0).place_in(&cell);
 		assert!((p.x - 6.0).abs() < 1e-5);
 		assert!((p.z - 3.0).abs() < 1e-5);
 		Ok(())

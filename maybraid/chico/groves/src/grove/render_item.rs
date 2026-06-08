@@ -5,9 +5,7 @@ use std::marker::PhantomData;
 use bevy::prelude::*;
 use render_item::{CascadeChunk, RenderItem};
 
-use super::{
-	CellGrove, Grove, GroveCellOutcome, GroveExtent, GroveOverspillPolicy, TerrainSample,
-};
+use super::{CellGrove, Grove, GroveCellOutcome, GroveExtent, GroveOverspillPolicy, TerrainSample};
 use gimme_gen::Cell;
 
 /// One placed grove cell ready for materialization.
@@ -98,9 +96,7 @@ impl<Item: RenderItem, V: Clone, Rule: GroveRenderRule<Item, V>> GroveRenderHelp
 	}
 
 	pub fn render_placements(&self) -> impl Iterator<Item = (Item, Transform)> + '_ {
-		self.placements
-			.iter()
-			.filter_map(|placed| self.rule.render_item_for(placed))
+		self.placements.iter().filter_map(|placed| self.rule.render_item_for(placed))
 	}
 }
 

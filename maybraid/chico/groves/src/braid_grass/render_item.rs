@@ -6,10 +6,9 @@ use bevy::prelude::*;
 use chico_ball_components::tuft::{BladeTuft, BladeTuftShape};
 use clap::Args;
 use gimme_gen::Cell;
-use procedural_common::{noise_params_from_scalar_str, NoiseParams};
+use procedural_common::{noise_params_from_scalar_str, NoiseConfig, NoiseParams};
 use render_item::{CascadeChunk, RenderItem};
 
-use crate::braid_grass::sample::blade_tuft_shape_from;
 use crate::braid_grass::{
 	BraidGrassCell, BraidGrassClump, BraidGrassDefinition, BraidGrassGroveFrontend,
 };
@@ -165,7 +164,9 @@ where
 		}
 	}
 
-	fn render_helper(&self) -> GroveRenderHelper<
+	fn render_helper(
+		&self,
+	) -> GroveRenderHelper<
 		PaletteBladeTuft<LeafM>,
 		BraidGrassCell,
 		BraidGrassRenderRule<LeafM, LeafS>,
@@ -289,6 +290,33 @@ where
 			.insert((Mesh3d(mesh_handle), MeshMaterial3d(material_handle)));
 	});
 	vec![root]
+}
+
+fn blade_tuft_shape_from(
+	position: Vec3,
+	grass: &BraidGrassClump,
+	foliage_seed: i32,
+) -> BladeTuftShape {
+	let noise = NoiseConfig::new(NoiseParams::from_scalar(foliage_seed as f32, 1.0, 1.0, 1));
+	let sample_f32 = |range: procedural_common::UnitRange, salt| {
+		let lo = range.start.min(range.end);
+		let hi = range.start.max(range.end);
+		noise.sample_range_f32_4d(lo, hi, position.x, position.y, position.z, salt)
+	};
+	let sample_u32 = |range: &std::ops::RangeInclusive<u32>, salt| {
+		let lo = *range.start() as usize;
+		let hi = (*range.end() as usize).saturating_add(1);
+		noise.sample_range_usize_4d(lo, hi, position.x, position.y, position.z, salt) as u32
+	};
+
+	BladeTuftShape {
+		blade_count: sample_u32(&grass.blade_count, 3.0),
+		blade_length: sample_f32(grass.height, 1.0).max(0.1),
+		blade_width: sample_f32(grass.width, 2.0).max(0.005),
+		max_tilt_radians: sample_f32(grass.braid_twist, 4.0).max(0.01),
+		seed: foliage_seed,
+		..BladeTuftShape::default()
+	}
 }
 
 fn braid_grass_clump(variant: &BraidGrassCell) -> Option<&BraidGrassClump> {
@@ -430,9 +458,8 @@ mod tests {
 		use crate::grove::{parse_variant_weights, preview_cell_grid};
 
 		let mut grass = BraidGrassStd::default();
-		grass.grove.variant_weights = Some(
-			parse_variant_weights("0,3,2,2,1").map_err(|e| anyhow::anyhow!("{e}"))?,
-		);
+		grass.grove.variant_weights =
+			Some(parse_variant_weights("0,3,2,2,1").map_err(|e| anyhow::anyhow!("{e}"))?);
 		grass.cells = preview_cell_grid(5, BraidGrassDefinition::preview_cell_extent());
 		let placements = grass.placements();
 		assert!(

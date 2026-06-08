@@ -1,7 +1,7 @@
 //! Demo cell grids for grove render previews.
 
-use bevy_math::Vec3;
 use bevy_math::bounding::Aabb3d;
+use bevy_math::Vec3;
 use gimme_gen::Cell;
 
 use crate::braid_grass::BraidGrassDefinition;
@@ -16,10 +16,7 @@ pub fn preview_cell_grid(cells_per_axis: u32, cell_extent: f32) -> Vec<Cell> {
 	for x in 0..count {
 		for z in 0..count {
 			let origin = Vec3::new(x as f32 * extent, 0.0, z as f32 * extent);
-			cells.push(Cell(Aabb3d::from_min_max(
-				origin,
-				origin + Vec3::new(extent, 1.0, extent),
-			)));
+			cells.push(Cell(Aabb3d::from_min_max(origin, origin + Vec3::new(extent, 1.0, extent))));
 		}
 	}
 	cells

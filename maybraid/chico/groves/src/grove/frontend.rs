@@ -62,11 +62,6 @@ impl GroveFrontend {
 	where
 		G::Variant: Clone,
 	{
-		Grove::assemble(
-			definition,
-			self.biases,
-			self.noise,
-			self.perturbation_origin,
-		)
+		Grove::assemble(definition, self.biases, self.noise, self.perturbation_origin)
 	}
 }

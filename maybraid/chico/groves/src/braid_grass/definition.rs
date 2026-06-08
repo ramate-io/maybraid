@@ -96,8 +96,8 @@ mod tests {
 	use super::*;
 	use crate::braid_grass::BraidGrassClump;
 	use crate::grove::{
-		candidate_position, ForestGroveBiases, Grove, GroveCellOutcome, GroveNoiseConfig,
-		PlacementConstraints, SampledCellParams, TerrainSample,
+		ForestGroveBiases, Grove, GroveCellOutcome, GroveNoiseConfig, PlacementConstraints,
+		TerrainSample,
 	};
 	use anyhow::Result;
 	use bevy_math::bounding::Aabb3d;
@@ -195,13 +195,12 @@ mod tests {
 	fn constraint_first_fit_fallback() -> Result<()> {
 		let grove = assembled_grove();
 		let terrain = FlatTerrain { elevation: 0.3, steepness: 0.35 };
-		let sampled = SampledCellParams::sample(
-			&grove.placement_ranges(),
+		let sampled = grove.placement_ranges().sample_at(
 			grove.biases(),
 			grove.noise(),
 			Vec3::new(5.0, 0.0, 5.0),
 		);
-		let position = candidate_position(&test_cell(), sampled.offset);
+		let position = sampled.position_in(&test_cell());
 		// Jungle (index 3) rejects steepness 0.35; first-fit wraps to RedEdge (index 4).
 		let outcome = grove.prepared().select_at_with_start(3, position, sampled, &terrain);
 		match outcome {
@@ -217,13 +216,12 @@ mod tests {
 	fn assemble_selects_placed_variant() -> Result<()> {
 		let grove = assembled_grove();
 		let terrain = FlatTerrain { elevation: 0.4, steepness: 0.1 };
-		let sampled = SampledCellParams::sample(
-			&grove.placement_ranges(),
+		let sampled = grove.placement_ranges().sample_at(
 			grove.biases(),
 			grove.noise(),
 			Vec3::new(5.0, 0.0, 5.0),
 		);
-		let position = candidate_position(&test_cell(), sampled.offset);
+		let position = sampled.position_in(&test_cell());
 		// None bucket weight dominates random throw; pin start to a placed bucket.
 		let outcome = grove.prepared().select_at_with_start(1, position, sampled, &terrain);
 		assert!(matches!(outcome, GroveCellOutcome::Placed { .. }));
