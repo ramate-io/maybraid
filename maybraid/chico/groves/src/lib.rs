@@ -2,9 +2,14 @@
 
 pub mod grove;
 
+pub mod braid_grass;
+
 pub use grove::{
-	biased_sample, candidate_position, cell_origin, sample_cell_params, CellGrove,
+	biased_sample, candidate_position, cell_origin, sample_cell_params, Bucket, CellGrove,
 	ForestGroveBiases, Grove, GroveBucket, GroveCellOutcome, GroveDistribution,
-	GroveDistributionBuilder, GroveNoiseConfig, GroveParamRanges, PlacementConstraints,
-	PreparedGroveDistribution, SampledCellParams, TerrainSample,
+	GroveDistributionBuilder, GroveNoiseConfig, GroveParamRanges, PaletteColor, PaletteMix,
+	PaletteSlot, PlacementConstraints, PreparedGroveDistribution, SampledCellParams,
+	TerrainSample, WithPaletteMix,
 };
+
+pub use braid_grass::{BraidGrass, BraidGrassCell, BraidGrassGrove};

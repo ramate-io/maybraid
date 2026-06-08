@@ -4,21 +4,26 @@
 //! the spatial index lands in gimme.
 
 mod biases;
+mod bucket;
+mod buckets_macro;
 mod cell_grove;
 mod constraints;
 mod distribution;
 mod outcome;
+mod palette;
 mod params;
 mod placement;
 mod terrain;
 
 pub use biases::ForestGroveBiases;
+pub use bucket::Bucket;
 pub use cell_grove::CellGrove;
 pub use constraints::PlacementConstraints;
 pub use distribution::{
 	GroveBucket, GroveDistribution, GroveDistributionBuilder, PreparedGroveDistribution,
 };
 pub use outcome::GroveCellOutcome;
+pub use palette::{PaletteColor, PaletteMix, PaletteSlot, WithPaletteMix};
 pub use params::{
 	biased_sample, sample_cell_params, GroveNoiseConfig, GroveParamRanges, SampledCellParams,
 };
