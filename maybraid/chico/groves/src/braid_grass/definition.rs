@@ -1,5 +1,6 @@
 //! [`BraidGrassDefinition`] — well-known understory grove ([RFC-183 §3.4.5.1], [#306](https://github.com/ramate-io/maybraid/issues/306)).
 
+use bevy_math::Vec2;
 use procedural_common::UnitRange;
 
 use crate::braid_grass::BraidGrassCell;
@@ -8,7 +9,7 @@ use crate::grove::{CellGrove, GroveDistribution, GrovePlacementRanges};
 /// Authored Braid Grass grove definition.
 #[derive(Debug, Clone, PartialEq)]
 pub struct BraidGrassDefinition {
-	cell_extent_xz: f32,
+	cell_extent_xz: Vec2,
 	placement: GrovePlacementRanges,
 	distribution: GroveDistribution<BraidGrassCell>,
 }
@@ -20,11 +21,11 @@ impl Default for BraidGrassDefinition {
 }
 
 impl BraidGrassDefinition {
-	/// RFC §3.4.5.1 authored square cell footprint (metres on X and Z).
+	/// RFC §3.4.5.1 authored cell footprint (metres on X and Z).
 	///
 	/// Forest gridding may choose any span inside the RFC `2.5..6.0` band; this is the
 	/// definition default used by playground previews until a forest pass supplies cells.
-	pub const AUTHORED_CELL_EXTENT_XZ: f32 = 4.25;
+	pub const AUTHORED_CELL_EXTENT_XZ: Vec2 = Vec2::splat(4.25);
 
 	/// Per-cell placement ranges from RFC §3.4.5.1.
 	///
@@ -46,8 +47,8 @@ impl BraidGrassDefinition {
 		}
 	}
 
-	pub fn with_cell_extent_xz(mut self, cell_extent_xz: f32) -> Self {
-		self.cell_extent_xz = cell_extent_xz.max(0.1);
+	pub fn with_cell_extent_xz(mut self, cell_extent_xz: Vec2) -> Self {
+		self.cell_extent_xz = cell_extent_xz.max(Vec2::splat(0.1));
 		self
 	}
 
@@ -67,8 +68,8 @@ impl BraidGrassDefinition {
 	/// Authored bucket weights for CLI help (`None` bucket, then macro declaration order).
 	pub const VARIANT_WEIGHTS_CLI: &str = "2.5,2,1,1,0.5";
 
-	/// Default square cell footprint for gridding this grove.
-	pub fn cell_extent_xz_default() -> f32 {
+	/// Default cell footprint for gridding this grove.
+	pub fn cell_extent_xz_default() -> Vec2 {
 		Self::AUTHORED_CELL_EXTENT_XZ
 	}
 }
@@ -76,7 +77,7 @@ impl BraidGrassDefinition {
 impl CellGrove for BraidGrassDefinition {
 	type Variant = BraidGrassCell;
 
-	fn cell_extent_xz(&self) -> f32 {
+	fn cell_extent_xz(&self) -> Vec2 {
 		self.cell_extent_xz
 	}
 

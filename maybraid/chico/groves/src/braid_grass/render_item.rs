@@ -12,7 +12,7 @@ use crate::braid_grass::{
 	BraidGrassCell, BraidGrassClump, BraidGrassDefinition, BraidGrassGroveFrontend,
 };
 use crate::grove::{
-	FlatTerrainSample, GroveExtent, GrovePlacedCell, GroveRenderHelper, GroveRenderRule,
+	CellGrove, FlatTerrainSample, GroveExtent, GrovePlacedCell, GroveRenderHelper, GroveRenderRule,
 	TerrainSample, WithPalette,
 };
 use crate::skipped_mesh_material::{SkippedLeafMeshMaterial, SkippedStickMeshMaterial};
@@ -55,9 +55,6 @@ where
 	pub foliage_noise: NoiseParams,
 
 	#[arg(skip)]
-	pub cells_per_axis: u32,
-
-	#[arg(skip)]
 	pub extent: GroveExtent,
 
 	#[command(flatten, next_help_heading = "Terrain")]
@@ -86,7 +83,6 @@ where
 			stick_material: StickS::default(),
 			leaf_material: LeafS::default(),
 			foliage_noise: NoiseParams::from_scalar(0.0, 1.0, 0.06, 1),
-			cells_per_axis: 1,
 			extent: GroveExtent::new(Vec3::ZERO, Vec3::ZERO),
 			terrain: Terrain::default(),
 			resolved_placements: None,
@@ -119,7 +115,6 @@ where
 			stick_material,
 			leaf_material,
 			foliage_noise,
-			cells_per_axis: 1,
 			extent: GroveExtent::new(Vec3::ZERO, Vec3::ZERO),
 			terrain,
 			resolved_placements: Some(resolved_placements),
@@ -127,9 +122,8 @@ where
 		}
 	}
 
-	pub fn with_grid(mut self, extent: GroveExtent, cells_per_axis: u32) -> Self {
+	pub fn with_extent(mut self, extent: GroveExtent) -> Self {
 		self.extent = extent;
-		self.cells_per_axis = cells_per_axis.max(1);
 		self
 	}
 
@@ -147,7 +141,14 @@ where
 	}
 
 	pub fn placement_cells(&self) -> Vec<gimme_gen::Cell> {
-		self.extent.subdivide_xz(self.cells_per_axis)
+		let cell_extent_xz = self
+			.definition()
+			.map(|definition| definition.cell_extent_xz())
+			.unwrap_or_else(|err| {
+				log::warn!("braid grass definition: {err}; using authored cell extent");
+				BraidGrassDefinition::cell_extent_xz_default()
+			});
+		self.extent.subdivide_xz(cell_extent_xz)
 	}
 
 	pub fn definition(&self) -> Result<BraidGrassDefinition, String> {
@@ -441,9 +442,10 @@ mod tests {
 			terrain: FlatTerrainSample { elevation: 0.4, steepness: 0.1 },
 			..Default::default()
 		};
-		let span = 3.0 * BraidGrassDefinition::cell_extent_xz_default();
-		let extent = GroveExtent::new(Vec3::ZERO, Vec3::new(span, 1.0, span));
-		grass = grass.with_grid(extent, 3);
+		let cell_extent = BraidGrassDefinition::cell_extent_xz_default();
+		let span = 3.0 * cell_extent;
+		let extent = GroveExtent::new(Vec3::ZERO, Vec3::new(span.x, 1.0, span.y));
+		grass = grass.with_extent(extent);
 		assert!(!grass.placements().is_empty());
 		Ok(())
 	}
@@ -454,9 +456,10 @@ mod tests {
 		use crate::grove::GroveExtent;
 
 		let mut grass = BraidGrassStd::default();
-		let span = 5.0 * BraidGrassDefinition::cell_extent_xz_default();
-		let extent = GroveExtent::new(Vec3::ZERO, Vec3::new(span, 1.0, span));
-		grass = grass.with_grid(extent, 5);
+		let cell_extent = BraidGrassDefinition::cell_extent_xz_default();
+		let span = 5.0 * cell_extent;
+		let extent = GroveExtent::new(Vec3::ZERO, Vec3::new(span.x, 1.0, span.y));
+		grass = grass.with_extent(extent);
 		let placements = grass.placements();
 		assert!(
 			!placements.is_empty(),
@@ -474,9 +477,10 @@ mod tests {
 		let mut grass = BraidGrassStd::default();
 		grass.grove.variant_weights =
 			Some(parse_variant_weights("0,3,2,2,1").map_err(|e| anyhow::anyhow!("{e}"))?);
-		let span = 5.0 * BraidGrassDefinition::cell_extent_xz_default();
-		let extent = GroveExtent::new(Vec3::ZERO, Vec3::new(span, 1.0, span));
-		grass = grass.with_grid(extent, 5);
+		let cell_extent = BraidGrassDefinition::cell_extent_xz_default();
+		let span = 5.0 * cell_extent;
+		let extent = GroveExtent::new(Vec3::ZERO, Vec3::new(span.x, 1.0, span.y));
+		grass = grass.with_extent(extent);
 		let placements = grass.placements();
 		assert!(
 			!placements.is_empty(),

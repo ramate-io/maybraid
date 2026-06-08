@@ -44,7 +44,7 @@ pub use vec3_args::parse_vec3_csv;
 #[cfg(feature = "render")]
 pub use render_item::{GroveRenderHelper, GroveRenderRule};
 
-use bevy_math::Vec3;
+use bevy_math::{Vec2, Vec3};
 use gimme_gen::Cell;
 
 /// Assembled grove definition with forest biases, shared noise, and a pre-built distribution.
@@ -212,7 +212,7 @@ impl<G: CellGrove> Grove<G> {
 		self.definition.placement_ranges()
 	}
 
-	pub fn cell_extent_xz(&self) -> f32 {
+	pub fn cell_extent_xz(&self) -> Vec2 {
 		self.definition.cell_extent_xz()
 	}
 
@@ -234,7 +234,7 @@ mod tests {
 	use procedural_common::UnitRange;
 
 	struct MockGrove {
-		cell_extent_xz: f32,
+		cell_extent_xz: Vec2,
 		placement: GrovePlacementRanges,
 		distribution: GroveDistribution<&'static str>,
 	}
@@ -242,7 +242,7 @@ mod tests {
 	impl CellGrove for MockGrove {
 		type Variant = &'static str;
 
-		fn cell_extent_xz(&self) -> f32 {
+		fn cell_extent_xz(&self) -> Vec2 {
 			self.cell_extent_xz
 		}
 
@@ -280,7 +280,7 @@ mod tests {
 		});
 		let grove = Grove::assemble(
 			MockGrove {
-				cell_extent_xz: 10.0,
+				cell_extent_xz: Vec2::splat(10.0),
 				placement: GrovePlacementRanges::new(
 					UnitRange::new(0.8, 1.2),
 					UnitRange::new(-0.2, 0.2),
@@ -314,7 +314,7 @@ mod tests {
 		});
 		let grove = Grove::assemble(
 			MockGrove {
-				cell_extent_xz: 10.0,
+				cell_extent_xz: Vec2::splat(10.0),
 				placement: GrovePlacementRanges::new(
 					UnitRange::new(1.0, 1.0),
 					UnitRange::new(20.0, 20.0),

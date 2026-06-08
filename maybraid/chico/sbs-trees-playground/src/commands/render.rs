@@ -102,15 +102,15 @@ impl<T: clap::Args + Clone> RenderHelper<T> {
 	}
 }
 
-/// Wraps [`RenderHelper`] with square grove grid settings for grove [`RenderItem`] commands.
+/// Wraps [`RenderHelper`] with square grove extent settings for grove [`RenderItem`] commands.
 #[derive(Clone, clap::Args, Component)]
 #[command(rename_all = "kebab-case")]
 pub struct CellRenderHelper<T: clap::Args + Clone> {
 	#[command(flatten)]
 	pub render: RenderHelper<T>,
 
-	#[arg(long, default_value_t = 5, help_heading = "Grove Grid")]
-	pub cells_per_axis: u32,
+	#[arg(long, default_value_t = 21.25, help_heading = "Grove Extent")]
+	pub grove_extent_xz: f32,
 }
 
 impl<T: clap::Args + Clone> CellRenderHelper<T> {
@@ -691,13 +691,13 @@ mod tests {
 	#[test]
 	fn braid_grass_command_preserves_grove_params() -> Result<()> {
 		let cmd = crate::commands::PlaygroundCommand::parse_line(
-			"render braid-grass --variant-weights 0.0,9.0,x,x,x --elevation 0.4 --cells-per-axis 3",
+			"render braid-grass --variant-weights 0.0,9.0,x,x,x --elevation 0.4 --grove-extent-xz 12.75",
 		)
 		.map_err(|e| anyhow::anyhow!("{e}"))?;
 		let crate::commands::PlaygroundCommand::Render(Render::BraidGrass(helper)) = cmd else {
 			anyhow::bail!("expected braid-grass render command");
 		};
-		assert_eq!(helper.cells_per_axis, 3);
+		assert!((helper.grove_extent_xz - 12.75).abs() < 1e-5);
 		let grass = helper.configured_braid_grass();
 		assert_eq!(grass.placement_cells().len(), 9);
 		assert!((grass.terrain.elevation - 0.4).abs() < 1e-5);
