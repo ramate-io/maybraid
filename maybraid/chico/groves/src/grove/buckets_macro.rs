@@ -11,10 +11,21 @@ macro_rules! unit_range {
 	};
 }
 
+/// Expand one authored palette slot (`start..end` token pair).
+#[macro_export]
+macro_rules! palette_slot {
+	($start:ident .. $end:ident) => {
+		$crate::grove::PaletteSlot {
+			start: $crate::grove::PaletteColor(stringify!($start)),
+			end: $crate::grove::PaletteColor(stringify!($end)),
+		}
+	};
+}
+
 /// Declare a grove cell enum with [`Bucket`](crate::grove::Bucket) variants and
 /// [`GroveDistribution`](crate::grove::GroveDistribution) builder.
 ///
-/// The `@none` arm must be first; remaining arms are placed variants with an `item:` block.
+/// The `@none` arm must be first; remaining arms are placed variants with `palette_mix` and `item`.
 #[macro_export]
 macro_rules! grove_buckets {
 	(
@@ -28,6 +39,9 @@ macro_rules! grove_buckets {
 				$Variant:ident {
 					weight: $weight:literal,
 					placement_constraints: $constraints:expr,
+					palette_mix: [
+						$( [$palette_start:ident .. $palette_end:ident] ),* $(,)?
+					],
 					item: $item_ty:ident {
 						height: $h_lo:literal .. $h_hi:literal,
 						width: $w_lo:literal .. $w_hi:literal,
@@ -63,6 +77,9 @@ macro_rules! grove_buckets {
 						item: Some($Enum::$Variant($crate::grove::Bucket {
 							weight: $weight,
 							placement_constraints: $constraints,
+							palette_mix: $crate::grove::PaletteMix::from_slots(vec![
+								$( $crate::palette_slot!($palette_start .. $palette_end) ),*
+							]),
 							item: $item_ty {
 								height: $crate::unit_range!($h_lo .. $h_hi),
 								width: $crate::unit_range!($w_lo .. $w_hi),

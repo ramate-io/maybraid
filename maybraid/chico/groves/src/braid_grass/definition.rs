@@ -146,6 +146,18 @@ mod tests {
 	}
 
 	#[test]
+	fn deep_green_palette_matches_rfc() -> Result<()> {
+		let dist = BraidGrassCell::grove_distribution();
+		let Some(BraidGrassCell::DeepGreenBlade(bucket)) = dist.buckets[1].item.as_ref() else {
+			anyhow::bail!("expected DeepGreenBlade bucket");
+		};
+		assert_eq!(bucket.palette_mix.slots.len(), 3);
+		assert_eq!(bucket.palette_mix.slots[0].start, crate::grove::PaletteColor("deep_green"));
+		assert_eq!(bucket.palette_mix.slots[0].end, crate::grove::PaletteColor("wet_green"));
+		Ok(())
+	}
+
+	#[test]
 	fn distribution_bucket_count_and_weights() -> Result<()> {
 		let dist = BraidGrassCell::grove_distribution();
 		assert_eq!(dist.len(), 5);

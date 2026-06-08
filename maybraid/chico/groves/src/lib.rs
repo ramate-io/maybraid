@@ -13,7 +13,7 @@ pub use grove::{
 	ForestGroveBiases, Grove, GroveBucket, GroveCellOutcome, GroveDistribution,
 	GroveDistributionBuilder, GroveFrontend, GroveNoiseConfig, GrovePlacementRanges, PaletteColor,
 	PaletteMix, PaletteSlot, PlacementConstraints, PreparedGroveDistribution, SampledCellParams,
-	TerrainSample, VariantWeightOverrides, WithPaletteMix,
+	TerrainSample, VariantWeightOverrides, WithPalette,
 };
 
 pub use braid_grass::{BraidGrassCell, BraidGrassClump, BraidGrassDefinition};

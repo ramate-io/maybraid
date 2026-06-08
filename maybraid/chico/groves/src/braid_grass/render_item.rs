@@ -3,7 +3,7 @@
 use std::marker::PhantomData;
 
 use bevy::prelude::*;
-use chico_ball_components::tuft::BladeTuft;
+use chico_ball_components::tuft::{BladeTuft, BladeTuftShape};
 use clap::Args;
 use gimme_gen::Cell;
 use procedural_common::{noise_params_from_scalar_str, NoiseParams};
@@ -15,6 +15,7 @@ use crate::braid_grass::{
 };
 use crate::grove::{
 	FlatTerrainSample, GrovePlacedCell, GroveRenderHelper, GroveRenderRule, TerrainSample,
+	WithPalette,
 };
 use crate::skipped_mesh_material::{SkippedLeafMeshMaterial, SkippedStickMeshMaterial};
 
@@ -33,7 +34,7 @@ pub struct BraidGrass<StickM, StickS, LeafM, LeafS, Terrain = FlatTerrainSample>
 where
 	StickM: Material,
 	StickS: Clone + Into<MeshMaterial3d<StickM>> + Args + Send + Sync + 'static,
-	LeafM: Material,
+	LeafM: Material + WithPalette + Default,
 	LeafS: Clone + Into<MeshMaterial3d<LeafM>> + Args + Send + Sync + 'static,
 	Terrain: TerrainSample + Clone + Send + Sync + 'static + Default + clap::Args,
 {
@@ -74,7 +75,7 @@ impl<StickM, StickS, LeafM, LeafS, Terrain> Default
 where
 	StickM: Material,
 	StickS: Clone + Into<MeshMaterial3d<StickM>> + Args + Send + Sync + 'static + Default,
-	LeafM: Material,
+	LeafM: Material + WithPalette + Default,
 	LeafS: Clone + Into<MeshMaterial3d<LeafM>> + Args + Send + Sync + 'static + Default,
 	Terrain: TerrainSample + Clone + Send + Sync + 'static + Default + clap::Args,
 {
@@ -96,7 +97,7 @@ impl<StickM, StickS, LeafM, LeafS, Terrain> BraidGrass<StickM, StickS, LeafM, Le
 where
 	StickM: Material,
 	StickS: Clone + Into<MeshMaterial3d<StickM>> + Args + Send + Sync + 'static,
-	LeafM: Material,
+	LeafM: Material + WithPalette + Default,
 	LeafS: Clone + Into<MeshMaterial3d<LeafM>> + Args + Send + Sync + 'static,
 	Terrain: TerrainSample + Clone + Send + Sync + 'static + Default + clap::Args,
 {
@@ -165,11 +166,43 @@ where
 	}
 
 	fn render_helper(&self) -> GroveRenderHelper<
-		BladeTuft<LeafM, LeafS>,
+		PaletteBladeTuft<LeafM>,
 		BraidGrassCell,
 		BraidGrassRenderRule<LeafM, LeafS>,
 	> {
 		GroveRenderHelper::new(self.placements(), self.render_rule())
+	}
+}
+
+/// Blade tuft with palette-resolved owned material (spawn adds assets explicitly).
+#[derive(Component, Clone)]
+pub struct PaletteBladeTuft<M: Material + Clone> {
+	pub shape: BladeTuftShape,
+	pub material: M,
+}
+
+impl<M: Material + Clone> PaletteBladeTuft<M> {
+	pub fn from_shape(shape: BladeTuftShape, material: M) -> Self {
+		Self { shape, material }
+	}
+
+	pub fn build_mesh(&self, world_uniform_scale: f32) -> Mesh {
+		BladeTuft::<M, SkippedLeafMeshMaterial<M>>::from_shape(
+			self.shape.clone(),
+			SkippedLeafMeshMaterial::default(),
+		)
+		.build_mesh(world_uniform_scale)
+	}
+}
+
+impl<M: Material + Clone + Send + Sync + 'static> RenderItem for PaletteBladeTuft<M> {
+	fn spawn_render_items(
+		&self,
+		commands: &mut Commands,
+		cascade_chunk: &CascadeChunk,
+		transform: Transform,
+	) -> Vec<Entity> {
+		spawn_blade_tuft_with_owned_material(self, commands, cascade_chunk, transform)
 	}
 }
 
@@ -178,7 +211,7 @@ impl<StickM, StickS, LeafM, LeafS, Terrain> RenderItem
 where
 	StickM: Material + Send + Sync + 'static,
 	StickS: Clone + Into<MeshMaterial3d<StickM>> + Args + Send + Sync + 'static,
-	LeafM: Material + Send + Sync + 'static,
+	LeafM: Material + WithPalette + Default + Clone + Send + Sync + 'static,
 	LeafS: Clone + Into<MeshMaterial3d<LeafM>> + Args + Send + Sync + 'static,
 	Terrain: TerrainSample + Clone + Send + Sync + 'static + Default + clap::Args,
 {
@@ -203,23 +236,27 @@ where
 	pub(crate) __marker: PhantomData<fn() -> LeafM>,
 }
 
-impl<LeafM, LeafS> GroveRenderRule<BladeTuft<LeafM, LeafS>, BraidGrassCell>
+impl<LeafM, LeafS> GroveRenderRule<PaletteBladeTuft<LeafM>, BraidGrassCell>
 	for BraidGrassRenderRule<LeafM, LeafS>
 where
-	LeafM: Material + Send + Sync + 'static,
+	LeafM: Material + WithPalette + Default + Clone + Send + Sync + 'static,
 	LeafS: Clone + Into<MeshMaterial3d<LeafM>> + Send + Sync + 'static,
 {
 	fn render_item_for(
 		&self,
 		placed: &GrovePlacedCell<BraidGrassCell>,
-	) -> Option<(BladeTuft<LeafM, LeafS>, Transform)> {
+	) -> Option<(PaletteBladeTuft<LeafM>, Transform)> {
 		let grass = braid_grass_clump(&placed.variant)?;
-		let seed = self.foliage_noise.seed ^ placed.position.x.to_bits() as i32;
-		let mut shape = blade_tuft_shape_from(placed.position, grass, seed);
+		let foliage_seed = self.foliage_noise.seed ^ placed.position.x.to_bits() as i32;
+		let palette_seed =
+			foliage_seed ^ placed.position.z.to_bits() as i32 ^ placed.position.y.to_bits() as i32;
+		let mut shape = blade_tuft_shape_from(placed.position, grass, foliage_seed);
 		shape.noise_amplitude = self.foliage_noise.amplitude;
 		shape.noise_frequency = self.foliage_noise.frequency;
 
-		let tuft = BladeTuft::from_shape(shape, self.leaf_material.clone());
+		let material =
+			LeafM::with_palette(LeafM::default(), placed.variant.palette_mix(), palette_seed);
+		let tuft = PaletteBladeTuft::from_shape(shape, material);
 		let transform = Transform {
 			translation: placed.position,
 			rotation: Quat::IDENTITY,
@@ -227,6 +264,31 @@ where
 		};
 		Some((tuft, transform))
 	}
+}
+
+fn spawn_blade_tuft_with_owned_material<M>(
+	tuft: &PaletteBladeTuft<M>,
+	commands: &mut Commands,
+	cascade_chunk: &CascadeChunk,
+	transform: Transform,
+) -> Vec<Entity>
+where
+	M: Material + Send + Sync + 'static + Clone,
+{
+	let mesh = tuft.build_mesh(1.0);
+	let material = tuft.material.clone();
+	let marker = tuft.clone();
+	let root = commands
+		.spawn((marker, cascade_chunk.clone(), transform, Visibility::default()))
+		.id();
+	commands.queue(move |world: &mut World| {
+		let mesh_handle = world.resource_mut::<Assets<Mesh>>().add(mesh);
+		let material_handle = world.resource_mut::<Assets<M>>().add(material);
+		world
+			.entity_mut(root)
+			.insert((Mesh3d(mesh_handle), MeshMaterial3d(material_handle)));
+	});
+	vec![root]
 }
 
 fn braid_grass_clump(variant: &BraidGrassCell) -> Option<&BraidGrassClump> {
@@ -267,6 +329,21 @@ mod tests {
 		};
 		assert!(tuft.shape.blade_count >= 10);
 		assert!(transform.scale.x > 0.0);
+		let palette = placement.variant.palette_mix();
+		let mut allowed = Vec::new();
+		for slot in &palette.slots {
+			if let Some(color) = slot.start.resolve() {
+				allowed.push(color);
+			}
+			if let Some(color) = slot.end.resolve() {
+				allowed.push(color);
+			}
+		}
+		assert!(
+			allowed.contains(&tuft.material.base_color),
+			"expected palette-resolved color, got {:?}",
+			tuft.material.base_color
+		);
 		Ok(())
 	}
 

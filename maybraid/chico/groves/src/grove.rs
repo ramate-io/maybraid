@@ -35,7 +35,7 @@ pub use distribution::{
 pub use extent::{GroveExtent, GroveOverspillPolicy};
 pub use frontend::GroveFrontend;
 pub use outcome::GroveCellOutcome;
-pub use palette::{PaletteColor, PaletteMix, PaletteSlot, WithPaletteMix};
+pub use palette::{PaletteColor, PaletteMix, PaletteSlot, WithPalette};
 pub use params::{
 	biased_sample, sample_cell_params, GroveNoiseConfig, GrovePlacementRanges, SampledCellParams,
 };

@@ -76,7 +76,7 @@ impl<G: CellGrove> Grove<G> {
 }
 
 /// Maps one [`GrovePlacedCell`] to a renderable item and local transform.
-pub trait GroveRenderRule<Item: RenderItem, V>: Clone {
+pub trait GroveRenderRule<Item, V>: Clone {
 	fn render_item_for(&self, placed: &GrovePlacedCell<V>) -> Option<(Item, Transform)>;
 }
 
