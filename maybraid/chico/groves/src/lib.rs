@@ -9,10 +9,11 @@ pub mod skipped_mesh_material;
 
 pub use grove::{
 	biased_sample, candidate_position, cell_origin, parse_variant_weights, braid_grass_preview_cells,
-	preview_cell_grid, sample_cell_params, Bucket, CellGrove, FlatTerrainSample, ForestGroveBiases, Grove, GroveBucket, GroveCellOutcome,
-	GroveDistribution, GroveDistributionBuilder, GroveFrontend, GroveNoiseConfig, GroveParamRanges,
-	PaletteColor, PaletteMix, PaletteSlot, PlacementConstraints, PreparedGroveDistribution,
-	SampledCellParams, TerrainSample, VariantWeightOverrides, WithPaletteMix,
+	preview_cell_grid, sample_cell_params, Bucket, CellGrove, CellXzOffset, FlatTerrainSample,
+	ForestGroveBiases, Grove, GroveBucket, GroveCellOutcome, GroveDistribution,
+	GroveDistributionBuilder, GroveFrontend, GroveNoiseConfig, GrovePlacementRanges, PaletteColor,
+	PaletteMix, PaletteSlot, PlacementConstraints, PreparedGroveDistribution, SampledCellParams,
+	TerrainSample, VariantWeightOverrides, WithPaletteMix,
 };
 
 pub use braid_grass::{BraidGrassCell, BraidGrassClump, BraidGrassDefinition};

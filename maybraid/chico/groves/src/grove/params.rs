@@ -1,43 +1,88 @@
-//! Authored grove parameter ranges and per-cell placement sampling ([RFC-183 3.4.1]).
+//! Per-cell placement sampling ranges ([RFC-183 3.4.1]).
 
-use bevy_math::Vec2;
+use bevy_math::Vec3;
 use procedural_common::{NoiseConfig, NoiseParams, UnitRange};
 
 use super::biases::ForestGroveBiases;
+use super::placement::CellXzOffset;
 
-/// Authored min/max ranges owned by a grove definition.
+/// Authored ranges for parameters sampled **inside** each vegetation cell during selection.
 ///
-/// `cell_size` and `density` are grove-level: the forest uses them when gridding and biasing
-/// composition, not per vegetation cell during variant selection.
+/// Cell grid footprint ([`super::CellGrove::cell_extent_xz`]) and fill density
+/// ([`super::GroveDistribution`] bucket weights, including `None`) are owned elsewhere.
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct GroveParamRanges {
-	pub cell_size: UnitRange,
+pub struct GrovePlacementRanges {
+	/// The scale range of the vegetation instances.
 	pub scale: UnitRange,
-	pub density: UnitRange,
+	/// Signed world-metre shift on each horizontal axis from the cell center (usually symmetric).
 	pub offset: UnitRange,
+	/// The amplitude range of the noise passed down to the vegetation instances.
 	pub noise_amplitude: UnitRange,
+	/// The frequency range of the noise passed down to the vegetation instances.
 	pub noise_frequency: UnitRange,
 }
 
-impl GroveParamRanges {
+impl GrovePlacementRanges {
 	pub const fn new(
-		cell_size: UnitRange,
 		scale: UnitRange,
-		density: UnitRange,
 		offset: UnitRange,
 		noise_amplitude: UnitRange,
 		noise_frequency: UnitRange,
 	) -> Self {
-		Self { cell_size, scale, density, offset, noise_amplitude, noise_frequency }
+		Self { scale, offset, noise_amplitude, noise_frequency }
 	}
 }
 
-/// Per-cell placement sample: offset, instance scale, and noise params for this draw.
+/// Per-cell placement sample: horizontal shift, instance scale, and foliage noise.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct SampledCellParams {
 	pub noise: NoiseParams,
 	pub scale: f32,
-	pub offset: Vec2,
+	pub offset: CellXzOffset,
+}
+
+impl SampledCellParams {
+	/// Sample placement parameters for one vegetation cell inside a grove.
+	///
+	/// `cell_center` should be the parent cell center in world space (see [`super::placement::cell_origin`]).
+	pub fn sample(
+		ranges: &GrovePlacementRanges,
+		biases: &ForestGroveBiases,
+		noise: &GroveNoiseConfig,
+		cell_center: Vec3,
+	) -> Self {
+		let n = NoiseConfig::new(noise.base);
+		let scale = biased_sample(
+			ranges.scale,
+			biases.scale_mean,
+			n.sample_3d_world(cell_center + Vec3::new(2.0, 0.0, 0.0)),
+		);
+		let amplitude = biased_sample(
+			ranges.noise_amplitude,
+			biases.noise_amplitude_mean,
+			n.sample_3d_world(cell_center + Vec3::new(4.0, 0.0, 0.0)),
+		);
+		let frequency = biased_sample(
+			ranges.noise_frequency,
+			biases.noise_frequency_mean,
+			n.sample_3d_world(cell_center + Vec3::new(5.0, 0.0, 0.0)),
+		);
+		let offset_x = biased_sample(
+			ranges.offset,
+			biases.offset_mean,
+			n.sample_3d_world(cell_center + Vec3::new(6.0, 0.0, 0.0)),
+		);
+		let offset_z = biased_sample(
+			ranges.offset,
+			biases.offset_mean,
+			n.sample_3d_world(cell_center + Vec3::new(0.0, 0.0, 7.0)),
+		);
+		Self {
+			noise: NoiseParams { amplitude, frequency, ..noise.base },
+			scale,
+			offset: CellXzOffset::new(offset_x, offset_z),
+		}
+	}
 }
 
 /// Shared noise seed/configuration for grove sampling channels.
@@ -79,44 +124,14 @@ pub fn biased_sample(range: UnitRange, mean_unit: f32, noise: f32) -> f32 {
 	(mean + noise * radius).clamp(lo, hi)
 }
 
-/// Sample placement parameters for one vegetation cell inside a grove.
+/// [`SampledCellParams::sample`] alias kept for older call sites.
 pub fn sample_cell_params(
-	ranges: &GroveParamRanges,
+	ranges: &GrovePlacementRanges,
 	biases: &ForestGroveBiases,
 	noise: &GroveNoiseConfig,
-	sample_position: bevy_math::Vec3,
+	cell_center: Vec3,
 ) -> SampledCellParams {
-	let n = NoiseConfig::new(noise.base);
-	let scale = biased_sample(
-		ranges.scale,
-		biases.scale_mean,
-		n.sample_3d_world(sample_position + bevy_math::Vec3::new(2.0, 0.0, 0.0)),
-	);
-	let amplitude = biased_sample(
-		ranges.noise_amplitude,
-		biases.noise_amplitude_mean,
-		n.sample_3d_world(sample_position + bevy_math::Vec3::new(4.0, 0.0, 0.0)),
-	);
-	let frequency = biased_sample(
-		ranges.noise_frequency,
-		biases.noise_frequency_mean,
-		n.sample_3d_world(sample_position + bevy_math::Vec3::new(5.0, 0.0, 0.0)),
-	);
-	let offset_x = biased_sample(
-		ranges.offset,
-		biases.offset_mean,
-		n.sample_2d_world(sample_position.truncate() + Vec2::new(6.0, 0.0)),
-	);
-	let offset_y = biased_sample(
-		ranges.offset,
-		biases.offset_mean,
-		n.sample_2d_world(sample_position.truncate() + Vec2::new(0.0, 7.0)),
-	);
-	SampledCellParams {
-		noise: NoiseParams { amplitude, frequency, ..noise.base },
-		scale,
-		offset: Vec2::new(offset_x, offset_y),
-	}
+	SampledCellParams::sample(ranges, biases, noise, cell_center)
 }
 
 #[cfg(test)]
@@ -135,19 +150,39 @@ mod tests {
 	}
 
 	#[test]
-	fn sample_cell_params_is_deterministic() -> Result<()> {
-		let ranges = GroveParamRanges::new(
-			UnitRange::new(8.0, 16.0),
+	fn sample_is_deterministic_for_cell_center() -> Result<()> {
+		let ranges = GrovePlacementRanges::new(
 			UnitRange::new(0.8, 1.2),
-			UnitRange::new(0.1, 0.5),
-			UnitRange::new(0.0, 0.2),
+			UnitRange::new(-0.2, 0.2),
 			UnitRange::new(0.02, 0.12),
 			UnitRange::new(0.01, 0.03),
 		);
-		let pos = bevy_math::Vec3::new(10.0, 0.0, 20.0);
-		let a = sample_cell_params(&ranges, &ForestGroveBiases::default(), &GroveNoiseConfig::default(), pos);
-		let b = sample_cell_params(&ranges, &ForestGroveBiases::default(), &GroveNoiseConfig::default(), pos);
+		let pos = Vec3::new(10.0, 0.0, 20.0);
+		let biases = ForestGroveBiases::default();
+		let noise = GroveNoiseConfig::default();
+		let a = SampledCellParams::sample(&ranges, &biases, &noise, pos);
+		let b = SampledCellParams::sample(&ranges, &biases, &noise, pos);
 		assert_eq!(a, b);
+		Ok(())
+	}
+
+	#[test]
+	fn offset_varies_with_cell_center_z() -> Result<()> {
+		let ranges = GrovePlacementRanges::new(
+			UnitRange::new(1.0, 1.0),
+			UnitRange::new(-1.0, 1.0),
+			UnitRange::new(0.1, 0.1),
+			UnitRange::new(0.05, 0.05),
+		);
+		let biases = ForestGroveBiases::default();
+		let noise = GroveNoiseConfig::default();
+		let along_x = SampledCellParams::sample(&ranges, &biases, &noise, Vec3::new(2.0, 0.5, 4.0));
+		let along_z =
+			SampledCellParams::sample(&ranges, &biases, &noise, Vec3::new(2.0, 0.5, 24.0));
+		assert_ne!(
+			along_x.offset, along_z.offset,
+			"offset should vary when the cell center moves on Z"
+		);
 		Ok(())
 	}
 }

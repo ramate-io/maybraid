@@ -2,13 +2,16 @@
 
 use bevy_math::Vec3;
 use gimme_gen::Cell;
-use procedural_common::{perturb_weights, BucketThrow, FirstFitIndices, NoiseConfig, MIN_BUCKET_WEIGHT};
+use procedural_common::{
+	perturb_weights, BucketThrow, FirstFitIndices, NoiseConfig, MIN_BUCKET_WEIGHT,
+};
 
 use super::{
 	biases::ForestGroveBiases,
 	constraints::PlacementConstraints,
+	extent::{GroveExtent, GroveOverspillPolicy},
 	outcome::GroveCellOutcome,
-	params::{sample_cell_params, GroveNoiseConfig, GroveParamRanges, SampledCellParams},
+	params::{GroveNoiseConfig, GrovePlacementRanges, SampledCellParams},
 	placement::candidate_position,
 	terrain::TerrainSample,
 };
@@ -27,10 +30,8 @@ impl<V> GroveBucket<V> {
 		if self.item.is_none() {
 			return true;
 		}
-		self.constraints.allows(
-			terrain.elevation_at(position),
-			terrain.steepness_at(position),
-		)
+		self.constraints
+			.allows(terrain.elevation_at(position), terrain.steepness_at(position))
 	}
 }
 
@@ -122,7 +123,9 @@ impl<V> PreparedGroveDistribution<V> {
 	pub fn select_cell(
 		&self,
 		cell: &Cell,
-		ranges: &GroveParamRanges,
+		grove_extent: Option<&GroveExtent>,
+		overspill_policy: GroveOverspillPolicy,
+		ranges: &GrovePlacementRanges,
 		biases: &ForestGroveBiases,
 		noise: &GroveNoiseConfig,
 		terrain: &impl TerrainSample,
@@ -130,8 +133,20 @@ impl<V> PreparedGroveDistribution<V> {
 	where
 		V: Clone,
 	{
-		let sampled = sample_cell_params(ranges, biases, noise, super::placement::cell_origin(cell));
-		let position = candidate_position(cell, sampled.offset);
+		let sampled = SampledCellParams::sample(
+			ranges,
+			biases,
+			noise,
+			super::placement::cell_origin(cell),
+		);
+		let candidate = candidate_position(cell, sampled.offset);
+		let position = match grove_extent {
+			Some(extent) => match extent.resolve_xz(candidate, overspill_policy) {
+				Some(position) => position,
+				None => return GroveCellOutcome::Rejected { position: candidate },
+			},
+			None => candidate,
+		};
 		self.select_at(position, sampled, noise, terrain)
 	}
 
@@ -153,11 +168,7 @@ impl<V> PreparedGroveDistribution<V> {
 		let selection_noise = bucket_selection_noise(noise, position);
 		let throw = selection_noise * self.bucket_throw.total_weight() * 0.5;
 		let throw_index = self.bucket_throw.select(throw).unwrap_or(0);
-		let start = self
-			.throw_bucket_indices
-			.get(throw_index)
-			.copied()
-			.unwrap_or(0);
+		let start = self.throw_bucket_indices.get(throw_index).copied().unwrap_or(0);
 
 		for index in FirstFitIndices::new(self.buckets.len(), start) {
 			let bucket = &self.buckets[index];
@@ -229,10 +240,7 @@ fn build_perturbed_bucket_throw<V>(
 		distribution.base_bucket_perturbation_strength * (1.0 + biases.bucket_perturbation_bias);
 	let total = base.total_weight();
 	if strength.abs() <= f32::EPSILON || base.is_empty() {
-		return (
-			base.with_mean_anchor(bucket_mean_shift(biases, total)),
-			throw_bucket_indices,
-		);
+		return (base.with_mean_anchor(bucket_mean_shift(biases, total)), throw_bucket_indices);
 	}
 
 	let n = NoiseConfig::new(noise.base);
@@ -244,10 +252,7 @@ fn build_perturbed_bucket_throw<V>(
 		.collect();
 	let perturbed = perturb_weights(&base, strength, &bucket_noises, MIN_BUCKET_WEIGHT);
 	let total = perturbed.total_weight();
-	(
-		perturbed.with_mean_anchor(bucket_mean_shift(biases, total)),
-		throw_bucket_indices,
-	)
+	(perturbed.with_mean_anchor(bucket_mean_shift(biases, total)), throw_bucket_indices)
 }
 
 fn bucket_mean_shift(biases: &ForestGroveBiases, total_weight: f32) -> f32 {
@@ -282,12 +287,10 @@ mod tests {
 		}
 	}
 
-	fn test_ranges() -> GroveParamRanges {
-		GroveParamRanges::new(
-			UnitRange::new(8.0, 16.0),
+	fn test_ranges() -> GrovePlacementRanges {
+		GrovePlacementRanges::new(
 			UnitRange::new(0.8, 1.2),
-			UnitRange::new(0.1, 0.5),
-			UnitRange::new(0.0, 0.2),
+			UnitRange::new(-0.2, 0.2),
 			UnitRange::new(0.02, 0.12),
 			UnitRange::new(0.01, 0.03),
 		)
@@ -316,6 +319,8 @@ mod tests {
 		let prepared = prepared_dist(dist);
 		let outcome = prepared.select_cell(
 			&test_cell(),
+			None,
+			GroveOverspillPolicy::Discard,
 			&test_ranges(),
 			&ForestGroveBiases::default(),
 			&GroveNoiseConfig::default(),
@@ -330,17 +335,23 @@ mod tests {
 		let mut dist = GroveDistribution::new();
 		dist.push(GroveBucket {
 			weight: 1.0,
-			constraints: PlacementConstraints::new(UnitRange::new(0.8, 1.0), UnitRange::new(0.0, 0.1)),
+			constraints: PlacementConstraints::new(
+				UnitRange::new(0.8, 1.0),
+				UnitRange::new(0.0, 0.1),
+			),
 			item: Some("steep_only"),
 		});
 		dist.push(GroveBucket {
 			weight: 1.0,
-			constraints: PlacementConstraints::new(UnitRange::new(0.0, 0.5), UnitRange::new(0.0, 0.5)),
+			constraints: PlacementConstraints::new(
+				UnitRange::new(0.0, 0.5),
+				UnitRange::new(0.0, 0.5),
+			),
 			item: Some("flat"),
 		});
 		let prepared = prepared_dist(dist);
 		let terrain = FlatTerrain { elevation: 0.3, steepness: 0.2 };
-		let sampled = sample_cell_params(
+		let sampled = SampledCellParams::sample(
 			&test_ranges(),
 			&ForestGroveBiases { bucket_mean_shift: 0.0, ..Default::default() },
 			&GroveNoiseConfig::default(),
@@ -369,24 +380,31 @@ mod tests {
 			Vec3::ZERO,
 		);
 		let terrain = FlatTerrain { elevation: 0.4, steepness: 0.1 };
-		let braid_ranges = crate::braid_grass::BraidGrassDefinition::AUTHORED_RANGES;
-		let mut placed = 0usize;
+		let braid_ranges = crate::braid_grass::BraidGrassDefinition::PLACEMENT_RANGES;
+		let mut cells = Vec::new();
 		for x in 0..3 {
 			for z in 0..3 {
-				let cell = Cell(Aabb3d::from_min_max(
+				cells.push(Cell(Aabb3d::from_min_max(
 					Vec3::new(x as f32 * 4.25, 0.0, z as f32 * 4.25),
 					Vec3::new((x + 1) as f32 * 4.25, 1.0, (z + 1) as f32 * 4.25),
-				));
-				let outcome = prepared.select_cell(
-					&cell,
-					&braid_ranges,
-					&ForestGroveBiases::default(),
-					&GroveNoiseConfig::new(NoiseParams::from_scalar(0.0, 1.0, 0.0, 1)),
-					&terrain,
-				);
-				if matches!(outcome, GroveCellOutcome::Placed { .. }) {
-					placed += 1;
-				}
+				)));
+			}
+		}
+		let grove_extent = GroveExtent::from_cells(&cells)
+			.ok_or_else(|| anyhow::anyhow!("expected grove extent from preview cells"))?;
+		let mut placed = 0usize;
+		for cell in &cells {
+			let outcome = prepared.select_cell(
+				cell,
+				Some(&grove_extent),
+				GroveOverspillPolicy::Discard,
+				&braid_ranges,
+				&ForestGroveBiases::default(),
+				&GroveNoiseConfig::new(NoiseParams::from_scalar(0.0, 1.0, 0.0, 1)),
+				&terrain,
+			);
+			if matches!(outcome, GroveCellOutcome::Placed { .. }) {
+				placed += 1;
 			}
 		}
 		assert!(
@@ -413,10 +431,72 @@ mod tests {
 		let ranges = test_ranges();
 		let biases = ForestGroveBiases::default();
 		let noise = GroveNoiseConfig::default();
-		let a = prepared.select_cell(&test_cell(), &ranges, &biases, &noise, &terrain);
-		let b = prepared.select_cell(&test_cell(), &ranges, &biases, &noise, &terrain);
+		let a = prepared.select_cell(
+			&test_cell(),
+			None,
+			GroveOverspillPolicy::Discard,
+			&ranges,
+			&biases,
+			&noise,
+			&terrain,
+		);
+		let b = prepared.select_cell(
+			&test_cell(),
+			None,
+			GroveOverspillPolicy::Discard,
+			&ranges,
+			&biases,
+			&noise,
+			&terrain,
+		);
 		assert!(matches!(a, GroveCellOutcome::Placed { .. }));
 		assert_eq!(a, b);
+		Ok(())
+	}
+
+	#[test]
+	fn discard_rejects_candidate_outside_grove_extent() -> Result<()> {
+		use crate::grove::CellXzOffset;
+		use procedural_common::NoiseParams;
+
+		let mut dist = GroveDistribution::new();
+		dist.push(GroveBucket {
+			weight: 1.0,
+			constraints: PlacementConstraints::UNCONSTRAINED,
+			item: Some("tree"),
+		});
+		let prepared = prepared_dist(dist);
+		let grove_extent = GroveExtent::from_cells(&[test_cell()])
+			.ok_or_else(|| anyhow::anyhow!("expected grove extent"))?;
+		let sampled = SampledCellParams {
+			noise: NoiseParams::from_scalar(0.0, 0.05, 0.1, 1),
+			scale: 1.0,
+			offset: CellXzOffset::new(20.0, 0.0),
+		};
+		let candidate = candidate_position(&test_cell(), sampled.offset);
+		let outcome = prepared.select_at(
+			candidate,
+			sampled,
+			&GroveNoiseConfig::default(),
+			&FlatTerrain { elevation: 0.4, steepness: 0.1 },
+		);
+		assert!(matches!(outcome, GroveCellOutcome::Placed { .. }));
+
+		let outcome = prepared.select_cell(
+			&test_cell(),
+			Some(&grove_extent),
+			GroveOverspillPolicy::Discard,
+			&GrovePlacementRanges::new(
+				UnitRange::new(1.0, 1.0),
+				UnitRange::new(20.0, 20.0),
+				UnitRange::new(0.1, 0.1),
+				UnitRange::new(0.05, 0.05),
+			),
+			&ForestGroveBiases::default(),
+			&GroveNoiseConfig::default(),
+			&FlatTerrain { elevation: 0.4, steepness: 0.1 },
+		);
+		assert!(matches!(outcome, GroveCellOutcome::Rejected { .. }));
 		Ok(())
 	}
 }

@@ -3,12 +3,13 @@
 use procedural_common::UnitRange;
 
 use crate::braid_grass::BraidGrassCell;
-use crate::grove::{CellGrove, GroveDistribution, GroveParamRanges};
+use crate::grove::{CellGrove, GroveDistribution, GrovePlacementRanges};
 
 /// Authored Braid Grass grove definition.
 #[derive(Debug, Clone, PartialEq)]
 pub struct BraidGrassDefinition {
-	ranges: GroveParamRanges,
+	cell_extent_xz: f32,
+	placement: GrovePlacementRanges,
 	distribution: GroveDistribution<BraidGrassCell>,
 }
 
@@ -19,25 +20,39 @@ impl Default for BraidGrassDefinition {
 }
 
 impl BraidGrassDefinition {
-	/// RFC §3.4.5.1 grove-level parameter ranges.
-	pub const AUTHORED_RANGES: GroveParamRanges = GroveParamRanges::new(
-		UnitRange::new(2.5, 6.0),
+	/// RFC §3.4.5.1 authored square cell footprint (metres on X and Z).
+	///
+	/// Forest gridding may choose any span inside the RFC `2.5..6.0` band; this is the
+	/// definition default used by playground previews until a forest pass supplies cells.
+	pub const AUTHORED_CELL_EXTENT_XZ: f32 = 4.25;
+
+	/// Per-cell placement ranges from RFC §3.4.5.1.
+	///
+	/// Offset uses a wider overspill band than the RFC's nominal ±1 m so biased sampling plus
+	/// noise still reaches meaningful horizontal variety; [`GroveExtent`] validation keeps the
+	/// grove LOD unit bounded.
+	pub const PLACEMENT_RANGES: GrovePlacementRanges = GrovePlacementRanges::new(
 		UnitRange::new(0.85, 1.15),
-		UnitRange::new(0.35, 0.75),
-		UnitRange::new(0.0, 1.0),
+		UnitRange::new(-3.0, 3.0),
 		UnitRange::new(0.10, 0.35),
 		UnitRange::new(0.03, 0.10),
 	);
 
 	pub fn new() -> Self {
 		Self {
-			ranges: Self::AUTHORED_RANGES,
+			cell_extent_xz: Self::AUTHORED_CELL_EXTENT_XZ,
+			placement: Self::PLACEMENT_RANGES,
 			distribution: BraidGrassCell::grove_distribution(),
 		}
 	}
 
-	pub fn with_ranges(mut self, ranges: GroveParamRanges) -> Self {
-		self.ranges = ranges;
+	pub fn with_cell_extent_xz(mut self, cell_extent_xz: f32) -> Self {
+		self.cell_extent_xz = cell_extent_xz.max(0.1);
+		self
+	}
+
+	pub fn with_placement_ranges(mut self, placement: GrovePlacementRanges) -> Self {
+		self.placement = placement;
 		self
 	}
 
@@ -52,18 +67,21 @@ impl BraidGrassDefinition {
 	/// Authored bucket weights for CLI help (`None` bucket, then macro declaration order).
 	pub const VARIANT_WEIGHTS_CLI: &str = "2.5,2,1,1,0.5";
 
-	/// Typical cell footprint for playground preview grids (midpoint of authored `cell_size`).
+	/// Square cell footprint for playground preview grids.
 	pub fn preview_cell_extent() -> f32 {
-		let range = Self::AUTHORED_RANGES.cell_size;
-		(range.start + range.end) * 0.5
+		Self::AUTHORED_CELL_EXTENT_XZ
 	}
 }
 
 impl CellGrove for BraidGrassDefinition {
 	type Variant = BraidGrassCell;
 
-	fn param_ranges(&self) -> GroveParamRanges {
-		self.ranges
+	fn cell_extent_xz(&self) -> f32 {
+		self.cell_extent_xz
+	}
+
+	fn placement_ranges(&self) -> GrovePlacementRanges {
+		self.placement
 	}
 
 	fn distribution(&self) -> &GroveDistribution<Self::Variant> {
@@ -78,12 +96,12 @@ mod tests {
 	use super::*;
 	use crate::braid_grass::BraidGrassClump;
 	use crate::grove::{
-		candidate_position, sample_cell_params, ForestGroveBiases, Grove, GroveCellOutcome,
-		GroveNoiseConfig, PlacementConstraints, TerrainSample,
+		candidate_position, ForestGroveBiases, Grove, GroveCellOutcome, GroveNoiseConfig,
+		PlacementConstraints, SampledCellParams, TerrainSample,
 	};
 	use anyhow::Result;
-	use bevy_math::Vec3;
 	use bevy_math::bounding::Aabb3d;
+	use bevy_math::Vec3;
 	use gimme_gen::Cell;
 	use procedural_common::UnitRange;
 
@@ -116,15 +134,14 @@ mod tests {
 	}
 
 	#[test]
-	fn authored_ranges_match_rfc() -> Result<()> {
+	fn authored_definition_matches_rfc() -> Result<()> {
 		let grove = BraidGrassDefinition::new();
-		let ranges = grove.param_ranges();
-		assert_eq!(ranges.cell_size, UnitRange::new(2.5, 6.0));
-		assert_eq!(ranges.density, UnitRange::new(0.35, 0.75));
-		assert_eq!(ranges.offset, UnitRange::new(0.0, 1.0));
-		assert_eq!(ranges.noise_amplitude, UnitRange::new(0.10, 0.35));
-		assert_eq!(ranges.noise_frequency, UnitRange::new(0.03, 0.10));
-		assert_eq!(ranges.scale, UnitRange::new(0.85, 1.15));
+		assert_eq!(grove.cell_extent_xz(), BraidGrassDefinition::AUTHORED_CELL_EXTENT_XZ);
+		let placement = grove.placement_ranges();
+		assert_eq!(placement.offset, UnitRange::new(-3.0, 3.0));
+		assert_eq!(placement.noise_amplitude, UnitRange::new(0.10, 0.35));
+		assert_eq!(placement.noise_frequency, UnitRange::new(0.03, 0.10));
+		assert_eq!(placement.scale, UnitRange::new(0.85, 1.15));
 		Ok(())
 	}
 
@@ -166,17 +183,15 @@ mod tests {
 	fn constraint_first_fit_fallback() -> Result<()> {
 		let grove = assembled_grove();
 		let terrain = FlatTerrain { elevation: 0.3, steepness: 0.35 };
-		let sampled = sample_cell_params(
-			&grove.param_ranges(),
+		let sampled = SampledCellParams::sample(
+			&grove.placement_ranges(),
 			grove.biases(),
 			grove.noise(),
 			Vec3::new(5.0, 0.0, 5.0),
 		);
 		let position = candidate_position(&test_cell(), sampled.offset);
 		// Jungle (index 3) rejects steepness 0.35; first-fit wraps to RedEdge (index 4).
-		let outcome = grove
-			.prepared()
-			.select_at_with_start(3, position, sampled, &terrain);
+		let outcome = grove.prepared().select_at_with_start(3, position, sampled, &terrain);
 		match outcome {
 			GroveCellOutcome::Placed { variant, .. } => {
 				assert!(matches!(variant, BraidGrassCell::RedEdgeBlade(_)));
@@ -190,17 +205,15 @@ mod tests {
 	fn assemble_selects_placed_variant() -> Result<()> {
 		let grove = assembled_grove();
 		let terrain = FlatTerrain { elevation: 0.4, steepness: 0.1 };
-		let sampled = sample_cell_params(
-			&grove.param_ranges(),
+		let sampled = SampledCellParams::sample(
+			&grove.placement_ranges(),
 			grove.biases(),
 			grove.noise(),
 			Vec3::new(5.0, 0.0, 5.0),
 		);
 		let position = candidate_position(&test_cell(), sampled.offset);
 		// None bucket weight dominates random throw; pin start to a placed bucket.
-		let outcome = grove
-			.prepared()
-			.select_at_with_start(1, position, sampled, &terrain);
+		let outcome = grove.prepared().select_at_with_start(1, position, sampled, &terrain);
 		assert!(matches!(outcome, GroveCellOutcome::Placed { .. }));
 		Ok(())
 	}
@@ -223,6 +236,7 @@ mod tests {
 		);
 		let outcome = assembled.select_cell(
 			&test_cell(),
+			None,
 			&FlatTerrain { elevation: 0.5, steepness: 0.1 },
 		);
 		assert!(matches!(outcome, GroveCellOutcome::Empty { .. }));
@@ -234,8 +248,8 @@ mod tests {
 		let grove = assembled_grove();
 		let cell = test_cell();
 		let terrain = FlatTerrain { elevation: 0.35, steepness: 0.15 };
-		let a = grove.select_cell(&cell, &terrain);
-		let b = grove.select_cell(&cell, &terrain);
+		let a = grove.select_cell(&cell, None, &terrain);
+		let b = grove.select_cell(&cell, None, &terrain);
 		assert_eq!(a, b);
 		Ok(())
 	}

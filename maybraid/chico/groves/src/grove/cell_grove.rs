@@ -1,12 +1,19 @@
 //! [`CellGrove`] — authored grove identity ([RFC-183 3.4]).
 
-use super::{distribution::GroveDistribution, params::GroveParamRanges};
+use super::{distribution::GroveDistribution, params::GrovePlacementRanges};
 
-/// Authored grove identity: parameter ranges plus ordered variant distribution.
+/// Authored grove identity: cell footprint, per-draw placement ranges, and variant distribution.
 pub trait CellGrove {
 	type Variant: Clone;
 
-	fn param_ranges(&self) -> GroveParamRanges;
+	/// Square vegetation cell span in world metres on X and Z (set by whoever grids the grove).
+	///
+	/// A future `cell_extent_xz` range on this trait could support variable cell sizes within one
+	/// grove grid by sampling the span to the next element as cells are iterated.
+	fn cell_extent_xz(&self) -> f32;
+
+	/// Ranges sampled independently for each cell draw (scale, offset, foliage noise).
+	fn placement_ranges(&self) -> GrovePlacementRanges;
 
 	fn distribution(&self) -> &GroveDistribution<Self::Variant>;
 }

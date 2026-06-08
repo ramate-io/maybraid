@@ -9,6 +9,7 @@ mod buckets_macro;
 mod cell_grove;
 mod constraints;
 mod distribution;
+mod extent;
 mod outcome;
 mod palette;
 mod params;
@@ -31,13 +32,14 @@ pub use constraints::PlacementConstraints;
 pub use distribution::{
 	GroveBucket, GroveDistribution, GroveDistributionBuilder, PreparedGroveDistribution,
 };
+pub use extent::{GroveExtent, GroveOverspillPolicy};
 pub use frontend::GroveFrontend;
 pub use outcome::GroveCellOutcome;
 pub use palette::{PaletteColor, PaletteMix, PaletteSlot, WithPaletteMix};
 pub use params::{
-	biased_sample, sample_cell_params, GroveNoiseConfig, GroveParamRanges, SampledCellParams,
+	biased_sample, sample_cell_params, GroveNoiseConfig, GrovePlacementRanges, SampledCellParams,
 };
-pub use placement::{candidate_position, cell_origin};
+pub use placement::{candidate_position, cell_origin, CellXzOffset};
 pub use preview::{braid_grass_preview_cells, preview_cell_grid};
 pub use terrain::{FlatTerrainSample, TerrainSample};
 pub use variant_weights::{parse_variant_weights, VariantWeightOverrides};
@@ -90,8 +92,12 @@ impl<G: CellGrove> Grove<G> {
 		&self.noise
 	}
 
-	pub fn param_ranges(&self) -> GroveParamRanges {
-		self.definition.param_ranges()
+	pub fn placement_ranges(&self) -> GrovePlacementRanges {
+		self.definition.placement_ranges()
+	}
+
+	pub fn cell_extent_xz(&self) -> f32 {
+		self.definition.cell_extent_xz()
 	}
 
 	pub fn distribution(&self) -> &GroveDistribution<G::Variant> {
@@ -106,11 +112,25 @@ impl<G: CellGrove> Grove<G> {
 	pub fn select_cell(
 		&self,
 		cell: &Cell,
+		grove_extent: Option<&GroveExtent>,
+		terrain: &impl TerrainSample,
+	) -> GroveCellOutcome<G::Variant> {
+		self.select_cell_with_policy(cell, grove_extent, GroveOverspillPolicy::Discard, terrain)
+	}
+
+	/// Like [`Self::select_cell`], with an explicit overspill policy when validating grove extent.
+	pub fn select_cell_with_policy(
+		&self,
+		cell: &Cell,
+		grove_extent: Option<&GroveExtent>,
+		overspill_policy: GroveOverspillPolicy,
 		terrain: &impl TerrainSample,
 	) -> GroveCellOutcome<G::Variant> {
 		self.prepared.select_cell(
 			cell,
-			&self.definition.param_ranges(),
+			grove_extent,
+			overspill_policy,
+			&self.definition.placement_ranges(),
 			&self.biases,
 			&self.noise,
 			terrain,
@@ -127,15 +147,20 @@ mod tests {
 	use procedural_common::UnitRange;
 
 	struct MockGrove {
-		ranges: GroveParamRanges,
+		cell_extent_xz: f32,
+		placement: GrovePlacementRanges,
 		distribution: GroveDistribution<&'static str>,
 	}
 
 	impl CellGrove for MockGrove {
 		type Variant = &'static str;
 
-		fn param_ranges(&self) -> GroveParamRanges {
-			self.ranges
+		fn cell_extent_xz(&self) -> f32 {
+			self.cell_extent_xz
+		}
+
+		fn placement_ranges(&self) -> GrovePlacementRanges {
+			self.placement
 		}
 
 		fn distribution(&self) -> &GroveDistribution<Self::Variant> {
@@ -168,11 +193,10 @@ mod tests {
 		});
 		let grove = Grove::assemble(
 			MockGrove {
-				ranges: GroveParamRanges::new(
-					UnitRange::new(8.0, 16.0),
+				cell_extent_xz: 10.0,
+				placement: GrovePlacementRanges::new(
 					UnitRange::new(0.8, 1.2),
-					UnitRange::new(0.1, 0.5),
-					UnitRange::new(0.0, 0.2),
+					UnitRange::new(-0.2, 0.2),
 					UnitRange::new(0.02, 0.12),
 					UnitRange::new(0.01, 0.03),
 				),
@@ -186,7 +210,7 @@ mod tests {
 			bevy_math::Vec3::ZERO,
 			bevy_math::Vec3::new(10.0, 1.0, 10.0),
 		));
-		let outcome = grove.select_cell(&cell, &FlatTerrain { elevation: 0.4, steepness: 0.1 });
+		let outcome = grove.select_cell(&cell, None, &FlatTerrain { elevation: 0.4, steepness: 0.1 });
 		assert!(matches!(outcome, GroveCellOutcome::Placed { variant: "tree", .. }));
 		Ok(())
 	}
