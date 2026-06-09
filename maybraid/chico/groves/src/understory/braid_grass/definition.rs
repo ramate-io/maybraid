@@ -3,7 +3,7 @@
 use bevy_math::Vec2;
 use procedural_common::UnitRange;
 
-use crate::braid_grass::BraidGrassCell;
+use super::BraidGrassCell;
 use crate::grove::{CellGrove, GroveDistribution, GrovePlacementRanges};
 
 /// Authored Braid Grass grove definition.
@@ -26,9 +26,6 @@ impl BraidGrassDefinition {
 	/// This denser default keeps preview groves visually populated while preserving the authored
 	/// square-cell pattern; forest gridding may override it per grove.
 	pub const AUTHORED_CELL_EXTENT_XZ: Vec2 = Vec2::splat(2.125);
-
-	/// Default square grove preview footprint in metres on X and Z.
-	pub const DEFAULT_GROVE_EXTENT_XZ: f32 = 100.0;
 
 	/// Per-cell placement ranges from RFC §3.4.5.1.
 	///
@@ -98,7 +95,7 @@ mod tests {
 	use std::mem;
 
 	use super::*;
-	use crate::braid_grass::BraidGrassClump;
+	use crate::BraidGrassClump;
 	use crate::grove::{
 		ForestGroveBiases, Grove, GroveCellOutcome, GroveNoiseConfig, PlacementConstraints,
 		TerrainSample,

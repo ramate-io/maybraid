@@ -4,6 +4,8 @@ mod crown;
 pub mod render_item_plugin;
 mod tuft;
 
+pub use crown::frond_shape_for_ring;
+
 use std::marker::PhantomData;
 
 use bevy::prelude::*;
@@ -58,6 +60,16 @@ where
 			foliage_noise: NoiseParams::from_scalar(0.0, 1.0, 0.06, 1),
 			__marker: PhantomData,
 		}
+	}
+}
+
+impl<LeafM, LeafS> PalmBush<LeafM, LeafS>
+where
+	LeafM: Material,
+	LeafS: Clone + Into<MeshMaterial3d<LeafM>> + Args,
+{
+	pub fn new(geometry: PalmBushSbs, leaf_material: LeafS, foliage_noise: NoiseParams) -> Self {
+		Self { geometry, leaf_material, foliage_noise, __marker: PhantomData }
 	}
 }
 

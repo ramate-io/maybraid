@@ -3,6 +3,9 @@
 use bevy_math::bounding::Aabb3d;
 use bevy_math::{Vec2, Vec3};
 use gimme_gen::Cell;
+
+/// Default square grove preview / isolation-render footprint in metres on X and Z.
+pub const DEFAULT_GROVE_EXTENT_XZ: f32 = 100.0;
 /// How candidate placements that exceed the grove LOD footprint are handled.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum GroveOverspillPolicy {

@@ -19,30 +19,29 @@ mod terrain;
 mod variant_weights;
 
 #[cfg(feature = "render")]
-mod vec3_args;
+pub mod owned_spawn;
 
 #[cfg(feature = "render")]
-mod render_item;
+mod vec3_args;
 
 pub use biases::ForestGroveBiases;
 pub use bucket::Bucket;
 pub use cell_grove::CellGrove;
 pub use constraints::PlacementConstraints;
 pub use distribution::{GroveBucket, GroveDistribution, PreparedGroveDistribution};
-pub use extent::{GroveExtent, GroveOverspillPolicy};
+pub use extent::{GroveExtent, GroveOverspillPolicy, DEFAULT_GROVE_EXTENT_XZ};
 pub use frontend::GroveFrontend;
 pub use outcome::GroveCellOutcome;
 pub use palette::{PaletteColor, PaletteMix, PaletteSlot, WithPalette};
-pub use params::{GroveNoiseConfig, GrovePlacementRanges, SampledCellParams};
+pub use params::{
+	placement_noise, GroveNoiseConfig, GrovePlacementRanges, SampledCellParams,
+};
 pub use placement::CellXzOffset;
 pub use terrain::{FlatTerrainSample, TerrainSample};
 pub use variant_weights::{parse_variant_weights, VariantWeightOverrides};
 
 #[cfg(feature = "render")]
 pub use vec3_args::{parse_vec2_csv, parse_vec3_csv};
-
-#[cfg(feature = "render")]
-pub use render_item::{GroveRenderHelper, GroveRenderRule};
 
 use bevy_math::{Vec2, Vec3};
 use gimme_gen::Cell;

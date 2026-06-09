@@ -4,6 +4,17 @@ use bevy_math::Vec3;
 use gimme_gen::Cell;
 use procedural_common::{NoiseConfig, NoiseParams, UnitRange};
 
+/// Mix world position into a foliage noise seed lane for one placed instance.
+pub fn placement_noise(base: NoiseParams, position: Vec3) -> NoiseParams {
+	NoiseParams {
+		seed: base.seed
+			^ position.x.to_bits() as i32
+			^ position.z.to_bits() as i32
+			^ position.y.to_bits() as i32,
+		..base
+	}
+}
+
 use super::biases::ForestGroveBiases;
 use super::placement::CellXzOffset;
 

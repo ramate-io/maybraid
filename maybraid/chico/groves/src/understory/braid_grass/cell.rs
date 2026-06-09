@@ -1,6 +1,6 @@
 //! [`BraidGrassCell`] bucket enum ([RFC-183 §3.4.5.1]).
 
-use crate::braid_grass::BraidGrassClump;
+use super::BraidGrassClump;
 use crate::grove::{PaletteMix, PlacementConstraints};
 use crate::{grove_buckets, unit_range};
 

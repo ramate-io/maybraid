@@ -18,4 +18,4 @@ pub use definition::BraidGrassDefinition;
 pub use frontend::BraidGrassGroveFrontend;
 
 #[cfg(feature = "render")]
-pub use render_item::{BraidGrass, BraidGrassRenderRule, BraidGrassStd};
+pub use render_item::{BraidGrass, BraidGrassStd};

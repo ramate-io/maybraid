@@ -234,6 +234,9 @@ fn attach_render_materials(
 			g.stick_material.mesh = MeshMaterial3d(tuft.clone());
 			g.leaf_material.mesh = MeshMaterial3d(tuft.clone());
 		}
+		RenderSubject::TropicalTufts(g) => {
+			g.leaf_material.mesh = MeshMaterial3d(tuft.clone());
+		}
 		RenderSubject::SpearTuft(t) => {
 			t.material.mesh = MeshMaterial3d(tuft.clone());
 		}

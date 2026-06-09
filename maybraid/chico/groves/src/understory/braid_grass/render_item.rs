@@ -3,17 +3,17 @@
 use std::marker::PhantomData;
 
 use bevy::prelude::*;
-use chico_ball_components::tuft::{BladeTuft, BladeTuftShape};
+use chico_ball_components::tuft::BladeTuft;
 use clap::Args;
-use procedural_common::{noise_params_from_scalar_str, NoiseConfig, NoiseParams};
+use procedural_common::{noise_params_from_scalar_str, BuildWithNoise, NoiseParams};
 use render_item::{CascadeChunk, RenderItem};
 
-use crate::braid_grass::{
-	BraidGrassCell, BraidGrassClump, BraidGrassDefinition, BraidGrassGroveFrontend,
+use super::{
+	BraidGrassCell, BraidGrassDefinition, BraidGrassGroveFrontend,
 };
 use crate::grove::{
-	CellGrove, FlatTerrainSample, GroveExtent, GrovePlacedCell, GroveRenderHelper, GroveRenderRule,
-	TerrainSample, WithPalette,
+	owned_spawn, placement_noise, CellGrove, FlatTerrainSample, GroveExtent, GrovePlacedCell,
+	TerrainSample, WithPalette, DEFAULT_GROVE_EXTENT_XZ,
 };
 use crate::skipped_mesh_material::{SkippedLeafMeshMaterial, SkippedStickMeshMaterial};
 
@@ -60,7 +60,6 @@ where
 	#[command(flatten, next_help_heading = "Terrain")]
 	pub terrain: Terrain,
 
-	/// Fixed outcomes when the grove is already resolved (replay, persistence, tests).
 	#[arg(skip)]
 	resolved_placements: Option<Vec<GrovePlacedCell<BraidGrassCell>>>,
 
@@ -85,11 +84,7 @@ where
 			foliage_noise: NoiseParams::from_scalar(0.0, 1.0, 0.06, 1),
 			extent: GroveExtent::new(
 				Vec3::ZERO,
-				Vec3::new(
-					BraidGrassDefinition::DEFAULT_GROVE_EXTENT_XZ,
-					1.0,
-					BraidGrassDefinition::DEFAULT_GROVE_EXTENT_XZ,
-				),
+				Vec3::new(DEFAULT_GROVE_EXTENT_XZ, 1.0, DEFAULT_GROVE_EXTENT_XZ),
 			),
 			terrain: Terrain::default(),
 			resolved_placements: None,
@@ -106,10 +101,6 @@ where
 	LeafS: Clone + Into<MeshMaterial3d<LeafM>> + Args + Send + Sync + 'static,
 	Terrain: TerrainSample + Clone + Send + Sync + 'static + Default + clap::Args,
 {
-	/// Carry forward resolved placements when the grove is already in a stateful condition.
-	///
-	/// Use for replay, persisted forest snapshots, and isolation tests that pin bucket throw
-	/// and constraint outcomes without re-running live cell selection.
 	pub fn with_resolved_placements(
 		resolved_placements: Vec<GrovePlacedCell<BraidGrassCell>>,
 		terrain: Terrain,
@@ -124,11 +115,7 @@ where
 			foliage_noise,
 			extent: GroveExtent::new(
 				Vec3::ZERO,
-				Vec3::new(
-					BraidGrassDefinition::DEFAULT_GROVE_EXTENT_XZ,
-					1.0,
-					BraidGrassDefinition::DEFAULT_GROVE_EXTENT_XZ,
-				),
+				Vec3::new(DEFAULT_GROVE_EXTENT_XZ, 1.0, DEFAULT_GROVE_EXTENT_XZ),
 			),
 			terrain,
 			resolved_placements: Some(resolved_placements),
@@ -181,56 +168,42 @@ where
 		});
 		self.grove.clone().assemble(definition)
 	}
+}
 
-	fn render_rule(&self) -> BraidGrassRenderRule<LeafM, LeafS> {
-		BraidGrassRenderRule {
-			foliage_noise: self.foliage_noise,
-			leaf_material: self.leaf_material.clone(),
-			__marker: PhantomData,
-		}
-	}
-
-	fn render_helper(
-		&self,
-	) -> GroveRenderHelper<
-		PaletteBladeTuft<LeafM>,
-		BraidGrassCell,
-		BraidGrassRenderRule<LeafM, LeafS>,
-	> {
-		GroveRenderHelper::new(self.placements(), self.render_rule())
+fn placement_transform(placed: &GrovePlacedCell<BraidGrassCell>) -> Transform {
+	Transform {
+		translation: placed.position,
+		rotation: Quat::IDENTITY,
+		scale: Vec3::splat(placed.scale.max(1e-4)),
 	}
 }
 
-/// Blade tuft with palette-resolved owned material (spawn adds assets explicitly).
-#[derive(Component, Clone)]
-pub struct PaletteBladeTuft<M: Material + Clone> {
-	pub shape: BladeTuftShape,
-	pub material: M,
-}
+#[derive(Component, Clone, Copy)]
+struct PlacedBladeTuft;
 
-impl<M: Material + Clone> PaletteBladeTuft<M> {
-	pub fn from_shape(shape: BladeTuftShape, material: M) -> Self {
-		Self { shape, material }
-	}
-
-	pub fn build_mesh(&self, world_uniform_scale: f32) -> Mesh {
-		BladeTuft::<M, SkippedLeafMeshMaterial<M>>::from_shape(
-			self.shape.clone(),
-			SkippedLeafMeshMaterial::default(),
-		)
-		.build_mesh(world_uniform_scale)
-	}
-}
-
-impl<M: Material + Clone + Send + Sync + 'static> RenderItem for PaletteBladeTuft<M> {
-	fn spawn_render_items(
-		&self,
-		commands: &mut Commands,
-		cascade_chunk: &CascadeChunk,
-		transform: Transform,
-	) -> Vec<Entity> {
-		spawn_blade_tuft_with_owned_material(self, commands, cascade_chunk, transform)
-	}
+fn spawn_blade_tuft_for_bucket<LeafM>(
+	clump: &super::BraidGrassClump,
+	palette_mix: &crate::grove::PaletteMix,
+	placed: &GrovePlacedCell<BraidGrassCell>,
+	foliage_noise: NoiseParams,
+	commands: &mut Commands,
+	cascade_chunk: &CascadeChunk,
+	transform: Transform,
+) -> Vec<Entity>
+where
+	LeafM: Material + WithPalette + Default + Send + Sync + 'static,
+{
+	let noise = placement_noise(foliage_noise, placed.position);
+	let mut shape = clump.build_with_noise(noise);
+	shape.noise_amplitude = foliage_noise.amplitude;
+	shape.noise_frequency = foliage_noise.frequency;
+	let material = LeafM::with_palette(LeafM::default(), palette_mix, noise.seed);
+	let mesh = BladeTuft::<LeafM, SkippedLeafMeshMaterial<LeafM>>::from_shape(
+		shape.clone(),
+		SkippedLeafMeshMaterial::default(),
+	)
+	.build_mesh(1.0);
+	owned_spawn::spawn_owned_mesh(PlacedBladeTuft, mesh, material, commands, cascade_chunk, transform)
 }
 
 impl<StickM, StickS, LeafM, LeafS, Terrain> RenderItem
@@ -238,7 +211,7 @@ impl<StickM, StickS, LeafM, LeafS, Terrain> RenderItem
 where
 	StickM: Material + Send + Sync + 'static,
 	StickS: Clone + Into<MeshMaterial3d<StickM>> + Args + Send + Sync + 'static,
-	LeafM: Material + WithPalette + Default + Clone + Send + Sync + 'static,
+	LeafM: Material + WithPalette + Default + Send + Sync + 'static,
 	LeafS: Clone + Into<MeshMaterial3d<LeafM>> + Args + Send + Sync + 'static,
 	Terrain: TerrainSample + Clone + Send + Sync + 'static + Default + clap::Args,
 {
@@ -248,110 +221,28 @@ where
 		cascade_chunk: &CascadeChunk,
 		transform: Transform,
 	) -> Vec<Entity> {
-		self.render_helper().spawn_render_items(commands, cascade_chunk, transform)
-	}
-}
-
-#[derive(Clone)]
-pub struct BraidGrassRenderRule<LeafM, LeafS>
-where
-	LeafM: Material,
-	LeafS: Clone + Into<MeshMaterial3d<LeafM>>,
-{
-	pub foliage_noise: NoiseParams,
-	pub leaf_material: LeafS,
-	pub(crate) __marker: PhantomData<fn() -> LeafM>,
-}
-
-impl<LeafM, LeafS> GroveRenderRule<PaletteBladeTuft<LeafM>, BraidGrassCell>
-	for BraidGrassRenderRule<LeafM, LeafS>
-where
-	LeafM: Material + WithPalette + Default + Clone + Send + Sync + 'static,
-	LeafS: Clone + Into<MeshMaterial3d<LeafM>> + Send + Sync + 'static,
-{
-	fn render_item_for(
-		&self,
-		placed: &GrovePlacedCell<BraidGrassCell>,
-	) -> Option<(PaletteBladeTuft<LeafM>, Transform)> {
-		let grass = braid_grass_clump(&placed.variant)?;
-		let foliage_seed = self.foliage_noise.seed ^ placed.position.x.to_bits() as i32;
-		let palette_seed =
-			foliage_seed ^ placed.position.z.to_bits() as i32 ^ placed.position.y.to_bits() as i32;
-		let mut shape = blade_tuft_shape_from(placed.position, grass, foliage_seed);
-		shape.noise_amplitude = self.foliage_noise.amplitude;
-		shape.noise_frequency = self.foliage_noise.frequency;
-
-		let material =
-			LeafM::with_palette(LeafM::default(), placed.variant.palette_mix(), palette_seed);
-		let tuft = PaletteBladeTuft::from_shape(shape, material);
-		let transform = Transform {
-			translation: placed.position,
-			rotation: Quat::IDENTITY,
-			scale: Vec3::splat(placed.scale.max(1e-4)),
-		};
-		Some((tuft, transform))
-	}
-}
-
-fn spawn_blade_tuft_with_owned_material<M>(
-	tuft: &PaletteBladeTuft<M>,
-	commands: &mut Commands,
-	cascade_chunk: &CascadeChunk,
-	transform: Transform,
-) -> Vec<Entity>
-where
-	M: Material + Send + Sync + 'static + Clone,
-{
-	let mesh = tuft.build_mesh(1.0);
-	let material = tuft.material.clone();
-	let marker = tuft.clone();
-	let root = commands
-		.spawn((marker, cascade_chunk.clone(), transform, Visibility::default()))
-		.id();
-	commands.queue(move |world: &mut World| {
-		let mesh_handle = world.resource_mut::<Assets<Mesh>>().add(mesh);
-		let material_handle = world.resource_mut::<Assets<M>>().add(material);
-		world
-			.entity_mut(root)
-			.insert((Mesh3d(mesh_handle), MeshMaterial3d(material_handle)));
-	});
-	vec![root]
-}
-
-fn blade_tuft_shape_from(
-	position: Vec3,
-	grass: &BraidGrassClump,
-	foliage_seed: i32,
-) -> BladeTuftShape {
-	let noise = NoiseConfig::new(NoiseParams::from_scalar(foliage_seed as f32, 1.0, 1.0, 1));
-	let sample_f32 = |range: procedural_common::UnitRange, salt| {
-		let lo = range.start.min(range.end);
-		let hi = range.start.max(range.end);
-		noise.sample_range_f32_4d(lo, hi, position.x, position.y, position.z, salt)
-	};
-	let sample_u32 = |range: &std::ops::RangeInclusive<u32>, salt| {
-		let lo = *range.start() as usize;
-		let hi = (*range.end() as usize).saturating_add(1);
-		noise.sample_range_usize_4d(lo, hi, position.x, position.y, position.z, salt) as u32
-	};
-
-	BladeTuftShape {
-		blade_count: sample_u32(&grass.blade_count, 3.0),
-		blade_length: sample_f32(grass.height, 1.0).max(0.1),
-		blade_width: sample_f32(grass.width, 2.0).max(0.005),
-		max_tilt_radians: sample_f32(grass.braid_twist, 4.0).max(0.01),
-		seed: foliage_seed,
-		..BladeTuftShape::default()
-	}
-}
-
-fn braid_grass_clump(variant: &BraidGrassCell) -> Option<&BraidGrassClump> {
-	match variant {
-		BraidGrassCell::None(_) => None,
-		BraidGrassCell::DeepGreenBlade(bucket) => Some(&bucket.item),
-		BraidGrassCell::PaleReedBlade(bucket) => Some(&bucket.item),
-		BraidGrassCell::JungleBlade(bucket) => Some(&bucket.item),
-		BraidGrassCell::RedEdgeBlade(bucket) => Some(&bucket.item),
+		let mut out = Vec::new();
+		for placed in self.placements() {
+			let local = transform.mul_transform(placement_transform(&placed));
+			match &placed.variant {
+				BraidGrassCell::None(_) => {}
+				BraidGrassCell::DeepGreenBlade(bucket)
+				| BraidGrassCell::PaleReedBlade(bucket)
+				| BraidGrassCell::JungleBlade(bucket)
+				| BraidGrassCell::RedEdgeBlade(bucket) => {
+					out.extend(spawn_blade_tuft_for_bucket::<LeafM>(
+						&bucket.item,
+						placed.variant.palette_mix(),
+						&placed,
+						self.foliage_noise,
+						commands,
+						cascade_chunk,
+						local,
+					));
+				}
+			}
+		}
+		out
 	}
 }
 
@@ -362,7 +253,7 @@ mod tests {
 	use anyhow::Result;
 
 	#[test]
-	fn render_rule_builds_blade_tuft_for_placed_cell() -> Result<()> {
+	fn build_with_noise_produces_palette_resolved_tuft() -> Result<()> {
 		let dist = BraidGrassCell::grove_distribution();
 		let Some(BraidGrassCell::DeepGreenBlade(bucket)) = dist.buckets[1].item.clone() else {
 			anyhow::bail!("expected DeepGreenBlade variant");
@@ -372,17 +263,12 @@ mod tests {
 			Vec3::new(5.0, 0.0, 5.0),
 			1.0,
 		);
-
-		let rule = BraidGrassRenderRule {
-			foliage_noise: NoiseParams::default(),
-			leaf_material: SkippedLeafMeshMaterial::<StandardMaterial>::default(),
-			__marker: PhantomData,
+		let BraidGrassCell::DeepGreenBlade(bucket) = &placement.variant else {
+			anyhow::bail!("expected DeepGreenBlade bucket");
 		};
-		let Some((tuft, transform)) = rule.render_item_for(&placement) else {
-			anyhow::bail!("expected blade tuft render item");
-		};
-		assert!(tuft.shape.blade_count >= 10);
-		assert!(transform.scale.x > 0.0);
+		let noise = placement_noise(NoiseParams::default(), placement.position);
+		let shape = bucket.item.build_with_noise(noise);
+		assert!(shape.blade_count >= 10);
 		let palette = placement.variant.palette_mix();
 		let mut allowed = Vec::new();
 		for slot in &palette.slots {
@@ -393,10 +279,12 @@ mod tests {
 				allowed.push(color);
 			}
 		}
+		let material =
+			StandardMaterial::with_palette(StandardMaterial::default(), palette, noise.seed);
 		assert!(
-			allowed.contains(&tuft.material.base_color),
+			allowed.contains(&material.base_color),
 			"expected palette-resolved color, got {:?}",
-			tuft.material.base_color
+			material.base_color
 		);
 		Ok(())
 	}
@@ -444,7 +332,6 @@ mod tests {
 
 	#[test]
 	fn zero_none_weight_still_places_blades() -> Result<()> {
-		use crate::braid_grass::BraidGrassDefinition;
 		use crate::grove::{parse_variant_weights, GroveExtent};
 
 		let mut grass = BraidGrassStd {
@@ -467,7 +354,6 @@ mod tests {
 
 	#[test]
 	fn extent_subdivision_yields_placements_with_default_weights() -> Result<()> {
-		use crate::braid_grass::BraidGrassDefinition;
 		use crate::grove::GroveExtent;
 
 		let mut grass = BraidGrassStd::default();
@@ -486,7 +372,6 @@ mod tests {
 
 	#[test]
 	fn extent_subdivision_yields_placements_with_authored_terrain() -> Result<()> {
-		use crate::braid_grass::BraidGrassDefinition;
 		use crate::grove::{parse_variant_weights, GroveExtent};
 
 		let mut grass = BraidGrassStd::default();
@@ -502,21 +387,6 @@ mod tests {
 			"expected placed braid-grass cells in preview grid, got {}",
 			placements.len()
 		);
-		Ok(())
-	}
-
-	#[test]
-	fn sample_respects_authored_blade_count_range() -> Result<()> {
-		use procedural_common::UnitRange;
-
-		let grass = BraidGrassClump {
-			height: UnitRange::new(1.0, 2.0),
-			width: UnitRange::new(0.3, 0.8),
-			blade_count: 12..=28,
-			braid_twist: UnitRange::new(0.1, 0.3),
-		};
-		let shape = blade_tuft_shape_from(Vec3::new(3.0, 0.0, 7.0), &grass, 0);
-		assert!((12..=28).contains(&shape.blade_count));
 		Ok(())
 	}
 }

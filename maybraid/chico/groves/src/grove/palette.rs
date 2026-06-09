@@ -83,6 +83,12 @@ pub fn resolve_palette_color(name: &str) -> Option<Color> {
 		"red_green" => Color::srgb(0.35, 0.48, 0.22),
 		"copper_red" => Color::srgb(0.62, 0.38, 0.22),
 		"dark_red" => Color::srgb(0.42, 0.18, 0.12),
+		"young_green" => Color::srgb(0.38, 0.72, 0.32),
+		"palm_bark" => Color::srgb(0.45, 0.32, 0.18),
+		"tan_bark" => Color::srgb(0.58, 0.48, 0.32),
+		"green_stem" => Color::srgb(0.28, 0.52, 0.22),
+		"wet_brown" => Color::srgb(0.32, 0.24, 0.14),
+		"young_palm_bark" => Color::srgb(0.52, 0.42, 0.28),
 		_ => return None,
 	})
 }

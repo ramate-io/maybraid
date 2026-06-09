@@ -1887,6 +1887,8 @@ dependencies = [
  "bevy",
  "bevy_math",
  "chico-ball-components",
+ "chico-sbs-geometry",
+ "chico-sbs-trees",
  "clap",
  "gimme-gen",
  "log",
