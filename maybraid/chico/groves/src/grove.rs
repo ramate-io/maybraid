@@ -4,28 +4,47 @@
 //! the spatial index lands in gimme.
 
 mod biases;
+mod bucket;
+mod buckets_macro;
 mod cell_grove;
 mod constraints;
 mod distribution;
+mod extent;
+mod frontend;
 mod outcome;
+mod palette;
 mod params;
 mod placement;
 mod terrain;
+mod variant_weights;
+
+#[cfg(feature = "render")]
+mod vec3_args;
+
+#[cfg(feature = "render")]
+mod render_item;
 
 pub use biases::ForestGroveBiases;
+pub use bucket::Bucket;
 pub use cell_grove::CellGrove;
 pub use constraints::PlacementConstraints;
-pub use distribution::{
-	GroveBucket, GroveDistribution, GroveDistributionBuilder, PreparedGroveDistribution,
-};
+pub use distribution::{GroveBucket, GroveDistribution, PreparedGroveDistribution};
+pub use extent::{GroveExtent, GroveOverspillPolicy};
+pub use frontend::GroveFrontend;
 pub use outcome::GroveCellOutcome;
-pub use params::{
-	biased_sample, sample_cell_params, GroveNoiseConfig, GroveParamRanges, SampledCellParams,
-};
-pub use placement::{candidate_position, cell_origin};
-pub use terrain::TerrainSample;
+pub use palette::{PaletteColor, PaletteMix, PaletteSlot, WithPalette};
+pub use params::{GroveNoiseConfig, GrovePlacementRanges, SampledCellParams};
+pub use placement::CellXzOffset;
+pub use terrain::{FlatTerrainSample, TerrainSample};
+pub use variant_weights::{parse_variant_weights, VariantWeightOverrides};
 
-use bevy_math::Vec3;
+#[cfg(feature = "render")]
+pub use vec3_args::parse_vec3_csv;
+
+#[cfg(feature = "render")]
+pub use render_item::{GroveRenderHelper, GroveRenderRule};
+
+use bevy_math::{Vec2, Vec3};
 use gimme_gen::Cell;
 
 /// Assembled grove definition with forest biases, shared noise, and a pre-built distribution.
@@ -34,6 +53,42 @@ pub struct Grove<G: CellGrove> {
 	biases: ForestGroveBiases,
 	noise: GroveNoiseConfig,
 	prepared: PreparedGroveDistribution<G::Variant>,
+}
+
+/// Sampled placement for one vegetation cell before bucket selection.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct GroveCellPlacement {
+	/// The raw cell-center + offset point. This may lie outside the grove extent.
+	pub candidate_position: Vec3,
+	/// The point used for terrain checks and rendering after overspill handling.
+	pub position: Vec3,
+	/// Per-instance scale, foliage noise, and offset sampled for this cell.
+	pub sampled: SampledCellParams,
+}
+
+/// One placed grove item ready for materialization.
+#[derive(Debug, Clone, PartialEq)]
+pub struct GrovePlacedCell<V> {
+	pub variant: V,
+	pub position: Vec3,
+	pub scale: f32,
+}
+
+impl<V: Clone> GrovePlacedCell<V> {
+	pub fn new(variant: V, position: Vec3, scale: f32) -> Self {
+		Self { variant, position, scale }
+	}
+}
+
+impl<V: Clone> From<GroveCellOutcome<V>> for Option<GrovePlacedCell<V>> {
+	fn from(outcome: GroveCellOutcome<V>) -> Self {
+		match outcome {
+			GroveCellOutcome::Placed { variant, position, scale } => {
+				Some(GrovePlacedCell { variant, position, scale })
+			}
+			GroveCellOutcome::Empty { .. } | GroveCellOutcome::Rejected { .. } => None,
+		}
+	}
 }
 
 impl<G: CellGrove> Grove<G> {
@@ -47,12 +102,98 @@ impl<G: CellGrove> Grove<G> {
 	where
 		G::Variant: Clone,
 	{
-		let prepared = definition
-			.distribution()
-			.clone()
-			.builder()
-			.build(&biases, &noise, perturbation_origin);
+		let prepared =
+			definition.distribution().clone().prepare(&biases, &noise, perturbation_origin);
 		Self { definition, biases, noise, prepared }
+	}
+
+	/// Select and place every vegetation cell in this grove LOD unit.
+	///
+	/// The grove extent is the union of `cells`: individual cell offsets may overspill, but
+	/// ownership/culling stays bounded by the grove.
+	pub fn select_placements(
+		&self,
+		grove_extent: &GroveExtent,
+		cells: &[Cell],
+		terrain: &impl TerrainSample,
+	) -> Vec<GrovePlacedCell<G::Variant>>
+	where
+		G::Variant: Clone,
+	{
+		self.select_placements_with_policy(
+			grove_extent,
+			cells,
+			terrain,
+			GroveOverspillPolicy::Discard,
+		)
+	}
+
+	/// Like [`Self::select_placements`], with explicit handling for candidates outside the grove.
+	pub fn select_placements_with_policy(
+		&self,
+		grove_extent: &GroveExtent,
+		cells: &[Cell],
+		terrain: &impl TerrainSample,
+		overspill_policy: GroveOverspillPolicy,
+	) -> Vec<GrovePlacedCell<G::Variant>>
+	where
+		G::Variant: Clone,
+	{
+		cells
+			.iter()
+			.filter_map(|cell| {
+				Option::<GrovePlacedCell<G::Variant>>::from(self.select_cell_with_policy(
+					cell,
+					grove_extent,
+					overspill_policy,
+					terrain,
+				))
+			})
+			.collect()
+	}
+
+	/// Sample, place, validate, and choose a bucket for one vegetation cell.
+	pub fn select_cell(
+		&self,
+		cell: &Cell,
+		grove_extent: &GroveExtent,
+		terrain: &impl TerrainSample,
+	) -> GroveCellOutcome<G::Variant> {
+		self.select_cell_with_policy(cell, grove_extent, GroveOverspillPolicy::Discard, terrain)
+	}
+
+	/// Like [`Self::select_cell`], with an explicit overspill policy when validating grove extent.
+	pub fn select_cell_with_policy(
+		&self,
+		cell: &Cell,
+		grove_extent: &GroveExtent,
+		overspill_policy: GroveOverspillPolicy,
+		terrain: &impl TerrainSample,
+	) -> GroveCellOutcome<G::Variant> {
+		let placement = match self.place_cell(cell, grove_extent, overspill_policy) {
+			Ok(placement) => placement,
+			Err(candidate_position) => {
+				return GroveCellOutcome::Rejected { position: candidate_position }
+			}
+		};
+		self.prepared
+			.select_at(placement.position, placement.sampled, &self.noise, terrain)
+	}
+
+	/// Sample a cell and resolve its candidate point against the grove extent.
+	pub fn place_cell(
+		&self,
+		cell: &Cell,
+		grove_extent: &GroveExtent,
+		overspill_policy: GroveOverspillPolicy,
+	) -> Result<GroveCellPlacement, Vec3> {
+		let sampled =
+			self.definition.placement_ranges().sample_cell(&self.biases, &self.noise, cell);
+		let candidate_position = sampled.position_in(cell);
+		let Some(position) = grove_extent.resolve_xz(candidate_position, overspill_policy) else {
+			return Err(candidate_position);
+		};
+		Ok(GroveCellPlacement { candidate_position, position, sampled })
 	}
 
 	pub fn definition(&self) -> &G {
@@ -67,8 +208,12 @@ impl<G: CellGrove> Grove<G> {
 		&self.noise
 	}
 
-	pub fn param_ranges(&self) -> GroveParamRanges {
-		self.definition.param_ranges()
+	pub fn placement_ranges(&self) -> GrovePlacementRanges {
+		self.definition.placement_ranges()
+	}
+
+	pub fn cell_extent_xz(&self) -> Vec2 {
+		self.definition.cell_extent_xz()
 	}
 
 	pub fn distribution(&self) -> &GroveDistribution<G::Variant> {
@@ -77,21 +222,6 @@ impl<G: CellGrove> Grove<G> {
 
 	pub fn prepared(&self) -> &PreparedGroveDistribution<G::Variant> {
 		&self.prepared
-	}
-
-	/// Run bucket throw, first-fit, and constraint validation for one cell.
-	pub fn select_cell(
-		&self,
-		cell: &Cell,
-		terrain: &impl TerrainSample,
-	) -> GroveCellOutcome<G::Variant> {
-		self.prepared.select_cell(
-			cell,
-			&self.definition.param_ranges(),
-			&self.biases,
-			&self.noise,
-			terrain,
-		)
 	}
 }
 
@@ -104,15 +234,20 @@ mod tests {
 	use procedural_common::UnitRange;
 
 	struct MockGrove {
-		ranges: GroveParamRanges,
+		cell_extent_xz: Vec2,
+		placement: GrovePlacementRanges,
 		distribution: GroveDistribution<&'static str>,
 	}
 
 	impl CellGrove for MockGrove {
 		type Variant = &'static str;
 
-		fn param_ranges(&self) -> GroveParamRanges {
-			self.ranges
+		fn cell_extent_xz(&self) -> Vec2 {
+			self.cell_extent_xz
+		}
+
+		fn placement_ranges(&self) -> GrovePlacementRanges {
+			self.placement
 		}
 
 		fn distribution(&self) -> &GroveDistribution<Self::Variant> {
@@ -145,11 +280,10 @@ mod tests {
 		});
 		let grove = Grove::assemble(
 			MockGrove {
-				ranges: GroveParamRanges::new(
-					UnitRange::new(8.0, 16.0),
+				cell_extent_xz: Vec2::splat(10.0),
+				placement: GrovePlacementRanges::new(
 					UnitRange::new(0.8, 1.2),
-					UnitRange::new(0.1, 0.5),
-					UnitRange::new(0.0, 0.2),
+					UnitRange::new(-0.2, 0.2),
 					UnitRange::new(0.02, 0.12),
 					UnitRange::new(0.01, 0.03),
 				),
@@ -163,8 +297,44 @@ mod tests {
 			bevy_math::Vec3::ZERO,
 			bevy_math::Vec3::new(10.0, 1.0, 10.0),
 		));
-		let outcome = grove.select_cell(&cell, &FlatTerrain { elevation: 0.4, steepness: 0.1 });
+		let extent = GroveExtent::new(Vec3::ZERO, Vec3::new(10.0, 1.0, 10.0));
+		let outcome =
+			grove.select_cell(&cell, &extent, &FlatTerrain { elevation: 0.4, steepness: 0.1 });
 		assert!(matches!(outcome, GroveCellOutcome::Placed { variant: "tree", .. }));
+		Ok(())
+	}
+
+	#[test]
+	fn select_cell_rejects_placement_outside_grove_extent() -> Result<()> {
+		let mut distribution = GroveDistribution::new();
+		distribution.push(GroveBucket {
+			weight: 1.0,
+			constraints: PlacementConstraints::UNCONSTRAINED,
+			item: Some("tree"),
+		});
+		let grove = Grove::assemble(
+			MockGrove {
+				cell_extent_xz: Vec2::splat(10.0),
+				placement: GrovePlacementRanges::new(
+					UnitRange::new(1.0, 1.0),
+					UnitRange::new(20.0, 20.0),
+					UnitRange::new(0.1, 0.1),
+					UnitRange::new(0.05, 0.05),
+				),
+				distribution,
+			},
+			ForestGroveBiases::default(),
+			GroveNoiseConfig::default(),
+			Vec3::ZERO,
+		);
+		let cell = Cell(Aabb3d::from_min_max(
+			bevy_math::Vec3::ZERO,
+			bevy_math::Vec3::new(10.0, 1.0, 10.0),
+		));
+		let extent = GroveExtent::new(Vec3::ZERO, Vec3::new(10.0, 1.0, 10.0));
+		let outcome =
+			grove.select_cell(&cell, &extent, &FlatTerrain { elevation: 0.4, steepness: 0.1 });
+		assert!(matches!(outcome, GroveCellOutcome::Rejected { .. }));
 		Ok(())
 	}
 }

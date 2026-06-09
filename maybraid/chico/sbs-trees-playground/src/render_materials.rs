@@ -145,7 +145,10 @@ pub fn attach_braid_oak_materials(tree: &mut RenderBraidOakTree, mats: &RenderMa
 	tree.outer_leaf_material.mesh = MeshMaterial3d(mats.braid_outer_leaf.clone());
 }
 
-pub fn attach_jungle_storybook_materials(tree: &mut RenderJungleStorybookTree, mats: &RenderMaterials) {
+pub fn attach_jungle_storybook_materials(
+	tree: &mut RenderJungleStorybookTree,
+	mats: &RenderMaterials,
+) {
 	tree.stick_material.mesh = MeshMaterial3d(mats.jungle_stick.clone());
 	tree.inner_leaf_material.mesh = MeshMaterial3d(mats.jungle_inner_leaf.clone());
 	tree.outer_leaf_material.mesh = MeshMaterial3d(mats.jungle_outer_leaf.clone());
@@ -227,6 +230,10 @@ fn attach_render_materials(
 		RenderSubject::BladeTuft(t) => {
 			t.material.mesh = MeshMaterial3d(tuft.clone());
 		}
+		RenderSubject::BraidGrass(g) => {
+			g.stick_material.mesh = MeshMaterial3d(tuft.clone());
+			g.leaf_material.mesh = MeshMaterial3d(tuft.clone());
+		}
 		RenderSubject::SpearTuft(t) => {
 			t.material.mesh = MeshMaterial3d(tuft.clone());
 		}
@@ -254,16 +261,20 @@ fn attach_render_materials(
 }
 
 /// CLI parses [`SkippedLeafMeshMaterial`] defaults as empty handles; reattach curated materials before spawning.
-pub fn sync_render_material_handles(
-	mut config: ResMut<RenderConfig>,
-	mats: Res<RenderMaterials>,
-) {
+pub fn sync_render_material_handles(mut config: ResMut<RenderConfig>, mats: Res<RenderMaterials>) {
 	let stick = mats.stick.clone();
 	let conifer_stick = mats.conifer_stick.clone();
 	let leaf = mats.leaf.clone();
 	let northern_leaf = mats.northern_leaf.clone();
 	let tuft = mats.tuft.clone();
-	attach_render_materials(&mut config.subject, &stick, &conifer_stick, &leaf, &northern_leaf, &tuft);
+	attach_render_materials(
+		&mut config.subject,
+		&stick,
+		&conifer_stick,
+		&leaf,
+		&northern_leaf,
+		&tuft,
+	);
 	if let RenderSubject::JungleStorybookTree(tree) = &mut config.subject {
 		attach_jungle_storybook_materials(tree, &mats);
 	}

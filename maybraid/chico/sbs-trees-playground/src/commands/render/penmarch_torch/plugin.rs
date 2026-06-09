@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 
-use crate::commands::render::{Render, PenmarchTorchRenderHelper};
+use crate::commands::render::{PenmarchTorchRenderHelper, Render};
 use crate::render::{RenderConfig, RenderSubject};
 
 pub struct PenmarchTorchRenderPlugin;

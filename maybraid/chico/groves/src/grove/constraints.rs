@@ -14,10 +14,8 @@ impl PlacementConstraints {
 		Self { elevation, steepness }
 	}
 
-	pub const UNCONSTRAINED: Self = Self {
-		elevation: UnitRange::new(0.0, 1.0),
-		steepness: UnitRange::new(0.0, 1.0),
-	};
+	pub const UNCONSTRAINED: Self =
+		Self { elevation: UnitRange::new(0.0, 1.0), steepness: UnitRange::new(0.0, 1.0) };
 
 	/// Whether normalized elevation and steepness satisfy this bucket's half-open ranges.
 	pub fn allows(&self, elevation: f32, steepness: f32) -> bool {
@@ -58,7 +56,10 @@ mod tests {
 	fn none_bucket_always_valid() -> Result<()> {
 		let bucket = GroveBucket::<()> {
 			weight: 1.0,
-			constraints: PlacementConstraints::new(UnitRange::new(0.9, 1.0), UnitRange::new(0.0, 0.1)),
+			constraints: PlacementConstraints::new(
+				UnitRange::new(0.9, 1.0),
+				UnitRange::new(0.0, 0.1),
+			),
 			item: None,
 		};
 		let terrain = FlatTerrain { elevation: 0.0, steepness: 0.99 };
@@ -70,7 +71,10 @@ mod tests {
 	fn variant_must_match_constraints() -> Result<()> {
 		let bucket = GroveBucket {
 			weight: 1.0,
-			constraints: PlacementConstraints::new(UnitRange::new(0.2, 0.6), UnitRange::new(0.0, 0.3)),
+			constraints: PlacementConstraints::new(
+				UnitRange::new(0.2, 0.6),
+				UnitRange::new(0.0, 0.3),
+			),
 			item: Some(42_u32),
 		};
 		let terrain = FlatTerrain { elevation: 0.5, steepness: 0.1 };
