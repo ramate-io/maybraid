@@ -1,24 +1,25 @@
 use bevy::prelude::*;
-use chico_ball_components::{FrondCrown, ModerateLodFrondCrown};
 use chico_ball_components::tuft::{
-	BuddhaHandTuft, BladeTuft, SpearTuft, SucculentTuft, WeepingTuft,
+	BladeTuft, BuddhaHandTuft, SpearTuft, SucculentTuft, WeepingTuft,
 };
-use chico_sbs_trees::date_palm::DatePalm;
-use chico_sbs_trees::palm_bush::PalmBush;
-use chico_sbs_trees::waialea_palm::WaialeaPalm;
-use chico_sbs_trees::liams_conifer::LiamsConifer;
-use chico_sbs_trees::friends_conifer::FriendsConifer;
-use chico_sbs_trees::northern_conifer::NorthernConifer;
-use chico_sbs_trees::temperate_conifer::TemperateConifer;
-use chico_sbs_trees::jungle_storybook_tree::JungleStorybookTree;
+use chico_ball_components::{FrondCrown, ModerateLodFrondCrown};
+use chico_groves::braid_grass::BraidGrassStd;
 use chico_sbs_trees::braid_oak_tree::BraidOakTree;
-use chico_sbs_trees::storybook_tree::StorybookTree;
-use chico_sbs_trees::penmarch_torch::PenmarchTorch;
-use chico_sbs_trees::kamakura_torch::KamakuraTorch;
-use chico_sbs_trees::rorys_head_trained::RorysHeadTrained;
-use chico_sbs_trees::vase_tree::VaseTree;
-use chico_sbs_trees::sopes_banyan::SopesBanyan;
+use chico_sbs_trees::date_palm::DatePalm;
+use chico_sbs_trees::friends_conifer::FriendsConifer;
 use chico_sbs_trees::honu_banyan::HonuBanyan;
+use chico_sbs_trees::jungle_storybook_tree::JungleStorybookTree;
+use chico_sbs_trees::kamakura_torch::KamakuraTorch;
+use chico_sbs_trees::liams_conifer::LiamsConifer;
+use chico_sbs_trees::northern_conifer::NorthernConifer;
+use chico_sbs_trees::palm_bush::PalmBush;
+use chico_sbs_trees::penmarch_torch::PenmarchTorch;
+use chico_sbs_trees::rorys_head_trained::RorysHeadTrained;
+use chico_sbs_trees::sopes_banyan::SopesBanyan;
+use chico_sbs_trees::storybook_tree::StorybookTree;
+use chico_sbs_trees::temperate_conifer::TemperateConifer;
+use chico_sbs_trees::vase_tree::VaseTree;
+use chico_sbs_trees::waialea_palm::WaialeaPalm;
 use chico_sbs_trees::SkippedLeafMeshMaterial;
 use chico_sbs_trees::SkippedStickMeshMaterial;
 use chico_tree_components::{
@@ -99,10 +100,7 @@ pub type RenderWaialeaPalm = WaialeaPalm<
 >;
 
 /// [`PalmBush`] — trunkless ground-anchored frond cluster ([#231](https://github.com/ramate-io/maybraid/issues/231)).
-pub type RenderPalmBush = PalmBush<
-	StandardMaterial,
-	SkippedLeafMeshMaterial<StandardMaterial>,
->;
+pub type RenderPalmBush = PalmBush<StandardMaterial, SkippedLeafMeshMaterial<StandardMaterial>>;
 
 /// [`StorybookTree`] — default broadleaf stalk + log-tapered radial canopy ([#230](https://github.com/ramate-io/maybraid/issues/230)).
 pub type RenderStorybookTree = StorybookTree<
@@ -170,9 +168,7 @@ pub type RenderJungleStorybookTree = JungleStorybookTree<
 	SkippedFoliageMeshMaterial<StandardMaterial>,
 >;
 
-use chico_sbs_trees::{
-	SkippedInnerLeafMeshMaterial, SkippedOuterLeafMeshMaterial,
-};
+use chico_sbs_trees::{SkippedInnerLeafMeshMaterial, SkippedOuterLeafMeshMaterial};
 
 pub type RenderSucculentTuft =
 	SucculentTuft<StandardMaterial, SkippedLeafMeshMaterial<StandardMaterial>>;
@@ -182,8 +178,7 @@ pub type RenderBuddhaHandTuft =
 	BuddhaHandTuft<StandardMaterial, SkippedLeafMeshMaterial<StandardMaterial>>;
 pub type RenderWeepingTuft =
 	WeepingTuft<StandardMaterial, SkippedLeafMeshMaterial<StandardMaterial>>;
-pub type RenderFrondCrown =
-	FrondCrown<StandardMaterial, SkippedLeafMeshMaterial<StandardMaterial>>;
+pub type RenderFrondCrown = FrondCrown<StandardMaterial, SkippedLeafMeshMaterial<StandardMaterial>>;
 pub type RenderModerateLodFrondCrown =
 	ModerateLodFrondCrown<StandardMaterial, SkippedLeafMeshMaterial<StandardMaterial>>;
 
@@ -202,6 +197,9 @@ pub type RenderJungleGrowth = JungleGrowth<
 	StandardMaterial,
 	SkippedFoliageMeshMaterial<StandardMaterial>,
 >;
+
+/// [`BraidGrassStd`] — understory blade-tuft grove ([#306](https://github.com/ramate-io/maybraid/issues/306)).
+pub type RenderBraidGrass = BraidGrassStd;
 
 #[derive(Clone)]
 pub enum RenderSubject {
@@ -223,6 +221,7 @@ pub enum RenderSubject {
 	JungleStorybookTree(RenderJungleStorybookTree),
 	SucculentTuft(RenderSucculentTuft),
 	BladeTuft(RenderBladeTuft),
+	BraidGrass(RenderBraidGrass),
 	SpearTuft(RenderSpearTuft),
 	BuddhaHandTuft(RenderBuddhaHandTuft),
 	WeepingTuft(RenderWeepingTuft),
@@ -254,6 +253,7 @@ impl RenderSubject {
 			Self::JungleStorybookTree(_) => "JungleStorybookTree",
 			Self::SucculentTuft(_) => "SucculentTuft",
 			Self::BladeTuft(_) => "BladeTuft",
+			Self::BraidGrass(_) => "BraidGrass",
 			Self::SpearTuft(_) => "SpearTuft",
 			Self::BuddhaHandTuft(_) => "BuddhaHandTuft",
 			Self::WeepingTuft(_) => "WeepingTuft",
@@ -272,10 +272,7 @@ impl RenderSubject {
 			Self::HonuBanyan(t) => format!("{:?}", t.geometry),
 			Self::LiamsConifer(t) => format!("{:?}", t.geometry),
 			Self::FriendsConifer(t) => {
-				format!(
-					"{:?}|splay={}",
-					t.geometry, t.splay_radius_fraction_of_height
-				)
+				format!("{:?}|splay={}", t.geometry, t.splay_radius_fraction_of_height)
 			}
 			Self::NorthernConifer(t) => {
 				format!(
@@ -307,6 +304,12 @@ impl RenderSubject {
 			Self::JungleStorybookTree(t) => format!("{:?}", t.geometry),
 			Self::SucculentTuft(t) => format!("{:?}", t.shape),
 			Self::BladeTuft(t) => format!("{:?}", t.shape),
+			Self::BraidGrass(g) => {
+				format!(
+					"{:?}|extent={:?}|terrain={:?}|foliage={:?}",
+					g.grove, g.extent, g.terrain, g.foliage_noise
+				)
+			}
 			Self::SpearTuft(t) => format!("{:?}", t.shape),
 			Self::BuddhaHandTuft(t) => format!("{:?}", t.shape),
 			Self::WeepingTuft(t) => format!("{:?}", t.shape),
@@ -339,6 +342,7 @@ impl RenderSubject {
 			Self::JungleStorybookTree(tree) => RenderDispatch::JungleStorybookTree(tree.clone()),
 			Self::SucculentTuft(tuft) => RenderDispatch::SucculentTuft(tuft.clone()),
 			Self::BladeTuft(tuft) => RenderDispatch::BladeTuft(tuft.clone()),
+			Self::BraidGrass(grove) => RenderDispatch::BraidGrass(grove.clone()),
 			Self::SpearTuft(tuft) => RenderDispatch::SpearTuft(tuft.clone()),
 			Self::BuddhaHandTuft(tuft) => RenderDispatch::BuddhaHandTuft(tuft.clone()),
 			Self::WeepingTuft(tuft) => RenderDispatch::WeepingTuft(tuft.clone()),
@@ -346,7 +350,9 @@ impl RenderSubject {
 			Self::CommonHighBush(shoots) => RenderDispatch::CommonHighBush(shoots.clone()),
 			Self::JungleGrowth(growth) => RenderDispatch::JungleGrowth(growth.clone()),
 			Self::FrondCrown(crown) => RenderDispatch::FrondCrown(crown.clone()),
-			Self::ModerateLodFrondCrown(crown) => RenderDispatch::ModerateLodFrondCrown(crown.clone()),
+			Self::ModerateLodFrondCrown(crown) => {
+				RenderDispatch::ModerateLodFrondCrown(crown.clone())
+			}
 		}
 	}
 }
@@ -371,6 +377,7 @@ enum RenderDispatch {
 	JungleStorybookTree(RenderJungleStorybookTree),
 	SucculentTuft(RenderSucculentTuft),
 	BladeTuft(RenderBladeTuft),
+	BraidGrass(RenderBraidGrass),
 	SpearTuft(RenderSpearTuft),
 	BuddhaHandTuft(RenderBuddhaHandTuft),
 	WeepingTuft(RenderWeepingTuft),
@@ -495,6 +502,9 @@ pub fn sync_render(
 		}
 		RenderDispatch::BladeTuft(tuft) => {
 			commands.spawn((bundle, DispatchRenderItem::new(tuft)));
+		}
+		RenderDispatch::BraidGrass(grove) => {
+			commands.spawn((bundle, DispatchRenderItem::new(grove)));
 		}
 		RenderDispatch::SpearTuft(tuft) => {
 			commands.spawn((bundle, DispatchRenderItem::new(tuft)));

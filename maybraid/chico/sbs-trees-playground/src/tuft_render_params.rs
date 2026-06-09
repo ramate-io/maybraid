@@ -2,7 +2,7 @@
 
 use bevy::prelude::*;
 use chico_ball_components::tuft::{
-	BuddhaHandTuftShape, BladeTuftShape, SpearTuftShape, SucculentTuftShape, WeepingTuftShape,
+	BladeTuftShape, BuddhaHandTuftShape, SpearTuftShape, SucculentTuftShape, WeepingTuftShape,
 };
 use chico_sbs_trees::SkippedLeafMeshMaterial;
 
@@ -21,10 +21,7 @@ pub struct SucculentTuftRenderParams {
 
 impl Default for SucculentTuftRenderParams {
 	fn default() -> Self {
-		Self {
-			shape: SucculentTuftShape::default(),
-			material: SkippedLeafMeshMaterial::default(),
-		}
+		Self { shape: SucculentTuftShape::default(), material: SkippedLeafMeshMaterial::default() }
 	}
 }
 
@@ -45,10 +42,7 @@ pub struct BladeTuftRenderParams {
 
 impl Default for BladeTuftRenderParams {
 	fn default() -> Self {
-		Self {
-			shape: BladeTuftShape::default(),
-			material: SkippedLeafMeshMaterial::default(),
-		}
+		Self { shape: BladeTuftShape::default(), material: SkippedLeafMeshMaterial::default() }
 	}
 }
 
@@ -69,10 +63,7 @@ pub struct WeepingTuftRenderParams {
 
 impl Default for WeepingTuftRenderParams {
 	fn default() -> Self {
-		Self {
-			shape: WeepingTuftShape::default(),
-			material: SkippedLeafMeshMaterial::default(),
-		}
+		Self { shape: WeepingTuftShape::default(), material: SkippedLeafMeshMaterial::default() }
 	}
 }
 
@@ -93,10 +84,7 @@ pub struct SpearTuftRenderParams {
 
 impl Default for SpearTuftRenderParams {
 	fn default() -> Self {
-		Self {
-			shape: SpearTuftShape::default(),
-			material: SkippedLeafMeshMaterial::default(),
-		}
+		Self { shape: SpearTuftShape::default(), material: SkippedLeafMeshMaterial::default() }
 	}
 }
 
@@ -117,10 +105,7 @@ pub struct BuddhaHandTuftRenderParams {
 
 impl Default for BuddhaHandTuftRenderParams {
 	fn default() -> Self {
-		Self {
-			shape: BuddhaHandTuftShape::default(),
-			material: SkippedLeafMeshMaterial::default(),
-		}
+		Self { shape: BuddhaHandTuftShape::default(), material: SkippedLeafMeshMaterial::default() }
 	}
 }
 

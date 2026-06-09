@@ -1,0 +1,24 @@
+//! Cellular grove selection for Chico vegetation ([RFC-183 §4.7](https://github.com/ramate-io/maybraid/tree/main/rfc/rfc-000-000-183-chico-vegetation#47-grove-core-selection)).
+
+pub mod grove;
+
+pub mod braid_grass;
+
+#[cfg(feature = "render")]
+pub mod skipped_mesh_material;
+
+pub use grove::{
+	parse_variant_weights, Bucket, CellGrove, CellXzOffset, FlatTerrainSample, ForestGroveBiases,
+	Grove, GroveBucket, GroveCellOutcome, GroveCellPlacement, GroveDistribution, GroveExtent,
+	GroveFrontend, GroveNoiseConfig, GrovePlacedCell, GrovePlacementRanges, PaletteColor,
+	PaletteMix, PaletteSlot, PlacementConstraints, PreparedGroveDistribution, SampledCellParams,
+	TerrainSample, VariantWeightOverrides, WithPalette,
+};
+
+pub use braid_grass::{BraidGrassCell, BraidGrassClump, BraidGrassDefinition};
+
+#[cfg(feature = "render")]
+pub use braid_grass::{BraidGrass, BraidGrassRenderRule, BraidGrassStd};
+
+#[cfg(feature = "render")]
+pub use grove::{GroveRenderHelper, GroveRenderRule};

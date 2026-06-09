@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 
-use crate::commands::render::{Render, BraidOakTreeRenderHelper};
+use crate::commands::render::{BraidOakTreeRenderHelper, Render};
 use crate::render::{RenderConfig, RenderSubject};
 
 pub struct BraidOakTreeRenderPlugin;

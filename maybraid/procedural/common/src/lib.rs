@@ -15,3 +15,4 @@ pub use noise::{
 	SetNoiseParams, WithNoise,
 };
 pub use distributions::bucket_throw::{Bucket, BucketThrow, TypedBucketThrow};
+pub use distributions::{perturb_weights, FirstFitIndices, MIN_BUCKET_WEIGHT};
