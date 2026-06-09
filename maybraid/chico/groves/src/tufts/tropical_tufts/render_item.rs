@@ -9,9 +9,7 @@ use clap::Args;
 use procedural_common::{noise_params_from_scalar_str, BuildWithNoise, NoiseParams};
 use render_item::{CascadeChunk, RenderItem};
 
-use super::{
-	TropicalTuftsCell, TropicalTuftsDefinition, TropicalTuftsGroveFrontend,
-};
+use super::{TropicalTuftsCell, TropicalTuftsDefinition, TropicalTuftsGroveFrontend};
 use crate::grove::{
 	patch_spawned_leaf_material, placement_noise, CellGrove, FlatTerrainSample, GroveExtent,
 	GrovePlacedCell, TerrainSample, WithPalette, DEFAULT_GROVE_EXTENT_XZ,
@@ -199,6 +197,7 @@ where
 				| TropicalTuftsCell::JuvenilePalmBush(bucket) => {
 					let geometry = bucket.item.build_with_noise(noise);
 					let bush = PalmBush::new(geometry, self.leaf_material.clone(), noise);
+					log::info!("spawning palm bush {:?} with transform {:?}", bush.geometry, local);
 					let entities = bush.spawn_render_items(commands, cascade_chunk, local);
 					patch_spawned_leaf_material::<LeafM>(
 						&entities,

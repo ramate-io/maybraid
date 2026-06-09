@@ -110,7 +110,8 @@ mod tests {
 
 	#[test]
 	fn default_geometry_ring_count_matches_crown_params() {
-		let bush = PalmBush::<StandardMaterial, SkippedLeafMeshMaterial<StandardMaterial>>::default();
+		let bush =
+			PalmBush::<StandardMaterial, SkippedLeafMeshMaterial<StandardMaterial>>::default();
 		assert_eq!(bush.geometry.crown.ring_count, 8);
 		assert_eq!(bush.geometry.crown.fronds_per_ring, 12);
 	}
