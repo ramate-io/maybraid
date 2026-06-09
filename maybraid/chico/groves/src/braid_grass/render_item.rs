@@ -83,7 +83,14 @@ where
 			stick_material: StickS::default(),
 			leaf_material: LeafS::default(),
 			foliage_noise: NoiseParams::from_scalar(0.0, 1.0, 0.06, 1),
-			extent: GroveExtent::new(Vec3::ZERO, Vec3::ZERO),
+			extent: GroveExtent::new(
+				Vec3::ZERO,
+				Vec3::new(
+					BraidGrassDefinition::DEFAULT_GROVE_EXTENT_XZ,
+					1.0,
+					BraidGrassDefinition::DEFAULT_GROVE_EXTENT_XZ,
+				),
+			),
 			terrain: Terrain::default(),
 			resolved_placements: None,
 			__marker: PhantomData,
@@ -115,7 +122,14 @@ where
 			stick_material,
 			leaf_material,
 			foliage_noise,
-			extent: GroveExtent::new(Vec3::ZERO, Vec3::ZERO),
+			extent: GroveExtent::new(
+				Vec3::ZERO,
+				Vec3::new(
+					BraidGrassDefinition::DEFAULT_GROVE_EXTENT_XZ,
+					1.0,
+					BraidGrassDefinition::DEFAULT_GROVE_EXTENT_XZ,
+				),
+			),
 			terrain,
 			resolved_placements: Some(resolved_placements),
 			__marker: PhantomData,
@@ -152,7 +166,8 @@ where
 	}
 
 	pub fn definition(&self) -> Result<BraidGrassDefinition, String> {
-		let mut definition = BraidGrassDefinition::new();
+		let mut definition =
+			BraidGrassDefinition::new().with_cell_extent_xz(self.grove.cell_extent_xz);
 		if let Some(ref overrides) = self.grove.variant_weights {
 			definition = definition.with_variant_weights(overrides)?;
 		}

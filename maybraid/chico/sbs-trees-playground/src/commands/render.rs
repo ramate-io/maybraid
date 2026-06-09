@@ -30,6 +30,7 @@ pub mod succulent_tuft;
 pub mod weeping_tuft;
 
 use bevy::prelude::*;
+use chico_groves::BraidGrassDefinition;
 use clap::Subcommand;
 
 use crate::render::{RenderConfig, RenderSubject};
@@ -109,7 +110,7 @@ pub struct CellRenderHelper<T: clap::Args + Clone> {
 	#[command(flatten)]
 	pub render: RenderHelper<T>,
 
-	#[arg(long, default_value_t = 21.25, help_heading = "Grove Extent")]
+	#[arg(long, default_value_t = BraidGrassDefinition::DEFAULT_GROVE_EXTENT_XZ, help_heading = "Grove Extent")]
 	pub grove_extent_xz: f32,
 }
 
@@ -679,7 +680,8 @@ mod tests {
 		let grass = helper.configured_braid_grass();
 		assert!(grass.grove.variant_weights.is_none());
 		let placements = grass.placements();
-		assert_eq!(grass.placement_cells().len(), 25);
+		assert_eq!(helper.grove_extent_xz, 100.0);
+		assert_eq!(grass.placement_cells().len(), 48 * 48);
 		assert!(
 			placements.len() >= 8,
 			"expected a visible braid-grass preview with default flags, got {} placements",
@@ -691,13 +693,14 @@ mod tests {
 	#[test]
 	fn braid_grass_command_preserves_grove_params() -> Result<()> {
 		let cmd = crate::commands::PlaygroundCommand::parse_line(
-			"render braid-grass --variant-weights 0.0,9.0,x,x,x --elevation 0.4 --grove-extent-xz 12.75",
+			"render braid-grass --variant-weights 0.0,9.0,x,x,x --elevation 0.4 --grove-extent-xz 12.75 --cell-extent-xz 4.25,4.25",
 		)
 		.map_err(|e| anyhow::anyhow!("{e}"))?;
 		let crate::commands::PlaygroundCommand::Render(Render::BraidGrass(helper)) = cmd else {
 			anyhow::bail!("expected braid-grass render command");
 		};
 		assert!((helper.grove_extent_xz - 12.75).abs() < 1e-5);
+		assert_eq!(helper.render.inner.grove.cell_extent_xz, Vec2::splat(4.25));
 		let grass = helper.configured_braid_grass();
 		assert_eq!(grass.placement_cells().len(), 9);
 		assert!((grass.terrain.elevation - 0.4).abs() < 1e-5);

@@ -1,6 +1,6 @@
 //! Braid Grass CLI grove surface — defaults defer to [`BraidGrassDefinition`] authored weights.
 
-use bevy_math::Vec3;
+use bevy_math::{Vec2, Vec3};
 
 use super::BraidGrassDefinition;
 use crate::grove::{
@@ -9,7 +9,7 @@ use crate::grove::{
 };
 
 #[cfg(feature = "render")]
-use crate::grove::parse_vec3_csv;
+use crate::grove::{parse_vec2_csv, parse_vec3_csv};
 
 /// [`GroveFrontend`] for Braid Grass; omits `--variant-weights` unless the caller overrides.
 #[derive(Debug, Clone, PartialEq)]
@@ -21,6 +21,18 @@ pub struct BraidGrassGroveFrontend {
 
 	#[cfg_attr(feature = "render", command(flatten, next_help_heading = "Grove Noise"))]
 	pub noise: GroveNoiseConfig,
+
+	#[cfg_attr(
+		feature = "render",
+		arg(
+			long,
+			default_value = "2.125,2.125",
+			value_parser = parse_vec2_csv,
+			value_name = "X,Z",
+			help_heading = "Grove Assembly",
+		)
+	)]
+	pub cell_extent_xz: Vec2,
 
 	#[cfg_attr(
 		feature = "render",
@@ -59,6 +71,7 @@ impl Default for BraidGrassGroveFrontend {
 		Self {
 			biases: ForestGroveBiases::default(),
 			noise: GroveNoiseConfig::default(),
+			cell_extent_xz: BraidGrassDefinition::cell_extent_xz_default(),
 			variant_weights: braid_grass_variant_weights_default(),
 			perturbation_origin: Vec3::ZERO,
 		}
@@ -81,7 +94,8 @@ impl BraidGrassGroveFrontend {
 		&self,
 		definition: BraidGrassDefinition,
 	) -> crate::grove::Grove<BraidGrassDefinition> {
-		GroveFrontend::from(self.clone()).assemble(definition)
+		GroveFrontend::from(self.clone())
+			.assemble(definition.with_cell_extent_xz(self.cell_extent_xz))
 	}
 }
 
@@ -116,6 +130,15 @@ mod tests {
 			.map(str::to_string)
 			.collect::<Vec<_>>();
 		assert_eq!(cli, expected);
+		Ok(())
+	}
+
+	#[test]
+	fn assemble_applies_frontend_cell_extent() -> Result<()> {
+		let frontend =
+			BraidGrassGroveFrontend { cell_extent_xz: Vec2::new(3.0, 5.0), ..Default::default() };
+		let grove = frontend.assemble(BraidGrassDefinition::new());
+		assert_eq!(grove.cell_extent_xz(), Vec2::new(3.0, 5.0));
 		Ok(())
 	}
 }
