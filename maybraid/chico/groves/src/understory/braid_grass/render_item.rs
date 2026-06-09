@@ -12,8 +12,8 @@ use super::{
 	BraidGrassCell, BraidGrassDefinition, BraidGrassGroveFrontend,
 };
 use crate::grove::{
-	owned_spawn, placement_noise, CellGrove, FlatTerrainSample, GroveExtent, GrovePlacedCell,
-	TerrainSample, WithPalette, DEFAULT_GROVE_EXTENT_XZ,
+	patch_spawned_leaf_material, placement_noise, CellGrove, FlatTerrainSample, GroveExtent,
+	GrovePlacedCell, TerrainSample, WithPalette, DEFAULT_GROVE_EXTENT_XZ,
 };
 use crate::skipped_mesh_material::{SkippedLeafMeshMaterial, SkippedStickMeshMaterial};
 
@@ -32,7 +32,7 @@ pub struct BraidGrass<StickM, StickS, LeafM, LeafS, Terrain = FlatTerrainSample>
 where
 	StickM: Material,
 	StickS: Clone + Into<MeshMaterial3d<StickM>> + Args + Send + Sync + 'static,
-	LeafM: Material + WithPalette + Default,
+	LeafM: Material,
 	LeafS: Clone + Into<MeshMaterial3d<LeafM>> + Args + Send + Sync + 'static,
 	Terrain: TerrainSample + Clone + Send + Sync + 'static + Default + clap::Args,
 {
@@ -72,7 +72,7 @@ impl<StickM, StickS, LeafM, LeafS, Terrain> Default
 where
 	StickM: Material,
 	StickS: Clone + Into<MeshMaterial3d<StickM>> + Args + Send + Sync + 'static + Default,
-	LeafM: Material + WithPalette + Default,
+	LeafM: Material,
 	LeafS: Clone + Into<MeshMaterial3d<LeafM>> + Args + Send + Sync + 'static + Default,
 	Terrain: TerrainSample + Clone + Send + Sync + 'static + Default + clap::Args,
 {
@@ -97,7 +97,7 @@ impl<StickM, StickS, LeafM, LeafS, Terrain> BraidGrass<StickM, StickS, LeafM, Le
 where
 	StickM: Material,
 	StickS: Clone + Into<MeshMaterial3d<StickM>> + Args + Send + Sync + 'static,
-	LeafM: Material + WithPalette + Default,
+	LeafM: Material,
 	LeafS: Clone + Into<MeshMaterial3d<LeafM>> + Args + Send + Sync + 'static,
 	Terrain: TerrainSample + Clone + Send + Sync + 'static + Default + clap::Args,
 {
@@ -178,34 +178,6 @@ fn placement_transform(placed: &GrovePlacedCell<BraidGrassCell>) -> Transform {
 	}
 }
 
-#[derive(Component, Clone, Copy)]
-struct PlacedBladeTuft;
-
-fn spawn_blade_tuft_for_bucket<LeafM>(
-	clump: &super::BraidGrassClump,
-	palette_mix: &crate::grove::PaletteMix,
-	placed: &GrovePlacedCell<BraidGrassCell>,
-	foliage_noise: NoiseParams,
-	commands: &mut Commands,
-	cascade_chunk: &CascadeChunk,
-	transform: Transform,
-) -> Vec<Entity>
-where
-	LeafM: Material + WithPalette + Default + Send + Sync + 'static,
-{
-	let noise = placement_noise(foliage_noise, placed.position);
-	let mut shape = clump.build_with_noise(noise);
-	shape.noise_amplitude = foliage_noise.amplitude;
-	shape.noise_frequency = foliage_noise.frequency;
-	let material = LeafM::with_palette(LeafM::default(), palette_mix, noise.seed);
-	let mesh = BladeTuft::<LeafM, SkippedLeafMeshMaterial<LeafM>>::from_shape(
-		shape.clone(),
-		SkippedLeafMeshMaterial::default(),
-	)
-	.build_mesh(1.0);
-	owned_spawn::spawn_owned_mesh(PlacedBladeTuft, mesh, material, commands, cascade_chunk, transform)
-}
-
 impl<StickM, StickS, LeafM, LeafS, Terrain> RenderItem
 	for BraidGrass<StickM, StickS, LeafM, LeafS, Terrain>
 where
@@ -224,21 +196,25 @@ where
 		let mut out = Vec::new();
 		for placed in self.placements() {
 			let local = transform.mul_transform(placement_transform(&placed));
+			let noise = placement_noise(self.foliage_noise, placed.position);
 			match &placed.variant {
 				BraidGrassCell::None(_) => {}
 				BraidGrassCell::DeepGreenBlade(bucket)
 				| BraidGrassCell::PaleReedBlade(bucket)
 				| BraidGrassCell::JungleBlade(bucket)
 				| BraidGrassCell::RedEdgeBlade(bucket) => {
-					out.extend(spawn_blade_tuft_for_bucket::<LeafM>(
-						&bucket.item,
+					let mut shape = bucket.item.build_with_noise(noise);
+					shape.noise_amplitude = self.foliage_noise.amplitude;
+					shape.noise_frequency = self.foliage_noise.frequency;
+					let tuft = BladeTuft::from_shape(shape, self.leaf_material.clone());
+					let entities = tuft.spawn_render_items(commands, cascade_chunk, local);
+					patch_spawned_leaf_material::<LeafM>(
+						&entities,
 						placed.variant.palette_mix(),
-						&placed,
-						self.foliage_noise,
+						noise.seed,
 						commands,
-						cascade_chunk,
-						local,
-					));
+					);
+					out.extend(entities);
 				}
 			}
 		}

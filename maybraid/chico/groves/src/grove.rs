@@ -19,9 +19,6 @@ mod terrain;
 mod variant_weights;
 
 #[cfg(feature = "render")]
-pub mod owned_spawn;
-
-#[cfg(feature = "render")]
 mod vec3_args;
 
 pub use biases::ForestGroveBiases;
@@ -32,7 +29,7 @@ pub use distribution::{GroveBucket, GroveDistribution, PreparedGroveDistribution
 pub use extent::{GroveExtent, GroveOverspillPolicy, DEFAULT_GROVE_EXTENT_XZ};
 pub use frontend::GroveFrontend;
 pub use outcome::GroveCellOutcome;
-pub use palette::{PaletteColor, PaletteMix, PaletteSlot, WithPalette};
+pub use palette::{patch_spawned_leaf_material, PaletteColor, PaletteMix, PaletteSlot, WithPalette};
 pub use params::{
 	placement_noise, GroveNoiseConfig, GrovePlacementRanges, SampledCellParams,
 };

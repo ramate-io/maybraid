@@ -21,6 +21,9 @@ pub use grove::{
 };
 
 #[cfg(feature = "render")]
+pub use grove::patch_spawned_leaf_material;
+
+#[cfg(feature = "render")]
 pub use grove::placement_noise;
 
 pub use understory::braid_grass::{BraidGrassCell, BraidGrassClump, BraidGrassDefinition};

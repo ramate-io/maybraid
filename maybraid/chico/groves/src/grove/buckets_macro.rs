@@ -22,6 +22,52 @@ macro_rules! palette_slot {
 	};
 }
 
+/// Expand one authored bucket item payload.
+#[macro_export]
+macro_rules! grove_bucket_item {
+	(
+		$item_ty:ident {
+			height: $h_lo:literal .. $h_hi:literal,
+			width: $w_lo:literal .. $w_hi:literal,
+			blade_count: $bc_lo:literal ..= $bc_hi:literal,
+			braid_twist: $bt_lo:literal .. $bt_hi:literal,
+		}
+	) => {
+		$item_ty {
+			height: $crate::unit_range!($h_lo .. $h_hi),
+			width: $crate::unit_range!($w_lo .. $w_hi),
+			blade_count: $bc_lo..=$bc_hi,
+			braid_twist: $crate::unit_range!($bt_lo .. $bt_hi),
+		}
+	};
+	(
+		$item_ty:ident {
+			height: $h_lo:literal .. $h_hi:literal,
+			width: $w_lo:literal .. $w_hi:literal,
+		}
+	) => {
+		$item_ty {
+			height: $crate::unit_range!($h_lo .. $h_hi),
+			width: $crate::unit_range!($w_lo .. $w_hi),
+		}
+	};
+	(
+		$item_ty:ident {
+			height: $h_lo:literal .. $h_hi:literal,
+			frond_count: $fc_lo:literal ..= $fc_hi:literal,
+			frond_length: $fl_lo:literal .. $fl_hi:literal,
+			crown_spread: $cs_lo:literal .. $cs_hi:literal,
+		}
+	) => {
+		$item_ty {
+			height: $crate::unit_range!($h_lo .. $h_hi),
+			frond_count: $fc_lo..=$fc_hi,
+			frond_length: $crate::unit_range!($fl_lo .. $fl_hi),
+			crown_spread: $crate::unit_range!($cs_lo .. $cs_hi),
+		}
+	};
+}
+
 /// Declare a grove cell enum with [`Bucket`](crate::grove::Bucket) variants and
 /// [`GroveDistribution`](crate::grove::GroveDistribution) builder.
 ///
@@ -43,10 +89,7 @@ macro_rules! grove_buckets {
 						$( [$palette_start:ident .. $palette_end:ident] ),* $(,)?
 					],
 					item: $item_ty:ident {
-						height: $h_lo:literal .. $h_hi:literal,
-						width: $w_lo:literal .. $w_hi:literal,
-						blade_count: $bc_lo:literal ..= $bc_hi:literal,
-						braid_twist: $bt_lo:literal .. $bt_hi:literal,
+						$($item_fields:tt)*
 					},
 				},
 			)*
@@ -80,12 +123,9 @@ macro_rules! grove_buckets {
 							palette_mix: $crate::grove::PaletteMix::from_slots(vec![
 								$( $crate::palette_slot!($palette_start .. $palette_end) ),*
 							]),
-							item: $item_ty {
-								height: $crate::unit_range!($h_lo .. $h_hi),
-								width: $crate::unit_range!($w_lo .. $w_hi),
-								blade_count: $bc_lo..=$bc_hi,
-								braid_twist: $crate::unit_range!($bt_lo .. $bt_hi),
-							},
+							item: $crate::grove_bucket_item!($item_ty {
+								$($item_fields)*
+							}),
 						})),
 					});
 				)*

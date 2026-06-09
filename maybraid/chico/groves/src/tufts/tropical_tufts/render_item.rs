@@ -3,10 +3,8 @@
 use std::marker::PhantomData;
 
 use bevy::prelude::*;
-use chico_ball_components::tuft::{BladeTuft, SucculentTuft, SucculentTuftShape};
-use chico_sbs_geometry::PalmBushSbs;
-use chico_sbs_trees::palm_bush::frond_shape_for_ring;
-use chico_sbs_trees::palm_crown::FROND_RING_SEED_SALT;
+use chico_ball_components::tuft::BladeTuft;
+use chico_sbs_trees::palm_bush::PalmBush;
 use clap::Args;
 use procedural_common::{noise_params_from_scalar_str, BuildWithNoise, NoiseParams};
 use render_item::{CascadeChunk, RenderItem};
@@ -15,9 +13,8 @@ use super::{
 	TropicalTuftsCell, TropicalTuftsDefinition, TropicalTuftsGroveFrontend,
 };
 use crate::grove::{
-	owned_spawn::{self, spawn_owned_frond},
-	placement_noise, CellGrove, FlatTerrainSample, GroveExtent, GrovePlacedCell, PaletteMix,
-	TerrainSample, WithPalette, DEFAULT_GROVE_EXTENT_XZ,
+	patch_spawned_leaf_material, placement_noise, CellGrove, FlatTerrainSample, GroveExtent,
+	GrovePlacedCell, TerrainSample, WithPalette, DEFAULT_GROVE_EXTENT_XZ,
 };
 use crate::skipped_mesh_material::SkippedLeafMeshMaterial;
 
@@ -29,7 +26,7 @@ pub type TropicalTuftsStd =
 #[command(rename_all = "kebab-case")]
 pub struct TropicalTufts<LeafM, LeafS, Terrain = FlatTerrainSample>
 where
-	LeafM: Material + WithPalette + Default,
+	LeafM: Material,
 	LeafS: Clone + Into<MeshMaterial3d<LeafM>> + Args + Send + Sync + 'static,
 	Terrain: TerrainSample + Clone + Send + Sync + 'static + Default + clap::Args,
 {
@@ -63,7 +60,7 @@ where
 
 impl<LeafM, LeafS, Terrain> Default for TropicalTufts<LeafM, LeafS, Terrain>
 where
-	LeafM: Material + WithPalette + Default,
+	LeafM: Material,
 	LeafS: Clone + Into<MeshMaterial3d<LeafM>> + Args + Send + Sync + 'static + Default,
 	Terrain: TerrainSample + Clone + Send + Sync + 'static + Default + clap::Args,
 {
@@ -85,7 +82,7 @@ where
 
 impl<LeafM, LeafS, Terrain> TropicalTufts<LeafM, LeafS, Terrain>
 where
-	LeafM: Material + WithPalette + Default,
+	LeafM: Material,
 	LeafS: Clone + Into<MeshMaterial3d<LeafM>> + Args + Send + Sync + 'static,
 	Terrain: TerrainSample + Clone + Send + Sync + 'static + Default + clap::Args,
 {
@@ -156,124 +153,6 @@ where
 	}
 }
 
-#[derive(Component, Clone, Copy)]
-struct PlacedBladeTuft;
-
-fn spawn_tuft_blade<LeafM>(
-	clump: &super::TropicalTuftClump,
-	palette_mix: &crate::grove::PaletteMix,
-	placed: &GrovePlacedCell<TropicalTuftsCell>,
-	foliage_noise: NoiseParams,
-	commands: &mut Commands,
-	cascade_chunk: &CascadeChunk,
-	transform: Transform,
-) -> Vec<Entity>
-where
-	LeafM: Material + WithPalette + Default + Send + Sync + 'static,
-{
-	let noise = placement_noise(foliage_noise, placed.position);
-	let mut shape = clump.build_with_noise(noise);
-	shape.noise_amplitude = foliage_noise.amplitude;
-	shape.noise_frequency = foliage_noise.frequency;
-	let material = LeafM::with_palette(LeafM::default(), palette_mix, noise.seed);
-	let mesh = BladeTuft::<LeafM, SkippedLeafMeshMaterial<LeafM>>::from_shape(
-		shape.clone(),
-		SkippedLeafMeshMaterial::default(),
-	)
-	.build_mesh(1.0);
-	owned_spawn::spawn_owned_mesh(PlacedBladeTuft, mesh, material, commands, cascade_chunk, transform)
-}
-
-fn spawn_tropical_palm<LeafM>(
-	palm: &super::TropicalPalmBush,
-	palette_mix: &PaletteMix,
-	placed: &GrovePlacedCell<TropicalTuftsCell>,
-	foliage_noise: NoiseParams,
-	commands: &mut Commands,
-	cascade_chunk: &CascadeChunk,
-	root_transform: Transform,
-) -> Vec<Entity>
-where
-	LeafM: Material + WithPalette + Default + Send + Sync + 'static,
-{
-	let noise = placement_noise(foliage_noise, placed.position);
-	let geometry = palm.build_with_noise(noise);
-	let material = LeafM::with_palette(LeafM::default(), palette_mix, noise.seed);
-	spawn_palm_bush_owned::<LeafM>(
-		&geometry,
-		&noise,
-		material,
-		commands,
-		cascade_chunk,
-		root_transform,
-	)
-}
-
-fn spawn_palm_bush_owned<LeafM>(
-	geometry: &PalmBushSbs,
-	foliage_noise: &NoiseParams,
-	material: LeafM,
-	commands: &mut Commands,
-	cascade_chunk: &CascadeChunk,
-	root_transform: Transform,
-) -> Vec<Entity>
-where
-	LeafM: Material + Clone + Send + Sync + 'static,
-{
-	let mut out = Vec::new();
-	let uniform_scale = geometry.frond_world_scale.max(1e-8);
-
-	for ring in 0..geometry.crown.ring_count {
-		let world_pos = geometry.crown_ring_position(ring);
-		let local = root_transform
-			.rotation
-			.inverse()
-			.mul_vec3(world_pos - root_transform.translation);
-		let local_transform =
-			Transform { translation: local, scale: Vec3::splat(uniform_scale), ..default() };
-		let seed = foliage_noise.seed.wrapping_add(ring as i32 * FROND_RING_SEED_SALT);
-		let shape = frond_shape_for_ring(geometry, ring, seed);
-		out.extend(spawn_owned_frond(
-			shape,
-			material.clone(),
-			commands,
-			cascade_chunk,
-			local_transform,
-		));
-	}
-
-	let origin = geometry.crown_origin();
-	let local = root_transform
-		.rotation
-		.inverse()
-		.mul_vec3(origin - root_transform.translation);
-	let tuft_scale = geometry.crown_tuft_world_scale();
-	let tuft_mesh = SucculentTuft::<LeafM, SkippedLeafMeshMaterial<LeafM>>::from_shape(
-		SucculentTuftShape {
-			seed: foliage_noise.seed.wrapping_add(91),
-			element_count: 8,
-			noise_frequency: foliage_noise.frequency,
-			noise_amplitude: foliage_noise.amplitude,
-			..SucculentTuftShape::default()
-		},
-		SkippedLeafMeshMaterial::default(),
-	)
-	.build_mesh(1.0);
-	out.extend(owned_spawn::spawn_owned_mesh(
-		PlacedPalmCrownTuft,
-		tuft_mesh,
-		material,
-		commands,
-		cascade_chunk,
-		Transform { translation: local, scale: Vec3::splat(tuft_scale), ..default() },
-	));
-
-	out
-}
-
-#[derive(Component, Clone, Copy)]
-struct PlacedPalmCrownTuft;
-
 fn placement_transform(placed: &GrovePlacedCell<TropicalTuftsCell>) -> Transform {
 	Transform {
 		translation: placed.position,
@@ -297,32 +176,37 @@ where
 		let mut out = Vec::new();
 		for placed in self.placements() {
 			let local = transform.mul_transform(placement_transform(&placed));
+			let noise = placement_noise(self.foliage_noise, placed.position);
 			match &placed.variant {
 				TropicalTuftsCell::None(_) => {}
 				TropicalTuftsCell::BrightTuft(bucket)
 				| TropicalTuftsCell::DeepTuft(bucket)
 				| TropicalTuftsCell::YellowGreenTuft(bucket) => {
-					out.extend(spawn_tuft_blade::<LeafM>(
-						&bucket.item,
+					let mut shape = bucket.item.build_with_noise(noise);
+					shape.noise_amplitude = self.foliage_noise.amplitude;
+					shape.noise_frequency = self.foliage_noise.frequency;
+					let tuft = BladeTuft::from_shape(shape, self.leaf_material.clone());
+					let entities = tuft.spawn_render_items(commands, cascade_chunk, local);
+					patch_spawned_leaf_material::<LeafM>(
+						&entities,
 						placed.variant.palette_mix(),
-						&placed,
-						self.foliage_noise,
+						noise.seed,
 						commands,
-						cascade_chunk,
-						local,
-					));
+					);
+					out.extend(entities);
 				}
 				TropicalTuftsCell::SmallPalmBush(bucket)
 				| TropicalTuftsCell::JuvenilePalmBush(bucket) => {
-					out.extend(spawn_tropical_palm::<LeafM>(
-						&bucket.item,
+					let geometry = bucket.item.build_with_noise(noise);
+					let bush = PalmBush::new(geometry, self.leaf_material.clone(), noise);
+					let entities = bush.spawn_render_items(commands, cascade_chunk, local);
+					patch_spawned_leaf_material::<LeafM>(
+						&entities,
 						placed.variant.palette_mix(),
-						&placed,
-						self.foliage_noise,
+						noise.seed,
 						commands,
-						cascade_chunk,
-						local,
-					));
+					);
+					out.extend(entities);
 				}
 			}
 		}

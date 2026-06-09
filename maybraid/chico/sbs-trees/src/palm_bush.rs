@@ -4,8 +4,6 @@ mod crown;
 pub mod render_item_plugin;
 mod tuft;
 
-pub use crown::frond_shape_for_ring;
-
 use std::marker::PhantomData;
 
 use bevy::prelude::*;

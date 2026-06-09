@@ -104,6 +104,31 @@ impl WithPalette for bevy::prelude::StandardMaterial {
 	}
 }
 
+/// After lower-order [`RenderItem::spawn_render_items`], patch spawned entities with a
+/// per-placement palette-resolved material asset.
+#[cfg(feature = "render")]
+pub fn patch_spawned_leaf_material<M: bevy::prelude::Material + WithPalette + Default>(
+	entities: &[bevy::prelude::Entity],
+	palette: &PaletteMix,
+	seed: i32,
+	commands: &mut bevy::prelude::Commands,
+) {
+	if entities.is_empty() {
+		return;
+	}
+	let palette = palette.clone();
+	let entities = entities.to_vec();
+	commands.queue(move |world: &mut bevy::prelude::World| {
+		let material = M::with_palette(M::default(), &palette, seed);
+		let handle = world.resource_mut::<bevy::prelude::Assets<M>>().add(material);
+		for entity in entities {
+			world
+				.entity_mut(entity)
+				.insert(bevy::prelude::MeshMaterial3d(handle.clone()));
+		}
+	});
+}
+
 #[cfg(test)]
 mod tests {
 	use super::*;
