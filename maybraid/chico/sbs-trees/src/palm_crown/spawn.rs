@@ -2,7 +2,6 @@
 
 use bevy::prelude::*;
 use chico_ball_components::frond::{FrondCrown, FrondCrownShape};
-use procedural_common::NoiseParams;
 use render_item::{CascadeChunk, RenderItem};
 
 /// Per-ring seed salt mixed into foliage noise (shared by Date, Waialea, and Palm Bush).
@@ -14,7 +13,7 @@ pub fn spawn_stacked_frond_crowns<LeafM, LeafS>(
 	ring_world_position: impl Fn(u32) -> Vec3,
 	frond_shape_for_ring: impl Fn(u32, i32) -> FrondCrownShape,
 	frond_world_scale: f32,
-	foliage_noise: &NoiseParams,
+	foliage_seed: i32,
 	leaf_material: LeafS,
 	commands: &mut Commands,
 	cascade_chunk: &CascadeChunk,
@@ -34,7 +33,7 @@ where
 			scale: Vec3::splat(uniform_scale),
 			..default()
 		};
-		let seed = foliage_noise.seed.wrapping_add(ring as i32 * FROND_RING_SEED_SALT);
+		let seed = foliage_seed.wrapping_add(ring as i32 * FROND_RING_SEED_SALT);
 		let crown = FrondCrown::from_shape(frond_shape_for_ring(ring, seed), leaf_material.clone());
 		out.extend(crown.spawn_render_items(commands, cascade_chunk, local_transform));
 	}

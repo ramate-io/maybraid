@@ -3,7 +3,6 @@
 use bevy::prelude::*;
 use chico_ball_components::tuft::{SucculentTuft, SucculentTuftShape};
 use chico_sbs_geometry::PalmBushSbs;
-use procedural_common::NoiseParams;
 use render_item::{CascadeChunk, RenderItem};
 
 pub fn spawn_crown_tuft<LeafM, LeafS>(
@@ -11,13 +10,13 @@ pub fn spawn_crown_tuft<LeafM, LeafS>(
 	commands: &mut Commands,
 	cascade_chunk: &CascadeChunk,
 	root_transform: Transform,
-	foliage_noise: &NoiseParams,
 	leaf_material: LeafS,
 ) -> Vec<Entity>
 where
 	LeafM: Material + Send + Sync + 'static,
 	LeafS: Clone + Into<MeshMaterial3d<LeafM>> + Send + Sync + 'static,
 {
+	let foliage_noise = &geometry.foliage_noise;
 	let scale = geometry.crown_tuft_world_scale();
 	let tuft = SucculentTuft::from_shape(
 		SucculentTuftShape {

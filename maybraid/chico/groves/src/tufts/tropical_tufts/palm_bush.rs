@@ -15,24 +15,19 @@ pub struct TropicalPalmBush {
 
 #[cfg(feature = "render")]
 mod render {
-	use std::ops::RangeInclusive;
-
-	use bevy_math::Vec3;
-	use chico_sbs_geometry::anchors::palm_bush::DEFAULT_CROWN_TUFT_SCALE_FRACTION;
-	use chico_sbs_geometry::sbs::palm_bush::{PalmBushCrownParams, PalmBushScale};
 	use chico_sbs_geometry::PalmBushSbs;
-	use procedural_common::{BuildWithNoise, NoiseConfig, NoiseParams, UnitRange};
+	use procedural_common::{BuildWithNoise, NoiseParams};
 
 	use super::TropicalPalmBush;
 
 	impl BuildWithNoise<PalmBushSbs> for TropicalPalmBush {
 		fn build_with_noise(&self, noise: NoiseParams) -> PalmBushSbs {
-			/*let mut noise = noise;
-			noise.frequency = 10.0;
-			let height_sample = noise.build().sample_unit_3d(0.0, 0.0, 0.0);
-			let height = self.height.start.min(self.height.end)
-				+ height_sample * (self.height.end - self.height.start);*/
-			PalmBushSbs::default().with_height(2.4).with_frond_world_scale(0.6)
+			// TODO: sample the authored `height` / `frond_count` / `frond_length` /
+			// `crown_spread` ranges from `noise` instead of fixed companion values.
+			PalmBushSbs::default()
+				.with_height(2.4)
+				.with_frond_world_scale(0.6)
+				.with_noise_params(noise)
 		}
 	}
 }
