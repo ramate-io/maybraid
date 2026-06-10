@@ -27,7 +27,12 @@ mod render {
 
 	impl BuildWithNoise<PalmBushSbs> for TropicalPalmBush {
 		fn build_with_noise(&self, noise: NoiseParams) -> PalmBushSbs {
-			PalmBushSbs::default().with_noise_params(noise)
+			/*let mut noise = noise;
+			noise.frequency = 10.0;
+			let height_sample = noise.build().sample_unit_3d(0.0, 0.0, 0.0);
+			let height = self.height.start.min(self.height.end)
+				+ height_sample * (self.height.end - self.height.start);*/
+			PalmBushSbs::default().with_height(2.4).with_frond_world_scale(0.6)
 		}
 	}
 }

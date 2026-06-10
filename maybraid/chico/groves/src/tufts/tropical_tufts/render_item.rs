@@ -198,6 +198,7 @@ where
 					let geometry = bucket.item.build_with_noise(noise);
 					let bush = PalmBush::new(geometry, self.leaf_material.clone(), noise);
 					log::info!("spawning palm bush {:?} with transform {:?}", bush.geometry, local);
+					let mut local = local;
 					let entities = bush.spawn_render_items(commands, cascade_chunk, local);
 					patch_spawned_leaf_material::<LeafM>(
 						&entities,

@@ -138,6 +138,10 @@ impl NoiseParams {
 	pub fn build_generator(&self) -> Arc<FastNoiseLite> {
 		Arc::new(self.build_fast_noise())
 	}
+
+	pub fn build(self) -> NoiseConfig {
+		NoiseConfig::new(self)
+	}
 }
 
 /// Immutable handle: shared generator + params used to construct it.

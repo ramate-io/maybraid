@@ -89,6 +89,16 @@ impl PalmBushSbs {
 		self.scale.height.max(1e-6)
 	}
 
+	pub fn with_height(mut self, height: f32) -> Self {
+		self.scale.height = height;
+		self
+	}
+
+	pub fn with_frond_world_scale(mut self, frond_world_scale: f32) -> Self {
+		self.frond_world_scale = frond_world_scale;
+		self
+	}
+
 	pub fn to_proto(&self) -> PalmBushProtoAnchors {
 		let defaults = PalmBushProtoAnchors::default();
 		PalmBushProtoAnchors {

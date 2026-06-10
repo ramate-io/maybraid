@@ -82,6 +82,7 @@ where
 		cascade_chunk: &CascadeChunk,
 		transform: Transform,
 	) -> Vec<Entity> {
+		log::info!("spawning palm bush {:?} with transform {:?}", self.geometry, transform);
 		let mut out = spawn_crown_rings::<LeafM, LeafS>(
 			&self.geometry,
 			commands,
