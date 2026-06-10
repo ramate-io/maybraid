@@ -28,7 +28,7 @@ pub const DEFAULT_VERTICAL_BIAS_LOW: f32 = -0.20;
 pub const DEFAULT_VERTICAL_BIAS_HIGH: f32 = 0.35;
 
 /// RFC optional tuft scale as a fraction of `H`.
-pub const DEFAULT_CROWN_TUFT_SCALE_FRACTION: f32 = 0.04;
+pub const DEFAULT_CROWN_TUFT_SCALE_FRACTION: f32 = 0.2;
 
 /// Trunkless palm-bush crown parameters.
 #[derive(Clone, Debug, PartialEq)]
@@ -72,12 +72,7 @@ impl PalmBushProtoAnchors {
 
 	/// RFC `mix(low, high, u)` for ring index `ring` in `0..ring_count`.
 	pub fn ring_vertical_bias(&self, ring: u32) -> f32 {
-		vertical_bias_mix(
-			ring,
-			self.ring_count,
-			self.vertical_bias_low,
-			self.vertical_bias_high,
-		)
+		vertical_bias_mix(ring, self.ring_count, self.vertical_bias_low, self.vertical_bias_high)
 	}
 
 	/// Ground-up stacked ring anchor (RFC palm bush).

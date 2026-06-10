@@ -18,11 +18,6 @@ where
 	LeafM: Material + Send + Sync + 'static,
 	LeafS: Clone + Into<MeshMaterial3d<LeafM>> + Send + Sync + 'static,
 {
-	let origin = geometry.crown_origin();
-	let local = root_transform
-		.rotation
-		.inverse()
-		.mul_vec3(origin - root_transform.translation);
 	let scale = geometry.crown_tuft_world_scale();
 	let tuft = SucculentTuft::from_shape(
 		SucculentTuftShape {
@@ -39,7 +34,7 @@ where
 		commands,
 		cascade_chunk,
 		Transform {
-			translation: local,
+			translation: root_transform.translation,
 			scale: Vec3::splat(scale),
 			..default()
 		},
