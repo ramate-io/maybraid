@@ -23,9 +23,12 @@ impl Default for BraidGrassDefinition {
 impl BraidGrassDefinition {
 	/// RFC §3.4.5.1 authored cell footprint (metres on X and Z).
 	///
-	/// Forest gridding may choose any span inside the RFC `2.5..6.0` band; this is the
-	/// definition default used by playground previews until a forest pass supplies cells.
-	pub const AUTHORED_CELL_EXTENT_XZ: Vec2 = Vec2::splat(4.25);
+	/// This denser default keeps preview groves visually populated while preserving the authored
+	/// square-cell pattern; forest gridding may override it per grove.
+	pub const AUTHORED_CELL_EXTENT_XZ: Vec2 = Vec2::splat(2.125);
+
+	/// Default square grove preview footprint in metres on X and Z.
+	pub const DEFAULT_GROVE_EXTENT_XZ: f32 = 100.0;
 
 	/// Per-cell placement ranges from RFC §3.4.5.1.
 	///

@@ -306,8 +306,8 @@ impl RenderSubject {
 			Self::BladeTuft(t) => format!("{:?}", t.shape),
 			Self::BraidGrass(g) => {
 				format!(
-					"{:?}|extent={:?}|terrain={:?}|foliage={:?}",
-					g.grove, g.extent, g.terrain, g.foliage_noise
+					"{:?}|extent={:?}|cell_extent_xz={:?}|terrain={:?}|foliage={:?}",
+					g.grove, g.extent, g.grove.cell_extent_xz, g.terrain, g.foliage_noise
 				)
 			}
 			Self::SpearTuft(t) => format!("{:?}", t.shape),

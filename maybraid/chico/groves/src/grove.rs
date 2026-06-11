@@ -39,7 +39,7 @@ pub use terrain::{FlatTerrainSample, TerrainSample};
 pub use variant_weights::{parse_variant_weights, VariantWeightOverrides};
 
 #[cfg(feature = "render")]
-pub use vec3_args::parse_vec3_csv;
+pub use vec3_args::{parse_vec2_csv, parse_vec3_csv};
 
 #[cfg(feature = "render")]
 pub use render_item::{GroveRenderHelper, GroveRenderRule};
