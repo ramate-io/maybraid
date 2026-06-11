@@ -1,19 +1,23 @@
-//! Grove distribution and per-cell selection pipeline ([RFC-183 3.4.2]).
+//! Ordered weighted grove buckets and per-cell variant selection ([RFC-183 3.4.2]).
+//!
+//! Selection happens in two phases: [`GroveDistribution::prepare`] perturbs bucket weights once
+//! per grove instance ([RFC-183 3.4.2.1.2]), then [`PreparedGroveDistribution::select_at`] runs a
+//! bucket throw plus ordered first-fit walk for each cell ([RFC-183 3.4.2.5]).
 
 use bevy_math::Vec3;
 use procedural_common::{
-	perturb_weights, BucketThrow, FirstFitIndices, NoiseConfig, MIN_BUCKET_WEIGHT,
+	perturb_weights, BucketThrow, FirstFitIndices, NoiseConfig, NoiseParams, MIN_BUCKET_WEIGHT,
 };
 
-use super::{
-	biases::ForestGroveBiases,
-	constraints::PlacementConstraints,
-	outcome::GroveCellOutcome,
-	params::{GroveNoiseConfig, SampledCellParams},
-	terrain::TerrainSample,
-};
+use crate::grove::terrain::{PlacementConstraints, TerrainSample};
+use crate::grove::GroveCellOutcome;
 
-/// One ordered bucket in a grove distribution.
+/// Noise lane for the per-cell bucket throw (offset from the placement position).
+const SELECTION_LANE: Vec3 = Vec3::new(30.0, 0.0, 0.0);
+/// Noise lane base for per-bucket weight perturbation (offset from the perturbation origin).
+const PERTURBATION_LANE_BASE: f32 = 20.0;
+
+/// One ordered bucket: weight, constraints, and an optional variant (`None` = empty cell).
 #[derive(Debug, Clone, PartialEq)]
 pub struct GroveBucket<V> {
 	pub weight: f32,
@@ -22,7 +26,16 @@ pub struct GroveBucket<V> {
 }
 
 impl<V> GroveBucket<V> {
-	/// Whether this bucket may occupy `position` on `terrain`. Explicit `None` buckets always pass.
+	/// Explicit `None` bucket: wins first-fit anywhere and leaves the cell empty.
+	pub const fn none(weight: f32) -> Self {
+		Self { weight, constraints: PlacementConstraints::UNCONSTRAINED, item: None }
+	}
+
+	pub const fn placed(weight: f32, constraints: PlacementConstraints, variant: V) -> Self {
+		Self { weight, constraints, item: Some(variant) }
+	}
+
+	/// Whether this bucket may occupy `position` on `terrain`. `None` buckets always pass.
 	pub fn valid_at(&self, position: Vec3, terrain: &impl TerrainSample) -> bool {
 		if self.item.is_none() {
 			return true;
@@ -32,23 +45,17 @@ impl<V> GroveBucket<V> {
 	}
 }
 
-/// Ordered weighted grove variants with per-bucket constraints.
+/// Authored ordered weighted variants for one grove.
 #[derive(Debug, Clone, PartialEq)]
 pub struct GroveDistribution<V> {
 	pub buckets: Vec<GroveBucket<V>>,
-	/// Base perturbation strength before forest bias scaling.
+	/// Base perturbation strength before forest bias scaling ([RFC-183 3.4.2.1.2]).
 	pub base_bucket_perturbation_strength: f32,
 }
 
-impl<V> Default for GroveDistribution<V> {
-	fn default() -> Self {
-		Self { buckets: Vec::new(), base_bucket_perturbation_strength: 0.0 }
-	}
-}
-
 impl<V> GroveDistribution<V> {
-	pub fn new() -> Self {
-		Self::default()
+	pub fn new(buckets: Vec<GroveBucket<V>>) -> Self {
+		Self { buckets, base_bucket_perturbation_strength: 0.0 }
 	}
 
 	pub fn with_perturbation_strength(mut self, strength: f32) -> Self {
@@ -56,10 +63,6 @@ impl<V> GroveDistribution<V> {
 		self
 	}
 
-	pub fn push(&mut self, bucket: GroveBucket<V>) {
-		self.buckets.push(bucket);
-	}
-
 	pub fn len(&self) -> usize {
 		self.buckets.len()
 	}
@@ -68,198 +71,176 @@ impl<V> GroveDistribution<V> {
 		self.buckets.is_empty()
 	}
 
-	/// Perturb bucket weights at `perturbation_origin`, then freeze the throw for many cell draws.
+	/// Perturb bucket weights once at `perturbation_origin` and freeze the throw for many cell
+	/// draws. `bucket_mean_shift` and `bucket_perturbation_bias` come from the parent forest.
 	pub fn prepare(
 		self,
-		biases: &ForestGroveBiases,
-		noise: &GroveNoiseConfig,
+		bucket_mean_shift: f32,
+		bucket_perturbation_bias: f32,
+		noise: NoiseParams,
 		perturbation_origin: Vec3,
 	) -> PreparedGroveDistribution<V> {
-		let (bucket_throw, throw_bucket_indices) =
-			build_perturbed_bucket_throw(&self, biases, noise, perturbation_origin);
-		PreparedGroveDistribution { buckets: self.buckets, bucket_throw, throw_bucket_indices }
+		// Zero-weight buckets are excluded from the throw but stay in the ordered first-fit
+		// walk, so a zeroed `None` bucket cannot shadow its placed neighbors.
+		let mut base = BucketThrow::new();
+		let mut throw_bucket_indices = Vec::new();
+		for (index, bucket) in self.buckets.iter().enumerate() {
+			if base.add(bucket.weight) {
+				throw_bucket_indices.push(index);
+			}
+		}
+
+		let strength = self.base_bucket_perturbation_strength * (1.0 + bucket_perturbation_bias);
+		let throw = if strength.abs() <= f32::EPSILON || base.is_empty() {
+			base
+		} else {
+			let n = NoiseConfig::new(noise);
+			let bucket_noises: Vec<f32> = throw_bucket_indices
+				.iter()
+				.map(|&index| {
+					n.sample_3d_world(
+						perturbation_origin
+							+ Vec3::new(PERTURBATION_LANE_BASE + index as f32, 0.0, 0.0),
+					)
+				})
+				.collect();
+			perturb_weights(&base, strength, &bucket_noises, MIN_BUCKET_WEIGHT)
+		};
+		let mean_anchor = bucket_mean_shift * throw.total_weight();
+		PreparedGroveDistribution {
+			buckets: self.buckets,
+			bucket_throw: throw.with_mean_anchor(mean_anchor),
+			throw_bucket_indices,
+		}
 	}
 }
 
-/// Grove distribution with bucket weights perturbed once for a forest/grove instance.
+/// Grove distribution with bucket weights perturbed once per grove instance.
 #[derive(Debug, Clone)]
 pub struct PreparedGroveDistribution<V> {
 	buckets: Vec<GroveBucket<V>>,
 	bucket_throw: BucketThrow,
-	/// Maps compressed [`BucketThrow`] indices to [`Self::buckets`] indices (zero-weight buckets omitted).
+	/// Maps compressed [`BucketThrow`] indices back to [`Self::buckets`] indices.
 	throw_bucket_indices: Vec<usize>,
 }
 
-impl<V> PreparedGroveDistribution<V> {
-	pub fn len(&self) -> usize {
-		self.buckets.len()
-	}
-
+impl<V: Clone> PreparedGroveDistribution<V> {
 	pub fn is_empty(&self) -> bool {
 		self.buckets.is_empty()
 	}
 
-	/// Select at an explicit candidate point (used when placement is precomputed).
+	/// Throw into the weighted buckets at `position`, then first-fit walk to a valid variant.
 	pub fn select_at(
 		&self,
 		position: Vec3,
-		sampled: SampledCellParams,
-		noise: &GroveNoiseConfig,
+		scale: f32,
+		noise: NoiseParams,
 		terrain: &impl TerrainSample,
-	) -> GroveCellOutcome<V>
-	where
-		V: Clone,
-	{
+	) -> GroveCellOutcome<V> {
 		if self.is_empty() {
 			return GroveCellOutcome::Rejected { position };
 		}
-
-		let start = self.start_index(noise, position);
-
-		self.select_at_with_start(start, position, sampled, terrain)
+		let selection_noise = NoiseConfig::new(noise).sample_3d_world(position + SELECTION_LANE);
+		let throw = selection_noise * self.bucket_throw.total_weight() * 0.5;
+		let throw_index = self.bucket_throw.select(throw).unwrap_or(0);
+		let start = self.throw_bucket_indices.get(throw_index).copied().unwrap_or(0);
+		self.select_from(start, position, scale, terrain)
 	}
 
-	/// Select starting from a known bucket index (used by tests and debugging).
-	pub fn select_at_with_start(
+	/// First-fit walk from a known starting bucket index (also used by tests and debugging).
+	pub fn select_from(
 		&self,
 		start: usize,
 		position: Vec3,
-		sampled: SampledCellParams,
+		scale: f32,
 		terrain: &impl TerrainSample,
-	) -> GroveCellOutcome<V>
-	where
-		V: Clone,
-	{
-		if self.is_empty() {
-			return GroveCellOutcome::Rejected { position };
-		}
-
+	) -> GroveCellOutcome<V> {
 		for index in FirstFitIndices::new(self.buckets.len(), start) {
 			let bucket = &self.buckets[index];
 			if !bucket.valid_at(position, terrain) {
 				continue;
 			}
 			return match &bucket.item {
-				Some(variant) => GroveCellOutcome::Placed {
-					variant: variant.clone(),
-					position,
-					scale: sampled.scale,
-				},
+				Some(variant) => {
+					GroveCellOutcome::Placed { variant: variant.clone(), position, scale }
+				}
 				None => GroveCellOutcome::Empty { position },
 			};
 		}
-
 		GroveCellOutcome::Rejected { position }
 	}
-
-	fn start_index(&self, noise: &GroveNoiseConfig, position: Vec3) -> usize {
-		let selection_noise = bucket_selection_noise(noise, position);
-		let throw = selection_noise * self.bucket_throw.total_weight() * 0.5;
-		let throw_index = self.bucket_throw.select(throw).unwrap_or(0);
-		self.throw_bucket_indices.get(throw_index).copied().unwrap_or(0)
-	}
 }
 
-fn build_perturbed_bucket_throw<V>(
-	distribution: &GroveDistribution<V>,
-	biases: &ForestGroveBiases,
-	noise: &GroveNoiseConfig,
-	perturbation_origin: Vec3,
-) -> (BucketThrow, Vec<usize>) {
-	let mut base = BucketThrow::new();
-	let mut throw_bucket_indices = Vec::new();
-	for (index, bucket) in distribution.buckets.iter().enumerate() {
-		if base.add(bucket.weight) {
-			throw_bucket_indices.push(index);
+/// Per-bucket weight overrides aligned with [`GroveDistribution::buckets`] order.
+///
+/// `None` at index *i* keeps the authored weight for bucket *i*; `Some(w)` replaces it.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct VariantWeightOverrides {
+	pub slots: Vec<Option<f32>>,
+}
+
+impl VariantWeightOverrides {
+	pub fn apply_to<V>(&self, distribution: &mut GroveDistribution<V>) -> Result<(), String> {
+		if self.slots.len() != distribution.buckets.len() {
+			return Err(format!(
+				"variant weight count {} does not match bucket count {}",
+				self.slots.len(),
+				distribution.buckets.len()
+			));
 		}
+		for (slot, bucket) in self.slots.iter().zip(&mut distribution.buckets) {
+			if let Some(weight) = slot {
+				bucket.weight = *weight;
+			}
+		}
+		Ok(())
 	}
+}
 
-	let strength =
-		distribution.base_bucket_perturbation_strength * (1.0 + biases.bucket_perturbation_bias);
-	let total = base.total_weight();
-	if strength.abs() <= f32::EPSILON || base.is_empty() {
-		return (base.with_mean_anchor(bucket_mean_shift(biases, total)), throw_bucket_indices);
-	}
-
-	let n = NoiseConfig::new(noise.base);
-	let bucket_noises: Vec<f32> = throw_bucket_indices
-		.iter()
-		.map(|&index| {
-			n.sample_3d_world(perturbation_origin + Vec3::new(20.0 + index as f32, 0.0, 0.0))
+/// Parse `--variant-weights 1.0,x,2.5,3.0,x` (one slot per bucket; `x` keeps the default).
+pub fn parse_variant_weights(s: &str) -> Result<VariantWeightOverrides, String> {
+	let slots = s
+		.split(',')
+		.map(str::trim)
+		.filter(|part| !part.is_empty())
+		.map(|part| {
+			if part.eq_ignore_ascii_case("x") {
+				return Ok(None);
+			}
+			part.parse::<f32>()
+				.map(Some)
+				.map_err(|e| format!("invalid variant weight {part:?}: {e}"))
 		})
-		.collect();
-	let perturbed = perturb_weights(&base, strength, &bucket_noises, MIN_BUCKET_WEIGHT);
-	let total = perturbed.total_weight();
-	(perturbed.with_mean_anchor(bucket_mean_shift(biases, total)), throw_bucket_indices)
-}
-
-fn bucket_mean_shift(biases: &ForestGroveBiases, total_weight: f32) -> f32 {
-	biases.bucket_mean_shift * total_weight
-}
-
-fn bucket_selection_noise(noise: &GroveNoiseConfig, position: Vec3) -> f32 {
-	NoiseConfig::new(noise.base).sample_3d_world(position + Vec3::new(30.0, 0.0, 0.0))
+		.collect::<Result<Vec<_>, String>>()?;
+	if slots.is_empty() {
+		return Err("expected at least one variant weight slot".into());
+	}
+	Ok(VariantWeightOverrides { slots })
 }
 
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use crate::grove::params::{GroveNoiseConfig, GrovePlacementRanges};
+	use crate::grove::terrain::FlatTerrainSample;
 	use anyhow::Result;
-	use bevy_math::bounding::Aabb3d;
-	use gimme_gen::Cell;
 	use procedural_common::UnitRange;
 
-	struct FlatTerrain {
-		elevation: f32,
-		steepness: f32,
+	fn flat(elevation: f32, steepness: f32) -> FlatTerrainSample {
+		FlatTerrainSample { elevation, steepness }
 	}
 
-	impl TerrainSample for FlatTerrain {
-		fn elevation_at(&self, _position: Vec3) -> f32 {
-			self.elevation
-		}
-
-		fn steepness_at(&self, _position: Vec3) -> f32 {
-			self.steepness
-		}
-	}
-
-	fn test_ranges() -> GrovePlacementRanges {
-		GrovePlacementRanges::new(
-			UnitRange::new(0.8, 1.2),
-			UnitRange::new(-0.2, 0.2),
-			UnitRange::new(0.02, 0.12),
-			UnitRange::new(0.01, 0.03),
-		)
-	}
-
-	fn test_cell() -> Cell {
-		Cell(Aabb3d::from_min_max(Vec3::new(0.0, 0.0, 0.0), Vec3::new(10.0, 1.0, 10.0)))
-	}
-
-	fn prepared_dist<V>(dist: GroveDistribution<V>) -> PreparedGroveDistribution<V> {
-		dist.prepare(&ForestGroveBiases::default(), &GroveNoiseConfig::default(), Vec3::ZERO)
+	fn prepared<V: Clone>(dist: GroveDistribution<V>) -> PreparedGroveDistribution<V> {
+		dist.prepare(0.0, 0.0, NoiseParams::default(), Vec3::ZERO)
 	}
 
 	#[test]
-	fn selects_none_bucket() -> Result<()> {
-		let mut dist: GroveDistribution<()> = GroveDistribution::new();
-		dist.push(GroveBucket {
-			weight: 1.0,
-			constraints: PlacementConstraints::UNCONSTRAINED,
-			item: None,
-		});
-		let prepared = prepared_dist(dist);
-		let outcome = prepared.select_at(
+	fn none_bucket_yields_empty() -> Result<()> {
+		let dist: GroveDistribution<()> = GroveDistribution::new(vec![GroveBucket::none(1.0)]);
+		let outcome = prepared(dist).select_at(
 			Vec3::ZERO,
-			test_ranges().sample_at(
-				&ForestGroveBiases::default(),
-				&GroveNoiseConfig::default(),
-				Vec3::ZERO,
-			),
-			&GroveNoiseConfig::default(),
-			&FlatTerrain { elevation: 0.5, steepness: 0.1 },
+			1.0,
+			NoiseParams::default(),
+			&flat(0.5, 0.1),
 		);
 		assert!(matches!(outcome, GroveCellOutcome::Empty { .. }));
 		Ok(())
@@ -267,102 +248,121 @@ mod tests {
 
 	#[test]
 	fn first_fit_falls_back_to_valid_variant() -> Result<()> {
-		let mut dist = GroveDistribution::new();
-		dist.push(GroveBucket {
-			weight: 1.0,
-			constraints: PlacementConstraints::new(
-				UnitRange::new(0.8, 1.0),
-				UnitRange::new(0.0, 0.1),
+		let dist = GroveDistribution::new(vec![
+			GroveBucket::placed(
+				1.0,
+				PlacementConstraints::new(UnitRange::new(0.8, 1.0), UnitRange::new(0.0, 0.1)),
+				"high_only",
 			),
-			item: Some("steep_only"),
-		});
-		dist.push(GroveBucket {
-			weight: 1.0,
-			constraints: PlacementConstraints::new(
-				UnitRange::new(0.0, 0.5),
-				UnitRange::new(0.0, 0.5),
+			GroveBucket::placed(
+				1.0,
+				PlacementConstraints::new(UnitRange::new(0.0, 0.5), UnitRange::new(0.0, 0.5)),
+				"flat",
 			),
-			item: Some("flat"),
-		});
-		let prepared = prepared_dist(dist);
-		let terrain = FlatTerrain { elevation: 0.3, steepness: 0.2 };
-		let sampled = test_ranges().sample_at(
-			&ForestGroveBiases { bucket_mean_shift: 0.0, ..Default::default() },
-			&GroveNoiseConfig::default(),
-			Vec3::new(5.0, 0.0, 5.0),
-		);
-		let position = sampled.position_in(&test_cell());
-		let outcome = prepared.select_at_with_start(0, position, sampled, &terrain);
+		]);
+		let outcome =
+			prepared(dist).select_from(0, Vec3::new(5.0, 0.0, 5.0), 1.0, &flat(0.3, 0.2));
 		match outcome {
 			GroveCellOutcome::Placed { variant, .. } => assert_eq!(variant, "flat"),
-			other => panic!("expected Placed flat, got {other:?}"),
+			other => anyhow::bail!("expected Placed flat, got {other:?}"),
 		}
 		Ok(())
 	}
 
 	#[test]
-	fn zero_weight_none_bucket_does_not_shadow_blade_variants() -> Result<()> {
-		use crate::BraidGrassCell;
-		use procedural_common::NoiseParams;
+	fn none_bucket_ignores_constraints() -> Result<()> {
+		let dist: GroveDistribution<()> = GroveDistribution::new(vec![GroveBucket {
+			weight: 1.0,
+			constraints: PlacementConstraints::new(
+				UnitRange::new(0.9, 1.0),
+				UnitRange::new(0.0, 0.1),
+			),
+			item: None,
+		}]);
+		let outcome = prepared(dist).select_at(
+			Vec3::ZERO,
+			1.0,
+			NoiseParams::default(),
+			&flat(0.0, 0.99),
+		);
+		assert!(matches!(outcome, GroveCellOutcome::Empty { .. }));
+		Ok(())
+	}
 
-		let mut dist = BraidGrassCell::grove_distribution();
+	#[test]
+	fn all_buckets_invalid_rejects() -> Result<()> {
+		let dist = GroveDistribution::new(vec![GroveBucket::placed(
+			1.0,
+			PlacementConstraints::new(UnitRange::new(0.8, 1.0), UnitRange::new(0.0, 0.1)),
+			"high_only",
+		)]);
+		let outcome =
+			prepared(dist).select_at(Vec3::ZERO, 1.0, NoiseParams::default(), &flat(0.1, 0.5));
+		assert!(matches!(outcome, GroveCellOutcome::Rejected { .. }));
+		Ok(())
+	}
+
+	#[test]
+	fn zero_weight_none_bucket_does_not_shadow_placed_variants() -> Result<()> {
+		let mut dist = crate::braid_grass::BraidGrassCell::distribution();
 		dist.buckets[0].weight = 0.0;
 		dist.buckets[1].weight = 9.0;
-		let prepared = dist.prepare(
-			&ForestGroveBiases::default(),
-			&GroveNoiseConfig::new(NoiseParams::from_scalar(0.0, 1.0, 0.0, 1)),
-			Vec3::ZERO,
-		);
-		let terrain = FlatTerrain { elevation: 0.4, steepness: 0.1 };
-		let braid_ranges = crate::braid_grass::BraidGrassDefinition::PLACEMENT_RANGES;
-		let mut cells = Vec::new();
+		let noise = NoiseParams::from_scalar(0.0, 1.0, 0.0, 1);
+		let prepared = dist.prepare(0.0, 0.0, noise, Vec3::ZERO);
+		let terrain = flat(0.4, 0.1);
+		let mut placed = 0usize;
 		for x in 0..3 {
 			for z in 0..3 {
-				cells.push(Cell(Aabb3d::from_min_max(
-					Vec3::new(x as f32 * 4.25, 0.0, z as f32 * 4.25),
-					Vec3::new((x + 1) as f32 * 4.25, 1.0, (z + 1) as f32 * 4.25),
-				)));
+				let position = Vec3::new(x as f32 * 4.25, 0.0, z as f32 * 4.25);
+				if matches!(
+					prepared.select_at(position, 1.0, noise, &terrain),
+					GroveCellOutcome::Placed { .. }
+				) {
+					placed += 1;
+				}
 			}
 		}
-		let mut placed = 0usize;
-		for cell in &cells {
-			let noise = GroveNoiseConfig::new(NoiseParams::from_scalar(0.0, 1.0, 0.0, 1));
-			let sampled = braid_ranges.sample_cell(&ForestGroveBiases::default(), &noise, cell);
-			let outcome = prepared.select_at(sampled.position_in(cell), sampled, &noise, &terrain);
-			if matches!(outcome, GroveCellOutcome::Placed { .. }) {
-				placed += 1;
-			}
-		}
-		assert!(
-			placed > 0,
-			"expected blade placements when None weight is zero, got {placed} placed cells"
-		);
+		assert!(placed > 0, "expected placements when None weight is zero, got {placed}");
 		Ok(())
 	}
 
 	#[test]
-	fn prepare_reuses_perturbed_throw_across_cells() -> Result<()> {
-		let mut dist = GroveDistribution::new();
-		dist.push(GroveBucket {
-			weight: 1.0,
-			constraints: PlacementConstraints::UNCONSTRAINED,
-			item: Some("tree"),
-		});
-		let prepared = dist.prepare(
-			&ForestGroveBiases::default(),
-			&GroveNoiseConfig::default(),
-			Vec3::new(100.0, 0.0, 50.0),
-		);
-		let terrain = FlatTerrain { elevation: 0.4, steepness: 0.1 };
-		let ranges = test_ranges();
-		let biases = ForestGroveBiases::default();
-		let noise = GroveNoiseConfig::default();
-		let sampled = ranges.sample_cell(&biases, &noise, &test_cell());
-		let position = sampled.position_in(&test_cell());
-		let a = prepared.select_at(position, sampled, &noise, &terrain);
-		let b = prepared.select_at(position, sampled, &noise, &terrain);
-		assert!(matches!(a, GroveCellOutcome::Placed { .. }));
+	fn selection_is_deterministic() -> Result<()> {
+		let dist = GroveDistribution::new(vec![
+			GroveBucket::none(1.0),
+			GroveBucket::placed(2.0, PlacementConstraints::UNCONSTRAINED, "tree"),
+		]);
+		let prepared = prepared(dist);
+		let position = Vec3::new(100.0, 0.0, 50.0);
+		let a = prepared.select_at(position, 1.0, NoiseParams::default(), &flat(0.4, 0.1));
+		let b = prepared.select_at(position, 1.0, NoiseParams::default(), &flat(0.4, 0.1));
 		assert_eq!(a, b);
+		Ok(())
+	}
+
+	#[test]
+	fn parse_variant_weights_accepts_defaults_and_overrides() -> Result<()> {
+		let overrides =
+			parse_variant_weights("1.0,x,2.5,3.0,x").map_err(|e| anyhow::anyhow!("{e}"))?;
+		assert_eq!(overrides.slots, vec![Some(1.0), None, Some(2.5), Some(3.0), None]);
+		Ok(())
+	}
+
+	#[test]
+	fn apply_variant_weights_updates_only_set_slots_and_rejects_mismatch() -> Result<()> {
+		let mut dist = GroveDistribution::new(vec![
+			GroveBucket::none(2.5),
+			GroveBucket::placed(2.0, PlacementConstraints::UNCONSTRAINED, "a"),
+			GroveBucket::placed(1.0, PlacementConstraints::UNCONSTRAINED, "b"),
+		]);
+		let overrides = parse_variant_weights("0.1,x,4.0").map_err(|e| anyhow::anyhow!("{e}"))?;
+		overrides.apply_to(&mut dist).map_err(|e| anyhow::anyhow!("{e}"))?;
+		assert_eq!(dist.buckets[0].weight, 0.1);
+		assert_eq!(dist.buckets[1].weight, 2.0);
+		assert_eq!(dist.buckets[2].weight, 4.0);
+
+		let mismatched = VariantWeightOverrides { slots: vec![Some(1.0)] };
+		assert!(mismatched.apply_to(&mut dist).is_err());
 		Ok(())
 	}
 }

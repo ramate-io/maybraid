@@ -728,7 +728,7 @@ mod tests {
 			anyhow::bail!("expected tropical-tufts render command");
 		};
 		assert!((helper.grove_extent_xz - 13.0).abs() < 1e-5);
-		assert_eq!(helper.render.inner.grove.cell_extent_xz, Vec2::splat(3.25));
+		assert_eq!(helper.render.inner.grove.cell_extent_xz, Some(Vec2::splat(3.25)));
 		let tufts = helper.configured_tropical_tufts();
 		assert_eq!(tufts.placement_cells().len(), 16);
 		assert!((tufts.terrain.elevation - 0.4).abs() < 1e-5);
@@ -752,7 +752,7 @@ mod tests {
 			anyhow::bail!("expected braid-grass render command");
 		};
 		assert!((helper.grove_extent_xz - 12.75).abs() < 1e-5);
-		assert_eq!(helper.render.inner.grove.cell_extent_xz, Vec2::splat(4.25));
+		assert_eq!(helper.render.inner.grove.cell_extent_xz, Some(Vec2::splat(4.25)));
 		let grass = helper.configured_braid_grass();
 		assert_eq!(grass.placement_cells().len(), 9);
 		assert!((grass.terrain.elevation - 0.4).abs() < 1e-5);

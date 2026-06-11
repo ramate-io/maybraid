@@ -231,7 +231,6 @@ fn attach_render_materials(
 			t.material.mesh = MeshMaterial3d(tuft.clone());
 		}
 		RenderSubject::BraidGrass(g) => {
-			g.stick_material.mesh = MeshMaterial3d(tuft.clone());
 			g.leaf_material.mesh = MeshMaterial3d(tuft.clone());
 		}
 		RenderSubject::TropicalTufts(g) => {

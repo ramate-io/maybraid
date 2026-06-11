@@ -4,7 +4,7 @@ use chico_ball_components::tuft::{
 };
 use chico_ball_components::{FrondCrown, ModerateLodFrondCrown};
 use chico_groves::braid_grass::BraidGrassStd;
-use chico_groves::tufts::tropical_tufts::TropicalTuftsStd;
+use chico_groves::tropical_tufts::TropicalTuftsStd;
 use chico_sbs_trees::braid_oak_tree::BraidOakTree;
 use chico_sbs_trees::date_palm::DatePalm;
 use chico_sbs_trees::friends_conifer::FriendsConifer;
@@ -313,13 +313,21 @@ impl RenderSubject {
 			Self::BraidGrass(g) => {
 				format!(
 					"{:?}|extent={:?}|cell_extent_xz={:?}|terrain={:?}|foliage={:?}",
-					g.grove, g.extent, g.grove.cell_extent_xz, g.terrain, g.foliage_noise
+					g.grove,
+					g.extent,
+					g.cell_extent_xz(),
+					g.terrain,
+					g.foliage_noise
 				)
 			}
 			Self::TropicalTufts(g) => {
 				format!(
 					"{:?}|extent={:?}|cell_extent_xz={:?}|terrain={:?}|foliage={:?}",
-					g.grove, g.extent, g.grove.cell_extent_xz, g.terrain, g.foliage_noise
+					g.grove,
+					g.extent,
+					g.cell_extent_xz(),
+					g.terrain,
+					g.foliage_noise
 				)
 			}
 			Self::SpearTuft(t) => format!("{:?}", t.shape),

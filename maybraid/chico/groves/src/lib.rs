@@ -2,38 +2,29 @@
 
 pub mod grove;
 
-pub mod understory;
-pub mod tufts;
-
-/// Back-compat re-export of [`understory::braid_grass`].
-pub use understory::braid_grass as braid_grass;
+pub mod braid_grass;
+pub mod tropical_tufts;
 
 #[cfg(feature = "render")]
 pub mod skipped_mesh_material;
 
 pub use grove::{
-	parse_variant_weights, Bucket, CellGrove, CellXzOffset, DEFAULT_GROVE_EXTENT_XZ,
-	FlatTerrainSample, ForestGroveBiases, Grove, GroveBucket, GroveCellOutcome, GroveCellPlacement,
-	GroveDistribution, GroveExtent, GroveFrontend, GroveNoiseConfig, GrovePlacedCell,
-	GrovePlacementRanges, PaletteColor, PaletteMix, PaletteSlot, PlacementConstraints,
-	PreparedGroveDistribution, SampledCellParams, TerrainSample, VariantWeightOverrides,
-	WithPalette,
+	cell_center, parse_variant_weights, parse_vec2_csv, parse_vec3_csv, placement_noise,
+	FlatTerrainSample, ForestGroveBiases, Grove, GroveBucket, GroveCellOutcome, GroveDefinition,
+	GroveDistribution, GroveExtent, GroveFrontend, GrovePlacedCell, GrovePlacementRanges,
+	PaletteColor, PaletteMix, PaletteSlot, PlacementConstraints, PlacementSample,
+	PreparedGroveDistribution, TerrainSample, VariantWeightOverrides, DEFAULT_GROVE_EXTENT_XZ,
 };
 
 #[cfg(feature = "render")]
-pub use grove::patch_spawned_leaf_material;
+pub use grove::{patch_spawned_leaf_material, resolve_palette_color, WithPalette};
 
-#[cfg(feature = "render")]
-pub use grove::placement_noise;
-
-pub use understory::braid_grass::{BraidGrassCell, BraidGrassClump, BraidGrassDefinition};
-
-pub use tufts::tropical_tufts::{
-	TropicalPalmBush, TropicalTuftClump, TropicalTuftsCell, TropicalTuftsDefinition,
+pub use braid_grass::{BraidGrassCell, BraidGrassClump};
+pub use tropical_tufts::{
+	TropicalPalmBush, TropicalTuftClump, TropicalTuftsCell, TropicalTuftsItem,
 };
 
 #[cfg(feature = "render")]
-pub use understory::braid_grass::{BraidGrass, BraidGrassStd};
-
+pub use braid_grass::{BraidGrass, BraidGrassStd};
 #[cfg(feature = "render")]
-pub use tufts::tropical_tufts::{TropicalTufts, TropicalTuftsStd};
+pub use tropical_tufts::{TropicalTufts, TropicalTuftsStd};

@@ -3,23 +3,29 @@
 use std::marker::PhantomData;
 
 use bevy::prelude::*;
-use chico_ball_components::tuft::BladeTuft;
+use chico_ball_components::tuft::{BladeTuft, BladeTuftShape};
+use chico_sbs_geometry::PalmBushSbs;
 use chico_sbs_trees::palm_bush::PalmBush;
 use clap::Args;
-use procedural_common::{noise_params_from_scalar_str, BuildWithNoise, NoiseParams};
+use procedural_common::{
+	noise_params_from_scalar_str, BuildWithNoise, NoiseConfig, NoiseParams, UnitRange,
+};
 use render_item::{CascadeChunk, RenderItem};
 
-use super::{TropicalTuftsCell, TropicalTuftsDefinition, TropicalTuftsGroveFrontend};
 use crate::grove::{
-	patch_spawned_leaf_material, placement_noise, CellGrove, FlatTerrainSample, GroveExtent,
+	patch_spawned_leaf_material, placement_noise, FlatTerrainSample, GroveExtent, GroveFrontend,
 	GrovePlacedCell, TerrainSample, WithPalette, DEFAULT_GROVE_EXTENT_XZ,
 };
 use crate::skipped_mesh_material::SkippedLeafMeshMaterial;
+use crate::tropical_tufts::{
+	definition, TropicalPalmBush, TropicalTuftClump, TropicalTuftsCell, TropicalTuftsItem,
+};
 
 /// Typical [`StandardMaterial`] Tropical Tufts instance.
 pub type TropicalTuftsStd =
 	TropicalTufts<StandardMaterial, SkippedLeafMeshMaterial<StandardMaterial>, FlatTerrainSample>;
 
+/// Tropical Tufts grove preview (leaf material → blade tufts and palm bush companions).
 #[derive(Clone, Args)]
 #[command(rename_all = "kebab-case")]
 pub struct TropicalTufts<LeafM, LeafS, Terrain = FlatTerrainSample>
@@ -29,7 +35,7 @@ where
 	Terrain: TerrainSample + Clone + Send + Sync + 'static + Default + clap::Args,
 {
 	#[command(flatten, next_help_heading = "Grove")]
-	pub grove: TropicalTuftsGroveFrontend,
+	pub grove: GroveFrontend,
 
 	#[command(flatten, next_help_heading = "Leaf Material")]
 	pub leaf_material: LeafS,
@@ -64,7 +70,7 @@ where
 {
 	fn default() -> Self {
 		Self {
-			grove: TropicalTuftsGroveFrontend::default(),
+			grove: GroveFrontend::default(),
 			leaf_material: LeafS::default(),
 			foliage_noise: NoiseParams::from_scalar(0.0, 1.0, 0.06, 1),
 			extent: GroveExtent::new(
@@ -84,6 +90,7 @@ where
 	LeafS: Clone + Into<MeshMaterial3d<LeafM>> + Args + Send + Sync + 'static,
 	Terrain: TerrainSample + Clone + Send + Sync + 'static + Default + clap::Args,
 {
+	/// Render precomputed placements instead of selecting live from the grove frontend.
 	pub fn with_resolved_placements(
 		resolved_placements: Vec<GrovePlacedCell<TropicalTuftsCell>>,
 		terrain: Terrain,
@@ -91,7 +98,7 @@ where
 		leaf_material: LeafS,
 	) -> Self {
 		Self {
-			grove: TropicalTuftsGroveFrontend::default(),
+			grove: GroveFrontend::default(),
 			leaf_material,
 			foliage_noise,
 			extent: GroveExtent::new(
@@ -114,44 +121,55 @@ where
 		self
 	}
 
+	/// Effective vegetation cell footprint (frontend override or authored).
+	pub fn cell_extent_xz(&self) -> Vec2 {
+		self.grove.definition(definition()).cell_extent_xz
+	}
+
+	pub fn placement_cells(&self) -> Vec<gimme_gen::Cell> {
+		self.extent.subdivide_xz(self.cell_extent_xz())
+	}
+
 	pub fn placements(&self) -> Vec<GrovePlacedCell<TropicalTuftsCell>> {
 		if let Some(ref resolved) = self.resolved_placements {
 			return resolved.clone();
 		}
-		let cells = self.placement_cells();
-		self.assemble_grove().select_placements(&self.extent, &cells, &self.terrain)
-	}
-
-	pub fn placement_cells(&self) -> Vec<gimme_gen::Cell> {
-		let cell_extent_xz = self
-			.definition()
-			.map(|definition| definition.cell_extent_xz())
-			.unwrap_or_else(|err| {
-				log::warn!("tropical tufts definition: {err}; using authored cell extent");
-				TropicalTuftsDefinition::cell_extent_xz_default()
-			});
-		self.extent.subdivide_xz(cell_extent_xz)
-	}
-
-	pub fn definition(&self) -> Result<TropicalTuftsDefinition, String> {
-		let mut definition =
-			TropicalTuftsDefinition::new().with_cell_extent_xz(self.grove.cell_extent_xz);
-		if let Some(ref overrides) = self.grove.variant_weights {
-			definition = definition.with_variant_weights(overrides)?;
-		}
-		Ok(definition)
-	}
-
-	pub fn assemble_grove(&self) -> crate::grove::Grove<TropicalTuftsDefinition> {
-		let definition = self.definition().unwrap_or_else(|err| {
-			log::warn!("tropical tufts definition: {err}; using authored weights");
-			TropicalTuftsDefinition::new()
-		});
-		self.grove.clone().assemble(definition)
+		self.grove.assemble(definition()).populate(&self.extent, &self.terrain)
 	}
 }
 
-fn placement_transform(placed: &GrovePlacedCell<TropicalTuftsCell>) -> Transform {
+/// Sample a tuft clump's authored geometry ranges into a blade tuft shape.
+impl BuildWithNoise<BladeTuftShape> for TropicalTuftClump {
+	fn build_with_noise(&self, noise: NoiseParams) -> BladeTuftShape {
+		let config = NoiseConfig::new(noise);
+		let sample_f32 = |range: UnitRange, salt| {
+			let lo = range.start.min(range.end);
+			let hi = range.start.max(range.end);
+			config.sample_range_f32_4d(lo, hi, 0.0, 0.0, 0.0, salt)
+		};
+
+		BladeTuftShape {
+			blade_count: 8,
+			blade_length: sample_f32(self.height, 1.0).max(0.05),
+			blade_width: sample_f32(self.width, 2.0).max(0.005),
+			seed: noise.seed,
+			..BladeTuftShape::default()
+		}
+	}
+}
+
+impl BuildWithNoise<PalmBushSbs> for TropicalPalmBush {
+	fn build_with_noise(&self, noise: NoiseParams) -> PalmBushSbs {
+		// TODO: sample the authored `height` / `frond_count` / `frond_length` /
+		// `crown_spread` ranges from `noise` instead of fixed companion values.
+		PalmBushSbs::default()
+			.with_height(2.4)
+			.with_frond_world_scale(0.6)
+			.with_noise_params(noise)
+	}
+}
+
+fn placement_transform<V>(placed: &GrovePlacedCell<V>) -> Transform {
 	Transform {
 		translation: placed.position,
 		rotation: Quat::IDENTITY,
@@ -175,38 +193,27 @@ where
 		for placed in self.placements() {
 			let local = transform.mul_transform(placement_transform(&placed));
 			let noise = placement_noise(self.foliage_noise, placed.position);
-			match &placed.variant {
-				TropicalTuftsCell::None(_) => {}
-				TropicalTuftsCell::BrightTuft(bucket)
-				| TropicalTuftsCell::DeepTuft(bucket)
-				| TropicalTuftsCell::YellowGreenTuft(bucket) => {
-					let mut shape = bucket.item.build_with_noise(noise);
+			let entities = match placed.variant.item() {
+				TropicalTuftsItem::Tuft(clump) => {
+					let mut shape = clump.build_with_noise(noise);
 					shape.noise_amplitude = self.foliage_noise.amplitude;
 					shape.noise_frequency = self.foliage_noise.frequency;
 					let tuft = BladeTuft::from_shape(shape, self.leaf_material.clone());
-					let entities = tuft.spawn_render_items(commands, cascade_chunk, local);
-					patch_spawned_leaf_material::<LeafM>(
-						&entities,
-						placed.variant.palette_mix(),
-						noise.seed,
-						commands,
-					);
-					out.extend(entities);
+					tuft.spawn_render_items(commands, cascade_chunk, local)
 				}
-				TropicalTuftsCell::SmallPalmBush(bucket)
-				| TropicalTuftsCell::JuvenilePalmBush(bucket) => {
-					let geometry = bucket.item.build_with_noise(noise);
+				TropicalTuftsItem::PalmBush(palm) => {
+					let geometry = palm.build_with_noise(noise);
 					let bush = PalmBush::new(geometry, self.leaf_material.clone());
-					let entities = bush.spawn_render_items(commands, cascade_chunk, local);
-					patch_spawned_leaf_material::<LeafM>(
-						&entities,
-						placed.variant.palette_mix(),
-						noise.seed,
-						commands,
-					);
-					out.extend(entities);
+					bush.spawn_render_items(commands, cascade_chunk, local)
 				}
-			}
+			};
+			patch_spawned_leaf_material::<LeafM>(
+				&entities,
+				placed.variant.palette_mix(),
+				noise.seed,
+				commands,
+			);
+			out.extend(entities);
 		}
 		out
 	}
@@ -216,38 +223,19 @@ where
 mod tests {
 	use super::*;
 	use anyhow::Result;
-	use procedural_common::BuildWithNoise;
 
 	#[test]
-	fn render_builds_tuft_shape_for_placed_cell() -> Result<()> {
-		let dist = TropicalTuftsCell::grove_distribution();
-		let Some(TropicalTuftsCell::BrightTuft(bucket)) = dist.buckets[1].item.clone() else {
-			anyhow::bail!("expected BrightTuft variant");
+	fn tuft_and_palm_geometry_build_from_noise() -> Result<()> {
+		let noise = placement_noise(NoiseParams::default(), Vec3::new(5.0, 0.0, 5.0));
+		let TropicalTuftsItem::Tuft(clump) = TropicalTuftsCell::BrightTuft.item() else {
+			anyhow::bail!("expected tuft item");
 		};
-		let placement = GrovePlacedCell::new(
-			TropicalTuftsCell::BrightTuft(bucket.clone()),
-			Vec3::new(5.0, 0.0, 5.0),
-			1.0,
-		);
-		let noise = placement_noise(NoiseParams::default(), placement.position);
-		let shape = bucket.item.build_with_noise(noise);
-		assert!(shape.blade_length > 0.0);
-		Ok(())
-	}
+		assert!(clump.build_with_noise(noise).blade_length > 0.0);
 
-	#[test]
-	fn render_builds_palm_geometry_for_placed_cell() -> Result<()> {
-		let dist = TropicalTuftsCell::grove_distribution();
-		let Some(TropicalTuftsCell::SmallPalmBush(bucket)) = dist.buckets[4].item.clone() else {
-			anyhow::bail!("expected SmallPalmBush variant");
+		let TropicalTuftsItem::PalmBush(palm) = TropicalTuftsCell::SmallPalmBush.item() else {
+			anyhow::bail!("expected palm bush item");
 		};
-		let placement = GrovePlacedCell::new(
-			TropicalTuftsCell::SmallPalmBush(bucket.clone()),
-			Vec3::new(3.0, 0.0, 7.0),
-			1.0,
-		);
-		let noise = placement_noise(NoiseParams::default(), placement.position);
-		let geometry = bucket.item.build_with_noise(noise);
+		let geometry = palm.build_with_noise(noise);
 		assert!(geometry.crown.fronds_per_ring >= 4);
 		assert!(geometry.scale.height > 0.0);
 		Ok(())
@@ -255,15 +243,8 @@ mod tests {
 
 	#[test]
 	fn with_resolved_placements_skips_live_selection() -> Result<()> {
-		let dist = TropicalTuftsCell::grove_distribution();
-		let Some(TropicalTuftsCell::BrightTuft(bucket)) = dist.buckets[1].item.clone() else {
-			anyhow::bail!("expected BrightTuft variant");
-		};
-		let placement = GrovePlacedCell::new(
-			TropicalTuftsCell::BrightTuft(bucket),
-			Vec3::new(1.0, 0.0, 2.0),
-			1.0,
-		);
+		let placement =
+			GrovePlacedCell::new(TropicalTuftsCell::BrightTuft, Vec3::new(1.0, 0.0, 2.0), 1.0);
 		let item = TropicalTuftsStd::with_resolved_placements(
 			vec![placement.clone()],
 			FlatTerrainSample::default(),
@@ -276,39 +257,22 @@ mod tests {
 
 	#[test]
 	fn default_extent_includes_palm_placements() -> Result<()> {
-		let mut tufts = TropicalTuftsStd::default();
 		let span = DEFAULT_GROVE_EXTENT_XZ;
-		let extent = GroveExtent::new(Vec3::ZERO, Vec3::new(span, 1.0, span));
-		tufts = tufts.with_extent(extent);
+		let tufts = TropicalTuftsStd::default()
+			.with_extent(GroveExtent::new(Vec3::ZERO, Vec3::new(span, 1.0, span)));
 		let placements = tufts.placements();
 		let palms = placements
 			.iter()
 			.filter(|p| {
 				matches!(
 					p.variant,
-					TropicalTuftsCell::SmallPalmBush(_) | TropicalTuftsCell::JuvenilePalmBush(_)
+					TropicalTuftsCell::SmallPalmBush | TropicalTuftsCell::JuvenilePalmBush
 				)
 			})
 			.count();
 		assert!(
 			palms > 0,
 			"expected palm buckets in default tropical-tufts grove, got {palms} palms among {} placements",
-			placements.len()
-		);
-		Ok(())
-	}
-
-	#[test]
-	fn extent_subdivision_yields_sparse_placements() -> Result<()> {
-		let mut tufts = TropicalTuftsStd::default();
-		let cell_extent = TropicalTuftsDefinition::cell_extent_xz_default();
-		let span = 5.0 * cell_extent;
-		let extent = GroveExtent::new(Vec3::ZERO, Vec3::new(span.x, 1.0, span.y));
-		tufts = tufts.with_extent(extent);
-		let placements = tufts.placements();
-		assert!(
-			!placements.is_empty(),
-			"expected placed tropical-tufts cells with default weights, got {}",
 			placements.len()
 		);
 		Ok(())

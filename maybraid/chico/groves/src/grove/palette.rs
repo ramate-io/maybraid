@@ -1,4 +1,7 @@
 //! Authored palette slots and material resolution ([RFC-183 §3.4.5.1]).
+//!
+//! Palette mixes are authored as `const` data on each grove's cell enum; per-placement seeds
+//! pick one endpoint color deterministically at spawn time.
 
 #[cfg(feature = "render")]
 use bevy::prelude::Color;
@@ -6,21 +9,23 @@ use bevy::prelude::Color;
 use procedural_common::{NoiseConfig, NoiseParams};
 
 /// Named color-range slots for one grove bucket.
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct PaletteMix {
-	pub slots: Vec<PaletteSlot>,
+	pub slots: &'static [PaletteSlot],
 }
 
 impl PaletteMix {
-	pub fn from_slots(slots: Vec<PaletteSlot>) -> Self {
+	pub const fn new(slots: &'static [PaletteSlot]) -> Self {
 		Self { slots }
 	}
+
+	pub const EMPTY: Self = Self { slots: &[] };
 
 	/// Noisily pick one authored endpoint color from all slots.
 	#[cfg(feature = "render")]
 	pub fn pick_color(&self, seed: i32) -> Option<Color> {
 		let mut colors = Vec::new();
-		for slot in &self.slots {
+		for slot in self.slots {
 			if let Some(color) = slot.start.resolve() {
 				colors.push(color);
 			}
@@ -39,10 +44,16 @@ impl PaletteMix {
 }
 
 /// One authored color range slot.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct PaletteSlot {
 	pub start: PaletteColor,
 	pub end: PaletteColor,
+}
+
+impl PaletteSlot {
+	pub const fn new(start: &'static str, end: &'static str) -> Self {
+		Self { start: PaletteColor(start), end: PaletteColor(end) }
+	}
 }
 
 /// Named palette token until a shared chico color registry exists.
@@ -59,7 +70,7 @@ impl PaletteColor {
 /// Apply an authored [`PaletteMix`] to a material template.
 #[cfg(feature = "render")]
 pub trait WithPalette: Sized {
-	fn with_palette(base: Self, palette: &PaletteMix, seed: i32) -> Self;
+	fn with_palette(base: Self, palette: PaletteMix, seed: i32) -> Self;
 }
 
 /// Resolve RFC-style palette tokens to playground sRGB colors.
@@ -95,7 +106,7 @@ pub fn resolve_palette_color(name: &str) -> Option<Color> {
 
 #[cfg(feature = "render")]
 impl WithPalette for bevy::prelude::StandardMaterial {
-	fn with_palette(mut base: Self, palette: &PaletteMix, seed: i32) -> Self {
+	fn with_palette(mut base: Self, palette: PaletteMix, seed: i32) -> Self {
 		if let Some(color) = palette.pick_color(seed) {
 			base.base_color = color;
 		}
@@ -104,22 +115,21 @@ impl WithPalette for bevy::prelude::StandardMaterial {
 	}
 }
 
-/// After lower-order [`RenderItem::spawn_render_items`], patch spawned entities with a
-/// per-placement palette-resolved material asset.
+/// After lower-order [`RenderItem::spawn_render_items`](render_item::RenderItem), patch spawned
+/// entities with a per-placement palette-resolved material asset.
 #[cfg(feature = "render")]
 pub fn patch_spawned_leaf_material<M: bevy::prelude::Material + WithPalette + Default>(
 	entities: &[bevy::prelude::Entity],
-	palette: &PaletteMix,
+	palette: PaletteMix,
 	seed: i32,
 	commands: &mut bevy::prelude::Commands,
 ) {
 	if entities.is_empty() {
 		return;
 	}
-	let palette = palette.clone();
 	let entities = entities.to_vec();
 	commands.queue(move |world: &mut bevy::prelude::World| {
-		let material = M::with_palette(M::default(), &palette, seed);
+		let material = M::with_palette(M::default(), palette, seed);
 		let handle = world.resource_mut::<bevy::prelude::Assets<M>>().add(material);
 		for entity in entities {
 			world
@@ -129,36 +139,33 @@ pub fn patch_spawned_leaf_material<M: bevy::prelude::Material + WithPalette + De
 	});
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "render"))]
 mod tests {
 	use super::*;
 	use anyhow::Result;
 
-	#[cfg(feature = "render")]
+	const TEST_MIX: PaletteMix = PaletteMix::new(&[PaletteSlot::new("deep_green", "wet_green")]);
+
 	#[test]
 	fn pick_color_is_deterministic() -> Result<()> {
-		let palette = PaletteMix::from_slots(vec![PaletteSlot {
-			start: PaletteColor("deep_green"),
-			end: PaletteColor("wet_green"),
-		}]);
-		let a = palette.pick_color(42);
-		let b = palette.pick_color(42);
+		let a = TEST_MIX.pick_color(42);
+		let b = TEST_MIX.pick_color(42);
 		assert_eq!(a, b);
 		assert!(a.is_some());
 		Ok(())
 	}
 
-	#[cfg(feature = "render")]
 	#[test]
 	fn standard_material_with_palette_sets_base_color() -> Result<()> {
 		use bevy::prelude::StandardMaterial;
 
-		let palette = PaletteMix::from_slots(vec![PaletteSlot {
-			start: PaletteColor("deep_green"),
-			end: PaletteColor("wet_green"),
-		}]);
-		let material = StandardMaterial::with_palette(StandardMaterial::default(), &palette, 7);
-		assert_eq!(material.base_color, PaletteColor("deep_green").resolve().unwrap());
+		let material = StandardMaterial::with_palette(StandardMaterial::default(), TEST_MIX, 7);
+		let allowed = [
+			PaletteColor("deep_green").resolve(),
+			PaletteColor("wet_green").resolve(),
+		];
+		assert!(allowed.contains(&Some(material.base_color)));
+		assert!(material.double_sided);
 		Ok(())
 	}
 }
