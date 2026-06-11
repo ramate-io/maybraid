@@ -1,5 +1,6 @@
 //! Per-cell placement sampling ranges ([RFC-183 3.4.1]).
 
+use super::terrain::TerrainSample;
 use bevy_math::Vec3;
 use gimme_gen::Cell;
 use procedural_common::{NoiseConfig, NoiseParams, UnitRange};
@@ -114,8 +115,8 @@ pub struct SampledCellParams {
 
 impl SampledCellParams {
 	/// Candidate point for this sampled offset in `cell`, before grove-extent validation.
-	pub fn position_in(&self, cell: &Cell) -> Vec3 {
-		self.offset.place_in(cell)
+	pub fn position_in(&self, cell: &Cell, elevation: &impl TerrainSample) -> Vec3 {
+		self.offset.place_in(cell, elevation)
 	}
 }
 

@@ -184,7 +184,7 @@ mod tests {
 			grove.noise(),
 			Vec3::new(5.0, 0.0, 5.0),
 		);
-		let position = sampled.position_in(&test_cell());
+		let position = sampled.position_in(&test_cell(), &0.0);
 		let outcome = grove.prepared().select_at_with_start(1, position, sampled, &terrain);
 		assert!(matches!(outcome, GroveCellOutcome::Placed { .. }));
 		Ok(())

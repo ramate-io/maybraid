@@ -29,10 +29,10 @@ pub use distribution::{GroveBucket, GroveDistribution, PreparedGroveDistribution
 pub use extent::{GroveExtent, GroveOverspillPolicy, DEFAULT_GROVE_EXTENT_XZ};
 pub use frontend::GroveFrontend;
 pub use outcome::GroveCellOutcome;
-pub use palette::{patch_spawned_leaf_material, PaletteColor, PaletteMix, PaletteSlot, WithPalette};
-pub use params::{
-	placement_noise, GroveNoiseConfig, GrovePlacementRanges, SampledCellParams,
+pub use palette::{
+	patch_spawned_leaf_material, PaletteColor, PaletteMix, PaletteSlot, WithPalette,
 };
+pub use params::{placement_noise, GroveNoiseConfig, GrovePlacementRanges, SampledCellParams};
 pub use placement::CellXzOffset;
 pub use terrain::{FlatTerrainSample, TerrainSample};
 pub use variant_weights::{parse_variant_weights, VariantWeightOverrides};
@@ -166,7 +166,7 @@ impl<G: CellGrove> Grove<G> {
 		overspill_policy: GroveOverspillPolicy,
 		terrain: &impl TerrainSample,
 	) -> GroveCellOutcome<G::Variant> {
-		let placement = match self.place_cell(cell, grove_extent, overspill_policy) {
+		let placement = match self.place_cell(cell, grove_extent, overspill_policy, terrain) {
 			Ok(placement) => placement,
 			Err(candidate_position) => {
 				return GroveCellOutcome::Rejected { position: candidate_position }
@@ -182,10 +182,11 @@ impl<G: CellGrove> Grove<G> {
 		cell: &Cell,
 		grove_extent: &GroveExtent,
 		overspill_policy: GroveOverspillPolicy,
+		terrain: &impl TerrainSample,
 	) -> Result<GroveCellPlacement, Vec3> {
 		let sampled =
 			self.definition.placement_ranges().sample_cell(&self.biases, &self.noise, cell);
-		let candidate_position = sampled.position_in(cell);
+		let candidate_position = sampled.position_in(cell, terrain);
 		let Some(position) = grove_extent.resolve_xz(candidate_position, overspill_policy) else {
 			return Err(candidate_position);
 		};
