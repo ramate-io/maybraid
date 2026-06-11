@@ -6,7 +6,7 @@
 
 use std::ops::{Deref, DerefMut};
 
-use procedural_common::{NoiseParams, SetNoiseParams, UnitRange};
+use procedural_common::UnitRange;
 
 use crate::anchors::storybook_tree::DEFAULT_OUTER_FOLIAGE_DISTANCE_FRACTION;
 use crate::anchors::Anchors;
@@ -178,13 +178,6 @@ impl JungleStorybookTreeSbs {
 impl Anchors<StorybookTreeChain> for JungleStorybookTreeSbs {
 	fn anchors(&self) -> Vec<StorybookTreeChain> {
 		self.storybook.anchors()
-	}
-}
-
-impl SetNoiseParams for JungleStorybookTreeSbs {
-	fn with_noise_params(mut self, params: NoiseParams) -> Self {
-		self.storybook = self.storybook.with_noise_params(params);
-		self
 	}
 }
 

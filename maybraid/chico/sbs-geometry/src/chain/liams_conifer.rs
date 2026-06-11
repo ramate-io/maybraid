@@ -17,7 +17,7 @@
 //! **not** reconfigured here — it follows [`BranchOut::radius_range_child_scale`] in
 //! [`super::branch_out::BranchOut::expand_children`].
 
-use procedural_common::{NoiseConfig, NoiseParams, SetNoiseParams};
+use procedural_common::NoiseConfig;
 
 use crate::BallStickNode;
 
@@ -136,15 +136,6 @@ impl Hysteresis for LiamsConiferChain {
 				.collect(),
 			LiamsConiferPhase::BranchOut(budget) => self.branch_children(budget),
 		}
-	}
-}
-
-impl SetNoiseParams for LiamsConiferChain {
-	fn with_noise_params(mut self, params: NoiseParams) -> Self {
-		let noise = NoiseConfig::new(params);
-		self.phase = self.phase.with_noise(noise.clone());
-		self.noise = noise;
-		self
 	}
 }
 

@@ -23,15 +23,6 @@ pub struct StrictStalk {
 	#[cfg_attr(feature = "clap", arg(long, default_value_t = 10.0))]
 	pub stalk_height: f32,
 
-	/// Base anchor of the stalk.
-	///
-	/// NOTE: we prefix this with stalk for flattening.
-	#[cfg_attr(
-		feature = "clap",
-		arg(long, default_value = "0,0,0", value_parser = crate::vec3_args::parse_vec3_csv)
-	)]
-	pub stalk_base_anchor: Vec3,
-
 	/// Base radius of the stalk.
 	///
 	/// NOTE: we prefix this with stalk for flattening.
@@ -40,10 +31,13 @@ pub struct StrictStalk {
 }
 
 impl StrictStalk {
-	/// Stalk radial centroid at height `t * height` above [`Self::base_anchor`], with `t` in `[0, 1]`.
+	/// Stalk radial centroid at height `t * height` above the tree-local origin, with `t` in `[0, 1]`.
+	///
+	/// Chains are generated in **tree-local space** (base at `Vec3::ZERO`); the spawned root
+	/// entity owns world placement, and per-instance variation comes from caller-supplied seeds.
 	pub fn centroid_at_height_fraction(&self, t: f32) -> Vec3 {
 		let t = t.clamp(0.0, 1.0);
-		self.stalk_base_anchor + Vec3::Y * (t * self.stalk_height)
+		Vec3::Y * (t * self.stalk_height)
 	}
 
 	pub fn point_to_point_anchors(&self) -> Vec<PointToPoint> {

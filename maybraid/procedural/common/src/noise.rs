@@ -2,9 +2,13 @@
 //!
 //! [`NoiseConfig`] owns an immutable [`Arc`]`<`[`FastNoiseLite`]`>` plus the [`NoiseParams`] snapshot used to build it.
 //! **There are no mutators:** [`FastNoiseLite`] already holds seed, fractal / octave settings, and noise type.
-//! Spatial **frequency**, output **amplitude**, and [`NoiseParams::domain_weights`] (default [`Vec3::ONE`]) live in
-//! [`NoiseParams`] and are applied in [`NoiseConfig`]'s **`sample_*`** helpers (coordinate scaling + gain).
-//! Use **`raw_*`** only when you want engine output with no coordinate or amplitude shaping from this layer.
+//! Spatial **frequency** and output **amplitude** live in [`NoiseParams`] and are applied in [`NoiseConfig`]'s
+//! **`sample_*`** helpers (coordinate scaling + gain). Use [`NoiseConfig::raw_3d`] when you want engine output
+//! with no coordinate or amplitude shaping from this layer.
+//!
+//! Geometry is generated in tree-local space, so samples are taken over local positions; callers
+//! that want per-instance variation supply a different [`NoiseParams::seed`] (or shift the **w**
+//! salt lane of the `*_4d` helpers) rather than offsetting the sampled positions.
 
 use std::sync::Arc;
 
@@ -22,18 +26,6 @@ pub fn noise_type_from_str(s: &str) -> Result<NoiseType, String> {
 		"value" => Ok(NoiseType::Value),
 		other => Err(format!("unknown noise type {other:?} (expected perlin, open-simplex-2, …)")),
 	}
-}
-
-/// Parse comma-separated domain weights `x,y,z` for [`NoiseParams::domain_weights`].
-pub fn domain_weights_from_str(s: &str) -> Result<Vec3, String> {
-	let parts: Vec<&str> = s.split(',').map(str::trim).filter(|p| !p.is_empty()).collect();
-	if parts.len() != 3 {
-		return Err(format!("expected three comma-separated floats, got {s:?}"));
-	}
-	let x: f32 = parts[0].parse::<f32>().map_err(|e| e.to_string())?;
-	let y: f32 = parts[1].parse::<f32>().map_err(|e| e.to_string())?;
-	let z: f32 = parts[2].parse::<f32>().map_err(|e| e.to_string())?;
-	Ok(Vec3::new(x, y, z))
 }
 
 #[cfg(feature = "serde")]
@@ -65,8 +57,7 @@ mod noise_type_serde {
 	}
 }
 
-/// Authoring parameters: spatial frequency (coordinate multiplier), output amplitude, fractal octaves, seed, noise kind,
-/// plus per-axis domain scaling for 3D sampling.
+/// Authoring parameters: spatial frequency (coordinate multiplier), output amplitude, fractal octaves, seed, noise kind.
 #[derive(Clone, Copy, Debug, PartialEq)]
 #[cfg_attr(feature = "clap", derive(clap::Args))]
 #[cfg_attr(feature = "clap", command(rename_all = "kebab-case"))]
@@ -75,7 +66,7 @@ pub struct NoiseParams {
 	/// Passed through to [`FastNoiseLite::with_seed`].
 	#[cfg_attr(feature = "clap", arg(long, default_value_t = 1337))]
 	pub seed: i32,
-	/// Multiplies coordinates **before** sampling (see [`NoiseConfig::sample_1d`] … [`NoiseConfig::sample_4d`]).
+	/// Multiplies coordinates **before** sampling.
 	#[cfg_attr(feature = "clap", arg(long, default_value_t = 1.0))]
 	pub frequency: f32,
 	/// Multiplies sampled noise after octaves / fractal processing (output gain).
@@ -94,17 +85,6 @@ pub struct NoiseParams {
 		)
 	)]
 	pub noise_type: NoiseType,
-	/// Per-axis multipliers on **world position** before frequency scaling in [`NoiseConfig::sample_3d_world`].
-	/// Does not affect [`NoiseConfig::sample_3d`] `(x, y, z)` or [`NoiseConfig::raw_3d`].
-	#[cfg_attr(
-		feature = "clap",
-		arg(
-			long,
-			value_parser = domain_weights_from_str,
-			default_value = "1,1,1"
-		)
-	)]
-	pub domain_weights: Vec3,
 }
 
 impl Default for NoiseParams {
@@ -115,7 +95,6 @@ impl Default for NoiseParams {
 			amplitude: 1.0,
 			octaves: 1,
 			noise_type: NoiseType::OpenSimplex2,
-			domain_weights: Vec3::ONE,
 		}
 	}
 }
@@ -134,14 +113,6 @@ impl NoiseParams {
 		}
 		n
 	}
-
-	pub fn build_generator(&self) -> Arc<FastNoiseLite> {
-		Arc::new(self.build_fast_noise())
-	}
-
-	pub fn build(self) -> NoiseConfig {
-		NoiseConfig::new(self)
-	}
 }
 
 /// Immutable handle: shared generator + params used to construct it.
@@ -157,7 +128,7 @@ pub struct NoiseConfig {
 
 impl NoiseConfig {
 	pub fn new(params: NoiseParams) -> Self {
-		let generator = params.build_generator();
+		let generator = Arc::new(params.build_fast_noise());
 		Self { generator, params }
 	}
 
@@ -170,80 +141,44 @@ impl NoiseConfig {
 		&self.params
 	}
 
-	pub fn generator(&self) -> &FastNoiseLite {
-		self.generator.as_ref()
-	}
-
 	fn gain(&self, raw: f32) -> f32 {
 		raw * self.params.amplitude
 	}
 
-	// --- Raw (direct FastNoise Lite; no coordinate frequency or amplitude from [`NoiseParams`]) ---
-
-	pub fn raw_1d(&self, x: f32) -> f32 {
-		self.generator.get_noise_2d(x, 0.0)
-	}
-
-	pub fn raw_2d(&self, x: f32, y: f32) -> f32 {
-		self.generator.get_noise_2d(x, y)
-	}
-
+	/// Direct FastNoise Lite output: no coordinate frequency or amplitude from [`NoiseParams`].
 	pub fn raw_3d(&self, x: f32, y: f32, z: f32) -> f32 {
 		self.generator.get_noise_3d(x, y, z)
 	}
 
-	/// FastNoise Lite is 3D max; the fourth coordinate **w** shears **x** (common “time” hack).
-	pub fn raw_4d(&self, x: f32, y: f32, z: f32, w: f32) -> f32 {
-		self.generator.get_noise_3d(x + w, y, z)
-	}
-
 	// --- Sampled (frequency on coordinates, then amplitude on output) ---
 
-	pub fn sample_1d(&self, x: f32) -> f32 {
+	fn sample_1d(&self, x: f32) -> f32 {
 		let f = self.params.frequency;
 		self.gain(self.generator.get_noise_2d(x * f, 0.0))
 	}
 
-	pub fn sample_2d(&self, x: f32, y: f32) -> f32 {
+	pub fn sample_2d(&self, position: Vec2) -> f32 {
 		let f = self.params.frequency;
-		self.gain(self.generator.get_noise_2d(x * f, y * f))
+		self.gain(self.generator.get_noise_2d(position.x * f, position.y * f))
 	}
 
-	pub fn sample_2d_world(&self, position: Vec2) -> f32 {
-		self.sample_2d_weighted(position, self.params.domain_weights.truncate())
-	}
-
-	pub fn sample_2d_weighted(&self, position: Vec2, domain_weights: Vec2) -> f32 {
-		let q = position * domain_weights;
-		self.sample_2d(q.x, q.y)
-	}
-
-	pub fn sample_3d(&self, x: f32, y: f32, z: f32) -> f32 {
+	pub fn sample_3d(&self, position: Vec3) -> f32 {
 		let f = self.params.frequency;
-		self.gain(self.generator.get_noise_3d(x * f, y * f, z * f))
+		self.gain(self.generator.get_noise_3d(position.x * f, position.y * f, position.z * f))
 	}
 
-	/// Sample using [`NoiseParams::domain_weights`] on **world position**, then frequency and amplitude.
-	pub fn sample_3d_world(&self, position: Vec3) -> f32 {
-		self.sample_3d_weighted(position, self.params.domain_weights)
-	}
-
-	/// Scale **world position** per axis before frequency scaling and sampling (explicit weights).
-	///
-	/// Prefer [`NoiseConfig::sample_3d_world`] and [`NoiseParams::domain_weights`] for authoring. Use **0** on
-	/// an axis to remove it from the noise domain, or values in **(0, 1)** to soften an axis.
-	pub fn sample_3d_weighted(&self, position: Vec3, domain_weights: Vec3) -> f32 {
-		let q = position * domain_weights;
-		self.sample_3d(q.x, q.y, q.z)
-	}
+	// --- 4D: FastNoise Lite is 3D max, so the fourth coordinate **w** shears **x** before
+	// sampling. Use **w** as a *salt lane*: keep `(x, y, z)` spatial and bump `w` by a constant
+	// per logical channel (e.g. per ring, per attribute) to decorrelate samples at the same
+	// position without a second generator. ---
 
 	pub fn sample_4d(&self, x: f32, y: f32, z: f32, w: f32) -> f32 {
 		let f = self.params.frequency;
 		self.gain(self.generator.get_noise_3d((x + w) * f, y * f, z * f))
 	}
 
-	/// Sample 4D and remap from `[-1, 1]` to `[0, 1]`.
-	pub fn sample_unit01_4d(&self, x: f32, y: f32, z: f32, w: f32) -> f32 {
+	/// Sample 4D, remap from `[-1, 1]` to `[0, 1]`, and clamp (amplitude can overshoot).
+	pub fn sample_unit_4d(&self, x: f32, y: f32, z: f32, w: f32) -> f32 {
 		(self.sample_4d(x, y, z, w) * 0.5 + 0.5).clamp(0.0, 1.0)
 	}
 
@@ -265,7 +200,7 @@ impl NoiseConfig {
 		if hi <= lo {
 			return lo;
 		}
-		let u = self.sample_unit01_4d(x, y, z, w);
+		let u = self.sample_unit_4d(x, y, z, w);
 		let span = hi - lo;
 		lo + ((u * span as f32).floor() as usize).min(span - 1)
 	}
@@ -275,25 +210,18 @@ impl NoiseConfig {
 		if hi <= lo {
 			return lo;
 		}
-		let u = self.sample_unit01_4d(x, y, z, w);
+		let u = self.sample_unit_4d(x, y, z, w);
 		lo + u * (hi - lo)
 	}
 
-	/// World-space input mapped to [0, 1] range.
+	// --- Unit-range mappings `[-1, 1] → [0, 1]` (unclamped; assume amplitude ≤ 1) ---
+
 	pub fn sample_unit_1d(&self, x: f32) -> f32 {
 		(self.sample_1d(x) + 1.0) * 0.5
 	}
 
-	pub fn sample_unit_2d(&self, x: f32, y: f32) -> f32 {
-		(self.sample_2d(x, y) + 1.0) * 0.5
-	}
-
 	pub fn sample_unit_3d(&self, x: f32, y: f32, z: f32) -> f32 {
-		(self.sample_3d(x, y, z) + 1.0) * 0.5
-	}
-
-	pub fn sample_unit_4d(&self, x: f32, y: f32, z: f32, w: f32) -> f32 {
-		(self.sample_4d(x, y, z, w) + 1.0) * 0.5
+		(self.sample_3d(Vec3::new(x, y, z)) + 1.0) * 0.5
 	}
 }
 
@@ -305,26 +233,6 @@ pub trait FromScalarNoise {
 pub trait BuildWithNoise<T> {
 	/// Builds a resultant type from the noise params.
 	fn build_with_noise(&self, noise: NoiseParams) -> T;
-}
-
-pub trait WithNoise {
-	/// Reconstructs an instance of self with give noise params.
-	fn with_noise(&self, noise: NoiseParams) -> Self;
-}
-
-/// Implements `BuildWithNoise` for types that implement `WithNoise`.
-impl<T> BuildWithNoise<T> for T
-where
-	T: WithNoise,
-{
-	fn build_with_noise(&self, noise: NoiseParams) -> T {
-		self.with_noise(noise)
-	}
-}
-
-/// Override structural noise params on a composable builder.
-pub trait SetNoiseParams {
-	fn with_noise_params(self, params: NoiseParams) -> Self;
 }
 
 /// Parse compact `seed,frequency,amplitude,octaves` tuples into [`NoiseParams`].
@@ -365,21 +273,9 @@ impl NoiseParams {
 	}
 }
 
-impl SetNoiseParams for NoiseParams {
-	fn with_noise_params(self, params: NoiseParams) -> Self {
-		params
-	}
-}
-
 impl FromScalarNoise for NoiseConfig {
 	fn from_scalar(noise: NoiseParams) -> Self {
 		Self::new(noise)
-	}
-}
-
-impl SetNoiseParams for NoiseConfig {
-	fn with_noise_params(self, params: NoiseParams) -> Self {
-		Self::new(params)
 	}
 }
 
@@ -387,7 +283,6 @@ impl SetNoiseParams for NoiseConfig {
 mod tests {
 	use super::*;
 	use anyhow::Result;
-	use bevy_math::Vec3;
 
 	fn example_params() -> NoiseParams {
 		NoiseParams {
@@ -396,7 +291,6 @@ mod tests {
 			amplitude: 0.05,
 			octaves: 1,
 			noise_type: NoiseType::Perlin,
-			..Default::default()
 		}
 	}
 
@@ -405,8 +299,8 @@ mod tests {
 		let p = example_params();
 		let a = NoiseConfig::new(p);
 		let b = NoiseConfig::new(p);
-		let x = 0.2_f32;
-		assert_eq!(a.sample_3d(x, x, x), b.sample_3d(x, x, x));
+		let q = Vec3::splat(0.2);
+		assert_eq!(a.sample_3d(q), b.sample_3d(q));
 		Ok(())
 	}
 
@@ -418,7 +312,6 @@ mod tests {
 			amplitude: 1.0,
 			noise_type: NoiseType::Perlin,
 			octaves: 1,
-			..Default::default()
 		};
 		let single = NoiseParams { octaves: 1, ..base };
 		let multi = NoiseParams { octaves: 3, ..base };
@@ -439,24 +332,24 @@ mod tests {
 	}
 
 	#[test]
-	fn sample_3d_weighted_zero_axis_ignores_that_axis() -> Result<()> {
-		let p = example_params();
-		let n = NoiseConfig::new(p);
-		let w = Vec3::new(1.0, 1.0, 0.0);
-		let a = n.sample_3d_weighted(Vec3::new(1.0, 2.0, 3.0), w);
-		let b = n.sample_3d_weighted(Vec3::new(1.0, 2.0, 99.0), w);
-		assert_eq!(a, b);
+	fn salt_lane_decorrelates_samples_at_same_position() -> Result<()> {
+		let n = NoiseConfig::new(example_params());
+		let a = n.sample_4d(0.3, 0.4, 0.5, 0.0);
+		let b = n.sample_4d(0.3, 0.4, 0.5, 17.0);
+		assert_ne!(a, b);
 		Ok(())
 	}
 
 	#[test]
-	fn sample_3d_world_uses_params_domain_weights() -> Result<()> {
+	fn sample_unit_4d_is_clamped_unit_range() -> Result<()> {
 		let mut p = example_params();
-		p.domain_weights = Vec3::new(1.0, 1.0, 0.0);
+		p.amplitude = 10.0;
 		let n = NoiseConfig::new(p);
-		let a = n.sample_3d_world(Vec3::new(1.0, 2.0, 3.0));
-		let b = n.sample_3d_world(Vec3::new(1.0, 2.0, 99.0));
-		assert_eq!(a, b);
+		for i in 0..32 {
+			let x = i as f32 * 0.37;
+			let u = n.sample_unit_4d(x, x * 0.5, x * 0.25, 3.0);
+			assert!((0.0..=1.0).contains(&u));
+		}
 		Ok(())
 	}
 }

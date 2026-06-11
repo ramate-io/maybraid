@@ -1,6 +1,5 @@
 //! Restricted **Sope's Banyan** geometry for CLI and playgrounds.
 
-use bevy_math::Vec3;
 #[cfg(feature = "clap")]
 use procedural_common::noise_params_from_scalar_str;
 #[cfg(any(feature = "clap", test))]
@@ -8,7 +7,7 @@ use procedural_common::{
 	parse_count_pair as parse_ring_layout, parse_unit_range, parse_usize_range as parse_depth_range,
 };
 use procedural_common::{
-	CountPair as RingLayout, NoiseConfig, NoiseParams, SetNoiseParams, UnitRange,
+	CountPair as RingLayout, NoiseConfig, NoiseParams, UnitRange,
 	UsizeRange as DepthRange,
 };
 
@@ -33,27 +32,11 @@ pub struct SopesBanyanScale {
 	/// Radius of the stalk base and radial scale for anchor offsets.
 	#[cfg_attr(feature = "clap", arg(long, default_value_t = 0.75))]
 	pub stalk_base_radius: f32,
-	/// Base anchor of the stalk as `x,y,z`.
-	#[cfg_attr(
-		feature = "clap",
-		arg(
-			long,
-			default_value = "0,0,0",
-			value_parser = crate::vec3_args::parse_vec3_csv,
-			value_name = "X,Y,Z"
-		)
-	)]
-	pub base_anchor: Vec3,
 }
 
 impl Default for SopesBanyanScale {
 	fn default() -> Self {
-		Self {
-			stalk_height: 20.0,
-			canopy_height: 40.0,
-			stalk_base_radius: 0.75,
-			base_anchor: Vec3::ZERO,
-		}
+		Self { stalk_height: 20.0, canopy_height: 40.0, stalk_base_radius: 0.75 }
 	}
 }
 
@@ -61,7 +44,6 @@ impl SopesBanyanScale {
 	pub fn to_stalk(&self) -> StrictStalk {
 		StrictStalk {
 			stalk_height: self.stalk_height,
-			stalk_base_anchor: self.base_anchor,
 			stalk_base_radius: self.stalk_base_radius,
 		}
 	}
@@ -280,7 +262,7 @@ impl Default for SopesBanyanSbs {
 impl SopesBanyanSbs {
 	/// World `y` of the crown floor (first ring height), matching terminal foliage cut-in for render.
 	pub fn crown_floor_world_y(&self) -> f32 {
-		self.scale.base_anchor.y + self.scale.stalk_height * self.rings.height_range.start
+		self.scale.stalk_height * self.rings.height_range.start
 	}
 
 	/// Suggested world-space radius for terminal leaf balls / splays (uniform scale numerator = this / [`crate::BallStickNode::radius`]).
@@ -330,8 +312,9 @@ impl Anchors<SopesBanyanChain> for SopesBanyanSbs {
 	}
 }
 
-impl SetNoiseParams for SopesBanyanSbs {
-	fn with_noise_params(mut self, params: NoiseParams) -> Self {
+impl SopesBanyanSbs {
+	/// Override the canopy noise (callers vary the seed per placement).
+	pub fn with_noise_params(mut self, params: NoiseParams) -> Self {
 		self.canopy_noise = params;
 		self
 	}

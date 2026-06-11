@@ -5,7 +5,7 @@
 //! [`storybook_branch_depth`] at the anchor/SBS boundary so [`DepthBudget::remaining`] and
 //! [`StorybookTreeChain::branch_depth`] stay aligned.
 
-use procedural_common::{NoiseConfig, NoiseParams, SetNoiseParams};
+use procedural_common::NoiseConfig;
 
 use crate::BallStickNode;
 
@@ -158,16 +158,6 @@ impl StorybookTreePhase {
 			Self::BranchOut(b) => &b.inner.node,
 		}
 	}
-
-	fn with_noise(self, noise: NoiseConfig) -> Self {
-		match self {
-			Self::BranchOut(mut b) => {
-				b.inner = b.inner.with_noise(noise);
-				Self::BranchOut(b)
-			}
-			other => other,
-		}
-	}
 }
 
 impl Hysteresis for StorybookTreeChain {
@@ -184,15 +174,6 @@ impl Hysteresis for StorybookTreeChain {
 				.collect(),
 			StorybookTreePhase::BranchOut(budget) => self.branch_children(budget),
 		}
-	}
-}
-
-impl SetNoiseParams for StorybookTreeChain {
-	fn with_noise_params(mut self, params: NoiseParams) -> Self {
-		let noise = NoiseConfig::new(params);
-		self.phase = self.phase.with_noise(noise.clone());
-		self.noise = noise;
-		self
 	}
 }
 

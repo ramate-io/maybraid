@@ -27,7 +27,7 @@ pub type RorysHeadTrainedStd = RorysHeadTrained<
 	SkippedLeafMeshMaterial<StandardMaterial>,
 >;
 
-#[derive(Clone, Args)]
+#[derive(Component, Clone, Args)]
 #[command(rename_all = "kebab-case")]
 pub struct RorysHeadTrained<StickM, StickS, LeafM, LeafS>
 where
@@ -116,6 +116,9 @@ where
 		cascade_chunk: &CascadeChunk,
 		transform: Transform,
 	) -> Vec<Entity> {
+		let root = commands
+			.spawn((self.clone(), cascade_chunk.clone(), transform, Visibility::default()))
+			.id();
 		let chain = self.build_chain();
 		let stick_rule = RorysHeadTrainedStickRule::<StickM, StickS> {
 			stick_surface_noise: self.stick_surface_noise,
@@ -123,8 +126,12 @@ where
 			__marker: PhantomData,
 		};
 
-		let mut out =
-			StickRenderHelper::new(chain.clone(), stick_rule).spawn_render_items(commands, cascade_chunk, transform);
+		StickRenderHelper::new(chain.clone(), stick_rule).spawn_render_items_under(
+			commands,
+			cascade_chunk,
+			Transform::IDENTITY,
+			Some(root),
+		);
 
 		let mut leaf_ball = self.leaf_surface_noise.build_scalar::<ChicoBall<LeafM, LeafS>>();
 		leaf_ball.material = self.leaf_material.clone();
@@ -133,12 +140,13 @@ where
 			leaf_radius_world: self.geometry.leaf_radius_world(),
 		};
 
-		out.extend(BallRenderHelper::new(chain, leaf_rule).spawn_render_items(
+		BallRenderHelper::new(chain, leaf_rule).spawn_render_items_under(
 			commands,
 			cascade_chunk,
-			transform,
-		));
+			Transform::IDENTITY,
+			Some(root),
+		);
 
-		out
+		vec![root]
 	}
 }

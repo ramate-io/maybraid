@@ -50,7 +50,7 @@ pub fn spawn_crown_rings<LeafM, LeafS>(
 	chain: &BallStickChain<WaialeaPalmChain>,
 	commands: &mut Commands,
 	cascade_chunk: &CascadeChunk,
-	root_transform: Transform,
+	parent: Entity,
 	foliage_noise: &NoiseParams,
 	leaf_material: LeafS,
 ) -> Vec<Entity>
@@ -67,6 +67,6 @@ where
 		leaf_material,
 		commands,
 		cascade_chunk,
-		root_transform,
+		parent,
 	)
 }

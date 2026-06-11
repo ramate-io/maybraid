@@ -89,7 +89,7 @@ pub fn spawn_joint_fronds<LeafM, LeafS>(
 	chain: &BallStickChain<FriendsConiferChain>,
 	commands: &mut Commands,
 	cascade_chunk: &CascadeChunk,
-	root_transform: Transform,
+	parent: Entity,
 	fronds_per_joint: &UnitRange,
 	length_fraction: &UnitRange,
 	frond_spawn_fraction: f32,
@@ -118,18 +118,18 @@ where
 		);
 		let crown = FrondCrown::from_shape(shape, leaf_material.clone());
 
-		let local = root_transform
-			.rotation
-			.inverse()
-			.mul_vec3(node.position - root_transform.translation);
 		let local_transform = Transform {
-			translation: local,
+			translation: node.position,
 			rotation: align_frond_direction(branch_dir),
 			scale: Vec3::splat(uniform_scale),
-			..default()
 		};
 
-		out.extend(crown.spawn_render_items_under(commands, cascade_chunk, local_transform, None));
+		out.extend(crown.spawn_render_items_under(
+			commands,
+			cascade_chunk,
+			local_transform,
+			Some(parent),
+		));
 	}
 
 	out

@@ -55,7 +55,7 @@ pub type TemperateConiferStd = TemperateConifer<
 	SkippedLeafMeshMaterial<StandardMaterial>,
 >;
 
-#[derive(Clone, Args)]
+#[derive(Component, Clone, Args)]
 #[command(rename_all = "kebab-case")]
 pub struct TemperateConifer<StickM, StickS, LeafM, LeafS>
 where
@@ -178,6 +178,9 @@ where
 		cascade_chunk: &CascadeChunk,
 		transform: Transform,
 	) -> Vec<Entity> {
+		let root = commands
+			.spawn((self.clone(), cascade_chunk.clone(), transform, Visibility::default()))
+			.id();
 		let chain = self.build_chain();
 
 		let stick_rule = TemperateConiferStickRule::<StickM, StickS> {
@@ -186,39 +189,40 @@ where
 			__marker: PhantomData,
 		};
 
-		let mut out = StickRenderHelper::new(chain.clone(), stick_rule).spawn_render_items(
+		StickRenderHelper::new(chain.clone(), stick_rule).spawn_render_items_under(
 			commands,
 			cascade_chunk,
-			transform,
+			Transform::IDENTITY,
+			Some(root),
 		);
 
 		let mut geometry = self.geometry.inner.clone();
 		geometry.apply_temperate_preset();
-		out.extend(spawn_joint_fronds::<LeafM, _>(
+		spawn_joint_fronds::<LeafM, _>(
 			&geometry,
 			self.frond_world_scale,
 			&chain,
 			commands,
 			cascade_chunk,
-			transform,
+			root,
 			&self.fronds_per_joint,
 			&self.frond_length_fraction,
 			self.frond_spawn_fraction,
 			self.leaf_material.clone(),
-		));
+		);
 
-		out.extend(spawn_apex_frond_crown::<LeafM, _>(
+		spawn_apex_frond_crown::<LeafM, _>(
 			&geometry,
 			self.frond_world_scale,
 			&chain,
 			commands,
 			cascade_chunk,
-			transform,
+			root,
 			&self.leaf_surface_noise,
 			self.apex_canopy_spawn_fraction,
 			self.leaf_material.clone(),
-		));
+		);
 
-		out
+		vec![root]
 	}
 }

@@ -54,7 +54,6 @@ impl Default for WaialeaPalmProtoAnchors {
 		Self {
 			stalk: StrictStalk {
 				stalk_height: h,
-				stalk_base_anchor: Vec3::ZERO,
 				stalk_base_radius: DEFAULT_TRUNK_RADIUS_FRACTION_OF_HEIGHT * h,
 			},
 			trunk_height_fraction: DEFAULT_TRUNK_HEIGHT_FRACTION,
@@ -98,7 +97,7 @@ impl WaialeaPalmProtoAnchors {
 	pub fn hysteresis_seeds(&self, chain_noise: NoiseConfig) -> Vec<WaialeaPalmChain> {
 		let h = self.stalk.stalk_height.max(1e-6);
 		let trunk_h = self.trunk_height();
-		let base = self.stalk.stalk_base_anchor;
+		let base = Vec3::ZERO;
 		let steps = self.trunk_segment_count();
 
 		let arch = ArchTrunk::from_params(

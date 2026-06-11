@@ -204,12 +204,12 @@ where
 	}
 
 	pub fn select_from_noise_2d(&self, noise: NoiseParams, position: Vec2) -> Option<&T> {
-		let sample = NoiseConfig::new(noise).sample_2d_world(position);
+		let sample = NoiseConfig::new(noise).sample_2d(position);
 		self.select(self.selection_throw(sample))
 	}
 
 	pub fn select_from_noise_3d(&self, noise: NoiseParams, position: Vec3) -> Option<&T> {
-		let sample = NoiseConfig::new(noise).sample_3d_world(position);
+		let sample = NoiseConfig::new(noise).sample_3d(position);
 		self.select(self.selection_throw(sample))
 	}
 

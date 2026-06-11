@@ -117,7 +117,8 @@ where
 		);
 	}
 
-	/// Spawn body + foliage under one assembly root at `transform`.
+	/// Spawn body + foliage under one assembly root at `transform`, returning only the root
+	/// (the [`RenderItem`] contract).
 	///
 	/// Uniform scale on `transform` is the anchor node radius. All parts are [`ChildOf`] the
 	/// assembly root with local transforms so the cluster repositions as one unit.

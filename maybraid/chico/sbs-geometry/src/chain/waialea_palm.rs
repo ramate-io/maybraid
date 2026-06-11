@@ -1,6 +1,6 @@
 //! Waialea Palm arched trunk as [`DepthBudget`] + [`super::ArchTrunk`] ([#255](https://github.com/ramate-io/maybraid/issues/255)).
 
-use procedural_common::{NoiseConfig, NoiseParams, SetNoiseParams};
+use procedural_common::NoiseConfig;
 
 use crate::BallStickNode;
 
@@ -52,15 +52,5 @@ impl Hysteresis for WaialeaPalmChain {
 				.map(|phase| self.with_phase(WaialeaPalmPhase::Trunk(phase)))
 				.collect(),
 		}
-	}
-}
-
-impl SetNoiseParams for WaialeaPalmChain {
-	fn with_noise_params(mut self, params: NoiseParams) -> Self {
-		let noise = NoiseConfig::new(params);
-		let WaialeaPalmPhase::Trunk(b) = &mut self.phase;
-		b.inner = b.inner.clone().with_noise_params(params);
-		self.noise = noise;
-		self
 	}
 }

@@ -33,7 +33,7 @@ use crate::DepthBudget;
 pub struct SopesBanyanProtoAnchors {
 	/// Vertical extent and base for ring placement.
 	pub stalk: StrictStalk,
-	/// First ring height as a fraction of [`StrictStalk::height`] above [`StrictStalk::base_anchor`] (RFC ~0.4).
+	/// First ring height as a fraction of [`StrictStalk::height`] above the tree-local origin (RFC ~0.4).
 	pub first_ring_unit_height: f32,
 	/// Last ring height fraction (RFC ~0.9).
 	pub last_ring_unit_height: f32,
@@ -58,7 +58,6 @@ impl Default for SopesBanyanProtoAnchors {
 		Self {
 			stalk: StrictStalk {
 				stalk_height: 20.0,
-				stalk_base_anchor: Vec3::ZERO,
 				stalk_base_radius: 0.75,
 			},
 			first_ring_unit_height: 0.40,
@@ -315,7 +314,6 @@ mod tests {
 		let a = SopesBanyanProtoAnchors {
 			stalk: StrictStalk {
 				stalk_height: 10.0,
-				stalk_base_anchor: Vec3::ZERO,
 				stalk_base_radius: 0.5,
 			},
 			ring_count: 5,

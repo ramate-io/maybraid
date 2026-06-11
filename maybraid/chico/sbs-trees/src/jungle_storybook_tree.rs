@@ -54,7 +54,7 @@ impl Default for JungleStorybookConstructionParams {
 	}
 }
 
-#[derive(Clone, Args)]
+#[derive(Component, Clone, Args)]
 #[command(rename_all = "kebab-case")]
 pub struct JungleStorybookTree<StickM, StickS, InnerLeafM, InnerLeafS, OuterLeafM, OuterLeafS, BodyM, BodyS, FoliageM, FoliageS>
 where
@@ -219,6 +219,9 @@ where
 		cascade_chunk: &CascadeChunk,
 		transform: Transform,
 	) -> Vec<Entity> {
+		let root = commands
+			.spawn((self.clone(), cascade_chunk.clone(), transform, Visibility::default()))
+			.id();
 		let geometry = self.geometry_for_render();
 		let chain = geometry.build_chain();
 		let leaf_radius = geometry.leaf_radius_world();
@@ -229,8 +232,12 @@ where
 			__marker: PhantomData,
 		};
 
-		let mut out =
-			StickRenderHelper::new(chain.clone(), stick_rule).spawn_render_items(commands, cascade_chunk, transform);
+		StickRenderHelper::new(chain.clone(), stick_rule).spawn_render_items_under(
+			commands,
+			cascade_chunk,
+			Transform::IDENTITY,
+			Some(root),
+		);
 
 		let mut inner_ball = self.inner_leaf_surface_noise.build_scalar::<ChicoBall<InnerLeafM, InnerLeafS>>();
 		inner_ball.material = self.inner_leaf_material.clone();
@@ -247,12 +254,13 @@ where
 			foliage_material: self.growth_foliage_material.clone(),
 			__marker: PhantomData,
 		};
-		out.extend(BallRenderHelper::new(chain, foliage_rule).spawn_render_items(
+		BallRenderHelper::new(chain, foliage_rule).spawn_render_items_under(
 			commands,
 			cascade_chunk,
-			transform,
-		));
+			Transform::IDENTITY,
+			Some(root),
+		);
 
-		out
+		vec![root]
 	}
 }

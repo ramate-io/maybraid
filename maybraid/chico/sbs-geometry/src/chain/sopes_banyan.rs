@@ -1,6 +1,6 @@
 //! Sope's Banyan canopy as a **phase machine** on [`super::Hysteresis`] ([#252](https://github.com/ramate-io/maybraid/issues/252)).
 
-use procedural_common::{NoiseConfig, NoiseParams, SetNoiseParams};
+use procedural_common::NoiseConfig;
 
 use crate::BallStickNode;
 
@@ -244,15 +244,6 @@ impl Hysteresis for SopesBanyanChain {
 			SopesBanyanPhase::StartDescender(s) => vec![self.with_phase(s.project_to_end())],
 			SopesBanyanPhase::EndDescender(_) => Vec::new(),
 		}
-	}
-}
-
-impl SetNoiseParams for SopesBanyanChain {
-	fn with_noise_params(mut self, params: NoiseParams) -> Self {
-		let noise = NoiseConfig::new(params);
-		self.phase = self.phase.with_noise(noise.clone());
-		self.noise = noise;
-		self
 	}
 }
 

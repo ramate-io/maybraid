@@ -1,6 +1,6 @@
 //! Date Palm vertical trunk as [`DepthBudget`] + [`BranchOut`] ([#256](https://github.com/ramate-io/maybraid/issues/256)).
 
-use procedural_common::{NoiseConfig, NoiseParams, SetNoiseParams};
+use procedural_common::NoiseConfig;
 
 use crate::BallStickNode;
 
@@ -52,15 +52,5 @@ impl Hysteresis for DatePalmChain {
 				.map(|phase| self.with_phase(DatePalmPhase::Trunk(phase)))
 				.collect(),
 		}
-	}
-}
-
-impl SetNoiseParams for DatePalmChain {
-	fn with_noise_params(mut self, params: NoiseParams) -> Self {
-		let noise = NoiseConfig::new(params);
-		let DatePalmPhase::Trunk(b) = &mut self.phase;
-		b.inner = b.inner.clone().with_noise_params(params);
-		self.noise = noise;
-		self
 	}
 }

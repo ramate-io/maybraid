@@ -1,6 +1,5 @@
 //! Shape parameters for [`super::HighBushShoots`](super::assembly::HighBushShoots).
 
-use bevy::prelude::*;
 use chico_sbs_geometry::anchors::high_bush::{
 	DEFAULT_BIAS_BLEND, DEFAULT_BRANCH_ANGLE_TOLERANCE_DEGREES,
 };
@@ -25,16 +24,6 @@ pub enum HighBushFoliageStyle {
 pub struct HighBushShootsShape {
 	#[cfg_attr(feature = "clap", arg(long, default_value_t = 10.0))]
 	pub height: f32,
-	#[cfg_attr(
-		feature = "clap",
-		arg(
-			long,
-			default_value = "0,0,0",
-			value_parser = chico_sbs_geometry::parse_vec3_csv,
-			value_name = "X,Y,Z"
-		)
-	)]
-	pub base_anchor: Vec3,
 	#[cfg_attr(feature = "clap", arg(long, default_value_t = 0.02))]
 	pub anchor_lift_fraction: f32,
 	#[cfg_attr(feature = "clap", arg(long, default_value_t = 6))]
@@ -77,7 +66,6 @@ impl HighBushShootsShape {
 	pub fn to_proto(&self) -> HighBushProtoAnchors {
 		HighBushProtoAnchors {
 			height: self.height,
-			base_anchor: self.base_anchor,
 			anchor_lift_fraction: self.anchor_lift_fraction,
 			shoot_count: self.shoot_count,
 			radial_strength: self.radial_strength,

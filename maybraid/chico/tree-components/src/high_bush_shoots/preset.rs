@@ -2,7 +2,6 @@
 
 use std::ops::RangeInclusive;
 
-use bevy::prelude::Vec3;
 use chico_sbs_geometry::anchors::high_bush::{
 	DEFAULT_ANCHOR_LIFT_FRACTION, DEFAULT_HEIGHT, DEFAULT_RADIAL_STRENGTH,
 	DEFAULT_SEGMENT_LENGTH_FRACTION_HI, DEFAULT_SEGMENT_LENGTH_FRACTION_LO,
@@ -26,7 +25,6 @@ pub const COMMON_HIGH_BUSH_LEAF_RADIUS_FRACTION: f32 = 0.05;
 fn generic_high_bush_shape() -> HighBushShootsShape {
 	HighBushShootsShape {
 		height: DEFAULT_HEIGHT,
-		base_anchor: Vec3::ZERO,
 		anchor_lift_fraction: DEFAULT_ANCHOR_LIFT_FRACTION,
 		shoot_count: 6,
 		radial_strength: 0.35,
@@ -79,7 +77,6 @@ pub fn apply_common_high_bush_preset(shape: &mut HighBushShootsShape) {
 pub fn common_high_bush_shape() -> HighBushShootsShape {
 	HighBushShootsShape {
 		height: DEFAULT_HEIGHT,
-		base_anchor: Vec3::ZERO,
 		shoot_count: DEFAULT_SHOOT_COUNT,
 		radial_strength: COMMON_HIGH_BUSH_RADIAL_STRENGTH,
 		vertical_bias: COMMON_HIGH_BUSH_VERTICAL_BIAS,

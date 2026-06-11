@@ -36,7 +36,7 @@ pub type LiamsConiferStd = LiamsConifer<
 	SkippedLeafMeshMaterial<StandardMaterial>,
 >;
 
-#[derive(Clone, Args)]
+#[derive(Component, Clone, Args)]
 #[command(rename_all = "kebab-case")]
 pub struct LiamsConifer<StickM, StickS, LeafM, LeafS>
 where
@@ -120,6 +120,9 @@ where
 		cascade_chunk: &CascadeChunk,
 		transform: Transform,
 	) -> Vec<Entity> {
+		let root = commands
+			.spawn((self.clone(), cascade_chunk.clone(), transform, Visibility::default()))
+			.id();
 		let chain = self.build_chain();
 
 		let stick_rule = LiamsConiferStickRule::<StickM, StickS> {
@@ -128,10 +131,11 @@ where
 			__marker: PhantomData,
 		};
 
-		let mut out = StickRenderHelper::new(chain.clone(), stick_rule).spawn_render_items(
+		StickRenderHelper::new(chain.clone(), stick_rule).spawn_render_items_under(
 			commands,
 			cascade_chunk,
-			transform,
+			Transform::IDENTITY,
+			Some(root),
 		);
 
 		let tuft_rule = LiamsConiferTuftRule::<LeafM, LeafS> {
@@ -141,12 +145,13 @@ where
 			__marker: PhantomData,
 		};
 
-		out.extend(TuftRenderHelper::new(chain, tuft_rule).spawn_render_items(
+		TuftRenderHelper::new(chain, tuft_rule).spawn_render_items_under(
 			commands,
 			cascade_chunk,
-			transform,
-		));
+			Transform::IDENTITY,
+			Some(root),
+		);
 
-		out
+		vec![root]
 	}
 }

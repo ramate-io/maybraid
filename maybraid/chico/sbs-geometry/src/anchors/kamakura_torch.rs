@@ -109,7 +109,6 @@ impl Default for KamakuraTorchProtoAnchors {
 			tree_height: h,
 			stalk: StrictStalk {
 				stalk_height: stalk_h,
-				stalk_base_anchor: Vec3::ZERO,
 				stalk_base_radius: DEFAULT_STALK_BASE_RADIUS_FRACTION * h,
 			},
 			first_ring_unit_height: DEFAULT_FIRST_RING_UNIT_HEIGHT,

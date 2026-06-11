@@ -46,7 +46,6 @@ impl Default for DatePalmProtoAnchors {
 		Self {
 			stalk: StrictStalk {
 				stalk_height: h,
-				stalk_base_anchor: Vec3::ZERO,
 				stalk_base_radius: DEFAULT_TRUNK_RADIUS_FRACTION_OF_HEIGHT * h,
 			},
 			trunk_height_fraction: 0.68,
@@ -96,7 +95,7 @@ impl DatePalmProtoAnchors {
 		let h = self.stalk.stalk_height.max(1e-6);
 		let (len_lo, len_hi) = self.segment_length_fraction;
 		let r = self.stalk.stalk_base_radius;
-		let base = BallStickNode::new(self.stalk.stalk_base_anchor, r);
+		let base = BallStickNode::new(Vec3::ZERO, r);
 
 		let branch = BranchOut::up(base)
 			.with_hysteresis_context(chain_noise.clone(), 0, Vec3::Y)

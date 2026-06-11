@@ -1,9 +1,8 @@
 //! Restricted **Rory's Head-trained** geometry for CLI and playgrounds ([#254](https://github.com/ramate-io/maybraid/issues/254)).
 
-use bevy_math::Vec3;
 #[cfg(feature = "clap")]
 use procedural_common::{noise_params_from_scalar_str, parse_unit_range};
-use procedural_common::{NoiseConfig, NoiseParams, SetNoiseParams, UnitRange};
+use procedural_common::{NoiseConfig, NoiseParams, UnitRange};
 
 use crate::anchors::rorys_head_trained::{
 	RorysHeadTrainedAnchorPerturbation, RorysHeadTrainedAnchors, RorysHeadTrainedProtoAnchors,
@@ -32,16 +31,6 @@ pub struct RorysHeadTrainedScale {
 	pub stalk_height_fraction: f32,
 	#[cfg_attr(feature = "clap", arg(long))]
 	pub stalk_base_radius: Option<f32>,
-	#[cfg_attr(
-		feature = "clap",
-		arg(
-			long,
-			default_value = "0,0,0",
-			value_parser = crate::vec3_args::parse_vec3_csv,
-			value_name = "X,Y,Z"
-		)
-	)]
-	pub base_anchor: Vec3,
 }
 
 impl Default for RorysHeadTrainedScale {
@@ -50,7 +39,6 @@ impl Default for RorysHeadTrainedScale {
 			tree_height: DEFAULT_TREE_HEIGHT,
 			stalk_height_fraction: DEFAULT_STALK_HEIGHT_FRACTION,
 			stalk_base_radius: None,
-			base_anchor: Vec3::ZERO,
 		}
 	}
 }
@@ -68,7 +56,6 @@ impl RorysHeadTrainedScale {
 	pub fn to_stalk(&self) -> StrictStalk {
 		StrictStalk {
 			stalk_height: self.stalk_height(),
-			stalk_base_anchor: self.base_anchor,
 			stalk_base_radius: self.stalk_base_radius_or_default(),
 		}
 	}
@@ -364,13 +351,6 @@ impl RorysHeadTrainedSbs {
 impl Anchors<StorybookTreeChain> for RorysHeadTrainedSbs {
 	fn anchors(&self) -> Vec<StorybookTreeChain> {
 		self.hysteresis_seeds()
-	}
-}
-
-impl SetNoiseParams for RorysHeadTrainedSbs {
-	fn with_noise_params(mut self, params: NoiseParams) -> Self {
-		self.canopy_noise = params;
-		self
 	}
 }
 

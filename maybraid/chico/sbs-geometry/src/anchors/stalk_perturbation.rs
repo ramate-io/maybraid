@@ -1,4 +1,10 @@
 //! Perturb non-stalk anchors around a shared [`StrictStalk`].
+//!
+//! Anchors are generated in **tree-local space** (stalk base at `Vec3::ZERO`), so noise here is
+//! sampled over local node positions: two identical trees produce identical geometry regardless
+//! of where their roots are placed. Per-instance variation comes from the caller supplying a
+//! different [`NoiseParams`] seed (e.g. groves mix a placement seed per instance), not from
+//! spatial offsets.
 
 use std::ops::Range;
 
@@ -19,7 +25,6 @@ pub trait HasStrictStalk {
 /// A sampled perturbation for one anchor seed.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct AnchorPerturbation {
-	pub stalk_base_anchor: Vec3,
 	pub vertical_offset: f32,
 	pub angular_scale: f32,
 	pub angular_u: f32,
@@ -90,7 +95,6 @@ where
 	where
 		T: PerturbAnchor,
 	{
-		let stalk_base_anchor = self.inner.strict_stalk().stalk_base_anchor;
 		let noise = NoiseConfig::new(self.noise);
 
 		anchors
@@ -98,12 +102,11 @@ where
 			.enumerate()
 			.map(|(i, anchor)| {
 				let node = anchor.ball_stick_node();
-				if is_stalk_base(node.position, stalk_base_anchor) {
+				if is_stalk_base(node.position) {
 					return anchor;
 				}
 
 				let perturbation = AnchorPerturbation {
-					stalk_base_anchor,
 					vertical_offset: sample_range(
 						&noise,
 						self.vertical_offset.clone(),
@@ -183,8 +186,9 @@ fn sample_signed(noise: &NoiseConfig, node: &BallStickNode, anchor_index: usize,
 	)
 }
 
-fn is_stalk_base(position: Vec3, stalk_base_anchor: Vec3) -> bool {
-	position.distance_squared(stalk_base_anchor) <= 1e-8
+/// Chains are tree-local, so the unperturbed stalk base is always the origin.
+fn is_stalk_base(position: Vec3) -> bool {
+	position.length_squared() <= 1e-8
 }
 
 #[cfg(test)]

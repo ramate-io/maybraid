@@ -1,9 +1,8 @@
 //! Restricted **Storybook Tree** geometry for CLI and playgrounds ([#230](https://github.com/ramate-io/maybraid/issues/230)).
 
-use bevy_math::Vec3;
 #[cfg(feature = "clap")]
 use procedural_common::{noise_params_from_scalar_str, parse_unit_range};
-use procedural_common::{NoiseConfig, NoiseParams, SetNoiseParams, UnitRange};
+use procedural_common::{NoiseConfig, NoiseParams, UnitRange};
 
 use crate::anchors::storybook_tree::{
 	StorybookTreeAnchorPerturbation, StorybookTreeAnchors, StorybookTreeProtoAnchors,
@@ -30,17 +29,6 @@ pub struct StorybookTreeScale {
 	/// [`DEFAULT_STALK_BASE_RADIUS_FRACTION`] × [`Self::tree_height`].
 	#[cfg_attr(feature = "clap", arg(long))]
 	pub stalk_base_radius: Option<f32>,
-	/// World position of the stalk base anchor (graph root). Ring centroids are offset from this point.
-	#[cfg_attr(
-		feature = "clap",
-		arg(
-			long,
-			default_value = "0,0,0",
-			value_parser = crate::vec3_args::parse_vec3_csv,
-			value_name = "X,Y,Z"
-		)
-	)]
-	pub base_anchor: Vec3,
 }
 
 impl Default for StorybookTreeScale {
@@ -49,7 +37,6 @@ impl Default for StorybookTreeScale {
 			tree_height: DEFAULT_TREE_HEIGHT,
 			stalk_height_fraction: DEFAULT_STALK_HEIGHT_FRACTION,
 			stalk_base_radius: None,
-			base_anchor: Vec3::ZERO,
 		}
 	}
 }
@@ -67,7 +54,6 @@ impl StorybookTreeScale {
 	pub fn to_stalk(&self) -> StrictStalk {
 		StrictStalk {
 			stalk_height: self.stalk_height(),
-			stalk_base_anchor: self.base_anchor,
 			stalk_base_radius: self.stalk_base_radius_or_default(),
 		}
 	}
@@ -383,13 +369,6 @@ impl StorybookTreeSbs {
 impl Anchors<StorybookTreeChain> for StorybookTreeSbs {
 	fn anchors(&self) -> Vec<StorybookTreeChain> {
 		self.hysteresis_seeds()
-	}
-}
-
-impl SetNoiseParams for StorybookTreeSbs {
-	fn with_noise_params(mut self, params: NoiseParams) -> Self {
-		self.canopy_noise = params;
-		self
 	}
 }
 

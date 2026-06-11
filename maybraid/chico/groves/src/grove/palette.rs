@@ -117,6 +117,10 @@ impl WithPalette for bevy::prelude::StandardMaterial {
 
 /// After lower-order [`RenderItem::spawn_render_items`](render_item::RenderItem), patch spawned
 /// entities with a per-placement palette-resolved material asset.
+///
+/// `spawn_render_items` returns root entities only; this walks each root's descendants (children
+/// exist by the time the queued closure runs) and swaps the handle on every entity already
+/// bearing a [`MeshMaterial3d<M>`](bevy::prelude::MeshMaterial3d).
 #[cfg(feature = "render")]
 pub fn patch_spawned_leaf_material<M: bevy::prelude::Material + WithPalette + Default>(
 	entities: &[bevy::prelude::Entity],
@@ -124,17 +128,25 @@ pub fn patch_spawned_leaf_material<M: bevy::prelude::Material + WithPalette + De
 	seed: i32,
 	commands: &mut bevy::prelude::Commands,
 ) {
+	use bevy::prelude::{Assets, Children, MeshMaterial3d, World};
+
 	if entities.is_empty() {
 		return;
 	}
-	let entities = entities.to_vec();
-	commands.queue(move |world: &mut bevy::prelude::World| {
+	let mut stack = entities.to_vec();
+	commands.queue(move |world: &mut World| {
 		let material = M::with_palette(M::default(), palette, seed);
-		let handle = world.resource_mut::<bevy::prelude::Assets<M>>().add(material);
-		for entity in entities {
-			world
-				.entity_mut(entity)
-				.insert(bevy::prelude::MeshMaterial3d(handle.clone()));
+		let handle = world.resource_mut::<Assets<M>>().add(material);
+		while let Some(entity) = stack.pop() {
+			let Ok(mut entity_mut) = world.get_entity_mut(entity) else {
+				continue;
+			};
+			if let Some(children) = entity_mut.get::<Children>() {
+				stack.extend(children.iter());
+			}
+			if entity_mut.contains::<MeshMaterial3d<M>>() {
+				entity_mut.insert(MeshMaterial3d(handle.clone()));
+			}
 		}
 	});
 }

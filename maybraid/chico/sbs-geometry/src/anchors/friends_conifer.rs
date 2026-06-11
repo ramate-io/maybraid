@@ -68,7 +68,6 @@ impl Default for FriendsConiferProtoAnchors {
 		Self {
 			stalk: StrictStalk {
 				stalk_height: h,
-				stalk_base_anchor: Vec3::ZERO,
 				stalk_base_radius: 0.025 * h,
 			},
 			first_ring_unit_height: 0.10,

@@ -1,7 +1,7 @@
 //! **Palm Bush** SBS frontend ([#231](https://github.com/ramate-io/maybraid/issues/231)).
 
 use bevy_math::Vec3;
-use procedural_common::{NoiseParams, SetNoiseParams};
+use procedural_common::{NoiseParams};
 
 use crate::anchors::palm_bush::{
 	PalmBushProtoAnchors, DEFAULT_CROWN_TUFT_SCALE_FRACTION, DEFAULT_FRONDS_PER_RING,
@@ -14,21 +14,11 @@ use crate::anchors::palm_bush::{
 pub struct PalmBushScale {
 	#[cfg_attr(feature = "clap", arg(long, default_value_t = DEFAULT_HEIGHT))]
 	pub height: f32,
-	#[cfg_attr(
-		feature = "clap",
-		arg(
-			long,
-			default_value = "0,0,0",
-			value_parser = crate::vec3_args::parse_vec3_csv,
-			value_name = "X,Y,Z"
-		)
-	)]
-	pub base_anchor: Vec3,
 }
 
 impl Default for PalmBushScale {
 	fn default() -> Self {
-		Self { height: DEFAULT_HEIGHT, base_anchor: Vec3::ZERO }
+		Self { height: DEFAULT_HEIGHT }
 	}
 }
 
@@ -103,7 +93,6 @@ impl PalmBushSbs {
 		let defaults = PalmBushProtoAnchors::default();
 		PalmBushProtoAnchors {
 			height: self.scale.height,
-			base_anchor: self.scale.base_anchor,
 			ring_count: self.crown.ring_count,
 			fronds_per_ring: self.crown.fronds_per_ring,
 			crown_tuft_scale_fraction: self.crown_tuft_scale_factor,
@@ -121,13 +110,6 @@ impl PalmBushSbs {
 
 	pub fn crown_tuft_world_scale(&self) -> f32 {
 		self.height() * self.crown_tuft_scale_factor
-	}
-}
-
-impl SetNoiseParams for PalmBushSbs {
-	fn with_noise_params(mut self, params: NoiseParams) -> Self {
-		self.foliage_noise = params;
-		self
 	}
 }
 

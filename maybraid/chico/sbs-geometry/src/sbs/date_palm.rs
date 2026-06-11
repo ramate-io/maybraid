@@ -1,7 +1,7 @@
 //! Restricted **Date Palm** geometry for CLI and playgrounds ([#256](https://github.com/ramate-io/maybraid/issues/256)).
 
 use bevy_math::Vec3;
-use procedural_common::{NoiseConfig, NoiseParams, SetNoiseParams};
+use procedural_common::{NoiseConfig, NoiseParams};
 
 use crate::anchors::date_palm::{
 	DatePalmAnchors, DatePalmProtoAnchors, DEFAULT_STALK_HEIGHT, DEFAULT_TRUNK_RADIUS_FRACTION_OF_HEIGHT,
@@ -20,25 +20,11 @@ pub struct DatePalmScale {
 	pub stalk_height: f32,
 	#[cfg_attr(feature = "clap", arg(long))]
 	pub stalk_base_radius: Option<f32>,
-	#[cfg_attr(
-		feature = "clap",
-		arg(
-			long,
-			default_value = "0,0,0",
-			value_parser = crate::vec3_args::parse_vec3_csv,
-			value_name = "X,Y,Z"
-		)
-	)]
-	pub base_anchor: Vec3,
 }
 
 impl Default for DatePalmScale {
 	fn default() -> Self {
-		Self {
-			stalk_height: DEFAULT_STALK_HEIGHT,
-			stalk_base_radius: None,
-			base_anchor: Vec3::ZERO,
-		}
+		Self { stalk_height: DEFAULT_STALK_HEIGHT, stalk_base_radius: None }
 	}
 }
 
@@ -51,7 +37,6 @@ impl DatePalmScale {
 	pub fn to_stalk(&self) -> StrictStalk {
 		StrictStalk {
 			stalk_height: self.stalk_height,
-			stalk_base_anchor: self.base_anchor,
 			stalk_base_radius: self.stalk_base_radius_or_default(),
 		}
 	}
@@ -165,13 +150,6 @@ impl DatePalmSbs {
 impl Anchors<DatePalmChain> for DatePalmSbs {
 	fn anchors(&self) -> Vec<DatePalmChain> {
 		self.hysteresis_seeds()
-	}
-}
-
-impl SetNoiseParams for DatePalmSbs {
-	fn with_noise_params(mut self, params: NoiseParams) -> Self {
-		self.trunk_noise = params;
-		self
 	}
 }
 

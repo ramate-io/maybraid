@@ -6,7 +6,7 @@
 use std::ops::Range;
 
 use bevy_math::Vec3;
-use procedural_common::{NoiseConfig, NoiseParams, SetNoiseParams};
+use procedural_common::NoiseConfig;
 
 use crate::BallStickNode;
 
@@ -152,17 +152,11 @@ impl Hysteresis for ArchTrunk {
 	}
 }
 
-impl SetNoiseParams for ArchTrunk {
-	fn with_noise_params(mut self, params: NoiseParams) -> Self {
-		self.noise = NoiseConfig::new(params);
-		self
-	}
-}
-
 #[cfg(test)]
 mod tests {
 	use super::*;
 	use anyhow::Result;
+	use procedural_common::NoiseParams;
 
 	#[test]
 	fn arch_point_reaches_lateral_tip_along_direction() -> Result<()> {
