@@ -52,7 +52,7 @@ impl Default for HonuBanyanConstructionParams {
 	}
 }
 
-#[derive(Clone, Args)]
+#[derive(Component, Clone, Args)]
 #[command(rename_all = "kebab-case")]
 pub struct HonuBanyan<
 	StickM,
@@ -291,6 +291,9 @@ where
 		cascade_chunk: &CascadeChunk,
 		transform: Transform,
 	) -> Vec<Entity> {
+		let root = commands
+			.spawn((self.clone(), cascade_chunk.clone(), transform, Visibility::default()))
+			.id();
 		let chain = self.build_chain();
 		let leaf_radius = self.geometry.leaf_ball_size();
 
@@ -300,21 +303,23 @@ where
 			__marker: PhantomData,
 		};
 
-		let mut out = StickRenderHelper::new(chain.clone(), stick_rule).spawn_render_items(
+		StickRenderHelper::new(chain.clone(), stick_rule).spawn_render_items_under(
 			commands,
 			cascade_chunk,
-			transform,
+			Transform::IDENTITY,
+			Some(root),
 		);
 
 		let mut joint_ball = self.stick_surface_noise.build_scalar::<ChicoBall<StickM, StickS>>();
 		joint_ball.material = self.stick_material.clone();
 		let joint_rule = HonuBanyanJointBallRule { joint_ball };
 
-		out.extend(BallRenderHelper::new(chain.clone(), joint_rule).spawn_render_items(
+		BallRenderHelper::new(chain.clone(), joint_rule).spawn_render_items_under(
 			commands,
 			cascade_chunk,
-			transform,
-		));
+			Transform::IDENTITY,
+			Some(root),
+		);
 
 		let mut inner_ball = self
 			.inner_leaf_surface_noise
@@ -334,12 +339,13 @@ where
 			__marker: PhantomData,
 		};
 
-		out.extend(BallRenderHelper::new(chain, foliage_rule).spawn_render_items(
+		BallRenderHelper::new(chain, foliage_rule).spawn_render_items_under(
 			commands,
 			cascade_chunk,
-			transform,
-		));
+			Transform::IDENTITY,
+			Some(root),
+		);
 
-		out
+		vec![root]
 	}
 }

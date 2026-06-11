@@ -1913,6 +1913,7 @@ dependencies = [
 name = "chico-sbs-trees"
 version = "0.0.1"
 dependencies = [
+ "anyhow",
  "bevy",
  "chico-ball-components",
  "chico-sbs-geometry",

@@ -56,7 +56,7 @@ where
 			+ segment.start.position.length() as i32
 			+ segment.end.position.length() as i32;
 		let noise = NoiseConfig::new(self.stick_surface_noise.with_seed(seed));
-		let n = noise.sample_3d(mid.x, mid.y, mid.z).clamp(-1.0, 1.0);
+		let n = noise.sample_3d(mid).clamp(-1.0, 1.0);
 		(base * (1.0 + BEND_STRENGTH_NOISE_GAIN * n)).max(MIN_BEND_STRENGTH)
 	}
 }

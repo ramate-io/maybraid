@@ -28,7 +28,7 @@ use chico_tree_components::{
 };
 use chico_vegetation_shaders::{ChicoLeafMaterial, ChicoStickMaterial};
 use chunk::cascade::CascadeChunk;
-use render_item::{DispatchRenderItem, RenderItem};
+use render_item::RenderItem;
 
 /// [`SopesBanyan`] configured for this playground.
 pub type RenderSopesBanyan = SopesBanyan<
@@ -205,6 +205,12 @@ pub type RenderBraidGrass = BraidGrassStd;
 /// [`TropicalTuftsStd`] — sparse tuft grove with palm companions ([#305](https://github.com/ramate-io/maybraid/issues/305)).
 pub type RenderTropicalTufts = TropicalTuftsStd;
 
+/// The configured render item currently shown in the scene.
+///
+/// This is the typed scene state behind [`RenderConfig`]: material patching
+/// ([`crate::render_materials`]) and respawning ([`sync_render`]) both need concrete item types,
+/// which the CLI layer (`crate::commands::render::Render`) discards once it resolves its
+/// transform/resolution arguments into a [`RenderConfig`].
 #[derive(Clone)]
 pub enum RenderSubject {
 	SopesBanyan(RenderSopesBanyan),
@@ -231,7 +237,6 @@ pub enum RenderSubject {
 	BuddhaHandTuft(RenderBuddhaHandTuft),
 	WeepingTuft(RenderWeepingTuft),
 	HighBushShoots(RenderHighBushShoots),
-	CommonHighBush(RenderHighBushShoots),
 	JungleGrowth(RenderJungleGrowth),
 	FrondCrown(RenderFrondCrown),
 	ModerateLodFrondCrown(RenderModerateLodFrondCrown),
@@ -264,7 +269,6 @@ impl RenderSubject {
 			Self::BuddhaHandTuft(_) => "BuddhaHandTuft",
 			Self::WeepingTuft(_) => "WeepingTuft",
 			Self::HighBushShoots(_) => "HighBushShoots",
-			Self::CommonHighBush(_) => "CommonHighBush",
 			Self::JungleGrowth(_) => "JungleGrowth",
 			Self::FrondCrown(_) => "FrondCrown",
 			Self::ModerateLodFrondCrown(_) => "ModerateLodFrondCrown",
@@ -333,88 +337,55 @@ impl RenderSubject {
 			Self::SpearTuft(t) => format!("{:?}", t.shape),
 			Self::BuddhaHandTuft(t) => format!("{:?}", t.shape),
 			Self::WeepingTuft(t) => format!("{:?}", t.shape),
-			Self::HighBushShoots(t) | Self::CommonHighBush(t) => {
-				format!("{:?}|style={:?}", t.shape, t.shape.foliage_style)
-			}
+			Self::HighBushShoots(t) => format!("{:?}", t.shape),
 			Self::JungleGrowth(t) => format!("{:?}", t.shape),
 			Self::FrondCrown(t) => format!("{:?}", t.shape),
 			Self::ModerateLodFrondCrown(t) => format!("{:?}", t.shape),
 		}
 	}
 
-	fn dispatch_item(&self) -> RenderDispatch {
+	/// Spawns this subject's render items, returning the top-level entities.
+	fn spawn_render_items(
+		&self,
+		commands: &mut Commands,
+		chunk: &CascadeChunk,
+		transform: Transform,
+	) -> Vec<Entity> {
 		match self {
-			Self::SopesBanyan(tree) => RenderDispatch::SopesBanyan(tree.clone()),
-			Self::HonuBanyan(tree) => RenderDispatch::HonuBanyan(tree.clone()),
-			Self::LiamsConifer(tree) => RenderDispatch::LiamsConifer(tree.clone()),
-			Self::FriendsConifer(tree) => RenderDispatch::FriendsConifer(tree.clone()),
-			Self::NorthernConifer(tree) => RenderDispatch::NorthernConifer(tree.clone()),
-			Self::TemperateConifer(tree) => RenderDispatch::TemperateConifer(tree.clone()),
-			Self::DatePalm(tree) => RenderDispatch::DatePalm(tree.clone()),
-			Self::WaialeaPalm(tree) => RenderDispatch::WaialeaPalm(tree.clone()),
-			Self::PalmBush(tree) => RenderDispatch::PalmBush(tree.clone()),
-			Self::StorybookTree(tree) => RenderDispatch::StorybookTree(tree.clone()),
-			Self::PenmarchTorch(tree) => RenderDispatch::PenmarchTorch(tree.clone()),
-			Self::KamakuraTorch(tree) => RenderDispatch::KamakuraTorch(tree.clone()),
-			Self::RorysHeadTrained(tree) => RenderDispatch::RorysHeadTrained(tree.clone()),
-			Self::VaseTree(tree) => RenderDispatch::VaseTree(tree.clone()),
-			Self::BraidOakTree(tree) => RenderDispatch::BraidOakTree(tree.clone()),
-			Self::JungleStorybookTree(tree) => RenderDispatch::JungleStorybookTree(tree.clone()),
-			Self::SucculentTuft(tuft) => RenderDispatch::SucculentTuft(tuft.clone()),
-			Self::BladeTuft(tuft) => RenderDispatch::BladeTuft(tuft.clone()),
-			Self::BraidGrass(grove) => RenderDispatch::BraidGrass(grove.clone()),
-			Self::TropicalTufts(grove) => RenderDispatch::TropicalTufts(grove.clone()),
-			Self::SpearTuft(tuft) => RenderDispatch::SpearTuft(tuft.clone()),
-			Self::BuddhaHandTuft(tuft) => RenderDispatch::BuddhaHandTuft(tuft.clone()),
-			Self::WeepingTuft(tuft) => RenderDispatch::WeepingTuft(tuft.clone()),
-			Self::HighBushShoots(shoots) => RenderDispatch::HighBushShoots(shoots.clone()),
-			Self::CommonHighBush(shoots) => RenderDispatch::CommonHighBush(shoots.clone()),
-			Self::JungleGrowth(growth) => RenderDispatch::JungleGrowth(growth.clone()),
-			Self::FrondCrown(crown) => RenderDispatch::FrondCrown(crown.clone()),
-			Self::ModerateLodFrondCrown(crown) => {
-				RenderDispatch::ModerateLodFrondCrown(crown.clone())
+			Self::SopesBanyan(item) => item.spawn_render_items(commands, chunk, transform),
+			Self::HonuBanyan(item) => item.spawn_render_items(commands, chunk, transform),
+			Self::LiamsConifer(item) => item.spawn_render_items(commands, chunk, transform),
+			Self::FriendsConifer(item) => item.spawn_render_items(commands, chunk, transform),
+			Self::NorthernConifer(item) => item.spawn_render_items(commands, chunk, transform),
+			Self::TemperateConifer(item) => item.spawn_render_items(commands, chunk, transform),
+			Self::DatePalm(item) => item.spawn_render_items(commands, chunk, transform),
+			Self::WaialeaPalm(item) => item.spawn_render_items(commands, chunk, transform),
+			Self::PalmBush(item) => item.spawn_render_items(commands, chunk, transform),
+			Self::StorybookTree(item) => item.spawn_render_items(commands, chunk, transform),
+			Self::PenmarchTorch(item) => item.spawn_render_items(commands, chunk, transform),
+			Self::KamakuraTorch(item) => item.spawn_render_items(commands, chunk, transform),
+			Self::RorysHeadTrained(item) => item.spawn_render_items(commands, chunk, transform),
+			Self::VaseTree(item) => item.spawn_render_items(commands, chunk, transform),
+			Self::BraidOakTree(item) => item.spawn_render_items(commands, chunk, transform),
+			Self::JungleStorybookTree(item) => item.spawn_render_items(commands, chunk, transform),
+			Self::SucculentTuft(item) => item.spawn_render_items(commands, chunk, transform),
+			Self::BladeTuft(item) => item.spawn_render_items(commands, chunk, transform),
+			Self::BraidGrass(item) => item.spawn_render_items(commands, chunk, transform),
+			Self::TropicalTufts(item) => item.spawn_render_items(commands, chunk, transform),
+			Self::SpearTuft(item) => item.spawn_render_items(commands, chunk, transform),
+			Self::BuddhaHandTuft(item) => item.spawn_render_items(commands, chunk, transform),
+			Self::WeepingTuft(item) => item.spawn_render_items(commands, chunk, transform),
+			Self::HighBushShoots(item) => item.spawn_render_items(commands, chunk, transform),
+			Self::JungleGrowth(item) => item.spawn_render_items(commands, chunk, transform),
+			Self::FrondCrown(item) => item.spawn_render_items(commands, chunk, transform),
+			Self::ModerateLodFrondCrown(item) => {
+				item.spawn_render_items(commands, chunk, transform)
 			}
 		}
 	}
 }
 
-#[derive(Clone)]
-enum RenderDispatch {
-	SopesBanyan(RenderSopesBanyan),
-	HonuBanyan(RenderHonuBanyan),
-	LiamsConifer(RenderLiamsConifer),
-	FriendsConifer(RenderFriendsConifer),
-	NorthernConifer(RenderNorthernConifer),
-	TemperateConifer(RenderTemperateConifer),
-	DatePalm(RenderDatePalm),
-	WaialeaPalm(RenderWaialeaPalm),
-	PalmBush(RenderPalmBush),
-	StorybookTree(RenderStorybookTree),
-	PenmarchTorch(RenderPenmarchTorch),
-	KamakuraTorch(RenderKamakuraTorch),
-	RorysHeadTrained(RenderRorysHeadTrained),
-	VaseTree(RenderVaseTree),
-	BraidOakTree(RenderBraidOakTree),
-	JungleStorybookTree(RenderJungleStorybookTree),
-	SucculentTuft(RenderSucculentTuft),
-	BladeTuft(RenderBladeTuft),
-	BraidGrass(RenderBraidGrass),
-	TropicalTufts(RenderTropicalTufts),
-	SpearTuft(RenderSpearTuft),
-	BuddhaHandTuft(RenderBuddhaHandTuft),
-	WeepingTuft(RenderWeepingTuft),
-	HighBushShoots(RenderHighBushShoots),
-	CommonHighBush(RenderHighBushShoots),
-	JungleGrowth(RenderJungleGrowth),
-	FrondCrown(RenderFrondCrown),
-	ModerateLodFrondCrown(RenderModerateLodFrondCrown),
-}
-
-/// Dispatch anchor for the active `/render` command.
-#[derive(Component)]
-pub struct SbsRenderRoot;
-
-/// Top-level entity spawned by the render pipeline (dispatch root or [`RenderItem::spawn_render_items`] return).
+/// Top-level entity spawned by the render pipeline ([`RenderItem::spawn_render_items`] return).
 #[derive(Component)]
 pub struct SbsRenderItem;
 
@@ -447,7 +418,7 @@ fn render_sync_key(config: &RenderConfig) -> String {
 	)
 }
 
-/// Despawns the previous scene and spawns a fresh dispatch entity when [`RenderConfig`] changes.
+/// Despawns the previous scene and respawns the subject when [`RenderConfig`] changes.
 pub fn sync_render(
 	mut commands: Commands,
 	config: Res<RenderConfig>,
@@ -463,111 +434,10 @@ pub fn sync_render(
 		commands.entity(entity).despawn();
 	}
 
-	let bundle = (
-		SbsRenderRoot,
-		SbsRenderItem,
-		CascadeChunk::unit_center_chunk().with_res_2(config.res_2),
-		config.transform,
-	);
-
-	match config.subject.dispatch_item() {
-		RenderDispatch::SopesBanyan(tree) => {
-			commands.spawn((bundle, DispatchRenderItem::new(tree)));
-		}
-		RenderDispatch::HonuBanyan(tree) => {
-			commands.spawn((bundle, DispatchRenderItem::new(tree)));
-		}
-		RenderDispatch::LiamsConifer(tree) => {
-			commands.spawn((bundle, DispatchRenderItem::new(tree)));
-		}
-		RenderDispatch::FriendsConifer(tree) => {
-			commands.spawn((bundle, DispatchRenderItem::new(tree)));
-		}
-		RenderDispatch::NorthernConifer(tree) => {
-			commands.spawn((bundle, DispatchRenderItem::new(tree)));
-		}
-		RenderDispatch::TemperateConifer(tree) => {
-			commands.spawn((bundle, DispatchRenderItem::new(tree)));
-		}
-		RenderDispatch::DatePalm(tree) => {
-			commands.spawn((bundle, DispatchRenderItem::new(tree)));
-		}
-		RenderDispatch::WaialeaPalm(tree) => {
-			commands.spawn((bundle, DispatchRenderItem::new(tree)));
-		}
-		RenderDispatch::PalmBush(tree) => {
-			commands.spawn((bundle, DispatchRenderItem::new(tree)));
-		}
-		RenderDispatch::StorybookTree(tree) => {
-			commands.spawn((bundle, DispatchRenderItem::new(tree)));
-		}
-		RenderDispatch::PenmarchTorch(tree) => {
-			commands.spawn((bundle, DispatchRenderItem::new(tree)));
-		}
-		RenderDispatch::KamakuraTorch(tree) => {
-			commands.spawn((bundle, DispatchRenderItem::new(tree)));
-		}
-		RenderDispatch::RorysHeadTrained(tree) => {
-			commands.spawn((bundle, DispatchRenderItem::new(tree)));
-		}
-		RenderDispatch::VaseTree(tree) => {
-			commands.spawn((bundle, DispatchRenderItem::new(tree)));
-		}
-		RenderDispatch::BraidOakTree(tree) => {
-			commands.spawn((bundle, DispatchRenderItem::new(tree)));
-		}
-		RenderDispatch::JungleStorybookTree(tree) => {
-			commands.spawn((bundle, DispatchRenderItem::new(tree)));
-		}
-		RenderDispatch::SucculentTuft(tuft) => {
-			commands.spawn((bundle, DispatchRenderItem::new(tuft)));
-		}
-		RenderDispatch::BladeTuft(tuft) => {
-			commands.spawn((bundle, DispatchRenderItem::new(tuft)));
-		}
-		RenderDispatch::BraidGrass(grove) => {
-			commands.spawn((bundle, DispatchRenderItem::new(grove)));
-		}
-		RenderDispatch::TropicalTufts(grove) => {
-			commands.spawn((bundle, DispatchRenderItem::new(grove)));
-		}
-		RenderDispatch::SpearTuft(tuft) => {
-			commands.spawn((bundle, DispatchRenderItem::new(tuft)));
-		}
-		RenderDispatch::BuddhaHandTuft(tuft) => {
-			commands.spawn((bundle, DispatchRenderItem::new(tuft)));
-		}
-		RenderDispatch::WeepingTuft(tuft) => {
-			commands.spawn((bundle, DispatchRenderItem::new(tuft)));
-		}
-		RenderDispatch::HighBushShoots(shoots) | RenderDispatch::CommonHighBush(shoots) => {
-			commands.spawn((bundle, DispatchRenderItem::new(shoots)));
-		}
-		RenderDispatch::JungleGrowth(growth) => {
-			commands.spawn((bundle, DispatchRenderItem::new(growth)));
-		}
-		RenderDispatch::FrondCrown(crown) => {
-			commands.spawn((bundle, DispatchRenderItem::new(crown)));
-		}
-		RenderDispatch::ModerateLodFrondCrown(crown) => {
-			commands.spawn((bundle, DispatchRenderItem::new(crown)));
-		}
+	let chunk = CascadeChunk::unit_center_chunk().with_res_2(config.res_2);
+	for entity in config.subject.spawn_render_items(&mut commands, &chunk, config.transform) {
+		commands.entity(entity).insert(SbsRenderItem);
 	}
 
 	*synced = Some(key);
-}
-
-/// Runs [`RenderItem::spawn_render_items`] for new dispatch roots and tags top-level spawned entities.
-pub fn dispatch_render_items<T: RenderItem + Send + Sync + 'static>(
-	mut commands: Commands,
-	query: Query<
-		(Entity, &DispatchRenderItem<T>, &CascadeChunk, &Transform),
-		(Added<DispatchRenderItem<T>>, With<SbsRenderRoot>, With<SbsRenderItem>),
-	>,
-) {
-	for (_root, dispatch, chunk, transform) in &query {
-		for entity in dispatch.spawn_render_items(&mut commands, chunk, *transform) {
-			commands.entity(entity).insert(SbsRenderItem);
-		}
-	}
 }

@@ -1,12 +1,10 @@
-//! In-game clap command hierarchy and plugins.
+//! In-game clap command hierarchy.
 
-pub mod plugin;
 pub mod render;
 
 use bevy::prelude::*;
 use clap::Parser;
 use game_commands::command::{CommandScript, GameCommand};
-pub use plugin::PlaygroundCommandsPlugin;
 pub use render::Render;
 
 pub const PLAYGROUND_CLI_NAME: &str = "chico-sbs";

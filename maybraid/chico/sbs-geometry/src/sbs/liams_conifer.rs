@@ -3,12 +3,11 @@
 //! Flattened argument groups map into [`crate::anchors::liams_conifer::LiamsConiferProtoAnchors`], then
 //! [`AnchorsToChain::build_chain`] grows the shared ball-stick graph.
 
-use bevy_math::Vec3;
 #[cfg(feature = "clap")]
 use procedural_common::noise_params_from_scalar_str;
 #[cfg(feature = "clap")]
 use procedural_common::parse_unit_range;
-use procedural_common::{NoiseConfig, NoiseParams, SetNoiseParams, UnitRange};
+use procedural_common::{NoiseConfig, NoiseParams, UnitRange};
 
 use crate::anchors::liams_conifer::{
 	LiamsConiferAnchorPerturbation, LiamsConiferAnchors, LiamsConiferProtoAnchors,
@@ -28,22 +27,11 @@ pub struct LiamsConiferScale {
 	/// Radius of the stalk base (`0.025 * H` when unset via [`Self::stalk_base_radius_or_default`]).
 	#[cfg_attr(feature = "clap", arg(long))]
 	pub stalk_base_radius: Option<f32>,
-	/// Base anchor of the stalk as `x,y,z`.
-	#[cfg_attr(
-		feature = "clap",
-		arg(
-			long,
-			default_value = "0,0,0",
-			value_parser = crate::vec3_args::parse_vec3_csv,
-			value_name = "X,Y,Z"
-		)
-	)]
-	pub base_anchor: Vec3,
 }
 
 impl Default for LiamsConiferScale {
 	fn default() -> Self {
-		Self { stalk_height: 30.0, stalk_base_radius: None, base_anchor: Vec3::ZERO }
+		Self { stalk_height: 30.0, stalk_base_radius: None }
 	}
 }
 
@@ -55,7 +43,6 @@ impl LiamsConiferScale {
 	pub fn to_stalk(&self) -> StrictStalk {
 		StrictStalk {
 			stalk_height: self.stalk_height,
-			stalk_base_anchor: self.base_anchor,
 			stalk_base_radius: self.stalk_base_radius_or_default(),
 		}
 	}
@@ -281,13 +268,6 @@ impl LiamsConiferSbs {
 impl Anchors<LiamsConiferChain> for LiamsConiferSbs {
 	fn anchors(&self) -> Vec<LiamsConiferChain> {
 		self.hysteresis_seeds()
-	}
-}
-
-impl SetNoiseParams for LiamsConiferSbs {
-	fn with_noise_params(mut self, params: NoiseParams) -> Self {
-		self.canopy_noise = params;
-		self
 	}
 }
 

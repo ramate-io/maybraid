@@ -54,6 +54,10 @@ where
 ///
 /// The helper scales `Y` by segment length, rotates +Y onto the segment direction,
 /// and places the transform at the segment midpoint.
+///
+/// Each stick gets a **chain-local** transform; the caller's `transform` composes on the left.
+/// Tree assemblies spawning under a root entity pass `Transform::IDENTITY` and parent via
+/// [`RenderItem::spawn_render_items_under`].
 #[derive(Clone)]
 pub struct StickRenderHelper<Item: RenderItem, Rule: StickRenderRule<Item, H>, H: Hysteresis> {
 	rule: Rule,

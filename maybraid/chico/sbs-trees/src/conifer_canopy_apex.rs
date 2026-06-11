@@ -30,21 +30,17 @@ pub fn sample_apex_canopy_spawn(
 	mix_seed_below_fraction(lane, tip.position, spawn_fraction)
 }
 
+/// Tree-local transform at a chain tip (chains are generated in tree space; the tree root
+/// entity owns world placement).
 fn local_transform_at_tip(
-	root_transform: Transform,
 	tip: &BallStickNode,
 	world_uniform_scale: f32,
 	rotation: Quat,
 ) -> Transform {
-	let local = root_transform
-		.rotation
-		.inverse()
-		.mul_vec3(tip.position - root_transform.translation);
 	Transform {
-		translation: local,
+		translation: tip.position,
 		rotation,
 		scale: Vec3::splat(world_uniform_scale / tip.radius.max(1e-4)),
-		..default()
 	}
 }
 
@@ -54,7 +50,7 @@ pub fn spawn_apex_chico_ball_at_tip<LeafM, LeafS>(
 	tip: &BallStickNode,
 	commands: &mut Commands,
 	cascade_chunk: &CascadeChunk,
-	root_transform: Transform,
+	parent: Entity,
 	leaf_noise: &NoiseParams,
 	apex_ball_radius_fraction: f32,
 	leaf_material: LeafS,
@@ -68,8 +64,8 @@ where
 	let mut ball = apex_noise.build_scalar::<ChicoBall<LeafM, LeafS>>();
 	ball.material = leaf_material;
 
-	let transform = local_transform_at_tip(root_transform, tip, world_radius, Quat::IDENTITY);
-	ball.spawn_render_items_under(commands, cascade_chunk, transform, None)
+	let transform = local_transform_at_tip(tip, world_radius, Quat::IDENTITY);
+	ball.spawn_render_items_under(commands, cascade_chunk, transform, Some(parent))
 }
 
 /// Optional [`ChicoBall`] at the stalk crown ([#236](https://github.com/ramate-io/maybraid/issues/236)).
@@ -78,7 +74,7 @@ pub fn spawn_apex_chico_ball<LeafM, LeafS>(
 	chain: &BallStickChain<FriendsConiferChain>,
 	commands: &mut Commands,
 	cascade_chunk: &CascadeChunk,
-	root_transform: Transform,
+	parent: Entity,
 	leaf_noise: &NoiseParams,
 	apex_spawn_fraction: f32,
 	apex_ball_radius_fraction: f32,
@@ -98,7 +94,7 @@ where
 		&tip,
 		commands,
 		cascade_chunk,
-		root_transform,
+		parent,
 		leaf_noise,
 		apex_ball_radius_fraction,
 		leaf_material,
@@ -111,7 +107,7 @@ pub fn spawn_apex_chico_ball_liams<LeafM, LeafS>(
 	chain: &BallStickChain<LiamsConiferChain>,
 	commands: &mut Commands,
 	cascade_chunk: &CascadeChunk,
-	root_transform: Transform,
+	parent: Entity,
 	leaf_noise: &NoiseParams,
 	apex_spawn_fraction: f32,
 	apex_ball_radius_fraction: f32,
@@ -131,7 +127,7 @@ where
 		&tip,
 		commands,
 		cascade_chunk,
-		root_transform,
+		parent,
 		leaf_noise,
 		apex_ball_radius_fraction,
 		leaf_material,
@@ -144,7 +140,7 @@ pub fn spawn_apex_chico_ball_northern<LeafM, LeafS>(
 	chain: &BallStickChain<LiamsConiferChain>,
 	commands: &mut Commands,
 	cascade_chunk: &CascadeChunk,
-	root_transform: Transform,
+	parent: Entity,
 	leaf_noise: &NoiseParams,
 	apex_spawn_fraction: f32,
 	apex_ball_radius_fraction: f32,
@@ -159,7 +155,7 @@ where
 		chain,
 		commands,
 		cascade_chunk,
-		root_transform,
+		parent,
 		leaf_noise,
 		apex_spawn_fraction,
 		apex_ball_radius_fraction,
@@ -174,7 +170,7 @@ pub fn spawn_apex_frond_crown<LeafM, LeafS>(
 	chain: &BallStickChain<FriendsConiferChain>,
 	commands: &mut Commands,
 	cascade_chunk: &CascadeChunk,
-	root_transform: Transform,
+	parent: Entity,
 	leaf_noise: &NoiseParams,
 	apex_spawn_fraction: f32,
 	leaf_material: LeafS,
@@ -212,13 +208,9 @@ where
 	};
 
 	let crown = FrondCrown::from_shape(shape, leaf_material);
-	let transform = local_transform_at_tip(
-		root_transform,
-		&tip,
-		frond_world_scale,
-		align_frond_direction(Vec3::NEG_Y),
-	);
-	crown.spawn_render_items_under(commands, cascade_chunk, transform, None)
+	let transform =
+		local_transform_at_tip(&tip, frond_world_scale, align_frond_direction(Vec3::NEG_Y));
+	crown.spawn_render_items_under(commands, cascade_chunk, transform, Some(parent))
 }
 
 #[cfg(test)]

@@ -34,7 +34,7 @@ pub type VaseTreeStd = VaseTree<
 	SkippedOuterLeafMeshMaterial<StandardMaterial>,
 >;
 
-#[derive(Clone, Args)]
+#[derive(Component, Clone, Args)]
 #[command(rename_all = "kebab-case")]
 pub struct VaseTree<StickM, StickS, InnerLeafM, InnerLeafS, OuterLeafM, OuterLeafS>
 where
@@ -146,6 +146,9 @@ where
 		cascade_chunk: &CascadeChunk,
 		transform: Transform,
 	) -> Vec<Entity> {
+		let root = commands
+			.spawn((self.clone(), cascade_chunk.clone(), transform, Visibility::default()))
+			.id();
 		let chain = self.build_chain();
 		let stick_rule = StorybookTreeStickRule::<StickM, StickS> {
 			surface_noise: self.stick_surface_noise,
@@ -153,8 +156,12 @@ where
 			__marker: PhantomData,
 		};
 
-		let mut out =
-			StickRenderHelper::new(chain.clone(), stick_rule).spawn_render_items(commands, cascade_chunk, transform);
+		StickRenderHelper::new(chain.clone(), stick_rule).spawn_render_items_under(
+			commands,
+			cascade_chunk,
+			Transform::IDENTITY,
+			Some(root),
+		);
 
 		let mut inner_ball = self.inner_leaf_surface_noise.build_scalar::<ChicoBall<InnerLeafM, InnerLeafS>>();
 		inner_ball.material = self.inner_leaf_material.clone();
@@ -167,24 +174,25 @@ where
 			upper_foliage_ring_u: self.geometry.canopy.upper_foliage_ring_u,
 		};
 
-		out.extend(BallRenderHelper::new(chain.clone(), foliage_rule).spawn_render_items(
+		BallRenderHelper::new(chain.clone(), foliage_rule).spawn_render_items_under(
 			commands,
 			cascade_chunk,
-			transform,
-		));
+			Transform::IDENTITY,
+			Some(root),
+		);
 
 		let tip = stalk_tip_from_chain(&chain);
-		out.extend(spawn_apex_chico_ball_at_tip::<InnerLeafM, _>(
+		spawn_apex_chico_ball_at_tip::<InnerLeafM, _>(
 			self.geometry.height(),
 			&tip,
 			commands,
 			cascade_chunk,
-			transform,
+			root,
 			&self.inner_leaf_surface_noise,
 			self.apex_ball_radius_fraction_of_height,
 			self.inner_leaf_material.clone(),
-		));
+		);
 
-		out
+		vec![root]
 	}
 }

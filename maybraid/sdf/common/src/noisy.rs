@@ -1,4 +1,4 @@
-//! Compositional **surface noise** for any [`Sdf`]: `distance(p) + noise.sample_3d_world(p)`.
+//! Compositional **surface noise** for any [`Sdf`]: `distance(p) + noise.sample_3d(p)`.
 //!
 //! [`NoisySurface`] stores authoring [`NoiseParams`] (CLI / serde friendly) and keeps a private
 //! [`NoiseConfig`] built from those params for sampling.
@@ -32,7 +32,7 @@ fn inflate_cuboid_bounds(aabb: Aabb3d, margin: f32) -> Aabb3d {
 	Aabb3d::from_min_max(aabb.min - pad, aabb.max + pad)
 }
 
-/// Wraps an inner SDF and offsets its field using [`NoiseConfig::sample_3d_world`] built from [`NoiseParams`].
+/// Wraps an inner SDF and offsets its field using [`NoiseConfig::sample_3d`] built from [`NoiseParams`].
 pub struct NoisySurface<S> {
 	pub inner: S,
 	pub noise: NoiseParams,
@@ -99,7 +99,7 @@ impl<S> NoisySurface<S> {
 impl<S: Sdf> Sdf for NoisySurface<S> {
 	fn distance(&self, p: Vec3) -> f32 {
 		let base = self.inner.distance(p);
-		let n = self.config.sample_3d_world(p);
+		let n = self.config.sample_3d(p);
 		base + n
 	}
 
@@ -212,24 +212,6 @@ mod tests {
 		let b = NoisySurface::new_perlin(c, 2, 5.0, 0.05);
 		let p = Vec3::new(0.11, 0.22, 0.33);
 		assert_ne!(a.distance(p), b.distance(p));
-		Ok(())
-	}
-
-	#[test]
-	fn domain_weight_zero_on_z_decouples_z_in_noise_only() -> Result<()> {
-		let c = TaperedCylinder::default();
-		let params = NoiseParams {
-			seed: 7,
-			frequency: 5.0,
-			amplitude: 0.05,
-			octaves: 1,
-			noise_type: NoiseType::Perlin,
-			domain_weights: Vec3::new(1.0, 1.0, 0.0),
-		};
-		let n = NoisySurface::from_params(c, params);
-		let p0 = Vec3::new(0.2, 0.3, 0.0);
-		let p1 = Vec3::new(0.0, 0.3, 0.2);
-		assert_eq!(n.distance(p0), n.distance(p1));
 		Ok(())
 	}
 

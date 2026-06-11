@@ -34,7 +34,6 @@ pub const DEFAULT_CROWN_TUFT_SCALE_FRACTION: f32 = 0.2;
 #[derive(Clone, Debug, PartialEq)]
 pub struct PalmBushProtoAnchors {
 	pub height: f32,
-	pub base_anchor: Vec3,
 	pub crown_lift_fraction: f32,
 	pub ring_count: u32,
 	pub fronds_per_ring: u32,
@@ -48,7 +47,6 @@ impl Default for PalmBushProtoAnchors {
 	fn default() -> Self {
 		Self {
 			height: DEFAULT_HEIGHT,
-			base_anchor: Vec3::ZERO,
 			crown_lift_fraction: DEFAULT_CROWN_LIFT_FRACTION,
 			ring_count: DEFAULT_RING_COUNT,
 			fronds_per_ring: DEFAULT_FRONDS_PER_RING,
@@ -61,9 +59,10 @@ impl Default for PalmBushProtoAnchors {
 }
 
 impl PalmBushProtoAnchors {
+	/// Tree-local crown origin (pure Y lift above the origin; the root entity owns world placement).
 	pub fn crown_origin(&self) -> Vec3 {
 		let h = self.height.max(1e-6);
-		self.base_anchor + Vec3::Y * (h * self.crown_lift_fraction)
+		Vec3::Y * (h * self.crown_lift_fraction)
 	}
 
 	pub fn ring_spacing(&self) -> f32 {

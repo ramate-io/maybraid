@@ -81,18 +81,18 @@ impl GrovePlacementRanges {
 			scale: biased_sample(
 				self.scale,
 				biases.scale_mean,
-				n.sample_3d_world(cell_center + SCALE_LANE),
+				n.sample_3d(cell_center + SCALE_LANE),
 			),
 			offset: Vec2::new(
 				biased_sample(
 					self.offset,
 					biases.offset_mean,
-					n.sample_3d_world(cell_center + OFFSET_X_LANE),
+					n.sample_3d(cell_center + OFFSET_X_LANE),
 				),
 				biased_sample(
 					self.offset,
 					biases.offset_mean,
-					n.sample_3d_world(cell_center + OFFSET_Z_LANE),
+					n.sample_3d(cell_center + OFFSET_Z_LANE),
 				),
 			),
 		}

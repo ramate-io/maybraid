@@ -66,7 +66,7 @@ impl<Item: RenderItem, Rule: TuftRenderRule<Item, H>, H: Hysteresis> RenderItem
 		self.render_tufts()
 			.into_iter()
 			.flat_map(|(item, inner)| {
-				item.spawn_render_items(commands, cascade_chunk, inner.mul_transform(transform))
+				item.spawn_render_items(commands, cascade_chunk, transform.mul_transform(inner))
 			})
 			.collect()
 	}

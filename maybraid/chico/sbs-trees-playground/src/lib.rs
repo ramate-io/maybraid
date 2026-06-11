@@ -3,20 +3,15 @@
 pub mod camera;
 pub mod checkerboard_material;
 pub mod commands;
-mod frond_render_params;
 mod ground;
-mod high_bush_shoots_render_params;
-mod jungle_growth_render_params;
-mod moderate_lod_frond_render_params;
 mod render;
 mod render_materials;
-mod tuft_render_params;
 mod ui;
 
 pub use camera::CameraController;
-pub use commands::{PlaygroundCommand, PlaygroundCommandsPlugin, PLAYGROUND_CLI_NAME};
+pub use commands::{PlaygroundCommand, PLAYGROUND_CLI_NAME};
 pub use game_commands::command::PendingStartupCommand;
-pub use render::{RenderConfig, RenderSubject, SbsRenderRoot};
+pub use render::{RenderConfig, RenderSubject};
 
 use bevy::prelude::*;
 use chico_ball_components::frond::FrondRenderItemPlugin;
@@ -43,7 +38,7 @@ use chico_vegetation_shaders::{
 };
 use game_commands::command::{capture_command_line_input, GameCommandPlugin};
 use ground::setup_ground;
-use render::{dispatch_render_items, sync_render};
+use render::sync_render;
 use render_item::mesh::handle::EnforceCachingPlugin;
 use render_materials::{setup_render_materials, sync_render_material_handles};
 
@@ -82,8 +77,7 @@ impl Plugin for SbsTreesPlaygroundPlugin {
 		if !app.is_plugin_added::<MaterialPlugin<StandardMaterial>>() {
 			app.add_plugins(MaterialPlugin::<StandardMaterial>::default());
 		}
-		app.add_plugins(PlaygroundCommandsPlugin)
-			.add_plugins(GameCommandPlugin::<PlaygroundCommand>::with_config(ui::ui_config()))
+		app.add_plugins(GameCommandPlugin::<PlaygroundCommand>::with_config(ui::ui_config()))
 			.add_plugins(
 				bevy::pbr::MaterialPlugin::<checkerboard_material::CheckerboardMaterial>::default(),
 			)
@@ -101,40 +95,6 @@ impl Plugin for SbsTreesPlaygroundPlugin {
 					sync_render
 						.after(capture_command_line_input::<PlaygroundCommand>)
 						.after(sync_render_material_handles),
-					(
-						(
-							dispatch_render_items::<render::RenderSopesBanyan>,
-							dispatch_render_items::<render::RenderHonuBanyan>,
-							dispatch_render_items::<render::RenderLiamsConifer>,
-							dispatch_render_items::<render::RenderFriendsConifer>,
-							dispatch_render_items::<render::RenderNorthernConifer>,
-							dispatch_render_items::<render::RenderTemperateConifer>,
-							dispatch_render_items::<render::RenderDatePalm>,
-							dispatch_render_items::<render::RenderWaialeaPalm>,
-							dispatch_render_items::<render::RenderPalmBush>,
-							dispatch_render_items::<render::RenderStorybookTree>,
-							dispatch_render_items::<render::RenderPenmarchTorch>,
-							dispatch_render_items::<render::RenderKamakuraTorch>,
-							dispatch_render_items::<render::RenderRorysHeadTrained>,
-							dispatch_render_items::<render::RenderVaseTree>,
-						),
-						(
-							dispatch_render_items::<render::RenderBraidOakTree>,
-							dispatch_render_items::<render::RenderJungleStorybookTree>,
-							dispatch_render_items::<render::RenderSucculentTuft>,
-							dispatch_render_items::<render::RenderBladeTuft>,
-							dispatch_render_items::<render::RenderBraidGrass>,
-							dispatch_render_items::<render::RenderTropicalTufts>,
-							dispatch_render_items::<render::RenderSpearTuft>,
-							dispatch_render_items::<render::RenderBuddhaHandTuft>,
-							dispatch_render_items::<render::RenderWeepingTuft>,
-							dispatch_render_items::<render::RenderJungleGrowth>,
-							dispatch_render_items::<render::RenderHighBushShoots>,
-							dispatch_render_items::<render::RenderFrondCrown>,
-							dispatch_render_items::<render::RenderModerateLodFrondCrown>,
-						),
-					)
-						.after(sync_render),
 					ui::sync_command_status_text.before(game_commands::ui::update_debug_ui),
 				),
 			);

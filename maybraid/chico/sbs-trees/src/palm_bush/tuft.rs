@@ -9,7 +9,7 @@ pub fn spawn_crown_tuft<LeafM, LeafS>(
 	geometry: &PalmBushSbs,
 	commands: &mut Commands,
 	cascade_chunk: &CascadeChunk,
-	root_transform: Transform,
+	parent: Entity,
 	leaf_material: LeafS,
 ) -> Vec<Entity>
 where
@@ -29,13 +29,14 @@ where
 		leaf_material,
 	);
 
-	tuft.spawn_render_items(
+	tuft.spawn_render_items_under(
 		commands,
 		cascade_chunk,
 		Transform {
-			translation: root_transform.translation,
+			translation: geometry.crown_origin(),
 			scale: Vec3::splat(scale),
 			..default()
 		},
+		Some(parent),
 	)
 }

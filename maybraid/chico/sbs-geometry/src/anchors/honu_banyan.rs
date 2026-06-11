@@ -106,7 +106,6 @@ impl Default for HonuBanyanProtoAnchors {
 			tree_height,
 			stalk: StrictStalk {
 				stalk_height: tree_height * DEFAULT_STALK_HEIGHT_FRACTION,
-				stalk_base_anchor: Vec3::ZERO,
 				stalk_base_radius: tree_height * DEFAULT_STALK_RADIUS_FRACTION,
 			},
 			first_ring_height_fraction: DEFAULT_FIRST_RING_HEIGHT_FRACTION,
@@ -160,10 +159,9 @@ impl HonuBanyanProtoAnchors {
 		a + (b - a) * u
 	}
 
-	fn ring_world_position(&self, height_fraction: f32, radial_offset: Vec3) -> Vec3 {
-		self.stalk.stalk_base_anchor
-			+ Vec3::Y * (height_fraction * self.tree_height)
-			+ radial_offset
+	/// Tree-local ring anchor (the spawned root entity owns world placement).
+	fn ring_local_position(&self, height_fraction: f32, radial_offset: Vec3) -> Vec3 {
+		Vec3::Y * (height_fraction * self.tree_height) + radial_offset
 	}
 
 	pub fn hysteresis_seeds(&self, chain_noise: NoiseConfig) -> Vec<HonuBanyanChain> {
@@ -182,7 +180,7 @@ impl HonuBanyanProtoAnchors {
 			for i in 0..k {
 				let theta = TAU * (i as f32) / (k as f32);
 				let radial = Vec3::new(theta.cos(), 0.0, theta.sin());
-				let pos = self.ring_world_position(y_frac, radial * radial_eps);
+				let pos = self.ring_local_position(y_frac, radial * radial_eps);
 				let bias = honu_canopy_bias(radial);
 				let joint_r = honu_limb_joint_radius(y_frac, self.stalk.stalk_base_radius);
 				let radius_range = honu_limb_radius_range(y_frac, self.stalk.stalk_base_radius);

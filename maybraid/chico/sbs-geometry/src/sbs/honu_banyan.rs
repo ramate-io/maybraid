@@ -1,6 +1,5 @@
 //! Restricted **Honu Banyan** geometry for CLI and playgrounds ([#250](https://github.com/ramate-io/maybraid/issues/250)).
 
-use bevy_math::Vec3;
 #[cfg(feature = "clap")]
 use procedural_common::noise_params_from_scalar_str;
 #[cfg(any(feature = "clap", test))]
@@ -8,7 +7,7 @@ use procedural_common::{
 	parse_count_pair as parse_ring_layout, parse_unit_range, parse_usize_range as parse_depth_range,
 };
 use procedural_common::{
-	CountPair as RingLayout, NoiseConfig, NoiseParams, SetNoiseParams, UnitRange,
+	CountPair as RingLayout, NoiseConfig, NoiseParams, UnitRange,
 	UsizeRange as DepthRange,
 };
 
@@ -33,16 +32,6 @@ pub struct HonuBanyanScale {
 	pub stalk_height_fraction: f32,
 	#[cfg_attr(feature = "clap", arg(long, default_value_t = DEFAULT_STALK_RADIUS_FRACTION))]
 	pub stalk_radius_fraction: f32,
-	#[cfg_attr(
-		feature = "clap",
-		arg(
-			long,
-			default_value = "0,0,0",
-			value_parser = crate::vec3_args::parse_vec3_csv,
-			value_name = "X,Y,Z"
-		)
-	)]
-	pub base_anchor: Vec3,
 }
 
 impl Default for HonuBanyanScale {
@@ -51,7 +40,6 @@ impl Default for HonuBanyanScale {
 			tree_height: DEFAULT_TREE_HEIGHT,
 			stalk_height_fraction: DEFAULT_STALK_HEIGHT_FRACTION,
 			stalk_radius_fraction: DEFAULT_STALK_RADIUS_FRACTION,
-			base_anchor: Vec3::ZERO,
 		}
 	}
 }
@@ -60,7 +48,6 @@ impl HonuBanyanScale {
 	pub fn to_stalk(&self) -> StrictStalk {
 		StrictStalk {
 			stalk_height: self.tree_height * self.stalk_height_fraction,
-			stalk_base_anchor: self.base_anchor,
 			stalk_base_radius: self.tree_height * self.stalk_radius_fraction,
 		}
 	}
@@ -268,7 +255,7 @@ impl Default for HonuBanyanSbs {
 
 impl HonuBanyanSbs {
 	pub fn crown_floor_world_y(&self) -> f32 {
-		self.scale.base_anchor.y + self.scale.tree_height * self.rings.height_range.start
+		self.scale.tree_height * self.rings.height_range.start
 	}
 
 	pub fn leaf_ball_size(&self) -> f32 {
@@ -320,13 +307,6 @@ impl HonuBanyanSbs {
 impl Anchors<HonuBanyanChain> for HonuBanyanSbs {
 	fn anchors(&self) -> Vec<HonuBanyanChain> {
 		self.hysteresis_seeds()
-	}
-}
-
-impl SetNoiseParams for HonuBanyanSbs {
-	fn with_noise_params(mut self, params: NoiseParams) -> Self {
-		self.canopy_noise = params;
-		self
 	}
 }
 

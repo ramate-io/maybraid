@@ -11,7 +11,7 @@ pub fn spawn_crown_tuft<LeafM, LeafS>(
 	chain: &BallStickChain<WaialeaPalmChain>,
 	commands: &mut Commands,
 	cascade_chunk: &CascadeChunk,
-	root_transform: Transform,
+	parent: Entity,
 	foliage_noise: &NoiseParams,
 	leaf_material: LeafS,
 ) -> Vec<Entity>
@@ -20,10 +20,6 @@ where
 	LeafS: Clone + Into<MeshMaterial3d<LeafM>> + Send + Sync + 'static,
 {
 	let tip = WaialeaPalmSbs::trunk_tip_from_chain(chain);
-	let local = root_transform
-		.rotation
-		.inverse()
-		.mul_vec3(tip - root_transform.translation);
 	let scale = geometry.crown_tuft_world_scale();
 	let tuft = SucculentTuft::from_shape(
 		SucculentTuftShape {
@@ -36,13 +32,14 @@ where
 		leaf_material,
 	);
 
-	tuft.spawn_render_items(
+	tuft.spawn_render_items_under(
 		commands,
 		cascade_chunk,
 		Transform {
-			translation: local,
+			translation: tip,
 			scale: Vec3::splat(scale),
 			..default()
 		},
+		Some(parent),
 	)
 }

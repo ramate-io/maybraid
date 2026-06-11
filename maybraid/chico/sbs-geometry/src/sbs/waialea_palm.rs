@@ -1,7 +1,7 @@
 //! Restricted **Waialea Palm** geometry for CLI and playgrounds ([#255](https://github.com/ramate-io/maybraid/issues/255)).
 
 use bevy_math::Vec3;
-use procedural_common::{NoiseConfig, NoiseParams, SetNoiseParams};
+use procedural_common::{NoiseConfig, NoiseParams};
 
 use crate::anchors::waialea_palm::{
 	WaialeaPalmAnchors, WaialeaPalmProtoAnchors, DEFAULT_ARCH_LATERAL_FRACTION, DEFAULT_ARCH_YAW_DEGREES,
@@ -21,25 +21,11 @@ pub struct WaialeaPalmScale {
 	pub stalk_height: f32,
 	#[cfg_attr(feature = "clap", arg(long))]
 	pub stalk_base_radius: Option<f32>,
-	#[cfg_attr(
-		feature = "clap",
-		arg(
-			long,
-			default_value = "0,0,0",
-			value_parser = crate::vec3_args::parse_vec3_csv,
-			value_name = "X,Y,Z"
-		)
-	)]
-	pub base_anchor: Vec3,
 }
 
 impl Default for WaialeaPalmScale {
 	fn default() -> Self {
-		Self {
-			stalk_height: DEFAULT_STALK_HEIGHT,
-			stalk_base_radius: None,
-			base_anchor: Vec3::ZERO,
-		}
+		Self { stalk_height: DEFAULT_STALK_HEIGHT, stalk_base_radius: None }
 	}
 }
 
@@ -52,7 +38,6 @@ impl WaialeaPalmScale {
 	pub fn to_stalk(&self) -> StrictStalk {
 		StrictStalk {
 			stalk_height: self.stalk_height,
-			stalk_base_anchor: self.base_anchor,
 			stalk_base_radius: self.stalk_base_radius_or_default(),
 		}
 	}
@@ -220,13 +205,6 @@ impl WaialeaPalmSbs {
 impl Anchors<WaialeaPalmChain> for WaialeaPalmSbs {
 	fn anchors(&self) -> Vec<WaialeaPalmChain> {
 		self.hysteresis_seeds()
-	}
-}
-
-impl SetNoiseParams for WaialeaPalmSbs {
-	fn with_noise_params(mut self, params: NoiseParams) -> Self {
-		self.trunk_noise = params;
-		self
 	}
 }
 

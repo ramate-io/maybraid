@@ -6,7 +6,7 @@
 
 #[cfg(feature = "clap")]
 use clap::Args;
-use procedural_common::{NoiseConfig, NoiseParams, SetNoiseParams, UnitRange};
+use procedural_common::{NoiseConfig, UnitRange};
 
 use super::liams_conifer::{LiamsConiferSbs, RingAnchorParams};
 use crate::anchors::liams_conifer::{LiamsConiferAnchors, LiamsConiferProtoAnchors};
@@ -166,13 +166,6 @@ impl std::ops::Deref for NorthernConiferSbs {
 impl Anchors<LiamsConiferChain> for NorthernConiferSbs {
 	fn anchors(&self) -> Vec<LiamsConiferChain> {
 		self.hysteresis_seeds()
-	}
-}
-
-impl SetNoiseParams for NorthernConiferSbs {
-	fn with_noise_params(mut self, params: NoiseParams) -> Self {
-		self.liams = self.liams.with_noise_params(params);
-		self
 	}
 }
 

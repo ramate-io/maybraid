@@ -58,7 +58,6 @@ pub fn high_bush_shoot_direction(
 #[derive(Clone, Debug, PartialEq)]
 pub struct HighBushProtoAnchors {
 	pub height: f32,
-	pub base_anchor: Vec3,
 	pub anchor_lift_fraction: f32,
 	pub shoot_count: u32,
 	pub radial_strength: f32,
@@ -80,7 +79,6 @@ impl Default for HighBushProtoAnchors {
 	fn default() -> Self {
 		Self {
 			height: DEFAULT_HEIGHT,
-			base_anchor: Vec3::ZERO,
 			anchor_lift_fraction: DEFAULT_ANCHOR_LIFT_FRACTION,
 			shoot_count: DEFAULT_SHOOT_COUNT,
 			radial_strength: DEFAULT_RADIAL_STRENGTH,
@@ -101,8 +99,9 @@ impl Default for HighBushProtoAnchors {
 }
 
 impl HighBushProtoAnchors {
+	/// Tree-local shoot anchor (pure Y lift above the origin; the root entity owns world placement).
 	pub fn anchor_position(&self) -> Vec3 {
-		self.base_anchor + Vec3::Y * (self.height * self.anchor_lift_fraction)
+		Vec3::Y * (self.height * self.anchor_lift_fraction)
 	}
 
 	pub fn root_radius(&self) -> f32 {

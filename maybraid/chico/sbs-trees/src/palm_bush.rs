@@ -21,7 +21,7 @@ pub type PalmBushStd = PalmBush<StandardMaterial, SkippedLeafMeshMaterial<Standa
 /// Foliage noise (seed, surface frequency / amplitude) lives on
 /// [`PalmBushSbs::foliage_noise`]; hoist per-instance noise in with
 /// [`PalmBushSbs::with_noise_params`].
-#[derive(Clone, Args)]
+#[derive(Component, Clone, Args)]
 #[command(rename_all = "kebab-case")]
 pub struct PalmBush<LeafM, LeafS>
 where
@@ -73,23 +73,27 @@ where
 		cascade_chunk: &CascadeChunk,
 		transform: Transform,
 	) -> Vec<Entity> {
-		let mut out = spawn_crown_rings::<LeafM, LeafS>(
+		let root = commands
+			.spawn((self.clone(), cascade_chunk.clone(), transform, Visibility::default()))
+			.id();
+
+		spawn_crown_rings::<LeafM, LeafS>(
 			&self.geometry,
 			commands,
 			cascade_chunk,
-			transform,
+			root,
 			self.leaf_material.clone(),
 		);
 
-		out.extend(spawn_crown_tuft::<LeafM, LeafS>(
+		spawn_crown_tuft::<LeafM, LeafS>(
 			&self.geometry,
 			commands,
 			cascade_chunk,
-			transform,
+			root,
 			self.leaf_material.clone(),
-		));
+		);
 
-		out
+		vec![root]
 	}
 }
 

@@ -84,6 +84,9 @@ where
 		cascade_chunk: &CascadeChunk,
 		transform: Transform,
 	) -> Vec<Entity> {
+		let root = commands
+			.spawn((self.clone(), cascade_chunk.clone(), transform, Visibility::default()))
+			.id();
 		let shape = self.shape_for_render();
 		let chain = shape.build_chain();
 
@@ -92,10 +95,11 @@ where
 			stick_material: self.stick_material.clone(),
 			__marker: PhantomData,
 		};
-		let mut out = StickRenderHelper::new(chain.clone(), stick_rule).spawn_render_items(
+		StickRenderHelper::new(chain.clone(), stick_rule).spawn_render_items_under(
 			commands,
 			cascade_chunk,
-			transform,
+			Transform::IDENTITY,
+			Some(root),
 		);
 
 		match shape.foliage_style {
@@ -106,12 +110,11 @@ where
 					leaf_splay,
 					leaf_radius_world: shape.leaf_radius_world(),
 				};
-				out.extend(
-					BallRenderHelper::new(chain, leaf_rule).spawn_render_items(
-						commands,
-						cascade_chunk,
-						transform,
-					),
+				BallRenderHelper::new(chain, leaf_rule).spawn_render_items_under(
+					commands,
+					cascade_chunk,
+					Transform::IDENTITY,
+					Some(root),
 				);
 			}
 			HighBushFoliageStyle::Tuft => {
@@ -121,16 +124,15 @@ where
 					leaf_material: self.leaf_material.clone(),
 					__marker: PhantomData,
 				};
-				out.extend(
-					TuftRenderHelper::new(chain, tuft_rule).spawn_render_items(
-						commands,
-						cascade_chunk,
-						transform,
-					),
+				TuftRenderHelper::new(chain, tuft_rule).spawn_render_items_under(
+					commands,
+					cascade_chunk,
+					Transform::IDENTITY,
+					Some(root),
 				);
 			}
 		}
 
-		out
+		vec![root]
 	}
 }

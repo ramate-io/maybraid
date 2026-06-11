@@ -5,7 +5,7 @@
 
 use std::ops::{Deref, DerefMut};
 
-use procedural_common::{NoiseParams, SetNoiseParams, UnitRange};
+use procedural_common::UnitRange;
 
 use crate::anchors::braid_oak::{
 	BraidOakTreeAnchors, BraidOakTreeProtoAnchors, BRAID_ANCHORS_PER_RING_MAX,
@@ -188,13 +188,6 @@ impl Anchors<StorybookTreeChain> for BraidOakTreeSbs {
 	fn anchors(&self) -> Vec<StorybookTreeChain> {
 		let noise = procedural_common::NoiseConfig::new(self.canopy_noise);
 		self.to_anchors().hysteresis_seeds(noise)
-	}
-}
-
-impl SetNoiseParams for BraidOakTreeSbs {
-	fn with_noise_params(mut self, params: NoiseParams) -> Self {
-		self.storybook = self.storybook.with_noise_params(params);
-		self
 	}
 }
 

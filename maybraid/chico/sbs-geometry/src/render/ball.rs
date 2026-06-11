@@ -50,8 +50,10 @@ where
 }
 
 /// A useful common helper for rendering balls.
-/// The plan right not to have someone spawn this type directly,
-/// but rather as an internal type used in a render item spawn tree.
+///
+/// Each ball gets a **chain-local** transform (node position + radius scale); the caller's
+/// `transform` composes on the left. Tree assemblies spawning under a root entity pass
+/// `Transform::IDENTITY` and parent via [`RenderItem::spawn_render_items_under`].
 #[derive(Clone)]
 pub struct BallRenderHelper<Item: RenderItem, Rule: BallRenderRule<Item, H>, H: Hysteresis> {
 	rule: Rule,
@@ -106,14 +108,13 @@ impl<Item: RenderItem, Rule: BallRenderRule<Item, H>, H: Hysteresis> RenderItem
 	) -> Vec<Entity> {
 		self.render_balls()
 			.into_iter()
-			.map(|(item, inner_transform)| {
+			.flat_map(|(item, inner_transform)| {
 				item.spawn_render_items(
 					commands,
 					cascade_chunk,
-					inner_transform.mul_transform(transform),
+					transform.mul_transform(inner_transform),
 				)
 			})
-			.flatten()
 			.collect()
 	}
 }

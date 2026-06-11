@@ -98,7 +98,7 @@ impl<V> GroveDistribution<V> {
 			let bucket_noises: Vec<f32> = throw_bucket_indices
 				.iter()
 				.map(|&index| {
-					n.sample_3d_world(
+					n.sample_3d(
 						perturbation_origin
 							+ Vec3::new(PERTURBATION_LANE_BASE + index as f32, 0.0, 0.0),
 					)
@@ -140,7 +140,7 @@ impl<V: Clone> PreparedGroveDistribution<V> {
 		if self.is_empty() {
 			return GroveCellOutcome::Rejected { position };
 		}
-		let selection_noise = NoiseConfig::new(noise).sample_3d_world(position + SELECTION_LANE);
+		let selection_noise = NoiseConfig::new(noise).sample_3d(position + SELECTION_LANE);
 		let throw = selection_noise * self.bucket_throw.total_weight() * 0.5;
 		let throw_index = self.bucket_throw.select(throw).unwrap_or(0);
 		let start = self.throw_bucket_indices.get(throw_index).copied().unwrap_or(0);

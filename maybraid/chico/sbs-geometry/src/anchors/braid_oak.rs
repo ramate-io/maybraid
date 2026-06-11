@@ -116,7 +116,6 @@ impl Default for BraidOakTreeProtoAnchors {
 			tree_height: h,
 			stalk: StrictStalk {
 				stalk_height: stalk_h,
-				stalk_base_anchor: Vec3::ZERO,
 				stalk_base_radius: BRAID_STALK_BASE_RADIUS_FRACTION * h,
 			},
 			first_ring_unit_height: BRAID_FIRST_RING_UNIT_HEIGHT,
@@ -351,7 +350,6 @@ mod tests {
 	fn segmented_stalk_builds_multiple_hops() {
 		let stalk = StrictStalk {
 			stalk_height: 10.0,
-			stalk_base_anchor: Vec3::ZERO,
 			stalk_base_radius: 0.5,
 		};
 		let seed = stalk.segmented_point_to_point(BRAID_STALK_SECTION_COUNT);

@@ -12,7 +12,6 @@ pub use fastnoise_lite::{FastNoiseLite, FractalType, NoiseType};
 pub use mu::{sdf_band_margin, NUMERIC_SURFACE_EPSILON};
 pub use noise::{
 	noise_params_from_scalar_str, BuildWithNoise, FromScalarNoise, NoiseConfig, NoiseParams,
-	SetNoiseParams, WithNoise,
 };
 pub use distributions::bucket_throw::{Bucket, BucketThrow, TypedBucketThrow};
 pub use distributions::{perturb_weights, FirstFitIndices, MIN_BUCKET_WEIGHT};

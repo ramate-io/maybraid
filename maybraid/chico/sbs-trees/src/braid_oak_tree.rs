@@ -35,7 +35,7 @@ pub type BraidOakTreeStd = BraidOakTree<
 	SkippedOuterLeafMeshMaterial<StandardMaterial>,
 >;
 
-#[derive(Clone, Args)]
+#[derive(Component, Clone, Args)]
 #[command(rename_all = "kebab-case")]
 pub struct BraidOakTree<StickM, StickS, InnerLeafM, InnerLeafS, OuterLeafM, OuterLeafS>
 where
@@ -140,6 +140,9 @@ where
 		cascade_chunk: &CascadeChunk,
 		transform: Transform,
 	) -> Vec<Entity> {
+		let root = commands
+			.spawn((self.clone(), cascade_chunk.clone(), transform, Visibility::default()))
+			.id();
 		let geometry = self.geometry_for_render();
 		let chain = geometry.build_chain();
 		let leaf_radius = geometry.leaf_radius_world();
@@ -150,18 +153,23 @@ where
 			__marker: PhantomData,
 		};
 
-		let mut out =
-			StickRenderHelper::new(chain.clone(), stick_rule).spawn_render_items(commands, cascade_chunk, transform);
+		StickRenderHelper::new(chain.clone(), stick_rule).spawn_render_items_under(
+			commands,
+			cascade_chunk,
+			Transform::IDENTITY,
+			Some(root),
+		);
 
 		let mut joint_ball = NoiseParams::from_scalar(0.0, 1.0, 0.04, 1)
 			.build_scalar::<ChicoBall<StickM, StickS>>();
 		joint_ball.material = self.stick_material.clone();
 		let joint_rule = BraidOakJointBallRule { joint_ball };
-		out.extend(BallRenderHelper::new(chain.clone(), joint_rule).spawn_render_items(
+		BallRenderHelper::new(chain.clone(), joint_rule).spawn_render_items_under(
 			commands,
 			cascade_chunk,
-			transform,
-		));
+			Transform::IDENTITY,
+			Some(root),
+		);
 
 		let mut inner_ball =
 			self.inner_leaf_surface_noise.build_scalar::<chico_ball_components::chico_ball::ChicoBall<
@@ -178,12 +186,13 @@ where
 			leaf_radius_world: leaf_radius,
 		};
 
-		out.extend(BallRenderHelper::new(chain, foliage_rule).spawn_render_items(
+		BallRenderHelper::new(chain, foliage_rule).spawn_render_items_under(
 			commands,
 			cascade_chunk,
-			transform,
-		));
+			Transform::IDENTITY,
+			Some(root),
+		);
 
-		out
+		vec![root]
 	}
 }

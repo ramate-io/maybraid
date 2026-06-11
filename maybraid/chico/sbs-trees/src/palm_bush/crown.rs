@@ -52,7 +52,7 @@ pub fn spawn_crown_rings<LeafM, LeafS>(
 	geometry: &PalmBushSbs,
 	commands: &mut Commands,
 	cascade_chunk: &CascadeChunk,
-	root_transform: Transform,
+	parent: Entity,
 	leaf_material: LeafS,
 ) -> Vec<Entity>
 where
@@ -68,7 +68,7 @@ where
 		leaf_material,
 		commands,
 		cascade_chunk,
-		root_transform,
+		parent,
 	)
 }
 

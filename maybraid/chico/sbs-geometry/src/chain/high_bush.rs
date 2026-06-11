@@ -2,7 +2,7 @@
 
 use std::ops::Range;
 
-use procedural_common::{NoiseConfig, NoiseParams, SetNoiseParams};
+use procedural_common::NoiseConfig;
 
 use crate::BallStickNode;
 
@@ -147,16 +147,6 @@ impl HighBushPhase {
 			Self::Shoot(b) => &b.inner.node,
 		}
 	}
-
-	fn with_noise(self, noise: NoiseConfig) -> Self {
-		match self {
-			Self::Shoot(mut b) => {
-				b.inner = b.inner.with_noise(noise);
-				Self::Shoot(b)
-			}
-			other => other,
-		}
-	}
 }
 
 /// Whether `node_idx` has no children in a built [`crate::BallStickChain`].
@@ -210,20 +200,12 @@ impl Hysteresis for HighBushChain {
 	}
 }
 
-impl SetNoiseParams for HighBushChain {
-	fn with_noise_params(mut self, params: NoiseParams) -> Self {
-		let noise = NoiseConfig::new(params);
-		self.phase = self.phase.with_noise(noise.clone());
-		self.noise = noise;
-		self
-	}
-}
-
 #[cfg(test)]
 mod tests {
 	use super::*;
 	use crate::anchors::high_bush::{DEFAULT_BIAS_BLEND, DEFAULT_BRANCH_ANGLE_TOLERANCE_DEGREES};
 	use bevy_math::Vec3;
+	use procedural_common::NoiseParams;
 
 	#[test]
 	fn high_bush_branch_depth_coerces_out_of_range() -> anyhow::Result<()> {
