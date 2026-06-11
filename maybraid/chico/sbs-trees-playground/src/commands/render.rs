@@ -1,70 +1,33 @@
-pub mod blade_tuft;
-pub mod braid_grass;
-pub mod braid_oak_tree;
-pub mod buddha_hand_tuft;
-pub mod common_high_bush;
-pub mod date_palm;
-pub mod friends_conifer;
-pub mod frond_crown;
-pub mod high_bush_shoots;
-pub mod jungle_growth;
-pub mod jungle_storybook_tree;
-pub mod kamakura_torch;
-pub mod liams_conifer;
-pub mod moderate_lod_frond_crown;
-pub mod northern_conifer;
-pub mod palm_bush;
-pub mod penmarch_torch;
-pub mod plugin;
-pub mod rorys_head_trained;
-pub mod storybook_tree;
-pub mod temperate_conifer;
-pub mod tropical_tufts;
-pub mod vase_tree;
-pub mod waialea_palm;
-
-pub use plugin::RenderCommandsPlugin;
-pub mod honu_banyan;
-pub mod sopes_banyan;
-pub mod spear_tuft;
-pub mod succulent_tuft;
-pub mod weeping_tuft;
+//! `/render` subcommand: one variant per previewable item.
+//!
+//! Trees in `chico-sbs-trees` are clap-parseable and flatten directly into [`RenderHelper`].
+//! Lower-level components (tufts, frond crowns, high bush, jungle growth) deliberately stay
+//! clap-free, so their helpers flatten the *shape* structs and [`Render::into_render_config`]
+//! builds the render item with default (skipped) materials — `sync_render_material_handles`
+//! patches in the curated handles before spawning.
 
 use bevy::prelude::*;
-use chico_groves::DEFAULT_GROVE_EXTENT_XZ;
+use chico_ball_components::tuft::{
+	BladeTuftShape, BuddhaHandTuftShape, SpearTuftShape, SucculentTuftShape, WeepingTuftShape,
+};
+use chico_ball_components::{FrondCrownShape, ModerateLodFrondCrownShape};
+use chico_groves::{GroveExtent, DEFAULT_GROVE_EXTENT_XZ};
+use chico_tree_components::{HighBushShootsShape, JungleGrowthShape};
 use clap::Subcommand;
+use procedural_common::{noise_params_from_scalar_str, NoiseParams};
 
-use crate::render::{RenderConfig, RenderSubject};
-pub use blade_tuft::BladeTuftRenderHelper;
-pub use braid_grass::BraidGrassRenderHelper;
-pub use braid_oak_tree::BraidOakTreeRenderHelper;
-pub use buddha_hand_tuft::BuddhaHandTuftRenderHelper;
-pub use common_high_bush::CommonHighBushRenderHelper;
-pub use date_palm::DatePalmRenderHelper;
-pub use friends_conifer::FriendsConiferRenderHelper;
-pub use frond_crown::FrondCrownRenderHelper;
-pub use high_bush_shoots::HighBushShootsRenderHelper;
-pub use honu_banyan::HonuBanyanRenderHelper;
-pub use jungle_growth::JungleGrowthRenderHelper;
-pub use jungle_storybook_tree::JungleStorybookTreeRenderHelper;
-pub use kamakura_torch::KamakuraTorchRenderHelper;
-pub use liams_conifer::LiamsConiferRenderHelper;
-pub use moderate_lod_frond_crown::ModerateLodFrondCrownRenderHelper;
-pub use northern_conifer::NorthernConiferRenderHelper;
-pub use palm_bush::PalmBushRenderHelper;
-pub use penmarch_torch::PenmarchTorchRenderHelper;
-pub use rorys_head_trained::RorysHeadTrainedRenderHelper;
-pub use sopes_banyan::SopesBanyanRenderHelper;
-pub use spear_tuft::SpearTuftRenderHelper;
-pub use storybook_tree::StorybookTreeRenderHelper;
-pub use succulent_tuft::SucculentTuftRenderHelper;
-pub use temperate_conifer::TemperateConiferRenderHelper;
-pub use tropical_tufts::TropicalTuftsRenderHelper;
-pub use vase_tree::VaseTreeRenderHelper;
-pub use waialea_palm::WaialeaPalmRenderHelper;
-pub use weeping_tuft::WeepingTuftRenderHelper;
+use crate::render::{
+	RenderBladeTuft, RenderBraidGrass, RenderBraidOakTree, RenderBuddhaHandTuft, RenderConfig,
+	RenderDatePalm, RenderFriendsConifer, RenderFrondCrown, RenderHighBushShoots,
+	RenderHonuBanyan, RenderJungleGrowth, RenderJungleStorybookTree, RenderKamakuraTorch,
+	RenderLiamsConifer, RenderModerateLodFrondCrown, RenderNorthernConifer, RenderPalmBush,
+	RenderPenmarchTorch, RenderRorysHeadTrained, RenderSopesBanyan, RenderSpearTuft,
+	RenderStorybookTree, RenderSubject, RenderSucculentTuft, RenderTemperateConifer,
+	RenderTropicalTufts, RenderVaseTree, RenderWaialeaPalm, RenderWeepingTuft,
+};
 
-#[derive(Clone, clap::Args, Component)]
+/// Shared render flags (resolution + scene transform) wrapped around per-item args.
+#[derive(Clone, clap::Args)]
 #[command(rename_all = "kebab-case")]
 pub struct RenderHelper<T: clap::Args + Clone> {
 	#[command(flatten)]
@@ -103,10 +66,14 @@ impl<T: clap::Args + Clone> RenderHelper<T> {
 			.with_rotation(rot)
 			.with_scale(self.scale)
 	}
+
+	fn config_with(&self, subject: RenderSubject) -> RenderConfig {
+		RenderConfig { subject, res_2: self.res_2, transform: self.render_transform() }
+	}
 }
 
 /// Wraps [`RenderHelper`] with square grove extent settings for grove [`RenderItem`] commands.
-#[derive(Clone, clap::Args, Component)]
+#[derive(Clone, clap::Args)]
 #[command(rename_all = "kebab-case")]
 pub struct CellRenderHelper<T: clap::Args + Clone> {
 	#[command(flatten)]
@@ -124,39 +91,105 @@ impl<T: clap::Args + Clone> CellRenderHelper<T> {
 	pub fn res_2(&self) -> u8 {
 		self.render.res_2
 	}
+
+	/// Square preview extent covering at least one grove cell.
+	fn grove_extent(&self, cell_extent_xz: Vec2) -> GroveExtent {
+		let span = self.grove_extent_xz.max(cell_extent_xz.x).max(cell_extent_xz.y);
+		GroveExtent::new(Vec3::ZERO, Vec3::new(span, 1.0, span))
+	}
 }
 
-#[derive(Clone, Subcommand, Component)]
+impl CellRenderHelper<RenderBraidGrass> {
+	pub fn configured_braid_grass(&self) -> RenderBraidGrass {
+		let mut grass = self.render.inner.clone();
+		grass.extent = self.grove_extent(grass.cell_extent_xz());
+		grass
+	}
+}
+
+impl CellRenderHelper<RenderTropicalTufts> {
+	pub fn configured_tropical_tufts(&self) -> RenderTropicalTufts {
+		let mut tufts = self.render.inner.clone();
+		tufts.extent = self.grove_extent(tufts.cell_extent_xz());
+		tufts
+	}
+}
+
+/// High bush shape plus the surface-noise flags that live on the render item (not the shape).
+#[derive(Clone, clap::Args)]
+#[command(rename_all = "kebab-case")]
+pub struct HighBushShootsArgs {
+	#[command(flatten)]
+	pub shape: HighBushShootsShape,
+
+	#[arg(
+		long,
+		default_value = "0,1,0.05,1",
+		value_parser = noise_params_from_scalar_str,
+		value_name = "SEED,FREQUENCY,AMPLITUDE,OCTAVES",
+		help_heading = "Surface Noise"
+	)]
+	pub stick_surface_noise: NoiseParams,
+
+	#[arg(
+		long,
+		default_value = "0,1,0.06,1",
+		value_parser = noise_params_from_scalar_str,
+		value_name = "SEED,FREQUENCY,AMPLITUDE,OCTAVES",
+		help_heading = "Surface Noise"
+	)]
+	pub leaf_surface_noise: NoiseParams,
+}
+
+impl HighBushShootsArgs {
+	fn to_render(&self) -> RenderHighBushShoots {
+		let mut shoots = RenderHighBushShoots::default();
+		shoots.shape = self.shape.clone();
+		shoots.stick_surface_noise = self.stick_surface_noise;
+		shoots.leaf_surface_noise = self.leaf_surface_noise;
+		shoots
+	}
+}
+
+fn jungle_growth_from_shape(shape: JungleGrowthShape) -> RenderJungleGrowth {
+	let mut growth = RenderJungleGrowth::default();
+	growth.shape = shape;
+	growth
+}
+
+#[derive(Clone, Subcommand)]
 #[command(rename_all = "kebab-case")]
 pub enum Render {
-	SopesBanyan(SopesBanyanRenderHelper),
-	HonuBanyan(HonuBanyanRenderHelper),
-	LiamsConifer(LiamsConiferRenderHelper),
-	FriendsConifer(FriendsConiferRenderHelper),
-	NorthernConifer(NorthernConiferRenderHelper),
-	TemperateConifer(TemperateConiferRenderHelper),
-	DatePalm(DatePalmRenderHelper),
-	WaialeaPalm(WaialeaPalmRenderHelper),
-	PalmBush(PalmBushRenderHelper),
-	StorybookTree(StorybookTreeRenderHelper),
-	PenmarchTorch(PenmarchTorchRenderHelper),
-	KamakuraTorch(KamakuraTorchRenderHelper),
-	RorysHeadTrained(RorysHeadTrainedRenderHelper),
-	VaseTree(VaseTreeRenderHelper),
-	BraidOakTree(BraidOakTreeRenderHelper),
-	JungleStorybookTree(JungleStorybookTreeRenderHelper),
-	SucculentTuft(SucculentTuftRenderHelper),
-	BladeTuft(BladeTuftRenderHelper),
-	BraidGrass(BraidGrassRenderHelper),
-	TropicalTufts(TropicalTuftsRenderHelper),
-	SpearTuft(SpearTuftRenderHelper),
-	BuddhaHandTuft(BuddhaHandTuftRenderHelper),
-	WeepingTuft(WeepingTuftRenderHelper),
-	JungleGrowth(JungleGrowthRenderHelper),
-	HighBushShoots(HighBushShootsRenderHelper),
-	CommonHighBush(CommonHighBushRenderHelper),
-	FrondCrown(FrondCrownRenderHelper),
-	ModerateLodFrondCrown(ModerateLodFrondCrownRenderHelper),
+	SopesBanyan(RenderHelper<RenderSopesBanyan>),
+	HonuBanyan(RenderHelper<RenderHonuBanyan>),
+	LiamsConifer(RenderHelper<RenderLiamsConifer>),
+	FriendsConifer(RenderHelper<RenderFriendsConifer>),
+	NorthernConifer(RenderHelper<RenderNorthernConifer>),
+	TemperateConifer(RenderHelper<RenderTemperateConifer>),
+	DatePalm(RenderHelper<RenderDatePalm>),
+	WaialeaPalm(RenderHelper<RenderWaialeaPalm>),
+	PalmBush(RenderHelper<RenderPalmBush>),
+	StorybookTree(RenderHelper<RenderStorybookTree>),
+	PenmarchTorch(RenderHelper<RenderPenmarchTorch>),
+	KamakuraTorch(RenderHelper<RenderKamakuraTorch>),
+	RorysHeadTrained(RenderHelper<RenderRorysHeadTrained>),
+	VaseTree(RenderHelper<RenderVaseTree>),
+	BraidOakTree(RenderHelper<RenderBraidOakTree>),
+	JungleStorybookTree(RenderHelper<RenderJungleStorybookTree>),
+	SucculentTuft(RenderHelper<SucculentTuftShape>),
+	BladeTuft(RenderHelper<BladeTuftShape>),
+	BraidGrass(CellRenderHelper<RenderBraidGrass>),
+	TropicalTufts(CellRenderHelper<RenderTropicalTufts>),
+	SpearTuft(RenderHelper<SpearTuftShape>),
+	BuddhaHandTuft(RenderHelper<BuddhaHandTuftShape>),
+	WeepingTuft(RenderHelper<WeepingTuftShape>),
+	JungleGrowth(RenderHelper<JungleGrowthShape>),
+	HighBushShoots(RenderHelper<HighBushShootsArgs>),
+	/// Alias of `high-bush-shoots`; the Common High Bush preset is always applied at render
+	/// ([#233](https://github.com/ramate-io/maybraid/issues/233)).
+	CommonHighBush(RenderHelper<HighBushShootsArgs>),
+	FrondCrown(RenderHelper<FrondCrownShape>),
+	ModerateLodFrondCrown(RenderHelper<ModerateLodFrondCrownShape>),
 }
 
 impl Render {
@@ -169,146 +202,67 @@ impl Render {
 
 	pub fn into_render_config(&self) -> RenderConfig {
 		match self {
-			Self::SopesBanyan(h) => RenderConfig {
-				subject: RenderSubject::SopesBanyan(h.inner.clone()),
-				res_2: h.res_2,
-				transform: h.render_transform(),
-			},
-			Self::HonuBanyan(h) => RenderConfig {
-				subject: RenderSubject::HonuBanyan(h.inner.clone()),
-				res_2: h.res_2,
-				transform: h.render_transform(),
-			},
-			Self::LiamsConifer(h) => RenderConfig {
-				subject: RenderSubject::LiamsConifer(h.inner.clone()),
-				res_2: h.res_2,
-				transform: h.render_transform(),
-			},
-			Self::FriendsConifer(h) => RenderConfig {
-				subject: RenderSubject::FriendsConifer(h.inner.clone()),
-				res_2: h.res_2,
-				transform: h.render_transform(),
-			},
-			Self::NorthernConifer(h) => RenderConfig {
-				subject: RenderSubject::NorthernConifer(h.inner.clone()),
-				res_2: h.res_2,
-				transform: h.render_transform(),
-			},
-			Self::TemperateConifer(h) => RenderConfig {
-				subject: RenderSubject::TemperateConifer(h.inner.clone()),
-				res_2: h.res_2,
-				transform: h.render_transform(),
-			},
-			Self::DatePalm(h) => RenderConfig {
-				subject: RenderSubject::DatePalm(h.inner.clone()),
-				res_2: h.res_2,
-				transform: h.render_transform(),
-			},
-			Self::WaialeaPalm(h) => RenderConfig {
-				subject: RenderSubject::WaialeaPalm(h.inner.clone()),
-				res_2: h.res_2,
-				transform: h.render_transform(),
-			},
-			Self::PalmBush(h) => RenderConfig {
-				subject: RenderSubject::PalmBush(h.inner.clone()),
-				res_2: h.res_2,
-				transform: h.render_transform(),
-			},
-			Self::StorybookTree(h) => RenderConfig {
-				subject: RenderSubject::StorybookTree(h.inner.clone()),
-				res_2: h.res_2,
-				transform: h.render_transform(),
-			},
-			Self::PenmarchTorch(h) => RenderConfig {
-				subject: RenderSubject::PenmarchTorch(h.inner.clone()),
-				res_2: h.res_2,
-				transform: h.render_transform(),
-			},
-			Self::KamakuraTorch(h) => RenderConfig {
-				subject: RenderSubject::KamakuraTorch(h.inner.clone()),
-				res_2: h.res_2,
-				transform: h.render_transform(),
-			},
-			Self::RorysHeadTrained(h) => RenderConfig {
-				subject: RenderSubject::RorysHeadTrained(h.inner.clone()),
-				res_2: h.res_2,
-				transform: h.render_transform(),
-			},
-			Self::VaseTree(h) => RenderConfig {
-				subject: RenderSubject::VaseTree(h.inner.clone()),
-				res_2: h.res_2,
-				transform: h.render_transform(),
-			},
-			Self::BraidOakTree(h) => RenderConfig {
-				subject: RenderSubject::BraidOakTree(h.inner.clone()),
-				res_2: h.res_2,
-				transform: h.render_transform(),
-			},
-			Self::JungleStorybookTree(h) => RenderConfig {
-				subject: RenderSubject::JungleStorybookTree(h.inner.clone()),
-				res_2: h.res_2,
-				transform: h.render_transform(),
-			},
-			Self::SucculentTuft(h) => RenderConfig {
-				subject: RenderSubject::SucculentTuft(h.inner.clone().into()),
-				res_2: h.res_2,
-				transform: h.render_transform(),
-			},
-			Self::BladeTuft(h) => RenderConfig {
-				subject: RenderSubject::BladeTuft(h.inner.clone().into()),
-				res_2: h.res_2,
-				transform: h.render_transform(),
-			},
-			Self::BraidGrass(h) => RenderConfig {
-				subject: RenderSubject::BraidGrass(h.configured_braid_grass()),
-				res_2: h.res_2(),
-				transform: h.render_transform(),
-			},
-			Self::TropicalTufts(h) => RenderConfig {
-				subject: RenderSubject::TropicalTufts(h.configured_tropical_tufts()),
-				res_2: h.res_2(),
-				transform: h.render_transform(),
-			},
-			Self::SpearTuft(h) => RenderConfig {
-				subject: RenderSubject::SpearTuft(h.inner.clone().into()),
-				res_2: h.res_2,
-				transform: h.render_transform(),
-			},
-			Self::BuddhaHandTuft(h) => RenderConfig {
-				subject: RenderSubject::BuddhaHandTuft(h.inner.clone().into()),
-				res_2: h.res_2,
-				transform: h.render_transform(),
-			},
-			Self::WeepingTuft(h) => RenderConfig {
-				subject: RenderSubject::WeepingTuft(h.inner.clone().into()),
-				res_2: h.res_2,
-				transform: h.render_transform(),
-			},
-			Self::JungleGrowth(h) => RenderConfig {
-				subject: RenderSubject::JungleGrowth(h.inner.clone().into()),
-				res_2: h.res_2,
-				transform: h.render_transform(),
-			},
-			Self::HighBushShoots(h) => RenderConfig {
-				subject: RenderSubject::HighBushShoots(h.inner.clone().into()),
-				res_2: h.res_2,
-				transform: h.render_transform(),
-			},
-			Self::CommonHighBush(h) => RenderConfig {
-				subject: RenderSubject::CommonHighBush(h.inner.clone().into()),
-				res_2: h.res_2,
-				transform: h.render_transform(),
-			},
-			Self::FrondCrown(h) => RenderConfig {
-				subject: RenderSubject::FrondCrown(h.inner.clone().into()),
-				res_2: h.res_2,
-				transform: h.render_transform(),
-			},
-			Self::ModerateLodFrondCrown(h) => RenderConfig {
-				subject: RenderSubject::ModerateLodFrondCrown(h.inner.clone().into()),
-				res_2: h.res_2,
-				transform: h.render_transform(),
-			},
+			Self::SopesBanyan(h) => h.config_with(RenderSubject::SopesBanyan(h.inner.clone())),
+			Self::HonuBanyan(h) => h.config_with(RenderSubject::HonuBanyan(h.inner.clone())),
+			Self::LiamsConifer(h) => h.config_with(RenderSubject::LiamsConifer(h.inner.clone())),
+			Self::FriendsConifer(h) => {
+				h.config_with(RenderSubject::FriendsConifer(h.inner.clone()))
+			}
+			Self::NorthernConifer(h) => {
+				h.config_with(RenderSubject::NorthernConifer(h.inner.clone()))
+			}
+			Self::TemperateConifer(h) => {
+				h.config_with(RenderSubject::TemperateConifer(h.inner.clone()))
+			}
+			Self::DatePalm(h) => h.config_with(RenderSubject::DatePalm(h.inner.clone())),
+			Self::WaialeaPalm(h) => h.config_with(RenderSubject::WaialeaPalm(h.inner.clone())),
+			Self::PalmBush(h) => h.config_with(RenderSubject::PalmBush(h.inner.clone())),
+			Self::StorybookTree(h) => h.config_with(RenderSubject::StorybookTree(h.inner.clone())),
+			Self::PenmarchTorch(h) => h.config_with(RenderSubject::PenmarchTorch(h.inner.clone())),
+			Self::KamakuraTorch(h) => h.config_with(RenderSubject::KamakuraTorch(h.inner.clone())),
+			Self::RorysHeadTrained(h) => {
+				h.config_with(RenderSubject::RorysHeadTrained(h.inner.clone()))
+			}
+			Self::VaseTree(h) => h.config_with(RenderSubject::VaseTree(h.inner.clone())),
+			Self::BraidOakTree(h) => h.config_with(RenderSubject::BraidOakTree(h.inner.clone())),
+			Self::JungleStorybookTree(h) => {
+				h.config_with(RenderSubject::JungleStorybookTree(h.inner.clone()))
+			}
+			Self::SucculentTuft(h) => h.config_with(RenderSubject::SucculentTuft(
+				RenderSucculentTuft::from_shape(h.inner.clone(), Default::default()),
+			)),
+			Self::BladeTuft(h) => h.config_with(RenderSubject::BladeTuft(
+				RenderBladeTuft::from_shape(h.inner.clone(), Default::default()),
+			)),
+			Self::BraidGrass(h) => h
+				.render
+				.config_with(RenderSubject::BraidGrass(h.configured_braid_grass())),
+			Self::TropicalTufts(h) => h
+				.render
+				.config_with(RenderSubject::TropicalTufts(h.configured_tropical_tufts())),
+			Self::SpearTuft(h) => h.config_with(RenderSubject::SpearTuft(
+				RenderSpearTuft::from_shape(h.inner.clone(), Default::default()),
+			)),
+			Self::BuddhaHandTuft(h) => h.config_with(RenderSubject::BuddhaHandTuft(
+				RenderBuddhaHandTuft::from_shape(h.inner.clone(), Default::default()),
+			)),
+			Self::WeepingTuft(h) => h.config_with(RenderSubject::WeepingTuft(
+				RenderWeepingTuft::from_shape(h.inner.clone(), Default::default()),
+			)),
+			Self::JungleGrowth(h) => h.config_with(RenderSubject::JungleGrowth(
+				jungle_growth_from_shape(h.inner.clone()),
+			)),
+			Self::HighBushShoots(h) | Self::CommonHighBush(h) => {
+				h.config_with(RenderSubject::HighBushShoots(h.inner.to_render()))
+			}
+			Self::FrondCrown(h) => h.config_with(RenderSubject::FrondCrown(
+				RenderFrondCrown::from_shape(h.inner.clone(), Default::default()),
+			)),
+			Self::ModerateLodFrondCrown(h) => {
+				h.config_with(RenderSubject::ModerateLodFrondCrown(
+					RenderModerateLodFrondCrown::from_shape(h.inner.clone(), Default::default()),
+				))
+			}
 		}
 	}
 }
@@ -338,7 +292,7 @@ mod tests {
 		let crate::commands::PlaygroundCommand::Render(Render::SpearTuft(helper)) = cmd else {
 			anyhow::bail!("expected spear-tuft render command");
 		};
-		assert_eq!(helper.inner.shape.spear_count, 20);
+		assert_eq!(helper.inner.spear_count, 20);
 		let cfg = Render::SpearTuft(helper).into_render_config();
 		let RenderSubject::SpearTuft(tuft) = cfg.subject else {
 			anyhow::bail!("expected spear subject");
@@ -356,8 +310,8 @@ mod tests {
 		let crate::commands::PlaygroundCommand::Render(Render::JungleGrowth(helper)) = cmd else {
 			anyhow::bail!("expected jungle-growth render command");
 		};
-		assert!((helper.inner.shape.inner_ball_scale - 0.9).abs() < 1e-5);
-		assert_eq!(helper.inner.shape.seed, 42);
+		assert!((helper.inner.inner_ball_scale - 0.9).abs() < 1e-5);
+		assert_eq!(helper.inner.seed, 42);
 		let cfg = Render::JungleGrowth(helper).into_render_config();
 		let RenderSubject::JungleGrowth(growth) = cfg.subject else {
 			anyhow::bail!("expected jungle growth subject");
@@ -610,6 +564,23 @@ mod tests {
 	}
 
 	#[test]
+	fn common_high_bush_command_matches_high_bush_shoots() -> Result<()> {
+		let cmd = crate::commands::PlaygroundCommand::parse_line(
+			"render common-high-bush --height 12 --shoot-count 8",
+		)
+		.map_err(|e| anyhow::anyhow!("{e}"))?;
+		let crate::commands::PlaygroundCommand::Render(render) = cmd else {
+			anyhow::bail!("expected render command");
+		};
+		let cfg = render.into_render_config();
+		let RenderSubject::HighBushShoots(shoots) = cfg.subject else {
+			anyhow::bail!("expected high bush shoots subject");
+		};
+		assert_eq!(shoots.shape.shoot_count, 8);
+		Ok(())
+	}
+
+	#[test]
 	fn friends_conifer_command_preserves_shape_params() -> Result<()> {
 		let cmd = crate::commands::PlaygroundCommand::parse_line(
 			"render friends-conifer --stalk-height 22 --angle-tolerance-degrees 32 --projection 0.12..0.03",
@@ -669,7 +640,7 @@ mod tests {
 		let crate::commands::PlaygroundCommand::Render(Render::FrondCrown(helper)) = cmd else {
 			anyhow::bail!("expected frond-crown render command");
 		};
-		assert_eq!(helper.inner.shape.frond_count, 15);
+		assert_eq!(helper.inner.frond_count, 15);
 		let cfg = Render::FrondCrown(helper).into_render_config();
 		let RenderSubject::FrondCrown(crown) = cfg.subject else {
 			anyhow::bail!("expected frond crown subject");

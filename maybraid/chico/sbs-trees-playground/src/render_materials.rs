@@ -249,7 +249,7 @@ fn attach_render_materials(
 			g.body_material.mesh = MeshMaterial3d(stick.clone());
 			g.foliage_material.mesh = MeshMaterial3d(tuft.clone());
 		}
-		RenderSubject::HighBushShoots(b) | RenderSubject::CommonHighBush(b) => {
+		RenderSubject::HighBushShoots(b) => {
 			b.stick_material.mesh = MeshMaterial3d(stick.clone());
 			b.leaf_material.mesh = MeshMaterial3d(tuft.clone());
 		}
