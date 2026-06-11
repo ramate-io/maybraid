@@ -63,7 +63,7 @@ where
 		|ring| geometry.crown_ring_position(chain, ring),
 		|ring, seed| frond_shape_for_ring(geometry, ring, seed),
 		geometry.frond_world_scale,
-		foliage_noise,
+		foliage_noise.seed,
 		leaf_material,
 		commands,
 		cascade_chunk,

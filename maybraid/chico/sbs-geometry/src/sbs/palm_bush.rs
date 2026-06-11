@@ -28,10 +28,7 @@ pub struct PalmBushScale {
 
 impl Default for PalmBushScale {
 	fn default() -> Self {
-		Self {
-			height: DEFAULT_HEIGHT,
-			base_anchor: Vec3::ZERO,
-		}
+		Self { height: DEFAULT_HEIGHT, base_anchor: Vec3::ZERO }
 	}
 }
 
@@ -47,10 +44,7 @@ pub struct PalmBushCrownParams {
 
 impl Default for PalmBushCrownParams {
 	fn default() -> Self {
-		Self {
-			ring_count: DEFAULT_RING_COUNT,
-			fronds_per_ring: DEFAULT_FRONDS_PER_RING,
-		}
+		Self { ring_count: DEFAULT_RING_COUNT, fronds_per_ring: DEFAULT_FRONDS_PER_RING }
 	}
 }
 
@@ -86,8 +80,23 @@ impl Default for PalmBushSbs {
 }
 
 impl PalmBushSbs {
+	pub fn with_noise_params(mut self, noise: NoiseParams) -> Self {
+		self.foliage_noise = noise;
+		self
+	}
+
 	pub fn height(&self) -> f32 {
 		self.scale.height.max(1e-6)
+	}
+
+	pub fn with_height(mut self, height: f32) -> Self {
+		self.scale.height = height;
+		self
+	}
+
+	pub fn with_frond_world_scale(mut self, frond_world_scale: f32) -> Self {
+		self.frond_world_scale = frond_world_scale;
+		self
 	}
 
 	pub fn to_proto(&self) -> PalmBushProtoAnchors {

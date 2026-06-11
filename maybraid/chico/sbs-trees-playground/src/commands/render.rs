@@ -19,6 +19,7 @@ pub mod plugin;
 pub mod rorys_head_trained;
 pub mod storybook_tree;
 pub mod temperate_conifer;
+pub mod tropical_tufts;
 pub mod vase_tree;
 pub mod waialea_palm;
 
@@ -30,7 +31,7 @@ pub mod succulent_tuft;
 pub mod weeping_tuft;
 
 use bevy::prelude::*;
-use chico_groves::BraidGrassDefinition;
+use chico_groves::DEFAULT_GROVE_EXTENT_XZ;
 use clap::Subcommand;
 
 use crate::render::{RenderConfig, RenderSubject};
@@ -58,6 +59,7 @@ pub use spear_tuft::SpearTuftRenderHelper;
 pub use storybook_tree::StorybookTreeRenderHelper;
 pub use succulent_tuft::SucculentTuftRenderHelper;
 pub use temperate_conifer::TemperateConiferRenderHelper;
+pub use tropical_tufts::TropicalTuftsRenderHelper;
 pub use vase_tree::VaseTreeRenderHelper;
 pub use waialea_palm::WaialeaPalmRenderHelper;
 pub use weeping_tuft::WeepingTuftRenderHelper;
@@ -110,7 +112,7 @@ pub struct CellRenderHelper<T: clap::Args + Clone> {
 	#[command(flatten)]
 	pub render: RenderHelper<T>,
 
-	#[arg(long, default_value_t = BraidGrassDefinition::DEFAULT_GROVE_EXTENT_XZ, help_heading = "Grove Extent")]
+	#[arg(long, default_value_t = DEFAULT_GROVE_EXTENT_XZ, help_heading = "Grove Extent")]
 	pub grove_extent_xz: f32,
 }
 
@@ -146,6 +148,7 @@ pub enum Render {
 	SucculentTuft(SucculentTuftRenderHelper),
 	BladeTuft(BladeTuftRenderHelper),
 	BraidGrass(BraidGrassRenderHelper),
+	TropicalTufts(TropicalTuftsRenderHelper),
 	SpearTuft(SpearTuftRenderHelper),
 	BuddhaHandTuft(BuddhaHandTuftRenderHelper),
 	WeepingTuft(WeepingTuftRenderHelper),
@@ -258,6 +261,11 @@ impl Render {
 			},
 			Self::BraidGrass(h) => RenderConfig {
 				subject: RenderSubject::BraidGrass(h.configured_braid_grass()),
+				res_2: h.res_2(),
+				transform: h.render_transform(),
+			},
+			Self::TropicalTufts(h) => RenderConfig {
+				subject: RenderSubject::TropicalTufts(h.configured_tropical_tufts()),
 				res_2: h.res_2(),
 				transform: h.render_transform(),
 			},
@@ -691,6 +699,50 @@ mod tests {
 	}
 
 	#[test]
+	fn tropical_tufts_defaults_spawn_placements() -> Result<()> {
+		let cmd = crate::commands::PlaygroundCommand::parse_line("render tropical-tufts")
+			.map_err(|e| anyhow::anyhow!("{e}"))?;
+		let crate::commands::PlaygroundCommand::Render(Render::TropicalTufts(helper)) = cmd else {
+			anyhow::bail!("expected tropical-tufts render command");
+		};
+		let tufts = helper.configured_tropical_tufts();
+		assert!(tufts.grove.variant_weights.is_none());
+		let placements = tufts.placements();
+		assert_eq!(helper.grove_extent_xz, 100.0);
+		assert_eq!(tufts.placement_cells().len(), 31 * 31);
+		assert!(
+			!placements.is_empty(),
+			"expected a visible tropical-tufts preview with default flags, got {} placements",
+			placements.len()
+		);
+		Ok(())
+	}
+
+	#[test]
+	fn tropical_tufts_command_preserves_grove_params() -> Result<()> {
+		let cmd = crate::commands::PlaygroundCommand::parse_line(
+			"render tropical-tufts --elevation 0.4 --grove-extent-xz 13 --cell-extent-xz 3.25,3.25",
+		)
+		.map_err(|e| anyhow::anyhow!("{e}"))?;
+		let crate::commands::PlaygroundCommand::Render(Render::TropicalTufts(helper)) = cmd else {
+			anyhow::bail!("expected tropical-tufts render command");
+		};
+		assert!((helper.grove_extent_xz - 13.0).abs() < 1e-5);
+		assert_eq!(helper.render.inner.grove.cell_extent_xz, Some(Vec2::splat(3.25)));
+		let tufts = helper.configured_tropical_tufts();
+		assert_eq!(tufts.placement_cells().len(), 16);
+		assert!((tufts.terrain.elevation - 0.4).abs() < 1e-5);
+		assert!(!tufts.placements().is_empty());
+		let cfg = Render::TropicalTufts(helper).into_render_config();
+		let RenderSubject::TropicalTufts(subject) = cfg.subject else {
+			anyhow::bail!("expected tropical tufts subject");
+		};
+		assert_eq!(subject.placement_cells().len(), 16);
+		assert!(!subject.placements().is_empty());
+		Ok(())
+	}
+
+	#[test]
 	fn braid_grass_command_preserves_grove_params() -> Result<()> {
 		let cmd = crate::commands::PlaygroundCommand::parse_line(
 			"render braid-grass --variant-weights 0.0,9.0,x,x,x --elevation 0.4 --grove-extent-xz 12.75 --cell-extent-xz 4.25,4.25",
@@ -700,7 +752,7 @@ mod tests {
 			anyhow::bail!("expected braid-grass render command");
 		};
 		assert!((helper.grove_extent_xz - 12.75).abs() < 1e-5);
-		assert_eq!(helper.render.inner.grove.cell_extent_xz, Vec2::splat(4.25));
+		assert_eq!(helper.render.inner.grove.cell_extent_xz, Some(Vec2::splat(4.25)));
 		let grass = helper.configured_braid_grass();
 		assert_eq!(grass.placement_cells().len(), 9);
 		assert!((grass.terrain.elevation - 0.4).abs() < 1e-5);

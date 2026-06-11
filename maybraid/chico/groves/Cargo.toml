@@ -16,6 +16,8 @@ procedural-common = { workspace = true }
 bevy = { workspace = true, optional = true }
 render-item = { workspace = true, optional = true  }
 chico-ball-components = { workspace = true, optional = true }
+chico-sbs-geometry = { workspace = true, optional = true, features = ["clap", "render"] }
+chico-sbs-trees = { workspace = true, optional = true }
 log = { workspace = true }
 gimme-gen = { workspace = true }
 
@@ -24,7 +26,15 @@ anyhow = { workspace = true }
 
 [features]
 default = [ "render" ]
-render = [ "dep:bevy", "dep:render-item", "dep:chico-ball-components", "dep:clap", "procedural-common/clap" ]
+render = [
+	"dep:bevy",
+	"dep:render-item",
+	"dep:chico-ball-components",
+	"dep:chico-sbs-geometry",
+	"dep:chico-sbs-trees",
+	"dep:clap",
+	"procedural-common/clap",
+]
 clap = [ "render" ]
 
 [lints]

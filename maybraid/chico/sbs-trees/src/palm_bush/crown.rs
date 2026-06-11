@@ -3,7 +3,6 @@
 use bevy::prelude::*;
 use chico_ball_components::frond::FrondCrownShape;
 use chico_sbs_geometry::PalmBushSbs;
-use procedural_common::NoiseParams;
 use render_item::CascadeChunk;
 
 use crate::palm_crown::spawn_stacked_frond_crowns;
@@ -54,7 +53,6 @@ pub fn spawn_crown_rings<LeafM, LeafS>(
 	commands: &mut Commands,
 	cascade_chunk: &CascadeChunk,
 	root_transform: Transform,
-	foliage_noise: &NoiseParams,
 	leaf_material: LeafS,
 ) -> Vec<Entity>
 where
@@ -66,7 +64,7 @@ where
 		|ring| geometry.crown_ring_position(ring),
 		|ring, seed| frond_shape_for_ring(geometry, ring, seed),
 		geometry.frond_world_scale,
-		foliage_noise,
+		geometry.foliage_noise.seed,
 		leaf_material,
 		commands,
 		cascade_chunk,

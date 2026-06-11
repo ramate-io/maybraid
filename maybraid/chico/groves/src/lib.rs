@@ -3,22 +3,28 @@
 pub mod grove;
 
 pub mod braid_grass;
+pub mod tropical_tufts;
 
 #[cfg(feature = "render")]
 pub mod skipped_mesh_material;
 
 pub use grove::{
-	parse_variant_weights, Bucket, CellGrove, CellXzOffset, FlatTerrainSample, ForestGroveBiases,
-	Grove, GroveBucket, GroveCellOutcome, GroveCellPlacement, GroveDistribution, GroveExtent,
-	GroveFrontend, GroveNoiseConfig, GrovePlacedCell, GrovePlacementRanges, PaletteColor,
-	PaletteMix, PaletteSlot, PlacementConstraints, PreparedGroveDistribution, SampledCellParams,
-	TerrainSample, VariantWeightOverrides, WithPalette,
+	cell_center, parse_variant_weights, parse_vec2_csv, parse_vec3_csv, placement_noise,
+	FlatTerrainSample, ForestGroveBiases, Grove, GroveBucket, GroveCellOutcome, GroveDefinition,
+	GroveDistribution, GroveExtent, GroveFrontend, GrovePlacedCell, GrovePlacementRanges,
+	PaletteColor, PaletteMix, PaletteSlot, PlacementConstraints, PlacementSample,
+	PreparedGroveDistribution, TerrainSample, VariantWeightOverrides, DEFAULT_GROVE_EXTENT_XZ,
 };
 
-pub use braid_grass::{BraidGrassCell, BraidGrassClump, BraidGrassDefinition};
+#[cfg(feature = "render")]
+pub use grove::{patch_spawned_leaf_material, resolve_palette_color, WithPalette};
+
+pub use braid_grass::{BraidGrassCell, BraidGrassClump};
+pub use tropical_tufts::{
+	TropicalPalmBush, TropicalTuftClump, TropicalTuftsCell, TropicalTuftsItem,
+};
 
 #[cfg(feature = "render")]
-pub use braid_grass::{BraidGrass, BraidGrassRenderRule, BraidGrassStd};
-
+pub use braid_grass::{BraidGrass, BraidGrassStd};
 #[cfg(feature = "render")]
-pub use grove::{GroveRenderHelper, GroveRenderRule};
+pub use tropical_tufts::{TropicalTufts, TropicalTuftsStd};

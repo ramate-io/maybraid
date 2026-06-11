@@ -9,8 +9,6 @@ use std::marker::PhantomData;
 use bevy::prelude::*;
 use chico_sbs_geometry::PalmBushSbs;
 use clap::Args;
-use procedural_common::noise_params_from_scalar_str;
-use procedural_common::NoiseParams;
 use render_item::{CascadeChunk, RenderItem};
 
 use crate::skipped_mesh_material::SkippedLeafMeshMaterial;
@@ -20,6 +18,9 @@ use tuft::spawn_crown_tuft;
 /// Typical [`StandardMaterial`] Palm Bush using CLI-skipped leaf handles.
 pub type PalmBushStd = PalmBush<StandardMaterial, SkippedLeafMeshMaterial<StandardMaterial>>;
 
+/// Foliage noise (seed, surface frequency / amplitude) lives on
+/// [`PalmBushSbs::foliage_noise`]; hoist per-instance noise in with
+/// [`PalmBushSbs::with_noise_params`].
 #[derive(Clone, Args)]
 #[command(rename_all = "kebab-case")]
 pub struct PalmBush<LeafM, LeafS>
@@ -32,15 +33,6 @@ where
 
 	#[command(flatten, next_help_heading = "Leaf Material")]
 	pub leaf_material: LeafS,
-
-	#[arg(
-		long,
-		default_value = "0,1,0.06,1",
-		value_parser = noise_params_from_scalar_str,
-		value_name = "SEED,FREQUENCY,AMPLITUDE,OCTAVES",
-		help_heading = "Foliage Surface Noise"
-	)]
-	pub foliage_noise: NoiseParams,
 
 	#[arg(skip)]
 	__marker: PhantomData<fn() -> LeafM>,
@@ -55,9 +47,18 @@ where
 		Self {
 			geometry: PalmBushSbs::default(),
 			leaf_material: LeafS::default(),
-			foliage_noise: NoiseParams::from_scalar(0.0, 1.0, 0.06, 1),
 			__marker: PhantomData,
 		}
+	}
+}
+
+impl<LeafM, LeafS> PalmBush<LeafM, LeafS>
+where
+	LeafM: Material,
+	LeafS: Clone + Into<MeshMaterial3d<LeafM>> + Args,
+{
+	pub fn new(geometry: PalmBushSbs, leaf_material: LeafS) -> Self {
+		Self { geometry, leaf_material, __marker: PhantomData }
 	}
 }
 
@@ -77,7 +78,6 @@ where
 			commands,
 			cascade_chunk,
 			transform,
-			&self.foliage_noise,
 			self.leaf_material.clone(),
 		);
 
@@ -86,7 +86,6 @@ where
 			commands,
 			cascade_chunk,
 			transform,
-			&self.foliage_noise,
 			self.leaf_material.clone(),
 		));
 
@@ -100,7 +99,8 @@ mod tests {
 
 	#[test]
 	fn default_geometry_ring_count_matches_crown_params() {
-		let bush = PalmBush::<StandardMaterial, SkippedLeafMeshMaterial<StandardMaterial>>::default();
+		let bush =
+			PalmBush::<StandardMaterial, SkippedLeafMeshMaterial<StandardMaterial>>::default();
 		assert_eq!(bush.geometry.crown.ring_count, 8);
 		assert_eq!(bush.geometry.crown.fronds_per_ring, 12);
 	}
