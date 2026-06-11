@@ -205,7 +205,7 @@ mod tests {
 			grove.noise(),
 			Vec3::new(5.0, 0.0, 5.0),
 		);
-		let position = sampled.position_in(&test_cell(), &0.0);
+		let position = sampled.position_in(&test_cell());
 		// Jungle (index 3) rejects steepness 0.35; first-fit wraps to RedEdge (index 4).
 		let outcome = grove.prepared().select_at_with_start(3, position, sampled, &terrain);
 		match outcome {
@@ -226,7 +226,7 @@ mod tests {
 			grove.noise(),
 			Vec3::new(5.0, 0.0, 5.0),
 		);
-		let position = sampled.position_in(&test_cell(), &0.0);
+		let position = sampled.position_in(&test_cell());
 		// None bucket weight dominates random throw; pin start to a placed bucket.
 		let outcome = grove.prepared().select_at_with_start(1, position, sampled, &terrain);
 		assert!(matches!(outcome, GroveCellOutcome::Placed { .. }));

@@ -291,7 +291,7 @@ mod tests {
 			&GroveNoiseConfig::default(),
 			Vec3::new(5.0, 0.0, 5.0),
 		);
-		let position = sampled.position_in(&test_cell(), &0.0);
+		let position = sampled.position_in(&test_cell());
 		let outcome = prepared.select_at_with_start(0, position, sampled, &terrain);
 		match outcome {
 			GroveCellOutcome::Placed { variant, .. } => assert_eq!(variant, "flat"),
@@ -328,8 +328,7 @@ mod tests {
 		for cell in &cells {
 			let noise = GroveNoiseConfig::new(NoiseParams::from_scalar(0.0, 1.0, 0.0, 1));
 			let sampled = braid_ranges.sample_cell(&ForestGroveBiases::default(), &noise, cell);
-			let outcome =
-				prepared.select_at(sampled.position_in(cell, &0.0), sampled, &noise, &terrain);
+			let outcome = prepared.select_at(sampled.position_in(cell), sampled, &noise, &terrain);
 			if matches!(outcome, GroveCellOutcome::Placed { .. }) {
 				placed += 1;
 			}
@@ -359,7 +358,7 @@ mod tests {
 		let biases = ForestGroveBiases::default();
 		let noise = GroveNoiseConfig::default();
 		let sampled = ranges.sample_cell(&biases, &noise, &test_cell());
-		let position = sampled.position_in(&test_cell(), &0.0);
+		let position = sampled.position_in(&test_cell());
 		let a = prepared.select_at(position, sampled, &noise, &terrain);
 		let b = prepared.select_at(position, sampled, &noise, &terrain);
 		assert!(matches!(a, GroveCellOutcome::Placed { .. }));

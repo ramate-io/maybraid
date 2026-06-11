@@ -186,10 +186,12 @@ impl<G: CellGrove> Grove<G> {
 	) -> Result<GroveCellPlacement, Vec3> {
 		let sampled =
 			self.definition.placement_ranges().sample_cell(&self.biases, &self.noise, cell);
-		let candidate_position = sampled.position_in(cell, terrain);
+		let candidate_position = sampled.position_in(cell);
 		let Some(position) = grove_extent.resolve_xz(candidate_position, overspill_policy) else {
 			return Err(candidate_position);
 		};
+		let y = terrain.elevation_at(position);
+		let position = Vec3::new(position.x, y, position.z);
 		Ok(GroveCellPlacement { candidate_position, position, sampled })
 	}
 
