@@ -186,7 +186,7 @@ pub struct AnchorPerturbationParams {
 			long = "anchor-perturbation-noise",
 			default_value = "1337,1,1,1",
 			value_parser = noise_params_from_scalar_str,
-			value_name = "SEED,FREQUENCY,AMPLITUDE,OCTAVES"
+			value_name = "SEED,FREQUENCY,AMPLITUDE,OCTAVES[,TYPE]"
 		)
 	)]
 	pub noise: NoiseParams,

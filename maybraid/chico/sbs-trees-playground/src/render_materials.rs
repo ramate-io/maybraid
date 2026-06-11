@@ -236,6 +236,9 @@ fn attach_render_materials(
 		RenderSubject::TropicalTufts(g) => {
 			g.leaf_material.mesh = MeshMaterial3d(tuft.clone());
 		}
+		RenderSubject::CommonTufts(g) => {
+			g.leaf_material.mesh = MeshMaterial3d(tuft.clone());
+		}
 		RenderSubject::SpearTuft(t) => {
 			t.material.mesh = MeshMaterial3d(tuft.clone());
 		}

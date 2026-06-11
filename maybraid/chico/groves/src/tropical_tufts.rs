@@ -20,12 +20,15 @@ mod render;
 pub use render::{TropicalTufts, TropicalTuftsStd};
 
 /// Authored Tropical Tufts grove definition.
+///
+/// The offset range is signed and wider than the RFC's nominal `0.0..1.0` (± one cell) so
+/// placements break the underlying grid instead of clustering near cell centers.
 pub fn definition() -> GroveDefinition<TropicalTuftsCell> {
 	GroveDefinition {
 		cell_extent_xz: Vec2::splat(3.25),
 		placement: GrovePlacementRanges::new(
 			UnitRange::new(0.85, 1.15),
-			UnitRange::new(0.0, 1.0),
+			UnitRange::new(-3.25, 3.25),
 		),
 		distribution: TropicalTuftsCell::distribution(),
 	}

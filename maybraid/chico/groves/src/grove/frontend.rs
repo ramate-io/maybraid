@@ -21,13 +21,17 @@ pub struct GroveFrontend {
 	pub biases: ForestGroveBiases,
 
 	/// Shared deterministic noise for grove placement and bucket selection.
+	///
+	/// Defaults to `cellular` (per-cell hash values): gradient noise sampled at regularly
+	/// spaced cell centers correlates between neighbours and reads as a grid, while cell
+	/// values give independent, sign-balanced draws per cell.
 	#[cfg_attr(
 		feature = "render",
 		arg(
 			long = "grove-noise",
-			default_value = "1337,1,1,1",
+			default_value = "1337,1,1,1,cellular",
 			value_parser = procedural_common::noise_params_from_scalar_str,
-			value_name = "SEED,FREQUENCY,AMPLITUDE,OCTAVES",
+			value_name = "SEED,FREQUENCY,AMPLITUDE,OCTAVES[,TYPE]",
 			help_heading = "Grove Noise",
 		)
 	)]
@@ -74,7 +78,10 @@ impl Default for GroveFrontend {
 	fn default() -> Self {
 		Self {
 			biases: ForestGroveBiases::default(),
-			noise: NoiseParams::default(),
+			noise: NoiseParams {
+				noise_type: procedural_common::NoiseType::Cellular,
+				..NoiseParams::default()
+			},
 			cell_extent_xz: None,
 			variant_weights: None,
 			perturbation_origin: Vec3::ZERO,
