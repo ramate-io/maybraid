@@ -10,8 +10,8 @@ use bevy_math::Vec2;
 use procedural_common::UnitRange;
 
 use crate::grove::{
-	GroveBucket, GroveDefinition, GroveDistribution, GrovePlacementRanges, PaletteMix,
-	PaletteSlot, PlacementConstraints,
+	GroveBucket, GroveDefinition, GroveDistribution, GrovePlacementRanges, PaletteMix, PaletteSlot,
+	PlacementConstraints,
 };
 
 #[cfg(feature = "render")]
@@ -73,20 +73,14 @@ pub struct TropicalPalmBush {
 	pub crown_spread: UnitRange,
 }
 
-const BRIGHT_TUFT: TropicalTuftClump = TropicalTuftClump {
-	height: UnitRange::new(0.25, 0.50),
-	width_factor: BLADE_WIDTH_FACTOR,
-};
+const BRIGHT_TUFT: TropicalTuftClump =
+	TropicalTuftClump { height: UnitRange::new(0.25, 0.50), width_factor: BLADE_WIDTH_FACTOR };
 
-const DEEP_TUFT: TropicalTuftClump = TropicalTuftClump {
-	height: UnitRange::new(0.30, 0.55),
-	width_factor: BLADE_WIDTH_FACTOR,
-};
+const DEEP_TUFT: TropicalTuftClump =
+	TropicalTuftClump { height: UnitRange::new(0.30, 0.8), width_factor: BLADE_WIDTH_FACTOR };
 
-const YELLOW_GREEN_TUFT: TropicalTuftClump = TropicalTuftClump {
-	height: UnitRange::new(0.25, 0.45),
-	width_factor: BLADE_WIDTH_FACTOR,
-};
+const YELLOW_GREEN_TUFT: TropicalTuftClump =
+	TropicalTuftClump { height: UnitRange::new(0.25, 0.45), width_factor: BLADE_WIDTH_FACTOR };
 
 const SMALL_PALM_BUSH: TropicalPalmBush = TropicalPalmBush {
 	height: UnitRange::new(0.35, 0.80),
@@ -112,7 +106,7 @@ impl TropicalTuftsCell {
 		let juvenile =
 			PlacementConstraints::new(UnitRange::new(0.0, 0.55), UnitRange::new(0.0, 0.75));
 		GroveDistribution::new(vec![
-			GroveBucket::none(29.4),
+			GroveBucket::none(10.0),
 			GroveBucket::placed(2.0, bright, Self::BrightTuft),
 			GroveBucket::placed(1.5, lowland, Self::DeepTuft),
 			GroveBucket::placed(1.0, lowland, Self::YellowGreenTuft),
@@ -208,12 +202,8 @@ mod tests {
 
 	#[test]
 	fn first_fit_from_placed_bucket_places_variant() -> Result<()> {
-		let prepared = TropicalTuftsCell::distribution().prepare(
-			0.0,
-			0.0,
-			NoiseParams::default(),
-			Vec3::ZERO,
-		);
+		let prepared =
+			TropicalTuftsCell::distribution().prepare(0.0, 0.0, NoiseParams::default(), Vec3::ZERO);
 		let terrain = FlatTerrainSample { elevation: 0.4, steepness: 0.1 };
 		let outcome = prepared.select_from(1, Vec3::new(5.0, 0.4, 5.0), 1.0, &terrain);
 		assert!(matches!(outcome, GroveCellOutcome::Placed { .. }));
