@@ -23,8 +23,8 @@ use crate::render::{
 	RenderKamakuraTorch, RenderLiamsConifer, RenderModerateLodFrondCrown, RenderNorthernConifer,
 	RenderPalmBush, RenderPenmarchTorch, RenderRorysHeadTrained, RenderSopesBanyan,
 	RenderSpearTuft, RenderStorybookTree, RenderSubject, RenderSucculentTuft,
-	RenderTemperateConifer, RenderTropicalTufts, RenderVaseTree, RenderWaialeaPalm,
-	RenderWeepingTuft,
+	RenderTemperateConifer, RenderTropicalTufts, RenderTuftPatch, RenderVaseTree,
+	RenderWaialeaPalm, RenderWeepingTuft,
 };
 
 /// Shared render flags (resolution + scene transform) wrapped around per-item args.
@@ -187,6 +187,7 @@ pub enum Render {
 	JungleStorybookTree(RenderHelper<RenderJungleStorybookTree>),
 	SucculentTuft(RenderHelper<SucculentTuftShape>),
 	BladeTuft(RenderHelper<BladeTuftShape>),
+	TuftPatch(RenderHelper<RenderTuftPatch>),
 	BraidGrass(CellRenderHelper<RenderBraidGrass>),
 	TropicalTufts(CellRenderHelper<RenderTropicalTufts>),
 	CommonTufts(CellRenderHelper<RenderCommonTufts>),
@@ -244,6 +245,7 @@ impl Render {
 			Self::BladeTuft(h) => h.config_with(RenderSubject::BladeTuft(
 				RenderBladeTuft::from_shape(h.inner.clone(), Default::default()),
 			)),
+			Self::TuftPatch(h) => h.config_with(RenderSubject::TuftPatch(h.inner.clone())),
 			Self::BraidGrass(h) => h
 				.render
 				.config_with(RenderSubject::BraidGrass(h.configured_braid_grass())),
@@ -791,6 +793,26 @@ mod tests {
 		};
 		assert_eq!(subject.placement_cells().len(), 9);
 		assert!(!subject.placements().is_empty());
+		Ok(())
+	}
+
+	#[test]
+	fn tuft_patch_command_preserves_patch_params() -> Result<()> {
+		let cmd = crate::commands::PlaygroundCommand::parse_line(
+			"render tuft-patch --clump-count 7 --patch-extent-xz 2.5 --blade-count 6 --seed 42",
+		)
+		.map_err(|e| anyhow::anyhow!("{e}"))?;
+		let crate::commands::PlaygroundCommand::Render(Render::TuftPatch(helper)) = cmd else {
+			anyhow::bail!("expected tuft-patch render command");
+		};
+		assert_eq!(helper.inner.clump_count, 7);
+		assert!((helper.inner.patch_extent_xz - 2.5).abs() < 1e-5);
+		assert_eq!(helper.inner.shape.blade_count, 6);
+		let cfg = Render::TuftPatch(helper).into_render_config();
+		let RenderSubject::TuftPatch(patch) = cfg.subject else {
+			anyhow::bail!("expected tuft patch subject");
+		};
+		assert_eq!(patch.clump_anchors().len(), 7);
 		Ok(())
 	}
 

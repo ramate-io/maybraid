@@ -230,6 +230,9 @@ fn attach_render_materials(
 		RenderSubject::BladeTuft(t) => {
 			t.material.mesh = MeshMaterial3d(tuft.clone());
 		}
+		RenderSubject::TuftPatch(t) => {
+			t.leaf_material.mesh = MeshMaterial3d(tuft.clone());
+		}
 		RenderSubject::BraidGrass(g) => {
 			g.leaf_material.mesh = MeshMaterial3d(tuft.clone());
 		}
