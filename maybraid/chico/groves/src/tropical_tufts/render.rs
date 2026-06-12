@@ -151,13 +151,21 @@ impl BuildWithNoise<BladeTuftShape> for TropicalTuftClump {
 			config.sample_range_f32_4d(lo, hi, 0.0, 0.0, 0.0, salt)
 		};
 
+		let sample_u32 = |range: &std::ops::RangeInclusive<u32>, salt| {
+			let lo = *range.start() as usize;
+			let hi = (*range.end() as usize).saturating_add(1);
+			config.sample_range_usize_4d(lo, hi, 0.0, 0.0, 0.0, salt) as u32
+		};
+
 		let blade_length = sample_f32(self.height, 1.0).max(0.05);
 		let blade_width = blade_length * sample_f32(self.width_factor, 2.0);
 
 		BladeTuftShape {
-			blade_count: 8,
+			blade_count: sample_u32(&self.blade_count, 3.0),
 			blade_length,
 			blade_width,
+			max_tilt_radians: sample_f32(self.max_tilt_radians, 4.0).max(0.01),
+			bend_segments: sample_u32(&self.bend_segments, 5.0).max(1),
 			seed: noise.seed,
 			..BladeTuftShape::default()
 		}

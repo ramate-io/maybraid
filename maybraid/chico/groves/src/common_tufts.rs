@@ -7,6 +7,8 @@
 //! weights, constraints, palettes, and clump geometry) lives in this module as constants
 //! mirroring the RFC blocks.
 
+use std::ops::RangeInclusive;
+
 use bevy_math::Vec2;
 use procedural_common::UnitRange;
 
@@ -50,19 +52,42 @@ pub struct CommonTuftClump {
 	/// Blade width as a **fraction of blade length**. The RFC's absolute widths describe the
 	/// clump footprint, not blade thickness — read literally they render far-too-thick blades.
 	pub width_factor: UnitRange,
+	pub blade_count: RangeInclusive<u32>,
+	pub bend_segments: RangeInclusive<u32>,
+	pub max_tilt_radians: UnitRange,
 }
 
 /// Shared blade thickness band: ~2–4 % of blade length keeps blades grass-thin at any height.
 const BLADE_WIDTH_FACTOR: UnitRange = UnitRange::new(0.02, 0.04);
 
-const SHORT_GREEN: CommonTuftClump =
-	CommonTuftClump { height: UnitRange::new(0.10, 0.40), width_factor: BLADE_WIDTH_FACTOR };
+// Modest per-clump shape variation; Braid Grass authors the widest bands of the tuft groves.
+const BLADE_COUNT: RangeInclusive<u32> = 6..=10;
+const BEND_SEGMENTS: RangeInclusive<u32> = 1..=3;
+const MAX_TILT_RADIANS: UnitRange = UnitRange::new(0.15, 0.30);
 
-const DRY_SCRUB: CommonTuftClump =
-	CommonTuftClump { height: UnitRange::new(0.15, 0.50), width_factor: BLADE_WIDTH_FACTOR };
+const SHORT_GREEN: CommonTuftClump = CommonTuftClump {
+	height: UnitRange::new(0.10, 0.40),
+	width_factor: BLADE_WIDTH_FACTOR,
+	blade_count: BLADE_COUNT,
+	bend_segments: BEND_SEGMENTS,
+	max_tilt_radians: MAX_TILT_RADIANS,
+};
 
-const TALL_WILD: CommonTuftClump =
-	CommonTuftClump { height: UnitRange::new(0.30, 1.0), width_factor: BLADE_WIDTH_FACTOR };
+const DRY_SCRUB: CommonTuftClump = CommonTuftClump {
+	height: UnitRange::new(0.15, 0.50),
+	width_factor: BLADE_WIDTH_FACTOR,
+	blade_count: BLADE_COUNT,
+	bend_segments: BEND_SEGMENTS,
+	max_tilt_radians: MAX_TILT_RADIANS,
+};
+
+const TALL_WILD: CommonTuftClump = CommonTuftClump {
+	height: UnitRange::new(0.30, 1.0),
+	width_factor: BLADE_WIDTH_FACTOR,
+	blade_count: BLADE_COUNT,
+	bend_segments: BEND_SEGMENTS,
+	max_tilt_radians: MAX_TILT_RADIANS,
+};
 
 impl CommonTuftsCell {
 	/// Authored ordered distribution: explicit `None`, then variants in declaration order.

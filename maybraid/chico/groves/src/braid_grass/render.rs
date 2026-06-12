@@ -146,20 +146,21 @@ impl BuildWithNoise<BladeTuftShape> for BraidGrassClump {
 			let hi = range.start.max(range.end);
 			config.sample_range_f32_4d(lo, hi, 0.0, 0.0, 0.0, salt)
 		};
-		let blade_count = {
-			let lo = *self.blade_count.start() as usize;
-			let hi = (*self.blade_count.end() as usize).saturating_add(1);
-			config.sample_range_usize_4d(lo, hi, 0.0, 0.0, 0.0, 3.0) as u32
+		let sample_u32 = |range: &std::ops::RangeInclusive<u32>, salt| {
+			let lo = *range.start() as usize;
+			let hi = (*range.end() as usize).saturating_add(1);
+			config.sample_range_usize_4d(lo, hi, 0.0, 0.0, 0.0, salt) as u32
 		};
 
 		let blade_length = sample_f32(self.height, 1.0).max(0.1);
 		let blade_width = blade_length * sample_f32(self.width_factor, 2.0);
 
 		BladeTuftShape {
-			blade_count,
+			blade_count: sample_u32(&self.blade_count, 3.0),
 			blade_length,
 			blade_width,
-			max_tilt_radians: sample_f32(self.braid_twist, 4.0).max(0.01),
+			max_tilt_radians: sample_f32(self.max_tilt_radians, 4.0).max(0.01),
+			bend_segments: sample_u32(&self.bend_segments, 5.0).max(1),
 			seed: noise.seed,
 			..BladeTuftShape::default()
 		}
@@ -214,10 +215,13 @@ mod tests {
 	use anyhow::Result;
 
 	#[test]
-	fn build_with_noise_respects_blade_count_range() -> Result<()> {
+	fn build_with_noise_respects_authored_shape_ranges() -> Result<()> {
 		let clump = BraidGrassCell::DeepGreenBlade.clump();
 		let shape = clump.build_with_noise(NoiseParams::from_scalar(42.0, 1.0, 1.0, 1));
 		assert!(clump.blade_count.contains(&shape.blade_count));
+		assert!(clump.bend_segments.contains(&shape.bend_segments));
+		assert!(shape.max_tilt_radians >= clump.max_tilt_radians.start);
+		assert!(shape.max_tilt_radians <= clump.max_tilt_radians.end);
 		Ok(())
 	}
 

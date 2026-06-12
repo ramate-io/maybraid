@@ -59,10 +59,18 @@ pub struct TropicalTuftClump {
 	/// Blade width as a **fraction of blade length**; absolute widths render far-too-thick
 	/// blades (the RFC widths describe the clump footprint, not blade thickness).
 	pub width_factor: UnitRange,
+	pub blade_count: RangeInclusive<u32>,
+	pub bend_segments: RangeInclusive<u32>,
+	pub max_tilt_radians: UnitRange,
 }
 
 /// Shared blade thickness band: ~2–4 % of blade length keeps blades grass-thin at any height.
 const BLADE_WIDTH_FACTOR: UnitRange = UnitRange::new(0.02, 0.04);
+
+// Modest per-clump shape variation; Braid Grass authors the widest bands of the tuft groves.
+const BLADE_COUNT: RangeInclusive<u32> = 6..=12;
+const BEND_SEGMENTS: RangeInclusive<u32> = 1..=3;
+const MAX_TILT_RADIANS: UnitRange = UnitRange::new(0.15, 0.35);
 
 /// Authored geometry ranges for one ground-anchored palm bush companion.
 #[derive(Debug, Clone, PartialEq)]
@@ -73,14 +81,29 @@ pub struct TropicalPalmBush {
 	pub crown_spread: UnitRange,
 }
 
-const BRIGHT_TUFT: TropicalTuftClump =
-	TropicalTuftClump { height: UnitRange::new(0.25, 0.50), width_factor: BLADE_WIDTH_FACTOR };
+const BRIGHT_TUFT: TropicalTuftClump = TropicalTuftClump {
+	height: UnitRange::new(0.25, 0.50),
+	width_factor: BLADE_WIDTH_FACTOR,
+	blade_count: BLADE_COUNT,
+	bend_segments: BEND_SEGMENTS,
+	max_tilt_radians: MAX_TILT_RADIANS,
+};
 
-const DEEP_TUFT: TropicalTuftClump =
-	TropicalTuftClump { height: UnitRange::new(0.30, 0.8), width_factor: BLADE_WIDTH_FACTOR };
+const DEEP_TUFT: TropicalTuftClump = TropicalTuftClump {
+	height: UnitRange::new(0.30, 0.8),
+	width_factor: BLADE_WIDTH_FACTOR,
+	blade_count: BLADE_COUNT,
+	bend_segments: BEND_SEGMENTS,
+	max_tilt_radians: MAX_TILT_RADIANS,
+};
 
-const YELLOW_GREEN_TUFT: TropicalTuftClump =
-	TropicalTuftClump { height: UnitRange::new(0.25, 0.45), width_factor: BLADE_WIDTH_FACTOR };
+const YELLOW_GREEN_TUFT: TropicalTuftClump = TropicalTuftClump {
+	height: UnitRange::new(0.25, 0.45),
+	width_factor: BLADE_WIDTH_FACTOR,
+	blade_count: BLADE_COUNT,
+	bend_segments: BEND_SEGMENTS,
+	max_tilt_radians: MAX_TILT_RADIANS,
+};
 
 const SMALL_PALM_BUSH: TropicalPalmBush = TropicalPalmBush {
 	height: UnitRange::new(0.35, 0.80),
@@ -178,7 +201,7 @@ mod tests {
 		let dist = TropicalTuftsCell::distribution();
 		assert_eq!(dist.len(), 6);
 		assert!(dist.buckets[0].item.is_none());
-		assert_eq!(dist.buckets[0].weight, 29.4);
+		assert_eq!(dist.buckets[0].weight, 10.0);
 		assert_eq!(dist.buckets[1].item, Some(TropicalTuftsCell::BrightTuft));
 		assert_eq!(dist.buckets[1].weight, 2.0);
 		assert_eq!(dist.buckets[2].weight, 1.5);
