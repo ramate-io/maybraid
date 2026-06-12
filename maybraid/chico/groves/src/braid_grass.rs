@@ -49,35 +49,41 @@ pub enum BraidGrassCell {
 #[derive(Debug, Clone, PartialEq)]
 pub struct BraidGrassClump {
 	pub height: UnitRange,
-	pub width: UnitRange,
+	/// Blade width as a **fraction of blade length**; absolute widths render far-too-thick
+	/// blades (the RFC widths describe the clump footprint, not blade thickness).
+	pub width_factor: UnitRange,
 	pub blade_count: RangeInclusive<u32>,
 	pub braid_twist: UnitRange,
 }
 
+/// Shared blade thickness band: ~2–3 % of blade length — braid blades run long (1–3 m),
+/// so the proportional band is tighter than the short-tuft groves.
+const BLADE_WIDTH_FACTOR: UnitRange = UnitRange::new(0.02, 0.03);
+
 const DEEP_GREEN_BLADE: BraidGrassClump = BraidGrassClump {
 	height: UnitRange::new(1.0, 2.2),
-	width: UnitRange::new(0.35, 0.85),
+	width_factor: BLADE_WIDTH_FACTOR,
 	blade_count: 12..=28,
 	braid_twist: UnitRange::new(0.10, 0.35),
 };
 
 const PALE_REED_BLADE: BraidGrassClump = BraidGrassClump {
 	height: UnitRange::new(1.2, 2.6),
-	width: UnitRange::new(0.30, 0.70),
+	width_factor: BLADE_WIDTH_FACTOR,
 	blade_count: 10..=22,
 	braid_twist: UnitRange::new(0.05, 0.25),
 };
 
 const JUNGLE_BLADE: BraidGrassClump = BraidGrassClump {
 	height: UnitRange::new(1.6, 3.0),
-	width: UnitRange::new(0.45, 1.00),
+	width_factor: BLADE_WIDTH_FACTOR,
 	blade_count: 18..=36,
 	braid_twist: UnitRange::new(0.20, 0.50),
 };
 
 const RED_EDGE_BLADE: BraidGrassClump = BraidGrassClump {
 	height: UnitRange::new(1.0, 2.0),
-	width: UnitRange::new(0.30, 0.75),
+	width_factor: BLADE_WIDTH_FACTOR,
 	blade_count: 10..=24,
 	braid_twist: UnitRange::new(0.10, 0.30),
 };

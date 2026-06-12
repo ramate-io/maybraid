@@ -139,6 +139,9 @@ where
 }
 
 /// Sample a tuft clump's authored geometry ranges into a blade tuft shape.
+///
+/// Blade width is **length-proportional** (`length * width_factor`), so short and tall
+/// varietals stay equally grass-thin.
 impl BuildWithNoise<BladeTuftShape> for TropicalTuftClump {
 	fn build_with_noise(&self, noise: NoiseParams) -> BladeTuftShape {
 		let config = NoiseConfig::new(noise);
@@ -148,10 +151,13 @@ impl BuildWithNoise<BladeTuftShape> for TropicalTuftClump {
 			config.sample_range_f32_4d(lo, hi, 0.0, 0.0, 0.0, salt)
 		};
 
+		let blade_length = sample_f32(self.height, 1.0).max(0.05);
+		let blade_width = blade_length * sample_f32(self.width_factor, 2.0);
+
 		BladeTuftShape {
 			blade_count: 8,
-			blade_length: sample_f32(self.height, 1.0).max(0.05),
-			blade_width: sample_f32(self.width, 2.0).max(0.005),
+			blade_length,
+			blade_width,
 			seed: noise.seed,
 			..BladeTuftShape::default()
 		}

@@ -11,8 +11,8 @@ use bevy_math::Vec2;
 use procedural_common::UnitRange;
 
 use crate::grove::{
-	GroveBucket, GroveDefinition, GroveDistribution, GrovePlacementRanges, PaletteMix,
-	PaletteSlot, PlacementConstraints,
+	GroveBucket, GroveDefinition, GroveDistribution, GrovePlacementRanges, PaletteMix, PaletteSlot,
+	PlacementConstraints,
 };
 
 #[cfg(feature = "render")]
@@ -29,10 +29,7 @@ pub use render::{CommonTufts, CommonTuftsStd};
 pub fn definition() -> GroveDefinition<CommonTuftsCell> {
 	GroveDefinition {
 		cell_extent_xz: Vec2::splat(2.0),
-		placement: GrovePlacementRanges::new(
-			UnitRange::new(0.85, 1.15),
-			UnitRange::new(-2.0, 2.0),
-		),
+		placement: GrovePlacementRanges::new(UnitRange::new(0.85, 1.15), UnitRange::new(-2.0, 2.0)),
 		distribution: CommonTuftsCell::distribution(),
 	}
 }
@@ -50,23 +47,22 @@ pub enum CommonTuftsCell {
 #[derive(Debug, Clone, PartialEq)]
 pub struct CommonTuftClump {
 	pub height: UnitRange,
-	pub width: UnitRange,
+	/// Blade width as a **fraction of blade length**. The RFC's absolute widths describe the
+	/// clump footprint, not blade thickness — read literally they render far-too-thick blades.
+	pub width_factor: UnitRange,
 }
 
-const SHORT_GREEN: CommonTuftClump = CommonTuftClump {
-	height: UnitRange::new(0.10, 0.25),
-	width: UnitRange::new(0.08, 0.20),
-};
+/// Shared blade thickness band: ~2–4 % of blade length keeps blades grass-thin at any height.
+const BLADE_WIDTH_FACTOR: UnitRange = UnitRange::new(0.02, 0.04);
 
-const DRY_SCRUB: CommonTuftClump = CommonTuftClump {
-	height: UnitRange::new(0.15, 0.40),
-	width: UnitRange::new(0.08, 0.25),
-};
+const SHORT_GREEN: CommonTuftClump =
+	CommonTuftClump { height: UnitRange::new(0.10, 0.40), width_factor: BLADE_WIDTH_FACTOR };
 
-const TALL_WILD: CommonTuftClump = CommonTuftClump {
-	height: UnitRange::new(0.30, 0.50),
-	width: UnitRange::new(0.12, 0.30),
-};
+const DRY_SCRUB: CommonTuftClump =
+	CommonTuftClump { height: UnitRange::new(0.15, 0.50), width_factor: BLADE_WIDTH_FACTOR };
+
+const TALL_WILD: CommonTuftClump =
+	CommonTuftClump { height: UnitRange::new(0.30, 1.0), width_factor: BLADE_WIDTH_FACTOR };
 
 impl CommonTuftsCell {
 	/// Authored ordered distribution: explicit `None`, then variants in declaration order.
@@ -142,21 +138,22 @@ mod tests {
 	fn placed_share_sits_in_rfc_density_range() -> Result<()> {
 		let dist = CommonTuftsCell::distribution();
 		let total: f32 = dist.buckets.iter().map(|b| b.weight).sum();
-		let placed: f32 =
-			dist.buckets.iter().filter(|b| b.item.is_some()).map(|b| b.weight).sum();
+		let placed: f32 = dist.buckets.iter().filter(|b| b.item.is_some()).map(|b| b.weight).sum();
 		let share = placed / total;
 		assert!((0.10..=0.35).contains(&share), "placed share {share} outside RFC density");
 		Ok(())
 	}
 
 	#[test]
-	fn clump_heights_follow_rfc_band() -> Result<()> {
+	fn clump_geometry_follows_authored_bands() -> Result<()> {
 		for cell in
 			[CommonTuftsCell::ShortGreen, CommonTuftsCell::DryScrub, CommonTuftsCell::TallWild]
 		{
 			let clump = cell.clump();
 			assert!(clump.height.start >= 0.10);
-			assert!(clump.height.end <= 0.50);
+			assert!(clump.height.end <= 1.0);
+			assert!(clump.width_factor.start > 0.0);
+			assert!(clump.width_factor.end <= 0.05, "blades should stay grass-thin");
 		}
 		Ok(())
 	}
@@ -164,12 +161,8 @@ mod tests {
 	#[test]
 	fn constraint_first_fit_fallback() -> Result<()> {
 		// ShortGreen (index 1) rejects elevation 0.85; first-fit falls to DryScrub (index 2).
-		let prepared = CommonTuftsCell::distribution().prepare(
-			0.0,
-			0.0,
-			NoiseParams::default(),
-			Vec3::ZERO,
-		);
+		let prepared =
+			CommonTuftsCell::distribution().prepare(0.0, 0.0, NoiseParams::default(), Vec3::ZERO);
 		let terrain = FlatTerrainSample { elevation: 0.85, steepness: 0.2 };
 		let outcome = prepared.select_from(1, Vec3::new(5.0, 0.85, 5.0), 1.0, &terrain);
 		match outcome {
@@ -185,8 +178,7 @@ mod tests {
 	fn placements_break_the_cell_grid() -> Result<()> {
 		// Match the frontend default: cellular per-cell hash values for placement draws.
 		let noise = crate::grove::GroveFrontend::default().noise;
-		let grove =
-			Grove::assemble(definition(), ForestGroveBiases::default(), noise, Vec3::ZERO);
+		let grove = Grove::assemble(definition(), ForestGroveBiases::default(), noise, Vec3::ZERO);
 		let extent = GroveExtent::new(Vec3::ZERO, Vec3::new(40.0, 1.0, 40.0));
 		let terrain = FlatTerrainSample { elevation: 0.35, steepness: 0.15 };
 		let placements = grove.populate(&extent, &terrain);

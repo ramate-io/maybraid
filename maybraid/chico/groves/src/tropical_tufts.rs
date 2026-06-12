@@ -56,8 +56,13 @@ pub enum TropicalTuftsItem {
 #[derive(Debug, Clone, PartialEq)]
 pub struct TropicalTuftClump {
 	pub height: UnitRange,
-	pub width: UnitRange,
+	/// Blade width as a **fraction of blade length**; absolute widths render far-too-thick
+	/// blades (the RFC widths describe the clump footprint, not blade thickness).
+	pub width_factor: UnitRange,
 }
+
+/// Shared blade thickness band: ~2–4 % of blade length keeps blades grass-thin at any height.
+const BLADE_WIDTH_FACTOR: UnitRange = UnitRange::new(0.02, 0.04);
 
 /// Authored geometry ranges for one ground-anchored palm bush companion.
 #[derive(Debug, Clone, PartialEq)]
@@ -70,17 +75,17 @@ pub struct TropicalPalmBush {
 
 const BRIGHT_TUFT: TropicalTuftClump = TropicalTuftClump {
 	height: UnitRange::new(0.25, 0.50),
-	width: UnitRange::new(0.14, 0.34),
+	width_factor: BLADE_WIDTH_FACTOR,
 };
 
 const DEEP_TUFT: TropicalTuftClump = TropicalTuftClump {
 	height: UnitRange::new(0.30, 0.55),
-	width: UnitRange::new(0.16, 0.38),
+	width_factor: BLADE_WIDTH_FACTOR,
 };
 
 const YELLOW_GREEN_TUFT: TropicalTuftClump = TropicalTuftClump {
 	height: UnitRange::new(0.25, 0.45),
-	width: UnitRange::new(0.12, 0.30),
+	width_factor: BLADE_WIDTH_FACTOR,
 };
 
 const SMALL_PALM_BUSH: TropicalPalmBush = TropicalPalmBush {
