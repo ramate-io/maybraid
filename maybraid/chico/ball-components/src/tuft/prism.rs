@@ -155,6 +155,10 @@ impl PrismaticCluster {
 		let sides = self.side_count.max(2) as usize;
 		let rings = self.height_segments.max(1) as usize;
 		let max_sway = length * MAX_SWAY_FRACTION_OF_LENGTH;
+		// Scale the sway coordinate with the ring count so each segment crosses new noise
+		// features; otherwise extra segments only refine the same smooth bow and
+		// `height_segments` has no visible effect.
+		let sway_frequency = self.noise_frequency * rings as f32;
 
 		for ring in 0..=rings {
 			let t = ring as f32 / rings as f32;
@@ -168,7 +172,7 @@ impl PrismaticCluster {
 				&noise,
 				element.seed,
 				t,
-				self.noise_frequency,
+				sway_frequency,
 				self.noise_amplitude,
 				max_sway,
 			);

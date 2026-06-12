@@ -20,7 +20,7 @@ pub use grove::{
 #[cfg(feature = "render")]
 pub use grove::{patch_spawned_leaf_material, resolve_palette_color, WithPalette};
 
-pub use braid_grass::{BraidGrassCell, BraidGrassClump};
+pub use braid_grass::{BraidGrassCell, BraidGrassClump, BraidGrassItem, BraidSpearClump};
 pub use common_tufts::{CommonTuftClump, CommonTuftsCell};
 pub use tropical_tufts::{
 	TropicalPalmBush, TropicalTuftClump, TropicalTuftsCell, TropicalTuftsItem,

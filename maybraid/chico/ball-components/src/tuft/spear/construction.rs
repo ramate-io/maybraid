@@ -218,6 +218,10 @@ fn append_ribbon(
 	}
 
 	let max_sway = length * MAX_SWAY_FRACTION_OF_LENGTH;
+	// Scale the sway coordinate with the segment count so each segment crosses new noise
+	// features; otherwise extra segments only refine the same smooth bow and
+	// `height_segments` has no visible effect.
+	let sway_frequency = noise_frequency * height_segments.max(1) as f32;
 	let mut sections: Vec<CrossSection> = Vec::new();
 
 	for t in body_ts(height_segments) {
@@ -233,7 +237,7 @@ fn append_ribbon(
 			t,
 			&noise,
 			element.seed,
-			noise_frequency,
+			sway_frequency,
 			noise_amplitude,
 			max_sway,
 		);
@@ -257,7 +261,7 @@ fn append_ribbon(
 			t,
 			&noise,
 			element.seed,
-			noise_frequency,
+			sway_frequency,
 			noise_amplitude,
 			max_sway,
 		);

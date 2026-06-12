@@ -3,14 +3,16 @@
 use std::marker::PhantomData;
 
 use bevy::prelude::*;
-use chico_ball_components::tuft::{BladeTuft, BladeTuftShape};
+use chico_ball_components::tuft::{BladeTuft, BladeTuftShape, SpearTuft, SpearTuftShape};
 use clap::Args;
 use procedural_common::{
 	noise_params_from_scalar_str, BuildWithNoise, NoiseConfig, NoiseParams, UnitRange,
 };
 use render_item::{CascadeChunk, RenderItem};
 
-use crate::braid_grass::{definition, BraidGrassCell, BraidGrassClump};
+use crate::braid_grass::{
+	definition, BraidGrassCell, BraidGrassClump, BraidGrassItem, BraidSpearClump,
+};
 use crate::grove::{
 	patch_spawned_leaf_material, placement_noise, FlatTerrainSample, GroveExtent, GroveFrontend,
 	GrovePlacedCell, TerrainSample, WithPalette, DEFAULT_GROVE_EXTENT_XZ,
@@ -167,6 +169,40 @@ impl BuildWithNoise<BladeTuftShape> for BraidGrassClump {
 	}
 }
 
+/// Sample a spear clump's authored geometry ranges into a spear tuft shape.
+///
+/// The belly half-width is **length-proportional** (`length * belly_factor`); the base tapers
+/// to roughly a third of the belly, keeping the authored belly→tip ribbon profile.
+impl BuildWithNoise<SpearTuftShape> for BraidSpearClump {
+	fn build_with_noise(&self, noise: NoiseParams) -> SpearTuftShape {
+		let config = NoiseConfig::new(noise);
+		let sample_f32 = |range: UnitRange, salt| {
+			let lo = range.start.min(range.end);
+			let hi = range.start.max(range.end);
+			config.sample_range_f32_4d(lo, hi, 0.0, 0.0, 0.0, salt)
+		};
+		let sample_u32 = |range: &std::ops::RangeInclusive<u32>, salt| {
+			let lo = *range.start() as usize;
+			let hi = (*range.end() as usize).saturating_add(1);
+			config.sample_range_usize_4d(lo, hi, 0.0, 0.0, 0.0, salt) as u32
+		};
+
+		let spear_length = sample_f32(self.height, 1.0).max(0.1);
+		let belly_half_width = spear_length * sample_f32(self.belly_factor, 2.0);
+
+		SpearTuftShape {
+			spear_count: sample_u32(&self.spear_count, 3.0),
+			spear_length,
+			base_half_width: belly_half_width * 0.35,
+			belly_half_width,
+			max_tilt_radians: sample_f32(self.max_tilt_radians, 4.0).max(0.01),
+			bend_segments: sample_u32(&self.bend_segments, 5.0).max(1),
+			seed: noise.seed,
+			..SpearTuftShape::default()
+		}
+	}
+}
+
 fn placement_transform<V>(placed: &GrovePlacedCell<V>) -> Transform {
 	Transform {
 		translation: placed.position,
@@ -191,11 +227,22 @@ where
 		for placed in self.placements() {
 			let local = transform.mul_transform(placement_transform(&placed));
 			let noise = placement_noise(self.foliage_noise, placed.position);
-			let mut shape = placed.variant.clump().build_with_noise(noise);
-			shape.noise_amplitude = self.foliage_noise.amplitude;
-			shape.noise_frequency = self.foliage_noise.frequency;
-			let tuft = BladeTuft::from_shape(shape, self.leaf_material.clone());
-			let entities = tuft.spawn_render_items(commands, cascade_chunk, local);
+			let entities = match placed.variant.item() {
+				BraidGrassItem::Blade(clump) => {
+					let mut shape = clump.build_with_noise(noise);
+					shape.noise_amplitude = self.foliage_noise.amplitude;
+					shape.noise_frequency = self.foliage_noise.frequency;
+					let tuft = BladeTuft::from_shape(shape, self.leaf_material.clone());
+					tuft.spawn_render_items(commands, cascade_chunk, local)
+				}
+				BraidGrassItem::Spear(clump) => {
+					let mut shape = clump.build_with_noise(noise);
+					shape.noise_amplitude = self.foliage_noise.amplitude;
+					shape.noise_frequency = self.foliage_noise.frequency;
+					let tuft = SpearTuft::from_shape(shape, self.leaf_material.clone());
+					tuft.spawn_render_items(commands, cascade_chunk, local)
+				}
+			};
 			patch_spawned_leaf_material::<LeafM>(
 				&entities,
 				placed.variant.palette_mix(),
@@ -216,12 +263,31 @@ mod tests {
 
 	#[test]
 	fn build_with_noise_respects_authored_shape_ranges() -> Result<()> {
-		let clump = BraidGrassCell::DeepGreenBlade.clump();
+		let BraidGrassItem::Blade(clump) = BraidGrassCell::DeepGreenBlade.item() else {
+			anyhow::bail!("expected blade item");
+		};
 		let shape = clump.build_with_noise(NoiseParams::from_scalar(42.0, 1.0, 1.0, 1));
 		assert!(clump.blade_count.contains(&shape.blade_count));
 		assert!(clump.bend_segments.contains(&shape.bend_segments));
 		assert!(shape.max_tilt_radians >= clump.max_tilt_radians.start);
 		assert!(shape.max_tilt_radians <= clump.max_tilt_radians.end);
+		Ok(())
+	}
+
+	#[test]
+	fn spear_build_respects_authored_shape_ranges() -> Result<()> {
+		let BraidGrassItem::Spear(clump) = BraidGrassCell::FountainSpear.item() else {
+			anyhow::bail!("expected spear item");
+		};
+		let shape = clump.build_with_noise(NoiseParams::from_scalar(42.0, 1.0, 1.0, 1));
+		assert!(clump.spear_count.contains(&shape.spear_count));
+		assert!(clump.bend_segments.contains(&shape.bend_segments));
+		assert!(shape.max_tilt_radians >= clump.max_tilt_radians.start);
+		assert!(shape.max_tilt_radians <= clump.max_tilt_radians.end);
+		let factor = shape.belly_half_width / shape.spear_length;
+		assert!(factor >= clump.belly_factor.start);
+		assert!(factor <= clump.belly_factor.end);
+		assert!(shape.base_half_width < shape.belly_half_width);
 		Ok(())
 	}
 
@@ -259,7 +325,7 @@ mod tests {
 			..Default::default()
 		};
 		grass.grove.variant_weights =
-			Some(parse_variant_weights("0.0,9.0,x,x,x").map_err(|e| anyhow::anyhow!("{e}"))?);
+			Some(parse_variant_weights("0.0,9.0,x,x,x,x,x").map_err(|e| anyhow::anyhow!("{e}"))?);
 		let span = 3.0 * grass.cell_extent_xz();
 		grass = grass.with_extent(GroveExtent::new(Vec3::ZERO, Vec3::new(span.x, 1.0, span.y)));
 		assert!(!grass.placements().is_empty());

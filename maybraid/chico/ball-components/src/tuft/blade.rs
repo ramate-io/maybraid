@@ -34,7 +34,8 @@ pub struct BladeTuftShape {
 	pub bend_segments: u32,
 	#[cfg_attr(feature = "clap", arg(long, default_value_t = 0.10))]
 	pub noise_amplitude: f32,
-	/// Sway wavelike cycles along the full strand (independent of length); lower = smoother.
+	/// Sway cycles **per bend segment**; near `1.0` each segment kinks independently, lower
+	/// keeps neighbouring segments correlated (smoother bow).
 	#[cfg_attr(feature = "clap", arg(long, default_value_t = 1.0))]
 	pub noise_frequency: f32,
 	#[cfg_attr(feature = "clap", arg(long, default_value_t = 0))]

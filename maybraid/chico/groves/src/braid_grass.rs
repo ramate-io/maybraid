@@ -40,9 +40,18 @@ pub enum BraidGrassCell {
 	PaleReedBlade,
 	JungleBlade,
 	RedEdgeBlade,
+	GreenSpear,
+	FountainSpear,
 }
 
-/// Authored geometry ranges for one braid-grass clump.
+/// Typed authored geometry for one braid-grass variant.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum BraidGrassItem {
+	Blade(&'static BraidGrassClump),
+	Spear(&'static BraidSpearClump),
+}
+
+/// Authored geometry ranges for one braid-grass blade clump.
 #[derive(Debug, Clone, PartialEq)]
 pub struct BraidGrassClump {
 	pub height: UnitRange,
@@ -55,20 +64,36 @@ pub struct BraidGrassClump {
 	pub max_tilt_radians: UnitRange,
 }
 
+/// Authored geometry ranges for one braid-grass spear clump (flat belly→tip ribbons).
+#[derive(Debug, Clone, PartialEq)]
+pub struct BraidSpearClump {
+	pub height: UnitRange,
+	/// Belly half-width as a **fraction of spear length** (same proportional contract as
+	/// [`BraidGrassClump::width_factor`]); the base tapers from the belly in the render build.
+	pub belly_factor: UnitRange,
+	pub spear_count: RangeInclusive<u32>,
+	pub bend_segments: RangeInclusive<u32>,
+	pub max_tilt_radians: UnitRange,
+}
+
 /// Shared blade thickness band: ~2–3 % of blade length — braid blades run long (1–3 m),
 /// so the proportional band is tighter than the short-tuft groves.
-const BLADE_WIDTH_FACTOR: UnitRange = UnitRange::new(0.02, 0.03);
+const BLADE_WIDTH_FACTOR: UnitRange = UnitRange::new(0.022, 0.034);
 
 /// Braid Grass takes the widest shape variation of the tuft groves: kink counts span
 /// near-straight reeds through heavily braided blades.
-const BEND_SEGMENTS: RangeInclusive<u32> = 1..=8;
+const BEND_SEGMENTS: RangeInclusive<u32> = 2..=10;
+
+// Most tilt bands sit in a moderate regime (uprightish PaleReed/GreenSpear through leaning
+// DeepGreen/RedEdge); Jungle and FountainSpear instead take *wide* bands, so individual
+// clumps of those varietals range anywhere from upright to fully splayed.
 
 const DEEP_GREEN_BLADE: BraidGrassClump = BraidGrassClump {
 	height: UnitRange::new(1.0, 2.2),
 	width_factor: BLADE_WIDTH_FACTOR,
 	blade_count: 8..=28,
 	bend_segments: BEND_SEGMENTS,
-	max_tilt_radians: UnitRange::new(0.10, 0.70),
+	max_tilt_radians: UnitRange::new(0.20, 0.45),
 };
 
 const PALE_REED_BLADE: BraidGrassClump = BraidGrassClump {
@@ -76,7 +101,7 @@ const PALE_REED_BLADE: BraidGrassClump = BraidGrassClump {
 	width_factor: BLADE_WIDTH_FACTOR,
 	blade_count: 6..=22,
 	bend_segments: BEND_SEGMENTS,
-	max_tilt_radians: UnitRange::new(0.05, 0.50),
+	max_tilt_radians: UnitRange::new(0.10, 0.25),
 };
 
 const JUNGLE_BLADE: BraidGrassClump = BraidGrassClump {
@@ -84,7 +109,7 @@ const JUNGLE_BLADE: BraidGrassClump = BraidGrassClump {
 	width_factor: BLADE_WIDTH_FACTOR,
 	blade_count: 6..=24,
 	bend_segments: BEND_SEGMENTS,
-	max_tilt_radians: UnitRange::new(0.20, 0.70),
+	max_tilt_radians: UnitRange::new(0.15, 0.90),
 };
 
 const RED_EDGE_BLADE: BraidGrassClump = BraidGrassClump {
@@ -92,7 +117,23 @@ const RED_EDGE_BLADE: BraidGrassClump = BraidGrassClump {
 	width_factor: BLADE_WIDTH_FACTOR,
 	blade_count: 10..=18,
 	bend_segments: BEND_SEGMENTS,
-	max_tilt_radians: UnitRange::new(0.10, 0.70),
+	max_tilt_radians: UnitRange::new(0.25, 0.55),
+};
+
+const GREEN_SPEAR: BraidSpearClump = BraidSpearClump {
+	height: UnitRange::new(1.2, 2.4),
+	belly_factor: UnitRange::new(0.008, 0.015),
+	spear_count: 10..=24,
+	bend_segments: BEND_SEGMENTS,
+	max_tilt_radians: UnitRange::new(0.12, 0.30),
+};
+
+const FOUNTAIN_SPEAR: BraidSpearClump = BraidSpearClump {
+	height: UnitRange::new(1.0, 2.0),
+	belly_factor: UnitRange::new(0.010, 0.018),
+	spear_count: 14..=30,
+	bend_segments: BEND_SEGMENTS,
+	max_tilt_radians: UnitRange::new(0.20, 1.10),
 };
 
 impl BraidGrassCell {
@@ -110,16 +151,20 @@ impl BraidGrassCell {
 			GroveBucket::placed(1.0, low_ground, Self::PaleReedBlade),
 			GroveBucket::placed(1.0, jungle_floor, Self::JungleBlade),
 			GroveBucket::placed(0.5, red_edge_ground, Self::RedEdgeBlade),
+			GroveBucket::placed(1.0, low_ground, Self::GreenSpear),
+			GroveBucket::placed(0.75, jungle_floor, Self::FountainSpear),
 		])
 	}
 
-	/// Authored geometry ranges for this variant.
-	pub fn clump(self) -> &'static BraidGrassClump {
+	/// Authored geometry for this variant.
+	pub fn item(self) -> BraidGrassItem {
 		match self {
-			Self::DeepGreenBlade => &DEEP_GREEN_BLADE,
-			Self::PaleReedBlade => &PALE_REED_BLADE,
-			Self::JungleBlade => &JUNGLE_BLADE,
-			Self::RedEdgeBlade => &RED_EDGE_BLADE,
+			Self::DeepGreenBlade => BraidGrassItem::Blade(&DEEP_GREEN_BLADE),
+			Self::PaleReedBlade => BraidGrassItem::Blade(&PALE_REED_BLADE),
+			Self::JungleBlade => BraidGrassItem::Blade(&JUNGLE_BLADE),
+			Self::RedEdgeBlade => BraidGrassItem::Blade(&RED_EDGE_BLADE),
+			Self::GreenSpear => BraidGrassItem::Spear(&GREEN_SPEAR),
+			Self::FountainSpear => BraidGrassItem::Spear(&FOUNTAIN_SPEAR),
 		}
 	}
 
@@ -145,11 +190,23 @@ impl BraidGrassCell {
 			PaletteSlot::new("copper_red", "yellow_green"),
 			PaletteSlot::new("dark_red", "wet_green"),
 		]);
+		const GREEN_SPEAR_MIX: PaletteMix = PaletteMix::new(&[
+			PaletteSlot::new("emerald_green", "fresh_green"),
+			PaletteSlot::new("deep_green", "lime_green"),
+			PaletteSlot::new("wet_green", "bright_green"),
+		]);
+		const FOUNTAIN_SPEAR_MIX: PaletteMix = PaletteMix::new(&[
+			PaletteSlot::new("bright_green", "lime_green"),
+			PaletteSlot::new("yellow_green", "fresh_green"),
+			PaletteSlot::new("lush_green", "light_green"),
+		]);
 		match self {
 			Self::DeepGreenBlade => DEEP_GREEN_MIX,
 			Self::PaleReedBlade => PALE_REED_MIX,
 			Self::JungleBlade => JUNGLE_MIX,
 			Self::RedEdgeBlade => RED_EDGE_MIX,
+			Self::GreenSpear => GREEN_SPEAR_MIX,
+			Self::FountainSpear => FOUNTAIN_SPEAR_MIX,
 		}
 	}
 }
@@ -167,7 +224,7 @@ mod tests {
 	#[test]
 	fn distribution_matches_rfc_order_and_weights() -> Result<()> {
 		let dist = BraidGrassCell::distribution();
-		assert_eq!(dist.len(), 5);
+		assert_eq!(dist.len(), 7);
 		assert!(dist.buckets[0].item.is_none());
 		assert_eq!(dist.buckets[0].weight, 2.5);
 		assert_eq!(dist.buckets[1].item, Some(BraidGrassCell::DeepGreenBlade));
@@ -176,6 +233,35 @@ mod tests {
 		assert_eq!(dist.buckets[3].weight, 1.0);
 		assert_eq!(dist.buckets[4].item, Some(BraidGrassCell::RedEdgeBlade));
 		assert_eq!(dist.buckets[4].weight, 0.5);
+		assert_eq!(dist.buckets[5].item, Some(BraidGrassCell::GreenSpear));
+		assert_eq!(dist.buckets[5].weight, 1.0);
+		assert_eq!(dist.buckets[6].item, Some(BraidGrassCell::FountainSpear));
+		assert_eq!(dist.buckets[6].weight, 0.75);
+		Ok(())
+	}
+
+	#[test]
+	fn tilt_bands_mix_moderate_and_wide() -> Result<()> {
+		// Most varietals stay in a moderate tilt regime; Jungle and FountainSpear take wide
+		// bands so their individual clumps span upright through fully splayed.
+		let tilt = |cell: BraidGrassCell| match cell.item() {
+			BraidGrassItem::Blade(clump) => clump.max_tilt_radians,
+			BraidGrassItem::Spear(clump) => clump.max_tilt_radians,
+		};
+		for moderate in [
+			BraidGrassCell::DeepGreenBlade,
+			BraidGrassCell::PaleReedBlade,
+			BraidGrassCell::RedEdgeBlade,
+			BraidGrassCell::GreenSpear,
+		] {
+			let band = tilt(moderate);
+			assert!(band.start >= 0.05, "{moderate:?} should not be extreme-upright");
+			assert!(band.end <= 0.60, "{moderate:?} should not be extreme-splayed");
+		}
+		for wide in [BraidGrassCell::JungleBlade, BraidGrassCell::FountainSpear] {
+			let band = tilt(wide);
+			assert!(band.end - band.start >= 0.6, "{wide:?} should span a wide tilt band");
+		}
 		Ok(())
 	}
 

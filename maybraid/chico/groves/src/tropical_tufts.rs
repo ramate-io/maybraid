@@ -69,7 +69,7 @@ const BLADE_WIDTH_FACTOR: UnitRange = UnitRange::new(0.02, 0.04);
 
 // Modest per-clump shape variation; Braid Grass authors the widest bands of the tuft groves.
 const BLADE_COUNT: RangeInclusive<u32> = 6..=12;
-const BEND_SEGMENTS: RangeInclusive<u32> = 1..=3;
+const BEND_SEGMENTS: RangeInclusive<u32> = 1..=6;
 const MAX_TILT_RADIANS: UnitRange = UnitRange::new(0.15, 0.35);
 
 /// Authored geometry ranges for one ground-anchored palm bush companion.
