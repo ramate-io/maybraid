@@ -24,6 +24,8 @@ pub(crate) struct PrismaticElement {
 	pub base_radius: f32,
 	pub tip_radius: f32,
 	pub seed: i32,
+	/// Cluster-space offset of the strand's base; bases need not share one anchor.
+	pub base_offset: Vec3,
 }
 
 impl PrismaticElement {
@@ -181,7 +183,7 @@ impl PrismaticCluster {
 			for side in 0..sides {
 				let angle = side as f32 * std::f32::consts::TAU / sides as f32;
 				let local = center + Vec3::new(angle.cos() * radius, 0.0, angle.sin() * radius);
-				let p = rotation * local;
+				let p = rotation * local + element.base_offset;
 				if !p.is_finite() {
 					return;
 				}

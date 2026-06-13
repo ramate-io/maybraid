@@ -13,8 +13,8 @@ use bevy_math::Vec2;
 use procedural_common::UnitRange;
 
 use crate::grove::{
-	GroveBucket, GroveDefinition, GroveDistribution, GrovePlacementRanges, PaletteMix, PaletteSlot,
-	PlacementConstraints,
+	GroveBucket, GroveDefinition, GroveDistribution, GrovePlacementRanges, GroveTuftPatch,
+	PaletteMix, PaletteSlot, PlacementConstraints,
 };
 
 #[cfg(feature = "render")]
@@ -43,6 +43,16 @@ pub enum CommonTuftsCell {
 	ShortGreen,
 	DryScrub,
 	TallWild,
+	ShortGreenPatch,
+	DryScrubPatch,
+	TallWildPatch,
+}
+
+/// Typed authored geometry for one common-tufts varietal.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum CommonTuftsItem {
+	Clump(&'static CommonTuftClump),
+	Patch(&'static GroveTuftPatch<CommonTuftClump>),
 }
 
 /// Authored geometry ranges for one common-tufts grass clump.
@@ -89,11 +99,36 @@ const TALL_WILD: CommonTuftClump = CommonTuftClump {
 	max_tilt_radians: MAX_TILT_RADIANS,
 };
 
+// Patch varietals scatter each clump's blades as loose mounds; they carry most of the
+// placed weight, so the single-anchor "cone" clump reads as the rarer silhouette.
+
+const SHORT_GREEN_PATCH: GroveTuftPatch<CommonTuftClump> = GroveTuftPatch {
+	clump: SHORT_GREEN,
+	clump_count: 3..=6,
+	patch_extent_xz: UnitRange::new(0.8, 1.6),
+	base_spread: UnitRange::new(0.10, 0.25),
+};
+
+const DRY_SCRUB_PATCH: GroveTuftPatch<CommonTuftClump> = GroveTuftPatch {
+	clump: DRY_SCRUB,
+	clump_count: 3..=6,
+	patch_extent_xz: UnitRange::new(0.9, 1.8),
+	base_spread: UnitRange::new(0.10, 0.25),
+};
+
+const TALL_WILD_PATCH: GroveTuftPatch<CommonTuftClump> = GroveTuftPatch {
+	clump: TALL_WILD,
+	clump_count: 2..=5,
+	patch_extent_xz: UnitRange::new(1.0, 2.0),
+	base_spread: UnitRange::new(0.15, 0.35),
+};
+
 impl CommonTuftsCell {
 	/// Authored ordered distribution: explicit `None`, then variants in declaration order.
 	///
-	/// Placed weights total `4.0`; the `None` weight of `13.78` puts the placed share at
-	/// `4.0 / 17.78 ≈ 0.225`, the midpoint of the RFC's `DENSITY_RANGE` (`0.10..0.35`).
+	/// Placed weights total `5.0`; the `None` weight of `13.78` puts the placed share at
+	/// `5.0 / 18.78 ≈ 0.266`, inside the RFC's `DENSITY_RANGE` (`0.10..0.35`). Patches carry
+	/// `4.0` of the placed weight; single-anchor clumps share the remaining `1.0`.
 	pub fn distribution() -> GroveDistribution<Self> {
 		let short_green =
 			PlacementConstraints::new(UnitRange::new(0.0, 0.80), UnitRange::new(0.0, 0.70));
@@ -103,18 +138,24 @@ impl CommonTuftsCell {
 			PlacementConstraints::new(UnitRange::new(0.0, 0.60), UnitRange::new(0.0, 0.70));
 		GroveDistribution::new(vec![
 			GroveBucket::none(13.78),
-			GroveBucket::placed(2.0, short_green, Self::ShortGreen),
-			GroveBucket::placed(1.0, dry_scrub, Self::DryScrub),
-			GroveBucket::placed(1.0, tall_wild, Self::TallWild),
+			GroveBucket::placed(0.5, short_green, Self::ShortGreen),
+			GroveBucket::placed(0.25, dry_scrub, Self::DryScrub),
+			GroveBucket::placed(0.25, tall_wild, Self::TallWild),
+			GroveBucket::placed(2.0, short_green, Self::ShortGreenPatch),
+			GroveBucket::placed(1.0, dry_scrub, Self::DryScrubPatch),
+			GroveBucket::placed(1.0, tall_wild, Self::TallWildPatch),
 		])
 	}
 
-	/// Authored geometry ranges for this varietal.
-	pub fn clump(self) -> &'static CommonTuftClump {
+	/// Authored geometry for this varietal.
+	pub fn item(self) -> CommonTuftsItem {
 		match self {
-			Self::ShortGreen => &SHORT_GREEN,
-			Self::DryScrub => &DRY_SCRUB,
-			Self::TallWild => &TALL_WILD,
+			Self::ShortGreen => CommonTuftsItem::Clump(&SHORT_GREEN),
+			Self::DryScrub => CommonTuftsItem::Clump(&DRY_SCRUB),
+			Self::TallWild => CommonTuftsItem::Clump(&TALL_WILD),
+			Self::ShortGreenPatch => CommonTuftsItem::Patch(&SHORT_GREEN_PATCH),
+			Self::DryScrubPatch => CommonTuftsItem::Patch(&DRY_SCRUB_PATCH),
+			Self::TallWildPatch => CommonTuftsItem::Patch(&TALL_WILD_PATCH),
 		}
 	}
 
@@ -127,9 +168,9 @@ impl CommonTuftsCell {
 		const TALL_WILD_MIX: PaletteMix =
 			PaletteMix::new(&[PaletteSlot::new("green", "pale_green")]);
 		match self {
-			Self::ShortGreen => SHORT_GREEN_MIX,
-			Self::DryScrub => DRY_SCRUB_MIX,
-			Self::TallWild => TALL_WILD_MIX,
+			Self::ShortGreen | Self::ShortGreenPatch => SHORT_GREEN_MIX,
+			Self::DryScrub | Self::DryScrubPatch => DRY_SCRUB_MIX,
+			Self::TallWild | Self::TallWildPatch => TALL_WILD_MIX,
 		}
 	}
 }
@@ -147,15 +188,42 @@ mod tests {
 	#[test]
 	fn distribution_matches_rfc_order_and_weights() -> Result<()> {
 		let dist = CommonTuftsCell::distribution();
-		assert_eq!(dist.len(), 4);
+		assert_eq!(dist.len(), 7);
 		assert!(dist.buckets[0].item.is_none());
 		assert_eq!(dist.buckets[0].weight, 13.78);
 		assert_eq!(dist.buckets[1].item, Some(CommonTuftsCell::ShortGreen));
-		assert_eq!(dist.buckets[1].weight, 2.0);
+		assert_eq!(dist.buckets[1].weight, 0.5);
 		assert_eq!(dist.buckets[2].item, Some(CommonTuftsCell::DryScrub));
-		assert_eq!(dist.buckets[2].weight, 1.0);
+		assert_eq!(dist.buckets[2].weight, 0.25);
 		assert_eq!(dist.buckets[3].item, Some(CommonTuftsCell::TallWild));
-		assert_eq!(dist.buckets[3].weight, 1.0);
+		assert_eq!(dist.buckets[3].weight, 0.25);
+		assert_eq!(dist.buckets[4].item, Some(CommonTuftsCell::ShortGreenPatch));
+		assert_eq!(dist.buckets[4].weight, 2.0);
+		assert_eq!(dist.buckets[5].item, Some(CommonTuftsCell::DryScrubPatch));
+		assert_eq!(dist.buckets[5].weight, 1.0);
+		assert_eq!(dist.buckets[6].item, Some(CommonTuftsCell::TallWildPatch));
+		assert_eq!(dist.buckets[6].weight, 1.0);
+		Ok(())
+	}
+
+	#[test]
+	fn patches_outweigh_single_clumps() -> Result<()> {
+		let placed_weight = |patch: bool| -> f32 {
+			CommonTuftsCell::distribution()
+				.buckets
+				.iter()
+				.filter(|b| {
+					b.item.is_some_and(|cell| {
+						matches!(cell.item(), CommonTuftsItem::Patch(_)) == patch
+					})
+				})
+				.map(|b| b.weight)
+				.sum()
+		};
+		assert!(
+			placed_weight(true) > 2.0 * placed_weight(false),
+			"patches should dominate placed weight"
+		);
 		Ok(())
 	}
 
@@ -174,12 +242,25 @@ mod tests {
 		for cell in
 			[CommonTuftsCell::ShortGreen, CommonTuftsCell::DryScrub, CommonTuftsCell::TallWild]
 		{
-			let clump = cell.clump();
+			let CommonTuftsItem::Clump(clump) = cell.item() else {
+				anyhow::bail!("expected clump item for {cell:?}");
+			};
 			assert!(clump.height.start >= 0.10);
 			assert!(clump.height.end <= 1.0);
 			assert!(clump.width_factor.start > 0.0);
 			assert!(clump.width_factor.end <= 0.05, "blades should stay grass-thin");
 		}
+		Ok(())
+	}
+
+	#[test]
+	fn patch_wraps_short_green_clump() -> Result<()> {
+		let CommonTuftsItem::Patch(patch) = CommonTuftsCell::ShortGreenPatch.item() else {
+			anyhow::bail!("expected patch item");
+		};
+		assert_eq!(patch.clump, SHORT_GREEN);
+		assert!(*patch.clump_count.start() >= 2, "a patch should scatter several clumps");
+		assert!(patch.patch_extent_xz.start > 0.0);
 		Ok(())
 	}
 

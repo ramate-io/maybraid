@@ -10,7 +10,7 @@ use procedural_common::{
 };
 use render_item::{CascadeChunk, RenderItem};
 
-use crate::common_tufts::{definition, CommonTuftClump, CommonTuftsCell};
+use crate::common_tufts::{definition, CommonTuftClump, CommonTuftsCell, CommonTuftsItem};
 use crate::grove::{
 	patch_spawned_leaf_material, placement_noise, FlatTerrainSample, GroveExtent, GroveFrontend,
 	GrovePlacedCell, TerrainSample, WithPalette, DEFAULT_GROVE_EXTENT_XZ,
@@ -192,11 +192,22 @@ where
 		for placed in self.placements() {
 			let local = transform.mul_transform(placement_transform(&placed));
 			let noise = placement_noise(self.foliage_noise, placed.position);
-			let mut shape = placed.variant.clump().build_with_noise(noise);
-			shape.noise_amplitude = self.foliage_noise.amplitude;
-			shape.noise_frequency = self.foliage_noise.frequency;
-			let tuft = BladeTuft::from_shape(shape, self.leaf_material.clone());
-			let entities = tuft.spawn_render_items(commands, cascade_chunk, local);
+			let entities = match placed.variant.item() {
+				CommonTuftsItem::Clump(clump) => {
+					let mut shape = clump.build_with_noise(noise);
+					shape.noise_amplitude = self.foliage_noise.amplitude;
+					shape.noise_frequency = self.foliage_noise.frequency;
+					let tuft = BladeTuft::from_shape(shape, self.leaf_material.clone());
+					tuft.spawn_render_items(commands, cascade_chunk, local)
+				}
+				CommonTuftsItem::Patch(patch) => {
+					let mut item =
+						patch.build_tuft_patch(noise, self.leaf_material.clone());
+					item.shape.noise_amplitude = self.foliage_noise.amplitude;
+					item.shape.noise_frequency = self.foliage_noise.frequency;
+					item.spawn_render_items(commands, cascade_chunk, local)
+				}
+			};
 			patch_spawned_leaf_material::<LeafM>(
 				&entities,
 				placed.variant.palette_mix(),
@@ -220,7 +231,9 @@ mod tests {
 		for cell in
 			[CommonTuftsCell::ShortGreen, CommonTuftsCell::DryScrub, CommonTuftsCell::TallWild]
 		{
-			let clump = cell.clump();
+			let CommonTuftsItem::Clump(clump) = cell.item() else {
+				anyhow::bail!("expected clump item for {cell:?}");
+			};
 			let shape = clump.build_with_noise(noise);
 			assert!(shape.blade_length >= clump.height.start.min(clump.height.end));
 			assert!(shape.blade_length <= clump.height.start.max(clump.height.end));
@@ -236,10 +249,32 @@ mod tests {
 	}
 
 	#[test]
+	fn patch_build_samples_layout_within_authored_ranges() -> Result<()> {
+		let noise = placement_noise(NoiseParams::default(), Vec3::new(5.0, 0.0, 5.0));
+		let CommonTuftsItem::Patch(patch) = CommonTuftsCell::ShortGreenPatch.item() else {
+			anyhow::bail!("expected patch item");
+		};
+		let item = patch.build_tuft_patch::<StandardMaterial, _>(
+			noise,
+			SkippedLeafMeshMaterial::<StandardMaterial>::default(),
+		);
+		assert!(patch.clump_count.contains(&item.clump_count));
+		assert!(item.patch_extent_xz >= patch.patch_extent_xz.start);
+		assert!(item.patch_extent_xz <= patch.patch_extent_xz.end);
+		assert_eq!(item.clump_anchors().len(), item.clump_count as usize);
+		assert!(item.shape.base_spread >= patch.base_spread.start);
+		assert!(item.shape.base_spread <= patch.base_spread.end);
+		Ok(())
+	}
+
+	#[test]
 	fn palette_resolves_to_authored_color() -> Result<()> {
-		for cell in
-			[CommonTuftsCell::ShortGreen, CommonTuftsCell::DryScrub, CommonTuftsCell::TallWild]
-		{
+		for cell in [
+			CommonTuftsCell::ShortGreen,
+			CommonTuftsCell::DryScrub,
+			CommonTuftsCell::TallWild,
+			CommonTuftsCell::ShortGreenPatch,
+		] {
 			let palette = cell.palette_mix();
 			let mut allowed = Vec::new();
 			for slot in palette.slots {

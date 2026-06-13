@@ -242,6 +242,13 @@ where
 					let tuft = SpearTuft::from_shape(shape, self.leaf_material.clone());
 					tuft.spawn_render_items(commands, cascade_chunk, local)
 				}
+				BraidGrassItem::Patch(patch) => {
+					let mut item =
+						patch.build_tuft_patch(noise, self.leaf_material.clone());
+					item.shape.noise_amplitude = self.foliage_noise.amplitude;
+					item.shape.noise_frequency = self.foliage_noise.frequency;
+					item.spawn_render_items(commands, cascade_chunk, local)
+				}
 			};
 			patch_spawned_leaf_material::<LeafM>(
 				&entities,
@@ -324,8 +331,9 @@ mod tests {
 			terrain: FlatTerrainSample { elevation: 0.4, steepness: 0.1 },
 			..Default::default()
 		};
-		grass.grove.variant_weights =
-			Some(parse_variant_weights("0.0,9.0,x,x,x,x,x").map_err(|e| anyhow::anyhow!("{e}"))?);
+		grass.grove.variant_weights = Some(
+			parse_variant_weights("0.0,9.0,x,x,x,x,x,x,x,x").map_err(|e| anyhow::anyhow!("{e}"))?,
+		);
 		let span = 3.0 * grass.cell_extent_xz();
 		grass = grass.with_extent(GroveExtent::new(Vec3::ZERO, Vec3::new(span.x, 1.0, span.y)));
 		assert!(!grass.placements().is_empty());

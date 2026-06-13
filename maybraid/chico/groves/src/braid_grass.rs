@@ -9,8 +9,8 @@ use bevy_math::Vec2;
 use procedural_common::UnitRange;
 
 use crate::grove::{
-	GroveBucket, GroveDefinition, GroveDistribution, GrovePlacementRanges, PaletteMix, PaletteSlot,
-	PlacementConstraints,
+	GroveBucket, GroveDefinition, GroveDistribution, GrovePlacementRanges, GroveTuftPatch,
+	PaletteMix, PaletteSlot, PlacementConstraints,
 };
 
 #[cfg(feature = "render")]
@@ -42,6 +42,9 @@ pub enum BraidGrassCell {
 	RedEdgeBlade,
 	GreenSpear,
 	FountainSpear,
+	DeepGreenPatch,
+	PaleReedPatch,
+	JunglePatch,
 }
 
 /// Typed authored geometry for one braid-grass variant.
@@ -49,6 +52,7 @@ pub enum BraidGrassCell {
 pub enum BraidGrassItem {
 	Blade(&'static BraidGrassClump),
 	Spear(&'static BraidSpearClump),
+	Patch(&'static GroveTuftPatch<BraidGrassClump>),
 }
 
 /// Authored geometry ranges for one braid-grass blade clump.
@@ -136,8 +140,36 @@ const FOUNTAIN_SPEAR: BraidSpearClump = BraidSpearClump {
 	max_tilt_radians: UnitRange::new(0.20, 1.10),
 };
 
+// Patch varietals scatter each blade clump as loose mounds; they carry most of the blade
+// weight, so the single-anchor "cone" clump reads as the rarer silhouette. Spears keep
+// their own buckets — their ribbon profile already breaks the cone read.
+
+const DEEP_GREEN_PATCH: GroveTuftPatch<BraidGrassClump> = GroveTuftPatch {
+	clump: DEEP_GREEN_BLADE,
+	clump_count: 3..=5,
+	patch_extent_xz: UnitRange::new(1.0, 2.0),
+	base_spread: UnitRange::new(0.20, 0.45),
+};
+
+const PALE_REED_PATCH: GroveTuftPatch<BraidGrassClump> = GroveTuftPatch {
+	clump: PALE_REED_BLADE,
+	clump_count: 2..=4,
+	patch_extent_xz: UnitRange::new(1.2, 2.2),
+	base_spread: UnitRange::new(0.15, 0.35),
+};
+
+const JUNGLE_PATCH: GroveTuftPatch<BraidGrassClump> = GroveTuftPatch {
+	clump: JUNGLE_BLADE,
+	clump_count: 2..=4,
+	patch_extent_xz: UnitRange::new(1.4, 2.4),
+	base_spread: UnitRange::new(0.25, 0.50),
+};
+
 impl BraidGrassCell {
 	/// Authored ordered distribution: explicit `None`, then variants in declaration order.
+	///
+	/// Blade weight (`5.25` total) leans on the patch varietals (`4.0`); single-anchor blade
+	/// clumps share the remaining `1.25`. Spears keep their original weights.
 	pub fn distribution() -> GroveDistribution<Self> {
 		let low_ground =
 			PlacementConstraints::new(UnitRange::new(0.0, 0.75), UnitRange::new(0.0, 0.60));
@@ -147,12 +179,15 @@ impl BraidGrassCell {
 			PlacementConstraints::new(UnitRange::new(0.0, 0.45), UnitRange::new(0.0, 0.60));
 		GroveDistribution::new(vec![
 			GroveBucket::none(2.5),
-			GroveBucket::placed(2.0, low_ground, Self::DeepGreenBlade),
-			GroveBucket::placed(1.0, low_ground, Self::PaleReedBlade),
-			GroveBucket::placed(1.0, jungle_floor, Self::JungleBlade),
-			GroveBucket::placed(0.5, red_edge_ground, Self::RedEdgeBlade),
+			GroveBucket::placed(0.5, low_ground, Self::DeepGreenBlade),
+			GroveBucket::placed(0.25, low_ground, Self::PaleReedBlade),
+			GroveBucket::placed(0.25, jungle_floor, Self::JungleBlade),
+			GroveBucket::placed(0.25, red_edge_ground, Self::RedEdgeBlade),
 			GroveBucket::placed(1.0, low_ground, Self::GreenSpear),
 			GroveBucket::placed(0.75, jungle_floor, Self::FountainSpear),
+			GroveBucket::placed(2.0, low_ground, Self::DeepGreenPatch),
+			GroveBucket::placed(1.0, low_ground, Self::PaleReedPatch),
+			GroveBucket::placed(1.0, jungle_floor, Self::JunglePatch),
 		])
 	}
 
@@ -165,6 +200,9 @@ impl BraidGrassCell {
 			Self::RedEdgeBlade => BraidGrassItem::Blade(&RED_EDGE_BLADE),
 			Self::GreenSpear => BraidGrassItem::Spear(&GREEN_SPEAR),
 			Self::FountainSpear => BraidGrassItem::Spear(&FOUNTAIN_SPEAR),
+			Self::DeepGreenPatch => BraidGrassItem::Patch(&DEEP_GREEN_PATCH),
+			Self::PaleReedPatch => BraidGrassItem::Patch(&PALE_REED_PATCH),
+			Self::JunglePatch => BraidGrassItem::Patch(&JUNGLE_PATCH),
 		}
 	}
 
@@ -201,9 +239,9 @@ impl BraidGrassCell {
 			PaletteSlot::new("lush_green", "light_green"),
 		]);
 		match self {
-			Self::DeepGreenBlade => DEEP_GREEN_MIX,
-			Self::PaleReedBlade => PALE_REED_MIX,
-			Self::JungleBlade => JUNGLE_MIX,
+			Self::DeepGreenBlade | Self::DeepGreenPatch => DEEP_GREEN_MIX,
+			Self::PaleReedBlade | Self::PaleReedPatch => PALE_REED_MIX,
+			Self::JungleBlade | Self::JunglePatch => JUNGLE_MIX,
 			Self::RedEdgeBlade => RED_EDGE_MIX,
 			Self::GreenSpear => GREEN_SPEAR_MIX,
 			Self::FountainSpear => FOUNTAIN_SPEAR_MIX,
@@ -224,19 +262,48 @@ mod tests {
 	#[test]
 	fn distribution_matches_rfc_order_and_weights() -> Result<()> {
 		let dist = BraidGrassCell::distribution();
-		assert_eq!(dist.len(), 7);
+		assert_eq!(dist.len(), 10);
 		assert!(dist.buckets[0].item.is_none());
 		assert_eq!(dist.buckets[0].weight, 2.5);
 		assert_eq!(dist.buckets[1].item, Some(BraidGrassCell::DeepGreenBlade));
-		assert_eq!(dist.buckets[1].weight, 2.0);
-		assert_eq!(dist.buckets[2].weight, 1.0);
-		assert_eq!(dist.buckets[3].weight, 1.0);
+		assert_eq!(dist.buckets[1].weight, 0.5);
+		assert_eq!(dist.buckets[2].weight, 0.25);
+		assert_eq!(dist.buckets[3].weight, 0.25);
 		assert_eq!(dist.buckets[4].item, Some(BraidGrassCell::RedEdgeBlade));
-		assert_eq!(dist.buckets[4].weight, 0.5);
+		assert_eq!(dist.buckets[4].weight, 0.25);
 		assert_eq!(dist.buckets[5].item, Some(BraidGrassCell::GreenSpear));
 		assert_eq!(dist.buckets[5].weight, 1.0);
 		assert_eq!(dist.buckets[6].item, Some(BraidGrassCell::FountainSpear));
 		assert_eq!(dist.buckets[6].weight, 0.75);
+		assert_eq!(dist.buckets[7].item, Some(BraidGrassCell::DeepGreenPatch));
+		assert_eq!(dist.buckets[7].weight, 2.0);
+		assert_eq!(dist.buckets[8].item, Some(BraidGrassCell::PaleReedPatch));
+		assert_eq!(dist.buckets[8].weight, 1.0);
+		assert_eq!(dist.buckets[9].item, Some(BraidGrassCell::JunglePatch));
+		assert_eq!(dist.buckets[9].weight, 1.0);
+		Ok(())
+	}
+
+	#[test]
+	fn patches_outweigh_single_blade_clumps() -> Result<()> {
+		let blade_weight = |patch: bool| -> f32 {
+			BraidGrassCell::distribution()
+				.buckets
+				.iter()
+				.filter(|b| {
+					b.item.is_some_and(|cell| match cell.item() {
+						BraidGrassItem::Blade(_) => !patch,
+						BraidGrassItem::Patch(_) => patch,
+						BraidGrassItem::Spear(_) => false,
+					})
+				})
+				.map(|b| b.weight)
+				.sum()
+		};
+		assert!(
+			blade_weight(true) > 2.0 * blade_weight(false),
+			"patches should dominate blade weight"
+		);
 		Ok(())
 	}
 
@@ -247,6 +314,7 @@ mod tests {
 		let tilt = |cell: BraidGrassCell| match cell.item() {
 			BraidGrassItem::Blade(clump) => clump.max_tilt_radians,
 			BraidGrassItem::Spear(clump) => clump.max_tilt_radians,
+			BraidGrassItem::Patch(patch) => patch.clump.max_tilt_radians,
 		};
 		for moderate in [
 			BraidGrassCell::DeepGreenBlade,

@@ -137,6 +137,7 @@ where
 				base_radius,
 				tip_radius,
 				seed: self.shape.seed.wrapping_add(i as i32),
+				base_offset: Vec3::ZERO,
 			})
 			.collect();
 

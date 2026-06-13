@@ -155,7 +155,8 @@ mod tests {
 		let frontend = GroveFrontend {
 			cell_extent_xz: Some(Vec2::new(4.0, 3.0)),
 			variant_weights: Some(
-				parse_variant_weights("0.0,9.0,x,x,x,x,x").map_err(|e| anyhow::anyhow!("{e}"))?,
+				parse_variant_weights("0.0,9.0,x,x,x,x,x,x,x,x")
+					.map_err(|e| anyhow::anyhow!("{e}"))?,
 			),
 			..Default::default()
 		};

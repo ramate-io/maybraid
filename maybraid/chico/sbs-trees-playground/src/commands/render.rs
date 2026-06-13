@@ -775,7 +775,7 @@ mod tests {
 	#[test]
 	fn braid_grass_command_preserves_grove_params() -> Result<()> {
 		let cmd = crate::commands::PlaygroundCommand::parse_line(
-			"render braid-grass --variant-weights 0.0,9.0,x,x,x,x,x --elevation 0.4 --grove-extent-xz 12.75 --cell-extent-xz 4.25,4.25",
+			"render braid-grass --variant-weights 0.0,9.0,x,x,x,x,x,x,x,x --elevation 0.4 --grove-extent-xz 12.75 --cell-extent-xz 4.25,4.25",
 		)
 		.map_err(|e| anyhow::anyhow!("{e}"))?;
 		let crate::commands::PlaygroundCommand::Render(Render::BraidGrass(helper)) = cmd else {

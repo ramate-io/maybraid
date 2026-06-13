@@ -141,6 +141,7 @@ where
 				base_radius,
 				tip_radius,
 				seed: self.shape.seed.wrapping_add(i as i32),
+				base_offset: Vec3::ZERO,
 			})
 			.collect();
 
@@ -213,6 +214,7 @@ mod tests {
 				base_radius: 0.04,
 				tip_radius: 0.01,
 				seed: i as i32,
+				base_offset: Vec3::ZERO,
 			};
 			let rotation = element.draping_rotation();
 			let mapped = rotation * (-Vec3::Y);
