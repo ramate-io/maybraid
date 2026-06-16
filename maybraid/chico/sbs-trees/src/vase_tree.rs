@@ -69,7 +69,7 @@ where
 		long,
 		default_value = "0,1,0.05,1",
 		value_parser = noise_params_from_scalar_str,
-		value_name = "SEED,FREQUENCY,AMPLITUDE,OCTAVES",
+		value_name = "SEED,FREQUENCY,AMPLITUDE,OCTAVES[,TYPE]",
 		help_heading = "Trunk Surface Noise"
 	)]
 	pub stick_surface_noise: NoiseParams,
@@ -78,7 +78,7 @@ where
 		long,
 		default_value = "0,1,0.06,1",
 		value_parser = noise_params_from_scalar_str,
-		value_name = "SEED,FREQUENCY,AMPLITUDE,OCTAVES",
+		value_name = "SEED,FREQUENCY,AMPLITUDE,OCTAVES[,TYPE]",
 		help_heading = "Inner Leaf Surface Noise"
 	)]
 	pub inner_leaf_surface_noise: NoiseParams,

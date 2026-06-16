@@ -18,6 +18,7 @@ mod frontend;
 mod palette;
 mod sampling;
 mod terrain;
+mod tuft_patch;
 
 pub use distribution::{
 	parse_variant_weights, GroveBucket, GroveDistribution, PreparedGroveDistribution,
@@ -30,6 +31,7 @@ pub use sampling::{
 	cell_center, placement_noise, ForestGroveBiases, GrovePlacementRanges, PlacementSample,
 };
 pub use terrain::{FlatTerrainSample, PlacementConstraints, TerrainSample};
+pub use tuft_patch::GroveTuftPatch;
 
 #[cfg(feature = "render")]
 pub use palette::{patch_spawned_leaf_material, resolve_palette_color, WithPalette};

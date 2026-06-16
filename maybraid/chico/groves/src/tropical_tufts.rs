@@ -10,8 +10,8 @@ use bevy_math::Vec2;
 use procedural_common::UnitRange;
 
 use crate::grove::{
-	GroveBucket, GroveDefinition, GroveDistribution, GrovePlacementRanges, PaletteMix,
-	PaletteSlot, PlacementConstraints,
+	GroveBucket, GroveDefinition, GroveDistribution, GrovePlacementRanges, GroveTuftPatch,
+	PaletteMix, PaletteSlot, PlacementConstraints,
 };
 
 #[cfg(feature = "render")]
@@ -20,12 +20,15 @@ mod render;
 pub use render::{TropicalTufts, TropicalTuftsStd};
 
 /// Authored Tropical Tufts grove definition.
+///
+/// The offset range is signed and wider than the RFC's nominal `0.0..1.0` (± one cell) so
+/// placements break the underlying grid instead of clustering near cell centers.
 pub fn definition() -> GroveDefinition<TropicalTuftsCell> {
 	GroveDefinition {
 		cell_extent_xz: Vec2::splat(3.25),
 		placement: GrovePlacementRanges::new(
 			UnitRange::new(0.85, 1.15),
-			UnitRange::new(0.0, 1.0),
+			UnitRange::new(-3.25, 3.25),
 		),
 		distribution: TropicalTuftsCell::distribution(),
 	}
@@ -40,6 +43,9 @@ pub enum TropicalTuftsCell {
 	YellowGreenTuft,
 	SmallPalmBush,
 	JuvenilePalmBush,
+	BrightTuftPatch,
+	DeepTuftPatch,
+	YellowGreenTuftPatch,
 }
 
 /// Typed authored geometry for one tropical-tufts variant.
@@ -47,14 +53,28 @@ pub enum TropicalTuftsCell {
 pub enum TropicalTuftsItem {
 	Tuft(&'static TropicalTuftClump),
 	PalmBush(&'static TropicalPalmBush),
+	Patch(&'static GroveTuftPatch<TropicalTuftClump>),
 }
 
 /// Authored geometry ranges for one tropical tuft clump.
 #[derive(Debug, Clone, PartialEq)]
 pub struct TropicalTuftClump {
 	pub height: UnitRange,
-	pub width: UnitRange,
+	/// Blade width as a **fraction of blade length**; absolute widths render far-too-thick
+	/// blades (the RFC widths describe the clump footprint, not blade thickness).
+	pub width_factor: UnitRange,
+	pub blade_count: RangeInclusive<u32>,
+	pub bend_segments: RangeInclusive<u32>,
+	pub max_tilt_radians: UnitRange,
 }
+
+/// Shared blade thickness band: ~2–4 % of blade length keeps blades grass-thin at any height.
+const BLADE_WIDTH_FACTOR: UnitRange = UnitRange::new(0.02, 0.04);
+
+// Modest per-clump shape variation; Braid Grass authors the widest bands of the tuft groves.
+const BLADE_COUNT: RangeInclusive<u32> = 6..=12;
+const BEND_SEGMENTS: RangeInclusive<u32> = 1..=6;
+const MAX_TILT_RADIANS: UnitRange = UnitRange::new(0.15, 0.35);
 
 /// Authored geometry ranges for one ground-anchored palm bush companion.
 #[derive(Debug, Clone, PartialEq)]
@@ -67,17 +87,50 @@ pub struct TropicalPalmBush {
 
 const BRIGHT_TUFT: TropicalTuftClump = TropicalTuftClump {
 	height: UnitRange::new(0.25, 0.50),
-	width: UnitRange::new(0.14, 0.34),
+	width_factor: BLADE_WIDTH_FACTOR,
+	blade_count: BLADE_COUNT,
+	bend_segments: BEND_SEGMENTS,
+	max_tilt_radians: MAX_TILT_RADIANS,
 };
 
 const DEEP_TUFT: TropicalTuftClump = TropicalTuftClump {
-	height: UnitRange::new(0.30, 0.55),
-	width: UnitRange::new(0.16, 0.38),
+	height: UnitRange::new(0.30, 0.8),
+	width_factor: BLADE_WIDTH_FACTOR,
+	blade_count: BLADE_COUNT,
+	bend_segments: BEND_SEGMENTS,
+	max_tilt_radians: MAX_TILT_RADIANS,
 };
 
 const YELLOW_GREEN_TUFT: TropicalTuftClump = TropicalTuftClump {
 	height: UnitRange::new(0.25, 0.45),
-	width: UnitRange::new(0.12, 0.30),
+	width_factor: BLADE_WIDTH_FACTOR,
+	blade_count: BLADE_COUNT,
+	bend_segments: BEND_SEGMENTS,
+	max_tilt_radians: MAX_TILT_RADIANS,
+};
+
+// Patch varietals scatter each tuft's blades as loose mounds; they carry most of the tuft
+// weight, so the single-anchor "cone" clump reads as the rarer silhouette.
+
+const BRIGHT_TUFT_PATCH: GroveTuftPatch<TropicalTuftClump> = GroveTuftPatch {
+	clump: BRIGHT_TUFT,
+	clump_count: 3..=6,
+	patch_extent_xz: UnitRange::new(1.0, 2.0),
+	base_spread: UnitRange::new(0.15, 0.30),
+};
+
+const DEEP_TUFT_PATCH: GroveTuftPatch<TropicalTuftClump> = GroveTuftPatch {
+	clump: DEEP_TUFT,
+	clump_count: 3..=6,
+	patch_extent_xz: UnitRange::new(1.2, 2.4),
+	base_spread: UnitRange::new(0.15, 0.35),
+};
+
+const YELLOW_GREEN_TUFT_PATCH: GroveTuftPatch<TropicalTuftClump> = GroveTuftPatch {
+	clump: YELLOW_GREEN_TUFT,
+	clump_count: 2..=5,
+	patch_extent_xz: UnitRange::new(1.0, 2.0),
+	base_spread: UnitRange::new(0.15, 0.30),
 };
 
 const SMALL_PALM_BUSH: TropicalPalmBush = TropicalPalmBush {
@@ -96,6 +149,9 @@ const JUVENILE_PALM_BUSH: TropicalPalmBush = TropicalPalmBush {
 
 impl TropicalTuftsCell {
 	/// Authored ordered distribution: explicit `None`, then variants in declaration order.
+	///
+	/// Tuft weight (`5.5` total) leans on the patch varietals (`4.4`); single-anchor clumps
+	/// share the remaining `1.1`. Palm companions keep their original weights.
 	pub fn distribution() -> GroveDistribution<Self> {
 		let bright =
 			PlacementConstraints::new(UnitRange::new(0.0, 0.65), UnitRange::new(0.0, 0.35));
@@ -104,12 +160,15 @@ impl TropicalTuftsCell {
 		let juvenile =
 			PlacementConstraints::new(UnitRange::new(0.0, 0.55), UnitRange::new(0.0, 0.75));
 		GroveDistribution::new(vec![
-			GroveBucket::none(29.4),
-			GroveBucket::placed(2.0, bright, Self::BrightTuft),
-			GroveBucket::placed(1.5, lowland, Self::DeepTuft),
-			GroveBucket::placed(1.0, lowland, Self::YellowGreenTuft),
+			GroveBucket::none(10.0),
+			GroveBucket::placed(0.5, bright, Self::BrightTuft),
+			GroveBucket::placed(0.35, lowland, Self::DeepTuft),
+			GroveBucket::placed(0.25, lowland, Self::YellowGreenTuft),
 			GroveBucket::placed(0.75, lowland, Self::SmallPalmBush),
 			GroveBucket::placed(0.35, juvenile, Self::JuvenilePalmBush),
+			GroveBucket::placed(2.0, bright, Self::BrightTuftPatch),
+			GroveBucket::placed(1.5, lowland, Self::DeepTuftPatch),
+			GroveBucket::placed(0.9, lowland, Self::YellowGreenTuftPatch),
 		])
 	}
 
@@ -121,6 +180,9 @@ impl TropicalTuftsCell {
 			Self::YellowGreenTuft => TropicalTuftsItem::Tuft(&YELLOW_GREEN_TUFT),
 			Self::SmallPalmBush => TropicalTuftsItem::PalmBush(&SMALL_PALM_BUSH),
 			Self::JuvenilePalmBush => TropicalTuftsItem::PalmBush(&JUVENILE_PALM_BUSH),
+			Self::BrightTuftPatch => TropicalTuftsItem::Patch(&BRIGHT_TUFT_PATCH),
+			Self::DeepTuftPatch => TropicalTuftsItem::Patch(&DEEP_TUFT_PATCH),
+			Self::YellowGreenTuftPatch => TropicalTuftsItem::Patch(&YELLOW_GREEN_TUFT_PATCH),
 		}
 	}
 
@@ -152,9 +214,9 @@ impl TropicalTuftsCell {
 			PaletteSlot::new("bright_green", "yellow_green"),
 		]);
 		match self {
-			Self::BrightTuft => BRIGHT_TUFT_MIX,
-			Self::DeepTuft => DEEP_TUFT_MIX,
-			Self::YellowGreenTuft => YELLOW_GREEN_TUFT_MIX,
+			Self::BrightTuft | Self::BrightTuftPatch => BRIGHT_TUFT_MIX,
+			Self::DeepTuft | Self::DeepTuftPatch => DEEP_TUFT_MIX,
+			Self::YellowGreenTuft | Self::YellowGreenTuftPatch => YELLOW_GREEN_TUFT_MIX,
 			Self::SmallPalmBush => SMALL_PALM_BUSH_MIX,
 			Self::JuvenilePalmBush => JUVENILE_PALM_BUSH_MIX,
 		}
@@ -174,17 +236,46 @@ mod tests {
 	#[test]
 	fn distribution_matches_rfc_order_and_weights() -> Result<()> {
 		let dist = TropicalTuftsCell::distribution();
-		assert_eq!(dist.len(), 6);
+		assert_eq!(dist.len(), 9);
 		assert!(dist.buckets[0].item.is_none());
-		assert_eq!(dist.buckets[0].weight, 29.4);
+		assert_eq!(dist.buckets[0].weight, 10.0);
 		assert_eq!(dist.buckets[1].item, Some(TropicalTuftsCell::BrightTuft));
-		assert_eq!(dist.buckets[1].weight, 2.0);
-		assert_eq!(dist.buckets[2].weight, 1.5);
-		assert_eq!(dist.buckets[3].weight, 1.0);
+		assert_eq!(dist.buckets[1].weight, 0.5);
+		assert_eq!(dist.buckets[2].weight, 0.35);
+		assert_eq!(dist.buckets[3].weight, 0.25);
 		assert_eq!(dist.buckets[4].item, Some(TropicalTuftsCell::SmallPalmBush));
 		assert_eq!(dist.buckets[4].weight, 0.75);
 		assert_eq!(dist.buckets[5].item, Some(TropicalTuftsCell::JuvenilePalmBush));
 		assert_eq!(dist.buckets[5].weight, 0.35);
+		assert_eq!(dist.buckets[6].item, Some(TropicalTuftsCell::BrightTuftPatch));
+		assert_eq!(dist.buckets[6].weight, 2.0);
+		assert_eq!(dist.buckets[7].item, Some(TropicalTuftsCell::DeepTuftPatch));
+		assert_eq!(dist.buckets[7].weight, 1.5);
+		assert_eq!(dist.buckets[8].item, Some(TropicalTuftsCell::YellowGreenTuftPatch));
+		assert_eq!(dist.buckets[8].weight, 0.9);
+		Ok(())
+	}
+
+	#[test]
+	fn patches_outweigh_single_tufts() -> Result<()> {
+		let tuft_weight = |patch: bool| -> f32 {
+			TropicalTuftsCell::distribution()
+				.buckets
+				.iter()
+				.filter(|b| {
+					b.item.is_some_and(|cell| match cell.item() {
+						TropicalTuftsItem::Tuft(_) => !patch,
+						TropicalTuftsItem::Patch(_) => patch,
+						TropicalTuftsItem::PalmBush(_) => false,
+					})
+				})
+				.map(|b| b.weight)
+				.sum()
+		};
+		assert!(
+			tuft_weight(true) > 2.0 * tuft_weight(false),
+			"patches should dominate tuft weight"
+		);
 		Ok(())
 	}
 
@@ -195,17 +286,17 @@ mod tests {
 			anyhow::bail!("expected palm bush item");
 		};
 		assert_eq!(palm.frond_count, 4..=7);
+		let TropicalTuftsItem::Patch(patch) = TropicalTuftsCell::BrightTuftPatch.item() else {
+			anyhow::bail!("expected patch item");
+		};
+		assert_eq!(patch.clump, BRIGHT_TUFT);
 		Ok(())
 	}
 
 	#[test]
 	fn first_fit_from_placed_bucket_places_variant() -> Result<()> {
-		let prepared = TropicalTuftsCell::distribution().prepare(
-			0.0,
-			0.0,
-			NoiseParams::default(),
-			Vec3::ZERO,
-		);
+		let prepared =
+			TropicalTuftsCell::distribution().prepare(0.0, 0.0, NoiseParams::default(), Vec3::ZERO);
 		let terrain = FlatTerrainSample { elevation: 0.4, steepness: 0.1 };
 		let outcome = prepared.select_from(1, Vec3::new(5.0, 0.4, 5.0), 1.0, &terrain);
 		assert!(matches!(outcome, GroveCellOutcome::Placed { .. }));

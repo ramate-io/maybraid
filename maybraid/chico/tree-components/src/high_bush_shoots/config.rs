@@ -52,7 +52,7 @@ pub struct HighBushShootsShape {
 			long,
 			default_value = "0,1,1,1",
 			value_parser = procedural_common::noise_params_from_scalar_str,
-			value_name = "SEED,FREQUENCY,AMPLITUDE,OCTAVES"
+			value_name = "SEED,FREQUENCY,AMPLITUDE,OCTAVES[,TYPE]"
 		)
 	)]
 	pub chain_noise: NoiseParams,

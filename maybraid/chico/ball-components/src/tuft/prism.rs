@@ -24,6 +24,8 @@ pub(crate) struct PrismaticElement {
 	pub base_radius: f32,
 	pub tip_radius: f32,
 	pub seed: i32,
+	/// Cluster-space offset of the strand's base; bases need not share one anchor.
+	pub base_offset: Vec3,
 }
 
 impl PrismaticElement {
@@ -155,6 +157,10 @@ impl PrismaticCluster {
 		let sides = self.side_count.max(2) as usize;
 		let rings = self.height_segments.max(1) as usize;
 		let max_sway = length * MAX_SWAY_FRACTION_OF_LENGTH;
+		// Scale the sway coordinate with the ring count so each segment crosses new noise
+		// features; otherwise extra segments only refine the same smooth bow and
+		// `height_segments` has no visible effect.
+		let sway_frequency = self.noise_frequency * rings as f32;
 
 		for ring in 0..=rings {
 			let t = ring as f32 / rings as f32;
@@ -168,7 +174,7 @@ impl PrismaticCluster {
 				&noise,
 				element.seed,
 				t,
-				self.noise_frequency,
+				sway_frequency,
 				self.noise_amplitude,
 				max_sway,
 			);
@@ -177,7 +183,7 @@ impl PrismaticCluster {
 			for side in 0..sides {
 				let angle = side as f32 * std::f32::consts::TAU / sides as f32;
 				let local = center + Vec3::new(angle.cos() * radius, 0.0, angle.sin() * radius);
-				let p = rotation * local;
+				let p = rotation * local + element.base_offset;
 				if !p.is_finite() {
 					return;
 				}

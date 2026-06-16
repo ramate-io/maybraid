@@ -4,6 +4,7 @@ use chico_ball_components::tuft::{
 };
 use chico_ball_components::{FrondCrown, ModerateLodFrondCrown};
 use chico_groves::braid_grass::BraidGrassStd;
+use chico_groves::common_tufts::CommonTuftsStd;
 use chico_groves::tropical_tufts::TropicalTuftsStd;
 use chico_sbs_trees::braid_oak_tree::BraidOakTree;
 use chico_sbs_trees::date_palm::DatePalm;
@@ -19,6 +20,7 @@ use chico_sbs_trees::rorys_head_trained::RorysHeadTrained;
 use chico_sbs_trees::sopes_banyan::SopesBanyan;
 use chico_sbs_trees::storybook_tree::StorybookTree;
 use chico_sbs_trees::temperate_conifer::TemperateConifer;
+use chico_sbs_trees::tuft_patch::TuftPatch;
 use chico_sbs_trees::vase_tree::VaseTree;
 use chico_sbs_trees::waialea_palm::WaialeaPalm;
 use chico_sbs_trees::SkippedLeafMeshMaterial;
@@ -102,6 +104,9 @@ pub type RenderWaialeaPalm = WaialeaPalm<
 
 /// [`PalmBush`] — trunkless ground-anchored frond cluster ([#231](https://github.com/ramate-io/maybraid/issues/231)).
 pub type RenderPalmBush = PalmBush<StandardMaterial, SkippedLeafMeshMaterial<StandardMaterial>>;
+
+/// [`TuftPatch`] — blade tufts scattered over a small ground area.
+pub type RenderTuftPatch = TuftPatch<StandardMaterial, SkippedLeafMeshMaterial<StandardMaterial>>;
 
 /// [`StorybookTree`] — default broadleaf stalk + log-tapered radial canopy ([#230](https://github.com/ramate-io/maybraid/issues/230)).
 pub type RenderStorybookTree = StorybookTree<
@@ -205,6 +210,9 @@ pub type RenderBraidGrass = BraidGrassStd;
 /// [`TropicalTuftsStd`] — sparse tuft grove with palm companions ([#305](https://github.com/ramate-io/maybraid/issues/305)).
 pub type RenderTropicalTufts = TropicalTuftsStd;
 
+/// [`CommonTuftsStd`] — sparse low grass-clump grove ([#301](https://github.com/ramate-io/maybraid/issues/301)).
+pub type RenderCommonTufts = CommonTuftsStd;
+
 /// The configured render item currently shown in the scene.
 ///
 /// This is the typed scene state behind [`RenderConfig`]: material patching
@@ -231,8 +239,10 @@ pub enum RenderSubject {
 	JungleStorybookTree(RenderJungleStorybookTree),
 	SucculentTuft(RenderSucculentTuft),
 	BladeTuft(RenderBladeTuft),
+	TuftPatch(RenderTuftPatch),
 	BraidGrass(RenderBraidGrass),
 	TropicalTufts(RenderTropicalTufts),
+	CommonTufts(RenderCommonTufts),
 	SpearTuft(RenderSpearTuft),
 	BuddhaHandTuft(RenderBuddhaHandTuft),
 	WeepingTuft(RenderWeepingTuft),
@@ -263,8 +273,10 @@ impl RenderSubject {
 			Self::JungleStorybookTree(_) => "JungleStorybookTree",
 			Self::SucculentTuft(_) => "SucculentTuft",
 			Self::BladeTuft(_) => "BladeTuft",
+			Self::TuftPatch(_) => "TuftPatch",
 			Self::BraidGrass(_) => "BraidGrass",
 			Self::TropicalTufts(_) => "TropicalTufts",
+			Self::CommonTufts(_) => "CommonTufts",
 			Self::SpearTuft(_) => "SpearTuft",
 			Self::BuddhaHandTuft(_) => "BuddhaHandTuft",
 			Self::WeepingTuft(_) => "WeepingTuft",
@@ -314,6 +326,12 @@ impl RenderSubject {
 			Self::JungleStorybookTree(t) => format!("{:?}", t.geometry),
 			Self::SucculentTuft(t) => format!("{:?}", t.shape),
 			Self::BladeTuft(t) => format!("{:?}", t.shape),
+			Self::TuftPatch(t) => {
+				format!(
+					"{:?}|clumps={}|patch_extent_xz={}",
+					t.shape, t.clump_count, t.patch_extent_xz
+				)
+			}
 			Self::BraidGrass(g) => {
 				format!(
 					"{:?}|extent={:?}|cell_extent_xz={:?}|terrain={:?}|foliage={:?}",
@@ -325,6 +343,16 @@ impl RenderSubject {
 				)
 			}
 			Self::TropicalTufts(g) => {
+				format!(
+					"{:?}|extent={:?}|cell_extent_xz={:?}|terrain={:?}|foliage={:?}",
+					g.grove,
+					g.extent,
+					g.cell_extent_xz(),
+					g.terrain,
+					g.foliage_noise
+				)
+			}
+			Self::CommonTufts(g) => {
 				format!(
 					"{:?}|extent={:?}|cell_extent_xz={:?}|terrain={:?}|foliage={:?}",
 					g.grove,
@@ -370,8 +398,10 @@ impl RenderSubject {
 			Self::JungleStorybookTree(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::SucculentTuft(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::BladeTuft(item) => item.spawn_render_items(commands, chunk, transform),
+			Self::TuftPatch(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::BraidGrass(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::TropicalTufts(item) => item.spawn_render_items(commands, chunk, transform),
+			Self::CommonTufts(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::SpearTuft(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::BuddhaHandTuft(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::WeepingTuft(item) => item.spawn_render_items(commands, chunk, transform),

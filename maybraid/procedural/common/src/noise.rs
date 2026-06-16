@@ -13,7 +13,7 @@
 use std::sync::Arc;
 
 use bevy_math::{Vec2, Vec3};
-use fastnoise_lite::{FastNoiseLite, FractalType, NoiseType};
+use fastnoise_lite::{CellularReturnType, FastNoiseLite, FractalType, NoiseType};
 
 /// Parse [`NoiseType`] from CLI / config strings (kebab-case or snake_case).
 pub fn noise_type_from_str(s: &str) -> Result<NoiseType, String> {
@@ -101,9 +101,16 @@ impl Default for NoiseParams {
 
 impl NoiseParams {
 	/// Configure [`FastNoiseLite`] from these params (internal sampling frequency fixed to **1.0** so spatial scaling is entirely [`NoiseParams::frequency`]).
+	///
+	/// [`NoiseType::Cellular`] decodes as **per-cell random values** ([`CellularReturnType::CellValue`]):
+	/// a piecewise-constant, sign-balanced hash lane suited to decorrelated per-cell draws (e.g.
+	/// grove placement jitter), rather than the engine's distance-field default.
 	pub fn build_fast_noise(&self) -> FastNoiseLite {
 		let mut n = FastNoiseLite::with_seed(self.seed);
 		n.set_noise_type(Some(self.noise_type));
+		if self.noise_type == NoiseType::Cellular {
+			n.set_cellular_return_type(Some(CellularReturnType::CellValue));
+		}
 		n.set_frequency(Some(1.0));
 		if self.octaves <= 1 {
 			n.set_fractal_type(Some(FractalType::None));
@@ -235,18 +242,25 @@ pub trait BuildWithNoise<T> {
 	fn build_with_noise(&self, noise: NoiseParams) -> T;
 }
 
-/// Parse compact `seed,frequency,amplitude,octaves` tuples into [`NoiseParams`].
+/// Parse compact `seed,frequency,amplitude,octaves[,noise-type]` tuples into [`NoiseParams`].
+///
+/// The optional fifth token is decoded with [`noise_type_from_str`] (e.g. `cellular`,
+/// `perlin`); omitting it keeps the [`NoiseParams::default`] noise type.
 pub fn noise_params_from_scalar_str(s: &str) -> Result<NoiseParams, String> {
 	let parts: Vec<&str> = s.split(',').map(str::trim).filter(|p| !p.is_empty()).collect();
-	if parts.len() != 4 {
-		return Err(format!("expected seed,frequency,amplitude,octaves, got {s:?}"));
+	if !(4..=5).contains(&parts.len()) {
+		return Err(format!("expected seed,frequency,amplitude,octaves[,noise-type], got {s:?}"));
 	}
 
 	let seed_scalar = parts[0].parse::<f32>().map_err(|e| e.to_string())?;
 	let frequency = parts[1].parse::<f32>().map_err(|e| e.to_string())?;
 	let amplitude = parts[2].parse::<f32>().map_err(|e| e.to_string())?;
 	let octaves = parts[3].parse::<u32>().map_err(|e| e.to_string())?;
-	Ok(NoiseParams::from_scalar(seed_scalar, frequency, amplitude, octaves))
+	let mut params = NoiseParams::from_scalar(seed_scalar, frequency, amplitude, octaves);
+	if let Some(noise_type) = parts.get(4) {
+		params.noise_type = noise_type_from_str(noise_type)?;
+	}
+	Ok(params)
 }
 
 impl FromScalarNoise for NoiseParams {
@@ -328,6 +342,46 @@ mod tests {
 		assert_eq!(p.frequency, 2.0);
 		assert_eq!(p.amplitude, 0.5);
 		assert_eq!(p.octaves, 2);
+		Ok(())
+	}
+
+	#[test]
+	fn scalar_str_decodes_optional_noise_type() -> Result<()> {
+		let p = noise_params_from_scalar_str("7,2,0.5,1,cellular")
+			.map_err(|e| anyhow::anyhow!("{e}"))?;
+		assert_eq!(p.noise_type, NoiseType::Cellular);
+		assert_eq!(p.seed, 7);
+		let default_type = noise_params_from_scalar_str("7,2,0.5,1")
+			.map_err(|e| anyhow::anyhow!("{e}"))?;
+		assert_eq!(default_type.noise_type, NoiseParams::default().noise_type);
+		assert!(noise_params_from_scalar_str("7,2,0.5,1,nonsense").is_err());
+		assert!(noise_params_from_scalar_str("7,2,0.5,1,cellular,extra").is_err());
+		Ok(())
+	}
+
+	#[test]
+	fn cellular_reads_as_sign_balanced_cell_values() -> Result<()> {
+		let p = NoiseParams {
+			noise_type: NoiseType::Cellular,
+			..NoiseParams::default()
+		};
+		let n = NoiseConfig::new(p);
+		let mut positives = 0_u32;
+		let mut negatives = 0_u32;
+		for i in 0..64 {
+			for j in 0..64 {
+				let v = n.sample_3d(Vec3::new(i as f32 * 2.0, 0.5, j as f32 * 2.0));
+				assert!((-1.0..=1.0).contains(&v));
+				if v > 0.0 {
+					positives += 1;
+				} else {
+					negatives += 1;
+				}
+			}
+		}
+		// CellValue is a hash lane; the engine's Distance default would be heavily negative.
+		assert!(positives > 1024, "expected sign balance, got {positives} positives");
+		assert!(negatives > 1024, "expected sign balance, got {negatives} negatives");
 		Ok(())
 	}
 

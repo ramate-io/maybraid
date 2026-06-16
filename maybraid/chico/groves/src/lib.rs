@@ -3,6 +3,7 @@
 pub mod grove;
 
 pub mod braid_grass;
+pub mod common_tufts;
 pub mod tropical_tufts;
 
 #[cfg(feature = "render")]
@@ -19,12 +20,15 @@ pub use grove::{
 #[cfg(feature = "render")]
 pub use grove::{patch_spawned_leaf_material, resolve_palette_color, WithPalette};
 
-pub use braid_grass::{BraidGrassCell, BraidGrassClump};
+pub use braid_grass::{BraidGrassCell, BraidGrassClump, BraidGrassItem, BraidSpearClump};
+pub use common_tufts::{CommonTuftClump, CommonTuftsCell, CommonTuftsItem};
 pub use tropical_tufts::{
 	TropicalPalmBush, TropicalTuftClump, TropicalTuftsCell, TropicalTuftsItem,
 };
 
 #[cfg(feature = "render")]
 pub use braid_grass::{BraidGrass, BraidGrassStd};
+#[cfg(feature = "render")]
+pub use common_tufts::{CommonTufts, CommonTuftsStd};
 #[cfg(feature = "render")]
 pub use tropical_tufts::{TropicalTufts, TropicalTuftsStd};

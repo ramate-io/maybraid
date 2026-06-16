@@ -17,13 +17,14 @@ use clap::Subcommand;
 use procedural_common::{noise_params_from_scalar_str, NoiseParams};
 
 use crate::render::{
-	RenderBladeTuft, RenderBraidGrass, RenderBraidOakTree, RenderBuddhaHandTuft, RenderConfig,
-	RenderDatePalm, RenderFriendsConifer, RenderFrondCrown, RenderHighBushShoots,
-	RenderHonuBanyan, RenderJungleGrowth, RenderJungleStorybookTree, RenderKamakuraTorch,
-	RenderLiamsConifer, RenderModerateLodFrondCrown, RenderNorthernConifer, RenderPalmBush,
-	RenderPenmarchTorch, RenderRorysHeadTrained, RenderSopesBanyan, RenderSpearTuft,
-	RenderStorybookTree, RenderSubject, RenderSucculentTuft, RenderTemperateConifer,
-	RenderTropicalTufts, RenderVaseTree, RenderWaialeaPalm, RenderWeepingTuft,
+	RenderBladeTuft, RenderBraidGrass, RenderBraidOakTree, RenderBuddhaHandTuft,
+	RenderCommonTufts, RenderConfig, RenderDatePalm, RenderFriendsConifer, RenderFrondCrown,
+	RenderHighBushShoots, RenderHonuBanyan, RenderJungleGrowth, RenderJungleStorybookTree,
+	RenderKamakuraTorch, RenderLiamsConifer, RenderModerateLodFrondCrown, RenderNorthernConifer,
+	RenderPalmBush, RenderPenmarchTorch, RenderRorysHeadTrained, RenderSopesBanyan,
+	RenderSpearTuft, RenderStorybookTree, RenderSubject, RenderSucculentTuft,
+	RenderTemperateConifer, RenderTropicalTufts, RenderTuftPatch, RenderVaseTree,
+	RenderWaialeaPalm, RenderWeepingTuft,
 };
 
 /// Shared render flags (resolution + scene transform) wrapped around per-item args.
@@ -115,6 +116,14 @@ impl CellRenderHelper<RenderTropicalTufts> {
 	}
 }
 
+impl CellRenderHelper<RenderCommonTufts> {
+	pub fn configured_common_tufts(&self) -> RenderCommonTufts {
+		let mut tufts = self.render.inner.clone();
+		tufts.extent = self.grove_extent(tufts.cell_extent_xz());
+		tufts
+	}
+}
+
 /// High bush shape plus the surface-noise flags that live on the render item (not the shape).
 #[derive(Clone, clap::Args)]
 #[command(rename_all = "kebab-case")]
@@ -126,7 +135,7 @@ pub struct HighBushShootsArgs {
 		long,
 		default_value = "0,1,0.05,1",
 		value_parser = noise_params_from_scalar_str,
-		value_name = "SEED,FREQUENCY,AMPLITUDE,OCTAVES",
+		value_name = "SEED,FREQUENCY,AMPLITUDE,OCTAVES[,TYPE]",
 		help_heading = "Surface Noise"
 	)]
 	pub stick_surface_noise: NoiseParams,
@@ -135,7 +144,7 @@ pub struct HighBushShootsArgs {
 		long,
 		default_value = "0,1,0.06,1",
 		value_parser = noise_params_from_scalar_str,
-		value_name = "SEED,FREQUENCY,AMPLITUDE,OCTAVES",
+		value_name = "SEED,FREQUENCY,AMPLITUDE,OCTAVES[,TYPE]",
 		help_heading = "Surface Noise"
 	)]
 	pub leaf_surface_noise: NoiseParams,
@@ -178,8 +187,10 @@ pub enum Render {
 	JungleStorybookTree(RenderHelper<RenderJungleStorybookTree>),
 	SucculentTuft(RenderHelper<SucculentTuftShape>),
 	BladeTuft(RenderHelper<BladeTuftShape>),
+	TuftPatch(RenderHelper<RenderTuftPatch>),
 	BraidGrass(CellRenderHelper<RenderBraidGrass>),
 	TropicalTufts(CellRenderHelper<RenderTropicalTufts>),
+	CommonTufts(CellRenderHelper<RenderCommonTufts>),
 	SpearTuft(RenderHelper<SpearTuftShape>),
 	BuddhaHandTuft(RenderHelper<BuddhaHandTuftShape>),
 	WeepingTuft(RenderHelper<WeepingTuftShape>),
@@ -234,12 +245,16 @@ impl Render {
 			Self::BladeTuft(h) => h.config_with(RenderSubject::BladeTuft(
 				RenderBladeTuft::from_shape(h.inner.clone(), Default::default()),
 			)),
+			Self::TuftPatch(h) => h.config_with(RenderSubject::TuftPatch(h.inner.clone())),
 			Self::BraidGrass(h) => h
 				.render
 				.config_with(RenderSubject::BraidGrass(h.configured_braid_grass())),
 			Self::TropicalTufts(h) => h
 				.render
 				.config_with(RenderSubject::TropicalTufts(h.configured_tropical_tufts())),
+			Self::CommonTufts(h) => h
+				.render
+				.config_with(RenderSubject::CommonTufts(h.configured_common_tufts())),
 			Self::SpearTuft(h) => h.config_with(RenderSubject::SpearTuft(
 				RenderSpearTuft::from_shape(h.inner.clone(), Default::default()),
 			)),
@@ -690,23 +705,43 @@ mod tests {
 	}
 
 	#[test]
-	fn tropical_tufts_command_preserves_grove_params() -> Result<()> {
+	fn common_tufts_defaults_spawn_placements() -> Result<()> {
+		let cmd = crate::commands::PlaygroundCommand::parse_line("render common-tufts")
+			.map_err(|e| anyhow::anyhow!("{e}"))?;
+		let crate::commands::PlaygroundCommand::Render(Render::CommonTufts(helper)) = cmd else {
+			anyhow::bail!("expected common-tufts render command");
+		};
+		let tufts = helper.configured_common_tufts();
+		assert!(tufts.grove.variant_weights.is_none());
+		let placements = tufts.placements();
+		assert_eq!(helper.grove_extent_xz, 100.0);
+		assert_eq!(tufts.placement_cells().len(), 50 * 50);
+		assert!(
+			!placements.is_empty(),
+			"expected a visible common-tufts preview with default flags, got {} placements",
+			placements.len()
+		);
+		Ok(())
+	}
+
+	#[test]
+	fn common_tufts_command_preserves_grove_params() -> Result<()> {
 		let cmd = crate::commands::PlaygroundCommand::parse_line(
-			"render tropical-tufts --elevation 0.4 --grove-extent-xz 13 --cell-extent-xz 3.25,3.25",
+			"render common-tufts --elevation 0.4 --grove-extent-xz 8 --cell-extent-xz 2,2",
 		)
 		.map_err(|e| anyhow::anyhow!("{e}"))?;
-		let crate::commands::PlaygroundCommand::Render(Render::TropicalTufts(helper)) = cmd else {
-			anyhow::bail!("expected tropical-tufts render command");
+		let crate::commands::PlaygroundCommand::Render(Render::CommonTufts(helper)) = cmd else {
+			anyhow::bail!("expected common-tufts render command");
 		};
-		assert!((helper.grove_extent_xz - 13.0).abs() < 1e-5);
-		assert_eq!(helper.render.inner.grove.cell_extent_xz, Some(Vec2::splat(3.25)));
-		let tufts = helper.configured_tropical_tufts();
+		assert!((helper.grove_extent_xz - 8.0).abs() < 1e-5);
+		assert_eq!(helper.render.inner.grove.cell_extent_xz, Some(Vec2::splat(2.0)));
+		let tufts = helper.configured_common_tufts();
 		assert_eq!(tufts.placement_cells().len(), 16);
 		assert!((tufts.terrain.elevation - 0.4).abs() < 1e-5);
 		assert!(!tufts.placements().is_empty());
-		let cfg = Render::TropicalTufts(helper).into_render_config();
-		let RenderSubject::TropicalTufts(subject) = cfg.subject else {
-			anyhow::bail!("expected tropical tufts subject");
+		let cfg = Render::CommonTufts(helper).into_render_config();
+		let RenderSubject::CommonTufts(subject) = cfg.subject else {
+			anyhow::bail!("expected common tufts subject");
 		};
 		assert_eq!(subject.placement_cells().len(), 16);
 		assert!(!subject.placements().is_empty());
@@ -714,9 +749,33 @@ mod tests {
 	}
 
 	#[test]
+	fn tropical_tufts_command_preserves_grove_params() -> Result<()> {
+		let cmd = crate::commands::PlaygroundCommand::parse_line(
+			"render tropical-tufts --elevation 0.4 --grove-extent-xz 26 --cell-extent-xz 3.25,3.25",
+		)
+		.map_err(|e| anyhow::anyhow!("{e}"))?;
+		let crate::commands::PlaygroundCommand::Render(Render::TropicalTufts(helper)) = cmd else {
+			anyhow::bail!("expected tropical-tufts render command");
+		};
+		assert!((helper.grove_extent_xz - 26.0).abs() < 1e-5);
+		assert_eq!(helper.render.inner.grove.cell_extent_xz, Some(Vec2::splat(3.25)));
+		let tufts = helper.configured_tropical_tufts();
+		assert_eq!(tufts.placement_cells().len(), 64);
+		assert!((tufts.terrain.elevation - 0.4).abs() < 1e-5);
+		assert!(!tufts.placements().is_empty());
+		let cfg = Render::TropicalTufts(helper).into_render_config();
+		let RenderSubject::TropicalTufts(subject) = cfg.subject else {
+			anyhow::bail!("expected tropical tufts subject");
+		};
+		assert_eq!(subject.placement_cells().len(), 64);
+		assert!(!subject.placements().is_empty());
+		Ok(())
+	}
+
+	#[test]
 	fn braid_grass_command_preserves_grove_params() -> Result<()> {
 		let cmd = crate::commands::PlaygroundCommand::parse_line(
-			"render braid-grass --variant-weights 0.0,9.0,x,x,x --elevation 0.4 --grove-extent-xz 12.75 --cell-extent-xz 4.25,4.25",
+			"render braid-grass --variant-weights 0.0,9.0,x,x,x,x,x,x,x,x --elevation 0.4 --grove-extent-xz 12.75 --cell-extent-xz 4.25,4.25",
 		)
 		.map_err(|e| anyhow::anyhow!("{e}"))?;
 		let crate::commands::PlaygroundCommand::Render(Render::BraidGrass(helper)) = cmd else {
@@ -734,6 +793,26 @@ mod tests {
 		};
 		assert_eq!(subject.placement_cells().len(), 9);
 		assert!(!subject.placements().is_empty());
+		Ok(())
+	}
+
+	#[test]
+	fn tuft_patch_command_preserves_patch_params() -> Result<()> {
+		let cmd = crate::commands::PlaygroundCommand::parse_line(
+			"render tuft-patch --clump-count 7 --patch-extent-xz 2.5 --blade-count 6 --seed 42",
+		)
+		.map_err(|e| anyhow::anyhow!("{e}"))?;
+		let crate::commands::PlaygroundCommand::Render(Render::TuftPatch(helper)) = cmd else {
+			anyhow::bail!("expected tuft-patch render command");
+		};
+		assert_eq!(helper.inner.clump_count, 7);
+		assert!((helper.inner.patch_extent_xz - 2.5).abs() < 1e-5);
+		assert_eq!(helper.inner.shape.blade_count, 6);
+		let cfg = Render::TuftPatch(helper).into_render_config();
+		let RenderSubject::TuftPatch(patch) = cfg.subject else {
+			anyhow::bail!("expected tuft patch subject");
+		};
+		assert_eq!(patch.clump_anchors().len(), 7);
 		Ok(())
 	}
 

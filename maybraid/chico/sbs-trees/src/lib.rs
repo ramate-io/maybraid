@@ -20,6 +20,7 @@ pub mod sopes_banyan;
 pub mod honu_banyan;
 pub mod storybook_tree;
 pub mod palm_bush;
+pub mod tuft_patch;
 pub mod waialea_palm;
 
 pub use braid_oak_tree::BraidOakTreeStd;
@@ -41,4 +42,5 @@ pub use kamakura_torch::KamakuraTorchStd;
 pub use rorys_head_trained::RorysHeadTrainedStd;
 pub use vase_tree::VaseTreeStd;
 pub use palm_bush::PalmBushStd;
+pub use tuft_patch::TuftPatchStd;
 pub use waialea_palm::WaialeaPalmStd;
