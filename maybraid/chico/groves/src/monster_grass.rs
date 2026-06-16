@@ -2,8 +2,9 @@
 //! ([RFC-183 §3.4.5.2](../../../../rfc/rfc-000-000-183-chico-vegetation/03-04-cellular-groves/05-well-known-understory-groves/02-monster-grass/README.md),
 //! [#308](https://github.com/ramate-io/maybraid/issues/308)).
 //!
-//! Sparse 2–6 m blade walls for jungle, swamp, and elder-tree understory. RFC `droop` maps to
-//! `max_tilt_radians` on upward-biased blade tufts; true downward sag remains a follow-up.
+//! Dense 2–6 m understory blades for jungle, swamp, and elder-tree floors — structurally
+//! Braid Grass at monster scale. RFC `droop` maps to `max_tilt_radians` on upward-biased blade
+//! tufts; true downward sag remains a follow-up.
 
 use std::ops::RangeInclusive;
 
@@ -22,16 +23,14 @@ pub use render::{MonsterGrass, MonsterGrassStd};
 
 /// Authored Monster Grass grove definition.
 ///
-/// Cell footprint is the midpoint of the RFC's `CELL_SIZE_RANGE` (`4.0..9.0`). The offset range
-/// is signed and wider than the RFC's nominal `0.0..1.0` (± one cell) so placements break the
-/// underlying grid instead of clustering near cell centers.
+/// Cell footprint is denser than the RFC's nominal `4.0..9.0` grid (like Braid Grass) so preview
+/// groves read as continuous tall understory rather than sparse screens. The offset range is
+/// signed and ± one cell so placements break the underlying grid instead of clustering near
+/// cell centers.
 pub fn definition() -> GroveDefinition<MonsterGrassCell> {
 	GroveDefinition {
-		cell_extent_xz: Vec2::splat(6.5),
-		placement: GrovePlacementRanges::new(
-			UnitRange::new(0.85, 1.15),
-			UnitRange::new(-6.5, 6.5),
-		),
+		cell_extent_xz: Vec2::splat(2.5),
+		placement: GrovePlacementRanges::new(UnitRange::new(0.85, 1.15), UnitRange::new(-2.5, 2.5)),
 		distribution: MonsterGrassCell::distribution(),
 	}
 }
@@ -79,7 +78,7 @@ const BEND_SEGMENTS: RangeInclusive<u32> = 4..=12;
 const GIANT_WET_BLADE: MonsterGrassClump = MonsterGrassClump {
 	height: UnitRange::new(2.00, 6.00),
 	width_factor: BLADE_WIDTH_FACTOR,
-	blade_count: 8..=18,
+	blade_count: 10..=28,
 	bend_segments: BEND_SEGMENTS,
 	max_tilt_radians: UnitRange::new(0.25, 0.70),
 };
@@ -87,7 +86,7 @@ const GIANT_WET_BLADE: MonsterGrassClump = MonsterGrassClump {
 const BROAD_JUNGLE_BLADE: MonsterGrassClump = MonsterGrassClump {
 	height: UnitRange::new(2.50, 5.00),
 	width_factor: BLADE_WIDTH_FACTOR,
-	blade_count: 6..=14,
+	blade_count: 8..=24,
 	bend_segments: BEND_SEGMENTS,
 	max_tilt_radians: UnitRange::new(0.35, 0.85),
 };
@@ -95,7 +94,7 @@ const BROAD_JUNGLE_BLADE: MonsterGrassClump = MonsterGrassClump {
 const PALE_GIANT_REED: MonsterGrassClump = MonsterGrassClump {
 	height: UnitRange::new(2.00, 4.50),
 	width_factor: BLADE_WIDTH_FACTOR,
-	blade_count: 6..=16,
+	blade_count: 8..=22,
 	bend_segments: BEND_SEGMENTS,
 	max_tilt_radians: UnitRange::new(0.15, 0.50),
 };
@@ -103,56 +102,56 @@ const PALE_GIANT_REED: MonsterGrassClump = MonsterGrassClump {
 const RED_RIBBED_BLADE: MonsterGrassClump = MonsterGrassClump {
 	height: UnitRange::new(2.20, 4.20),
 	width_factor: BLADE_WIDTH_FACTOR,
-	blade_count: 8..=18,
+	blade_count: 10..=24,
 	bend_segments: BEND_SEGMENTS,
 	max_tilt_radians: UnitRange::new(0.20, 0.65),
 };
 
-// Patch varietals use the largest footprints in the grove library so neighboring clumps overlap
-// into partial walls and screens.
+// Patch varietals scatter tall blade clumps as loose mounds — Braid Grass geometry scaled up,
+// with enough clumps per patch to read as dense understory rather than isolated walls.
 
 const GIANT_WET_BLADE_PATCH: GroveTuftPatch<MonsterGrassClump> = GroveTuftPatch {
 	clump: GIANT_WET_BLADE,
-	clump_count: 2..=4,
-	patch_extent_xz: UnitRange::new(3.0, 6.0),
-	base_spread: UnitRange::new(0.35, 0.70),
+	clump_count: 3..=5,
+	patch_extent_xz: UnitRange::new(1.8, 4.4),
+	base_spread: UnitRange::new(0.25, 0.50),
 };
 
 const BROAD_JUNGLE_BLADE_PATCH: GroveTuftPatch<MonsterGrassClump> = GroveTuftPatch {
 	clump: BROAD_JUNGLE_BLADE,
-	clump_count: 2..=4,
-	patch_extent_xz: UnitRange::new(3.5, 7.0),
-	base_spread: UnitRange::new(0.40, 0.80),
+	clump_count: 3..=6,
+	patch_extent_xz: UnitRange::new(1.6, 4.8),
+	base_spread: UnitRange::new(0.30, 0.55),
 };
 
 const PALE_GIANT_REED_PATCH: GroveTuftPatch<MonsterGrassClump> = GroveTuftPatch {
 	clump: PALE_GIANT_REED,
-	clump_count: 2..=4,
-	patch_extent_xz: UnitRange::new(2.5, 5.5),
-	base_spread: UnitRange::new(0.30, 0.60),
+	clump_count: 3..=5,
+	patch_extent_xz: UnitRange::new(2.0, 2.8),
+	base_spread: UnitRange::new(0.20, 0.45),
 };
 
 const RED_RIBBED_BLADE_PATCH: GroveTuftPatch<MonsterGrassClump> = GroveTuftPatch {
 	clump: RED_RIBBED_BLADE,
-	clump_count: 2..=3,
-	patch_extent_xz: UnitRange::new(3.0, 6.0),
-	base_spread: UnitRange::new(0.35, 0.65),
+	clump_count: 2..=5,
+	patch_extent_xz: UnitRange::new(1.8, 4.4),
+	base_spread: UnitRange::new(0.25, 0.50),
 };
 
 impl MonsterGrassCell {
 	/// Authored ordered distribution: explicit `None`, then variants in declaration order.
 	///
-	/// Placed weights total `4.6` (RFC relative proportions); the `None` weight of `6.0` puts
-	/// the placed share at `4.6 / 10.6 ≈ 0.43`, inside the RFC's `DENSITY_RANGE`
-	/// (`0.18..0.55`). Patches carry `3.68` of the placed weight; single-anchor clumps share
-	/// the remaining `0.92`.
+	/// Placed weights total `4.6` (RFC relative proportions); the `None` weight of `1.5` puts
+	/// the placed share at `4.6 / 6.1 ≈ 0.75`, matching the dense understory read of Braid
+	/// Grass. Patches carry `3.68` of the placed weight; single-anchor clumps share the
+	/// remaining `0.92`.
 	pub fn distribution() -> GroveDistribution<Self> {
 		let low_wet =
-			PlacementConstraints::new(UnitRange::new(0.0, 0.55), UnitRange::new(0.0, 0.25));
+			PlacementConstraints::new(UnitRange::new(0.0, 0.75), UnitRange::new(0.0, 0.50));
 		let red_ribbed =
-			PlacementConstraints::new(UnitRange::new(0.0, 0.55), UnitRange::new(0.0, 0.45));
+			PlacementConstraints::new(UnitRange::new(0.0, 0.75), UnitRange::new(0.0, 0.60));
 		GroveDistribution::new(vec![
-			GroveBucket::none(6.0),
+			GroveBucket::none(1.5),
 			GroveBucket::placed(0.40, low_wet, Self::GiantWetBlade),
 			GroveBucket::placed(0.30, low_wet, Self::BroadJungleBlade),
 			GroveBucket::placed(0.15, low_wet, Self::PaleGiantReed),
@@ -224,7 +223,7 @@ mod tests {
 		let dist = MonsterGrassCell::distribution();
 		assert_eq!(dist.len(), 9);
 		assert!(dist.buckets[0].item.is_none());
-		assert_eq!(dist.buckets[0].weight, 6.0);
+		assert_eq!(dist.buckets[0].weight, 1.5);
 		assert_eq!(dist.buckets[1].item, Some(MonsterGrassCell::GiantWetBlade));
 		assert_eq!(dist.buckets[1].weight, 0.40);
 		assert_eq!(dist.buckets[2].item, Some(MonsterGrassCell::BroadJungleBlade));
@@ -245,12 +244,15 @@ mod tests {
 	}
 
 	#[test]
-	fn placed_share_sits_in_rfc_density_range() -> Result<()> {
+	fn placed_share_matches_dense_understory_target() -> Result<()> {
 		let dist = MonsterGrassCell::distribution();
 		let total: f32 = dist.buckets.iter().map(|b| b.weight).sum();
 		let placed: f32 = dist.buckets.iter().filter(|b| b.item.is_some()).map(|b| b.weight).sum();
 		let share = placed / total;
-		assert!((0.18..=0.55).contains(&share), "placed share {share} outside RFC density");
+		assert!(
+			(0.70..=0.80).contains(&share),
+			"placed share {share} outside dense understory band (~75 %)"
+		);
 		Ok(())
 	}
 
@@ -300,18 +302,18 @@ mod tests {
 			anyhow::bail!("expected patch item");
 		};
 		assert_eq!(patch.clump, GIANT_WET_BLADE);
-		assert!(*patch.clump_count.start() >= 2);
-		assert!(patch.patch_extent_xz.start >= 3.0);
+		assert!(*patch.clump_count.start() >= 3);
+		assert!(patch.patch_extent_xz.start >= 1.2);
 		Ok(())
 	}
 
 	#[test]
 	fn constraint_first_fit_fallback() -> Result<()> {
-		// PaleGiantReed (index 3) rejects steepness 0.35; first-fit falls to RedRibbedBlade
-		// (index 4), which allows steepness up to 0.45.
-		let prepared = MonsterGrassCell::distribution()
-			.prepare(0.0, 0.0, NoiseParams::default(), Vec3::ZERO);
-		let terrain = FlatTerrainSample { elevation: 0.35, steepness: 0.35 };
+		// PaleGiantReed (index 3) rejects steepness 0.55; first-fit falls to RedRibbedBlade
+		// (index 4), which allows steepness up to 0.60.
+		let prepared =
+			MonsterGrassCell::distribution().prepare(0.0, 0.0, NoiseParams::default(), Vec3::ZERO);
+		let terrain = FlatTerrainSample { elevation: 0.35, steepness: 0.55 };
 		let outcome = prepared.select_from(3, Vec3::new(5.0, 0.35, 5.0), 1.0, &terrain);
 		match outcome {
 			GroveCellOutcome::Placed { variant, .. } => {
@@ -325,8 +327,7 @@ mod tests {
 	#[test]
 	fn placements_break_the_cell_grid() -> Result<()> {
 		let noise = crate::grove::GroveFrontend::default().noise;
-		let grove =
-			Grove::assemble(definition(), ForestGroveBiases::default(), noise, Vec3::ZERO);
+		let grove = Grove::assemble(definition(), ForestGroveBiases::default(), noise, Vec3::ZERO);
 		let extent = GroveExtent::new(Vec3::ZERO, Vec3::new(80.0, 1.0, 80.0));
 		let terrain = FlatTerrainSample { elevation: 0.35, steepness: 0.15 };
 		let placements = grove.populate(&extent, &terrain);

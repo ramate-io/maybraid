@@ -845,23 +845,23 @@ mod tests {
 	#[test]
 	fn monster_grass_command_preserves_grove_params() -> Result<()> {
 		let cmd = crate::commands::PlaygroundCommand::parse_line(
-			"render monster-grass --elevation 0.35 --grove-extent-xz 26 --cell-extent-xz 6.5,6.5",
+			"render monster-grass --elevation 0.35 --grove-extent-xz 25 --cell-extent-xz 2.5,2.5",
 		)
 		.map_err(|e| anyhow::anyhow!("{e}"))?;
 		let crate::commands::PlaygroundCommand::Render(Render::MonsterGrass(helper)) = cmd else {
 			anyhow::bail!("expected monster-grass render command");
 		};
-		assert!((helper.grove_extent_xz - 26.0).abs() < 1e-5);
-		assert_eq!(helper.render.inner.grove.cell_extent_xz, Some(Vec2::splat(6.5)));
+		assert!((helper.grove_extent_xz - 25.0).abs() < 1e-5);
+		assert_eq!(helper.render.inner.grove.cell_extent_xz, Some(Vec2::splat(2.5)));
 		let grass = helper.configured_monster_grass();
-		assert_eq!(grass.placement_cells().len(), 16);
+		assert_eq!(grass.placement_cells().len(), 100);
 		assert!((grass.terrain.elevation - 0.35).abs() < 1e-5);
 		assert!(!grass.placements().is_empty());
 		let cfg = Render::MonsterGrass(helper).into_render_config();
 		let RenderSubject::MonsterGrass(subject) = cfg.subject else {
 			anyhow::bail!("expected monster grass subject");
 		};
-		assert_eq!(subject.placement_cells().len(), 16);
+		assert_eq!(subject.placement_cells().len(), 100);
 		assert!(!subject.placements().is_empty());
 		Ok(())
 	}
