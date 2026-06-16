@@ -4,6 +4,7 @@ pub mod grove;
 
 pub mod braid_grass;
 pub mod common_tufts;
+pub mod low_bush;
 pub mod monster_grass;
 pub mod riverine_green;
 pub mod tropical_tufts;
@@ -25,6 +26,7 @@ pub use grove::{patch_spawned_leaf_material, resolve_palette_color, WithPalette}
 
 pub use braid_grass::{BraidGrassCell, BraidGrassClump, BraidGrassItem, BraidSpearClump};
 pub use common_tufts::{CommonTuftClump, CommonTuftsCell, CommonTuftsItem};
+pub use low_bush::{LowBushBush, LowBushCell, LowBushItem};
 pub use monster_grass::{MonsterGrassCell, MonsterGrassClump, MonsterGrassItem};
 pub use riverine_green::{RiverineGreenBush, RiverineGreenCell, RiverineGreenItem};
 pub use tropical_tufts::{
@@ -36,6 +38,8 @@ pub use wild_grass::{WildGrassCell, WildGrassClump, WildGrassItem};
 pub use braid_grass::{BraidGrass, BraidGrassStd};
 #[cfg(feature = "render")]
 pub use common_tufts::{CommonTufts, CommonTuftsStd};
+#[cfg(feature = "render")]
+pub use low_bush::{LowBush, LowBushStd};
 #[cfg(feature = "render")]
 pub use monster_grass::{MonsterGrass, MonsterGrassStd};
 #[cfg(feature = "render")]
