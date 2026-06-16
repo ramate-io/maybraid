@@ -4,9 +4,9 @@ use std::marker::PhantomData;
 
 use bevy::prelude::*;
 use chico_sbs_geometry::anchors::high_bush::{
-	DEFAULT_ANCHOR_LIFT_FRACTION, DEFAULT_RADIAL_STRENGTH, DEFAULT_SEGMENT_LENGTH_FRACTION_HI,
+	DEFAULT_ANCHOR_LIFT_FRACTION, DEFAULT_SEGMENT_LENGTH_FRACTION_HI,
 	DEFAULT_SEGMENT_LENGTH_FRACTION_LO, DEFAULT_SEGMENT_RADIUS_FRACTION_HI,
-	DEFAULT_SEGMENT_RADIUS_FRACTION_LO, DEFAULT_VERTICAL_BIAS,
+	DEFAULT_SEGMENT_RADIUS_FRACTION_LO,
 };
 use chico_tree_components::{HighBushFoliageStyle, HighBushShoots, HighBushShootsShape};
 use chico_vegetation_shaders::ChicoStickMaterial;
@@ -63,7 +63,7 @@ where
 
 	#[arg(
 		long,
-		default_value = "0,0.042,0.19,1",
+		default_value = "0,1.0,0.05,1",
 		value_parser = noise_params_from_scalar_str,
 		value_name = "SEED,FREQUENCY,AMPLITUDE,OCTAVES[,TYPE]",
 		help_heading = "Stick Surface Noise",
@@ -72,7 +72,7 @@ where
 
 	#[arg(
 		long,
-		default_value = "0,0.042,0.19,1",
+		default_value = "0,1.0,0.06,1",
 		value_parser = noise_params_from_scalar_str,
 		value_name = "SEED,FREQUENCY,AMPLITUDE,OCTAVES[,TYPE]",
 		help_heading = "Leaf Surface Noise",
@@ -107,8 +107,8 @@ where
 			stick_material: StickS::default(),
 			leaf_material: LeafS::default(),
 			bush_chain_noise: NoiseParams::from_scalar(0.0, 1.0, 1.0, 1),
-			stick_surface_noise: NoiseParams::from_scalar(0.0, 0.042, 0.19, 1),
-			leaf_surface_noise: NoiseParams::from_scalar(0.0, 0.042, 0.19, 1),
+			stick_surface_noise: NoiseParams::from_scalar(0.0, 1.0, 0.05, 1),
+			leaf_surface_noise: NoiseParams::from_scalar(0.0, 1.0, 0.06, 1),
 			extent: GroveExtent::new(
 				Vec3::ZERO,
 				Vec3::new(DEFAULT_GROVE_EXTENT_XZ, 1.0, DEFAULT_GROVE_EXTENT_XZ),
@@ -204,8 +204,8 @@ impl BuildWithNoise<HighBushShootsShape> for RiverineGreenBush {
 			height,
 			anchor_lift_fraction: DEFAULT_ANCHOR_LIFT_FRACTION,
 			shoot_count: sample_u32(&self.shoot_count, 3.0),
-			radial_strength: DEFAULT_RADIAL_STRENGTH,
-			vertical_bias: DEFAULT_VERTICAL_BIAS,
+			radial_strength: sample_f32(self.radial_strength, 5.0),
+			vertical_bias: sample_f32(self.vertical_bias, 6.0),
 			branch_depth: sample_u32(&self.branch_depth, 4.0) as usize,
 			segment_length_fraction_lo: DEFAULT_SEGMENT_LENGTH_FRACTION_LO,
 			segment_length_fraction_hi: DEFAULT_SEGMENT_LENGTH_FRACTION_HI,
@@ -244,9 +244,12 @@ where
 		let mut out = Vec::new();
 		for placed in self.placements() {
 			let local = transform.mul_transform(placement_transform(&placed));
-			let noise = placement_noise(self.bush_chain_noise, placed.position);
+			let chain_noise = placement_noise(self.bush_chain_noise, placed.position);
+			// Grove frontend noise samples authored geometry; chain noise drives stick growth.
+			let build_noise = placement_noise(self.grove.noise, placed.position);
 			let RiverineGreenItem::Bush(bush) = placed.variant.item();
-			let shape = bush.build_with_noise(noise);
+			let mut shape = bush.build_with_noise(build_noise);
+			shape.chain_noise = chain_noise;
 			let entities = HighBushShoots::<StickM, StickS, LeafM, LeafS>::spawn_from_shape(
 				shape,
 				self.stick_surface_noise,
@@ -257,8 +260,8 @@ where
 				cascade_chunk,
 				local,
 			);
-			let stick_seed = noise.seed as i32;
-			let canopy_seed = noise.seed as i32 + 31;
+			let stick_seed = chain_noise.seed as i32;
+			let canopy_seed = build_noise.seed as i32 + 31;
 			patch_spawned_leaf_material::<StickM>(
 				&entities,
 				placed.variant.stick_palette_mix(),
@@ -298,6 +301,10 @@ mod tests {
 			assert!(shape.height <= bush.height.start.max(bush.height.end));
 			assert!(bush.shoot_count.contains(&shape.shoot_count));
 			assert!(bush.branch_depth.contains(&(shape.branch_depth as u32)));
+			assert!(shape.radial_strength >= bush.radial_strength.start.min(bush.radial_strength.end));
+			assert!(shape.radial_strength <= bush.radial_strength.start.max(bush.radial_strength.end));
+			assert!(shape.vertical_bias >= bush.vertical_bias.start.min(bush.vertical_bias.end));
+			assert!(shape.vertical_bias <= bush.vertical_bias.start.max(bush.vertical_bias.end));
 			let leaf_radius = shape.leaf_radius_world();
 			assert!(leaf_radius >= bush.leaf_radius.start.min(bush.leaf_radius.end));
 			assert!(leaf_radius <= bush.leaf_radius.start.max(bush.leaf_radius.end));
@@ -373,7 +380,7 @@ mod tests {
 	}
 
 	#[test]
-	fn default_weights_yield_sparse_placements_in_preview_grid() -> Result<()> {
+	fn default_weights_yield_moderate_placements_in_preview_grid() -> Result<()> {
 		let span = DEFAULT_GROVE_EXTENT_XZ;
 		let grove = RiverineGreenStd::default()
 			.with_extent(GroveExtent::new(Vec3::ZERO, Vec3::new(span, 1.0, span)));
@@ -381,8 +388,8 @@ mod tests {
 		let placements = grove.placements();
 		let placed_share = placements.len() as f32 / cells as f32;
 		assert!(
-			placed_share < 0.35,
-			"expected sparse riverine fill, got {placed_share} ({}/{cells})",
+			(0.15..=0.45).contains(&placed_share),
+			"expected moderate riverine fill, got {placed_share} ({}/{cells})",
 			placements.len()
 		);
 		assert!(!placements.is_empty());

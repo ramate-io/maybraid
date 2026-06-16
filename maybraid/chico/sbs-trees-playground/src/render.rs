@@ -402,11 +402,12 @@ impl RenderSubject {
 			}
 			Self::RiverineGreen(g) => {
 				format!(
-					"{:?}|extent={:?}|cell_extent_xz={:?}|terrain={:?}|stick={:?}|leaf={:?}",
+					"{:?}|extent={:?}|cell_extent_xz={:?}|terrain={:?}|chain={:?}|stick={:?}|leaf={:?}",
 					g.grove,
 					g.extent,
 					g.cell_extent_xz(),
 					g.terrain,
+					g.bush_chain_noise,
 					g.stick_surface_noise,
 					g.leaf_surface_noise
 				)

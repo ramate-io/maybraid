@@ -2,9 +2,9 @@
 //! ([RFC-183 §3.4.5.10](../../../../rfc/rfc-000-000-183-chico-vegetation/03-04-cellular-groves/05-well-known-understory-groves/10-riverine-green/README.md),
 //! [#307](https://github.com/ramate-io/maybraid/issues/307)).
 //!
-//! Sparse Common High Bush punctuation along riparian edges. Each placement is a single
-//! [`HighBushShoots`](../../tree-components/src/high_bush_shoots/assembly.rs) bush with dual
-//! stick and canopy palettes; forest-layer attachment remains a follow-up.
+//! Moderate-density Common High Bush punctuation along riparian edges. Each placement is a
+//! single [`HighBushShoots`](../../tree-components/src/high_bush_shoots/assembly.rs) bush with
+//! dual stick and canopy palettes; forest-layer attachment remains a follow-up.
 
 use std::ops::RangeInclusive;
 
@@ -12,8 +12,8 @@ use bevy_math::Vec2;
 use procedural_common::UnitRange;
 
 use crate::grove::{
-	GroveBucket, GroveDefinition, GroveDistribution, GrovePlacementRanges, PaletteMix,
-	PaletteSlot, PlacementConstraints,
+	GroveBucket, GroveDefinition, GroveDistribution, GrovePlacementRanges, PaletteMix, PaletteSlot,
+	PlacementConstraints,
 };
 
 #[cfg(feature = "render")]
@@ -29,10 +29,7 @@ pub use render::{RiverineGreen, RiverineGreenStd};
 pub fn definition() -> GroveDefinition<RiverineGreenCell> {
 	GroveDefinition {
 		cell_extent_xz: Vec2::splat(7.0),
-		placement: GrovePlacementRanges::new(
-			UnitRange::new(0.85, 1.15),
-			UnitRange::new(-7.0, 7.0),
-		),
+		placement: GrovePlacementRanges::new(UnitRange::new(0.85, 1.15), UnitRange::new(-7.0, 7.0)),
 		distribution: RiverineGreenCell::distribution(),
 	}
 }
@@ -60,6 +57,10 @@ pub struct RiverineGreenBush {
 	pub height: UnitRange,
 	pub shoot_count: RangeInclusive<u32>,
 	pub branch_depth: RangeInclusive<u32>,
+	/// RFC `projection_count` — horizontal splay in shoot direction mix.
+	pub radial_strength: UnitRange,
+	/// RFC `projection_count` — upward bias in shoot direction mix.
+	pub vertical_bias: UnitRange,
 	/// Terminal foliage radius in **world meters** (render converts to a height fraction).
 	pub leaf_radius: UnitRange,
 }
@@ -68,6 +69,8 @@ const WET_GREEN_BUSH: RiverineGreenBush = RiverineGreenBush {
 	height: UnitRange::new(1.00, 2.20),
 	shoot_count: 7..=11,
 	branch_depth: 2..=4,
+	radial_strength: UnitRange::new(0.38, 0.52),
+	vertical_bias: UnitRange::new(0.18, 0.82),
 	leaf_radius: UnitRange::new(0.06, 0.13),
 };
 
@@ -75,6 +78,8 @@ const BRIGHT_BANK_BUSH: RiverineGreenBush = RiverineGreenBush {
 	height: UnitRange::new(0.80, 1.70),
 	shoot_count: 6..=10,
 	branch_depth: 2..=3,
+	radial_strength: UnitRange::new(0.42, 0.58),
+	vertical_bias: UnitRange::new(0.22, 0.78),
 	leaf_radius: UnitRange::new(0.05, 0.11),
 };
 
@@ -82,6 +87,8 @@ const DEEP_SHADE_BUSH: RiverineGreenBush = RiverineGreenBush {
 	height: UnitRange::new(1.20, 2.40),
 	shoot_count: 8..=12,
 	branch_depth: 3..=5,
+	radial_strength: UnitRange::new(0.30, 0.45),
+	vertical_bias: UnitRange::new(0.72, 0.90),
 	leaf_radius: UnitRange::new(0.07, 0.14),
 };
 
@@ -89,6 +96,8 @@ const PALE_RIPARIAN_BUSH: RiverineGreenBush = RiverineGreenBush {
 	height: UnitRange::new(0.90, 1.80),
 	shoot_count: 6..=10,
 	branch_depth: 2..=4,
+	radial_strength: UnitRange::new(0.35, 0.50),
+	vertical_bias: UnitRange::new(0.18, 0.80),
 	leaf_radius: UnitRange::new(0.05, 0.12),
 };
 
@@ -96,6 +105,8 @@ const RED_TWIG_RIVER_BUSH: RiverineGreenBush = RiverineGreenBush {
 	height: UnitRange::new(0.90, 1.90),
 	shoot_count: 7..=11,
 	branch_depth: 2..=4,
+	radial_strength: UnitRange::new(0.38, 0.55),
+	vertical_bias: UnitRange::new(0.18, 0.82),
 	leaf_radius: UnitRange::new(0.05, 0.12),
 };
 
@@ -149,50 +160,35 @@ const RED_TWIG_CANOPY_MIX: PaletteMix = PaletteMix::new(&[
 impl RiverineGreenCell {
 	/// Authored ordered distribution: explicit `None`, then variants in declaration order.
 	///
-	/// Placed weights total `4.45` (RFC relative proportions); the `None` weight of `18.0` puts
-	/// the placed share at `4.45 / 22.45 ≈ 0.20`, inside the RFC's `DENSITY_RANGE`
-	/// (`0.08..0.24`).
+	/// Placed weights total `4.45` (RFC relative proportions); the `None` weight of `11.0` puts
+	/// the placed share at `4.45 / 15.45 ≈ 0.29` — denser than the RFC midpoint while keeping
+	/// shorelines readable.
 	pub fn distribution() -> GroveDistribution<Self> {
 		GroveDistribution::new(vec![
-			GroveBucket::none(18.0),
+			GroveBucket::none(11.0),
 			GroveBucket::placed(
 				2.0,
-				PlacementConstraints::new(
-					UnitRange::new(0.0, 0.45),
-					UnitRange::new(0.0, 0.42),
-				),
+				PlacementConstraints::new(UnitRange::new(0.0, 0.45), UnitRange::new(0.0, 0.42)),
 				Self::WetGreenBush,
 			),
 			GroveBucket::placed(
 				1.0,
-				PlacementConstraints::new(
-					UnitRange::new(0.0, 0.40),
-					UnitRange::new(0.0, 0.65),
-				),
+				PlacementConstraints::new(UnitRange::new(0.0, 0.40), UnitRange::new(0.0, 0.65)),
 				Self::BrightBankBush,
 			),
 			GroveBucket::placed(
 				0.75,
-				PlacementConstraints::new(
-					UnitRange::new(0.0, 0.50),
-					UnitRange::new(0.0, 0.45),
-				),
+				PlacementConstraints::new(UnitRange::new(0.0, 0.50), UnitRange::new(0.0, 0.45)),
 				Self::DeepShadeBush,
 			),
 			GroveBucket::placed(
 				0.45,
-				PlacementConstraints::new(
-					UnitRange::new(0.0, 0.42),
-					UnitRange::new(0.0, 0.60),
-				),
+				PlacementConstraints::new(UnitRange::new(0.0, 0.42), UnitRange::new(0.0, 0.60)),
 				Self::PaleRiparianBush,
 			),
 			GroveBucket::placed(
 				0.25,
-				PlacementConstraints::new(
-					UnitRange::new(0.0, 0.38),
-					UnitRange::new(0.0, 0.55),
-				),
+				PlacementConstraints::new(UnitRange::new(0.0, 0.38), UnitRange::new(0.0, 0.55)),
 				Self::RedTwigRiverBush,
 			),
 		])
@@ -247,7 +243,7 @@ mod tests {
 		let dist = RiverineGreenCell::distribution();
 		assert_eq!(dist.len(), 6);
 		assert!(dist.buckets[0].item.is_none());
-		assert_eq!(dist.buckets[0].weight, 18.0);
+		assert_eq!(dist.buckets[0].weight, 11.0);
 		assert_eq!(dist.buckets[1].item, Some(RiverineGreenCell::WetGreenBush));
 		assert_eq!(dist.buckets[1].weight, 2.0);
 		assert_eq!(dist.buckets[2].item, Some(RiverineGreenCell::BrightBankBush));
@@ -262,12 +258,15 @@ mod tests {
 	}
 
 	#[test]
-	fn placed_share_sits_in_rfc_density_range() -> Result<()> {
+	fn placed_share_matches_moderate_riparian_target() -> Result<()> {
 		let dist = RiverineGreenCell::distribution();
 		let total: f32 = dist.buckets.iter().map(|b| b.weight).sum();
 		let placed: f32 = dist.buckets.iter().filter(|b| b.item.is_some()).map(|b| b.weight).sum();
 		let share = placed / total;
-		assert!((0.08..=0.24).contains(&share), "placed share {share} outside RFC density");
+		assert!(
+			(0.25..=0.35).contains(&share),
+			"placed share {share} outside moderate riparian band (~29 %)"
+		);
 		Ok(())
 	}
 
@@ -287,6 +286,10 @@ mod tests {
 			assert!(*bush.shoot_count.end() <= 12);
 			assert!(bush.leaf_radius.start >= 0.05);
 			assert!(bush.leaf_radius.end <= 0.14);
+			assert!(bush.radial_strength.start >= 0.30);
+			assert!(bush.radial_strength.end <= 0.58);
+			assert!(bush.vertical_bias.start >= 0.58);
+			assert!(bush.vertical_bias.end <= 0.90);
 		}
 		Ok(())
 	}
@@ -295,8 +298,8 @@ mod tests {
 	fn constraint_first_fit_fallback() -> Result<()> {
 		// DeepShadeBush (index 3) rejects steepness 0.50; first-fit falls to PaleRiparianBush
 		// (index 4), which allows steepness up to 0.60.
-		let prepared = RiverineGreenCell::distribution()
-			.prepare(0.0, 0.0, NoiseParams::default(), Vec3::ZERO);
+		let prepared =
+			RiverineGreenCell::distribution().prepare(0.0, 0.0, NoiseParams::default(), Vec3::ZERO);
 		let terrain = FlatTerrainSample { elevation: 0.25, steepness: 0.50 };
 		let outcome = prepared.select_from(3, Vec3::new(5.0, 0.25, 5.0), 1.0, &terrain);
 		match outcome {
@@ -311,8 +314,7 @@ mod tests {
 	#[test]
 	fn placements_break_the_cell_grid() -> Result<()> {
 		let noise = crate::grove::GroveFrontend::default().noise;
-		let grove =
-			Grove::assemble(definition(), ForestGroveBiases::default(), noise, Vec3::ZERO);
+		let grove = Grove::assemble(definition(), ForestGroveBiases::default(), noise, Vec3::ZERO);
 		let extent = GroveExtent::new(Vec3::ZERO, Vec3::new(80.0, 1.0, 80.0));
 		let terrain = FlatTerrainSample { elevation: 0.25, steepness: 0.15 };
 		let placements = grove.populate(&extent, &terrain);
