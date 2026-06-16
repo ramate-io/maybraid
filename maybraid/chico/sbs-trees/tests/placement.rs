@@ -57,7 +57,7 @@ fn contains_point(translations: &[Vec3], expected: Vec3) -> bool {
 fn palm_bush_spawns_single_root_at_caller_transform() -> Result<()> {
 	let bush = PalmBushStd::default();
 	let transform = rotated_root();
-	let (mut world, roots) = spawn_in_world(&bush, transform);
+	let (world, roots) = spawn_in_world(&bush, transform);
 
 	assert_eq!(roots.len(), 1, "spawn_render_items returns only the root");
 	let root = roots[0];
@@ -131,10 +131,8 @@ fn all_palm_bush_entities_are_children_of_the_root() -> Result<()> {
 	let (mut world, roots) = spawn_in_world(&bush, rotated_root());
 	let root = roots[0];
 
-	let entities: Vec<Entity> = world
-		.query_filtered::<Entity, With<Transform>>()
-		.iter(&world)
-		.collect();
+	let entities: Vec<Entity> =
+		world.query_filtered::<Entity, With<Transform>>().iter(&world).collect();
 	for entity in entities {
 		if entity == root {
 			continue;

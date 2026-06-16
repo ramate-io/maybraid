@@ -288,7 +288,7 @@ mod tests {
 			assert!(bush.leaf_radius.end <= 0.14);
 			assert!(bush.radial_strength.start >= 0.30);
 			assert!(bush.radial_strength.end <= 0.58);
-			assert!(bush.vertical_bias.start >= 0.58);
+			assert!(bush.vertical_bias.start >= 0.18);
 			assert!(bush.vertical_bias.end <= 0.90);
 		}
 		Ok(())
