@@ -245,6 +245,9 @@ fn attach_render_materials(
 		RenderSubject::WildGrass(g) => {
 			g.leaf_material.mesh = MeshMaterial3d(tuft.clone());
 		}
+		RenderSubject::MonsterGrass(g) => {
+			g.leaf_material.mesh = MeshMaterial3d(tuft.clone());
+		}
 		RenderSubject::SpearTuft(t) => {
 			t.material.mesh = MeshMaterial3d(tuft.clone());
 		}
