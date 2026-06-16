@@ -24,7 +24,7 @@ use crate::render::{
 	RenderPalmBush, RenderPenmarchTorch, RenderRorysHeadTrained, RenderSopesBanyan,
 	RenderSpearTuft, RenderStorybookTree, RenderSubject, RenderSucculentTuft,
 	RenderTemperateConifer, RenderTropicalTufts, RenderTuftPatch, RenderVaseTree,
-	RenderWaialeaPalm, RenderWeepingTuft, RenderWildGrass,
+	RenderWaialeaPalm, RenderWeepingTuft, RenderWildGrass, RenderMonsterGrass,
 };
 
 /// Shared render flags (resolution + scene transform) wrapped around per-item args.
@@ -132,6 +132,14 @@ impl CellRenderHelper<RenderWildGrass> {
 	}
 }
 
+impl CellRenderHelper<RenderMonsterGrass> {
+	pub fn configured_monster_grass(&self) -> RenderMonsterGrass {
+		let mut grass = self.render.inner.clone();
+		grass.extent = self.grove_extent(grass.cell_extent_xz());
+		grass
+	}
+}
+
 /// High bush shape plus the surface-noise flags that live on the render item (not the shape).
 #[derive(Clone, clap::Args)]
 #[command(rename_all = "kebab-case")]
@@ -200,6 +208,7 @@ pub enum Render {
 	TropicalTufts(CellRenderHelper<RenderTropicalTufts>),
 	CommonTufts(CellRenderHelper<RenderCommonTufts>),
 	WildGrass(CellRenderHelper<RenderWildGrass>),
+	MonsterGrass(CellRenderHelper<RenderMonsterGrass>),
 	SpearTuft(RenderHelper<SpearTuftShape>),
 	BuddhaHandTuft(RenderHelper<BuddhaHandTuftShape>),
 	WeepingTuft(RenderHelper<WeepingTuftShape>),
@@ -267,6 +276,9 @@ impl Render {
 			Self::WildGrass(h) => h
 				.render
 				.config_with(RenderSubject::WildGrass(h.configured_wild_grass())),
+			Self::MonsterGrass(h) => h
+				.render
+				.config_with(RenderSubject::MonsterGrass(h.configured_monster_grass())),
 			Self::SpearTuft(h) => h.config_with(RenderSubject::SpearTuft(
 				RenderSpearTuft::from_shape(h.inner.clone(), Default::default()),
 			)),
@@ -807,6 +819,49 @@ mod tests {
 			anyhow::bail!("expected wild grass subject");
 		};
 		assert_eq!(subject.placement_cells().len(), 64);
+		assert!(!subject.placements().is_empty());
+		Ok(())
+	}
+
+	#[test]
+	fn monster_grass_defaults_spawn_placements() -> Result<()> {
+		let cmd = crate::commands::PlaygroundCommand::parse_line("render monster-grass")
+			.map_err(|e| anyhow::anyhow!("{e}"))?;
+		let crate::commands::PlaygroundCommand::Render(Render::MonsterGrass(helper)) = cmd else {
+			anyhow::bail!("expected monster-grass render command");
+		};
+		let grass = helper.configured_monster_grass();
+		assert!(grass.grove.variant_weights.is_none());
+		let placements = grass.placements();
+		assert_eq!(helper.grove_extent_xz, 100.0);
+		assert!(
+			!placements.is_empty(),
+			"expected a visible monster-grass preview with default flags, got {} placements",
+			placements.len()
+		);
+		Ok(())
+	}
+
+	#[test]
+	fn monster_grass_command_preserves_grove_params() -> Result<()> {
+		let cmd = crate::commands::PlaygroundCommand::parse_line(
+			"render monster-grass --elevation 0.35 --grove-extent-xz 26 --cell-extent-xz 6.5,6.5",
+		)
+		.map_err(|e| anyhow::anyhow!("{e}"))?;
+		let crate::commands::PlaygroundCommand::Render(Render::MonsterGrass(helper)) = cmd else {
+			anyhow::bail!("expected monster-grass render command");
+		};
+		assert!((helper.grove_extent_xz - 26.0).abs() < 1e-5);
+		assert_eq!(helper.render.inner.grove.cell_extent_xz, Some(Vec2::splat(6.5)));
+		let grass = helper.configured_monster_grass();
+		assert_eq!(grass.placement_cells().len(), 16);
+		assert!((grass.terrain.elevation - 0.35).abs() < 1e-5);
+		assert!(!grass.placements().is_empty());
+		let cfg = Render::MonsterGrass(helper).into_render_config();
+		let RenderSubject::MonsterGrass(subject) = cfg.subject else {
+			anyhow::bail!("expected monster grass subject");
+		};
+		assert_eq!(subject.placement_cells().len(), 16);
 		assert!(!subject.placements().is_empty());
 		Ok(())
 	}
