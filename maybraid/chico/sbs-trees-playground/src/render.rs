@@ -6,6 +6,7 @@ use chico_ball_components::{FrondCrown, ModerateLodFrondCrown};
 use chico_groves::braid_grass::BraidGrassStd;
 use chico_groves::common_tufts::CommonTuftsStd;
 use chico_groves::tropical_tufts::TropicalTuftsStd;
+use chico_groves::wild_grass::WildGrassStd;
 use chico_sbs_trees::braid_oak_tree::BraidOakTree;
 use chico_sbs_trees::date_palm::DatePalm;
 use chico_sbs_trees::friends_conifer::FriendsConifer;
@@ -213,6 +214,9 @@ pub type RenderTropicalTufts = TropicalTuftsStd;
 /// [`CommonTuftsStd`] — sparse low grass-clump grove ([#301](https://github.com/ramate-io/maybraid/issues/301)).
 pub type RenderCommonTufts = CommonTuftsStd;
 
+/// [`WildGrassStd`] — dense colorful tall-tuft grove ([#304](https://github.com/ramate-io/maybraid/issues/304)).
+pub type RenderWildGrass = WildGrassStd;
+
 /// The configured render item currently shown in the scene.
 ///
 /// This is the typed scene state behind [`RenderConfig`]: material patching
@@ -243,6 +247,7 @@ pub enum RenderSubject {
 	BraidGrass(RenderBraidGrass),
 	TropicalTufts(RenderTropicalTufts),
 	CommonTufts(RenderCommonTufts),
+	WildGrass(RenderWildGrass),
 	SpearTuft(RenderSpearTuft),
 	BuddhaHandTuft(RenderBuddhaHandTuft),
 	WeepingTuft(RenderWeepingTuft),
@@ -277,6 +282,7 @@ impl RenderSubject {
 			Self::BraidGrass(_) => "BraidGrass",
 			Self::TropicalTufts(_) => "TropicalTufts",
 			Self::CommonTufts(_) => "CommonTufts",
+			Self::WildGrass(_) => "WildGrass",
 			Self::SpearTuft(_) => "SpearTuft",
 			Self::BuddhaHandTuft(_) => "BuddhaHandTuft",
 			Self::WeepingTuft(_) => "WeepingTuft",
@@ -362,6 +368,16 @@ impl RenderSubject {
 					g.foliage_noise
 				)
 			}
+			Self::WildGrass(g) => {
+				format!(
+					"{:?}|extent={:?}|cell_extent_xz={:?}|terrain={:?}|foliage={:?}",
+					g.grove,
+					g.extent,
+					g.cell_extent_xz(),
+					g.terrain,
+					g.foliage_noise
+				)
+			}
 			Self::SpearTuft(t) => format!("{:?}", t.shape),
 			Self::BuddhaHandTuft(t) => format!("{:?}", t.shape),
 			Self::WeepingTuft(t) => format!("{:?}", t.shape),
@@ -402,6 +418,7 @@ impl RenderSubject {
 			Self::BraidGrass(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::TropicalTufts(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::CommonTufts(item) => item.spawn_render_items(commands, chunk, transform),
+			Self::WildGrass(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::SpearTuft(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::BuddhaHandTuft(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::WeepingTuft(item) => item.spawn_render_items(commands, chunk, transform),

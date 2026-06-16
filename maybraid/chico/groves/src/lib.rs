@@ -5,6 +5,7 @@ pub mod grove;
 pub mod braid_grass;
 pub mod common_tufts;
 pub mod tropical_tufts;
+pub mod wild_grass;
 
 #[cfg(feature = "render")]
 pub mod skipped_mesh_material;
@@ -25,6 +26,7 @@ pub use common_tufts::{CommonTuftClump, CommonTuftsCell, CommonTuftsItem};
 pub use tropical_tufts::{
 	TropicalPalmBush, TropicalTuftClump, TropicalTuftsCell, TropicalTuftsItem,
 };
+pub use wild_grass::{WildGrassCell, WildGrassClump, WildGrassItem};
 
 #[cfg(feature = "render")]
 pub use braid_grass::{BraidGrass, BraidGrassStd};
@@ -32,3 +34,5 @@ pub use braid_grass::{BraidGrass, BraidGrassStd};
 pub use common_tufts::{CommonTufts, CommonTuftsStd};
 #[cfg(feature = "render")]
 pub use tropical_tufts::{TropicalTufts, TropicalTuftsStd};
+#[cfg(feature = "render")]
+pub use wild_grass::{WildGrass, WildGrassStd};
