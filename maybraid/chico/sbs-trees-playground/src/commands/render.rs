@@ -25,7 +25,7 @@ use crate::render::{
 	RenderSpearTuft, RenderStorybookTree, RenderSubject, RenderSucculentTuft,
 	RenderTemperateConifer, RenderTropicalTufts, RenderTuftPatch, RenderVaseTree,
 	RenderWaialeaPalm, RenderWeepingTuft, RenderWildGrass, RenderMonsterGrass,
-	RenderRiverineGreen, RenderLowBush,
+	RenderRiverineGreen, RenderLowBush, RenderHighBush,
 };
 
 /// Shared render flags (resolution + scene transform) wrapped around per-item args.
@@ -157,6 +157,14 @@ impl CellRenderHelper<RenderLowBush> {
 	}
 }
 
+impl CellRenderHelper<RenderHighBush> {
+	pub fn configured_high_bush(&self) -> RenderHighBush {
+		let mut grove = self.render.inner.clone();
+		grove.extent = self.grove_extent(grove.cell_extent_xz());
+		grove
+	}
+}
+
 /// High bush shape plus the surface-noise flags that live on the render item (not the shape).
 #[derive(Clone, clap::Args)]
 #[command(rename_all = "kebab-case")]
@@ -228,6 +236,7 @@ pub enum Render {
 	MonsterGrass(CellRenderHelper<RenderMonsterGrass>),
 	RiverineGreen(CellRenderHelper<RenderRiverineGreen>),
 	LowBush(CellRenderHelper<RenderLowBush>),
+	HighBush(CellRenderHelper<RenderHighBush>),
 	SpearTuft(RenderHelper<SpearTuftShape>),
 	BuddhaHandTuft(RenderHelper<BuddhaHandTuftShape>),
 	WeepingTuft(RenderHelper<WeepingTuftShape>),
@@ -304,6 +313,9 @@ impl Render {
 			Self::LowBush(h) => h
 				.render
 				.config_with(RenderSubject::LowBush(h.configured_low_bush())),
+			Self::HighBush(h) => h
+				.render
+				.config_with(RenderSubject::HighBush(h.configured_high_bush())),
 			Self::SpearTuft(h) => h.config_with(RenderSubject::SpearTuft(
 				RenderSpearTuft::from_shape(h.inner.clone(), Default::default()),
 			)),
@@ -971,6 +983,49 @@ mod tests {
 		let cfg = Render::LowBush(helper).into_render_config();
 		let RenderSubject::LowBush(subject) = cfg.subject else {
 			anyhow::bail!("expected low bush subject");
+		};
+		assert_eq!(subject.placement_cells().len(), 64);
+		assert!(!subject.placements().is_empty());
+		Ok(())
+	}
+
+	#[test]
+	fn high_bush_defaults_spawn_placements() -> Result<()> {
+		let cmd = crate::commands::PlaygroundCommand::parse_line("render high-bush")
+			.map_err(|e| anyhow::anyhow!("{e}"))?;
+		let crate::commands::PlaygroundCommand::Render(Render::HighBush(helper)) = cmd else {
+			anyhow::bail!("expected high-bush render command");
+		};
+		let grove = helper.configured_high_bush();
+		assert!(grove.grove.variant_weights.is_none());
+		let placements = grove.placements();
+		assert_eq!(helper.grove_extent_xz, 100.0);
+		assert!(
+			!placements.is_empty(),
+			"expected a visible high-bush preview with default flags, got {} placements",
+			placements.len()
+		);
+		Ok(())
+	}
+
+	#[test]
+	fn high_bush_command_preserves_grove_params() -> Result<()> {
+		let cmd = crate::commands::PlaygroundCommand::parse_line(
+			"render high-bush --elevation 0.35 --grove-extent-xz 46 --cell-extent-xz 5.75,5.75",
+		)
+		.map_err(|e| anyhow::anyhow!("{e}"))?;
+		let crate::commands::PlaygroundCommand::Render(Render::HighBush(helper)) = cmd else {
+			anyhow::bail!("expected high-bush render command");
+		};
+		assert!((helper.grove_extent_xz - 46.0).abs() < 1e-5);
+		assert_eq!(helper.render.inner.grove.cell_extent_xz, Some(Vec2::splat(5.75)));
+		let grove = helper.configured_high_bush();
+		assert_eq!(grove.placement_cells().len(), 64);
+		assert!((grove.terrain.elevation - 0.35).abs() < 1e-5);
+		assert!(!grove.placements().is_empty());
+		let cfg = Render::HighBush(helper).into_render_config();
+		let RenderSubject::HighBush(subject) = cfg.subject else {
+			anyhow::bail!("expected high bush subject");
 		};
 		assert_eq!(subject.placement_cells().len(), 64);
 		assert!(!subject.placements().is_empty());
