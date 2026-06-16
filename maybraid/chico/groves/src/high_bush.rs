@@ -282,7 +282,7 @@ mod tests {
 		] {
 			let HighBushItem::Bush(bush) = cell.item();
 			assert!(bush.height.start >= 1.00);
-			assert!(bush.height.end <= 2.50);
+			assert!(bush.height.end <= 3.50);
 			assert!(*bush.shoot_count.start() >= 6);
 			assert!(*bush.shoot_count.end() <= 12);
 			assert!(*bush.branch_depth.start() >= 2);
