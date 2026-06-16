@@ -6,6 +6,8 @@
 #[cfg(feature = "render")]
 use bevy::prelude::Color;
 #[cfg(feature = "render")]
+use bevy_math::Vec4;
+#[cfg(feature = "render")]
 use procedural_common::{NoiseConfig, NoiseParams};
 
 /// Named color-range slots for one grove bucket.
@@ -103,6 +105,13 @@ pub fn resolve_palette_color(name: &str) -> Option<Color> {
 		"tan_bark" => Color::srgb(0.58, 0.48, 0.32),
 		"green_stem" => Color::srgb(0.28, 0.52, 0.22),
 		"wet_brown" => Color::srgb(0.32, 0.24, 0.14),
+		"wet_bark" => Color::srgb(0.28, 0.22, 0.16),
+		"dark_bark" => Color::srgb(0.18, 0.12, 0.08),
+		"green_brown" => Color::srgb(0.32, 0.28, 0.18),
+		"young_bark" => Color::srgb(0.42, 0.34, 0.22),
+		"gray_brown" => Color::srgb(0.38, 0.32, 0.24),
+		"red_twig" => Color::srgb(0.58, 0.22, 0.18),
+		"wet_burgundy" => Color::srgb(0.38, 0.16, 0.14),
 		"young_palm_bark" => Color::srgb(0.52, 0.42, 0.28),
 		"spring_green" => Color::srgb(0.38, 0.72, 0.38),
 		"olive_green" => Color::srgb(0.42, 0.52, 0.28),
@@ -133,6 +142,17 @@ impl WithPalette for bevy::prelude::StandardMaterial {
 			base.base_color = color;
 		}
 		base.double_sided = true;
+		base
+	}
+}
+
+#[cfg(feature = "render")]
+impl WithPalette for chico_vegetation_shaders::ChicoStickMaterial {
+	fn with_palette(mut base: Self, palette: PaletteMix, seed: i32) -> Self {
+		if let Some(color) = palette.pick_color(seed) {
+			let linear = bevy::color::LinearRgba::from(color);
+			base.base_color = Vec4::new(linear.red, linear.green, linear.blue, linear.alpha);
+		}
 		base
 	}
 }

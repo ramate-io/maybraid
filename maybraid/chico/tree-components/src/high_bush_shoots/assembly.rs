@@ -69,6 +69,86 @@ where
 	pub fn build_chain(&self) -> BallStickChain<HighBushChain> {
 		self.shape_for_render().build_chain()
 	}
+
+	/// Spawn one bush from an authored shape without merging the Common High Bush preset.
+	pub fn spawn_from_shape(
+		shape: HighBushShootsShape,
+		stick_surface_noise: NoiseParams,
+		leaf_surface_noise: NoiseParams,
+		stick_material: StickS,
+		leaf_material: LeafS,
+		commands: &mut Commands,
+		cascade_chunk: &CascadeChunk,
+		transform: Transform,
+	) -> Vec<Entity>
+	where
+		StickM: Material + Send + Sync + 'static,
+		StickS: Clone + Into<MeshMaterial3d<StickM>> + Send + Sync + 'static,
+		LeafM: Material + Send + Sync + 'static,
+		LeafS: Clone + Into<MeshMaterial3d<LeafM>> + Send + Sync + 'static,
+	{
+		let root = commands
+			.spawn((
+				Self {
+					shape: shape.clone(),
+					stick_surface_noise,
+					leaf_surface_noise,
+					stick_material: stick_material.clone(),
+					leaf_material: leaf_material.clone(),
+					__marker: PhantomData,
+				},
+				cascade_chunk.clone(),
+				transform,
+				Visibility::default(),
+			))
+			.id();
+		let chain = shape.build_chain();
+
+		let stick_rule = HighBushStickRule::<StickM, StickS> {
+			surface_noise: stick_surface_noise,
+			stick_material,
+			__marker: PhantomData,
+		};
+		StickRenderHelper::new(chain.clone(), stick_rule).spawn_render_items_under(
+			commands,
+			cascade_chunk,
+			Transform::IDENTITY,
+			Some(root),
+		);
+
+		match shape.foliage_style {
+			HighBushFoliageStyle::PlaneSplay => {
+				let mut leaf_splay = PlaneSplay::<LeafM, LeafS>::default();
+				leaf_splay.material = leaf_material.clone();
+				let leaf_rule = HighBushSplayCanopyRule::<LeafM, LeafS> {
+					leaf_splay,
+					leaf_radius_world: shape.leaf_radius_world(),
+				};
+				BallRenderHelper::new(chain, leaf_rule).spawn_render_items_under(
+					commands,
+					cascade_chunk,
+					Transform::IDENTITY,
+					Some(root),
+				);
+			}
+			HighBushFoliageStyle::Tuft => {
+				let tuft_rule = HighBushTuftCanopyRule::<LeafM, LeafS> {
+					tuft_world_scale: shape.leaf_radius_world(),
+					leaf_surface_noise,
+					leaf_material,
+					__marker: PhantomData,
+				};
+				TuftRenderHelper::new(chain, tuft_rule).spawn_render_items_under(
+					commands,
+					cascade_chunk,
+					Transform::IDENTITY,
+					Some(root),
+				);
+			}
+		}
+
+		vec![root]
+	}
 }
 
 impl<StickM, StickS, LeafM, LeafS> RenderItem for HighBushShoots<StickM, StickS, LeafM, LeafS>

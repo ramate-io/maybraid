@@ -6,6 +6,7 @@ use chico_ball_components::{FrondCrown, ModerateLodFrondCrown};
 use chico_groves::braid_grass::BraidGrassStd;
 use chico_groves::common_tufts::CommonTuftsStd;
 use chico_groves::monster_grass::MonsterGrassStd;
+use chico_groves::riverine_green::RiverineGreenStd;
 use chico_groves::tropical_tufts::TropicalTuftsStd;
 use chico_groves::wild_grass::WildGrassStd;
 use chico_sbs_trees::braid_oak_tree::BraidOakTree;
@@ -221,6 +222,9 @@ pub type RenderWildGrass = WildGrassStd;
 /// [`MonsterGrassStd`] — oversized understory blade-wall grove ([#308](https://github.com/ramate-io/maybraid/issues/308)).
 pub type RenderMonsterGrass = MonsterGrassStd;
 
+/// [`RiverineGreenStd`] — sparse wet shrub understory grove ([#307](https://github.com/ramate-io/maybraid/issues/307)).
+pub type RenderRiverineGreen = RiverineGreenStd;
+
 /// The configured render item currently shown in the scene.
 ///
 /// This is the typed scene state behind [`RenderConfig`]: material patching
@@ -253,6 +257,7 @@ pub enum RenderSubject {
 	CommonTufts(RenderCommonTufts),
 	WildGrass(RenderWildGrass),
 	MonsterGrass(RenderMonsterGrass),
+	RiverineGreen(RenderRiverineGreen),
 	SpearTuft(RenderSpearTuft),
 	BuddhaHandTuft(RenderBuddhaHandTuft),
 	WeepingTuft(RenderWeepingTuft),
@@ -289,6 +294,7 @@ impl RenderSubject {
 			Self::CommonTufts(_) => "CommonTufts",
 			Self::WildGrass(_) => "WildGrass",
 			Self::MonsterGrass(_) => "MonsterGrass",
+			Self::RiverineGreen(_) => "RiverineGreen",
 			Self::SpearTuft(_) => "SpearTuft",
 			Self::BuddhaHandTuft(_) => "BuddhaHandTuft",
 			Self::WeepingTuft(_) => "WeepingTuft",
@@ -394,6 +400,17 @@ impl RenderSubject {
 					g.foliage_noise
 				)
 			}
+			Self::RiverineGreen(g) => {
+				format!(
+					"{:?}|extent={:?}|cell_extent_xz={:?}|terrain={:?}|stick={:?}|leaf={:?}",
+					g.grove,
+					g.extent,
+					g.cell_extent_xz(),
+					g.terrain,
+					g.stick_surface_noise,
+					g.leaf_surface_noise
+				)
+			}
 			Self::SpearTuft(t) => format!("{:?}", t.shape),
 			Self::BuddhaHandTuft(t) => format!("{:?}", t.shape),
 			Self::WeepingTuft(t) => format!("{:?}", t.shape),
@@ -436,6 +453,7 @@ impl RenderSubject {
 			Self::CommonTufts(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::WildGrass(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::MonsterGrass(item) => item.spawn_render_items(commands, chunk, transform),
+			Self::RiverineGreen(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::SpearTuft(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::BuddhaHandTuft(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::WeepingTuft(item) => item.spawn_render_items(commands, chunk, transform),

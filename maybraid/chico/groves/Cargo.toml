@@ -18,6 +18,8 @@ render-item = { workspace = true, optional = true  }
 chico-ball-components = { workspace = true, optional = true }
 chico-sbs-geometry = { workspace = true, optional = true, features = ["clap", "render"] }
 chico-sbs-trees = { workspace = true, optional = true }
+chico-tree-components = { workspace = true, optional = true }
+chico-vegetation-shaders = { workspace = true, optional = true }
 log = { workspace = true }
 gimme-gen = { workspace = true }
 
@@ -32,6 +34,8 @@ render = [
 	"dep:chico-ball-components",
 	"dep:chico-sbs-geometry",
 	"dep:chico-sbs-trees",
+	"dep:chico-tree-components",
+	"dep:chico-vegetation-shaders",
 	"dep:clap",
 	"procedural-common/clap",
 ]

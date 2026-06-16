@@ -1889,6 +1889,8 @@ dependencies = [
  "chico-ball-components",
  "chico-sbs-geometry",
  "chico-sbs-trees",
+ "chico-tree-components",
+ "chico-vegetation-shaders",
  "clap",
  "gimme-gen",
  "log",
