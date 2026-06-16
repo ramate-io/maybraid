@@ -131,6 +131,7 @@ pub fn resolve_palette_color(name: &str) -> Option<Color> {
 		"gold" => Color::srgb(0.78, 0.62, 0.18),
 		"warm_yellow" => Color::srgb(0.82, 0.72, 0.32),
 		"light_brown" => Color::srgb(0.58, 0.48, 0.32),
+		"dark_brown" => Color::srgb(0.32, 0.22, 0.14),
 		"red_brown" => Color::srgb(0.52, 0.28, 0.18),
 		"deep_rust" => Color::srgb(0.62, 0.32, 0.18),
 		"orange_brown" => Color::srgb(0.68, 0.42, 0.22),

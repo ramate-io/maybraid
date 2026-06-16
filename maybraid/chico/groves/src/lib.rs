@@ -8,6 +8,7 @@ pub mod high_bush;
 pub mod low_bush;
 pub mod monster_grass;
 pub mod riverine_green;
+pub mod tall_grass;
 pub mod tropical_tufts;
 pub mod wild_grass;
 
@@ -31,6 +32,7 @@ pub use high_bush::{HighBushBush, HighBushCell, HighBushItem};
 pub use low_bush::{LowBushBush, LowBushCell, LowBushItem};
 pub use monster_grass::{MonsterGrassCell, MonsterGrassClump, MonsterGrassItem};
 pub use riverine_green::{RiverineGreenBush, RiverineGreenCell, RiverineGreenItem};
+pub use tall_grass::{TallGrassCell, TallGrassClump, TallGrassItem};
 pub use tropical_tufts::{
 	TropicalPalmBush, TropicalTuftClump, TropicalTuftsCell, TropicalTuftsItem,
 };
@@ -48,6 +50,8 @@ pub use low_bush::{LowBush, LowBushStd};
 pub use monster_grass::{MonsterGrass, MonsterGrassStd};
 #[cfg(feature = "render")]
 pub use riverine_green::{RiverineGreen, RiverineGreenStd};
+#[cfg(feature = "render")]
+pub use tall_grass::{TallGrass, TallGrassStd};
 #[cfg(feature = "render")]
 pub use tropical_tufts::{TropicalTufts, TropicalTuftsStd};
 #[cfg(feature = "render")]
