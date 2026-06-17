@@ -5,8 +5,7 @@ use std::marker::PhantomData;
 use bevy::prelude::*;
 use chico_sbs_geometry::{HonuBanyanSbs, PalmBushSbs};
 use chico_sbs_geometry::anchors::high_bush::{
-	DEFAULT_ANCHOR_LIFT_FRACTION, DEFAULT_SEGMENT_LENGTH_FRACTION_HI,
-	DEFAULT_SEGMENT_LENGTH_FRACTION_LO, DEFAULT_SEGMENT_RADIUS_FRACTION_HI,
+	DEFAULT_ANCHOR_LIFT_FRACTION, DEFAULT_SEGMENT_RADIUS_FRACTION_HI,
 	DEFAULT_SEGMENT_RADIUS_FRACTION_LO,
 };
 use chico_sbs_trees::{
@@ -226,7 +225,13 @@ fn sample_u32(config: &NoiseConfig, range: &std::ops::RangeInclusive<u32>, salt:
 }
 
 fn span_fraction(canopy_spread: f32, height: f32) -> f32 {
-	(canopy_spread / height.max(0.5)).clamp(0.35, 0.92)
+	(canopy_spread / height.max(0.5)).clamp(0.35, 1.20)
+}
+
+fn ordered_unit_range_samples(config: &NoiseConfig, range: UnitRange, salt_lo: f32, salt_hi: f32) -> (f32, f32) {
+	let a = sample_f32(config, range, salt_lo);
+	let b = sample_f32(config, range, salt_hi);
+	if a <= b { (a, b) } else { (b, a) }
 }
 
 impl BuildWithNoise<PalmBushSbs> for TropicalThicketPalm {
@@ -254,6 +259,8 @@ impl BuildWithNoise<HighBushShootsShape> for TropicalThicketBush {
 		let config = NoiseConfig::new(noise);
 		let height = sample_f32(&config, self.height, 1.0).max(0.75);
 		let leaf_radius = sample_f32(&config, self.leaf_radius, 2.0).max(0.01);
+		let (segment_length_fraction_lo, segment_length_fraction_hi) =
+			ordered_unit_range_samples(&config, self.segment_length_fraction, 7.0, 8.0);
 
 		HighBushShootsShape {
 			height,
@@ -262,8 +269,8 @@ impl BuildWithNoise<HighBushShootsShape> for TropicalThicketBush {
 			radial_strength: sample_f32(&config, self.radial_strength, 5.0),
 			vertical_bias: sample_f32(&config, self.vertical_bias, 6.0),
 			branch_depth: sample_u32(&config, &self.branch_depth, 4.0) as usize,
-			segment_length_fraction_lo: DEFAULT_SEGMENT_LENGTH_FRACTION_LO,
-			segment_length_fraction_hi: DEFAULT_SEGMENT_LENGTH_FRACTION_HI,
+			segment_length_fraction_lo,
+			segment_length_fraction_hi,
 			segment_radius_fraction_lo: DEFAULT_SEGMENT_RADIUS_FRACTION_LO,
 			segment_radius_fraction_hi: DEFAULT_SEGMENT_RADIUS_FRACTION_HI,
 			leaf_radius_fraction: leaf_radius / height,
@@ -452,6 +459,11 @@ mod tests {
 			assert!(shape.height >= bush.height.start.min(bush.height.end));
 			assert!(shape.height <= bush.height.start.max(bush.height.end));
 			assert!(bush.shoot_count.contains(&shape.shoot_count));
+			assert!(bush.branch_depth.contains(&(shape.branch_depth as u32)));
+			assert!(shape.segment_length_fraction_lo
+				>= bush.segment_length_fraction.start.min(bush.segment_length_fraction.end));
+			assert!(shape.segment_length_fraction_hi
+				<= bush.segment_length_fraction.start.max(bush.segment_length_fraction.end));
 		}
 		Ok(())
 	}

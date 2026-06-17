@@ -19,9 +19,12 @@ mod render;
 #[cfg(feature = "render")]
 pub use render::{TropicalThicket, TropicalThicketStd};
 
-/// RFC `projection_count: Moderate` — thicket high-bush varietals.
-const MODERATE_PROJECTION_RADIAL: UnitRange = UnitRange::new(0.32, 0.48);
-const MODERATE_PROJECTION_VERTICAL: UnitRange = UnitRange::new(0.58, 0.78);
+/// RFC `projection_count: Moderate` with extended upper tails for occasional wide-span shrubs.
+const MODERATE_PROJECTION_RADIAL: UnitRange = UnitRange::new(0.32, 0.56);
+const MODERATE_PROJECTION_VERTICAL: UnitRange = UnitRange::new(0.50, 0.82);
+/// Stick segment reach as a fraction of shoot height; upper tail exceeds the generic bush default.
+const MODERATE_SEGMENT_LENGTH: UnitRange = UnitRange::new(0.08, 0.24);
+const FLOWERING_SEGMENT_LENGTH: UnitRange = UnitRange::new(0.08, 0.22);
 
 /// Authored Tropical Thicket grove definition.
 ///
@@ -85,35 +88,37 @@ pub struct TropicalThicketBush {
 	pub branch_depth: RangeInclusive<u32>,
 	pub radial_strength: UnitRange,
 	pub vertical_bias: UnitRange,
+	/// Per-segment stick length sampled as a fraction of shoot height.
+	pub segment_length_fraction: UnitRange,
 	/// Terminal foliage radius in **world meters** (render converts to a height fraction).
 	pub leaf_radius: UnitRange,
 }
 
 const LARGE_PALM_BUSH: TropicalThicketPalm = TropicalThicketPalm {
-	height: UnitRange::new(1.00, 2.20),
+	height: UnitRange::new(3.00, 6.60),
 	frond_count: 7..=12,
-	frond_length: UnitRange::new(0.55, 1.30),
-	crown_spread: UnitRange::new(0.80, 1.80),
+	frond_length: UnitRange::new(1.65, 4.50),
+	crown_spread: UnitRange::new(2.40, 6.30),
 };
 
 const BROAD_WET_PALM_BUSH: TropicalThicketPalm = TropicalThicketPalm {
-	height: UnitRange::new(1.20, 2.60),
+	height: UnitRange::new(3.60, 7.80),
 	frond_count: 8..=14,
-	frond_length: UnitRange::new(0.70, 1.60),
-	crown_spread: UnitRange::new(1.00, 2.20),
+	frond_length: UnitRange::new(2.10, 5.25),
+	crown_spread: UnitRange::new(3.00, 7.80),
 };
 
 const RED_STEM_PALM_BUSH: TropicalThicketPalm = TropicalThicketPalm {
-	height: UnitRange::new(1.00, 2.30),
+	height: UnitRange::new(3.00, 6.90),
 	frond_count: 6..=11,
-	frond_length: UnitRange::new(0.55, 1.35),
-	crown_spread: UnitRange::new(0.80, 1.80),
+	frond_length: UnitRange::new(1.65, 4.35),
+	crown_spread: UnitRange::new(2.40, 6.30),
 };
 
 const MINI_HONU_BANYAN: TropicalThicketBanyan = TropicalThicketBanyan {
 	height: UnitRange::new(1.80, 3.80),
 	stalk_radius: UnitRange::new(0.14, 0.30),
-	canopy_spread: UnitRange::new(1.20, 2.80),
+	canopy_spread: UnitRange::new(1.20, 3.40),
 	descender_density: UnitRange::new(0.02, 0.04),
 	canopy_density: UnitRange::new(0.35, 0.65),
 };
@@ -121,19 +126,21 @@ const MINI_HONU_BANYAN: TropicalThicketBanyan = TropicalThicketBanyan {
 const MODERATE_HIGH_BUSH: TropicalThicketBush = TropicalThicketBush {
 	height: UnitRange::new(1.20, 2.40),
 	shoot_count: 7..=11,
-	branch_depth: 2..=4,
+	branch_depth: 2..=5,
 	radial_strength: MODERATE_PROJECTION_RADIAL,
 	vertical_bias: MODERATE_PROJECTION_VERTICAL,
-	leaf_radius: UnitRange::new(0.06, 0.13),
+	segment_length_fraction: MODERATE_SEGMENT_LENGTH,
+	leaf_radius: UnitRange::new(0.06, 0.15),
 };
 
 const FLOWERING_HIGH_BUSH: TropicalThicketBush = TropicalThicketBush {
 	height: UnitRange::new(1.00, 2.20),
 	shoot_count: 7..=10,
-	branch_depth: 2..=4,
+	branch_depth: 2..=5,
 	radial_strength: MODERATE_PROJECTION_RADIAL,
 	vertical_bias: MODERATE_PROJECTION_VERTICAL,
-	leaf_radius: UnitRange::new(0.06, 0.12),
+	segment_length_fraction: FLOWERING_SEGMENT_LENGTH,
+	leaf_radius: UnitRange::new(0.06, 0.14),
 };
 
 const LARGE_PALM_STICK_MIX: PaletteMix = PaletteMix::new(&[
@@ -332,14 +339,14 @@ mod tests {
 		let TropicalThicketItem::Palm(large) = TropicalThicketCell::LargePalmBush.item() else {
 			anyhow::bail!("expected large palm item");
 		};
-		assert!(large.height.start >= 1.00);
-		assert!(large.height.end <= 2.20);
+		assert!(large.height.start >= 3.00);
+		assert!(large.height.end <= 6.60);
 		assert_eq!(large.frond_count, 7..=12);
 
 		let TropicalThicketItem::Palm(wet) = TropicalThicketCell::BroadWetPalmBush.item() else {
 			anyhow::bail!("expected broad wet palm item");
 		};
-		assert!(wet.height.end <= 2.60);
+		assert!(wet.height.end <= 7.80);
 		assert_eq!(wet.frond_count, 8..=14);
 
 		let TropicalThicketItem::Banyan(banyan) = TropicalThicketCell::MiniHonuBanyan.item() else {
@@ -353,7 +360,8 @@ mod tests {
 			anyhow::bail!("expected moderate bush item");
 		};
 		assert!(moderate.height.start >= 1.20);
-		assert!(moderate.leaf_radius.end <= 0.13);
+		assert!(moderate.leaf_radius.end <= 0.15);
+		assert_eq!(moderate.branch_depth, 2..=5);
 
 		let TropicalThicketItem::Bush(flowering) = TropicalThicketCell::FloweringHighBush.item()
 		else {
@@ -361,11 +369,12 @@ mod tests {
 		};
 		assert!(flowering.height.end <= 2.20);
 		assert_eq!(flowering.shoot_count, 7..=10);
+		assert_eq!(flowering.branch_depth, 2..=5);
 
 		let TropicalThicketItem::Palm(red) = TropicalThicketCell::RedStemPalmBush.item() else {
 			anyhow::bail!("expected red stem palm item");
 		};
-		assert!(red.crown_spread.end <= 1.80);
+		assert!(red.crown_spread.end <= 6.30);
 		Ok(())
 	}
 
