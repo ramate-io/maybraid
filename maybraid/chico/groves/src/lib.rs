@@ -3,6 +3,7 @@
 pub mod grove;
 
 pub mod braid_grass;
+pub mod bush_scrub;
 pub mod common_tufts;
 pub mod high_bush;
 pub mod low_bush;
@@ -27,6 +28,7 @@ pub use grove::{
 pub use grove::{patch_spawned_leaf_material, resolve_palette_color, WithPalette};
 
 pub use braid_grass::{BraidGrassCell, BraidGrassClump, BraidGrassItem, BraidSpearClump};
+pub use bush_scrub::{BushScrubBush, BushScrubCell, BushScrubItem, BushScrubTuft};
 pub use common_tufts::{CommonTuftClump, CommonTuftsCell, CommonTuftsItem};
 pub use high_bush::{HighBushBush, HighBushCell, HighBushItem};
 pub use low_bush::{LowBushBush, LowBushCell, LowBushItem};
@@ -40,6 +42,8 @@ pub use wild_grass::{WildGrassCell, WildGrassClump, WildGrassItem};
 
 #[cfg(feature = "render")]
 pub use braid_grass::{BraidGrass, BraidGrassStd};
+#[cfg(feature = "render")]
+pub use bush_scrub::{BushScrub, BushScrubStd};
 #[cfg(feature = "render")]
 pub use common_tufts::{CommonTufts, CommonTuftsStd};
 #[cfg(feature = "render")]

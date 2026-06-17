@@ -242,6 +242,10 @@ fn attach_render_materials(
 		RenderSubject::CommonTufts(g) => {
 			g.leaf_material.mesh = MeshMaterial3d(tuft.clone());
 		}
+		RenderSubject::BushScrub(g) => {
+			g.stick_material.mesh = MeshMaterial3d(stick.clone());
+			g.leaf_material.mesh = MeshMaterial3d(tuft.clone());
+		}
 		RenderSubject::TallGrass(g) => {
 			g.leaf_material.mesh = MeshMaterial3d(tuft.clone());
 		}
