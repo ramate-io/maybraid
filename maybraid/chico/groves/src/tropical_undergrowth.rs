@@ -41,6 +41,9 @@ pub enum TropicalUndergrowthCell {
 	MiniRoryHeadTrained,
 	MiniVaseTree,
 	MiniSparseStorybook,
+	MiniPenmarchTorch,
+	MiniKamakuraTorch,
+	MiniTorchTree,
 	BrightTuftPatch,
 	DeepTuftPatch,
 }
@@ -54,6 +57,9 @@ pub enum TropicalUndergrowthItem {
 	RoryHead(&'static TropicalUndergrowthRoryHead),
 	VaseTree(&'static TropicalUndergrowthVaseTree),
 	Storybook(&'static TropicalUndergrowthStorybook),
+	PenmarchTorch(&'static TropicalUndergrowthTorch),
+	KamakuraTorch(&'static TropicalUndergrowthTorch),
+	TorchTree(&'static TropicalUndergrowthTorch),
 }
 
 /// Authored geometry ranges for one tropical-undergrowth tuft clump.
@@ -91,6 +97,18 @@ pub struct TropicalUndergrowthRoryHead {
 /// Authored geometry ranges for one mini Vase Tree form.
 #[derive(Debug, Clone, PartialEq)]
 pub struct TropicalUndergrowthVaseTree {
+	pub height: UnitRange,
+	pub stalk_radius: UnitRange,
+	pub canopy_spread: UnitRange,
+	/// World meters between adjacent radial limb anchors on each canopy ring.
+	pub projection_spacing: UnitRange,
+	/// Vertical spacing between ring planes as a fraction of stalk height.
+	pub ring_spacing: UnitRange,
+}
+
+/// Authored geometry ranges for one mini torch form (Penmarch, Kamakura, or generic torch tree).
+#[derive(Debug, Clone, PartialEq)]
+pub struct TropicalUndergrowthTorch {
 	pub height: UnitRange,
 	pub stalk_radius: UnitRange,
 	pub canopy_spread: UnitRange,
@@ -180,6 +198,30 @@ const MINI_STORYBOOK: TropicalUndergrowthStorybook = TropicalUndergrowthStoryboo
 	ring_spacing: UnitRange::new(0.12, 0.16),
 };
 
+const MINI_TORCH_TREE: TropicalUndergrowthTorch = TropicalUndergrowthTorch {
+	height: UnitRange::new(1.00, 2.20),
+	stalk_radius: UnitRange::new(0.025, 0.035),
+	canopy_spread: UnitRange::new(0.55, 1.20),
+	projection_spacing: UnitRange::new(0.30, 0.46),
+	ring_spacing: UnitRange::new(0.12, 0.18),
+};
+
+const MINI_PENMARCH_TORCH: TropicalUndergrowthTorch = TropicalUndergrowthTorch {
+	height: UnitRange::new(1.20, 2.50),
+	stalk_radius: UnitRange::new(0.025, 0.035),
+	canopy_spread: UnitRange::new(0.65, 1.40),
+	projection_spacing: UnitRange::new(0.32, 0.50),
+	ring_spacing: UnitRange::new(0.12, 0.18),
+};
+
+const MINI_KAMAKURA_TORCH: TropicalUndergrowthTorch = TropicalUndergrowthTorch {
+	height: UnitRange::new(1.00, 2.30),
+	stalk_radius: UnitRange::new(0.025, 0.035),
+	canopy_spread: UnitRange::new(0.60, 1.30),
+	projection_spacing: UnitRange::new(0.30, 0.48),
+	ring_spacing: UnitRange::new(0.12, 0.16),
+};
+
 const BRIGHT_TUFT_MIX: PaletteMix = PaletteMix::new(&[
 	PaletteSlot::new("bright_green", "lime_green"),
 	PaletteSlot::new("lush_green", "fresh_green"),
@@ -236,13 +278,23 @@ const STORYBOOK_CANOPY_MIX: PaletteMix = PaletteMix::new(&[
 	PaletteSlot::new("blue_green", "yellow_green"),
 ]);
 
+const TORCH_STICK_MIX: PaletteMix = PaletteMix::new(&[
+	PaletteSlot::new("tropical_bark", "dark_bark"),
+	PaletteSlot::new("green_brown", "wet_brown"),
+]);
+
+const TORCH_CANOPY_MIX: PaletteMix = PaletteMix::new(&[
+	PaletteSlot::new("lush_green", "bright_green"),
+	PaletteSlot::new("yellow_green", "warm_yellow"),
+	PaletteSlot::new("lime_green", "fresh_green"),
+]);
+
 impl TropicalUndergrowthCell {
 	/// Authored ordered distribution: explicit `None`, then variants in declaration order.
 	///
-	/// Placed weights total `5.7` (RFC relative proportions); the `None` weight of `9.0` puts
-	/// the placed share at `5.7 / 14.7 ≈ 0.39`, mid RFC `DENSITY_RANGE` (`0.22..0.58`). Tuft
-	/// weight (`3.5` total) leans on patch varietals (`2.8`); single-anchor clumps share the
-	/// remaining `0.7`.
+	/// Placed weights total `5.98` (RFC relative proportions plus rare torch companions); the
+	/// `None` weight of `9.0` puts the placed share at `5.98 / 14.98 ≈ 0.40`, mid RFC
+	/// `DENSITY_RANGE` (`0.22..0.58`).
 	pub fn distribution() -> GroveDistribution<Self> {
 		let lowland =
 			PlacementConstraints::new(UnitRange::new(0.0, 0.40), UnitRange::new(0.0, 0.70));
@@ -257,6 +309,9 @@ impl TropicalUndergrowthCell {
 			GroveBucket::placed(0.85, lowland, Self::MiniRoryHeadTrained),
 			GroveBucket::placed(0.20, mini_tree, Self::MiniVaseTree),
 			GroveBucket::placed(0.15, mini_tree, Self::MiniSparseStorybook),
+			GroveBucket::placed(0.12, mini_tree, Self::MiniPenmarchTorch),
+			GroveBucket::placed(0.08, mini_tree, Self::MiniKamakuraTorch),
+			GroveBucket::placed(0.08, mini_tree, Self::MiniTorchTree),
 			GroveBucket::placed(1.6, lowland, Self::BrightTuftPatch),
 			GroveBucket::placed(1.2, lowland, Self::DeepTuftPatch),
 		])
@@ -270,6 +325,9 @@ impl TropicalUndergrowthCell {
 			Self::MiniRoryHeadTrained => TropicalUndergrowthItem::RoryHead(&MINI_RORY_HEAD),
 			Self::MiniVaseTree => TropicalUndergrowthItem::VaseTree(&MINI_VASE_TREE),
 			Self::MiniSparseStorybook => TropicalUndergrowthItem::Storybook(&MINI_STORYBOOK),
+			Self::MiniPenmarchTorch => TropicalUndergrowthItem::PenmarchTorch(&MINI_PENMARCH_TORCH),
+			Self::MiniKamakuraTorch => TropicalUndergrowthItem::KamakuraTorch(&MINI_KAMAKURA_TORCH),
+			Self::MiniTorchTree => TropicalUndergrowthItem::TorchTree(&MINI_TORCH_TREE),
 			Self::BrightTuftPatch => TropicalUndergrowthItem::Patch(&BRIGHT_TUFT_PATCH),
 			Self::DeepTuftPatch => TropicalUndergrowthItem::Patch(&DEEP_TUFT_PATCH),
 		}
@@ -283,6 +341,9 @@ impl TropicalUndergrowthCell {
 			Self::MiniRoryHeadTrained => RORY_CANOPY_MIX,
 			Self::MiniVaseTree => VASE_CANOPY_MIX,
 			Self::MiniSparseStorybook => STORYBOOK_CANOPY_MIX,
+			Self::MiniPenmarchTorch | Self::MiniKamakuraTorch | Self::MiniTorchTree => {
+				TORCH_CANOPY_MIX
+			}
 		}
 	}
 
@@ -292,6 +353,9 @@ impl TropicalUndergrowthCell {
 			Self::MiniRoryHeadTrained => RORY_STICK_MIX,
 			Self::MiniVaseTree => VASE_STICK_MIX,
 			Self::MiniSparseStorybook => STORYBOOK_STICK_MIX,
+			Self::MiniPenmarchTorch | Self::MiniKamakuraTorch | Self::MiniTorchTree => {
+				TORCH_STICK_MIX
+			}
 			_ => PALM_STICK_MIX,
 		}
 	}
@@ -302,6 +366,9 @@ impl TropicalUndergrowthCell {
 			Self::MiniRoryHeadTrained => RORY_CANOPY_MIX,
 			Self::MiniVaseTree => VASE_CANOPY_MIX,
 			Self::MiniSparseStorybook => STORYBOOK_CANOPY_MIX,
+			Self::MiniPenmarchTorch | Self::MiniKamakuraTorch | Self::MiniTorchTree => {
+				TORCH_CANOPY_MIX
+			}
 			_ => BRIGHT_TUFT_MIX,
 		}
 	}
@@ -320,7 +387,7 @@ mod tests {
 	#[test]
 	fn distribution_matches_rfc_order_and_weights() -> Result<()> {
 		let dist = TropicalUndergrowthCell::distribution();
-		assert_eq!(dist.len(), 9);
+		assert_eq!(dist.len(), 12);
 		assert!(dist.buckets[0].item.is_none());
 		assert_eq!(dist.buckets[0].weight, 9.0);
 		assert_eq!(dist.buckets[1].item, Some(TropicalUndergrowthCell::BrightTuft));
@@ -335,10 +402,16 @@ mod tests {
 		assert_eq!(dist.buckets[5].weight, 0.20);
 		assert_eq!(dist.buckets[6].item, Some(TropicalUndergrowthCell::MiniSparseStorybook));
 		assert_eq!(dist.buckets[6].weight, 0.15);
-		assert_eq!(dist.buckets[7].item, Some(TropicalUndergrowthCell::BrightTuftPatch));
-		assert_eq!(dist.buckets[7].weight, 1.6);
-		assert_eq!(dist.buckets[8].item, Some(TropicalUndergrowthCell::DeepTuftPatch));
-		assert_eq!(dist.buckets[8].weight, 1.2);
+		assert_eq!(dist.buckets[7].item, Some(TropicalUndergrowthCell::MiniPenmarchTorch));
+		assert_eq!(dist.buckets[7].weight, 0.12);
+		assert_eq!(dist.buckets[8].item, Some(TropicalUndergrowthCell::MiniKamakuraTorch));
+		assert_eq!(dist.buckets[8].weight, 0.08);
+		assert_eq!(dist.buckets[9].item, Some(TropicalUndergrowthCell::MiniTorchTree));
+		assert_eq!(dist.buckets[9].weight, 0.08);
+		assert_eq!(dist.buckets[10].item, Some(TropicalUndergrowthCell::BrightTuftPatch));
+		assert_eq!(dist.buckets[10].weight, 1.6);
+		assert_eq!(dist.buckets[11].item, Some(TropicalUndergrowthCell::DeepTuftPatch));
+		assert_eq!(dist.buckets[11].weight, 1.2);
 		Ok(())
 	}
 
@@ -391,6 +464,12 @@ mod tests {
 						("rory", TropicalUndergrowthItem::RoryHead(_)) => true,
 						("vase", TropicalUndergrowthItem::VaseTree(_)) => true,
 						("story", TropicalUndergrowthItem::Storybook(_)) => true,
+						(
+							"torch",
+							TropicalUndergrowthItem::PenmarchTorch(_)
+								| TropicalUndergrowthItem::KamakuraTorch(_)
+								| TropicalUndergrowthItem::TorchTree(_),
+						) => true,
 						_ => false,
 					})
 				})
@@ -402,11 +481,13 @@ mod tests {
 		let rory = weight("rory");
 		let vase = weight("vase");
 		let story = weight("story");
+		let torch = weight("torch");
 		assert!((tuft - 3.5).abs() < 1e-4, "expected tuft weight 3.5, got {tuft}");
 		assert!((palm - 1.0).abs() < 1e-4, "expected palm weight 1.0, got {palm}");
 		assert!((rory - 0.85).abs() < 1e-4, "expected rory weight 0.85, got {rory}");
 		assert!((vase - 0.20).abs() < 1e-4, "expected vase weight 0.20, got {vase}");
 		assert!((story - 0.15).abs() < 1e-4, "expected story weight 0.15, got {story}");
+		assert!((torch - 0.28).abs() < 1e-4, "expected torch weight 0.28, got {torch}");
 		Ok(())
 	}
 

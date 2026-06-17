@@ -41,8 +41,8 @@ pub use tropical_tufts::{
 };
 pub use tropical_undergrowth::{
 	TropicalUndergrowthCell, TropicalUndergrowthItem, TropicalUndergrowthPalm,
-	TropicalUndergrowthRoryHead, TropicalUndergrowthStorybook, TropicalUndergrowthTuft,
-	TropicalUndergrowthVaseTree,
+	TropicalUndergrowthRoryHead, TropicalUndergrowthStorybook, TropicalUndergrowthTorch,
+	TropicalUndergrowthTuft, TropicalUndergrowthVaseTree,
 };
 pub use wild_grass::{WildGrassCell, WildGrassClump, WildGrassItem};
 

@@ -4,8 +4,13 @@ use std::marker::PhantomData;
 
 use bevy::prelude::*;
 use chico_ball_components::tuft::{BladeTuft, BladeTuftShape};
-use chico_sbs_geometry::{PalmBushSbs, RorysHeadTrainedSbs, StorybookTreeSbs, VaseTreeSbs};
+use chico_sbs_geometry::{
+	KamakuraTorchSbs, PalmBushSbs, PenmarchTorchSbs, RorysHeadTrainedSbs, StorybookTreeSbs,
+	VaseTreeSbs,
+};
+use chico_sbs_trees::kamakura_torch::KamakuraTorch;
 use chico_sbs_trees::palm_bush::PalmBush;
+use chico_sbs_trees::penmarch_torch::PenmarchTorch;
 use chico_sbs_trees::rorys_head_trained::RorysHeadTrained;
 use chico_sbs_trees::storybook_tree::StorybookTree;
 use chico_sbs_trees::vase_tree::VaseTree;
@@ -23,8 +28,8 @@ use crate::grove::{
 use crate::skipped_mesh_material::{SkippedLeafMeshMaterial, SkippedStickMeshMaterial};
 use crate::tropical_undergrowth::{
 	definition, TropicalUndergrowthCell, TropicalUndergrowthItem, TropicalUndergrowthPalm,
-	TropicalUndergrowthRoryHead, TropicalUndergrowthStorybook, TropicalUndergrowthTuft,
-	TropicalUndergrowthVaseTree,
+	TropicalUndergrowthRoryHead, TropicalUndergrowthStorybook, TropicalUndergrowthTorch,
+	TropicalUndergrowthTuft, TropicalUndergrowthVaseTree,
 };
 
 /// Typical [`ChicoStickMaterial`] / [`StandardMaterial`] Tropical Undergrowth instance.
@@ -250,14 +255,15 @@ impl BuildWithNoise<RorysHeadTrainedSbs> for TropicalUndergrowthRoryHead {
 	fn build_with_noise(&self, noise: NoiseParams) -> RorysHeadTrainedSbs {
 		let config = NoiseConfig::new(noise);
 		let height = sample_f32(&config, self.height, 1.0).max(0.5);
+		let stalk_radius = sample_f32(&config, self.stalk_radius, 1.5);
 		let canopy_spread = sample_f32(&config, self.canopy_spread, 2.0);
 
 		let mut geometry = RorysHeadTrainedSbs::default();
 		geometry.scale.tree_height = height;
+		geometry.scale.stalk_base_radius = Some(stalk_radius);
 		geometry.canopy_noise = noise;
 		geometry.projection.span_fraction_of_height =
 			UnitRange::new(canopy_spread * 0.85, canopy_spread * 1.05);
-		// scale for the mini trees
 		geometry.anchor_perturbation.vertical_offset = UnitRange::new(-0.1, 0.1);
 		geometry
 	}
@@ -303,9 +309,69 @@ impl BuildWithNoise<StorybookTreeSbs> for TropicalUndergrowthStorybook {
 		geometry.rings.anchors_per_ring =
 			anchors_per_ring_from_spacing(canopy_spread, projection_spacing, 3, 5);
 		geometry.rings.spacing = ring_spacing;
-		geometry.rings.height_range = UnitRange::new(0.50, 0.68);
+		geometry.rings.height_range = UnitRange::new(0.50, 1.0);
 		geometry.canopy_noise = noise;
 		geometry.anchor_perturbation.vertical_offset = UnitRange::new(-0.2, 0.2);
+		geometry
+	}
+}
+
+struct TorchSamples {
+	height: f32,
+	stalk_radius: f32,
+	canopy_spread: f32,
+	projection_spacing: f32,
+	ring_spacing: f32,
+	span: f32,
+}
+
+fn sample_torch(torch: &TropicalUndergrowthTorch, noise: NoiseParams) -> TorchSamples {
+	let config = NoiseConfig::new(noise);
+	let height = sample_f32(&config, torch.height, 1.0).max(0.75);
+	let stalk_radius = sample_f32(&config, torch.stalk_radius, 1.5);
+	let canopy_spread = sample_f32(&config, torch.canopy_spread, 2.0);
+	let projection_spacing = sample_f32(&config, torch.projection_spacing, 3.0);
+	let ring_spacing = sample_f32(&config, torch.ring_spacing, 4.0);
+	let span = span_fraction(canopy_spread, height);
+	TorchSamples { height, stalk_radius, canopy_spread, projection_spacing, ring_spacing, span }
+}
+
+/// Workaround until anchor vertical offset scales with tree height (see issue draft).
+fn mini_torch_vertical_offset() -> UnitRange {
+	UnitRange::new(-0.2, 0.2)
+}
+
+impl BuildWithNoise<PenmarchTorchSbs> for TropicalUndergrowthTorch {
+	fn build_with_noise(&self, noise: NoiseParams) -> PenmarchTorchSbs {
+		let s = sample_torch(self, noise);
+		let mut geometry = PenmarchTorchSbs::default();
+		geometry.scale.tree_height = s.height;
+		geometry.scale.stalk_base_radius = Some(s.stalk_radius);
+		geometry.projection.span_fraction_of_height = UnitRange::new(s.span * 0.75, s.span);
+		geometry.growth.branch_depth = 2;
+		geometry.growth.child_count_min = 1;
+		geometry.growth.child_count_max = 2;
+		geometry.rings.anchors_per_ring =
+			anchors_per_ring_from_spacing(s.canopy_spread, s.projection_spacing, 3, 5);
+		geometry.rings.spacing = s.ring_spacing;
+		geometry.canopy_noise = noise;
+		geometry.anchor_perturbation.vertical_offset = mini_torch_vertical_offset();
+		geometry
+	}
+}
+
+impl BuildWithNoise<KamakuraTorchSbs> for TropicalUndergrowthTorch {
+	fn build_with_noise(&self, noise: NoiseParams) -> KamakuraTorchSbs {
+		let s = sample_torch(self, noise);
+		let mut geometry = KamakuraTorchSbs::default();
+		geometry.scale.tree_height = s.height;
+		geometry.scale.stalk_base_radius = Some(s.stalk_radius);
+		geometry.projection.span_fraction_of_height = UnitRange::new(s.span * 0.75, s.span);
+		geometry.rings.anchors_per_ring =
+			anchors_per_ring_from_spacing(s.canopy_spread, s.projection_spacing, 3, 5);
+		geometry.rings.spacing = s.ring_spacing;
+		geometry.canopy_noise = noise;
+		geometry.anchor_perturbation.vertical_offset = mini_torch_vertical_offset();
 		geometry
 	}
 }
@@ -465,6 +531,93 @@ where
 					);
 					entities
 				}
+				TropicalUndergrowthItem::PenmarchTorch(torch) => {
+					let build_noise = placement_noise(self.grove.noise, placed.position);
+					let geometry =
+						BuildWithNoise::<PenmarchTorchSbs>::build_with_noise(torch, build_noise);
+					let mut tree = PenmarchTorch::<StickM, StickS, LeafM, LeafS>::default();
+					tree.geometry = geometry;
+					tree.stick_material = self.stick_material.clone();
+					tree.leaf_material = self.leaf_material.clone();
+					tree.stick_surface_noise =
+						placement_noise(self.stick_surface_noise, placed.position);
+					tree.leaf_surface_noise = foliage_noise;
+					let entities = tree.spawn_render_items(commands, cascade_chunk, local);
+					let stick_seed =
+						placement_noise(self.tree_chain_noise, placed.position).seed as i32;
+					let canopy_seed = build_noise.seed as i32 + 31;
+					patch_spawned_leaf_material::<StickM>(
+						&entities,
+						placed.variant.stick_palette_mix(),
+						stick_seed,
+						commands,
+					);
+					patch_spawned_leaf_material::<LeafM>(
+						&entities,
+						placed.variant.canopy_palette_mix(),
+						canopy_seed,
+						commands,
+					);
+					entities
+				}
+				TropicalUndergrowthItem::KamakuraTorch(torch) => {
+					let build_noise = placement_noise(self.grove.noise, placed.position);
+					let geometry =
+						BuildWithNoise::<KamakuraTorchSbs>::build_with_noise(torch, build_noise);
+					let mut tree = KamakuraTorch::<StickM, StickS, LeafM, LeafS>::default();
+					tree.geometry = geometry;
+					tree.stick_material = self.stick_material.clone();
+					tree.leaf_material = self.leaf_material.clone();
+					tree.stick_surface_noise =
+						placement_noise(self.stick_surface_noise, placed.position);
+					tree.leaf_surface_noise = foliage_noise;
+					let entities = tree.spawn_render_items(commands, cascade_chunk, local);
+					let stick_seed =
+						placement_noise(self.tree_chain_noise, placed.position).seed as i32;
+					let canopy_seed = build_noise.seed as i32 + 31;
+					patch_spawned_leaf_material::<StickM>(
+						&entities,
+						placed.variant.stick_palette_mix(),
+						stick_seed,
+						commands,
+					);
+					patch_spawned_leaf_material::<LeafM>(
+						&entities,
+						placed.variant.canopy_palette_mix(),
+						canopy_seed,
+						commands,
+					);
+					entities
+				}
+				TropicalUndergrowthItem::TorchTree(torch) => {
+					let build_noise = placement_noise(self.grove.noise, placed.position);
+					let geometry =
+						BuildWithNoise::<PenmarchTorchSbs>::build_with_noise(torch, build_noise);
+					let mut tree = PenmarchTorch::<StickM, StickS, LeafM, LeafS>::default();
+					tree.geometry = geometry;
+					tree.stick_material = self.stick_material.clone();
+					tree.leaf_material = self.leaf_material.clone();
+					tree.stick_surface_noise =
+						placement_noise(self.stick_surface_noise, placed.position);
+					tree.leaf_surface_noise = foliage_noise;
+					let entities = tree.spawn_render_items(commands, cascade_chunk, local);
+					let stick_seed =
+						placement_noise(self.tree_chain_noise, placed.position).seed as i32;
+					let canopy_seed = build_noise.seed as i32 + 31;
+					patch_spawned_leaf_material::<StickM>(
+						&entities,
+						placed.variant.stick_palette_mix(),
+						stick_seed,
+						commands,
+					);
+					patch_spawned_leaf_material::<LeafM>(
+						&entities,
+						placed.variant.canopy_palette_mix(),
+						canopy_seed,
+						commands,
+					);
+					entities
+				}
 			};
 			out.extend(entities);
 		}
@@ -539,6 +692,33 @@ mod tests {
 		assert!(story_geom.rings.spacing >= story.ring_spacing.start.min(story.ring_spacing.end));
 		assert!(story_geom.rings.spacing <= story.ring_spacing.start.max(story.ring_spacing.end));
 		assert!(story_geom.rings.anchors_per_ring >= 3);
+
+		let TropicalUndergrowthItem::PenmarchTorch(penmarch) =
+			TropicalUndergrowthCell::MiniPenmarchTorch.item()
+		else {
+			anyhow::bail!("expected penmarch torch item");
+		};
+		let penmarch_geom = BuildWithNoise::<PenmarchTorchSbs>::build_with_noise(penmarch, noise);
+		assert!(penmarch_geom.height() >= penmarch.height.start.min(penmarch.height.end));
+		assert!(penmarch_geom.height() <= penmarch.height.start.max(penmarch.height.end));
+
+		let TropicalUndergrowthItem::KamakuraTorch(kamakura) =
+			TropicalUndergrowthCell::MiniKamakuraTorch.item()
+		else {
+			anyhow::bail!("expected kamakura torch item");
+		};
+		let kamakura_geom = BuildWithNoise::<KamakuraTorchSbs>::build_with_noise(kamakura, noise);
+		assert!(kamakura_geom.height() >= kamakura.height.start.min(kamakura.height.end));
+		assert!(kamakura_geom.height() <= kamakura.height.start.max(kamakura.height.end));
+
+		let TropicalUndergrowthItem::TorchTree(torch) =
+			TropicalUndergrowthCell::MiniTorchTree.item()
+		else {
+			anyhow::bail!("expected torch tree item");
+		};
+		let torch_geom = BuildWithNoise::<PenmarchTorchSbs>::build_with_noise(torch, noise);
+		assert!(torch_geom.height() >= torch.height.start.min(torch.height.end));
+		assert!(torch_geom.height() <= torch.height.start.max(torch.height.end));
 		Ok(())
 	}
 
@@ -551,6 +731,9 @@ mod tests {
 			TropicalUndergrowthCell::MiniRoryHeadTrained,
 			TropicalUndergrowthCell::MiniVaseTree,
 			TropicalUndergrowthCell::MiniSparseStorybook,
+			TropicalUndergrowthCell::MiniPenmarchTorch,
+			TropicalUndergrowthCell::MiniKamakuraTorch,
+			TropicalUndergrowthCell::MiniTorchTree,
 			TropicalUndergrowthCell::BrightTuftPatch,
 			TropicalUndergrowthCell::DeepTuftPatch,
 		] {
@@ -567,7 +750,10 @@ mod tests {
 				TropicalUndergrowthItem::PalmBush(_)
 				| TropicalUndergrowthItem::RoryHead(_)
 				| TropicalUndergrowthItem::VaseTree(_)
-				| TropicalUndergrowthItem::Storybook(_) => {
+				| TropicalUndergrowthItem::Storybook(_)
+				| TropicalUndergrowthItem::PenmarchTorch(_)
+				| TropicalUndergrowthItem::KamakuraTorch(_)
+				| TropicalUndergrowthItem::TorchTree(_) => {
 					for (palette, label) in
 						[(cell.stick_palette_mix(), "stick"), (cell.canopy_palette_mix(), "canopy")]
 					{
@@ -641,6 +827,9 @@ mod tests {
 					TropicalUndergrowthCell::MiniRoryHeadTrained
 						| TropicalUndergrowthCell::MiniVaseTree
 						| TropicalUndergrowthCell::MiniSparseStorybook
+						| TropicalUndergrowthCell::MiniPenmarchTorch
+						| TropicalUndergrowthCell::MiniKamakuraTorch
+						| TropicalUndergrowthCell::MiniTorchTree
 				)
 			})
 			.count();
