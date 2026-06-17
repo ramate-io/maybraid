@@ -9,6 +9,7 @@ use chico_groves::monster_grass::MonsterGrassStd;
 use chico_groves::high_bush::HighBushStd;
 use chico_groves::low_bush::LowBushStd;
 use chico_groves::riverine_green::RiverineGreenStd;
+use chico_groves::tall_grass::TallGrassStd;
 use chico_groves::tropical_tufts::TropicalTuftsStd;
 use chico_groves::wild_grass::WildGrassStd;
 use chico_sbs_trees::braid_oak_tree::BraidOakTree;
@@ -218,6 +219,9 @@ pub type RenderTropicalTufts = TropicalTuftsStd;
 /// [`CommonTuftsStd`] — sparse low grass-clump grove ([#301](https://github.com/ramate-io/maybraid/issues/301)).
 pub type RenderCommonTufts = CommonTuftsStd;
 
+/// [`TallGrassStd`] — dense mid-height tuft grove ([#302](https://github.com/ramate-io/maybraid/issues/302)).
+pub type RenderTallGrass = TallGrassStd;
+
 /// [`WildGrassStd`] — dense colorful tall-tuft grove ([#304](https://github.com/ramate-io/maybraid/issues/304)).
 pub type RenderWildGrass = WildGrassStd;
 
@@ -263,6 +267,7 @@ pub enum RenderSubject {
 	BraidGrass(RenderBraidGrass),
 	TropicalTufts(RenderTropicalTufts),
 	CommonTufts(RenderCommonTufts),
+	TallGrass(RenderTallGrass),
 	WildGrass(RenderWildGrass),
 	MonsterGrass(RenderMonsterGrass),
 	RiverineGreen(RenderRiverineGreen),
@@ -302,6 +307,7 @@ impl RenderSubject {
 			Self::BraidGrass(_) => "BraidGrass",
 			Self::TropicalTufts(_) => "TropicalTufts",
 			Self::CommonTufts(_) => "CommonTufts",
+			Self::TallGrass(_) => "TallGrass",
 			Self::WildGrass(_) => "WildGrass",
 			Self::MonsterGrass(_) => "MonsterGrass",
 			Self::RiverineGreen(_) => "RiverineGreen",
@@ -383,6 +389,16 @@ impl RenderSubject {
 				)
 			}
 			Self::CommonTufts(g) => {
+				format!(
+					"{:?}|extent={:?}|cell_extent_xz={:?}|terrain={:?}|foliage={:?}",
+					g.grove,
+					g.extent,
+					g.cell_extent_xz(),
+					g.terrain,
+					g.foliage_noise
+				)
+			}
+			Self::TallGrass(g) => {
 				format!(
 					"{:?}|extent={:?}|cell_extent_xz={:?}|terrain={:?}|foliage={:?}",
 					g.grove,
@@ -488,6 +504,7 @@ impl RenderSubject {
 			Self::BraidGrass(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::TropicalTufts(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::CommonTufts(item) => item.spawn_render_items(commands, chunk, transform),
+			Self::TallGrass(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::WildGrass(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::MonsterGrass(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::RiverineGreen(item) => item.spawn_render_items(commands, chunk, transform),

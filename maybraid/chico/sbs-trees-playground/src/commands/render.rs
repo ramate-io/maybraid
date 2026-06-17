@@ -24,7 +24,7 @@ use crate::render::{
 	RenderPalmBush, RenderPenmarchTorch, RenderRorysHeadTrained, RenderSopesBanyan,
 	RenderSpearTuft, RenderStorybookTree, RenderSubject, RenderSucculentTuft,
 	RenderTemperateConifer, RenderTropicalTufts, RenderTuftPatch, RenderVaseTree,
-	RenderWaialeaPalm, RenderWeepingTuft, RenderWildGrass, RenderMonsterGrass,
+	RenderWaialeaPalm, RenderWeepingTuft, RenderWildGrass, RenderTallGrass, RenderMonsterGrass,
 	RenderRiverineGreen, RenderLowBush, RenderHighBush,
 };
 
@@ -122,6 +122,14 @@ impl CellRenderHelper<RenderCommonTufts> {
 		let mut tufts = self.render.inner.clone();
 		tufts.extent = self.grove_extent(tufts.cell_extent_xz());
 		tufts
+	}
+}
+
+impl CellRenderHelper<RenderTallGrass> {
+	pub fn configured_tall_grass(&self) -> RenderTallGrass {
+		let mut grass = self.render.inner.clone();
+		grass.extent = self.grove_extent(grass.cell_extent_xz());
+		grass
 	}
 }
 
@@ -232,6 +240,7 @@ pub enum Render {
 	BraidGrass(CellRenderHelper<RenderBraidGrass>),
 	TropicalTufts(CellRenderHelper<RenderTropicalTufts>),
 	CommonTufts(CellRenderHelper<RenderCommonTufts>),
+	TallGrass(CellRenderHelper<RenderTallGrass>),
 	WildGrass(CellRenderHelper<RenderWildGrass>),
 	MonsterGrass(CellRenderHelper<RenderMonsterGrass>),
 	RiverineGreen(CellRenderHelper<RenderRiverineGreen>),
@@ -301,6 +310,9 @@ impl Render {
 			Self::CommonTufts(h) => h
 				.render
 				.config_with(RenderSubject::CommonTufts(h.configured_common_tufts())),
+			Self::TallGrass(h) => h
+				.render
+				.config_with(RenderSubject::TallGrass(h.configured_tall_grass())),
 			Self::WildGrass(h) => h
 				.render
 				.config_with(RenderSubject::WildGrass(h.configured_wild_grass())),
@@ -833,6 +845,56 @@ mod tests {
 			placements.len(),
 			cells
 		);
+		Ok(())
+	}
+
+	#[test]
+	fn tall_grass_defaults_spawn_placements() -> Result<()> {
+		let cmd = crate::commands::PlaygroundCommand::parse_line("render tall-grass")
+			.map_err(|e| anyhow::anyhow!("{e}"))?;
+		let crate::commands::PlaygroundCommand::Render(Render::TallGrass(helper)) = cmd else {
+			anyhow::bail!("expected tall-grass render command");
+		};
+		let grass = helper.configured_tall_grass();
+		assert!(grass.grove.variant_weights.is_none());
+		let placements = grass.placements();
+		assert_eq!(helper.grove_extent_xz, 100.0);
+		assert!(
+			!placements.is_empty(),
+			"expected a visible tall-grass preview with default flags, got {} placements",
+			placements.len()
+		);
+		let cells = grass.placement_cells().len();
+		assert!(
+			placements.len() * 2 >= cells,
+			"expected dense tall grass (got {} placements in {} cells)",
+			placements.len(),
+			cells
+		);
+		Ok(())
+	}
+
+	#[test]
+	fn tall_grass_command_preserves_grove_params() -> Result<()> {
+		let cmd = crate::commands::PlaygroundCommand::parse_line(
+			"render tall-grass --elevation 0.40 --grove-extent-xz 14 --cell-extent-xz 1.75,1.75",
+		)
+		.map_err(|e| anyhow::anyhow!("{e}"))?;
+		let crate::commands::PlaygroundCommand::Render(Render::TallGrass(helper)) = cmd else {
+			anyhow::bail!("expected tall-grass render command");
+		};
+		assert!((helper.grove_extent_xz - 14.0).abs() < 1e-5);
+		assert_eq!(helper.render.inner.grove.cell_extent_xz, Some(Vec2::splat(1.75)));
+		let grass = helper.configured_tall_grass();
+		assert_eq!(grass.placement_cells().len(), 64);
+		assert!((grass.terrain.elevation - 0.40).abs() < 1e-5);
+		assert!(!grass.placements().is_empty());
+		let cfg = Render::TallGrass(helper).into_render_config();
+		let RenderSubject::TallGrass(subject) = cfg.subject else {
+			anyhow::bail!("expected tall grass subject");
+		};
+		assert_eq!(subject.placement_cells().len(), 64);
+		assert!(!subject.placements().is_empty());
 		Ok(())
 	}
 
