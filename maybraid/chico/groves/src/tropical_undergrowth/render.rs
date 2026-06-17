@@ -277,14 +277,11 @@ impl BuildWithNoise<VaseTreeSbs> for TropicalUndergrowthVaseTree {
 		geometry.scale.tree_height = height;
 		geometry.scale.stalk_base_radius = Some(stalk_radius);
 		geometry.projection.span_fraction_of_height = UnitRange::new(span * 0.75, span);
-		geometry.growth.branch_depth = 2;
-		geometry.growth.child_count_min = 1;
-		geometry.growth.child_count_max = 2;
 		geometry.rings.anchors_per_ring =
 			anchors_per_ring_from_spacing(canopy_spread, projection_spacing, 3, 5);
 		geometry.rings.spacing = ring_spacing;
-		geometry.rings.height_range = UnitRange::new(0.55, 0.72);
 		geometry.canopy_noise = noise;
+		geometry.anchor_perturbation.vertical_offset = UnitRange::new(-0.2, 0.2);
 		geometry
 	}
 }
@@ -303,14 +300,12 @@ impl BuildWithNoise<StorybookTreeSbs> for TropicalUndergrowthStorybook {
 		geometry.scale.tree_height = height;
 		geometry.scale.stalk_base_radius = Some(stalk_radius);
 		geometry.projection.span_fraction_of_height = UnitRange::new(span * 0.70, span);
-		geometry.growth.branch_depth = 2;
-		geometry.growth.child_count_min = 1;
-		geometry.growth.child_count_max = 2;
 		geometry.rings.anchors_per_ring =
 			anchors_per_ring_from_spacing(canopy_spread, projection_spacing, 3, 5);
 		geometry.rings.spacing = ring_spacing;
 		geometry.rings.height_range = UnitRange::new(0.50, 0.68);
 		geometry.canopy_noise = noise;
+		geometry.anchor_perturbation.vertical_offset = UnitRange::new(-0.2, 0.2);
 		geometry
 	}
 }
@@ -416,6 +411,7 @@ where
 					let geometry = vase.build_with_noise(build_noise);
 					let mut tree =
 						VaseTree::<StickM, StickS, LeafM, LeafS, LeafM, LeafS>::default();
+					tree.apex_ball_radius_fraction_of_height = 0.0;
 					tree.geometry = geometry;
 					tree.stick_material = self.stick_material.clone();
 					tree.inner_leaf_material = self.leaf_material.clone();
