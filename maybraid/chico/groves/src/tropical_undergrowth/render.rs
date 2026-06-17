@@ -244,6 +244,15 @@ fn span_fraction(canopy_spread: f32, height: f32) -> f32 {
 	(canopy_spread / height.max(0.5)).clamp(0.25, 1.5)
 }
 
+/// Wider ring spacing and fewer spokes than full-size constructions for sparse understory silhouettes.
+const UNDERSTORY_RING_SPACING_SCALE: f32 = 1.85;
+const UNDERSTORY_ANCHORS_PER_RING: u32 = 4;
+const UNDERSTORY_RORY_ANCHORS_PER_RING: u32 = 3;
+
+fn understory_ring_spacing(base: f32) -> f32 {
+	base * UNDERSTORY_RING_SPACING_SCALE
+}
+
 impl BuildWithNoise<RorysHeadTrainedSbs> for TropicalUndergrowthRoryHead {
 	fn build_with_noise(&self, noise: NoiseParams) -> RorysHeadTrainedSbs {
 		let config = NoiseConfig::new(noise);
@@ -254,9 +263,10 @@ impl BuildWithNoise<RorysHeadTrainedSbs> for TropicalUndergrowthRoryHead {
 		let mut geometry = RorysHeadTrainedSbs::default();
 		geometry.scale.tree_height = height;
 		geometry.scale.stalk_base_radius = Some(stalk_radius);
+		geometry.rings.anchors_per_ring = UNDERSTORY_RORY_ANCHORS_PER_RING;
 		geometry.canopy_noise = noise;
 		let span = span_fraction(canopy_spread, height);
-		geometry.projection.span_fraction_of_height = UnitRange::new(span * 0.85, span * 1.05);
+		geometry.projection.span_fraction_of_height = UnitRange::new(span * 0.95, span * 1.15);
 		geometry
 	}
 }
@@ -272,7 +282,9 @@ impl BuildWithNoise<VaseTreeSbs> for TropicalUndergrowthVaseTree {
 		let mut geometry = VaseTreeSbs::default();
 		geometry.scale.tree_height = height;
 		geometry.scale.stalk_base_radius = Some(stalk_radius);
-		geometry.projection.span_fraction_of_height = UnitRange::new(span * 0.75, span);
+		geometry.rings.spacing = understory_ring_spacing(geometry.rings.spacing);
+		geometry.rings.anchors_per_ring = UNDERSTORY_ANCHORS_PER_RING;
+		geometry.projection.span_fraction_of_height = UnitRange::new(span * 0.88, span * 1.08);
 		geometry.canopy_noise = noise;
 		geometry
 	}
@@ -289,8 +301,10 @@ impl BuildWithNoise<StorybookTreeSbs> for TropicalUndergrowthStorybook {
 		let mut geometry = StorybookTreeSbs::default();
 		geometry.scale.tree_height = height;
 		geometry.scale.stalk_base_radius = Some(stalk_radius);
-		geometry.projection.span_fraction_of_height = UnitRange::new(span * 0.70, span);
-		geometry.rings.height_range = UnitRange::new(0.50, 1.0);
+		geometry.rings.spacing = understory_ring_spacing(geometry.rings.spacing);
+		geometry.rings.anchors_per_ring = UNDERSTORY_ANCHORS_PER_RING;
+		geometry.projection.span_fraction_of_height = UnitRange::new(span * 0.82, span * 1.05);
+		geometry.rings.height_range = UnitRange::new(0.58, 1.0);
 		geometry.canopy_noise = noise;
 		geometry
 	}
@@ -317,7 +331,9 @@ impl BuildWithNoise<PenmarchTorchSbs> for TropicalUndergrowthTorch {
 		let mut geometry = PenmarchTorchSbs::default();
 		geometry.scale.tree_height = s.height;
 		geometry.scale.stalk_base_radius = Some(s.stalk_radius);
-		geometry.projection.span_fraction_of_height = UnitRange::new(s.span * 0.75, s.span);
+		geometry.rings.spacing = understory_ring_spacing(geometry.rings.spacing);
+		geometry.rings.anchors_per_ring = UNDERSTORY_ANCHORS_PER_RING;
+		geometry.projection.span_fraction_of_height = UnitRange::new(s.span * 0.88, s.span * 1.08);
 		geometry.canopy_noise = noise;
 		geometry
 	}
@@ -329,7 +345,9 @@ impl BuildWithNoise<KamakuraTorchSbs> for TropicalUndergrowthTorch {
 		let mut geometry = KamakuraTorchSbs::default();
 		geometry.scale.tree_height = s.height;
 		geometry.scale.stalk_base_radius = Some(s.stalk_radius);
-		geometry.projection.span_fraction_of_height = UnitRange::new(s.span * 0.75, s.span);
+		geometry.rings.spacing = understory_ring_spacing(geometry.rings.spacing);
+		geometry.rings.anchors_per_ring = UNDERSTORY_ANCHORS_PER_RING;
+		geometry.projection.span_fraction_of_height = UnitRange::new(s.span * 0.88, s.span * 1.08);
 		geometry.canopy_noise = noise;
 		geometry
 	}
@@ -627,7 +645,8 @@ mod tests {
 		assert!(stalk >= rory.stalk_radius.start.min(rory.stalk_radius.end));
 		assert!(stalk <= rory.stalk_radius.start.max(rory.stalk_radius.end));
 		let default_rory = RorysHeadTrainedSbs::default();
-		assert_eq!(rory_geom.rings.anchors_per_ring, default_rory.rings.anchors_per_ring);
+		assert_eq!(rory_geom.rings.anchors_per_ring, UNDERSTORY_RORY_ANCHORS_PER_RING);
+		assert!(rory_geom.rings.anchors_per_ring < default_rory.rings.anchors_per_ring);
 		assert_eq!(
 			rory_geom.anchor_perturbation.vertical_offset,
 			default_rory.anchor_perturbation.vertical_offset
@@ -641,8 +660,9 @@ mod tests {
 		assert!(vase_geom.height() >= vase.height.start.min(vase.height.end));
 		assert!(vase_geom.height() <= vase.height.start.max(vase.height.end));
 		let default_vase = VaseTreeSbs::default();
-		assert_eq!(vase_geom.rings.spacing, default_vase.rings.spacing);
-		assert_eq!(vase_geom.rings.anchors_per_ring, default_vase.rings.anchors_per_ring);
+		assert_eq!(vase_geom.rings.spacing, understory_ring_spacing(default_vase.rings.spacing));
+		assert_eq!(vase_geom.rings.anchors_per_ring, UNDERSTORY_ANCHORS_PER_RING);
+		assert!(vase_geom.rings.spacing > default_vase.rings.spacing);
 		assert_eq!(
 			vase_geom.anchor_perturbation.vertical_offset,
 			default_vase.anchor_perturbation.vertical_offset
@@ -657,8 +677,10 @@ mod tests {
 		assert!(story_geom.height() >= story.height.start.min(story.height.end));
 		assert!(story_geom.height() <= story.height.start.max(story.height.end));
 		let default_story = StorybookTreeSbs::default();
-		assert_eq!(story_geom.rings.spacing, default_story.rings.spacing);
-		assert_eq!(story_geom.rings.anchors_per_ring, default_story.rings.anchors_per_ring);
+		assert_eq!(story_geom.rings.spacing, understory_ring_spacing(default_story.rings.spacing));
+		assert_eq!(story_geom.rings.anchors_per_ring, UNDERSTORY_ANCHORS_PER_RING);
+		assert_eq!(story_geom.rings.height_range, UnitRange::new(0.58, 1.0));
+		assert!(story_geom.rings.spacing > default_story.rings.spacing);
 		assert_eq!(
 			story_geom.anchor_perturbation.vertical_offset,
 			default_story.anchor_perturbation.vertical_offset
@@ -673,8 +695,12 @@ mod tests {
 		assert!(penmarch_geom.height() >= penmarch.height.start.min(penmarch.height.end));
 		assert!(penmarch_geom.height() <= penmarch.height.start.max(penmarch.height.end));
 		let default_penmarch = PenmarchTorchSbs::default();
-		assert_eq!(penmarch_geom.rings.spacing, default_penmarch.rings.spacing);
-		assert_eq!(penmarch_geom.rings.anchors_per_ring, default_penmarch.rings.anchors_per_ring);
+		assert_eq!(
+			penmarch_geom.rings.spacing,
+			understory_ring_spacing(default_penmarch.rings.spacing)
+		);
+		assert_eq!(penmarch_geom.rings.anchors_per_ring, UNDERSTORY_ANCHORS_PER_RING);
+		assert!(penmarch_geom.rings.spacing > default_penmarch.rings.spacing);
 		assert_eq!(penmarch_geom.growth.branch_depth, default_penmarch.growth.branch_depth);
 		assert_eq!(
 			penmarch_geom.anchor_perturbation.vertical_offset,
@@ -690,8 +716,12 @@ mod tests {
 		assert!(kamakura_geom.height() >= kamakura.height.start.min(kamakura.height.end));
 		assert!(kamakura_geom.height() <= kamakura.height.start.max(kamakura.height.end));
 		let default_kamakura = KamakuraTorchSbs::default();
-		assert_eq!(kamakura_geom.rings.spacing, default_kamakura.rings.spacing);
-		assert_eq!(kamakura_geom.rings.anchors_per_ring, default_kamakura.rings.anchors_per_ring);
+		assert_eq!(
+			kamakura_geom.rings.spacing,
+			understory_ring_spacing(default_kamakura.rings.spacing)
+		);
+		assert_eq!(kamakura_geom.rings.anchors_per_ring, UNDERSTORY_ANCHORS_PER_RING);
+		assert!(kamakura_geom.rings.spacing > default_kamakura.rings.spacing);
 		assert_eq!(
 			kamakura_geom.anchor_perturbation.vertical_offset,
 			default_kamakura.anchor_perturbation.vertical_offset
@@ -705,8 +735,11 @@ mod tests {
 		let torch_geom = BuildWithNoise::<PenmarchTorchSbs>::build_with_noise(torch, noise);
 		assert!(torch_geom.height() >= torch.height.start.min(torch.height.end));
 		assert!(torch_geom.height() <= torch.height.start.max(torch.height.end));
-		assert_eq!(torch_geom.rings.spacing, default_penmarch.rings.spacing);
-		assert_eq!(torch_geom.rings.anchors_per_ring, default_penmarch.rings.anchors_per_ring);
+		assert_eq!(
+			torch_geom.rings.spacing,
+			understory_ring_spacing(default_penmarch.rings.spacing)
+		);
+		assert_eq!(torch_geom.rings.anchors_per_ring, UNDERSTORY_ANCHORS_PER_RING);
 		assert_eq!(
 			torch_geom.anchor_perturbation.vertical_offset,
 			default_penmarch.anchor_perturbation.vertical_offset

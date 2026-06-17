@@ -154,47 +154,47 @@ const DEEP_TUFT_PATCH: GroveTuftPatch<TropicalUndergrowthTuft> = GroveTuftPatch 
 };
 
 const SMALL_PALM_BUSH: TropicalUndergrowthPalm = TropicalUndergrowthPalm {
-	height: UnitRange::new(0.50, 1.40),
+	height: UnitRange::new(1.00, 2.80),
 	frond_count: 5..=9,
-	frond_length: UnitRange::new(0.25, 0.70),
-	crown_spread: UnitRange::new(0.35, 0.90),
+	frond_length: UnitRange::new(0.50, 1.40),
+	crown_spread: UnitRange::new(0.70, 1.80),
 };
 
 const MINI_RORY_HEAD: TropicalUndergrowthRoryHead = TropicalUndergrowthRoryHead {
 	height: UnitRange::new(0.80, 1.80),
-	stalk_radius: UnitRange::new(0.020, 0.030),
-	canopy_spread: UnitRange::new(0.50, 1.20),
+	stalk_radius: UnitRange::new(0.037, 0.055),
+	canopy_spread: UnitRange::new(0.70, 1.68),
 	canopy_density: UnitRange::new(0.0, 1.0),
 };
 
 const MINI_VASE_TREE: TropicalUndergrowthVaseTree = TropicalUndergrowthVaseTree {
 	height: UnitRange::new(1.00, 2.30),
-	stalk_radius: UnitRange::new(0.025, 0.035),
-	canopy_spread: UnitRange::new(0.70, 1.50),
+	stalk_radius: UnitRange::new(0.046, 0.063),
+	canopy_spread: UnitRange::new(0.98, 2.10),
 };
 
 const MINI_STORYBOOK: TropicalUndergrowthStorybook = TropicalUndergrowthStorybook {
 	height: UnitRange::new(1.20, 2.50),
-	stalk_radius: UnitRange::new(0.025, 0.035),
-	canopy_spread: UnitRange::new(0.60, 1.40),
+	stalk_radius: UnitRange::new(0.046, 0.063),
+	canopy_spread: UnitRange::new(0.84, 1.96),
 };
 
 const MINI_TORCH_TREE: TropicalUndergrowthTorch = TropicalUndergrowthTorch {
 	height: UnitRange::new(1.00, 2.20),
-	stalk_radius: UnitRange::new(0.025, 0.035),
-	canopy_spread: UnitRange::new(0.55, 1.20),
+	stalk_radius: UnitRange::new(0.046, 0.063),
+	canopy_spread: UnitRange::new(0.77, 1.68),
 };
 
 const MINI_PENMARCH_TORCH: TropicalUndergrowthTorch = TropicalUndergrowthTorch {
 	height: UnitRange::new(1.20, 2.50),
-	stalk_radius: UnitRange::new(0.025, 0.035),
-	canopy_spread: UnitRange::new(0.65, 1.40),
+	stalk_radius: UnitRange::new(0.046, 0.063),
+	canopy_spread: UnitRange::new(0.91, 1.96),
 };
 
 const MINI_KAMAKURA_TORCH: TropicalUndergrowthTorch = TropicalUndergrowthTorch {
 	height: UnitRange::new(1.00, 2.30),
-	stalk_radius: UnitRange::new(0.025, 0.035),
-	canopy_spread: UnitRange::new(0.60, 1.30),
+	stalk_radius: UnitRange::new(0.046, 0.063),
+	canopy_spread: UnitRange::new(0.84, 1.82),
 };
 
 const BRIGHT_TUFT_MIX: PaletteMix = PaletteMix::new(&[
@@ -267,8 +267,8 @@ const TORCH_CANOPY_MIX: PaletteMix = PaletteMix::new(&[
 impl TropicalUndergrowthCell {
 	/// Authored ordered distribution: explicit `None`, then variants in declaration order.
 	///
-	/// Placed weights total `5.98` (RFC relative proportions plus rare torch companions); the
-	/// `None` weight of `9.0` puts the placed share at `5.98 / 14.98 ≈ 0.40`, mid RFC
+	/// Placed weights total `8.44` (RFC relative proportions plus torch companions); the
+	/// `None` weight of `12.0` puts the placed share at `8.44 / 20.44 ≈ 0.41`, mid RFC
 	/// `DENSITY_RANGE` (`0.22..0.58`).
 	pub fn distribution() -> GroveDistribution<Self> {
 		let lowland =
@@ -277,16 +277,16 @@ impl TropicalUndergrowthCell {
 		let mini_tree =
 			PlacementConstraints::new(UnitRange::new(0.0, 0.40), UnitRange::new(0.0, 0.50));
 		GroveDistribution::new(vec![
-			GroveBucket::none(9.0),
+			GroveBucket::none(12.0),
 			GroveBucket::placed(0.4, lowland, Self::BrightTuft),
 			GroveBucket::placed(0.3, lowland, Self::DeepTuft),
 			GroveBucket::placed(1.0, palm, Self::SmallPalmBush),
 			GroveBucket::placed(0.85, lowland, Self::MiniRoryHeadTrained),
 			GroveBucket::placed(0.20, mini_tree, Self::MiniVaseTree),
 			GroveBucket::placed(0.15, mini_tree, Self::MiniSparseStorybook),
-			GroveBucket::placed(0.12, mini_tree, Self::MiniPenmarchTorch),
-			GroveBucket::placed(0.08, mini_tree, Self::MiniKamakuraTorch),
-			GroveBucket::placed(0.08, mini_tree, Self::MiniTorchTree),
+			GroveBucket::placed(1.30, mini_tree, Self::MiniPenmarchTorch),
+			GroveBucket::placed(1.22, mini_tree, Self::MiniKamakuraTorch),
+			GroveBucket::placed(0.22, mini_tree, Self::MiniTorchTree),
 			GroveBucket::placed(1.6, lowland, Self::BrightTuftPatch),
 			GroveBucket::placed(1.2, lowland, Self::DeepTuftPatch),
 		])
@@ -364,7 +364,7 @@ mod tests {
 		let dist = TropicalUndergrowthCell::distribution();
 		assert_eq!(dist.len(), 12);
 		assert!(dist.buckets[0].item.is_none());
-		assert_eq!(dist.buckets[0].weight, 9.0);
+		assert_eq!(dist.buckets[0].weight, 12.0);
 		assert_eq!(dist.buckets[1].item, Some(TropicalUndergrowthCell::BrightTuft));
 		assert_eq!(dist.buckets[1].weight, 0.4);
 		assert_eq!(dist.buckets[2].item, Some(TropicalUndergrowthCell::DeepTuft));
@@ -378,11 +378,11 @@ mod tests {
 		assert_eq!(dist.buckets[6].item, Some(TropicalUndergrowthCell::MiniSparseStorybook));
 		assert_eq!(dist.buckets[6].weight, 0.15);
 		assert_eq!(dist.buckets[7].item, Some(TropicalUndergrowthCell::MiniPenmarchTorch));
-		assert_eq!(dist.buckets[7].weight, 0.12);
+		assert_eq!(dist.buckets[7].weight, 1.30);
 		assert_eq!(dist.buckets[8].item, Some(TropicalUndergrowthCell::MiniKamakuraTorch));
-		assert_eq!(dist.buckets[8].weight, 0.08);
+		assert_eq!(dist.buckets[8].weight, 1.22);
 		assert_eq!(dist.buckets[9].item, Some(TropicalUndergrowthCell::MiniTorchTree));
-		assert_eq!(dist.buckets[9].weight, 0.08);
+		assert_eq!(dist.buckets[9].weight, 0.22);
 		assert_eq!(dist.buckets[10].item, Some(TropicalUndergrowthCell::BrightTuftPatch));
 		assert_eq!(dist.buckets[10].weight, 1.6);
 		assert_eq!(dist.buckets[11].item, Some(TropicalUndergrowthCell::DeepTuftPatch));
@@ -462,7 +462,7 @@ mod tests {
 		assert!((rory - 0.85).abs() < 1e-4, "expected rory weight 0.85, got {rory}");
 		assert!((vase - 0.20).abs() < 1e-4, "expected vase weight 0.20, got {vase}");
 		assert!((story - 0.15).abs() < 1e-4, "expected story weight 0.15, got {story}");
-		assert!((torch - 0.28).abs() < 1e-4, "expected torch weight 0.28, got {torch}");
+		assert!((torch - 2.74).abs() < 1e-4, "expected torch weight 2.74, got {torch}");
 		Ok(())
 	}
 
@@ -489,8 +489,8 @@ mod tests {
 		else {
 			anyhow::bail!("expected palm item");
 		};
-		assert!(palm.height.start >= 0.50);
-		assert!(palm.height.end <= 1.40);
+		assert!(palm.height.start >= 1.00);
+		assert!(palm.height.end <= 2.80);
 		assert_eq!(palm.frond_count, 5..=9);
 
 		let TropicalUndergrowthItem::RoryHead(rory) =
@@ -500,9 +500,9 @@ mod tests {
 		};
 		assert!(rory.height.start >= 0.80);
 		assert!(rory.height.end <= 1.80);
-		assert!(rory.stalk_radius.start >= 0.020);
-		assert!(rory.stalk_radius.end <= 0.030);
-		assert!(rory.canopy_spread.start >= 0.50);
+		assert!(rory.stalk_radius.start >= 0.037);
+		assert!(rory.stalk_radius.end <= 0.055);
+		assert!(rory.canopy_spread.start >= 0.70);
 		assert!(rory.canopy_density.end <= 1.0);
 
 		let TropicalUndergrowthItem::VaseTree(vase) = TropicalUndergrowthCell::MiniVaseTree.item()
@@ -511,8 +511,8 @@ mod tests {
 		};
 		assert!(vase.height.start >= 1.00);
 		assert!(vase.height.end <= 2.30);
-		assert!(vase.stalk_radius.start >= 0.025);
-		assert!(vase.canopy_spread.end <= 1.50);
+		assert!(vase.stalk_radius.start >= 0.046);
+		assert!(vase.canopy_spread.end <= 2.10);
 
 		let TropicalUndergrowthItem::Storybook(story) =
 			TropicalUndergrowthCell::MiniSparseStorybook.item()
@@ -521,8 +521,8 @@ mod tests {
 		};
 		assert!(story.height.start >= 1.20);
 		assert!(story.height.end <= 2.50);
-		assert!(story.stalk_radius.end <= 0.035);
-		assert!(story.canopy_spread.start >= 0.60);
+		assert!(story.stalk_radius.end <= 0.063);
+		assert!(story.canopy_spread.start >= 0.84);
 		Ok(())
 	}
 
