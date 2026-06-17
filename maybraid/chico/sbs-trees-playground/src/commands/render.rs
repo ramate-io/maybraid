@@ -25,7 +25,7 @@ use crate::render::{
 	RenderSpearTuft, RenderStorybookTree, RenderSubject, RenderSucculentTuft,
 	RenderTemperateConifer, RenderTropicalTufts, RenderTuftPatch, RenderVaseTree,
 	RenderWaialeaPalm, RenderWeepingTuft, RenderWildGrass, RenderTallGrass, RenderMonsterGrass,
-	RenderRiverineGreen, RenderLowBush, RenderHighBush,
+	RenderRiverineGreen, RenderLowBush, RenderHighBush, RenderBushScrub,
 };
 
 /// Shared render flags (resolution + scene transform) wrapped around per-item args.
@@ -122,6 +122,14 @@ impl CellRenderHelper<RenderCommonTufts> {
 		let mut tufts = self.render.inner.clone();
 		tufts.extent = self.grove_extent(tufts.cell_extent_xz());
 		tufts
+	}
+}
+
+impl CellRenderHelper<RenderBushScrub> {
+	pub fn configured_bush_scrub(&self) -> RenderBushScrub {
+		let mut scrub = self.render.inner.clone();
+		scrub.extent = self.grove_extent(scrub.cell_extent_xz());
+		scrub
 	}
 }
 
@@ -240,6 +248,7 @@ pub enum Render {
 	BraidGrass(CellRenderHelper<RenderBraidGrass>),
 	TropicalTufts(CellRenderHelper<RenderTropicalTufts>),
 	CommonTufts(CellRenderHelper<RenderCommonTufts>),
+	BushScrub(CellRenderHelper<RenderBushScrub>),
 	TallGrass(CellRenderHelper<RenderTallGrass>),
 	WildGrass(CellRenderHelper<RenderWildGrass>),
 	MonsterGrass(CellRenderHelper<RenderMonsterGrass>),
@@ -310,6 +319,9 @@ impl Render {
 			Self::CommonTufts(h) => h
 				.render
 				.config_with(RenderSubject::CommonTufts(h.configured_common_tufts())),
+			Self::BushScrub(h) => h
+				.render
+				.config_with(RenderSubject::BushScrub(h.configured_bush_scrub())),
 			Self::TallGrass(h) => h
 				.render
 				.config_with(RenderSubject::TallGrass(h.configured_tall_grass())),
@@ -1090,6 +1102,49 @@ mod tests {
 			anyhow::bail!("expected high bush subject");
 		};
 		assert_eq!(subject.placement_cells().len(), 64);
+		assert!(!subject.placements().is_empty());
+		Ok(())
+	}
+
+	#[test]
+	fn bush_scrub_defaults_spawn_placements() -> Result<()> {
+		let cmd = crate::commands::PlaygroundCommand::parse_line("render bush-scrub")
+			.map_err(|e| anyhow::anyhow!("{e}"))?;
+		let crate::commands::PlaygroundCommand::Render(Render::BushScrub(helper)) = cmd else {
+			anyhow::bail!("expected bush-scrub render command");
+		};
+		let scrub = helper.configured_bush_scrub();
+		assert!(scrub.grove.variant_weights.is_none());
+		let placements = scrub.placements();
+		assert_eq!(helper.grove_extent_xz, 100.0);
+		assert!(
+			!placements.is_empty(),
+			"expected a visible bush-scrub preview with default flags, got {} placements",
+			placements.len()
+		);
+		Ok(())
+	}
+
+	#[test]
+	fn bush_scrub_command_preserves_grove_params() -> Result<()> {
+		let cmd = crate::commands::PlaygroundCommand::parse_line(
+			"render bush-scrub --elevation 0.40 --grove-extent-xz 35 --cell-extent-xz 2.5,2.5",
+		)
+		.map_err(|e| anyhow::anyhow!("{e}"))?;
+		let crate::commands::PlaygroundCommand::Render(Render::BushScrub(helper)) = cmd else {
+			anyhow::bail!("expected bush-scrub render command");
+		};
+		assert!((helper.grove_extent_xz - 35.0).abs() < 1e-5);
+		assert_eq!(helper.render.inner.grove.cell_extent_xz, Some(Vec2::splat(2.5)));
+		let scrub = helper.configured_bush_scrub();
+		assert_eq!(scrub.placement_cells().len(), 196);
+		assert!((scrub.terrain.elevation - 0.40).abs() < 1e-5);
+		assert!(!scrub.placements().is_empty());
+		let cfg = Render::BushScrub(helper).into_render_config();
+		let RenderSubject::BushScrub(subject) = cfg.subject else {
+			anyhow::bail!("expected bush scrub subject");
+		};
+		assert_eq!(subject.placement_cells().len(), 196);
 		assert!(!subject.placements().is_empty());
 		Ok(())
 	}
