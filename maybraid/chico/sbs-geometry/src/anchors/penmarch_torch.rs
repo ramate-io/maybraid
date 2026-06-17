@@ -11,9 +11,9 @@ use procedural_common::NoiseConfig;
 use super::stalk_perturbation::{HasStrictStalk, StalkPerturbation};
 use super::strict_stalk::StrictStalk;
 use super::torch_tree::{
-	torch_ring_spacing_unit_height, TORCH_ANCHOR_ANGULAR_SCALE_HI, TORCH_ANCHOR_ANGULAR_SCALE_LO,
-	TORCH_ANCHOR_RADIUS_OFFSET_HI, TORCH_ANCHOR_RADIUS_OFFSET_LO, TORCH_ANCHOR_VERTICAL_OFFSET_HI,
-	TORCH_ANCHOR_VERTICAL_OFFSET_LO, TORCH_ANCHORS_PER_RING, TORCH_BIAS_BLEND,
+	torch_ring_spacing_unit_height, TORCH_ANCHORS_PER_RING, TORCH_ANCHOR_ANGULAR_SCALE_HI,
+	TORCH_ANCHOR_ANGULAR_SCALE_LO, TORCH_ANCHOR_RADIUS_OFFSET_HI, TORCH_ANCHOR_RADIUS_OFFSET_LO,
+	TORCH_ANCHOR_VERTICAL_OFFSET_HI, TORCH_ANCHOR_VERTICAL_OFFSET_LO, TORCH_BIAS_BLEND,
 	TORCH_BRANCH_BASE_RADIUS_FRACTION_OF_STALK, TORCH_BRANCH_DEPTH,
 	TORCH_BRANCH_HYSTERESIS_FREQUENCY_SCALE, TORCH_BRANCH_RADIUS_CHILD_SCALE_HI,
 	TORCH_BRANCH_RADIUS_CHILD_SCALE_LO, TORCH_CHILD_COUNT_MAX, TORCH_CHILD_COUNT_MIN,
@@ -29,6 +29,10 @@ use crate::chain::storybook_tree::{
 use crate::chain::{BranchOut, DepthBudget};
 use crate::projection::vase_projection_length;
 use crate::render::mix_seed::mix_seed_below_fraction;
+use crate::sbs::scale::{
+	branch_base_radius_for_stalk, branch_radius_child_bounds_for_stalk,
+	branch_radius_child_scale_for_stalk,
+};
 use crate::BallStickNode;
 use procedural_common::NoiseParams;
 
@@ -98,12 +102,14 @@ pub fn penmarch_elevation_degrees(
 			return crown;
 		}
 		let u = ring_u.clamp(0.0, 1.0);
-		let flip = flip_start_u.clamp(PENMARCH_FLIP_RING_U_CLAMP_LO, PENMARCH_FLIP_RING_U_CLAMP_HI_APEX_ONLY);
+		let flip = flip_start_u
+			.clamp(PENMARCH_FLIP_RING_U_CLAMP_LO, PENMARCH_FLIP_RING_U_CLAMP_HI_APEX_ONLY);
 		return flare + (shoulder - flare) * (u / flip).min(1.0);
 	}
 
 	let u = ring_u.clamp(0.0, 1.0);
-	let flip = flip_start_u.clamp(PENMARCH_FLIP_RING_U_CLAMP_LO, PENMARCH_FLIP_RING_U_CLAMP_HI_GRADUAL);
+	let flip =
+		flip_start_u.clamp(PENMARCH_FLIP_RING_U_CLAMP_LO, PENMARCH_FLIP_RING_U_CLAMP_HI_GRADUAL);
 	if u < flip {
 		return flare + (shoulder - flare) * (u / flip);
 	}
@@ -231,17 +237,35 @@ impl PenmarchTorchProtoAnchors {
 
 	fn limb_base_radius(&self) -> f32 {
 		let base = self.stalk.stalk_base_radius.max(TORCH_STALK_RADIUS_EPSILON);
-		(base * self.branch_base_radius_fraction_of_stalk).max(TORCH_LIMB_BASE_RADIUS_FLOOR)
+		branch_base_radius_for_stalk(
+			base,
+			self.branch_base_radius_fraction_of_stalk,
+			TORCH_LIMB_BASE_RADIUS_FLOOR,
+			self.stalk.stalk_height,
+			DEFAULT_TREE_HEIGHT * DEFAULT_STALK_HEIGHT_FRACTION,
+		)
 	}
 
 	pub fn hysteresis_seeds(&self, chain_noise: NoiseConfig) -> Vec<StorybookTreeChain> {
 		let mut out = Vec::new();
 		let k = self.anchors_per_ring.max(1);
-		let radial_eps = (self.stalk.stalk_base_radius * TORCH_RADIAL_OFFSET_FRACTION_OF_STALK_BASE)
+		let radial_eps = (self.stalk.stalk_base_radius
+			* TORCH_RADIAL_OFFSET_FRACTION_OF_STALK_BASE)
 			.max(TORCH_STALK_RADIUS_EPSILON);
 		let limb_r = self.limb_base_radius();
 		let depth = storybook_branch_depth(self.branch_depth);
 		let fracs = segment_fracs(depth);
+		let child_scale = branch_radius_child_scale_for_stalk(
+			self.branch_radius_child_scale,
+			self.stalk.stalk_height,
+			DEFAULT_TREE_HEIGHT * DEFAULT_STALK_HEIGHT_FRACTION,
+		);
+		let child_bounds = branch_radius_child_bounds_for_stalk(
+			self.stalk.stalk_base_radius,
+			limb_r,
+			self.stalk.stalk_height,
+			DEFAULT_TREE_HEIGHT * DEFAULT_STALK_HEIGHT_FRACTION,
+		);
 		let last_ring_z = self.last_ring_unit_height;
 		let seed_lane =
 			chain_noise.params().seed.wrapping_mul(PENMARCH_APEX_ONLY_FLIP_SEED_SALT) as usize;
@@ -285,7 +309,8 @@ impl PenmarchTorchProtoAnchors {
 							..(self.child_count_max as usize).saturating_add(1),
 					)
 					.with_radius_range(limb_r..limb_r)
-					.with_radius_range_child_scale(self.branch_radius_child_scale)
+					.with_radius_range_child_scale(child_scale)
+					.with_radius_range_child_bounds(child_bounds.clone())
 					.with_length(
 						first_len * TORCH_FIRST_SEGMENT_LENGTH_LO
 							..first_len * TORCH_FIRST_SEGMENT_LENGTH_HI,
@@ -467,9 +492,6 @@ mod tests {
 		};
 		let ring_count = proto.ring_height_fractions().len();
 		let spokes = proto.anchors_per_ring as usize;
-		assert_eq!(
-			PenmarchTorchAnchors::new(proto).anchors().len(),
-			ring_count * spokes + 1
-		);
+		assert_eq!(PenmarchTorchAnchors::new(proto).anchors().len(), ring_count * spokes + 1);
 	}
 }

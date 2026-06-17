@@ -31,6 +31,8 @@ pub struct BranchOut {
 	/// Multipliers for the next hysteresis step: child [`Self::radius_range`] is
 	/// `(parent.start * .0)..(parent.end * .1)`.
 	pub radius_range_child_scale: (f32, f32),
+	/// Optional absolute clamp for sampled and propagated child radii.
+	pub radius_range_child_bounds: Option<Range<f32>>,
 	/// Half-open range for noisy segment length toward each child.
 	pub length: Range<f32>,
 	/// Degrees of freedom for noisy ray direction.
@@ -52,6 +54,7 @@ impl Default for BranchOut {
 			child_count: 1..3,
 			radius_range: 0.05..0.2,
 			radius_range_child_scale: (1.0, 1.0),
+			radius_range_child_bounds: None,
 			length: 0.2..0.5,
 			ray_degrees_of_freedom: 0.14,
 			bias_ray: Vec3::Y,
@@ -70,6 +73,7 @@ impl BranchOut {
 			child_count: 1..3,
 			radius_range: 0.05..0.2,
 			radius_range_child_scale: (1.0, 1.0),
+			radius_range_child_bounds: None,
 			length: 0.2..0.5,
 			ray_degrees_of_freedom: 0.14,
 			bias_ray: Vec3::Y,
@@ -92,6 +96,11 @@ impl BranchOut {
 		self
 	}
 
+	pub fn with_radius_range_child_bounds(mut self, radius_range_child_bounds: Range<f32>) -> Self {
+		self.radius_range_child_bounds = Some(radius_range_child_bounds);
+		self
+	}
+
 	pub fn down(node: BallStickNode) -> Self {
 		Self {
 			node,
@@ -101,6 +110,7 @@ impl BranchOut {
 			child_count: 1..3,
 			radius_range: 0.05..0.2,
 			radius_range_child_scale: (1.0, 1.0),
+			radius_range_child_bounds: None,
 			length: 0.2..0.5,
 			ray_degrees_of_freedom: 0.14,
 			bias_ray: -Vec3::Y,
@@ -121,6 +131,7 @@ impl BranchOut {
 			child_count: 1..4,
 			radius_range: 0.05..0.2,
 			radius_range_child_scale: (1.0, 1.0),
+			radius_range_child_bounds: None,
 			length: 0.2..0.5,
 			ray_degrees_of_freedom: 0.08,
 			bias_ray: radial,
@@ -201,7 +212,10 @@ impl BranchOut {
 				let inc = child_node.position - parent.position;
 				let (s_lo, s_hi) = self.radius_range_child_scale;
 				let rr = &self.radius_range;
-				let child_radius_range = (rr.start * s_lo)..(rr.end * s_hi);
+				let child_radius_range = clamp_radius_range(
+					(rr.start * s_lo)..(rr.end * s_hi),
+					&self.radius_range_child_bounds,
+				);
 				Self {
 					node: child_node,
 					noise: self.noise.clone(),
@@ -210,6 +224,7 @@ impl BranchOut {
 					child_count: self.child_count.clone(),
 					radius_range: child_radius_range,
 					radius_range_child_scale: self.radius_range_child_scale,
+					radius_range_child_bounds: self.radius_range_child_bounds.clone(),
 					length: self.length.clone(),
 					ray_degrees_of_freedom: self.ray_degrees_of_freedom,
 					bias_ray: self.bias_ray,
@@ -235,13 +250,14 @@ impl BranchOut {
 		segment_index: usize,
 		child_index: u32,
 	) -> f32 {
-		radius_range::sample_f32(
+		let radius = radius_range::sample_f32(
 			noise,
 			self.radius_range.clone(),
 			parent,
 			segment_index,
 			child_index,
-		)
+		);
+		clamp_radius(radius, &self.radius_range_child_bounds)
 	}
 
 	pub fn sample_ray(
@@ -279,6 +295,26 @@ impl BranchOut {
 	/// Blend incoming growth toward `bias_ray` with weight `t` in `[0, 1]`.
 	pub fn blend_direction(incoming_ray: Vec3, bias_ray: Vec3, t: f32) -> Vec3 {
 		degree_range::blend_direction(incoming_ray, bias_ray, t)
+	}
+}
+
+fn clamp_radius(radius: f32, bounds: &Option<Range<f32>>) -> f32 {
+	if let Some(bounds) = bounds {
+		let lo = bounds.start.min(bounds.end);
+		let hi = bounds.start.max(bounds.end);
+		radius.clamp(lo, hi)
+	} else {
+		radius
+	}
+}
+
+fn clamp_radius_range(range: Range<f32>, bounds: &Option<Range<f32>>) -> Range<f32> {
+	if let Some(bounds) = bounds {
+		let lo = bounds.start.min(bounds.end);
+		let hi = bounds.start.max(bounds.end);
+		range.start.clamp(lo, hi)..range.end.clamp(lo, hi)
+	} else {
+		range
 	}
 }
 

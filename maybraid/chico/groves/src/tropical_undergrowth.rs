@@ -88,8 +88,6 @@ pub struct TropicalUndergrowthRoryHead {
 	pub height: UnitRange,
 	pub stalk_radius: UnitRange,
 	pub canopy_spread: UnitRange,
-	/// World meters between adjacent radial limb anchors on the canopy ring.
-	pub projection_spacing: UnitRange,
 	/// Sampled `0.0..1.0` band mapping to sparse..moderate canopy density at render time.
 	pub canopy_density: UnitRange,
 }
@@ -100,10 +98,6 @@ pub struct TropicalUndergrowthVaseTree {
 	pub height: UnitRange,
 	pub stalk_radius: UnitRange,
 	pub canopy_spread: UnitRange,
-	/// World meters between adjacent radial limb anchors on each canopy ring.
-	pub projection_spacing: UnitRange,
-	/// Vertical spacing between ring planes as a fraction of stalk height.
-	pub ring_spacing: UnitRange,
 }
 
 /// Authored geometry ranges for one mini torch form (Penmarch, Kamakura, or generic torch tree).
@@ -112,10 +106,6 @@ pub struct TropicalUndergrowthTorch {
 	pub height: UnitRange,
 	pub stalk_radius: UnitRange,
 	pub canopy_spread: UnitRange,
-	/// World meters between adjacent radial limb anchors on each canopy ring.
-	pub projection_spacing: UnitRange,
-	/// Vertical spacing between ring planes as a fraction of stalk height.
-	pub ring_spacing: UnitRange,
 }
 
 /// Authored geometry ranges for one mini Storybook Tree form.
@@ -124,10 +114,6 @@ pub struct TropicalUndergrowthStorybook {
 	pub height: UnitRange,
 	pub stalk_radius: UnitRange,
 	pub canopy_spread: UnitRange,
-	/// World meters between adjacent radial limb anchors on each canopy ring.
-	pub projection_spacing: UnitRange,
-	/// Vertical spacing between ring planes as a fraction of stalk height.
-	pub ring_spacing: UnitRange,
 }
 
 /// Shared blade thickness band: ~2–4 % of blade length keeps blades grass-thin at any height.
@@ -178,7 +164,6 @@ const MINI_RORY_HEAD: TropicalUndergrowthRoryHead = TropicalUndergrowthRoryHead 
 	height: UnitRange::new(0.80, 1.80),
 	stalk_radius: UnitRange::new(0.020, 0.030),
 	canopy_spread: UnitRange::new(0.50, 1.20),
-	projection_spacing: UnitRange::new(0.28, 0.42),
 	canopy_density: UnitRange::new(0.0, 1.0),
 };
 
@@ -186,40 +171,30 @@ const MINI_VASE_TREE: TropicalUndergrowthVaseTree = TropicalUndergrowthVaseTree 
 	height: UnitRange::new(1.00, 2.30),
 	stalk_radius: UnitRange::new(0.025, 0.035),
 	canopy_spread: UnitRange::new(0.70, 1.50),
-	projection_spacing: UnitRange::new(0.32, 0.50),
-	ring_spacing: UnitRange::new(0.12, 0.18),
 };
 
 const MINI_STORYBOOK: TropicalUndergrowthStorybook = TropicalUndergrowthStorybook {
 	height: UnitRange::new(1.20, 2.50),
 	stalk_radius: UnitRange::new(0.025, 0.035),
 	canopy_spread: UnitRange::new(0.60, 1.40),
-	projection_spacing: UnitRange::new(0.30, 0.48),
-	ring_spacing: UnitRange::new(0.12, 0.16),
 };
 
 const MINI_TORCH_TREE: TropicalUndergrowthTorch = TropicalUndergrowthTorch {
 	height: UnitRange::new(1.00, 2.20),
 	stalk_radius: UnitRange::new(0.025, 0.035),
 	canopy_spread: UnitRange::new(0.55, 1.20),
-	projection_spacing: UnitRange::new(0.30, 0.46),
-	ring_spacing: UnitRange::new(0.12, 0.18),
 };
 
 const MINI_PENMARCH_TORCH: TropicalUndergrowthTorch = TropicalUndergrowthTorch {
 	height: UnitRange::new(1.20, 2.50),
 	stalk_radius: UnitRange::new(0.025, 0.035),
 	canopy_spread: UnitRange::new(0.65, 1.40),
-	projection_spacing: UnitRange::new(0.32, 0.50),
-	ring_spacing: UnitRange::new(0.12, 0.18),
 };
 
 const MINI_KAMAKURA_TORCH: TropicalUndergrowthTorch = TropicalUndergrowthTorch {
 	height: UnitRange::new(1.00, 2.30),
 	stalk_radius: UnitRange::new(0.025, 0.035),
 	canopy_spread: UnitRange::new(0.60, 1.30),
-	projection_spacing: UnitRange::new(0.30, 0.48),
-	ring_spacing: UnitRange::new(0.12, 0.16),
 };
 
 const BRIGHT_TUFT_MIX: PaletteMix = PaletteMix::new(&[
@@ -467,8 +442,8 @@ mod tests {
 						(
 							"torch",
 							TropicalUndergrowthItem::PenmarchTorch(_)
-								| TropicalUndergrowthItem::KamakuraTorch(_)
-								| TropicalUndergrowthItem::TorchTree(_),
+							| TropicalUndergrowthItem::KamakuraTorch(_)
+							| TropicalUndergrowthItem::TorchTree(_),
 						) => true,
 						_ => false,
 					})
@@ -527,7 +502,8 @@ mod tests {
 		assert!(rory.height.end <= 1.80);
 		assert!(rory.stalk_radius.start >= 0.020);
 		assert!(rory.stalk_radius.end <= 0.030);
-		assert!(rory.projection_spacing.start > 0.0);
+		assert!(rory.canopy_spread.start >= 0.50);
+		assert!(rory.canopy_density.end <= 1.0);
 
 		let TropicalUndergrowthItem::VaseTree(vase) = TropicalUndergrowthCell::MiniVaseTree.item()
 		else {
@@ -536,7 +512,7 @@ mod tests {
 		assert!(vase.height.start >= 1.00);
 		assert!(vase.height.end <= 2.30);
 		assert!(vase.stalk_radius.start >= 0.025);
-		assert!(vase.ring_spacing.start > 0.0);
+		assert!(vase.canopy_spread.end <= 1.50);
 
 		let TropicalUndergrowthItem::Storybook(story) =
 			TropicalUndergrowthCell::MiniSparseStorybook.item()
@@ -546,7 +522,7 @@ mod tests {
 		assert!(story.height.start >= 1.20);
 		assert!(story.height.end <= 2.50);
 		assert!(story.stalk_radius.end <= 0.035);
-		assert!(story.projection_spacing.end <= 0.50);
+		assert!(story.canopy_spread.start >= 0.60);
 		Ok(())
 	}
 

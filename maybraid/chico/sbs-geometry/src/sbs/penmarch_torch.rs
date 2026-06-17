@@ -6,24 +6,28 @@ use procedural_common::{NoiseConfig, NoiseParams, UnitRange};
 
 use crate::anchors::penmarch_torch::{
 	PenmarchTorchAnchorPerturbation, PenmarchTorchAnchors, PenmarchTorchProtoAnchors,
-	DEFAULT_FIRST_RING_UNIT_HEIGHT, DEFAULT_OUTER_FOLIAGE_DISTANCE_FRACTION,
+	DEFAULT_APEX_ONLY_FLIP_FRACTION, DEFAULT_BRANCH_ANGLE_TOLERANCE_DEGREES,
+	DEFAULT_CROWN_ELEVATION_DEGREES, DEFAULT_CROWN_FLIP_RING_U, DEFAULT_FIRST_RING_UNIT_HEIGHT,
+	DEFAULT_FLARE_ELEVATION_DEGREES, DEFAULT_OUTER_FOLIAGE_DISTANCE_FRACTION,
 	DEFAULT_PROJECTION_CENTER_FRACTION, DEFAULT_PROJECTION_MAX_FRACTION_OF_HEIGHT,
-	DEFAULT_PROJECTION_MIN_FRACTION_OF_HEIGHT, DEFAULT_STALK_BASE_RADIUS_FRACTION,
-	DEFAULT_STALK_HEIGHT_FRACTION, DEFAULT_TREE_HEIGHT, DEFAULT_APEX_ONLY_FLIP_FRACTION,
-	DEFAULT_BRANCH_ANGLE_TOLERANCE_DEGREES, DEFAULT_CROWN_ELEVATION_DEGREES,
-	DEFAULT_CROWN_FLIP_RING_U, DEFAULT_FLARE_ELEVATION_DEGREES, DEFAULT_SHOULDER_ELEVATION_DEGREES,
+	DEFAULT_PROJECTION_MIN_FRACTION_OF_HEIGHT, DEFAULT_SHOULDER_ELEVATION_DEGREES,
+	DEFAULT_STALK_BASE_RADIUS_FRACTION, DEFAULT_STALK_HEIGHT_FRACTION, DEFAULT_TREE_HEIGHT,
 	DEFAULT_VASE_PROFILE_EPSILON,
 };
-use crate::anchors::torch_tree::{
-	torch_ring_spacing_unit_height, TORCH_ANCHOR_ANGULAR_SCALE_HI, TORCH_ANCHOR_ANGULAR_SCALE_LO,
-	TORCH_ANCHOR_RADIUS_OFFSET_HI, TORCH_ANCHOR_RADIUS_OFFSET_LO, TORCH_ANCHOR_VERTICAL_OFFSET_HI,
-	TORCH_ANCHOR_VERTICAL_OFFSET_LO, TORCH_ANCHORS_PER_RING, TORCH_BRANCH_BASE_RADIUS_FRACTION_OF_STALK,
-	TORCH_BRANCH_DEPTH, TORCH_BRANCH_RADIUS_CHILD_SCALE_HI, TORCH_BRANCH_RADIUS_CHILD_SCALE_LO,
-	TORCH_CHILD_COUNT_MAX, TORCH_CHILD_COUNT_MIN, TORCH_LAST_RING_UNIT_HEIGHT,
-	TORCH_LEAF_RADIUS_FRACTION,
-};
 use crate::anchors::strict_stalk::StrictStalk;
+use crate::anchors::torch_tree::{
+	torch_ring_spacing_unit_height, TORCH_ANCHORS_PER_RING, TORCH_ANCHOR_ANGULAR_SCALE_HI,
+	TORCH_ANCHOR_ANGULAR_SCALE_LO, TORCH_ANCHOR_RADIUS_OFFSET_HI, TORCH_ANCHOR_RADIUS_OFFSET_LO,
+	TORCH_ANCHOR_VERTICAL_OFFSET_HI, TORCH_ANCHOR_VERTICAL_OFFSET_LO,
+	TORCH_BRANCH_BASE_RADIUS_FRACTION_OF_STALK, TORCH_BRANCH_DEPTH,
+	TORCH_BRANCH_RADIUS_CHILD_SCALE_HI, TORCH_BRANCH_RADIUS_CHILD_SCALE_LO, TORCH_CHILD_COUNT_MAX,
+	TORCH_CHILD_COUNT_MIN, TORCH_LAST_RING_UNIT_HEIGHT, TORCH_LEAF_RADIUS_FRACTION,
+};
 use crate::anchors::{Anchors, AnchorsToChain};
+use crate::sbs::scale::{
+	leaf_radius_for_stalk_scale, outer_foliage_distance_for_stalk, stalk_radius_scaled_range,
+	stalk_scaled_range,
+};
 use crate::BallStickChain;
 use crate::StorybookTreeChain;
 
@@ -90,7 +94,10 @@ pub struct PenmarchTorchRingParams {
 impl Default for PenmarchTorchRingParams {
 	fn default() -> Self {
 		Self {
-			height_range: UnitRange::new(DEFAULT_FIRST_RING_UNIT_HEIGHT, TORCH_LAST_RING_UNIT_HEIGHT),
+			height_range: UnitRange::new(
+				DEFAULT_FIRST_RING_UNIT_HEIGHT,
+				TORCH_LAST_RING_UNIT_HEIGHT,
+			),
 			spacing: torch_ring_spacing_unit_height(DEFAULT_STALK_HEIGHT_FRACTION),
 			anchors_per_ring: TORCH_ANCHORS_PER_RING,
 		}
@@ -331,7 +338,13 @@ impl PenmarchTorchSbs {
 	}
 
 	pub fn leaf_radius_world(&self) -> f32 {
-		self.height() * self.canopy.leaf_radius_fraction
+		leaf_radius_for_stalk_scale(
+			self.height(),
+			self.canopy.leaf_radius_fraction,
+			self.scale.stalk_height(),
+			DEFAULT_TREE_HEIGHT * DEFAULT_STALK_HEIGHT_FRACTION,
+			DEFAULT_TREE_HEIGHT,
+		)
 	}
 
 	pub fn to_proto(&self) -> PenmarchTorchProtoAnchors {
@@ -355,7 +368,11 @@ impl PenmarchTorchSbs {
 			branch_depth: self.growth.branch_depth,
 			child_count_min: self.growth.child_count_min,
 			child_count_max: self.growth.child_count_max.max(self.growth.child_count_min),
-			outer_foliage_distance_fraction: self.canopy.outer_foliage_distance_fraction,
+			outer_foliage_distance_fraction: outer_foliage_distance_for_stalk(
+				self.canopy.outer_foliage_distance_fraction,
+				self.scale.stalk_height(),
+				DEFAULT_TREE_HEIGHT * DEFAULT_STALK_HEIGHT_FRACTION,
+			),
 			branch_base_radius_fraction_of_stalk: self.growth.branch_base_radius_fraction_of_stalk,
 			branch_radius_child_scale: (
 				self.growth.branch_radius_child_scale_lo,
@@ -366,8 +383,20 @@ impl PenmarchTorchSbs {
 	}
 
 	pub fn to_anchors(&self) -> PenmarchTorchAnchors {
-		PenmarchTorchAnchors::new(self.to_proto())
-			.with_perturbation(self.anchor_perturbation.to_perturbation())
+		let mut perturbation = self.anchor_perturbation.to_perturbation();
+		let scaled = stalk_scaled_range(
+			UnitRange::new(perturbation.vertical_offset.start, perturbation.vertical_offset.end),
+			self.scale.stalk_height(),
+			DEFAULT_TREE_HEIGHT * DEFAULT_STALK_HEIGHT_FRACTION,
+		);
+		perturbation.vertical_offset = scaled.start..scaled.end;
+		let radius_scaled = stalk_radius_scaled_range(
+			UnitRange::new(perturbation.radius_offset.start, perturbation.radius_offset.end),
+			self.scale.stalk_base_radius_or_default(),
+			DEFAULT_TREE_HEIGHT * DEFAULT_STALK_BASE_RADIUS_FRACTION,
+		);
+		perturbation.radius_offset = radius_scaled.start..radius_scaled.end;
+		PenmarchTorchAnchors::new(self.to_proto()).with_perturbation(perturbation)
 	}
 
 	pub fn hysteresis_seeds(&self) -> Vec<StorybookTreeChain> {
@@ -404,8 +433,7 @@ mod tests {
 		assert_eq!(proto.anchors_per_ring, TORCH_ANCHORS_PER_RING);
 		assert!(
 			(proto.projection_max_fraction_of_height - DEFAULT_PROJECTION_MAX_FRACTION_OF_HEIGHT)
-				.abs()
-				< 1e-5
+				.abs() < 1e-5
 		);
 		Ok(())
 	}

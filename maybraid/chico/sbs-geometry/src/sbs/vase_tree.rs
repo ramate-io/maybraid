@@ -4,20 +4,24 @@
 use procedural_common::{noise_params_from_scalar_str, parse_unit_range};
 use procedural_common::{NoiseConfig, NoiseParams, UnitRange};
 
+use crate::anchors::strict_stalk::StrictStalk;
 use crate::anchors::vase_tree::{
 	VaseTreeAnchorPerturbation, VaseTreeAnchors, VaseTreeProtoAnchors, BUSH_STALK_HEIGHT_FRACTION,
 	DEFAULT_ANCHORS_PER_RING, DEFAULT_BIAS_ELEVATION_HI_DEGREES, DEFAULT_BIAS_ELEVATION_LO_DEGREES,
 	DEFAULT_BRANCH_ANGLE_TOLERANCE_DEGREES, DEFAULT_BRANCH_BASE_RADIUS_FRACTION_OF_STALK,
-	DEFAULT_BRANCH_DEPTH, DEFAULT_BRANCH_RADIUS_CHILD_SCALE_HI, DEFAULT_BRANCH_RADIUS_CHILD_SCALE_LO,
-	DEFAULT_CHILD_COUNT_MAX, DEFAULT_CHILD_COUNT_MIN, DEFAULT_FIRST_RING_UNIT_HEIGHT,
-	DEFAULT_LAST_RING_UNIT_HEIGHT, DEFAULT_LEAF_RADIUS_FRACTION, DEFAULT_OUTER_FOLIAGE_DISTANCE_FRACTION,
-	DEFAULT_PROJECTION_MAX_FRACTION_OF_HEIGHT, DEFAULT_PROJECTION_MIN_FRACTION_OF_HEIGHT,
-	DEFAULT_RING_SPACING_UNIT_HEIGHT, DEFAULT_STALK_BASE_RADIUS_FRACTION,
-	DEFAULT_STALK_HEIGHT_FRACTION, DEFAULT_TREE_HEIGHT, DEFAULT_UPPER_FOLIAGE_RING_U,
-	DEFAULT_VASE_PROFILE_CENTER, DEFAULT_VASE_PROFILE_EPSILON,
+	DEFAULT_BRANCH_DEPTH, DEFAULT_BRANCH_RADIUS_CHILD_SCALE_HI,
+	DEFAULT_BRANCH_RADIUS_CHILD_SCALE_LO, DEFAULT_CHILD_COUNT_MAX, DEFAULT_CHILD_COUNT_MIN,
+	DEFAULT_FIRST_RING_UNIT_HEIGHT, DEFAULT_LAST_RING_UNIT_HEIGHT, DEFAULT_LEAF_RADIUS_FRACTION,
+	DEFAULT_OUTER_FOLIAGE_DISTANCE_FRACTION, DEFAULT_PROJECTION_MAX_FRACTION_OF_HEIGHT,
+	DEFAULT_PROJECTION_MIN_FRACTION_OF_HEIGHT, DEFAULT_RING_SPACING_UNIT_HEIGHT,
+	DEFAULT_STALK_BASE_RADIUS_FRACTION, DEFAULT_STALK_HEIGHT_FRACTION, DEFAULT_TREE_HEIGHT,
+	DEFAULT_UPPER_FOLIAGE_RING_U, DEFAULT_VASE_PROFILE_CENTER, DEFAULT_VASE_PROFILE_EPSILON,
 };
-use crate::anchors::strict_stalk::StrictStalk;
 use crate::anchors::{Anchors, AnchorsToChain};
+use crate::sbs::scale::{
+	leaf_radius_for_stalk_scale, outer_foliage_distance_for_stalk, stalk_radius_scaled_range,
+	stalk_scaled_range,
+};
 use crate::BallStickChain;
 use crate::StorybookTreeChain;
 
@@ -84,7 +88,10 @@ pub struct VaseTreeRingParams {
 impl Default for VaseTreeRingParams {
 	fn default() -> Self {
 		Self {
-			height_range: UnitRange::new(DEFAULT_FIRST_RING_UNIT_HEIGHT, DEFAULT_LAST_RING_UNIT_HEIGHT),
+			height_range: UnitRange::new(
+				DEFAULT_FIRST_RING_UNIT_HEIGHT,
+				DEFAULT_LAST_RING_UNIT_HEIGHT,
+			),
 			spacing: DEFAULT_RING_SPACING_UNIT_HEIGHT,
 			anchors_per_ring: DEFAULT_ANCHORS_PER_RING,
 		}
@@ -320,7 +327,23 @@ impl VaseTreeSbs {
 	}
 
 	pub fn leaf_radius_world(&self) -> f32 {
-		self.height() * self.canopy.leaf_radius_fraction
+		leaf_radius_for_stalk_scale(
+			self.height(),
+			self.canopy.leaf_radius_fraction,
+			self.scale.stalk_height(),
+			DEFAULT_TREE_HEIGHT * DEFAULT_STALK_HEIGHT_FRACTION,
+			DEFAULT_TREE_HEIGHT,
+		)
+	}
+
+	pub fn apex_radius_world(&self, apex_ball_radius_fraction_of_height: f32) -> f32 {
+		leaf_radius_for_stalk_scale(
+			self.height(),
+			apex_ball_radius_fraction_of_height,
+			self.scale.stalk_height(),
+			DEFAULT_TREE_HEIGHT * DEFAULT_STALK_HEIGHT_FRACTION,
+			DEFAULT_TREE_HEIGHT,
+		)
 	}
 
 	/// Bush variant: shorter stalk (RFC ornamental / grape-vine form).
@@ -347,7 +370,11 @@ impl VaseTreeSbs {
 			child_count_min: self.growth.child_count_min,
 			child_count_max: self.growth.child_count_max.max(self.growth.child_count_min),
 			upper_foliage_ring_u: self.canopy.upper_foliage_ring_u,
-			outer_foliage_distance_fraction: self.canopy.outer_foliage_distance_fraction,
+			outer_foliage_distance_fraction: outer_foliage_distance_for_stalk(
+				self.canopy.outer_foliage_distance_fraction,
+				self.scale.stalk_height(),
+				DEFAULT_TREE_HEIGHT * DEFAULT_STALK_HEIGHT_FRACTION,
+			),
 			branch_base_radius_fraction_of_stalk: self.growth.branch_base_radius_fraction_of_stalk,
 			branch_radius_child_scale: (
 				self.growth.branch_radius_child_scale_lo,
@@ -358,8 +385,20 @@ impl VaseTreeSbs {
 	}
 
 	pub fn to_anchors(&self) -> VaseTreeAnchors {
-		VaseTreeAnchors::new(self.to_proto())
-			.with_perturbation(self.anchor_perturbation.to_perturbation())
+		let mut perturbation = self.anchor_perturbation.to_perturbation();
+		let scaled = stalk_scaled_range(
+			UnitRange::new(perturbation.vertical_offset.start, perturbation.vertical_offset.end),
+			self.scale.stalk_height(),
+			DEFAULT_TREE_HEIGHT * DEFAULT_STALK_HEIGHT_FRACTION,
+		);
+		perturbation.vertical_offset = scaled.start..scaled.end;
+		let radius_scaled = stalk_radius_scaled_range(
+			UnitRange::new(perturbation.radius_offset.start, perturbation.radius_offset.end),
+			self.scale.stalk_base_radius_or_default(),
+			DEFAULT_TREE_HEIGHT * DEFAULT_STALK_BASE_RADIUS_FRACTION,
+		);
+		perturbation.radius_offset = radius_scaled.start..radius_scaled.end;
+		VaseTreeAnchors::new(self.to_proto()).with_perturbation(perturbation)
 	}
 
 	pub fn hysteresis_seeds(&self) -> Vec<StorybookTreeChain> {
@@ -381,6 +420,7 @@ impl Anchors<StorybookTreeChain> for VaseTreeSbs {
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use crate::anchors::vase_tree::DEFAULT_APEX_BALL_RADIUS_FRACTION_OF_HEIGHT;
 	use anyhow::Result;
 
 	#[test]
@@ -413,6 +453,17 @@ mod tests {
 			(proto.stalk.stalk_height - DEFAULT_TREE_HEIGHT * BUSH_STALK_HEIGHT_FRACTION).abs()
 				< 1e-4
 		);
+		Ok(())
+	}
+
+	#[test]
+	fn apex_radius_scales_for_mini_forms() -> Result<()> {
+		let full = VaseTreeSbs::default();
+		let mut mini = VaseTreeSbs::default();
+		mini.scale.tree_height = 1.8;
+		let fraction = DEFAULT_APEX_BALL_RADIUS_FRACTION_OF_HEIGHT;
+		assert!((full.apex_radius_world(fraction) - full.height() * fraction).abs() < 1e-4);
+		assert!(mini.apex_radius_world(fraction) / mini.height() > fraction);
 		Ok(())
 	}
 }

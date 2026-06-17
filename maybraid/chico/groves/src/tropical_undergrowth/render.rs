@@ -244,13 +244,6 @@ fn span_fraction(canopy_spread: f32, height: f32) -> f32 {
 	(canopy_spread / height.max(0.5)).clamp(0.25, 1.5)
 }
 
-/// Derive anchor count from crown arc length and authored limb spacing so mini trees do not
-/// inherit full-size playground crowding.
-fn anchors_per_ring_from_spacing(canopy_spread: f32, spacing: f32, min: u32, max: u32) -> u32 {
-	let arc = std::f32::consts::PI * canopy_spread.max(0.2);
-	(arc / spacing.max(0.08)).round().clamp(min as f32, max as f32) as u32
-}
-
 impl BuildWithNoise<RorysHeadTrainedSbs> for TropicalUndergrowthRoryHead {
 	fn build_with_noise(&self, noise: NoiseParams) -> RorysHeadTrainedSbs {
 		let config = NoiseConfig::new(noise);
@@ -262,9 +255,8 @@ impl BuildWithNoise<RorysHeadTrainedSbs> for TropicalUndergrowthRoryHead {
 		geometry.scale.tree_height = height;
 		geometry.scale.stalk_base_radius = Some(stalk_radius);
 		geometry.canopy_noise = noise;
-		geometry.projection.span_fraction_of_height =
-			UnitRange::new(canopy_spread * 0.85, canopy_spread * 1.05);
-		geometry.anchor_perturbation.vertical_offset = UnitRange::new(-0.1, 0.1);
+		let span = span_fraction(canopy_spread, height);
+		geometry.projection.span_fraction_of_height = UnitRange::new(span * 0.85, span * 1.05);
 		geometry
 	}
 }
@@ -275,19 +267,13 @@ impl BuildWithNoise<VaseTreeSbs> for TropicalUndergrowthVaseTree {
 		let height = sample_f32(&config, self.height, 1.0).max(0.75);
 		let stalk_radius = sample_f32(&config, self.stalk_radius, 1.5);
 		let canopy_spread = sample_f32(&config, self.canopy_spread, 2.0);
-		let projection_spacing = sample_f32(&config, self.projection_spacing, 3.0);
-		let ring_spacing = sample_f32(&config, self.ring_spacing, 4.0);
 		let span = span_fraction(canopy_spread, height);
 
 		let mut geometry = VaseTreeSbs::default();
 		geometry.scale.tree_height = height;
 		geometry.scale.stalk_base_radius = Some(stalk_radius);
 		geometry.projection.span_fraction_of_height = UnitRange::new(span * 0.75, span);
-		geometry.rings.anchors_per_ring =
-			anchors_per_ring_from_spacing(canopy_spread, projection_spacing, 3, 5);
-		geometry.rings.spacing = ring_spacing;
 		geometry.canopy_noise = noise;
-		geometry.anchor_perturbation.vertical_offset = UnitRange::new(-0.2, 0.2);
 		geometry
 	}
 }
@@ -298,20 +284,14 @@ impl BuildWithNoise<StorybookTreeSbs> for TropicalUndergrowthStorybook {
 		let height = sample_f32(&config, self.height, 1.0).max(0.9);
 		let stalk_radius = sample_f32(&config, self.stalk_radius, 1.5);
 		let canopy_spread = sample_f32(&config, self.canopy_spread, 2.0);
-		let projection_spacing = sample_f32(&config, self.projection_spacing, 3.0);
-		let ring_spacing = sample_f32(&config, self.ring_spacing, 4.0);
 		let span = span_fraction(canopy_spread, height);
 
 		let mut geometry = StorybookTreeSbs::default();
 		geometry.scale.tree_height = height;
 		geometry.scale.stalk_base_radius = Some(stalk_radius);
 		geometry.projection.span_fraction_of_height = UnitRange::new(span * 0.70, span);
-		geometry.rings.anchors_per_ring =
-			anchors_per_ring_from_spacing(canopy_spread, projection_spacing, 3, 5);
-		geometry.rings.spacing = ring_spacing;
 		geometry.rings.height_range = UnitRange::new(0.50, 1.0);
 		geometry.canopy_noise = noise;
-		geometry.anchor_perturbation.vertical_offset = UnitRange::new(-0.2, 0.2);
 		geometry
 	}
 }
@@ -319,9 +299,6 @@ impl BuildWithNoise<StorybookTreeSbs> for TropicalUndergrowthStorybook {
 struct TorchSamples {
 	height: f32,
 	stalk_radius: f32,
-	canopy_spread: f32,
-	projection_spacing: f32,
-	ring_spacing: f32,
 	span: f32,
 }
 
@@ -330,15 +307,8 @@ fn sample_torch(torch: &TropicalUndergrowthTorch, noise: NoiseParams) -> TorchSa
 	let height = sample_f32(&config, torch.height, 1.0).max(0.75);
 	let stalk_radius = sample_f32(&config, torch.stalk_radius, 1.5);
 	let canopy_spread = sample_f32(&config, torch.canopy_spread, 2.0);
-	let projection_spacing = sample_f32(&config, torch.projection_spacing, 3.0);
-	let ring_spacing = sample_f32(&config, torch.ring_spacing, 4.0);
 	let span = span_fraction(canopy_spread, height);
-	TorchSamples { height, stalk_radius, canopy_spread, projection_spacing, ring_spacing, span }
-}
-
-/// Workaround until anchor vertical offset scales with tree height (see issue draft).
-fn mini_torch_vertical_offset() -> UnitRange {
-	UnitRange::new(-0.2, 0.2)
+	TorchSamples { height, stalk_radius, span }
 }
 
 impl BuildWithNoise<PenmarchTorchSbs> for TropicalUndergrowthTorch {
@@ -348,14 +318,7 @@ impl BuildWithNoise<PenmarchTorchSbs> for TropicalUndergrowthTorch {
 		geometry.scale.tree_height = s.height;
 		geometry.scale.stalk_base_radius = Some(s.stalk_radius);
 		geometry.projection.span_fraction_of_height = UnitRange::new(s.span * 0.75, s.span);
-		geometry.growth.branch_depth = 2;
-		geometry.growth.child_count_min = 1;
-		geometry.growth.child_count_max = 2;
-		geometry.rings.anchors_per_ring =
-			anchors_per_ring_from_spacing(s.canopy_spread, s.projection_spacing, 3, 5);
-		geometry.rings.spacing = s.ring_spacing;
 		geometry.canopy_noise = noise;
-		geometry.anchor_perturbation.vertical_offset = mini_torch_vertical_offset();
 		geometry
 	}
 }
@@ -367,11 +330,7 @@ impl BuildWithNoise<KamakuraTorchSbs> for TropicalUndergrowthTorch {
 		geometry.scale.tree_height = s.height;
 		geometry.scale.stalk_base_radius = Some(s.stalk_radius);
 		geometry.projection.span_fraction_of_height = UnitRange::new(s.span * 0.75, s.span);
-		geometry.rings.anchors_per_ring =
-			anchors_per_ring_from_spacing(s.canopy_spread, s.projection_spacing, 3, 5);
-		geometry.rings.spacing = s.ring_spacing;
 		geometry.canopy_noise = noise;
-		geometry.anchor_perturbation.vertical_offset = mini_torch_vertical_offset();
 		geometry
 	}
 }
@@ -477,7 +436,6 @@ where
 					let geometry = vase.build_with_noise(build_noise);
 					let mut tree =
 						VaseTree::<StickM, StickS, LeafM, LeafS, LeafM, LeafS>::default();
-					tree.apex_ball_radius_fraction_of_height = 0.0;
 					tree.geometry = geometry;
 					tree.stick_material = self.stick_material.clone();
 					tree.inner_leaf_material = self.leaf_material.clone();
@@ -668,7 +626,12 @@ mod tests {
 		let stalk = rory_geom.scale.stalk_base_radius_or_default();
 		assert!(stalk >= rory.stalk_radius.start.min(rory.stalk_radius.end));
 		assert!(stalk <= rory.stalk_radius.start.max(rory.stalk_radius.end));
-		assert!(rory_geom.rings.anchors_per_ring >= 3);
+		let default_rory = RorysHeadTrainedSbs::default();
+		assert_eq!(rory_geom.rings.anchors_per_ring, default_rory.rings.anchors_per_ring);
+		assert_eq!(
+			rory_geom.anchor_perturbation.vertical_offset,
+			default_rory.anchor_perturbation.vertical_offset
+		);
 
 		let TropicalUndergrowthItem::VaseTree(vase) = TropicalUndergrowthCell::MiniVaseTree.item()
 		else {
@@ -677,9 +640,13 @@ mod tests {
 		let vase_geom = vase.build_with_noise(noise);
 		assert!(vase_geom.height() >= vase.height.start.min(vase.height.end));
 		assert!(vase_geom.height() <= vase.height.start.max(vase.height.end));
-		assert!(vase_geom.rings.spacing >= vase.ring_spacing.start.min(vase.ring_spacing.end));
-		assert!(vase_geom.rings.spacing <= vase.ring_spacing.start.max(vase.ring_spacing.end));
-		assert!(vase_geom.rings.anchors_per_ring >= 3);
+		let default_vase = VaseTreeSbs::default();
+		assert_eq!(vase_geom.rings.spacing, default_vase.rings.spacing);
+		assert_eq!(vase_geom.rings.anchors_per_ring, default_vase.rings.anchors_per_ring);
+		assert_eq!(
+			vase_geom.anchor_perturbation.vertical_offset,
+			default_vase.anchor_perturbation.vertical_offset
+		);
 
 		let TropicalUndergrowthItem::Storybook(story) =
 			TropicalUndergrowthCell::MiniSparseStorybook.item()
@@ -689,9 +656,13 @@ mod tests {
 		let story_geom = story.build_with_noise(noise);
 		assert!(story_geom.height() >= story.height.start.min(story.height.end));
 		assert!(story_geom.height() <= story.height.start.max(story.height.end));
-		assert!(story_geom.rings.spacing >= story.ring_spacing.start.min(story.ring_spacing.end));
-		assert!(story_geom.rings.spacing <= story.ring_spacing.start.max(story.ring_spacing.end));
-		assert!(story_geom.rings.anchors_per_ring >= 3);
+		let default_story = StorybookTreeSbs::default();
+		assert_eq!(story_geom.rings.spacing, default_story.rings.spacing);
+		assert_eq!(story_geom.rings.anchors_per_ring, default_story.rings.anchors_per_ring);
+		assert_eq!(
+			story_geom.anchor_perturbation.vertical_offset,
+			default_story.anchor_perturbation.vertical_offset
+		);
 
 		let TropicalUndergrowthItem::PenmarchTorch(penmarch) =
 			TropicalUndergrowthCell::MiniPenmarchTorch.item()
@@ -701,6 +672,14 @@ mod tests {
 		let penmarch_geom = BuildWithNoise::<PenmarchTorchSbs>::build_with_noise(penmarch, noise);
 		assert!(penmarch_geom.height() >= penmarch.height.start.min(penmarch.height.end));
 		assert!(penmarch_geom.height() <= penmarch.height.start.max(penmarch.height.end));
+		let default_penmarch = PenmarchTorchSbs::default();
+		assert_eq!(penmarch_geom.rings.spacing, default_penmarch.rings.spacing);
+		assert_eq!(penmarch_geom.rings.anchors_per_ring, default_penmarch.rings.anchors_per_ring);
+		assert_eq!(penmarch_geom.growth.branch_depth, default_penmarch.growth.branch_depth);
+		assert_eq!(
+			penmarch_geom.anchor_perturbation.vertical_offset,
+			default_penmarch.anchor_perturbation.vertical_offset
+		);
 
 		let TropicalUndergrowthItem::KamakuraTorch(kamakura) =
 			TropicalUndergrowthCell::MiniKamakuraTorch.item()
@@ -710,6 +689,13 @@ mod tests {
 		let kamakura_geom = BuildWithNoise::<KamakuraTorchSbs>::build_with_noise(kamakura, noise);
 		assert!(kamakura_geom.height() >= kamakura.height.start.min(kamakura.height.end));
 		assert!(kamakura_geom.height() <= kamakura.height.start.max(kamakura.height.end));
+		let default_kamakura = KamakuraTorchSbs::default();
+		assert_eq!(kamakura_geom.rings.spacing, default_kamakura.rings.spacing);
+		assert_eq!(kamakura_geom.rings.anchors_per_ring, default_kamakura.rings.anchors_per_ring);
+		assert_eq!(
+			kamakura_geom.anchor_perturbation.vertical_offset,
+			default_kamakura.anchor_perturbation.vertical_offset
+		);
 
 		let TropicalUndergrowthItem::TorchTree(torch) =
 			TropicalUndergrowthCell::MiniTorchTree.item()
@@ -719,6 +705,12 @@ mod tests {
 		let torch_geom = BuildWithNoise::<PenmarchTorchSbs>::build_with_noise(torch, noise);
 		assert!(torch_geom.height() >= torch.height.start.min(torch.height.end));
 		assert!(torch_geom.height() <= torch.height.start.max(torch.height.end));
+		assert_eq!(torch_geom.rings.spacing, default_penmarch.rings.spacing);
+		assert_eq!(torch_geom.rings.anchors_per_ring, default_penmarch.rings.anchors_per_ring);
+		assert_eq!(
+			torch_geom.anchor_perturbation.vertical_offset,
+			default_penmarch.anchor_perturbation.vertical_offset
+		);
 		Ok(())
 	}
 

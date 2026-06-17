@@ -15,6 +15,10 @@ use crate::chain::storybook_tree::{
 	segment_fracs, storybook_branch_depth, StorybookTreeChain, StorybookTreePhase,
 };
 use crate::chain::{BranchOut, DepthBudget};
+use crate::sbs::scale::{
+	branch_base_radius_for_stalk, branch_radius_child_bounds_for_stalk,
+	branch_radius_child_scale_for_stalk,
+};
 use crate::BallStickNode;
 use procedural_common::NoiseParams;
 
@@ -160,7 +164,13 @@ impl StorybookTreeProtoAnchors {
 	/// Limb radius at ring anchors; floored so degenerate SBS fractions still produce visible sticks.
 	fn limb_base_radius(&self) -> f32 {
 		let base = self.stalk.stalk_base_radius.max(1e-4);
-		(base * self.branch_base_radius_fraction_of_stalk).max(0.02)
+		branch_base_radius_for_stalk(
+			base,
+			self.branch_base_radius_fraction_of_stalk,
+			0.02,
+			self.stalk.stalk_height,
+			DEFAULT_TREE_HEIGHT * DEFAULT_STALK_HEIGHT_FRACTION,
+		)
 	}
 
 	pub fn hysteresis_seeds(&self, chain_noise: NoiseConfig) -> Vec<StorybookTreeChain> {
@@ -170,6 +180,17 @@ impl StorybookTreeProtoAnchors {
 		let limb_r = self.limb_base_radius();
 		let depth = storybook_branch_depth(self.branch_depth);
 		let fracs = segment_fracs(depth);
+		let child_scale = branch_radius_child_scale_for_stalk(
+			self.branch_radius_child_scale,
+			self.stalk.stalk_height,
+			DEFAULT_TREE_HEIGHT * DEFAULT_STALK_HEIGHT_FRACTION,
+		);
+		let child_bounds = branch_radius_child_bounds_for_stalk(
+			self.stalk.stalk_base_radius,
+			limb_r,
+			self.stalk.stalk_height,
+			DEFAULT_TREE_HEIGHT * DEFAULT_STALK_HEIGHT_FRACTION,
+		);
 
 		for z_frac in self.ring_height_fractions() {
 			let u = self.ring_mix_u(z_frac);
@@ -193,7 +214,8 @@ impl StorybookTreeProtoAnchors {
 							..(self.child_count_max as usize).saturating_add(1),
 					)
 					.with_radius_range(limb_r..limb_r)
-					.with_radius_range_child_scale(self.branch_radius_child_scale)
+					.with_radius_range_child_scale(child_scale)
+					.with_radius_range_child_bounds(child_bounds.clone())
 					.with_length(first_len * 0.97..first_len * 1.03);
 
 				out.push(StorybookTreeChain::new(
