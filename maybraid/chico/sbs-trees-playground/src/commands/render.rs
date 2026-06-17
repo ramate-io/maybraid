@@ -23,9 +23,9 @@ use crate::render::{
 	RenderKamakuraTorch, RenderLiamsConifer, RenderModerateLodFrondCrown, RenderNorthernConifer,
 	RenderPalmBush, RenderPenmarchTorch, RenderRorysHeadTrained, RenderSopesBanyan,
 	RenderSpearTuft, RenderStorybookTree, RenderSubject, RenderSucculentTuft,
-	RenderTemperateConifer, RenderTropicalTufts, RenderTuftPatch, RenderVaseTree,
-	RenderWaialeaPalm, RenderWeepingTuft, RenderWildGrass, RenderTallGrass, RenderMonsterGrass,
-	RenderRiverineGreen, RenderLowBush, RenderHighBush, RenderBushScrub,
+	RenderTemperateConifer, RenderTropicalTufts, RenderTropicalUndergrowth, RenderTuftPatch,
+	RenderVaseTree, RenderWaialeaPalm, RenderWeepingTuft, RenderWildGrass, RenderTallGrass,
+	RenderMonsterGrass, RenderRiverineGreen, RenderLowBush, RenderHighBush, RenderBushScrub,
 };
 
 /// Shared render flags (resolution + scene transform) wrapped around per-item args.
@@ -130,6 +130,14 @@ impl CellRenderHelper<RenderBushScrub> {
 		let mut scrub = self.render.inner.clone();
 		scrub.extent = self.grove_extent(scrub.cell_extent_xz());
 		scrub
+	}
+}
+
+impl CellRenderHelper<RenderTropicalUndergrowth> {
+	pub fn configured_tropical_undergrowth(&self) -> RenderTropicalUndergrowth {
+		let mut grove = self.render.inner.clone();
+		grove.extent = self.grove_extent(grove.cell_extent_xz());
+		grove
 	}
 }
 
@@ -249,6 +257,7 @@ pub enum Render {
 	TropicalTufts(CellRenderHelper<RenderTropicalTufts>),
 	CommonTufts(CellRenderHelper<RenderCommonTufts>),
 	BushScrub(CellRenderHelper<RenderBushScrub>),
+	TropicalUndergrowth(CellRenderHelper<RenderTropicalUndergrowth>),
 	TallGrass(CellRenderHelper<RenderTallGrass>),
 	WildGrass(CellRenderHelper<RenderWildGrass>),
 	MonsterGrass(CellRenderHelper<RenderMonsterGrass>),
@@ -322,6 +331,9 @@ impl Render {
 			Self::BushScrub(h) => h
 				.render
 				.config_with(RenderSubject::BushScrub(h.configured_bush_scrub())),
+			Self::TropicalUndergrowth(h) => h.render.config_with(RenderSubject::TropicalUndergrowth(
+				h.configured_tropical_undergrowth(),
+			)),
 			Self::TallGrass(h) => h
 				.render
 				.config_with(RenderSubject::TallGrass(h.configured_tall_grass())),
@@ -1145,6 +1157,51 @@ mod tests {
 			anyhow::bail!("expected bush scrub subject");
 		};
 		assert_eq!(subject.placement_cells().len(), 196);
+		assert!(!subject.placements().is_empty());
+		Ok(())
+	}
+
+	#[test]
+	fn tropical_undergrowth_defaults_spawn_placements() -> Result<()> {
+		let cmd = crate::commands::PlaygroundCommand::parse_line("render tropical-undergrowth")
+			.map_err(|e| anyhow::anyhow!("{e}"))?;
+		let crate::commands::PlaygroundCommand::Render(Render::TropicalUndergrowth(helper)) = cmd
+		else {
+			anyhow::bail!("expected tropical-undergrowth render command");
+		};
+		let grove = helper.configured_tropical_undergrowth();
+		assert!(grove.grove.variant_weights.is_none());
+		let placements = grove.placements();
+		assert_eq!(helper.grove_extent_xz, 100.0);
+		assert!(
+			!placements.is_empty(),
+			"expected a visible tropical-undergrowth preview with default flags, got {} placements",
+			placements.len()
+		);
+		Ok(())
+	}
+
+	#[test]
+	fn tropical_undergrowth_command_preserves_grove_params() -> Result<()> {
+		let cmd = crate::commands::PlaygroundCommand::parse_line(
+			"render tropical-undergrowth --elevation 0.35 --grove-extent-xz 35 --cell-extent-xz 5,5",
+		)
+		.map_err(|e| anyhow::anyhow!("{e}"))?;
+		let crate::commands::PlaygroundCommand::Render(Render::TropicalUndergrowth(helper)) = cmd
+		else {
+			anyhow::bail!("expected tropical-undergrowth render command");
+		};
+		assert!((helper.grove_extent_xz - 35.0).abs() < 1e-5);
+		assert_eq!(helper.render.inner.grove.cell_extent_xz, Some(Vec2::splat(5.0)));
+		let grove = helper.configured_tropical_undergrowth();
+		assert_eq!(grove.placement_cells().len(), 49);
+		assert!((grove.terrain.elevation - 0.35).abs() < 1e-5);
+		assert!(!grove.placements().is_empty());
+		let cfg = Render::TropicalUndergrowth(helper).into_render_config();
+		let RenderSubject::TropicalUndergrowth(subject) = cfg.subject else {
+			anyhow::bail!("expected tropical undergrowth subject");
+		};
+		assert_eq!(subject.placement_cells().len(), 49);
 		assert!(!subject.placements().is_empty());
 		Ok(())
 	}

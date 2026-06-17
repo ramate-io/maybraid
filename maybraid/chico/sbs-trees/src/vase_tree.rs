@@ -18,7 +18,7 @@ use render_item::{CascadeChunk, RenderItem};
 
 use chico_sbs_geometry::DEFAULT_APEX_BALL_RADIUS_FRACTION_OF_HEIGHT;
 
-use crate::conifer_canopy_apex::spawn_apex_chico_ball_at_tip;
+use crate::conifer_canopy_apex::spawn_apex_chico_ball_at_tip_with_radius;
 use crate::skipped_mesh_material::{
 	SkippedInnerLeafMeshMaterial, SkippedOuterLeafMeshMaterial, SkippedStickMeshMaterial,
 };
@@ -163,7 +163,9 @@ where
 			Some(root),
 		);
 
-		let mut inner_ball = self.inner_leaf_surface_noise.build_scalar::<ChicoBall<InnerLeafM, InnerLeafS>>();
+		let mut inner_ball = self
+			.inner_leaf_surface_noise
+			.build_scalar::<ChicoBall<InnerLeafM, InnerLeafS>>();
 		inner_ball.material = self.inner_leaf_material.clone();
 		let mut outer_splay = PlaneSplay::<OuterLeafM, OuterLeafS>::default();
 		outer_splay.material = self.outer_leaf_material.clone();
@@ -182,14 +184,13 @@ where
 		);
 
 		let tip = stalk_tip_from_chain(&chain);
-		spawn_apex_chico_ball_at_tip::<InnerLeafM, _>(
-			self.geometry.height(),
+		spawn_apex_chico_ball_at_tip_with_radius::<InnerLeafM, _>(
+			self.geometry.apex_radius_world(self.apex_ball_radius_fraction_of_height),
 			&tip,
 			commands,
 			cascade_chunk,
 			root,
 			&self.inner_leaf_surface_noise,
-			self.apex_ball_radius_fraction_of_height,
 			self.inner_leaf_material.clone(),
 		);
 

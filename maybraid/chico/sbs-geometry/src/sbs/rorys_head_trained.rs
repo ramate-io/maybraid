@@ -13,11 +13,15 @@ use crate::anchors::rorys_head_trained::{
 	DEFAULT_CANOPY_RING_UNIT_HEIGHT, DEFAULT_CHILD_COUNT_MAX, DEFAULT_CHILD_COUNT_MIN,
 	DEFAULT_LEAF_RADIUS_FRACTION, DEFAULT_OUTER_FOLIAGE_DISTANCE_FRACTION,
 	DEFAULT_PROJECTION_MAX_FRACTION_OF_HEIGHT, DEFAULT_PROJECTION_MIN_FRACTION_OF_HEIGHT,
-	DEFAULT_STALK_BASE_RADIUS_FRACTION, DEFAULT_STALK_HEIGHT_FRACTION,
-	DEFAULT_STALK_SECTION_COUNT, DEFAULT_TREE_HEIGHT,
+	DEFAULT_STALK_BASE_RADIUS_FRACTION, DEFAULT_STALK_HEIGHT_FRACTION, DEFAULT_STALK_SECTION_COUNT,
+	DEFAULT_TREE_HEIGHT,
 };
 use crate::anchors::strict_stalk::StrictStalk;
 use crate::anchors::{Anchors, AnchorsToChain};
+use crate::sbs::scale::{
+	leaf_radius_for_stalk_scale, outer_foliage_distance_for_stalk, stalk_radius_scaled_range,
+	stalk_scaled_range,
+};
 use crate::BallStickChain;
 use crate::StorybookTreeChain;
 
@@ -297,16 +301,20 @@ impl RorysHeadTrainedSbs {
 	}
 
 	pub fn leaf_radius_world(&self) -> f32 {
-		self.height() * self.canopy.leaf_radius_fraction
+		leaf_radius_for_stalk_scale(
+			self.height(),
+			self.canopy.leaf_radius_fraction,
+			self.scale.stalk_height(),
+			DEFAULT_TREE_HEIGHT * DEFAULT_STALK_HEIGHT_FRACTION,
+			DEFAULT_TREE_HEIGHT,
+		)
 	}
 
 	/// RFC bush / grape-vine: shorter stalk and fixed wide spread (`0.60 * H`).
 	pub fn apply_bush_preset(&mut self) {
 		self.scale.stalk_height_fraction = BUSH_STALK_HEIGHT_FRACTION;
-		self.projection.span_fraction_of_height = UnitRange::new(
-			BUSH_PROJECTION_FRACTION_OF_HEIGHT,
-			BUSH_PROJECTION_FRACTION_OF_HEIGHT,
-		);
+		self.projection.span_fraction_of_height =
+			UnitRange::new(BUSH_PROJECTION_FRACTION_OF_HEIGHT, BUSH_PROJECTION_FRACTION_OF_HEIGHT);
 	}
 
 	pub fn to_proto(&self) -> RorysHeadTrainedProtoAnchors {
@@ -323,7 +331,11 @@ impl RorysHeadTrainedSbs {
 			child_count_min: self.growth.child_count_min,
 			child_count_max: self.growth.child_count_max.max(self.growth.child_count_min),
 			stalk_section_count: self.growth.stalk_section_count,
-			outer_foliage_distance_fraction: self.canopy.outer_foliage_distance_fraction,
+			outer_foliage_distance_fraction: outer_foliage_distance_for_stalk(
+				self.canopy.outer_foliage_distance_fraction,
+				self.scale.stalk_height(),
+				DEFAULT_TREE_HEIGHT * DEFAULT_STALK_HEIGHT_FRACTION,
+			),
 			branch_base_radius_fraction_of_stalk: self.growth.branch_base_radius_fraction_of_stalk,
 			branch_radius_child_scale: (
 				self.growth.branch_radius_child_scale_lo,
@@ -334,8 +346,20 @@ impl RorysHeadTrainedSbs {
 	}
 
 	pub fn to_anchors(&self) -> RorysHeadTrainedAnchors {
-		RorysHeadTrainedAnchors::new(self.to_proto())
-			.with_perturbation(self.anchor_perturbation.to_perturbation())
+		let mut perturbation = self.anchor_perturbation.to_perturbation();
+		let scaled = stalk_scaled_range(
+			UnitRange::new(perturbation.vertical_offset.start, perturbation.vertical_offset.end),
+			self.scale.stalk_height(),
+			DEFAULT_TREE_HEIGHT * DEFAULT_STALK_HEIGHT_FRACTION,
+		);
+		perturbation.vertical_offset = scaled.start..scaled.end;
+		let radius_scaled = stalk_radius_scaled_range(
+			UnitRange::new(perturbation.radius_offset.start, perturbation.radius_offset.end),
+			self.scale.stalk_base_radius_or_default(),
+			DEFAULT_TREE_HEIGHT * DEFAULT_STALK_BASE_RADIUS_FRACTION,
+		);
+		perturbation.radius_offset = radius_scaled.start..radius_scaled.end;
+		RorysHeadTrainedAnchors::new(self.to_proto()).with_perturbation(perturbation)
 	}
 
 	pub fn hysteresis_seeds(&self) -> Vec<StorybookTreeChain> {
@@ -372,8 +396,7 @@ mod tests {
 		assert_eq!(proto.anchors_per_ring, DEFAULT_ANCHORS_PER_RING);
 		assert!(
 			(proto.projection_max_fraction_of_height - DEFAULT_PROJECTION_MAX_FRACTION_OF_HEIGHT)
-				.abs()
-				< 1e-5
+				.abs() < 1e-5
 		);
 		Ok(())
 	}
@@ -383,7 +406,10 @@ mod tests {
 		let mut sbs = RorysHeadTrainedSbs::default();
 		sbs.apply_bush_preset();
 		let proto = sbs.to_proto();
-		assert!((proto.stalk.stalk_height - DEFAULT_TREE_HEIGHT * BUSH_STALK_HEIGHT_FRACTION).abs() < 1e-4);
+		assert!(
+			(proto.stalk.stalk_height - DEFAULT_TREE_HEIGHT * BUSH_STALK_HEIGHT_FRACTION).abs()
+				< 1e-4
+		);
 		assert!(
 			(proto.projection_min_fraction_of_height - BUSH_PROJECTION_FRACTION_OF_HEIGHT).abs()
 				< 1e-5

@@ -5,8 +5,8 @@ use chico_ball_components::chico_ball::ChicoBall;
 use chico_ball_components::frond::{align_frond_direction, FrondCrown, FrondCrownShape};
 use chico_sbs_geometry::render::mix_seed::mix_seed_below_fraction;
 use chico_sbs_geometry::{
-	liams_stalk_tip_from_chain, BallStickChain, BallStickNode, FriendsConiferChain, FriendsConiferSbs,
-	LiamsConiferChain, LiamsConiferSbs, NorthernConiferSbs,
+	liams_stalk_tip_from_chain, BallStickChain, BallStickNode, FriendsConiferChain,
+	FriendsConiferSbs, LiamsConiferChain, LiamsConiferSbs, NorthernConiferSbs,
 };
 use procedural_common::NoiseParams;
 use render_item::CascadeChunk;
@@ -40,7 +40,7 @@ fn local_transform_at_tip(
 	Transform {
 		translation: tip.position,
 		rotation,
-		scale: Vec3::splat(world_uniform_scale / tip.radius.max(1e-4)),
+		scale: Vec3::splat(world_uniform_scale.max(1e-8)),
 	}
 }
 
@@ -60,6 +60,31 @@ where
 	LeafS: Clone + Into<MeshMaterial3d<LeafM>> + Send + Sync + 'static + Default,
 {
 	let world_radius = tree_height * apex_ball_radius_fraction;
+	spawn_apex_chico_ball_at_tip_with_radius(
+		world_radius,
+		tip,
+		commands,
+		cascade_chunk,
+		parent,
+		leaf_noise,
+		leaf_material,
+	)
+}
+
+/// [`ChicoBall`] at a crown tip with an already-resolved world radius.
+pub fn spawn_apex_chico_ball_at_tip_with_radius<LeafM, LeafS>(
+	world_radius: f32,
+	tip: &BallStickNode,
+	commands: &mut Commands,
+	cascade_chunk: &CascadeChunk,
+	parent: Entity,
+	leaf_noise: &NoiseParams,
+	leaf_material: LeafS,
+) -> Vec<Entity>
+where
+	LeafM: Material + Send + Sync + 'static,
+	LeafS: Clone + Into<MeshMaterial3d<LeafM>> + Send + Sync + 'static + Default,
+{
 	let apex_noise = leaf_noise.with_seed(leaf_noise.seed.wrapping_add(0xA3E7));
 	let mut ball = apex_noise.build_scalar::<ChicoBall<LeafM, LeafS>>();
 	ball.material = leaf_material;
@@ -233,6 +258,16 @@ mod tests {
 		let tip = BallStickNode::new(Vec3::new(1.0, 25.0, 2.0), 0.15);
 		assert!(!sample_apex_canopy_spawn(&noise, &tip, 0.0));
 		assert!(sample_apex_canopy_spawn(&noise, &tip, 1.0));
+	}
+
+	#[test]
+	fn apex_transform_uses_world_scale_not_tip_radius() {
+		let tiny_tip = BallStickNode::new(Vec3::new(0.0, 1.5, 0.0), 0.002);
+		let normal_tip = BallStickNode::new(Vec3::new(0.0, 1.5, 0.0), 0.2);
+		let tiny = local_transform_at_tip(&tiny_tip, 0.18, Quat::IDENTITY);
+		let normal = local_transform_at_tip(&normal_tip, 0.18, Quat::IDENTITY);
+		assert!((tiny.scale.x - 0.18).abs() < 1e-5);
+		assert_eq!(tiny.scale, normal.scale);
 	}
 
 	#[test]

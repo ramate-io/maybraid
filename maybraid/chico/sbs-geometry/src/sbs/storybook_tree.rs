@@ -12,6 +12,10 @@ use crate::anchors::storybook_tree::{
 };
 use crate::anchors::strict_stalk::StrictStalk;
 use crate::anchors::{Anchors, AnchorsToChain};
+use crate::sbs::scale::{
+	leaf_radius_for_stalk_scale, outer_foliage_distance_for_stalk, stalk_radius_scaled_range,
+	stalk_scaled_range,
+};
 use crate::BallStickChain;
 use crate::StorybookTreeChain;
 
@@ -322,7 +326,13 @@ impl StorybookTreeSbs {
 	}
 
 	pub fn leaf_radius_world(&self) -> f32 {
-		self.height() * self.canopy.leaf_radius_fraction
+		leaf_radius_for_stalk_scale(
+			self.height(),
+			self.canopy.leaf_radius_fraction,
+			self.scale.stalk_height(),
+			DEFAULT_TREE_HEIGHT * DEFAULT_STALK_HEIGHT_FRACTION,
+			DEFAULT_TREE_HEIGHT,
+		)
 	}
 
 	pub fn to_proto(&self) -> StorybookTreeProtoAnchors {
@@ -341,7 +351,11 @@ impl StorybookTreeSbs {
 			branch_depth: self.growth.branch_depth,
 			child_count_min: self.growth.child_count_min,
 			child_count_max: self.growth.child_count_max.max(self.growth.child_count_min),
-			outer_foliage_distance_fraction: self.canopy.outer_foliage_distance_fraction,
+			outer_foliage_distance_fraction: outer_foliage_distance_for_stalk(
+				self.canopy.outer_foliage_distance_fraction,
+				self.scale.stalk_height(),
+				DEFAULT_TREE_HEIGHT * DEFAULT_STALK_HEIGHT_FRACTION,
+			),
 			branch_base_radius_fraction_of_stalk: self.growth.branch_base_radius_fraction_of_stalk,
 			branch_radius_child_scale: (
 				self.growth.branch_radius_child_scale_lo,
@@ -352,8 +366,20 @@ impl StorybookTreeSbs {
 	}
 
 	pub fn to_anchors(&self) -> StorybookTreeAnchors {
-		StorybookTreeAnchors::new(self.to_proto())
-			.with_perturbation(self.anchor_perturbation.to_perturbation())
+		let mut perturbation = self.anchor_perturbation.to_perturbation();
+		let scaled = stalk_scaled_range(
+			UnitRange::new(perturbation.vertical_offset.start, perturbation.vertical_offset.end),
+			self.scale.stalk_height(),
+			DEFAULT_TREE_HEIGHT * DEFAULT_STALK_HEIGHT_FRACTION,
+		);
+		perturbation.vertical_offset = scaled.start..scaled.end;
+		let radius_scaled = stalk_radius_scaled_range(
+			UnitRange::new(perturbation.radius_offset.start, perturbation.radius_offset.end),
+			self.scale.stalk_base_radius_or_default(),
+			DEFAULT_TREE_HEIGHT * DEFAULT_STALK_BASE_RADIUS_FRACTION,
+		);
+		perturbation.radius_offset = radius_scaled.start..radius_scaled.end;
+		StorybookTreeAnchors::new(self.to_proto()).with_perturbation(perturbation)
 	}
 
 	pub fn hysteresis_seeds(&self) -> Vec<StorybookTreeChain> {
@@ -409,7 +435,8 @@ mod tests {
 		let sbs = StorybookTreeSbs::default();
 		assert!((sbs.projection.max_fraction() - DEFAULT_MAX_PROJECTION_FRACTION).abs() < 1e-5);
 		assert!(
-			(sbs.projection.min_fraction() - DEFAULT_PROJECTION_MIN_FRACTION_OF_HEIGHT).abs() < 1e-5
+			(sbs.projection.min_fraction() - DEFAULT_PROJECTION_MIN_FRACTION_OF_HEIGHT).abs()
+				< 1e-5
 		);
 		let proto = sbs.to_proto();
 		let h = proto.tree_height;

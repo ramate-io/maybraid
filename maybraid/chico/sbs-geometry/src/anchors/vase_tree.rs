@@ -13,6 +13,10 @@ use crate::chain::storybook_tree::{
 };
 use crate::chain::{BranchOut, DepthBudget};
 use crate::projection::vase_projection_length;
+use crate::sbs::scale::{
+	branch_base_radius_for_stalk, branch_radius_child_bounds_for_stalk,
+	branch_radius_child_scale_for_stalk,
+};
 use crate::BallStickNode;
 use procedural_common::NoiseParams;
 
@@ -170,7 +174,13 @@ impl VaseTreeProtoAnchors {
 
 	fn limb_base_radius(&self) -> f32 {
 		let base = self.stalk.stalk_base_radius.max(STALK_RADIUS_EPSILON);
-		(base * self.branch_base_radius_fraction_of_stalk).max(LIMB_BASE_RADIUS_FLOOR)
+		branch_base_radius_for_stalk(
+			base,
+			self.branch_base_radius_fraction_of_stalk,
+			LIMB_BASE_RADIUS_FLOOR,
+			self.stalk.stalk_height,
+			DEFAULT_TREE_HEIGHT * DEFAULT_STALK_HEIGHT_FRACTION,
+		)
 	}
 
 	pub fn hysteresis_seeds(&self, chain_noise: NoiseConfig) -> Vec<StorybookTreeChain> {
@@ -180,8 +190,19 @@ impl VaseTreeProtoAnchors {
 		let limb_r = self.limb_base_radius();
 		let depth = storybook_branch_depth(self.branch_depth);
 		let fracs = segment_fracs(depth);
-		let child_count = self.child_count_min as usize
-			..(self.child_count_max as usize).saturating_add(1);
+		let child_scale = branch_radius_child_scale_for_stalk(
+			self.branch_radius_child_scale,
+			self.stalk.stalk_height,
+			DEFAULT_TREE_HEIGHT * DEFAULT_STALK_HEIGHT_FRACTION,
+		);
+		let child_bounds = branch_radius_child_bounds_for_stalk(
+			self.stalk.stalk_base_radius,
+			limb_r,
+			self.stalk.stalk_height,
+			DEFAULT_TREE_HEIGHT * DEFAULT_STALK_HEIGHT_FRACTION,
+		);
+		let child_count =
+			self.child_count_min as usize..(self.child_count_max as usize).saturating_add(1);
 
 		let mut out = Vec::new();
 
@@ -202,20 +223,25 @@ impl VaseTreeProtoAnchors {
 				let first_len = proj * fracs[0];
 				let noise = chain_noise.clone();
 
-				let branch = BranchOut::radial_out_horizontal(BallStickNode::new(pos, limb_r), radial)
-					.with_hysteresis_context(noise.clone(), 0, bias)
-					.with_bias_ray(bias)
-					.with_bias_blend(self.bias_blend)
-					.with_ray_degrees_of_freedom(self.branch_angle_tolerance)
-					.with_child_count(child_count.clone())
-					.with_radius_range(limb_r..limb_r)
-					.with_radius_range_child_scale(self.branch_radius_child_scale)
-					.with_length(first_len * SEGMENT_LENGTH_JITTER_LO..first_len * SEGMENT_LENGTH_JITTER_HI);
+				let branch =
+					BranchOut::radial_out_horizontal(BallStickNode::new(pos, limb_r), radial)
+						.with_hysteresis_context(noise.clone(), 0, bias)
+						.with_bias_ray(bias)
+						.with_bias_blend(self.bias_blend)
+						.with_ray_degrees_of_freedom(self.branch_angle_tolerance)
+						.with_child_count(child_count.clone())
+						.with_radius_range(limb_r..limb_r)
+						.with_radius_range_child_scale(child_scale)
+						.with_radius_range_child_bounds(child_bounds.clone())
+						.with_length(
+							first_len * SEGMENT_LENGTH_JITTER_LO
+								..first_len * SEGMENT_LENGTH_JITTER_HI,
+						);
 
 				out.push(StorybookTreeChain::new(
-					noise
-						.clone()
-						.with_frequency(noise.params().frequency * BRANCH_HYSTERESIS_FREQUENCY_SCALE),
+					noise.clone().with_frequency(
+						noise.params().frequency * BRANCH_HYSTERESIS_FREQUENCY_SCALE,
+					),
 					proj,
 					depth,
 					0.0,
@@ -271,8 +297,7 @@ impl VaseTreeAnchors {
 	}
 
 	pub fn hysteresis_seeds(&self, chain_noise: NoiseConfig) -> Vec<StorybookTreeChain> {
-		self.perturbation
-			.perturb_anchors(self.proto().hysteresis_seeds(chain_noise))
+		self.perturbation.perturb_anchors(self.proto().hysteresis_seeds(chain_noise))
 	}
 }
 

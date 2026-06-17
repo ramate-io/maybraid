@@ -11,6 +11,7 @@ pub mod monster_grass;
 pub mod riverine_green;
 pub mod tall_grass;
 pub mod tropical_tufts;
+pub mod tropical_undergrowth;
 pub mod wild_grass;
 
 #[cfg(feature = "render")]
@@ -38,6 +39,11 @@ pub use tall_grass::{TallGrassCell, TallGrassClump, TallGrassItem};
 pub use tropical_tufts::{
 	TropicalPalmBush, TropicalTuftClump, TropicalTuftsCell, TropicalTuftsItem,
 };
+pub use tropical_undergrowth::{
+	TropicalUndergrowthCell, TropicalUndergrowthItem, TropicalUndergrowthPalm,
+	TropicalUndergrowthRoryHead, TropicalUndergrowthStorybook, TropicalUndergrowthTorch,
+	TropicalUndergrowthTuft, TropicalUndergrowthVaseTree,
+};
 pub use wild_grass::{WildGrassCell, WildGrassClump, WildGrassItem};
 
 #[cfg(feature = "render")]
@@ -58,5 +64,7 @@ pub use riverine_green::{RiverineGreen, RiverineGreenStd};
 pub use tall_grass::{TallGrass, TallGrassStd};
 #[cfg(feature = "render")]
 pub use tropical_tufts::{TropicalTufts, TropicalTuftsStd};
+#[cfg(feature = "render")]
+pub use tropical_undergrowth::{TropicalUndergrowth, TropicalUndergrowthStd};
 #[cfg(feature = "render")]
 pub use wild_grass::{WildGrass, WildGrassStd};
