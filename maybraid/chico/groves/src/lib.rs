@@ -12,6 +12,7 @@ pub mod low_bush;
 pub mod monster_grass;
 pub mod riverine_green;
 pub mod spotty_bushes;
+pub mod strange_oasis;
 pub mod tall_grass;
 pub mod tropical_thicket;
 pub mod tropical_tufts;
@@ -49,6 +50,10 @@ pub use low_bush::{LowBushBush, LowBushCell, LowBushItem};
 pub use monster_grass::{MonsterGrassCell, MonsterGrassClump, MonsterGrassItem};
 pub use riverine_green::{RiverineGreenBush, RiverineGreenCell, RiverineGreenItem};
 pub use spotty_bushes::{SpottyBushesBush, SpottyBushesCell, SpottyBushesItem};
+pub use strange_oasis::{
+	StrangeOasisDatePalm, StrangeOasisCell, StrangeOasisItem, StrangeOasisStorybook,
+	StrangeOasisTorch,
+};
 pub use tall_grass::{TallGrassCell, TallGrassClump, TallGrassItem};
 pub use tropical_thicket::{
 	TropicalThicketBanyan, TropicalThicketBush, TropicalThicketCell, TropicalThicketItem,
@@ -88,6 +93,8 @@ pub use monster_grass::{MonsterGrass, MonsterGrassStd};
 pub use riverine_green::{RiverineGreen, RiverineGreenStd};
 #[cfg(feature = "render")]
 pub use spotty_bushes::{SpottyBushes, SpottyBushesStd};
+#[cfg(feature = "render")]
+pub use strange_oasis::{StrangeOasis, StrangeOasisStd};
 #[cfg(feature = "render")]
 pub use tall_grass::{TallGrass, TallGrassStd};
 #[cfg(feature = "render")]

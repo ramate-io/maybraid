@@ -30,7 +30,7 @@ const DENSE_CANOPY_DENSITY: UnitRange = UnitRange::new(0.50, 0.85);
 /// placements break the underlying grid instead of clustering near cell centers.
 pub fn definition() -> GroveDefinition<UnendingJungleCell> {
 	GroveDefinition {
-		cell_extent_xz: Vec2::splat(10.5),
+		cell_extent_xz: Vec2::splat(9.0),
 		placement: GrovePlacementRanges::new(
 			UnitRange::new(0.85, 1.15),
 			UnitRange::new(-10.5, 10.5),
@@ -274,7 +274,7 @@ impl UnendingJungleCell {
 		let waialea =
 			PlacementConstraints::new(UnitRange::new(0.0, 0.45), UnitRange::new(0.0, 0.70));
 		GroveDistribution::new(vec![
-			GroveBucket::none(10.0),
+			GroveBucket::none(8.0),
 			GroveBucket::placed(2.0, honu, Self::SmallHonuBanyan),
 			GroveBucket::placed(1.0, sope, Self::SmallSopeBanyan),
 			GroveBucket::placed(2.0, storybook, Self::LowerStorybook),
@@ -343,7 +343,7 @@ mod tests {
 		let dist = UnendingJungleCell::distribution();
 		assert_eq!(dist.len(), 9);
 		assert!(dist.buckets[0].item.is_none());
-		assert_eq!(dist.buckets[0].weight, 12.0);
+		assert_eq!(dist.buckets[0].weight, 8.0);
 		assert_eq!(dist.buckets[1].item, Some(UnendingJungleCell::SmallHonuBanyan));
 		assert_eq!(dist.buckets[1].weight, 2.0);
 		assert_eq!(dist.buckets[2].item, Some(UnendingJungleCell::SmallSopeBanyan));
@@ -359,7 +359,7 @@ mod tests {
 		assert_eq!(dist.buckets[7].item, Some(UnendingJungleCell::RoryAccent));
 		assert_eq!(dist.buckets[7].weight, 0.35);
 		assert_eq!(dist.buckets[8].item, Some(UnendingJungleCell::WaialeaPalmAccent));
-		assert_eq!(dist.buckets[8].weight, 0.25);
+		assert_eq!(dist.buckets[8].weight, 0.55);
 		Ok(())
 	}
 

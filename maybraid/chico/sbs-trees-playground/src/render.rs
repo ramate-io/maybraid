@@ -13,6 +13,7 @@ use chico_groves::low_bush::LowBushStd;
 use chico_groves::monster_grass::MonsterGrassStd;
 use chico_groves::riverine_green::RiverineGreenStd;
 use chico_groves::spotty_bushes::SpottyBushesStd;
+use chico_groves::strange_oasis::StrangeOasisStd;
 use chico_groves::tall_grass::TallGrassStd;
 use chico_groves::tropical_thicket::TropicalThicketStd;
 use chico_groves::tropical_tufts::TropicalTuftsStd;
@@ -265,6 +266,9 @@ pub type RenderSpottyBushes = SpottyBushesStd;
 /// [`UnendingJungleStd`] — moderate lower-canopy jungle grove ([#322](https://github.com/ramate-io/maybraid/issues/322)).
 pub type RenderUnendingJungle = UnendingJungleStd;
 
+/// [`StrangeOasisStd`] — sparse oasis lower-canopy grove ([#323](https://github.com/ramate-io/maybraid/issues/323)).
+pub type RenderStrangeOasis = StrangeOasisStd;
+
 /// The configured render item currently shown in the scene.
 ///
 /// This is the typed scene state behind [`RenderConfig`]: material patching
@@ -308,6 +312,7 @@ pub enum RenderSubject {
 	HighBush(RenderHighBush),
 	SpottyBushes(RenderSpottyBushes),
 	UnendingJungle(RenderUnendingJungle),
+	StrangeOasis(RenderStrangeOasis),
 	SpearTuft(RenderSpearTuft),
 	BuddhaHandTuft(RenderBuddhaHandTuft),
 	WeepingTuft(RenderWeepingTuft),
@@ -355,6 +360,7 @@ impl RenderSubject {
 			Self::HighBush(_) => "HighBush",
 			Self::SpottyBushes(_) => "SpottyBushes",
 			Self::UnendingJungle(_) => "UnendingJungle",
+			Self::StrangeOasis(_) => "StrangeOasis",
 			Self::SpearTuft(_) => "SpearTuft",
 			Self::BuddhaHandTuft(_) => "BuddhaHandTuft",
 			Self::WeepingTuft(_) => "WeepingTuft",
@@ -590,6 +596,18 @@ impl RenderSubject {
 					g.leaf_surface_noise
 				)
 			}
+			Self::StrangeOasis(g) => {
+				format!(
+					"{:?}|extent={:?}|cell_extent_xz={:?}|terrain={:?}|chain={:?}|stick={:?}|leaf={:?}",
+					g.grove,
+					g.extent,
+					g.cell_extent_xz(),
+					g.terrain,
+					g.tree_chain_noise,
+					g.stick_surface_noise,
+					g.leaf_surface_noise
+				)
+			}
 			Self::SpearTuft(t) => format!("{:?}", t.shape),
 			Self::BuddhaHandTuft(t) => format!("{:?}", t.shape),
 			Self::WeepingTuft(t) => format!("{:?}", t.shape),
@@ -643,6 +661,7 @@ impl RenderSubject {
 			Self::HighBush(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::SpottyBushes(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::UnendingJungle(item) => item.spawn_render_items(commands, chunk, transform),
+			Self::StrangeOasis(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::SpearTuft(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::BuddhaHandTuft(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::WeepingTuft(item) => item.spawn_render_items(commands, chunk, transform),

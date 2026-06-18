@@ -26,8 +26,8 @@ use crate::render::{
 	RenderRorysHeadTrained, RenderSopesBanyan, RenderSpearTuft, RenderSpottyBushes,
 	RenderStorybookTree, RenderSubject, RenderSucculentTuft, RenderTallGrass,
 	RenderTemperateConifer, RenderTropicalThicket, RenderTropicalTufts, RenderTropicalUndergrowth,
-	RenderTuftPatch, RenderUnendingJungle, RenderVaseTree, RenderWaialeaPalm, RenderWeepingTuft,
-	RenderWildGrass,
+	RenderTuftPatch, RenderUnendingJungle, RenderStrangeOasis, RenderVaseTree, RenderWaialeaPalm,
+	RenderWeepingTuft, RenderWildGrass,
 };
 
 /// Shared render flags (resolution + scene transform) wrapped around per-item args.
@@ -231,6 +231,14 @@ impl CellRenderHelper<RenderUnendingJungle> {
 	}
 }
 
+impl CellRenderHelper<RenderStrangeOasis> {
+	pub fn configured_strange_oasis(&self) -> RenderStrangeOasis {
+		let mut grove = self.render.inner.clone();
+		grove.extent = self.grove_extent(grove.cell_extent_xz());
+		grove
+	}
+}
+
 /// High bush shape plus the surface-noise flags that live on the render item (not the shape).
 #[derive(Clone, clap::Args)]
 #[command(rename_all = "kebab-case")]
@@ -311,6 +319,7 @@ pub enum Render {
 	HighBush(CellRenderHelper<RenderHighBush>),
 	SpottyBushes(CellRenderHelper<RenderSpottyBushes>),
 	UnendingJungle(CellRenderHelper<RenderUnendingJungle>),
+	StrangeOasis(CellRenderHelper<RenderStrangeOasis>),
 	SpearTuft(RenderHelper<SpearTuftShape>),
 	BuddhaHandTuft(RenderHelper<BuddhaHandTuftShape>),
 	WeepingTuft(RenderHelper<WeepingTuftShape>),
@@ -414,6 +423,9 @@ impl Render {
 			Self::UnendingJungle(h) => h
 				.render
 				.config_with(RenderSubject::UnendingJungle(h.configured_unending_jungle())),
+			Self::StrangeOasis(h) => h
+				.render
+				.config_with(RenderSubject::StrangeOasis(h.configured_strange_oasis())),
 			Self::SpearTuft(h) => h.config_with(RenderSubject::SpearTuft(
 				RenderSpearTuft::from_shape(h.inner.clone(), Default::default()),
 			)),
@@ -1260,6 +1272,50 @@ mod tests {
 		let cfg = Render::UnendingJungle(helper).into_render_config();
 		let RenderSubject::UnendingJungle(subject) = cfg.subject else {
 			anyhow::bail!("expected unending jungle subject");
+		};
+		assert_eq!(subject.placement_cells().len(), cell_count);
+		assert!(!subject.placements().is_empty());
+		Ok(())
+	}
+
+	#[test]
+	fn strange_oasis_defaults_spawn_placements() -> Result<()> {
+		let cmd = crate::commands::PlaygroundCommand::parse_line("render strange-oasis")
+			.map_err(|e| anyhow::anyhow!("{e}"))?;
+		let crate::commands::PlaygroundCommand::Render(Render::StrangeOasis(helper)) = cmd else {
+			anyhow::bail!("expected strange-oasis render command");
+		};
+		let grove = helper.configured_strange_oasis();
+		assert!(grove.grove.variant_weights.is_none());
+		let placements = grove.placements();
+		assert_eq!(helper.grove_extent_xz, 100.0);
+		assert!(
+			!placements.is_empty(),
+			"expected a visible strange-oasis preview with default flags, got {} placements",
+			placements.len()
+		);
+		Ok(())
+	}
+
+	#[test]
+	fn strange_oasis_command_preserves_grove_params() -> Result<()> {
+		let cmd = crate::commands::PlaygroundCommand::parse_line(
+			"render strange-oasis --elevation 0.25 --grove-extent-xz 39 --cell-extent-xz 12,12",
+		)
+		.map_err(|e| anyhow::anyhow!("{e}"))?;
+		let crate::commands::PlaygroundCommand::Render(Render::StrangeOasis(helper)) = cmd else {
+			anyhow::bail!("expected strange-oasis render command");
+		};
+		assert!((helper.grove_extent_xz - 39.0).abs() < 1e-5);
+		assert_eq!(helper.render.inner.grove.cell_extent_xz, Some(Vec2::splat(12.0)));
+		let grove = helper.configured_strange_oasis();
+		let cell_count = grove.placement_cells().len();
+		assert_eq!(cell_count, 16);
+		assert!((grove.terrain.elevation - 0.25).abs() < 1e-5);
+		assert!(!grove.placements().is_empty());
+		let cfg = Render::StrangeOasis(helper).into_render_config();
+		let RenderSubject::StrangeOasis(subject) = cfg.subject else {
+			anyhow::bail!("expected strange oasis subject");
 		};
 		assert_eq!(subject.placement_cells().len(), cell_count);
 		assert!(!subject.placements().is_empty());
