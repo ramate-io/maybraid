@@ -6,15 +6,16 @@ use chico_ball_components::{FrondCrown, ModerateLodFrondCrown};
 use chico_groves::braid_grass::BraidGrassStd;
 use chico_groves::bush_scrub::BushScrubStd;
 use chico_groves::common_tufts::CommonTuftsStd;
-use chico_groves::monster_grass::MonsterGrassStd;
 use chico_groves::high_bush::HighBushStd;
 use chico_groves::jerrys_chaparral::JerrysChaparralStd;
 use chico_groves::levantine_scrub::LevantineScrubStd;
 use chico_groves::low_bush::LowBushStd;
+use chico_groves::monster_grass::MonsterGrassStd;
 use chico_groves::riverine_green::RiverineGreenStd;
+use chico_groves::spotty_bushes::SpottyBushesStd;
 use chico_groves::tall_grass::TallGrassStd;
-use chico_groves::tropical_tufts::TropicalTuftsStd;
 use chico_groves::tropical_thicket::TropicalThicketStd;
+use chico_groves::tropical_tufts::TropicalTuftsStd;
 use chico_groves::tropical_undergrowth::TropicalUndergrowthStd;
 use chico_groves::wild_grass::WildGrassStd;
 use chico_sbs_trees::braid_oak_tree::BraidOakTree;
@@ -257,6 +258,9 @@ pub type RenderLowBush = LowBushStd;
 /// [`HighBushStd`] — moderate tall shrub understory grove ([#312](https://github.com/ramate-io/maybraid/issues/312)).
 pub type RenderHighBush = HighBushStd;
 
+/// [`SpottyBushesStd`] — very sparse High Bush punctuation grove ([#321](https://github.com/ramate-io/maybraid/issues/321)).
+pub type RenderSpottyBushes = SpottyBushesStd;
+
 /// The configured render item currently shown in the scene.
 ///
 /// This is the typed scene state behind [`RenderConfig`]: material patching
@@ -298,6 +302,7 @@ pub enum RenderSubject {
 	RiverineGreen(RenderRiverineGreen),
 	LowBush(RenderLowBush),
 	HighBush(RenderHighBush),
+	SpottyBushes(RenderSpottyBushes),
 	SpearTuft(RenderSpearTuft),
 	BuddhaHandTuft(RenderBuddhaHandTuft),
 	WeepingTuft(RenderWeepingTuft),
@@ -343,6 +348,7 @@ impl RenderSubject {
 			Self::RiverineGreen(_) => "RiverineGreen",
 			Self::LowBush(_) => "LowBush",
 			Self::HighBush(_) => "HighBush",
+			Self::SpottyBushes(_) => "SpottyBushes",
 			Self::SpearTuft(_) => "SpearTuft",
 			Self::BuddhaHandTuft(_) => "BuddhaHandTuft",
 			Self::WeepingTuft(_) => "WeepingTuft",
@@ -554,6 +560,18 @@ impl RenderSubject {
 					g.leaf_surface_noise
 				)
 			}
+			Self::SpottyBushes(g) => {
+				format!(
+					"{:?}|extent={:?}|cell_extent_xz={:?}|terrain={:?}|chain={:?}|stick={:?}|leaf={:?}",
+					g.grove,
+					g.extent,
+					g.cell_extent_xz(),
+					g.terrain,
+					g.bush_chain_noise,
+					g.stick_surface_noise,
+					g.leaf_surface_noise
+				)
+			}
 			Self::SpearTuft(t) => format!("{:?}", t.shape),
 			Self::BuddhaHandTuft(t) => format!("{:?}", t.shape),
 			Self::WeepingTuft(t) => format!("{:?}", t.shape),
@@ -605,6 +623,7 @@ impl RenderSubject {
 			Self::RiverineGreen(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::LowBush(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::HighBush(item) => item.spawn_render_items(commands, chunk, transform),
+			Self::SpottyBushes(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::SpearTuft(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::BuddhaHandTuft(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::WeepingTuft(item) => item.spawn_render_items(commands, chunk, transform),
