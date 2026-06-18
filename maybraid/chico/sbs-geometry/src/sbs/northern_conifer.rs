@@ -6,7 +6,7 @@
 
 #[cfg(feature = "clap")]
 use clap::Args;
-use procedural_common::{NoiseConfig, UnitRange};
+use procedural_common::{NoiseConfig, NoiseParams, UnitRange};
 
 use super::liams_conifer::{LiamsConiferSbs, RingAnchorParams};
 use crate::anchors::liams_conifer::{LiamsConiferAnchors, LiamsConiferProtoAnchors};
@@ -258,6 +258,26 @@ mod tests {
 	fn build_chain_has_stalk_and_branches() -> anyhow::Result<()> {
 		let chain = NorthernConiferSbs::default().build_chain();
 		assert!(chain.nodes.len() > 10);
+		Ok(())
+	}
+
+	#[test]
+	fn mini_sapling_branch_radii_stay_within_stalk_relative_bounds() -> anyhow::Result<()> {
+		let mut sbs = NorthernConiferSbs::default();
+		sbs.liams.scale.stalk_height = 3.0;
+		sbs.liams.canopy_noise = NoiseParams::from_scalar(7.0, 1.0, 1.0, 1);
+		let chain = sbs.build_chain();
+		let stalk = sbs.liams.scale.stalk_base_radius_or_default();
+		let max = chain
+			.nodes_with_hysteresis()
+			.filter_map(|(node, hysteresis)| {
+				hysteresis.active_branch_profile().map(|_| node.radius)
+			})
+			.fold(0.0_f32, f32::max);
+		assert!(
+			max <= stalk * 0.36,
+			"northern max branch radius {max} vs stalk {stalk}"
+		);
 		Ok(())
 	}
 }

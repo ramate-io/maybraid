@@ -6,7 +6,8 @@ pub mod mu;
 pub mod noise;
 
 pub use args::{
-	parse_count_pair, parse_unit_range, parse_usize_range, CountPair, UnitRange, UsizeRange,
+	parse_count_pair, parse_u32_range, parse_unit_range, parse_usize_range, CountPair, U32Range,
+	UnitRange, UsizeRange,
 };
 pub use fastnoise_lite::{FastNoiseLite, FractalType, NoiseType};
 pub use mu::{sdf_band_margin, NUMERIC_SURFACE_EPSILON};

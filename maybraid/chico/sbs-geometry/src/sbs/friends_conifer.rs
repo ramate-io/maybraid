@@ -6,8 +6,9 @@
 use procedural_common::noise_params_from_scalar_str;
 #[cfg(feature = "clap")]
 use procedural_common::parse_unit_range;
-use procedural_common::{NoiseConfig, NoiseParams, UnitRange};
+use procedural_common::{parse_usize_range, NoiseConfig, NoiseParams, UnitRange, UsizeRange};
 
+use crate::anchors::friends_conifer::FriendsConiferChain;
 use crate::anchors::friends_conifer::{
 	FriendsConiferAnchorPerturbation, FriendsConiferAnchors, FriendsConiferProtoAnchors,
 	FRIENDS_BRANCH_BASE_RADIUS_FRACTION_OF_STALK, FRIENDS_BRANCH_RADIUS_CHILD_SCALE,
@@ -17,8 +18,12 @@ use crate::anchors::friends_conifer::{
 };
 use crate::anchors::strict_stalk::StrictStalk;
 use crate::anchors::{Anchors, AnchorsToChain};
-use crate::anchors::friends_conifer::FriendsConiferChain;
+use crate::sbs::scale::{stalk_radius_scaled_range, stalk_scaled_range};
 use crate::BallStickChain;
+
+/// Full-size Friend's Conifer defaults used to scale mini-tree perturbation and limb caps.
+const REFERENCE_STALK_HEIGHT: f32 = 30.0;
+const REFERENCE_STALK_BASE_RADIUS: f32 = 0.025 * REFERENCE_STALK_HEIGHT;
 
 /// High-level world scale ([RFC §3.1.7.14](https://github.com/ramate-io/maybraid/tree/main/rfc/rfc-000-000-183-chico-vegetation/03-01-stalk-and-ball-stick-trees/07-well-known-tree-constructions/14-friend-s-conifer/README.md)).
 #[derive(Clone, Debug, PartialEq)]
@@ -95,6 +100,16 @@ pub struct FriendsLogProjectionParams {
 	pub alpha: f32,
 	#[cfg_attr(feature = "clap", arg(long, default_value_t = 3.0))]
 	pub beta: f32,
+	#[cfg_attr(
+		feature = "clap",
+		arg(
+			long = "child-count",
+			default_value = "0..2",
+			value_parser = parse_usize_range,
+			value_name = "MIN..MAX"
+		)
+	)]
+	pub child_count_range: UsizeRange,
 }
 
 impl Default for FriendsLogProjectionParams {
@@ -106,6 +121,7 @@ impl Default for FriendsLogProjectionParams {
 			),
 			alpha: 8.0,
 			beta: 3.0,
+			child_count_range: UsizeRange::new(0, 2),
 		}
 	}
 }
@@ -124,11 +140,7 @@ pub struct FriendsConiferGrowthParams {
 
 impl Default for FriendsConiferGrowthParams {
 	fn default() -> Self {
-		Self {
-			branch_depth: 3,
-			downward_bias_degrees: 12.0,
-			angle_tolerance_degrees: 32.0,
-		}
+		Self { branch_depth: 3, downward_bias_degrees: 12.0, angle_tolerance_degrees: 32.0 }
 	}
 }
 
@@ -150,7 +162,7 @@ pub struct FriendsAnchorPerturbationParams {
 		feature = "clap",
 		arg(
 			long = "anchor-angular-perturbation",
-			default_value = "0.0..0.5",
+			default_value = "0.0..2.0",
 			value_parser = parse_unit_range,
 			value_name = "MIN..MAX"
 		)
@@ -170,7 +182,7 @@ pub struct FriendsAnchorPerturbationParams {
 		feature = "clap",
 		arg(
 			long = "anchor-perturbation-noise",
-			default_value = "1337,1,1,1",
+			default_value = "1337,0.1,1,1",
 			value_parser = noise_params_from_scalar_str,
 			value_name = "SEED,FREQUENCY,AMPLITUDE,OCTAVES[,TYPE]"
 		)
@@ -182,7 +194,7 @@ impl Default for FriendsAnchorPerturbationParams {
 	fn default() -> Self {
 		Self {
 			vertical_offset: UnitRange::new(-1.0, 1.0),
-			angular_scale: UnitRange::new(0.0, 0.5),
+			angular_scale: UnitRange::new(0.0, 2.0),
 			radius_offset: UnitRange::new(-0.05, 0.05),
 			noise: NoiseParams::default(),
 		}
@@ -247,6 +259,19 @@ impl FriendsConiferSbs {
 	}
 
 	pub fn to_anchors(&self) -> FriendsConiferAnchors {
+		let mut perturbation = self.anchor_perturbation.to_perturbation();
+		let vertical = stalk_scaled_range(
+			self.anchor_perturbation.vertical_offset,
+			self.scale.stalk_height,
+			REFERENCE_STALK_HEIGHT,
+		);
+		perturbation.vertical_offset = vertical.start..vertical.end;
+		let radius = stalk_radius_scaled_range(
+			self.anchor_perturbation.radius_offset,
+			self.scale.stalk_base_radius_or_default(),
+			REFERENCE_STALK_BASE_RADIUS,
+		);
+		perturbation.radius_offset = radius.start..radius.end;
 		FriendsConiferAnchors::new(FriendsConiferProtoAnchors {
 			stalk: self.scale.to_stalk(),
 			first_ring_unit_height: self.rings.height_range.start,
@@ -262,8 +287,10 @@ impl FriendsConiferSbs {
 			branch_depth: self.growth.branch_depth,
 			branch_base_radius_fraction_of_stalk: FRIENDS_BRANCH_BASE_RADIUS_FRACTION_OF_STALK,
 			branch_radius_child_scale: FRIENDS_BRANCH_RADIUS_CHILD_SCALE,
+			child_count_range: self.projection.child_count_range.into(),
+			..Default::default()
 		})
-		.with_perturbation(self.anchor_perturbation.to_perturbation())
+		.with_perturbation(perturbation)
 	}
 
 	pub fn hysteresis_seeds(&self) -> Vec<FriendsConiferChain> {
@@ -285,6 +312,7 @@ impl Anchors<FriendsConiferChain> for FriendsConiferSbs {
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use anyhow::Result;
 
 	#[test]
 	fn default_frontend_converts_to_anchor_recipe() {
@@ -293,18 +321,38 @@ mod tests {
 		let proto = anchors.proto();
 
 		assert_eq!(proto.stalk, sbs.scale.to_stalk());
-		assert!((proto.max_projection_fraction_of_height - FRIENDS_MAX_PROJECTION_FRACTION_OF_HEIGHT).abs()
-			< 1e-6);
-		assert!((proto.min_projection_fraction_of_height - FRIENDS_MIN_PROJECTION_FRACTION_OF_HEIGHT).abs()
-			< 1e-6);
+		assert!(
+			(proto.max_projection_fraction_of_height - FRIENDS_MAX_PROJECTION_FRACTION_OF_HEIGHT)
+				.abs() < 1e-6
+		);
+		assert!(
+			(proto.min_projection_fraction_of_height - FRIENDS_MIN_PROJECTION_FRACTION_OF_HEIGHT)
+				.abs() < 1e-6
+		);
 		assert_eq!(proto.projection_alpha, 8.0);
 		assert_eq!(proto.anchors_per_ring, 4);
+		assert_eq!(proto.child_count_range, 0..1);
 	}
 
 	#[test]
 	fn build_chain_has_stalk_and_branches() -> anyhow::Result<()> {
 		let chain = FriendsConiferSbs::default().build_chain();
 		assert!(chain.nodes.len() > 8);
+		Ok(())
+	}
+
+	#[test]
+	fn mini_sapling_perturbation_scales_with_stalk() -> Result<()> {
+		let mut mini = FriendsConiferSbs::default();
+		mini.scale.stalk_height = 3.0;
+		let anchors = mini.to_anchors();
+		let scale = mini.scale.stalk_height / REFERENCE_STALK_HEIGHT;
+		assert!((anchors.perturbation.vertical_offset.start + scale).abs() < 1e-4);
+		assert!((anchors.perturbation.vertical_offset.end - scale).abs() < 1e-4);
+		assert!(
+			anchors.perturbation.radius_offset.end
+				<= mini.scale.stalk_base_radius_or_default() * 0.01
+		);
 		Ok(())
 	}
 }

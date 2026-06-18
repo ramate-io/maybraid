@@ -14,7 +14,12 @@ use crate::anchors::liams_conifer::{
 };
 use crate::anchors::strict_stalk::StrictStalk;
 use crate::anchors::{Anchors, AnchorsToChain};
+use crate::sbs::scale::{stalk_radius_scaled_range, stalk_scaled_range};
 use crate::{BallStickChain, LiamsConiferChain};
+
+/// Full-size Liam's Conifer defaults used to scale mini-tree perturbation and limb caps.
+const REFERENCE_STALK_HEIGHT: f32 = 30.0;
+const REFERENCE_STALK_BASE_RADIUS: f32 = 0.025 * REFERENCE_STALK_HEIGHT;
 
 /// High-level world scale for Liam's Conifer ([RFC §3.1.7.2](https://github.com/ramate-io/maybraid/tree/main/rfc/rfc-000-000-183-chico-vegetation/03-01-stalk-and-ball-stick-trees/07-well-known-tree-constructions/02-liam-s-conifer/README.md)).
 #[derive(Clone, Debug, PartialEq)]
@@ -236,6 +241,19 @@ impl LiamsConiferSbs {
 
 	/// Anchor recipe used by [`Self::build_chain`] / [`Anchors::anchors`].
 	pub fn to_anchors(&self) -> LiamsConiferAnchors {
+		let mut perturbation = self.anchor_perturbation.to_perturbation();
+		let vertical = stalk_scaled_range(
+			self.anchor_perturbation.vertical_offset,
+			self.scale.stalk_height,
+			REFERENCE_STALK_HEIGHT,
+		);
+		perturbation.vertical_offset = vertical.start..vertical.end;
+		let radius = stalk_radius_scaled_range(
+			self.anchor_perturbation.radius_offset,
+			self.scale.stalk_base_radius_or_default(),
+			REFERENCE_STALK_BASE_RADIUS,
+		);
+		perturbation.radius_offset = radius.start..radius.end;
 		LiamsConiferAnchors::new(LiamsConiferProtoAnchors {
 			stalk: self.scale.to_stalk(),
 			first_ring_unit_height: self.rings.height_range.start,
@@ -252,7 +270,7 @@ impl LiamsConiferSbs {
 			branch_radius_child_scale: (0.72, 0.80),
 			linear_projection_taper: false,
 		})
-		.with_perturbation(self.anchor_perturbation.to_perturbation())
+		.with_perturbation(perturbation)
 	}
 
 	pub fn hysteresis_seeds(&self) -> Vec<LiamsConiferChain> {
@@ -274,6 +292,7 @@ impl Anchors<LiamsConiferChain> for LiamsConiferSbs {
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use anyhow::Result;
 
 	#[test]
 	fn default_frontend_converts_to_anchor_recipe() {
@@ -311,6 +330,18 @@ mod tests {
 	fn build_chain_has_stalk_and_branches() -> anyhow::Result<()> {
 		let chain = LiamsConiferSbs::default().build_chain();
 		assert!(chain.nodes.len() > 10);
+		Ok(())
+	}
+
+	#[test]
+	fn mini_sapling_perturbation_scales_with_stalk() -> Result<()> {
+		let mut mini = LiamsConiferSbs::default();
+		mini.scale.stalk_height = 3.0;
+		let anchors = mini.to_anchors();
+		let scale = mini.scale.stalk_height / REFERENCE_STALK_HEIGHT;
+		assert!((anchors.perturbation.vertical_offset.start + scale).abs() < 1e-4);
+		assert!((anchors.perturbation.vertical_offset.end - scale).abs() < 1e-4);
+		assert!(anchors.perturbation.radius_offset.end <= mini.scale.stalk_base_radius_or_default() * 0.01);
 		Ok(())
 	}
 }

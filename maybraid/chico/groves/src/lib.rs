@@ -5,6 +5,7 @@ pub mod grove;
 pub mod braid_grass;
 pub mod bush_scrub;
 pub mod common_tufts;
+pub mod arid_conifer_sapling;
 pub mod conifer_sapling;
 pub mod goettingen_follow;
 pub mod high_bush;
@@ -40,6 +41,10 @@ pub use grove::{patch_spawned_leaf_material, resolve_palette_color, WithPalette}
 pub use braid_grass::{BraidGrassCell, BraidGrassClump, BraidGrassItem, BraidSpearClump};
 pub use bush_scrub::{BushScrubBush, BushScrubCell, BushScrubItem, BushScrubTuft};
 pub use common_tufts::{CommonTuftClump, CommonTuftsCell, CommonTuftsItem};
+pub use arid_conifer_sapling::{
+	AridConiferSaplingCell, AridConiferSaplingFriendsConifer, AridConiferSaplingItem,
+	AridConiferSaplingLiamsConifer, AridConiferSaplingNorthernConifer,
+};
 pub use conifer_sapling::{
 	ConiferSaplingCell, ConiferSaplingFriendsConifer, ConiferSaplingItem,
 	ConiferSaplingNorthernConifer,

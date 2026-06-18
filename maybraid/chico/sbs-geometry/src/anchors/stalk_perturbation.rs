@@ -156,6 +156,13 @@ pub fn perturb_branch_out(mut branch: BranchOut, perturbation: AnchorPerturbatio
 	);
 	branch.radius_range = (branch.radius_range.start + perturbation.radius_offset).max(1e-4)
 		..(branch.radius_range.end + perturbation.radius_offset).max(1e-4);
+	if let Some(bounds) = &branch.radius_range_child_bounds {
+		let lo = bounds.start.min(bounds.end);
+		let hi = bounds.start.max(bounds.end);
+		let radius = branch.node.radius.clamp(lo, hi);
+		branch.node.radius = radius;
+		branch.radius_range = radius..radius;
+	}
 	branch
 }
 
