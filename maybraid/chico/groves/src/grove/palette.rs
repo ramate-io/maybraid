@@ -145,6 +145,8 @@ pub fn resolve_palette_color(name: &str) -> Option<Color> {
 		"manzanita_red" => Color::srgb(0.72, 0.28, 0.22),
 		"vine_bark" => Color::srgb(0.48, 0.36, 0.24),
 		"conifer_bark" => Color::srgb(0.32, 0.26, 0.18),
+		"cold_bark" => Color::srgb(0.38, 0.34, 0.28),
+		"cold_green" => Color::srgb(0.16, 0.38, 0.32),
 		"needle_green" => Color::srgb(0.22, 0.42, 0.28),
 		"smooth_burgundy" => Color::srgb(0.52, 0.22, 0.20),
 		"flower_yellow" => Color::srgb(0.88, 0.78, 0.32),
