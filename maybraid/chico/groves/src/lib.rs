@@ -12,10 +12,12 @@ pub mod low_bush;
 pub mod monster_grass;
 pub mod riverine_green;
 pub mod spotty_bushes;
+pub mod strange_oasis;
 pub mod tall_grass;
 pub mod tropical_thicket;
 pub mod tropical_tufts;
 pub mod tropical_undergrowth;
+pub mod unending_jungle;
 pub mod wild_grass;
 
 #[cfg(feature = "render")]
@@ -48,6 +50,10 @@ pub use low_bush::{LowBushBush, LowBushCell, LowBushItem};
 pub use monster_grass::{MonsterGrassCell, MonsterGrassClump, MonsterGrassItem};
 pub use riverine_green::{RiverineGreenBush, RiverineGreenCell, RiverineGreenItem};
 pub use spotty_bushes::{SpottyBushesBush, SpottyBushesCell, SpottyBushesItem};
+pub use strange_oasis::{
+	StrangeOasisDatePalm, StrangeOasisCell, StrangeOasisItem, StrangeOasisStorybook,
+	StrangeOasisTorch,
+};
 pub use tall_grass::{TallGrassCell, TallGrassClump, TallGrassItem};
 pub use tropical_thicket::{
 	TropicalThicketBanyan, TropicalThicketBush, TropicalThicketCell, TropicalThicketItem,
@@ -60,6 +66,10 @@ pub use tropical_undergrowth::{
 	TropicalUndergrowthCell, TropicalUndergrowthItem, TropicalUndergrowthPalm,
 	TropicalUndergrowthRoryHead, TropicalUndergrowthStorybook, TropicalUndergrowthTorch,
 	TropicalUndergrowthTuft, TropicalUndergrowthVaseTree,
+};
+pub use unending_jungle::{
+	UnendingJungleBanyan, UnendingJungleCell, UnendingJungleItem, UnendingJungleJungleStorybook,
+	UnendingJungleRoryHead, UnendingJungleStorybook, UnendingJungleTorch, UnendingJungleWaialeaPalm,
 };
 pub use wild_grass::{WildGrassCell, WildGrassClump, WildGrassItem};
 
@@ -84,6 +94,8 @@ pub use riverine_green::{RiverineGreen, RiverineGreenStd};
 #[cfg(feature = "render")]
 pub use spotty_bushes::{SpottyBushes, SpottyBushesStd};
 #[cfg(feature = "render")]
+pub use strange_oasis::{StrangeOasis, StrangeOasisStd};
+#[cfg(feature = "render")]
 pub use tall_grass::{TallGrass, TallGrassStd};
 #[cfg(feature = "render")]
 pub use tropical_thicket::{TropicalThicket, TropicalThicketStd};
@@ -91,5 +103,7 @@ pub use tropical_thicket::{TropicalThicket, TropicalThicketStd};
 pub use tropical_tufts::{TropicalTufts, TropicalTuftsStd};
 #[cfg(feature = "render")]
 pub use tropical_undergrowth::{TropicalUndergrowth, TropicalUndergrowthStd};
+#[cfg(feature = "render")]
+pub use unending_jungle::{UnendingJungle, UnendingJungleStd};
 #[cfg(feature = "render")]
 pub use wild_grass::{WildGrass, WildGrassStd};
