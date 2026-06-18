@@ -6,6 +6,7 @@ pub mod braid_grass;
 pub mod bush_scrub;
 pub mod common_tufts;
 pub mod high_bush;
+pub mod jerrys_chaparral;
 pub mod low_bush;
 pub mod monster_grass;
 pub mod riverine_green;
@@ -33,6 +34,10 @@ pub use braid_grass::{BraidGrassCell, BraidGrassClump, BraidGrassItem, BraidSpea
 pub use bush_scrub::{BushScrubBush, BushScrubCell, BushScrubItem, BushScrubTuft};
 pub use common_tufts::{CommonTuftClump, CommonTuftsCell, CommonTuftsItem};
 pub use high_bush::{HighBushBush, HighBushCell, HighBushItem};
+pub use jerrys_chaparral::{
+	JerrysChaparralBush, JerrysChaparralCell, JerrysChaparralFriendsConifer,
+	JerrysChaparralItem, JerrysChaparralRoryHead,
+};
 pub use low_bush::{LowBushBush, LowBushCell, LowBushItem};
 pub use monster_grass::{MonsterGrassCell, MonsterGrassClump, MonsterGrassItem};
 pub use riverine_green::{RiverineGreenBush, RiverineGreenCell, RiverineGreenItem};
@@ -59,6 +64,8 @@ pub use bush_scrub::{BushScrub, BushScrubStd};
 pub use common_tufts::{CommonTufts, CommonTuftsStd};
 #[cfg(feature = "render")]
 pub use high_bush::{HighBush, HighBushStd};
+#[cfg(feature = "render")]
+pub use jerrys_chaparral::{JerrysChaparral, JerrysChaparralStd};
 #[cfg(feature = "render")]
 pub use low_bush::{LowBush, LowBushStd};
 #[cfg(feature = "render")]

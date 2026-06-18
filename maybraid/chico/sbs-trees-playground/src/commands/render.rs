@@ -19,7 +19,7 @@ use procedural_common::{noise_params_from_scalar_str, NoiseParams};
 use crate::render::{
 	RenderBladeTuft, RenderBraidGrass, RenderBraidOakTree, RenderBuddhaHandTuft,
 	RenderCommonTufts, RenderConfig, RenderDatePalm, RenderFriendsConifer, RenderFrondCrown,
-	RenderHighBushShoots, RenderHonuBanyan, RenderJungleGrowth, RenderJungleStorybookTree,
+	RenderHighBushShoots, RenderHonuBanyan, RenderJerrysChaparral, RenderJungleGrowth, RenderJungleStorybookTree,
 	RenderKamakuraTorch, RenderLiamsConifer, RenderModerateLodFrondCrown, RenderNorthernConifer,
 	RenderPalmBush, RenderPenmarchTorch, RenderRorysHeadTrained, RenderSopesBanyan,
 	RenderSpearTuft, RenderStorybookTree, RenderSubject, RenderSucculentTuft,
@@ -149,6 +149,14 @@ impl CellRenderHelper<RenderTropicalThicket> {
 	}
 }
 
+impl CellRenderHelper<RenderJerrysChaparral> {
+	pub fn configured_jerrys_chaparral(&self) -> RenderJerrysChaparral {
+		let mut grove = self.render.inner.clone();
+		grove.extent = self.grove_extent(grove.cell_extent_xz());
+		grove
+	}
+}
+
 impl CellRenderHelper<RenderTallGrass> {
 	pub fn configured_tall_grass(&self) -> RenderTallGrass {
 		let mut grass = self.render.inner.clone();
@@ -267,6 +275,7 @@ pub enum Render {
 	BushScrub(CellRenderHelper<RenderBushScrub>),
 	TropicalUndergrowth(CellRenderHelper<RenderTropicalUndergrowth>),
 	TropicalThicket(CellRenderHelper<RenderTropicalThicket>),
+	JerrysChaparral(CellRenderHelper<RenderJerrysChaparral>),
 	TallGrass(CellRenderHelper<RenderTallGrass>),
 	WildGrass(CellRenderHelper<RenderWildGrass>),
 	MonsterGrass(CellRenderHelper<RenderMonsterGrass>),
@@ -345,6 +354,9 @@ impl Render {
 			)),
 			Self::TropicalThicket(h) => h.render.config_with(RenderSubject::TropicalThicket(
 				h.configured_tropical_thicket(),
+			)),
+			Self::JerrysChaparral(h) => h.render.config_with(RenderSubject::JerrysChaparral(
+				h.configured_jerrys_chaparral(),
 			)),
 			Self::TallGrass(h) => h
 				.render
@@ -1255,6 +1267,49 @@ mod tests {
 		let cfg = Render::TropicalThicket(helper).into_render_config();
 		let RenderSubject::TropicalThicket(subject) = cfg.subject else {
 			anyhow::bail!("expected tropical thicket subject");
+		};
+		assert_eq!(subject.placement_cells().len(), 36);
+		assert!(!subject.placements().is_empty());
+		Ok(())
+	}
+
+	#[test]
+	fn jerrys_chaparral_defaults_spawn_placements() -> Result<()> {
+		let cmd = crate::commands::PlaygroundCommand::parse_line("render jerrys-chaparral")
+			.map_err(|e| anyhow::anyhow!("{e}"))?;
+		let crate::commands::PlaygroundCommand::Render(Render::JerrysChaparral(helper)) = cmd else {
+			anyhow::bail!("expected jerrys-chaparral render command");
+		};
+		let grove = helper.configured_jerrys_chaparral();
+		assert!(grove.grove.variant_weights.is_none());
+		let placements = grove.placements();
+		assert_eq!(helper.grove_extent_xz, 100.0);
+		assert!(
+			!placements.is_empty(),
+			"expected a visible jerrys-chaparral preview with default flags, got {} placements",
+			placements.len()
+		);
+		Ok(())
+	}
+
+	#[test]
+	fn jerrys_chaparral_command_preserves_grove_params() -> Result<()> {
+		let cmd = crate::commands::PlaygroundCommand::parse_line(
+			"render jerrys-chaparral --elevation 0.35 --grove-extent-xz 39 --cell-extent-xz 6.5,6.5",
+		)
+		.map_err(|e| anyhow::anyhow!("{e}"))?;
+		let crate::commands::PlaygroundCommand::Render(Render::JerrysChaparral(helper)) = cmd else {
+			anyhow::bail!("expected jerrys-chaparral render command");
+		};
+		assert!((helper.grove_extent_xz - 39.0).abs() < 1e-5);
+		assert_eq!(helper.render.inner.grove.cell_extent_xz, Some(Vec2::splat(6.5)));
+		let grove = helper.configured_jerrys_chaparral();
+		assert_eq!(grove.placement_cells().len(), 36);
+		assert!((grove.terrain.elevation - 0.35).abs() < 1e-5);
+		assert!(!grove.placements().is_empty());
+		let cfg = Render::JerrysChaparral(helper).into_render_config();
+		let RenderSubject::JerrysChaparral(subject) = cfg.subject else {
+			anyhow::bail!("expected jerrys chaparral subject");
 		};
 		assert_eq!(subject.placement_cells().len(), 36);
 		assert!(!subject.placements().is_empty());
