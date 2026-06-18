@@ -8,6 +8,7 @@ use chico_groves::bush_scrub::BushScrubStd;
 use chico_groves::common_tufts::CommonTuftsStd;
 use chico_groves::monster_grass::MonsterGrassStd;
 use chico_groves::high_bush::HighBushStd;
+use chico_groves::jerrys_chaparral::JerrysChaparralStd;
 use chico_groves::low_bush::LowBushStd;
 use chico_groves::riverine_green::RiverineGreenStd;
 use chico_groves::tall_grass::TallGrassStd;
@@ -231,6 +232,9 @@ pub type RenderTropicalUndergrowth = TropicalUndergrowthStd;
 /// [`TropicalThicketStd`] — dense tropical understory thicket ([#317](https://github.com/ramate-io/maybraid/issues/317)).
 pub type RenderTropicalThicket = TropicalThicketStd;
 
+/// [`JerrysChaparralStd`] — moderately dense dry scrub chaparral ([#318](https://github.com/ramate-io/maybraid/issues/318)).
+pub type RenderJerrysChaparral = JerrysChaparralStd;
+
 /// [`TallGrassStd`] — dense mid-height tuft grove ([#302](https://github.com/ramate-io/maybraid/issues/302)).
 pub type RenderTallGrass = TallGrassStd;
 
@@ -282,6 +286,7 @@ pub enum RenderSubject {
 	BushScrub(RenderBushScrub),
 	TropicalUndergrowth(RenderTropicalUndergrowth),
 	TropicalThicket(RenderTropicalThicket),
+	JerrysChaparral(RenderJerrysChaparral),
 	TallGrass(RenderTallGrass),
 	WildGrass(RenderWildGrass),
 	MonsterGrass(RenderMonsterGrass),
@@ -325,6 +330,7 @@ impl RenderSubject {
 			Self::BushScrub(_) => "BushScrub",
 			Self::TropicalUndergrowth(_) => "TropicalUndergrowth",
 			Self::TropicalThicket(_) => "TropicalThicket",
+			Self::JerrysChaparral(_) => "JerrysChaparral",
 			Self::TallGrass(_) => "TallGrass",
 			Self::WildGrass(_) => "WildGrass",
 			Self::MonsterGrass(_) => "MonsterGrass",
@@ -452,6 +458,18 @@ impl RenderSubject {
 					g.leaf_surface_noise
 				)
 			}
+			Self::JerrysChaparral(g) => {
+				format!(
+					"{:?}|extent={:?}|cell_extent_xz={:?}|terrain={:?}|chain={:?}|stick={:?}|leaf={:?}",
+					g.grove,
+					g.extent,
+					g.cell_extent_xz(),
+					g.terrain,
+					g.tree_chain_noise,
+					g.stick_surface_noise,
+					g.leaf_surface_noise
+				)
+			}
 			Self::TallGrass(g) => {
 				format!(
 					"{:?}|extent={:?}|cell_extent_xz={:?}|terrain={:?}|foliage={:?}",
@@ -561,6 +579,7 @@ impl RenderSubject {
 			Self::BushScrub(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::TropicalUndergrowth(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::TropicalThicket(item) => item.spawn_render_items(commands, chunk, transform),
+			Self::JerrysChaparral(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::TallGrass(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::WildGrass(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::MonsterGrass(item) => item.spawn_render_items(commands, chunk, transform),
