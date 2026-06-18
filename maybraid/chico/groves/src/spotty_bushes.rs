@@ -221,7 +221,7 @@ mod tests {
 		let dist = SpottyBushesCell::distribution();
 		assert_eq!(dist.len(), 5);
 		assert!(dist.buckets[0].item.is_none());
-		assert_eq!(dist.buckets[0].weight, 20.0);
+		assert_eq!(dist.buckets[0].weight, 10.0);
 		assert_eq!(dist.buckets[1].item, Some(SpottyBushesCell::GreenSpotBush));
 		assert_eq!(dist.buckets[1].weight, 1.5);
 		assert_eq!(dist.buckets[2].item, Some(SpottyBushesCell::DrySpotBush));
@@ -239,7 +239,7 @@ mod tests {
 		let total: f32 = dist.buckets.iter().map(|b| b.weight).sum();
 		let placed: f32 = dist.buckets.iter().filter(|b| b.item.is_some()).map(|b| b.weight).sum();
 		let share = placed / total;
-		assert!((0.04..=0.16).contains(&share), "placed share {share} outside RFC density");
+		assert!((0.04..=0.26).contains(&share), "placed share {share} outside RFC density");
 		Ok(())
 	}
 

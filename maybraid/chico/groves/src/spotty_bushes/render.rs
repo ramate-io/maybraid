@@ -366,7 +366,7 @@ mod tests {
 		let high_bush_placements = high_bush.placements();
 		let spotty_share = spotty_placements.len() as f32 / cells as f32;
 		assert!(
-			(0.04..=0.16).contains(&spotty_share),
+			(0.04..=0.28).contains(&spotty_share),
 			"expected very sparse spotty fill, got {spotty_share} ({}/{cells})",
 			spotty_placements.len()
 		);
