@@ -27,7 +27,7 @@ use crate::render::{
 	RenderStorybookTree, RenderSubject, RenderSucculentTuft, RenderTallGrass,
 	RenderTemperateConifer, RenderTropicalThicket, RenderTropicalTufts, RenderTropicalUndergrowth,
 	RenderTuftPatch, RenderUnendingJungle, RenderStrangeOasis, RenderShamanhome,
-	RenderGoettingenFollow, RenderVaseTree, RenderWaialeaPalm,
+	RenderGoettingenFollow, RenderConiferSapling, RenderVaseTree, RenderWaialeaPalm,
 	RenderWeepingTuft, RenderWildGrass,
 };
 
@@ -256,6 +256,14 @@ impl CellRenderHelper<RenderGoettingenFollow> {
 	}
 }
 
+impl CellRenderHelper<RenderConiferSapling> {
+	pub fn configured_conifer_sapling(&self) -> RenderConiferSapling {
+		let mut grove = self.render.inner.clone();
+		grove.extent = self.grove_extent(grove.cell_extent_xz());
+		grove
+	}
+}
+
 /// High bush shape plus the surface-noise flags that live on the render item (not the shape).
 #[derive(Clone, clap::Args)]
 #[command(rename_all = "kebab-case")]
@@ -339,6 +347,7 @@ pub enum Render {
 	StrangeOasis(CellRenderHelper<RenderStrangeOasis>),
 	Shamanhome(CellRenderHelper<RenderShamanhome>),
 	GoettingenFollow(CellRenderHelper<RenderGoettingenFollow>),
+	ConiferSapling(CellRenderHelper<RenderConiferSapling>),
 	SpearTuft(RenderHelper<SpearTuftShape>),
 	BuddhaHandTuft(RenderHelper<BuddhaHandTuftShape>),
 	WeepingTuft(RenderHelper<WeepingTuftShape>),
@@ -450,6 +459,9 @@ impl Render {
 				.config_with(RenderSubject::Shamanhome(h.configured_shamanhome())),
 			Self::GoettingenFollow(h) => h.render.config_with(RenderSubject::GoettingenFollow(
 				h.configured_goettingen_follow(),
+			)),
+			Self::ConiferSapling(h) => h.render.config_with(RenderSubject::ConiferSapling(
+				h.configured_conifer_sapling(),
 			)),
 			Self::SpearTuft(h) => h.config_with(RenderSubject::SpearTuft(
 				RenderSpearTuft::from_shape(h.inner.clone(), Default::default()),
@@ -1429,6 +1441,50 @@ mod tests {
 		let cfg = Render::GoettingenFollow(helper).into_render_config();
 		let RenderSubject::GoettingenFollow(subject) = cfg.subject else {
 			anyhow::bail!("expected goettingen follow subject");
+		};
+		assert_eq!(subject.placement_cells().len(), cell_count);
+		assert!(!subject.placements().is_empty());
+		Ok(())
+	}
+
+	#[test]
+	fn conifer_sapling_defaults_spawn_placements() -> Result<()> {
+		let cmd = crate::commands::PlaygroundCommand::parse_line("render conifer-sapling")
+			.map_err(|e| anyhow::anyhow!("{e}"))?;
+		let crate::commands::PlaygroundCommand::Render(Render::ConiferSapling(helper)) = cmd else {
+			anyhow::bail!("expected conifer-sapling render command");
+		};
+		let grove = helper.configured_conifer_sapling();
+		assert!(grove.grove.variant_weights.is_none());
+		let placements = grove.placements();
+		assert_eq!(helper.grove_extent_xz, 100.0);
+		assert!(
+			!placements.is_empty(),
+			"expected a visible conifer-sapling preview with default flags, got {} placements",
+			placements.len()
+		);
+		Ok(())
+	}
+
+	#[test]
+	fn conifer_sapling_command_preserves_grove_params() -> Result<()> {
+		let cmd = crate::commands::PlaygroundCommand::parse_line(
+			"render conifer-sapling --elevation 0.55 --grove-extent-xz 39 --cell-extent-xz 10.5,10.5",
+		)
+		.map_err(|e| anyhow::anyhow!("{e}"))?;
+		let crate::commands::PlaygroundCommand::Render(Render::ConiferSapling(helper)) = cmd else {
+			anyhow::bail!("expected conifer-sapling render command");
+		};
+		assert!((helper.grove_extent_xz - 39.0).abs() < 1e-5);
+		assert_eq!(helper.render.inner.grove.cell_extent_xz, Some(Vec2::splat(10.5)));
+		let grove = helper.configured_conifer_sapling();
+		let cell_count = grove.placement_cells().len();
+		assert_eq!(cell_count, 16);
+		assert!((grove.terrain.elevation - 0.55).abs() < 1e-5);
+		assert!(!grove.placements().is_empty());
+		let cfg = Render::ConiferSapling(helper).into_render_config();
+		let RenderSubject::ConiferSapling(subject) = cfg.subject else {
+			anyhow::bail!("expected conifer sapling subject");
 		};
 		assert_eq!(subject.placement_cells().len(), cell_count);
 		assert!(!subject.placements().is_empty());
