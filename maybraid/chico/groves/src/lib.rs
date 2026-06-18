@@ -11,6 +11,7 @@ pub mod levantine_scrub;
 pub mod low_bush;
 pub mod monster_grass;
 pub mod riverine_green;
+pub mod shamanhome;
 pub mod spotty_bushes;
 pub mod strange_oasis;
 pub mod tall_grass;
@@ -49,6 +50,9 @@ pub use levantine_scrub::{
 pub use low_bush::{LowBushBush, LowBushCell, LowBushItem};
 pub use monster_grass::{MonsterGrassCell, MonsterGrassClump, MonsterGrassItem};
 pub use riverine_green::{RiverineGreenBush, RiverineGreenCell, RiverineGreenItem};
+pub use shamanhome::{
+	ShamanhomeBanyan, ShamanhomeBraidOak, ShamanhomeCell, ShamanhomeDatePalm, ShamanhomeItem,
+};
 pub use spotty_bushes::{SpottyBushesBush, SpottyBushesCell, SpottyBushesItem};
 pub use strange_oasis::{
 	StrangeOasisDatePalm, StrangeOasisCell, StrangeOasisItem, StrangeOasisStorybook,
@@ -91,6 +95,8 @@ pub use low_bush::{LowBush, LowBushStd};
 pub use monster_grass::{MonsterGrass, MonsterGrassStd};
 #[cfg(feature = "render")]
 pub use riverine_green::{RiverineGreen, RiverineGreenStd};
+#[cfg(feature = "render")]
+pub use shamanhome::{Shamanhome, ShamanhomeStd};
 #[cfg(feature = "render")]
 pub use spotty_bushes::{SpottyBushes, SpottyBushesStd};
 #[cfg(feature = "render")]

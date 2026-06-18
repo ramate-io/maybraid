@@ -12,6 +12,7 @@ use chico_groves::levantine_scrub::LevantineScrubStd;
 use chico_groves::low_bush::LowBushStd;
 use chico_groves::monster_grass::MonsterGrassStd;
 use chico_groves::riverine_green::RiverineGreenStd;
+use chico_groves::shamanhome::ShamanhomeStd;
 use chico_groves::spotty_bushes::SpottyBushesStd;
 use chico_groves::strange_oasis::StrangeOasisStd;
 use chico_groves::tall_grass::TallGrassStd;
@@ -269,6 +270,9 @@ pub type RenderUnendingJungle = UnendingJungleStd;
 /// [`StrangeOasisStd`] — sparse oasis lower-canopy grove ([#323](https://github.com/ramate-io/maybraid/issues/323)).
 pub type RenderStrangeOasis = StrangeOasisStd;
 
+/// [`ShamanhomeStd`] — moderate sacred lower-canopy grove ([#324](https://github.com/ramate-io/maybraid/issues/324)).
+pub type RenderShamanhome = ShamanhomeStd;
+
 /// The configured render item currently shown in the scene.
 ///
 /// This is the typed scene state behind [`RenderConfig`]: material patching
@@ -313,6 +317,7 @@ pub enum RenderSubject {
 	SpottyBushes(RenderSpottyBushes),
 	UnendingJungle(RenderUnendingJungle),
 	StrangeOasis(RenderStrangeOasis),
+	Shamanhome(RenderShamanhome),
 	SpearTuft(RenderSpearTuft),
 	BuddhaHandTuft(RenderBuddhaHandTuft),
 	WeepingTuft(RenderWeepingTuft),
@@ -361,6 +366,7 @@ impl RenderSubject {
 			Self::SpottyBushes(_) => "SpottyBushes",
 			Self::UnendingJungle(_) => "UnendingJungle",
 			Self::StrangeOasis(_) => "StrangeOasis",
+			Self::Shamanhome(_) => "Shamanhome",
 			Self::SpearTuft(_) => "SpearTuft",
 			Self::BuddhaHandTuft(_) => "BuddhaHandTuft",
 			Self::WeepingTuft(_) => "WeepingTuft",
@@ -608,6 +614,18 @@ impl RenderSubject {
 					g.leaf_surface_noise
 				)
 			}
+			Self::Shamanhome(g) => {
+				format!(
+					"{:?}|extent={:?}|cell_extent_xz={:?}|terrain={:?}|chain={:?}|stick={:?}|leaf={:?}",
+					g.grove,
+					g.extent,
+					g.cell_extent_xz(),
+					g.terrain,
+					g.tree_chain_noise,
+					g.stick_surface_noise,
+					g.leaf_surface_noise
+				)
+			}
 			Self::SpearTuft(t) => format!("{:?}", t.shape),
 			Self::BuddhaHandTuft(t) => format!("{:?}", t.shape),
 			Self::WeepingTuft(t) => format!("{:?}", t.shape),
@@ -662,6 +680,7 @@ impl RenderSubject {
 			Self::SpottyBushes(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::UnendingJungle(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::StrangeOasis(item) => item.spawn_render_items(commands, chunk, transform),
+			Self::Shamanhome(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::SpearTuft(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::BuddhaHandTuft(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::WeepingTuft(item) => item.spawn_render_items(commands, chunk, transform),
