@@ -314,6 +314,10 @@ fn attach_render_materials(
 			g.stick_material.mesh = MeshMaterial3d(stick.clone());
 			g.leaf_material.mesh = MeshMaterial3d(tuft.clone());
 		}
+		RenderSubject::GoettingenFollow(g) => {
+			g.stick_material.mesh = MeshMaterial3d(stick.clone());
+			g.leaf_material.mesh = MeshMaterial3d(tuft.clone());
+		}
 		RenderSubject::SpearTuft(t) => {
 			t.material.mesh = MeshMaterial3d(tuft.clone());
 		}

@@ -5,6 +5,7 @@ pub mod grove;
 pub mod braid_grass;
 pub mod bush_scrub;
 pub mod common_tufts;
+pub mod goettingen_follow;
 pub mod high_bush;
 pub mod jerrys_chaparral;
 pub mod levantine_scrub;
@@ -38,6 +39,10 @@ pub use grove::{patch_spawned_leaf_material, resolve_palette_color, WithPalette}
 pub use braid_grass::{BraidGrassCell, BraidGrassClump, BraidGrassItem, BraidSpearClump};
 pub use bush_scrub::{BushScrubBush, BushScrubCell, BushScrubItem, BushScrubTuft};
 pub use common_tufts::{CommonTuftClump, CommonTuftsCell, CommonTuftsItem};
+pub use goettingen_follow::{
+	GoettingenFollowBraidOak, GoettingenFollowCell, GoettingenFollowItem,
+	GoettingenFollowStorybook,
+};
 pub use high_bush::{HighBushBush, HighBushCell, HighBushItem};
 pub use jerrys_chaparral::{
 	JerrysChaparralBush, JerrysChaparralCell, JerrysChaparralFriendsConifer, JerrysChaparralItem,
@@ -83,6 +88,8 @@ pub use braid_grass::{BraidGrass, BraidGrassStd};
 pub use bush_scrub::{BushScrub, BushScrubStd};
 #[cfg(feature = "render")]
 pub use common_tufts::{CommonTufts, CommonTuftsStd};
+#[cfg(feature = "render")]
+pub use goettingen_follow::{GoettingenFollow, GoettingenFollowStd};
 #[cfg(feature = "render")]
 pub use high_bush::{HighBush, HighBushStd};
 #[cfg(feature = "render")]
