@@ -128,6 +128,13 @@ pub fn setup_render_materials(
 	if let RenderSubject::TropicalThicket(grove) = &mut config.subject {
 		attach_honu_banyan_materials(&mut grove.honu_template, &mats_snapshot);
 	}
+	if let RenderSubject::UnendingJungle(grove) = &mut config.subject {
+		attach_honu_banyan_materials(&mut grove.honu_template, &mats_snapshot);
+		grove.sope_template.stick_material.mesh = MeshMaterial3d(mats_snapshot.jungle_stick.clone());
+		grove.sope_template.leaf_material.mesh =
+			MeshMaterial3d(mats_snapshot.jungle_inner_leaf.clone());
+		attach_jungle_storybook_materials(&mut grove.jungle_storybook_template, &mats_snapshot);
+	}
 	if let RenderSubject::BraidOakTree(tree) = &mut config.subject {
 		attach_braid_oak_materials(tree, &mats_snapshot);
 	}
@@ -290,6 +297,10 @@ fn attach_render_materials(
 			g.stick_material.mesh = MeshMaterial3d(stick.clone());
 			g.leaf_material.mesh = MeshMaterial3d(tuft.clone());
 		}
+		RenderSubject::UnendingJungle(g) => {
+			g.stick_material.mesh = MeshMaterial3d(stick.clone());
+			g.leaf_material.mesh = MeshMaterial3d(tuft.clone());
+		}
 		RenderSubject::SpearTuft(t) => {
 			t.material.mesh = MeshMaterial3d(tuft.clone());
 		}
@@ -339,6 +350,12 @@ pub fn sync_render_material_handles(mut config: ResMut<RenderConfig>, mats: Res<
 	}
 	if let RenderSubject::TropicalThicket(grove) = &mut config.subject {
 		attach_honu_banyan_materials(&mut grove.honu_template, &mats);
+	}
+	if let RenderSubject::UnendingJungle(grove) = &mut config.subject {
+		attach_honu_banyan_materials(&mut grove.honu_template, &mats);
+		grove.sope_template.stick_material.mesh = MeshMaterial3d(mats.jungle_stick.clone());
+		grove.sope_template.leaf_material.mesh = MeshMaterial3d(mats.jungle_inner_leaf.clone());
+		attach_jungle_storybook_materials(&mut grove.jungle_storybook_template, &mats);
 	}
 	if let RenderSubject::VaseTree(tree) = &mut config.subject {
 		attach_vase_tree_materials(tree, &mats);

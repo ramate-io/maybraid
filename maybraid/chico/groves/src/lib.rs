@@ -16,6 +16,7 @@ pub mod tall_grass;
 pub mod tropical_thicket;
 pub mod tropical_tufts;
 pub mod tropical_undergrowth;
+pub mod unending_jungle;
 pub mod wild_grass;
 
 #[cfg(feature = "render")]
@@ -61,6 +62,10 @@ pub use tropical_undergrowth::{
 	TropicalUndergrowthRoryHead, TropicalUndergrowthStorybook, TropicalUndergrowthTorch,
 	TropicalUndergrowthTuft, TropicalUndergrowthVaseTree,
 };
+pub use unending_jungle::{
+	UnendingJungleBanyan, UnendingJungleCell, UnendingJungleItem, UnendingJungleJungleStorybook,
+	UnendingJungleRoryHead, UnendingJungleStorybook, UnendingJungleTorch, UnendingJungleWaialeaPalm,
+};
 pub use wild_grass::{WildGrassCell, WildGrassClump, WildGrassItem};
 
 #[cfg(feature = "render")]
@@ -91,5 +96,7 @@ pub use tropical_thicket::{TropicalThicket, TropicalThicketStd};
 pub use tropical_tufts::{TropicalTufts, TropicalTuftsStd};
 #[cfg(feature = "render")]
 pub use tropical_undergrowth::{TropicalUndergrowth, TropicalUndergrowthStd};
+#[cfg(feature = "render")]
+pub use unending_jungle::{UnendingJungle, UnendingJungleStd};
 #[cfg(feature = "render")]
 pub use wild_grass::{WildGrass, WildGrassStd};

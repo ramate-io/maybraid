@@ -26,7 +26,8 @@ use crate::render::{
 	RenderRorysHeadTrained, RenderSopesBanyan, RenderSpearTuft, RenderSpottyBushes,
 	RenderStorybookTree, RenderSubject, RenderSucculentTuft, RenderTallGrass,
 	RenderTemperateConifer, RenderTropicalThicket, RenderTropicalTufts, RenderTropicalUndergrowth,
-	RenderTuftPatch, RenderVaseTree, RenderWaialeaPalm, RenderWeepingTuft, RenderWildGrass,
+	RenderTuftPatch, RenderUnendingJungle, RenderVaseTree, RenderWaialeaPalm, RenderWeepingTuft,
+	RenderWildGrass,
 };
 
 /// Shared render flags (resolution + scene transform) wrapped around per-item args.
@@ -222,6 +223,14 @@ impl CellRenderHelper<RenderSpottyBushes> {
 	}
 }
 
+impl CellRenderHelper<RenderUnendingJungle> {
+	pub fn configured_unending_jungle(&self) -> RenderUnendingJungle {
+		let mut grove = self.render.inner.clone();
+		grove.extent = self.grove_extent(grove.cell_extent_xz());
+		grove
+	}
+}
+
 /// High bush shape plus the surface-noise flags that live on the render item (not the shape).
 #[derive(Clone, clap::Args)]
 #[command(rename_all = "kebab-case")]
@@ -301,6 +310,7 @@ pub enum Render {
 	LowBush(CellRenderHelper<RenderLowBush>),
 	HighBush(CellRenderHelper<RenderHighBush>),
 	SpottyBushes(CellRenderHelper<RenderSpottyBushes>),
+	UnendingJungle(CellRenderHelper<RenderUnendingJungle>),
 	SpearTuft(RenderHelper<SpearTuftShape>),
 	BuddhaHandTuft(RenderHelper<BuddhaHandTuftShape>),
 	WeepingTuft(RenderHelper<WeepingTuftShape>),
@@ -401,6 +411,9 @@ impl Render {
 			Self::SpottyBushes(h) => {
 				h.render.config_with(RenderSubject::SpottyBushes(h.configured_spotty_bushes()))
 			}
+			Self::UnendingJungle(h) => h
+				.render
+				.config_with(RenderSubject::UnendingJungle(h.configured_unending_jungle())),
 			Self::SpearTuft(h) => h.config_with(RenderSubject::SpearTuft(
 				RenderSpearTuft::from_shape(h.inner.clone(), Default::default()),
 			)),
@@ -1203,6 +1216,50 @@ mod tests {
 		let cfg = Render::SpottyBushes(helper).into_render_config();
 		let RenderSubject::SpottyBushes(subject) = cfg.subject else {
 			anyhow::bail!("expected spotty bushes subject");
+		};
+		assert_eq!(subject.placement_cells().len(), cell_count);
+		assert!(!subject.placements().is_empty());
+		Ok(())
+	}
+
+	#[test]
+	fn unending_jungle_defaults_spawn_placements() -> Result<()> {
+		let cmd = crate::commands::PlaygroundCommand::parse_line("render unending-jungle")
+			.map_err(|e| anyhow::anyhow!("{e}"))?;
+		let crate::commands::PlaygroundCommand::Render(Render::UnendingJungle(helper)) = cmd else {
+			anyhow::bail!("expected unending-jungle render command");
+		};
+		let grove = helper.configured_unending_jungle();
+		assert!(grove.grove.variant_weights.is_none());
+		let placements = grove.placements();
+		assert_eq!(helper.grove_extent_xz, 100.0);
+		assert!(
+			!placements.is_empty(),
+			"expected a visible unending-jungle preview with default flags, got {} placements",
+			placements.len()
+		);
+		Ok(())
+	}
+
+	#[test]
+	fn unending_jungle_command_preserves_grove_params() -> Result<()> {
+		let cmd = crate::commands::PlaygroundCommand::parse_line(
+			"render unending-jungle --elevation 0.35 --grove-extent-xz 39 --cell-extent-xz 10.5,10.5",
+		)
+		.map_err(|e| anyhow::anyhow!("{e}"))?;
+		let crate::commands::PlaygroundCommand::Render(Render::UnendingJungle(helper)) = cmd else {
+			anyhow::bail!("expected unending-jungle render command");
+		};
+		assert!((helper.grove_extent_xz - 39.0).abs() < 1e-5);
+		assert_eq!(helper.render.inner.grove.cell_extent_xz, Some(Vec2::splat(10.5)));
+		let grove = helper.configured_unending_jungle();
+		let cell_count = grove.placement_cells().len();
+		assert_eq!(cell_count, 16);
+		assert!((grove.terrain.elevation - 0.35).abs() < 1e-5);
+		assert!(!grove.placements().is_empty());
+		let cfg = Render::UnendingJungle(helper).into_render_config();
+		let RenderSubject::UnendingJungle(subject) = cfg.subject else {
+			anyhow::bail!("expected unending jungle subject");
 		};
 		assert_eq!(subject.placement_cells().len(), cell_count);
 		assert!(!subject.placements().is_empty());
