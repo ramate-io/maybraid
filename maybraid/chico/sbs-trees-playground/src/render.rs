@@ -6,6 +6,7 @@ use chico_ball_components::{FrondCrown, ModerateLodFrondCrown};
 use chico_groves::braid_grass::BraidGrassStd;
 use chico_groves::bush_scrub::BushScrubStd;
 use chico_groves::common_tufts::CommonTuftsStd;
+use chico_groves::arid_conifer_sapling::AridConiferSaplingStd;
 use chico_groves::conifer_sapling::ConiferSaplingStd;
 use chico_groves::goettingen_follow::GoettingenFollowStd;
 use chico_groves::high_bush::HighBushStd;
@@ -281,6 +282,9 @@ pub type RenderGoettingenFollow = GoettingenFollowStd;
 /// [`ConiferSaplingStd`] — moderate young conifer lower-canopy grove ([#326](https://github.com/ramate-io/maybraid/issues/326)).
 pub type RenderConiferSapling = ConiferSaplingStd;
 
+/// [`AridConiferSaplingStd`] — sparse dry young conifer lower-canopy grove ([#327](https://github.com/ramate-io/maybraid/issues/327)).
+pub type RenderAridConiferSapling = AridConiferSaplingStd;
+
 /// The configured render item currently shown in the scene.
 ///
 /// This is the typed scene state behind [`RenderConfig`]: material patching
@@ -328,6 +332,7 @@ pub enum RenderSubject {
 	Shamanhome(RenderShamanhome),
 	GoettingenFollow(RenderGoettingenFollow),
 	ConiferSapling(RenderConiferSapling),
+	AridConiferSapling(RenderAridConiferSapling),
 	SpearTuft(RenderSpearTuft),
 	BuddhaHandTuft(RenderBuddhaHandTuft),
 	WeepingTuft(RenderWeepingTuft),
@@ -379,6 +384,7 @@ impl RenderSubject {
 			Self::Shamanhome(_) => "Shamanhome",
 			Self::GoettingenFollow(_) => "GoettingenFollow",
 			Self::ConiferSapling(_) => "ConiferSapling",
+			Self::AridConiferSapling(_) => "AridConiferSapling",
 			Self::SpearTuft(_) => "SpearTuft",
 			Self::BuddhaHandTuft(_) => "BuddhaHandTuft",
 			Self::WeepingTuft(_) => "WeepingTuft",
@@ -662,6 +668,18 @@ impl RenderSubject {
 					g.leaf_surface_noise
 				)
 			}
+			Self::AridConiferSapling(g) => {
+				format!(
+					"{:?}|extent={:?}|cell_extent_xz={:?}|terrain={:?}|chain={:?}|stick={:?}|leaf={:?}",
+					g.grove,
+					g.extent,
+					g.cell_extent_xz(),
+					g.terrain,
+					g.tree_chain_noise,
+					g.stick_surface_noise,
+					g.leaf_surface_noise
+				)
+			}
 			Self::SpearTuft(t) => format!("{:?}", t.shape),
 			Self::BuddhaHandTuft(t) => format!("{:?}", t.shape),
 			Self::WeepingTuft(t) => format!("{:?}", t.shape),
@@ -719,6 +737,7 @@ impl RenderSubject {
 			Self::Shamanhome(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::GoettingenFollow(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::ConiferSapling(item) => item.spawn_render_items(commands, chunk, transform),
+			Self::AridConiferSapling(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::SpearTuft(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::BuddhaHandTuft(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::WeepingTuft(item) => item.spawn_render_items(commands, chunk, transform),

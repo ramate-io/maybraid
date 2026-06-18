@@ -20,6 +20,10 @@ use super::stalk_perturbation::{
 };
 use super::strict_stalk::StrictStalk;
 use super::Anchors;
+use crate::sbs::scale::{
+	branch_base_radius_for_stalk, branch_radius_child_bounds_for_stalk,
+	branch_radius_child_scale_for_stalk,
+};
 use procedural_common::{NoiseConfig, NoiseParams};
 
 use crate::chain::liams_conifer::{
@@ -28,6 +32,8 @@ use crate::chain::liams_conifer::{
 use crate::chain::BranchOut;
 use crate::chain::DepthBudget;
 use crate::BallStickNode;
+
+const LIAMS_REFERENCE_STALK_HEIGHT: f32 = 30.0;
 
 /// Tilt horizontal radial slightly toward −Y (RFC ~2° downward bias).
 pub(crate) fn downward_biased_radial(radial_xz: Vec3, bias_radians: f32) -> Vec3 {
@@ -139,7 +145,13 @@ impl LiamsConiferProtoAnchors {
 	/// Joint radius at a ring spoke before any [`BranchOut`] down-stepping.
 	fn limb_base_radius(&self) -> f32 {
 		let base = self.stalk.stalk_base_radius.max(1e-4);
-		(base * self.branch_base_radius_fraction_of_stalk).max(0.035)
+		branch_base_radius_for_stalk(
+			base,
+			self.branch_base_radius_fraction_of_stalk,
+			0.035,
+			self.stalk.stalk_height,
+			LIAMS_REFERENCE_STALK_HEIGHT,
+		)
 	}
 
 	/// Approximate terminal joint radius after `branch_depth` down-steps (for tests / tuning).
@@ -154,6 +166,17 @@ impl LiamsConiferProtoAnchors {
 		let k = self.anchors_per_ring.max(1);
 		let radial_eps = (self.stalk.stalk_base_radius * 0.05).max(1e-4);
 		let limb_r = self.limb_base_radius();
+		let child_scale = branch_radius_child_scale_for_stalk(
+			self.branch_radius_child_scale,
+			self.stalk.stalk_height,
+			LIAMS_REFERENCE_STALK_HEIGHT,
+		);
+		let child_bounds = branch_radius_child_bounds_for_stalk(
+			self.stalk.stalk_base_radius,
+			limb_r,
+			self.stalk.stalk_height,
+			LIAMS_REFERENCE_STALK_HEIGHT,
+		);
 
 		for z_frac in self.ring_height_fractions() {
 			let u = self.ring_mix_u(z_frac);
@@ -174,7 +197,8 @@ impl LiamsConiferProtoAnchors {
 					.with_ray_degrees_of_freedom(self.branch_angle_tolerance)
 					.with_child_count(1..2)
 					.with_radius_range(limb_r..limb_r)
-					.with_radius_range_child_scale(self.branch_radius_child_scale)
+					.with_radius_range_child_scale(child_scale)
+					.with_radius_range_child_bounds(child_bounds.clone())
 					.with_length(first_len * 0.97..first_len * 1.03)
 					.single_child();
 
@@ -296,6 +320,13 @@ impl PerturbAnchor for LiamsConiferChain {
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use anyhow::Result;
+
+	fn first_branch_radius(seeds: &[LiamsConiferChain]) -> Option<f32> {
+		seeds
+			.iter()
+			.find_map(|seed| seed.active_branch_profile().map(|branch| branch.node.radius))
+	}
 
 	#[test]
 	fn projection_length_shrinks_with_ring_height() {
@@ -349,5 +380,49 @@ mod tests {
 		let base = a.limb_base_radius();
 		let terminal = a.limb_terminal_radius_estimate();
 		assert!(terminal < base, "down-stepping should thin limbs toward tips");
+	}
+
+	#[test]
+	fn mini_branch_radii_stay_within_stalk_relative_bounds() -> Result<()> {
+		let proto = LiamsConiferProtoAnchors {
+			stalk: StrictStalk {
+				stalk_height: 3.0,
+				stalk_base_radius: 0.025 * 3.0,
+			},
+			ring_spacing_unit_height: 0.20,
+			..Default::default()
+		};
+		let chain = crate::anchors::AnchorsToChain::build_chain(&LiamsConiferAnchors::new(proto));
+		let stalk = 0.025 * 3.0;
+		let radii: Vec<f32> = chain
+			.nodes_with_hysteresis()
+			.filter_map(|(node, hysteresis)| {
+				hysteresis.active_branch_profile().map(|_| node.radius)
+			})
+			.collect();
+		let max = radii.iter().copied().fold(0.0_f32, f32::max);
+		assert!(max <= stalk * 0.36, "liams max branch radius {max} vs stalk {stalk}");
+		Ok(())
+	}
+
+	#[test]
+	fn mini_limb_radius_scales_below_full_size_floor() -> Result<()> {
+		let proto = LiamsConiferProtoAnchors {
+			stalk: StrictStalk {
+				stalk_height: 2.0,
+				stalk_base_radius: 0.025 * 2.0,
+			},
+			..Default::default()
+		};
+		let branch_radius = first_branch_radius(&proto.hysteresis_seeds(NoiseConfig::new(
+			NoiseParams::default(),
+		)))
+		.ok_or_else(|| anyhow::anyhow!("expected a mini Liam's Conifer branch seed"))?;
+		assert!(branch_radius < 0.035, "mini branch radius should not hit full-size floor");
+		assert!(
+			branch_radius >= proto.stalk.stalk_base_radius * 0.08,
+			"mini branch radius should remain readable relative to stalk"
+		);
+		Ok(())
 	}
 }
