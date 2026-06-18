@@ -49,8 +49,7 @@ where
 		_chain: &BallStickChain<FriendsConiferChain>,
 	) -> Option<(PlaneSplay<LeafM, LeafS>, f32)> {
 		let mut splay = self.leaf_splay.clone();
-		splay.icosphere_subdivisions =
-			icosphere_subdivisions_for_node(node_idx, node.position);
+		splay.icosphere_subdivisions = icosphere_subdivisions_for_node(node_idx, node.position);
 		let scale = self.splay_radius_world / node.radius.max(1e-4);
 		Some((splay, scale))
 	}

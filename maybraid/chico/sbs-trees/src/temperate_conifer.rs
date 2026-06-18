@@ -5,8 +5,8 @@
 //! [`FrondCrown`](chico_ball_components::frond::FrondCrown) aligned to branch direction.
 
 mod foliage;
-mod stick;
 pub mod render_item_plugin;
+mod stick;
 
 use std::marker::PhantomData;
 
@@ -42,8 +42,8 @@ use procedural_common::parse_unit_range;
 use procedural_common::{NoiseParams, UnitRange};
 use render_item::{CascadeChunk, RenderItem};
 
-use crate::skipped_mesh_material::{SkippedLeafMeshMaterial, SkippedStickMeshMaterial};
 use crate::conifer_canopy_apex::{spawn_apex_frond_crown, DEFAULT_APEX_CANOPY_SPAWN_FRACTION};
+use crate::skipped_mesh_material::{SkippedLeafMeshMaterial, SkippedStickMeshMaterial};
 use foliage::spawn_joint_fronds;
 use stick::TemperateConiferStickRule;
 
@@ -158,7 +158,9 @@ where
 	LeafM: Material,
 	LeafS: Clone + Into<MeshMaterial3d<LeafM>> + Args,
 {
-	pub fn build_chain(&self) -> chico_sbs_geometry::BallStickChain<chico_sbs_geometry::FriendsConiferChain> {
+	pub fn build_chain(
+		&self,
+	) -> chico_sbs_geometry::BallStickChain<chico_sbs_geometry::FriendsConiferChain> {
 		let mut geometry = self.geometry.inner.clone();
 		geometry.apply_temperate_preset();
 		geometry.build_chain()

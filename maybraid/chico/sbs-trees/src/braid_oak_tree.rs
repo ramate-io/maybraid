@@ -1,8 +1,8 @@
 //! **Braid Oak Tree** — gnarled broadleaf with crook-cylinder branches ([#234](https://github.com/ramate-io/maybraid/issues/234), [RFC §3.1.7.13](https://github.com/ramate-io/maybraid/tree/main/rfc/rfc-000-000-183-chico-vegetation/03-01-stalk-and-ball-stick-trees/07-well-known-tree-constructions/13-braid-oak/README.md)).
 
 mod canopy;
-pub mod render_item_plugin;
 pub(crate) mod joint_ball;
+pub mod render_item_plugin;
 pub(crate) mod stick;
 
 use std::marker::PhantomData;
@@ -160,8 +160,8 @@ where
 			Some(root),
 		);
 
-		let mut joint_ball = NoiseParams::from_scalar(0.0, 1.0, 0.04, 1)
-			.build_scalar::<ChicoBall<StickM, StickS>>();
+		let mut joint_ball =
+			NoiseParams::from_scalar(0.0, 1.0, 0.04, 1).build_scalar::<ChicoBall<StickM, StickS>>();
 		joint_ball.material = self.stick_material.clone();
 		let joint_rule = BraidOakJointBallRule { joint_ball };
 		BallRenderHelper::new(chain.clone(), joint_rule).spawn_render_items_under(
@@ -171,20 +171,16 @@ where
 			Some(root),
 		);
 
-		let mut inner_ball =
-			self.inner_leaf_surface_noise.build_scalar::<chico_ball_components::chico_ball::ChicoBall<
-				InnerLeafM,
-				InnerLeafS,
-			>>();
+		let mut inner_ball = self
+			.inner_leaf_surface_noise
+			.build_scalar::<chico_ball_components::chico_ball::ChicoBall<InnerLeafM, InnerLeafS>>(
+		);
 		inner_ball.material = self.inner_leaf_material.clone();
 		let mut outer_splay = PlaneSplay::<OuterLeafM, OuterLeafS>::default();
 		outer_splay.material = self.outer_leaf_material.clone();
 
-		let foliage_rule = BraidOakFoliageRule {
-			inner_ball,
-			outer_splay,
-			leaf_radius_world: leaf_radius,
-		};
+		let foliage_rule =
+			BraidOakFoliageRule { inner_ball, outer_splay, leaf_radius_world: leaf_radius };
 
 		BallRenderHelper::new(chain, foliage_rule).spawn_render_items_under(
 			commands,

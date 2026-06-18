@@ -18,11 +18,8 @@ use crate::monster_grass::{definition, MonsterGrassCell, MonsterGrassClump, Mons
 use crate::skipped_mesh_material::SkippedLeafMeshMaterial;
 
 /// Typical [`StandardMaterial`] Monster Grass instance.
-pub type MonsterGrassStd = MonsterGrass<
-	StandardMaterial,
-	SkippedLeafMeshMaterial<StandardMaterial>,
-	FlatTerrainSample,
->;
+pub type MonsterGrassStd =
+	MonsterGrass<StandardMaterial, SkippedLeafMeshMaterial<StandardMaterial>, FlatTerrainSample>;
 
 /// Monster Grass grove preview (leaf material → oversized blade tufts).
 #[derive(Clone, Args)]
@@ -204,8 +201,7 @@ where
 					tuft.spawn_render_items(commands, cascade_chunk, local)
 				}
 				MonsterGrassItem::Patch(patch) => {
-					let mut item =
-						patch.build_tuft_patch(noise, self.leaf_material.clone());
+					let mut item = patch.build_tuft_patch(noise, self.leaf_material.clone());
 					item.shape.noise_amplitude = self.foliage_noise.amplitude;
 					item.shape.noise_frequency = self.foliage_noise.frequency;
 					item.spawn_render_items(commands, cascade_chunk, local)

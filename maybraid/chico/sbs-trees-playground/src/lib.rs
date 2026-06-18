@@ -27,6 +27,7 @@ use chico_sbs_trees::northern_conifer::render_item_plugin::ensure_registered as 
 use chico_sbs_trees::palm_bush::render_item_plugin::ensure_registered as ensure_palm_bush_render_plugins;
 use chico_sbs_trees::penmarch_torch::render_item_plugin::ensure_registered as ensure_penmarch_torch_render_plugins;
 use chico_sbs_trees::rorys_head_trained::render_item_plugin::ensure_registered as ensure_rorys_head_trained_render_plugins;
+use chico_sbs_trees::simplemans_hedge::render_item_plugin::ensure_registered as ensure_simplemans_hedge_render_plugins;
 use chico_sbs_trees::sopes_banyan::render_item_plugin::ensure_registered as ensure_sopes_banyan_render_plugins;
 use chico_sbs_trees::storybook_tree::render_item_plugin::ensure_registered as ensure_storybook_tree_render_plugins;
 use chico_sbs_trees::temperate_conifer::render_item_plugin::ensure_registered as ensure_temperate_conifer_render_plugins;
@@ -60,6 +61,7 @@ impl Plugin for SbsTreesPlaygroundPlugin {
 		ensure_penmarch_torch_render_plugins(app);
 		ensure_kamakura_torch_render_plugins(app);
 		ensure_rorys_head_trained_render_plugins(app);
+		ensure_simplemans_hedge_render_plugins(app);
 		ensure_vase_tree_render_plugins(app);
 		ensure_braid_oak_tree_render_plugins(app);
 		ensure_jungle_storybook_tree_render_plugins(app);

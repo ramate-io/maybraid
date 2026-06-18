@@ -9,9 +9,9 @@
 //! - **Stick material** — all graph segments.
 //! - **Leaf material** — 2–3 tufts per joint at [`LiamsConiferSbs::tuft_world_scale`].
 
+pub mod render_item_plugin;
 pub mod stick;
 mod tuft;
-pub mod render_item_plugin;
 
 use std::marker::PhantomData;
 

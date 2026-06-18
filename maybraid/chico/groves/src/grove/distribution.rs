@@ -236,12 +236,8 @@ mod tests {
 	#[test]
 	fn none_bucket_yields_empty() -> Result<()> {
 		let dist: GroveDistribution<()> = GroveDistribution::new(vec![GroveBucket::none(1.0)]);
-		let outcome = prepared(dist).select_at(
-			Vec3::ZERO,
-			1.0,
-			NoiseParams::default(),
-			&flat(0.5, 0.1),
-		);
+		let outcome =
+			prepared(dist).select_at(Vec3::ZERO, 1.0, NoiseParams::default(), &flat(0.5, 0.1));
 		assert!(matches!(outcome, GroveCellOutcome::Empty { .. }));
 		Ok(())
 	}
@@ -260,8 +256,7 @@ mod tests {
 				"flat",
 			),
 		]);
-		let outcome =
-			prepared(dist).select_from(0, Vec3::new(5.0, 0.0, 5.0), 1.0, &flat(0.3, 0.2));
+		let outcome = prepared(dist).select_from(0, Vec3::new(5.0, 0.0, 5.0), 1.0, &flat(0.3, 0.2));
 		match outcome {
 			GroveCellOutcome::Placed { variant, .. } => assert_eq!(variant, "flat"),
 			other => anyhow::bail!("expected Placed flat, got {other:?}"),
@@ -279,12 +274,8 @@ mod tests {
 			),
 			item: None,
 		}]);
-		let outcome = prepared(dist).select_at(
-			Vec3::ZERO,
-			1.0,
-			NoiseParams::default(),
-			&flat(0.0, 0.99),
-		);
+		let outcome =
+			prepared(dist).select_at(Vec3::ZERO, 1.0, NoiseParams::default(), &flat(0.0, 0.99));
 		assert!(matches!(outcome, GroveCellOutcome::Empty { .. }));
 		Ok(())
 	}

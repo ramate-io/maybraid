@@ -2,8 +2,8 @@
 
 use bevy::prelude::*;
 use chico_ball_components::plane_splay::PlaneSplay;
-use chico_sbs_geometry::render::ball::BallRenderRule;
 use chico_sbs_geometry::chain::storybook_tree::is_graph_terminal;
+use chico_sbs_geometry::render::ball::BallRenderRule;
 use chico_sbs_geometry::{BallStickChain, BallStickNode, StorybookTreeChain, StorybookTreePhase};
 
 fn should_allocate_plane_splay(

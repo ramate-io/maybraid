@@ -78,7 +78,8 @@ where
 
 	/// Deterministic patch-local clump anchors, scattered within the XZ footprint.
 	pub fn clump_anchors(&self) -> Vec<Vec3> {
-		let config = NoiseConfig::new(NoiseParams::from_scalar(self.shape.seed as f32, 1.0, 1.0, 1));
+		let config =
+			NoiseConfig::new(NoiseParams::from_scalar(self.shape.seed as f32, 1.0, 1.0, 1));
 		let half = (self.patch_extent_xz * 0.5).max(0.0);
 		(0..self.clump_count)
 			.map(|i| {

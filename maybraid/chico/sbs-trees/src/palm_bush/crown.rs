@@ -24,7 +24,8 @@ pub fn frond_shape_for_ring(
 	let scale = geometry.frond_world_scale.max(1e-8);
 	let proto = geometry.to_proto();
 	let u = proto.ring_vertical_bias(ring);
-	let length_fraction = FROND_LENGTH_FRACTION_LO + (FROND_LENGTH_FRACTION_HI - FROND_LENGTH_FRACTION_LO) * u;
+	let length_fraction =
+		FROND_LENGTH_FRACTION_LO + (FROND_LENGTH_FRACTION_HI - FROND_LENGTH_FRACTION_LO) * u;
 	let downward_tilt = 0.38 + (1.0 - u) * 0.18;
 	let emission_lift = 0.18 + u * 0.22;
 	let droop = 0.52 + (1.0 - u) * 0.16;

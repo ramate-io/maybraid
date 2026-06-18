@@ -187,7 +187,9 @@ impl JerrysChaparralCell {
 		match self {
 			Self::DryRoryHeadTrained => JerrysChaparralItem::RoryHead(&DRY_RORY_HEAD),
 			Self::ChaparralHighBush => JerrysChaparralItem::Bush(&CHAPARRAL_HIGH_BUSH),
-			Self::SmallFriendsConifer => JerrysChaparralItem::FriendsConifer(&SMALL_FRIENDS_CONIFER),
+			Self::SmallFriendsConifer => {
+				JerrysChaparralItem::FriendsConifer(&SMALL_FRIENDS_CONIFER)
+			}
 			Self::ManzanitaRory => JerrysChaparralItem::RoryHead(&MANZANITA_RORY),
 		}
 	}
@@ -308,8 +310,12 @@ mod tests {
 	fn constraint_first_fit_fallback() -> Result<()> {
 		// ChaparralHighBush (index 2) rejects steepness 0.60; first-fit falls to SmallFriendsConifer
 		// (index 3), which allows steepness up to 0.65.
-		let prepared =
-			JerrysChaparralCell::distribution().prepare(0.0, 0.0, NoiseParams::default(), Vec3::ZERO);
+		let prepared = JerrysChaparralCell::distribution().prepare(
+			0.0,
+			0.0,
+			NoiseParams::default(),
+			Vec3::ZERO,
+		);
 		let terrain = FlatTerrainSample { elevation: 0.35, steepness: 0.60 };
 		let outcome = prepared.select_from(2, Vec3::new(5.0, 0.35, 5.0), 1.0, &terrain);
 		match outcome {

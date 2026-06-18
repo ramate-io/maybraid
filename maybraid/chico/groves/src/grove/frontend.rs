@@ -130,9 +130,7 @@ pub fn parse_vec2_csv(s: &str) -> Result<Vec2, String> {
 pub fn parse_vec3_csv(s: &str) -> Result<Vec3, String> {
 	match parse_f32_csv(s)?.as_slice() {
 		&[x, y, z] => Ok(Vec3::new(x, y, z)),
-		parts => {
-			Err(format!("expected three comma-separated numbers, got {}: {s:?}", parts.len()))
-		}
+		parts => Err(format!("expected three comma-separated numbers, got {}: {s:?}", parts.len())),
 	}
 }
 
@@ -183,7 +181,10 @@ mod tests {
 
 	#[test]
 	fn parse_vec_csv_accepts_whitespace_and_rejects_arity() -> Result<()> {
-		assert_eq!(parse_vec2_csv("1.0, 2.0").map_err(|e| anyhow::anyhow!("{e}"))?, Vec2::new(1.0, 2.0));
+		assert_eq!(
+			parse_vec2_csv("1.0, 2.0").map_err(|e| anyhow::anyhow!("{e}"))?,
+			Vec2::new(1.0, 2.0)
+		);
 		assert!(parse_vec2_csv("1.0,2.0,3.0").is_err());
 		assert_eq!(
 			parse_vec3_csv("1,2,3").map_err(|e| anyhow::anyhow!("{e}"))?,

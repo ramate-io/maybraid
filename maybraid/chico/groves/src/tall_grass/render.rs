@@ -195,8 +195,7 @@ where
 					tuft.spawn_render_items(commands, cascade_chunk, local)
 				}
 				TallGrassItem::Patch(patch) => {
-					let mut item =
-						patch.build_tuft_patch(noise, self.leaf_material.clone());
+					let mut item = patch.build_tuft_patch(noise, self.leaf_material.clone());
 					item.shape.noise_amplitude = self.foliage_noise.amplitude;
 					item.shape.noise_frequency = self.foliage_noise.frequency;
 					item.spawn_render_items(commands, cascade_chunk, local)

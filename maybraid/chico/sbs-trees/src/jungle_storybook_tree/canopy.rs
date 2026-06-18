@@ -118,7 +118,8 @@ where
 	let pos = node.position;
 	shape.frond.rachis_half_thickness =
 		jitter(RACHIS_THICKNESS_CENTER, RACHIS_THICKNESS_SPAN, mix_unit(node_idx, pos, 11));
-	shape.foliage_scale = jitter(FOLIAGE_SCALE_CENTER, FOLIAGE_SCALE_SPAN, mix_unit(node_idx, pos, 19));
+	shape.foliage_scale =
+		jitter(FOLIAGE_SCALE_CENTER, FOLIAGE_SCALE_SPAN, mix_unit(node_idx, pos, 19));
 	shape.frond.frond_count = GROWTH_FROND_COUNT;
 
 	let radius_scale =
@@ -135,8 +136,16 @@ where
 
 /// [`BallRenderRule`] for the unified jungle canopy enum (inner ball, outer splay, growth).
 #[derive(Clone)]
-pub(crate) struct JungleStorybookFoliageRule<InnerM, InnerS, OuterM, OuterS, BodyM, BodyS, FoliageM, FoliageS>
-where
+pub(crate) struct JungleStorybookFoliageRule<
+	InnerM,
+	InnerS,
+	OuterM,
+	OuterS,
+	BodyM,
+	BodyS,
+	FoliageM,
+	FoliageS,
+> where
 	InnerM: Material,
 	InnerS: Clone + Into<MeshMaterial3d<InnerM>>,
 	OuterM: Material,
@@ -161,7 +170,16 @@ where
 
 impl<InnerM, InnerS, OuterM, OuterS, BodyM, BodyS, FoliageM, FoliageS>
 	BallRenderRule<
-		JungleStorybookCanopyFoliage<InnerM, InnerS, OuterM, OuterS, BodyM, BodyS, FoliageM, FoliageS>,
+		JungleStorybookCanopyFoliage<
+			InnerM,
+			InnerS,
+			OuterM,
+			OuterS,
+			BodyM,
+			BodyS,
+			FoliageM,
+			FoliageS,
+		>,
 		StorybookTreeChain,
 	> for JungleStorybookFoliageRule<InnerM, InnerS, OuterM, OuterS, BodyM, BodyS, FoliageM, FoliageS>
 where
@@ -181,17 +199,20 @@ where
 		hysteresis: &StorybookTreeChain,
 		chain: &BallStickChain<StorybookTreeChain>,
 	) -> Option<(
-		JungleStorybookCanopyFoliage<InnerM, InnerS, OuterM, OuterS, BodyM, BodyS, FoliageM, FoliageS>,
+		JungleStorybookCanopyFoliage<
+			InnerM,
+			InnerS,
+			OuterM,
+			OuterS,
+			BodyM,
+			BodyS,
+			FoliageM,
+			FoliageS,
+		>,
 		f32,
 	)> {
 		let scale = self.leaf_radius_world / node.radius.max(1e-4);
-		match classify_node_foliage(
-			self.growth_spawn_fraction,
-			node_idx,
-			node,
-			hysteresis,
-			chain,
-		) {
+		match classify_node_foliage(self.growth_spawn_fraction, node_idx, node, hysteresis, chain) {
 			NodeFoliageKind::None => None,
 			NodeFoliageKind::Growth => {
 				let (growth, radius_scale) = build_jungle_growth(
@@ -204,10 +225,9 @@ where
 				);
 				Some((JungleStorybookCanopyFoliage::Growth(growth), radius_scale))
 			}
-			NodeFoliageKind::InnerBall => Some((
-				JungleStorybookCanopyFoliage::InnerBall(self.inner_ball.clone()),
-				scale,
-			)),
+			NodeFoliageKind::InnerBall => {
+				Some((JungleStorybookCanopyFoliage::InnerBall(self.inner_ball.clone()), scale))
+			}
 			NodeFoliageKind::OuterSplay => {
 				let mut splay = self.outer_splay.clone();
 				let seed = node_mix_seed(node_idx, node.position);

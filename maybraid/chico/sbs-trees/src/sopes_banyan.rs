@@ -31,9 +31,9 @@ use procedural_common::noise_params_from_scalar_str;
 use procedural_common::NoiseParams;
 use render_item::{CascadeChunk, RenderItem};
 
+use crate::layered_canopy::LayeredTerminalCanopy;
 use crate::skipped_mesh_material::{SkippedLeafMeshMaterial, SkippedStickMeshMaterial};
 use canopy::SopesBanyanLeafCanopyRule;
-use crate::layered_canopy::LayeredTerminalCanopy;
 use joint_ball::SopesBanyanJointBallRule;
 use stick::SopesBanyanStickRule;
 

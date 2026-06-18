@@ -41,9 +41,6 @@ where
 		tuft.shape.element_count = element_count;
 		tuft.material = self.leaf_material.clone();
 
-		vec![(
-			tuft,
-			tuft_transform_at_joint(node, self.tuft_world_scale),
-		)]
+		vec![(tuft, tuft_transform_at_joint(node, self.tuft_world_scale))]
 	}
 }

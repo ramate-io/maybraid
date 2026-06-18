@@ -20,7 +20,7 @@ use crate::render::{
 	RenderBladeTuft, RenderBraidGrass, RenderBraidOakTree, RenderBuddhaHandTuft,
 	RenderCommonTufts, RenderConfig, RenderDatePalm, RenderFriendsConifer, RenderFrondCrown,
 	RenderHighBushShoots, RenderHonuBanyan, RenderJerrysChaparral, RenderJungleGrowth, RenderJungleStorybookTree,
-	RenderKamakuraTorch, RenderLiamsConifer, RenderModerateLodFrondCrown, RenderNorthernConifer,
+	RenderKamakuraTorch, RenderLevantineScrub, RenderLiamsConifer, RenderModerateLodFrondCrown, RenderNorthernConifer,
 	RenderPalmBush, RenderPenmarchTorch, RenderRorysHeadTrained, RenderSopesBanyan,
 	RenderSpearTuft, RenderStorybookTree, RenderSubject, RenderSucculentTuft,
 	RenderTemperateConifer, RenderTropicalThicket, RenderTropicalTufts, RenderTropicalUndergrowth, RenderTuftPatch,
@@ -157,6 +157,14 @@ impl CellRenderHelper<RenderJerrysChaparral> {
 	}
 }
 
+impl CellRenderHelper<RenderLevantineScrub> {
+	pub fn configured_levantine_scrub(&self) -> RenderLevantineScrub {
+		let mut grove = self.render.inner.clone();
+		grove.extent = self.grove_extent(grove.cell_extent_xz());
+		grove
+	}
+}
+
 impl CellRenderHelper<RenderTallGrass> {
 	pub fn configured_tall_grass(&self) -> RenderTallGrass {
 		let mut grass = self.render.inner.clone();
@@ -276,6 +284,7 @@ pub enum Render {
 	TropicalUndergrowth(CellRenderHelper<RenderTropicalUndergrowth>),
 	TropicalThicket(CellRenderHelper<RenderTropicalThicket>),
 	JerrysChaparral(CellRenderHelper<RenderJerrysChaparral>),
+	LevantineScrub(CellRenderHelper<RenderLevantineScrub>),
 	TallGrass(CellRenderHelper<RenderTallGrass>),
 	WildGrass(CellRenderHelper<RenderWildGrass>),
 	MonsterGrass(CellRenderHelper<RenderMonsterGrass>),
@@ -357,6 +366,9 @@ impl Render {
 			)),
 			Self::JerrysChaparral(h) => h.render.config_with(RenderSubject::JerrysChaparral(
 				h.configured_jerrys_chaparral(),
+			)),
+			Self::LevantineScrub(h) => h.render.config_with(RenderSubject::LevantineScrub(
+				h.configured_levantine_scrub(),
 			)),
 			Self::TallGrass(h) => h
 				.render
@@ -1312,6 +1324,50 @@ mod tests {
 			anyhow::bail!("expected jerrys chaparral subject");
 		};
 		assert_eq!(subject.placement_cells().len(), 36);
+		assert!(!subject.placements().is_empty());
+		Ok(())
+	}
+
+	#[test]
+	fn levantine_scrub_defaults_spawn_placements() -> Result<()> {
+		let cmd = crate::commands::PlaygroundCommand::parse_line("render levantine-scrub")
+			.map_err(|e| anyhow::anyhow!("{e}"))?;
+		let crate::commands::PlaygroundCommand::Render(Render::LevantineScrub(helper)) = cmd else {
+			anyhow::bail!("expected levantine-scrub render command");
+		};
+		let grove = helper.configured_levantine_scrub();
+		assert!(grove.grove.variant_weights.is_none());
+		let placements = grove.placements();
+		assert_eq!(helper.grove_extent_xz, 100.0);
+		assert!(
+			!placements.is_empty(),
+			"expected a visible levantine-scrub preview with default flags, got {} placements",
+			placements.len()
+		);
+		Ok(())
+	}
+
+	#[test]
+	fn levantine_scrub_command_preserves_grove_params() -> Result<()> {
+		let cmd = crate::commands::PlaygroundCommand::parse_line(
+			"render levantine-scrub --elevation 0.25 --grove-extent-xz 39 --cell-extent-xz 5.75,5.75",
+		)
+		.map_err(|e| anyhow::anyhow!("{e}"))?;
+		let crate::commands::PlaygroundCommand::Render(Render::LevantineScrub(helper)) = cmd else {
+			anyhow::bail!("expected levantine-scrub render command");
+		};
+		assert!((helper.grove_extent_xz - 39.0).abs() < 1e-5);
+		assert_eq!(helper.render.inner.grove.cell_extent_xz, Some(Vec2::splat(5.75)));
+		let grove = helper.configured_levantine_scrub();
+		let cell_count = grove.placement_cells().len();
+		assert_eq!(cell_count, 49);
+		assert!((grove.terrain.elevation - 0.25).abs() < 1e-5);
+		assert!(!grove.placements().is_empty());
+		let cfg = Render::LevantineScrub(helper).into_render_config();
+		let RenderSubject::LevantineScrub(subject) = cfg.subject else {
+			anyhow::bail!("expected levantine scrub subject");
+		};
+		assert_eq!(subject.placement_cells().len(), cell_count);
 		assert!(!subject.placements().is_empty());
 		Ok(())
 	}
