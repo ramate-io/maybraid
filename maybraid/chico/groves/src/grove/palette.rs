@@ -135,6 +135,9 @@ pub fn resolve_palette_color(name: &str) -> Option<Color> {
 		"young_palm_bark" => Color::srgb(0.52, 0.42, 0.28),
 		"spring_green" => Color::srgb(0.38, 0.72, 0.38),
 		"olive_green" => Color::srgb(0.42, 0.52, 0.28),
+		"olive_brown" => Color::srgb(0.45, 0.40, 0.28),
+		"ornamental_bark" => Color::srgb(0.52, 0.44, 0.36),
+		"hedge_green" => Color::srgb(0.32, 0.50, 0.30),
 		"gold" => Color::srgb(0.78, 0.62, 0.18),
 		"warm_yellow" => Color::srgb(0.82, 0.72, 0.32),
 		"light_brown" => Color::srgb(0.58, 0.48, 0.32),
@@ -246,10 +249,7 @@ mod tests {
 		use bevy::prelude::StandardMaterial;
 
 		let material = StandardMaterial::with_palette(StandardMaterial::default(), TEST_MIX, 7);
-		let allowed = [
-			PaletteColor("deep_green").resolve(),
-			PaletteColor("wet_green").resolve(),
-		];
+		let allowed = [PaletteColor("deep_green").resolve(), PaletteColor("wet_green").resolve()];
 		assert!(allowed.contains(&Some(material.base_color)));
 		assert!(material.double_sided);
 		Ok(())

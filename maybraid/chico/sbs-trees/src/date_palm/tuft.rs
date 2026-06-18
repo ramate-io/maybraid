@@ -35,11 +35,7 @@ where
 	tuft.spawn_render_items_under(
 		commands,
 		cascade_chunk,
-		Transform {
-			translation: tip,
-			scale: Vec3::splat(scale),
-			..default()
-		},
+		Transform { translation: tip, scale: Vec3::splat(scale), ..default() },
 		Some(parent),
 	)
 }

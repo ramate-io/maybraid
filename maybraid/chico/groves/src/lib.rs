@@ -7,12 +7,13 @@ pub mod bush_scrub;
 pub mod common_tufts;
 pub mod high_bush;
 pub mod jerrys_chaparral;
+pub mod levantine_scrub;
 pub mod low_bush;
 pub mod monster_grass;
 pub mod riverine_green;
 pub mod tall_grass;
-pub mod tropical_tufts;
 pub mod tropical_thicket;
+pub mod tropical_tufts;
 pub mod tropical_undergrowth;
 pub mod wild_grass;
 
@@ -35,19 +36,23 @@ pub use bush_scrub::{BushScrubBush, BushScrubCell, BushScrubItem, BushScrubTuft}
 pub use common_tufts::{CommonTuftClump, CommonTuftsCell, CommonTuftsItem};
 pub use high_bush::{HighBushBush, HighBushCell, HighBushItem};
 pub use jerrys_chaparral::{
-	JerrysChaparralBush, JerrysChaparralCell, JerrysChaparralFriendsConifer,
-	JerrysChaparralItem, JerrysChaparralRoryHead,
+	JerrysChaparralBush, JerrysChaparralCell, JerrysChaparralFriendsConifer, JerrysChaparralItem,
+	JerrysChaparralRoryHead,
+};
+pub use levantine_scrub::{
+	LevantineScrubBraidOak, LevantineScrubBush, LevantineScrubCell, LevantineScrubHedge,
+	LevantineScrubItem, LevantineScrubRoryHead, LevantineScrubTorch, LevantineScrubVaseTree,
 };
 pub use low_bush::{LowBushBush, LowBushCell, LowBushItem};
 pub use monster_grass::{MonsterGrassCell, MonsterGrassClump, MonsterGrassItem};
 pub use riverine_green::{RiverineGreenBush, RiverineGreenCell, RiverineGreenItem};
 pub use tall_grass::{TallGrassCell, TallGrassClump, TallGrassItem};
-pub use tropical_tufts::{
-	TropicalPalmBush, TropicalTuftClump, TropicalTuftsCell, TropicalTuftsItem,
-};
 pub use tropical_thicket::{
 	TropicalThicketBanyan, TropicalThicketBush, TropicalThicketCell, TropicalThicketItem,
 	TropicalThicketPalm,
+};
+pub use tropical_tufts::{
+	TropicalPalmBush, TropicalTuftClump, TropicalTuftsCell, TropicalTuftsItem,
 };
 pub use tropical_undergrowth::{
 	TropicalUndergrowthCell, TropicalUndergrowthItem, TropicalUndergrowthPalm,
@@ -67,6 +72,8 @@ pub use high_bush::{HighBush, HighBushStd};
 #[cfg(feature = "render")]
 pub use jerrys_chaparral::{JerrysChaparral, JerrysChaparralStd};
 #[cfg(feature = "render")]
+pub use levantine_scrub::{LevantineScrub, LevantineScrubStd};
+#[cfg(feature = "render")]
 pub use low_bush::{LowBush, LowBushStd};
 #[cfg(feature = "render")]
 pub use monster_grass::{MonsterGrass, MonsterGrassStd};
@@ -75,9 +82,9 @@ pub use riverine_green::{RiverineGreen, RiverineGreenStd};
 #[cfg(feature = "render")]
 pub use tall_grass::{TallGrass, TallGrassStd};
 #[cfg(feature = "render")]
-pub use tropical_tufts::{TropicalTufts, TropicalTuftsStd};
-#[cfg(feature = "render")]
 pub use tropical_thicket::{TropicalThicket, TropicalThicketStd};
+#[cfg(feature = "render")]
+pub use tropical_tufts::{TropicalTufts, TropicalTuftsStd};
 #[cfg(feature = "render")]
 pub use tropical_undergrowth::{TropicalUndergrowth, TropicalUndergrowthStd};
 #[cfg(feature = "render")]

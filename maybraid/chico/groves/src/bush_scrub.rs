@@ -37,10 +37,7 @@ const VERY_LOW_PROJECTION_VERTICAL: UnitRange = UnitRange::new(0.78, 0.92);
 pub fn definition() -> GroveDefinition<BushScrubCell> {
 	GroveDefinition {
 		cell_extent_xz: Vec2::splat(2.5),
-		placement: GrovePlacementRanges::new(
-			UnitRange::new(0.85, 1.15),
-			UnitRange::new(-2.5, 2.5),
-		),
+		placement: GrovePlacementRanges::new(UnitRange::new(0.85, 1.15), UnitRange::new(-2.5, 2.5)),
 		distribution: BushScrubCell::distribution(),
 	}
 }
@@ -149,8 +146,7 @@ const GREEN_TUFT_PATCH: GroveTuftPatch<BushScrubTuft> = GroveTuftPatch {
 	base_spread: UnitRange::new(0.12, 0.28),
 };
 
-const DRY_TUFT_MIX: PaletteMix =
-	PaletteMix::new(&[PaletteSlot::new("dry_green", "straw_brown")]);
+const DRY_TUFT_MIX: PaletteMix = PaletteMix::new(&[PaletteSlot::new("dry_green", "straw_brown")]);
 const GREEN_TUFT_MIX: PaletteMix =
 	PaletteMix::new(&[PaletteSlot::new("dark_green", "light_green")]);
 

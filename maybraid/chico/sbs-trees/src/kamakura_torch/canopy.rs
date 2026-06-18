@@ -3,7 +3,10 @@
 use bevy::prelude::*;
 use chico_sbs_geometry::render::ball::BallRenderRule;
 use chico_sbs_geometry::render::mix_seed::node_mix_seed;
-use chico_sbs_geometry::{kamakura_is_graph_terminal, BallStickChain, BallStickNode, KamakuraTorchChain, StorybookTreePhase};
+use chico_sbs_geometry::{
+	kamakura_is_graph_terminal, BallStickChain, BallStickNode, KamakuraTorchChain,
+	StorybookTreePhase,
+};
 
 use crate::layered_canopy::{LayeredTerminalCanopy, LayeredTerminalCanopyItem};
 
@@ -21,8 +24,7 @@ fn should_allocate_foliage(
 	}
 	let is_terminal = kamakura_is_graph_terminal(chain, node_idx);
 	let upper = hysteresis.ring_u > 0.55;
-	let outer = hysteresis.distance_from_anchor
-		> 0.70 * hysteresis.projection_length;
+	let outer = hysteresis.distance_from_anchor > 0.70 * hysteresis.projection_length;
 	is_terminal || upper || outer
 }
 

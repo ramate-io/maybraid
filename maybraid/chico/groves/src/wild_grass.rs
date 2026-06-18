@@ -333,9 +333,8 @@ mod tests {
 				.buckets
 				.iter()
 				.filter(|b| {
-					b.item.is_some_and(|cell| {
-						matches!(cell.item(), WildGrassItem::Patch(_)) == patch
-					})
+					b.item
+						.is_some_and(|cell| matches!(cell.item(), WildGrassItem::Patch(_)) == patch)
 				})
 				.map(|b| b.weight)
 				.sum()

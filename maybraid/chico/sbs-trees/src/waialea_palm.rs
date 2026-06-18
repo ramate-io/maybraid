@@ -99,7 +99,9 @@ where
 	LeafM: Material,
 	LeafS: Clone + Into<MeshMaterial3d<LeafM>> + Args,
 {
-	pub fn build_chain(&self) -> chico_sbs_geometry::BallStickChain<chico_sbs_geometry::WaialeaPalmChain> {
+	pub fn build_chain(
+		&self,
+	) -> chico_sbs_geometry::BallStickChain<chico_sbs_geometry::WaialeaPalmChain> {
 		self.geometry.build_chain()
 	}
 }

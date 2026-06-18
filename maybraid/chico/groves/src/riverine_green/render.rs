@@ -301,8 +301,12 @@ mod tests {
 			assert!(shape.height <= bush.height.start.max(bush.height.end));
 			assert!(bush.shoot_count.contains(&shape.shoot_count));
 			assert!(bush.branch_depth.contains(&(shape.branch_depth as u32)));
-			assert!(shape.radial_strength >= bush.radial_strength.start.min(bush.radial_strength.end));
-			assert!(shape.radial_strength <= bush.radial_strength.start.max(bush.radial_strength.end));
+			assert!(
+				shape.radial_strength >= bush.radial_strength.start.min(bush.radial_strength.end)
+			);
+			assert!(
+				shape.radial_strength <= bush.radial_strength.start.max(bush.radial_strength.end)
+			);
 			assert!(shape.vertical_bias >= bush.vertical_bias.start.min(bush.vertical_bias.end));
 			assert!(shape.vertical_bias <= bush.vertical_bias.start.max(bush.vertical_bias.end));
 			let leaf_radius = shape.leaf_radius_world();

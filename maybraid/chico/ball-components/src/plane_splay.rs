@@ -51,6 +51,63 @@ where
 		let n = self.icosphere_subdivisions.min(6);
 		20u32.saturating_mul(4u32.saturating_pow(n))
 	}
+
+	/// Spawn under `parent` with `local_transform` relative to the parent (assembly-local placement).
+	pub fn spawn_render_items_under(
+		&self,
+		commands: &mut Commands,
+		cascade_chunk: &CascadeChunk,
+		local_transform: Transform,
+		parent: Option<Entity>,
+	) -> Vec<Entity>
+	where
+		M: Send + Sync + 'static,
+		S: Send + Sync + 'static,
+	{
+		let bundle = (self.clone(), cascade_chunk.clone(), local_transform, Visibility::default());
+		let root = match parent {
+			Some(parent) => {
+				let mut entity = Entity::PLACEHOLDER;
+				commands.entity(parent).with_children(|parent_cmd| {
+					entity = parent_cmd.spawn(bundle).id();
+				});
+				entity
+			}
+			None => commands.spawn(bundle).id(),
+		};
+
+		let splay = self.clone();
+		commands.queue(move |world: &mut World| {
+			let subdiv = splay.icosphere_subdivisions.min(4);
+			let core_mesh =
+				SphereMeshBuilder::new(splay.core_radius, SphereKind::Ico { subdivisions: subdiv })
+					.build();
+
+			let plate_mesh = plate_shell_mesh(&core_mesh, splay.leaf_disc_radius);
+
+			let (core_handle, plate_handle) = {
+				let mut meshes = world.resource_mut::<Assets<Mesh>>();
+				let core_handle = meshes.add(core_mesh);
+				let plate_handle = plate_mesh.map(|p| meshes.add(p));
+				(core_handle, plate_handle)
+			};
+
+			let material: MeshMaterial3d<M> = splay.material.clone().into();
+
+			world.spawn((
+				ChildOf(root),
+				Mesh3d(core_handle),
+				material.clone(),
+				Transform::IDENTITY,
+			));
+
+			if let Some(ph) = plate_handle {
+				world.spawn((ChildOf(root), Mesh3d(ph), material, Transform::IDENTITY));
+			}
+		});
+
+		vec![root]
+	}
 }
 
 /// Right-handed orthonormal basis spanning the plane `u · x = 0` (plane through origin with normal `u`).
@@ -130,40 +187,6 @@ where
 		cascade_chunk: &CascadeChunk,
 		transform: Transform,
 	) -> Vec<Entity> {
-		let root = commands
-			.spawn((self.clone(), cascade_chunk.clone(), transform, Visibility::default()))
-			.id();
-
-		let splay = self.clone();
-		commands.queue(move |world: &mut World| {
-			let subdiv = splay.icosphere_subdivisions.min(4);
-			let core_mesh =
-				SphereMeshBuilder::new(splay.core_radius, SphereKind::Ico { subdivisions: subdiv })
-					.build();
-
-			let plate_mesh = plate_shell_mesh(&core_mesh, splay.leaf_disc_radius);
-
-			let (core_handle, plate_handle) = {
-				let mut meshes = world.resource_mut::<Assets<Mesh>>();
-				let core_handle = meshes.add(core_mesh);
-				let plate_handle = plate_mesh.map(|p| meshes.add(p));
-				(core_handle, plate_handle)
-			};
-
-			let material: MeshMaterial3d<M> = splay.material.clone().into();
-
-			world.spawn((
-				ChildOf(root),
-				Mesh3d(core_handle),
-				material.clone(),
-				Transform::IDENTITY,
-			));
-
-			if let Some(ph) = plate_handle {
-				world.spawn((ChildOf(root), Mesh3d(ph), material, Transform::IDENTITY));
-			}
-		});
-
-		vec![root]
+		self.spawn_render_items_under(commands, cascade_chunk, transform, None)
 	}
 }

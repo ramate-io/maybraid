@@ -215,7 +215,8 @@ impl TropicalThicketCell {
 	/// Placed weights total `5.25` (RFC relative proportions); the `None` weight of `7.0` puts
 	/// the placed share at `5.25 / 12.25 ≈ 0.43`, mid RFC `DENSITY_RANGE` (`0.24..0.62`).
 	pub fn distribution() -> GroveDistribution<Self> {
-		let gentle = PlacementConstraints::new(UnitRange::new(0.0, 0.45), UnitRange::new(0.0, 0.28));
+		let gentle =
+			PlacementConstraints::new(UnitRange::new(0.0, 0.45), UnitRange::new(0.0, 0.28));
 		let wet_palm =
 			PlacementConstraints::new(UnitRange::new(0.0, 0.45), UnitRange::new(0.0, 0.68));
 		let flowering =
@@ -356,7 +357,8 @@ mod tests {
 		assert!(banyan.height.end <= 3.80);
 		assert!(banyan.canopy_spread.start >= 1.20);
 
-		let TropicalThicketItem::Bush(moderate) = TropicalThicketCell::ModerateHighBush.item() else {
+		let TropicalThicketItem::Bush(moderate) = TropicalThicketCell::ModerateHighBush.item()
+		else {
 			anyhow::bail!("expected moderate bush item");
 		};
 		assert!(moderate.height.start >= 1.20);
@@ -382,8 +384,12 @@ mod tests {
 	fn constraint_first_fit_fallback() -> Result<()> {
 		// LargePalmBush (index 1) rejects steepness 0.30; first-fit falls to BroadWetPalmBush
 		// (index 2), which allows steepness up to 0.68.
-		let prepared =
-			TropicalThicketCell::distribution().prepare(0.0, 0.0, NoiseParams::default(), Vec3::ZERO);
+		let prepared = TropicalThicketCell::distribution().prepare(
+			0.0,
+			0.0,
+			NoiseParams::default(),
+			Vec3::ZERO,
+		);
 		let terrain = FlatTerrainSample { elevation: 0.35, steepness: 0.30 };
 		let outcome = prepared.select_from(1, Vec3::new(5.0, 0.35, 5.0), 1.0, &terrain);
 		match outcome {

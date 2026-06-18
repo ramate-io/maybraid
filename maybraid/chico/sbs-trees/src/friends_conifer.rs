@@ -172,10 +172,8 @@ where
 		leaf_splay.leaf_disc_radius = FRIENDS_SPLAY_LEAF_DISC_RADIUS;
 		leaf_splay.icosphere_subdivisions = 1;
 		leaf_splay.material = self.leaf_material.clone();
-		let leaf_rule = FriendsConiferCanopyRule {
-			leaf_splay,
-			splay_radius_world: self.splay_radius_world(),
-		};
+		let leaf_rule =
+			FriendsConiferCanopyRule { leaf_splay, splay_radius_world: self.splay_radius_world() };
 
 		BallRenderHelper::new(chain.clone(), leaf_rule).spawn_render_items_under(
 			commands,

@@ -13,8 +13,8 @@ use chico_ball_components::plane_splay::PlaneSplay;
 use chico_sbs_geometry::render::ball::BallRenderHelper;
 use chico_sbs_geometry::render::stick::StickRenderHelper;
 use chico_sbs_geometry::{BallStickChain, JungleStorybookTreeSbs, StorybookTreeChain};
-use clap::Args;
 use chico_tree_components::{SkippedBodyMeshMaterial, SkippedFoliageMeshMaterial};
+use clap::Args;
 use procedural_common::noise_params_from_scalar_str;
 use procedural_common::NoiseParams;
 use render_item::{CascadeChunk, RenderItem};
@@ -56,8 +56,18 @@ impl Default for JungleStorybookConstructionParams {
 
 #[derive(Component, Clone, Args)]
 #[command(rename_all = "kebab-case")]
-pub struct JungleStorybookTree<StickM, StickS, InnerLeafM, InnerLeafS, OuterLeafM, OuterLeafS, BodyM, BodyS, FoliageM, FoliageS>
-where
+pub struct JungleStorybookTree<
+	StickM,
+	StickS,
+	InnerLeafM,
+	InnerLeafS,
+	OuterLeafM,
+	OuterLeafS,
+	BodyM,
+	BodyS,
+	FoliageM,
+	FoliageS,
+> where
 	StickM: Material,
 	StickS: Clone + Into<MeshMaterial3d<StickM>> + Args,
 	InnerLeafM: Material,
@@ -137,11 +147,39 @@ where
 	pub growth_foliage_noise: NoiseParams,
 
 	#[arg(skip)]
-	__marker: PhantomData<(fn() -> StickM, fn() -> InnerLeafM, fn() -> OuterLeafM, fn() -> BodyM, fn() -> FoliageM)>,
+	__marker: PhantomData<(
+		fn() -> StickM,
+		fn() -> InnerLeafM,
+		fn() -> OuterLeafM,
+		fn() -> BodyM,
+		fn() -> FoliageM,
+	)>,
 }
 
-impl<StickM, StickS, InnerLeafM, InnerLeafS, OuterLeafM, OuterLeafS, BodyM, BodyS, FoliageM, FoliageS>
-	Default for JungleStorybookTree<StickM, StickS, InnerLeafM, InnerLeafS, OuterLeafM, OuterLeafS, BodyM, BodyS, FoliageM, FoliageS>
+impl<
+		StickM,
+		StickS,
+		InnerLeafM,
+		InnerLeafS,
+		OuterLeafM,
+		OuterLeafS,
+		BodyM,
+		BodyS,
+		FoliageM,
+		FoliageS,
+	> Default
+	for JungleStorybookTree<
+		StickM,
+		StickS,
+		InnerLeafM,
+		InnerLeafS,
+		OuterLeafM,
+		OuterLeafS,
+		BodyM,
+		BodyS,
+		FoliageM,
+		FoliageS,
+	>
 where
 	StickM: Material,
 	StickS: Clone + Into<MeshMaterial3d<StickM>> + Args + Default,
@@ -173,8 +211,30 @@ where
 	}
 }
 
-impl<StickM, StickS, InnerLeafM, InnerLeafS, OuterLeafM, OuterLeafS, BodyM, BodyS, FoliageM, FoliageS>
-	JungleStorybookTree<StickM, StickS, InnerLeafM, InnerLeafS, OuterLeafM, OuterLeafS, BodyM, BodyS, FoliageM, FoliageS>
+impl<
+		StickM,
+		StickS,
+		InnerLeafM,
+		InnerLeafS,
+		OuterLeafM,
+		OuterLeafS,
+		BodyM,
+		BodyS,
+		FoliageM,
+		FoliageS,
+	>
+	JungleStorybookTree<
+		StickM,
+		StickS,
+		InnerLeafM,
+		InnerLeafS,
+		OuterLeafM,
+		OuterLeafS,
+		BodyM,
+		BodyS,
+		FoliageM,
+		FoliageS,
+	>
 where
 	StickM: Material,
 	StickS: Clone + Into<MeshMaterial3d<StickM>> + Args,
@@ -199,8 +259,30 @@ where
 	}
 }
 
-impl<StickM, StickS, InnerLeafM, InnerLeafS, OuterLeafM, OuterLeafS, BodyM, BodyS, FoliageM, FoliageS> RenderItem
-	for JungleStorybookTree<StickM, StickS, InnerLeafM, InnerLeafS, OuterLeafM, OuterLeafS, BodyM, BodyS, FoliageM, FoliageS>
+impl<
+		StickM,
+		StickS,
+		InnerLeafM,
+		InnerLeafS,
+		OuterLeafM,
+		OuterLeafS,
+		BodyM,
+		BodyS,
+		FoliageM,
+		FoliageS,
+	> RenderItem
+	for JungleStorybookTree<
+		StickM,
+		StickS,
+		InnerLeafM,
+		InnerLeafS,
+		OuterLeafM,
+		OuterLeafS,
+		BodyM,
+		BodyS,
+		FoliageM,
+		FoliageS,
+	>
 where
 	StickM: Material + Send + Sync + 'static,
 	StickS: Clone + Into<MeshMaterial3d<StickM>> + Args + Send + Sync + 'static + Default,
@@ -239,7 +321,9 @@ where
 			Some(root),
 		);
 
-		let mut inner_ball = self.inner_leaf_surface_noise.build_scalar::<ChicoBall<InnerLeafM, InnerLeafS>>();
+		let mut inner_ball = self
+			.inner_leaf_surface_noise
+			.build_scalar::<ChicoBall<InnerLeafM, InnerLeafS>>();
 		inner_ball.material = self.inner_leaf_material.clone();
 		let mut outer_splay = PlaneSplay::<OuterLeafM, OuterLeafS>::default();
 		outer_splay.material = self.outer_leaf_material.clone();

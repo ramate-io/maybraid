@@ -32,11 +32,7 @@ where
 	tuft.spawn_render_items_under(
 		commands,
 		cascade_chunk,
-		Transform {
-			translation: geometry.crown_origin(),
-			scale: Vec3::splat(scale),
-			..default()
-		},
+		Transform { translation: geometry.crown_origin(), scale: Vec3::splat(scale), ..default() },
 		Some(parent),
 	)
 }

@@ -3,12 +3,12 @@
 use std::marker::PhantomData;
 
 use bevy::prelude::*;
-use chico_sbs_geometry::{FriendsConiferSbs, RorysHeadTrainedSbs};
 use chico_sbs_geometry::anchors::high_bush::{
 	DEFAULT_ANCHOR_LIFT_FRACTION, DEFAULT_SEGMENT_LENGTH_FRACTION_HI,
 	DEFAULT_SEGMENT_LENGTH_FRACTION_LO, DEFAULT_SEGMENT_RADIUS_FRACTION_HI,
 	DEFAULT_SEGMENT_RADIUS_FRACTION_LO,
 };
+use chico_sbs_geometry::{FriendsConiferSbs, RorysHeadTrainedSbs};
 use chico_sbs_trees::friends_conifer::FriendsConifer;
 use chico_sbs_trees::rorys_head_trained::RorysHeadTrained;
 use chico_tree_components::{HighBushFoliageStyle, HighBushShoots, HighBushShootsShape};
@@ -431,8 +431,7 @@ mod tests {
 	fn rory_bush_and_conifer_geometry_builds_within_authored_ranges() -> Result<()> {
 		let noise = placement_noise(NoiseParams::default(), Vec3::new(5.0, 0.0, 5.0));
 
-		for cell in [JerrysChaparralCell::DryRoryHeadTrained, JerrysChaparralCell::ManzanitaRory]
-		{
+		for cell in [JerrysChaparralCell::DryRoryHeadTrained, JerrysChaparralCell::ManzanitaRory] {
 			let JerrysChaparralItem::RoryHead(rory) = cell.item() else {
 				anyhow::bail!("expected rory item for {cell:?}");
 			};
@@ -456,8 +455,12 @@ mod tests {
 			anyhow::bail!("expected conifer item");
 		};
 		let samples = conifer.build_with_noise(noise);
-		assert!(samples.geometry.scale.stalk_height >= conifer.height.start.min(conifer.height.end));
-		assert!(samples.geometry.scale.stalk_height <= conifer.height.start.max(conifer.height.end));
+		assert!(
+			samples.geometry.scale.stalk_height >= conifer.height.start.min(conifer.height.end)
+		);
+		assert!(
+			samples.geometry.scale.stalk_height <= conifer.height.start.max(conifer.height.end)
+		);
 		assert!((0.25..=0.55).contains(&samples.apex_canopy_spawn_fraction));
 		Ok(())
 	}
@@ -528,9 +531,9 @@ mod tests {
 		let placements = grove.placements();
 		assert!(!placements.is_empty());
 		assert!(
-			placements.iter().any(|p| {
-				matches!(p.variant, JerrysChaparralCell::ChaparralHighBush)
-			}),
+			placements
+				.iter()
+				.any(|p| { matches!(p.variant, JerrysChaparralCell::ChaparralHighBush) }),
 			"expected at least one chaparral high bush"
 		);
 		assert!(
@@ -543,9 +546,9 @@ mod tests {
 			"expected at least one rory form"
 		);
 		assert!(
-			placements.iter().any(|p| {
-				matches!(p.variant, JerrysChaparralCell::SmallFriendsConifer)
-			}),
+			placements
+				.iter()
+				.any(|p| { matches!(p.variant, JerrysChaparralCell::SmallFriendsConifer) }),
 			"expected at least one small friends conifer over enlarged extent"
 		);
 		Ok(())

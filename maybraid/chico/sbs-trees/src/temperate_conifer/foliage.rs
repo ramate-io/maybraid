@@ -14,11 +14,7 @@ const FROND_LEAFLET_COUNT: u32 = 8;
 const FROND_SPINE_SEGMENTS: u32 = 6;
 
 /// Deterministic frond count in `fronds_per_joint` (inclusive range).
-fn frond_count_for_node(
-	node_idx: usize,
-	position: Vec3,
-	fronds_per_joint: &UnitRange,
-) -> u32 {
+fn frond_count_for_node(node_idx: usize, position: Vec3, fronds_per_joint: &UnitRange) -> u32 {
 	let span = fronds_per_joint.end - fronds_per_joint.start;
 	if span <= 0.0 {
 		return fronds_per_joint.start.round().max(1.0) as u32;
@@ -41,7 +37,11 @@ fn frond_length_world(
 	(frac * h / frond_world_scale.max(1e-8)).max(1e-4)
 }
 
-fn branch_direction(chain: &BallStickChain<FriendsConiferChain>, node_idx: usize, node: &BallStickNode) -> Vec3 {
+fn branch_direction(
+	chain: &BallStickChain<FriendsConiferChain>,
+	node_idx: usize,
+	node: &BallStickNode,
+) -> Vec3 {
 	if let Some(parent) = chain.parent_index(node_idx) {
 		let delta = node.position - chain.nodes[parent].position;
 		if delta.length_squared() > 1e-10 {

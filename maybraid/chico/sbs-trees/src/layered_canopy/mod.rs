@@ -44,7 +44,11 @@ where
 	}
 
 	/// Plane splay with per-node variation from [`node_mix_seed`](chico_sbs_geometry::render::mix_seed::node_mix_seed).
-	pub fn plane_splay_item_varied(&self, node_idx: usize, position: Vec3) -> LayeredTerminalCanopyItem<LeafM, LeafS> {
+	pub fn plane_splay_item_varied(
+		&self,
+		node_idx: usize,
+		position: Vec3,
+	) -> LayeredTerminalCanopyItem<LeafM, LeafS> {
 		let mut splay = self.plane_splay.clone();
 		let seed = chico_sbs_geometry::render::mix_seed::node_mix_seed(node_idx, position);
 		splay.icosphere_subdivisions = seed % 2;

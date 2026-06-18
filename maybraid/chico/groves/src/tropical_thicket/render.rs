@@ -3,16 +3,16 @@
 use std::marker::PhantomData;
 
 use bevy::prelude::*;
-use chico_sbs_geometry::{HonuBanyanSbs, PalmBushSbs};
 use chico_sbs_geometry::anchors::high_bush::{
 	DEFAULT_ANCHOR_LIFT_FRACTION, DEFAULT_SEGMENT_RADIUS_FRACTION_HI,
 	DEFAULT_SEGMENT_RADIUS_FRACTION_LO,
 };
+use chico_sbs_geometry::{HonuBanyanSbs, PalmBushSbs};
+use chico_sbs_trees::honu_banyan::HonuBanyan;
+use chico_sbs_trees::palm_bush::PalmBush;
 use chico_sbs_trees::{
 	SkippedInnerLeafMeshMaterial, SkippedOuterLeafMeshMaterial, SkippedStickMeshMaterial,
 };
-use chico_sbs_trees::honu_banyan::HonuBanyan;
-use chico_sbs_trees::palm_bush::PalmBush;
 use chico_tree_components::{
 	HighBushFoliageStyle, HighBushShoots, HighBushShootsShape, SkippedBodyMeshMaterial,
 	SkippedFoliageMeshMaterial,
@@ -32,8 +32,8 @@ use crate::skipped_mesh_material::{
 	SkippedLeafMeshMaterial, SkippedStickMeshMaterial as GroveSkippedStickMeshMaterial,
 };
 use crate::tropical_thicket::{
-	definition, TropicalThicketBanyan, TropicalThicketBush, TropicalThicketCell, TropicalThicketItem,
-	TropicalThicketPalm,
+	definition, TropicalThicketBanyan, TropicalThicketBush, TropicalThicketCell,
+	TropicalThicketItem, TropicalThicketPalm,
 };
 
 /// Honu template for mini-banyan placements (material slots match playground [`RenderHonuBanyan`]).
@@ -228,10 +228,19 @@ fn span_fraction(canopy_spread: f32, height: f32) -> f32 {
 	(canopy_spread / height.max(0.5)).clamp(0.35, 1.20)
 }
 
-fn ordered_unit_range_samples(config: &NoiseConfig, range: UnitRange, salt_lo: f32, salt_hi: f32) -> (f32, f32) {
+fn ordered_unit_range_samples(
+	config: &NoiseConfig,
+	range: UnitRange,
+	salt_lo: f32,
+	salt_hi: f32,
+) -> (f32, f32) {
 	let a = sample_f32(config, range, salt_lo);
 	let b = sample_f32(config, range, salt_hi);
-	if a <= b { (a, b) } else { (b, a) }
+	if a <= b {
+		(a, b)
+	} else {
+		(b, a)
+	}
 }
 
 impl BuildWithNoise<PalmBushSbs> for TropicalThicketPalm {
@@ -446,9 +455,14 @@ mod tests {
 		assert!(samples.geometry.scale.tree_height >= banyan.height.start.min(banyan.height.end));
 		assert!(samples.geometry.scale.tree_height <= banyan.height.start.max(banyan.height.end));
 		assert_eq!(samples.geometry.rings.layout, RingLayout::new(2, 5));
-		assert!(samples.geometry.growth.descender_threshold
-			>= banyan.descender_density.start.min(banyan.descender_density.end));
-		assert!(samples.growth_spawn_fraction >= banyan.canopy_density.start.min(banyan.canopy_density.end));
+		assert!(
+			samples.geometry.growth.descender_threshold
+				>= banyan.descender_density.start.min(banyan.descender_density.end)
+		);
+		assert!(
+			samples.growth_spawn_fraction
+				>= banyan.canopy_density.start.min(banyan.canopy_density.end)
+		);
 
 		for cell in [TropicalThicketCell::ModerateHighBush, TropicalThicketCell::FloweringHighBush]
 		{
@@ -460,10 +474,14 @@ mod tests {
 			assert!(shape.height <= bush.height.start.max(bush.height.end));
 			assert!(bush.shoot_count.contains(&shape.shoot_count));
 			assert!(bush.branch_depth.contains(&(shape.branch_depth as u32)));
-			assert!(shape.segment_length_fraction_lo
-				>= bush.segment_length_fraction.start.min(bush.segment_length_fraction.end));
-			assert!(shape.segment_length_fraction_hi
-				<= bush.segment_length_fraction.start.max(bush.segment_length_fraction.end));
+			assert!(
+				shape.segment_length_fraction_lo
+					>= bush.segment_length_fraction.start.min(bush.segment_length_fraction.end)
+			);
+			assert!(
+				shape.segment_length_fraction_hi
+					<= bush.segment_length_fraction.start.max(bush.segment_length_fraction.end)
+			);
 		}
 		Ok(())
 	}
@@ -507,11 +525,8 @@ mod tests {
 
 	#[test]
 	fn with_resolved_placements_skips_live_selection() -> Result<()> {
-		let placement = GrovePlacedCell::new(
-			TropicalThicketCell::LargePalmBush,
-			Vec3::new(1.0, 0.0, 2.0),
-			1.0,
-		);
+		let placement =
+			GrovePlacedCell::new(TropicalThicketCell::LargePalmBush, Vec3::new(1.0, 0.0, 2.0), 1.0);
 		let item = TropicalThicketStd::with_resolved_placements(
 			vec![placement.clone()],
 			FlatTerrainSample::default(),
