@@ -11,6 +11,7 @@ use chico_groves::conifer_sapling::ConiferSaplingStd;
 use chico_groves::goettingen_follow::GoettingenFollowStd;
 use chico_groves::high_bush::HighBushStd;
 use chico_groves::jerrys_chaparral::JerrysChaparralStd;
+use chico_groves::jungle_lower_massives::JungleLowerMassivesStd;
 use chico_groves::levantine_scrub::LevantineScrubStd;
 use chico_groves::low_bush::LowBushStd;
 use chico_groves::monster_grass::MonsterGrassStd;
@@ -285,6 +286,9 @@ pub type RenderConiferSapling = ConiferSaplingStd;
 /// [`AridConiferSaplingStd`] — sparse dry young conifer lower-canopy grove ([#327](https://github.com/ramate-io/maybraid/issues/327)).
 pub type RenderAridConiferSapling = AridConiferSaplingStd;
 
+/// [`JungleLowerMassivesStd`] — moderate massive jungle lower-canopy grove ([#328](https://github.com/ramate-io/maybraid/issues/328)).
+pub type RenderJungleLowerMassives = JungleLowerMassivesStd;
+
 /// The configured render item currently shown in the scene.
 ///
 /// This is the typed scene state behind [`RenderConfig`]: material patching
@@ -333,6 +337,7 @@ pub enum RenderSubject {
 	GoettingenFollow(RenderGoettingenFollow),
 	ConiferSapling(RenderConiferSapling),
 	AridConiferSapling(RenderAridConiferSapling),
+	JungleLowerMassives(RenderJungleLowerMassives),
 	SpearTuft(RenderSpearTuft),
 	BuddhaHandTuft(RenderBuddhaHandTuft),
 	WeepingTuft(RenderWeepingTuft),
@@ -385,6 +390,7 @@ impl RenderSubject {
 			Self::GoettingenFollow(_) => "GoettingenFollow",
 			Self::ConiferSapling(_) => "ConiferSapling",
 			Self::AridConiferSapling(_) => "AridConiferSapling",
+			Self::JungleLowerMassives(_) => "JungleLowerMassives",
 			Self::SpearTuft(_) => "SpearTuft",
 			Self::BuddhaHandTuft(_) => "BuddhaHandTuft",
 			Self::WeepingTuft(_) => "WeepingTuft",
@@ -620,6 +626,18 @@ impl RenderSubject {
 					g.leaf_surface_noise
 				)
 			}
+			Self::JungleLowerMassives(g) => {
+				format!(
+					"{:?}|extent={:?}|cell_extent_xz={:?}|terrain={:?}|chain={:?}|stick={:?}|leaf={:?}",
+					g.grove,
+					g.extent,
+					g.cell_extent_xz(),
+					g.terrain,
+					g.tree_chain_noise,
+					g.stick_surface_noise,
+					g.leaf_surface_noise
+				)
+			}
 			Self::StrangeOasis(g) => {
 				format!(
 					"{:?}|extent={:?}|cell_extent_xz={:?}|terrain={:?}|chain={:?}|stick={:?}|leaf={:?}",
@@ -738,6 +756,7 @@ impl RenderSubject {
 			Self::GoettingenFollow(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::ConiferSapling(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::AridConiferSapling(item) => item.spawn_render_items(commands, chunk, transform),
+			Self::JungleLowerMassives(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::SpearTuft(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::BuddhaHandTuft(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::WeepingTuft(item) => item.spawn_render_items(commands, chunk, transform),
