@@ -272,7 +272,7 @@ mod tests {
 		let dist = ShamanhomeCell::distribution();
 		assert_eq!(dist.len(), 8);
 		assert!(dist.buckets[0].item.is_none());
-		assert_eq!(dist.buckets[0].weight, 8.0);
+		assert_eq!(dist.buckets[0].weight, 6.0);
 		assert_eq!(dist.buckets[1].item, Some(ShamanhomeCell::ShamanBraidOak));
 		assert_eq!(dist.buckets[1].weight, 2.0);
 		assert_eq!(dist.buckets[2].item, Some(ShamanhomeCell::RedRitualBraidOak));
