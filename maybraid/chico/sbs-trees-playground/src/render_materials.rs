@@ -125,6 +125,9 @@ pub fn setup_render_materials(
 	if let RenderSubject::HonuBanyan(tree) = &mut config.subject {
 		attach_honu_banyan_materials(tree, &mats_snapshot);
 	}
+	if let RenderSubject::TropicalThicket(grove) = &mut config.subject {
+		attach_honu_banyan_materials(&mut grove.honu_template, &mats_snapshot);
+	}
 	if let RenderSubject::BraidOakTree(tree) = &mut config.subject {
 		attach_braid_oak_materials(tree, &mats_snapshot);
 	}
@@ -250,6 +253,10 @@ fn attach_render_materials(
 			g.stick_material.mesh = MeshMaterial3d(stick.clone());
 			g.leaf_material.mesh = MeshMaterial3d(tuft.clone());
 		}
+		RenderSubject::TropicalThicket(g) => {
+			g.stick_material.mesh = MeshMaterial3d(stick.clone());
+			g.leaf_material.mesh = MeshMaterial3d(tuft.clone());
+		}
 		RenderSubject::TallGrass(g) => {
 			g.leaf_material.mesh = MeshMaterial3d(tuft.clone());
 		}
@@ -317,6 +324,9 @@ pub fn sync_render_material_handles(mut config: ResMut<RenderConfig>, mats: Res<
 	}
 	if let RenderSubject::HonuBanyan(tree) = &mut config.subject {
 		attach_honu_banyan_materials(tree, &mats);
+	}
+	if let RenderSubject::TropicalThicket(grove) = &mut config.subject {
+		attach_honu_banyan_materials(&mut grove.honu_template, &mats);
 	}
 	if let RenderSubject::VaseTree(tree) = &mut config.subject {
 		attach_vase_tree_materials(tree, &mats);

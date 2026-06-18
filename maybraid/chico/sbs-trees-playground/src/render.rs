@@ -12,6 +12,7 @@ use chico_groves::low_bush::LowBushStd;
 use chico_groves::riverine_green::RiverineGreenStd;
 use chico_groves::tall_grass::TallGrassStd;
 use chico_groves::tropical_tufts::TropicalTuftsStd;
+use chico_groves::tropical_thicket::TropicalThicketStd;
 use chico_groves::tropical_undergrowth::TropicalUndergrowthStd;
 use chico_groves::wild_grass::WildGrassStd;
 use chico_sbs_trees::braid_oak_tree::BraidOakTree;
@@ -227,6 +228,9 @@ pub type RenderBushScrub = BushScrubStd;
 /// [`TropicalUndergrowthStd`] — moderate-to-dense hybrid tropical understory ([#315](https://github.com/ramate-io/maybraid/issues/315)).
 pub type RenderTropicalUndergrowth = TropicalUndergrowthStd;
 
+/// [`TropicalThicketStd`] — dense tropical understory thicket ([#317](https://github.com/ramate-io/maybraid/issues/317)).
+pub type RenderTropicalThicket = TropicalThicketStd;
+
 /// [`TallGrassStd`] — dense mid-height tuft grove ([#302](https://github.com/ramate-io/maybraid/issues/302)).
 pub type RenderTallGrass = TallGrassStd;
 
@@ -277,6 +281,7 @@ pub enum RenderSubject {
 	CommonTufts(RenderCommonTufts),
 	BushScrub(RenderBushScrub),
 	TropicalUndergrowth(RenderTropicalUndergrowth),
+	TropicalThicket(RenderTropicalThicket),
 	TallGrass(RenderTallGrass),
 	WildGrass(RenderWildGrass),
 	MonsterGrass(RenderMonsterGrass),
@@ -319,6 +324,7 @@ impl RenderSubject {
 			Self::CommonTufts(_) => "CommonTufts",
 			Self::BushScrub(_) => "BushScrub",
 			Self::TropicalUndergrowth(_) => "TropicalUndergrowth",
+			Self::TropicalThicket(_) => "TropicalThicket",
 			Self::TallGrass(_) => "TallGrass",
 			Self::WildGrass(_) => "WildGrass",
 			Self::MonsterGrass(_) => "MonsterGrass",
@@ -434,6 +440,18 @@ impl RenderSubject {
 					g.leaf_surface_noise
 				)
 			}
+			Self::TropicalThicket(g) => {
+				format!(
+					"{:?}|extent={:?}|cell_extent_xz={:?}|terrain={:?}|chain={:?}|stick={:?}|leaf={:?}",
+					g.grove,
+					g.extent,
+					g.cell_extent_xz(),
+					g.terrain,
+					g.bush_chain_noise,
+					g.stick_surface_noise,
+					g.leaf_surface_noise
+				)
+			}
 			Self::TallGrass(g) => {
 				format!(
 					"{:?}|extent={:?}|cell_extent_xz={:?}|terrain={:?}|foliage={:?}",
@@ -542,6 +560,7 @@ impl RenderSubject {
 			Self::CommonTufts(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::BushScrub(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::TropicalUndergrowth(item) => item.spawn_render_items(commands, chunk, transform),
+			Self::TropicalThicket(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::TallGrass(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::WildGrass(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::MonsterGrass(item) => item.spawn_render_items(commands, chunk, transform),
