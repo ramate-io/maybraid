@@ -109,6 +109,7 @@ pub fn resolve_palette_color(name: &str) -> Option<Color> {
 		"brown_bark" => Color::srgb(0.48, 0.36, 0.24),
 		"oak_bark" => Color::srgb(0.52, 0.40, 0.28),
 		"wet_oak_bark" => Color::srgb(0.38, 0.28, 0.18),
+		"weathered_bark" => Color::srgb(0.46, 0.40, 0.34),
 		"red_oak_bark" => Color::srgb(0.58, 0.32, 0.22),
 		"broadleaf_bark" => Color::srgb(0.50, 0.38, 0.26),
 		"broadleaf_green" => Color::srgb(0.32, 0.55, 0.30),

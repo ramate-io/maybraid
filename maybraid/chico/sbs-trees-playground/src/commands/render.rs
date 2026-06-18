@@ -28,7 +28,7 @@ use crate::render::{
 	RenderTemperateConifer, RenderTropicalThicket, RenderTropicalTufts, RenderTropicalUndergrowth,
 	RenderTuftPatch, RenderUnendingJungle, RenderStrangeOasis, RenderShamanhome,
 	RenderGoettingenFollow, RenderConiferSapling, RenderAridConiferSapling,
-	RenderJungleLowerMassives, RenderVaseTree, RenderWaialeaPalm,
+	RenderJungleLowerMassives, RenderTemperateLowerMassives, RenderVaseTree, RenderWaialeaPalm,
 	RenderWeepingTuft, RenderWildGrass,
 };
 
@@ -281,6 +281,14 @@ impl CellRenderHelper<RenderJungleLowerMassives> {
 	}
 }
 
+impl CellRenderHelper<RenderTemperateLowerMassives> {
+	pub fn configured_temperate_lower_massives(&self) -> RenderTemperateLowerMassives {
+		let mut grove = self.render.inner.clone();
+		grove.extent = self.grove_extent(grove.cell_extent_xz());
+		grove
+	}
+}
+
 /// High bush shape plus the surface-noise flags that live on the render item (not the shape).
 #[derive(Clone, clap::Args)]
 #[command(rename_all = "kebab-case")]
@@ -367,6 +375,7 @@ pub enum Render {
 	ConiferSapling(CellRenderHelper<RenderConiferSapling>),
 	AridConiferSapling(CellRenderHelper<RenderAridConiferSapling>),
 	JungleLowerMassives(CellRenderHelper<RenderJungleLowerMassives>),
+	TemperateLowerMassives(CellRenderHelper<RenderTemperateLowerMassives>),
 	SpearTuft(RenderHelper<SpearTuftShape>),
 	BuddhaHandTuft(RenderHelper<BuddhaHandTuftShape>),
 	WeepingTuft(RenderHelper<WeepingTuftShape>),
@@ -487,6 +496,9 @@ impl Render {
 			)),
 			Self::JungleLowerMassives(h) => h.render.config_with(
 				RenderSubject::JungleLowerMassives(h.configured_jungle_lower_massives()),
+			),
+			Self::TemperateLowerMassives(h) => h.render.config_with(
+				RenderSubject::TemperateLowerMassives(h.configured_temperate_lower_massives()),
 			),
 			Self::SpearTuft(h) => h.config_with(RenderSubject::SpearTuft(
 				RenderSpearTuft::from_shape(h.inner.clone(), Default::default()),
@@ -1600,6 +1612,53 @@ mod tests {
 		let cfg = Render::JungleLowerMassives(helper).into_render_config();
 		let RenderSubject::JungleLowerMassives(subject) = cfg.subject else {
 			anyhow::bail!("expected jungle lower massives subject");
+		};
+		assert_eq!(subject.placement_cells().len(), cell_count);
+		assert!(!subject.placements().is_empty());
+		Ok(())
+	}
+
+	#[test]
+	fn temperate_lower_massives_defaults_spawn_placements() -> Result<()> {
+		let cmd = crate::commands::PlaygroundCommand::parse_line(
+			"render temperate-lower-massives --elevation 0.35",
+		)
+		.map_err(|e| anyhow::anyhow!("{e}"))?;
+		let crate::commands::PlaygroundCommand::Render(Render::TemperateLowerMassives(helper)) = cmd
+		else {
+			anyhow::bail!("expected temperate-lower-massives render command");
+		};
+		let grove = helper.configured_temperate_lower_massives();
+		assert!(grove.grove.variant_weights.is_none());
+		let placements = grove.placements();
+		assert_eq!(helper.grove_extent_xz, 100.0);
+		assert!(
+			!placements.is_empty(),
+			"expected a visible temperate-lower-massives preview with default flags, got {} placements",
+			placements.len()
+		);
+		Ok(())
+	}
+
+	#[test]
+	fn temperate_lower_massives_command_preserves_grove_params() -> Result<()> {
+		let cmd = crate::commands::PlaygroundCommand::parse_line(
+			"render temperate-lower-massives --elevation 0.35 --grove-extent-xz 92 --cell-extent-xz 26,26",
+		)
+		.map_err(|e| anyhow::anyhow!("{e}"))?;
+		let crate::commands::PlaygroundCommand::Render(Render::TemperateLowerMassives(helper)) = cmd
+		else {
+			anyhow::bail!("expected temperate-lower-massives render command");
+		};
+		assert!((helper.grove_extent_xz - 92.0).abs() < 1e-5);
+		assert_eq!(helper.render.inner.grove.cell_extent_xz, Some(Vec2::splat(26.0)));
+		let grove = helper.configured_temperate_lower_massives();
+		let cell_count = grove.placement_cells().len();
+		assert_eq!(cell_count, 16);
+		assert!(!grove.placements().is_empty());
+		let cfg = Render::TemperateLowerMassives(helper).into_render_config();
+		let RenderSubject::TemperateLowerMassives(subject) = cfg.subject else {
+			anyhow::bail!("expected temperate lower massives subject");
 		};
 		assert_eq!(subject.placement_cells().len(), cell_count);
 		assert!(!subject.placements().is_empty());
