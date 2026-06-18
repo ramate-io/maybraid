@@ -87,7 +87,7 @@ impl Default for FriendsConiferProtoAnchors {
 			branch_depth: 3,
 			branch_base_radius_fraction_of_stalk: FRIENDS_BRANCH_BASE_RADIUS_FRACTION_OF_STALK,
 			branch_radius_child_scale: FRIENDS_BRANCH_RADIUS_CHILD_SCALE,
-			child_count_range: 0..1,
+			child_count_range: 0..2,
 		}
 	}
 }

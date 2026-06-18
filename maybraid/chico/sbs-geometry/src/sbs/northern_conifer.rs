@@ -11,8 +11,13 @@ use procedural_common::{NoiseConfig, NoiseParams, UnitRange};
 use super::liams_conifer::{LiamsConiferSbs, RingAnchorParams};
 use crate::anchors::liams_conifer::{LiamsConiferAnchors, LiamsConiferProtoAnchors};
 use crate::anchors::{Anchors, AnchorsToChain};
+use crate::sbs::scale::{stalk_radius_scaled_range, stalk_scaled_range};
 use crate::sbs::storybook_tree::{apply_storybook_field_preset, apply_unit_range_preset};
 use crate::{BallStickChain, LiamsConiferChain};
+
+/// Full-size Liam's Conifer defaults used to scale mini-tree anchor perturbation.
+const REFERENCE_STALK_HEIGHT: f32 = 30.0;
+const REFERENCE_STALK_BASE_RADIUS: f32 = 0.025 * REFERENCE_STALK_HEIGHT;
 
 /// First ring height as a fraction of stalk height (higher than Liam's `0.10`).
 pub const NORTHERN_RING_HEIGHTS_START: f32 = 0.1;
@@ -113,6 +118,19 @@ impl NorthernConiferSbs {
 		{
 			stalk.stalk_base_radius = h * NORTHERN_STALK_BASE_RADIUS_FRACTION_OF_HEIGHT;
 		}
+		let mut perturbation = l.anchor_perturbation.to_perturbation();
+		let vertical = stalk_scaled_range(
+			l.anchor_perturbation.vertical_offset,
+			l.scale.stalk_height,
+			REFERENCE_STALK_HEIGHT,
+		);
+		perturbation.vertical_offset = vertical.start..vertical.end;
+		let radius = stalk_radius_scaled_range(
+			l.anchor_perturbation.radius_offset,
+			stalk.stalk_base_radius,
+			REFERENCE_STALK_BASE_RADIUS,
+		);
+		perturbation.radius_offset = radius.start..radius.end;
 		LiamsConiferAnchors::new(LiamsConiferProtoAnchors {
 			stalk,
 			first_ring_unit_height: l.rings.height_range.start,
@@ -128,7 +146,7 @@ impl NorthernConiferSbs {
 			branch_radius_child_scale: (0.72, 0.80),
 			linear_projection_taper: true,
 		})
-		.with_perturbation(l.anchor_perturbation.to_perturbation())
+		.with_perturbation(perturbation)
 	}
 
 	pub fn hysteresis_seeds(&self) -> Vec<LiamsConiferChain> {
@@ -258,6 +276,21 @@ mod tests {
 	fn build_chain_has_stalk_and_branches() -> anyhow::Result<()> {
 		let chain = NorthernConiferSbs::default().build_chain();
 		assert!(chain.nodes.len() > 10);
+		Ok(())
+	}
+
+	#[test]
+	fn mini_sapling_perturbation_scales_with_stalk() -> anyhow::Result<()> {
+		let mut sbs = NorthernConiferSbs::default();
+		sbs.liams.scale.stalk_height = 3.0;
+		let anchors = sbs.to_anchors();
+		let scale = sbs.liams.scale.stalk_height / REFERENCE_STALK_HEIGHT;
+		assert!((anchors.perturbation.vertical_offset.start + scale).abs() < 1e-4);
+		assert!((anchors.perturbation.vertical_offset.end - scale).abs() < 1e-4);
+		assert!(
+			anchors.perturbation.radius_offset.end
+				<= anchors.proto().stalk.stalk_base_radius * 0.01
+		);
 		Ok(())
 	}
 
