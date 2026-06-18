@@ -72,7 +72,6 @@ impl StartDescender {
 				let node = inner.node;
 				let sample =
 					noise.sample_unit_3d(node.position.x, node.position.y, node.position.z);
-				log::info!("descender sample: {}", sample);
 				if sample < descender_threshold {
 					let drop_len = (banyan_height * 2.0).max(inner.length.end);
 					SopesBanyanPhase::StartDescender(StartDescender {
