@@ -59,7 +59,7 @@ where
 
 	#[arg(
 		long,
-		default_value = "0,1.0,1.0,1",
+		default_value = "0,0.1,1.0,1",
 		value_parser = noise_params_from_scalar_str,
 		value_name = "SEED,FREQUENCY,AMPLITUDE,OCTAVES[,TYPE]",
 		help_heading = "The noise applied to the chains of sticks in trees",
@@ -200,6 +200,7 @@ impl BuildWithNoise<FriendsConiferSbs> for AridConiferSaplingFriendsConifer {
 	fn build_with_noise(&self, noise: NoiseParams) -> FriendsConiferSbs {
 		let config = NoiseConfig::new(noise);
 		let mut geometry = FriendsConiferSbs::default();
+		geometry.rings.spacing = sample_f32(&config, self.canopy_density, 1.5);
 		geometry.scale.stalk_height = sample_sapling_height(&config, self.height);
 		geometry.scale.stalk_base_radius = Some(sample_f32(&config, self.stalk_radius, 1.5));
 		geometry.canopy_noise = noise;
@@ -211,6 +212,7 @@ impl BuildWithNoise<NorthernConiferSbs> for AridConiferSaplingNorthernConifer {
 	fn build_with_noise(&self, noise: NoiseParams) -> NorthernConiferSbs {
 		let config = NoiseConfig::new(noise);
 		let mut geometry = NorthernConiferSbs::default();
+		geometry.liams.rings.spacing = sample_f32(&config, self.canopy_density, 1.5);
 		geometry.liams.scale.stalk_height = sample_sapling_height(&config, self.height);
 		geometry.liams.scale.stalk_base_radius = Some(sample_f32(&config, self.stalk_radius, 1.5));
 		geometry.apply_northern_preset();
@@ -223,6 +225,7 @@ impl BuildWithNoise<LiamsConiferSbs> for AridConiferSaplingLiamsConifer {
 	fn build_with_noise(&self, noise: NoiseParams) -> LiamsConiferSbs {
 		let config = NoiseConfig::new(noise);
 		let mut geometry = LiamsConiferSbs::default();
+		geometry.rings.spacing = sample_f32(&config, self.canopy_density, 1.5);
 		geometry.scale.stalk_height = sample_sapling_height(&config, self.height);
 		geometry.scale.stalk_base_radius = Some(sample_f32(&config, self.stalk_radius, 1.5));
 		geometry.canopy_noise = noise;
@@ -357,14 +360,19 @@ mod tests {
 			anyhow::bail!("expected dry friend sapling item");
 		};
 		let friend_geometry = friend.build_with_noise(noise);
+		assert!(friend_geometry.scale.stalk_height >= friend.height.start.min(friend.height.end));
+		assert!(friend_geometry.scale.stalk_height <= friend.height.start.max(friend.height.end));
 		assert!(
-			friend_geometry.scale.stalk_height >= friend.height.start.min(friend.height.end)
+			friend_geometry.rings.spacing
+				>= friend.canopy_density.start.min(friend.canopy_density.end)
 		);
 		assert!(
-			friend_geometry.scale.stalk_height <= friend.height.start.max(friend.height.end)
+			friend_geometry.rings.spacing
+				<= friend.canopy_density.start.max(friend.canopy_density.end)
 		);
 		assert_eq!(friend_geometry, {
 			let mut expected = FriendsConiferSbs::default();
+			expected.rings.spacing = friend_geometry.rings.spacing;
 			expected.scale.stalk_height = friend_geometry.scale.stalk_height;
 			expected.scale.stalk_base_radius = friend_geometry.scale.stalk_base_radius;
 			expected.canopy_noise = noise;
@@ -394,8 +402,17 @@ mod tests {
 		let liams_geometry = liams.build_with_noise(noise);
 		assert!(liams_geometry.scale.stalk_height >= liams.height.start.min(liams.height.end));
 		assert!(liams_geometry.scale.stalk_height <= liams.height.start.max(liams.height.end));
+		assert!(
+			liams_geometry.rings.spacing
+				>= liams.canopy_density.start.min(liams.canopy_density.end)
+		);
+		assert!(
+			liams_geometry.rings.spacing
+				<= liams.canopy_density.start.max(liams.canopy_density.end)
+		);
 		assert_eq!(liams_geometry, {
 			let mut expected = LiamsConiferSbs::default();
+			expected.rings.spacing = liams_geometry.rings.spacing;
 			expected.scale.stalk_height = liams_geometry.scale.stalk_height;
 			expected.scale.stalk_base_radius = liams_geometry.scale.stalk_base_radius;
 			expected.canopy_noise = noise;

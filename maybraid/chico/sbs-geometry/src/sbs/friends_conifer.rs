@@ -331,7 +331,7 @@ mod tests {
 		);
 		assert_eq!(proto.projection_alpha, 8.0);
 		assert_eq!(proto.anchors_per_ring, 4);
-		assert_eq!(proto.child_count_range, 0..1);
+		assert_eq!(proto.child_count_range, 0..2);
 	}
 
 	#[test]

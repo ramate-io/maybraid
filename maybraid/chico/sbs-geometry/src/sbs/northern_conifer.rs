@@ -6,7 +6,7 @@
 
 #[cfg(feature = "clap")]
 use clap::Args;
-use procedural_common::{NoiseConfig, NoiseParams, UnitRange};
+use procedural_common::{NoiseConfig, UnitRange};
 
 use super::liams_conifer::{LiamsConiferSbs, RingAnchorParams};
 use crate::anchors::liams_conifer::{LiamsConiferAnchors, LiamsConiferProtoAnchors};
@@ -190,6 +190,7 @@ impl Anchors<LiamsConiferChain> for NorthernConiferSbs {
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use procedural_common::NoiseParams;
 
 	#[test]
 	fn default_projection_longer_than_liams() {
@@ -307,10 +308,7 @@ mod tests {
 				hysteresis.active_branch_profile().map(|_| node.radius)
 			})
 			.fold(0.0_f32, f32::max);
-		assert!(
-			max <= stalk * 0.36,
-			"northern max branch radius {max} vs stalk {stalk}"
-		);
+		assert!(max <= stalk * 0.36, "northern max branch radius {max} vs stalk {stalk}");
 		Ok(())
 	}
 }

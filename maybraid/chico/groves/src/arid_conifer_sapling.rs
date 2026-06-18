@@ -20,9 +20,9 @@ pub use render::{AridConiferSapling, AridConiferSaplingStd};
 /// Standard arid sapling height band ([`2.0`, `4.0`] m).
 const ARID_SAPLING_HEIGHT: UnitRange = UnitRange::new(2.0, 4.0);
 /// Sparse sampled canopy-density band ([`0.0`, `0.35`]).
-const SPARSE_CANOPY_DENSITY: UnitRange = UnitRange::new(0.0, 0.35);
+const SPARSE_CANOPY_DENSITY: UnitRange = UnitRange::new(0.04, 0.15);
 /// Ultra-sparse sampled canopy-density band ([`0.0`, `0.15`]).
-const ULTRA_SPARSE_CANOPY_DENSITY: UnitRange = UnitRange::new(0.0, 0.15);
+const ULTRA_SPARSE_CANOPY_DENSITY: UnitRange = UnitRange::new(0.01, 0.18);
 
 /// Authored Arid Conifer Sapling grove definition.
 ///
@@ -66,7 +66,6 @@ pub struct AridConiferSaplingFriendsConifer {
 	pub height: UnitRange,
 	/// World-space stalk base radius (RFC `0.025 × H`).
 	pub stalk_radius: UnitRange,
-	pub canopy_spread: UnitRange,
 	/// Sampled `0.0..1.0` band mapping to sparse canopy density at render time.
 	pub canopy_density: UnitRange,
 }
@@ -77,7 +76,6 @@ pub struct AridConiferSaplingNorthernConifer {
 	pub height: UnitRange,
 	/// World-space stalk base radius (Northern `0.032 × H`).
 	pub stalk_radius: UnitRange,
-	pub canopy_spread: UnitRange,
 	/// Sampled `0.0..1.0` band mapping to sparse canopy density at render time.
 	pub canopy_density: UnitRange,
 }
@@ -88,7 +86,6 @@ pub struct AridConiferSaplingLiamsConifer {
 	pub height: UnitRange,
 	/// World-space stalk base radius (RFC `0.025 × H`).
 	pub stalk_radius: UnitRange,
-	pub canopy_spread: UnitRange,
 	/// Sampled `0.0..1.0` band mapping to sparse tuft density at render time.
 	pub canopy_density: UnitRange,
 }
@@ -96,14 +93,12 @@ pub struct AridConiferSaplingLiamsConifer {
 const DRY_FRIEND_SAPLING: AridConiferSaplingFriendsConifer = AridConiferSaplingFriendsConifer {
 	height: ARID_SAPLING_HEIGHT,
 	stalk_radius: UnitRange::new(0.05, 0.10),
-	canopy_spread: UnitRange::new(0.12, 0.50),
 	canopy_density: SPARSE_CANOPY_DENSITY,
 };
 
 const DRY_NORTHERN_SAPLING: AridConiferSaplingNorthernConifer = AridConiferSaplingNorthernConifer {
 	height: ARID_SAPLING_HEIGHT,
 	stalk_radius: UnitRange::new(0.064, 0.128),
-	canopy_spread: UnitRange::new(0.12, 0.50),
 	canopy_density: SPARSE_CANOPY_DENSITY,
 };
 
@@ -111,7 +106,6 @@ const WISPY_DRY_FRIEND_SAPLING: AridConiferSaplingFriendsConifer =
 	AridConiferSaplingFriendsConifer {
 		height: ARID_SAPLING_HEIGHT,
 		stalk_radius: UnitRange::new(0.05, 0.10),
-		canopy_spread: UnitRange::new(0.10, 0.38),
 		canopy_density: ULTRA_SPARSE_CANOPY_DENSITY,
 	};
 
@@ -119,7 +113,6 @@ const WISPY_DRY_NORTHERN_SAPLING: AridConiferSaplingNorthernConifer =
 	AridConiferSaplingNorthernConifer {
 		height: ARID_SAPLING_HEIGHT,
 		stalk_radius: UnitRange::new(0.064, 0.128),
-		canopy_spread: UnitRange::new(0.10, 0.38),
 		canopy_density: ULTRA_SPARSE_CANOPY_DENSITY,
 	};
 
@@ -127,7 +120,6 @@ const BARE_DRY_FRIEND_SAPLING: AridConiferSaplingFriendsConifer =
 	AridConiferSaplingFriendsConifer {
 		height: ARID_SAPLING_HEIGHT,
 		stalk_radius: UnitRange::new(0.05, 0.09),
-		canopy_spread: UnitRange::new(0.08, 0.28),
 		canopy_density: ULTRA_SPARSE_CANOPY_DENSITY,
 	};
 
@@ -135,14 +127,12 @@ const BARE_DRY_NORTHERN_SAPLING: AridConiferSaplingNorthernConifer =
 	AridConiferSaplingNorthernConifer {
 		height: ARID_SAPLING_HEIGHT,
 		stalk_radius: UnitRange::new(0.064, 0.115),
-		canopy_spread: UnitRange::new(0.08, 0.28),
 		canopy_density: ULTRA_SPARSE_CANOPY_DENSITY,
 	};
 
 const DRY_LIAMS_SAPLING: AridConiferSaplingLiamsConifer = AridConiferSaplingLiamsConifer {
 	height: ARID_SAPLING_HEIGHT,
 	stalk_radius: UnitRange::new(0.05, 0.10),
-	canopy_spread: UnitRange::new(0.10, 0.32),
 	canopy_density: ULTRA_SPARSE_CANOPY_DENSITY,
 };
 
@@ -228,19 +218,31 @@ impl AridConiferSaplingCell {
 			GroveBucket::none(24.0),
 			GroveBucket::placed(0.5, PlacementConstraints::UNCONSTRAINED, Self::DryFriendSapling),
 			GroveBucket::placed(0.5, PlacementConstraints::UNCONSTRAINED, Self::DryNorthernSapling),
-			GroveBucket::placed(1.0, PlacementConstraints::UNCONSTRAINED, Self::WispyDryFriendSapling),
+			GroveBucket::placed(
+				1.0,
+				PlacementConstraints::UNCONSTRAINED,
+				Self::WispyDryFriendSapling,
+			),
 			GroveBucket::placed(
 				1.0,
 				PlacementConstraints::UNCONSTRAINED,
 				Self::WispyDryNorthernSapling,
 			),
-			GroveBucket::placed(0.75, PlacementConstraints::UNCONSTRAINED, Self::BareDryFriendSapling),
+			GroveBucket::placed(
+				0.75,
+				PlacementConstraints::UNCONSTRAINED,
+				Self::BareDryFriendSapling,
+			),
 			GroveBucket::placed(
 				0.75,
 				PlacementConstraints::UNCONSTRAINED,
 				Self::BareDryNorthernSapling,
 			),
-			GroveBucket::placed(0.2, PlacementConstraints::UNCONSTRAINED, Self::DryLiamsConiferSapling),
+			GroveBucket::placed(
+				0.2,
+				PlacementConstraints::UNCONSTRAINED,
+				Self::DryLiamsConiferSapling,
+			),
 		])
 	}
 
@@ -262,7 +264,9 @@ impl AridConiferSaplingCell {
 			Self::BareDryNorthernSapling => {
 				AridConiferSaplingItem::NorthernConifer(&BARE_DRY_NORTHERN_SAPLING)
 			}
-			Self::DryLiamsConiferSapling => AridConiferSaplingItem::LiamsConifer(&DRY_LIAMS_SAPLING),
+			Self::DryLiamsConiferSapling => {
+				AridConiferSaplingItem::LiamsConifer(&DRY_LIAMS_SAPLING)
+			}
 		}
 	}
 

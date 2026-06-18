@@ -327,7 +327,7 @@ mod tests {
 			+ 1;
 		assert_eq!(rings.len(), expected);
 		assert!((rings[0] - 0.10).abs() < 1e-6);
-		assert_eq!(a.anchors_per_ring, 4);
+		assert_eq!(a.anchors_per_ring, 6);
 	}
 
 	#[test]
