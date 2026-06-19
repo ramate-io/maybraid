@@ -206,11 +206,16 @@ pub use unending_jungle::{UnendingJungle, UnendingJungleStd};
 #[cfg(feature = "render")]
 pub use wild_grass::{WildGrass, WildGrassStd};pub mod conifer_massives;
 pub mod temperate_massives;
+pub mod riparian_general;
 pub use conifer_massives::{
 	ConiferMassivesCell, ConiferMassivesFriendsConifer, ConiferMassivesItem,
 	ConiferMassivesLiamsConifer, ConiferMassivesNorthernConifer, ConiferMassivesTemperateConifer,
 pub use temperate_massives::{
 	TemperateMassivesBraidOak, TemperateMassivesCell, TemperateMassivesItem, TemperateMassivesRory,
 	TemperateMassivesStorybook,
+pub use riparian_general::{
+	RiparianGeneralBraidOak, RiparianGeneralCell, RiparianGeneralHighBush, RiparianGeneralItem,
+	RiparianGeneralStorybook,
 pub use conifer_massives::{ConiferMassives, ConiferMassivesStd};
 pub use temperate_massives::{TemperateMassives, TemperateMassivesStd};
+pub use riparian_general::{RiparianGeneral, RiparianGeneralStd};
