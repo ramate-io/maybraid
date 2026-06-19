@@ -205,6 +205,8 @@ pub fn resolve_palette_color(name: &str) -> Option<Color> {
 		"blue_leaf" => Color::srgb(0.28, 0.42, 0.62),
 		"cyan_leaf" => Color::srgb(0.32, 0.58, 0.62),
 		"deep_blue_green" => Color::srgb(0.12, 0.38, 0.42),
+		"acacia_bark" => Color::srgb(0.55, 0.42, 0.28),
+		"dry_banyan_bark" => Color::srgb(0.48, 0.38, 0.28),
 		_ => return None,
 	})
 }
