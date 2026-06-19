@@ -4,17 +4,17 @@ use std::marker::PhantomData;
 
 use bevy::prelude::*;
 use chico_sbs_geometry::{BraidOakTreeSbs, FriendsConiferSbs, StorybookTreeSbs};
-use chico_sbs_trees::temperate_conifer::{TemperateConifer, TemperateConiferGeometry};
 use chico_sbs_trees::braid_oak_tree::BraidOakTree;
 use chico_sbs_trees::friends_conifer::FriendsConifer;
 use chico_sbs_trees::storybook_tree::StorybookTree;
+use chico_sbs_trees::temperate_conifer::{TemperateConifer, TemperateConiferGeometry};
 use chico_vegetation_shaders::ChicoStickMaterial;
 use clap::Args;
+use procedural_common::UsizeRange;
 use procedural_common::{
 	noise_params_from_scalar_str, BuildWithNoise, NoiseConfig, NoiseParams, UnitRange,
 };
 use render_item::{CascadeChunk, RenderItem};
-
 
 use crate::grove::{
 	patch_spawned_leaf_material, placement_noise, FlatTerrainSample, GroveExtent, GroveFrontend,
@@ -205,8 +205,8 @@ fn riparian_ring_spacing(base: f32) -> f32 {
 impl BuildWithNoise<BraidOakTreeSbs> for RiparianMixBraidOak {
 	fn build_with_noise(&self, noise: NoiseParams) -> BraidOakTreeSbs {
 		let config = NoiseConfig::new(noise);
-		let height = sample_f32(&config, self.height, 1.0)
-			.max(self.height.start.min(self.height.end));
+		let height =
+			sample_f32(&config, self.height, 1.0).max(self.height.start.min(self.height.end));
 		let canopy_density = sample_f32(&config, self.canopy_density, 2.0);
 		let spread_lo = height * 0.35;
 		let spread_hi = height * 0.55;
@@ -216,8 +216,7 @@ impl BuildWithNoise<BraidOakTreeSbs> for RiparianMixBraidOak {
 		let mut geometry = BraidOakTreeSbs::default();
 		geometry.apply_braid_preset();
 		geometry.scale.tree_height = height;
-		geometry.projection.span_fraction_of_height =
-			UnitRange::new(span * 0.82, span * 1.02);
+		geometry.projection.span_fraction_of_height = UnitRange::new(span * 0.82, span * 1.02);
 		let _ = canopy_density;
 		geometry.canopy_noise = noise;
 		geometry
@@ -227,8 +226,8 @@ impl BuildWithNoise<BraidOakTreeSbs> for RiparianMixBraidOak {
 impl BuildWithNoise<StorybookTreeSbs> for RiparianMixStorybook {
 	fn build_with_noise(&self, noise: NoiseParams) -> StorybookTreeSbs {
 		let config = NoiseConfig::new(noise);
-		let height = sample_f32(&config, self.height, 1.0)
-			.max(self.height.start.min(self.height.end));
+		let height =
+			sample_f32(&config, self.height, 1.0).max(self.height.start.min(self.height.end));
 		let stalk_radius = sample_f32(&config, self.stalk_radius, 1.5);
 		let canopy_spread = sample_f32(&config, self.canopy_spread, 2.0);
 		let canopy_density = sample_f32(&config, self.canopy_density, 4.0);
@@ -256,20 +255,16 @@ struct FriendsConiferSamples {
 impl BuildWithNoise<FriendsConiferSamples> for RiparianMixFriendsConifer {
 	fn build_with_noise(&self, noise: NoiseParams) -> FriendsConiferSamples {
 		let config = NoiseConfig::new(noise);
-		let height = sample_f32(&config, self.height, 1.0)
-			.max(self.height.start.min(self.height.end));
+		let height =
+			sample_f32(&config, self.height, 1.0).max(self.height.start.min(self.height.end));
 		let stalk_radius = sample_f32(&config, self.stalk_radius, 1.5);
 		let canopy_spread = sample_f32(&config, self.canopy_spread, 2.0);
 		let canopy_density = sample_f32(&config, self.canopy_density, 3.0);
-		let span = span_fraction(canopy_spread, height);
 
 		let mut geometry = FriendsConiferSbs::default();
+		geometry.projection.child_count_range = UsizeRange::new(1, 2);
 		geometry.scale.stalk_height = height;
 		geometry.scale.stalk_base_radius = Some(stalk_radius);
-		geometry.projection.length_fraction_of_height =
-			UnitRange::new(span * 0.95, (span * 0.35).max(0.03));
-		geometry.growth.branch_depth = 2;
-		geometry.rings.anchors_per_ring = 3;
 		geometry.canopy_noise = noise;
 
 		FriendsConiferSamples {
@@ -292,14 +287,15 @@ struct TemperateConiferSamples {
 impl BuildWithNoise<TemperateConiferSamples> for RiparianMixTemperateConifer {
 	fn build_with_noise(&self, noise: NoiseParams) -> TemperateConiferSamples {
 		let config = NoiseConfig::new(noise);
-		let height = sample_f32(&config, self.height, 1.0)
-			.max(self.height.start.min(self.height.end));
+		let height =
+			sample_f32(&config, self.height, 1.0).max(self.height.start.min(self.height.end));
 		let canopy_density = sample_f32(&config, self.canopy_density, 2.0);
 
 		let mut inner = FriendsConiferSbs::default();
 		inner.apply_temperate_preset();
 		inner.scale.stalk_height = height;
 		inner.scale.stalk_base_radius = Some((height * 0.025).clamp(0.18, 0.50));
+		inner.projection.child_count_range = UsizeRange::new(1, 2);
 		inner.canopy_noise = noise;
 
 		let frond_spawn_fraction = (0.45 + canopy_density * 0.45).clamp(0.45, 0.95);

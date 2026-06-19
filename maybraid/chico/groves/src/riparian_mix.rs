@@ -92,10 +92,8 @@ pub struct RiparianMixTemperateConifer {
 	pub canopy_density: UnitRange,
 }
 
-const BANK_BRAID_OAK: RiparianMixBraidOak = RiparianMixBraidOak {
-	height: UnitRange::new(5.0, 12.0),
-	canopy_density: DENSE_CANOPY_DENSITY,
-};
+const BANK_BRAID_OAK: RiparianMixBraidOak =
+	RiparianMixBraidOak { height: UnitRange::new(5.0, 12.0), canopy_density: DENSE_CANOPY_DENSITY };
 
 const OVERBANK_BRAID_OAK: RiparianMixBraidOak = RiparianMixBraidOak {
 	height: UnitRange::new(10.0, 18.0),
@@ -187,17 +185,17 @@ impl RiparianMixCell {
 		let bank_braid_oak =
 			PlacementConstraints::new(UnitRange::new(0.0, 0.38), UnitRange::new(0.0, 0.30));
 		let overbank_braid_oak =
-			PlacementConstraints::new(UnitRange::new(0.02, 0.48), UnitRange::new(0.0, 0.42));
+			PlacementConstraints::new(UnitRange::new(0.00, 0.48), UnitRange::new(0.0, 0.42));
 		let round_storybook =
 			PlacementConstraints::new(UnitRange::new(0.0, 0.46), UnitRange::new(0.0, 0.42));
 		let tall_storybook =
-			PlacementConstraints::new(UnitRange::new(0.02, 0.52), UnitRange::new(0.0, 0.48));
+			PlacementConstraints::new(UnitRange::new(0.00, 0.52), UnitRange::new(0.0, 0.48));
 		let bank_friend =
-			PlacementConstraints::new(UnitRange::new(0.02, 0.58), UnitRange::new(0.0, 0.50));
+			PlacementConstraints::new(UnitRange::new(0.00, 0.58), UnitRange::new(0.0, 0.50));
 		let sheltered_temperate =
-			PlacementConstraints::new(UnitRange::new(0.04, 0.62), UnitRange::new(0.0, 0.54));
+			PlacementConstraints::new(UnitRange::new(0.00, 0.62), UnitRange::new(0.0, 0.54));
 		GroveDistribution::new(vec![
-			GroveBucket::none(10.9),
+			GroveBucket::none(6.9),
 			GroveBucket::placed(0.9, bank_braid_oak, Self::BankBraidOak),
 			GroveBucket::placed(0.6, overbank_braid_oak, Self::OverbankBraidOak),
 			GroveBucket::placed(0.9, round_storybook, Self::RoundRiparianStorybook),
@@ -211,9 +209,7 @@ impl RiparianMixCell {
 		match self {
 			Self::BankBraidOak => RiparianMixItem::BraidOak(&BANK_BRAID_OAK),
 			Self::OverbankBraidOak => RiparianMixItem::BraidOak(&OVERBANK_BRAID_OAK),
-			Self::RoundRiparianStorybook => {
-				RiparianMixItem::Storybook(&ROUND_RIPARIAN_STORYBOOK)
-			}
+			Self::RoundRiparianStorybook => RiparianMixItem::Storybook(&ROUND_RIPARIAN_STORYBOOK),
 			Self::TallRiparianStorybook => RiparianMixItem::Storybook(&TALL_RIPARIAN_STORYBOOK),
 			Self::BankFriendConifer => RiparianMixItem::FriendsConifer(&BANK_FRIEND_CONIFER),
 			Self::ShelteredTemperateConifer => {
