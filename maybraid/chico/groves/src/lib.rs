@@ -66,6 +66,7 @@ pub use trade_winds::{
 };
 pub use wandering_acacia::{
 	WanderingAcaciaBanyan, WanderingAcaciaCell, WanderingAcaciaHighBush, WanderingAcaciaItem,
+	WanderingAcaciaTorch, WanderingAcaciaVaseTree,
 };
 pub use conifer_sapling::{
 	ConiferSaplingCell, ConiferSaplingFriendsConifer, ConiferSaplingItem,

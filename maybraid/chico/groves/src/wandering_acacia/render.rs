@@ -8,8 +8,11 @@ use chico_sbs_geometry::anchors::high_bush::{
 	DEFAULT_SEGMENT_LENGTH_FRACTION_LO, DEFAULT_SEGMENT_RADIUS_FRACTION_HI,
 	DEFAULT_SEGMENT_RADIUS_FRACTION_LO,
 };
-use chico_sbs_geometry::SopesBanyanSbs;
+use chico_sbs_geometry::{KamakuraTorchSbs, PenmarchTorchSbs, SopesBanyanSbs, VaseTreeSbs};
+use chico_sbs_trees::kamakura_torch::KamakuraTorch;
+use chico_sbs_trees::penmarch_torch::PenmarchTorch;
 use chico_sbs_trees::sopes_banyan::SopesBanyan;
+use chico_sbs_trees::vase_tree::VaseTree;
 use chico_sbs_trees::{SkippedLeafMeshMaterial, SkippedStickMeshMaterial};
 use chico_tree_components::{HighBushFoliageStyle, HighBushShoots, HighBushShootsShape};
 use chico_vegetation_shaders::{ChicoLeafMaterial, ChicoStickMaterial};
@@ -29,7 +32,7 @@ use crate::skipped_mesh_material::{
 };
 use crate::wandering_acacia::{
 	definition, WanderingAcaciaBanyan, WanderingAcaciaCell, WanderingAcaciaHighBush,
-	WanderingAcaciaItem,
+	WanderingAcaciaItem, WanderingAcaciaTorch, WanderingAcaciaVaseTree,
 };
 
 /// Sope template (material slots match playground [`RenderSopesBanyan`]).
@@ -49,7 +52,7 @@ pub type WanderingAcaciaStd = WanderingAcacia<
 	FlatTerrainSample,
 >;
 
-/// Wandering Acacia grove preview (sparse acacia-like High Bush and dry Sope's Banyan forms).
+/// Wandering Acacia grove preview (sparse High Bush, dry Sope's Banyan, and rare vase/torch accents).
 #[derive(Clone, Args)]
 #[command(rename_all = "kebab-case")]
 pub struct WanderingAcacia<StickM, StickS, LeafM, LeafS, Terrain = FlatTerrainSample>
@@ -277,6 +280,76 @@ impl BuildWithNoise<SopeBanyanSamples> for WanderingAcaciaBanyan {
 	}
 }
 
+impl BuildWithNoise<VaseTreeSbs> for WanderingAcaciaVaseTree {
+	fn build_with_noise(&self, noise: NoiseParams) -> VaseTreeSbs {
+		let config = NoiseConfig::new(noise);
+		let sample_f32 = |range: UnitRange, salt: f32| {
+			let lo = range.start.min(range.end);
+			let hi = range.start.max(range.end);
+			config.sample_range_f32_4d(lo, hi, 0.0, 0.0, 0.0, salt)
+		};
+
+		let height =
+			sample_f32(self.height, 1.0).max(self.height.start.min(self.height.end));
+		let stalk_radius = sample_f32(self.stalk_radius, 1.5);
+		let canopy_spread = sample_f32(self.canopy_spread, 2.0);
+		let span = span_fraction(canopy_spread, height);
+
+		let mut geometry = VaseTreeSbs::default();
+		geometry.scale.tree_height = height;
+		geometry.scale.stalk_base_radius = Some(stalk_radius);
+		geometry.projection.span_fraction_of_height = UnitRange::new(span * 0.88, span * 1.08);
+		geometry.canopy_noise = noise;
+		geometry
+	}
+}
+
+struct TorchSamples {
+	height: f32,
+	stalk_radius: f32,
+	span: f32,
+}
+
+fn sample_torch(torch: &WanderingAcaciaTorch, noise: NoiseParams) -> TorchSamples {
+	let config = NoiseConfig::new(noise);
+	let sample_f32 = |range: UnitRange, salt: f32| {
+		let lo = range.start.min(range.end);
+		let hi = range.start.max(range.end);
+		config.sample_range_f32_4d(lo, hi, 0.0, 0.0, 0.0, salt)
+	};
+
+	let height =
+		sample_f32(torch.height, 1.0).max(torch.height.start.min(torch.height.end));
+	let stalk_radius = sample_f32(torch.stalk_radius, 1.5);
+	let canopy_spread = sample_f32(torch.canopy_spread, 2.0);
+	let span = span_fraction(canopy_spread, height);
+	TorchSamples { height, stalk_radius, span }
+}
+
+impl BuildWithNoise<PenmarchTorchSbs> for WanderingAcaciaTorch {
+	fn build_with_noise(&self, noise: NoiseParams) -> PenmarchTorchSbs {
+		let s = sample_torch(self, noise);
+		let mut geometry = PenmarchTorchSbs::default();
+		geometry.scale.tree_height = s.height;
+		geometry.scale.stalk_base_radius = Some(s.stalk_radius);
+		geometry.projection.span_fraction_of_height = UnitRange::new(s.span * 0.88, s.span * 1.08);
+		geometry.canopy_noise = noise;
+		geometry
+	}
+}
+
+impl BuildWithNoise<KamakuraTorchSbs> for WanderingAcaciaTorch {
+	fn build_with_noise(&self, noise: NoiseParams) -> KamakuraTorchSbs {
+		let s = sample_torch(self, noise);
+		let mut geometry = KamakuraTorchSbs::default();
+		geometry.scale.tree_height = s.height;
+		geometry.scale.stalk_base_radius = Some(s.stalk_radius);
+		geometry.projection.span_fraction_of_height = UnitRange::new(s.span * 0.88, s.span * 1.08);
+		geometry.canopy_noise = noise;
+		geometry
+	}
+}
+
 fn placement_transform<V>(placed: &GrovePlacedCell<V>) -> Transform {
 	Transform {
 		translation: placed.position,
@@ -359,6 +432,82 @@ where
 					);
 					entities
 				}
+				WanderingAcaciaItem::VaseTree(vase) => {
+					let geometry = vase.build_with_noise(build_noise);
+					let mut tree =
+						VaseTree::<StickM, StickS, LeafM, LeafS, LeafM, LeafS>::default();
+					tree.geometry = geometry;
+					tree.stick_material = self.stick_material.clone();
+					tree.inner_leaf_material = self.leaf_material.clone();
+					tree.outer_leaf_material = self.leaf_material.clone();
+					tree.stick_surface_noise =
+						placement_noise(self.stick_surface_noise, placed.position);
+					tree.inner_leaf_surface_noise = foliage_noise;
+					let entities = tree.spawn_render_items(commands, cascade_chunk, local);
+					patch_spawned_leaf_material::<StickM>(
+						&entities,
+						placed.variant.stick_palette_mix(),
+						stick_seed,
+						commands,
+					);
+					patch_spawned_leaf_material::<LeafM>(
+						&entities,
+						placed.variant.canopy_palette_mix(),
+						canopy_seed,
+						commands,
+					);
+					entities
+				}
+				WanderingAcaciaItem::PenmarchTorch(torch) => {
+					let geometry =
+						BuildWithNoise::<PenmarchTorchSbs>::build_with_noise(torch, build_noise);
+					let mut tree = PenmarchTorch::<StickM, StickS, LeafM, LeafS>::default();
+					tree.geometry = geometry;
+					tree.stick_material = self.stick_material.clone();
+					tree.leaf_material = self.leaf_material.clone();
+					tree.stick_surface_noise =
+						placement_noise(self.stick_surface_noise, placed.position);
+					tree.leaf_surface_noise = foliage_noise;
+					let entities = tree.spawn_render_items(commands, cascade_chunk, local);
+					patch_spawned_leaf_material::<StickM>(
+						&entities,
+						placed.variant.stick_palette_mix(),
+						stick_seed,
+						commands,
+					);
+					patch_spawned_leaf_material::<LeafM>(
+						&entities,
+						placed.variant.canopy_palette_mix(),
+						canopy_seed,
+						commands,
+					);
+					entities
+				}
+				WanderingAcaciaItem::KamakuraTorch(torch) => {
+					let geometry =
+						BuildWithNoise::<KamakuraTorchSbs>::build_with_noise(torch, build_noise);
+					let mut tree = KamakuraTorch::<StickM, StickS, LeafM, LeafS>::default();
+					tree.geometry = geometry;
+					tree.stick_material = self.stick_material.clone();
+					tree.leaf_material = self.leaf_material.clone();
+					tree.stick_surface_noise =
+						placement_noise(self.stick_surface_noise, placed.position);
+					tree.leaf_surface_noise = foliage_noise;
+					let entities = tree.spawn_render_items(commands, cascade_chunk, local);
+					patch_spawned_leaf_material::<StickM>(
+						&entities,
+						placed.variant.stick_palette_mix(),
+						stick_seed,
+						commands,
+					);
+					patch_spawned_leaf_material::<LeafM>(
+						&entities,
+						placed.variant.canopy_palette_mix(),
+						canopy_seed,
+						commands,
+					);
+					entities
+				}
 			};
 			out.extend(entities);
 		}
@@ -401,6 +550,9 @@ mod tests {
 		for cell in [
 			WanderingAcaciaCell::WanderingHighBush,
 			WanderingAcaciaCell::DryWanderingSopesBanyan,
+			WanderingAcaciaCell::WanderingVaseTree,
+			WanderingAcaciaCell::WanderingPenmarchTorch,
+			WanderingAcaciaCell::WanderingKamakuraTorch,
 		] {
 			for (palette, label) in
 				[(cell.stick_palette_mix(), "stick"), (cell.canopy_palette_mix(), "canopy")]
@@ -466,6 +618,21 @@ mod tests {
 				Vec3::new(4.0, 0.0, 0.0),
 				1.0,
 			),
+			GrovePlacedCell::new(
+				WanderingAcaciaCell::WanderingVaseTree,
+				Vec3::new(8.0, 0.0, 0.0),
+				1.0,
+			),
+			GrovePlacedCell::new(
+				WanderingAcaciaCell::WanderingPenmarchTorch,
+				Vec3::new(12.0, 0.0, 0.0),
+				1.0,
+			),
+			GrovePlacedCell::new(
+				WanderingAcaciaCell::WanderingKamakuraTorch,
+				Vec3::new(16.0, 0.0, 0.0),
+				1.0,
+			),
 		];
 		let item = WanderingAcaciaStd::with_resolved_placements(
 			placements.clone(),
@@ -476,7 +643,7 @@ mod tests {
 			GroveSkippedStickMeshMaterial::<ChicoStickMaterial>::default(),
 			GroveSkippedLeafMeshMaterial::<StandardMaterial>::default(),
 		);
-		assert_eq!(item.placements().len(), 2);
+		assert_eq!(item.placements().len(), 5);
 		Ok(())
 	}
 }
