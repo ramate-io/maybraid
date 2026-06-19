@@ -31,6 +31,8 @@ use crate::render::{
 	RenderJungleLowerMassives, RenderJungleMassives, RenderTemperateLowerMassives, RenderPalmShade,
 	RenderRiparianMix, RenderAlpine, RenderDryland, RenderStorytellers, RenderTradeWinds,
 	RenderWanderingAcacia, RenderLeeward, RenderChristmasTaiga,
+	RenderConiferMassives, RenderTemperateMassives, RenderRiparianGeneral, RenderRollingOaks,
+	RenderForlornSavanna, RenderOrchard, RenderVineyard, RenderDateGrove,
 	RenderVaseTree, RenderWaialeaPalm,
 	RenderWeepingTuft, RenderWildGrass,
 };
@@ -372,6 +374,70 @@ impl CellRenderHelper<RenderChristmasTaiga> {
 	}
 }
 
+impl CellRenderHelper<RenderConiferMassives> {
+	pub fn configured_conifer_massives(&self) -> RenderConiferMassives {
+		let mut grove = self.render.inner.clone();
+		grove.extent = self.grove_extent(grove.cell_extent_xz());
+		grove
+	}
+}
+
+impl CellRenderHelper<RenderTemperateMassives> {
+	pub fn configured_temperate_massives(&self) -> RenderTemperateMassives {
+		let mut grove = self.render.inner.clone();
+		grove.extent = self.grove_extent(grove.cell_extent_xz());
+		grove
+	}
+}
+
+impl CellRenderHelper<RenderRiparianGeneral> {
+	pub fn configured_riparian_general(&self) -> RenderRiparianGeneral {
+		let mut grove = self.render.inner.clone();
+		grove.extent = self.grove_extent(grove.cell_extent_xz());
+		grove
+	}
+}
+
+impl CellRenderHelper<RenderRollingOaks> {
+	pub fn configured_rolling_oaks(&self) -> RenderRollingOaks {
+		let mut grove = self.render.inner.clone();
+		grove.extent = self.grove_extent(grove.cell_extent_xz());
+		grove
+	}
+}
+
+impl CellRenderHelper<RenderForlornSavanna> {
+	pub fn configured_forlorn_savanna(&self) -> RenderForlornSavanna {
+		let mut grove = self.render.inner.clone();
+		grove.extent = self.grove_extent(grove.cell_extent_xz());
+		grove
+	}
+}
+
+impl CellRenderHelper<RenderOrchard> {
+	pub fn configured_orchard(&self) -> RenderOrchard {
+		let mut grove = self.render.inner.clone();
+		grove.extent = self.grove_extent(grove.cell_extent_xz());
+		grove
+	}
+}
+
+impl CellRenderHelper<RenderVineyard> {
+	pub fn configured_vineyard(&self) -> RenderVineyard {
+		let mut grove = self.render.inner.clone();
+		grove.extent = self.grove_extent(grove.cell_extent_xz());
+		grove
+	}
+}
+
+impl CellRenderHelper<RenderDateGrove> {
+	pub fn configured_date_grove(&self) -> RenderDateGrove {
+		let mut grove = self.render.inner.clone();
+		grove.extent = self.grove_extent(grove.cell_extent_xz());
+		grove
+	}
+}
+
 /// High bush shape plus the surface-noise flags that live on the render item (not the shape).
 #[derive(Clone, clap::Args)]
 #[command(rename_all = "kebab-case")]
@@ -469,6 +535,14 @@ pub enum Render {
 	WanderingAcacia(CellRenderHelper<RenderWanderingAcacia>),
 	Leeward(CellRenderHelper<RenderLeeward>),
 	ChristmasTaiga(CellRenderHelper<RenderChristmasTaiga>),
+	ConiferMassives(CellRenderHelper<RenderConiferMassives>),
+	TemperateMassives(CellRenderHelper<RenderTemperateMassives>),
+	RiparianGeneral(CellRenderHelper<RenderRiparianGeneral>),
+	RollingOaks(CellRenderHelper<RenderRollingOaks>),
+	ForlornSavanna(CellRenderHelper<RenderForlornSavanna>),
+	Orchard(CellRenderHelper<RenderOrchard>),
+	Vineyard(CellRenderHelper<RenderVineyard>),
+	DateGrove(CellRenderHelper<RenderDateGrove>),
 	SpearTuft(RenderHelper<SpearTuftShape>),
 	BuddhaHandTuft(RenderHelper<BuddhaHandTuftShape>),
 	WeepingTuft(RenderHelper<WeepingTuftShape>),
@@ -620,6 +694,26 @@ impl Render {
 			Self::Leeward(h) => h.render.config_with(RenderSubject::Leeward(h.configured_leeward())),
 			Self::ChristmasTaiga(h) => h.render.config_with(
 				RenderSubject::ChristmasTaiga(h.configured_christmas_taiga()),
+			),
+			Self::ConiferMassives(h) => h.render.config_with(
+				RenderSubject::ConiferMassives(h.configured_conifer_massives()),
+			),
+			Self::TemperateMassives(h) => h.render.config_with(
+				RenderSubject::TemperateMassives(h.configured_temperate_massives()),
+			),
+			Self::RiparianGeneral(h) => h.render.config_with(
+				RenderSubject::RiparianGeneral(h.configured_riparian_general()),
+			),
+			Self::RollingOaks(h) => h.render.config_with(
+				RenderSubject::RollingOaks(h.configured_rolling_oaks()),
+			),
+			Self::ForlornSavanna(h) => h.render.config_with(
+				RenderSubject::ForlornSavanna(h.configured_forlorn_savanna()),
+			),
+			Self::Orchard(h) => h.render.config_with(RenderSubject::Orchard(h.configured_orchard())),
+			Self::Vineyard(h) => h.render.config_with(RenderSubject::Vineyard(h.configured_vineyard())),
+			Self::DateGrove(h) => h.render.config_with(
+				RenderSubject::DateGrove(h.configured_date_grove()),
 			),
 			Self::SpearTuft(h) => h.config_with(RenderSubject::SpearTuft(
 				RenderSpearTuft::from_shape(h.inner.clone(), Default::default()),
@@ -2226,6 +2320,350 @@ mod tests {
 		let cfg = Render::ChristmasTaiga(helper).into_render_config();
 		let RenderSubject::ChristmasTaiga(subject) = cfg.subject else {
 			anyhow::bail!("expected christmas-taiga subject");
+		};
+		assert_eq!(subject.placement_cells().len(), cell_count);
+		assert!(!subject.placements().is_empty());
+		Ok(())
+	}
+
+	#[test]
+	fn conifer_massives_defaults_spawn_placements() -> Result<()> {
+		let cmd = crate::commands::PlaygroundCommand::parse_line(
+			"render conifer-massives --grove-extent-xz 400",
+		)
+		.map_err(|e| anyhow::anyhow!("{e}"))?;
+		let crate::commands::PlaygroundCommand::Render(Render::ConiferMassives(helper)) = cmd else {
+			anyhow::bail!("expected conifer-massives render command");
+		};
+		let grove = helper.configured_conifer_massives();
+		let placements = grove.placements();
+		assert!(
+			!placements.is_empty(),
+			"expected a visible conifer-massives preview with default flags, got {} placements",
+			placements.len()
+		);
+		Ok(())
+	}
+
+	#[test]
+	fn conifer_massives_command_preserves_grove_params() -> Result<()> {
+		let cmd = crate::commands::PlaygroundCommand::parse_line(
+			"render conifer-massives --grove-extent-xz 400 --cell-extent-xz 50,50",
+		)
+		.map_err(|e| anyhow::anyhow!("{e}"))?;
+		let crate::commands::PlaygroundCommand::Render(Render::ConiferMassives(helper)) = cmd else {
+			anyhow::bail!("expected conifer-massives render command");
+		};
+		assert!((helper.grove_extent_xz - 400.0).abs() < 1e-5);
+		assert_eq!(helper.render.inner.grove.cell_extent_xz, Some(Vec2::splat(50.0)));
+		let grove = helper.configured_conifer_massives();
+		let cell_count = grove.placement_cells().len();
+		assert_eq!(cell_count, 64);
+		assert!(!grove.placements().is_empty());
+		let cfg = Render::ConiferMassives(helper).into_render_config();
+		let RenderSubject::ConiferMassives(subject) = cfg.subject else {
+			anyhow::bail!("expected conifer-massives subject");
+		};
+		assert_eq!(subject.placement_cells().len(), cell_count);
+		assert!(!subject.placements().is_empty());
+		Ok(())
+	}
+
+	#[test]
+	fn temperate_massives_defaults_spawn_placements() -> Result<()> {
+		let cmd = crate::commands::PlaygroundCommand::parse_line(
+			"render temperate-massives --grove-extent-xz 400",
+		)
+		.map_err(|e| anyhow::anyhow!("{e}"))?;
+		let crate::commands::PlaygroundCommand::Render(Render::TemperateMassives(helper)) = cmd
+		else {
+			anyhow::bail!("expected temperate-massives render command");
+		};
+		let grove = helper.configured_temperate_massives();
+		let placements = grove.placements();
+		assert!(
+			!placements.is_empty(),
+			"expected a visible temperate-massives preview with default flags, got {} placements",
+			placements.len()
+		);
+		Ok(())
+	}
+
+	#[test]
+	fn temperate_massives_command_preserves_grove_params() -> Result<()> {
+		let cmd = crate::commands::PlaygroundCommand::parse_line(
+			"render temperate-massives --grove-extent-xz 400 --cell-extent-xz 49,49",
+		)
+		.map_err(|e| anyhow::anyhow!("{e}"))?;
+		let crate::commands::PlaygroundCommand::Render(Render::TemperateMassives(helper)) = cmd
+		else {
+			anyhow::bail!("expected temperate-massives render command");
+		};
+		assert!((helper.grove_extent_xz - 400.0).abs() < 1e-5);
+		assert_eq!(helper.render.inner.grove.cell_extent_xz, Some(Vec2::splat(49.0)));
+		let grove = helper.configured_temperate_massives();
+		let cell_count = grove.placement_cells().len();
+		assert_eq!(cell_count, 81);
+		assert!(!grove.placements().is_empty());
+		let cfg = Render::TemperateMassives(helper).into_render_config();
+		let RenderSubject::TemperateMassives(subject) = cfg.subject else {
+			anyhow::bail!("expected temperate-massives subject");
+		};
+		assert_eq!(subject.placement_cells().len(), cell_count);
+		assert!(!subject.placements().is_empty());
+		Ok(())
+	}
+
+	#[test]
+	fn riparian_general_defaults_spawn_placements() -> Result<()> {
+		let cmd = crate::commands::PlaygroundCommand::parse_line(
+			"render riparian-general --grove-extent-xz 200",
+		)
+		.map_err(|e| anyhow::anyhow!("{e}"))?;
+		let crate::commands::PlaygroundCommand::Render(Render::RiparianGeneral(helper)) = cmd else {
+			anyhow::bail!("expected riparian-general render command");
+		};
+		let grove = helper.configured_riparian_general();
+		let placements = grove.placements();
+		assert!(
+			!placements.is_empty(),
+			"expected a visible riparian-general preview with default flags, got {} placements",
+			placements.len()
+		);
+		Ok(())
+	}
+
+	#[test]
+	fn riparian_general_command_preserves_grove_params() -> Result<()> {
+		let cmd = crate::commands::PlaygroundCommand::parse_line(
+			"render riparian-general --grove-extent-xz 200 --cell-extent-xz 16,16",
+		)
+		.map_err(|e| anyhow::anyhow!("{e}"))?;
+		let crate::commands::PlaygroundCommand::Render(Render::RiparianGeneral(helper)) = cmd else {
+			anyhow::bail!("expected riparian-general render command");
+		};
+		assert!((helper.grove_extent_xz - 200.0).abs() < 1e-5);
+		assert_eq!(helper.render.inner.grove.cell_extent_xz, Some(Vec2::splat(16.0)));
+		let grove = helper.configured_riparian_general();
+		let cell_count = grove.placement_cells().len();
+		assert_eq!(cell_count, 169);
+		assert!(!grove.placements().is_empty());
+		let cfg = Render::RiparianGeneral(helper).into_render_config();
+		let RenderSubject::RiparianGeneral(subject) = cfg.subject else {
+			anyhow::bail!("expected riparian-general subject");
+		};
+		assert_eq!(subject.placement_cells().len(), cell_count);
+		assert!(!subject.placements().is_empty());
+		Ok(())
+	}
+
+	#[test]
+	fn rolling_oaks_defaults_spawn_placements() -> Result<()> {
+		let cmd = crate::commands::PlaygroundCommand::parse_line(
+			"render rolling-oaks --grove-extent-xz 260 --elevation 0.40",
+		)
+		.map_err(|e| anyhow::anyhow!("{e}"))?;
+		let crate::commands::PlaygroundCommand::Render(Render::RollingOaks(helper)) = cmd else {
+			anyhow::bail!("expected rolling-oaks render command");
+		};
+		let grove = helper.configured_rolling_oaks();
+		let placements = grove.placements();
+		assert!(
+			!placements.is_empty(),
+			"expected a visible rolling-oaks preview with default flags, got {} placements",
+			placements.len()
+		);
+		Ok(())
+	}
+
+	#[test]
+	fn rolling_oaks_command_preserves_grove_params() -> Result<()> {
+		let cmd = crate::commands::PlaygroundCommand::parse_line(
+			"render rolling-oaks --elevation 0.40 --grove-extent-xz 260 --cell-extent-xz 22,22",
+		)
+		.map_err(|e| anyhow::anyhow!("{e}"))?;
+		let crate::commands::PlaygroundCommand::Render(Render::RollingOaks(helper)) = cmd else {
+			anyhow::bail!("expected rolling-oaks render command");
+		};
+		assert!((helper.grove_extent_xz - 260.0).abs() < 1e-5);
+		assert_eq!(helper.render.inner.grove.cell_extent_xz, Some(Vec2::splat(22.0)));
+		let grove = helper.configured_rolling_oaks();
+		let cell_count = grove.placement_cells().len();
+		assert_eq!(cell_count, 144);
+		assert!(!grove.placements().is_empty());
+		let cfg = Render::RollingOaks(helper).into_render_config();
+		let RenderSubject::RollingOaks(subject) = cfg.subject else {
+			anyhow::bail!("expected rolling-oaks subject");
+		};
+		assert_eq!(subject.placement_cells().len(), cell_count);
+		assert!(!subject.placements().is_empty());
+		Ok(())
+	}
+
+	#[test]
+	fn forlorn_savanna_defaults_spawn_placements() -> Result<()> {
+		let cmd = crate::commands::PlaygroundCommand::parse_line(
+			"render forlorn-savanna --grove-extent-xz 300",
+		)
+		.map_err(|e| anyhow::anyhow!("{e}"))?;
+		let crate::commands::PlaygroundCommand::Render(Render::ForlornSavanna(helper)) = cmd else {
+			anyhow::bail!("expected forlorn-savanna render command");
+		};
+		let grove = helper.configured_forlorn_savanna();
+		let placements = grove.placements();
+		assert!(
+			!placements.is_empty(),
+			"expected a visible forlorn-savanna preview with default flags, got {} placements",
+			placements.len()
+		);
+		Ok(())
+	}
+
+	#[test]
+	fn forlorn_savanna_command_preserves_grove_params() -> Result<()> {
+		let cmd = crate::commands::PlaygroundCommand::parse_line(
+			"render forlorn-savanna --grove-extent-xz 300 --cell-extent-xz 30,30",
+		)
+		.map_err(|e| anyhow::anyhow!("{e}"))?;
+		let crate::commands::PlaygroundCommand::Render(Render::ForlornSavanna(helper)) = cmd else {
+			anyhow::bail!("expected forlorn-savanna render command");
+		};
+		assert!((helper.grove_extent_xz - 300.0).abs() < 1e-5);
+		assert_eq!(helper.render.inner.grove.cell_extent_xz, Some(Vec2::splat(30.0)));
+		let grove = helper.configured_forlorn_savanna();
+		let cell_count = grove.placement_cells().len();
+		assert_eq!(cell_count, 100);
+		assert!(!grove.placements().is_empty());
+		let cfg = Render::ForlornSavanna(helper).into_render_config();
+		let RenderSubject::ForlornSavanna(subject) = cfg.subject else {
+			anyhow::bail!("expected forlorn-savanna subject");
+		};
+		assert_eq!(subject.placement_cells().len(), cell_count);
+		assert!(!subject.placements().is_empty());
+		Ok(())
+	}
+
+	#[test]
+	fn orchard_defaults_spawn_placements() -> Result<()> {
+		let cmd = crate::commands::PlaygroundCommand::parse_line("render orchard --grove-extent-xz 160")
+			.map_err(|e| anyhow::anyhow!("{e}"))?;
+		let crate::commands::PlaygroundCommand::Render(Render::Orchard(helper)) = cmd else {
+			anyhow::bail!("expected orchard render command");
+		};
+		let grove = helper.configured_orchard();
+		let placements = grove.placements();
+		assert!(
+			!placements.is_empty(),
+			"expected a visible orchard preview with default flags, got {} placements",
+			placements.len()
+		);
+		Ok(())
+	}
+
+	#[test]
+	fn orchard_command_preserves_grove_params() -> Result<()> {
+		let cmd = crate::commands::PlaygroundCommand::parse_line(
+			"render orchard --grove-extent-xz 160 --cell-extent-xz 11,11",
+		)
+		.map_err(|e| anyhow::anyhow!("{e}"))?;
+		let crate::commands::PlaygroundCommand::Render(Render::Orchard(helper)) = cmd else {
+			anyhow::bail!("expected orchard render command");
+		};
+		assert!((helper.grove_extent_xz - 160.0).abs() < 1e-5);
+		assert_eq!(helper.render.inner.grove.cell_extent_xz, Some(Vec2::splat(11.0)));
+		let grove = helper.configured_orchard();
+		let cell_count = grove.placement_cells().len();
+		assert_eq!(cell_count, 225);
+		assert!(!grove.placements().is_empty());
+		let cfg = Render::Orchard(helper).into_render_config();
+		let RenderSubject::Orchard(subject) = cfg.subject else {
+			anyhow::bail!("expected orchard subject");
+		};
+		assert_eq!(subject.placement_cells().len(), cell_count);
+		assert!(!subject.placements().is_empty());
+		Ok(())
+	}
+
+	#[test]
+	fn vineyard_defaults_spawn_placements() -> Result<()> {
+		let cmd = crate::commands::PlaygroundCommand::parse_line(
+			"render vineyard --grove-extent-xz 90 --elevation 0.35",
+		)
+			.map_err(|e| anyhow::anyhow!("{e}"))?;
+		let crate::commands::PlaygroundCommand::Render(Render::Vineyard(helper)) = cmd else {
+			anyhow::bail!("expected vineyard render command");
+		};
+		let grove = helper.configured_vineyard();
+		let placements = grove.placements();
+		assert!(
+			!placements.is_empty(),
+			"expected a visible vineyard preview with default flags, got {} placements",
+			placements.len()
+		);
+		Ok(())
+	}
+
+	#[test]
+	fn vineyard_command_preserves_grove_params() -> Result<()> {
+		let cmd = crate::commands::PlaygroundCommand::parse_line(
+			"render vineyard --elevation 0.35 --grove-extent-xz 90 --cell-extent-xz 4.5,4.5",
+		)
+		.map_err(|e| anyhow::anyhow!("{e}"))?;
+		let crate::commands::PlaygroundCommand::Render(Render::Vineyard(helper)) = cmd else {
+			anyhow::bail!("expected vineyard render command");
+		};
+		assert!((helper.grove_extent_xz - 90.0).abs() < 1e-5);
+		assert_eq!(helper.render.inner.grove.cell_extent_xz, Some(Vec2::splat(4.5)));
+		let grove = helper.configured_vineyard();
+		let cell_count = grove.placement_cells().len();
+		assert_eq!(cell_count, 400);
+		assert!(!grove.placements().is_empty());
+		let cfg = Render::Vineyard(helper).into_render_config();
+		let RenderSubject::Vineyard(subject) = cfg.subject else {
+			anyhow::bail!("expected vineyard subject");
+		};
+		assert_eq!(subject.placement_cells().len(), cell_count);
+		assert!(!subject.placements().is_empty());
+		Ok(())
+	}
+
+	#[test]
+	fn date_grove_defaults_spawn_placements() -> Result<()> {
+		let cmd = crate::commands::PlaygroundCommand::parse_line(
+			"render date-grove --grove-extent-xz 160",
+		)
+		.map_err(|e| anyhow::anyhow!("{e}"))?;
+		let crate::commands::PlaygroundCommand::Render(Render::DateGrove(helper)) = cmd else {
+			anyhow::bail!("expected date-grove render command");
+		};
+		let grove = helper.configured_date_grove();
+		let placements = grove.placements();
+		assert!(
+			!placements.is_empty(),
+			"expected a visible date-grove preview with default flags, got {} placements",
+			placements.len()
+		);
+		Ok(())
+	}
+
+	#[test]
+	fn date_grove_command_preserves_grove_params() -> Result<()> {
+		let cmd = crate::commands::PlaygroundCommand::parse_line(
+			"render date-grove --grove-extent-xz 160 --cell-extent-xz 12,12",
+		)
+		.map_err(|e| anyhow::anyhow!("{e}"))?;
+		let crate::commands::PlaygroundCommand::Render(Render::DateGrove(helper)) = cmd else {
+			anyhow::bail!("expected date-grove render command");
+		};
+		assert!((helper.grove_extent_xz - 160.0).abs() < 1e-5);
+		assert_eq!(helper.render.inner.grove.cell_extent_xz, Some(Vec2::splat(12.0)));
+		let grove = helper.configured_date_grove();
+		let cell_count = grove.placement_cells().len();
+		assert_eq!(cell_count, 196);
+		assert!(!grove.placements().is_empty());
+		let cfg = Render::DateGrove(helper).into_render_config();
+		let RenderSubject::DateGrove(subject) = cfg.subject else {
+			anyhow::bail!("expected date-grove subject");
 		};
 		assert_eq!(subject.placement_cells().len(), cell_count);
 		assert!(!subject.placements().is_empty());
