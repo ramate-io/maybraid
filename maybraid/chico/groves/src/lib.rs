@@ -11,6 +11,7 @@ pub mod goettingen_follow;
 pub mod high_bush;
 pub mod jerrys_chaparral;
 pub mod jungle_lower_massives;
+pub mod jungle_massives;
 pub mod levantine_scrub;
 pub mod low_bush;
 pub mod monster_grass;
@@ -19,6 +20,7 @@ pub mod shamanhome;
 pub mod spotty_bushes;
 pub mod strange_oasis;
 pub mod tall_grass;
+pub mod temperate_lower_massives;
 pub mod tropical_thicket;
 pub mod tropical_tufts;
 pub mod tropical_undergrowth;
@@ -63,6 +65,9 @@ pub use jungle_lower_massives::{
 	JungleLowerMassivesBanyan, JungleLowerMassivesBraidOak, JungleLowerMassivesCell,
 	JungleLowerMassivesItem, JungleLowerMassivesJungleStorybook, JungleLowerMassivesWaialeaPalm,
 };
+pub use jungle_massives::{
+	JungleMassivesBanyan, JungleMassivesCell, JungleMassivesItem, JungleMassivesJungleStorybook,
+};
 pub use levantine_scrub::{
 	LevantineScrubBraidOak, LevantineScrubBush, LevantineScrubCell, LevantineScrubHedge,
 	LevantineScrubItem, LevantineScrubRoryHead, LevantineScrubTorch, LevantineScrubVaseTree,
@@ -74,6 +79,10 @@ pub use shamanhome::{
 	ShamanhomeBanyan, ShamanhomeBraidOak, ShamanhomeCell, ShamanhomeDatePalm, ShamanhomeItem,
 };
 pub use spotty_bushes::{SpottyBushesBush, SpottyBushesCell, SpottyBushesItem};
+pub use temperate_lower_massives::{
+	TemperateLowerMassivesBraidOak, TemperateLowerMassivesCell, TemperateLowerMassivesItem,
+	TemperateLowerMassivesRory, TemperateLowerMassivesStorybook,
+};
 pub use strange_oasis::{
 	StrangeOasisDatePalm, StrangeOasisCell, StrangeOasisItem, StrangeOasisStorybook,
 	StrangeOasisTorch,
@@ -112,6 +121,8 @@ pub use jerrys_chaparral::{JerrysChaparral, JerrysChaparralStd};
 #[cfg(feature = "render")]
 pub use jungle_lower_massives::{JungleLowerMassives, JungleLowerMassivesStd};
 #[cfg(feature = "render")]
+pub use jungle_massives::{JungleMassives, JungleMassivesStd};
+#[cfg(feature = "render")]
 pub use levantine_scrub::{LevantineScrub, LevantineScrubStd};
 #[cfg(feature = "render")]
 pub use low_bush::{LowBush, LowBushStd};
@@ -123,6 +134,8 @@ pub use riverine_green::{RiverineGreen, RiverineGreenStd};
 pub use shamanhome::{Shamanhome, ShamanhomeStd};
 #[cfg(feature = "render")]
 pub use spotty_bushes::{SpottyBushes, SpottyBushesStd};
+#[cfg(feature = "render")]
+pub use temperate_lower_massives::{TemperateLowerMassives, TemperateLowerMassivesStd};
 #[cfg(feature = "render")]
 pub use strange_oasis::{StrangeOasis, StrangeOasisStd};
 #[cfg(feature = "render")]
