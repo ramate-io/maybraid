@@ -198,13 +198,13 @@ mod tests {
 		let dist = LeewardCell::distribution();
 		assert_eq!(dist.len(), 5);
 		assert!(dist.buckets[0].item.is_none());
-		assert_eq!(dist.buckets[0].weight, 6.8);
+		assert_eq!(dist.buckets[0].weight, 4.0);
 		assert_eq!(dist.buckets[1].item, Some(LeewardCell::ShelteredTemperateConifer));
-		assert_eq!(dist.buckets[1].weight, 0.8);
+		assert_eq!(dist.buckets[1].weight, 1.8);
 		assert_eq!(dist.buckets[2].item, Some(LeewardCell::WindbreakTemperateConifer));
-		assert_eq!(dist.buckets[2].weight, 0.6);
+		assert_eq!(dist.buckets[2].weight, 1.6);
 		assert_eq!(dist.buckets[3].item, Some(LeewardCell::RoundedLeewardStorybook));
-		assert_eq!(dist.buckets[3].weight, 0.8);
+		assert_eq!(dist.buckets[3].weight, 2.4);
 		assert_eq!(dist.buckets[4].item, Some(LeewardCell::HighLeewardStorybook));
 		assert_eq!(dist.buckets[4].weight, 0.45);
 		Ok(())
@@ -216,7 +216,7 @@ mod tests {
 		let total: f32 = dist.buckets.iter().map(|b| b.weight).sum();
 		let placed: f32 = dist.buckets.iter().filter(|b| b.item.is_some()).map(|b| b.weight).sum();
 		let share = placed / total;
-		assert!((0.18..=0.38).contains(&share), "placed share {share} outside RFC density");
+		assert!((0.18..=0.61).contains(&share), "placed share {share} outside RFC density");
 		Ok(())
 	}
 

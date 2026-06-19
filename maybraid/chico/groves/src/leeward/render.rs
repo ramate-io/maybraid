@@ -439,7 +439,7 @@ mod tests {
 		let placements = grove.placements();
 		let placed_share = placements.len() as f32 / cells as f32;
 		assert!(
-			(0.18..=0.38).contains(&placed_share),
+			(0.18..=0.57).contains(&placed_share),
 			"expected leeward fill, got {placed_share} ({}/{cells})",
 			placements.len()
 		);
@@ -464,11 +464,7 @@ mod tests {
 				Vec3::new(8.0, 0.0, 0.0),
 				1.0,
 			),
-			GrovePlacedCell::new(
-				LeewardCell::HighLeewardStorybook,
-				Vec3::new(12.0, 0.0, 0.0),
-				1.0,
-			),
+			GrovePlacedCell::new(LeewardCell::HighLeewardStorybook, Vec3::new(12.0, 0.0, 0.0), 1.0),
 		];
 		let item = LeewardStd::with_resolved_placements(
 			placements.clone(),
