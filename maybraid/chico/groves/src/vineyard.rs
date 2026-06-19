@@ -1,4 +1,4 @@
-//! Vineyard — moderate-density cultivated Rory-trained vine upper-canopy grove
+//! Vineyard — high-density cultivated Rory-trained vine upper-canopy grove
 //! ([RFC-183 §3.4.7.8], [#355](https://github.com/ramate-io/maybraid/issues/355)).
 //!
 //! Low trained-vine rows with very tight cell offset and grape-like palettes. Forest-layer
@@ -22,15 +22,12 @@ const SPARSE_CANOPY_DENSITY: UnitRange = UnitRange::new(0.0, 0.35);
 
 /// Authored Vineyard grove definition.
 ///
-/// Cell footprint sits at the RFC midpoint (`4.5` m). Offset stays very tight for row-like
-/// cultivated placement.
+/// Cell footprint sits at the RFC midpoint (`4.5` m). Placements stay on cell centroids with only
+/// ±`0.5` m horizontal jitter for regular vine rows.
 pub fn definition() -> GroveDefinition<VineyardCell> {
 	GroveDefinition {
 		cell_extent_xz: Vec2::splat(4.5),
-		placement: GrovePlacementRanges::new(
-			UnitRange::new(0.85, 1.15),
-			UnitRange::new(-0.6, 0.6),
-		),
+		placement: GrovePlacementRanges::new(UnitRange::new(1.0, 1.0), UnitRange::new(-0.5, 0.5)),
 		distribution: VineyardCell::distribution(),
 	}
 }
@@ -74,17 +71,21 @@ const VINE_CANOPY_MIX: PaletteMix = PaletteMix::new(&[
 	PaletteSlot::new("deep_green", "yellow_green"),
 ]);
 
+/// Explicit `None` weight so ~`95%` of cells receive a vine (`0.05` empty vs `0.95` placed).
+const CULTIVATED_EMPTY_WEIGHT: f32 = 0.05;
+const CULTIVATED_PLACED_WEIGHT: f32 = 0.95;
+
 impl VineyardCell {
 	/// Authored ordered distribution: explicit `None`, then variants in declaration order.
 	///
-	/// Placed weight `1.0`; the `None` weight of `2.5` puts the placed share at
-	/// `1.0 / 3.5 ≈ 0.29`, low RFC `DENSITY_RANGE` (`0.28..0.50`).
+	/// `None` weight `0.05` against placed weight `0.95` yields a `0.95` placed share for
+	/// regular row planting.
 	pub fn distribution() -> GroveDistribution<Self> {
 		let trained_vine =
-			PlacementConstraints::new(UnitRange::new(0.04, 0.68), UnitRange::new(0.0, 0.34));
+			PlacementConstraints::new(UnitRange::new(0.0, 1.0), UnitRange::new(0.0, 0.34));
 		GroveDistribution::new(vec![
-			GroveBucket::none(2.5),
-			GroveBucket::placed(1.0, trained_vine, Self::TrainedVineRory),
+			GroveBucket::none(CULTIVATED_EMPTY_WEIGHT),
+			GroveBucket::placed(CULTIVATED_PLACED_WEIGHT, trained_vine, Self::TrainedVineRory),
 		])
 	}
 
@@ -115,19 +116,30 @@ mod tests {
 		let dist = VineyardCell::distribution();
 		assert_eq!(dist.len(), 2);
 		assert!(dist.buckets[0].item.is_none());
-		assert_eq!(dist.buckets[0].weight, 2.5);
+		assert_eq!(dist.buckets[0].weight, CULTIVATED_EMPTY_WEIGHT);
 		assert_eq!(dist.buckets[1].item, Some(VineyardCell::TrainedVineRory));
-		assert_eq!(dist.buckets[1].weight, 1.0);
+		assert_eq!(dist.buckets[1].weight, CULTIVATED_PLACED_WEIGHT);
 		Ok(())
 	}
 
 	#[test]
-	fn placed_share_sits_in_rfc_density_range() -> Result<()> {
+	fn placed_share_targets_cultivated_fill() -> Result<()> {
 		let dist = VineyardCell::distribution();
 		let total: f32 = dist.buckets.iter().map(|b| b.weight).sum();
 		let placed: f32 = dist.buckets.iter().filter(|b| b.item.is_some()).map(|b| b.weight).sum();
 		let share = placed / total;
-		assert!((0.28..=0.50).contains(&share), "placed share {share} outside RFC density");
+		assert!(
+			(0.94..=0.96).contains(&share),
+			"placed share {share} outside cultivated ~95% target"
+		);
+		Ok(())
+	}
+
+	#[test]
+	fn placement_uses_tight_centroid_offset_and_uniform_scale() -> Result<()> {
+		let def = definition();
+		assert_eq!(def.placement.offset, UnitRange::new(-0.5, 0.5));
+		assert_eq!(def.placement.scale, UnitRange::new(1.0, 1.0));
 		Ok(())
 	}
 
@@ -143,15 +155,15 @@ mod tests {
 	}
 
 	#[test]
-	fn placement_constraints_match_rfc() -> Result<()> {
+	fn placement_constraints_use_full_elevation_and_rfc_steepness() -> Result<()> {
 		let dist = VineyardCell::distribution();
 		let vine = dist
 			.buckets
 			.iter()
 			.find(|b| b.item == Some(VineyardCell::TrainedVineRory))
 			.ok_or_else(|| anyhow::anyhow!("missing trained vine bucket"))?;
-		assert_eq!(vine.constraints.elevation.start, 0.04);
-		assert_eq!(vine.constraints.elevation.end, 0.68);
+		assert_eq!(vine.constraints.elevation.start, 0.0);
+		assert_eq!(vine.constraints.elevation.end, 1.0);
 		assert_eq!(vine.constraints.steepness.end, 0.34);
 		Ok(())
 	}

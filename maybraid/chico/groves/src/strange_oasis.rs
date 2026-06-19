@@ -103,7 +103,7 @@ const RED_TORCH_ACCENT: StrangeOasisTorch = StrangeOasisTorch {
 
 const OASIS_STORYBOOK: StrangeOasisStorybook = StrangeOasisStorybook {
 	height: UnitRange::new(4.0, 6.0),
-	stalk_radius: UnitRange::new(0.14, 0.24),
+	stalk_radius: UnitRange::new(0.20, 0.32),
 	canopy_spread: UnitRange::new(1.6, 3.6),
 	canopy_density: SPARSE_TO_MODERATE_CANOPY_DENSITY,
 };

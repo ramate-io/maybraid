@@ -336,6 +336,22 @@ mod tests {
 		assert!(oak_geom.scale.tree_height >= oak.height.start.min(oak.height.end));
 		assert!(oak_geom.scale.tree_height <= oak.height.start.max(oak.height.end));
 
+		let RollingOaksItem::BraidOak(tall) = RollingOaksCell::RareTallRollingBraidOak.item() else {
+			anyhow::bail!("expected rare tall braid oak item");
+		};
+		let tall_geom = tall.build_with_noise(noise);
+		assert!(tall_geom.scale.tree_height >= tall.height.start.min(tall.height.end));
+		assert!(tall_geom.scale.tree_height <= tall.height.start.max(tall.height.end));
+
+		let RollingOaksItem::BraidOak(sentinel) =
+			RollingOaksCell::RareSentinelRollingBraidOak.item()
+		else {
+			anyhow::bail!("expected rare sentinel braid oak item");
+		};
+		let sentinel_geom = sentinel.build_with_noise(noise);
+		assert!(sentinel_geom.scale.tree_height >= sentinel.height.start.min(sentinel.height.end));
+		assert!(sentinel_geom.scale.tree_height <= sentinel.height.start.max(sentinel.height.end));
+
 		let RollingOaksItem::Storybook(story) = RollingOaksCell::RareRollingStorybook.item() else {
 			anyhow::bail!("expected storybook item");
 		};
@@ -347,7 +363,12 @@ mod tests {
 
 	#[test]
 	fn palette_resolves_for_all_varietals() -> Result<()> {
-		for cell in [RollingOaksCell::RollingBraidOak, RollingOaksCell::RareRollingStorybook] {
+		for cell in [
+			RollingOaksCell::RollingBraidOak,
+			RollingOaksCell::RareTallRollingBraidOak,
+			RollingOaksCell::RareSentinelRollingBraidOak,
+			RollingOaksCell::RareRollingStorybook,
+		] {
 			for (palette, label) in
 				[(cell.stick_palette_mix(), "stick"), (cell.canopy_palette_mix(), "canopy")]
 			{

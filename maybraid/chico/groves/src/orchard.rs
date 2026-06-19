@@ -1,4 +1,4 @@
-//! Orchard — moderate-density cultivated Storybook Tree upper-canopy grove
+//! Orchard — high-density cultivated Storybook Tree upper-canopy grove
 //! ([RFC-183 §3.4.7.7], [#353](https://github.com/ramate-io/maybraid/issues/353)).
 //!
 //! Compact fruiting and pale-bloom storybook forms on low-slope terrain with tight cell offset.
@@ -22,14 +22,14 @@ const MODERATE_CANOPY_DENSITY: UnitRange = UnitRange::new(0.35, 0.65);
 
 /// Authored Orchard grove definition.
 ///
-/// Cell footprint sits at the RFC midpoint (`11.0` m). Offset stays tight so placements read as
-/// tended rows without snapping to a rigid grid.
+/// Cell footprint sits at the RFC midpoint (`11.0` m). Placements stay on cell centroids with only
+/// ±`0.5` m horizontal jitter so the grove reads as regular tended rows.
 pub fn definition() -> GroveDefinition<OrchardCell> {
 	GroveDefinition {
 		cell_extent_xz: Vec2::splat(11.0),
 		placement: GrovePlacementRanges::new(
-			UnitRange::new(0.85, 1.15),
-			UnitRange::new(-2.0, 2.0),
+			UnitRange::new(1.0, 1.0),
+			UnitRange::new(-0.5, 0.5),
 		),
 		distribution: OrchardCell::distribution(),
 	}
@@ -60,14 +60,14 @@ pub struct OrchardStorybook {
 
 const FRUITING_STORYBOOK: OrchardStorybook = OrchardStorybook {
 	height: UnitRange::new(5.0, 10.0),
-	stalk_radius: UnitRange::new(0.14, 0.30),
+	stalk_radius: UnitRange::new(0.22, 0.44),
 	canopy_spread: UnitRange::new(1.8, 4.2),
 	canopy_density: MODERATE_CANOPY_DENSITY,
 };
 
 const PALE_BLOOM_STORYBOOK: OrchardStorybook = OrchardStorybook {
 	height: UnitRange::new(5.0, 9.0),
-	stalk_radius: UnitRange::new(0.12, 0.28),
+	stalk_radius: UnitRange::new(0.20, 0.38),
 	canopy_spread: UnitRange::new(1.6, 3.8),
 	canopy_density: MODERATE_CANOPY_DENSITY,
 };
@@ -92,18 +92,21 @@ const PALE_BLOOM_CANOPY_MIX: PaletteMix = PaletteMix::new(&[
 	PaletteSlot::new("light_green", "yellow_green"),
 ]);
 
+/// Explicit `None` weight paired with placed weights so ~`95%` of cells receive a tree.
+const CULTIVATED_EMPTY_WEIGHT: f32 = 2.25 / 19.0;
+
 impl OrchardCell {
 	/// Authored ordered distribution: explicit `None`, then variants in declaration order.
 	///
-	/// Placed weights total `2.25`; the `None` weight of `5.0` puts the placed share at
-	/// `2.25 / 7.25 ≈ 0.31`, mid RFC `DENSITY_RANGE` (`0.24..0.44`).
+	/// Placed weights total `2.25`; the `None` weight of `2.25 / 19` yields a `~0.95` placed share
+	/// for regular tended-row planting.
 	pub fn distribution() -> GroveDistribution<Self> {
 		let fruiting =
 			PlacementConstraints::new(UnitRange::new(0.0, 1.0), UnitRange::new(0.0, 0.30));
 		let pale_bloom =
 			PlacementConstraints::new(UnitRange::new(0.0, 1.0), UnitRange::new(0.0, 0.28));
 		GroveDistribution::new(vec![
-			GroveBucket::none(5.0),
+			GroveBucket::none(CULTIVATED_EMPTY_WEIGHT),
 			GroveBucket::placed(1.5, fruiting, Self::FruitingStorybook),
 			GroveBucket::placed(0.75, pale_bloom, Self::PaleBloomStorybook),
 		])
@@ -146,7 +149,7 @@ mod tests {
 		let dist = OrchardCell::distribution();
 		assert_eq!(dist.len(), 3);
 		assert!(dist.buckets[0].item.is_none());
-		assert_eq!(dist.buckets[0].weight, 5.0);
+		assert_eq!(dist.buckets[0].weight, CULTIVATED_EMPTY_WEIGHT);
 		assert_eq!(dist.buckets[1].item, Some(OrchardCell::FruitingStorybook));
 		assert_eq!(dist.buckets[1].weight, 1.5);
 		assert_eq!(dist.buckets[2].item, Some(OrchardCell::PaleBloomStorybook));
@@ -155,12 +158,15 @@ mod tests {
 	}
 
 	#[test]
-	fn placed_share_sits_in_rfc_density_range() -> Result<()> {
+	fn placed_share_targets_cultivated_fill() -> Result<()> {
 		let dist = OrchardCell::distribution();
 		let total: f32 = dist.buckets.iter().map(|b| b.weight).sum();
 		let placed: f32 = dist.buckets.iter().filter(|b| b.item.is_some()).map(|b| b.weight).sum();
 		let share = placed / total;
-		assert!((0.24..=0.44).contains(&share), "placed share {share} outside RFC density");
+		assert!(
+			(0.94..=0.96).contains(&share),
+			"placed share {share} outside cultivated ~95% target"
+		);
 		Ok(())
 	}
 
@@ -239,6 +245,14 @@ mod tests {
 				assert!(!allowed.is_empty(), "unresolved {label} tokens for {cell:?}");
 			}
 		}
+		Ok(())
+	}
+
+	#[test]
+	fn placement_uses_tight_centroid_offset_and_uniform_scale() -> Result<()> {
+		let def = definition();
+		assert_eq!(def.placement.offset, UnitRange::new(-0.5, 0.5));
+		assert_eq!(def.placement.scale, UnitRange::new(1.0, 1.0));
 		Ok(())
 	}
 

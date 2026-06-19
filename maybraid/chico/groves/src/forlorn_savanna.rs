@@ -105,7 +105,7 @@ const ACACIA_HIGH_BUSH: ForlornSavannaHighBush = ForlornSavannaHighBush {
 
 const RARE_SAVANNA_STORYBOOK: ForlornSavannaStorybook = ForlornSavannaStorybook {
 	height: UnitRange::new(10.0, 20.0),
-	stalk_radius: UnitRange::new(0.16, 0.38),
+	stalk_radius: UnitRange::new(0.24, 0.52),
 	canopy_spread: UnitRange::new(2.5, 6.5),
 	canopy_density: SPARSE_CANOPY_DENSITY,
 };
@@ -143,20 +143,19 @@ const SAVANNA_STORYBOOK_CANOPY_MIX: PaletteMix = PaletteMix::new(&[
 impl ForlornSavannaCell {
 	/// Authored ordered distribution: explicit `None`, then variants in declaration order.
 	///
-	/// Placed weights total `4.35`; the `None` weight of `22.0` puts the placed share at
-	/// `4.35 / 26.35 ≈ 0.17`, mid RFC `DENSITY_RANGE` (`0.06..0.20`).
+	/// Placed weights total `5.2`; the `None` weight of `30.0` puts the placed share at
+	/// `5.2 / 35.2 ≈ 0.15`, mid RFC `DENSITY_RANGE` (`0.06..0.20`).
 	pub fn distribution() -> GroveDistribution<Self> {
-		let rory =
-			PlacementConstraints::new(UnitRange::new(0.0, 1.0), UnitRange::new(0.0, 0.58));
+		let rory = PlacementConstraints::new(UnitRange::new(0.0, 1.0), UnitRange::new(0.0, 0.58));
 		let high_bush =
 			PlacementConstraints::new(UnitRange::new(0.0, 1.0), UnitRange::new(0.0, 0.64));
 		let storybook =
 			PlacementConstraints::new(UnitRange::new(0.0, 1.0), UnitRange::new(0.0, 0.50));
 		GroveDistribution::new(vec![
-			GroveBucket::none(22.0),
-			GroveBucket::placed(2.0, rory, Self::SavannaRory),
+			GroveBucket::none(30.0),
+			GroveBucket::placed(3.0, rory, Self::SavannaRory),
 			GroveBucket::placed(2.0, high_bush, Self::AcaciaHighBush),
-			GroveBucket::placed(0.35, storybook, Self::RareSavannaStorybook),
+			GroveBucket::placed(0.2, storybook, Self::RareSavannaStorybook),
 		])
 	}
 
@@ -200,13 +199,13 @@ mod tests {
 		let dist = ForlornSavannaCell::distribution();
 		assert_eq!(dist.len(), 4);
 		assert!(dist.buckets[0].item.is_none());
-		assert_eq!(dist.buckets[0].weight, 22.0);
+		assert_eq!(dist.buckets[0].weight, 30.0);
 		assert_eq!(dist.buckets[1].item, Some(ForlornSavannaCell::SavannaRory));
-		assert_eq!(dist.buckets[1].weight, 2.0);
+		assert_eq!(dist.buckets[1].weight, 3.0);
 		assert_eq!(dist.buckets[2].item, Some(ForlornSavannaCell::AcaciaHighBush));
 		assert_eq!(dist.buckets[2].weight, 2.0);
 		assert_eq!(dist.buckets[3].item, Some(ForlornSavannaCell::RareSavannaStorybook));
-		assert_eq!(dist.buckets[3].weight, 0.35);
+		assert_eq!(dist.buckets[3].weight, 0.2);
 		Ok(())
 	}
 
@@ -275,8 +274,12 @@ mod tests {
 
 	#[test]
 	fn steep_slope_rejects_rory_but_allows_high_bush() -> Result<()> {
-		let prepared =
-			ForlornSavannaCell::distribution().prepare(0.0, 0.0, NoiseParams::default(), Vec3::ZERO);
+		let prepared = ForlornSavannaCell::distribution().prepare(
+			0.0,
+			0.0,
+			NoiseParams::default(),
+			Vec3::ZERO,
+		);
 		let terrain = FlatTerrainSample { elevation: 0.40, steepness: 0.60 };
 		let bush_outcome = prepared.select_from(5, Vec3::new(5.0, 0.40, 5.0), 1.0, &terrain);
 		match bush_outcome {

@@ -124,7 +124,7 @@ const DRY_WANDERING_SOPE: WanderingAcaciaBanyan = WanderingAcaciaBanyan {
 
 const WANDERING_VASE_TREE: WanderingAcaciaVaseTree = WanderingAcaciaVaseTree {
 	height: UnitRange::new(4.0, 8.0),
-	stalk_radius: UnitRange::new(0.16, 0.36),
+	stalk_radius: UnitRange::new(0.22, 0.48),
 	canopy_spread: UnitRange::new(0.5, 1.4),
 	canopy_density: SPARSE_CANOPY_DENSITY,
 };

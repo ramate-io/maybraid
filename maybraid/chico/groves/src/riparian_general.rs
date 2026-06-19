@@ -91,7 +91,7 @@ const RIPARIAN_BRAID_OAK: RiparianGeneralBraidOak = RiparianGeneralBraidOak {
 
 const RIPARIAN_STORYBOOK: RiparianGeneralStorybook = RiparianGeneralStorybook {
 	height: UnitRange::new(5.0, 15.0),
-	stalk_radius: UnitRange::new(0.12, 0.28),
+	stalk_radius: UnitRange::new(0.20, 0.42),
 	canopy_spread: UnitRange::new(2.0, 5.5),
 	canopy_density: MODERATE_CANOPY_DENSITY,
 };
@@ -142,11 +142,11 @@ impl RiparianGeneralCell {
 	/// `3.35 / 10.75 ≈ 0.31`, mid RFC `DENSITY_RANGE` (`0.20..0.42`).
 	pub fn distribution() -> GroveDistribution<Self> {
 		let braid_oak =
-			PlacementConstraints::new(UnitRange::new(0.0, 0.42), UnitRange::new(0.0, 0.36));
+			PlacementConstraints::new(UnitRange::new(0.0, 1.0), UnitRange::new(0.0, 0.36));
 		let storybook =
-			PlacementConstraints::new(UnitRange::new(0.0, 0.45), UnitRange::new(0.0, 0.44));
+			PlacementConstraints::new(UnitRange::new(0.0, 1.0), UnitRange::new(0.0, 0.44));
 		let high_bush =
-			PlacementConstraints::new(UnitRange::new(0.0, 0.38), UnitRange::new(0.0, 0.52));
+			PlacementConstraints::new(UnitRange::new(0.0, 1.0), UnitRange::new(0.0, 0.52));
 		GroveDistribution::new(vec![
 			GroveBucket::none(7.4),
 			GroveBucket::placed(1.5, braid_oak, Self::RiparianBraidOak),
@@ -247,7 +247,8 @@ mod tests {
 			.iter()
 			.find(|b| b.item == Some(RiparianGeneralCell::RiparianBraidOak))
 			.ok_or_else(|| anyhow::anyhow!("missing braid oak bucket"))?;
-		assert_eq!(braid_oak.constraints.elevation.end, 0.42);
+		assert_eq!(braid_oak.constraints.elevation.start, 0.0);
+		assert_eq!(braid_oak.constraints.elevation.end, 1.0);
 		assert_eq!(braid_oak.constraints.steepness.end, 0.36);
 
 		let storybook = dist
@@ -255,7 +256,8 @@ mod tests {
 			.iter()
 			.find(|b| b.item == Some(RiparianGeneralCell::RiparianStorybook))
 			.ok_or_else(|| anyhow::anyhow!("missing storybook bucket"))?;
-		assert_eq!(storybook.constraints.elevation.end, 0.45);
+		assert_eq!(storybook.constraints.elevation.start, 0.0);
+		assert_eq!(storybook.constraints.elevation.end, 1.0);
 		assert_eq!(storybook.constraints.steepness.end, 0.44);
 
 		let high_bush = dist
@@ -263,7 +265,8 @@ mod tests {
 			.iter()
 			.find(|b| b.item == Some(RiparianGeneralCell::RareRiparianHighBush))
 			.ok_or_else(|| anyhow::anyhow!("missing high bush bucket"))?;
-		assert_eq!(high_bush.constraints.elevation.end, 0.38);
+		assert_eq!(high_bush.constraints.elevation.start, 0.0);
+		assert_eq!(high_bush.constraints.elevation.end, 1.0);
 		assert_eq!(high_bush.constraints.steepness.end, 0.52);
 		Ok(())
 	}

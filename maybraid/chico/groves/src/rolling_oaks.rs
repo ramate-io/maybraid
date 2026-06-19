@@ -40,6 +40,8 @@ pub fn definition() -> GroveDefinition<RollingOaksCell> {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RollingOaksCell {
 	RollingBraidOak,
+	RareTallRollingBraidOak,
+	RareSentinelRollingBraidOak,
 	RareRollingStorybook,
 }
 
@@ -73,9 +75,21 @@ const ROLLING_BRAID_OAK: RollingOaksBraidOak = RollingOaksBraidOak {
 	canopy_density: MODERATE_CANOPY_DENSITY,
 };
 
+const RARE_TALL_ROLLING_BRAID_OAK: RollingOaksBraidOak = RollingOaksBraidOak {
+	height: UnitRange::new(20.0, 32.0),
+	canopy_spread: UnitRange::new(5.0, 11.0),
+	canopy_density: MODERATE_CANOPY_DENSITY,
+};
+
+const RARE_SENTINEL_ROLLING_BRAID_OAK: RollingOaksBraidOak = RollingOaksBraidOak {
+	height: UnitRange::new(28.0, 40.0),
+	canopy_spread: UnitRange::new(7.0, 14.0),
+	canopy_density: MODERATE_CANOPY_DENSITY,
+};
+
 const RARE_ROLLING_STORYBOOK: RollingOaksStorybook = RollingOaksStorybook {
 	height: UnitRange::new(5.0, 20.0),
-	stalk_radius: UnitRange::new(0.12, 0.32),
+	stalk_radius: UnitRange::new(0.20, 0.48),
 	canopy_spread: UnitRange::new(2.0, 6.5),
 	canopy_density: MODERATE_CANOPY_DENSITY,
 };
@@ -88,6 +102,26 @@ const ROLLING_BRAID_OAK_STICK_MIX: PaletteMix = PaletteMix::new(&[
 const ROLLING_BRAID_OAK_CANOPY_MIX: PaletteMix = PaletteMix::new(&[
 	PaletteSlot::new("olive_green", "fresh_green"),
 	PaletteSlot::new("deep_green", "yellow_green"),
+]);
+
+const RARE_TALL_ROLLING_BRAID_OAK_STICK_MIX: PaletteMix = PaletteMix::new(&[
+	PaletteSlot::new("gnarled_brown", "oak_bark"),
+	PaletteSlot::new("moss_bark", "dark_bark"),
+]);
+
+const RARE_TALL_ROLLING_BRAID_OAK_CANOPY_MIX: PaletteMix = PaletteMix::new(&[
+	PaletteSlot::new("dark_green", "deep_green"),
+	PaletteSlot::new("olive_green", "light_green"),
+]);
+
+const RARE_SENTINEL_ROLLING_BRAID_OAK_STICK_MIX: PaletteMix = PaletteMix::new(&[
+	PaletteSlot::new("wet_bark", "gnarled_brown"),
+	PaletteSlot::new("dark_bark", "moss_bark"),
+]);
+
+const RARE_SENTINEL_ROLLING_BRAID_OAK_CANOPY_MIX: PaletteMix = PaletteMix::new(&[
+	PaletteSlot::new("emerald_green", "deep_green"),
+	PaletteSlot::new("moss_green", "olive_green"),
 ]);
 
 const ROLLING_STORYBOOK_STICK_MIX: PaletteMix = PaletteMix::new(&[
@@ -103,16 +137,22 @@ const ROLLING_STORYBOOK_CANOPY_MIX: PaletteMix = PaletteMix::new(&[
 impl RollingOaksCell {
 	/// Authored ordered distribution: explicit `None`, then variants in declaration order.
 	///
-	/// Placed weights total `2.35`; the `None` weight of `12.4` puts the placed share at
-	/// `2.35 / 14.75 ≈ 0.16`, mid RFC `DENSITY_RANGE` (`0.08..0.24`).
+	/// Placed weights total `2.55`; the `None` weight of `12.4` puts the placed share at
+	/// `2.55 / 14.95 ≈ 0.17`, mid RFC `DENSITY_RANGE` (`0.08..0.24`).
 	pub fn distribution() -> GroveDistribution<Self> {
 		let braid_oak =
-			PlacementConstraints::new(UnitRange::new(0.08, 0.72), UnitRange::new(0.0, 0.48));
+			PlacementConstraints::new(UnitRange::new(0.0, 1.0), UnitRange::new(0.0, 0.48));
+		let tall_braid_oak =
+			PlacementConstraints::new(UnitRange::new(0.0, 1.0), UnitRange::new(0.0, 0.48));
+		let sentinel_braid_oak =
+			PlacementConstraints::new(UnitRange::new(0.0, 1.0), UnitRange::new(0.0, 0.44));
 		let storybook =
-			PlacementConstraints::new(UnitRange::new(0.08, 0.68), UnitRange::new(0.0, 0.54));
+			PlacementConstraints::new(UnitRange::new(0.0, 1.0), UnitRange::new(0.0, 0.54));
 		GroveDistribution::new(vec![
 			GroveBucket::none(12.4),
 			GroveBucket::placed(2.0, braid_oak, Self::RollingBraidOak),
+			GroveBucket::placed(0.15, tall_braid_oak, Self::RareTallRollingBraidOak),
+			GroveBucket::placed(0.05, sentinel_braid_oak, Self::RareSentinelRollingBraidOak),
 			GroveBucket::placed(0.35, storybook, Self::RareRollingStorybook),
 		])
 	}
@@ -120,6 +160,10 @@ impl RollingOaksCell {
 	pub fn item(self) -> RollingOaksItem {
 		match self {
 			Self::RollingBraidOak => RollingOaksItem::BraidOak(&ROLLING_BRAID_OAK),
+			Self::RareTallRollingBraidOak => RollingOaksItem::BraidOak(&RARE_TALL_ROLLING_BRAID_OAK),
+			Self::RareSentinelRollingBraidOak => {
+				RollingOaksItem::BraidOak(&RARE_SENTINEL_ROLLING_BRAID_OAK)
+			}
 			Self::RareRollingStorybook => RollingOaksItem::Storybook(&RARE_ROLLING_STORYBOOK),
 		}
 	}
@@ -127,6 +171,8 @@ impl RollingOaksCell {
 	pub fn stick_palette_mix(self) -> PaletteMix {
 		match self {
 			Self::RollingBraidOak => ROLLING_BRAID_OAK_STICK_MIX,
+			Self::RareTallRollingBraidOak => RARE_TALL_ROLLING_BRAID_OAK_STICK_MIX,
+			Self::RareSentinelRollingBraidOak => RARE_SENTINEL_ROLLING_BRAID_OAK_STICK_MIX,
 			Self::RareRollingStorybook => ROLLING_STORYBOOK_STICK_MIX,
 		}
 	}
@@ -134,6 +180,8 @@ impl RollingOaksCell {
 	pub fn canopy_palette_mix(self) -> PaletteMix {
 		match self {
 			Self::RollingBraidOak => ROLLING_BRAID_OAK_CANOPY_MIX,
+			Self::RareTallRollingBraidOak => RARE_TALL_ROLLING_BRAID_OAK_CANOPY_MIX,
+			Self::RareSentinelRollingBraidOak => RARE_SENTINEL_ROLLING_BRAID_OAK_CANOPY_MIX,
 			Self::RareRollingStorybook => ROLLING_STORYBOOK_CANOPY_MIX,
 		}
 	}
@@ -152,13 +200,17 @@ mod tests {
 	#[test]
 	fn distribution_matches_rfc_order_and_weights() -> Result<()> {
 		let dist = RollingOaksCell::distribution();
-		assert_eq!(dist.len(), 3);
+		assert_eq!(dist.len(), 5);
 		assert!(dist.buckets[0].item.is_none());
 		assert_eq!(dist.buckets[0].weight, 12.4);
 		assert_eq!(dist.buckets[1].item, Some(RollingOaksCell::RollingBraidOak));
 		assert_eq!(dist.buckets[1].weight, 2.0);
-		assert_eq!(dist.buckets[2].item, Some(RollingOaksCell::RareRollingStorybook));
-		assert_eq!(dist.buckets[2].weight, 0.35);
+		assert_eq!(dist.buckets[2].item, Some(RollingOaksCell::RareTallRollingBraidOak));
+		assert_eq!(dist.buckets[2].weight, 0.15);
+		assert_eq!(dist.buckets[3].item, Some(RollingOaksCell::RareSentinelRollingBraidOak));
+		assert_eq!(dist.buckets[3].weight, 0.05);
+		assert_eq!(dist.buckets[4].item, Some(RollingOaksCell::RareRollingStorybook));
+		assert_eq!(dist.buckets[4].weight, 0.35);
 		Ok(())
 	}
 
@@ -180,6 +232,18 @@ mod tests {
 		assert_eq!(oak.height, UnitRange::new(5.0, 20.0));
 		assert_eq!(oak.canopy_density, MODERATE_CANOPY_DENSITY);
 
+		let RollingOaksItem::BraidOak(tall) = RollingOaksCell::RareTallRollingBraidOak.item() else {
+			anyhow::bail!("expected rare tall braid oak item");
+		};
+		assert_eq!(tall.height, UnitRange::new(20.0, 32.0));
+
+		let RollingOaksItem::BraidOak(sentinel) =
+			RollingOaksCell::RareSentinelRollingBraidOak.item()
+		else {
+			anyhow::bail!("expected rare sentinel braid oak item");
+		};
+		assert_eq!(sentinel.height, UnitRange::new(28.0, 40.0));
+
 		let RollingOaksItem::Storybook(story) = RollingOaksCell::RareRollingStorybook.item() else {
 			anyhow::bail!("expected storybook item");
 		};
@@ -196,17 +260,33 @@ mod tests {
 			.iter()
 			.find(|b| b.item == Some(RollingOaksCell::RollingBraidOak))
 			.ok_or_else(|| anyhow::anyhow!("missing braid oak bucket"))?;
-		assert_eq!(braid_oak.constraints.elevation.start, 0.08);
-		assert_eq!(braid_oak.constraints.elevation.end, 0.72);
+		assert_eq!(braid_oak.constraints.elevation.start, 0.0);
+		assert_eq!(braid_oak.constraints.elevation.end, 1.0);
 		assert_eq!(braid_oak.constraints.steepness.end, 0.48);
+
+		let tall_braid_oak = dist
+			.buckets
+			.iter()
+			.find(|b| b.item == Some(RollingOaksCell::RareTallRollingBraidOak))
+			.ok_or_else(|| anyhow::anyhow!("missing tall braid oak bucket"))?;
+		assert_eq!(tall_braid_oak.constraints.elevation.end, 1.0);
+		assert_eq!(tall_braid_oak.constraints.steepness.end, 0.48);
+
+		let sentinel_braid_oak = dist
+			.buckets
+			.iter()
+			.find(|b| b.item == Some(RollingOaksCell::RareSentinelRollingBraidOak))
+			.ok_or_else(|| anyhow::anyhow!("missing sentinel braid oak bucket"))?;
+		assert_eq!(sentinel_braid_oak.constraints.elevation.end, 1.0);
+		assert_eq!(sentinel_braid_oak.constraints.steepness.end, 0.44);
 
 		let storybook = dist
 			.buckets
 			.iter()
 			.find(|b| b.item == Some(RollingOaksCell::RareRollingStorybook))
 			.ok_or_else(|| anyhow::anyhow!("missing storybook bucket"))?;
-		assert_eq!(storybook.constraints.elevation.start, 0.08);
-		assert_eq!(storybook.constraints.elevation.end, 0.68);
+		assert_eq!(storybook.constraints.elevation.start, 0.0);
+		assert_eq!(storybook.constraints.elevation.end, 1.0);
 		assert_eq!(storybook.constraints.steepness.end, 0.54);
 		Ok(())
 	}
@@ -216,7 +296,7 @@ mod tests {
 		let prepared =
 			RollingOaksCell::distribution().prepare(0.0, 0.0, NoiseParams::default(), Vec3::ZERO);
 		let terrain = FlatTerrainSample { elevation: 0.40, steepness: 0.50 };
-		let story_outcome = prepared.select_from(5, Vec3::new(5.0, 0.40, 5.0), 1.0, &terrain);
+		let story_outcome = prepared.select_from(4, Vec3::new(5.0, 0.40, 5.0), 1.0, &terrain);
 		match story_outcome {
 			GroveCellOutcome::Placed { variant, .. } => {
 				assert_eq!(variant, RollingOaksCell::RareRollingStorybook);
@@ -226,16 +306,23 @@ mod tests {
 		let braid_outcome = prepared.select_from(1, Vec3::new(5.0, 0.40, 5.0), 1.0, &terrain);
 		match braid_outcome {
 			GroveCellOutcome::Placed { variant, .. } => {
-				assert_ne!(variant, RollingOaksCell::RollingBraidOak);
+				assert_eq!(variant, RollingOaksCell::RareRollingStorybook);
 			}
-			GroveCellOutcome::Empty { .. } | GroveCellOutcome::Rejected { .. } => {}
+			other => anyhow::bail!(
+				"expected storybook after braid-oak variants reject steep slope, got {other:?}"
+			),
 		}
 		Ok(())
 	}
 
 	#[test]
 	fn palette_resolves_for_all_varietals() -> Result<()> {
-		for cell in [RollingOaksCell::RollingBraidOak, RollingOaksCell::RareRollingStorybook] {
+		for cell in [
+			RollingOaksCell::RollingBraidOak,
+			RollingOaksCell::RareTallRollingBraidOak,
+			RollingOaksCell::RareSentinelRollingBraidOak,
+			RollingOaksCell::RareRollingStorybook,
+		] {
 			for (palette, label) in
 				[(cell.stick_palette_mix(), "stick"), (cell.canopy_palette_mix(), "canopy")]
 			{

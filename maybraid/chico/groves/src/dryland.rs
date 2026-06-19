@@ -75,7 +75,7 @@ const DRYLAND_LIAMS: DrylandLiamsConifer = DrylandLiamsConifer {
 
 const DRYLAND_VASE: DrylandVaseTree = DrylandVaseTree {
 	height: UnitRange::new(10.0, 20.0),
-	stalk_radius: UnitRange::new(0.25, 0.50),
+	stalk_radius: UnitRange::new(0.34, 0.68),
 	canopy_spread: UnitRange::new(2.0, 5.5),
 	canopy_density: SPARSE_CANOPY_DENSITY,
 };

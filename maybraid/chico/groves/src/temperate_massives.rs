@@ -88,7 +88,7 @@ const MASSIVE_BRAID_OAK: TemperateMassivesBraidOak = TemperateMassivesBraidOak {
 
 const MASSIVE_STORYBOOK: TemperateMassivesStorybook = TemperateMassivesStorybook {
 	height: UnitRange::new(35.0, 170.0),
-	stalk_radius: UnitRange::new(0.5, 1.2),
+	stalk_radius: UnitRange::new(3.0, 9.0),
 	canopy_spread: UnitRange::new(12.0, 35.0),
 	canopy_density: DENSE_CANOPY_DENSITY,
 };
@@ -225,7 +225,7 @@ mod tests {
 			anyhow::bail!("expected storybook item");
 		};
 		assert_eq!(story.height, UnitRange::new(35.0, 170.0));
-		assert_eq!(story.stalk_radius, UnitRange::new(0.5, 1.2));
+		assert_eq!(story.stalk_radius, UnitRange::new(3.0, 9.0));
 		assert_eq!(story.canopy_spread, UnitRange::new(12.0, 35.0));
 		assert_eq!(story.canopy_density, DENSE_CANOPY_DENSITY);
 

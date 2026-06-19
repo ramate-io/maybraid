@@ -1,4 +1,4 @@
-//! Date Grove — moderate-density cultivated Date Palm upper-canopy grove
+//! Date Grove — high-density cultivated Date Palm upper-canopy grove
 //! ([RFC-183 §3.4.7.9], [#357](https://github.com/ramate-io/maybraid/issues/357)).
 //!
 //! Single moderate-crown date palm form with tight cell offset on warm flat terrain.
@@ -22,14 +22,14 @@ const MODERATE_CROWN_DENSITY: UnitRange = UnitRange::new(0.35, 0.65);
 
 /// Authored Date Grove definition.
 ///
-/// Cell footprint sits at the RFC midpoint (`12.0` m). Offset stays tight so placements read as
-/// cultivated rows.
+/// Cell footprint sits at the RFC midpoint (`12.0` m). Placements stay on cell centroids with only
+/// ±`0.5` m horizontal jitter for regular palm rows.
 pub fn definition() -> GroveDefinition<DateGroveCell> {
 	GroveDefinition {
 		cell_extent_xz: Vec2::splat(12.0),
 		placement: GrovePlacementRanges::new(
-			UnitRange::new(0.85, 1.15),
-			UnitRange::new(-2.0, 2.0),
+			UnitRange::new(1.0, 1.0),
+			UnitRange::new(-0.5, 0.5),
 		),
 		distribution: DateGroveCell::distribution(),
 	}
@@ -70,17 +70,21 @@ const DATE_PALM_CANOPY_MIX: PaletteMix = PaletteMix::new(&[
 	PaletteSlot::new("fresh_green", "yellow_green"),
 ]);
 
+/// Explicit `None` weight so ~`95%` of cells receive a palm (`0.05` empty vs `0.95` placed).
+const CULTIVATED_EMPTY_WEIGHT: f32 = 0.05;
+const CULTIVATED_PLACED_WEIGHT: f32 = 0.95;
+
 impl DateGroveCell {
 	/// Authored ordered distribution: explicit `None`, then variants in declaration order.
 	///
-	/// Placed weight `1.0`; the `None` weight of `2.4` puts the placed share at
-	/// `1.0 / 3.4 ≈ 0.29`, mid RFC `DENSITY_RANGE` (`0.22..0.42`).
+	/// `None` weight `0.05` against placed weight `0.95` yields a `0.95` placed share for
+	/// regular grove planting.
 	pub fn distribution() -> GroveDistribution<Self> {
 		let fruiting_date =
-			PlacementConstraints::new(UnitRange::new(0.0, 0.46), UnitRange::new(0.0, 0.30));
+			PlacementConstraints::new(UnitRange::new(0.0, 1.0), UnitRange::new(0.0, 0.30));
 		GroveDistribution::new(vec![
-			GroveBucket::none(2.4),
-			GroveBucket::placed(1.0, fruiting_date, Self::FruitingDatePalm),
+			GroveBucket::none(CULTIVATED_EMPTY_WEIGHT),
+			GroveBucket::placed(CULTIVATED_PLACED_WEIGHT, fruiting_date, Self::FruitingDatePalm),
 		])
 	}
 
@@ -111,19 +115,30 @@ mod tests {
 		let dist = DateGroveCell::distribution();
 		assert_eq!(dist.len(), 2);
 		assert!(dist.buckets[0].item.is_none());
-		assert_eq!(dist.buckets[0].weight, 2.4);
+		assert_eq!(dist.buckets[0].weight, CULTIVATED_EMPTY_WEIGHT);
 		assert_eq!(dist.buckets[1].item, Some(DateGroveCell::FruitingDatePalm));
-		assert_eq!(dist.buckets[1].weight, 1.0);
+		assert_eq!(dist.buckets[1].weight, CULTIVATED_PLACED_WEIGHT);
 		Ok(())
 	}
 
 	#[test]
-	fn placed_share_sits_in_rfc_density_range() -> Result<()> {
+	fn placed_share_targets_cultivated_fill() -> Result<()> {
 		let dist = DateGroveCell::distribution();
 		let total: f32 = dist.buckets.iter().map(|b| b.weight).sum();
 		let placed: f32 = dist.buckets.iter().filter(|b| b.item.is_some()).map(|b| b.weight).sum();
 		let share = placed / total;
-		assert!((0.22..=0.42).contains(&share), "placed share {share} outside RFC density");
+		assert!(
+			(0.94..=0.96).contains(&share),
+			"placed share {share} outside cultivated ~95% target"
+		);
+		Ok(())
+	}
+
+	#[test]
+	fn placement_uses_tight_centroid_offset_and_uniform_scale() -> Result<()> {
+		let def = definition();
+		assert_eq!(def.placement.offset, UnitRange::new(-0.5, 0.5));
+		assert_eq!(def.placement.scale, UnitRange::new(1.0, 1.0));
 		Ok(())
 	}
 
@@ -138,7 +153,7 @@ mod tests {
 	}
 
 	#[test]
-	fn placement_constraints_match_rfc() -> Result<()> {
+	fn placement_constraints_use_full_elevation_and_rfc_steepness() -> Result<()> {
 		let dist = DateGroveCell::distribution();
 		let palm = dist
 			.buckets
@@ -146,7 +161,7 @@ mod tests {
 			.find(|b| b.item == Some(DateGroveCell::FruitingDatePalm))
 			.ok_or_else(|| anyhow::anyhow!("missing fruiting date palm bucket"))?;
 		assert_eq!(palm.constraints.elevation.start, 0.0);
-		assert_eq!(palm.constraints.elevation.end, 0.46);
+		assert_eq!(palm.constraints.elevation.end, 1.0);
 		assert_eq!(palm.constraints.steepness.end, 0.30);
 		Ok(())
 	}
