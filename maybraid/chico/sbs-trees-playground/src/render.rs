@@ -17,6 +17,7 @@ use chico_groves::alpine::AlpineStd;
 use chico_groves::dryland::DrylandStd;
 use chico_groves::storytellers::StorytellersStd;
 use chico_groves::trade_winds::TradeWindsStd;
+use chico_groves::leeward::LeewardStd;
 use chico_groves::wandering_acacia::WanderingAcaciaStd;
 use chico_groves::palm_shade::PalmShadeStd;
 use chico_groves::riparian_mix::RiparianMixStd;
@@ -325,6 +326,9 @@ pub type RenderTradeWinds = TradeWindsStd;
 /// [`WanderingAcaciaStd`] — very-low-density dry open upper-canopy grove ([#338](https://github.com/ramate-io/maybraid/issues/338)).
 pub type RenderWanderingAcacia = WanderingAcaciaStd;
 
+/// [`LeewardStd`] — moderate-density sheltered upper-canopy grove ([#339](https://github.com/ramate-io/maybraid/issues/339)).
+pub type RenderLeeward = LeewardStd;
+
 /// The configured render item currently shown in the scene.
 ///
 /// This is the typed scene state behind [`RenderConfig`]: material patching
@@ -383,6 +387,7 @@ pub enum RenderSubject {
 	Storytellers(RenderStorytellers),
 	TradeWinds(RenderTradeWinds),
 	WanderingAcacia(RenderWanderingAcacia),
+	Leeward(RenderLeeward),
 	SpearTuft(RenderSpearTuft),
 	BuddhaHandTuft(RenderBuddhaHandTuft),
 	WeepingTuft(RenderWeepingTuft),
@@ -445,6 +450,7 @@ impl RenderSubject {
 			Self::Storytellers(_) => "Storytellers",
 			Self::TradeWinds(_) => "TradeWinds",
 			Self::WanderingAcacia(_) => "WanderingAcacia",
+			Self::Leeward(_) => "Leeward",
 			Self::SpearTuft(_) => "SpearTuft",
 			Self::BuddhaHandTuft(_) => "BuddhaHandTuft",
 			Self::WeepingTuft(_) => "WeepingTuft",
@@ -800,6 +806,18 @@ impl RenderSubject {
 					g.leaf_surface_noise
 				)
 			}
+			Self::Leeward(g) => {
+				format!(
+					"{:?}|extent={:?}|cell_extent_xz={:?}|terrain={:?}|chain={:?}|stick={:?}|leaf={:?}",
+					g.grove,
+					g.extent,
+					g.cell_extent_xz(),
+					g.terrain,
+					g.tree_chain_noise,
+					g.stick_surface_noise,
+					g.leaf_surface_noise
+				)
+			}
 			Self::StrangeOasis(g) => {
 				format!(
 					"{:?}|extent={:?}|cell_extent_xz={:?}|terrain={:?}|chain={:?}|stick={:?}|leaf={:?}",
@@ -928,6 +946,7 @@ impl RenderSubject {
 			Self::Storytellers(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::TradeWinds(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::WanderingAcacia(item) => item.spawn_render_items(commands, chunk, transform),
+			Self::Leeward(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::SpearTuft(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::BuddhaHandTuft(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::WeepingTuft(item) => item.spawn_render_items(commands, chunk, transform),
