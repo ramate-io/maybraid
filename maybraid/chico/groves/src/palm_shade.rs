@@ -175,6 +175,7 @@ mod tests {
 	};
 	use anyhow::Result;
 	use bevy_math::Vec3;
+	use gimme_gen::Cell;
 	use procedural_common::NoiseParams;
 
 	#[test]
@@ -274,14 +275,14 @@ mod tests {
 		let prepared =
 			PalmShadeCell::distribution().prepare(0.0, 0.0, NoiseParams::default(), Vec3::ZERO);
 		let terrain = FlatTerrainSample { elevation: 0.30, steepness: 0.38 };
-		let shade_outcome = prepared.select_from(3, Vec3::new(5.0, 0.30, 5.0), 1.0, &terrain);
+		let shade_outcome = prepared.select_from(3, Vec3::new(5.0, 0.30, 5.0), 1.0, Cell::from_min_max(Vec3::ZERO, Vec3::ONE), &terrain);
 		match shade_outcome {
 			GroveCellOutcome::Placed { variant, .. } => {
 				assert_eq!(variant, PalmShadeCell::ShadeDatePalm);
 			}
 			other => anyhow::bail!("expected ShadeDatePalm on moderate slope, got {other:?}"),
 		}
-		let cluster_outcome = prepared.select_from(5, Vec3::new(5.0, 0.30, 5.0), 1.0, &terrain);
+		let cluster_outcome = prepared.select_from(5, Vec3::new(5.0, 0.30, 5.0), 1.0, Cell::from_min_max(Vec3::ZERO, Vec3::ONE), &terrain);
 		match cluster_outcome {
 			GroveCellOutcome::Placed { variant, .. } => {
 				assert_ne!(variant, PalmShadeCell::ClusterDatePalm);

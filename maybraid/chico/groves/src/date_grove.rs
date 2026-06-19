@@ -27,10 +27,7 @@ const MODERATE_CROWN_DENSITY: UnitRange = UnitRange::new(0.35, 0.65);
 pub fn definition() -> GroveDefinition<DateGroveCell> {
 	GroveDefinition {
 		cell_extent_xz: Vec2::splat(12.0),
-		placement: GrovePlacementRanges::new(
-			UnitRange::new(1.0, 1.0),
-			UnitRange::new(-0.5, 0.5),
-		),
+		placement: GrovePlacementRanges::new(UnitRange::new(1.0, 1.0), UnitRange::new(-0.5, 0.5)),
 		distribution: DateGroveCell::distribution(),
 	}
 }
@@ -55,10 +52,8 @@ pub struct DateGroveDatePalm {
 	pub crown_density: UnitRange,
 }
 
-const FRUITING_DATE_PALM: DateGroveDatePalm = DateGroveDatePalm {
-	height: UnitRange::new(5.0, 8.0),
-	crown_density: MODERATE_CROWN_DENSITY,
-};
+const FRUITING_DATE_PALM: DateGroveDatePalm =
+	DateGroveDatePalm { height: UnitRange::new(5.0, 8.0), crown_density: MODERATE_CROWN_DENSITY };
 
 const DATE_PALM_STICK_MIX: PaletteMix = PaletteMix::new(&[
 	PaletteSlot::new("palm_bark", "tan_bark"),
@@ -144,9 +139,7 @@ mod tests {
 
 	#[test]
 	fn geometry_follows_authored_bands() -> Result<()> {
-		let DateGroveItem::DatePalm(palm) = DateGroveCell::FruitingDatePalm.item() else {
-			anyhow::bail!("expected fruiting date palm item");
-		};
+		let DateGroveItem::DatePalm(palm) = DateGroveCell::FruitingDatePalm.item();
 		assert_eq!(palm.height, UnitRange::new(5.0, 8.0));
 		assert_eq!(palm.crown_density, MODERATE_CROWN_DENSITY);
 		Ok(())

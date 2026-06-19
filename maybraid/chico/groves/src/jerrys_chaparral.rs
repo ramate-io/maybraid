@@ -221,6 +221,7 @@ mod tests {
 	};
 	use anyhow::Result;
 	use bevy_math::Vec3;
+	use gimme_gen::Cell;
 	use procedural_common::NoiseParams;
 
 	#[test]
@@ -317,7 +318,7 @@ mod tests {
 			Vec3::ZERO,
 		);
 		let terrain = FlatTerrainSample { elevation: 0.35, steepness: 0.60 };
-		let outcome = prepared.select_from(2, Vec3::new(5.0, 0.35, 5.0), 1.0, &terrain);
+		let outcome = prepared.select_from(2, Vec3::new(5.0, 0.35, 5.0), 1.0, Cell::from_min_max(Vec3::ZERO, Vec3::ONE), &terrain);
 		match outcome {
 			GroveCellOutcome::Placed { variant, .. } => {
 				assert_eq!(variant, JerrysChaparralCell::SmallFriendsConifer);

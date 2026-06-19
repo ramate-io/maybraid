@@ -356,6 +356,7 @@ where
 
 #[cfg(test)]
 mod tests {
+	use gimme_gen::Cell;
 	use super::*;
 	use anyhow::Result;
 
@@ -415,6 +416,7 @@ mod tests {
 			LeewardCell::ShelteredTemperateConifer,
 			Vec3::new(1.0, 0.0, 2.0),
 			1.0,
+			Cell::from_min_max(Vec3::new(0.0, 0.0, 0.0), Vec3::new(1.0, 1.0, 1.0)),
 		);
 		let item = LeewardStd::with_resolved_placements(
 			vec![placement.clone()],
@@ -453,18 +455,26 @@ mod tests {
 				LeewardCell::ShelteredTemperateConifer,
 				Vec3::new(0.0, 0.0, 0.0),
 				1.0,
+				Cell::from_min_max(Vec3::new(0.0, 0.0, 0.0), Vec3::new(1.0, 1.0, 1.0)),
 			),
 			GrovePlacedCell::new(
 				LeewardCell::WindbreakTemperateConifer,
 				Vec3::new(4.0, 0.0, 0.0),
 				1.0,
+				Cell::from_min_max(Vec3::new(0.0, 0.0, 0.0), Vec3::new(1.0, 1.0, 1.0)),
 			),
 			GrovePlacedCell::new(
 				LeewardCell::RoundedLeewardStorybook,
 				Vec3::new(8.0, 0.0, 0.0),
 				1.0,
+				Cell::from_min_max(Vec3::new(0.0, 0.0, 0.0), Vec3::new(1.0, 1.0, 1.0)),
 			),
-			GrovePlacedCell::new(LeewardCell::HighLeewardStorybook, Vec3::new(12.0, 0.0, 0.0), 1.0),
+			GrovePlacedCell::new(
+				LeewardCell::HighLeewardStorybook,
+				Vec3::new(12.0, 0.0, 0.0),
+				1.0,
+				Cell::from_min_max(Vec3::new(0.0, 0.0, 0.0), Vec3::new(1.0, 1.0, 1.0)),
+			),
 		];
 		let item = LeewardStd::with_resolved_placements(
 			placements.clone(),

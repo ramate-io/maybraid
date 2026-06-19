@@ -513,6 +513,7 @@ where
 
 #[cfg(test)]
 mod tests {
+	use gimme_gen::Cell;
 	use super::*;
 	use anyhow::Result;
 
@@ -568,7 +569,8 @@ mod tests {
 		let placement = GrovePlacedCell::new(
 			WanderingAcaciaCell::WanderingHighBush,
 			Vec3::new(1.0, 0.0, 2.0),
-			1.0,
+				1.0,
+			Cell::from_min_max(Vec3::new(0.0, 0.0, 0.0), Vec3::new(1.0, 1.0, 1.0)),
 		);
 		let item = WanderingAcaciaStd::with_resolved_placements(
 			vec![placement.clone()],
@@ -607,26 +609,31 @@ mod tests {
 				WanderingAcaciaCell::WanderingHighBush,
 				Vec3::new(0.0, 0.0, 0.0),
 				1.0,
+			Cell::from_min_max(Vec3::new(0.0, 0.0, 0.0), Vec3::new(1.0, 1.0, 1.0)),
 			),
 			GrovePlacedCell::new(
 				WanderingAcaciaCell::DryWanderingSopesBanyan,
 				Vec3::new(4.0, 0.0, 0.0),
 				1.0,
+			Cell::from_min_max(Vec3::new(0.0, 0.0, 0.0), Vec3::new(1.0, 1.0, 1.0)),
 			),
 			GrovePlacedCell::new(
 				WanderingAcaciaCell::WanderingVaseTree,
 				Vec3::new(8.0, 0.0, 0.0),
 				1.0,
+			Cell::from_min_max(Vec3::new(0.0, 0.0, 0.0), Vec3::new(1.0, 1.0, 1.0)),
 			),
 			GrovePlacedCell::new(
 				WanderingAcaciaCell::WanderingPenmarchTorch,
 				Vec3::new(12.0, 0.0, 0.0),
 				1.0,
+			Cell::from_min_max(Vec3::new(0.0, 0.0, 0.0), Vec3::new(1.0, 1.0, 1.0)),
 			),
 			GrovePlacedCell::new(
 				WanderingAcaciaCell::WanderingKamakuraTorch,
 				Vec3::new(16.0, 0.0, 0.0),
 				1.0,
+			Cell::from_min_max(Vec3::new(0.0, 0.0, 0.0), Vec3::new(1.0, 1.0, 1.0)),
 			),
 		];
 		let item = WanderingAcaciaStd::with_resolved_placements(

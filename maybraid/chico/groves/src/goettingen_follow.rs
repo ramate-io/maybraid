@@ -27,10 +27,7 @@ const MODERATE_CANOPY_DENSITY: UnitRange = UnitRange::new(0.35, 0.65);
 pub fn definition() -> GroveDefinition<GoettingenFollowCell> {
 	GroveDefinition {
 		cell_extent_xz: Vec2::splat(9.0),
-		placement: GrovePlacementRanges::new(
-			UnitRange::new(0.85, 1.15),
-			UnitRange::new(-9.0, 9.0),
-		),
+		placement: GrovePlacementRanges::new(UnitRange::new(0.85, 1.15), UnitRange::new(-9.0, 9.0)),
 		distribution: GoettingenFollowCell::distribution(),
 	}
 }
@@ -179,14 +176,18 @@ impl GoettingenFollowCell {
 		GroveDistribution::new(vec![
 			GroveBucket::none(9.7),
 			GroveBucket::placed(1.0, PlacementConstraints::UNCONSTRAINED, Self::FollowBraidOak),
+			GroveBucket::placed(0.35, PlacementConstraints::UNCONSTRAINED, Self::RedBranchBraidOak),
 			GroveBucket::placed(
-				0.35,
+				0.40,
 				PlacementConstraints::UNCONSTRAINED,
-				Self::RedBranchBraidOak,
+				Self::MossyTrailBraidOak,
 			),
-			GroveBucket::placed(0.40, PlacementConstraints::UNCONSTRAINED, Self::MossyTrailBraidOak),
 			GroveBucket::placed(0.30, PlacementConstraints::UNCONSTRAINED, Self::ParkEdgeBraidOak),
-			GroveBucket::placed(0.45, PlacementConstraints::UNCONSTRAINED, Self::TallFollowBraidOak),
+			GroveBucket::placed(
+				0.45,
+				PlacementConstraints::UNCONSTRAINED,
+				Self::TallFollowBraidOak,
+			),
 			GroveBucket::placed(
 				0.25,
 				PlacementConstraints::UNCONSTRAINED,
@@ -238,9 +239,7 @@ impl GoettingenFollowCell {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use crate::grove::{
-		FlatTerrainSample, ForestGroveBiases, Grove, GroveExtent,
-	};
+	use crate::grove::{FlatTerrainSample, ForestGroveBiases, Grove, GroveExtent};
 	use anyhow::Result;
 	use bevy_math::Vec3;
 	use procedural_common::NoiseParams;
@@ -280,7 +279,8 @@ mod tests {
 
 	#[test]
 	fn geometry_follows_authored_bands() -> Result<()> {
-		let GoettingenFollowItem::BraidOak(oak) = GoettingenFollowCell::FollowBraidOak.item() else {
+		let GoettingenFollowItem::BraidOak(oak) = GoettingenFollowCell::FollowBraidOak.item()
+		else {
 			anyhow::bail!("expected braid oak item");
 		};
 		assert_eq!(oak.height, UnitRange::new(4.0, 9.0));
@@ -292,7 +292,8 @@ mod tests {
 		};
 		assert_eq!(tall.height, UnitRange::new(7.0, 11.0));
 
-		let GoettingenFollowItem::BraidOak(old) = GoettingenFollowCell::OldGrowthFollowBraidOak.item()
+		let GoettingenFollowItem::BraidOak(old) =
+			GoettingenFollowCell::OldGrowthFollowBraidOak.item()
 		else {
 			anyhow::bail!("expected old-growth braid oak item");
 		};

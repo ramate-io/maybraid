@@ -281,6 +281,7 @@ where
 
 #[cfg(test)]
 mod tests {
+	use gimme_gen::Cell;
 	use super::*;
 	use crate::high_bush::HighBushStd;
 	use anyhow::Result;
@@ -341,7 +342,7 @@ mod tests {
 	#[test]
 	fn with_resolved_placements_skips_live_selection() -> Result<()> {
 		let placement =
-			GrovePlacedCell::new(SpottyBushesCell::GreenSpotBush, Vec3::new(1.0, 0.0, 2.0), 1.0);
+			GrovePlacedCell::new(SpottyBushesCell::GreenSpotBush, Vec3::new(1.0, 0.0, 2.0), 1.0, Cell::from_min_max(Vec3::new(0.0, 0.0, 0.0), Vec3::new(1.0, 1.0, 1.0)));
 		let item = SpottyBushesStd::with_resolved_placements(
 			vec![placement.clone()],
 			FlatTerrainSample::default(),

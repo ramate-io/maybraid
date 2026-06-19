@@ -301,13 +301,16 @@ mod tests {
 	fn tree_geometry_builds_within_authored_ranges() -> Result<()> {
 		let noise = placement_noise(NoiseParams::default(), Vec3::new(5.0, 0.0, 5.0));
 		let ChristmasTaigaItem::NorthernConifer(christmas) =
-			ChristmasTaigaCell::ChristmasNorthernConifer.item()
-		else {
-			anyhow::bail!("expected christmas northern conifer item");
-		};
+			ChristmasTaigaCell::ChristmasNorthernConifer.item();
 		let samples = christmas.build_with_noise(noise);
-		assert!(samples.geometry.liams.scale.stalk_height >= christmas.height.start.min(christmas.height.end));
-		assert!(samples.geometry.liams.scale.stalk_height <= christmas.height.start.max(christmas.height.end));
+		assert!(
+			samples.geometry.liams.scale.stalk_height
+				>= christmas.height.start.min(christmas.height.end)
+		);
+		assert!(
+			samples.geometry.liams.scale.stalk_height
+				<= christmas.height.start.max(christmas.height.end)
+		);
 		Ok(())
 	}
 

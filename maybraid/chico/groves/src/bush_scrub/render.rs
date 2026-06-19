@@ -345,6 +345,7 @@ where
 
 #[cfg(test)]
 mod tests {
+	use gimme_gen::Cell;
 	use super::*;
 	use anyhow::Result;
 
@@ -458,7 +459,7 @@ mod tests {
 
 	#[test]
 	fn with_resolved_placements_skips_live_selection() -> Result<()> {
-		let placement = GrovePlacedCell::new(BushScrubCell::DryTuft, Vec3::new(1.0, 0.0, 2.0), 1.0);
+		let placement = GrovePlacedCell::new(BushScrubCell::DryTuft, Vec3::new(1.0, 0.0, 2.0), 1.0, Cell::from_min_max(Vec3::new(0.0, 0.0, 0.0), Vec3::new(1.0, 1.0, 1.0)));
 		let item = BushScrubStd::with_resolved_placements(
 			vec![placement.clone()],
 			FlatTerrainSample::default(),

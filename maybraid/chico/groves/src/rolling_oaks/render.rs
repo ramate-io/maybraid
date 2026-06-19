@@ -336,7 +336,8 @@ mod tests {
 		assert!(oak_geom.scale.tree_height >= oak.height.start.min(oak.height.end));
 		assert!(oak_geom.scale.tree_height <= oak.height.start.max(oak.height.end));
 
-		let RollingOaksItem::BraidOak(tall) = RollingOaksCell::RareTallRollingBraidOak.item() else {
+		let RollingOaksItem::BraidOak(tall) = RollingOaksCell::RareTallRollingBraidOak.item()
+		else {
 			anyhow::bail!("expected rare tall braid oak item");
 		};
 		let tall_geom = tall.build_with_noise(noise);

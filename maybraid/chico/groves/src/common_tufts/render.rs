@@ -3,14 +3,12 @@
 use std::marker::PhantomData;
 
 use bevy::prelude::*;
-use chico_ball_components::tuft::{BladeTuft, BladeTuftShape};
+use chico_ball_components::tuft::BladeTuft;
 use clap::Args;
-use procedural_common::{
-	noise_params_from_scalar_str, BuildWithNoise, NoiseConfig, NoiseParams, UnitRange,
-};
+use procedural_common::{noise_params_from_scalar_str, BuildWithNoise, NoiseParams};
 use render_item::{CascadeChunk, RenderItem};
 
-use crate::common_tufts::{definition, CommonTuftClump, CommonTuftsCell, CommonTuftsItem};
+use crate::common_tufts::{definition, CommonTuftsCell, CommonTuftsItem};
 use crate::grove::{
 	patch_spawned_leaf_material, placement_noise, FlatTerrainSample, GroveExtent, GroveFrontend,
 	GrovePlacedCell, TerrainSample, WithPalette, DEFAULT_GROVE_EXTENT_XZ,
@@ -134,40 +132,6 @@ where
 	}
 }
 
-/// Sample a clump's authored geometry ranges into a blade tuft shape.
-///
-/// Blade width is **length-proportional** (`length * width_factor`), so short and tall
-/// varietals stay equally grass-thin.
-impl BuildWithNoise<BladeTuftShape> for CommonTuftClump {
-	fn build_with_noise(&self, noise: NoiseParams) -> BladeTuftShape {
-		let config = NoiseConfig::new(noise);
-		let sample_f32 = |range: UnitRange, salt| {
-			let lo = range.start.min(range.end);
-			let hi = range.start.max(range.end);
-			config.sample_range_f32_4d(lo, hi, 0.0, 0.0, 0.0, salt)
-		};
-
-		let sample_u32 = |range: &std::ops::RangeInclusive<u32>, salt| {
-			let lo = *range.start() as usize;
-			let hi = (*range.end() as usize).saturating_add(1);
-			config.sample_range_usize_4d(lo, hi, 0.0, 0.0, 0.0, salt) as u32
-		};
-
-		let blade_length = sample_f32(self.height, 1.0).max(0.05);
-		let blade_width = blade_length * sample_f32(self.width_factor, 2.0);
-
-		BladeTuftShape {
-			blade_count: sample_u32(&self.blade_count, 3.0),
-			blade_length,
-			blade_width,
-			max_tilt_radians: sample_f32(self.max_tilt_radians, 4.0).max(0.01),
-			bend_segments: sample_u32(&self.bend_segments, 5.0).max(1),
-			seed: noise.seed,
-			..BladeTuftShape::default()
-		}
-	}
-}
-
 fn placement_transform<V>(placed: &GrovePlacedCell<V>) -> Transform {
 	Transform {
 		translation: placed.position,
@@ -221,8 +185,10 @@ where
 
 #[cfg(test)]
 mod tests {
+	use gimme_gen::Cell;
 	use super::*;
 	use anyhow::Result;
+	use procedural_common::BuildWithNoise;
 
 	#[test]
 	fn clump_geometry_builds_within_authored_ranges() -> Result<()> {
@@ -290,7 +256,7 @@ mod tests {
 	#[test]
 	fn with_resolved_placements_skips_live_selection() -> Result<()> {
 		let placement =
-			GrovePlacedCell::new(CommonTuftsCell::ShortGreen, Vec3::new(1.0, 0.0, 2.0), 1.0);
+			GrovePlacedCell::new(CommonTuftsCell::ShortGreen, Vec3::new(1.0, 0.0, 2.0), 1.0, Cell::from_min_max(Vec3::new(0.0, 0.0, 0.0), Vec3::new(1.0, 1.0, 1.0)));
 		let item = CommonTuftsStd::with_resolved_placements(
 			vec![placement.clone()],
 			FlatTerrainSample::default(),

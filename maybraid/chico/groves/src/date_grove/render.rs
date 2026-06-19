@@ -9,9 +9,7 @@ use chico_sbs_geometry::DatePalmSbs;
 use chico_sbs_trees::date_palm::DatePalm;
 use chico_vegetation_shaders::ChicoStickMaterial;
 use clap::Args;
-use procedural_common::{
-	noise_params_from_scalar_str, BuildWithNoise, NoiseConfig, NoiseParams,
-};
+use procedural_common::{noise_params_from_scalar_str, BuildWithNoise, NoiseConfig, NoiseParams};
 use render_item::{CascadeChunk, RenderItem};
 
 use crate::date_grove::{definition, DateGroveCell, DateGroveDatePalm, DateGroveItem};
@@ -187,8 +185,8 @@ fn sample_f32(config: &NoiseConfig, range: procedural_common::UnitRange, salt: f
 impl BuildWithNoise<DatePalmSbs> for DateGroveDatePalm {
 	fn build_with_noise(&self, noise: NoiseParams) -> DatePalmSbs {
 		let config = NoiseConfig::new(noise);
-		let height = sample_f32(&config, self.height, 1.0)
-			.max(self.height.start.min(self.height.end));
+		let height =
+			sample_f32(&config, self.height, 1.0).max(self.height.start.min(self.height.end));
 		let crown_density = sample_f32(&config, self.crown_density, 2.0);
 
 		let mut geometry = DatePalmSbs::default();
@@ -265,14 +263,13 @@ where
 mod tests {
 	use super::*;
 	use anyhow::Result;
+	use gimme_gen::Cell;
 
 	#[test]
 	fn palm_geometry_builds_within_authored_ranges() -> Result<()> {
 		let noise = placement_noise(NoiseParams::default(), Vec3::new(5.0, 0.0, 5.0));
 
-		let DateGroveItem::DatePalm(palm) = DateGroveCell::FruitingDatePalm.item() else {
-			anyhow::bail!("expected fruiting date palm item");
-		};
+		let DateGroveItem::DatePalm(palm) = DateGroveCell::FruitingDatePalm.item();
 		let palm_geom = palm.build_with_noise(noise);
 		assert!(palm_geom.scale.stalk_height >= palm.height.start.min(palm.height.end));
 		assert!(palm_geom.scale.stalk_height <= palm.height.start.max(palm.height.end));
@@ -298,8 +295,12 @@ mod tests {
 
 	#[test]
 	fn with_resolved_placements_skips_live_selection() -> Result<()> {
-		let placement =
-			GrovePlacedCell::new(DateGroveCell::FruitingDatePalm, Vec3::new(1.0, 0.0, 2.0), 1.0);
+		let placement = GrovePlacedCell::new(
+			DateGroveCell::FruitingDatePalm,
+			Vec3::new(1.0, 0.0, 2.0),
+			1.0,
+			Cell::from_min_max(Vec3::new(0.0, 0.0, 0.0), Vec3::new(1.0, 1.0, 1.0)),
+		);
 		let item = DateGroveStd::with_resolved_placements(
 			vec![placement.clone()],
 			FlatTerrainSample::default(),

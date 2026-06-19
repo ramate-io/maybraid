@@ -5,6 +5,7 @@
 //! bucket throw plus ordered first-fit walk for each cell ([RFC-183 3.4.2.5]).
 
 use bevy_math::Vec3;
+use gimme_gen::Cell;
 use procedural_common::{
 	perturb_weights, BucketThrow, FirstFitIndices, NoiseConfig, NoiseParams, MIN_BUCKET_WEIGHT,
 };
@@ -134,6 +135,7 @@ impl<V: Clone> PreparedGroveDistribution<V> {
 		&self,
 		position: Vec3,
 		scale: f32,
+		cell: Cell,
 		noise: NoiseParams,
 		terrain: &impl TerrainSample,
 	) -> GroveCellOutcome<V> {
@@ -144,7 +146,7 @@ impl<V: Clone> PreparedGroveDistribution<V> {
 		let throw = selection_noise * self.bucket_throw.total_weight() * 0.5;
 		let throw_index = self.bucket_throw.select(throw).unwrap_or(0);
 		let start = self.throw_bucket_indices.get(throw_index).copied().unwrap_or(0);
-		self.select_from(start, position, scale, terrain)
+		self.select_from(start, position, scale, cell, terrain)
 	}
 
 	/// First-fit walk from a known starting bucket index (also used by tests and debugging).
@@ -153,6 +155,7 @@ impl<V: Clone> PreparedGroveDistribution<V> {
 		start: usize,
 		position: Vec3,
 		scale: f32,
+		cell: Cell,
 		terrain: &impl TerrainSample,
 	) -> GroveCellOutcome<V> {
 		for index in FirstFitIndices::new(self.buckets.len(), start) {
@@ -162,7 +165,7 @@ impl<V: Clone> PreparedGroveDistribution<V> {
 			}
 			return match &bucket.item {
 				Some(variant) => {
-					GroveCellOutcome::Placed { variant: variant.clone(), position, scale }
+					GroveCellOutcome::Placed { variant: variant.clone(), position, scale, cell }
 				}
 				None => GroveCellOutcome::Empty { position },
 			};
@@ -237,7 +240,7 @@ mod tests {
 	fn none_bucket_yields_empty() -> Result<()> {
 		let dist: GroveDistribution<()> = GroveDistribution::new(vec![GroveBucket::none(1.0)]);
 		let outcome =
-			prepared(dist).select_at(Vec3::ZERO, 1.0, NoiseParams::default(), &flat(0.5, 0.1));
+			prepared(dist).select_at(Vec3::ZERO, 1.0, Cell::from_min_max(Vec3::ZERO, Vec3::ONE), NoiseParams::default(), &flat(0.5, 0.1));
 		assert!(matches!(outcome, GroveCellOutcome::Empty { .. }));
 		Ok(())
 	}
@@ -256,7 +259,7 @@ mod tests {
 				"flat",
 			),
 		]);
-		let outcome = prepared(dist).select_from(0, Vec3::new(5.0, 0.0, 5.0), 1.0, &flat(0.3, 0.2));
+		let outcome = prepared(dist).select_from(0, Vec3::new(5.0, 0.0, 5.0), 1.0, Cell::from_min_max(Vec3::ZERO, Vec3::ONE), &flat(0.3, 0.2));
 		match outcome {
 			GroveCellOutcome::Placed { variant, .. } => assert_eq!(variant, "flat"),
 			other => anyhow::bail!("expected Placed flat, got {other:?}"),
@@ -275,7 +278,7 @@ mod tests {
 			item: None,
 		}]);
 		let outcome =
-			prepared(dist).select_at(Vec3::ZERO, 1.0, NoiseParams::default(), &flat(0.0, 0.99));
+			prepared(dist).select_at(Vec3::ZERO, 1.0, Cell::from_min_max(Vec3::ZERO, Vec3::ONE), NoiseParams::default(), &flat(0.0, 0.99));
 		assert!(matches!(outcome, GroveCellOutcome::Empty { .. }));
 		Ok(())
 	}
@@ -288,7 +291,7 @@ mod tests {
 			"high_only",
 		)]);
 		let outcome =
-			prepared(dist).select_at(Vec3::ZERO, 1.0, NoiseParams::default(), &flat(0.1, 0.5));
+			prepared(dist).select_at(Vec3::ZERO, 1.0, Cell::from_min_max(Vec3::ZERO, Vec3::ONE), NoiseParams::default(), &flat(0.1, 0.5));
 		assert!(matches!(outcome, GroveCellOutcome::Rejected { .. }));
 		Ok(())
 	}
@@ -306,7 +309,7 @@ mod tests {
 			for z in 0..3 {
 				let position = Vec3::new(x as f32 * 4.25, 0.0, z as f32 * 4.25);
 				if matches!(
-					prepared.select_at(position, 1.0, noise, &terrain),
+					prepared.select_at(position, 1.0, Cell::from_min_max(Vec3::ZERO, Vec3::ONE), noise, &terrain),
 					GroveCellOutcome::Placed { .. }
 				) {
 					placed += 1;
@@ -325,8 +328,20 @@ mod tests {
 		]);
 		let prepared = prepared(dist);
 		let position = Vec3::new(100.0, 0.0, 50.0);
-		let a = prepared.select_at(position, 1.0, NoiseParams::default(), &flat(0.4, 0.1));
-		let b = prepared.select_at(position, 1.0, NoiseParams::default(), &flat(0.4, 0.1));
+		let a = prepared.select_at(
+			position,
+			1.0,
+			Cell::from_min_max(Vec3::ZERO, Vec3::ONE),
+			NoiseParams::default(),
+			&flat(0.4, 0.1),
+		);
+		let b = prepared.select_at(
+			position,
+			1.0,
+			Cell::from_min_max(Vec3::ZERO, Vec3::ONE),
+			NoiseParams::default(),
+			&flat(0.4, 0.1),
+		);
 		assert_eq!(a, b);
 		Ok(())
 	}

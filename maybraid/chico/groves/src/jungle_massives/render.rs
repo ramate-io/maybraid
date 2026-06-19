@@ -448,6 +448,7 @@ where
 
 #[cfg(test)]
 mod tests {
+	use gimme_gen::Cell;
 	use super::*;
 	use crate::jungle_lower_massives::JungleLowerMassivesStd;
 	use anyhow::Result;
@@ -513,7 +514,8 @@ mod tests {
 		let placement = GrovePlacedCell::new(
 			JungleMassivesCell::MassiveJungleStorybook,
 			Vec3::new(1.0, 0.0, 2.0),
-			1.0,
+				1.0,
+			Cell::from_min_max(Vec3::new(0.0, 0.0, 0.0), Vec3::new(1.0, 1.0, 1.0)),
 		);
 		let item = JungleMassivesStd::with_resolved_placements(
 			vec![placement.clone()],
@@ -575,16 +577,19 @@ mod tests {
 				JungleMassivesCell::MassiveJungleStorybook,
 				Vec3::new(0.0, 0.0, 0.0),
 				1.0,
+			Cell::from_min_max(Vec3::new(0.0, 0.0, 0.0), Vec3::new(1.0, 1.0, 1.0)),
 			),
 			GrovePlacedCell::new(
 				JungleMassivesCell::MassiveHonuBanyan,
 				Vec3::new(4.0, 0.0, 0.0),
 				1.0,
+			Cell::from_min_max(Vec3::new(0.0, 0.0, 0.0), Vec3::new(1.0, 1.0, 1.0)),
 			),
 			GrovePlacedCell::new(
 				JungleMassivesCell::MassiveSopesBanyan,
 				Vec3::new(8.0, 0.0, 0.0),
 				1.0,
+			Cell::from_min_max(Vec3::new(0.0, 0.0, 0.0), Vec3::new(1.0, 1.0, 1.0)),
 			),
 		];
 		let item = JungleMassivesStd::with_resolved_placements(

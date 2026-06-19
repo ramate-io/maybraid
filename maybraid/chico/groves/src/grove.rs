@@ -66,11 +66,12 @@ pub struct GrovePlacedCell<V> {
 	pub variant: V,
 	pub position: Vec3,
 	pub scale: f32,
+	pub cell: Cell,
 }
 
 impl<V> GrovePlacedCell<V> {
-	pub fn new(variant: V, position: Vec3, scale: f32) -> Self {
-		Self { variant, position, scale }
+	pub fn new(variant: V, position: Vec3, scale: f32, cell: Cell) -> Self {
+		Self { variant, position, scale, cell }
 	}
 }
 
@@ -81,6 +82,7 @@ pub enum GroveCellOutcome<V> {
 		variant: V,
 		position: Vec3,
 		scale: f32,
+		cell: Cell,
 	},
 	/// Explicit `None` bucket won first-fit at this candidate point. The position is the
 	/// evaluated placement (cell center + offset) so empty outcomes stay addressable in space
@@ -99,8 +101,8 @@ pub enum GroveCellOutcome<V> {
 impl<V> GroveCellOutcome<V> {
 	pub fn into_placed(self) -> Option<GrovePlacedCell<V>> {
 		match self {
-			GroveCellOutcome::Placed { variant, position, scale } => {
-				Some(GrovePlacedCell { variant, position, scale })
+			GroveCellOutcome::Placed { variant, position, scale, cell } => {
+				Some(GrovePlacedCell { variant, position, scale, cell })
 			}
 			GroveCellOutcome::Empty { .. } | GroveCellOutcome::Rejected { .. } => None,
 		}
@@ -157,7 +159,7 @@ impl<V: Clone> Grove<V> {
 			return GroveCellOutcome::Rejected { position: candidate };
 		}
 		let position = Vec3::new(candidate.x, terrain.elevation_at(candidate), candidate.z);
-		self.distribution.select_at(position, sample.scale, self.noise, terrain)
+		self.distribution.select_at(position, sample.scale, *cell, self.noise, terrain)
 	}
 
 	pub fn cell_extent_xz(&self) -> Vec2 {

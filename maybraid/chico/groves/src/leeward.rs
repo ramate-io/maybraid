@@ -191,6 +191,7 @@ mod tests {
 	};
 	use anyhow::Result;
 	use bevy_math::Vec3;
+	use gimme_gen::Cell;
 	use procedural_common::NoiseParams;
 
 	#[test]
@@ -280,7 +281,7 @@ mod tests {
 		let prepared =
 			LeewardCell::distribution().prepare(0.0, 0.0, NoiseParams::default(), Vec3::ZERO);
 		let moderate = FlatTerrainSample { elevation: 0.40, steepness: 0.45 };
-		let sheltered_outcome = prepared.select_from(1, Vec3::new(5.0, 0.40, 5.0), 1.0, &moderate);
+		let sheltered_outcome = prepared.select_from(1, Vec3::new(5.0, 0.40, 5.0), 1.0, Cell::from_min_max(Vec3::ZERO, Vec3::ONE), &moderate);
 		match sheltered_outcome {
 			GroveCellOutcome::Placed { variant, .. } => {
 				assert_eq!(variant, LeewardCell::ShelteredTemperateConifer);
@@ -290,7 +291,7 @@ mod tests {
 			}
 		}
 		let steep = FlatTerrainSample { elevation: 0.40, steepness: 0.55 };
-		let steep_outcome = prepared.select_from(1, Vec3::new(5.0, 0.40, 5.0), 1.0, &steep);
+		let steep_outcome = prepared.select_from(1, Vec3::new(5.0, 0.40, 5.0), 1.0, Cell::from_min_max(Vec3::ZERO, Vec3::ONE), &steep);
 		match steep_outcome {
 			GroveCellOutcome::Placed { variant, .. } => {
 				assert_eq!(variant, LeewardCell::WindbreakTemperateConifer);

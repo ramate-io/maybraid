@@ -282,14 +282,13 @@ where
 mod tests {
 	use super::*;
 	use anyhow::Result;
+	use gimme_gen::Cell;
 
 	#[test]
 	fn tree_geometry_builds_within_authored_ranges() -> Result<()> {
 		let noise = placement_noise(NoiseParams::default(), Vec3::new(5.0, 0.0, 5.0));
 
-		let OrchardItem::Storybook(fruiting) = OrchardCell::FruitingStorybook.item() else {
-			anyhow::bail!("expected fruiting storybook item");
-		};
+		let OrchardItem::Storybook(fruiting) = OrchardCell::FruitingStorybook.item();
 		let story_geom = fruiting.build_with_noise(noise);
 		assert!(story_geom.scale.tree_height >= fruiting.height.start.min(fruiting.height.end));
 		assert!(story_geom.scale.tree_height <= fruiting.height.start.max(fruiting.height.end));
@@ -315,8 +314,12 @@ mod tests {
 
 	#[test]
 	fn with_resolved_placements_skips_live_selection() -> Result<()> {
-		let placement =
-			GrovePlacedCell::new(OrchardCell::FruitingStorybook, Vec3::new(1.0, 0.0, 2.0), 1.0);
+		let placement = GrovePlacedCell::new(
+			OrchardCell::FruitingStorybook,
+			Vec3::new(1.0, 0.0, 2.0),
+			1.0,
+			Cell::from_min_max(Vec3::new(0.0, 0.0, 0.0), Vec3::new(1.0, 1.0, 1.0)),
+		);
 		let item = OrchardStd::with_resolved_placements(
 			vec![placement.clone()],
 			FlatTerrainSample::default(),

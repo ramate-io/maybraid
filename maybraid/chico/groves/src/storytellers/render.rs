@@ -456,6 +456,7 @@ where
 
 #[cfg(test)]
 mod tests {
+	use gimme_gen::Cell;
 	use super::*;
 	use anyhow::Result;
 
@@ -524,7 +525,8 @@ mod tests {
 		let placement = GrovePlacedCell::new(
 			StorytellersCell::ColorfulStorybook,
 			Vec3::new(1.0, 0.0, 2.0),
-			1.0,
+				1.0,
+			Cell::from_min_max(Vec3::new(0.0, 0.0, 0.0), Vec3::new(1.0, 1.0, 1.0)),
 		);
 		let item = StorytellersStd::with_resolved_placements(
 			vec![placement.clone()],
@@ -563,16 +565,19 @@ mod tests {
 				StorytellersCell::ColorfulBraidOak,
 				Vec3::new(0.0, 0.0, 0.0),
 				1.0,
+			Cell::from_min_max(Vec3::new(0.0, 0.0, 0.0), Vec3::new(1.0, 1.0, 1.0)),
 			),
 			GrovePlacedCell::new(
 				StorytellersCell::ColorfulStorybook,
 				Vec3::new(4.0, 0.0, 0.0),
 				1.0,
+			Cell::from_min_max(Vec3::new(0.0, 0.0, 0.0), Vec3::new(1.0, 1.0, 1.0)),
 			),
 			GrovePlacedCell::new(
 				StorytellersCell::GoldenLanternPenmarch,
 				Vec3::new(8.0, 0.0, 0.0),
 				1.0,
+			Cell::from_min_max(Vec3::new(0.0, 0.0, 0.0), Vec3::new(1.0, 1.0, 1.0)),
 			),
 		];
 		let item = StorytellersStd::with_resolved_placements(

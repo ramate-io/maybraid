@@ -195,6 +195,7 @@ mod tests {
 	};
 	use anyhow::Result;
 	use bevy_math::Vec3;
+	use gimme_gen::Cell;
 	use procedural_common::NoiseParams;
 
 	#[test]
@@ -296,14 +297,14 @@ mod tests {
 		let prepared =
 			RollingOaksCell::distribution().prepare(0.0, 0.0, NoiseParams::default(), Vec3::ZERO);
 		let terrain = FlatTerrainSample { elevation: 0.40, steepness: 0.50 };
-		let story_outcome = prepared.select_from(4, Vec3::new(5.0, 0.40, 5.0), 1.0, &terrain);
+		let story_outcome = prepared.select_from(4, Vec3::new(5.0, 0.40, 5.0), 1.0, Cell::from_min_max(Vec3::ZERO, Vec3::ONE), &terrain);
 		match story_outcome {
 			GroveCellOutcome::Placed { variant, .. } => {
 				assert_eq!(variant, RollingOaksCell::RareRollingStorybook);
 			}
 			other => anyhow::bail!("expected RareRollingStorybook on moderate slope, got {other:?}"),
 		}
-		let braid_outcome = prepared.select_from(1, Vec3::new(5.0, 0.40, 5.0), 1.0, &terrain);
+		let braid_outcome = prepared.select_from(1, Vec3::new(5.0, 0.40, 5.0), 1.0, Cell::from_min_max(Vec3::ZERO, Vec3::ONE), &terrain);
 		match braid_outcome {
 			GroveCellOutcome::Placed { variant, .. } => {
 				assert_eq!(variant, RollingOaksCell::RareRollingStorybook);

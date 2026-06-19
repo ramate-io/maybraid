@@ -400,8 +400,12 @@ mod tests {
 				anyhow::bail!("expected friend sapling item for {cell:?}");
 			};
 			let samples = friend.build_with_noise(noise);
-			assert!(samples.geometry.scale.stalk_height >= friend.height.start.min(friend.height.end));
-			assert!(samples.geometry.scale.stalk_height <= friend.height.start.max(friend.height.end));
+			assert!(
+				samples.geometry.scale.stalk_height >= friend.height.start.min(friend.height.end)
+			);
+			assert!(
+				samples.geometry.scale.stalk_height <= friend.height.start.max(friend.height.end)
+			);
 		}
 
 		for cell in [

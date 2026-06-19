@@ -138,9 +138,7 @@ impl ChristmasTaigaCell {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use crate::grove::{
-		FlatTerrainSample, ForestGroveBiases, Grove, GroveExtent,
-	};
+	use crate::grove::{FlatTerrainSample, ForestGroveBiases, Grove, GroveExtent};
 	use anyhow::Result;
 	use bevy_math::Vec3;
 
@@ -170,10 +168,7 @@ mod tests {
 	#[test]
 	fn geometry_follows_authored_bands() -> Result<()> {
 		let ChristmasTaigaItem::NorthernConifer(christmas) =
-			ChristmasTaigaCell::ChristmasNorthernConifer.item()
-		else {
-			anyhow::bail!("expected christmas northern conifer item");
-		};
+			ChristmasTaigaCell::ChristmasNorthernConifer.item();
 		assert_eq!(christmas.height, UnitRange::new(8.0, 20.0));
 		assert_eq!(christmas.canopy_density, DENSE_CANOPY_DENSITY);
 		Ok(())
@@ -181,8 +176,10 @@ mod tests {
 
 	#[test]
 	fn palette_resolves_for_all_varietals() -> Result<()> {
-		for cell in [ChristmasTaigaCell::ChristmasNorthernConifer, ChristmasTaigaCell::HighBandNorthernConifer]
-		{
+		for cell in [
+			ChristmasTaigaCell::ChristmasNorthernConifer,
+			ChristmasTaigaCell::HighBandNorthernConifer,
+		] {
 			for (palette, label) in
 				[(cell.stick_palette_mix(), "stick"), (cell.canopy_palette_mix(), "canopy")]
 			{

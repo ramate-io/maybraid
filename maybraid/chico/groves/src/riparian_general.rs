@@ -188,6 +188,7 @@ mod tests {
 	};
 	use anyhow::Result;
 	use bevy_math::Vec3;
+	use gimme_gen::Cell;
 	use procedural_common::NoiseParams;
 
 	#[test]
@@ -276,14 +277,14 @@ mod tests {
 		let prepared =
 			RiparianGeneralCell::distribution().prepare(0.0, 0.0, NoiseParams::default(), Vec3::ZERO);
 		let terrain = FlatTerrainSample { elevation: 0.25, steepness: 0.45 };
-		let bush_outcome = prepared.select_from(5, Vec3::new(5.0, 0.25, 5.0), 1.0, &terrain);
+		let bush_outcome = prepared.select_from(5, Vec3::new(5.0, 0.25, 5.0), 1.0, Cell::from_min_max(Vec3::ZERO, Vec3::ONE), &terrain);
 		match bush_outcome {
 			GroveCellOutcome::Placed { variant, .. } => {
 				assert_eq!(variant, RiparianGeneralCell::RareRiparianHighBush);
 			}
 			other => anyhow::bail!("expected RareRiparianHighBush on moderate slope, got {other:?}"),
 		}
-		let braid_outcome = prepared.select_from(1, Vec3::new(5.0, 0.25, 5.0), 1.0, &terrain);
+		let braid_outcome = prepared.select_from(1, Vec3::new(5.0, 0.25, 5.0), 1.0, Cell::from_min_max(Vec3::ZERO, Vec3::ONE), &terrain);
 		match braid_outcome {
 			GroveCellOutcome::Placed { variant, .. } => {
 				assert_ne!(variant, RiparianGeneralCell::RiparianBraidOak);
