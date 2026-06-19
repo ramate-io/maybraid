@@ -16,6 +16,7 @@ use chico_groves::jungle_massives::JungleMassivesStd;
 use chico_groves::alpine::AlpineStd;
 use chico_groves::dryland::DrylandStd;
 use chico_groves::storytellers::StorytellersStd;
+use chico_groves::trade_winds::TradeWindsStd;
 use chico_groves::palm_shade::PalmShadeStd;
 use chico_groves::riparian_mix::RiparianMixStd;
 use chico_groves::temperate_lower_massives::TemperateLowerMassivesStd;
@@ -317,6 +318,9 @@ pub type RenderDryland = DrylandStd;
 /// [`StorytellersStd`] — colorful Storybook and Braid Oak upper-canopy grove ([#336](https://github.com/ramate-io/maybraid/issues/336)).
 pub type RenderStorytellers = StorytellersStd;
 
+/// [`TradeWindsStd`] — low-density tropical upper-canopy grove ([#337](https://github.com/ramate-io/maybraid/issues/337)).
+pub type RenderTradeWinds = TradeWindsStd;
+
 /// The configured render item currently shown in the scene.
 ///
 /// This is the typed scene state behind [`RenderConfig`]: material patching
@@ -373,6 +377,7 @@ pub enum RenderSubject {
 	Alpine(RenderAlpine),
 	Dryland(RenderDryland),
 	Storytellers(RenderStorytellers),
+	TradeWinds(RenderTradeWinds),
 	SpearTuft(RenderSpearTuft),
 	BuddhaHandTuft(RenderBuddhaHandTuft),
 	WeepingTuft(RenderWeepingTuft),
@@ -433,6 +438,7 @@ impl RenderSubject {
 			Self::Alpine(_) => "Alpine",
 			Self::Dryland(_) => "Dryland",
 			Self::Storytellers(_) => "Storytellers",
+			Self::TradeWinds(_) => "TradeWinds",
 			Self::SpearTuft(_) => "SpearTuft",
 			Self::BuddhaHandTuft(_) => "BuddhaHandTuft",
 			Self::WeepingTuft(_) => "WeepingTuft",
@@ -764,6 +770,18 @@ impl RenderSubject {
 					g.leaf_surface_noise
 				)
 			}
+			Self::TradeWinds(g) => {
+				format!(
+					"{:?}|extent={:?}|cell_extent_xz={:?}|terrain={:?}|chain={:?}|stick={:?}|leaf={:?}",
+					g.grove,
+					g.extent,
+					g.cell_extent_xz(),
+					g.terrain,
+					g.tree_chain_noise,
+					g.stick_surface_noise,
+					g.leaf_surface_noise
+				)
+			}
 			Self::StrangeOasis(g) => {
 				format!(
 					"{:?}|extent={:?}|cell_extent_xz={:?}|terrain={:?}|chain={:?}|stick={:?}|leaf={:?}",
@@ -890,6 +908,7 @@ impl RenderSubject {
 			Self::Alpine(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::Dryland(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::Storytellers(item) => item.spawn_render_items(commands, chunk, transform),
+			Self::TradeWinds(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::SpearTuft(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::BuddhaHandTuft(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::WeepingTuft(item) => item.spawn_render_items(commands, chunk, transform),

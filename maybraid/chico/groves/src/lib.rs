@@ -9,6 +9,7 @@ pub mod arid_conifer_sapling;
 pub mod alpine;
 pub mod dryland;
 pub mod storytellers;
+pub mod trade_winds;
 pub mod conifer_sapling;
 pub mod goettingen_follow;
 pub mod high_bush;
@@ -58,6 +59,9 @@ pub use dryland::{DrylandCell, DrylandItem, DrylandLiamsConifer, DrylandVaseTree
 pub use storytellers::{
 	StorytellersBraidOak, StorytellersCell, StorytellersItem, StorytellersStorybook,
 	StorytellersTorch,
+};
+pub use trade_winds::{
+	TradeWindsBanyan, TradeWindsCell, TradeWindsItem, TradeWindsStorybook, TradeWindsWaialeaPalm,
 };
 pub use conifer_sapling::{
 	ConiferSaplingCell, ConiferSaplingFriendsConifer, ConiferSaplingItem,
@@ -132,6 +136,8 @@ pub use alpine::{Alpine, AlpineStd};
 pub use dryland::{Dryland, DrylandStd};
 #[cfg(feature = "render")]
 pub use storytellers::{Storytellers, StorytellersStd};
+#[cfg(feature = "render")]
+pub use trade_winds::{TradeWinds, TradeWindsStd};
 #[cfg(feature = "render")]
 pub use braid_grass::{BraidGrass, BraidGrassStd};
 #[cfg(feature = "render")]
