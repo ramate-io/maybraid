@@ -19,10 +19,10 @@ pub use render::{Alpine, AlpineStd};
 
 /// Sparse sampled canopy-density band ([`0.0`, `0.35`]).
 const SPARSE_CANOPY_DENSITY: UnitRange = UnitRange::new(0.0, 0.35);
-/// Moderate sampled canopy-density band ([`0.35`, `0.65`]).
-const MODERATE_CANOPY_DENSITY: UnitRange = UnitRange::new(0.35, 0.65);
-/// Dense sampled canopy-density band ([`0.50`, `0.85`]).
-const DENSE_CANOPY_DENSITY: UnitRange = UnitRange::new(0.50, 0.85);
+/// Moderate sampled canopy-density band ([`0.25`, `0.45`]).
+const MODERATE_CANOPY_DENSITY: UnitRange = UnitRange::new(0.25, 0.45);
+/// Dense sampled canopy-density band ([`0.35`, `0.85`]).
+const DENSE_CANOPY_DENSITY: UnitRange = UnitRange::new(0.35, 0.85);
 
 /// Authored Alpine grove definition.
 ///
@@ -74,27 +74,27 @@ pub struct AlpineLiamsConifer {
 }
 
 const TALL_ALPINE_FRIENDS: AlpineFriendsConifer = AlpineFriendsConifer {
-	height: UnitRange::new(18.0, 40.0),
+	height: UnitRange::new(12.0, 40.0),
 	stalk_radius: UnitRange::new(0.32, 0.72),
-	canopy_spread: UnitRange::new(4.0, 12.0),
+	canopy_spread: UnitRange::new(4.0, 7.0),
 	canopy_density: DENSE_CANOPY_DENSITY,
 };
 
 const WINDLINE_FRIENDS: AlpineFriendsConifer = AlpineFriendsConifer {
-	height: UnitRange::new(10.0, 22.0),
+	height: UnitRange::new(6.0, 22.0),
 	stalk_radius: UnitRange::new(0.18, 0.42),
 	canopy_spread: UnitRange::new(1.5, 5.0),
 	canopy_density: SPARSE_CANOPY_DENSITY,
 };
 
 const ALPINE_LIAMS: AlpineLiamsConifer = AlpineLiamsConifer {
-	height: UnitRange::new(10.0, 40.0),
+	height: UnitRange::new(8.0, 40.0),
 	stalk_radius: UnitRange::new(0.25, 0.85),
 	canopy_density: MODERATE_CANOPY_DENSITY,
 };
 
 const NEEDLE_SPIRE_LIAMS: AlpineLiamsConifer = AlpineLiamsConifer {
-	height: UnitRange::new(16.0, 32.0),
+	height: UnitRange::new(6.0, 32.0),
 	stalk_radius: UnitRange::new(0.30, 0.55),
 	canopy_density: SPARSE_CANOPY_DENSITY,
 };
@@ -145,22 +145,14 @@ impl AlpineCell {
 	/// Placed weights total `3.7`; the `None` weight of `9.5` puts the placed share at
 	/// `3.7 / 13.2 ≈ 0.28`, mid RFC `DENSITY_RANGE` (`0.18..0.38`).
 	pub fn distribution() -> GroveDistribution<Self> {
-		let tall_friends = PlacementConstraints::new(
-			UnitRange::new(0.42, 1.0),
-			UnitRange::new(0.0, 0.68),
-		);
-		let windline_friends = PlacementConstraints::new(
-			UnitRange::new(0.62, 1.0),
-			UnitRange::new(0.0, 0.86),
-		);
-		let alpine_liams = PlacementConstraints::new(
-			UnitRange::new(0.50, 1.0),
-			UnitRange::new(0.0, 0.86),
-		);
-		let needle_spire = PlacementConstraints::new(
-			UnitRange::new(0.58, 1.0),
-			UnitRange::new(0.0, 0.92),
-		);
+		let tall_friends =
+			PlacementConstraints::new(UnitRange::new(0.0, 1.0), UnitRange::new(0.0, 0.68));
+		let windline_friends =
+			PlacementConstraints::new(UnitRange::new(0.0, 1.0), UnitRange::new(0.0, 0.86));
+		let alpine_liams =
+			PlacementConstraints::new(UnitRange::new(0.0, 1.0), UnitRange::new(0.0, 0.86));
+		let needle_spire =
+			PlacementConstraints::new(UnitRange::new(0.0, 1.0), UnitRange::new(0.0, 0.92));
 		GroveDistribution::new(vec![
 			GroveBucket::none(9.5),
 			GroveBucket::placed(1.5, tall_friends, Self::TallAlpineFriendsConifer),
@@ -173,9 +165,7 @@ impl AlpineCell {
 	pub fn item(self) -> AlpineItem {
 		match self {
 			Self::TallAlpineFriendsConifer | Self::WindlineFriendsConifer => match self {
-				Self::TallAlpineFriendsConifer => {
-					AlpineItem::FriendsConifer(&TALL_ALPINE_FRIENDS)
-				}
+				Self::TallAlpineFriendsConifer => AlpineItem::FriendsConifer(&TALL_ALPINE_FRIENDS),
 				Self::WindlineFriendsConifer => AlpineItem::FriendsConifer(&WINDLINE_FRIENDS),
 				_ => unreachable!(),
 			},
@@ -245,26 +235,29 @@ mod tests {
 		let AlpineItem::FriendsConifer(tall) = AlpineCell::TallAlpineFriendsConifer.item() else {
 			anyhow::bail!("expected tall friends item");
 		};
-		assert_eq!(tall.height, UnitRange::new(18.0, 40.0));
+		assert_eq!(tall.height, UnitRange::new(12.0, 40.0));
 		assert_eq!(tall.canopy_density, DENSE_CANOPY_DENSITY);
 
 		let AlpineItem::LiamsConifer(spire) = AlpineCell::NeedleSpireLiamsConifer.item() else {
 			anyhow::bail!("expected needle spire item");
 		};
-		assert_eq!(spire.height, UnitRange::new(16.0, 32.0));
+		assert_eq!(spire.height, UnitRange::new(6.0, 32.0));
 		assert_eq!(spire.canopy_density, SPARSE_CANOPY_DENSITY);
 		Ok(())
 	}
 
 	#[test]
-	fn placement_constraints_match_rfc() -> Result<()> {
+	fn placement_constraints_use_full_elevation_and_rfc_steepness() -> Result<()> {
 		let dist = AlpineCell::distribution();
+		for bucket in dist.buckets.iter().filter(|b| b.item.is_some()) {
+			assert_eq!(bucket.constraints.elevation.start, 0.0);
+			assert_eq!(bucket.constraints.elevation.end, 1.0);
+		}
 		let tall = dist
 			.buckets
 			.iter()
 			.find(|b| b.item == Some(AlpineCell::TallAlpineFriendsConifer))
 			.ok_or_else(|| anyhow::anyhow!("missing tall friends bucket"))?;
-		assert_eq!(tall.constraints.elevation.start, 0.42);
 		assert_eq!(tall.constraints.steepness.end, 0.68);
 
 		let windline = dist
@@ -272,32 +265,29 @@ mod tests {
 			.iter()
 			.find(|b| b.item == Some(AlpineCell::WindlineFriendsConifer))
 			.ok_or_else(|| anyhow::anyhow!("missing windline friends bucket"))?;
-		assert_eq!(windline.constraints.elevation.start, 0.62);
 		assert_eq!(windline.constraints.steepness.end, 0.86);
 		Ok(())
 	}
 
 	#[test]
-	fn low_elevation_rejects_alpine_but_high_steep_ridge_allows_windline() -> Result<()> {
+	fn steep_slope_rejects_tall_friends_but_allows_windline() -> Result<()> {
 		let prepared =
 			AlpineCell::distribution().prepare(0.0, 0.0, NoiseParams::default(), Vec3::ZERO);
-		let low = FlatTerrainSample { elevation: 0.30, steepness: 0.20 };
-		let low_outcome = prepared.select_from(1, Vec3::new(5.0, 0.30, 5.0), 1.0, &low);
-		match low_outcome {
+		let moderate = FlatTerrainSample { elevation: 0.30, steepness: 0.40 };
+		let moderate_outcome = prepared.select_from(1, Vec3::new(5.0, 0.30, 5.0), 1.0, &moderate);
+		match moderate_outcome {
 			GroveCellOutcome::Placed { variant, .. } => {
-				assert_ne!(variant, AlpineCell::TallAlpineFriendsConifer);
-				assert_ne!(variant, AlpineCell::AlpineLiamsConifer);
+				assert_eq!(variant, AlpineCell::TallAlpineFriendsConifer);
 			}
-			GroveCellOutcome::Empty { .. } | GroveCellOutcome::Rejected { .. } => {}
+			other => anyhow::bail!("expected TallAlpineFriendsConifer on moderate slope, got {other:?}"),
 		}
-		let ridge = FlatTerrainSample { elevation: 0.72, steepness: 0.78 };
-		let windline_outcome =
-			prepared.select_from(2, Vec3::new(5.0, 0.72, 5.0), 1.0, &ridge);
-		match windline_outcome {
+		let steep = FlatTerrainSample { elevation: 0.30, steepness: 0.70 };
+		let steep_outcome = prepared.select_from(1, Vec3::new(5.0, 0.30, 5.0), 1.0, &steep);
+		match steep_outcome {
 			GroveCellOutcome::Placed { variant, .. } => {
 				assert_eq!(variant, AlpineCell::WindlineFriendsConifer);
 			}
-			other => anyhow::bail!("expected WindlineFriendsConifer on high steep ridge, got {other:?}"),
+			other => anyhow::bail!("expected WindlineFriendsConifer on steep ridge, got {other:?}"),
 		}
 		Ok(())
 	}
@@ -329,7 +319,7 @@ mod tests {
 		let noise = crate::grove::GroveFrontend::default().noise;
 		let grove = Grove::assemble(definition(), ForestGroveBiases::default(), noise, Vec3::ZERO);
 		let extent = GroveExtent::new(Vec3::ZERO, Vec3::new(220.0, 1.0, 220.0));
-		let terrain = FlatTerrainSample { elevation: 0.65, steepness: 0.35 };
+		let terrain = FlatTerrainSample::default();
 		let a = grove.populate(&extent, &terrain);
 		let b = grove.populate(&extent, &terrain);
 		assert_eq!(a, b);

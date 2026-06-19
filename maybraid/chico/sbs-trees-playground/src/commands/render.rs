@@ -1853,7 +1853,7 @@ mod tests {
 	#[test]
 	fn alpine_defaults_spawn_placements() -> Result<()> {
 		let cmd = crate::commands::PlaygroundCommand::parse_line(
-			"render alpine --grove-extent-xz 220 --elevation 0.65",
+			"render alpine --grove-extent-xz 220",
 		)
 		.map_err(|e| anyhow::anyhow!("{e}"))?;
 		let crate::commands::PlaygroundCommand::Render(Render::Alpine(helper)) = cmd else {
@@ -1874,7 +1874,7 @@ mod tests {
 	#[test]
 	fn alpine_command_preserves_grove_params() -> Result<()> {
 		let cmd = crate::commands::PlaygroundCommand::parse_line(
-			"render alpine --grove-extent-xz 220 --cell-extent-xz 27,27 --elevation 0.65",
+			"render alpine --grove-extent-xz 220 --cell-extent-xz 27,27",
 		)
 		.map_err(|e| anyhow::anyhow!("{e}"))?;
 		let crate::commands::PlaygroundCommand::Render(Render::Alpine(helper)) = cmd else {
