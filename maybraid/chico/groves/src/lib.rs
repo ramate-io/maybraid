@@ -13,6 +13,9 @@ pub mod trade_winds;
 pub mod wandering_acacia;
 pub mod leeward;
 pub mod christmas_taiga;
+pub mod conifer_massives;
+pub mod temperate_massives;
+pub mod riparian_general;
 pub mod conifer_sapling;
 pub mod goettingen_follow;
 pub mod high_bush;
@@ -158,6 +161,22 @@ pub use leeward::{Leeward, LeewardStd};
 #[cfg(feature = "render")]
 pub use christmas_taiga::{ChristmasTaiga, ChristmasTaigaStd};
 #[cfg(feature = "render")]
+pub use conifer_massives::{ConiferMassives, ConiferMassivesStd};
+
+#[cfg(feature = "render")]
+pub use temperate_massives::{TemperateMassives, TemperateMassivesStd};
+
+#[cfg(feature = "render")]
+pub use riparian_general::{RiparianGeneral, RiparianGeneralStd};
+#[cfg(feature = "render")]
+#[cfg(feature = "render")]
+#[cfg(feature = "render")]
+#[cfg(feature = "render")]
+#[cfg(feature = "render")]
+#[cfg(feature = "render")]
+#[cfg(feature = "render")]
+#[cfg(feature = "render")]
+#[cfg(feature = "render")]
 pub use braid_grass::{BraidGrass, BraidGrassStd};
 #[cfg(feature = "render")]
 pub use bush_scrub::{BushScrub, BushScrubStd};
@@ -205,18 +224,3 @@ pub use tropical_undergrowth::{TropicalUndergrowth, TropicalUndergrowthStd};
 pub use unending_jungle::{UnendingJungle, UnendingJungleStd};
 #[cfg(feature = "render")]
 pub use wild_grass::{WildGrass, WildGrassStd};
-pub mod conifer_massives;
-pub mod temperate_massives;
-pub mod riparian_general;
-pub use conifer_massives::{
-	ConiferMassivesCell, ConiferMassivesFriendsConifer, ConiferMassivesItem,
-	ConiferMassivesLiamsConifer, ConiferMassivesNorthernConifer, ConiferMassivesTemperateConifer,
-pub use temperate_massives::{
-	TemperateMassivesBraidOak, TemperateMassivesCell, TemperateMassivesItem, TemperateMassivesRory,
-	TemperateMassivesStorybook,
-pub use riparian_general::{
-	RiparianGeneralBraidOak, RiparianGeneralCell, RiparianGeneralHighBush, RiparianGeneralItem,
-	RiparianGeneralStorybook,
-pub use conifer_massives::{ConiferMassives, ConiferMassivesStd};
-pub use temperate_massives::{TemperateMassives, TemperateMassivesStd};
-pub use riparian_general::{RiparianGeneral, RiparianGeneralStd};
