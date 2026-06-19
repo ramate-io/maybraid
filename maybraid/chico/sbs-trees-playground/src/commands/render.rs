@@ -29,6 +29,7 @@ use crate::render::{
 	RenderTuftPatch, RenderUnendingJungle, RenderStrangeOasis, RenderShamanhome,
 	RenderGoettingenFollow, RenderConiferSapling, RenderAridConiferSapling,
 	RenderJungleLowerMassives, RenderJungleMassives, RenderTemperateLowerMassives, RenderPalmShade,
+	RenderRiparianMix,
 	RenderVaseTree, RenderWaialeaPalm,
 	RenderWeepingTuft, RenderWildGrass,
 };
@@ -306,6 +307,14 @@ impl CellRenderHelper<RenderPalmShade> {
 	}
 }
 
+impl CellRenderHelper<RenderRiparianMix> {
+	pub fn configured_riparian_mix(&self) -> RenderRiparianMix {
+		let mut grove = self.render.inner.clone();
+		grove.extent = self.grove_extent(grove.cell_extent_xz());
+		grove
+	}
+}
+
 /// High bush shape plus the surface-noise flags that live on the render item (not the shape).
 #[derive(Clone, clap::Args)]
 #[command(rename_all = "kebab-case")]
@@ -395,6 +404,7 @@ pub enum Render {
 	JungleMassives(CellRenderHelper<RenderJungleMassives>),
 	TemperateLowerMassives(CellRenderHelper<RenderTemperateLowerMassives>),
 	PalmShade(CellRenderHelper<RenderPalmShade>),
+	RiparianMix(CellRenderHelper<RenderRiparianMix>),
 	SpearTuft(RenderHelper<SpearTuftShape>),
 	BuddhaHandTuft(RenderHelper<BuddhaHandTuftShape>),
 	WeepingTuft(RenderHelper<WeepingTuftShape>),
@@ -524,6 +534,9 @@ impl Render {
 			),
 			Self::PalmShade(h) => h.render.config_with(
 				RenderSubject::PalmShade(h.configured_palm_shade()),
+			),
+			Self::RiparianMix(h) => h.render.config_with(
+				RenderSubject::RiparianMix(h.configured_riparian_mix()),
 			),
 			Self::SpearTuft(h) => h.config_with(RenderSubject::SpearTuft(
 				RenderSpearTuft::from_shape(h.inner.clone(), Default::default()),
@@ -1774,6 +1787,51 @@ mod tests {
 		let cfg = Render::PalmShade(helper).into_render_config();
 		let RenderSubject::PalmShade(subject) = cfg.subject else {
 			anyhow::bail!("expected palm shade subject");
+		};
+		assert_eq!(subject.placement_cells().len(), cell_count);
+		assert!(!subject.placements().is_empty());
+		Ok(())
+	}
+
+	#[test]
+	fn riparian_mix_defaults_spawn_placements() -> Result<()> {
+		let cmd = crate::commands::PlaygroundCommand::parse_line(
+			"render riparian-mix --grove-extent-xz 180",
+		)
+		.map_err(|e| anyhow::anyhow!("{e}"))?;
+		let crate::commands::PlaygroundCommand::Render(Render::RiparianMix(helper)) = cmd else {
+			anyhow::bail!("expected riparian-mix render command");
+		};
+		let grove = helper.configured_riparian_mix();
+		assert!(grove.grove.variant_weights.is_none());
+		let placements = grove.placements();
+		assert!((helper.grove_extent_xz - 180.0).abs() < 1e-5);
+		assert!(
+			!placements.is_empty(),
+			"expected a visible riparian-mix preview with default flags, got {} placements",
+			placements.len()
+		);
+		Ok(())
+	}
+
+	#[test]
+	fn riparian_mix_command_preserves_grove_params() -> Result<()> {
+		let cmd = crate::commands::PlaygroundCommand::parse_line(
+			"render riparian-mix --grove-extent-xz 180 --cell-extent-xz 17,17",
+		)
+		.map_err(|e| anyhow::anyhow!("{e}"))?;
+		let crate::commands::PlaygroundCommand::Render(Render::RiparianMix(helper)) = cmd else {
+			anyhow::bail!("expected riparian-mix render command");
+		};
+		assert!((helper.grove_extent_xz - 180.0).abs() < 1e-5);
+		assert_eq!(helper.render.inner.grove.cell_extent_xz, Some(Vec2::splat(17.0)));
+		let grove = helper.configured_riparian_mix();
+		let cell_count = grove.placement_cells().len();
+		assert_eq!(cell_count, 121);
+		assert!(!grove.placements().is_empty());
+		let cfg = Render::RiparianMix(helper).into_render_config();
+		let RenderSubject::RiparianMix(subject) = cfg.subject else {
+			anyhow::bail!("expected riparian mix subject");
 		};
 		assert_eq!(subject.placement_cells().len(), cell_count);
 		assert!(!subject.placements().is_empty());

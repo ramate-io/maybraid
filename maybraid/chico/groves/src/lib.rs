@@ -16,6 +16,7 @@ pub mod levantine_scrub;
 pub mod low_bush;
 pub mod monster_grass;
 pub mod palm_shade;
+pub mod riparian_mix;
 pub mod riverine_green;
 pub mod shamanhome;
 pub mod spotty_bushes;
@@ -78,6 +79,10 @@ pub use monster_grass::{MonsterGrassCell, MonsterGrassClump, MonsterGrassItem};
 pub use palm_shade::{
 	PalmShadeCell, PalmShadeDatePalm, PalmShadeItem, PalmShadeWaialeaPalm,
 };
+pub use riparian_mix::{
+	RiparianMixBraidOak, RiparianMixCell, RiparianMixFriendsConifer, RiparianMixItem,
+	RiparianMixStorybook, RiparianMixTemperateConifer,
+};
 pub use riverine_green::{RiverineGreenBush, RiverineGreenCell, RiverineGreenItem};
 pub use shamanhome::{
 	ShamanhomeBanyan, ShamanhomeBraidOak, ShamanhomeCell, ShamanhomeDatePalm, ShamanhomeItem,
@@ -134,6 +139,8 @@ pub use low_bush::{LowBush, LowBushStd};
 pub use monster_grass::{MonsterGrass, MonsterGrassStd};
 #[cfg(feature = "render")]
 pub use palm_shade::{PalmShade, PalmShadeStd};
+#[cfg(feature = "render")]
+pub use riparian_mix::{RiparianMix, RiparianMixStd};
 #[cfg(feature = "render")]
 pub use riverine_green::{RiverineGreen, RiverineGreenStd};
 #[cfg(feature = "render")]
