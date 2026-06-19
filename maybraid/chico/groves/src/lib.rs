@@ -11,6 +11,7 @@ pub mod goettingen_follow;
 pub mod high_bush;
 pub mod jerrys_chaparral;
 pub mod jungle_lower_massives;
+pub mod jungle_massives;
 pub mod levantine_scrub;
 pub mod low_bush;
 pub mod monster_grass;
@@ -64,6 +65,9 @@ pub use jungle_lower_massives::{
 	JungleLowerMassivesBanyan, JungleLowerMassivesBraidOak, JungleLowerMassivesCell,
 	JungleLowerMassivesItem, JungleLowerMassivesJungleStorybook, JungleLowerMassivesWaialeaPalm,
 };
+pub use jungle_massives::{
+	JungleMassivesBanyan, JungleMassivesCell, JungleMassivesItem, JungleMassivesJungleStorybook,
+};
 pub use levantine_scrub::{
 	LevantineScrubBraidOak, LevantineScrubBush, LevantineScrubCell, LevantineScrubHedge,
 	LevantineScrubItem, LevantineScrubRoryHead, LevantineScrubTorch, LevantineScrubVaseTree,
@@ -116,6 +120,8 @@ pub use high_bush::{HighBush, HighBushStd};
 pub use jerrys_chaparral::{JerrysChaparral, JerrysChaparralStd};
 #[cfg(feature = "render")]
 pub use jungle_lower_massives::{JungleLowerMassives, JungleLowerMassivesStd};
+#[cfg(feature = "render")]
+pub use jungle_massives::{JungleMassives, JungleMassivesStd};
 #[cfg(feature = "render")]
 pub use levantine_scrub::{LevantineScrub, LevantineScrubStd};
 #[cfg(feature = "render")]
