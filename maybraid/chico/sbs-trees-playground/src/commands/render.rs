@@ -28,7 +28,9 @@ use crate::render::{
 	RenderTemperateConifer, RenderTropicalThicket, RenderTropicalTufts, RenderTropicalUndergrowth,
 	RenderTuftPatch, RenderUnendingJungle, RenderStrangeOasis, RenderShamanhome,
 	RenderGoettingenFollow, RenderConiferSapling, RenderAridConiferSapling,
-	RenderJungleLowerMassives, RenderJungleMassives, RenderTemperateLowerMassives, RenderVaseTree, RenderWaialeaPalm,
+	RenderJungleLowerMassives, RenderJungleMassives, RenderTemperateLowerMassives, RenderPalmShade,
+	RenderRiparianMix, RenderAlpine, RenderDryland, RenderStorytellers, RenderTradeWinds,
+	RenderVaseTree, RenderWaialeaPalm,
 	RenderWeepingTuft, RenderWildGrass,
 };
 
@@ -297,6 +299,54 @@ impl CellRenderHelper<RenderTemperateLowerMassives> {
 	}
 }
 
+impl CellRenderHelper<RenderPalmShade> {
+	pub fn configured_palm_shade(&self) -> RenderPalmShade {
+		let mut grove = self.render.inner.clone();
+		grove.extent = self.grove_extent(grove.cell_extent_xz());
+		grove
+	}
+}
+
+impl CellRenderHelper<RenderRiparianMix> {
+	pub fn configured_riparian_mix(&self) -> RenderRiparianMix {
+		let mut grove = self.render.inner.clone();
+		grove.extent = self.grove_extent(grove.cell_extent_xz());
+		grove
+	}
+}
+
+impl CellRenderHelper<RenderAlpine> {
+	pub fn configured_alpine(&self) -> RenderAlpine {
+		let mut grove = self.render.inner.clone();
+		grove.extent = self.grove_extent(grove.cell_extent_xz());
+		grove
+	}
+}
+
+impl CellRenderHelper<RenderDryland> {
+	pub fn configured_dryland(&self) -> RenderDryland {
+		let mut grove = self.render.inner.clone();
+		grove.extent = self.grove_extent(grove.cell_extent_xz());
+		grove
+	}
+}
+
+impl CellRenderHelper<RenderStorytellers> {
+	pub fn configured_storytellers(&self) -> RenderStorytellers {
+		let mut grove = self.render.inner.clone();
+		grove.extent = self.grove_extent(grove.cell_extent_xz());
+		grove
+	}
+}
+
+impl CellRenderHelper<RenderTradeWinds> {
+	pub fn configured_trade_winds(&self) -> RenderTradeWinds {
+		let mut grove = self.render.inner.clone();
+		grove.extent = self.grove_extent(grove.cell_extent_xz());
+		grove
+	}
+}
+
 /// High bush shape plus the surface-noise flags that live on the render item (not the shape).
 #[derive(Clone, clap::Args)]
 #[command(rename_all = "kebab-case")]
@@ -385,6 +435,12 @@ pub enum Render {
 	JungleLowerMassives(CellRenderHelper<RenderJungleLowerMassives>),
 	JungleMassives(CellRenderHelper<RenderJungleMassives>),
 	TemperateLowerMassives(CellRenderHelper<RenderTemperateLowerMassives>),
+	PalmShade(CellRenderHelper<RenderPalmShade>),
+	RiparianMix(CellRenderHelper<RenderRiparianMix>),
+	Alpine(CellRenderHelper<RenderAlpine>),
+	Dryland(CellRenderHelper<RenderDryland>),
+	Storytellers(CellRenderHelper<RenderStorytellers>),
+	TradeWinds(CellRenderHelper<RenderTradeWinds>),
 	SpearTuft(RenderHelper<SpearTuftShape>),
 	BuddhaHandTuft(RenderHelper<BuddhaHandTuftShape>),
 	WeepingTuft(RenderHelper<WeepingTuftShape>),
@@ -511,6 +567,24 @@ impl Render {
 			),
 			Self::TemperateLowerMassives(h) => h.render.config_with(
 				RenderSubject::TemperateLowerMassives(h.configured_temperate_lower_massives()),
+			),
+			Self::PalmShade(h) => h.render.config_with(
+				RenderSubject::PalmShade(h.configured_palm_shade()),
+			),
+			Self::RiparianMix(h) => h.render.config_with(
+				RenderSubject::RiparianMix(h.configured_riparian_mix()),
+			),
+			Self::Alpine(h) => h.render.config_with(
+				RenderSubject::Alpine(h.configured_alpine()),
+			),
+			Self::Dryland(h) => h.render.config_with(
+				RenderSubject::Dryland(h.configured_dryland()),
+			),
+			Self::Storytellers(h) => h.render.config_with(
+				RenderSubject::Storytellers(h.configured_storytellers()),
+			),
+			Self::TradeWinds(h) => h.render.config_with(
+				RenderSubject::TradeWinds(h.configured_trade_winds()),
 			),
 			Self::SpearTuft(h) => h.config_with(RenderSubject::SpearTuft(
 				RenderSpearTuft::from_shape(h.inner.clone(), Default::default()),
@@ -1716,6 +1790,276 @@ mod tests {
 		let cfg = Render::TemperateLowerMassives(helper).into_render_config();
 		let RenderSubject::TemperateLowerMassives(subject) = cfg.subject else {
 			anyhow::bail!("expected temperate lower massives subject");
+		};
+		assert_eq!(subject.placement_cells().len(), cell_count);
+		assert!(!subject.placements().is_empty());
+		Ok(())
+	}
+
+	#[test]
+	fn palm_shade_defaults_spawn_placements() -> Result<()> {
+		let cmd = crate::commands::PlaygroundCommand::parse_line(
+			"render palm-shade --grove-extent-xz 220",
+		)
+		.map_err(|e| anyhow::anyhow!("{e}"))?;
+		let crate::commands::PlaygroundCommand::Render(Render::PalmShade(helper)) = cmd else {
+			anyhow::bail!("expected palm-shade render command");
+		};
+		let grove = helper.configured_palm_shade();
+		assert!(grove.grove.variant_weights.is_none());
+		let placements = grove.placements();
+		assert!((helper.grove_extent_xz - 220.0).abs() < 1e-5);
+		assert!(
+			!placements.is_empty(),
+			"expected a visible palm-shade preview with default flags, got {} placements",
+			placements.len()
+		);
+		Ok(())
+	}
+
+	#[test]
+	fn palm_shade_command_preserves_grove_params() -> Result<()> {
+		let cmd = crate::commands::PlaygroundCommand::parse_line(
+			"render palm-shade --grove-extent-xz 220 --cell-extent-xz 24,24",
+		)
+		.map_err(|e| anyhow::anyhow!("{e}"))?;
+		let crate::commands::PlaygroundCommand::Render(Render::PalmShade(helper)) = cmd else {
+			anyhow::bail!("expected palm-shade render command");
+		};
+		assert!((helper.grove_extent_xz - 220.0).abs() < 1e-5);
+		assert_eq!(helper.render.inner.grove.cell_extent_xz, Some(Vec2::splat(24.0)));
+		let grove = helper.configured_palm_shade();
+		let cell_count = grove.placement_cells().len();
+		assert_eq!(cell_count, 100);
+		assert!(!grove.placements().is_empty());
+		let cfg = Render::PalmShade(helper).into_render_config();
+		let RenderSubject::PalmShade(subject) = cfg.subject else {
+			anyhow::bail!("expected palm shade subject");
+		};
+		assert_eq!(subject.placement_cells().len(), cell_count);
+		assert!(!subject.placements().is_empty());
+		Ok(())
+	}
+
+	#[test]
+	fn riparian_mix_defaults_spawn_placements() -> Result<()> {
+		let cmd = crate::commands::PlaygroundCommand::parse_line(
+			"render riparian-mix --grove-extent-xz 180",
+		)
+		.map_err(|e| anyhow::anyhow!("{e}"))?;
+		let crate::commands::PlaygroundCommand::Render(Render::RiparianMix(helper)) = cmd else {
+			anyhow::bail!("expected riparian-mix render command");
+		};
+		let grove = helper.configured_riparian_mix();
+		assert!(grove.grove.variant_weights.is_none());
+		let placements = grove.placements();
+		assert!((helper.grove_extent_xz - 180.0).abs() < 1e-5);
+		assert!(
+			!placements.is_empty(),
+			"expected a visible riparian-mix preview with default flags, got {} placements",
+			placements.len()
+		);
+		Ok(())
+	}
+
+	#[test]
+	fn riparian_mix_command_preserves_grove_params() -> Result<()> {
+		let cmd = crate::commands::PlaygroundCommand::parse_line(
+			"render riparian-mix --grove-extent-xz 180 --cell-extent-xz 17,17",
+		)
+		.map_err(|e| anyhow::anyhow!("{e}"))?;
+		let crate::commands::PlaygroundCommand::Render(Render::RiparianMix(helper)) = cmd else {
+			anyhow::bail!("expected riparian-mix render command");
+		};
+		assert!((helper.grove_extent_xz - 180.0).abs() < 1e-5);
+		assert_eq!(helper.render.inner.grove.cell_extent_xz, Some(Vec2::splat(17.0)));
+		let grove = helper.configured_riparian_mix();
+		let cell_count = grove.placement_cells().len();
+		assert_eq!(cell_count, 121);
+		assert!(!grove.placements().is_empty());
+		let cfg = Render::RiparianMix(helper).into_render_config();
+		let RenderSubject::RiparianMix(subject) = cfg.subject else {
+			anyhow::bail!("expected riparian mix subject");
+		};
+		assert_eq!(subject.placement_cells().len(), cell_count);
+		assert!(!subject.placements().is_empty());
+		Ok(())
+	}
+
+	#[test]
+	fn alpine_defaults_spawn_placements() -> Result<()> {
+		let cmd = crate::commands::PlaygroundCommand::parse_line(
+			"render alpine --grove-extent-xz 220",
+		)
+		.map_err(|e| anyhow::anyhow!("{e}"))?;
+		let crate::commands::PlaygroundCommand::Render(Render::Alpine(helper)) = cmd else {
+			anyhow::bail!("expected alpine render command");
+		};
+		let grove = helper.configured_alpine();
+		assert!(grove.grove.variant_weights.is_none());
+		let placements = grove.placements();
+		assert!((helper.grove_extent_xz - 220.0).abs() < 1e-5);
+		assert!(
+			!placements.is_empty(),
+			"expected a visible alpine preview with default flags, got {} placements",
+			placements.len()
+		);
+		Ok(())
+	}
+
+	#[test]
+	fn alpine_command_preserves_grove_params() -> Result<()> {
+		let cmd = crate::commands::PlaygroundCommand::parse_line(
+			"render alpine --grove-extent-xz 220 --cell-extent-xz 27,27",
+		)
+		.map_err(|e| anyhow::anyhow!("{e}"))?;
+		let crate::commands::PlaygroundCommand::Render(Render::Alpine(helper)) = cmd else {
+			anyhow::bail!("expected alpine render command");
+		};
+		assert!((helper.grove_extent_xz - 220.0).abs() < 1e-5);
+		assert_eq!(helper.render.inner.grove.cell_extent_xz, Some(Vec2::splat(27.0)));
+		let grove = helper.configured_alpine();
+		let cell_count = grove.placement_cells().len();
+		assert_eq!(cell_count, 81);
+		assert!(!grove.placements().is_empty());
+		let cfg = Render::Alpine(helper).into_render_config();
+		let RenderSubject::Alpine(subject) = cfg.subject else {
+			anyhow::bail!("expected alpine subject");
+		};
+		assert_eq!(subject.placement_cells().len(), cell_count);
+		assert!(!subject.placements().is_empty());
+		Ok(())
+	}
+
+	#[test]
+	fn dryland_defaults_spawn_placements() -> Result<()> {
+		let cmd = crate::commands::PlaygroundCommand::parse_line(
+			"render dryland --grove-extent-xz 280",
+		)
+		.map_err(|e| anyhow::anyhow!("{e}"))?;
+		let crate::commands::PlaygroundCommand::Render(Render::Dryland(helper)) = cmd else {
+			anyhow::bail!("expected dryland render command");
+		};
+		let grove = helper.configured_dryland();
+		assert!(grove.grove.variant_weights.is_none());
+		let placements = grove.placements();
+		assert!((helper.grove_extent_xz - 280.0).abs() < 1e-5);
+		assert!(
+			!placements.is_empty(),
+			"expected a visible dryland preview with default flags, got {} placements",
+			placements.len()
+		);
+		Ok(())
+	}
+
+	#[test]
+	fn dryland_command_preserves_grove_params() -> Result<()> {
+		let cmd = crate::commands::PlaygroundCommand::parse_line(
+			"render dryland --grove-extent-xz 280 --cell-extent-xz 35,35",
+		)
+		.map_err(|e| anyhow::anyhow!("{e}"))?;
+		let crate::commands::PlaygroundCommand::Render(Render::Dryland(helper)) = cmd else {
+			anyhow::bail!("expected dryland render command");
+		};
+		assert!((helper.grove_extent_xz - 280.0).abs() < 1e-5);
+		assert_eq!(helper.render.inner.grove.cell_extent_xz, Some(Vec2::splat(35.0)));
+		let grove = helper.configured_dryland();
+		let cell_count = grove.placement_cells().len();
+		assert_eq!(cell_count, 64);
+		assert!(!grove.placements().is_empty());
+		let cfg = Render::Dryland(helper).into_render_config();
+		let RenderSubject::Dryland(subject) = cfg.subject else {
+			anyhow::bail!("expected dryland subject");
+		};
+		assert_eq!(subject.placement_cells().len(), cell_count);
+		assert!(!subject.placements().is_empty());
+		Ok(())
+	}
+
+	#[test]
+	fn storytellers_defaults_spawn_placements() -> Result<()> {
+		let cmd = crate::commands::PlaygroundCommand::parse_line(
+			"render storytellers --grove-extent-xz 220",
+		)
+		.map_err(|e| anyhow::anyhow!("{e}"))?;
+		let crate::commands::PlaygroundCommand::Render(Render::Storytellers(helper)) = cmd else {
+			anyhow::bail!("expected storytellers render command");
+		};
+		let grove = helper.configured_storytellers();
+		assert!(grove.grove.variant_weights.is_none());
+		let placements = grove.placements();
+		assert!((helper.grove_extent_xz - 220.0).abs() < 1e-5);
+		assert!(
+			!placements.is_empty(),
+			"expected a visible storytellers preview with default flags, got {} placements",
+			placements.len()
+		);
+		Ok(())
+	}
+
+	#[test]
+	fn storytellers_command_preserves_grove_params() -> Result<()> {
+		let cmd = crate::commands::PlaygroundCommand::parse_line(
+			"render storytellers --grove-extent-xz 220 --cell-extent-xz 22,22",
+		)
+		.map_err(|e| anyhow::anyhow!("{e}"))?;
+		let crate::commands::PlaygroundCommand::Render(Render::Storytellers(helper)) = cmd else {
+			anyhow::bail!("expected storytellers render command");
+		};
+		assert!((helper.grove_extent_xz - 220.0).abs() < 1e-5);
+		assert_eq!(helper.render.inner.grove.cell_extent_xz, Some(Vec2::splat(22.0)));
+		let grove = helper.configured_storytellers();
+		let cell_count = grove.placement_cells().len();
+		assert_eq!(cell_count, 100);
+		assert!(!grove.placements().is_empty());
+		let cfg = Render::Storytellers(helper).into_render_config();
+		let RenderSubject::Storytellers(subject) = cfg.subject else {
+			anyhow::bail!("expected storytellers subject");
+		};
+		assert_eq!(subject.placement_cells().len(), cell_count);
+		assert!(!subject.placements().is_empty());
+		Ok(())
+	}
+
+	#[test]
+	fn trade_winds_defaults_spawn_placements() -> Result<()> {
+		let cmd = crate::commands::PlaygroundCommand::parse_line(
+			"render trade-winds --grove-extent-xz 260",
+		)
+		.map_err(|e| anyhow::anyhow!("{e}"))?;
+		let crate::commands::PlaygroundCommand::Render(Render::TradeWinds(helper)) = cmd else {
+			anyhow::bail!("expected trade-winds render command");
+		};
+		let grove = helper.configured_trade_winds();
+		assert!(grove.grove.variant_weights.is_none());
+		let placements = grove.placements();
+		assert!((helper.grove_extent_xz - 260.0).abs() < 1e-5);
+		assert!(
+			!placements.is_empty(),
+			"expected a visible trade-winds preview with default flags, got {} placements",
+			placements.len()
+		);
+		Ok(())
+	}
+
+	#[test]
+	fn trade_winds_command_preserves_grove_params() -> Result<()> {
+		let cmd = crate::commands::PlaygroundCommand::parse_line(
+			"render trade-winds --grove-extent-xz 260 --cell-extent-xz 26,26",
+		)
+		.map_err(|e| anyhow::anyhow!("{e}"))?;
+		let crate::commands::PlaygroundCommand::Render(Render::TradeWinds(helper)) = cmd else {
+			anyhow::bail!("expected trade-winds render command");
+		};
+		assert!((helper.grove_extent_xz - 260.0).abs() < 1e-5);
+		assert_eq!(helper.render.inner.grove.cell_extent_xz, Some(Vec2::splat(26.0)));
+		let grove = helper.configured_trade_winds();
+		let cell_count = grove.placement_cells().len();
+		assert_eq!(cell_count, 100);
+		assert!(!grove.placements().is_empty());
+		let cfg = Render::TradeWinds(helper).into_render_config();
+		let RenderSubject::TradeWinds(subject) = cfg.subject else {
+			anyhow::bail!("expected trade-winds subject");
 		};
 		assert_eq!(subject.placement_cells().len(), cell_count);
 		assert!(!subject.placements().is_empty());

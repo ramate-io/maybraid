@@ -2,6 +2,12 @@
 
 set -e
 
+# Developer can turn off with environment variable
+if [ -n "$SPELLCHECK_DISABLE" ]; then
+    echo "Ltex-cli-plus is disabled. Skipping..."
+    exit 0
+fi
+
 # Status helper function
 status() {
     if [ $? -eq 0 ]; then

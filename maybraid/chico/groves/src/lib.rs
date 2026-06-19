@@ -6,6 +6,10 @@ pub mod braid_grass;
 pub mod bush_scrub;
 pub mod common_tufts;
 pub mod arid_conifer_sapling;
+pub mod alpine;
+pub mod dryland;
+pub mod storytellers;
+pub mod trade_winds;
 pub mod conifer_sapling;
 pub mod goettingen_follow;
 pub mod high_bush;
@@ -15,6 +19,8 @@ pub mod jungle_massives;
 pub mod levantine_scrub;
 pub mod low_bush;
 pub mod monster_grass;
+pub mod palm_shade;
+pub mod riparian_mix;
 pub mod riverine_green;
 pub mod shamanhome;
 pub mod spotty_bushes;
@@ -48,6 +54,15 @@ pub use arid_conifer_sapling::{
 	AridConiferSaplingCell, AridConiferSaplingFriendsConifer, AridConiferSaplingItem,
 	AridConiferSaplingLiamsConifer, AridConiferSaplingNorthernConifer,
 };
+pub use alpine::{AlpineCell, AlpineFriendsConifer, AlpineItem, AlpineLiamsConifer};
+pub use dryland::{DrylandCell, DrylandItem, DrylandLiamsConifer, DrylandVaseTree};
+pub use storytellers::{
+	StorytellersBraidOak, StorytellersCell, StorytellersItem, StorytellersStorybook,
+	StorytellersTorch,
+};
+pub use trade_winds::{
+	TradeWindsBanyan, TradeWindsCell, TradeWindsItem, TradeWindsStorybook, TradeWindsWaialeaPalm,
+};
 pub use conifer_sapling::{
 	ConiferSaplingCell, ConiferSaplingFriendsConifer, ConiferSaplingItem,
 	ConiferSaplingNorthernConifer,
@@ -74,6 +89,13 @@ pub use levantine_scrub::{
 };
 pub use low_bush::{LowBushBush, LowBushCell, LowBushItem};
 pub use monster_grass::{MonsterGrassCell, MonsterGrassClump, MonsterGrassItem};
+pub use palm_shade::{
+	PalmShadeCell, PalmShadeDatePalm, PalmShadeItem, PalmShadeWaialeaPalm,
+};
+pub use riparian_mix::{
+	RiparianMixBraidOak, RiparianMixCell, RiparianMixFriendsConifer, RiparianMixItem,
+	RiparianMixStorybook, RiparianMixTemperateConifer,
+};
 pub use riverine_green::{RiverineGreenBush, RiverineGreenCell, RiverineGreenItem};
 pub use shamanhome::{
 	ShamanhomeBanyan, ShamanhomeBraidOak, ShamanhomeCell, ShamanhomeDatePalm, ShamanhomeItem,
@@ -107,6 +129,16 @@ pub use unending_jungle::{
 pub use wild_grass::{WildGrassCell, WildGrassClump, WildGrassItem};
 
 #[cfg(feature = "render")]
+pub use arid_conifer_sapling::{AridConiferSapling, AridConiferSaplingStd};
+#[cfg(feature = "render")]
+pub use alpine::{Alpine, AlpineStd};
+#[cfg(feature = "render")]
+pub use dryland::{Dryland, DrylandStd};
+#[cfg(feature = "render")]
+pub use storytellers::{Storytellers, StorytellersStd};
+#[cfg(feature = "render")]
+pub use trade_winds::{TradeWinds, TradeWindsStd};
+#[cfg(feature = "render")]
 pub use braid_grass::{BraidGrass, BraidGrassStd};
 #[cfg(feature = "render")]
 pub use bush_scrub::{BushScrub, BushScrubStd};
@@ -128,6 +160,10 @@ pub use levantine_scrub::{LevantineScrub, LevantineScrubStd};
 pub use low_bush::{LowBush, LowBushStd};
 #[cfg(feature = "render")]
 pub use monster_grass::{MonsterGrass, MonsterGrassStd};
+#[cfg(feature = "render")]
+pub use palm_shade::{PalmShade, PalmShadeStd};
+#[cfg(feature = "render")]
+pub use riparian_mix::{RiparianMix, RiparianMixStd};
 #[cfg(feature = "render")]
 pub use riverine_green::{RiverineGreen, RiverineGreenStd};
 #[cfg(feature = "render")]

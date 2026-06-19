@@ -13,6 +13,12 @@ use chico_groves::high_bush::HighBushStd;
 use chico_groves::jerrys_chaparral::JerrysChaparralStd;
 use chico_groves::jungle_lower_massives::JungleLowerMassivesStd;
 use chico_groves::jungle_massives::JungleMassivesStd;
+use chico_groves::alpine::AlpineStd;
+use chico_groves::dryland::DrylandStd;
+use chico_groves::storytellers::StorytellersStd;
+use chico_groves::trade_winds::TradeWindsStd;
+use chico_groves::palm_shade::PalmShadeStd;
+use chico_groves::riparian_mix::RiparianMixStd;
 use chico_groves::temperate_lower_massives::TemperateLowerMassivesStd;
 use chico_groves::levantine_scrub::LevantineScrubStd;
 use chico_groves::low_bush::LowBushStd;
@@ -297,6 +303,24 @@ pub type RenderJungleMassives = JungleMassivesStd;
 /// [`TemperateLowerMassivesStd`] — low-density massive temperate lower-canopy grove ([#330](https://github.com/ramate-io/maybraid/issues/330)).
 pub type RenderTemperateLowerMassives = TemperateLowerMassivesStd;
 
+/// [`PalmShadeStd`] — sparse Waialea and Date Palm upper-canopy grove ([#332](https://github.com/ramate-io/maybraid/issues/332)).
+pub type RenderPalmShade = PalmShadeStd;
+
+/// [`RiparianMixStd`] — mixed riparian upper-canopy grove ([#333](https://github.com/ramate-io/maybraid/issues/333)).
+pub type RenderRiparianMix = RiparianMixStd;
+
+/// [`AlpineStd`] — cold upland conifer upper-canopy grove ([#334](https://github.com/ramate-io/maybraid/issues/334)).
+pub type RenderAlpine = AlpineStd;
+
+/// [`DrylandStd`] — very-low-density arid upper-canopy grove ([#335](https://github.com/ramate-io/maybraid/issues/335)).
+pub type RenderDryland = DrylandStd;
+
+/// [`StorytellersStd`] — colorful Storybook and Braid Oak upper-canopy grove ([#336](https://github.com/ramate-io/maybraid/issues/336)).
+pub type RenderStorytellers = StorytellersStd;
+
+/// [`TradeWindsStd`] — low-density tropical upper-canopy grove ([#337](https://github.com/ramate-io/maybraid/issues/337)).
+pub type RenderTradeWinds = TradeWindsStd;
+
 /// The configured render item currently shown in the scene.
 ///
 /// This is the typed scene state behind [`RenderConfig`]: material patching
@@ -348,6 +372,12 @@ pub enum RenderSubject {
 	JungleLowerMassives(RenderJungleLowerMassives),
 	JungleMassives(RenderJungleMassives),
 	TemperateLowerMassives(RenderTemperateLowerMassives),
+	PalmShade(RenderPalmShade),
+	RiparianMix(RenderRiparianMix),
+	Alpine(RenderAlpine),
+	Dryland(RenderDryland),
+	Storytellers(RenderStorytellers),
+	TradeWinds(RenderTradeWinds),
 	SpearTuft(RenderSpearTuft),
 	BuddhaHandTuft(RenderBuddhaHandTuft),
 	WeepingTuft(RenderWeepingTuft),
@@ -403,6 +433,12 @@ impl RenderSubject {
 			Self::JungleLowerMassives(_) => "JungleLowerMassives",
 			Self::JungleMassives(_) => "JungleMassives",
 			Self::TemperateLowerMassives(_) => "TemperateLowerMassives",
+			Self::PalmShade(_) => "PalmShade",
+			Self::RiparianMix(_) => "RiparianMix",
+			Self::Alpine(_) => "Alpine",
+			Self::Dryland(_) => "Dryland",
+			Self::Storytellers(_) => "Storytellers",
+			Self::TradeWinds(_) => "TradeWinds",
 			Self::SpearTuft(_) => "SpearTuft",
 			Self::BuddhaHandTuft(_) => "BuddhaHandTuft",
 			Self::WeepingTuft(_) => "WeepingTuft",
@@ -674,6 +710,78 @@ impl RenderSubject {
 					g.leaf_surface_noise
 				)
 			}
+			Self::PalmShade(g) => {
+				format!(
+					"{:?}|extent={:?}|cell_extent_xz={:?}|terrain={:?}|chain={:?}|stick={:?}|leaf={:?}",
+					g.grove,
+					g.extent,
+					g.cell_extent_xz(),
+					g.terrain,
+					g.tree_chain_noise,
+					g.stick_surface_noise,
+					g.leaf_surface_noise
+				)
+			}
+			Self::RiparianMix(g) => {
+				format!(
+					"{:?}|extent={:?}|cell_extent_xz={:?}|terrain={:?}|chain={:?}|stick={:?}|leaf={:?}",
+					g.grove,
+					g.extent,
+					g.cell_extent_xz(),
+					g.terrain,
+					g.tree_chain_noise,
+					g.stick_surface_noise,
+					g.leaf_surface_noise
+				)
+			}
+			Self::Alpine(g) => {
+				format!(
+					"{:?}|extent={:?}|cell_extent_xz={:?}|terrain={:?}|chain={:?}|stick={:?}|leaf={:?}",
+					g.grove,
+					g.extent,
+					g.cell_extent_xz(),
+					g.terrain,
+					g.tree_chain_noise,
+					g.stick_surface_noise,
+					g.leaf_surface_noise
+				)
+			}
+			Self::Dryland(g) => {
+				format!(
+					"{:?}|extent={:?}|cell_extent_xz={:?}|terrain={:?}|chain={:?}|stick={:?}|leaf={:?}",
+					g.grove,
+					g.extent,
+					g.cell_extent_xz(),
+					g.terrain,
+					g.tree_chain_noise,
+					g.stick_surface_noise,
+					g.leaf_surface_noise
+				)
+			}
+			Self::Storytellers(g) => {
+				format!(
+					"{:?}|extent={:?}|cell_extent_xz={:?}|terrain={:?}|chain={:?}|stick={:?}|leaf={:?}",
+					g.grove,
+					g.extent,
+					g.cell_extent_xz(),
+					g.terrain,
+					g.tree_chain_noise,
+					g.stick_surface_noise,
+					g.leaf_surface_noise
+				)
+			}
+			Self::TradeWinds(g) => {
+				format!(
+					"{:?}|extent={:?}|cell_extent_xz={:?}|terrain={:?}|chain={:?}|stick={:?}|leaf={:?}",
+					g.grove,
+					g.extent,
+					g.cell_extent_xz(),
+					g.terrain,
+					g.tree_chain_noise,
+					g.stick_surface_noise,
+					g.leaf_surface_noise
+				)
+			}
 			Self::StrangeOasis(g) => {
 				format!(
 					"{:?}|extent={:?}|cell_extent_xz={:?}|terrain={:?}|chain={:?}|stick={:?}|leaf={:?}",
@@ -795,6 +903,12 @@ impl RenderSubject {
 			Self::JungleLowerMassives(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::JungleMassives(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::TemperateLowerMassives(item) => item.spawn_render_items(commands, chunk, transform),
+			Self::PalmShade(item) => item.spawn_render_items(commands, chunk, transform),
+			Self::RiparianMix(item) => item.spawn_render_items(commands, chunk, transform),
+			Self::Alpine(item) => item.spawn_render_items(commands, chunk, transform),
+			Self::Dryland(item) => item.spawn_render_items(commands, chunk, transform),
+			Self::Storytellers(item) => item.spawn_render_items(commands, chunk, transform),
+			Self::TradeWinds(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::SpearTuft(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::BuddhaHandTuft(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::WeepingTuft(item) => item.spawn_render_items(commands, chunk, transform),

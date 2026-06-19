@@ -163,7 +163,7 @@ pub struct StorybookGrowthParams {
 	/// Limb segment hops (`3`–`5`); must match a [`segment_fracs`](crate::segment_fracs) table ([`storybook_branch_depth`](crate::chain::storybook_tree::storybook_branch_depth) coerces out-of-range CLI values at anchor build).
 	#[cfg_attr(feature = "clap", arg(long, default_value_t = 4))]
 	pub branch_depth: usize,
-	#[cfg_attr(feature = "clap", arg(long, default_value_t = 26.0))]
+	#[cfg_attr(feature = "clap", arg(long, default_value_t = 33.0))]
 	pub angle_tolerance_degrees: f32,
 	#[cfg_attr(feature = "clap", arg(long, default_value_t = 4.0))]
 	pub ring_tilt_degrees: f32,
@@ -172,7 +172,7 @@ pub struct StorybookGrowthParams {
 	#[cfg_attr(feature = "clap", arg(long, default_value_t = 3))]
 	pub child_count_max: u32,
 	/// Limb radius at the ring anchor as a fraction of stalk base radius.
-	#[cfg_attr(feature = "clap", arg(long, default_value_t = 0.12))]
+	#[cfg_attr(feature = "clap", arg(long, default_value_t = 0.25))]
 	pub branch_base_radius_fraction_of_stalk: f32,
 	/// Per-hop radius scale range (lo..hi) applied down each limb.
 	#[cfg_attr(feature = "clap", arg(long, default_value_t = 0.75))]
@@ -185,11 +185,11 @@ impl Default for StorybookGrowthParams {
 	fn default() -> Self {
 		Self {
 			branch_depth: 4,
-			angle_tolerance_degrees: 26.0,
+			angle_tolerance_degrees: 33.0,
 			ring_tilt_degrees: 4.0,
 			child_count_min: 1,
 			child_count_max: 3,
-			branch_base_radius_fraction_of_stalk: 0.12,
+			branch_base_radius_fraction_of_stalk: 0.25,
 			branch_radius_child_scale_lo: 0.75,
 			branch_radius_child_scale_hi: 0.82,
 		}
