@@ -19,6 +19,7 @@ pub mod riparian_general;
 pub mod rolling_oaks;
 pub mod forlorn_savanna;
 pub mod orchard;
+pub mod vineyard;
 pub mod conifer_sapling;
 pub mod goettingen_follow;
 pub mod high_bush;
@@ -102,6 +103,7 @@ pub use forlorn_savanna::{
 	ForlornSavannaStorybook,
 };
 pub use orchard::{OrchardCell, OrchardItem, OrchardStorybook};
+pub use vineyard::{VineyardCell, VineyardItem, VineyardRory};
 pub use conifer_sapling::{
 	ConiferSaplingCell, ConiferSaplingFriendsConifer, ConiferSaplingItem,
 	ConiferSaplingNorthernConifer,
@@ -195,6 +197,8 @@ pub use rolling_oaks::{RollingOaks, RollingOaksStd};
 pub use forlorn_savanna::{ForlornSavanna, ForlornSavannaStd};
 #[cfg(feature = "render")]
 pub use orchard::{Orchard, OrchardStd};
+#[cfg(feature = "render")]
+pub use vineyard::{Vineyard, VineyardStd};
 #[cfg(feature = "render")]
 pub use braid_grass::{BraidGrass, BraidGrassStd};
 #[cfg(feature = "render")]
