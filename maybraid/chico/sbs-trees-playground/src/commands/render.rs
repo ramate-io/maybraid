@@ -29,7 +29,7 @@ use crate::render::{
 	RenderTuftPatch, RenderUnendingJungle, RenderStrangeOasis, RenderShamanhome,
 	RenderGoettingenFollow, RenderConiferSapling, RenderAridConiferSapling,
 	RenderJungleLowerMassives, RenderJungleMassives, RenderTemperateLowerMassives, RenderPalmShade,
-	RenderRiparianMix, RenderAlpine,
+	RenderRiparianMix, RenderAlpine, RenderDryland,
 	RenderVaseTree, RenderWaialeaPalm,
 	RenderWeepingTuft, RenderWildGrass,
 };
@@ -323,6 +323,14 @@ impl CellRenderHelper<RenderAlpine> {
 	}
 }
 
+impl CellRenderHelper<RenderDryland> {
+	pub fn configured_dryland(&self) -> RenderDryland {
+		let mut grove = self.render.inner.clone();
+		grove.extent = self.grove_extent(grove.cell_extent_xz());
+		grove
+	}
+}
+
 /// High bush shape plus the surface-noise flags that live on the render item (not the shape).
 #[derive(Clone, clap::Args)]
 #[command(rename_all = "kebab-case")]
@@ -414,6 +422,7 @@ pub enum Render {
 	PalmShade(CellRenderHelper<RenderPalmShade>),
 	RiparianMix(CellRenderHelper<RenderRiparianMix>),
 	Alpine(CellRenderHelper<RenderAlpine>),
+	Dryland(CellRenderHelper<RenderDryland>),
 	SpearTuft(RenderHelper<SpearTuftShape>),
 	BuddhaHandTuft(RenderHelper<BuddhaHandTuftShape>),
 	WeepingTuft(RenderHelper<WeepingTuftShape>),
@@ -549,6 +558,9 @@ impl Render {
 			),
 			Self::Alpine(h) => h.render.config_with(
 				RenderSubject::Alpine(h.configured_alpine()),
+			),
+			Self::Dryland(h) => h.render.config_with(
+				RenderSubject::Dryland(h.configured_dryland()),
 			),
 			Self::SpearTuft(h) => h.config_with(RenderSubject::SpearTuft(
 				RenderSpearTuft::from_shape(h.inner.clone(), Default::default()),
@@ -1889,6 +1901,51 @@ mod tests {
 		let cfg = Render::Alpine(helper).into_render_config();
 		let RenderSubject::Alpine(subject) = cfg.subject else {
 			anyhow::bail!("expected alpine subject");
+		};
+		assert_eq!(subject.placement_cells().len(), cell_count);
+		assert!(!subject.placements().is_empty());
+		Ok(())
+	}
+
+	#[test]
+	fn dryland_defaults_spawn_placements() -> Result<()> {
+		let cmd = crate::commands::PlaygroundCommand::parse_line(
+			"render dryland --grove-extent-xz 280",
+		)
+		.map_err(|e| anyhow::anyhow!("{e}"))?;
+		let crate::commands::PlaygroundCommand::Render(Render::Dryland(helper)) = cmd else {
+			anyhow::bail!("expected dryland render command");
+		};
+		let grove = helper.configured_dryland();
+		assert!(grove.grove.variant_weights.is_none());
+		let placements = grove.placements();
+		assert!((helper.grove_extent_xz - 280.0).abs() < 1e-5);
+		assert!(
+			!placements.is_empty(),
+			"expected a visible dryland preview with default flags, got {} placements",
+			placements.len()
+		);
+		Ok(())
+	}
+
+	#[test]
+	fn dryland_command_preserves_grove_params() -> Result<()> {
+		let cmd = crate::commands::PlaygroundCommand::parse_line(
+			"render dryland --grove-extent-xz 280 --cell-extent-xz 35,35",
+		)
+		.map_err(|e| anyhow::anyhow!("{e}"))?;
+		let crate::commands::PlaygroundCommand::Render(Render::Dryland(helper)) = cmd else {
+			anyhow::bail!("expected dryland render command");
+		};
+		assert!((helper.grove_extent_xz - 280.0).abs() < 1e-5);
+		assert_eq!(helper.render.inner.grove.cell_extent_xz, Some(Vec2::splat(35.0)));
+		let grove = helper.configured_dryland();
+		let cell_count = grove.placement_cells().len();
+		assert_eq!(cell_count, 64);
+		assert!(!grove.placements().is_empty());
+		let cfg = Render::Dryland(helper).into_render_config();
+		let RenderSubject::Dryland(subject) = cfg.subject else {
+			anyhow::bail!("expected dryland subject");
 		};
 		assert_eq!(subject.placement_cells().len(), cell_count);
 		assert!(!subject.placements().is_empty());
