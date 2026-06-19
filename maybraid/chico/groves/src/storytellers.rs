@@ -1,7 +1,7 @@
 //! Storyteller's — colorful whimsical Storybook and Braid Oak upper-canopy grove
 //! ([RFC-183 §3.4.7.14], [#336](https://github.com/ramate-io/maybraid/issues/336)).
 //!
-//! Moderate-density color-pop canopy with common storybook and braid-oak forms. Forest-layer
+//! Moderate-density color-pop canopy with common storybook, braid-oak, and torch forms. Forest-layer
 //! attachment remains a follow-up.
 
 use bevy_math::Vec2;
@@ -50,6 +50,12 @@ pub enum StorytellersCell {
 	RedFestivalBraidOak,
 	PurpleCrownStorybook,
 	BlueMoonStorybook,
+	GoldenLanternPenmarch,
+	BlueFlameKamakura,
+	FestivalTorchTree,
+	VioletCanopyBraidOak,
+	GoldLeafBraidOak,
+	CopperFlameBraidOak,
 }
 
 /// Typed authored geometry for one storyteller varietal.
@@ -57,6 +63,9 @@ pub enum StorytellersCell {
 pub enum StorytellersItem {
 	Storybook(&'static StorytellersStorybook),
 	BraidOak(&'static StorytellersBraidOak),
+	PenmarchTorch(&'static StorytellersTorch),
+	KamakuraTorch(&'static StorytellersTorch),
+	TorchTree(&'static StorytellersTorch),
 }
 
 /// Authored geometry ranges for one Storybook Tree form.
@@ -73,6 +82,14 @@ pub struct StorytellersStorybook {
 pub struct StorytellersBraidOak {
 	pub height: UnitRange,
 	pub canopy_density: UnitRange,
+}
+
+/// Authored geometry ranges for one upper-canopy torch form.
+#[derive(Debug, Clone, PartialEq)]
+pub struct StorytellersTorch {
+	pub height: UnitRange,
+	pub stalk_radius: UnitRange,
+	pub canopy_spread: UnitRange,
 }
 
 const COLORFUL_STORYBOOK: StorytellersStorybook = StorytellersStorybook {
@@ -117,6 +134,39 @@ const BLUE_MOON_STORYBOOK: StorytellersStorybook = StorytellersStorybook {
 	height: UnitRange::new(12.0, 22.0),
 	stalk_radius: UnitRange::new(0.16, 0.36),
 	canopy_spread: UnitRange::new(2.5, 6.5),
+	canopy_density: MODERATE_CANOPY_DENSITY,
+};
+
+const GOLDEN_LANTERN_PENMARCH: StorytellersTorch = StorytellersTorch {
+	height: UnitRange::new(10.0, 26.0),
+	stalk_radius: UnitRange::new(0.16, 0.38),
+	canopy_spread: UnitRange::new(2.5, 7.0),
+};
+
+const BLUE_FLAME_KAMAKURA: StorytellersTorch = StorytellersTorch {
+	height: UnitRange::new(12.0, 28.0),
+	stalk_radius: UnitRange::new(0.14, 0.36),
+	canopy_spread: UnitRange::new(2.0, 6.5),
+};
+
+const FESTIVAL_TORCH_TREE: StorytellersTorch = StorytellersTorch {
+	height: UnitRange::new(10.0, 24.0),
+	stalk_radius: UnitRange::new(0.16, 0.40),
+	canopy_spread: UnitRange::new(2.5, 6.0),
+};
+
+const VIOLET_CANOPY_BRAID_OAK: StorytellersBraidOak = StorytellersBraidOak {
+	height: UnitRange::new(14.0, 28.0),
+	canopy_density: MODERATE_CANOPY_DENSITY,
+};
+
+const GOLD_LEAF_BRAID_OAK: StorytellersBraidOak = StorytellersBraidOak {
+	height: UnitRange::new(10.0, 22.0),
+	canopy_density: DENSE_CANOPY_DENSITY,
+};
+
+const COPPER_FLAME_BRAID_OAK: StorytellersBraidOak = StorytellersBraidOak {
+	height: UnitRange::new(12.0, 26.0),
 	canopy_density: MODERATE_CANOPY_DENSITY,
 };
 
@@ -190,11 +240,71 @@ const BLUE_MOON_CANOPY_MIX: PaletteMix = PaletteMix::new(&[
 	PaletteSlot::new("deep_blue_green", "fresh_green"),
 ]);
 
+const GOLDEN_LANTERN_STICK_MIX: PaletteMix = PaletteMix::new(&[
+	PaletteSlot::new("warm_bark", "gold"),
+	PaletteSlot::new("ornamental_bark", "red_brown"),
+]);
+
+const GOLDEN_LANTERN_CANOPY_MIX: PaletteMix = PaletteMix::new(&[
+	PaletteSlot::new("gold_leaf", "flower_yellow"),
+	PaletteSlot::new("warm_yellow", "fresh_green"),
+]);
+
+const BLUE_FLAME_STICK_MIX: PaletteMix = PaletteMix::new(&[
+	PaletteSlot::new("blue_gray_bark", "purple_brown"),
+	PaletteSlot::new("gray_brown", "dark_bark"),
+]);
+
+const BLUE_FLAME_CANOPY_MIX: PaletteMix = PaletteMix::new(&[
+	PaletteSlot::new("blue_leaf", "cyan_leaf"),
+	PaletteSlot::new("deep_blue_green", "violet_leaf"),
+]);
+
+const FESTIVAL_TORCH_STICK_MIX: PaletteMix = PaletteMix::new(&[
+	PaletteSlot::new("ritual_red_bark", "copper_red"),
+	PaletteSlot::new("bright_red_bark", "dark_bark"),
+]);
+
+const FESTIVAL_TORCH_CANOPY_MIX: PaletteMix = PaletteMix::new(&[
+	PaletteSlot::new("hot_pink", "gold_leaf"),
+	PaletteSlot::new("flower_yellow", "rose_leaf"),
+]);
+
+const VIOLET_CANOPY_STICK_MIX: PaletteMix = PaletteMix::new(&[
+	PaletteSlot::new("purple_brown", "blue_gray_bark"),
+	PaletteSlot::new("red_brown", "dark_bark"),
+]);
+
+const VIOLET_CANOPY_CANOPY_MIX: PaletteMix = PaletteMix::new(&[
+	PaletteSlot::new("violet_leaf", "purple_leaf"),
+	PaletteSlot::new("deep_green", "rose_leaf"),
+]);
+
+const GOLD_LEAF_STICK_MIX: PaletteMix = PaletteMix::new(&[
+	PaletteSlot::new("oak_bark", "warm_bark"),
+	PaletteSlot::new("ornamental_bark", "gray_brown"),
+]);
+
+const GOLD_LEAF_CANOPY_MIX: PaletteMix = PaletteMix::new(&[
+	PaletteSlot::new("gold_leaf", "gold_green"),
+	PaletteSlot::new("warm_yellow", "fresh_green"),
+]);
+
+const COPPER_FLAME_STICK_MIX: PaletteMix = PaletteMix::new(&[
+	PaletteSlot::new("copper_red", "bright_red_bark"),
+	PaletteSlot::new("red_oak_bark", "dark_bark"),
+]);
+
+const COPPER_FLAME_CANOPY_MIX: PaletteMix = PaletteMix::new(&[
+	PaletteSlot::new("copper_leaf", "red_leaf"),
+	PaletteSlot::new("gold_leaf", "orange_brown"),
+]);
+
 impl StorytellersCell {
 	/// Authored ordered distribution: explicit `None`, then variants in declaration order.
 	///
-	/// Placed weights total `4.9`; the `None` weight of `12.6` puts the placed share at
-	/// `4.9 / 17.5 ≈ 0.28`, mid RFC `DENSITY_RANGE` (`0.18..0.38`).
+	/// Placed weights total `6.28`; the `None` weight of `16.2` puts the placed share at
+	/// `6.28 / 22.48 ≈ 0.28`, mid RFC `DENSITY_RANGE` (`0.18..0.38`).
 	pub fn distribution() -> GroveDistribution<Self> {
 		let colorful_storybook =
 			PlacementConstraints::new(UnitRange::new(0.0, 1.0), UnitRange::new(0.0, 0.52));
@@ -210,8 +320,20 @@ impl StorytellersCell {
 			PlacementConstraints::new(UnitRange::new(0.0, 1.0), UnitRange::new(0.0, 0.54));
 		let blue_moon =
 			PlacementConstraints::new(UnitRange::new(0.0, 1.0), UnitRange::new(0.0, 0.58));
+		let golden_lantern =
+			PlacementConstraints::new(UnitRange::new(0.0, 1.0), UnitRange::new(0.0, 0.52));
+		let blue_flame =
+			PlacementConstraints::new(UnitRange::new(0.0, 1.0), UnitRange::new(0.0, 0.54));
+		let festival_torch =
+			PlacementConstraints::new(UnitRange::new(0.0, 1.0), UnitRange::new(0.0, 0.50));
+		let violet_canopy =
+			PlacementConstraints::new(UnitRange::new(0.0, 1.0), UnitRange::new(0.0, 0.50));
+		let gold_leaf =
+			PlacementConstraints::new(UnitRange::new(0.0, 1.0), UnitRange::new(0.0, 0.52));
+		let copper_flame =
+			PlacementConstraints::new(UnitRange::new(0.0, 1.0), UnitRange::new(0.0, 0.48));
 		GroveDistribution::new(vec![
-			GroveBucket::none(12.6),
+			GroveBucket::none(16.2),
 			GroveBucket::placed(1.5, colorful_storybook, Self::ColorfulStorybook),
 			GroveBucket::placed(1.5, colorful_braid, Self::ColorfulBraidOak),
 			GroveBucket::placed(0.75, bright_storybook, Self::BrightCanopyStorybook),
@@ -219,6 +341,12 @@ impl StorytellersCell {
 			GroveBucket::placed(0.30, red_festival, Self::RedFestivalBraidOak),
 			GroveBucket::placed(0.25, purple_crown, Self::PurpleCrownStorybook),
 			GroveBucket::placed(0.25, blue_moon, Self::BlueMoonStorybook),
+			GroveBucket::placed(0.22, golden_lantern, Self::GoldenLanternPenmarch),
+			GroveBucket::placed(0.20, blue_flame, Self::BlueFlameKamakura),
+			GroveBucket::placed(0.18, festival_torch, Self::FestivalTorchTree),
+			GroveBucket::placed(0.28, violet_canopy, Self::VioletCanopyBraidOak),
+			GroveBucket::placed(0.26, gold_leaf, Self::GoldLeafBraidOak),
+			GroveBucket::placed(0.24, copper_flame, Self::CopperFlameBraidOak),
 		])
 	}
 
@@ -231,6 +359,14 @@ impl StorytellersCell {
 			Self::RedFestivalBraidOak => StorytellersItem::BraidOak(&RED_FESTIVAL_BRAID_OAK),
 			Self::PurpleCrownStorybook => StorytellersItem::Storybook(&PURPLE_CROWN_STORYBOOK),
 			Self::BlueMoonStorybook => StorytellersItem::Storybook(&BLUE_MOON_STORYBOOK),
+			Self::GoldenLanternPenmarch => {
+				StorytellersItem::PenmarchTorch(&GOLDEN_LANTERN_PENMARCH)
+			}
+			Self::BlueFlameKamakura => StorytellersItem::KamakuraTorch(&BLUE_FLAME_KAMAKURA),
+			Self::FestivalTorchTree => StorytellersItem::TorchTree(&FESTIVAL_TORCH_TREE),
+			Self::VioletCanopyBraidOak => StorytellersItem::BraidOak(&VIOLET_CANOPY_BRAID_OAK),
+			Self::GoldLeafBraidOak => StorytellersItem::BraidOak(&GOLD_LEAF_BRAID_OAK),
+			Self::CopperFlameBraidOak => StorytellersItem::BraidOak(&COPPER_FLAME_BRAID_OAK),
 		}
 	}
 
@@ -243,6 +379,12 @@ impl StorytellersCell {
 			Self::RedFestivalBraidOak => RED_FESTIVAL_STICK_MIX,
 			Self::PurpleCrownStorybook => PURPLE_CROWN_STICK_MIX,
 			Self::BlueMoonStorybook => BLUE_MOON_STICK_MIX,
+			Self::GoldenLanternPenmarch => GOLDEN_LANTERN_STICK_MIX,
+			Self::BlueFlameKamakura => BLUE_FLAME_STICK_MIX,
+			Self::FestivalTorchTree => FESTIVAL_TORCH_STICK_MIX,
+			Self::VioletCanopyBraidOak => VIOLET_CANOPY_STICK_MIX,
+			Self::GoldLeafBraidOak => GOLD_LEAF_STICK_MIX,
+			Self::CopperFlameBraidOak => COPPER_FLAME_STICK_MIX,
 		}
 	}
 
@@ -255,6 +397,12 @@ impl StorytellersCell {
 			Self::RedFestivalBraidOak => RED_FESTIVAL_CANOPY_MIX,
 			Self::PurpleCrownStorybook => PURPLE_CROWN_CANOPY_MIX,
 			Self::BlueMoonStorybook => BLUE_MOON_CANOPY_MIX,
+			Self::GoldenLanternPenmarch => GOLDEN_LANTERN_CANOPY_MIX,
+			Self::BlueFlameKamakura => BLUE_FLAME_CANOPY_MIX,
+			Self::FestivalTorchTree => FESTIVAL_TORCH_CANOPY_MIX,
+			Self::VioletCanopyBraidOak => VIOLET_CANOPY_CANOPY_MIX,
+			Self::GoldLeafBraidOak => GOLD_LEAF_CANOPY_MIX,
+			Self::CopperFlameBraidOak => COPPER_FLAME_CANOPY_MIX,
 		}
 	}
 }
@@ -270,11 +418,11 @@ mod tests {
 	use procedural_common::NoiseParams;
 
 	#[test]
-	fn distribution_matches_rfc_order_and_weights() -> Result<()> {
+	fn distribution_matches_authored_order_and_weights() -> Result<()> {
 		let dist = StorytellersCell::distribution();
-		assert_eq!(dist.len(), 8);
+		assert_eq!(dist.len(), 14);
 		assert!(dist.buckets[0].item.is_none());
-		assert_eq!(dist.buckets[0].weight, 12.6);
+		assert_eq!(dist.buckets[0].weight, 16.2);
 		assert_eq!(dist.buckets[1].item, Some(StorytellersCell::ColorfulStorybook));
 		assert_eq!(dist.buckets[1].weight, 1.5);
 		assert_eq!(dist.buckets[2].item, Some(StorytellersCell::ColorfulBraidOak));
@@ -289,6 +437,18 @@ mod tests {
 		assert_eq!(dist.buckets[6].weight, 0.25);
 		assert_eq!(dist.buckets[7].item, Some(StorytellersCell::BlueMoonStorybook));
 		assert_eq!(dist.buckets[7].weight, 0.25);
+		assert_eq!(dist.buckets[8].item, Some(StorytellersCell::GoldenLanternPenmarch));
+		assert_eq!(dist.buckets[8].weight, 0.22);
+		assert_eq!(dist.buckets[9].item, Some(StorytellersCell::BlueFlameKamakura));
+		assert_eq!(dist.buckets[9].weight, 0.20);
+		assert_eq!(dist.buckets[10].item, Some(StorytellersCell::FestivalTorchTree));
+		assert_eq!(dist.buckets[10].weight, 0.18);
+		assert_eq!(dist.buckets[11].item, Some(StorytellersCell::VioletCanopyBraidOak));
+		assert_eq!(dist.buckets[11].weight, 0.28);
+		assert_eq!(dist.buckets[12].item, Some(StorytellersCell::GoldLeafBraidOak));
+		assert_eq!(dist.buckets[12].weight, 0.26);
+		assert_eq!(dist.buckets[13].item, Some(StorytellersCell::CopperFlameBraidOak));
+		assert_eq!(dist.buckets[13].weight, 0.24);
 		Ok(())
 	}
 
@@ -378,6 +538,12 @@ mod tests {
 			StorytellersCell::RedFestivalBraidOak,
 			StorytellersCell::PurpleCrownStorybook,
 			StorytellersCell::BlueMoonStorybook,
+			StorytellersCell::GoldenLanternPenmarch,
+			StorytellersCell::BlueFlameKamakura,
+			StorytellersCell::FestivalTorchTree,
+			StorytellersCell::VioletCanopyBraidOak,
+			StorytellersCell::GoldLeafBraidOak,
+			StorytellersCell::CopperFlameBraidOak,
 		] {
 			for (palette, label) in
 				[(cell.stick_palette_mix(), "stick"), (cell.canopy_palette_mix(), "canopy")]

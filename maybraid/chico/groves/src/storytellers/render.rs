@@ -3,8 +3,10 @@
 use std::marker::PhantomData;
 
 use bevy::prelude::*;
-use chico_sbs_geometry::{BraidOakTreeSbs, StorybookTreeSbs};
+use chico_sbs_geometry::{BraidOakTreeSbs, KamakuraTorchSbs, PenmarchTorchSbs, StorybookTreeSbs};
 use chico_sbs_trees::braid_oak_tree::BraidOakTree;
+use chico_sbs_trees::kamakura_torch::KamakuraTorch;
+use chico_sbs_trees::penmarch_torch::PenmarchTorch;
 use chico_sbs_trees::storybook_tree::StorybookTree;
 use chico_vegetation_shaders::ChicoStickMaterial;
 use clap::Args;
@@ -22,6 +24,7 @@ use crate::skipped_mesh_material::{
 };
 use crate::storytellers::{
 	definition, StorytellersBraidOak, StorytellersCell, StorytellersItem, StorytellersStorybook,
+	StorytellersTorch,
 };
 
 /// Typical [`ChicoStickMaterial`] / [`StandardMaterial`] Storyteller's instance.
@@ -33,7 +36,7 @@ pub type StorytellersStd = Storytellers<
 	FlatTerrainSample,
 >;
 
-/// Storyteller's grove preview (colorful Storybook and Braid Oak upper-canopy forms).
+/// Storyteller's grove preview (colorful Storybook, Braid Oak, and torch upper-canopy forms).
 #[derive(Clone, Args)]
 #[command(rename_all = "kebab-case")]
 pub struct Storytellers<StickM, StickS, LeafM, LeafS, Terrain = FlatTerrainSample>
@@ -242,6 +245,50 @@ impl BuildWithNoise<StorybookTreeSbs> for StorytellersStorybook {
 	}
 }
 
+struct TorchSamples {
+	height: f32,
+	stalk_radius: f32,
+	span: f32,
+}
+
+fn sample_torch(torch: &StorytellersTorch, noise: NoiseParams) -> TorchSamples {
+	let config = NoiseConfig::new(noise);
+	let height =
+		sample_f32(&config, torch.height, 1.0).max(torch.height.start.min(torch.height.end));
+	let stalk_radius = sample_f32(&config, torch.stalk_radius, 1.5);
+	let canopy_spread = sample_f32(&config, torch.canopy_spread, 2.0);
+	let span = span_fraction(canopy_spread, height);
+	TorchSamples { height, stalk_radius, span }
+}
+
+impl BuildWithNoise<PenmarchTorchSbs> for StorytellersTorch {
+	fn build_with_noise(&self, noise: NoiseParams) -> PenmarchTorchSbs {
+		let s = sample_torch(self, noise);
+		let mut geometry = PenmarchTorchSbs::default();
+		geometry.scale.tree_height = s.height;
+		geometry.scale.stalk_base_radius = Some(s.stalk_radius);
+		geometry.rings.spacing = storytellers_ring_spacing(geometry.rings.spacing);
+		geometry.rings.anchors_per_ring = STORYTELLERS_ANCHORS_PER_RING;
+		geometry.projection.span_fraction_of_height = UnitRange::new(s.span * 0.88, s.span * 1.08);
+		geometry.canopy_noise = noise;
+		geometry
+	}
+}
+
+impl BuildWithNoise<KamakuraTorchSbs> for StorytellersTorch {
+	fn build_with_noise(&self, noise: NoiseParams) -> KamakuraTorchSbs {
+		let s = sample_torch(self, noise);
+		let mut geometry = KamakuraTorchSbs::default();
+		geometry.scale.tree_height = s.height;
+		geometry.scale.stalk_base_radius = Some(s.stalk_radius);
+		geometry.rings.spacing = storytellers_ring_spacing(geometry.rings.spacing);
+		geometry.rings.anchors_per_ring = STORYTELLERS_ANCHORS_PER_RING;
+		geometry.projection.span_fraction_of_height = UnitRange::new(s.span * 0.88, s.span * 1.08);
+		geometry.canopy_noise = noise;
+		geometry
+	}
+}
+
 fn placement_transform<V>(placed: &GrovePlacedCell<V>) -> Transform {
 	Transform {
 		translation: placed.position,
@@ -325,6 +372,81 @@ where
 					);
 					entities
 				}
+				StorytellersItem::PenmarchTorch(torch) => {
+					let geometry =
+						BuildWithNoise::<PenmarchTorchSbs>::build_with_noise(torch, build_noise);
+					let mut tree = PenmarchTorch::<StickM, StickS, LeafM, LeafS>::default();
+					tree.geometry = geometry;
+					tree.stick_material = self.stick_material.clone();
+					tree.leaf_material = self.leaf_material.clone();
+					tree.stick_surface_noise =
+						placement_noise(self.stick_surface_noise, placed.position);
+					tree.leaf_surface_noise = foliage_noise;
+					let entities = tree.spawn_render_items(commands, cascade_chunk, local);
+					patch_spawned_leaf_material::<StickM>(
+						&entities,
+						placed.variant.stick_palette_mix(),
+						stick_seed,
+						commands,
+					);
+					patch_spawned_leaf_material::<LeafM>(
+						&entities,
+						placed.variant.canopy_palette_mix(),
+						canopy_seed,
+						commands,
+					);
+					entities
+				}
+				StorytellersItem::KamakuraTorch(torch) => {
+					let geometry =
+						BuildWithNoise::<KamakuraTorchSbs>::build_with_noise(torch, build_noise);
+					let mut tree = KamakuraTorch::<StickM, StickS, LeafM, LeafS>::default();
+					tree.geometry = geometry;
+					tree.stick_material = self.stick_material.clone();
+					tree.leaf_material = self.leaf_material.clone();
+					tree.stick_surface_noise =
+						placement_noise(self.stick_surface_noise, placed.position);
+					tree.leaf_surface_noise = foliage_noise;
+					let entities = tree.spawn_render_items(commands, cascade_chunk, local);
+					patch_spawned_leaf_material::<StickM>(
+						&entities,
+						placed.variant.stick_palette_mix(),
+						stick_seed,
+						commands,
+					);
+					patch_spawned_leaf_material::<LeafM>(
+						&entities,
+						placed.variant.canopy_palette_mix(),
+						canopy_seed,
+						commands,
+					);
+					entities
+				}
+				StorytellersItem::TorchTree(torch) => {
+					let geometry =
+						BuildWithNoise::<PenmarchTorchSbs>::build_with_noise(torch, build_noise);
+					let mut tree = PenmarchTorch::<StickM, StickS, LeafM, LeafS>::default();
+					tree.geometry = geometry;
+					tree.stick_material = self.stick_material.clone();
+					tree.leaf_material = self.leaf_material.clone();
+					tree.stick_surface_noise =
+						placement_noise(self.stick_surface_noise, placed.position);
+					tree.leaf_surface_noise = foliage_noise;
+					let entities = tree.spawn_render_items(commands, cascade_chunk, local);
+					patch_spawned_leaf_material::<StickM>(
+						&entities,
+						placed.variant.stick_palette_mix(),
+						stick_seed,
+						commands,
+					);
+					patch_spawned_leaf_material::<LeafM>(
+						&entities,
+						placed.variant.canopy_palette_mix(),
+						canopy_seed,
+						commands,
+					);
+					entities
+				}
 			};
 			out.extend(entities);
 		}
@@ -354,6 +476,15 @@ mod tests {
 		let story_geom = story.build_with_noise(noise);
 		assert!(story_geom.scale.tree_height >= story.height.start.min(story.height.end));
 		assert!(story_geom.scale.tree_height <= story.height.start.max(story.height.end));
+
+		let StorytellersItem::PenmarchTorch(torch) =
+			StorytellersCell::GoldenLanternPenmarch.item()
+		else {
+			anyhow::bail!("expected penmarch torch item");
+		};
+		let torch_geom = BuildWithNoise::<PenmarchTorchSbs>::build_with_noise(torch, noise);
+		assert!(torch_geom.scale.tree_height >= torch.height.start.min(torch.height.end));
+		assert!(torch_geom.scale.tree_height <= torch.height.start.max(torch.height.end));
 		Ok(())
 	}
 
@@ -367,6 +498,12 @@ mod tests {
 			StorytellersCell::RedFestivalBraidOak,
 			StorytellersCell::PurpleCrownStorybook,
 			StorytellersCell::BlueMoonStorybook,
+			StorytellersCell::GoldenLanternPenmarch,
+			StorytellersCell::BlueFlameKamakura,
+			StorytellersCell::FestivalTorchTree,
+			StorytellersCell::VioletCanopyBraidOak,
+			StorytellersCell::GoldLeafBraidOak,
+			StorytellersCell::CopperFlameBraidOak,
 		] {
 			for (palette, label) in
 				[(cell.stick_palette_mix(), "stick"), (cell.canopy_palette_mix(), "canopy")]
@@ -432,6 +569,11 @@ mod tests {
 				Vec3::new(4.0, 0.0, 0.0),
 				1.0,
 			),
+			GrovePlacedCell::new(
+				StorytellersCell::GoldenLanternPenmarch,
+				Vec3::new(8.0, 0.0, 0.0),
+				1.0,
+			),
 		];
 		let item = StorytellersStd::with_resolved_placements(
 			placements.clone(),
@@ -442,7 +584,7 @@ mod tests {
 			GroveSkippedStickMeshMaterial::<ChicoStickMaterial>::default(),
 			SkippedLeafMeshMaterial::<StandardMaterial>::default(),
 		);
-		assert_eq!(item.placements().len(), 2);
+		assert_eq!(item.placements().len(), 3);
 		Ok(())
 	}
 }

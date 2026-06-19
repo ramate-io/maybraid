@@ -57,6 +57,7 @@ pub use alpine::{AlpineCell, AlpineFriendsConifer, AlpineItem, AlpineLiamsConife
 pub use dryland::{DrylandCell, DrylandItem, DrylandLiamsConifer, DrylandVaseTree};
 pub use storytellers::{
 	StorytellersBraidOak, StorytellersCell, StorytellersItem, StorytellersStorybook,
+	StorytellersTorch,
 };
 pub use conifer_sapling::{
 	ConiferSaplingCell, ConiferSaplingFriendsConifer, ConiferSaplingItem,
