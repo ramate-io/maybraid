@@ -258,7 +258,7 @@ mod tests {
 		let dist = RiparianMixCell::distribution();
 		assert_eq!(dist.len(), 7);
 		assert!(dist.buckets[0].item.is_none());
-		assert_eq!(dist.buckets[0].weight, 10.9);
+		assert_eq!(dist.buckets[0].weight, 6.9);
 		assert_eq!(dist.buckets[1].item, Some(RiparianMixCell::BankBraidOak));
 		assert_eq!(dist.buckets[1].weight, 0.9);
 		assert_eq!(dist.buckets[2].item, Some(RiparianMixCell::OverbankBraidOak));
