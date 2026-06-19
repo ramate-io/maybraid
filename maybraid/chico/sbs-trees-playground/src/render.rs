@@ -13,6 +13,7 @@ use chico_groves::high_bush::HighBushStd;
 use chico_groves::jerrys_chaparral::JerrysChaparralStd;
 use chico_groves::jungle_lower_massives::JungleLowerMassivesStd;
 use chico_groves::jungle_massives::JungleMassivesStd;
+use chico_groves::alpine::AlpineStd;
 use chico_groves::palm_shade::PalmShadeStd;
 use chico_groves::riparian_mix::RiparianMixStd;
 use chico_groves::temperate_lower_massives::TemperateLowerMassivesStd;
@@ -305,6 +306,9 @@ pub type RenderPalmShade = PalmShadeStd;
 /// [`RiparianMixStd`] — mixed riparian upper-canopy grove ([#333](https://github.com/ramate-io/maybraid/issues/333)).
 pub type RenderRiparianMix = RiparianMixStd;
 
+/// [`AlpineStd`] — cold upland conifer upper-canopy grove ([#334](https://github.com/ramate-io/maybraid/issues/334)).
+pub type RenderAlpine = AlpineStd;
+
 /// The configured render item currently shown in the scene.
 ///
 /// This is the typed scene state behind [`RenderConfig`]: material patching
@@ -358,6 +362,7 @@ pub enum RenderSubject {
 	TemperateLowerMassives(RenderTemperateLowerMassives),
 	PalmShade(RenderPalmShade),
 	RiparianMix(RenderRiparianMix),
+	Alpine(RenderAlpine),
 	SpearTuft(RenderSpearTuft),
 	BuddhaHandTuft(RenderBuddhaHandTuft),
 	WeepingTuft(RenderWeepingTuft),
@@ -415,6 +420,7 @@ impl RenderSubject {
 			Self::TemperateLowerMassives(_) => "TemperateLowerMassives",
 			Self::PalmShade(_) => "PalmShade",
 			Self::RiparianMix(_) => "RiparianMix",
+			Self::Alpine(_) => "Alpine",
 			Self::SpearTuft(_) => "SpearTuft",
 			Self::BuddhaHandTuft(_) => "BuddhaHandTuft",
 			Self::WeepingTuft(_) => "WeepingTuft",
@@ -710,6 +716,18 @@ impl RenderSubject {
 					g.leaf_surface_noise
 				)
 			}
+			Self::Alpine(g) => {
+				format!(
+					"{:?}|extent={:?}|cell_extent_xz={:?}|terrain={:?}|chain={:?}|stick={:?}|leaf={:?}",
+					g.grove,
+					g.extent,
+					g.cell_extent_xz(),
+					g.terrain,
+					g.tree_chain_noise,
+					g.stick_surface_noise,
+					g.leaf_surface_noise
+				)
+			}
 			Self::StrangeOasis(g) => {
 				format!(
 					"{:?}|extent={:?}|cell_extent_xz={:?}|terrain={:?}|chain={:?}|stick={:?}|leaf={:?}",
@@ -833,6 +851,7 @@ impl RenderSubject {
 			Self::TemperateLowerMassives(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::PalmShade(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::RiparianMix(item) => item.spawn_render_items(commands, chunk, transform),
+			Self::Alpine(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::SpearTuft(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::BuddhaHandTuft(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::WeepingTuft(item) => item.spawn_render_items(commands, chunk, transform),

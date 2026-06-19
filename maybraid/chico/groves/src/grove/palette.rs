@@ -153,6 +153,8 @@ pub fn resolve_palette_color(name: &str) -> Option<Color> {
 		"vine_bark" => Color::srgb(0.48, 0.36, 0.24),
 		"conifer_bark" => Color::srgb(0.32, 0.26, 0.18),
 		"cold_bark" => Color::srgb(0.38, 0.34, 0.28),
+		"wind_barked" => Color::srgb(0.42, 0.38, 0.32),
+		"stone_gray" => Color::srgb(0.48, 0.46, 0.44),
 		"cold_green" => Color::srgb(0.16, 0.38, 0.32),
 		"dry_conifer_bark" => Color::srgb(0.42, 0.34, 0.24),
 		"sun_baked_bark" => Color::srgb(0.62, 0.52, 0.38),
