@@ -30,7 +30,7 @@ const DENSE_CANOPY_DENSITY: UnitRange = UnitRange::new(0.50, 0.85);
 /// placements break the underlying grid instead of clustering near cell centers.
 pub fn definition() -> GroveDefinition<LeewardCell> {
 	GroveDefinition {
-		cell_extent_xz: Vec2::splat(19.0),
+		cell_extent_xz: Vec2::splat(9.0),
 		placement: GrovePlacementRanges::new(
 			UnitRange::new(0.85, 1.15),
 			UnitRange::new(-19.0, 19.0),
@@ -141,10 +141,10 @@ impl LeewardCell {
 		let high_storybook =
 			PlacementConstraints::new(UnitRange::new(0.0, 1.0), UnitRange::new(0.0, 0.58));
 		GroveDistribution::new(vec![
-			GroveBucket::none(6.8),
-			GroveBucket::placed(0.8, sheltered_temperate, Self::ShelteredTemperateConifer),
-			GroveBucket::placed(0.6, windbreak_temperate, Self::WindbreakTemperateConifer),
-			GroveBucket::placed(0.8, rounded_storybook, Self::RoundedLeewardStorybook),
+			GroveBucket::none(4.0),
+			GroveBucket::placed(1.8, sheltered_temperate, Self::ShelteredTemperateConifer),
+			GroveBucket::placed(1.6, windbreak_temperate, Self::WindbreakTemperateConifer),
+			GroveBucket::placed(2.4, rounded_storybook, Self::RoundedLeewardStorybook),
 			GroveBucket::placed(0.45, high_storybook, Self::HighLeewardStorybook),
 		])
 	}
@@ -166,7 +166,9 @@ impl LeewardCell {
 		match self {
 			Self::ShelteredTemperateConifer => SHELTERED_TEMPERATE_STICK_MIX,
 			Self::WindbreakTemperateConifer => WINDBREAK_TEMPERATE_STICK_MIX,
-			Self::RoundedLeewardStorybook | Self::HighLeewardStorybook => LEEWARD_STORYBOOK_STICK_MIX,
+			Self::RoundedLeewardStorybook | Self::HighLeewardStorybook => {
+				LEEWARD_STORYBOOK_STICK_MIX
+			}
 		}
 	}
 
@@ -228,7 +230,8 @@ mod tests {
 		assert_eq!(sheltered.height, UnitRange::new(10.0, 18.0));
 		assert_eq!(sheltered.canopy_density, MODERATE_CANOPY_DENSITY);
 
-		let LeewardItem::TemperateConifer(windbreak) = LeewardCell::WindbreakTemperateConifer.item()
+		let LeewardItem::TemperateConifer(windbreak) =
+			LeewardCell::WindbreakTemperateConifer.item()
 		else {
 			anyhow::bail!("expected windbreak temperate conifer item");
 		};
@@ -277,13 +280,14 @@ mod tests {
 		let prepared =
 			LeewardCell::distribution().prepare(0.0, 0.0, NoiseParams::default(), Vec3::ZERO);
 		let moderate = FlatTerrainSample { elevation: 0.40, steepness: 0.45 };
-		let sheltered_outcome =
-			prepared.select_from(1, Vec3::new(5.0, 0.40, 5.0), 1.0, &moderate);
+		let sheltered_outcome = prepared.select_from(1, Vec3::new(5.0, 0.40, 5.0), 1.0, &moderate);
 		match sheltered_outcome {
 			GroveCellOutcome::Placed { variant, .. } => {
 				assert_eq!(variant, LeewardCell::ShelteredTemperateConifer);
 			}
-			other => anyhow::bail!("expected ShelteredTemperateConifer on moderate slope, got {other:?}"),
+			other => {
+				anyhow::bail!("expected ShelteredTemperateConifer on moderate slope, got {other:?}")
+			}
 		}
 		let steep = FlatTerrainSample { elevation: 0.40, steepness: 0.55 };
 		let steep_outcome = prepared.select_from(1, Vec3::new(5.0, 0.40, 5.0), 1.0, &steep);
@@ -291,7 +295,9 @@ mod tests {
 			GroveCellOutcome::Placed { variant, .. } => {
 				assert_eq!(variant, LeewardCell::WindbreakTemperateConifer);
 			}
-			other => anyhow::bail!("expected fall-through to WindbreakTemperateConifer, got {other:?}"),
+			other => {
+				anyhow::bail!("expected fall-through to WindbreakTemperateConifer, got {other:?}")
+			}
 		}
 		Ok(())
 	}
