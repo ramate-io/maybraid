@@ -94,7 +94,7 @@ pub struct StorytellersTorch {
 
 const COLORFUL_STORYBOOK: StorytellersStorybook = StorytellersStorybook {
 	height: UnitRange::new(10.0, 30.0),
-	stalk_radius: UnitRange::new(0.18, 0.42),
+	stalk_radius: UnitRange::new(0.24, 0.55),
 	canopy_spread: UnitRange::new(3.0, 8.0),
 	canopy_density: DENSE_CANOPY_DENSITY,
 };
@@ -106,14 +106,14 @@ const COLORFUL_BRAID_OAK: StorytellersBraidOak = StorytellersBraidOak {
 
 const BRIGHT_CANOPY_STORYBOOK: StorytellersStorybook = StorytellersStorybook {
 	height: UnitRange::new(10.0, 26.0),
-	stalk_radius: UnitRange::new(0.16, 0.38),
+	stalk_radius: UnitRange::new(0.22, 0.50),
 	canopy_spread: UnitRange::new(2.5, 7.0),
 	canopy_density: MODERATE_CANOPY_DENSITY,
 };
 
 const PINK_LANTERN_STORYBOOK: StorytellersStorybook = StorytellersStorybook {
 	height: UnitRange::new(8.0, 18.0),
-	stalk_radius: UnitRange::new(0.14, 0.32),
+	stalk_radius: UnitRange::new(0.20, 0.44),
 	canopy_spread: UnitRange::new(2.0, 5.5),
 	canopy_density: DENSE_CANOPY_DENSITY,
 };
@@ -125,14 +125,14 @@ const RED_FESTIVAL_BRAID_OAK: StorytellersBraidOak = StorytellersBraidOak {
 
 const PURPLE_CROWN_STORYBOOK: StorytellersStorybook = StorytellersStorybook {
 	height: UnitRange::new(14.0, 30.0),
-	stalk_radius: UnitRange::new(0.20, 0.45),
+	stalk_radius: UnitRange::new(0.28, 0.58),
 	canopy_spread: UnitRange::new(3.5, 9.0),
 	canopy_density: SPARSE_CANOPY_DENSITY,
 };
 
 const BLUE_MOON_STORYBOOK: StorytellersStorybook = StorytellersStorybook {
 	height: UnitRange::new(12.0, 22.0),
-	stalk_radius: UnitRange::new(0.16, 0.36),
+	stalk_radius: UnitRange::new(0.22, 0.48),
 	canopy_spread: UnitRange::new(2.5, 6.5),
 	canopy_density: MODERATE_CANOPY_DENSITY,
 };

@@ -88,7 +88,7 @@ const LOWER_MASSIVE_BRAID_OAK: TemperateLowerMassivesBraidOak = TemperateLowerMa
 
 const LOWER_MASSIVE_STORYBOOK: TemperateLowerMassivesStorybook = TemperateLowerMassivesStorybook {
 	height: UnitRange::new(8.0, 20.0),
-	stalk_radius: UnitRange::new(0.28, 0.55),
+	stalk_radius: UnitRange::new(0.36, 0.72),
 	canopy_spread: UnitRange::new(3.5, 8.0),
 	canopy_density: MODERATE_CANOPY_DENSITY,
 };

@@ -17,7 +17,16 @@ use chico_groves::alpine::AlpineStd;
 use chico_groves::dryland::DrylandStd;
 use chico_groves::storytellers::StorytellersStd;
 use chico_groves::trade_winds::TradeWindsStd;
+use chico_groves::christmas_taiga::ChristmasTaigaStd;
+use chico_groves::conifer_massives::ConiferMassivesStd;
+use chico_groves::date_grove::DateGroveStd;
+use chico_groves::forlorn_savanna::ForlornSavannaStd;
 use chico_groves::leeward::LeewardStd;
+use chico_groves::orchard::OrchardStd;
+use chico_groves::riparian_general::RiparianGeneralStd;
+use chico_groves::rolling_oaks::RollingOaksStd;
+use chico_groves::temperate_massives::TemperateMassivesStd;
+use chico_groves::vineyard::VineyardStd;
 use chico_groves::wandering_acacia::WanderingAcaciaStd;
 use chico_groves::palm_shade::PalmShadeStd;
 use chico_groves::riparian_mix::RiparianMixStd;
@@ -329,6 +338,33 @@ pub type RenderWanderingAcacia = WanderingAcaciaStd;
 /// [`LeewardStd`] — moderate-density sheltered upper-canopy grove ([#339](https://github.com/ramate-io/maybraid/issues/339)).
 pub type RenderLeeward = LeewardStd;
 
+/// [`ChristmasTaigaStd`] — moderate-density cold Northern Conifer upper-canopy grove ([#341](https://github.com/ramate-io/maybraid/issues/341)).
+pub type RenderChristmasTaiga = ChristmasTaigaStd;
+
+/// [`ConiferMassivesStd`] — moderate giant conifer upper-canopy grove.
+pub type RenderConiferMassives = ConiferMassivesStd;
+
+/// [`TemperateMassivesStd`] — moderate giant temperate upper-canopy grove.
+pub type RenderTemperateMassives = TemperateMassivesStd;
+
+/// [`RiparianGeneralStd`] — mixed riparian upper-canopy grove.
+pub type RenderRiparianGeneral = RiparianGeneralStd;
+
+/// [`RollingOaksStd`] — rolling oak upper-canopy grove.
+pub type RenderRollingOaks = RollingOaksStd;
+
+/// [`ForlornSavannaStd`] — sparse dry savanna upper-canopy grove.
+pub type RenderForlornSavanna = ForlornSavannaStd;
+
+/// [`OrchardStd`] — cultivated orchard upper-canopy grove.
+pub type RenderOrchard = OrchardStd;
+
+/// [`VineyardStd`] — cultivated vineyard upper-canopy grove.
+pub type RenderVineyard = VineyardStd;
+
+/// [`DateGroveStd`] — date palm upper-canopy grove.
+pub type RenderDateGrove = DateGroveStd;
+
 /// The configured render item currently shown in the scene.
 ///
 /// This is the typed scene state behind [`RenderConfig`]: material patching
@@ -388,6 +424,15 @@ pub enum RenderSubject {
 	TradeWinds(RenderTradeWinds),
 	WanderingAcacia(RenderWanderingAcacia),
 	Leeward(RenderLeeward),
+	ChristmasTaiga(RenderChristmasTaiga),
+	ConiferMassives(RenderConiferMassives),
+	TemperateMassives(RenderTemperateMassives),
+	RiparianGeneral(RenderRiparianGeneral),
+	RollingOaks(RenderRollingOaks),
+	ForlornSavanna(RenderForlornSavanna),
+	Orchard(RenderOrchard),
+	Vineyard(RenderVineyard),
+	DateGrove(RenderDateGrove),
 	SpearTuft(RenderSpearTuft),
 	BuddhaHandTuft(RenderBuddhaHandTuft),
 	WeepingTuft(RenderWeepingTuft),
@@ -451,6 +496,15 @@ impl RenderSubject {
 			Self::TradeWinds(_) => "TradeWinds",
 			Self::WanderingAcacia(_) => "WanderingAcacia",
 			Self::Leeward(_) => "Leeward",
+			Self::ChristmasTaiga(_) => "ChristmasTaiga",
+			Self::ConiferMassives(_) => "ConiferMassives",
+			Self::TemperateMassives(_) => "TemperateMassives",
+			Self::RiparianGeneral(_) => "RiparianGeneral",
+			Self::RollingOaks(_) => "RollingOaks",
+			Self::ForlornSavanna(_) => "ForlornSavanna",
+			Self::Orchard(_) => "Orchard",
+			Self::Vineyard(_) => "Vineyard",
+			Self::DateGrove(_) => "DateGrove",
 			Self::SpearTuft(_) => "SpearTuft",
 			Self::BuddhaHandTuft(_) => "BuddhaHandTuft",
 			Self::WeepingTuft(_) => "WeepingTuft",
@@ -818,6 +872,114 @@ impl RenderSubject {
 					g.leaf_surface_noise
 				)
 			}
+			Self::ChristmasTaiga(g) => {
+				format!(
+					"{:?}|extent={:?}|cell_extent_xz={:?}|terrain={:?}|chain={:?}|stick={:?}|leaf={:?}",
+					g.grove,
+					g.extent,
+					g.cell_extent_xz(),
+					g.terrain,
+					g.tree_chain_noise,
+					g.stick_surface_noise,
+					g.leaf_surface_noise
+				)
+			}
+			Self::ConiferMassives(g) => {
+				format!(
+					"{:?}|extent={:?}|cell_extent_xz={:?}|terrain={:?}|chain={:?}|stick={:?}|leaf={:?}",
+					g.grove,
+					g.extent,
+					g.cell_extent_xz(),
+					g.terrain,
+					g.tree_chain_noise,
+					g.stick_surface_noise,
+					g.leaf_surface_noise
+				)
+			}
+			Self::TemperateMassives(g) => {
+				format!(
+					"{:?}|extent={:?}|cell_extent_xz={:?}|terrain={:?}|chain={:?}|stick={:?}|leaf={:?}",
+					g.grove,
+					g.extent,
+					g.cell_extent_xz(),
+					g.terrain,
+					g.tree_chain_noise,
+					g.stick_surface_noise,
+					g.leaf_surface_noise
+				)
+			}
+			Self::RiparianGeneral(g) => {
+				format!(
+					"{:?}|extent={:?}|cell_extent_xz={:?}|terrain={:?}|chain={:?}|stick={:?}|leaf={:?}",
+					g.grove,
+					g.extent,
+					g.cell_extent_xz(),
+					g.terrain,
+					g.tree_chain_noise,
+					g.stick_surface_noise,
+					g.leaf_surface_noise
+				)
+			}
+			Self::RollingOaks(g) => {
+				format!(
+					"{:?}|extent={:?}|cell_extent_xz={:?}|terrain={:?}|chain={:?}|stick={:?}|leaf={:?}",
+					g.grove,
+					g.extent,
+					g.cell_extent_xz(),
+					g.terrain,
+					g.tree_chain_noise,
+					g.stick_surface_noise,
+					g.leaf_surface_noise
+				)
+			}
+			Self::ForlornSavanna(g) => {
+				format!(
+					"{:?}|extent={:?}|cell_extent_xz={:?}|terrain={:?}|chain={:?}|stick={:?}|leaf={:?}",
+					g.grove,
+					g.extent,
+					g.cell_extent_xz(),
+					g.terrain,
+					g.tree_chain_noise,
+					g.stick_surface_noise,
+					g.leaf_surface_noise
+				)
+			}
+			Self::Orchard(g) => {
+				format!(
+					"{:?}|extent={:?}|cell_extent_xz={:?}|terrain={:?}|chain={:?}|stick={:?}|leaf={:?}",
+					g.grove,
+					g.extent,
+					g.cell_extent_xz(),
+					g.terrain,
+					g.tree_chain_noise,
+					g.stick_surface_noise,
+					g.leaf_surface_noise
+				)
+			}
+			Self::Vineyard(g) => {
+				format!(
+					"{:?}|extent={:?}|cell_extent_xz={:?}|terrain={:?}|chain={:?}|stick={:?}|leaf={:?}",
+					g.grove,
+					g.extent,
+					g.cell_extent_xz(),
+					g.terrain,
+					g.tree_chain_noise,
+					g.stick_surface_noise,
+					g.leaf_surface_noise
+				)
+			}
+			Self::DateGrove(g) => {
+				format!(
+					"{:?}|extent={:?}|cell_extent_xz={:?}|terrain={:?}|chain={:?}|stick={:?}|leaf={:?}",
+					g.grove,
+					g.extent,
+					g.cell_extent_xz(),
+					g.terrain,
+					g.tree_chain_noise,
+					g.stick_surface_noise,
+					g.leaf_surface_noise
+				)
+			}
 			Self::StrangeOasis(g) => {
 				format!(
 					"{:?}|extent={:?}|cell_extent_xz={:?}|terrain={:?}|chain={:?}|stick={:?}|leaf={:?}",
@@ -947,6 +1109,15 @@ impl RenderSubject {
 			Self::TradeWinds(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::WanderingAcacia(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::Leeward(item) => item.spawn_render_items(commands, chunk, transform),
+			Self::ChristmasTaiga(item) => item.spawn_render_items(commands, chunk, transform),
+			Self::ConiferMassives(item) => item.spawn_render_items(commands, chunk, transform),
+			Self::TemperateMassives(item) => item.spawn_render_items(commands, chunk, transform),
+			Self::RiparianGeneral(item) => item.spawn_render_items(commands, chunk, transform),
+			Self::RollingOaks(item) => item.spawn_render_items(commands, chunk, transform),
+			Self::ForlornSavanna(item) => item.spawn_render_items(commands, chunk, transform),
+			Self::Orchard(item) => item.spawn_render_items(commands, chunk, transform),
+			Self::Vineyard(item) => item.spawn_render_items(commands, chunk, transform),
+			Self::DateGrove(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::SpearTuft(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::BuddhaHandTuft(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::WeepingTuft(item) => item.spawn_render_items(commands, chunk, transform),

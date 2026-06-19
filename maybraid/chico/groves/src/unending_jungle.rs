@@ -137,7 +137,7 @@ const SMALL_SOPE_BANYAN: UnendingJungleBanyan = UnendingJungleBanyan {
 
 const LOWER_STORYBOOK: UnendingJungleStorybook = UnendingJungleStorybook {
 	height: UnitRange::new(3.0, 5.0),
-	stalk_radius: UnitRange::new(0.12, 0.20),
+	stalk_radius: UnitRange::new(0.18, 0.28),
 	canopy_spread: UnitRange::new(1.5, 3.5),
 	canopy_density: MODERATE_CANOPY_DENSITY,
 };

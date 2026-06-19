@@ -156,6 +156,7 @@ pub fn resolve_palette_color(name: &str) -> Option<Color> {
 		"wind_barked" => Color::srgb(0.42, 0.38, 0.32),
 		"stone_gray" => Color::srgb(0.48, 0.46, 0.44),
 		"cold_green" => Color::srgb(0.16, 0.38, 0.32),
+		"christmas_green" => Color::srgb(0.14, 0.42, 0.22),
 		"dry_conifer_bark" => Color::srgb(0.42, 0.34, 0.24),
 		"sun_baked_bark" => Color::srgb(0.62, 0.52, 0.38),
 		"sage_green" => Color::srgb(0.42, 0.48, 0.32),
@@ -207,6 +208,10 @@ pub fn resolve_palette_color(name: &str) -> Option<Color> {
 		"deep_blue_green" => Color::srgb(0.12, 0.38, 0.42),
 		"acacia_bark" => Color::srgb(0.55, 0.42, 0.28),
 		"dry_banyan_bark" => Color::srgb(0.48, 0.38, 0.28),
+		"willow_bark" => Color::srgb(0.42, 0.34, 0.24),
+		"orchard_bark" => Color::srgb(0.56, 0.42, 0.28),
+		"pale_blossom" => Color::srgb(0.92, 0.82, 0.86),
+		"grape_green" => Color::srgb(0.32, 0.52, 0.28),
 		_ => return None,
 	})
 }

@@ -93,7 +93,7 @@ const OLD_GROWTH_FOLLOW_BRAID_OAK: GoettingenFollowBraidOak = GoettingenFollowBr
 
 const FOLLOW_STORYBOOK: GoettingenFollowStorybook = GoettingenFollowStorybook {
 	height: UnitRange::new(4.0, 9.0),
-	stalk_radius: UnitRange::new(0.12, 0.28),
+	stalk_radius: UnitRange::new(0.18, 0.40),
 	canopy_spread: UnitRange::new(1.6, 4.0),
 	canopy_density: MODERATE_CANOPY_DENSITY,
 };

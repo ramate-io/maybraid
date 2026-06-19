@@ -102,14 +102,14 @@ const OVERBANK_BRAID_OAK: RiparianMixBraidOak = RiparianMixBraidOak {
 
 const ROUND_RIPARIAN_STORYBOOK: RiparianMixStorybook = RiparianMixStorybook {
 	height: UnitRange::new(5.0, 15.0),
-	stalk_radius: UnitRange::new(0.12, 0.28),
+	stalk_radius: UnitRange::new(0.18, 0.40),
 	canopy_spread: UnitRange::new(2.0, 5.5),
 	canopy_density: MODERATE_CANOPY_DENSITY,
 };
 
 const TALL_RIPARIAN_STORYBOOK: RiparianMixStorybook = RiparianMixStorybook {
 	height: UnitRange::new(12.0, 22.0),
-	stalk_radius: UnitRange::new(0.18, 0.38),
+	stalk_radius: UnitRange::new(0.26, 0.52),
 	canopy_spread: UnitRange::new(3.5, 8.0),
 	canopy_density: SPARSE_CANOPY_DENSITY,
 };

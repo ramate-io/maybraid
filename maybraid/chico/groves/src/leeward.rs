@@ -30,7 +30,7 @@ const DENSE_CANOPY_DENSITY: UnitRange = UnitRange::new(0.50, 0.85);
 /// placements break the underlying grid instead of clustering near cell centers.
 pub fn definition() -> GroveDefinition<LeewardCell> {
 	GroveDefinition {
-		cell_extent_xz: Vec2::splat(9.0),
+		cell_extent_xz: Vec2::splat(19.0),
 		placement: GrovePlacementRanges::new(
 			UnitRange::new(0.85, 1.15),
 			UnitRange::new(-19.0, 19.0),
@@ -84,14 +84,14 @@ const WINDBREAK_TEMPERATE_CONIFER: LeewardTemperateConifer = LeewardTemperateCon
 
 const ROUNDED_LEEWARD_STORYBOOK: LeewardStorybook = LeewardStorybook {
 	height: UnitRange::new(10.0, 18.0),
-	stalk_radius: UnitRange::new(0.16, 0.34),
+	stalk_radius: UnitRange::new(0.22, 0.46),
 	canopy_spread: UnitRange::new(2.5, 6.0),
 	canopy_density: DENSE_CANOPY_DENSITY,
 };
 
 const HIGH_LEEWARD_STORYBOOK: LeewardStorybook = LeewardStorybook {
 	height: UnitRange::new(16.0, 24.0),
-	stalk_radius: UnitRange::new(0.18, 0.40),
+	stalk_radius: UnitRange::new(0.26, 0.52),
 	canopy_spread: UnitRange::new(3.0, 7.5),
 	canopy_density: MODERATE_CANOPY_DENSITY,
 };

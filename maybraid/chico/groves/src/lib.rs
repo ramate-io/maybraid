@@ -12,6 +12,15 @@ pub mod storytellers;
 pub mod trade_winds;
 pub mod wandering_acacia;
 pub mod leeward;
+pub mod christmas_taiga;
+pub mod conifer_massives;
+pub mod temperate_massives;
+pub mod riparian_general;
+pub mod rolling_oaks;
+pub mod forlorn_savanna;
+pub mod orchard;
+pub mod vineyard;
+pub mod date_grove;
 pub mod conifer_sapling;
 pub mod goettingen_follow;
 pub mod high_bush;
@@ -72,6 +81,31 @@ pub use wandering_acacia::{
 pub use leeward::{
 	LeewardCell, LeewardItem, LeewardStorybook, LeewardTemperateConifer,
 };
+pub use christmas_taiga::{
+	ChristmasTaigaCell, ChristmasTaigaItem, ChristmasTaigaNorthernConifer,
+};
+pub use conifer_massives::{
+	ConiferMassivesCell, ConiferMassivesFriendsConifer, ConiferMassivesItem,
+	ConiferMassivesLiamsConifer, ConiferMassivesNorthernConifer, ConiferMassivesTemperateConifer,
+};
+pub use temperate_massives::{
+	TemperateMassivesBraidOak, TemperateMassivesCell, TemperateMassivesItem, TemperateMassivesRory,
+	TemperateMassivesStorybook,
+};
+pub use riparian_general::{
+	RiparianGeneralBraidOak, RiparianGeneralCell, RiparianGeneralHighBush, RiparianGeneralItem,
+	RiparianGeneralStorybook,
+};
+pub use rolling_oaks::{
+	RollingOaksBraidOak, RollingOaksCell, RollingOaksItem, RollingOaksStorybook,
+};
+pub use forlorn_savanna::{
+	ForlornSavannaCell, ForlornSavannaHighBush, ForlornSavannaItem, ForlornSavannaRory,
+	ForlornSavannaStorybook,
+};
+pub use orchard::{OrchardCell, OrchardItem, OrchardStorybook};
+pub use vineyard::{VineyardCell, VineyardItem, VineyardRory};
+pub use date_grove::{DateGroveCell, DateGroveDatePalm, DateGroveItem};
 pub use conifer_sapling::{
 	ConiferSaplingCell, ConiferSaplingFriendsConifer, ConiferSaplingItem,
 	ConiferSaplingNorthernConifer,
@@ -151,6 +185,24 @@ pub use trade_winds::{TradeWinds, TradeWindsStd};
 pub use wandering_acacia::{WanderingAcacia, WanderingAcaciaStd};
 #[cfg(feature = "render")]
 pub use leeward::{Leeward, LeewardStd};
+#[cfg(feature = "render")]
+pub use christmas_taiga::{ChristmasTaiga, ChristmasTaigaStd};
+#[cfg(feature = "render")]
+pub use conifer_massives::{ConiferMassives, ConiferMassivesStd};
+#[cfg(feature = "render")]
+pub use temperate_massives::{TemperateMassives, TemperateMassivesStd};
+#[cfg(feature = "render")]
+pub use riparian_general::{RiparianGeneral, RiparianGeneralStd};
+#[cfg(feature = "render")]
+pub use rolling_oaks::{RollingOaks, RollingOaksStd};
+#[cfg(feature = "render")]
+pub use forlorn_savanna::{ForlornSavanna, ForlornSavannaStd};
+#[cfg(feature = "render")]
+pub use orchard::{Orchard, OrchardStd};
+#[cfg(feature = "render")]
+pub use vineyard::{Vineyard, VineyardStd};
+#[cfg(feature = "render")]
+pub use date_grove::{DateGrove, DateGroveStd};
 #[cfg(feature = "render")]
 pub use braid_grass::{BraidGrass, BraidGrassStd};
 #[cfg(feature = "render")]
