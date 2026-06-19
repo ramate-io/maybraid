@@ -8,10 +8,12 @@ use render_item::CascadeChunk;
 
 use crate::palm_crown::spawn_stacked_frond_crowns;
 
-/// Frond spine length in world units (`shape.length * frond_world_scale`).
-const FROND_LENGTH_FRACTION_OF_HEIGHT: f32 = 0.7;
 /// Rachis width in world units before crown uniform scale.
 const FROND_WIDTH_FRACTION_OF_HEIGHT: f32 = 0.070;
+/// Lower-ring frond length as a fraction of `H` (RFC `0.25`).
+const FROND_LENGTH_FRACTION_LO: f32 = 0.6;
+/// Upper-ring frond length as a fraction of `H` (RFC `0.40`).
+const FROND_LENGTH_FRACTION_HI: f32 = 0.8;
 
 /// RFC-aligned frond crown defaults scaled to tree height `H`.
 pub fn frond_shape_for_ring(
@@ -23,23 +25,27 @@ pub fn frond_shape_for_ring(
 	let scale = geometry.frond_world_scale.max(1e-8);
 	let proto = geometry.to_proto();
 	let u = proto.ring_vertical_bias(ring);
-	let downward_tilt = 0.22 + u * 0.20;
+	let downward_tilt = 0.44 + (1.0 - u) * 0.20;
 	let emission_lift = 0.28 + (1.0 - u) * 0.10;
+	let droop = 0.5 + (1.0 - u) * 0.16;
+	// length shortens with ring index
+	let length_fraction =
+		FROND_LENGTH_FRACTION_LO + (FROND_LENGTH_FRACTION_HI - FROND_LENGTH_FRACTION_LO) * u;
 
 	FrondCrownShape {
 		frond_count: proto.fronds_per_ring,
-		length: (FROND_LENGTH_FRACTION_OF_HEIGHT * h) / scale,
+		length: (length_fraction * h) / scale,
 		width: (FROND_WIDTH_FRACTION_OF_HEIGHT * h) / scale,
-		droop: 0.44,
+		droop,
 		arch_lift: 0.30,
-		twist: 0.21,
+		twist: 0.66,
 		leaflet_count: 16,
 		spine_segments: 11,
 		shoot_half_radius: 0.020,
 		rachis_half_thickness: 0.007,
 		leaflet_length_scale: 4.0,
 		downward_tilt_radians: downward_tilt,
-		outward_spread_radians: 1.0,
+		outward_spread_radians: 2.0,
 		emission_lift_radians: emission_lift,
 		seed: foliage_seed.wrapping_add(ring as i32),
 	}
