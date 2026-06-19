@@ -8,6 +8,7 @@ pub mod common_tufts;
 pub mod arid_conifer_sapling;
 pub mod alpine;
 pub mod dryland;
+pub mod storytellers;
 pub mod conifer_sapling;
 pub mod goettingen_follow;
 pub mod high_bush;
@@ -54,6 +55,9 @@ pub use arid_conifer_sapling::{
 };
 pub use alpine::{AlpineCell, AlpineFriendsConifer, AlpineItem, AlpineLiamsConifer};
 pub use dryland::{DrylandCell, DrylandItem, DrylandLiamsConifer, DrylandVaseTree};
+pub use storytellers::{
+	StorytellersBraidOak, StorytellersCell, StorytellersItem, StorytellersStorybook,
+};
 pub use conifer_sapling::{
 	ConiferSaplingCell, ConiferSaplingFriendsConifer, ConiferSaplingItem,
 	ConiferSaplingNorthernConifer,
@@ -125,6 +129,8 @@ pub use arid_conifer_sapling::{AridConiferSapling, AridConiferSaplingStd};
 pub use alpine::{Alpine, AlpineStd};
 #[cfg(feature = "render")]
 pub use dryland::{Dryland, DrylandStd};
+#[cfg(feature = "render")]
+pub use storytellers::{Storytellers, StorytellersStd};
 #[cfg(feature = "render")]
 pub use braid_grass::{BraidGrass, BraidGrassStd};
 #[cfg(feature = "render")]

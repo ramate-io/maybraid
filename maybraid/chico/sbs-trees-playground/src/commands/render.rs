@@ -29,7 +29,7 @@ use crate::render::{
 	RenderTuftPatch, RenderUnendingJungle, RenderStrangeOasis, RenderShamanhome,
 	RenderGoettingenFollow, RenderConiferSapling, RenderAridConiferSapling,
 	RenderJungleLowerMassives, RenderJungleMassives, RenderTemperateLowerMassives, RenderPalmShade,
-	RenderRiparianMix, RenderAlpine, RenderDryland,
+	RenderRiparianMix, RenderAlpine, RenderDryland, RenderStorytellers,
 	RenderVaseTree, RenderWaialeaPalm,
 	RenderWeepingTuft, RenderWildGrass,
 };
@@ -331,6 +331,14 @@ impl CellRenderHelper<RenderDryland> {
 	}
 }
 
+impl CellRenderHelper<RenderStorytellers> {
+	pub fn configured_storytellers(&self) -> RenderStorytellers {
+		let mut grove = self.render.inner.clone();
+		grove.extent = self.grove_extent(grove.cell_extent_xz());
+		grove
+	}
+}
+
 /// High bush shape plus the surface-noise flags that live on the render item (not the shape).
 #[derive(Clone, clap::Args)]
 #[command(rename_all = "kebab-case")]
@@ -423,6 +431,7 @@ pub enum Render {
 	RiparianMix(CellRenderHelper<RenderRiparianMix>),
 	Alpine(CellRenderHelper<RenderAlpine>),
 	Dryland(CellRenderHelper<RenderDryland>),
+	Storytellers(CellRenderHelper<RenderStorytellers>),
 	SpearTuft(RenderHelper<SpearTuftShape>),
 	BuddhaHandTuft(RenderHelper<BuddhaHandTuftShape>),
 	WeepingTuft(RenderHelper<WeepingTuftShape>),
@@ -561,6 +570,9 @@ impl Render {
 			),
 			Self::Dryland(h) => h.render.config_with(
 				RenderSubject::Dryland(h.configured_dryland()),
+			),
+			Self::Storytellers(h) => h.render.config_with(
+				RenderSubject::Storytellers(h.configured_storytellers()),
 			),
 			Self::SpearTuft(h) => h.config_with(RenderSubject::SpearTuft(
 				RenderSpearTuft::from_shape(h.inner.clone(), Default::default()),
@@ -1946,6 +1958,51 @@ mod tests {
 		let cfg = Render::Dryland(helper).into_render_config();
 		let RenderSubject::Dryland(subject) = cfg.subject else {
 			anyhow::bail!("expected dryland subject");
+		};
+		assert_eq!(subject.placement_cells().len(), cell_count);
+		assert!(!subject.placements().is_empty());
+		Ok(())
+	}
+
+	#[test]
+	fn storytellers_defaults_spawn_placements() -> Result<()> {
+		let cmd = crate::commands::PlaygroundCommand::parse_line(
+			"render storytellers --grove-extent-xz 220",
+		)
+		.map_err(|e| anyhow::anyhow!("{e}"))?;
+		let crate::commands::PlaygroundCommand::Render(Render::Storytellers(helper)) = cmd else {
+			anyhow::bail!("expected storytellers render command");
+		};
+		let grove = helper.configured_storytellers();
+		assert!(grove.grove.variant_weights.is_none());
+		let placements = grove.placements();
+		assert!((helper.grove_extent_xz - 220.0).abs() < 1e-5);
+		assert!(
+			!placements.is_empty(),
+			"expected a visible storytellers preview with default flags, got {} placements",
+			placements.len()
+		);
+		Ok(())
+	}
+
+	#[test]
+	fn storytellers_command_preserves_grove_params() -> Result<()> {
+		let cmd = crate::commands::PlaygroundCommand::parse_line(
+			"render storytellers --grove-extent-xz 220 --cell-extent-xz 22,22",
+		)
+		.map_err(|e| anyhow::anyhow!("{e}"))?;
+		let crate::commands::PlaygroundCommand::Render(Render::Storytellers(helper)) = cmd else {
+			anyhow::bail!("expected storytellers render command");
+		};
+		assert!((helper.grove_extent_xz - 220.0).abs() < 1e-5);
+		assert_eq!(helper.render.inner.grove.cell_extent_xz, Some(Vec2::splat(22.0)));
+		let grove = helper.configured_storytellers();
+		let cell_count = grove.placement_cells().len();
+		assert_eq!(cell_count, 100);
+		assert!(!grove.placements().is_empty());
+		let cfg = Render::Storytellers(helper).into_render_config();
+		let RenderSubject::Storytellers(subject) = cfg.subject else {
+			anyhow::bail!("expected storytellers subject");
 		};
 		assert_eq!(subject.placement_cells().len(), cell_count);
 		assert!(!subject.placements().is_empty());

@@ -348,6 +348,10 @@ fn attach_render_materials(
 			g.stick_material.mesh = MeshMaterial3d(stick.clone());
 			g.leaf_material.mesh = MeshMaterial3d(tuft.clone());
 		}
+		RenderSubject::Storytellers(g) => {
+			g.stick_material.mesh = MeshMaterial3d(stick.clone());
+			g.leaf_material.mesh = MeshMaterial3d(tuft.clone());
+		}
 		RenderSubject::StrangeOasis(g) => {
 			g.stick_material.mesh = MeshMaterial3d(stick.clone());
 			g.leaf_material.mesh = MeshMaterial3d(tuft.clone());
