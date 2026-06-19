@@ -208,6 +208,7 @@ pub use wild_grass::{WildGrass, WildGrassStd};pub mod conifer_massives;
 pub mod temperate_massives;
 pub mod riparian_general;
 pub mod rolling_oaks;
+pub mod forlorn_savanna;
 pub use conifer_massives::{
 	ConiferMassivesCell, ConiferMassivesFriendsConifer, ConiferMassivesItem,
 	ConiferMassivesLiamsConifer, ConiferMassivesNorthernConifer, ConiferMassivesTemperateConifer,
@@ -219,7 +220,11 @@ pub use riparian_general::{
 	RiparianGeneralStorybook,
 pub use rolling_oaks::{
 	RollingOaksBraidOak, RollingOaksCell, RollingOaksItem, RollingOaksStorybook,
+pub use forlorn_savanna::{
+	ForlornSavannaCell, ForlornSavannaHighBush, ForlornSavannaItem, ForlornSavannaRory,
+	ForlornSavannaStorybook,
 pub use conifer_massives::{ConiferMassives, ConiferMassivesStd};
 pub use temperate_massives::{TemperateMassives, TemperateMassivesStd};
 pub use riparian_general::{RiparianGeneral, RiparianGeneralStd};
 pub use rolling_oaks::{RollingOaks, RollingOaksStd};
+pub use forlorn_savanna::{ForlornSavanna, ForlornSavannaStd};
