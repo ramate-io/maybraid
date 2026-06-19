@@ -15,6 +15,7 @@ pub mod jungle_massives;
 pub mod levantine_scrub;
 pub mod low_bush;
 pub mod monster_grass;
+pub mod palm_shade;
 pub mod riverine_green;
 pub mod shamanhome;
 pub mod spotty_bushes;
@@ -74,6 +75,9 @@ pub use levantine_scrub::{
 };
 pub use low_bush::{LowBushBush, LowBushCell, LowBushItem};
 pub use monster_grass::{MonsterGrassCell, MonsterGrassClump, MonsterGrassItem};
+pub use palm_shade::{
+	PalmShadeCell, PalmShadeDatePalm, PalmShadeItem, PalmShadeWaialeaPalm,
+};
 pub use riverine_green::{RiverineGreenBush, RiverineGreenCell, RiverineGreenItem};
 pub use shamanhome::{
 	ShamanhomeBanyan, ShamanhomeBraidOak, ShamanhomeCell, ShamanhomeDatePalm, ShamanhomeItem,
@@ -128,6 +132,8 @@ pub use levantine_scrub::{LevantineScrub, LevantineScrubStd};
 pub use low_bush::{LowBush, LowBushStd};
 #[cfg(feature = "render")]
 pub use monster_grass::{MonsterGrass, MonsterGrassStd};
+#[cfg(feature = "render")]
+pub use palm_shade::{PalmShade, PalmShadeStd};
 #[cfg(feature = "render")]
 pub use riverine_green::{RiverineGreen, RiverineGreenStd};
 #[cfg(feature = "render")]

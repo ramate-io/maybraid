@@ -13,6 +13,7 @@ use chico_groves::high_bush::HighBushStd;
 use chico_groves::jerrys_chaparral::JerrysChaparralStd;
 use chico_groves::jungle_lower_massives::JungleLowerMassivesStd;
 use chico_groves::jungle_massives::JungleMassivesStd;
+use chico_groves::palm_shade::PalmShadeStd;
 use chico_groves::temperate_lower_massives::TemperateLowerMassivesStd;
 use chico_groves::levantine_scrub::LevantineScrubStd;
 use chico_groves::low_bush::LowBushStd;
@@ -297,6 +298,9 @@ pub type RenderJungleMassives = JungleMassivesStd;
 /// [`TemperateLowerMassivesStd`] — low-density massive temperate lower-canopy grove ([#330](https://github.com/ramate-io/maybraid/issues/330)).
 pub type RenderTemperateLowerMassives = TemperateLowerMassivesStd;
 
+/// [`PalmShadeStd`] — sparse Waialea and Date Palm upper-canopy grove ([#332](https://github.com/ramate-io/maybraid/issues/332)).
+pub type RenderPalmShade = PalmShadeStd;
+
 /// The configured render item currently shown in the scene.
 ///
 /// This is the typed scene state behind [`RenderConfig`]: material patching
@@ -348,6 +352,7 @@ pub enum RenderSubject {
 	JungleLowerMassives(RenderJungleLowerMassives),
 	JungleMassives(RenderJungleMassives),
 	TemperateLowerMassives(RenderTemperateLowerMassives),
+	PalmShade(RenderPalmShade),
 	SpearTuft(RenderSpearTuft),
 	BuddhaHandTuft(RenderBuddhaHandTuft),
 	WeepingTuft(RenderWeepingTuft),
@@ -403,6 +408,7 @@ impl RenderSubject {
 			Self::JungleLowerMassives(_) => "JungleLowerMassives",
 			Self::JungleMassives(_) => "JungleMassives",
 			Self::TemperateLowerMassives(_) => "TemperateLowerMassives",
+			Self::PalmShade(_) => "PalmShade",
 			Self::SpearTuft(_) => "SpearTuft",
 			Self::BuddhaHandTuft(_) => "BuddhaHandTuft",
 			Self::WeepingTuft(_) => "WeepingTuft",
@@ -674,6 +680,18 @@ impl RenderSubject {
 					g.leaf_surface_noise
 				)
 			}
+			Self::PalmShade(g) => {
+				format!(
+					"{:?}|extent={:?}|cell_extent_xz={:?}|terrain={:?}|chain={:?}|stick={:?}|leaf={:?}",
+					g.grove,
+					g.extent,
+					g.cell_extent_xz(),
+					g.terrain,
+					g.tree_chain_noise,
+					g.stick_surface_noise,
+					g.leaf_surface_noise
+				)
+			}
 			Self::StrangeOasis(g) => {
 				format!(
 					"{:?}|extent={:?}|cell_extent_xz={:?}|terrain={:?}|chain={:?}|stick={:?}|leaf={:?}",
@@ -795,6 +813,7 @@ impl RenderSubject {
 			Self::JungleLowerMassives(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::JungleMassives(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::TemperateLowerMassives(item) => item.spawn_render_items(commands, chunk, transform),
+			Self::PalmShade(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::SpearTuft(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::BuddhaHandTuft(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::WeepingTuft(item) => item.spawn_render_items(commands, chunk, transform),

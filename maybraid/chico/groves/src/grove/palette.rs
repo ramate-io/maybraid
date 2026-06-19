@@ -102,6 +102,8 @@ pub fn resolve_palette_color(name: &str) -> Option<Color> {
 		"dark_red" => Color::srgb(0.42, 0.18, 0.12),
 		"young_green" => Color::srgb(0.38, 0.72, 0.32),
 		"palm_bark" => Color::srgb(0.45, 0.32, 0.18),
+		"date_trunk" => Color::srgb(0.44, 0.32, 0.20),
+		"palm_green" => Color::srgb(0.35, 0.64, 0.29),
 		"banyan_bark" => Color::srgb(0.42, 0.30, 0.18),
 		"dry_brown" => Color::srgb(0.42, 0.32, 0.22),
 		"date_green" => Color::srgb(0.48, 0.62, 0.28),
