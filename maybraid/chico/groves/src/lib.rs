@@ -209,6 +209,7 @@ pub mod temperate_massives;
 pub mod riparian_general;
 pub mod rolling_oaks;
 pub mod forlorn_savanna;
+pub mod orchard;
 pub use conifer_massives::{
 	ConiferMassivesCell, ConiferMassivesFriendsConifer, ConiferMassivesItem,
 	ConiferMassivesLiamsConifer, ConiferMassivesNorthernConifer, ConiferMassivesTemperateConifer,
@@ -223,8 +224,10 @@ pub use rolling_oaks::{
 pub use forlorn_savanna::{
 	ForlornSavannaCell, ForlornSavannaHighBush, ForlornSavannaItem, ForlornSavannaRory,
 	ForlornSavannaStorybook,
+pub use orchard::{OrchardCell, OrchardItem, OrchardStorybook};
 pub use conifer_massives::{ConiferMassives, ConiferMassivesStd};
 pub use temperate_massives::{TemperateMassives, TemperateMassivesStd};
 pub use riparian_general::{RiparianGeneral, RiparianGeneralStd};
 pub use rolling_oaks::{RollingOaks, RollingOaksStd};
 pub use forlorn_savanna::{ForlornSavanna, ForlornSavannaStd};
+pub use orchard::{Orchard, OrchardStd};
