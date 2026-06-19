@@ -204,7 +204,8 @@ pub use tropical_undergrowth::{TropicalUndergrowth, TropicalUndergrowthStd};
 #[cfg(feature = "render")]
 pub use unending_jungle::{UnendingJungle, UnendingJungleStd};
 #[cfg(feature = "render")]
-pub use wild_grass::{WildGrass, WildGrassStd};pub mod conifer_massives;
+pub use wild_grass::{WildGrass, WildGrassStd};
+pub mod conifer_massives;
 pub mod temperate_massives;
 pub use conifer_massives::{
 	ConiferMassivesCell, ConiferMassivesFriendsConifer, ConiferMassivesItem,
