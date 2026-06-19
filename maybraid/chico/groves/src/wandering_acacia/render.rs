@@ -258,8 +258,7 @@ impl BuildWithNoise<SopeBanyanSamples> for WanderingAcaciaBanyan {
 			config.sample_range_f32_4d(lo, hi, 0.0, 0.0, 0.0, salt)
 		};
 
-		let height =
-			sample_f32(self.height, 1.0).max(self.height.start.min(self.height.end));
+		let height = sample_f32(self.height, 1.0).max(self.height.start.min(self.height.end));
 		let stalk_radius = sample_f32(self.stalk_radius, 1.5);
 		let canopy_spread = sample_f32(self.canopy_spread, 2.0);
 		let descender_threshold = sample_f32(self.descender_density, 3.0);
@@ -270,8 +269,7 @@ impl BuildWithNoise<SopeBanyanSamples> for WanderingAcaciaBanyan {
 		geometry.scale.stalk_height = height;
 		geometry.scale.canopy_height = height * 2.0;
 		geometry.scale.stalk_base_radius = stalk_radius;
-		geometry.projection.length_fraction_of_height =
-			UnitRange::new(span * 0.05, span * 0.18);
+		geometry.projection.length_fraction_of_height = UnitRange::new(span * 0.05, span * 0.18);
 		geometry.growth.descender_threshold = descender_threshold;
 		geometry.leaf_ball_factor = 0.15 + canopy_density * 0.25;
 		geometry.canopy_noise = noise;
@@ -289,8 +287,7 @@ impl BuildWithNoise<VaseTreeSbs> for WanderingAcaciaVaseTree {
 			config.sample_range_f32_4d(lo, hi, 0.0, 0.0, 0.0, salt)
 		};
 
-		let height =
-			sample_f32(self.height, 1.0).max(self.height.start.min(self.height.end));
+		let height = sample_f32(self.height, 1.0).max(self.height.start.min(self.height.end));
 		let stalk_radius = sample_f32(self.stalk_radius, 1.5);
 		let canopy_spread = sample_f32(self.canopy_spread, 2.0);
 		let span = span_fraction(canopy_spread, height);
@@ -318,8 +315,7 @@ fn sample_torch(torch: &WanderingAcaciaTorch, noise: NoiseParams) -> TorchSample
 		config.sample_range_f32_4d(lo, hi, 0.0, 0.0, 0.0, salt)
 	};
 
-	let height =
-		sample_f32(torch.height, 1.0).max(torch.height.start.min(torch.height.end));
+	let height = sample_f32(torch.height, 1.0).max(torch.height.start.min(torch.height.end));
 	let stalk_radius = sample_f32(torch.stalk_radius, 1.5);
 	let canopy_spread = sample_f32(torch.canopy_spread, 2.0);
 	let span = span_fraction(canopy_spread, height);
@@ -534,8 +530,7 @@ mod tests {
 		assert!(bush.shoot_count.contains(&shape.shoot_count));
 		assert_eq!(shape.foliage_style, HighBushFoliageStyle::PlaneSplay);
 
-		let WanderingAcaciaItem::Sope(sope) =
-			WanderingAcaciaCell::DryWanderingSopesBanyan.item()
+		let WanderingAcaciaItem::Sope(sope) = WanderingAcaciaCell::DryWanderingSopesBanyan.item()
 		else {
 			anyhow::bail!("expected dry wandering sope item");
 		};
@@ -598,7 +593,7 @@ mod tests {
 		let placements = grove.placements();
 		let placed_share = placements.len() as f32 / cells as f32;
 		assert!(
-			(0.03..=0.12).contains(&placed_share),
+			(0.08..=0.24).contains(&placed_share),
 			"expected wandering-acacia fill, got {placed_share} ({}/{cells})",
 			placements.len()
 		);

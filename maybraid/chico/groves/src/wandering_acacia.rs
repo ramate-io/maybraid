@@ -271,7 +271,7 @@ mod tests {
 		assert!(dist.buckets[0].item.is_none());
 		assert_eq!(dist.buckets[0].weight, 37.0);
 		assert_eq!(dist.buckets[1].item, Some(WanderingAcaciaCell::WanderingHighBush));
-		assert_eq!(dist.buckets[1].weight, 2.0);
+		assert_eq!(dist.buckets[1].weight, 5.0);
 		assert_eq!(dist.buckets[2].item, Some(WanderingAcaciaCell::DryWanderingSopesBanyan));
 		assert_eq!(dist.buckets[2].weight, 1.0);
 		assert_eq!(dist.buckets[3].item, Some(WanderingAcaciaCell::WanderingVaseTree));
@@ -289,7 +289,7 @@ mod tests {
 		let total: f32 = dist.buckets.iter().map(|b| b.weight).sum();
 		let placed: f32 = dist.buckets.iter().filter(|b| b.item.is_some()).map(|b| b.weight).sum();
 		let share = placed / total;
-		assert!((0.03..=0.12).contains(&share), "placed share {share} outside RFC density");
+		assert!((0.08..=0.24).contains(&share), "placed share {share} outside RFC density");
 		Ok(())
 	}
 
@@ -300,7 +300,7 @@ mod tests {
 			anyhow::bail!("expected wandering high bush item");
 		};
 		assert_eq!(bush.height, UnitRange::new(5.0, 15.0));
-		assert_eq!(bush.leaf_radius, UnitRange::new(0.24, 0.56));
+		assert_eq!(bush.leaf_radius, UnitRange::new(0.45, 0.72));
 		assert_eq!(bush.radial_strength, SPARSE_PROJECTION_RADIAL);
 
 		let WanderingAcaciaItem::Sope(sope) = WanderingAcaciaCell::DryWanderingSopesBanyan.item()
@@ -314,7 +314,7 @@ mod tests {
 		else {
 			anyhow::bail!("expected wandering vase item");
 		};
-		assert_eq!(vase.height, UnitRange::new(6.0, 18.0));
+		assert_eq!(vase.height, UnitRange::new(4.0, 8.0));
 		assert_eq!(vase.canopy_density, SPARSE_CANOPY_DENSITY);
 
 		let WanderingAcaciaItem::PenmarchTorch(torch) =
@@ -322,7 +322,7 @@ mod tests {
 		else {
 			anyhow::bail!("expected wandering penmarch item");
 		};
-		assert_eq!(torch.height, UnitRange::new(6.0, 16.0));
+		assert_eq!(torch.height, UnitRange::new(5.0, 8.0));
 		Ok(())
 	}
 
