@@ -120,6 +120,26 @@ impl NoiseParams {
 		}
 		n
 	}
+
+	pub fn with_octaves(mut self, octaves: u32) -> Self {
+		self.octaves = octaves;
+		self
+	}
+
+	pub fn with_noise_type(mut self, noise_type: NoiseType) -> Self {
+		self.noise_type = noise_type;
+		self
+	}
+
+	pub fn with_frequency(mut self, frequency: f32) -> Self {
+		self.frequency = frequency;
+		self
+	}
+
+	pub fn with_amplitude(mut self, amplitude: f32) -> Self {
+		self.amplitude = amplitude;
+		self
+	}
 }
 
 /// Immutable handle: shared generator + params used to construct it.
@@ -351,8 +371,8 @@ mod tests {
 			.map_err(|e| anyhow::anyhow!("{e}"))?;
 		assert_eq!(p.noise_type, NoiseType::Cellular);
 		assert_eq!(p.seed, 7);
-		let default_type = noise_params_from_scalar_str("7,2,0.5,1")
-			.map_err(|e| anyhow::anyhow!("{e}"))?;
+		let default_type =
+			noise_params_from_scalar_str("7,2,0.5,1").map_err(|e| anyhow::anyhow!("{e}"))?;
 		assert_eq!(default_type.noise_type, NoiseParams::default().noise_type);
 		assert!(noise_params_from_scalar_str("7,2,0.5,1,nonsense").is_err());
 		assert!(noise_params_from_scalar_str("7,2,0.5,1,cellular,extra").is_err());
@@ -361,10 +381,7 @@ mod tests {
 
 	#[test]
 	fn cellular_reads_as_sign_balanced_cell_values() -> Result<()> {
-		let p = NoiseParams {
-			noise_type: NoiseType::Cellular,
-			..NoiseParams::default()
-		};
+		let p = NoiseParams { noise_type: NoiseType::Cellular, ..NoiseParams::default() };
 		let n = NoiseConfig::new(p);
 		let mut positives = 0_u32;
 		let mut negatives = 0_u32;

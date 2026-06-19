@@ -116,13 +116,13 @@ pub struct ConiferGrowthParams {
 	#[cfg_attr(feature = "clap", arg(long, default_value_t = 2.0))]
 	pub downward_bias_degrees: f32,
 	/// Ray perturbation tolerance in degrees (RFC ~8°).
-	#[cfg_attr(feature = "clap", arg(long, default_value_t = 8.0))]
+	#[cfg_attr(feature = "clap", arg(long, default_value_t = 27.0))]
 	pub angle_tolerance_degrees: f32,
 }
 
 impl Default for ConiferGrowthParams {
 	fn default() -> Self {
-		Self { branch_depth: 3, downward_bias_degrees: 2.0, angle_tolerance_degrees: 8.0 }
+		Self { branch_depth: 3, downward_bias_degrees: 2.0, angle_tolerance_degrees: 27.0 }
 	}
 }
 
@@ -154,7 +154,7 @@ pub struct AnchorPerturbationParams {
 		feature = "clap",
 		arg(
 			long = "anchor-radius-perturbation",
-			default_value = "-0.05..0.05",
+			default_value = "-0.5..0.5",
 			value_parser = parse_unit_range,
 			value_name = "MIN..MAX"
 		)
@@ -164,7 +164,7 @@ pub struct AnchorPerturbationParams {
 		feature = "clap",
 		arg(
 			long = "anchor-perturbation-noise",
-			default_value = "1337,1,1,1",
+			default_value = "1337,0.1,1,1",
 			value_parser = noise_params_from_scalar_str,
 			value_name = "SEED,FREQUENCY,AMPLITUDE,OCTAVES[,TYPE]"
 		)
@@ -177,8 +177,8 @@ impl Default for AnchorPerturbationParams {
 		Self {
 			vertical_offset: UnitRange::new(-1.0, 1.0),
 			angular_scale: UnitRange::new(0.0, 0.5),
-			radius_offset: UnitRange::new(-0.05, 0.05),
-			noise: NoiseParams::default(),
+			radius_offset: UnitRange::new(-0.5, 0.5),
+			noise: NoiseParams::default().with_frequency(0.1),
 		}
 	}
 }
@@ -341,7 +341,10 @@ mod tests {
 		let scale = mini.scale.stalk_height / REFERENCE_STALK_HEIGHT;
 		assert!((anchors.perturbation.vertical_offset.start + scale).abs() < 1e-4);
 		assert!((anchors.perturbation.vertical_offset.end - scale).abs() < 1e-4);
-		assert!(anchors.perturbation.radius_offset.end <= mini.scale.stalk_base_radius_or_default() * 0.01);
+		assert!(
+			anchors.perturbation.radius_offset.end
+				<= mini.scale.stalk_base_radius_or_default() * 0.01
+		);
 		Ok(())
 	}
 }

@@ -71,13 +71,13 @@ pub struct FriendsRingAnchorParams {
 	pub height_range: UnitRange,
 	#[cfg_attr(feature = "clap", arg(long, default_value = "0.04"))]
 	pub spacing: f32,
-	#[cfg_attr(feature = "clap", arg(long, default_value_t = 4))]
+	#[cfg_attr(feature = "clap", arg(long, default_value_t = 6))]
 	pub anchors_per_ring: u32,
 }
 
 impl Default for FriendsRingAnchorParams {
 	fn default() -> Self {
-		Self { height_range: UnitRange::new(0.10, 0.98), spacing: 0.04, anchors_per_ring: 4 }
+		Self { height_range: UnitRange::new(0.10, 0.98), spacing: 0.04, anchors_per_ring: 6 }
 	}
 }
 
@@ -104,7 +104,7 @@ pub struct FriendsLogProjectionParams {
 		feature = "clap",
 		arg(
 			long = "child-count",
-			default_value = "0..2",
+			default_value = "1..2",
 			value_parser = parse_usize_range,
 			value_name = "MIN..MAX"
 		)
@@ -121,7 +121,7 @@ impl Default for FriendsLogProjectionParams {
 			),
 			alpha: 8.0,
 			beta: 3.0,
-			child_count_range: UsizeRange::new(0, 2),
+			child_count_range: UsizeRange::new(1, 2),
 		}
 	}
 }
