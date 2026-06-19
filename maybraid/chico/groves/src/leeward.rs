@@ -30,7 +30,7 @@ const DENSE_CANOPY_DENSITY: UnitRange = UnitRange::new(0.50, 0.85);
 /// placements break the underlying grid instead of clustering near cell centers.
 pub fn definition() -> GroveDefinition<LeewardCell> {
 	GroveDefinition {
-		cell_extent_xz: Vec2::splat(9.0),
+		cell_extent_xz: Vec2::splat(19.0),
 		placement: GrovePlacementRanges::new(
 			UnitRange::new(0.85, 1.15),
 			UnitRange::new(-19.0, 19.0),

@@ -12,6 +12,7 @@ pub mod storytellers;
 pub mod trade_winds;
 pub mod wandering_acacia;
 pub mod leeward;
+pub mod christmas_taiga;
 pub mod conifer_sapling;
 pub mod goettingen_follow;
 pub mod high_bush;
@@ -71,6 +72,9 @@ pub use wandering_acacia::{
 };
 pub use leeward::{
 	LeewardCell, LeewardItem, LeewardStorybook, LeewardTemperateConifer,
+};
+pub use christmas_taiga::{
+	ChristmasTaigaCell, ChristmasTaigaItem, ChristmasTaigaNorthernConifer,
 };
 pub use conifer_sapling::{
 	ConiferSaplingCell, ConiferSaplingFriendsConifer, ConiferSaplingItem,
@@ -151,6 +155,8 @@ pub use trade_winds::{TradeWinds, TradeWindsStd};
 pub use wandering_acacia::{WanderingAcacia, WanderingAcaciaStd};
 #[cfg(feature = "render")]
 pub use leeward::{Leeward, LeewardStd};
+#[cfg(feature = "render")]
+pub use christmas_taiga::{ChristmasTaiga, ChristmasTaigaStd};
 #[cfg(feature = "render")]
 pub use braid_grass::{BraidGrass, BraidGrassStd};
 #[cfg(feature = "render")]
