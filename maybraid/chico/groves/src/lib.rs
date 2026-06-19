@@ -207,6 +207,7 @@ pub use unending_jungle::{UnendingJungle, UnendingJungleStd};
 pub use wild_grass::{WildGrass, WildGrassStd};pub mod conifer_massives;
 pub mod temperate_massives;
 pub mod riparian_general;
+pub mod rolling_oaks;
 pub use conifer_massives::{
 	ConiferMassivesCell, ConiferMassivesFriendsConifer, ConiferMassivesItem,
 	ConiferMassivesLiamsConifer, ConiferMassivesNorthernConifer, ConiferMassivesTemperateConifer,
@@ -216,6 +217,9 @@ pub use temperate_massives::{
 pub use riparian_general::{
 	RiparianGeneralBraidOak, RiparianGeneralCell, RiparianGeneralHighBush, RiparianGeneralItem,
 	RiparianGeneralStorybook,
+pub use rolling_oaks::{
+	RollingOaksBraidOak, RollingOaksCell, RollingOaksItem, RollingOaksStorybook,
 pub use conifer_massives::{ConiferMassives, ConiferMassivesStd};
 pub use temperate_massives::{TemperateMassives, TemperateMassivesStd};
 pub use riparian_general::{RiparianGeneral, RiparianGeneralStd};
+pub use rolling_oaks::{RollingOaks, RollingOaksStd};
