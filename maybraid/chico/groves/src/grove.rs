@@ -204,6 +204,20 @@ impl<V: Clone> Grove<V> {
 	}
 }
 
+/// Grove items can be constructed from cell, grove, information about extents, and terrain.
+///
+/// This is a useful plugin to hierarchical generation APIs, ala https://github.com/ramate-io/maybraid/tree/main/rfc/rfc-000-000-142-gimme#34-hierarchical-generation
+pub trait GroveItem: Clone {
+	fn from_cell_and_grove(
+		cell: &Cell,
+		grove: &Grove<Self>,
+		grove_extent: &GroveExtent,
+		terrain: &impl TerrainSample,
+	) -> Option<GroveCellVariant<Self>> {
+		grove.sample_cell(cell, grove_extent, terrain).0
+	}
+}
+
 #[cfg(test)]
 mod tests {
 	use super::*;
