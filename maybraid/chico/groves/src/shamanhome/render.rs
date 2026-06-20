@@ -3,26 +3,20 @@
 use std::marker::PhantomData;
 
 use bevy::prelude::*;
-use chico_sbs_geometry::{BraidOakTreeSbs, DatePalmSbs, SopesBanyanSbs};
 use chico_sbs_trees::braid_oak_tree::BraidOakTree;
 use chico_sbs_trees::date_palm::DatePalm;
 use chico_sbs_trees::sopes_banyan::SopesBanyan;
 use chico_sbs_trees::SkippedStickMeshMaterial;
 use chico_vegetation_shaders::{ChicoLeafMaterial, ChicoStickMaterial};
 use clap::Args;
-use procedural_common::{
-	noise_params_from_scalar_str, BuildWithNoise, NoiseConfig, NoiseParams, UnitRange,
-};
+use procedural_common::{noise_params_from_scalar_str, BuildWithNoise, NoiseParams};
 use render_item::{CascadeChunk, RenderItem};
 
 use crate::grove::{
 	patch_spawned_leaf_material, placement_noise, FlatTerrainSample, GroveExtent, GroveFrontend,
 	GroveCellVariant, GroveWorldSample, WithPalette, DEFAULT_GROVE_EXTENT_XZ,
 };
-use crate::shamanhome::{
-	definition, ShamanhomeBanyan, ShamanhomeBraidOak, ShamanhomeCell, ShamanhomeDatePalm,
-	ShamanhomeItem,
-};
+use crate::shamanhome::{definition, ShamanhomeCell, ShamanhomeItem};
 use crate::skipped_mesh_material::{
 	SkippedLeafMeshMaterial, SkippedStickMeshMaterial as GroveSkippedStickMeshMaterial,
 };
@@ -197,76 +191,6 @@ where
 	}
 }
 
-fn sample_f32(config: &NoiseConfig, range: UnitRange, salt: f32) -> f32 {
-	let lo = range.start.min(range.end);
-	let hi = range.start.max(range.end);
-	config.sample_range_f32_4d(lo, hi, 0.0, 0.0, 0.0, salt)
-}
-
-fn span_fraction(canopy_spread: f32, height: f32) -> f32 {
-	(canopy_spread / height.max(0.5)).clamp(0.35, 1.20)
-}
-
-impl BuildWithNoise<BraidOakTreeSbs> for ShamanhomeBraidOak {
-	fn build_with_noise(&self, noise: NoiseParams) -> BraidOakTreeSbs {
-		let config = NoiseConfig::new(noise);
-		let height = sample_f32(&config, self.height, 1.0).max(3.5);
-		let canopy_spread = sample_f32(&config, self.canopy_spread, 2.0);
-		let span = span_fraction(canopy_spread, height);
-
-		let mut geometry = BraidOakTreeSbs::default();
-		geometry.apply_braid_preset();
-		geometry.scale.tree_height = height;
-		geometry.projection.span_fraction_of_height = UnitRange::new(span * 0.82, span * 1.02);
-		geometry.canopy_noise = noise;
-		geometry
-	}
-}
-
-impl BuildWithNoise<DatePalmSbs> for ShamanhomeDatePalm {
-	fn build_with_noise(&self, noise: NoiseParams) -> DatePalmSbs {
-		let config = NoiseConfig::new(noise);
-		let height = sample_f32(&config, self.height, 1.0).max(3.5);
-		let crown_density = sample_f32(&config, self.crown_density, 2.0);
-
-		let mut geometry = DatePalmSbs::default();
-		geometry.scale.stalk_height = height;
-		geometry.crown.ring_count = 2 + (crown_density * 2.0).round() as u32;
-		geometry.crown.fronds_per_ring = 5 + (crown_density * 5.0).round() as u32;
-		geometry.frond_world_scale = 0.28 + crown_density * 0.24;
-		geometry.crown_tuft_scale_factor = 0.04 + crown_density * 0.02;
-		geometry.trunk_noise = noise;
-		geometry
-	}
-}
-
-struct SopeBanyanSamples {
-	geometry: SopesBanyanSbs,
-}
-
-impl BuildWithNoise<SopeBanyanSamples> for ShamanhomeBanyan {
-	fn build_with_noise(&self, noise: NoiseParams) -> SopeBanyanSamples {
-		let config = NoiseConfig::new(noise);
-		let height = sample_f32(&config, self.height, 1.0).max(4.5);
-		let stalk_radius = sample_f32(&config, self.stalk_radius, 1.5);
-		let canopy_spread = sample_f32(&config, self.canopy_spread, 2.0);
-		let descender_threshold = sample_f32(&config, self.descender_density, 3.0);
-		let canopy_density = sample_f32(&config, self.canopy_density, 4.0);
-		let span = span_fraction(canopy_spread, height);
-
-		let mut geometry = SopesBanyanSbs::default();
-		geometry.scale.stalk_height = height;
-		geometry.scale.canopy_height = height * 2.0;
-		geometry.scale.stalk_base_radius = stalk_radius;
-		geometry.projection.length_fraction_of_height = UnitRange::new(span * 0.05, span * 0.18);
-		geometry.growth.descender_threshold = descender_threshold;
-		geometry.leaf_ball_factor = 0.25 + canopy_density * 0.35;
-		geometry.canopy_noise = noise;
-
-		SopeBanyanSamples { geometry }
-	}
-}
-
 fn placement_transform<V>(placed: &GroveCellVariant<V>) -> Transform {
 	Transform {
 		translation: placed.position,
@@ -352,7 +276,7 @@ where
 					entities
 				}
 				ShamanhomeItem::SopeBanyan(banyan) => {
-					let samples: SopeBanyanSamples = banyan.build_with_noise(build_noise);
+					let samples = banyan.build_with_noise(build_noise);
 					let mut tree = self.sope_template.clone();
 					tree.geometry = samples.geometry;
 					tree.stick_surface_noise =

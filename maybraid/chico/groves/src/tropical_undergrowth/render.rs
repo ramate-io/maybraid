@@ -3,11 +3,8 @@
 use std::marker::PhantomData;
 
 use bevy::prelude::*;
-use chico_ball_components::tuft::{BladeTuft, BladeTuftShape};
-use chico_sbs_geometry::{
-	KamakuraTorchSbs, PalmBushSbs, PenmarchTorchSbs, RorysHeadTrainedSbs, StorybookTreeSbs,
-	VaseTreeSbs,
-};
+use chico_ball_components::tuft::BladeTuft;
+use chico_sbs_geometry::{KamakuraTorchSbs, PenmarchTorchSbs};
 use chico_sbs_trees::kamakura_torch::KamakuraTorch;
 use chico_sbs_trees::palm_bush::PalmBush;
 use chico_sbs_trees::penmarch_torch::PenmarchTorch;
@@ -16,9 +13,7 @@ use chico_sbs_trees::storybook_tree::StorybookTree;
 use chico_sbs_trees::vase_tree::VaseTree;
 use chico_vegetation_shaders::ChicoStickMaterial;
 use clap::Args;
-use procedural_common::{
-	noise_params_from_scalar_str, BuildWithNoise, NoiseConfig, NoiseParams, UnitRange,
-};
+use procedural_common::{noise_params_from_scalar_str, BuildWithNoise, NoiseParams};
 use render_item::{CascadeChunk, RenderItem};
 
 use crate::grove::{
@@ -26,11 +21,7 @@ use crate::grove::{
 	GroveCellVariant, GroveWorldSample, WithPalette, DEFAULT_GROVE_EXTENT_XZ,
 };
 use crate::skipped_mesh_material::{SkippedLeafMeshMaterial, SkippedStickMeshMaterial};
-use crate::tropical_undergrowth::{
-	definition, TropicalUndergrowthCell, TropicalUndergrowthItem, TropicalUndergrowthPalm,
-	TropicalUndergrowthRoryHead, TropicalUndergrowthStorybook, TropicalUndergrowthTorch,
-	TropicalUndergrowthTuft, TropicalUndergrowthVaseTree,
-};
+use crate::tropical_undergrowth::{definition, TropicalUndergrowthCell, TropicalUndergrowthItem};
 
 /// Typical [`ChicoStickMaterial`] / [`StandardMaterial`] Tropical Undergrowth instance.
 pub type TropicalUndergrowthStd = TropicalUndergrowth<
@@ -187,169 +178,6 @@ where
 			return resolved.clone();
 		}
 		self.grove.assemble(definition()).populate(&self.extent, &self.terrain)
-	}
-}
-
-fn sample_f32(config: &NoiseConfig, range: UnitRange, salt: f32) -> f32 {
-	let lo = range.start.min(range.end);
-	let hi = range.start.max(range.end);
-	config.sample_range_f32_4d(lo, hi, 0.0, 0.0, 0.0, salt)
-}
-
-fn sample_u32(config: &NoiseConfig, range: &std::ops::RangeInclusive<u32>, salt: f32) -> u32 {
-	let lo = *range.start() as usize;
-	let hi = (*range.end() as usize).saturating_add(1);
-	config.sample_range_usize_4d(lo, hi, 0.0, 0.0, 0.0, salt) as u32
-}
-
-impl BuildWithNoise<BladeTuftShape> for TropicalUndergrowthTuft {
-	fn build_with_noise(&self, noise: NoiseParams) -> BladeTuftShape {
-		let config = NoiseConfig::new(noise);
-		let blade_length = sample_f32(&config, self.height, 1.0).max(0.05);
-		let blade_width = blade_length * sample_f32(&config, self.width_factor, 2.0);
-
-		BladeTuftShape {
-			blade_count: sample_u32(&config, &self.blade_count, 3.0),
-			blade_length,
-			blade_width,
-			max_tilt_radians: sample_f32(&config, self.max_tilt_radians, 4.0).max(0.01),
-			bend_segments: sample_u32(&config, &self.bend_segments, 5.0).max(1),
-			seed: noise.seed,
-			..BladeTuftShape::default()
-		}
-	}
-}
-
-impl BuildWithNoise<PalmBushSbs> for TropicalUndergrowthPalm {
-	fn build_with_noise(&self, noise: NoiseParams) -> PalmBushSbs {
-		let config = NoiseConfig::new(noise);
-		let height = sample_f32(&config, self.height, 1.0).max(0.35);
-		let frond_count = sample_u32(&config, &self.frond_count, 2.0);
-		let frond_length = sample_f32(&config, self.frond_length, 3.0);
-		let crown_spread = sample_f32(&config, self.crown_spread, 4.0);
-		let frond_world_scale = (frond_length / height.max(0.5)).clamp(0.15, 1.2)
-			* (crown_spread / height.max(0.5)).clamp(0.4, 1.5);
-
-		let mut geometry = PalmBushSbs::default()
-			.with_height(height)
-			.with_frond_world_scale(frond_world_scale)
-			.with_noise_params(noise);
-		geometry.crown.fronds_per_ring = frond_count;
-		geometry.crown.ring_count = 1;
-		geometry
-	}
-}
-
-fn span_fraction(canopy_spread: f32, height: f32) -> f32 {
-	(canopy_spread / height.max(0.5)).clamp(0.25, 1.5)
-}
-
-/// Wider ring spacing and fewer spokes than full-size constructions for sparse understory silhouettes.
-const UNDERSTORY_RING_SPACING_SCALE: f32 = 1.85;
-const UNDERSTORY_ANCHORS_PER_RING: u32 = 4;
-const UNDERSTORY_RORY_ANCHORS_PER_RING: u32 = 3;
-
-fn understory_ring_spacing(base: f32) -> f32 {
-	base * UNDERSTORY_RING_SPACING_SCALE
-}
-
-impl BuildWithNoise<RorysHeadTrainedSbs> for TropicalUndergrowthRoryHead {
-	fn build_with_noise(&self, noise: NoiseParams) -> RorysHeadTrainedSbs {
-		let config = NoiseConfig::new(noise);
-		let height = sample_f32(&config, self.height, 1.0).max(0.5);
-		let stalk_radius = sample_f32(&config, self.stalk_radius, 1.5);
-		let canopy_spread = sample_f32(&config, self.canopy_spread, 2.0);
-
-		let mut geometry = RorysHeadTrainedSbs::default();
-		geometry.scale.tree_height = height;
-		geometry.scale.stalk_base_radius = Some(stalk_radius);
-		geometry.rings.anchors_per_ring = UNDERSTORY_RORY_ANCHORS_PER_RING;
-		geometry.canopy_noise = noise;
-		let span = span_fraction(canopy_spread, height);
-		geometry.projection.span_fraction_of_height = UnitRange::new(span * 0.95, span * 1.15);
-		geometry
-	}
-}
-
-impl BuildWithNoise<VaseTreeSbs> for TropicalUndergrowthVaseTree {
-	fn build_with_noise(&self, noise: NoiseParams) -> VaseTreeSbs {
-		let config = NoiseConfig::new(noise);
-		let height = sample_f32(&config, self.height, 1.0).max(0.75);
-		let stalk_radius = sample_f32(&config, self.stalk_radius, 1.5);
-		let canopy_spread = sample_f32(&config, self.canopy_spread, 2.0);
-		let span = span_fraction(canopy_spread, height);
-
-		let mut geometry = VaseTreeSbs::default();
-		geometry.scale.tree_height = height;
-		geometry.scale.stalk_base_radius = Some(stalk_radius);
-		geometry.rings.spacing = understory_ring_spacing(geometry.rings.spacing);
-		geometry.rings.anchors_per_ring = UNDERSTORY_ANCHORS_PER_RING;
-		geometry.projection.span_fraction_of_height = UnitRange::new(span * 0.88, span * 1.08);
-		geometry.canopy_noise = noise;
-		geometry
-	}
-}
-
-impl BuildWithNoise<StorybookTreeSbs> for TropicalUndergrowthStorybook {
-	fn build_with_noise(&self, noise: NoiseParams) -> StorybookTreeSbs {
-		let config = NoiseConfig::new(noise);
-		let height = sample_f32(&config, self.height, 1.0).max(0.9);
-		let stalk_radius = sample_f32(&config, self.stalk_radius, 1.5);
-		let canopy_spread = sample_f32(&config, self.canopy_spread, 2.0);
-		let span = span_fraction(canopy_spread, height);
-
-		let mut geometry = StorybookTreeSbs::default();
-		geometry.scale.tree_height = height;
-		geometry.scale.stalk_base_radius = Some(stalk_radius);
-		geometry.rings.spacing = understory_ring_spacing(geometry.rings.spacing);
-		geometry.rings.anchors_per_ring = UNDERSTORY_ANCHORS_PER_RING;
-		geometry.projection.span_fraction_of_height = UnitRange::new(span * 0.82, span * 1.05);
-		geometry.rings.height_range = UnitRange::new(0.58, 1.0);
-		geometry.canopy_noise = noise;
-		geometry
-	}
-}
-
-struct TorchSamples {
-	height: f32,
-	stalk_radius: f32,
-	span: f32,
-}
-
-fn sample_torch(torch: &TropicalUndergrowthTorch, noise: NoiseParams) -> TorchSamples {
-	let config = NoiseConfig::new(noise);
-	let height = sample_f32(&config, torch.height, 1.0).max(0.75);
-	let stalk_radius = sample_f32(&config, torch.stalk_radius, 1.5);
-	let canopy_spread = sample_f32(&config, torch.canopy_spread, 2.0);
-	let span = span_fraction(canopy_spread, height);
-	TorchSamples { height, stalk_radius, span }
-}
-
-impl BuildWithNoise<PenmarchTorchSbs> for TropicalUndergrowthTorch {
-	fn build_with_noise(&self, noise: NoiseParams) -> PenmarchTorchSbs {
-		let s = sample_torch(self, noise);
-		let mut geometry = PenmarchTorchSbs::default();
-		geometry.scale.tree_height = s.height;
-		geometry.scale.stalk_base_radius = Some(s.stalk_radius);
-		geometry.rings.spacing = understory_ring_spacing(geometry.rings.spacing);
-		geometry.rings.anchors_per_ring = UNDERSTORY_ANCHORS_PER_RING;
-		geometry.projection.span_fraction_of_height = UnitRange::new(s.span * 0.88, s.span * 1.08);
-		geometry.canopy_noise = noise;
-		geometry
-	}
-}
-
-impl BuildWithNoise<KamakuraTorchSbs> for TropicalUndergrowthTorch {
-	fn build_with_noise(&self, noise: NoiseParams) -> KamakuraTorchSbs {
-		let s = sample_torch(self, noise);
-		let mut geometry = KamakuraTorchSbs::default();
-		geometry.scale.tree_height = s.height;
-		geometry.scale.stalk_base_radius = Some(s.stalk_radius);
-		geometry.rings.spacing = understory_ring_spacing(geometry.rings.spacing);
-		geometry.rings.anchors_per_ring = UNDERSTORY_ANCHORS_PER_RING;
-		geometry.projection.span_fraction_of_height = UnitRange::new(s.span * 0.88, s.span * 1.08);
-		geometry.canopy_noise = noise;
-		geometry
 	}
 }
 
@@ -605,6 +433,12 @@ where
 mod tests {
 	use super::*;
 	use anyhow::Result;
+	use crate::tropical_undergrowth::variants::tropical_undergrowth_rory_head::UNDERSTORY_RORY_ANCHORS_PER_RING;
+	use crate::tropical_undergrowth::variants::tropical_undergrowth_vase_tree::{
+		understory_ring_spacing, UNDERSTORY_ANCHORS_PER_RING,
+	};
+	use chico_sbs_geometry::{RorysHeadTrainedSbs, StorybookTreeSbs, VaseTreeSbs};
+	use procedural_common::UnitRange;
 
 	#[test]
 	fn tuft_geometry_builds_within_authored_ranges() -> Result<()> {

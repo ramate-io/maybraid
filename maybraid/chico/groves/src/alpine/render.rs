@@ -3,19 +3,14 @@
 use std::marker::PhantomData;
 
 use bevy::prelude::*;
-use chico_sbs_geometry::{FriendsConiferSbs, LiamsConiferSbs};
 use chico_sbs_trees::friends_conifer::FriendsConifer;
 use chico_sbs_trees::liams_conifer::LiamsConifer;
 use chico_vegetation_shaders::ChicoStickMaterial;
 use clap::Args;
-use procedural_common::{
-	noise_params_from_scalar_str, BuildWithNoise, NoiseConfig, NoiseParams, UnitRange,
-};
+use procedural_common::{noise_params_from_scalar_str, BuildWithNoise, NoiseParams};
 use render_item::{CascadeChunk, RenderItem};
 
-use crate::alpine::{
-	definition, AlpineCell, AlpineFriendsConifer, AlpineItem, AlpineLiamsConifer,
-};
+use crate::alpine::{definition, AlpineCell, AlpineItem};
 use crate::grove::{
 	patch_spawned_leaf_material, placement_noise, FlatTerrainSample, GroveExtent, GroveFrontend,
 	GroveCellVariant, GroveWorldSample, WithPalette, DEFAULT_GROVE_EXTENT_XZ,
@@ -177,66 +172,6 @@ where
 			return resolved.clone();
 		}
 		self.grove.assemble(definition()).populate(&self.extent, &self.terrain)
-	}
-}
-
-fn sample_f32(config: &NoiseConfig, range: UnitRange, salt: f32) -> f32 {
-	let lo = range.start.min(range.end);
-	let hi = range.start.max(range.end);
-	config.sample_range_f32_4d(lo, hi, 0.0, 0.0, 0.0, salt)
-}
-
-fn span_fraction(canopy_spread: f32, height: f32) -> f32 {
-	(canopy_spread / height.max(0.5)).clamp(0.25, 1.20)
-}
-
-struct FriendsConiferSamples {
-	geometry: FriendsConiferSbs,
-	apex_canopy_spawn_fraction: f32,
-	splay_radius_fraction_of_height: f32,
-}
-
-impl BuildWithNoise<FriendsConiferSamples> for AlpineFriendsConifer {
-	fn build_with_noise(&self, noise: NoiseParams) -> FriendsConiferSamples {
-		let config = NoiseConfig::new(noise);
-		let height =
-			sample_f32(&config, self.height, 1.0).max(self.height.start.min(self.height.end));
-		let stalk_radius = sample_f32(&config, self.stalk_radius, 1.5);
-		let canopy_spread = sample_f32(&config, self.canopy_spread, 2.0);
-		let canopy_density = sample_f32(&config, self.canopy_density, 3.0);
-		let span = span_fraction(canopy_spread, height);
-
-		let mut geometry = FriendsConiferSbs::default();
-		geometry.scale.stalk_height = height;
-		geometry.scale.stalk_base_radius = Some(stalk_radius);
-		geometry.projection.length_fraction_of_height =
-			UnitRange::new(span * 0.95, (span * 0.35).max(0.03));
-		geometry.growth.branch_depth = 2;
-		geometry.rings.anchors_per_ring = 3;
-		geometry.canopy_noise = noise;
-
-		FriendsConiferSamples {
-			geometry,
-			apex_canopy_spawn_fraction: canopy_density.clamp(0.35, 0.75),
-			splay_radius_fraction_of_height: (canopy_spread / height).clamp(0.014, 0.08),
-		}
-	}
-}
-
-impl BuildWithNoise<LiamsConiferSbs> for AlpineLiamsConifer {
-	fn build_with_noise(&self, noise: NoiseParams) -> LiamsConiferSbs {
-		let config = NoiseConfig::new(noise);
-		let height =
-			sample_f32(&config, self.height, 1.0).max(self.height.start.min(self.height.end));
-		let stalk_radius = sample_f32(&config, self.stalk_radius, 1.5);
-		let canopy_density = sample_f32(&config, self.canopy_density, 2.0);
-
-		let mut geometry = LiamsConiferSbs::default();
-		geometry.rings.spacing = (0.02 + canopy_density * 0.04).clamp(0.02, 0.06);
-		geometry.scale.stalk_height = height;
-		geometry.scale.stalk_base_radius = Some(stalk_radius);
-		geometry.canopy_noise = noise;
-		geometry
 	}
 }
 

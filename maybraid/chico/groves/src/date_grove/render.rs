@@ -5,14 +5,13 @@
 use std::marker::PhantomData;
 
 use bevy::prelude::*;
-use chico_sbs_geometry::DatePalmSbs;
 use chico_sbs_trees::date_palm::DatePalm;
 use chico_vegetation_shaders::ChicoStickMaterial;
 use clap::Args;
-use procedural_common::{noise_params_from_scalar_str, BuildWithNoise, NoiseConfig, NoiseParams};
+use procedural_common::{noise_params_from_scalar_str, BuildWithNoise, NoiseParams};
 use render_item::{CascadeChunk, RenderItem};
 
-use crate::date_grove::{definition, DateGroveCell, DateGroveDatePalm, DateGroveItem};
+use crate::date_grove::{definition, DateGroveCell, DateGroveItem};
 use crate::grove::{
 	patch_spawned_leaf_material, placement_noise, FlatTerrainSample, GroveExtent, GroveFrontend,
 	GroveCellVariant, GroveWorldSample, WithPalette, DEFAULT_GROVE_EXTENT_XZ,
@@ -173,30 +172,6 @@ where
 			return resolved.clone();
 		}
 		self.grove.assemble(definition()).populate(&self.extent, &self.terrain)
-	}
-}
-
-fn sample_f32(config: &NoiseConfig, range: procedural_common::UnitRange, salt: f32) -> f32 {
-	let lo = range.start.min(range.end);
-	let hi = range.start.max(range.end);
-	config.sample_range_f32_4d(lo, hi, 0.0, 0.0, 0.0, salt)
-}
-
-impl BuildWithNoise<DatePalmSbs> for DateGroveDatePalm {
-	fn build_with_noise(&self, noise: NoiseParams) -> DatePalmSbs {
-		let config = NoiseConfig::new(noise);
-		let height =
-			sample_f32(&config, self.height, 1.0).max(self.height.start.min(self.height.end));
-		let crown_density = sample_f32(&config, self.crown_density, 2.0);
-
-		let mut geometry = DatePalmSbs::default();
-		geometry.scale.stalk_height = height;
-		geometry.crown.ring_count = 3 + (crown_density * 3.0).round() as u32;
-		geometry.crown.fronds_per_ring = 6 + (crown_density * 6.0).round() as u32;
-		geometry.frond_world_scale = 0.35 + crown_density * 0.35;
-		geometry.crown_tuft_scale_factor = 0.04 + crown_density * 0.02;
-		geometry.trunk_noise = noise;
-		geometry
 	}
 }
 

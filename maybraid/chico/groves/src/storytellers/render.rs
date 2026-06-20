@@ -3,16 +3,14 @@
 use std::marker::PhantomData;
 
 use bevy::prelude::*;
-use chico_sbs_geometry::{BraidOakTreeSbs, KamakuraTorchSbs, PenmarchTorchSbs, StorybookTreeSbs};
+use chico_sbs_geometry::{KamakuraTorchSbs, PenmarchTorchSbs};
 use chico_sbs_trees::braid_oak_tree::BraidOakTree;
 use chico_sbs_trees::kamakura_torch::KamakuraTorch;
 use chico_sbs_trees::penmarch_torch::PenmarchTorch;
 use chico_sbs_trees::storybook_tree::StorybookTree;
 use chico_vegetation_shaders::ChicoStickMaterial;
 use clap::Args;
-use procedural_common::{
-	noise_params_from_scalar_str, BuildWithNoise, NoiseConfig, NoiseParams, UnitRange,
-};
+use procedural_common::{noise_params_from_scalar_str, BuildWithNoise, NoiseParams};
 use render_item::{CascadeChunk, RenderItem};
 
 use crate::grove::{
@@ -22,10 +20,7 @@ use crate::grove::{
 use crate::skipped_mesh_material::{
 	SkippedLeafMeshMaterial, SkippedStickMeshMaterial as GroveSkippedStickMeshMaterial,
 };
-use crate::storytellers::{
-	definition, StorytellersBraidOak, StorytellersCell, StorytellersItem, StorytellersStorybook,
-	StorytellersTorch,
-};
+use crate::storytellers::{definition, StorytellersCell, StorytellersItem};
 
 /// Typical [`ChicoStickMaterial`] / [`StandardMaterial`] Storyteller's instance.
 pub type StorytellersStd = Storytellers<
@@ -181,111 +176,6 @@ where
 			return resolved.clone();
 		}
 		self.grove.assemble(definition()).populate(&self.extent, &self.terrain)
-	}
-}
-
-fn sample_f32(config: &NoiseConfig, range: UnitRange, salt: f32) -> f32 {
-	let lo = range.start.min(range.end);
-	let hi = range.start.max(range.end);
-	config.sample_range_f32_4d(lo, hi, 0.0, 0.0, 0.0, salt)
-}
-
-fn span_fraction(canopy_spread: f32, height: f32) -> f32 {
-	(canopy_spread / height.max(0.5)).clamp(0.35, 1.20)
-}
-
-const STORYTELLERS_RING_SPACING_SCALE: f32 = 1.25;
-const STORYTELLERS_ANCHORS_PER_RING: u32 = 5;
-
-fn storytellers_ring_spacing(base: f32) -> f32 {
-	base * STORYTELLERS_RING_SPACING_SCALE
-}
-
-impl BuildWithNoise<BraidOakTreeSbs> for StorytellersBraidOak {
-	fn build_with_noise(&self, noise: NoiseParams) -> BraidOakTreeSbs {
-		let config = NoiseConfig::new(noise);
-		let height =
-			sample_f32(&config, self.height, 1.0).max(self.height.start.min(self.height.end));
-		let canopy_density = sample_f32(&config, self.canopy_density, 2.0);
-		let spread_lo = height * 0.35;
-		let spread_hi = height * 0.55;
-		let canopy_spread = sample_f32(&config, UnitRange::new(spread_lo, spread_hi), 3.0);
-		let span = span_fraction(canopy_spread, height);
-
-		let mut geometry = BraidOakTreeSbs::default();
-		geometry.apply_braid_preset();
-		geometry.scale.tree_height = height;
-		geometry.projection.span_fraction_of_height = UnitRange::new(span * 0.82, span * 1.02);
-		let _ = canopy_density;
-		geometry.canopy_noise = noise;
-		geometry
-	}
-}
-
-impl BuildWithNoise<StorybookTreeSbs> for StorytellersStorybook {
-	fn build_with_noise(&self, noise: NoiseParams) -> StorybookTreeSbs {
-		let config = NoiseConfig::new(noise);
-		let height =
-			sample_f32(&config, self.height, 1.0).max(self.height.start.min(self.height.end));
-		let stalk_radius = sample_f32(&config, self.stalk_radius, 1.5);
-		let canopy_spread = sample_f32(&config, self.canopy_spread, 2.0);
-		let canopy_density = sample_f32(&config, self.canopy_density, 4.0);
-		let span = span_fraction(canopy_spread, height);
-
-		let mut geometry = StorybookTreeSbs::default();
-		geometry.scale.tree_height = height;
-		geometry.scale.stalk_base_radius = Some(stalk_radius);
-		geometry.rings.spacing = storytellers_ring_spacing(geometry.rings.spacing);
-		geometry.rings.anchors_per_ring =
-			STORYTELLERS_ANCHORS_PER_RING + (canopy_density * 2.0).round() as u32;
-		geometry.projection.span_fraction_of_height = UnitRange::new(span * 0.82, span * 1.05);
-		geometry.rings.height_range = UnitRange::new(0.58, 1.0);
-		geometry.canopy_noise = noise;
-		geometry
-	}
-}
-
-struct TorchSamples {
-	height: f32,
-	stalk_radius: f32,
-	span: f32,
-}
-
-fn sample_torch(torch: &StorytellersTorch, noise: NoiseParams) -> TorchSamples {
-	let config = NoiseConfig::new(noise);
-	let height =
-		sample_f32(&config, torch.height, 1.0).max(torch.height.start.min(torch.height.end));
-	let stalk_radius = sample_f32(&config, torch.stalk_radius, 1.5);
-	let canopy_spread = sample_f32(&config, torch.canopy_spread, 2.0);
-	let span = span_fraction(canopy_spread, height);
-	TorchSamples { height, stalk_radius, span }
-}
-
-impl BuildWithNoise<PenmarchTorchSbs> for StorytellersTorch {
-	fn build_with_noise(&self, noise: NoiseParams) -> PenmarchTorchSbs {
-		let s = sample_torch(self, noise);
-		let mut geometry = PenmarchTorchSbs::default();
-		geometry.scale.tree_height = s.height;
-		geometry.scale.stalk_base_radius = Some(s.stalk_radius);
-		geometry.rings.spacing = storytellers_ring_spacing(geometry.rings.spacing);
-		geometry.rings.anchors_per_ring = STORYTELLERS_ANCHORS_PER_RING;
-		geometry.projection.span_fraction_of_height = UnitRange::new(s.span * 0.88, s.span * 1.08);
-		geometry.canopy_noise = noise;
-		geometry
-	}
-}
-
-impl BuildWithNoise<KamakuraTorchSbs> for StorytellersTorch {
-	fn build_with_noise(&self, noise: NoiseParams) -> KamakuraTorchSbs {
-		let s = sample_torch(self, noise);
-		let mut geometry = KamakuraTorchSbs::default();
-		geometry.scale.tree_height = s.height;
-		geometry.scale.stalk_base_radius = Some(s.stalk_radius);
-		geometry.rings.spacing = storytellers_ring_spacing(geometry.rings.spacing);
-		geometry.rings.anchors_per_ring = STORYTELLERS_ANCHORS_PER_RING;
-		geometry.projection.span_fraction_of_height = UnitRange::new(s.span * 0.88, s.span * 1.08);
-		geometry.canopy_noise = noise;
-		geometry
 	}
 }
 

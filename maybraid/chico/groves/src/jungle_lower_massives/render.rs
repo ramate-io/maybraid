@@ -3,12 +3,6 @@
 use std::marker::PhantomData;
 
 use bevy::prelude::*;
-use chico_sbs_geometry::{
-	BraidOakTreeSbs, HonuBanyanSbs, JungleStorybookTreeSbs, SopesBanyanSbs, WaialeaPalmSbs,
-};
-use chico_sbs_geometry::sbs::jungle_storybook_tree::{
-	JUNGLE_ANCHORS_PER_RING, JUNGLE_LEAF_RADIUS_FRACTION, JUNGLE_STALK_BASE_RADIUS_FRACTION,
-};
 use chico_sbs_trees::braid_oak_tree::BraidOakTree;
 use chico_sbs_trees::honu_banyan::HonuBanyan;
 use chico_sbs_trees::jungle_storybook_tree::JungleStorybookTree;
@@ -20,19 +14,15 @@ use chico_sbs_trees::{
 use chico_tree_components::{SkippedBodyMeshMaterial, SkippedFoliageMeshMaterial};
 use chico_vegetation_shaders::{ChicoLeafMaterial, ChicoStickMaterial};
 use clap::Args;
-use procedural_common::{
-	noise_params_from_scalar_str, BuildWithNoise, NoiseConfig, NoiseParams, UnitRange,
-};
+use procedural_common::{noise_params_from_scalar_str, BuildWithNoise, NoiseParams};
 use render_item::{CascadeChunk, RenderItem};
 
 use crate::grove::{
 	patch_spawned_leaf_material, placement_noise, FlatTerrainSample, GroveExtent, GroveFrontend,
 	GroveCellVariant, GroveWorldSample, WithPalette, DEFAULT_GROVE_EXTENT_XZ,
 };
-use crate::jungle_lower_massives::{
-	definition, JungleLowerMassivesBanyan, JungleLowerMassivesBraidOak, JungleLowerMassivesCell,
-	JungleLowerMassivesItem, JungleLowerMassivesJungleStorybook, JungleLowerMassivesWaialeaPalm,
-};
+use crate::jungle_lower_massives::variants::jungle_lower_massives_banyan::{HonuBanyanSamples, SopeBanyanSamples};
+use crate::jungle_lower_massives::{definition, JungleLowerMassivesCell, JungleLowerMassivesItem};
 use crate::skipped_mesh_material::{
 	SkippedLeafMeshMaterial, SkippedStickMeshMaterial as GroveSkippedStickMeshMaterial,
 };
@@ -246,129 +236,6 @@ where
 	}
 }
 
-fn sample_f32(config: &NoiseConfig, range: UnitRange, salt: f32) -> f32 {
-	let lo = range.start.min(range.end);
-	let hi = range.start.max(range.end);
-	config.sample_range_f32_4d(lo, hi, 0.0, 0.0, 0.0, salt)
-}
-
-fn span_fraction(canopy_spread: f32, height: f32) -> f32 {
-	(canopy_spread / height.max(0.5)).clamp(0.35, 1.20)
-}
-
-struct HonuBanyanSamples {
-	geometry: HonuBanyanSbs,
-	growth_spawn_fraction: f32,
-}
-
-impl BuildWithNoise<HonuBanyanSamples> for JungleLowerMassivesBanyan {
-	fn build_with_noise(&self, noise: NoiseParams) -> HonuBanyanSamples {
-		let config = NoiseConfig::new(noise);
-		let height = sample_f32(&config, self.height, 1.0).max(10.0);
-		let stalk_radius = sample_f32(&config, self.stalk_radius, 1.5);
-		let canopy_spread = sample_f32(&config, self.canopy_spread, 2.0);
-		let descender_threshold = sample_f32(&config, self.descender_density, 3.0);
-		let canopy_density = sample_f32(&config, self.canopy_density, 4.0);
-		let span = span_fraction(canopy_spread, height);
-
-		let mut geometry = HonuBanyanSbs::default();
-		geometry.scale.tree_height = height;
-		geometry.scale.stalk_radius_fraction = (stalk_radius / height).clamp(0.04, 0.08);
-		geometry.projection.length_fraction_of_height = UnitRange::new(span * 0.85, span);
-		geometry.growth.descender_threshold = descender_threshold;
-		geometry.canopy_noise = noise;
-
-		HonuBanyanSamples { geometry, growth_spawn_fraction: canopy_density }
-	}
-}
-
-struct SopeBanyanSamples {
-	geometry: SopesBanyanSbs,
-}
-
-impl BuildWithNoise<SopeBanyanSamples> for JungleLowerMassivesBanyan {
-	fn build_with_noise(&self, noise: NoiseParams) -> SopeBanyanSamples {
-		let config = NoiseConfig::new(noise);
-		let height = sample_f32(&config, self.height, 1.0).max(10.0);
-		let stalk_radius = sample_f32(&config, self.stalk_radius, 1.5);
-		let canopy_spread = sample_f32(&config, self.canopy_spread, 2.0);
-		let descender_threshold = sample_f32(&config, self.descender_density, 3.0);
-		let canopy_density = sample_f32(&config, self.canopy_density, 4.0);
-		let span = span_fraction(canopy_spread, height);
-
-		let mut geometry = SopesBanyanSbs::default();
-		geometry.scale.stalk_height = height;
-		geometry.scale.canopy_height = height * 2.0;
-		geometry.scale.stalk_base_radius = stalk_radius;
-		geometry.projection.length_fraction_of_height =
-			UnitRange::new(span * 0.05, span * 0.18);
-		geometry.growth.descender_threshold = descender_threshold;
-		geometry.leaf_ball_factor = 0.25 + canopy_density * 0.35;
-		geometry.canopy_noise = noise;
-
-		SopeBanyanSamples { geometry }
-	}
-}
-
-struct JungleStorybookSamples {
-	geometry: JungleStorybookTreeSbs,
-	growth_spawn_fraction: f32,
-}
-
-impl BuildWithNoise<JungleStorybookSamples> for JungleLowerMassivesJungleStorybook {
-	fn build_with_noise(&self, noise: NoiseParams) -> JungleStorybookSamples {
-		let config = NoiseConfig::new(noise);
-		let height = sample_f32(&config, self.height, 1.0).max(10.0);
-		let canopy_density = sample_f32(&config, self.canopy_density, 2.0);
-		let growth_spawn_fraction = sample_f32(&config, self.jungle_growth_density, 3.0);
-
-		let mut geometry = JungleStorybookTreeSbs::default();
-		geometry.apply_jungle_preset();
-		geometry.storybook.scale.tree_height = height;
-		geometry.storybook.scale.stalk_base_radius =
-			Some(JUNGLE_STALK_BASE_RADIUS_FRACTION * height);
-		geometry.storybook.rings.anchors_per_ring =
-			JUNGLE_ANCHORS_PER_RING + (canopy_density * 2.0).round() as u32;
-		geometry.storybook.canopy.leaf_radius_fraction =
-			JUNGLE_LEAF_RADIUS_FRACTION * (0.85 + canopy_density * 0.25);
-		geometry.storybook.canopy_noise = noise;
-
-		JungleStorybookSamples { geometry, growth_spawn_fraction }
-	}
-}
-
-impl BuildWithNoise<WaialeaPalmSbs> for JungleLowerMassivesWaialeaPalm {
-	fn build_with_noise(&self, noise: NoiseParams) -> WaialeaPalmSbs {
-		let config = NoiseConfig::new(noise);
-		let height = sample_f32(&config, self.height, 1.0).max(10.0);
-		let crown_density = sample_f32(&config, self.crown_density, 2.0);
-
-		let mut geometry = WaialeaPalmSbs::default();
-		geometry.scale.stalk_height = height;
-		geometry.crown.ring_count = 2 + (crown_density * 2.0).round() as u32;
-		geometry.crown.fronds_per_ring = 8 + (crown_density * 7.0).round() as u32;
-		geometry.frond_world_scale = 0.55 + crown_density * 0.35;
-		geometry.trunk_noise = noise;
-		geometry
-	}
-}
-
-impl BuildWithNoise<BraidOakTreeSbs> for JungleLowerMassivesBraidOak {
-	fn build_with_noise(&self, noise: NoiseParams) -> BraidOakTreeSbs {
-		let config = NoiseConfig::new(noise);
-		let height = sample_f32(&config, self.height, 1.0).max(10.0);
-		let canopy_spread = sample_f32(&config, self.canopy_spread, 2.0);
-		let span = span_fraction(canopy_spread, height);
-
-		let mut geometry = BraidOakTreeSbs::default();
-		geometry.apply_braid_preset();
-		geometry.scale.tree_height = height;
-		geometry.projection.span_fraction_of_height = UnitRange::new(span * 0.82, span * 1.02);
-		geometry.canopy_noise = noise;
-		geometry
-	}
-}
-
 fn placement_transform<V>(placed: &GroveCellVariant<V>) -> Transform {
 	Transform {
 		translation: placed.position,
@@ -403,7 +270,7 @@ where
 
 			let entities = match placed.variant.item() {
 				JungleLowerMassivesItem::Honu(banyan) => {
-					let samples: HonuBanyanSamples = banyan.build_with_noise(build_noise);
+					let samples = BuildWithNoise::<HonuBanyanSamples>::build_with_noise(banyan, build_noise);
 					let mut tree = self.honu_template.clone();
 					tree.geometry = samples.geometry;
 					tree.construction.growth_spawn_fraction = samples.growth_spawn_fraction;
@@ -429,7 +296,7 @@ where
 					entities
 				}
 				JungleLowerMassivesItem::Sope(banyan) => {
-					let samples: SopeBanyanSamples = banyan.build_with_noise(build_noise);
+					let samples = BuildWithNoise::<SopeBanyanSamples>::build_with_noise(banyan, build_noise);
 					let mut tree = self.sope_template.clone();
 					tree.geometry = samples.geometry;
 					tree.stick_surface_noise =
@@ -547,7 +414,7 @@ mod tests {
 		else {
 			anyhow::bail!("expected honu item");
 		};
-		let honu_samples: HonuBanyanSamples = honu.build_with_noise(noise);
+		let honu_samples = BuildWithNoise::<HonuBanyanSamples>::build_with_noise(honu, noise);
 		assert!(honu_samples.geometry.scale.tree_height >= honu.height.start.min(honu.height.end));
 		assert!(honu_samples.geometry.scale.tree_height <= honu.height.start.max(honu.height.end));
 
@@ -556,7 +423,7 @@ mod tests {
 		else {
 			anyhow::bail!("expected sope item");
 		};
-		let sope_samples: SopeBanyanSamples = sope.build_with_noise(noise);
+		let sope_samples = BuildWithNoise::<SopeBanyanSamples>::build_with_noise(sope, noise);
 		assert!(sope_samples.geometry.scale.stalk_height >= sope.height.start.min(sope.height.end));
 		assert!(sope_samples.geometry.scale.stalk_height <= sope.height.start.max(sope.height.end));
 

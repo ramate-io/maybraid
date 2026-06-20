@@ -3,21 +3,15 @@
 use std::marker::PhantomData;
 
 use bevy::prelude::*;
-use chico_sbs_geometry::{FriendsConiferSbs, LiamsConiferSbs, NorthernConiferSbs};
 use chico_sbs_trees::friends_conifer::FriendsConifer;
 use chico_sbs_trees::liams_conifer::LiamsConifer;
 use chico_sbs_trees::northern_conifer::NorthernConifer;
 use chico_vegetation_shaders::ChicoStickMaterial;
 use clap::Args;
-use procedural_common::{
-	noise_params_from_scalar_str, BuildWithNoise, NoiseConfig, NoiseParams, UnitRange,
-};
+use procedural_common::{noise_params_from_scalar_str, BuildWithNoise, NoiseParams};
 use render_item::{CascadeChunk, RenderItem};
 
-use crate::arid_conifer_sapling::{
-	definition, AridConiferSaplingCell, AridConiferSaplingFriendsConifer, AridConiferSaplingItem,
-	AridConiferSaplingLiamsConifer, AridConiferSaplingNorthernConifer,
-};
+use crate::arid_conifer_sapling::{definition, AridConiferSaplingCell, AridConiferSaplingItem};
 #[cfg(test)]
 use crate::conifer_sapling::ConiferSaplingStd;
 use crate::grove::{
@@ -186,53 +180,6 @@ where
 	}
 }
 
-fn sample_f32(config: &NoiseConfig, range: UnitRange, salt: f32) -> f32 {
-	let lo = range.start.min(range.end);
-	let hi = range.start.max(range.end);
-	config.sample_range_f32_4d(lo, hi, 0.0, 0.0, 0.0, salt)
-}
-
-fn sample_sapling_height(config: &NoiseConfig, height: UnitRange) -> f32 {
-	sample_f32(config, height, 1.0).max(2.0)
-}
-
-impl BuildWithNoise<FriendsConiferSbs> for AridConiferSaplingFriendsConifer {
-	fn build_with_noise(&self, noise: NoiseParams) -> FriendsConiferSbs {
-		let config = NoiseConfig::new(noise);
-		let mut geometry = FriendsConiferSbs::default();
-		geometry.rings.spacing = sample_f32(&config, self.canopy_density, 1.5);
-		geometry.scale.stalk_height = sample_sapling_height(&config, self.height);
-		geometry.scale.stalk_base_radius = Some(sample_f32(&config, self.stalk_radius, 1.5));
-		geometry.canopy_noise = noise;
-		geometry
-	}
-}
-
-impl BuildWithNoise<NorthernConiferSbs> for AridConiferSaplingNorthernConifer {
-	fn build_with_noise(&self, noise: NoiseParams) -> NorthernConiferSbs {
-		let config = NoiseConfig::new(noise);
-		let mut geometry = NorthernConiferSbs::default();
-		geometry.liams.rings.spacing = sample_f32(&config, self.canopy_density, 1.5);
-		geometry.liams.scale.stalk_height = sample_sapling_height(&config, self.height);
-		geometry.liams.scale.stalk_base_radius = Some(sample_f32(&config, self.stalk_radius, 1.5));
-		geometry.apply_northern_preset();
-		geometry.liams.canopy_noise = noise;
-		geometry
-	}
-}
-
-impl BuildWithNoise<LiamsConiferSbs> for AridConiferSaplingLiamsConifer {
-	fn build_with_noise(&self, noise: NoiseParams) -> LiamsConiferSbs {
-		let config = NoiseConfig::new(noise);
-		let mut geometry = LiamsConiferSbs::default();
-		geometry.rings.spacing = sample_f32(&config, self.canopy_density, 1.5);
-		geometry.scale.stalk_height = sample_sapling_height(&config, self.height);
-		geometry.scale.stalk_base_radius = Some(sample_f32(&config, self.stalk_radius, 1.5));
-		geometry.canopy_noise = noise;
-		geometry
-	}
-}
-
 fn placement_transform<V>(placed: &GroveCellVariant<V>) -> Transform {
 	Transform {
 		translation: placed.position,
@@ -349,6 +296,7 @@ where
 mod tests {
 	use super::*;
 	use anyhow::Result;
+	use chico_sbs_geometry::{FriendsConiferSbs, LiamsConiferSbs};
 
 	#[test]
 	fn tree_geometry_builds_within_authored_ranges() -> Result<()> {

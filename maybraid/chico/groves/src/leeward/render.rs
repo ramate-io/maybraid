@@ -3,24 +3,18 @@
 use std::marker::PhantomData;
 
 use bevy::prelude::*;
-use chico_sbs_geometry::{FriendsConiferSbs, StorybookTreeSbs};
 use chico_sbs_trees::storybook_tree::StorybookTree;
-use chico_sbs_trees::temperate_conifer::{TemperateConifer, TemperateConiferGeometry};
+use chico_sbs_trees::temperate_conifer::TemperateConifer;
 use chico_vegetation_shaders::ChicoStickMaterial;
 use clap::Args;
-use procedural_common::UsizeRange;
-use procedural_common::{
-	noise_params_from_scalar_str, BuildWithNoise, NoiseConfig, NoiseParams, UnitRange,
-};
+use procedural_common::{noise_params_from_scalar_str, BuildWithNoise, NoiseParams};
 use render_item::{CascadeChunk, RenderItem};
 
 use crate::grove::{
 	patch_spawned_leaf_material, placement_noise, FlatTerrainSample, GroveExtent, GroveFrontend,
 	GroveCellVariant, GroveWorldSample, WithPalette, DEFAULT_GROVE_EXTENT_XZ,
 };
-use crate::leeward::{
-	definition, LeewardCell, LeewardItem, LeewardStorybook, LeewardTemperateConifer,
-};
+use crate::leeward::{definition, LeewardCell, LeewardItem};
 use crate::skipped_mesh_material::{
 	SkippedLeafMeshMaterial, SkippedStickMeshMaterial as GroveSkippedStickMeshMaterial,
 };
@@ -179,85 +173,6 @@ where
 			return resolved.clone();
 		}
 		self.grove.assemble(definition()).populate(&self.extent, &self.terrain)
-	}
-}
-
-fn sample_f32(config: &NoiseConfig, range: UnitRange, salt: f32) -> f32 {
-	let lo = range.start.min(range.end);
-	let hi = range.start.max(range.end);
-	config.sample_range_f32_4d(lo, hi, 0.0, 0.0, 0.0, salt)
-}
-
-fn span_fraction(canopy_spread: f32, height: f32) -> f32 {
-	(canopy_spread / height.max(0.5)).clamp(0.25, 1.20)
-}
-
-const LEEWARD_RING_SPACING_SCALE: f32 = 1.22;
-const LEEWARD_ANCHORS_PER_RING: u32 = 5;
-
-fn leeward_ring_spacing(base: f32) -> f32 {
-	base * LEEWARD_RING_SPACING_SCALE
-}
-
-impl BuildWithNoise<StorybookTreeSbs> for LeewardStorybook {
-	fn build_with_noise(&self, noise: NoiseParams) -> StorybookTreeSbs {
-		let config = NoiseConfig::new(noise);
-		let height =
-			sample_f32(&config, self.height, 1.0).max(self.height.start.min(self.height.end));
-		let stalk_radius = sample_f32(&config, self.stalk_radius, 1.5);
-		let canopy_spread = sample_f32(&config, self.canopy_spread, 2.0);
-		let canopy_density = sample_f32(&config, self.canopy_density, 4.0);
-		let span = span_fraction(canopy_spread, height);
-
-		let mut geometry = StorybookTreeSbs::default();
-		geometry.scale.tree_height = height;
-		geometry.scale.stalk_base_radius = Some(stalk_radius);
-		geometry.rings.spacing = leeward_ring_spacing(geometry.rings.spacing);
-		geometry.rings.anchors_per_ring =
-			LEEWARD_ANCHORS_PER_RING + (canopy_density * 2.0).round() as u32;
-		geometry.projection.span_fraction_of_height = UnitRange::new(span * 0.82, span * 1.05);
-		geometry.rings.height_range = UnitRange::new(0.58, 1.0);
-		geometry.canopy_noise = noise;
-		geometry
-	}
-}
-
-struct TemperateConiferSamples {
-	geometry: TemperateConiferGeometry,
-	fronds_per_joint: UnitRange,
-	frond_length_fraction: UnitRange,
-	frond_spawn_fraction: f32,
-	frond_world_scale: f32,
-	apex_canopy_spawn_fraction: f32,
-}
-
-impl BuildWithNoise<TemperateConiferSamples> for LeewardTemperateConifer {
-	fn build_with_noise(&self, noise: NoiseParams) -> TemperateConiferSamples {
-		let config = NoiseConfig::new(noise);
-		let height =
-			sample_f32(&config, self.height, 1.0).max(self.height.start.min(self.height.end));
-		let canopy_density = sample_f32(&config, self.canopy_density, 2.0);
-
-		let mut inner = FriendsConiferSbs::default();
-		inner.apply_temperate_preset();
-		inner.scale.stalk_height = height;
-		inner.scale.stalk_base_radius = Some((height * 0.025).clamp(0.18, 0.50));
-		inner.projection.child_count_range = UsizeRange::new(1, 2);
-		inner.canopy_noise = noise;
-
-		let frond_spawn_fraction = (0.45 + canopy_density * 0.45).clamp(0.45, 0.95);
-		let fronds_hi = 1.0 + (canopy_density * 1.0).round();
-		let frond_len_lo = 0.030 + canopy_density * 0.010;
-		let frond_len_hi = 0.045 + canopy_density * 0.030;
-
-		TemperateConiferSamples {
-			geometry: TemperateConiferGeometry { inner },
-			fronds_per_joint: UnitRange::new(1.0, fronds_hi),
-			frond_length_fraction: UnitRange::new(frond_len_lo, frond_len_hi),
-			frond_spawn_fraction,
-			frond_world_scale: 0.85 + canopy_density * 0.25,
-			apex_canopy_spawn_fraction: 0.72 * (0.65 + canopy_density * 0.35),
-		}
 	}
 }
 

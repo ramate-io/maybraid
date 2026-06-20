@@ -3,23 +3,16 @@
 use std::marker::PhantomData;
 
 use bevy::prelude::*;
-use chico_sbs_geometry::anchors::high_bush::{
-	DEFAULT_ANCHOR_LIFT_FRACTION, DEFAULT_SEGMENT_LENGTH_FRACTION_HI,
-	DEFAULT_SEGMENT_LENGTH_FRACTION_LO, DEFAULT_SEGMENT_RADIUS_FRACTION_HI,
-	DEFAULT_SEGMENT_RADIUS_FRACTION_LO,
-};
-use chico_sbs_geometry::{KamakuraTorchSbs, PenmarchTorchSbs, SopesBanyanSbs, VaseTreeSbs};
+use chico_sbs_geometry::{KamakuraTorchSbs, PenmarchTorchSbs};
 use chico_sbs_trees::kamakura_torch::KamakuraTorch;
 use chico_sbs_trees::penmarch_torch::PenmarchTorch;
 use chico_sbs_trees::sopes_banyan::SopesBanyan;
 use chico_sbs_trees::vase_tree::VaseTree;
 use chico_sbs_trees::{SkippedLeafMeshMaterial, SkippedStickMeshMaterial};
-use chico_tree_components::{HighBushFoliageStyle, HighBushShoots, HighBushShootsShape};
+use chico_tree_components::HighBushShoots;
 use chico_vegetation_shaders::{ChicoLeafMaterial, ChicoStickMaterial};
 use clap::Args;
-use procedural_common::{
-	noise_params_from_scalar_str, BuildWithNoise, NoiseConfig, NoiseParams, UnitRange,
-};
+use procedural_common::{noise_params_from_scalar_str, BuildWithNoise, NoiseParams};
 use render_item::{CascadeChunk, RenderItem};
 
 use crate::grove::{
@@ -30,10 +23,7 @@ use crate::skipped_mesh_material::{
 	SkippedLeafMeshMaterial as GroveSkippedLeafMeshMaterial,
 	SkippedStickMeshMaterial as GroveSkippedStickMeshMaterial,
 };
-use crate::wandering_acacia::{
-	definition, WanderingAcaciaBanyan, WanderingAcaciaCell, WanderingAcaciaHighBush,
-	WanderingAcaciaItem, WanderingAcaciaTorch, WanderingAcaciaVaseTree,
-};
+use crate::wandering_acacia::{definition, WanderingAcaciaCell, WanderingAcaciaItem};
 
 /// Sope template (material slots match playground [`RenderSopesBanyan`]).
 pub type WaSope = SopesBanyan<
@@ -205,147 +195,6 @@ where
 	}
 }
 
-impl BuildWithNoise<HighBushShootsShape> for WanderingAcaciaHighBush {
-	fn build_with_noise(&self, noise: NoiseParams) -> HighBushShootsShape {
-		let config = NoiseConfig::new(noise);
-		let sample_f32 = |range: UnitRange, salt| {
-			let lo = range.start.min(range.end);
-			let hi = range.start.max(range.end);
-			config.sample_range_f32_4d(lo, hi, 0.0, 0.0, 0.0, salt)
-		};
-
-		let sample_u32 = |range: &std::ops::RangeInclusive<u32>, salt| {
-			let lo = *range.start() as usize;
-			let hi = (*range.end() as usize).saturating_add(1);
-			config.sample_range_usize_4d(lo, hi, 0.0, 0.0, 0.0, salt) as u32
-		};
-
-		let height = sample_f32(self.height, 1.0).max(self.height.start.min(self.height.end));
-		let leaf_radius = sample_f32(self.leaf_radius, 2.0).max(0.01);
-
-		HighBushShootsShape {
-			height,
-			anchor_lift_fraction: DEFAULT_ANCHOR_LIFT_FRACTION,
-			shoot_count: sample_u32(&self.shoot_count, 3.0),
-			radial_strength: sample_f32(self.radial_strength, 5.0),
-			vertical_bias: sample_f32(self.vertical_bias, 6.0),
-			branch_depth: sample_u32(&self.branch_depth, 4.0) as usize,
-			segment_length_fraction_lo: DEFAULT_SEGMENT_LENGTH_FRACTION_LO,
-			segment_length_fraction_hi: DEFAULT_SEGMENT_LENGTH_FRACTION_HI,
-			segment_radius_fraction_lo: DEFAULT_SEGMENT_RADIUS_FRACTION_LO,
-			segment_radius_fraction_hi: DEFAULT_SEGMENT_RADIUS_FRACTION_HI,
-			leaf_radius_fraction: leaf_radius / height,
-			foliage_style: HighBushFoliageStyle::PlaneSplay,
-			chain_noise: noise,
-		}
-	}
-}
-
-fn span_fraction(canopy_spread: f32, height: f32) -> f32 {
-	(canopy_spread / height.max(0.5)).clamp(0.35, 1.20)
-}
-
-struct SopeBanyanSamples {
-	geometry: SopesBanyanSbs,
-}
-
-impl BuildWithNoise<SopeBanyanSamples> for WanderingAcaciaBanyan {
-	fn build_with_noise(&self, noise: NoiseParams) -> SopeBanyanSamples {
-		let config = NoiseConfig::new(noise);
-		let sample_f32 = |range: UnitRange, salt: f32| {
-			let lo = range.start.min(range.end);
-			let hi = range.start.max(range.end);
-			config.sample_range_f32_4d(lo, hi, 0.0, 0.0, 0.0, salt)
-		};
-
-		let height = sample_f32(self.height, 1.0).max(self.height.start.min(self.height.end));
-		let stalk_radius = sample_f32(self.stalk_radius, 1.5);
-		let canopy_spread = sample_f32(self.canopy_spread, 2.0);
-		let descender_threshold = sample_f32(self.descender_density, 3.0);
-		let canopy_density = sample_f32(self.canopy_density, 4.0);
-		let span = span_fraction(canopy_spread, height);
-
-		let mut geometry = SopesBanyanSbs::default();
-		geometry.scale.stalk_height = height;
-		geometry.scale.canopy_height = height * 2.0;
-		geometry.scale.stalk_base_radius = stalk_radius;
-		geometry.projection.length_fraction_of_height = UnitRange::new(span * 0.05, span * 0.18);
-		geometry.growth.descender_threshold = descender_threshold;
-		geometry.leaf_ball_factor = 0.15 + canopy_density * 0.25;
-		geometry.canopy_noise = noise;
-
-		SopeBanyanSamples { geometry }
-	}
-}
-
-impl BuildWithNoise<VaseTreeSbs> for WanderingAcaciaVaseTree {
-	fn build_with_noise(&self, noise: NoiseParams) -> VaseTreeSbs {
-		let config = NoiseConfig::new(noise);
-		let sample_f32 = |range: UnitRange, salt: f32| {
-			let lo = range.start.min(range.end);
-			let hi = range.start.max(range.end);
-			config.sample_range_f32_4d(lo, hi, 0.0, 0.0, 0.0, salt)
-		};
-
-		let height = sample_f32(self.height, 1.0).max(self.height.start.min(self.height.end));
-		let stalk_radius = sample_f32(self.stalk_radius, 1.5);
-		let canopy_spread = sample_f32(self.canopy_spread, 2.0);
-		let span = span_fraction(canopy_spread, height);
-
-		let mut geometry = VaseTreeSbs::default();
-		geometry.scale.tree_height = height;
-		geometry.scale.stalk_base_radius = Some(stalk_radius);
-		geometry.projection.span_fraction_of_height = UnitRange::new(span * 0.88, span * 1.08);
-		geometry.canopy_noise = noise;
-		geometry
-	}
-}
-
-struct TorchSamples {
-	height: f32,
-	stalk_radius: f32,
-	span: f32,
-}
-
-fn sample_torch(torch: &WanderingAcaciaTorch, noise: NoiseParams) -> TorchSamples {
-	let config = NoiseConfig::new(noise);
-	let sample_f32 = |range: UnitRange, salt: f32| {
-		let lo = range.start.min(range.end);
-		let hi = range.start.max(range.end);
-		config.sample_range_f32_4d(lo, hi, 0.0, 0.0, 0.0, salt)
-	};
-
-	let height = sample_f32(torch.height, 1.0).max(torch.height.start.min(torch.height.end));
-	let stalk_radius = sample_f32(torch.stalk_radius, 1.5);
-	let canopy_spread = sample_f32(torch.canopy_spread, 2.0);
-	let span = span_fraction(canopy_spread, height);
-	TorchSamples { height, stalk_radius, span }
-}
-
-impl BuildWithNoise<PenmarchTorchSbs> for WanderingAcaciaTorch {
-	fn build_with_noise(&self, noise: NoiseParams) -> PenmarchTorchSbs {
-		let s = sample_torch(self, noise);
-		let mut geometry = PenmarchTorchSbs::default();
-		geometry.scale.tree_height = s.height;
-		geometry.scale.stalk_base_radius = Some(s.stalk_radius);
-		geometry.projection.span_fraction_of_height = UnitRange::new(s.span * 0.88, s.span * 1.08);
-		geometry.canopy_noise = noise;
-		geometry
-	}
-}
-
-impl BuildWithNoise<KamakuraTorchSbs> for WanderingAcaciaTorch {
-	fn build_with_noise(&self, noise: NoiseParams) -> KamakuraTorchSbs {
-		let s = sample_torch(self, noise);
-		let mut geometry = KamakuraTorchSbs::default();
-		geometry.scale.tree_height = s.height;
-		geometry.scale.stalk_base_radius = Some(s.stalk_radius);
-		geometry.projection.span_fraction_of_height = UnitRange::new(s.span * 0.88, s.span * 1.08);
-		geometry.canopy_noise = noise;
-		geometry
-	}
-}
-
 fn placement_transform<V>(placed: &GroveCellVariant<V>) -> Transform {
 	Transform {
 		translation: placed.position,
@@ -407,7 +256,7 @@ where
 					entities
 				}
 				WanderingAcaciaItem::Sope(banyan) => {
-					let samples: SopeBanyanSamples = banyan.build_with_noise(build_noise);
+					let samples = banyan.build_with_noise(build_noise);
 					let mut tree = self.sope_template.clone();
 					tree.geometry = samples.geometry;
 					tree.stick_surface_noise =
@@ -514,6 +363,7 @@ where
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use chico_tree_components::HighBushFoliageStyle;
 	use anyhow::Result;
 
 	#[test]
@@ -534,7 +384,7 @@ mod tests {
 		else {
 			anyhow::bail!("expected dry wandering sope item");
 		};
-		let sope_samples: SopeBanyanSamples = sope.build_with_noise(noise);
+		let sope_samples = sope.build_with_noise(noise);
 		assert!(sope_samples.geometry.scale.stalk_height >= sope.height.start.min(sope.height.end));
 		assert!(sope_samples.geometry.scale.stalk_height <= sope.height.start.max(sope.height.end));
 		Ok(())

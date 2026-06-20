@@ -1,4 +1,4 @@
-//! [`RenderItem`] for populated Common Tufts groves ([#301](https://github.com/ramate-io/maybraid/issues/301)).
+//! [`BuildWithNoise`] for [`CommonTuftClump`].
 use chico_ball_components::tuft::BladeTuftShape;
 use procedural_common::{BuildWithNoise, NoiseConfig, NoiseParams, UnitRange};
 

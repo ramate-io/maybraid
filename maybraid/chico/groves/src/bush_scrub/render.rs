@@ -3,21 +3,14 @@
 use std::marker::PhantomData;
 
 use bevy::prelude::*;
-use chico_ball_components::tuft::{BladeTuft, BladeTuftShape};
-use chico_sbs_geometry::anchors::high_bush::{
-	DEFAULT_ANCHOR_LIFT_FRACTION, DEFAULT_SEGMENT_LENGTH_FRACTION_HI,
-	DEFAULT_SEGMENT_LENGTH_FRACTION_LO, DEFAULT_SEGMENT_RADIUS_FRACTION_HI,
-	DEFAULT_SEGMENT_RADIUS_FRACTION_LO,
-};
-use chico_tree_components::{HighBushFoliageStyle, HighBushShoots, HighBushShootsShape};
+use chico_ball_components::tuft::BladeTuft;
+use chico_tree_components::HighBushShoots;
 use chico_vegetation_shaders::ChicoStickMaterial;
 use clap::Args;
-use procedural_common::{
-	noise_params_from_scalar_str, BuildWithNoise, NoiseConfig, NoiseParams, UnitRange,
-};
+use procedural_common::{noise_params_from_scalar_str, BuildWithNoise, NoiseParams};
 use render_item::{CascadeChunk, RenderItem};
 
-use crate::bush_scrub::{definition, BushScrubBush, BushScrubCell, BushScrubItem, BushScrubTuft};
+use crate::bush_scrub::{definition, BushScrubCell, BushScrubItem};
 use crate::grove::{
 	patch_spawned_leaf_material, placement_noise, FlatTerrainSample, GroveExtent, GroveFrontend,
 	GroveCellVariant, GroveWorldSample, WithPalette, DEFAULT_GROVE_EXTENT_XZ,
@@ -181,74 +174,6 @@ where
 	}
 }
 
-impl BuildWithNoise<BladeTuftShape> for BushScrubTuft {
-	fn build_with_noise(&self, noise: NoiseParams) -> BladeTuftShape {
-		let config = NoiseConfig::new(noise);
-		let sample_f32 = |range: UnitRange, salt| {
-			let lo = range.start.min(range.end);
-			let hi = range.start.max(range.end);
-			config.sample_range_f32_4d(lo, hi, 0.0, 0.0, 0.0, salt)
-		};
-
-		let sample_u32 = |range: &std::ops::RangeInclusive<u32>, salt| {
-			let lo = *range.start() as usize;
-			let hi = (*range.end() as usize).saturating_add(1);
-			config.sample_range_usize_4d(lo, hi, 0.0, 0.0, 0.0, salt) as u32
-		};
-
-		let blade_length = sample_f32(self.height, 1.0).max(0.05);
-		let blade_width = blade_length * sample_f32(self.width_factor, 2.0);
-
-		BladeTuftShape {
-			blade_count: sample_u32(&self.blade_count, 3.0),
-			blade_length,
-			blade_width,
-			max_tilt_radians: sample_f32(self.max_tilt_radians, 4.0).max(0.01),
-			bend_segments: sample_u32(&self.bend_segments, 5.0).max(1),
-			seed: noise.seed,
-			..BladeTuftShape::default()
-		}
-	}
-}
-
-/// Sample authored bush ranges into a [`HighBushShootsShape`] without applying the Common High
-/// Bush playground preset.
-impl BuildWithNoise<HighBushShootsShape> for BushScrubBush {
-	fn build_with_noise(&self, noise: NoiseParams) -> HighBushShootsShape {
-		let config = NoiseConfig::new(noise);
-		let sample_f32 = |range: UnitRange, salt| {
-			let lo = range.start.min(range.end);
-			let hi = range.start.max(range.end);
-			config.sample_range_f32_4d(lo, hi, 0.0, 0.0, 0.0, salt)
-		};
-
-		let sample_u32 = |range: &std::ops::RangeInclusive<u32>, salt| {
-			let lo = *range.start() as usize;
-			let hi = (*range.end() as usize).saturating_add(1);
-			config.sample_range_usize_4d(lo, hi, 0.0, 0.0, 0.0, salt) as u32
-		};
-
-		let height = sample_f32(self.height, 1.0).max(0.25);
-		let leaf_radius = sample_f32(self.leaf_radius, 2.0).max(0.01);
-
-		HighBushShootsShape {
-			height,
-			anchor_lift_fraction: DEFAULT_ANCHOR_LIFT_FRACTION,
-			shoot_count: sample_u32(&self.shoot_count, 3.0),
-			radial_strength: sample_f32(self.radial_strength, 5.0),
-			vertical_bias: sample_f32(self.vertical_bias, 6.0),
-			branch_depth: sample_u32(&self.branch_depth, 4.0) as usize,
-			segment_length_fraction_lo: DEFAULT_SEGMENT_LENGTH_FRACTION_LO,
-			segment_length_fraction_hi: DEFAULT_SEGMENT_LENGTH_FRACTION_HI,
-			segment_radius_fraction_lo: DEFAULT_SEGMENT_RADIUS_FRACTION_LO,
-			segment_radius_fraction_hi: DEFAULT_SEGMENT_RADIUS_FRACTION_HI,
-			leaf_radius_fraction: leaf_radius / height,
-			foliage_style: HighBushFoliageStyle::PlaneSplay,
-			chain_noise: noise,
-		}
-	}
-}
-
 fn placement_transform<V>(placed: &GroveCellVariant<V>) -> Transform {
 	Transform {
 		translation: placed.position,
@@ -346,6 +271,7 @@ where
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use chico_tree_components::HighBushFoliageStyle;
 	use anyhow::Result;
 
 	#[test]

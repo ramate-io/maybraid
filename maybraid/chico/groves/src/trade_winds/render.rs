@@ -3,7 +3,6 @@
 use std::marker::PhantomData;
 
 use bevy::prelude::*;
-use chico_sbs_geometry::{HonuBanyanSbs, SopesBanyanSbs, StorybookTreeSbs, WaialeaPalmSbs};
 use chico_sbs_trees::honu_banyan::HonuBanyan;
 use chico_sbs_trees::sopes_banyan::SopesBanyan;
 use chico_sbs_trees::storybook_tree::StorybookTree;
@@ -14,9 +13,7 @@ use chico_sbs_trees::{
 use chico_tree_components::{SkippedBodyMeshMaterial, SkippedFoliageMeshMaterial};
 use chico_vegetation_shaders::{ChicoLeafMaterial, ChicoStickMaterial};
 use clap::Args;
-use procedural_common::{
-	noise_params_from_scalar_str, BuildWithNoise, NoiseConfig, NoiseParams, UnitRange,
-};
+use procedural_common::{noise_params_from_scalar_str, BuildWithNoise, NoiseParams};
 use render_item::{CascadeChunk, RenderItem};
 
 use crate::grove::{
@@ -26,10 +23,8 @@ use crate::grove::{
 use crate::skipped_mesh_material::{
 	SkippedLeafMeshMaterial, SkippedStickMeshMaterial as GroveSkippedStickMeshMaterial,
 };
-use crate::trade_winds::{
-	definition, TradeWindsBanyan, TradeWindsCell, TradeWindsItem, TradeWindsStorybook,
-	TradeWindsWaialeaPalm,
-};
+use crate::trade_winds::variants::trade_winds_banyan::{HonuBanyanSamples, SopeBanyanSamples};
+use crate::trade_winds::{definition, TradeWindsCell, TradeWindsItem};
 
 /// Honu template (material slots match playground [`RenderHonuBanyan`]).
 pub type TwHonu = HonuBanyan<
@@ -220,122 +215,6 @@ where
 	}
 }
 
-fn sample_f32(config: &NoiseConfig, range: UnitRange, salt: f32) -> f32 {
-	let lo = range.start.min(range.end);
-	let hi = range.start.max(range.end);
-	config.sample_range_f32_4d(lo, hi, 0.0, 0.0, 0.0, salt)
-}
-
-fn span_fraction(canopy_spread: f32, height: f32) -> f32 {
-	(canopy_spread / height.max(0.5)).clamp(0.35, 1.20)
-}
-
-const TRADE_WINDS_RING_SPACING_SCALE: f32 = 1.25;
-const TRADE_WINDS_ANCHORS_PER_RING: u32 = 5;
-
-fn trade_winds_ring_spacing(base: f32) -> f32 {
-	base * TRADE_WINDS_RING_SPACING_SCALE
-}
-
-impl BuildWithNoise<StorybookTreeSbs> for TradeWindsStorybook {
-	fn build_with_noise(&self, noise: NoiseParams) -> StorybookTreeSbs {
-		let config = NoiseConfig::new(noise);
-		let height =
-			sample_f32(&config, self.height, 1.0).max(self.height.start.min(self.height.end));
-		let stalk_radius = sample_f32(&config, self.stalk_radius, 1.5);
-		let canopy_spread = sample_f32(&config, self.canopy_spread, 2.0);
-		let canopy_density = sample_f32(&config, self.canopy_density, 4.0);
-		let span = span_fraction(canopy_spread, height);
-
-		let mut geometry = StorybookTreeSbs::default();
-		geometry.scale.tree_height = height;
-		geometry.scale.stalk_base_radius = Some(stalk_radius);
-		geometry.rings.spacing = trade_winds_ring_spacing(geometry.rings.spacing);
-		geometry.rings.anchors_per_ring =
-			TRADE_WINDS_ANCHORS_PER_RING + (canopy_density * 2.0).round() as u32;
-		geometry.projection.span_fraction_of_height = UnitRange::new(span * 0.82, span * 1.05);
-		geometry.rings.height_range = UnitRange::new(0.58, 1.0);
-		geometry.canopy_noise = noise;
-		geometry
-	}
-}
-
-struct HonuBanyanSamples {
-	geometry: HonuBanyanSbs,
-	growth_spawn_fraction: f32,
-}
-
-impl BuildWithNoise<HonuBanyanSamples> for TradeWindsBanyan {
-	fn build_with_noise(&self, noise: NoiseParams) -> HonuBanyanSamples {
-		let config = NoiseConfig::new(noise);
-		let height =
-			sample_f32(&config, self.height, 1.0).max(self.height.start.min(self.height.end));
-		let stalk_radius = sample_f32(&config, self.stalk_radius, 1.5);
-		let canopy_spread = sample_f32(&config, self.canopy_spread, 2.0);
-		let descender_threshold = sample_f32(&config, self.descender_density, 3.0);
-		let canopy_density = sample_f32(&config, self.canopy_density, 4.0);
-		let span = span_fraction(canopy_spread, height);
-
-		let mut geometry = HonuBanyanSbs::default();
-		geometry.scale.tree_height = height;
-		geometry.scale.stalk_radius_fraction = (stalk_radius / height).clamp(0.04, 0.08);
-		geometry.projection.length_fraction_of_height = UnitRange::new(span * 0.85, span);
-		geometry.growth.descender_threshold = descender_threshold;
-		geometry.canopy_noise = noise;
-
-		HonuBanyanSamples { geometry, growth_spawn_fraction: canopy_density }
-	}
-}
-
-struct SopeBanyanSamples {
-	geometry: SopesBanyanSbs,
-}
-
-impl BuildWithNoise<SopeBanyanSamples> for TradeWindsBanyan {
-	fn build_with_noise(&self, noise: NoiseParams) -> SopeBanyanSamples {
-		let config = NoiseConfig::new(noise);
-		let height =
-			sample_f32(&config, self.height, 1.0).max(self.height.start.min(self.height.end));
-		let stalk_radius = sample_f32(&config, self.stalk_radius, 1.5);
-		let canopy_spread = sample_f32(&config, self.canopy_spread, 2.0);
-		let descender_threshold = sample_f32(&config, self.descender_density, 3.0);
-		let canopy_density = sample_f32(&config, self.canopy_density, 4.0);
-		let span = span_fraction(canopy_spread, height);
-
-		let mut geometry = SopesBanyanSbs::default();
-		geometry.scale.stalk_height = height;
-		geometry.scale.canopy_height = height * 2.0;
-		geometry.scale.stalk_base_radius = stalk_radius;
-		geometry.projection.length_fraction_of_height =
-			UnitRange::new(span * 0.05, span * 0.18);
-		geometry.growth.descender_threshold = descender_threshold;
-		geometry.leaf_ball_factor = 0.25 + canopy_density * 0.35;
-		geometry.canopy_noise = noise;
-
-		SopeBanyanSamples { geometry }
-	}
-}
-
-fn waialea_height_floor(palm: &TradeWindsWaialeaPalm) -> f32 {
-	palm.height.start.min(palm.height.end)
-}
-
-impl BuildWithNoise<WaialeaPalmSbs> for TradeWindsWaialeaPalm {
-	fn build_with_noise(&self, noise: NoiseParams) -> WaialeaPalmSbs {
-		let config = NoiseConfig::new(noise);
-		let height = sample_f32(&config, self.height, 1.0).max(waialea_height_floor(self));
-		let crown_density = sample_f32(&config, self.crown_density, 2.0);
-
-		let mut geometry = WaialeaPalmSbs::default();
-		geometry.scale.stalk_height = height;
-		geometry.crown.ring_count = 2 + (crown_density * 2.0).round() as u32;
-		geometry.crown.fronds_per_ring = 8 + (crown_density * 7.0).round() as u32;
-		geometry.frond_world_scale = 0.55 + crown_density * 0.35;
-		geometry.trunk_noise = noise;
-		geometry
-	}
-}
-
 fn placement_transform<V>(placed: &GroveCellVariant<V>) -> Transform {
 	Transform {
 		translation: placed.position,
@@ -394,7 +273,7 @@ where
 					entities
 				}
 				TradeWindsItem::Honu(banyan) => {
-					let samples: HonuBanyanSamples = banyan.build_with_noise(build_noise);
+					let samples = BuildWithNoise::<HonuBanyanSamples>::build_with_noise(banyan, build_noise);
 					let mut tree = self.honu_template.clone();
 					tree.geometry = samples.geometry;
 					tree.construction.growth_spawn_fraction = samples.growth_spawn_fraction;
@@ -420,7 +299,7 @@ where
 					entities
 				}
 				TradeWindsItem::Sope(banyan) => {
-					let samples: SopeBanyanSamples = banyan.build_with_noise(build_noise);
+					let samples = BuildWithNoise::<SopeBanyanSamples>::build_with_noise(banyan, build_noise);
 					let mut tree = self.sope_template.clone();
 					tree.geometry = samples.geometry;
 					tree.stick_surface_noise =
@@ -491,14 +370,14 @@ mod tests {
 		let TradeWindsItem::Honu(honu) = TradeWindsCell::TradeHonuBanyan.item() else {
 			anyhow::bail!("expected trade honu item");
 		};
-		let honu_samples: HonuBanyanSamples = honu.build_with_noise(noise);
+		let honu_samples = BuildWithNoise::<HonuBanyanSamples>::build_with_noise(honu, noise);
 		assert!(honu_samples.geometry.scale.tree_height >= honu.height.start.min(honu.height.end));
 		assert!(honu_samples.geometry.scale.tree_height <= honu.height.start.max(honu.height.end));
 
 		let TradeWindsItem::Sope(sope) = TradeWindsCell::TradeSopesBanyan.item() else {
 			anyhow::bail!("expected trade sope item");
 		};
-		let sope_samples: SopeBanyanSamples = sope.build_with_noise(noise);
+		let sope_samples = BuildWithNoise::<SopeBanyanSamples>::build_with_noise(sope, noise);
 		assert!(sope_samples.geometry.scale.stalk_height >= sope.height.start.min(sope.height.end));
 		assert!(sope_samples.geometry.scale.stalk_height <= sope.height.start.max(sope.height.end));
 

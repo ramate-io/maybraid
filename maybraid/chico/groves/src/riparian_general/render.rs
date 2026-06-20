@@ -3,30 +3,19 @@
 use std::marker::PhantomData;
 
 use bevy::prelude::*;
-use chico_sbs_geometry::anchors::high_bush::{
-	DEFAULT_ANCHOR_LIFT_FRACTION, DEFAULT_SEGMENT_LENGTH_FRACTION_HI,
-	DEFAULT_SEGMENT_LENGTH_FRACTION_LO, DEFAULT_SEGMENT_RADIUS_FRACTION_HI,
-	DEFAULT_SEGMENT_RADIUS_FRACTION_LO,
-};
-use chico_sbs_geometry::{BraidOakTreeSbs, StorybookTreeSbs};
 use chico_sbs_trees::braid_oak_tree::BraidOakTree;
 use chico_sbs_trees::storybook_tree::StorybookTree;
-use chico_tree_components::{HighBushFoliageStyle, HighBushShoots, HighBushShootsShape};
+use chico_tree_components::HighBushShoots;
 use chico_vegetation_shaders::ChicoStickMaterial;
 use clap::Args;
-use procedural_common::{
-	noise_params_from_scalar_str, BuildWithNoise, NoiseConfig, NoiseParams, UnitRange,
-};
+use procedural_common::{noise_params_from_scalar_str, BuildWithNoise, NoiseParams};
 use render_item::{CascadeChunk, RenderItem};
 
 use crate::grove::{
 	patch_spawned_leaf_material, placement_noise, FlatTerrainSample, GroveExtent, GroveFrontend,
 	GroveCellVariant, GroveWorldSample, WithPalette, DEFAULT_GROVE_EXTENT_XZ,
 };
-use crate::riparian_general::{
-	definition, RiparianGeneralBraidOak, RiparianGeneralCell, RiparianGeneralHighBush,
-	RiparianGeneralItem, RiparianGeneralStorybook,
-};
+use crate::riparian_general::{definition, RiparianGeneralCell, RiparianGeneralItem};
 use crate::skipped_mesh_material::{
 	SkippedLeafMeshMaterial, SkippedStickMeshMaterial as GroveSkippedStickMeshMaterial,
 };
@@ -188,97 +177,6 @@ where
 	}
 }
 
-fn sample_f32(config: &NoiseConfig, range: UnitRange, salt: f32) -> f32 {
-	let lo = range.start.min(range.end);
-	let hi = range.start.max(range.end);
-	config.sample_range_f32_4d(lo, hi, 0.0, 0.0, 0.0, salt)
-}
-
-fn span_fraction(canopy_spread: f32, height: f32) -> f32 {
-	(canopy_spread / height.max(0.5)).clamp(0.25, 1.20)
-}
-
-const RIPARIAN_RING_SPACING_SCALE: f32 = 1.25;
-const RIPARIAN_ANCHORS_PER_RING: u32 = 5;
-
-fn riparian_ring_spacing(base: f32) -> f32 {
-	base * RIPARIAN_RING_SPACING_SCALE
-}
-
-impl BuildWithNoise<BraidOakTreeSbs> for RiparianGeneralBraidOak {
-	fn build_with_noise(&self, noise: NoiseParams) -> BraidOakTreeSbs {
-		let config = NoiseConfig::new(noise);
-		let height =
-			sample_f32(&config, self.height, 1.0).max(self.height.start.min(self.height.end));
-		let canopy_density = sample_f32(&config, self.canopy_density, 2.0);
-		let spread_lo = height * 0.35;
-		let spread_hi = height * 0.55;
-		let canopy_spread = sample_f32(&config, UnitRange::new(spread_lo, spread_hi), 3.0);
-		let span = span_fraction(canopy_spread, height);
-
-		let mut geometry = BraidOakTreeSbs::default();
-		geometry.apply_braid_preset();
-		geometry.scale.tree_height = height;
-		geometry.projection.span_fraction_of_height = UnitRange::new(span * 0.82, span * 1.02);
-		let _ = canopy_density;
-		geometry.canopy_noise = noise;
-		geometry
-	}
-}
-
-impl BuildWithNoise<StorybookTreeSbs> for RiparianGeneralStorybook {
-	fn build_with_noise(&self, noise: NoiseParams) -> StorybookTreeSbs {
-		let config = NoiseConfig::new(noise);
-		let height =
-			sample_f32(&config, self.height, 1.0).max(self.height.start.min(self.height.end));
-		let stalk_radius = sample_f32(&config, self.stalk_radius, 1.5);
-		let canopy_spread = sample_f32(&config, self.canopy_spread, 2.0);
-		let canopy_density = sample_f32(&config, self.canopy_density, 4.0);
-		let span = span_fraction(canopy_spread, height);
-
-		let mut geometry = StorybookTreeSbs::default();
-		geometry.scale.tree_height = height;
-		geometry.scale.stalk_base_radius = Some(stalk_radius);
-		geometry.rings.spacing = riparian_ring_spacing(geometry.rings.spacing);
-		geometry.rings.anchors_per_ring =
-			RIPARIAN_ANCHORS_PER_RING + (canopy_density * 2.0).round() as u32;
-		geometry.projection.span_fraction_of_height = UnitRange::new(span * 0.82, span * 1.05);
-		geometry.rings.height_range = UnitRange::new(0.58, 1.0);
-		geometry.canopy_noise = noise;
-		geometry
-	}
-}
-
-impl BuildWithNoise<HighBushShootsShape> for RiparianGeneralHighBush {
-	fn build_with_noise(&self, noise: NoiseParams) -> HighBushShootsShape {
-		let config = NoiseConfig::new(noise);
-		let sample_u32 = |range: &std::ops::RangeInclusive<u32>, salt| {
-			let lo = *range.start() as usize;
-			let hi = (*range.end() as usize).saturating_add(1);
-			config.sample_range_usize_4d(lo, hi, 0.0, 0.0, 0.0, salt) as u32
-		};
-
-		let height = sample_f32(&config, self.height, 1.0).max(self.height.start.min(self.height.end));
-		let leaf_radius = sample_f32(&config, self.leaf_radius, 2.0).max(0.01);
-
-		HighBushShootsShape {
-			height,
-			anchor_lift_fraction: DEFAULT_ANCHOR_LIFT_FRACTION,
-			shoot_count: sample_u32(&self.shoot_count, 3.0),
-			radial_strength: sample_f32(&config, self.radial_strength, 5.0),
-			vertical_bias: sample_f32(&config, self.vertical_bias, 6.0),
-			branch_depth: sample_u32(&self.branch_depth, 4.0) as usize,
-			segment_length_fraction_lo: DEFAULT_SEGMENT_LENGTH_FRACTION_LO,
-			segment_length_fraction_hi: DEFAULT_SEGMENT_LENGTH_FRACTION_HI,
-			segment_radius_fraction_lo: DEFAULT_SEGMENT_RADIUS_FRACTION_LO,
-			segment_radius_fraction_hi: DEFAULT_SEGMENT_RADIUS_FRACTION_HI,
-			leaf_radius_fraction: leaf_radius / height,
-			foliage_style: HighBushFoliageStyle::PlaneSplay,
-			chain_noise: noise,
-		}
-	}
-}
-
 fn placement_transform<V>(placed: &GroveCellVariant<V>) -> Transform {
 	Transform {
 		translation: placed.position,
@@ -399,6 +297,7 @@ where
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use chico_tree_components::HighBushFoliageStyle;
 	use anyhow::Result;
 
 	#[test]
