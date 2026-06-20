@@ -6,7 +6,7 @@
 //! few material and shape varietals. All authored data (cell footprint, placement ranges, bucket
 //! weights, constraints, palettes, and clump geometry) lives in this module as constants
 //! mirroring the RFC blocks.
-pub mod sample;
+pub mod variants;
 
 use std::ops::RangeInclusive;
 
@@ -272,7 +272,13 @@ mod tests {
 		let prepared =
 			CommonTuftsCell::distribution().prepare(0.0, 0.0, NoiseParams::default(), Vec3::ZERO);
 		let terrain = FlatTerrainSample { elevation: 0.85, steepness: 0.2 };
-		let outcome = prepared.select_from(1, Vec3::new(5.0, 0.85, 5.0), 1.0, Cell::from_min_max(Vec3::ZERO, Vec3::ONE), &terrain);
+		let outcome = prepared.select_from(
+			1,
+			Vec3::new(5.0, 0.85, 5.0),
+			1.0,
+			Cell::from_min_max(Vec3::ZERO, Vec3::ONE),
+			&terrain,
+		);
 		match outcome {
 			GroveCellOutcome::Placed { variant, .. } => {
 				assert_eq!(variant, CommonTuftsCell::DryScrub);

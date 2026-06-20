@@ -37,3 +37,19 @@ impl BuildWithNoise<BladeTuftShape> for CommonTuftClump {
 		}
 	}
 }
+
+/// A shape for a common tuft clump.
+///
+/// We store the shape under a separate type for querability.
+/// This plugs with the gimme-gen API: https://github.com/ramate-io/maybraid/tree/main/rfc/rfc-000-000-142-gimme#34-hierarchical-generation
+#[derive(Debug, Clone, PartialEq)]
+pub struct CommonTuftClumpShape(pub BladeTuftShape);
+
+impl CommonTuftClumpShape {
+	/// Build a shape from noise and a clump.
+	///
+	/// RFC-style: https://github.com/ramate-io/maybraid/tree/main/rfc/rfc-000-000-142-gimme#34-hierarchical-generation
+	pub fn from_noise_and_clump(noise: NoiseParams, clump: &CommonTuftClump) -> Self {
+		Self(clump.build_with_noise(noise))
+	}
+}
