@@ -16,10 +16,6 @@ use crate::grove::{
 	PaletteMix, PaletteSlot, PlacementConstraints,
 };
 
-#[cfg(feature = "render")]
-mod render;
-#[cfg(feature = "render")]
-pub use render::{TropicalTufts, TropicalTuftsStd};
 
 /// Authored Tropical Tufts grove definition.
 ///

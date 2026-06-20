@@ -18,10 +18,6 @@ use crate::grove::{
 	PlacementConstraints,
 };
 
-#[cfg(feature = "render")]
-mod render;
-#[cfg(feature = "render")]
-pub use render::{LowBush, LowBushStd};
 
 /// RFC `projection_count: Low` — upright rounded low shrubs.
 const LOW_PROJECTION_RADIAL: UnitRange = UnitRange::new(0.20, 0.38);

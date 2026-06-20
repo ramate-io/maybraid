@@ -14,10 +14,6 @@ use crate::grove::{
 	PlacementConstraints,
 };
 
-#[cfg(feature = "render")]
-mod render;
-#[cfg(feature = "render")]
-pub use render::{RiparianMix, RiparianMixStd};
 
 /// Sparse sampled canopy-density band ([`0.0`, `0.35`]).
 const SPARSE_CANOPY_DENSITY: UnitRange = UnitRange::new(0.0, 0.35);

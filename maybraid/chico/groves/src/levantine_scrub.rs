@@ -17,10 +17,6 @@ use crate::grove::{
 	PlacementConstraints,
 };
 
-#[cfg(feature = "render")]
-mod render;
-#[cfg(feature = "render")]
-pub use render::{LevantineScrub, LevantineScrubStd};
 
 /// RFC `projection_count: Moderate` — dry high-bush varietal.
 const MODERATE_PROJECTION_RADIAL: UnitRange = UnitRange::new(0.32, 0.48);

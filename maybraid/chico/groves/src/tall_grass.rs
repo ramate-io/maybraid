@@ -19,10 +19,6 @@ use crate::grove::{
 	PaletteMix, PaletteSlot, PlacementConstraints,
 };
 
-#[cfg(feature = "render")]
-mod render;
-#[cfg(feature = "render")]
-pub use render::{TallGrass, TallGrassStd};
 
 /// Authored Tall Grass grove definition.
 ///

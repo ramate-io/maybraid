@@ -16,9 +16,9 @@ fn span_fraction(canopy_spread: f32, height: f32) -> f32 {
 }
 
 const UNDERSTORY_RING_SPACING_SCALE: f32 = 1.85;
-pub(crate) const UNDERSTORY_ANCHORS_PER_RING: u32 = 4;
+pub const UNDERSTORY_ANCHORS_PER_RING: u32 = 4;
 
-pub(crate) fn understory_ring_spacing(base: f32) -> f32 {
+pub fn understory_ring_spacing(base: f32) -> f32 {
 	base * UNDERSTORY_RING_SPACING_SCALE
 }
 

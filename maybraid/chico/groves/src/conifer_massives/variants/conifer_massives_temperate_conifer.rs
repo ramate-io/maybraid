@@ -17,13 +17,13 @@ fn moderate_density_fraction(canopy_density: f32) -> f32 {
 	canopy_density.clamp(0.35, 0.65)
 }
 
-pub(crate) struct TemperateConiferSamples {
-	pub(crate) geometry: TemperateConiferGeometry,
-	pub(crate) fronds_per_joint: UnitRange,
-	pub(crate) frond_length_fraction: UnitRange,
-	pub(crate) frond_spawn_fraction: f32,
-	pub(crate) frond_world_scale: f32,
-	pub(crate) apex_canopy_spawn_fraction: f32,
+pub struct TemperateConiferSamples {
+	pub geometry: TemperateConiferGeometry,
+	pub fronds_per_joint: UnitRange,
+	pub frond_length_fraction: UnitRange,
+	pub frond_spawn_fraction: f32,
+	pub frond_world_scale: f32,
+	pub apex_canopy_spawn_fraction: f32,
 }
 
 impl BuildWithNoise<TemperateConiferSamples> for ConiferMassivesTemperateConifer {

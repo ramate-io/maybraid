@@ -18,11 +18,11 @@ fn dense_density_fraction(canopy_density: f32) -> f32 {
 /// Playground default from [`NorthernConifer`] (RFC `0.048 × H`).
 const NORTHERN_SPLAY_RADIUS_FRACTION: f32 = 0.048;
 
-pub(crate) struct NorthernConiferSamples {
-	pub(crate) geometry: NorthernConiferSbs,
-	pub(crate) splay_radius_fraction_of_height: f32,
-	pub(crate) splay_spawn_fraction: f32,
-	pub(crate) apex_canopy_spawn_fraction: f32,
+pub struct NorthernConiferSamples {
+	pub geometry: NorthernConiferSbs,
+	pub splay_radius_fraction_of_height: f32,
+	pub splay_spawn_fraction: f32,
+	pub apex_canopy_spawn_fraction: f32,
 }
 
 impl BuildWithNoise<NorthernConiferSamples> for ConiferMassivesNorthernConifer {

@@ -15,9 +15,9 @@ fn span_fraction(canopy_spread: f32, height: f32) -> f32 {
 	(canopy_spread / height.max(0.5)).clamp(0.35, 1.20)
 }
 
-pub(crate) struct HonuBanyanSamples {
-	pub(crate) geometry: HonuBanyanSbs,
-	pub(crate) growth_spawn_fraction: f32,
+pub struct HonuBanyanSamples {
+	pub geometry: HonuBanyanSbs,
+	pub growth_spawn_fraction: f32,
 }
 
 impl BuildWithNoise<HonuBanyanSamples> for JungleMassivesBanyan {
@@ -41,8 +41,8 @@ impl BuildWithNoise<HonuBanyanSamples> for JungleMassivesBanyan {
 	}
 }
 
-pub(crate) struct SopeBanyanSamples {
-	pub(crate) geometry: SopesBanyanSbs,
+pub struct SopeBanyanSamples {
+	pub geometry: SopesBanyanSbs,
 }
 
 impl BuildWithNoise<SopeBanyanSamples> for JungleMassivesBanyan {

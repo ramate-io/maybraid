@@ -16,10 +16,6 @@ use crate::grove::{
 	PaletteMix, PaletteSlot, PlacementConstraints,
 };
 
-#[cfg(feature = "render")]
-mod render;
-#[cfg(feature = "render")]
-pub use render::{TropicalUndergrowth, TropicalUndergrowthStd};
 
 /// Authored Tropical Undergrowth grove definition.
 ///

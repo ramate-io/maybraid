@@ -19,10 +19,10 @@ fn moderate_density_fraction(canopy_density: f32) -> f32 {
 	canopy_density.clamp(0.35, 0.65)
 }
 
-pub(crate) struct FriendConiferSamples {
-	pub(crate) geometry: FriendsConiferSbs,
-	pub(crate) apex_canopy_spawn_fraction: f32,
-	pub(crate) splay_radius_fraction_of_height: f32,
+pub struct FriendConiferSamples {
+	pub geometry: FriendsConiferSbs,
+	pub apex_canopy_spawn_fraction: f32,
+	pub splay_radius_fraction_of_height: f32,
 }
 
 impl BuildWithNoise<FriendConiferSamples> for ConiferSaplingFriendsConifer {

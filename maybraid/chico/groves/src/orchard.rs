@@ -14,10 +14,6 @@ use crate::grove::{
 	PlacementConstraints,
 };
 
-#[cfg(feature = "render")]
-mod render;
-#[cfg(feature = "render")]
-pub use render::{Orchard, OrchardStd};
 
 /// Moderate sampled canopy-density band ([`0.35`, `0.65`]).
 const MODERATE_CANOPY_DENSITY: UnitRange = UnitRange::new(0.35, 0.65);

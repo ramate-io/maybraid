@@ -16,10 +16,6 @@ use crate::grove::{
 	PlacementConstraints,
 };
 
-#[cfg(feature = "render")]
-mod render;
-#[cfg(feature = "render")]
-pub use render::{RiparianGeneral, RiparianGeneralStd};
 
 const MODERATE_CANOPY_DENSITY: UnitRange = UnitRange::new(0.35, 0.65);
 /// Flat sparse crown projection for willow-like High Bush forms.

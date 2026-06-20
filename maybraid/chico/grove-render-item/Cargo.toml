@@ -10,6 +10,7 @@ publish = { workspace = true }
 rust-version = { workspace = true }
 
 [dependencies]
+chico-groves = { workspace = true, features = ["render"] }
 bevy_math = { workspace = true }
 clap = { workspace = true, optional = true }
 procedural-common = { workspace = true }

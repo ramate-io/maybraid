@@ -14,10 +14,6 @@ use crate::grove::{
 	PlacementConstraints,
 };
 
-#[cfg(feature = "render")]
-mod render;
-#[cfg(feature = "render")]
-pub use render::{ConiferSapling, ConiferSaplingStd};
 
 /// Standard sapling height band ([`1.0`, `4.0`] m).
 const SAPLING_HEIGHT: UnitRange = UnitRange::new(1.0, 4.0);

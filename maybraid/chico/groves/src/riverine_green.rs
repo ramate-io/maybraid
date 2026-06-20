@@ -18,10 +18,6 @@ use crate::grove::{
 	PlacementConstraints,
 };
 
-#[cfg(feature = "render")]
-mod render;
-#[cfg(feature = "render")]
-pub use render::{RiverineGreen, RiverineGreenStd};
 
 /// Authored Riverine Green grove definition.
 ///

@@ -15,10 +15,10 @@ fn span_fraction(canopy_spread: f32, height: f32) -> f32 {
 	(canopy_spread / height.max(0.5)).clamp(0.25, 1.20)
 }
 
-pub(crate) struct ConiferSamples {
-	pub(crate) geometry: FriendsConiferSbs,
-	pub(crate) apex_canopy_spawn_fraction: f32,
-	pub(crate) splay_radius_fraction_of_height: f32,
+pub struct ConiferSamples {
+	pub geometry: FriendsConiferSbs,
+	pub apex_canopy_spawn_fraction: f32,
+	pub splay_radius_fraction_of_height: f32,
 }
 
 impl BuildWithNoise<ConiferSamples> for JerrysChaparralFriendsConifer {

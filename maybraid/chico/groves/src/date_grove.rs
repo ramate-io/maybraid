@@ -14,10 +14,6 @@ use crate::grove::{
 	PlacementConstraints,
 };
 
-#[cfg(feature = "render")]
-mod render;
-#[cfg(feature = "render")]
-pub use render::{DateGrove, DateGroveStd};
 
 /// Moderate sampled crown-density band ([`0.35`, `0.65`]).
 const MODERATE_CROWN_DENSITY: UnitRange = UnitRange::new(0.35, 0.65);

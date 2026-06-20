@@ -18,10 +18,6 @@ use crate::grove::{
 	PlacementConstraints,
 };
 
-#[cfg(feature = "render")]
-mod render;
-#[cfg(feature = "render")]
-pub use render::{SpottyBushes, SpottyBushesStd};
 
 /// RFC `projection_count: Moderate`.
 const MODERATE_PROJECTION_RADIAL: UnitRange = UnitRange::new(0.32, 0.48);

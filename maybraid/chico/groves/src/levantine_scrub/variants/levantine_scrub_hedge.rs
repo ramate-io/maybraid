@@ -10,11 +10,11 @@ fn sample_f32(config: &NoiseConfig, range: UnitRange, salt: f32) -> f32 {
 	config.sample_range_f32_4d(lo, hi, 0.0, 0.0, 0.0, salt)
 }
 
-pub(crate) struct HedgeSamples {
-	pub(crate) height: f32,
-	pub(crate) footprint_xz: f32,
-	pub(crate) density: f32,
-	pub(crate) seed: u32,
+pub struct HedgeSamples {
+	pub height: f32,
+	pub footprint_xz: f32,
+	pub density: f32,
+	pub seed: u32,
 }
 
 impl BuildWithNoise<HedgeSamples> for LevantineScrubHedge {

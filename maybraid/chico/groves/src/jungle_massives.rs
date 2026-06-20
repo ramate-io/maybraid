@@ -14,10 +14,6 @@ use crate::grove::{
 	PlacementConstraints,
 };
 
-#[cfg(feature = "render")]
-mod render;
-#[cfg(feature = "render")]
-pub use render::{JungleMassives, JungleMassivesStd};
 
 /// Dense sampled canopy-density band ([`0.20`, `0.60`]).
 const DENSE_CANOPY_DENSITY: UnitRange = UnitRange::new(0.2, 0.6);

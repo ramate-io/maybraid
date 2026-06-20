@@ -11,10 +11,10 @@ fn sample_f32(config: &NoiseConfig, range: UnitRange, salt: f32) -> f32 {
 	config.sample_range_f32_4d(lo, hi, 0.0, 0.0, 0.0, salt)
 }
 
-pub(crate) struct FriendsConiferSamples {
-	pub(crate) geometry: FriendsConiferSbs,
-	pub(crate) apex_canopy_spawn_fraction: f32,
-	pub(crate) splay_radius_fraction_of_height: f32,
+pub struct FriendsConiferSamples {
+	pub geometry: FriendsConiferSbs,
+	pub apex_canopy_spawn_fraction: f32,
+	pub splay_radius_fraction_of_height: f32,
 }
 
 impl BuildWithNoise<FriendsConiferSamples> for RiparianMixFriendsConifer {

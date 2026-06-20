@@ -14,10 +14,6 @@ use crate::grove::{
 	PlacementConstraints,
 };
 
-#[cfg(feature = "render")]
-mod render;
-#[cfg(feature = "render")]
-pub use render::{Shamanhome, ShamanhomeStd};
 
 /// Sparse sampled descender-density band ([`0.02`, `0.04`]).
 const SPARSE_DESCENDER_DENSITY: UnitRange = UnitRange::new(0.02, 0.04);

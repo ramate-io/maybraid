@@ -9,8 +9,8 @@ fn span_fraction(canopy_spread: f32, height: f32) -> f32 {
 	(canopy_spread / height.max(0.5)).clamp(0.35, 1.20)
 }
 
-pub(crate) struct SopeBanyanSamples {
-	pub(crate) geometry: SopesBanyanSbs,
+pub struct SopeBanyanSamples {
+	pub geometry: SopesBanyanSbs,
 }
 
 impl BuildWithNoise<SopeBanyanSamples> for WanderingAcaciaBanyan {

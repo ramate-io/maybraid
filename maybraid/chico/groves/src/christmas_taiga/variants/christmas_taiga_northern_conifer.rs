@@ -17,11 +17,11 @@ fn moderate_density_fraction(canopy_density: f32) -> f32 {
 	(0.55 + canopy_density * 0.35).clamp(0.55, 0.90)
 }
 
-pub(crate) struct NorthernConiferSamples {
-	pub(crate) geometry: NorthernConiferSbs,
-	pub(crate) splay_radius_fraction_of_height: f32,
-	pub(crate) splay_spawn_fraction: f32,
-	pub(crate) apex_canopy_spawn_fraction: f32,
+pub struct NorthernConiferSamples {
+	pub geometry: NorthernConiferSbs,
+	pub splay_radius_fraction_of_height: f32,
+	pub splay_spawn_fraction: f32,
+	pub apex_canopy_spawn_fraction: f32,
 }
 
 impl BuildWithNoise<NorthernConiferSamples> for ChristmasTaigaNorthernConifer {

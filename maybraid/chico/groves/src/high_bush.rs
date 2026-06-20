@@ -18,10 +18,6 @@ use crate::grove::{
 	PlacementConstraints,
 };
 
-#[cfg(feature = "render")]
-mod render;
-#[cfg(feature = "render")]
-pub use render::{HighBush, HighBushStd};
 
 /// RFC `projection_count: Moderate` — all High Bush varietals.
 const MODERATE_PROJECTION_RADIAL: UnitRange = UnitRange::new(0.32, 0.48);

@@ -16,10 +16,6 @@ use crate::grove::{
 	PlacementConstraints,
 };
 
-#[cfg(feature = "render")]
-mod render;
-#[cfg(feature = "render")]
-pub use render::{TropicalThicket, TropicalThicketStd};
 
 /// RFC `projection_count: Moderate` with extended upper tails for occasional wide-span shrubs.
 const MODERATE_PROJECTION_RADIAL: UnitRange = UnitRange::new(0.32, 0.56);

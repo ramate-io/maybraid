@@ -18,10 +18,6 @@ use crate::grove::{
 	PaletteMix, PaletteSlot, PlacementConstraints,
 };
 
-#[cfg(feature = "render")]
-mod render;
-#[cfg(feature = "render")]
-pub use render::{MonsterGrass, MonsterGrassStd};
 
 /// Authored Monster Grass grove definition.
 ///

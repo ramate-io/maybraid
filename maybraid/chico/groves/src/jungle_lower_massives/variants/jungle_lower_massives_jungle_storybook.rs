@@ -14,9 +14,9 @@ fn sample_f32(config: &NoiseConfig, range: UnitRange, salt: f32) -> f32 {
 	config.sample_range_f32_4d(lo, hi, 0.0, 0.0, 0.0, salt)
 }
 
-pub(crate) struct JungleStorybookSamples {
-	pub(crate) geometry: JungleStorybookTreeSbs,
-	pub(crate) growth_spawn_fraction: f32,
+pub struct JungleStorybookSamples {
+	pub geometry: JungleStorybookTreeSbs,
+	pub growth_spawn_fraction: f32,
 }
 
 impl BuildWithNoise<JungleStorybookSamples> for JungleLowerMassivesJungleStorybook {

@@ -15,9 +15,9 @@ fn span_fraction(canopy_spread: f32, height: f32) -> f32 {
 	(canopy_spread / height.max(0.5)).clamp(0.35, 1.20)
 }
 
-pub(crate) struct BanyanSamples {
-	pub(crate) geometry: HonuBanyanSbs,
-	pub(crate) growth_spawn_fraction: f32,
+pub struct BanyanSamples {
+	pub geometry: HonuBanyanSbs,
+	pub growth_spawn_fraction: f32,
 }
 
 impl BuildWithNoise<BanyanSamples> for TropicalThicketBanyan {

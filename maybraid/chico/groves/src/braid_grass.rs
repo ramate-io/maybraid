@@ -15,10 +15,6 @@ use crate::grove::{
 	PaletteMix, PaletteSlot, PlacementConstraints,
 };
 
-#[cfg(feature = "render")]
-mod render;
-#[cfg(feature = "render")]
-pub use render::{BraidGrass, BraidGrassStd};
 
 /// Authored Braid Grass grove definition.
 ///

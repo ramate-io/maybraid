@@ -15,7 +15,7 @@ fn span_fraction(canopy_spread: f32, height: f32) -> f32 {
 	(canopy_spread / height.max(0.5)).clamp(0.25, 1.5)
 }
 
-pub(crate) const UNDERSTORY_RORY_ANCHORS_PER_RING: u32 = 3;
+pub const UNDERSTORY_RORY_ANCHORS_PER_RING: u32 = 3;
 
 impl BuildWithNoise<RorysHeadTrainedSbs> for TropicalUndergrowthRoryHead {
 	fn build_with_noise(&self, noise: NoiseParams) -> RorysHeadTrainedSbs {
