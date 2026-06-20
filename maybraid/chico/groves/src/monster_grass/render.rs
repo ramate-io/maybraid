@@ -12,7 +12,7 @@ use render_item::{CascadeChunk, RenderItem};
 
 use crate::grove::{
 	patch_spawned_leaf_material, placement_noise, FlatTerrainSample, GroveExtent, GroveFrontend,
-	GroveCellVariant, TerrainSample, WithPalette, DEFAULT_GROVE_EXTENT_XZ,
+	GroveCellVariant, GroveWorldSample, WithPalette, DEFAULT_GROVE_EXTENT_XZ,
 };
 use crate::monster_grass::{definition, MonsterGrassCell, MonsterGrassClump, MonsterGrassItem};
 use crate::skipped_mesh_material::SkippedLeafMeshMaterial;
@@ -28,7 +28,7 @@ pub struct MonsterGrass<LeafM, LeafS, Terrain = FlatTerrainSample>
 where
 	LeafM: Material,
 	LeafS: Clone + Into<MeshMaterial3d<LeafM>> + Args + Send + Sync + 'static,
-	Terrain: TerrainSample + Clone + Send + Sync + 'static + Default + clap::Args,
+	Terrain: GroveWorldSample + Clone + Send + Sync + 'static + Default + clap::Args,
 {
 	#[command(flatten, next_help_heading = "Grove")]
 	pub grove: GroveFrontend,
@@ -62,7 +62,7 @@ impl<LeafM, LeafS, Terrain> Default for MonsterGrass<LeafM, LeafS, Terrain>
 where
 	LeafM: Material,
 	LeafS: Clone + Into<MeshMaterial3d<LeafM>> + Args + Send + Sync + 'static + Default,
-	Terrain: TerrainSample + Clone + Send + Sync + 'static + Default + clap::Args,
+	Terrain: GroveWorldSample + Clone + Send + Sync + 'static + Default + clap::Args,
 {
 	fn default() -> Self {
 		Self {
@@ -84,7 +84,7 @@ impl<LeafM, LeafS, Terrain> MonsterGrass<LeafM, LeafS, Terrain>
 where
 	LeafM: Material,
 	LeafS: Clone + Into<MeshMaterial3d<LeafM>> + Args + Send + Sync + 'static,
-	Terrain: TerrainSample + Clone + Send + Sync + 'static + Default + clap::Args,
+	Terrain: GroveWorldSample + Clone + Send + Sync + 'static + Default + clap::Args,
 {
 	/// Render precomputed placements instead of selecting live from the grove frontend.
 	pub fn with_resolved_placements(
@@ -180,7 +180,7 @@ impl<LeafM, LeafS, Terrain> RenderItem for MonsterGrass<LeafM, LeafS, Terrain>
 where
 	LeafM: Material + WithPalette + Default + Send + Sync + 'static,
 	LeafS: Clone + Into<MeshMaterial3d<LeafM>> + Args + Send + Sync + 'static + Default,
-	Terrain: TerrainSample + Clone + Send + Sync + 'static + Default + clap::Args,
+	Terrain: GroveWorldSample + Clone + Send + Sync + 'static + Default + clap::Args,
 {
 	fn spawn_render_items(
 		&self,

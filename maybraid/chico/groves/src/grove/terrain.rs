@@ -1,15 +1,26 @@
-//! Terrain sampling and per-variant placement constraints ([RFC-183 3.4.1.5–6, 3.4.2.4]).
+//! World sampling and per-variant placement constraints ([RFC-183 3.4.1.5–6, 3.4.2.4]).
 
-use bevy_math::Vec3;
+use bevy_math::bounding::{Aabb3d, BoundingVolume};
+use bevy_math::{Vec3, Vec3A};
 use procedural_common::UnitRange;
 
-/// Normalized elevation and steepness at world positions.
-pub trait TerrainSample {
+/// Normalized elevation, steepness, and placement exclusion at world positions.
+pub trait GroveWorldSample {
 	fn elevation_at(&self, position: Vec3) -> f32;
 	fn steepness_at(&self, position: Vec3) -> f32;
+
+	/// Axis-aligned regions where grove items must not be placed.
+	fn exclusion_zones(&self) -> &[Aabb3d] {
+		&[]
+	}
+
+	/// Whether a grove item may occupy `position` on this sample layer.
+	fn allows_placement_at(&self, position: Vec3) -> bool {
+		!point_in_any_aabb(position, self.exclusion_zones())
+	}
 }
 
-/// Uniform terrain sample for CLI previews and isolation tests.
+/// Uniform world sample for CLI previews and isolation tests.
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[cfg_attr(feature = "render", derive(clap::Args))]
 #[cfg_attr(feature = "render", command(next_help_heading = "Terrain"))]
@@ -26,7 +37,7 @@ impl Default for FlatTerrainSample {
 	}
 }
 
-impl TerrainSample for FlatTerrainSample {
+impl GroveWorldSample for FlatTerrainSample {
 	fn elevation_at(&self, _position: Vec3) -> f32 {
 		self.elevation
 	}
@@ -58,6 +69,11 @@ impl PlacementConstraints {
 	}
 }
 
+fn point_in_any_aabb(position: Vec3, zones: &[Aabb3d]) -> bool {
+	let point = Aabb3d::from_min_max(Vec3A::from(position), Vec3A::from(position));
+	zones.iter().any(|zone| zone.contains(&point))
+}
+
 fn scalar_in_half_open_range(value: f32, range: UnitRange) -> bool {
 	let lo = range.start.min(range.end);
 	let hi = range.start.max(range.end);
@@ -77,6 +93,42 @@ mod tests {
 		assert!(constraints.allows(0.2, 0.0));
 		assert!(!constraints.allows(0.6, 0.1), "upper bound is exclusive");
 		assert!(!constraints.allows(0.5, 0.9));
+		Ok(())
+	}
+
+	#[test]
+	fn flat_sample_allows_all_placements() -> Result<()> {
+		let sample = FlatTerrainSample::default();
+		assert!(sample.allows_placement_at(Vec3::ZERO));
+		assert!(sample.allows_placement_at(Vec3::new(100.0, 0.0, -50.0)));
+		Ok(())
+	}
+
+	#[test]
+	fn exclusion_zones_block_placement() -> Result<()> {
+		struct SampleWithExclusion {
+			zones: Vec<Aabb3d>,
+		}
+
+		impl GroveWorldSample for SampleWithExclusion {
+			fn elevation_at(&self, _position: Vec3) -> f32 {
+				0.5
+			}
+
+			fn steepness_at(&self, _position: Vec3) -> f32 {
+				0.1
+			}
+
+			fn exclusion_zones(&self) -> &[Aabb3d] {
+				&self.zones
+			}
+		}
+
+		let sample = SampleWithExclusion {
+			zones: vec![Aabb3d::from_min_max(Vec3::ZERO, Vec3::ONE)],
+		};
+		assert!(!sample.allows_placement_at(Vec3::new(0.5, 0.5, 0.5)));
+		assert!(sample.allows_placement_at(Vec3::new(2.0, 0.0, 0.0)));
 		Ok(())
 	}
 }

@@ -10,7 +10,7 @@ use procedural_common::{
 	perturb_weights, BucketThrow, FirstFitIndices, NoiseConfig, NoiseParams, MIN_BUCKET_WEIGHT,
 };
 
-use crate::grove::terrain::{PlacementConstraints, TerrainSample};
+use crate::grove::terrain::{GroveWorldSample, PlacementConstraints};
 use crate::grove::GroveCellOutcome;
 
 /// Noise lane for the per-cell bucket throw (offset from the placement position).
@@ -37,12 +37,15 @@ impl<V> GroveBucket<V> {
 	}
 
 	/// Whether this bucket may occupy `position` on `terrain`. `None` buckets always pass.
-	pub fn valid_at(&self, position: Vec3, terrain: &impl TerrainSample) -> bool {
+	pub fn valid_at(&self, position: Vec3, world: &impl GroveWorldSample) -> bool {
 		if self.item.is_none() {
 			return true;
 		}
-		self.constraints
-			.allows(terrain.elevation_at(position), terrain.steepness_at(position))
+		world.allows_placement_at(position)
+			&& self.constraints.allows(
+				world.elevation_at(position),
+				world.steepness_at(position),
+			)
 	}
 }
 
@@ -137,7 +140,7 @@ impl<V: Clone> PreparedGroveDistribution<V> {
 		scale: f32,
 		cell: Cell,
 		noise: NoiseParams,
-		terrain: &impl TerrainSample,
+		world: &impl GroveWorldSample,
 	) -> GroveCellOutcome<V> {
 		if self.is_empty() {
 			return GroveCellOutcome::Rejected { position };
@@ -146,7 +149,7 @@ impl<V: Clone> PreparedGroveDistribution<V> {
 		let throw = selection_noise * self.bucket_throw.total_weight() * 0.5;
 		let throw_index = self.bucket_throw.select(throw).unwrap_or(0);
 		let start = self.throw_bucket_indices.get(throw_index).copied().unwrap_or(0);
-		self.select_from(start, position, scale, cell, terrain)
+		self.select_from(start, position, scale, cell, world)
 	}
 
 	/// First-fit walk from a known starting bucket index (also used by tests and debugging).
@@ -156,11 +159,11 @@ impl<V: Clone> PreparedGroveDistribution<V> {
 		position: Vec3,
 		scale: f32,
 		_cell: Cell,
-		terrain: &impl TerrainSample,
+		world: &impl GroveWorldSample,
 	) -> GroveCellOutcome<V> {
 		for index in FirstFitIndices::new(self.buckets.len(), start) {
 			let bucket = &self.buckets[index];
-			if !bucket.valid_at(position, terrain) {
+			if !bucket.valid_at(position, world) {
 				continue;
 			}
 			return match &bucket.item {

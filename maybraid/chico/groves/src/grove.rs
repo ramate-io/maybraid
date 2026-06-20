@@ -30,7 +30,7 @@ pub use palette::{PaletteColor, PaletteMix, PaletteSlot};
 pub use sampling::{
 	cell_center, placement_noise, ForestGroveBiases, GrovePlacementRanges, PlacementSample,
 };
-pub use terrain::{FlatTerrainSample, PlacementConstraints, TerrainSample};
+pub use terrain::{FlatTerrainSample, GroveWorldSample, PlacementConstraints};
 pub use tuft_patch::GroveTuftPatch;
 
 #[cfg(feature = "render")]
@@ -144,12 +144,12 @@ impl<V: Clone> Grove<V> {
 	pub fn populate(
 		&self,
 		extent: &GroveExtent,
-		terrain: &impl TerrainSample,
+		world: &impl GroveWorldSample,
 	) -> Vec<GroveCellVariant<V>> {
 		extent
 			.subdivide_xz(self.cell_extent_xz)
 			.iter()
-			.filter_map(|cell| self.select_cell(cell, extent, terrain).into_placed())
+			.filter_map(|cell| self.select_cell(cell, extent, world).into_placed())
 			.collect()
 	}
 
@@ -158,7 +158,7 @@ impl<V: Clone> Grove<V> {
 		&self,
 		cell: &Cell,
 		extent: &GroveExtent,
-		terrain: &impl TerrainSample,
+		world: &impl GroveWorldSample,
 	) -> GroveCellOutcome<V> {
 		let sample = self.placement.sample_cell(&self.biases, self.noise, cell);
 		let candidate = sample.position_in(cell);
@@ -166,8 +166,11 @@ impl<V: Clone> Grove<V> {
 		if !extent.contains_xz(candidate) {
 			return GroveCellOutcome::Rejected { position: candidate };
 		}
-		let position = Vec3::new(candidate.x, terrain.elevation_at(candidate), candidate.z);
-		self.distribution.select_at(position, sample.scale, *cell, self.noise, terrain)
+		let position = Vec3::new(candidate.x, world.elevation_at(candidate), candidate.z);
+		if !world.allows_placement_at(position) {
+			return GroveCellOutcome::Rejected { position };
+		}
+		self.distribution.select_at(position, sample.scale, *cell, self.noise, world)
 	}
 
 	/// Sample, place, validate, and choose a bucket for one vegetation cell.
@@ -177,9 +180,9 @@ impl<V: Clone> Grove<V> {
 		&self,
 		cell: &Cell,
 		extent: &GroveExtent,
-		terrain: &impl TerrainSample,
+		world: &impl GroveWorldSample,
 	) -> (Option<GroveCellVariant<V>>, Cell) {
-		let outcome = self.select_cell(cell, extent, terrain).into_placed();
+		let outcome = self.select_cell(cell, extent, world).into_placed();
 		(outcome, *cell)
 	}
 
@@ -212,9 +215,9 @@ pub trait GroveItem: Clone {
 		cell: &Cell,
 		grove: &Grove<Self>,
 		grove_extent: &GroveExtent,
-		terrain: &impl TerrainSample,
+		world: &impl GroveWorldSample,
 	) -> Option<GroveCellVariant<Self>> {
-		grove.sample_cell(cell, grove_extent, terrain).0
+		grove.sample_cell(cell, grove_extent, world).0
 	}
 }
 

@@ -52,7 +52,7 @@ pub use grove::{
 	FlatTerrainSample, ForestGroveBiases, Grove, GroveBucket, GroveCellOutcome, GroveDefinition,
 	GroveDistribution, GroveExtent, GroveFrontend, GroveCellVariant, GrovePlacementRanges,
 	PaletteColor, PaletteMix, PaletteSlot, PlacementConstraints, PlacementSample,
-	PreparedGroveDistribution, TerrainSample, VariantWeightOverrides, DEFAULT_GROVE_EXTENT_XZ,
+	PreparedGroveDistribution, GroveWorldSample, VariantWeightOverrides, DEFAULT_GROVE_EXTENT_XZ,
 };
 
 #[cfg(feature = "render")]
