@@ -22,7 +22,7 @@ use crate::conifer_massives::{
 };
 use crate::grove::{
 	patch_spawned_leaf_material, placement_noise, FlatTerrainSample, GroveExtent, GroveFrontend,
-	GrovePlacedCell, TerrainSample, WithPalette, DEFAULT_GROVE_EXTENT_XZ,
+	GroveCellVariant, TerrainSample, WithPalette, DEFAULT_GROVE_EXTENT_XZ,
 };
 use crate::skipped_mesh_material::{
 	SkippedLeafMeshMaterial, SkippedStickMeshMaterial as GroveSkippedStickMeshMaterial,
@@ -91,7 +91,7 @@ where
 	pub terrain: Terrain,
 
 	#[arg(skip)]
-	resolved_placements: Option<Vec<GrovePlacedCell<ConiferMassivesCell>>>,
+	resolved_placements: Option<Vec<GroveCellVariant<ConiferMassivesCell>>>,
 
 	#[arg(skip)]
 	__marker: PhantomData<fn() -> (StickM, LeafM)>,
@@ -134,7 +134,7 @@ where
 	Terrain: TerrainSample + Clone + Send + Sync + 'static + Default + clap::Args,
 {
 	pub fn with_resolved_placements(
-		resolved_placements: Vec<GrovePlacedCell<ConiferMassivesCell>>,
+		resolved_placements: Vec<GroveCellVariant<ConiferMassivesCell>>,
 		terrain: Terrain,
 		tree_chain_noise: NoiseParams,
 		stick_surface_noise: NoiseParams,
@@ -177,7 +177,7 @@ where
 		self.extent.subdivide_xz(self.cell_extent_xz())
 	}
 
-	pub fn placements(&self) -> Vec<GrovePlacedCell<ConiferMassivesCell>> {
+	pub fn placements(&self) -> Vec<GroveCellVariant<ConiferMassivesCell>> {
 		if let Some(ref resolved) = self.resolved_placements {
 			return resolved.clone();
 		}
@@ -331,7 +331,7 @@ impl BuildWithNoise<TemperateConiferSamples> for ConiferMassivesTemperateConifer
 	}
 }
 
-fn placement_transform<V>(placed: &GrovePlacedCell<V>) -> Transform {
+fn placement_transform<V>(placed: &GroveCellVariant<V>) -> Transform {
 	Transform {
 		translation: placed.position,
 		rotation: Quat::IDENTITY,
@@ -479,7 +479,6 @@ where
 
 #[cfg(test)]
 mod tests {
-	use gimme_gen::Cell;
 	use super::*;
 	use anyhow::Result;
 
@@ -554,11 +553,10 @@ mod tests {
 
 	#[test]
 	fn with_resolved_placements_skips_live_selection() -> Result<()> {
-		let placement = GrovePlacedCell::new(
+		let placement = GroveCellVariant::new(
 			ConiferMassivesCell::MassiveNorthernConifer,
 			Vec3::new(1.0, 0.0, 2.0),
 			1.0,
-			Cell::from_min_max(Vec3::new(0.0, 0.0, 0.0), Vec3::new(1.0, 1.0, 1.0)),
 		);
 		let item = ConiferMassivesStd::with_resolved_placements(
 			vec![placement.clone()],

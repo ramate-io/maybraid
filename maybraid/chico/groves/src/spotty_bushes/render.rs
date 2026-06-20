@@ -18,7 +18,7 @@ use render_item::{CascadeChunk, RenderItem};
 
 use crate::grove::{
 	patch_spawned_leaf_material, placement_noise, FlatTerrainSample, GroveExtent, GroveFrontend,
-	GrovePlacedCell, TerrainSample, WithPalette, DEFAULT_GROVE_EXTENT_XZ,
+	GroveCellVariant, TerrainSample, WithPalette, DEFAULT_GROVE_EXTENT_XZ,
 };
 use crate::skipped_mesh_material::{SkippedLeafMeshMaterial, SkippedStickMeshMaterial};
 use crate::spotty_bushes::{definition, SpottyBushesBush, SpottyBushesCell, SpottyBushesItem};
@@ -86,7 +86,7 @@ where
 	pub terrain: Terrain,
 
 	#[arg(skip)]
-	resolved_placements: Option<Vec<GrovePlacedCell<SpottyBushesCell>>>,
+	resolved_placements: Option<Vec<GroveCellVariant<SpottyBushesCell>>>,
 
 	#[arg(skip)]
 	__marker: PhantomData<fn() -> (StickM, LeafM)>,
@@ -129,7 +129,7 @@ where
 	Terrain: TerrainSample + Clone + Send + Sync + 'static + Default + clap::Args,
 {
 	pub fn with_resolved_placements(
-		resolved_placements: Vec<GrovePlacedCell<SpottyBushesCell>>,
+		resolved_placements: Vec<GroveCellVariant<SpottyBushesCell>>,
 		terrain: Terrain,
 		bush_chain_noise: NoiseParams,
 		stick_surface_noise: NoiseParams,
@@ -172,7 +172,7 @@ where
 		self.extent.subdivide_xz(self.cell_extent_xz())
 	}
 
-	pub fn placements(&self) -> Vec<GrovePlacedCell<SpottyBushesCell>> {
+	pub fn placements(&self) -> Vec<GroveCellVariant<SpottyBushesCell>> {
 		if let Some(ref resolved) = self.resolved_placements {
 			return resolved.clone();
 		}
@@ -218,7 +218,7 @@ impl BuildWithNoise<HighBushShootsShape> for SpottyBushesBush {
 	}
 }
 
-fn placement_transform<V>(placed: &GrovePlacedCell<V>) -> Transform {
+fn placement_transform<V>(placed: &GroveCellVariant<V>) -> Transform {
 	Transform {
 		translation: placed.position,
 		rotation: Quat::IDENTITY,
@@ -281,7 +281,6 @@ where
 
 #[cfg(test)]
 mod tests {
-	use gimme_gen::Cell;
 	use super::*;
 	use crate::high_bush::HighBushStd;
 	use anyhow::Result;
@@ -342,7 +341,7 @@ mod tests {
 	#[test]
 	fn with_resolved_placements_skips_live_selection() -> Result<()> {
 		let placement =
-			GrovePlacedCell::new(SpottyBushesCell::GreenSpotBush, Vec3::new(1.0, 0.0, 2.0), 1.0, Cell::from_min_max(Vec3::new(0.0, 0.0, 0.0), Vec3::new(1.0, 1.0, 1.0)));
+			GroveCellVariant::new(SpottyBushesCell::GreenSpotBush, Vec3::new(1.0, 0.0, 2.0), 1.0);
 		let item = SpottyBushesStd::with_resolved_placements(
 			vec![placement.clone()],
 			FlatTerrainSample::default(),

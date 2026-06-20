@@ -15,7 +15,7 @@ use crate::braid_grass::{
 };
 use crate::grove::{
 	patch_spawned_leaf_material, placement_noise, FlatTerrainSample, GroveExtent, GroveFrontend,
-	GrovePlacedCell, TerrainSample, WithPalette, DEFAULT_GROVE_EXTENT_XZ,
+	GroveCellVariant, TerrainSample, WithPalette, DEFAULT_GROVE_EXTENT_XZ,
 };
 use crate::skipped_mesh_material::SkippedLeafMeshMaterial;
 
@@ -54,7 +54,7 @@ where
 	pub terrain: Terrain,
 
 	#[arg(skip)]
-	resolved_placements: Option<Vec<GrovePlacedCell<BraidGrassCell>>>,
+	resolved_placements: Option<Vec<GroveCellVariant<BraidGrassCell>>>,
 
 	#[arg(skip)]
 	__marker: PhantomData<fn() -> LeafM>,
@@ -90,7 +90,7 @@ where
 {
 	/// Render precomputed placements instead of selecting live from the grove frontend.
 	pub fn with_resolved_placements(
-		resolved_placements: Vec<GrovePlacedCell<BraidGrassCell>>,
+		resolved_placements: Vec<GroveCellVariant<BraidGrassCell>>,
 		terrain: Terrain,
 		foliage_noise: NoiseParams,
 		leaf_material: LeafS,
@@ -128,7 +128,7 @@ where
 		self.extent.subdivide_xz(self.cell_extent_xz())
 	}
 
-	pub fn placements(&self) -> Vec<GrovePlacedCell<BraidGrassCell>> {
+	pub fn placements(&self) -> Vec<GroveCellVariant<BraidGrassCell>> {
 		if let Some(ref resolved) = self.resolved_placements {
 			return resolved.clone();
 		}
@@ -203,7 +203,7 @@ impl BuildWithNoise<SpearTuftShape> for BraidSpearClump {
 	}
 }
 
-fn placement_transform<V>(placed: &GrovePlacedCell<V>) -> Transform {
+fn placement_transform<V>(placed: &GroveCellVariant<V>) -> Transform {
 	Transform {
 		translation: placed.position,
 		rotation: Quat::IDENTITY,
@@ -263,7 +263,6 @@ where
 
 #[cfg(test)]
 mod tests {
-	use gimme_gen::Cell;
 	use super::*;
 	use crate::grove::parse_variant_weights;
 	use anyhow::Result;
@@ -314,7 +313,7 @@ mod tests {
 	#[test]
 	fn with_resolved_placements_skips_live_selection() -> Result<()> {
 		let placement =
-			GrovePlacedCell::new(BraidGrassCell::DeepGreenBlade, Vec3::new(1.0, 0.0, 2.0), 1.0, Cell::from_min_max(Vec3::new(0.0, 0.0, 0.0), Vec3::new(1.0, 1.0, 1.0)));
+			GroveCellVariant::new(BraidGrassCell::DeepGreenBlade, Vec3::new(1.0, 0.0, 2.0), 1.0);
 		let item = BraidGrassStd::with_resolved_placements(
 			vec![placement.clone()],
 			FlatTerrainSample::default(),

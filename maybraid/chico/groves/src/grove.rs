@@ -41,6 +41,8 @@ use gimme_gen::Cell;
 use procedural_common::NoiseParams;
 
 /// Authored grove identity: cell footprint, per-cell placement ranges, and variant distribution.
+///
+/// Typically, this will be requested first by the generation hierarchy.
 #[derive(Debug, Clone, PartialEq)]
 pub struct GroveDefinition<V> {
 	/// Vegetation cell span in world metres on X and Z.
@@ -52,6 +54,9 @@ pub struct GroveDefinition<V> {
 }
 
 /// Assembled grove with forest biases, shared noise, and a pre-perturbed distribution.
+///
+/// This will be assembled from a definition by the generation hierarchy.
+#[derive(Debug, Clone)]
 pub struct Grove<V> {
 	cell_extent_xz: Vec2,
 	placement: GrovePlacementRanges,
@@ -61,17 +66,21 @@ pub struct Grove<V> {
 }
 
 /// One placed grove item ready for materialization.
+///
+/// This is the result of the selection and generation pipeline.
 #[derive(Debug, Clone, PartialEq)]
-pub struct GrovePlacedCell<V> {
+pub struct GroveCellVariant<V> {
+	/// The variant that was placed.
 	pub variant: V,
+	/// The position that was placed.
 	pub position: Vec3,
+	/// The scale that was placed.
 	pub scale: f32,
-	pub cell: Cell,
 }
 
-impl<V> GrovePlacedCell<V> {
-	pub fn new(variant: V, position: Vec3, scale: f32, cell: Cell) -> Self {
-		Self { variant, position, scale, cell }
+impl<V> GroveCellVariant<V> {
+	pub fn new(variant: V, position: Vec3, scale: f32) -> Self {
+		Self { variant, position, scale }
 	}
 }
 
@@ -82,7 +91,6 @@ pub enum GroveCellOutcome<V> {
 		variant: V,
 		position: Vec3,
 		scale: f32,
-		cell: Cell,
 	},
 	/// Explicit `None` bucket won first-fit at this candidate point. The position is the
 	/// evaluated placement (cell center + offset) so empty outcomes stay addressable in space
@@ -99,10 +107,10 @@ pub enum GroveCellOutcome<V> {
 }
 
 impl<V> GroveCellOutcome<V> {
-	pub fn into_placed(self) -> Option<GrovePlacedCell<V>> {
+	pub fn into_placed(self) -> Option<GroveCellVariant<V>> {
 		match self {
-			GroveCellOutcome::Placed { variant, position, scale, cell } => {
-				Some(GrovePlacedCell { variant, position, scale, cell })
+			GroveCellOutcome::Placed { variant, position, scale } => {
+				Some(GroveCellVariant { variant, position, scale })
 			}
 			GroveCellOutcome::Empty { .. } | GroveCellOutcome::Rejected { .. } => None,
 		}
@@ -137,7 +145,7 @@ impl<V: Clone> Grove<V> {
 		&self,
 		extent: &GroveExtent,
 		terrain: &impl TerrainSample,
-	) -> Vec<GrovePlacedCell<V>> {
+	) -> Vec<GroveCellVariant<V>> {
 		extent
 			.subdivide_xz(self.cell_extent_xz)
 			.iter()
@@ -160,6 +168,19 @@ impl<V: Clone> Grove<V> {
 		}
 		let position = Vec3::new(candidate.x, terrain.elevation_at(candidate), candidate.z);
 		self.distribution.select_at(position, sample.scale, *cell, self.noise, terrain)
+	}
+
+	/// Sample, place, validate, and choose a bucket for one vegetation cell.
+	///
+	/// This is the implementation that will hook into the generative API.
+	pub fn sample_cell(
+		&self,
+		cell: &Cell,
+		extent: &GroveExtent,
+		terrain: &impl TerrainSample,
+	) -> (Option<GroveCellVariant<V>>, Cell) {
+		let outcome = self.select_cell(cell, extent, terrain).into_placed();
+		(outcome, *cell)
 	}
 
 	pub fn cell_extent_xz(&self) -> Vec2 {

@@ -15,7 +15,7 @@ use render_item::{CascadeChunk, RenderItem};
 
 use crate::grove::{
 	patch_spawned_leaf_material, placement_noise, FlatTerrainSample, GroveExtent, GroveFrontend,
-	GrovePlacedCell, TerrainSample, WithPalette, DEFAULT_GROVE_EXTENT_XZ,
+	GroveCellVariant, TerrainSample, WithPalette, DEFAULT_GROVE_EXTENT_XZ,
 };
 use crate::rolling_oaks::{
 	definition, RollingOaksBraidOak, RollingOaksCell, RollingOaksItem, RollingOaksStorybook,
@@ -87,7 +87,7 @@ where
 	pub terrain: Terrain,
 
 	#[arg(skip)]
-	resolved_placements: Option<Vec<GrovePlacedCell<RollingOaksCell>>>,
+	resolved_placements: Option<Vec<GroveCellVariant<RollingOaksCell>>>,
 
 	#[arg(skip)]
 	__marker: PhantomData<fn() -> (StickM, LeafM)>,
@@ -130,7 +130,7 @@ where
 	Terrain: TerrainSample + Clone + Send + Sync + 'static + Default + clap::Args,
 {
 	pub fn with_resolved_placements(
-		resolved_placements: Vec<GrovePlacedCell<RollingOaksCell>>,
+		resolved_placements: Vec<GroveCellVariant<RollingOaksCell>>,
 		terrain: Terrain,
 		tree_chain_noise: NoiseParams,
 		stick_surface_noise: NoiseParams,
@@ -173,7 +173,7 @@ where
 		self.extent.subdivide_xz(self.cell_extent_xz())
 	}
 
-	pub fn placements(&self) -> Vec<GrovePlacedCell<RollingOaksCell>> {
+	pub fn placements(&self) -> Vec<GroveCellVariant<RollingOaksCell>> {
 		if let Some(ref resolved) = self.resolved_placements {
 			return resolved.clone();
 		}
@@ -230,7 +230,7 @@ impl BuildWithNoise<StorybookTreeSbs> for RollingOaksStorybook {
 	}
 }
 
-fn placement_transform<V>(placed: &GrovePlacedCell<V>) -> Transform {
+fn placement_transform<V>(placed: &GroveCellVariant<V>) -> Transform {
 	Transform {
 		translation: placed.position,
 		rotation: Quat::IDENTITY,

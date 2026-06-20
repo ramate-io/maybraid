@@ -50,7 +50,7 @@ pub mod skipped_mesh_material;
 pub use grove::{
 	cell_center, parse_variant_weights, parse_vec2_csv, parse_vec3_csv, placement_noise,
 	FlatTerrainSample, ForestGroveBiases, Grove, GroveBucket, GroveCellOutcome, GroveDefinition,
-	GroveDistribution, GroveExtent, GroveFrontend, GrovePlacedCell, GrovePlacementRanges,
+	GroveDistribution, GroveExtent, GroveFrontend, GroveCellVariant, GrovePlacementRanges,
 	PaletteColor, PaletteMix, PaletteSlot, PlacementConstraints, PlacementSample,
 	PreparedGroveDistribution, TerrainSample, VariantWeightOverrides, DEFAULT_GROVE_EXTENT_XZ,
 };

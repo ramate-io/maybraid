@@ -14,7 +14,7 @@ use render_item::{CascadeChunk, RenderItem};
 
 use crate::grove::{
 	patch_spawned_leaf_material, placement_noise, FlatTerrainSample, GroveExtent, GroveFrontend,
-	GrovePlacedCell, TerrainSample, WithPalette, DEFAULT_GROVE_EXTENT_XZ,
+	GroveCellVariant, TerrainSample, WithPalette, DEFAULT_GROVE_EXTENT_XZ,
 };
 use crate::skipped_mesh_material::SkippedLeafMeshMaterial;
 use crate::tropical_tufts::{
@@ -56,7 +56,7 @@ where
 	pub terrain: Terrain,
 
 	#[arg(skip)]
-	resolved_placements: Option<Vec<GrovePlacedCell<TropicalTuftsCell>>>,
+	resolved_placements: Option<Vec<GroveCellVariant<TropicalTuftsCell>>>,
 
 	#[arg(skip)]
 	__marker: PhantomData<fn() -> LeafM>,
@@ -92,7 +92,7 @@ where
 {
 	/// Render precomputed placements instead of selecting live from the grove frontend.
 	pub fn with_resolved_placements(
-		resolved_placements: Vec<GrovePlacedCell<TropicalTuftsCell>>,
+		resolved_placements: Vec<GroveCellVariant<TropicalTuftsCell>>,
 		terrain: Terrain,
 		foliage_noise: NoiseParams,
 		leaf_material: LeafS,
@@ -130,7 +130,7 @@ where
 		self.extent.subdivide_xz(self.cell_extent_xz())
 	}
 
-	pub fn placements(&self) -> Vec<GrovePlacedCell<TropicalTuftsCell>> {
+	pub fn placements(&self) -> Vec<GroveCellVariant<TropicalTuftsCell>> {
 		if let Some(ref resolved) = self.resolved_placements {
 			return resolved.clone();
 		}
@@ -183,7 +183,7 @@ impl BuildWithNoise<PalmBushSbs> for TropicalPalmBush {
 	}
 }
 
-fn placement_transform<V>(placed: &GrovePlacedCell<V>) -> Transform {
+fn placement_transform<V>(placed: &GroveCellVariant<V>) -> Transform {
 	Transform {
 		translation: placed.position,
 		rotation: Quat::IDENTITY,
@@ -241,7 +241,6 @@ where
 
 #[cfg(test)]
 mod tests {
-	use gimme_gen::Cell;
 	use super::*;
 	use anyhow::Result;
 
@@ -265,7 +264,7 @@ mod tests {
 	#[test]
 	fn with_resolved_placements_skips_live_selection() -> Result<()> {
 		let placement =
-			GrovePlacedCell::new(TropicalTuftsCell::BrightTuft, Vec3::new(1.0, 0.0, 2.0), 1.0, Cell::from_min_max(Vec3::new(0.0, 0.0, 0.0), Vec3::new(1.0, 1.0, 1.0)));
+			GroveCellVariant::new(TropicalTuftsCell::BrightTuft, Vec3::new(1.0, 0.0, 2.0), 1.0);
 		let item = TropicalTuftsStd::with_resolved_placements(
 			vec![placement.clone()],
 			FlatTerrainSample::default(),

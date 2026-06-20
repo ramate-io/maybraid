@@ -14,7 +14,7 @@ use render_item::{CascadeChunk, RenderItem};
 
 use crate::grove::{
 	patch_spawned_leaf_material, placement_noise, FlatTerrainSample, GroveExtent, GroveFrontend,
-	GrovePlacedCell, TerrainSample, WithPalette, DEFAULT_GROVE_EXTENT_XZ,
+	GroveCellVariant, TerrainSample, WithPalette, DEFAULT_GROVE_EXTENT_XZ,
 };
 use crate::orchard::{definition, OrchardCell, OrchardItem, OrchardStorybook};
 use crate::skipped_mesh_material::{
@@ -84,7 +84,7 @@ where
 	pub terrain: Terrain,
 
 	#[arg(skip)]
-	resolved_placements: Option<Vec<GrovePlacedCell<OrchardCell>>>,
+	resolved_placements: Option<Vec<GroveCellVariant<OrchardCell>>>,
 
 	#[arg(skip)]
 	__marker: PhantomData<fn() -> (StickM, LeafM)>,
@@ -127,7 +127,7 @@ where
 	Terrain: TerrainSample + Clone + Send + Sync + 'static + Default + clap::Args,
 {
 	pub fn with_resolved_placements(
-		resolved_placements: Vec<GrovePlacedCell<OrchardCell>>,
+		resolved_placements: Vec<GroveCellVariant<OrchardCell>>,
 		terrain: Terrain,
 		tree_chain_noise: NoiseParams,
 		stick_surface_noise: NoiseParams,
@@ -170,7 +170,7 @@ where
 		self.extent.subdivide_xz(self.cell_extent_xz())
 	}
 
-	pub fn placements(&self) -> Vec<GrovePlacedCell<OrchardCell>> {
+	pub fn placements(&self) -> Vec<GroveCellVariant<OrchardCell>> {
 		if let Some(ref resolved) = self.resolved_placements {
 			return resolved.clone();
 		}
@@ -219,7 +219,7 @@ impl BuildWithNoise<StorybookTreeSbs> for OrchardStorybook {
 	}
 }
 
-fn placement_transform<V>(placed: &GrovePlacedCell<V>) -> Transform {
+fn placement_transform<V>(placed: &GroveCellVariant<V>) -> Transform {
 	Transform {
 		translation: placed.position,
 		rotation: Quat::IDENTITY,
@@ -282,7 +282,6 @@ where
 mod tests {
 	use super::*;
 	use anyhow::Result;
-	use gimme_gen::Cell;
 
 	#[test]
 	fn tree_geometry_builds_within_authored_ranges() -> Result<()> {
@@ -314,11 +313,10 @@ mod tests {
 
 	#[test]
 	fn with_resolved_placements_skips_live_selection() -> Result<()> {
-		let placement = GrovePlacedCell::new(
+		let placement = GroveCellVariant::new(
 			OrchardCell::FruitingStorybook,
 			Vec3::new(1.0, 0.0, 2.0),
 			1.0,
-			Cell::from_min_max(Vec3::new(0.0, 0.0, 0.0), Vec3::new(1.0, 1.0, 1.0)),
 		);
 		let item = OrchardStd::with_resolved_placements(
 			vec![placement.clone()],

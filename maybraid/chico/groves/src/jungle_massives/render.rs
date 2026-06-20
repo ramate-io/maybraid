@@ -23,7 +23,7 @@ use render_item::{CascadeChunk, RenderItem};
 
 use crate::grove::{
 	patch_spawned_leaf_material, placement_noise, FlatTerrainSample, GroveExtent, GroveFrontend,
-	GrovePlacedCell, TerrainSample, WithPalette, DEFAULT_GROVE_EXTENT_XZ,
+	GroveCellVariant, TerrainSample, WithPalette, DEFAULT_GROVE_EXTENT_XZ,
 };
 use crate::jungle_massives::{
 	definition, JungleMassivesBanyan, JungleMassivesCell, JungleMassivesItem,
@@ -141,7 +141,7 @@ where
 	pub terrain: Terrain,
 
 	#[arg(skip)]
-	resolved_placements: Option<Vec<GrovePlacedCell<JungleMassivesCell>>>,
+	resolved_placements: Option<Vec<GroveCellVariant<JungleMassivesCell>>>,
 
 	#[arg(skip)]
 	__marker: PhantomData<fn() -> (StickM, LeafM)>,
@@ -187,7 +187,7 @@ where
 	Terrain: TerrainSample + Clone + Send + Sync + 'static + Default + clap::Args,
 {
 	pub fn with_resolved_placements(
-		resolved_placements: Vec<GrovePlacedCell<JungleMassivesCell>>,
+		resolved_placements: Vec<GroveCellVariant<JungleMassivesCell>>,
 		terrain: Terrain,
 		tree_chain_noise: NoiseParams,
 		stick_surface_noise: NoiseParams,
@@ -233,7 +233,7 @@ where
 		self.extent.subdivide_xz(self.cell_extent_xz())
 	}
 
-	pub fn placements(&self) -> Vec<GrovePlacedCell<JungleMassivesCell>> {
+	pub fn placements(&self) -> Vec<GroveCellVariant<JungleMassivesCell>> {
 		if let Some(ref resolved) = self.resolved_placements {
 			return resolved.clone();
 		}
@@ -332,7 +332,7 @@ impl BuildWithNoise<JungleStorybookSamples> for JungleMassivesJungleStorybook {
 	}
 }
 
-fn placement_transform<V>(placed: &GrovePlacedCell<V>) -> Transform {
+fn placement_transform<V>(placed: &GroveCellVariant<V>) -> Transform {
 	Transform {
 		translation: placed.position,
 		rotation: Quat::IDENTITY,
@@ -448,7 +448,6 @@ where
 
 #[cfg(test)]
 mod tests {
-	use gimme_gen::Cell;
 	use super::*;
 	use crate::jungle_lower_massives::JungleLowerMassivesStd;
 	use anyhow::Result;
@@ -511,11 +510,10 @@ mod tests {
 
 	#[test]
 	fn with_resolved_placements_skips_live_selection() -> Result<()> {
-		let placement = GrovePlacedCell::new(
+		let placement = GroveCellVariant::new(
 			JungleMassivesCell::MassiveJungleStorybook,
 			Vec3::new(1.0, 0.0, 2.0),
 				1.0,
-			Cell::from_min_max(Vec3::new(0.0, 0.0, 0.0), Vec3::new(1.0, 1.0, 1.0)),
 		);
 		let item = JungleMassivesStd::with_resolved_placements(
 			vec![placement.clone()],
@@ -573,23 +571,20 @@ mod tests {
 	#[test]
 	fn resolved_placements_cover_all_varietal_kinds() -> Result<()> {
 		let placements = vec![
-			GrovePlacedCell::new(
+			GroveCellVariant::new(
 				JungleMassivesCell::MassiveJungleStorybook,
 				Vec3::new(0.0, 0.0, 0.0),
 				1.0,
-			Cell::from_min_max(Vec3::new(0.0, 0.0, 0.0), Vec3::new(1.0, 1.0, 1.0)),
 			),
-			GrovePlacedCell::new(
+			GroveCellVariant::new(
 				JungleMassivesCell::MassiveHonuBanyan,
 				Vec3::new(4.0, 0.0, 0.0),
 				1.0,
-			Cell::from_min_max(Vec3::new(0.0, 0.0, 0.0), Vec3::new(1.0, 1.0, 1.0)),
 			),
-			GrovePlacedCell::new(
+			GroveCellVariant::new(
 				JungleMassivesCell::MassiveSopesBanyan,
 				Vec3::new(8.0, 0.0, 0.0),
 				1.0,
-			Cell::from_min_max(Vec3::new(0.0, 0.0, 0.0), Vec3::new(1.0, 1.0, 1.0)),
 			),
 		];
 		let item = JungleMassivesStd::with_resolved_placements(

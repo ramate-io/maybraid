@@ -155,7 +155,7 @@ impl<V: Clone> PreparedGroveDistribution<V> {
 		start: usize,
 		position: Vec3,
 		scale: f32,
-		cell: Cell,
+		_cell: Cell,
 		terrain: &impl TerrainSample,
 	) -> GroveCellOutcome<V> {
 		for index in FirstFitIndices::new(self.buckets.len(), start) {
@@ -165,7 +165,7 @@ impl<V: Clone> PreparedGroveDistribution<V> {
 			}
 			return match &bucket.item {
 				Some(variant) => {
-					GroveCellOutcome::Placed { variant: variant.clone(), position, scale, cell }
+					GroveCellOutcome::Placed { variant: variant.clone(), position, scale }
 				}
 				None => GroveCellOutcome::Empty { position },
 			};
