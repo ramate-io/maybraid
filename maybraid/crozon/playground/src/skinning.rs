@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use bevy::{mesh::skinning::SkinnedMesh, prelude::*};
 
@@ -26,8 +26,17 @@ pub struct CharacterRig;
 pub struct ModularPart;
 
 #[derive(Component)]
-pub struct NeedsSkinRemap {
+pub struct PartRigRef {
 	pub rig_root: Entity,
+}
+
+#[derive(Component)]
+pub struct NeedsSkinRemap;
+
+/// Part mesh was skinned to a skeleton that does not match the active rig (e.g. head armature).
+#[derive(Component, Debug)]
+pub struct NoMatchingArmature {
+	pub missing_joints: Vec<String>,
 }
 
 #[derive(Component, Default)]
@@ -64,14 +73,17 @@ pub fn build_rig_bone_map(
 
 pub fn remap_part_skin_to_rig(
 	mut commands: Commands,
-	part_roots: Query<(Entity, &Children, &NeedsSkinRemap), With<ModularPart>>,
+	part_roots: Query<
+		(Entity, &Children, &PartRigRef, &NeedsSkinRemap),
+		(With<ModularPart>, Without<NoMatchingArmature>),
+	>,
 	rig_maps: Query<&BoneMap, With<CharacterRig>>,
 	children_q: Query<&Children>,
 	names_q: Query<&Name>,
 	mut skinned_meshes: Query<&mut SkinnedMesh>,
 ) {
-	for (part_root, children, remap) in &part_roots {
-		let Ok(rig_map) = rig_maps.get(remap.rig_root) else {
+	for (part_root, children, rig_ref, _needs_remap) in &part_roots {
+		let Ok(rig_map) = rig_maps.get(rig_ref.rig_root) else {
 			continue;
 		};
 
@@ -80,30 +92,35 @@ pub fn remap_part_skin_to_rig(
 		}
 
 		let mut stack: Vec<Entity> = children.iter().collect();
-		let mut remapped_any = false;
+		let mut any_skinned = false;
+		let mut all_meshes_ok = true;
+		let mut missing_joints = HashSet::new();
 
 		while let Some(entity) = stack.pop() {
 			if let Ok(mut skin) = skinned_meshes.get_mut(entity) {
+				any_skinned = true;
 				let mut new_joints = Vec::with_capacity(skin.joints.len());
+				let mut mesh_ok = true;
 
 				for old_joint in &skin.joints {
 					let Ok(old_name) = names_q.get(*old_joint) else {
+						mesh_ok = false;
 						continue;
 					};
 
-					let Some(new_joint) = rig_map.by_name.get(old_name.as_str()) else {
-						warn!("No matching rig joint for part joint {}", old_name);
-						continue;
-					};
-
-					new_joints.push(*new_joint);
+					match rig_map.by_name.get(old_name.as_str()) {
+						Some(new_joint) => new_joints.push(*new_joint),
+						None => {
+							missing_joints.insert(old_name.to_string());
+							mesh_ok = false;
+						}
+					}
 				}
 
-				if new_joints.len() == skin.joints.len() {
+				if mesh_ok && new_joints.len() == skin.joints.len() {
 					skin.joints = new_joints;
-					remapped_any = true;
 				} else {
-					warn!("Part skin remap failed due to missing joints");
+					all_meshes_ok = false;
 				}
 			}
 
@@ -112,22 +129,35 @@ pub fn remap_part_skin_to_rig(
 			}
 		}
 
-		if remapped_any {
-			commands.entity(part_root).remove::<NeedsSkinRemap>();
+		if !any_skinned {
+			continue;
 		}
+
+		if !all_meshes_ok {
+			let mut missing: Vec<_> = missing_joints.into_iter().collect();
+			missing.sort();
+			warn!(
+				"Part skin remap failed ({} missing rig joints): {}",
+				missing.len(),
+				missing.join(", ")
+			);
+			commands.entity(part_root).insert(NoMatchingArmature { missing_joints: missing });
+		}
+
+		commands.entity(part_root).remove::<NeedsSkinRemap>();
 	}
 }
 
 pub fn attach_parts_to_sockets(
 	mut commands: Commands,
 	mut parts: Query<
-		(Entity, &mut Transform, &NeedsSkinRemap, &NeedsSocketPlacement),
+		(Entity, &mut Transform, &PartRigRef, &NeedsSocketPlacement),
 		With<ModularPart>,
 	>,
 	rig_maps: Query<&BoneMap, With<CharacterRig>>,
 ) {
-	for (entity, mut transform, remap, placement) in &mut parts {
-		let Ok(rig_map) = rig_maps.get(remap.rig_root) else {
+	for (entity, mut transform, rig_ref, placement) in &mut parts {
+		let Ok(rig_map) = rig_maps.get(rig_ref.rig_root) else {
 			continue;
 		};
 

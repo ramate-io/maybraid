@@ -2,7 +2,7 @@ use bevy::prelude::*;
 
 use crate::skinning::{
 	BoneMap, CharacterRig, DumpBonesRequest, ModularPart, ModularPartKind, NeedsSkinRemap,
-	NeedsSocketPlacement, HEAD_SCALE, HEAD_SOCKET_BONE,
+	NeedsSocketPlacement, PartRigRef, HEAD_SCALE, HEAD_SOCKET_BONE,
 };
 
 pub const DEFAULT_RIG: &str = "characters/bodies/humanoid_rig.glb";
@@ -129,7 +129,8 @@ pub(crate) fn sync_character(
 			SceneRoot(asset_server.load(GltfAssetLabel::Scene(0).from_asset(path))),
 			ModularPart,
 			kind,
-			NeedsSkinRemap { rig_root: rig_entity },
+			PartRigRef { rig_root: rig_entity },
+			NeedsSkinRemap,
 			CharacterRoot,
 			transform,
 			Name::new(format!("character_{label}")),

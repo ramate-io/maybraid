@@ -1,5 +1,6 @@
 //! Interactive viewer for Crozon modular character rigs.
 
+mod animation;
 pub mod camera;
 pub mod character;
 pub mod checkerboard_material;
@@ -16,6 +17,7 @@ use bevy::prelude::*;
 use character::CharacterConfig;
 use game_commands::command::{capture_command_line_input, GameCommandPlugin};
 use ground::setup_ground;
+use animation::{animate_limbs, init_limb_animators};
 use skinning::{
 	attach_parts_to_sockets, build_rig_bone_map, dump_bones_to_console, remap_part_skin_to_rig,
 	DumpBonesRequest,
@@ -44,7 +46,9 @@ impl Plugin for CrozonCharacterPlaygroundPlugin {
 						.after(capture_command_line_input::<PlaygroundCommand>),
 					build_rig_bone_map,
 					attach_parts_to_sockets.after(build_rig_bone_map),
-					remap_part_skin_to_rig.after(build_rig_bone_map),
+					remap_part_skin_to_rig.after(attach_parts_to_sockets),
+					init_limb_animators.after(build_rig_bone_map),
+					animate_limbs.after(init_limb_animators),
 					dump_bones_to_console,
 					ui::sync_command_status_text.before(game_commands::ui::update_debug_ui),
 				),
