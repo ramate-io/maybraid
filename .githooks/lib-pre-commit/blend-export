@@ -27,6 +27,18 @@ if [ ! -f "$EXPORT_SCRIPT" ]; then
     exit 1
 fi
 
+# Incremental locally by default; full re-export in GitHub Actions CI.
+# Override with BLEND_EXPORT_FULL=1 or BLEND_EXPORT_INCREMENTAL=1.
+if [ -n "$BLEND_EXPORT_FULL" ]; then
+    INCREMENTAL=0
+elif [ -n "$BLEND_EXPORT_INCREMENTAL" ]; then
+    INCREMENTAL=1
+elif [ -n "$GITHUB_ACTIONS" ]; then
+    INCREMENTAL=0
+else
+    INCREMENTAL=1
+fi
+
 BLEND_FILES=$(git ls-files --cached --exclude-standard 'maybraid/art/**/*.blend' | grep -E '\.blend$' || true)
 
 if [ -z "$BLEND_FILES" ]; then
@@ -35,7 +47,7 @@ if [ -z "$BLEND_FILES" ]; then
 fi
 
 TOTAL_FILES=$(echo "$BLEND_FILES" | wc -l | tr -d ' ')
-if [ -n "$BLEND_EXPORT_INCREMENTAL" ]; then
+if [ "$INCREMENTAL" -eq 1 ]; then
     echo "📝 Found $TOTAL_FILES tracked .blend files (incremental mode)"
 else
     echo "📝 Found $TOTAL_FILES tracked .blend files (full export)"
@@ -55,7 +67,7 @@ needs_export() {
     local blend_file="$1"
     local glb_file="$2"
 
-    if [ -z "$BLEND_EXPORT_INCREMENTAL" ]; then
+    if [ "$INCREMENTAL" -eq 0 ]; then
         return 0
     fi
 
@@ -92,7 +104,7 @@ while IFS= read -r blend_file || [ -n "$blend_file" ]; do
         echo "💡 Tips:"
         echo "   - Ensure the .blend file opens cleanly in Blender"
         echo "   - Run manually: blender --background \"${blend_file}\" --python \"${EXPORT_SCRIPT}\" -- \"${glb_file}\""
-        echo "   - For faster local commits when art is unchanged: BLEND_EXPORT_INCREMENTAL=1"
+        echo "   - To force full re-export locally: BLEND_EXPORT_FULL=1"
         exit 1
     fi
 done <<< "$BLEND_FILES"
@@ -112,5 +124,7 @@ else
     echo "✨ Blend export completed."
 fi
 
-echo "ℹ️  For faster local commits when art is unchanged: BLEND_EXPORT_INCREMENTAL=1"
+if [ "$INCREMENTAL" -eq 1 ]; then
+    echo "ℹ️  Incremental export is the local default; use BLEND_EXPORT_FULL=1 to re-export all .blend files"
+fi
 exit 0
