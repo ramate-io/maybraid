@@ -17,7 +17,7 @@ pub struct NeedsSocketPlacement {
 }
 
 pub const HEAD_SOCKET_BONE: &str = "upper_neck";
-pub const HEAD_SCALE: f32 = 0.15;
+pub const HEAD_SCALE: f32 = 0.3;
 
 #[derive(Component)]
 pub struct CharacterRig;
@@ -141,7 +141,9 @@ pub fn remap_part_skin_to_rig(
 				missing.len(),
 				missing.join(", ")
 			);
-			commands.entity(part_root).insert(NoMatchingArmature { missing_joints: missing });
+			commands
+				.entity(part_root)
+				.insert(NoMatchingArmature { missing_joints: missing });
 		}
 
 		commands.entity(part_root).remove::<NeedsSkinRemap>();
