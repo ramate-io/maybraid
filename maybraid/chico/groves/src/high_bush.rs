@@ -11,15 +11,13 @@ use std::ops::RangeInclusive;
 use bevy_math::Vec2;
 use procedural_common::UnitRange;
 
+pub mod variants;
+
 use crate::grove::{
 	GroveBucket, GroveDefinition, GroveDistribution, GrovePlacementRanges, PaletteMix, PaletteSlot,
 	PlacementConstraints,
 };
 
-#[cfg(feature = "render")]
-mod render;
-#[cfg(feature = "render")]
-pub use render::{HighBush, HighBushStd};
 
 /// RFC `projection_count: Moderate` — all High Bush varietals.
 const MODERATE_PROJECTION_RADIAL: UnitRange = UnitRange::new(0.32, 0.48);
@@ -240,6 +238,7 @@ mod tests {
 	};
 	use anyhow::Result;
 	use bevy_math::Vec3;
+	use gimme_gen::Cell;
 	use procedural_common::NoiseParams;
 
 	#[test]
@@ -300,7 +299,7 @@ mod tests {
 		let prepared =
 			HighBushCell::distribution().prepare(0.0, 0.0, NoiseParams::default(), Vec3::ZERO);
 		let terrain = FlatTerrainSample { elevation: 0.35, steepness: 0.40 };
-		let outcome = prepared.select_from(4, Vec3::new(5.0, 0.35, 5.0), 1.0, &terrain);
+		let outcome = prepared.select_from(4, Vec3::new(5.0, 0.35, 5.0), 1.0, Cell::from_min_max(Vec3::ZERO, Vec3::ONE), &terrain);
 		match outcome {
 			GroveCellOutcome::Placed { variant, .. } => {
 				assert_eq!(variant, HighBushCell::CopperCaneHighBush);

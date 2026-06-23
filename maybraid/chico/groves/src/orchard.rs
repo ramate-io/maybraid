@@ -7,15 +7,13 @@
 use bevy_math::Vec2;
 use procedural_common::UnitRange;
 
+pub mod variants;
+
 use crate::grove::{
 	GroveBucket, GroveDefinition, GroveDistribution, GrovePlacementRanges, PaletteMix, PaletteSlot,
 	PlacementConstraints,
 };
 
-#[cfg(feature = "render")]
-mod render;
-#[cfg(feature = "render")]
-pub use render::{Orchard, OrchardStd};
 
 /// Moderate sampled canopy-density band ([`0.35`, `0.65`]).
 const MODERATE_CANOPY_DENSITY: UnitRange = UnitRange::new(0.35, 0.65);
@@ -27,10 +25,7 @@ const MODERATE_CANOPY_DENSITY: UnitRange = UnitRange::new(0.35, 0.65);
 pub fn definition() -> GroveDefinition<OrchardCell> {
 	GroveDefinition {
 		cell_extent_xz: Vec2::splat(11.0),
-		placement: GrovePlacementRanges::new(
-			UnitRange::new(1.0, 1.0),
-			UnitRange::new(-0.5, 0.5),
-		),
+		placement: GrovePlacementRanges::new(UnitRange::new(1.0, 1.0), UnitRange::new(-0.5, 0.5)),
 		distribution: OrchardCell::distribution(),
 	}
 }
@@ -142,6 +137,7 @@ mod tests {
 	};
 	use anyhow::Result;
 	use bevy_math::Vec3;
+	use gimme_gen::Cell;
 	use procedural_common::NoiseParams;
 
 	#[test]
@@ -172,15 +168,11 @@ mod tests {
 
 	#[test]
 	fn geometry_follows_authored_bands() -> Result<()> {
-		let OrchardItem::Storybook(fruiting) = OrchardCell::FruitingStorybook.item() else {
-			anyhow::bail!("expected fruiting storybook item");
-		};
+		let OrchardItem::Storybook(fruiting) = OrchardCell::FruitingStorybook.item();
 		assert_eq!(fruiting.height, UnitRange::new(5.0, 10.0));
 		assert_eq!(fruiting.canopy_density, MODERATE_CANOPY_DENSITY);
 
-		let OrchardItem::Storybook(pale) = OrchardCell::PaleBloomStorybook.item() else {
-			anyhow::bail!("expected pale bloom storybook item");
-		};
+		let OrchardItem::Storybook(pale) = OrchardCell::PaleBloomStorybook.item();
 		assert_eq!(pale.height, UnitRange::new(5.0, 9.0));
 		Ok(())
 	}
@@ -213,7 +205,13 @@ mod tests {
 		let prepared =
 			OrchardCell::distribution().prepare(0.0, 0.0, NoiseParams::default(), Vec3::ZERO);
 		let gentle = FlatTerrainSample { elevation: 0.40, steepness: 0.25 };
-		let fruiting_outcome = prepared.select_from(1, Vec3::new(5.0, 0.40, 5.0), 1.0, &gentle);
+		let fruiting_outcome = prepared.select_from(
+			1,
+			Vec3::new(5.0, 0.40, 5.0),
+			1.0,
+			Cell::from_min_max(Vec3::ZERO, Vec3::ONE),
+			&gentle,
+		);
 		match fruiting_outcome {
 			GroveCellOutcome::Placed { variant, .. } => {
 				assert_eq!(variant, OrchardCell::FruitingStorybook);
@@ -221,7 +219,13 @@ mod tests {
 			other => anyhow::bail!("expected FruitingStorybook on gentle slope, got {other:?}"),
 		}
 		let steep = FlatTerrainSample { elevation: 0.40, steepness: 0.32 };
-		let steep_outcome = prepared.select_from(1, Vec3::new(5.0, 0.40, 5.0), 1.0, &steep);
+		let steep_outcome = prepared.select_from(
+			1,
+			Vec3::new(5.0, 0.40, 5.0),
+			1.0,
+			Cell::from_min_max(Vec3::ZERO, Vec3::ONE),
+			&steep,
+		);
 		match steep_outcome {
 			GroveCellOutcome::Placed { variant, .. } => {
 				assert_ne!(variant, OrchardCell::FruitingStorybook);

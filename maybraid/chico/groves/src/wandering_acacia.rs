@@ -9,15 +9,13 @@ use std::ops::RangeInclusive;
 use bevy_math::Vec2;
 use procedural_common::UnitRange;
 
+pub mod variants;
+
 use crate::grove::{
 	GroveBucket, GroveDefinition, GroveDistribution, GrovePlacementRanges, PaletteMix, PaletteSlot,
 	PlacementConstraints,
 };
 
-#[cfg(feature = "render")]
-mod render;
-#[cfg(feature = "render")]
-pub use render::{WanderingAcacia, WanderingAcaciaStd};
 
 /// Sparse sampled canopy-density band ([`0.0`, `0.35`]).
 const SPARSE_CANOPY_DENSITY: UnitRange = UnitRange::new(0.0, 0.35);
@@ -262,6 +260,7 @@ mod tests {
 	};
 	use anyhow::Result;
 	use bevy_math::Vec3;
+	use gimme_gen::Cell;
 	use procedural_common::NoiseParams;
 
 	#[test]
@@ -358,7 +357,7 @@ mod tests {
 			Vec3::ZERO,
 		);
 		let moderate = FlatTerrainSample { elevation: 0.40, steepness: 0.55 };
-		let sope_outcome = prepared.select_from(2, Vec3::new(5.0, 0.40, 5.0), 1.0, &moderate);
+		let sope_outcome = prepared.select_from(2, Vec3::new(5.0, 0.40, 5.0), 1.0, Cell::from_min_max(Vec3::ZERO, Vec3::ONE), &moderate);
 		match sope_outcome {
 			GroveCellOutcome::Placed { variant, .. } => {
 				assert_eq!(variant, WanderingAcaciaCell::DryWanderingSopesBanyan);
@@ -368,7 +367,7 @@ mod tests {
 			}
 		}
 		let steep = FlatTerrainSample { elevation: 0.40, steepness: 0.60 };
-		let steep_outcome = prepared.select_from(2, Vec3::new(5.0, 0.40, 5.0), 1.0, &steep);
+		let steep_outcome = prepared.select_from(2, Vec3::new(5.0, 0.40, 5.0), 1.0, Cell::from_min_max(Vec3::ZERO, Vec3::ONE), &steep);
 		match steep_outcome {
 			GroveCellOutcome::Placed { variant, .. } => {
 				assert_eq!(variant, WanderingAcaciaCell::WanderingVaseTree);
@@ -377,7 +376,7 @@ mod tests {
 				"expected fall-through to WanderingVaseTree on steep slope, got {other:?}"
 			),
 		}
-		let bush_outcome = prepared.select_from(1, Vec3::new(5.0, 0.40, 5.0), 1.0, &steep);
+		let bush_outcome = prepared.select_from(1, Vec3::new(5.0, 0.40, 5.0), 1.0, Cell::from_min_max(Vec3::ZERO, Vec3::ONE), &steep);
 		match bush_outcome {
 			GroveCellOutcome::Placed { variant, .. } => {
 				assert_eq!(variant, WanderingAcaciaCell::WanderingHighBush);

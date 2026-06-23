@@ -22,6 +22,11 @@
         craneLib = (crane.mkLib pkgs).overrideToolchain(toolchain);
         frameworks = pkgs.darwin.apple_sdk.frameworks;
 
+        macosBlenderApp = "/Applications/Blender.app/Contents/MacOS/Blender";
+        macosBlender = pkgs.writeShellScriptBin "blender" ''
+          exec ${macosBlenderApp} "$@"
+        '';
+
         # An LLVM build environment
         dependencies = with pkgs; [
           gh
@@ -30,6 +35,7 @@
           grpcui
           ltex-ls-plus
           lychee
+          uv
           perl
           llvmPackages.bintools
           openssl
@@ -56,6 +62,7 @@
           frameworks.CoreFoundation
           frameworks.Foundation
           libelf
+          macosBlender
         ] ++ lib.optionals stdenv.isLinux [
           udev
           systemd
@@ -63,6 +70,7 @@
           elfutils
           jemalloc
           alsa-lib
+          blender
         ];
 
         # Specific version of toolchain
@@ -101,6 +109,24 @@
                 export MACOSX_DEPLOYMENT_TARGET=$(sw_vers -productVersion)
                 export LDFLAGS="-L/opt/homebrew/opt/zlib/lib"
                 export CPPFLAGS="-I/opt/homebrew/opt/zlib/include"
+
+                macos_blender="${macosBlenderApp}"
+                if [ ! -x "$macos_blender" ]; then
+                  echo ""
+                  echo "❌ Blender not found at $macos_blender"
+                  echo "Install Blender 5.1.2 from https://www.blender.org/download/"
+                  exit 1
+                fi
+                blender_version="$("$macos_blender" --version 2>/dev/null | head -1 || true)"
+                if [ -z "$blender_version" ]; then
+                  echo ""
+                  echo "❌ Failed to run Blender at $macos_blender"
+                  exit 1
+                fi
+                if [[ ! "$blender_version" =~ ^Blender\ 5\.1\. ]]; then
+                  echo ""
+                  echo "⚠️  Blender 5.1.2 is preferred for .blend → .glb export (found: $blender_version)"
+                fi
               fi
 
               # Add ./target/debug/* to PATH

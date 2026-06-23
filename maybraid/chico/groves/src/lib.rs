@@ -44,15 +44,12 @@ pub mod tropical_undergrowth;
 pub mod unending_jungle;
 pub mod wild_grass;
 
-#[cfg(feature = "render")]
-pub mod skipped_mesh_material;
-
 pub use grove::{
 	cell_center, parse_variant_weights, parse_vec2_csv, parse_vec3_csv, placement_noise,
 	FlatTerrainSample, ForestGroveBiases, Grove, GroveBucket, GroveCellOutcome, GroveDefinition,
-	GroveDistribution, GroveExtent, GroveFrontend, GrovePlacedCell, GrovePlacementRanges,
+	GroveDistribution, GroveExtent, GroveFrontend, GroveCellVariant, GrovePlacementRanges,
 	PaletteColor, PaletteMix, PaletteSlot, PlacementConstraints, PlacementSample,
-	PreparedGroveDistribution, TerrainSample, VariantWeightOverrides, DEFAULT_GROVE_EXTENT_XZ,
+	PreparedGroveDistribution, GroveWorldSample, VariantWeightOverrides, DEFAULT_GROVE_EXTENT_XZ,
 };
 
 #[cfg(feature = "render")]
@@ -170,84 +167,3 @@ pub use unending_jungle::{
 	UnendingJungleRoryHead, UnendingJungleStorybook, UnendingJungleTorch, UnendingJungleWaialeaPalm,
 };
 pub use wild_grass::{WildGrassCell, WildGrassClump, WildGrassItem};
-
-#[cfg(feature = "render")]
-pub use arid_conifer_sapling::{AridConiferSapling, AridConiferSaplingStd};
-#[cfg(feature = "render")]
-pub use alpine::{Alpine, AlpineStd};
-#[cfg(feature = "render")]
-pub use dryland::{Dryland, DrylandStd};
-#[cfg(feature = "render")]
-pub use storytellers::{Storytellers, StorytellersStd};
-#[cfg(feature = "render")]
-pub use trade_winds::{TradeWinds, TradeWindsStd};
-#[cfg(feature = "render")]
-pub use wandering_acacia::{WanderingAcacia, WanderingAcaciaStd};
-#[cfg(feature = "render")]
-pub use leeward::{Leeward, LeewardStd};
-#[cfg(feature = "render")]
-pub use christmas_taiga::{ChristmasTaiga, ChristmasTaigaStd};
-#[cfg(feature = "render")]
-pub use conifer_massives::{ConiferMassives, ConiferMassivesStd};
-#[cfg(feature = "render")]
-pub use temperate_massives::{TemperateMassives, TemperateMassivesStd};
-#[cfg(feature = "render")]
-pub use riparian_general::{RiparianGeneral, RiparianGeneralStd};
-#[cfg(feature = "render")]
-pub use rolling_oaks::{RollingOaks, RollingOaksStd};
-#[cfg(feature = "render")]
-pub use forlorn_savanna::{ForlornSavanna, ForlornSavannaStd};
-#[cfg(feature = "render")]
-pub use orchard::{Orchard, OrchardStd};
-#[cfg(feature = "render")]
-pub use vineyard::{Vineyard, VineyardStd};
-#[cfg(feature = "render")]
-pub use date_grove::{DateGrove, DateGroveStd};
-#[cfg(feature = "render")]
-pub use braid_grass::{BraidGrass, BraidGrassStd};
-#[cfg(feature = "render")]
-pub use bush_scrub::{BushScrub, BushScrubStd};
-#[cfg(feature = "render")]
-pub use common_tufts::{CommonTufts, CommonTuftsStd};
-#[cfg(feature = "render")]
-pub use goettingen_follow::{GoettingenFollow, GoettingenFollowStd};
-#[cfg(feature = "render")]
-pub use high_bush::{HighBush, HighBushStd};
-#[cfg(feature = "render")]
-pub use jerrys_chaparral::{JerrysChaparral, JerrysChaparralStd};
-#[cfg(feature = "render")]
-pub use jungle_lower_massives::{JungleLowerMassives, JungleLowerMassivesStd};
-#[cfg(feature = "render")]
-pub use jungle_massives::{JungleMassives, JungleMassivesStd};
-#[cfg(feature = "render")]
-pub use levantine_scrub::{LevantineScrub, LevantineScrubStd};
-#[cfg(feature = "render")]
-pub use low_bush::{LowBush, LowBushStd};
-#[cfg(feature = "render")]
-pub use monster_grass::{MonsterGrass, MonsterGrassStd};
-#[cfg(feature = "render")]
-pub use palm_shade::{PalmShade, PalmShadeStd};
-#[cfg(feature = "render")]
-pub use riparian_mix::{RiparianMix, RiparianMixStd};
-#[cfg(feature = "render")]
-pub use riverine_green::{RiverineGreen, RiverineGreenStd};
-#[cfg(feature = "render")]
-pub use shamanhome::{Shamanhome, ShamanhomeStd};
-#[cfg(feature = "render")]
-pub use spotty_bushes::{SpottyBushes, SpottyBushesStd};
-#[cfg(feature = "render")]
-pub use temperate_lower_massives::{TemperateLowerMassives, TemperateLowerMassivesStd};
-#[cfg(feature = "render")]
-pub use strange_oasis::{StrangeOasis, StrangeOasisStd};
-#[cfg(feature = "render")]
-pub use tall_grass::{TallGrass, TallGrassStd};
-#[cfg(feature = "render")]
-pub use tropical_thicket::{TropicalThicket, TropicalThicketStd};
-#[cfg(feature = "render")]
-pub use tropical_tufts::{TropicalTufts, TropicalTuftsStd};
-#[cfg(feature = "render")]
-pub use tropical_undergrowth::{TropicalUndergrowth, TropicalUndergrowthStd};
-#[cfg(feature = "render")]
-pub use unending_jungle::{UnendingJungle, UnendingJungleStd};
-#[cfg(feature = "render")]
-pub use wild_grass::{WildGrass, WildGrassStd};

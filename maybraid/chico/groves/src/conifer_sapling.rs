@@ -7,15 +7,13 @@
 use bevy_math::Vec2;
 use procedural_common::UnitRange;
 
+pub mod variants;
+
 use crate::grove::{
 	GroveBucket, GroveDefinition, GroveDistribution, GrovePlacementRanges, PaletteMix, PaletteSlot,
 	PlacementConstraints,
 };
 
-#[cfg(feature = "render")]
-mod render;
-#[cfg(feature = "render")]
-pub use render::{ConiferSapling, ConiferSaplingStd};
 
 /// Standard sapling height band ([`1.0`, `4.0`] m).
 const SAPLING_HEIGHT: UnitRange = UnitRange::new(1.0, 4.0);
@@ -251,6 +249,7 @@ mod tests {
 	};
 	use anyhow::Result;
 	use bevy_math::Vec3;
+	use gimme_gen::Cell;
 	use procedural_common::NoiseParams;
 
 	#[test]
@@ -319,7 +318,7 @@ mod tests {
 		);
 
 		let terrain = FlatTerrainSample { elevation: 0.50, steepness: 0.30 };
-		let outcome = prepared.select_from(1, Vec3::new(5.0, 0.50, 5.0), 1.0, &terrain);
+		let outcome = prepared.select_from(1, Vec3::new(5.0, 0.50, 5.0), 1.0, Cell::from_min_max(Vec3::ZERO, Vec3::ONE), &terrain);
 		match outcome {
 			GroveCellOutcome::Placed { variant, .. } => {
 				assert_eq!(variant, ConiferSaplingCell::FriendSapling);
@@ -329,7 +328,7 @@ mod tests {
 
 		// Friend max elevation is 0.82; Northern accepts up to 0.88.
 		let high_terrain = FlatTerrainSample { elevation: 0.85, steepness: 0.30 };
-		let outcome = prepared.select_from(2, Vec3::new(6.0, 0.85, 6.0), 1.0, &high_terrain);
+		let outcome = prepared.select_from(2, Vec3::new(6.0, 0.85, 6.0), 1.0, Cell::from_min_max(Vec3::ZERO, Vec3::ONE), &high_terrain);
 		match outcome {
 			GroveCellOutcome::Placed { variant, .. } => {
 				assert_eq!(variant, ConiferSaplingCell::NorthernSapling);
@@ -339,7 +338,7 @@ mod tests {
 
 		// Friend max steepness is 0.64; Northern accepts up to 0.72.
 		let steep_terrain = FlatTerrainSample { elevation: 0.50, steepness: 0.70 };
-		let outcome = prepared.select_from(1, Vec3::new(7.0, 0.50, 7.0), 1.0, &steep_terrain);
+		let outcome = prepared.select_from(1, Vec3::new(7.0, 0.50, 7.0), 1.0, Cell::from_min_max(Vec3::ZERO, Vec3::ONE), &steep_terrain);
 		match outcome {
 			GroveCellOutcome::Placed { variant, .. } => {
 				assert_eq!(variant, ConiferSaplingCell::NorthernSapling);

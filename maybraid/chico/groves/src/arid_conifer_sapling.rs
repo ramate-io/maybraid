@@ -7,15 +7,13 @@
 use bevy_math::Vec2;
 use procedural_common::UnitRange;
 
+pub mod variants;
+
 use crate::grove::{
 	GroveBucket, GroveDefinition, GroveDistribution, GrovePlacementRanges, PaletteMix, PaletteSlot,
 	PlacementConstraints,
 };
 
-#[cfg(feature = "render")]
-mod render;
-#[cfg(feature = "render")]
-pub use render::{AridConiferSapling, AridConiferSaplingStd};
 
 /// Standard arid sapling height band ([`2.0`, `4.0`] m).
 const ARID_SAPLING_HEIGHT: UnitRange = UnitRange::new(2.0, 4.0);

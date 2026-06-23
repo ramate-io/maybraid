@@ -11,15 +11,13 @@ use std::ops::RangeInclusive;
 use bevy_math::Vec2;
 use procedural_common::UnitRange;
 
+pub mod variants;
+
 use crate::grove::{
 	GroveBucket, GroveDefinition, GroveDistribution, GrovePlacementRanges, GroveTuftPatch,
 	PaletteMix, PaletteSlot, PlacementConstraints,
 };
 
-#[cfg(feature = "render")]
-mod render;
-#[cfg(feature = "render")]
-pub use render::{BushScrub, BushScrubStd};
 
 /// RFC `projection_count: Low` — upright rounded low shrubs.
 const LOW_PROJECTION_RADIAL: UnitRange = UnitRange::new(0.20, 0.38);
@@ -232,6 +230,7 @@ mod tests {
 	};
 	use anyhow::Result;
 	use bevy_math::Vec3;
+	use gimme_gen::Cell;
 	use procedural_common::NoiseParams;
 
 	#[test]
@@ -363,7 +362,7 @@ mod tests {
 		let prepared =
 			BushScrubCell::distribution().prepare(0.0, 0.0, NoiseParams::default(), Vec3::ZERO);
 		let terrain = FlatTerrainSample { elevation: 0.40, steepness: 0.50 };
-		let outcome = prepared.select_from(2, Vec3::new(5.0, 0.40, 5.0), 1.0, &terrain);
+		let outcome = prepared.select_from(2, Vec3::new(5.0, 0.40, 5.0), 1.0, Cell::from_min_max(Vec3::ZERO, Vec3::ONE), &terrain);
 		match outcome {
 			GroveCellOutcome::Placed { variant, .. } => {
 				assert_eq!(variant, BushScrubCell::SmallBush);

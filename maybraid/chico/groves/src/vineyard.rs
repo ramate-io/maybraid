@@ -7,15 +7,13 @@
 use bevy_math::Vec2;
 use procedural_common::UnitRange;
 
+pub mod variants;
+
 use crate::grove::{
 	GroveBucket, GroveDefinition, GroveDistribution, GrovePlacementRanges, PaletteMix, PaletteSlot,
 	PlacementConstraints,
 };
 
-#[cfg(feature = "render")]
-mod render;
-#[cfg(feature = "render")]
-pub use render::{Vineyard, VineyardStd};
 
 /// Sparse sampled canopy-density band ([`0.0`, `0.35`]).
 const SPARSE_CANOPY_DENSITY: UnitRange = UnitRange::new(0.0, 0.35);
@@ -145,9 +143,7 @@ mod tests {
 
 	#[test]
 	fn geometry_follows_authored_bands() -> Result<()> {
-		let VineyardItem::Rory(vine) = VineyardCell::TrainedVineRory.item() else {
-			anyhow::bail!("expected trained vine rory item");
-		};
+		let VineyardItem::Rory(vine) = VineyardCell::TrainedVineRory.item();
 		assert_eq!(vine.height, UnitRange::new(1.5, 3.0));
 		assert_eq!(vine.canopy_spread, UnitRange::new(1.0, 2.4));
 		assert_eq!(vine.canopy_density, SPARSE_CANOPY_DENSITY);

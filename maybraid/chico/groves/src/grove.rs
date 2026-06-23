@@ -30,7 +30,7 @@ pub use palette::{PaletteColor, PaletteMix, PaletteSlot};
 pub use sampling::{
 	cell_center, placement_noise, ForestGroveBiases, GrovePlacementRanges, PlacementSample,
 };
-pub use terrain::{FlatTerrainSample, PlacementConstraints, TerrainSample};
+pub use terrain::{FlatTerrainSample, GroveWorldSample, PlacementConstraints};
 pub use tuft_patch::GroveTuftPatch;
 
 #[cfg(feature = "render")]
@@ -41,6 +41,8 @@ use gimme_gen::Cell;
 use procedural_common::NoiseParams;
 
 /// Authored grove identity: cell footprint, per-cell placement ranges, and variant distribution.
+///
+/// Typically, this will be requested first by the generation hierarchy.
 #[derive(Debug, Clone, PartialEq)]
 pub struct GroveDefinition<V> {
 	/// Vegetation cell span in world metres on X and Z.
@@ -52,6 +54,9 @@ pub struct GroveDefinition<V> {
 }
 
 /// Assembled grove with forest biases, shared noise, and a pre-perturbed distribution.
+///
+/// This will be assembled from a definition by the generation hierarchy.
+#[derive(Debug, Clone)]
 pub struct Grove<V> {
 	cell_extent_xz: Vec2,
 	placement: GrovePlacementRanges,
@@ -61,14 +66,19 @@ pub struct Grove<V> {
 }
 
 /// One placed grove item ready for materialization.
+///
+/// This is the result of the selection and generation pipeline.
 #[derive(Debug, Clone, PartialEq)]
-pub struct GrovePlacedCell<V> {
+pub struct GroveCellVariant<V> {
+	/// The variant that was placed.
 	pub variant: V,
+	/// The position that was placed.
 	pub position: Vec3,
+	/// The scale that was placed.
 	pub scale: f32,
 }
 
-impl<V> GrovePlacedCell<V> {
+impl<V> GroveCellVariant<V> {
 	pub fn new(variant: V, position: Vec3, scale: f32) -> Self {
 		Self { variant, position, scale }
 	}
@@ -97,10 +107,10 @@ pub enum GroveCellOutcome<V> {
 }
 
 impl<V> GroveCellOutcome<V> {
-	pub fn into_placed(self) -> Option<GrovePlacedCell<V>> {
+	pub fn into_placed(self) -> Option<GroveCellVariant<V>> {
 		match self {
 			GroveCellOutcome::Placed { variant, position, scale } => {
-				Some(GrovePlacedCell { variant, position, scale })
+				Some(GroveCellVariant { variant, position, scale })
 			}
 			GroveCellOutcome::Empty { .. } | GroveCellOutcome::Rejected { .. } => None,
 		}
@@ -134,12 +144,12 @@ impl<V: Clone> Grove<V> {
 	pub fn populate(
 		&self,
 		extent: &GroveExtent,
-		terrain: &impl TerrainSample,
-	) -> Vec<GrovePlacedCell<V>> {
+		world: &impl GroveWorldSample,
+	) -> Vec<GroveCellVariant<V>> {
 		extent
 			.subdivide_xz(self.cell_extent_xz)
 			.iter()
-			.filter_map(|cell| self.select_cell(cell, extent, terrain).into_placed())
+			.filter_map(|cell| self.select_cell(cell, extent, world).into_placed())
 			.collect()
 	}
 
@@ -148,7 +158,7 @@ impl<V: Clone> Grove<V> {
 		&self,
 		cell: &Cell,
 		extent: &GroveExtent,
-		terrain: &impl TerrainSample,
+		world: &impl GroveWorldSample,
 	) -> GroveCellOutcome<V> {
 		let sample = self.placement.sample_cell(&self.biases, self.noise, cell);
 		let candidate = sample.position_in(cell);
@@ -156,8 +166,24 @@ impl<V: Clone> Grove<V> {
 		if !extent.contains_xz(candidate) {
 			return GroveCellOutcome::Rejected { position: candidate };
 		}
-		let position = Vec3::new(candidate.x, terrain.elevation_at(candidate), candidate.z);
-		self.distribution.select_at(position, sample.scale, self.noise, terrain)
+		let position = Vec3::new(candidate.x, world.elevation_at(candidate), candidate.z);
+		if !world.allows_placement_at(position) {
+			return GroveCellOutcome::Rejected { position };
+		}
+		self.distribution.select_at(position, sample.scale, *cell, self.noise, world)
+	}
+
+	/// Sample, place, validate, and choose a bucket for one vegetation cell.
+	///
+	/// This is the implementation that will hook into the generative API.
+	pub fn sample_cell(
+		&self,
+		cell: &Cell,
+		extent: &GroveExtent,
+		world: &impl GroveWorldSample,
+	) -> (Option<GroveCellVariant<V>>, Cell) {
+		let outcome = self.select_cell(cell, extent, world).into_placed();
+		(outcome, *cell)
 	}
 
 	pub fn cell_extent_xz(&self) -> Vec2 {
@@ -178,6 +204,20 @@ impl<V: Clone> Grove<V> {
 
 	pub fn distribution(&self) -> &PreparedGroveDistribution<V> {
 		&self.distribution
+	}
+}
+
+/// Grove items can be constructed from cell, grove, information about extents, and terrain.
+///
+/// This is a useful plugin to hierarchical generation APIs, ala https://github.com/ramate-io/maybraid/tree/main/rfc/rfc-000-000-142-gimme#34-hierarchical-generation
+pub trait GroveItem: Clone {
+	fn from_cell_and_grove(
+		cell: &Cell,
+		grove: &Grove<Self>,
+		grove_extent: &GroveExtent,
+		world: &impl GroveWorldSample,
+	) -> Option<GroveCellVariant<Self>> {
+		grove.sample_cell(cell, grove_extent, world).0
 	}
 }
 

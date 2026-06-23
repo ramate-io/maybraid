@@ -9,15 +9,13 @@ use std::ops::RangeInclusive;
 use bevy_math::Vec2;
 use procedural_common::UnitRange;
 
+pub mod variants;
+
 use crate::grove::{
 	GroveBucket, GroveDefinition, GroveDistribution, GrovePlacementRanges, GroveTuftPatch,
 	PaletteMix, PaletteSlot, PlacementConstraints,
 };
 
-#[cfg(feature = "render")]
-mod render;
-#[cfg(feature = "render")]
-pub use render::{TropicalTufts, TropicalTuftsStd};
 
 /// Authored Tropical Tufts grove definition.
 ///
@@ -231,6 +229,7 @@ mod tests {
 	};
 	use anyhow::Result;
 	use bevy_math::Vec3;
+	use gimme_gen::Cell;
 	use procedural_common::NoiseParams;
 
 	#[test]
@@ -298,7 +297,7 @@ mod tests {
 		let prepared =
 			TropicalTuftsCell::distribution().prepare(0.0, 0.0, NoiseParams::default(), Vec3::ZERO);
 		let terrain = FlatTerrainSample { elevation: 0.4, steepness: 0.1 };
-		let outcome = prepared.select_from(1, Vec3::new(5.0, 0.4, 5.0), 1.0, &terrain);
+		let outcome = prepared.select_from(1, Vec3::new(5.0, 0.4, 5.0), 1.0, Cell::from_min_max(Vec3::ZERO, Vec3::ONE), &terrain);
 		assert!(matches!(outcome, GroveCellOutcome::Placed { .. }));
 		Ok(())
 	}
