@@ -1,0 +1,29 @@
+# armature object: Quadruped
+
+back_ridge
+anterior_mid_back
+  upper_back
+    neck
+    shoulder.L
+      anterior_thigh.L
+        anterior_shin.L
+    shoulder_vertical_thickness
+    shoulder.R
+      anterior_thigh.R
+        anterior_shin.R
+  lower_chest_width.L
+  chest_thickness
+  lower_chest_width.R
+posterior_mid_back
+  lumbar
+    tailbone
+    hip.L
+      posterior_thigh.L
+        posterior_shin.L
+    haunch_vertical_thickness
+    hip.R
+      posterior_thigh.R
+        posterior_shin.R
+  waist.L
+  belly
+  waist.R
