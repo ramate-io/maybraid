@@ -1,0 +1,138 @@
+#!/bin/bash
+
+set -e
+
+if [ -n "$ARMATURE_DUMP_DISABLE" ]; then
+    echo "Armature dump is disabled. Skipping..."
+    exit 0
+fi
+
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+DUMP_SCRIPT="$REPO_ROOT/scripts/armature-dump/main.py"
+ART_PREFIX="maybraid/art/"
+ASSETS_PREFIX="maybraid/assets/"
+
+echo "Running pre-commit hook: Dumping armature hierarchies from .blend files..."
+
+if ! command -v blender &> /dev/null; then
+    echo "❌ blender command not found."
+    echo "   macOS: install Blender 5.1.2 to /Applications/Blender.app and enter nix develop"
+    echo "   Linux/CI: ensure you're in the nix development shell"
+    exit 1
+fi
+
+if [ ! -f "$DUMP_SCRIPT" ]; then
+    echo "❌ Armature dump script not found: $DUMP_SCRIPT"
+    exit 1
+fi
+
+if [ -n "$ARMATURE_DUMP_FULL" ]; then
+    INCREMENTAL=0
+elif [ -n "$ARMATURE_DUMP_INCREMENTAL" ]; then
+    INCREMENTAL=1
+elif [ -n "$GITHUB_ACTIONS" ]; then
+    INCREMENTAL=0
+else
+    INCREMENTAL=1
+fi
+
+BLEND_FILES=$(git ls-files --cached --exclude-standard 'maybraid/art/**/*.blend' | grep -E '\.blend$' || true)
+
+if [ -z "$BLEND_FILES" ]; then
+    echo "📭 No tracked .blend files found under maybraid/art/."
+    exit 0
+fi
+
+TOTAL_FILES=$(echo "$BLEND_FILES" | wc -l | tr -d ' ')
+if [ "$INCREMENTAL" -eq 1 ]; then
+    echo "📝 Found $TOTAL_FILES tracked .blend files (incremental mode)"
+else
+    echo "📝 Found $TOTAL_FILES tracked .blend files (full dump)"
+fi
+
+CURRENT=0
+DUMPED=0
+SKIPPED=0
+NO_ARMATURE=0
+STAGED_FILES=()
+
+blend_to_armature_dump() {
+    local blend_file="$1"
+    echo "${blend_file#$ART_PREFIX}" | sed 's/\.blend$/.armature_dump/'
+}
+
+needs_dump() {
+    local blend_file="$1"
+    local dump_file="$2"
+
+    if [ "$INCREMENTAL" -eq 0 ]; then
+        return 0
+    fi
+
+    if [ ! -f "$dump_file" ]; then
+        return 0
+    fi
+
+    if [ "$blend_file" -nt "$dump_file" ]; then
+        return 0
+    fi
+
+    return 1
+}
+
+while IFS= read -r blend_file || [ -n "$blend_file" ]; do
+    [ -z "$blend_file" ] && continue
+
+    CURRENT=$((CURRENT + 1))
+    relative_path="$(blend_to_armature_dump "$blend_file")"
+    dump_file="${ASSETS_PREFIX}${relative_path}"
+
+    if ! needs_dump "$blend_file" "$dump_file"; then
+        SKIPPED=$((SKIPPED + 1))
+        echo "⏭️  Skipping up-to-date ${blend_file} (${CURRENT}/${TOTAL_FILES})"
+        continue
+    fi
+
+    echo "🔍 Dumping armature from ${blend_file} → ${dump_file} (${CURRENT}/${TOTAL_FILES})..."
+    set +e
+    blender --background "$blend_file" --python "$DUMP_SCRIPT" -- "$dump_file"
+    exit_code=$?
+    set -e
+
+    if [ "$exit_code" -eq 0 ]; then
+        DUMPED=$((DUMPED + 1))
+        STAGED_FILES+=("$dump_file")
+    elif [ "$exit_code" -eq 2 ]; then
+        NO_ARMATURE=$((NO_ARMATURE + 1))
+        echo "⚠️  No armature in ${blend_file}; skipping"
+    else
+        echo "❌ Failed to dump armature from ${blend_file}"
+        echo "💡 Tips:"
+        echo "   - Run manually: blender --background \"${blend_file}\" --python \"${DUMP_SCRIPT}\" -- \"${dump_file}\""
+        echo "   - To force full re-dump locally: ARMATURE_DUMP_FULL=1"
+        exit 1
+    fi
+done <<< "$BLEND_FILES"
+
+if [ "${#STAGED_FILES[@]}" -gt 0 ]; then
+    git add -- "${STAGED_FILES[@]}"
+fi
+
+if [ "$DUMPED" -eq 0 ] && [ "$SKIPPED" -gt 0 ]; then
+    echo "✨ All armature dumps are up to date (${SKIPPED} skipped)."
+elif [ "$DUMPED" -gt 0 ]; then
+    echo "✨ Dumped ${DUMPED} armature file(s)."
+    if [ "$SKIPPED" -gt 0 ]; then
+        echo "   Skipped ${SKIPPED} up-to-date file(s)."
+    fi
+    if [ "$NO_ARMATURE" -gt 0 ]; then
+        echo "   Skipped ${NO_ARMATURE} file(s) with no armature."
+    fi
+else
+    echo "✨ Armature dump completed."
+fi
+
+if [ "$INCREMENTAL" -eq 1 ]; then
+    echo "ℹ️  Incremental dump is the local default; use ARMATURE_DUMP_FULL=1 to re-dump all .blend files"
+fi
+exit 0

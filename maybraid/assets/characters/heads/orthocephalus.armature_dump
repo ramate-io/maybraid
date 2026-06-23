@@ -1,0 +1,17 @@
+# armature object: Armature
+
+root
+  occiput
+  eyes
+    nose
+      mouth
+        jaw
+          lower_mandible.R
+        mandible.R
+      midcheek.R
+    cheek.R
+  temple.R
+  forehead
+    crown
+      calvaria.R
+    parietal.R
