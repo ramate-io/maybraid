@@ -1,0 +1,116 @@
+#!/bin/bash
+
+set -e
+
+# Allow developer to turn off with environment variable
+if [ -n "$BLEND_EXPORT_DISABLE" ]; then
+    echo "Blend export is disabled. Skipping..."
+    exit 0
+fi
+
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+EXPORT_SCRIPT="$REPO_ROOT/scripts/glb/main.py"
+ART_PREFIX="maybraid/art/"
+ASSETS_PREFIX="maybraid/assets/"
+
+echo "Running pre-commit hook: Exporting .blend files to .glb..."
+
+if ! command -v blender &> /dev/null; then
+    echo "❌ blender command not found."
+    echo "   macOS: install Blender 5.1.2 to /Applications/Blender.app and enter nix develop"
+    echo "   Linux/CI: ensure you're in the nix development shell"
+    exit 1
+fi
+
+if [ ! -f "$EXPORT_SCRIPT" ]; then
+    echo "❌ Export script not found: $EXPORT_SCRIPT"
+    exit 1
+fi
+
+BLEND_FILES=$(git ls-files --cached --exclude-standard 'maybraid/art/**/*.blend' | grep -E '\.blend$' || true)
+
+if [ -z "$BLEND_FILES" ]; then
+    echo "📭 No tracked .blend files found under maybraid/art/."
+    exit 0
+fi
+
+TOTAL_FILES=$(echo "$BLEND_FILES" | wc -l | tr -d ' ')
+if [ -n "$BLEND_EXPORT_INCREMENTAL" ]; then
+    echo "📝 Found $TOTAL_FILES tracked .blend files (incremental mode)"
+else
+    echo "📝 Found $TOTAL_FILES tracked .blend files (full export)"
+fi
+
+CURRENT=0
+EXPORTED=0
+SKIPPED=0
+STAGED_FILES=()
+
+blend_to_glb() {
+    local blend_file="$1"
+    echo "${blend_file#$ART_PREFIX}" | sed 's/\.blend$/.glb/'
+}
+
+needs_export() {
+    local blend_file="$1"
+    local glb_file="$2"
+
+    if [ -z "$BLEND_EXPORT_INCREMENTAL" ]; then
+        return 0
+    fi
+
+    if [ ! -f "$glb_file" ]; then
+        return 0
+    fi
+
+    if [ "$blend_file" -nt "$glb_file" ]; then
+        return 0
+    fi
+
+    return 1
+}
+
+while IFS= read -r blend_file || [ -n "$blend_file" ]; do
+    [ -z "$blend_file" ] && continue
+
+    CURRENT=$((CURRENT + 1))
+    relative_path="$(blend_to_glb "$blend_file")"
+    glb_file="${ASSETS_PREFIX}${relative_path}"
+
+    if ! needs_export "$blend_file" "$glb_file"; then
+        SKIPPED=$((SKIPPED + 1))
+        echo "⏭️  Skipping up-to-date ${blend_file} (${CURRENT}/${TOTAL_FILES})"
+        continue
+    fi
+
+    echo "🔍 Exporting ${blend_file} → ${glb_file} (${CURRENT}/${TOTAL_FILES})..."
+    if blender --background "$blend_file" --python "$EXPORT_SCRIPT" -- "$glb_file"; then
+        EXPORTED=$((EXPORTED + 1))
+        STAGED_FILES+=("$glb_file")
+    else
+        echo "❌ Failed to export ${blend_file}"
+        echo "💡 Tips:"
+        echo "   - Ensure the .blend file opens cleanly in Blender"
+        echo "   - Run manually: blender --background \"${blend_file}\" --python \"${EXPORT_SCRIPT}\" -- \"${glb_file}\""
+        echo "   - For faster local commits when art is unchanged: BLEND_EXPORT_INCREMENTAL=1"
+        exit 1
+    fi
+done <<< "$BLEND_FILES"
+
+if [ "${#STAGED_FILES[@]}" -gt 0 ]; then
+    git add -- "${STAGED_FILES[@]}"
+fi
+
+if [ "$EXPORTED" -eq 0 ] && [ "$SKIPPED" -gt 0 ]; then
+    echo "✨ All GLB exports are up to date (${SKIPPED} skipped)."
+elif [ "$EXPORTED" -gt 0 ]; then
+    echo "✨ Exported ${EXPORTED} .glb file(s)."
+    if [ "$SKIPPED" -gt 0 ]; then
+        echo "   Skipped ${SKIPPED} up-to-date file(s)."
+    fi
+else
+    echo "✨ Blend export completed."
+fi
+
+echo "ℹ️  For faster local commits when art is unchanged: BLEND_EXPORT_INCREMENTAL=1"
+exit 0
