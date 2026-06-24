@@ -170,26 +170,26 @@ fn wave_flex_angle(bone: &str, t: f32) -> f32 {
 
 fn run_pose(bone: &str, t: f32) -> (f32, f32) {
 	let phase = (t * RUN_CYCLE_SPEED).fract();
-	let side = side_sign(bone);
 
 	let right_leg = thigh_swing(phase);
 	let left_leg = thigh_swing(phase + 0.5);
 
-	// Contralateral to legs; mirror `.R` bones so world-space swing is symmetric.
-	let left_arm = side * -arm_swing(phase);
-	let right_arm = -side * arm_swing(phase);
+	// Mirrored T-pose arms: same world-axis sign produces opposite visual swing.
+	// Each arm is contralateral to the opposite leg (phase vs phase+0.5).
+	let left_swing = -arm_swing(phase);
+	let right_swing = arm_swing(phase + 0.5);
 
 	match bone {
-		"shoulder.L" => (left_arm * RUN_SHOULDER_SWING, 0.0),
-		"shoulder.R" => (right_arm * RUN_SHOULDER_SWING, 0.0),
-		"humerus.L" => (left_arm * 0.75, -RUN_ARM_DOWN),
-		"humerus.R" => (right_arm * 0.75, RUN_ARM_DOWN),
+		"shoulder.L" => (left_swing * RUN_SHOULDER_SWING, 0.0),
+		"shoulder.R" => (right_swing * RUN_SHOULDER_SWING, 0.0),
+		"humerus.L" => (left_swing * 0.75, -RUN_ARM_DOWN),
+		"humerus.R" => (right_swing * 0.75, RUN_ARM_DOWN),
 		"forearm.L" => {
-			let forward = arm_swing(phase).max(0.0);
-			(0.0, RUN_ELBOW_BEND + forward * RUN_ELBOW_SWING)
+			let forward = left_swing.max(0.0);
+			(0.0, -(RUN_ELBOW_BEND + forward * RUN_ELBOW_SWING))
 		}
 		"forearm.R" => {
-			let forward = arm_swing(phase).max(0.0);
+			let forward = right_swing.max(0.0);
 			(0.0, -(RUN_ELBOW_BEND + forward * RUN_ELBOW_SWING))
 		}
 		"pelvis.L" => (left_leg * RUN_HIP_SWING, 0.0),
@@ -199,14 +199,6 @@ fn run_pose(bone: &str, t: f32) -> (f32, f32) {
 		"shin.R" => (0.0, knee_flex(phase)),
 		"shin.L" => (0.0, knee_flex(phase + 0.5)),
 		_ => (0.0, 0.0),
-	}
-}
-
-fn side_sign(bone: &str) -> f32 {
-	if bone.ends_with(".R") {
-		-1.0
-	} else {
-		1.0
 	}
 }
 
