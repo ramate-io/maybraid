@@ -1,8 +1,8 @@
 use bevy::prelude::*;
 
 use crate::{
-	humanoid::{HumanoidArm, HumanoidLeg, HumanoidNeck, HumanoidSpine},
-	BoneDefinition, BoneTable, Name, RiggedAxis, Side,
+	humanoid::{HumanoidArm, HumanoidLeg, HumanoidNeck, HumanoidRig, HumanoidSpine},
+	BoneDefinition, BoneTable, Name, RigPose, RiggedAxis, Side,
 };
 
 /// Store the bones of the first imported humanoid rig in a semantically reasonable hierarchy.
@@ -13,6 +13,7 @@ use crate::{
 #[derive(Component, Debug, Clone)]
 pub struct HumanoidV0Rig {
 	pub bones: BoneTable,
+	pub pose: RigPose,
 }
 
 impl HumanoidV0Rig {
@@ -22,10 +23,12 @@ impl HumanoidV0Rig {
 			bones.insert(BoneDefinition { name: Name::from(name), relative_axis });
 		}
 
-		Self { bones }
+		Self { bones, pose: RigPose::new() }
 	}
+}
 
-	pub fn leg(&self, side: Side) -> HumanoidLeg {
+impl HumanoidRig for HumanoidV0Rig {
+	fn leg(&self, side: Side) -> HumanoidLeg {
 		let suffix = side.suffix();
 		HumanoidLeg {
 			pelvis: Name::new(format!("pelvis.{suffix}")),
@@ -34,7 +37,7 @@ impl HumanoidV0Rig {
 		}
 	}
 
-	pub fn arm(&self, side: Side) -> HumanoidArm {
+	fn arm(&self, side: Side) -> HumanoidArm {
 		let suffix = side.suffix();
 		HumanoidArm {
 			shoulder: Name::new(format!("shoulder.{suffix}")),
@@ -43,7 +46,7 @@ impl HumanoidV0Rig {
 		}
 	}
 
-	pub fn spine(&self) -> HumanoidSpine {
+	fn spine(&self) -> HumanoidSpine {
 		HumanoidSpine {
 			root: Name::from("root"),
 			lumbar: Name::from("lumbar"),
@@ -52,10 +55,20 @@ impl HumanoidV0Rig {
 		}
 	}
 
-	pub fn neck(&self) -> HumanoidNeck {
+	fn neck(&self) -> HumanoidNeck {
 		HumanoidNeck { lower_neck: Name::from("lower_neck"), upper_neck: Name::from("upper_neck") }
 	}
 
+	fn pose(&self) -> &RigPose {
+		&self.pose
+	}
+
+	fn pose_mut(&mut self) -> &mut RigPose {
+		&mut self.pose
+	}
+}
+
+impl HumanoidV0Rig {
 	pub fn animation_bones(&self) -> Vec<Name> {
 		let left_arm = self.arm(Side::Left);
 		let right_arm = self.arm(Side::Right);

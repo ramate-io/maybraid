@@ -1,4 +1,4 @@
-use crate::Name;
+use crate::{Name, RigPose, Side};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HumanoidLeg {
@@ -26,4 +26,13 @@ pub struct HumanoidSpine {
 pub struct HumanoidNeck {
 	pub lower_neck: Name,
 	pub upper_neck: Name,
+}
+
+pub trait HumanoidRig {
+	fn leg(&self, side: Side) -> HumanoidLeg;
+	fn arm(&self, side: Side) -> HumanoidArm;
+	fn spine(&self) -> HumanoidSpine;
+	fn neck(&self) -> HumanoidNeck;
+	fn pose(&self) -> &RigPose;
+	fn pose_mut(&mut self) -> &mut RigPose;
 }

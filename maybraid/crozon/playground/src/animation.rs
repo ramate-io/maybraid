@@ -3,7 +3,7 @@ use std::f32::consts::PI;
 use bevy::prelude::*;
 use clap::ValueEnum;
 use crozon_rigs::{
-	humanoid::{HumanoidArm, HumanoidLeg},
+	humanoid::{HumanoidArm, HumanoidLeg, HumanoidRig},
 	rigs::humanoid_v0::HumanoidV0Rig,
 	BonePose, Name as RigName, Side,
 };
