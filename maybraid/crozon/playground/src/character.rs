@@ -1,5 +1,6 @@
 use bevy::prelude::*;
 
+use crate::animation::AnimationMode;
 use crate::skinning::{
 	BoneMap, CharacterRig, DumpBonesRequest, ModularPart, ModularPartKind, NeedsSkinRemap,
 	NeedsSocketPlacement, PartRigRef, HEAD_SCALE, HEAD_SOCKET_BONE,
@@ -18,6 +19,7 @@ pub struct CharacterConfig {
 	pub head: Option<String>,
 	pub mouth: Option<String>,
 	pub nose: Option<String>,
+	pub animation: AnimationMode,
 	pub transform: Transform,
 }
 
@@ -29,6 +31,7 @@ impl Default for CharacterConfig {
 			head: None,
 			mouth: None,
 			nose: None,
+			animation: AnimationMode::default(),
 			transform: Transform::IDENTITY,
 		}
 	}
@@ -49,6 +52,7 @@ impl CharacterConfig {
 		if let Some(nose) = &self.nose {
 			parts.push(format!("nose={nose}"));
 		}
+		parts.push(format!("animation={:?}", self.animation));
 		format!("character {}", parts.join(" "))
 	}
 
@@ -137,10 +141,7 @@ pub(crate) fn sync_character(
 		));
 
 		if kind == ModularPartKind::Head {
-			part.insert(NeedsSocketPlacement {
-				socket_bone: HEAD_SOCKET_BONE,
-				scale: HEAD_SCALE,
-			});
+			part.insert(NeedsSocketPlacement { socket_bone: HEAD_SOCKET_BONE, scale: HEAD_SCALE });
 		}
 	}
 }

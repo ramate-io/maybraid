@@ -3,9 +3,9 @@
 pub mod character;
 
 use bevy::prelude::*;
+pub use character::Character;
 use clap::Parser;
 use game_commands::command::{CommandScript, GameCommand};
-pub use character::Character;
 
 pub const PLAYGROUND_CLI_NAME: &str = "crozon";
 pub type Script = CommandScript<PlaygroundCommand>;

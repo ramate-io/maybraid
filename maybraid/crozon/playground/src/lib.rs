@@ -13,11 +13,11 @@ pub use camera::CameraController;
 pub use commands::{PlaygroundCommand, PLAYGROUND_CLI_NAME};
 pub use game_commands::command::PendingStartupCommand;
 
+use animation::{animate_limbs, init_limb_animators};
 use bevy::prelude::*;
 use character::CharacterConfig;
 use game_commands::command::{capture_command_line_input, GameCommandPlugin};
 use ground::setup_ground;
-use animation::{animate_limbs, init_limb_animators};
 use skinning::{
 	attach_parts_to_sockets, build_rig_bone_map, dump_bones_to_console, remap_part_skin_to_rig,
 	DumpBonesRequest,
@@ -34,10 +34,7 @@ impl Plugin for CrozonCharacterPlaygroundPlugin {
 			.add_plugins(
 				bevy::pbr::MaterialPlugin::<checkerboard_material::CheckerboardMaterial>::default(),
 			)
-			.add_systems(
-				Startup,
-				(camera::setup_camera, setup_lighting, setup_ground),
-			)
+			.add_systems(Startup, (camera::setup_camera, setup_lighting, setup_ground))
 			.add_systems(
 				Update,
 				(

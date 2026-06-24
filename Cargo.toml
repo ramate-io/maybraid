@@ -15,6 +15,7 @@ members = [
   "maybraid/sdf/common",
   "maybraid/sdf/common-playground",
 
+  "maybraid/crozon/rigs",
   "maybraid/crozon/playground",
 
   "maybraid/procedural/common",

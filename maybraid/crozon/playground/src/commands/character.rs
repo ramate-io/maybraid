@@ -3,6 +3,7 @@
 use bevy::prelude::*;
 use clap::{Args, Subcommand};
 
+use crate::animation::AnimationMode;
 use crate::character::{request_dump_bones, CharacterConfig};
 
 #[derive(Clone, Subcommand)]
@@ -35,6 +36,10 @@ pub struct AssembleArgs {
 	/// Nose mesh GLB path.
 	#[arg(long)]
 	pub nose: Option<String>,
+
+	/// Procedural animation applied to the rig (`wave` or `run`).
+	#[arg(long, value_enum, default_value_t = AnimationMode::Wave)]
+	pub animation: AnimationMode,
 
 	/// Translation `x,y,z` in world units.
 	#[arg(long, default_value = "0,0,0", value_parser = parse_vec3_csv)]
@@ -80,6 +85,7 @@ impl AssembleArgs {
 			head: self.head,
 			mouth: self.mouth,
 			nose: self.nose,
+			animation: self.animation,
 			transform: Transform::from_translation(self.translate)
 				.with_rotation(rot)
 				.with_scale(self.scale),
