@@ -169,6 +169,7 @@ lod-cascade-system = { path = "maybraid/lod/cascade-system" }
 sdf-common = { path = "maybraid/sdf/common" }
 sdf-common-playground = { path = "maybraid/sdf/common-playground" }
 crozon-character-playground = { path = "maybraid/crozon/playground" }
+crozon-rigs = { path = "maybraid/crozon/rigs" }
 procedural-common = { path = "maybraid/procedural/common" }
 
 chico = { path = "maybraid/chico/lib" }

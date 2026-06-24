@@ -2,6 +2,11 @@ use std::f32::consts::PI;
 
 use bevy::prelude::*;
 use clap::ValueEnum;
+use crozon_rigs::{
+	humanoid::{HumanoidArm, HumanoidLeg},
+	rigs::humanoid_v0::HumanoidV0Rig,
+	BonePose, Name as RigName, Side,
+};
 
 use crate::character::CharacterConfig;
 use crate::skinning::{BoneMap, CharacterRig};
@@ -35,7 +40,7 @@ pub enum AnimationMode {
 
 #[derive(Component)]
 pub struct LimbAnimator {
-	pub bone: &'static str,
+	pub bone: RigName,
 	pub rest: Quat,
 	/// World-space axis for forward/back swing.
 	pub swing_axis: Vec3,
@@ -44,21 +49,6 @@ pub struct LimbAnimator {
 	/// +1 or −1 so mirrored bones flex the same way visually.
 	pub flex_sign: f32,
 }
-
-const ANIMATED_BONES: &[&str] = &[
-	"shoulder.L",
-	"shoulder.R",
-	"humerus.L",
-	"forearm.L",
-	"humerus.R",
-	"forearm.R",
-	"pelvis.L",
-	"pelvis.R",
-	"femur.L",
-	"shin.L",
-	"femur.R",
-	"shin.R",
-];
 
 pub fn init_limb_animators(
 	mut commands: Commands,
@@ -80,8 +70,9 @@ pub fn init_limb_animators(
 		return;
 	}
 
-	for &bone in ANIMATED_BONES {
-		let Some(&entity) = bone_map.by_name.get(bone) else {
+	let humanoid = HumanoidV0Rig::imported();
+	for bone in humanoid.animation_bones() {
+		let Some(&entity) = bone_map.by_name.get(bone.as_str()) else {
 			continue;
 		};
 		let Ok(transform) = transforms.get(entity) else {
@@ -90,8 +81,8 @@ pub fn init_limb_animators(
 
 		let world_rot = world_rotation(entity, &transforms, &parents_q);
 		let bone_dir = bone_world_direction(entity, world_rot, &children_q, &transforms);
-		let (swing_axis, flex_axis) = bone_axes(bone, bone_dir);
-		let flex_sign = if bone.starts_with("forearm.") {
+		let (swing_axis, flex_axis) = bone_axes(bone.as_str(), bone_dir);
+		let flex_sign = if bone.as_str().starts_with("forearm.") {
 			forward_flex_sign(bone_dir, flex_axis)
 		} else {
 			1.0
@@ -115,6 +106,7 @@ pub fn animate_limbs(
 	time: Res<Time>,
 ) {
 	let t = time.elapsed_secs();
+	let humanoid = HumanoidV0Rig::imported();
 
 	for (entity, mut transform, animator) in &mut limbs {
 		let parent_rot = parents
@@ -124,30 +116,11 @@ pub fn animate_limbs(
 			.map(|global| global.rotation())
 			.unwrap_or(Quat::IDENTITY);
 
-		transform.rotation = match config.animation {
-			AnimationMode::Wave => {
-				let swing = wave_angle(animator.bone, t);
-				compose_world_rotations(
-					animator.rest,
-					parent_rot,
-					animator.swing_axis,
-					swing,
-					animator.flex_axis,
-					wave_flex_angle(animator.bone, t) * animator.flex_sign,
-				)
-			}
-			AnimationMode::Run => {
-				let (swing, flex) = run_pose(animator.bone, t, animator.flex_sign);
-				compose_world_rotations(
-					animator.rest,
-					parent_rot,
-					animator.swing_axis,
-					swing,
-					animator.flex_axis,
-					flex,
-				)
-			}
+		let pose = match config.animation {
+			AnimationMode::Wave => wave_bone_pose(animator, parent_rot, t),
+			AnimationMode::Run => run_bone_pose(&humanoid, animator, parent_rot, t),
 		};
+		transform.rotation = pose.transform.rotation;
 	}
 }
 
@@ -161,6 +134,23 @@ fn bone_axes(bone: &str, bone_dir: Vec3) -> (Vec3, Vec3) {
 		}
 		_ => (sagittal, hinge_axis(bone_dir, sagittal)),
 	}
+}
+
+fn wave_bone_pose(animator: &LimbAnimator, parent_rot: Quat, t: f32) -> BonePose {
+	let bone = animator.bone.as_str();
+	let swing = wave_angle(bone, t);
+	let flex = wave_flex_angle(bone, t) * animator.flex_sign;
+	BonePose::new(
+		animator.bone.clone(),
+		Transform::from_rotation(compose_world_rotations(
+			animator.rest,
+			parent_rot,
+			animator.swing_axis,
+			swing,
+			animator.flex_axis,
+			flex,
+		)),
+	)
 }
 
 fn wave_angle(bone: &str, t: f32) -> f32 {
@@ -181,31 +171,89 @@ fn wave_flex_angle(bone: &str, t: f32) -> f32 {
 	}
 }
 
-fn run_pose(bone: &str, t: f32, flex_sign: f32) -> (f32, f32) {
+fn run_bone_pose(
+	humanoid: &HumanoidV0Rig,
+	animator: &LimbAnimator,
+	parent_rot: Quat,
+	t: f32,
+) -> BonePose {
+	let (swing, flex) = run_pose(humanoid, &animator.bone, t, animator.flex_sign);
+	BonePose::new(
+		animator.bone.clone(),
+		Transform::from_rotation(compose_world_rotations(
+			animator.rest,
+			parent_rot,
+			animator.swing_axis,
+			swing,
+			animator.flex_axis,
+			flex,
+		)),
+	)
+}
+
+fn run_pose(humanoid: &HumanoidV0Rig, bone: &RigName, t: f32, flex_sign: f32) -> (f32, f32) {
 	let phase = (t * RUN_CYCLE_SPEED).fract();
 
-	let leg = |offset: f32| thigh_swing(phase + offset);
 	let left_swing = -arm_swing(phase + 0.5);
 	let right_swing = arm_swing(phase);
+	let left_arm = humanoid.arm(Side::Left);
+	let right_arm = humanoid.arm(Side::Right);
+	let left_leg = humanoid.leg(Side::Left);
+	let right_leg = humanoid.leg(Side::Right);
 
-	match bone {
-		"shoulder.L" => {
-			(left_swing * RUN_SHOULDER_SWING, -shoulder_lift(left_swing, RUN_SHOULDER_LIFT))
-		}
-		"shoulder.R" => {
-			(right_swing * RUN_SHOULDER_SWING, -shoulder_lift(right_swing, RUN_SHOULDER_LIFT))
-		}
-		"humerus.L" => (left_swing * 0.75, -RUN_ARM_DOWN),
-		"humerus.R" => (right_swing * 0.75, RUN_ARM_DOWN),
-		"forearm.L" => (0.0, elbow_flex(left_swing, phase, flex_sign)),
-		"forearm.R" => (0.0, elbow_flex(right_swing, phase, flex_sign)),
-		"pelvis.L" => (leg(0.5) * RUN_HIP_SWING, -hip_lift(leg(0.5), RUN_HIP_LIFT)),
-		"pelvis.R" => (leg(0.0) * RUN_HIP_SWING, hip_lift(leg(0.0), RUN_HIP_LIFT)),
-		"femur.L" => (leg(0.5) * 1.05, 0.0),
-		"femur.R" => (leg(0.0) * 1.05, 0.0),
-		"shin.L" => (0.0, knee_flex(phase + 0.5)),
-		"shin.R" => (0.0, knee_flex(phase)),
-		_ => (0.0, 0.0),
+	if let Some(pose) = animate_arm(&left_arm, bone, left_swing, phase, flex_sign, -RUN_ARM_DOWN) {
+		return pose;
+	}
+	if let Some(pose) = animate_arm(&right_arm, bone, right_swing, phase, flex_sign, RUN_ARM_DOWN) {
+		return pose;
+	}
+	if let Some(pose) = animate_leg(&left_leg, bone, phase + 0.5, -1.0) {
+		return pose;
+	}
+	if let Some(pose) = animate_leg(&right_leg, bone, phase, 1.0) {
+		return pose;
+	}
+
+	(0.0, 0.0)
+}
+
+fn animate_arm(
+	arm: &HumanoidArm,
+	bone: &RigName,
+	arm_swing_value: f32,
+	phase: f32,
+	flex_sign: f32,
+	arm_down: f32,
+) -> Option<(f32, f32)> {
+	if bone == &arm.shoulder {
+		Some((
+			arm_swing_value * RUN_SHOULDER_SWING,
+			-shoulder_lift(arm_swing_value, RUN_SHOULDER_LIFT),
+		))
+	} else if bone == &arm.humerus {
+		Some((arm_swing_value * 0.75, arm_down))
+	} else if bone == &arm.forearm {
+		Some((0.0, elbow_flex(arm_swing_value, phase, flex_sign)))
+	} else {
+		None
+	}
+}
+
+fn animate_leg(
+	leg: &HumanoidLeg,
+	bone: &RigName,
+	phase: f32,
+	lift_sign: f32,
+) -> Option<(f32, f32)> {
+	let swing = thigh_swing(phase);
+	if bone == &leg.pelvis {
+		Some((swing * RUN_HIP_SWING, hip_lift(swing, RUN_HIP_LIFT) * lift_sign))
+	} else if bone == &leg.femur {
+		Some((swing * 1.05, 0.0))
+	} else if bone == &leg.shin {
+		Some((0.0, knee_flex(phase)))
+	} else {
+		None
 	}
 }
 
