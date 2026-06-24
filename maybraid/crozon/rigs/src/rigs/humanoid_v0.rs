@@ -167,6 +167,21 @@ mod tests {
 	}
 
 	#[test]
+	fn humanoid_v0_uses_default_semantic_pose_writers() {
+		let mut rig = HumanoidV0Rig::imported();
+		let leg = rig.leg(Side::Left);
+		let arm = rig.arm(Side::Right);
+		let femur = Transform::from_translation(Vec3::X);
+		let forearm = Transform::from_translation(Vec3::Y);
+
+		rig.pose_leg(Side::Left, Transform::IDENTITY, femur, Transform::IDENTITY);
+		rig.pose_arm(Side::Right, Transform::IDENTITY, Transform::IDENTITY, forearm);
+
+		assert_eq!(rig.pose().get(&leg.femur), Some(&femur));
+		assert_eq!(rig.pose().get(&arm.forearm), Some(&forearm));
+	}
+
+	#[test]
 	fn humanoid_v0_definition_covers_imported_dump() {
 		let rig = HumanoidV0Rig::imported();
 

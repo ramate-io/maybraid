@@ -20,35 +20,25 @@ fn apply_leg<R: HumanoidRig>(
 	hip_lift_sign: f32,
 	run: &Run<R>,
 ) {
-	let leg = rig.leg(side);
 	let swing = thigh_swing(phase);
 
-	rig.pose_mut().set_transform(
-		leg.pelvis,
+	rig.pose_leg(
+		side,
 		Transform::from_rotation(Quat::from_rotation_x(swing * run.hip_swing * hip_lift_sign)),
-	);
-	rig.pose_mut().set_transform(
-		leg.femur,
 		Transform::from_rotation(Quat::from_rotation_x(swing * run.stride)),
-	);
-	rig.pose_mut().set_transform(
-		leg.shin,
 		Transform::from_rotation(Quat::from_rotation_x(knee_flex(phase, run))),
 	);
 }
 
 fn apply_arm<R: HumanoidRig>(rig: &mut R, side: Side, swing: f32, arm_down: f32, run: &Run<R>) {
-	let arm = rig.arm(side);
 	let elbow = run.elbow_bend + swing.abs() * run.elbow_pump;
 
-	rig.pose_mut()
-		.set_transform(arm.shoulder, Transform::from_rotation(Quat::from_rotation_y(swing * 0.14)));
-	rig.pose_mut().set_transform(
-		arm.humerus,
+	rig.pose_arm(
+		side,
+		Transform::from_rotation(Quat::from_rotation_y(swing * 0.14)),
 		Transform::from_rotation(Quat::from_rotation_y(swing) * Quat::from_rotation_z(arm_down)),
+		Transform::from_rotation(Quat::from_rotation_y(elbow)),
 	);
-	rig.pose_mut()
-		.set_transform(arm.forearm, Transform::from_rotation(Quat::from_rotation_y(elbow)));
 }
 
 fn thigh_swing(phase: f32) -> f32 {
