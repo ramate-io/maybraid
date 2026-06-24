@@ -9,6 +9,19 @@ use crate::skinning::{BoneMap, CharacterRig};
 const WORLD_FORWARD: Vec3 = Vec3::NEG_Z;
 const WORLD_LATERAL: Vec3 = Vec3::X;
 
+const RUN_CYCLE_SPEED: f32 = 1.75;
+
+/// Base pitch from T-pose toward a natural running arm carriage (radians).
+const RUN_ARM_DOWN: f32 = 0.85;
+/// Base elbow flex while running (radians).
+const RUN_ELBOW_BEND: f32 = 1.05;
+/// Extra elbow flex on the forward arm swing.
+const RUN_ELBOW_SWING: f32 = 0.3;
+/// Shoulder counter-swing amplitude.
+const RUN_SHOULDER_SWING: f32 = 0.14;
+/// Hip counter-swing amplitude.
+const RUN_HIP_SWING: f32 = 0.1;
+
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, ValueEnum)]
 pub enum AnimationMode {
 	#[default]
@@ -20,15 +33,21 @@ pub enum AnimationMode {
 pub struct LimbAnimator {
 	pub bone: &'static str,
 	pub rest: Quat,
-	/// World-space axis that produces forward/back motion for this bone.
-	pub world_axis: Vec3,
+	/// World-space axis for forward/back swing.
+	pub swing_axis: Vec3,
+	/// World-space axis for pitch (arm down) or hinge flex (elbow/knee).
+	pub flex_axis: Vec3,
 }
 
 const ANIMATED_BONES: &[&str] = &[
+	"shoulder.L",
+	"shoulder.R",
 	"humerus.L",
 	"forearm.L",
 	"humerus.R",
 	"forearm.R",
+	"pelvis.L",
+	"pelvis.R",
 	"femur.L",
 	"shin.L",
 	"femur.R",
@@ -65,12 +84,13 @@ pub fn init_limb_animators(
 
 		let world_rot = world_rotation(entity, &transforms, &parents_q);
 		let bone_dir = bone_world_direction(entity, world_rot, &children_q, &transforms);
-		let world_axis = sagittal_world_axis(bone_dir);
+		let (swing_axis, flex_axis) = bone_axes(bone, bone_dir);
 
 		commands.entity(entity).insert(LimbAnimator {
 			bone,
 			rest: transform.rotation,
-			world_axis,
+			swing_axis,
+			flex_axis,
 		});
 	}
 }
@@ -85,11 +105,6 @@ pub fn animate_limbs(
 	let t = time.elapsed_secs();
 
 	for (entity, mut transform, animator) in &mut limbs {
-		let angle = match config.animation {
-			AnimationMode::Wave => wave_angle(animator.bone, t),
-			AnimationMode::Run => run_angle(animator.bone, t),
-		};
-
 		let parent_rot = parents
 			.get(entity)
 			.ok()
@@ -97,8 +112,41 @@ pub fn animate_limbs(
 			.map(|global| global.rotation())
 			.unwrap_or(Quat::IDENTITY);
 
-		transform.rotation =
-			world_axis_rotation(animator.rest, parent_rot, animator.world_axis, angle);
+		transform.rotation = match config.animation {
+			AnimationMode::Wave => {
+				let swing = wave_angle(animator.bone, t);
+				compose_world_rotations(
+					animator.rest,
+					parent_rot,
+					animator.swing_axis,
+					swing,
+					animator.flex_axis,
+					wave_flex_angle(animator.bone, t),
+				)
+			}
+			AnimationMode::Run => {
+				let (swing, flex) = run_pose(animator.bone, t);
+				compose_world_rotations(
+					animator.rest,
+					parent_rot,
+					animator.swing_axis,
+					swing,
+					animator.flex_axis,
+					flex,
+				)
+			}
+		};
+	}
+}
+
+fn bone_axes(bone: &str, bone_dir: Vec3) -> (Vec3, Vec3) {
+	let sagittal = sagittal_world_axis(bone_dir);
+	match bone {
+		// Elbow and knee hinge in the sagittal plane (same axis as leg/arm swing).
+		"forearm.L" | "forearm.R" | "shin.L" | "shin.R" => (sagittal, sagittal),
+		// Upper arm: sagittal pump + separate pitch-down from T-pose.
+		"humerus.L" | "humerus.R" => (sagittal, pitch_down_axis(bone_dir)),
+		_ => (sagittal, hinge_axis(bone_dir, sagittal)),
 	}
 }
 
@@ -106,25 +154,59 @@ fn wave_angle(bone: &str, t: f32) -> f32 {
 	let s = (t * 0.75).sin();
 	match bone {
 		"humerus.L" | "humerus.R" => s * 0.65,
-		"forearm.L" | "forearm.R" => 0.25 + s * 0.25,
 		"femur.L" | "femur.R" => s * 0.35,
+		_ => 0.0,
+	}
+}
+
+fn wave_flex_angle(bone: &str, t: f32) -> f32 {
+	let s = (t * 0.75).sin();
+	match bone {
+		"forearm.L" | "forearm.R" => 0.25 + s * 0.25,
 		"shin.L" | "shin.R" => s * 0.2,
 		_ => 0.0,
 	}
 }
 
-fn run_angle(bone: &str, t: f32) -> f32 {
-	let phase = (t * 2.8).fract();
+fn run_pose(bone: &str, t: f32) -> (f32, f32) {
+	let phase = (t * RUN_CYCLE_SPEED).fract();
+	let side = side_sign(bone);
+
+	let right_leg = thigh_swing(phase);
+	let left_leg = thigh_swing(phase + 0.5);
+
+	// Contralateral to legs; mirror `.R` bones so world-space swing is symmetric.
+	let left_arm = side * -arm_swing(phase);
+	let right_arm = -side * arm_swing(phase);
+
 	match bone {
-		"femur.R" => thigh_swing(phase) * 1.15,
-		"femur.L" => thigh_swing(phase + 0.5) * 1.15,
-		"shin.R" => knee_flex(phase),
-		"shin.L" => knee_flex(phase + 0.5),
-		"humerus.L" => arm_swing(phase) * 0.85,
-		"humerus.R" => arm_swing(phase + 0.5) * 0.85,
-		"forearm.L" => 0.55 + arm_swing(phase).max(0.0) * 0.25,
-		"forearm.R" => 0.55 + arm_swing(phase + 0.5).max(0.0) * 0.25,
-		_ => 0.0,
+		"shoulder.L" => (left_arm * RUN_SHOULDER_SWING, 0.0),
+		"shoulder.R" => (right_arm * RUN_SHOULDER_SWING, 0.0),
+		"humerus.L" => (left_arm * 0.75, -RUN_ARM_DOWN),
+		"humerus.R" => (right_arm * 0.75, RUN_ARM_DOWN),
+		"forearm.L" => {
+			let forward = arm_swing(phase).max(0.0);
+			(0.0, RUN_ELBOW_BEND + forward * RUN_ELBOW_SWING)
+		}
+		"forearm.R" => {
+			let forward = arm_swing(phase).max(0.0);
+			(0.0, -(RUN_ELBOW_BEND + forward * RUN_ELBOW_SWING))
+		}
+		"pelvis.L" => (left_leg * RUN_HIP_SWING, 0.0),
+		"pelvis.R" => (right_leg * RUN_HIP_SWING, 0.0),
+		"femur.R" => (right_leg * 1.15, 0.0),
+		"femur.L" => (left_leg * 1.15, 0.0),
+		"shin.R" => (0.0, knee_flex(phase)),
+		"shin.L" => (0.0, knee_flex(phase + 0.5)),
+		_ => (0.0, 0.0),
+	}
+}
+
+fn side_sign(bone: &str) -> f32 {
+	if bone.ends_with(".R") {
+		-1.0
+	} else {
+		1.0
 	}
 }
 
@@ -223,8 +305,48 @@ fn sagittal_world_axis(bone_dir: Vec3) -> Vec3 {
 	best_axis
 }
 
-fn world_axis_rotation(rest: Quat, parent_rot: Quat, world_axis: Vec3, angle: f32) -> Quat {
-	let rest_global = parent_rot * rest;
-	let animated_global = Quat::from_axis_angle(world_axis, angle) * rest_global;
-	parent_rot.inverse() * animated_global
+/// Axis that pitches a T-pose arm toward world down.
+fn pitch_down_axis(bone_dir: Vec3) -> Vec3 {
+	const CANDIDATES: [Vec3; 3] = [Vec3::X, Vec3::Y, Vec3::Z];
+	const TEST_ANGLE: f32 = 0.1;
+
+	let mut best_axis = Vec3::Z;
+	let mut best_down = f32::NEG_INFINITY;
+
+	for axis in CANDIDATES {
+		if axis.cross(bone_dir).length_squared() < f32::EPSILON {
+			continue;
+		}
+
+		let rotated = Quat::from_axis_angle(axis, TEST_ANGLE) * bone_dir;
+		let downward = rotated.y - bone_dir.y;
+		if downward < best_down {
+			best_down = downward;
+			best_axis = axis;
+		}
+	}
+
+	best_axis
+}
+
+fn hinge_axis(bone_dir: Vec3, swing_axis: Vec3) -> Vec3 {
+	bone_dir.cross(swing_axis).normalize_or(Vec3::Y)
+}
+
+fn compose_world_rotations(
+	rest: Quat,
+	parent_rot: Quat,
+	swing_axis: Vec3,
+	swing: f32,
+	flex_axis: Vec3,
+	flex: f32,
+) -> Quat {
+	let mut global = parent_rot * rest;
+	if flex.abs() > f32::EPSILON {
+		global = Quat::from_axis_angle(flex_axis, flex) * global;
+	}
+	if swing.abs() > f32::EPSILON {
+		global = Quat::from_axis_angle(swing_axis, swing) * global;
+	}
+	parent_rot.inverse() * global
 }
