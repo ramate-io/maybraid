@@ -9,18 +9,22 @@ use crate::skinning::{BoneMap, CharacterRig};
 const WORLD_FORWARD: Vec3 = Vec3::NEG_Z;
 const WORLD_LATERAL: Vec3 = Vec3::X;
 
-const RUN_CYCLE_SPEED: f32 = 1.75;
+const RUN_CYCLE_SPEED: f32 = 0.5;
 
 /// Base pitch from T-pose toward a natural running arm carriage (radians).
 const RUN_ARM_DOWN: f32 = 0.85;
 /// Base elbow flex while running (radians).
 const RUN_ELBOW_BEND: f32 = 1.05;
-/// Extra elbow flex on the forward arm swing.
-const RUN_ELBOW_SWING: f32 = 0.3;
+/// Extra elbow flex while pumping through a stride.
+const RUN_ELBOW_STRIDE: f32 = 0.45;
 /// Shoulder counter-swing amplitude.
 const RUN_SHOULDER_SWING: f32 = 0.14;
+/// Shoulder rise/drop with arm pump.
+const RUN_SHOULDER_LIFT: f32 = 0.07;
 /// Hip counter-swing amplitude.
 const RUN_HIP_SWING: f32 = 0.1;
+/// Hip rise/drop with leg swing.
+const RUN_HIP_LIFT: f32 = 0.06;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, ValueEnum)]
 pub enum AnimationMode {
@@ -142,10 +146,11 @@ pub fn animate_limbs(
 fn bone_axes(bone: &str, bone_dir: Vec3) -> (Vec3, Vec3) {
 	let sagittal = sagittal_world_axis(bone_dir);
 	match bone {
-		// Elbow and knee hinge in the sagittal plane (same axis as leg/arm swing).
 		"forearm.L" | "forearm.R" | "shin.L" | "shin.R" => (sagittal, sagittal),
-		// Upper arm: sagittal pump + separate pitch-down from T-pose.
 		"humerus.L" | "humerus.R" => (sagittal, pitch_down_axis(bone_dir)),
+		"shoulder.L" | "shoulder.R" | "pelvis.L" | "pelvis.R" => {
+			(sagittal, vertical_lift_axis(bone_dir))
+		}
 		_ => (sagittal, hinge_axis(bone_dir, sagittal)),
 	}
 }
@@ -175,27 +180,33 @@ fn run_pose(bone: &str, t: f32) -> (f32, f32) {
 	let left_leg = thigh_swing(phase + 0.5);
 
 	// Mirrored T-pose arms: same world-axis sign produces opposite visual swing.
-	// Each arm is contralateral to the opposite leg (phase vs phase+0.5).
-	let left_swing = -arm_swing(phase);
-	let right_swing = arm_swing(phase + 0.5);
+	// Contralateral gait: left arm with right leg, right arm with left leg.
+	let left_swing = -arm_swing(phase + 0.5);
+	let right_swing = arm_swing(phase);
 
 	match bone {
-		"shoulder.L" => (left_swing * RUN_SHOULDER_SWING, 0.0),
-		"shoulder.R" => (right_swing * RUN_SHOULDER_SWING, 0.0),
+		"shoulder.L" => (
+			left_swing * RUN_SHOULDER_SWING,
+			-shoulder_lift(left_swing, RUN_SHOULDER_LIFT),
+		),
+		"shoulder.R" => (
+			right_swing * RUN_SHOULDER_SWING,
+			-shoulder_lift(right_swing, RUN_SHOULDER_LIFT),
+		),
 		"humerus.L" => (left_swing * 0.75, -RUN_ARM_DOWN),
 		"humerus.R" => (right_swing * 0.75, RUN_ARM_DOWN),
-		"forearm.L" => {
-			let forward = left_swing.max(0.0);
-			(0.0, -(RUN_ELBOW_BEND + forward * RUN_ELBOW_SWING))
-		}
-		"forearm.R" => {
-			let forward = right_swing.max(0.0);
-			(0.0, -(RUN_ELBOW_BEND + forward * RUN_ELBOW_SWING))
-		}
-		"pelvis.L" => (left_leg * RUN_HIP_SWING, 0.0),
-		"pelvis.R" => (right_leg * RUN_HIP_SWING, 0.0),
-		"femur.R" => (right_leg * 1.15, 0.0),
-		"femur.L" => (left_leg * 1.15, 0.0),
+		"forearm.L" => (0.0, elbow_flex(left_swing)),
+		"forearm.R" => (0.0, elbow_flex(right_swing)),
+		"pelvis.L" => (
+			left_leg * RUN_HIP_SWING,
+			-hip_lift(left_leg, RUN_HIP_LIFT),
+		),
+		"pelvis.R" => (
+			right_leg * RUN_HIP_SWING,
+			hip_lift(right_leg, RUN_HIP_LIFT),
+		),
+		"femur.R" => (right_leg * 1.05, 0.0),
+		"femur.L" => (left_leg * 1.05, 0.0),
 		"shin.R" => (0.0, knee_flex(phase)),
 		"shin.L" => (0.0, knee_flex(phase + 0.5)),
 		_ => (0.0, 0.0),
@@ -215,15 +226,39 @@ fn arm_swing(phase: f32) -> f32 {
 	thigh_swing(phase) * 0.75
 }
 
+fn elbow_flex(arm_swing: f32) -> f32 {
+	let pump = arm_swing.abs();
+	-(RUN_ELBOW_BEND + pump * RUN_ELBOW_STRIDE)
+}
+
+fn shoulder_lift(arm_swing: f32, amplitude: f32) -> f32 {
+	arm_swing * amplitude
+}
+
+fn hip_lift(leg_swing: f32, amplitude: f32) -> f32 {
+	leg_swing * amplitude
+}
+
+/// ~90° knee joint angle at front and rear of the stride.
+const KNEE_NEUTRAL: f32 = PI * 0.5;
+/// Contracted (< 90°): tucked knee on forward swing (rear → front).
+const KNEE_CONTRACTED: f32 = 2.15;
+/// Extended (> 90°): straighter knee on backswing (front → rear).
+const KNEE_EXTENDED: f32 = 0.35;
+
 fn knee_flex(leg_phase: f32) -> f32 {
 	let p = leg_phase.fract();
-	if p > 0.12 && p < 0.42 {
-		let x = (p - 0.12) / 0.3;
-		(x * PI).sin() * 1.35
-	} else if p < 0.08 {
-		0.12
+
+	if p < 0.5 {
+		// Backswing half (reversed): front → rear, extended peak at p=0.25.
+		let t = p * 2.0;
+		let s = (t * PI).sin();
+		KNEE_NEUTRAL + s * (KNEE_EXTENDED - KNEE_NEUTRAL)
 	} else {
-		0.05
+		// Forward swing half (reversed): rear → front, contracted peak at p=0.75.
+		let t = (p - 0.5) * 2.0;
+		let s = (t * PI).sin();
+		KNEE_NEUTRAL + s * (KNEE_CONTRACTED - KNEE_NEUTRAL)
 	}
 }
 
@@ -290,6 +325,30 @@ fn sagittal_world_axis(bone_dir: Vec3) -> Vec3 {
 
 		if score > best_score {
 			best_score = score;
+			best_axis = axis;
+		}
+	}
+
+	best_axis
+}
+
+/// Axis that lifts or drops the bone mostly along world up.
+fn vertical_lift_axis(bone_dir: Vec3) -> Vec3 {
+	const CANDIDATES: [Vec3; 3] = [Vec3::X, Vec3::Y, Vec3::Z];
+	const TEST_ANGLE: f32 = 0.1;
+
+	let mut best_axis = Vec3::Z;
+	let mut best_lift = 0.0_f32;
+
+	for axis in CANDIDATES {
+		if axis.cross(bone_dir).length_squared() < f32::EPSILON {
+			continue;
+		}
+
+		let rotated = Quat::from_axis_angle(axis, TEST_ANGLE) * bone_dir;
+		let lift = (rotated.y - bone_dir.y).abs();
+		if lift > best_lift {
+			best_lift = lift;
 			best_axis = axis;
 		}
 	}
