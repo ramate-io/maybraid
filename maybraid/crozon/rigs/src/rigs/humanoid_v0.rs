@@ -2,7 +2,7 @@ use bevy::prelude::*;
 
 use crate::{
 	humanoid::{HumanoidArm, HumanoidLeg, HumanoidNeck, HumanoidRig, HumanoidSpine},
-	BoneDefinition, BoneTable, Name, RigPose, RiggedAxis, Side,
+	BoneDefinition, BonePose, BoneTable, Name, RigPose, RiggedAxis, Side,
 };
 
 /// Store the bones of the first imported humanoid rig in a semantically reasonable hierarchy.
@@ -31,32 +31,35 @@ impl HumanoidRig for HumanoidV0Rig {
 	fn leg(&self, side: Side) -> HumanoidLeg {
 		let suffix = side.suffix();
 		HumanoidLeg {
-			pelvis: Name::new(format!("pelvis.{suffix}")),
-			femur: Name::new(format!("femur.{suffix}")),
-			shin: Name::new(format!("shin.{suffix}")),
+			pelvis: BonePose::new(format!("pelvis.{suffix}"), Transform::IDENTITY),
+			femur: BonePose::new(format!("femur.{suffix}"), Transform::IDENTITY),
+			shin: BonePose::new(format!("shin.{suffix}"), Transform::IDENTITY),
 		}
 	}
 
 	fn arm(&self, side: Side) -> HumanoidArm {
 		let suffix = side.suffix();
 		HumanoidArm {
-			shoulder: Name::new(format!("shoulder.{suffix}")),
-			humerus: Name::new(format!("humerus.{suffix}")),
-			forearm: Name::new(format!("forearm.{suffix}")),
+			shoulder: BonePose::new(format!("shoulder.{suffix}"), Transform::IDENTITY),
+			humerus: BonePose::new(format!("humerus.{suffix}"), Transform::IDENTITY),
+			forearm: BonePose::new(format!("forearm.{suffix}"), Transform::IDENTITY),
 		}
 	}
 
 	fn spine(&self) -> HumanoidSpine {
 		HumanoidSpine {
-			root: Name::from("root"),
-			lumbar: Name::from("lumbar"),
-			midback: Name::from("midback"),
-			upper_back: Name::from("upper_back"),
+			root: BonePose::new("root", Transform::IDENTITY),
+			lumbar: BonePose::new("lumbar", Transform::IDENTITY),
+			midback: BonePose::new("midback", Transform::IDENTITY),
+			upper_back: BonePose::new("upper_back", Transform::IDENTITY),
 		}
 	}
 
 	fn neck(&self) -> HumanoidNeck {
-		HumanoidNeck { lower_neck: Name::from("lower_neck"), upper_neck: Name::from("upper_neck") }
+		HumanoidNeck {
+			lower_neck: BonePose::new("lower_neck", Transform::IDENTITY),
+			upper_neck: BonePose::new("upper_neck", Transform::IDENTITY),
+		}
 	}
 
 	fn pose(&self) -> &RigPose {
@@ -76,18 +79,18 @@ impl HumanoidV0Rig {
 		let right_leg = self.leg(Side::Right);
 
 		vec![
-			left_arm.shoulder,
-			right_arm.shoulder,
-			left_arm.humerus,
-			left_arm.forearm,
-			right_arm.humerus,
-			right_arm.forearm,
-			left_leg.pelvis,
-			right_leg.pelvis,
-			left_leg.femur,
-			left_leg.shin,
-			right_leg.femur,
-			right_leg.shin,
+			left_arm.shoulder.name,
+			right_arm.shoulder.name,
+			left_arm.humerus.name,
+			left_arm.forearm.name,
+			right_arm.humerus.name,
+			right_arm.forearm.name,
+			left_leg.pelvis.name,
+			right_leg.pelvis.name,
+			left_leg.femur.name,
+			left_leg.shin.name,
+			right_leg.femur.name,
+			right_leg.shin.name,
 		]
 	}
 }
@@ -150,11 +153,11 @@ mod tests {
 	fn humanoid_v0_accessors_map_to_imported_names() {
 		let rig = HumanoidV0Rig::imported();
 
-		assert_eq!(rig.leg(Side::Left).femur, Name::from("femur.L"));
-		assert_eq!(rig.leg(Side::Right).shin, Name::from("shin.R"));
-		assert_eq!(rig.arm(Side::Left).humerus, Name::from("humerus.L"));
-		assert_eq!(rig.arm(Side::Right).forearm, Name::from("forearm.R"));
-		assert_eq!(rig.neck().upper_neck, Name::from("upper_neck"));
+		assert_eq!(rig.leg(Side::Left).femur.name, Name::from("femur.L"));
+		assert_eq!(rig.leg(Side::Right).shin.name, Name::from("shin.R"));
+		assert_eq!(rig.arm(Side::Left).humerus.name, Name::from("humerus.L"));
+		assert_eq!(rig.arm(Side::Right).forearm.name, Name::from("forearm.R"));
+		assert_eq!(rig.neck().upper_neck.name, Name::from("upper_neck"));
 	}
 
 	#[test]
@@ -169,16 +172,30 @@ mod tests {
 	#[test]
 	fn humanoid_v0_uses_default_semantic_pose_writers() {
 		let mut rig = HumanoidV0Rig::imported();
-		let leg = rig.leg(Side::Left);
-		let arm = rig.arm(Side::Right);
+		let mut leg = rig.leg(Side::Left);
+		let mut arm = rig.arm(Side::Right);
 		let femur = Transform::from_translation(Vec3::X);
 		let forearm = Transform::from_translation(Vec3::Y);
 
-		rig.pose_leg(Side::Left, Transform::IDENTITY, femur, Transform::IDENTITY);
-		rig.pose_arm(Side::Right, Transform::IDENTITY, Transform::IDENTITY, forearm);
+		leg.femur.transform = femur;
+		arm.forearm.transform = forearm;
+		rig.pose_leg(leg);
+		rig.pose_arm(arm);
 
-		assert_eq!(rig.pose().get(&leg.femur), Some(&femur));
-		assert_eq!(rig.pose().get(&arm.forearm), Some(&forearm));
+		assert_eq!(rig.pose().get(&Name::from("femur.L")), Some(&femur));
+		assert_eq!(rig.pose().get(&Name::from("forearm.R")), Some(&forearm));
+	}
+
+	#[test]
+	fn humanoid_v0_leg_pose_round_trips_through_rig_pose() {
+		let mut rig = HumanoidV0Rig::imported();
+		let mut leg = rig.leg(Side::Left);
+		leg.shin.transform = Transform::from_translation(Vec3::Z);
+
+		rig.pose_leg(leg);
+		let hydrated = rig.leg_pose(Side::Left);
+
+		assert_eq!(hydrated.shin.transform, Transform::from_translation(Vec3::Z));
 	}
 
 	#[test]

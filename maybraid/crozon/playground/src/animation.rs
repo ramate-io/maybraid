@@ -225,14 +225,14 @@ fn animate_arm(
 	flex_sign: f32,
 	arm_down: f32,
 ) -> Option<(f32, f32)> {
-	if bone == &arm.shoulder {
+	if bone == &arm.shoulder.name {
 		Some((
 			arm_swing_value * RUN_SHOULDER_SWING,
 			-shoulder_lift(arm_swing_value, RUN_SHOULDER_LIFT),
 		))
-	} else if bone == &arm.humerus {
+	} else if bone == &arm.humerus.name {
 		Some((arm_swing_value * 0.75, arm_down))
-	} else if bone == &arm.forearm {
+	} else if bone == &arm.forearm.name {
 		Some((0.0, elbow_flex(arm_swing_value, phase, flex_sign)))
 	} else {
 		None
@@ -246,11 +246,11 @@ fn animate_leg(
 	lift_sign: f32,
 ) -> Option<(f32, f32)> {
 	let swing = thigh_swing(phase);
-	if bone == &leg.pelvis {
+	if bone == &leg.pelvis.name {
 		Some((swing * RUN_HIP_SWING, hip_lift(swing, RUN_HIP_LIFT) * lift_sign))
-	} else if bone == &leg.femur {
+	} else if bone == &leg.femur.name {
 		Some((swing * 1.05, 0.0))
-	} else if bone == &leg.shin {
+	} else if bone == &leg.shin.name {
 		Some((0.0, knee_flex(phase)))
 	} else {
 		None
