@@ -15,6 +15,10 @@ members = [
   "maybraid/sdf/common",
   "maybraid/sdf/common-playground",
 
+  "maybraid/crozon/animations",
+  "maybraid/crozon/rigs",
+  "maybraid/crozon/playground",
+
   "maybraid/procedural/common",
 
   "maybraid/chico/lib",
@@ -165,6 +169,9 @@ lod-cascade-system = { path = "maybraid/lod/cascade-system" }
 
 sdf-common = { path = "maybraid/sdf/common" }
 sdf-common-playground = { path = "maybraid/sdf/common-playground" }
+crozon-character-playground = { path = "maybraid/crozon/playground" }
+crozon-rigs = { path = "maybraid/crozon/rigs" }
+malo-animations = { path = "maybraid/crozon/animations" }
 procedural-common = { path = "maybraid/procedural/common" }
 
 chico = { path = "maybraid/chico/lib" }

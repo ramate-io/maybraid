@@ -1,0 +1,230 @@
+pub mod humanoid;
+pub mod rigs;
+pub mod sliders;
+
+use bevy::prelude::*;
+use std::{collections::HashMap, fmt};
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct Name(pub String);
+
+impl Name {
+	pub fn new(name: impl Into<String>) -> Self {
+		Self(name.into())
+	}
+
+	pub fn as_str(&self) -> &str {
+		&self.0
+	}
+}
+
+impl From<&str> for Name {
+	fn from(value: &str) -> Self {
+		Self::new(value)
+	}
+}
+
+impl From<String> for Name {
+	fn from(value: String) -> Self {
+		Self::new(value)
+	}
+}
+
+impl fmt::Display for Name {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		self.0.fmt(f)
+	}
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Side {
+	Left,
+	Right,
+}
+
+impl Side {
+	pub fn suffix(self) -> &'static str {
+		match self {
+			Self::Left => "L",
+			Self::Right => "R",
+		}
+	}
+}
+
+/// The orientation of the bone in the rig,
+/// relative to the intended geometry.
+///
+/// Useful when it is discovered that the default assumption is not correctly
+/// adhered to in in the rig:
+///
+/// Default assumption:
+/// 1. -Y (Blender) = +Z (Bevy) is forward.
+/// 2. +Z (Blender) = +Y (Bevy) is up.
+/// 3. +X (Blender) = +X (Bevy) is right.
+///
+/// NOTE: I believe the below can be reduced from three axes to two,
+/// plus a sign.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct RiggedAxis {
+	pub forward: Vec3,
+	pub up: Vec3,
+	pub right: Vec3,
+}
+
+impl Default for RiggedAxis {
+	fn default() -> Self {
+		Self::DEFAULT
+	}
+}
+
+impl RiggedAxis {
+	pub const DEFAULT: Self = Self { forward: Vec3::Z, up: Vec3::Y, right: Vec3::X };
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct BoneDefinition {
+	/// Typically used as a constant to reference the loaded bone.
+	pub name: Name,
+	/// The orientation of the bone in the rig, relative to the intended geometry.
+	///
+	/// Often this will just be the default.
+	pub relative_axis: RiggedAxis,
+}
+
+/// Backwards-compatible short name for static bone metadata.
+pub type Bone = BoneDefinition;
+
+#[derive(Debug, Clone)]
+pub struct BoneTable(HashMap<Name, Bone>);
+
+impl BoneTable {
+	pub fn new() -> Self {
+		Self(HashMap::new())
+	}
+
+	pub fn insert(&mut self, bone: Bone) {
+		self.0.insert(bone.name.clone(), bone);
+	}
+
+	pub fn get(&self, name: &Name) -> Option<&Bone> {
+		self.0.get(name)
+	}
+
+	pub fn get_mut(&mut self, name: &Name) -> Option<&mut Bone> {
+		self.0.get_mut(name)
+	}
+
+	pub fn remove(&mut self, name: &Name) {
+		self.0.remove(name);
+	}
+
+	pub fn iter(&self) -> impl Iterator<Item = &Bone> {
+		self.0.values()
+	}
+
+	pub fn len(&self) -> usize {
+		self.0.len()
+	}
+
+	pub fn is_empty(&self) -> bool {
+		self.0.is_empty()
+	}
+}
+
+impl Default for BoneTable {
+	fn default() -> Self {
+		Self::new()
+	}
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct BonePose {
+	pub name: Name,
+	pub transform: Transform,
+	/// Forward/back swing magnitude (radians) about the bone's swing axis.
+	pub swing: f32,
+	/// Pitch or hinge flex magnitude (radians) about the bone's flex axis.
+	pub flex: f32,
+}
+
+impl BonePose {
+	pub fn new(name: impl Into<Name>, transform: Transform) -> Self {
+		Self { name: name.into(), transform, swing: 0.0, flex: 0.0 }
+	}
+
+	pub fn with_articulation(name: impl Into<Name>, swing: f32, flex: f32) -> Self {
+		Self { name: name.into(), transform: Transform::IDENTITY, swing, flex }
+	}
+}
+
+#[derive(Debug, Clone)]
+pub struct RigPose(HashMap<Name, BonePose>);
+
+impl RigPose {
+	pub fn new() -> Self {
+		Self(HashMap::new())
+	}
+
+	pub fn insert(&mut self, pose: BonePose) {
+		self.0.insert(pose.name.clone(), pose);
+	}
+
+	pub fn set_transform(&mut self, name: impl Into<Name>, transform: Transform) {
+		let name = name.into();
+		self.0
+			.entry(name.clone())
+			.and_modify(|pose| pose.transform = transform)
+			.or_insert_with(|| BonePose::new(name, transform));
+	}
+
+	pub fn get(&self, name: &Name) -> Option<&BonePose> {
+		self.0.get(name)
+	}
+
+	pub fn get_mut(&mut self, name: &Name) -> Option<&mut BonePose> {
+		self.0.get_mut(name)
+	}
+
+	pub fn remove(&mut self, name: &Name) {
+		self.0.remove(name);
+	}
+
+	pub fn iter(&self) -> impl Iterator<Item = (&Name, &BonePose)> {
+		self.0.iter()
+	}
+
+	pub fn bone_poses(&self) -> impl Iterator<Item = BonePose> + '_ {
+		self.0.values().cloned()
+	}
+
+	pub fn len(&self) -> usize {
+		self.0.len()
+	}
+
+	pub fn is_empty(&self) -> bool {
+		self.0.is_empty()
+	}
+}
+
+impl Default for RigPose {
+	fn default() -> Self {
+		Self::new()
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn rig_pose_round_trips_by_name() {
+		let mut pose = RigPose::new();
+		let name = Name::from("femur.L");
+		let transform = Transform::from_translation(Vec3::new(1.0, 2.0, 3.0));
+
+		pose.insert(BonePose::new(name.clone(), transform));
+
+		assert_eq!(pose.get(&name).map(|pose| pose.transform), Some(transform));
+		assert_eq!(pose.len(), 1);
+	}
+}

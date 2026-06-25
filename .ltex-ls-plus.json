@@ -1,8 +1,7 @@
 {
   "ltex": {
     "enabled": [
-      "markdown",
-      "restructuredtext"
+      "markdown"
     ],
     "language": "en-US",
     "checkFrequency": "save",
@@ -441,7 +440,8 @@
         "logit",
         "argv",
         "rachis",
-        "trunkless"
+        "trunkless",
+        "occiput"
       ]
     },
     "bibtex": {
