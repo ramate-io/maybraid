@@ -7,15 +7,13 @@
 use bevy_math::Vec2;
 use procedural_common::UnitRange;
 
+pub mod variants;
+
 use crate::grove::{
 	GroveBucket, GroveDefinition, GroveDistribution, GrovePlacementRanges, PaletteMix, PaletteSlot,
 	PlacementConstraints,
 };
 
-#[cfg(feature = "render")]
-mod render;
-#[cfg(feature = "render")]
-pub use render::{StrangeOasis, StrangeOasisStd};
 
 /// Sparse sampled canopy-density band ([`0.0`, `0.35`]).
 const SPARSE_CANOPY_DENSITY: UnitRange = UnitRange::new(0.0, 0.35);
@@ -103,7 +101,7 @@ const RED_TORCH_ACCENT: StrangeOasisTorch = StrangeOasisTorch {
 
 const OASIS_STORYBOOK: StrangeOasisStorybook = StrangeOasisStorybook {
 	height: UnitRange::new(4.0, 6.0),
-	stalk_radius: UnitRange::new(0.14, 0.24),
+	stalk_radius: UnitRange::new(0.20, 0.32),
 	canopy_spread: UnitRange::new(1.6, 3.6),
 	canopy_density: SPARSE_TO_MODERATE_CANOPY_DENSITY,
 };
@@ -206,6 +204,7 @@ mod tests {
 	};
 	use anyhow::Result;
 	use bevy_math::Vec3;
+	use gimme_gen::Cell;
 	use procedural_common::NoiseParams;
 
 	#[test]
@@ -261,14 +260,14 @@ mod tests {
 		let prepared =
 			StrangeOasisCell::distribution().prepare(0.0, 0.0, NoiseParams::default(), Vec3::ZERO);
 		let terrain = FlatTerrainSample { elevation: 0.25, steepness: 0.32 };
-		let red_outcome = prepared.select_from(3, Vec3::new(5.0, 0.25, 5.0), 1.0, &terrain);
+		let red_outcome = prepared.select_from(3, Vec3::new(5.0, 0.25, 5.0), 1.0, Cell::from_min_max(Vec3::ZERO, Vec3::ONE), &terrain);
 		match red_outcome {
 			GroveCellOutcome::Placed { variant, .. } => {
 				assert_eq!(variant, StrangeOasisCell::RedTorchAccent);
 			}
 			other => anyhow::bail!("expected RedTorchAccent on moderate slope, got {other:?}"),
 		}
-		let palm_outcome = prepared.select_from(1, Vec3::new(5.0, 0.25, 5.0), 1.0, &terrain);
+		let palm_outcome = prepared.select_from(1, Vec3::new(5.0, 0.25, 5.0), 1.0, Cell::from_min_max(Vec3::ZERO, Vec3::ONE), &terrain);
 		match palm_outcome {
 			GroveCellOutcome::Placed { variant, .. } => {
 				assert_ne!(variant, StrangeOasisCell::CompactDatePalm);
@@ -283,7 +282,7 @@ mod tests {
 		let prepared =
 			StrangeOasisCell::distribution().prepare(0.0, 0.0, NoiseParams::default(), Vec3::ZERO);
 		let terrain = FlatTerrainSample { elevation: 0.45, steepness: 0.15 };
-		let outcome = prepared.select_from(1, Vec3::new(5.0, 0.45, 5.0), 1.0, &terrain);
+		let outcome = prepared.select_from(1, Vec3::new(5.0, 0.45, 5.0), 1.0, Cell::from_min_max(Vec3::ZERO, Vec3::ONE), &terrain);
 		match outcome {
 			GroveCellOutcome::Placed { variant, .. } => {
 				assert_ne!(variant, StrangeOasisCell::CompactDatePalm);

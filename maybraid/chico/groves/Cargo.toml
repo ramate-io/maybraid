@@ -11,35 +11,31 @@ rust-version = { workspace = true }
 
 [dependencies]
 bevy_math = { workspace = true }
-clap = { workspace = true, optional = true }
 procedural-common = { workspace = true }
-bevy = { workspace = true, optional = true }
-render-item = { workspace = true, optional = true  }
-chico-ball-components = { workspace = true, optional = true }
-chico-sbs-geometry = { workspace = true, optional = true, features = ["clap", "render"] }
-chico-sbs-trees = { workspace = true, optional = true }
-chico-tree-components = { workspace = true, optional = true }
-chico-vegetation-shaders = { workspace = true, optional = true }
-log = { workspace = true }
 gimme-gen = { workspace = true }
-
-[dev-dependencies]
-anyhow = { workspace = true }
+log = { workspace = true }
+chico-sbs-geometry = { workspace = true }
+chico-tree-components = { workspace = true }
+bevy = { workspace = true, optional = true }
+chico-ball-components = { workspace = true, optional = true }
+chico-sbs-trees = { workspace = true, optional = true }
+chico-vegetation-shaders = { workspace = true, optional = true }
+clap = { workspace = true, optional = true }
 
 [features]
-default = [ "render" ]
+default = []
 render = [
 	"dep:bevy",
-	"dep:render-item",
 	"dep:chico-ball-components",
-	"dep:chico-sbs-geometry",
 	"dep:chico-sbs-trees",
-	"dep:chico-tree-components",
 	"dep:chico-vegetation-shaders",
 	"dep:clap",
 	"procedural-common/clap",
 ]
-clap = [ "render" ]
+clap = ["render"]
+
+[dev-dependencies]
+anyhow = { workspace = true }
 
 [lints]
 workspace = true

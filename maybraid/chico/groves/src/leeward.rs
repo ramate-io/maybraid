@@ -7,15 +7,13 @@
 use bevy_math::Vec2;
 use procedural_common::UnitRange;
 
+pub mod variants;
+
 use crate::grove::{
 	GroveBucket, GroveDefinition, GroveDistribution, GrovePlacementRanges, PaletteMix, PaletteSlot,
 	PlacementConstraints,
 };
 
-#[cfg(feature = "render")]
-mod render;
-#[cfg(feature = "render")]
-pub use render::{Leeward, LeewardStd};
 
 /// Sparse sampled canopy-density band ([`0.0`, `0.35`]).
 const SPARSE_CANOPY_DENSITY: UnitRange = UnitRange::new(0.0, 0.35);
@@ -84,14 +82,14 @@ const WINDBREAK_TEMPERATE_CONIFER: LeewardTemperateConifer = LeewardTemperateCon
 
 const ROUNDED_LEEWARD_STORYBOOK: LeewardStorybook = LeewardStorybook {
 	height: UnitRange::new(10.0, 18.0),
-	stalk_radius: UnitRange::new(0.16, 0.34),
+	stalk_radius: UnitRange::new(0.22, 0.46),
 	canopy_spread: UnitRange::new(2.5, 6.0),
 	canopy_density: DENSE_CANOPY_DENSITY,
 };
 
 const HIGH_LEEWARD_STORYBOOK: LeewardStorybook = LeewardStorybook {
 	height: UnitRange::new(16.0, 24.0),
-	stalk_radius: UnitRange::new(0.18, 0.40),
+	stalk_radius: UnitRange::new(0.26, 0.52),
 	canopy_spread: UnitRange::new(3.0, 7.5),
 	canopy_density: MODERATE_CANOPY_DENSITY,
 };
@@ -191,6 +189,7 @@ mod tests {
 	};
 	use anyhow::Result;
 	use bevy_math::Vec3;
+	use gimme_gen::Cell;
 	use procedural_common::NoiseParams;
 
 	#[test]
@@ -280,7 +279,7 @@ mod tests {
 		let prepared =
 			LeewardCell::distribution().prepare(0.0, 0.0, NoiseParams::default(), Vec3::ZERO);
 		let moderate = FlatTerrainSample { elevation: 0.40, steepness: 0.45 };
-		let sheltered_outcome = prepared.select_from(1, Vec3::new(5.0, 0.40, 5.0), 1.0, &moderate);
+		let sheltered_outcome = prepared.select_from(1, Vec3::new(5.0, 0.40, 5.0), 1.0, Cell::from_min_max(Vec3::ZERO, Vec3::ONE), &moderate);
 		match sheltered_outcome {
 			GroveCellOutcome::Placed { variant, .. } => {
 				assert_eq!(variant, LeewardCell::ShelteredTemperateConifer);
@@ -290,7 +289,7 @@ mod tests {
 			}
 		}
 		let steep = FlatTerrainSample { elevation: 0.40, steepness: 0.55 };
-		let steep_outcome = prepared.select_from(1, Vec3::new(5.0, 0.40, 5.0), 1.0, &steep);
+		let steep_outcome = prepared.select_from(1, Vec3::new(5.0, 0.40, 5.0), 1.0, Cell::from_min_max(Vec3::ZERO, Vec3::ONE), &steep);
 		match steep_outcome {
 			GroveCellOutcome::Placed { variant, .. } => {
 				assert_eq!(variant, LeewardCell::WindbreakTemperateConifer);

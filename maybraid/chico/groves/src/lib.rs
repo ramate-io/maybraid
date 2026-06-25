@@ -18,6 +18,9 @@ pub mod temperate_massives;
 pub mod riparian_general;
 pub mod rolling_oaks;
 pub mod forlorn_savanna;
+pub mod orchard;
+pub mod vineyard;
+pub mod date_grove;
 pub mod conifer_sapling;
 pub mod goettingen_follow;
 pub mod high_bush;
@@ -41,15 +44,12 @@ pub mod tropical_undergrowth;
 pub mod unending_jungle;
 pub mod wild_grass;
 
-#[cfg(feature = "render")]
-pub mod skipped_mesh_material;
-
 pub use grove::{
 	cell_center, parse_variant_weights, parse_vec2_csv, parse_vec3_csv, placement_noise,
 	FlatTerrainSample, ForestGroveBiases, Grove, GroveBucket, GroveCellOutcome, GroveDefinition,
-	GroveDistribution, GroveExtent, GroveFrontend, GrovePlacedCell, GrovePlacementRanges,
+	GroveDistribution, GroveExtent, GroveFrontend, GroveCellVariant, GrovePlacementRanges,
 	PaletteColor, PaletteMix, PaletteSlot, PlacementConstraints, PlacementSample,
-	PreparedGroveDistribution, TerrainSample, VariantWeightOverrides, DEFAULT_GROVE_EXTENT_XZ,
+	PreparedGroveDistribution, GroveWorldSample, VariantWeightOverrides, DEFAULT_GROVE_EXTENT_XZ,
 };
 
 #[cfg(feature = "render")]
@@ -81,6 +81,28 @@ pub use leeward::{
 pub use christmas_taiga::{
 	ChristmasTaigaCell, ChristmasTaigaItem, ChristmasTaigaNorthernConifer,
 };
+pub use conifer_massives::{
+	ConiferMassivesCell, ConiferMassivesFriendsConifer, ConiferMassivesItem,
+	ConiferMassivesLiamsConifer, ConiferMassivesNorthernConifer, ConiferMassivesTemperateConifer,
+};
+pub use temperate_massives::{
+	TemperateMassivesBraidOak, TemperateMassivesCell, TemperateMassivesItem, TemperateMassivesRory,
+	TemperateMassivesStorybook,
+};
+pub use riparian_general::{
+	RiparianGeneralBraidOak, RiparianGeneralCell, RiparianGeneralHighBush, RiparianGeneralItem,
+	RiparianGeneralStorybook,
+};
+pub use rolling_oaks::{
+	RollingOaksBraidOak, RollingOaksCell, RollingOaksItem, RollingOaksStorybook,
+};
+pub use forlorn_savanna::{
+	ForlornSavannaCell, ForlornSavannaHighBush, ForlornSavannaItem, ForlornSavannaRory,
+	ForlornSavannaStorybook,
+};
+pub use orchard::{OrchardCell, OrchardItem, OrchardStorybook};
+pub use vineyard::{VineyardCell, VineyardItem, VineyardRory};
+pub use date_grove::{DateGroveCell, DateGroveDatePalm, DateGroveItem};
 pub use conifer_sapling::{
 	ConiferSaplingCell, ConiferSaplingFriendsConifer, ConiferSaplingItem,
 	ConiferSaplingNorthernConifer,
@@ -145,6 +167,7 @@ pub use unending_jungle::{
 	UnendingJungleRoryHead, UnendingJungleStorybook, UnendingJungleTorch, UnendingJungleWaialeaPalm,
 };
 pub use wild_grass::{WildGrassCell, WildGrassClump, WildGrassItem};
+<<<<<<< HEAD
 
 #[cfg(feature = "render")]
 pub use arid_conifer_sapling::{AridConiferSapling, AridConiferSaplingStd};
@@ -232,3 +255,5 @@ pub use tropical_undergrowth::{TropicalUndergrowth, TropicalUndergrowthStd};
 pub use unending_jungle::{UnendingJungle, UnendingJungleStd};
 #[cfg(feature = "render")]
 pub use wild_grass::{WildGrass, WildGrassStd};
+=======
+>>>>>>> c5cb98d0035b242ef0a11495ee457c818828c06f

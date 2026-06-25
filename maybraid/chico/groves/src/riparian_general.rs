@@ -9,15 +9,13 @@ use std::ops::RangeInclusive;
 use bevy_math::Vec2;
 use procedural_common::UnitRange;
 
+pub mod variants;
+
 use crate::grove::{
 	GroveBucket, GroveDefinition, GroveDistribution, GrovePlacementRanges, PaletteMix, PaletteSlot,
 	PlacementConstraints,
 };
 
-#[cfg(feature = "render")]
-mod render;
-#[cfg(feature = "render")]
-pub use render::{RiparianGeneral, RiparianGeneralStd};
 
 const MODERATE_CANOPY_DENSITY: UnitRange = UnitRange::new(0.35, 0.65);
 /// Flat sparse crown projection for willow-like High Bush forms.
@@ -91,7 +89,7 @@ const RIPARIAN_BRAID_OAK: RiparianGeneralBraidOak = RiparianGeneralBraidOak {
 
 const RIPARIAN_STORYBOOK: RiparianGeneralStorybook = RiparianGeneralStorybook {
 	height: UnitRange::new(5.0, 15.0),
-	stalk_radius: UnitRange::new(0.12, 0.28),
+	stalk_radius: UnitRange::new(0.20, 0.42),
 	canopy_spread: UnitRange::new(2.0, 5.5),
 	canopy_density: MODERATE_CANOPY_DENSITY,
 };
@@ -142,11 +140,11 @@ impl RiparianGeneralCell {
 	/// `3.35 / 10.75 ≈ 0.31`, mid RFC `DENSITY_RANGE` (`0.20..0.42`).
 	pub fn distribution() -> GroveDistribution<Self> {
 		let braid_oak =
-			PlacementConstraints::new(UnitRange::new(0.0, 0.42), UnitRange::new(0.0, 0.36));
+			PlacementConstraints::new(UnitRange::new(0.0, 1.0), UnitRange::new(0.0, 0.36));
 		let storybook =
-			PlacementConstraints::new(UnitRange::new(0.0, 0.45), UnitRange::new(0.0, 0.44));
+			PlacementConstraints::new(UnitRange::new(0.0, 1.0), UnitRange::new(0.0, 0.44));
 		let high_bush =
-			PlacementConstraints::new(UnitRange::new(0.0, 0.38), UnitRange::new(0.0, 0.52));
+			PlacementConstraints::new(UnitRange::new(0.0, 1.0), UnitRange::new(0.0, 0.52));
 		GroveDistribution::new(vec![
 			GroveBucket::none(7.4),
 			GroveBucket::placed(1.5, braid_oak, Self::RiparianBraidOak),
@@ -188,6 +186,7 @@ mod tests {
 	};
 	use anyhow::Result;
 	use bevy_math::Vec3;
+	use gimme_gen::Cell;
 	use procedural_common::NoiseParams;
 
 	#[test]
@@ -247,7 +246,8 @@ mod tests {
 			.iter()
 			.find(|b| b.item == Some(RiparianGeneralCell::RiparianBraidOak))
 			.ok_or_else(|| anyhow::anyhow!("missing braid oak bucket"))?;
-		assert_eq!(braid_oak.constraints.elevation.end, 0.42);
+		assert_eq!(braid_oak.constraints.elevation.start, 0.0);
+		assert_eq!(braid_oak.constraints.elevation.end, 1.0);
 		assert_eq!(braid_oak.constraints.steepness.end, 0.36);
 
 		let storybook = dist
@@ -255,7 +255,8 @@ mod tests {
 			.iter()
 			.find(|b| b.item == Some(RiparianGeneralCell::RiparianStorybook))
 			.ok_or_else(|| anyhow::anyhow!("missing storybook bucket"))?;
-		assert_eq!(storybook.constraints.elevation.end, 0.45);
+		assert_eq!(storybook.constraints.elevation.start, 0.0);
+		assert_eq!(storybook.constraints.elevation.end, 1.0);
 		assert_eq!(storybook.constraints.steepness.end, 0.44);
 
 		let high_bush = dist
@@ -263,7 +264,8 @@ mod tests {
 			.iter()
 			.find(|b| b.item == Some(RiparianGeneralCell::RareRiparianHighBush))
 			.ok_or_else(|| anyhow::anyhow!("missing high bush bucket"))?;
-		assert_eq!(high_bush.constraints.elevation.end, 0.38);
+		assert_eq!(high_bush.constraints.elevation.start, 0.0);
+		assert_eq!(high_bush.constraints.elevation.end, 1.0);
 		assert_eq!(high_bush.constraints.steepness.end, 0.52);
 		Ok(())
 	}
@@ -273,14 +275,14 @@ mod tests {
 		let prepared =
 			RiparianGeneralCell::distribution().prepare(0.0, 0.0, NoiseParams::default(), Vec3::ZERO);
 		let terrain = FlatTerrainSample { elevation: 0.25, steepness: 0.45 };
-		let bush_outcome = prepared.select_from(5, Vec3::new(5.0, 0.25, 5.0), 1.0, &terrain);
+		let bush_outcome = prepared.select_from(5, Vec3::new(5.0, 0.25, 5.0), 1.0, Cell::from_min_max(Vec3::ZERO, Vec3::ONE), &terrain);
 		match bush_outcome {
 			GroveCellOutcome::Placed { variant, .. } => {
 				assert_eq!(variant, RiparianGeneralCell::RareRiparianHighBush);
 			}
 			other => anyhow::bail!("expected RareRiparianHighBush on moderate slope, got {other:?}"),
 		}
-		let braid_outcome = prepared.select_from(1, Vec3::new(5.0, 0.25, 5.0), 1.0, &terrain);
+		let braid_outcome = prepared.select_from(1, Vec3::new(5.0, 0.25, 5.0), 1.0, Cell::from_min_max(Vec3::ZERO, Vec3::ONE), &terrain);
 		match braid_outcome {
 			GroveCellOutcome::Placed { variant, .. } => {
 				assert_ne!(variant, RiparianGeneralCell::RiparianBraidOak);

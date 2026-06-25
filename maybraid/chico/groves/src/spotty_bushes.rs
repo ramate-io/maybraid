@@ -11,15 +11,13 @@ use std::ops::RangeInclusive;
 use bevy_math::Vec2;
 use procedural_common::UnitRange;
 
+pub mod variants;
+
 use crate::grove::{
 	GroveBucket, GroveDefinition, GroveDistribution, GrovePlacementRanges, PaletteMix, PaletteSlot,
 	PlacementConstraints,
 };
 
-#[cfg(feature = "render")]
-mod render;
-#[cfg(feature = "render")]
-pub use render::{SpottyBushes, SpottyBushesStd};
 
 /// RFC `projection_count: Moderate`.
 const MODERATE_PROJECTION_RADIAL: UnitRange = UnitRange::new(0.32, 0.48);
@@ -214,6 +212,7 @@ mod tests {
 	};
 	use anyhow::Result;
 	use bevy_math::Vec3;
+	use gimme_gen::Cell;
 	use procedural_common::NoiseParams;
 
 	#[test]
@@ -269,14 +268,14 @@ mod tests {
 		let prepared =
 			SpottyBushesCell::distribution().prepare(0.0, 0.0, NoiseParams::default(), Vec3::ZERO);
 		let terrain = FlatTerrainSample { elevation: 0.35, steepness: 0.45 };
-		let dry_outcome = prepared.select_from(2, Vec3::new(5.0, 0.35, 5.0), 1.0, &terrain);
+		let dry_outcome = prepared.select_from(2, Vec3::new(5.0, 0.35, 5.0), 1.0, Cell::from_min_max(Vec3::ZERO, Vec3::ONE), &terrain);
 		match dry_outcome {
 			GroveCellOutcome::Placed { variant, .. } => {
 				assert_eq!(variant, SpottyBushesCell::DrySpotBush);
 			}
 			other => anyhow::bail!("expected DrySpotBush on moderate slope, got {other:?}"),
 		}
-		let dense_outcome = prepared.select_from(3, Vec3::new(5.0, 0.35, 5.0), 1.0, &terrain);
+		let dense_outcome = prepared.select_from(3, Vec3::new(5.0, 0.35, 5.0), 1.0, Cell::from_min_max(Vec3::ZERO, Vec3::ONE), &terrain);
 		match dense_outcome {
 			GroveCellOutcome::Placed { variant, .. } => {
 				assert_ne!(variant, SpottyBushesCell::DenseSpotBush);
@@ -294,7 +293,7 @@ mod tests {
 		for (index, cell) in
 			[(3, SpottyBushesCell::DenseSpotBush), (4, SpottyBushesCell::FloweringSpotBush)]
 		{
-			let outcome = prepared.select_from(index, Vec3::new(5.0, 0.25, 5.0), 1.0, &terrain);
+			let outcome = prepared.select_from(index, Vec3::new(5.0, 0.25, 5.0), 1.0, Cell::from_min_max(Vec3::ZERO, Vec3::ONE), &terrain);
 			match outcome {
 				GroveCellOutcome::Placed { variant, .. } => {
 					assert_ne!(variant, cell, "expected {cell:?} to reject steepness 0.45");

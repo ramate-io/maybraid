@@ -209,6 +209,9 @@ pub fn resolve_palette_color(name: &str) -> Option<Color> {
 		"acacia_bark" => Color::srgb(0.55, 0.42, 0.28),
 		"dry_banyan_bark" => Color::srgb(0.48, 0.38, 0.28),
 		"willow_bark" => Color::srgb(0.42, 0.34, 0.24),
+		"orchard_bark" => Color::srgb(0.56, 0.42, 0.28),
+		"pale_blossom" => Color::srgb(0.92, 0.82, 0.86),
+		"grape_green" => Color::srgb(0.32, 0.52, 0.28),
 		_ => return None,
 	})
 }

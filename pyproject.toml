@@ -1,0 +1,9 @@
+[project]
+name = "wctp"
+version = "0.0.0"
+description = "Workspace for Maybraid tooling and scripts"
+requires-python = ">=3.11"
+dependencies = []
+
+[tool.uv.workspace]
+members = ["scripts/glb"]

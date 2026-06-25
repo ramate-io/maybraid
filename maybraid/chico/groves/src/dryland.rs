@@ -7,15 +7,13 @@
 use bevy_math::Vec2;
 use procedural_common::UnitRange;
 
+pub mod variants;
+
 use crate::grove::{
 	GroveBucket, GroveDefinition, GroveDistribution, GrovePlacementRanges, PaletteMix, PaletteSlot,
 	PlacementConstraints,
 };
 
-#[cfg(feature = "render")]
-mod render;
-#[cfg(feature = "render")]
-pub use render::{Dryland, DrylandStd};
 
 /// Sparse sampled canopy-density band ([`0.0`, `0.35`]).
 const SPARSE_CANOPY_DENSITY: UnitRange = UnitRange::new(0.0, 0.35);
@@ -75,7 +73,7 @@ const DRYLAND_LIAMS: DrylandLiamsConifer = DrylandLiamsConifer {
 
 const DRYLAND_VASE: DrylandVaseTree = DrylandVaseTree {
 	height: UnitRange::new(10.0, 20.0),
-	stalk_radius: UnitRange::new(0.25, 0.50),
+	stalk_radius: UnitRange::new(0.34, 0.68),
 	canopy_spread: UnitRange::new(2.0, 5.5),
 	canopy_density: SPARSE_CANOPY_DENSITY,
 };
@@ -145,6 +143,7 @@ mod tests {
 	};
 	use anyhow::Result;
 	use bevy_math::Vec3;
+	use gimme_gen::Cell;
 	use procedural_common::NoiseParams;
 
 	#[test]
@@ -214,7 +213,7 @@ mod tests {
 		let prepared =
 			DrylandCell::distribution().prepare(0.0, 0.0, NoiseParams::default(), Vec3::ZERO);
 		let moderate = FlatTerrainSample { elevation: 0.40, steepness: 0.55 };
-		let vase_outcome = prepared.select_from(2, Vec3::new(5.0, 0.40, 5.0), 1.0, &moderate);
+		let vase_outcome = prepared.select_from(2, Vec3::new(5.0, 0.40, 5.0), 1.0, Cell::from_min_max(Vec3::ZERO, Vec3::ONE), &moderate);
 		match vase_outcome {
 			GroveCellOutcome::Placed { variant, .. } => {
 				assert_eq!(variant, DrylandCell::DrylandVaseTree);
@@ -222,14 +221,14 @@ mod tests {
 			other => anyhow::bail!("expected DrylandVaseTree on moderate slope, got {other:?}"),
 		}
 		let steep = FlatTerrainSample { elevation: 0.40, steepness: 0.75 };
-		let liams_outcome = prepared.select_from(1, Vec3::new(5.0, 0.40, 5.0), 1.0, &steep);
+		let liams_outcome = prepared.select_from(1, Vec3::new(5.0, 0.40, 5.0), 1.0, Cell::from_min_max(Vec3::ZERO, Vec3::ONE), &steep);
 		match liams_outcome {
 			GroveCellOutcome::Placed { variant, .. } => {
 				assert_eq!(variant, DrylandCell::DrylandLiamsConifer);
 			}
 			other => anyhow::bail!("expected DrylandLiamsConifer on steep slope, got {other:?}"),
 		}
-		match prepared.select_from(2, Vec3::new(5.0, 0.40, 5.0), 1.0, &steep) {
+		match prepared.select_from(2, Vec3::new(5.0, 0.40, 5.0), 1.0, Cell::from_min_max(Vec3::ZERO, Vec3::ONE), &steep) {
 			GroveCellOutcome::Placed { variant, .. } => {
 				assert_ne!(variant, DrylandCell::DrylandVaseTree);
 			}

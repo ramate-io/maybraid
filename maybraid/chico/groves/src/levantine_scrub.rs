@@ -10,15 +10,13 @@ use std::ops::RangeInclusive;
 use bevy_math::Vec2;
 use procedural_common::UnitRange;
 
+pub mod variants;
+
 use crate::grove::{
 	GroveBucket, GroveDefinition, GroveDistribution, GrovePlacementRanges, PaletteMix, PaletteSlot,
 	PlacementConstraints,
 };
 
-#[cfg(feature = "render")]
-mod render;
-#[cfg(feature = "render")]
-pub use render::{LevantineScrub, LevantineScrubStd};
 
 /// RFC `projection_count: Moderate` — dry high-bush varietal.
 const MODERATE_PROJECTION_RADIAL: UnitRange = UnitRange::new(0.32, 0.48);
@@ -326,6 +324,7 @@ mod tests {
 	};
 	use anyhow::Result;
 	use bevy_math::Vec3;
+	use gimme_gen::Cell;
 	use procedural_common::NoiseParams;
 
 	#[test]
@@ -395,7 +394,7 @@ mod tests {
 			Vec3::ZERO,
 		);
 		let terrain = FlatTerrainSample { elevation: 0.25, steepness: 0.30 };
-		let outcome = prepared.select_from(7, Vec3::new(5.0, 0.25, 5.0), 1.0, &terrain);
+		let outcome = prepared.select_from(7, Vec3::new(5.0, 0.25, 5.0), 1.0, Cell::from_min_max(Vec3::ZERO, Vec3::ONE), &terrain);
 		match outcome {
 			GroveCellOutcome::Placed { variant, .. } => {
 				assert_eq!(variant, LevantineScrubCell::ScrubHedge);
@@ -414,7 +413,7 @@ mod tests {
 			Vec3::ZERO,
 		);
 		let terrain = FlatTerrainSample { elevation: 0.25, steepness: 0.69 };
-		let outcome = prepared.select_from(3, Vec3::new(5.0, 0.25, 5.0), 1.0, &terrain);
+		let outcome = prepared.select_from(3, Vec3::new(5.0, 0.25, 5.0), 1.0, Cell::from_min_max(Vec3::ZERO, Vec3::ONE), &terrain);
 		match outcome {
 			GroveCellOutcome::Empty { .. } => {}
 			other => anyhow::bail!("expected Empty on steep slope, got {other:?}"),
@@ -431,7 +430,7 @@ mod tests {
 			Vec3::ZERO,
 		);
 		let terrain = FlatTerrainSample { elevation: 0.25, steepness: 0.62 };
-		let outcome = prepared.select_from(3, Vec3::new(5.0, 0.25, 5.0), 1.0, &terrain);
+		let outcome = prepared.select_from(3, Vec3::new(5.0, 0.25, 5.0), 1.0, Cell::from_min_max(Vec3::ZERO, Vec3::ONE), &terrain);
 		match outcome {
 			GroveCellOutcome::Placed { variant, .. } => {
 				assert_eq!(variant, LevantineScrubCell::DryHighBush);

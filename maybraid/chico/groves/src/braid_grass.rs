@@ -8,15 +8,13 @@ use std::ops::RangeInclusive;
 use bevy_math::Vec2;
 use procedural_common::UnitRange;
 
+pub mod variants;
+
 use crate::grove::{
 	GroveBucket, GroveDefinition, GroveDistribution, GrovePlacementRanges, GroveTuftPatch,
 	PaletteMix, PaletteSlot, PlacementConstraints,
 };
 
-#[cfg(feature = "render")]
-mod render;
-#[cfg(feature = "render")]
-pub use render::{BraidGrass, BraidGrassStd};
 
 /// Authored Braid Grass grove definition.
 ///
@@ -257,6 +255,7 @@ mod tests {
 	};
 	use anyhow::Result;
 	use bevy_math::Vec3;
+	use gimme_gen::Cell;
 	use procedural_common::NoiseParams;
 
 	#[test]
@@ -339,7 +338,7 @@ mod tests {
 		let prepared =
 			BraidGrassCell::distribution().prepare(0.0, 0.0, NoiseParams::default(), Vec3::ZERO);
 		let terrain = FlatTerrainSample { elevation: 0.3, steepness: 0.35 };
-		let outcome = prepared.select_from(3, Vec3::new(5.0, 0.3, 5.0), 1.0, &terrain);
+		let outcome = prepared.select_from(3, Vec3::new(5.0, 0.3, 5.0), 1.0, Cell::from_min_max(Vec3::ZERO, Vec3::ONE), &terrain);
 		match outcome {
 			GroveCellOutcome::Placed { variant, .. } => {
 				assert_eq!(variant, BraidGrassCell::RedEdgeBlade);

@@ -7,15 +7,13 @@
 use bevy_math::Vec2;
 use procedural_common::UnitRange;
 
+pub mod variants;
+
 use crate::grove::{
 	GroveBucket, GroveDefinition, GroveDistribution, GrovePlacementRanges, PaletteMix, PaletteSlot,
 	PlacementConstraints,
 };
 
-#[cfg(feature = "render")]
-mod render;
-#[cfg(feature = "render")]
-pub use render::{Alpine, AlpineStd};
 
 /// Sparse sampled canopy-density band ([`0.0`, `0.35`]).
 const SPARSE_CANOPY_DENSITY: UnitRange = UnitRange::new(0.0, 0.35);
@@ -201,6 +199,7 @@ mod tests {
 	};
 	use anyhow::Result;
 	use bevy_math::Vec3;
+	use gimme_gen::Cell;
 	use procedural_common::NoiseParams;
 
 	#[test]
@@ -274,7 +273,7 @@ mod tests {
 		let prepared =
 			AlpineCell::distribution().prepare(0.0, 0.0, NoiseParams::default(), Vec3::ZERO);
 		let moderate = FlatTerrainSample { elevation: 0.30, steepness: 0.40 };
-		let moderate_outcome = prepared.select_from(1, Vec3::new(5.0, 0.30, 5.0), 1.0, &moderate);
+		let moderate_outcome = prepared.select_from(1, Vec3::new(5.0, 0.30, 5.0), 1.0, Cell::from_min_max(Vec3::ZERO, Vec3::ONE), &moderate);
 		match moderate_outcome {
 			GroveCellOutcome::Placed { variant, .. } => {
 				assert_eq!(variant, AlpineCell::TallAlpineFriendsConifer);
@@ -282,7 +281,7 @@ mod tests {
 			other => anyhow::bail!("expected TallAlpineFriendsConifer on moderate slope, got {other:?}"),
 		}
 		let steep = FlatTerrainSample { elevation: 0.30, steepness: 0.70 };
-		let steep_outcome = prepared.select_from(1, Vec3::new(5.0, 0.30, 5.0), 1.0, &steep);
+		let steep_outcome = prepared.select_from(1, Vec3::new(5.0, 0.30, 5.0), 1.0, Cell::from_min_max(Vec3::ZERO, Vec3::ONE), &steep);
 		match steep_outcome {
 			GroveCellOutcome::Placed { variant, .. } => {
 				assert_eq!(variant, AlpineCell::WindlineFriendsConifer);
