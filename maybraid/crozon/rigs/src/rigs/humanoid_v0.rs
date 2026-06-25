@@ -14,6 +14,7 @@ use crate::{
 pub struct HumanoidV0Rig {
 	pub bones: BoneTable,
 	pub pose: RigPose,
+	pub forearm_flex_sign: [f32; 2],
 }
 
 impl HumanoidV0Rig {
@@ -23,7 +24,7 @@ impl HumanoidV0Rig {
 			bones.insert(BoneDefinition { name: Name::from(name), relative_axis });
 		}
 
-		Self { bones, pose: RigPose::new() }
+		Self { bones, pose: RigPose::new(), forearm_flex_sign: [1.0, 1.0] }
 	}
 }
 
@@ -68,6 +69,13 @@ impl HumanoidRig for HumanoidV0Rig {
 
 	fn pose_mut(&mut self) -> &mut RigPose {
 		&mut self.pose
+	}
+
+	fn forearm_flex_sign(&self, side: Side) -> f32 {
+		match side {
+			Side::Left => self.forearm_flex_sign[0],
+			Side::Right => self.forearm_flex_sign[1],
+		}
 	}
 }
 
@@ -182,8 +190,11 @@ mod tests {
 		rig.pose_leg(leg);
 		rig.pose_arm(arm);
 
-		assert_eq!(rig.pose().get(&Name::from("femur.L")), Some(&femur));
-		assert_eq!(rig.pose().get(&Name::from("forearm.R")), Some(&forearm));
+		assert_eq!(rig.pose().get(&Name::from("femur.L")).map(|pose| pose.transform), Some(femur));
+		assert_eq!(
+			rig.pose().get(&Name::from("forearm.R")).map(|pose| pose.transform),
+			Some(forearm)
+		);
 	}
 
 	#[test]

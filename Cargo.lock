@@ -2395,6 +2395,7 @@ dependencies = [
  "crozon-rigs",
  "game-commands",
  "log",
+ "malo-animations",
 ]
 
 [[package]]

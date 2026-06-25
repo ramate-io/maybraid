@@ -1,5 +1,3 @@
-use bevy::prelude::*;
-
 use crate::{BonePose, RigPose, Side};
 
 #[derive(Debug, Clone, PartialEq)]
@@ -87,7 +85,11 @@ impl HumanoidNeck {
 }
 
 fn hydrate_bone(pose: &RigPose, bone: &mut BonePose) {
-	bone.transform = pose.get(&bone.name).copied().unwrap_or(Transform::IDENTITY);
+	if let Some(stored) = pose.get(&bone.name) {
+		bone.transform = stored.transform;
+		bone.swing = stored.swing;
+		bone.flex = stored.flex;
+	}
 }
 
 pub trait HumanoidRig {
@@ -97,6 +99,11 @@ pub trait HumanoidRig {
 	fn neck(&self) -> HumanoidNeck;
 	fn pose(&self) -> &RigPose;
 	fn pose_mut(&mut self) -> &mut RigPose;
+
+	/// +1 or −1 so mirrored forearms flex forward consistently in run animation.
+	fn forearm_flex_sign(&self, _side: Side) -> f32 {
+		1.0
+	}
 
 	fn leg_pose(&self, side: Side) -> HumanoidLeg {
 		let mut leg = self.leg(side);

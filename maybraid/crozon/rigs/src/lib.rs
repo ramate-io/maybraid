@@ -141,16 +141,24 @@ impl Default for BoneTable {
 pub struct BonePose {
 	pub name: Name,
 	pub transform: Transform,
+	/// Forward/back swing magnitude (radians) about the bone's swing axis.
+	pub swing: f32,
+	/// Pitch or hinge flex magnitude (radians) about the bone's flex axis.
+	pub flex: f32,
 }
 
 impl BonePose {
 	pub fn new(name: impl Into<Name>, transform: Transform) -> Self {
-		Self { name: name.into(), transform }
+		Self { name: name.into(), transform, swing: 0.0, flex: 0.0 }
+	}
+
+	pub fn with_articulation(name: impl Into<Name>, swing: f32, flex: f32) -> Self {
+		Self { name: name.into(), transform: Transform::IDENTITY, swing, flex }
 	}
 }
 
 #[derive(Debug, Clone)]
-pub struct RigPose(HashMap<Name, Transform>);
+pub struct RigPose(HashMap<Name, BonePose>);
 
 impl RigPose {
 	pub fn new() -> Self {
@@ -158,18 +166,22 @@ impl RigPose {
 	}
 
 	pub fn insert(&mut self, pose: BonePose) {
-		self.0.insert(pose.name, pose.transform);
+		self.0.insert(pose.name.clone(), pose);
 	}
 
 	pub fn set_transform(&mut self, name: impl Into<Name>, transform: Transform) {
-		self.0.insert(name.into(), transform);
+		let name = name.into();
+		self.0
+			.entry(name.clone())
+			.and_modify(|pose| pose.transform = transform)
+			.or_insert_with(|| BonePose::new(name, transform));
 	}
 
-	pub fn get(&self, name: &Name) -> Option<&Transform> {
+	pub fn get(&self, name: &Name) -> Option<&BonePose> {
 		self.0.get(name)
 	}
 
-	pub fn get_mut(&mut self, name: &Name) -> Option<&mut Transform> {
+	pub fn get_mut(&mut self, name: &Name) -> Option<&mut BonePose> {
 		self.0.get_mut(name)
 	}
 
@@ -177,14 +189,12 @@ impl RigPose {
 		self.0.remove(name);
 	}
 
-	pub fn iter(&self) -> impl Iterator<Item = (&Name, &Transform)> {
+	pub fn iter(&self) -> impl Iterator<Item = (&Name, &BonePose)> {
 		self.0.iter()
 	}
 
 	pub fn bone_poses(&self) -> impl Iterator<Item = BonePose> + '_ {
-		self.0
-			.iter()
-			.map(|(name, transform)| BonePose { name: name.clone(), transform: *transform })
+		self.0.values().cloned()
 	}
 
 	pub fn len(&self) -> usize {
@@ -214,7 +224,7 @@ mod tests {
 
 		pose.insert(BonePose::new(name.clone(), transform));
 
-		assert_eq!(pose.get(&name), Some(&transform));
+		assert_eq!(pose.get(&name).map(|pose| pose.transform), Some(transform));
 		assert_eq!(pose.len(), 1);
 	}
 }

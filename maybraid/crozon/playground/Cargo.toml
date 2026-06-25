@@ -15,6 +15,7 @@ clap = { workspace = true }
 crozon-rigs = { workspace = true }
 game-commands = { workspace = true }
 log = { workspace = true }
+malo-animations = { workspace = true }
 
 [lints]
 workspace = true
