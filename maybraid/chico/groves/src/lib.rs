@@ -7,10 +7,7 @@ pub mod arid_conifer_sapling;
 pub mod braid_grass;
 pub mod bush_scrub;
 pub mod christmas_taiga;
-<<<<<<< HEAD
 pub mod common_tufts;
-=======
->>>>>>> 18d745e10771809ee1e380059601ec809c59949c
 pub mod conifer_massives;
 pub mod conifer_sapling;
 pub mod date_grove;
