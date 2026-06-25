@@ -5,9 +5,21 @@ pub mod mesh;
 pub mod sdf;
 
 use bevy::prelude::*;
-use chunk::cascade::CascadeChunk;
+pub use chunk::cascade::CascadeChunk;
 
-/// Used for logical items that can will spawn their constituens into the world.
+/// A logical item that can spawn its constituents into the world.
+///
+/// # Placement contract
+///
+/// `transform` is the item's placement **in the caller's space**: world space when spawned
+/// top-level, or parent-local when spawned via [`RenderItem::spawn_render_items_under`].
+/// Composite items (tree assemblies and similar) should spawn **one root entity** carrying the
+/// item as a `Component` plus `transform`, attach their constituents as children with
+/// item-local transforms, and return only the root. Bevy's transform propagation then owns
+/// world placement — implementations must not bake world offsets into child transforms.
+///
+/// Per-instance variation (e.g. across a grove) comes from the **seeds** the caller sets on the
+/// item's noise parameters, not from spatial offsets baked into the geometry.
 pub trait RenderItem: Clone {
 	fn spawn_render_items(
 		&self,
@@ -15,6 +27,24 @@ pub trait RenderItem: Clone {
 		cascade_chunk: &CascadeChunk,
 		transform: Transform,
 	) -> Vec<Entity>;
+
+	/// Spawn with `local_transform` relative to `parent` (when given), attaching the returned
+	/// entities as its children.
+	fn spawn_render_items_under(
+		&self,
+		commands: &mut Commands,
+		cascade_chunk: &CascadeChunk,
+		local_transform: Transform,
+		parent: Option<Entity>,
+	) -> Vec<Entity> {
+		let entities = self.spawn_render_items(commands, cascade_chunk, local_transform);
+		if let Some(parent) = parent {
+			for entity in &entities {
+				commands.entity(*entity).insert(ChildOf(parent));
+			}
+		}
+		entities
+	}
 }
 
 /// Signals an intent to render an item into the world.

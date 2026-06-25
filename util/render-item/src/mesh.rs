@@ -6,6 +6,7 @@ use bevy::prelude::*;
 use cache::{handle::MeshHandleCache, mesh::MeshCache};
 use chunk::cascade::CascadeChunk;
 use std::hash::Hash;
+use std::marker::PhantomData;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct MeshId(String);
@@ -104,9 +105,31 @@ pub fn fetch_meshes<T: MeshFetcher + Send + Sync + 'static, M: Material>(
 		Added<MeshDispatch<T>>,
 	>,
 ) {
-	for (_entity, mesh_dispatch, cascade_chunk, transform, material) in &query {
+	for (parent_entity, mesh_dispatch, cascade_chunk, _transform, material) in &query {
 		if let Some(mesh) = mesh_dispatch.fetcher.fetch_mesh(&mut meshes, cascade_chunk) {
-			commands.spawn((Mesh3d(mesh), *transform, material.clone()));
+			commands.entity(parent_entity).with_children(|parent| {
+				parent.spawn((
+					Mesh3d(mesh),
+					MeshMaterial3d(material.0.clone()),
+					Transform::default(), // local to parent, no extra offset/scale/rotation
+				));
+			});
 		}
+	}
+}
+
+pub struct MeshDispatchPlugin<T: MeshFetcher + Send + Sync + 'static, M: Material> {
+	__marker: PhantomData<(T, M)>,
+}
+
+impl<T: MeshFetcher + Send + Sync + 'static, M: Material> Default for MeshDispatchPlugin<T, M> {
+	fn default() -> Self {
+		Self { __marker: PhantomData }
+	}
+}
+
+impl<T: MeshFetcher + Send + Sync + 'static, M: Material> Plugin for MeshDispatchPlugin<T, M> {
+	fn build(&self, app: &mut App) {
+		app.add_systems(Update, fetch_meshes::<T, M>);
 	}
 }

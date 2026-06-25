@@ -1,0 +1,26 @@
+[package]
+name = "sdf-common-playground"
+version = { workspace = true }
+edition  = { workspace = true }
+license  = { workspace = true }
+authors = { workspace = true }
+repository = { workspace = true }
+homepage = { workspace = true }
+publish = { workspace = true }
+rust-version = { workspace = true }
+
+[dependencies]
+bevy = { workspace = true }
+chunk = { workspace = true }
+game-commands = { workspace = true }
+log = { workspace = true }
+render-item = { workspace = true }
+sdf = { workspace = true }
+sdf-common = { workspace = true }
+clap = { workspace = true }
+
+[dev-dependencies]
+anyhow = { workspace = true }
+
+[lints]
+workspace = true

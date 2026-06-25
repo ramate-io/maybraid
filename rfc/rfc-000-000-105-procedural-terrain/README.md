@@ -99,7 +99,7 @@ In Maybraid, we align directly with a stampable pipeline: the global base can st
 
 #### 2.1.3: Hydraulic and thermal erosion
 
-Iterated sediment transport and slope-collapse models reshape noise into drainage-like networks; classic references appear in Musgrave’s line of work and in [*Texturing and Modeling*](https://www.sciencedirect.com/book/9781558608481/texturing-and-modeling) (Ebert et al.); see also surveys of interactive terrain erosion (e.g. [terrain deformation / erosion](https://en.wikipedia.org/wiki/Terrain_deformation)).
+Iterated sediment transport and slope-collapse models reshape noise into drainage-like networks; classic references appear in Musgrave’s line of work and in [*Texturing and Modeling*]() (Ebert et al.); see also surveys of interactive terrain erosion (e.g. [terrain deformation / erosion](https://en.wikipedia.org/wiki/Terrain_deformation)).
 
 In other games, erosion appears both as offline bake (acceptable load times) and as GPU or chunk passes for live worlds; it sells valleys, talus, and river attachment better than raw noise alone.
 

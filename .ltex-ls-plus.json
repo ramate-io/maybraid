@@ -1,8 +1,7 @@
 {
   "ltex": {
     "enabled": [
-      "markdown",
-      "restructuredtext"
+      "markdown"
     ],
     "language": "en-US",
     "checkFrequency": "save",
@@ -18,7 +17,8 @@
         "IN_THE_INTERNET",
         "CONSEQUENCES_OF_FOR",
         "EN_COMPOUNDS_POCKET_SIZE",
-        "PHRASE_REPETITION"
+        "PHRASE_REPETITION",
+        "NUMBERS_IN_WORDS"
       ]
     },
     "enabledRules": {
@@ -435,7 +435,13 @@
         "Wildlands",
         "MathJax",
         "accessor",
-        "accessors"
+        "accessors",
+        "Argv",
+        "logit",
+        "argv",
+        "rachis",
+        "trunkless",
+        "occiput"
       ]
     },
     "bibtex": {

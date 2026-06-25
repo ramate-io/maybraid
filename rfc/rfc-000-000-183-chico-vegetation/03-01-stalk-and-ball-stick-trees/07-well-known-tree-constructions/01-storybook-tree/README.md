@@ -34,12 +34,12 @@ NoisyCylinder {
 
 **Anchor Rings**
 
-Radial projections begin at roughly $15%$ of total height and continue toward the top of the stalk.
+Radial projections begin around **30%** along the stalk (clear trunk below the canopy belt) and continue toward the top of the stalk. Ring anchors are perturbed in position and direction like Sope's Banyan.
 
 ```rust
-let z_min = 0.15 * H;
-let z_max = stalk_height;
-let ring_spacing = 0.08 * H;
+let z_min_frac = 0.30; // along stalk, 0 = base, 1 = tip
+let z_max_frac = 1.0;
+let ring_spacing = 0.10; // fraction of stalk height between rings
 let anchors_per_ring = 6;
 ```
 
@@ -60,26 +60,26 @@ Anchors should originate near the stalk radial centroid to avoid detached-lookin
 
 **Projection Length**
 
-Lower branches should be longer than upper branches. Let:
+Branch reach should form a **rounded canopy belt**: shorter near the lower trunk and near the tip, longest around mid-height. Let:
 
 $$
 u = \frac{z - z_{\min}}{z_{\max} - z_{\min}}
 $$
 
-Use a logarithmic or similar falloff:
+Use a dome (bell) profile that is low at both ends of the ring band:
 
 $$
-\ell(u) = \ell_{\max}(1 - \log(1 + \alpha u) / \log(1 + \alpha))
+\ell(u) = \ell_{\min} + (\ell_{\max} - \ell_{\min}) \sin(\pi u)
 $$
 
 with:
 
 ```rust
-let max_projection_length = 0.60 * H;
-let alpha = 4.0;
+let max_projection_length = 0.50 * H;
+let end_fraction = 0.40; // ℓ_min = end_fraction * ℓ_max at u = 0 and u = 1
 ```
 
-This produces a round canopy that gently approaches the vertical axis near the top.
+This produces a round canopy that arches outward in the middle without extreme short/long contrast between the lowest and highest rings.
 
 **Chain Growth**
 
@@ -89,7 +89,7 @@ Each radial projection grows as a short ball-stick chain:
 BallStickChain {
     segments: 3..=5,
     child_count: 1..=3, // mean near 2
-    angle_tolerance: radians(15.0),
+    angle_tolerance: radians(26.0),
     bias_ray: radial,
     bias_strength: moderate,
 }

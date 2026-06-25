@@ -1,0 +1,18 @@
+//! Procedural primitives shared across Maybraid (noise, fields, …).
+
+pub mod args;
+pub mod distributions;
+pub mod mu;
+pub mod noise;
+
+pub use args::{
+	parse_count_pair, parse_u32_range, parse_unit_range, parse_usize_range, CountPair, U32Range,
+	UnitRange, UsizeRange,
+};
+pub use fastnoise_lite::{FastNoiseLite, FractalType, NoiseType};
+pub use mu::{sdf_band_margin, NUMERIC_SURFACE_EPSILON};
+pub use noise::{
+	noise_params_from_scalar_str, BuildWithNoise, FromScalarNoise, NoiseConfig, NoiseParams,
+};
+pub use distributions::bucket_throw::{Bucket, BucketThrow, TypedBucketThrow};
+pub use distributions::{perturb_weights, FirstFitIndices, MIN_BUCKET_WEIGHT};

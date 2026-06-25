@@ -12,6 +12,28 @@ members = [
   "maybraid/lod/cascade",
   "maybraid/lod/cascade-system",
 
+  "maybraid/sdf/common",
+  "maybraid/sdf/common-playground",
+
+  "maybraid/crozon/animations",
+  "maybraid/crozon/rigs",
+  "maybraid/crozon/playground",
+
+  "maybraid/procedural/common",
+
+  "maybraid/chico/lib",
+  "maybraid/chico/shaders",
+  "maybraid/chico/sbs-trees",
+  "maybraid/chico/sbs-trees-playground",
+  "maybraid/chico/sdf",
+  "maybraid/chico/ball-components",
+  "maybraid/chico/stick-components",
+  "maybraid/chico/tree-components",
+  "maybraid/chico/sbs-geometry",
+  "maybraid/chico/groves",
+  "maybraid/chico/grove-render-item",
+  "maybraid/gimme/core",
+  "maybraid/gimme/gen",
 
   # legacy still being refactored out: engine
   "engine",
@@ -34,6 +56,7 @@ members = [
   ## sdf
   "util/sdf",
   "util/chunk",
+  "util/game-commands",
   "util/render-item",
 
   # demos
@@ -77,6 +100,7 @@ zip = { version = "2.4.2", features = ["flate2"] }
 walkdir = "2.3.2"
 tempfile = "3.5.0"
 itertools = "0.14.0"
+paste = "1.0"
 regex = "1.9.0"
 syn = { version = "2.0", features = ["full"] }
 quote = "1.0.23"
@@ -116,6 +140,7 @@ comrak = { version = "0.43.0" }
 pulldown-cmark = "0.13.0"
 rayon = { version = "1.11.0" }
 noise = { version = "0.9" }
+fastnoise-lite = "1.1.1"
 lz4_flex = "0.11"
 bincode = "1.3.3"
 bevy_math = "0.18.0"
@@ -126,6 +151,7 @@ clap-markdown-ext = { git = "https://github.com/movementlabsxyz/clap-markdown-ex
 sdf = { path = "util/sdf" }
 render-item = { path = "util/render-item" }
 chunk = { path = "util/chunk" }
+game-commands = { path = "util/game-commands" }
 
 terrain = { path = "procedures/terrain" }
 vegetation-sdf = { path = "procedures/vegetation" }
@@ -140,6 +166,27 @@ durham-terrain-shaders = { path = "maybraid/durham/shaders" }
 lod = { path = "maybraid/lod/lib" }
 lod-cascade = { path = "maybraid/lod/cascade" }
 lod-cascade-system = { path = "maybraid/lod/cascade-system" }
+
+sdf-common = { path = "maybraid/sdf/common" }
+sdf-common-playground = { path = "maybraid/sdf/common-playground" }
+crozon-character-playground = { path = "maybraid/crozon/playground" }
+crozon-rigs = { path = "maybraid/crozon/rigs" }
+malo-animations = { path = "maybraid/crozon/animations" }
+procedural-common = { path = "maybraid/procedural/common" }
+
+chico = { path = "maybraid/chico/lib" }
+chico-sbs-trees = { path = "maybraid/chico/sbs-trees" }
+chico-sdf = { path = "maybraid/chico/sdf" }
+chico-ball-components = { path = "maybraid/chico/ball-components" }
+chico-stick-components = { path = "maybraid/chico/stick-components" }
+chico-tree-components = { path = "maybraid/chico/tree-components" }
+chico-sbs-geometry = { path = "maybraid/chico/sbs-geometry" }
+chico-groves = { path = "maybraid/chico/groves" }
+chico-grove-render-items = { path = "maybraid/chico/grove-render-item" }
+chico-vegetation-shaders = { path = "maybraid/chico/shaders" }
+
+gimme-core = { path = "maybraid/gimme/core" }
+gimme-gen = { path = "maybraid/gimme/gen" }
 
 [workspace.lints.clippy]
 debug_assert_with_mut_call = "deny"
