@@ -1,0 +1,12 @@
+# armature object: ThreeDigitRig
+
+wrist
+  palm
+    middle_digit_first_joint
+      middle_digit_second_joint
+    lateral.L
+      lateral_digit_first_joint.L
+        lateral_digit_second_joint.L
+    lateral.R
+      lateral_digit_first_joint.R
+        lateral_digit_second_joint.R
