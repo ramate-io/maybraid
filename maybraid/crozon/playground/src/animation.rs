@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use clap::ValueEnum;
 use crozon_rigs::{rigs::humanoid_v0::HumanoidV0Rig, BonePose, Name as RigName};
-use malo_animations::{animations::Run, Animation};
+use malo_animations::{animations::{Run, Squat}, Animation};
 
 use crate::character::CharacterConfig;
 use crate::skinning::{BoneMap, CharacterRig};
@@ -10,12 +10,14 @@ const WORLD_FORWARD: Vec3 = Vec3::NEG_Z;
 const WORLD_LATERAL: Vec3 = Vec3::X;
 
 const RUN_CYCLE_SPEED: f32 = 0.5;
+const SQUAT_CYCLE_SPEED: f32 = 0.25;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, ValueEnum)]
 pub enum AnimationMode {
 	#[default]
 	Wave,
 	Run,
+	Squat,
 }
 
 #[derive(Component)]
@@ -99,6 +101,9 @@ pub fn animate_limbs(
 		AnimationMode::Run => {
 			animate_run(&mut rig, &mut limbs, &globals, &parents, time.elapsed_secs())
 		}
+		AnimationMode::Squat => {
+			animate_squat(&mut rig, &mut limbs, &globals, &parents, time.elapsed_secs())
+		}
 	}
 }
 
@@ -128,7 +133,30 @@ fn animate_run(
 	};
 
 	Run::<HumanoidV0Rig>::from_time(t, RUN_CYCLE_SPEED).apply(&mut rig);
+	apply_rig_pose_to_limbs(&rig, limbs, globals, parents);
+}
 
+fn animate_squat(
+	rig: &mut Query<&mut HumanoidV0Rig, With<CharacterRig>>,
+	limbs: &mut Query<(Entity, &mut Transform, &LimbAnimator)>,
+	globals: &Query<&GlobalTransform>,
+	parents: &Query<&ChildOf>,
+	t: f32,
+) {
+	let Ok(mut rig) = rig.single_mut() else {
+		return;
+	};
+
+	Squat::<HumanoidV0Rig>::from_time(t, SQUAT_CYCLE_SPEED).apply(&mut rig);
+	apply_rig_pose_to_limbs(&rig, limbs, globals, parents);
+}
+
+fn apply_rig_pose_to_limbs(
+	rig: &HumanoidV0Rig,
+	limbs: &mut Query<(Entity, &mut Transform, &LimbAnimator)>,
+	globals: &Query<&GlobalTransform>,
+	parents: &Query<&ChildOf>,
+) {
 	for (entity, mut transform, animator) in limbs.iter_mut() {
 		let Some(articulation) = rig.pose.get(&animator.bone) else {
 			continue;

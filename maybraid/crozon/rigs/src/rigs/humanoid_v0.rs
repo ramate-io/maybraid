@@ -85,8 +85,10 @@ impl HumanoidV0Rig {
 		let right_arm = self.arm(Side::Right);
 		let left_leg = self.leg(Side::Left);
 		let right_leg = self.leg(Side::Right);
+		let root = self.spine().root;
 
 		vec![
+			root.name,
 			left_arm.shoulder.name,
 			right_arm.shoulder.name,
 			left_arm.humerus.name,

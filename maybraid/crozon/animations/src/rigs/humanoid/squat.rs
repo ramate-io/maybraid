@@ -1,0 +1,87 @@
+use crozon_rigs::{humanoid::HumanoidRig, BonePose, Side};
+
+use crate::{animations::Squat, Animation};
+
+impl<R: HumanoidRig> Animation<R> for Squat<R> {
+	fn apply(&self, rig: &mut R) {
+		let femur_swing = self.femur_swing();
+		let shin_flex = self.shin_flex();
+
+		apply_leg(rig, Side::Left, femur_swing, shin_flex);
+		apply_leg(rig, Side::Right, femur_swing, shin_flex);
+		apply_root(rig, self.root_swing());
+	}
+}
+
+fn apply_leg<R: HumanoidRig>(
+	rig: &mut R,
+	side: Side,
+	femur_swing: f32,
+	shin_flex: f32,
+) {
+	let mut leg = rig.leg(side);
+
+	leg.femur = BonePose::with_articulation(leg.femur.name, femur_swing, 0.0);
+	leg.shin = BonePose::with_articulation(leg.shin.name, 0.0, shin_flex);
+	rig.pose_leg(leg);
+}
+
+fn apply_root<R: HumanoidRig>(rig: &mut R, root_swing: f32) {
+	let mut spine = rig.spine();
+	spine.root = BonePose::with_articulation(spine.root.name, root_swing, 0.0);
+	rig.pose_spine(spine);
+}
+
+#[cfg(test)]
+mod tests {
+	use std::f32::consts::{FRAC_PI_2, FRAC_PI_4};
+
+	use crozon_rigs::rigs::humanoid_v0::HumanoidV0Rig;
+
+	use super::*;
+
+	#[test]
+	fn stand_phase_keeps_pose_neutral() {
+		let mut rig = HumanoidV0Rig::imported();
+		Squat::<HumanoidV0Rig>::new(0.0).apply(&mut rig);
+
+		let femur = rig
+			.pose()
+			.get(&rig.leg(Side::Left).femur.name)
+			.expect("left femur pose");
+		let shin = rig
+			.pose()
+			.get(&rig.leg(Side::Left).shin.name)
+			.expect("left shin pose");
+		let root = rig
+			.pose()
+			.get(&rig.spine().root.name)
+			.expect("root pose");
+		assert_eq!(femur.swing, 0.0);
+		assert_eq!(shin.flex, 0.0);
+		assert_eq!(root.swing, 0.0);
+	}
+
+	#[test]
+	fn deepest_squat_matches_blender_reference_angles() {
+		let mut rig = HumanoidV0Rig::imported();
+		Squat::<HumanoidV0Rig>::new(0.5).apply(&mut rig);
+
+		let femur = rig
+			.pose()
+			.get(&rig.leg(Side::Left).femur.name)
+			.expect("left femur pose");
+		let shin = rig
+			.pose()
+			.get(&rig.leg(Side::Left).shin.name)
+			.expect("left shin pose");
+		let root = rig
+			.pose()
+			.get(&rig.spine().root.name)
+			.expect("root pose");
+
+		assert!((femur.swing + FRAC_PI_4).abs() < 1e-5);
+		assert!((shin.flex - FRAC_PI_2).abs() < 1e-5);
+		assert!((root.swing - 15.0_f32.to_radians()).abs() < 1e-5);
+	}
+}
