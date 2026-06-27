@@ -9,8 +9,8 @@ use crozon_rigs::{
 	BonePose, Name as RigName,
 };
 use malo_animations::{
-	animations::{Run, Squat, TwoFootedJump},
-	Effects, Animation,
+	animations::{Run, Squat, TwoFootedJump, DEFAULT_GRAVITY},
+	Animation, Effects,
 };
 
 use crate::character::CharacterConfig;
@@ -18,7 +18,6 @@ use crate::skinning::{BoneMap, CharacterRig};
 
 const RUN_CYCLE_SPEED: f32 = 0.5;
 const SQUAT_CYCLE_SPEED: f32 = 0.25;
-const JUMP_SQUAT_DESCENT_SPEED: f32 = 0.8;
 const JUMP_HEIGHT: f32 = 1.5;
 
 const DEBUG_BONES: &[&str] = &[
@@ -163,12 +162,13 @@ fn animate_squat(
 	};
 
 	marshal_limbs_into_pose(&mut rig, limbs);
-	let squat = Squat::<HumanoidV0Rig>::from_time(t, SQUAT_CYCLE_SPEED);
+	let squat_half_speed = 2.0 * SQUAT_CYCLE_SPEED;
+	let squat = Squat::<HumanoidV0Rig>::from_time(t, squat_half_speed, squat_half_speed);
 	let effects = squat.apply(&mut rig);
 	apply_effects(config.transform, effects, armature);
 
 	if debug.0.should_log(t) {
-		let phase = squat.phase.fract();
+		let phase = squat.cycle_phase();
 		let lengths = rig.segment_lengths();
 		let drop = squat.vertical_drop(lengths);
 		let rest_by_bone = rest_transforms(limbs);
@@ -179,8 +179,8 @@ fn animate_squat(
 		let header = vec![
 			format!("t={t:.2}s phase={phase:.3}"),
 			format!(
-				"envelope: amount={:.3} femur_swing={:.3} shin_flex={:.3} root_swing={:.3} vertical_drop={:.4}",
-				squat.squat_amount(),
+				"envelope: depth={:.3} femur_swing={:.3} shin_flex={:.3} root_swing={:.3} vertical_drop={:.4}",
+				squat.depth(),
 				squat.femur_swing(),
 				squat.shin_flex(),
 				squat.root_swing(),
@@ -217,9 +217,9 @@ fn animate_jump(
 	};
 
 	marshal_limbs_into_pose(&mut rig, limbs);
-	let jump = TwoFootedJump::<HumanoidV0Rig>::from_time(t)
-		.with_jump_height(JUMP_HEIGHT)
-		.with_squat_descent_speed(JUMP_SQUAT_DESCENT_SPEED);
+	let lengths = rig.segment_lengths();
+	let jump = TwoFootedJump::<HumanoidV0Rig>::auto_scale(t, DEFAULT_GRAVITY, JUMP_HEIGHT, lengths)
+		.with_slower_initial_squat_down_by(0.75);
 	let effects = jump.apply(&mut rig);
 	apply_effects(config.transform, effects, armature);
 	marshal_pose_to_limbs(&rig, limbs);
@@ -243,7 +243,10 @@ fn apply_effects(
 }
 
 fn rest_transforms(limbs: &Query<(&mut Transform, &LimbAnimator)>) -> HashMap<RigName, Transform> {
-	limbs.iter().map(|(_, animator)| (animator.bone.clone(), animator.rest)).collect()
+	limbs
+		.iter()
+		.map(|(_, animator)| (animator.bone.clone(), animator.rest))
+		.collect()
 }
 
 fn marshal_limbs_into_pose(
