@@ -45,6 +45,27 @@ impl<Rig> Squat<Rig> {
 		(self.phase.fract() * PI).sin()
 	}
 
+	/// Wind-up only: 0 at stand, 1 at deepest squat (no return).
+	pub fn wind_up_amount(&self) -> f32 {
+		(self.phase.fract() * FRAC_PI_2).sin()
+	}
+
+	pub fn wind_up_femur_swing(&self) -> f32 {
+		self.wind_up_amount() * self.femur_peak
+	}
+
+	pub fn wind_up_shin_flex(&self) -> f32 {
+		self.wind_up_amount() * self.shin_peak
+	}
+
+	pub fn wind_up_root_swing(&self) -> f32 {
+		self.wind_up_amount() * self.root_peak
+	}
+
+	pub fn wind_up_vertical_drop(&self, lengths: LegSegmentLengths) -> f32 {
+		vertical_drop(self.wind_up_femur_swing(), self.wind_up_shin_flex(), lengths)
+	}
+
 	pub fn femur_swing(&self) -> f32 {
 		self.squat_amount() * self.femur_peak
 	}

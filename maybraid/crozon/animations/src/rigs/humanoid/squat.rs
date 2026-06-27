@@ -1,7 +1,9 @@
 use bevy::prelude::{Transform, Vec3};
 use crozon_rigs::{humanoid::HumanoidRig, Side};
 
-use crate::{animations::Squat, Effects, Animation};
+use crate::animations::Squat;
+use crate::rigs::humanoid::apply::{apply_leg, apply_root};
+use crate::{Effects, Animation};
 
 impl<R: HumanoidRig> Animation<R> for Squat<R> {
 	fn apply(&self, rig: &mut R) -> Effects {
@@ -20,18 +22,14 @@ impl<R: HumanoidRig> Animation<R> for Squat<R> {
 	}
 }
 
-fn apply_leg<R: HumanoidRig>(rig: &mut R, side: Side, femur_swing: f32, shin_flex: f32) {
-	let mut leg = rig.leg_pose(side);
+/// Squat wind-up segment for jump (monotonic 0 → full squat).
+pub fn apply_squat_windup<R: HumanoidRig>(rig: &mut R, squat: &Squat<R>) {
+	let femur_swing = squat.wind_up_femur_swing();
+	let shin_flex = squat.wind_up_shin_flex();
 
-	leg.femur = rig.articulate_on_rig(leg.femur, femur_swing, 0.0);
-	leg.shin = rig.articulate_on_rig(leg.shin, 0.0, shin_flex);
-	rig.pose_leg(leg);
-}
-
-fn apply_root<R: HumanoidRig>(rig: &mut R, root_swing: f32) {
-	let mut spine = rig.spine_pose();
-	spine.root = rig.articulate_on_rig(spine.root, root_swing, 0.0);
-	rig.pose_spine(spine);
+	apply_leg(rig, Side::Left, femur_swing, shin_flex);
+	apply_leg(rig, Side::Right, femur_swing, shin_flex);
+	apply_root(rig, squat.wind_up_root_swing());
 }
 
 #[cfg(test)]

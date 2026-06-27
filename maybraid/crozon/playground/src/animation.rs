@@ -9,7 +9,7 @@ use crozon_rigs::{
 	BonePose, Name as RigName,
 };
 use malo_animations::{
-	animations::{Run, Squat},
+	animations::{Run, Squat, TwoFootedJump},
 	Effects, Animation,
 };
 
@@ -18,6 +18,7 @@ use crate::skinning::{BoneMap, CharacterRig};
 
 const RUN_CYCLE_SPEED: f32 = 0.5;
 const SQUAT_CYCLE_SPEED: f32 = 0.25;
+const JUMP_CYCLE_SPEED: f32 = 0.2;
 
 const DEBUG_BONES: &[&str] = &[
 	"root",
@@ -40,6 +41,7 @@ pub enum AnimationMode {
 	#[default]
 	Run,
 	Squat,
+	Jump,
 }
 
 #[derive(Resource)]
@@ -126,6 +128,7 @@ pub fn animate_limbs(
 		AnimationMode::Squat => {
 			animate_squat(&config, &mut debug, &mut rig, &mut armature, &mut limbs, t)
 		}
+		AnimationMode::Jump => animate_jump(&config, &mut rig, &mut armature, &mut limbs, t),
 	}
 }
 
@@ -198,6 +201,23 @@ fn animate_squat(
 		);
 	}
 
+	marshal_pose_to_limbs(&rig, limbs);
+}
+
+fn animate_jump(
+	config: &CharacterConfig,
+	rig: &mut Query<&mut HumanoidV0Rig, With<CharacterRig>>,
+	armature: &mut Query<&mut Transform, (With<CharacterRig>, Without<LimbAnimator>)>,
+	limbs: &mut Query<(&mut Transform, &LimbAnimator)>,
+	t: f32,
+) {
+	let Ok(mut rig) = rig.single_mut() else {
+		return;
+	};
+
+	marshal_limbs_into_pose(&mut rig, limbs);
+	let effects = TwoFootedJump::<HumanoidV0Rig>::from_time(t, JUMP_CYCLE_SPEED).apply(&mut rig);
+	apply_effects(config.transform, effects, armature);
 	marshal_pose_to_limbs(&rig, limbs);
 }
 

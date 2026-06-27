@@ -2,33 +2,36 @@ use std::f32::consts::PI;
 
 use crozon_rigs::{humanoid::HumanoidRig, Side};
 
-use crate::{animations::Run, Effects, Animation};
+use crate::animations::Run;
+use crate::rigs::humanoid::apply::apply_arm;
+use crate::{Effects, Animation};
 
 impl<R: HumanoidRig> Animation<R> for Run<R> {
 	fn apply(&self, rig: &mut R) -> Effects {
 		let phase = self.phase.fract();
 		let left_arm_swing = -arm_swing(phase);
 		let right_arm_swing = arm_swing(phase + 0.5);
+		let run = self;
 
-		apply_leg(rig, Side::Left, phase, -1.0, self);
-		apply_leg(rig, Side::Right, phase, 1.0, self);
-		apply_arm(
+		apply_leg(rig, Side::Left, phase, -1.0, run);
+		apply_leg(rig, Side::Right, phase, 1.0, run);
+		apply_run_arm(
 			rig,
 			Side::Left,
 			left_arm_swing,
 			phase,
 			rig.forearm_flex_sign(Side::Left),
-			-self.arm_down,
-			self,
+			-run.arm_down,
+			run,
 		);
-		apply_arm(
+		apply_run_arm(
 			rig,
 			Side::Right,
 			right_arm_swing,
 			phase,
 			rig.forearm_flex_sign(Side::Right),
-			self.arm_down,
-			self,
+			run.arm_down,
+			run,
 		);
 
 		Effects::default()
@@ -52,30 +55,24 @@ fn apply_leg<R: HumanoidRig>(rig: &mut R, side: Side, phase: f32, lift_sign: f32
 	rig.pose_leg(leg);
 }
 
-fn apply_arm<R: HumanoidRig>(
+fn apply_run_arm<R: HumanoidRig>(
 	rig: &mut R,
 	side: Side,
 	arm_swing_value: f32,
 	phase: f32,
 	flex_sign: f32,
-	arm_down: f32,
+	humerus_flex: f32,
 	run: &Run<R>,
 ) {
-	let mut arm = rig.arm_pose(side);
-
-	arm.shoulder = rig.articulate_on_rig(
-		arm.shoulder,
+	apply_arm(
+		rig,
+		side,
 		arm_swing_value * run.shoulder_swing,
 		-shoulder_lift(arm_swing_value, run.shoulder_lift),
-	);
-	arm.humerus =
-		rig.articulate_on_rig(arm.humerus, arm_swing_value * run.humerus_swing_scale, arm_down);
-	arm.forearm = rig.articulate_on_rig(
-		arm.forearm,
-		0.0,
+		arm_swing_value * run.humerus_swing_scale,
+		humerus_flex,
 		elbow_flex(arm_swing_value, phase, -flex_sign, run),
 	);
-	rig.pose_arm(arm);
 }
 
 fn thigh_swing(phase: f32) -> f32 {
