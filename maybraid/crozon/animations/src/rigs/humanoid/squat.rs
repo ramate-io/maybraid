@@ -15,9 +15,8 @@ impl<R: HumanoidRig> Animation<R> for Squat<R> {
 
 fn apply_leg<R: HumanoidRig>(rig: &mut R, side: Side, femur_swing: f32, shin_flex: f32) {
 	let mut leg = rig.leg_pose(side);
-	let sign = if side == Side::Left { 1.0 } else { -1.0 };
 
-	leg.femur = rig.articulate_on_rig(leg.femur, femur_swing * sign, 0.0);
+	leg.femur = rig.articulate_on_rig(leg.femur, femur_swing, 0.0);
 	leg.shin = rig.articulate_on_rig(leg.shin, 0.0, shin_flex);
 	rig.pose_leg(leg);
 }
@@ -60,7 +59,11 @@ mod tests {
 		let shin = rig.pose().get(&rig.leg(Side::Left).shin.name).expect("left shin pose");
 		let root = rig.pose().get(&rig.spine().root.name).expect("root pose");
 
+		let right_femur =
+			rig.pose().get(&rig.leg(Side::Right).femur.name).expect("right femur pose");
+
 		assert!((femur.swing + FRAC_PI_4).abs() < 1e-5);
+		assert!((right_femur.swing + FRAC_PI_4).abs() < 1e-5);
 		assert!((shin.flex - FRAC_PI_2).abs() < 1e-5);
 		assert!((root.swing - 15.0_f32.to_radians()).abs() < 1e-5);
 	}

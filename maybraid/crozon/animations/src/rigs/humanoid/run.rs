@@ -7,8 +7,8 @@ use crate::{animations::Run, Animation};
 impl<R: HumanoidRig> Animation<R> for Run<R> {
 	fn apply(&self, rig: &mut R) {
 		let phase = self.phase.fract();
-		let left_arm_swing = -arm_swing(phase + 0.5);
-		let right_arm_swing = arm_swing(phase);
+		let left_arm_swing = -arm_swing(phase);
+		let right_arm_swing = arm_swing(phase + 0.5);
 
 		apply_leg(rig, Side::Left, phase, -1.0, self);
 		apply_leg(rig, Side::Right, phase, 1.0, self);
@@ -35,8 +35,8 @@ impl<R: HumanoidRig> Animation<R> for Run<R> {
 
 fn apply_leg<R: HumanoidRig>(rig: &mut R, side: Side, phase: f32, lift_sign: f32, run: &Run<R>) {
 	let mut leg = rig.leg_pose(side);
-	let swing = thigh_swing(phase);
 	let phase = if side == Side::Left { phase } else { phase + 0.5 };
+	let swing = thigh_swing(phase);
 
 	leg.pelvis = rig.articulate_on_rig(
 		leg.pelvis,
