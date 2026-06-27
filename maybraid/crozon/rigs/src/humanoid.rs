@@ -127,25 +127,15 @@ pub trait HumanoidRig {
 		1.0
 	}
 
+	/// Static per-bone swing/flex axes derived from the rig's `RiggedAxis` orientation.
 	fn articulation_frame(&self, _bone: &Name) -> Option<BoneArticulationFrame> {
 		None
 	}
 
-	fn parent_rot(&self, _bone: &Name) -> Quat {
-		Quat::IDENTITY
-	}
-
-	fn set_articulation_frame(&mut self, _bone: Name, _frame: BoneArticulationFrame) {}
-
-	fn set_parent_rot(&mut self, _bone: Name, _rot: Quat) {}
-
-	fn clear_parent_rots(&mut self) {}
-
-	/// Apply swing/flex using stored articulation frame and parent rotation.
+	/// Apply swing/flex about the bone's static local articulation axes.
 	fn articulate_on_rig(&self, mut bone: BonePose, swing: f32, flex: f32) -> BonePose {
-		let name = bone.name.clone();
-		if let Some(frame) = self.articulation_frame(&name) {
-			bone = bone.articulate(self.parent_rot(&name), frame, swing, flex);
+		if let Some(frame) = self.articulation_frame(&bone.name) {
+			bone = bone.articulate(frame, swing, flex);
 		} else {
 			bone.swing = swing;
 			bone.flex = flex;

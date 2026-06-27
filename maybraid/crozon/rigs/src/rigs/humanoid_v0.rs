@@ -2,7 +2,7 @@ use bevy::prelude::*;
 use std::collections::HashMap;
 
 use crate::{
-	articulation::{bone_axes, forward_flex_sign, BoneArticulationFrame},
+	articulation::{BoneArticulationFrame, FlexAxis},
 	humanoid::{
 		HumanoidArm, HumanoidLeg, HumanoidNeck, HumanoidRig, HumanoidSpine, LegSegmentLengths,
 	},
@@ -20,7 +20,6 @@ pub struct HumanoidV0Rig {
 	pub pose: RigPose,
 	pub segment_lengths: LegSegmentLengths,
 	articulation_frames: HashMap<Name, BoneArticulationFrame>,
-	parent_rots: HashMap<Name, Quat>,
 }
 
 impl HumanoidV0Rig {
@@ -35,35 +34,31 @@ impl HumanoidV0Rig {
 			pose: RigPose::new(),
 			segment_lengths: LegSegmentLengths::default(),
 			articulation_frames: HashMap::new(),
-			parent_rots: HashMap::new(),
 		};
-		rig.install_default_articulation_frames();
+		rig.install_articulation_frames();
 		rig
 	}
 
-	/// Heuristic rest bone directions for unit tests before playground axis discovery runs.
-	fn install_default_articulation_frames(&mut self) {
+	/// Derive each bone's swing/flex axes statically from its `RiggedAxis` orientation.
+	///
+	/// No runtime probing: if a bone is exported with an unexpected orientation, encode the
+	/// correction in its `RiggedAxis` entry and the articulation axes follow automatically.
+	fn install_articulation_frames(&mut self) {
 		for bone in self.animation_bones() {
-			let bone_dir = default_bone_dir(bone.as_str());
-			let (swing_axis, flex_axis) = bone_axes(bone.as_str(), bone_dir);
-			let flex_sign = if bone.as_str().starts_with("forearm.") {
-				forward_flex_sign(bone_dir, flex_axis)
-			} else {
-				1.0
-			};
-			self.articulation_frames
-				.insert(bone.clone(), BoneArticulationFrame::new(swing_axis, flex_axis, flex_sign));
+			let axis = self.bones.get(&bone).map(|bone| bone.relative_axis).unwrap_or_default();
+			let frame =
+				BoneArticulationFrame::from_rigged_axis(axis, flex_axis_kind(bone.as_str()));
+			self.articulation_frames.insert(bone, frame);
 		}
 	}
 }
 
-fn default_bone_dir(bone: &str) -> Vec3 {
-	if bone == "root" {
-		Vec3::Y
-	} else if bone.contains("femur") || bone.contains("shin") {
-		Vec3::NEG_Y
+/// Map a bone's anatomical role to the plane it flexes in.
+fn flex_axis_kind(bone: &str) -> FlexAxis {
+	if bone.starts_with("shoulder") || bone.starts_with("pelvis") || bone.starts_with("humerus") {
+		FlexAxis::Frontal
 	} else {
-		Vec3::X
+		FlexAxis::Hinge
 	}
 }
 
@@ -112,32 +107,14 @@ impl HumanoidRig for HumanoidV0Rig {
 
 	fn forearm_flex_sign(&self, side: Side) -> f32 {
 		let name = Name::from(format!("forearm.{}", side.suffix()));
-		self.articulation_frame(&name).map(|frame| frame.flex_sign).unwrap_or_else(|| {
-			self.bones
-				.get(&name)
-				.map(|bone| flex_sign_from_axis(bone.relative_axis))
-				.unwrap_or(1.0)
-		})
+		self.bones
+			.get(&name)
+			.map(|bone| flex_sign_from_axis(bone.relative_axis))
+			.unwrap_or(1.0)
 	}
 
 	fn articulation_frame(&self, bone: &Name) -> Option<BoneArticulationFrame> {
 		self.articulation_frames.get(bone).copied()
-	}
-
-	fn parent_rot(&self, bone: &Name) -> Quat {
-		self.parent_rots.get(bone).copied().unwrap_or(Quat::IDENTITY)
-	}
-
-	fn set_articulation_frame(&mut self, bone: Name, frame: BoneArticulationFrame) {
-		self.articulation_frames.insert(bone, frame);
-	}
-
-	fn set_parent_rot(&mut self, bone: Name, rot: Quat) {
-		self.parent_rots.insert(bone, rot);
-	}
-
-	fn clear_parent_rots(&mut self) {
-		self.parent_rots.clear();
 	}
 
 	fn animation_bones(&self) -> Vec<Name> {

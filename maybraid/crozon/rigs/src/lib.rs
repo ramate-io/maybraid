@@ -3,7 +3,7 @@ pub mod humanoid;
 pub mod rigs;
 pub mod sliders;
 
-pub use articulation::{compose_world_rotations, BoneArticulationFrame};
+pub use articulation::{BoneArticulationFrame, FlexAxis};
 
 use bevy::prelude::*;
 use std::{collections::HashMap, fmt};
@@ -54,19 +54,23 @@ impl Side {
 	}
 }
 
-/// The orientation of the bone in the rig,
-/// relative to the intended geometry.
+/// The orientation of a bone in the rig, expressed in its local articulation frame.
 ///
-/// Useful when it is discovered that the default assumption is not correctly
-/// adhered to in in the rig:
+/// `swing`/`flex` articulation rotates about these axes (see
+/// [`crate::articulation`]), so they describe the bone's anatomical directions in the
+/// space its `Transform.rotation` lives in:
 ///
-/// Default assumption:
-/// 1. -Y (Blender) = +Z (Bevy) is forward.
-/// 2. +Z (Blender) = +Y (Bevy) is up.
-/// 3. +X (Blender) = +X (Bevy) is right.
+/// - `right` is the medial-lateral axis. Sagittal (dorsal-ventral, front/back) swing and
+///   hinge flex rotate about it.
+/// - `forward` is the dorsal-ventral axis. Frontal-plane lift/pitch (e.g. shoulder raise,
+///   hip abduction) rotates about it.
+/// - `up` is the bone's long (superior-inferior) axis; twist would rotate about it.
 ///
-/// NOTE: I believe the below can be reduced from three axes to two,
-/// plus a sign.
+/// For the imported humanoid, the bones are oriented so the sagittal bend axis is Bevy
+/// `Y`, the frontal axis is Bevy `Z`, and the bone runs along Bevy `X`. If a future rig
+/// follows the textbook `right = X` convention, override that bone's `RiggedAxis`.
+///
+/// NOTE: I believe the below can be reduced from three axes to two, plus a sign.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct RiggedAxis {
 	pub forward: Vec3,
@@ -81,7 +85,7 @@ impl Default for RiggedAxis {
 }
 
 impl RiggedAxis {
-	pub const DEFAULT: Self = Self { forward: Vec3::Z, up: Vec3::Y, right: Vec3::X };
+	pub const DEFAULT: Self = Self { forward: Vec3::Z, up: Vec3::X, right: Vec3::Y };
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -163,20 +167,13 @@ impl BonePose {
 		Self { name: name.into(), transform: Transform::from_translation(translation), swing, flex }
 	}
 
-	/// Apply swing/flex using world-space axes, producing a local bone rotation.
-	pub fn articulate(
-		mut self,
-		parent_rot: Quat,
-		frame: BoneArticulationFrame,
-		swing: f32,
-		flex: f32,
-	) -> Self {
+	/// Apply swing/flex about the bone's static local articulation axes.
+	pub fn articulate(mut self, frame: BoneArticulationFrame, swing: f32, flex: f32) -> Self {
 		self.swing = swing;
 		self.flex = flex;
 		let rest = self.transform.rotation;
-		self.transform.rotation = compose_world_rotations(
+		self.transform.rotation = articulation::compose_local_rotation(
 			rest,
-			parent_rot,
 			frame.swing_axis,
 			swing,
 			frame.flex_axis,
