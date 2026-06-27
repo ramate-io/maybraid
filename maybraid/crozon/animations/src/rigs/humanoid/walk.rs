@@ -50,7 +50,7 @@ fn apply_leg<R: HumanoidRig>(rig: &mut R, side: Side, phase: f32, lift_sign: f32
 		hip_lift(swing, walk.hip_lift) * lift_sign,
 	);
 	leg.femur = rig.articulate_on_rig(leg.femur, swing * walk.stride, femur_medial);
-	leg.shin = rig.articulate_on_rig(leg.shin, 0.0, knee_flex(phase, walk) - walk.knee_extended);
+	leg.shin = rig.articulate_on_rig(leg.shin, 0.0, knee_flex(phase, walk));
 	rig.pose_leg(leg);
 }
 
@@ -101,17 +101,11 @@ fn hip_lift(leg_swing: f32, amplitude: f32) -> f32 {
 	leg_swing * amplitude
 }
 
-/// Soft knee on stance; extra clearance flex during swing.
+/// Soft knee on stance; smooth half-sine lift through swing and back to stance.
 fn knee_flex<Rig>(leg_phase: f32, walk: &Walk<Rig>) -> f32 {
 	let p = leg_phase.fract();
-	let stance = if p < 0.5 { walk.knee_stance_bend } else { 0.0 };
-	let clearance = if p >= 0.5 {
-		let t = (p - 0.5) * 2.0;
-		(t * std::f32::consts::PI).sin() * walk.knee_clearance
-	} else {
-		0.0
-	};
-	walk.knee_extended + stance + clearance
+	let t = ((p - 0.5).max(0.0) * 2.0) * std::f32::consts::PI;
+	walk.knee_stance_bend + t.sin() * (walk.knee_swing_bend - walk.knee_stance_bend)
 }
 
 #[cfg(test)]
@@ -200,6 +194,22 @@ mod tests {
 
 		let shin = rig.pose().get(&rig.leg(Side::Left).shin.name).expect("shin");
 		assert!(shin.flex > 0.0);
+	}
+
+	#[test]
+	fn walk_knee_flex_is_continuous_across_stride() {
+		let walk = Walk::<HumanoidV0Rig>::default();
+		let samples = 120;
+		let mut prev = knee_flex(0.0, &walk);
+		for i in 1..=samples {
+			let phase = i as f32 / samples as f32;
+			let flex = knee_flex(phase, &walk);
+			assert!(
+				(flex - prev).abs() < 0.02,
+				"knee snap at phase {phase}: {prev} -> {flex}"
+			);
+			prev = flex;
+		}
 	}
 
 	#[test]

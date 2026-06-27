@@ -31,12 +31,10 @@ pub struct Walk<Rig> {
 	pub humerus_swing_scale: f32,
 	/// Constant forward root lean while walking (radians).
 	pub torso_lean: f32,
-	/// Shin flex at full leg extension (radians).
-	pub knee_extended: f32,
-	/// Extra shin flex on the stance leg for a soft knee (radians).
+	/// Shin flex on the stance leg (radians).
 	pub knee_stance_bend: f32,
-	/// Extra shin flex during swing phase for toe clearance (radians).
-	pub knee_clearance: f32,
+	/// Peak shin flex during swing for toe clearance (radians).
+	pub knee_swing_bend: f32,
 	_rig: PhantomData<Rig>,
 }
 
@@ -55,9 +53,8 @@ impl<Rig> Default for Walk<Rig> {
 			femur_medial_counter: 0.2,
 			humerus_swing_scale: 0.5,
 			torso_lean: 0.08,
-			knee_extended: 0.35,
-			knee_stance_bend: 0.4,
-			knee_clearance: 0.2,
+			knee_stance_bend: 0.1,
+			knee_swing_bend: 0.2,
 			_rig: PhantomData,
 		}
 	}
