@@ -1,7 +1,10 @@
 use bevy::prelude::*;
 use clap::ValueEnum;
-use crozon_rigs::{rigs::humanoid_v0::HumanoidV0Rig, BonePose, Name as RigName};
-use malo_animations::{animations::{Run, Squat}, Animation};
+use crozon_rigs::{rigs::humanoid_v0::HumanoidV0Rig, Name as RigName};
+use malo_animations::{
+	animations::{Run, Squat},
+	Animation,
+};
 
 use crate::character::CharacterConfig;
 use crate::skinning::{BoneMap, CharacterRig};
@@ -15,7 +18,6 @@ const SQUAT_CYCLE_SPEED: f32 = 0.25;
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, ValueEnum)]
 pub enum AnimationMode {
 	#[default]
-	Wave,
 	Run,
 	Squat,
 }
@@ -24,12 +26,11 @@ pub enum AnimationMode {
 pub struct LimbAnimator {
 	pub bone: RigName,
 	pub rest: Quat,
+	pub rest_translation: Vec3,
 	/// World-space axis for forward/back swing.
 	pub swing_axis: Vec3,
 	/// World-space axis for pitch (arm down) or hinge flex (elbow/knee).
 	pub flex_axis: Vec3,
-	/// +1 or −1 so mirrored bones flex the same way visually.
-	pub flex_sign: f32,
 }
 
 pub fn init_limb_animators(
@@ -52,7 +53,7 @@ pub fn init_limb_animators(
 		return;
 	}
 
-	let mut humanoid = HumanoidV0Rig::imported();
+	let humanoid = HumanoidV0Rig::imported();
 	for bone in humanoid.animation_bones() {
 		let Some(&entity) = bone_map.by_name.get(bone.as_str()) else {
 			continue;
@@ -64,24 +65,13 @@ pub fn init_limb_animators(
 		let world_rot = world_rotation(entity, &transforms, &parents_q);
 		let bone_dir = bone_world_direction(entity, world_rot, &children_q, &transforms);
 		let (swing_axis, flex_axis) = bone_axes(bone.as_str(), bone_dir);
-		let flex_sign = if bone.as_str().starts_with("forearm.") {
-			forward_flex_sign(bone_dir, flex_axis)
-		} else {
-			1.0
-		};
-
-		if bone.as_str() == "forearm.L" {
-			humanoid.forearm_flex_sign[0] = flex_sign;
-		} else if bone.as_str() == "forearm.R" {
-			humanoid.forearm_flex_sign[1] = flex_sign;
-		}
 
 		commands.entity(entity).insert(LimbAnimator {
 			bone,
 			rest: transform.rotation,
+			rest_translation: transform.translation,
 			swing_axis,
 			flex_axis,
-			flex_sign,
 		});
 	}
 
@@ -97,27 +87,12 @@ pub fn animate_limbs(
 	time: Res<Time>,
 ) {
 	match config.animation {
-		AnimationMode::Wave => animate_wave(&mut limbs, &globals, &parents, time.elapsed_secs()),
 		AnimationMode::Run => {
 			animate_run(&mut rig, &mut limbs, &globals, &parents, time.elapsed_secs())
 		}
 		AnimationMode::Squat => {
 			animate_squat(&mut rig, &mut limbs, &globals, &parents, time.elapsed_secs())
 		}
-	}
-}
-
-fn animate_wave(
-	limbs: &mut Query<(Entity, &mut Transform, &LimbAnimator)>,
-	globals: &Query<&GlobalTransform>,
-	parents: &Query<&ChildOf>,
-	t: f32,
-) {
-	for (entity, mut transform, animator) in limbs.iter_mut() {
-		let parent_rot = parent_rotation(entity, globals, parents);
-
-		let pose = wave_bone_pose(animator, parent_rot, t);
-		transform.rotation = pose.transform.rotation;
 	}
 }
 
@@ -161,7 +136,8 @@ fn apply_rig_pose_to_limbs(
 		let Some(articulation) = rig.pose.get(&animator.bone) else {
 			continue;
 		};
-		let parent_rot = parent_rotation(entity, globals, parents);
+		let parent_global = parent_transform(entity, globals, parents);
+		let parent_rot = parent_global.rotation();
 		transform.rotation = compose_world_rotations(
 			animator.rest,
 			parent_rot,
@@ -170,20 +146,25 @@ fn apply_rig_pose_to_limbs(
 			animator.flex_axis,
 			articulation.flex,
 		);
+		transform.translation = compose_world_translation(
+			animator.rest_translation,
+			parent_global,
+			articulation.transform.translation,
+		);
 	}
 }
 
-fn parent_rotation(
+fn parent_transform(
 	entity: Entity,
 	globals: &Query<&GlobalTransform>,
 	parents: &Query<&ChildOf>,
-) -> Quat {
+) -> GlobalTransform {
 	parents
 		.get(entity)
 		.ok()
 		.and_then(|child_of| globals.get(child_of.parent()).ok())
-		.map(|global| global.rotation())
-		.unwrap_or(Quat::IDENTITY)
+		.copied()
+		.unwrap_or(GlobalTransform::IDENTITY)
 }
 
 fn bone_axes(bone: &str, bone_dir: Vec3) -> (Vec3, Vec3) {
@@ -195,54 +176,6 @@ fn bone_axes(bone: &str, bone_dir: Vec3) -> (Vec3, Vec3) {
 			(sagittal, vertical_lift_axis(bone_dir))
 		}
 		_ => (sagittal, hinge_axis(bone_dir, sagittal)),
-	}
-}
-
-fn wave_bone_pose(animator: &LimbAnimator, parent_rot: Quat, t: f32) -> BonePose {
-	let bone = animator.bone.as_str();
-	let swing = wave_angle(bone, t);
-	let flex = wave_flex_angle(bone, t) * animator.flex_sign;
-	BonePose::new(
-		animator.bone.clone(),
-		Transform::from_rotation(compose_world_rotations(
-			animator.rest,
-			parent_rot,
-			animator.swing_axis,
-			swing,
-			animator.flex_axis,
-			flex,
-		)),
-	)
-}
-
-fn wave_angle(bone: &str, t: f32) -> f32 {
-	let s = (t * 0.75).sin();
-	match bone {
-		"humerus.L" | "humerus.R" => s * 0.65,
-		"femur.L" | "femur.R" => s * 0.35,
-		_ => 0.0,
-	}
-}
-
-fn wave_flex_angle(bone: &str, t: f32) -> f32 {
-	let s = (t * 0.75).sin();
-	match bone {
-		"forearm.L" | "forearm.R" => 0.25 + s * 0.25,
-		"shin.L" | "shin.R" => s * 0.2,
-		_ => 0.0,
-	}
-}
-
-fn forward_flex_sign(bone_dir: Vec3, axis: Vec3) -> f32 {
-	const TEST: f32 = 0.12;
-	let neg = Quat::from_axis_angle(axis, -TEST) * bone_dir;
-	let pos = Quat::from_axis_angle(axis, TEST) * bone_dir;
-	let neg_forward = (neg - bone_dir).dot(WORLD_FORWARD);
-	let pos_forward = (pos - bone_dir).dot(WORLD_FORWARD);
-	if neg_forward < pos_forward {
-		-1.0
-	} else {
-		1.0
 	}
 }
 
@@ -384,4 +317,13 @@ fn compose_world_rotations(
 		global = Quat::from_axis_angle(swing_axis, swing) * global;
 	}
 	parent_rot.inverse() * global
+}
+
+fn compose_world_translation(
+	rest_translation: Vec3,
+	parent_global: GlobalTransform,
+	translation: Vec3,
+) -> Vec3 {
+	let parent_rot = parent_global.rotation();
+	rest_translation + parent_rot.inverse() * translation
 }

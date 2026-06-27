@@ -15,12 +15,12 @@ use std::f32::consts::TAU;
 use bevy_math::Vec3;
 
 use super::stalk_perturbation::{
-	AnchorPerturbation, HasStrictStalk, PerturbAnchor, StalkPerturbation, perturb_branch_out,
-	perturb_node,
+	perturb_branch_out, perturb_node, AnchorPerturbation, HasStrictStalk, PerturbAnchor,
+	StalkPerturbation,
 };
-use crate::chain::sopes_banyan::{SopesBanyanChain, SopesBanyanPhase};
 use super::strict_stalk::StrictStalk;
 use super::Anchors;
+use crate::chain::sopes_banyan::{SopesBanyanChain, SopesBanyanPhase};
 use procedural_common::{NoiseConfig, NoiseParams};
 
 use crate::chain::BranchOut;
@@ -56,10 +56,7 @@ pub struct SopesBanyanProtoAnchors {
 impl Default for SopesBanyanProtoAnchors {
 	fn default() -> Self {
 		Self {
-			stalk: StrictStalk {
-				stalk_height: 20.0,
-				stalk_base_radius: 0.75,
-			},
+			stalk: StrictStalk { stalk_height: 20.0, stalk_base_radius: 0.75 },
 			first_ring_unit_height: 0.40,
 			last_ring_unit_height: 0.95,
 			ring_count: 8,
@@ -312,10 +309,7 @@ mod tests {
 	#[test]
 	fn vase_projection_grows_with_ring_height() {
 		let a = SopesBanyanProtoAnchors {
-			stalk: StrictStalk {
-				stalk_height: 10.0,
-				stalk_base_radius: 0.5,
-			},
+			stalk: StrictStalk { stalk_height: 10.0, stalk_base_radius: 0.5 },
 			ring_count: 5,
 			..Default::default()
 		};

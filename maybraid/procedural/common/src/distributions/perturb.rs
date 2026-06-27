@@ -33,10 +33,7 @@ pub fn perturb_weights(
 	}
 
 	let scale = total / sum;
-	BucketThrow::from_weights(
-		weights.into_iter().map(|w| w * scale),
-		base.mean_anchor(),
-	)
+	BucketThrow::from_weights(weights.into_iter().map(|w| w * scale), base.mean_anchor())
 }
 
 #[cfg(test)]

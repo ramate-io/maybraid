@@ -150,9 +150,7 @@ mod tests {
 			);
 			assert!(buddha.translation.y < frond.translation.y);
 			assert!((frond.scale.x - shape.foliage_scale).abs() < 1e-5);
-			assert!(
-				(buddha.scale.x - shape.foliage_scale * shape.buddha_hand_scale).abs() < 1e-5
-			);
+			assert!((buddha.scale.x - shape.foliage_scale * shape.buddha_hand_scale).abs() < 1e-5);
 		}
 		Ok(())
 	}

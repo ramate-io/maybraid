@@ -30,12 +30,8 @@ pub(crate) fn crown_directions(
 			let lift = emission_lift_radians * (0.7 + 0.3 * unit_jitter(seed, 4 * i + 3));
 			let pitch = lift - down;
 			let azimuth = GOLDEN_ANGLE.mul_add(fi, phase) + spread * signed_jitter(seed, 4 * i + 4);
-			Vec3::new(
-				pitch.cos() * azimuth.cos(),
-				pitch.sin(),
-				pitch.cos() * azimuth.sin(),
-			)
-			.normalize_or_zero()
+			Vec3::new(pitch.cos() * azimuth.cos(), pitch.sin(), pitch.cos() * azimuth.sin())
+				.normalize_or_zero()
 		})
 		.collect()
 }
@@ -72,10 +68,7 @@ mod tests {
 		let with_spread = crown_directions(1, 0, 0.8, 1.2, 0.0)[0];
 		// Jitter band floor is sin(0.65 * 0.8) ≈ 0.497.
 		assert!(steep.y < -0.45, "expected downward pitch: {steep:?}");
-		assert!(
-			with_spread.y < -0.4,
-			"spread should not cancel downward pitch: {with_spread:?}"
-		);
+		assert!(with_spread.y < -0.4, "spread should not cancel downward pitch: {with_spread:?}");
 	}
 
 	#[test]

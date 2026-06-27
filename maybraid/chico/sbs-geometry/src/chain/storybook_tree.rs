@@ -228,11 +228,7 @@ mod tests {
 		);
 		let root = seed.ball_stick_node().position;
 		let chain = crate::BallStickChain::build(vec![seed]);
-		let max_dist = chain
-			.nodes
-			.iter()
-			.map(|n| n.position.distance(root))
-			.fold(0.0f32, f32::max);
+		let max_dist = chain.nodes.iter().map(|n| n.position.distance(root)).fold(0.0f32, f32::max);
 		assert!(max_dist > proj * 0.7, "limb span {max_dist} vs projection {proj}");
 		Ok(())
 	}

@@ -18,7 +18,6 @@ use crate::grove::{
 	PaletteMix, PaletteSlot, PlacementConstraints,
 };
 
-
 /// Authored Common Tufts grove definition.
 ///
 /// Cell footprint is the midpoint of the RFC's `CELL_SIZE_RANGE` (`1.0..3.0`). The offset range

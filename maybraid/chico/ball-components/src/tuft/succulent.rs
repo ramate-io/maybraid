@@ -73,11 +73,7 @@ where
 	S: Clone + Into<MeshMaterial3d<M>> + Default,
 {
 	fn default() -> Self {
-		Self {
-			shape: SucculentTuftShape::default(),
-			material: S::default(),
-			__marker: PhantomData,
-		}
+		Self { shape: SucculentTuftShape::default(), material: S::default(), __marker: PhantomData }
 	}
 }
 
@@ -116,7 +112,8 @@ where
 	}
 
 	fn element_length_at(&self, index: u32, min: f32, max: f32, scale: f32) -> f32 {
-		(self.shape.element_length * CapDirections::length_scale(index, self.shape.seed, min, max)
+		(self.shape.element_length
+			* CapDirections::length_scale(index, self.shape.seed, min, max)
 			* scale)
 			.max(1e-4)
 	}
@@ -191,8 +188,7 @@ mod tests {
 
 	#[test]
 	fn defaults_are_compact_and_upward() -> Result<()> {
-		let tuft =
-			SucculentTuft::<StandardMaterial, MeshMaterial3d<StandardMaterial>>::default();
+		let tuft = SucculentTuft::<StandardMaterial, MeshMaterial3d<StandardMaterial>>::default();
 		for d in tuft.element_directions() {
 			assert!(d.y > 0.5);
 		}

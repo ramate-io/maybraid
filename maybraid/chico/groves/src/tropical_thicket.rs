@@ -16,7 +16,6 @@ use crate::grove::{
 	PlacementConstraints,
 };
 
-
 /// RFC `projection_count: Moderate` with extended upper tails for occasional wide-span shrubs.
 const MODERATE_PROJECTION_RADIAL: UnitRange = UnitRange::new(0.32, 0.56);
 const MODERATE_PROJECTION_VERTICAL: UnitRange = UnitRange::new(0.50, 0.82);
@@ -390,7 +389,13 @@ mod tests {
 			Vec3::ZERO,
 		);
 		let terrain = FlatTerrainSample { elevation: 0.35, steepness: 0.30 };
-		let outcome = prepared.select_from(1, Vec3::new(5.0, 0.35, 5.0), 1.0, Cell::from_min_max(Vec3::ZERO, Vec3::ONE), &terrain);
+		let outcome = prepared.select_from(
+			1,
+			Vec3::new(5.0, 0.35, 5.0),
+			1.0,
+			Cell::from_min_max(Vec3::ZERO, Vec3::ONE),
+			&terrain,
+		);
 		match outcome {
 			GroveCellOutcome::Placed { variant, .. } => {
 				assert_eq!(variant, TropicalThicketCell::BroadWetPalmBush);

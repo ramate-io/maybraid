@@ -202,14 +202,7 @@ impl CascadeChunk {
 	pub fn with_mu(self, mu: f32) -> Self {
 		let origin = self.origin + Vec3::new(-mu, -mu, -mu);
 		let size = self.size + 2.0 * mu;
-		Self {
-			world: self.world,
-			origin,
-			size,
-			extent: None,
-			res_2: self.res_2,
-			omit: self.omit,
-		}
+		Self { world: self.world, origin, size, extent: None, res_2: self.res_2, omit: self.omit }
 	}
 
 	pub fn with_res_2(mut self, res_2: u8) -> Self {

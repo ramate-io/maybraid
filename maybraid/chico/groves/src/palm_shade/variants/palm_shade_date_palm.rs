@@ -14,8 +14,8 @@ fn sample_f32(config: &NoiseConfig, range: UnitRange, salt: f32) -> f32 {
 impl BuildWithNoise<DatePalmSbs> for PalmShadeDatePalm {
 	fn build_with_noise(&self, noise: NoiseParams) -> DatePalmSbs {
 		let config = NoiseConfig::new(noise);
-		let height = sample_f32(&config, self.height, 1.0)
-			.max(self.height.start.min(self.height.end));
+		let height =
+			sample_f32(&config, self.height, 1.0).max(self.height.start.min(self.height.end));
 		let crown_density = sample_f32(&config, self.crown_density, 2.0);
 
 		let mut geometry = DatePalmSbs::default();

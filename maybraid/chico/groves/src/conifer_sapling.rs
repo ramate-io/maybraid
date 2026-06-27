@@ -14,7 +14,6 @@ use crate::grove::{
 	PlacementConstraints,
 };
 
-
 /// Standard sapling height band ([`1.0`, `4.0`] m).
 const SAPLING_HEIGHT: UnitRange = UnitRange::new(1.0, 4.0);
 /// Moderate sampled canopy-density band ([`0.35`, `0.65`]).
@@ -204,9 +203,7 @@ impl ConiferSaplingCell {
 	pub fn item(self) -> ConiferSaplingItem {
 		match self {
 			Self::FriendSapling => ConiferSaplingItem::FriendsConifer(&FRIEND_SAPLING),
-			Self::BrightFriendSapling => {
-				ConiferSaplingItem::FriendsConifer(&BRIGHT_FRIEND_SAPLING)
-			}
+			Self::BrightFriendSapling => ConiferSaplingItem::FriendsConifer(&BRIGHT_FRIEND_SAPLING),
 			Self::MossyFriendSapling => ConiferSaplingItem::FriendsConifer(&MOSSY_FRIEND_SAPLING),
 			Self::NorthernSapling => ConiferSaplingItem::NorthernConifer(&NORTHERN_SAPLING),
 			Self::ColdNorthernSapling => {
@@ -318,7 +315,13 @@ mod tests {
 		);
 
 		let terrain = FlatTerrainSample { elevation: 0.50, steepness: 0.30 };
-		let outcome = prepared.select_from(1, Vec3::new(5.0, 0.50, 5.0), 1.0, Cell::from_min_max(Vec3::ZERO, Vec3::ONE), &terrain);
+		let outcome = prepared.select_from(
+			1,
+			Vec3::new(5.0, 0.50, 5.0),
+			1.0,
+			Cell::from_min_max(Vec3::ZERO, Vec3::ONE),
+			&terrain,
+		);
 		match outcome {
 			GroveCellOutcome::Placed { variant, .. } => {
 				assert_eq!(variant, ConiferSaplingCell::FriendSapling);
@@ -328,7 +331,13 @@ mod tests {
 
 		// Friend max elevation is 0.82; Northern accepts up to 0.88.
 		let high_terrain = FlatTerrainSample { elevation: 0.85, steepness: 0.30 };
-		let outcome = prepared.select_from(2, Vec3::new(6.0, 0.85, 6.0), 1.0, Cell::from_min_max(Vec3::ZERO, Vec3::ONE), &high_terrain);
+		let outcome = prepared.select_from(
+			2,
+			Vec3::new(6.0, 0.85, 6.0),
+			1.0,
+			Cell::from_min_max(Vec3::ZERO, Vec3::ONE),
+			&high_terrain,
+		);
 		match outcome {
 			GroveCellOutcome::Placed { variant, .. } => {
 				assert_eq!(variant, ConiferSaplingCell::NorthernSapling);
@@ -338,7 +347,13 @@ mod tests {
 
 		// Friend max steepness is 0.64; Northern accepts up to 0.72.
 		let steep_terrain = FlatTerrainSample { elevation: 0.50, steepness: 0.70 };
-		let outcome = prepared.select_from(1, Vec3::new(7.0, 0.50, 7.0), 1.0, Cell::from_min_max(Vec3::ZERO, Vec3::ONE), &steep_terrain);
+		let outcome = prepared.select_from(
+			1,
+			Vec3::new(7.0, 0.50, 7.0),
+			1.0,
+			Cell::from_min_max(Vec3::ZERO, Vec3::ONE),
+			&steep_terrain,
+		);
 		match outcome {
 			GroveCellOutcome::Placed { variant, .. } => {
 				assert_eq!(variant, ConiferSaplingCell::NorthernSapling);

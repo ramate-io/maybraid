@@ -1,7 +1,7 @@
 pub mod affine;
 pub mod branching;
-pub mod rounding;
 pub mod grading;
+pub mod rounding;
 
 use bevy::prelude::*;
 use noise::{NoiseFn, Perlin};
@@ -76,7 +76,6 @@ impl RegionNoise {
 		let value = self.sample_fbm(x, z, amplitude, frequency);
 		value.signum() * (amplitude - value.abs())
 	}
-
 }
 
 impl Region2D {
@@ -189,8 +188,10 @@ impl Region2D {
 		let pow = (relative_size + 1317.0) * (relative_size + 1317.0);
 		let anchor = self.anchor_point(0);
 		let amplitude = (pow % relative_size) * 3.0;
-		let x_offset = noise.sample_fbm_double_peak(anchor.x - 1.0, anchor.y + 1.0, amplitude, 0.05);
-		let z_offset = noise.sample_fbm_double_peak(anchor.x + 1.0, anchor.y - 1.0, amplitude, 0.05);
+		let x_offset =
+			noise.sample_fbm_double_peak(anchor.x - 1.0, anchor.y + 1.0, amplitude, 0.05);
+		let z_offset =
+			noise.sample_fbm_double_peak(anchor.x + 1.0, anchor.y - 1.0, amplitude, 0.05);
 		anchor + Vec2::new(x_offset, z_offset)
 	}
 
@@ -198,7 +199,9 @@ impl Region2D {
 	pub fn branching_scale(&self, noise: &RegionNoise) -> f32 {
 		let anchor = self.anchor_point(0);
 		let amplitude = 2.0; // as much as double the size
-		noise.sample_fbm_double_peak(anchor.x - 1.0, anchor.y + 1.0, amplitude, 0.05).abs()
+		noise
+			.sample_fbm_double_peak(anchor.x - 1.0, anchor.y + 1.0, amplitude, 0.05)
+			.abs()
 	}
 
 	/// Scales the region by the given factor.
@@ -243,8 +246,6 @@ impl Region2D {
 		let scale_body = self.branching_scale(noise);
 		let scale_detail = self.branching_scale(noise);
 
-		self
-			.reanchor(anchor)
-			.scale(scale_body, scale_detail)
+		self.reanchor(anchor).scale(scale_body, scale_detail)
 	}
 }

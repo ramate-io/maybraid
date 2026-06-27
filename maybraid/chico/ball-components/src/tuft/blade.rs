@@ -78,11 +78,7 @@ where
 	S: Clone + Into<MeshMaterial3d<M>> + Default,
 {
 	fn default() -> Self {
-		Self {
-			shape: BladeTuftShape::default(),
-			material: S::default(),
-			__marker: PhantomData,
-		}
+		Self { shape: BladeTuftShape::default(), material: S::default(), __marker: PhantomData }
 	}
 }
 
@@ -117,7 +113,8 @@ where
 	}
 
 	fn blade_length_at(&self, index: u32, min: f32, max: f32, scale: f32) -> f32 {
-		(self.shape.blade_length * CapDirections::length_scale(index, self.shape.seed, min, max)
+		(self.shape.blade_length
+			* CapDirections::length_scale(index, self.shape.seed, min, max)
 			* scale)
 			.max(1e-4)
 	}
@@ -130,8 +127,7 @@ where
 			return Vec3::ZERO;
 		}
 		let outward = Vec3::new(direction.x, 0.0, direction.z).normalize_or_zero();
-		let radius =
-			CapDirections::length_scale(index, self.shape.seed.wrapping_add(17), 0.2, 1.0);
+		let radius = CapDirections::length_scale(index, self.shape.seed.wrapping_add(17), 0.2, 1.0);
 		outward * (spread * radius)
 	}
 

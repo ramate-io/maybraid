@@ -5,10 +5,10 @@ use std::marker::PhantomData;
 use bevy::prelude::*;
 use render_item::{CascadeChunk, RenderItem};
 
-use super::construction::{ModerateLodPalmFrondCluster, ModerateLodPalmFrondElement};
 use super::super::config::FrondConfig;
 use super::super::crown::{crown_directions, length_scale};
 use super::super::spawn::MergedFrond;
+use super::construction::{ModerateLodPalmFrondCluster, ModerateLodPalmFrondElement};
 
 /// [`StandardMaterial`] moderate-LOD frond crown.
 pub type ModerateLodFrondCrownStd =
@@ -137,8 +137,7 @@ where
 			.enumerate()
 			.map(|(i, direction)| {
 				let mut element_config = config;
-				element_config.length *=
-					length_scale(i as u32, self.shape.seed, 0.82, 1.08);
+				element_config.length *= length_scale(i as u32, self.shape.seed, 0.82, 1.08);
 				ModerateLodPalmFrondElement {
 					direction,
 					config: element_config,
@@ -147,7 +146,8 @@ where
 			})
 			.collect();
 
-		ModerateLodPalmFrondCluster::new(elements, shoot, self.shape.leaflet_length_scale).into_mesh()
+		ModerateLodPalmFrondCluster::new(elements, shoot, self.shape.leaflet_length_scale)
+			.into_mesh()
 	}
 }
 
@@ -179,11 +179,7 @@ where
 		let shoot = (self.shoot_half_radius * scale).max(1e-6);
 
 		ModerateLodPalmFrondCluster::new(
-			vec![ModerateLodPalmFrondElement {
-				direction: self.direction,
-				config,
-				seed: 0,
-			}],
+			vec![ModerateLodPalmFrondElement { direction: self.direction, config, seed: 0 }],
 			shoot,
 			self.leaflet_length_scale,
 		)

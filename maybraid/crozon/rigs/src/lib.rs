@@ -155,6 +155,10 @@ impl BonePose {
 	pub fn with_articulation(name: impl Into<Name>, swing: f32, flex: f32) -> Self {
 		Self { name: name.into(), transform: Transform::IDENTITY, swing, flex }
 	}
+
+	pub fn with_pose(name: impl Into<Name>, swing: f32, flex: f32, translation: Vec3) -> Self {
+		Self { name: name.into(), transform: Transform::from_translation(translation), swing, flex }
+	}
 }
 
 #[derive(Debug, Clone)]
@@ -204,6 +208,17 @@ impl RigPose {
 	pub fn is_empty(&self) -> bool {
 		self.0.is_empty()
 	}
+
+	/// Add the same translation to every named bone, preserving existing swing/flex.
+	/// Inserts identity articulation for bones not yet in the pose.
+	pub fn move_all(&mut self, bones: impl IntoIterator<Item = Name>, translation: Vec3) {
+		for name in bones {
+			self.0
+				.entry(name.clone())
+				.and_modify(|pose| pose.transform.translation += translation)
+				.or_insert_with(|| BonePose::new(name, Transform::from_translation(translation)));
+		}
+	}
 }
 
 impl Default for RigPose {
@@ -226,5 +241,29 @@ mod tests {
 
 		assert_eq!(pose.get(&name).map(|pose| pose.transform), Some(transform));
 		assert_eq!(pose.len(), 1);
+	}
+
+	#[test]
+	fn rig_pose_move_all_preserves_articulation() {
+		let mut pose = RigPose::new();
+		let name = Name::from("femur.L");
+		pose.insert(BonePose::with_pose(name.clone(), 0.5, 1.0, Vec3::X));
+		pose.move_all([name.clone()], Vec3::new(0.0, -0.1, 0.0));
+
+		let bone = pose.get(&name).expect("femur pose");
+		assert_eq!(bone.swing, 0.5);
+		assert_eq!(bone.flex, 1.0);
+		assert_eq!(bone.transform.translation, Vec3::new(1.0, -0.1, 0.0));
+	}
+
+	#[test]
+	fn rig_pose_move_all_inserts_missing_bones() {
+		let mut pose = RigPose::new();
+		let name = Name::from("root");
+		pose.move_all([name.clone()], Vec3::new(0.0, -0.2, 0.0));
+
+		let bone = pose.get(&name).expect("root pose");
+		assert_eq!(bone.transform.translation, Vec3::new(0.0, -0.2, 0.0));
+		assert_eq!(bone.swing, 0.0);
 	}
 }

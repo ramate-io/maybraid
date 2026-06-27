@@ -37,8 +37,8 @@ pub struct AssembleArgs {
 	#[arg(long)]
 	pub nose: Option<String>,
 
-	/// Procedural animation applied to the rig (`wave`, `run`, or `squat`).
-	#[arg(long, value_enum, default_value_t = AnimationMode::Wave)]
+	/// Procedural animation applied to the rig (`run` or `squat`).
+	#[arg(long, value_enum, default_value_t = AnimationMode::Run)]
 	pub animation: AnimationMode,
 
 	/// Translation `x,y,z` in world units.

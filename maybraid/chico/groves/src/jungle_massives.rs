@@ -14,7 +14,6 @@ use crate::grove::{
 	PlacementConstraints,
 };
 
-
 /// Dense sampled canopy-density band ([`0.20`, `0.60`]).
 const DENSE_CANOPY_DENSITY: UnitRange = UnitRange::new(0.2, 0.6);
 /// Dense sampled jungle-growth band ([`0.20`, `0.60`]).
@@ -268,7 +267,13 @@ mod tests {
 			Vec3::ZERO,
 		);
 		let terrain = FlatTerrainSample { elevation: 0.30, steepness: 0.40 };
-		let outcome = prepared.select_from(8, Vec3::new(5.0, 0.30, 5.0), 1.0, Cell::from_min_max(Vec3::ZERO, Vec3::ONE), &terrain);
+		let outcome = prepared.select_from(
+			8,
+			Vec3::new(5.0, 0.30, 5.0),
+			1.0,
+			Cell::from_min_max(Vec3::ZERO, Vec3::ONE),
+			&terrain,
+		);
 		match outcome {
 			GroveCellOutcome::Placed { variant, .. } => {
 				assert_ne!(variant, JungleMassivesCell::MassiveHonuBanyan);

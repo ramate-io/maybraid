@@ -13,12 +13,7 @@ impl<R: HumanoidRig> Animation<R> for Squat<R> {
 	}
 }
 
-fn apply_leg<R: HumanoidRig>(
-	rig: &mut R,
-	side: Side,
-	femur_swing: f32,
-	shin_flex: f32,
-) {
+fn apply_leg<R: HumanoidRig>(rig: &mut R, side: Side, femur_swing: f32, shin_flex: f32) {
 	let mut leg = rig.leg(side);
 
 	leg.femur = BonePose::with_articulation(leg.femur.name, femur_swing, 0.0);
@@ -36,6 +31,7 @@ fn apply_root<R: HumanoidRig>(rig: &mut R, root_swing: f32) {
 mod tests {
 	use std::f32::consts::{FRAC_PI_2, FRAC_PI_4};
 
+	use bevy::prelude::Vec3;
 	use crozon_rigs::rigs::humanoid_v0::HumanoidV0Rig;
 
 	use super::*;
@@ -45,21 +41,13 @@ mod tests {
 		let mut rig = HumanoidV0Rig::imported();
 		Squat::<HumanoidV0Rig>::new(0.0).apply(&mut rig);
 
-		let femur = rig
-			.pose()
-			.get(&rig.leg(Side::Left).femur.name)
-			.expect("left femur pose");
-		let shin = rig
-			.pose()
-			.get(&rig.leg(Side::Left).shin.name)
-			.expect("left shin pose");
-		let root = rig
-			.pose()
-			.get(&rig.spine().root.name)
-			.expect("root pose");
+		let femur = rig.pose().get(&rig.leg(Side::Left).femur.name).expect("left femur pose");
+		let shin = rig.pose().get(&rig.leg(Side::Left).shin.name).expect("left shin pose");
+		let root = rig.pose().get(&rig.spine().root.name).expect("root pose");
 		assert_eq!(femur.swing, 0.0);
 		assert_eq!(shin.flex, 0.0);
 		assert_eq!(root.swing, 0.0);
+		assert_eq!(femur.transform.translation, Vec3::ZERO);
 	}
 
 	#[test]
@@ -67,21 +55,29 @@ mod tests {
 		let mut rig = HumanoidV0Rig::imported();
 		Squat::<HumanoidV0Rig>::new(0.5).apply(&mut rig);
 
-		let femur = rig
-			.pose()
-			.get(&rig.leg(Side::Left).femur.name)
-			.expect("left femur pose");
-		let shin = rig
-			.pose()
-			.get(&rig.leg(Side::Left).shin.name)
-			.expect("left shin pose");
-		let root = rig
-			.pose()
-			.get(&rig.spine().root.name)
-			.expect("root pose");
+		let femur = rig.pose().get(&rig.leg(Side::Left).femur.name).expect("left femur pose");
+		let shin = rig.pose().get(&rig.leg(Side::Left).shin.name).expect("left shin pose");
+		let root = rig.pose().get(&rig.spine().root.name).expect("root pose");
 
 		assert!((femur.swing + FRAC_PI_4).abs() < 1e-5);
 		assert!((shin.flex - FRAC_PI_2).abs() < 1e-5);
 		assert!((root.swing - 15.0_f32.to_radians()).abs() < 1e-5);
+	}
+
+	#[test]
+	fn deepest_squat_leaves_translations_neutral_for_now() {
+		let mut rig = HumanoidV0Rig::imported();
+		Squat::<HumanoidV0Rig>::new(0.5).apply(&mut rig);
+
+		for bone in [
+			rig.leg(Side::Left).femur.name,
+			rig.leg(Side::Left).shin.name,
+			rig.leg(Side::Right).femur.name,
+			rig.leg(Side::Right).shin.name,
+			rig.spine().root.name,
+		] {
+			let pose = rig.pose().get(&bone).unwrap_or_else(|| panic!("missing pose for {bone}"));
+			assert_eq!(pose.transform.translation, Vec3::ZERO, "unexpected translation on {bone}");
+		}
 	}
 }

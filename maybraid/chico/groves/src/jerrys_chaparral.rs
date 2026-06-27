@@ -16,7 +16,6 @@ use crate::grove::{
 	PlacementConstraints,
 };
 
-
 /// RFC `projection_count: Moderate` — chaparral high-bush varietal.
 const MODERATE_PROJECTION_RADIAL: UnitRange = UnitRange::new(0.32, 0.48);
 const MODERATE_PROJECTION_VERTICAL: UnitRange = UnitRange::new(0.58, 0.78);
@@ -316,7 +315,13 @@ mod tests {
 			Vec3::ZERO,
 		);
 		let terrain = FlatTerrainSample { elevation: 0.35, steepness: 0.60 };
-		let outcome = prepared.select_from(2, Vec3::new(5.0, 0.35, 5.0), 1.0, Cell::from_min_max(Vec3::ZERO, Vec3::ONE), &terrain);
+		let outcome = prepared.select_from(
+			2,
+			Vec3::new(5.0, 0.35, 5.0),
+			1.0,
+			Cell::from_min_max(Vec3::ZERO, Vec3::ONE),
+			&terrain,
+		);
 		match outcome {
 			GroveCellOutcome::Placed { variant, .. } => {
 				assert_eq!(variant, JerrysChaparralCell::SmallFriendsConifer);

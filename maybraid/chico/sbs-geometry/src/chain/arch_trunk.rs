@@ -137,13 +137,8 @@ impl Hysteresis for ArchTrunk {
 		let next_step = self.step + 1;
 		let t = next_step as f32 / self.params.total_steps as f32;
 		let pos = arch_point_from_params(&self.params, t);
-		let _len = length_range::sample_f32(
-			&self.noise,
-			self.length_range(),
-			&self.node,
-			self.step,
-			0,
-		);
+		let _len =
+			length_range::sample_f32(&self.noise, self.length_range(), &self.node, self.step, 0);
 		vec![Self {
 			node: BallStickNode::new(pos, self.params.radius),
 			step: next_step,
@@ -173,7 +168,8 @@ mod tests {
 	#[test]
 	fn arch_yaw_rotates_tip_into_z() -> Result<()> {
 		let h = 10.0;
-		let tip = arch_point(Vec3::ZERO, h, 0.12, arch_horizontal_direction_from_yaw_degrees(90.0), 1.0);
+		let tip =
+			arch_point(Vec3::ZERO, h, 0.12, arch_horizontal_direction_from_yaw_degrees(90.0), 1.0);
 		assert!((tip.z - 0.12 * h).abs() < 1e-3);
 		assert!(tip.x.abs() < 1e-3);
 		Ok(())

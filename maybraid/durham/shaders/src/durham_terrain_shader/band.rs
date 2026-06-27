@@ -37,7 +37,12 @@ impl DurhamTerrainBandUniform {
 		)
 	}
 
-	pub fn from_meso_high_contrast(seed: f32, frequency: f32, amplitude: f32, blend_weight: f32) -> Self {
+	pub fn from_meso_high_contrast(
+		seed: f32,
+		frequency: f32,
+		amplitude: f32,
+		blend_weight: f32,
+	) -> Self {
 		Self::new(
 			seed,
 			frequency,
@@ -47,7 +52,12 @@ impl DurhamTerrainBandUniform {
 		)
 	}
 
-	pub fn from_finer_high_contrast(seed: f32, frequency: f32, amplitude: f32, blend_weight: f32) -> Self {
+	pub fn from_finer_high_contrast(
+		seed: f32,
+		frequency: f32,
+		amplitude: f32,
+		blend_weight: f32,
+	) -> Self {
 		Self::new(
 			seed,
 			frequency,

@@ -10,13 +10,13 @@ use clap::Args;
 use procedural_common::{noise_params_from_scalar_str, BuildWithNoise, NoiseParams};
 use render_item::{CascadeChunk, RenderItem};
 
-use chico_groves::goettingen_follow::{definition, GoettingenFollowCell, GoettingenFollowItem};
-use chico_groves::{
-	patch_spawned_leaf_material, placement_noise, FlatTerrainSample, GroveExtent, GroveFrontend,
-	GroveCellVariant, GroveWorldSample, WithPalette, DEFAULT_GROVE_EXTENT_XZ,
-};
 use crate::skipped_mesh_material::{
 	SkippedLeafMeshMaterial, SkippedStickMeshMaterial as GroveSkippedStickMeshMaterial,
+};
+use chico_groves::goettingen_follow::{definition, GoettingenFollowCell, GoettingenFollowItem};
+use chico_groves::{
+	patch_spawned_leaf_material, placement_noise, FlatTerrainSample, GroveCellVariant, GroveExtent,
+	GroveFrontend, GroveWorldSample, WithPalette, DEFAULT_GROVE_EXTENT_XZ,
 };
 
 /// Typical [`ChicoStickMaterial`] / [`StandardMaterial`] Goettingen Follow instance.
@@ -352,7 +352,8 @@ mod tests {
 		let span = DEFAULT_GROVE_EXTENT_XZ;
 		let extent = GroveExtent::new(Vec3::ZERO, Vec3::new(span, 1.0, span));
 		let terrain = FlatTerrainSample { elevation: 0.35, steepness: 0.15 };
-		let follow = GoettingenFollowStd::default().with_terrain(terrain).with_extent(extent.clone());
+		let follow =
+			GoettingenFollowStd::default().with_terrain(terrain).with_extent(extent.clone());
 		let shamanhome = ShamanhomeStd::default().with_terrain(terrain).with_extent(extent);
 		let cells = follow.placement_cells().len();
 		let follow_placements = follow.placements();

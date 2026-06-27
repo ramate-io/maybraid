@@ -16,7 +16,6 @@ use crate::grove::{
 	PlacementConstraints,
 };
 
-
 const MODERATE_CANOPY_DENSITY: UnitRange = UnitRange::new(0.35, 0.65);
 /// Flat sparse crown projection for willow-like High Bush forms.
 const SPARSE_PROJECTION_RADIAL: UnitRange = UnitRange::new(0.42, 0.62);
@@ -216,7 +215,8 @@ mod tests {
 
 	#[test]
 	fn geometry_follows_authored_bands() -> Result<()> {
-		let RiparianGeneralItem::BraidOak(oak) = RiparianGeneralCell::RiparianBraidOak.item() else {
+		let RiparianGeneralItem::BraidOak(oak) = RiparianGeneralCell::RiparianBraidOak.item()
+		else {
 			anyhow::bail!("expected braid oak item");
 		};
 		assert_eq!(oak.height, UnitRange::new(5.0, 15.0));
@@ -272,17 +272,35 @@ mod tests {
 
 	#[test]
 	fn steep_slope_rejects_braid_oak_but_allows_high_bush() -> Result<()> {
-		let prepared =
-			RiparianGeneralCell::distribution().prepare(0.0, 0.0, NoiseParams::default(), Vec3::ZERO);
+		let prepared = RiparianGeneralCell::distribution().prepare(
+			0.0,
+			0.0,
+			NoiseParams::default(),
+			Vec3::ZERO,
+		);
 		let terrain = FlatTerrainSample { elevation: 0.25, steepness: 0.45 };
-		let bush_outcome = prepared.select_from(5, Vec3::new(5.0, 0.25, 5.0), 1.0, Cell::from_min_max(Vec3::ZERO, Vec3::ONE), &terrain);
+		let bush_outcome = prepared.select_from(
+			5,
+			Vec3::new(5.0, 0.25, 5.0),
+			1.0,
+			Cell::from_min_max(Vec3::ZERO, Vec3::ONE),
+			&terrain,
+		);
 		match bush_outcome {
 			GroveCellOutcome::Placed { variant, .. } => {
 				assert_eq!(variant, RiparianGeneralCell::RareRiparianHighBush);
 			}
-			other => anyhow::bail!("expected RareRiparianHighBush on moderate slope, got {other:?}"),
+			other => {
+				anyhow::bail!("expected RareRiparianHighBush on moderate slope, got {other:?}")
+			}
 		}
-		let braid_outcome = prepared.select_from(1, Vec3::new(5.0, 0.25, 5.0), 1.0, Cell::from_min_max(Vec3::ZERO, Vec3::ONE), &terrain);
+		let braid_outcome = prepared.select_from(
+			1,
+			Vec3::new(5.0, 0.25, 5.0),
+			1.0,
+			Cell::from_min_max(Vec3::ZERO, Vec3::ONE),
+			&terrain,
+		);
 		match braid_outcome {
 			GroveCellOutcome::Placed { variant, .. } => {
 				assert_ne!(variant, RiparianGeneralCell::RiparianBraidOak);

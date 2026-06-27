@@ -25,7 +25,8 @@ impl BuildWithNoise<HighBushShootsShape> for RiparianGeneralHighBush {
 			config.sample_range_usize_4d(lo, hi, 0.0, 0.0, 0.0, salt) as u32
 		};
 
-		let height = sample_f32(&config, self.height, 1.0).max(self.height.start.min(self.height.end));
+		let height =
+			sample_f32(&config, self.height, 1.0).max(self.height.start.min(self.height.end));
 		let leaf_radius = sample_f32(&config, self.leaf_radius, 2.0).max(0.01);
 
 		HighBushShootsShape {

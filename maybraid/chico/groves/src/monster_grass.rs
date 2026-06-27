@@ -18,7 +18,6 @@ use crate::grove::{
 	PaletteMix, PaletteSlot, PlacementConstraints,
 };
 
-
 /// Authored Monster Grass grove definition.
 ///
 /// Cell footprint is denser than the RFC's nominal `4.0..9.0` grid (like Braid Grass) so preview
@@ -313,7 +312,13 @@ mod tests {
 		let prepared =
 			MonsterGrassCell::distribution().prepare(0.0, 0.0, NoiseParams::default(), Vec3::ZERO);
 		let terrain = FlatTerrainSample { elevation: 0.35, steepness: 0.55 };
-		let outcome = prepared.select_from(3, Vec3::new(5.0, 0.35, 5.0), 1.0, Cell::from_min_max(Vec3::ZERO, Vec3::ONE), &terrain);
+		let outcome = prepared.select_from(
+			3,
+			Vec3::new(5.0, 0.35, 5.0),
+			1.0,
+			Cell::from_min_max(Vec3::ZERO, Vec3::ONE),
+			&terrain,
+		);
 		match outcome {
 			GroveCellOutcome::Placed { variant, .. } => {
 				assert_eq!(variant, MonsterGrassCell::RedRibbedBlade);

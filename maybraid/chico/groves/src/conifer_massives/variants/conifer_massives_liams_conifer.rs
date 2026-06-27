@@ -24,8 +24,8 @@ impl BuildWithNoise<LiamsConiferSbs> for ConiferMassivesLiamsConifer {
 		let canopy_density = sample_f32(&config, self.canopy_density, 2.0);
 
 		let mut geometry = LiamsConiferSbs::default();
-		geometry.rings.spacing = (0.02 + moderate_density_fraction(canopy_density) * 0.04)
-			.clamp(0.02, 0.06);
+		geometry.rings.spacing =
+			(0.02 + moderate_density_fraction(canopy_density) * 0.04).clamp(0.02, 0.06);
 		geometry.scale.stalk_height = height;
 		geometry.scale.stalk_base_radius = Some(stalk_radius);
 		geometry.canopy_noise = noise;

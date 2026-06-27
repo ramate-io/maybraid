@@ -23,10 +23,7 @@ mod tests {
 
 	#[test]
 	fn belly_tip_profile_widens_then_tapers() -> Result<()> {
-		let profile = BellyTipProfile {
-			base_half_width: 0.02,
-			belly_half_width: 0.06,
-		};
+		let profile = BellyTipProfile { base_half_width: 0.02, belly_half_width: 0.06 };
 		assert!(profile.half_width_at(0.5) > profile.half_width_at(0.0));
 		assert!(profile.half_width_at(1.0) < 1e-5);
 		Ok(())

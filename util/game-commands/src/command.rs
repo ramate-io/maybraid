@@ -294,10 +294,7 @@ impl<T: GameCommand> Plugin for GameCommandPlugin<T> {
 		}
 		app.add_plugins(GameCommandUiPlugin { config: self.ui_config.clone() })
 			.add_systems(Startup, run_pending_startup_command::<T>)
-			.add_systems(
-				Update,
-				(toggle_text_entry_focus, capture_command_line_input::<T>),
-			);
+			.add_systems(Update, (toggle_text_entry_focus, capture_command_line_input::<T>));
 	}
 }
 

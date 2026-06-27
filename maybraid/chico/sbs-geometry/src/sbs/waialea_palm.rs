@@ -3,11 +3,12 @@
 use bevy_math::Vec3;
 use procedural_common::{NoiseConfig, NoiseParams};
 
-use crate::anchors::waialea_palm::{
-	WaialeaPalmAnchors, WaialeaPalmProtoAnchors, DEFAULT_ARCH_LATERAL_FRACTION, DEFAULT_ARCH_YAW_DEGREES,
-	DEFAULT_STALK_HEIGHT, DEFAULT_TRUNK_HEIGHT_FRACTION, DEFAULT_TRUNK_RADIUS_FRACTION_OF_HEIGHT,
-};
 use crate::anchors::strict_stalk::StrictStalk;
+use crate::anchors::waialea_palm::{
+	WaialeaPalmAnchors, WaialeaPalmProtoAnchors, DEFAULT_ARCH_LATERAL_FRACTION,
+	DEFAULT_ARCH_YAW_DEGREES, DEFAULT_STALK_HEIGHT, DEFAULT_TRUNK_HEIGHT_FRACTION,
+	DEFAULT_TRUNK_RADIUS_FRACTION_OF_HEIGHT,
+};
 use crate::anchors::{Anchors, AnchorsToChain};
 use crate::chain::waialea_palm::WaialeaPalmChain;
 use crate::BallStickChain;

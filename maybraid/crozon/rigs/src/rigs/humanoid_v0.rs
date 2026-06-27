@@ -1,7 +1,9 @@
 use bevy::prelude::*;
 
 use crate::{
-	humanoid::{HumanoidArm, HumanoidLeg, HumanoidNeck, HumanoidRig, HumanoidSpine},
+	humanoid::{
+		HumanoidArm, HumanoidLeg, HumanoidNeck, HumanoidRig, HumanoidSpine, LegSegmentLengths,
+	},
 	BoneDefinition, BonePose, BoneTable, Name, RigPose, RiggedAxis, Side,
 };
 
@@ -14,7 +16,7 @@ use crate::{
 pub struct HumanoidV0Rig {
 	pub bones: BoneTable,
 	pub pose: RigPose,
-	pub forearm_flex_sign: [f32; 2],
+	pub segment_lengths: LegSegmentLengths,
 }
 
 impl HumanoidV0Rig {
@@ -24,7 +26,7 @@ impl HumanoidV0Rig {
 			bones.insert(BoneDefinition { name: Name::from(name), relative_axis });
 		}
 
-		Self { bones, pose: RigPose::new(), forearm_flex_sign: [1.0, 1.0] }
+		Self { bones, pose: RigPose::new(), segment_lengths: LegSegmentLengths::default() }
 	}
 }
 
@@ -72,10 +74,27 @@ impl HumanoidRig for HumanoidV0Rig {
 	}
 
 	fn forearm_flex_sign(&self, side: Side) -> f32 {
-		match side {
-			Side::Left => self.forearm_flex_sign[0],
-			Side::Right => self.forearm_flex_sign[1],
-		}
+		let name = Name::from(format!("forearm.{}", side.suffix()));
+		self.bones
+			.get(&name)
+			.map(|bone| flex_sign_from_axis(bone.relative_axis))
+			.unwrap_or(1.0)
+	}
+
+	fn animation_bones(&self) -> Vec<Name> {
+		HumanoidV0Rig::animation_bones(self)
+	}
+
+	fn segment_lengths(&self) -> LegSegmentLengths {
+		self.segment_lengths
+	}
+}
+
+fn flex_sign_from_axis(axis: RiggedAxis) -> f32 {
+	if axis.forward.dot(RiggedAxis::DEFAULT.forward) < 0.0 {
+		-1.0
+	} else {
+		1.0
 	}
 }
 
@@ -158,6 +177,30 @@ pub fn humanoid_v0_bone_names() -> impl Iterator<Item = &'static str> {
 #[cfg(test)]
 mod tests {
 	use super::*;
+
+	#[test]
+	fn humanoid_v0_default_segment_lengths() {
+		let rig = HumanoidV0Rig::imported();
+		assert_eq!(rig.segment_lengths, LegSegmentLengths::default());
+	}
+
+	#[test]
+	fn humanoid_v0_move_all_updates_animation_bones() {
+		let mut rig = HumanoidV0Rig::imported();
+		rig.pose_leg({
+			let mut leg = rig.leg(Side::Left);
+			leg.femur = BonePose::with_articulation(leg.femur.name, 0.25, 0.0);
+			leg
+		});
+		rig.move_all(Vec3::new(0.0, -0.15, 0.0));
+
+		let femur = rig.pose().get(&Name::from("femur.L")).expect("femur pose");
+		assert_eq!(femur.swing, 0.25);
+		assert_eq!(femur.transform.translation, Vec3::new(0.0, -0.15, 0.0));
+
+		let shoulder = rig.pose().get(&Name::from("shoulder.L")).expect("shoulder pose");
+		assert_eq!(shoulder.transform.translation, Vec3::new(0.0, -0.15, 0.0));
+	}
 
 	#[test]
 	fn humanoid_v0_accessors_map_to_imported_names() {

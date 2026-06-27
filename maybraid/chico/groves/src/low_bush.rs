@@ -18,7 +18,6 @@ use crate::grove::{
 	PlacementConstraints,
 };
 
-
 /// RFC `projection_count: Low` — upright rounded low shrubs.
 const LOW_PROJECTION_RADIAL: UnitRange = UnitRange::new(0.20, 0.38);
 const LOW_PROJECTION_VERTICAL: UnitRange = UnitRange::new(0.68, 0.88);
@@ -303,7 +302,13 @@ mod tests {
 		let prepared =
 			LowBushCell::distribution().prepare(0.0, 0.0, NoiseParams::default(), Vec3::ZERO);
 		let terrain = FlatTerrainSample { elevation: 0.30, steepness: 0.40 };
-		let outcome = prepared.select_from(3, Vec3::new(5.0, 0.30, 5.0), 1.0, Cell::from_min_max(Vec3::ZERO, Vec3::ONE), &terrain);
+		let outcome = prepared.select_from(
+			3,
+			Vec3::new(5.0, 0.30, 5.0),
+			1.0,
+			Cell::from_min_max(Vec3::ZERO, Vec3::ONE),
+			&terrain,
+		);
 		match outcome {
 			GroveCellOutcome::Placed { variant, .. } => {
 				assert_eq!(variant, LowBushCell::FloweringLowBush);

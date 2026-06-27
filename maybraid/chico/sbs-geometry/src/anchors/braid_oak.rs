@@ -131,7 +131,10 @@ impl Default for BraidOakTreeProtoAnchors {
 			child_count_max: BRAID_CHILD_COUNT,
 			outer_foliage_distance_fraction: DEFAULT_OUTER_FOLIAGE_DISTANCE_FRACTION,
 			branch_base_radius_fraction_of_stalk: BRAID_BRANCH_BASE_RADIUS_FRACTION_OF_STALK,
-			branch_radius_child_scale: (BRAID_BRANCH_RADIUS_CHILD_SCALE_LO, BRAID_BRANCH_RADIUS_CHILD_SCALE_HI),
+			branch_radius_child_scale: (
+				BRAID_BRANCH_RADIUS_CHILD_SCALE_LO,
+				BRAID_BRANCH_RADIUS_CHILD_SCALE_HI,
+			),
 		}
 	}
 }
@@ -201,9 +204,7 @@ impl BraidOakTreeProtoAnchors {
 		for (ring_index, z_frac) in self.ring_height_fractions().into_iter().enumerate() {
 			let u = self.ring_mix_u(z_frac);
 			let proj = self.projection_length(u);
-			let k = self
-				.sample_anchors_per_ring(&chain_noise, z_frac, ring_index as u32)
-				.max(1);
+			let k = self.sample_anchors_per_ring(&chain_noise, z_frac, ring_index as u32).max(1);
 
 			for i in 0..k {
 				let theta = TAU * (i as f32) / (k as f32);
@@ -348,10 +349,7 @@ mod tests {
 
 	#[test]
 	fn segmented_stalk_builds_multiple_hops() {
-		let stalk = StrictStalk {
-			stalk_height: 10.0,
-			stalk_base_radius: 0.5,
-		};
+		let stalk = StrictStalk { stalk_height: 10.0, stalk_base_radius: 0.5 };
 		let seed = stalk.segmented_point_to_point(BRAID_STALK_SECTION_COUNT);
 		let chain = crate::BallStickChain::build(vec![seed]);
 		assert_eq!(chain.nodes.len(), BRAID_STALK_SECTION_COUNT as usize + 1);

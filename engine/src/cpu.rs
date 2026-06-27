@@ -5,7 +5,7 @@ use crate::chunk::TerrainChunk;
 use crate::shaders::outline::EdgeMaterial;
 use bevy::prelude::*;
 use rayon::prelude::*;
-use sdf::{Sign, Sdf};
+use sdf::{Sdf, Sign};
 use std::sync::Arc;
 
 /// CPU-based terrain mesh generator
@@ -223,8 +223,7 @@ impl CpuMeshGenerator {
 				// Local-space cube origin (all dimensions relative to chunk origin)
 				let cube_pos_local =
 					Vec3::new(x as f32 * cube_size, y as f32 * cube_size, z as f32 * cube_size);
-				
-				
+
 				// Corner scalar values (standard MC corner ordering assumed by your helpers)
 				// Inline index calculation: (y * nz + z) * nx + x
 				let corners = [
@@ -430,7 +429,11 @@ impl CpuMeshGenerator {
 		// Create edge material (shader handles the rendering)
 		let material_handle = materials.add(EdgeMaterial {
 			// brownish color
-			base_color: if is_cascade {  Vec4::new(0.89, 0.886, 0.604, 1.0) } else { Vec4::new(0.89, 0.886, 0.604, 1.0) },
+			base_color: if is_cascade {
+				Vec4::new(0.89, 0.886, 0.604, 1.0)
+			} else {
+				Vec4::new(0.89, 0.886, 0.604, 1.0)
+			},
 		});
 
 		// Use cascade chunk origin for world position
@@ -442,7 +445,9 @@ impl CpuMeshGenerator {
 				TerrainChunk { chunk: cascade_chunk },
 				Mesh3d(mesh_handle.clone()),
 				MeshMaterial3d::<EdgeMaterial>(material_handle.clone()),
-				Transform::from_translation(world_pos).with_rotation(sdf.rotation()).with_scale(sdf.scale())
+				Transform::from_translation(world_pos)
+					.with_rotation(sdf.rotation())
+					.with_scale(sdf.scale()),
 			))
 			.id();
 

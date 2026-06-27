@@ -9,12 +9,12 @@ use clap::Args;
 use procedural_common::{noise_params_from_scalar_str, BuildWithNoise, NoiseParams};
 use render_item::{CascadeChunk, RenderItem};
 
-use chico_groves::{
-	patch_spawned_leaf_material, placement_noise, FlatTerrainSample, GroveExtent, GroveFrontend,
-	GroveCellVariant, GroveWorldSample, WithPalette, DEFAULT_GROVE_EXTENT_XZ,
-};
-use chico_groves::high_bush::{definition, HighBushCell, HighBushItem};
 use crate::skipped_mesh_material::{SkippedLeafMeshMaterial, SkippedStickMeshMaterial};
+use chico_groves::high_bush::{definition, HighBushCell, HighBushItem};
+use chico_groves::{
+	patch_spawned_leaf_material, placement_noise, FlatTerrainSample, GroveCellVariant, GroveExtent,
+	GroveFrontend, GroveWorldSample, WithPalette, DEFAULT_GROVE_EXTENT_XZ,
+};
 
 /// Typical [`ChicoStickMaterial`] / [`StandardMaterial`] High Bush instance.
 pub type HighBushStd = HighBush<
@@ -238,8 +238,8 @@ where
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use chico_tree_components::HighBushFoliageStyle;
 	use anyhow::Result;
+	use chico_tree_components::HighBushFoliageStyle;
 
 	#[test]
 	fn bush_geometry_builds_within_authored_ranges() -> Result<()> {
@@ -324,11 +324,8 @@ mod tests {
 
 	#[test]
 	fn with_resolved_placements_skips_live_selection() -> Result<()> {
-		let placement = GroveCellVariant::new(
-			HighBushCell::GreenHighBush,
-			Vec3::new(1.0, 0.0, 2.0),
-			1.0,
-		);
+		let placement =
+			GroveCellVariant::new(HighBushCell::GreenHighBush, Vec3::new(1.0, 0.0, 2.0), 1.0);
 		let item = HighBushStd::with_resolved_placements(
 			vec![placement.clone()],
 			FlatTerrainSample::default(),

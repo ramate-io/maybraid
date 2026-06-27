@@ -88,7 +88,8 @@ where
 	pub fn iter_all(&self) -> impl Iterator<Item = (Id, Aabb3d)> + '_ {
 		let mut ids: Vec<_> = self.bounds.keys().copied().collect();
 		ids.sort();
-		ids.into_iter().filter_map(|id| self.bounds.get(&id).copied().map(|bounds| (id, bounds)))
+		ids.into_iter()
+			.filter_map(|id| self.bounds.get(&id).copied().map(|bounds| (id, bounds)))
 	}
 
 	pub fn query_iter(
@@ -179,9 +180,7 @@ mod tests {
 	fn query_deduplicates_multi_cell_object() -> Result<()> {
 		let mut idx = index()?;
 		idx.insert(1, aabb([0.0, 0.0, 0.0], [2.0, 1.0, 1.0]))?;
-		let hits: Vec<_> = idx
-			.query_iter(aabb([0.0, 0.0, 0.0], [2.0, 1.0, 1.0]), [1])
-			.collect();
+		let hits: Vec<_> = idx.query_iter(aabb([0.0, 0.0, 0.0], [2.0, 1.0, 1.0]), [1]).collect();
 		assert_eq!(hits.len(), 1);
 		assert_eq!(hits[0].0, 1);
 		Ok(())

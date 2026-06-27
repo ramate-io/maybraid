@@ -14,7 +14,6 @@ use crate::grove::{
 	PlacementConstraints,
 };
 
-
 /// Sparse sampled canopy-density band ([`0.0`, `0.35`]).
 const SPARSE_CANOPY_DENSITY: UnitRange = UnitRange::new(0.0, 0.35);
 /// Moderate sampled canopy-density band ([`0.35`, `0.65`]).
@@ -260,14 +259,26 @@ mod tests {
 		let prepared =
 			StrangeOasisCell::distribution().prepare(0.0, 0.0, NoiseParams::default(), Vec3::ZERO);
 		let terrain = FlatTerrainSample { elevation: 0.25, steepness: 0.32 };
-		let red_outcome = prepared.select_from(3, Vec3::new(5.0, 0.25, 5.0), 1.0, Cell::from_min_max(Vec3::ZERO, Vec3::ONE), &terrain);
+		let red_outcome = prepared.select_from(
+			3,
+			Vec3::new(5.0, 0.25, 5.0),
+			1.0,
+			Cell::from_min_max(Vec3::ZERO, Vec3::ONE),
+			&terrain,
+		);
 		match red_outcome {
 			GroveCellOutcome::Placed { variant, .. } => {
 				assert_eq!(variant, StrangeOasisCell::RedTorchAccent);
 			}
 			other => anyhow::bail!("expected RedTorchAccent on moderate slope, got {other:?}"),
 		}
-		let palm_outcome = prepared.select_from(1, Vec3::new(5.0, 0.25, 5.0), 1.0, Cell::from_min_max(Vec3::ZERO, Vec3::ONE), &terrain);
+		let palm_outcome = prepared.select_from(
+			1,
+			Vec3::new(5.0, 0.25, 5.0),
+			1.0,
+			Cell::from_min_max(Vec3::ZERO, Vec3::ONE),
+			&terrain,
+		);
 		match palm_outcome {
 			GroveCellOutcome::Placed { variant, .. } => {
 				assert_ne!(variant, StrangeOasisCell::CompactDatePalm);
@@ -282,7 +293,13 @@ mod tests {
 		let prepared =
 			StrangeOasisCell::distribution().prepare(0.0, 0.0, NoiseParams::default(), Vec3::ZERO);
 		let terrain = FlatTerrainSample { elevation: 0.45, steepness: 0.15 };
-		let outcome = prepared.select_from(1, Vec3::new(5.0, 0.45, 5.0), 1.0, Cell::from_min_max(Vec3::ZERO, Vec3::ONE), &terrain);
+		let outcome = prepared.select_from(
+			1,
+			Vec3::new(5.0, 0.45, 5.0),
+			1.0,
+			Cell::from_min_max(Vec3::ZERO, Vec3::ONE),
+			&terrain,
+		);
 		match outcome {
 			GroveCellOutcome::Placed { variant, .. } => {
 				assert_ne!(variant, StrangeOasisCell::CompactDatePalm);

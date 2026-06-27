@@ -4,7 +4,8 @@ use bevy_math::Vec3;
 use procedural_common::{NoiseConfig, NoiseParams};
 
 use crate::anchors::date_palm::{
-	DatePalmAnchors, DatePalmProtoAnchors, DEFAULT_STALK_HEIGHT, DEFAULT_TRUNK_RADIUS_FRACTION_OF_HEIGHT,
+	DatePalmAnchors, DatePalmProtoAnchors, DEFAULT_STALK_HEIGHT,
+	DEFAULT_TRUNK_RADIUS_FRACTION_OF_HEIGHT,
 };
 use crate::anchors::strict_stalk::StrictStalk;
 use crate::anchors::{Anchors, AnchorsToChain};

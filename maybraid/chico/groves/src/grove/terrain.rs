@@ -124,9 +124,8 @@ mod tests {
 			}
 		}
 
-		let sample = SampleWithExclusion {
-			zones: vec![Aabb3d::from_min_max(Vec3::ZERO, Vec3::ONE)],
-		};
+		let sample =
+			SampleWithExclusion { zones: vec![Aabb3d::from_min_max(Vec3::ZERO, Vec3::ONE)] };
 		assert!(!sample.allows_placement_at(Vec3::new(0.5, 0.5, 0.5)));
 		assert!(sample.allows_placement_at(Vec3::new(2.0, 0.0, 0.0)));
 		Ok(())

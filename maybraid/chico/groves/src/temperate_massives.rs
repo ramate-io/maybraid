@@ -14,7 +14,6 @@ use crate::grove::{
 	PlacementConstraints,
 };
 
-
 /// Moderate sampled canopy-density band ([`0.35`, `0.65`]).
 const MODERATE_CANOPY_DENSITY: UnitRange = UnitRange::new(0.35, 0.65);
 /// Dense sampled canopy-density band ([`0.50`, `0.85`]).
@@ -228,7 +227,8 @@ mod tests {
 		assert_eq!(story.canopy_spread, UnitRange::new(12.0, 35.0));
 		assert_eq!(story.canopy_density, DENSE_CANOPY_DENSITY);
 
-		let TemperateMassivesItem::Rory(rory) = TemperateMassivesCell::RareMassiveRory.item() else {
+		let TemperateMassivesItem::Rory(rory) = TemperateMassivesCell::RareMassiveRory.item()
+		else {
 			anyhow::bail!("expected rory item");
 		};
 		assert_eq!(rory.height, UnitRange::new(50.0, 200.0));
@@ -269,10 +269,20 @@ mod tests {
 
 	#[test]
 	fn steep_slope_rejects_braid_oak_but_allows_rory() -> Result<()> {
-		let prepared =
-			TemperateMassivesCell::distribution().prepare(0.0, 0.0, NoiseParams::default(), Vec3::ZERO);
+		let prepared = TemperateMassivesCell::distribution().prepare(
+			0.0,
+			0.0,
+			NoiseParams::default(),
+			Vec3::ZERO,
+		);
 		let terrain = FlatTerrainSample { elevation: 0.30, steepness: 0.55 };
-		let outcome = prepared.select_from(8, Vec3::new(5.0, 0.30, 5.0), 1.0, Cell::from_min_max(Vec3::ZERO, Vec3::ONE), &terrain);
+		let outcome = prepared.select_from(
+			8,
+			Vec3::new(5.0, 0.30, 5.0),
+			1.0,
+			Cell::from_min_max(Vec3::ZERO, Vec3::ONE),
+			&terrain,
+		);
 		match outcome {
 			GroveCellOutcome::Placed { variant, .. } => {
 				assert_ne!(variant, TemperateMassivesCell::MassiveBraidOak);

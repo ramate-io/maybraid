@@ -10,6 +10,6 @@ mod stick;
 pub use assembly::HighBushShoots;
 pub use config::{HighBushFoliageStyle, HighBushShootsShape};
 pub use preset::{
-	apply_common_high_bush_preset, COMMON_HIGH_BUSH_RADIAL_STRENGTH,
-	COMMON_HIGH_BUSH_SHOOT_COUNT, COMMON_HIGH_BUSH_VERTICAL_BIAS,
+	apply_common_high_bush_preset, COMMON_HIGH_BUSH_RADIAL_STRENGTH, COMMON_HIGH_BUSH_SHOOT_COUNT,
+	COMMON_HIGH_BUSH_VERTICAL_BIAS,
 };

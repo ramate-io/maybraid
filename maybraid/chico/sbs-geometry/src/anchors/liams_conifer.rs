@@ -15,8 +15,8 @@ use std::f32::consts::TAU;
 use bevy_math::Vec3;
 
 use super::stalk_perturbation::{
-	AnchorPerturbation, HasStrictStalk, PerturbAnchor, StalkPerturbation, perturb_branch_out,
-	perturb_node,
+	perturb_branch_out, perturb_node, AnchorPerturbation, HasStrictStalk, PerturbAnchor,
+	StalkPerturbation,
 };
 use super::strict_stalk::StrictStalk;
 use super::Anchors;
@@ -82,10 +82,7 @@ impl Default for LiamsConiferProtoAnchors {
 	fn default() -> Self {
 		let h = 30.0;
 		Self {
-			stalk: StrictStalk {
-				stalk_height: h,
-				stalk_base_radius: 0.025 * h,
-			},
+			stalk: StrictStalk { stalk_height: h, stalk_base_radius: 0.025 * h },
 			first_ring_unit_height: 0.10,
 			last_ring_unit_height: 1.0,
 			ring_spacing_unit_height: 0.03,
@@ -207,10 +204,7 @@ impl LiamsConiferProtoAnchors {
 					chain_noise.clone(),
 					proj,
 					depth,
-					LiamsConiferPhase::BranchOut(DepthBudget {
-						inner: branch,
-						remaining: depth,
-					}),
+					LiamsConiferPhase::BranchOut(DepthBudget { inner: branch, remaining: depth }),
 				));
 			}
 		}
@@ -385,10 +379,7 @@ mod tests {
 	#[test]
 	fn mini_branch_radii_stay_within_stalk_relative_bounds() -> Result<()> {
 		let proto = LiamsConiferProtoAnchors {
-			stalk: StrictStalk {
-				stalk_height: 3.0,
-				stalk_base_radius: 0.025 * 3.0,
-			},
+			stalk: StrictStalk { stalk_height: 3.0, stalk_base_radius: 0.025 * 3.0 },
 			ring_spacing_unit_height: 0.20,
 			..Default::default()
 		};
@@ -408,16 +399,12 @@ mod tests {
 	#[test]
 	fn mini_limb_radius_scales_below_full_size_floor() -> Result<()> {
 		let proto = LiamsConiferProtoAnchors {
-			stalk: StrictStalk {
-				stalk_height: 2.0,
-				stalk_base_radius: 0.025 * 2.0,
-			},
+			stalk: StrictStalk { stalk_height: 2.0, stalk_base_radius: 0.025 * 2.0 },
 			..Default::default()
 		};
-		let branch_radius = first_branch_radius(&proto.hysteresis_seeds(NoiseConfig::new(
-			NoiseParams::default(),
-		)))
-		.ok_or_else(|| anyhow::anyhow!("expected a mini Liam's Conifer branch seed"))?;
+		let branch_radius =
+			first_branch_radius(&proto.hysteresis_seeds(NoiseConfig::new(NoiseParams::default())))
+				.ok_or_else(|| anyhow::anyhow!("expected a mini Liam's Conifer branch seed"))?;
 		assert!(branch_radius < 0.035, "mini branch radius should not hit full-size floor");
 		assert!(
 			branch_radius >= proto.stalk.stalk_base_radius * 0.08,

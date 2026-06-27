@@ -9,12 +9,12 @@ use clap::Args;
 use procedural_common::{noise_params_from_scalar_str, BuildWithNoise, NoiseParams};
 use render_item::{CascadeChunk, RenderItem};
 
-use chico_groves::{
-	patch_spawned_leaf_material, placement_noise, FlatTerrainSample, GroveExtent, GroveFrontend,
-	GroveCellVariant, GroveWorldSample, WithPalette, DEFAULT_GROVE_EXTENT_XZ,
-};
 use crate::skipped_mesh_material::{SkippedLeafMeshMaterial, SkippedStickMeshMaterial};
 use chico_groves::spotty_bushes::{definition, SpottyBushesCell, SpottyBushesItem};
+use chico_groves::{
+	patch_spawned_leaf_material, placement_noise, FlatTerrainSample, GroveCellVariant, GroveExtent,
+	GroveFrontend, GroveWorldSample, WithPalette, DEFAULT_GROVE_EXTENT_XZ,
+};
 
 /// Typical [`ChicoStickMaterial`] / [`StandardMaterial`] Spotty Bushes instance.
 pub type SpottyBushesStd = SpottyBushes<
@@ -237,9 +237,9 @@ where
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use chico_tree_components::HighBushFoliageStyle;
 	use crate::high_bush::HighBushStd;
 	use anyhow::Result;
+	use chico_tree_components::HighBushFoliageStyle;
 
 	#[test]
 	fn spot_bush_geometry_builds_within_authored_ranges() -> Result<()> {

@@ -10,13 +10,13 @@ use clap::Args;
 use procedural_common::{noise_params_from_scalar_str, BuildWithNoise, NoiseParams};
 use render_item::{CascadeChunk, RenderItem};
 
-use chico_groves::alpine::{definition, AlpineCell, AlpineItem};
-use chico_groves::{
-	patch_spawned_leaf_material, placement_noise, FlatTerrainSample, GroveExtent, GroveFrontend,
-	GroveCellVariant, GroveWorldSample, WithPalette, DEFAULT_GROVE_EXTENT_XZ,
-};
 use crate::skipped_mesh_material::{
 	SkippedLeafMeshMaterial, SkippedStickMeshMaterial as GroveSkippedStickMeshMaterial,
+};
+use chico_groves::alpine::{definition, AlpineCell, AlpineItem};
+use chico_groves::{
+	patch_spawned_leaf_material, placement_noise, FlatTerrainSample, GroveCellVariant, GroveExtent,
+	GroveFrontend, GroveWorldSample, WithPalette, DEFAULT_GROVE_EXTENT_XZ,
 };
 
 /// Typical [`ChicoStickMaterial`] / [`StandardMaterial`] Alpine instance.
@@ -88,7 +88,8 @@ where
 	__marker: PhantomData<fn() -> (StickM, LeafM)>,
 }
 
-impl<StickM, StickS, LeafM, LeafS, Terrain> Default for Alpine<StickM, StickS, LeafM, LeafS, Terrain>
+impl<StickM, StickS, LeafM, LeafS, Terrain> Default
+	for Alpine<StickM, StickS, LeafM, LeafS, Terrain>
 where
 	StickM: Material,
 	StickS: Clone + Into<MeshMaterial3d<StickM>> + Args + Send + Sync + 'static + Default,
@@ -314,8 +315,11 @@ mod tests {
 
 	#[test]
 	fn with_resolved_placements_skips_live_selection() -> Result<()> {
-		let placement =
-			GroveCellVariant::new(AlpineCell::TallAlpineFriendsConifer, Vec3::new(1.0, 0.0, 2.0), 1.0);
+		let placement = GroveCellVariant::new(
+			AlpineCell::TallAlpineFriendsConifer,
+			Vec3::new(1.0, 0.0, 2.0),
+			1.0,
+		);
 		let item = AlpineStd::with_resolved_placements(
 			vec![placement.clone()],
 			FlatTerrainSample::default(),

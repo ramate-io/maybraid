@@ -1,16 +1,16 @@
 pub mod marching_cubes;
 
-use bevy::prelude::*;
-use chunk::cascade::CascadeChunk;
-use sdf::{Sign, Sdf};
-use std::sync::Arc;
-use rayon::prelude::*;
-use marching_cubes::{get_cube_index, interpolate_vertex_cell, TRIANGULATIONS};
 use crate::mesh::MeshBuilder;
 use crate::NormalizeChunk;
+use bevy::prelude::*;
+use chunk::cascade::CascadeChunk;
+use marching_cubes::{get_cube_index, interpolate_vertex_cell, TRIANGULATIONS};
+use rayon::prelude::*;
+use sdf::{Sdf, Sign};
+use std::sync::Arc;
 pub trait CpuShotSdf: Sdf + Clone {
 	fn cpu_chunk_mesh(&self, cascade_chunk: &CascadeChunk) -> Option<Mesh> {
-        // ---------- grid setup ---------------------------------------------------
+		// ---------- grid setup ---------------------------------------------------
 		let extent = cascade_chunk.extent_vec();
 		let res = cascade_chunk.resolution();
 		let cube_cell = extent / res as f32;
@@ -214,8 +214,7 @@ pub trait CpuShotSdf: Sdf + Clone {
 					y as f32 * cube_cell.y,
 					z as f32 * cube_cell.z,
 				);
-				
-				
+
 				// Corner scalar values (standard MC corner ordering assumed by your helpers)
 				// Inline index calculation: (y * nz + z) * nx + x
 				let corners = [
@@ -400,13 +399,12 @@ pub trait CpuShotSdf: Sdf + Clone {
 		mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uvs);
 		mesh.insert_indices(bevy::mesh::Indices::U32(indices));
 		Some(mesh)
-
-    }
+	}
 }
 
-impl <T: Sdf + Clone> CpuShotSdf for T {}
+impl<T: Sdf + Clone> CpuShotSdf for T {}
 
-impl <T: CpuShotSdf + NormalizeChunk> MeshBuilder for T {
+impl<T: CpuShotSdf + NormalizeChunk> MeshBuilder for T {
 	fn build_mesh_impl(&self, cascade_chunk: &CascadeChunk) -> Option<Mesh> {
 		log::debug!("Building mesh for chunk: {:?}", cascade_chunk);
 		self.cpu_chunk_mesh(cascade_chunk)

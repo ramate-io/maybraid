@@ -13,7 +13,7 @@
 
 pub use sdf;
 
-pub use procedural_common::{FromScalarNoise, NoiseConfig, NoiseParams, sdf_band_margin};
+pub use procedural_common::{sdf_band_margin, FromScalarNoise, NoiseConfig, NoiseParams};
 
 pub mod ball;
 pub mod crook_cylinder;

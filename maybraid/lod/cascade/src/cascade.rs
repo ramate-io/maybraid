@@ -16,10 +16,7 @@ pub struct GridConfig {
 
 impl GridConfig {
 	pub fn new(edge_multiple_log2: u8, radius: [u32; 3]) -> Self {
-		Self {
-			edge_multiple_log2,
-			radius,
-		}
+		Self { edge_multiple_log2, radius }
 	}
 
 	#[inline]
@@ -55,11 +52,7 @@ pub struct Cascade {
 
 impl Cascade {
 	pub fn new(leaf_scale: Vec3, rings: u8, grid: Option<GridConfig>) -> Self {
-		Self {
-			leaf_scale,
-			rings,
-			grid,
-		}
+		Self { leaf_scale, rings, grid }
 	}
 
 	/// Finest lattice spacing \(\mathbf s_0\) along each world axis.
@@ -167,9 +160,7 @@ impl Cascade {
 	/// Scalar grid tile edge \(G = \max(\boldsymbol\sigma)\,2^{\mathrm{mult}}\) when a grid is configured.
 	pub fn grid_chunk_edge(&self) -> Option<f32> {
 		let cfg = self.grid?;
-		Some(
-			self.span_max_axis() * 2_f32.powi(cfg.edge_multiple_log2() as i32),
-		)
+		Some(self.span_max_axis() * 2_f32.powi(cfg.edge_multiple_log2() as i32))
 	}
 
 	/// Cheap leaf-cell recentring test (RFC §3.1.3).
@@ -181,11 +172,7 @@ impl Cascade {
 	pub fn cascade_footprints(&self, focal: Vec3) -> HashSet<Chunk> {
 		let mut out = HashSet::new();
 		let leaf_origin = self.leaf_origin(focal);
-		out.insert(Chunk::from_min_max(
-			leaf_origin,
-			leaf_origin + self.leaf_scale,
-			None,
-		));
+		out.insert(Chunk::from_min_max(leaf_origin, leaf_origin + self.leaf_scale, None));
 
 		let mut anchor = leaf_origin - self.leaf_scale;
 		for k in 0..self.rings {
@@ -205,18 +192,13 @@ impl Cascade {
 		let omit_hull = self.hull(focal);
 		let [rx, ry, rz] = cfg.radius();
 
-		let anchor = Vec3::new(
-			(focal.x / g).floor() * g,
-			g * -0.5,
-			(focal.z / g).floor() * g,
-		);
+		let anchor = Vec3::new((focal.x / g).floor() * g, g * -0.5, (focal.z / g).floor() * g);
 
 		let mut out = HashSet::new();
 		for xi in -(rx as i32)..=(rx as i32) {
 			for yi in -(ry as i32)..=(ry as i32) {
 				for zi in -(rz as i32)..=(rz as i32) {
-					let corner =
-						anchor + Vec3::new(xi as f32 * g, yi as f32 * g, zi as f32 * g);
+					let corner = anchor + Vec3::new(xi as f32 * g, yi as f32 * g, zi as f32 * g);
 					out.insert(Chunk::cube(corner, g, Some(omit_hull)));
 				}
 			}
@@ -264,11 +246,7 @@ impl Cascade {
 	}
 
 	/// Candidate chunks for overlap queries when an entity’s bounds move (RFC §3.4.4).
-	pub fn all_possible_new_chunks(
-		&self,
-		previous: Option<Aabb3d>,
-		current: Aabb3d,
-	) -> Vec<Chunk> {
+	pub fn all_possible_new_chunks(&self, previous: Option<Aabb3d>, current: Aabb3d) -> Vec<Chunk> {
 		let mut u = self.work_set_at_bounds(&current);
 		if let Some(p) = previous {
 			u.extend(self.work_set_at_bounds(&p));
@@ -388,10 +366,7 @@ mod tests {
 		let c = cubic(1.0, 1, None);
 		let bb = cube_bb(Vec3::ZERO, 0.25);
 		let delta = c.new_chunks(Some(bb), bb);
-		assert!(
-			delta.is_empty(),
-			"same work set should yield no new footprints"
-		);
+		assert!(delta.is_empty(), "same work set should yield no new footprints");
 	}
 
 	#[test]
@@ -400,10 +375,7 @@ mod tests {
 		let prev = cube_bb(Vec3::new(0.25, 0.0, 0.0), 0.05);
 		let curr = cube_bb(Vec3::new(2.5, 0.0, 0.0), 0.05);
 		let delta = c.new_chunks(Some(prev), curr);
-		assert!(
-			!delta.is_empty(),
-			"crossing a leaf boundary should introduce new chunks"
-		);
+		assert!(!delta.is_empty(), "crossing a leaf boundary should introduce new chunks");
 	}
 
 	#[test]
@@ -411,7 +383,8 @@ mod tests {
 		let c = cubic(1.0, 1, None);
 		let a = cube_bb(Vec3::ZERO, 0.2);
 		let b = cube_bb(Vec3::new(5.0, 0.0, 0.0), 0.2);
-		let union_keys: HashSet<Chunk> = c.all_possible_new_chunks(Some(a), b).into_iter().collect();
+		let union_keys: HashSet<Chunk> =
+			c.all_possible_new_chunks(Some(a), b).into_iter().collect();
 		let wa = c.work_set_at_focal(a.center().into());
 		let wb = c.work_set_at_focal(b.center().into());
 		let mut manual = wa;

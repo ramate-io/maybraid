@@ -61,9 +61,9 @@ where
 		region: Aabb3d,
 		levels: impl IntoIterator<Item = Level>,
 	) -> impl Iterator<Item = (&T, Aabb3d)> + '_ {
-		self.grid.query_iter(region, levels).filter_map(|(id, bounds)| {
-			self.store.get(id).map(|value| (value, bounds))
-		})
+		self.grid
+			.query_iter(region, levels)
+			.filter_map(|(id, bounds)| self.store.get(id).map(|value| (value, bounds)))
 	}
 }
 
@@ -140,9 +140,7 @@ mod tests {
 		let mut idx = TypedIndex::new(DVec3::ONE, HashMapStore::new())?;
 		idx.insert(Named { id: 1, label: "a" }, aabb([0.0, 0.0, 0.0], [1.0, 1.0, 1.0]))?;
 		idx.insert(Named { id: 2, label: "b" }, aabb([5.0, 0.0, 0.0], [6.0, 1.0, 1.0]))?;
-		let hits: Vec<_> = idx
-			.query_values(aabb([0.0, 0.0, 0.0], [1.0, 1.0, 1.0]), [0])
-			.collect();
+		let hits: Vec<_> = idx.query_values(aabb([0.0, 0.0, 0.0], [1.0, 1.0, 1.0]), [0]).collect();
 		assert_eq!(hits.len(), 1);
 		assert_eq!(hits[0].0.label, "a");
 		Ok(())

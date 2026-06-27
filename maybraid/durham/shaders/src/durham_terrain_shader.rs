@@ -9,10 +9,7 @@ pub use noise_uniform::{DurhamTerrainNoiseUniform, EVEN_BAND_BLEND_WEIGHT};
 pub use swatch::{DurhamSwatchUniform, EVEN_SWATCH_FOLD_WEIGHT};
 
 use bevy::{
-	asset::embedded_asset,
-	prelude::*,
-	reflect::TypePath,
-	render::render_resource::AsBindGroup,
+	asset::embedded_asset, prelude::*, reflect::TypePath, render::render_resource::AsBindGroup,
 	shader::ShaderRef,
 };
 
@@ -57,7 +54,6 @@ impl DurhamTerrainShader {
 		self.terrain_noise = self.terrain_noise.with_seed_uniform_across_bands(seed);
 		self
 	}
-
 }
 
 impl Material for DurhamTerrainShader {

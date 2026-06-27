@@ -79,11 +79,7 @@ where
 	S: Clone + Into<MeshMaterial3d<M>> + Default,
 {
 	fn default() -> Self {
-		Self {
-			shape: SpearTuftShape::default(),
-			material: S::default(),
-			__marker: PhantomData,
-		}
+		Self { shape: SpearTuftShape::default(), material: S::default(), __marker: PhantomData }
 	}
 }
 
@@ -118,7 +114,8 @@ where
 	}
 
 	fn spear_length_at(&self, index: u32, min: f32, max: f32, scale: f32) -> f32 {
-		(self.shape.spear_length * CapDirections::length_scale(index, self.shape.seed, min, max)
+		(self.shape.spear_length
+			* CapDirections::length_scale(index, self.shape.seed, min, max)
 			* scale)
 			.max(1e-4)
 	}

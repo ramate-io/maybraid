@@ -7,16 +7,16 @@ use procedural_common::{
 	parse_count_pair as parse_ring_layout, parse_unit_range, parse_usize_range as parse_depth_range,
 };
 use procedural_common::{
-	CountPair as RingLayout, NoiseConfig, NoiseParams, UnitRange,
-	UsizeRange as DepthRange,
+	CountPair as RingLayout, NoiseConfig, NoiseParams, UnitRange, UsizeRange as DepthRange,
 };
 
 use crate::anchors::honu_banyan::{
 	HonuBanyanAnchorPerturbation, HonuBanyanAnchors, HonuBanyanProtoAnchors,
-	DEFAULT_DESCENDER_THRESHOLD, DEFAULT_FIRST_RING_HEIGHT_FRACTION, DEFAULT_LAST_RING_HEIGHT_FRACTION,
-	DEFAULT_MAX_DEPTH_FIRST_RING, DEFAULT_MAX_DEPTH_LAST_RING, DEFAULT_PROJECTION_MAX_FRACTION,
-	DEFAULT_PROJECTION_MIN_FRACTION, DEFAULT_PROJECTION_MIX_SCALE, DEFAULT_STALK_HEIGHT_FRACTION,
-	DEFAULT_STALK_RADIUS_FRACTION, DEFAULT_STALK_SECTION_COUNT, DEFAULT_TREE_HEIGHT,
+	DEFAULT_DESCENDER_THRESHOLD, DEFAULT_FIRST_RING_HEIGHT_FRACTION,
+	DEFAULT_LAST_RING_HEIGHT_FRACTION, DEFAULT_MAX_DEPTH_FIRST_RING, DEFAULT_MAX_DEPTH_LAST_RING,
+	DEFAULT_PROJECTION_MAX_FRACTION, DEFAULT_PROJECTION_MIN_FRACTION, DEFAULT_PROJECTION_MIX_SCALE,
+	DEFAULT_STALK_HEIGHT_FRACTION, DEFAULT_STALK_RADIUS_FRACTION, DEFAULT_STALK_SECTION_COUNT,
+	DEFAULT_TREE_HEIGHT,
 };
 use crate::anchors::strict_stalk::StrictStalk;
 use crate::anchors::{Anchors, AnchorsToChain};
@@ -231,7 +231,10 @@ pub struct HonuBanyanSbs {
 	pub projection: HonuProjectionParams,
 	#[cfg_attr(feature = "clap", command(flatten, next_help_heading = "Growth"))]
 	pub growth: HonuGrowthParams,
-	#[cfg_attr(feature = "clap", arg(long, default_value_t = 0.10, help_heading = "Terminal canopy"))]
+	#[cfg_attr(
+		feature = "clap",
+		arg(long, default_value_t = 0.10, help_heading = "Terminal canopy")
+	)]
 	pub leaf_ball_factor: f32,
 	#[cfg_attr(feature = "clap", command(flatten, next_help_heading = "Anchor Perturbation"))]
 	pub anchor_perturbation: AnchorPerturbationParams,

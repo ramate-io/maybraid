@@ -10,10 +10,10 @@ use procedural_common::UnitRange;
 use crate::anchors::braid_oak::{
 	BraidOakTreeAnchors, BraidOakTreeProtoAnchors, BRAID_ANCHORS_PER_RING_MAX,
 	BRAID_ANGLE_TOLERANCE_DEGREES, BRAID_BRANCH_BASE_RADIUS_FRACTION_OF_STALK, BRAID_BRANCH_DEPTH,
+	BRAID_BRANCH_RADIUS_CHILD_SCALE_HI, BRAID_BRANCH_RADIUS_CHILD_SCALE_LO, BRAID_CHILD_COUNT,
 	BRAID_FIRST_RING_UNIT_HEIGHT, BRAID_LEAF_RADIUS_FRACTION, BRAID_MAX_PROJECTION_FRACTION,
-	BRAID_PROJECTION_MIN_FRACTION, BRAID_RING_SPACING_UNIT_HEIGHT, BRAID_STALK_BASE_RADIUS_FRACTION,
-	BRAID_STALK_HEIGHT_FRACTION, BRAID_BRANCH_RADIUS_CHILD_SCALE_HI,
-	BRAID_BRANCH_RADIUS_CHILD_SCALE_LO, BRAID_CHILD_COUNT,
+	BRAID_PROJECTION_MIN_FRACTION, BRAID_RING_SPACING_UNIT_HEIGHT,
+	BRAID_STALK_BASE_RADIUS_FRACTION, BRAID_STALK_HEIGHT_FRACTION,
 };
 use crate::anchors::storybook_tree::DEFAULT_OUTER_FOLIAGE_DISTANCE_FRACTION;
 use crate::anchors::{Anchors, AnchorsToChain};
@@ -74,9 +74,7 @@ pub struct BraidOakTreeSbs {
 
 impl Default for BraidOakTreeSbs {
 	fn default() -> Self {
-		Self {
-			storybook: braid_oak_fields(crate::anchors::storybook_tree::DEFAULT_TREE_HEIGHT),
-		}
+		Self { storybook: braid_oak_fields(crate::anchors::storybook_tree::DEFAULT_TREE_HEIGHT) }
 	}
 }
 
@@ -194,9 +192,7 @@ impl Anchors<StorybookTreeChain> for BraidOakTreeSbs {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use crate::anchors::braid_oak::{
-		BRAID_MAX_PROJECTION_FRACTION, BRAID_PROJECTION_MIN_FRACTION,
-	};
+	use crate::anchors::braid_oak::{BRAID_MAX_PROJECTION_FRACTION, BRAID_PROJECTION_MIN_FRACTION};
 	use anyhow::Result;
 
 	#[test]
@@ -211,10 +207,17 @@ mod tests {
 		let mut geometry = BraidOakTreeSbs { storybook: StorybookTreeSbs::default() };
 		geometry.apply_braid_preset();
 		let proto = geometry.to_proto();
-		assert!((proto.stalk.stalk_height - geometry.height() * BRAID_STALK_HEIGHT_FRACTION).abs() < 1e-3);
+		assert!(
+			(proto.stalk.stalk_height - geometry.height() * BRAID_STALK_HEIGHT_FRACTION).abs()
+				< 1e-3
+		);
 		assert!((proto.first_ring_unit_height - BRAID_FIRST_RING_UNIT_HEIGHT).abs() < 1e-4);
-		assert!((proto.max_projection_fraction_of_height - BRAID_MAX_PROJECTION_FRACTION).abs() < 1e-4);
-		assert!((proto.projection_min_fraction_of_height - BRAID_PROJECTION_MIN_FRACTION).abs() < 1e-4);
+		assert!(
+			(proto.max_projection_fraction_of_height - BRAID_MAX_PROJECTION_FRACTION).abs() < 1e-4
+		);
+		assert!(
+			(proto.projection_min_fraction_of_height - BRAID_PROJECTION_MIN_FRACTION).abs() < 1e-4
+		);
 		assert_eq!(proto.child_count_min, BRAID_CHILD_COUNT);
 		assert_eq!(proto.child_count_max, BRAID_CHILD_COUNT);
 		assert_eq!(proto.branch_depth, BRAID_BRANCH_DEPTH);

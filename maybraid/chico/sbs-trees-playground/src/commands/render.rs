@@ -17,24 +17,22 @@ use clap::Subcommand;
 use procedural_common::{noise_params_from_scalar_str, NoiseParams};
 
 use crate::render::{
-	RenderBladeTuft, RenderBraidGrass, RenderBraidOakTree, RenderBuddhaHandTuft, RenderBushScrub,
-	RenderCommonTufts, RenderConfig, RenderDatePalm, RenderFriendsConifer, RenderFrondCrown,
+	RenderAlpine, RenderAridConiferSapling, RenderBladeTuft, RenderBraidGrass, RenderBraidOakTree,
+	RenderBuddhaHandTuft, RenderBushScrub, RenderChristmasTaiga, RenderCommonTufts, RenderConfig,
+	RenderConiferMassives, RenderConiferSapling, RenderDateGrove, RenderDatePalm, RenderDryland,
+	RenderForlornSavanna, RenderFriendsConifer, RenderFrondCrown, RenderGoettingenFollow,
 	RenderHighBush, RenderHighBushShoots, RenderHonuBanyan, RenderJerrysChaparral,
-	RenderJungleGrowth, RenderJungleStorybookTree, RenderKamakuraTorch, RenderLevantineScrub,
-	RenderLiamsConifer, RenderLowBush, RenderModerateLodFrondCrown, RenderMonsterGrass,
-	RenderNorthernConifer, RenderPalmBush, RenderPenmarchTorch, RenderRiverineGreen,
-	RenderRorysHeadTrained, RenderSopesBanyan, RenderSpearTuft, RenderSpottyBushes,
-	RenderStorybookTree, RenderSubject, RenderSucculentTuft, RenderTallGrass,
-	RenderTemperateConifer, RenderTropicalThicket, RenderTropicalTufts, RenderTropicalUndergrowth,
-	RenderTuftPatch, RenderUnendingJungle, RenderStrangeOasis, RenderShamanhome,
-	RenderGoettingenFollow, RenderConiferSapling, RenderAridConiferSapling,
-	RenderJungleLowerMassives, RenderJungleMassives, RenderTemperateLowerMassives, RenderPalmShade,
-	RenderRiparianMix, RenderAlpine, RenderDryland, RenderStorytellers, RenderTradeWinds,
-	RenderWanderingAcacia, RenderLeeward, RenderChristmasTaiga,
-	RenderConiferMassives, RenderTemperateMassives, RenderRiparianGeneral, RenderRollingOaks,
-	RenderForlornSavanna, RenderOrchard, RenderVineyard, RenderDateGrove,
-	RenderVaseTree, RenderWaialeaPalm,
-	RenderWeepingTuft, RenderWildGrass,
+	RenderJungleGrowth, RenderJungleLowerMassives, RenderJungleMassives, RenderJungleStorybookTree,
+	RenderKamakuraTorch, RenderLeeward, RenderLevantineScrub, RenderLiamsConifer, RenderLowBush,
+	RenderModerateLodFrondCrown, RenderMonsterGrass, RenderNorthernConifer, RenderOrchard,
+	RenderPalmBush, RenderPalmShade, RenderPenmarchTorch, RenderRiparianGeneral, RenderRiparianMix,
+	RenderRiverineGreen, RenderRollingOaks, RenderRorysHeadTrained, RenderShamanhome,
+	RenderSopesBanyan, RenderSpearTuft, RenderSpottyBushes, RenderStorybookTree,
+	RenderStorytellers, RenderStrangeOasis, RenderSubject, RenderSucculentTuft, RenderTallGrass,
+	RenderTemperateConifer, RenderTemperateLowerMassives, RenderTemperateMassives,
+	RenderTradeWinds, RenderTropicalThicket, RenderTropicalTufts, RenderTropicalUndergrowth,
+	RenderTuftPatch, RenderUnendingJungle, RenderVaseTree, RenderVineyard, RenderWaialeaPalm,
+	RenderWanderingAcacia, RenderWeepingTuft, RenderWildGrass,
 };
 
 /// Shared render flags (resolution + scene transform) wrapped around per-item args.
@@ -646,75 +644,79 @@ impl Render {
 			Self::UnendingJungle(h) => h
 				.render
 				.config_with(RenderSubject::UnendingJungle(h.configured_unending_jungle())),
-			Self::StrangeOasis(h) => h
+			Self::StrangeOasis(h) => {
+				h.render.config_with(RenderSubject::StrangeOasis(h.configured_strange_oasis()))
+			}
+			Self::Shamanhome(h) => {
+				h.render.config_with(RenderSubject::Shamanhome(h.configured_shamanhome()))
+			}
+			Self::GoettingenFollow(h) => h
 				.render
-				.config_with(RenderSubject::StrangeOasis(h.configured_strange_oasis())),
-			Self::Shamanhome(h) => h
+				.config_with(RenderSubject::GoettingenFollow(h.configured_goettingen_follow())),
+			Self::ConiferSapling(h) => h
 				.render
-				.config_with(RenderSubject::Shamanhome(h.configured_shamanhome())),
-			Self::GoettingenFollow(h) => h.render.config_with(RenderSubject::GoettingenFollow(
-				h.configured_goettingen_follow(),
-			)),
-			Self::ConiferSapling(h) => h.render.config_with(RenderSubject::ConiferSapling(
-				h.configured_conifer_sapling(),
-			)),
+				.config_with(RenderSubject::ConiferSapling(h.configured_conifer_sapling())),
 			Self::AridConiferSapling(h) => h.render.config_with(RenderSubject::AridConiferSapling(
 				h.configured_arid_conifer_sapling(),
 			)),
 			Self::JungleLowerMassives(h) => h.render.config_with(
 				RenderSubject::JungleLowerMassives(h.configured_jungle_lower_massives()),
 			),
-			Self::JungleMassives(h) => h.render.config_with(
-				RenderSubject::JungleMassives(h.configured_jungle_massives()),
-			),
+			Self::JungleMassives(h) => h
+				.render
+				.config_with(RenderSubject::JungleMassives(h.configured_jungle_massives())),
 			Self::TemperateLowerMassives(h) => h.render.config_with(
 				RenderSubject::TemperateLowerMassives(h.configured_temperate_lower_massives()),
 			),
-			Self::PalmShade(h) => h.render.config_with(
-				RenderSubject::PalmShade(h.configured_palm_shade()),
-			),
-			Self::RiparianMix(h) => h.render.config_with(
-				RenderSubject::RiparianMix(h.configured_riparian_mix()),
-			),
-			Self::Alpine(h) => h.render.config_with(
-				RenderSubject::Alpine(h.configured_alpine()),
-			),
-			Self::Dryland(h) => h.render.config_with(
-				RenderSubject::Dryland(h.configured_dryland()),
-			),
-			Self::Storytellers(h) => h.render.config_with(
-				RenderSubject::Storytellers(h.configured_storytellers()),
-			),
-			Self::TradeWinds(h) => h.render.config_with(
-				RenderSubject::TradeWinds(h.configured_trade_winds()),
-			),
-			Self::WanderingAcacia(h) => h.render.config_with(
-				RenderSubject::WanderingAcacia(h.configured_wandering_acacia()),
-			),
-			Self::Leeward(h) => h.render.config_with(RenderSubject::Leeward(h.configured_leeward())),
-			Self::ChristmasTaiga(h) => h.render.config_with(
-				RenderSubject::ChristmasTaiga(h.configured_christmas_taiga()),
-			),
-			Self::ConiferMassives(h) => h.render.config_with(
-				RenderSubject::ConiferMassives(h.configured_conifer_massives()),
-			),
-			Self::TemperateMassives(h) => h.render.config_with(
-				RenderSubject::TemperateMassives(h.configured_temperate_massives()),
-			),
-			Self::RiparianGeneral(h) => h.render.config_with(
-				RenderSubject::RiparianGeneral(h.configured_riparian_general()),
-			),
-			Self::RollingOaks(h) => h.render.config_with(
-				RenderSubject::RollingOaks(h.configured_rolling_oaks()),
-			),
-			Self::ForlornSavanna(h) => h.render.config_with(
-				RenderSubject::ForlornSavanna(h.configured_forlorn_savanna()),
-			),
-			Self::Orchard(h) => h.render.config_with(RenderSubject::Orchard(h.configured_orchard())),
-			Self::Vineyard(h) => h.render.config_with(RenderSubject::Vineyard(h.configured_vineyard())),
-			Self::DateGrove(h) => h.render.config_with(
-				RenderSubject::DateGrove(h.configured_date_grove()),
-			),
+			Self::PalmShade(h) => {
+				h.render.config_with(RenderSubject::PalmShade(h.configured_palm_shade()))
+			}
+			Self::RiparianMix(h) => {
+				h.render.config_with(RenderSubject::RiparianMix(h.configured_riparian_mix()))
+			}
+			Self::Alpine(h) => h.render.config_with(RenderSubject::Alpine(h.configured_alpine())),
+			Self::Dryland(h) => {
+				h.render.config_with(RenderSubject::Dryland(h.configured_dryland()))
+			}
+			Self::Storytellers(h) => {
+				h.render.config_with(RenderSubject::Storytellers(h.configured_storytellers()))
+			}
+			Self::TradeWinds(h) => {
+				h.render.config_with(RenderSubject::TradeWinds(h.configured_trade_winds()))
+			}
+			Self::WanderingAcacia(h) => h
+				.render
+				.config_with(RenderSubject::WanderingAcacia(h.configured_wandering_acacia())),
+			Self::Leeward(h) => {
+				h.render.config_with(RenderSubject::Leeward(h.configured_leeward()))
+			}
+			Self::ChristmasTaiga(h) => h
+				.render
+				.config_with(RenderSubject::ChristmasTaiga(h.configured_christmas_taiga())),
+			Self::ConiferMassives(h) => h
+				.render
+				.config_with(RenderSubject::ConiferMassives(h.configured_conifer_massives())),
+			Self::TemperateMassives(h) => h
+				.render
+				.config_with(RenderSubject::TemperateMassives(h.configured_temperate_massives())),
+			Self::RiparianGeneral(h) => h
+				.render
+				.config_with(RenderSubject::RiparianGeneral(h.configured_riparian_general())),
+			Self::RollingOaks(h) => {
+				h.render.config_with(RenderSubject::RollingOaks(h.configured_rolling_oaks()))
+			}
+			Self::ForlornSavanna(h) => h
+				.render
+				.config_with(RenderSubject::ForlornSavanna(h.configured_forlorn_savanna())),
+			Self::Orchard(h) => {
+				h.render.config_with(RenderSubject::Orchard(h.configured_orchard()))
+			}
+			Self::Vineyard(h) => {
+				h.render.config_with(RenderSubject::Vineyard(h.configured_vineyard()))
+			}
+			Self::DateGrove(h) => {
+				h.render.config_with(RenderSubject::DateGrove(h.configured_date_grove()))
+			}
 			Self::SpearTuft(h) => h.config_with(RenderSubject::SpearTuft(
 				RenderSpearTuft::from_shape(h.inner.clone(), Default::default()),
 			)),
@@ -1659,7 +1661,8 @@ mod tests {
 	fn goettingen_follow_defaults_spawn_placements() -> Result<()> {
 		let cmd = crate::commands::PlaygroundCommand::parse_line("render goettingen-follow")
 			.map_err(|e| anyhow::anyhow!("{e}"))?;
-		let crate::commands::PlaygroundCommand::Render(Render::GoettingenFollow(helper)) = cmd else {
+		let crate::commands::PlaygroundCommand::Render(Render::GoettingenFollow(helper)) = cmd
+		else {
 			anyhow::bail!("expected goettingen-follow render command");
 		};
 		let grove = helper.configured_goettingen_follow();
@@ -1680,7 +1683,8 @@ mod tests {
 			"render goettingen-follow --elevation 0.25 --grove-extent-xz 39 --cell-extent-xz 9,9",
 		)
 		.map_err(|e| anyhow::anyhow!("{e}"))?;
-		let crate::commands::PlaygroundCommand::Render(Render::GoettingenFollow(helper)) = cmd else {
+		let crate::commands::PlaygroundCommand::Render(Render::GoettingenFollow(helper)) = cmd
+		else {
 			anyhow::bail!("expected goettingen-follow render command");
 		};
 		assert!((helper.grove_extent_xz - 39.0).abs() < 1e-5);
@@ -1884,7 +1888,8 @@ mod tests {
 			"render temperate-lower-massives --elevation 0.35",
 		)
 		.map_err(|e| anyhow::anyhow!("{e}"))?;
-		let crate::commands::PlaygroundCommand::Render(Render::TemperateLowerMassives(helper)) = cmd
+		let crate::commands::PlaygroundCommand::Render(Render::TemperateLowerMassives(helper)) =
+			cmd
 		else {
 			anyhow::bail!("expected temperate-lower-massives render command");
 		};
@@ -1906,7 +1911,8 @@ mod tests {
 			"render temperate-lower-massives --elevation 0.35 --grove-extent-xz 92 --cell-extent-xz 26,26",
 		)
 		.map_err(|e| anyhow::anyhow!("{e}"))?;
-		let crate::commands::PlaygroundCommand::Render(Render::TemperateLowerMassives(helper)) = cmd
+		let crate::commands::PlaygroundCommand::Render(Render::TemperateLowerMassives(helper)) =
+			cmd
 		else {
 			anyhow::bail!("expected temperate-lower-massives render command");
 		};
@@ -2017,10 +2023,9 @@ mod tests {
 
 	#[test]
 	fn alpine_defaults_spawn_placements() -> Result<()> {
-		let cmd = crate::commands::PlaygroundCommand::parse_line(
-			"render alpine --grove-extent-xz 220",
-		)
-		.map_err(|e| anyhow::anyhow!("{e}"))?;
+		let cmd =
+			crate::commands::PlaygroundCommand::parse_line("render alpine --grove-extent-xz 220")
+				.map_err(|e| anyhow::anyhow!("{e}"))?;
 		let crate::commands::PlaygroundCommand::Render(Render::Alpine(helper)) = cmd else {
 			anyhow::bail!("expected alpine render command");
 		};
@@ -2062,10 +2067,9 @@ mod tests {
 
 	#[test]
 	fn dryland_defaults_spawn_placements() -> Result<()> {
-		let cmd = crate::commands::PlaygroundCommand::parse_line(
-			"render dryland --grove-extent-xz 280",
-		)
-		.map_err(|e| anyhow::anyhow!("{e}"))?;
+		let cmd =
+			crate::commands::PlaygroundCommand::parse_line("render dryland --grove-extent-xz 280")
+				.map_err(|e| anyhow::anyhow!("{e}"))?;
 		let crate::commands::PlaygroundCommand::Render(Render::Dryland(helper)) = cmd else {
 			anyhow::bail!("expected dryland render command");
 		};
@@ -2201,7 +2205,8 @@ mod tests {
 			"render wandering-acacia --grove-extent-xz 300",
 		)
 		.map_err(|e| anyhow::anyhow!("{e}"))?;
-		let crate::commands::PlaygroundCommand::Render(Render::WanderingAcacia(helper)) = cmd else {
+		let crate::commands::PlaygroundCommand::Render(Render::WanderingAcacia(helper)) = cmd
+		else {
 			anyhow::bail!("expected wandering-acacia render command");
 		};
 		let grove = helper.configured_wandering_acacia();
@@ -2222,7 +2227,8 @@ mod tests {
 			"render wandering-acacia --grove-extent-xz 300 --cell-extent-xz 37,37",
 		)
 		.map_err(|e| anyhow::anyhow!("{e}"))?;
-		let crate::commands::PlaygroundCommand::Render(Render::WanderingAcacia(helper)) = cmd else {
+		let crate::commands::PlaygroundCommand::Render(Render::WanderingAcacia(helper)) = cmd
+		else {
 			anyhow::bail!("expected wandering-acacia render command");
 		};
 		assert!((helper.grove_extent_xz - 300.0).abs() < 1e-5);
@@ -2242,10 +2248,9 @@ mod tests {
 
 	#[test]
 	fn leeward_defaults_spawn_placements() -> Result<()> {
-		let cmd = crate::commands::PlaygroundCommand::parse_line(
-			"render leeward --grove-extent-xz 220",
-		)
-		.map_err(|e| anyhow::anyhow!("{e}"))?;
+		let cmd =
+			crate::commands::PlaygroundCommand::parse_line("render leeward --grove-extent-xz 220")
+				.map_err(|e| anyhow::anyhow!("{e}"))?;
 		let crate::commands::PlaygroundCommand::Render(Render::Leeward(helper)) = cmd else {
 			anyhow::bail!("expected leeward render command");
 		};
@@ -2332,7 +2337,8 @@ mod tests {
 			"render conifer-massives --grove-extent-xz 400",
 		)
 		.map_err(|e| anyhow::anyhow!("{e}"))?;
-		let crate::commands::PlaygroundCommand::Render(Render::ConiferMassives(helper)) = cmd else {
+		let crate::commands::PlaygroundCommand::Render(Render::ConiferMassives(helper)) = cmd
+		else {
 			anyhow::bail!("expected conifer-massives render command");
 		};
 		let grove = helper.configured_conifer_massives();
@@ -2351,7 +2357,8 @@ mod tests {
 			"render conifer-massives --grove-extent-xz 400 --cell-extent-xz 50,50",
 		)
 		.map_err(|e| anyhow::anyhow!("{e}"))?;
-		let crate::commands::PlaygroundCommand::Render(Render::ConiferMassives(helper)) = cmd else {
+		let crate::commands::PlaygroundCommand::Render(Render::ConiferMassives(helper)) = cmd
+		else {
 			anyhow::bail!("expected conifer-massives render command");
 		};
 		assert!((helper.grove_extent_xz - 400.0).abs() < 1e-5);
@@ -2420,7 +2427,8 @@ mod tests {
 			"render riparian-general --grove-extent-xz 200",
 		)
 		.map_err(|e| anyhow::anyhow!("{e}"))?;
-		let crate::commands::PlaygroundCommand::Render(Render::RiparianGeneral(helper)) = cmd else {
+		let crate::commands::PlaygroundCommand::Render(Render::RiparianGeneral(helper)) = cmd
+		else {
 			anyhow::bail!("expected riparian-general render command");
 		};
 		let grove = helper.configured_riparian_general();
@@ -2439,7 +2447,8 @@ mod tests {
 			"render riparian-general --grove-extent-xz 200 --cell-extent-xz 16,16",
 		)
 		.map_err(|e| anyhow::anyhow!("{e}"))?;
-		let crate::commands::PlaygroundCommand::Render(Render::RiparianGeneral(helper)) = cmd else {
+		let crate::commands::PlaygroundCommand::Render(Render::RiparianGeneral(helper)) = cmd
+		else {
 			anyhow::bail!("expected riparian-general render command");
 		};
 		assert!((helper.grove_extent_xz - 200.0).abs() < 1e-5);
@@ -2545,8 +2554,9 @@ mod tests {
 
 	#[test]
 	fn orchard_defaults_spawn_placements() -> Result<()> {
-		let cmd = crate::commands::PlaygroundCommand::parse_line("render orchard --grove-extent-xz 160")
-			.map_err(|e| anyhow::anyhow!("{e}"))?;
+		let cmd =
+			crate::commands::PlaygroundCommand::parse_line("render orchard --grove-extent-xz 160")
+				.map_err(|e| anyhow::anyhow!("{e}"))?;
 		let crate::commands::PlaygroundCommand::Render(Render::Orchard(helper)) = cmd else {
 			anyhow::bail!("expected orchard render command");
 		};
@@ -2589,7 +2599,7 @@ mod tests {
 		let cmd = crate::commands::PlaygroundCommand::parse_line(
 			"render vineyard --grove-extent-xz 90 --elevation 0.35",
 		)
-			.map_err(|e| anyhow::anyhow!("{e}"))?;
+		.map_err(|e| anyhow::anyhow!("{e}"))?;
 		let crate::commands::PlaygroundCommand::Render(Render::Vineyard(helper)) = cmd else {
 			anyhow::bail!("expected vineyard render command");
 		};

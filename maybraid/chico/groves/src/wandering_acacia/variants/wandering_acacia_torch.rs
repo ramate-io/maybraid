@@ -23,7 +23,8 @@ struct TorchSamples {
 
 fn sample_torch(torch: &WanderingAcaciaTorch, noise: NoiseParams) -> TorchSamples {
 	let config = NoiseConfig::new(noise);
-	let height = sample_f32(&config, torch.height, 1.0).max(torch.height.start.min(torch.height.end));
+	let height =
+		sample_f32(&config, torch.height, 1.0).max(torch.height.start.min(torch.height.end));
 	let stalk_radius = sample_f32(&config, torch.stalk_radius, 1.5);
 	let canopy_spread = sample_f32(&config, torch.canopy_spread, 2.0);
 	let span = span_fraction(canopy_spread, height);

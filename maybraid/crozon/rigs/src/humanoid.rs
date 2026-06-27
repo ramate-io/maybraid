@@ -1,4 +1,19 @@
-use crate::{BonePose, RigPose, Side};
+use bevy::prelude::*;
+
+use crate::{BonePose, Name, RigPose, Side};
+
+/// Rest-pose thigh and shin segment lengths used for analytic IK-style drop.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct LegSegmentLengths {
+	pub femur: f32,
+	pub shin: f32,
+}
+
+impl Default for LegSegmentLengths {
+	fn default() -> Self {
+		Self { femur: 0.5, shin: 0.5 }
+	}
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct HumanoidLeg {
@@ -100,6 +115,13 @@ pub trait HumanoidRig {
 	fn pose(&self) -> &RigPose;
 	fn pose_mut(&mut self) -> &mut RigPose;
 
+	/// Bones driven by procedural animation in the playground.
+	fn animation_bones(&self) -> Vec<Name>;
+
+	fn segment_lengths(&self) -> LegSegmentLengths {
+		LegSegmentLengths::default()
+	}
+
 	/// +1 or −1 so mirrored forearms flex forward consistently in run animation.
 	fn forearm_flex_sign(&self, _side: Side) -> f32 {
 		1.0
@@ -143,5 +165,11 @@ pub trait HumanoidRig {
 
 	fn pose_neck(&mut self, neck: HumanoidNeck) {
 		neck.apply_to(self.pose_mut());
+	}
+
+	/// Move every animation bone in the current pose by a uniform translation.
+	fn move_all(&mut self, translation: Vec3) {
+		let bones = self.animation_bones();
+		self.pose_mut().move_all(bones, translation);
 	}
 }

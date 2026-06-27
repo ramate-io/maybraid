@@ -117,13 +117,7 @@ impl PrismaticCluster {
 			if !rotation.is_finite() {
 				continue;
 			}
-			self.append_element(
-				&mut positions,
-				&mut indices,
-				element,
-				rotation,
-				length,
-			);
+			self.append_element(&mut positions, &mut indices, element, rotation, length);
 		}
 
 		let mut mesh = Mesh::new(
@@ -199,21 +193,11 @@ impl PrismaticCluster {
 				let i3 = base_vertex + (ring + 1) * sides + (side + 1) % sides;
 				if self.growth == GrowthPolarity::Draping {
 					indices.extend_from_slice(&[
-						i0 as u32,
-						i1 as u32,
-						i2 as u32,
-						i1 as u32,
-						i3 as u32,
-						i2 as u32,
+						i0 as u32, i1 as u32, i2 as u32, i1 as u32, i3 as u32, i2 as u32,
 					]);
 				} else {
 					indices.extend_from_slice(&[
-						i0 as u32,
-						i2 as u32,
-						i1 as u32,
-						i1 as u32,
-						i2 as u32,
-						i3 as u32,
+						i0 as u32, i2 as u32, i1 as u32, i1 as u32, i2 as u32, i3 as u32,
 					]);
 				}
 			}
