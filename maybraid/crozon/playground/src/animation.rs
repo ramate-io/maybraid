@@ -9,7 +9,7 @@ use crozon_rigs::{
 	BonePose, Name as RigName,
 };
 use malo_animations::{
-	animations::{Run, Squat, TwoFootedJump, DEFAULT_GRAVITY},
+	animations::{Run, Squat, TwoFootedJump, DEFAULT_GRAVITY, DEFAULT_LANDING_SQUAT_SPEED, DEFAULT_PRE_SQUAT_SPEED},
 	Animation, Effects,
 };
 
@@ -19,6 +19,8 @@ use crate::skinning::{BoneMap, CharacterRig};
 const RUN_CYCLE_SPEED: f32 = 0.5;
 const SQUAT_CYCLE_SPEED: f32 = 0.25;
 const JUMP_HEIGHT: f32 = 1.5;
+const JUMP_PRE_SQUAT_SPEED: f32 = DEFAULT_PRE_SQUAT_SPEED * 1.2;
+const JUMP_LANDING_SQUAT_SPEED: f32 = DEFAULT_LANDING_SQUAT_SPEED * 1.3;
 
 const DEBUG_BONES: &[&str] = &[
 	"root",
@@ -217,9 +219,11 @@ fn animate_jump(
 	};
 
 	marshal_limbs_into_pose(&mut rig, limbs);
-	let lengths = rig.segment_lengths();
-	let jump = TwoFootedJump::<HumanoidV0Rig>::auto_scale(t, DEFAULT_GRAVITY, JUMP_HEIGHT, lengths)
-		.with_slower_initial_squat_down_by(0.75);
+	let jump = TwoFootedJump::<HumanoidV0Rig>::from_time(t)
+		.with_gravity(DEFAULT_GRAVITY)
+		.with_jump_height(JUMP_HEIGHT)
+		.with_pre_squat_speed(JUMP_PRE_SQUAT_SPEED)
+		.with_landing_squat_speed(JUMP_LANDING_SQUAT_SPEED);
 	let effects = jump.apply(&mut rig);
 	apply_effects(config.transform, effects, armature);
 	marshal_pose_to_limbs(&rig, limbs);

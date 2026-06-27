@@ -2,8 +2,7 @@ use bevy::prelude::{Transform, Vec3};
 use crozon_rigs::humanoid::HumanoidRig;
 
 use crate::animations::{
-	FALL_BLEND_FRACTION, Fall, JumpSegment, LAND_BLEND_FRACTION, Smooth, Spring, Squat,
-	TwoFootedJump,
+	FALL_BLEND_FRACTION, Fall, JumpSegment, Smooth, Spring, Squat, TwoFootedJump,
 };
 use crate::{Animation, Effects};
 
@@ -40,7 +39,7 @@ impl<R: HumanoidRig> Animation<R> for TwoFootedJump<R> {
 			JumpSegment::Land => {
 				let land = self.landing_squat(lengths);
 				let timings = self.timings(lengths);
-				let blend_window = timings.land_duration() * LAND_BLEND_FRACTION;
+				let blend_window = timings.land_pose_blend_duration();
 				let blend = if blend_window > f32::EPSILON {
 					(local / blend_window).clamp(0.0, 1.0)
 				} else {
@@ -66,14 +65,11 @@ impl<R: HumanoidRig> Animation<R> for TwoFootedJump<R> {
 mod tests {
 	use crozon_rigs::{rigs::humanoid_v0::HumanoidV0Rig, Side};
 
-	use crozon_rigs::humanoid::LegSegmentLengths;
-
 	use super::*;
-	use crate::animations::{DEFAULT_GRAVITY, DEFAULT_JUMP_HEIGHT, DEFAULT_SPRING_DURATION, Squat};
+	use crate::animations::{DEFAULT_SPRING_DURATION, Squat};
 
 	fn jump_at_elapsed(elapsed: f32) -> TwoFootedJump<HumanoidV0Rig> {
-		let lengths = LegSegmentLengths::default();
-		TwoFootedJump::auto_scale(elapsed, DEFAULT_GRAVITY, DEFAULT_JUMP_HEIGHT, lengths)
+		TwoFootedJump::from_time(elapsed)
 	}
 
 	#[test]
@@ -97,14 +93,15 @@ mod tests {
 		crate::rigs::mix::seed_bind_pose(&mut rig);
 		let jump = jump_at_elapsed(0.0);
 		let lengths = rig.segment_lengths();
-		jump_at_elapsed(jump.timings(lengths).air_end() + 0.01).apply(&mut rig);
+		let timings = jump.timings(lengths);
+		jump_at_elapsed(timings.air_end() + timings.land_descent_duration * 0.25).apply(&mut rig);
 
 		let shoulder = rig.pose().get(&rig.arm(Side::Left).shoulder.name).expect("shoulder");
 		let spread = Fall::<HumanoidV0Rig>::spread().shoulder_flex(Side::Left);
 		assert!(shoulder.flex.abs() < spread.abs());
 
 		let femur = rig.pose().get(&rig.leg(Side::Left).femur.name).expect("femur");
-		assert!(femur.swing.abs() < 0.05);
+		assert!(femur.swing.abs() > 0.01);
 		Ok(())
 	}
 

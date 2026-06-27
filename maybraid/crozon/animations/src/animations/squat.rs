@@ -5,25 +5,27 @@ use crozon_rigs::humanoid::LegSegmentLengths;
 
 const ROOT_SQUAT_DEG: f32 = 15.0;
 
-/// Baseline windup descent rate before jump-height scaling.
-pub const DEFAULT_WINDUP_DESCENT_SPEED: f32 = 0.9;
-
 #[derive(Debug, Clone)]
 pub struct Squat<Rig> {
+	/// Elapsed seconds driving the squat envelope.
 	pub time: f32,
-	/// Stand to full depth in `1/descent_speed` seconds.
+	/// Stand-to-bottom rate: full descent takes `1/descent_speed` seconds.
 	pub descent_speed: f32,
-	/// Full depth to stand in `1/ascent_speed` seconds.
+	/// Bottom-to-stand rate: full ascent takes `1/ascent_speed` seconds.
 	pub ascent_speed: f32,
+	/// When true, the envelope runs once (jump segments); when false, it loops.
 	pub one_shot: bool,
+	/// Peak femur forward swing at full depth (radians).
 	pub femur_peak: f32,
+	/// Peak shin flex relative to femur at full depth (radians).
 	pub shin_peak: f32,
+	/// Peak root forward swing at full depth (radians).
 	pub root_peak: f32,
 	_rig: PhantomData<Rig>,
 }
 
 impl<Rig> Squat<Rig> {
-	/// Looping squat with independent half-cycle speeds.
+	/// Looping squat with independent descent and ascent half-cycle speeds.
 	pub fn from_time(time: f32, descent_speed: f32, ascent_speed: f32) -> Self {
 		Self {
 			time,
@@ -53,7 +55,7 @@ impl<Rig> Squat<Rig> {
 		}
 	}
 
-	/// One-shot down-up envelope for jump segments.
+	/// One-shot down-up envelope with the given half-cycle speeds.
 	pub fn with_speeds(descent_speed: f32, ascent_speed: f32) -> Self {
 		Self {
 			descent_speed,
@@ -63,12 +65,14 @@ impl<Rig> Squat<Rig> {
 		}
 	}
 
+	/// Sample the one-shot envelope at `segment_time` seconds into the segment.
 	pub fn at_segment_time(mut self, segment_time: f32) -> Self {
 		self.time = segment_time;
 		self.one_shot = true;
 		self
 	}
 
+	/// Normalized position in `[0, 1)` within one full down-up cycle.
 	pub fn cycle_phase(&self) -> f32 {
 		let cycle = self.cycle_duration();
 		if cycle <= f32::EPSILON {
@@ -77,18 +81,22 @@ impl<Rig> Squat<Rig> {
 		(self.envelope_time() / cycle).fract()
 	}
 
+	/// Duration of one full down-up cycle in seconds.
 	pub fn cycle_duration(&self) -> f32 {
 		self.descent_duration() + self.ascent_duration()
 	}
 
+	/// Duration of the stand-to-bottom half in seconds.
 	pub fn descent_duration(&self) -> f32 {
 		(1.0 / self.descent_speed).max(f32::EPSILON)
 	}
 
+	/// Duration of the bottom-to-stand half in seconds.
 	pub fn ascent_duration(&self) -> f32 {
 		(1.0 / self.ascent_speed).max(f32::EPSILON)
 	}
 
+	/// Vertical drop at full depth (`depth` = 1).
 	pub fn peak_vertical_drop(&self, lengths: LegSegmentLengths) -> f32 {
 		vertical_drop(self.femur_peak, self.shin_peak, lengths)
 	}
@@ -98,8 +106,8 @@ impl<Rig> Default for Squat<Rig> {
 	fn default() -> Self {
 		Self {
 			time: 0.0,
-			descent_speed: DEFAULT_WINDUP_DESCENT_SPEED,
-			ascent_speed: DEFAULT_WINDUP_DESCENT_SPEED,
+			descent_speed: 1.0,
+			ascent_speed: 1.0,
 			one_shot: false,
 			femur_peak: -FRAC_PI_4,
 			shin_peak: FRAC_PI_2,
@@ -119,7 +127,7 @@ impl<Rig> Squat<Rig> {
 		}
 	}
 
-	/// 0 at stand, 1 at deepest squat.
+	/// Squat depth: 0 at stand, 1 at deepest flex.
 	pub fn depth(&self) -> f32 {
 		let desc_d = self.descent_duration();
 		let asc_d = self.ascent_duration();
