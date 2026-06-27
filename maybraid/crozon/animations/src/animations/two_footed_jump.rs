@@ -18,10 +18,10 @@ use crate::animations::{Land, Squat};
 
 pub const DEFAULT_GRAVITY: f32 = 9.8;
 pub const DEFAULT_JUMP_HEIGHT: f32 = 1.5;
-/// Default pre-jump squat-down rate (bottom in ~0.7 s).
-pub const DEFAULT_PRE_SQUAT_SPEED: f32 = 1.4;
+/// Default pre-jump squat-down rate (bottom in ~0.33 s).
+pub const DEFAULT_PRE_SQUAT_SPEED: f32 = 3.0;
 /// Default landing recovery rate; also scales impact-matched compression.
-pub const DEFAULT_LANDING_SQUAT_SPEED: f32 = 1.2;
+pub const DEFAULT_LANDING_SQUAT_SPEED: f32 = 3.0;
 pub const DEFAULT_SPRING_DURATION: f32 = 0.15;
 
 /// Fraction of the airborne segment used to blend from spring into fall spread.
@@ -152,11 +152,8 @@ impl<Rig> TwoFootedJump<Rig> {
 		let land_peak = Land::<Rig>::default().peak_vertical_drop(lengths);
 
 		let windup_descent = self.pre_squat_speed.max(MIN_SPEED);
-		let windup_ascent = if squat_peak > f32::EPSILON {
-			impact / squat_peak
-		} else {
-			windup_descent
-		};
+		let windup_ascent =
+			if squat_peak > f32::EPSILON { impact / squat_peak } else { windup_descent };
 
 		let land_compression_duration = if land_peak > f32::EPSILON && impact > f32::EPSILON {
 			// Literal distance / impact speed is only a few milliseconds at this rig scale,
@@ -170,11 +167,7 @@ impl<Rig> TwoFootedJump<Rig> {
 		let land_recovery = self.landing_squat_speed.max(MIN_SPEED);
 
 		let windup = Squat::with_speeds(windup_descent, windup_ascent.max(MIN_SPEED));
-		let landing = Land::with_speeds(
-			land_compression,
-			land_recovery,
-			Squat::<Rig>::default(),
-		);
+		let landing = Land::with_speeds(land_compression, land_recovery, Squat::<Rig>::default());
 		(windup, landing)
 	}
 
@@ -343,7 +336,10 @@ mod tests {
 		let lengths = LegSegmentLengths::default();
 		let low = TwoFootedJump::<()>::from_time(0.0).with_jump_height(1.0);
 		let high = TwoFootedJump::<()>::from_time(0.0).with_jump_height(3.0);
-		assert!(high.timings(lengths).land_descent_duration < low.timings(lengths).land_descent_duration);
+		assert!(
+			high.timings(lengths).land_descent_duration
+				< low.timings(lengths).land_descent_duration
+		);
 		Ok(())
 	}
 
@@ -397,7 +393,10 @@ mod tests {
 		let lengths = LegSegmentLengths::default();
 		let slow = TwoFootedJump::<()>::from_time(0.0).with_pre_squat_speed(0.5);
 		let fast = TwoFootedJump::<()>::from_time(0.0).with_pre_squat_speed(2.0);
-		assert!(slow.timings(lengths).squat_descent_duration > fast.timings(lengths).squat_descent_duration);
+		assert!(
+			slow.timings(lengths).squat_descent_duration
+				> fast.timings(lengths).squat_descent_duration
+		);
 		Ok(())
 	}
 
@@ -418,8 +417,7 @@ mod tests {
 		assert!(jump.vertical_offset(lengths).abs() < 1e-5);
 
 		let timings = jump.timings(lengths);
-		let squat_bottom =
-			TwoFootedJump::<()>::from_time(timings.squat_descent_duration * 0.99);
+		let squat_bottom = TwoFootedJump::<()>::from_time(timings.squat_descent_duration * 0.99);
 		assert!(squat_bottom.vertical_offset(lengths) < 0.0);
 
 		let squat_end = TwoFootedJump::<()>::from_time(timings.squat_end() - 0.001);
