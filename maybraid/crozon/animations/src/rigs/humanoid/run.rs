@@ -43,7 +43,9 @@ fn apply_leg<R: HumanoidRig>(rig: &mut R, side: Side, phase: f32, lift_sign: f32
 		hip_lift(swing, run.hip_lift) * lift_sign,
 	);
 	leg.femur = rig.articulate_on_rig(leg.femur, swing * run.stride, 0.0);
-	leg.shin = rig.articulate_on_rig(leg.shin, 0.0, knee_flex(phase, run));
+	// Reference `knee_flex` is a sagittal rotation magnitude; locally, bind-pose straight
+	// matches `knee_extended` (see squat — flex is a delta from stand, not absolute π/2).
+	leg.shin = rig.articulate_on_rig(leg.shin, 0.0, knee_flex(phase, run) - run.knee_extended);
 	rig.pose_leg(leg);
 }
 
@@ -120,22 +122,37 @@ mod tests {
 	}
 
 	#[test]
-	fn run_left_and_right_femur_swing_are_opposite_at_phase_zero() {
+	fn run_left_and_right_femur_swing_match_at_same_phase() {
 		let mut rig = HumanoidV0Rig::imported();
 		Run::<HumanoidV0Rig>::new(0.0).apply(&mut rig);
 
 		let left = rig.pose().get(&rig.leg(Side::Left).femur.name).expect("left femur");
 		let right = rig.pose().get(&rig.leg(Side::Right).femur.name).expect("right femur");
-		assert!(left.swing * right.swing < 0.0, "legs should be anti-phase");
+		assert_eq!(left.swing, right.swing, "both legs share the same gait phase");
 	}
 
 	#[test]
 	fn run_applies_knee_flex_to_shin() {
-		let mut rig = HumanoidV0Rig::imported();
-		Run::<HumanoidV0Rig>::new(0.25).apply(&mut rig);
+		use bevy::prelude::*;
 
-		let shin = rig.pose().get(&rig.leg(Side::Left).shin.name).expect("left shin");
-		assert!(shin.flex.abs() > 0.0, "expected knee bend on shin");
+		let mut rig = HumanoidV0Rig::imported();
+		let shin_name = rig.leg(Side::Left).shin.name.clone();
+		rig.pose_mut()
+			.insert(crozon_rigs::BonePose::new(shin_name.clone(), Transform::IDENTITY));
+
+		// Extended stride: shin flex delta ≈ 0 (straight relative to femur).
+		Run::<HumanoidV0Rig>::new(0.25).apply(&mut rig);
+		let extended = rig.pose().get(&shin_name).expect("left shin").clone();
+		assert!(extended.flex.abs() < 1e-4, "expected straight knee, flex={}", extended.flex);
+
+		// Contracted stride: visible tuck above extended baseline.
+		Run::<HumanoidV0Rig>::new(0.75).apply(&mut rig);
+		let tucked = rig.pose().get(&shin_name).expect("left shin");
+		assert!(tucked.flex > 1.0, "expected knee tuck, flex={}", tucked.flex);
+		assert!(
+			extended.transform.rotation.dot(tucked.transform.rotation).abs() < 0.95,
+			"knee rotation should change across stride"
+		);
 	}
 
 	#[test]

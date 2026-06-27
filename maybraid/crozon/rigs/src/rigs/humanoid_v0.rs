@@ -1,8 +1,6 @@
 use bevy::prelude::*;
-use std::collections::HashMap;
 
 use crate::{
-	articulation::{BoneArticulationFrame, FlexAxis},
 	humanoid::{
 		HumanoidArm, HumanoidLeg, HumanoidNeck, HumanoidRig, HumanoidSpine, LegSegmentLengths,
 	},
@@ -19,7 +17,6 @@ pub struct HumanoidV0Rig {
 	pub bones: BoneTable,
 	pub pose: RigPose,
 	pub segment_lengths: LegSegmentLengths,
-	articulation_frames: HashMap<Name, BoneArticulationFrame>,
 }
 
 impl HumanoidV0Rig {
@@ -29,36 +26,7 @@ impl HumanoidV0Rig {
 			bones.insert(BoneDefinition { name: Name::from(name), relative_axis });
 		}
 
-		let mut rig = Self {
-			bones,
-			pose: RigPose::new(),
-			segment_lengths: LegSegmentLengths::default(),
-			articulation_frames: HashMap::new(),
-		};
-		rig.install_articulation_frames();
-		rig
-	}
-
-	/// Derive each bone's swing/flex axes statically from its `RiggedAxis` orientation.
-	///
-	/// No runtime probing: if a bone is exported with an unexpected orientation, encode the
-	/// correction in its `RiggedAxis` entry and the articulation axes follow automatically.
-	fn install_articulation_frames(&mut self) {
-		for bone in self.animation_bones() {
-			let axis = self.bones.get(&bone).map(|bone| bone.relative_axis).unwrap_or_default();
-			let frame =
-				BoneArticulationFrame::from_rigged_axis(axis, flex_axis_kind(bone.as_str()));
-			self.articulation_frames.insert(bone, frame);
-		}
-	}
-}
-
-/// Map a bone's anatomical role to the plane it flexes in.
-fn flex_axis_kind(bone: &str) -> FlexAxis {
-	if bone.starts_with("shoulder") || bone.starts_with("pelvis") || bone.starts_with("humerus") {
-		FlexAxis::Frontal
-	} else {
-		FlexAxis::Hinge
+		Self { bones, pose: RigPose::new(), segment_lengths: LegSegmentLengths::default() }
 	}
 }
 
@@ -66,34 +34,34 @@ impl HumanoidRig for HumanoidV0Rig {
 	fn leg(&self, side: Side) -> HumanoidLeg {
 		let suffix = side.suffix();
 		HumanoidLeg {
-			pelvis: BonePose::new(format!("pelvis.{suffix}"), Transform::IDENTITY),
-			femur: BonePose::new(format!("femur.{suffix}"), Transform::IDENTITY),
-			shin: BonePose::new(format!("shin.{suffix}"), Transform::IDENTITY),
+			pelvis: self.bone_pose(format!("pelvis.{suffix}")),
+			femur: self.bone_pose(format!("femur.{suffix}")),
+			shin: self.bone_pose(format!("shin.{suffix}")),
 		}
 	}
 
 	fn arm(&self, side: Side) -> HumanoidArm {
 		let suffix = side.suffix();
 		HumanoidArm {
-			shoulder: BonePose::new(format!("shoulder.{suffix}"), Transform::IDENTITY),
-			humerus: BonePose::new(format!("humerus.{suffix}"), Transform::IDENTITY),
-			forearm: BonePose::new(format!("forearm.{suffix}"), Transform::IDENTITY),
+			shoulder: self.bone_pose(format!("shoulder.{suffix}")),
+			humerus: self.bone_pose(format!("humerus.{suffix}")),
+			forearm: self.bone_pose(format!("forearm.{suffix}")),
 		}
 	}
 
 	fn spine(&self) -> HumanoidSpine {
 		HumanoidSpine {
-			root: BonePose::new("root", Transform::IDENTITY),
-			lumbar: BonePose::new("lumbar", Transform::IDENTITY),
-			midback: BonePose::new("midback", Transform::IDENTITY),
-			upper_back: BonePose::new("upper_back", Transform::IDENTITY),
+			root: self.bone_pose("root"),
+			lumbar: self.bone_pose("lumbar"),
+			midback: self.bone_pose("midback"),
+			upper_back: self.bone_pose("upper_back"),
 		}
 	}
 
 	fn neck(&self) -> HumanoidNeck {
 		HumanoidNeck {
-			lower_neck: BonePose::new("lower_neck", Transform::IDENTITY),
-			upper_neck: BonePose::new("upper_neck", Transform::IDENTITY),
+			lower_neck: self.bone_pose("lower_neck"),
+			upper_neck: self.bone_pose("upper_neck"),
 		}
 	}
 
@@ -113,8 +81,8 @@ impl HumanoidRig for HumanoidV0Rig {
 			.unwrap_or(1.0)
 	}
 
-	fn articulation_frame(&self, bone: &Name) -> Option<BoneArticulationFrame> {
-		self.articulation_frames.get(bone).copied()
+	fn rigged_axis(&self, bone: &Name) -> Option<RiggedAxis> {
+		self.bones.get(bone).map(|bone| bone.relative_axis)
 	}
 
 	fn animation_bones(&self) -> Vec<Name> {
@@ -127,7 +95,7 @@ impl HumanoidRig for HumanoidV0Rig {
 }
 
 fn flex_sign_from_axis(axis: RiggedAxis) -> f32 {
-	if axis.forward.dot(RiggedAxis::DEFAULT.forward) < 0.0 {
+	if axis.flex_axis.dot(RiggedAxis::DEFAULT.flex_axis) < 0.0 {
 		-1.0
 	} else {
 		1.0
@@ -135,6 +103,14 @@ fn flex_sign_from_axis(axis: RiggedAxis) -> f32 {
 }
 
 impl HumanoidV0Rig {
+	fn bone_pose(&self, name: impl Into<Name>) -> BonePose {
+		let name = name.into();
+		self.pose
+			.get(&name)
+			.cloned()
+			.unwrap_or_else(|| BonePose::new(name, Transform::IDENTITY))
+	}
+
 	pub fn animation_bones(&self) -> Vec<Name> {
 		let left_arm = self.arm(Side::Left);
 		let right_arm = self.arm(Side::Right);
@@ -195,12 +171,12 @@ pub const HUMANOID_V0_BONE_DEFINITIONS: [(&str, RiggedAxis); 37] = [
 	("lower_belly", RiggedAxis::DEFAULT),
 	("pelvis.L", RiggedAxis::DEFAULT),
 	("femur.L", RiggedAxis::DEFAULT),
-	("shin.L", RiggedAxis::DEFAULT),
+	("shin.L", RiggedAxis::SHIN),
 	("calf_thickness.L", RiggedAxis::DEFAULT),
 	("thigh_thickness.L", RiggedAxis::DEFAULT),
 	("pelvis.R", RiggedAxis::DEFAULT),
 	("femur.R", RiggedAxis::DEFAULT),
-	("shin.R", RiggedAxis::DEFAULT),
+	("shin.R", RiggedAxis::SHIN),
 	("calf_thickness.R", RiggedAxis::DEFAULT),
 	("thigh_thickness.R", RiggedAxis::DEFAULT),
 	("buttocks", RiggedAxis::DEFAULT),

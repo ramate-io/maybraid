@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 
-use crate::{articulation::BoneArticulationFrame, BonePose, Name, RigPose, Side};
+use crate::{BonePose, Name, RigPose, RiggedAxis, Side};
 
 /// Rest-pose thigh and shin segment lengths used for analytic IK-style drop.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -127,15 +127,15 @@ pub trait HumanoidRig {
 		1.0
 	}
 
-	/// Static per-bone swing/flex axes derived from the rig's `RiggedAxis` orientation.
-	fn articulation_frame(&self, _bone: &Name) -> Option<BoneArticulationFrame> {
+	/// Static per-bone swing/flex axes for the rig.
+	fn rigged_axis(&self, _bone: &Name) -> Option<RiggedAxis> {
 		None
 	}
 
-	/// Apply swing/flex about the bone's static local articulation axes.
+	/// Apply swing/flex about the bone's rig-defined local axes.
 	fn articulate_on_rig(&self, mut bone: BonePose, swing: f32, flex: f32) -> BonePose {
-		if let Some(frame) = self.articulation_frame(&bone.name) {
-			bone = bone.articulate(frame, swing, flex);
+		if let Some(axis) = self.rigged_axis(&bone.name) {
+			bone = bone.articulate(axis, swing, flex);
 		} else {
 			bone.swing = swing;
 			bone.flex = flex;

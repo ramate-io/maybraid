@@ -3,8 +3,6 @@ pub mod humanoid;
 pub mod rigs;
 pub mod sliders;
 
-pub use articulation::{BoneArticulationFrame, FlexAxis};
-
 use bevy::prelude::*;
 use std::{collections::HashMap, fmt};
 
@@ -54,28 +52,19 @@ impl Side {
 	}
 }
 
-/// The orientation of a bone in the rig, expressed in its local articulation frame.
+/// The local axes a rigged bone uses for procedural articulation.
 ///
-/// `swing`/`flex` articulation rotates about these axes (see
-/// [`crate::articulation`]), so they describe the bone's anatomical directions in the
-/// space its `Transform.rotation` lives in:
+/// These are expressed in the same local space as the bone's `Transform.rotation`.
+/// Animation code supplies semantic `swing` and `flex` magnitudes; the rig decides
+/// which concrete local axes those magnitudes use.
 ///
-/// - `right` is the medial-lateral axis. Sagittal (dorsal-ventral, front/back) swing and
-///   hinge flex rotate about it.
-/// - `forward` is the dorsal-ventral axis. Frontal-plane lift/pitch (e.g. shoulder raise,
-///   hip abduction) rotates about it.
-/// - `up` is the bone's long (superior-inferior) axis; twist would rotate about it.
-///
-/// For the imported humanoid, the bones are oriented so the sagittal bend axis is Bevy
-/// `Y`, the frontal axis is Bevy `Z`, and the bone runs along Bevy `X`. If a future rig
-/// follows the textbook `right = X` convention, override that bone's `RiggedAxis`.
-///
-/// NOTE: I believe the below can be reduced from three axes to two, plus a sign.
+/// `twist_axis` is included for completeness, even though current animations only use
+/// swing and flex.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct RiggedAxis {
-	pub forward: Vec3,
-	pub up: Vec3,
-	pub right: Vec3,
+	pub swing_axis: Vec3,
+	pub flex_axis: Vec3,
+	pub twist_axis: Vec3,
 }
 
 impl Default for RiggedAxis {
@@ -85,7 +74,8 @@ impl Default for RiggedAxis {
 }
 
 impl RiggedAxis {
-	pub const DEFAULT: Self = Self { forward: Vec3::Z, up: Vec3::X, right: Vec3::Y };
+	pub const DEFAULT: Self = Self { swing_axis: Vec3::Y, flex_axis: Vec3::Z, twist_axis: Vec3::X };
+	pub const SHIN: Self = Self { swing_axis: Vec3::Y, flex_axis: Vec3::X, twist_axis: Vec3::Z };
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -167,18 +157,12 @@ impl BonePose {
 		Self { name: name.into(), transform: Transform::from_translation(translation), swing, flex }
 	}
 
-	/// Apply swing/flex about the bone's static local articulation axes.
-	pub fn articulate(mut self, frame: BoneArticulationFrame, swing: f32, flex: f32) -> Self {
+	/// Apply swing/flex about this bone's rig-defined local axes.
+	pub fn articulate(mut self, axis: RiggedAxis, swing: f32, flex: f32) -> Self {
 		self.swing = swing;
 		self.flex = flex;
 		let rest = self.transform.rotation;
-		self.transform.rotation = articulation::compose_local_rotation(
-			rest,
-			frame.swing_axis,
-			swing,
-			frame.flex_axis,
-			flex,
-		);
+		self.transform.rotation = articulation::compose_local_rotation(rest, axis, swing, flex);
 		self
 	}
 }
