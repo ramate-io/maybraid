@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 
-use crate::{BonePose, Name, RigPose, Side};
+use crate::{articulation::BoneArticulationFrame, BonePose, Name, RigPose, Side};
 
 /// Rest-pose thigh and shin segment lengths used for analytic IK-style drop.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -125,6 +125,32 @@ pub trait HumanoidRig {
 	/// +1 or −1 so mirrored forearms flex forward consistently in run animation.
 	fn forearm_flex_sign(&self, _side: Side) -> f32 {
 		1.0
+	}
+
+	fn articulation_frame(&self, _bone: &Name) -> Option<BoneArticulationFrame> {
+		None
+	}
+
+	fn parent_rot(&self, _bone: &Name) -> Quat {
+		Quat::IDENTITY
+	}
+
+	fn set_articulation_frame(&mut self, _bone: Name, _frame: BoneArticulationFrame) {}
+
+	fn set_parent_rot(&mut self, _bone: Name, _rot: Quat) {}
+
+	fn clear_parent_rots(&mut self) {}
+
+	/// Apply swing/flex using stored articulation frame and parent rotation.
+	fn articulate_on_rig(&self, mut bone: BonePose, swing: f32, flex: f32) -> BonePose {
+		let name = bone.name.clone();
+		if let Some(frame) = self.articulation_frame(&name) {
+			bone = bone.articulate(self.parent_rot(&name), frame, swing, flex);
+		} else {
+			bone.swing = swing;
+			bone.flex = flex;
+		}
+		bone
 	}
 
 	fn leg_pose(&self, side: Side) -> HumanoidLeg {

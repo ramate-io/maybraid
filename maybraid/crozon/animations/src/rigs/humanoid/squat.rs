@@ -1,5 +1,4 @@
-use bevy::prelude::Quat;
-use crozon_rigs::{humanoid::HumanoidRig, BonePose, Side};
+use crozon_rigs::{humanoid::HumanoidRig, Side};
 
 use crate::{animations::Squat, Animation};
 
@@ -17,22 +16,15 @@ impl<R: HumanoidRig> Animation<R> for Squat<R> {
 fn apply_leg<R: HumanoidRig>(rig: &mut R, side: Side, femur_swing: f32, shin_flex: f32) {
 	let mut leg = rig.leg_pose(side);
 
-	leg.femur = articulated(leg.femur, femur_swing, 0.0);
-	leg.shin = articulated(leg.shin, 0.0, shin_flex);
+	leg.femur = rig.articulate_on_rig(leg.femur, femur_swing, 0.0);
+	leg.shin = rig.articulate_on_rig(leg.shin, 0.0, shin_flex);
 	rig.pose_leg(leg);
 }
 
 fn apply_root<R: HumanoidRig>(rig: &mut R, root_swing: f32) {
 	let mut spine = rig.spine_pose();
-	spine.root = articulated(spine.root, root_swing, 0.0);
+	spine.root = rig.articulate_on_rig(spine.root, root_swing, 0.0);
 	rig.pose_spine(spine);
-}
-
-fn articulated(mut bone: BonePose, swing: f32, flex: f32) -> BonePose {
-	bone.swing = swing;
-	bone.flex = flex;
-	bone.transform.rotation = Quat::from_rotation_x(swing + flex) * bone.transform.rotation;
-	bone
 }
 
 #[cfg(test)]

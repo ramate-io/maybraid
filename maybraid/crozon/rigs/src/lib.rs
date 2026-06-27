@@ -1,6 +1,9 @@
+pub mod articulation;
 pub mod humanoid;
 pub mod rigs;
 pub mod sliders;
+
+pub use articulation::{compose_world_rotations, BoneArticulationFrame};
 
 use bevy::prelude::*;
 use std::{collections::HashMap, fmt};
@@ -158,6 +161,28 @@ impl BonePose {
 
 	pub fn with_pose(name: impl Into<Name>, swing: f32, flex: f32, translation: Vec3) -> Self {
 		Self { name: name.into(), transform: Transform::from_translation(translation), swing, flex }
+	}
+
+	/// Apply swing/flex using world-space axes, producing a local bone rotation.
+	pub fn articulate(
+		mut self,
+		parent_rot: Quat,
+		frame: BoneArticulationFrame,
+		swing: f32,
+		flex: f32,
+	) -> Self {
+		self.swing = swing;
+		self.flex = flex;
+		let rest = self.transform.rotation;
+		self.transform.rotation = compose_world_rotations(
+			rest,
+			parent_rot,
+			frame.swing_axis,
+			swing,
+			frame.flex_axis,
+			flex,
+		);
+		self
 	}
 }
 
