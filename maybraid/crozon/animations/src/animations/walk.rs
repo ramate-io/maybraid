@@ -41,20 +41,20 @@ pub struct Walk<Rig> {
 impl<Rig> Default for Walk<Rig> {
 	fn default() -> Self {
 		Self {
-			arm_down: 0.35,
+			arm_down: 1.2,
 			elbow_bend: 0.35,
 			elbow_pump: 0.12,
 			elbow_cycle: 0.05,
 			shoulder_swing: 0.08,
 			shoulder_lift: 0.0,
-			hip_swing: 0.1,
+			hip_swing: 0.03,
 			hip_lift: 0.15,
-			stride: 0.46,
-			femur_medial_counter: 0.2,
+			stride: 0.35,
+			femur_medial_counter: 0.1,
 			humerus_swing_scale: 0.5,
 			torso_lean: 0.08,
 			knee_stance_bend: 0.1,
-			knee_swing_bend: 0.2,
+			knee_swing_bend: 0.8,
 			_rig: PhantomData,
 		}
 	}
