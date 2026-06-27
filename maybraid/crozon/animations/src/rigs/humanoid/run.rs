@@ -36,6 +36,7 @@ impl<R: HumanoidRig> Animation<R> for Run<R> {
 fn apply_leg<R: HumanoidRig>(rig: &mut R, side: Side, phase: f32, lift_sign: f32, run: &Run<R>) {
 	let mut leg = rig.leg_pose(side);
 	let swing = thigh_swing(phase);
+	let knee_phase = if side == Side::Left { phase } else { phase + 0.5 };
 
 	leg.pelvis = rig.articulate_on_rig(
 		leg.pelvis,
@@ -45,7 +46,7 @@ fn apply_leg<R: HumanoidRig>(rig: &mut R, side: Side, phase: f32, lift_sign: f32
 	leg.femur = rig.articulate_on_rig(leg.femur, swing * run.stride, 0.0);
 	// Reference `knee_flex` is a sagittal rotation magnitude; locally, bind-pose straight
 	// matches `knee_extended` (see squat — flex is a delta from stand, not absolute π/2).
-	leg.shin = rig.articulate_on_rig(leg.shin, 0.0, knee_flex(phase, run) - run.knee_extended);
+	leg.shin = rig.articulate_on_rig(leg.shin, 0.0, knee_flex(knee_phase, run) - run.knee_extended);
 	rig.pose_leg(leg);
 }
 
