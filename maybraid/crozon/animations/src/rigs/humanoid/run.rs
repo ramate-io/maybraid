@@ -10,7 +10,7 @@ impl<R: HumanoidRig> Animation<R> for Run<R> {
 		let left_arm_swing = -arm_swing(phase + 0.5);
 		let right_arm_swing = arm_swing(phase);
 
-		apply_leg(rig, Side::Left, phase + 0.5, -1.0, self);
+		apply_leg(rig, Side::Left, phase, -1.0, self);
 		apply_leg(rig, Side::Right, phase, 1.0, self);
 		apply_arm(
 			rig,
