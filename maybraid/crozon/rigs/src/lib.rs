@@ -1,4 +1,5 @@
 pub mod articulation;
+pub mod debug;
 pub mod humanoid;
 pub mod rigs;
 pub mod sliders;

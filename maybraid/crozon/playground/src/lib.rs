@@ -13,7 +13,7 @@ pub use camera::CameraController;
 pub use commands::{PlaygroundCommand, PLAYGROUND_CLI_NAME};
 pub use game_commands::command::PendingStartupCommand;
 
-use animation::{animate_limbs, init_limb_animators};
+use animation::{animate_limbs, init_limb_animators, AnimationArticulationDebug};
 use bevy::prelude::*;
 use character::CharacterConfig;
 use game_commands::command::{capture_command_line_input, GameCommandPlugin};
@@ -29,6 +29,7 @@ impl Plugin for CrozonCharacterPlaygroundPlugin {
 	fn build(&self, app: &mut App) {
 		app.init_resource::<CharacterConfig>()
 			.init_resource::<character::CharacterSyncState>()
+			.init_resource::<AnimationArticulationDebug>()
 			.init_resource::<DumpBonesRequest>()
 			.add_plugins(GameCommandPlugin::<PlaygroundCommand>::with_config(ui::ui_config()))
 			.add_plugins(

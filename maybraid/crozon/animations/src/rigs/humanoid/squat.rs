@@ -1,15 +1,22 @@
+use bevy::prelude::{Transform, Vec3};
 use crozon_rigs::{humanoid::HumanoidRig, Side};
 
-use crate::{animations::Squat, Animation};
+use crate::{animations::Squat, Effects, Animation};
 
 impl<R: HumanoidRig> Animation<R> for Squat<R> {
-	fn apply(&self, rig: &mut R) {
+	fn apply(&self, rig: &mut R) -> Effects {
 		let femur_swing = self.femur_swing();
 		let shin_flex = self.shin_flex();
 
 		apply_leg(rig, Side::Left, femur_swing, shin_flex);
 		apply_leg(rig, Side::Right, femur_swing, shin_flex);
 		apply_root(rig, self.root_swing());
+
+		let drop = self.vertical_drop(rig.segment_lengths());
+		Effects {
+			r#move: (drop > f32::EPSILON)
+				.then(|| Transform::from_translation(Vec3::new(0.0, -drop, 0.0))),
+		}
 	}
 }
 
@@ -31,7 +38,7 @@ fn apply_root<R: HumanoidRig>(rig: &mut R, root_swing: f32) {
 mod tests {
 	use std::f32::consts::{FRAC_PI_2, FRAC_PI_4};
 
-	use bevy::prelude::Vec3;
+	use bevy::prelude::{Transform, Vec3};
 	use crozon_rigs::rigs::humanoid_v0::HumanoidV0Rig;
 
 	use super::*;
@@ -39,7 +46,7 @@ mod tests {
 	#[test]
 	fn stand_phase_keeps_pose_neutral() {
 		let mut rig = HumanoidV0Rig::imported();
-		Squat::<HumanoidV0Rig>::new(0.0).apply(&mut rig);
+		let effects = Squat::<HumanoidV0Rig>::new(0.0).apply(&mut rig);
 
 		let femur = rig.pose().get(&rig.leg(Side::Left).femur.name).expect("left femur pose");
 		let shin = rig.pose().get(&rig.leg(Side::Left).shin.name).expect("left shin pose");
@@ -48,6 +55,7 @@ mod tests {
 		assert_eq!(shin.flex, 0.0);
 		assert_eq!(root.swing, 0.0);
 		assert_eq!(femur.transform.translation, Vec3::ZERO);
+		assert!(effects.r#move.is_none());
 	}
 
 	#[test]
@@ -69,19 +77,24 @@ mod tests {
 	}
 
 	#[test]
-	fn deepest_squat_leaves_translations_neutral_for_now() {
+	fn deepest_squat_returns_armature_drop_without_bone_translation() {
 		let mut rig = HumanoidV0Rig::imported();
-		Squat::<HumanoidV0Rig>::new(0.5).apply(&mut rig);
+		rig.pose.insert(crozon_rigs::BonePose::new(
+			rig.leg(Side::Left).femur.name.clone(),
+			Transform::from_translation(Vec3::new(0.0, 0.25, 0.0)),
+		));
 
-		for bone in [
-			rig.leg(Side::Left).femur.name,
-			rig.leg(Side::Left).shin.name,
-			rig.leg(Side::Right).femur.name,
-			rig.leg(Side::Right).shin.name,
-			rig.spine().root.name,
-		] {
-			let pose = rig.pose().get(&bone).unwrap_or_else(|| panic!("missing pose for {bone}"));
-			assert_eq!(pose.transform.translation, Vec3::ZERO, "unexpected translation on {bone}");
-		}
+		let squat = Squat::<HumanoidV0Rig>::new(0.5);
+		let effects = squat.apply(&mut rig);
+
+		let drop = squat.vertical_drop(rig.segment_lengths());
+		assert!(drop > 0.0);
+		assert_eq!(
+			effects.r#move,
+			Some(Transform::from_translation(Vec3::new(0.0, -drop, 0.0)))
+		);
+
+		let femur = rig.pose().get(&rig.leg(Side::Left).femur.name).expect("left femur");
+		assert_eq!(femur.transform.translation, Vec3::new(0.0, 0.25, 0.0));
 	}
 }

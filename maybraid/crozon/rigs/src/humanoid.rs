@@ -183,9 +183,28 @@ pub trait HumanoidRig {
 		neck.apply_to(self.pose_mut());
 	}
 
-	/// Move every animation bone in the current pose by a uniform translation.
-	fn move_all(&mut self, translation: Vec3) {
+	/// World rotation of the bone's parent at the current pose (identity when unknown).
+	fn parent_world_rotation(&self, _bone: &Name) -> Quat {
+		Quat::IDENTITY
+	}
+
+	/// Shift every animation bone by a world-space displacement without shortening bind segments.
+	fn move_all(&mut self, world_displacement: Vec3) {
 		let bones = self.animation_bones();
-		self.pose_mut().move_all(bones, translation);
+		for bone in bones {
+			let parent_world = self.parent_world_rotation(&bone);
+			let axis = self.rigged_axis(&bone).unwrap_or(RiggedAxis::DEFAULT);
+			let Some(pose) = self.pose_mut().get_mut(&bone) else {
+				continue;
+			};
+			let segment = pose.transform.translation;
+			let delta = crate::articulation::axis_aware_translation_delta(
+				segment,
+				axis,
+				world_displacement,
+				parent_world,
+			);
+			pose.transform.translation += delta;
+		}
 	}
 }

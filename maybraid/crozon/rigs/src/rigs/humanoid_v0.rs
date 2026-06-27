@@ -97,6 +97,10 @@ impl HumanoidRig for HumanoidV0Rig {
 	fn segment_lengths(&self) -> LegSegmentLengths {
 		self.segment_lengths
 	}
+
+	fn parent_world_rotation(&self, bone: &Name) -> Quat {
+		self.parent_world_rotation_for(bone)
+	}
 }
 
 impl HumanoidV0Rig {
@@ -106,6 +110,20 @@ impl HumanoidV0Rig {
 			.get(&name)
 			.cloned()
 			.unwrap_or_else(|| BonePose::new(name, Transform::IDENTITY))
+	}
+
+	fn local_rotation(&self, bone: &Name) -> Quat {
+		self.pose.get(bone).map(|pose| pose.transform.rotation).unwrap_or(Quat::IDENTITY)
+	}
+
+	fn world_rotation_for(&self, bone: &Name) -> Quat {
+		self.parent_world_rotation_for(bone) * self.local_rotation(bone)
+	}
+
+	fn parent_world_rotation_for(&self, bone: &Name) -> Quat {
+		humanoid_v0_parent(bone.as_str())
+			.map(|parent| self.world_rotation_for(&Name::from(parent)))
+			.unwrap_or(Quat::IDENTITY)
 	}
 
 	pub fn animation_bones(&self) -> Vec<Name> {
@@ -183,6 +201,34 @@ pub fn humanoid_v0_bone_names() -> impl Iterator<Item = &'static str> {
 	HUMANOID_V0_BONE_DEFINITIONS.into_iter().map(|(name, _axis)| name)
 }
 
+/// Parent links for world-space displacement (includes non-animated spine ancestors).
+const HUMANOID_V0_PARENT: &[(&str, &str)] = &[
+	("root", ""),
+	("lumbar", "root"),
+	("midback", "lumbar"),
+	("upper_back", "midback"),
+	("shoulder.L", "upper_back"),
+	("shoulder.R", "upper_back"),
+	("humerus.L", "shoulder.L"),
+	("humerus.R", "shoulder.R"),
+	("forearm.L", "humerus.L"),
+	("forearm.R", "humerus.R"),
+	("pelvis.L", ""),
+	("pelvis.R", ""),
+	("femur.L", "pelvis.L"),
+	("femur.R", "pelvis.R"),
+	("shin.L", "femur.L"),
+	("shin.R", "femur.R"),
+];
+
+fn humanoid_v0_parent(name: &str) -> Option<&'static str> {
+	HUMANOID_V0_PARENT
+		.iter()
+		.find(|(child, _)| *child == name)
+		.map(|(_, parent)| *parent)
+		.filter(|parent| !parent.is_empty())
+}
+
 #[cfg(test)]
 mod tests {
 	use super::*;
@@ -194,21 +240,31 @@ mod tests {
 	}
 
 	#[test]
-	fn humanoid_v0_move_all_updates_animation_bones() {
+	fn humanoid_v0_move_all_lowers_root_without_shortening_segments() {
 		let mut rig = HumanoidV0Rig::imported();
-		rig.pose_leg({
-			let mut leg = rig.leg(Side::Left);
-			leg.femur = BonePose::with_articulation(leg.femur.name, 0.25, 0.0);
-			leg
-		});
+		rig.pose.insert(BonePose::new(
+			Name::from("root"),
+			Transform::from_translation(Vec3::ZERO),
+		));
+		rig.pose.insert(BonePose::new(
+			Name::from("femur.L"),
+			Transform::from_translation(Vec3::new(0.0, 0.25, 0.0)),
+		));
+		rig.pose.insert(BonePose::new(
+			Name::from("shoulder.L"),
+			Transform::from_translation(Vec3::new(0.0, 0.1, 0.0)),
+		));
+
 		rig.move_all(Vec3::new(0.0, -0.15, 0.0));
 
+		let root = rig.pose().get(&Name::from("root")).expect("root pose");
+		assert_eq!(root.transform.translation, Vec3::new(0.0, -0.15, 0.0));
+
 		let femur = rig.pose().get(&Name::from("femur.L")).expect("femur pose");
-		assert_eq!(femur.swing, 0.25);
-		assert_eq!(femur.transform.translation, Vec3::new(0.0, -0.15, 0.0));
+		assert_eq!(femur.transform.translation, Vec3::new(0.0, 0.25, 0.0));
 
 		let shoulder = rig.pose().get(&Name::from("shoulder.L")).expect("shoulder pose");
-		assert_eq!(shoulder.transform.translation, Vec3::new(0.0, -0.15, 0.0));
+		assert_eq!(shoulder.transform.translation, Vec3::new(0.0, 0.1, 0.0));
 	}
 
 	#[test]

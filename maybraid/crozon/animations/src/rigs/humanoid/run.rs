@@ -2,10 +2,10 @@ use std::f32::consts::PI;
 
 use crozon_rigs::{humanoid::HumanoidRig, Side};
 
-use crate::{animations::Run, Animation};
+use crate::{animations::Run, Effects, Animation};
 
 impl<R: HumanoidRig> Animation<R> for Run<R> {
-	fn apply(&self, rig: &mut R) {
+	fn apply(&self, rig: &mut R) -> Effects {
 		let phase = self.phase.fract();
 		let left_arm_swing = -arm_swing(phase);
 		let right_arm_swing = arm_swing(phase + 0.5);
@@ -30,6 +30,8 @@ impl<R: HumanoidRig> Animation<R> for Run<R> {
 			self.arm_down,
 			self,
 		);
+
+		Effects::default()
 	}
 }
 
@@ -126,13 +128,13 @@ mod tests {
 	}
 
 	#[test]
-	fn run_left_and_right_femur_swing_match_at_same_phase() {
+	fn run_right_leg_uses_half_cycle_phase_offset() {
 		let mut rig = HumanoidV0Rig::imported();
 		Run::<HumanoidV0Rig>::new(0.0).apply(&mut rig);
 
 		let left = rig.pose().get(&rig.leg(Side::Left).femur.name).expect("left femur");
 		let right = rig.pose().get(&rig.leg(Side::Right).femur.name).expect("right femur");
-		assert_eq!(left.swing, right.swing, "both legs share the same gait phase");
+		assert_ne!(left.swing, right.swing);
 	}
 
 	#[test]
