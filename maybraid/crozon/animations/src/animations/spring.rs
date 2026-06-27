@@ -20,8 +20,13 @@ impl<Rig> Spring<Rig> {
 
 	/// Ease-out 0 at crouch, 1 at full extension.
 	pub fn extend_amount(&self) -> f32 {
-		let t = self.phase.fract();
+		let t = self.phase.clamp(0.0, 1.0);
 		1.0 - (1.0 - t).powi(2)
+	}
+
+	/// Fully extended spring pose (for mix targets).
+	pub fn extended() -> Self {
+		Self::new(1.0, Squat::default())
 	}
 
 	pub fn femur_swing(&self) -> f32 {

@@ -2,9 +2,8 @@ use bevy::prelude::{Transform, Vec3};
 use crozon_rigs::humanoid::HumanoidRig;
 
 use crate::animations::{
-	Fall, JumpSegment, Land, Spring, Squat, TwoFootedJump,
+	Fall, JumpSegment, Land, Smooth, Spring, Squat, TwoFootedJump,
 };
-use crate::rigs::humanoid::squat::apply_squat_windup;
 use crate::{Effects, Animation};
 
 impl<R: HumanoidRig> Animation<R> for TwoFootedJump<R> {
@@ -14,12 +13,15 @@ impl<R: HumanoidRig> Animation<R> for TwoFootedJump<R> {
 
 		match segment {
 			JumpSegment::Squat => {
-				let squat = Squat::<R>::new(local);
-				apply_squat_windup(rig, &squat);
+				Squat::<R>::new(local).apply(rig);
 			}
 			JumpSegment::Spring => {
-				let spring = Spring::<R>::new(local, Squat::<R>::default());
-				spring.apply(rig);
+				Smooth::<_, _, R>::new(
+					Squat::<R>::new(0.0),
+					Spring::<R>::extended(),
+					local,
+				)
+				.apply(rig);
 			}
 			JumpSegment::Fall => {
 				Fall::<R>::new(local).apply(rig);
@@ -54,6 +56,20 @@ mod tests {
 		let shin = rig.pose().get(&rig.leg(Side::Left).shin.name).expect("shin");
 		assert!(femur.swing.abs() < 0.05);
 		assert!(shin.flex.abs() < 0.05);
+		Ok(())
+	}
+
+	#[test]
+	fn spring_midpoint_blends_from_stand() -> anyhow::Result<()> {
+		let mut rig = HumanoidV0Rig::imported();
+		crate::rigs::mix::seed_bind_pose(&mut rig);
+		let phase = SQUAT_SEGMENT_END + (SPRING_SEGMENT_END - SQUAT_SEGMENT_END) * 0.5;
+		TwoFootedJump::<HumanoidV0Rig>::new(phase).apply(&mut rig);
+
+		let shoulder = rig.pose().get(&rig.arm(Side::Left).shoulder.name).expect("shoulder");
+		let full = Spring::<HumanoidV0Rig>::extended().shoulder_swing();
+		assert!(shoulder.swing < 0.0);
+		assert!(shoulder.swing.abs() < full.abs());
 		Ok(())
 	}
 
@@ -97,6 +113,17 @@ mod tests {
 		let end = TwoFootedJump::<HumanoidV0Rig>::new(0.999).apply(&mut rig);
 		let y = end.r#move.map(|t| t.translation.y).unwrap_or(0.0);
 		assert!(y.abs() < 0.1);
+		Ok(())
+	}
+
+	#[test]
+	fn squat_to_spring_vertical_is_continuous() -> anyhow::Result<()> {
+		let lengths = crozon_rigs::humanoid::LegSegmentLengths::default();
+		let squat_end = TwoFootedJump::<()>::new(SQUAT_SEGMENT_END * 0.99);
+		let spring_start = TwoFootedJump::<()>::new(SQUAT_SEGMENT_END);
+		assert!(
+			(squat_end.vertical_offset(lengths) - spring_start.vertical_offset(lengths)).abs() < 0.05
+		);
 		Ok(())
 	}
 }

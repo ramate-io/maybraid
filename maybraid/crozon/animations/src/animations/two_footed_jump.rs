@@ -65,11 +65,10 @@ impl<Rig> TwoFootedJump<Rig> {
 		let jump_height = self.jump_height(lengths);
 
 		match segment {
-			JumpSegment::Squat => -squat.wind_up_vertical_drop(lengths),
+			JumpSegment::Squat => -squat.vertical_drop(lengths),
 			JumpSegment::Spring => {
 				let spring = Spring::<Rig>::new(local, Squat::<Rig>::default());
-				let bottom = -spring.start_drop(lengths);
-				bottom + (jump_height - bottom) * spring.extend_amount()
+				jump_height * spring.extend_amount()
 			}
 			JumpSegment::Fall => jump_height,
 			JumpSegment::Land => {
@@ -115,8 +114,11 @@ mod tests {
 		let jump = TwoFootedJump::<()>::new(0.99);
 		assert!(jump.vertical_offset(lengths).abs() < 0.05);
 
-		let squat_bottom = TwoFootedJump::<()>::new(SQUAT_SEGMENT_END * 0.99);
+		let squat_bottom = TwoFootedJump::<()>::new(SQUAT_SEGMENT_END * 0.5);
 		assert!(squat_bottom.vertical_offset(lengths) < 0.0);
+
+		let squat_end = TwoFootedJump::<()>::new(SQUAT_SEGMENT_END * 0.99);
+		assert!(squat_end.vertical_offset(lengths).abs() < 0.05);
 
 		let apex = TwoFootedJump::<()>::new((SPRING_SEGMENT_END + FALL_SEGMENT_END) * 0.5);
 		assert!(apex.vertical_offset(lengths) > 0.0);

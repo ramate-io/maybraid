@@ -22,16 +22,6 @@ impl<R: HumanoidRig> Animation<R> for Squat<R> {
 	}
 }
 
-/// Squat wind-up segment for jump (monotonic 0 → full squat).
-pub fn apply_squat_windup<R: HumanoidRig>(rig: &mut R, squat: &Squat<R>) {
-	let femur_swing = squat.wind_up_femur_swing();
-	let shin_flex = squat.wind_up_shin_flex();
-
-	apply_leg(rig, Side::Left, femur_swing, shin_flex);
-	apply_leg(rig, Side::Right, femur_swing, shin_flex);
-	apply_root(rig, squat.wind_up_root_swing());
-}
-
 #[cfg(test)]
 mod tests {
 	use std::f32::consts::{FRAC_PI_2, FRAC_PI_4};
