@@ -192,11 +192,11 @@ impl<Rig> TwoFootedJump<Rig> {
 			return (JumpSegment::Spring, t / timings.spring_duration);
 		}
 		t -= timings.spring_duration;
-		if t < timings.air_duration {
+		if t < timings.air_duration - 0.1 {
 			return (JumpSegment::Fall, t / timings.air_duration);
 		}
 		t -= timings.air_duration;
-		(JumpSegment::Land, t)
+		(JumpSegment::Land, t + 0.15)
 	}
 
 	pub fn segment(&self, lengths: LegSegmentLengths, elapsed: f32) -> (JumpSegment, f32) {

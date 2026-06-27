@@ -26,8 +26,7 @@ impl<R: HumanoidRig> Animation<R> for TwoFootedJump<R> {
 				squat.apply(rig, progress);
 			}
 			JumpSegment::Spring => {
-				let from_pose =
-					capture_animation_pose(&Squat::<R>::for_loop(1.0, 1.0), rig, 0.0);
+				let from_pose = capture_animation_pose(&Squat::<R>::for_loop(1.0, 1.0), rig, 0.0);
 				Transition::from_pose(Spring::<R>::default(), from_pose)
 					.with_curve(TransitionCurve::SmoothStep)
 					.apply(rig, local, local);
@@ -46,8 +45,7 @@ impl<R: HumanoidRig> Animation<R> for TwoFootedJump<R> {
 					);
 				}
 				if local < blend_end {
-					let from_pose =
-						capture_animation_pose(&Spring::<R>::default(), rig, 1.0);
+					let from_pose = capture_animation_pose(&Spring::<R>::default(), rig, 1.0);
 					let transition_progress = (local / blend_end).clamp(0.0, 1.0);
 					Transition::from_pose(fall, from_pose)
 						.with_curve(TransitionCurve::SmoothStep)
@@ -80,8 +78,7 @@ impl<R: HumanoidRig> Animation<R> for TwoFootedJump<R> {
 					);
 				}
 				if transition_progress < 1.0 {
-					let from_pose =
-						capture_animation_pose(&Fall::<R>::default(), rig, 1.0);
+					let from_pose = capture_animation_pose(&Fall::<R>::default(), rig, 1.0);
 					Transition::from_pose(land, from_pose)
 						.with_curve(TransitionCurve::SmoothStep)
 						.apply(rig, land_progress, transition_progress);
