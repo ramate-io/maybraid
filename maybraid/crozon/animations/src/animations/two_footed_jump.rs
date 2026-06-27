@@ -7,8 +7,8 @@
 //! - **`pre_squat_speed`** — how fast the character squats down before take-off
 //!   (stand to bottom in `1/pre_squat_speed` seconds). The return to stand before
 //!   spring is matched to launch speed from `jump_height` and `gravity`.
-//! - **`landing_squat_speed`** — scales landing compression (matched to impact speed)
-//!   and sets recovery rate (stand-up in `1/landing_squat_speed` seconds).
+//! - **`landing_squat_speed`** — scales landing compression from the impact-speed
+//!   baseline and sets recovery rate (stand-up in `1/landing_squat_speed` seconds).
 
 use std::marker::PhantomData;
 
@@ -158,11 +158,15 @@ impl<Rig> TwoFootedJump<Rig> {
 			windup_descent
 		};
 
-		let land_compression = if land_peak > f32::EPSILON {
-			(impact / land_peak) * self.landing_squat_speed.max(MIN_SPEED)
+		let land_compression_duration = if land_peak > f32::EPSILON && impact > f32::EPSILON {
+			// Literal distance / impact speed is only a few milliseconds at this rig scale,
+			// which lands between frames and reads as a snap. Use an impact-scaled square-root
+			// duration so higher falls still compress faster while remaining visible.
+			(land_peak / impact).sqrt() / self.landing_squat_speed.max(MIN_SPEED)
 		} else {
-			self.landing_squat_speed.max(MIN_SPEED)
+			1.0 / self.landing_squat_speed.max(MIN_SPEED)
 		};
+		let land_compression = 1.0 / land_compression_duration.max(MIN_SEGMENT_DURATION);
 		let land_recovery = self.landing_squat_speed.max(MIN_SPEED);
 
 		let windup = Squat::with_speeds(windup_descent, windup_ascent.max(MIN_SPEED));
@@ -241,12 +245,20 @@ impl<Rig> TwoFootedJump<Rig> {
 	}
 
 	pub fn landing_squat(&self, lengths: LegSegmentLengths) -> Land<Rig> {
-		let (_, landing) = self.squat_configs(lengths);
 		let (segment, time) = self.segment(lengths);
 		if segment != JumpSegment::Land {
-			return landing.at_segment_time(0.0);
+			return self.landing_squat_at_segment_time(lengths, 0.0);
 		}
-		landing.at_segment_time(time)
+		self.landing_squat_at_segment_time(lengths, time)
+	}
+
+	pub fn landing_squat_at_segment_time(
+		&self,
+		lengths: LegSegmentLengths,
+		segment_time: f32,
+	) -> Land<Rig> {
+		let (_, landing) = self.squat_configs(lengths);
+		landing.at_segment_time(segment_time)
 	}
 
 	pub fn vertical_offset(&self, lengths: LegSegmentLengths) -> f32 {
@@ -320,8 +332,8 @@ mod tests {
 		let land_peak = Land::<()>::default().peak_vertical_drop(lengths);
 
 		assert!((timings.squat_ascent_duration - squat_peak / impact).abs() < 1e-3);
-		let expected_land_descent = land_peak
-			/ (impact * DEFAULT_LANDING_SQUAT_SPEED.max(f32::EPSILON));
+		let expected_land_descent =
+			(land_peak / impact).sqrt() / DEFAULT_LANDING_SQUAT_SPEED.max(f32::EPSILON);
 		assert!((timings.land_descent_duration - expected_land_descent).abs() < 1e-3);
 		Ok(())
 	}
@@ -367,6 +379,16 @@ mod tests {
 		let timings = default_jump().timings(lengths);
 		let jump = TwoFootedJump::<()>::from_time(timings.air_end() + 0.02);
 		assert!(jump.landing_squat(lengths).depth() > 0.1);
+		Ok(())
+	}
+
+	#[test]
+	fn compression_does_not_snap_to_bottom_on_first_frame() -> anyhow::Result<()> {
+		let lengths = LegSegmentLengths::default();
+		let timings = default_jump().timings(lengths);
+		let one_frame = 1.0 / 120.0;
+		let jump = TwoFootedJump::<()>::from_time(timings.air_end() + one_frame);
+		assert!(jump.landing_squat(lengths).depth() < 0.5);
 		Ok(())
 	}
 

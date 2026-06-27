@@ -130,7 +130,9 @@ pub fn animate_limbs(
 		AnimationMode::Squat => {
 			animate_squat(&config, &mut debug, &mut rig, &mut armature, &mut limbs, t)
 		}
-		AnimationMode::Jump => animate_jump(&config, &mut rig, &mut armature, &mut limbs, t),
+		AnimationMode::Jump => {
+			animate_jump(&config, &mut debug, &mut rig, &mut armature, &mut limbs, t)
+		}
 	}
 }
 
@@ -209,6 +211,7 @@ fn animate_squat(
 
 fn animate_jump(
 	config: &CharacterConfig,
+	debug: &mut AnimationArticulationDebug,
 	rig: &mut Query<&mut HumanoidV0Rig, With<CharacterRig>>,
 	armature: &mut Query<&mut Transform, (With<CharacterRig>, Without<LimbAnimator>)>,
 	limbs: &mut Query<(&mut Transform, &LimbAnimator)>,
@@ -226,6 +229,13 @@ fn animate_jump(
 		.with_landing_squat_speed(JUMP_LANDING_SQUAT_SPEED);
 	let effects = jump.apply(&mut rig);
 	apply_effects(config.transform, effects, armature);
+	if debug.0.enabled {
+		let lengths = rig.segment_lengths();
+		let (segment, _) = jump.segment(lengths);
+		if segment == malo_animations::animations::JumpSegment::Land || debug.0.should_log(t) {
+			jump.log_landing_debug(&rig, "jump articulation debug");
+		}
+	}
 	marshal_pose_to_limbs(&rig, limbs);
 }
 
