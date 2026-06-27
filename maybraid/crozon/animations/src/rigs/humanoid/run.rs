@@ -1,5 +1,6 @@
 use std::f32::consts::PI;
 
+use bevy::prelude::Quat;
 use crozon_rigs::{humanoid::HumanoidRig, BonePose, Side};
 
 use crate::{animations::Run, Animation};
@@ -34,16 +35,13 @@ impl<R: HumanoidRig> Animation<R> for Run<R> {
 }
 
 fn apply_leg<R: HumanoidRig>(rig: &mut R, side: Side, phase: f32, lift_sign: f32, run: &Run<R>) {
-	let mut leg = rig.leg(side);
+	let mut leg = rig.leg_pose(side);
 	let swing = thigh_swing(phase);
 
-	leg.pelvis = BonePose::with_articulation(
-		leg.pelvis.name,
-		swing * run.hip_swing,
-		hip_lift(swing, run.hip_lift) * lift_sign,
-	);
-	leg.femur = BonePose::with_articulation(leg.femur.name, swing * run.stride, 0.0);
-	leg.shin = BonePose::with_articulation(leg.shin.name, 0.0, knee_flex(phase, run));
+	leg.pelvis =
+		articulated(leg.pelvis, swing * run.hip_swing, hip_lift(swing, run.hip_lift) * lift_sign);
+	leg.femur = articulated(leg.femur, swing * run.stride, 0.0);
+	leg.shin = articulated(leg.shin, 0.0, knee_flex(phase, run));
 	rig.pose_leg(leg);
 }
 
@@ -56,24 +54,23 @@ fn apply_arm<R: HumanoidRig>(
 	arm_down: f32,
 	run: &Run<R>,
 ) {
-	let mut arm = rig.arm(side);
+	let mut arm = rig.arm_pose(side);
 
-	arm.shoulder = BonePose::with_articulation(
-		arm.shoulder.name,
+	arm.shoulder = articulated(
+		arm.shoulder,
 		arm_swing_value * run.shoulder_swing,
 		-shoulder_lift(arm_swing_value, run.shoulder_lift),
 	);
-	arm.humerus = BonePose::with_articulation(
-		arm.humerus.name,
-		arm_swing_value * run.humerus_swing_scale,
-		arm_down,
-	);
-	arm.forearm = BonePose::with_articulation(
-		arm.forearm.name,
-		0.0,
-		elbow_flex(arm_swing_value, phase, flex_sign, run),
-	);
+	arm.humerus = articulated(arm.humerus, arm_swing_value * run.humerus_swing_scale, arm_down);
+	arm.forearm = articulated(arm.forearm, 0.0, elbow_flex(arm_swing_value, phase, flex_sign, run));
 	rig.pose_arm(arm);
+}
+
+fn articulated(mut bone: BonePose, swing: f32, flex: f32) -> BonePose {
+	bone.swing = swing;
+	bone.flex = flex;
+	bone.transform.rotation = Quat::from_rotation_x(swing + flex) * bone.transform.rotation;
+	bone
 }
 
 fn thigh_swing(phase: f32) -> f32 {
