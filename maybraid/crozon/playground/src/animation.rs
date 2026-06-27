@@ -148,7 +148,7 @@ fn animate_run(
 	};
 
 	marshal_limbs_into_pose(&mut rig, limbs);
-	let effects = Run::<HumanoidV0Rig>::from_time(t, RUN_CYCLE_SPEED).apply(&mut rig);
+	let effects = Run::<HumanoidV0Rig>::default().apply(&mut rig, t * RUN_CYCLE_SPEED);
 	apply_effects(config.transform, effects, armature);
 	marshal_pose_to_limbs(&rig, limbs);
 }
@@ -167,14 +167,15 @@ fn animate_squat(
 
 	marshal_limbs_into_pose(&mut rig, limbs);
 	let squat_half_speed = 2.0 * SQUAT_CYCLE_SPEED;
-	let squat = Squat::<HumanoidV0Rig>::from_time(t, squat_half_speed, squat_half_speed);
-	let effects = squat.apply(&mut rig);
+	let squat = Squat::<HumanoidV0Rig>::for_loop(squat_half_speed, squat_half_speed);
+	let squat_progress = t * SQUAT_CYCLE_SPEED;
+	let effects = squat.apply(&mut rig, squat_progress);
 	apply_effects(config.transform, effects, armature);
 
 	if debug.0.should_log(t) {
-		let phase = squat.cycle_phase();
+		let phase = squat.cycle_phase(squat_progress);
 		let lengths = rig.segment_lengths();
-		let drop = squat.vertical_drop(lengths);
+		let drop = squat.vertical_drop(squat_progress, lengths);
 		let rest_by_bone = rest_transforms(limbs);
 		let move_label = effects
 			.r#move
@@ -184,10 +185,10 @@ fn animate_squat(
 			format!("t={t:.2}s phase={phase:.3}"),
 			format!(
 				"envelope: depth={:.3} femur_swing={:.3} shin_flex={:.3} root_swing={:.3} vertical_drop={:.4}",
-				squat.depth(),
-				squat.femur_swing(),
-				squat.shin_flex(),
-				squat.root_swing(),
+				squat.depth(squat_progress),
+				squat.femur_swing(squat_progress),
+				squat.shin_flex(squat_progress),
+				squat.root_swing(squat_progress),
 				drop,
 			),
 			format!(
@@ -222,18 +223,18 @@ fn animate_jump(
 	};
 
 	marshal_limbs_into_pose(&mut rig, limbs);
-	let jump = TwoFootedJump::<HumanoidV0Rig>::from_time(t)
+	let jump = TwoFootedJump::<HumanoidV0Rig>::default()
 		.with_gravity(DEFAULT_GRAVITY)
 		.with_jump_height(JUMP_HEIGHT)
 		.with_pre_squat_speed(JUMP_PRE_SQUAT_SPEED)
 		.with_landing_squat_speed(JUMP_LANDING_SQUAT_SPEED);
-	let effects = jump.apply(&mut rig);
+	let effects = jump.apply(&mut rig, t);
 	apply_effects(config.transform, effects, armature);
 	if debug.0.enabled {
 		let lengths = rig.segment_lengths();
-		let (segment, _) = jump.segment(lengths);
+		let (segment, _) = jump.segment(lengths, t);
 		if segment == malo_animations::animations::JumpSegment::Land || debug.0.should_log(t) {
-			jump.log_landing_debug(&rig, "jump articulation debug");
+			jump.log_landing_debug(&rig, t, "jump articulation debug");
 		}
 	}
 	marshal_pose_to_limbs(&rig, limbs);

@@ -4,7 +4,7 @@ use crozon_rigs::RigPose;
 
 /// Remaps linear transition progress into blend weight.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum BlendCurve {
+pub enum TransitionCurve {
 	Linear,
 	#[default]
 	SmoothStep,
@@ -13,7 +13,7 @@ pub enum BlendCurve {
 	EaseInOut,
 }
 
-impl BlendCurve {
+impl TransitionCurve {
 	pub fn sample(self, t: f32) -> f32 {
 		let t = t.clamp(0.0, 1.0);
 
@@ -36,51 +36,47 @@ impl BlendCurve {
 	}
 }
 
+/// Alias kept for earlier docs referring to [`BlendCurve`].
+pub type BlendCurve = TransitionCurve;
+
 /// Transition into an animation from a captured source pose.
 ///
 /// Unlike [`Mix`](super::Mix) or [`Smooth`](super::Smooth), the source pose is fixed at
-/// construction time rather than re-sampled each frame.
+/// construction time rather than re-sampled each frame. Call [`Transition::apply`] with
+/// separate animation and transition progress values.
 #[derive(Debug, Clone)]
 pub struct Transition<A, R> {
 	/// Animation being transitioned into.
 	pub animation: A,
 	/// Pose captured when the transition began.
 	pub from_pose: RigPose,
-	/// Linear transition progress before curve remapping (`0.0..=1.0`).
-	pub progress: f32,
-	/// Curve used to remap [`Self::progress`] into blend weight.
-	pub curve: BlendCurve,
+	/// Curve used to remap transition progress into blend weight.
+	pub curve: TransitionCurve,
 	_rig: PhantomData<R>,
 }
 
 impl<A, R> Transition<A, R> {
 	/// Creates a transition from an explicit captured pose.
-	pub fn from_pose(animation: A, from_pose: RigPose, progress: f32) -> Self {
+	pub fn from_pose(animation: A, from_pose: RigPose) -> Self {
 		Self {
 			animation,
 			from_pose,
-			progress: progress.clamp(0.0, 1.0),
-			curve: BlendCurve::default(),
+			curve: TransitionCurve::default(),
 			_rig: PhantomData,
 		}
 	}
 
-	pub fn with_curve(mut self, curve: BlendCurve) -> Self {
+	pub fn with_curve(mut self, curve: TransitionCurve) -> Self {
 		self.curve = curve;
 		self
 	}
 
-	pub fn with_progress(mut self, progress: f32) -> Self {
-		self.progress = progress.clamp(0.0, 1.0);
-		self
+	pub fn weight(&self, transition_progress: f32) -> f32 {
+		self.curve.sample(transition_progress.clamp(0.0, 1.0))
 	}
 
-	pub fn weight(&self) -> f32 {
-		self.curve.sample(self.progress)
-	}
-
-	pub fn is_complete(&self) -> bool {
-		self.progress >= 1.0
+	pub fn is_complete(&self, transition_progress: f32) -> bool {
+		transition_progress >= 1.0
 	}
 }
 
@@ -89,23 +85,17 @@ mod tests {
 	use super::*;
 
 	#[test]
-	fn blend_curve_endpoints() -> anyhow::Result<()> {
+	fn transition_curve_endpoints() -> anyhow::Result<()> {
 		for curve in [
-			BlendCurve::Linear,
-			BlendCurve::SmoothStep,
-			BlendCurve::EaseIn,
-			BlendCurve::EaseOut,
-			BlendCurve::EaseInOut,
+			TransitionCurve::Linear,
+			TransitionCurve::SmoothStep,
+			TransitionCurve::EaseIn,
+			TransitionCurve::EaseOut,
+			TransitionCurve::EaseInOut,
 		] {
 			assert!(curve.sample(0.0).abs() < 1e-5);
 			assert!((curve.sample(1.0) - 1.0).abs() < 1e-5);
 		}
 		Ok(())
-	}
-
-	#[test]
-	fn transition_clamps_progress() {
-		let transition = Transition::<(), ()>::from_pose((), RigPose::new(), 1.5);
-		assert_eq!(transition.progress, 1.0);
 	}
 }

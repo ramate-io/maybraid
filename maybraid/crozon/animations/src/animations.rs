@@ -13,7 +13,7 @@ pub use mix::{smoothstep, Mix, Smooth};
 pub use run::Run;
 pub use spring::Spring;
 pub use squat::{Squat, vertical_drop};
-pub use transition::{BlendCurve, Transition};
+pub use transition::{BlendCurve, Transition, TransitionCurve};
 pub use two_footed_jump::{
 	air_duration, ballistic_height, launch_speed, JumpSegment, JumpTiming, TwoFootedJump,
 	DEFAULT_GRAVITY, DEFAULT_JUMP_HEIGHT, DEFAULT_LANDING_SQUAT_SPEED, DEFAULT_PRE_SQUAT_SPEED,

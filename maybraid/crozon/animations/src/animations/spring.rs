@@ -1,5 +1,6 @@
 use std::marker::PhantomData;
 
+use crate::Progress;
 use crate::animations::Squat;
 
 const SHOULDER_SWING_BACK: f32 = -0.55;
@@ -8,69 +9,54 @@ const FOREARM_EXTEND: f32 = -0.35;
 
 #[derive(Debug, Clone)]
 pub struct Spring<Rig> {
-	pub phase: f32,
 	pub squat: Squat<Rig>,
 	_rig: PhantomData<Rig>,
 }
 
 impl<Rig> Spring<Rig> {
-	pub fn new(phase: f32, squat: Squat<Rig>) -> Self {
-		Self { phase, squat, _rig: PhantomData }
-	}
-
 	/// Ease-out 0 at crouch, 1 at full extension.
-	pub fn extend_amount(&self) -> f32 {
-		let t = self.phase.clamp(0.0, 1.0);
+	pub fn extend_amount(&self, progress: f32) -> f32 {
+		let t = Progress(progress).clamp();
 		1.0 - (1.0 - t).powi(2)
 	}
 
-	/// Fully extended spring pose (for mix targets).
-	pub fn extended() -> Self {
-		Self::new(1.0, Squat::default())
+	pub fn femur_swing(&self, progress: f32) -> f32 {
+		self.squat.femur_peak * (1.0 - self.extend_amount(progress))
 	}
 
-	/// Pose at a specific extension progress in `[0, 1]`.
-	pub fn at_extension(progress: f32) -> Self {
-		Self::new(progress.clamp(0.0, 1.0), Squat::default())
+	pub fn shin_flex(&self, progress: f32) -> f32 {
+		self.squat.shin_peak * (1.0 - self.extend_amount(progress))
 	}
 
-	pub fn femur_swing(&self) -> f32 {
-		self.squat.femur_peak * (1.0 - self.extend_amount())
+	pub fn root_swing(&self, progress: f32) -> f32 {
+		self.squat.root_peak * (1.0 - self.extend_amount(progress))
 	}
 
-	pub fn shin_flex(&self) -> f32 {
-		self.squat.shin_peak * (1.0 - self.extend_amount())
+	pub fn arm_amount(&self, progress: f32) -> f32 {
+		self.extend_amount(progress)
 	}
 
-	pub fn root_swing(&self) -> f32 {
-		self.squat.root_peak * (1.0 - self.extend_amount())
+	pub fn shoulder_swing(&self, progress: f32) -> f32 {
+		self.arm_amount(progress) * SHOULDER_SWING_BACK
 	}
 
-	pub fn arm_amount(&self) -> f32 {
-		self.extend_amount()
+	pub fn humerus_flex(&self, progress: f32) -> f32 {
+		self.arm_amount(progress) * HUMERUS_FLEX_BACK
 	}
 
-	pub fn shoulder_swing(&self) -> f32 {
-		self.arm_amount() * SHOULDER_SWING_BACK
-	}
-
-	pub fn humerus_flex(&self) -> f32 {
-		self.arm_amount() * HUMERUS_FLEX_BACK
-	}
-
-	pub fn forearm_flex(&self) -> f32 {
-		self.arm_amount() * FOREARM_EXTEND
+	pub fn forearm_flex(&self, progress: f32) -> f32 {
+		self.arm_amount(progress) * FOREARM_EXTEND
 	}
 
 	/// Squat-depth vertical drop at spring start (legs fully bent).
 	pub fn start_drop(&self, lengths: crozon_rigs::humanoid::LegSegmentLengths) -> f32 {
-		self.squat.vertical_drop(lengths)
+		self.squat.vertical_drop(0.0, lengths)
 	}
 }
 
 impl<Rig> Default for Spring<Rig> {
 	fn default() -> Self {
-		Self::new(0.0, Squat::default())
+		Self { squat: Squat::default(), _rig: PhantomData }
 	}
 }
 
@@ -80,27 +66,27 @@ mod tests {
 
 	#[test]
 	fn spring_end_straens_legs() -> anyhow::Result<()> {
-		let spring = Spring::<()>::new(0.99, Squat::default());
-		assert!(spring.femur_swing().abs() < 1e-2);
-		assert!(spring.shin_flex().abs() < 1e-2);
-		assert!(spring.root_swing().abs() < 1e-2);
+		let spring = Spring::<()>::default();
+		assert!(spring.femur_swing(0.99).abs() < 1e-2);
+		assert!(spring.shin_flex(0.99).abs() < 1e-2);
+		assert!(spring.root_swing(0.99).abs() < 1e-2);
 		Ok(())
 	}
 
 	#[test]
 	fn spring_start_matches_full_squat_angles() -> anyhow::Result<()> {
 		let squat = Squat::<()>::default();
-		let spring = Spring::<()>::new(0.0, squat.clone());
-		assert!((spring.femur_swing() - squat.femur_peak).abs() < 1e-5);
-		assert!((spring.shin_flex() - squat.shin_peak).abs() < 1e-5);
+		let spring = Spring::<()>::default();
+		assert!((spring.femur_swing(0.0) - squat.femur_peak).abs() < 1e-5);
+		assert!((spring.shin_flex(0.0) - squat.shin_peak).abs() < 1e-5);
 		Ok(())
 	}
 
 	#[test]
 	fn spring_arms_reach_back_at_full_extension() -> anyhow::Result<()> {
-		let spring = Spring::<()>::new(0.99, Squat::default());
-		assert!(spring.shoulder_swing() < -0.3);
-		assert!(spring.humerus_flex() > 0.0);
+		let spring = Spring::<()>::default();
+		assert!(spring.shoulder_swing(0.99) < -0.3);
+		assert!(spring.humerus_flex(0.99) > 0.0);
 		Ok(())
 	}
 }

@@ -1,14 +1,12 @@
-use std::f32::consts::PI;
-
 use crozon_rigs::{humanoid::HumanoidRig, Side};
 
 use crate::animations::Run;
 use crate::rigs::humanoid::apply::apply_arm;
-use crate::{Effects, Animation};
+use crate::{Animation, Effects, Progress};
 
 impl<R: HumanoidRig> Animation<R> for Run<R> {
-	fn apply(&self, rig: &mut R) -> Effects {
-		let phase = self.phase.fract();
+	fn apply(&self, rig: &mut R, progress: f32) -> Effects {
+		let phase = Progress(progress).cycle();
 		let left_arm_swing = -arm_swing(phase);
 		let right_arm_swing = arm_swing(phase + 0.5);
 		let run = self;
@@ -49,8 +47,6 @@ fn apply_leg<R: HumanoidRig>(rig: &mut R, side: Side, phase: f32, lift_sign: f32
 		hip_lift(swing, run.hip_lift) * lift_sign,
 	);
 	leg.femur = rig.articulate_on_rig(leg.femur, swing * run.stride, 0.0);
-	// Reference `knee_flex` is a sagittal rotation magnitude; locally, bind-pose straight
-	// matches `knee_extended` (see squat — flex is a delta from stand, not absolute π/2).
 	leg.shin = rig.articulate_on_rig(leg.shin, 0.0, knee_flex(phase, run) - run.knee_extended);
 	rig.pose_leg(leg);
 }
@@ -90,7 +86,7 @@ fn arm_swing(phase: f32) -> f32 {
 
 fn elbow_flex<Rig>(arm_swing: f32, phase: f32, flex_sign: f32, run: &Run<Rig>) -> f32 {
 	let pump = arm_swing.abs();
-	let cycle = ((phase + arm_swing.signum() * 0.125) * PI * 4.0).sin().abs();
+	let cycle = ((phase + arm_swing.signum() * 0.125) * std::f32::consts::PI * 4.0).sin().abs();
 	flex_sign * (run.elbow_bend + pump * run.elbow_pump + cycle * run.elbow_cycle)
 }
 
@@ -106,7 +102,7 @@ fn knee_flex<Rig>(leg_phase: f32, run: &Run<Rig>) -> f32 {
 	let p = leg_phase.fract();
 	let peak = if p < 0.5 { run.knee_extended } else { run.knee_contracted };
 	let t = if p < 0.5 { p * 2.0 } else { (p - 0.5) * 2.0 };
-	run.knee_neutral + (t * PI).sin() * (peak - run.knee_neutral)
+	run.knee_neutral + (t * std::f32::consts::PI).sin() * (peak - run.knee_neutral)
 }
 
 #[cfg(test)]
@@ -118,7 +114,7 @@ mod tests {
 	#[test]
 	fn run_writes_swing_flex_for_left_femur() {
 		let mut rig = HumanoidV0Rig::imported();
-		Run::<HumanoidV0Rig>::new(0.0).apply(&mut rig);
+		Run::<HumanoidV0Rig>::default().apply(&mut rig, 0.0);
 
 		let femur = rig.pose().get(&rig.leg(Side::Left).femur.name).expect("femur pose");
 		assert!(femur.swing.abs() > 0.0);
@@ -127,7 +123,7 @@ mod tests {
 	#[test]
 	fn run_right_leg_uses_half_cycle_phase_offset() {
 		let mut rig = HumanoidV0Rig::imported();
-		Run::<HumanoidV0Rig>::new(0.0).apply(&mut rig);
+		Run::<HumanoidV0Rig>::default().apply(&mut rig, 0.0);
 
 		let left = rig.pose().get(&rig.leg(Side::Left).femur.name).expect("left femur");
 		let right = rig.pose().get(&rig.leg(Side::Right).femur.name).expect("right femur");
@@ -143,13 +139,11 @@ mod tests {
 		rig.pose_mut()
 			.insert(crozon_rigs::BonePose::new(shin_name.clone(), Transform::IDENTITY));
 
-		// Extended stride: shin flex delta ≈ 0 (straight relative to femur).
-		Run::<HumanoidV0Rig>::new(0.25).apply(&mut rig);
+		Run::<HumanoidV0Rig>::default().apply(&mut rig, 0.25);
 		let extended = rig.pose().get(&shin_name).expect("left shin").clone();
 		assert!(extended.flex.abs() < 1e-4, "expected straight knee, flex={}", extended.flex);
 
-		// Contracted stride: visible tuck above extended baseline.
-		Run::<HumanoidV0Rig>::new(0.75).apply(&mut rig);
+		Run::<HumanoidV0Rig>::default().apply(&mut rig, 0.75);
 		let tucked = rig.pose().get(&shin_name).expect("left shin");
 		assert!(tucked.flex > 1.0, "expected knee tuck, flex={}", tucked.flex);
 		assert!(
@@ -161,7 +155,7 @@ mod tests {
 	#[test]
 	fn run_applies_elbow_bend_to_forearm() {
 		let mut rig = HumanoidV0Rig::imported();
-		Run::<HumanoidV0Rig>::new(0.0).apply(&mut rig);
+		Run::<HumanoidV0Rig>::default().apply(&mut rig, 0.0);
 
 		let left_forearm = rig.pose().get(&rig.arm(Side::Left).forearm.name).expect("left forearm");
 		assert!(left_forearm.flex.abs() > 1.0, "expected elbow bend baseline");
@@ -170,7 +164,7 @@ mod tests {
 	#[test]
 	fn run_applies_shoulder_and_hip_lift() {
 		let mut rig = HumanoidV0Rig::imported();
-		Run::<HumanoidV0Rig>::new(0.0).apply(&mut rig);
+		Run::<HumanoidV0Rig>::default().apply(&mut rig, 0.0);
 
 		let shoulder = rig.pose().get(&rig.arm(Side::Left).shoulder.name).expect("shoulder");
 		let pelvis = rig.pose().get(&rig.leg(Side::Left).pelvis.name).expect("pelvis");

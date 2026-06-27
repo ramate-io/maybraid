@@ -26,15 +26,9 @@ impl<Rig> Land<Rig> {
 		Self { squat: timed, scale: DEFAULT_LAND_SCALE, _rig: PhantomData }
 	}
 
-	/// Sample the landing envelope at `segment_time` seconds after touchdown.
-	pub fn at_segment_time(mut self, segment_time: f32) -> Self {
-		self.squat = self.squat.at_segment_time(segment_time);
-		self
-	}
-
 	/// Normalized landing depth before scale: 0 at touch-down extension, 1 at peak compression.
-	pub fn depth(&self) -> f32 {
-		self.squat.depth()
+	pub fn depth(&self, progress: f32) -> f32 {
+		self.squat.depth(progress)
 	}
 
 	/// Duration of impact compression (touch-down to peak flex) in seconds.
@@ -47,20 +41,24 @@ impl<Rig> Land<Rig> {
 		self.squat.ascent_duration()
 	}
 
-	pub fn femur_swing(&self) -> f32 {
-		self.depth() * self.scale * self.squat.femur_peak
+	pub fn cycle_duration(&self) -> f32 {
+		self.squat.cycle_duration()
 	}
 
-	pub fn shin_flex(&self) -> f32 {
-		self.depth() * self.scale * self.squat.shin_peak
+	pub fn femur_swing(&self, progress: f32) -> f32 {
+		self.depth(progress) * self.scale * self.squat.femur_peak
 	}
 
-	pub fn root_swing(&self) -> f32 {
-		self.depth() * self.scale * self.squat.root_peak
+	pub fn shin_flex(&self, progress: f32) -> f32 {
+		self.depth(progress) * self.scale * self.squat.shin_peak
 	}
 
-	pub fn vertical_drop(&self, lengths: LegSegmentLengths) -> f32 {
-		vertical_drop(self.femur_swing(), self.shin_flex(), lengths)
+	pub fn root_swing(&self, progress: f32) -> f32 {
+		self.depth(progress) * self.scale * self.squat.root_peak
+	}
+
+	pub fn vertical_drop(&self, progress: f32, lengths: LegSegmentLengths) -> f32 {
+		vertical_drop(self.femur_swing(progress), self.shin_flex(progress), lengths)
 	}
 
 	/// Vertical drop at peak landing compression.
@@ -86,25 +84,27 @@ mod tests {
 
 	#[test]
 	fn land_peak_flex_below_full_squat() -> anyhow::Result<()> {
-		let squat = Squat::<()>::new(0.5);
-		let land = Land::<()>::with_speeds(1.0, 1.0, Squat::default()).at_segment_time(1.0);
-		assert!(land.femur_swing().abs() < squat.femur_swing().abs());
-		assert!(land.shin_flex().abs() < squat.shin_flex().abs());
+		let squat = Squat::<()>::for_loop(1.0, 1.0);
+		let land = Land::<()>::default();
+		let peak = land.descent_duration() / land.cycle_duration();
+		assert!(land.femur_swing(peak).abs() < squat.femur_swing(0.5).abs());
+		assert!(land.shin_flex(peak).abs() < squat.shin_flex(0.5).abs());
 		Ok(())
 	}
 
 	#[test]
 	fn land_starts_at_stand() -> anyhow::Result<()> {
-		let land = Land::<()>::with_speeds(1.0, 1.0, Squat::default()).at_segment_time(0.0);
-		assert!(land.depth().abs() < 1e-5);
-		assert!(land.femur_swing().abs() < 1e-5);
+		let land = Land::<()>::default();
+		assert!(land.depth(0.0).abs() < 1e-5);
+		assert!(land.femur_swing(0.0).abs() < 1e-5);
 		Ok(())
 	}
 
 	#[test]
 	fn land_compresses_gradually_after_touchdown() -> anyhow::Result<()> {
-		let land = Land::<()>::with_speeds(10.0, 1.0, Squat::default()).at_segment_time(0.05);
-		assert!(land.depth() > 0.0);
+		let land = Land::<()>::with_speeds(10.0, 1.0, Squat::default());
+		let early = land.descent_duration() * 0.5 / land.cycle_duration();
+		assert!(land.depth(early) > 0.0);
 		Ok(())
 	}
 }

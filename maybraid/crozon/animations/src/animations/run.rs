@@ -3,7 +3,6 @@ use std::marker::PhantomData;
 
 #[derive(Debug, Clone)]
 pub struct Run<Rig> {
-	pub phase: f32,
 	pub arm_down: f32,
 	pub elbow_bend: f32,
 	pub elbow_pump: f32,
@@ -20,21 +19,9 @@ pub struct Run<Rig> {
 	_rig: PhantomData<Rig>,
 }
 
-impl<Rig> Run<Rig> {
-	pub fn new(phase: f32) -> Self {
-		Self { phase, ..Self::default() }
-	}
-
-	/// Build a run pose from elapsed time and cycle speed (matches playground timing).
-	pub fn from_time(t: f32, cycle_speed: f32) -> Self {
-		Self::new((t * cycle_speed).fract())
-	}
-}
-
 impl<Rig> Default for Run<Rig> {
 	fn default() -> Self {
 		Self {
-			phase: 0.0,
 			arm_down: 0.85,
 			elbow_bend: 1.25,
 			elbow_pump: 0.5,

@@ -10,8 +10,24 @@ where
 	B: Animation<R>,
 	R: HumanoidRig,
 {
-	fn apply(&self, rig: &mut R) -> Effects {
-		blend_animations(rig, &self.from, &self.to, self.weight)
+	fn apply(&self, rig: &mut R, progress: f32) -> Effects {
+		self.apply_at(rig, progress, progress)
+	}
+}
+
+impl<A, B, R> Mix<A, B, R>
+where
+	A: Animation<R>,
+	B: Animation<R>,
+	R: HumanoidRig,
+{
+	pub fn apply_at(
+		&self,
+		rig: &mut R,
+		from_progress: f32,
+		to_progress: f32,
+	) -> Effects {
+		blend_animations(rig, &self.from, &self.to, from_progress, to_progress, self.weight)
 	}
 }
 
@@ -21,25 +37,50 @@ where
 	B: Animation<R>,
 	R: HumanoidRig,
 {
-	fn apply(&self, rig: &mut R) -> Effects {
+	fn apply(&self, rig: &mut R, progress: f32) -> Effects {
+		self.apply_at(rig, progress, progress)
+	}
+}
+
+impl<A, B, R> Smooth<A, B, R>
+where
+	A: Animation<R>,
+	B: Animation<R>,
+	R: HumanoidRig,
+{
+	pub fn apply_at(
+		&self,
+		rig: &mut R,
+		from_progress: f32,
+		to_progress: f32,
+	) -> Effects {
 		blend_animations(
 			rig,
 			&self.from,
 			&self.to,
+			from_progress,
+			to_progress,
 			crate::animations::smoothstep(self.weight),
 		)
 	}
 }
 
-fn blend_animations<A, B, R>(rig: &mut R, from: &A, to: &B, weight: f32) -> Effects
+fn blend_animations<A, B, R>(
+	rig: &mut R,
+	from: &A,
+	to: &B,
+	from_progress: f32,
+	to_progress: f32,
+	weight: f32,
+) -> Effects
 where
 	A: Animation<R>,
 	B: Animation<R>,
 	R: HumanoidRig,
 {
 	let rest = snapshot_pose(rig);
-	let (from_pose, from_effects) = sample(from, rig, &rest);
-	let (to_pose, to_effects) = sample(to, rig, &rest);
+	let (from_pose, from_effects) = sample(from, rig, &rest, from_progress);
+	let (to_pose, to_effects) = sample(to, rig, &rest, to_progress);
 	blend_pose(rig, &from_pose, &to_pose, weight);
 	mix_effects(from_effects, to_effects, weight)
 }
@@ -66,10 +107,11 @@ pub(crate) fn sample<A: Animation<R>, R: HumanoidRig>(
 	anim: &A,
 	rig: &mut R,
 	rest: &RigPose,
+	progress: f32,
 ) -> (RigPose, Effects) {
 	restore_pose(rig, rest);
-	let effects = anim.apply(rig);
-	( snapshot_pose(rig), effects)
+	let effects = anim.apply(rig, progress);
+	(snapshot_pose(rig), effects)
 }
 
 pub(crate) fn blend_pose<R: HumanoidRig>(rig: &mut R, from: &RigPose, to: &RigPose, weight: f32) {
@@ -132,9 +174,10 @@ fn scale_transform(t: Transform, scale: f32) -> Transform {
 pub(crate) fn pose_from_animation<A: Animation<R>, R: HumanoidRig>(
 	anim: &A,
 	rig: &mut R,
+	progress: f32,
 ) -> RigPose {
 	let rest = snapshot_pose(rig);
-	let (pose, _effects) = sample(anim, rig, &rest);
+	let (pose, _effects) = sample(anim, rig, &rest, progress);
 	restore_pose(rig, &rest);
 	pose
 }
@@ -161,14 +204,14 @@ mod tests {
 		seed_bind_pose(&mut rig);
 
 		let mix = Mix::<_, _, HumanoidV0Rig>::new(
-			Squat::<HumanoidV0Rig>::new(0.0),
-			Squat::<HumanoidV0Rig>::new(0.5),
+			Squat::<HumanoidV0Rig>::for_loop(1.0, 1.0),
+			Squat::<HumanoidV0Rig>::for_loop(1.0, 1.0),
 			0.5,
 		);
-		mix.apply(&mut rig);
+		mix.apply_at(&mut rig, 0.0, 0.5);
 
 		let femur = rig.pose().get(&rig.leg(Side::Left).femur.name).expect("femur");
-		let full = Squat::<HumanoidV0Rig>::new(0.5).femur_swing();
+		let full = Squat::<HumanoidV0Rig>::for_loop(1.0, 1.0).femur_swing(0.5);
 		assert!(femur.swing.abs() > 0.0);
 		assert!(femur.swing.abs() < full.abs());
 		Ok(())
@@ -181,13 +224,13 @@ mod tests {
 		seed_bind_pose(&mut rig_a);
 		seed_bind_pose(&mut rig_b);
 
-		Squat::<HumanoidV0Rig>::new(0.25).apply(&mut rig_a);
+		Squat::<HumanoidV0Rig>::for_loop(1.0, 1.0).apply(&mut rig_a, 0.25);
 		Mix::<_, _, HumanoidV0Rig>::new(
-			Squat::<HumanoidV0Rig>::new(0.25),
-			Squat::<HumanoidV0Rig>::new(0.75),
+			Squat::<HumanoidV0Rig>::for_loop(1.0, 1.0),
+			Squat::<HumanoidV0Rig>::for_loop(1.0, 1.0),
 			0.0,
 		)
-		.apply(&mut rig_b);
+		.apply_at(&mut rig_b, 0.25, 0.75);
 
 		let bone = rig_a.leg(Side::Left).femur.name.clone();
 		assert_eq!(
@@ -203,11 +246,11 @@ mod tests {
 		seed_bind_pose(&mut rig);
 
 		Smooth::<_, _, HumanoidV0Rig>::new(
-			Squat::<HumanoidV0Rig>::new(0.0),
-			Spring::<HumanoidV0Rig>::extended(),
+			Squat::<HumanoidV0Rig>::for_loop(1.0, 1.0),
+			Spring::<HumanoidV0Rig>::default(),
 			0.5,
 		)
-		.apply(&mut rig);
+		.apply_at(&mut rig, 0.0, 1.0);
 
 		let shoulder = rig.pose().get(&rig.arm(Side::Left).shoulder.name).expect("shoulder");
 		assert!(shoulder.swing < 0.0);

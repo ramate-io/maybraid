@@ -91,8 +91,6 @@ pub enum JumpSegment {
 
 #[derive(Debug, Clone)]
 pub struct TwoFootedJump<Rig> {
-	/// Elapsed time in seconds (loops over the full jump cycle).
-	pub elapsed: f32,
 	/// Downward acceleration for ballistic motion (units/s²).
 	pub gravity: f32,
 	/// Apex height above the take-off point (world units).
@@ -107,7 +105,6 @@ pub struct TwoFootedJump<Rig> {
 impl<Rig> Default for TwoFootedJump<Rig> {
 	fn default() -> Self {
 		Self {
-			elapsed: 0.0,
 			gravity: DEFAULT_GRAVITY,
 			jump_height: DEFAULT_JUMP_HEIGHT,
 			pre_squat_speed: DEFAULT_PRE_SQUAT_SPEED,
@@ -118,14 +115,6 @@ impl<Rig> Default for TwoFootedJump<Rig> {
 }
 
 impl<Rig> TwoFootedJump<Rig> {
-	pub fn new(elapsed: f32) -> Self {
-		Self { elapsed, ..Self::default() }
-	}
-
-	pub fn from_time(elapsed: f32) -> Self {
-		Self::new(elapsed)
-	}
-
 	pub fn with_gravity(mut self, gravity: f32) -> Self {
 		self.gravity = gravity;
 		self
@@ -154,15 +143,10 @@ impl<Rig> TwoFootedJump<Rig> {
 		let windup_ascent =
 			if squat_peak > f32::EPSILON { impact / squat_peak } else { windup_descent };
 
-		// Run the landing squat at `landing_squat_speed`, matching pre-jump descent. Impact-
-		// matched compression was only ~20 ms at this rig scale and read as a snap between
-		// frames even without pose blending.
 		let land_half_speed = self.landing_squat_speed.max(MIN_SPEED);
-		let land_compression = land_half_speed;
-		let land_recovery = land_half_speed;
 
 		let windup = Squat::with_speeds(windup_descent, windup_ascent.max(MIN_SPEED));
-		let landing = Land::with_speeds(land_compression, land_recovery, Squat::<Rig>::default());
+		let landing = Land::with_speeds(land_half_speed, land_half_speed, Squat::<Rig>::default());
 		(windup, landing)
 	}
 
@@ -182,12 +166,12 @@ impl<Rig> TwoFootedJump<Rig> {
 		self.timings(lengths).cycle_duration()
 	}
 
-	pub fn time_in_cycle(&self, lengths: LegSegmentLengths) -> f32 {
+	pub fn time_in_cycle(&self, lengths: LegSegmentLengths, elapsed: f32) -> f32 {
 		let cycle = self.cycle_duration(lengths);
 		if cycle <= f32::EPSILON {
 			return 0.0;
 		}
-		self.elapsed % cycle
+		elapsed % cycle
 	}
 
 	pub fn launch_speed(&self) -> f32 {
@@ -215,49 +199,50 @@ impl<Rig> TwoFootedJump<Rig> {
 		(JumpSegment::Land, t)
 	}
 
-	pub fn segment(&self, lengths: LegSegmentLengths) -> (JumpSegment, f32) {
-		Self::segment_at_time(self.time_in_cycle(lengths), &self.timings(lengths))
+	pub fn segment(&self, lengths: LegSegmentLengths, elapsed: f32) -> (JumpSegment, f32) {
+		Self::segment_at_time(self.time_in_cycle(lengths, elapsed), &self.timings(lengths))
 	}
 
-	pub fn time_since_launch(&self, lengths: LegSegmentLengths) -> f32 {
-		(self.time_in_cycle(lengths) - self.timings(lengths).squat_end()).max(0.0)
+	pub fn time_since_launch(&self, lengths: LegSegmentLengths, elapsed: f32) -> f32 {
+		(self.time_in_cycle(lengths, elapsed) - self.timings(lengths).squat_end()).max(0.0)
 	}
 
 	pub fn prejump_squat(&self, lengths: LegSegmentLengths) -> Squat<Rig> {
-		let (windup, _) = self.squat_configs(lengths);
-		let (segment, time) = self.segment(lengths);
-		if segment != JumpSegment::Squat {
-			return windup.at_segment_time(0.0);
-		}
-		windup.at_segment_time(time)
+		self.squat_configs(lengths).0
 	}
 
 	pub fn landing_squat(&self, lengths: LegSegmentLengths) -> Land<Rig> {
-		let (segment, time) = self.segment(lengths);
+		self.squat_configs(lengths).1
+	}
+
+	pub fn landing_depth(&self, lengths: LegSegmentLengths, elapsed: f32) -> f32 {
+		let land = self.landing_squat(lengths);
+		let (segment, local) = self.segment(lengths, elapsed);
 		if segment != JumpSegment::Land {
-			return self.landing_squat_at_segment_time(lengths, 0.0);
+			return 0.0;
 		}
-		self.landing_squat_at_segment_time(lengths, time)
+		let duration = land.cycle_duration().max(f32::EPSILON);
+		land.depth(local / duration)
 	}
 
-	pub fn landing_squat_at_segment_time(
-		&self,
-		lengths: LegSegmentLengths,
-		segment_time: f32,
-	) -> Land<Rig> {
-		let (_, landing) = self.squat_configs(lengths);
-		landing.at_segment_time(segment_time)
-	}
-
-	pub fn vertical_offset(&self, lengths: LegSegmentLengths) -> f32 {
-		let (segment, _) = self.segment(lengths);
+	pub fn vertical_offset(&self, lengths: LegSegmentLengths, elapsed: f32) -> f32 {
+		let (segment, local) = self.segment(lengths, elapsed);
+		let timings = self.timings(lengths);
 
 		match segment {
-			JumpSegment::Squat => -self.prejump_squat(lengths).vertical_drop(lengths),
-			JumpSegment::Spring | JumpSegment::Fall => {
-				self.ballistic_height(self.time_since_launch(lengths))
+			JumpSegment::Squat => {
+				let squat = self.prejump_squat(lengths);
+				let p = local / timings.squat_duration().max(f32::EPSILON);
+				-squat.vertical_drop(p, lengths)
 			}
-			JumpSegment::Land => -self.landing_squat(lengths).vertical_drop(lengths),
+			JumpSegment::Spring | JumpSegment::Fall => {
+				self.ballistic_height(self.time_since_launch(lengths, elapsed))
+			}
+			JumpSegment::Land => {
+				let land = self.landing_squat(lengths);
+				let p = local / timings.land_duration().max(f32::EPSILON);
+				-land.vertical_drop(p, lengths)
+			}
 		}
 	}
 }
@@ -286,7 +271,7 @@ mod tests {
 	use super::*;
 
 	fn default_jump() -> TwoFootedJump<()> {
-		TwoFootedJump::from_time(0.0)
+		TwoFootedJump::default()
 	}
 
 	#[test]
@@ -325,8 +310,8 @@ mod tests {
 	#[test]
 	fn landing_squat_speed_controls_compression_and_recovery() -> anyhow::Result<()> {
 		let lengths = LegSegmentLengths::default();
-		let slow = TwoFootedJump::<()>::from_time(0.0).with_landing_squat_speed(1.0);
-		let fast = TwoFootedJump::<()>::from_time(0.0).with_landing_squat_speed(4.0);
+		let slow = TwoFootedJump::<()>::default().with_landing_squat_speed(1.0);
+		let fast = TwoFootedJump::<()>::default().with_landing_squat_speed(4.0);
 		let slow_timings = slow.timings(lengths);
 		let fast_timings = fast.timings(lengths);
 		assert!((slow_timings.land_descent_duration - 1.0).abs() < 1e-3);
@@ -348,35 +333,36 @@ mod tests {
 	#[test]
 	fn land_starts_at_stand() -> anyhow::Result<()> {
 		let lengths = LegSegmentLengths::default();
-		let jump = TwoFootedJump::<()>::from_time(default_jump().timings(lengths).air_end());
-		assert!(jump.landing_squat(lengths).depth().abs() < 1e-5);
+		let jump = default_jump();
+		let elapsed = jump.timings(lengths).air_end();
+		assert!(jump.landing_depth(lengths, elapsed).abs() < 1e-5);
 		Ok(())
 	}
 
 	#[test]
 	fn compression_visible_shortly_after_touchdown() -> anyhow::Result<()> {
 		let lengths = LegSegmentLengths::default();
-		let timings = default_jump().timings(lengths);
-		let jump = TwoFootedJump::<()>::from_time(timings.air_end() + 0.05);
-		assert!(jump.landing_squat(lengths).depth() > 0.1);
+		let jump = default_jump();
+		let timings = jump.timings(lengths);
+		assert!(jump.landing_depth(lengths, timings.air_end() + 0.05) > 0.1);
 		Ok(())
 	}
 
 	#[test]
 	fn compression_does_not_snap_to_bottom_on_first_frame() -> anyhow::Result<()> {
 		let lengths = LegSegmentLengths::default();
-		let timings = default_jump().timings(lengths);
+		let jump = default_jump();
+		let timings = jump.timings(lengths);
 		let one_frame = 1.0 / 120.0;
-		let jump = TwoFootedJump::<()>::from_time(timings.air_end() + one_frame);
-		assert!(jump.landing_squat(lengths).depth() < 0.5);
+		assert!(jump.landing_depth(lengths, timings.air_end() + one_frame) < 0.5);
 		Ok(())
 	}
 
 	#[test]
 	fn pre_squat_speed_controls_windup_descent() -> anyhow::Result<()> {
 		let lengths = LegSegmentLengths::default();
-		let slow = TwoFootedJump::<()>::from_time(0.0).with_pre_squat_speed(0.5);
-		let fast = TwoFootedJump::<()>::from_time(0.0).with_pre_squat_speed(2.0);
+		let slow = TwoFootedJump::<()>::default().with_pre_squat_speed(0.5);
+		let fast = TwoFootedJump::<()>::default().with_pre_squat_speed(2.0);
 		assert!(
 			slow.timings(lengths).squat_descent_duration
 				> fast.timings(lengths).squat_descent_duration
@@ -398,19 +384,15 @@ mod tests {
 	fn vertical_profile_endpoints_and_peak() -> anyhow::Result<()> {
 		let lengths = LegSegmentLengths::default();
 		let jump = default_jump();
-		assert!(jump.vertical_offset(lengths).abs() < 1e-5);
+		assert!(jump.vertical_offset(lengths, 0.0).abs() < 1e-5);
 
 		let timings = jump.timings(lengths);
-		let squat_bottom = TwoFootedJump::<()>::from_time(timings.squat_descent_duration * 0.99);
-		assert!(squat_bottom.vertical_offset(lengths) < 0.0);
-
-		let squat_end = TwoFootedJump::<()>::from_time(timings.squat_end() - 0.001);
-		assert!(squat_end.vertical_offset(lengths).abs() < 0.08);
+		assert!(jump.vertical_offset(lengths, timings.squat_descent_duration * 0.99) < 0.0);
+		assert!(jump.vertical_offset(lengths, timings.squat_end() - 0.001).abs() < 0.08);
 
 		let apex_time = timings.squat_end()
 			+ launch_speed(DEFAULT_GRAVITY, DEFAULT_JUMP_HEIGHT) / DEFAULT_GRAVITY;
-		let apex = TwoFootedJump::<()>::from_time(apex_time);
-		assert!((apex.vertical_offset(lengths) - DEFAULT_JUMP_HEIGHT).abs() < 0.05);
+		assert!((jump.vertical_offset(lengths, apex_time) - DEFAULT_JUMP_HEIGHT).abs() < 0.05);
 
 		Ok(())
 	}
