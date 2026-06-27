@@ -41,13 +41,15 @@ fn apply_leg<R: HumanoidRig>(rig: &mut R, side: Side, phase: f32, lift_sign: f32
 	let mut leg = rig.leg_pose(side);
 	let phase = if side == Side::Left { phase } else { phase + 0.5 };
 	let swing = thigh_swing(phase);
+	let hip_sagittal = swing * walk.hip_swing * lift_sign;
+	let femur_medial = -swing * walk.femur_medial_counter * lift_sign;
 
 	leg.pelvis = rig.articulate_on_rig(
 		leg.pelvis,
-		swing * walk.hip_swing * lift_sign,
+		hip_sagittal,
 		hip_lift(swing, walk.hip_lift) * lift_sign,
 	);
-	leg.femur = rig.articulate_on_rig(leg.femur, swing * walk.stride, 0.0);
+	leg.femur = rig.articulate_on_rig(leg.femur, swing * walk.stride, femur_medial);
 	leg.shin = rig.articulate_on_rig(leg.shin, 0.0, knee_flex(phase, walk) - walk.knee_extended);
 	rig.pose_leg(leg);
 }
@@ -99,16 +101,17 @@ fn hip_lift(leg_swing: f32, amplitude: f32) -> f32 {
 	leg_swing * amplitude
 }
 
-/// Straight leg on stance; small clearance flex only during swing.
+/// Soft knee on stance; extra clearance flex during swing.
 fn knee_flex<Rig>(leg_phase: f32, walk: &Walk<Rig>) -> f32 {
 	let p = leg_phase.fract();
+	let stance = if p < 0.5 { walk.knee_stance_bend } else { 0.0 };
 	let clearance = if p >= 0.5 {
 		let t = (p - 0.5) * 2.0;
 		(t * std::f32::consts::PI).sin() * walk.knee_clearance
 	} else {
 		0.0
 	};
-	walk.knee_extended + clearance
+	walk.knee_extended + stance + clearance
 }
 
 #[cfg(test)]
@@ -179,13 +182,24 @@ mod tests {
 	}
 
 	#[test]
-	fn walk_hip_swing_exceeds_femur_on_support_side() {
+	fn walk_femur_counters_hip_swing_out() {
 		let mut rig = HumanoidV0Rig::imported();
 		Walk::<HumanoidV0Rig>::default().apply(&mut rig, 0.0);
 
 		let pelvis = rig.pose().get(&rig.leg(Side::Left).pelvis.name).expect("pelvis");
 		let femur = rig.pose().get(&rig.leg(Side::Left).femur.name).expect("femur");
-		assert!(pelvis.swing.abs() > femur.swing.abs());
+		assert!(pelvis.swing.abs() > 0.0);
+		assert!(femur.flex.signum() != pelvis.swing.signum());
+		assert!(femur.flex.abs() > 0.0);
+	}
+
+	#[test]
+	fn walk_stance_leg_has_soft_knee_bend() {
+		let mut rig = HumanoidV0Rig::imported();
+		Walk::<HumanoidV0Rig>::default().apply(&mut rig, 0.0);
+
+		let shin = rig.pose().get(&rig.leg(Side::Left).shin.name).expect("shin");
+		assert!(shin.flex > 0.0);
 	}
 
 	#[test]

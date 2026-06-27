@@ -7,15 +7,20 @@ use crate::{
 	BoneDefinition, BonePose, BoneTable, Name, RigPose, RiggedAxis, Side,
 };
 
+/// Left femur: sagittal stride on Y, medial/lateral on X, knee hinge lives on shin.
 const HUMANOID_V0_FEMUR_AXIS: RiggedAxis =
-	RiggedAxis { swing_axis: Vec3::Y, flex_axis: Vec3::Z, twist_axis: Vec3::X };
+	RiggedAxis { swing_axis: Vec3::Y, flex_axis: Vec3::X, twist_axis: Vec3::Z };
 
 const HUMANOID_V0_SHIN_AXIS: RiggedAxis =
 	RiggedAxis { swing_axis: Vec3::Y, flex_axis: Vec3::Z, twist_axis: Vec3::X };
 
-/// Mirrored limbs share semantic swing/flex magnitudes; negate the local axis instead.
-const HUMANOID_V0_RIGHT_SWING_AXIS: RiggedAxis =
-	RiggedAxis { swing_axis: Vec3::NEG_Y, flex_axis: Vec3::Z, twist_axis: Vec3::X };
+/// Mirrored right femur: negate swing and medial/lateral axes together.
+const HUMANOID_V0_RIGHT_FEMUR_AXIS: RiggedAxis =
+	RiggedAxis { swing_axis: Vec3::NEG_Y, flex_axis: Vec3::NEG_X, twist_axis: Vec3::Z };
+
+/// Mirrored right shin: negate flex so knee hinge matches the left leg semantically.
+const HUMANOID_V0_RIGHT_SHIN_AXIS: RiggedAxis =
+	RiggedAxis { swing_axis: Vec3::Y, flex_axis: Vec3::NEG_Z, twist_axis: Vec3::X };
 
 const HUMANOID_V0_RIGHT_FLEX_AXIS: RiggedAxis =
 	RiggedAxis { swing_axis: Vec3::Y, flex_axis: Vec3::NEG_Z, twist_axis: Vec3::X };
@@ -190,8 +195,8 @@ pub const HUMANOID_V0_BONE_DEFINITIONS: [(&str, RiggedAxis); 37] = [
 	("calf_thickness.L", RiggedAxis::DEFAULT),
 	("thigh_thickness.L", RiggedAxis::DEFAULT),
 	("pelvis.R", RiggedAxis::DEFAULT),
-	("femur.R", HUMANOID_V0_RIGHT_SWING_AXIS),
-	("shin.R", HUMANOID_V0_RIGHT_FLEX_AXIS),
+	("femur.R", HUMANOID_V0_RIGHT_FEMUR_AXIS),
+	("shin.R", HUMANOID_V0_RIGHT_SHIN_AXIS),
 	("calf_thickness.R", RiggedAxis::DEFAULT),
 	("thigh_thickness.R", RiggedAxis::DEFAULT),
 	("buttocks", RiggedAxis::DEFAULT),
@@ -297,7 +302,9 @@ mod tests {
 		let right_forearm = rig.bones.get(&Name::from("forearm.R")).expect("right forearm");
 
 		assert_eq!(left_femur.relative_axis.swing_axis, Vec3::Y);
+		assert_eq!(left_femur.relative_axis.flex_axis, Vec3::X);
 		assert_eq!(right_femur.relative_axis.swing_axis, Vec3::NEG_Y);
+		assert_eq!(right_femur.relative_axis.flex_axis, Vec3::NEG_X);
 		assert_eq!(left_shin.relative_axis.flex_axis, Vec3::Z);
 		assert_eq!(right_shin.relative_axis.flex_axis, Vec3::NEG_Z);
 		assert_eq!(right_forearm.relative_axis.flex_axis, Vec3::NEG_Z);
