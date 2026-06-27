@@ -15,8 +15,9 @@ impl<R: HumanoidRig> Animation<R> for Squat<R> {
 
 fn apply_leg<R: HumanoidRig>(rig: &mut R, side: Side, femur_swing: f32, shin_flex: f32) {
 	let mut leg = rig.leg_pose(side);
+	let sign = if side == Side::Left { 1.0 } else { -1.0 };
 
-	leg.femur = rig.articulate_on_rig(leg.femur, femur_swing, 0.0);
+	leg.femur = rig.articulate_on_rig(leg.femur, femur_swing * sign, 0.0);
 	leg.shin = rig.articulate_on_rig(leg.shin, 0.0, shin_flex);
 	rig.pose_leg(leg);
 }
