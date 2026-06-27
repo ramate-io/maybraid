@@ -15,9 +15,14 @@ impl<Rig> Fall<Rig> {
 		Self { phase, _rig: PhantomData }
 	}
 
+	/// Full airborne spread pose (for mix targets).
+	pub fn spread() -> Self {
+		Self::new(1.0)
+	}
+
 	/// Ramp in during the first fifth of the segment, then hold.
 	pub fn spread_amount(&self) -> f32 {
-		let t = self.phase.fract();
+		let t = self.phase.clamp(0.0, 1.0);
 		if t < 0.2 {
 			t / 0.2
 		} else {

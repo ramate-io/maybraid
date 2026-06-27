@@ -12,4 +12,8 @@ pub use mix::{Mix, Smooth, smoothstep};
 pub use run::Run;
 pub use spring::Spring;
 pub use squat::{Squat, vertical_drop};
-pub use two_footed_jump::{JumpSegment, TwoFootedJump, FALL_SEGMENT_END, SPRING_SEGMENT_END, SQUAT_SEGMENT_END};
+pub use two_footed_jump::{
+	JumpSegment, JumpTiming, TwoFootedJump, DEFAULT_GRAVITY, DEFAULT_JUMP_HEIGHT, DEFAULT_LAND_DURATION,
+	DEFAULT_SPRING_DURATION, DEFAULT_SQUAT_SPEED, FALL_BLEND_FRACTION, air_duration, ballistic_height,
+	launch_speed,
+};

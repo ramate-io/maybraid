@@ -29,6 +29,11 @@ impl<Rig> Spring<Rig> {
 		Self::new(1.0, Squat::default())
 	}
 
+	/// Pose at a specific extension progress in `[0, 1]`.
+	pub fn at_extension(progress: f32) -> Self {
+		Self::new(progress.clamp(0.0, 1.0), Squat::default())
+	}
+
 	pub fn femur_swing(&self) -> f32 {
 		self.squat.femur_peak * (1.0 - self.extend_amount())
 	}
