@@ -15,7 +15,7 @@ pub use spring::Spring;
 pub use squat::{Squat, vertical_drop};
 pub use transition::{BlendCurve, Transition, TransitionCurve};
 pub use two_footed_jump::{
-	air_duration, ballistic_height, launch_speed, JumpSegment, JumpTiming, TwoFootedJump,
+	air_duration, ballistic_height, launch_speed, touchdown_time_since_launch, JumpSegment, JumpTiming, TwoFootedJump,
 	DEFAULT_GRAVITY, DEFAULT_JUMP_HEIGHT, DEFAULT_LANDING_SQUAT_SPEED, DEFAULT_PRE_SQUAT_SPEED,
 	DEFAULT_SPRING_DURATION, FALL_BLEND_FRACTION, LAND_BLEND_FRACTION, LAND_POSE_BLEND_MAX_SECS,
 };

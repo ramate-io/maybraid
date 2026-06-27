@@ -41,7 +41,7 @@ impl<R: HumanoidRig> Animation<R> for TwoFootedJump<R> {
 						self.time_in_cycle(lengths, elapsed),
 						timings.air_end(),
 						local,
-						fall.shoulder_flex(Side::Left, 1.0),
+						fall.shoulder_flex(Side::Left, local),
 					);
 				}
 				if local < blend_end {
@@ -49,9 +49,9 @@ impl<R: HumanoidRig> Animation<R> for TwoFootedJump<R> {
 					let transition_progress = (local / blend_end).clamp(0.0, 1.0);
 					Transition::from_pose(fall, from_pose)
 						.with_curve(TransitionCurve::SmoothStep)
-						.apply(rig, 1.0, transition_progress);
+						.apply(rig, local, transition_progress);
 				} else {
-					fall.apply(rig, 1.0);
+					fall.apply(rig, local);
 				}
 			}
 			JumpSegment::Land => {
@@ -78,7 +78,8 @@ impl<R: HumanoidRig> Animation<R> for TwoFootedJump<R> {
 					);
 				}
 				if transition_progress < 1.0 {
-					let from_pose = capture_animation_pose(&Fall::<R>::default(), rig, 1.0);
+					let from_pose =
+						capture_animation_pose(&Fall::<R>::default(), rig, 1.0);
 					Transition::from_pose(land, from_pose)
 						.with_curve(TransitionCurve::SmoothStep)
 						.apply(rig, land_progress, transition_progress);

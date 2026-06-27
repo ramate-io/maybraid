@@ -42,7 +42,7 @@ pub struct JumpTiming {
 	pub squat_ascent_duration: f32,
 	/// Leg extension / push-off window (seconds).
 	pub spring_duration: f32,
-	/// Ballistic air time from take-off back to launch height (seconds).
+	/// Fall segment duration: spring end until ballistic touchdown (seconds).
 	pub air_duration: f32,
 	/// Landing compression duration (seconds).
 	pub land_descent_duration: f32,
@@ -152,14 +152,23 @@ impl<Rig> TwoFootedJump<Rig> {
 
 	pub fn timings(&self, lengths: LegSegmentLengths) -> JumpTiming {
 		let (windup, landing) = self.squat_configs(lengths);
+		let touchdown = touchdown_time_since_launch(self.gravity, self.jump_height);
+		// Fall runs from spring end until ballistic height returns to zero. Spring already
+		// consumes part of the post-launch clock, so subtract it from the full arc.
+		let fall_duration = (touchdown - DEFAULT_SPRING_DURATION).max(MIN_SEGMENT_DURATION);
 		JumpTiming {
 			squat_descent_duration: windup.descent_duration().max(MIN_SEGMENT_DURATION),
 			squat_ascent_duration: windup.ascent_duration().max(MIN_SEGMENT_DURATION),
 			spring_duration: DEFAULT_SPRING_DURATION,
-			air_duration: air_duration(self.gravity, self.jump_height),
+			air_duration: fall_duration,
 			land_descent_duration: landing.descent_duration().max(MIN_SEGMENT_DURATION),
 			land_ascent_duration: landing.ascent_duration().max(MIN_SEGMENT_DURATION),
 		}
+	}
+
+	/// Seconds after take-off when [`ballistic_height`] returns to zero on descent.
+	pub fn touchdown_time_since_launch(&self) -> f32 {
+		touchdown_time_since_launch(self.gravity, self.jump_height)
 	}
 
 	pub fn cycle_duration(&self, lengths: LegSegmentLengths) -> f32 {
@@ -192,11 +201,11 @@ impl<Rig> TwoFootedJump<Rig> {
 			return (JumpSegment::Spring, t / timings.spring_duration);
 		}
 		t -= timings.spring_duration;
-		if t < timings.air_duration - 0.1 {
-			return (JumpSegment::Fall, t / timings.air_duration);
+		if t < timings.air_duration {
+			return (JumpSegment::Fall, t / timings.air_duration.max(f32::EPSILON));
 		}
 		t -= timings.air_duration;
-		(JumpSegment::Land, t + 0.15)
+		(JumpSegment::Land, t)
 	}
 
 	pub fn segment(&self, lengths: LegSegmentLengths, elapsed: f32) -> (JumpSegment, f32) {
@@ -236,7 +245,8 @@ impl<Rig> TwoFootedJump<Rig> {
 				-squat.vertical_drop(p, lengths)
 			}
 			JumpSegment::Spring | JumpSegment::Fall => {
-				self.ballistic_height(self.time_since_launch(lengths, elapsed))
+				let since_launch = self.time_since_launch(lengths, elapsed);
+				self.ballistic_height(since_launch.min(self.touchdown_time_since_launch()))
 			}
 			JumpSegment::Land => {
 				let land = self.landing_squat(lengths);
@@ -257,6 +267,11 @@ pub fn air_duration(gravity: f32, jump_height: f32) -> f32 {
 	2.0 * launch_speed(gravity, jump_height) / gravity
 }
 
+/// Time after take-off when [`ballistic_height`] returns to zero on descent.
+pub fn touchdown_time_since_launch(gravity: f32, jump_height: f32) -> f32 {
+	air_duration(gravity, jump_height)
+}
+
 /// Height above launch point `t` seconds after take-off.
 pub fn ballistic_height(time_since_launch: f32, gravity: f32, jump_height: f32) -> f32 {
 	if time_since_launch <= 0.0 {
@@ -272,6 +287,29 @@ mod tests {
 
 	fn default_jump() -> TwoFootedJump<()> {
 		TwoFootedJump::default()
+	}
+
+	#[test]
+	fn fall_duration_ends_at_ballistic_touchdown() -> anyhow::Result<()> {
+		let lengths = LegSegmentLengths::default();
+		let jump = default_jump();
+		let timings = jump.timings(lengths);
+		let touchdown = jump.touchdown_time_since_launch();
+		assert!(
+			(timings.spring_duration + timings.air_duration - touchdown).abs() < 1e-3,
+			"spring + fall should equal ballistic touchdown"
+		);
+		Ok(())
+	}
+
+	#[test]
+	fn vertical_offset_near_zero_at_touchdown() -> anyhow::Result<()> {
+		let lengths = LegSegmentLengths::default();
+		let jump = default_jump();
+		let timings = jump.timings(lengths);
+		let y = jump.vertical_offset(lengths, timings.air_end());
+		assert!(y.abs() < 0.05, "expected near-ground at land start, y={y}");
+		Ok(())
 	}
 
 	#[test]
