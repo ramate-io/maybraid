@@ -44,7 +44,7 @@ where
 	mix_effects(from_effects, to_effects, weight)
 }
 
-fn snapshot_pose<R: HumanoidRig>(rig: &R) -> RigPose {
+pub(crate) fn snapshot_pose<R: HumanoidRig>(rig: &R) -> RigPose {
 	let mut pose = RigPose::new();
 	for bone in rig.animation_bones() {
 		if let Some(p) = rig.pose().get(&bone) {
@@ -54,7 +54,7 @@ fn snapshot_pose<R: HumanoidRig>(rig: &R) -> RigPose {
 	pose
 }
 
-fn restore_pose<R: HumanoidRig>(rig: &mut R, rest: &RigPose) {
+pub(crate) fn restore_pose<R: HumanoidRig>(rig: &mut R, rest: &RigPose) {
 	for bone in rig.animation_bones() {
 		if let Some(p) = rest.get(&bone) {
 			rig.pose_mut().insert(p.clone());
@@ -62,7 +62,7 @@ fn restore_pose<R: HumanoidRig>(rig: &mut R, rest: &RigPose) {
 	}
 }
 
-fn sample<A: Animation<R>, R: HumanoidRig>(
+pub(crate) fn sample<A: Animation<R>, R: HumanoidRig>(
 	anim: &A,
 	rig: &mut R,
 	rest: &RigPose,
@@ -72,7 +72,7 @@ fn sample<A: Animation<R>, R: HumanoidRig>(
 	( snapshot_pose(rig), effects)
 }
 
-fn blend_pose<R: HumanoidRig>(rig: &mut R, from: &RigPose, to: &RigPose, weight: f32) {
+pub(crate) fn blend_pose<R: HumanoidRig>(rig: &mut R, from: &RigPose, to: &RigPose, weight: f32) {
 	for bone in rig.animation_bones() {
 		let Some(from_bone) = from.get(&bone) else {
 			if let Some(to_bone) = to.get(&bone) {
@@ -98,7 +98,7 @@ fn blend_bone(from: &BonePose, to: &BonePose, weight: f32) -> BonePose {
 	}
 }
 
-fn mix_effects(from: Effects, to: Effects, weight: f32) -> Effects {
+pub(crate) fn mix_effects(from: Effects, to: Effects, weight: f32) -> Effects {
 	match (from.r#move, to.r#move) {
 		(None, None) => Effects::default(),
 		(Some(m), None) => Effects {
@@ -127,6 +127,16 @@ fn scale_transform(t: Transform, scale: f32) -> Transform {
 		rotation: t.rotation,
 		scale: t.scale,
 	}
+}
+
+pub(crate) fn pose_from_animation<A: Animation<R>, R: HumanoidRig>(
+	anim: &A,
+	rig: &mut R,
+) -> RigPose {
+	let rest = snapshot_pose(rig);
+	let (pose, _effects) = sample(anim, rig, &rest);
+	restore_pose(rig, &rest);
+	pose
 }
 
 #[allow(dead_code)]

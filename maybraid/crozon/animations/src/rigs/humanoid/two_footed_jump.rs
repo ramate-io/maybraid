@@ -3,8 +3,9 @@ use crozon_rigs::{humanoid::HumanoidRig, Side};
 use log::info;
 
 use crate::animations::{
-	Fall, JumpSegment, Smooth, Spring, Squat, TwoFootedJump, FALL_BLEND_FRACTION,
+	BlendCurve, Fall, JumpSegment, Spring, Squat, Transition, TwoFootedJump, FALL_BLEND_FRACTION,
 };
+use crate::rigs::transition::capture_animation_pose;
 use crate::{Animation, Effects};
 
 fn segment_debug_enabled() -> bool {
@@ -22,13 +23,15 @@ impl<R: HumanoidRig> Animation<R> for TwoFootedJump<R> {
 				self.prejump_squat(lengths).apply(rig);
 			}
 			JumpSegment::Spring => {
-				Smooth::<_, _, R>::new(Squat::<R>::new(0.0), Spring::<R>::extended(), local)
+				let from_pose = capture_animation_pose(&Squat::<R>::new(0.0), rig);
+				Transition::from_pose(Spring::<R>::at_extension(local), from_pose, local)
+					.with_curve(BlendCurve::SmoothStep)
 					.apply(rig);
 			}
 			JumpSegment::Fall => {
-				let blend = (local / FALL_BLEND_FRACTION).clamp(0.0, 1.0);
+				let fall = Fall::<R>::spread();
+				let blend_end = FALL_BLEND_FRACTION;
 				if segment_debug_enabled() && local > 0.9 {
-					let fall = Fall::<R>::spread();
 					info!(
 						"jump fall end: elapsed={:.3} cycle_t={:.3} air_end={:.3} fall_local={:.4} fall_femur=0 fall_shoulder_flex={:.4}",
 						self.elapsed,
@@ -38,30 +41,45 @@ impl<R: HumanoidRig> Animation<R> for TwoFootedJump<R> {
 						fall.shoulder_flex(Side::Left),
 					);
 				}
-				if blend < 1.0 {
-					Smooth::<_, _, R>::new(Spring::<R>::extended(), Fall::<R>::spread(), blend)
+				if local < blend_end {
+					let from_pose = capture_animation_pose(&Spring::<R>::extended(), rig);
+					let progress = (local / blend_end).clamp(0.0, 1.0);
+					Transition::from_pose(fall, from_pose, progress)
+						.with_curve(BlendCurve::SmoothStep)
 						.apply(rig);
 				} else {
-					Fall::<R>::spread().apply(rig);
+					fall.apply(rig);
 				}
 			}
 			JumpSegment::Land => {
 				let land = self.landing_squat(lengths);
+				let blend_window = timings.land_pose_blend_duration();
+				let progress = if blend_window > f32::EPSILON {
+					(local / blend_window).clamp(0.0, 1.0)
+				} else {
+					1.0
+				};
 				if segment_debug_enabled() && local < timings.land_descent_duration + 0.05 {
-					let fall_shoulder = Fall::<R>::spread().shoulder_flex(Side::Left);
 					info!(
-						"jump land start: elapsed={:.3} cycle_t={:.3} land_local={:.4} land_depth={:.4} land_femur={:.4} fall_shoulder={:.4} land_desc_d={:.4} y={:.4}",
+						"jump land start: elapsed={:.3} cycle_t={:.3} land_local={:.4} land_depth={:.4} land_femur={:.4} transition={:.4} land_desc_d={:.4} y={:.4}",
 						self.elapsed,
 						self.time_in_cycle(lengths),
 						local,
 						land.depth(),
 						land.femur_swing(),
-						fall_shoulder,
+						progress,
 						timings.land_descent_duration,
 						self.vertical_offset(lengths),
 					);
 				}
-				land.apply(rig);
+				if progress < 1.0 {
+					let from_pose = capture_animation_pose(&Fall::<R>::spread(), rig);
+					Transition::from_pose(land, from_pose, progress)
+						.with_curve(BlendCurve::SmoothStep)
+						.apply(rig);
+				} else {
+					land.apply(rig);
+				}
 			}
 		}
 
@@ -162,6 +180,23 @@ mod tests {
 			rig_land.pose().get(&rig_land.leg(Side::Left).femur.name).expect("femur").swing;
 
 		assert!(land_femur.abs() < squat_femur.abs());
+		Ok(())
+	}
+
+	#[test]
+	fn land_transition_blends_arms_from_fall() -> anyhow::Result<()> {
+		let mut rig = HumanoidV0Rig::imported();
+		crate::rigs::mix::seed_bind_pose(&mut rig);
+		let jump = jump_at_elapsed(0.0);
+		let lengths = rig.segment_lengths();
+		let timings = jump.timings(lengths);
+		let blend = timings.land_pose_blend_duration();
+		jump_at_elapsed(timings.air_end() + blend * 0.5).apply(&mut rig);
+
+		let shoulder = rig.pose().get(&rig.arm(Side::Left).shoulder.name).expect("shoulder");
+		let fall_shoulder = Fall::<HumanoidV0Rig>::spread().shoulder_flex(Side::Left);
+		assert!(shoulder.flex.abs() > 0.05);
+		assert!(shoulder.flex.abs() < fall_shoulder.abs());
 		Ok(())
 	}
 }
