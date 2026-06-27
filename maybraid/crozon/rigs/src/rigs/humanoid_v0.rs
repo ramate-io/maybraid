@@ -7,6 +7,12 @@ use crate::{
 	BoneDefinition, BonePose, BoneTable, Name, RigPose, RiggedAxis, Side,
 };
 
+const HUMANOID_V0_SHIN_AXIS: RiggedAxis =
+	RiggedAxis { swing_axis: Vec3::Y, flex_axis: Vec3::Z, twist_axis: Vec3::X };
+
+const HUMANOID_V0_RIGHT_FLEX_AXIS: RiggedAxis =
+	RiggedAxis { swing_axis: Vec3::Y, flex_axis: Vec3::NEG_Z, twist_axis: Vec3::X };
+
 /// Store the bones of the first imported humanoid rig in a semantically reasonable hierarchy.
 ///
 /// Symmetry is currently represented by explicit accessors (`arm(Side)`, `leg(Side)`) rather
@@ -73,14 +79,6 @@ impl HumanoidRig for HumanoidV0Rig {
 		&mut self.pose
 	}
 
-	fn forearm_flex_sign(&self, side: Side) -> f32 {
-		let name = Name::from(format!("forearm.{}", side.suffix()));
-		self.bones
-			.get(&name)
-			.map(|bone| flex_sign_from_axis(bone.relative_axis))
-			.unwrap_or(1.0)
-	}
-
 	fn rigged_axis(&self, bone: &Name) -> Option<RiggedAxis> {
 		self.bones.get(bone).map(|bone| bone.relative_axis)
 	}
@@ -91,14 +89,6 @@ impl HumanoidRig for HumanoidV0Rig {
 
 	fn segment_lengths(&self) -> LegSegmentLengths {
 		self.segment_lengths
-	}
-}
-
-fn flex_sign_from_axis(axis: RiggedAxis) -> f32 {
-	if axis.flex_axis.dot(RiggedAxis::DEFAULT.flex_axis) < 0.0 {
-		-1.0
-	} else {
-		1.0
 	}
 }
 
@@ -156,7 +146,7 @@ pub const HUMANOID_V0_BONE_DEFINITIONS: [(&str, RiggedAxis); 37] = [
 	("upper_neck", RiggedAxis::DEFAULT),
 	("shoulder.R", RiggedAxis::DEFAULT),
 	("humerus.R", RiggedAxis::DEFAULT),
-	("forearm.R", RiggedAxis::DEFAULT),
+	("forearm.R", HUMANOID_V0_RIGHT_FLEX_AXIS),
 	("lower_arm_thickness.R", RiggedAxis::DEFAULT),
 	("upper_arm_thickness.R", RiggedAxis::DEFAULT),
 	("chest.L", RiggedAxis::DEFAULT),
@@ -171,12 +161,12 @@ pub const HUMANOID_V0_BONE_DEFINITIONS: [(&str, RiggedAxis); 37] = [
 	("lower_belly", RiggedAxis::DEFAULT),
 	("pelvis.L", RiggedAxis::DEFAULT),
 	("femur.L", RiggedAxis::DEFAULT),
-	("shin.L", RiggedAxis::SHIN),
+	("shin.L", HUMANOID_V0_SHIN_AXIS),
 	("calf_thickness.L", RiggedAxis::DEFAULT),
 	("thigh_thickness.L", RiggedAxis::DEFAULT),
 	("pelvis.R", RiggedAxis::DEFAULT),
 	("femur.R", RiggedAxis::DEFAULT),
-	("shin.R", RiggedAxis::SHIN),
+	("shin.R", HUMANOID_V0_RIGHT_FLEX_AXIS),
 	("calf_thickness.R", RiggedAxis::DEFAULT),
 	("thigh_thickness.R", RiggedAxis::DEFAULT),
 	("buttocks", RiggedAxis::DEFAULT),
@@ -232,6 +222,18 @@ mod tests {
 		for name in rig.animation_bones() {
 			assert!(rig.bones.get(&name).is_some(), "missing animation bone {name}");
 		}
+	}
+
+	#[test]
+	fn humanoid_v0_mirrors_right_flex_axes_in_metadata() {
+		let rig = HumanoidV0Rig::imported();
+		let left_shin = rig.bones.get(&Name::from("shin.L")).expect("left shin");
+		let right_shin = rig.bones.get(&Name::from("shin.R")).expect("right shin");
+		let right_forearm = rig.bones.get(&Name::from("forearm.R")).expect("right forearm");
+
+		assert_eq!(left_shin.relative_axis.flex_axis, Vec3::Z);
+		assert_eq!(right_shin.relative_axis.flex_axis, Vec3::NEG_Z);
+		assert_eq!(right_forearm.relative_axis.flex_axis, Vec3::NEG_Z);
 	}
 
 	#[test]

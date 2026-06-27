@@ -75,7 +75,6 @@ impl Default for RiggedAxis {
 
 impl RiggedAxis {
 	pub const DEFAULT: Self = Self { swing_axis: Vec3::Y, flex_axis: Vec3::Z, twist_axis: Vec3::X };
-	pub const SHIN: Self = Self { swing_axis: Vec3::Y, flex_axis: Vec3::Z, twist_axis: Vec3::X };
 }
 
 #[derive(Debug, Clone, PartialEq)]
