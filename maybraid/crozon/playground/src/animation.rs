@@ -18,6 +18,8 @@ use crate::skinning::{BoneMap, CharacterRig};
 
 const RUN_CYCLE_SPEED: f32 = 0.5;
 const SQUAT_CYCLE_SPEED: f32 = 0.25;
+const JUMP_SQUAT_DESCENT_SPEED: f32 = 0.8;
+const JUMP_HEIGHT: f32 = 1.5;
 
 const DEBUG_BONES: &[&str] = &[
 	"root",
@@ -215,7 +217,9 @@ fn animate_jump(
 	};
 
 	marshal_limbs_into_pose(&mut rig, limbs);
-	let jump = TwoFootedJump::<HumanoidV0Rig>::from_time(t).with_squat_speed(SQUAT_CYCLE_SPEED);
+	let jump = TwoFootedJump::<HumanoidV0Rig>::from_time(t)
+		.with_jump_height(JUMP_HEIGHT)
+		.with_squat_descent_speed(JUMP_SQUAT_DESCENT_SPEED);
 	let effects = jump.apply(&mut rig);
 	apply_effects(config.transform, effects, armature);
 	marshal_pose_to_limbs(&rig, limbs);

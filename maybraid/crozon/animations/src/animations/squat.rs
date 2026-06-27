@@ -8,6 +8,8 @@ const ROOT_SQUAT_DEG: f32 = 15.0;
 #[derive(Debug, Clone)]
 pub struct Squat<Rig> {
 	pub phase: f32,
+	/// When set, overrides phase-based [`Self::squat_amount`].
+	pub amount: Option<f32>,
 	/// Peak femur forward angle at deepest squat (radians).
 	pub femur_peak: f32,
 	/// Peak shin angle relative to femur at deepest squat (radians).
@@ -19,11 +21,20 @@ pub struct Squat<Rig> {
 
 impl<Rig> Squat<Rig> {
 	pub fn new(phase: f32) -> Self {
-		Self { phase, ..Self::default() }
+		Self { phase, amount: None, ..Self::default() }
+	}
+
+	pub fn with_amount(amount: f32) -> Self {
+		Self { amount: Some(amount.clamp(0.0, 1.0)), ..Self::default() }
 	}
 
 	pub fn from_time(t: f32, cycle_speed: f32) -> Self {
 		Self::new((t * cycle_speed).fract())
+	}
+
+	/// Peak vertical drop at full depth (amount = 1).
+	pub fn peak_vertical_drop(&self, lengths: LegSegmentLengths) -> f32 {
+		vertical_drop(self.femur_peak, self.shin_peak, lengths)
 	}
 }
 
@@ -31,6 +42,7 @@ impl<Rig> Default for Squat<Rig> {
 	fn default() -> Self {
 		Self {
 			phase: 0.0,
+			amount: None,
 			femur_peak: -FRAC_PI_4,
 			shin_peak: FRAC_PI_2,
 			root_peak: ROOT_SQUAT_DEG.to_radians(),
@@ -42,7 +54,7 @@ impl<Rig> Default for Squat<Rig> {
 impl<Rig> Squat<Rig> {
 	/// 0 at stand, 1 at deepest squat, back to 0 over one cycle.
 	pub fn squat_amount(&self) -> f32 {
-		(self.phase.fract() * PI).sin()
+		self.amount.unwrap_or_else(|| (self.phase.fract() * PI).sin())
 	}
 
 	/// Wind-up only: 0 at stand, 1 at deepest squat (no return).
@@ -90,9 +102,35 @@ pub fn vertical_drop(femur_swing: f32, shin_flex: f32, lengths: LegSegmentLength
 	(standing - bent).max(0.0)
 }
 
+/// Piecewise squat envelope: controlled descent, then ascent over separate durations.
+pub fn descent_ascent_amount(time: f32, descent_duration: f32, ascent_duration: f32) -> f32 {
+	if time <= 0.0 {
+		return 0.0;
+	}
+	if descent_duration > f32::EPSILON && time < descent_duration {
+		let u = (time / descent_duration).clamp(0.0, 1.0);
+		return (u * FRAC_PI_2).sin();
+	}
+	let ascent_time = time - descent_duration;
+	if ascent_duration > f32::EPSILON && ascent_time < ascent_duration {
+		let u = (ascent_time / ascent_duration).clamp(0.0, 1.0);
+		return (u * FRAC_PI_2).cos();
+	}
+	0.0
+}
+
 #[cfg(test)]
 mod tests {
 	use super::*;
+
+	#[test]
+	fn descent_ascent_reaches_peak_between_halves() -> anyhow::Result<()> {
+		let peak = descent_ascent_amount(1.0, 1.0, 1.0);
+		assert!((peak - 1.0).abs() < 1e-5);
+		let end = descent_ascent_amount(2.0, 1.0, 1.0);
+		assert!(end.abs() < 1e-5);
+		Ok(())
+	}
 
 	#[test]
 	fn stand_phase_has_zero_drop() {

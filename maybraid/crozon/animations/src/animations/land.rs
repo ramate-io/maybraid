@@ -10,16 +10,28 @@ pub struct Land<Rig> {
 	pub phase: f32,
 	pub scale: f32,
 	pub squat: Squat<Rig>,
+	/// When set, overrides phase-based [`Self::land_amount`].
+	pub amount: Option<f32>,
 	_rig: PhantomData<Rig>,
 }
 
 impl<Rig> Land<Rig> {
 	pub fn new(phase: f32, squat: Squat<Rig>) -> Self {
-		Self { phase, scale: DEFAULT_LAND_SCALE, squat, _rig: PhantomData }
+		Self { phase, scale: DEFAULT_LAND_SCALE, squat, amount: None, _rig: PhantomData }
+	}
+
+	pub fn with_amount(amount: f32, squat: Squat<Rig>) -> Self {
+		Self {
+			phase: 0.0,
+			scale: DEFAULT_LAND_SCALE,
+			squat,
+			amount: Some(amount.clamp(0.0, 1.0)),
+			_rig: PhantomData,
+		}
 	}
 
 	pub fn land_amount(&self) -> f32 {
-		(self.phase.fract() * PI).sin()
+		self.amount.unwrap_or_else(|| (self.phase.clamp(0.0, 1.0) * PI).sin())
 	}
 
 	pub fn femur_swing(&self) -> f32 {
@@ -37,6 +49,14 @@ impl<Rig> Land<Rig> {
 	pub fn vertical_drop(&self, lengths: crozon_rigs::humanoid::LegSegmentLengths) -> f32 {
 		vertical_drop(self.femur_swing(), self.shin_flex(), lengths)
 	}
+
+	pub fn peak_vertical_drop(&self, lengths: crozon_rigs::humanoid::LegSegmentLengths) -> f32 {
+		vertical_drop(
+			self.scale * self.squat.femur_peak,
+			self.scale * self.squat.shin_peak,
+			lengths,
+		)
+	}
 }
 
 impl<Rig> Default for Land<Rig> {
@@ -53,7 +73,7 @@ mod tests {
 	#[test]
 	fn land_peak_flex_below_full_squat() -> anyhow::Result<()> {
 		let squat = Squat::<()>::new(0.5);
-		let land = Land::<()>::new(0.5, Squat::default());
+		let land = Land::<()>::with_amount(1.0, Squat::default());
 		assert!(land.femur_swing().abs() < squat.femur_swing().abs());
 		assert!(land.shin_flex().abs() < squat.shin_flex().abs());
 		Ok(())
@@ -61,9 +81,7 @@ mod tests {
 
 	#[test]
 	fn land_endpoints_are_neutral() -> anyhow::Result<()> {
-		let land = Land::<()>::new(0.0, Squat::default());
-		assert!(land.femur_swing().abs() < 1e-5);
-		let land = Land::<()>::new(1.0, Squat::default());
+		let land = Land::<()>::with_amount(0.0, Squat::default());
 		assert!(land.femur_swing().abs() < 1e-5);
 		Ok(())
 	}

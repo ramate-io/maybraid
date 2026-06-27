@@ -8,12 +8,12 @@ use crate::{Effects, Animation};
 
 impl<R: HumanoidRig> Animation<R> for TwoFootedJump<R> {
 	fn apply(&self, rig: &mut R) -> Effects {
-		let (segment, local) = self.segment();
 		let lengths = rig.segment_lengths();
+		let (segment, local) = self.segment(lengths);
 
 		match segment {
 			JumpSegment::Squat => {
-				Squat::<R>::new(local).apply(rig);
+				Squat::<R>::with_amount(self.prejump_squat_amount(lengths)).apply(rig);
 			}
 			JumpSegment::Spring => {
 				Smooth::<_, _, R>::new(
@@ -37,7 +37,7 @@ impl<R: HumanoidRig> Animation<R> for TwoFootedJump<R> {
 				}
 			}
 			JumpSegment::Land => {
-				Land::<R>::new(local, Squat::<R>::default()).apply(rig);
+				Land::<R>::with_amount(self.land_squat_amount(lengths), Squat::<R>::default()).apply(rig);
 			}
 		}
 
@@ -54,7 +54,7 @@ mod tests {
 	use crozon_rigs::{rigs::humanoid_v0::HumanoidV0Rig, Side};
 
 	use super::*;
-	use crate::animations::{DEFAULT_SPRING_DURATION, DEFAULT_SQUAT_SPEED, Squat};
+	use crate::animations::{DEFAULT_SPRING_DURATION, Squat};
 
 	fn jump_at_elapsed(elapsed: f32) -> TwoFootedJump<HumanoidV0Rig> {
 		TwoFootedJump::new(elapsed)
@@ -63,8 +63,10 @@ mod tests {
 	#[test]
 	fn spring_end_legs_straight() -> anyhow::Result<()> {
 		let mut rig = HumanoidV0Rig::imported();
-		let jump = jump_at_elapsed(1.0 / DEFAULT_SQUAT_SPEED + DEFAULT_SPRING_DURATION * 0.99);
-		jump.apply(&mut rig);
+		let jump = jump_at_elapsed(0.0);
+		let lengths = rig.segment_lengths();
+		let elapsed = jump.timings(lengths).squat_end() + DEFAULT_SPRING_DURATION * 0.99;
+		jump_at_elapsed(elapsed).apply(&mut rig);
 
 		let femur = rig.pose().get(&rig.leg(Side::Left).femur.name).expect("femur");
 		let shin = rig.pose().get(&rig.leg(Side::Left).shin.name).expect("shin");
@@ -77,8 +79,10 @@ mod tests {
 	fn spring_midpoint_blends_from_stand() -> anyhow::Result<()> {
 		let mut rig = HumanoidV0Rig::imported();
 		crate::rigs::mix::seed_bind_pose(&mut rig);
-		let jump = jump_at_elapsed(1.0 / DEFAULT_SQUAT_SPEED + DEFAULT_SPRING_DURATION * 0.5);
-		jump.apply(&mut rig);
+		let jump = jump_at_elapsed(0.0);
+		let lengths = rig.segment_lengths();
+		let elapsed = jump.timings(lengths).squat_end() + DEFAULT_SPRING_DURATION * 0.5;
+		jump_at_elapsed(elapsed).apply(&mut rig);
 
 		let shoulder = rig.pose().get(&rig.arm(Side::Left).shoulder.name).expect("shoulder");
 		let full = Spring::<HumanoidV0Rig>::extended().shoulder_swing();
@@ -91,8 +95,9 @@ mod tests {
 	fn fall_blends_from_spring_at_air_start() -> anyhow::Result<()> {
 		let mut rig = HumanoidV0Rig::imported();
 		crate::rigs::mix::seed_bind_pose(&mut rig);
-		let jump = jump_at_elapsed(jump_at_elapsed(0.0).timings().spring_end() + 0.01);
-		jump.apply(&mut rig);
+		let jump = jump_at_elapsed(0.0);
+		let lengths = rig.segment_lengths();
+		jump_at_elapsed(jump.timings(lengths).spring_end() + 0.01).apply(&mut rig);
 
 		let shoulder = rig.pose().get(&rig.arm(Side::Left).shoulder.name).expect("shoulder");
 		let spread = Fall::<HumanoidV0Rig>::spread().shoulder_flex(Side::Left);
@@ -104,7 +109,8 @@ mod tests {
 	fn fall_spreads_arms() -> anyhow::Result<()> {
 		let mut rig = HumanoidV0Rig::imported();
 		let jump = jump_at_elapsed(0.0);
-		let elapsed = jump.timings().spring_end() + jump.timings().air_duration * 0.5;
+		let lengths = rig.segment_lengths();
+		let elapsed = jump.timings(lengths).spring_end() + jump.timings(lengths).air_duration * 0.5;
 		jump_at_elapsed(elapsed).apply(&mut rig);
 
 		let left = rig.pose().get(&rig.arm(Side::Left).shoulder.name).expect("shoulder");
@@ -122,8 +128,10 @@ mod tests {
 			rig_squat.pose().get(&rig_squat.leg(Side::Left).femur.name).expect("femur").swing;
 
 		let mut rig_land = HumanoidV0Rig::imported();
-		let timings = jump_at_elapsed(0.0).timings();
-		jump_at_elapsed(timings.air_end() + timings.land_duration * 0.5).apply(&mut rig_land);
+		let jump = jump_at_elapsed(0.0);
+		let lengths = rig_land.segment_lengths();
+		let timings = jump.timings(lengths);
+		jump_at_elapsed(timings.air_end() + timings.land_descent_duration * 0.99).apply(&mut rig_land);
 		let land_femur =
 			rig_land.pose().get(&rig_land.leg(Side::Left).femur.name).expect("femur").swing;
 
@@ -134,12 +142,13 @@ mod tests {
 	#[test]
 	fn jump_effects_near_zero_at_cycle_boundaries() -> anyhow::Result<()> {
 		let mut rig = HumanoidV0Rig::imported();
+		let lengths = rig.segment_lengths();
 		let start = jump_at_elapsed(0.0).apply(&mut rig);
 		assert!(start.r#move.is_none() || start.r#move.unwrap().translation.y.abs() < 1e-4);
 
 		let mut rig = HumanoidV0Rig::imported();
 		let jump = jump_at_elapsed(0.0);
-		let end = jump_at_elapsed(jump.cycle_duration() * 0.999).apply(&mut rig);
+		let end = jump_at_elapsed(jump.cycle_duration(lengths) * 0.999).apply(&mut rig);
 		let y = end.r#move.map(|t| t.translation.y).unwrap_or(0.0);
 		assert!(y.abs() < 0.1);
 		Ok(())
@@ -149,11 +158,11 @@ mod tests {
 	fn squat_to_spring_vertical_is_continuous() -> anyhow::Result<()> {
 		let lengths = crozon_rigs::humanoid::LegSegmentLengths::default();
 		let jump = TwoFootedJump::<()>::default();
-		let timings = jump.timings();
-		let squat_end = TwoFootedJump::<()>::new(timings.squat_end() * 0.99);
-		let spring_start = TwoFootedJump::<()>::new(timings.squat_end());
+		let timings = jump.timings(lengths);
+		let squat_end = TwoFootedJump::<()>::new(timings.squat_end() - 0.001);
+		let spring_start = TwoFootedJump::<()>::new(timings.squat_end() + 1e-4);
 		assert!(
-			(squat_end.vertical_offset(lengths) - spring_start.vertical_offset(lengths)).abs() < 0.05
+			(squat_end.vertical_offset(lengths) - spring_start.vertical_offset(lengths)).abs() < 0.1
 		);
 		Ok(())
 	}
