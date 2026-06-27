@@ -7,8 +7,8 @@
 //! - **`pre_squat_speed`** — how fast the character squats down before take-off
 //!   (stand to bottom in `1/pre_squat_speed` seconds). The return to stand before
 //!   spring is matched to launch speed from `jump_height` and `gravity`.
-//! - **`landing_squat_speed`** — scales landing compression from the impact-speed
-//!   baseline and sets recovery rate (stand-up in `1/landing_squat_speed` seconds).
+//! - **`landing_squat_speed`** — landing compression and recovery rate (each half-cycle
+//!   takes `1/landing_squat_speed` seconds).
 
 use std::marker::PhantomData;
 
@@ -29,7 +29,7 @@ pub const FALL_BLEND_FRACTION: f32 = 0.25;
 /// Fraction of the **compression** half used to blend fall arms into landing pose.
 pub const LAND_BLEND_FRACTION: f32 = 0.25;
 /// Upper cap on fall-to-land pose blend so compression is not delayed by recovery timing.
-pub const LAND_POSE_BLEND_MAX_SECS: f32 = 0.06;
+pub const LAND_POSE_BLEND_MAX_SECS: f32 = 0.5;
 
 const MIN_SEGMENT_DURATION: f32 = 1e-3;
 const MIN_SPEED: f32 = 1e-3;
@@ -149,22 +149,17 @@ impl<Rig> TwoFootedJump<Rig> {
 	fn squat_configs(&self, lengths: LegSegmentLengths) -> (Squat<Rig>, Land<Rig>) {
 		let impact = launch_speed(self.gravity, self.jump_height);
 		let squat_peak = Squat::<Rig>::default().peak_vertical_drop(lengths);
-		let land_peak = Land::<Rig>::default().peak_vertical_drop(lengths);
 
 		let windup_descent = self.pre_squat_speed.max(MIN_SPEED);
 		let windup_ascent =
 			if squat_peak > f32::EPSILON { impact / squat_peak } else { windup_descent };
 
-		let land_compression_duration = if land_peak > f32::EPSILON && impact > f32::EPSILON {
-			// Literal distance / impact speed is only a few milliseconds at this rig scale,
-			// which lands between frames and reads as a snap. Use an impact-scaled square-root
-			// duration so higher falls still compress faster while remaining visible.
-			(land_peak / impact).sqrt() / self.landing_squat_speed.max(MIN_SPEED)
-		} else {
-			1.0 / self.landing_squat_speed.max(MIN_SPEED)
-		};
-		let land_compression = 1.0 / land_compression_duration.max(MIN_SEGMENT_DURATION);
-		let land_recovery = self.landing_squat_speed.max(MIN_SPEED);
+		// Run the landing squat at `landing_squat_speed`, matching pre-jump descent. Impact-
+		// matched compression was only ~20 ms at this rig scale and read as a snap between
+		// frames even without pose blending.
+		let land_half_speed = self.landing_squat_speed.max(MIN_SPEED);
+		let land_compression = land_half_speed;
+		let land_recovery = land_half_speed;
 
 		let windup = Squat::with_speeds(windup_descent, windup_ascent.max(MIN_SPEED));
 		let landing = Land::with_speeds(land_compression, land_recovery, Squat::<Rig>::default());
@@ -316,39 +311,28 @@ mod tests {
 	}
 
 	#[test]
-	fn ascent_and_compression_match_impact_speed() -> anyhow::Result<()> {
+	fn windup_ascent_matches_impact_speed() -> anyhow::Result<()> {
 		let lengths = LegSegmentLengths::default();
 		let jump = default_jump();
 		let timings = jump.timings(lengths);
 		let impact = launch_speed(DEFAULT_GRAVITY, DEFAULT_JUMP_HEIGHT);
 		let squat_peak = Squat::<()>::default().peak_vertical_drop(lengths);
-		let land_peak = Land::<()>::default().peak_vertical_drop(lengths);
 
 		assert!((timings.squat_ascent_duration - squat_peak / impact).abs() < 1e-3);
-		let expected_land_descent =
-			(land_peak / impact).sqrt() / DEFAULT_LANDING_SQUAT_SPEED.max(f32::EPSILON);
-		assert!((timings.land_descent_duration - expected_land_descent).abs() < 1e-3);
 		Ok(())
 	}
 
 	#[test]
-	fn higher_jump_shortens_land_compression() -> anyhow::Result<()> {
+	fn landing_squat_speed_controls_compression_and_recovery() -> anyhow::Result<()> {
 		let lengths = LegSegmentLengths::default();
-		let low = TwoFootedJump::<()>::from_time(0.0).with_jump_height(1.0);
-		let high = TwoFootedJump::<()>::from_time(0.0).with_jump_height(3.0);
-		assert!(
-			high.timings(lengths).land_descent_duration
-				< low.timings(lengths).land_descent_duration
-		);
-		Ok(())
-	}
-
-	#[test]
-	fn landing_descent_faster_than_recovery() -> anyhow::Result<()> {
-		let lengths = LegSegmentLengths::default();
-		let jump = default_jump();
-		let timings = jump.timings(lengths);
-		assert!(timings.land_descent_duration < timings.land_ascent_duration);
+		let slow = TwoFootedJump::<()>::from_time(0.0).with_landing_squat_speed(1.0);
+		let fast = TwoFootedJump::<()>::from_time(0.0).with_landing_squat_speed(4.0);
+		let slow_timings = slow.timings(lengths);
+		let fast_timings = fast.timings(lengths);
+		assert!((slow_timings.land_descent_duration - 1.0).abs() < 1e-3);
+		assert!((slow_timings.land_ascent_duration - 1.0).abs() < 1e-3);
+		assert!(fast_timings.land_descent_duration < slow_timings.land_descent_duration);
+		assert!(fast_timings.land_ascent_duration < slow_timings.land_ascent_duration);
 		Ok(())
 	}
 
@@ -373,7 +357,7 @@ mod tests {
 	fn compression_visible_shortly_after_touchdown() -> anyhow::Result<()> {
 		let lengths = LegSegmentLengths::default();
 		let timings = default_jump().timings(lengths);
-		let jump = TwoFootedJump::<()>::from_time(timings.air_end() + 0.02);
+		let jump = TwoFootedJump::<()>::from_time(timings.air_end() + 0.05);
 		assert!(jump.landing_squat(lengths).depth() > 0.1);
 		Ok(())
 	}
