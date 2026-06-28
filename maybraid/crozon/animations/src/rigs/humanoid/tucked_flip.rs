@@ -1,12 +1,12 @@
 use bevy::prelude::{Quat, Transform};
 use crozon_rigs::humanoid::HumanoidRig;
 
-use crate::animations::TuckedFlip;
+use crate::animations::{FixedPosition, TuckedFlip};
 use crate::{Animation, Effects};
 
 impl<R: HumanoidRig> Animation<R> for TuckedFlip<R> {
 	fn apply(&self, rig: &mut R, progress: f32) -> Effects {
-		self.tuck.apply(rig, progress);
+		self.tuck.apply_fixed(rig);
 
 		let pitch = self.pitch_radians(progress);
 		Effects {

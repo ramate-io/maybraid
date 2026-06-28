@@ -9,7 +9,7 @@ use crozon_rigs::{
 	BonePose, Name as RigName,
 };
 use malo_animations::{
-	animations::{Run, Squat, Tuck, TuckedFlip, TwoFootedJump, Walk, DEFAULT_GRAVITY, DEFAULT_LANDING_SQUAT_SPEED, DEFAULT_PRE_SQUAT_SPEED},
+	animations::{FixedTuck, Run, Squat, Tuck, TuckedFlip, TwoFootedJump, Walk, DEFAULT_GRAVITY, DEFAULT_LANDING_SQUAT_SPEED, DEFAULT_PRE_SQUAT_SPEED},
 	Animation, Effects,
 };
 
@@ -49,6 +49,7 @@ pub enum AnimationMode {
 	Squat,
 	Jump,
 	Tuck,
+	FixedTuck,
 	TuckedFlip,
 }
 
@@ -141,6 +142,9 @@ pub fn animate_limbs(
 			animate_jump(&config, &mut debug, &mut rig, &mut armature, &mut limbs, t)
 		}
 		AnimationMode::Tuck => animate_tuck(&config, &mut rig, &mut armature, &mut limbs, t),
+		AnimationMode::FixedTuck => {
+			animate_fixed_tuck(&config, &mut rig, &mut armature, &mut limbs)
+		}
 		AnimationMode::TuckedFlip => {
 			animate_tucked_flip(&config, &mut rig, &mut armature, &mut limbs, t)
 		}
@@ -195,6 +199,22 @@ fn animate_tuck(
 	marshal_limbs_into_pose(&mut rig, limbs);
 	let progress = (t * TUCK_CYCLE_SPEED).rem_euclid(1.0);
 	let effects = Tuck::<HumanoidV0Rig>::default().apply(rig.as_mut(), progress);
+	apply_effects(config.transform, effects, armature);
+	marshal_pose_to_limbs(&rig, limbs);
+}
+
+fn animate_fixed_tuck(
+	config: &CharacterConfig,
+	rig: &mut Query<&mut HumanoidV0Rig, With<CharacterRig>>,
+	armature: &mut Query<&mut Transform, (With<CharacterRig>, Without<LimbAnimator>)>,
+	limbs: &mut Query<(&mut Transform, &LimbAnimator)>,
+) {
+	let Ok(mut rig) = rig.single_mut() else {
+		return;
+	};
+
+	marshal_limbs_into_pose(&mut rig, limbs);
+	let effects = FixedTuck::<HumanoidV0Rig>::default().apply(rig.as_mut(), 0.0);
 	apply_effects(config.transform, effects, armature);
 	marshal_pose_to_limbs(&rig, limbs);
 }

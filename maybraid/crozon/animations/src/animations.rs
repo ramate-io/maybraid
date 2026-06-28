@@ -1,4 +1,6 @@
 pub mod fall;
+pub mod fixed;
+pub mod fixed_tuck;
 pub mod land;
 pub mod mix;
 pub mod run;
@@ -13,13 +15,15 @@ pub mod upright_walk;
 pub mod walk;
 
 pub use fall::Fall;
+pub use fixed::FixedPosition;
+pub use fixed_tuck::FixedTuck;
 pub use land::Land;
 pub use mix::{smoothstep, Mix, Smooth};
 pub use run::Run;
 pub use spring::Spring;
 pub use squat::{Squat, vertical_drop};
 pub use transition::{BlendCurve, Transition, TransitionCurve};
-pub use tuck::Tuck;
+pub use tuck::{Tuck, TuckProfile};
 pub use tucked_flip::{FlipDirection, TuckedFlip};
 pub use upright_run::UprightRun;
 pub use upright_walk::UprightWalk;

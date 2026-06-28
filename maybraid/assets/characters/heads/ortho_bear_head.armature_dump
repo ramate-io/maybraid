@@ -1,0 +1,27 @@
+# armature object: Armature
+
+nose_eye
+  forehead
+  eye_width.L
+    temple.L
+    eye_socket_protrusion.L
+      frontal_eye_ridge.L
+    eye_ridge.L
+  eye_width.R
+    temple.R
+    eye_socket_protrusion.R
+      frontal_eye_ridge.R
+    eye_ridge.R
+cheek_width.L
+  cheek_fullness.L
+nose_mouth
+  nape_width.L
+  mouth_protrusion
+    jaw_box.L
+    jaw_box.R
+  chin
+  nape_width.R
+root
+nose_protrusion
+cheek_width.R
+  cheek_fullness.R

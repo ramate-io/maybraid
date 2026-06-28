@@ -1,29 +1,49 @@
-use crozon_rigs::{humanoid::HumanoidRig, Side};
+use bevy::prelude::Vec3;
+use crozon_rigs::{humanoid::HumanoidRig, RiggedAxis, Side};
 
-use crate::animations::Tuck;
-use crate::rigs::humanoid::apply::{apply_arm, apply_leg};
+use crate::animations::{Tuck, TuckProfile};
+use crate::rigs::humanoid::apply::apply_leg;
 use crate::{Animation, Effects};
+
+/// Humerus tuck uses Y swing with medial/lateral on X, without changing the rig-wide default.
+fn humerus_tuck_axis(side: Side) -> RiggedAxis {
+	match side {
+		Side::Left => RiggedAxis { swing_axis: Vec3::Y, flex_axis: Vec3::X, twist_axis: Vec3::Z },
+		Side::Right => {
+			RiggedAxis { swing_axis: Vec3::Y, flex_axis: Vec3::NEG_X, twist_axis: Vec3::Z }
+		}
+	}
+}
+
+/// Apply tuck articulation scaled by `amount` in `[0.0, 1.0]`.
+pub fn apply_tuck_profile<R: HumanoidRig>(
+	rig: &mut R,
+	profile: &TuckProfile,
+	amount: f32,
+) -> Effects {
+	apply_leg(rig, Side::Left, profile.femur_swing(amount), profile.shin_flex(amount));
+	apply_leg(rig, Side::Right, profile.femur_swing(amount), profile.shin_flex(amount));
+
+	for side in [Side::Left, Side::Right] {
+		let mut arm = rig.arm_pose(side);
+
+		arm.shoulder =
+			rig.articulate_on_rig(arm.shoulder, 0.0, profile.shoulder_flex(side, amount));
+		arm.humerus = arm.humerus.articulate(
+			humerus_tuck_axis(side),
+			profile.humerus_swing(side, amount),
+			profile.humerus_medial(side, amount),
+		);
+		arm.forearm = rig.articulate_on_rig(arm.forearm, 0.0, profile.forearm_flex(amount));
+		rig.pose_arm(arm);
+	}
+
+	Effects::default()
+}
 
 impl<R: HumanoidRig> Animation<R> for Tuck<R> {
 	fn apply(&self, rig: &mut R, progress: f32) -> Effects {
-		let femur = self.femur_swing(progress);
-		let shin = self.shin_flex(progress);
-		apply_leg(rig, Side::Left, femur, shin);
-		apply_leg(rig, Side::Right, femur, shin);
-
-		for side in [Side::Left, Side::Right] {
-			apply_arm(
-				rig,
-				side,
-				0.0,
-				self.shoulder_flex(side, progress),
-				self.humerus_swing(side, progress),
-				0.0,
-				self.forearm_flex(progress),
-			);
-		}
-
-		Effects::default()
+		apply_tuck_profile(rig, &self.profile(), self.tuck_amount(progress))
 	}
 }
 
@@ -44,15 +64,42 @@ mod tests {
 	}
 
 	#[test]
-	fn tuck_drives_humerus_swing_not_flex() -> anyhow::Result<()> {
+	fn tuck_drives_humerus_swing_and_small_medial() -> anyhow::Result<()> {
 		let mut rig = HumanoidV0Rig::imported();
-		Tuck::<HumanoidV0Rig>::default().apply(&mut rig, 0.5);
+		let tuck = Tuck::<HumanoidV0Rig>::default();
+		tuck.apply(&mut rig, 0.5);
 
+		let profile = tuck.profile();
 		let humerus = rig.pose().get(&rig.arm(Side::Left).humerus.name).expect("humerus");
 		let forearm = rig.pose().get(&rig.arm(Side::Left).forearm.name).expect("forearm");
 		assert!(humerus.swing.abs() > 0.1);
-		assert!(humerus.flex.abs() < 1e-4);
-		assert!(forearm.flex > 0.5);
+		assert!(humerus.flex.abs() > 0.05);
+		assert!(humerus.flex.abs() <= profile.humerus_medial(Side::Left, 1.0).abs() + 1e-4);
+		assert!(forearm.flex < -0.5);
+		Ok(())
+	}
+
+	#[test]
+	fn tuck_forearms_flex_toward_midline_symmetrically() -> anyhow::Result<()> {
+		let mut rig = HumanoidV0Rig::imported();
+		Tuck::<HumanoidV0Rig>::default().apply(&mut rig, 1.0);
+
+		let left = rig.pose().get(&rig.arm(Side::Left).forearm.name).expect("left forearm");
+		let right = rig.pose().get(&rig.arm(Side::Right).forearm.name).expect("right forearm");
+		assert!(left.flex < -0.5);
+		assert!(right.flex < -0.5);
+		assert_eq!(left.flex.signum(), right.flex.signum());
+		Ok(())
+	}
+
+	#[test]
+	fn tuck_shoulder_contribution_is_modest() -> anyhow::Result<()> {
+		let mut rig = HumanoidV0Rig::imported();
+		Tuck::<HumanoidV0Rig>::default().apply(&mut rig, 1.0);
+
+		let shoulder = rig.pose().get(&rig.arm(Side::Left).shoulder.name).expect("shoulder");
+		let humerus = rig.pose().get(&rig.arm(Side::Left).humerus.name).expect("humerus");
+		assert!(shoulder.flex.abs() < humerus.swing.abs());
 		Ok(())
 	}
 }

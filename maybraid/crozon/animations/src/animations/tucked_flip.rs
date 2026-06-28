@@ -1,7 +1,7 @@
 use std::f32::consts::TAU;
 use std::marker::PhantomData;
 
-use crate::animations::Tuck;
+use crate::animations::FixedTuck;
 use crate::Progress;
 
 /// Forward pitch is +X; backward is −X.
@@ -17,7 +17,7 @@ pub struct TuckedFlip<Rig> {
 	/// Rotations over the animation (`1.0` = one full turn).
 	pub turns: f32,
 	pub direction: FlipDirection,
-	pub tuck: Tuck<Rig>,
+	pub tuck: FixedTuck<Rig>,
 	_rig: PhantomData<Rig>,
 }
 
@@ -26,7 +26,7 @@ impl<Rig> Default for TuckedFlip<Rig> {
 		Self {
 			turns: 1.0,
 			direction: FlipDirection::Forward,
-			tuck: Tuck::default(),
+			tuck: FixedTuck::default(),
 			_rig: PhantomData,
 		}
 	}
