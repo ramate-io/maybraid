@@ -9,7 +9,7 @@ use crozon_rigs::{
 	BonePose, Name as RigName,
 };
 use malo_animations::{
-	animations::{Run, Squat, TwoFootedJump, Walk, DEFAULT_GRAVITY, DEFAULT_LANDING_SQUAT_SPEED, DEFAULT_PRE_SQUAT_SPEED},
+	animations::{Run, Squat, Tuck, TuckedFlip, TwoFootedJump, Walk, DEFAULT_GRAVITY, DEFAULT_LANDING_SQUAT_SPEED, DEFAULT_PRE_SQUAT_SPEED},
 	Animation, Effects,
 };
 
@@ -19,6 +19,8 @@ use crate::skinning::{BoneMap, CharacterRig};
 const RUN_CYCLE_SPEED: f32 = 0.5;
 const WALK_CYCLE_SPEED: f32 = 0.35;
 const SQUAT_CYCLE_SPEED: f32 = 0.25;
+const TUCK_CYCLE_SPEED: f32 = 0.6;
+const FRONT_FLIP_CYCLE_SPEED: f32 = 0.85;
 const JUMP_HEIGHT: f32 = 1.5;
 const JUMP_PRE_SQUAT_SPEED: f32 = DEFAULT_PRE_SQUAT_SPEED * 1.2;
 const JUMP_LANDING_SQUAT_SPEED: f32 = DEFAULT_LANDING_SQUAT_SPEED * 1.3;
@@ -46,6 +48,8 @@ pub enum AnimationMode {
 	Walk,
 	Squat,
 	Jump,
+	Tuck,
+	TuckedFlip,
 }
 
 #[derive(Resource)]
@@ -136,6 +140,10 @@ pub fn animate_limbs(
 		AnimationMode::Jump => {
 			animate_jump(&config, &mut debug, &mut rig, &mut armature, &mut limbs, t)
 		}
+		AnimationMode::Tuck => animate_tuck(&config, &mut rig, &mut armature, &mut limbs, t),
+		AnimationMode::TuckedFlip => {
+			animate_tucked_flip(&config, &mut rig, &mut armature, &mut limbs, t)
+		}
 	}
 }
 
@@ -169,6 +177,42 @@ fn animate_walk(
 
 	marshal_limbs_into_pose(&mut rig, limbs);
 	let effects = Walk::default().apply(rig.as_mut(), t * WALK_CYCLE_SPEED);
+	apply_effects(config.transform, effects, armature);
+	marshal_pose_to_limbs(&rig, limbs);
+}
+
+fn animate_tuck(
+	config: &CharacterConfig,
+	rig: &mut Query<&mut HumanoidV0Rig, With<CharacterRig>>,
+	armature: &mut Query<&mut Transform, (With<CharacterRig>, Without<LimbAnimator>)>,
+	limbs: &mut Query<(&mut Transform, &LimbAnimator)>,
+	t: f32,
+) {
+	let Ok(mut rig) = rig.single_mut() else {
+		return;
+	};
+
+	marshal_limbs_into_pose(&mut rig, limbs);
+	let progress = (t * TUCK_CYCLE_SPEED).rem_euclid(1.0);
+	let effects = Tuck::<HumanoidV0Rig>::default().apply(rig.as_mut(), progress);
+	apply_effects(config.transform, effects, armature);
+	marshal_pose_to_limbs(&rig, limbs);
+}
+
+fn animate_tucked_flip(
+	config: &CharacterConfig,
+	rig: &mut Query<&mut HumanoidV0Rig, With<CharacterRig>>,
+	armature: &mut Query<&mut Transform, (With<CharacterRig>, Without<LimbAnimator>)>,
+	limbs: &mut Query<(&mut Transform, &LimbAnimator)>,
+	t: f32,
+) {
+	let Ok(mut rig) = rig.single_mut() else {
+		return;
+	};
+
+	marshal_limbs_into_pose(&mut rig, limbs);
+	let progress = (t * FRONT_FLIP_CYCLE_SPEED).rem_euclid(1.0);
+	let effects = TuckedFlip::<HumanoidV0Rig>::default().apply(rig.as_mut(), progress);
 	apply_effects(config.transform, effects, armature);
 	marshal_pose_to_limbs(&rig, limbs);
 }

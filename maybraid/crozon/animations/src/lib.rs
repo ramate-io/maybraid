@@ -1,5 +1,4 @@
 pub mod animations;
-pub mod poses;
 pub mod rigs;
 
 use bevy::prelude::*;
