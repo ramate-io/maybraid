@@ -7,8 +7,8 @@ const FEMUR_AT_FULL: f32 = -0.55;
 const SHIN_AT_FULL: f32 = 2.2;
 const SHOULDER_AT_FULL: f32 = 0.35;
 const HUMERUS_SWING_AT_FULL: f32 = 0.55;
-const HUMERUS_MEDIAL_AT_FULL: f32 = 0.2;
-const FOREARM_AT_FULL: f32 = -1.4;
+const HUMERUS_MEDIAL_AT_FULL: f32 = 1.25;
+const FOREARM_AT_FULL: f32 = 1.4;
 
 /// Joint targets for a tucked pose, scaled from one tightness value.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -96,12 +96,10 @@ mod tests {
 		let fall = Fall::<()>::default();
 		for side in [Side::Left, Side::Right] {
 			assert!(
-				profile.shoulder_flex(side, 1.0).signum()
-					!= fall.shoulder_flex(side, 0.5).signum()
+				profile.shoulder_flex(side, 1.0).signum() != fall.shoulder_flex(side, 0.5).signum()
 			);
 			assert!(
-				profile.humerus_swing(side, 1.0).signum()
-					!= fall.humerus_swing(side, 0.5).signum()
+				profile.humerus_swing(side, 1.0).signum() != fall.humerus_swing(side, 0.5).signum()
 			);
 		}
 		Ok(())
