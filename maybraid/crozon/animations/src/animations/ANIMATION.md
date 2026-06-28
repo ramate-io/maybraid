@@ -56,10 +56,27 @@ impl Progress {
 }
 ```
 
-Then `Run` becomes cleaner:
+Then locomotion uses a rig-agnostic frontend converted for humanoids:
 
 ```rust
-impl<R: HumanoidRig> Animation<R> for Run<R> {
+/// Rig-agnostic run cycle (stride, bounce, rotation).
+pub struct Run {
+    pub stride: f32,
+    pub bounce: f32,
+    pub rotation: f32,
+}
+
+impl<R: HumanoidRig> Animation<R> for Run {
+    fn apply(&self, rig: &mut R, progress: f32) -> Effects {
+        UprightRun::from_run(self).apply(rig, progress)
+    }
+}
+```
+
+Art-level biped tuning lives in `UprightRun<R>` / `UprightWalk<R>`; [`UprightRun::from_run`](upright_run.rs) scales the tuned template from the three frontend knobs (`bounce` and `rotation` default to `1.0`).
+
+```rust
+impl<R: HumanoidRig> Animation<R> for UprightRun<R> {
     fn apply(&self, rig: &mut R, progress: f32) -> Effects {
         let phase = Progress(progress).cycle();
 
@@ -95,24 +112,13 @@ impl<R: HumanoidRig> Animation<R> for Run<R> {
 }
 ```
 
-This likely means `Run` should no longer store `phase`:
+This likely means `Run` should no longer store per-bone tuning:
 
 ```rust
-pub struct Run<R> {
+pub struct Run {
     pub stride: f32,
-    pub hip_swing: f32,
-    pub hip_lift: f32,
-    pub knee_neutral: f32,
-    pub knee_extended: f32,
-    pub knee_contracted: f32,
-    pub shoulder_swing: f32,
-    pub shoulder_lift: f32,
-    pub humerus_swing_scale: f32,
-    pub arm_down: f32,
-    pub elbow_bend: f32,
-    pub elbow_pump: f32,
-    pub elbow_cycle: f32,
-    _rig: PhantomData<R>,
+    pub bounce: f32,
+    pub rotation: f32,
 }
 ```
 

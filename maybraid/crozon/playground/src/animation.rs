@@ -151,7 +151,7 @@ fn animate_run(
 	};
 
 	marshal_limbs_into_pose(&mut rig, limbs);
-	let effects = Run::<HumanoidV0Rig>::default().apply(&mut rig, t * RUN_CYCLE_SPEED);
+	let effects = Run::default().apply(rig.as_mut(), t * RUN_CYCLE_SPEED);
 	apply_effects(config.transform, effects, armature);
 	marshal_pose_to_limbs(&rig, limbs);
 }
@@ -168,7 +168,7 @@ fn animate_walk(
 	};
 
 	marshal_limbs_into_pose(&mut rig, limbs);
-	let effects = Walk::<HumanoidV0Rig>::default().apply(&mut rig, t * WALK_CYCLE_SPEED);
+	let effects = Walk::default().apply(rig.as_mut(), t * WALK_CYCLE_SPEED);
 	apply_effects(config.transform, effects, armature);
 	marshal_pose_to_limbs(&rig, limbs);
 }

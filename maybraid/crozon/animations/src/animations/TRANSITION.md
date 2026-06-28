@@ -158,7 +158,7 @@ Expected semantics:
 ```rust
 // At transition start:
 let transition = Transition::<_, HumanoidV0Rig>::new(
-    Run::<HumanoidV0Rig>::new(phase),
+    Run::default(),
     rig,
     0.0,
 )

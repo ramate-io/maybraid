@@ -6,6 +6,8 @@ pub mod spring;
 pub mod squat;
 pub mod transition;
 pub mod two_footed_jump;
+pub mod upright_run;
+pub mod upright_walk;
 pub mod walk;
 
 pub use fall::Fall;
@@ -15,6 +17,8 @@ pub use run::Run;
 pub use spring::Spring;
 pub use squat::{Squat, vertical_drop};
 pub use transition::{BlendCurve, Transition, TransitionCurve};
+pub use upright_run::UprightRun;
+pub use upright_walk::UprightWalk;
 pub use walk::Walk;
 pub use two_footed_jump::{
 	air_duration, ballistic_height, launch_speed, touchdown_time_since_launch, JumpSegment, JumpTiming, TwoFootedJump,

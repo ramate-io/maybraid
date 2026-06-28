@@ -1,10 +1,16 @@
 use crozon_rigs::{humanoid::HumanoidRig, Side};
 
-use crate::animations::Walk;
+use crate::animations::{UprightWalk, Walk};
 use crate::rigs::humanoid::apply::{apply_arm, apply_root};
 use crate::{Animation, Effects, Progress};
 
-impl<R: HumanoidRig> Animation<R> for Walk<R> {
+impl<R: HumanoidRig> Animation<R> for Walk {
+	fn apply(&self, rig: &mut R, progress: f32) -> Effects {
+		UprightWalk::from_walk(self).apply(rig, progress)
+	}
+}
+
+impl<R: HumanoidRig> Animation<R> for UprightWalk<R> {
 	fn apply(&self, rig: &mut R, progress: f32) -> Effects {
 		let phase = Progress(progress).cycle();
 		let left_arm_swing = -arm_swing(phase);
@@ -37,7 +43,13 @@ impl<R: HumanoidRig> Animation<R> for Walk<R> {
 	}
 }
 
-fn apply_leg<R: HumanoidRig>(rig: &mut R, side: Side, phase: f32, lift_sign: f32, walk: &Walk<R>) {
+fn apply_leg<R: HumanoidRig>(
+	rig: &mut R,
+	side: Side,
+	phase: f32,
+	lift_sign: f32,
+	walk: &UprightWalk<R>,
+) {
 	let mut leg = rig.leg_pose(side);
 	let phase = if side == Side::Left { phase } else { phase + 0.5 };
 	let swing = thigh_swing(phase);
@@ -61,7 +73,7 @@ fn apply_walk_arm<R: HumanoidRig>(
 	phase: f32,
 	flex_sign: f32,
 	humerus_flex: f32,
-	walk: &Walk<R>,
+	walk: &UprightWalk<R>,
 ) {
 	apply_arm(
 		rig,
@@ -87,7 +99,7 @@ fn arm_swing(phase: f32) -> f32 {
 	thigh_swing(phase) * 0.75
 }
 
-fn elbow_flex<Rig>(arm_swing: f32, phase: f32, flex_sign: f32, walk: &Walk<Rig>) -> f32 {
+fn elbow_flex<Rig>(arm_swing: f32, phase: f32, flex_sign: f32, walk: &UprightWalk<Rig>) -> f32 {
 	let pump = arm_swing.abs();
 	let cycle = ((phase + arm_swing.signum() * 0.125) * std::f32::consts::PI * 4.0).sin().abs();
 	flex_sign * (walk.elbow_bend + pump * walk.elbow_pump + cycle * walk.elbow_cycle)
@@ -102,7 +114,7 @@ fn hip_lift(leg_swing: f32, amplitude: f32) -> f32 {
 }
 
 /// Soft knee on stance; smooth half-sine lift through swing and back to stance.
-fn knee_flex<Rig>(leg_phase: f32, walk: &Walk<Rig>) -> f32 {
+fn knee_flex<Rig>(leg_phase: f32, walk: &UprightWalk<Rig>) -> f32 {
 	let p = leg_phase.fract();
 	let t = ((p - 0.5).max(0.0) * 2.0) * std::f32::consts::PI;
 	walk.knee_stance_bend + t.sin() * (walk.knee_swing_bend - walk.knee_stance_bend)
@@ -115,10 +127,33 @@ mod tests {
 	use super::*;
 	use crate::animations::Run;
 
+	fn assert_pose_matches_at_phases(phases: &[f32]) {
+		for &phase in phases {
+			let mut from_walk = HumanoidV0Rig::imported();
+			let mut from_upright = HumanoidV0Rig::imported();
+			Walk::default().apply(&mut from_walk, phase);
+			UprightWalk::<HumanoidV0Rig>::default().apply(&mut from_upright, phase);
+
+			for bone in from_walk.animation_bones() {
+				let Some(walk_pose) = from_walk.pose().get(&bone) else {
+					continue;
+				};
+				let upright_pose = from_upright.pose().get(&bone).expect("upright pose");
+				assert_eq!(walk_pose.swing, upright_pose.swing, "swing mismatch on {bone} at {phase}");
+				assert_eq!(walk_pose.flex, upright_pose.flex, "flex mismatch on {bone} at {phase}");
+			}
+		}
+	}
+
+	#[test]
+	fn walk_delegates_to_upright_default() {
+		assert_pose_matches_at_phases(&[0.0, 0.25, 0.5, 0.75]);
+	}
+
 	#[test]
 	fn walk_animates_femur_swing() {
 		let mut rig = HumanoidV0Rig::imported();
-		Walk::<HumanoidV0Rig>::default().apply(&mut rig, 0.0);
+		UprightWalk::<HumanoidV0Rig>::default().apply(&mut rig, 0.0);
 
 		let femur = rig.pose().get(&rig.leg(Side::Left).femur.name).expect("femur pose");
 		assert!(femur.swing.abs() > 0.0);
@@ -127,7 +162,7 @@ mod tests {
 	#[test]
 	fn walk_legs_are_half_cycle_out_of_phase() {
 		let mut rig = HumanoidV0Rig::imported();
-		Walk::<HumanoidV0Rig>::default().apply(&mut rig, 0.0);
+		UprightWalk::<HumanoidV0Rig>::default().apply(&mut rig, 0.0);
 
 		let left = rig.pose().get(&rig.leg(Side::Left).femur.name).expect("left femur");
 		let right = rig.pose().get(&rig.leg(Side::Right).femur.name).expect("right femur");
@@ -138,8 +173,8 @@ mod tests {
 	fn walk_stride_is_smaller_than_run() {
 		let mut walk_rig = HumanoidV0Rig::imported();
 		let mut run_rig = HumanoidV0Rig::imported();
-		Walk::<HumanoidV0Rig>::default().apply(&mut walk_rig, 0.0);
-		Run::<HumanoidV0Rig>::default().apply(&mut run_rig, 0.0);
+		Walk::default().apply(&mut walk_rig, 0.0);
+		Run::default().apply(&mut run_rig, 0.0);
 
 		let walk_femur = walk_rig.pose().get(&walk_rig.leg(Side::Left).femur.name).expect("walk");
 		let run_femur = run_rig.pose().get(&run_rig.leg(Side::Left).femur.name).expect("run");
@@ -158,8 +193,8 @@ mod tests {
 				.insert(crozon_rigs::BonePose::new(shin.clone(), Transform::IDENTITY));
 		}
 
-		Walk::<HumanoidV0Rig>::default().apply(&mut walk_rig, 0.75);
-		Run::<HumanoidV0Rig>::default().apply(&mut run_rig, 0.75);
+		Walk::default().apply(&mut walk_rig, 0.75);
+		Run::default().apply(&mut run_rig, 0.75);
 
 		let walk_shin = walk_rig.pose().get(&shin).expect("walk shin");
 		let run_shin = run_rig.pose().get(&shin).expect("run shin");
@@ -169,7 +204,7 @@ mod tests {
 	#[test]
 	fn walk_applies_forward_torso_lean() {
 		let mut rig = HumanoidV0Rig::imported();
-		Walk::<HumanoidV0Rig>::default().apply(&mut rig, 0.0);
+		UprightWalk::<HumanoidV0Rig>::default().apply(&mut rig, 0.0);
 
 		let root = rig.pose().get(&rig.spine().root.name).expect("root");
 		assert!(root.swing > 0.05);
@@ -178,7 +213,7 @@ mod tests {
 	#[test]
 	fn walk_femur_counters_hip_swing_out() {
 		let mut rig = HumanoidV0Rig::imported();
-		Walk::<HumanoidV0Rig>::default().apply(&mut rig, 0.0);
+		UprightWalk::<HumanoidV0Rig>::default().apply(&mut rig, 0.0);
 
 		let pelvis = rig.pose().get(&rig.leg(Side::Left).pelvis.name).expect("pelvis");
 		let femur = rig.pose().get(&rig.leg(Side::Left).femur.name).expect("femur");
@@ -190,7 +225,7 @@ mod tests {
 	#[test]
 	fn walk_stance_leg_has_soft_knee_bend() {
 		let mut rig = HumanoidV0Rig::imported();
-		Walk::<HumanoidV0Rig>::default().apply(&mut rig, 0.0);
+		UprightWalk::<HumanoidV0Rig>::default().apply(&mut rig, 0.0);
 
 		let shin = rig.pose().get(&rig.leg(Side::Left).shin.name).expect("shin");
 		assert!(shin.flex > 0.0);
@@ -198,14 +233,17 @@ mod tests {
 
 	#[test]
 	fn walk_knee_flex_is_continuous_across_stride() {
-		let walk = Walk::<HumanoidV0Rig>::default();
+		let walk = UprightWalk::<HumanoidV0Rig>::default();
 		let samples = 120;
+		let max_step = (walk.knee_swing_bend - walk.knee_stance_bend) * 2.0 * std::f32::consts::PI
+			/ samples as f32
+			+ 1e-4;
 		let mut prev = knee_flex(0.0, &walk);
 		for i in 1..=samples {
 			let phase = i as f32 / samples as f32;
 			let flex = knee_flex(phase, &walk);
 			assert!(
-				(flex - prev).abs() < 0.02,
+				(flex - prev).abs() < max_step,
 				"knee snap at phase {phase}: {prev} -> {flex}"
 			);
 			prev = flex;
@@ -215,7 +253,7 @@ mod tests {
 	#[test]
 	fn walk_vertical_bob_comes_mostly_from_hips() {
 		let mut rig = HumanoidV0Rig::imported();
-		Walk::<HumanoidV0Rig>::default().apply(&mut rig, 0.0);
+		UprightWalk::<HumanoidV0Rig>::default().apply(&mut rig, 0.0);
 
 		let pelvis = rig.pose().get(&rig.leg(Side::Left).pelvis.name).expect("pelvis");
 		let shoulder = rig.pose().get(&rig.arm(Side::Left).shoulder.name).expect("shoulder");
