@@ -218,7 +218,7 @@ impl BraidmanAssets {
 	fn head_rig() -> ResolvedCharacterPart {
 		ResolvedCharacterPart::new(
 			CharacterPartSlot::HeadRig,
-			CharacterAsset::new("OrthogradeHeadRig", HEAD_RIG, AssetNormalization::base_y(0.12)),
+			CharacterAsset::new("OrthogradeHeadRig", HEAD_RIG, AssetNormalization::base_y(0.26)),
 			SkinTarget::OwnRig,
 			Some(SocketAttachment {
 				rig: SocketRig::Body,
@@ -240,7 +240,7 @@ impl BraidmanAssets {
 	fn eye_left(eye: EyeMesh) -> ResolvedCharacterPart {
 		ResolvedCharacterPart::new(
 			CharacterPartSlot::EyeLeft,
-			CharacterAsset::new(eye.label(), eye.path(), AssetNormalization::centroid(0.04)),
+			CharacterAsset::new(eye.label(), eye.path(), AssetNormalization::centroid(1.0)),
 			SkinTarget::HeadRig,
 			Some(Self::head_socket("eye.L", Transform::IDENTITY)),
 		)
@@ -267,7 +267,7 @@ impl BraidmanAssets {
 	fn mouth(mouth: MouthMesh) -> ResolvedCharacterPart {
 		ResolvedCharacterPart::new(
 			CharacterPartSlot::Mouth,
-			CharacterAsset::new(mouth.label(), mouth.path(), AssetNormalization::centroid(0.02)),
+			CharacterAsset::new(mouth.label(), mouth.path(), AssetNormalization::centroid(0.25)),
 			SkinTarget::HeadRig,
 			Some(Self::head_socket("mouth", Transform::IDENTITY)),
 		)
@@ -276,26 +276,18 @@ impl BraidmanAssets {
 	fn ear_left(ear: EarMesh) -> ResolvedCharacterPart {
 		ResolvedCharacterPart::new(
 			CharacterPartSlot::EarLeft,
-			CharacterAsset::new(
-				ear.label(),
-				ear.path(),
-				AssetNormalization::centroid(0.08).facing_positive_x(),
-			),
+			CharacterAsset::new(ear.label(), ear.path(), AssetNormalization::centroid(0.52)),
 			SkinTarget::HeadRig,
-			Some(Self::head_socket("cheek.L", Transform::IDENTITY)),
+			Some(Self::head_socket("temple.L", Transform::IDENTITY)),
 		)
 	}
 
 	fn ear_right(ear: EarMesh) -> ResolvedCharacterPart {
 		ResolvedCharacterPart::new(
 			CharacterPartSlot::EarRight,
-			CharacterAsset::new(
-				ear.label(),
-				ear.path(),
-				AssetNormalization::centroid(0.08).facing_positive_x(),
-			),
+			CharacterAsset::new(ear.label(), ear.path(), AssetNormalization::centroid(0.52)),
 			SkinTarget::HeadRig,
-			Some(Self::head_socket("cheek.R", Self::mirror_x())),
+			Some(Self::head_socket("temple.R", Self::mirror_x())),
 		)
 	}
 
