@@ -812,25 +812,82 @@ This lets the current rig-slider system remain simple while leaving room for fea
 # Characters
 
 > [!WARNING]
-> When implementing these characters always stop and report if a given asset is missing. 
+> When implementing these characters always stop and report if a given asset is missing.
+
+Asset paths in this section use the shorthand `assets/…` (linked to [`maybraid/assets/characters/`](../../assets/characters/)). At runtime, load them as `characters/…` under the `maybraid/assets` root (same convention as [`crozon/playground`](../playground/src/character.rs)).
+
+Definitions and resolution logic belong in [`crozon/characters`](../characters/); the concepts screen wires them through [`crozon/character-concepts-playground`](../character-concepts-playground/).
+
+## Assembly
+
+Each species preview is a small hierarchy of spawned GLB scenes:
+
+1. **Body rig** (`Humanoid`) — animation target and bone map for body-skinned parts.
+2. **Body mesh** — skin remapped onto the body rig.
+3. **Head rig** (`OrthogradeHeadRig`) — socketed child of the body rig at `upper_neck`. Own bone map for head-skinned parts.
+4. **Head mesh** — skinned to the head rig (not the body rig).
+5. **Features** (eyes, nose, mouth, ears, hair) — skinned to the head rig and/or socketed on head-rig bones. See attachment table below.
+6. **Clothes** — skinned to `Humanoid`; each layer remaps onto the body rig. `NoChanges` fit unless a garment defines otherwise.
+
+`*_left` feature meshes denote the authored side; mirror them for the right (scale/attachment on the paired head-rig bone).
+
+The playground’s fixed `HEAD_SCALE` socket is a stopgap. Here, head placement and overall silhouette come from species **Height / Width / Depth** plus rig sliders, not a hard-coded scale factor.
+
+### Feature attachment (Braidman)
+
+| Feature | Head-rig socket bone | Skinned to |
+|---|---|---|
+| Head mesh | (root of head rig) | `OrthogradeHeadRig` |
+| Eyes | `eye.L`, `eye.R` | `OrthogradeHeadRig` |
+| Nose | `nose` | `OrthogradeHeadRig` |
+| Mouth | `mouth` | `OrthogradeHeadRig` |
+| Ears | `cheek.L`, `cheek.R` | `LateralEarRig` (per ear mesh) |
+| Hair | `crown` | `OrthogradeHeadRig` |
+
+## Sliders and scale
+
+**Species Height / Width / Depth** are the baseline proportions everything else deforms from.
+
+Resolution order (see [Stage 1](#stage-1-menu-state-to-resolved-character-config) above): species baseline → gender preset → build preset → user-facing slider values → clamp → map to rig effects.
+
+Two layers:
+
+* **User-facing sliders** — what the concepts screen exposes (grouped by body, head, feature, etc.).
+* **Rig sliders** — underlying `Slidable` bone effects in `crozon/rigs`; one user slider may drive one or more rig sliders.
+
+When the same label appears at head and feature scope, they compose rather than override:
+
+| User-facing control | Scope | Effect |
+|---|---|---|
+| Eye Spacing | Head | Move `eye.L` / `eye.R` apart on the head rig |
+| Eye Width | Eye | Horizontal scale of the eye mesh |
+| Eye Height | Eye | Vertical scale of the eye mesh |
+| Eye Tilt | Eye | Rotate the eye mesh (degrees) |
+| Nose Width | Head | Span of nose-region layout bones |
+| Nose Width | Nose | Horizontal scale of the nose mesh |
+| Nose Length | Head | Nose protrusion along the head rig |
+| Nose Length / Depth | Nose | Scale of the nose mesh |
+
+Gender and build presets below adjust the same body rig sliders (percent offsets on the current value).
 
 ## Braidman
 
-Braidman is relatively plain humanoid species. 
+Braidman is a relatively plain humanoid species.
 
 - **Body Rig:** "Humanoid" `Armature` in [`assets/bodies/humanoid_rig.glb`](../../assets/characters/bodies/humanoid_rig.glb)
-- **Height:** 1.0 (default)
-- **Width:** 0.8 (slightly smaller than the original rig)
-- **Depth:** 0.8 (slightly smaller than the original rig)
+- **Height:** 1.0 (default species scale)
+- **Width:** 0.8 (default species scale; slightly smaller than the authored rig)
+- **Depth:** 0.8 (default species scale; slightly smaller than the authored rig)
 - **Body Meshes:** 
     - **Standard:** "HumanoidFullBody" `Mesh` in [`assets/bodies/humanoid_full_body.glb`](../../assets/characters/bodies/humanoid_full_body.glb)
     - **Full:** "LeronBipedFullBody" `Mesh` in [`assets/bodies/leron_biped_full_body.glb`](../../assets/characters/bodies/leron_biped_full_body.glb)
 - **Body Rig Sliders:**
-    - **Height:** from 0.5 to 1.5 of the original height.
+    - **Height:** from 0.5 to 1.5 of the species baseline height.
     - **Shoulder Width:** from 0.8 to 1.2 of the original shoulder width.
-    - **Hip Width:** from 0.8 to 1.4 of the original hip width (0.8).
+    - **Hip Width:** from 0.8 to 1.4 of the original hip width.
     - **Chest Thickness:** from 0.8 to 1.2 of the original chest thickness.
     - **Back Thickness:** from 0.8 to 1.2 of the original back thickness.
+    - **Belly Thickness:** from 0.8 to 1.2 of the original belly thickness (`upper_belly`, `lower_belly`).
     - **Buttocks Thickness:** from 0.8 to 1.2 of the original buttock thickness.
     - **Arm Length:** from 0.8 to 1.2 of the original arm length.
     - **Arm Thickness:** from 0.8 to 1.2 of the original arm thickness.
@@ -838,43 +895,43 @@ Braidman is relatively plain humanoid species.
     - **Leg Thickness:** from 0.8 to 1.2 of the original leg thickness.
     - **Neck Length:** from 0.8 to 1.2 of the original neck length.
     - **Neck Thickness:** from 0.8 to 1.2 of the original neck thickness.
-- **Head Rig:** "OrthogradeHeadRig" `Armature` in [`assets/heads/ortho_simple_head.glb`](../../assets/characters/heads/ortho_simple_head.glb) bones dumped in [`assets/heads/ortho_simple_head.armature_dump`](../../assets/characters/heads/ortho_simple_head.armature_dump)
+- **Head Rig:** "OrthogradeHeadRig" `Armature` in [`assets/heads/orthograde_head.glb`](../../assets/characters/heads/orthograde_head.glb), bones dumped in [`assets/heads/orthograde_head.armature_dump`](../../assets/characters/heads/orthograde_head.armature_dump). Socket on body rig `upper_neck`.
 - **Heads:**
     - **Standard:** "MeerkatHead" `Mesh` in [`assets/heads/meerkat_head.glb`](../../assets/characters/heads/meerkat_head.glb)
     - **Gaunt:** "GauntOrthoHumanoidHead" `Mesh` in [`assets/heads/gaunt_ortho_humanoid_head.glb`](../../assets/characters/heads/gaunt_ortho_humanoid_head.glb)
-    - **Full:** "FullOrthHumanoidHead `Mesh` in [`assets/heads/full_ortho_humanoid_head.glb`](../../assets/characters/heads/full_ortho_humanoid_head.glb)
-- **Head Sliders:**
+    - **Full:** "FullOrthHumanoidHead" `Mesh` in [`assets/heads/full_ortho_humanoid_head.glb`](../../assets/characters/heads/full_ortho_humanoid_head.glb)
+- **Head Sliders:** (layout on the head rig; see [slider table](#sliders-and-scale) for naming)
     - **Head Width:** from 0.8 to 1.2 of the original head width.
     - **Head Height:** from 0.8 to 1.2 of the original head height.
     - **Head Depth:** from 0.8 to 1.2 of the original head depth.
-    - **Eye Width:** from 0.8 to 1.2 of the original eye width.
+    - **Eye Spacing:** from 0.8 to 1.2 of the original inter-eye distance.
     - **Eye-line Height:** from 0.8 to 1.2 of the original eye height.
-    - **Nose Width:** from 0.8 to 1.2 of the original nose width.
-    - **Nose Length:** from 0.8 to 1.2 of the original nose length.
+    - **Nose Width:** from 0.8 to 1.2 of the original nose-region span.
+    - **Nose Length:** from 0.8 to 1.2 of the original nose length along the head rig.
     - **Nose Protrusion:** from 0.8 to 1.2 of the original nose protrusion.
-- **Eyes:**
+- **Eyes:** (author `*_left`; mirror for the right eye)
     - **Standard:** "HumanoidEyeLeft" `Mesh` in [`assets/eyes/humanoid_eye_left.glb`](../../assets/characters/eyes/humanoid_eye_left.glb)
     - **Falcon:** "FalconEyeLeft" `Mesh` in [`assets/eyes/falcon_eye_left.glb`](../../assets/characters/eyes/falcon_eye_left.glb)
-- **Eye Sliders:**
-    - **Eye Width:** from 0.8 to 1.2 of the original eye width.
-    - **Eye Height:** from 0.8 to 1.2 of the original eye height.
+- **Eye Sliders:** (per-eye mesh scale/rotation; compose with head **Eye Spacing**)
+    - **Eye Width:** from 0.8 to 1.2 of the original eye mesh width.
+    - **Eye Height:** from 0.8 to 1.2 of the original eye mesh height.
     - **Eye Tilt:** -5 to 5 degrees.
 - **Noses:**
     - **Standard:** "HumanoidNose" `Mesh` in [`assets/noses/humanoid_nose.glb`](../../assets/characters/noses/humanoid_nose.glb)
     - **Broad:** "BroadHumanoidNose" `Mesh` in [`assets/noses/broad_humanoid_nose.glb`](../../assets/characters/noses/broad_humanoid_nose.glb)
     - **Loaf:** "LoafHumanoidNose" `Mesh` in [`assets/noses/loaf_nose.glb`](../../assets/characters/noses/loaf_nose.glb)
     - **Balloon:** "MumbusNose" `Mesh` in [`assets/noses/mumbus_nose.glb`](../../assets/characters/noses/mumbus_nose.glb)
-- **Nose Sliders:**
-    - **Nose Width:** from 0.8 to 1.2 of the original nose width.
-    - **Nose Length:** from 0.8 to 1.2 of the original nose length.
-    - **Nose Depth:** from 0.8 to 1.2 of the original nose depth.
+- **Nose Sliders:** (per-nose mesh scale; compose with head nose layout sliders)
+    - **Nose Width:** from 0.8 to 1.2 of the original nose mesh width.
+    - **Nose Length:** from 0.8 to 1.2 of the original nose mesh length.
+    - **Nose Depth:** from 0.8 to 1.2 of the original nose mesh depth.
 - **Mouths:**
     - **Standard:** "CommonMouth" `Mesh` in [`assets/mouths/common_mouth.glb`](../../assets/characters/mouths/common_mouth.glb)
 - **Mouth Sliders:**
     - **Mouth Width:** from 0.8 to 1.2 of the original mouth width.
     - **Mouth Height:** from 0.8 to 1.2 of the original mouth height.
     - **Mouth Depth:** from 0.8 to 1.2 of the original mouth depth.
-- **Ears:**
+- **Ears:** (author `*_left`; mirror for the right ear)
     - **Standard:** "RoundScoopLateralEarLeft" `Mesh` in [`assets/ears/round_scoop_lateral_ear_left.glb`](../../assets/characters/ears/round_scoop_lateral_ear_left.glb)
     - **Round:** "RoundLateralEarLeft" `Mesh` in [`assets/ears/round_lateral_ear_left.glb`](../../assets/characters/ears/round_lateral_ear_left.glb)
     - **Flank:** "FlankLateralEarLeft" `Mesh` in [`assets/ears/flank_lateral_ear_left.glb`](../../assets/characters/ears/flank_lateral_ear_left.glb)
@@ -894,17 +951,18 @@ Braidman is relatively plain humanoid species.
         - **Flowing Edgy Curls:** "FlowingEdgyCurls" `Mesh` in [`assets/hair/flowing_edgy_curls.glb`](../../assets/characters/hair/flowing_edgy_curls.glb)
         - **Perm Braid:** "PermBraid" `Mesh` in [`assets/hair/perm_braid.glb`](../../assets/characters/hair/perm_braid.glb)
         - **Techno Edge:** "TechnoEdge" `Mesh` in [`assets/hair/techno_edge.glb`](../../assets/characters/hair/techno_edge.glb)
-- **Clothes:** (can wear as many as you want at the same time)
-    - **Basketball Cut Shirt:** "BasketballCutShirt" `Mesh` in [`assets/clothes/basketball_cut_shirt.glb`](../../assets/characters/clothes/basketball_cut_shirt.glb), no special fitting needed.
-    - **Tunic:** "Tunic" `Mesh` in [`assets/clothes/tunic.glb`](../../assets/characters/clothes/tunic.glb), no special fitting needed.
-    - **Long Dress:** "LongDress" `Mesh` in [`assets/clothes/long_dress.glb`](../../assets/characters/clothes/long_dress.glb), no special fitting needed.
-    - **Short Dress:** "ShortDress" `Mesh` in [`assets/clothes/short_dress.glb`](../../assets/characters/clothes/short_dress.glb), no special fitting needed.
-    - **Fitted Coat:** "FittedCoat" `Mesh` in [`assets/clothes/fitted_coat.glb`](../../assets/characters/clothes/fitted_coat.glb), no special fitting needed.
-    - **Quarter Coat:** "QuarterCoat" `Mesh` in [`assets/clothes/quarter_coat.glb`](../../assets/characters/clothes/quarter_coat.glb), no special fitting needed.
-    - **Robe Coat:** "RobeCoat" `Mesh` in [`assets/clothes/robe_coat.glb`](../../assets/characters/clothes/robe_coat.glb), no special fitting needed.
-    - **Short-sleeved Robe Coat:** "ShortSleevedRobeCoat" `Mesh` in [`assets/clothes/short_sleeved_robe_coat.glb`](../../assets/characters/clothes/short_sleeved_robe_coat.glb), no special fitting needed.
-    - **Tailored Coat:** "TailoredCoat" `Mesh` in [`assets/clothes/tailored_coat.glb`](../../assets/characters/clothes/tailored_coat.glb), no special fitting needed.
-- **Genders:**
+- **Clothes:** (can wear as many as you want at the same time; each remaps to the body rig, `NoChanges` fit)
+    - **Basketball Cut Shirt:** "BasketballCutShirt" `Mesh` in [`assets/clothes/basketball_cut_shirt.glb`](../../assets/characters/clothes/basketball_cut_shirt.glb).
+    - **Tunic:** "Tunic" `Mesh` in [`assets/clothes/tunic.glb`](../../assets/characters/clothes/tunic.glb).
+    - **Long Dress:** "LongDress" `Mesh` in [`assets/clothes/long_dress.glb`](../../assets/characters/clothes/long_dress.glb).
+    - **Short Dress:** "ShortDress" `Mesh` in [`assets/clothes/short_dress.glb`](../../assets/characters/clothes/short_dress.glb).
+    - **Fitted Coat:** "FittedCoat" `Mesh` in [`assets/clothes/fitted_coat.glb`](../../assets/characters/clothes/fitted_coat.glb).
+    - **Quarter Coat:** "QuarterCoat" `Mesh` in [`assets/clothes/quarter_coat.glb`](../../assets/characters/clothes/quarter_coat.glb).
+    - **Robe Coat:** "RobeCoat" `Mesh` in [`assets/clothes/robe_coat.glb`](../../assets/characters/clothes/robe_coat.glb).
+    - **Short-sleeved Robe Coat:** "ShortSleevedRobeCoat" `Mesh` in [`assets/clothes/short_sleeved_robe_coat.glb`](../../assets/characters/clothes/short_sleeved_robe_coat.glb).
+    - **Tailored Coat:** "TailoredCoat" `Mesh` in [`assets/clothes/tailored_coat.glb`](../../assets/characters/clothes/tailored_coat.glb).
+- **Animations:** walk, run, two-footed jump, tucked flip (humanoid-compatible; see [`crozon/animations`](../animations/)).
+- **Genders:** (percent offsets on body rig sliders after species baseline)
     - **Male:**
         - Increase shoulder width by 5%.
     - **Female:**
@@ -914,7 +972,7 @@ Braidman is relatively plain humanoid species.
         - Increase buttocks thickness by 10%.
     - **Non-binary:**
         - Decrease shoulder width by 5%.
-- **Builds:**
+- **Builds:** (percent offsets on body rig sliders after gender preset)
     - **Slender:**
         - Decrease shoulder width by 5%.
         - Decrease chest thickness by 10%.
