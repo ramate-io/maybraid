@@ -875,26 +875,44 @@ Gender and build presets below adjust the same body rig sliders (percent offsets
 Braidman is a relatively plain humanoid species.
 
 - **Body Rig:** "Humanoid" `Armature` in [`assets/bodies/humanoid_rig.glb`](../../assets/characters/bodies/humanoid_rig.glb)
-- **Height:** 1.0 (default species scale)
-- **Width:** 0.8 (default species scale; slightly smaller than the authored rig)
-- **Depth:** 0.8 (default species scale; slightly smaller than the authored rig)
+    - **Proportions:**
+        - **Lateral Width:** 
+            - Scale the lower_chest_width bones down to 0.8.
+            - Scale the waist bones up by 0.2.
+        - **Others:**
+            - No changes to the other bones.
 - **Body Meshes:** 
     - **Standard:** "HumanoidFullBody" `Mesh` in [`assets/bodies/humanoid_full_body.glb`](../../assets/characters/bodies/humanoid_full_body.glb)
     - **Full:** "LeronBipedFullBody" `Mesh` in [`assets/bodies/leron_biped_full_body.glb`](../../assets/characters/bodies/leron_biped_full_body.glb)
 - **Body Rig Sliders:**
     - **Height:** from 0.5 to 1.5 of the species baseline height.
+        - Scaling height increases the length of the legs, arms, and spinal bones. 
     - **Shoulder Width:** from 0.8 to 1.2 of the original shoulder width.
+        - Scaling shoulder width increases the length of the shoulder bones.
     - **Hip Width:** from 0.8 to 1.4 of the original hip width.
+        - Scaling hip width increases the length of the pelvis bones.
+    - **Trunk Thickness:** from 0.8 to 1.2 of the original trunk thickness.
+        - Scaling trunk thickness increases the X-Z scale of the bones in the back pelvis and shoulders. 
     - **Chest Thickness:** from 0.8 to 1.2 of the original chest thickness.
+        - Scaling chest thickness increases the length of the chest thickness bones.
     - **Back Thickness:** from 0.8 to 1.2 of the original back thickness.
+        - Scaling back thickness increases the length of the back thickness bones.
     - **Belly Thickness:** from 0.8 to 1.2 of the original belly thickness (`upper_belly`, `lower_belly`).
+        - Scaling belly thickness increases the length of the belly thickness bones.
     - **Buttocks Thickness:** from 0.8 to 1.2 of the original buttock thickness.
+        - Scaling buttocks thickness increases the length of the buttocks thickness bones.
     - **Arm Length:** from 0.8 to 1.2 of the original arm length.
+        - Scaling arm length increases the length of the arm bones.
     - **Arm Thickness:** from 0.8 to 1.2 of the original arm thickness.
+        - Scaling arm thickness increases the X-Z scale of the bones in the arms.
     - **Leg Length:** from 0.8 to 1.2 of the original leg length.
+        - Scaling leg length increases the length of the leg bones.
     - **Leg Thickness:** from 0.8 to 1.2 of the original leg thickness.
+        - Scaling leg thickness increases the X-Z scale of the bones in the legs.
     - **Neck Length:** from 0.8 to 1.2 of the original neck length.
+        - Scaling neck length increases the length of the neck bones.
     - **Neck Thickness:** from 0.8 to 1.2 of the original neck thickness.
+        - Scaling neck thickness increases the X-Z scale of the bones in the neck.
 - **Head Rig:** "OrthogradeHeadRig" `Armature` in [`assets/heads/orthograde_head.glb`](../../assets/characters/heads/orthograde_head.glb), bones dumped in [`assets/heads/orthograde_head.armature_dump`](../../assets/characters/heads/orthograde_head.armature_dump). Socket on body rig `upper_neck`.
 - **Heads:**
     - **Standard:** "MeerkatHead" `Mesh` in [`assets/heads/meerkat_head.glb`](../../assets/characters/heads/meerkat_head.glb)
@@ -902,8 +920,11 @@ Braidman is a relatively plain humanoid species.
     - **Full:** "FullOrthHumanoidHead" `Mesh` in [`assets/heads/full_ortho_humanoid_head.glb`](../../assets/characters/heads/full_ortho_humanoid_head.glb)
 - **Head Sliders:** (layout on the head rig; see [slider table](#sliders-and-scale) for naming)
     - **Head Width:** from 0.8 to 1.2 of the original head width.
+        - Scaling head width increases the length of lateral bones in the head rig.
     - **Head Height:** from 0.8 to 1.2 of the original head height.
+        - Scaling head height increases the length of medial vertical bones in the head rig.
     - **Head Depth:** from 0.8 to 1.2 of the original head depth.
+        - Scaling head depth increases the length of medial horizontal bones in the head rig.
     - **Eye Spacing:** from 0.8 to 1.2 of the original inter-eye distance.
     - **Eye-line Height:** from 0.8 to 1.2 of the original eye height.
     - **Nose Width:** from 0.8 to 1.2 of the original nose-region span.
