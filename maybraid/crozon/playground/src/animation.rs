@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use bevy::prelude::*;
 use clap::ValueEnum;
+use log::info;
 use crozon_rigs::{
 	debug::{format_rigged_axis, log_bind_pose, log_pose_deltas, RigPoseDebug},
 	humanoid::HumanoidRig,
@@ -9,7 +10,7 @@ use crozon_rigs::{
 	BonePose, Name as RigName,
 };
 use malo_animations::{
-	animations::{FixedTuck, Run, Squat, Tuck, TuckedFlip, TwoFootedJump, Walk, DEFAULT_GRAVITY, DEFAULT_LANDING_SQUAT_SPEED, DEFAULT_PRE_SQUAT_SPEED},
+	animations::{FixedTuck, Run, Squat, Tuck, TuckedFlip, TwoFootedJump, TwoFootTuckedFlip, Walk, DEFAULT_GRAVITY, DEFAULT_LANDING_SQUAT_SPEED, DEFAULT_PRE_SQUAT_SPEED},
 	Animation, Effects,
 };
 
@@ -51,6 +52,7 @@ pub enum AnimationMode {
 	Tuck,
 	FixedTuck,
 	TuckedFlip,
+	TwoFootTuckedFlip,
 }
 
 #[derive(Resource)]
@@ -147,6 +149,9 @@ pub fn animate_limbs(
 		}
 		AnimationMode::TuckedFlip => {
 			animate_tucked_flip(&config, &mut rig, &mut armature, &mut limbs, t)
+		}
+		AnimationMode::TwoFootTuckedFlip => {
+			animate_two_foot_tucked_flip(&config, &mut debug, &mut rig, &mut armature, &mut limbs, t)
 		}
 	}
 }
@@ -291,6 +296,44 @@ fn animate_squat(
 		);
 	}
 
+	marshal_pose_to_limbs(&rig, limbs);
+}
+
+fn animate_two_foot_tucked_flip(
+	config: &CharacterConfig,
+	debug: &mut AnimationArticulationDebug,
+	rig: &mut Query<&mut HumanoidV0Rig, With<CharacterRig>>,
+	armature: &mut Query<&mut Transform, (With<CharacterRig>, Without<LimbAnimator>)>,
+	limbs: &mut Query<(&mut Transform, &LimbAnimator)>,
+	t: f32,
+) {
+	let Ok(mut rig) = rig.single_mut() else {
+		return;
+	};
+
+	marshal_limbs_into_pose(&mut rig, limbs);
+	let flip = TwoFootTuckedFlip::<HumanoidV0Rig>::default()
+		.with_jump(
+			TwoFootedJump::<HumanoidV0Rig>::default()
+				.with_gravity(DEFAULT_GRAVITY)
+				.with_jump_height(JUMP_HEIGHT)
+				.with_pre_squat_speed(JUMP_PRE_SQUAT_SPEED)
+				.with_landing_squat_speed(JUMP_LANDING_SQUAT_SPEED),
+		);
+	let effects = flip.apply(&mut rig, t);
+	apply_effects(config.transform, effects, armature);
+	if debug.0.enabled {
+		let lengths = rig.segment_lengths();
+		let (segment, _) = flip.segment(lengths, t);
+		if segment == malo_animations::animations::JumpSegment::Land || debug.0.should_log(t) {
+			info!(
+				"tucked flip: elapsed={:.3} pitch={:.3} y={:.3}",
+				t,
+				flip.flip_pitch_radians(lengths, t),
+				flip.vertical_offset(lengths, t),
+			);
+		}
+	}
 	marshal_pose_to_limbs(&rig, limbs);
 }
 

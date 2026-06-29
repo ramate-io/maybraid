@@ -27,8 +27,11 @@ pub fn apply_tuck_profile<R: HumanoidRig>(
 	for side in [Side::Left, Side::Right] {
 		let mut arm = rig.arm_pose(side);
 
-		arm.shoulder =
-			rig.articulate_on_rig(arm.shoulder, 0.0, profile.shoulder_flex(side, amount));
+		arm.shoulder = rig.articulate_on_rig(
+			arm.shoulder,
+			profile.shoulder_swing(side, amount),
+			profile.shoulder_flex(side, amount),
+		);
 		arm.humerus = arm.humerus.articulate(
 			humerus_tuck_axis(side),
 			profile.humerus_swing(side, amount),
@@ -75,31 +78,32 @@ mod tests {
 		assert!(humerus.swing.abs() > 0.1);
 		assert!(humerus.flex.abs() > 0.05);
 		assert!(humerus.flex.abs() <= profile.humerus_medial(Side::Left, 1.0).abs() + 1e-4);
-		assert!(forearm.flex < -0.5);
+		assert!(forearm.flex.abs() > 0.05);
+		assert!(forearm.flex.abs() < 0.5);
 		Ok(())
 	}
 
 	#[test]
-	fn tuck_forearms_flex_toward_midline_symmetrically() -> anyhow::Result<()> {
+	fn tuck_shoulders_rotate_toward_midline() -> anyhow::Result<()> {
 		let mut rig = HumanoidV0Rig::imported();
 		Tuck::<HumanoidV0Rig>::default().apply(&mut rig, 1.0);
 
-		let left = rig.pose().get(&rig.arm(Side::Left).forearm.name).expect("left forearm");
-		let right = rig.pose().get(&rig.arm(Side::Right).forearm.name).expect("right forearm");
-		assert!(left.flex < -0.5);
-		assert!(right.flex < -0.5);
-		assert_eq!(left.flex.signum(), right.flex.signum());
+		let left = rig.pose().get(&rig.arm(Side::Left).shoulder.name).expect("left shoulder");
+		let right = rig.pose().get(&rig.arm(Side::Right).shoulder.name).expect("right shoulder");
+		assert!(left.swing.abs() > 0.3);
+		assert!(right.swing.abs() > 0.3);
+		assert!(left.swing.signum() != right.swing.signum());
 		Ok(())
 	}
 
 	#[test]
-	fn tuck_shoulder_contribution_is_modest() -> anyhow::Result<()> {
+	fn tuck_shoulder_swing_dominates_forearm_vertical_flex() -> anyhow::Result<()> {
 		let mut rig = HumanoidV0Rig::imported();
 		Tuck::<HumanoidV0Rig>::default().apply(&mut rig, 1.0);
 
 		let shoulder = rig.pose().get(&rig.arm(Side::Left).shoulder.name).expect("shoulder");
-		let humerus = rig.pose().get(&rig.arm(Side::Left).humerus.name).expect("humerus");
-		assert!(shoulder.flex.abs() < humerus.swing.abs());
+		let forearm = rig.pose().get(&rig.arm(Side::Left).forearm.name).expect("forearm");
+		assert!(shoulder.swing.abs() > forearm.flex.abs());
 		Ok(())
 	}
 }

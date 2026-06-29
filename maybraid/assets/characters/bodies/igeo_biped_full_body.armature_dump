@@ -1,0 +1,39 @@
+# armature object: Humanoid
+
+root
+  lumbar
+    midback
+      upper_back
+        shoulder.L
+          humerus.L
+            forearm.L
+            lower_arm_thickness.L
+          upper_arm_thickness.L
+        lower_neck
+          upper_neck
+        shoulder.R
+          humerus.R
+            forearm.R
+            lower_arm_thickness.R
+          upper_arm_thickness.R
+      chest.L
+      chest.R
+      upper_back_thickness
+      chest_thickness
+    lat.L
+    lat.R
+    upper_belly
+  waist.L
+  waist.R
+  lower_belly
+pelvis.L
+  femur.L
+    shin.L
+    calf_thickness.L
+  thigh_thickness.L
+pelvis.R
+  femur.R
+    shin.R
+    calf_thickness.R
+  thigh_thickness.R
+buttocks

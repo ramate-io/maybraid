@@ -5,10 +5,13 @@ use crozon_rigs::Side;
 /// Unit-tightness magnitudes at full tuck (`tightness = 1.0`).
 const FEMUR_AT_FULL: f32 = -0.55;
 const SHIN_AT_FULL: f32 = 2.2;
-const SHOULDER_AT_FULL: f32 = 0.35;
+/// Negative is rolled inward
+const SHOULDER_SWING_AT_FULL: f32 = -0.65;
+const SHOULDER_FLEX_AT_FULL: f32 = 0.25;
 const HUMERUS_SWING_AT_FULL: f32 = 0.55;
 const HUMERUS_MEDIAL_AT_FULL: f32 = 1.25;
-const FOREARM_AT_FULL: f32 = 1.4;
+/// Modest forearm flex on the rig vertical axis; elbow closure comes from shoulder swing + humerus medial.
+const FOREARM_AT_FULL: f32 = 0.25;
 
 /// Joint targets for a tucked pose, scaled from one tightness value.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -35,12 +38,20 @@ impl TuckProfile {
 		amount * SHIN_AT_FULL * self.tightness
 	}
 
+	pub fn shoulder_swing(&self, side: Side, amount: f32) -> f32 {
+		let sign = match side {
+			Side::Left => 1.0,
+			Side::Right => -1.0,
+		};
+		amount * SHOULDER_SWING_AT_FULL * self.tightness * sign
+	}
+
 	pub fn shoulder_flex(&self, side: Side, amount: f32) -> f32 {
 		let sign = match side {
 			Side::Left => -1.0,
 			Side::Right => 1.0,
 		};
-		amount * SHOULDER_AT_FULL * self.tightness * sign
+		amount * SHOULDER_FLEX_AT_FULL * self.tightness * sign
 	}
 
 	pub fn humerus_swing(&self, side: Side, amount: f32) -> f32 {
@@ -100,6 +111,10 @@ mod tests {
 			);
 			assert!(
 				profile.humerus_swing(side, 1.0).signum() != fall.humerus_swing(side, 0.5).signum()
+			);
+			assert!(
+				profile.shoulder_swing(side, 1.0).signum()
+					!= fall.humerus_swing(side, 0.5).signum()
 			);
 		}
 		Ok(())
