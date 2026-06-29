@@ -904,3 +904,43 @@ Braidman is relatively plain humanoid species.
     - **Robe Coat:** "RobeCoat" `Mesh` in [`assets/clothes/robe_coat.glb`](../../assets/characters/clothes/robe_coat.glb), no special fitting needed.
     - **Short-sleeved Robe Coat:** "ShortSleevedRobeCoat" `Mesh` in [`assets/clothes/short_sleeved_robe_coat.glb`](../../assets/characters/clothes/short_sleeved_robe_coat.glb), no special fitting needed.
     - **Tailored Coat:** "TailoredCoat" `Mesh` in [`assets/clothes/tailored_coat.glb`](../../assets/characters/clothes/tailored_coat.glb), no special fitting needed.
+- **Genders:**
+    - **Male:**
+        - Increase shoulder width by 5%.
+    - **Female:**
+        - Decrease shoulder width by 5%.
+        - Increase chest thickness by 20%.
+        - Increase hip width by 10%.
+        - Increase buttocks thickness by 10%.
+    - **Non-binary:**
+        - Decrease shoulder width by 5%.
+- **Builds:**
+    - **Slender:**
+        - Decrease shoulder width by 5%.
+        - Decrease chest thickness by 10%.
+        - Decrease hip width by 10%.
+    - **Athletic:**
+        - Increase shoulder width by 5%.
+        - Increase chest thickness by 10%.
+        - Increase hip width by 10%.
+        - Increase arm length by 10%.
+        - Increase arm thickness by 10%.
+        - Increase leg length by 10%.
+    - **Heavy:**
+        - Increase shoulder width by 5%.
+        - Increase chest thickness by 10%.
+        - Increase hip width by 10%.
+        - Increase belly thickness by 20%.
+    - **Stocky:**
+        - Increase shoulder width by 10%.
+        - Increase chest thickness by 10%.
+        - Increase arm thickness by 10%.
+        - Increase leg thickness by 10%.
+    - **Lanky:**
+        - Decrease shoulder width by 5%.
+        - Decrease chest thickness by 10%.
+        - Decrease hip width by 10%.
+        - Decrease belly thickness by 20%.
+        - Increase neck length by 10%.
+        - Increase leg length by 10%.
+        - Increase arm length by 10%.
