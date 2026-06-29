@@ -10,7 +10,7 @@ pub mod transition;
 pub mod tuck;
 pub mod tucked_flip;
 pub mod two_footed_jump;
-pub mod two_foot_tucked_flip;
+pub mod two_footed_tucked_flip;
 pub mod upright_run;
 pub mod upright_walk;
 pub mod walk;
@@ -34,4 +34,4 @@ pub use two_footed_jump::{
 	DEFAULT_GRAVITY, DEFAULT_JUMP_HEIGHT, DEFAULT_LANDING_SQUAT_SPEED, DEFAULT_PRE_SQUAT_SPEED,
 	DEFAULT_SPRING_DURATION, FALL_BLEND_FRACTION, LAND_BLEND_FRACTION, LAND_POSE_BLEND_MAX_SECS,
 };
-pub use two_foot_tucked_flip::TwoFootTuckedFlip;
+pub use two_footed_tucked_flip::TwoFootedTuckedFlip;

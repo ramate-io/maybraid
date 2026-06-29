@@ -104,6 +104,7 @@ fn hydrate_bone(pose: &RigPose, bone: &mut BonePose) {
 		bone.transform = stored.transform;
 		bone.swing = stored.swing;
 		bone.flex = stored.flex;
+		bone.twist = stored.twist;
 	}
 }
 
@@ -135,7 +136,7 @@ pub trait HumanoidRig {
 	/// Apply swing/flex about the bone's rig-defined local axes.
 	fn articulate_on_rig(&self, mut bone: BonePose, swing: f32, flex: f32) -> BonePose {
 		if let Some(axis) = self.rigged_axis(&bone.name) {
-			bone = bone.articulate(axis, swing, flex);
+			bone = bone.articulate(axis, swing, flex, 0.0);
 		} else {
 			bone.swing = swing;
 			bone.flex = flex;

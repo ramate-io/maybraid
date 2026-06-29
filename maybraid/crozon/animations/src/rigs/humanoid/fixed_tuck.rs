@@ -39,6 +39,7 @@ mod tests {
 			let half = at_half.pose().get(&bone).expect("matching bone");
 			assert_eq!(zero.swing, half.swing, "swing drift on {bone}");
 			assert_eq!(zero.flex, half.flex, "flex drift on {bone}");
+			assert_eq!(zero.twist, half.twist, "twist drift on {bone}");
 		}
 		Ok(())
 	}

@@ -142,27 +142,37 @@ pub struct BonePose {
 	pub swing: f32,
 	/// Pitch or hinge flex magnitude (radians) about the bone's flex axis.
 	pub flex: f32,
+	/// Roll or long-axis twist magnitude (radians) about the bone's twist axis.
+	pub twist: f32,
 }
 
 impl BonePose {
 	pub fn new(name: impl Into<Name>, transform: Transform) -> Self {
-		Self { name: name.into(), transform, swing: 0.0, flex: 0.0 }
+		Self { name: name.into(), transform, swing: 0.0, flex: 0.0, twist: 0.0 }
 	}
 
 	pub fn with_articulation(name: impl Into<Name>, swing: f32, flex: f32) -> Self {
-		Self { name: name.into(), transform: Transform::IDENTITY, swing, flex }
+		Self { name: name.into(), transform: Transform::IDENTITY, swing, flex, twist: 0.0 }
 	}
 
 	pub fn with_pose(name: impl Into<Name>, swing: f32, flex: f32, translation: Vec3) -> Self {
-		Self { name: name.into(), transform: Transform::from_translation(translation), swing, flex }
+		Self {
+			name: name.into(),
+			transform: Transform::from_translation(translation),
+			swing,
+			flex,
+			twist: 0.0,
+		}
 	}
 
-	/// Apply swing/flex about this bone's rig-defined local axes.
-	pub fn articulate(mut self, axis: RiggedAxis, swing: f32, flex: f32) -> Self {
+	/// Apply swing/flex/twist about this bone's rig-defined local axes.
+	pub fn articulate(mut self, axis: RiggedAxis, swing: f32, flex: f32, twist: f32) -> Self {
 		self.swing = swing;
 		self.flex = flex;
+		self.twist = twist;
 		let rest = self.transform.rotation;
-		self.transform.rotation = articulation::compose_local_rotation(rest, axis, swing, flex);
+		self.transform.rotation =
+			articulation::compose_local_rotation(rest, axis, swing, flex, twist);
 		self
 	}
 }

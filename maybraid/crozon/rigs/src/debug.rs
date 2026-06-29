@@ -85,7 +85,7 @@ fn log_bone_delta(bone: &str, rest: &Transform, pose: &BonePose, axis: &str) {
 	let rot_delta = rest.rotation.inverse() * pose.transform.rotation;
 
 	info!(
-		"[{bone}] trans_rest={} trans_pose={} trans_delta={} | rot_rest={} rot_pose={} rot_delta={} | swing={:.3} flex={:.3} | rigged_axis={axis}",
+		"[{bone}] trans_rest={} trans_pose={} trans_delta={} | rot_rest={} rot_pose={} rot_delta={} | swing={:.3} flex={:.3} twist={:.3} | rigged_axis={axis}",
 		format_vec3(rest.translation),
 		format_vec3(pose.transform.translation),
 		format_vec3(trans_delta),
@@ -94,6 +94,7 @@ fn log_bone_delta(bone: &str, rest: &Transform, pose: &BonePose, axis: &str) {
 		format_euler_deg(rot_delta),
 		pose.swing,
 		pose.flex,
+		pose.twist,
 	);
 }
 

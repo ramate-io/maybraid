@@ -8,5 +8,5 @@ pub mod squat;
 pub mod tuck;
 pub mod tucked_flip;
 pub mod two_footed_jump;
-pub mod two_foot_tucked_flip;
+pub mod two_footed_tucked_flip;
 pub mod walk;

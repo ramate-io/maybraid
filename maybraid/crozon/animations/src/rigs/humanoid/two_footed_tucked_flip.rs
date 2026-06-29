@@ -3,7 +3,7 @@ use crozon_rigs::humanoid::HumanoidRig;
 use log::info;
 
 use crate::animations::{
-	FixedPosition, JumpSegment, Spring, Squat, Transition, TransitionCurve, Tuck, TwoFootTuckedFlip,
+	FixedPosition, JumpSegment, Spring, Squat, Transition, TransitionCurve, Tuck, TwoFootedTuckedFlip,
 	FALL_BLEND_FRACTION,
 };
 use crate::rigs::transition::capture_animation_pose;
@@ -13,7 +13,7 @@ fn segment_debug_enabled() -> bool {
 	std::env::var("CROZON_ANIMATION_DEBUG").is_ok()
 }
 
-impl<R: HumanoidRig> Animation<R> for TwoFootTuckedFlip<R> {
+impl<R: HumanoidRig> Animation<R> for TwoFootedTuckedFlip<R> {
 	fn apply(&self, rig: &mut R, elapsed: f32) -> Effects {
 		let lengths = rig.segment_lengths();
 		let (segment, local) = self.segment(lengths, elapsed);
@@ -104,8 +104,8 @@ mod tests {
 	use super::*;
 	use crate::animations::DEFAULT_SPRING_DURATION;
 
-	fn default_flip() -> TwoFootTuckedFlip<HumanoidV0Rig> {
-		TwoFootTuckedFlip::default()
+	fn default_flip() -> TwoFootedTuckedFlip<HumanoidV0Rig> {
+		TwoFootedTuckedFlip::default()
 	}
 
 	#[test]
@@ -153,7 +153,7 @@ mod tests {
 
 		let shoulder = rig.pose().get(&rig.arm(Side::Left).shoulder.name).expect("shoulder");
 		let tucked_shoulder =
-			Tuck::<HumanoidV0Rig>::default().profile().shoulder_swing(Side::Left, 1.0);
+			Tuck::<HumanoidV0Rig>::default().profile().shoulder_roll(Side::Left, 1.0);
 		assert!(shoulder.swing.abs() > 0.05);
 		assert!(shoulder.swing.abs() < tucked_shoulder.abs());
 		Ok(())

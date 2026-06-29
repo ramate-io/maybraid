@@ -137,6 +137,7 @@ fn blend_bone(from: &BonePose, to: &BonePose, weight: f32) -> BonePose {
 		},
 		swing: from.swing + (to.swing - from.swing) * weight,
 		flex: from.flex + (to.flex - from.flex) * weight,
+		twist: from.twist + (to.twist - from.twist) * weight,
 	}
 }
 

@@ -10,7 +10,7 @@ use crozon_rigs::{
 	BonePose, Name as RigName,
 };
 use malo_animations::{
-	animations::{FixedTuck, Run, Squat, Tuck, TuckedFlip, TwoFootedJump, TwoFootTuckedFlip, Walk, DEFAULT_GRAVITY, DEFAULT_LANDING_SQUAT_SPEED, DEFAULT_PRE_SQUAT_SPEED},
+	animations::{FixedTuck, Run, Squat, Tuck, TuckedFlip, TwoFootedJump, TwoFootedTuckedFlip, Walk, DEFAULT_GRAVITY, DEFAULT_LANDING_SQUAT_SPEED, DEFAULT_PRE_SQUAT_SPEED},
 	Animation, Effects,
 };
 
@@ -52,7 +52,7 @@ pub enum AnimationMode {
 	Tuck,
 	FixedTuck,
 	TuckedFlip,
-	TwoFootTuckedFlip,
+	TwoFootedTuckedFlip,
 }
 
 #[derive(Resource)]
@@ -150,8 +150,8 @@ pub fn animate_limbs(
 		AnimationMode::TuckedFlip => {
 			animate_tucked_flip(&config, &mut rig, &mut armature, &mut limbs, t)
 		}
-		AnimationMode::TwoFootTuckedFlip => {
-			animate_two_foot_tucked_flip(&config, &mut debug, &mut rig, &mut armature, &mut limbs, t)
+		AnimationMode::TwoFootedTuckedFlip => {
+			animate_two_footed_tucked_flip(&config, &mut debug, &mut rig, &mut armature, &mut limbs, t)
 		}
 	}
 }
@@ -299,7 +299,7 @@ fn animate_squat(
 	marshal_pose_to_limbs(&rig, limbs);
 }
 
-fn animate_two_foot_tucked_flip(
+fn animate_two_footed_tucked_flip(
 	config: &CharacterConfig,
 	debug: &mut AnimationArticulationDebug,
 	rig: &mut Query<&mut HumanoidV0Rig, With<CharacterRig>>,
@@ -312,7 +312,7 @@ fn animate_two_foot_tucked_flip(
 	};
 
 	marshal_limbs_into_pose(&mut rig, limbs);
-	let flip = TwoFootTuckedFlip::<HumanoidV0Rig>::default()
+	let flip = TwoFootedTuckedFlip::<HumanoidV0Rig>::default()
 		.with_jump(
 			TwoFootedJump::<HumanoidV0Rig>::default()
 				.with_gravity(DEFAULT_GRAVITY)

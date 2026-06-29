@@ -5,13 +5,16 @@ use crozon_rigs::Side;
 /// Unit-tightness magnitudes at full tuck (`tightness = 1.0`).
 const FEMUR_AT_FULL: f32 = -0.55;
 const SHIN_AT_FULL: f32 = 2.2;
-/// Negative is rolled inward
-const SHOULDER_SWING_AT_FULL: f32 = -0.65;
-const SHOULDER_FLEX_AT_FULL: f32 = 0.25;
-const HUMERUS_SWING_AT_FULL: f32 = 0.55;
-const HUMERUS_MEDIAL_AT_FULL: f32 = 1.25;
-/// Modest forearm flex on the rig vertical axis; elbow closure comes from shoulder swing + humerus medial.
-const FOREARM_AT_FULL: f32 = 0.25;
+/// Small inward shoulder roll on local Y; side signs mirror via [`Side`], not axis flip.
+const SHOULDER_ROLL_AT_FULL: f32 = 0.1;
+/// Humerus elevation on local Y (swing).
+const HUMERUS_SWING_AT_FULL: f32 = -0.0;
+/// Humerus medial/lateral on local X (flex).
+const HUMERUS_FLEX_AT_FULL: f32 = 1.5;
+/// Humerus long-axis spin on local Y (twist); sets forearm orientation.
+const HUMERUS_TWIST_AT_FULL: f32 = 0.95;
+/// Forearm hinge on Z after humerus articulation.
+const FOREARM_AT_FULL: f32 = 2.0;
 
 /// Joint targets for a tucked pose, scaled from one tightness value.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -38,36 +41,36 @@ impl TuckProfile {
 		amount * SHIN_AT_FULL * self.tightness
 	}
 
-	pub fn shoulder_swing(&self, side: Side, amount: f32) -> f32 {
+	pub fn shoulder_roll(&self, side: Side, amount: f32) -> f32 {
 		let sign = match side {
 			Side::Left => 1.0,
 			Side::Right => -1.0,
 		};
-		amount * SHOULDER_SWING_AT_FULL * self.tightness * sign
-	}
-
-	pub fn shoulder_flex(&self, side: Side, amount: f32) -> f32 {
-		let sign = match side {
-			Side::Left => -1.0,
-			Side::Right => 1.0,
-		};
-		amount * SHOULDER_FLEX_AT_FULL * self.tightness * sign
+		amount * SHOULDER_ROLL_AT_FULL * self.tightness * sign
 	}
 
 	pub fn humerus_swing(&self, side: Side, amount: f32) -> f32 {
 		let sign = match side {
-			Side::Left => 1.0,
-			Side::Right => -1.0,
+			Side::Left => -1.0,
+			Side::Right => 1.0,
 		};
 		amount * HUMERUS_SWING_AT_FULL * self.tightness * sign
 	}
 
-	pub fn humerus_medial(&self, side: Side, amount: f32) -> f32 {
+	pub fn humerus_flex(&self, side: Side, amount: f32) -> f32 {
 		let sign = match side {
 			Side::Left => 1.0,
 			Side::Right => -1.0,
 		};
-		amount * HUMERUS_MEDIAL_AT_FULL * self.tightness * sign
+		amount * HUMERUS_FLEX_AT_FULL * self.tightness * sign
+	}
+
+	pub fn humerus_twist(&self, side: Side, amount: f32) -> f32 {
+		let sign = match side {
+			Side::Left => 1.0,
+			Side::Right => -1.0,
+		};
+		amount * HUMERUS_TWIST_AT_FULL * self.tightness * sign
 	}
 
 	pub fn forearm_flex(&self, amount: f32) -> f32 {
@@ -89,7 +92,7 @@ mod tests {
 		let profile = TuckProfile::new(TuckProfile::DEFAULT_TIGHTNESS);
 		assert!((profile.femur_swing(1.0) - FEMUR_AT_FULL).abs() < 1e-5);
 		assert!((profile.shin_flex(1.0) - SHIN_AT_FULL).abs() < 1e-5);
-		assert!((profile.humerus_medial(Side::Left, 1.0) - HUMERUS_MEDIAL_AT_FULL).abs() < 1e-5);
+		assert!((profile.humerus_flex(Side::Left, 1.0) - HUMERUS_FLEX_AT_FULL).abs() < 1e-5);
 		Ok(())
 	}
 
@@ -107,16 +110,21 @@ mod tests {
 		let fall = Fall::<()>::default();
 		for side in [Side::Left, Side::Right] {
 			assert!(
-				profile.shoulder_flex(side, 1.0).signum() != fall.shoulder_flex(side, 0.5).signum()
-			);
-			assert!(
 				profile.humerus_swing(side, 1.0).signum() != fall.humerus_swing(side, 0.5).signum()
 			);
-			assert!(
-				profile.shoulder_swing(side, 1.0).signum()
-					!= fall.humerus_swing(side, 0.5).signum()
-			);
 		}
+		assert!(
+			profile.shoulder_roll(Side::Left, 1.0).signum()
+				!= profile.shoulder_roll(Side::Right, 1.0).signum()
+		);
+		assert!(
+			profile.humerus_swing(Side::Left, 1.0).signum()
+				!= profile.humerus_swing(Side::Right, 1.0).signum()
+		);
+		assert!(
+			profile.humerus_twist(Side::Left, 1.0).signum()
+				!= profile.humerus_twist(Side::Right, 1.0).signum()
+		);
 		Ok(())
 	}
 
