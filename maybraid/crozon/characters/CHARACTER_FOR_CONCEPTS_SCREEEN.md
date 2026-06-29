@@ -2,28 +2,14 @@
 
 ## Key Recommendations
 
-Use a layered design:
+Use a layered, bone-driven design:
 
-1. **Menu model**
+1. **Menu model** — editable UI state: species, gender, build, features, clothes, active animation, and raw control values.
+2. **Resolved character config** — normalized game-facing data: concrete species definitions, chosen assets, resolved field values, active feature effects, and clothing choices.
+3. **Rig pose / render assembly** — converts resolved config into a `RigPose`, spawned scenes, attached features, clothing fits, and animation preview.
+4. **Actual character struct** — final runtime/gameplay data, built from resolved config rather than UI widgets.
 
-   * Represents what the player is editing.
-   * Stores selected species, gender, build, features, clothes, and raw control values.
-
-2. **Resolved character config**
-
-   * A normalized, game-facing description of the character.
-   * Contains concrete species data, selected assets, selected features, slider values, and clothing choices.
-
-3. **Rig pose / render assembly**
-
-   * Converts resolved config into a `RigPose`, spawned scenes, attached features, clothing fits, and animation preview.
-
-4. **Actual character struct**
-
-   * The final runtime/gameplay character representation.
-   * Should not directly depend on menu UI widgets.
-
-The menu should not directly mutate the final character struct field-by-field. Instead, it should produce an intermediate resolved config, which is then converted into the actual character.
+The preview must not mutate the final character field-by-field, and it must not use scene-root scaling to express species proportions. Proportions are layered on bones: GLTF bind pose -> species base bone scales -> gender/build refinements -> user slider deltas -> Bevy bone marshaling, skin remap, and animation.
 
 ---
 
@@ -46,7 +32,8 @@ The screen should follow this pipeline:
 ```rust
 Menu State
     -> Resolved Character Config
-    -> Rig Pose + Feature/Clothing Assembly
+    -> RigPose from bind pose + layered bone effects
+    -> Feature/Clothing Assembly
     -> Preview Entity
     -> Final Character Struct, when needed
 ```
@@ -57,6 +44,7 @@ In pseudocode:
 fn update_character_preview(
     menu: Res<CharacterCreationMenuState>,
     species_defs: Res<SpeciesDefinitions>,
+    bind_poses: Res<RigBindPoses>,
     mut preview: ResMut<CharacterPreview>,
 ) {
     if !menu.is_changed() {
@@ -64,8 +52,9 @@ fn update_character_preview(
     }
 
     let resolved = resolve_character_config(&menu, &species_defs);
+    let bind_pose = bind_poses.for_species(resolved.species);
 
-    let rig_pose = build_rig_pose(&resolved);
+    let rig_pose = build_rig_pose_from_bind_pose(&resolved, bind_pose);
     let features = build_feature_instances(&resolved);
     let clothing = fit_clothing(&resolved, &rig_pose);
 
@@ -86,7 +75,7 @@ fn commit_character(
 }
 ```
 
-This keeps the menu flexible while preventing UI structure from leaking into gameplay structs.
+This keeps the menu flexible while preventing UI structure from leaking into gameplay structs. In the preview hierarchy, scene-root transforms should usually be identity; skinned body/head/clothing meshes follow their remapped rigs.
 
 ---
 
@@ -162,7 +151,7 @@ pub struct ResolvedCharacterConfig {
     pub species: SpeciesId,
     pub gender: PresetId,
     pub build: PresetId,
-    pub rig_sliders: Vec<Box<dyn Slidable>>,
+    pub rig_sliders: Vec<RigSlider>,
     pub non_rig_controls: Vec<ResolvedControlEffect>,
     pub features: Vec<ResolvedFeature>,
     pub clothing: Vec<ClothingItemId>,
@@ -221,37 +210,47 @@ Suggested resolution order:
 
 ## Stage 2: Resolved Config to RigPose
 
-Your current rig slider traits fit well here.
+`RigPose` is the single transform budget for the skinned preview. Start from a snapshot of the GLTF bind pose, then compose species, preset, and user effects onto that rest pose.
 
 ```rust
 impl RigPose {
-    pub fn apply_sliders<S: Slidable>(&mut self, sliders: &[S]) {
+    pub fn apply_sliders<S: Slidable>(&mut self, sliders: &[S], rest: &RigPose) {
         for slider in sliders {
             let bone_effects = slider.slider_bone_effects();
 
             for bone_effect in bone_effects {
-                self.insert(bone_effect.bone_pose());
+                self.compose_bone_effect(rest, bone_effect);
             }
         }
     }
 }
 ```
 
-The resolved config should collect all currently active rig sliders, then apply them:
+The resolved config should collect all currently active rig sliders, then build the pose in order:
 
 ```rust
-fn build_rig_pose(config: &ResolvedCharacterConfig) -> RigPose {
-    let mut pose = RigPose::default();
+fn build_rig_pose_from_bind_pose(
+    config: &ResolvedCharacterConfig,
+    bind_pose: &RigPose,
+) -> RigPose {
+    let mut pose = bind_pose.clone();
 
-    pose.apply_base_species_pose(config.species);
-    pose.apply_gender_preset(config.gender);
-    pose.apply_build_preset(config.build);
+    pose.apply_species_base(config.species, bind_pose);
+    pose.apply_gender_preset(config.gender, bind_pose);
+    pose.apply_build_preset(config.build, bind_pose);
 
-    pose.apply_sliders(&config.rig_sliders);
+    pose.apply_sliders(&config.rig_sliders, bind_pose);
 
     pose
 }
 ```
+
+Rules:
+
+* Bone effects compose with bind-pose translation, rotation, and scale; they never replace a full bone `Transform`.
+* A slider value of `1.0` means "species baseline", not "write identity transform".
+* Species width, height, and depth are bone scales or named bone-group effects, not scene-root downscales.
+* Reuse `crozon_rigs` helpers such as `RigPose::apply_sliders`, articulation helpers, axis-aware translation deltas, and bind-pose debug output.
 
 Because `Slidable` uses concrete generic types, you may want an enum wrapper for heterogeneous rig sliders:
 
@@ -300,10 +299,10 @@ pub struct ResolvedCharacterConfig {
 And then:
 
 ```rust
-rig_pose.apply_sliders(&config.rig_sliders);
+rig_pose.apply_sliders(&config.rig_sliders, bind_pose);
 ```
 
-This is likely cleaner than using `Vec<Box<dyn Slidable>>`, especially since the current `Sliders<S: Slidable>` trait is generic and Rust will be happier with a concrete enum.
+This is cleaner than using `Vec<Box<dyn Slidable>>`, especially since the current `Sliders<S: Slidable>` trait is generic and Rust will be happier with a concrete enum.
 
 ---
 
@@ -461,12 +460,12 @@ Each species defines:
 * Allowed build presets
 * Species-level fields
 * Allowed extended features
-* Bone scaling and offset rules
+* Base bone scales and offset rules, grouped by named bone sets
 * Feature attachment points
 * Animation compatibility
 * Clothing fit compatibility
 
-Species should own constraints.
+Species should own constraints and base silhouette behavior. Put readable proportion constants on species rig asset types, not in scattered resolution helpers.
 
 A species can expose fields like:
 
@@ -503,10 +502,10 @@ Gender presets may:
 * Set initial field values
 * Set initial rig slider values
 * Enable default extended features
-* Adjust base rig proportions
+* Refine base rig proportions with documented bone-scale or bone-offset effects
 * Select default assets
 
-Gender presets must not restrict slider ranges.
+Gender presets must not restrict slider ranges. Defaults are allowed to be non-neutral, but they must be visible in resolution and debug output.
 
 ---
 
@@ -526,11 +525,11 @@ Examples:
 Build presets may:
 
 * Set initial field values
-* Adjust bone scales
+* Refine bone scales or slider values after gender defaults
 * Enable or disable default features
 * Select a stronger silhouette
 
-Build presets must not restrict slider ranges.
+Build presets must not restrict slider ranges. Like gender presets, their effects should compose on top of the species baseline rather than writing absolute bone transforms.
 
 ---
 
@@ -833,6 +832,8 @@ Each species preview is a small hierarchy of spawned GLB scenes:
 
 The playground’s fixed `HEAD_SCALE` socket is a stopgap. Here, head placement and overall silhouette come from species **Height / Width / Depth** plus rig sliders, not a hard-coded scale factor.
 
+Keep skinned scene-root transforms minimal. Body width, head proportions, and clothing fit should come from the relevant body/head rig bones after skin remap.
+
 ### Feature attachment (Braidman)
 
 | Feature | Head-rig socket bone | Skinned to |
@@ -846,14 +847,14 @@ The playground’s fixed `HEAD_SCALE` socket is a stopgap. Here, head placement 
 
 ## Sliders and scale
 
-**Species Height / Width / Depth** are the baseline proportions everything else deforms from.
+**Species Height / Width / Depth** are baseline bone-scale groups, not scene-root scale values. Everything else deforms from that species baseline.
 
-Resolution order (see [Stage 1](#stage-1-menu-state-to-resolved-character-config) above): species baseline → gender preset → build preset → user-facing slider values → clamp → map to rig effects.
+Resolution order (see [Stage 1](#stage-1-menu-state-to-resolved-character-config) above): species baseline -> gender preset -> build preset -> user-facing slider values -> clamp -> map to rig effects.
 
 Two layers:
 
 * **User-facing sliders** — what the concepts screen exposes (grouped by body, head, feature, etc.).
-* **Rig sliders** — underlying `Slidable` bone effects in `crozon/rigs`; one user slider may drive one or more rig sliders.
+* **Rig sliders** — underlying `Slidable` bone effects in `crozon/rigs`; one user slider may drive one or more rig sliders, and each effect composes with the bind pose.
 
 When the same label appears at head and feature scope, they compose rather than override:
 
@@ -868,110 +869,128 @@ When the same label appears at head and feature scope, they compose rather than 
 | Nose Length | Head | Nose protrusion along the head rig |
 | Nose Length / Depth | Nose | Scale of the nose mesh |
 
-Gender and build presets below adjust the same body rig sliders (percent offsets on the current value).
+Gender and build presets below adjust the same body rig sliders as percent offsets on the current value.
 
 ## Braidman
 
 Braidman is a relatively plain humanoid species.
 
 - **Body Rig:** "Humanoid" `Armature` in [`assets/bodies/humanoid_rig.glb`](../../assets/characters/bodies/humanoid_rig.glb)
-    - **Proportions:**
-        - **Lateral Width:** 
-            - Scale the lower_chest_width bones down to 0.8.
-            - Scale the waist bones up by 0.2.
-        - **Others:**
-            - No changes to the other bones.
+    - **Base bone scales:**
+        - Lower chest width group: `0.8`.
+        - Waist width group: `1.2`.
+        - Other body bones: species baseline `1.0`.
 - **Body Meshes:** 
     - **Standard:** "HumanoidFullBody" `Mesh` in [`assets/bodies/humanoid_full_body.glb`](../../assets/characters/bodies/humanoid_full_body.glb)
     - **Full:** "LeronBipedFullBody" `Mesh` in [`assets/bodies/leron_biped_full_body.glb`](../../assets/characters/bodies/leron_biped_full_body.glb)
 - **Body Rig Sliders:**
     - **Height:** from 0.5 to 1.5 of the species baseline height.
         - Scaling height increases the length of the legs, arms, and spinal bones. 
-    - **Shoulder Width:** from 0.8 to 1.2 of the original shoulder width.
+    - **Shoulder Width:** from 0.8 to 1.2 of the species baseline shoulder width.
         - Scaling shoulder width increases the length of the shoulder bones.
-    - **Hip Width:** from 0.8 to 1.4 of the original hip width.
+    - **Hip Width:** from 0.8 to 1.4 of the species baseline hip width.
         - Scaling hip width increases the length of the pelvis bones.
-    - **Trunk Thickness:** from 0.8 to 1.2 of the original trunk thickness.
+    - **Trunk Thickness:** from 0.8 to 1.2 of the species baseline trunk thickness.
         - Scaling trunk thickness increases the X-Z scale of the bones in the back pelvis and shoulders. 
-    - **Chest Thickness:** from 0.8 to 1.2 of the original chest thickness.
+    - **Chest Thickness:** from 0.8 to 1.2 of the species baseline chest thickness.
         - Scaling chest thickness increases the length of the chest thickness bones.
-    - **Back Thickness:** from 0.8 to 1.2 of the original back thickness.
+    - **Back Thickness:** from 0.8 to 1.2 of the species baseline back thickness.
         - Scaling back thickness increases the length of the back thickness bones.
-    - **Belly Thickness:** from 0.8 to 1.2 of the original belly thickness (`upper_belly`, `lower_belly`).
+    - **Belly Thickness:** from 0.8 to 1.2 of the species baseline belly thickness (`upper_belly`, `lower_belly`).
         - Scaling belly thickness increases the length of the belly thickness bones.
-    - **Buttocks Thickness:** from 0.8 to 1.2 of the original buttock thickness.
+    - **Buttocks Thickness:** from 0.8 to 1.2 of the species baseline buttock thickness.
         - Scaling buttocks thickness increases the length of the buttocks thickness bones.
-    - **Arm Length:** from 0.8 to 1.2 of the original arm length.
+    - **Arm Length:** from 0.8 to 1.2 of the species baseline arm length.
         - Scaling arm length increases the length of the arm bones.
-    - **Arm Thickness:** from 0.8 to 1.2 of the original arm thickness.
+    - **Arm Thickness:** from 0.8 to 1.2 of the species baseline arm thickness.
         - Scaling arm thickness increases the X-Z scale of the bones in the arms.
-    - **Leg Length:** from 0.8 to 1.2 of the original leg length.
+    - **Leg Length:** from 0.8 to 1.2 of the species baseline leg length.
         - Scaling leg length increases the length of the leg bones.
-    - **Leg Thickness:** from 0.8 to 1.2 of the original leg thickness.
+    - **Leg Thickness:** from 0.8 to 1.2 of the species baseline leg thickness.
         - Scaling leg thickness increases the X-Z scale of the bones in the legs.
-    - **Neck Length:** from 0.8 to 1.2 of the original neck length.
+    - **Neck Length:** from 0.8 to 1.2 of the species baseline neck length.
         - Scaling neck length increases the length of the neck bones.
-    - **Neck Thickness:** from 0.8 to 1.2 of the original neck thickness.
+    - **Neck Thickness:** from 0.8 to 1.2 of the species baseline neck thickness.
         - Scaling neck thickness increases the X-Z scale of the bones in the neck.
 - **Head Rig:** "OrthogradeHeadRig" `Armature` in [`assets/heads/orthograde_head.glb`](../../assets/characters/heads/orthograde_head.glb), bones dumped in [`assets/heads/orthograde_head.armature_dump`](../../assets/characters/heads/orthograde_head.armature_dump). Socket on body rig `upper_neck`.
+    - Asset designed on 1m radius +Z (Blender)/+Y (Bevy) only. Needs to be scaled to 0.12.
 - **Heads:**
     - **Standard:** "MeerkatHead" `Mesh` in [`assets/heads/meerkat_head.glb`](../../assets/characters/heads/meerkat_head.glb)
     - **Gaunt:** "GauntOrthoHumanoidHead" `Mesh` in [`assets/heads/gaunt_ortho_humanoid_head.glb`](../../assets/characters/heads/gaunt_ortho_humanoid_head.glb)
     - **Full:** "FullOrthHumanoidHead" `Mesh` in [`assets/heads/full_ortho_humanoid_head.glb`](../../assets/characters/heads/full_ortho_humanoid_head.glb)
 - **Head Sliders:** (layout on the head rig; see [slider table](#sliders-and-scale) for naming)
-    - **Head Width:** from 0.8 to 1.2 of the original head width.
+    - **Head Width:** from 0.8 to 1.2 of the species baseline head width.
         - Scaling head width increases the length of lateral bones in the head rig.
-    - **Head Height:** from 0.8 to 1.2 of the original head height.
+    - **Head Height:** from 0.8 to 1.2 of the species baseline head height.
         - Scaling head height increases the length of medial vertical bones in the head rig.
-    - **Head Depth:** from 0.8 to 1.2 of the original head depth.
+    - **Head Depth:** from 0.8 to 1.2 of the species baseline head depth.
         - Scaling head depth increases the length of medial horizontal bones in the head rig.
-    - **Eye Spacing:** from 0.8 to 1.2 of the original inter-eye distance.
-    - **Eye-line Height:** from 0.8 to 1.2 of the original eye height.
-    - **Nose Width:** from 0.8 to 1.2 of the original nose-region span.
-    - **Nose Length:** from 0.8 to 1.2 of the original nose length along the head rig.
-    - **Nose Protrusion:** from 0.8 to 1.2 of the original nose protrusion.
+    - **Eye Spacing:** from 0.8 to 1.2 of the species baseline inter-eye distance.
+    - **Eye-line Height:** from 0.8 to 1.2 of the species baseline eye height.
+    - **Nose Width:** from 0.8 to 1.2 of the species baseline nose-region span.
+    - **Nose Length:** from 0.8 to 1.2 of the species baseline nose length along the head rig.
+    - **Nose Protrusion:** from 0.8 to 1.2 of the species baseline nose protrusion.
 - **Eyes:** (author `*_left`; mirror for the right eye)
     - **Standard:** "HumanoidEyeLeft" `Mesh` in [`assets/eyes/humanoid_eye_left.glb`](../../assets/characters/eyes/humanoid_eye_left.glb)
+        - Asset designed on 1m radius. Need to be scaled to 0.04. 
     - **Falcon:** "FalconEyeLeft" `Mesh` in [`assets/eyes/falcon_eye_left.glb`](../../assets/characters/eyes/falcon_eye_left.glb)
+        - Asset designed on 1m radius. Need to be scaled to 0.04. 
 - **Eye Sliders:** (per-eye mesh scale/rotation; compose with head **Eye Spacing**)
-    - **Eye Width:** from 0.8 to 1.2 of the original eye mesh width.
-    - **Eye Height:** from 0.8 to 1.2 of the original eye mesh height.
+    - **Eye Width:** from 0.8 to 1.2 of the selected eye mesh baseline width.
+    - **Eye Height:** from 0.8 to 1.2 of the selected eye mesh baseline height.
     - **Eye Tilt:** -5 to 5 degrees.
 - **Noses:**
     - **Standard:** "HumanoidNose" `Mesh` in [`assets/noses/humanoid_nose.glb`](../../assets/characters/noses/humanoid_nose.glb)
+        - Asset designed on 1m radius. Need to be scaled to 0.05. 
     - **Broad:** "BroadHumanoidNose" `Mesh` in [`assets/noses/broad_humanoid_nose.glb`](../../assets/characters/noses/broad_humanoid_nose.glb)
+        - Asset designed on 1m radius. Need to be scaled to 0.05. 
     - **Loaf:** "LoafHumanoidNose" `Mesh` in [`assets/noses/loaf_nose.glb`](../../assets/characters/noses/loaf_nose.glb)
+        - Asset designed on 1m radius. Need to be scaled to 0.05. 
     - **Balloon:** "MumbusNose" `Mesh` in [`assets/noses/mumbus_nose.glb`](../../assets/characters/noses/mumbus_nose.glb)
+        - Asset designed on 1m radius. Need to be scaled to 0.08. 
 - **Nose Sliders:** (per-nose mesh scale; compose with head nose layout sliders)
-    - **Nose Width:** from 0.8 to 1.2 of the original nose mesh width.
-    - **Nose Length:** from 0.8 to 1.2 of the original nose mesh length.
-    - **Nose Depth:** from 0.8 to 1.2 of the original nose mesh depth.
+    - **Nose Width:** from 0.8 to 1.2 of the selected nose mesh baseline width.
+    - **Nose Length:** from 0.8 to 1.2 of the selected nose mesh baseline length.
+    - **Nose Depth:** from 0.8 to 1.2 of the selected nose mesh baseline depth.
 - **Mouths:**
     - **Standard:** "CommonMouth" `Mesh` in [`assets/mouths/common_mouth.glb`](../../assets/characters/mouths/common_mouth.glb)
+        - Asset designed on 1m radius. Need to be scaled to 0.02. 
 - **Mouth Sliders:**
-    - **Mouth Width:** from 0.8 to 1.2 of the original mouth width.
-    - **Mouth Height:** from 0.8 to 1.2 of the original mouth height.
-    - **Mouth Depth:** from 0.8 to 1.2 of the original mouth depth.
+    - **Mouth Width:** from 0.8 to 1.2 of the selected mouth mesh baseline width.
+    - **Mouth Height:** from 0.8 to 1.2 of the selected mouth mesh baseline height.
+    - **Mouth Depth:** from 0.8 to 1.2 of the selected mouth mesh baseline depth.
 - **Ears:** (author `*_left`; mirror for the right ear)
     - **Standard:** "RoundScoopLateralEarLeft" `Mesh` in [`assets/ears/round_scoop_lateral_ear_left.glb`](../../assets/characters/ears/round_scoop_lateral_ear_left.glb)
+        - Asset designed on 1m radius. Need to be scaled to 0.08. 
     - **Round:** "RoundLateralEarLeft" `Mesh` in [`assets/ears/round_lateral_ear_left.glb`](../../assets/characters/ears/round_lateral_ear_left.glb)
+        - Asset designed on 1m radius. Need to be scaled to 0.08.
     - **Flank:** "FlankLateralEarLeft" `Mesh` in [`assets/ears/flank_lateral_ear_left.glb`](../../assets/characters/ears/flank_lateral_ear_left.glb)
+        - Asset designed on 1m radius. Need to be scaled to 0.08.
 - **Ear Sliders:**
-    - **Ear Width:** from 0.8 to 1.2 of the original ear width.
-    - **Ear Height:** from 0.8 to 1.2 of the original ear height.
-    - **Ear Depth:** from 0.8 to 1.2 of the original ear depth.
+    - **Ear Width:** from 0.8 to 1.2 of the selected ear mesh baseline width.
+    - **Ear Height:** from 0.8 to 1.2 of the selected ear mesh baseline height.
+    - **Ear Depth:** from 0.8 to 1.2 of the selected ear mesh baseline depth.
 - **Extended Features:**
     - **Head Hair:** 
         - **None:** no hair on head.
         - **Thick Braids:** "ThickBraids" `Mesh` in [`assets/hair/thick_braids.glb`](../../assets/characters/hair/thick_braids.glb)
+            - Asset designed on 1m radius. Need to be scaled to 0.12 (same as head). 
         - **Flowing Curls:** "FlowingCurls" `Mesh` in [`assets/hair/flowing_curls.glb`](../../assets/characters/hair/flowing_curls.glb)
+            - Asset designed on 1m radius. Need to be scaled to 0.12 (same as head). 
         - **Wrapping Braids:** "WrappingBraids" `Mesh` in [`assets/hair/wrapping_braids.glb`](../../assets/characters/hair/wrapping_braids.glb)
+            - Asset designed on 1m radius. Need to be scaled to 0.12 (same as head). 
         - **Wrapping Braids Hanging Locks:** "Wrapping Braids Hanging Locks" `Mesh` in [`assets/hair/wrapping_braids_hanging_locks.glb`](../../assets/characters/hair/wrapping_braids_hanging_locks.glb)
+            - Asset designed on 1m radius +Z (Blender)/+Y (Bevy) only. Need to be scaled to 0.12 (same as head). 
         - **Braid Hawk:** "BraidHawk" `Mesh` in [`assets/hair/braid_hawk.glb`](../../assets/characters/hair/braid_hawk.glb)
+            - Asset designed on 1m radius +Z (Blender)/+Y (Bevy) only. Need to be scaled to 0.12 (same as head). 
         - **Feather Hawk:** "FeatherHawk" `Mesh` in [`assets/hair/feather_hawk.glb`](../../assets/characters/hair/feather_hawk.glb)
+            - Asset designed on 1m radius +Z (Blender)/+Y (Bevy) only. Need to be scaled to 0.12 (same as head). 
         - **Flowing Edgy Curls:** "FlowingEdgyCurls" `Mesh` in [`assets/hair/flowing_edgy_curls.glb`](../../assets/characters/hair/flowing_edgy_curls.glb)
+            - Asset designed on 1m radius +Z (Blender)/+Y (Bevy) only. Need to be scaled to 0.12 (same as head). 
         - **Perm Braid:** "PermBraid" `Mesh` in [`assets/hair/perm_braid.glb`](../../assets/characters/hair/perm_braid.glb)
+            - Asset designed on 1m radius +Z (Blender)/+Y (Bevy) only. Need to be scaled to 0.12 (same as head). 
         - **Techno Edge:** "TechnoEdge" `Mesh` in [`assets/hair/techno_edge.glb`](../../assets/characters/hair/techno_edge.glb)
+            - Asset designed on 1m radius +Z (Blender)/+Y (Bevy) only. Need to be scaled to 0.12 (same as head). 
 - **Clothes:** (can wear as many as you want at the same time; each remaps to the body rig, `NoChanges` fit)
     - **Basketball Cut Shirt:** "BasketballCutShirt" `Mesh` in [`assets/clothes/basketball_cut_shirt.glb`](../../assets/characters/clothes/basketball_cut_shirt.glb).
     - **Tunic:** "Tunic" `Mesh` in [`assets/clothes/tunic.glb`](../../assets/characters/clothes/tunic.glb).
