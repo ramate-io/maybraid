@@ -876,7 +876,8 @@ Braidman is relatively plain humanoid species.
     - **Mouth Depth:** from 0.8 to 1.2 of the original mouth depth.
 - **Ears:**
     - **Standard:** "RoundScoopLateralEarLeft" `Mesh` in [`assets/ears/round_scoop_lateral_ear_left.glb`](../../assets/characters/ears/round_scoop_lateral_ear_left.glb)
-    - **Falcon:** "FalconEarLeft" `Mesh` in [`assets/ears/falcon_ear_left.glb`](../../assets/characters/ears/falcon_ear_left.glb)
+    - **Round:** "RoundLateralEarLeft" `Mesh` in [`assets/ears/round_lateral_ear_left.glb`](../../assets/characters/ears/round_lateral_ear_left.glb)
+    - **Flank:** "FlankLateralEarLeft" `Mesh` in [`assets/ears/flank_lateral_ear_left.glb`](../../assets/characters/ears/flank_lateral_ear_left.glb)
 - **Ear Sliders:**
     - **Ear Width:** from 0.8 to 1.2 of the original ear width.
     - **Ear Height:** from 0.8 to 1.2 of the original ear height.
