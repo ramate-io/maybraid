@@ -893,3 +893,13 @@ Braidman is relatively plain humanoid species.
         - **Flowing Edgy Curls:** "FlowingEdgyCurls" `Mesh` in `assets/hair/flowing_edgy_curls.glb`
         - **Perm Braid:** "PermBraid" `Mesh` in `assets/hair/perm_braid.glb`
         - **Techno Edge:** "TechnoEdge" `Mesh` in `assets/hair/techno_edge.glb`
+- **Clothes:** (can wear as many as you want at the same time)
+    - **Basketball Cut Shirt:** "BasketballCutShirt" `Mesh` in `assets/clothes/basketball_cut_shirt.glb`, no special fitting needed.
+    - **Tunic:** "Tunic" `Mesh` in `assets/clothes/tunic.glb`, no special fitting needed.
+    - **Long Dress:** "LongDress" `Mesh` in `assets/clothes/long_dress.glb`, no special fitting needed.
+    - **Short Dress:** "ShortDress" `Mesh` in `assets/clothes/short_dress.glb`, no special fitting needed.
+    - **Fitted Coat:** "FittedCoat" `Mesh` in `assets/clothes/fitted_coat.glb`, no special fitting needed.
+    - **Quarter Coat:** "QuarterCoat" `Mesh` in `assets/clothes/quarter_coat.glb`, no special fitting needed.
+    - **Robe Coat:** "RobeCoat" `Mesh` in `assets/clothes/robe_coat.glb`, no special fitting needed.
+    - **Short-sleeved Robe Coat:** "ShortSleevedRobeCoat" `Mesh` in `assets/clothes/short_sleeved_robe_coat.glb`, no special fitting needed.
+    - **Tailored Coat:** "TailoredCoat" `Mesh` in `assets/clothes/tailored_coat.glb`, no special fitting needed.
