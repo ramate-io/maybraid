@@ -1,0 +1,91 @@
+//! `/braidman` commands for the simplified concept species.
+
+use bevy::prelude::*;
+use clap::{Args, Subcommand};
+use crozon_characters::{
+	species::braidman::{
+		assets::{BodyMesh, EarMesh, EyeMesh, HeadMesh, MouthMesh, NoseMesh},
+		sliders::BraidmanSliders,
+		BraidmanConfig,
+	},
+	BuildPreset, GenderPreset,
+};
+
+use crate::preview::ConceptPreviewConfig;
+
+#[derive(Clone, Subcommand)]
+pub enum Braidman {
+	/// Spawn a simplified Braidman through the resolved concepts pipeline.
+	Preview(PreviewArgs),
+}
+
+#[derive(Clone, Args)]
+#[command(rename_all = "kebab-case")]
+pub struct PreviewArgs {
+	#[arg(long, value_enum, default_value_t = GenderPreset::Neutral)]
+	pub gender: GenderPreset,
+
+	#[arg(long, value_enum, default_value_t = BuildPreset::Average)]
+	pub build: BuildPreset,
+
+	#[arg(long, value_enum, default_value_t = BodyMesh::Standard)]
+	pub body: BodyMesh,
+
+	#[arg(long, value_enum, default_value_t = HeadMesh::Standard)]
+	pub head: HeadMesh,
+
+	#[arg(long, value_enum, default_value_t = EyeMesh::Standard)]
+	pub eye: EyeMesh,
+
+	#[arg(long, value_enum, default_value_t = NoseMesh::Standard)]
+	pub nose: NoseMesh,
+
+	#[arg(long, value_enum, default_value_t = MouthMesh::Standard)]
+	pub mouth: MouthMesh,
+
+	#[arg(long, value_enum, default_value_t = EarMesh::Standard)]
+	pub ear: EarMesh,
+
+	/// Shoulder width multiplier on top of the Braidman species baseline.
+	#[arg(long, default_value_t = 1.0)]
+	pub shoulder_width: f32,
+
+	/// Hip width multiplier on top of the Braidman species baseline.
+	#[arg(long, default_value_t = 1.0)]
+	pub hip_width: f32,
+
+	/// Chest thickness multiplier on top of the Braidman species baseline.
+	#[arg(long, default_value_t = 1.0)]
+	pub chest_thickness: f32,
+}
+
+impl Braidman {
+	pub fn react(self, commands: &mut Commands) {
+		match self {
+			Self::Preview(args) => {
+				let config = args.into_preview_config();
+				commands.queue(move |world: &mut World| {
+					*world.resource_mut::<ConceptPreviewConfig>() = config;
+				});
+			}
+		}
+	}
+}
+
+impl PreviewArgs {
+	fn into_preview_config(self) -> ConceptPreviewConfig {
+		let sliders =
+			BraidmanSliders::new(self.shoulder_width, self.hip_width, self.chest_thickness);
+		ConceptPreviewConfig::braidman(BraidmanConfig {
+			gender: self.gender,
+			build: self.build,
+			body: self.body,
+			head: self.head,
+			eye: self.eye,
+			nose: self.nose,
+			mouth: self.mouth,
+			ear: self.ear,
+			sliders,
+		})
+	}
+}
