@@ -11,6 +11,8 @@ Use a layered, bone-driven design:
 
 The preview must not mutate the final character field-by-field, and it must not use scene-root scaling to express species proportions. Proportions are layered on bones: GLTF bind pose -> species base bone scales -> gender/build refinements -> user slider deltas -> Bevy bone marshaling, skin remap, and animation.
 
+Asset authoring scale is separate from character proportions. If an imported mesh or rig was authored as a 1m-radius working asset, give that asset a documented local normalization transform; sliders then multiply the normalized baseline.
+
 ---
 
 # Character Concepts Screen
@@ -845,6 +847,21 @@ Keep skinned scene-root transforms minimal. Body width, head proportions, and cl
 | Ears | `cheek.L`, `cheek.R` | `LateralEarRig` (per ear mesh) |
 | Hair | `crown` | `OrthogradeHeadRig` |
 
+### Authored asset scale (Braidman)
+
+These are one-time asset-local normalization scales for 1m-radius authored assets. They are not species proportions, rig sliders, or preview-root scales.
+
+* Head rig and head-sized hair: `0.12`.
+* Eyes: `0.04`.
+* Standard, Broad, and Loaf noses: `0.05`.
+* Balloon nose: `0.08`.
+* Mouth: `0.02`.
+* Ears: `0.08`.
+
+The head asset is base anchored: +Z in Blender / +Y in Bevy. The other feature assets are roughly centroid anchored, so their normalization scale should not imply the same base-anchor rule.
+
+Ears are authored turned sideways, facing +X. That orientation matters for socket attachment metadata, but it does not change the normalization scale listed here.
+
 ## Sliders and scale
 
 **Species Height / Width / Depth** are baseline bone-scale groups, not scene-root scale values. Everything else deforms from that species baseline.
@@ -913,7 +930,6 @@ Braidman is a relatively plain humanoid species.
     - **Neck Thickness:** from 0.8 to 1.2 of the species baseline neck thickness.
         - Scaling neck thickness increases the X-Z scale of the bones in the neck.
 - **Head Rig:** "OrthogradeHeadRig" `Armature` in [`assets/heads/orthograde_head.glb`](../../assets/characters/heads/orthograde_head.glb), bones dumped in [`assets/heads/orthograde_head.armature_dump`](../../assets/characters/heads/orthograde_head.armature_dump). Socket on body rig `upper_neck`.
-    - Asset designed on 1m radius +Z (Blender)/+Y (Bevy) only. Needs to be scaled to 0.12.
 - **Heads:**
     - **Standard:** "MeerkatHead" `Mesh` in [`assets/heads/meerkat_head.glb`](../../assets/characters/heads/meerkat_head.glb)
     - **Gaunt:** "GauntOrthoHumanoidHead" `Mesh` in [`assets/heads/gaunt_ortho_humanoid_head.glb`](../../assets/characters/heads/gaunt_ortho_humanoid_head.glb)
@@ -932,40 +948,30 @@ Braidman is a relatively plain humanoid species.
     - **Nose Protrusion:** from 0.8 to 1.2 of the species baseline nose protrusion.
 - **Eyes:** (author `*_left`; mirror for the right eye)
     - **Standard:** "HumanoidEyeLeft" `Mesh` in [`assets/eyes/humanoid_eye_left.glb`](../../assets/characters/eyes/humanoid_eye_left.glb)
-        - Asset designed on 1m radius. Need to be scaled to 0.04. 
     - **Falcon:** "FalconEyeLeft" `Mesh` in [`assets/eyes/falcon_eye_left.glb`](../../assets/characters/eyes/falcon_eye_left.glb)
-        - Asset designed on 1m radius. Need to be scaled to 0.04. 
 - **Eye Sliders:** (per-eye mesh scale/rotation; compose with head **Eye Spacing**)
     - **Eye Width:** from 0.8 to 1.2 of the selected eye mesh baseline width.
     - **Eye Height:** from 0.8 to 1.2 of the selected eye mesh baseline height.
     - **Eye Tilt:** -5 to 5 degrees.
 - **Noses:**
     - **Standard:** "HumanoidNose" `Mesh` in [`assets/noses/humanoid_nose.glb`](../../assets/characters/noses/humanoid_nose.glb)
-        - Asset designed on 1m radius. Need to be scaled to 0.05. 
     - **Broad:** "BroadHumanoidNose" `Mesh` in [`assets/noses/broad_humanoid_nose.glb`](../../assets/characters/noses/broad_humanoid_nose.glb)
-        - Asset designed on 1m radius. Need to be scaled to 0.05. 
     - **Loaf:** "LoafHumanoidNose" `Mesh` in [`assets/noses/loaf_nose.glb`](../../assets/characters/noses/loaf_nose.glb)
-        - Asset designed on 1m radius. Need to be scaled to 0.05. 
     - **Balloon:** "MumbusNose" `Mesh` in [`assets/noses/mumbus_nose.glb`](../../assets/characters/noses/mumbus_nose.glb)
-        - Asset designed on 1m radius. Need to be scaled to 0.08. 
 - **Nose Sliders:** (per-nose mesh scale; compose with head nose layout sliders)
     - **Nose Width:** from 0.8 to 1.2 of the selected nose mesh baseline width.
     - **Nose Length:** from 0.8 to 1.2 of the selected nose mesh baseline length.
     - **Nose Depth:** from 0.8 to 1.2 of the selected nose mesh baseline depth.
 - **Mouths:**
     - **Standard:** "CommonMouth" `Mesh` in [`assets/mouths/common_mouth.glb`](../../assets/characters/mouths/common_mouth.glb)
-        - Asset designed on 1m radius. Need to be scaled to 0.02. 
 - **Mouth Sliders:**
     - **Mouth Width:** from 0.8 to 1.2 of the selected mouth mesh baseline width.
     - **Mouth Height:** from 0.8 to 1.2 of the selected mouth mesh baseline height.
     - **Mouth Depth:** from 0.8 to 1.2 of the selected mouth mesh baseline depth.
 - **Ears:** (author `*_left`; mirror for the right ear)
     - **Standard:** "RoundScoopLateralEarLeft" `Mesh` in [`assets/ears/round_scoop_lateral_ear_left.glb`](../../assets/characters/ears/round_scoop_lateral_ear_left.glb)
-        - Asset designed on 1m radius. Need to be scaled to 0.08. 
     - **Round:** "RoundLateralEarLeft" `Mesh` in [`assets/ears/round_lateral_ear_left.glb`](../../assets/characters/ears/round_lateral_ear_left.glb)
-        - Asset designed on 1m radius. Need to be scaled to 0.08.
     - **Flank:** "FlankLateralEarLeft" `Mesh` in [`assets/ears/flank_lateral_ear_left.glb`](../../assets/characters/ears/flank_lateral_ear_left.glb)
-        - Asset designed on 1m radius. Need to be scaled to 0.08.
 - **Ear Sliders:**
     - **Ear Width:** from 0.8 to 1.2 of the selected ear mesh baseline width.
     - **Ear Height:** from 0.8 to 1.2 of the selected ear mesh baseline height.
@@ -974,23 +980,14 @@ Braidman is a relatively plain humanoid species.
     - **Head Hair:** 
         - **None:** no hair on head.
         - **Thick Braids:** "ThickBraids" `Mesh` in [`assets/hair/thick_braids.glb`](../../assets/characters/hair/thick_braids.glb)
-            - Asset designed on 1m radius. Need to be scaled to 0.12 (same as head). 
         - **Flowing Curls:** "FlowingCurls" `Mesh` in [`assets/hair/flowing_curls.glb`](../../assets/characters/hair/flowing_curls.glb)
-            - Asset designed on 1m radius. Need to be scaled to 0.12 (same as head). 
         - **Wrapping Braids:** "WrappingBraids" `Mesh` in [`assets/hair/wrapping_braids.glb`](../../assets/characters/hair/wrapping_braids.glb)
-            - Asset designed on 1m radius. Need to be scaled to 0.12 (same as head). 
         - **Wrapping Braids Hanging Locks:** "Wrapping Braids Hanging Locks" `Mesh` in [`assets/hair/wrapping_braids_hanging_locks.glb`](../../assets/characters/hair/wrapping_braids_hanging_locks.glb)
-            - Asset designed on 1m radius +Z (Blender)/+Y (Bevy) only. Need to be scaled to 0.12 (same as head). 
         - **Braid Hawk:** "BraidHawk" `Mesh` in [`assets/hair/braid_hawk.glb`](../../assets/characters/hair/braid_hawk.glb)
-            - Asset designed on 1m radius +Z (Blender)/+Y (Bevy) only. Need to be scaled to 0.12 (same as head). 
         - **Feather Hawk:** "FeatherHawk" `Mesh` in [`assets/hair/feather_hawk.glb`](../../assets/characters/hair/feather_hawk.glb)
-            - Asset designed on 1m radius +Z (Blender)/+Y (Bevy) only. Need to be scaled to 0.12 (same as head). 
         - **Flowing Edgy Curls:** "FlowingEdgyCurls" `Mesh` in [`assets/hair/flowing_edgy_curls.glb`](../../assets/characters/hair/flowing_edgy_curls.glb)
-            - Asset designed on 1m radius +Z (Blender)/+Y (Bevy) only. Need to be scaled to 0.12 (same as head). 
         - **Perm Braid:** "PermBraid" `Mesh` in [`assets/hair/perm_braid.glb`](../../assets/characters/hair/perm_braid.glb)
-            - Asset designed on 1m radius +Z (Blender)/+Y (Bevy) only. Need to be scaled to 0.12 (same as head). 
         - **Techno Edge:** "TechnoEdge" `Mesh` in [`assets/hair/techno_edge.glb`](../../assets/characters/hair/techno_edge.glb)
-            - Asset designed on 1m radius +Z (Blender)/+Y (Bevy) only. Need to be scaled to 0.12 (same as head). 
 - **Clothes:** (can wear as many as you want at the same time; each remaps to the body rig, `NoChanges` fit)
     - **Basketball Cut Shirt:** "BasketballCutShirt" `Mesh` in [`assets/clothes/basketball_cut_shirt.glb`](../../assets/characters/clothes/basketball_cut_shirt.glb).
     - **Tunic:** "Tunic" `Mesh` in [`assets/clothes/tunic.glb`](../../assets/characters/clothes/tunic.glb).
