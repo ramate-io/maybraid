@@ -818,13 +818,13 @@ This lets the current rig-slider system remain simple while leaving room for fea
 
 Braidman is relatively plain humanoid species. 
 
-- **Body Rig:** "Humanoid" `Armature` in `assets/bodies/humanoid_rig.glb`
+- **Body Rig:** "Humanoid" `Armature` in [`assets/bodies/humanoid_rig.glb`](../../assets/characters/bodies/humanoid_rig.glb)
 - **Height:** 1.0 (default)
 - **Width:** 0.8 (slightly smaller than the original rig)
 - **Depth:** 0.8 (slightly smaller than the original rig)
 - **Body Meshes:** 
-    - **Standard:** "HumanoidFullBody" `Mesh` in `assets/bodies/humanoid_full_body.glb` 
-    - **Full:** "LeronBipedFullBody" `Mesh` in `assets/bodies/leron_biped_full_body.glb`
+    - **Standard:** "HumanoidFullBody" `Mesh` in [`assets/bodies/humanoid_full_body.glb`](../../assets/characters/bodies/humanoid_full_body.glb)
+    - **Full:** "LeronBipedFullBody" `Mesh` in [`assets/bodies/leron_biped_full_body.glb`](../../assets/characters/bodies/leron_biped_full_body.glb)
 - **Body Rig Sliders:**
     - **Height:** from 0.5 to 1.5 of the original height.
     - **Shoulder Width:** from 0.8 to 1.2 of the original shoulder width.
@@ -838,11 +838,11 @@ Braidman is relatively plain humanoid species.
     - **Leg Thickness:** from 0.8 to 1.2 of the original leg thickness.
     - **Neck Length:** from 0.8 to 1.2 of the original neck length.
     - **Neck Thickness:** from 0.8 to 1.2 of the original neck thickness.
-- **Head Rig:** "OrthogradeHeadRig" `Armature` in `assets/heads/ortho_simple_head.glb` bones dumped in `assets/heads/ortho_simple_head.armature_dump`
+- **Head Rig:** "OrthogradeHeadRig" `Armature` in [`assets/heads/ortho_simple_head.glb`](../../assets/characters/heads/ortho_simple_head.glb) bones dumped in [`assets/heads/ortho_simple_head.armature_dump`](../../assets/characters/heads/ortho_simple_head.armature_dump)
 - **Heads:**
-    - **Standard:** "MeerkatHead" `Mesh` in `assets/heads/meerkat_head.glb`
-    - **Gaunt:** "GauntOrthoHumanoidHead" `Mesh` in `assets/heads/gaunt_ortho_humanoid_head.glb`
-    - **Full:** "FullOrthHumanoidHead `Mesh` in `assets/heads/full_ortho_humanoid_head.glb`
+    - **Standard:** "MeerkatHead" `Mesh` in [`assets/heads/meerkat_head.glb`](../../assets/characters/heads/meerkat_head.glb)
+    - **Gaunt:** "GauntOrthoHumanoidHead" `Mesh` in [`assets/heads/gaunt_ortho_humanoid_head.glb`](../../assets/characters/heads/gaunt_ortho_humanoid_head.glb)
+    - **Full:** "FullOrthHumanoidHead `Mesh` in [`assets/heads/full_ortho_humanoid_head.glb`](../../assets/characters/heads/full_ortho_humanoid_head.glb)
 - **Head Sliders:**
     - **Head Width:** from 0.8 to 1.2 of the original head width.
     - **Head Height:** from 0.8 to 1.2 of the original head height.
@@ -853,30 +853,30 @@ Braidman is relatively plain humanoid species.
     - **Nose Length:** from 0.8 to 1.2 of the original nose length.
     - **Nose Protrusion:** from 0.8 to 1.2 of the original nose protrusion.
 - **Eyes:**
-    - **Standard:** "HumanoidEyeLeft" `Mesh` in `assets/eyes/humanoid_eye_left.glb`
-    - **Falcon:** "FalconEyeLeft" `Mesh` in `assets/eyes/falcon_eye_left.glb`
+    - **Standard:** "HumanoidEyeLeft" `Mesh` in [`assets/eyes/humanoid_eye_left.glb`](../../assets/characters/eyes/humanoid_eye_left.glb)
+    - **Falcon:** "FalconEyeLeft" `Mesh` in [`assets/eyes/falcon_eye_left.glb`](../../assets/characters/eyes/falcon_eye_left.glb)
 - **Eye Sliders:**
     - **Eye Width:** from 0.8 to 1.2 of the original eye width.
     - **Eye Height:** from 0.8 to 1.2 of the original eye height.
     - **Eye Tilt:** -5 to 5 degrees.
 - **Noses:**
-    - **Standard:** "HumanoidNose" `Mesh` in `assets/noses/humanoid_nose.glb`
-    - **Broad:** "BroadHumanoidNose" `Mesh` in `assets/noses/broad_humanoid_nose.glb`
-    - **Loaf:** "LoafHumanoidNose" `Mesh` in `assets/noses/loaf_nose.glb`
-    - **Balloon:** "MumbusNose" `Mesh` in `assets/noses/mumbus_nose.glb`
+    - **Standard:** "HumanoidNose" `Mesh` in [`assets/noses/humanoid_nose.glb`](../../assets/characters/noses/humanoid_nose.glb)
+    - **Broad:** "BroadHumanoidNose" `Mesh` in [`assets/noses/broad_humanoid_nose.glb`](../../assets/characters/noses/broad_humanoid_nose.glb)
+    - **Loaf:** "LoafHumanoidNose" `Mesh` in [`assets/noses/loaf_nose.glb`](../../assets/characters/noses/loaf_nose.glb)
+    - **Balloon:** "MumbusNose" `Mesh` in [`assets/noses/mumbus_nose.glb`](../../assets/characters/noses/mumbus_nose.glb)
 - **Nose Sliders:**
     - **Nose Width:** from 0.8 to 1.2 of the original nose width.
     - **Nose Length:** from 0.8 to 1.2 of the original nose length.
     - **Nose Depth:** from 0.8 to 1.2 of the original nose depth.
 - **Mouths:**
-    - **Standard:** "CommonMouth" `Mesh` in `assets/mouths/common_mouth.glb`
+    - **Standard:** "CommonMouth" `Mesh` in [`assets/mouths/common_mouth.glb`](../../assets/characters/mouths/common_mouth.glb)
 - **Mouth Sliders:**
     - **Mouth Width:** from 0.8 to 1.2 of the original mouth width.
     - **Mouth Height:** from 0.8 to 1.2 of the original mouth height.
     - **Mouth Depth:** from 0.8 to 1.2 of the original mouth depth.
 - **Ears:**
-    - **Standard:** "RoundScoopLateralEarLeft" `Mesh` in `assets/ears/round_scoop_lateral_ear_left.glb`
-    - **Falcon:** "FalconEarLeft" `Mesh` in `assets/ears/falcon_ear_left.glb`
+    - **Standard:** "RoundScoopLateralEarLeft" `Mesh` in [`assets/ears/round_scoop_lateral_ear_left.glb`](../../assets/characters/ears/round_scoop_lateral_ear_left.glb)
+    - **Falcon:** "FalconEarLeft" `Mesh` in [`assets/ears/falcon_ear_left.glb`](../../assets/characters/ears/falcon_ear_left.glb)
 - **Ear Sliders:**
     - **Ear Width:** from 0.8 to 1.2 of the original ear width.
     - **Ear Height:** from 0.8 to 1.2 of the original ear height.
@@ -884,22 +884,22 @@ Braidman is relatively plain humanoid species.
 - **Extended Features:**
     - **Head Hair:** 
         - **None:** no hair on head.
-        - **Thick Braids:** "ThickBraids" `Mesh` in `assets/hair/thick_braids.glb`
-        - **Flowing Curls:** "FlowingCurls" `Mesh` in `assets/hair/flowing_curls.glb`
-        - **Wrapping Braids:** "WrappingBraids" `Mesh` in `assets/hair/wrapping_braids.glb`
-        - **Wrapping Braids Hanging Locks:** "Wrapping Braids Hanging Locks" `Mesh` in `assets/hair/wrapping_braids_hanging_locks.glb`
-        - **Braid Hawk:** "BraidHawk" `Mesh` in `assets/hair/braid_hawk.glb`
-        - **Feather Hawk:** "FeatherHawk" `Mesh` in `assets/hair/feather_hawk.glb`
-        - **Flowing Edgy Curls:** "FlowingEdgyCurls" `Mesh` in `assets/hair/flowing_edgy_curls.glb`
-        - **Perm Braid:** "PermBraid" `Mesh` in `assets/hair/perm_braid.glb`
-        - **Techno Edge:** "TechnoEdge" `Mesh` in `assets/hair/techno_edge.glb`
+        - **Thick Braids:** "ThickBraids" `Mesh` in [`assets/hair/thick_braids.glb`](../../assets/characters/hair/thick_braids.glb)
+        - **Flowing Curls:** "FlowingCurls" `Mesh` in [`assets/hair/flowing_curls.glb`](../../assets/characters/hair/flowing_curls.glb)
+        - **Wrapping Braids:** "WrappingBraids" `Mesh` in [`assets/hair/wrapping_braids.glb`](../../assets/characters/hair/wrapping_braids.glb)
+        - **Wrapping Braids Hanging Locks:** "Wrapping Braids Hanging Locks" `Mesh` in [`assets/hair/wrapping_braids_hanging_locks.glb`](../../assets/characters/hair/wrapping_braids_hanging_locks.glb)
+        - **Braid Hawk:** "BraidHawk" `Mesh` in [`assets/hair/braid_hawk.glb`](../../assets/characters/hair/braid_hawk.glb)
+        - **Feather Hawk:** "FeatherHawk" `Mesh` in [`assets/hair/feather_hawk.glb`](../../assets/characters/hair/feather_hawk.glb)
+        - **Flowing Edgy Curls:** "FlowingEdgyCurls" `Mesh` in [`assets/hair/flowing_edgy_curls.glb`](../../assets/characters/hair/flowing_edgy_curls.glb)
+        - **Perm Braid:** "PermBraid" `Mesh` in [`assets/hair/perm_braid.glb`](../../assets/characters/hair/perm_braid.glb)
+        - **Techno Edge:** "TechnoEdge" `Mesh` in [`assets/hair/techno_edge.glb`](../../assets/characters/hair/techno_edge.glb)
 - **Clothes:** (can wear as many as you want at the same time)
-    - **Basketball Cut Shirt:** "BasketballCutShirt" `Mesh` in `assets/clothes/basketball_cut_shirt.glb`, no special fitting needed.
-    - **Tunic:** "Tunic" `Mesh` in `assets/clothes/tunic.glb`, no special fitting needed.
-    - **Long Dress:** "LongDress" `Mesh` in `assets/clothes/long_dress.glb`, no special fitting needed.
-    - **Short Dress:** "ShortDress" `Mesh` in `assets/clothes/short_dress.glb`, no special fitting needed.
-    - **Fitted Coat:** "FittedCoat" `Mesh` in `assets/clothes/fitted_coat.glb`, no special fitting needed.
-    - **Quarter Coat:** "QuarterCoat" `Mesh` in `assets/clothes/quarter_coat.glb`, no special fitting needed.
-    - **Robe Coat:** "RobeCoat" `Mesh` in `assets/clothes/robe_coat.glb`, no special fitting needed.
-    - **Short-sleeved Robe Coat:** "ShortSleevedRobeCoat" `Mesh` in `assets/clothes/short_sleeved_robe_coat.glb`, no special fitting needed.
-    - **Tailored Coat:** "TailoredCoat" `Mesh` in `assets/clothes/tailored_coat.glb`, no special fitting needed.
+    - **Basketball Cut Shirt:** "BasketballCutShirt" `Mesh` in [`assets/clothes/basketball_cut_shirt.glb`](../../assets/characters/clothes/basketball_cut_shirt.glb), no special fitting needed.
+    - **Tunic:** "Tunic" `Mesh` in [`assets/clothes/tunic.glb`](../../assets/characters/clothes/tunic.glb), no special fitting needed.
+    - **Long Dress:** "LongDress" `Mesh` in [`assets/clothes/long_dress.glb`](../../assets/characters/clothes/long_dress.glb), no special fitting needed.
+    - **Short Dress:** "ShortDress" `Mesh` in [`assets/clothes/short_dress.glb`](../../assets/characters/clothes/short_dress.glb), no special fitting needed.
+    - **Fitted Coat:** "FittedCoat" `Mesh` in [`assets/clothes/fitted_coat.glb`](../../assets/characters/clothes/fitted_coat.glb), no special fitting needed.
+    - **Quarter Coat:** "QuarterCoat" `Mesh` in [`assets/clothes/quarter_coat.glb`](../../assets/characters/clothes/quarter_coat.glb), no special fitting needed.
+    - **Robe Coat:** "RobeCoat" `Mesh` in [`assets/clothes/robe_coat.glb`](../../assets/characters/clothes/robe_coat.glb), no special fitting needed.
+    - **Short-sleeved Robe Coat:** "ShortSleevedRobeCoat" `Mesh` in [`assets/clothes/short_sleeved_robe_coat.glb`](../../assets/characters/clothes/short_sleeved_robe_coat.glb), no special fitting needed.
+    - **Tailored Coat:** "TailoredCoat" `Mesh` in [`assets/clothes/tailored_coat.glb`](../../assets/characters/clothes/tailored_coat.glb), no special fitting needed.
