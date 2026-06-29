@@ -821,6 +821,7 @@ Braidman is relatively plain humanoid species.
 - **Body Rig:** "Humanoid" `Armature` in `assets/bodies/humanoid_rig.glb`
 - **Height:** 1.0 (default)
 - **Width:** 0.8 (slightly smaller than the original rig)
+- **Depth:** 0.8 (slightly smaller than the original rig)
 - **Body Meshes:** 
     - **Standard:** "HumanoidFullBody" `Mesh` in `assets/bodies/humanoid_full_body.glb` 
     - **Full:** "LeronBipedFullBody" `Mesh` in `assets/bodies/leron_biped_full_body.glb`
@@ -852,9 +853,43 @@ Braidman is relatively plain humanoid species.
     - **Nose Length:** from 0.8 to 1.2 of the original nose length.
     - **Nose Protrusion:** from 0.8 to 1.2 of the original nose protrusion.
 - **Eyes:**
-    - **Standard:** "HumanoidEye" `Mesh` in `assets/eyes/humanoid_eye.glb`
-    - **Falcon:** "FalconEye" `Mesh` in `assets/eyes/falcon_eye.glb`
+    - **Standard:** "HumanoidEyeLeft" `Mesh` in `assets/eyes/humanoid_eye_left.glb`
+    - **Falcon:** "FalconEyeLeft" `Mesh` in `assets/eyes/falcon_eye_left.glb`
 - **Eye Sliders:**
     - **Eye Width:** from 0.8 to 1.2 of the original eye width.
     - **Eye Height:** from 0.8 to 1.2 of the original eye height.
     - **Eye Tilt:** -5 to 5 degrees.
+- **Noses:**
+    - **Standard:** "HumanoidNose" `Mesh` in `assets/noses/humanoid_nose.glb`
+    - **Broad:** "BroadHumanoidNose" `Mesh` in `assets/noses/broad_humanoid_nose.glb`
+    - **Loaf:** "LoafHumanoidNose" `Mesh` in `assets/noses/loaf_nose.glb`
+    - **Balloon:** "MumbusNose" `Mesh` in `assets/noses/mumbus_nose.glb`
+- **Nose Sliders:**
+    - **Nose Width:** from 0.8 to 1.2 of the original nose width.
+    - **Nose Length:** from 0.8 to 1.2 of the original nose length.
+    - **Nose Depth:** from 0.8 to 1.2 of the original nose depth.
+- **Mouths:**
+    - **Standard:** "CommonMouth" `Mesh` in `assets/mouths/common_mouth.glb`
+- **Mouth Sliders:**
+    - **Mouth Width:** from 0.8 to 1.2 of the original mouth width.
+    - **Mouth Height:** from 0.8 to 1.2 of the original mouth height.
+    - **Mouth Depth:** from 0.8 to 1.2 of the original mouth depth.
+- **Ears:**
+    - **Standard:** "RoundScoopLateralEarLeft" `Mesh` in `assets/ears/round_scoop_lateral_ear_left.glb`
+    - **Falcon:** "FalconEarLeft" `Mesh` in `assets/ears/falcon_ear_left.glb`
+- **Ear Sliders:**
+    - **Ear Width:** from 0.8 to 1.2 of the original ear width.
+    - **Ear Height:** from 0.8 to 1.2 of the original ear height.
+    - **Ear Depth:** from 0.8 to 1.2 of the original ear depth.
+- **Extended Features:**
+    - **Head Hair:** 
+        - **None:** no hair on head.
+        - **Thick Braids:** "ThickBraids" `Mesh` in `assets/hair/thick_braids.glb`
+        - **Flowing Curls:** "FlowingCurls" `Mesh` in `assets/hair/flowing_curls.glb`
+        - **Wrapping Braids:** "WrappingBraids" `Mesh` in `assets/hair/wrapping_braids.glb`
+        - **Wrapping Braids Hanging Locks:** "Wrapping Braids Hanging Locks" `Mesh` in `assets/hair/wrapping_braids_hanging_locks.glb`
+        - **Braid Hawk:** "BraidHawk" `Mesh` in `assets/hair/braid_hawk.glb`
+        - **Feather Hawk:** "FeatherHawk" `Mesh` in `assets/hair/feather_hawk.glb`
+        - **Flowing Edgy Curls:** "FlowingEdgyCurls" `Mesh` in `assets/hair/flowing_edgy_curls.glb`
+        - **Perm Braid:** "PermBraid" `Mesh` in `assets/hair/perm_braid.glb`
+        - **Techno Edge:** "TechnoEdge" `Mesh` in `assets/hair/techno_edge.glb`
