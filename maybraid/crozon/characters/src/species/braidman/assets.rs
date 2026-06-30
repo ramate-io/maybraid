@@ -245,7 +245,8 @@ impl BraidmanAssets {
 			Some(Self::head_socket(
 				"eye_socket.L",
 				// Rotate 90 degrees around the Y axis.
-				Transform::from_rotation(Quat::from_rotation_y(-std::f32::consts::PI / 2.0)),
+				Transform::from_rotation(Quat::from_rotation_y(-std::f32::consts::PI / 2.0))
+					.with_translation(Vec3::new(0.075, -0.1, 0.0)),
 			)),
 		)
 	}
@@ -259,7 +260,8 @@ impl BraidmanAssets {
 				"eye_socket.R",
 				// For some reason this is socketed back s.t. the eyes are sideways.
 				// Rotate 90 degrees around the Y axis.
-				Transform::from_rotation(Quat::from_rotation_y(std::f32::consts::PI / 2.0)),
+				Transform::from_rotation(Quat::from_rotation_y(std::f32::consts::PI / 2.0))
+					.with_translation(Vec3::new(-0.075, -0.1, 0.0)),
 			)),
 		)
 	}
@@ -285,18 +287,24 @@ impl BraidmanAssets {
 	fn ear_left(ear: EarMesh) -> ResolvedCharacterPart {
 		ResolvedCharacterPart::new(
 			CharacterPartSlot::EarLeft,
-			CharacterAsset::new(ear.label(), ear.path(), AssetNormalization::centroid(0.12)),
+			CharacterAsset::new(ear.label(), ear.path(), AssetNormalization::centroid(0.15)),
 			SkinTarget::HeadRig,
-			Some(Self::head_socket("ear_socket.L", Transform::IDENTITY)),
+			Some(Self::head_socket(
+				"ear_socket.L",
+				Transform::from_translation(Vec3::new(0.0, 0.0, 0.05)),
+			)),
 		)
 	}
 
 	fn ear_right(ear: EarMesh) -> ResolvedCharacterPart {
 		ResolvedCharacterPart::new(
 			CharacterPartSlot::EarRight,
-			CharacterAsset::new(ear.label(), ear.path(), AssetNormalization::centroid(0.12)),
+			CharacterAsset::new(ear.label(), ear.path(), AssetNormalization::centroid(0.15)),
 			SkinTarget::HeadRig,
-			Some(Self::head_socket("ear_socket.R", Self::mirror_x())),
+			Some(Self::head_socket(
+				"ear_socket.R",
+				Self::mirror_x().with_translation(Vec3::new(0.0, 0.0, 0.05)),
+			)),
 		)
 	}
 

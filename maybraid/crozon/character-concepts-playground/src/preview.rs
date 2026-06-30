@@ -158,9 +158,9 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 		head_rig: Option<Entity>,
 		part: &ResolvedCharacterPart,
 	) {
-		if part.slot == CharacterPartSlot::HeadMesh {
+		/*if part.slot == CharacterPartSlot::HeadMesh {
 			return;
-		}
+		}*/
 
 		let entity = self
 			.commands
