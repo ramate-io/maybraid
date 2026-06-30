@@ -22,7 +22,12 @@ impl PreviewColorMaterials {
 		self.handles
 			.entry(color)
 			.or_insert_with(|| {
-				materials.add(StandardMaterial { base_color: color.color(), ..default() })
+				materials.add(StandardMaterial {
+					base_color: color.color(),
+					// TODO: Remove this once we have given properly mirrored meshes.
+					cull_mode: None,
+					..default()
+				})
 			})
 			.clone()
 	}
