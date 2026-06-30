@@ -136,7 +136,7 @@ impl NoseMesh {
 	const fn normalization(self) -> AssetNormalization {
 		match self {
 			Self::Balloon => AssetNormalization::centroid(0.08),
-			Self::Standard | Self::Broad | Self::Loaf => AssetNormalization::centroid(0.12),
+			Self::Standard | Self::Broad | Self::Loaf => AssetNormalization::centroid(0.2),
 		}
 	}
 }
@@ -244,9 +244,7 @@ impl BraidmanAssets {
 			SkinTarget::HeadRig,
 			Some(Self::head_socket(
 				"eye_socket.L",
-				// Rotate 90 degrees around the Y axis.
-				Transform::from_rotation(Quat::from_rotation_y(-std::f32::consts::PI / 2.0))
-					.with_translation(Vec3::new(0.075, -0.1, 0.0)),
+				Transform::from_translation(Vec3::new(0.0, -0.1, -0.075)),
 			)),
 		)
 	}
@@ -258,10 +256,7 @@ impl BraidmanAssets {
 			SkinTarget::HeadRig,
 			Some(Self::head_socket(
 				"eye_socket.R",
-				// For some reason this is socketed back s.t. the eyes are sideways.
-				// Rotate 90 degrees around the Y axis.
-				Transform::from_rotation(Quat::from_rotation_y(std::f32::consts::PI / 2.0))
-					.with_translation(Vec3::new(-0.075, -0.1, 0.0)),
+				Self::mirror_x().with_translation(Vec3::new(0.0, -0.1, -0.075)),
 			)),
 		)
 	}
@@ -271,7 +266,10 @@ impl BraidmanAssets {
 			CharacterPartSlot::Nose,
 			CharacterAsset::new(nose.label(), nose.path(), nose.normalization()),
 			SkinTarget::HeadRig,
-			Some(Self::head_socket("nose_socket", Transform::IDENTITY)),
+			Some(Self::head_socket(
+				"nose_socket",
+				Transform::from_translation(Vec3::new(0.0, 0.0, 0.1)),
+			)),
 		)
 	}
 
@@ -280,7 +278,10 @@ impl BraidmanAssets {
 			CharacterPartSlot::Mouth,
 			CharacterAsset::new(mouth.label(), mouth.path(), AssetNormalization::centroid(0.12)),
 			SkinTarget::HeadRig,
-			Some(Self::head_socket("mouth_socket", Transform::IDENTITY)),
+			Some(Self::head_socket(
+				"mouth_socket",
+				Transform::from_translation(Vec3::new(0.0, 0.0, 0.1)),
+			)),
 		)
 	}
 
@@ -291,7 +292,9 @@ impl BraidmanAssets {
 			SkinTarget::HeadRig,
 			Some(Self::head_socket(
 				"ear_socket.L",
-				Transform::from_translation(Vec3::new(0.0, 0.0, 0.05)),
+				// Bump out and angle back 45 degrees.
+				Transform::from_translation(Vec3::new(0.1, -0.1, 0.00))
+					.with_rotation(Quat::from_rotation_y(std::f32::consts::PI / 4.0)),
 			)),
 		)
 	}
@@ -303,7 +306,10 @@ impl BraidmanAssets {
 			SkinTarget::HeadRig,
 			Some(Self::head_socket(
 				"ear_socket.R",
-				Self::mirror_x().with_translation(Vec3::new(0.0, 0.0, 0.05)),
+				// Bump out and angle back 45 degrees.
+				Self::mirror_x()
+					.with_translation(Vec3::new(-0.1, -0.1, 0.00))
+					.with_rotation(Quat::from_rotation_y(-std::f32::consts::PI / 4.0)),
 			)),
 		)
 	}
