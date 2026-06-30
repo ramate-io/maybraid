@@ -151,7 +151,7 @@ impl UiAssetTarget {
 				SocketRig::Body,
 				"root",
 				Vec3::new(0.0, 1.0, 3.3),
-				Vec3::new(0.0, -0.5, 0.0),
+				Vec3::new(0.0, 0.2, 0.0),
 			),
 			// Head rig root is anchored at the neck base; bias look-at toward face height.
 			Self::Head(_) => CameraFocus::new(
