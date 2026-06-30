@@ -13,11 +13,9 @@ root
           jaw_bone.R
         mouth_socket
     cheek.R
-      eye_height.R
-        eye_socket.R
+      eye_socket.R
     cheek.L
-      eye_height.L
-        eye_socket.L
+      eye_socket.L
   temple.R
     ear_socket.R
   forehead

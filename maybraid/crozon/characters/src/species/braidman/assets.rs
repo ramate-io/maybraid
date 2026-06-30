@@ -285,20 +285,16 @@ impl BraidmanAssets {
 	fn ear_left(ear: EarMesh) -> ResolvedCharacterPart {
 		ResolvedCharacterPart::new(
 			CharacterPartSlot::EarLeft,
-			CharacterAsset::new(ear.label(), ear.path(), AssetNormalization::centroid(0.32)),
+			CharacterAsset::new(ear.label(), ear.path(), AssetNormalization::centroid(0.12)),
 			SkinTarget::HeadRig,
-			Some(Self::head_socket(
-				"ear_socket.L",
-				// Rotate 90 degrees around the and Z Y axis.
-				Transform::IDENTITY,
-			)),
+			Some(Self::head_socket("ear_socket.L", Transform::IDENTITY)),
 		)
 	}
 
 	fn ear_right(ear: EarMesh) -> ResolvedCharacterPart {
 		ResolvedCharacterPart::new(
 			CharacterPartSlot::EarRight,
-			CharacterAsset::new(ear.label(), ear.path(), AssetNormalization::centroid(0.3)),
+			CharacterAsset::new(ear.label(), ear.path(), AssetNormalization::centroid(0.12)),
 			SkinTarget::HeadRig,
 			Some(Self::head_socket("ear_socket.R", Self::mirror_x())),
 		)

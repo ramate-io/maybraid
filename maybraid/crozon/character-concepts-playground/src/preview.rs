@@ -158,7 +158,6 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 		head_rig: Option<Entity>,
 		part: &ResolvedCharacterPart,
 	) {
-		// debug: disable head mesh for now
 		if part.slot == CharacterPartSlot::HeadMesh {
 			return;
 		}
