@@ -101,6 +101,7 @@ impl PreviewArgs {
 				ear: self.ear,
 				hair: self.hair,
 				clothing: self.clothing,
+				colors: Default::default(),
 				sliders,
 			},
 			self.animation,

@@ -27,22 +27,12 @@ pub struct Squat<Rig> {
 impl<Rig> Squat<Rig> {
 	/// Looping squat with independent descent and ascent half-cycle speeds.
 	pub fn for_loop(descent_speed: f32, ascent_speed: f32) -> Self {
-		Self {
-			descent_speed,
-			ascent_speed,
-			one_shot: false,
-			..Self::default()
-		}
+		Self { descent_speed, ascent_speed, one_shot: false, ..Self::default() }
 	}
 
 	/// One-shot down-up envelope with the given half-cycle speeds.
 	pub fn with_speeds(descent_speed: f32, ascent_speed: f32) -> Self {
-		Self {
-			descent_speed,
-			ascent_speed,
-			one_shot: true,
-			..Self::default()
-		}
+		Self { descent_speed, ascent_speed, one_shot: true, ..Self::default() }
 	}
 
 	/// Duration of one full down-up cycle in seconds.

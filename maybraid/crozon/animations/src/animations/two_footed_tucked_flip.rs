@@ -4,7 +4,7 @@ use std::marker::PhantomData;
 
 use crozon_rigs::humanoid::LegSegmentLengths;
 
-use crate::animations::{TuckedFlip, TwoFootedJump, JumpSegment, JumpTiming};
+use crate::animations::{JumpSegment, JumpTiming, TuckedFlip, TwoFootedJump};
 
 #[derive(Debug, Clone)]
 pub struct TwoFootedTuckedFlip<Rig> {

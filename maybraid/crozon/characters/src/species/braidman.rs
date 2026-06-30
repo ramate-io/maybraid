@@ -21,6 +21,103 @@ use assets::{
 };
 use sliders::BraidmanSliders;
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum BraidmanColor {
+	#[default]
+	Natural,
+	Warm,
+	Cool,
+	Dark,
+	Light,
+	Red,
+	Blue,
+	Green,
+	Gold,
+}
+
+impl BraidmanColor {
+	pub const fn label(self) -> &'static str {
+		match self {
+			Self::Natural => "natural",
+			Self::Warm => "warm",
+			Self::Cool => "cool",
+			Self::Dark => "dark",
+			Self::Light => "light",
+			Self::Red => "red",
+			Self::Blue => "blue",
+			Self::Green => "green",
+			Self::Gold => "gold",
+		}
+	}
+
+	pub fn color(self) -> bevy::prelude::Color {
+		match self {
+			Self::Natural => bevy::prelude::Color::srgb(0.72, 0.54, 0.42),
+			Self::Warm => bevy::prelude::Color::srgb(0.86, 0.58, 0.38),
+			Self::Cool => bevy::prelude::Color::srgb(0.46, 0.60, 0.72),
+			Self::Dark => bevy::prelude::Color::srgb(0.18, 0.16, 0.15),
+			Self::Light => bevy::prelude::Color::srgb(0.88, 0.80, 0.68),
+			Self::Red => bevy::prelude::Color::srgb(0.72, 0.18, 0.16),
+			Self::Blue => bevy::prelude::Color::srgb(0.18, 0.30, 0.76),
+			Self::Green => bevy::prelude::Color::srgb(0.22, 0.52, 0.28),
+			Self::Gold => bevy::prelude::Color::srgb(0.88, 0.68, 0.22),
+		}
+	}
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ClothingColor {
+	pub clothing: ClothingMesh,
+	pub color: BraidmanColor,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BraidmanColors {
+	pub body: BraidmanColor,
+	pub head: BraidmanColor,
+	pub eyes: BraidmanColor,
+	pub nose: BraidmanColor,
+	pub mouth: BraidmanColor,
+	pub ears: BraidmanColor,
+	pub hair: BraidmanColor,
+	pub clothing_default: BraidmanColor,
+	pub clothing: Vec<ClothingColor>,
+}
+
+impl Default for BraidmanColors {
+	fn default() -> Self {
+		Self {
+			body: BraidmanColor::Natural,
+			head: BraidmanColor::Natural,
+			eyes: BraidmanColor::Blue,
+			nose: BraidmanColor::Natural,
+			mouth: BraidmanColor::Warm,
+			ears: BraidmanColor::Natural,
+			hair: BraidmanColor::Dark,
+			clothing_default: BraidmanColor::Cool,
+			clothing: Vec::new(),
+		}
+	}
+}
+
+impl BraidmanColors {
+	pub fn clothing_color(&self, clothing: ClothingMesh) -> BraidmanColor {
+		self.clothing
+			.iter()
+			.find(|choice| choice.clothing == clothing)
+			.map(|choice| choice.color)
+			.unwrap_or(self.clothing_default)
+	}
+
+	pub fn set_clothing_color(&mut self, clothing: ClothingMesh, color: BraidmanColor) {
+		if let Some(choice) = self.clothing.iter_mut().find(|choice| choice.clothing == clothing) {
+			choice.color = color;
+		} else {
+			self.clothing.push(ClothingColor { clothing, color });
+		}
+	}
+}
+
 /// Minimal unresolved Braidman state used by commands and, later, UI fields.
 #[derive(Debug, Clone, PartialEq)]
 pub struct BraidmanConfig {
@@ -36,6 +133,7 @@ pub struct BraidmanConfig {
 	pub hair: HairMesh,
 	/// Multiple clothing layers compose; repeat `--clothing` on the CLI.
 	pub clothing: Vec<ClothingMesh>,
+	pub colors: BraidmanColors,
 	pub sliders: BraidmanSliders,
 }
 
@@ -59,6 +157,7 @@ impl BraidmanConfig {
 			ear: EarMesh::Standard,
 			hair: HairMesh::None,
 			clothing: Vec::new(),
+			colors: BraidmanColors::default(),
 			sliders: BraidmanSliders::default(),
 		}
 	}
@@ -89,7 +188,7 @@ impl BraidmanConfig {
 				.join(",")
 		};
 		format!(
-			"braidman gender={} build={} body={} head={} eye={} nose={} mouth={} ear={} hair={} clothing={} sliders={}",
+			"braidman gender={} build={} body={} head={} eye={} nose={} mouth={} ear={} hair={} clothing={} colors=body:{} head:{} eyes:{} nose:{} mouth:{} ears:{} hair:{} sliders={}",
 			self.gender.label(),
 			self.build.label(),
 			self.body.label(),
@@ -100,6 +199,13 @@ impl BraidmanConfig {
 			self.ear.label(),
 			self.hair.label(),
 			clothing,
+			self.colors.body.label(),
+			self.colors.head.label(),
+			self.colors.eyes.label(),
+			self.colors.nose.label(),
+			self.colors.mouth.label(),
+			self.colors.ears.label(),
+			self.colors.hair.label(),
 			self.sliders.status_label(),
 		)
 	}

@@ -5,21 +5,28 @@
 //! `crozon-characters` before any Bevy entities are spawned.
 
 mod animation;
+mod camera_focus;
 pub mod commands;
+mod focus;
 mod ground;
+mod material;
 mod preview;
 mod skinning;
+mod thumbnail;
 mod ui;
 
 pub use commands::{ConceptsCommand, CONCEPTS_CLI_NAME};
 pub use game_commands::command::PendingStartupCommand;
 
 use bevy::prelude::*;
-use crozon_character_playground::{camera, checkerboard_material};
 use camera_controls::look::{CameraLookConfig, CameraLookPlugin};
+use crozon_character_playground::{camera, checkerboard_material};
 use game_commands::command::{capture_command_line_input, GameCommandPlugin};
 
 use animation::{animate_body_rig, init_limb_animators};
+use camera_focus::{apply_camera_suggestion, sync_camera_suggestion, RequestedCameraSuggestion};
+use focus::animate_focused_preview_asset;
+use material::apply_preview_colors;
 use preview::{sync_preview, ConceptPreviewConfig, ConceptPreviewSyncState};
 use skinning::{
 	attach_parts_to_sockets, build_rig_bone_map, dump_bones_to_console, maintain_resolved_pose,
@@ -33,6 +40,10 @@ impl Plugin for CrozonCharacterConceptsPlaygroundPlugin {
 		app.init_resource::<ConceptPreviewConfig>()
 			.init_resource::<ConceptPreviewSyncState>()
 			.init_resource::<DumpBonesRequest>()
+			.init_resource::<RequestedCameraSuggestion>()
+			.init_resource::<thumbnail::ThumbnailCache>()
+			.init_resource::<ui::CreatorUiState>()
+			.init_resource::<ui::CreatorUiSyncState>()
 			.add_plugins(CameraLookPlugin::new(CameraLookConfig {
 				enabled_at_start: false,
 				..CameraLookConfig::default()
@@ -53,15 +64,20 @@ impl Plugin for CrozonCharacterConceptsPlaygroundPlugin {
 				(
 					camera::camera_controller,
 					ui::react_creator_ui,
+					sync_camera_suggestion.after(ui::react_creator_ui),
+					apply_camera_suggestion.after(sync_camera_suggestion),
 					sync_preview.after(capture_command_line_input::<ConceptsCommand>),
 					build_rig_bone_map,
 					attach_parts_to_sockets.after(build_rig_bone_map),
 					remap_part_skin_to_rig.after(attach_parts_to_sockets),
 					prune_duplicate_part_scenes.after(remap_part_skin_to_rig),
+					apply_preview_colors.after(prune_duplicate_part_scenes),
+					animate_focused_preview_asset.after(attach_parts_to_sockets),
 					init_limb_animators.after(build_rig_bone_map),
 					animate_body_rig.after(init_limb_animators),
 					dump_bones_to_console,
 					ui::sync_creator_ui.after(ui::react_creator_ui),
+					thumbnail::sync_thumbnail_camera_activity.after(ui::sync_creator_ui),
 					ui::sync_command_status_text.before(game_commands::ui::update_debug_ui),
 				),
 			)

@@ -58,12 +58,7 @@ pub struct Transition<A, R> {
 impl<A, R> Transition<A, R> {
 	/// Creates a transition from an explicit captured pose.
 	pub fn from_pose(animation: A, from_pose: RigPose) -> Self {
-		Self {
-			animation,
-			from_pose,
-			curve: TransitionCurve::default(),
-			_rig: PhantomData,
-		}
+		Self { animation, from_pose, curve: TransitionCurve::default(), _rig: PhantomData }
 	}
 
 	pub fn with_curve(mut self, curve: TransitionCurve) -> Self {

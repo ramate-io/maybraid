@@ -56,11 +56,8 @@ fn apply_leg<R: HumanoidRig>(
 	let hip_sagittal = swing * walk.hip_swing * lift_sign;
 	let femur_medial = -swing * walk.femur_medial_counter * lift_sign;
 
-	leg.pelvis = rig.articulate_on_rig(
-		leg.pelvis,
-		hip_sagittal,
-		hip_lift(swing, walk.hip_lift) * lift_sign,
-	);
+	leg.pelvis =
+		rig.articulate_on_rig(leg.pelvis, hip_sagittal, hip_lift(swing, walk.hip_lift) * lift_sign);
 	leg.femur = rig.articulate_on_rig(leg.femur, swing * walk.stride, femur_medial);
 	leg.shin = rig.articulate_on_rig(leg.shin, 0.0, knee_flex(phase, walk));
 	rig.pose_leg(leg);
@@ -139,7 +136,10 @@ mod tests {
 					continue;
 				};
 				let upright_pose = from_upright.pose().get(&bone).expect("upright pose");
-				assert_eq!(walk_pose.swing, upright_pose.swing, "swing mismatch on {bone} at {phase}");
+				assert_eq!(
+					walk_pose.swing, upright_pose.swing,
+					"swing mismatch on {bone} at {phase}"
+				);
 				assert_eq!(walk_pose.flex, upright_pose.flex, "flex mismatch on {bone} at {phase}");
 			}
 		}
@@ -242,10 +242,7 @@ mod tests {
 		for i in 1..=samples {
 			let phase = i as f32 / samples as f32;
 			let flex = knee_flex(phase, &walk);
-			assert!(
-				(flex - prev).abs() < max_step,
-				"knee snap at phase {phase}: {prev} -> {flex}"
-			);
+			assert!((flex - prev).abs() < max_step, "knee snap at phase {phase}: {prev} -> {flex}");
 			prev = flex;
 		}
 	}

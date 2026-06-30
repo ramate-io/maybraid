@@ -2,15 +2,18 @@ use std::collections::HashMap;
 
 use bevy::prelude::*;
 use clap::ValueEnum;
-use log::info;
 use crozon_rigs::{
 	debug::{format_rigged_axis, log_bind_pose, log_pose_deltas, RigPoseDebug},
 	humanoid::HumanoidRig,
 	rigs::humanoid_v0::HumanoidV0Rig,
 	BonePose, Name as RigName,
 };
+use log::info;
 use malo_animations::{
-	animations::{FixedTuck, Run, Squat, Tuck, TuckedFlip, TwoFootedJump, TwoFootedTuckedFlip, Walk, DEFAULT_GRAVITY, DEFAULT_LANDING_SQUAT_SPEED, DEFAULT_PRE_SQUAT_SPEED},
+	animations::{
+		FixedTuck, Run, Squat, Tuck, TuckedFlip, TwoFootedJump, TwoFootedTuckedFlip, Walk,
+		DEFAULT_GRAVITY, DEFAULT_LANDING_SQUAT_SPEED, DEFAULT_PRE_SQUAT_SPEED,
+	},
 	Animation, Effects,
 };
 
@@ -150,9 +153,14 @@ pub fn animate_limbs(
 		AnimationMode::TuckedFlip => {
 			animate_tucked_flip(&config, &mut rig, &mut armature, &mut limbs, t)
 		}
-		AnimationMode::TwoFootedTuckedFlip => {
-			animate_two_footed_tucked_flip(&config, &mut debug, &mut rig, &mut armature, &mut limbs, t)
-		}
+		AnimationMode::TwoFootedTuckedFlip => animate_two_footed_tucked_flip(
+			&config,
+			&mut debug,
+			&mut rig,
+			&mut armature,
+			&mut limbs,
+			t,
+		),
 	}
 }
 
@@ -312,14 +320,13 @@ fn animate_two_footed_tucked_flip(
 	};
 
 	marshal_limbs_into_pose(&mut rig, limbs);
-	let flip = TwoFootedTuckedFlip::<HumanoidV0Rig>::default()
-		.with_jump(
-			TwoFootedJump::<HumanoidV0Rig>::default()
-				.with_gravity(DEFAULT_GRAVITY)
-				.with_jump_height(JUMP_HEIGHT)
-				.with_pre_squat_speed(JUMP_PRE_SQUAT_SPEED)
-				.with_landing_squat_speed(JUMP_LANDING_SQUAT_SPEED),
-		);
+	let flip = TwoFootedTuckedFlip::<HumanoidV0Rig>::default().with_jump(
+		TwoFootedJump::<HumanoidV0Rig>::default()
+			.with_gravity(DEFAULT_GRAVITY)
+			.with_jump_height(JUMP_HEIGHT)
+			.with_pre_squat_speed(JUMP_PRE_SQUAT_SPEED)
+			.with_landing_squat_speed(JUMP_LANDING_SQUAT_SPEED),
+	);
 	let effects = flip.apply(&mut rig, t);
 	apply_effects(config.transform, effects, armature);
 	if debug.0.enabled {

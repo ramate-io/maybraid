@@ -96,8 +96,7 @@ mod tests {
 		assert!((upright.stride - template.stride * 2.0).abs() < 1e-5);
 		assert!(
 			(upright.knee_contracted - template.knee_contracted * 2.0 + template.knee_extended)
-				.abs()
-				< 1e-4
+				.abs() < 1e-4
 		);
 	}
 

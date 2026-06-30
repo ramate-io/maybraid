@@ -27,11 +27,8 @@ pub fn apply_tuck_profile<R: HumanoidRig>(
 	for side in [Side::Left, Side::Right] {
 		let mut arm = rig.arm_pose(side);
 
-		arm.shoulder = rig.articulate_on_rig(
-			arm.shoulder,
-			profile.shoulder_roll(side, amount),
-			0.0,
-		);
+		arm.shoulder =
+			rig.articulate_on_rig(arm.shoulder, profile.shoulder_roll(side, amount), 0.0);
 		arm.humerus = arm.humerus.articulate(
 			humerus_tuck_axis(side),
 			profile.humerus_swing(side, amount),

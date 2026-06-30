@@ -56,7 +56,7 @@ const CLOTHING_SHORT_SLEEVED_ROBE_COAT: AssetPath =
 const CLOTHING_TAILORED_COAT: AssetPath = AssetPath::new("characters/clothes/tailored_coat.glb");
 const CLOTHING_HOOD: AssetPath = AssetPath::new("characters/clothes/hood.glb");
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, ValueEnum)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, ValueEnum)]
 pub enum BodyMesh {
 	#[default]
 	Standard,
@@ -71,7 +71,7 @@ impl BodyMesh {
 		}
 	}
 
-	const fn path(self) -> AssetPath {
+	pub const fn path(self) -> AssetPath {
 		match self {
 			Self::Standard => BODY_STANDARD,
 			Self::Full => BODY_FULL,
@@ -79,7 +79,7 @@ impl BodyMesh {
 	}
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, ValueEnum)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, ValueEnum)]
 pub enum HeadMesh {
 	#[default]
 	Standard,
@@ -96,7 +96,7 @@ impl HeadMesh {
 		}
 	}
 
-	const fn path(self) -> AssetPath {
+	pub const fn path(self) -> AssetPath {
 		match self {
 			Self::Standard => HEAD_STANDARD,
 			Self::Gaunt => HEAD_GAUNT,
@@ -105,7 +105,7 @@ impl HeadMesh {
 	}
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, ValueEnum)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, ValueEnum)]
 pub enum EyeMesh {
 	#[default]
 	Standard,
@@ -120,7 +120,7 @@ impl EyeMesh {
 		}
 	}
 
-	const fn path(self) -> AssetPath {
+	pub const fn path(self) -> AssetPath {
 		match self {
 			Self::Standard => EYE_STANDARD,
 			Self::Falcon => EYE_FALCON,
@@ -128,7 +128,7 @@ impl EyeMesh {
 	}
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, ValueEnum)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, ValueEnum)]
 pub enum NoseMesh {
 	#[default]
 	Standard,
@@ -147,7 +147,7 @@ impl NoseMesh {
 		}
 	}
 
-	const fn path(self) -> AssetPath {
+	pub const fn path(self) -> AssetPath {
 		match self {
 			Self::Standard => NOSE_STANDARD,
 			Self::Broad => NOSE_BROAD,
@@ -164,7 +164,7 @@ impl NoseMesh {
 	}
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, ValueEnum)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, ValueEnum)]
 pub enum MouthMesh {
 	#[default]
 	Standard,
@@ -175,14 +175,14 @@ impl MouthMesh {
 		"standard"
 	}
 
-	const fn path(self) -> AssetPath {
+	pub const fn path(self) -> AssetPath {
 		match self {
 			Self::Standard => MOUTH_STANDARD,
 		}
 	}
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, ValueEnum)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, ValueEnum)]
 pub enum EarMesh {
 	#[default]
 	Standard,
@@ -199,7 +199,7 @@ impl EarMesh {
 		}
 	}
 
-	const fn path(self) -> AssetPath {
+	pub const fn path(self) -> AssetPath {
 		match self {
 			Self::Standard => EAR_STANDARD,
 			Self::Round => EAR_ROUND,
@@ -208,7 +208,7 @@ impl EarMesh {
 	}
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, ValueEnum)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, ValueEnum)]
 pub enum HairMesh {
 	#[default]
 	None,
@@ -239,7 +239,7 @@ impl HairMesh {
 		}
 	}
 
-	const fn path(self) -> Option<AssetPath> {
+	pub const fn path(self) -> Option<AssetPath> {
 		match self {
 			Self::None => None,
 			Self::ThickBraids => Some(HAIR_THICK_BRAIDS),
@@ -255,7 +255,7 @@ impl HairMesh {
 	}
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, ValueEnum)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, ValueEnum)]
 pub enum ClothingMesh {
 	BasketballCutShirt,
 	Tunic,
@@ -285,7 +285,7 @@ impl ClothingMesh {
 		}
 	}
 
-	const fn path(self) -> AssetPath {
+	pub const fn path(self) -> AssetPath {
 		match self {
 			Self::BasketballCutShirt => CLOTHING_BASKETBALL_CUT_SHIRT,
 			Self::Tunic => CLOTHING_TUNIC,

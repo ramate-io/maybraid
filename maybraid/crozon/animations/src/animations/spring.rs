@@ -1,7 +1,7 @@
 use std::marker::PhantomData;
 
-use crate::Progress;
 use crate::animations::Squat;
+use crate::Progress;
 
 const SHOULDER_SWING_BACK: f32 = -0.55;
 const HUMERUS_FLEX_BACK: f32 = 0.65;

@@ -2,7 +2,7 @@ use crozon_rigs::{humanoid::HumanoidRig, RigPose};
 
 use crate::animations::Transition;
 use crate::rigs::mix::{blend_pose, mix_effects, pose_from_animation, restore_pose, snapshot_pose};
-use crate::{Effects, Animation};
+use crate::{Animation, Effects};
 
 impl<A, R> Transition<A, R>
 where
@@ -14,12 +14,7 @@ where
 		Self::from_pose(animation, snapshot_pose(rig))
 	}
 
-	pub fn apply(
-		&self,
-		rig: &mut R,
-		animation_progress: f32,
-		transition_progress: f32,
-	) -> Effects {
+	pub fn apply(&self, rig: &mut R, animation_progress: f32, transition_progress: f32) -> Effects {
 		let rest = snapshot_pose(rig);
 		restore_pose(rig, &rest);
 		let effects = self.animation.apply(rig, animation_progress);
@@ -120,8 +115,7 @@ mod tests {
 		let femur = rig.pose().get(&rig.leg(Side::Left).femur.name).expect("femur");
 		assert!(femur.swing.abs() > 0.0);
 		assert!(
-			femur.swing.abs()
-				< Squat::<HumanoidV0Rig>::for_loop(1.0, 1.0).femur_swing(0.5).abs()
+			femur.swing.abs() < Squat::<HumanoidV0Rig>::for_loop(1.0, 1.0).femur_swing(0.5).abs()
 		);
 		Ok(())
 	}

@@ -6,7 +6,10 @@
 use bevy::prelude::*;
 use crozon_characters::{
 	assembly::{CharacterPartSlot, ResolvedCharacterAssembly},
-	species::{braidman::BraidmanConfig, SpeciesConfig},
+	species::{
+		braidman::{BraidmanColor, BraidmanConfig},
+		SpeciesConfig,
+	},
 	ResolvedCharacterPart, SkinTarget, SocketRig,
 };
 
@@ -15,6 +18,7 @@ use crate::skinning::{
 	ActiveRigPose, BoneMap, CharacterPart, CharacterRig, CharacterRigRole, NeedsSkinRemap,
 	NeedsSocketPlacement, PartRigRef, RigBindScales,
 };
+use crate::ui::UiAssetTarget;
 
 #[derive(Resource, Debug, Clone, PartialEq)]
 pub enum ConceptPreviewConfig {
@@ -73,6 +77,12 @@ pub struct ConceptPreviewSyncState {
 #[derive(Component)]
 pub struct ConceptPreviewRoot;
 
+#[derive(Component, Clone, Copy)]
+pub struct PreviewAssetTarget {
+	pub target: UiAssetTarget,
+	pub color: BraidmanColor,
+}
+
 pub fn sync_preview(
 	mut commands: Commands,
 	asset_server: Res<AssetServer>,
@@ -92,13 +102,14 @@ pub fn sync_preview(
 	}
 
 	let assembly = config.resolve();
-	PreviewSpawner::new(&mut commands, &asset_server, assembly).spawn();
+	PreviewSpawner::new(&mut commands, &asset_server, assembly, config.clone()).spawn();
 }
 
 struct PreviewSpawner<'w, 's, 'a> {
 	commands: &'a mut Commands<'w, 's>,
 	asset_server: &'a AssetServer,
 	assembly: ResolvedCharacterAssembly,
+	config: ConceptPreviewConfig,
 }
 
 impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
@@ -106,8 +117,9 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 		commands: &'a mut Commands<'w, 's>,
 		asset_server: &'a AssetServer,
 		assembly: ResolvedCharacterAssembly,
+		config: ConceptPreviewConfig,
 	) -> Self {
-		Self { commands, asset_server, assembly }
+		Self { commands, asset_server, assembly, config }
 	}
 
 	fn spawn(mut self) {
@@ -158,6 +170,7 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 				BoneMap::default(),
 				ConceptPreviewRoot,
 				part.asset.normalization.transform(),
+				self.preview_target(part),
 				Name::new(format!("character_{:?}", part.slot)),
 			))
 			.id();
@@ -193,6 +206,7 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 				CharacterPart { slot: part.slot },
 				ConceptPreviewRoot,
 				part.asset.normalization.transform(),
+				self.preview_target(part),
 				Name::new(format!("character_{:?}_{}", part.slot, part.asset.label)),
 			))
 			.id();
@@ -235,6 +249,55 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 		match target {
 			SocketRig::Body => Some(body_rig),
 			SocketRig::Head => head_rig,
+		}
+	}
+
+	fn preview_target(&self, part: &ResolvedCharacterPart) -> PreviewAssetTarget {
+		let ConceptPreviewConfig::Braidman { config, .. } = &self.config;
+		match part.slot {
+			CharacterPartSlot::BodyMesh => PreviewAssetTarget {
+				target: UiAssetTarget::Body(config.body),
+				color: config.colors.body,
+			},
+			CharacterPartSlot::HeadRig | CharacterPartSlot::HeadMesh => PreviewAssetTarget {
+				target: UiAssetTarget::Head(config.head),
+				color: config.colors.head,
+			},
+			CharacterPartSlot::EyeLeft | CharacterPartSlot::EyeRight => PreviewAssetTarget {
+				target: UiAssetTarget::Eye(config.eye),
+				color: config.colors.eyes,
+			},
+			CharacterPartSlot::Nose => PreviewAssetTarget {
+				target: UiAssetTarget::Nose(config.nose),
+				color: config.colors.nose,
+			},
+			CharacterPartSlot::Mouth => PreviewAssetTarget {
+				target: UiAssetTarget::Mouth(config.mouth),
+				color: config.colors.mouth,
+			},
+			CharacterPartSlot::EarLeft | CharacterPartSlot::EarRight => PreviewAssetTarget {
+				target: UiAssetTarget::Ear(config.ear),
+				color: config.colors.ears,
+			},
+			CharacterPartSlot::Hair => PreviewAssetTarget {
+				target: UiAssetTarget::Hair(config.hair),
+				color: config.colors.hair,
+			},
+			CharacterPartSlot::Clothing => match config
+				.clothing
+				.iter()
+				.copied()
+				.find(|clothing| clothing.label() == part.asset.label)
+			{
+				Some(clothing) => PreviewAssetTarget {
+					target: UiAssetTarget::Clothing(clothing),
+					color: config.colors.clothing_color(clothing),
+				},
+				None => PreviewAssetTarget {
+					target: UiAssetTarget::Head(config.head),
+					color: config.colors.head,
+				},
+			},
 		}
 	}
 }

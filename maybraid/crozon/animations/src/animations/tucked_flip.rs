@@ -69,10 +69,8 @@ mod tests {
 	#[test]
 	fn backward_tucked_flip_negates_pitch() -> anyhow::Result<()> {
 		let forward = TuckedFlip::<()>::default();
-		let backward = TuckedFlip::<()> {
-			direction: FlipDirection::Backward,
-			..Default::default()
-		};
+		let backward =
+			TuckedFlip::<()> { direction: FlipDirection::Backward, ..Default::default() };
 		assert!((backward.pitch_radians(0.5) + forward.pitch_radians(0.5)).abs() < 1e-4);
 		Ok(())
 	}

@@ -78,8 +78,7 @@ impl<R: HumanoidRig> Animation<R> for TwoFootedJump<R> {
 					);
 				}
 				if transition_progress < 1.0 {
-					let from_pose =
-						capture_animation_pose(&Fall::<R>::default(), rig, 1.0);
+					let from_pose = capture_animation_pose(&Fall::<R>::default(), rig, 1.0);
 					Transition::from_pose(land, from_pose)
 						.with_curve(TransitionCurve::SmoothStep)
 						.apply(rig, land_progress, transition_progress);

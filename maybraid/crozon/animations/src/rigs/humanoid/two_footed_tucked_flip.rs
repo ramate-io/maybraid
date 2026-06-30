@@ -3,8 +3,8 @@ use crozon_rigs::humanoid::HumanoidRig;
 use log::info;
 
 use crate::animations::{
-	FixedPosition, JumpSegment, Spring, Squat, Transition, TransitionCurve, Tuck, TwoFootedTuckedFlip,
-	FALL_BLEND_FRACTION,
+	FixedPosition, JumpSegment, Spring, Squat, Transition, TransitionCurve, Tuck,
+	TwoFootedTuckedFlip, FALL_BLEND_FRACTION,
 };
 use crate::rigs::transition::capture_animation_pose;
 use crate::{Animation, Effects};
@@ -67,9 +67,7 @@ impl<R: HumanoidRig> Animation<R> for TwoFootedTuckedFlip<R> {
 				if segment_debug_enabled() && local < timings.land_descent_duration + 0.05 {
 					info!(
 						"tucked flip land start: elapsed={:.3} land_local={:.4} transition={:.4}",
-						elapsed,
-						local,
-						transition_progress,
+						elapsed, local, transition_progress,
 					);
 				}
 				if transition_progress < 1.0 {
@@ -86,12 +84,10 @@ impl<R: HumanoidRig> Animation<R> for TwoFootedTuckedFlip<R> {
 		let y = self.vertical_offset(lengths, elapsed);
 		let pitch = self.flip_pitch_radians(lengths, elapsed);
 		Effects {
-			r#move: (y.abs() > f32::EPSILON || pitch.abs() > f32::EPSILON).then(|| {
-				Transform {
-					translation: Vec3::new(0.0, y, 0.0),
-					rotation: Quat::from_rotation_x(pitch),
-					..Default::default()
-				}
+			r#move: (y.abs() > f32::EPSILON || pitch.abs() > f32::EPSILON).then(|| Transform {
+				translation: Vec3::new(0.0, y, 0.0),
+				rotation: Quat::from_rotation_x(pitch),
+				..Default::default()
 			}),
 		}
 	}

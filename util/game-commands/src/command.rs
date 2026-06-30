@@ -9,9 +9,7 @@ use bevy::input::ButtonState;
 use bevy::prelude::*;
 use clap::Parser;
 
-use crate::ui::{
-	GameCommandDrawerConfig, GameCommandUiConfig, GameCommandUiPlugin,
-};
+use crate::ui::{GameCommandDrawerConfig, GameCommandUiConfig, GameCommandUiPlugin};
 
 pub const COMMAND_HISTORY_MAX: usize = 1024;
 
@@ -309,8 +307,8 @@ impl<T: GameCommand> Plugin for GameCommandPlugin<T> {
 			self.ui_config.clone(),
 			self.drawer_config.clone(),
 		))
-			.add_systems(Startup, run_pending_startup_command::<T>)
-			.add_systems(Update, (toggle_text_entry_focus, capture_command_line_input::<T>));
+		.add_systems(Startup, run_pending_startup_command::<T>)
+		.add_systems(Update, (toggle_text_entry_focus, capture_command_line_input::<T>));
 	}
 }
 

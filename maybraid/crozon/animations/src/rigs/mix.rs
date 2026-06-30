@@ -2,7 +2,7 @@ use bevy::prelude::*;
 use crozon_rigs::{humanoid::HumanoidRig, BonePose, RigPose};
 
 use crate::animations::{Mix, Smooth};
-use crate::{Effects, Animation};
+use crate::{Animation, Effects};
 
 impl<A, B, R> Animation<R> for Mix<A, B, R>
 where
@@ -21,12 +21,7 @@ where
 	B: Animation<R>,
 	R: HumanoidRig,
 {
-	pub fn apply_at(
-		&self,
-		rig: &mut R,
-		from_progress: f32,
-		to_progress: f32,
-	) -> Effects {
+	pub fn apply_at(&self, rig: &mut R, from_progress: f32, to_progress: f32) -> Effects {
 		blend_animations(rig, &self.from, &self.to, from_progress, to_progress, self.weight)
 	}
 }
@@ -48,12 +43,7 @@ where
 	B: Animation<R>,
 	R: HumanoidRig,
 {
-	pub fn apply_at(
-		&self,
-		rig: &mut R,
-		from_progress: f32,
-		to_progress: f32,
-	) -> Effects {
+	pub fn apply_at(&self, rig: &mut R, from_progress: f32, to_progress: f32) -> Effects {
 		blend_animations(
 			rig,
 			&self.from,
@@ -144,15 +134,9 @@ fn blend_bone(from: &BonePose, to: &BonePose, weight: f32) -> BonePose {
 pub(crate) fn mix_effects(from: Effects, to: Effects, weight: f32) -> Effects {
 	match (from.r#move, to.r#move) {
 		(None, None) => Effects::default(),
-		(Some(m), None) => Effects {
-			r#move: Some(scale_transform(m, 1.0 - weight)),
-		},
-		(None, Some(m)) => Effects {
-			r#move: Some(scale_transform(m, weight)),
-		},
-		(Some(a), Some(b)) => Effects {
-			r#move: Some(lerp_transform(a, b, weight)),
-		},
+		(Some(m), None) => Effects { r#move: Some(scale_transform(m, 1.0 - weight)) },
+		(None, Some(m)) => Effects { r#move: Some(scale_transform(m, weight)) },
+		(Some(a), Some(b)) => Effects { r#move: Some(lerp_transform(a, b, weight)) },
 	}
 }
 
@@ -165,11 +149,7 @@ fn lerp_transform(a: Transform, b: Transform, t: f32) -> Transform {
 }
 
 fn scale_transform(t: Transform, scale: f32) -> Transform {
-	Transform {
-		translation: t.translation * scale,
-		rotation: t.rotation,
-		scale: t.scale,
-	}
+	Transform { translation: t.translation * scale, rotation: t.rotation, scale: t.scale }
 }
 
 pub(crate) fn pose_from_animation<A: Animation<R>, R: HumanoidRig>(

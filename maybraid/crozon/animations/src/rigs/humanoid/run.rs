@@ -42,7 +42,13 @@ impl<R: HumanoidRig> Animation<R> for UprightRun<R> {
 	}
 }
 
-fn apply_leg<R: HumanoidRig>(rig: &mut R, side: Side, phase: f32, lift_sign: f32, run: &UprightRun<R>) {
+fn apply_leg<R: HumanoidRig>(
+	rig: &mut R,
+	side: Side,
+	phase: f32,
+	lift_sign: f32,
+	run: &UprightRun<R>,
+) {
 	let mut leg = rig.leg_pose(side);
 	let phase = if side == Side::Left { phase } else { phase + 0.5 };
 	let swing = thigh_swing(phase);
@@ -129,7 +135,10 @@ mod tests {
 					continue;
 				};
 				let upright_pose = from_upright.pose().get(&bone).expect("upright pose");
-				assert_eq!(run_pose.swing, upright_pose.swing, "swing mismatch on {bone} at {phase}");
+				assert_eq!(
+					run_pose.swing, upright_pose.swing,
+					"swing mismatch on {bone} at {phase}"
+				);
 				assert_eq!(run_pose.flex, upright_pose.flex, "flex mismatch on {bone} at {phase}");
 			}
 		}

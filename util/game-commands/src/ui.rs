@@ -366,7 +366,11 @@ pub fn scroll_console_viewport_keyboard(
 }
 
 fn drawer_visibility(visible: GameCommandDrawerVisible) -> Visibility {
-	if visible.0 { Visibility::Visible } else { Visibility::Hidden }
+	if visible.0 {
+		Visibility::Visible
+	} else {
+		Visibility::Hidden
+	}
 }
 
 fn toggle_binding_pressed(

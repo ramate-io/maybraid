@@ -78,10 +78,7 @@ mod tests {
 
 		let drop = squat.vertical_drop(0.5, rig.segment_lengths());
 		assert!(drop > 0.0);
-		assert_eq!(
-			effects.r#move,
-			Some(Transform::from_translation(Vec3::new(0.0, -drop, 0.0)))
-		);
+		assert_eq!(effects.r#move, Some(Transform::from_translation(Vec3::new(0.0, -drop, 0.0))));
 
 		let femur = rig.pose().get(&rig.leg(Side::Left).femur.name).expect("left femur");
 		assert_eq!(femur.transform.translation, Vec3::new(0.0, 0.25, 0.0));
