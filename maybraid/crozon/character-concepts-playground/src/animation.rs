@@ -9,8 +9,8 @@ use clap::ValueEnum;
 use crozon_rigs::{rigs::humanoid_v0::HumanoidV0Rig, BonePose, Name as RigName};
 use malo_animations::{
 	animations::{
-		Run, Tuck, TuckedFlip, TwoFootedJump, Walk, DEFAULT_GRAVITY, DEFAULT_LANDING_SQUAT_SPEED,
-		DEFAULT_PRE_SQUAT_SPEED,
+		Run, Tuck, TuckedFlip, TwoFootedJump, TwoFootedTuckedFlip, Walk, DEFAULT_GRAVITY,
+		DEFAULT_LANDING_SQUAT_SPEED, DEFAULT_PRE_SQUAT_SPEED,
 	},
 	Animation, Effects,
 };
@@ -34,6 +34,7 @@ pub enum ConceptAnimation {
 	Jump,
 	Tuck,
 	TuckedFlip,
+	TwoFootedTuckedFlip,
 }
 
 impl ConceptAnimation {
@@ -45,6 +46,7 @@ impl ConceptAnimation {
 			Self::Jump => "jump",
 			Self::Tuck => "tuck",
 			Self::TuckedFlip => "tucked-flip",
+			Self::TwoFootedTuckedFlip => "two-footed-tucked-flip",
 		}
 	}
 }
@@ -135,6 +137,15 @@ pub fn animate_body_rig(
 			let progress = (t * FRONT_FLIP_CYCLE_SPEED).rem_euclid(1.0);
 			TuckedFlip::<HumanoidV0Rig>::default().apply(rig.as_mut(), progress)
 		}
+		ConceptAnimation::TwoFootedTuckedFlip => TwoFootedTuckedFlip::<HumanoidV0Rig>::default()
+			.with_jump(
+				TwoFootedJump::<HumanoidV0Rig>::default()
+					.with_gravity(DEFAULT_GRAVITY)
+					.with_jump_height(JUMP_HEIGHT)
+					.with_pre_squat_speed(JUMP_PRE_SQUAT_SPEED)
+					.with_landing_squat_speed(JUMP_LANDING_SQUAT_SPEED),
+			)
+			.apply(rig.as_mut(), t),
 	};
 	apply_effects(effects, &mut armature);
 	marshal_pose_to_limbs(&rig, &mut limbs);
