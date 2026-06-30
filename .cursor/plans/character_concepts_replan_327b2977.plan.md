@@ -10,7 +10,7 @@ todos:
     status: completed
   - id: complete-braidman
     content: Fill out the complete Braidman asset, preset, and slider model while keeping resolver code simple and explicit.
-    status: pending
+    status: completed
   - id: first-ui-cut
     content: Implement first UI controls for sliders, single selects, and multi-selects without camera suggestions.
     status: pending

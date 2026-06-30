@@ -54,6 +54,7 @@ const CLOTHING_ROBE_COAT: AssetPath = AssetPath::new("characters/clothes/robe_co
 const CLOTHING_SHORT_SLEEVED_ROBE_COAT: AssetPath =
 	AssetPath::new("characters/clothes/short_sleeved_robe_coat.glb");
 const CLOTHING_TAILORED_COAT: AssetPath = AssetPath::new("characters/clothes/tailored_coat.glb");
+const CLOTHING_HOOD: AssetPath = AssetPath::new("characters/clothes/hood.glb");
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, ValueEnum)]
 pub enum BodyMesh {
@@ -265,6 +266,7 @@ pub enum ClothingMesh {
 	RobeCoat,
 	ShortSleevedRobeCoat,
 	TailoredCoat,
+	Hood,
 }
 
 impl ClothingMesh {
@@ -279,6 +281,7 @@ impl ClothingMesh {
 			Self::RobeCoat => "robe-coat",
 			Self::ShortSleevedRobeCoat => "short-sleeved-robe-coat",
 			Self::TailoredCoat => "tailored-coat",
+			Self::Hood => "hood",
 		}
 	}
 
@@ -293,6 +296,7 @@ impl ClothingMesh {
 			Self::RobeCoat => CLOTHING_ROBE_COAT,
 			Self::ShortSleevedRobeCoat => CLOTHING_SHORT_SLEEVED_ROBE_COAT,
 			Self::TailoredCoat => CLOTHING_TAILORED_COAT,
+			Self::Hood => CLOTHING_HOOD,
 		}
 	}
 }
