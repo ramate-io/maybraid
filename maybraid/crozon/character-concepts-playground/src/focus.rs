@@ -37,7 +37,7 @@ pub fn animate_focused_preview_asset(
 			Some(base) => base.0,
 			None => {
 				let scale = transform.scale;
-				commands.entity(entity).insert(PreviewFocusBaseScale(scale));
+				commands.entity(entity).try_insert(PreviewFocusBaseScale(scale));
 				scale
 			}
 		};

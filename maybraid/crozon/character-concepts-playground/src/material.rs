@@ -101,7 +101,7 @@ fn apply_color_to_tree(
 				continue;
 			}
 			material.0 = handle.clone();
-			commands.entity(mesh).insert(AppliedPreviewColor(color));
+			commands.entity(mesh).try_insert(AppliedPreviewColor(color));
 		}
 		if let Ok(children) = children_q.get(entity) {
 			for child in children.iter() {

@@ -74,6 +74,23 @@ pub struct ConceptPreviewSyncState {
 	key: String,
 }
 
+/// Skips preview mutation systems for one frame after a full respawn so queued
+/// despawn commands are not racing inserts on the outgoing entities.
+#[derive(Resource, Default)]
+pub struct PreviewRespawnCooldown {
+	pub frames_remaining: u8,
+}
+
+pub fn tick_preview_respawn_cooldown(mut cooldown: ResMut<PreviewRespawnCooldown>) {
+	if cooldown.frames_remaining > 0 {
+		cooldown.frames_remaining -= 1;
+	}
+}
+
+pub fn preview_pass_ready(cooldown: Res<PreviewRespawnCooldown>) -> bool {
+	cooldown.frames_remaining == 0
+}
+
 #[derive(Component)]
 pub struct ConceptPreviewRoot;
 
@@ -88,6 +105,7 @@ pub fn sync_preview(
 	asset_server: Res<AssetServer>,
 	config: Res<ConceptPreviewConfig>,
 	mut sync_state: ResMut<ConceptPreviewSyncState>,
+	mut respawn_cooldown: ResMut<PreviewRespawnCooldown>,
 	roots: Query<Entity, With<ConceptPreviewRoot>>,
 ) {
 	let key = config.sync_key();
@@ -95,10 +113,11 @@ pub fn sync_preview(
 		return;
 	}
 	sync_state.key.clone_from(&key);
+	respawn_cooldown.frames_remaining = 1;
 
 	// Full respawn on any config change; fine for command-driven preview scale.
 	for entity in &roots {
-		commands.entity(entity).despawn();
+		commands.entity(entity).try_despawn();
 	}
 
 	let assembly = config.resolve();

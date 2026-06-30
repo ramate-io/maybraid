@@ -124,8 +124,8 @@ pub fn attach_parts_to_sockets(
 		// Authored asset scale is preserved; socket offset is applied first.
 		transform.scale *= normalization_scale;
 
-		commands.entity(entity).insert(ChildOf(*bone_entity));
-		commands.entity(entity).remove::<NeedsSocketPlacement>();
+		commands.entity(entity).try_insert(ChildOf(*bone_entity));
+		commands.entity(entity).try_remove::<NeedsSocketPlacement>();
 	}
 }
 
@@ -190,7 +190,7 @@ pub fn remap_part_skin_to_rig(
 		}
 
 		if !any_skinned {
-			commands.entity(part_root).remove::<NeedsSkinRemap>();
+			commands.entity(part_root).try_remove::<NeedsSkinRemap>();
 			continue;
 		}
 
@@ -205,19 +205,19 @@ pub fn remap_part_skin_to_rig(
 			);
 			commands
 				.entity(part_root)
-				.insert(NoMatchingArmature { missing_joints: missing });
+				.try_insert(NoMatchingArmature { missing_joints: missing });
 		} else {
 			for entity in &remapped_meshes {
 				// Clean clothing path: the mesh keeps its inverse bind poses, but
 				// points at the live character rig joints by name.
-				commands.entity(*entity).insert(ChildOf(part_root));
+				commands.entity(*entity).try_insert(ChildOf(part_root));
 			}
 			commands
 				.entity(part_root)
-				.insert(NeedsDuplicateScenePrune { keep: remapped_meshes });
+				.try_insert(NeedsDuplicateScenePrune { keep: remapped_meshes });
 		}
 
-		commands.entity(part_root).remove::<NeedsSkinRemap>();
+		commands.entity(part_root).try_remove::<NeedsSkinRemap>();
 	}
 }
 
@@ -233,11 +233,11 @@ pub fn prune_duplicate_part_scenes(
 					// Whole-scene loading brings along the clothing file's duplicate
 					// armature. Once remapped meshes are direct children of the part
 					// root, the remaining scene hierarchy is no longer needed.
-					commands.entity(child).despawn();
+					commands.entity(child).try_despawn();
 				}
 			}
 		}
-		commands.entity(part_root).remove::<NeedsDuplicateScenePrune>();
+		commands.entity(part_root).try_remove::<NeedsDuplicateScenePrune>();
 	}
 }
 

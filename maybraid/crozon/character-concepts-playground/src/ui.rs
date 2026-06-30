@@ -364,7 +364,7 @@ pub fn sync_creator_ui(
 	sync_state.config_key = key;
 	sync_state.layout_revision = ui_state.layout_revision;
 	for root in &roots {
-		commands.entity(root).despawn();
+		commands.entity(root).try_despawn();
 	}
 	spawn_creator_ui(
 		&mut commands,

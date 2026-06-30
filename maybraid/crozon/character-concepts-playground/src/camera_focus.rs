@@ -3,7 +3,11 @@ use camera_controls::look::CameraLookEnabled;
 use crozon_character_playground::CameraController;
 use crozon_characters::SocketRig;
 
-use crate::skinning::{BoneMap, CharacterRig, CharacterRigRole};
+use crate::{
+	preview::ConceptPreviewConfig,
+	skinning::{BoneMap, CharacterRig, CharacterRigRole},
+	ui::{CreatorUiState, UiAssetTarget},
+};
 
 /// Camera framing relative to a named rig socket bone.
 ///
@@ -39,6 +43,23 @@ pub struct PendingCameraFocus {
 
 const SNAP_DISTANCE: f32 = 0.04;
 const SNAP_ANGLE: f32 = 0.03;
+
+/// Queue the default body framing once when the playground starts (look locked).
+pub fn queue_default_camera_focus(
+	mut pending: ResMut<PendingCameraFocus>,
+	config: Res<ConceptPreviewConfig>,
+	mut ui_state: ResMut<CreatorUiState>,
+	mut queued: Local<bool>,
+) {
+	if *queued {
+		return;
+	}
+	*queued = true;
+	let ConceptPreviewConfig::Braidman { config: braidman, .. } = config.as_ref();
+	let target = UiAssetTarget::Body(braidman.body);
+	ui_state.last_selected = Some(target);
+	pending.focus = Some(target.camera_focus());
+}
 
 pub fn apply_camera_suggestion(
 	time: Res<Time>,

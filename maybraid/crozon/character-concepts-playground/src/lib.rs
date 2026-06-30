@@ -24,11 +24,14 @@ use crozon_character_playground::{camera, checkerboard_material};
 use game_commands::command::{capture_command_line_input, GameCommandPlugin};
 
 use animation::{animate_body_rig, init_limb_animators};
-use camera_focus::{apply_camera_suggestion, PendingCameraFocus};
+use camera_focus::{apply_camera_suggestion, queue_default_camera_focus, PendingCameraFocus};
 use focus::animate_focused_preview_asset;
 use material::apply_preview_colors;
 use material::PreviewColorMaterials;
-use preview::{sync_preview, ConceptPreviewConfig, ConceptPreviewSyncState};
+use preview::{
+	preview_pass_ready, sync_preview, tick_preview_respawn_cooldown, ConceptPreviewConfig,
+	ConceptPreviewSyncState, PreviewRespawnCooldown,
+};
 use skinning::{
 	attach_parts_to_sockets, build_rig_bone_map, dump_bones_to_console, maintain_resolved_pose,
 	prune_duplicate_part_scenes, remap_part_skin_to_rig, DumpBonesRequest,
@@ -40,6 +43,7 @@ impl Plugin for CrozonCharacterConceptsPlaygroundPlugin {
 	fn build(&self, app: &mut App) {
 		app.init_resource::<ConceptPreviewConfig>()
 			.init_resource::<ConceptPreviewSyncState>()
+			.init_resource::<PreviewRespawnCooldown>()
 			.init_resource::<DumpBonesRequest>()
 			.init_resource::<PendingCameraFocus>()
 			.init_resource::<PreviewColorMaterials>()
@@ -65,6 +69,8 @@ impl Plugin for CrozonCharacterConceptsPlaygroundPlugin {
 			.add_systems(
 				Update,
 				(
+					tick_preview_respawn_cooldown,
+					queue_default_camera_focus,
 					ui::sync_creator_ui,
 					camera::camera_controller,
 					ui::react_creator_ui.after(ui::sync_creator_ui),
@@ -72,19 +78,29 @@ impl Plugin for CrozonCharacterConceptsPlaygroundPlugin {
 					sync_preview
 						.after(capture_command_line_input::<ConceptsCommand>)
 						.after(ui::react_creator_ui),
-					animate_focused_preview_asset
-						.after(ui::react_creator_ui)
-						.before(sync_preview),
-					build_rig_bone_map.after(sync_preview),
-					attach_parts_to_sockets.after(build_rig_bone_map),
-					remap_part_skin_to_rig.after(attach_parts_to_sockets),
-					prune_duplicate_part_scenes.after(remap_part_skin_to_rig),
-					apply_preview_colors.after(prune_duplicate_part_scenes),
-					init_limb_animators.after(build_rig_bone_map),
-					animate_body_rig.after(init_limb_animators),
-					apply_camera_suggestion
-						.after(ui::react_creator_ui)
-						.after(build_rig_bone_map),
+					animate_focused_preview_asset.after(ui::react_creator_ui).before(sync_preview),
+					build_rig_bone_map
+						.after(sync_preview)
+						.run_if(preview_pass_ready),
+					attach_parts_to_sockets
+						.after(build_rig_bone_map)
+						.run_if(preview_pass_ready),
+					remap_part_skin_to_rig
+						.after(attach_parts_to_sockets)
+						.run_if(preview_pass_ready),
+					prune_duplicate_part_scenes
+						.after(remap_part_skin_to_rig)
+						.run_if(preview_pass_ready),
+					apply_preview_colors
+						.after(prune_duplicate_part_scenes)
+						.run_if(preview_pass_ready),
+					init_limb_animators
+						.after(build_rig_bone_map)
+						.run_if(preview_pass_ready),
+					animate_body_rig
+						.after(init_limb_animators)
+						.run_if(preview_pass_ready),
+					apply_camera_suggestion.after(ui::react_creator_ui).after(build_rig_bone_map),
 					dump_bones_to_console,
 					thumbnail::sync_thumbnail_camera_activity.after(ui::sync_creator_ui),
 					ui::sync_command_status_text.before(game_commands::ui::update_debug_ui),
