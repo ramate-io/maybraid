@@ -65,21 +65,27 @@ impl Plugin for CrozonCharacterConceptsPlaygroundPlugin {
 			.add_systems(
 				Update,
 				(
+					ui::sync_creator_ui,
 					camera::camera_controller,
-					ui::react_creator_ui,
+					ui::react_creator_ui.after(ui::sync_creator_ui),
 					ui::send_creator_ui_scroll_events,
-					apply_camera_suggestion.after(ui::react_creator_ui),
-					sync_preview.after(capture_command_line_input::<ConceptsCommand>),
-					build_rig_bone_map,
+					sync_preview
+						.after(capture_command_line_input::<ConceptsCommand>)
+						.after(ui::react_creator_ui),
+					animate_focused_preview_asset
+						.after(ui::react_creator_ui)
+						.before(sync_preview),
+					build_rig_bone_map.after(sync_preview),
 					attach_parts_to_sockets.after(build_rig_bone_map),
 					remap_part_skin_to_rig.after(attach_parts_to_sockets),
 					prune_duplicate_part_scenes.after(remap_part_skin_to_rig),
 					apply_preview_colors.after(prune_duplicate_part_scenes),
-					animate_focused_preview_asset.after(attach_parts_to_sockets),
 					init_limb_animators.after(build_rig_bone_map),
 					animate_body_rig.after(init_limb_animators),
+					apply_camera_suggestion
+						.after(ui::react_creator_ui)
+						.after(build_rig_bone_map),
 					dump_bones_to_console,
-					ui::sync_creator_ui.after(ui::react_creator_ui),
 					thumbnail::sync_thumbnail_camera_activity.after(ui::sync_creator_ui),
 					ui::sync_command_status_text.before(game_commands::ui::update_debug_ui),
 				),

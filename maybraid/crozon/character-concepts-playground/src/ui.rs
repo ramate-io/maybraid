@@ -4,6 +4,7 @@ use bevy::input::mouse::{MouseScrollUnit, MouseWheel};
 use bevy::picking::hover::HoverMap;
 use bevy::prelude::*;
 use bevy::render::render_resource::{TextureDimension, TextureFormat, TextureUsages};
+use crozon_characters::SocketRig;
 use crozon_characters::{
 	presets::{BuildPreset, GenderPreset},
 	species::braidman::{
@@ -17,7 +18,7 @@ use game_commands::ui::{GameCommandDrawerConfig, GameCommandStatusText, GameComm
 
 use crate::{
 	animation::ConceptAnimation,
-	camera_focus::{CameraSuggestion, PendingCameraFocus},
+	camera_focus::{CameraFocus, PendingCameraFocus},
 	preview::ConceptPreviewConfig,
 	thumbnail::{self, ThumbnailCache},
 };
@@ -143,14 +144,52 @@ impl UiAssetTarget {
 		}
 	}
 
-	pub const fn camera_suggestion(self) -> CameraSuggestion {
+	pub const fn camera_focus(self) -> CameraFocus {
 		match self {
-			Self::Body(_) | Self::Animation(_) => CameraSuggestion::FullBody,
-			Self::Clothing(_) => CameraSuggestion::Torso,
-			Self::Head(_) | Self::Hair(_) => CameraSuggestion::Head,
-			Self::Eye(_) => CameraSuggestion::Eyes,
-			Self::Nose(_) | Self::Mouth(_) => CameraSuggestion::Face,
-			Self::Ear(_) => CameraSuggestion::Ears,
+			// Root pivot sits at the ground; aim at upper torso for full-body framing.
+			Self::Body(_) | Self::Animation(_) | Self::Clothing(_) => CameraFocus::new(
+				SocketRig::Body,
+				"root",
+				Vec3::new(0.0, 1.0, 3.3),
+				Vec3::new(0.0, -0.5, 0.0),
+			),
+			// Head rig root is anchored at the neck base; bias look-at toward face height.
+			Self::Head(_) => CameraFocus::new(
+				SocketRig::Head,
+				"root",
+				Vec3::new(0.0, 0.0, 1.55),
+				Vec3::new(0.0, 0.12, 0.0),
+			),
+			Self::Hair(_) => CameraFocus::new(
+				SocketRig::Head,
+				"crown_socket",
+				Vec3::new(0.0, 0.15, 1.4),
+				Vec3::ZERO,
+			),
+			Self::Eye(_) => CameraFocus::new(
+				SocketRig::Head,
+				"eye_socket.L",
+				Vec3::new(0.0, 0.0, 0.35),
+				Vec3::ZERO,
+			),
+			Self::Nose(_) => CameraFocus::new(
+				SocketRig::Head,
+				"nose_socket",
+				Vec3::new(0.0, 0.0, 0.25),
+				Vec3::ZERO,
+			),
+			Self::Mouth(_) => CameraFocus::new(
+				SocketRig::Head,
+				"mouth_socket",
+				Vec3::new(0.0, 0.0, 0.25),
+				Vec3::ZERO,
+			),
+			Self::Ear(_) => CameraFocus::new(
+				SocketRig::Head,
+				"ear_socket.L",
+				Vec3::new(0.55, 0.0, 0.3),
+				Vec3::ZERO,
+			),
 		}
 	}
 }
@@ -355,7 +394,7 @@ pub fn react_creator_ui(
 		}
 		if let Some(target) = action.focus_target() {
 			ui_state.last_selected = Some(target);
-			pending_camera.suggestion = Some(target.camera_suggestion());
+			pending_camera.focus = Some(target.camera_focus());
 		}
 		let ConceptPreviewConfig::Braidman { config: braidman, animation } = config.as_mut();
 		match *action {

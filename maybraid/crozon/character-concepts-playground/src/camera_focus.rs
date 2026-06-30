@@ -1,22 +1,40 @@
 use bevy::prelude::*;
 use camera_controls::look::CameraLookEnabled;
 use crozon_character_playground::CameraController;
+use crozon_characters::SocketRig;
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub enum CameraSuggestion {
-	#[default]
-	FullBody,
-	Torso,
-	Head,
-	Eyes,
-	Face,
-	Ears,
+use crate::skinning::{BoneMap, CharacterRig, CharacterRigRole};
+
+/// Camera framing relative to a named rig socket bone.
+///
+/// `camera_offset` and `look_at_offset` are distances in **world meters** along the
+/// socket bone's local axes (rotation only). They intentionally ignore bind-pose and
+/// proportion **scale** on the bone chain — rig bones often carry non-uniform stretch
+/// scale (especially on X/Z vs Y), which would otherwise force huge local numbers for
+/// a modest camera pullback.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct CameraFocus {
+	pub rig: SocketRig,
+	pub socket: &'static str,
+	pub camera_offset: Vec3,
+	pub look_at_offset: Vec3,
+}
+
+impl CameraFocus {
+	pub const fn new(
+		rig: SocketRig,
+		socket: &'static str,
+		camera_offset: Vec3,
+		look_at_offset: Vec3,
+	) -> Self {
+		Self { rig, socket, camera_offset, look_at_offset }
+	}
 }
 
 /// One-shot camera move queued when the user selects an asset in the creator UI.
 #[derive(Resource, Default)]
 pub struct PendingCameraFocus {
-	pub suggestion: Option<CameraSuggestion>,
+	pub focus: Option<CameraFocus>,
 }
 
 const SNAP_DISTANCE: f32 = 0.04;
@@ -26,19 +44,23 @@ pub fn apply_camera_suggestion(
 	time: Res<Time>,
 	look_enabled: Option<Res<CameraLookEnabled>>,
 	mut pending: ResMut<PendingCameraFocus>,
+	rigs: Query<(&BoneMap, &CharacterRig)>,
+	transforms: Query<&GlobalTransform>,
 	mut cameras: Query<(&mut Transform, &mut CameraController), With<Camera3d>>,
 ) {
 	if look_enabled.is_none_or(|enabled| enabled.0) {
-		pending.suggestion = None;
+		pending.focus = None;
 		return;
 	}
-	let Some(suggestion) = pending.suggestion else {
+	let Some(focus) = pending.focus else {
+		return;
+	};
+	let Some(target) = resolve_focus_transform(focus, &rigs, &transforms) else {
 		return;
 	};
 	let Ok((mut transform, mut controller)) = cameras.single_mut() else {
 		return;
 	};
-	let target = suggested_transform(suggestion);
 	let t = (time.delta_secs() * 6.0).clamp(0.0, 1.0);
 	transform.translation = transform.translation.lerp(target.translation, t);
 	transform.rotation = transform.rotation.slerp(target.rotation, t);
@@ -47,7 +69,7 @@ pub fn apply_camera_suggestion(
 		&& transform.rotation.angle_between(target.rotation) < SNAP_ANGLE;
 	if settled {
 		*transform = target;
-		pending.suggestion = None;
+		pending.focus = None;
 	} else {
 		let (yaw, pitch) = yaw_pitch_from_rotation(transform.rotation);
 		controller.yaw = yaw;
@@ -55,16 +77,31 @@ pub fn apply_camera_suggestion(
 	}
 }
 
-fn suggested_transform(suggestion: CameraSuggestion) -> Transform {
-	let (camera_pos, look_at) = match suggestion {
-		CameraSuggestion::FullBody => (Vec3::new(0.0, 1.45, 3.3), Vec3::new(0.0, 1.0, 0.0)),
-		CameraSuggestion::Torso => (Vec3::new(0.0, 1.25, 2.15), Vec3::new(0.0, 1.05, 0.0)),
-		CameraSuggestion::Head => (Vec3::new(0.0, 1.72, 1.55), Vec3::new(0.0, 1.55, 0.0)),
-		CameraSuggestion::Eyes => (Vec3::new(0.0, 1.72, 1.15), Vec3::new(0.0, 1.62, 0.0)),
-		CameraSuggestion::Face => (Vec3::new(0.0, 1.60, 1.20), Vec3::new(0.0, 1.50, 0.0)),
-		CameraSuggestion::Ears => (Vec3::new(0.95, 1.62, 1.25), Vec3::new(0.0, 1.54, 0.0)),
+fn resolve_focus_transform(
+	focus: CameraFocus,
+	rigs: &Query<(&BoneMap, &CharacterRig)>,
+	transforms: &Query<&GlobalTransform>,
+) -> Option<Transform> {
+	let role = match focus.rig {
+		SocketRig::Body => CharacterRigRole::Body,
+		SocketRig::Head => CharacterRigRole::Head,
 	};
-	Transform::from_translation(camera_pos).looking_at(look_at, Vec3::Y)
+	for (bone_map, rig) in rigs {
+		if rig.role != role {
+			continue;
+		}
+		let bone_entity = bone_map.by_name.get(focus.socket)?;
+		let socket = transforms.get(*bone_entity).ok()?;
+		let camera_pos = socket_oriented_point(socket, focus.camera_offset);
+		let look_at = socket_oriented_point(socket, focus.look_at_offset);
+		return Some(Transform::from_translation(camera_pos).looking_at(look_at, Vec3::Y));
+	}
+	None
+}
+
+/// Map a meter offset along the socket's local axes into world space (no bone scale).
+fn socket_oriented_point(socket: &GlobalTransform, local_offset: Vec3) -> Vec3 {
+	socket.translation() + socket.rotation() * local_offset
 }
 
 fn yaw_pitch_from_rotation(rotation: Quat) -> (f32, f32) {
