@@ -240,7 +240,7 @@ impl BraidmanAssets {
 	fn eye_left(eye: EyeMesh) -> ResolvedCharacterPart {
 		ResolvedCharacterPart::new(
 			CharacterPartSlot::EyeLeft,
-			CharacterAsset::new(eye.label(), eye.path(), AssetNormalization::centroid(1.0)),
+			CharacterAsset::new(eye.label(), eye.path(), AssetNormalization::centroid(0.16)),
 			SkinTarget::HeadRig,
 			Some(Self::head_socket("eye.L", Transform::IDENTITY)),
 		)
@@ -249,7 +249,7 @@ impl BraidmanAssets {
 	fn eye_right(eye: EyeMesh) -> ResolvedCharacterPart {
 		ResolvedCharacterPart::new(
 			CharacterPartSlot::EyeRight,
-			CharacterAsset::new(eye.label(), eye.path(), AssetNormalization::centroid(0.04)),
+			CharacterAsset::new(eye.label(), eye.path(), AssetNormalization::centroid(0.16)),
 			SkinTarget::HeadRig,
 			Some(Self::head_socket("eye.R", Self::mirror_x())),
 		)
@@ -267,7 +267,7 @@ impl BraidmanAssets {
 	fn mouth(mouth: MouthMesh) -> ResolvedCharacterPart {
 		ResolvedCharacterPart::new(
 			CharacterPartSlot::Mouth,
-			CharacterAsset::new(mouth.label(), mouth.path(), AssetNormalization::centroid(0.25)),
+			CharacterAsset::new(mouth.label(), mouth.path(), AssetNormalization::centroid(0.00)),
 			SkinTarget::HeadRig,
 			Some(Self::head_socket("mouth", Transform::IDENTITY)),
 		)

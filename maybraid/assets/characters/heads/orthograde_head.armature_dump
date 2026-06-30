@@ -13,11 +13,11 @@ root
       midcheek.R
       midcheek.L
     cheek.R
-    eye_width.R
-      eye.R
+      eye_height.R
+        eye.R
     cheek.L
-    eye_width.L
-      eye.L
+      eye_height.L
+        eye.L
   temple.R
   forehead
     crown
