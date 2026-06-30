@@ -36,11 +36,15 @@ impl Plugin for CrozonCharacterConceptsPlaygroundPlugin {
 			.add_plugins(
 				bevy::pbr::MaterialPlugin::<checkerboard_material::CheckerboardMaterial>::default(),
 			)
-			.add_systems(Startup, (camera::setup_camera, setup_lighting, ground::setup_ground))
+			.add_systems(
+				Startup,
+				(camera::setup_camera, setup_lighting, ground::setup_ground, ui::setup_creator_ui),
+			)
 			.add_systems(
 				Update,
 				(
 					camera::camera_controller,
+					ui::react_creator_ui,
 					sync_preview.after(capture_command_line_input::<ConceptsCommand>),
 					build_rig_bone_map,
 					attach_parts_to_sockets.after(build_rig_bone_map),
@@ -49,6 +53,7 @@ impl Plugin for CrozonCharacterConceptsPlaygroundPlugin {
 					init_limb_animators.after(build_rig_bone_map),
 					animate_body_rig.after(init_limb_animators),
 					dump_bones_to_console,
+					ui::sync_creator_ui.after(ui::react_creator_ui),
 					ui::sync_command_status_text.before(game_commands::ui::update_debug_ui),
 				),
 			)

@@ -13,7 +13,7 @@ todos:
     status: completed
   - id: first-ui-cut
     content: Implement first UI controls for sliders, single selects, and multi-selects without camera suggestions.
-    status: pending
+    status: completed
   - id: camera-previews
     content: Add camera suggestions and small object renderings after the core UI and model are stable.
     status: pending
