@@ -118,7 +118,10 @@ impl HumanoidV0Rig {
 	}
 
 	fn local_rotation(&self, bone: &Name) -> Quat {
-		self.pose.get(bone).map(|pose| pose.transform.rotation).unwrap_or(Quat::IDENTITY)
+		self.pose
+			.get(bone)
+			.map(|pose| pose.transform.rotation)
+			.unwrap_or(Quat::IDENTITY)
 	}
 
 	fn world_rotation_for(&self, bone: &Name) -> Quat {
@@ -247,10 +250,8 @@ mod tests {
 	#[test]
 	fn humanoid_v0_move_all_lowers_root_without_shortening_segments() {
 		let mut rig = HumanoidV0Rig::imported();
-		rig.pose.insert(BonePose::new(
-			Name::from("root"),
-			Transform::from_translation(Vec3::ZERO),
-		));
+		rig.pose
+			.insert(BonePose::new(Name::from("root"), Transform::from_translation(Vec3::ZERO)));
 		rig.pose.insert(BonePose::new(
 			Name::from("femur.L"),
 			Transform::from_translation(Vec3::new(0.0, 0.25, 0.0)),

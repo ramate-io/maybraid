@@ -65,9 +65,8 @@ mod tests {
 		let rest = Quat::from_rotation_x(0.1);
 		let axis = RiggedAxis { swing_axis: Vec3::X, flex_axis: Vec3::Z, twist_axis: Vec3::Y };
 		let composed = compose_local_rotation(rest, axis, 0.3, 0.4, 0.0);
-		let expected = Quat::from_axis_angle(Vec3::X, 0.3)
-			* Quat::from_axis_angle(Vec3::Z, 0.4)
-			* rest;
+		let expected =
+			Quat::from_axis_angle(Vec3::X, 0.3) * Quat::from_axis_angle(Vec3::Z, 0.4) * rest;
 		assert!((composed.dot(expected).abs() - 1.0).abs() < 1e-5);
 	}
 
@@ -93,7 +92,8 @@ mod tests {
 	fn axis_aware_delta_preserves_segment_length_on_y_bone() {
 		let segment = Vec3::new(0.0, 0.25, 0.0);
 		let drop = Vec3::new(0.0, -0.15, 0.0);
-		let delta = axis_aware_translation_delta(segment, RiggedAxis::DEFAULT, drop, Quat::IDENTITY);
+		let delta =
+			axis_aware_translation_delta(segment, RiggedAxis::DEFAULT, drop, Quat::IDENTITY);
 		assert_eq!(delta, Vec3::ZERO);
 	}
 
@@ -109,8 +109,7 @@ mod tests {
 	fn axis_aware_delta_converts_world_y_through_parent_rotation() {
 		let parent = Quat::from_euler(EulerRot::XYZ, -FRAC_PI_2, 0.0, -FRAC_PI_2);
 		let drop = Vec3::new(0.0, -0.15, 0.0);
-		let delta =
-			axis_aware_translation_delta(Vec3::ZERO, RiggedAxis::DEFAULT, drop, parent);
+		let delta = axis_aware_translation_delta(Vec3::ZERO, RiggedAxis::DEFAULT, drop, parent);
 		assert!(delta.length() > 0.0);
 		assert!((delta.y).abs() < 0.01, "pelvis-local drop should not stay on parent Y");
 	}

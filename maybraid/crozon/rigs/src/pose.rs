@@ -1,9 +1,9 @@
-//! Rig-pose effect data for character proportions.
+//! Layered bind-pose composition for rig proportions.
 //!
-//! The first concepts playground pass keeps pose data intentionally small. Each
-//! layer describes scale multipliers that should compose with the loaded bind
-//! pose. A preview system can apply these to live Bevy bone transforms after the
-//! rig's bone map is available.
+//! These types describe proportional effects as ordered scale multipliers on top
+//! of a captured bind pose. They complement [`super::RigPose`], which stores
+//! absolute per-bone transforms for animation and slider insertion; use this
+//! module when effects should compose as `bind * layer1 * layer2 * …`.
 
 use bevy::prelude::*;
 

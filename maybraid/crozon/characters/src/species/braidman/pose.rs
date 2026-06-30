@@ -5,10 +5,10 @@
 //! that the preview applies to the loaded rest pose.
 
 use crate::{
-	pose::{BoneScale, ResolvedRigPose, RigPoseLayer},
 	presets::{BuildPreset, GenderPreset},
 	species::braidman::{sliders::BraidmanSliders, BraidmanConfig},
 };
+use crozon_rigs::{BoneScale, ResolvedRigPose, RigPoseLayer};
 
 /// Resolved proportional intent for Braidman's humanoid rig.
 #[derive(Debug, Clone, Copy, PartialEq)]

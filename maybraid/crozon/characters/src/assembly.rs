@@ -6,10 +6,8 @@
 
 use bevy::prelude::*;
 
-use crate::{
-	assets::{AssetNormalization, AssetPath},
-	pose::ResolvedRigPose,
-};
+use crate::assets::{AssetNormalization, AssetPath};
+use crozon_rigs::ResolvedRigPose;
 
 /// A rig scene used as an animation or skinning target.
 #[derive(Debug, Clone, PartialEq)]

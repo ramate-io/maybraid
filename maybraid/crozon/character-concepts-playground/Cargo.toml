@@ -14,6 +14,7 @@ bevy = { workspace = true }
 clap = { workspace = true }
 crozon-character-playground = { workspace = true }
 crozon-characters = { workspace = true }
+crozon-rigs = { workspace = true }
 game-commands = { workspace = true }
 
 [lints]

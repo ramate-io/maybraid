@@ -7,7 +7,6 @@
 
 pub mod assembly;
 pub mod assets;
-pub mod pose;
 pub mod presets;
 pub mod species;
 
@@ -16,5 +15,5 @@ pub use assembly::{
 	SkinTarget, SocketAttachment, SocketRig,
 };
 pub use assets::{AssetFacing, AssetNormalization, AssetPath, AuthoredAnchor};
-pub use pose::{BoneScale, ResolvedRigPose, RigPoseLayer};
+pub use crozon_rigs::{BoneScale, ResolvedRigPose, RigPoseLayer};
 pub use presets::{BuildPreset, GenderPreset};

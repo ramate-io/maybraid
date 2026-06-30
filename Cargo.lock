@@ -2394,6 +2394,7 @@ dependencies = [
  "clap",
  "crozon-character-playground",
  "crozon-characters",
+ "crozon-rigs",
  "game-commands",
 ]
 

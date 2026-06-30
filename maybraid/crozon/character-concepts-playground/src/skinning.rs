@@ -3,7 +3,8 @@
 use std::collections::{HashMap, HashSet};
 
 use bevy::{mesh::skinning::SkinnedMesh, prelude::*};
-use crozon_characters::{CharacterPartSlot, ResolvedRigPose};
+use crozon_characters::CharacterPartSlot;
+use crozon_rigs::ResolvedRigPose;
 
 #[derive(Component, Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CharacterRigRole {
