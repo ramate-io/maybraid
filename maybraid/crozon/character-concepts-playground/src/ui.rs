@@ -14,7 +14,7 @@ use game_commands::ui::{GameCommandDrawerConfig, GameCommandStatusText, GameComm
 
 use crate::{
 	animation::ConceptAnimation,
-	camera_focus::CameraSuggestion,
+	camera_focus::{CameraSuggestion, PendingCameraFocus},
 	preview::ConceptPreviewConfig,
 	thumbnail::{self, ThumbnailCache},
 };
@@ -326,6 +326,7 @@ pub fn react_creator_ui(
 	mut interactions: Query<(&Interaction, &CreatorUiAction), (Changed<Interaction>, With<Button>)>,
 	mut config: ResMut<ConceptPreviewConfig>,
 	mut ui_state: ResMut<CreatorUiState>,
+	mut pending_camera: ResMut<PendingCameraFocus>,
 ) {
 	for (interaction, action) in &mut interactions {
 		if *interaction == Interaction::Hovered {
@@ -339,6 +340,7 @@ pub fn react_creator_ui(
 		}
 		if let Some(target) = action.focus_target() {
 			ui_state.last_selected = Some(target);
+			pending_camera.suggestion = Some(target.camera_suggestion());
 		}
 		let ConceptPreviewConfig::Braidman { config: braidman, animation } = config.as_mut();
 		match *action {
@@ -415,13 +417,15 @@ fn spawn_creator_ui(
 				top: Val::Px(10.0),
 				right: Val::Px(10.0),
 				width: Val::Px(PANEL_WIDTH),
-				max_height: Val::Percent(82.0),
+				height: Val::Percent(82.0),
 				padding: UiRect::all(Val::Px(8.0)),
 				flex_direction: FlexDirection::Column,
 				row_gap: Val::Px(5.0),
 				overflow: Overflow::scroll_y(),
 				..default()
 			},
+			ScrollPosition::default(),
+			Pickable::default(),
 			BackgroundColor(Color::srgba(0.05, 0.06, 0.08, 0.84)),
 			CreatorUiRoot,
 		))

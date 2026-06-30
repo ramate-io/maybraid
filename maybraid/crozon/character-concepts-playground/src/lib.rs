@@ -24,7 +24,8 @@ use crozon_character_playground::{camera, checkerboard_material};
 use game_commands::command::{capture_command_line_input, GameCommandPlugin};
 
 use animation::{animate_body_rig, init_limb_animators};
-use camera_focus::{apply_camera_suggestion, sync_camera_suggestion, RequestedCameraSuggestion};
+use camera_focus::{apply_camera_suggestion, PendingCameraFocus};
+use material::PreviewColorMaterials;
 use focus::animate_focused_preview_asset;
 use material::apply_preview_colors;
 use preview::{sync_preview, ConceptPreviewConfig, ConceptPreviewSyncState};
@@ -40,7 +41,8 @@ impl Plugin for CrozonCharacterConceptsPlaygroundPlugin {
 		app.init_resource::<ConceptPreviewConfig>()
 			.init_resource::<ConceptPreviewSyncState>()
 			.init_resource::<DumpBonesRequest>()
-			.init_resource::<RequestedCameraSuggestion>()
+			.init_resource::<PendingCameraFocus>()
+			.init_resource::<PreviewColorMaterials>()
 			.init_resource::<thumbnail::ThumbnailCache>()
 			.init_resource::<ui::CreatorUiState>()
 			.init_resource::<ui::CreatorUiSyncState>()
@@ -64,8 +66,7 @@ impl Plugin for CrozonCharacterConceptsPlaygroundPlugin {
 				(
 					camera::camera_controller,
 					ui::react_creator_ui,
-					sync_camera_suggestion.after(ui::react_creator_ui),
-					apply_camera_suggestion.after(sync_camera_suggestion),
+					apply_camera_suggestion.after(ui::react_creator_ui),
 					sync_preview.after(capture_command_line_input::<ConceptsCommand>),
 					build_rig_bone_map,
 					attach_parts_to_sockets.after(build_rig_bone_map),

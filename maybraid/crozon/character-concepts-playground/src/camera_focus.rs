@@ -2,8 +2,6 @@ use bevy::prelude::*;
 use camera_controls::look::CameraLookEnabled;
 use crozon_character_playground::CameraController;
 
-use crate::ui::{CreatorUiState, UiAssetTarget};
-
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum CameraSuggestion {
 	#[default]
@@ -15,45 +13,46 @@ pub enum CameraSuggestion {
 	Ears,
 }
 
+/// One-shot camera move queued when the user selects an asset in the creator UI.
 #[derive(Resource, Default)]
-pub struct RequestedCameraSuggestion {
-	pub target: Option<UiAssetTarget>,
-	pub suggestion: CameraSuggestion,
+pub struct PendingCameraFocus {
+	pub suggestion: Option<CameraSuggestion>,
 }
 
-pub fn sync_camera_suggestion(
-	ui_state: Res<CreatorUiState>,
-	mut request: ResMut<RequestedCameraSuggestion>,
-) {
-	let Some(target) = ui_state.focused_target() else {
-		return;
-	};
-	if request.target == Some(target) {
-		return;
-	}
-	request.target = Some(target);
-	request.suggestion = target.camera_suggestion();
-}
+const SNAP_DISTANCE: f32 = 0.04;
+const SNAP_ANGLE: f32 = 0.03;
 
 pub fn apply_camera_suggestion(
 	time: Res<Time>,
 	look_enabled: Option<Res<CameraLookEnabled>>,
-	request: Res<RequestedCameraSuggestion>,
+	mut pending: ResMut<PendingCameraFocus>,
 	mut cameras: Query<(&mut Transform, &mut CameraController), With<Camera3d>>,
 ) {
 	if look_enabled.is_none_or(|enabled| enabled.0) {
+		pending.suggestion = None;
 		return;
 	}
+	let Some(suggestion) = pending.suggestion else {
+		return;
+	};
 	let Ok((mut transform, mut controller)) = cameras.single_mut() else {
 		return;
 	};
-	let target = suggested_transform(request.suggestion);
+	let target = suggested_transform(suggestion);
 	let t = (time.delta_secs() * 6.0).clamp(0.0, 1.0);
 	transform.translation = transform.translation.lerp(target.translation, t);
 	transform.rotation = transform.rotation.slerp(target.rotation, t);
-	let (yaw, pitch) = yaw_pitch_from_rotation(transform.rotation);
-	controller.yaw = yaw;
-	controller.pitch = pitch;
+
+	let settled = transform.translation.distance(target.translation) < SNAP_DISTANCE
+		&& transform.rotation.angle_between(target.rotation) < SNAP_ANGLE;
+	if settled {
+		*transform = target;
+		pending.suggestion = None;
+	} else {
+		let (yaw, pitch) = yaw_pitch_from_rotation(transform.rotation);
+		controller.yaw = yaw;
+		controller.pitch = pitch;
+	}
 }
 
 fn suggested_transform(suggestion: CameraSuggestion) -> Transform {
