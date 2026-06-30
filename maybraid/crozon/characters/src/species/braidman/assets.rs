@@ -136,7 +136,7 @@ impl NoseMesh {
 	const fn normalization(self) -> AssetNormalization {
 		match self {
 			Self::Balloon => AssetNormalization::centroid(0.08),
-			Self::Standard | Self::Broad | Self::Loaf => AssetNormalization::centroid(0.05),
+			Self::Standard | Self::Broad | Self::Loaf => AssetNormalization::centroid(0.12),
 		}
 	}
 }
@@ -242,7 +242,11 @@ impl BraidmanAssets {
 			CharacterPartSlot::EyeLeft,
 			CharacterAsset::new(eye.label(), eye.path(), AssetNormalization::centroid(0.16)),
 			SkinTarget::HeadRig,
-			Some(Self::head_socket("eye.L", Transform::IDENTITY)),
+			Some(Self::head_socket(
+				"eye.L",
+				// Rotate 90 degrees around the Y axis.
+				Transform::from_rotation(Quat::from_rotation_y(-std::f32::consts::PI / 2.0)),
+			)),
 		)
 	}
 
@@ -251,7 +255,12 @@ impl BraidmanAssets {
 			CharacterPartSlot::EyeRight,
 			CharacterAsset::new(eye.label(), eye.path(), AssetNormalization::centroid(0.16)),
 			SkinTarget::HeadRig,
-			Some(Self::head_socket("eye.R", Self::mirror_x())),
+			Some(Self::head_socket(
+				"eye.R",
+				// For some reason this is socketed back s.t. the eyes are sideways.
+				// Rotate 90 degrees around the Y axis.
+				Transform::from_rotation(Quat::from_rotation_y(std::f32::consts::PI / 2.0)),
+			)),
 		)
 	}
 
@@ -260,14 +269,18 @@ impl BraidmanAssets {
 			CharacterPartSlot::Nose,
 			CharacterAsset::new(nose.label(), nose.path(), nose.normalization()),
 			SkinTarget::HeadRig,
-			Some(Self::head_socket("nose", Transform::IDENTITY)),
+			Some(Self::head_socket(
+				"nose",
+				// flip vertically
+				Transform::from_scale(Vec3::new(1.0, -1.0, -1.0)),
+			)),
 		)
 	}
 
 	fn mouth(mouth: MouthMesh) -> ResolvedCharacterPart {
 		ResolvedCharacterPart::new(
 			CharacterPartSlot::Mouth,
-			CharacterAsset::new(mouth.label(), mouth.path(), AssetNormalization::centroid(0.00)),
+			CharacterAsset::new(mouth.label(), mouth.path(), AssetNormalization::centroid(0.12)),
 			SkinTarget::HeadRig,
 			Some(Self::head_socket("mouth", Transform::IDENTITY)),
 		)
