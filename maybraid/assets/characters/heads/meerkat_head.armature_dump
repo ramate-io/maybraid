@@ -3,26 +3,27 @@
 root
   occiput
   brow
-    nose
-      mouth
-        jaw
-          lower_mandible.R
-          lower_mandible.L
-        mandible.R
-        mandible.L
+    nose_bone
       midcheek.R
       midcheek.L
+      nose_socket
+      mouth_bone
+        chin_bone
+          jaw_bone.L
+          jaw_bone.R
+        mouth_socket
     cheek.R
-    eye_width.R
-      eye.R
+      eye_socket.R
     cheek.L
-    eye_width.L
-      eye.L
+      eye_socket.L
   temple.R
+    ear_socket.R
   forehead
     crown
       calvaria.R
       calvaria.L
+      crown_socket
     parietal.R
     parietal.L
   temple.L
+    ear_socket.L

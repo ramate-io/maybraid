@@ -31,6 +31,11 @@ pub struct PartRigRef {
 pub struct NeedsSkinRemap;
 
 #[derive(Component)]
+pub struct NeedsDuplicateScenePrune {
+	pub keep: Vec<Entity>,
+}
+
+#[derive(Component)]
 pub struct NeedsSocketPlacement {
 	pub rig_root: Entity,
 	pub socket_bone: &'static str,
@@ -147,6 +152,7 @@ pub fn remap_part_skin_to_rig(
 		let mut any_skinned = false;
 		let mut all_meshes_ok = true;
 		let mut missing_joints = HashSet::new();
+		let mut remapped_meshes = Vec::new();
 
 		while let Some(entity) = stack.pop() {
 			if let Ok(mut skin) = skinned_meshes.get_mut(entity) {
@@ -172,6 +178,7 @@ pub fn remap_part_skin_to_rig(
 
 				if mesh_ok && new_joints.len() == skin.joints.len() {
 					skin.joints = new_joints;
+					remapped_meshes.push(entity);
 				} else {
 					all_meshes_ok = false;
 				}
@@ -199,9 +206,38 @@ pub fn remap_part_skin_to_rig(
 			commands
 				.entity(part_root)
 				.insert(NoMatchingArmature { missing_joints: missing });
+		} else {
+			for entity in &remapped_meshes {
+				// Clean clothing path: the mesh keeps its inverse bind poses, but
+				// points at the live character rig joints by name.
+				commands.entity(*entity).insert(ChildOf(part_root));
+			}
+			commands
+				.entity(part_root)
+				.insert(NeedsDuplicateScenePrune { keep: remapped_meshes });
 		}
 
 		commands.entity(part_root).remove::<NeedsSkinRemap>();
+	}
+}
+
+pub fn prune_duplicate_part_scenes(
+	mut commands: Commands,
+	part_roots: Query<(Entity, Option<&Children>, &NeedsDuplicateScenePrune), With<CharacterPart>>,
+) {
+	for (part_root, children, prune) in &part_roots {
+		let keep: HashSet<_> = prune.keep.iter().copied().collect();
+		if let Some(children) = children {
+			for child in children.iter() {
+				if !keep.contains(&child) {
+					// Whole-scene loading brings along the clothing file's duplicate
+					// armature. Once remapped meshes are direct children of the part
+					// root, the remaining scene hierarchy is no longer needed.
+					commands.entity(child).despawn();
+				}
+			}
+		}
+		commands.entity(part_root).remove::<NeedsDuplicateScenePrune>();
 	}
 }
 

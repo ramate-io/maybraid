@@ -22,7 +22,7 @@ use animation::{animate_body_rig, init_limb_animators};
 use preview::{sync_preview, ConceptPreviewConfig, ConceptPreviewSyncState};
 use skinning::{
 	attach_parts_to_sockets, build_rig_bone_map, dump_bones_to_console, maintain_resolved_pose,
-	remap_part_skin_to_rig, DumpBonesRequest,
+	prune_duplicate_part_scenes, remap_part_skin_to_rig, DumpBonesRequest,
 };
 
 pub struct CrozonCharacterConceptsPlaygroundPlugin;
@@ -45,6 +45,7 @@ impl Plugin for CrozonCharacterConceptsPlaygroundPlugin {
 					build_rig_bone_map,
 					attach_parts_to_sockets.after(build_rig_bone_map),
 					remap_part_skin_to_rig.after(attach_parts_to_sockets),
+					prune_duplicate_part_scenes.after(remap_part_skin_to_rig),
 					init_limb_animators.after(build_rig_bone_map),
 					animate_body_rig.after(init_limb_animators),
 					dump_bones_to_console,
