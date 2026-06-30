@@ -243,7 +243,7 @@ impl BraidmanAssets {
 			CharacterAsset::new(eye.label(), eye.path(), AssetNormalization::centroid(0.16)),
 			SkinTarget::HeadRig,
 			Some(Self::head_socket(
-				"eye.L",
+				"eye_socket.L",
 				// Rotate 90 degrees around the Y axis.
 				Transform::from_rotation(Quat::from_rotation_y(-std::f32::consts::PI / 2.0)),
 			)),
@@ -256,7 +256,7 @@ impl BraidmanAssets {
 			CharacterAsset::new(eye.label(), eye.path(), AssetNormalization::centroid(0.16)),
 			SkinTarget::HeadRig,
 			Some(Self::head_socket(
-				"eye.R",
+				"eye_socket.R",
 				// For some reason this is socketed back s.t. the eyes are sideways.
 				// Rotate 90 degrees around the Y axis.
 				Transform::from_rotation(Quat::from_rotation_y(std::f32::consts::PI / 2.0)),
@@ -269,11 +269,7 @@ impl BraidmanAssets {
 			CharacterPartSlot::Nose,
 			CharacterAsset::new(nose.label(), nose.path(), nose.normalization()),
 			SkinTarget::HeadRig,
-			Some(Self::head_socket(
-				"nose",
-				// flip vertically
-				Transform::from_scale(Vec3::new(1.0, -1.0, -1.0)),
-			)),
+			Some(Self::head_socket("nose_socket", Transform::IDENTITY)),
 		)
 	}
 
@@ -282,7 +278,7 @@ impl BraidmanAssets {
 			CharacterPartSlot::Mouth,
 			CharacterAsset::new(mouth.label(), mouth.path(), AssetNormalization::centroid(0.12)),
 			SkinTarget::HeadRig,
-			Some(Self::head_socket("mouth", Transform::IDENTITY)),
+			Some(Self::head_socket("mouth_socket", Transform::IDENTITY)),
 		)
 	}
 
@@ -292,7 +288,7 @@ impl BraidmanAssets {
 			CharacterAsset::new(ear.label(), ear.path(), AssetNormalization::centroid(0.32)),
 			SkinTarget::HeadRig,
 			Some(Self::head_socket(
-				"temple.L",
+				"ear_socket.L",
 				// Rotate 90 degrees around the and Z Y axis.
 				Transform::from_rotation(
 					Quat::from_rotation_x(-std::f32::consts::PI / 2.0)
@@ -305,9 +301,9 @@ impl BraidmanAssets {
 	fn ear_right(ear: EarMesh) -> ResolvedCharacterPart {
 		ResolvedCharacterPart::new(
 			CharacterPartSlot::EarRight,
-			CharacterAsset::new(ear.label(), ear.path(), AssetNormalization::centroid(0.0)),
+			CharacterAsset::new(ear.label(), ear.path(), AssetNormalization::centroid(0.3)),
 			SkinTarget::HeadRig,
-			Some(Self::head_socket("temple.R", Self::mirror_x())),
+			Some(Self::head_socket("ear_socket.R", Self::mirror_x())),
 		)
 	}
 

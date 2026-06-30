@@ -4,16 +4,14 @@ root
   occiput
   brow
     nose_bone
-      mouth_bone
-        jaw
-          lower_mandible.R
-          lower_mandible.L
-        mandible.R
-        mandible.L
-        mouth_socket
       midcheek.R
       midcheek.L
       nose_socket
+      mouth_bone
+        chin_bone
+          jaw_bone.L
+          jaw_bone.R
+        mouth_socket
     cheek.R
       eye_height.R
         eye_socket.R
