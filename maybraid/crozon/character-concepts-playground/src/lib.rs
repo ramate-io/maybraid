@@ -25,9 +25,9 @@ use game_commands::command::{capture_command_line_input, GameCommandPlugin};
 
 use animation::{animate_body_rig, init_limb_animators};
 use camera_focus::{apply_camera_suggestion, PendingCameraFocus};
-use material::PreviewColorMaterials;
 use focus::animate_focused_preview_asset;
 use material::apply_preview_colors;
+use material::PreviewColorMaterials;
 use preview::{sync_preview, ConceptPreviewConfig, ConceptPreviewSyncState};
 use skinning::{
 	attach_parts_to_sockets, build_rig_bone_map, dump_bones_to_console, maintain_resolved_pose,
@@ -57,6 +57,7 @@ impl Plugin for CrozonCharacterConceptsPlaygroundPlugin {
 			.add_plugins(
 				bevy::pbr::MaterialPlugin::<checkerboard_material::CheckerboardMaterial>::default(),
 			)
+			.add_observer(ui::on_creator_ui_scroll)
 			.add_systems(
 				Startup,
 				(camera::setup_camera, setup_lighting, ground::setup_ground, ui::setup_creator_ui),
@@ -66,6 +67,7 @@ impl Plugin for CrozonCharacterConceptsPlaygroundPlugin {
 				(
 					camera::camera_controller,
 					ui::react_creator_ui,
+					ui::send_creator_ui_scroll_events,
 					apply_camera_suggestion.after(ui::react_creator_ui),
 					sync_preview.after(capture_command_line_input::<ConceptsCommand>),
 					build_rig_bone_map,

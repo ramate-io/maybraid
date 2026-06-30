@@ -1,4 +1,7 @@
 use bevy::asset::RenderAssetUsages;
+use bevy::ecs::event::EntityEvent;
+use bevy::input::mouse::{MouseScrollUnit, MouseWheel};
+use bevy::picking::hover::HoverMap;
 use bevy::prelude::*;
 use bevy::render::render_resource::{TextureDimension, TextureFormat, TextureUsages};
 use crozon_characters::{
@@ -20,9 +23,11 @@ use crate::{
 };
 
 const PANEL_WIDTH: f32 = 360.0;
+const PANEL_HEIGHT_PERCENT: f32 = 82.0;
 const BUTTON_HEIGHT: f32 = 22.0;
 const SLIDER_STEP: f32 = 0.05;
 const THUMBNAIL_SIZE: f32 = 54.0;
+const SCROLL_LINE_PX: f32 = 14.0;
 
 const GENDERS: &[GenderPreset] =
 	&[GenderPreset::Neutral, GenderPreset::Male, GenderPreset::Female, GenderPreset::NonBinary];
@@ -232,6 +237,16 @@ pub struct CreatorUiSyncState {
 #[derive(Component)]
 pub struct CreatorUiRoot;
 
+#[derive(Component)]
+pub struct CreatorUiScrollViewport;
+
+#[derive(EntityEvent, Debug)]
+#[entity_event(propagate, auto_propagate)]
+pub struct CreatorUiScroll {
+	pub entity: Entity,
+	pub delta: Vec2,
+}
+
 #[derive(Component, Clone, Copy)]
 pub enum CreatorUiAction {
 	ToggleSection(UiSection),
@@ -417,139 +432,164 @@ fn spawn_creator_ui(
 				top: Val::Px(10.0),
 				right: Val::Px(10.0),
 				width: Val::Px(PANEL_WIDTH),
-				height: Val::Percent(82.0),
+				height: Val::Percent(PANEL_HEIGHT_PERCENT),
 				padding: UiRect::all(Val::Px(8.0)),
 				flex_direction: FlexDirection::Column,
-				row_gap: Val::Px(5.0),
-				overflow: Overflow::scroll_y(),
+				overflow: Overflow::clip(),
 				..default()
 			},
-			ScrollPosition::default(),
-			Pickable::default(),
 			BackgroundColor(Color::srgba(0.05, 0.06, 0.08, 0.84)),
 			CreatorUiRoot,
 		))
-		.with_children(|panel| {
-			text(panel, "Character Concepts", 15.0, Color::WHITE);
-			text(
-				panel,
-				"Expandable controls, thumbnails, colors, and focus camera.",
-				10.0,
-				muted(),
-			);
-			section(panel, UiSection::Presets, ui_state, |section| {
-				selector(section, "Gender", braidman.gender.label(), CreatorUiAction::Gender);
-				selector(section, "Build", braidman.build.label(), CreatorUiAction::Build);
-			});
-			section(panel, UiSection::Body, ui_state, |section| {
-				asset_grid(
-					section,
-					asset_server,
-					images,
-					thumbnails,
-					BODIES.iter().map(|value| UiAssetTarget::Body(*value)),
-					Uis::new(ui_state, braidman, *animation),
-				);
-				slider(
-					section,
-					"Shoulders",
-					braidman.sliders.shoulder_width,
-					CreatorUiAction::ShoulderWidth,
-				);
-				slider(section, "Hips", braidman.sliders.hip_width, CreatorUiAction::HipWidth);
-				slider(
-					section,
-					"Chest",
-					braidman.sliders.chest_thickness,
-					CreatorUiAction::ChestThickness,
-				);
-				color_swatches(section, UiColorTarget::Body, braidman.colors.body);
-			});
-			section(panel, UiSection::HeadFeatures, ui_state, |section| {
-				asset_grid(
-					section,
-					asset_server,
-					images,
-					thumbnails,
-					HEADS.iter().map(|value| UiAssetTarget::Head(*value)),
-					Uis::new(ui_state, braidman, *animation),
-				);
-				asset_grid(
-					section,
-					asset_server,
-					images,
-					thumbnails,
-					EYES.iter().map(|value| UiAssetTarget::Eye(*value)),
-					Uis::new(ui_state, braidman, *animation),
-				);
-				asset_grid(
-					section,
-					asset_server,
-					images,
-					thumbnails,
-					NOSES.iter().map(|value| UiAssetTarget::Nose(*value)),
-					Uis::new(ui_state, braidman, *animation),
-				);
-				asset_grid(
-					section,
-					asset_server,
-					images,
-					thumbnails,
-					MOUTHS.iter().map(|value| UiAssetTarget::Mouth(*value)),
-					Uis::new(ui_state, braidman, *animation),
-				);
-				asset_grid(
-					section,
-					asset_server,
-					images,
-					thumbnails,
-					EARS.iter().map(|value| UiAssetTarget::Ear(*value)),
-					Uis::new(ui_state, braidman, *animation),
-				);
-				color_swatches(section, UiColorTarget::Head, braidman.colors.head);
-				color_swatches(section, UiColorTarget::Eyes, braidman.colors.eyes);
-				color_swatches(section, UiColorTarget::Nose, braidman.colors.nose);
-				color_swatches(section, UiColorTarget::Mouth, braidman.colors.mouth);
-				color_swatches(section, UiColorTarget::Ears, braidman.colors.ears);
-			});
-			section(panel, UiSection::Hair, ui_state, |section| {
-				asset_grid(
-					section,
-					asset_server,
-					images,
-					thumbnails,
-					HAIRS.iter().map(|value| UiAssetTarget::Hair(*value)),
-					Uis::new(ui_state, braidman, *animation),
-				);
-				color_swatches(section, UiColorTarget::Hair, braidman.colors.hair);
-			});
-			section(panel, UiSection::Clothing, ui_state, |section| {
-				asset_grid(
-					section,
-					asset_server,
-					images,
-					thumbnails,
-					CLOTHING.iter().map(|value| UiAssetTarget::Clothing(*value)),
-					Uis::new(ui_state, braidman, *animation),
-				);
-				if let Some(UiAssetTarget::Clothing(clothing)) = ui_state.focused_target() {
-					color_swatches(
-						section,
-						UiColorTarget::Clothing(clothing),
-						braidman.colors.clothing_color(clothing),
+		.with_children(|shell| {
+			shell
+				.spawn((
+					Node {
+						width: Val::Percent(100.0),
+						flex_grow: 1.0,
+						flex_shrink: 1.0,
+						min_height: Val::Px(0.0),
+						flex_direction: FlexDirection::Column,
+						row_gap: Val::Px(5.0),
+						overflow: Overflow::scroll_y(),
+						..default()
+					},
+					ScrollPosition::default(),
+					Pickable::default(),
+					CreatorUiScrollViewport,
+				))
+				.with_children(|panel| {
+					text(panel, "Character Concepts", 15.0, Color::WHITE);
+					text(
+						panel,
+						"Expandable controls, thumbnails, colors, and focus camera.",
+						10.0,
+						muted(),
 					);
-				}
-			});
-			section(panel, UiSection::Animation, ui_state, |section| {
-				asset_grid(
-					section,
-					asset_server,
-					images,
-					thumbnails,
-					ANIMATIONS.iter().map(|value| UiAssetTarget::Animation(*value)),
-					Uis::new(ui_state, braidman, *animation),
-				);
-			});
+					section(panel, UiSection::Presets, ui_state, |section| {
+						selector(
+							section,
+							"Gender",
+							braidman.gender.label(),
+							CreatorUiAction::Gender,
+						);
+						selector(section, "Build", braidman.build.label(), CreatorUiAction::Build);
+					});
+					section(panel, UiSection::Body, ui_state, |section| {
+						asset_grid(
+							section,
+							asset_server,
+							images,
+							thumbnails,
+							BODIES.iter().map(|value| UiAssetTarget::Body(*value)),
+							Uis::new(ui_state, braidman, *animation),
+						);
+						slider(
+							section,
+							"Shoulders",
+							braidman.sliders.shoulder_width,
+							CreatorUiAction::ShoulderWidth,
+						);
+						slider(
+							section,
+							"Hips",
+							braidman.sliders.hip_width,
+							CreatorUiAction::HipWidth,
+						);
+						slider(
+							section,
+							"Chest",
+							braidman.sliders.chest_thickness,
+							CreatorUiAction::ChestThickness,
+						);
+						color_swatches(section, UiColorTarget::Body, braidman.colors.body);
+					});
+					section(panel, UiSection::HeadFeatures, ui_state, |section| {
+						asset_grid(
+							section,
+							asset_server,
+							images,
+							thumbnails,
+							HEADS.iter().map(|value| UiAssetTarget::Head(*value)),
+							Uis::new(ui_state, braidman, *animation),
+						);
+						asset_grid(
+							section,
+							asset_server,
+							images,
+							thumbnails,
+							EYES.iter().map(|value| UiAssetTarget::Eye(*value)),
+							Uis::new(ui_state, braidman, *animation),
+						);
+						asset_grid(
+							section,
+							asset_server,
+							images,
+							thumbnails,
+							NOSES.iter().map(|value| UiAssetTarget::Nose(*value)),
+							Uis::new(ui_state, braidman, *animation),
+						);
+						asset_grid(
+							section,
+							asset_server,
+							images,
+							thumbnails,
+							MOUTHS.iter().map(|value| UiAssetTarget::Mouth(*value)),
+							Uis::new(ui_state, braidman, *animation),
+						);
+						asset_grid(
+							section,
+							asset_server,
+							images,
+							thumbnails,
+							EARS.iter().map(|value| UiAssetTarget::Ear(*value)),
+							Uis::new(ui_state, braidman, *animation),
+						);
+						color_swatches(section, UiColorTarget::Head, braidman.colors.head);
+						color_swatches(section, UiColorTarget::Eyes, braidman.colors.eyes);
+						color_swatches(section, UiColorTarget::Nose, braidman.colors.nose);
+						color_swatches(section, UiColorTarget::Mouth, braidman.colors.mouth);
+						color_swatches(section, UiColorTarget::Ears, braidman.colors.ears);
+					});
+					section(panel, UiSection::Hair, ui_state, |section| {
+						asset_grid(
+							section,
+							asset_server,
+							images,
+							thumbnails,
+							HAIRS.iter().map(|value| UiAssetTarget::Hair(*value)),
+							Uis::new(ui_state, braidman, *animation),
+						);
+						color_swatches(section, UiColorTarget::Hair, braidman.colors.hair);
+					});
+					section(panel, UiSection::Clothing, ui_state, |section| {
+						asset_grid(
+							section,
+							asset_server,
+							images,
+							thumbnails,
+							CLOTHING.iter().map(|value| UiAssetTarget::Clothing(*value)),
+							Uis::new(ui_state, braidman, *animation),
+						);
+						if let Some(UiAssetTarget::Clothing(clothing)) = ui_state.focused_target() {
+							color_swatches(
+								section,
+								UiColorTarget::Clothing(clothing),
+								braidman.colors.clothing_color(clothing),
+							);
+						}
+					});
+					section(panel, UiSection::Animation, ui_state, |section| {
+						asset_grid(
+							section,
+							asset_server,
+							images,
+							thumbnails,
+							ANIMATIONS.iter().map(|value| UiAssetTarget::Animation(*value)),
+							Uis::new(ui_state, braidman, *animation),
+						);
+					});
+				});
 		});
 }
 
@@ -880,6 +920,58 @@ fn color_target_label(target: UiColorTarget) -> &'static str {
 		UiColorTarget::Ears => "Ear color",
 		UiColorTarget::Hair => "Hair color",
 		UiColorTarget::Clothing(_) => "Clothing color",
+	}
+}
+
+pub fn send_creator_ui_scroll_events(
+	mut mouse_wheel_reader: MessageReader<MouseWheel>,
+	hover_map: Res<HoverMap>,
+	mut commands: Commands,
+) {
+	for mouse_wheel in mouse_wheel_reader.read() {
+		let mut delta = -Vec2::new(mouse_wheel.x, mouse_wheel.y);
+		if mouse_wheel.unit == MouseScrollUnit::Line {
+			delta *= SCROLL_LINE_PX;
+		}
+		for pointer_map in hover_map.values() {
+			for entity in pointer_map.keys().copied() {
+				commands.trigger(CreatorUiScroll { entity, delta });
+			}
+		}
+	}
+}
+
+pub fn on_creator_ui_scroll(
+	mut scroll: On<CreatorUiScroll>,
+	mut query: Query<(&mut ScrollPosition, &Node, &ComputedNode), With<CreatorUiScrollViewport>>,
+) {
+	let Ok((mut scroll_position, node, computed)) = query.get_mut(scroll.entity) else {
+		return;
+	};
+
+	let max_offset = (computed.content_size() - computed.size()) * computed.inverse_scale_factor();
+	let delta = &mut scroll.delta;
+
+	if node.overflow.x == OverflowAxis::Scroll && delta.x != 0. {
+		let max =
+			if delta.x > 0. { scroll_position.x >= max_offset.x } else { scroll_position.x <= 0. };
+		if !max {
+			scroll_position.x += delta.x;
+			delta.x = 0.;
+		}
+	}
+
+	if node.overflow.y == OverflowAxis::Scroll && delta.y != 0. {
+		let max =
+			if delta.y > 0. { scroll_position.y >= max_offset.y } else { scroll_position.y <= 0. };
+		if !max {
+			scroll_position.y += delta.y;
+			delta.y = 0.;
+		}
+	}
+
+	if *delta == Vec2::ZERO {
+		scroll.propagate(false);
 	}
 }
 

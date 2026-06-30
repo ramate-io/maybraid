@@ -3,11 +3,7 @@ use std::collections::HashMap;
 use bevy::prelude::*;
 use crozon_characters::species::braidman::BraidmanColor;
 
-use crate::{
-	preview::PreviewAssetTarget,
-	skinning::CharacterPart,
-	thumbnail::ThumbnailPreview,
-};
+use crate::{preview::PreviewAssetTarget, skinning::CharacterPart, thumbnail::ThumbnailPreview};
 
 #[derive(Component, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct AppliedPreviewColor(BraidmanColor);
