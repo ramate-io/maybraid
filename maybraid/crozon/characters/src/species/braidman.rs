@@ -86,13 +86,14 @@ pub struct BraidmanColors {
 
 impl Default for BraidmanColors {
 	fn default() -> Self {
+		let body = BraidmanColor::Natural;
 		Self {
-			body: BraidmanColor::Natural,
-			head: BraidmanColor::Natural,
+			body,
+			head: body,
 			eyes: BraidmanColor::Blue,
-			nose: BraidmanColor::Natural,
+			nose: body,
 			mouth: BraidmanColor::Warm,
-			ears: BraidmanColor::Natural,
+			ears: body,
 			hair: BraidmanColor::Dark,
 			clothing_default: BraidmanColor::Cool,
 			clothing: Vec::new(),
@@ -101,6 +102,17 @@ impl Default for BraidmanColors {
 }
 
 impl BraidmanColors {
+	pub fn skin_color(&self) -> BraidmanColor {
+		self.body
+	}
+
+	pub fn sync_skin_from_body(&mut self) {
+		let skin = self.body;
+		self.head = skin;
+		self.nose = skin;
+		self.ears = skin;
+	}
+
 	pub fn clothing_color(&self, clothing: ClothingMesh) -> BraidmanColor {
 		self.clothing
 			.iter()

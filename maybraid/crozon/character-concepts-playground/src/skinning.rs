@@ -111,7 +111,7 @@ pub fn attach_parts_to_sockets(
 	mut parts: Query<(Entity, &mut Transform, &NeedsSocketPlacement), With<CharacterPart>>,
 	rig_maps: Query<&BoneMap, With<CharacterRig>>,
 ) {
-	for (entity, mut transform, placement) in &mut parts {
+		for (entity, mut transform, placement) in &mut parts {
 		let Ok(rig_map) = rig_maps.get(placement.rig_root) else {
 			continue;
 		};
@@ -119,10 +119,12 @@ pub fn attach_parts_to_sockets(
 			continue;
 		};
 
-		let normalization_scale = transform.scale;
+		let authored_scale = transform.scale;
+		let authored_rotation = transform.rotation;
 		*transform = placement.local_transform;
-		// Authored asset scale is preserved; socket offset is applied first.
-		transform.scale *= normalization_scale;
+		// Authored asset scale and feature rotation are preserved; socket offset is applied first.
+		transform.scale *= authored_scale;
+		transform.rotation *= authored_rotation;
 
 		commands.entity(entity).try_insert(ChildOf(*bone_entity));
 		commands.entity(entity).try_remove::<NeedsSocketPlacement>();

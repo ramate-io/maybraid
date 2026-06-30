@@ -106,11 +106,8 @@ impl UiAssetTarget {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum UiColorTarget {
 	Body,
-	Head,
 	Eyes,
-	Nose,
 	Mouth,
-	Ears,
 	Hair,
 	Clothing(ClothingMesh),
 }
@@ -291,11 +288,8 @@ pub fn populate_panel(
 			uis,
 		);
 		sliders::spawn_ears(section, braidman);
-		color_swatches(section, UiColorTarget::Head, braidman.colors.head);
 		color_swatches(section, UiColorTarget::Eyes, braidman.colors.eyes);
-		color_swatches(section, UiColorTarget::Nose, braidman.colors.nose);
 		color_swatches(section, UiColorTarget::Mouth, braidman.colors.mouth);
-		color_swatches(section, UiColorTarget::Ears, braidman.colors.ears);
 	});
 	section(panel, UiSection::Hair, ui_state, |section| {
 		asset_grid(
@@ -494,13 +488,12 @@ fn target_path(target: UiAssetTarget) -> Option<&'static str> {
 }
 
 fn target_color(target: UiAssetTarget, braidman: &BraidmanConfig) -> BraidmanColor {
+	let skin = braidman.colors.skin_color();
 	match target {
 		UiAssetTarget::Body(_) => braidman.colors.body,
-		UiAssetTarget::Head(_) => braidman.colors.head,
+		UiAssetTarget::Head(_) | UiAssetTarget::Nose(_) | UiAssetTarget::Ear(_) => skin,
 		UiAssetTarget::Eye(_) => braidman.colors.eyes,
-		UiAssetTarget::Nose(_) => braidman.colors.nose,
 		UiAssetTarget::Mouth(_) => braidman.colors.mouth,
-		UiAssetTarget::Ear(_) => braidman.colors.ears,
 		UiAssetTarget::Hair(_) => braidman.colors.hair,
 		UiAssetTarget::Clothing(value) => braidman.colors.clothing_color(value),
 		UiAssetTarget::Animation(_) => BraidmanColor::Natural,
@@ -509,12 +502,12 @@ fn target_color(target: UiAssetTarget, braidman: &BraidmanConfig) -> BraidmanCol
 
 fn set_color(braidman: &mut BraidmanConfig, target: UiColorTarget, color: BraidmanColor) {
 	match target {
-		UiColorTarget::Body => braidman.colors.body = color,
-		UiColorTarget::Head => braidman.colors.head = color,
+		UiColorTarget::Body => {
+			braidman.colors.body = color;
+			braidman.colors.sync_skin_from_body();
+		}
 		UiColorTarget::Eyes => braidman.colors.eyes = color,
-		UiColorTarget::Nose => braidman.colors.nose = color,
 		UiColorTarget::Mouth => braidman.colors.mouth = color,
-		UiColorTarget::Ears => braidman.colors.ears = color,
 		UiColorTarget::Hair => braidman.colors.hair = color,
 		UiColorTarget::Clothing(clothing) => braidman.colors.set_clothing_color(clothing, color),
 	}
@@ -523,11 +516,8 @@ fn set_color(braidman: &mut BraidmanConfig, target: UiColorTarget, color: Braidm
 pub fn color_target_label(target: UiColorTarget) -> &'static str {
 	match target {
 		UiColorTarget::Body => "Body color",
-		UiColorTarget::Head => "Head color",
 		UiColorTarget::Eyes => "Eye color",
-		UiColorTarget::Nose => "Nose color",
 		UiColorTarget::Mouth => "Mouth color",
-		UiColorTarget::Ears => "Ear color",
 		UiColorTarget::Hair => "Hair color",
 		UiColorTarget::Clothing(_) => "Clothing color",
 	}

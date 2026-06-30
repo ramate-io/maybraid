@@ -75,42 +75,52 @@ pub fn apply_action(sliders: &mut BraidmanSliders, action: CreatorUiAction) -> b
 
 pub fn spawn_body(parent: &mut ChildSpawnerCommands, braidman: &BraidmanConfig) {
 	let sliders = &braidman.sliders;
-	row(parent, "Shoulders", sliders.shoulder_width, CreatorUiAction::ShoulderWidth);
-	row(parent, "Hips", sliders.hip_width, CreatorUiAction::HipWidth);
-	row(parent, "Chest", sliders.chest_thickness, CreatorUiAction::ChestThickness);
-	row(parent, "Hip thick", sliders.hip_thickness, CreatorUiAction::HipThickness);
-	row(parent, "Leg thick", sliders.leg_thickness, CreatorUiAction::LegThickness);
-	row(parent, "Buttocks", sliders.buttocks_thickness, CreatorUiAction::ButtocksThickness);
-	row(parent, "Waist", sliders.waist_thickness, CreatorUiAction::WaistThickness);
-	row(parent, "Trunk", sliders.lower_trunk_thickness, CreatorUiAction::LowerTrunkThickness);
-	row(parent, "Arm len", sliders.arm_length, CreatorUiAction::ArmLength);
-	row(parent, "Arm thick", sliders.arm_thickness, CreatorUiAction::ArmThickness);
-	row(parent, "Leg len", sliders.leg_length, CreatorUiAction::LegLength);
+	row(parent, "Shoulder Width", sliders.shoulder_width, CreatorUiAction::ShoulderWidth);
+	row(parent, "Hip Width", sliders.hip_width, CreatorUiAction::HipWidth);
+	row(parent, "Chest Thickness", sliders.chest_thickness, CreatorUiAction::ChestThickness);
+	row(parent, "Hip Thickness", sliders.hip_thickness, CreatorUiAction::HipThickness);
+	row(parent, "Leg Thickness", sliders.leg_thickness, CreatorUiAction::LegThickness);
+	row(
+		parent,
+		"Buttocks Thickness",
+		sliders.buttocks_thickness,
+		CreatorUiAction::ButtocksThickness,
+	);
+	row(parent, "Waist Thickness", sliders.waist_thickness, CreatorUiAction::WaistThickness);
+	row(
+		parent,
+		"Lower Trunk Thickness",
+		sliders.lower_trunk_thickness,
+		CreatorUiAction::LowerTrunkThickness,
+	);
+	row(parent, "Arm Length", sliders.arm_length, CreatorUiAction::ArmLength);
+	row(parent, "Arm Thickness", sliders.arm_thickness, CreatorUiAction::ArmThickness);
+	row(parent, "Leg Length", sliders.leg_length, CreatorUiAction::LegLength);
 }
 
 pub fn spawn_eyes(parent: &mut ChildSpawnerCommands, braidman: &BraidmanConfig) {
 	let sliders = &braidman.sliders;
-	row(parent, "Eye W", sliders.eye_width, CreatorUiAction::EyeWidth);
-	row(parent, "Eye H", sliders.eye_height, CreatorUiAction::EyeHeight);
-	tilt_row(parent, "Eye tilt", sliders.eye_tilt, CreatorUiAction::EyeTilt);
+	row(parent, "Eye Width", sliders.eye_width, CreatorUiAction::EyeWidth);
+	row(parent, "Eye Height", sliders.eye_height, CreatorUiAction::EyeHeight);
+	tilt_row(parent, "Eye Tilt", sliders.eye_tilt, CreatorUiAction::EyeTilt);
 }
 
 pub fn spawn_nose(parent: &mut ChildSpawnerCommands, braidman: &BraidmanConfig) {
 	let sliders = &braidman.sliders;
-	row(parent, "Nose W", sliders.nose_width, CreatorUiAction::NoseWidth);
-	row(parent, "Nose H", sliders.nose_height, CreatorUiAction::NoseHeight);
+	row(parent, "Nose Width", sliders.nose_width, CreatorUiAction::NoseWidth);
+	row(parent, "Nose Height", sliders.nose_height, CreatorUiAction::NoseHeight);
 }
 
 pub fn spawn_mouth(parent: &mut ChildSpawnerCommands, braidman: &BraidmanConfig) {
 	let sliders = &braidman.sliders;
-	row(parent, "Mouth W", sliders.mouth_width, CreatorUiAction::MouthWidth);
-	row(parent, "Mouth H", sliders.mouth_height, CreatorUiAction::MouthHeight);
+	row(parent, "Mouth Width", sliders.mouth_width, CreatorUiAction::MouthWidth);
+	row(parent, "Mouth Height", sliders.mouth_height, CreatorUiAction::MouthHeight);
 }
 
 pub fn spawn_ears(parent: &mut ChildSpawnerCommands, braidman: &BraidmanConfig) {
 	let sliders = &braidman.sliders;
-	row(parent, "Ear W", sliders.ear_width, CreatorUiAction::EarWidth);
-	row(parent, "Ear H", sliders.ear_height, CreatorUiAction::EarHeight);
+	row(parent, "Ear Width", sliders.ear_width, CreatorUiAction::EarWidth);
+	row(parent, "Ear Height", sliders.ear_height, CreatorUiAction::EarHeight);
 }
 
 fn row(

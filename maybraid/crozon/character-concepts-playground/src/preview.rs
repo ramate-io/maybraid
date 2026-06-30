@@ -282,6 +282,7 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 
 	fn preview_target(&self, part: &ResolvedCharacterPart) -> PreviewAssetTarget {
 		let ConceptPreviewConfig::Braidman { config, .. } = &self.config;
+		let skin = config.colors.skin_color();
 		match part.slot {
 			CharacterPartSlot::BodyMesh => PreviewAssetTarget {
 				target: UiAssetTarget::Body(config.body),
@@ -289,7 +290,7 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 			},
 			CharacterPartSlot::HeadRig | CharacterPartSlot::HeadMesh => PreviewAssetTarget {
 				target: UiAssetTarget::Head(config.head),
-				color: config.colors.head,
+				color: skin,
 			},
 			CharacterPartSlot::EyeLeft | CharacterPartSlot::EyeRight => PreviewAssetTarget {
 				target: UiAssetTarget::Eye(config.eye),
@@ -297,7 +298,7 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 			},
 			CharacterPartSlot::Nose => PreviewAssetTarget {
 				target: UiAssetTarget::Nose(config.nose),
-				color: config.colors.nose,
+				color: skin,
 			},
 			CharacterPartSlot::Mouth => PreviewAssetTarget {
 				target: UiAssetTarget::Mouth(config.mouth),
@@ -305,7 +306,7 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 			},
 			CharacterPartSlot::EarLeft | CharacterPartSlot::EarRight => PreviewAssetTarget {
 				target: UiAssetTarget::Ear(config.ear),
-				color: config.colors.ears,
+				color: skin,
 			},
 			CharacterPartSlot::Hair => PreviewAssetTarget {
 				target: UiAssetTarget::Hair(config.hair),
@@ -323,7 +324,7 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 				},
 				None => PreviewAssetTarget {
 					target: UiAssetTarget::Head(config.head),
-					color: config.colors.head,
+					color: skin,
 				},
 			},
 		}

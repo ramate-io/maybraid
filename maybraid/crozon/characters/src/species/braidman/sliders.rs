@@ -78,7 +78,7 @@ impl BraidmanSliders {
 		self.leg_length = self.leg_length.clamp(0.8, 1.2);
 		self.eye_width = self.eye_width.clamp(0.8, 1.2);
 		self.eye_height = self.eye_height.clamp(0.8, 1.2);
-		self.eye_tilt = self.eye_tilt.clamp(-5.0, 5.0);
+		self.eye_tilt = self.eye_tilt.clamp(-30.0, 30.0);
 		self.nose_width = self.nose_width.clamp(0.8, 1.2);
 		self.nose_height = self.nose_height.clamp(0.8, 1.2);
 		self.mouth_width = self.mouth_width.clamp(0.8, 1.2);
@@ -286,9 +286,15 @@ impl BraidmanSliders {
 	/// Per-feature mesh scale/rotation composed with asset normalization at spawn.
 	pub fn feature_transform(self, slot: CharacterPartSlot) -> Transform {
 		match slot {
-			CharacterPartSlot::EyeLeft | CharacterPartSlot::EyeRight => Transform {
+			CharacterPartSlot::EyeLeft => Transform {
 				scale: Vec3::new(self.eye_width, self.eye_height, 1.0),
 				rotation: Quat::from_rotation_z(self.eye_tilt.to_radians()),
+				..default()
+			},
+			// Right eye sockets mirror X; negate tilt so cant is symmetric in world space.
+			CharacterPartSlot::EyeRight => Transform {
+				scale: Vec3::new(self.eye_width, self.eye_height, 1.0),
+				rotation: Quat::from_rotation_z(-self.eye_tilt.to_radians()),
 				..default()
 			},
 			CharacterPartSlot::Nose => {
