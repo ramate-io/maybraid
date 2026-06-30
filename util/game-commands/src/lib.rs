@@ -2,3 +2,5 @@
 
 pub mod command;
 pub mod ui;
+
+pub use ui::{GameCommandDrawerConfig, GameCommandDrawerVisible};

@@ -15,6 +15,7 @@ pub use game_commands::command::PendingStartupCommand;
 
 use animation::{animate_limbs, init_limb_animators, AnimationArticulationDebug};
 use bevy::prelude::*;
+use camera_controls::look::CameraLookPlugin;
 use character::CharacterConfig;
 use game_commands::command::{capture_command_line_input, GameCommandPlugin};
 use ground::setup_ground;
@@ -31,6 +32,7 @@ impl Plugin for CrozonCharacterPlaygroundPlugin {
 			.init_resource::<character::CharacterSyncState>()
 			.init_resource::<AnimationArticulationDebug>()
 			.init_resource::<DumpBonesRequest>()
+			.add_plugins(CameraLookPlugin::default())
 			.add_plugins(GameCommandPlugin::<PlaygroundCommand>::with_config(ui::ui_config()))
 			.add_plugins(
 				bevy::pbr::MaterialPlugin::<checkerboard_material::CheckerboardMaterial>::default(),

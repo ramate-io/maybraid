@@ -1822,6 +1822,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "camera-controls"
+version = "0.0.1"
+dependencies = [
+ "bevy",
+]
+
+[[package]]
 name = "cc"
 version = "1.2.33"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2391,6 +2398,7 @@ name = "crozon-character-concepts-playground"
 version = "0.0.1"
 dependencies = [
  "bevy",
+ "camera-controls",
  "clap",
  "crozon-character-playground",
  "crozon-characters",
@@ -2404,6 +2412,7 @@ name = "crozon-character-playground"
 version = "0.0.1"
 dependencies = [
  "bevy",
+ "camera-controls",
  "clap",
  "crozon-rigs",
  "game-commands",

@@ -16,6 +16,7 @@ pub use game_commands::command::PendingStartupCommand;
 
 use bevy::prelude::*;
 use crozon_character_playground::{camera, checkerboard_material};
+use camera_controls::look::{CameraLookConfig, CameraLookPlugin};
 use game_commands::command::{capture_command_line_input, GameCommandPlugin};
 
 use animation::{animate_body_rig, init_limb_animators};
@@ -32,7 +33,14 @@ impl Plugin for CrozonCharacterConceptsPlaygroundPlugin {
 		app.init_resource::<ConceptPreviewConfig>()
 			.init_resource::<ConceptPreviewSyncState>()
 			.init_resource::<DumpBonesRequest>()
-			.add_plugins(GameCommandPlugin::<ConceptsCommand>::with_config(ui::ui_config()))
+			.add_plugins(CameraLookPlugin::new(CameraLookConfig {
+				enabled_at_start: false,
+				..CameraLookConfig::default()
+			}))
+			.add_plugins(
+				GameCommandPlugin::<ConceptsCommand>::with_config(ui::ui_config())
+					.with_drawer_config(ui::drawer_config()),
+			)
 			.add_plugins(
 				bevy::pbr::MaterialPlugin::<checkerboard_material::CheckerboardMaterial>::default(),
 			)

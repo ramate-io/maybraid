@@ -8,7 +8,7 @@ use crozon_characters::{
 		BraidmanConfig,
 	},
 };
-use game_commands::ui::{GameCommandStatusText, GameCommandUiConfig};
+use game_commands::ui::{GameCommandDrawerConfig, GameCommandStatusText, GameCommandUiConfig};
 
 use crate::{animation::ConceptAnimation, preview::ConceptPreviewConfig};
 
@@ -90,12 +90,15 @@ pub enum CreatorUiAction {
 
 pub fn ui_config() -> GameCommandUiConfig {
 	GameCommandUiConfig {
-		title: "Crozon character concepts - / cmd - WASD - up/down history - PgUp/PgDn scroll"
-			.into(),
+		title: "Crozon character concepts - / cmd - F1 drawer - L look - WASD".into(),
 		empty_console_text: "Console: (errors & `help` output) - wheel or PgUp/PgDn".into(),
 		root_background: Color::srgba(0.12, 0.14, 0.18, 0.82),
-		controls_hint: "help - Enter - up/down history - PgUp/PgDn - Shift+up/down scroll".into(),
+		controls_hint: "F1 hide drawer - L lock look - help - Enter - up/down history".into(),
 	}
+}
+
+pub fn drawer_config() -> GameCommandDrawerConfig {
+	GameCommandDrawerConfig { open_at_start: false, ..GameCommandDrawerConfig::default() }
 }
 
 pub(crate) fn sync_command_status_text(

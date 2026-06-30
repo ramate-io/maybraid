@@ -59,6 +59,7 @@ members = [
   "util/sdf",
   "util/chunk",
   "util/game-commands",
+  "util/camera-controls",
   "util/render-item",
 
   # demos
@@ -154,6 +155,7 @@ sdf = { path = "util/sdf" }
 render-item = { path = "util/render-item" }
 chunk = { path = "util/chunk" }
 game-commands = { path = "util/game-commands" }
+camera-controls = { path = "util/camera-controls" }
 
 terrain = { path = "procedures/terrain" }
 vegetation-sdf = { path = "procedures/vegetation" }
