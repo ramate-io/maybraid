@@ -23,6 +23,10 @@ impl BoneScale {
 		Self { bone, scale: Vec3::splat(scale) }
 	}
 
+	pub fn length(bone: &'static str, scale: f32) -> Self {
+		Self { bone, scale: Vec3::new(1.0, scale, 1.0) }
+	}
+
 	pub fn lateral(bone: &'static str, scale: f32) -> Self {
 		Self { bone, scale: Vec3::new(scale, 1.0, 1.0) }
 	}

@@ -36,9 +36,25 @@ pub struct NeedsSocketPlacement {
 	pub local_transform: Transform,
 }
 
+/// Resolved proportional layers to maintain on this rig across frames.
+///
+/// GLTF scene loads can reset bone transforms after the first application, so the
+/// preview reapplies pose from a captured bind snapshot every frame.
 #[derive(Component)]
-pub struct NeedsPoseApply {
+pub struct ActiveRigPose {
 	pub pose: ResolvedRigPose,
+}
+
+/// Bind-pose bone scales captured once each named bone appears in the rig map.
+#[derive(Component, Default)]
+pub struct RigBindScales {
+	pub scales: HashMap<String, Vec3>,
+}
+
+fn bone_map_ready(map: &BoneMap) -> bool {
+	["root", "pelvis.L", "chest.L", "waist.L"]
+		.iter()
+		.all(|bone| map.by_name.contains_key(*bone))
 }
 
 /// Part mesh was skinned to a skeleton that does not match the active rig.
@@ -67,9 +83,9 @@ pub fn build_rig_bone_map(
 	names_q: Query<&Name>,
 ) {
 	for (_rig_root, children, mut map) in &mut rig_roots {
-		if !map.by_name.is_empty() {
-			continue;
-		}
+		// Rebuild each frame so bones that appear after the initial GLTF spawn are
+		// included before pose maintenance runs.
+		map.by_name.clear();
 
 		let mut stack: Vec<Entity> = children.iter().collect();
 		while let Some(entity) = stack.pop() {
@@ -185,29 +201,38 @@ pub fn remap_part_skin_to_rig(
 	}
 }
 
-pub fn apply_resolved_pose(
-	mut commands: Commands,
-	rig_roots: Query<(Entity, &BoneMap, &NeedsPoseApply), With<CharacterRig>>,
+pub fn maintain_resolved_pose(
+	mut rig_roots: Query<(&BoneMap, &ActiveRigPose, &mut RigBindScales), With<CharacterRig>>,
 	mut transforms: Query<&mut Transform>,
 ) {
-	for (rig_root, bone_map, request) in &rig_roots {
-		if bone_map.by_name.is_empty() {
+	for (bone_map, active_pose, mut bind_scales) in &mut rig_roots {
+		if !bone_map_ready(bone_map) {
 			continue;
 		}
 
-		for layer in request.pose.layers() {
-			for scale in layer.scales() {
-				let Some(entity) = bone_map.by_name.get(scale.bone) else {
-					warn!("Missing bone `{}` for pose layer `{}`", scale.bone, layer.label);
-					continue;
-				};
-				if let Ok(mut transform) = transforms.get_mut(*entity) {
-					transform.scale *= scale.scale;
-				}
+		for (bone_name, entity) in &bone_map.by_name {
+			if bind_scales.scales.contains_key(bone_name) {
+				continue;
 			}
+			let Ok(transform) = transforms.get(*entity) else {
+				continue;
+			};
+			bind_scales.scales.insert(bone_name.clone(), transform.scale);
 		}
 
-		commands.entity(rig_root).remove::<NeedsPoseApply>();
+		for (bone_name, entity) in &bone_map.by_name {
+			let multiplier = active_pose.pose.scale_for_bone(bone_name);
+			if multiplier == Vec3::ONE {
+				continue;
+			}
+			let Some(bind_scale) = bind_scales.scales.get(bone_name) else {
+				continue;
+			};
+			let Ok(mut transform) = transforms.get_mut(*entity) else {
+				continue;
+			};
+			transform.scale = *bind_scale * multiplier;
+		}
 	}
 }
 

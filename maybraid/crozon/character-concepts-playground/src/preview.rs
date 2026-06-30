@@ -11,8 +11,8 @@ use crozon_characters::{
 };
 
 use crate::skinning::{
-	BoneMap, CharacterPart, CharacterRig, CharacterRigRole, NeedsPoseApply, NeedsSkinRemap,
-	NeedsSocketPlacement, PartRigRef,
+	ActiveRigPose, BoneMap, CharacterPart, CharacterRig, CharacterRigRole, NeedsSkinRemap,
+	NeedsSocketPlacement, PartRigRef, RigBindScales,
 };
 
 #[derive(Resource, Debug, Clone, PartialEq)]
@@ -116,7 +116,8 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 				)),
 				CharacterRig { role: CharacterRigRole::Body },
 				BoneMap::default(),
-				NeedsPoseApply { pose: self.assembly.pose.clone() },
+				ActiveRigPose { pose: self.assembly.pose.clone() },
+				RigBindScales::default(),
 				ConceptPreviewRoot,
 				Transform::IDENTITY,
 				Name::new(format!("{}_body_rig", self.assembly.label)),

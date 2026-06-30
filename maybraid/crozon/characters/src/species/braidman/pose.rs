@@ -33,10 +33,20 @@ impl BraidmanPose {
 
 	fn species_baseline(self) -> RigPoseLayer {
 		RigPoseLayer::new("braidman species baseline")
-			.with_scale(BoneScale::lateral("chest.L", 0.8))
-			.with_scale(BoneScale::lateral("chest.R", 0.8))
-			.with_scale(BoneScale::lateral("waist.L", 1.2))
-			.with_scale(BoneScale::lateral("waist.R", 1.2))
+			.with_scale(BoneScale::uniform("chest.L", 0.8))
+			.with_scale(BoneScale::uniform("chest.R", 0.8))
+			.with_scale(BoneScale::uniform("lat.L", 0.2))
+			.with_scale(BoneScale::uniform("lat.R", 0.2))
+			.with_scale(BoneScale::uniform("waist.L", 1.0))
+			.with_scale(BoneScale::uniform("waist.R", 1.0))
+			.with_scale(BoneScale::length("pelvis.L", 0.8))
+			.with_scale(BoneScale::length("pelvis.R", 0.8))
+			.with_scale(BoneScale::uniform("lumbar", 0.8))
+			.with_scale(BoneScale::uniform("buttocks", 0.8))
+			.with_scale(BoneScale::thickness("humerus.L", 0.8))
+			.with_scale(BoneScale::thickness("humerus.R", 0.8))
+			.with_scale(BoneScale::uniform("thigh_thickness.L", 0.5))
+			.with_scale(BoneScale::uniform("thigh_thickness.R", 0.5))
 	}
 
 	fn gender_layer(self) -> RigPoseLayer {
@@ -46,9 +56,20 @@ impl BraidmanPose {
 				layer = Self::with_shoulder_width(layer, 1.05);
 			}
 			GenderPreset::Female => {
-				layer = Self::with_shoulder_width(layer, 0.95);
-				layer = Self::with_chest_thickness(layer, 1.2);
-				layer = Self::with_hip_width(layer, 1.1);
+				layer = Self::with_shoulder_width(layer, 0.9);
+				layer = Self::with_chest_thickness(layer, 1.5);
+				layer = Self::with_hip_width(layer, 1.2);
+				layer = Self::with_hip_thickness(layer, 1.1);
+				// increase thigh thickness
+				layer = Self::with_thigh_thickness(layer, 1.2);
+				// increase buttocks thickness
+				layer = Self::with_buttocks_thickness(layer, 1.2);
+				// decrease lower trunk thickness
+				layer = Self::with_lower_trunk_thickness(layer, 0.9);
+				// decrease waist thickness
+				layer = Self::with_waist_thickness(layer, 0.7);
+				// arms need to be longer to compensate for shoulders
+				layer = Self::with_arm_length(layer, 1.1);
 			}
 			GenderPreset::NonBinary => {
 				layer = Self::with_shoulder_width(layer, 0.95);
@@ -107,11 +128,46 @@ impl BraidmanPose {
 
 	fn with_hip_width(layer: RigPoseLayer, value: f32) -> RigPoseLayer {
 		layer
-			.with_scale(BoneScale::uniform("pelvis.L", value))
-			.with_scale(BoneScale::uniform("pelvis.R", value))
+			.with_scale(BoneScale::length("pelvis.L", value))
+			.with_scale(BoneScale::length("pelvis.R", value))
+	}
+
+	fn with_hip_thickness(layer: RigPoseLayer, value: f32) -> RigPoseLayer {
+		layer
+			.with_scale(BoneScale::thickness("pelvis.L", value))
+			.with_scale(BoneScale::thickness("pelvis.R", value))
 	}
 
 	fn with_chest_thickness(layer: RigPoseLayer, value: f32) -> RigPoseLayer {
-		layer.with_scale(BoneScale::thickness("chest_thickness", value))
+		// The chest thickness bone is oriented ventrally.
+		layer.with_scale(BoneScale::uniform("chest_thickness", value))
+	}
+
+	fn with_thigh_thickness(layer: RigPoseLayer, value: f32) -> RigPoseLayer {
+		layer
+			.with_scale(BoneScale::uniform("thigh_thickness.L", value))
+			.with_scale(BoneScale::uniform("thigh_thickness.R", value))
+	}
+
+	fn with_buttocks_thickness(layer: RigPoseLayer, value: f32) -> RigPoseLayer {
+		layer.with_scale(BoneScale::uniform("buttocks", value))
+	}
+
+	fn with_waist_thickness(layer: RigPoseLayer, value: f32) -> RigPoseLayer {
+		layer
+			.with_scale(BoneScale::length("waist.L", value))
+			.with_scale(BoneScale::length("waist.R", value))
+	}
+
+	fn with_lower_trunk_thickness(layer: RigPoseLayer, value: f32) -> RigPoseLayer {
+		layer.with_scale(BoneScale::thickness("lumbar", value))
+	}
+
+	fn with_arm_length(layer: RigPoseLayer, value: f32) -> RigPoseLayer {
+		layer
+			.with_scale(BoneScale::length("humerus.L", value))
+			.with_scale(BoneScale::length("humerus.R", value))
+			.with_scale(BoneScale::length("forearm.L", value))
+			.with_scale(BoneScale::length("forearm.R", value))
 	}
 }

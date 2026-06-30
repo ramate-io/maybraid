@@ -19,7 +19,7 @@ use game_commands::command::{capture_command_line_input, GameCommandPlugin};
 
 use preview::{sync_preview, ConceptPreviewConfig, ConceptPreviewSyncState};
 use skinning::{
-	apply_resolved_pose, attach_parts_to_sockets, build_rig_bone_map, dump_bones_to_console,
+	attach_parts_to_sockets, build_rig_bone_map, dump_bones_to_console, maintain_resolved_pose,
 	remap_part_skin_to_rig, DumpBonesRequest,
 };
 
@@ -43,11 +43,11 @@ impl Plugin for CrozonCharacterConceptsPlaygroundPlugin {
 					build_rig_bone_map,
 					attach_parts_to_sockets.after(build_rig_bone_map),
 					remap_part_skin_to_rig.after(attach_parts_to_sockets),
-					apply_resolved_pose.after(build_rig_bone_map),
 					dump_bones_to_console,
 					ui::sync_command_status_text.before(game_commands::ui::update_debug_ui),
 				),
-			);
+			)
+			.add_systems(PostUpdate, maintain_resolved_pose);
 	}
 }
 
