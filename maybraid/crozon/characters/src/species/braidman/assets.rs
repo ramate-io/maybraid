@@ -32,6 +32,27 @@ const MOUTH_STANDARD: AssetPath = AssetPath::new("characters/mouths/common_mouth
 const EAR_STANDARD: AssetPath = AssetPath::new("characters/ears/round_scoop_lateral_ear_left.glb");
 const EAR_ROUND: AssetPath = AssetPath::new("characters/ears/round_lateral_ear_left.glb");
 const EAR_FLANK: AssetPath = AssetPath::new("characters/ears/flank_lateral_ear_left.glb");
+const HAIR_THICK_BRAIDS: AssetPath = AssetPath::new("characters/hair/thick_braids.glb");
+const HAIR_FLOWING_CURLS: AssetPath = AssetPath::new("characters/hair/flowing_curls.glb");
+const HAIR_WRAPPING_BRAIDS: AssetPath = AssetPath::new("characters/hair/wrapping_braids.glb");
+const HAIR_WRAPPING_BRAIDS_HANGING_LOCKS: AssetPath =
+	AssetPath::new("characters/hair/wrapping_braids_hanging_locks.glb");
+const HAIR_BRAID_HAWK: AssetPath = AssetPath::new("characters/hair/braid_hawk.glb");
+const HAIR_FEATHER_HAWK: AssetPath = AssetPath::new("characters/hair/feather_hawk.glb");
+const HAIR_FLOWING_EDGY_CURLS: AssetPath = AssetPath::new("characters/hair/flowing_edgy_curls.glb");
+const HAIR_PERM_BRAID: AssetPath = AssetPath::new("characters/hair/perm_braid.glb");
+const HAIR_TECHNO_EDGE: AssetPath = AssetPath::new("characters/hair/techno_edge.glb");
+const CLOTHING_BASKETBALL_CUT_SHIRT: AssetPath =
+	AssetPath::new("characters/clothes/basketball_cut_shirt.glb");
+const CLOTHING_TUNIC: AssetPath = AssetPath::new("characters/clothes/tunic.glb");
+const CLOTHING_LONG_DRESS: AssetPath = AssetPath::new("characters/clothes/long_dress.glb");
+const CLOTHING_SHORT_DRESS: AssetPath = AssetPath::new("characters/clothes/short_dress.glb");
+const CLOTHING_FITTED_COAT: AssetPath = AssetPath::new("characters/clothes/fitted_coat.glb");
+const CLOTHING_QUARTER_COAT: AssetPath = AssetPath::new("characters/clothes/quarter_coat.glb");
+const CLOTHING_ROBE_COAT: AssetPath = AssetPath::new("characters/clothes/robe_coat.glb");
+const CLOTHING_SHORT_SLEEVED_ROBE_COAT: AssetPath =
+	AssetPath::new("characters/clothes/short_sleeved_robe_coat.glb");
+const CLOTHING_TAILORED_COAT: AssetPath = AssetPath::new("characters/clothes/tailored_coat.glb");
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, ValueEnum)]
 pub enum BodyMesh {
@@ -185,12 +206,102 @@ impl EarMesh {
 	}
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, ValueEnum)]
+pub enum HairMesh {
+	#[default]
+	None,
+	ThickBraids,
+	FlowingCurls,
+	WrappingBraids,
+	WrappingBraidsHangingLocks,
+	BraidHawk,
+	FeatherHawk,
+	FlowingEdgyCurls,
+	PermBraid,
+	TechnoEdge,
+}
+
+impl HairMesh {
+	pub const fn label(self) -> &'static str {
+		match self {
+			Self::None => "none",
+			Self::ThickBraids => "thick-braids",
+			Self::FlowingCurls => "flowing-curls",
+			Self::WrappingBraids => "wrapping-braids",
+			Self::WrappingBraidsHangingLocks => "wrapping-braids-hanging-locks",
+			Self::BraidHawk => "braid-hawk",
+			Self::FeatherHawk => "feather-hawk",
+			Self::FlowingEdgyCurls => "flowing-edgy-curls",
+			Self::PermBraid => "perm-braid",
+			Self::TechnoEdge => "techno-edge",
+		}
+	}
+
+	const fn path(self) -> Option<AssetPath> {
+		match self {
+			Self::None => None,
+			Self::ThickBraids => Some(HAIR_THICK_BRAIDS),
+			Self::FlowingCurls => Some(HAIR_FLOWING_CURLS),
+			Self::WrappingBraids => Some(HAIR_WRAPPING_BRAIDS),
+			Self::WrappingBraidsHangingLocks => Some(HAIR_WRAPPING_BRAIDS_HANGING_LOCKS),
+			Self::BraidHawk => Some(HAIR_BRAID_HAWK),
+			Self::FeatherHawk => Some(HAIR_FEATHER_HAWK),
+			Self::FlowingEdgyCurls => Some(HAIR_FLOWING_EDGY_CURLS),
+			Self::PermBraid => Some(HAIR_PERM_BRAID),
+			Self::TechnoEdge => Some(HAIR_TECHNO_EDGE),
+		}
+	}
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, ValueEnum)]
+pub enum ClothingMesh {
+	BasketballCutShirt,
+	Tunic,
+	LongDress,
+	ShortDress,
+	FittedCoat,
+	QuarterCoat,
+	RobeCoat,
+	ShortSleevedRobeCoat,
+	TailoredCoat,
+}
+
+impl ClothingMesh {
+	pub const fn label(self) -> &'static str {
+		match self {
+			Self::BasketballCutShirt => "basketball-cut-shirt",
+			Self::Tunic => "tunic",
+			Self::LongDress => "long-dress",
+			Self::ShortDress => "short-dress",
+			Self::FittedCoat => "fitted-coat",
+			Self::QuarterCoat => "quarter-coat",
+			Self::RobeCoat => "robe-coat",
+			Self::ShortSleevedRobeCoat => "short-sleeved-robe-coat",
+			Self::TailoredCoat => "tailored-coat",
+		}
+	}
+
+	const fn path(self) -> AssetPath {
+		match self {
+			Self::BasketballCutShirt => CLOTHING_BASKETBALL_CUT_SHIRT,
+			Self::Tunic => CLOTHING_TUNIC,
+			Self::LongDress => CLOTHING_LONG_DRESS,
+			Self::ShortDress => CLOTHING_SHORT_DRESS,
+			Self::FittedCoat => CLOTHING_FITTED_COAT,
+			Self::QuarterCoat => CLOTHING_QUARTER_COAT,
+			Self::RobeCoat => CLOTHING_ROBE_COAT,
+			Self::ShortSleevedRobeCoat => CLOTHING_SHORT_SLEEVED_ROBE_COAT,
+			Self::TailoredCoat => CLOTHING_TAILORED_COAT,
+		}
+	}
+}
+
 /// Species-local resolver for Braidman asset choices.
 pub struct BraidmanAssets;
 
 impl BraidmanAssets {
 	pub fn resolve(config: &BraidmanConfig) -> ResolvedCharacterAssembly {
-		ResolvedCharacterAssembly::new(
+		let assembly = ResolvedCharacterAssembly::new(
 			"Braidman",
 			RigAsset::new("Humanoid", BODY_RIG),
 			BraidmanPose::from_config(config).resolve(),
@@ -204,7 +315,16 @@ impl BraidmanAssets {
 		.with_part(Self::nose(config.nose))
 		.with_part(Self::mouth(config.mouth))
 		.with_part(Self::ear_left(config.ear))
-		.with_part(Self::ear_right(config.ear))
+		.with_part(Self::ear_right(config.ear));
+
+		let assembly = match Self::hair(config.hair) {
+			Some(hair) => assembly.with_part(hair),
+			None => assembly,
+		};
+		config
+			.clothing
+			.iter()
+			.fold(assembly, |assembly, clothing| assembly.with_part(Self::clothing(*clothing)))
 	}
 
 	fn body_mesh(body: BodyMesh) -> ResolvedCharacterPart {
@@ -313,6 +433,24 @@ impl BraidmanAssets {
 					.with_translation(Vec3::new(-0.1, -0.1, 0.00))
 					.with_rotation(Quat::from_rotation_y(-std::f32::consts::PI / 4.0)),
 			)),
+		)
+	}
+
+	fn hair(hair: HairMesh) -> Option<ResolvedCharacterPart> {
+		Some(ResolvedCharacterPart::new(
+			CharacterPartSlot::Hair,
+			CharacterAsset::new(hair.label(), hair.path()?, AssetNormalization::centroid(0.12)),
+			SkinTarget::HeadRig,
+			Some(Self::head_socket("crown", Transform::IDENTITY)),
+		))
+	}
+
+	fn clothing(clothing: ClothingMesh) -> ResolvedCharacterPart {
+		ResolvedCharacterPart::new(
+			CharacterPartSlot::Clothing,
+			CharacterAsset::new(clothing.label(), clothing.path(), AssetNormalization::IDENTITY),
+			SkinTarget::BodyRig,
+			None,
 		)
 	}
 

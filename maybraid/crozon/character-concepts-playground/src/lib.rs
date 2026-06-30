@@ -4,6 +4,7 @@
 //! temporary stand-ins for future UI fields; they still resolve through
 //! `crozon-characters` before any Bevy entities are spawned.
 
+mod animation;
 pub mod commands;
 mod ground;
 mod preview;
@@ -17,6 +18,7 @@ use bevy::prelude::*;
 use crozon_character_playground::{camera, checkerboard_material};
 use game_commands::command::{capture_command_line_input, GameCommandPlugin};
 
+use animation::{animate_body_rig, init_limb_animators};
 use preview::{sync_preview, ConceptPreviewConfig, ConceptPreviewSyncState};
 use skinning::{
 	attach_parts_to_sockets, build_rig_bone_map, dump_bones_to_console, maintain_resolved_pose,
@@ -43,6 +45,8 @@ impl Plugin for CrozonCharacterConceptsPlaygroundPlugin {
 					build_rig_bone_map,
 					attach_parts_to_sockets.after(build_rig_bone_map),
 					remap_part_skin_to_rig.after(attach_parts_to_sockets),
+					init_limb_animators.after(build_rig_bone_map),
+					animate_body_rig.after(init_limb_animators),
 					dump_bones_to_console,
 					ui::sync_command_status_text.before(game_commands::ui::update_debug_ui),
 				),

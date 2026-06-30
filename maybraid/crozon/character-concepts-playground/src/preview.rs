@@ -10,6 +10,7 @@ use crozon_characters::{
 	ResolvedCharacterPart, SkinTarget, SocketRig,
 };
 
+use crate::animation::{AnimatedBodyRig, BodyRigBindTransform, ConceptAnimation};
 use crate::skinning::{
 	ActiveRigPose, BoneMap, CharacterPart, CharacterRig, CharacterRigRole, NeedsSkinRemap,
 	NeedsSocketPlacement, PartRigRef, RigBindScales,
@@ -17,7 +18,7 @@ use crate::skinning::{
 
 #[derive(Resource, Debug, Clone, PartialEq)]
 pub enum ConceptPreviewConfig {
-	Braidman(BraidmanConfig),
+	Braidman { config: BraidmanConfig, animation: ConceptAnimation },
 }
 
 impl Default for ConceptPreviewConfig {
@@ -28,24 +29,38 @@ impl Default for ConceptPreviewConfig {
 
 impl ConceptPreviewConfig {
 	pub fn braidman(config: BraidmanConfig) -> Self {
-		Self::Braidman(config)
+		Self::Braidman { config, animation: ConceptAnimation::default() }
+	}
+
+	pub fn braidman_with_animation(config: BraidmanConfig, animation: ConceptAnimation) -> Self {
+		Self::Braidman { config, animation }
 	}
 
 	pub fn resolve(&self) -> ResolvedCharacterAssembly {
 		match self {
-			Self::Braidman(config) => config.resolve(),
+			Self::Braidman { config, .. } => config.resolve(),
 		}
 	}
 
 	pub fn status_label(&self) -> String {
 		match self {
-			Self::Braidman(config) => config.status_label(),
+			Self::Braidman { config, animation } => {
+				format!("{} animation={}", config.status_label(), animation.label())
+			}
 		}
 	}
 
 	pub fn sync_key(&self) -> String {
 		match self {
-			Self::Braidman(config) => config.sync_key(),
+			Self::Braidman { config, animation } => {
+				format!("{} animation={animation:?}", config.sync_key())
+			}
+		}
+	}
+
+	pub const fn animation(&self) -> ConceptAnimation {
+		match self {
+			Self::Braidman { animation, .. } => *animation,
 		}
 	}
 }
@@ -117,10 +132,12 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 					GltfAssetLabel::Scene(0).from_asset(self.assembly.body_rig.path.as_str()),
 				)),
 				CharacterRig { role: CharacterRigRole::Body },
+				AnimatedBodyRig,
 				BoneMap::default(),
 				// Pose maintenance runs on the body rig only in this pass.
 				ActiveRigPose { pose: self.assembly.pose.clone() },
 				RigBindScales::default(),
+				BodyRigBindTransform(Transform::IDENTITY),
 				ConceptPreviewRoot,
 				Transform::IDENTITY,
 				Name::new(format!("{}_body_rig", self.assembly.label)),

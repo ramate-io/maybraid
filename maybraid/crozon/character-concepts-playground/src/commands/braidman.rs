@@ -4,14 +4,16 @@ use bevy::prelude::*;
 use clap::{Args, Subcommand};
 use crozon_characters::{
 	species::braidman::{
-		assets::{BodyMesh, EarMesh, EyeMesh, HeadMesh, MouthMesh, NoseMesh},
+		assets::{
+			BodyMesh, ClothingMesh, EarMesh, EyeMesh, HairMesh, HeadMesh, MouthMesh, NoseMesh,
+		},
 		sliders::BraidmanSliders,
 		BraidmanConfig,
 	},
 	BuildPreset, GenderPreset,
 };
 
-use crate::preview::ConceptPreviewConfig;
+use crate::{animation::ConceptAnimation, preview::ConceptPreviewConfig};
 
 #[derive(Clone, Subcommand)]
 pub enum Braidman {
@@ -46,6 +48,17 @@ pub struct PreviewArgs {
 	#[arg(long, value_enum, default_value_t = EarMesh::Standard)]
 	pub ear: EarMesh,
 
+	#[arg(long, value_enum, default_value_t = HairMesh::None)]
+	pub hair: HairMesh,
+
+	/// Clothing layers to remap to the body rig. Repeat the flag for multiple layers.
+	#[arg(long, value_enum)]
+	pub clothing: Vec<ClothingMesh>,
+
+	/// Procedural body animation used to inspect sockets and skinning under motion.
+	#[arg(long, value_enum, default_value_t = ConceptAnimation::Still)]
+	pub animation: ConceptAnimation,
+
 	/// Shoulder width multiplier on top of the Braidman species baseline.
 	#[arg(long, default_value_t = 1.0)]
 	pub shoulder_width: f32,
@@ -76,16 +89,21 @@ impl PreviewArgs {
 	fn into_preview_config(self) -> ConceptPreviewConfig {
 		let sliders =
 			BraidmanSliders::new(self.shoulder_width, self.hip_width, self.chest_thickness);
-		ConceptPreviewConfig::braidman(BraidmanConfig {
-			gender: self.gender,
-			build: self.build,
-			body: self.body,
-			head: self.head,
-			eye: self.eye,
-			nose: self.nose,
-			mouth: self.mouth,
-			ear: self.ear,
-			sliders,
-		})
+		ConceptPreviewConfig::braidman_with_animation(
+			BraidmanConfig {
+				gender: self.gender,
+				build: self.build,
+				body: self.body,
+				head: self.head,
+				eye: self.eye,
+				nose: self.nose,
+				mouth: self.mouth,
+				ear: self.ear,
+				hair: self.hair,
+				clothing: self.clothing,
+				sliders,
+			},
+			self.animation,
+		)
 	}
 }

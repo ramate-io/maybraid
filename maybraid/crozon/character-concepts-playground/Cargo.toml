@@ -16,6 +16,7 @@ crozon-character-playground = { workspace = true }
 crozon-characters = { workspace = true }
 crozon-rigs = { workspace = true }
 game-commands = { workspace = true }
+malo-animations = { workspace = true }
 
 [lints]
 workspace = true

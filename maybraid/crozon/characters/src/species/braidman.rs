@@ -15,7 +15,10 @@ use crate::{
 	ResolvedCharacterAssembly,
 };
 
-use assets::{BodyMesh, BraidmanAssets, EarMesh, EyeMesh, HeadMesh, MouthMesh, NoseMesh};
+use assets::{
+	BodyMesh, BraidmanAssets, ClothingMesh, EarMesh, EyeMesh, HairMesh, HeadMesh, MouthMesh,
+	NoseMesh,
+};
 use sliders::BraidmanSliders;
 
 /// Minimal unresolved Braidman state used by commands and, later, UI fields.
@@ -30,6 +33,8 @@ pub struct BraidmanConfig {
 	pub nose: NoseMesh,
 	pub mouth: MouthMesh,
 	pub ear: EarMesh,
+	pub hair: HairMesh,
+	pub clothing: Vec<ClothingMesh>,
 	pub sliders: BraidmanSliders,
 }
 
@@ -51,6 +56,8 @@ impl BraidmanConfig {
 			nose: NoseMesh::Standard,
 			mouth: MouthMesh::Standard,
 			ear: EarMesh::Standard,
+			hair: HairMesh::None,
+			clothing: Vec::new(),
 			sliders: BraidmanSliders::default(),
 		}
 	}
@@ -71,8 +78,17 @@ impl BraidmanConfig {
 	}
 
 	pub fn status_label(&self) -> String {
+		let clothing = if self.clothing.is_empty() {
+			"none".into()
+		} else {
+			self.clothing
+				.iter()
+				.map(|clothing| clothing.label())
+				.collect::<Vec<_>>()
+				.join(",")
+		};
 		format!(
-			"braidman gender={} build={} body={} head={} eye={} nose={} mouth={} ear={} sliders={}",
+			"braidman gender={} build={} body={} head={} eye={} nose={} mouth={} ear={} hair={} clothing={} sliders={}",
 			self.gender.label(),
 			self.build.label(),
 			self.body.label(),
@@ -81,6 +97,8 @@ impl BraidmanConfig {
 			self.nose.label(),
 			self.mouth.label(),
 			self.ear.label(),
+			self.hair.label(),
+			clothing,
 			self.sliders.status_label(),
 		)
 	}
