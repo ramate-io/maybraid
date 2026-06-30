@@ -441,9 +441,13 @@ impl BraidmanAssets {
 		let path = hair.path()?;
 		Some(ResolvedCharacterPart::new(
 			CharacterPartSlot::Hair,
-			CharacterAsset::new(hair.label(), path, AssetNormalization::centroid(0.12)),
+			CharacterAsset::new(hair.label(), path, AssetNormalization::centroid(1.0)),
 			SkinTarget::HeadRig,
-			Some(Self::head_socket("crown", Transform::IDENTITY)),
+			Some(Self::head_socket(
+				"crown_socket",
+				// shift down a bit to compensate for the head rig's base-y anchor
+				Transform::from_translation(Vec3::new(0.0, -0.1, 0.1)),
+			)),
 		))
 	}
 
