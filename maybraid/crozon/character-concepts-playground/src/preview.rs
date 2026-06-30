@@ -193,7 +193,7 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 				CharacterPart { slot: part.slot },
 				ConceptPreviewRoot,
 				part.asset.normalization.transform(),
-				Name::new(format!("character_{:?}", part.slot)),
+				Name::new(format!("character_{:?}_{}", part.slot, part.asset.label)),
 			))
 			.id();
 

@@ -34,6 +34,7 @@ pub struct BraidmanConfig {
 	pub mouth: MouthMesh,
 	pub ear: EarMesh,
 	pub hair: HairMesh,
+	/// Multiple clothing layers compose; repeat `--clothing` on the CLI.
 	pub clothing: Vec<ClothingMesh>,
 	pub sliders: BraidmanSliders,
 }

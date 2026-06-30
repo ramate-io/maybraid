@@ -1,7 +1,8 @@
-//! Braidman asset catalog for the first concepts pass.
+//! Braidman asset catalog for the concepts playground.
 //!
-//! Only a small subset is exposed so the module organization can be reviewed
-//! before every Braidman feature and clothing variant is added.
+//! Phase 2 adds hair and clothing through the same resolved-part path as body
+//! and head features: hair socketed on the head rig `crown` bone, clothing
+//! remapped to the body rig. Clothing is multi-select via `BraidmanConfig::clothing`.
 
 use bevy::prelude::*;
 use clap::ValueEnum;
@@ -437,15 +438,17 @@ impl BraidmanAssets {
 	}
 
 	fn hair(hair: HairMesh) -> Option<ResolvedCharacterPart> {
+		let path = hair.path()?;
 		Some(ResolvedCharacterPart::new(
 			CharacterPartSlot::Hair,
-			CharacterAsset::new(hair.label(), hair.path()?, AssetNormalization::centroid(0.12)),
+			CharacterAsset::new(hair.label(), path, AssetNormalization::centroid(0.12)),
 			SkinTarget::HeadRig,
 			Some(Self::head_socket("crown", Transform::IDENTITY)),
 		))
 	}
 
 	fn clothing(clothing: ClothingMesh) -> ResolvedCharacterPart {
+		// Each layer remaps independently onto the body rig; spec fit is NoChanges.
 		ResolvedCharacterPart::new(
 			CharacterPartSlot::Clothing,
 			CharacterAsset::new(clothing.label(), clothing.path(), AssetNormalization::IDENTITY),

@@ -22,6 +22,7 @@ root
     crown
       calvaria.R
       calvaria.L
+      crown_socket
     parietal.R
     parietal.L
   temple.L
