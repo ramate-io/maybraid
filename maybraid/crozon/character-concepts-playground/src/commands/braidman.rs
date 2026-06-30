@@ -87,8 +87,10 @@ impl Braidman {
 
 impl PreviewArgs {
 	fn into_preview_config(self) -> ConceptPreviewConfig {
-		let sliders =
-			BraidmanSliders::new(self.shoulder_width, self.hip_width, self.chest_thickness);
+		let sliders = BraidmanSliders::default()
+			.with_shoulder_width(self.shoulder_width)
+			.with_hip_width(self.hip_width)
+			.with_chest_thickness(self.chest_thickness);
 		ConceptPreviewConfig::braidman_with_animation(
 			BraidmanConfig {
 				gender: self.gender,

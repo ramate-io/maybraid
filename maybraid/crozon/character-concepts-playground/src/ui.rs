@@ -27,6 +27,7 @@ const PANEL_WIDTH: f32 = 360.0;
 const PANEL_HEIGHT_PERCENT: f32 = 82.0;
 const BUTTON_HEIGHT: f32 = 22.0;
 const SLIDER_STEP: f32 = 0.05;
+const TILT_STEP_DEG: f32 = 0.5;
 const THUMBNAIL_SIZE: f32 = 54.0;
 const SCROLL_LINE_PX: f32 = 14.0;
 
@@ -304,6 +305,23 @@ pub enum CreatorUiAction {
 	ShoulderWidth(f32),
 	HipWidth(f32),
 	ChestThickness(f32),
+	HipThickness(f32),
+	LegThickness(f32),
+	ButtocksThickness(f32),
+	WaistThickness(f32),
+	LowerTrunkThickness(f32),
+	ArmLength(f32),
+	ArmThickness(f32),
+	LegLength(f32),
+	EyeWidth(f32),
+	EyeHeight(f32),
+	EyeTilt(f32),
+	NoseWidth(f32),
+	NoseHeight(f32),
+	MouthWidth(f32),
+	MouthHeight(f32),
+	EarWidth(f32),
+	EarHeight(f32),
 }
 
 pub fn ui_config() -> GameCommandUiConfig {
@@ -427,6 +445,75 @@ pub fn react_creator_ui(
 				braidman.sliders =
 					braidman.sliders.with_chest_thickness(braidman.sliders.chest_thickness + delta);
 			}
+			CreatorUiAction::HipThickness(delta) => {
+				braidman.sliders =
+					braidman.sliders.with_hip_thickness(braidman.sliders.hip_thickness + delta);
+			}
+			CreatorUiAction::LegThickness(delta) => {
+				braidman.sliders =
+					braidman.sliders.with_leg_thickness(braidman.sliders.leg_thickness + delta);
+			}
+			CreatorUiAction::ButtocksThickness(delta) => {
+				braidman.sliders = braidman
+					.sliders
+					.with_buttocks_thickness(braidman.sliders.buttocks_thickness + delta);
+			}
+			CreatorUiAction::WaistThickness(delta) => {
+				braidman.sliders =
+					braidman.sliders.with_waist_thickness(braidman.sliders.waist_thickness + delta);
+			}
+			CreatorUiAction::LowerTrunkThickness(delta) => {
+				braidman.sliders = braidman
+					.sliders
+					.with_lower_trunk_thickness(braidman.sliders.lower_trunk_thickness + delta);
+			}
+			CreatorUiAction::ArmLength(delta) => {
+				braidman.sliders =
+					braidman.sliders.with_arm_length(braidman.sliders.arm_length + delta);
+			}
+			CreatorUiAction::ArmThickness(delta) => {
+				braidman.sliders =
+					braidman.sliders.with_arm_thickness(braidman.sliders.arm_thickness + delta);
+			}
+			CreatorUiAction::LegLength(delta) => {
+				braidman.sliders =
+					braidman.sliders.with_leg_length(braidman.sliders.leg_length + delta);
+			}
+			CreatorUiAction::EyeWidth(delta) => {
+				braidman.sliders =
+					braidman.sliders.with_eye_width(braidman.sliders.eye_width + delta);
+			}
+			CreatorUiAction::EyeHeight(delta) => {
+				braidman.sliders =
+					braidman.sliders.with_eye_height(braidman.sliders.eye_height + delta);
+			}
+			CreatorUiAction::EyeTilt(delta) => {
+				braidman.sliders = braidman.sliders.with_eye_tilt(braidman.sliders.eye_tilt + delta);
+			}
+			CreatorUiAction::NoseWidth(delta) => {
+				braidman.sliders =
+					braidman.sliders.with_nose_width(braidman.sliders.nose_width + delta);
+			}
+			CreatorUiAction::NoseHeight(delta) => {
+				braidman.sliders =
+					braidman.sliders.with_nose_height(braidman.sliders.nose_height + delta);
+			}
+			CreatorUiAction::MouthWidth(delta) => {
+				braidman.sliders =
+					braidman.sliders.with_mouth_width(braidman.sliders.mouth_width + delta);
+			}
+			CreatorUiAction::MouthHeight(delta) => {
+				braidman.sliders =
+					braidman.sliders.with_mouth_height(braidman.sliders.mouth_height + delta);
+			}
+			CreatorUiAction::EarWidth(delta) => {
+				braidman.sliders =
+					braidman.sliders.with_ear_width(braidman.sliders.ear_width + delta);
+			}
+			CreatorUiAction::EarHeight(delta) => {
+				braidman.sliders =
+					braidman.sliders.with_ear_height(braidman.sliders.ear_height + delta);
+			}
 		}
 	}
 }
@@ -449,7 +536,24 @@ impl CreatorUiAction {
 			| Self::SetColor(_, _)
 			| Self::ShoulderWidth(_)
 			| Self::HipWidth(_)
-			| Self::ChestThickness(_) => None,
+			| Self::ChestThickness(_)
+			| Self::HipThickness(_)
+			| Self::LegThickness(_)
+			| Self::ButtocksThickness(_)
+			| Self::WaistThickness(_)
+			| Self::LowerTrunkThickness(_)
+			| Self::ArmLength(_)
+			| Self::ArmThickness(_)
+			| Self::LegLength(_)
+			| Self::EyeWidth(_)
+			| Self::EyeHeight(_)
+			| Self::EyeTilt(_)
+			| Self::NoseWidth(_)
+			| Self::NoseHeight(_)
+			| Self::MouthWidth(_)
+			| Self::MouthHeight(_)
+			| Self::EarWidth(_)
+			| Self::EarHeight(_) => None,
 		}
 	}
 }
@@ -541,6 +645,54 @@ fn spawn_creator_ui(
 							braidman.sliders.chest_thickness,
 							CreatorUiAction::ChestThickness,
 						);
+						slider(
+							section,
+							"Hip thick",
+							braidman.sliders.hip_thickness,
+							CreatorUiAction::HipThickness,
+						);
+						slider(
+							section,
+							"Leg thick",
+							braidman.sliders.leg_thickness,
+							CreatorUiAction::LegThickness,
+						);
+						slider(
+							section,
+							"Buttocks",
+							braidman.sliders.buttocks_thickness,
+							CreatorUiAction::ButtocksThickness,
+						);
+						slider(
+							section,
+							"Waist",
+							braidman.sliders.waist_thickness,
+							CreatorUiAction::WaistThickness,
+						);
+						slider(
+							section,
+							"Trunk",
+							braidman.sliders.lower_trunk_thickness,
+							CreatorUiAction::LowerTrunkThickness,
+						);
+						slider(
+							section,
+							"Arm len",
+							braidman.sliders.arm_length,
+							CreatorUiAction::ArmLength,
+						);
+						slider(
+							section,
+							"Arm thick",
+							braidman.sliders.arm_thickness,
+							CreatorUiAction::ArmThickness,
+						);
+						slider(
+							section,
+							"Leg len",
+							braidman.sliders.leg_length,
+							CreatorUiAction::LegLength,
+						);
 						color_swatches(section, UiColorTarget::Body, braidman.colors.body);
 					});
 					section(panel, UiSection::HeadFeatures, ui_state, |section| {
@@ -560,6 +712,24 @@ fn spawn_creator_ui(
 							EYES.iter().map(|value| UiAssetTarget::Eye(*value)),
 							Uis::new(ui_state, braidman, *animation),
 						);
+						slider(
+							section,
+							"Eye W",
+							braidman.sliders.eye_width,
+							CreatorUiAction::EyeWidth,
+						);
+						slider(
+							section,
+							"Eye H",
+							braidman.sliders.eye_height,
+							CreatorUiAction::EyeHeight,
+						);
+						tilt_slider(
+							section,
+							"Eye tilt",
+							braidman.sliders.eye_tilt,
+							CreatorUiAction::EyeTilt,
+						);
 						asset_grid(
 							section,
 							asset_server,
@@ -567,6 +737,18 @@ fn spawn_creator_ui(
 							thumbnails,
 							NOSES.iter().map(|value| UiAssetTarget::Nose(*value)),
 							Uis::new(ui_state, braidman, *animation),
+						);
+						slider(
+							section,
+							"Nose W",
+							braidman.sliders.nose_width,
+							CreatorUiAction::NoseWidth,
+						);
+						slider(
+							section,
+							"Nose H",
+							braidman.sliders.nose_height,
+							CreatorUiAction::NoseHeight,
 						);
 						asset_grid(
 							section,
@@ -576,6 +758,18 @@ fn spawn_creator_ui(
 							MOUTHS.iter().map(|value| UiAssetTarget::Mouth(*value)),
 							Uis::new(ui_state, braidman, *animation),
 						);
+						slider(
+							section,
+							"Mouth W",
+							braidman.sliders.mouth_width,
+							CreatorUiAction::MouthWidth,
+						);
+						slider(
+							section,
+							"Mouth H",
+							braidman.sliders.mouth_height,
+							CreatorUiAction::MouthHeight,
+						);
 						asset_grid(
 							section,
 							asset_server,
@@ -583,6 +777,18 @@ fn spawn_creator_ui(
 							thumbnails,
 							EARS.iter().map(|value| UiAssetTarget::Ear(*value)),
 							Uis::new(ui_state, braidman, *animation),
+						);
+						slider(
+							section,
+							"Ear W",
+							braidman.sliders.ear_width,
+							CreatorUiAction::EarWidth,
+						);
+						slider(
+							section,
+							"Ear H",
+							braidman.sliders.ear_height,
+							CreatorUiAction::EarHeight,
 						);
 						color_swatches(section, UiColorTarget::Head, braidman.colors.head);
 						color_swatches(section, UiColorTarget::Eyes, braidman.colors.eyes);
@@ -789,6 +995,20 @@ fn slider(
 		button(row, "-", action(-SLIDER_STEP), false);
 		text(row, &format!("{value:.2}"), 11.0, Color::srgb(0.85, 0.95, 1.0));
 		button(row, "+", action(SLIDER_STEP), false);
+	});
+}
+
+fn tilt_slider(
+	parent: &mut ChildSpawnerCommands,
+	label: &'static str,
+	value_deg: f32,
+	action: fn(f32) -> CreatorUiAction,
+) {
+	parent.spawn((row_node(), Pickable::IGNORE)).with_children(|row| {
+		text(row, label, 11.0, Color::WHITE);
+		button(row, "-", action(-TILT_STEP_DEG), false);
+		text(row, &format!("{value_deg:.1}°"), 11.0, Color::srgb(0.85, 0.95, 1.0));
+		button(row, "+", action(TILT_STEP_DEG), false);
 	});
 }
 

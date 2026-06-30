@@ -156,6 +156,15 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 		}
 	}
 
+	fn part_transform(&self, part: &ResolvedCharacterPart) -> Transform {
+		let ConceptPreviewConfig::Braidman { config, .. } = &self.config;
+		let sliders = config.sliders.clamped();
+		part.asset
+			.normalization
+			.transform()
+			.mul_transform(sliders.feature_transform(part.slot))
+	}
+
 	fn spawn_body_rig(&mut self) -> Entity {
 		self.commands
 			.spawn((
@@ -188,7 +197,7 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 				CharacterPart { slot: part.slot },
 				BoneMap::default(),
 				ConceptPreviewRoot,
-				part.asset.normalization.transform(),
+				self.part_transform(part),
 				self.preview_target(part),
 				Name::new(format!("character_{:?}", part.slot)),
 			))
@@ -224,7 +233,7 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 				),
 				CharacterPart { slot: part.slot },
 				ConceptPreviewRoot,
-				part.asset.normalization.transform(),
+				self.part_transform(part),
 				self.preview_target(part),
 				Name::new(format!("character_{:?}_{}", part.slot, part.asset.label)),
 			))
