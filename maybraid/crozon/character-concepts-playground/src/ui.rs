@@ -157,13 +157,13 @@ impl UiAssetTarget {
 			Self::Head(_) => CameraFocus::new(
 				SocketRig::Head,
 				"root",
-				Vec3::new(0.0, 0.0, 1.55),
-				Vec3::new(0.0, 0.12, 0.0),
+				Vec3::new(0.0, 0.0, 1.0),
+				Vec3::new(0.0, 0.05, 0.0),
 			),
 			Self::Hair(_) => CameraFocus::new(
 				SocketRig::Head,
 				"crown_socket",
-				Vec3::new(0.0, 0.15, 1.4),
+				Vec3::new(0.0, 0.15, 1.0),
 				Vec3::ZERO,
 			),
 			Self::Eye(_) => CameraFocus::new(
