@@ -39,6 +39,7 @@ impl BraidmanSliders {
 	}
 
 	pub fn clamped(mut self) -> Self {
+		// Ranges mirror spec Braidman body rig slider bounds for the lean pass.
 		self.shoulder_width = self.shoulder_width.clamp(0.8, 1.2);
 		self.hip_width = self.hip_width.clamp(0.8, 1.4);
 		self.chest_thickness = self.chest_thickness.clamp(0.8, 1.2);

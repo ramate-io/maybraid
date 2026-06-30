@@ -5,6 +5,8 @@
 
 use clap::ValueEnum;
 
+// Shared vocabulary for every species in the concepts pass. Species modules may
+// later restrict which variants they expose, but the IDs stay stable for CLI/UI.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, ValueEnum)]
 pub enum GenderPreset {
 	#[default]
@@ -25,6 +27,8 @@ impl GenderPreset {
 	}
 }
 
+// Applied after gender defaults in resolution order; neither preset narrows slider
+// ranges—they only seed or refine values the user can still override.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, ValueEnum)]
 pub enum BuildPreset {
 	#[default]

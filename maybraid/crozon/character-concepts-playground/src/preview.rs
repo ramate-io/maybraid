@@ -71,6 +71,7 @@ pub fn sync_preview(
 	}
 	sync_state.key.clone_from(&key);
 
+	// Full respawn on any config change; fine for command-driven preview scale.
 	for entity in &roots {
 		commands.entity(entity).despawn();
 	}
@@ -98,6 +99,7 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 		let body_rig = self.spawn_body_rig();
 		let mut head_rig = None;
 
+		// Head rig must exist before features that skin or socket to it.
 		let parts = self.assembly.parts.clone();
 		for part in parts {
 			if part.slot == CharacterPartSlot::HeadRig {
@@ -116,6 +118,7 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 				)),
 				CharacterRig { role: CharacterRigRole::Body },
 				BoneMap::default(),
+				// Pose maintenance runs on the body rig only in this pass.
 				ActiveRigPose { pose: self.assembly.pose.clone() },
 				RigBindScales::default(),
 				ConceptPreviewRoot,
@@ -178,6 +181,7 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 			.id();
 
 		if let Some(rig_root) = self.skin_target_rig(body_rig, head_rig, part.skin_target) {
+			// Deferred until bone map is populated after GLTF load.
 			self.commands.entity(entity).insert((PartRigRef { rig_root }, NeedsSkinRemap));
 		}
 

@@ -24,14 +24,17 @@ impl BoneScale {
 	}
 
 	pub fn length(bone: &'static str, scale: f32) -> Self {
+		// Humanoid proportion bones usually carry length along local Y.
 		Self { bone, scale: Vec3::new(1.0, scale, 1.0) }
 	}
 
 	pub fn lateral(bone: &'static str, scale: f32) -> Self {
+		// Width groups on this rig tend to use local X.
 		Self { bone, scale: Vec3::new(scale, 1.0, 1.0) }
 	}
 
 	pub fn thickness(bone: &'static str, scale: f32) -> Self {
+		// Bulk controls that should not stretch bone length.
 		Self { bone, scale: Vec3::new(scale, 1.0, scale) }
 	}
 }
@@ -79,6 +82,7 @@ impl ResolvedRigPose {
 	}
 
 	pub fn scale_for_bone(&self, bone: &str) -> Vec3 {
+		// Same bone may appear in multiple layers; multiply in stack order.
 		self.layers
 			.iter()
 			.flat_map(|layer| layer.scales())

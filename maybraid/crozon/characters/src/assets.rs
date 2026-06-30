@@ -70,6 +70,7 @@ impl AssetNormalization {
 	}
 
 	pub fn transform(self) -> Transform {
+		// Applied at spawn time only; species/preset/slider scales are separate.
 		Transform::from_scale(Vec3::splat(self.scale))
 	}
 }

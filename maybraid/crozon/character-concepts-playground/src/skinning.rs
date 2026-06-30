@@ -53,6 +53,7 @@ pub struct RigBindScales {
 }
 
 fn bone_map_ready(map: &BoneMap) -> bool {
+	// Wait for a few landmarks so GLTF scene instantiation has finished wiring bones.
 	["root", "pelvis.L", "chest.L", "waist.L"]
 		.iter()
 		.all(|bone| map.by_name.contains_key(*bone))
@@ -115,6 +116,7 @@ pub fn attach_parts_to_sockets(
 
 		let normalization_scale = transform.scale;
 		*transform = placement.local_transform;
+		// Authored asset scale is preserved; socket offset is applied first.
 		transform.scale *= normalization_scale;
 
 		commands.entity(entity).insert(ChildOf(*bone_entity));
@@ -158,6 +160,7 @@ pub fn remap_part_skin_to_rig(
 						continue;
 					};
 
+					// Joint names must match between part armature and target rig.
 					match rig_map.by_name.get(old_name.as_str()) {
 						Some(new_joint) => new_joints.push(*new_joint),
 						None => {
@@ -218,6 +221,7 @@ pub fn maintain_resolved_pose(
 			let Ok(transform) = transforms.get(*entity) else {
 				continue;
 			};
+			// First sighting after load: treat current scale as bind snapshot.
 			bind_scales.scales.insert(bone_name.clone(), transform.scale);
 		}
 
@@ -232,6 +236,7 @@ pub fn maintain_resolved_pose(
 			let Ok(mut transform) = transforms.get_mut(*entity) else {
 				continue;
 			};
+			// Reapply every frame because GLTF spawn can reset bone transforms.
 			transform.scale = *bind_scale * multiplier;
 		}
 	}

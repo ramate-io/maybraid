@@ -196,6 +196,7 @@ impl BraidmanAssets {
 			BraidmanPose::from_config(config).resolve(),
 		)
 		.with_part(Self::body_mesh(config.body))
+		// Head rig is an armature scene, not a head mesh variant selector.
 		.with_part(Self::head_rig())
 		.with_part(Self::head_mesh(config.head))
 		.with_part(Self::eye_left(config.eye))
@@ -229,6 +230,7 @@ impl BraidmanAssets {
 	}
 
 	fn head_mesh(head: HeadMesh) -> ResolvedCharacterPart {
+		// Mesh variant skins to the head rig; it does not replace the rig asset.
 		ResolvedCharacterPart::new(
 			CharacterPartSlot::HeadMesh,
 			CharacterAsset::new(head.label(), head.path(), AssetNormalization::IDENTITY),
@@ -319,6 +321,7 @@ impl BraidmanAssets {
 	}
 
 	fn mirror_x() -> Transform {
+		// Left-authored GLBs: mirror X for the right-side instance without duplicating assets.
 		Transform::from_scale(Vec3::new(-1.0, 1.0, 1.0))
 	}
 }

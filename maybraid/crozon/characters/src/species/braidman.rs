@@ -21,6 +21,7 @@ use sliders::BraidmanSliders;
 /// Minimal unresolved Braidman state used by commands and, later, UI fields.
 #[derive(Debug, Clone, PartialEq)]
 pub struct BraidmanConfig {
+	// Preset IDs are shared enums today; species-owned tables will live in `presets`.
 	pub gender: GenderPreset,
 	pub build: BuildPreset,
 	pub body: BodyMesh,

@@ -24,6 +24,8 @@ impl BraidmanPose {
 	}
 
 	pub fn resolve(self) -> ResolvedRigPose {
+		// Order matches spec Stage 1: baseline → gender → build → user sliders.
+		// Each layer multiplies; later layers never replace earlier bone scales.
 		ResolvedRigPose::new()
 			.with_layer(self.species_baseline())
 			.with_layer(self.gender_layer())
@@ -32,6 +34,8 @@ impl BraidmanPose {
 	}
 
 	fn species_baseline(self) -> RigPoseLayer {
+		// Authored humanoid rest pose is not Braidman's silhouette; these constants
+		// are the species-owned baseline before presets or command sliders run.
 		RigPoseLayer::new("braidman species baseline")
 			.with_scale(BoneScale::uniform("chest.L", 0.8))
 			.with_scale(BoneScale::uniform("chest.R", 0.8))
@@ -50,6 +54,8 @@ impl BraidmanPose {
 	}
 
 	fn gender_layer(self) -> RigPoseLayer {
+		// Lean shortcut: preset effects are bone scales here. Full pass should
+		// apply spec percent offsets to `BraidmanSliders` in `presets` first.
 		let mut layer = RigPoseLayer::new("gender preset");
 		match self.gender {
 			GenderPreset::Male => {
@@ -60,15 +66,11 @@ impl BraidmanPose {
 				layer = Self::with_chest_thickness(layer, 1.5);
 				layer = Self::with_hip_width(layer, 1.2);
 				layer = Self::with_hip_thickness(layer, 1.1);
-				// increase thigh thickness
 				layer = Self::with_thigh_thickness(layer, 1.2);
-				// increase buttocks thickness
 				layer = Self::with_buttocks_thickness(layer, 1.2);
-				// decrease lower trunk thickness
 				layer = Self::with_lower_trunk_thickness(layer, 0.9);
-				// decrease waist thickness
 				layer = Self::with_waist_thickness(layer, 0.7);
-				// arms need to be longer to compensate for shoulders
+				// Narrower shoulders shorten reach unless arm bones lengthen too.
 				layer = Self::with_arm_length(layer, 1.1);
 			}
 			GenderPreset::NonBinary => {
@@ -112,6 +114,7 @@ impl BraidmanPose {
 	}
 
 	fn slider_layer(self) -> RigPoseLayer {
+		// Command/UI overrides win last; same bone helpers as presets for now.
 		RigPoseLayer::new("command sliders")
 			.with_scale(BoneScale::uniform("shoulder.L", self.sliders.shoulder_width))
 			.with_scale(BoneScale::uniform("shoulder.R", self.sliders.shoulder_width))
@@ -121,12 +124,14 @@ impl BraidmanPose {
 	}
 
 	fn with_shoulder_width(layer: RigPoseLayer, value: f32) -> RigPoseLayer {
+		// Shoulder bones carry width in uniform local scale on this rig.
 		layer
 			.with_scale(BoneScale::uniform("shoulder.L", value))
 			.with_scale(BoneScale::uniform("shoulder.R", value))
 	}
 
 	fn with_hip_width(layer: RigPoseLayer, value: f32) -> RigPoseLayer {
+		// Pelvis width is authored along bone Y (length), not lateral X.
 		layer
 			.with_scale(BoneScale::length("pelvis.L", value))
 			.with_scale(BoneScale::length("pelvis.R", value))
@@ -139,7 +144,7 @@ impl BraidmanPose {
 	}
 
 	fn with_chest_thickness(layer: RigPoseLayer, value: f32) -> RigPoseLayer {
-		// The chest thickness bone is oriented ventrally.
+		// Ventrally oriented control bone: uniform scale, not thickness helper.
 		layer.with_scale(BoneScale::uniform("chest_thickness", value))
 	}
 

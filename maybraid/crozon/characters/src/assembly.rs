@@ -61,7 +61,9 @@ pub enum CharacterPartSlot {
 pub enum SkinTarget {
 	BodyRig,
 	HeadRig,
+	/// Part keeps its embedded armature (e.g. head rig scene before socket attach).
 	OwnRig,
+	/// Socketed prop with no skinning, or mesh follows parent transform only.
 	None,
 }
 
@@ -112,6 +114,7 @@ pub struct ResolvedCharacterAssembly {
 	pub label: &'static str,
 	pub body_rig: RigAsset,
 	pub parts: Vec<ResolvedCharacterPart>,
+	/// Proportional layers for the body rig; head rig pose is future work.
 	pub pose: ResolvedRigPose,
 }
 
