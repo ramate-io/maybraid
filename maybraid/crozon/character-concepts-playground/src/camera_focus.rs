@@ -6,34 +6,8 @@ use crozon_characters::SocketRig;
 use crate::{
 	preview::ConceptPreviewConfig,
 	skinning::{BoneMap, CharacterRig, CharacterRigRole},
-	ui::{CreatorUiState, UiAssetTarget},
+	ui::{CameraFocus, CreatorUiState, UiAssetTarget},
 };
-
-/// Camera framing relative to a named rig socket bone.
-///
-/// `camera_offset` and `look_at_offset` are distances in **world meters** along the
-/// socket bone's local axes (rotation only). They intentionally ignore bind-pose and
-/// proportion **scale** on the bone chain — rig bones often carry non-uniform stretch
-/// scale (especially on X/Z vs Y), which would otherwise force huge local numbers for
-/// a modest camera pullback.
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct CameraFocus {
-	pub rig: SocketRig,
-	pub socket: &'static str,
-	pub camera_offset: Vec3,
-	pub look_at_offset: Vec3,
-}
-
-impl CameraFocus {
-	pub const fn new(
-		rig: SocketRig,
-		socket: &'static str,
-		camera_offset: Vec3,
-		look_at_offset: Vec3,
-	) -> Self {
-		Self { rig, socket, camera_offset, look_at_offset }
-	}
-}
 
 /// One-shot camera move queued when the user selects an asset in the creator UI.
 #[derive(Resource, Default)]
