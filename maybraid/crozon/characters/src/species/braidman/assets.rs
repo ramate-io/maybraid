@@ -290,10 +290,7 @@ impl BraidmanAssets {
 			Some(Self::head_socket(
 				"ear_socket.L",
 				// Rotate 90 degrees around the and Z Y axis.
-				Transform::from_rotation(
-					Quat::from_rotation_x(-std::f32::consts::PI / 2.0)
-						.mul_quat(Quat::from_rotation_z(std::f32::consts::PI / 2.0)),
-				),
+				Transform::IDENTITY,
 			)),
 		)
 	}
