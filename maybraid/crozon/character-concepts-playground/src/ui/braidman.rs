@@ -17,7 +17,8 @@ use crate::{
 	preview::ConceptPreviewConfig,
 	thumbnail::{self, ThumbnailCache},
 	ui::{
-		color_swatches, section, selector, text, CreatorUiState, THUMBNAIL_SIZE, UiSection,
+		color_swatches, inline_color_swatches, section, selector, subsection, text, CreatorUiState,
+		THUMBNAIL_SIZE, UiSection,
 	},
 };
 
@@ -232,102 +233,110 @@ pub fn populate_panel(
 		selector(section, "Build", braidman.build.label(), CreatorUiAction::Build);
 	});
 	section(panel, UiSection::Body, ui_state, |section| {
-		asset_grid(
-			section,
-			asset_server,
-			images,
-			thumbnails,
-			BODIES.iter().map(|value| UiAssetTarget::Body(*value)),
-			uis,
-		);
-		sliders::spawn_body(section, braidman);
-		color_swatches(section, UiColorTarget::Body, braidman.colors.body);
+		subsection(section, "Body Mesh", |sub| {
+			asset_grid(
+				sub,
+				asset_server,
+				images,
+				thumbnails,
+				BODIES.iter().map(|value| UiAssetTarget::Body(*value)),
+				uis,
+			);
+		});
+		subsection(section, "Proportions", |sub| {
+			sliders::spawn_body(sub, braidman);
+		});
+		subsection(section, "Color", |sub| {
+			color_swatches(sub, UiColorTarget::Body, braidman.colors.body);
+		});
 	});
 	section(panel, UiSection::HeadFeatures, ui_state, |section| {
-		asset_grid(
-			section,
-			asset_server,
-			images,
-			thumbnails,
-			HEADS.iter().map(|value| UiAssetTarget::Head(*value)),
-			uis,
-		);
-		asset_grid(
-			section,
-			asset_server,
-			images,
-			thumbnails,
-			EYES.iter().map(|value| UiAssetTarget::Eye(*value)),
-			uis,
-		);
-		sliders::spawn_eyes(section, braidman);
-		asset_grid(
-			section,
-			asset_server,
-			images,
-			thumbnails,
-			NOSES.iter().map(|value| UiAssetTarget::Nose(*value)),
-			uis,
-		);
-		sliders::spawn_nose(section, braidman);
-		asset_grid(
-			section,
-			asset_server,
-			images,
-			thumbnails,
-			MOUTHS.iter().map(|value| UiAssetTarget::Mouth(*value)),
-			uis,
-		);
-		sliders::spawn_mouth(section, braidman);
-		asset_grid(
-			section,
-			asset_server,
-			images,
-			thumbnails,
-			EARS.iter().map(|value| UiAssetTarget::Ear(*value)),
-			uis,
-		);
-		sliders::spawn_ears(section, braidman);
-		color_swatches(section, UiColorTarget::Eyes, braidman.colors.eyes);
-		color_swatches(section, UiColorTarget::Mouth, braidman.colors.mouth);
+		subsection(section, "Head", |sub| {
+			asset_grid(
+				sub,
+				asset_server,
+				images,
+				thumbnails,
+				HEADS.iter().map(|value| UiAssetTarget::Head(*value)),
+				uis,
+			);
+		});
+		subsection(section, "Eyes", |sub| {
+			asset_grid(
+				sub,
+				asset_server,
+				images,
+				thumbnails,
+				EYES.iter().map(|value| UiAssetTarget::Eye(*value)),
+				uis,
+			);
+			sliders::spawn_eyes(sub, braidman);
+			color_swatches(sub, UiColorTarget::Eyes, braidman.colors.eyes);
+		});
+		subsection(section, "Nose", |sub| {
+			asset_grid(
+				sub,
+				asset_server,
+				images,
+				thumbnails,
+				NOSES.iter().map(|value| UiAssetTarget::Nose(*value)),
+				uis,
+			);
+			sliders::spawn_nose(sub, braidman);
+		});
+		subsection(section, "Mouth", |sub| {
+			asset_grid(
+				sub,
+				asset_server,
+				images,
+				thumbnails,
+				MOUTHS.iter().map(|value| UiAssetTarget::Mouth(*value)),
+				uis,
+			);
+			sliders::spawn_mouth(sub, braidman);
+			color_swatches(sub, UiColorTarget::Mouth, braidman.colors.mouth);
+		});
+		subsection(section, "Ears", |sub| {
+			asset_grid(
+				sub,
+				asset_server,
+				images,
+				thumbnails,
+				EARS.iter().map(|value| UiAssetTarget::Ear(*value)),
+				uis,
+			);
+			sliders::spawn_ears(sub, braidman);
+		});
 	});
 	section(panel, UiSection::Hair, ui_state, |section| {
-		asset_grid(
-			section,
-			asset_server,
-			images,
-			thumbnails,
-			HAIRS.iter().map(|value| UiAssetTarget::Hair(*value)),
-			uis,
-		);
-		color_swatches(section, UiColorTarget::Hair, braidman.colors.hair);
+		subsection(section, "Style", |sub| {
+			asset_grid(
+				sub,
+				asset_server,
+				images,
+				thumbnails,
+				HAIRS.iter().map(|value| UiAssetTarget::Hair(*value)),
+				uis,
+			);
+		});
+		subsection(section, "Color", |sub| {
+			color_swatches(sub, UiColorTarget::Hair, braidman.colors.hair);
+		});
 	});
 	section(panel, UiSection::Clothing, ui_state, |section| {
-		asset_grid(
-			section,
-			asset_server,
-			images,
-			thumbnails,
-			CLOTHING.iter().map(|value| UiAssetTarget::Clothing(*value)),
-			uis,
-		);
-		if let Some(UiAssetTarget::Clothing(clothing)) = ui_state.focused_target() {
-			color_swatches(
-				section,
-				UiColorTarget::Clothing(clothing),
-				braidman.colors.clothing_color(clothing),
-			);
-		}
+		clothing_list(section, asset_server, images, thumbnails, braidman, uis);
 	});
 	section(panel, UiSection::Animation, ui_state, |section| {
-		asset_grid(
-			section,
-			asset_server,
-			images,
-			thumbnails,
-			ANIMATIONS.iter().map(|value| UiAssetTarget::Animation(*value)),
-			uis,
-		);
+		subsection(section, "Clip", |sub| {
+			asset_grid(
+				sub,
+				asset_server,
+				images,
+				thumbnails,
+				ANIMATIONS.iter().map(|value| UiAssetTarget::Animation(*value)),
+				uis,
+			);
+		});
 	});
 }
 
@@ -336,6 +345,63 @@ struct PanelContext<'a> {
 	ui_state: &'a CreatorUiState,
 	braidman: &'a BraidmanConfig,
 	animation: ConceptAnimation,
+}
+
+fn clothing_list(
+	parent: &mut ChildSpawnerCommands,
+	asset_server: &AssetServer,
+	images: &mut Assets<Image>,
+	thumbnails: &mut ThumbnailCache,
+	braidman: &BraidmanConfig,
+	ctx: PanelContext,
+) {
+	parent
+		.spawn((
+			Node {
+				width: Val::Percent(100.0),
+				flex_direction: FlexDirection::Column,
+				row_gap: Val::Px(8.0),
+				..default()
+			},
+			Pickable::IGNORE,
+		))
+		.with_children(|list| {
+			for clothing in CLOTHING {
+				let target = UiAssetTarget::Clothing(*clothing);
+				let active = braidman.clothing.contains(clothing);
+				let focus = ctx.ui_state.focused_target() == Some(target);
+				let color = braidman.colors.clothing_color(*clothing);
+				list
+					.spawn((
+						Node {
+							width: Val::Percent(100.0),
+							flex_direction: FlexDirection::Column,
+							row_gap: Val::Px(4.0),
+							padding: UiRect::all(Val::Px(4.0)),
+							..default()
+						},
+						BackgroundColor(Color::srgba(0.10, 0.11, 0.14, 0.65)),
+						Pickable::IGNORE,
+					))
+					.with_children(|item| {
+						let camera = thumbnail::camera_for_target(
+							&mut item.commands(),
+							images,
+							asset_server,
+							thumbnails,
+							target,
+							clothing.path().as_str(),
+							color,
+						);
+						asset_button(item, target, active, focus, Some(camera));
+						inline_color_swatches(
+							item,
+							UiColorTarget::Clothing(*clothing),
+							color,
+						);
+					});
+			}
+		});
 }
 
 fn asset_grid(

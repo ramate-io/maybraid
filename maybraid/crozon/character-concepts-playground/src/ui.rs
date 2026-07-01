@@ -316,6 +316,28 @@ pub(crate) fn section(
 		});
 }
 
+pub(crate) fn subsection(
+	parent: &mut ChildSpawnerCommands,
+	label: &'static str,
+	body: impl FnOnce(&mut ChildSpawnerCommands),
+) {
+	parent
+		.spawn((
+			Node {
+				width: Val::Percent(100.0),
+				flex_direction: FlexDirection::Column,
+				row_gap: Val::Px(4.0),
+				padding: UiRect::new(Val::Px(2.0), Val::Px(0.0), Val::Px(0.0), Val::Px(2.0)),
+				..default()
+			},
+			Pickable::IGNORE,
+		))
+		.with_children(|sub| {
+			text(sub, label, 12.0, Color::srgb(0.78, 0.84, 0.92));
+			body(sub);
+		});
+}
+
 pub(crate) fn selector(
 	parent: &mut ChildSpawnerCommands,
 	label: &'static str,
@@ -379,6 +401,41 @@ pub(crate) fn color_swatches(
 			));
 		}
 	});
+}
+
+pub(crate) fn inline_color_swatches(
+	parent: &mut ChildSpawnerCommands,
+	target: UiColorTarget,
+	active: BraidmanColor,
+) {
+	parent
+		.spawn((
+			Node {
+				flex_direction: FlexDirection::Row,
+				flex_wrap: FlexWrap::Wrap,
+				column_gap: Val::Px(3.0),
+				row_gap: Val::Px(3.0),
+				align_items: AlignItems::Center,
+				..default()
+			},
+			Pickable::IGNORE,
+		))
+		.with_children(|row| {
+			for color in braidman::COLORS {
+				row.spawn((
+					Button,
+					Node {
+						width: Val::Px(20.0),
+						height: Val::Px(16.0),
+						border: UiRect::all(Val::Px(if *color == active { 2.0 } else { 1.0 })),
+						..default()
+					},
+					BorderColor::all(if *color == active { Color::WHITE } else { muted() }),
+					BackgroundColor(color.color()),
+					CreatorUiAction::SetColor(target, *color),
+				));
+			}
+		});
 }
 
 pub(crate) fn text(parent: &mut ChildSpawnerCommands, value: &str, size: f32, color: Color) {

@@ -146,7 +146,7 @@ fn tilt_row(
 	parent.spawn((crate::ui::row_node(), Pickable::IGNORE)).with_children(|row| {
 		text(row, label, 11.0, Color::WHITE);
 		button(row, "-", action(-TILT_STEP_DEG), false);
-		text(row, &format!("{value_deg:.1}°"), 11.0, Color::srgb(0.85, 0.95, 1.0));
+		text(row, &format!("{value_deg:.1} deg."), 11.0, Color::srgb(0.85, 0.95, 1.0));
 		button(row, "+", action(TILT_STEP_DEG), false);
 	});
 }
