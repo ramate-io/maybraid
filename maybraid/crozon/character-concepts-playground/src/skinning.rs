@@ -106,29 +106,52 @@ pub fn build_rig_bone_map(
 	}
 }
 
+pub fn attach_focus_reference_to_sockets(
+	mut commands: Commands,
+	mut parts: Query<
+		(Entity, &mut Transform, &NeedsSocketPlacement),
+		(With<crate::focus_reference::FocusReferenceRig>, Without<CharacterPart>),
+	>,
+	rig_maps: Query<&BoneMap, With<CharacterRig>>,
+) {
+	for (entity, mut transform, placement) in &mut parts {
+		attach_part_to_socket(&mut commands, entity, &mut transform, placement, &rig_maps);
+	}
+}
+
 pub fn attach_parts_to_sockets(
 	mut commands: Commands,
 	mut parts: Query<(Entity, &mut Transform, &NeedsSocketPlacement), With<CharacterPart>>,
 	rig_maps: Query<&BoneMap, With<CharacterRig>>,
 ) {
-		for (entity, mut transform, placement) in &mut parts {
-		let Ok(rig_map) = rig_maps.get(placement.rig_root) else {
-			continue;
-		};
-		let Some(bone_entity) = rig_map.by_name.get(placement.socket_bone) else {
-			continue;
-		};
-
-		let authored_scale = transform.scale;
-		let authored_rotation = transform.rotation;
-		*transform = placement.local_transform;
-		// Authored asset scale and feature rotation are preserved; socket offset is applied first.
-		transform.scale *= authored_scale;
-		transform.rotation *= authored_rotation;
-
-		commands.entity(entity).try_insert(ChildOf(*bone_entity));
-		commands.entity(entity).try_remove::<NeedsSocketPlacement>();
+	for (entity, mut transform, placement) in &mut parts {
+		attach_part_to_socket(&mut commands, entity, &mut transform, placement, &rig_maps);
 	}
+}
+
+fn attach_part_to_socket(
+	commands: &mut Commands,
+	entity: Entity,
+	transform: &mut Transform,
+	placement: &NeedsSocketPlacement,
+	rig_maps: &Query<&BoneMap, With<CharacterRig>>,
+) {
+	let Ok(rig_map) = rig_maps.get(placement.rig_root) else {
+		return;
+	};
+	let Some(bone_entity) = rig_map.by_name.get(placement.socket_bone) else {
+		return;
+	};
+
+	let authored_scale = transform.scale;
+	let authored_rotation = transform.rotation;
+	*transform = placement.local_transform;
+	// Authored asset scale and feature rotation are preserved; socket offset is applied first.
+	transform.scale *= authored_scale;
+	transform.rotation *= authored_rotation;
+
+	commands.entity(entity).try_insert(ChildOf(*bone_entity));
+	commands.entity(entity).try_remove::<NeedsSocketPlacement>();
 }
 
 pub fn remap_part_skin_to_rig(

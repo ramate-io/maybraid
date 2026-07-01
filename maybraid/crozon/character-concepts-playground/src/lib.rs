@@ -8,6 +8,7 @@ mod animation;
 mod camera_focus;
 pub mod commands;
 mod focus;
+mod focus_reference;
 mod ground;
 mod material;
 mod preview;
@@ -25,6 +26,7 @@ use game_commands::command::{capture_command_line_input, GameCommandPlugin};
 
 use animation::{animate_body_rig, init_limb_animators};
 use camera_focus::{apply_camera_suggestion, queue_default_camera_focus, PendingCameraFocus};
+use focus_reference::{sync_focus_reference, FocusReferenceSyncState};
 use focus::animate_focused_preview_asset;
 use material::apply_preview_colors;
 use material::PreviewColorMaterials;
@@ -33,8 +35,9 @@ use preview::{
 	ConceptPreviewConfig, ConceptPreviewSyncState, PreviewRespawnCooldown,
 };
 use skinning::{
-	attach_parts_to_sockets, build_rig_bone_map, dump_bones_to_console, maintain_resolved_pose,
-	prune_duplicate_part_scenes, remap_part_skin_to_rig, DumpBonesRequest,
+	attach_focus_reference_to_sockets, attach_parts_to_sockets, build_rig_bone_map,
+	dump_bones_to_console, maintain_resolved_pose, prune_duplicate_part_scenes,
+	remap_part_skin_to_rig, DumpBonesRequest,
 };
 
 pub struct CrozonCharacterConceptsPlaygroundPlugin;
@@ -43,6 +46,7 @@ impl Plugin for CrozonCharacterConceptsPlaygroundPlugin {
 	fn build(&self, app: &mut App) {
 		app.init_resource::<ConceptPreviewConfig>()
 			.init_resource::<ConceptPreviewSyncState>()
+			.init_resource::<FocusReferenceSyncState>()
 			.init_resource::<PreviewRespawnCooldown>()
 			.init_resource::<DumpBonesRequest>()
 			.init_resource::<PendingCameraFocus>()
@@ -79,14 +83,16 @@ impl Plugin for CrozonCharacterConceptsPlaygroundPlugin {
 					sync_preview
 						.after(capture_command_line_input::<ConceptsCommand>)
 						.after(ui::react_creator_ui),
+					sync_focus_reference.after(sync_preview),
 					animate_focused_preview_asset.after(ui::react_creator_ui).before(sync_preview),
-					build_rig_bone_map.after(sync_preview),
+					build_rig_bone_map.after(sync_focus_reference),
 					maintain_resolved_pose.after(build_rig_bone_map),
 				),
 			)
 			.add_systems(
 				Update,
 				(
+					attach_focus_reference_to_sockets.after(build_rig_bone_map),
 					attach_parts_to_sockets
 						.after(build_rig_bone_map)
 						.run_if(preview_pass_ready),
@@ -109,7 +115,10 @@ impl Plugin for CrozonCharacterConceptsPlaygroundPlugin {
 					animate_body_rig
 						.after(init_limb_animators)
 						.run_if(preview_pass_ready),
-					apply_camera_suggestion.after(ui::react_creator_ui).after(build_rig_bone_map),
+					apply_camera_suggestion
+						.after(ui::react_creator_ui)
+						.after(maintain_resolved_pose)
+						.after(attach_focus_reference_to_sockets),
 					dump_bones_to_console,
 					thumbnail::sync_thumbnail_camera_activity.after(ui::sync_creator_ui),
 					ui::sync_command_status_text.before(game_commands::ui::update_debug_ui),

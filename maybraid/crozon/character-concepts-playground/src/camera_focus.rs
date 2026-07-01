@@ -4,6 +4,7 @@ use crozon_character_playground::CameraController;
 use crozon_characters::SocketRig;
 
 use crate::{
+	focus_reference::FocusReferenceRig,
 	preview::ConceptPreviewConfig,
 	skinning::{BoneMap, CharacterRig, CharacterRigRole},
 	ui::{CameraFocus, CreatorUiState, UiAssetTarget},
@@ -39,7 +40,7 @@ pub fn apply_camera_suggestion(
 	time: Res<Time>,
 	look_enabled: Option<Res<CameraLookEnabled>>,
 	mut pending: ResMut<PendingCameraFocus>,
-	rigs: Query<(&BoneMap, &CharacterRig)>,
+	rigs: Query<(&BoneMap, &CharacterRig), With<FocusReferenceRig>>,
 	transforms: Query<&GlobalTransform>,
 	mut cameras: Query<(&mut Transform, &mut CameraController), With<Camera3d>>,
 ) {
@@ -74,7 +75,7 @@ pub fn apply_camera_suggestion(
 
 fn resolve_focus_transform(
 	focus: CameraFocus,
-	rigs: &Query<(&BoneMap, &CharacterRig)>,
+	rigs: &Query<(&BoneMap, &CharacterRig), With<FocusReferenceRig>>,
 	transforms: &Query<&GlobalTransform>,
 ) -> Option<Transform> {
 	let role = match focus.rig {
