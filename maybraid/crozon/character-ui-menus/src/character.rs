@@ -1,13 +1,14 @@
-use character_ui_menu::{
-	AssetValue, CameraFocus, CharacterField, MenuEvent, Section, SectionId, SingleSelect,
-	SwatchValue,
-};
+use character_ui_menu::{CameraFocus, Section, SingleSelect};
 use crozon_characters::{
 	species::{braidman::BraidmanConfig, brodler::BrodlerConfig},
 	ConceptAnimation,
 };
 
-use crate::{braidman::BraidmanMenu, brodler::BrodlerMenu, cycle_value};
+use crate::{
+	characters::{braidman::BraidmanMenu, brodler::BrodlerMenu},
+	cycle_value,
+	event::{AssetValue, CharacterField, MenuEvent, SectionId, SwatchValue},
+};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ConceptSpecies {

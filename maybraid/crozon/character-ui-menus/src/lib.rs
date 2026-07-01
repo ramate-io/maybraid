@@ -1,16 +1,17 @@
 //! Crozon-specific typed character menus.
 
-pub mod braidman;
-pub mod brodler;
 pub mod character;
+pub mod characters;
+pub mod event;
 pub mod focus;
 
-pub use braidman::BraidmanMenu;
-pub use brodler::BrodlerMenu;
 pub use character::{CharacterMenu, ConceptSpecies, SectionOpenState, SpeciesMenu};
+pub use characters::{braidman::BraidmanMenu, brodler::BrodlerMenu};
+pub use event::{AssetValue, CharacterField, MenuEvent, SectionId, SwatchValue};
 pub use focus::BODY_FOCUS;
 
-use character_ui_menu::IdentifiedAsset;
+use bevy_math::Vec3;
+use character_ui_menu::{IdentifiedAsset, ThumbnailCamera};
 use crozon_characters::{
 	presets::{BuildPreset, GenderPreset},
 	species::{
@@ -91,31 +92,45 @@ impl_menu_identity!(BrodlerEyeColor);
 impl_menu_identity!(BrodlerHornColor);
 
 macro_rules! impl_asset_option {
-	($ty:ty) => {
+	($ty:ty, $camera:expr) => {
 		impl AssetOption for $ty {
 			fn asset(&self) -> IdentifiedAsset {
 				let path = (*self).path();
 				IdentifiedAsset::new((*self).label(), (*self).label(), path.as_str())
+					.with_thumbnail_camera($camera)
 			}
 		}
 	};
 }
 
-impl_asset_option!(BodyMesh);
-impl_asset_option!(HeadMesh);
-impl_asset_option!(BrodlerHeadMesh);
-impl_asset_option!(HornMesh);
-impl_asset_option!(EyeMesh);
-impl_asset_option!(NoseMesh);
-impl_asset_option!(MouthMesh);
-impl_asset_option!(EarMesh);
-impl_asset_option!(ClothingMesh);
+const BODY_THUMBNAIL_CAMERA: ThumbnailCamera =
+	ThumbnailCamera::new(Vec3::new(0.0, 0.8, 3.2), Vec3::new(0.0, 0.65, 0.0));
+const HEAD_THUMBNAIL_CAMERA: ThumbnailCamera =
+	ThumbnailCamera::new(Vec3::new(0.0, 0.05, 1.25), Vec3::new(0.0, 0.05, 0.0));
+const FACE_FEATURE_THUMBNAIL_CAMERA: ThumbnailCamera =
+	ThumbnailCamera::new(Vec3::new(0.0, 0.0, 0.55), Vec3::ZERO);
+const EAR_THUMBNAIL_CAMERA: ThumbnailCamera =
+	ThumbnailCamera::new(Vec3::new(0.45, 0.0, 0.65), Vec3::ZERO);
+const CROWN_THUMBNAIL_CAMERA: ThumbnailCamera =
+	ThumbnailCamera::new(Vec3::new(0.0, 0.2, 1.3), Vec3::new(0.0, 0.1, 0.0));
+const CLOTHING_THUMBNAIL_CAMERA: ThumbnailCamera =
+	ThumbnailCamera::new(Vec3::new(0.0, 0.75, 2.5), Vec3::new(0.0, 0.65, 0.0));
+
+impl_asset_option!(BodyMesh, BODY_THUMBNAIL_CAMERA);
+impl_asset_option!(HeadMesh, HEAD_THUMBNAIL_CAMERA);
+impl_asset_option!(BrodlerHeadMesh, HEAD_THUMBNAIL_CAMERA);
+impl_asset_option!(HornMesh, CROWN_THUMBNAIL_CAMERA);
+impl_asset_option!(EyeMesh, FACE_FEATURE_THUMBNAIL_CAMERA);
+impl_asset_option!(NoseMesh, FACE_FEATURE_THUMBNAIL_CAMERA);
+impl_asset_option!(MouthMesh, FACE_FEATURE_THUMBNAIL_CAMERA);
+impl_asset_option!(EarMesh, EAR_THUMBNAIL_CAMERA);
+impl_asset_option!(ClothingMesh, CLOTHING_THUMBNAIL_CAMERA);
 
 impl AssetOption for HairMesh {
 	fn asset(&self) -> IdentifiedAsset {
 		let label = (*self).label();
 		let path = (*self).path().map(|path| path.as_str()).unwrap_or("");
-		IdentifiedAsset::new(label, label, path)
+		IdentifiedAsset::new(label, label, path).with_thumbnail_camera(CROWN_THUMBNAIL_CAMERA)
 	}
 }
 

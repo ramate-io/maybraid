@@ -2,7 +2,10 @@ use crozon_characters::species::{
 	braidman::BraidmanConfig, brodler::BrodlerConfig, common::ClothingMesh,
 };
 
-use crate::{braidman::BraidmanMenu, brodler::BrodlerMenu, character::CharacterMenu};
+use crate::{
+	character::CharacterMenu,
+	characters::{braidman::BraidmanMenu, brodler::BrodlerMenu},
+};
 
 #[test]
 fn braidman_config_round_trip() -> anyhow::Result<()> {
@@ -28,8 +31,9 @@ fn brodler_config_round_trip() -> anyhow::Result<()> {
 
 #[test]
 fn clothing_toggle_and_color() -> anyhow::Result<()> {
-	use character_ui_menu::{CharacterField, MenuEvent, SwatchValue};
 	use crozon_characters::species::braidman::BraidmanColor;
+
+	use crate::{CharacterField, MenuEvent, SwatchValue};
 
 	let mut menu = CharacterMenu::default();
 	let coat = ClothingMesh::FittedCoat;
@@ -45,8 +49,9 @@ fn clothing_toggle_and_color() -> anyhow::Result<()> {
 
 #[test]
 fn body_color_syncs_skin() -> anyhow::Result<()> {
-	use character_ui_menu::{CharacterField, MenuEvent, SwatchValue};
 	use crozon_characters::species::braidman::BraidmanColor;
+
+	use crate::{CharacterField, MenuEvent, SwatchValue};
 
 	let mut menu = CharacterMenu::default();
 	assert!(menu.apply(MenuEvent::SetSwatch(

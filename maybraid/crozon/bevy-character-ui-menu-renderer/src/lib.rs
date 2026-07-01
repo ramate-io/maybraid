@@ -5,6 +5,7 @@ pub mod render;
 
 pub use plugin::CharacterUiMenuRendererPlugin;
 pub use render::{
-	render_asset_select, render_multi_select, render_section, render_single_cycle, render_slider,
-	render_swatch_select, MenuButton, MenuThumbnailContext,
+	render_asset_select, render_colored_multi_select, render_multi_select, render_section,
+	render_single_cycle, render_slider, render_swatch_select, MenuButton, MenuThumbnailContext,
+	RenderContext, RenderMenu, Renderer,
 };

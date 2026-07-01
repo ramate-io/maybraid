@@ -1,6 +1,4 @@
-use character_ui_menu::{
-	AssetSingleSelect, CameraFocus, CharacterField, MultiSelect, Section, SwatchSingleSelect,
-};
+use character_ui_menu::{AssetSingleSelect, CameraFocus, MultiSelect, Section, SwatchSingleSelect};
 use crozon_characters::{
 	species::{
 		braidman::{BraidmanColor, ClothingColor},
@@ -14,7 +12,8 @@ use crozon_characters::{
 };
 
 use crate::{
-	braidman::AnimationMenu,
+	characters::braidman::AnimationMenu,
+	event::CharacterField,
 	focus::{
 		BODY_FOCUS, CROWN_FOCUS, EAR_FOCUS, EYE_FOCUS, HEAD_ROOT_FOCUS, MOUTH_FOCUS, NOSE_FOCUS,
 	},

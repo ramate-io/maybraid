@@ -4,13 +4,15 @@ use bevy::input::mouse::{MouseScrollUnit, MouseWheel};
 use bevy::picking::hover::HoverMap;
 use bevy::prelude::*;
 use bevy::render::render_resource::{TextureDimension, TextureFormat, TextureUsages};
-use bevy_character_ui_menu_renderer::{
-	render_asset_select, render_multi_select, render_section, render_single_cycle, render_slider,
-	render_swatch_select, MenuButton, MenuThumbnailContext,
+use bevy_character_ui_menu_renderer::{MenuButton, MenuThumbnailContext, RenderContext, Renderer};
+use character_ui_menu::ThumbnailCamera;
+use crozon_character_ui_menus::{
+	AssetOption, CharacterMenu, MenuEvent, SectionId, SectionOpenState,
 };
-use character_ui_menu::{AssetValue, CharacterField, MenuEvent, SectionId, SwatchValue};
-use crozon_character_ui_menus::{BraidmanMenu, BrodlerMenu, CharacterMenu, SectionOpenState};
-use crozon_characters::species::common::ClothingMesh;
+use crozon_characters::species::{
+	brodler::{assets::HornMesh, BrodlerHeadMesh},
+	common::{BodyMesh, ClothingMesh, EarMesh, EyeMesh, HairMesh, HeadMesh, MouthMesh, NoseMesh},
+};
 use game_commands::ui::{GameCommandDrawerConfig, GameCommandStatusText, GameCommandUiConfig};
 
 use crate::{
@@ -20,7 +22,7 @@ use crate::{
 		ConceptPreviewConfig, ConceptPreviewSyncState, ConceptSpecies, PreviewRespawnCooldown,
 	},
 	species_session::{reset_for_species_switch, CameraFocusBootState, SpeciesSessionState},
-	thumbnail::ThumbnailCache,
+	thumbnail::{self, ThumbnailCache},
 };
 
 pub use character_ui_menu::CameraFocus;
@@ -88,11 +90,19 @@ pub struct CreatorUiScroll {
 	pub delta: Vec2,
 }
 
-struct NoThumbnails;
+struct CachedThumbnails<'a> {
+	cache: &'a ThumbnailCache,
+}
 
-impl MenuThumbnailContext for NoThumbnails {
-	fn image_for_asset(&mut self, _asset_path: &'static str) -> Option<Handle<Image>> {
-		None
+impl MenuThumbnailContext for CachedThumbnails<'_> {
+	fn image_for_asset(
+		&mut self,
+		_label: &'static str,
+		asset_path: &'static str,
+		color: Color,
+		_camera: ThumbnailCamera,
+	) -> Option<Handle<Image>> {
+		self.cache.cached_image(asset_path, color)
 	}
 }
 
@@ -118,6 +128,8 @@ pub(crate) fn sync_command_status_text(
 
 pub fn setup_creator_ui(
 	mut commands: Commands,
+	asset_server: Res<AssetServer>,
+	mut images: ResMut<Assets<Image>>,
 	mut thumbnails: ResMut<ThumbnailCache>,
 	config: Res<ConceptPreviewConfig>,
 	ui_state: Res<CreatorUiState>,
@@ -129,6 +141,8 @@ pub fn setup_creator_ui(
 	let viewport = spawn_creator_ui_shell(&mut commands);
 	rebuild_creator_ui_panel(
 		&mut commands,
+		asset_server.as_ref(),
+		images.as_mut(),
 		thumbnails.as_mut(),
 		config.as_ref(),
 		ui_state.as_ref(),
@@ -138,6 +152,8 @@ pub fn setup_creator_ui(
 
 pub fn sync_creator_ui(
 	mut commands: Commands,
+	asset_server: Res<AssetServer>,
+	mut images: ResMut<Assets<Image>>,
 	mut thumbnails: ResMut<ThumbnailCache>,
 	config: Res<ConceptPreviewConfig>,
 	ui_state: Res<CreatorUiState>,
@@ -161,6 +177,8 @@ pub fn sync_creator_ui(
 	}
 	rebuild_creator_ui_panel(
 		&mut commands,
+		asset_server.as_ref(),
+		images.as_mut(),
 		thumbnails.as_mut(),
 		config.as_ref(),
 		ui_state.as_ref(),
@@ -308,38 +326,229 @@ fn spawn_creator_ui_shell(commands: &mut Commands) -> Entity {
 
 fn rebuild_creator_ui_panel(
 	commands: &mut Commands,
+	asset_server: &AssetServer,
+	images: &mut Assets<Image>,
 	thumbnails: &mut ThumbnailCache,
 	config: &ConceptPreviewConfig,
 	ui_state: &CreatorUiState,
 	viewports: impl IntoIterator<Item = Entity>,
 ) {
 	thumbnails.begin_ui_rebuild();
+	prewarm_thumbnails(commands, images, asset_server, thumbnails, config);
 	for viewport in viewports {
 		commands.entity(viewport).despawn_related::<Children>();
 		commands.entity(viewport).with_children(|panel| {
-			populate_creator_ui_panel(panel, config, ui_state);
+			populate_creator_ui_panel(panel, thumbnails, config, ui_state);
 		});
 	}
 }
 
 fn populate_creator_ui_panel(
 	panel: &mut ChildSpawnerCommands,
+	thumbnails: &ThumbnailCache,
 	config: &ConceptPreviewConfig,
 	ui_state: &CreatorUiState,
 ) {
 	text(panel, "Character Concepts", 15.0, Color::WHITE);
 	text(panel, "Typed menu primitives rendered through a shared Bevy layer.", 10.0, muted());
 	species_picker(panel, config.species());
-	match config {
+	let menu = match config {
 		ConceptPreviewConfig::Braidman { config, animation } => {
-			let menu = BraidmanMenu::from(config).with_animation(*animation);
-			populate_braidman(panel, &menu, ui_state);
+			CharacterMenu::from_braidman(config, *animation)
 		}
 		ConceptPreviewConfig::Brodler { config, animation } => {
-			let menu = BrodlerMenu::from(config).with_animation(*animation);
-			populate_brodler(panel, &menu, ui_state);
+			CharacterMenu::from_brodler(config, *animation)
+		}
+	};
+	let mut thumbnails = CachedThumbnails { cache: thumbnails };
+	let mut context = RenderContext { sections: ui_state.sections, thumbnails: &mut thumbnails };
+	Renderer::default().render(panel, &menu, &mut context);
+}
+
+fn prewarm_thumbnails(
+	commands: &mut Commands,
+	images: &mut Assets<Image>,
+	asset_server: &AssetServer,
+	thumbnails: &mut ThumbnailCache,
+	config: &ConceptPreviewConfig,
+) {
+	match config {
+		ConceptPreviewConfig::Braidman { config, .. } => {
+			let skin = config.colors.skin_color().color();
+			for body in BodyMesh::VALUES {
+				prewarm_asset_option(
+					commands,
+					images,
+					asset_server,
+					thumbnails,
+					*body,
+					config.colors.body.color(),
+				);
+			}
+			for head in HeadMesh::VALUES {
+				prewarm_asset_option(commands, images, asset_server, thumbnails, *head, skin);
+			}
+			prewarm_common_feature_thumbnails(commands, images, asset_server, thumbnails, |slot| {
+				match slot {
+					CommonThumbnailSlot::Eye => config.colors.eyes.color(),
+					CommonThumbnailSlot::Mouth => config.colors.mouth.color(),
+					CommonThumbnailSlot::Nose | CommonThumbnailSlot::Ear => skin,
+				}
+			});
+			for hair in HairMesh::VALUES {
+				prewarm_asset_option(
+					commands,
+					images,
+					asset_server,
+					thumbnails,
+					*hair,
+					config.colors.hair.color(),
+				);
+			}
+			for clothing in ClothingMesh::VALUES {
+				prewarm_asset_option(
+					commands,
+					images,
+					asset_server,
+					thumbnails,
+					*clothing,
+					config.colors.clothing_color(*clothing).color(),
+				);
+			}
+		}
+		ConceptPreviewConfig::Brodler { config, .. } => {
+			for head in BrodlerHeadMesh::VALUES {
+				prewarm_asset_option(
+					commands,
+					images,
+					asset_server,
+					thumbnails,
+					*head,
+					config.colors.skin.color(),
+				);
+			}
+			for horns in HornMesh::VALUES {
+				prewarm_asset_option(
+					commands,
+					images,
+					asset_server,
+					thumbnails,
+					*horns,
+					config.colors.horns.color(),
+				);
+			}
+			prewarm_common_feature_thumbnails(commands, images, asset_server, thumbnails, |slot| {
+				match slot {
+					CommonThumbnailSlot::Eye => config.colors.eyes.color(),
+					CommonThumbnailSlot::Mouth => config.colors.mouth.color(),
+					CommonThumbnailSlot::Nose | CommonThumbnailSlot::Ear => {
+						config.colors.skin.color()
+					}
+				}
+			});
+			for hair in HairMesh::VALUES {
+				prewarm_asset_option(
+					commands,
+					images,
+					asset_server,
+					thumbnails,
+					*hair,
+					config.colors.hair.color(),
+				);
+			}
+			for clothing in ClothingMesh::VALUES {
+				prewarm_asset_option(
+					commands,
+					images,
+					asset_server,
+					thumbnails,
+					*clothing,
+					config.colors.clothing_color(*clothing).color(),
+				);
+			}
 		}
 	}
+}
+
+#[derive(Clone, Copy)]
+enum CommonThumbnailSlot {
+	Eye,
+	Nose,
+	Mouth,
+	Ear,
+}
+
+fn prewarm_common_feature_thumbnails(
+	commands: &mut Commands,
+	images: &mut Assets<Image>,
+	asset_server: &AssetServer,
+	thumbnails: &mut ThumbnailCache,
+	color_for_slot: impl Fn(CommonThumbnailSlot) -> Color,
+) {
+	for eye in EyeMesh::VALUES {
+		prewarm_asset_option(
+			commands,
+			images,
+			asset_server,
+			thumbnails,
+			*eye,
+			color_for_slot(CommonThumbnailSlot::Eye),
+		);
+	}
+	for nose in NoseMesh::VALUES {
+		prewarm_asset_option(
+			commands,
+			images,
+			asset_server,
+			thumbnails,
+			*nose,
+			color_for_slot(CommonThumbnailSlot::Nose),
+		);
+	}
+	for mouth in MouthMesh::VALUES {
+		prewarm_asset_option(
+			commands,
+			images,
+			asset_server,
+			thumbnails,
+			*mouth,
+			color_for_slot(CommonThumbnailSlot::Mouth),
+		);
+	}
+	for ear in EarMesh::VALUES {
+		prewarm_asset_option(
+			commands,
+			images,
+			asset_server,
+			thumbnails,
+			*ear,
+			color_for_slot(CommonThumbnailSlot::Ear),
+		);
+	}
+}
+
+fn prewarm_asset_option<T: AssetOption>(
+	commands: &mut Commands,
+	images: &mut Assets<Image>,
+	asset_server: &AssetServer,
+	thumbnails: &mut ThumbnailCache,
+	value: T,
+	color: Color,
+) {
+	let asset = value.asset();
+	if asset.path.is_empty() {
+		return;
+	}
+	let _ = thumbnail::image_for_asset(
+		commands,
+		images,
+		asset_server,
+		thumbnails,
+		asset.label,
+		asset.path,
+		color,
+		asset.thumbnail_camera,
+	);
 }
 
 fn species_picker(panel: &mut ChildSpawnerCommands, active: ConceptSpecies) {
@@ -361,463 +570,6 @@ fn species_picker(panel: &mut ChildSpawnerCommands, active: ConceptSpecies) {
 				species_button(row, species, active == species);
 			}
 		});
-}
-
-fn populate_braidman(
-	parent: &mut ChildSpawnerCommands,
-	menu: &BraidmanMenu,
-	state: &CreatorUiState,
-) {
-	render_section(
-		parent,
-		SectionId::Presets,
-		state.sections.is_open(SectionId::Presets),
-		|body| {
-			render_single_cycle(
-				body,
-				"Gender",
-				menu.presets.value.gender.value.label(),
-				CharacterField::Gender,
-			);
-			render_single_cycle(
-				body,
-				"Build",
-				menu.presets.value.build.value.label(),
-				CharacterField::Build,
-			);
-		},
-	);
-	render_section(parent, SectionId::Body, state.sections.is_open(SectionId::Body), |body| {
-		let mut thumbnails = NoThumbnails;
-		render_asset_select(
-			body,
-			"Body Mesh",
-			menu.body.value.body.value,
-			CharacterField::BodyMesh,
-			AssetValue::Body,
-			&mut thumbnails,
-		);
-		render_braidman_body_sliders(body, menu);
-		render_swatch_select(body, "Body Color", menu.body.value.color.value, |color| {
-			MenuEvent::SetSwatch(CharacterField::BodyColor, SwatchValue::Braidman(color))
-		});
-	});
-	render_section(
-		parent,
-		SectionId::HeadFeatures,
-		state.sections.is_open(SectionId::HeadFeatures),
-		|body| {
-			let mut thumbnails = NoThumbnails;
-			render_asset_select(
-				body,
-				"Head",
-				menu.head_features.value.head.value,
-				CharacterField::HeadMesh,
-				AssetValue::Head,
-				&mut thumbnails,
-			);
-			render_asset_select(
-				body,
-				"Eyes",
-				menu.head_features.value.eye.value,
-				CharacterField::Eye,
-				AssetValue::Eye,
-				&mut thumbnails,
-			);
-			render_swatch_select(
-				body,
-				"Eye Color",
-				menu.head_features.value.eye_color.value,
-				|color| {
-					MenuEvent::SetSwatch(CharacterField::EyeColor, SwatchValue::Braidman(color))
-				},
-			);
-			render_asset_select(
-				body,
-				"Nose",
-				menu.head_features.value.nose.value,
-				CharacterField::Nose,
-				AssetValue::Nose,
-				&mut thumbnails,
-			);
-			render_asset_select(
-				body,
-				"Mouth",
-				menu.head_features.value.mouth.value,
-				CharacterField::Mouth,
-				AssetValue::Mouth,
-				&mut thumbnails,
-			);
-			render_swatch_select(
-				body,
-				"Mouth Color",
-				menu.head_features.value.mouth_color.value,
-				|color| {
-					MenuEvent::SetSwatch(CharacterField::MouthColor, SwatchValue::Braidman(color))
-				},
-			);
-			render_asset_select(
-				body,
-				"Ears",
-				menu.head_features.value.ear.value,
-				CharacterField::Ear,
-				AssetValue::Ear,
-				&mut thumbnails,
-			);
-		},
-	);
-	render_section(parent, SectionId::Hair, state.sections.is_open(SectionId::Hair), |body| {
-		let mut thumbnails = NoThumbnails;
-		render_asset_select(
-			body,
-			"Hair",
-			menu.hair.value.style.value,
-			CharacterField::Hair,
-			AssetValue::Hair,
-			&mut thumbnails,
-		);
-		render_swatch_select(body, "Hair Color", menu.hair.value.color.value, |color| {
-			MenuEvent::SetSwatch(CharacterField::HairColor, SwatchValue::Braidman(color))
-		});
-	});
-	render_section(
-		parent,
-		SectionId::Clothing,
-		state.sections.is_open(SectionId::Clothing),
-		|body| {
-			let mut thumbnails = NoThumbnails;
-			render_multi_select(
-				body,
-				"Clothing",
-				&menu.clothing.value.layers.selected,
-				MenuEvent::ToggleClothing,
-				&mut thumbnails,
-			);
-			for clothing in ClothingMesh::VALUES {
-				render_swatch_select(
-					body,
-					clothing.label(),
-					menu.clothing_color(*clothing),
-					|color| {
-						MenuEvent::SetSwatch(
-							CharacterField::Clothing(*clothing),
-							SwatchValue::Braidman(color),
-						)
-					},
-				);
-			}
-		},
-	);
-	render_section(
-		parent,
-		SectionId::Animation,
-		state.sections.is_open(SectionId::Animation),
-		|body| {
-			let mut thumbnails = NoThumbnails;
-			render_asset_select(
-				body,
-				"Animation",
-				menu.animation.value.clip.value,
-				CharacterField::Animation,
-				AssetValue::Animation,
-				&mut thumbnails,
-			);
-		},
-	);
-}
-
-fn populate_brodler(parent: &mut ChildSpawnerCommands, menu: &BrodlerMenu, state: &CreatorUiState) {
-	render_section(parent, SectionId::Head, state.sections.is_open(SectionId::Head), |body| {
-		let mut thumbnails = NoThumbnails;
-		render_asset_select(
-			body,
-			"Head",
-			menu.head.value.head.value,
-			CharacterField::BrodlerHead,
-			AssetValue::BrodlerHead,
-			&mut thumbnails,
-		);
-		render_asset_select(
-			body,
-			"Horns",
-			menu.head.value.horns.value,
-			CharacterField::Horns,
-			AssetValue::Horns,
-			&mut thumbnails,
-		);
-		render_swatch_select(body, "Skin", menu.head.value.skin.value, |color| {
-			MenuEvent::SetSwatch(CharacterField::SkinColor, SwatchValue::BrodlerSkin(color))
-		});
-	});
-	render_section(
-		parent,
-		SectionId::HeadFeatures,
-		state.sections.is_open(SectionId::HeadFeatures),
-		|body| {
-			let mut thumbnails = NoThumbnails;
-			render_asset_select(
-				body,
-				"Eyes",
-				menu.head_features.value.eye.value,
-				CharacterField::Eye,
-				AssetValue::Eye,
-				&mut thumbnails,
-			);
-			render_swatch_select(
-				body,
-				"Eye Color",
-				menu.head_features.value.eye_color.value,
-				|color| {
-					MenuEvent::SetSwatch(
-						CharacterField::BrodlerEyeColor,
-						SwatchValue::BrodlerEye(color),
-					)
-				},
-			);
-			render_swatch_select(
-				body,
-				"Horn Color",
-				menu.head_features.value.horn_color.value,
-				|color| {
-					MenuEvent::SetSwatch(CharacterField::HornColor, SwatchValue::BrodlerHorn(color))
-				},
-			);
-			render_asset_select(
-				body,
-				"Nose",
-				menu.head_features.value.nose.value,
-				CharacterField::Nose,
-				AssetValue::Nose,
-				&mut thumbnails,
-			);
-			render_asset_select(
-				body,
-				"Mouth",
-				menu.head_features.value.mouth.value,
-				CharacterField::Mouth,
-				AssetValue::Mouth,
-				&mut thumbnails,
-			);
-			render_swatch_select(
-				body,
-				"Mouth Color",
-				menu.head_features.value.mouth_color.value,
-				|color| {
-					MenuEvent::SetSwatch(CharacterField::MouthColor, SwatchValue::Braidman(color))
-				},
-			);
-			render_asset_select(
-				body,
-				"Ears",
-				menu.head_features.value.ear.value,
-				CharacterField::Ear,
-				AssetValue::Ear,
-				&mut thumbnails,
-			);
-		},
-	);
-	render_section(parent, SectionId::Hair, state.sections.is_open(SectionId::Hair), |body| {
-		let mut thumbnails = NoThumbnails;
-		render_asset_select(
-			body,
-			"Hair",
-			menu.hair.value.style.value,
-			CharacterField::Hair,
-			AssetValue::Hair,
-			&mut thumbnails,
-		);
-		render_swatch_select(body, "Hair Color", menu.hair.value.color.value, |color| {
-			MenuEvent::SetSwatch(CharacterField::HairColor, SwatchValue::Braidman(color))
-		});
-	});
-	render_section(
-		parent,
-		SectionId::Clothing,
-		state.sections.is_open(SectionId::Clothing),
-		|body| {
-			let mut thumbnails = NoThumbnails;
-			render_multi_select(
-				body,
-				"Clothing",
-				&menu.clothing.value.layers.selected,
-				MenuEvent::ToggleClothing,
-				&mut thumbnails,
-			);
-			for clothing in ClothingMesh::VALUES {
-				render_swatch_select(
-					body,
-					clothing.label(),
-					menu.clothing_color(*clothing),
-					|color| {
-						MenuEvent::SetSwatch(
-							CharacterField::Clothing(*clothing),
-							SwatchValue::Braidman(color),
-						)
-					},
-				);
-			}
-		},
-	);
-	render_section(
-		parent,
-		SectionId::Animation,
-		state.sections.is_open(SectionId::Animation),
-		|body| {
-			let mut thumbnails = NoThumbnails;
-			render_asset_select(
-				body,
-				"Animation",
-				menu.animation.value.clip.value,
-				CharacterField::Animation,
-				AssetValue::Animation,
-				&mut thumbnails,
-			);
-		},
-	);
-}
-
-fn render_braidman_body_sliders(parent: &mut ChildSpawnerCommands, menu: &BraidmanMenu) {
-	let sliders = &menu.body.value.sliders;
-	render_slider(
-		parent,
-		"Shoulder Width",
-		sliders.shoulder_width.value,
-		sliders.shoulder_width.step,
-		CharacterField::ShoulderWidth,
-	);
-	render_slider(
-		parent,
-		"Hip Width",
-		sliders.hip_width.value,
-		sliders.hip_width.step,
-		CharacterField::HipWidth,
-	);
-	render_slider(
-		parent,
-		"Chest Thickness",
-		sliders.chest_thickness.value,
-		sliders.chest_thickness.step,
-		CharacterField::ChestThickness,
-	);
-	render_slider(
-		parent,
-		"Hip Thickness",
-		sliders.hip_thickness.value,
-		sliders.hip_thickness.step,
-		CharacterField::HipThickness,
-	);
-	render_slider(
-		parent,
-		"Leg Thickness",
-		sliders.leg_thickness.value,
-		sliders.leg_thickness.step,
-		CharacterField::LegThickness,
-	);
-	render_slider(
-		parent,
-		"Buttocks Thickness",
-		sliders.buttocks_thickness.value,
-		sliders.buttocks_thickness.step,
-		CharacterField::ButtocksThickness,
-	);
-	render_slider(
-		parent,
-		"Waist Thickness",
-		sliders.waist_thickness.value,
-		sliders.waist_thickness.step,
-		CharacterField::WaistThickness,
-	);
-	render_slider(
-		parent,
-		"Lower Trunk Thickness",
-		sliders.lower_trunk_thickness.value,
-		sliders.lower_trunk_thickness.step,
-		CharacterField::LowerTrunkThickness,
-	);
-	render_slider(
-		parent,
-		"Arm Length",
-		sliders.arm_length.value,
-		sliders.arm_length.step,
-		CharacterField::ArmLength,
-	);
-	render_slider(
-		parent,
-		"Arm Thickness",
-		sliders.arm_thickness.value,
-		sliders.arm_thickness.step,
-		CharacterField::ArmThickness,
-	);
-	render_slider(
-		parent,
-		"Leg Length",
-		sliders.leg_length.value,
-		sliders.leg_length.step,
-		CharacterField::LegLength,
-	);
-	render_slider(
-		parent,
-		"Eye Width",
-		sliders.eye_width.value,
-		sliders.eye_width.step,
-		CharacterField::EyeWidth,
-	);
-	render_slider(
-		parent,
-		"Eye Height",
-		sliders.eye_height.value,
-		sliders.eye_height.step,
-		CharacterField::EyeHeight,
-	);
-	render_slider(
-		parent,
-		"Eye Tilt",
-		sliders.eye_tilt.value,
-		sliders.eye_tilt.step,
-		CharacterField::EyeTilt,
-	);
-	render_slider(
-		parent,
-		"Nose Width",
-		sliders.nose_width.value,
-		sliders.nose_width.step,
-		CharacterField::NoseWidth,
-	);
-	render_slider(
-		parent,
-		"Nose Height",
-		sliders.nose_height.value,
-		sliders.nose_height.step,
-		CharacterField::NoseHeight,
-	);
-	render_slider(
-		parent,
-		"Mouth Width",
-		sliders.mouth_width.value,
-		sliders.mouth_width.step,
-		CharacterField::MouthWidth,
-	);
-	render_slider(
-		parent,
-		"Mouth Height",
-		sliders.mouth_height.value,
-		sliders.mouth_height.step,
-		CharacterField::MouthHeight,
-	);
-	render_slider(
-		parent,
-		"Ear Width",
-		sliders.ear_width.value,
-		sliders.ear_width.step,
-		CharacterField::EarWidth,
-	);
-	render_slider(
-		parent,
-		"Ear Height",
-		sliders.ear_height.value,
-		sliders.ear_height.step,
-		CharacterField::EarHeight,
-	);
 }
 
 fn species_button(parent: &mut ChildSpawnerCommands, species: ConceptSpecies, active: bool) {

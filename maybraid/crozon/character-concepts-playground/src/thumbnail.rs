@@ -1,13 +1,10 @@
-#![allow(dead_code)]
-// The typed renderer keys thumbnails by asset path now. The cache is retained so
-// the next visual thumbnail pass can plug in without reviving species UI targets.
-
 use std::collections::HashMap;
 
 use bevy::camera::RenderTarget;
 use bevy::prelude::*;
+use character_ui_menu::ThumbnailCamera;
 
-use crate::{preview_color::PreviewColor, ui::thumbnail_image};
+use crate::ui::thumbnail_image;
 
 const THUMBNAIL_SPACING: f32 = 8.0;
 
@@ -21,47 +18,56 @@ pub struct ThumbnailCache {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 struct ThumbnailKey {
 	path: &'static str,
-	color: PreviewColor,
+	color: [u8; 4],
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 struct ThumbnailEntry {
 	camera: Entity,
+	image: Handle<Image>,
 	last_seen_revision: u64,
 }
 
 #[derive(Component)]
 pub struct ThumbnailPreview {
-	pub color: PreviewColor,
+	pub color: Color,
 }
 
 impl ThumbnailCache {
 	pub fn begin_ui_rebuild(&mut self) {
 		self.revision += 1;
 	}
+
+	pub fn cached_image(&self, path: &'static str, color: Color) -> Option<Handle<Image>> {
+		self.entries
+			.get(&ThumbnailKey { path, color: color_key(color) })
+			.map(|entry| entry.image.clone())
+	}
 }
 
-pub fn camera_for_asset(
+pub fn image_for_asset(
 	commands: &mut Commands,
 	images: &mut Assets<Image>,
 	asset_server: &AssetServer,
 	cache: &mut ThumbnailCache,
 	label: &'static str,
 	path: &'static str,
-	color: PreviewColor,
-) -> Entity {
-	let key = ThumbnailKey { path, color };
+	color: Color,
+	thumbnail_camera: ThumbnailCamera,
+) -> Handle<Image> {
+	let key = ThumbnailKey { path, color: color_key(color) };
 	if let Some(entry) = cache.entries.get_mut(&key) {
 		entry.last_seen_revision = cache.revision;
-		return entry.camera;
+		return entry.image.clone();
 	}
 
 	let slot = cache.next_slot;
 	cache.next_slot += 1;
 	let base = Vec3::new(4000.0 + slot as f32 * THUMBNAIL_SPACING, 0.0, 0.0);
 	let image = images.add(thumbnail_image());
-	let camera_transform =
-		Transform::from_translation(base + Vec3::new(0.0, 0.45, 1.55)).looking_at(base, Vec3::Y);
+	let image_handle = image.clone();
+	let camera_transform = Transform::from_translation(base + thumbnail_camera.position)
+		.looking_at(base + thumbnail_camera.look_at, Vec3::Y);
 	let camera = commands
 		.spawn((
 			Camera3d::default(),
@@ -91,10 +97,11 @@ pub fn camera_for_asset(
 		Name::new(format!("thumbnail_light_{label}")),
 	));
 
-	cache
-		.entries
-		.insert(key, ThumbnailEntry { camera, last_seen_revision: cache.revision });
-	camera
+	cache.entries.insert(
+		key,
+		ThumbnailEntry { camera, image: image_handle.clone(), last_seen_revision: cache.revision },
+	);
+	image_handle
 }
 
 pub fn sync_thumbnail_camera_activity(cache: Res<ThumbnailCache>, mut cameras: Query<&mut Camera>) {
@@ -104,4 +111,14 @@ pub fn sync_thumbnail_camera_activity(cache: Res<ThumbnailCache>, mut cameras: Q
 		};
 		camera.is_active = entry.last_seen_revision == cache.revision;
 	}
+}
+
+fn color_key(color: Color) -> [u8; 4] {
+	let color = color.to_srgba();
+	[
+		(color.red * 255.0).round() as u8,
+		(color.green * 255.0).round() as u8,
+		(color.blue * 255.0).round() as u8,
+		(color.alpha * 255.0).round() as u8,
+	]
 }

@@ -1,6 +1,5 @@
 use character_ui_menu::{
-	AssetSingleSelect, CameraFocus, CharacterField, MultiSelect, Section, SingleSelect, Slider,
-	SwatchSingleSelect,
+	AssetSingleSelect, CameraFocus, MultiSelect, Section, SingleSelect, Slider, SwatchSingleSelect,
 };
 use crozon_characters::{
 	presets::{BuildPreset, GenderPreset},
@@ -15,8 +14,11 @@ use crozon_characters::{
 	ConceptAnimation,
 };
 
-use crate::focus::{
-	BODY_FOCUS, CROWN_FOCUS, EAR_FOCUS, EYE_FOCUS, HEAD_ROOT_FOCUS, MOUTH_FOCUS, NOSE_FOCUS,
+use crate::{
+	event::CharacterField,
+	focus::{
+		BODY_FOCUS, CROWN_FOCUS, EAR_FOCUS, EYE_FOCUS, HEAD_ROOT_FOCUS, MOUTH_FOCUS, NOSE_FOCUS,
+	},
 };
 
 #[derive(Clone, Debug, PartialEq)]
