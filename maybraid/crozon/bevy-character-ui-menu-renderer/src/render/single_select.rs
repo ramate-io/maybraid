@@ -1,17 +1,15 @@
 use bevy::prelude::*;
-use character_ui_menu::{LabelOption, ListValues, SingleSelect};
+use character_ui_menu::SingleSelect;
 
 use crate::render::{MenuThumbnailContext, RenderContext, RenderMenu, Renderer};
 
-impl<T> RenderMenu for SingleSelect<T>
-where
-	T: Copy + LabelOption + ListValues,
-{
+impl<T: RenderMenu> RenderMenu for SingleSelect<T> {
 	fn render_with<C: MenuThumbnailContext>(
 		&self,
-		_renderer: &Renderer,
-		_parent: &mut ChildSpawnerCommands,
-		_context: &mut RenderContext<'_, C>,
+		renderer: &Renderer,
+		parent: &mut ChildSpawnerCommands,
+		context: &mut RenderContext<'_, C>,
 	) {
+		self.value.render_with(renderer, parent, context);
 	}
 }

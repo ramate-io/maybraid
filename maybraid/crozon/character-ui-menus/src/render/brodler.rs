@@ -7,7 +7,7 @@ use crate::{
 	},
 	event::CharacterField,
 	fields::ColoredMultiSelectField,
-	render::{asset_field, swatch_field},
+	render::{block_asset, labeled_swatch, render_colored_clothing},
 };
 
 impl RenderMenu for BrodlerMenu {
@@ -35,10 +35,10 @@ impl RenderMenu for BrodlerHeadMenu {
 		context: &mut RenderContext<'_, C>,
 	) {
 		context.preview_color = self.skin.value.color();
-		asset_field("Head", CharacterField::BrodlerHead, self.head).render_with(renderer, parent, context);
+		block_asset("Head", CharacterField::BrodlerHead, self.head).render_with(renderer, parent, context);
 		context.preview_color = context.accent_preview_color;
-		asset_field("Horns", CharacterField::Horns, self.horns).render_with(renderer, parent, context);
-		swatch_field("Skin", CharacterField::SkinColor, self.skin).render_with(renderer, parent, context);
+		block_asset("Horns", CharacterField::Horns, self.horns).render_with(renderer, parent, context);
+		labeled_swatch("Skin", CharacterField::SkinColor, self.skin).render_with(renderer, parent, context);
 	}
 }
 
@@ -50,19 +50,19 @@ impl RenderMenu for BrodlerHeadFeaturesMenu {
 		context: &mut RenderContext<'_, C>,
 	) {
 		context.preview_color = self.eye_color.value.color();
-		asset_field("Eyes", CharacterField::Eye, self.eye).render_with(renderer, parent, context);
-		swatch_field("Eye Color", CharacterField::BrodlerEyeColor, self.eye_color)
+		block_asset("Eyes", CharacterField::Eye, self.eye).render_with(renderer, parent, context);
+		labeled_swatch("Eye Color", CharacterField::BrodlerEyeColor, self.eye_color)
 			.render_with(renderer, parent, context);
-		swatch_field("Horn Color", CharacterField::HornColor, self.horn_color)
+		labeled_swatch("Horn Color", CharacterField::HornColor, self.horn_color)
 			.render_with(renderer, parent, context);
 		context.preview_color = context.base_preview_color;
-		asset_field("Nose", CharacterField::Nose, self.nose).render_with(renderer, parent, context);
+		block_asset("Nose", CharacterField::Nose, self.nose).render_with(renderer, parent, context);
 		context.preview_color = self.mouth_color.value.color();
-		asset_field("Mouth", CharacterField::Mouth, self.mouth).render_with(renderer, parent, context);
-		swatch_field("Mouth Color", CharacterField::MouthColor, self.mouth_color)
+		block_asset("Mouth", CharacterField::Mouth, self.mouth).render_with(renderer, parent, context);
+		labeled_swatch("Mouth Color", CharacterField::MouthColor, self.mouth_color)
 			.render_with(renderer, parent, context);
 		context.preview_color = context.base_preview_color;
-		asset_field("Ears", CharacterField::Ear, self.ear).render_with(renderer, parent, context);
+		block_asset("Ears", CharacterField::Ear, self.ear).render_with(renderer, parent, context);
 	}
 }
 
@@ -74,8 +74,8 @@ impl RenderMenu for BrodlerHairMenu {
 		context: &mut RenderContext<'_, C>,
 	) {
 		context.preview_color = self.color.value.color();
-		asset_field("Hair", CharacterField::Hair, self.style).render_with(renderer, parent, context);
-		swatch_field("Hair Color", CharacterField::HairColor, self.color)
+		block_asset("Hair", CharacterField::Hair, self.style).render_with(renderer, parent, context);
+		labeled_swatch("Hair Color", CharacterField::HairColor, self.color)
 			.render_with(renderer, parent, context);
 	}
 }
@@ -87,12 +87,12 @@ impl RenderMenu for BrodlerClothingMenu {
 		parent: &mut ChildSpawnerCommands,
 		context: &mut RenderContext<'_, C>,
 	) {
-		ColoredMultiSelectField {
+		let field = ColoredMultiSelectField {
 			label: "Clothing",
 			layers: self.layers.clone(),
 			default_color: self.default_color,
 			item_colors: self.item_colors.clone(),
-		}
-		.render_with(renderer, parent, context);
+		};
+		render_colored_clothing(&field, renderer, parent, context);
 	}
 }

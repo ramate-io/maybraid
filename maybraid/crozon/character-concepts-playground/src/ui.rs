@@ -7,7 +7,6 @@ use bevy_character_ui_menu_renderer::{
 };
 use character_ui_menu::{AssetThumbnailDisplay, ThumbnailRequest};
 use crozon_character_ui_menus::SectionOpenState;
-use crate::preview::ConceptSpecies;
 use game_commands::ui::{GameCommandDrawerConfig, GameCommandStatusText, GameCommandUiConfig};
 
 use crate::{
@@ -69,11 +68,6 @@ pub struct CreatorUiRoot;
 
 #[derive(Component)]
 pub struct CreatorUiScrollViewport;
-
-#[derive(Component, Clone, Copy, Debug)]
-pub(crate) enum SpeciesButton {
-	Switch(ConceptSpecies),
-}
 
 #[derive(EntityEvent, Debug)]
 #[entity_event(propagate, auto_propagate)]
@@ -256,13 +250,6 @@ fn populate_creator_ui_panel(
 ) {
 	text(panel, "Character Concepts", 15.0, Color::WHITE);
 	text(panel, "Typed menu primitives rendered through a shared Bevy layer.", 10.0, muted());
-	species_picker(
-		panel,
-		match menu_state.0.species.value {
-			crozon_character_ui_menus::ConceptSpecies::Braidman => ConceptSpecies::Braidman,
-			crozon_character_ui_menus::ConceptSpecies::Brodler => ConceptSpecies::Brodler,
-		},
-	);
 	let mut cached = CachedThumbnails { cache: thumbnails };
 	let mut context = RenderContext {
 		sections: &ui_state.sections,
@@ -287,49 +274,6 @@ fn text(parent: &mut ChildSpawnerCommands, value: &str, size: f32, color: Color)
 
 fn muted() -> Color {
 	Color::srgba(0.72, 0.78, 0.86, 1.0)
-}
-
-fn species_picker(panel: &mut ChildSpawnerCommands, active: ConceptSpecies) {
-	panel
-		.spawn((
-			Node {
-				width: Val::Percent(100.0),
-				flex_direction: FlexDirection::Row,
-				column_gap: Val::Px(6.0),
-				row_gap: Val::Px(6.0),
-				margin: UiRect::bottom(Val::Px(6.0)),
-				..default()
-			},
-			Pickable::IGNORE,
-		))
-		.with_children(|row| {
-			text(row, "Species", 11.0, Color::WHITE);
-			for species in [ConceptSpecies::Braidman, ConceptSpecies::Brodler] {
-				species_button(row, species, active == species);
-			}
-		});
-}
-
-fn species_button(parent: &mut ChildSpawnerCommands, species: ConceptSpecies, active: bool) {
-	parent
-		.spawn((
-			Button,
-			Node {
-				min_width: Val::Px(28.0),
-				height: Val::Px(22.0),
-				padding: UiRect::axes(Val::Px(7.0), Val::Px(2.0)),
-				justify_content: JustifyContent::Center,
-				align_items: AlignItems::Center,
-				..default()
-			},
-			BackgroundColor(if active {
-				Color::srgba(0.16, 0.34, 0.50, 0.95)
-			} else {
-				Color::srgba(0.18, 0.20, 0.24, 0.92)
-			}),
-			SpeciesButton::Switch(species),
-		))
-		.with_children(|button| text(button, species.label(), 10.0, Color::WHITE));
 }
 
 pub fn send_creator_ui_scroll_events(

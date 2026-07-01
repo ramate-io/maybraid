@@ -3,22 +3,25 @@ use character_ui_menu::{AssetThumbnailDisplay, SectionOpen, ThumbnailRequest};
 
 pub mod asset;
 pub mod cycle;
+pub mod labeled;
 pub mod multi_select;
 pub mod root;
 pub mod section;
+pub mod section_select;
+pub mod select_picker;
 pub mod single_select;
 pub mod slider;
 pub mod swatch;
 mod util;
 
-pub use asset::{AssetEventMap, AssetGrid, LabeledAssetGrid};
-pub use cycle::LabeledCycle;
+pub use asset::{AssetEventMap, AssetGrid, AssetSelect};
 pub use multi_select::{
 	ClothingSwatchEventMap, ColoredAssetMultiSelect, ColoredMultiSelectMaps, ItemColorMap,
 	ItemPreviewColorMap, ToggleEventMap,
 };
-pub use slider::LabeledSlider;
-pub use swatch::{LabeledSwatch, SwatchEventMap, SwatchPicker};
+pub use section_select::{SectionMenuMap, SectionSelect};
+pub use select_picker::{SelectEventMap, SelectPicker};
+pub use swatch::{SwatchEventMap, SwatchPicker, SwatchSelect};
 
 /// Renderer-owned thumbnail bridge. The playground adapts this to its cache.
 pub trait MenuThumbnailContext {

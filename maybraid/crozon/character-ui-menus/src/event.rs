@@ -126,6 +126,7 @@ impl SwatchValue {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum MenuEvent {
 	ToggleSection(SectionId),
+	SetSpecies(crate::character::ConceptSpecies),
 	Cycle(CharacterField, i32),
 	SetAsset(CharacterField, AssetValue),
 	SliderDelta(CharacterField, f32),

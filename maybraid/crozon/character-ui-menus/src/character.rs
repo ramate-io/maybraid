@@ -1,4 +1,4 @@
-use character_ui_menu::{CameraFocus, Section, SingleSelect};
+use character_ui_menu::{CameraFocus, LabelOption, ListValues, Section, SingleSelect};
 use crozon_characters::{
 	species::{braidman::BraidmanConfig, brodler::BrodlerConfig},
 	ConceptAnimation,
@@ -19,6 +19,21 @@ pub enum ConceptSpecies {
 impl ConceptSpecies {
 	pub const fn label(self) -> &'static str {
 		match self {
+			Self::Braidman => "braidman",
+			Self::Brodler => "brodler",
+		}
+	}
+}
+
+impl ListValues for ConceptSpecies {
+	fn values() -> &'static [Self] {
+		&[Self::Braidman, Self::Brodler]
+	}
+}
+
+impl LabelOption for ConceptSpecies {
+	fn label(&self) -> &'static str {
+		match *self {
 			Self::Braidman => "braidman",
 			Self::Brodler => "brodler",
 		}
@@ -82,6 +97,17 @@ impl CharacterMenu {
 	}
 
 	pub fn apply(&mut self, event: MenuEvent) -> bool {
+		match event {
+			MenuEvent::SetSpecies(species) => {
+				if self.species.value == species {
+					return false;
+				}
+				self.species.value = species;
+				return true;
+			}
+			MenuEvent::ToggleSection(_) => return false,
+			_ => {}
+		}
 		match self.species.value {
 			ConceptSpecies::Braidman => self.apply_braidman(event),
 			ConceptSpecies::Brodler => self.apply_brodler(event),
@@ -103,7 +129,7 @@ impl CharacterMenu {
 	fn apply_braidman(&mut self, event: MenuEvent) -> bool {
 		let menu = &mut self.braidman;
 		match event {
-			MenuEvent::ToggleSection(_) => false,
+			MenuEvent::ToggleSection(_) | MenuEvent::SetSpecies(_) => false,
 			MenuEvent::Cycle(CharacterField::Gender, delta) => {
 				menu.presets.value.gender.value =
 					cycle_value(menu.presets.value.gender.value, delta);
@@ -183,7 +209,7 @@ impl CharacterMenu {
 	fn apply_brodler(&mut self, event: MenuEvent) -> bool {
 		let menu = &mut self.brodler;
 		match event {
-			MenuEvent::ToggleSection(_) => false,
+			MenuEvent::ToggleSection(_) | MenuEvent::SetSpecies(_) => false,
 			MenuEvent::SetAsset(field, value) => match (field, value) {
 				(CharacterField::BrodlerHead, AssetValue::BrodlerHead(value)) => {
 					menu.head.value.head.value = value;

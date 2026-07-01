@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 use bevy_character_ui_menu_renderer::{CharacterMenuEvent, MenuButton, ToggleSectionKey};
-use crozon_character_ui_menus::{CharacterMenu, MenuEvent, SectionId};
+use crozon_character_ui_menus::{CharacterMenu, ConceptSpecies, MenuEvent, SectionId};
 
 use crate::{
 	camera_focus::{focus_debug_enabled, queue_camera_focus, PendingCameraFocus},
@@ -20,10 +20,10 @@ impl Default for CharacterMenuState {
 
 pub fn menu_to_preview_config(menu: &CharacterMenu) -> ConceptPreviewConfig {
 	match menu.species.value {
-		crozon_character_ui_menus::ConceptSpecies::Braidman => {
+		ConceptSpecies::Braidman => {
 			ConceptPreviewConfig::braidman_with_animation(menu.braidman_config(), menu.animation())
 		}
-		crozon_character_ui_menus::ConceptSpecies::Brodler => {
+		ConceptSpecies::Brodler => {
 			ConceptPreviewConfig::brodler_with_animation(menu.brodler_config(), menu.animation())
 		}
 	}
@@ -57,6 +57,13 @@ pub fn sync_menu_state_from_config(
 	menu_state.0 = menu_from_preview_config(&config);
 }
 
+fn preview_species(species: ConceptSpecies) -> crate::preview::ConceptSpecies {
+	match species {
+		ConceptSpecies::Braidman => crate::preview::ConceptSpecies::Braidman,
+		ConceptSpecies::Brodler => crate::preview::ConceptSpecies::Brodler,
+	}
+}
+
 pub fn dispatch_menu_interactions(
 	mut menu_state: ResMut<CharacterMenuState>,
 	mut menu_events: MessageWriter<CharacterMenuEvent<CharacterMenu>>,
@@ -68,10 +75,6 @@ pub fn dispatch_menu_interactions(
 		(&Interaction, &MenuButton<MenuEvent>),
 		(Changed<Interaction>, With<Button>, Without<ToggleSectionKey>),
 	>,
-	mut species_interactions: Query<
-		(&Interaction, &crate::ui::SpeciesButton),
-		(Changed<Interaction>, With<Button>, Without<MenuButton<MenuEvent>>),
-	>,
 	mut config: ResMut<ConceptPreviewConfig>,
 	mut ui_state: ResMut<crate::ui::CreatorUiState>,
 	mut ui_sync: ResMut<crate::ui::CreatorUiSyncState>,
@@ -82,26 +85,6 @@ pub fn dispatch_menu_interactions(
 	mut pending_camera: ResMut<PendingCameraFocus>,
 	mut camera_boot: ResMut<CameraFocusBootState>,
 ) {
-	for (interaction, crate::ui::SpeciesButton::Switch(species)) in &mut species_interactions {
-		if *interaction != Interaction::Pressed || config.species() == *species {
-			continue;
-		}
-		reset_for_species_switch(
-			*species,
-			&mut session,
-			&mut config,
-			&mut ui_state,
-			&mut preview_sync,
-			&mut focus_sync,
-			&mut respawn_cooldown,
-			&mut pending_camera,
-			&mut camera_boot,
-		);
-		menu_state.0 = menu_from_preview_config(&config);
-		crate::ui::mark_menu_ui_dirty(&mut ui_sync);
-		menu_events.write(CharacterMenuEvent::MenuUpdate(menu_state.0.clone()));
-	}
-
 	for (interaction, toggle) in &mut section_interactions {
 		if *interaction != Interaction::Pressed {
 			continue;
@@ -122,6 +105,26 @@ pub fn dispatch_menu_interactions(
 			continue;
 		}
 		let event = button.0;
+		if let MenuEvent::SetSpecies(species) = event {
+			let preview_species = preview_species(species);
+			if config.species() != preview_species {
+				reset_for_species_switch(
+					preview_species,
+					&mut session,
+					&mut config,
+					&mut ui_state,
+					&mut preview_sync,
+					&mut focus_sync,
+					&mut respawn_cooldown,
+					&mut pending_camera,
+					&mut camera_boot,
+				);
+				menu_state.0 = menu_from_preview_config(&config);
+				crate::ui::mark_menu_ui_dirty(&mut ui_sync);
+				menu_events.write(CharacterMenuEvent::MenuUpdate(menu_state.0.clone()));
+			}
+			continue;
+		}
 		if let Some(focus) = menu_state.0.camera_focus_for_event(event) {
 			ui_state.last_selected = Some(focus);
 			menu_events.write(CharacterMenuEvent::CameraFocus(focus));

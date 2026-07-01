@@ -2,41 +2,40 @@ use bevy::prelude::*;
 use character_ui_menu::{LabelOption, ListValues, SwatchOption, SwatchSingleSelect};
 
 use crate::render::{MenuThumbnailContext, RenderContext, RenderMenu, Renderer};
-use crate::widgets::{color_from_hex, row_node, text, MUTED};
+use crate::widgets::{color_from_hex, MUTED};
 
 pub trait SwatchEventMap<E: Copy + Send + Sync + 'static, T: Copy> {
 	fn swatch_event(&self, value: T) -> E;
 }
 
-/// Labeled row of color swatch buttons.
-pub struct LabeledSwatch<'a, E, T, M>
+/// Swatch picker wired to menu events.
+pub struct SwatchSelect<E, T, M>
 where
 	E: Copy + Send + Sync + 'static,
 	T: Copy,
-	M: SwatchEventMap<E, T> + ?Sized,
+	M: SwatchEventMap<E, T> + Copy,
 {
-	pub label: &'static str,
-	pub active: T,
-	pub map: &'a M,
+	pub swatch: SwatchSingleSelect<T>,
+	pub map: M,
 	_marker: core::marker::PhantomData<E>,
 }
 
-impl<'a, E, T, M> LabeledSwatch<'a, E, T, M>
+impl<E, T, M> SwatchSelect<E, T, M>
 where
 	E: Copy + Send + Sync + 'static,
 	T: Copy,
-	M: SwatchEventMap<E, T> + ?Sized,
+	M: SwatchEventMap<E, T> + Copy,
 {
-	pub const fn new(label: &'static str, active: T, map: &'a M) -> Self {
-		Self { label, active, map, _marker: core::marker::PhantomData }
+	pub const fn new(swatch: SwatchSingleSelect<T>, map: M) -> Self {
+		Self { swatch, map, _marker: core::marker::PhantomData }
 	}
 }
 
-impl<'a, E, T, M> RenderMenu for LabeledSwatch<'a, E, T, M>
+impl<E, T, M> RenderMenu for SwatchSelect<E, T, M>
 where
 	E: Copy + Send + Sync + 'static,
 	T: Copy + PartialEq + LabelOption + ListValues + SwatchOption,
-	M: SwatchEventMap<E, T> + ?Sized,
+	M: SwatchEventMap<E, T> + Copy,
 {
 	fn render_with<C: MenuThumbnailContext>(
 		&self,
@@ -44,41 +43,38 @@ where
 		parent: &mut ChildSpawnerCommands,
 		context: &mut RenderContext<'_, C>,
 	) {
-		parent.spawn((row_node(), Pickable::IGNORE)).with_children(|row| {
-			text(row, self.label, 11.0, Color::WHITE);
-			SwatchPicker::new(self.active, self.map).render_with(renderer, row, context);
-		});
+		SwatchPicker::new(self.swatch.value, self.map).render_with(renderer, parent, context);
 	}
 }
 
 /// Inline swatch buttons without a field label.
-pub struct SwatchPicker<'a, E, T, M>
+pub struct SwatchPicker<E, T, M>
 where
 	E: Copy + Send + Sync + 'static,
 	T: Copy,
-	M: SwatchEventMap<E, T> + ?Sized,
+	M: SwatchEventMap<E, T> + Copy,
 {
 	pub active: T,
-	pub map: &'a M,
+	pub map: M,
 	_marker: core::marker::PhantomData<E>,
 }
 
-impl<'a, E, T, M> SwatchPicker<'a, E, T, M>
+impl<E, T, M> SwatchPicker<E, T, M>
 where
 	E: Copy + Send + Sync + 'static,
 	T: Copy,
-	M: SwatchEventMap<E, T> + ?Sized,
+	M: SwatchEventMap<E, T> + Copy,
 {
-	pub const fn new(active: T, map: &'a M) -> Self {
+	pub const fn new(active: T, map: M) -> Self {
 		Self { active, map, _marker: core::marker::PhantomData }
 	}
 }
 
-impl<'a, E, T, M> RenderMenu for SwatchPicker<'a, E, T, M>
+impl<E, T, M> RenderMenu for SwatchPicker<E, T, M>
 where
 	E: Copy + Send + Sync + 'static,
 	T: Copy + PartialEq + LabelOption + ListValues + SwatchOption,
-	M: SwatchEventMap<E, T> + ?Sized,
+	M: SwatchEventMap<E, T> + Copy,
 {
 	fn render_with<C: MenuThumbnailContext>(
 		&self,
@@ -107,13 +103,23 @@ where
 
 impl<T> RenderMenu for SwatchSingleSelect<T>
 where
-	T: Copy + LabelOption + ListValues + SwatchOption,
+	T: Copy + SwatchOption,
 {
 	fn render_with<C: MenuThumbnailContext>(
 		&self,
 		_renderer: &Renderer,
-		_parent: &mut ChildSpawnerCommands,
+		parent: &mut ChildSpawnerCommands,
 		_context: &mut RenderContext<'_, C>,
 	) {
+		parent.spawn((
+			Node {
+				width: Val::Px(22.0),
+				height: Val::Px(18.0),
+				border: UiRect::all(Val::Px(2.0)),
+				..default()
+			},
+			BorderColor::all(Color::WHITE),
+			BackgroundColor(color_from_hex(self.value.color_hex())),
+		));
 	}
 }

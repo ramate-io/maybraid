@@ -11,8 +11,8 @@ pub mod traits;
 
 pub use camera_focus::{CameraFocus, FocusRig};
 pub use primitives::{
-	AssetSingleSelect, IdentifiedAsset, MultiSelect, Section, SingleSelect, Slider,
-	SwatchSingleSelect, ThumbnailCamera, VecSelect,
+	AssetSingleSelect, BlockLabeled, Cycle, IdentifiedAsset, Labeled, MultiSelect, Section, SingleSelect, Slider,
+	SliderStep, SwatchSingleSelect, ThumbnailCamera, VecSelect,
 };
 pub use root::Root;
 pub use section_open::SectionOpen;

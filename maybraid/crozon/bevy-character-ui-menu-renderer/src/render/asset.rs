@@ -11,35 +11,34 @@ pub trait AssetEventMap<E: Copy + Send + Sync + 'static, T: Copy> {
 	fn select_event(&self, value: T) -> E;
 }
 
-/// Section heading plus a wrapped grid of asset pickers.
-pub struct LabeledAssetGrid<'a, E, T, M>
+/// Asset grid wired to menu events.
+pub struct AssetSelect<E, T, M>
 where
 	E: Copy + Send + Sync + 'static,
 	T: Copy,
-	M: AssetEventMap<E, T> + ?Sized,
+	M: AssetEventMap<E, T> + Copy,
 {
-	pub label: &'static str,
-	pub active: T,
-	pub map: &'a M,
+	pub select: AssetSingleSelect<T>,
+	pub map: M,
 	_marker: core::marker::PhantomData<E>,
 }
 
-impl<'a, E, T, M> LabeledAssetGrid<'a, E, T, M>
+impl<E, T, M> AssetSelect<E, T, M>
 where
 	E: Copy + Send + Sync + 'static,
 	T: Copy,
-	M: AssetEventMap<E, T> + ?Sized,
+	M: AssetEventMap<E, T> + Copy,
 {
-	pub const fn new(label: &'static str, active: T, map: &'a M) -> Self {
-		Self { label, active, map, _marker: core::marker::PhantomData }
+	pub const fn new(select: AssetSingleSelect<T>, map: M) -> Self {
+		Self { select, map, _marker: core::marker::PhantomData }
 	}
 }
 
-impl<'a, E, T, M> RenderMenu for LabeledAssetGrid<'a, E, T, M>
+impl<E, T, M> RenderMenu for AssetSelect<E, T, M>
 where
 	E: Copy + Send + Sync + 'static,
 	T: Copy + PartialEq + LabelOption + ListValues + AssetOption,
-	M: AssetEventMap<E, T> + ?Sized,
+	M: AssetEventMap<E, T> + Copy,
 {
 	fn render_with<C: MenuThumbnailContext>(
 		&self,
@@ -47,39 +46,38 @@ where
 		parent: &mut ChildSpawnerCommands,
 		context: &mut RenderContext<'_, C>,
 	) {
-		text(parent, self.label, 12.0, Color::srgb(0.78, 0.84, 0.92));
-		AssetGrid::new(self.active, self.map).render_with(renderer, parent, context);
+		AssetGrid::new(self.select.value, self.map).render_with(renderer, parent, context);
 	}
 }
 
 /// Grid of asset picker buttons.
-pub struct AssetGrid<'a, E, T, M>
+pub struct AssetGrid<E, T, M>
 where
 	E: Copy + Send + Sync + 'static,
 	T: Copy,
-	M: AssetEventMap<E, T> + ?Sized,
+	M: AssetEventMap<E, T> + Copy,
 {
 	pub active: T,
-	pub map: &'a M,
+	pub map: M,
 	_marker: core::marker::PhantomData<E>,
 }
 
-impl<'a, E, T, M> AssetGrid<'a, E, T, M>
+impl<E, T, M> AssetGrid<E, T, M>
 where
 	E: Copy + Send + Sync + 'static,
 	T: Copy,
-	M: AssetEventMap<E, T> + ?Sized,
+	M: AssetEventMap<E, T> + Copy,
 {
-	pub const fn new(active: T, map: &'a M) -> Self {
+	pub const fn new(active: T, map: M) -> Self {
 		Self { active, map, _marker: core::marker::PhantomData }
 	}
 }
 
-impl<'a, E, T, M> RenderMenu for AssetGrid<'a, E, T, M>
+impl<E, T, M> RenderMenu for AssetGrid<E, T, M>
 where
 	E: Copy + Send + Sync + 'static,
 	T: Copy + PartialEq + LabelOption + ListValues + AssetOption,
-	M: AssetEventMap<E, T> + ?Sized,
+	M: AssetEventMap<E, T> + Copy,
 {
 	fn render_with<C: MenuThumbnailContext>(
 		&self,
@@ -102,6 +100,7 @@ where
 			))
 			.with_children(|grid| {
 				for value in T::values() {
+					let value = *value;
 					let asset = value.asset();
 					if context.asset_thumbnails != AssetThumbnailDisplay::None && !asset.path.is_empty()
 					{
@@ -123,8 +122,8 @@ where
 					render_asset_button(
 						grid,
 						value.label(),
-						self.map.select_event(*value),
-						*value == self.active,
+						self.map.select_event(value),
+						value == self.active,
 						thumbnail,
 					);
 				}
@@ -134,13 +133,14 @@ where
 
 impl<T> RenderMenu for AssetSingleSelect<T>
 where
-	T: Copy + LabelOption + ListValues + AssetOption,
+	T: Copy + LabelOption,
 {
 	fn render_with<C: MenuThumbnailContext>(
 		&self,
 		_renderer: &Renderer,
-		_parent: &mut ChildSpawnerCommands,
+		parent: &mut ChildSpawnerCommands,
 		_context: &mut RenderContext<'_, C>,
 	) {
+		text(parent, self.value.label(), 11.0, Color::srgb(0.85, 0.95, 1.0));
 	}
 }

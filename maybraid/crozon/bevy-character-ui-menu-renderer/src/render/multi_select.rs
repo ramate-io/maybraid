@@ -72,9 +72,45 @@ where
 		parent: &mut ChildSpawnerCommands,
 		context: &mut RenderContext<'_, Ctx>,
 	) {
-		text(parent, self.label, 12.0, Color::srgb(0.78, 0.84, 0.92));
+		character_ui_menu::BlockLabeled::new(
+			self.label,
+			ColoredAssetRows {
+				selected: &self.selected,
+				map: self.map,
+				_marker: core::marker::PhantomData,
+			},
+		)
+		.render_with(renderer, parent, context);
+	}
+}
+
+struct ColoredAssetRows<'a, E, T, C, M>
+where
+	E: Copy + Send + Sync + 'static,
+	T: Copy,
+	C: Copy,
+	M: ColoredMultiSelectMaps<E, T, C> + ?Sized,
+{
+	selected: &'a [T],
+	map: &'a M,
+	_marker: core::marker::PhantomData<(E, C)>,
+}
+
+impl<'a, E, T, C, M> RenderMenu for ColoredAssetRows<'a, E, T, C, M>
+where
+	E: Copy + Send + Sync + 'static,
+	T: Copy + PartialEq + LabelOption + ListValues + AssetOption,
+	C: Copy + PartialEq + LabelOption + ListValues + SwatchOption,
+	M: ColoredMultiSelectMaps<E, T, C> + ?Sized,
+{
+	fn render_with<Ctx: MenuThumbnailContext>(
+		&self,
+		renderer: &Renderer,
+		parent: &mut ChildSpawnerCommands,
+		context: &mut RenderContext<'_, Ctx>,
+	) {
 		for value in T::values() {
-			ColoredAssetRow::new(*value, &self.selected, self.map).render_with(renderer, parent, context);
+			ColoredAssetRow::new(*value, self.selected, self.map).render_with(renderer, parent, context);
 		}
 	}
 }
@@ -87,7 +123,7 @@ where
 	M: ColoredMultiSelectMaps<E, T, C> + ?Sized,
 {
 	value: T,
-	selected: Vec<T>,
+	selected: &'a [T],
 	map: &'a M,
 	_marker: core::marker::PhantomData<(E, C)>,
 }
@@ -99,13 +135,8 @@ where
 	C: Copy,
 	M: ColoredMultiSelectMaps<E, T, C> + ?Sized,
 {
-	fn new(value: T, selected: &[T], map: &'a M) -> Self {
-		Self {
-			value,
-			selected: selected.to_vec(),
-			map,
-			_marker: core::marker::PhantomData,
-		}
+	const fn new(value: T, selected: &'a [T], map: &'a M) -> Self {
+		Self { value, selected, map, _marker: core::marker::PhantomData }
 	}
 }
 
@@ -118,7 +149,7 @@ where
 {
 	fn render_with<Ctx: MenuThumbnailContext>(
 		&self,
-		_renderer: &Renderer,
+		renderer: &Renderer,
 		parent: &mut ChildSpawnerCommands,
 		context: &mut RenderContext<'_, Ctx>,
 	) {
@@ -161,7 +192,7 @@ where
 					active,
 					thumbnail,
 				);
-				ClothingSwatchRow::new(self.value, self.map).render_with(_renderer, row, context);
+				ClothingSwatchRow::new(self.value, self.map).render_with(renderer, row, context);
 			});
 	}
 }
@@ -237,12 +268,23 @@ where
 	}
 }
 
-impl<T> RenderMenu for MultiSelect<T> {
+impl<T> RenderMenu for MultiSelect<T>
+where
+	T: Copy + LabelOption + ListValues + AssetOption,
+{
 	fn render_with<C: MenuThumbnailContext>(
 		&self,
 		_renderer: &Renderer,
-		_parent: &mut ChildSpawnerCommands,
+		parent: &mut ChildSpawnerCommands,
 		_context: &mut RenderContext<'_, C>,
 	) {
+		let selected = self
+			.selected
+			.iter()
+			.map(|item| item.label())
+			.collect::<Vec<_>>()
+			.join(", ");
+		let summary = if selected.is_empty() { "none" } else { selected.as_str() };
+		text(parent, summary, 11.0, Color::srgb(0.85, 0.95, 1.0));
 	}
 }
