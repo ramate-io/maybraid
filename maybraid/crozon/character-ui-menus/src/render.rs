@@ -1,13 +1,22 @@
 use bevy::prelude::*;
 use bevy_character_ui_menu_renderer::{
-	MenuThumbnailContext, RenderContext, RenderMenu, Renderer,
+	AssetEventMap, ClothingSwatchEventMap, ColoredAssetMultiSelect, ColoredMultiSelectMaps,
+	ItemColorMap, ItemPreviewColorMap, LabeledAssetGrid, LabeledCycle, LabeledSlider, LabeledSwatch,
+	MenuThumbnailContext, RenderContext, RenderMenu, Renderer, SwatchEventMap, ToggleEventMap,
 };
-use character_ui_menu::{AssetOption, LabelOption, ListValues, Root, SingleSelect, SwatchOption};
+use character_ui_menu::{AssetOption, LabelOption, ListValues, Root, SwatchOption};
+use crozon_characters::species::{
+	braidman::BraidmanColor,
+	common::ClothingMesh,
+};
 
 use crate::{
 	character::{CharacterMenu, ConceptSpecies},
-	event::{MenuEvent, SwatchValue},
-	fields::{ColoredMultiSelectColors, AssetField, AssetFieldValue, ColoredMultiSelectField, CycleField, SliderField, SwatchField, SwatchFieldValue},
+	event::{CharacterField, MenuEvent, SwatchValue},
+	fields::{
+		AssetField, AssetFieldValue, ColoredMultiSelectColors, ColoredMultiSelectField, CycleField,
+		SliderField, SwatchField, SwatchFieldValue,
+	},
 };
 
 pub mod braidman;
@@ -24,14 +33,13 @@ where
 		parent: &mut ChildSpawnerCommands,
 		context: &mut RenderContext<'_, C>,
 	) {
-		renderer.render_cycle_row(
-			parent,
-			self.label,
-			self.select.value.label(),
-			MenuEvent::Cycle(self.field, -1),
-			MenuEvent::Cycle(self.field, 1),
-			context,
-		);
+		LabeledCycle {
+			label: self.label,
+			value_label: self.select.value.label(),
+			minus: MenuEvent::Cycle(self.field, -1),
+			plus: MenuEvent::Cycle(self.field, 1),
+		}
+		.render_with(renderer, parent, context);
 	}
 }
 
@@ -42,15 +50,26 @@ impl RenderMenu for SliderField {
 		parent: &mut ChildSpawnerCommands,
 		context: &mut RenderContext<'_, C>,
 	) {
-		renderer.render_slider_row(
-			parent,
-			self.label,
-			self.slider.value,
-			self.slider.step,
-			MenuEvent::SliderDelta(self.field, -self.slider.step),
-			MenuEvent::SliderDelta(self.field, self.slider.step),
-			context,
-		);
+		LabeledSlider {
+			label: self.label,
+			slider: self.slider,
+			decrease: MenuEvent::SliderDelta(self.field, -self.slider.step),
+			increase: MenuEvent::SliderDelta(self.field, self.slider.step),
+		}
+		.render_with(renderer, parent, context);
+	}
+}
+
+struct SwatchEvents {
+	field: CharacterField,
+}
+
+impl<T> SwatchEventMap<MenuEvent, T> for SwatchEvents
+where
+	T: SwatchFieldValue + Copy,
+{
+	fn swatch_event(&self, value: T) -> MenuEvent {
+		MenuEvent::SetSwatch(self.field, T::to_swatch_value(value))
 	}
 }
 
@@ -64,13 +83,21 @@ where
 		parent: &mut ChildSpawnerCommands,
 		context: &mut RenderContext<'_, C>,
 	) {
-		renderer.render_swatch_row(
-			parent,
-			self.label,
-			self.swatch.value,
-			|value| MenuEvent::SetSwatch(self.field, T::to_swatch_value(value)),
-			context,
-		);
+		let map = SwatchEvents { field: self.field };
+		LabeledSwatch::new(self.label, self.swatch.value, &map).render_with(renderer, parent, context);
+	}
+}
+
+struct AssetEvents {
+	field: CharacterField,
+}
+
+impl<T> AssetEventMap<MenuEvent, T> for AssetEvents
+where
+	T: AssetFieldValue + Copy,
+{
+	fn select_event(&self, value: T) -> MenuEvent {
+		MenuEvent::SetAsset(self.field, T::to_asset_value(value))
 	}
 }
 
@@ -84,40 +111,52 @@ where
 		parent: &mut ChildSpawnerCommands,
 		context: &mut RenderContext<'_, C>,
 	) {
-		let color = context.preview_color;
-		renderer.render_asset_grid(
-			parent,
-			self.label,
-			self.select.value,
-			|value| MenuEvent::SetAsset(self.field, T::to_asset_value(value)),
-			|_| color,
-			context,
-		);
+		let map = AssetEvents { field: self.field };
+		LabeledAssetGrid::new(self.label, self.select.value, &map)
+			.render_with(renderer, parent, context);
 	}
 }
 
-impl RenderMenu for ColoredMultiSelectField<crozon_characters::species::common::ClothingMesh, crozon_characters::species::braidman::BraidmanColor> {
+struct ClothingFieldMaps<'a> {
+	field: &'a ColoredMultiSelectField<ClothingMesh, BraidmanColor>,
+}
+
+impl ToggleEventMap<MenuEvent, ClothingMesh> for ClothingFieldMaps<'_> {
+	fn toggle_event(&self, value: ClothingMesh) -> MenuEvent {
+		MenuEvent::ToggleClothing(value)
+	}
+}
+
+impl ClothingSwatchEventMap<MenuEvent, ClothingMesh, BraidmanColor> for ClothingFieldMaps<'_> {
+	fn color_event(&self, item: ClothingMesh, color: BraidmanColor) -> MenuEvent {
+		MenuEvent::SetSwatch(CharacterField::Clothing(item), SwatchValue::Braidman(color))
+	}
+}
+
+impl ItemColorMap<ClothingMesh, BraidmanColor> for ClothingFieldMaps<'_> {
+	fn color_for(&self, item: ClothingMesh) -> BraidmanColor {
+		self.field.color_for(item)
+	}
+}
+
+impl ItemPreviewColorMap<ClothingMesh> for ClothingFieldMaps<'_> {
+	fn preview_color(&self, item: ClothingMesh) -> Color {
+		self.field.color_for(item).color()
+	}
+}
+
+impl ColoredMultiSelectMaps<MenuEvent, ClothingMesh, BraidmanColor> for ClothingFieldMaps<'_> {}
+
+impl RenderMenu for ColoredMultiSelectField<ClothingMesh, BraidmanColor> {
 	fn render_with<Ctx: MenuThumbnailContext>(
 		&self,
 		renderer: &Renderer,
 		parent: &mut ChildSpawnerCommands,
 		context: &mut RenderContext<'_, Ctx>,
 	) {
-		renderer.render_colored_multi_select(
-			parent,
-			self.label,
-			&self.layers.selected,
-			|value| self.color_for(value),
-			|value| MenuEvent::ToggleClothing(value),
-			|value, color| {
-				MenuEvent::SetSwatch(
-					crate::event::CharacterField::Clothing(value),
-					SwatchValue::Braidman(color),
-				)
-			},
-			|value| self.color_for(value).color(),
-			context,
-		);
+		let maps = ClothingFieldMaps { field: self };
+		ColoredAssetMultiSelect::new(self.label, &self.layers.selected, &maps)
+			.render_with(renderer, parent, context);
 	}
 }
 
@@ -141,15 +180,15 @@ impl RenderMenu for CharacterMenu {
 
 pub(crate) fn cycle_field<T>(
 	label: &'static str,
-	field: crate::event::CharacterField,
-	select: SingleSelect<T>,
+	field: CharacterField,
+	select: character_ui_menu::SingleSelect<T>,
 ) -> CycleField<T> {
 	CycleField { label, field, select }
 }
 
 pub(crate) fn slider_field(
 	label: &'static str,
-	field: crate::event::CharacterField,
+	field: CharacterField,
 	slider: character_ui_menu::Slider,
 ) -> SliderField {
 	SliderField { label, field, slider }
@@ -157,7 +196,7 @@ pub(crate) fn slider_field(
 
 pub(crate) fn swatch_field<T>(
 	label: &'static str,
-	field: crate::event::CharacterField,
+	field: CharacterField,
 	swatch: character_ui_menu::SwatchSingleSelect<T>,
 ) -> SwatchField<T> {
 	SwatchField { label, field, swatch }
@@ -165,7 +204,7 @@ pub(crate) fn swatch_field<T>(
 
 pub(crate) fn asset_field<T>(
 	label: &'static str,
-	field: crate::event::CharacterField,
+	field: CharacterField,
 	select: character_ui_menu::AssetSingleSelect<T>,
 ) -> AssetField<T> {
 	AssetField { label, field, select }

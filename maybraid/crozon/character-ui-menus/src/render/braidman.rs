@@ -1,10 +1,5 @@
 use bevy::prelude::*;
 use bevy_character_ui_menu_renderer::{MenuThumbnailContext, RenderContext, RenderMenu, Renderer};
-use crozon_characters::{
-	presets::{BuildPreset, GenderPreset},
-	species::braidman::BraidmanColor,
-	species::common::ClothingMesh,
-};
 
 use crate::{
 	characters::braidman::{

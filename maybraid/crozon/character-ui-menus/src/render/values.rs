@@ -2,7 +2,7 @@ use crozon_characters::{
 	species::{
 		braidman::BraidmanColor,
 		brodler::{assets::HornMesh, BrodlerEyeColor, BrodlerHeadMesh, BrodlerHornColor, BrodlerSkinColor},
-		common::{BodyMesh, ClothingMesh, EarMesh, EyeMesh, HairMesh, HeadMesh, MouthMesh, NoseMesh},
+		common::{BodyMesh, EarMesh, EyeMesh, HairMesh, HeadMesh, MouthMesh, NoseMesh},
 	},
 	ConceptAnimation,
 };

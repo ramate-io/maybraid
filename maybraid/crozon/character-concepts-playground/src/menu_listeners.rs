@@ -5,7 +5,7 @@ use crozon_character_ui_menus::{CharacterMenu, MenuEvent, SectionId};
 use crate::{
 	camera_focus::{focus_debug_enabled, queue_camera_focus, PendingCameraFocus},
 	focus_reference::FocusReferenceSyncState,
-	preview::{ConceptPreviewConfig, ConceptPreviewSyncState, ConceptSpecies, PreviewRespawnCooldown},
+	preview::{ConceptPreviewConfig, ConceptPreviewSyncState, PreviewRespawnCooldown},
 	species_session::{reset_for_species_switch, CameraFocusBootState, SpeciesSessionState},
 };
 
