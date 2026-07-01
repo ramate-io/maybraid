@@ -7,16 +7,19 @@
 mod animation;
 mod camera_focus;
 pub mod commands;
+mod diagnostics;
 mod focus;
 mod focus_reference;
 mod ground;
 mod material;
 mod preview;
+mod preview_color;
 mod skinning;
 mod thumbnail;
 mod ui;
 
 pub use commands::{ConceptsCommand, CONCEPTS_CLI_NAME};
+pub use diagnostics::fps_debug_enabled;
 pub use game_commands::command::PendingStartupCommand;
 
 use bevy::prelude::*;
@@ -44,6 +47,9 @@ pub struct CrozonCharacterConceptsPlaygroundPlugin;
 
 impl Plugin for CrozonCharacterConceptsPlaygroundPlugin {
 	fn build(&self, app: &mut App) {
+		if diagnostics::fps_debug_enabled() {
+			app.add_plugins(diagnostics::FpsDiagnosticsPlugin);
+		}
 		app.init_resource::<ConceptPreviewConfig>()
 			.init_resource::<ConceptPreviewSyncState>()
 			.init_resource::<FocusReferenceSyncState>()

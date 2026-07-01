@@ -7,31 +7,64 @@ use bevy::prelude::*;
 use crozon_characters::{
 	assembly::{CharacterPartSlot, ResolvedCharacterAssembly},
 	species::{
-		braidman::{BraidmanColor, BraidmanConfig},
+		braidman::BraidmanConfig,
+		brodler::BrodlerConfig,
 		SpeciesConfig,
 	},
 	ResolvedCharacterPart, SkinTarget, SocketRig,
 };
 
 use crate::animation::{AnimatedBodyRig, BodyRigBindTransform, ConceptAnimation};
+use crate::preview_color::PreviewColor;
 use crate::skinning::{
 	bind_scales_ready, bone_map_ready, ActiveRigPose, BoneMap, CharacterPart, CharacterRig,
 	CharacterRigRole, NeedsSkinRemap, NeedsSocketPlacement, PartRigRef, RigBindScales,
 };
 use crate::ui::UiAssetTarget;
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum ConceptSpecies {
+	#[default]
+	Braidman,
+	Brodler,
+}
+
+impl ConceptSpecies {
+	pub const fn label(self) -> &'static str {
+		match self {
+			Self::Braidman => "braidman",
+			Self::Brodler => "brodler",
+		}
+	}
+}
+
 #[derive(Resource, Debug, Clone, PartialEq)]
 pub enum ConceptPreviewConfig {
 	Braidman { config: BraidmanConfig, animation: ConceptAnimation },
+	Brodler { config: BrodlerConfig, animation: ConceptAnimation },
 }
 
 impl Default for ConceptPreviewConfig {
 	fn default() -> Self {
-		Self::braidman(BraidmanConfig::default_preview())
+		Self::default_for(ConceptSpecies::Braidman)
 	}
 }
 
 impl ConceptPreviewConfig {
+	pub fn default_for(species: ConceptSpecies) -> Self {
+		match species {
+			ConceptSpecies::Braidman => Self::braidman(BraidmanConfig::default_preview()),
+			ConceptSpecies::Brodler => Self::brodler(BrodlerConfig::default_preview()),
+		}
+	}
+
+	pub fn species(&self) -> ConceptSpecies {
+		match self {
+			Self::Braidman { .. } => ConceptSpecies::Braidman,
+			Self::Brodler { .. } => ConceptSpecies::Brodler,
+		}
+	}
+
 	pub fn braidman(config: BraidmanConfig) -> Self {
 		Self::Braidman { config, animation: ConceptAnimation::default() }
 	}
@@ -40,9 +73,18 @@ impl ConceptPreviewConfig {
 		Self::Braidman { config, animation }
 	}
 
+	pub fn brodler(config: BrodlerConfig) -> Self {
+		Self::Brodler { config, animation: ConceptAnimation::default() }
+	}
+
+	pub fn brodler_with_animation(config: BrodlerConfig, animation: ConceptAnimation) -> Self {
+		Self::Brodler { config, animation }
+	}
+
 	pub fn resolve(&self) -> ResolvedCharacterAssembly {
 		match self {
 			Self::Braidman { config, .. } => config.resolve(),
+			Self::Brodler { config, .. } => config.resolve(),
 		}
 	}
 
@@ -51,23 +93,27 @@ impl ConceptPreviewConfig {
 			Self::Braidman { config, animation } => {
 				format!("{} animation={}", config.status_label(), animation.label())
 			}
-		}
-	}
-
-	/// Full config fingerprint — used for status text and command sync.
-	pub fn sync_key(&self) -> String {
-		match self {
-			Self::Braidman { config, animation } => {
-				format!("{} animation={animation:?}", config.sync_key())
+			Self::Brodler { config, animation } => {
+				format!("{} animation={}", config.status_label(), animation.label())
 			}
 		}
 	}
 
-	/// Asset topology only. When this changes the preview GLTF scenes are respawned.
+	pub fn sync_key(&self) -> String {
+		match self {
+			Self::Braidman { config, animation } => {
+				format!("species=braidman {} animation={animation:?}", config.sync_key())
+			}
+			Self::Brodler { config, animation } => {
+				format!("species=brodler {} animation={animation:?}", config.sync_key())
+			}
+		}
+	}
+
 	pub fn spawn_key(&self) -> String {
 		match self {
 			Self::Braidman { config, .. } => format!(
-				"body={:?} head={:?} eye={:?} nose={:?} mouth={:?} ear={:?} hair={:?} clothing={:?}",
+				"species=braidman body={:?} head={:?} eye={:?} nose={:?} mouth={:?} ear={:?} hair={:?} clothing={:?}",
 				config.body,
 				config.head,
 				config.eye,
@@ -77,12 +123,27 @@ impl ConceptPreviewConfig {
 				config.hair,
 				config.clothing,
 			),
+			Self::Brodler { config, .. } => format!(
+				"species=brodler head={:?} horns={:?} hair={:?} clothing={:?}",
+				config.head,
+				config.horns,
+				config.hair,
+				config.clothing,
+			),
 		}
 	}
 
 	pub const fn animation(&self) -> ConceptAnimation {
 		match self {
-			Self::Braidman { animation, .. } => *animation,
+			Self::Braidman { animation, .. } | Self::Brodler { animation, .. } => *animation,
+		}
+	}
+
+	pub fn set_animation(&mut self, animation: ConceptAnimation) {
+		match self {
+			Self::Braidman { animation: current, .. } | Self::Brodler { animation: current, .. } => {
+				*current = animation;
+			}
 		}
 	}
 }
@@ -126,7 +187,7 @@ pub struct PreviewPartBaseTransform {
 #[derive(Component, Clone, Copy)]
 pub struct PreviewAssetTarget {
 	pub target: UiAssetTarget,
-	pub color: BraidmanColor,
+	pub color: PreviewColor,
 }
 
 pub fn sync_preview(
@@ -183,29 +244,37 @@ fn sync_live_preview(
 		pose.pose = assembly.pose.clone();
 	}
 
-	let ConceptPreviewConfig::Braidman { config: braidman, .. } = config;
-	let sliders = braidman.sliders.clamped();
-	for (part, mut target, base, transform) in parts {
-		target.color = preview_color(braidman, target.target);
-		let Some(base) = base else {
-			continue;
-		};
-		let Some(mut transform) = transform else {
-			continue;
-		};
-		if !has_feature_transform(part.slot) {
-			continue;
-		}
-		let authored = base
-			.normalization
-			.mul_transform(sliders.feature_transform(part.slot));
-		match base.socket {
-			Some(socket) => {
-				*transform = socket;
-				transform.scale *= authored.scale;
-				transform.rotation *= authored.rotation;
+	match config {
+		ConceptPreviewConfig::Braidman { config: braidman, .. } => {
+			let sliders = braidman.sliders.clamped();
+			for (part, mut target, base, transform) in parts {
+				target.color = preview_color_braidman(braidman, target.target);
+				let Some(base) = base else {
+					continue;
+				};
+				let Some(mut transform) = transform else {
+					continue;
+				};
+				if !has_feature_transform(part.slot) {
+					continue;
+				}
+				let authored = base
+					.normalization
+					.mul_transform(sliders.feature_transform(part.slot));
+				match base.socket {
+					Some(socket) => {
+						*transform = socket;
+						transform.scale *= authored.scale;
+						transform.rotation *= authored.rotation;
+					}
+					None => *transform = authored,
+				}
 			}
-			None => *transform = authored,
+		}
+		ConceptPreviewConfig::Brodler { config: brodler, .. } => {
+			for (_, mut target, ..) in parts {
+				target.color = preview_color_brodler(brodler, target.target);
+			}
 		}
 	}
 }
@@ -240,16 +309,44 @@ fn has_feature_transform(slot: CharacterPartSlot) -> bool {
 	)
 }
 
-fn preview_color(config: &BraidmanConfig, target: UiAssetTarget) -> BraidmanColor {
+fn preview_color_braidman(
+	config: &BraidmanConfig,
+	target: UiAssetTarget,
+) -> PreviewColor {
+	use crate::ui::braidman::UiAssetTarget as BraidmanTarget;
+	use crozon_characters::species::braidman::BraidmanColor;
+
+	let UiAssetTarget::Braidman(target) = target else {
+		return PreviewColor::Braidman(BraidmanColor::Natural);
+	};
 	let skin = config.colors.skin_color();
+	PreviewColor::Braidman(match target {
+		BraidmanTarget::Body(_) => config.colors.body,
+		BraidmanTarget::Head(_) | BraidmanTarget::Nose(_) | BraidmanTarget::Ear(_) => skin,
+		BraidmanTarget::Eye(_) => config.colors.eyes,
+		BraidmanTarget::Mouth(_) => config.colors.mouth,
+		BraidmanTarget::Hair(_) => config.colors.hair,
+		BraidmanTarget::Clothing(clothing) => config.colors.clothing_color(clothing),
+		BraidmanTarget::Animation(_) => BraidmanColor::Natural,
+	})
+}
+
+fn preview_color_brodler(config: &BrodlerConfig, target: UiAssetTarget) -> PreviewColor {
+	use crate::ui::brodler::UiAssetTarget as BrodlerTarget;
+
+	let UiAssetTarget::Brodler(target) = target else {
+		return PreviewColor::BrodlerSkin(config.colors.skin);
+	};
 	match target {
-		UiAssetTarget::Body(_) => config.colors.body,
-		UiAssetTarget::Head(_) | UiAssetTarget::Nose(_) | UiAssetTarget::Ear(_) => skin,
-		UiAssetTarget::Eye(_) => config.colors.eyes,
-		UiAssetTarget::Mouth(_) => config.colors.mouth,
-		UiAssetTarget::Hair(_) => config.colors.hair,
-		UiAssetTarget::Clothing(clothing) => config.colors.clothing_color(clothing),
-		UiAssetTarget::Animation(_) => BraidmanColor::Natural,
+		BrodlerTarget::Head(_) | BrodlerTarget::Horns(_) | BrodlerTarget::Body => {
+			PreviewColor::BrodlerSkin(config.colors.skin)
+		}
+		BrodlerTarget::Eye => PreviewColor::BrodlerEye(config.colors.eyes),
+		BrodlerTarget::Hair(_) => PreviewColor::Braidman(config.colors.hair),
+		BrodlerTarget::Clothing(clothing) => {
+			PreviewColor::Braidman(config.colors.clothing_color(clothing))
+		}
+		BrodlerTarget::Animation(_) => PreviewColor::BrodlerSkin(config.colors.skin),
 	}
 }
 
@@ -285,12 +382,16 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 	}
 
 	fn part_transform(&self, part: &ResolvedCharacterPart) -> Transform {
-		let ConceptPreviewConfig::Braidman { config, .. } = &self.config;
-		let sliders = config.sliders.clamped();
-		part.asset
-			.normalization
-			.transform()
-			.mul_transform(sliders.feature_transform(part.slot))
+		match &self.config {
+			ConceptPreviewConfig::Braidman { config, .. } => {
+				let sliders = config.sliders.clamped();
+				part.asset
+					.normalization
+					.transform()
+					.mul_transform(sliders.feature_transform(part.slot))
+			}
+			ConceptPreviewConfig::Brodler { .. } => part.asset.normalization.transform(),
+		}
 	}
 
 	fn part_base_transform(&self, part: &ResolvedCharacterPart) -> PreviewPartBaseTransform {
@@ -418,55 +519,68 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 	}
 
 	fn preview_target(&self, part: &ResolvedCharacterPart) -> PreviewAssetTarget {
-		let ConceptPreviewConfig::Braidman { config, .. } = &self.config;
-		PreviewAssetTarget {
-			target: match part.slot {
-				CharacterPartSlot::BodyMesh => UiAssetTarget::Body(config.body),
-				CharacterPartSlot::HeadRig | CharacterPartSlot::HeadMesh => {
-					UiAssetTarget::Head(config.head)
-				}
-				CharacterPartSlot::EyeLeft | CharacterPartSlot::EyeRight => {
-					UiAssetTarget::Eye(config.eye)
-				}
-				CharacterPartSlot::Nose => UiAssetTarget::Nose(config.nose),
-				CharacterPartSlot::Mouth => UiAssetTarget::Mouth(config.mouth),
-				CharacterPartSlot::EarLeft | CharacterPartSlot::EarRight => {
-					UiAssetTarget::Ear(config.ear)
-				}
-				CharacterPartSlot::Hair => UiAssetTarget::Hair(config.hair),
-				CharacterPartSlot::Clothing => config
-					.clothing
-					.iter()
-					.copied()
-					.find(|clothing| clothing.label() == part.asset.label)
-					.map(UiAssetTarget::Clothing)
-					.unwrap_or(UiAssetTarget::Head(config.head)),
-			},
-			color: preview_color(
-				config,
-				match part.slot {
-					CharacterPartSlot::BodyMesh => UiAssetTarget::Body(config.body),
+		match &self.config {
+			ConceptPreviewConfig::Braidman { config, .. } => {
+				use crate::ui::braidman::UiAssetTarget as BraidmanTarget;
+				let target = match part.slot {
+					CharacterPartSlot::BodyMesh => BraidmanTarget::Body(config.body),
 					CharacterPartSlot::HeadRig | CharacterPartSlot::HeadMesh => {
-						UiAssetTarget::Head(config.head)
+						BraidmanTarget::Head(config.head)
 					}
 					CharacterPartSlot::EyeLeft | CharacterPartSlot::EyeRight => {
-						UiAssetTarget::Eye(config.eye)
+						BraidmanTarget::Eye(config.eye)
 					}
-					CharacterPartSlot::Nose => UiAssetTarget::Nose(config.nose),
-					CharacterPartSlot::Mouth => UiAssetTarget::Mouth(config.mouth),
+					CharacterPartSlot::Nose => BraidmanTarget::Nose(config.nose),
+					CharacterPartSlot::Mouth => BraidmanTarget::Mouth(config.mouth),
 					CharacterPartSlot::EarLeft | CharacterPartSlot::EarRight => {
-						UiAssetTarget::Ear(config.ear)
+						BraidmanTarget::Ear(config.ear)
 					}
-					CharacterPartSlot::Hair => UiAssetTarget::Hair(config.hair),
+					CharacterPartSlot::Hair => BraidmanTarget::Hair(config.hair),
+					CharacterPartSlot::Horns => BraidmanTarget::Head(config.head),
 					CharacterPartSlot::Clothing => config
 						.clothing
 						.iter()
 						.copied()
 						.find(|clothing| clothing.label() == part.asset.label)
-						.map(UiAssetTarget::Clothing)
-						.unwrap_or(UiAssetTarget::Head(config.head)),
-				},
-			),
+						.map(BraidmanTarget::Clothing)
+						.unwrap_or(BraidmanTarget::Head(config.head)),
+				};
+				let ui_target = UiAssetTarget::Braidman(target);
+				PreviewAssetTarget {
+					target: ui_target,
+					color: preview_color_braidman(config, ui_target),
+				}
+			}
+			ConceptPreviewConfig::Brodler { config, .. } => {
+				use crate::ui::brodler::UiAssetTarget as BrodlerTarget;
+				let target = match part.slot {
+					CharacterPartSlot::BodyMesh => BrodlerTarget::Body,
+					CharacterPartSlot::HeadRig | CharacterPartSlot::HeadMesh => {
+						BrodlerTarget::Head(config.head)
+					}
+					CharacterPartSlot::EyeLeft | CharacterPartSlot::EyeRight => BrodlerTarget::Eye,
+					CharacterPartSlot::Nose | CharacterPartSlot::Mouth => {
+						BrodlerTarget::Head(config.head)
+					}
+					CharacterPartSlot::EarLeft | CharacterPartSlot::EarRight => {
+						BrodlerTarget::Head(config.head)
+					}
+					CharacterPartSlot::Horns => BrodlerTarget::Horns(config.horns),
+					CharacterPartSlot::Hair => BrodlerTarget::Hair(config.hair),
+					CharacterPartSlot::Clothing => config
+						.clothing
+						.iter()
+						.copied()
+						.find(|clothing| clothing.label() == part.asset.label)
+						.map(BrodlerTarget::Clothing)
+						.unwrap_or(BrodlerTarget::Head(config.head)),
+				};
+				let ui_target = UiAssetTarget::Brodler(target);
+				PreviewAssetTarget {
+					target: ui_target,
+					color: preview_color_brodler(config, ui_target),
+				}
+			}
 		}
 	}
 }

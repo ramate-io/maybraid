@@ -4,6 +4,8 @@
 //! mapping from resolved controls to rig/feature effects.
 
 pub mod braidman;
+pub mod brodler;
+pub mod common;
 
 use crate::ResolvedCharacterAssembly;
 

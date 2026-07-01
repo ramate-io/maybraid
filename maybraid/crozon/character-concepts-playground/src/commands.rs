@@ -1,9 +1,11 @@
 //! In-game clap command hierarchy for the concepts playground.
 
 pub mod braidman;
+pub mod brodler;
 
 use bevy::prelude::*;
 pub use braidman::Braidman;
+pub use brodler::Brodler;
 use clap::Parser;
 use game_commands::command::{CommandScript, GameCommand};
 
@@ -26,6 +28,9 @@ pub enum ConceptsCommand {
 	/// Spawn or adjust the simplified Braidman concept preview.
 	#[command(subcommand)]
 	Braidman(Braidman),
+	/// Spawn or adjust the Brodler concept preview.
+	#[command(subcommand)]
+	Brodler(Brodler),
 	/// Print the live rig bone hierarchy to the HUD console.
 	DumpBones,
 }
@@ -44,6 +49,7 @@ impl ConceptsCommand {
 			Self::Help => *console = Self::long_help_string(),
 			Self::Script(script) => script.run(commands, console),
 			Self::Braidman(braidman) => braidman.react(commands),
+			Self::Brodler(brodler) => brodler.react(commands),
 			Self::DumpBones => request_dump_bones(commands),
 		}
 	}

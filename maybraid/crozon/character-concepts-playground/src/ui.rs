@@ -1,4 +1,5 @@
-mod braidman;
+pub mod braidman;
+pub mod brodler;
 
 use bevy::asset::RenderAssetUsages;
 use bevy::ecs::event::EntityEvent;
@@ -11,11 +12,50 @@ use game_commands::ui::{GameCommandDrawerConfig, GameCommandStatusText, GameComm
 
 use crate::{
 	camera_focus::{focus_debug_enabled, queue_camera_focus, PendingCameraFocus},
-	preview::ConceptPreviewConfig,
+	preview::{ConceptPreviewConfig, ConceptSpecies},
 	thumbnail::ThumbnailCache,
 };
 
-pub use braidman::{CameraFocus, CreatorUiAction, UiAssetTarget, UiColorTarget};
+pub use braidman::{CameraFocus, UiColorTarget};
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum UiAssetTarget {
+	Braidman(braidman::UiAssetTarget),
+	Brodler(brodler::UiAssetTarget),
+}
+
+impl UiAssetTarget {
+	pub fn label(self) -> &'static str {
+		match self {
+			Self::Braidman(target) => target.label(),
+			Self::Brodler(target) => target.label(),
+		}
+	}
+
+	pub fn camera_focus(self) -> CameraFocus {
+		match self {
+			Self::Braidman(target) => target.camera_focus(),
+			Self::Brodler(target) => target.camera_focus(),
+		}
+	}
+}
+
+#[derive(Component, Clone, Copy, Debug)]
+pub enum CreatorUiAction {
+	SwitchSpecies(ConceptSpecies),
+	Braidman(braidman::CreatorUiAction),
+	Brodler(brodler::CreatorUiAction),
+}
+
+impl CreatorUiAction {
+	pub fn focus_target(self) -> Option<UiAssetTarget> {
+		match self {
+			Self::SwitchSpecies(_) => None,
+			Self::Braidman(action) => action.focus_target().map(UiAssetTarget::Braidman),
+			Self::Brodler(action) => action.focus_target().map(UiAssetTarget::Brodler),
+		}
+	}
+}
 
 const PANEL_WIDTH: f32 = 360.0;
 const PANEL_HEIGHT_PERCENT: f32 = 82.0;
@@ -29,6 +69,7 @@ const SCROLL_LINE_PX: f32 = 14.0;
 pub enum UiSection {
 	#[default]
 	Presets,
+	Head,
 	Body,
 	HeadFeatures,
 	Hair,
@@ -40,6 +81,7 @@ impl UiSection {
 	pub(crate) const fn label(self) -> &'static str {
 		match self {
 			Self::Presets => "Presets",
+			Self::Head => "Head",
 			Self::Body => "Body",
 			Self::HeadFeatures => "Head & Features",
 			Self::Hair => "Hair",
@@ -52,6 +94,7 @@ impl UiSection {
 #[derive(Resource, Debug)]
 pub struct CreatorUiState {
 	pub presets_open: bool,
+	pub head_open: bool,
 	pub body_open: bool,
 	pub head_features_open: bool,
 	pub hair_open: bool,
@@ -66,6 +109,7 @@ impl Default for CreatorUiState {
 	fn default() -> Self {
 		Self {
 			presets_open: true,
+			head_open: true,
 			body_open: true,
 			head_features_open: false,
 			hair_open: false,
@@ -89,6 +133,7 @@ impl CreatorUiState {
 	pub(crate) fn is_open(&self, section: UiSection) -> bool {
 		match section {
 			UiSection::Presets => self.presets_open,
+			UiSection::Head => self.head_open,
 			UiSection::Body => self.body_open,
 			UiSection::HeadFeatures => self.head_features_open,
 			UiSection::Hair => self.hair_open,
@@ -100,6 +145,7 @@ impl CreatorUiState {
 	pub(crate) fn toggle(&mut self, section: UiSection) {
 		match section {
 			UiSection::Presets => self.presets_open = !self.presets_open,
+			UiSection::Head => self.head_open = !self.head_open,
 			UiSection::Body => self.body_open = !self.body_open,
 			UiSection::HeadFeatures => self.head_features_open = !self.head_features_open,
 			UiSection::Hair => self.hair_open = !self.hair_open,
@@ -243,19 +289,61 @@ pub fn react_creator_ui(
 		if *interaction != Interaction::Pressed {
 			continue;
 		}
-		let ConceptPreviewConfig::Braidman { animation, .. } = config.as_ref();
-		let animation_before = *animation;
-		if let Some(target) = action.focus_target() {
-			ui_state.last_selected = Some(target);
-			let trigger = format!("ui-press:{target:?}");
-			queue_camera_focus(&mut pending_camera, target.camera_focus(), trigger);
-		}
-		let ConceptPreviewConfig::Braidman { config: braidman, animation } = config.as_mut();
-		braidman::apply_action(*action, braidman, animation, &mut ui_state);
-		if focus_debug_enabled() {
-			info!(
-				"[camera-focus] ui action={action:?} animation_before={animation_before:?} animation_after={animation:?}",
-			);
+		let animation_before = config.animation();
+		match *action {
+			CreatorUiAction::SwitchSpecies(species) => {
+				if config.species() != species {
+					*config = ConceptPreviewConfig::default_for(species);
+					config.set_animation(animation_before);
+					ui_state.hovered = None;
+					ui_state.last_selected = None;
+					ui_state.layout_revision += 1;
+					pending_camera.focus = None;
+					pending_camera.resolved_target = None;
+					pending_camera.focus_trigger = None;
+				}
+				continue;
+			}
+			CreatorUiAction::Braidman(braidman_action) => {
+				if let Some(target) = braidman_action.focus_target() {
+					ui_state.last_selected = Some(UiAssetTarget::Braidman(target));
+					let trigger = format!("ui-press:{target:?}");
+					queue_camera_focus(
+						&mut pending_camera,
+						UiAssetTarget::Braidman(target).camera_focus(),
+						trigger,
+					);
+				}
+				let ConceptPreviewConfig::Braidman { config: braidman, animation } = config.as_mut() else {
+					continue;
+				};
+				braidman::apply_action(braidman_action, braidman, animation, &mut ui_state);
+				if focus_debug_enabled() {
+					info!(
+						"[camera-focus] ui action={braidman_action:?} animation_before={animation_before:?} animation_after={animation:?}",
+					);
+				}
+			}
+			CreatorUiAction::Brodler(brodler_action) => {
+				if let Some(target) = brodler_action.focus_target() {
+					ui_state.last_selected = Some(UiAssetTarget::Brodler(target));
+					let trigger = format!("ui-press:{target:?}");
+					queue_camera_focus(
+						&mut pending_camera,
+						UiAssetTarget::Brodler(target).camera_focus(),
+						trigger,
+					);
+				}
+				let ConceptPreviewConfig::Brodler { config: brodler, animation } = config.as_mut() else {
+					continue;
+				};
+				brodler::apply_action(brodler_action, brodler, animation, &mut ui_state);
+				if focus_debug_enabled() {
+					info!(
+						"[camera-focus] ui action={brodler_action:?} animation_before={animation_before:?} animation_after={animation:?}",
+					);
+				}
+			}
 		}
 	}
 }
@@ -267,21 +355,64 @@ pub fn refresh_creator_ui_display(
 	mut buttons: Query<(&mut BackgroundColor, &CreatorUiAction), With<Button>>,
 	mut color_swatches: Query<(&mut BorderColor, &CreatorUiAction), With<Button>>,
 ) {
-	let ConceptPreviewConfig::Braidman { config: braidman, animation } = config.as_ref();
-	for (mut text, binding) in &mut value_labels {
-		text.0 = braidman::format_value_binding(*binding, braidman);
-	}
-	for (mut background, action) in &mut buttons {
-		if let Some(color) =
-			braidman::selection_button_color(*action, braidman, *animation, &ui_state)
-		{
-			background.0 = color;
+	match config.as_ref() {
+		ConceptPreviewConfig::Braidman { config: braidman, animation } => {
+			for (mut text, binding) in &mut value_labels {
+				text.0 = braidman::format_value_binding(*binding, braidman);
+			}
+			for (mut background, action) in &mut buttons {
+				let CreatorUiAction::Braidman(braidman_action) = *action else {
+					continue;
+				};
+				if let Some(color) =
+					braidman::selection_button_color(braidman_action, braidman, *animation, &ui_state)
+				{
+					background.0 = color;
+				}
+			}
+			for (mut border, action) in &mut color_swatches {
+				let CreatorUiAction::Braidman(braidman::CreatorUiAction::SetColor(target, swatch)) =
+					*action
+				else {
+					continue;
+				};
+				let active = braidman::color_target_value(target, braidman) == swatch;
+				*border = BorderColor::all(if active { Color::WHITE } else { muted() });
+			}
 		}
-	}
-	for (mut border, action) in &mut color_swatches {
-		if let CreatorUiAction::SetColor(target, swatch) = *action {
-			let active = braidman::color_target_value(target, braidman) == swatch;
-			*border = BorderColor::all(if active { Color::WHITE } else { muted() });
+		ConceptPreviewConfig::Brodler { config: brodler, animation } => {
+			for (mut text, _binding) in &mut value_labels {
+				text.0.clear();
+			}
+			for (mut background, action) in &mut buttons {
+				let CreatorUiAction::Brodler(brodler_action) = *action else {
+					continue;
+				};
+				if let Some(color) =
+					brodler::selection_button_color(brodler_action, brodler, *animation, &ui_state)
+				{
+					background.0 = color;
+				}
+			}
+			for (mut border, action) in &mut color_swatches {
+				let active = match *action {
+					CreatorUiAction::Brodler(brodler::CreatorUiAction::SetSkin(color)) => {
+						brodler.colors.skin == color
+					}
+					CreatorUiAction::Brodler(brodler::CreatorUiAction::SetEyes(color)) => {
+						brodler.colors.eyes == color
+					}
+					CreatorUiAction::Brodler(brodler::CreatorUiAction::SetHairColor(color)) => {
+						brodler.colors.hair == color
+					}
+					CreatorUiAction::Brodler(brodler::CreatorUiAction::SetClothingColor(
+						clothing,
+						color,
+					)) => brodler.colors.clothing_color(clothing) == color,
+					_ => continue,
+				};
+				*border = BorderColor::all(if active { Color::WHITE } else { muted() });
+			}
 		}
 	}
 }
@@ -341,7 +472,41 @@ fn populate_creator_ui_panel(
 		10.0,
 		muted(),
 	);
-	braidman::populate_panel(panel, asset_server, images, thumbnails, config, ui_state);
+	species_picker(panel, config.species());
+	match config {
+		ConceptPreviewConfig::Braidman { .. } => {
+			braidman::populate_panel(panel, asset_server, images, thumbnails, config, ui_state);
+		}
+		ConceptPreviewConfig::Brodler { .. } => {
+			brodler::populate_panel(panel, asset_server, images, thumbnails, config, ui_state);
+		}
+	}
+}
+
+fn species_picker(panel: &mut ChildSpawnerCommands, active: ConceptSpecies) {
+	panel
+		.spawn((
+			Node {
+				width: Val::Percent(100.0),
+				flex_direction: FlexDirection::Row,
+				column_gap: Val::Px(6.0),
+				row_gap: Val::Px(6.0),
+				margin: UiRect::bottom(Val::Px(6.0)),
+				..default()
+			},
+			Pickable::IGNORE,
+		))
+		.with_children(|row| {
+			text(row, "Species", 11.0, Color::WHITE);
+			for species in [ConceptSpecies::Braidman, ConceptSpecies::Brodler] {
+				button(
+					row,
+					species.label(),
+					CreatorUiAction::SwitchSpecies(species),
+					active == species,
+				);
+			}
+		});
 }
 
 fn rebuild_creator_ui_panel(
@@ -366,6 +531,7 @@ pub(crate) fn section(
 	parent: &mut ChildSpawnerCommands,
 	section: UiSection,
 	state: &CreatorUiState,
+	toggle: CreatorUiAction,
 	body: impl FnOnce(&mut ChildSpawnerCommands),
 ) {
 	let open = state.is_open(section);
@@ -383,7 +549,7 @@ pub(crate) fn section(
 			button(
 				section_parent,
 				&format!("{} {}", if open { "v" } else { ">" }, section.label()),
-				CreatorUiAction::ToggleSection(section),
+				toggle,
 				open,
 			);
 			if open {
@@ -483,7 +649,7 @@ pub(crate) fn color_swatches(
 				},
 				BorderColor::all(if *color == active { Color::WHITE } else { muted() }),
 				BackgroundColor(color.color()),
-				CreatorUiAction::SetColor(target, *color),
+				CreatorUiAction::Braidman(braidman::CreatorUiAction::SetColor(target, *color)),
 			));
 		}
 	});
@@ -518,7 +684,7 @@ pub(crate) fn inline_color_swatches(
 					},
 					BorderColor::all(if *color == active { Color::WHITE } else { muted() }),
 					BackgroundColor(color.color()),
-					CreatorUiAction::SetColor(target, *color),
+					CreatorUiAction::Braidman(braidman::CreatorUiAction::SetColor(target, *color)),
 				));
 			}
 		});

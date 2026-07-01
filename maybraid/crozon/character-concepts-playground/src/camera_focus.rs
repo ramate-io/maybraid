@@ -59,8 +59,12 @@ pub fn queue_default_camera_focus(
 		return;
 	}
 	*queued = true;
-	let ConceptPreviewConfig::Braidman { config: braidman, .. } = config.as_ref();
-	let target = UiAssetTarget::Body(braidman.body);
+	let target = match config.as_ref() {
+		ConceptPreviewConfig::Braidman { config: braidman, .. } => {
+			UiAssetTarget::Braidman(crate::ui::braidman::UiAssetTarget::Body(braidman.body))
+		}
+		ConceptPreviewConfig::Brodler { .. } => crate::ui::brodler::default_focus_target(),
+	};
 	ui_state.last_selected = Some(target);
 	queue_camera_focus(&mut pending, target.camera_focus(), "startup-default");
 }

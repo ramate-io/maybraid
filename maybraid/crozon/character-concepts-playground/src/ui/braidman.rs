@@ -15,10 +15,12 @@ use crozon_characters::{
 use crate::{
 	animation::ConceptAnimation,
 	preview::ConceptPreviewConfig,
+	preview_color::PreviewColor,
 	thumbnail::{self, ThumbnailCache},
 	ui::{
-		color_swatches, inline_color_swatches, section, selector, subsection, text, CreatorUiState,
-		CreatorUiValueBinding, THUMBNAIL_SIZE, UiSection,
+		color_swatches, inline_color_swatches, section, selector, subsection, text,
+		CreatorUiAction as ShellAction, CreatorUiState, CreatorUiValueBinding, THUMBNAIL_SIZE,
+		UiAssetTarget as ShellTarget, UiSection,
 	},
 };
 
@@ -225,19 +227,37 @@ pub fn populate_panel(
 	config: &ConceptPreviewConfig,
 	ui_state: &CreatorUiState,
 ) {
-	let ConceptPreviewConfig::Braidman { config: braidman, animation } = config;
+	let ConceptPreviewConfig::Braidman { config: braidman, animation } = config else {
+		return;
+	};
 	let uis = PanelContext { ui_state, braidman, animation: *animation };
 
-	section(panel, UiSection::Presets, ui_state, |section| {
+	section(
+		panel,
+		UiSection::Presets,
+		ui_state,
+		ShellAction::Braidman(CreatorUiAction::ToggleSection(UiSection::Presets)),
+		|section| {
 		selector(
 			section,
 			"Gender",
 			CreatorUiValueBinding::Gender,
-			CreatorUiAction::Gender,
+			|delta| ShellAction::Braidman(CreatorUiAction::Gender(delta)),
 		);
-		selector(section, "Build", CreatorUiValueBinding::Build, CreatorUiAction::Build);
-	});
-	section(panel, UiSection::Body, ui_state, |section| {
+		selector(
+			section,
+			"Build",
+			CreatorUiValueBinding::Build,
+			|delta| ShellAction::Braidman(CreatorUiAction::Build(delta)),
+		);
+	},
+	);
+	section(
+		panel,
+		UiSection::Body,
+		ui_state,
+		ShellAction::Braidman(CreatorUiAction::ToggleSection(UiSection::Body)),
+		|section| {
 		subsection(section, "Body Mesh", |sub| {
 			asset_grid(
 				sub,
@@ -254,8 +274,14 @@ pub fn populate_panel(
 		subsection(section, "Color", |sub| {
 			color_swatches(sub, UiColorTarget::Body, braidman.colors.body);
 		});
-	});
-	section(panel, UiSection::HeadFeatures, ui_state, |section| {
+	},
+	);
+	section(
+		panel,
+		UiSection::HeadFeatures,
+		ui_state,
+		ShellAction::Braidman(CreatorUiAction::ToggleSection(UiSection::HeadFeatures)),
+		|section| {
 		subsection(section, "Head", |sub| {
 			asset_grid(
 				sub,
@@ -312,8 +338,14 @@ pub fn populate_panel(
 			);
 			sliders::spawn_ears(sub, braidman);
 		});
-	});
-	section(panel, UiSection::Hair, ui_state, |section| {
+	},
+	);
+	section(
+		panel,
+		UiSection::Hair,
+		ui_state,
+		ShellAction::Braidman(CreatorUiAction::ToggleSection(UiSection::Hair)),
+		|section| {
 		subsection(section, "Style", |sub| {
 			asset_grid(
 				sub,
@@ -327,11 +359,23 @@ pub fn populate_panel(
 		subsection(section, "Color", |sub| {
 			color_swatches(sub, UiColorTarget::Hair, braidman.colors.hair);
 		});
-	});
-	section(panel, UiSection::Clothing, ui_state, |section| {
+	},
+	);
+	section(
+		panel,
+		UiSection::Clothing,
+		ui_state,
+		ShellAction::Braidman(CreatorUiAction::ToggleSection(UiSection::Clothing)),
+		|section| {
 		clothing_list(section, asset_server, images, thumbnails, braidman, uis);
-	});
-	section(panel, UiSection::Animation, ui_state, |section| {
+	},
+	);
+	section(
+		panel,
+		UiSection::Animation,
+		ui_state,
+		ShellAction::Braidman(CreatorUiAction::ToggleSection(UiSection::Animation)),
+		|section| {
 		subsection(section, "Clip", |sub| {
 			asset_grid(
 				sub,
@@ -342,7 +386,8 @@ pub fn populate_panel(
 				uis,
 			);
 		});
-	});
+	},
+	);
 }
 
 #[derive(Clone, Copy)]
@@ -374,7 +419,7 @@ fn clothing_list(
 			for clothing in CLOTHING {
 				let target = UiAssetTarget::Clothing(*clothing);
 				let active = braidman.clothing.contains(clothing);
-				let focus = ctx.ui_state.focused_target() == Some(target);
+				let focus = ctx.ui_state.focused_target() == Some(wrap(target));
 				let color = braidman.colors.clothing_color(*clothing);
 				list
 					.spawn((
@@ -389,15 +434,15 @@ fn clothing_list(
 						Pickable::IGNORE,
 					))
 					.with_children(|item| {
-						let camera = thumbnail::camera_for_target(
-							&mut item.commands(),
-							images,
-							asset_server,
-							thumbnails,
-							target,
-							clothing.path().as_str(),
-							color,
-						);
+				let camera = thumbnail::camera_for_target(
+					&mut item.commands(),
+					images,
+					asset_server,
+					thumbnails,
+					wrap(target),
+					clothing.path().as_str(),
+					PreviewColor::Braidman(color),
+				);
 						asset_button(item, target, active, focus, Some(camera));
 						inline_color_swatches(
 							item,
@@ -432,7 +477,7 @@ fn asset_grid(
 		.with_children(|grid| {
 			for target in targets {
 				let active = target_active(target, ctx.braidman, ctx.animation);
-				let focus = ctx.ui_state.focused_target() == Some(target);
+				let focus = ctx.ui_state.focused_target() == Some(wrap(target));
 				let color = target_color(target, ctx.braidman);
 				let camera = target_path(target).map(|path| {
 					let mut commands = grid.commands();
@@ -441,7 +486,7 @@ fn asset_grid(
 						images,
 						asset_server,
 						thumbnails,
-						target,
+						wrap(target),
 						path,
 						color,
 					)
@@ -478,7 +523,7 @@ fn asset_button(
 			} else {
 				Color::srgba(0.18, 0.20, 0.24, 0.92)
 			}),
-			target_action(target),
+			ShellAction::Braidman(target_action(target)),
 		))
 		.with_children(|button| {
 			if let Some(camera) = camera {
@@ -558,9 +603,9 @@ fn target_path(target: UiAssetTarget) -> Option<&'static str> {
 	}
 }
 
-fn target_color(target: UiAssetTarget, braidman: &BraidmanConfig) -> BraidmanColor {
+fn target_color(target: UiAssetTarget, braidman: &BraidmanConfig) -> PreviewColor {
 	let skin = braidman.colors.skin_color();
-	match target {
+	let color = match target {
 		UiAssetTarget::Body(_) => braidman.colors.body,
 		UiAssetTarget::Head(_) | UiAssetTarget::Nose(_) | UiAssetTarget::Ear(_) => skin,
 		UiAssetTarget::Eye(_) => braidman.colors.eyes,
@@ -568,7 +613,12 @@ fn target_color(target: UiAssetTarget, braidman: &BraidmanConfig) -> BraidmanCol
 		UiAssetTarget::Hair(_) => braidman.colors.hair,
 		UiAssetTarget::Clothing(value) => braidman.colors.clothing_color(value),
 		UiAssetTarget::Animation(_) => BraidmanColor::Natural,
-	}
+	};
+	PreviewColor::Braidman(color)
+}
+
+fn wrap(target: UiAssetTarget) -> ShellTarget {
+	ShellTarget::Braidman(target)
 }
 
 fn set_color(braidman: &mut BraidmanConfig, target: UiColorTarget, color: BraidmanColor) {
@@ -730,7 +780,7 @@ fn asset_button_color(
 	const FOCUS: Color = Color::srgba(0.30, 0.38, 0.48, 0.98);
 
 	let active = target_active(target, braidman, animation);
-	let focus = ui_state.focused_target() == Some(target);
+	let focus = ui_state.focused_target() == Some(wrap(target));
 	if focus {
 		FOCUS
 	} else if active {

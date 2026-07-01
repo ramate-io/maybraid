@@ -1,10 +1,7 @@
-//! Braidman asset catalog for the concepts playground.
-//!
-//! Phase 2 adds hair and clothing through the same resolved-part path as body
-//! and head features: hair socketed on the head rig `crown` bone, clothing
-//! remapped to the body rig. Clothing is multi-select via `BraidmanConfig::clothing`.
+//! Brodler asset catalog and assembly resolver.
 
 use bevy::prelude::*;
+use clap::ValueEnum;
 
 use crate::{
 	assembly::{
@@ -13,35 +10,57 @@ use crate::{
 	},
 	assets::AssetNormalization,
 	species::{
-		braidman::{pose::BraidmanPose, BraidmanConfig},
-		common::{BODY_RIG, HEAD_RIG},
+		brodler::{pose::BrodlerPose, BrodlerConfig, BrodlerHeadMesh},
+		common::{
+			BodyMesh, ClothingMesh, EarMesh, EyeMesh, HairMesh, MouthMesh, NoseMesh, BODY_RIG,
+			BODY_STANDARD, HEAD_RIG, HORNS_HARROWED_CROWN, HORNS_LORKEN_CROWN,
+		},
 	},
 };
 
-pub use crate::species::common::{
-	BodyMesh, ClothingMesh, EarMesh, EyeMesh, HairMesh, HeadMesh, MouthMesh, NoseMesh,
-};
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, ValueEnum)]
+pub enum HornMesh {
+	#[default]
+	HarrowedCrown,
+	LorkenCrown,
+}
 
-/// Species-local resolver for Braidman asset choices.
-pub struct BraidmanAssets;
+impl HornMesh {
+	pub const fn label(self) -> &'static str {
+		match self {
+			Self::HarrowedCrown => "harrowed-crown",
+			Self::LorkenCrown => "lorken-crown",
+		}
+	}
 
-impl BraidmanAssets {
-	pub fn resolve(config: &BraidmanConfig) -> ResolvedCharacterAssembly {
+	pub const fn path(self) -> crate::assets::AssetPath {
+		match self {
+			Self::HarrowedCrown => HORNS_HARROWED_CROWN,
+			Self::LorkenCrown => HORNS_LORKEN_CROWN,
+		}
+	}
+}
+
+/// Species-local resolver for Brodler asset choices.
+pub struct BrodlerAssets;
+
+impl BrodlerAssets {
+	pub fn resolve(config: &BrodlerConfig) -> ResolvedCharacterAssembly {
 		let assembly = ResolvedCharacterAssembly::new(
-			"Braidman",
+			"Brodler",
 			RigAsset::new("Humanoid", BODY_RIG),
-			BraidmanPose::from_config(config).resolve(),
+			BrodlerPose.resolve(),
 		)
-		.with_part(Self::body_mesh(config.body))
-		// Head rig is an armature scene, not a head mesh variant selector.
+		.with_part(Self::body_mesh())
 		.with_part(Self::head_rig())
 		.with_part(Self::head_mesh(config.head))
-		.with_part(Self::eye_left(config.eye))
-		.with_part(Self::eye_right(config.eye))
-		.with_part(Self::nose(config.nose))
-		.with_part(Self::mouth(config.mouth))
-		.with_part(Self::ear_left(config.ear))
-		.with_part(Self::ear_right(config.ear));
+		.with_part(Self::eye_left())
+		.with_part(Self::eye_right())
+		.with_part(Self::nose())
+		.with_part(Self::mouth())
+		.with_part(Self::ear_left())
+		.with_part(Self::ear_right())
+		.with_part(Self::horns(config.horns));
 
 		let assembly = match Self::hair(config.hair) {
 			Some(hair) => assembly.with_part(hair),
@@ -53,10 +72,14 @@ impl BraidmanAssets {
 			.fold(assembly, |assembly, clothing| assembly.with_part(Self::clothing(*clothing)))
 	}
 
-	fn body_mesh(body: BodyMesh) -> ResolvedCharacterPart {
+	fn body_mesh() -> ResolvedCharacterPart {
 		ResolvedCharacterPart::new(
 			CharacterPartSlot::BodyMesh,
-			CharacterAsset::new(body.label(), body.path(), AssetNormalization::IDENTITY),
+			CharacterAsset::new(
+				BodyMesh::Standard.label(),
+				BODY_STANDARD,
+				AssetNormalization::IDENTITY,
+			),
 			SkinTarget::BodyRig,
 			None,
 		)
@@ -75,7 +98,7 @@ impl BraidmanAssets {
 		)
 	}
 
-	fn head_mesh(head: HeadMesh) -> ResolvedCharacterPart {
+	fn head_mesh(head: BrodlerHeadMesh) -> ResolvedCharacterPart {
 		ResolvedCharacterPart::new(
 			CharacterPartSlot::HeadMesh,
 			CharacterAsset::new(head.label(), head.path(), AssetNormalization::IDENTITY),
@@ -84,10 +107,14 @@ impl BraidmanAssets {
 		)
 	}
 
-	fn eye_left(eye: EyeMesh) -> ResolvedCharacterPart {
+	fn eye_left() -> ResolvedCharacterPart {
 		ResolvedCharacterPart::new(
 			CharacterPartSlot::EyeLeft,
-			CharacterAsset::new(eye.label(), eye.path(), AssetNormalization::centroid(0.16)),
+			CharacterAsset::new(
+				EyeMesh::Standard.label(),
+				EyeMesh::Standard.path(),
+				AssetNormalization::centroid(0.16),
+			),
 			SkinTarget::HeadRig,
 			Some(Self::head_socket(
 				"eye_socket.L",
@@ -96,10 +123,14 @@ impl BraidmanAssets {
 		)
 	}
 
-	fn eye_right(eye: EyeMesh) -> ResolvedCharacterPart {
+	fn eye_right() -> ResolvedCharacterPart {
 		ResolvedCharacterPart::new(
 			CharacterPartSlot::EyeRight,
-			CharacterAsset::new(eye.label(), eye.path(), AssetNormalization::centroid(0.16)),
+			CharacterAsset::new(
+				EyeMesh::Standard.label(),
+				EyeMesh::Standard.path(),
+				AssetNormalization::centroid(0.16),
+			),
 			SkinTarget::HeadRig,
 			Some(Self::head_socket(
 				"eye_socket.R",
@@ -108,10 +139,14 @@ impl BraidmanAssets {
 		)
 	}
 
-	fn nose(nose: NoseMesh) -> ResolvedCharacterPart {
+	fn nose() -> ResolvedCharacterPart {
 		ResolvedCharacterPart::new(
 			CharacterPartSlot::Nose,
-			CharacterAsset::new(nose.label(), nose.path(), nose.normalization()),
+			CharacterAsset::new(
+				NoseMesh::Standard.label(),
+				NoseMesh::Standard.path(),
+				NoseMesh::Standard.normalization(),
+			),
 			SkinTarget::HeadRig,
 			Some(Self::head_socket(
 				"nose_socket",
@@ -120,10 +155,14 @@ impl BraidmanAssets {
 		)
 	}
 
-	fn mouth(mouth: MouthMesh) -> ResolvedCharacterPart {
+	fn mouth() -> ResolvedCharacterPart {
 		ResolvedCharacterPart::new(
 			CharacterPartSlot::Mouth,
-			CharacterAsset::new(mouth.label(), mouth.path(), AssetNormalization::centroid(0.12)),
+			CharacterAsset::new(
+				MouthMesh::Standard.label(),
+				MouthMesh::Standard.path(),
+				AssetNormalization::centroid(0.12),
+			),
 			SkinTarget::HeadRig,
 			Some(Self::head_socket(
 				"mouth_socket",
@@ -132,10 +171,14 @@ impl BraidmanAssets {
 		)
 	}
 
-	fn ear_left(ear: EarMesh) -> ResolvedCharacterPart {
+	fn ear_left() -> ResolvedCharacterPart {
 		ResolvedCharacterPart::new(
 			CharacterPartSlot::EarLeft,
-			CharacterAsset::new(ear.label(), ear.path(), AssetNormalization::centroid(0.15)),
+			CharacterAsset::new(
+				EarMesh::Standard.label(),
+				EarMesh::Standard.path(),
+				AssetNormalization::centroid(0.15),
+			),
 			SkinTarget::HeadRig,
 			Some(Self::head_socket(
 				"ear_socket.L",
@@ -145,16 +188,32 @@ impl BraidmanAssets {
 		)
 	}
 
-	fn ear_right(ear: EarMesh) -> ResolvedCharacterPart {
+	fn ear_right() -> ResolvedCharacterPart {
 		ResolvedCharacterPart::new(
 			CharacterPartSlot::EarRight,
-			CharacterAsset::new(ear.label(), ear.path(), AssetNormalization::centroid(0.15)),
+			CharacterAsset::new(
+				EarMesh::Standard.label(),
+				EarMesh::Standard.path(),
+				AssetNormalization::centroid(0.15),
+			),
 			SkinTarget::HeadRig,
 			Some(Self::head_socket(
 				"ear_socket.R",
 				Self::mirror_x()
 					.with_translation(Vec3::new(-0.1, -0.1, 0.00))
 					.with_rotation(Quat::from_rotation_y(-std::f32::consts::PI / 4.0)),
+			)),
+		)
+	}
+
+	fn horns(horns: HornMesh) -> ResolvedCharacterPart {
+		ResolvedCharacterPart::new(
+			CharacterPartSlot::Horns,
+			CharacterAsset::new(horns.label(), horns.path(), AssetNormalization::centroid(1.0)),
+			SkinTarget::HeadRig,
+			Some(Self::head_socket(
+				"crown_socket",
+				Transform::from_translation(Vec3::new(0.0, -0.1, 0.1)),
 			)),
 		)
 	}

@@ -2,9 +2,11 @@ use std::collections::HashMap;
 
 use bevy::camera::RenderTarget;
 use bevy::prelude::*;
-use crozon_characters::species::braidman::BraidmanColor;
 
-use crate::ui::{thumbnail_image, UiAssetTarget};
+use crate::{
+	preview_color::PreviewColor,
+	ui::{thumbnail_image, UiAssetTarget},
+};
 
 const THUMBNAIL_SPACING: f32 = 8.0;
 
@@ -18,7 +20,7 @@ pub struct ThumbnailCache {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 struct ThumbnailKey {
 	target: UiAssetTarget,
-	color: BraidmanColor,
+	color: PreviewColor,
 }
 
 #[derive(Clone, Copy)]
@@ -29,7 +31,7 @@ struct ThumbnailEntry {
 
 #[derive(Component)]
 pub struct ThumbnailPreview {
-	pub color: BraidmanColor,
+	pub color: PreviewColor,
 }
 
 impl ThumbnailCache {
@@ -45,7 +47,7 @@ pub fn camera_for_target(
 	cache: &mut ThumbnailCache,
 	target: UiAssetTarget,
 	path: &'static str,
-	color: BraidmanColor,
+	color: PreviewColor,
 ) -> Entity {
 	let key = ThumbnailKey { target, color };
 	if let Some(entry) = cache.entries.get_mut(&key) {

@@ -53,6 +53,7 @@ pub enum CharacterPartSlot {
 	EarLeft,
 	EarRight,
 	Hair,
+	Horns,
 	Clothing,
 }
 

@@ -1,7 +1,10 @@
 use bevy::prelude::*;
 use crozon_characters::species::braidman::{sliders::BraidmanSliders, BraidmanConfig};
 
-use crate::ui::{button, text, value_text, CreatorUiValueBinding, SLIDER_STEP, TILT_STEP_DEG};
+use crate::ui::{
+	button, text, value_text, CreatorUiAction as ShellAction, CreatorUiValueBinding, SLIDER_STEP,
+	TILT_STEP_DEG,
+};
 
 use super::CreatorUiAction;
 
@@ -161,9 +164,9 @@ fn row(
 ) {
 	parent.spawn((crate::ui::row_node(), Pickable::IGNORE)).with_children(|row| {
 		text(row, label, 11.0, Color::WHITE);
-		button(row, "-", action(-SLIDER_STEP), false);
+		button(row, "-", ShellAction::Braidman(action(-SLIDER_STEP)), false);
 		value_text(row, binding);
-		button(row, "+", action(SLIDER_STEP), false);
+		button(row, "+", ShellAction::Braidman(action(SLIDER_STEP)), false);
 	});
 }
 
@@ -175,8 +178,8 @@ fn tilt_row(
 ) {
 	parent.spawn((crate::ui::row_node(), Pickable::IGNORE)).with_children(|row| {
 		text(row, label, 11.0, Color::WHITE);
-		button(row, "-", action(-TILT_STEP_DEG), false);
+		button(row, "-", ShellAction::Braidman(action(-TILT_STEP_DEG)), false);
 		value_text(row, binding);
-		button(row, "+", action(TILT_STEP_DEG), false);
+		button(row, "+", ShellAction::Braidman(action(TILT_STEP_DEG)), false);
 	});
 }

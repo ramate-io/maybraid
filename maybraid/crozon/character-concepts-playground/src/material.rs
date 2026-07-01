@@ -1,30 +1,28 @@
 use std::collections::HashMap;
 
 use bevy::prelude::*;
-use crozon_characters::species::braidman::BraidmanColor;
 
-use crate::{preview::PreviewAssetTarget, skinning::CharacterPart, thumbnail::ThumbnailPreview};
+use crate::{preview::PreviewAssetTarget, preview_color::PreviewColor, skinning::CharacterPart, thumbnail::ThumbnailPreview};
 
 #[derive(Component, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct AppliedPreviewColor(BraidmanColor);
+pub(crate) struct AppliedPreviewColor(PreviewColor);
 
 #[derive(Resource, Default)]
 pub struct PreviewColorMaterials {
-	handles: HashMap<BraidmanColor, Handle<StandardMaterial>>,
+	handles: HashMap<PreviewColor, Handle<StandardMaterial>>,
 }
 
 impl PreviewColorMaterials {
 	fn handle(
 		&mut self,
-		color: BraidmanColor,
+		color: PreviewColor,
 		materials: &mut Assets<StandardMaterial>,
 	) -> Handle<StandardMaterial> {
 		self.handles
 			.entry(color)
 			.or_insert_with(|| {
 				materials.add(StandardMaterial {
-					base_color: color.color(),
-					// TODO: Remove this once we have given properly mirrored meshes.
+					base_color: color.bevy_color(),
 					cull_mode: None,
 					..default()
 				})
@@ -77,7 +75,7 @@ pub fn apply_preview_colors(
 
 fn apply_color_to_tree(
 	root: Entity,
-	color: BraidmanColor,
+	color: PreviewColor,
 	children: Option<&Children>,
 	character_parts: &Query<Entity, With<CharacterPart>>,
 	children_q: &Query<&Children>,
@@ -96,8 +94,6 @@ fn apply_color_to_tree(
 	let handle = color_materials.handle(color, materials);
 	let mut stack: Vec<(Entity, bool)> = children.iter().map(|entity| (entity, false)).collect();
 	while let Some((entity, is_entry)) = stack.pop() {
-		// Socketed feature parts live under the head rig hierarchy; skip their subtrees
-		// when coloring from an ancestor so we don't fight per-part overrides.
 		if !is_entry && character_parts.contains(entity) && entity != root {
 			continue;
 		}

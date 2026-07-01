@@ -15,9 +15,9 @@ use crate::{
 	ResolvedCharacterAssembly,
 };
 
-use assets::{
-	BodyMesh, BraidmanAssets, ClothingMesh, EarMesh, EyeMesh, HairMesh, HeadMesh, MouthMesh,
-	NoseMesh,
+use assets::BraidmanAssets;
+use crate::species::common::{
+	BodyMesh, ClothingMesh, EarMesh, EyeMesh, HairMesh, HeadMesh, MouthMesh, NoseMesh,
 };
 use sliders::BraidmanSliders;
 

@@ -2,7 +2,8 @@ use std::path::{Path, PathBuf};
 
 use bevy::prelude::*;
 use crozon_character_concepts_playground::{
-	ConceptsCommand, CrozonCharacterConceptsPlaygroundPlugin, PendingStartupCommand,
+	fps_debug_enabled, ConceptsCommand, CrozonCharacterConceptsPlaygroundPlugin,
+	PendingStartupCommand,
 };
 
 fn assets_root() -> PathBuf {
@@ -18,6 +19,11 @@ fn main() {
 		println!("Startup command from argv (same as in-game / text).");
 	} else {
 		println!("Crozon character concepts playground - press / for commands.");
+	}
+	if fps_debug_enabled() {
+		println!(
+			"FPS diagnostics enabled (CROZON_FPS_DEBUG). Set RUST_LOG=info for throttled fps/frame_time logs."
+		);
 	}
 
 	let assets_path = assets_root();

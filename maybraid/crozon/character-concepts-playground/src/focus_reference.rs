@@ -27,13 +27,17 @@ pub struct FocusReferenceSyncState {
 fn focus_live_key(config: &ConceptPreviewConfig) -> String {
 	match config {
 		ConceptPreviewConfig::Braidman { config, .. } => config.sync_key(),
+		ConceptPreviewConfig::Brodler { config, .. } => config.sync_key(),
 	}
 }
 
 fn focus_spawn_key(config: &ConceptPreviewConfig) -> String {
 	match config {
 		ConceptPreviewConfig::Braidman { config, .. } => {
-			format!("body={:?} head={:?}", config.body, config.head)
+			format!("species=braidman body={:?} head={:?}", config.body, config.head)
+		}
+		ConceptPreviewConfig::Brodler { config, .. } => {
+			format!("species=brodler head={:?} horns={:?}", config.head, config.horns)
 		}
 	}
 }
