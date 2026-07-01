@@ -15,8 +15,8 @@ use crozon_characters::{
 
 use crate::animation::{AnimatedBodyRig, BodyRigBindTransform, ConceptAnimation};
 use crate::skinning::{
-	ActiveRigPose, BoneMap, CharacterPart, CharacterRig, CharacterRigRole, NeedsSkinRemap,
-	NeedsSocketPlacement, PartRigRef, RigBindScales,
+	bind_scales_ready, bone_map_ready, ActiveRigPose, BoneMap, CharacterPart, CharacterRig,
+	CharacterRigRole, NeedsSkinRemap, NeedsSocketPlacement, PartRigRef, RigBindScales,
 };
 use crate::ui::UiAssetTarget;
 
@@ -54,11 +54,29 @@ impl ConceptPreviewConfig {
 		}
 	}
 
+	/// Full config fingerprint — used for status text and command sync.
 	pub fn sync_key(&self) -> String {
 		match self {
 			Self::Braidman { config, animation } => {
 				format!("{} animation={animation:?}", config.sync_key())
 			}
+		}
+	}
+
+	/// Asset topology only. When this changes the preview GLTF scenes are respawned.
+	pub fn spawn_key(&self) -> String {
+		match self {
+			Self::Braidman { config, .. } => format!(
+				"body={:?} head={:?} eye={:?} nose={:?} mouth={:?} ear={:?} hair={:?} clothing={:?}",
+				config.body,
+				config.head,
+				config.eye,
+				config.nose,
+				config.mouth,
+				config.ear,
+				config.hair,
+				config.clothing,
+			),
 		}
 	}
 
@@ -71,10 +89,11 @@ impl ConceptPreviewConfig {
 
 #[derive(Resource, Default)]
 pub struct ConceptPreviewSyncState {
-	key: String,
+	live_key: String,
+	spawn_key: String,
 }
 
-/// Skips preview mutation systems for one frame after a full respawn so queued
+/// Skips part attachment/remap for one frame after a GLTF respawn so queued
 /// despawn commands are not racing inserts on the outgoing entities.
 #[derive(Resource, Default)]
 pub struct PreviewRespawnCooldown {
@@ -94,6 +113,16 @@ pub fn preview_pass_ready(cooldown: Res<PreviewRespawnCooldown>) -> bool {
 #[derive(Component)]
 pub struct ConceptPreviewRoot;
 
+/// Spawned hidden until the body rig bone map and bind scales are ready.
+#[derive(Component)]
+pub struct PreviewAwaitingReveal;
+
+#[derive(Component, Clone, Copy)]
+pub struct PreviewPartBaseTransform {
+	normalization: Transform,
+	socket: Option<Transform>,
+}
+
 #[derive(Component, Clone, Copy)]
 pub struct PreviewAssetTarget {
 	pub target: UiAssetTarget,
@@ -106,22 +135,122 @@ pub fn sync_preview(
 	config: Res<ConceptPreviewConfig>,
 	mut sync_state: ResMut<ConceptPreviewSyncState>,
 	mut respawn_cooldown: ResMut<PreviewRespawnCooldown>,
+	mut body_poses: Query<&mut ActiveRigPose, With<AnimatedBodyRig>>,
+	mut parts: Query<(
+		&CharacterPart,
+		&mut PreviewAssetTarget,
+		Option<&PreviewPartBaseTransform>,
+		Option<&mut Transform>,
+	)>,
 	roots: Query<Entity, With<ConceptPreviewRoot>>,
 ) {
-	let key = config.sync_key();
-	if sync_state.key == key {
+	let live_key = config.sync_key();
+	let spawn_key = config.spawn_key();
+	if sync_state.live_key == live_key {
 		return;
 	}
-	sync_state.key.clone_from(&key);
+
+	let assembly = config.resolve();
+	if sync_state.spawn_key == spawn_key {
+		sync_state.live_key = live_key;
+		sync_live_preview(&config, &assembly, &mut body_poses, &mut parts);
+		return;
+	}
+
+	sync_state.live_key = live_key;
+	sync_state.spawn_key.clone_from(&spawn_key);
 	respawn_cooldown.frames_remaining = 1;
 
-	// Full respawn on any config change; fine for command-driven preview scale.
 	for entity in &roots {
 		commands.entity(entity).try_despawn();
 	}
 
-	let assembly = config.resolve();
 	PreviewSpawner::new(&mut commands, &asset_server, assembly, config.clone()).spawn();
+}
+
+fn sync_live_preview(
+	config: &ConceptPreviewConfig,
+	assembly: &ResolvedCharacterAssembly,
+	body_poses: &mut Query<&mut ActiveRigPose, With<AnimatedBodyRig>>,
+	parts: &mut Query<(
+		&CharacterPart,
+		&mut PreviewAssetTarget,
+		Option<&PreviewPartBaseTransform>,
+		Option<&mut Transform>,
+	)>,
+) {
+	for mut pose in body_poses {
+		pose.pose = assembly.pose.clone();
+	}
+
+	let ConceptPreviewConfig::Braidman { config: braidman, .. } = config;
+	let sliders = braidman.sliders.clamped();
+	for (part, mut target, base, transform) in parts {
+		target.color = preview_color(braidman, target.target);
+		let Some(base) = base else {
+			continue;
+		};
+		let Some(mut transform) = transform else {
+			continue;
+		};
+		if !has_feature_transform(part.slot) {
+			continue;
+		}
+		let authored = base
+			.normalization
+			.mul_transform(sliders.feature_transform(part.slot));
+		match base.socket {
+			Some(socket) => {
+				*transform = socket;
+				transform.scale *= authored.scale;
+				transform.rotation *= authored.rotation;
+			}
+			None => *transform = authored,
+		}
+	}
+}
+
+/// Reveal a respawned preview only after proportions have been applied once.
+pub fn reveal_ready_preview(
+	mut commands: Commands,
+	pending: Query<Entity, With<PreviewAwaitingReveal>>,
+	body_rigs: Query<(&BoneMap, &RigBindScales), With<AnimatedBodyRig>>,
+) {
+	let Ok((bone_map, bind_scales)) = body_rigs.single() else {
+		return;
+	};
+	if !bone_map_ready(bone_map) || !bind_scales_ready(bind_scales, bone_map) {
+		return;
+	}
+	for entity in &pending {
+		commands.entity(entity).try_insert(Visibility::Inherited);
+		commands.entity(entity).try_remove::<PreviewAwaitingReveal>();
+	}
+}
+
+fn has_feature_transform(slot: CharacterPartSlot) -> bool {
+	matches!(
+		slot,
+		CharacterPartSlot::EyeLeft
+			| CharacterPartSlot::EyeRight
+			| CharacterPartSlot::Nose
+			| CharacterPartSlot::Mouth
+			| CharacterPartSlot::EarLeft
+			| CharacterPartSlot::EarRight
+	)
+}
+
+fn preview_color(config: &BraidmanConfig, target: UiAssetTarget) -> BraidmanColor {
+	let skin = config.colors.skin_color();
+	match target {
+		UiAssetTarget::Body(_) => config.colors.body,
+		UiAssetTarget::Head(_) | UiAssetTarget::Nose(_) | UiAssetTarget::Ear(_) => skin,
+		UiAssetTarget::Eye(_) => config.colors.eyes,
+		UiAssetTarget::Mouth(_) => config.colors.mouth,
+		UiAssetTarget::Hair(_) => config.colors.hair,
+		UiAssetTarget::Clothing(clothing) => config.colors.clothing_color(clothing),
+		UiAssetTarget::Animation(_) => BraidmanColor::Natural,
+	}
 }
 
 struct PreviewSpawner<'w, 's, 'a> {
@@ -145,7 +274,6 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 		let body_rig = self.spawn_body_rig();
 		let mut head_rig = None;
 
-		// Head rig must exist before features that skin or socket to it.
 		let parts = self.assembly.parts.clone();
 		for part in parts {
 			if part.slot == CharacterPartSlot::HeadRig {
@@ -165,6 +293,13 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 			.mul_transform(sliders.feature_transform(part.slot))
 	}
 
+	fn part_base_transform(&self, part: &ResolvedCharacterPart) -> PreviewPartBaseTransform {
+		PreviewPartBaseTransform {
+			normalization: part.asset.normalization.transform(),
+			socket: part.socket.map(|socket| socket.local_transform),
+		}
+	}
+
 	fn spawn_body_rig(&mut self) -> Entity {
 		self.commands
 			.spawn((
@@ -174,11 +309,12 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 				CharacterRig { role: CharacterRigRole::Body },
 				AnimatedBodyRig,
 				BoneMap::default(),
-				// Pose maintenance runs on the body rig only in this pass.
 				ActiveRigPose { pose: self.assembly.pose.clone() },
 				RigBindScales::default(),
 				BodyRigBindTransform(Transform::IDENTITY),
 				ConceptPreviewRoot,
+				PreviewAwaitingReveal,
+				Visibility::Hidden,
 				Transform::IDENTITY,
 				Name::new(format!("{}_body_rig", self.assembly.label)),
 			))
@@ -197,6 +333,9 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 				CharacterPart { slot: part.slot },
 				BoneMap::default(),
 				ConceptPreviewRoot,
+				PreviewAwaitingReveal,
+				Visibility::Hidden,
+				self.part_base_transform(part),
 				self.part_transform(part),
 				self.preview_target(part),
 				Name::new(format!("character_{:?}", part.slot)),
@@ -220,10 +359,6 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 		head_rig: Option<Entity>,
 		part: &ResolvedCharacterPart,
 	) {
-		/*if part.slot == CharacterPartSlot::HeadMesh {
-			return;
-		}*/
-
 		let entity = self
 			.commands
 			.spawn((
@@ -233,6 +368,9 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 				),
 				CharacterPart { slot: part.slot },
 				ConceptPreviewRoot,
+				PreviewAwaitingReveal,
+				Visibility::Hidden,
+				self.part_base_transform(part),
 				self.part_transform(part),
 				self.preview_target(part),
 				Name::new(format!("character_{:?}_{}", part.slot, part.asset.label)),
@@ -240,7 +378,6 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 			.id();
 
 		if let Some(rig_root) = self.skin_target_rig(body_rig, head_rig, part.skin_target) {
-			// Deferred until bone map is populated after GLTF load.
 			self.commands.entity(entity).insert((PartRigRef { rig_root }, NeedsSkinRemap));
 		}
 
@@ -282,51 +419,54 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 
 	fn preview_target(&self, part: &ResolvedCharacterPart) -> PreviewAssetTarget {
 		let ConceptPreviewConfig::Braidman { config, .. } = &self.config;
-		let skin = config.colors.skin_color();
-		match part.slot {
-			CharacterPartSlot::BodyMesh => PreviewAssetTarget {
-				target: UiAssetTarget::Body(config.body),
-				color: config.colors.body,
+		PreviewAssetTarget {
+			target: match part.slot {
+				CharacterPartSlot::BodyMesh => UiAssetTarget::Body(config.body),
+				CharacterPartSlot::HeadRig | CharacterPartSlot::HeadMesh => {
+					UiAssetTarget::Head(config.head)
+				}
+				CharacterPartSlot::EyeLeft | CharacterPartSlot::EyeRight => {
+					UiAssetTarget::Eye(config.eye)
+				}
+				CharacterPartSlot::Nose => UiAssetTarget::Nose(config.nose),
+				CharacterPartSlot::Mouth => UiAssetTarget::Mouth(config.mouth),
+				CharacterPartSlot::EarLeft | CharacterPartSlot::EarRight => {
+					UiAssetTarget::Ear(config.ear)
+				}
+				CharacterPartSlot::Hair => UiAssetTarget::Hair(config.hair),
+				CharacterPartSlot::Clothing => config
+					.clothing
+					.iter()
+					.copied()
+					.find(|clothing| clothing.label() == part.asset.label)
+					.map(UiAssetTarget::Clothing)
+					.unwrap_or(UiAssetTarget::Head(config.head)),
 			},
-			CharacterPartSlot::HeadRig | CharacterPartSlot::HeadMesh => PreviewAssetTarget {
-				target: UiAssetTarget::Head(config.head),
-				color: skin,
-			},
-			CharacterPartSlot::EyeLeft | CharacterPartSlot::EyeRight => PreviewAssetTarget {
-				target: UiAssetTarget::Eye(config.eye),
-				color: config.colors.eyes,
-			},
-			CharacterPartSlot::Nose => PreviewAssetTarget {
-				target: UiAssetTarget::Nose(config.nose),
-				color: skin,
-			},
-			CharacterPartSlot::Mouth => PreviewAssetTarget {
-				target: UiAssetTarget::Mouth(config.mouth),
-				color: config.colors.mouth,
-			},
-			CharacterPartSlot::EarLeft | CharacterPartSlot::EarRight => PreviewAssetTarget {
-				target: UiAssetTarget::Ear(config.ear),
-				color: skin,
-			},
-			CharacterPartSlot::Hair => PreviewAssetTarget {
-				target: UiAssetTarget::Hair(config.hair),
-				color: config.colors.hair,
-			},
-			CharacterPartSlot::Clothing => match config
-				.clothing
-				.iter()
-				.copied()
-				.find(|clothing| clothing.label() == part.asset.label)
-			{
-				Some(clothing) => PreviewAssetTarget {
-					target: UiAssetTarget::Clothing(clothing),
-					color: config.colors.clothing_color(clothing),
+			color: preview_color(
+				config,
+				match part.slot {
+					CharacterPartSlot::BodyMesh => UiAssetTarget::Body(config.body),
+					CharacterPartSlot::HeadRig | CharacterPartSlot::HeadMesh => {
+						UiAssetTarget::Head(config.head)
+					}
+					CharacterPartSlot::EyeLeft | CharacterPartSlot::EyeRight => {
+						UiAssetTarget::Eye(config.eye)
+					}
+					CharacterPartSlot::Nose => UiAssetTarget::Nose(config.nose),
+					CharacterPartSlot::Mouth => UiAssetTarget::Mouth(config.mouth),
+					CharacterPartSlot::EarLeft | CharacterPartSlot::EarRight => {
+						UiAssetTarget::Ear(config.ear)
+					}
+					CharacterPartSlot::Hair => UiAssetTarget::Hair(config.hair),
+					CharacterPartSlot::Clothing => config
+						.clothing
+						.iter()
+						.copied()
+						.find(|clothing| clothing.label() == part.asset.label)
+						.map(UiAssetTarget::Clothing)
+						.unwrap_or(UiAssetTarget::Head(config.head)),
 				},
-				None => PreviewAssetTarget {
-					target: UiAssetTarget::Head(config.head),
-					color: skin,
-				},
-			},
+			),
 		}
 	}
 }

@@ -67,14 +67,12 @@ pub struct LimbAnimator {
 
 pub fn init_limb_animators(
 	mut commands: Commands,
-	rig_roots: Query<(Entity, &BoneMap), (With<CharacterRig>, With<AnimatedBodyRig>)>,
+	rig_roots: Query<
+		(Entity, &BoneMap),
+		(With<CharacterRig>, With<AnimatedBodyRig>, Without<HumanoidV0Rig>),
+	>,
 	transforms: Query<&Transform>,
-	animated: Query<Entity, With<LimbAnimator>>,
 ) {
-	if !animated.is_empty() {
-		return;
-	}
-
 	let Ok((rig_entity, bone_map)) = rig_roots.single() else {
 		return;
 	};

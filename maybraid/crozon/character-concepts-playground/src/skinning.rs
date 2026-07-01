@@ -57,7 +57,7 @@ pub struct RigBindScales {
 	pub scales: HashMap<String, Vec3>,
 }
 
-fn bone_map_ready(map: &BoneMap) -> bool {
+pub fn bone_map_ready(map: &BoneMap) -> bool {
 	// Wait for a few landmarks so GLTF scene instantiation has finished wiring bones.
 	["root", "pelvis.L", "chest.L", "waist.L"]
 		.iter()
@@ -241,6 +241,13 @@ pub fn prune_duplicate_part_scenes(
 		}
 		commands.entity(part_root).try_remove::<NeedsDuplicateScenePrune>();
 	}
+}
+
+/// True once landmark bind scales have been captured for a rig.
+pub fn bind_scales_ready(bind_scales: &RigBindScales, bone_map: &BoneMap) -> bool {
+	["root", "pelvis.L", "chest.L", "waist.L"]
+		.iter()
+		.all(|bone| bind_scales.scales.contains_key(*bone) && bone_map.by_name.contains_key(*bone))
 }
 
 pub fn maintain_resolved_pose(

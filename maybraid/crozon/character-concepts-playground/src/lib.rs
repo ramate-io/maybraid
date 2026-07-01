@@ -29,8 +29,8 @@ use focus::animate_focused_preview_asset;
 use material::apply_preview_colors;
 use material::PreviewColorMaterials;
 use preview::{
-	preview_pass_ready, sync_preview, tick_preview_respawn_cooldown, ConceptPreviewConfig,
-	ConceptPreviewSyncState, PreviewRespawnCooldown,
+	preview_pass_ready, reveal_ready_preview, sync_preview, tick_preview_respawn_cooldown,
+	ConceptPreviewConfig, ConceptPreviewSyncState, PreviewRespawnCooldown,
 };
 use skinning::{
 	attach_parts_to_sockets, build_rig_bone_map, dump_bones_to_console, maintain_resolved_pose,
@@ -80,11 +80,19 @@ impl Plugin for CrozonCharacterConceptsPlaygroundPlugin {
 						.after(capture_command_line_input::<ConceptsCommand>)
 						.after(ui::react_creator_ui),
 					animate_focused_preview_asset.after(ui::react_creator_ui).before(sync_preview),
-					build_rig_bone_map
-						.after(sync_preview)
-						.run_if(preview_pass_ready),
+					build_rig_bone_map.after(sync_preview),
+					maintain_resolved_pose.after(build_rig_bone_map),
+				),
+			)
+			.add_systems(
+				Update,
+				(
 					attach_parts_to_sockets
 						.after(build_rig_bone_map)
+						.run_if(preview_pass_ready),
+					reveal_ready_preview
+						.after(maintain_resolved_pose)
+						.after(attach_parts_to_sockets)
 						.run_if(preview_pass_ready),
 					remap_part_skin_to_rig
 						.after(attach_parts_to_sockets)
@@ -96,7 +104,7 @@ impl Plugin for CrozonCharacterConceptsPlaygroundPlugin {
 						.after(prune_duplicate_part_scenes)
 						.run_if(preview_pass_ready),
 					init_limb_animators
-						.after(build_rig_bone_map)
+						.after(maintain_resolved_pose)
 						.run_if(preview_pass_ready),
 					animate_body_rig
 						.after(init_limb_animators)
