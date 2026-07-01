@@ -1,5 +1,16 @@
 # Typed Character UI Menu Spec
 
+## Implementation Status
+
+The typed character UI now follows the crate split described below:
+
+- `character-ui-menu` owns renderer-independent primitives (`Section`, `Slider`, `SingleSelect`, `SwatchSingleSelect`, `AssetSingleSelect`, `MultiSelect`), `CameraFocus`, and generic `MenuEvent`s.
+- `crozon-character-ui-menus` owns Crozon-specific menu traits, trait impls for character enums, typed `BraidmanMenu` / `BrodlerMenu` / `CharacterMenu` trees, menu-to-config conversion, and focus metadata.
+- `bevy-character-ui-menu-renderer` owns the Bevy widget helpers for sections, sliders, swatches, asset selects, multi-selects, and menu event buttons.
+- `character-concepts-playground/src/ui.rs` is now integration glue: it builds typed menus from `ConceptPreviewConfig`, delegates rendering, applies menu events back to configs, and keeps the existing camera/session/scroll systems alive.
+
+Shared math types use Bevy crates (`bevy_math::Vec3`) rather than an extra standalone `glam` dependency.
+
 ## Goal
 
 Replace redundant hand-written character creation UI builders with a typed menu description layer.

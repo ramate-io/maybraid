@@ -1,12 +1,13 @@
+#![allow(dead_code)]
+// The typed renderer keys thumbnails by asset path now. The cache is retained so
+// the next visual thumbnail pass can plug in without reviving species UI targets.
+
 use std::collections::HashMap;
 
 use bevy::camera::RenderTarget;
 use bevy::prelude::*;
 
-use crate::{
-	preview_color::PreviewColor,
-	ui::{thumbnail_image, UiAssetTarget},
-};
+use crate::{preview_color::PreviewColor, ui::thumbnail_image};
 
 const THUMBNAIL_SPACING: f32 = 8.0;
 
@@ -19,7 +20,7 @@ pub struct ThumbnailCache {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 struct ThumbnailKey {
-	target: UiAssetTarget,
+	path: &'static str,
 	color: PreviewColor,
 }
 
@@ -40,16 +41,16 @@ impl ThumbnailCache {
 	}
 }
 
-pub fn camera_for_target(
+pub fn camera_for_asset(
 	commands: &mut Commands,
 	images: &mut Assets<Image>,
 	asset_server: &AssetServer,
 	cache: &mut ThumbnailCache,
-	target: UiAssetTarget,
+	label: &'static str,
 	path: &'static str,
 	color: PreviewColor,
 ) -> Entity {
-	let key = ThumbnailKey { target, color };
+	let key = ThumbnailKey { path, color };
 	if let Some(entry) = cache.entries.get_mut(&key) {
 		entry.last_seen_revision = cache.revision;
 		return entry.camera;
@@ -73,7 +74,7 @@ pub fn camera_for_target(
 				..default()
 			}),
 			camera_transform,
-			Name::new(format!("thumbnail_camera_{}", target.label())),
+			Name::new(format!("thumbnail_camera_{label}")),
 		))
 		.id();
 
@@ -81,13 +82,13 @@ pub fn camera_for_target(
 		SceneRoot(asset_server.load(GltfAssetLabel::Scene(0).from_asset(path))),
 		Transform::from_translation(base),
 		ThumbnailPreview { color },
-		Name::new(format!("thumbnail_asset_{}", target.label())),
+		Name::new(format!("thumbnail_asset_{label}")),
 	));
 
 	commands.spawn((
 		PointLight { intensity: 450.0, range: 6.0, shadows_enabled: false, ..default() },
 		Transform::from_translation(base + Vec3::new(0.3, 1.8, 1.6)),
-		Name::new(format!("thumbnail_light_{}", target.label())),
+		Name::new(format!("thumbnail_light_{label}")),
 	));
 
 	cache

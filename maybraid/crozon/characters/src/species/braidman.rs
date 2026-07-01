@@ -15,10 +15,10 @@ use crate::{
 	ResolvedCharacterAssembly,
 };
 
-use assets::BraidmanAssets;
 use crate::species::common::{
 	BodyMesh, ClothingMesh, EarMesh, EyeMesh, HairMesh, HeadMesh, MouthMesh, NoseMesh,
 };
+use assets::BraidmanAssets;
 use sliders::BraidmanSliders;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
@@ -36,6 +36,18 @@ pub enum BraidmanColor {
 }
 
 impl BraidmanColor {
+	pub const VALUES: &'static [Self] = &[
+		Self::Natural,
+		Self::Warm,
+		Self::Cool,
+		Self::Dark,
+		Self::Light,
+		Self::Red,
+		Self::Blue,
+		Self::Green,
+		Self::Gold,
+	];
+
 	pub const fn label(self) -> &'static str {
 		match self {
 			Self::Natural => "natural",

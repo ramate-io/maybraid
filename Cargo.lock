@@ -390,6 +390,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "bevy-character-ui-menu-renderer"
+version = "0.0.1"
+dependencies = [
+ "bevy",
+ "character-ui-menu",
+ "crozon-character-ui-menus",
+]
+
+[[package]]
 name = "bevy_a11y"
 version = "0.18.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1867,6 +1876,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "613afe47fcd5fac7ccf1db93babcb082c5994d996f20b8b159f2ad1658eb5724"
 
 [[package]]
+name = "character-ui-menu"
+version = "0.0.1"
+dependencies = [
+ "bevy_math",
+ "crozon-characters",
+]
+
+[[package]]
 name = "chico"
 version = "0.0.1"
 dependencies = [
@@ -2398,9 +2415,12 @@ name = "crozon-character-concepts-playground"
 version = "0.0.1"
 dependencies = [
  "bevy",
+ "bevy-character-ui-menu-renderer",
  "camera-controls",
+ "character-ui-menu",
  "clap",
  "crozon-character-playground",
+ "crozon-character-ui-menus",
  "crozon-characters",
  "crozon-rigs",
  "game-commands",
@@ -2418,6 +2438,16 @@ dependencies = [
  "game-commands",
  "log",
  "malo-animations",
+]
+
+[[package]]
+name = "crozon-character-ui-menus"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "bevy_math",
+ "character-ui-menu",
+ "crozon-characters",
 ]
 
 [[package]]

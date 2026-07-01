@@ -1,6 +1,8 @@
 use bevy::prelude::*;
 use camera_controls::look::CameraLookEnabled;
+use character_ui_menu::CameraFocus;
 use crozon_character_playground::CameraController;
+use crozon_character_ui_menus::BODY_FOCUS;
 use crozon_characters::SocketRig;
 
 use crate::{
@@ -11,7 +13,7 @@ use crate::{
 		bind_scales_ready, bone_map_ready, ActiveRigPose, BoneMap, CharacterRig, CharacterRigRole,
 		NeedsSocketPlacement, RigBindScales,
 	},
-	ui::{CameraFocus, CreatorUiState, UiAssetTarget},
+	ui::CreatorUiState,
 };
 
 /// Minimum posed `upper_neck` height before body shadow framing is trusted.
@@ -55,18 +57,13 @@ pub fn queue_species_default_camera_focus(
 	config: &ConceptPreviewConfig,
 	trigger: impl Into<String>,
 ) {
-	let target = default_focus_target(config);
-	ui_state.last_selected = Some(target);
-	queue_camera_focus(pending, target.camera_focus(), trigger);
+	let focus = default_focus_target(config);
+	ui_state.last_selected = Some(focus);
+	queue_camera_focus(pending, focus, trigger);
 }
 
-pub fn default_focus_target(config: &ConceptPreviewConfig) -> UiAssetTarget {
-	match config {
-		ConceptPreviewConfig::Braidman { config: braidman, .. } => {
-			UiAssetTarget::Braidman(crate::ui::braidman::UiAssetTarget::Body(braidman.body))
-		}
-		ConceptPreviewConfig::Brodler { .. } => crate::ui::brodler::default_focus_target(),
-	}
+pub fn default_focus_target(_config: &ConceptPreviewConfig) -> CameraFocus {
+	BODY_FOCUS
 }
 
 pub fn apply_camera_suggestion(
@@ -80,11 +77,7 @@ pub fn apply_camera_suggestion(
 	>,
 	shadow_head_rigs: Query<
 		(&BoneMap, &CharacterRig),
-		(
-			With<FocusReferenceRig>,
-			With<CharacterRig>,
-			Without<NeedsSocketPlacement>,
-		),
+		(With<FocusReferenceRig>, With<CharacterRig>, Without<NeedsSocketPlacement>),
 	>,
 	preview_body_pose: Query<
 		(&BoneMap, &RigBindScales, &CharacterRig),
@@ -101,11 +94,7 @@ pub fn apply_camera_suggestion(
 	>,
 	preview_rigs: Query<
 		(&BoneMap, &CharacterRig, &GlobalTransform),
-		(
-			With<CharacterRig>,
-			With<ConceptPreviewRoot>,
-			Without<FocusReferenceRig>,
-		),
+		(With<CharacterRig>, With<ConceptPreviewRoot>, Without<FocusReferenceRig>),
 	>,
 	bone_globals: Query<&GlobalTransform>,
 	mut cameras: Query<(&mut Transform, &mut CameraController), With<Camera3d>>,
@@ -247,11 +236,7 @@ fn focus_target_ready(
 	>,
 	shadow_head_rigs: &Query<
 		(&BoneMap, &CharacterRig),
-		(
-			With<FocusReferenceRig>,
-			With<CharacterRig>,
-			Without<NeedsSocketPlacement>,
-		),
+		(With<FocusReferenceRig>, With<CharacterRig>, Without<NeedsSocketPlacement>),
 	>,
 	preview_body_pose: &Query<
 		(&BoneMap, &RigBindScales, &CharacterRig),
@@ -339,11 +324,7 @@ fn log_focus_apply(
 	shadow_rigs: &Query<(&BoneMap, &CharacterRig, &GlobalTransform), With<FocusReferenceRig>>,
 	preview_rigs: &Query<
 		(&BoneMap, &CharacterRig, &GlobalTransform),
-		(
-			With<CharacterRig>,
-			With<ConceptPreviewRoot>,
-			Without<FocusReferenceRig>,
-		),
+		(With<CharacterRig>, With<ConceptPreviewRoot>, Without<FocusReferenceRig>),
 	>,
 	bone_globals: &Query<&GlobalTransform>,
 	camera_before: Vec3,
@@ -358,11 +339,7 @@ fn log_focus_apply(
 		.zip(preview.root_y)
 		.map(|(shadow_y, preview_y)| shadow_y - preview_y);
 	let look_at = target.translation + target.forward() * 2.0;
-	let active = if focus.uses_preview_sockets() {
-		&preview
-	} else {
-		&shadow
-	};
+	let active = if focus.uses_preview_sockets() { &preview } else { &shadow };
 
 	info!(
 		"[camera-focus] apply trigger={trigger} settled={settled} source={} focus={} \
@@ -419,11 +396,7 @@ fn rig_socket_report_preview(
 	focus: CameraFocus,
 	rigs: &Query<
 		(&BoneMap, &CharacterRig, &GlobalTransform),
-		(
-			With<CharacterRig>,
-			With<ConceptPreviewRoot>,
-			Without<FocusReferenceRig>,
-		),
+		(With<CharacterRig>, With<ConceptPreviewRoot>, Without<FocusReferenceRig>),
 	>,
 	bone_globals: &Query<&GlobalTransform>,
 ) -> RigSocketReport {
@@ -454,11 +427,7 @@ fn rig_socket_report_inner<'a>(
 				bone_map.by_name.len(),
 			);
 		}
-		return RigSocketReport {
-			rig_root_y: Some(rig_global.translation().y),
-			root_y,
-			socket_y,
-		};
+		return RigSocketReport { rig_root_y: Some(rig_global.translation().y), root_y, socket_y };
 	}
 	if focus_debug_enabled() {
 		warn!("[camera-focus] {label} no rig for role {:?}", role);
@@ -487,11 +456,7 @@ fn resolve_focus_transform(
 	shadow_rigs: &Query<(&BoneMap, &CharacterRig, &GlobalTransform), With<FocusReferenceRig>>,
 	preview_rigs: &Query<
 		(&BoneMap, &CharacterRig, &GlobalTransform),
-		(
-			With<CharacterRig>,
-			With<ConceptPreviewRoot>,
-			Without<FocusReferenceRig>,
-		),
+		(With<CharacterRig>, With<ConceptPreviewRoot>, Without<FocusReferenceRig>),
 	>,
 	bone_globals: &Query<&GlobalTransform>,
 ) -> Option<Transform> {

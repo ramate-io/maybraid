@@ -29,6 +29,8 @@ pub enum BrodlerHeadMesh {
 }
 
 impl BrodlerHeadMesh {
+	pub const VALUES: &'static [Self] = &[Self::Gaunt, Self::Full];
+
 	pub const fn label(self) -> &'static str {
 		match self {
 			Self::Gaunt => "gaunt",
@@ -54,6 +56,8 @@ pub enum BrodlerSkinColor {
 }
 
 impl BrodlerSkinColor {
+	pub const VALUES: &'static [Self] = &[Self::Crimson, Self::Umber, Self::Ochre];
+
 	pub const fn label(self) -> &'static str {
 		match self {
 			Self::Crimson => "crimson",
@@ -80,6 +84,8 @@ pub enum BrodlerEyeColor {
 }
 
 impl BrodlerEyeColor {
+	pub const VALUES: &'static [Self] = &[Self::Black, Self::LightBlue, Self::Yellow];
+
 	pub const fn label(self) -> &'static str {
 		match self {
 			Self::Black => "black",
@@ -105,6 +111,8 @@ pub enum BrodlerHornColor {
 }
 
 impl BrodlerHornColor {
+	pub const VALUES: &'static [Self] = &[Self::LightBrown, Self::Yellow];
+
 	pub const fn label(self) -> &'static str {
 		match self {
 			Self::LightBrown => "light-brown",

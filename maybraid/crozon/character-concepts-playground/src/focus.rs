@@ -1,10 +1,11 @@
 use bevy::prelude::*;
+use character_ui_menu::CameraFocus;
 use crozon_characters::CharacterPartSlot;
 
 use crate::{
-	preview::PreviewAssetTarget,
+	preview::{PreviewAssetTarget, PreviewTarget},
 	skinning::{CharacterPart, NeedsSocketPlacement},
-	ui::{CreatorUiState, UiAssetTarget},
+	ui::CreatorUiState,
 };
 
 #[derive(Component, Clone, Copy)]
@@ -56,9 +57,13 @@ fn should_pulse(slot: CharacterPartSlot) -> bool {
 	)
 }
 
-fn focus_scale(focus: Option<UiAssetTarget>, target: UiAssetTarget, elapsed: f32) -> f32 {
-	if focus != Some(target) {
+fn focus_scale(focus: Option<CameraFocus>, target: PreviewTarget, elapsed: f32) -> f32 {
+	if focus.is_none() || !focus_matches_preview_target(target) {
 		return 1.0;
 	}
 	1.0 + elapsed.mul_add(7.0, 0.0).sin().abs() * 0.045
+}
+
+fn focus_matches_preview_target(_target: PreviewTarget) -> bool {
+	true
 }

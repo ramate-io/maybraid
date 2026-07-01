@@ -5,7 +5,7 @@
 //! out socket and skin-remap issues while the model surface is still changing.
 
 use bevy::prelude::*;
-use clap::ValueEnum;
+pub use crozon_characters::ConceptAnimation;
 use crozon_rigs::{rigs::humanoid_v0::HumanoidV0Rig, BonePose, Name as RigName};
 use malo_animations::{
 	animations::{
@@ -24,32 +24,6 @@ const FRONT_FLIP_CYCLE_SPEED: f32 = 0.85;
 const JUMP_HEIGHT: f32 = 1.5;
 const JUMP_PRE_SQUAT_SPEED: f32 = DEFAULT_PRE_SQUAT_SPEED * 1.2;
 const JUMP_LANDING_SQUAT_SPEED: f32 = DEFAULT_LANDING_SQUAT_SPEED * 1.3;
-
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, ValueEnum)]
-pub enum ConceptAnimation {
-	#[default]
-	Still,
-	Walk,
-	Run,
-	Jump,
-	Tuck,
-	TuckedFlip,
-	TwoFootedTuckedFlip,
-}
-
-impl ConceptAnimation {
-	pub const fn label(self) -> &'static str {
-		match self {
-			Self::Still => "still",
-			Self::Walk => "walk",
-			Self::Run => "run",
-			Self::Jump => "jump",
-			Self::Tuck => "tuck",
-			Self::TuckedFlip => "tucked-flip",
-			Self::TwoFootedTuckedFlip => "two-footed-tucked-flip",
-		}
-	}
-}
 
 /// Marks the body rig as the only rig animated in this pass.
 #[derive(Component)]

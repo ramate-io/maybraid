@@ -17,6 +17,8 @@ pub enum GenderPreset {
 }
 
 impl GenderPreset {
+	pub const VALUES: &'static [Self] = &[Self::Neutral, Self::Male, Self::Female, Self::NonBinary];
+
 	pub const fn label(self) -> &'static str {
 		match self {
 			Self::Neutral => "neutral",
@@ -41,6 +43,9 @@ pub enum BuildPreset {
 }
 
 impl BuildPreset {
+	pub const VALUES: &'static [Self] =
+		&[Self::Average, Self::Slender, Self::Athletic, Self::Heavy, Self::Stocky, Self::Lanky];
+
 	pub const fn label(self) -> &'static str {
 		match self {
 			Self::Average => "average",

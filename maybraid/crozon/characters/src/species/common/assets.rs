@@ -22,8 +22,7 @@ pub const EAR_STANDARD: AssetPath =
 	AssetPath::new("characters/ears/round_scoop_lateral_ear_left.glb");
 pub const EAR_ROUND: AssetPath = AssetPath::new("characters/ears/round_lateral_ear_left.glb");
 pub const EAR_FLANK: AssetPath = AssetPath::new("characters/ears/flank_lateral_ear_left.glb");
-pub const HORNS_HARROWED_CROWN: AssetPath =
-	AssetPath::new("characters/horns/harrowed_crown.glb");
+pub const HORNS_HARROWED_CROWN: AssetPath = AssetPath::new("characters/horns/harrowed_crown.glb");
 pub const HORNS_LORKEN_CROWN: AssetPath = AssetPath::new("characters/horns/lorken_crown.glb");
 pub const HAIR_THICK_BRAIDS: AssetPath = AssetPath::new("characters/hair/thick_braids.glb");
 pub const HAIR_FLOWING_CURLS: AssetPath = AssetPath::new("characters/hair/flowing_curls.glb");
@@ -46,7 +45,8 @@ pub const CLOTHING_QUARTER_COAT: AssetPath = AssetPath::new("characters/clothes/
 pub const CLOTHING_ROBE_COAT: AssetPath = AssetPath::new("characters/clothes/robe_coat.glb");
 pub const CLOTHING_SHORT_SLEEVED_ROBE_COAT: AssetPath =
 	AssetPath::new("characters/clothes/short_sleeved_robe_coat.glb");
-pub const CLOTHING_TAILORED_COAT: AssetPath = AssetPath::new("characters/clothes/tailored_coat.glb");
+pub const CLOTHING_TAILORED_COAT: AssetPath =
+	AssetPath::new("characters/clothes/tailored_coat.glb");
 pub const CLOTHING_HOOD: AssetPath = AssetPath::new("characters/clothes/hood.glb");
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, ValueEnum)]
@@ -57,6 +57,8 @@ pub enum BodyMesh {
 }
 
 impl BodyMesh {
+	pub const VALUES: &'static [Self] = &[Self::Standard, Self::Full];
+
 	pub const fn label(self) -> &'static str {
 		match self {
 			Self::Standard => "standard",
@@ -81,6 +83,8 @@ pub enum HeadMesh {
 }
 
 impl HeadMesh {
+	pub const VALUES: &'static [Self] = &[Self::Standard, Self::Gaunt, Self::Full];
+
 	pub const fn label(self) -> &'static str {
 		match self {
 			Self::Standard => "standard",
@@ -106,6 +110,8 @@ pub enum EyeMesh {
 }
 
 impl EyeMesh {
+	pub const VALUES: &'static [Self] = &[Self::Standard, Self::Falcon];
+
 	pub const fn label(self) -> &'static str {
 		match self {
 			Self::Standard => "standard",
@@ -131,6 +137,8 @@ pub enum NoseMesh {
 }
 
 impl NoseMesh {
+	pub const VALUES: &'static [Self] = &[Self::Standard, Self::Broad, Self::Loaf, Self::Balloon];
+
 	pub const fn label(self) -> &'static str {
 		match self {
 			Self::Standard => "standard",
@@ -165,6 +173,8 @@ pub enum MouthMesh {
 }
 
 impl MouthMesh {
+	pub const VALUES: &'static [Self] = &[Self::Standard];
+
 	pub const fn label(self) -> &'static str {
 		"standard"
 	}
@@ -183,6 +193,8 @@ pub enum EarMesh {
 }
 
 impl EarMesh {
+	pub const VALUES: &'static [Self] = &[Self::Standard, Self::Round, Self::Flank];
+
 	pub const fn label(self) -> &'static str {
 		match self {
 			Self::Standard => "standard",
@@ -216,6 +228,19 @@ pub enum HairMesh {
 }
 
 impl HairMesh {
+	pub const VALUES: &'static [Self] = &[
+		Self::None,
+		Self::ThickBraids,
+		Self::FlowingCurls,
+		Self::WrappingBraids,
+		Self::WrappingBraidsHangingLocks,
+		Self::BraidHawk,
+		Self::FeatherHawk,
+		Self::FlowingEdgyCurls,
+		Self::PermBraid,
+		Self::TechnoEdge,
+	];
+
 	pub const fn label(self) -> &'static str {
 		match self {
 			Self::None => "none",
@@ -262,6 +287,19 @@ pub enum ClothingMesh {
 }
 
 impl ClothingMesh {
+	pub const VALUES: &'static [Self] = &[
+		Self::BasketballCutShirt,
+		Self::Tunic,
+		Self::LongDress,
+		Self::ShortDress,
+		Self::FittedCoat,
+		Self::QuarterCoat,
+		Self::RobeCoat,
+		Self::ShortSleevedRobeCoat,
+		Self::TailoredCoat,
+		Self::Hood,
+	];
+
 	pub const fn label(self) -> &'static str {
 		match self {
 			Self::BasketballCutShirt => "basketball-cut-shirt",

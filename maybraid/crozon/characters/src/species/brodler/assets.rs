@@ -26,6 +26,8 @@ pub enum HornMesh {
 }
 
 impl HornMesh {
+	pub const VALUES: &'static [Self] = &[Self::HarrowedCrown, Self::LorkenCrown];
+
 	pub const fn label(self) -> &'static str {
 		match self {
 			Self::HarrowedCrown => "harrowed-crown",

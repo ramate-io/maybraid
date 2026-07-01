@@ -1,0 +1,61 @@
+use crozon_characters::species::{
+	braidman::BraidmanConfig, brodler::BrodlerConfig, common::ClothingMesh,
+};
+
+use crate::{braidman::BraidmanMenu, brodler::BrodlerMenu, character::CharacterMenu};
+
+#[test]
+fn braidman_config_round_trip() -> anyhow::Result<()> {
+	let config = BraidmanConfig::default_preview();
+	let menu = BraidmanMenu::from(&config);
+	let restored = BraidmanConfig::from(&menu);
+	assert_eq!(config.gender, restored.gender);
+	assert_eq!(config.body, restored.body);
+	assert_eq!(config.sliders.shoulder_width, restored.sliders.shoulder_width);
+	Ok(())
+}
+
+#[test]
+fn brodler_config_round_trip() -> anyhow::Result<()> {
+	let config = BrodlerConfig::default_preview();
+	let menu = BrodlerMenu::from(&config);
+	let restored = BrodlerConfig::from(&menu);
+	assert_eq!(config.head, restored.head);
+	assert_eq!(config.horns, restored.horns);
+	assert_eq!(config.colors.skin, restored.colors.skin);
+	Ok(())
+}
+
+#[test]
+fn clothing_toggle_and_color() -> anyhow::Result<()> {
+	use character_ui_menu::{CharacterField, MenuEvent, SwatchValue};
+	use crozon_characters::species::braidman::BraidmanColor;
+
+	let mut menu = CharacterMenu::default();
+	let coat = ClothingMesh::FittedCoat;
+	assert!(menu.apply(MenuEvent::ToggleClothing(coat)));
+	assert!(menu.braidman.clothing.value.layers.contains(coat));
+	assert!(menu.apply(MenuEvent::SetSwatch(
+		CharacterField::Clothing(coat),
+		SwatchValue::Braidman(BraidmanColor::Red),
+	)));
+	assert_eq!(menu.braidman.clothing_color(coat), BraidmanColor::Red);
+	Ok(())
+}
+
+#[test]
+fn body_color_syncs_skin() -> anyhow::Result<()> {
+	use character_ui_menu::{CharacterField, MenuEvent, SwatchValue};
+	use crozon_characters::species::braidman::BraidmanColor;
+
+	let mut menu = CharacterMenu::default();
+	assert!(menu.apply(MenuEvent::SetSwatch(
+		CharacterField::BodyColor,
+		SwatchValue::Braidman(BraidmanColor::Warm),
+	)));
+	let config = menu.braidman_config();
+	assert_eq!(config.colors.body, BraidmanColor::Warm);
+	assert_eq!(config.colors.head, BraidmanColor::Warm);
+	assert_eq!(config.colors.nose, BraidmanColor::Warm);
+	Ok(())
+}
