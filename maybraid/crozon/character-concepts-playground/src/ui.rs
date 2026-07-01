@@ -10,7 +10,7 @@ use crozon_characters::species::braidman::BraidmanColor;
 use game_commands::ui::{GameCommandDrawerConfig, GameCommandStatusText, GameCommandUiConfig};
 
 use crate::{
-	camera_focus::PendingCameraFocus,
+	camera_focus::{focus_debug_enabled, queue_camera_focus, PendingCameraFocus},
 	preview::ConceptPreviewConfig,
 	thumbnail::ThumbnailCache,
 };
@@ -243,12 +243,20 @@ pub fn react_creator_ui(
 		if *interaction != Interaction::Pressed {
 			continue;
 		}
+		let ConceptPreviewConfig::Braidman { animation, .. } = config.as_ref();
+		let animation_before = *animation;
 		if let Some(target) = action.focus_target() {
 			ui_state.last_selected = Some(target);
-			pending_camera.focus = Some(target.camera_focus());
+			let trigger = format!("ui-press:{target:?}");
+			queue_camera_focus(&mut pending_camera, target.camera_focus(), trigger);
 		}
 		let ConceptPreviewConfig::Braidman { config: braidman, animation } = config.as_mut();
 		braidman::apply_action(*action, braidman, animation, &mut ui_state);
+		if focus_debug_enabled() {
+			info!(
+				"[camera-focus] ui action={action:?} animation_before={animation_before:?} animation_after={animation:?}",
+			);
+		}
 	}
 }
 

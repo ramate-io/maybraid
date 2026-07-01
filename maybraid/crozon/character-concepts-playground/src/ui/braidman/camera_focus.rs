@@ -24,6 +24,19 @@ impl CameraFocus {
 	) -> Self {
 		Self { rig, socket, camera_offset, look_at_offset }
 	}
+
+	/// Socketed head features frame the visible preview; root pivots use the shadow rig.
+	pub fn uses_preview_sockets(self) -> bool {
+		matches!(self.rig, SocketRig::Head) && self.socket != "root"
+	}
+
+	pub fn resolve_source_label(self) -> &'static str {
+		if self.uses_preview_sockets() {
+			"preview"
+		} else {
+			"shadow"
+		}
+	}
 }
 
 impl UiAssetTarget {
@@ -33,8 +46,8 @@ impl UiAssetTarget {
 			Self::Body(_) | Self::Animation(_) | Self::Clothing(_) => CameraFocus::new(
 				SocketRig::Body,
 				"root",
-				Vec3::new(0.0, 1.0, 3.3),
-				Vec3::new(0.0, 0.2, 0.0),
+				Vec3::new(-1.0, 1.0, 4.0),
+				Vec3::new(2.0, 0.0, -2.0),
 			),
 			// Head rig root is anchored at the neck base; bias look-at toward face height.
 			Self::Head(_) => CameraFocus::new(

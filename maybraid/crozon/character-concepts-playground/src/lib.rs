@@ -115,16 +115,20 @@ impl Plugin for CrozonCharacterConceptsPlaygroundPlugin {
 					animate_body_rig
 						.after(init_limb_animators)
 						.run_if(preview_pass_ready),
-					apply_camera_suggestion
-						.after(ui::react_creator_ui)
-						.after(maintain_resolved_pose)
-						.after(attach_focus_reference_to_sockets),
 					dump_bones_to_console,
 					thumbnail::sync_thumbnail_camera_activity.after(ui::sync_creator_ui),
 					ui::sync_command_status_text.before(game_commands::ui::update_debug_ui),
 				),
 			)
-			.add_systems(PostUpdate, maintain_resolved_pose);
+			.add_systems(
+				PostUpdate,
+				(
+					maintain_resolved_pose.before(TransformSystems::Propagate),
+					apply_camera_suggestion
+						.after(TransformSystems::Propagate)
+						.after(ui::react_creator_ui),
+				),
+			);
 	}
 }
 

@@ -113,7 +113,7 @@ pub enum UiColorTarget {
 	Clothing(ClothingMesh),
 }
 
-#[derive(Component, Clone, Copy)]
+#[derive(Component, Clone, Copy, Debug)]
 pub enum CreatorUiAction {
 	ToggleSection(UiSection),
 	Gender(i32),
@@ -160,7 +160,7 @@ impl CreatorUiAction {
 			Self::Mouth(value) => Some(UiAssetTarget::Mouth(value)),
 			Self::Ear(value) => Some(UiAssetTarget::Ear(value)),
 			Self::Hair(value) => Some(UiAssetTarget::Hair(value)),
-			Self::Animation(value) => Some(UiAssetTarget::Animation(value)),
+			Self::Animation(_) => None,
 			Self::ToggleClothing(value) => Some(UiAssetTarget::Clothing(value)),
 			Self::ToggleSection(_)
 			| Self::Gender(_)
