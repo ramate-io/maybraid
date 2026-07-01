@@ -15,6 +15,7 @@ mod material;
 mod preview;
 mod preview_color;
 mod skinning;
+mod species_session;
 mod thumbnail;
 mod ui;
 
@@ -28,7 +29,10 @@ use crozon_character_playground::{camera, checkerboard_material};
 use game_commands::command::{capture_command_line_input, GameCommandPlugin};
 
 use animation::{animate_body_rig, init_limb_animators};
-use camera_focus::{apply_camera_suggestion, queue_default_camera_focus, PendingCameraFocus};
+use camera_focus::{apply_camera_suggestion, PendingCameraFocus};
+use species_session::{
+	ensure_species_camera_focus, persist_species_session, CameraFocusBootState, SpeciesSessionState,
+};
 use focus_reference::{sync_focus_reference, FocusReferenceSyncState};
 use focus::animate_focused_preview_asset;
 use material::apply_preview_colors;
@@ -56,6 +60,8 @@ impl Plugin for CrozonCharacterConceptsPlaygroundPlugin {
 			.init_resource::<PreviewRespawnCooldown>()
 			.init_resource::<DumpBonesRequest>()
 			.init_resource::<PendingCameraFocus>()
+			.init_resource::<SpeciesSessionState>()
+			.init_resource::<CameraFocusBootState>()
 			.init_resource::<PreviewColorMaterials>()
 			.init_resource::<thumbnail::ThumbnailCache>()
 			.init_resource::<ui::CreatorUiState>()
@@ -80,7 +86,8 @@ impl Plugin for CrozonCharacterConceptsPlaygroundPlugin {
 				Update,
 				(
 					tick_preview_respawn_cooldown,
-					queue_default_camera_focus,
+					persist_species_session,
+					ensure_species_camera_focus.after(persist_species_session),
 					ui::react_creator_ui,
 					ui::sync_creator_ui.after(ui::react_creator_ui),
 					ui::refresh_creator_ui_display.after(ui::sync_creator_ui),

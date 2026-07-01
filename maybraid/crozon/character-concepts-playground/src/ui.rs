@@ -12,8 +12,10 @@ use game_commands::ui::{GameCommandDrawerConfig, GameCommandStatusText, GameComm
 
 use crate::{
 	camera_focus::{focus_debug_enabled, queue_camera_focus, PendingCameraFocus},
-	preview::{ConceptPreviewConfig, ConceptSpecies},
+	preview::{ConceptPreviewConfig, ConceptPreviewSyncState, ConceptSpecies, PreviewRespawnCooldown},
+	species_session::{reset_for_species_switch, CameraFocusBootState, SpeciesSessionState},
 	thumbnail::ThumbnailCache,
+	focus_reference::FocusReferenceSyncState,
 };
 
 pub use braidman::{CameraFocus, UiColorTarget};
@@ -154,11 +156,16 @@ impl CreatorUiState {
 		}
 		self.layout_revision += 1;
 	}
+
+	pub(crate) fn bump_layout_revision(&mut self) {
+		self.layout_revision += 1;
+	}
 }
 
 #[derive(Resource, Default)]
 pub struct CreatorUiSyncState {
 	layout_revision: u64,
+	species: Option<ConceptSpecies>,
 }
 
 /// Binds a value label to live config state so the panel can refresh without rebuilding.
@@ -254,11 +261,14 @@ pub fn sync_creator_ui(
 	roots: Query<Entity, With<CreatorUiRoot>>,
 	viewports: Query<Entity, With<CreatorUiScrollViewport>>,
 ) {
+	let species = config.species();
 	let layout_changed = sync_state.layout_revision != ui_state.layout_revision;
-	if !layout_changed && !roots.is_empty() {
+	let species_changed = sync_state.species != Some(species);
+	if !layout_changed && !species_changed && !roots.is_empty() {
 		return;
 	}
 	sync_state.layout_revision = ui_state.layout_revision;
+	sync_state.species = Some(species);
 	if roots.is_empty() {
 		spawn_creator_ui_shell(&mut commands);
 	}
@@ -278,6 +288,11 @@ pub fn react_creator_ui(
 	mut config: ResMut<ConceptPreviewConfig>,
 	mut ui_state: ResMut<CreatorUiState>,
 	mut pending_camera: ResMut<PendingCameraFocus>,
+	mut session: ResMut<SpeciesSessionState>,
+	mut preview_sync: ResMut<ConceptPreviewSyncState>,
+	mut focus_sync: ResMut<FocusReferenceSyncState>,
+	mut respawn_cooldown: ResMut<PreviewRespawnCooldown>,
+	mut camera_boot: ResMut<CameraFocusBootState>,
 ) {
 	for (interaction, action) in &mut interactions {
 		if *interaction == Interaction::Hovered {
@@ -293,14 +308,17 @@ pub fn react_creator_ui(
 		match *action {
 			CreatorUiAction::SwitchSpecies(species) => {
 				if config.species() != species {
-					*config = ConceptPreviewConfig::default_for(species);
-					config.set_animation(animation_before);
-					ui_state.hovered = None;
-					ui_state.last_selected = None;
-					ui_state.layout_revision += 1;
-					pending_camera.focus = None;
-					pending_camera.resolved_target = None;
-					pending_camera.focus_trigger = None;
+					reset_for_species_switch(
+						species,
+						&mut session,
+						&mut config,
+						&mut ui_state,
+						&mut preview_sync,
+						&mut focus_sync,
+						&mut respawn_cooldown,
+						&mut pending_camera,
+						&mut camera_boot,
+					);
 				}
 				continue;
 			}
@@ -355,6 +373,14 @@ pub fn refresh_creator_ui_display(
 	mut buttons: Query<(&mut BackgroundColor, &CreatorUiAction), With<Button>>,
 	mut color_swatches: Query<(&mut BorderColor, &CreatorUiAction), With<Button>>,
 ) {
+	const INACTIVE: Color = Color::srgba(0.18, 0.20, 0.24, 0.92);
+	const ACTIVE: Color = Color::srgba(0.16, 0.34, 0.50, 0.95);
+	let active_species = config.species();
+	for (mut background, action) in &mut buttons {
+		if let CreatorUiAction::SwitchSpecies(species) = *action {
+			background.0 = if active_species == species { ACTIVE } else { INACTIVE };
+		}
+	}
 	match config.as_ref() {
 		ConceptPreviewConfig::Braidman { config: braidman, animation } => {
 			for (mut text, binding) in &mut value_labels {

@@ -24,6 +24,13 @@ pub struct FocusReferenceSyncState {
 	spawn_key: String,
 }
 
+impl FocusReferenceSyncState {
+	pub(crate) fn invalidate(&mut self) {
+		self.live_key.clear();
+		self.spawn_key.clear();
+	}
+}
+
 fn focus_live_key(config: &ConceptPreviewConfig) -> String {
 	match config {
 		ConceptPreviewConfig::Braidman { config, .. } => config.sync_key(),
@@ -32,14 +39,7 @@ fn focus_live_key(config: &ConceptPreviewConfig) -> String {
 }
 
 fn focus_spawn_key(config: &ConceptPreviewConfig) -> String {
-	match config {
-		ConceptPreviewConfig::Braidman { config, .. } => {
-			format!("species=braidman body={:?} head={:?}", config.body, config.head)
-		}
-		ConceptPreviewConfig::Brodler { config, .. } => {
-			format!("species=brodler head={:?} horns={:?} eye={:?}", config.head, config.horns, config.eye)
-		}
-	}
+	config.spawn_key()
 }
 
 pub fn sync_focus_reference(

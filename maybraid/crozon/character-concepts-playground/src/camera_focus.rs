@@ -48,25 +48,25 @@ pub fn queue_camera_focus(
 	pending.resolved_target = None;
 }
 
-/// Queue the default body framing once when the playground starts (look locked).
-pub fn queue_default_camera_focus(
-	mut pending: ResMut<PendingCameraFocus>,
-	config: Res<ConceptPreviewConfig>,
-	mut ui_state: ResMut<CreatorUiState>,
-	mut queued: Local<bool>,
+/// Queue default body framing for the active species.
+pub fn queue_species_default_camera_focus(
+	pending: &mut PendingCameraFocus,
+	ui_state: &mut CreatorUiState,
+	config: &ConceptPreviewConfig,
+	trigger: impl Into<String>,
 ) {
-	if *queued {
-		return;
-	}
-	*queued = true;
-	let target = match config.as_ref() {
+	let target = default_focus_target(config);
+	ui_state.last_selected = Some(target);
+	queue_camera_focus(pending, target.camera_focus(), trigger);
+}
+
+pub fn default_focus_target(config: &ConceptPreviewConfig) -> UiAssetTarget {
+	match config {
 		ConceptPreviewConfig::Braidman { config: braidman, .. } => {
 			UiAssetTarget::Braidman(crate::ui::braidman::UiAssetTarget::Body(braidman.body))
 		}
 		ConceptPreviewConfig::Brodler { .. } => crate::ui::brodler::default_focus_target(),
-	};
-	ui_state.last_selected = Some(target);
-	queue_camera_focus(&mut pending, target.camera_focus(), "startup-default");
+	}
 }
 
 pub fn apply_camera_suggestion(

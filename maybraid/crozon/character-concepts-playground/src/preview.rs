@@ -158,6 +158,13 @@ pub struct ConceptPreviewSyncState {
 	spawn_key: String,
 }
 
+impl ConceptPreviewSyncState {
+	pub(crate) fn invalidate(&mut self) {
+		self.live_key.clear();
+		self.spawn_key.clear();
+	}
+}
+
 /// Skips part attachment/remap for one frame after a GLTF respawn so queued
 /// despawn commands are not racing inserts on the outgoing entities.
 #[derive(Resource, Default)]
