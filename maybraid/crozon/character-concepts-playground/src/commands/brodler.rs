@@ -5,7 +5,7 @@ use clap::{Args, Subcommand};
 use crozon_characters::species::{
 	brodler::{
 		assets::HornMesh,
-		{BrodlerConfig, BrodlerEyeColor, BrodlerHeadMesh, BrodlerSkinColor},
+		{BrodlerConfig, BrodlerEyeColor, BrodlerHeadMesh, BrodlerHornColor, BrodlerSkinColor},
 	},
 	common::{ClothingMesh, EarMesh, EyeMesh, HairMesh, MouthMesh, NoseMesh},
 };
@@ -37,11 +37,14 @@ pub struct PreviewArgs {
 	#[arg(long, value_enum, default_value_t = ConceptAnimation::Still)]
 	pub animation: ConceptAnimation,
 
-	#[arg(long, value_enum, default_value_t = BrodlerSkinColor::Red)]
+	#[arg(long, value_enum, default_value_t = BrodlerSkinColor::Crimson)]
 	pub skin: BrodlerSkinColor,
 
-	#[arg(long, value_enum, default_value_t = BrodlerEyeColor::Red)]
+	#[arg(long, value_enum, default_value_t = BrodlerEyeColor::LightBlue)]
 	pub eyes: BrodlerEyeColor,
+
+	#[arg(long, value_enum, default_value_t = BrodlerHornColor::LightBrown)]
+	pub horn_color: BrodlerHornColor,
 }
 
 impl Brodler {
@@ -62,6 +65,7 @@ impl PreviewArgs {
 		let mut colors = crozon_characters::species::brodler::BrodlerColors::default();
 		colors.skin = self.skin;
 		colors.eyes = self.eyes;
+		colors.horns = self.horn_color;
 		ConceptPreviewConfig::brodler_with_animation(
 			BrodlerConfig {
 				head: self.head,
@@ -69,7 +73,7 @@ impl PreviewArgs {
 				eye: EyeMesh::Standard,
 				nose: NoseMesh::Standard,
 				mouth: MouthMesh::Standard,
-				ear: EarMesh::Standard,
+				ear: EarMesh::Flank,
 				hair: self.hair,
 				clothing: self.clothing,
 				colors,

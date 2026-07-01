@@ -3,7 +3,7 @@
 use bevy::prelude::*;
 use crozon_characters::species::{
 	braidman::BraidmanColor,
-	brodler::{BrodlerEyeColor, BrodlerSkinColor},
+	brodler::{BrodlerEyeColor, BrodlerHornColor, BrodlerSkinColor},
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -11,6 +11,7 @@ pub enum PreviewColor {
 	Braidman(BraidmanColor),
 	BrodlerSkin(BrodlerSkinColor),
 	BrodlerEye(BrodlerEyeColor),
+	BrodlerHorn(BrodlerHornColor),
 }
 
 impl PreviewColor {
@@ -19,6 +20,7 @@ impl PreviewColor {
 			Self::Braidman(color) => color.color(),
 			Self::BrodlerSkin(color) => color.color(),
 			Self::BrodlerEye(color) => color.color(),
+			Self::BrodlerHorn(color) => color.color(),
 		}
 	}
 }

@@ -48,51 +48,74 @@ impl BrodlerHeadMesh {
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, ValueEnum)]
 pub enum BrodlerSkinColor {
 	#[default]
-	Red,
-	Black,
-	Yellow,
+	Crimson,
+	Umber,
+	Ochre,
 }
 
 impl BrodlerSkinColor {
 	pub const fn label(self) -> &'static str {
 		match self {
-			Self::Red => "red",
-			Self::Black => "black",
-			Self::Yellow => "yellow",
+			Self::Crimson => "crimson",
+			Self::Umber => "umber",
+			Self::Ochre => "ochre",
 		}
 	}
 
 	pub fn color(self) -> bevy::prelude::Color {
 		match self {
-			Self::Red => bevy::prelude::Color::srgb(0.78, 0.22, 0.18),
-			Self::Black => bevy::prelude::Color::srgb(0.12, 0.10, 0.10),
-			Self::Yellow => bevy::prelude::Color::srgb(0.92, 0.82, 0.28),
+			Self::Crimson => bevy::prelude::Color::srgb(0.58, 0.14, 0.12),
+			Self::Umber => bevy::prelude::Color::srgb(0.30, 0.20, 0.16),
+			Self::Ochre => bevy::prelude::Color::srgb(0.68, 0.52, 0.26),
 		}
 	}
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, ValueEnum)]
 pub enum BrodlerEyeColor {
-	#[default]
-	Red,
-	Green,
 	Black,
+	#[default]
+	LightBlue,
+	Yellow,
 }
 
 impl BrodlerEyeColor {
 	pub const fn label(self) -> &'static str {
 		match self {
-			Self::Red => "red",
-			Self::Green => "green",
 			Self::Black => "black",
+			Self::LightBlue => "light-blue",
+			Self::Yellow => "yellow",
 		}
 	}
 
 	pub fn color(self) -> bevy::prelude::Color {
 		match self {
-			Self::Red => bevy::prelude::Color::srgb(0.82, 0.12, 0.10),
-			Self::Green => bevy::prelude::Color::srgb(0.18, 0.62, 0.22),
 			Self::Black => bevy::prelude::Color::srgb(0.08, 0.08, 0.10),
+			Self::LightBlue => bevy::prelude::Color::srgb(0.52, 0.70, 0.82),
+			Self::Yellow => bevy::prelude::Color::srgb(0.82, 0.72, 0.28),
+		}
+	}
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, ValueEnum)]
+pub enum BrodlerHornColor {
+	#[default]
+	LightBrown,
+	Yellow,
+}
+
+impl BrodlerHornColor {
+	pub const fn label(self) -> &'static str {
+		match self {
+			Self::LightBrown => "light-brown",
+			Self::Yellow => "yellow",
+		}
+	}
+
+	pub fn color(self) -> bevy::prelude::Color {
+		match self {
+			Self::LightBrown => bevy::prelude::Color::srgb(0.62, 0.48, 0.30),
+			Self::Yellow => bevy::prelude::Color::srgb(0.78, 0.66, 0.28),
 		}
 	}
 }
@@ -101,6 +124,7 @@ impl BrodlerEyeColor {
 pub struct BrodlerColors {
 	pub skin: BrodlerSkinColor,
 	pub eyes: BrodlerEyeColor,
+	pub horns: BrodlerHornColor,
 	pub mouth: BraidmanColor,
 	pub hair: BraidmanColor,
 	pub clothing_default: BraidmanColor,
@@ -110,8 +134,9 @@ pub struct BrodlerColors {
 impl Default for BrodlerColors {
 	fn default() -> Self {
 		Self {
-			skin: BrodlerSkinColor::Red,
-			eyes: BrodlerEyeColor::Red,
+			skin: BrodlerSkinColor::Crimson,
+			eyes: BrodlerEyeColor::LightBlue,
+			horns: BrodlerHornColor::LightBrown,
 			mouth: BraidmanColor::Natural,
 			hair: BraidmanColor::Dark,
 			clothing_default: BraidmanColor::Cool,
@@ -165,7 +190,7 @@ impl BrodlerConfig {
 			eye: EyeMesh::Standard,
 			nose: NoseMesh::Standard,
 			mouth: MouthMesh::Standard,
-			ear: EarMesh::Standard,
+			ear: EarMesh::Flank,
 			hair: HairMesh::None,
 			clothing: Vec::new(),
 			colors: BrodlerColors::default(),
@@ -183,7 +208,7 @@ impl BrodlerConfig {
 				.join(",")
 		};
 		format!(
-			"brodler head={} horns={} eye={} nose={} mouth={} ear={} hair={} clothing={} skin={} eyes={} hair_color={}",
+			"brodler head={} horns={} eye={} nose={} mouth={} ear={} hair={} clothing={} skin={} eyes={} horn_color={} hair_color={}",
 			self.head.label(),
 			self.horns.label(),
 			self.eye.label(),
@@ -194,6 +219,7 @@ impl BrodlerConfig {
 			clothing,
 			self.colors.skin.label(),
 			self.colors.eyes.label(),
+			self.colors.horns.label(),
 			self.colors.hair.label(),
 		)
 	}

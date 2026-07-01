@@ -342,10 +342,9 @@ fn preview_color_brodler(config: &BrodlerConfig, target: UiAssetTarget) -> Previ
 		return PreviewColor::BrodlerSkin(config.colors.skin);
 	};
 	match target {
-		BrodlerTarget::Head(_) | BrodlerTarget::Horns(_) | BrodlerTarget::Body
-		| BrodlerTarget::Nose(_) | BrodlerTarget::Ear(_) => {
-			PreviewColor::BrodlerSkin(config.colors.skin)
-		}
+		BrodlerTarget::Head(_) | BrodlerTarget::Body | BrodlerTarget::Nose(_)
+		| BrodlerTarget::Ear(_) => PreviewColor::BrodlerSkin(config.colors.skin),
+		BrodlerTarget::Horns(_) => PreviewColor::BrodlerHorn(config.colors.horns),
 		BrodlerTarget::Eye(_) => PreviewColor::BrodlerEye(config.colors.eyes),
 		BrodlerTarget::Mouth(_) => PreviewColor::Braidman(config.colors.mouth),
 		BrodlerTarget::Hair(_) => PreviewColor::Braidman(config.colors.hair),

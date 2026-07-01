@@ -3,7 +3,9 @@ pub mod camera_focus;
 use bevy::prelude::*;
 use crozon_characters::species::{
 	braidman::BraidmanColor,
-	brodler::{BrodlerConfig, BrodlerEyeColor, BrodlerHeadMesh, BrodlerSkinColor, HornMesh},
+	brodler::{
+		BrodlerConfig, BrodlerEyeColor, BrodlerHeadMesh, BrodlerHornColor, BrodlerSkinColor, HornMesh,
+	},
 	common::{ClothingMesh, EarMesh, EyeMesh, HairMesh, MouthMesh, NoseMesh},
 };
 
@@ -26,11 +28,13 @@ const EYES: &[EyeMesh] = &[EyeMesh::Standard, EyeMesh::Falcon];
 const NOSES: &[NoseMesh] =
 	&[NoseMesh::Standard, NoseMesh::Broad, NoseMesh::Loaf, NoseMesh::Balloon];
 const MOUTHS: &[MouthMesh] = &[MouthMesh::Standard];
-const EARS: &[EarMesh] = &[EarMesh::Standard, EarMesh::Round, EarMesh::Flank];
+const EARS: &[EarMesh] = &[EarMesh::Standard, EarMesh::Flank];
 const SKIN_COLORS: &[BrodlerSkinColor] =
-	&[BrodlerSkinColor::Red, BrodlerSkinColor::Black, BrodlerSkinColor::Yellow];
+	&[BrodlerSkinColor::Crimson, BrodlerSkinColor::Umber, BrodlerSkinColor::Ochre];
 const EYE_COLORS: &[BrodlerEyeColor] =
-	&[BrodlerEyeColor::Red, BrodlerEyeColor::Green, BrodlerEyeColor::Black];
+	&[BrodlerEyeColor::Black, BrodlerEyeColor::LightBlue, BrodlerEyeColor::Yellow];
+const HORN_COLORS: &[BrodlerHornColor] =
+	&[BrodlerHornColor::LightBrown, BrodlerHornColor::Yellow];
 const HAIRS: &[HairMesh] = &[
 	HairMesh::None,
 	HairMesh::ThickBraids,
@@ -110,6 +114,7 @@ pub enum CreatorUiAction {
 	ToggleClothing(ClothingMesh),
 	SetSkin(BrodlerSkinColor),
 	SetEyes(BrodlerEyeColor),
+	SetHornsColor(BrodlerHornColor),
 	SetMouthColor(BraidmanColor),
 	SetHairColor(BraidmanColor),
 	SetClothingColor(ClothingMesh, BraidmanColor),
@@ -130,6 +135,7 @@ impl CreatorUiAction {
 			Self::ToggleSection(_)
 			| Self::SetSkin(_)
 			| Self::SetEyes(_)
+			| Self::SetHornsColor(_)
 			| Self::SetMouthColor(_)
 			| Self::SetHairColor(_)
 			| Self::SetClothingColor(_, _) => None,
@@ -189,6 +195,7 @@ pub fn populate_panel(
 				HORNS.iter().copied().map(UiAssetTarget::Horns),
 				ctx,
 			);
+			horn_color_swatches(sub, brodler.colors.horns);
 		});
 		subsection(section, "Skin", |sub| {
 			skin_color_swatches(sub, brodler.colors.skin);
@@ -307,6 +314,7 @@ pub fn apply_action(
 		CreatorUiAction::ToggleClothing(value) => toggle_clothing(&mut brodler.clothing, value),
 		CreatorUiAction::SetSkin(color) => brodler.colors.skin = color,
 		CreatorUiAction::SetEyes(color) => brodler.colors.eyes = color,
+		CreatorUiAction::SetHornsColor(color) => brodler.colors.horns = color,
 		CreatorUiAction::SetMouthColor(color) => brodler.colors.mouth = color,
 		CreatorUiAction::SetHairColor(color) => brodler.colors.hair = color,
 		CreatorUiAction::SetClothingColor(clothing, color) => {
@@ -384,6 +392,7 @@ pub fn selection_button_color(
 		)),
 		CreatorUiAction::SetSkin(_)
 		| CreatorUiAction::SetEyes(_)
+		| CreatorUiAction::SetHornsColor(_)
 		| CreatorUiAction::SetMouthColor(_)
 		| CreatorUiAction::SetHairColor(_)
 		| CreatorUiAction::SetClothingColor(_, _) => None,
@@ -560,6 +569,19 @@ fn eye_color_swatches(parent: &mut ChildSpawnerCommands, active: BrodlerEyeColor
 	});
 }
 
+fn horn_color_swatches(parent: &mut ChildSpawnerCommands, active: BrodlerHornColor) {
+	swatch_row(parent, |row| {
+		for color in HORN_COLORS {
+			spawn_swatch(
+				row,
+				color.color(),
+				*color == active,
+				ShellAction::Brodler(CreatorUiAction::SetHornsColor(*color)),
+			);
+		}
+	});
+}
+
 fn mouth_color_swatches(parent: &mut ChildSpawnerCommands, active: BraidmanColor) {
 	swatch_row(parent, |row| {
 		for color in braidman::COLORS {
@@ -692,9 +714,9 @@ fn target_color(target: UiAssetTarget, brodler: &BrodlerConfig) -> PreviewColor 
 	match target {
 		UiAssetTarget::Body
 		| UiAssetTarget::Head(_)
-		| UiAssetTarget::Horns(_)
 		| UiAssetTarget::Nose(_)
 		| UiAssetTarget::Ear(_) => PreviewColor::BrodlerSkin(brodler.colors.skin),
+		UiAssetTarget::Horns(_) => PreviewColor::BrodlerHorn(brodler.colors.horns),
 		UiAssetTarget::Eye(_) => PreviewColor::BrodlerEye(brodler.colors.eyes),
 		UiAssetTarget::Mouth(_) => PreviewColor::Braidman(brodler.colors.mouth),
 		UiAssetTarget::Hair(_) => PreviewColor::Braidman(brodler.colors.hair),
