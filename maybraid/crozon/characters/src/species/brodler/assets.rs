@@ -185,7 +185,7 @@ impl BrodlerAssets {
 	fn horns(horns: HornMesh) -> ResolvedCharacterPart {
 		ResolvedCharacterPart::new(
 			CharacterPartSlot::Horns,
-			CharacterAsset::new(horns.label(), horns.path(), AssetNormalization::centroid(1.0)),
+			CharacterAsset::new(horns.label(), horns.path(), AssetNormalization::centroid(0.7)),
 			SkinTarget::HeadRig,
 			Some(Self::head_socket(
 				"crown_socket",

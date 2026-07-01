@@ -211,8 +211,8 @@ impl BraidmanSliders {
 	pub fn apply_shoulder_width(layer: RigPoseLayer, value: f32) -> RigPoseLayer {
 		// Shoulder bones carry width in uniform local scale on this rig.
 		layer
-			.with_scale(BoneScale::uniform("shoulder.L", value))
-			.with_scale(BoneScale::uniform("shoulder.R", value))
+			.with_scale(BoneScale::length("shoulder.L", value))
+			.with_scale(BoneScale::length("shoulder.R", value))
 	}
 
 	pub fn apply_hip_width(layer: RigPoseLayer, value: f32) -> RigPoseLayer {
