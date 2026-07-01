@@ -37,7 +37,7 @@ fn focus_spawn_key(config: &ConceptPreviewConfig) -> String {
 			format!("species=braidman body={:?} head={:?}", config.body, config.head)
 		}
 		ConceptPreviewConfig::Brodler { config, .. } => {
-			format!("species=brodler head={:?} horns={:?}", config.head, config.horns)
+			format!("species=brodler head={:?} horns={:?} eye={:?}", config.head, config.horns, config.eye)
 		}
 	}
 }

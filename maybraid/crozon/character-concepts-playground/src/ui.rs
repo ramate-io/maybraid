@@ -405,6 +405,9 @@ pub fn refresh_creator_ui_display(
 					CreatorUiAction::Brodler(brodler::CreatorUiAction::SetHairColor(color)) => {
 						brodler.colors.hair == color
 					}
+					CreatorUiAction::Brodler(brodler::CreatorUiAction::SetMouthColor(color)) => {
+						brodler.colors.mouth == color
+					}
 					CreatorUiAction::Brodler(brodler::CreatorUiAction::SetClothingColor(
 						clothing,
 						color,

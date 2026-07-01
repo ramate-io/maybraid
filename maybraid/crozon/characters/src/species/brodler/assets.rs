@@ -54,12 +54,12 @@ impl BrodlerAssets {
 		.with_part(Self::body_mesh())
 		.with_part(Self::head_rig())
 		.with_part(Self::head_mesh(config.head))
-		.with_part(Self::eye_left())
-		.with_part(Self::eye_right())
-		.with_part(Self::nose())
-		.with_part(Self::mouth())
-		.with_part(Self::ear_left())
-		.with_part(Self::ear_right())
+		.with_part(Self::eye_left(config.eye))
+		.with_part(Self::eye_right(config.eye))
+		.with_part(Self::nose(config.nose))
+		.with_part(Self::mouth(config.mouth))
+		.with_part(Self::ear_left(config.ear))
+		.with_part(Self::ear_right(config.ear))
 		.with_part(Self::horns(config.horns));
 
 		let assembly = match Self::hair(config.hair) {
@@ -107,14 +107,10 @@ impl BrodlerAssets {
 		)
 	}
 
-	fn eye_left() -> ResolvedCharacterPart {
+	fn eye_left(eye: EyeMesh) -> ResolvedCharacterPart {
 		ResolvedCharacterPart::new(
 			CharacterPartSlot::EyeLeft,
-			CharacterAsset::new(
-				EyeMesh::Standard.label(),
-				EyeMesh::Standard.path(),
-				AssetNormalization::centroid(0.16),
-			),
+			CharacterAsset::new(eye.label(), eye.path(), AssetNormalization::centroid(0.16)),
 			SkinTarget::HeadRig,
 			Some(Self::head_socket(
 				"eye_socket.L",
@@ -123,14 +119,10 @@ impl BrodlerAssets {
 		)
 	}
 
-	fn eye_right() -> ResolvedCharacterPart {
+	fn eye_right(eye: EyeMesh) -> ResolvedCharacterPart {
 		ResolvedCharacterPart::new(
 			CharacterPartSlot::EyeRight,
-			CharacterAsset::new(
-				EyeMesh::Standard.label(),
-				EyeMesh::Standard.path(),
-				AssetNormalization::centroid(0.16),
-			),
+			CharacterAsset::new(eye.label(), eye.path(), AssetNormalization::centroid(0.16)),
 			SkinTarget::HeadRig,
 			Some(Self::head_socket(
 				"eye_socket.R",
@@ -139,14 +131,10 @@ impl BrodlerAssets {
 		)
 	}
 
-	fn nose() -> ResolvedCharacterPart {
+	fn nose(nose: NoseMesh) -> ResolvedCharacterPart {
 		ResolvedCharacterPart::new(
 			CharacterPartSlot::Nose,
-			CharacterAsset::new(
-				NoseMesh::Standard.label(),
-				NoseMesh::Standard.path(),
-				NoseMesh::Standard.normalization(),
-			),
+			CharacterAsset::new(nose.label(), nose.path(), nose.normalization()),
 			SkinTarget::HeadRig,
 			Some(Self::head_socket(
 				"nose_socket",
@@ -155,14 +143,10 @@ impl BrodlerAssets {
 		)
 	}
 
-	fn mouth() -> ResolvedCharacterPart {
+	fn mouth(mouth: MouthMesh) -> ResolvedCharacterPart {
 		ResolvedCharacterPart::new(
 			CharacterPartSlot::Mouth,
-			CharacterAsset::new(
-				MouthMesh::Standard.label(),
-				MouthMesh::Standard.path(),
-				AssetNormalization::centroid(0.12),
-			),
+			CharacterAsset::new(mouth.label(), mouth.path(), AssetNormalization::centroid(0.12)),
 			SkinTarget::HeadRig,
 			Some(Self::head_socket(
 				"mouth_socket",
@@ -171,14 +155,10 @@ impl BrodlerAssets {
 		)
 	}
 
-	fn ear_left() -> ResolvedCharacterPart {
+	fn ear_left(ear: EarMesh) -> ResolvedCharacterPart {
 		ResolvedCharacterPart::new(
 			CharacterPartSlot::EarLeft,
-			CharacterAsset::new(
-				EarMesh::Standard.label(),
-				EarMesh::Standard.path(),
-				AssetNormalization::centroid(0.15),
-			),
+			CharacterAsset::new(ear.label(), ear.path(), AssetNormalization::centroid(0.15)),
 			SkinTarget::HeadRig,
 			Some(Self::head_socket(
 				"ear_socket.L",
@@ -188,14 +168,10 @@ impl BrodlerAssets {
 		)
 	}
 
-	fn ear_right() -> ResolvedCharacterPart {
+	fn ear_right(ear: EarMesh) -> ResolvedCharacterPart {
 		ResolvedCharacterPart::new(
 			CharacterPartSlot::EarRight,
-			CharacterAsset::new(
-				EarMesh::Standard.label(),
-				EarMesh::Standard.path(),
-				AssetNormalization::centroid(0.15),
-			),
+			CharacterAsset::new(ear.label(), ear.path(), AssetNormalization::centroid(0.15)),
 			SkinTarget::HeadRig,
 			Some(Self::head_socket(
 				"ear_socket.R",

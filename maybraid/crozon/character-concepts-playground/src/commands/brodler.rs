@@ -7,7 +7,7 @@ use crozon_characters::species::{
 		assets::HornMesh,
 		{BrodlerConfig, BrodlerEyeColor, BrodlerHeadMesh, BrodlerSkinColor},
 	},
-	common::{ClothingMesh, HairMesh},
+	common::{ClothingMesh, EarMesh, EyeMesh, HairMesh, MouthMesh, NoseMesh},
 };
 
 use crate::{animation::ConceptAnimation, preview::ConceptPreviewConfig};
@@ -63,7 +63,17 @@ impl PreviewArgs {
 		colors.skin = self.skin;
 		colors.eyes = self.eyes;
 		ConceptPreviewConfig::brodler_with_animation(
-			BrodlerConfig { head: self.head, horns: self.horns, hair: self.hair, clothing: self.clothing, colors },
+			BrodlerConfig {
+				head: self.head,
+				horns: self.horns,
+				eye: EyeMesh::Standard,
+				nose: NoseMesh::Standard,
+				mouth: MouthMesh::Standard,
+				ear: EarMesh::Standard,
+				hair: self.hair,
+				clothing: self.clothing,
+				colors,
+			},
 			self.animation,
 		)
 	}

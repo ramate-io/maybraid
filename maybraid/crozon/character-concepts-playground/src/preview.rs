@@ -124,9 +124,13 @@ impl ConceptPreviewConfig {
 				config.clothing,
 			),
 			Self::Brodler { config, .. } => format!(
-				"species=brodler head={:?} horns={:?} hair={:?} clothing={:?}",
+				"species=brodler head={:?} horns={:?} eye={:?} nose={:?} mouth={:?} ear={:?} hair={:?} clothing={:?}",
 				config.head,
 				config.horns,
+				config.eye,
+				config.nose,
+				config.mouth,
+				config.ear,
 				config.hair,
 				config.clothing,
 			),
@@ -338,10 +342,12 @@ fn preview_color_brodler(config: &BrodlerConfig, target: UiAssetTarget) -> Previ
 		return PreviewColor::BrodlerSkin(config.colors.skin);
 	};
 	match target {
-		BrodlerTarget::Head(_) | BrodlerTarget::Horns(_) | BrodlerTarget::Body => {
+		BrodlerTarget::Head(_) | BrodlerTarget::Horns(_) | BrodlerTarget::Body
+		| BrodlerTarget::Nose(_) | BrodlerTarget::Ear(_) => {
 			PreviewColor::BrodlerSkin(config.colors.skin)
 		}
-		BrodlerTarget::Eye => PreviewColor::BrodlerEye(config.colors.eyes),
+		BrodlerTarget::Eye(_) => PreviewColor::BrodlerEye(config.colors.eyes),
+		BrodlerTarget::Mouth(_) => PreviewColor::Braidman(config.colors.mouth),
 		BrodlerTarget::Hair(_) => PreviewColor::Braidman(config.colors.hair),
 		BrodlerTarget::Clothing(clothing) => {
 			PreviewColor::Braidman(config.colors.clothing_color(clothing))
@@ -558,12 +564,13 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 					CharacterPartSlot::HeadRig | CharacterPartSlot::HeadMesh => {
 						BrodlerTarget::Head(config.head)
 					}
-					CharacterPartSlot::EyeLeft | CharacterPartSlot::EyeRight => BrodlerTarget::Eye,
-					CharacterPartSlot::Nose | CharacterPartSlot::Mouth => {
-						BrodlerTarget::Head(config.head)
+					CharacterPartSlot::EyeLeft | CharacterPartSlot::EyeRight => {
+						BrodlerTarget::Eye(config.eye)
 					}
+					CharacterPartSlot::Nose => BrodlerTarget::Nose(config.nose),
+					CharacterPartSlot::Mouth => BrodlerTarget::Mouth(config.mouth),
 					CharacterPartSlot::EarLeft | CharacterPartSlot::EarRight => {
-						BrodlerTarget::Head(config.head)
+						BrodlerTarget::Ear(config.ear)
 					}
 					CharacterPartSlot::Horns => BrodlerTarget::Horns(config.horns),
 					CharacterPartSlot::Hair => BrodlerTarget::Hair(config.hair),

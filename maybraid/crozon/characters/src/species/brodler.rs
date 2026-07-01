@@ -9,7 +9,7 @@ pub mod pose;
 use crate::{
 	species::{
 		braidman::{BraidmanColor, ClothingColor},
-		common::{ClothingMesh, HairMesh},
+		common::{ClothingMesh, EarMesh, EyeMesh, HairMesh, MouthMesh, NoseMesh},
 		SpeciesConfig,
 	},
 	ResolvedCharacterAssembly,
@@ -101,6 +101,7 @@ impl BrodlerEyeColor {
 pub struct BrodlerColors {
 	pub skin: BrodlerSkinColor,
 	pub eyes: BrodlerEyeColor,
+	pub mouth: BraidmanColor,
 	pub hair: BraidmanColor,
 	pub clothing_default: BraidmanColor,
 	pub clothing: Vec<ClothingColor>,
@@ -111,6 +112,7 @@ impl Default for BrodlerColors {
 		Self {
 			skin: BrodlerSkinColor::Red,
 			eyes: BrodlerEyeColor::Red,
+			mouth: BraidmanColor::Natural,
 			hair: BraidmanColor::Dark,
 			clothing_default: BraidmanColor::Cool,
 			clothing: Vec::new(),
@@ -140,6 +142,10 @@ impl BrodlerColors {
 pub struct BrodlerConfig {
 	pub head: BrodlerHeadMesh,
 	pub horns: HornMesh,
+	pub eye: EyeMesh,
+	pub nose: NoseMesh,
+	pub mouth: MouthMesh,
+	pub ear: EarMesh,
 	pub hair: HairMesh,
 	pub clothing: Vec<ClothingMesh>,
 	pub colors: BrodlerColors,
@@ -156,6 +162,10 @@ impl BrodlerConfig {
 		Self {
 			head: BrodlerHeadMesh::Gaunt,
 			horns: HornMesh::HarrowedCrown,
+			eye: EyeMesh::Standard,
+			nose: NoseMesh::Standard,
+			mouth: MouthMesh::Standard,
+			ear: EarMesh::Standard,
 			hair: HairMesh::None,
 			clothing: Vec::new(),
 			colors: BrodlerColors::default(),
@@ -173,9 +183,13 @@ impl BrodlerConfig {
 				.join(",")
 		};
 		format!(
-			"brodler head={} horns={} hair={} clothing={} skin={} eyes={} hair_color={}",
+			"brodler head={} horns={} eye={} nose={} mouth={} ear={} hair={} clothing={} skin={} eyes={} hair_color={}",
 			self.head.label(),
 			self.horns.label(),
+			self.eye.label(),
+			self.nose.label(),
+			self.mouth.label(),
+			self.ear.label(),
 			self.hair.label(),
 			clothing,
 			self.colors.skin.label(),

@@ -27,17 +27,35 @@ impl UiAssetTarget {
 				Vec3::new(0.0, 0.15, 1.0),
 				Vec3::ZERO,
 			),
-			Self::Clothing(_) => CameraFocus::new(
+			Self::Clothing(_) | Self::Body | Self::Animation(_) => CameraFocus::new(
 				SocketRig::Body,
 				"root",
 				Vec3::new(-1.0, 1.0, 4.0),
 				Vec3::new(2.0, 0.0, -2.0),
 			),
-			Self::Body | Self::Eye | Self::Animation(_) => CameraFocus::new(
-				SocketRig::Body,
-				"root",
-				Vec3::new(-1.0, 1.0, 4.0),
-				Vec3::new(2.0, 0.0, -2.0),
+			Self::Eye(_) => CameraFocus::new(
+				SocketRig::Head,
+				"eye_socket.L",
+				Vec3::new(0.0, 0.0, 0.35),
+				Vec3::ZERO,
+			),
+			Self::Nose(_) => CameraFocus::new(
+				SocketRig::Head,
+				"nose_socket",
+				Vec3::new(0.0, 0.0, 0.25),
+				Vec3::ZERO,
+			),
+			Self::Mouth(_) => CameraFocus::new(
+				SocketRig::Head,
+				"mouth_socket",
+				Vec3::new(0.0, 0.0, 0.25),
+				Vec3::ZERO,
+			),
+			Self::Ear(_) => CameraFocus::new(
+				SocketRig::Head,
+				"ear_socket.L",
+				Vec3::new(0.55, 0.0, 0.3),
+				Vec3::ZERO,
 			),
 		}
 	}
