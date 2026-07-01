@@ -112,8 +112,34 @@ impl CreatorUiState {
 
 #[derive(Resource, Default)]
 pub struct CreatorUiSyncState {
-	config_key: String,
 	layout_revision: u64,
+}
+
+/// Binds a value label to live config state so the panel can refresh without rebuilding.
+#[derive(Component, Clone, Copy)]
+pub(crate) enum CreatorUiValueBinding {
+	Gender,
+	Build,
+	ShoulderWidth,
+	HipWidth,
+	ChestThickness,
+	HipThickness,
+	LegThickness,
+	ButtocksThickness,
+	WaistThickness,
+	LowerTrunkThickness,
+	ArmLength,
+	ArmThickness,
+	LegLength,
+	EyeWidth,
+	EyeHeight,
+	EyeTilt,
+	NoseWidth,
+	NoseHeight,
+	MouthWidth,
+	MouthHeight,
+	EarWidth,
+	EarHeight,
 }
 
 #[derive(Component)]
@@ -158,15 +184,16 @@ pub fn setup_creator_ui(
 	ui_state: Res<CreatorUiState>,
 	mut sync_state: ResMut<CreatorUiSyncState>,
 ) {
-	sync_state.config_key = config.sync_key();
 	sync_state.layout_revision = ui_state.layout_revision;
-	spawn_creator_ui(
+	let viewport = spawn_creator_ui_shell(&mut commands);
+	rebuild_creator_ui_panel(
 		&mut commands,
 		asset_server.as_ref(),
 		&mut images,
 		&mut thumbnails,
 		&config,
 		&ui_state,
+		[viewport],
 	);
 }
 
@@ -179,23 +206,24 @@ pub fn sync_creator_ui(
 	ui_state: Res<CreatorUiState>,
 	mut sync_state: ResMut<CreatorUiSyncState>,
 	roots: Query<Entity, With<CreatorUiRoot>>,
+	viewports: Query<Entity, With<CreatorUiScrollViewport>>,
 ) {
-	let key = config.sync_key();
-	if sync_state.config_key == key && sync_state.layout_revision == ui_state.layout_revision {
+	let layout_changed = sync_state.layout_revision != ui_state.layout_revision;
+	if !layout_changed && !roots.is_empty() {
 		return;
 	}
-	sync_state.config_key = key;
 	sync_state.layout_revision = ui_state.layout_revision;
-	for root in &roots {
-		commands.entity(root).try_despawn();
+	if roots.is_empty() {
+		spawn_creator_ui_shell(&mut commands);
 	}
-	spawn_creator_ui(
+	rebuild_creator_ui_panel(
 		&mut commands,
 		asset_server.as_ref(),
 		&mut images,
 		&mut thumbnails,
 		&config,
 		&ui_state,
+		&viewports,
 	);
 }
 
@@ -224,15 +252,34 @@ pub fn react_creator_ui(
 	}
 }
 
-fn spawn_creator_ui(
-	commands: &mut Commands,
-	asset_server: &AssetServer,
-	images: &mut Assets<Image>,
-	thumbnails: &mut ThumbnailCache,
-	config: &ConceptPreviewConfig,
-	ui_state: &CreatorUiState,
+pub fn refresh_creator_ui_display(
+	config: Res<ConceptPreviewConfig>,
+	ui_state: Res<CreatorUiState>,
+	mut value_labels: Query<(&mut Text, &CreatorUiValueBinding)>,
+	mut buttons: Query<(&mut BackgroundColor, &CreatorUiAction), With<Button>>,
+	mut color_swatches: Query<(&mut BorderColor, &CreatorUiAction), With<Button>>,
 ) {
-	thumbnails.begin_ui_rebuild();
+	let ConceptPreviewConfig::Braidman { config: braidman, animation } = config.as_ref();
+	for (mut text, binding) in &mut value_labels {
+		text.0 = braidman::format_value_binding(*binding, braidman);
+	}
+	for (mut background, action) in &mut buttons {
+		if let Some(color) =
+			braidman::selection_button_color(*action, braidman, *animation, &ui_state)
+		{
+			background.0 = color;
+		}
+	}
+	for (mut border, action) in &mut color_swatches {
+		if let CreatorUiAction::SetColor(target, swatch) = *action {
+			let active = braidman::color_target_value(target, braidman) == swatch;
+			*border = BorderColor::all(if active { Color::WHITE } else { muted() });
+		}
+	}
+}
+
+fn spawn_creator_ui_shell(commands: &mut Commands) -> Entity {
+	let mut viewport = Entity::PLACEHOLDER;
 	commands
 		.spawn((
 			Node {
@@ -250,7 +297,7 @@ fn spawn_creator_ui(
 			CreatorUiRoot,
 		))
 		.with_children(|shell| {
-			shell
+			viewport = shell
 				.spawn((
 					Node {
 						width: Val::Percent(100.0),
@@ -266,24 +313,45 @@ fn spawn_creator_ui(
 					Pickable::default(),
 					CreatorUiScrollViewport,
 				))
-				.with_children(|panel| {
-					text(panel, "Character Concepts", 15.0, Color::WHITE);
-					text(
-						panel,
-						"Expandable controls, thumbnails, colors, and focus camera.",
-						10.0,
-						muted(),
-					);
-					braidman::populate_panel(
-						panel,
-						asset_server,
-						images,
-						thumbnails,
-						config,
-						ui_state,
-					);
-				});
+				.id();
 		});
+	viewport
+}
+
+fn populate_creator_ui_panel(
+	panel: &mut ChildSpawnerCommands,
+	asset_server: &AssetServer,
+	images: &mut Assets<Image>,
+	thumbnails: &mut ThumbnailCache,
+	config: &ConceptPreviewConfig,
+	ui_state: &CreatorUiState,
+) {
+	text(panel, "Character Concepts", 15.0, Color::WHITE);
+	text(
+		panel,
+		"Expandable controls, thumbnails, colors, and focus camera.",
+		10.0,
+		muted(),
+	);
+	braidman::populate_panel(panel, asset_server, images, thumbnails, config, ui_state);
+}
+
+fn rebuild_creator_ui_panel(
+	commands: &mut Commands,
+	asset_server: &AssetServer,
+	images: &mut Assets<Image>,
+	thumbnails: &mut ThumbnailCache,
+	config: &ConceptPreviewConfig,
+	ui_state: &CreatorUiState,
+	viewports: impl IntoIterator<Item = Entity>,
+) {
+	thumbnails.begin_ui_rebuild();
+	for viewport in viewports {
+		commands.entity(viewport).despawn_related::<Children>();
+		commands.entity(viewport).with_children(|panel| {
+			populate_creator_ui_panel(panel, asset_server, images, thumbnails, config, ui_state);
+		});
+	}
 }
 
 pub(crate) fn section(
@@ -341,15 +409,25 @@ pub(crate) fn subsection(
 pub(crate) fn selector(
 	parent: &mut ChildSpawnerCommands,
 	label: &'static str,
-	value: &'static str,
+	value_binding: CreatorUiValueBinding,
 	action: fn(i32) -> CreatorUiAction,
 ) {
 	parent.spawn((row_node(), Pickable::IGNORE)).with_children(|row| {
 		text(row, label, 11.0, Color::WHITE);
 		button(row, "<", action(-1), false);
-		text(row, value, 11.0, Color::srgb(0.85, 0.95, 1.0));
+		value_text(row, value_binding);
 		button(row, ">", action(1), false);
 	});
+}
+
+pub(crate) fn value_text(parent: &mut ChildSpawnerCommands, binding: CreatorUiValueBinding) {
+	parent.spawn((
+		Text::new(""),
+		TextFont { font_size: 11.0, ..default() },
+		TextColor(Color::srgb(0.85, 0.95, 1.0)),
+		binding,
+		Pickable::IGNORE,
+	));
 }
 
 pub(crate) fn button(

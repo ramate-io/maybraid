@@ -18,7 +18,7 @@ use crate::{
 	thumbnail::{self, ThumbnailCache},
 	ui::{
 		color_swatches, inline_color_swatches, section, selector, subsection, text, CreatorUiState,
-		THUMBNAIL_SIZE, UiSection,
+		CreatorUiValueBinding, THUMBNAIL_SIZE, UiSection,
 	},
 };
 
@@ -229,8 +229,13 @@ pub fn populate_panel(
 	let uis = PanelContext { ui_state, braidman, animation: *animation };
 
 	section(panel, UiSection::Presets, ui_state, |section| {
-		selector(section, "Gender", braidman.gender.label(), CreatorUiAction::Gender);
-		selector(section, "Build", braidman.build.label(), CreatorUiAction::Build);
+		selector(
+			section,
+			"Gender",
+			CreatorUiValueBinding::Gender,
+			CreatorUiAction::Gender,
+		);
+		selector(section, "Build", CreatorUiValueBinding::Build, CreatorUiAction::Build);
 	});
 	section(panel, UiSection::Body, ui_state, |section| {
 		subsection(section, "Body Mesh", |sub| {
@@ -600,3 +605,137 @@ pub const COLORS: &[BraidmanColor] = &[
 	BraidmanColor::Green,
 	BraidmanColor::Gold,
 ];
+
+pub fn format_value_binding(binding: CreatorUiValueBinding, braidman: &BraidmanConfig) -> String {
+	let sliders = &braidman.sliders;
+	match binding {
+		CreatorUiValueBinding::Gender => braidman.gender.label().into(),
+		CreatorUiValueBinding::Build => braidman.build.label().into(),
+		CreatorUiValueBinding::ShoulderWidth => format!("{:.2}", sliders.shoulder_width),
+		CreatorUiValueBinding::HipWidth => format!("{:.2}", sliders.hip_width),
+		CreatorUiValueBinding::ChestThickness => format!("{:.2}", sliders.chest_thickness),
+		CreatorUiValueBinding::HipThickness => format!("{:.2}", sliders.hip_thickness),
+		CreatorUiValueBinding::LegThickness => format!("{:.2}", sliders.leg_thickness),
+		CreatorUiValueBinding::ButtocksThickness => {
+			format!("{:.2}", sliders.buttocks_thickness)
+		}
+		CreatorUiValueBinding::WaistThickness => format!("{:.2}", sliders.waist_thickness),
+		CreatorUiValueBinding::LowerTrunkThickness => {
+			format!("{:.2}", sliders.lower_trunk_thickness)
+		}
+		CreatorUiValueBinding::ArmLength => format!("{:.2}", sliders.arm_length),
+		CreatorUiValueBinding::ArmThickness => format!("{:.2}", sliders.arm_thickness),
+		CreatorUiValueBinding::LegLength => format!("{:.2}", sliders.leg_length),
+		CreatorUiValueBinding::EyeWidth => format!("{:.2}", sliders.eye_width),
+		CreatorUiValueBinding::EyeHeight => format!("{:.2}", sliders.eye_height),
+		CreatorUiValueBinding::EyeTilt => format!("{:.1} deg.", sliders.eye_tilt),
+		CreatorUiValueBinding::NoseWidth => format!("{:.2}", sliders.nose_width),
+		CreatorUiValueBinding::NoseHeight => format!("{:.2}", sliders.nose_height),
+		CreatorUiValueBinding::MouthWidth => format!("{:.2}", sliders.mouth_width),
+		CreatorUiValueBinding::MouthHeight => format!("{:.2}", sliders.mouth_height),
+		CreatorUiValueBinding::EarWidth => format!("{:.2}", sliders.ear_width),
+		CreatorUiValueBinding::EarHeight => format!("{:.2}", sliders.ear_height),
+	}
+}
+
+pub fn color_target_value(target: UiColorTarget, braidman: &BraidmanConfig) -> BraidmanColor {
+	match target {
+		UiColorTarget::Body => braidman.colors.body,
+		UiColorTarget::Eyes => braidman.colors.eyes,
+		UiColorTarget::Mouth => braidman.colors.mouth,
+		UiColorTarget::Hair => braidman.colors.hair,
+		UiColorTarget::Clothing(clothing) => braidman.colors.clothing_color(clothing),
+	}
+}
+
+pub fn selection_button_color(
+	action: CreatorUiAction,
+	braidman: &BraidmanConfig,
+	animation: ConceptAnimation,
+	ui_state: &CreatorUiState,
+) -> Option<Color> {
+	const INACTIVE: Color = Color::srgba(0.18, 0.20, 0.24, 0.92);
+	const ACTIVE: Color = Color::srgba(0.16, 0.34, 0.50, 0.95);
+
+	match action {
+		CreatorUiAction::ToggleSection(section) => {
+			Some(if ui_state.is_open(section) { ACTIVE } else { INACTIVE })
+		}
+		CreatorUiAction::Body(value) => Some(asset_button_color(
+			UiAssetTarget::Body(value),
+			braidman,
+			animation,
+			ui_state,
+		)),
+		CreatorUiAction::Head(value) => Some(asset_button_color(
+			UiAssetTarget::Head(value),
+			braidman,
+			animation,
+			ui_state,
+		)),
+		CreatorUiAction::Eye(value) => Some(asset_button_color(
+			UiAssetTarget::Eye(value),
+			braidman,
+			animation,
+			ui_state,
+		)),
+		CreatorUiAction::Nose(value) => Some(asset_button_color(
+			UiAssetTarget::Nose(value),
+			braidman,
+			animation,
+			ui_state,
+		)),
+		CreatorUiAction::Mouth(value) => Some(asset_button_color(
+			UiAssetTarget::Mouth(value),
+			braidman,
+			animation,
+			ui_state,
+		)),
+		CreatorUiAction::Ear(value) => Some(asset_button_color(
+			UiAssetTarget::Ear(value),
+			braidman,
+			animation,
+			ui_state,
+		)),
+		CreatorUiAction::Hair(value) => Some(asset_button_color(
+			UiAssetTarget::Hair(value),
+			braidman,
+			animation,
+			ui_state,
+		)),
+		CreatorUiAction::ToggleClothing(value) => Some(asset_button_color(
+			UiAssetTarget::Clothing(value),
+			braidman,
+			animation,
+			ui_state,
+		)),
+		CreatorUiAction::Animation(value) => Some(asset_button_color(
+			UiAssetTarget::Animation(value),
+			braidman,
+			animation,
+			ui_state,
+		)),
+		_ => None,
+	}
+}
+
+fn asset_button_color(
+	target: UiAssetTarget,
+	braidman: &BraidmanConfig,
+	animation: ConceptAnimation,
+	ui_state: &CreatorUiState,
+) -> Color {
+	const INACTIVE: Color = Color::srgba(0.18, 0.20, 0.24, 0.92);
+	const ACTIVE: Color = Color::srgba(0.16, 0.34, 0.50, 0.95);
+	const FOCUS: Color = Color::srgba(0.30, 0.38, 0.48, 0.98);
+
+	let active = target_active(target, braidman, animation);
+	let focus = ui_state.focused_target() == Some(target);
+	if focus {
+		FOCUS
+	} else if active {
+		ACTIVE
+	} else {
+		INACTIVE
+	}
+}

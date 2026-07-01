@@ -71,9 +71,10 @@ impl Plugin for CrozonCharacterConceptsPlaygroundPlugin {
 				(
 					tick_preview_respawn_cooldown,
 					queue_default_camera_focus,
-					ui::sync_creator_ui,
+					ui::react_creator_ui,
+					ui::sync_creator_ui.after(ui::react_creator_ui),
+					ui::refresh_creator_ui_display.after(ui::sync_creator_ui),
 					camera::camera_controller,
-					ui::react_creator_ui.after(ui::sync_creator_ui),
 					ui::send_creator_ui_scroll_events,
 					sync_preview
 						.after(capture_command_line_input::<ConceptsCommand>)
