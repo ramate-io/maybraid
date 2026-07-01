@@ -8,6 +8,7 @@
 pub mod assembly;
 pub mod assets;
 pub mod concepts;
+pub mod menu_traits;
 pub mod presets;
 pub mod species;
 

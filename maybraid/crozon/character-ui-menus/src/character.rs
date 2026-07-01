@@ -319,7 +319,7 @@ pub struct SectionOpenState {
 }
 
 impl SectionOpenState {
-	pub fn is_open(self, section: SectionId) -> bool {
+	pub fn is_section_open(self, section: SectionId) -> bool {
 		match section {
 			SectionId::Presets => self.presets_open,
 			SectionId::Head => self.head_open,

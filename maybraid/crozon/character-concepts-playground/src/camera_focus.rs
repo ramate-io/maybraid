@@ -1,9 +1,8 @@
 use bevy::prelude::*;
 use camera_controls::look::CameraLookEnabled;
-use character_ui_menu::CameraFocus;
+use character_ui_menu::{CameraFocus, FocusRig};
 use crozon_character_playground::CameraController;
 use crozon_character_ui_menus::BODY_FOCUS;
-use crozon_characters::SocketRig;
 
 use crate::{
 	animation::AnimatedBodyRig,
@@ -135,7 +134,7 @@ pub fn apply_camera_suggestion(
 						.unwrap_or_else(|| "source=preview head_rig=missing".into())
 				} else {
 					match focus.rig {
-						SocketRig::Body => shadow_body_pose
+						FocusRig::Body => shadow_body_pose
 							.iter()
 							.find(|(_, _, rig)| rig.role == CharacterRigRole::Body)
 							.map(|(map, scales, _)| {
@@ -146,7 +145,7 @@ pub fn apply_camera_suggestion(
 								)
 							})
 							.unwrap_or_else(|| "source=shadow body_rig=missing".into()),
-						SocketRig::Head => shadow_rigs
+						FocusRig::Head => shadow_rigs
 							.iter()
 							.find(|(_, rig, _)| rig.role == CharacterRigRole::Head)
 							.map(|(map, _, _)| {
@@ -265,8 +264,8 @@ fn focus_target_ready(
 	}
 
 	match focus.rig {
-		SocketRig::Body => true,
-		SocketRig::Head => shadow_head_rigs.iter().any(|(bone_map, rig)| {
+		FocusRig::Body => true,
+		FocusRig::Head => shadow_head_rigs.iter().any(|(bone_map, rig)| {
 			rig.role == CharacterRigRole::Head && head_rig_focus_ready(bone_map, focus.socket)
 		}),
 	}
@@ -410,8 +409,8 @@ fn rig_socket_report_inner<'a>(
 	bone_globals: &Query<&GlobalTransform>,
 ) -> RigSocketReport {
 	let role = match focus.rig {
-		SocketRig::Body => CharacterRigRole::Body,
-		SocketRig::Head => CharacterRigRole::Head,
+		FocusRig::Body => CharacterRigRole::Body,
+		FocusRig::Head => CharacterRigRole::Head,
 	};
 	for (bone_map, rig, rig_global) in rigs {
 		if rig.role != role {
@@ -473,8 +472,8 @@ fn resolve_focus_transform_from_rigs<'a>(
 	bone_globals: &Query<&GlobalTransform>,
 ) -> Option<Transform> {
 	let role = match focus.rig {
-		SocketRig::Body => CharacterRigRole::Body,
-		SocketRig::Head => CharacterRigRole::Head,
+		FocusRig::Body => CharacterRigRole::Body,
+		FocusRig::Head => CharacterRigRole::Head,
 	};
 	for (bone_map, rig, rig_global) in rigs {
 		if rig.role != role {
@@ -497,7 +496,7 @@ fn focus_socket_global(
 	rig_global: &GlobalTransform,
 	bone_globals: &Query<&GlobalTransform>,
 ) -> Option<GlobalTransform> {
-	if focus.rig == SocketRig::Body && focus.socket == "root" {
+	if focus.rig == FocusRig::Body && focus.socket == "root" {
 		return Some(*rig_global);
 	}
 	let bone_entity = bone_map.by_name.get(focus.socket)?;

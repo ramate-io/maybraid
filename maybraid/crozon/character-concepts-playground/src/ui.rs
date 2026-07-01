@@ -1,28 +1,19 @@
-use bevy::asset::RenderAssetUsages;
 use bevy::ecs::event::EntityEvent;
 use bevy::input::mouse::{MouseScrollUnit, MouseWheel};
 use bevy::picking::hover::HoverMap;
 use bevy::prelude::*;
-use bevy::render::render_resource::{TextureDimension, TextureFormat, TextureUsages};
-use bevy_character_ui_menu_renderer::{MenuButton, MenuThumbnailContext, RenderContext, Renderer};
-use character_ui_menu::ThumbnailCamera;
-use crozon_character_ui_menus::{
-	AssetOption, CharacterMenu, MenuEvent, SectionId, SectionOpenState,
+use bevy_character_ui_menu_renderer::{
+	MenuThumbnailContext, RenderContext, Renderer,
 };
-use crozon_characters::species::{
-	brodler::{assets::HornMesh, BrodlerHeadMesh},
-	common::{BodyMesh, ClothingMesh, EarMesh, EyeMesh, HairMesh, HeadMesh, MouthMesh, NoseMesh},
-};
+use character_ui_menu::{AssetThumbnailDisplay, ThumbnailRequest};
+use crozon_character_ui_menus::SectionOpenState;
+use crate::preview::ConceptSpecies;
 use game_commands::ui::{GameCommandDrawerConfig, GameCommandStatusText, GameCommandUiConfig};
 
 use crate::{
-	camera_focus::{focus_debug_enabled, queue_camera_focus, PendingCameraFocus},
-	focus_reference::FocusReferenceSyncState,
-	preview::{
-		ConceptPreviewConfig, ConceptPreviewSyncState, ConceptSpecies, PreviewRespawnCooldown,
-	},
-	species_session::{reset_for_species_switch, CameraFocusBootState, SpeciesSessionState},
-	thumbnail::{self, ThumbnailCache},
+	menu_listeners::CharacterMenuState,
+	preview::ConceptPreviewConfig,
+	thumbnail::ThumbnailCache,
 };
 
 pub use character_ui_menu::CameraFocus;
@@ -36,6 +27,7 @@ pub struct CreatorUiState {
 	pub sections: SectionOpenState,
 	pub hovered: Option<CameraFocus>,
 	pub last_selected: Option<CameraFocus>,
+	pub asset_thumbnails: AssetThumbnailDisplay,
 	layout_revision: u64,
 }
 
@@ -45,6 +37,7 @@ impl Default for CreatorUiState {
 			sections: SectionOpenState::default(),
 			hovered: None,
 			last_selected: None,
+			asset_thumbnails: AssetThumbnailDisplay::default(),
 			layout_revision: 0,
 		}
 	}
@@ -59,7 +52,7 @@ impl CreatorUiState {
 		self.layout_revision += 1;
 	}
 
-	fn toggle_section(&mut self, section: SectionId) {
+	pub(crate) fn toggle_section(&mut self, section: crozon_character_ui_menus::SectionId) {
 		self.sections.toggle(section);
 		self.bump_layout_revision();
 	}
@@ -68,8 +61,7 @@ impl CreatorUiState {
 #[derive(Resource, Default)]
 pub struct CreatorUiSyncState {
 	layout_revision: u64,
-	species: Option<ConceptSpecies>,
-	sync_key: String,
+	menu_dirty: bool,
 }
 
 #[derive(Component)]
@@ -100,7 +92,7 @@ impl MenuThumbnailContext for CachedThumbnails<'_> {
 		_label: &'static str,
 		asset_path: &'static str,
 		color: Color,
-		_camera: ThumbnailCamera,
+		_camera: character_ui_menu::ThumbnailCamera,
 	) -> Option<Handle<Image>> {
 		self.cache.cached_image(asset_path, color)
 	}
@@ -131,20 +123,19 @@ pub fn setup_creator_ui(
 	asset_server: Res<AssetServer>,
 	mut images: ResMut<Assets<Image>>,
 	mut thumbnails: ResMut<ThumbnailCache>,
-	config: Res<ConceptPreviewConfig>,
+	menu_state: Res<CharacterMenuState>,
 	ui_state: Res<CreatorUiState>,
 	mut sync_state: ResMut<CreatorUiSyncState>,
 ) {
 	sync_state.layout_revision = ui_state.layout_revision;
-	sync_state.species = Some(config.species());
-	sync_state.sync_key = config.sync_key();
+	sync_state.menu_dirty = false;
 	let viewport = spawn_creator_ui_shell(&mut commands);
 	rebuild_creator_ui_panel(
 		&mut commands,
 		asset_server.as_ref(),
 		images.as_mut(),
 		thumbnails.as_mut(),
-		config.as_ref(),
+		menu_state.as_ref(),
 		ui_state.as_ref(),
 		[viewport],
 	);
@@ -155,23 +146,19 @@ pub fn sync_creator_ui(
 	asset_server: Res<AssetServer>,
 	mut images: ResMut<Assets<Image>>,
 	mut thumbnails: ResMut<ThumbnailCache>,
-	config: Res<ConceptPreviewConfig>,
+	menu_state: Res<CharacterMenuState>,
 	ui_state: Res<CreatorUiState>,
 	mut sync_state: ResMut<CreatorUiSyncState>,
 	roots: Query<Entity, With<CreatorUiRoot>>,
 	viewports: Query<Entity, With<CreatorUiScrollViewport>>,
 ) {
-	let species = config.species();
-	let sync_key = config.sync_key();
 	let layout_changed = sync_state.layout_revision != ui_state.layout_revision;
-	let species_changed = sync_state.species != Some(species);
-	let config_changed = sync_state.sync_key != sync_key;
-	if !layout_changed && !species_changed && !config_changed && !roots.is_empty() {
+	let menu_changed = sync_state.menu_dirty || menu_state.is_changed();
+	if !layout_changed && !menu_changed && !roots.is_empty() {
 		return;
 	}
 	sync_state.layout_revision = ui_state.layout_revision;
-	sync_state.species = Some(species);
-	sync_state.sync_key = sync_key;
+	sync_state.menu_dirty = false;
 	if roots.is_empty() {
 		spawn_creator_ui_shell(&mut commands);
 	}
@@ -180,108 +167,16 @@ pub fn sync_creator_ui(
 		asset_server.as_ref(),
 		images.as_mut(),
 		thumbnails.as_mut(),
-		config.as_ref(),
+		menu_state.as_ref(),
 		ui_state.as_ref(),
 		&viewports,
 	);
 }
 
-pub fn react_creator_ui(
-	mut menu_interactions: Query<(&Interaction, &MenuButton), (Changed<Interaction>, With<Button>)>,
-	mut species_interactions: Query<
-		(&Interaction, &SpeciesButton),
-		(Changed<Interaction>, With<Button>, Without<MenuButton>),
-	>,
-	mut config: ResMut<ConceptPreviewConfig>,
-	mut ui_state: ResMut<CreatorUiState>,
-	mut pending_camera: ResMut<PendingCameraFocus>,
-	mut session: ResMut<SpeciesSessionState>,
-	mut preview_sync: ResMut<ConceptPreviewSyncState>,
-	mut focus_sync: ResMut<FocusReferenceSyncState>,
-	mut respawn_cooldown: ResMut<PreviewRespawnCooldown>,
-	mut camera_boot: ResMut<CameraFocusBootState>,
-) {
-	for (interaction, SpeciesButton::Switch(species)) in &mut species_interactions {
-		if *interaction != Interaction::Pressed || config.species() == *species {
-			continue;
-		}
-		reset_for_species_switch(
-			*species,
-			&mut session,
-			&mut config,
-			&mut ui_state,
-			&mut preview_sync,
-			&mut focus_sync,
-			&mut respawn_cooldown,
-			&mut pending_camera,
-			&mut camera_boot,
-		);
-	}
-
-	for (interaction, button) in &mut menu_interactions {
-		if *interaction == Interaction::Hovered {
-			if let Some(focus) = menu_from_config(&config).camera_focus_for_event(button.0) {
-				ui_state.hovered = Some(focus);
-			}
-			continue;
-		}
-		if *interaction != Interaction::Pressed {
-			continue;
-		}
-		match button.0 {
-			MenuEvent::ToggleSection(section) => {
-				ui_state.toggle_section(section);
-				continue;
-			}
-			event => {
-				let mut menu = menu_from_config(&config);
-				if let Some(focus) = menu.camera_focus_for_event(event) {
-					ui_state.last_selected = Some(focus);
-					queue_camera_focus(&mut pending_camera, focus, format!("ui-press:{event:?}"));
-				}
-				if !menu.apply(event) {
-					continue;
-				}
-				apply_menu_to_config(menu, &mut config);
-				preview_sync.invalidate();
-				focus_sync.invalidate();
-				respawn_cooldown.frames_remaining = 0;
-				if focus_debug_enabled() {
-					info!("[camera-focus] typed-ui event={event:?}");
-				}
-			}
-		}
-	}
-}
-
 pub fn refresh_creator_ui_display() {}
 
-fn menu_from_config(config: &ConceptPreviewConfig) -> CharacterMenu {
-	match config {
-		ConceptPreviewConfig::Braidman { config, animation } => {
-			CharacterMenu::from_braidman(config, *animation)
-		}
-		ConceptPreviewConfig::Brodler { config, animation } => {
-			CharacterMenu::from_brodler(config, *animation)
-		}
-	}
-}
-
-fn apply_menu_to_config(menu: CharacterMenu, config: &mut ConceptPreviewConfig) {
-	match menu.species.value {
-		crozon_character_ui_menus::ConceptSpecies::Braidman => {
-			*config = ConceptPreviewConfig::braidman_with_animation(
-				menu.braidman_config(),
-				menu.animation(),
-			);
-		}
-		crozon_character_ui_menus::ConceptSpecies::Brodler => {
-			*config = ConceptPreviewConfig::brodler_with_animation(
-				menu.brodler_config(),
-				menu.animation(),
-			);
-		}
-	}
+pub(crate) fn mark_menu_ui_dirty(sync_state: &mut CreatorUiSyncState) {
+	sync_state.menu_dirty = true;
 }
 
 fn spawn_creator_ui_shell(commands: &mut Commands) -> Entity {
@@ -329,226 +224,69 @@ fn rebuild_creator_ui_panel(
 	asset_server: &AssetServer,
 	images: &mut Assets<Image>,
 	thumbnails: &mut ThumbnailCache,
-	config: &ConceptPreviewConfig,
+	menu_state: &CharacterMenuState,
 	ui_state: &CreatorUiState,
 	viewports: impl IntoIterator<Item = Entity>,
 ) {
 	thumbnails.begin_ui_rebuild();
-	prewarm_thumbnails(commands, images, asset_server, thumbnails, config);
+	let mut prewarm = Vec::new();
 	for viewport in viewports {
 		commands.entity(viewport).despawn_related::<Children>();
 		commands.entity(viewport).with_children(|panel| {
-			populate_creator_ui_panel(panel, thumbnails, config, ui_state);
+			populate_creator_ui_panel(panel, thumbnails, menu_state, ui_state, &mut prewarm);
 		});
+	}
+	if ui_state.asset_thumbnails != AssetThumbnailDisplay::None {
+		crate::thumbnail::prewarm_thumbnail_requests(
+			commands,
+			images,
+			asset_server,
+			thumbnails,
+			&prewarm,
+		);
 	}
 }
 
 fn populate_creator_ui_panel(
 	panel: &mut ChildSpawnerCommands,
 	thumbnails: &ThumbnailCache,
-	config: &ConceptPreviewConfig,
+	menu_state: &CharacterMenuState,
 	ui_state: &CreatorUiState,
+	prewarm: &mut Vec<ThumbnailRequest>,
 ) {
 	text(panel, "Character Concepts", 15.0, Color::WHITE);
 	text(panel, "Typed menu primitives rendered through a shared Bevy layer.", 10.0, muted());
-	species_picker(panel, config.species());
-	let menu = match config {
-		ConceptPreviewConfig::Braidman { config, animation } => {
-			CharacterMenu::from_braidman(config, *animation)
-		}
-		ConceptPreviewConfig::Brodler { config, animation } => {
-			CharacterMenu::from_brodler(config, *animation)
-		}
-	};
-	let mut thumbnails = CachedThumbnails { cache: thumbnails };
-	let mut context = RenderContext { sections: ui_state.sections, thumbnails: &mut thumbnails };
-	Renderer::default().render(panel, &menu, &mut context);
-}
-
-fn prewarm_thumbnails(
-	commands: &mut Commands,
-	images: &mut Assets<Image>,
-	asset_server: &AssetServer,
-	thumbnails: &mut ThumbnailCache,
-	config: &ConceptPreviewConfig,
-) {
-	match config {
-		ConceptPreviewConfig::Braidman { config, .. } => {
-			let skin = config.colors.skin_color().color();
-			for body in BodyMesh::VALUES {
-				prewarm_asset_option(
-					commands,
-					images,
-					asset_server,
-					thumbnails,
-					*body,
-					config.colors.body.color(),
-				);
-			}
-			for head in HeadMesh::VALUES {
-				prewarm_asset_option(commands, images, asset_server, thumbnails, *head, skin);
-			}
-			prewarm_common_feature_thumbnails(commands, images, asset_server, thumbnails, |slot| {
-				match slot {
-					CommonThumbnailSlot::Eye => config.colors.eyes.color(),
-					CommonThumbnailSlot::Mouth => config.colors.mouth.color(),
-					CommonThumbnailSlot::Nose | CommonThumbnailSlot::Ear => skin,
-				}
-			});
-			for hair in HairMesh::VALUES {
-				prewarm_asset_option(
-					commands,
-					images,
-					asset_server,
-					thumbnails,
-					*hair,
-					config.colors.hair.color(),
-				);
-			}
-			for clothing in ClothingMesh::VALUES {
-				prewarm_asset_option(
-					commands,
-					images,
-					asset_server,
-					thumbnails,
-					*clothing,
-					config.colors.clothing_color(*clothing).color(),
-				);
-			}
-		}
-		ConceptPreviewConfig::Brodler { config, .. } => {
-			for head in BrodlerHeadMesh::VALUES {
-				prewarm_asset_option(
-					commands,
-					images,
-					asset_server,
-					thumbnails,
-					*head,
-					config.colors.skin.color(),
-				);
-			}
-			for horns in HornMesh::VALUES {
-				prewarm_asset_option(
-					commands,
-					images,
-					asset_server,
-					thumbnails,
-					*horns,
-					config.colors.horns.color(),
-				);
-			}
-			prewarm_common_feature_thumbnails(commands, images, asset_server, thumbnails, |slot| {
-				match slot {
-					CommonThumbnailSlot::Eye => config.colors.eyes.color(),
-					CommonThumbnailSlot::Mouth => config.colors.mouth.color(),
-					CommonThumbnailSlot::Nose | CommonThumbnailSlot::Ear => {
-						config.colors.skin.color()
-					}
-				}
-			});
-			for hair in HairMesh::VALUES {
-				prewarm_asset_option(
-					commands,
-					images,
-					asset_server,
-					thumbnails,
-					*hair,
-					config.colors.hair.color(),
-				);
-			}
-			for clothing in ClothingMesh::VALUES {
-				prewarm_asset_option(
-					commands,
-					images,
-					asset_server,
-					thumbnails,
-					*clothing,
-					config.colors.clothing_color(*clothing).color(),
-				);
-			}
-		}
-	}
-}
-
-#[derive(Clone, Copy)]
-enum CommonThumbnailSlot {
-	Eye,
-	Nose,
-	Mouth,
-	Ear,
-}
-
-fn prewarm_common_feature_thumbnails(
-	commands: &mut Commands,
-	images: &mut Assets<Image>,
-	asset_server: &AssetServer,
-	thumbnails: &mut ThumbnailCache,
-	color_for_slot: impl Fn(CommonThumbnailSlot) -> Color,
-) {
-	for eye in EyeMesh::VALUES {
-		prewarm_asset_option(
-			commands,
-			images,
-			asset_server,
-			thumbnails,
-			*eye,
-			color_for_slot(CommonThumbnailSlot::Eye),
-		);
-	}
-	for nose in NoseMesh::VALUES {
-		prewarm_asset_option(
-			commands,
-			images,
-			asset_server,
-			thumbnails,
-			*nose,
-			color_for_slot(CommonThumbnailSlot::Nose),
-		);
-	}
-	for mouth in MouthMesh::VALUES {
-		prewarm_asset_option(
-			commands,
-			images,
-			asset_server,
-			thumbnails,
-			*mouth,
-			color_for_slot(CommonThumbnailSlot::Mouth),
-		);
-	}
-	for ear in EarMesh::VALUES {
-		prewarm_asset_option(
-			commands,
-			images,
-			asset_server,
-			thumbnails,
-			*ear,
-			color_for_slot(CommonThumbnailSlot::Ear),
-		);
-	}
-}
-
-fn prewarm_asset_option<T: AssetOption>(
-	commands: &mut Commands,
-	images: &mut Assets<Image>,
-	asset_server: &AssetServer,
-	thumbnails: &mut ThumbnailCache,
-	value: T,
-	color: Color,
-) {
-	let asset = value.asset();
-	if asset.path.is_empty() {
-		return;
-	}
-	let _ = thumbnail::image_for_asset(
-		commands,
-		images,
-		asset_server,
-		thumbnails,
-		asset.label,
-		asset.path,
-		color,
-		asset.thumbnail_camera,
+	species_picker(
+		panel,
+		match menu_state.0.species.value {
+			crozon_character_ui_menus::ConceptSpecies::Braidman => ConceptSpecies::Braidman,
+			crozon_character_ui_menus::ConceptSpecies::Brodler => ConceptSpecies::Brodler,
+		},
 	);
+	let mut cached = CachedThumbnails { cache: thumbnails };
+	let mut context = RenderContext {
+		sections: &ui_state.sections,
+		thumbnails: &mut cached,
+		asset_thumbnails: ui_state.asset_thumbnails,
+		preview_color: Color::WHITE,
+		base_preview_color: Color::WHITE,
+		accent_preview_color: Color::WHITE,
+		prewarm,
+	};
+	Renderer::default().render(panel, &menu_state.0, &mut context);
+}
+
+fn text(parent: &mut ChildSpawnerCommands, value: &str, size: f32, color: Color) {
+	parent.spawn((
+		Text::new(value.to_string()),
+		TextFont { font_size: size, ..default() },
+		TextColor(color),
+		Pickable::IGNORE,
+	));
+}
+
+fn muted() -> Color {
+	Color::srgba(0.72, 0.78, 0.86, 1.0)
 }
 
 fn species_picker(panel: &mut ChildSpawnerCommands, active: ConceptSpecies) {
@@ -592,19 +330,6 @@ fn species_button(parent: &mut ChildSpawnerCommands, species: ConceptSpecies, ac
 			SpeciesButton::Switch(species),
 		))
 		.with_children(|button| text(button, species.label(), 10.0, Color::WHITE));
-}
-
-fn text(parent: &mut ChildSpawnerCommands, value: &str, size: f32, color: Color) {
-	parent.spawn((
-		Text::new(value.to_string()),
-		TextFont { font_size: size, ..default() },
-		TextColor(color),
-		Pickable::IGNORE,
-	));
-}
-
-fn muted() -> Color {
-	Color::srgba(0.72, 0.78, 0.86, 1.0)
 }
 
 pub fn send_creator_ui_scroll_events(
@@ -653,17 +378,4 @@ pub fn on_creator_ui_scroll(
 	if *delta == Vec2::ZERO {
 		scroll.propagate(false);
 	}
-}
-
-#[allow(dead_code)]
-pub fn thumbnail_image() -> Image {
-	let mut image = Image::new_uninit(
-		default(),
-		TextureDimension::D2,
-		TextureFormat::Bgra8UnormSrgb,
-		RenderAssetUsages::all(),
-	);
-	image.texture_descriptor.usage =
-		TextureUsages::TEXTURE_BINDING | TextureUsages::COPY_DST | TextureUsages::RENDER_ATTACHMENT;
-	image
 }

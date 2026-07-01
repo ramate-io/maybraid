@@ -16,6 +16,7 @@ mod preview;
 mod preview_color;
 mod skinning;
 mod species_session;
+mod menu_listeners;
 mod thumbnail;
 mod ui;
 
@@ -24,12 +25,18 @@ pub use diagnostics::fps_debug_enabled;
 pub use game_commands::command::PendingStartupCommand;
 
 use bevy::prelude::*;
+use bevy_character_ui_menu_renderer::CharacterMenuRendererPlugin;
 use camera_controls::look::{CameraLookConfig, CameraLookPlugin};
+use crozon_character_ui_menus::CharacterMenu;
 use crozon_character_playground::{camera, checkerboard_material};
 use game_commands::command::{capture_command_line_input, GameCommandPlugin};
 
 use animation::{animate_body_rig, init_limb_animators};
 use camera_focus::{apply_camera_suggestion, PendingCameraFocus};
+use menu_listeners::{
+	dispatch_menu_interactions, init_character_menu_state, on_character_menu_event,
+	sync_menu_state_from_config, CharacterMenuState,
+};
 use species_session::{
 	ensure_species_camera_focus, persist_species_session, CameraFocusBootState, SpeciesSessionState,
 };
@@ -66,6 +73,8 @@ impl Plugin for CrozonCharacterConceptsPlaygroundPlugin {
 			.init_resource::<thumbnail::ThumbnailCache>()
 			.init_resource::<ui::CreatorUiState>()
 			.init_resource::<ui::CreatorUiSyncState>()
+			.init_resource::<CharacterMenuState>()
+			.add_plugins(CharacterMenuRendererPlugin::<CharacterMenu>::default())
 			.add_plugins(CameraLookPlugin::new(CameraLookConfig {
 				enabled_at_start: false,
 				..CameraLookConfig::default()
@@ -80,7 +89,13 @@ impl Plugin for CrozonCharacterConceptsPlaygroundPlugin {
 			.add_observer(ui::on_creator_ui_scroll)
 			.add_systems(
 				Startup,
-				(camera::setup_camera, setup_lighting, ground::setup_ground, ui::setup_creator_ui),
+				(
+					camera::setup_camera,
+					setup_lighting,
+					ground::setup_ground,
+					init_character_menu_state,
+					ui::setup_creator_ui,
+				),
 			)
 			.add_systems(
 				Update,
@@ -88,16 +103,20 @@ impl Plugin for CrozonCharacterConceptsPlaygroundPlugin {
 					tick_preview_respawn_cooldown,
 					persist_species_session,
 					ensure_species_camera_focus.after(persist_species_session),
-					ui::react_creator_ui,
-					ui::sync_creator_ui.after(ui::react_creator_ui),
+					sync_menu_state_from_config,
+					dispatch_menu_interactions,
+					on_character_menu_event.after(dispatch_menu_interactions),
+					ui::sync_creator_ui.after(dispatch_menu_interactions),
 					ui::refresh_creator_ui_display.after(ui::sync_creator_ui),
 					camera::camera_controller,
 					ui::send_creator_ui_scroll_events,
 					sync_preview
 						.after(capture_command_line_input::<ConceptsCommand>)
-						.after(ui::react_creator_ui),
+						.after(on_character_menu_event),
 					sync_focus_reference.after(sync_preview),
-					animate_focused_preview_asset.after(ui::react_creator_ui).before(sync_preview),
+					animate_focused_preview_asset
+						.after(dispatch_menu_interactions)
+						.before(sync_preview),
 					build_rig_bone_map.after(sync_focus_reference),
 					maintain_resolved_pose.after(build_rig_bone_map),
 				),
@@ -139,7 +158,7 @@ impl Plugin for CrozonCharacterConceptsPlaygroundPlugin {
 					maintain_resolved_pose.before(TransformSystems::Propagate),
 					apply_camera_suggestion
 						.after(TransformSystems::Propagate)
-						.after(ui::react_creator_ui),
+						.after(on_character_menu_event),
 				),
 			);
 	}

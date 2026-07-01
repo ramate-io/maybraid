@@ -1,10 +1,9 @@
-use std::collections::HashMap;
-
+use bevy::asset::RenderAssetUsages;
 use bevy::camera::RenderTarget;
 use bevy::prelude::*;
-use character_ui_menu::ThumbnailCamera;
-
-use crate::ui::thumbnail_image;
+use bevy::render::render_resource::{TextureDimension, TextureFormat, TextureUsages};
+use character_ui_menu::{ThumbnailCamera, ThumbnailRequest};
+use std::collections::HashMap;
 
 const THUMBNAIL_SPACING: f32 = 8.0;
 
@@ -121,4 +120,46 @@ fn color_key(color: Color) -> [u8; 4] {
 		(color.blue * 255.0).round() as u8,
 		(color.alpha * 255.0).round() as u8,
 	]
+}
+
+pub fn prewarm_thumbnail_requests(
+	commands: &mut Commands,
+	images: &mut Assets<Image>,
+	asset_server: &AssetServer,
+	cache: &mut ThumbnailCache,
+	requests: &[ThumbnailRequest],
+) {
+	for request in requests {
+		if request.path.is_empty() {
+			continue;
+		}
+		let color = Color::srgba(
+			request.color[0] as f32 / 255.0,
+			request.color[1] as f32 / 255.0,
+			request.color[2] as f32 / 255.0,
+			request.color[3] as f32 / 255.0,
+		);
+		let _ = image_for_asset(
+			commands,
+			images,
+			asset_server,
+			cache,
+			"prewarm",
+			request.path,
+			color,
+			request.camera,
+		);
+	}
+}
+
+pub fn thumbnail_image() -> Image {
+	let mut image = Image::new_uninit(
+		default(),
+		TextureDimension::D2,
+		TextureFormat::Bgra8UnormSrgb,
+		RenderAssetUsages::all(),
+	);
+	image.texture_descriptor.usage =
+		TextureUsages::TEXTURE_BINDING | TextureUsages::COPY_DST | TextureUsages::RENDER_ATTACHMENT;
+	image
 }

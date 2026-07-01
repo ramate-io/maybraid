@@ -105,6 +105,24 @@ pub enum SwatchValue {
 	BrodlerHorn(BrodlerHornColor),
 }
 
+impl SwatchValue {
+	pub fn with_braidman(self, color: BraidmanColor) -> Self {
+		Self::Braidman(color)
+	}
+
+	pub fn with_brodler_skin(self, color: BrodlerSkinColor) -> Self {
+		Self::BrodlerSkin(color)
+	}
+
+	pub fn with_brodler_eye(self, color: BrodlerEyeColor) -> Self {
+		Self::BrodlerEye(color)
+	}
+
+	pub fn with_brodler_horn(self, color: BrodlerHornColor) -> Self {
+		Self::BrodlerHorn(color)
+	}
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum MenuEvent {
 	ToggleSection(SectionId),

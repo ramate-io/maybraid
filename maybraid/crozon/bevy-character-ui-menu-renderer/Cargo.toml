@@ -12,7 +12,6 @@ rust-version = { workspace = true }
 [dependencies]
 bevy = { workspace = true }
 character-ui-menu = { workspace = true }
-crozon-character-ui-menus = { workspace = true }
 
 [lints]
 workspace = true
