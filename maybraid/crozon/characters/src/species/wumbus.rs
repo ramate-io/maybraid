@@ -165,6 +165,34 @@ impl WumbusHornColor {
 	}
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, ValueEnum)]
+pub enum WumbusSpineColor {
+	#[default]
+	Ivory,
+	Wheat,
+	PaleGold,
+}
+
+impl WumbusSpineColor {
+	pub const VALUES: &'static [Self] = &[Self::Ivory, Self::Wheat, Self::PaleGold];
+
+	pub const fn label(self) -> &'static str {
+		match self {
+			Self::Ivory => "ivory",
+			Self::Wheat => "wheat",
+			Self::PaleGold => "pale-gold",
+		}
+	}
+
+	pub fn color(self) -> bevy::prelude::Color {
+		match self {
+			Self::Ivory => bevy::prelude::Color::srgb(0.88, 0.84, 0.74),
+			Self::Wheat => bevy::prelude::Color::srgb(0.82, 0.74, 0.56),
+			Self::PaleGold => bevy::prelude::Color::srgb(0.90, 0.82, 0.62),
+		}
+	}
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WumbusColors {
 	pub skin: WumbusSkinColor,
@@ -172,6 +200,7 @@ pub struct WumbusColors {
 	pub ears: WumbusEarColor,
 	pub mouth: WumbusMouthColor,
 	pub horns: WumbusHornColor,
+	pub spine: WumbusSpineColor,
 	pub hair: BraidmanColor,
 	pub clothing_default: BraidmanColor,
 	pub clothing: Vec<ClothingColor>,
@@ -185,6 +214,7 @@ impl Default for WumbusColors {
 			ears: WumbusEarColor::Cream,
 			mouth: WumbusMouthColor::Blush,
 			horns: WumbusHornColor::Ivory,
+			spine: WumbusSpineColor::Ivory,
 			hair: BraidmanColor::Dark,
 			clothing_default: BraidmanColor::Cool,
 			clothing: Vec::new(),

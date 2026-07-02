@@ -13,7 +13,10 @@ use crate::{
 		mygr::{MygrEyeColor, MygrHeadMesh, MygrMouthMesh, MygrSkinColor},
 		wumbus::{
 			WumbusEarColor, WumbusEyeColor, WumbusHeadMesh, WumbusHornColor, WumbusHornMesh,
-			WumbusMouthColor, WumbusMouthMesh, WumbusSkinColor,
+			WumbusMouthColor, WumbusMouthMesh, WumbusSkinColor, WumbusSpineColor,
+		},
+		lero::{
+			LeroEyeColor, LeroHeadMesh, LeroMouthMesh, LeroSkinColor, LeroSpineColor, LeroTailColor,
 		},
 		dui::{DuiEyeMesh, DuiHeadMesh, DuiMouthMesh, DuiNoseMesh, DuiEyeColor, DuiMouthColor, DuiNoseColor, DuiSkinColor},
 		common::{
@@ -74,6 +77,13 @@ impl_menu_identity!(WumbusEyeColor);
 impl_menu_identity!(WumbusEarColor);
 impl_menu_identity!(WumbusMouthColor);
 impl_menu_identity!(WumbusHornColor);
+impl_menu_identity!(WumbusSpineColor);
+impl_menu_identity!(LeroHeadMesh);
+impl_menu_identity!(LeroMouthMesh);
+impl_menu_identity!(LeroSkinColor);
+impl_menu_identity!(LeroEyeColor);
+impl_menu_identity!(LeroTailColor);
+impl_menu_identity!(LeroSpineColor);
 impl_menu_identity!(DuiHeadMesh);
 impl_menu_identity!(DuiEyeMesh);
 impl_menu_identity!(DuiNoseMesh);
@@ -121,6 +131,8 @@ impl_asset_option!(MygrHeadMesh, HEAD_THUMBNAIL_CAMERA);
 impl_asset_option!(MygrMouthMesh, FACE_FEATURE_THUMBNAIL_CAMERA);
 impl_asset_option!(WumbusHeadMesh, HEAD_THUMBNAIL_CAMERA);
 impl_asset_option!(WumbusMouthMesh, FACE_FEATURE_THUMBNAIL_CAMERA);
+impl_asset_option!(LeroHeadMesh, HEAD_THUMBNAIL_CAMERA);
+impl_asset_option!(LeroMouthMesh, FACE_FEATURE_THUMBNAIL_CAMERA);
 impl_asset_option!(DuiHeadMesh, HEAD_THUMBNAIL_CAMERA);
 impl_asset_option!(DuiEyeMesh, FACE_FEATURE_THUMBNAIL_CAMERA);
 impl_asset_option!(DuiMouthMesh, FACE_FEATURE_THUMBNAIL_CAMERA);
@@ -315,6 +327,61 @@ impl SwatchOption for WumbusHornColor {
 			Self::Ivory => "#E0D6BD",
 			Self::Wheat => "#D1BD8F",
 			Self::PaleGold => "#E5D19E",
+		}
+	}
+}
+
+impl SwatchOption for WumbusSpineColor {
+	fn color_hex(&self) -> &'static str {
+		match self {
+			Self::Ivory => "#E0D6BD",
+			Self::Wheat => "#D1BD8F",
+			Self::PaleGold => "#E5D19E",
+		}
+	}
+}
+
+impl SwatchOption for LeroSkinColor {
+	fn color_hex(&self) -> &'static str {
+		match self {
+			Self::FadedGreen => "#849475",
+			Self::MossDrift => "#73856B",
+			Self::DustySage => "#949E85",
+			Self::FadedRed => "#946B66",
+			Self::WeatheredRose => "#9E7A75",
+			Self::ClayRust => "#856157",
+		}
+	}
+}
+
+impl SwatchOption for LeroEyeColor {
+	fn color_hex(&self) -> &'static str {
+		match self {
+			Self::Gold => "#D1B861",
+			Self::Amber => "#C79E47",
+			Self::PaleYellow => "#E0D18C",
+		}
+	}
+}
+
+impl SwatchOption for LeroTailColor {
+	fn color_hex(&self) -> &'static str {
+		match self {
+			Self::Pearl => "#E5E0D1",
+			Self::PaleIvory => "#E0D6C2",
+			Self::Sand => "#D1BD99",
+			Self::PaleMint => "#C7E0D1",
+		}
+	}
+}
+
+impl SwatchOption for LeroSpineColor {
+	fn color_hex(&self) -> &'static str {
+		match self {
+			Self::Pearl => "#E5E0D1",
+			Self::PaleIvory => "#E0D6C2",
+			Self::Sand => "#D1BD99",
+			Self::PaleMint => "#C7E0D1",
 		}
 	}
 }

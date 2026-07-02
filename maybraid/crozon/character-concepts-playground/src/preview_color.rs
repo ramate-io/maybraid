@@ -8,7 +8,9 @@ use crozon_characters::species::{
 	dui::{DuiEyeColor, DuiMouthColor, DuiNoseColor, DuiSkinColor},
 	wumbus::{
 		WumbusEarColor, WumbusEyeColor, WumbusHornColor, WumbusMouthColor, WumbusSkinColor,
+		WumbusSpineColor,
 	},
+	lero::{LeroEyeColor, LeroSkinColor, LeroSpineColor, LeroTailColor},
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -28,6 +30,11 @@ pub enum PreviewColor {
 	WumbusEar(WumbusEarColor),
 	WumbusMouth(WumbusMouthColor),
 	WumbusHorn(WumbusHornColor),
+	WumbusSpine(WumbusSpineColor),
+	LeroSkin(LeroSkinColor),
+	LeroEye(LeroEyeColor),
+	LeroTail(LeroTailColor),
+	LeroSpine(LeroSpineColor),
 }
 
 impl PreviewColor {
@@ -48,6 +55,11 @@ impl PreviewColor {
 			Self::WumbusEar(color) => color.color(),
 			Self::WumbusMouth(color) => color.color(),
 			Self::WumbusHorn(color) => color.color(),
+			Self::WumbusSpine(color) => color.color(),
+			Self::LeroSkin(color) => color.color(),
+			Self::LeroEye(color) => color.color(),
+			Self::LeroTail(color) => color.color(),
+			Self::LeroSpine(color) => color.color(),
 		}
 	}
 }

@@ -64,6 +64,19 @@ fn wumbus_config_round_trip() -> anyhow::Result<()> {
 	assert_eq!(config.colors.ears, restored.colors.ears);
 	assert_eq!(config.colors.mouth, restored.colors.mouth);
 	assert_eq!(config.colors.horns, restored.colors.horns);
+	assert_eq!(config.colors.spine, restored.colors.spine);
+	Ok(())
+}
+
+#[test]
+fn lero_config_round_trip() -> anyhow::Result<()> {
+	let config = crozon_characters::species::lero::LeroConfig::default_preview();
+	let menu = crate::characters::lero::LeroMenu::from(&config);
+	let restored = crozon_characters::species::lero::LeroConfig::from(&menu);
+	assert_eq!(config.mouth, restored.mouth);
+	assert_eq!(config.colors.skin, restored.colors.skin);
+	assert_eq!(config.colors.tail, restored.colors.tail);
+	assert_eq!(config.colors.spine, restored.colors.spine);
 	Ok(())
 }
 

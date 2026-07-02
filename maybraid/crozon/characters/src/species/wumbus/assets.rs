@@ -11,13 +11,15 @@ use crate::{
 	assets::{AssetNormalization, AssetPath},
 	species::{
 		common::assets::{
-			BODY_RIG, EAR_FLANK, HEAD_ORTHO_BEAR, HEAD_RIG, HORNS_HARROWED_CROWN, MOUTH_CANINE_SNOUT,
+			BODY_RIG, EAR_FLANK, HEAD_ORTHO_BEAR, HEAD_RIG, HORNS_HARROWED_CROWN,
+			MOUTH_CANINE_SNOUT,
 		},
 		wumbus::{pose::WumbusPose, WumbusConfig},
 	},
 };
 
 const BODY_WUMBUS: AssetPath = AssetPath::new("characters/bodies/wumbus_biped_full_body.glb");
+const SPINE_SNAIL_BACK: AssetPath = AssetPath::new("characters/spines/snail_back_full_exo.glb");
 
 /// Species-local resolver for Wumbus asset choices.
 pub struct WumbusAssets;
@@ -36,7 +38,8 @@ impl WumbusAssets {
 		.with_part(Self::eye_right(config.eye))
 		.with_part(Self::mouth())
 		.with_part(Self::ear_left())
-		.with_part(Self::ear_right());
+		.with_part(Self::ear_right())
+		.with_part(Self::spine());
 
 		let assembly = if config.horns != WumbusHornMesh::None {
 			assembly.with_part(Self::horns(config.horns))
@@ -70,7 +73,7 @@ impl WumbusAssets {
 			Some(SocketAttachment {
 				rig: SocketRig::Body,
 				bone: "upper_neck",
-				local_transform: Transform::IDENTITY,
+				local_transform: Transform::from_translation(Vec3::new(0.0, -0.2, 0.00)),
 			}),
 		)
 	}
@@ -155,6 +158,15 @@ impl WumbusAssets {
 		)
 	}
 
+	fn spine() -> ResolvedCharacterPart {
+		ResolvedCharacterPart::new(
+			CharacterPartSlot::Spine,
+			CharacterAsset::new("snail-back", SPINE_SNAIL_BACK, AssetNormalization::IDENTITY),
+			SkinTarget::BodyRig,
+			Some(Self::body_socket("upper_back", Transform::IDENTITY)),
+		)
+	}
+
 	fn horns(horns: WumbusHornMesh) -> ResolvedCharacterPart {
 		ResolvedCharacterPart::new(
 			CharacterPartSlot::Horns,
@@ -191,6 +203,10 @@ impl WumbusAssets {
 
 	fn head_socket(bone: &'static str, local_transform: Transform) -> SocketAttachment {
 		SocketAttachment { rig: SocketRig::Head, bone, local_transform }
+	}
+
+	fn body_socket(bone: &'static str, local_transform: Transform) -> SocketAttachment {
+		SocketAttachment { rig: SocketRig::Body, bone, local_transform }
 	}
 
 	fn mirror_x() -> Transform {

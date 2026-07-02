@@ -35,6 +35,9 @@ pub fn menu_to_preview_config(menu: &CharacterMenu) -> ConceptPreviewConfig {
 		ConceptSpecies::Wumbus => {
 			ConceptPreviewConfig::wumbus_with_animation(menu.wumbus_config(), menu.animation())
 		}
+		ConceptSpecies::Lero => {
+			ConceptPreviewConfig::lero_with_animation(menu.lero_config(), menu.animation())
+		}
 	}
 }
 
@@ -54,6 +57,9 @@ pub fn menu_from_preview_config(config: &ConceptPreviewConfig) -> CharacterMenu 
 		}
 		ConceptPreviewConfig::Wumbus { config, animation } => {
 			CharacterMenu::from_wumbus(config, *animation)
+		}
+		ConceptPreviewConfig::Lero { config, animation } => {
+			CharacterMenu::from_lero(config, *animation)
 		}
 	}
 }
@@ -82,6 +88,7 @@ fn preview_species(species: ConceptSpecies) -> crate::preview::ConceptSpecies {
 		ConceptSpecies::Mygr => crate::preview::ConceptSpecies::Mygr,
 		ConceptSpecies::Dui => crate::preview::ConceptSpecies::Dui,
 		ConceptSpecies::Wumbus => crate::preview::ConceptSpecies::Wumbus,
+		ConceptSpecies::Lero => crate::preview::ConceptSpecies::Lero,
 	}
 }
 

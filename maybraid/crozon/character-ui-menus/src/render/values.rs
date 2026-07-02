@@ -5,7 +5,10 @@ use crozon_characters::{
 		mygr::{MygrEyeColor, MygrHeadMesh, MygrMouthMesh, MygrSkinColor},
 		wumbus::{
 			WumbusEarColor, WumbusEyeColor, WumbusHeadMesh, WumbusHornColor, WumbusMouthColor,
-			WumbusMouthMesh, WumbusSkinColor,
+			WumbusMouthMesh, WumbusSkinColor, WumbusSpineColor,
+		},
+		lero::{
+			LeroEyeColor, LeroHeadMesh, LeroMouthMesh, LeroSkinColor, LeroSpineColor, LeroTailColor,
 		},
 		dui::{DuiEyeMesh, DuiHeadMesh, DuiMouthMesh, DuiMouthColor, DuiSkinColor},
 		common::{BodyMesh, EarMesh, EyeMesh, HairMesh, HeadMesh, MouthMesh, NoseMesh},
@@ -183,6 +186,48 @@ impl SwatchFieldValue for WumbusMouthColor {
 impl SwatchFieldValue for WumbusHornColor {
 	fn to_swatch_value(value: Self) -> SwatchValue {
 		SwatchValue::WumbusHorn(value)
+	}
+}
+
+impl SwatchFieldValue for WumbusSpineColor {
+	fn to_swatch_value(value: Self) -> SwatchValue {
+		SwatchValue::WumbusSpine(value)
+	}
+}
+
+impl AssetFieldValue for LeroHeadMesh {
+	fn to_asset_value(value: Self) -> AssetValue {
+		AssetValue::LeroHead(value)
+	}
+}
+
+impl AssetFieldValue for LeroMouthMesh {
+	fn to_asset_value(value: Self) -> AssetValue {
+		AssetValue::LeroMouth(value)
+	}
+}
+
+impl SwatchFieldValue for LeroSkinColor {
+	fn to_swatch_value(value: Self) -> SwatchValue {
+		SwatchValue::LeroSkin(value)
+	}
+}
+
+impl SwatchFieldValue for LeroEyeColor {
+	fn to_swatch_value(value: Self) -> SwatchValue {
+		SwatchValue::LeroEye(value)
+	}
+}
+
+impl SwatchFieldValue for LeroTailColor {
+	fn to_swatch_value(value: Self) -> SwatchValue {
+		SwatchValue::LeroTail(value)
+	}
+}
+
+impl SwatchFieldValue for LeroSpineColor {
+	fn to_swatch_value(value: Self) -> SwatchValue {
+		SwatchValue::LeroSpine(value)
 	}
 }
 

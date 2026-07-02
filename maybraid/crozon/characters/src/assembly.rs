@@ -55,6 +55,7 @@ pub enum CharacterPartSlot {
 	Hair,
 	Horns,
 	Clothing,
+	Spine,
 	Tail,
 }
 

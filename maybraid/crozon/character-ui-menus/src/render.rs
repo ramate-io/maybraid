@@ -24,6 +24,7 @@ pub mod brodler;
 pub mod dui;
 pub mod mygr;
 pub mod wumbus;
+pub mod lero;
 mod values;
 
 #[derive(Clone, Copy)]
@@ -62,6 +63,9 @@ impl SectionMenuMap<ConceptSpecies> for CharacterSpeciesMenus<'_> {
 			}
 			ConceptSpecies::Wumbus => {
 				Root::new(self.menu.wumbus.clone()).render_with(renderer, parent, context)
+			}
+			ConceptSpecies::Lero => {
+				Root::new(self.menu.lero.clone()).render_with(renderer, parent, context)
 			}
 		}
 	}

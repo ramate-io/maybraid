@@ -12,6 +12,7 @@ use crozon_characters::{
 		mygr::MygrConfig,
 		dui::{DuiConfig, DuiNoseMesh},
 		wumbus::{WumbusConfig, WumbusHornMesh},
+		lero::{LeroConfig, LeroMouthMesh},
 		common::{
 			BodyMesh, ClothingMesh, EarMesh, EyeMesh, HairMesh, HeadMesh, MouthMesh, NoseMesh,
 		},
@@ -36,6 +37,7 @@ pub enum ConceptSpecies {
 	Mygr,
 	Dui,
 	Wumbus,
+	Lero,
 }
 
 #[derive(Resource, Debug, Clone, PartialEq)]
@@ -45,6 +47,7 @@ pub enum ConceptPreviewConfig {
 	Mygr { config: MygrConfig, animation: ConceptAnimation },
 	Dui { config: DuiConfig, animation: ConceptAnimation },
 	Wumbus { config: WumbusConfig, animation: ConceptAnimation },
+	Lero { config: LeroConfig, animation: ConceptAnimation },
 }
 
 impl Default for ConceptPreviewConfig {
@@ -61,6 +64,7 @@ impl ConceptPreviewConfig {
 			ConceptSpecies::Mygr => Self::mygr(MygrConfig::default_preview()),
 			ConceptSpecies::Dui => Self::dui(DuiConfig::default_preview()),
 			ConceptSpecies::Wumbus => Self::wumbus(WumbusConfig::default_preview()),
+			ConceptSpecies::Lero => Self::lero(LeroConfig::default_preview()),
 		}
 	}
 
@@ -71,6 +75,7 @@ impl ConceptPreviewConfig {
 			Self::Mygr { .. } => ConceptSpecies::Mygr,
 			Self::Dui { .. } => ConceptSpecies::Dui,
 			Self::Wumbus { .. } => ConceptSpecies::Wumbus,
+			Self::Lero { .. } => ConceptSpecies::Lero,
 		}
 	}
 
@@ -114,6 +119,14 @@ impl ConceptPreviewConfig {
 		Self::Wumbus { config, animation }
 	}
 
+	pub fn lero(config: LeroConfig) -> Self {
+		Self::Lero { config, animation: ConceptAnimation::default() }
+	}
+
+	pub fn lero_with_animation(config: LeroConfig, animation: ConceptAnimation) -> Self {
+		Self::Lero { config, animation }
+	}
+
 	pub fn resolve(&self) -> ResolvedCharacterAssembly {
 		match self {
 			Self::Braidman { config, .. } => config.resolve(),
@@ -121,6 +134,7 @@ impl ConceptPreviewConfig {
 			Self::Mygr { config, .. } => config.resolve(),
 			Self::Dui { config, .. } => config.resolve(),
 			Self::Wumbus { config, .. } => config.resolve(),
+			Self::Lero { config, .. } => config.resolve(),
 		}
 	}
 
@@ -139,6 +153,9 @@ impl ConceptPreviewConfig {
 				format!("{} animation={}", config.status_label(), animation.label())
 			}
 			Self::Wumbus { config, animation } => {
+				format!("{} animation={}", config.status_label(), animation.label())
+			}
+			Self::Lero { config, animation } => {
 				format!("{} animation={}", config.status_label(), animation.label())
 			}
 		}
@@ -160,6 +177,9 @@ impl ConceptPreviewConfig {
 			}
 			Self::Wumbus { config, animation } => {
 				format!("species=wumbus {} animation={animation:?}", config.sync_key())
+			}
+			Self::Lero { config, animation } => {
+				format!("species=lero {} animation={animation:?}", config.sync_key())
 			}
 		}
 	}
@@ -207,6 +227,12 @@ impl ConceptPreviewConfig {
 				config.hair,
 				config.clothing,
 			),
+			Self::Lero { config, .. } => format!(
+				"species=lero mouth={:?} hair={:?} clothing={:?}",
+				config.mouth,
+				config.hair,
+				config.clothing,
+			),
 		}
 	}
 
@@ -216,7 +242,8 @@ impl ConceptPreviewConfig {
 			| Self::Brodler { animation, .. }
 			| Self::Mygr { animation, .. }
 			| Self::Dui { animation, .. }
-			| Self::Wumbus { animation, .. } => *animation,
+			| Self::Wumbus { animation, .. }
+			| Self::Lero { animation, .. } => *animation,
 		}
 	}
 }
@@ -313,11 +340,20 @@ pub enum PreviewTarget {
 	WumbusBody,
 	WumbusHead,
 	WumbusHorns(WumbusHornMesh),
+	WumbusSpine,
 	WumbusEye(EyeMesh),
 	WumbusMouth,
 	WumbusEar,
 	WumbusHair(HairMesh),
 	WumbusClothing(ClothingMesh),
+	LeroBody,
+	LeroHead,
+	LeroEye,
+	LeroMouth(LeroMouthMesh),
+	LeroTail,
+	LeroSpine,
+	LeroHair(HairMesh),
+	LeroClothing(ClothingMesh),
 }
 
 pub fn sync_preview(
@@ -418,6 +454,11 @@ fn sync_live_preview(
 		ConceptPreviewConfig::Wumbus { config: wumbus, .. } => {
 			for (_, mut target, ..) in parts {
 				target.color = preview_color_wumbus(wumbus, target.target);
+			}
+		}
+		ConceptPreviewConfig::Lero { config: lero, .. } => {
+			for (_, mut target, ..) in parts {
+				target.color = preview_color_lero(lero, target.target);
 			}
 		}
 	}
@@ -542,6 +583,7 @@ fn preview_color_wumbus(config: &WumbusConfig, target: PreviewTarget) -> Preview
 			PreviewColor::WumbusSkin(config.colors.skin)
 		}
 		PreviewTarget::WumbusHorns(_) => PreviewColor::WumbusHorn(config.colors.horns),
+		PreviewTarget::WumbusSpine => PreviewColor::WumbusSpine(config.colors.spine),
 		PreviewTarget::WumbusEye(_) => PreviewColor::WumbusEye(config.colors.eyes),
 		PreviewTarget::WumbusEar => PreviewColor::WumbusEar(config.colors.ears),
 		PreviewTarget::WumbusMouth => PreviewColor::WumbusMouth(config.colors.mouth),
@@ -550,6 +592,22 @@ fn preview_color_wumbus(config: &WumbusConfig, target: PreviewTarget) -> Preview
 			PreviewColor::Braidman(config.colors.clothing_color(clothing))
 		}
 		_ => PreviewColor::WumbusSkin(config.colors.skin),
+	}
+}
+
+fn preview_color_lero(config: &LeroConfig, target: PreviewTarget) -> PreviewColor {
+	match target {
+		PreviewTarget::LeroHead | PreviewTarget::LeroBody | PreviewTarget::LeroMouth(_) => {
+			PreviewColor::LeroSkin(config.colors.skin)
+		}
+		PreviewTarget::LeroEye => PreviewColor::LeroEye(config.colors.eyes),
+		PreviewTarget::LeroTail => PreviewColor::LeroTail(config.colors.tail),
+		PreviewTarget::LeroSpine => PreviewColor::LeroSpine(config.colors.spine),
+		PreviewTarget::LeroHair(_) => PreviewColor::Braidman(config.colors.hair),
+		PreviewTarget::LeroClothing(clothing) => {
+			PreviewColor::Braidman(config.colors.clothing_color(clothing))
+		}
+		_ => PreviewColor::LeroSkin(config.colors.skin),
 	}
 }
 
@@ -597,6 +655,7 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 			ConceptPreviewConfig::Mygr { .. } => part.asset.normalization.transform(),
 			ConceptPreviewConfig::Dui { .. } => part.asset.normalization.transform(),
 			ConceptPreviewConfig::Wumbus { .. } => part.asset.normalization.transform(),
+			ConceptPreviewConfig::Lero { .. } => part.asset.normalization.transform(),
 		}
 	}
 
@@ -750,6 +809,7 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 						.map(PreviewTarget::BraidmanClothing)
 						.unwrap_or(PreviewTarget::BraidmanHead(config.head)),
 					CharacterPartSlot::Tail => PreviewTarget::BraidmanBody(config.body),
+					CharacterPartSlot::Spine => PreviewTarget::BraidmanBody(config.body),
 				};
 				PreviewAssetTarget { target, color: preview_color_braidman(config, target) }
 			}
@@ -777,6 +837,7 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 						.map(PreviewTarget::BrodlerClothing)
 						.unwrap_or(PreviewTarget::BrodlerHead(config.head)),
 					CharacterPartSlot::Tail => PreviewTarget::BrodlerBody,
+					CharacterPartSlot::Spine => PreviewTarget::BrodlerBody,
 				};
 				PreviewAssetTarget { target, color: preview_color_brodler(config, target) }
 			}
@@ -799,6 +860,7 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 						.find(|clothing| clothing.label() == part.asset.label)
 						.map(PreviewTarget::MygrClothing)
 						.unwrap_or(PreviewTarget::MygrHead),
+					CharacterPartSlot::Spine => PreviewTarget::MygrBody,
 				};
 				PreviewAssetTarget { target, color: preview_color_mygr(config, target) }
 			}
@@ -812,7 +874,8 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 					CharacterPartSlot::EarLeft
 					| CharacterPartSlot::EarRight
 					| CharacterPartSlot::Horns
-					| CharacterPartSlot::Tail => PreviewTarget::DuiHead,
+					| CharacterPartSlot::Tail
+					| CharacterPartSlot::Spine => PreviewTarget::DuiHead,
 					CharacterPartSlot::Hair => PreviewTarget::DuiHair(config.hair),
 					CharacterPartSlot::Clothing => config
 						.clothing
@@ -834,6 +897,7 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 					CharacterPartSlot::Mouth => PreviewTarget::WumbusMouth,
 					CharacterPartSlot::EarLeft | CharacterPartSlot::EarRight => PreviewTarget::WumbusEar,
 					CharacterPartSlot::Horns => PreviewTarget::WumbusHorns(config.horns),
+					CharacterPartSlot::Spine => PreviewTarget::WumbusSpine,
 					CharacterPartSlot::Nose | CharacterPartSlot::Tail => PreviewTarget::WumbusHead,
 					CharacterPartSlot::Hair => PreviewTarget::WumbusHair(config.hair),
 					CharacterPartSlot::Clothing => config
@@ -845,6 +909,29 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 						.unwrap_or(PreviewTarget::WumbusHead),
 				};
 				PreviewAssetTarget { target, color: preview_color_wumbus(config, target) }
+			}
+			ConceptPreviewConfig::Lero { config, .. } => {
+				let target = match part.slot {
+					CharacterPartSlot::BodyMesh => PreviewTarget::LeroBody,
+					CharacterPartSlot::HeadRig | CharacterPartSlot::HeadMesh => PreviewTarget::LeroHead,
+					CharacterPartSlot::EyeLeft | CharacterPartSlot::EyeRight => PreviewTarget::LeroEye,
+					CharacterPartSlot::Mouth => PreviewTarget::LeroMouth(config.mouth),
+					CharacterPartSlot::Tail => PreviewTarget::LeroTail,
+					CharacterPartSlot::Spine => PreviewTarget::LeroSpine,
+					CharacterPartSlot::Nose
+					| CharacterPartSlot::EarLeft
+					| CharacterPartSlot::EarRight
+					| CharacterPartSlot::Horns => PreviewTarget::LeroHead,
+					CharacterPartSlot::Hair => PreviewTarget::LeroHair(config.hair),
+					CharacterPartSlot::Clothing => config
+						.clothing
+						.iter()
+						.copied()
+						.find(|clothing| clothing.label() == part.asset.label)
+						.map(PreviewTarget::LeroClothing)
+						.unwrap_or(PreviewTarget::LeroHead),
+				};
+				PreviewAssetTarget { target, color: preview_color_lero(config, target) }
 			}
 		}
 	}

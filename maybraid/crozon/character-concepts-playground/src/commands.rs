@@ -5,11 +5,13 @@ pub mod brodler;
 pub mod dui;
 pub mod mygr;
 pub mod wumbus;
+pub mod lero;
 
 use bevy::prelude::*;
 pub use braidman::Braidman;
 pub use brodler::Brodler;
 pub use dui::Dui;
+pub use lero::Lero;
 pub use mygr::Mygr;
 pub use wumbus::Wumbus;
 use clap::Parser;
@@ -46,6 +48,9 @@ pub enum ConceptsCommand {
 	/// Spawn or adjust the Wumbus concept preview.
 	#[command(subcommand)]
 	Wumbus(Wumbus),
+	/// Spawn or adjust the Lero concept preview.
+	#[command(subcommand)]
+	Lero(Lero),
 	/// Print the live rig bone hierarchy to the HUD console.
 	DumpBones,
 }
@@ -68,6 +73,7 @@ impl ConceptsCommand {
 			Self::Mygr(mygr) => mygr.react(commands),
 			Self::Dui(dui) => dui.react(commands),
 			Self::Wumbus(wumbus) => wumbus.react(commands),
+			Self::Lero(lero) => lero.react(commands),
 			Self::DumpBones => request_dump_bones(commands),
 		}
 	}

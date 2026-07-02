@@ -1,11 +1,11 @@
 use character_ui_menu::{CameraFocus, LabelOption, ListValues, Section, SingleSelect};
 use crozon_characters::{
-	species::{braidman::BraidmanConfig, brodler::BrodlerConfig, dui::DuiConfig, mygr::MygrConfig, wumbus::WumbusConfig},
+	species::{braidman::BraidmanConfig, brodler::BrodlerConfig, dui::DuiConfig, lero::LeroConfig, mygr::MygrConfig, wumbus::WumbusConfig},
 	ConceptAnimation,
 };
 
 use crate::{
-	characters::{braidman::BraidmanMenu, brodler::BrodlerMenu, dui::DuiMenu, mygr::MygrMenu, wumbus::WumbusMenu},
+	characters::{braidman::BraidmanMenu, brodler::BrodlerMenu, dui::DuiMenu, lero::LeroMenu, mygr::MygrMenu, wumbus::WumbusMenu},
 	cycle_value,
 	event::{AssetValue, CharacterField, MenuEvent, SectionId, SwatchValue},
 };
@@ -17,6 +17,7 @@ pub enum ConceptSpecies {
 	Mygr,
 	Dui,
 	Wumbus,
+	Lero,
 }
 
 impl ConceptSpecies {
@@ -27,13 +28,14 @@ impl ConceptSpecies {
 			Self::Mygr => "mygr",
 			Self::Dui => "dui",
 			Self::Wumbus => "wumbus",
+			Self::Lero => "lero",
 		}
 	}
 }
 
 impl ListValues for ConceptSpecies {
 	fn values() -> &'static [Self] {
-		&[Self::Braidman, Self::Brodler, Self::Mygr, Self::Dui, Self::Wumbus]
+		&[Self::Braidman, Self::Brodler, Self::Mygr, Self::Dui, Self::Wumbus, Self::Lero]
 	}
 }
 
@@ -45,6 +47,7 @@ impl LabelOption for ConceptSpecies {
 			Self::Mygr => "mygr",
 			Self::Dui => "dui",
 			Self::Wumbus => "wumbus",
+			Self::Lero => "lero",
 		}
 	}
 }
@@ -56,6 +59,7 @@ pub enum SpeciesMenu {
 	Mygr(Section<MygrMenu>),
 	Dui(Section<DuiMenu>),
 	Wumbus(Section<WumbusMenu>),
+	Lero(Section<LeroMenu>),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -66,6 +70,7 @@ pub struct CharacterMenu {
 	pub mygr: MygrMenu,
 	pub dui: DuiMenu,
 	pub wumbus: WumbusMenu,
+	pub lero: LeroMenu,
 }
 
 impl CharacterMenu {
@@ -77,6 +82,7 @@ impl CharacterMenu {
 			mygr: MygrMenu::default(),
 			dui: DuiMenu::default(),
 			wumbus: WumbusMenu::default(),
+			lero: LeroMenu::default(),
 		}
 	}
 
@@ -88,6 +94,7 @@ impl CharacterMenu {
 			mygr: MygrMenu::default(),
 			dui: DuiMenu::default(),
 			wumbus: WumbusMenu::default(),
+			lero: LeroMenu::default(),
 		}
 	}
 
@@ -99,6 +106,7 @@ impl CharacterMenu {
 			mygr: MygrMenu::from(config).with_animation(animation),
 			dui: DuiMenu::default(),
 			wumbus: WumbusMenu::default(),
+			lero: LeroMenu::default(),
 		}
 	}
 
@@ -110,6 +118,7 @@ impl CharacterMenu {
 			mygr: MygrMenu::default(),
 			dui: DuiMenu::from(config).with_animation(animation),
 			wumbus: WumbusMenu::default(),
+			lero: LeroMenu::default(),
 		}
 	}
 
@@ -121,6 +130,19 @@ impl CharacterMenu {
 			mygr: MygrMenu::default(),
 			dui: DuiMenu::default(),
 			wumbus: WumbusMenu::from(config).with_animation(animation),
+			lero: LeroMenu::default(),
+		}
+	}
+
+	pub fn from_lero(config: &LeroConfig, animation: ConceptAnimation) -> Self {
+		Self {
+			species: SingleSelect::new(ConceptSpecies::Lero),
+			braidman: BraidmanMenu::default(),
+			brodler: BrodlerMenu::default(),
+			mygr: MygrMenu::default(),
+			dui: DuiMenu::default(),
+			wumbus: WumbusMenu::default(),
+			lero: LeroMenu::from(config).with_animation(animation),
 		}
 	}
 
@@ -137,6 +159,7 @@ impl CharacterMenu {
 			ConceptSpecies::Wumbus => {
 				SpeciesMenu::Wumbus(Section::new("Wumbus", self.wumbus.clone()))
 			}
+			ConceptSpecies::Lero => SpeciesMenu::Lero(Section::new("Lero", self.lero.clone())),
 		}
 	}
 
@@ -147,6 +170,7 @@ impl CharacterMenu {
 			ConceptSpecies::Mygr => self.mygr.animation(),
 			ConceptSpecies::Dui => self.dui.animation(),
 			ConceptSpecies::Wumbus => self.wumbus.animation(),
+			ConceptSpecies::Lero => self.lero.animation(),
 		}
 	}
 
@@ -170,6 +194,10 @@ impl CharacterMenu {
 		WumbusConfig::from(&self.wumbus)
 	}
 
+	pub fn lero_config(&self) -> LeroConfig {
+		LeroConfig::from(&self.lero)
+	}
+
 	pub fn apply(&mut self, event: MenuEvent) -> bool {
 		match event {
 			MenuEvent::SetSpecies(species) => {
@@ -188,6 +216,7 @@ impl CharacterMenu {
 			ConceptSpecies::Mygr => self.apply_mygr(event),
 			ConceptSpecies::Dui => self.apply_dui(event),
 			ConceptSpecies::Wumbus => self.apply_wumbus(event),
+			ConceptSpecies::Lero => self.apply_lero(event),
 		}
 	}
 
@@ -203,6 +232,7 @@ impl CharacterMenu {
 			ConceptSpecies::Mygr => self.mygr.camera_focus_for_field(field),
 			ConceptSpecies::Dui => self.dui.camera_focus_for_field(field),
 			ConceptSpecies::Wumbus => self.wumbus.camera_focus_for_field(field),
+			ConceptSpecies::Lero => self.lero.camera_focus_for_field(field),
 		}
 	}
 
@@ -532,6 +562,68 @@ impl CharacterMenu {
 				}
 				(CharacterField::WumbusHornColor, SwatchValue::WumbusHorn(color)) => {
 					menu.head.value.horn_color.value = color;
+					true
+				}
+				(CharacterField::WumbusSpineColor, SwatchValue::WumbusSpine(color)) => {
+					menu.head.value.spine_color.value = color;
+					true
+				}
+				(CharacterField::HairColor, SwatchValue::Braidman(color)) => {
+					menu.hair.value.color.value = color;
+					true
+				}
+				(CharacterField::Clothing(clothing), SwatchValue::Braidman(color)) => {
+					menu.set_clothing_color(clothing, color);
+					true
+				}
+				_ => false,
+			},
+			MenuEvent::Cycle(_, _) | MenuEvent::SliderDelta(_, _) => false,
+		}
+	}
+
+	fn apply_lero(&mut self, event: MenuEvent) -> bool {
+		let menu = &mut self.lero;
+		match event {
+			MenuEvent::ToggleSection(_) | MenuEvent::SetSpecies(_) => false,
+			MenuEvent::SetAsset(field, value) => match (field, value) {
+				(CharacterField::LeroHead, AssetValue::LeroHead(value)) => {
+					menu.head.value.head.value = value;
+					true
+				}
+				(CharacterField::LeroMouth, AssetValue::LeroMouth(value)) => {
+					menu.head_features.value.snout.value = value;
+					true
+				}
+				(CharacterField::Hair, AssetValue::Hair(value)) => {
+					menu.hair.value.style.value = value;
+					true
+				}
+				(CharacterField::Animation, AssetValue::Animation(value)) => {
+					menu.animation.value.clip.value = value;
+					true
+				}
+				_ => false,
+			},
+			MenuEvent::ToggleClothing(clothing) => {
+				menu.clothing.value.layers.toggle(clothing);
+				true
+			}
+			MenuEvent::SetSwatch(field, value) => match (field, value) {
+				(CharacterField::LeroSkinColor, SwatchValue::LeroSkin(color)) => {
+					menu.head.value.skin.value = color;
+					true
+				}
+				(CharacterField::LeroEyeColor, SwatchValue::LeroEye(color)) => {
+					menu.head_features.value.eye_color.value = color;
+					true
+				}
+				(CharacterField::LeroTailColor, SwatchValue::LeroTail(color)) => {
+					menu.body.value.tail_color.value = color;
+					true
+				}
+				(CharacterField::LeroSpineColor, SwatchValue::LeroSpine(color)) => {
+					menu.body.value.spine_color.value = color;
 					true
 				}
 				(CharacterField::HairColor, SwatchValue::Braidman(color)) => {

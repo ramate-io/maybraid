@@ -9,6 +9,7 @@ pub mod common;
 pub mod dui;
 pub mod mygr;
 pub mod wumbus;
+pub mod lero;
 
 use crate::ResolvedCharacterAssembly;
 

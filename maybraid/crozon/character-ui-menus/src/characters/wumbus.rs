@@ -5,7 +5,7 @@ use crozon_characters::{
 		common::{ClothingMesh, EyeMesh, HairMesh},
 		wumbus::{
 			WumbusEarColor, WumbusEyeColor, WumbusHeadMesh, WumbusHornColor, WumbusHornMesh,
-			WumbusMouthColor, WumbusMouthMesh, WumbusSkinColor,
+			WumbusMouthColor, WumbusMouthMesh, WumbusSkinColor, WumbusSpineColor,
 		},
 	},
 	ConceptAnimation,
@@ -23,6 +23,7 @@ pub struct WumbusHeadMenu {
 	pub skin: SwatchSingleSelect<WumbusSkinColor>,
 	pub horns: SingleSelect<WumbusHornMesh>,
 	pub horn_color: SwatchSingleSelect<WumbusHornColor>,
+	pub spine_color: SwatchSingleSelect<WumbusSpineColor>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -67,6 +68,7 @@ impl From<&crozon_characters::species::wumbus::WumbusConfig> for WumbusMenu {
 					skin: SwatchSingleSelect::new(config.colors.skin),
 					horns: SingleSelect::new(config.horns).with_camera_focus(CROWN_FOCUS),
 					horn_color: SwatchSingleSelect::new(config.colors.horns),
+					spine_color: SwatchSingleSelect::new(config.colors.spine),
 				},
 			),
 			head_features: Section::new(
@@ -120,6 +122,7 @@ impl From<&WumbusMenu> for crozon_characters::species::wumbus::WumbusConfig {
 				ears: menu.head_features.value.ear_color.value,
 				mouth: menu.head_features.value.mouth_color.value,
 				horns: menu.head.value.horn_color.value,
+				spine: menu.head.value.spine_color.value,
 				hair: menu.hair.value.color.value,
 				clothing_default: menu.clothing.value.default_color.value,
 				clothing: menu.clothing.value.item_colors.clone(),

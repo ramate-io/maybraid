@@ -7,10 +7,13 @@ use crozon_characters::{
 		},
 		mygr::{MygrEyeColor, MygrHeadMesh, MygrMouthMesh, MygrSkinColor},
 		wumbus::{
-			WumbusEarColor, WumbusEyeColor, WumbusHeadMesh, WumbusHornColor,
-			WumbusMouthColor, WumbusMouthMesh, WumbusSkinColor,
+            WumbusEarColor, WumbusEyeColor, WumbusHeadMesh, WumbusHornColor,
+			WumbusMouthColor, WumbusMouthMesh, WumbusSkinColor, WumbusSpineColor,
 		},
 		dui::{DuiEyeMesh, DuiHeadMesh, DuiMouthMesh, DuiMouthColor, DuiSkinColor},
+		lero::{
+			LeroEyeColor, LeroHeadMesh, LeroMouthMesh, LeroSkinColor, LeroSpineColor, LeroTailColor,
+		},
 		common::{
 			BodyMesh, ClothingMesh, EarMesh, EyeMesh, HairMesh, HeadMesh, MouthMesh, NoseMesh,
 		},
@@ -80,8 +83,15 @@ pub enum CharacterField {
 	WumbusEarColor,
 	WumbusMouthColor,
 	WumbusHornColor,
+	WumbusSpineColor,
 	DuiSkinColor,
 	DuiMouthColor,
+	LeroHead,
+	LeroMouth,
+	LeroSkinColor,
+	LeroEyeColor,
+	LeroTailColor,
+	LeroSpineColor,
 	Clothing(ClothingMesh),
 	ShoulderWidth,
 	HipWidth,
@@ -117,6 +127,8 @@ pub enum AssetValue {
 	MygrMouth(MygrMouthMesh),
 	WumbusHead(WumbusHeadMesh),
 	WumbusMouth(WumbusMouthMesh),
+	LeroHead(LeroHeadMesh),
+	LeroMouth(LeroMouthMesh),
 	DuiHead(DuiHeadMesh),
 	DuiEye(DuiEyeMesh),
 	DuiMouth(DuiMouthMesh),
@@ -141,8 +153,13 @@ pub enum SwatchValue {
 	WumbusEar(WumbusEarColor),
 	WumbusMouth(WumbusMouthColor),
 	WumbusHorn(WumbusHornColor),
+	WumbusSpine(WumbusSpineColor),
 	DuiSkin(DuiSkinColor),
 	DuiMouth(DuiMouthColor),
+	LeroSkin(LeroSkinColor),
+	LeroEye(LeroEyeColor),
+	LeroTail(LeroTailColor),
+	LeroSpine(LeroSpineColor),
 }
 
 impl SwatchValue {
@@ -196,6 +213,26 @@ impl SwatchValue {
 
 	pub fn with_wumbus_horn(self, color: WumbusHornColor) -> Self {
 		Self::WumbusHorn(color)
+	}
+
+	pub fn with_wumbus_spine(self, color: WumbusSpineColor) -> Self {
+		Self::WumbusSpine(color)
+	}
+
+	pub fn with_lero_skin(self, color: LeroSkinColor) -> Self {
+		Self::LeroSkin(color)
+	}
+
+	pub fn with_lero_eye(self, color: LeroEyeColor) -> Self {
+		Self::LeroEye(color)
+	}
+
+	pub fn with_lero_tail(self, color: LeroTailColor) -> Self {
+		Self::LeroTail(color)
+	}
+
+	pub fn with_lero_spine(self, color: LeroSpineColor) -> Self {
+		Self::LeroSpine(color)
 	}
 }
 
