@@ -37,19 +37,19 @@ pub struct PreviewArgs {
 	#[arg(long, value_enum, default_value_t = SpibmomSkinColor::PowderBlue)]
 	pub skin: SpibmomSkinColor,
 
-	#[arg(long, value_enum, default_value_t = SpibmomEyeColor::SoftAmber)]
+	#[arg(long, value_enum, default_value_t = SpibmomEyeColor::Pearl)]
 	pub eyes: SpibmomEyeColor,
 
-	#[arg(long, value_enum, default_value_t = SpibmomEarColor::Cream)]
+	#[arg(long, value_enum, default_value_t = SpibmomEarColor::Umber)]
 	pub ears: SpibmomEarColor,
 
-	#[arg(long, value_enum, default_value_t = SpibmomMouthColor::SoftBlush)]
-	pub snout_color: SpibmomMouthColor,
+	#[arg(long, value_enum, default_value_t = SpibmomMouthColor::Espresso)]
+	pub nose_color: SpibmomMouthColor,
 
-	#[arg(long, value_enum, default_value_t = SpibmomCrownColor::Ivory)]
+	#[arg(long, value_enum, default_value_t = SpibmomCrownColor::Charcoal)]
 	pub crown: SpibmomCrownColor,
 
-	#[arg(long, value_enum, default_value_t = SpibmomSpineColor::Ivory)]
+	#[arg(long, value_enum, default_value_t = SpibmomSpineColor::Charcoal)]
 	pub spine: SpibmomSpineColor,
 }
 
@@ -72,7 +72,7 @@ impl PreviewArgs {
 		colors.skin = self.skin;
 		colors.eyes = self.eyes;
 		colors.ears = self.ears;
-		colors.mouth = self.snout_color;
+		colors.mouth = self.nose_color;
 		colors.crown = self.crown;
 		colors.spine = self.spine;
 		ConceptPreviewConfig::spibmom_with_animation(

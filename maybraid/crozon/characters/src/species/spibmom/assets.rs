@@ -10,7 +10,7 @@ use crate::{
 	},
 	assets::{AssetNormalization, AssetPath},
 	species::{
-		common::assets::{BODY_RIG, EAR_FLANK, HEAD_RIG, HEAD_STANDARD},
+		common::assets::{BODY_RIG, EAR_ROUND, HEAD_RIG, HEAD_STANDARD},
 		spibmom::{pose::SpibmomPose, SpibmomConfig},
 	},
 };
@@ -18,10 +18,10 @@ use crate::{
 const BODY_WUMBUS: AssetPath = AssetPath::new("characters/bodies/wumbus_biped_full_body.glb");
 const SPINE_SNAIL_BACK: AssetPath = AssetPath::new("characters/spines/snail_back_full_exo.glb");
 const HORNS_FINBONE_CROWN: AssetPath = AssetPath::new("characters/horns/finbone_crown.glb");
-const MOUTH_IGNY_SNOUT: AssetPath = AssetPath::new("characters/snouts/igny_snout.glb");
+const NOSE_TRUNKISH: AssetPath = AssetPath::new("characters/noses/trunkish_nose.glb");
 
 const HEAD_RIG_SOCKET_SCALE: f32 = 2.0;
-const EAR_SOCKET_SCALE: f32 = 0.6;
+const EAR_SOCKET_SCALE: f32 = 1.0;
 
 /// Species-local resolver for Spibmom asset choices.
 pub struct SpibmomAssets;
@@ -38,7 +38,7 @@ impl SpibmomAssets {
 		.with_part(Self::head_mesh())
 		.with_part(Self::eye_left(config.eye))
 		.with_part(Self::eye_right(config.eye))
-		.with_part(Self::mouth())
+		.with_part(Self::nose())
 		.with_part(Self::ear_left())
 		.with_part(Self::ear_right())
 		.with_part(Self::horns())
@@ -96,7 +96,7 @@ impl SpibmomAssets {
 			SkinTarget::HeadRig,
 			Some(Self::head_socket(
 				"eye_socket.L",
-				Transform::from_translation(Vec3::new(0.0, -0.05, -0.12)),
+				Transform::from_translation(Vec3::new(0.0, -0.15, -0.12)),
 			)),
 		)
 	}
@@ -108,23 +108,23 @@ impl SpibmomAssets {
 			SkinTarget::HeadRig,
 			Some(Self::head_socket(
 				"eye_socket.R",
-				Self::mirror_x().with_translation(Vec3::new(0.0, -0.05, -0.12)),
+				Self::mirror_x().with_translation(Vec3::new(0.0, -0.15, -0.12)),
 			)),
 		)
 	}
 
-	fn mouth() -> ResolvedCharacterPart {
+	fn nose() -> ResolvedCharacterPart {
 		ResolvedCharacterPart::new(
-			CharacterPartSlot::Mouth,
+			CharacterPartSlot::Nose,
 			CharacterAsset::new(
-				SpibmomMouthMesh::Igny.label(),
-				MOUTH_IGNY_SNOUT,
-				AssetNormalization::centroid(0.4),
+				SpibmomMouthMesh::Trunkish.label(),
+				NOSE_TRUNKISH,
+				AssetNormalization::centroid(0.2),
 			),
 			SkinTarget::HeadRig,
 			Some(Self::head_socket(
-				"mouth_socket",
-				Transform::from_translation(Vec3::new(0.0, 0.0, 0.1)),
+				"nose_socket",
+				Transform::from_translation(Vec3::new(0.0, -0.1, 0.1)),
 			)),
 		)
 	}
@@ -132,7 +132,7 @@ impl SpibmomAssets {
 	fn ear_left() -> ResolvedCharacterPart {
 		ResolvedCharacterPart::new(
 			CharacterPartSlot::EarLeft,
-			CharacterAsset::new("flank", EAR_FLANK, AssetNormalization::centroid(0.4)),
+			CharacterAsset::new("round", EAR_ROUND, AssetNormalization::centroid(0.4)),
 			SkinTarget::HeadRig,
 			Some(Self::head_socket(
 				"ear_socket.L",
@@ -146,7 +146,7 @@ impl SpibmomAssets {
 	fn ear_right() -> ResolvedCharacterPart {
 		ResolvedCharacterPart::new(
 			CharacterPartSlot::EarRight,
-			CharacterAsset::new("flank", EAR_FLANK, AssetNormalization::centroid(0.4)),
+			CharacterAsset::new("round", EAR_ROUND, AssetNormalization::centroid(0.4)),
 			SkinTarget::HeadRig,
 			Some(Self::head_socket(
 				"ear_socket.R",
@@ -164,7 +164,7 @@ impl SpibmomAssets {
 			CharacterAsset::new(
 				SpibmomCrownMesh::Finbone.label(),
 				HORNS_FINBONE_CROWN,
-				AssetNormalization::centroid(0.7),
+				AssetNormalization::centroid(1.2),
 			),
 			SkinTarget::HeadRig,
 			Some(Self::head_socket(
@@ -177,7 +177,7 @@ impl SpibmomAssets {
 	fn spine() -> ResolvedCharacterPart {
 		ResolvedCharacterPart::new(
 			CharacterPartSlot::Spine,
-			CharacterAsset::new("snail-back", SPINE_SNAIL_BACK, AssetNormalization::IDENTITY),
+			CharacterAsset::new("snail-back", SPINE_SNAIL_BACK, AssetNormalization::base_y(1.4)),
 			SkinTarget::BodyRig,
 			Some(Self::body_socket("upper_back", Transform::IDENTITY)),
 		)
@@ -239,18 +239,18 @@ impl SpibmomHeadMesh {
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, ValueEnum)]
 pub enum SpibmomMouthMesh {
 	#[default]
-	Igny,
+	Trunkish,
 }
 
 impl SpibmomMouthMesh {
-	pub const VALUES: &'static [Self] = &[Self::Igny];
+	pub const VALUES: &'static [Self] = &[Self::Trunkish];
 
 	pub const fn label(self) -> &'static str {
-		"igny"
+		"trunkish"
 	}
 
 	pub const fn path(self) -> AssetPath {
-		MOUTH_IGNY_SNOUT
+		NOSE_TRUNKISH
 	}
 }
 

@@ -61,8 +61,8 @@ impl RenderMenu for SpibmomHeadFeaturesMenu {
 		labeled_swatch("Ear Color", CharacterField::SpibmomEarColor, self.ear_color)
 			.render_with(renderer, parent, context);
 		context.preview_color = self.mouth_color.value.color();
-		block_asset("Snout", CharacterField::SpibmomMouth, self.snout).render_with(renderer, parent, context);
-		labeled_swatch("Snout Color", CharacterField::SpibmomMouthColor, self.mouth_color)
+		block_asset("Nose", CharacterField::SpibmomMouth, self.snout).render_with(renderer, parent, context);
+		labeled_swatch("Nose Color", CharacterField::SpibmomMouthColor, self.mouth_color)
 			.render_with(renderer, parent, context);
 	}
 }

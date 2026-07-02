@@ -427,9 +427,9 @@ impl SwatchOption for SpibmomSkinColor {
 impl SwatchOption for SpibmomEyeColor {
 	fn color_hex(&self) -> &'static str {
 		match self {
-			Self::SoftAmber => "#D1B87A",
-			Self::PaleGold => "#E0CC94",
-			Self::WarmBrown => "#9E7A5C",
+			Self::Pearl => "#F5F5F0",
+			Self::Frost => "#F0F5FA",
+			Self::Ivory => "#F5F0E5",
 		}
 	}
 }
@@ -437,9 +437,9 @@ impl SwatchOption for SpibmomEyeColor {
 impl SwatchOption for SpibmomEarColor {
 	fn color_hex(&self) -> &'static str {
 		match self {
-			Self::Cream => "#E5DBC2",
-			Self::Sandy => "#D1BD94",
-			Self::PaleRose => "#E0BCB3",
+			Self::Umber => "#523D2E",
+			Self::Charcoal => "#3D3833",
+			Self::DeepSlate => "#333D47",
 		}
 	}
 }
@@ -447,9 +447,9 @@ impl SwatchOption for SpibmomEarColor {
 impl SwatchOption for SpibmomMouthColor {
 	fn color_hex(&self) -> &'static str {
 		match self {
-			Self::SoftBlush => "#E5C7BC",
-			Self::Buttercream => "#EBDBB3",
-			Self::PaleCoral => "#E0A899",
+			Self::Espresso => "#382924",
+			Self::Charcoal => "#333338",
+			Self::DeepSlate => "#2E3842",
 		}
 	}
 }
@@ -457,9 +457,9 @@ impl SwatchOption for SpibmomMouthColor {
 impl SwatchOption for SpibmomCrownColor {
 	fn color_hex(&self) -> &'static str {
 		match self {
-			Self::Ivory => "#E0D6BD",
-			Self::Wheat => "#D1BD8F",
-			Self::PaleGold => "#E5D19E",
+			Self::Charcoal => "#3D3D42",
+			Self::DeepBronze => "#57422E",
+			Self::DarkUmber => "#4D3829",
 		}
 	}
 }
@@ -467,9 +467,9 @@ impl SwatchOption for SpibmomCrownColor {
 impl SwatchOption for SpibmomSpineColor {
 	fn color_hex(&self) -> &'static str {
 		match self {
-			Self::Ivory => "#E0D6BD",
-			Self::Wheat => "#D1BD8F",
-			Self::PaleGold => "#E5D19E",
+			Self::Charcoal => "#3D3D42",
+			Self::DeepBronze => "#57422E",
+			Self::DarkUmber => "#4D3829",
 		}
 	}
 }

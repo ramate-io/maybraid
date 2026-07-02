@@ -64,27 +64,27 @@ impl SpibmomSkinColor {
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, ValueEnum)]
 pub enum SpibmomEyeColor {
 	#[default]
-	SoftAmber,
-	PaleGold,
-	WarmBrown,
+	Pearl,
+	Frost,
+	Ivory,
 }
 
 impl SpibmomEyeColor {
-	pub const VALUES: &'static [Self] = &[Self::SoftAmber, Self::PaleGold, Self::WarmBrown];
+	pub const VALUES: &'static [Self] = &[Self::Pearl, Self::Frost, Self::Ivory];
 
 	pub const fn label(self) -> &'static str {
 		match self {
-			Self::SoftAmber => "soft-amber",
-			Self::PaleGold => "pale-gold",
-			Self::WarmBrown => "warm-brown",
+			Self::Pearl => "pearl",
+			Self::Frost => "frost",
+			Self::Ivory => "ivory",
 		}
 	}
 
 	pub fn color(self) -> bevy::prelude::Color {
 		match self {
-			Self::SoftAmber => bevy::prelude::Color::srgb(0.82, 0.72, 0.48),
-			Self::PaleGold => bevy::prelude::Color::srgb(0.88, 0.80, 0.58),
-			Self::WarmBrown => bevy::prelude::Color::srgb(0.62, 0.48, 0.36),
+			Self::Pearl => bevy::prelude::Color::srgb(0.96, 0.96, 0.94),
+			Self::Frost => bevy::prelude::Color::srgb(0.94, 0.96, 0.98),
+			Self::Ivory => bevy::prelude::Color::srgb(0.96, 0.94, 0.90),
 		}
 	}
 }
@@ -92,27 +92,27 @@ impl SpibmomEyeColor {
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, ValueEnum)]
 pub enum SpibmomEarColor {
 	#[default]
-	Cream,
-	Sandy,
-	PaleRose,
+	Umber,
+	Charcoal,
+	DeepSlate,
 }
 
 impl SpibmomEarColor {
-	pub const VALUES: &'static [Self] = &[Self::Cream, Self::Sandy, Self::PaleRose];
+	pub const VALUES: &'static [Self] = &[Self::Umber, Self::Charcoal, Self::DeepSlate];
 
 	pub const fn label(self) -> &'static str {
 		match self {
-			Self::Cream => "cream",
-			Self::Sandy => "sandy",
-			Self::PaleRose => "pale-rose",
+			Self::Umber => "umber",
+			Self::Charcoal => "charcoal",
+			Self::DeepSlate => "deep-slate",
 		}
 	}
 
 	pub fn color(self) -> bevy::prelude::Color {
 		match self {
-			Self::Cream => bevy::prelude::Color::srgb(0.90, 0.86, 0.76),
-			Self::Sandy => bevy::prelude::Color::srgb(0.82, 0.74, 0.58),
-			Self::PaleRose => bevy::prelude::Color::srgb(0.88, 0.74, 0.70),
+			Self::Umber => bevy::prelude::Color::srgb(0.32, 0.24, 0.18),
+			Self::Charcoal => bevy::prelude::Color::srgb(0.24, 0.22, 0.20),
+			Self::DeepSlate => bevy::prelude::Color::srgb(0.20, 0.24, 0.28),
 		}
 	}
 }
@@ -120,27 +120,27 @@ impl SpibmomEarColor {
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, ValueEnum)]
 pub enum SpibmomMouthColor {
 	#[default]
-	SoftBlush,
-	Buttercream,
-	PaleCoral,
+	Espresso,
+	Charcoal,
+	DeepSlate,
 }
 
 impl SpibmomMouthColor {
-	pub const VALUES: &'static [Self] = &[Self::SoftBlush, Self::Buttercream, Self::PaleCoral];
+	pub const VALUES: &'static [Self] = &[Self::Espresso, Self::Charcoal, Self::DeepSlate];
 
 	pub const fn label(self) -> &'static str {
 		match self {
-			Self::SoftBlush => "soft-blush",
-			Self::Buttercream => "buttercream",
-			Self::PaleCoral => "pale-coral",
+			Self::Espresso => "espresso",
+			Self::Charcoal => "charcoal",
+			Self::DeepSlate => "deep-slate",
 		}
 	}
 
 	pub fn color(self) -> bevy::prelude::Color {
 		match self {
-			Self::SoftBlush => bevy::prelude::Color::srgb(0.90, 0.78, 0.74),
-			Self::Buttercream => bevy::prelude::Color::srgb(0.92, 0.86, 0.70),
-			Self::PaleCoral => bevy::prelude::Color::srgb(0.88, 0.66, 0.60),
+			Self::Espresso => bevy::prelude::Color::srgb(0.22, 0.16, 0.14),
+			Self::Charcoal => bevy::prelude::Color::srgb(0.20, 0.20, 0.22),
+			Self::DeepSlate => bevy::prelude::Color::srgb(0.18, 0.22, 0.26),
 		}
 	}
 }
@@ -148,27 +148,27 @@ impl SpibmomMouthColor {
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, ValueEnum)]
 pub enum SpibmomCrownColor {
 	#[default]
-	Ivory,
-	Wheat,
-	PaleGold,
+	Charcoal,
+	DeepBronze,
+	DarkUmber,
 }
 
 impl SpibmomCrownColor {
-	pub const VALUES: &'static [Self] = &[Self::Ivory, Self::Wheat, Self::PaleGold];
+	pub const VALUES: &'static [Self] = &[Self::Charcoal, Self::DeepBronze, Self::DarkUmber];
 
 	pub const fn label(self) -> &'static str {
 		match self {
-			Self::Ivory => "ivory",
-			Self::Wheat => "wheat",
-			Self::PaleGold => "pale-gold",
+			Self::Charcoal => "charcoal",
+			Self::DeepBronze => "deep-bronze",
+			Self::DarkUmber => "dark-umber",
 		}
 	}
 
 	pub fn color(self) -> bevy::prelude::Color {
 		match self {
-			Self::Ivory => bevy::prelude::Color::srgb(0.88, 0.84, 0.74),
-			Self::Wheat => bevy::prelude::Color::srgb(0.82, 0.74, 0.56),
-			Self::PaleGold => bevy::prelude::Color::srgb(0.90, 0.82, 0.62),
+			Self::Charcoal => bevy::prelude::Color::srgb(0.24, 0.24, 0.26),
+			Self::DeepBronze => bevy::prelude::Color::srgb(0.34, 0.26, 0.18),
+			Self::DarkUmber => bevy::prelude::Color::srgb(0.30, 0.22, 0.16),
 		}
 	}
 }
@@ -176,27 +176,27 @@ impl SpibmomCrownColor {
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, ValueEnum)]
 pub enum SpibmomSpineColor {
 	#[default]
-	Ivory,
-	Wheat,
-	PaleGold,
+	Charcoal,
+	DeepBronze,
+	DarkUmber,
 }
 
 impl SpibmomSpineColor {
-	pub const VALUES: &'static [Self] = &[Self::Ivory, Self::Wheat, Self::PaleGold];
+	pub const VALUES: &'static [Self] = &[Self::Charcoal, Self::DeepBronze, Self::DarkUmber];
 
 	pub const fn label(self) -> &'static str {
 		match self {
-			Self::Ivory => "ivory",
-			Self::Wheat => "wheat",
-			Self::PaleGold => "pale-gold",
+			Self::Charcoal => "charcoal",
+			Self::DeepBronze => "deep-bronze",
+			Self::DarkUmber => "dark-umber",
 		}
 	}
 
 	pub fn color(self) -> bevy::prelude::Color {
 		match self {
-			Self::Ivory => bevy::prelude::Color::srgb(0.88, 0.84, 0.74),
-			Self::Wheat => bevy::prelude::Color::srgb(0.82, 0.74, 0.56),
-			Self::PaleGold => bevy::prelude::Color::srgb(0.90, 0.82, 0.62),
+			Self::Charcoal => bevy::prelude::Color::srgb(0.24, 0.24, 0.26),
+			Self::DeepBronze => bevy::prelude::Color::srgb(0.34, 0.26, 0.18),
+			Self::DarkUmber => bevy::prelude::Color::srgb(0.30, 0.22, 0.16),
 		}
 	}
 }
@@ -218,11 +218,11 @@ impl Default for SpibmomColors {
 	fn default() -> Self {
 		Self {
 			skin: SpibmomSkinColor::PowderBlue,
-			eyes: SpibmomEyeColor::SoftAmber,
-			ears: SpibmomEarColor::Cream,
-			mouth: SpibmomMouthColor::SoftBlush,
-			crown: SpibmomCrownColor::Ivory,
-			spine: SpibmomSpineColor::Ivory,
+			eyes: SpibmomEyeColor::Pearl,
+			ears: SpibmomEarColor::Umber,
+			mouth: SpibmomMouthColor::Espresso,
+			crown: SpibmomCrownColor::Charcoal,
+			spine: SpibmomSpineColor::Charcoal,
 			hair: BraidmanColor::Dark,
 			clothing_default: BraidmanColor::Cool,
 			clothing: Vec::new(),

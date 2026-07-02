@@ -14,7 +14,10 @@ use crozon_characters::{
 use crate::{
 	characters::braidman::AnimationMenu,
 	event::CharacterField,
-	focus::{BODY_FOCUS, CROWN_FOCUS, EYE_FOCUS, HEAD_ROOT_FOCUS, MOUTH_FOCUS},
+	focus::{
+		SPIBMOM_BODY_FOCUS, SPIBMOM_CROWN_FOCUS, SPIBMOM_EYE_FOCUS, SPIBMOM_HEAD_ROOT_FOCUS,
+		SPIBMOM_NOSE_FOCUS,
+	},
 };
 
 #[derive(Clone, Debug, PartialEq)]
@@ -63,19 +66,19 @@ impl From<&crozon_characters::species::spibmom::SpibmomConfig> for SpibmomMenu {
 				"Head",
 				SpibmomHeadMenu {
 					head: AssetSingleSelect::new(SpibmomHeadMesh::Meerkat)
-						.with_camera_focus(HEAD_ROOT_FOCUS),
+						.with_camera_focus(SPIBMOM_HEAD_ROOT_FOCUS),
 					skin: SwatchSingleSelect::new(config.colors.skin),
 					crown_color: SwatchSingleSelect::new(config.colors.crown)
-						.with_camera_focus(CROWN_FOCUS),
+						.with_camera_focus(SPIBMOM_CROWN_FOCUS),
 					spine_color: SwatchSingleSelect::new(config.colors.spine),
 				},
 			),
 			head_features: Section::new(
 				"Head & Features",
 				SpibmomHeadFeaturesMenu {
-					eye: AssetSingleSelect::new(config.eye).with_camera_focus(EYE_FOCUS),
-					snout: AssetSingleSelect::new(SpibmomMouthMesh::Igny)
-						.with_camera_focus(MOUTH_FOCUS),
+					eye: AssetSingleSelect::new(config.eye).with_camera_focus(SPIBMOM_EYE_FOCUS),
+					snout: AssetSingleSelect::new(SpibmomMouthMesh::Trunkish)
+						.with_camera_focus(SPIBMOM_NOSE_FOCUS),
 					eye_color: SwatchSingleSelect::new(config.colors.eyes),
 					ear_color: SwatchSingleSelect::new(config.colors.ears),
 					mouth_color: SwatchSingleSelect::new(config.colors.mouth),
@@ -84,7 +87,7 @@ impl From<&crozon_characters::species::spibmom::SpibmomConfig> for SpibmomMenu {
 			hair: Section::new(
 				"Hair",
 				SpibmomHairMenu {
-					style: AssetSingleSelect::new(config.hair).with_camera_focus(HEAD_ROOT_FOCUS),
+					style: AssetSingleSelect::new(config.hair).with_camera_focus(SPIBMOM_HEAD_ROOT_FOCUS),
 					color: SwatchSingleSelect::new(config.colors.hair),
 				},
 			),
@@ -96,12 +99,12 @@ impl From<&crozon_characters::species::spibmom::SpibmomConfig> for SpibmomMenu {
 					item_colors: config.colors.clothing.clone(),
 				},
 			)
-			.with_camera_focus(BODY_FOCUS),
+			.with_camera_focus(SPIBMOM_BODY_FOCUS),
 			animation: Section::new(
 				"Animation",
 				AnimationMenu {
 					clip: AssetSingleSelect::new(ConceptAnimation::Still)
-						.with_camera_focus(BODY_FOCUS),
+						.with_camera_focus(SPIBMOM_BODY_FOCUS),
 				},
 			),
 		}
@@ -171,7 +174,7 @@ impl SpibmomMenu {
 			CharacterField::SpibmomCrownColor => self.head.value.crown_color.camera_focus,
 			CharacterField::Hair => self.hair.value.style.camera_focus,
 			CharacterField::Clothing(_) | CharacterField::Animation | CharacterField::SpibmomSpineColor => {
-				Some(BODY_FOCUS)
+				Some(SPIBMOM_BODY_FOCUS)
 			}
 			_ => None,
 		}

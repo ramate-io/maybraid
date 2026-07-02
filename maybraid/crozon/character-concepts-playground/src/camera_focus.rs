@@ -3,6 +3,7 @@ use camera_controls::look::CameraLookEnabled;
 use character_ui_menu::{CameraFocus, FocusRig};
 use crozon_character_playground::CameraController;
 use crozon_character_ui_menus::BODY_FOCUS;
+use crozon_character_ui_menus::focus::SPIBMOM_BODY_FOCUS;
 
 use crate::{
 	animation::AnimatedBodyRig,
@@ -61,8 +62,11 @@ pub fn queue_species_default_camera_focus(
 	queue_camera_focus(pending, focus, trigger);
 }
 
-pub fn default_focus_target(_config: &ConceptPreviewConfig) -> CameraFocus {
-	BODY_FOCUS
+pub fn default_focus_target(config: &ConceptPreviewConfig) -> CameraFocus {
+	match config.species() {
+		crate::preview::ConceptSpecies::Spibmom => SPIBMOM_BODY_FOCUS,
+		_ => BODY_FOCUS,
+	}
 }
 
 pub fn apply_camera_suggestion(

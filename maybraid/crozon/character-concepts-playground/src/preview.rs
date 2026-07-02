@@ -999,11 +999,11 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 					CharacterPartSlot::EyeLeft | CharacterPartSlot::EyeRight => {
 						PreviewTarget::SpibmomEye(config.eye)
 					}
-					CharacterPartSlot::Mouth => PreviewTarget::SpibmomMouth,
+					CharacterPartSlot::Nose => PreviewTarget::SpibmomMouth,
 					CharacterPartSlot::EarLeft | CharacterPartSlot::EarRight => PreviewTarget::SpibmomEar,
 					CharacterPartSlot::Horns => PreviewTarget::SpibmomHorns,
 					CharacterPartSlot::Spine => PreviewTarget::SpibmomSpine,
-					CharacterPartSlot::Nose | CharacterPartSlot::Tail => PreviewTarget::SpibmomHead,
+					CharacterPartSlot::Mouth | CharacterPartSlot::Tail => PreviewTarget::SpibmomHead,
 					CharacterPartSlot::Hair => PreviewTarget::SpibmomHair(config.hair),
 					CharacterPartSlot::Clothing => config
 						.clothing
