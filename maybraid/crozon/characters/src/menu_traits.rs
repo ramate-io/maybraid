@@ -18,6 +18,10 @@ use crate::{
 		lero::{
 			LeroEyeColor, LeroHeadMesh, LeroMouthColor, LeroMouthMesh, LeroSkinColor, LeroSpineColor, LeroTailColor,
 		},
+		spibmom::{
+			SpibmomCrownColor, SpibmomEarColor, SpibmomEyeColor, SpibmomHeadMesh, SpibmomMouthColor,
+			SpibmomMouthMesh, SpibmomSkinColor, SpibmomSpineColor,
+		},
 		dui::{DuiEyeMesh, DuiHeadMesh, DuiMouthMesh, DuiNoseMesh, DuiEyeColor, DuiMouthColor, DuiNoseColor, DuiSkinColor},
 		common::{
 			BodyMesh, ClothingMesh, EarMesh, EyeMesh, HairMesh, HeadMesh, MouthMesh, NoseMesh,
@@ -85,6 +89,14 @@ impl_menu_identity!(LeroSkinColor);
 impl_menu_identity!(LeroEyeColor);
 impl_menu_identity!(LeroTailColor);
 impl_menu_identity!(LeroSpineColor);
+impl_menu_identity!(SpibmomHeadMesh);
+impl_menu_identity!(SpibmomMouthMesh);
+impl_menu_identity!(SpibmomSkinColor);
+impl_menu_identity!(SpibmomEyeColor);
+impl_menu_identity!(SpibmomEarColor);
+impl_menu_identity!(SpibmomMouthColor);
+impl_menu_identity!(SpibmomCrownColor);
+impl_menu_identity!(SpibmomSpineColor);
 impl_menu_identity!(DuiHeadMesh);
 impl_menu_identity!(DuiEyeMesh);
 impl_menu_identity!(DuiNoseMesh);
@@ -134,6 +146,8 @@ impl_asset_option!(WumbusHeadMesh, HEAD_THUMBNAIL_CAMERA);
 impl_asset_option!(WumbusMouthMesh, FACE_FEATURE_THUMBNAIL_CAMERA);
 impl_asset_option!(LeroHeadMesh, HEAD_THUMBNAIL_CAMERA);
 impl_asset_option!(LeroMouthMesh, FACE_FEATURE_THUMBNAIL_CAMERA);
+impl_asset_option!(SpibmomHeadMesh, HEAD_THUMBNAIL_CAMERA);
+impl_asset_option!(SpibmomMouthMesh, FACE_FEATURE_THUMBNAIL_CAMERA);
 impl_asset_option!(DuiHeadMesh, HEAD_THUMBNAIL_CAMERA);
 impl_asset_option!(DuiEyeMesh, FACE_FEATURE_THUMBNAIL_CAMERA);
 impl_asset_option!(DuiMouthMesh, FACE_FEATURE_THUMBNAIL_CAMERA);
@@ -394,6 +408,68 @@ impl SwatchOption for LeroSpineColor {
 			Self::PaleIvory => "#E0D6C2",
 			Self::Sand => "#D1BD99",
 			Self::PaleMint => "#C7E0D1",
+		}
+	}
+}
+
+impl SwatchOption for SpibmomSkinColor {
+	fn color_hex(&self) -> &'static str {
+		match self {
+			Self::PowderBlue => "#B8CCE0",
+			Self::MistBlue => "#A6BDD1",
+			Self::SoftSky => "#94ADC7",
+			Self::PalePeriwinkle => "#B3B8DB",
+			Self::DustyBlue => "#8C9EB8",
+		}
+	}
+}
+
+impl SwatchOption for SpibmomEyeColor {
+	fn color_hex(&self) -> &'static str {
+		match self {
+			Self::SoftAmber => "#D1B87A",
+			Self::PaleGold => "#E0CC94",
+			Self::WarmBrown => "#9E7A5C",
+		}
+	}
+}
+
+impl SwatchOption for SpibmomEarColor {
+	fn color_hex(&self) -> &'static str {
+		match self {
+			Self::Cream => "#E5DBC2",
+			Self::Sandy => "#D1BD94",
+			Self::PaleRose => "#E0BCB3",
+		}
+	}
+}
+
+impl SwatchOption for SpibmomMouthColor {
+	fn color_hex(&self) -> &'static str {
+		match self {
+			Self::SoftBlush => "#E5C7BC",
+			Self::Buttercream => "#EBDBB3",
+			Self::PaleCoral => "#E0A899",
+		}
+	}
+}
+
+impl SwatchOption for SpibmomCrownColor {
+	fn color_hex(&self) -> &'static str {
+		match self {
+			Self::Ivory => "#E0D6BD",
+			Self::Wheat => "#D1BD8F",
+			Self::PaleGold => "#E5D19E",
+		}
+	}
+}
+
+impl SwatchOption for SpibmomSpineColor {
+	fn color_hex(&self) -> &'static str {
+		match self {
+			Self::Ivory => "#E0D6BD",
+			Self::Wheat => "#D1BD8F",
+			Self::PaleGold => "#E5D19E",
 		}
 	}
 }

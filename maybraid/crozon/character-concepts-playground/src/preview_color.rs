@@ -11,6 +11,10 @@ use crozon_characters::species::{
 		WumbusSpineColor,
 	},
 	lero::{LeroEyeColor, LeroMouthColor, LeroSkinColor, LeroSpineColor, LeroTailColor},
+	spibmom::{
+		SpibmomCrownColor, SpibmomEarColor, SpibmomEyeColor, SpibmomMouthColor, SpibmomSkinColor,
+		SpibmomSpineColor,
+	},
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -36,6 +40,12 @@ pub enum PreviewColor {
 	LeroMouth(LeroMouthColor),
 	LeroTail(LeroTailColor),
 	LeroSpine(LeroSpineColor),
+	SpibmomSkin(SpibmomSkinColor),
+	SpibmomEye(SpibmomEyeColor),
+	SpibmomEar(SpibmomEarColor),
+	SpibmomMouth(SpibmomMouthColor),
+	SpibmomCrown(SpibmomCrownColor),
+	SpibmomSpine(SpibmomSpineColor),
 }
 
 impl PreviewColor {
@@ -62,6 +72,12 @@ impl PreviewColor {
 			Self::LeroMouth(color) => color.color(),
 			Self::LeroTail(color) => color.color(),
 			Self::LeroSpine(color) => color.color(),
+			Self::SpibmomSkin(color) => color.color(),
+			Self::SpibmomEye(color) => color.color(),
+			Self::SpibmomEar(color) => color.color(),
+			Self::SpibmomMouth(color) => color.color(),
+			Self::SpibmomCrown(color) => color.color(),
+			Self::SpibmomSpine(color) => color.color(),
 		}
 	}
 }

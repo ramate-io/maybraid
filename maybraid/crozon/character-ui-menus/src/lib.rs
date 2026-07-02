@@ -9,7 +9,7 @@ pub mod render;
 pub mod section_open;
 
 pub use character::{CharacterMenu, ConceptSpecies, SectionOpenState, SpeciesMenu};
-pub use characters::{braidman::BraidmanMenu, brodler::BrodlerMenu, dui::DuiMenu, lero::LeroMenu, mygr::MygrMenu, wumbus::WumbusMenu};
+pub use characters::{braidman::BraidmanMenu, brodler::BrodlerMenu, dui::DuiMenu, lero::LeroMenu, mygr::MygrMenu, spibmom::SpibmomMenu, wumbus::WumbusMenu};
 pub use event::{AssetValue, CharacterField, MenuEvent, SectionId, SwatchValue};
 pub use fields::{
 	AssetField, ColoredMultiSelectField, CycleField, PreviewColorSource, SliderField, SwatchField,

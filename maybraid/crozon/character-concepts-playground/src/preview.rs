@@ -13,6 +13,7 @@ use crozon_characters::{
 		dui::{DuiConfig, DuiNoseMesh},
 		wumbus::{WumbusConfig, WumbusHornMesh},
 		lero::{LeroConfig, LeroMouthMesh},
+		spibmom::SpibmomConfig,
 		common::{
 			BodyMesh, ClothingMesh, EarMesh, EyeMesh, HairMesh, HeadMesh, MouthMesh, NoseMesh,
 		},
@@ -38,6 +39,7 @@ pub enum ConceptSpecies {
 	Dui,
 	Wumbus,
 	Lero,
+	Spibmom,
 }
 
 #[derive(Resource, Debug, Clone, PartialEq)]
@@ -48,6 +50,7 @@ pub enum ConceptPreviewConfig {
 	Dui { config: DuiConfig, animation: ConceptAnimation },
 	Wumbus { config: WumbusConfig, animation: ConceptAnimation },
 	Lero { config: LeroConfig, animation: ConceptAnimation },
+	Spibmom { config: SpibmomConfig, animation: ConceptAnimation },
 }
 
 impl Default for ConceptPreviewConfig {
@@ -65,6 +68,7 @@ impl ConceptPreviewConfig {
 			ConceptSpecies::Dui => Self::dui(DuiConfig::default_preview()),
 			ConceptSpecies::Wumbus => Self::wumbus(WumbusConfig::default_preview()),
 			ConceptSpecies::Lero => Self::lero(LeroConfig::default_preview()),
+			ConceptSpecies::Spibmom => Self::spibmom(SpibmomConfig::default_preview()),
 		}
 	}
 
@@ -76,6 +80,7 @@ impl ConceptPreviewConfig {
 			Self::Dui { .. } => ConceptSpecies::Dui,
 			Self::Wumbus { .. } => ConceptSpecies::Wumbus,
 			Self::Lero { .. } => ConceptSpecies::Lero,
+			Self::Spibmom { .. } => ConceptSpecies::Spibmom,
 		}
 	}
 
@@ -127,6 +132,14 @@ impl ConceptPreviewConfig {
 		Self::Lero { config, animation }
 	}
 
+	pub fn spibmom(config: SpibmomConfig) -> Self {
+		Self::Spibmom { config, animation: ConceptAnimation::default() }
+	}
+
+	pub fn spibmom_with_animation(config: SpibmomConfig, animation: ConceptAnimation) -> Self {
+		Self::Spibmom { config, animation }
+	}
+
 	pub fn resolve(&self) -> ResolvedCharacterAssembly {
 		match self {
 			Self::Braidman { config, .. } => config.resolve(),
@@ -135,6 +148,7 @@ impl ConceptPreviewConfig {
 			Self::Dui { config, .. } => config.resolve(),
 			Self::Wumbus { config, .. } => config.resolve(),
 			Self::Lero { config, .. } => config.resolve(),
+			Self::Spibmom { config, .. } => config.resolve(),
 		}
 	}
 
@@ -156,6 +170,9 @@ impl ConceptPreviewConfig {
 				format!("{} animation={}", config.status_label(), animation.label())
 			}
 			Self::Lero { config, animation } => {
+				format!("{} animation={}", config.status_label(), animation.label())
+			}
+			Self::Spibmom { config, animation } => {
 				format!("{} animation={}", config.status_label(), animation.label())
 			}
 		}
@@ -180,6 +197,9 @@ impl ConceptPreviewConfig {
 			}
 			Self::Lero { config, animation } => {
 				format!("species=lero {} animation={animation:?}", config.sync_key())
+			}
+			Self::Spibmom { config, animation } => {
+				format!("species=spibmom {} animation={animation:?}", config.sync_key())
 			}
 		}
 	}
@@ -233,6 +253,12 @@ impl ConceptPreviewConfig {
 				config.hair,
 				config.clothing,
 			),
+			Self::Spibmom { config, .. } => format!(
+				"species=spibmom eye={:?} hair={:?} clothing={:?}",
+				config.eye,
+				config.hair,
+				config.clothing,
+			),
 		}
 	}
 
@@ -243,7 +269,8 @@ impl ConceptPreviewConfig {
 			| Self::Mygr { animation, .. }
 			| Self::Dui { animation, .. }
 			| Self::Wumbus { animation, .. }
-			| Self::Lero { animation, .. } => *animation,
+			| Self::Lero { animation, .. }
+			| Self::Spibmom { animation, .. } => *animation,
 		}
 	}
 }
@@ -354,6 +381,15 @@ pub enum PreviewTarget {
 	LeroSpine,
 	LeroHair(HairMesh),
 	LeroClothing(ClothingMesh),
+	SpibmomBody,
+	SpibmomHead,
+	SpibmomHorns,
+	SpibmomSpine,
+	SpibmomEye(EyeMesh),
+	SpibmomMouth,
+	SpibmomEar,
+	SpibmomHair(HairMesh),
+	SpibmomClothing(ClothingMesh),
 }
 
 pub fn sync_preview(
@@ -459,6 +495,11 @@ fn sync_live_preview(
 		ConceptPreviewConfig::Lero { config: lero, .. } => {
 			for (_, mut target, ..) in parts {
 				target.color = preview_color_lero(lero, target.target);
+			}
+		}
+		ConceptPreviewConfig::Spibmom { config: spibmom, .. } => {
+			for (_, mut target, ..) in parts {
+				target.color = preview_color_spibmom(spibmom, target.target);
 			}
 		}
 	}
@@ -610,6 +651,24 @@ fn preview_color_lero(config: &LeroConfig, target: PreviewTarget) -> PreviewColo
 	}
 }
 
+fn preview_color_spibmom(config: &SpibmomConfig, target: PreviewTarget) -> PreviewColor {
+	match target {
+		PreviewTarget::SpibmomHead | PreviewTarget::SpibmomBody => {
+			PreviewColor::SpibmomSkin(config.colors.skin)
+		}
+		PreviewTarget::SpibmomHorns => PreviewColor::SpibmomCrown(config.colors.crown),
+		PreviewTarget::SpibmomSpine => PreviewColor::SpibmomSpine(config.colors.spine),
+		PreviewTarget::SpibmomEye(_) => PreviewColor::SpibmomEye(config.colors.eyes),
+		PreviewTarget::SpibmomEar => PreviewColor::SpibmomEar(config.colors.ears),
+		PreviewTarget::SpibmomMouth => PreviewColor::SpibmomMouth(config.colors.mouth),
+		PreviewTarget::SpibmomHair(_) => PreviewColor::Braidman(config.colors.hair),
+		PreviewTarget::SpibmomClothing(clothing) => {
+			PreviewColor::Braidman(config.colors.clothing_color(clothing))
+		}
+		_ => PreviewColor::SpibmomSkin(config.colors.skin),
+	}
+}
+
 struct PreviewSpawner<'w, 's, 'a> {
 	commands: &'a mut Commands<'w, 's>,
 	asset_server: &'a AssetServer,
@@ -655,6 +714,7 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 			ConceptPreviewConfig::Dui { .. } => part.asset.normalization.transform(),
 			ConceptPreviewConfig::Wumbus { .. } => part.asset.normalization.transform(),
 			ConceptPreviewConfig::Lero { .. } => part.asset.normalization.transform(),
+			ConceptPreviewConfig::Spibmom { .. } => part.asset.normalization.transform(),
 		}
 	}
 
@@ -931,6 +991,29 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 						.unwrap_or(PreviewTarget::LeroHead),
 				};
 				PreviewAssetTarget { target, color: preview_color_lero(config, target) }
+			}
+			ConceptPreviewConfig::Spibmom { config, .. } => {
+				let target = match part.slot {
+					CharacterPartSlot::BodyMesh => PreviewTarget::SpibmomBody,
+					CharacterPartSlot::HeadRig | CharacterPartSlot::HeadMesh => PreviewTarget::SpibmomHead,
+					CharacterPartSlot::EyeLeft | CharacterPartSlot::EyeRight => {
+						PreviewTarget::SpibmomEye(config.eye)
+					}
+					CharacterPartSlot::Mouth => PreviewTarget::SpibmomMouth,
+					CharacterPartSlot::EarLeft | CharacterPartSlot::EarRight => PreviewTarget::SpibmomEar,
+					CharacterPartSlot::Horns => PreviewTarget::SpibmomHorns,
+					CharacterPartSlot::Spine => PreviewTarget::SpibmomSpine,
+					CharacterPartSlot::Nose | CharacterPartSlot::Tail => PreviewTarget::SpibmomHead,
+					CharacterPartSlot::Hair => PreviewTarget::SpibmomHair(config.hair),
+					CharacterPartSlot::Clothing => config
+						.clothing
+						.iter()
+						.copied()
+						.find(|clothing| clothing.label() == part.asset.label)
+						.map(PreviewTarget::SpibmomClothing)
+						.unwrap_or(PreviewTarget::SpibmomHead),
+				};
+				PreviewAssetTarget { target, color: preview_color_spibmom(config, target) }
 			}
 		}
 	}

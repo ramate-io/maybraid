@@ -5,6 +5,7 @@ use crozon_characters::species::{
 	braidman::BraidmanConfig, brodler::BrodlerConfig, dui::DuiConfig, mygr::MygrConfig,
 	wumbus::WumbusConfig,
 	lero::LeroConfig,
+	spibmom::SpibmomConfig,
 };
 
 use crate::{
@@ -25,12 +26,14 @@ pub struct SpeciesSessionState {
 	pub dui: DuiConfig,
 	pub wumbus: WumbusConfig,
 	pub lero: LeroConfig,
+	pub spibmom: SpibmomConfig,
 	pub braidman_animation: crate::animation::ConceptAnimation,
 	pub brodler_animation: crate::animation::ConceptAnimation,
 	pub mygr_animation: crate::animation::ConceptAnimation,
 	pub dui_animation: crate::animation::ConceptAnimation,
 	pub wumbus_animation: crate::animation::ConceptAnimation,
 	pub lero_animation: crate::animation::ConceptAnimation,
+	pub spibmom_animation: crate::animation::ConceptAnimation,
 }
 
 impl Default for SpeciesSessionState {
@@ -42,12 +45,14 @@ impl Default for SpeciesSessionState {
 			dui: DuiConfig::default_preview(),
 			wumbus: WumbusConfig::default_preview(),
 			lero: LeroConfig::default_preview(),
+			spibmom: SpibmomConfig::default_preview(),
 			braidman_animation: crate::animation::ConceptAnimation::default(),
 			brodler_animation: crate::animation::ConceptAnimation::default(),
 			mygr_animation: crate::animation::ConceptAnimation::default(),
 			dui_animation: crate::animation::ConceptAnimation::default(),
 			wumbus_animation: crate::animation::ConceptAnimation::default(),
 			lero_animation: crate::animation::ConceptAnimation::default(),
+			spibmom_animation: crate::animation::ConceptAnimation::default(),
 		}
 	}
 }
@@ -79,6 +84,10 @@ impl SpeciesSessionState {
 				self.lero.clone_from(config);
 				self.lero_animation = *animation;
 			}
+			ConceptPreviewConfig::Spibmom { config, animation } => {
+				self.spibmom.clone_from(config);
+				self.spibmom_animation = *animation;
+			}
 		}
 	}
 
@@ -107,6 +116,10 @@ impl SpeciesSessionState {
 			ConceptSpecies::Lero => ConceptPreviewConfig::lero_with_animation(
 				self.lero.clone(),
 				self.lero_animation,
+			),
+			ConceptSpecies::Spibmom => ConceptPreviewConfig::spibmom_with_animation(
+				self.spibmom.clone(),
+				self.spibmom_animation,
 			),
 		}
 	}

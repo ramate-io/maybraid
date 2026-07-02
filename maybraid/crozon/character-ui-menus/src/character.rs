@@ -1,11 +1,11 @@
 use character_ui_menu::{CameraFocus, LabelOption, ListValues, Section, SingleSelect};
 use crozon_characters::{
-	species::{braidman::BraidmanConfig, brodler::BrodlerConfig, dui::DuiConfig, lero::LeroConfig, mygr::MygrConfig, wumbus::WumbusConfig},
+	species::{braidman::BraidmanConfig, brodler::BrodlerConfig, dui::DuiConfig, lero::LeroConfig, mygr::MygrConfig, spibmom::SpibmomConfig, wumbus::WumbusConfig},
 	ConceptAnimation,
 };
 
 use crate::{
-	characters::{braidman::BraidmanMenu, brodler::BrodlerMenu, dui::DuiMenu, lero::LeroMenu, mygr::MygrMenu, wumbus::WumbusMenu},
+	characters::{braidman::BraidmanMenu, brodler::BrodlerMenu, dui::DuiMenu, lero::LeroMenu, mygr::MygrMenu, spibmom::SpibmomMenu, wumbus::WumbusMenu},
 	cycle_value,
 	event::{AssetValue, CharacterField, MenuEvent, SectionId, SwatchValue},
 };
@@ -18,6 +18,7 @@ pub enum ConceptSpecies {
 	Dui,
 	Wumbus,
 	Lero,
+	Spibmom,
 }
 
 impl ConceptSpecies {
@@ -29,13 +30,14 @@ impl ConceptSpecies {
 			Self::Dui => "dui",
 			Self::Wumbus => "wumbus",
 			Self::Lero => "lero",
+			Self::Spibmom => "spibmom",
 		}
 	}
 }
 
 impl ListValues for ConceptSpecies {
 	fn values() -> &'static [Self] {
-		&[Self::Braidman, Self::Brodler, Self::Mygr, Self::Dui, Self::Wumbus, Self::Lero]
+		&[Self::Braidman, Self::Brodler, Self::Mygr, Self::Dui, Self::Wumbus, Self::Lero, Self::Spibmom]
 	}
 }
 
@@ -48,6 +50,7 @@ impl LabelOption for ConceptSpecies {
 			Self::Dui => "dui",
 			Self::Wumbus => "wumbus",
 			Self::Lero => "lero",
+			Self::Spibmom => "spibmom",
 		}
 	}
 }
@@ -60,6 +63,7 @@ pub enum SpeciesMenu {
 	Dui(Section<DuiMenu>),
 	Wumbus(Section<WumbusMenu>),
 	Lero(Section<LeroMenu>),
+	Spibmom(Section<SpibmomMenu>),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -71,6 +75,7 @@ pub struct CharacterMenu {
 	pub dui: DuiMenu,
 	pub wumbus: WumbusMenu,
 	pub lero: LeroMenu,
+	pub spibmom: SpibmomMenu,
 }
 
 impl CharacterMenu {
@@ -83,6 +88,7 @@ impl CharacterMenu {
 			dui: DuiMenu::default(),
 			wumbus: WumbusMenu::default(),
 			lero: LeroMenu::default(),
+			spibmom: SpibmomMenu::default(),
 		}
 	}
 
@@ -95,6 +101,7 @@ impl CharacterMenu {
 			dui: DuiMenu::default(),
 			wumbus: WumbusMenu::default(),
 			lero: LeroMenu::default(),
+			spibmom: SpibmomMenu::default(),
 		}
 	}
 
@@ -107,6 +114,7 @@ impl CharacterMenu {
 			dui: DuiMenu::default(),
 			wumbus: WumbusMenu::default(),
 			lero: LeroMenu::default(),
+			spibmom: SpibmomMenu::default(),
 		}
 	}
 
@@ -119,6 +127,7 @@ impl CharacterMenu {
 			dui: DuiMenu::from(config).with_animation(animation),
 			wumbus: WumbusMenu::default(),
 			lero: LeroMenu::default(),
+			spibmom: SpibmomMenu::default(),
 		}
 	}
 
@@ -131,6 +140,7 @@ impl CharacterMenu {
 			dui: DuiMenu::default(),
 			wumbus: WumbusMenu::from(config).with_animation(animation),
 			lero: LeroMenu::default(),
+			spibmom: SpibmomMenu::default(),
 		}
 	}
 
@@ -143,6 +153,20 @@ impl CharacterMenu {
 			dui: DuiMenu::default(),
 			wumbus: WumbusMenu::default(),
 			lero: LeroMenu::from(config).with_animation(animation),
+			spibmom: SpibmomMenu::default(),
+		}
+	}
+
+	pub fn from_spibmom(config: &SpibmomConfig, animation: ConceptAnimation) -> Self {
+		Self {
+			species: SingleSelect::new(ConceptSpecies::Spibmom),
+			braidman: BraidmanMenu::default(),
+			brodler: BrodlerMenu::default(),
+			mygr: MygrMenu::default(),
+			dui: DuiMenu::default(),
+			wumbus: WumbusMenu::default(),
+			lero: LeroMenu::default(),
+			spibmom: SpibmomMenu::from(config).with_animation(animation),
 		}
 	}
 
@@ -160,6 +184,9 @@ impl CharacterMenu {
 				SpeciesMenu::Wumbus(Section::new("Wumbus", self.wumbus.clone()))
 			}
 			ConceptSpecies::Lero => SpeciesMenu::Lero(Section::new("Lero", self.lero.clone())),
+			ConceptSpecies::Spibmom => {
+				SpeciesMenu::Spibmom(Section::new("Spibmom", self.spibmom.clone()))
+			}
 		}
 	}
 
@@ -171,6 +198,7 @@ impl CharacterMenu {
 			ConceptSpecies::Dui => self.dui.animation(),
 			ConceptSpecies::Wumbus => self.wumbus.animation(),
 			ConceptSpecies::Lero => self.lero.animation(),
+			ConceptSpecies::Spibmom => self.spibmom.animation(),
 		}
 	}
 
@@ -198,6 +226,10 @@ impl CharacterMenu {
 		LeroConfig::from(&self.lero)
 	}
 
+	pub fn spibmom_config(&self) -> SpibmomConfig {
+		SpibmomConfig::from(&self.spibmom)
+	}
+
 	pub fn apply(&mut self, event: MenuEvent) -> bool {
 		match event {
 			MenuEvent::SetSpecies(species) => {
@@ -217,6 +249,7 @@ impl CharacterMenu {
 			ConceptSpecies::Dui => self.apply_dui(event),
 			ConceptSpecies::Wumbus => self.apply_wumbus(event),
 			ConceptSpecies::Lero => self.apply_lero(event),
+			ConceptSpecies::Spibmom => self.apply_spibmom(event),
 		}
 	}
 
@@ -233,6 +266,7 @@ impl CharacterMenu {
 			ConceptSpecies::Dui => self.dui.camera_focus_for_field(field),
 			ConceptSpecies::Wumbus => self.wumbus.camera_focus_for_field(field),
 			ConceptSpecies::Lero => self.lero.camera_focus_for_field(field),
+			ConceptSpecies::Spibmom => self.spibmom.camera_focus_for_field(field),
 		}
 	}
 
@@ -628,6 +662,76 @@ impl CharacterMenu {
 				}
 				(CharacterField::LeroSpineColor, SwatchValue::LeroSpine(color)) => {
 					menu.body.value.spine_color.value = color;
+					true
+				}
+				(CharacterField::HairColor, SwatchValue::Braidman(color)) => {
+					menu.hair.value.color.value = color;
+					true
+				}
+				(CharacterField::Clothing(clothing), SwatchValue::Braidman(color)) => {
+					menu.set_clothing_color(clothing, color);
+					true
+				}
+				_ => false,
+			},
+			MenuEvent::Cycle(_, _) | MenuEvent::SliderDelta(_, _) => false,
+		}
+	}
+
+	fn apply_spibmom(&mut self, event: MenuEvent) -> bool {
+		let menu = &mut self.spibmom;
+		match event {
+			MenuEvent::ToggleSection(_) | MenuEvent::SetSpecies(_) => false,
+			MenuEvent::SetAsset(field, value) => match (field, value) {
+				(CharacterField::SpibmomHead, AssetValue::SpibmomHead(value)) => {
+					menu.head.value.head.value = value;
+					true
+				}
+				(CharacterField::Eye, AssetValue::Eye(value)) => {
+					menu.head_features.value.eye.value = value;
+					true
+				}
+				(CharacterField::SpibmomMouth, AssetValue::SpibmomMouth(value)) => {
+					menu.head_features.value.snout.value = value;
+					true
+				}
+				(CharacterField::Hair, AssetValue::Hair(value)) => {
+					menu.hair.value.style.value = value;
+					true
+				}
+				(CharacterField::Animation, AssetValue::Animation(value)) => {
+					menu.animation.value.clip.value = value;
+					true
+				}
+				_ => false,
+			},
+			MenuEvent::ToggleClothing(clothing) => {
+				menu.clothing.value.layers.toggle(clothing);
+				true
+			}
+			MenuEvent::SetSwatch(field, value) => match (field, value) {
+				(CharacterField::SpibmomSkinColor, SwatchValue::SpibmomSkin(color)) => {
+					menu.head.value.skin.value = color;
+					true
+				}
+				(CharacterField::SpibmomEyeColor, SwatchValue::SpibmomEye(color)) => {
+					menu.head_features.value.eye_color.value = color;
+					true
+				}
+				(CharacterField::SpibmomEarColor, SwatchValue::SpibmomEar(color)) => {
+					menu.head_features.value.ear_color.value = color;
+					true
+				}
+				(CharacterField::SpibmomMouthColor, SwatchValue::SpibmomMouthColor(color)) => {
+					menu.head_features.value.mouth_color.value = color;
+					true
+				}
+				(CharacterField::SpibmomCrownColor, SwatchValue::SpibmomCrown(color)) => {
+					menu.head.value.crown_color.value = color;
+					true
+				}
+				(CharacterField::SpibmomSpineColor, SwatchValue::SpibmomSpine(color)) => {
+					menu.head.value.spine_color.value = color;
 					true
 				}
 				(CharacterField::HairColor, SwatchValue::Braidman(color)) => {

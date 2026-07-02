@@ -94,7 +94,7 @@ impl LeroAssets {
 			SkinTarget::HeadRig,
 			Some(Self::head_socket(
 				"eye_socket.L",
-				Transform::from_translation(Vec3::new(0.0, 0.0, -0.12)),
+				Transform::from_translation(Vec3::new(0.0, -0.05, -0.12)),
 			)),
 		)
 	}
@@ -106,7 +106,7 @@ impl LeroAssets {
 			SkinTarget::HeadRig,
 			Some(Self::head_socket(
 				"eye_socket.R",
-				Self::mirror_x().with_translation(Vec3::new(0.0, 0.0, -0.12)),
+				Self::mirror_x().with_translation(Vec3::new(0.0, -0.05, -0.12)),
 			)),
 		)
 	}

@@ -38,6 +38,9 @@ pub fn menu_to_preview_config(menu: &CharacterMenu) -> ConceptPreviewConfig {
 		ConceptSpecies::Lero => {
 			ConceptPreviewConfig::lero_with_animation(menu.lero_config(), menu.animation())
 		}
+		ConceptSpecies::Spibmom => {
+			ConceptPreviewConfig::spibmom_with_animation(menu.spibmom_config(), menu.animation())
+		}
 	}
 }
 
@@ -60,6 +63,9 @@ pub fn menu_from_preview_config(config: &ConceptPreviewConfig) -> CharacterMenu 
 		}
 		ConceptPreviewConfig::Lero { config, animation } => {
 			CharacterMenu::from_lero(config, *animation)
+		}
+		ConceptPreviewConfig::Spibmom { config, animation } => {
+			CharacterMenu::from_spibmom(config, *animation)
 		}
 	}
 }
@@ -89,6 +95,7 @@ fn preview_species(species: ConceptSpecies) -> crate::preview::ConceptSpecies {
 		ConceptSpecies::Dui => crate::preview::ConceptSpecies::Dui,
 		ConceptSpecies::Wumbus => crate::preview::ConceptSpecies::Wumbus,
 		ConceptSpecies::Lero => crate::preview::ConceptSpecies::Lero,
+		ConceptSpecies::Spibmom => crate::preview::ConceptSpecies::Spibmom,
 	}
 }
 

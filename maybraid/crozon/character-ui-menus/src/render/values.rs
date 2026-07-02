@@ -11,6 +11,10 @@ use crozon_characters::{
 			LeroEyeColor, LeroHeadMesh, LeroMouthColor, LeroMouthMesh, LeroSkinColor, LeroSpineColor,
 			LeroTailColor,
 		},
+		spibmom::{
+			SpibmomCrownColor, SpibmomEarColor, SpibmomEyeColor, SpibmomHeadMesh, SpibmomMouthColor,
+			SpibmomMouthMesh, SpibmomSkinColor, SpibmomSpineColor,
+		},
 		dui::{DuiEyeMesh, DuiHeadMesh, DuiMouthMesh, DuiMouthColor, DuiSkinColor},
 		common::{BodyMesh, EarMesh, EyeMesh, HairMesh, HeadMesh, MouthMesh, NoseMesh},
 	},
@@ -235,6 +239,54 @@ impl SwatchFieldValue for LeroTailColor {
 impl SwatchFieldValue for LeroSpineColor {
 	fn to_swatch_value(value: Self) -> SwatchValue {
 		SwatchValue::LeroSpine(value)
+	}
+}
+
+impl AssetFieldValue for SpibmomHeadMesh {
+	fn to_asset_value(value: Self) -> AssetValue {
+		AssetValue::SpibmomHead(value)
+	}
+}
+
+impl AssetFieldValue for SpibmomMouthMesh {
+	fn to_asset_value(value: Self) -> AssetValue {
+		AssetValue::SpibmomMouth(value)
+	}
+}
+
+impl SwatchFieldValue for SpibmomSkinColor {
+	fn to_swatch_value(value: Self) -> SwatchValue {
+		SwatchValue::SpibmomSkin(value)
+	}
+}
+
+impl SwatchFieldValue for SpibmomEyeColor {
+	fn to_swatch_value(value: Self) -> SwatchValue {
+		SwatchValue::SpibmomEye(value)
+	}
+}
+
+impl SwatchFieldValue for SpibmomEarColor {
+	fn to_swatch_value(value: Self) -> SwatchValue {
+		SwatchValue::SpibmomEar(value)
+	}
+}
+
+impl SwatchFieldValue for SpibmomMouthColor {
+	fn to_swatch_value(value: Self) -> SwatchValue {
+		SwatchValue::SpibmomMouthColor(value)
+	}
+}
+
+impl SwatchFieldValue for SpibmomCrownColor {
+	fn to_swatch_value(value: Self) -> SwatchValue {
+		SwatchValue::SpibmomCrown(value)
+	}
+}
+
+impl SwatchFieldValue for SpibmomSpineColor {
+	fn to_swatch_value(value: Self) -> SwatchValue {
+		SwatchValue::SpibmomSpine(value)
 	}
 }
 

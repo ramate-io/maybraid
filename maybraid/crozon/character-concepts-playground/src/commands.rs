@@ -6,6 +6,7 @@ pub mod dui;
 pub mod mygr;
 pub mod wumbus;
 pub mod lero;
+pub mod spibmom;
 
 use bevy::prelude::*;
 pub use braidman::Braidman;
@@ -13,6 +14,7 @@ pub use brodler::Brodler;
 pub use dui::Dui;
 pub use lero::Lero;
 pub use mygr::Mygr;
+pub use spibmom::Spibmom;
 pub use wumbus::Wumbus;
 use clap::Parser;
 use game_commands::command::{CommandScript, GameCommand};
@@ -51,6 +53,9 @@ pub enum ConceptsCommand {
 	/// Spawn or adjust the Lero concept preview.
 	#[command(subcommand)]
 	Lero(Lero),
+	/// Spawn or adjust the Spibmom concept preview.
+	#[command(subcommand)]
+	Spibmom(Spibmom),
 	/// Print the live rig bone hierarchy to the HUD console.
 	DumpBones,
 }
@@ -74,6 +79,7 @@ impl ConceptsCommand {
 			Self::Dui(dui) => dui.react(commands),
 			Self::Wumbus(wumbus) => wumbus.react(commands),
 			Self::Lero(lero) => lero.react(commands),
+			Self::Spibmom(spibmom) => spibmom.react(commands),
 			Self::DumpBones => request_dump_bones(commands),
 		}
 	}

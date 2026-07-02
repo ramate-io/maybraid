@@ -45,6 +45,7 @@ fn focus_live_key(config: &ConceptPreviewConfig) -> String {
 		ConceptPreviewConfig::Dui { config, .. } => config.sync_key(),
 		ConceptPreviewConfig::Wumbus { config, .. } => config.sync_key(),
 		ConceptPreviewConfig::Lero { config, .. } => config.sync_key(),
+		ConceptPreviewConfig::Spibmom { config, .. } => config.sync_key(),
 	}
 }
 
@@ -58,6 +59,7 @@ fn focus_spawn_key(config: &ConceptPreviewConfig) -> String {
 		ConceptSpecies::Dui => "focus_rigs=dui".into(),
 		ConceptSpecies::Wumbus => "focus_rigs=wumbus".into(),
 		ConceptSpecies::Lero => "focus_rigs=lero".into(),
+		ConceptSpecies::Spibmom => "focus_rigs=spibmom".into(),
 	}
 }
 

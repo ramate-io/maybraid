@@ -82,6 +82,19 @@ fn lero_config_round_trip() -> anyhow::Result<()> {
 }
 
 #[test]
+fn spibmom_config_round_trip() -> anyhow::Result<()> {
+	let config = crozon_characters::species::spibmom::SpibmomConfig::default_preview();
+	let menu = crate::characters::spibmom::SpibmomMenu::from(&config);
+	let restored = crozon_characters::species::spibmom::SpibmomConfig::from(&menu);
+	assert_eq!(config.eye, restored.eye);
+	assert_eq!(config.colors.skin, restored.colors.skin);
+	assert_eq!(config.colors.crown, restored.colors.crown);
+	assert_eq!(config.colors.spine, restored.colors.spine);
+	assert_eq!(config.colors.mouth, restored.colors.mouth);
+	Ok(())
+}
+
+#[test]
 fn clothing_toggle_and_color() -> anyhow::Result<()> {
 	use crozon_characters::species::braidman::BraidmanColor;
 

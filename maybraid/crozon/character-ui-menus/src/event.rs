@@ -15,6 +15,10 @@ use crozon_characters::{
 			LeroEyeColor, LeroHeadMesh, LeroMouthColor, LeroMouthMesh, LeroSkinColor,
 			LeroSpineColor, LeroTailColor,
 		},
+		spibmom::{
+			SpibmomCrownColor, SpibmomEarColor, SpibmomEyeColor, SpibmomHeadMesh, SpibmomMouthColor,
+			SpibmomMouthMesh, SpibmomSkinColor, SpibmomSpineColor,
+		},
 		common::{
 			BodyMesh, ClothingMesh, EarMesh, EyeMesh, HairMesh, HeadMesh, MouthMesh, NoseMesh,
 		},
@@ -94,6 +98,14 @@ pub enum CharacterField {
 	LeroEyeColor,
 	LeroTailColor,
 	LeroSpineColor,
+	SpibmomHead,
+	SpibmomMouth,
+	SpibmomSkinColor,
+	SpibmomEyeColor,
+	SpibmomEarColor,
+	SpibmomMouthColor,
+	SpibmomCrownColor,
+	SpibmomSpineColor,
 	Clothing(ClothingMesh),
 	ShoulderWidth,
 	HipWidth,
@@ -131,6 +143,8 @@ pub enum AssetValue {
 	WumbusMouth(WumbusMouthMesh),
 	LeroHead(LeroHeadMesh),
 	LeroMouth(LeroMouthMesh),
+	SpibmomHead(SpibmomHeadMesh),
+	SpibmomMouth(SpibmomMouthMesh),
 	DuiHead(DuiHeadMesh),
 	DuiEye(DuiEyeMesh),
 	DuiMouth(DuiMouthMesh),
@@ -163,6 +177,12 @@ pub enum SwatchValue {
 	LeroMouthColor(LeroMouthColor),
 	LeroTail(LeroTailColor),
 	LeroSpine(LeroSpineColor),
+	SpibmomSkin(SpibmomSkinColor),
+	SpibmomEye(SpibmomEyeColor),
+	SpibmomEar(SpibmomEarColor),
+	SpibmomMouthColor(SpibmomMouthColor),
+	SpibmomCrown(SpibmomCrownColor),
+	SpibmomSpine(SpibmomSpineColor),
 }
 
 impl SwatchValue {
@@ -240,6 +260,30 @@ impl SwatchValue {
 
 	pub fn with_lero_mouth_color(self, color: LeroMouthColor) -> Self {
 		Self::LeroMouthColor(color)
+	}
+
+	pub fn with_spibmom_skin(self, color: SpibmomSkinColor) -> Self {
+		Self::SpibmomSkin(color)
+	}
+
+	pub fn with_spibmom_eye(self, color: SpibmomEyeColor) -> Self {
+		Self::SpibmomEye(color)
+	}
+
+	pub fn with_spibmom_ear(self, color: SpibmomEarColor) -> Self {
+		Self::SpibmomEar(color)
+	}
+
+	pub fn with_spibmom_mouth_color(self, color: SpibmomMouthColor) -> Self {
+		Self::SpibmomMouthColor(color)
+	}
+
+	pub fn with_spibmom_crown(self, color: SpibmomCrownColor) -> Self {
+		Self::SpibmomCrown(color)
+	}
+
+	pub fn with_spibmom_spine(self, color: SpibmomSpineColor) -> Self {
+		Self::SpibmomSpine(color)
 	}
 }
 

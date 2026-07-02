@@ -25,6 +25,7 @@ pub mod dui;
 pub mod mygr;
 pub mod wumbus;
 pub mod lero;
+pub mod spibmom;
 mod values;
 
 #[derive(Clone, Copy)]
@@ -66,6 +67,9 @@ impl SectionMenuMap<ConceptSpecies> for CharacterSpeciesMenus<'_> {
 			}
 			ConceptSpecies::Lero => {
 				Root::new(self.menu.lero.clone()).render_with(renderer, parent, context)
+			}
+			ConceptSpecies::Spibmom => {
+				Root::new(self.menu.spibmom.clone()).render_with(renderer, parent, context)
 			}
 		}
 	}
