@@ -2,7 +2,7 @@ use bevy::prelude::*;
 use character_ui_menu::{BlockLabeled, Labeled};
 
 use crate::render::{MenuThumbnailContext, RenderContext, RenderMenu, Renderer};
-use crate::widgets::{row_node, text};
+use crate::widgets::{inline_chip_row, labeled_row, text};
 
 impl<T: RenderMenu> RenderMenu for Labeled<T> {
 	fn render_with<C: MenuThumbnailContext>(
@@ -11,9 +11,11 @@ impl<T: RenderMenu> RenderMenu for Labeled<T> {
 		parent: &mut ChildSpawnerCommands,
 		context: &mut RenderContext<'_, C>,
 	) {
-		parent.spawn((row_node(), Pickable::IGNORE)).with_children(|row| {
+		parent.spawn((labeled_row(), Pickable::IGNORE)).with_children(|row| {
 			text(row, self.label, 11.0, Color::WHITE);
-			self.value.render_with(renderer, row, context);
+			row.spawn((inline_chip_row(), Pickable::IGNORE)).with_children(|group| {
+				self.value.render_with(renderer, group, context);
+			});
 		});
 	}
 }

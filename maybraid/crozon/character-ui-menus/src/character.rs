@@ -282,46 +282,37 @@ impl CharacterMenu {
 }
 
 fn apply_braidman_slider(menu: &mut BraidmanMenu, field: CharacterField, delta: f32) -> bool {
-	let sliders = &mut menu.body.value.sliders;
+	let body = &mut menu.body.value.sliders;
+	let face = &mut menu.head_features.value.feature_sliders;
 	match field {
 		CharacterField::ShoulderWidth => {
-			sliders.shoulder_width = sliders.shoulder_width.apply_delta(delta)
+			body.shoulder_width = body.shoulder_width.apply_delta(delta)
 		}
-		CharacterField::HipWidth => sliders.hip_width = sliders.hip_width.apply_delta(delta),
+		CharacterField::HipWidth => body.hip_width = body.hip_width.apply_delta(delta),
 		CharacterField::ChestThickness => {
-			sliders.chest_thickness = sliders.chest_thickness.apply_delta(delta)
+			body.chest_thickness = body.chest_thickness.apply_delta(delta)
 		}
-		CharacterField::HipThickness => {
-			sliders.hip_thickness = sliders.hip_thickness.apply_delta(delta)
-		}
-		CharacterField::LegThickness => {
-			sliders.leg_thickness = sliders.leg_thickness.apply_delta(delta)
-		}
+		CharacterField::HipThickness => body.hip_thickness = body.hip_thickness.apply_delta(delta),
+		CharacterField::LegThickness => body.leg_thickness = body.leg_thickness.apply_delta(delta),
 		CharacterField::ButtocksThickness => {
-			sliders.buttocks_thickness = sliders.buttocks_thickness.apply_delta(delta)
+			body.buttocks_thickness = body.buttocks_thickness.apply_delta(delta)
 		}
-		CharacterField::WaistThickness => {
-			sliders.waist_thickness = sliders.waist_thickness.apply_delta(delta)
-		}
+		CharacterField::WaistThickness => body.waist_thickness = body.waist_thickness.apply_delta(delta),
 		CharacterField::LowerTrunkThickness => {
-			sliders.lower_trunk_thickness = sliders.lower_trunk_thickness.apply_delta(delta)
+			body.lower_trunk_thickness = body.lower_trunk_thickness.apply_delta(delta)
 		}
-		CharacterField::ArmLength => sliders.arm_length = sliders.arm_length.apply_delta(delta),
-		CharacterField::ArmThickness => {
-			sliders.arm_thickness = sliders.arm_thickness.apply_delta(delta)
-		}
-		CharacterField::LegLength => sliders.leg_length = sliders.leg_length.apply_delta(delta),
-		CharacterField::EyeWidth => sliders.eye_width = sliders.eye_width.apply_delta(delta),
-		CharacterField::EyeHeight => sliders.eye_height = sliders.eye_height.apply_delta(delta),
-		CharacterField::EyeTilt => sliders.eye_tilt = sliders.eye_tilt.apply_delta(delta),
-		CharacterField::NoseWidth => sliders.nose_width = sliders.nose_width.apply_delta(delta),
-		CharacterField::NoseHeight => sliders.nose_height = sliders.nose_height.apply_delta(delta),
-		CharacterField::MouthWidth => sliders.mouth_width = sliders.mouth_width.apply_delta(delta),
-		CharacterField::MouthHeight => {
-			sliders.mouth_height = sliders.mouth_height.apply_delta(delta)
-		}
-		CharacterField::EarWidth => sliders.ear_width = sliders.ear_width.apply_delta(delta),
-		CharacterField::EarHeight => sliders.ear_height = sliders.ear_height.apply_delta(delta),
+		CharacterField::ArmLength => body.arm_length = body.arm_length.apply_delta(delta),
+		CharacterField::ArmThickness => body.arm_thickness = body.arm_thickness.apply_delta(delta),
+		CharacterField::LegLength => body.leg_length = body.leg_length.apply_delta(delta),
+		CharacterField::EyeWidth => face.eye_width = face.eye_width.apply_delta(delta),
+		CharacterField::EyeHeight => face.eye_height = face.eye_height.apply_delta(delta),
+		CharacterField::EyeTilt => face.eye_tilt = face.eye_tilt.apply_delta(delta),
+		CharacterField::NoseWidth => face.nose_width = face.nose_width.apply_delta(delta),
+		CharacterField::NoseHeight => face.nose_height = face.nose_height.apply_delta(delta),
+		CharacterField::MouthWidth => face.mouth_width = face.mouth_width.apply_delta(delta),
+		CharacterField::MouthHeight => face.mouth_height = face.mouth_height.apply_delta(delta),
+		CharacterField::EarWidth => face.ear_width = face.ear_width.apply_delta(delta),
+		CharacterField::EarHeight => face.ear_height = face.ear_height.apply_delta(delta),
 		_ => return false,
 	}
 	true

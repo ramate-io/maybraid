@@ -2,7 +2,7 @@ use bevy::prelude::*;
 use character_ui_menu::{LabelOption, ListValues, SwatchOption, SwatchSingleSelect};
 
 use crate::render::{MenuThumbnailContext, RenderContext, RenderMenu, Renderer};
-use crate::widgets::{color_from_hex, MUTED};
+use crate::widgets::{color_from_hex, inline_chip_row, swatch_node, MUTED};
 
 pub trait SwatchEventMap<E: Copy + Send + Sync + 'static, T: Copy> {
 	fn swatch_event(&self, value: T) -> E;
@@ -82,22 +82,19 @@ where
 		parent: &mut ChildSpawnerCommands,
 		_context: &mut RenderContext<'_, C>,
 	) {
-		for value in T::values() {
-			let value = *value;
-			let selected = value == self.active;
-			parent.spawn((
-				Button,
-				Node {
-					width: Val::Px(22.0),
-					height: Val::Px(18.0),
-					border: UiRect::all(Val::Px(if selected { 2.0 } else { 1.0 })),
-					..default()
-				},
-				BorderColor::all(if selected { Color::WHITE } else { MUTED }),
-				BackgroundColor(color_from_hex(value.color_hex())),
-				crate::widgets::MenuButton(self.map.swatch_event(value)),
-			));
-		}
+		parent.spawn((inline_chip_row(), Pickable::IGNORE)).with_children(|row| {
+			for value in T::values() {
+				let value = *value;
+				let selected = value == self.active;
+				row.spawn((
+					Button,
+					swatch_node(selected),
+					BorderColor::all(if selected { Color::WHITE } else { MUTED }),
+					BackgroundColor(color_from_hex(value.color_hex())),
+					crate::widgets::MenuButton(self.map.swatch_event(value)),
+				));
+			}
+		});
 	}
 }
 
@@ -112,12 +109,7 @@ where
 		_context: &mut RenderContext<'_, C>,
 	) {
 		parent.spawn((
-			Node {
-				width: Val::Px(22.0),
-				height: Val::Px(18.0),
-				border: UiRect::all(Val::Px(2.0)),
-				..default()
-			},
+			swatch_node(true),
 			BorderColor::all(Color::WHITE),
 			BackgroundColor(color_from_hex(self.value.color_hex())),
 		));

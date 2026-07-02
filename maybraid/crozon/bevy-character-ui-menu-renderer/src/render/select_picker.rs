@@ -2,7 +2,7 @@ use bevy::prelude::*;
 use character_ui_menu::{LabelOption, ListValues, SingleSelect};
 
 use crate::render::{MenuThumbnailContext, RenderContext, RenderMenu, Renderer};
-use crate::widgets::{text, ACTIVE, INACTIVE};
+use crate::widgets::{inline_chip_row, select_tile_node, tile_text, ACTIVE, INACTIVE};
 
 pub trait SelectEventMap<E: Copy + Send + Sync + 'static, T: Copy> {
 	fn select_event(&self, value: T) -> E;
@@ -43,26 +43,21 @@ where
 		parent: &mut ChildSpawnerCommands,
 		_context: &mut RenderContext<'_, C>,
 	) {
-		for value in T::values() {
-			let value = *value;
-			let active = value == self.select.value;
-			parent
-				.spawn((
-					Button,
-					Node {
-						min_width: Val::Px(28.0),
-						height: Val::Px(22.0),
-						padding: UiRect::axes(Val::Px(7.0), Val::Px(2.0)),
-						justify_content: JustifyContent::Center,
-						align_items: AlignItems::Center,
-						..default()
-					},
-					BackgroundColor(if active { ACTIVE } else { INACTIVE }),
-					crate::widgets::MenuButton(self.map.select_event(value)),
-				))
-				.with_children(|button| {
-					text(button, value.label(), 10.0, Color::WHITE);
-				});
-		}
+		parent.spawn((inline_chip_row(), Pickable::IGNORE)).with_children(|row| {
+			for value in T::values() {
+				let value = *value;
+				let active = value == self.select.value;
+				row
+					.spawn((
+						Button,
+						select_tile_node(),
+						BackgroundColor(if active { ACTIVE } else { INACTIVE }),
+						crate::widgets::MenuButton(self.map.select_event(value)),
+					))
+					.with_children(|button| {
+						tile_text(button, value.label(), 9.0, Color::WHITE);
+					});
+			}
+		});
 	}
 }

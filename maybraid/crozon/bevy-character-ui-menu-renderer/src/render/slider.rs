@@ -2,7 +2,7 @@ use bevy::prelude::*;
 use character_ui_menu::{Slider, SliderStep};
 
 use crate::render::{MenuThumbnailContext, RenderContext, RenderMenu, Renderer};
-use crate::widgets::{render_button, row_node, text};
+use crate::widgets::{compact_control_row, render_button, text};
 
 impl RenderMenu for Slider {
 	fn render_with<C: MenuThumbnailContext>(
@@ -25,7 +25,7 @@ where
 		parent: &mut ChildSpawnerCommands,
 		context: &mut RenderContext<'_, C>,
 	) {
-		parent.spawn((row_node(), Pickable::IGNORE)).with_children(|row| {
+		parent.spawn((compact_control_row(), Pickable::IGNORE)).with_children(|row| {
 			render_button(row, "-", self.decrease, false);
 			self.slider.render_with(renderer, row, context);
 			render_button(row, "+", self.increase, false);

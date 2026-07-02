@@ -3,8 +3,9 @@ use bevy_character_ui_menu_renderer::{MenuThumbnailContext, RenderContext, Rende
 
 use crate::{
 	characters::braidman::{
-		AnimationMenu, BraidmanBodyMenu, BraidmanClothingMenu, BraidmanHairMenu,
-		BraidmanHeadFeaturesMenu, BraidmanMenu, BraidmanPresetsMenu, BraidmanSlidersMenu,
+		AnimationMenu, BraidmanBodyMenu, BraidmanBodyProportionSliders, BraidmanClothingMenu,
+		BraidmanHairMenu, BraidmanHeadFeaturesMenu, BraidmanMenu,
+		BraidmanPresetsMenu,
 	},
 	event::CharacterField,
 	fields::ColoredMultiSelectField,
@@ -55,7 +56,7 @@ impl RenderMenu for BraidmanBodyMenu {
 	}
 }
 
-impl RenderMenu for BraidmanSlidersMenu {
+impl RenderMenu for BraidmanBodyProportionSliders {
 	fn render_with<C: MenuThumbnailContext>(
 		&self,
 		renderer: &Renderer,
@@ -88,24 +89,6 @@ impl RenderMenu for BraidmanSlidersMenu {
 			.render_with(renderer, parent, context);
 		labeled_slider("Leg Length", CharacterField::LegLength, self.leg_length)
 			.render_with(renderer, parent, context);
-		labeled_slider("Eye Width", CharacterField::EyeWidth, self.eye_width)
-			.render_with(renderer, parent, context);
-		labeled_slider("Eye Height", CharacterField::EyeHeight, self.eye_height)
-			.render_with(renderer, parent, context);
-		labeled_slider("Eye Tilt", CharacterField::EyeTilt, self.eye_tilt)
-			.render_with(renderer, parent, context);
-		labeled_slider("Nose Width", CharacterField::NoseWidth, self.nose_width)
-			.render_with(renderer, parent, context);
-		labeled_slider("Nose Height", CharacterField::NoseHeight, self.nose_height)
-			.render_with(renderer, parent, context);
-		labeled_slider("Mouth Width", CharacterField::MouthWidth, self.mouth_width)
-			.render_with(renderer, parent, context);
-		labeled_slider("Mouth Height", CharacterField::MouthHeight, self.mouth_height)
-			.render_with(renderer, parent, context);
-		labeled_slider("Ear Width", CharacterField::EarWidth, self.ear_width)
-			.render_with(renderer, parent, context);
-		labeled_slider("Ear Height", CharacterField::EarHeight, self.ear_height)
-			.render_with(renderer, parent, context);
 	}
 }
 
@@ -116,20 +99,39 @@ impl RenderMenu for BraidmanHeadFeaturesMenu {
 		parent: &mut ChildSpawnerCommands,
 		context: &mut RenderContext<'_, C>,
 	) {
+		let sliders = &self.feature_sliders;
 		context.preview_color = context.base_preview_color;
 		block_asset("Head", CharacterField::HeadMesh, self.head).render_with(renderer, parent, context);
 		context.preview_color = self.eye_color.value.color();
 		block_asset("Eyes", CharacterField::Eye, self.eye).render_with(renderer, parent, context);
+		labeled_slider("Eye Width", CharacterField::EyeWidth, sliders.eye_width)
+			.render_with(renderer, parent, context);
+		labeled_slider("Eye Height", CharacterField::EyeHeight, sliders.eye_height)
+			.render_with(renderer, parent, context);
+		labeled_slider("Eye Tilt", CharacterField::EyeTilt, sliders.eye_tilt)
+			.render_with(renderer, parent, context);
 		labeled_swatch("Eye Color", CharacterField::EyeColor, self.eye_color)
 			.render_with(renderer, parent, context);
 		context.preview_color = context.base_preview_color;
 		block_asset("Nose", CharacterField::Nose, self.nose).render_with(renderer, parent, context);
+		labeled_slider("Nose Width", CharacterField::NoseWidth, sliders.nose_width)
+			.render_with(renderer, parent, context);
+		labeled_slider("Nose Height", CharacterField::NoseHeight, sliders.nose_height)
+			.render_with(renderer, parent, context);
 		context.preview_color = self.mouth_color.value.color();
 		block_asset("Mouth", CharacterField::Mouth, self.mouth).render_with(renderer, parent, context);
+		labeled_slider("Mouth Width", CharacterField::MouthWidth, sliders.mouth_width)
+			.render_with(renderer, parent, context);
+		labeled_slider("Mouth Height", CharacterField::MouthHeight, sliders.mouth_height)
+			.render_with(renderer, parent, context);
 		labeled_swatch("Mouth Color", CharacterField::MouthColor, self.mouth_color)
 			.render_with(renderer, parent, context);
 		context.preview_color = context.base_preview_color;
 		block_asset("Ears", CharacterField::Ear, self.ear).render_with(renderer, parent, context);
+		labeled_slider("Ear Width", CharacterField::EarWidth, sliders.ear_width)
+			.render_with(renderer, parent, context);
+		labeled_slider("Ear Height", CharacterField::EarHeight, sliders.ear_height)
+			.render_with(renderer, parent, context);
 	}
 }
 

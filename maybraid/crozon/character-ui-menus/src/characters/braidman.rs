@@ -28,7 +28,7 @@ pub struct BraidmanPresetsMenu {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct BraidmanSlidersMenu {
+pub struct BraidmanBodyProportionSliders {
 	pub shoulder_width: Slider,
 	pub hip_width: Slider,
 	pub chest_thickness: Slider,
@@ -40,6 +40,10 @@ pub struct BraidmanSlidersMenu {
 	pub arm_length: Slider,
 	pub arm_thickness: Slider,
 	pub leg_length: Slider,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct BraidmanHeadFeatureSliders {
 	pub eye_width: Slider,
 	pub eye_height: Slider,
 	pub eye_tilt: Slider,
@@ -54,7 +58,7 @@ pub struct BraidmanSlidersMenu {
 #[derive(Clone, Debug, PartialEq)]
 pub struct BraidmanBodyMenu {
 	pub body: AssetSingleSelect<BodyMesh>,
-	pub sliders: BraidmanSlidersMenu,
+	pub sliders: BraidmanBodyProportionSliders,
 	pub color: SwatchSingleSelect<BraidmanColor>,
 }
 
@@ -67,6 +71,7 @@ pub struct BraidmanHeadFeaturesMenu {
 	pub ear: AssetSingleSelect<EarMesh>,
 	pub eye_color: SwatchSingleSelect<BraidmanColor>,
 	pub mouth_color: SwatchSingleSelect<BraidmanColor>,
+	pub feature_sliders: BraidmanHeadFeatureSliders,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -101,7 +106,7 @@ fn slider(value: f32, min: f32, max: f32, step: f32) -> Slider {
 	Slider::new(value, min, max, step)
 }
 
-impl BraidmanSlidersMenu {
+impl BraidmanBodyProportionSliders {
 	pub fn from_config(sliders: BraidmanSliders) -> Self {
 		Self {
 			shoulder_width: slider(sliders.shoulder_width, 0.8, 1.2, 0.05),
@@ -115,6 +120,27 @@ impl BraidmanSlidersMenu {
 			arm_length: slider(sliders.arm_length, 0.8, 1.2, 0.05),
 			arm_thickness: slider(sliders.arm_thickness, 0.8, 1.2, 0.05),
 			leg_length: slider(sliders.leg_length, 0.8, 1.2, 0.05),
+		}
+	}
+
+	pub fn write_config(&self, sliders: &mut BraidmanSliders) {
+		sliders.shoulder_width = self.shoulder_width.value;
+		sliders.hip_width = self.hip_width.value;
+		sliders.chest_thickness = self.chest_thickness.value;
+		sliders.hip_thickness = self.hip_thickness.value;
+		sliders.leg_thickness = self.leg_thickness.value;
+		sliders.buttocks_thickness = self.buttocks_thickness.value;
+		sliders.waist_thickness = self.waist_thickness.value;
+		sliders.lower_trunk_thickness = self.lower_trunk_thickness.value;
+		sliders.arm_length = self.arm_length.value;
+		sliders.arm_thickness = self.arm_thickness.value;
+		sliders.leg_length = self.leg_length.value;
+	}
+}
+
+impl BraidmanHeadFeatureSliders {
+	pub fn from_config(sliders: BraidmanSliders) -> Self {
+		Self {
 			eye_width: slider(sliders.eye_width, 0.8, 1.2, 0.05),
 			eye_height: slider(sliders.eye_height, 0.8, 1.2, 0.05),
 			eye_tilt: slider(sliders.eye_tilt, -30.0, 30.0, 0.5),
@@ -127,30 +153,16 @@ impl BraidmanSlidersMenu {
 		}
 	}
 
-	pub fn to_config(&self) -> BraidmanSliders {
-		BraidmanSliders {
-			shoulder_width: self.shoulder_width.value,
-			hip_width: self.hip_width.value,
-			chest_thickness: self.chest_thickness.value,
-			hip_thickness: self.hip_thickness.value,
-			leg_thickness: self.leg_thickness.value,
-			buttocks_thickness: self.buttocks_thickness.value,
-			waist_thickness: self.waist_thickness.value,
-			lower_trunk_thickness: self.lower_trunk_thickness.value,
-			arm_length: self.arm_length.value,
-			arm_thickness: self.arm_thickness.value,
-			leg_length: self.leg_length.value,
-			eye_width: self.eye_width.value,
-			eye_height: self.eye_height.value,
-			eye_tilt: self.eye_tilt.value,
-			nose_width: self.nose_width.value,
-			nose_height: self.nose_height.value,
-			mouth_width: self.mouth_width.value,
-			mouth_height: self.mouth_height.value,
-			ear_width: self.ear_width.value,
-			ear_height: self.ear_height.value,
-		}
-		.clamped()
+	pub fn write_config(&self, sliders: &mut BraidmanSliders) {
+		sliders.eye_width = self.eye_width.value;
+		sliders.eye_height = self.eye_height.value;
+		sliders.eye_tilt = self.eye_tilt.value;
+		sliders.nose_width = self.nose_width.value;
+		sliders.nose_height = self.nose_height.value;
+		sliders.mouth_width = self.mouth_width.value;
+		sliders.mouth_height = self.mouth_height.value;
+		sliders.ear_width = self.ear_width.value;
+		sliders.ear_height = self.ear_height.value;
 	}
 }
 
@@ -168,7 +180,7 @@ impl From<&BraidmanConfig> for BraidmanMenu {
 				"Body",
 				BraidmanBodyMenu {
 					body: AssetSingleSelect::new(config.body).with_camera_focus(BODY_FOCUS),
-					sliders: BraidmanSlidersMenu::from_config(config.sliders),
+					sliders: BraidmanBodyProportionSliders::from_config(config.sliders),
 					color: SwatchSingleSelect::new(config.colors.body),
 				},
 			)
@@ -183,6 +195,7 @@ impl From<&BraidmanConfig> for BraidmanMenu {
 					ear: AssetSingleSelect::new(config.ear).with_camera_focus(EAR_FOCUS),
 					eye_color: SwatchSingleSelect::new(config.colors.eyes),
 					mouth_color: SwatchSingleSelect::new(config.colors.mouth),
+					feature_sliders: BraidmanHeadFeatureSliders::from_config(config.sliders),
 				},
 			),
 			hair: Section::new(
@@ -237,7 +250,12 @@ impl From<&BraidmanMenu> for BraidmanConfig {
 				clothing_default: menu.clothing.value.default_color.value,
 				clothing: menu.clothing.value.item_colors.clone(),
 			},
-			sliders: menu.body.value.sliders.to_config(),
+			sliders: {
+				let mut sliders = BraidmanSliders::default();
+				menu.body.value.sliders.write_config(&mut sliders);
+				menu.head_features.value.feature_sliders.write_config(&mut sliders);
+				sliders.clamped()
+			},
 		}
 	}
 }

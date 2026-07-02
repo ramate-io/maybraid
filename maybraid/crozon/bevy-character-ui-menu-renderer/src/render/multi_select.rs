@@ -5,7 +5,7 @@ use character_ui_menu::{
 
 use crate::render::util::color_to_key;
 use crate::render::{MenuThumbnailContext, RenderContext, RenderMenu, Renderer};
-use crate::widgets::{color_from_hex, render_asset_button, text, MUTED};
+use crate::widgets::{color_from_hex, inline_chip_row, render_asset_button, swatch_node, text, MUTED};
 
 pub trait ToggleEventMap<E: Copy + Send + Sync + 'static, T: Copy> {
 	fn toggle_event(&self, value: T) -> E;
@@ -235,36 +235,19 @@ where
 		_context: &mut RenderContext<'_, Ctx>,
 	) {
 		let active = self.map.color_for(self.item);
-		parent
-			.spawn((
-				Node {
-					flex_direction: FlexDirection::Row,
-					flex_wrap: FlexWrap::Wrap,
-					column_gap: Val::Px(3.0),
-					row_gap: Val::Px(3.0),
-					align_items: AlignItems::Center,
-					..default()
-				},
-				Pickable::IGNORE,
-			))
-			.with_children(|row| {
-				for swatch in C::values() {
-					let swatch = *swatch;
-					let selected = swatch == active;
-					row.spawn((
-						Button,
-						Node {
-							width: Val::Px(20.0),
-							height: Val::Px(16.0),
-							border: UiRect::all(Val::Px(if selected { 2.0 } else { 1.0 })),
-							..default()
-						},
-						BorderColor::all(if selected { Color::WHITE } else { MUTED }),
-						BackgroundColor(color_from_hex(swatch.color_hex())),
-						crate::widgets::MenuButton(self.map.color_event(self.item, swatch)),
-					));
-				}
-			});
+		parent.spawn((inline_chip_row(), Pickable::IGNORE)).with_children(|row| {
+			for swatch in C::values() {
+				let swatch = *swatch;
+				let selected = swatch == active;
+				row.spawn((
+					Button,
+					swatch_node(selected),
+					BorderColor::all(if selected { Color::WHITE } else { MUTED }),
+					BackgroundColor(color_from_hex(swatch.color_hex())),
+					crate::widgets::MenuButton(self.map.color_event(self.item, swatch)),
+				));
+			}
+		});
 	}
 }
 
