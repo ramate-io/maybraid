@@ -312,8 +312,12 @@ fn body_pose_landmark_ready(bone_map: &BoneMap, bone_globals: &Query<&GlobalTran
 		.is_some_and(|y| y > BODY_POSE_LANDMARK_MIN_Y)
 }
 
-/// Head rig uses different landmarks than the body; only require the focus socket bone.
+/// Head rig uses different landmarks than the body.
 fn head_rig_focus_ready(bone_map: &BoneMap, socket: &str) -> bool {
+	if socket == "root" {
+		// `"root"` anchors on the rig entity once socket-attached, not a named bone.
+		return true;
+	}
 	!bone_map.by_name.is_empty() && bone_map.by_name.contains_key(socket)
 }
 
@@ -489,14 +493,14 @@ fn resolve_focus_transform_from_rigs<'a>(
 	None
 }
 
-/// Body `"root"` framing anchors on the rig entity (ground); other sockets use named bones.
+/// `"root"` framing anchors on the rig entity; other sockets use named bones.
 fn focus_socket_global(
 	focus: CameraFocus,
 	bone_map: &BoneMap,
 	rig_global: &GlobalTransform,
 	bone_globals: &Query<&GlobalTransform>,
 ) -> Option<GlobalTransform> {
-	if focus.rig == FocusRig::Body && focus.socket == "root" {
+	if focus.socket == "root" {
 		return Some(*rig_global);
 	}
 	let bone_entity = bone_map.by_name.get(focus.socket)?;

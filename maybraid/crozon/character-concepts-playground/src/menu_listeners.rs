@@ -154,8 +154,8 @@ pub fn on_character_menu_event(
 		match event {
 			CharacterMenuEvent::MenuUpdate(menu) => {
 				*config = menu_to_preview_config(menu);
-				preview_sync.invalidate();
-				focus_sync.invalidate();
+				preview_sync.invalidate_live();
+				focus_sync.invalidate_live();
 				respawn_cooldown.frames_remaining = 0;
 				crate::ui::mark_menu_ui_dirty(&mut ui_sync);
 			}

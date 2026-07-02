@@ -153,6 +153,12 @@ pub struct ConceptPreviewSyncState {
 }
 
 impl ConceptPreviewSyncState {
+	/// Drop cached pose/config so the next sync can live-update or respawn parts.
+	pub(crate) fn invalidate_live(&mut self) {
+		self.live_key.clear();
+	}
+
+	/// Force a full preview respawn (species switch).
 	pub(crate) fn invalidate(&mut self) {
 		self.live_key.clear();
 		self.spawn_key.clear();

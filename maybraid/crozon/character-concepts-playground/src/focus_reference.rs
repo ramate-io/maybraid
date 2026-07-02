@@ -6,7 +6,7 @@
 use bevy::prelude::*;
 use crozon_characters::assembly::{CharacterPartSlot, ResolvedCharacterAssembly};
 
-use crate::preview::ConceptPreviewConfig;
+use crate::preview::{ConceptPreviewConfig, ConceptSpecies};
 use crate::skinning::{
 	ActiveRigPose, BoneMap, CharacterRig, CharacterRigRole, NeedsSocketPlacement, RigBindScales,
 };
@@ -25,6 +25,12 @@ pub struct FocusReferenceSyncState {
 }
 
 impl FocusReferenceSyncState {
+	/// Drop cached pose/config so the next sync re-runs without despawning rigs.
+	pub(crate) fn invalidate_live(&mut self) {
+		self.live_key.clear();
+	}
+
+	/// Force a full hidden-rig respawn (species switch).
 	pub(crate) fn invalidate(&mut self) {
 		self.live_key.clear();
 		self.spawn_key.clear();
@@ -38,8 +44,13 @@ fn focus_live_key(config: &ConceptPreviewConfig) -> String {
 	}
 }
 
+/// Hidden focus rigs only mirror body + head armatures; cosmetic part swaps do not
+/// change these assets.
 fn focus_spawn_key(config: &ConceptPreviewConfig) -> String {
-	config.spawn_key()
+	match config.species() {
+		ConceptSpecies::Braidman => "focus_rigs=braidman".into(),
+		ConceptSpecies::Brodler => "focus_rigs=brodler".into(),
+	}
 }
 
 pub fn sync_focus_reference(

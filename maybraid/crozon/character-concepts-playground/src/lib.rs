@@ -158,7 +158,7 @@ impl Plugin for CrozonCharacterConceptsPlaygroundPlugin {
 					maintain_resolved_pose.before(TransformSystems::Propagate),
 					apply_camera_suggestion
 						.after(TransformSystems::Propagate)
-						.after(on_character_menu_event),
+						.after(attach_focus_reference_to_sockets),
 				),
 			);
 	}
