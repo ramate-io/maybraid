@@ -17,7 +17,7 @@ use crate::{
 
 const BODY_IGEO: AssetPath = AssetPath::new("characters/bodies/igeo_biped_full_body.glb");
 const HEAD_BARRED_BOWL: AssetPath = AssetPath::new("characters/heads/barred_bowl_head.glb");
-const EYE_LARGE_ROUNDED: AssetPath = AssetPath::new("characters/eyes/large_rounded_eye_left.glb");
+const EYE_LARGE_ROUNDED: AssetPath = AssetPath::new("characters/eyes/humanoid_eye_left.glb");
 const NOSE_TBAR: AssetPath = AssetPath::new("characters/noses/tbar_nose.glb");
 
 /// Species-local resolver for Dui asset choices.
