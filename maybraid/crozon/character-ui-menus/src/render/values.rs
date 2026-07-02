@@ -2,6 +2,7 @@ use crozon_characters::{
 	species::{
 		braidman::BraidmanColor,
 		brodler::{assets::HornMesh, BrodlerEyeColor, BrodlerHeadMesh, BrodlerHornColor, BrodlerSkinColor},
+		mygr::{MygrEyeColor, MygrHeadMesh, MygrMouthMesh, MygrSkinColor},
 		common::{BodyMesh, EarMesh, EyeMesh, HairMesh, HeadMesh, MouthMesh, NoseMesh},
 	},
 	ConceptAnimation,
@@ -33,6 +34,18 @@ impl AssetFieldValue for BrodlerHeadMesh {
 impl AssetFieldValue for HornMesh {
 	fn to_asset_value(value: Self) -> AssetValue {
 		AssetValue::Horns(value)
+	}
+}
+
+impl AssetFieldValue for MygrHeadMesh {
+	fn to_asset_value(value: Self) -> AssetValue {
+		AssetValue::MygrHead(value)
+	}
+}
+
+impl AssetFieldValue for MygrMouthMesh {
+	fn to_asset_value(value: Self) -> AssetValue {
+		AssetValue::MygrMouth(value)
 	}
 }
 
@@ -93,5 +106,17 @@ impl SwatchFieldValue for BrodlerEyeColor {
 impl SwatchFieldValue for BrodlerHornColor {
 	fn to_swatch_value(value: Self) -> SwatchValue {
 		SwatchValue::BrodlerHorn(value)
+	}
+}
+
+impl SwatchFieldValue for MygrSkinColor {
+	fn to_swatch_value(value: Self) -> SwatchValue {
+		SwatchValue::MygrSkin(value)
+	}
+}
+
+impl SwatchFieldValue for MygrEyeColor {
+	fn to_swatch_value(value: Self) -> SwatchValue {
+		SwatchValue::MygrEye(value)
 	}
 }

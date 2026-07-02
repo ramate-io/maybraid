@@ -6,6 +6,7 @@
 pub mod braidman;
 pub mod brodler;
 pub mod common;
+pub mod mygr;
 
 use crate::ResolvedCharacterAssembly;
 

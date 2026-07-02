@@ -9,6 +9,7 @@ use crozon_characters::{
 	species::{
 		braidman::BraidmanConfig,
 		brodler::{BrodlerConfig, BrodlerHeadMesh, HornMesh},
+		mygr::MygrConfig,
 		common::{
 			BodyMesh, ClothingMesh, EarMesh, EyeMesh, HairMesh, HeadMesh, MouthMesh, NoseMesh,
 		},
@@ -30,12 +31,14 @@ pub enum ConceptSpecies {
 	#[default]
 	Braidman,
 	Brodler,
+	Mygr,
 }
 
 #[derive(Resource, Debug, Clone, PartialEq)]
 pub enum ConceptPreviewConfig {
 	Braidman { config: BraidmanConfig, animation: ConceptAnimation },
 	Brodler { config: BrodlerConfig, animation: ConceptAnimation },
+	Mygr { config: MygrConfig, animation: ConceptAnimation },
 }
 
 impl Default for ConceptPreviewConfig {
@@ -49,6 +52,7 @@ impl ConceptPreviewConfig {
 		match species {
 			ConceptSpecies::Braidman => Self::braidman(BraidmanConfig::default_preview()),
 			ConceptSpecies::Brodler => Self::brodler(BrodlerConfig::default_preview()),
+			ConceptSpecies::Mygr => Self::mygr(MygrConfig::default_preview()),
 		}
 	}
 
@@ -56,6 +60,7 @@ impl ConceptPreviewConfig {
 		match self {
 			Self::Braidman { .. } => ConceptSpecies::Braidman,
 			Self::Brodler { .. } => ConceptSpecies::Brodler,
+			Self::Mygr { .. } => ConceptSpecies::Mygr,
 		}
 	}
 
@@ -75,10 +80,19 @@ impl ConceptPreviewConfig {
 		Self::Brodler { config, animation }
 	}
 
+	pub fn mygr(config: MygrConfig) -> Self {
+		Self::Mygr { config, animation: ConceptAnimation::default() }
+	}
+
+	pub fn mygr_with_animation(config: MygrConfig, animation: ConceptAnimation) -> Self {
+		Self::Mygr { config, animation }
+	}
+
 	pub fn resolve(&self) -> ResolvedCharacterAssembly {
 		match self {
 			Self::Braidman { config, .. } => config.resolve(),
 			Self::Brodler { config, .. } => config.resolve(),
+			Self::Mygr { config, .. } => config.resolve(),
 		}
 	}
 
@@ -88,6 +102,9 @@ impl ConceptPreviewConfig {
 				format!("{} animation={}", config.status_label(), animation.label())
 			}
 			Self::Brodler { config, animation } => {
+				format!("{} animation={}", config.status_label(), animation.label())
+			}
+			Self::Mygr { config, animation } => {
 				format!("{} animation={}", config.status_label(), animation.label())
 			}
 		}
@@ -100,6 +117,9 @@ impl ConceptPreviewConfig {
 			}
 			Self::Brodler { config, animation } => {
 				format!("species=brodler {} animation={animation:?}", config.sync_key())
+			}
+			Self::Mygr { config, animation } => {
+				format!("species=mygr {} animation={animation:?}", config.sync_key())
 			}
 		}
 	}
@@ -128,12 +148,20 @@ impl ConceptPreviewConfig {
 				config.hair,
 				config.clothing,
 			),
+			Self::Mygr { config, .. } => format!(
+				"species=mygr eye={:?} hair={:?} clothing={:?}",
+				config.eye,
+				config.hair,
+				config.clothing,
+			),
 		}
 	}
 
 	pub const fn animation(&self) -> ConceptAnimation {
 		match self {
-			Self::Braidman { animation, .. } | Self::Brodler { animation, .. } => *animation,
+			Self::Braidman { animation, .. }
+			| Self::Brodler { animation, .. }
+			| Self::Mygr { animation, .. } => *animation,
 		}
 	}
 }
@@ -212,6 +240,13 @@ pub enum PreviewTarget {
 	BrodlerEar(EarMesh),
 	BrodlerHair(HairMesh),
 	BrodlerClothing(ClothingMesh),
+	MygrBody,
+	MygrHead,
+	MygrEye(EyeMesh),
+	MygrMouth,
+	MygrEar,
+	MygrHair(HairMesh),
+	MygrClothing(ClothingMesh),
 }
 
 pub fn sync_preview(
@@ -299,6 +334,11 @@ fn sync_live_preview(
 				target.color = preview_color_brodler(brodler, target.target);
 			}
 		}
+		ConceptPreviewConfig::Mygr { config: mygr, .. } => {
+			for (_, mut target, ..) in parts {
+				target.color = preview_color_mygr(mygr, target.target);
+			}
+		}
 	}
 }
 
@@ -384,6 +424,21 @@ fn preview_color_brodler(config: &BrodlerConfig, target: PreviewTarget) -> Previ
 	}
 }
 
+fn preview_color_mygr(config: &MygrConfig, target: PreviewTarget) -> PreviewColor {
+	match target {
+		PreviewTarget::MygrHead
+		| PreviewTarget::MygrBody
+		| PreviewTarget::MygrEar => PreviewColor::MygrSkin(config.colors.skin),
+		PreviewTarget::MygrEye(_) => PreviewColor::MygrEye(config.colors.eyes),
+		PreviewTarget::MygrMouth => PreviewColor::Braidman(config.colors.mouth),
+		PreviewTarget::MygrHair(_) => PreviewColor::Braidman(config.colors.hair),
+		PreviewTarget::MygrClothing(clothing) => {
+			PreviewColor::Braidman(config.colors.clothing_color(clothing))
+		}
+		_ => PreviewColor::MygrSkin(config.colors.skin),
+	}
+}
+
 struct PreviewSpawner<'w, 's, 'a> {
 	commands: &'a mut Commands<'w, 's>,
 	asset_server: &'a AssetServer,
@@ -425,6 +480,7 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 					.mul_transform(sliders.feature_transform(part.slot))
 			}
 			ConceptPreviewConfig::Brodler { .. } => part.asset.normalization.transform(),
+			ConceptPreviewConfig::Mygr { .. } => part.asset.normalization.transform(),
 		}
 	}
 
@@ -605,6 +661,27 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 						.unwrap_or(PreviewTarget::BrodlerHead(config.head)),
 				};
 				PreviewAssetTarget { target, color: preview_color_brodler(config, target) }
+			}
+			ConceptPreviewConfig::Mygr { config, .. } => {
+				let target = match part.slot {
+					CharacterPartSlot::BodyMesh => PreviewTarget::MygrBody,
+					CharacterPartSlot::HeadRig | CharacterPartSlot::HeadMesh => PreviewTarget::MygrHead,
+					CharacterPartSlot::EyeLeft | CharacterPartSlot::EyeRight => {
+						PreviewTarget::MygrEye(config.eye)
+					}
+					CharacterPartSlot::Mouth => PreviewTarget::MygrMouth,
+					CharacterPartSlot::EarLeft | CharacterPartSlot::EarRight => PreviewTarget::MygrEar,
+					CharacterPartSlot::Nose | CharacterPartSlot::Horns => PreviewTarget::MygrHead,
+					CharacterPartSlot::Hair => PreviewTarget::MygrHair(config.hair),
+					CharacterPartSlot::Clothing => config
+						.clothing
+						.iter()
+						.copied()
+						.find(|clothing| clothing.label() == part.asset.label)
+						.map(PreviewTarget::MygrClothing)
+						.unwrap_or(PreviewTarget::MygrHead),
+				};
+				PreviewAssetTarget { target, color: preview_color_mygr(config, target) }
 			}
 		}
 	}

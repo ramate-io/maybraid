@@ -11,6 +11,7 @@ pub const HEAD_RIG: AssetPath = AssetPath::new("characters/heads/orthograde_head
 pub const HEAD_STANDARD: AssetPath = AssetPath::new("characters/heads/meerkat_head_v2.glb");
 pub const HEAD_GAUNT: AssetPath = AssetPath::new("characters/heads/gaunt_ortho_humanoid_head.glb");
 pub const HEAD_FULL: AssetPath = AssetPath::new("characters/heads/full_ortho_humanoid_head.glb");
+pub const HEAD_ORTHO_BEAR: AssetPath = AssetPath::new("characters/heads/ortho_bear_head.glb");
 pub const EYE_STANDARD: AssetPath = AssetPath::new("characters/eyes/humanoid_eye_left.glb");
 pub const EYE_FALCON: AssetPath = AssetPath::new("characters/eyes/falcon_eye_left.glb");
 pub const NOSE_STANDARD: AssetPath = AssetPath::new("characters/noses/humanoid_nose.glb");
@@ -18,6 +19,7 @@ pub const NOSE_BROAD: AssetPath = AssetPath::new("characters/noses/broad_humanoi
 pub const NOSE_LOAF: AssetPath = AssetPath::new("characters/noses/loaf_nose.glb");
 pub const NOSE_BALLOON: AssetPath = AssetPath::new("characters/noses/mumbus_nose.glb");
 pub const MOUTH_STANDARD: AssetPath = AssetPath::new("characters/mouths/common_mouth.glb");
+pub const MOUTH_CANINE_SNOUT: AssetPath = AssetPath::new("characters/snouts/canine.glb");
 pub const EAR_STANDARD: AssetPath =
 	AssetPath::new("characters/ears/round_scoop_lateral_ear_left.glb");
 pub const EAR_ROUND: AssetPath = AssetPath::new("characters/ears/round_lateral_ear_left.glb");

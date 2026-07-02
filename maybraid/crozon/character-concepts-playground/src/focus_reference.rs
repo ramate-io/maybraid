@@ -41,6 +41,7 @@ fn focus_live_key(config: &ConceptPreviewConfig) -> String {
 	match config {
 		ConceptPreviewConfig::Braidman { config, .. } => config.sync_key(),
 		ConceptPreviewConfig::Brodler { config, .. } => config.sync_key(),
+		ConceptPreviewConfig::Mygr { config, .. } => config.sync_key(),
 	}
 }
 
@@ -50,6 +51,7 @@ fn focus_spawn_key(config: &ConceptPreviewConfig) -> String {
 	match config.species() {
 		ConceptSpecies::Braidman => "focus_rigs=braidman".into(),
 		ConceptSpecies::Brodler => "focus_rigs=brodler".into(),
+		ConceptSpecies::Mygr => "focus_rigs=mygr".into(),
 	}
 }
 

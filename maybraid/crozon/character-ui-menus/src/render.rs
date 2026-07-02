@@ -21,6 +21,7 @@ use crate::{
 
 pub mod braidman;
 pub mod brodler;
+pub mod mygr;
 mod values;
 
 #[derive(Clone, Copy)]
@@ -50,6 +51,9 @@ impl SectionMenuMap<ConceptSpecies> for CharacterSpeciesMenus<'_> {
 			}
 			ConceptSpecies::Brodler => {
 				Root::new(self.menu.brodler.clone()).render_with(renderer, parent, context)
+			}
+			ConceptSpecies::Mygr => {
+				Root::new(self.menu.mygr.clone()).render_with(renderer, parent, context)
 			}
 		}
 	}

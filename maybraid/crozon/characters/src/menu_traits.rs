@@ -10,6 +10,7 @@ use crate::{
 		brodler::{
 			assets::HornMesh, BrodlerEyeColor, BrodlerHeadMesh, BrodlerHornColor, BrodlerSkinColor,
 		},
+		mygr::{MygrEyeColor, MygrHeadMesh, MygrMouthMesh, MygrSkinColor},
 		common::{
 			BodyMesh, ClothingMesh, EarMesh, EyeMesh, HairMesh, HeadMesh, MouthMesh, NoseMesh,
 		},
@@ -56,6 +57,10 @@ impl_menu_identity!(BraidmanColor);
 impl_menu_identity!(BrodlerSkinColor);
 impl_menu_identity!(BrodlerEyeColor);
 impl_menu_identity!(BrodlerHornColor);
+impl_menu_identity!(MygrHeadMesh);
+impl_menu_identity!(MygrMouthMesh);
+impl_menu_identity!(MygrSkinColor);
+impl_menu_identity!(MygrEyeColor);
 
 macro_rules! impl_asset_option {
 	($ty:ty, $camera:expr) => {
@@ -91,6 +96,8 @@ impl_asset_option!(NoseMesh, FACE_FEATURE_THUMBNAIL_CAMERA);
 impl_asset_option!(MouthMesh, FACE_FEATURE_THUMBNAIL_CAMERA);
 impl_asset_option!(EarMesh, EAR_THUMBNAIL_CAMERA);
 impl_asset_option!(ClothingMesh, CLOTHING_THUMBNAIL_CAMERA);
+impl_asset_option!(MygrHeadMesh, HEAD_THUMBNAIL_CAMERA);
+impl_asset_option!(MygrMouthMesh, FACE_FEATURE_THUMBNAIL_CAMERA);
 
 impl AssetOption for HairMesh {
 	fn asset(&self) -> IdentifiedAsset {
@@ -147,6 +154,28 @@ impl SwatchOption for BrodlerHornColor {
 		match self {
 			Self::LightBrown => "#9E7A4D",
 			Self::Yellow => "#C7A847",
+		}
+	}
+}
+
+impl SwatchOption for MygrSkinColor {
+	fn color_hex(&self) -> &'static str {
+		match self {
+			Self::Ginger => "#C47A3A",
+			Self::Charcoal => "#282624",
+			Self::Silver => "#8A8F94",
+			Self::Cream => "#E8DCC8",
+			Self::Tawny => "#8B5E3C",
+		}
+	}
+}
+
+impl SwatchOption for MygrEyeColor {
+	fn color_hex(&self) -> &'static str {
+		match self {
+			Self::Green => "#4A8C4F",
+			Self::Amber => "#C9A227",
+			Self::Blue => "#6BA3D1",
 		}
 	}
 }
