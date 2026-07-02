@@ -6,6 +6,10 @@ use crozon_characters::{
 			assets::HornMesh, BrodlerEyeColor, BrodlerHeadMesh, BrodlerHornColor, BrodlerSkinColor,
 		},
 		mygr::{MygrEyeColor, MygrHeadMesh, MygrMouthMesh, MygrSkinColor},
+		wumbus::{
+			WumbusEarColor, WumbusEyeColor, WumbusHeadMesh, WumbusHornColor,
+			WumbusMouthColor, WumbusMouthMesh, WumbusSkinColor,
+		},
 		dui::{DuiEyeMesh, DuiHeadMesh, DuiMouthMesh, DuiMouthColor, DuiSkinColor},
 		common::{
 			BodyMesh, ClothingMesh, EarMesh, EyeMesh, HairMesh, HeadMesh, MouthMesh, NoseMesh,
@@ -49,6 +53,9 @@ pub enum CharacterField {
 	Horns,
 	MygrHead,
 	MygrMouth,
+	WumbusHead,
+	WumbusMouth,
+	WumbusHorns,
 	DuiHead,
 	DuiEye,
 	DuiNose,
@@ -68,6 +75,11 @@ pub enum CharacterField {
 	HornColor,
 	MygrSkinColor,
 	MygrEyeColor,
+	WumbusSkinColor,
+	WumbusEyeColor,
+	WumbusEarColor,
+	WumbusMouthColor,
+	WumbusHornColor,
 	DuiSkinColor,
 	DuiMouthColor,
 	Clothing(ClothingMesh),
@@ -103,6 +115,8 @@ pub enum AssetValue {
 	Horns(HornMesh),
 	MygrHead(MygrHeadMesh),
 	MygrMouth(MygrMouthMesh),
+	WumbusHead(WumbusHeadMesh),
+	WumbusMouth(WumbusMouthMesh),
 	DuiHead(DuiHeadMesh),
 	DuiEye(DuiEyeMesh),
 	DuiMouth(DuiMouthMesh),
@@ -122,6 +136,11 @@ pub enum SwatchValue {
 	BrodlerHorn(BrodlerHornColor),
 	MygrSkin(MygrSkinColor),
 	MygrEye(MygrEyeColor),
+	WumbusSkin(WumbusSkinColor),
+	WumbusEye(WumbusEyeColor),
+	WumbusEar(WumbusEarColor),
+	WumbusMouth(WumbusMouthColor),
+	WumbusHorn(WumbusHornColor),
 	DuiSkin(DuiSkinColor),
 	DuiMouth(DuiMouthColor),
 }
@@ -157,6 +176,26 @@ impl SwatchValue {
 
 	pub fn with_dui_mouth(self, color: DuiMouthColor) -> Self {
 		Self::DuiMouth(color)
+	}
+
+	pub fn with_wumbus_skin(self, color: WumbusSkinColor) -> Self {
+		Self::WumbusSkin(color)
+	}
+
+	pub fn with_wumbus_eye(self, color: WumbusEyeColor) -> Self {
+		Self::WumbusEye(color)
+	}
+
+	pub fn with_wumbus_ear(self, color: WumbusEarColor) -> Self {
+		Self::WumbusEar(color)
+	}
+
+	pub fn with_wumbus_mouth(self, color: WumbusMouthColor) -> Self {
+		Self::WumbusMouth(color)
+	}
+
+	pub fn with_wumbus_horn(self, color: WumbusHornColor) -> Self {
+		Self::WumbusHorn(color)
 	}
 }
 

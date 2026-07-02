@@ -11,6 +11,7 @@ use crozon_characters::{
 		brodler::{BrodlerConfig, BrodlerHeadMesh, HornMesh},
 		mygr::MygrConfig,
 		dui::{DuiConfig, DuiNoseMesh},
+		wumbus::{WumbusConfig, WumbusHornMesh},
 		common::{
 			BodyMesh, ClothingMesh, EarMesh, EyeMesh, HairMesh, HeadMesh, MouthMesh, NoseMesh,
 		},
@@ -34,6 +35,7 @@ pub enum ConceptSpecies {
 	Brodler,
 	Mygr,
 	Dui,
+	Wumbus,
 }
 
 #[derive(Resource, Debug, Clone, PartialEq)]
@@ -42,6 +44,7 @@ pub enum ConceptPreviewConfig {
 	Brodler { config: BrodlerConfig, animation: ConceptAnimation },
 	Mygr { config: MygrConfig, animation: ConceptAnimation },
 	Dui { config: DuiConfig, animation: ConceptAnimation },
+	Wumbus { config: WumbusConfig, animation: ConceptAnimation },
 }
 
 impl Default for ConceptPreviewConfig {
@@ -57,6 +60,7 @@ impl ConceptPreviewConfig {
 			ConceptSpecies::Brodler => Self::brodler(BrodlerConfig::default_preview()),
 			ConceptSpecies::Mygr => Self::mygr(MygrConfig::default_preview()),
 			ConceptSpecies::Dui => Self::dui(DuiConfig::default_preview()),
+			ConceptSpecies::Wumbus => Self::wumbus(WumbusConfig::default_preview()),
 		}
 	}
 
@@ -66,6 +70,7 @@ impl ConceptPreviewConfig {
 			Self::Brodler { .. } => ConceptSpecies::Brodler,
 			Self::Mygr { .. } => ConceptSpecies::Mygr,
 			Self::Dui { .. } => ConceptSpecies::Dui,
+			Self::Wumbus { .. } => ConceptSpecies::Wumbus,
 		}
 	}
 
@@ -101,12 +106,21 @@ impl ConceptPreviewConfig {
 		Self::Dui { config, animation }
 	}
 
+	pub fn wumbus(config: WumbusConfig) -> Self {
+		Self::Wumbus { config, animation: ConceptAnimation::default() }
+	}
+
+	pub fn wumbus_with_animation(config: WumbusConfig, animation: ConceptAnimation) -> Self {
+		Self::Wumbus { config, animation }
+	}
+
 	pub fn resolve(&self) -> ResolvedCharacterAssembly {
 		match self {
 			Self::Braidman { config, .. } => config.resolve(),
 			Self::Brodler { config, .. } => config.resolve(),
 			Self::Mygr { config, .. } => config.resolve(),
 			Self::Dui { config, .. } => config.resolve(),
+			Self::Wumbus { config, .. } => config.resolve(),
 		}
 	}
 
@@ -122,6 +136,9 @@ impl ConceptPreviewConfig {
 				format!("{} animation={}", config.status_label(), animation.label())
 			}
 			Self::Dui { config, animation } => {
+				format!("{} animation={}", config.status_label(), animation.label())
+			}
+			Self::Wumbus { config, animation } => {
 				format!("{} animation={}", config.status_label(), animation.label())
 			}
 		}
@@ -140,6 +157,9 @@ impl ConceptPreviewConfig {
 			}
 			Self::Dui { config, animation } => {
 				format!("species=dui {} animation={animation:?}", config.sync_key())
+			}
+			Self::Wumbus { config, animation } => {
+				format!("species=wumbus {} animation={animation:?}", config.sync_key())
 			}
 		}
 	}
@@ -180,6 +200,13 @@ impl ConceptPreviewConfig {
 				config.hair,
 				config.clothing,
 			),
+			Self::Wumbus { config, .. } => format!(
+				"species=wumbus horns={:?} eye={:?} hair={:?} clothing={:?}",
+				config.horns,
+				config.eye,
+				config.hair,
+				config.clothing,
+			),
 		}
 	}
 
@@ -188,7 +215,8 @@ impl ConceptPreviewConfig {
 			Self::Braidman { animation, .. }
 			| Self::Brodler { animation, .. }
 			| Self::Mygr { animation, .. }
-			| Self::Dui { animation, .. } => *animation,
+			| Self::Dui { animation, .. }
+			| Self::Wumbus { animation, .. } => *animation,
 		}
 	}
 }
@@ -282,6 +310,14 @@ pub enum PreviewTarget {
 	DuiMouth,
 	DuiHair(HairMesh),
 	DuiClothing(ClothingMesh),
+	WumbusBody,
+	WumbusHead,
+	WumbusHorns(WumbusHornMesh),
+	WumbusEye(EyeMesh),
+	WumbusMouth,
+	WumbusEar,
+	WumbusHair(HairMesh),
+	WumbusClothing(ClothingMesh),
 }
 
 pub fn sync_preview(
@@ -377,6 +413,11 @@ fn sync_live_preview(
 		ConceptPreviewConfig::Dui { config: dui, .. } => {
 			for (_, mut target, ..) in parts {
 				target.color = preview_color_dui(dui, target.target);
+			}
+		}
+		ConceptPreviewConfig::Wumbus { config: wumbus, .. } => {
+			for (_, mut target, ..) in parts {
+				target.color = preview_color_wumbus(wumbus, target.target);
 			}
 		}
 	}
@@ -495,6 +536,23 @@ fn preview_color_dui(config: &DuiConfig, target: PreviewTarget) -> PreviewColor 
 	}
 }
 
+fn preview_color_wumbus(config: &WumbusConfig, target: PreviewTarget) -> PreviewColor {
+	match target {
+		PreviewTarget::WumbusHead | PreviewTarget::WumbusBody => {
+			PreviewColor::WumbusSkin(config.colors.skin)
+		}
+		PreviewTarget::WumbusHorns(_) => PreviewColor::WumbusHorn(config.colors.horns),
+		PreviewTarget::WumbusEye(_) => PreviewColor::WumbusEye(config.colors.eyes),
+		PreviewTarget::WumbusEar => PreviewColor::WumbusEar(config.colors.ears),
+		PreviewTarget::WumbusMouth => PreviewColor::WumbusMouth(config.colors.mouth),
+		PreviewTarget::WumbusHair(_) => PreviewColor::Braidman(config.colors.hair),
+		PreviewTarget::WumbusClothing(clothing) => {
+			PreviewColor::Braidman(config.colors.clothing_color(clothing))
+		}
+		_ => PreviewColor::WumbusSkin(config.colors.skin),
+	}
+}
+
 struct PreviewSpawner<'w, 's, 'a> {
 	commands: &'a mut Commands<'w, 's>,
 	asset_server: &'a AssetServer,
@@ -538,6 +596,7 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 			ConceptPreviewConfig::Brodler { .. } => part.asset.normalization.transform(),
 			ConceptPreviewConfig::Mygr { .. } => part.asset.normalization.transform(),
 			ConceptPreviewConfig::Dui { .. } => part.asset.normalization.transform(),
+			ConceptPreviewConfig::Wumbus { .. } => part.asset.normalization.transform(),
 		}
 	}
 
@@ -764,6 +823,28 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 						.unwrap_or(PreviewTarget::DuiHead),
 				};
 				PreviewAssetTarget { target, color: preview_color_dui(config, target) }
+			}
+			ConceptPreviewConfig::Wumbus { config, .. } => {
+				let target = match part.slot {
+					CharacterPartSlot::BodyMesh => PreviewTarget::WumbusBody,
+					CharacterPartSlot::HeadRig | CharacterPartSlot::HeadMesh => PreviewTarget::WumbusHead,
+					CharacterPartSlot::EyeLeft | CharacterPartSlot::EyeRight => {
+						PreviewTarget::WumbusEye(config.eye)
+					}
+					CharacterPartSlot::Mouth => PreviewTarget::WumbusMouth,
+					CharacterPartSlot::EarLeft | CharacterPartSlot::EarRight => PreviewTarget::WumbusEar,
+					CharacterPartSlot::Horns => PreviewTarget::WumbusHorns(config.horns),
+					CharacterPartSlot::Nose | CharacterPartSlot::Tail => PreviewTarget::WumbusHead,
+					CharacterPartSlot::Hair => PreviewTarget::WumbusHair(config.hair),
+					CharacterPartSlot::Clothing => config
+						.clothing
+						.iter()
+						.copied()
+						.find(|clothing| clothing.label() == part.asset.label)
+						.map(PreviewTarget::WumbusClothing)
+						.unwrap_or(PreviewTarget::WumbusHead),
+				};
+				PreviewAssetTarget { target, color: preview_color_wumbus(config, target) }
 			}
 		}
 	}

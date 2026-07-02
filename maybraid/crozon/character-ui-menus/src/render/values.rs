@@ -3,6 +3,10 @@ use crozon_characters::{
 		braidman::BraidmanColor,
 		brodler::{assets::HornMesh, BrodlerEyeColor, BrodlerHeadMesh, BrodlerHornColor, BrodlerSkinColor},
 		mygr::{MygrEyeColor, MygrHeadMesh, MygrMouthMesh, MygrSkinColor},
+		wumbus::{
+			WumbusEarColor, WumbusEyeColor, WumbusHeadMesh, WumbusHornColor, WumbusMouthColor,
+			WumbusMouthMesh, WumbusSkinColor,
+		},
 		dui::{DuiEyeMesh, DuiHeadMesh, DuiMouthMesh, DuiMouthColor, DuiSkinColor},
 		common::{BodyMesh, EarMesh, EyeMesh, HairMesh, HeadMesh, MouthMesh, NoseMesh},
 	},
@@ -47,6 +51,18 @@ impl AssetFieldValue for MygrHeadMesh {
 impl AssetFieldValue for MygrMouthMesh {
 	fn to_asset_value(value: Self) -> AssetValue {
 		AssetValue::MygrMouth(value)
+	}
+}
+
+impl AssetFieldValue for WumbusHeadMesh {
+	fn to_asset_value(value: Self) -> AssetValue {
+		AssetValue::WumbusHead(value)
+	}
+}
+
+impl AssetFieldValue for WumbusMouthMesh {
+	fn to_asset_value(value: Self) -> AssetValue {
+		AssetValue::WumbusMouth(value)
 	}
 }
 
@@ -137,6 +153,36 @@ impl SwatchFieldValue for MygrSkinColor {
 impl SwatchFieldValue for MygrEyeColor {
 	fn to_swatch_value(value: Self) -> SwatchValue {
 		SwatchValue::MygrEye(value)
+	}
+}
+
+impl SwatchFieldValue for WumbusSkinColor {
+	fn to_swatch_value(value: Self) -> SwatchValue {
+		SwatchValue::WumbusSkin(value)
+	}
+}
+
+impl SwatchFieldValue for WumbusEyeColor {
+	fn to_swatch_value(value: Self) -> SwatchValue {
+		SwatchValue::WumbusEye(value)
+	}
+}
+
+impl SwatchFieldValue for WumbusEarColor {
+	fn to_swatch_value(value: Self) -> SwatchValue {
+		SwatchValue::WumbusEar(value)
+	}
+}
+
+impl SwatchFieldValue for WumbusMouthColor {
+	fn to_swatch_value(value: Self) -> SwatchValue {
+		SwatchValue::WumbusMouth(value)
+	}
+}
+
+impl SwatchFieldValue for WumbusHornColor {
+	fn to_swatch_value(value: Self) -> SwatchValue {
+		SwatchValue::WumbusHorn(value)
 	}
 }
 

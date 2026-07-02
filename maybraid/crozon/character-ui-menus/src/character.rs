@@ -1,11 +1,11 @@
 use character_ui_menu::{CameraFocus, LabelOption, ListValues, Section, SingleSelect};
 use crozon_characters::{
-	species::{braidman::BraidmanConfig, brodler::BrodlerConfig, dui::DuiConfig, mygr::MygrConfig},
+	species::{braidman::BraidmanConfig, brodler::BrodlerConfig, dui::DuiConfig, mygr::MygrConfig, wumbus::WumbusConfig},
 	ConceptAnimation,
 };
 
 use crate::{
-	characters::{braidman::BraidmanMenu, brodler::BrodlerMenu, dui::DuiMenu, mygr::MygrMenu},
+	characters::{braidman::BraidmanMenu, brodler::BrodlerMenu, dui::DuiMenu, mygr::MygrMenu, wumbus::WumbusMenu},
 	cycle_value,
 	event::{AssetValue, CharacterField, MenuEvent, SectionId, SwatchValue},
 };
@@ -16,6 +16,7 @@ pub enum ConceptSpecies {
 	Brodler,
 	Mygr,
 	Dui,
+	Wumbus,
 }
 
 impl ConceptSpecies {
@@ -25,13 +26,14 @@ impl ConceptSpecies {
 			Self::Brodler => "brodler",
 			Self::Mygr => "mygr",
 			Self::Dui => "dui",
+			Self::Wumbus => "wumbus",
 		}
 	}
 }
 
 impl ListValues for ConceptSpecies {
 	fn values() -> &'static [Self] {
-		&[Self::Braidman, Self::Brodler, Self::Mygr, Self::Dui]
+		&[Self::Braidman, Self::Brodler, Self::Mygr, Self::Dui, Self::Wumbus]
 	}
 }
 
@@ -42,6 +44,7 @@ impl LabelOption for ConceptSpecies {
 			Self::Brodler => "brodler",
 			Self::Mygr => "mygr",
 			Self::Dui => "dui",
+			Self::Wumbus => "wumbus",
 		}
 	}
 }
@@ -52,6 +55,7 @@ pub enum SpeciesMenu {
 	Brodler(Section<BrodlerMenu>),
 	Mygr(Section<MygrMenu>),
 	Dui(Section<DuiMenu>),
+	Wumbus(Section<WumbusMenu>),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -61,6 +65,7 @@ pub struct CharacterMenu {
 	pub brodler: BrodlerMenu,
 	pub mygr: MygrMenu,
 	pub dui: DuiMenu,
+	pub wumbus: WumbusMenu,
 }
 
 impl CharacterMenu {
@@ -71,6 +76,7 @@ impl CharacterMenu {
 			brodler: BrodlerMenu::default(),
 			mygr: MygrMenu::default(),
 			dui: DuiMenu::default(),
+			wumbus: WumbusMenu::default(),
 		}
 	}
 
@@ -81,6 +87,7 @@ impl CharacterMenu {
 			brodler: BrodlerMenu::from(config).with_animation(animation),
 			mygr: MygrMenu::default(),
 			dui: DuiMenu::default(),
+			wumbus: WumbusMenu::default(),
 		}
 	}
 
@@ -91,6 +98,7 @@ impl CharacterMenu {
 			brodler: BrodlerMenu::default(),
 			mygr: MygrMenu::from(config).with_animation(animation),
 			dui: DuiMenu::default(),
+			wumbus: WumbusMenu::default(),
 		}
 	}
 
@@ -101,6 +109,18 @@ impl CharacterMenu {
 			brodler: BrodlerMenu::default(),
 			mygr: MygrMenu::default(),
 			dui: DuiMenu::from(config).with_animation(animation),
+			wumbus: WumbusMenu::default(),
+		}
+	}
+
+	pub fn from_wumbus(config: &WumbusConfig, animation: ConceptAnimation) -> Self {
+		Self {
+			species: SingleSelect::new(ConceptSpecies::Wumbus),
+			braidman: BraidmanMenu::default(),
+			brodler: BrodlerMenu::default(),
+			mygr: MygrMenu::default(),
+			dui: DuiMenu::default(),
+			wumbus: WumbusMenu::from(config).with_animation(animation),
 		}
 	}
 
@@ -114,6 +134,9 @@ impl CharacterMenu {
 			}
 			ConceptSpecies::Mygr => SpeciesMenu::Mygr(Section::new("Mygr", self.mygr.clone())),
 			ConceptSpecies::Dui => SpeciesMenu::Dui(Section::new("Dui", self.dui.clone())),
+			ConceptSpecies::Wumbus => {
+				SpeciesMenu::Wumbus(Section::new("Wumbus", self.wumbus.clone()))
+			}
 		}
 	}
 
@@ -123,6 +146,7 @@ impl CharacterMenu {
 			ConceptSpecies::Brodler => self.brodler.animation(),
 			ConceptSpecies::Mygr => self.mygr.animation(),
 			ConceptSpecies::Dui => self.dui.animation(),
+			ConceptSpecies::Wumbus => self.wumbus.animation(),
 		}
 	}
 
@@ -142,6 +166,10 @@ impl CharacterMenu {
 		DuiConfig::from(&self.dui)
 	}
 
+	pub fn wumbus_config(&self) -> WumbusConfig {
+		WumbusConfig::from(&self.wumbus)
+	}
+
 	pub fn apply(&mut self, event: MenuEvent) -> bool {
 		match event {
 			MenuEvent::SetSpecies(species) => {
@@ -159,6 +187,7 @@ impl CharacterMenu {
 			ConceptSpecies::Brodler => self.apply_brodler(event),
 			ConceptSpecies::Mygr => self.apply_mygr(event),
 			ConceptSpecies::Dui => self.apply_dui(event),
+			ConceptSpecies::Wumbus => self.apply_wumbus(event),
 		}
 	}
 
@@ -173,6 +202,7 @@ impl CharacterMenu {
 			ConceptSpecies::Brodler => self.brodler.camera_focus_for_field(field),
 			ConceptSpecies::Mygr => self.mygr.camera_focus_for_field(field),
 			ConceptSpecies::Dui => self.dui.camera_focus_for_field(field),
+			ConceptSpecies::Wumbus => self.wumbus.camera_focus_for_field(field),
 		}
 	}
 
@@ -431,6 +461,77 @@ impl CharacterMenu {
 				}
 				(CharacterField::DuiMouthColor, SwatchValue::DuiMouth(color)) => {
 					menu.head_features.value.mouth_color.value = color;
+					true
+				}
+				(CharacterField::HairColor, SwatchValue::Braidman(color)) => {
+					menu.hair.value.color.value = color;
+					true
+				}
+				(CharacterField::Clothing(clothing), SwatchValue::Braidman(color)) => {
+					menu.set_clothing_color(clothing, color);
+					true
+				}
+				_ => false,
+			},
+			MenuEvent::Cycle(_, _) | MenuEvent::SliderDelta(_, _) => false,
+		}
+	}
+
+	fn apply_wumbus(&mut self, event: MenuEvent) -> bool {
+		let menu = &mut self.wumbus;
+		match event {
+			MenuEvent::ToggleSection(_) | MenuEvent::SetSpecies(_) => false,
+			MenuEvent::Cycle(CharacterField::WumbusHorns, delta) => {
+				menu.head.value.horns.value =
+					cycle_value(menu.head.value.horns.value, delta);
+				true
+			}
+			MenuEvent::SetAsset(field, value) => match (field, value) {
+				(CharacterField::WumbusHead, AssetValue::WumbusHead(value)) => {
+					menu.head.value.head.value = value;
+					true
+				}
+				(CharacterField::Eye, AssetValue::Eye(value)) => {
+					menu.head_features.value.eye.value = value;
+					true
+				}
+				(CharacterField::WumbusMouth, AssetValue::WumbusMouth(value)) => {
+					menu.head_features.value.snout.value = value;
+					true
+				}
+				(CharacterField::Hair, AssetValue::Hair(value)) => {
+					menu.hair.value.style.value = value;
+					true
+				}
+				(CharacterField::Animation, AssetValue::Animation(value)) => {
+					menu.animation.value.clip.value = value;
+					true
+				}
+				_ => false,
+			},
+			MenuEvent::ToggleClothing(clothing) => {
+				menu.clothing.value.layers.toggle(clothing);
+				true
+			}
+			MenuEvent::SetSwatch(field, value) => match (field, value) {
+				(CharacterField::WumbusSkinColor, SwatchValue::WumbusSkin(color)) => {
+					menu.head.value.skin.value = color;
+					true
+				}
+				(CharacterField::WumbusEyeColor, SwatchValue::WumbusEye(color)) => {
+					menu.head_features.value.eye_color.value = color;
+					true
+				}
+				(CharacterField::WumbusEarColor, SwatchValue::WumbusEar(color)) => {
+					menu.head_features.value.ear_color.value = color;
+					true
+				}
+				(CharacterField::WumbusMouthColor, SwatchValue::WumbusMouth(color)) => {
+					menu.head_features.value.mouth_color.value = color;
+					true
+				}
+				(CharacterField::WumbusHornColor, SwatchValue::WumbusHorn(color)) => {
+					menu.head.value.horn_color.value = color;
 					true
 				}
 				(CharacterField::HairColor, SwatchValue::Braidman(color)) => {

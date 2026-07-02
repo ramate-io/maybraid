@@ -11,6 +11,10 @@ use crate::{
 			assets::HornMesh, BrodlerEyeColor, BrodlerHeadMesh, BrodlerHornColor, BrodlerSkinColor,
 		},
 		mygr::{MygrEyeColor, MygrHeadMesh, MygrMouthMesh, MygrSkinColor},
+		wumbus::{
+			WumbusEarColor, WumbusEyeColor, WumbusHeadMesh, WumbusHornColor, WumbusHornMesh,
+			WumbusMouthColor, WumbusMouthMesh, WumbusSkinColor,
+		},
 		dui::{DuiEyeMesh, DuiHeadMesh, DuiMouthMesh, DuiNoseMesh, DuiEyeColor, DuiMouthColor, DuiNoseColor, DuiSkinColor},
 		common::{
 			BodyMesh, ClothingMesh, EarMesh, EyeMesh, HairMesh, HeadMesh, MouthMesh, NoseMesh,
@@ -62,6 +66,14 @@ impl_menu_identity!(MygrHeadMesh);
 impl_menu_identity!(MygrMouthMesh);
 impl_menu_identity!(MygrSkinColor);
 impl_menu_identity!(MygrEyeColor);
+impl_menu_identity!(WumbusHeadMesh);
+impl_menu_identity!(WumbusMouthMesh);
+impl_menu_identity!(WumbusHornMesh);
+impl_menu_identity!(WumbusSkinColor);
+impl_menu_identity!(WumbusEyeColor);
+impl_menu_identity!(WumbusEarColor);
+impl_menu_identity!(WumbusMouthColor);
+impl_menu_identity!(WumbusHornColor);
 impl_menu_identity!(DuiHeadMesh);
 impl_menu_identity!(DuiEyeMesh);
 impl_menu_identity!(DuiNoseMesh);
@@ -107,6 +119,8 @@ impl_asset_option!(EarMesh, EAR_THUMBNAIL_CAMERA);
 impl_asset_option!(ClothingMesh, CLOTHING_THUMBNAIL_CAMERA);
 impl_asset_option!(MygrHeadMesh, HEAD_THUMBNAIL_CAMERA);
 impl_asset_option!(MygrMouthMesh, FACE_FEATURE_THUMBNAIL_CAMERA);
+impl_asset_option!(WumbusHeadMesh, HEAD_THUMBNAIL_CAMERA);
+impl_asset_option!(WumbusMouthMesh, FACE_FEATURE_THUMBNAIL_CAMERA);
 impl_asset_option!(DuiHeadMesh, HEAD_THUMBNAIL_CAMERA);
 impl_asset_option!(DuiEyeMesh, FACE_FEATURE_THUMBNAIL_CAMERA);
 impl_asset_option!(DuiMouthMesh, FACE_FEATURE_THUMBNAIL_CAMERA);
@@ -119,6 +133,19 @@ impl AssetOption for DuiNoseMesh {
 				let path = (*self).path();
 				IdentifiedAsset::new((*self).label(), (*self).label(), path.as_str())
 					.with_thumbnail_camera(FACE_FEATURE_THUMBNAIL_CAMERA)
+			}
+		}
+	}
+}
+
+impl AssetOption for WumbusHornMesh {
+	fn asset(&self) -> IdentifiedAsset {
+		match self {
+			Self::None => IdentifiedAsset::new("none", "none", ""),
+			Self::HarrowedCrown => {
+				let path = (*self).path();
+				IdentifiedAsset::new((*self).label(), (*self).label(), path.as_str())
+					.with_thumbnail_camera(CROWN_THUMBNAIL_CAMERA)
 			}
 		}
 	}
@@ -237,6 +264,57 @@ impl SwatchOption for DuiMouthColor {
 		match self {
 			Self::Red => "#8C5C52",
 			Self::Blue => "#667080",
+		}
+	}
+}
+
+impl SwatchOption for WumbusSkinColor {
+	fn color_hex(&self) -> &'static str {
+		match self {
+			Self::Chocolate => "#473328",
+			Self::Espresso => "#2E241F",
+			Self::Umber => "#523D2E",
+			Self::Soot => "#1F1C1A",
+		}
+	}
+}
+
+impl SwatchOption for WumbusEyeColor {
+	fn color_hex(&self) -> &'static str {
+		match self {
+			Self::PaleBlue => "#9EB8C7",
+			Self::Honey => "#C7AD6B",
+			Self::Sage => "#94AD8C",
+		}
+	}
+}
+
+impl SwatchOption for WumbusEarColor {
+	fn color_hex(&self) -> &'static str {
+		match self {
+			Self::Cream => "#E0D1B8",
+			Self::Sandy => "#C7AD85",
+			Self::RustTip => "#B87A52",
+		}
+	}
+}
+
+impl SwatchOption for WumbusMouthColor {
+	fn color_hex(&self) -> &'static str {
+		match self {
+			Self::Blush => "#D19E94",
+			Self::DustyRose => "#BF8C85",
+			Self::PaleCoral => "#E0A899",
+		}
+	}
+}
+
+impl SwatchOption for WumbusHornColor {
+	fn color_hex(&self) -> &'static str {
+		match self {
+			Self::Ivory => "#E0D6BD",
+			Self::Wheat => "#D1BD8F",
+			Self::PaleGold => "#E5D19E",
 		}
 	}
 }

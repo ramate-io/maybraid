@@ -23,6 +23,7 @@ pub mod braidman;
 pub mod brodler;
 pub mod dui;
 pub mod mygr;
+pub mod wumbus;
 mod values;
 
 #[derive(Clone, Copy)]
@@ -58,6 +59,9 @@ impl SectionMenuMap<ConceptSpecies> for CharacterSpeciesMenus<'_> {
 			}
 			ConceptSpecies::Dui => {
 				Root::new(self.menu.dui.clone()).render_with(renderer, parent, context)
+			}
+			ConceptSpecies::Wumbus => {
+				Root::new(self.menu.wumbus.clone()).render_with(renderer, parent, context)
 			}
 		}
 	}
@@ -125,7 +129,7 @@ impl RenderMenu for CharacterMenu {
 		context: &mut RenderContext<'_, Ctx>,
 	) {
 		let species_menus = CharacterSpeciesMenus { menu: self };
-		SectionSelect::new(self.species, SpeciesSelectEvents, &species_menus)
+		SectionSelect::new("Species", self.species, SpeciesSelectEvents, &species_menus)
 			.render_with(renderer, parent, context);
 	}
 }

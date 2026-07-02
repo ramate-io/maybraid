@@ -54,6 +54,20 @@ fn mygr_config_round_trip() -> anyhow::Result<()> {
 }
 
 #[test]
+fn wumbus_config_round_trip() -> anyhow::Result<()> {
+	let config = crozon_characters::species::wumbus::WumbusConfig::default_preview();
+	let menu = crate::characters::wumbus::WumbusMenu::from(&config);
+	let restored = crozon_characters::species::wumbus::WumbusConfig::from(&menu);
+	assert_eq!(config.horns, restored.horns);
+	assert_eq!(config.colors.skin, restored.colors.skin);
+	assert_eq!(config.colors.eyes, restored.colors.eyes);
+	assert_eq!(config.colors.ears, restored.colors.ears);
+	assert_eq!(config.colors.mouth, restored.colors.mouth);
+	assert_eq!(config.colors.horns, restored.colors.horns);
+	Ok(())
+}
+
+#[test]
 fn clothing_toggle_and_color() -> anyhow::Result<()> {
 	use crozon_characters::species::braidman::BraidmanColor;
 

@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use character_ui_menu::{LabelOption, ListValues, SingleSelect};
+use character_ui_menu::{BlockLabeled, LabelOption, ListValues, SingleSelect};
 
 use crate::render::select_picker::{SelectEventMap, SelectPicker};
 use crate::render::{MenuThumbnailContext, RenderContext, RenderMenu, Renderer};
@@ -14,7 +14,7 @@ pub trait SectionMenuMap<T: Copy> {
 	);
 }
 
-/// Species-style picker that swaps between one menu subtree per selected value.
+/// Picker that swaps between one menu subtree per selected value.
 pub struct SectionSelect<'a, E, T, M, S>
 where
 	E: Copy + Send + Sync + 'static,
@@ -22,6 +22,7 @@ where
 	M: SelectEventMap<E, T> + Copy,
 	S: SectionMenuMap<T> + ?Sized,
 {
+	pub label: &'static str,
 	pub select: SingleSelect<T>,
 	pub picker: M,
 	pub menus: &'a S,
@@ -35,8 +36,13 @@ where
 	M: SelectEventMap<E, T> + Copy,
 	S: SectionMenuMap<T> + ?Sized,
 {
-	pub const fn new(select: SingleSelect<T>, picker: M, menus: &'a S) -> Self {
-		Self { select, picker, menus, _marker: core::marker::PhantomData }
+	pub const fn new(
+		label: &'static str,
+		select: SingleSelect<T>,
+		picker: M,
+		menus: &'a S,
+	) -> Self {
+		Self { label, select, picker, menus, _marker: core::marker::PhantomData }
 	}
 }
 
@@ -53,8 +59,8 @@ where
 		parent: &mut ChildSpawnerCommands,
 		context: &mut RenderContext<'_, C>,
 	) {
-		character_ui_menu::Labeled::new(
-			"Species",
+		BlockLabeled::new(
+			self.label,
 			SelectPicker::new(self.select, self.picker),
 		)
 		.render_with(renderer, parent, context);

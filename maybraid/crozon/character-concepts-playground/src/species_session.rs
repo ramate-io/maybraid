@@ -3,6 +3,7 @@
 use bevy::prelude::*;
 use crozon_characters::species::{
 	braidman::BraidmanConfig, brodler::BrodlerConfig, dui::DuiConfig, mygr::MygrConfig,
+	wumbus::WumbusConfig,
 };
 
 use crate::{
@@ -21,10 +22,12 @@ pub struct SpeciesSessionState {
 	pub brodler: BrodlerConfig,
 	pub mygr: MygrConfig,
 	pub dui: DuiConfig,
+	pub wumbus: WumbusConfig,
 	pub braidman_animation: crate::animation::ConceptAnimation,
 	pub brodler_animation: crate::animation::ConceptAnimation,
 	pub mygr_animation: crate::animation::ConceptAnimation,
 	pub dui_animation: crate::animation::ConceptAnimation,
+	pub wumbus_animation: crate::animation::ConceptAnimation,
 }
 
 impl Default for SpeciesSessionState {
@@ -34,10 +37,12 @@ impl Default for SpeciesSessionState {
 			brodler: BrodlerConfig::default_preview(),
 			mygr: MygrConfig::default_preview(),
 			dui: DuiConfig::default_preview(),
+			wumbus: WumbusConfig::default_preview(),
 			braidman_animation: crate::animation::ConceptAnimation::default(),
 			brodler_animation: crate::animation::ConceptAnimation::default(),
 			mygr_animation: crate::animation::ConceptAnimation::default(),
 			dui_animation: crate::animation::ConceptAnimation::default(),
+			wumbus_animation: crate::animation::ConceptAnimation::default(),
 		}
 	}
 }
@@ -61,6 +66,10 @@ impl SpeciesSessionState {
 				self.dui.clone_from(config);
 				self.dui_animation = *animation;
 			}
+			ConceptPreviewConfig::Wumbus { config, animation } => {
+				self.wumbus.clone_from(config);
+				self.wumbus_animation = *animation;
+			}
 		}
 	}
 
@@ -81,6 +90,10 @@ impl SpeciesSessionState {
 			ConceptSpecies::Dui => ConceptPreviewConfig::dui_with_animation(
 				self.dui.clone(),
 				self.dui_animation,
+			),
+			ConceptSpecies::Wumbus => ConceptPreviewConfig::wumbus_with_animation(
+				self.wumbus.clone(),
+				self.wumbus_animation,
 			),
 		}
 	}
