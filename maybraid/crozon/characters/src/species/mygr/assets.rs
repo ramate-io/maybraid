@@ -8,7 +8,7 @@ use crate::{
 		CharacterAsset, CharacterPartSlot, ResolvedCharacterAssembly, ResolvedCharacterPart,
 		RigAsset, SkinTarget, SocketAttachment, SocketRig,
 	},
-	assets::AssetNormalization,
+	assets::{AssetNormalization, AssetPath},
 	species::{
 		common::assets::{
 			BODY_FULL, BODY_RIG, EAR_FLANK, HEAD_ORTHO_BEAR, HEAD_RIG, MOUTH_CANINE_SNOUT,
@@ -16,6 +16,8 @@ use crate::{
 		mygr::{pose::MygrPose, MygrConfig},
 	},
 };
+
+const TAIL_CAT: AssetPath = AssetPath::new("characters/tails/cat_tail.glb");
 
 /// Species-local resolver for Mygr asset choices.
 pub struct MygrAssets;
@@ -34,7 +36,8 @@ impl MygrAssets {
 		.with_part(Self::eye_right(config.eye))
 		.with_part(Self::mouth())
 		.with_part(Self::ear_left())
-		.with_part(Self::ear_right());
+		.with_part(Self::ear_right())
+		.with_part(Self::tail());
 
 		let assembly = match Self::hair(config.hair) {
 			Some(hair) => assembly.with_part(hair),
@@ -148,6 +151,15 @@ impl MygrAssets {
 		)
 	}
 
+	fn tail() -> ResolvedCharacterPart {
+		ResolvedCharacterPart::new(
+			CharacterPartSlot::Tail,
+			CharacterAsset::new("cat-tail", TAIL_CAT, AssetNormalization::IDENTITY),
+			SkinTarget::BodyRig,
+			Some(Self::body_socket("root", Transform::IDENTITY)),
+		)
+	}
+
 	fn hair(hair: crate::species::common::HairMesh) -> Option<ResolvedCharacterPart> {
 		let path = hair.path()?;
 		Some(ResolvedCharacterPart::new(
@@ -172,6 +184,10 @@ impl MygrAssets {
 
 	fn head_socket(bone: &'static str, local_transform: Transform) -> SocketAttachment {
 		SocketAttachment { rig: SocketRig::Head, bone, local_transform }
+	}
+
+	fn body_socket(bone: &'static str, local_transform: Transform) -> SocketAttachment {
+		SocketAttachment { rig: SocketRig::Body, bone, local_transform }
 	}
 
 	fn mirror_x() -> Transform {

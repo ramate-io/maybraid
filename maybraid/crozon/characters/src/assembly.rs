@@ -55,6 +55,7 @@ pub enum CharacterPartSlot {
 	Hair,
 	Horns,
 	Clothing,
+	Tail,
 }
 
 /// Which rig should receive a skinned part's joint remap.

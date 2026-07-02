@@ -245,6 +245,7 @@ pub enum PreviewTarget {
 	MygrEye(EyeMesh),
 	MygrMouth,
 	MygrEar,
+	MygrTail,
 	MygrHair(HairMesh),
 	MygrClothing(ClothingMesh),
 }
@@ -428,7 +429,8 @@ fn preview_color_mygr(config: &MygrConfig, target: PreviewTarget) -> PreviewColo
 	match target {
 		PreviewTarget::MygrHead
 		| PreviewTarget::MygrBody
-		| PreviewTarget::MygrEar => PreviewColor::MygrSkin(config.colors.skin),
+		| PreviewTarget::MygrEar
+		| PreviewTarget::MygrTail => PreviewColor::MygrSkin(config.colors.skin),
 		PreviewTarget::MygrEye(_) => PreviewColor::MygrEye(config.colors.eyes),
 		PreviewTarget::MygrMouth => PreviewColor::Braidman(config.colors.mouth),
 		PreviewTarget::MygrHair(_) => PreviewColor::Braidman(config.colors.hair),
@@ -633,6 +635,7 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 						.find(|clothing| clothing.label() == part.asset.label)
 						.map(PreviewTarget::BraidmanClothing)
 						.unwrap_or(PreviewTarget::BraidmanHead(config.head)),
+					CharacterPartSlot::Tail => PreviewTarget::BraidmanBody(config.body),
 				};
 				PreviewAssetTarget { target, color: preview_color_braidman(config, target) }
 			}
@@ -659,6 +662,7 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 						.find(|clothing| clothing.label() == part.asset.label)
 						.map(PreviewTarget::BrodlerClothing)
 						.unwrap_or(PreviewTarget::BrodlerHead(config.head)),
+					CharacterPartSlot::Tail => PreviewTarget::BrodlerBody,
 				};
 				PreviewAssetTarget { target, color: preview_color_brodler(config, target) }
 			}
@@ -671,6 +675,7 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 					}
 					CharacterPartSlot::Mouth => PreviewTarget::MygrMouth,
 					CharacterPartSlot::EarLeft | CharacterPartSlot::EarRight => PreviewTarget::MygrEar,
+					CharacterPartSlot::Tail => PreviewTarget::MygrTail,
 					CharacterPartSlot::Nose | CharacterPartSlot::Horns => PreviewTarget::MygrHead,
 					CharacterPartSlot::Hair => PreviewTarget::MygrHair(config.hair),
 					CharacterPartSlot::Clothing => config
