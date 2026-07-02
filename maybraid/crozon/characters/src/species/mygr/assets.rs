@@ -10,7 +10,9 @@ use crate::{
 	},
 	assets::AssetNormalization,
 	species::{
-		common::assets::{BODY_FULL, BODY_RIG, EAR_FLANK, HEAD_ORTHO_BEAR, HEAD_RIG, MOUTH_CANINE_SNOUT},
+		common::assets::{
+			BODY_FULL, BODY_RIG, EAR_FLANK, HEAD_ORTHO_BEAR, HEAD_RIG, MOUTH_CANINE_SNOUT,
+		},
 		mygr::{pose::MygrPose, MygrConfig},
 	},
 };
@@ -82,11 +84,11 @@ impl MygrAssets {
 	fn eye_left(eye: crate::species::common::EyeMesh) -> ResolvedCharacterPart {
 		ResolvedCharacterPart::new(
 			CharacterPartSlot::EyeLeft,
-			CharacterAsset::new(eye.label(), eye.path(), AssetNormalization::centroid(0.16)),
+			CharacterAsset::new(eye.label(), eye.path(), AssetNormalization::centroid(0.2)),
 			SkinTarget::HeadRig,
 			Some(Self::head_socket(
 				"eye_socket.L",
-				Transform::from_translation(Vec3::new(0.0, -0.1, -0.075)),
+				Transform::from_translation(Vec3::new(0.0, 0.0, -0.12)),
 			)),
 		)
 	}
@@ -94,11 +96,11 @@ impl MygrAssets {
 	fn eye_right(eye: crate::species::common::EyeMesh) -> ResolvedCharacterPart {
 		ResolvedCharacterPart::new(
 			CharacterPartSlot::EyeRight,
-			CharacterAsset::new(eye.label(), eye.path(), AssetNormalization::centroid(0.16)),
+			CharacterAsset::new(eye.label(), eye.path(), AssetNormalization::centroid(0.2)),
 			SkinTarget::HeadRig,
 			Some(Self::head_socket(
 				"eye_socket.R",
-				Self::mirror_x().with_translation(Vec3::new(0.0, -0.1, -0.075)),
+				Self::mirror_x().with_translation(Vec3::new(0.0, 0.0, -0.12)),
 			)),
 		)
 	}
@@ -109,7 +111,7 @@ impl MygrAssets {
 			CharacterAsset::new(
 				MygrMouthMesh::CanineSnout.label(),
 				MOUTH_CANINE_SNOUT,
-				AssetNormalization::centroid(0.2),
+				AssetNormalization::centroid(0.4),
 			),
 			SkinTarget::HeadRig,
 			Some(Self::head_socket(
@@ -122,11 +124,11 @@ impl MygrAssets {
 	fn ear_left() -> ResolvedCharacterPart {
 		ResolvedCharacterPart::new(
 			CharacterPartSlot::EarLeft,
-			CharacterAsset::new("flank", EAR_FLANK, AssetNormalization::centroid(0.15)),
+			CharacterAsset::new("flank", EAR_FLANK, AssetNormalization::centroid(0.4)),
 			SkinTarget::HeadRig,
 			Some(Self::head_socket(
 				"ear_socket.L",
-				Transform::from_translation(Vec3::new(0.1, -0.1, 0.00))
+				Transform::from_translation(Vec3::new(0.15, 0.3, -0.05))
 					.with_rotation(Quat::from_rotation_y(std::f32::consts::PI / 4.0)),
 			)),
 		)
@@ -135,12 +137,12 @@ impl MygrAssets {
 	fn ear_right() -> ResolvedCharacterPart {
 		ResolvedCharacterPart::new(
 			CharacterPartSlot::EarRight,
-			CharacterAsset::new("flank", EAR_FLANK, AssetNormalization::centroid(0.15)),
+			CharacterAsset::new("flank", EAR_FLANK, AssetNormalization::centroid(0.4)),
 			SkinTarget::HeadRig,
 			Some(Self::head_socket(
 				"ear_socket.R",
 				Self::mirror_x()
-					.with_translation(Vec3::new(-0.1, -0.1, 0.00))
+					.with_translation(Vec3::new(-0.15, 0.3, -0.05))
 					.with_rotation(Quat::from_rotation_y(-std::f32::consts::PI / 4.0)),
 			)),
 		)
