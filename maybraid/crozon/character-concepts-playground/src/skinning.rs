@@ -215,6 +215,12 @@ pub fn remap_part_skin_to_rig(
 		}
 
 		if !any_skinned {
+			// GLTF scene children can appear a few frames after spawn; keep retrying
+			// until the hierarchy is present. Rigid parts with no SkinnedMesh then
+			// drop the flag once the scene has loaded.
+			if children.is_empty() {
+				continue;
+			}
 			commands.entity(part_root).try_remove::<NeedsSkinRemap>();
 			continue;
 		}

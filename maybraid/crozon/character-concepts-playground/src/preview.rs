@@ -21,7 +21,8 @@ use crate::animation::{AnimatedBodyRig, BodyRigBindTransform, ConceptAnimation};
 use crate::preview_color::PreviewColor;
 use crate::skinning::{
 	bind_scales_ready, bone_map_ready, ActiveRigPose, BoneMap, CharacterPart, CharacterRig,
-	CharacterRigRole, NeedsSkinRemap, NeedsSocketPlacement, PartRigRef, RigBindScales,
+	CharacterRigRole, NeedsDuplicateScenePrune, NeedsSkinRemap, NeedsSocketPlacement,
+	NoMatchingArmature, PartRigRef, RigBindScales,
 };
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
@@ -310,16 +311,34 @@ fn sync_live_preview(
 	}
 }
 
-/// Reveal a respawned preview only after proportions have been applied once.
+/// Reveal a respawned preview only after the body pose, socket attach, and skin
+/// remap passes have settled.
 pub fn reveal_ready_preview(
 	mut commands: Commands,
 	pending: Query<Entity, With<PreviewAwaitingReveal>>,
 	body_rigs: Query<(&BoneMap, &RigBindScales), With<AnimatedBodyRig>>,
+	awaiting_socket: Query<(), (With<NeedsSocketPlacement>, With<ConceptPreviewRoot>)>,
+	awaiting_remap: Query<
+		(),
+		(
+			With<NeedsSkinRemap>,
+			With<CharacterPart>,
+			With<ConceptPreviewRoot>,
+			Without<NoMatchingArmature>,
+		),
+	>,
+	awaiting_prune: Query<
+		(),
+		(With<NeedsDuplicateScenePrune>, With<CharacterPart>, With<ConceptPreviewRoot>),
+	>,
 ) {
 	let Ok((bone_map, bind_scales)) = body_rigs.single() else {
 		return;
 	};
 	if !bone_map_ready(bone_map) || !bind_scales_ready(bind_scales, bone_map) {
+		return;
+	}
+	if !awaiting_socket.is_empty() || !awaiting_remap.is_empty() || !awaiting_prune.is_empty() {
 		return;
 	}
 	for entity in &pending {

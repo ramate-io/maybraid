@@ -128,15 +128,15 @@ impl Plugin for CrozonCharacterConceptsPlaygroundPlugin {
 					attach_parts_to_sockets
 						.after(build_rig_bone_map)
 						.run_if(preview_pass_ready),
-					reveal_ready_preview
-						.after(maintain_resolved_pose)
-						.after(attach_parts_to_sockets)
-						.run_if(preview_pass_ready),
 					remap_part_skin_to_rig
 						.after(attach_parts_to_sockets)
 						.run_if(preview_pass_ready),
 					prune_duplicate_part_scenes
 						.after(remap_part_skin_to_rig)
+						.run_if(preview_pass_ready),
+					reveal_ready_preview
+						.after(maintain_resolved_pose)
+						.after(prune_duplicate_part_scenes)
 						.run_if(preview_pass_ready),
 					apply_preview_colors
 						.after(prune_duplicate_part_scenes)
