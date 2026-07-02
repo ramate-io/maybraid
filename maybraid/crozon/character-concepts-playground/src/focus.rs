@@ -48,13 +48,7 @@ pub fn animate_focused_preview_asset(
 }
 
 fn should_pulse(slot: CharacterPartSlot) -> bool {
-	matches!(
-		slot,
-		CharacterPartSlot::BodyMesh
-			| CharacterPartSlot::HeadMesh
-			| CharacterPartSlot::Horns
-			| CharacterPartSlot::Clothing
-	)
+	false
 }
 
 fn focus_scale(focus: Option<CameraFocus>, target: PreviewTarget, elapsed: f32) -> f32 {
