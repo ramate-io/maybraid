@@ -2,7 +2,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use bevy::{mesh::skinning::SkinnedMesh, prelude::*};
+use bevy::{mesh::skinning::SkinnedMesh, prelude::*, scene::{SceneInstance, SceneSpawner}};
 use crozon_characters::CharacterPartSlot;
 use crozon_rigs::ResolvedRigPose;
 
@@ -88,6 +88,7 @@ pub fn build_rig_bone_map(
 	mut rig_roots: Query<(Entity, &Children, &mut BoneMap), With<CharacterRig>>,
 	children_q: Query<&Children>,
 	names_q: Query<&Name>,
+	boundaries: Query<(), Or<(With<CharacterRig>, With<CharacterPart>)>>,
 ) {
 	for (_rig_root, children, mut map) in &mut rig_roots {
 		// Rebuild each frame so bones that appear after the initial GLTF spawn are
@@ -96,6 +97,12 @@ pub fn build_rig_bone_map(
 
 		let mut stack: Vec<Entity> = children.iter().collect();
 		while let Some(entity) = stack.pop() {
+			// Socket-attached parts and nested rigs live under this rig's bones but
+			// carry their own (often name-colliding) armatures; keep the map scoped
+			// to this rig's skeleton only.
+			if boundaries.contains(entity) {
+				continue;
+			}
 			if let Ok(name) = names_q.get(entity) {
 				map.by_name.insert(name.to_string(), entity);
 			}
@@ -164,6 +171,8 @@ pub fn remap_part_skin_to_rig(
 	children_q: Query<&Children>,
 	names_q: Query<&Name>,
 	mut skinned_meshes: Query<&mut SkinnedMesh>,
+	scene_instances: Query<&SceneInstance>,
+	scene_spawner: Res<SceneSpawner>,
 ) {
 	for (part_root, children, part, rig_ref, _needs_remap) in &part_roots {
 		let Ok(rig_map) = rig_maps.get(rig_ref.rig_root) else {
@@ -215,10 +224,10 @@ pub fn remap_part_skin_to_rig(
 		}
 
 		if !any_skinned {
-			// GLTF scene children can appear a few frames after spawn; keep retrying
-			// until the hierarchy is present. Rigid parts with no SkinnedMesh then
-			// drop the flag once the scene has loaded.
-			if children.is_empty() {
+			let Ok(instance) = scene_instances.get(part_root) else {
+				continue;
+			};
+			if !scene_spawner.instance_is_ready(**instance) {
 				continue;
 			}
 			commands.entity(part_root).try_remove::<NeedsSkinRemap>();

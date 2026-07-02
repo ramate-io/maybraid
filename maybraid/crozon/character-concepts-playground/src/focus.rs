@@ -47,7 +47,7 @@ pub fn animate_focused_preview_asset(
 	}
 }
 
-fn should_pulse(slot: CharacterPartSlot) -> bool {
+fn should_pulse(_slot: CharacterPartSlot) -> bool {
 	false
 }
 

@@ -25,6 +25,7 @@ pub use diagnostics::fps_debug_enabled;
 pub use game_commands::command::PendingStartupCommand;
 
 use bevy::prelude::*;
+use bevy::scene::SceneSpawnerSystems;
 use bevy_character_ui_menu_renderer::CharacterMenuRendererPlugin;
 use camera_controls::look::{CameraLookConfig, CameraLookPlugin};
 use crozon_character_ui_menus::CharacterMenu;
@@ -130,6 +131,7 @@ impl Plugin for CrozonCharacterConceptsPlaygroundPlugin {
 						.run_if(preview_pass_ready),
 					remap_part_skin_to_rig
 						.after(attach_parts_to_sockets)
+						.after(SceneSpawnerSystems::Spawn)
 						.run_if(preview_pass_ready),
 					prune_duplicate_part_scenes
 						.after(remap_part_skin_to_rig)

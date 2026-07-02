@@ -32,15 +32,6 @@ pub enum ConceptSpecies {
 	Brodler,
 }
 
-impl ConceptSpecies {
-	pub const fn label(self) -> &'static str {
-		match self {
-			Self::Braidman => "braidman",
-			Self::Brodler => "brodler",
-		}
-	}
-}
-
 #[derive(Resource, Debug, Clone, PartialEq)]
 pub enum ConceptPreviewConfig {
 	Braidman { config: BraidmanConfig, animation: ConceptAnimation },
