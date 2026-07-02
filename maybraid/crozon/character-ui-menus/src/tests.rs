@@ -75,6 +75,7 @@ fn lero_config_round_trip() -> anyhow::Result<()> {
 	let restored = crozon_characters::species::lero::LeroConfig::from(&menu);
 	assert_eq!(config.mouth, restored.mouth);
 	assert_eq!(config.colors.skin, restored.colors.skin);
+	assert_eq!(config.colors.mouth, restored.colors.mouth);
 	assert_eq!(config.colors.tail, restored.colors.tail);
 	assert_eq!(config.colors.spine, restored.colors.spine);
 	Ok(())

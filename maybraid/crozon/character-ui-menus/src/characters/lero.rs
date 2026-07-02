@@ -4,7 +4,8 @@ use crozon_characters::{
 		braidman::{BraidmanColor, ClothingColor},
 		common::{ClothingMesh, HairMesh},
 		lero::{
-			LeroEyeColor, LeroHeadMesh, LeroMouthMesh, LeroSkinColor, LeroSpineColor, LeroTailColor,
+			LeroEyeColor, LeroHeadMesh, LeroMouthColor, LeroMouthMesh, LeroSkinColor, LeroSpineColor,
+			LeroTailColor,
 		},
 	},
 	ConceptAnimation,
@@ -25,6 +26,7 @@ pub struct LeroHeadMenu {
 #[derive(Clone, Debug, PartialEq)]
 pub struct LeroHeadFeaturesMenu {
 	pub snout: AssetSingleSelect<LeroMouthMesh>,
+	pub mouth_color: SwatchSingleSelect<LeroMouthColor>,
 	pub eye_color: SwatchSingleSelect<LeroEyeColor>,
 }
 
@@ -72,6 +74,8 @@ impl From<&crozon_characters::species::lero::LeroConfig> for LeroMenu {
 				"Head & Features",
 				LeroHeadFeaturesMenu {
 					snout: AssetSingleSelect::new(config.mouth).with_camera_focus(MOUTH_FOCUS),
+					mouth_color: SwatchSingleSelect::new(config.colors.mouth)
+						.with_camera_focus(MOUTH_FOCUS),
 					eye_color: SwatchSingleSelect::new(config.colors.eyes)
 						.with_camera_focus(EYE_FOCUS),
 				},
@@ -120,6 +124,7 @@ impl From<&LeroMenu> for crozon_characters::species::lero::LeroConfig {
 			colors: crozon_characters::species::lero::LeroColors {
 				skin: menu.head.value.skin.value,
 				eyes: menu.head_features.value.eye_color.value,
+				mouth: menu.head_features.value.mouth_color.value,
 				tail: menu.body.value.tail_color.value,
 				spine: menu.body.value.spine_color.value,
 				hair: menu.hair.value.color.value,
@@ -168,6 +173,7 @@ impl LeroMenu {
 		match field {
 			CharacterField::LeroHead => self.head.value.head.camera_focus,
 			CharacterField::LeroMouth => self.head_features.value.snout.camera_focus,
+			CharacterField::LeroMouthColor => self.head_features.value.mouth_color.camera_focus,
 			CharacterField::LeroEyeColor => self.head_features.value.eye_color.camera_focus,
 			CharacterField::Hair => self.hair.value.style.camera_focus,
 			CharacterField::Clothing(_) | CharacterField::Animation | CharacterField::LeroTailColor

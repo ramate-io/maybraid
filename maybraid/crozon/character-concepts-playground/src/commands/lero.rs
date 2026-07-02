@@ -4,7 +4,7 @@ use bevy::prelude::*;
 use clap::{Args, Subcommand};
 use crozon_characters::species::{
 	common::{ClothingMesh, HairMesh},
-	lero::{LeroConfig, LeroEyeColor, LeroMouthMesh, LeroSkinColor, LeroSpineColor, LeroTailColor},
+	lero::{LeroConfig, LeroEyeColor, LeroMouthColor, LeroMouthMesh, LeroSkinColor, LeroSpineColor, LeroTailColor},
 };
 
 use crate::{animation::ConceptAnimation, preview::ConceptPreviewConfig};
@@ -37,6 +37,9 @@ pub struct PreviewArgs {
 	#[arg(long, value_enum, default_value_t = LeroEyeColor::Gold)]
 	pub eyes: LeroEyeColor,
 
+	#[arg(long, value_enum, default_value_t = LeroMouthColor::SoftBlush)]
+	pub snout_color: LeroMouthColor,
+
 	#[arg(long, value_enum, default_value_t = LeroTailColor::Pearl)]
 	pub tail: LeroTailColor,
 
@@ -62,6 +65,7 @@ impl PreviewArgs {
 		let mut colors = crozon_characters::species::lero::LeroColors::default();
 		colors.skin = self.skin;
 		colors.eyes = self.eyes;
+		colors.mouth = self.snout_color;
 		colors.tail = self.tail;
 		colors.spine = self.spine;
 		ConceptPreviewConfig::lero_with_animation(

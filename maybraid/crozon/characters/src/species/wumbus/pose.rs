@@ -22,14 +22,16 @@ impl WumbusPose {
 			.with_scale(BoneScale::length("lumbar", 1.1))
 			.with_scale(BoneScale::length("chest", 1.08));
 
-		const DEPTH: f32 = 1.5;
-		layer = BraidmanSliders::apply_chest_thickness(layer, DEPTH);
-		layer = BraidmanSliders::apply_hip_thickness(layer, DEPTH);
-		layer = BraidmanSliders::apply_leg_thickness(layer, DEPTH);
-		layer = BraidmanSliders::apply_buttocks_thickness(layer, DEPTH);
-		layer = BraidmanSliders::apply_waist_thickness(layer, DEPTH);
-		layer = BraidmanSliders::apply_lower_trunk_thickness(layer, DEPTH);
-		layer = BraidmanSliders::apply_arm_thickness(layer, DEPTH);
+		const TRUNK_DEPTH: f32 = 1.58;
+		const LEG_DEPTH: f32 = 1.72;
+		const ARM_DEPTH: f32 = 1.05;
+		layer = BraidmanSliders::apply_chest_thickness(layer, TRUNK_DEPTH);
+		layer = BraidmanSliders::apply_hip_thickness(layer, TRUNK_DEPTH);
+		layer = BraidmanSliders::apply_leg_thickness(layer, LEG_DEPTH);
+		layer = BraidmanSliders::apply_buttocks_thickness(layer, TRUNK_DEPTH);
+		layer = BraidmanSliders::apply_waist_thickness(layer, TRUNK_DEPTH);
+		layer = BraidmanSliders::apply_lower_trunk_thickness(layer, TRUNK_DEPTH);
+		layer = BraidmanSliders::apply_arm_thickness(layer, ARM_DEPTH);
 
 		layer
 	}

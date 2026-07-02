@@ -5,6 +5,9 @@ use character_ui_menu::ThumbnailCamera;
 pub const BUTTON_HEIGHT: f32 = 22.0;
 pub const SELECT_TILE_SIZE: f32 = 52.0;
 pub const SWATCH_SIZE: f32 = 20.0;
+pub const MENU_VERTICAL_GAP: f32 = 6.0;
+pub const MENU_CHIP_GAP: f32 = 6.0;
+pub const MENU_BUTTON_PADDING_V: f32 = 4.0;
 pub const ACTIVE: Color = Color::srgba(0.16, 0.34, 0.50, 0.95);
 pub const INACTIVE: Color = Color::srgba(0.18, 0.20, 0.24, 0.92);
 pub const MUTED: Color = Color::srgba(0.72, 0.78, 0.86, 1.0);
@@ -38,7 +41,7 @@ pub fn render_button<E: Copy + Send + Sync + 'static>(
 			Node {
 				min_width: Val::Px(28.0),
 				height: Val::Px(BUTTON_HEIGHT),
-				padding: UiRect::axes(Val::Px(7.0), Val::Px(2.0)),
+				padding: UiRect::axes(Val::Px(7.0), Val::Px(MENU_BUTTON_PADDING_V)),
 				justify_content: JustifyContent::Center,
 				align_items: AlignItems::Center,
 				..default()
@@ -62,11 +65,11 @@ pub fn render_asset_button<E: Copy + Send + Sync + 'static>(
 			Node {
 				min_width: Val::Px(72.0),
 				min_height: Val::Px(54.0),
-				padding: UiRect::axes(Val::Px(5.0), Val::Px(4.0)),
+				padding: UiRect::axes(Val::Px(5.0), Val::Px(6.0)),
 				flex_direction: FlexDirection::Column,
 				justify_content: JustifyContent::Center,
 				align_items: AlignItems::Center,
-				row_gap: Val::Px(3.0),
+				row_gap: Val::Px(MENU_VERTICAL_GAP),
 				..default()
 			},
 			BackgroundColor(if active { ACTIVE } else { INACTIVE }),
@@ -123,7 +126,7 @@ pub fn select_tile_node() -> Node {
 		height: Val::Px(SELECT_TILE_SIZE),
 		flex_shrink: 0.,
 		flex_grow: 0.,
-		padding: UiRect::all(Val::Px(4.0)),
+		padding: UiRect::all(Val::Px(6.0)),
 		flex_direction: FlexDirection::Column,
 		justify_content: JustifyContent::Center,
 		align_items: AlignItems::Center,
@@ -138,7 +141,7 @@ pub fn labeled_row() -> Node {
 		width: Val::Percent(100.0),
 		flex_direction: FlexDirection::Row,
 		column_gap: Val::Px(8.0),
-		row_gap: Val::Px(4.0),
+		row_gap: Val::Px(MENU_VERTICAL_GAP),
 		align_items: AlignItems::FlexStart,
 		justify_content: JustifyContent::FlexStart,
 		..default()
@@ -150,8 +153,8 @@ pub fn inline_chip_row() -> Node {
 	Node {
 		flex_direction: FlexDirection::Row,
 		flex_wrap: FlexWrap::Wrap,
-		column_gap: Val::Px(4.0),
-		row_gap: Val::Px(4.0),
+		column_gap: Val::Px(MENU_CHIP_GAP),
+		row_gap: Val::Px(MENU_CHIP_GAP),
 		align_items: AlignItems::FlexStart,
 		justify_content: JustifyContent::FlexStart,
 		..default()

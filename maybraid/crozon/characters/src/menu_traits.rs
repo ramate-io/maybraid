@@ -16,7 +16,7 @@ use crate::{
 			WumbusMouthColor, WumbusMouthMesh, WumbusSkinColor, WumbusSpineColor,
 		},
 		lero::{
-			LeroEyeColor, LeroHeadMesh, LeroMouthMesh, LeroSkinColor, LeroSpineColor, LeroTailColor,
+			LeroEyeColor, LeroHeadMesh, LeroMouthColor, LeroMouthMesh, LeroSkinColor, LeroSpineColor, LeroTailColor,
 		},
 		dui::{DuiEyeMesh, DuiHeadMesh, DuiMouthMesh, DuiNoseMesh, DuiEyeColor, DuiMouthColor, DuiNoseColor, DuiSkinColor},
 		common::{
@@ -80,6 +80,7 @@ impl_menu_identity!(WumbusHornColor);
 impl_menu_identity!(WumbusSpineColor);
 impl_menu_identity!(LeroHeadMesh);
 impl_menu_identity!(LeroMouthMesh);
+impl_menu_identity!(LeroMouthColor);
 impl_menu_identity!(LeroSkinColor);
 impl_menu_identity!(LeroEyeColor);
 impl_menu_identity!(LeroTailColor);
@@ -360,6 +361,17 @@ impl SwatchOption for LeroEyeColor {
 			Self::Gold => "#D1B861",
 			Self::Amber => "#C79E47",
 			Self::PaleYellow => "#E0D18C",
+		}
+	}
+}
+
+impl SwatchOption for LeroMouthColor {
+	fn color_hex(&self) -> &'static str {
+		match self {
+			Self::SoftBlush => "#E5C7BC",
+			Self::PaleRose => "#E0B8AD",
+			Self::Buttercream => "#EBDBB3",
+			Self::PaleGold => "#E5D19E",
 		}
 	}
 }

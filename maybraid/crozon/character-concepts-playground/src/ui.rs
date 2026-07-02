@@ -183,7 +183,7 @@ fn spawn_creator_ui_shell(commands: &mut Commands) -> Entity {
 				right: Val::Px(10.0),
 				width: Val::Px(PANEL_WIDTH),
 				height: Val::Percent(PANEL_HEIGHT_PERCENT),
-				padding: UiRect::all(Val::Px(8.0)),
+				padding: UiRect::all(Val::Px(10.0)),
 				flex_direction: FlexDirection::Column,
 				overflow: Overflow::clip(),
 				..default()
@@ -200,7 +200,7 @@ fn spawn_creator_ui_shell(commands: &mut Commands) -> Entity {
 						flex_shrink: 1.0,
 						min_height: Val::Px(0.0),
 						flex_direction: FlexDirection::Column,
-						row_gap: Val::Px(5.0),
+						row_gap: Val::Px(8.0),
 						overflow: Overflow::scroll_y(),
 						..default()
 					},

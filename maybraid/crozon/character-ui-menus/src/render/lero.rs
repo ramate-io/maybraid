@@ -51,8 +51,10 @@ impl RenderMenu for LeroHeadFeaturesMenu {
 		context.preview_color = self.eye_color.value.color();
 		labeled_swatch("Eye Color", CharacterField::LeroEyeColor, self.eye_color)
 			.render_with(renderer, parent, context);
-		context.preview_color = context.base_preview_color;
+		context.preview_color = self.mouth_color.value.color();
 		block_asset("Snout", CharacterField::LeroMouth, self.snout).render_with(renderer, parent, context);
+		labeled_swatch("Snout Color", CharacterField::LeroMouthColor, self.mouth_color)
+			.render_with(renderer, parent, context);
 	}
 }
 

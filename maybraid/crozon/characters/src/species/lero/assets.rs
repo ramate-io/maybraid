@@ -19,10 +19,9 @@ const HEAD_ORTHO_TEE: AssetPath = AssetPath::new("characters/heads/ortho_tee_hea
 const SNOUT_LERODON: AssetPath = AssetPath::new("characters/snouts/lerodon_snout.glb");
 const SNOUT_ROBREK: AssetPath = AssetPath::new("characters/snouts/robrek_snout.glb");
 const TAIL_LERODON: AssetPath = AssetPath::new("characters/tails/lerodon_tail.glb");
-const SPINE_LERODON: AssetPath =
-	AssetPath::new("characters/spines/spiked_lerodon_full_exo.glb");
+const SPINE_LERODON: AssetPath = AssetPath::new("characters/spines/spiked_lerodon_full_exo.glb");
 
-const SNOUT_Z_SCALE: f32 = 1.3;
+const SNOUT_Z_SCALE: f32 = 2.5;
 
 /// Species-local resolver for Lero asset choices.
 pub struct LeroAssets;
@@ -119,8 +118,11 @@ impl LeroAssets {
 			SkinTarget::HeadRig,
 			Some(Self::head_socket(
 				"mouth_socket",
-				Transform::from_translation(Vec3::new(0.0, 0.0, 0.1))
-					.with_scale(Vec3::new(1.0, 1.0, SNOUT_Z_SCALE)),
+				Transform::from_translation(Vec3::new(0.0, 0.0, 0.1)).with_scale(Vec3::new(
+					1.0,
+					1.0,
+					SNOUT_Z_SCALE,
+				)),
 			)),
 		)
 	}

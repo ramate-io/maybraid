@@ -8,7 +8,8 @@ use crozon_characters::{
 			WumbusMouthMesh, WumbusSkinColor, WumbusSpineColor,
 		},
 		lero::{
-			LeroEyeColor, LeroHeadMesh, LeroMouthMesh, LeroSkinColor, LeroSpineColor, LeroTailColor,
+			LeroEyeColor, LeroHeadMesh, LeroMouthColor, LeroMouthMesh, LeroSkinColor, LeroSpineColor,
+			LeroTailColor,
 		},
 		dui::{DuiEyeMesh, DuiHeadMesh, DuiMouthMesh, DuiMouthColor, DuiSkinColor},
 		common::{BodyMesh, EarMesh, EyeMesh, HairMesh, HeadMesh, MouthMesh, NoseMesh},
@@ -216,6 +217,12 @@ impl SwatchFieldValue for LeroSkinColor {
 impl SwatchFieldValue for LeroEyeColor {
 	fn to_swatch_value(value: Self) -> SwatchValue {
 		SwatchValue::LeroEye(value)
+	}
+}
+
+impl SwatchFieldValue for LeroMouthColor {
+	fn to_swatch_value(value: Self) -> SwatchValue {
+		SwatchValue::LeroMouthColor(value)
 	}
 }
 

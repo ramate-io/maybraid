@@ -597,9 +597,8 @@ fn preview_color_wumbus(config: &WumbusConfig, target: PreviewTarget) -> Preview
 
 fn preview_color_lero(config: &LeroConfig, target: PreviewTarget) -> PreviewColor {
 	match target {
-		PreviewTarget::LeroHead | PreviewTarget::LeroBody | PreviewTarget::LeroMouth(_) => {
-			PreviewColor::LeroSkin(config.colors.skin)
-		}
+		PreviewTarget::LeroHead | PreviewTarget::LeroBody => PreviewColor::LeroSkin(config.colors.skin),
+		PreviewTarget::LeroMouth(_) => PreviewColor::LeroMouth(config.colors.mouth),
 		PreviewTarget::LeroEye => PreviewColor::LeroEye(config.colors.eyes),
 		PreviewTarget::LeroTail => PreviewColor::LeroTail(config.colors.tail),
 		PreviewTarget::LeroSpine => PreviewColor::LeroSpine(config.colors.spine),

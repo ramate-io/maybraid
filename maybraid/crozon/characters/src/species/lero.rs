@@ -94,6 +94,38 @@ impl LeroEyeColor {
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, ValueEnum)]
+pub enum LeroMouthColor {
+	#[default]
+	SoftBlush,
+	PaleRose,
+	Buttercream,
+	PaleGold,
+}
+
+impl LeroMouthColor {
+	pub const VALUES: &'static [Self] =
+		&[Self::SoftBlush, Self::PaleRose, Self::Buttercream, Self::PaleGold];
+
+	pub const fn label(self) -> &'static str {
+		match self {
+			Self::SoftBlush => "soft-blush",
+			Self::PaleRose => "pale-rose",
+			Self::Buttercream => "buttercream",
+			Self::PaleGold => "pale-gold",
+		}
+	}
+
+	pub fn color(self) -> bevy::prelude::Color {
+		match self {
+			Self::SoftBlush => bevy::prelude::Color::srgb(0.90, 0.78, 0.74),
+			Self::PaleRose => bevy::prelude::Color::srgb(0.88, 0.72, 0.68),
+			Self::Buttercream => bevy::prelude::Color::srgb(0.92, 0.86, 0.70),
+			Self::PaleGold => bevy::prelude::Color::srgb(0.90, 0.82, 0.62),
+		}
+	}
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, ValueEnum)]
 pub enum LeroTailColor {
 	#[default]
 	Pearl,
@@ -159,6 +191,7 @@ impl LeroSpineColor {
 pub struct LeroColors {
 	pub skin: LeroSkinColor,
 	pub eyes: LeroEyeColor,
+	pub mouth: LeroMouthColor,
 	pub tail: LeroTailColor,
 	pub spine: LeroSpineColor,
 	pub hair: BraidmanColor,
@@ -171,6 +204,7 @@ impl Default for LeroColors {
 		Self {
 			skin: LeroSkinColor::FadedGreen,
 			eyes: LeroEyeColor::Gold,
+			mouth: LeroMouthColor::SoftBlush,
 			tail: LeroTailColor::Pearl,
 			spine: LeroSpineColor::Pearl,
 			hair: BraidmanColor::Dark,
@@ -233,12 +267,13 @@ impl LeroConfig {
 				.join(",")
 		};
 		format!(
-			"lero mouth={} hair={} clothing={} skin={} eyes={} tail={} spine={} hair_color={}",
+			"lero mouth={} hair={} clothing={} skin={} eyes={} snout={} tail={} spine={} hair_color={}",
 			self.mouth.label(),
 			self.hair.label(),
 			clothing,
 			self.colors.skin.label(),
 			self.colors.eyes.label(),
+			self.colors.mouth.label(),
 			self.colors.tail.label(),
 			self.colors.spine.label(),
 			self.colors.hair.label(),

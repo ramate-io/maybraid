@@ -12,7 +12,8 @@ use crozon_characters::{
 		},
 		dui::{DuiEyeMesh, DuiHeadMesh, DuiMouthMesh, DuiMouthColor, DuiSkinColor},
 		lero::{
-			LeroEyeColor, LeroHeadMesh, LeroMouthMesh, LeroSkinColor, LeroSpineColor, LeroTailColor,
+			LeroEyeColor, LeroHeadMesh, LeroMouthColor, LeroMouthMesh, LeroSkinColor,
+			LeroSpineColor, LeroTailColor,
 		},
 		common::{
 			BodyMesh, ClothingMesh, EarMesh, EyeMesh, HairMesh, HeadMesh, MouthMesh, NoseMesh,
@@ -88,6 +89,7 @@ pub enum CharacterField {
 	DuiMouthColor,
 	LeroHead,
 	LeroMouth,
+	LeroMouthColor,
 	LeroSkinColor,
 	LeroEyeColor,
 	LeroTailColor,
@@ -158,6 +160,7 @@ pub enum SwatchValue {
 	DuiMouth(DuiMouthColor),
 	LeroSkin(LeroSkinColor),
 	LeroEye(LeroEyeColor),
+	LeroMouthColor(LeroMouthColor),
 	LeroTail(LeroTailColor),
 	LeroSpine(LeroSpineColor),
 }
@@ -233,6 +236,10 @@ impl SwatchValue {
 
 	pub fn with_lero_spine(self, color: LeroSpineColor) -> Self {
 		Self::LeroSpine(color)
+	}
+
+	pub fn with_lero_mouth_color(self, color: LeroMouthColor) -> Self {
+		Self::LeroMouthColor(color)
 	}
 }
 

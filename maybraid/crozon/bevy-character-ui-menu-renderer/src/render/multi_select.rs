@@ -178,7 +178,7 @@ where
 					width: Val::Percent(100.0),
 					flex_direction: FlexDirection::Row,
 					column_gap: Val::Px(6.0),
-					row_gap: Val::Px(4.0),
+					row_gap: Val::Px(crate::widgets::MENU_VERTICAL_GAP),
 					align_items: AlignItems::Center,
 					..default()
 				},

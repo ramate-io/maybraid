@@ -618,6 +618,10 @@ impl CharacterMenu {
 					menu.head_features.value.eye_color.value = color;
 					true
 				}
+				(CharacterField::LeroMouthColor, SwatchValue::LeroMouthColor(color)) => {
+					menu.head_features.value.mouth_color.value = color;
+					true
+				}
 				(CharacterField::LeroTailColor, SwatchValue::LeroTail(color)) => {
 					menu.body.value.tail_color.value = color;
 					true

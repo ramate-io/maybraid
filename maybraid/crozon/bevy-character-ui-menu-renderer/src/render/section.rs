@@ -17,7 +17,7 @@ impl<T: RenderMenu> RenderMenu for Section<T> {
 				Node {
 					width: Val::Percent(100.0),
 					flex_direction: FlexDirection::Column,
-					row_gap: Val::Px(4.0),
+					row_gap: Val::Px(crate::widgets::MENU_VERTICAL_GAP),
 					..default()
 				},
 				Pickable::IGNORE,
@@ -28,7 +28,10 @@ impl<T: RenderMenu> RenderMenu for Section<T> {
 					Node {
 						min_width: Val::Px(28.0),
 						height: Val::Px(crate::widgets::BUTTON_HEIGHT),
-						padding: UiRect::axes(Val::Px(7.0), Val::Px(2.0)),
+						padding: UiRect::axes(
+							Val::Px(7.0),
+							Val::Px(crate::widgets::MENU_BUTTON_PADDING_V),
+						),
 						justify_content: JustifyContent::Center,
 						align_items: AlignItems::Center,
 						..default()
