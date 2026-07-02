@@ -429,7 +429,7 @@ impl CharacterMenu {
 					menu.head.value.skin.value = color;
 					true
 				}
-				(CharacterField::MouthColor, SwatchValue::Braidman(color)) => {
+				(CharacterField::DuiMouthColor, SwatchValue::DuiMouth(color)) => {
 					menu.head_features.value.mouth_color.value = color;
 					true
 				}

@@ -36,6 +36,9 @@ fn dui_config_round_trip() -> anyhow::Result<()> {
 	let restored = crozon_characters::species::dui::DuiConfig::from(&menu);
 	assert_eq!(config.nose, restored.nose);
 	assert_eq!(config.colors.skin, restored.colors.skin);
+	assert_eq!(config.colors.mouth, restored.colors.mouth);
+	assert_eq!(config.colors.eyes, restored.colors.eyes);
+	assert_eq!(config.colors.nose_color, restored.colors.nose_color);
 	Ok(())
 }
 

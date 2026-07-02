@@ -46,12 +46,13 @@ impl RenderMenu for DuiHeadFeaturesMenu {
 		parent: &mut ChildSpawnerCommands,
 		context: &mut RenderContext<'_, C>,
 	) {
-		context.preview_color = context.base_preview_color;
+		context.preview_color = crozon_characters::species::dui::DuiEyeColor::Black.color();
 		block_asset("Eyes", CharacterField::DuiEye, self.eye).render_with(renderer, parent, context);
+		context.preview_color = crozon_characters::species::dui::DuiNoseColor::Black.color();
 		labeled_cycle("Nose", CharacterField::DuiNose, self.nose).render_with(renderer, parent, context);
 		context.preview_color = self.mouth_color.value.color();
 		block_asset("Mouth", CharacterField::DuiMouth, self.mouth).render_with(renderer, parent, context);
-		labeled_swatch("Mouth Color", CharacterField::MouthColor, self.mouth_color)
+		labeled_swatch("Mouth Color", CharacterField::DuiMouthColor, self.mouth_color)
 			.render_with(renderer, parent, context);
 	}
 }

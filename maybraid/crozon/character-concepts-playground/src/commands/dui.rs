@@ -4,7 +4,7 @@ use bevy::prelude::*;
 use clap::{Args, Subcommand};
 use crozon_characters::species::{
 	common::{ClothingMesh, HairMesh},
-	dui::{DuiConfig, DuiNoseMesh, DuiSkinColor},
+	dui::{DuiConfig, DuiMouthColor, DuiNoseMesh, DuiSkinColor},
 };
 
 use crate::{animation::ConceptAnimation, preview::ConceptPreviewConfig};
@@ -33,6 +33,9 @@ pub struct PreviewArgs {
 
 	#[arg(long, value_enum, default_value_t = DuiSkinColor::Purple)]
 	pub skin: DuiSkinColor,
+
+	#[arg(long, value_enum, default_value_t = DuiMouthColor::Red)]
+	pub mouth_color: DuiMouthColor,
 }
 
 impl Dui {
@@ -52,6 +55,7 @@ impl PreviewArgs {
 	fn into_preview_config(self) -> ConceptPreviewConfig {
 		let mut colors = crozon_characters::species::dui::DuiColors::default();
 		colors.skin = self.skin;
+		colors.mouth = self.mouth_color;
 		ConceptPreviewConfig::dui_with_animation(
 			DuiConfig {
 				nose: self.nose,

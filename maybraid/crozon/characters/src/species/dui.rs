@@ -1,7 +1,7 @@
 //! Dui species definition.
 //!
-//! Tall slender humanoid: barred bowl head on the Igeo body, large rounded eyes,
-//! optional t-bar nose, small common mouth, no ears, and earth-tone skin colors.
+//! Tall slender humanoid: barred bowl head on the Igeo body, thorn horns as eyes,
+//! optional t-bar nose, small common mouth, no ears, and soft earth-tone skin colors.
 
 pub mod assets;
 pub mod pose;
@@ -45,10 +45,75 @@ impl DuiSkinColor {
 
 	pub fn color(self) -> bevy::prelude::Color {
 		match self {
-			Self::Purple => bevy::prelude::Color::srgb(0.48, 0.40, 0.52),
-			Self::DesertBrown => bevy::prelude::Color::srgb(0.61, 0.48, 0.36),
-			Self::Blue => bevy::prelude::Color::srgb(0.35, 0.48, 0.55),
-			Self::Gold => bevy::prelude::Color::srgb(0.77, 0.63, 0.32),
+			Self::Purple => bevy::prelude::Color::srgb(0.54, 0.47, 0.48),
+			Self::DesertBrown => bevy::prelude::Color::srgb(0.62, 0.54, 0.44),
+			Self::Blue => bevy::prelude::Color::srgb(0.50, 0.54, 0.52),
+			Self::Gold => bevy::prelude::Color::srgb(0.66, 0.58, 0.44),
+		}
+	}
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, ValueEnum)]
+pub enum DuiEyeColor {
+	#[default]
+	Black,
+}
+
+impl DuiEyeColor {
+	pub const VALUES: &'static [Self] = &[Self::Black];
+
+	pub const fn label(self) -> &'static str {
+		"black"
+	}
+
+	pub fn color(self) -> bevy::prelude::Color {
+		match self {
+			Self::Black => bevy::prelude::Color::srgb(0.08, 0.08, 0.10),
+		}
+	}
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, ValueEnum)]
+pub enum DuiMouthColor {
+	#[default]
+	Red,
+	Blue,
+}
+
+impl DuiMouthColor {
+	pub const VALUES: &'static [Self] = &[Self::Red, Self::Blue];
+
+	pub const fn label(self) -> &'static str {
+		match self {
+			Self::Red => "red",
+			Self::Blue => "blue",
+		}
+	}
+
+	pub fn color(self) -> bevy::prelude::Color {
+		match self {
+			Self::Red => bevy::prelude::Color::srgb(0.55, 0.36, 0.32),
+			Self::Blue => bevy::prelude::Color::srgb(0.40, 0.44, 0.50),
+		}
+	}
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, ValueEnum)]
+pub enum DuiNoseColor {
+	#[default]
+	Black,
+}
+
+impl DuiNoseColor {
+	pub const VALUES: &'static [Self] = &[Self::Black];
+
+	pub const fn label(self) -> &'static str {
+		"black"
+	}
+
+	pub fn color(self) -> bevy::prelude::Color {
+		match self {
+			Self::Black => bevy::prelude::Color::srgb(0.08, 0.08, 0.10),
 		}
 	}
 }
@@ -56,7 +121,9 @@ impl DuiSkinColor {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DuiColors {
 	pub skin: DuiSkinColor,
-	pub mouth: BraidmanColor,
+	pub eyes: DuiEyeColor,
+	pub nose_color: DuiNoseColor,
+	pub mouth: DuiMouthColor,
 	pub hair: BraidmanColor,
 	pub clothing_default: BraidmanColor,
 	pub clothing: Vec<ClothingColor>,
@@ -66,7 +133,9 @@ impl Default for DuiColors {
 	fn default() -> Self {
 		Self {
 			skin: DuiSkinColor::Purple,
-			mouth: BraidmanColor::Natural,
+			eyes: DuiEyeColor::Black,
+			nose_color: DuiNoseColor::Black,
+			mouth: DuiMouthColor::Red,
 			hair: BraidmanColor::Dark,
 			clothing_default: BraidmanColor::Cool,
 			clothing: Vec::new(),

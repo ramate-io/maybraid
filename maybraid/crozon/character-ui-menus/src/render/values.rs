@@ -3,7 +3,7 @@ use crozon_characters::{
 		braidman::BraidmanColor,
 		brodler::{assets::HornMesh, BrodlerEyeColor, BrodlerHeadMesh, BrodlerHornColor, BrodlerSkinColor},
 		mygr::{MygrEyeColor, MygrHeadMesh, MygrMouthMesh, MygrSkinColor},
-		dui::{DuiEyeMesh, DuiHeadMesh, DuiMouthMesh, DuiSkinColor},
+		dui::{DuiEyeMesh, DuiHeadMesh, DuiMouthMesh, DuiMouthColor, DuiSkinColor},
 		common::{BodyMesh, EarMesh, EyeMesh, HairMesh, HeadMesh, MouthMesh, NoseMesh},
 	},
 	ConceptAnimation,
@@ -143,5 +143,11 @@ impl SwatchFieldValue for MygrEyeColor {
 impl SwatchFieldValue for DuiSkinColor {
 	fn to_swatch_value(value: Self) -> SwatchValue {
 		SwatchValue::DuiSkin(value)
+	}
+}
+
+impl SwatchFieldValue for DuiMouthColor {
+	fn to_swatch_value(value: Self) -> SwatchValue {
+		SwatchValue::DuiMouth(value)
 	}
 }

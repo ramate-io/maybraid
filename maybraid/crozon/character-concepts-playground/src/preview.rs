@@ -483,10 +483,10 @@ fn preview_color_mygr(config: &MygrConfig, target: PreviewTarget) -> PreviewColo
 fn preview_color_dui(config: &DuiConfig, target: PreviewTarget) -> PreviewColor {
 	match target {
 		PreviewTarget::DuiHead
-		| PreviewTarget::DuiBody
-		| PreviewTarget::DuiEye
-		| PreviewTarget::DuiNose(_) => PreviewColor::DuiSkin(config.colors.skin),
-		PreviewTarget::DuiMouth => PreviewColor::Braidman(config.colors.mouth),
+		| PreviewTarget::DuiBody => PreviewColor::DuiSkin(config.colors.skin),
+		PreviewTarget::DuiNose(_) => PreviewColor::DuiNose(config.colors.nose_color),
+		PreviewTarget::DuiEye => PreviewColor::DuiEye(config.colors.eyes),
+		PreviewTarget::DuiMouth => PreviewColor::DuiMouth(config.colors.mouth),
 		PreviewTarget::DuiHair(_) => PreviewColor::Braidman(config.colors.hair),
 		PreviewTarget::DuiClothing(clothing) => {
 			PreviewColor::Braidman(config.colors.clothing_color(clothing))

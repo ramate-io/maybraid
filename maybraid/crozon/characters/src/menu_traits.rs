@@ -11,7 +11,7 @@ use crate::{
 			assets::HornMesh, BrodlerEyeColor, BrodlerHeadMesh, BrodlerHornColor, BrodlerSkinColor,
 		},
 		mygr::{MygrEyeColor, MygrHeadMesh, MygrMouthMesh, MygrSkinColor},
-		dui::{DuiEyeMesh, DuiHeadMesh, DuiMouthMesh, DuiNoseMesh, DuiSkinColor},
+		dui::{DuiEyeMesh, DuiHeadMesh, DuiMouthMesh, DuiNoseMesh, DuiEyeColor, DuiMouthColor, DuiNoseColor, DuiSkinColor},
 		common::{
 			BodyMesh, ClothingMesh, EarMesh, EyeMesh, HairMesh, HeadMesh, MouthMesh, NoseMesh,
 		},
@@ -67,6 +67,9 @@ impl_menu_identity!(DuiEyeMesh);
 impl_menu_identity!(DuiNoseMesh);
 impl_menu_identity!(DuiMouthMesh);
 impl_menu_identity!(DuiSkinColor);
+impl_menu_identity!(DuiEyeColor);
+impl_menu_identity!(DuiNoseColor);
+impl_menu_identity!(DuiMouthColor);
 
 macro_rules! impl_asset_option {
 	($ty:ty, $camera:expr) => {
@@ -205,10 +208,35 @@ impl SwatchOption for MygrEyeColor {
 impl SwatchOption for DuiSkinColor {
 	fn color_hex(&self) -> &'static str {
 		match self {
-			Self::Purple => "#7A6685",
-			Self::DesertBrown => "#9C7A5C",
-			Self::Blue => "#5A7A8C",
-			Self::Gold => "#C4A052",
+			Self::Purple => "#8A787A",
+			Self::DesertBrown => "#9E8970",
+			Self::Blue => "#7F8A85",
+			Self::Gold => "#A89470",
+		}
+	}
+}
+
+impl SwatchOption for DuiEyeColor {
+	fn color_hex(&self) -> &'static str {
+		match self {
+			Self::Black => "#141419",
+		}
+	}
+}
+
+impl SwatchOption for DuiNoseColor {
+	fn color_hex(&self) -> &'static str {
+		match self {
+			Self::Black => "#141419",
+		}
+	}
+}
+
+impl SwatchOption for DuiMouthColor {
+	fn color_hex(&self) -> &'static str {
+		match self {
+			Self::Red => "#8C5C52",
+			Self::Blue => "#667080",
 		}
 	}
 }

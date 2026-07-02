@@ -17,7 +17,7 @@ use crate::{
 
 const BODY_IGEO: AssetPath = AssetPath::new("characters/bodies/igeo_biped_full_body.glb");
 const HEAD_BARRED_BOWL: AssetPath = AssetPath::new("characters/heads/barred_bowl_head.glb");
-const EYE_LARGE_ROUNDED: AssetPath = AssetPath::new("characters/eyes/humanoid_eye_left.glb");
+const EYE_THORN: AssetPath = AssetPath::new("characters/horns/single_thorn_left.glb");
 const NOSE_TBAR: AssetPath = AssetPath::new("characters/noses/tbar_nose.glb");
 
 /// Species-local resolver for Dui asset choices.
@@ -63,7 +63,7 @@ impl DuiAssets {
 	fn head_rig() -> ResolvedCharacterPart {
 		ResolvedCharacterPart::new(
 			CharacterPartSlot::HeadRig,
-			CharacterAsset::new("OrthogradeHeadRig", HEAD_RIG, AssetNormalization::base_y(0.26)),
+			CharacterAsset::new("OrthogradeHeadRig", HEAD_RIG, AssetNormalization::base_y(0.4)),
 			SkinTarget::OwnRig,
 			Some(SocketAttachment {
 				rig: SocketRig::Body,
@@ -90,14 +90,14 @@ impl DuiAssets {
 		ResolvedCharacterPart::new(
 			CharacterPartSlot::EyeLeft,
 			CharacterAsset::new(
-				DuiEyeMesh::LargeRounded.label(),
-				EYE_LARGE_ROUNDED,
-				AssetNormalization::centroid(0.2),
+				DuiEyeMesh::Thorn.label(),
+				EYE_THORN,
+				AssetNormalization::centroid(0.6),
 			),
 			SkinTarget::HeadRig,
 			Some(Self::head_socket(
 				"eye_socket.L",
-				Transform::from_translation(Vec3::new(0.0, -0.1, -0.075)),
+				Transform::from_translation(Vec3::new(0.0, -0.1, 0.05)),
 			)),
 		)
 	}
@@ -106,14 +106,14 @@ impl DuiAssets {
 		ResolvedCharacterPart::new(
 			CharacterPartSlot::EyeRight,
 			CharacterAsset::new(
-				DuiEyeMesh::LargeRounded.label(),
-				EYE_LARGE_ROUNDED,
-				AssetNormalization::centroid(0.2),
+				DuiEyeMesh::Thorn.label(),
+				EYE_THORN,
+				AssetNormalization::centroid(0.6),
 			),
 			SkinTarget::HeadRig,
 			Some(Self::head_socket(
 				"eye_socket.R",
-				Self::mirror_x().with_translation(Vec3::new(0.0, -0.1, -0.075)),
+				Self::mirror_x().with_translation(Vec3::new(0.0, -0.1, 0.05)),
 			)),
 		)
 	}
@@ -121,7 +121,7 @@ impl DuiAssets {
 	fn nose(nose: DuiNoseMesh) -> ResolvedCharacterPart {
 		ResolvedCharacterPart::new(
 			CharacterPartSlot::Nose,
-			CharacterAsset::new(nose.label(), nose.path(), AssetNormalization::centroid(0.2)),
+			CharacterAsset::new(nose.label(), nose.path(), AssetNormalization::centroid(0.05)),
 			SkinTarget::HeadRig,
 			Some(Self::head_socket(
 				"nose_socket",
@@ -141,7 +141,7 @@ impl DuiAssets {
 			SkinTarget::HeadRig,
 			Some(Self::head_socket(
 				"mouth_socket",
-				Transform::from_translation(Vec3::new(0.0, 0.0, 0.1)),
+				Transform::from_translation(Vec3::new(0.0, 0.0, -0.01)),
 			)),
 		)
 	}
@@ -198,18 +198,18 @@ impl DuiHeadMesh {
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, ValueEnum)]
 pub enum DuiEyeMesh {
 	#[default]
-	LargeRounded,
+	Thorn,
 }
 
 impl DuiEyeMesh {
-	pub const VALUES: &'static [Self] = &[Self::LargeRounded];
+	pub const VALUES: &'static [Self] = &[Self::Thorn];
 
 	pub const fn label(self) -> &'static str {
-		"large-rounded"
+		"thorn"
 	}
 
 	pub const fn path(self) -> AssetPath {
-		EYE_LARGE_ROUNDED
+		EYE_THORN
 	}
 }
 

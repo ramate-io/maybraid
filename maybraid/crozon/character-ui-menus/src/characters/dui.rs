@@ -5,7 +5,7 @@ use crozon_characters::{
 	species::{
 		braidman::{BraidmanColor, ClothingColor},
 		common::{ClothingMesh, HairMesh},
-		dui::{DuiEyeMesh, DuiHeadMesh, DuiMouthMesh, DuiNoseMesh, DuiSkinColor},
+		dui::{DuiEyeMesh, DuiHeadMesh, DuiMouthMesh, DuiMouthColor, DuiNoseMesh, DuiSkinColor},
 	},
 	ConceptAnimation,
 };
@@ -27,7 +27,7 @@ pub struct DuiHeadFeaturesMenu {
 	pub eye: AssetSingleSelect<DuiEyeMesh>,
 	pub nose: SingleSelect<DuiNoseMesh>,
 	pub mouth: AssetSingleSelect<DuiMouthMesh>,
-	pub mouth_color: SwatchSingleSelect<BraidmanColor>,
+	pub mouth_color: SwatchSingleSelect<DuiMouthColor>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -66,7 +66,7 @@ impl From<&crozon_characters::species::dui::DuiConfig> for DuiMenu {
 			head_features: Section::new(
 				"Head & Features",
 				DuiHeadFeaturesMenu {
-					eye: AssetSingleSelect::new(DuiEyeMesh::LargeRounded)
+					eye: AssetSingleSelect::new(DuiEyeMesh::Thorn)
 						.with_camera_focus(EYE_FOCUS),
 					nose: SingleSelect::new(config.nose),
 					mouth: AssetSingleSelect::new(DuiMouthMesh::SmallCommon)
@@ -109,6 +109,8 @@ impl From<&DuiMenu> for crozon_characters::species::dui::DuiConfig {
 			clothing: menu.clothing.value.layers.selected.clone(),
 			colors: crozon_characters::species::dui::DuiColors {
 				skin: menu.head.value.skin.value,
+				eyes: crozon_characters::species::dui::DuiEyeColor::Black,
+				nose_color: crozon_characters::species::dui::DuiNoseColor::Black,
 				mouth: menu.head_features.value.mouth_color.value,
 				hair: menu.hair.value.color.value,
 				clothing_default: menu.clothing.value.default_color.value,
