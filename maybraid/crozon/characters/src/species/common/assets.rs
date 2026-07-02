@@ -48,6 +48,13 @@ pub const CLOTHING_SHORT_SLEEVED_ROBE_COAT: AssetPath =
 pub const CLOTHING_TAILORED_COAT: AssetPath =
 	AssetPath::new("characters/clothes/tailored_coat.glb");
 pub const CLOTHING_HOOD: AssetPath = AssetPath::new("characters/clothes/hood.glb");
+pub const CLOTHING_PANTS: AssetPath = AssetPath::new("characters/clothes/pants.glb");
+pub const CLOTHING_HAREM_PANTS: AssetPath =
+	AssetPath::new("characters/clothes/harem_pants_unified.glb");
+pub const CLOTHING_HAREM_PANTS_UPPER: AssetPath =
+	AssetPath::new("characters/clothes/harem_pants_top.glb");
+pub const CLOTHING_HAREM_PANTS_LOWER_WRAP: AssetPath =
+	AssetPath::new("characters/clothes/harem_pants_bottom_wrap.glb");
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, ValueEnum)]
 pub enum BodyMesh {
@@ -284,6 +291,10 @@ pub enum ClothingMesh {
 	ShortSleevedRobeCoat,
 	TailoredCoat,
 	Hood,
+	Pants,
+	HaremPants,
+	HaremPantsUpper,
+	HaremPantsLowerWrap,
 }
 
 impl ClothingMesh {
@@ -298,6 +309,10 @@ impl ClothingMesh {
 		Self::ShortSleevedRobeCoat,
 		Self::TailoredCoat,
 		Self::Hood,
+		Self::Pants,
+		Self::HaremPants,
+		Self::HaremPantsUpper,
+		Self::HaremPantsLowerWrap,
 	];
 
 	pub const fn label(self) -> &'static str {
@@ -312,6 +327,10 @@ impl ClothingMesh {
 			Self::ShortSleevedRobeCoat => "short-sleeved-robe-coat",
 			Self::TailoredCoat => "tailored-coat",
 			Self::Hood => "hood",
+			Self::Pants => "pants",
+			Self::HaremPants => "harem-pants",
+			Self::HaremPantsUpper => "harem-pants-upper",
+			Self::HaremPantsLowerWrap => "harem-pants-lower-wrap",
 		}
 	}
 
@@ -327,6 +346,10 @@ impl ClothingMesh {
 			Self::ShortSleevedRobeCoat => CLOTHING_SHORT_SLEEVED_ROBE_COAT,
 			Self::TailoredCoat => CLOTHING_TAILORED_COAT,
 			Self::Hood => CLOTHING_HOOD,
+			Self::Pants => CLOTHING_PANTS,
+			Self::HaremPants => CLOTHING_HAREM_PANTS,
+			Self::HaremPantsUpper => CLOTHING_HAREM_PANTS_UPPER,
+			Self::HaremPantsLowerWrap => CLOTHING_HAREM_PANTS_LOWER_WRAP,
 		}
 	}
 }
