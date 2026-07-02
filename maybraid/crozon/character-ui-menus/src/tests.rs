@@ -30,6 +30,16 @@ fn brodler_config_round_trip() -> anyhow::Result<()> {
 }
 
 #[test]
+fn dui_config_round_trip() -> anyhow::Result<()> {
+	let config = crozon_characters::species::dui::DuiConfig::default_preview();
+	let menu = crate::characters::dui::DuiMenu::from(&config);
+	let restored = crozon_characters::species::dui::DuiConfig::from(&menu);
+	assert_eq!(config.nose, restored.nose);
+	assert_eq!(config.colors.skin, restored.colors.skin);
+	Ok(())
+}
+
+#[test]
 fn mygr_config_round_trip() -> anyhow::Result<()> {
 	let config = crozon_characters::species::mygr::MygrConfig::default_preview();
 	let menu = crate::characters::mygr::MygrMenu::from(&config);

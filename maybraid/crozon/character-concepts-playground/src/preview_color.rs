@@ -5,6 +5,7 @@ use crozon_characters::species::{
 	braidman::BraidmanColor,
 	brodler::{BrodlerEyeColor, BrodlerHornColor, BrodlerSkinColor},
 	mygr::{MygrEyeColor, MygrSkinColor},
+	dui::DuiSkinColor,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -15,6 +16,7 @@ pub enum PreviewColor {
 	BrodlerHorn(BrodlerHornColor),
 	MygrSkin(MygrSkinColor),
 	MygrEye(MygrEyeColor),
+	DuiSkin(DuiSkinColor),
 }
 
 impl PreviewColor {
@@ -26,6 +28,7 @@ impl PreviewColor {
 			Self::BrodlerHorn(color) => color.color(),
 			Self::MygrSkin(color) => color.color(),
 			Self::MygrEye(color) => color.color(),
+			Self::DuiSkin(color) => color.color(),
 		}
 	}
 }

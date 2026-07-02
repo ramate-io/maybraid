@@ -21,6 +21,7 @@ use crate::{
 
 pub mod braidman;
 pub mod brodler;
+pub mod dui;
 pub mod mygr;
 mod values;
 
@@ -54,6 +55,9 @@ impl SectionMenuMap<ConceptSpecies> for CharacterSpeciesMenus<'_> {
 			}
 			ConceptSpecies::Mygr => {
 				Root::new(self.menu.mygr.clone()).render_with(renderer, parent, context)
+			}
+			ConceptSpecies::Dui => {
+				Root::new(self.menu.dui.clone()).render_with(renderer, parent, context)
 			}
 		}
 	}

@@ -11,6 +11,7 @@ use crate::{
 			assets::HornMesh, BrodlerEyeColor, BrodlerHeadMesh, BrodlerHornColor, BrodlerSkinColor,
 		},
 		mygr::{MygrEyeColor, MygrHeadMesh, MygrMouthMesh, MygrSkinColor},
+		dui::{DuiEyeMesh, DuiHeadMesh, DuiMouthMesh, DuiNoseMesh, DuiSkinColor},
 		common::{
 			BodyMesh, ClothingMesh, EarMesh, EyeMesh, HairMesh, HeadMesh, MouthMesh, NoseMesh,
 		},
@@ -61,6 +62,11 @@ impl_menu_identity!(MygrHeadMesh);
 impl_menu_identity!(MygrMouthMesh);
 impl_menu_identity!(MygrSkinColor);
 impl_menu_identity!(MygrEyeColor);
+impl_menu_identity!(DuiHeadMesh);
+impl_menu_identity!(DuiEyeMesh);
+impl_menu_identity!(DuiNoseMesh);
+impl_menu_identity!(DuiMouthMesh);
+impl_menu_identity!(DuiSkinColor);
 
 macro_rules! impl_asset_option {
 	($ty:ty, $camera:expr) => {
@@ -98,6 +104,22 @@ impl_asset_option!(EarMesh, EAR_THUMBNAIL_CAMERA);
 impl_asset_option!(ClothingMesh, CLOTHING_THUMBNAIL_CAMERA);
 impl_asset_option!(MygrHeadMesh, HEAD_THUMBNAIL_CAMERA);
 impl_asset_option!(MygrMouthMesh, FACE_FEATURE_THUMBNAIL_CAMERA);
+impl_asset_option!(DuiHeadMesh, HEAD_THUMBNAIL_CAMERA);
+impl_asset_option!(DuiEyeMesh, FACE_FEATURE_THUMBNAIL_CAMERA);
+impl_asset_option!(DuiMouthMesh, FACE_FEATURE_THUMBNAIL_CAMERA);
+
+impl AssetOption for DuiNoseMesh {
+	fn asset(&self) -> IdentifiedAsset {
+		match self {
+			Self::None => IdentifiedAsset::new("none", "none", ""),
+			Self::Tbar => {
+				let path = (*self).path();
+				IdentifiedAsset::new((*self).label(), (*self).label(), path.as_str())
+					.with_thumbnail_camera(FACE_FEATURE_THUMBNAIL_CAMERA)
+			}
+		}
+	}
+}
 
 impl AssetOption for HairMesh {
 	fn asset(&self) -> IdentifiedAsset {
@@ -176,6 +198,17 @@ impl SwatchOption for MygrEyeColor {
 			Self::Green => "#4A8C4F",
 			Self::Amber => "#C9A227",
 			Self::Blue => "#6BA3D1",
+		}
+	}
+}
+
+impl SwatchOption for DuiSkinColor {
+	fn color_hex(&self) -> &'static str {
+		match self {
+			Self::Purple => "#7A6685",
+			Self::DesertBrown => "#9C7A5C",
+			Self::Blue => "#5A7A8C",
+			Self::Gold => "#C4A052",
 		}
 	}
 }

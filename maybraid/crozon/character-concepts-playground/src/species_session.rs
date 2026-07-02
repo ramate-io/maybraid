@@ -1,7 +1,9 @@
 //! Per-species build memory and runtime reset when switching species.
 
 use bevy::prelude::*;
-use crozon_characters::species::{braidman::BraidmanConfig, brodler::BrodlerConfig, mygr::MygrConfig};
+use crozon_characters::species::{
+	braidman::BraidmanConfig, brodler::BrodlerConfig, dui::DuiConfig, mygr::MygrConfig,
+};
 
 use crate::{
 	camera_focus::{queue_species_default_camera_focus, PendingCameraFocus},
@@ -18,9 +20,11 @@ pub struct SpeciesSessionState {
 	pub braidman: BraidmanConfig,
 	pub brodler: BrodlerConfig,
 	pub mygr: MygrConfig,
+	pub dui: DuiConfig,
 	pub braidman_animation: crate::animation::ConceptAnimation,
 	pub brodler_animation: crate::animation::ConceptAnimation,
 	pub mygr_animation: crate::animation::ConceptAnimation,
+	pub dui_animation: crate::animation::ConceptAnimation,
 }
 
 impl Default for SpeciesSessionState {
@@ -29,9 +33,11 @@ impl Default for SpeciesSessionState {
 			braidman: BraidmanConfig::default_preview(),
 			brodler: BrodlerConfig::default_preview(),
 			mygr: MygrConfig::default_preview(),
+			dui: DuiConfig::default_preview(),
 			braidman_animation: crate::animation::ConceptAnimation::default(),
 			brodler_animation: crate::animation::ConceptAnimation::default(),
 			mygr_animation: crate::animation::ConceptAnimation::default(),
+			dui_animation: crate::animation::ConceptAnimation::default(),
 		}
 	}
 }
@@ -51,6 +57,10 @@ impl SpeciesSessionState {
 				self.mygr.clone_from(config);
 				self.mygr_animation = *animation;
 			}
+			ConceptPreviewConfig::Dui { config, animation } => {
+				self.dui.clone_from(config);
+				self.dui_animation = *animation;
+			}
 		}
 	}
 
@@ -67,6 +77,10 @@ impl SpeciesSessionState {
 			ConceptSpecies::Mygr => ConceptPreviewConfig::mygr_with_animation(
 				self.mygr.clone(),
 				self.mygr_animation,
+			),
+			ConceptSpecies::Dui => ConceptPreviewConfig::dui_with_animation(
+				self.dui.clone(),
+				self.dui_animation,
 			),
 		}
 	}

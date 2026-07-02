@@ -1,11 +1,11 @@
 use character_ui_menu::{CameraFocus, LabelOption, ListValues, Section, SingleSelect};
 use crozon_characters::{
-	species::{braidman::BraidmanConfig, brodler::BrodlerConfig, mygr::MygrConfig},
+	species::{braidman::BraidmanConfig, brodler::BrodlerConfig, dui::DuiConfig, mygr::MygrConfig},
 	ConceptAnimation,
 };
 
 use crate::{
-	characters::{braidman::BraidmanMenu, brodler::BrodlerMenu, mygr::MygrMenu},
+	characters::{braidman::BraidmanMenu, brodler::BrodlerMenu, dui::DuiMenu, mygr::MygrMenu},
 	cycle_value,
 	event::{AssetValue, CharacterField, MenuEvent, SectionId, SwatchValue},
 };
@@ -15,6 +15,7 @@ pub enum ConceptSpecies {
 	Braidman,
 	Brodler,
 	Mygr,
+	Dui,
 }
 
 impl ConceptSpecies {
@@ -23,13 +24,14 @@ impl ConceptSpecies {
 			Self::Braidman => "braidman",
 			Self::Brodler => "brodler",
 			Self::Mygr => "mygr",
+			Self::Dui => "dui",
 		}
 	}
 }
 
 impl ListValues for ConceptSpecies {
 	fn values() -> &'static [Self] {
-		&[Self::Braidman, Self::Brodler, Self::Mygr]
+		&[Self::Braidman, Self::Brodler, Self::Mygr, Self::Dui]
 	}
 }
 
@@ -39,6 +41,7 @@ impl LabelOption for ConceptSpecies {
 			Self::Braidman => "braidman",
 			Self::Brodler => "brodler",
 			Self::Mygr => "mygr",
+			Self::Dui => "dui",
 		}
 	}
 }
@@ -48,6 +51,7 @@ pub enum SpeciesMenu {
 	Braidman(Section<BraidmanMenu>),
 	Brodler(Section<BrodlerMenu>),
 	Mygr(Section<MygrMenu>),
+	Dui(Section<DuiMenu>),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -56,6 +60,7 @@ pub struct CharacterMenu {
 	pub braidman: BraidmanMenu,
 	pub brodler: BrodlerMenu,
 	pub mygr: MygrMenu,
+	pub dui: DuiMenu,
 }
 
 impl CharacterMenu {
@@ -65,6 +70,7 @@ impl CharacterMenu {
 			braidman: BraidmanMenu::from(config).with_animation(animation),
 			brodler: BrodlerMenu::default(),
 			mygr: MygrMenu::default(),
+			dui: DuiMenu::default(),
 		}
 	}
 
@@ -74,6 +80,7 @@ impl CharacterMenu {
 			braidman: BraidmanMenu::default(),
 			brodler: BrodlerMenu::from(config).with_animation(animation),
 			mygr: MygrMenu::default(),
+			dui: DuiMenu::default(),
 		}
 	}
 
@@ -83,6 +90,17 @@ impl CharacterMenu {
 			braidman: BraidmanMenu::default(),
 			brodler: BrodlerMenu::default(),
 			mygr: MygrMenu::from(config).with_animation(animation),
+			dui: DuiMenu::default(),
+		}
+	}
+
+	pub fn from_dui(config: &DuiConfig, animation: ConceptAnimation) -> Self {
+		Self {
+			species: SingleSelect::new(ConceptSpecies::Dui),
+			braidman: BraidmanMenu::default(),
+			brodler: BrodlerMenu::default(),
+			mygr: MygrMenu::default(),
+			dui: DuiMenu::from(config).with_animation(animation),
 		}
 	}
 
@@ -95,6 +113,7 @@ impl CharacterMenu {
 				SpeciesMenu::Brodler(Section::new("Brodler", self.brodler.clone()))
 			}
 			ConceptSpecies::Mygr => SpeciesMenu::Mygr(Section::new("Mygr", self.mygr.clone())),
+			ConceptSpecies::Dui => SpeciesMenu::Dui(Section::new("Dui", self.dui.clone())),
 		}
 	}
 
@@ -103,6 +122,7 @@ impl CharacterMenu {
 			ConceptSpecies::Braidman => self.braidman.animation(),
 			ConceptSpecies::Brodler => self.brodler.animation(),
 			ConceptSpecies::Mygr => self.mygr.animation(),
+			ConceptSpecies::Dui => self.dui.animation(),
 		}
 	}
 
@@ -116,6 +136,10 @@ impl CharacterMenu {
 
 	pub fn mygr_config(&self) -> MygrConfig {
 		MygrConfig::from(&self.mygr)
+	}
+
+	pub fn dui_config(&self) -> DuiConfig {
+		DuiConfig::from(&self.dui)
 	}
 
 	pub fn apply(&mut self, event: MenuEvent) -> bool {
@@ -134,6 +158,7 @@ impl CharacterMenu {
 			ConceptSpecies::Braidman => self.apply_braidman(event),
 			ConceptSpecies::Brodler => self.apply_brodler(event),
 			ConceptSpecies::Mygr => self.apply_mygr(event),
+			ConceptSpecies::Dui => self.apply_dui(event),
 		}
 	}
 
@@ -147,6 +172,7 @@ impl CharacterMenu {
 			ConceptSpecies::Braidman => self.braidman.camera_focus_for_field(field),
 			ConceptSpecies::Brodler => self.brodler.camera_focus_for_field(field),
 			ConceptSpecies::Mygr => self.mygr.camera_focus_for_field(field),
+			ConceptSpecies::Dui => self.dui.camera_focus_for_field(field),
 		}
 	}
 
@@ -342,6 +368,65 @@ impl CharacterMenu {
 				}
 				(CharacterField::MygrEyeColor, SwatchValue::MygrEye(color)) => {
 					menu.head_features.value.eye_color.value = color;
+					true
+				}
+				(CharacterField::MouthColor, SwatchValue::Braidman(color)) => {
+					menu.head_features.value.mouth_color.value = color;
+					true
+				}
+				(CharacterField::HairColor, SwatchValue::Braidman(color)) => {
+					menu.hair.value.color.value = color;
+					true
+				}
+				(CharacterField::Clothing(clothing), SwatchValue::Braidman(color)) => {
+					menu.set_clothing_color(clothing, color);
+					true
+				}
+				_ => false,
+			},
+			MenuEvent::Cycle(_, _) | MenuEvent::SliderDelta(_, _) => false,
+		}
+	}
+
+	fn apply_dui(&mut self, event: MenuEvent) -> bool {
+		let menu = &mut self.dui;
+		match event {
+			MenuEvent::ToggleSection(_) | MenuEvent::SetSpecies(_) => false,
+			MenuEvent::Cycle(CharacterField::DuiNose, delta) => {
+				menu.head_features.value.nose.value =
+					cycle_value(menu.head_features.value.nose.value, delta);
+				true
+			}
+			MenuEvent::SetAsset(field, value) => match (field, value) {
+				(CharacterField::DuiHead, AssetValue::DuiHead(value)) => {
+					menu.head.value.head.value = value;
+					true
+				}
+				(CharacterField::DuiEye, AssetValue::DuiEye(value)) => {
+					menu.head_features.value.eye.value = value;
+					true
+				}
+				(CharacterField::DuiMouth, AssetValue::DuiMouth(value)) => {
+					menu.head_features.value.mouth.value = value;
+					true
+				}
+				(CharacterField::Hair, AssetValue::Hair(value)) => {
+					menu.hair.value.style.value = value;
+					true
+				}
+				(CharacterField::Animation, AssetValue::Animation(value)) => {
+					menu.animation.value.clip.value = value;
+					true
+				}
+				_ => false,
+			},
+			MenuEvent::ToggleClothing(clothing) => {
+				menu.clothing.value.layers.toggle(clothing);
+				true
+			}
+			MenuEvent::SetSwatch(field, value) => match (field, value) {
+				(CharacterField::DuiSkinColor, SwatchValue::DuiSkin(color)) => {
+					menu.head.value.skin.value = color;
 					true
 				}
 				(CharacterField::MouthColor, SwatchValue::Braidman(color)) => {

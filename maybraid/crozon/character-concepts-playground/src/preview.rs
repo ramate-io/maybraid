@@ -10,6 +10,7 @@ use crozon_characters::{
 		braidman::BraidmanConfig,
 		brodler::{BrodlerConfig, BrodlerHeadMesh, HornMesh},
 		mygr::MygrConfig,
+		dui::{DuiConfig, DuiNoseMesh},
 		common::{
 			BodyMesh, ClothingMesh, EarMesh, EyeMesh, HairMesh, HeadMesh, MouthMesh, NoseMesh,
 		},
@@ -32,6 +33,7 @@ pub enum ConceptSpecies {
 	Braidman,
 	Brodler,
 	Mygr,
+	Dui,
 }
 
 #[derive(Resource, Debug, Clone, PartialEq)]
@@ -39,6 +41,7 @@ pub enum ConceptPreviewConfig {
 	Braidman { config: BraidmanConfig, animation: ConceptAnimation },
 	Brodler { config: BrodlerConfig, animation: ConceptAnimation },
 	Mygr { config: MygrConfig, animation: ConceptAnimation },
+	Dui { config: DuiConfig, animation: ConceptAnimation },
 }
 
 impl Default for ConceptPreviewConfig {
@@ -53,6 +56,7 @@ impl ConceptPreviewConfig {
 			ConceptSpecies::Braidman => Self::braidman(BraidmanConfig::default_preview()),
 			ConceptSpecies::Brodler => Self::brodler(BrodlerConfig::default_preview()),
 			ConceptSpecies::Mygr => Self::mygr(MygrConfig::default_preview()),
+			ConceptSpecies::Dui => Self::dui(DuiConfig::default_preview()),
 		}
 	}
 
@@ -61,6 +65,7 @@ impl ConceptPreviewConfig {
 			Self::Braidman { .. } => ConceptSpecies::Braidman,
 			Self::Brodler { .. } => ConceptSpecies::Brodler,
 			Self::Mygr { .. } => ConceptSpecies::Mygr,
+			Self::Dui { .. } => ConceptSpecies::Dui,
 		}
 	}
 
@@ -88,11 +93,20 @@ impl ConceptPreviewConfig {
 		Self::Mygr { config, animation }
 	}
 
+	pub fn dui(config: DuiConfig) -> Self {
+		Self::Dui { config, animation: ConceptAnimation::default() }
+	}
+
+	pub fn dui_with_animation(config: DuiConfig, animation: ConceptAnimation) -> Self {
+		Self::Dui { config, animation }
+	}
+
 	pub fn resolve(&self) -> ResolvedCharacterAssembly {
 		match self {
 			Self::Braidman { config, .. } => config.resolve(),
 			Self::Brodler { config, .. } => config.resolve(),
 			Self::Mygr { config, .. } => config.resolve(),
+			Self::Dui { config, .. } => config.resolve(),
 		}
 	}
 
@@ -105,6 +119,9 @@ impl ConceptPreviewConfig {
 				format!("{} animation={}", config.status_label(), animation.label())
 			}
 			Self::Mygr { config, animation } => {
+				format!("{} animation={}", config.status_label(), animation.label())
+			}
+			Self::Dui { config, animation } => {
 				format!("{} animation={}", config.status_label(), animation.label())
 			}
 		}
@@ -120,6 +137,9 @@ impl ConceptPreviewConfig {
 			}
 			Self::Mygr { config, animation } => {
 				format!("species=mygr {} animation={animation:?}", config.sync_key())
+			}
+			Self::Dui { config, animation } => {
+				format!("species=dui {} animation={animation:?}", config.sync_key())
 			}
 		}
 	}
@@ -154,6 +174,12 @@ impl ConceptPreviewConfig {
 				config.hair,
 				config.clothing,
 			),
+			Self::Dui { config, .. } => format!(
+				"species=dui nose={:?} hair={:?} clothing={:?}",
+				config.nose,
+				config.hair,
+				config.clothing,
+			),
 		}
 	}
 
@@ -161,7 +187,8 @@ impl ConceptPreviewConfig {
 		match self {
 			Self::Braidman { animation, .. }
 			| Self::Brodler { animation, .. }
-			| Self::Mygr { animation, .. } => *animation,
+			| Self::Mygr { animation, .. }
+			| Self::Dui { animation, .. } => *animation,
 		}
 	}
 }
@@ -248,6 +275,13 @@ pub enum PreviewTarget {
 	MygrTail,
 	MygrHair(HairMesh),
 	MygrClothing(ClothingMesh),
+	DuiBody,
+	DuiHead,
+	DuiEye,
+	DuiNose(DuiNoseMesh),
+	DuiMouth,
+	DuiHair(HairMesh),
+	DuiClothing(ClothingMesh),
 }
 
 pub fn sync_preview(
@@ -338,6 +372,11 @@ fn sync_live_preview(
 		ConceptPreviewConfig::Mygr { config: mygr, .. } => {
 			for (_, mut target, ..) in parts {
 				target.color = preview_color_mygr(mygr, target.target);
+			}
+		}
+		ConceptPreviewConfig::Dui { config: dui, .. } => {
+			for (_, mut target, ..) in parts {
+				target.color = preview_color_dui(dui, target.target);
 			}
 		}
 	}
@@ -441,6 +480,21 @@ fn preview_color_mygr(config: &MygrConfig, target: PreviewTarget) -> PreviewColo
 	}
 }
 
+fn preview_color_dui(config: &DuiConfig, target: PreviewTarget) -> PreviewColor {
+	match target {
+		PreviewTarget::DuiHead
+		| PreviewTarget::DuiBody
+		| PreviewTarget::DuiEye
+		| PreviewTarget::DuiNose(_) => PreviewColor::DuiSkin(config.colors.skin),
+		PreviewTarget::DuiMouth => PreviewColor::Braidman(config.colors.mouth),
+		PreviewTarget::DuiHair(_) => PreviewColor::Braidman(config.colors.hair),
+		PreviewTarget::DuiClothing(clothing) => {
+			PreviewColor::Braidman(config.colors.clothing_color(clothing))
+		}
+		_ => PreviewColor::DuiSkin(config.colors.skin),
+	}
+}
+
 struct PreviewSpawner<'w, 's, 'a> {
 	commands: &'a mut Commands<'w, 's>,
 	asset_server: &'a AssetServer,
@@ -483,6 +537,7 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 			}
 			ConceptPreviewConfig::Brodler { .. } => part.asset.normalization.transform(),
 			ConceptPreviewConfig::Mygr { .. } => part.asset.normalization.transform(),
+			ConceptPreviewConfig::Dui { .. } => part.asset.normalization.transform(),
 		}
 	}
 
@@ -687,6 +742,28 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 						.unwrap_or(PreviewTarget::MygrHead),
 				};
 				PreviewAssetTarget { target, color: preview_color_mygr(config, target) }
+			}
+			ConceptPreviewConfig::Dui { config, .. } => {
+				let target = match part.slot {
+					CharacterPartSlot::BodyMesh => PreviewTarget::DuiBody,
+					CharacterPartSlot::HeadRig | CharacterPartSlot::HeadMesh => PreviewTarget::DuiHead,
+					CharacterPartSlot::EyeLeft | CharacterPartSlot::EyeRight => PreviewTarget::DuiEye,
+					CharacterPartSlot::Nose => PreviewTarget::DuiNose(config.nose),
+					CharacterPartSlot::Mouth => PreviewTarget::DuiMouth,
+					CharacterPartSlot::EarLeft
+					| CharacterPartSlot::EarRight
+					| CharacterPartSlot::Horns
+					| CharacterPartSlot::Tail => PreviewTarget::DuiHead,
+					CharacterPartSlot::Hair => PreviewTarget::DuiHair(config.hair),
+					CharacterPartSlot::Clothing => config
+						.clothing
+						.iter()
+						.copied()
+						.find(|clothing| clothing.label() == part.asset.label)
+						.map(PreviewTarget::DuiClothing)
+						.unwrap_or(PreviewTarget::DuiHead),
+				};
+				PreviewAssetTarget { target, color: preview_color_dui(config, target) }
 			}
 		}
 	}

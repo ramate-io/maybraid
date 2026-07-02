@@ -6,6 +6,7 @@ use crozon_characters::{
 			assets::HornMesh, BrodlerEyeColor, BrodlerHeadMesh, BrodlerHornColor, BrodlerSkinColor,
 		},
 		mygr::{MygrEyeColor, MygrHeadMesh, MygrMouthMesh, MygrSkinColor},
+		dui::{DuiEyeMesh, DuiHeadMesh, DuiMouthMesh, DuiSkinColor},
 		common::{
 			BodyMesh, ClothingMesh, EarMesh, EyeMesh, HairMesh, HeadMesh, MouthMesh, NoseMesh,
 		},
@@ -48,6 +49,10 @@ pub enum CharacterField {
 	Horns,
 	MygrHead,
 	MygrMouth,
+	DuiHead,
+	DuiEye,
+	DuiNose,
+	DuiMouth,
 	Eye,
 	Nose,
 	Mouth,
@@ -63,6 +68,7 @@ pub enum CharacterField {
 	HornColor,
 	MygrSkinColor,
 	MygrEyeColor,
+	DuiSkinColor,
 	Clothing(ClothingMesh),
 	ShoulderWidth,
 	HipWidth,
@@ -96,6 +102,9 @@ pub enum AssetValue {
 	Horns(HornMesh),
 	MygrHead(MygrHeadMesh),
 	MygrMouth(MygrMouthMesh),
+	DuiHead(DuiHeadMesh),
+	DuiEye(DuiEyeMesh),
+	DuiMouth(DuiMouthMesh),
 	Eye(EyeMesh),
 	Nose(NoseMesh),
 	Mouth(MouthMesh),
@@ -112,6 +121,7 @@ pub enum SwatchValue {
 	BrodlerHorn(BrodlerHornColor),
 	MygrSkin(MygrSkinColor),
 	MygrEye(MygrEyeColor),
+	DuiSkin(DuiSkinColor),
 }
 
 impl SwatchValue {
@@ -137,6 +147,10 @@ impl SwatchValue {
 
 	pub fn with_mygr_eye(self, color: MygrEyeColor) -> Self {
 		Self::MygrEye(color)
+	}
+
+	pub fn with_dui_skin(self, color: DuiSkinColor) -> Self {
+		Self::DuiSkin(color)
 	}
 }
 

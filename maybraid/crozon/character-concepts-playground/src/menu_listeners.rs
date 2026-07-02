@@ -29,6 +29,9 @@ pub fn menu_to_preview_config(menu: &CharacterMenu) -> ConceptPreviewConfig {
 		ConceptSpecies::Mygr => {
 			ConceptPreviewConfig::mygr_with_animation(menu.mygr_config(), menu.animation())
 		}
+		ConceptSpecies::Dui => {
+			ConceptPreviewConfig::dui_with_animation(menu.dui_config(), menu.animation())
+		}
 	}
 }
 
@@ -42,6 +45,9 @@ pub fn menu_from_preview_config(config: &ConceptPreviewConfig) -> CharacterMenu 
 		}
 		ConceptPreviewConfig::Mygr { config, animation } => {
 			CharacterMenu::from_mygr(config, *animation)
+		}
+		ConceptPreviewConfig::Dui { config, animation } => {
+			CharacterMenu::from_dui(config, *animation)
 		}
 	}
 }
@@ -68,6 +74,7 @@ fn preview_species(species: ConceptSpecies) -> crate::preview::ConceptSpecies {
 		ConceptSpecies::Braidman => crate::preview::ConceptSpecies::Braidman,
 		ConceptSpecies::Brodler => crate::preview::ConceptSpecies::Brodler,
 		ConceptSpecies::Mygr => crate::preview::ConceptSpecies::Mygr,
+		ConceptSpecies::Dui => crate::preview::ConceptSpecies::Dui,
 	}
 }
 

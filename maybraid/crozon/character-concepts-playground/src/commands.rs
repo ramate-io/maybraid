@@ -2,11 +2,13 @@
 
 pub mod braidman;
 pub mod brodler;
+pub mod dui;
 pub mod mygr;
 
 use bevy::prelude::*;
 pub use braidman::Braidman;
 pub use brodler::Brodler;
+pub use dui::Dui;
 pub use mygr::Mygr;
 use clap::Parser;
 use game_commands::command::{CommandScript, GameCommand};
@@ -36,6 +38,9 @@ pub enum ConceptsCommand {
 	/// Spawn or adjust the Mygr concept preview.
 	#[command(subcommand)]
 	Mygr(Mygr),
+	/// Spawn or adjust the Dui concept preview.
+	#[command(subcommand)]
+	Dui(Dui),
 	/// Print the live rig bone hierarchy to the HUD console.
 	DumpBones,
 }
@@ -56,6 +61,7 @@ impl ConceptsCommand {
 			Self::Braidman(braidman) => braidman.react(commands),
 			Self::Brodler(brodler) => brodler.react(commands),
 			Self::Mygr(mygr) => mygr.react(commands),
+			Self::Dui(dui) => dui.react(commands),
 			Self::DumpBones => request_dump_bones(commands),
 		}
 	}
