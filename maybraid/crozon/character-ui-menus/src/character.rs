@@ -1,4 +1,6 @@
-use character_ui_menu::{CameraFocus, LabelOption, ListValues, MenuNode, MenuTree, SingleSelect};
+use character_ui_menu::{
+	CameraFocus, LabelOption, ListValues, MenuComponent, MenuNode, SingleSelect,
+};
 use crozon_characters::{
 	species::{
 		braidman::BraidmanConfig, brodler::BrodlerConfig, dui::DuiConfig, lero::LeroConfig,
@@ -175,15 +177,15 @@ impl CharacterMenu {
 
 	/// Lowers the currently selected species menu; the other species' state is
 	/// retained but not part of the tree.
-	fn species_nodes(&self) -> Vec<MenuNode<MenuEvent>> {
+	fn species_node(&self) -> MenuNode<MenuEvent> {
 		match self.species.value {
-			ConceptSpecies::Braidman => self.braidman.menu_nodes(),
-			ConceptSpecies::Brodler => self.brodler.menu_nodes(),
-			ConceptSpecies::Mygr => self.mygr.menu_nodes(),
-			ConceptSpecies::Dui => self.dui.menu_nodes(),
-			ConceptSpecies::Wumbus => self.wumbus.menu_nodes(),
-			ConceptSpecies::Lero => self.lero.menu_nodes(),
-			ConceptSpecies::Spibmom => self.spibmom.menu_nodes(),
+			ConceptSpecies::Braidman => self.braidman.menu_node(),
+			ConceptSpecies::Brodler => self.brodler.menu_node(),
+			ConceptSpecies::Mygr => self.mygr.menu_node(),
+			ConceptSpecies::Dui => self.dui.menu_node(),
+			ConceptSpecies::Wumbus => self.wumbus.menu_node(),
+			ConceptSpecies::Lero => self.lero.menu_node(),
+			ConceptSpecies::Spibmom => self.spibmom.menu_node(),
 		}
 	}
 
@@ -748,14 +750,14 @@ impl CharacterMenu {
 	}
 }
 
-impl MenuTree<MenuEvent> for CharacterMenu {
-	fn menu_nodes(&self) -> Vec<MenuNode<MenuEvent>> {
-		vec![MenuNode::section_select(
+impl MenuComponent<MenuEvent> for CharacterMenu {
+	fn menu_node(&self) -> MenuNode<MenuEvent> {
+		MenuNode::section_select(
 			"Species",
 			self.species.value,
 			MenuEvent::SetSpecies,
-			self.species_nodes(),
-		)]
+			self.species_node(),
+		)
 	}
 }
 

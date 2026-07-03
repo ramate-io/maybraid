@@ -5,7 +5,7 @@ use bevy::prelude::*;
 use bevy_character_ui_menu_renderer::{
 	BevyMenuSink, MenuSink, MenuThumbnailContext, RenderContext,
 };
-use character_ui_menu::{AssetThumbnailDisplay, MenuTree, ThumbnailRequest};
+use character_ui_menu::{AssetThumbnailDisplay, MenuComponent, ThumbnailRequest};
 use crozon_character_ui_menus::SectionOpenState;
 use game_commands::ui::{GameCommandDrawerConfig, GameCommandStatusText, GameCommandUiConfig};
 

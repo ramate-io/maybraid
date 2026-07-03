@@ -1,4 +1,4 @@
-use character_ui_menu::{MenuNode, MenuTree};
+use character_ui_menu::{MenuComponent, MenuNode};
 use crozon_character_items::ClothingMesh;
 use crozon_characters::species::{braidman::BraidmanConfig, brodler::BrodlerConfig};
 

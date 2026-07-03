@@ -124,6 +124,9 @@ pub struct ItemRow<E> {
 /// embedded in leaves at lowering time; renderers forward it verbatim.
 #[derive(Clone, Debug, PartialEq)]
 pub enum MenuNode<E> {
+	/// Invisible grouping for composition; flattened by [`normalize`] before
+	/// rendering. Fragments never paint as their own widget.
+	Fragment(Vec<MenuNode<E>>),
 	/// Collapsible labeled section. Open state is keyed by label via
 	/// [`crate::SectionOpen`].
 	Section { label: &'static str, children: Vec<MenuNode<E>> },
@@ -144,15 +147,26 @@ pub enum MenuNode<E> {
 }
 
 impl<E> MenuNode<E> {
-	pub fn section(label: &'static str, children: Vec<MenuNode<E>>) -> Self {
-		Self::Section { label, children }
+	/// Groups `children` for composition; invisible after [`normalize`].
+	pub fn fragment(children: impl IntoIterator<Item = MenuNode<E>>) -> Self {
+		Self::Fragment(children.into_iter().collect())
+	}
+
+	/// Collapsible labeled section; `child` may be a [`Fragment`].
+	pub fn section(label: &'static str, child: MenuNode<E>) -> Self {
+		Self::Section { label, children: normalize(vec![child]) }
+	}
+
+	/// Alias for [`Self::section`].
+	pub fn submenu(label: &'static str, child: MenuNode<E>) -> Self {
+		Self::section(label, child)
 	}
 
 	pub fn section_select<T>(
 		label: &'static str,
 		selected: T,
 		mut event: impl FnMut(T) -> E,
-		children: Vec<MenuNode<E>>,
+		child: MenuNode<E>,
 	) -> Self
 	where
 		T: ListValues + LabelOption + PartialEq + Copy,
@@ -167,7 +181,7 @@ impl<E> MenuNode<E> {
 					event: event(*value),
 				})
 				.collect(),
-			children,
+			children: normalize(vec![child]),
 		}
 	}
 
@@ -224,7 +238,23 @@ impl<E> MenuNode<E> {
 	}
 }
 
+/// Recursively removes [`MenuNode::Fragment`] wrappers.
+pub fn normalize<E>(nodes: Vec<MenuNode<E>>) -> Vec<MenuNode<E>> {
+	nodes
+		.into_iter()
+		.flat_map(|node| match node {
+			MenuNode::Fragment(children) => normalize(children),
+			other => vec![other],
+		})
+		.collect()
+}
+
 /// Lowers typed menu state to a renderer-agnostic [`MenuNode`] tree.
-pub trait MenuTree<E> {
-	fn menu_nodes(&self) -> Vec<MenuNode<E>>;
+pub trait MenuComponent<E> {
+	fn menu_node(&self) -> MenuNode<E>;
+
+	/// Root node flattened for renderers that consume a slice.
+	fn menu_nodes(&self) -> Vec<MenuNode<E>> {
+		normalize(vec![self.menu_node()])
+	}
 }

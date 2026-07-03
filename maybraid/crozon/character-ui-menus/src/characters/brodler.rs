@@ -1,5 +1,6 @@
 use character_ui_menu::{
-	AssetSingleSelect, CameraFocus, MenuNode, MenuTree, PreviewColor, Section, SwatchSingleSelect,
+	AssetSingleSelect, CameraFocus, MenuComponent, MenuNode, PreviewColor, Section,
+	SwatchSingleSelect,
 };
 use crozon_character_items::{ClothingMesh, ItemColor};
 use crozon_characters::{
@@ -118,10 +119,10 @@ impl From<&BrodlerMenu> for BrodlerConfig {
 	}
 }
 
-impl MenuTree<MenuEvent> for BrodlerHeadMenu {
-	fn menu_nodes(&self) -> Vec<MenuNode<MenuEvent>> {
+impl MenuComponent<MenuEvent> for BrodlerHeadMenu {
+	fn menu_node(&self) -> MenuNode<MenuEvent> {
 		let base = PreviewColor::of(self.skin.value);
-		vec![
+		MenuNode::fragment([
 			MenuNode::asset_grid("Head", &self.head, base, |value| {
 				MenuEvent::SetAsset(CharacterField::BrodlerHead, AssetValue::BrodlerHead(value))
 			}),
@@ -134,14 +135,14 @@ impl MenuTree<MenuEvent> for BrodlerHeadMenu {
 			MenuNode::swatch("Skin", &self.skin, |color| {
 				MenuEvent::SetSwatch(CharacterField::SkinColor, SwatchValue::BrodlerSkin(color))
 			}),
-		]
+		])
 	}
 }
 
-impl MenuTree<MenuEvent> for BrodlerHeadFeaturesMenu {
-	fn menu_nodes(&self) -> Vec<MenuNode<MenuEvent>> {
+impl MenuComponent<MenuEvent> for BrodlerHeadFeaturesMenu {
+	fn menu_node(&self) -> MenuNode<MenuEvent> {
 		let base = PreviewColor::of(self.skin_color);
-		vec![
+		MenuNode::fragment([
 			MenuNode::asset_grid(
 				"Eyes",
 				&self.eye,
@@ -172,19 +173,19 @@ impl MenuTree<MenuEvent> for BrodlerHeadFeaturesMenu {
 			MenuNode::asset_grid("Ears", &self.ear, base, |value| {
 				MenuEvent::SetAsset(CharacterField::Ear, AssetValue::Ear(value))
 			}),
-		]
+		])
 	}
 }
 
-impl MenuTree<MenuEvent> for BrodlerMenu {
-	fn menu_nodes(&self) -> Vec<MenuNode<MenuEvent>> {
-		vec![
-			MenuNode::section(self.head.label, self.head.value.menu_nodes()),
-			MenuNode::section(self.head_features.label, self.head_features.value.menu_nodes()),
-			MenuNode::section(self.hair.label, self.hair.value.menu_nodes()),
-			MenuNode::section(self.clothing.label, self.clothing.value.menu_nodes()),
-			MenuNode::section(self.animation.label, self.animation.value.menu_nodes()),
-		]
+impl MenuComponent<MenuEvent> for BrodlerMenu {
+	fn menu_node(&self) -> MenuNode<MenuEvent> {
+		MenuNode::fragment([
+			MenuNode::section(self.head.label, self.head.value.menu_node()),
+			MenuNode::section(self.head_features.label, self.head_features.value.menu_node()),
+			MenuNode::section(self.hair.label, self.hair.value.menu_node()),
+			MenuNode::section(self.clothing.label, self.clothing.value.menu_node()),
+			MenuNode::section(self.animation.label, self.animation.value.menu_node()),
+		])
 	}
 }
 

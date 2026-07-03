@@ -1,5 +1,5 @@
 use character_ui_menu::{
-	AssetSingleSelect, CameraFocus, MenuNode, MenuTree, PreviewColor, Section, SingleSelect,
+	AssetSingleSelect, CameraFocus, MenuComponent, MenuNode, PreviewColor, Section, SingleSelect,
 	Slider, SwatchSingleSelect,
 };
 use crozon_character_items::{ClothingMesh, ItemColor};
@@ -122,9 +122,9 @@ impl BraidmanBodyProportionSliders {
 	}
 }
 
-impl MenuTree<MenuEvent> for BraidmanBodyProportionSliders {
-	fn menu_nodes(&self) -> Vec<MenuNode<MenuEvent>> {
-		vec![
+impl MenuComponent<MenuEvent> for BraidmanBodyProportionSliders {
+	fn menu_node(&self) -> MenuNode<MenuEvent> {
+		MenuNode::fragment([
 			MenuNode::slider("Shoulder Width", &self.shoulder_width, |delta| {
 				MenuEvent::SliderDelta(CharacterField::ShoulderWidth, delta)
 			}),
@@ -158,7 +158,7 @@ impl MenuTree<MenuEvent> for BraidmanBodyProportionSliders {
 			MenuNode::slider("Leg Length", &self.leg_length, |delta| {
 				MenuEvent::SliderDelta(CharacterField::LegLength, delta)
 			}),
-		]
+		])
 	}
 }
 
@@ -273,39 +273,40 @@ impl From<&BraidmanMenu> for BraidmanConfig {
 	}
 }
 
-impl MenuTree<MenuEvent> for BraidmanPresetsMenu {
-	fn menu_nodes(&self) -> Vec<MenuNode<MenuEvent>> {
-		vec![
+impl MenuComponent<MenuEvent> for BraidmanPresetsMenu {
+	fn menu_node(&self) -> MenuNode<MenuEvent> {
+		MenuNode::fragment([
 			MenuNode::cycle("Gender", &self.gender, |delta| {
 				MenuEvent::Cycle(CharacterField::Gender, delta)
 			}),
 			MenuNode::cycle("Build", &self.build, |delta| {
 				MenuEvent::Cycle(CharacterField::Build, delta)
 			}),
-		]
+		])
 	}
 }
 
-impl MenuTree<MenuEvent> for BraidmanBodyMenu {
-	fn menu_nodes(&self) -> Vec<MenuNode<MenuEvent>> {
-		let mut nodes = vec![MenuNode::asset_grid(
-			"Body Mesh",
-			&self.body,
-			PreviewColor::of(self.color.value),
-			|value| MenuEvent::SetAsset(CharacterField::BodyMesh, AssetValue::Body(value)),
-		)];
-		nodes.extend(self.sliders.menu_nodes());
-		nodes.push(MenuNode::swatch("Body Color", &self.color, |color| {
-			MenuEvent::SetSwatch(CharacterField::BodyColor, SwatchValue::Item(color))
-		}));
-		nodes
+impl MenuComponent<MenuEvent> for BraidmanBodyMenu {
+	fn menu_node(&self) -> MenuNode<MenuEvent> {
+		MenuNode::fragment([
+			MenuNode::asset_grid(
+				"Body Mesh",
+				&self.body,
+				PreviewColor::of(self.color.value),
+				|value| MenuEvent::SetAsset(CharacterField::BodyMesh, AssetValue::Body(value)),
+			),
+			self.sliders.menu_node(),
+			MenuNode::swatch("Body Color", &self.color, |color| {
+				MenuEvent::SetSwatch(CharacterField::BodyColor, SwatchValue::Item(color))
+			}),
+		])
 	}
 }
 
-impl MenuTree<MenuEvent> for BraidmanHeadFeaturesMenu {
-	fn menu_nodes(&self) -> Vec<MenuNode<MenuEvent>> {
+impl MenuComponent<MenuEvent> for BraidmanHeadFeaturesMenu {
+	fn menu_node(&self) -> MenuNode<MenuEvent> {
 		let base = PreviewColor::of(self.body_color);
-		vec![
+		MenuNode::fragment([
 			MenuNode::asset_grid("Head", &self.head, base, |value| {
 				MenuEvent::SetAsset(CharacterField::HeadMesh, AssetValue::Head(value))
 			}),
@@ -360,20 +361,20 @@ impl MenuTree<MenuEvent> for BraidmanHeadFeaturesMenu {
 			MenuNode::slider("Ear Height", &self.feature_sliders.ear_height, |delta| {
 				MenuEvent::SliderDelta(CharacterField::EarHeight, delta)
 			}),
-		]
+		])
 	}
 }
 
-impl MenuTree<MenuEvent> for BraidmanMenu {
-	fn menu_nodes(&self) -> Vec<MenuNode<MenuEvent>> {
-		vec![
-			MenuNode::section(self.presets.label, self.presets.value.menu_nodes()),
-			MenuNode::section(self.body.label, self.body.value.menu_nodes()),
-			MenuNode::section(self.head_features.label, self.head_features.value.menu_nodes()),
-			MenuNode::section(self.hair.label, self.hair.value.menu_nodes()),
-			MenuNode::section(self.clothing.label, self.clothing.value.menu_nodes()),
-			MenuNode::section(self.animation.label, self.animation.value.menu_nodes()),
-		]
+impl MenuComponent<MenuEvent> for BraidmanMenu {
+	fn menu_node(&self) -> MenuNode<MenuEvent> {
+		MenuNode::fragment([
+			MenuNode::section(self.presets.label, self.presets.value.menu_node()),
+			MenuNode::section(self.body.label, self.body.value.menu_node()),
+			MenuNode::section(self.head_features.label, self.head_features.value.menu_node()),
+			MenuNode::section(self.hair.label, self.hair.value.menu_node()),
+			MenuNode::section(self.clothing.label, self.clothing.value.menu_node()),
+			MenuNode::section(self.animation.label, self.animation.value.menu_node()),
+		])
 	}
 }
 

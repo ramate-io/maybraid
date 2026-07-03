@@ -1,5 +1,6 @@
 use character_ui_menu::{
-	AssetSingleSelect, CameraFocus, MenuNode, MenuTree, PreviewColor, Section, SwatchSingleSelect,
+	AssetSingleSelect, CameraFocus, MenuComponent, MenuNode, PreviewColor, Section,
+	SwatchSingleSelect,
 };
 use crozon_character_items::{ClothingMesh, ItemColor};
 use crozon_characters::{
@@ -112,22 +113,22 @@ impl From<&LeroMenu> for LeroConfig {
 	}
 }
 
-impl MenuTree<MenuEvent> for LeroHeadMenu {
-	fn menu_nodes(&self) -> Vec<MenuNode<MenuEvent>> {
-		vec![
+impl MenuComponent<MenuEvent> for LeroHeadMenu {
+	fn menu_node(&self) -> MenuNode<MenuEvent> {
+		MenuNode::fragment([
 			MenuNode::asset_grid("Head", &self.head, PreviewColor::of(self.skin.value), |value| {
 				MenuEvent::SetAsset(CharacterField::LeroHead, AssetValue::LeroHead(value))
 			}),
 			MenuNode::swatch("Skin", &self.skin, |color| {
 				MenuEvent::SetSwatch(CharacterField::LeroSkinColor, SwatchValue::LeroSkin(color))
 			}),
-		]
+		])
 	}
 }
 
-impl MenuTree<MenuEvent> for LeroHeadFeaturesMenu {
-	fn menu_nodes(&self) -> Vec<MenuNode<MenuEvent>> {
-		vec![
+impl MenuComponent<MenuEvent> for LeroHeadFeaturesMenu {
+	fn menu_node(&self) -> MenuNode<MenuEvent> {
+		MenuNode::fragment([
 			MenuNode::asset_grid(
 				"Snout",
 				&self.snout,
@@ -145,33 +146,33 @@ impl MenuTree<MenuEvent> for LeroHeadFeaturesMenu {
 			MenuNode::swatch("Eye Color", &self.eye_color, |color| {
 				MenuEvent::SetSwatch(CharacterField::LeroEyeColor, SwatchValue::LeroEye(color))
 			}),
-		]
+		])
 	}
 }
 
-impl MenuTree<MenuEvent> for LeroBodyMenu {
-	fn menu_nodes(&self) -> Vec<MenuNode<MenuEvent>> {
-		vec![
+impl MenuComponent<MenuEvent> for LeroBodyMenu {
+	fn menu_node(&self) -> MenuNode<MenuEvent> {
+		MenuNode::fragment([
 			MenuNode::swatch("Tail Color", &self.tail_color, |color| {
 				MenuEvent::SetSwatch(CharacterField::LeroTailColor, SwatchValue::LeroTail(color))
 			}),
 			MenuNode::swatch("Spine Color", &self.spine_color, |color| {
 				MenuEvent::SetSwatch(CharacterField::LeroSpineColor, SwatchValue::LeroSpine(color))
 			}),
-		]
+		])
 	}
 }
 
-impl MenuTree<MenuEvent> for LeroMenu {
-	fn menu_nodes(&self) -> Vec<MenuNode<MenuEvent>> {
-		vec![
-			MenuNode::section(self.head.label, self.head.value.menu_nodes()),
-			MenuNode::section(self.head_features.label, self.head_features.value.menu_nodes()),
-			MenuNode::section(self.body.label, self.body.value.menu_nodes()),
-			MenuNode::section(self.hair.label, self.hair.value.menu_nodes()),
-			MenuNode::section(self.clothing.label, self.clothing.value.menu_nodes()),
-			MenuNode::section(self.animation.label, self.animation.value.menu_nodes()),
-		]
+impl MenuComponent<MenuEvent> for LeroMenu {
+	fn menu_node(&self) -> MenuNode<MenuEvent> {
+		MenuNode::fragment([
+			MenuNode::section(self.head.label, self.head.value.menu_node()),
+			MenuNode::section(self.head_features.label, self.head_features.value.menu_node()),
+			MenuNode::section(self.body.label, self.body.value.menu_node()),
+			MenuNode::section(self.hair.label, self.hair.value.menu_node()),
+			MenuNode::section(self.clothing.label, self.clothing.value.menu_node()),
+			MenuNode::section(self.animation.label, self.animation.value.menu_node()),
+		])
 	}
 }
 

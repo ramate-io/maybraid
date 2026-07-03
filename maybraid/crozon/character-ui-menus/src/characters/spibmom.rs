@@ -1,5 +1,6 @@
 use character_ui_menu::{
-	AssetSingleSelect, CameraFocus, MenuNode, MenuTree, PreviewColor, Section, SwatchSingleSelect,
+	AssetSingleSelect, CameraFocus, MenuComponent, MenuNode, PreviewColor, Section,
+	SwatchSingleSelect,
 };
 use crozon_character_items::{ClothingMesh, ItemColor};
 use crozon_characters::{
@@ -113,9 +114,9 @@ impl From<&SpibmomMenu> for SpibmomConfig {
 	}
 }
 
-impl MenuTree<MenuEvent> for SpibmomHeadMenu {
-	fn menu_nodes(&self) -> Vec<MenuNode<MenuEvent>> {
-		vec![
+impl MenuComponent<MenuEvent> for SpibmomHeadMenu {
+	fn menu_node(&self) -> MenuNode<MenuEvent> {
+		MenuNode::fragment([
 			MenuNode::asset_grid("Head", &self.head, PreviewColor::of(self.skin.value), |value| {
 				MenuEvent::SetAsset(CharacterField::SpibmomHead, AssetValue::SpibmomHead(value))
 			}),
@@ -137,13 +138,13 @@ impl MenuTree<MenuEvent> for SpibmomHeadMenu {
 					SwatchValue::SpibmomSpine(color),
 				)
 			}),
-		]
+		])
 	}
 }
 
-impl MenuTree<MenuEvent> for SpibmomHeadFeaturesMenu {
-	fn menu_nodes(&self) -> Vec<MenuNode<MenuEvent>> {
-		vec![
+impl MenuComponent<MenuEvent> for SpibmomHeadFeaturesMenu {
+	fn menu_node(&self) -> MenuNode<MenuEvent> {
+		MenuNode::fragment([
 			MenuNode::asset_grid(
 				"Eyes",
 				&self.eye,
@@ -179,19 +180,19 @@ impl MenuTree<MenuEvent> for SpibmomHeadFeaturesMenu {
 					SwatchValue::SpibmomMouthColor(color),
 				)
 			}),
-		]
+		])
 	}
 }
 
-impl MenuTree<MenuEvent> for SpibmomMenu {
-	fn menu_nodes(&self) -> Vec<MenuNode<MenuEvent>> {
-		vec![
-			MenuNode::section(self.head.label, self.head.value.menu_nodes()),
-			MenuNode::section(self.head_features.label, self.head_features.value.menu_nodes()),
-			MenuNode::section(self.hair.label, self.hair.value.menu_nodes()),
-			MenuNode::section(self.clothing.label, self.clothing.value.menu_nodes()),
-			MenuNode::section(self.animation.label, self.animation.value.menu_nodes()),
-		]
+impl MenuComponent<MenuEvent> for SpibmomMenu {
+	fn menu_node(&self) -> MenuNode<MenuEvent> {
+		MenuNode::fragment([
+			MenuNode::section(self.head.label, self.head.value.menu_node()),
+			MenuNode::section(self.head_features.label, self.head_features.value.menu_node()),
+			MenuNode::section(self.hair.label, self.hair.value.menu_node()),
+			MenuNode::section(self.clothing.label, self.clothing.value.menu_node()),
+			MenuNode::section(self.animation.label, self.animation.value.menu_node()),
+		])
 	}
 }
 

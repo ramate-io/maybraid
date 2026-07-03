@@ -2,10 +2,10 @@
 //!
 //! Hair, clothing, and animation controls are structurally identical across
 //! species, so they are defined once here instead of per species. Each
-//! implements [`MenuTree`] to lower itself into [`MenuNode`]s.
+//! implements [`MenuComponent`] to lower itself into [`MenuNode`]s.
 
 use character_ui_menu::{
-	AssetChoice, AssetSingleSelect, CameraFocus, ItemRow, MenuNode, MenuTree, MultiSelect,
+	AssetChoice, AssetSingleSelect, CameraFocus, ItemRow, MenuComponent, MenuNode, MultiSelect,
 	PreviewColor, SwatchChoice, SwatchSingleSelect,
 };
 use crozon_character_items::{ClothingColor, ClothingMesh, ItemColor};
@@ -33,9 +33,9 @@ impl HairMenu {
 	}
 }
 
-impl MenuTree<MenuEvent> for HairMenu {
-	fn menu_nodes(&self) -> Vec<MenuNode<MenuEvent>> {
-		vec![
+impl MenuComponent<MenuEvent> for HairMenu {
+	fn menu_node(&self) -> MenuNode<MenuEvent> {
+		MenuNode::fragment([
 			MenuNode::asset_grid(
 				"Hair",
 				&self.style,
@@ -45,7 +45,7 @@ impl MenuTree<MenuEvent> for HairMenu {
 			MenuNode::swatch("Hair Color", &self.color, |color| {
 				MenuEvent::SetSwatch(CharacterField::HairColor, SwatchValue::Item(color))
 			}),
-		]
+		])
 	}
 }
 
@@ -79,8 +79,8 @@ impl ClothingMenu {
 	}
 }
 
-impl MenuTree<MenuEvent> for ClothingMenu {
-	fn menu_nodes(&self) -> Vec<MenuNode<MenuEvent>> {
+impl MenuComponent<MenuEvent> for ClothingMenu {
+	fn menu_node(&self) -> MenuNode<MenuEvent> {
 		let rows = ClothingMesh::VALUES
 			.iter()
 			.map(|&clothing| {
@@ -107,7 +107,7 @@ impl MenuTree<MenuEvent> for ClothingMenu {
 				}
 			})
 			.collect();
-		vec![MenuNode::ItemMultiSelect { label: "Clothing", rows }]
+		MenuNode::ItemMultiSelect { label: "Clothing", rows }
 	}
 }
 
@@ -123,10 +123,10 @@ impl AnimationMenu {
 	}
 }
 
-impl MenuTree<MenuEvent> for AnimationMenu {
-	fn menu_nodes(&self) -> Vec<MenuNode<MenuEvent>> {
-		vec![MenuNode::asset_grid("Animation", &self.clip, PreviewColor::WHITE, |value| {
+impl MenuComponent<MenuEvent> for AnimationMenu {
+	fn menu_node(&self) -> MenuNode<MenuEvent> {
+		MenuNode::asset_grid("Animation", &self.clip, PreviewColor::WHITE, |value| {
 			MenuEvent::SetAsset(CharacterField::Animation, AssetValue::Animation(value))
-		})]
+		})
 	}
 }

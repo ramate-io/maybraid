@@ -68,6 +68,7 @@ impl<E: Copy + Send + Sync + 'static> MenuSink<E> for BevyMenuSink {
 		context: &mut RenderContext<'_, C>,
 	) {
 		match node {
+			MenuNode::Fragment(children) => self.render_nodes(children, parent, context),
 			MenuNode::Section { label, children } => self.section(label, children, parent, context),
 			MenuNode::SectionSelect { label, choices, children } => {
 				block_label(parent, label);

@@ -1,5 +1,5 @@
 use character_ui_menu::{
-	AssetSingleSelect, CameraFocus, MenuNode, MenuTree, PreviewColor, Section, SingleSelect,
+	AssetSingleSelect, CameraFocus, MenuComponent, MenuNode, PreviewColor, Section, SingleSelect,
 	SwatchSingleSelect,
 };
 use crozon_character_items::{ClothingMesh, ItemColor};
@@ -98,22 +98,22 @@ impl From<&DuiMenu> for DuiConfig {
 	}
 }
 
-impl MenuTree<MenuEvent> for DuiHeadMenu {
-	fn menu_nodes(&self) -> Vec<MenuNode<MenuEvent>> {
-		vec![
+impl MenuComponent<MenuEvent> for DuiHeadMenu {
+	fn menu_node(&self) -> MenuNode<MenuEvent> {
+		MenuNode::fragment([
 			MenuNode::asset_grid("Head", &self.head, PreviewColor::of(self.skin.value), |value| {
 				MenuEvent::SetAsset(CharacterField::DuiHead, AssetValue::DuiHead(value))
 			}),
 			MenuNode::swatch("Skin", &self.skin, |color| {
 				MenuEvent::SetSwatch(CharacterField::DuiSkinColor, SwatchValue::DuiSkin(color))
 			}),
-		]
+		])
 	}
 }
 
-impl MenuTree<MenuEvent> for DuiHeadFeaturesMenu {
-	fn menu_nodes(&self) -> Vec<MenuNode<MenuEvent>> {
-		vec![
+impl MenuComponent<MenuEvent> for DuiHeadFeaturesMenu {
+	fn menu_node(&self) -> MenuNode<MenuEvent> {
+		MenuNode::fragment([
 			MenuNode::asset_grid(
 				"Eyes",
 				&self.eye,
@@ -132,19 +132,19 @@ impl MenuTree<MenuEvent> for DuiHeadFeaturesMenu {
 			MenuNode::swatch("Mouth Color", &self.mouth_color, |color| {
 				MenuEvent::SetSwatch(CharacterField::DuiMouthColor, SwatchValue::DuiMouth(color))
 			}),
-		]
+		])
 	}
 }
 
-impl MenuTree<MenuEvent> for DuiMenu {
-	fn menu_nodes(&self) -> Vec<MenuNode<MenuEvent>> {
-		vec![
-			MenuNode::section(self.head.label, self.head.value.menu_nodes()),
-			MenuNode::section(self.head_features.label, self.head_features.value.menu_nodes()),
-			MenuNode::section(self.hair.label, self.hair.value.menu_nodes()),
-			MenuNode::section(self.clothing.label, self.clothing.value.menu_nodes()),
-			MenuNode::section(self.animation.label, self.animation.value.menu_nodes()),
-		]
+impl MenuComponent<MenuEvent> for DuiMenu {
+	fn menu_node(&self) -> MenuNode<MenuEvent> {
+		MenuNode::fragment([
+			MenuNode::section(self.head.label, self.head.value.menu_node()),
+			MenuNode::section(self.head_features.label, self.head_features.value.menu_node()),
+			MenuNode::section(self.hair.label, self.hair.value.menu_node()),
+			MenuNode::section(self.clothing.label, self.clothing.value.menu_node()),
+			MenuNode::section(self.animation.label, self.animation.value.menu_node()),
+		])
 	}
 }
 
