@@ -4,6 +4,7 @@
 //! lerodon or robrek snout, faded green and red scales, and light accent colors.
 
 pub mod assets;
+pub mod bsn;
 pub mod palette;
 pub mod pose;
 

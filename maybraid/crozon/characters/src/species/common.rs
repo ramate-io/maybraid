@@ -1,6 +1,7 @@
 //! Shared humanoid asset catalog used by multiple species.
 
 pub mod assets;
+pub mod bsn;
 
 pub use assets::{
 	BodyMesh, EarMesh, EyeMesh, HairMesh, HeadMesh, MouthMesh, NoseMesh, BODY_FULL, BODY_RIG,

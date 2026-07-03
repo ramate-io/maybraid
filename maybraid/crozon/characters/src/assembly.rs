@@ -41,8 +41,9 @@ impl CharacterAsset {
 }
 
 /// Semantic slot used for debugging and future UI/status reporting.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum CharacterPartSlot {
+	#[default]
 	BodyMesh,
 	HeadRig,
 	HeadMesh,
@@ -60,8 +61,9 @@ pub enum CharacterPartSlot {
 }
 
 /// Which rig should receive a skinned part's joint remap.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum SkinTarget {
+	#[default]
 	BodyRig,
 	HeadRig,
 	/// Part keeps its embedded armature (e.g. head rig scene before socket attach).
@@ -71,8 +73,9 @@ pub enum SkinTarget {
 }
 
 /// The rig hierarchy that owns a socket bone.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum SocketRig {
+	#[default]
 	Body,
 	Head,
 }

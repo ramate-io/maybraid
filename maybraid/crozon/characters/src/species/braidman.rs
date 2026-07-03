@@ -5,6 +5,7 @@
 //! before the full Braidman matrix is implemented.
 
 pub mod assets;
+pub mod bsn;
 pub mod pose;
 pub mod presets;
 pub mod sliders;

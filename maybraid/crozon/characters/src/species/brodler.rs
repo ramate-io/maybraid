@@ -4,6 +4,7 @@
 //! species-owned skin/eye colors, and shared hair/clothing catalogs.
 
 pub mod assets;
+pub mod bsn;
 pub mod palette;
 pub mod pose;
 

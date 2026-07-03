@@ -4,6 +4,7 @@
 //! dark fur colors with lighter contrasting features, and optional harrowed crown.
 
 pub mod assets;
+pub mod bsn;
 pub mod palette;
 pub mod pose;
 

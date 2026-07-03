@@ -20,6 +20,11 @@ impl AssetPath {
 	pub const fn as_str(self) -> &'static str {
 		self.0
 	}
+
+	/// GLTF scene label for [`WorldAssetRoot`] in BSN (`path#Scene0`).
+	pub fn gltf_scene_0(self) -> String {
+		format!("{}#Scene0", self.0)
+	}
 }
 
 impl std::fmt::Display for AssetPath {

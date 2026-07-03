@@ -4,6 +4,7 @@
 //! small flank ears, and igny snout. Soft blue skin with light contrasting accents.
 
 pub mod assets;
+pub mod bsn;
 pub mod palette;
 pub mod pose;
 

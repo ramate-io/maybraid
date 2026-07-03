@@ -4,6 +4,7 @@
 //! optional t-bar nose, small common mouth, no ears, and soft earth-tone skin colors.
 
 pub mod assets;
+pub mod bsn;
 pub mod palette;
 pub mod pose;
 
