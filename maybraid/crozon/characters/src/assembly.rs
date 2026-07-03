@@ -109,6 +109,20 @@ impl ResolvedCharacterPart {
 	) -> Self {
 		Self { slot, asset, skin_target, socket }
 	}
+
+	/// Adapter from the shared item catalog: clothing skins onto the body rig.
+	pub const fn clothing(clothing: crozon_character_items::ClothingMesh) -> Self {
+		Self::new(
+			CharacterPartSlot::Clothing,
+			CharacterAsset::new(
+				clothing.label(),
+				AssetPath::new(clothing.path()),
+				AssetNormalization::IDENTITY,
+			),
+			SkinTarget::BodyRig,
+			None,
+		)
+	}
 }
 
 /// Complete resolved preview assembly.

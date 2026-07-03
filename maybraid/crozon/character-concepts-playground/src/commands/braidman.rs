@@ -2,11 +2,10 @@
 
 use bevy::prelude::*;
 use clap::{Args, Subcommand};
+use crozon_character_items::ClothingMesh;
 use crozon_characters::{
 	species::braidman::{
-		assets::{
-			BodyMesh, ClothingMesh, EarMesh, EyeMesh, HairMesh, HeadMesh, MouthMesh, NoseMesh,
-		},
+		assets::{BodyMesh, EarMesh, EyeMesh, HairMesh, HeadMesh, MouthMesh, NoseMesh},
 		sliders::BraidmanSliders,
 		BraidmanConfig,
 	},

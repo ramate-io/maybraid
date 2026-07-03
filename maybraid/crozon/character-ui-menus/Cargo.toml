@@ -14,6 +14,7 @@ bevy = { workspace = true }
 bevy_math = { workspace = true }
 bevy-character-ui-menu-renderer = { workspace = true }
 character-ui-menu = { workspace = true }
+crozon-character-items = { workspace = true }
 crozon-characters = { workspace = true }
 
 [dev-dependencies]

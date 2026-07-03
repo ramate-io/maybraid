@@ -4,188 +4,20 @@
 //! lerodon or robrek snout, faded green and red scales, and light accent colors.
 
 pub mod assets;
+pub mod palette;
 pub mod pose;
 
 use crate::{
-	species::{
-		braidman::{BraidmanColor, ClothingColor},
-		common::{ClothingMesh, HairMesh},
-		SpeciesConfig,
-	},
+	species::{common::HairMesh, SpeciesConfig},
 	ResolvedCharacterAssembly,
 };
 
-use clap::ValueEnum;
+use crozon_character_items::{ClothingColor, ClothingMesh, ItemColor};
 
 use assets::LeroAssets;
 
 pub use assets::{LeroHeadMesh, LeroMouthMesh};
-
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, ValueEnum)]
-pub enum LeroSkinColor {
-	#[default]
-	FadedGreen,
-	MossDrift,
-	DustySage,
-	FadedRed,
-	WeatheredRose,
-	ClayRust,
-}
-
-impl LeroSkinColor {
-	pub const VALUES: &'static [Self] = &[
-		Self::FadedGreen,
-		Self::MossDrift,
-		Self::DustySage,
-		Self::FadedRed,
-		Self::WeatheredRose,
-		Self::ClayRust,
-	];
-
-	pub const fn label(self) -> &'static str {
-		match self {
-			Self::FadedGreen => "faded-green",
-			Self::MossDrift => "moss-drift",
-			Self::DustySage => "dusty-sage",
-			Self::FadedRed => "faded-red",
-			Self::WeatheredRose => "weathered-rose",
-			Self::ClayRust => "clay-rust",
-		}
-	}
-
-	pub fn color(self) -> bevy::prelude::Color {
-		match self {
-			Self::FadedGreen => bevy::prelude::Color::srgb(0.52, 0.58, 0.48),
-			Self::MossDrift => bevy::prelude::Color::srgb(0.45, 0.52, 0.42),
-			Self::DustySage => bevy::prelude::Color::srgb(0.58, 0.62, 0.52),
-			Self::FadedRed => bevy::prelude::Color::srgb(0.58, 0.42, 0.40),
-			Self::WeatheredRose => bevy::prelude::Color::srgb(0.62, 0.48, 0.46),
-			Self::ClayRust => bevy::prelude::Color::srgb(0.52, 0.38, 0.34),
-		}
-	}
-}
-
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, ValueEnum)]
-pub enum LeroEyeColor {
-	#[default]
-	Gold,
-	Amber,
-	PaleYellow,
-}
-
-impl LeroEyeColor {
-	pub const VALUES: &'static [Self] = &[Self::Gold, Self::Amber, Self::PaleYellow];
-
-	pub const fn label(self) -> &'static str {
-		match self {
-			Self::Gold => "gold",
-			Self::Amber => "amber",
-			Self::PaleYellow => "pale-yellow",
-		}
-	}
-
-	pub fn color(self) -> bevy::prelude::Color {
-		match self {
-			Self::Gold => bevy::prelude::Color::srgb(0.82, 0.72, 0.38),
-			Self::Amber => bevy::prelude::Color::srgb(0.78, 0.62, 0.28),
-			Self::PaleYellow => bevy::prelude::Color::srgb(0.88, 0.82, 0.55),
-		}
-	}
-}
-
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, ValueEnum)]
-pub enum LeroMouthColor {
-	#[default]
-	SoftBlush,
-	PaleRose,
-	Buttercream,
-	PaleGold,
-}
-
-impl LeroMouthColor {
-	pub const VALUES: &'static [Self] =
-		&[Self::SoftBlush, Self::PaleRose, Self::Buttercream, Self::PaleGold];
-
-	pub const fn label(self) -> &'static str {
-		match self {
-			Self::SoftBlush => "soft-blush",
-			Self::PaleRose => "pale-rose",
-			Self::Buttercream => "buttercream",
-			Self::PaleGold => "pale-gold",
-		}
-	}
-
-	pub fn color(self) -> bevy::prelude::Color {
-		match self {
-			Self::SoftBlush => bevy::prelude::Color::srgb(0.90, 0.78, 0.74),
-			Self::PaleRose => bevy::prelude::Color::srgb(0.88, 0.72, 0.68),
-			Self::Buttercream => bevy::prelude::Color::srgb(0.92, 0.86, 0.70),
-			Self::PaleGold => bevy::prelude::Color::srgb(0.90, 0.82, 0.62),
-		}
-	}
-}
-
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, ValueEnum)]
-pub enum LeroTailColor {
-	#[default]
-	Pearl,
-	PaleIvory,
-	Sand,
-	PaleMint,
-}
-
-impl LeroTailColor {
-	pub const VALUES: &'static [Self] = &[Self::Pearl, Self::PaleIvory, Self::Sand, Self::PaleMint];
-
-	pub const fn label(self) -> &'static str {
-		match self {
-			Self::Pearl => "pearl",
-			Self::PaleIvory => "pale-ivory",
-			Self::Sand => "sand",
-			Self::PaleMint => "pale-mint",
-		}
-	}
-
-	pub fn color(self) -> bevy::prelude::Color {
-		match self {
-			Self::Pearl => bevy::prelude::Color::srgb(0.90, 0.88, 0.82),
-			Self::PaleIvory => bevy::prelude::Color::srgb(0.88, 0.84, 0.76),
-			Self::Sand => bevy::prelude::Color::srgb(0.82, 0.74, 0.60),
-			Self::PaleMint => bevy::prelude::Color::srgb(0.78, 0.88, 0.82),
-		}
-	}
-}
-
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, ValueEnum)]
-pub enum LeroSpineColor {
-	#[default]
-	Pearl,
-	PaleIvory,
-	Sand,
-	PaleMint,
-}
-
-impl LeroSpineColor {
-	pub const VALUES: &'static [Self] = &[Self::Pearl, Self::PaleIvory, Self::Sand, Self::PaleMint];
-
-	pub const fn label(self) -> &'static str {
-		match self {
-			Self::Pearl => "pearl",
-			Self::PaleIvory => "pale-ivory",
-			Self::Sand => "sand",
-			Self::PaleMint => "pale-mint",
-		}
-	}
-
-	pub fn color(self) -> bevy::prelude::Color {
-		match self {
-			Self::Pearl => bevy::prelude::Color::srgb(0.90, 0.88, 0.82),
-			Self::PaleIvory => bevy::prelude::Color::srgb(0.88, 0.84, 0.76),
-			Self::Sand => bevy::prelude::Color::srgb(0.82, 0.74, 0.60),
-			Self::PaleMint => bevy::prelude::Color::srgb(0.78, 0.88, 0.82),
-		}
-	}
-}
+pub use palette::{LeroEyeColor, LeroMouthColor, LeroSkinColor, LeroSpineColor, LeroTailColor};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LeroColors {
@@ -194,8 +26,8 @@ pub struct LeroColors {
 	pub mouth: LeroMouthColor,
 	pub tail: LeroTailColor,
 	pub spine: LeroSpineColor,
-	pub hair: BraidmanColor,
-	pub clothing_default: BraidmanColor,
+	pub hair: ItemColor,
+	pub clothing_default: ItemColor,
 	pub clothing: Vec<ClothingColor>,
 }
 
@@ -207,28 +39,20 @@ impl Default for LeroColors {
 			mouth: LeroMouthColor::SoftBlush,
 			tail: LeroTailColor::Pearl,
 			spine: LeroSpineColor::Pearl,
-			hair: BraidmanColor::Dark,
-			clothing_default: BraidmanColor::Cool,
+			hair: ItemColor::Dark,
+			clothing_default: ItemColor::Cool,
 			clothing: Vec::new(),
 		}
 	}
 }
 
 impl LeroColors {
-	pub fn clothing_color(&self, clothing: ClothingMesh) -> BraidmanColor {
-		self.clothing
-			.iter()
-			.find(|choice| choice.clothing == clothing)
-			.map(|choice| choice.color)
-			.unwrap_or(self.clothing_default)
+	pub fn clothing_color(&self, clothing: ClothingMesh) -> ItemColor {
+		ClothingColor::resolve(&self.clothing, self.clothing_default, clothing)
 	}
 
-	pub fn set_clothing_color(&mut self, clothing: ClothingMesh, color: BraidmanColor) {
-		if let Some(choice) = self.clothing.iter_mut().find(|choice| choice.clothing == clothing) {
-			choice.color = color;
-		} else {
-			self.clothing.push(ClothingColor { clothing, color });
-		}
+	pub fn set_clothing_color(&mut self, clothing: ClothingMesh, color: ItemColor) {
+		ClothingColor::set(&mut self.clothing, clothing, color);
 	}
 }
 

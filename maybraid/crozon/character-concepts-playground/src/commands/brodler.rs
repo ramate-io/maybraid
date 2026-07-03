@@ -2,12 +2,13 @@
 
 use bevy::prelude::*;
 use clap::{Args, Subcommand};
+use crozon_character_items::ClothingMesh;
 use crozon_characters::species::{
 	brodler::{
 		assets::HornMesh,
 		{BrodlerConfig, BrodlerEyeColor, BrodlerHeadMesh, BrodlerHornColor, BrodlerSkinColor},
 	},
-	common::{ClothingMesh, EarMesh, EyeMesh, HairMesh, MouthMesh, NoseMesh},
+	common::{EarMesh, EyeMesh, HairMesh, MouthMesh, NoseMesh},
 };
 
 use crate::{animation::ConceptAnimation, preview::ConceptPreviewConfig};

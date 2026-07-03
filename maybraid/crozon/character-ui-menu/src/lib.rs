@@ -1,22 +1,27 @@
 //! Generic typed menu primitives for character creation UIs.
 //!
-//! This crate owns the renderer-independent data vocabulary. Crozon-specific
-//! menu instances and trait implementations live in `crozon-character-ui-menus`.
+//! This crate owns the renderer-independent data vocabulary: typed menu state
+//! primitives, option traits, and the [`MenuNode`] intermediate representation
+//! that menus lower into. Crozon-specific menu instances and trait
+//! implementations live in `crozon-character-ui-menus`; Bevy painting lives in
+//! `bevy-character-ui-menu-renderer`.
 
 pub mod camera_focus;
+pub mod node;
 pub mod primitives;
-pub mod root;
 pub mod section_open;
 pub mod traits;
 
 pub use camera_focus::{CameraFocus, FocusRig};
-pub use primitives::{
-	AssetSingleSelect, BlockLabeled, Cycle, IdentifiedAsset, Labeled, MultiSelect, Section, SingleSelect, Slider,
-	SliderStep, SwatchSingleSelect, ThumbnailCamera, VecSelect,
+pub use node::{
+	AssetChoice, ItemRow, MenuNode, MenuTree, PreviewColor, SelectChoice, SwatchChoice,
 };
-pub use root::Root;
+pub use primitives::{
+	AssetSingleSelect, IdentifiedAsset, MultiSelect, Section, SingleSelect, Slider,
+	SwatchSingleSelect, ThumbnailCamera,
+};
 pub use section_open::SectionOpen;
 pub use traits::{
-	AssetOption, AssetThumbnailDisplay, LabelOption, ListValues, StringIdentified,
-	SwatchOption, ThumbnailRequest, ThumbnailSources,
+	AssetOption, AssetThumbnailDisplay, LabelOption, ListValues, StringIdentified, SwatchOption,
+	ThumbnailRequest,
 };

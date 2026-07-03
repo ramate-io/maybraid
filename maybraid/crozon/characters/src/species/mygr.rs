@@ -4,93 +4,31 @@
 //! ears, species-owned fur/eye colors, and shared hair/clothing catalogs.
 
 pub mod assets;
+pub mod palette;
 pub mod pose;
 
 use crate::{
 	species::{
-		braidman::{BraidmanColor, ClothingColor},
-		common::{ClothingMesh, EyeMesh, HairMesh},
+		common::{EyeMesh, HairMesh},
 		SpeciesConfig,
 	},
 	ResolvedCharacterAssembly,
 };
 
-use clap::ValueEnum;
+use crozon_character_items::{ClothingColor, ClothingMesh, ItemColor};
 
 use assets::MygrAssets;
 
 pub use assets::{MygrHeadMesh, MygrMouthMesh};
-
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, ValueEnum)]
-pub enum MygrSkinColor {
-	#[default]
-	Ginger,
-	Charcoal,
-	Silver,
-	Cream,
-	Tawny,
-}
-
-impl MygrSkinColor {
-	pub const VALUES: &'static [Self] =
-		&[Self::Ginger, Self::Charcoal, Self::Silver, Self::Cream, Self::Tawny];
-
-	pub const fn label(self) -> &'static str {
-		match self {
-			Self::Ginger => "ginger",
-			Self::Charcoal => "charcoal",
-			Self::Silver => "silver",
-			Self::Cream => "cream",
-			Self::Tawny => "tawny",
-		}
-	}
-
-	pub fn color(self) -> bevy::prelude::Color {
-		match self {
-			Self::Ginger => bevy::prelude::Color::srgb(0.77, 0.48, 0.23),
-			Self::Charcoal => bevy::prelude::Color::srgb(0.16, 0.15, 0.14),
-			Self::Silver => bevy::prelude::Color::srgb(0.54, 0.56, 0.58),
-			Self::Cream => bevy::prelude::Color::srgb(0.91, 0.86, 0.78),
-			Self::Tawny => bevy::prelude::Color::srgb(0.55, 0.37, 0.24),
-		}
-	}
-}
-
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, ValueEnum)]
-pub enum MygrEyeColor {
-	#[default]
-	Green,
-	Amber,
-	Blue,
-}
-
-impl MygrEyeColor {
-	pub const VALUES: &'static [Self] = &[Self::Green, Self::Amber, Self::Blue];
-
-	pub const fn label(self) -> &'static str {
-		match self {
-			Self::Green => "green",
-			Self::Amber => "amber",
-			Self::Blue => "blue",
-		}
-	}
-
-	pub fn color(self) -> bevy::prelude::Color {
-		match self {
-			Self::Green => bevy::prelude::Color::srgb(0.29, 0.55, 0.31),
-			Self::Amber => bevy::prelude::Color::srgb(0.79, 0.64, 0.15),
-			Self::Blue => bevy::prelude::Color::srgb(0.42, 0.64, 0.82),
-		}
-	}
-}
+pub use palette::{MygrEyeColor, MygrSkinColor};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MygrColors {
 	pub skin: MygrSkinColor,
 	pub eyes: MygrEyeColor,
-	pub mouth: BraidmanColor,
-	pub hair: BraidmanColor,
-	pub clothing_default: BraidmanColor,
+	pub mouth: ItemColor,
+	pub hair: ItemColor,
+	pub clothing_default: ItemColor,
 	pub clothing: Vec<ClothingColor>,
 }
 
@@ -99,29 +37,21 @@ impl Default for MygrColors {
 		Self {
 			skin: MygrSkinColor::Ginger,
 			eyes: MygrEyeColor::Green,
-			mouth: BraidmanColor::Natural,
-			hair: BraidmanColor::Dark,
-			clothing_default: BraidmanColor::Cool,
+			mouth: ItemColor::Natural,
+			hair: ItemColor::Dark,
+			clothing_default: ItemColor::Cool,
 			clothing: Vec::new(),
 		}
 	}
 }
 
 impl MygrColors {
-	pub fn clothing_color(&self, clothing: ClothingMesh) -> BraidmanColor {
-		self.clothing
-			.iter()
-			.find(|choice| choice.clothing == clothing)
-			.map(|choice| choice.color)
-			.unwrap_or(self.clothing_default)
+	pub fn clothing_color(&self, clothing: ClothingMesh) -> ItemColor {
+		ClothingColor::resolve(&self.clothing, self.clothing_default, clothing)
 	}
 
-	pub fn set_clothing_color(&mut self, clothing: ClothingMesh, color: BraidmanColor) {
-		if let Some(choice) = self.clothing.iter_mut().find(|choice| choice.clothing == clothing) {
-			choice.color = color;
-		} else {
-			self.clothing.push(ClothingColor { clothing, color });
-		}
+	pub fn set_clothing_color(&mut self, clothing: ClothingMesh, color: ItemColor) {
+		ClothingColor::set(&mut self.clothing, clothing, color);
 	}
 }
 

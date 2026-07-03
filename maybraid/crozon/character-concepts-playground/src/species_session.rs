@@ -2,10 +2,8 @@
 
 use bevy::prelude::*;
 use crozon_characters::species::{
-	braidman::BraidmanConfig, brodler::BrodlerConfig, dui::DuiConfig, mygr::MygrConfig,
-	wumbus::WumbusConfig,
-	lero::LeroConfig,
-	spibmom::SpibmomConfig,
+	braidman::BraidmanConfig, brodler::BrodlerConfig, dui::DuiConfig, lero::LeroConfig,
+	mygr::MygrConfig, spibmom::SpibmomConfig, wumbus::WumbusConfig,
 };
 
 use crate::{
@@ -101,22 +99,19 @@ impl SpeciesSessionState {
 				self.brodler.clone(),
 				self.brodler_animation,
 			),
-			ConceptSpecies::Mygr => ConceptPreviewConfig::mygr_with_animation(
-				self.mygr.clone(),
-				self.mygr_animation,
-			),
-			ConceptSpecies::Dui => ConceptPreviewConfig::dui_with_animation(
-				self.dui.clone(),
-				self.dui_animation,
-			),
+			ConceptSpecies::Mygr => {
+				ConceptPreviewConfig::mygr_with_animation(self.mygr.clone(), self.mygr_animation)
+			}
+			ConceptSpecies::Dui => {
+				ConceptPreviewConfig::dui_with_animation(self.dui.clone(), self.dui_animation)
+			}
 			ConceptSpecies::Wumbus => ConceptPreviewConfig::wumbus_with_animation(
 				self.wumbus.clone(),
 				self.wumbus_animation,
 			),
-			ConceptSpecies::Lero => ConceptPreviewConfig::lero_with_animation(
-				self.lero.clone(),
-				self.lero_animation,
-			),
+			ConceptSpecies::Lero => {
+				ConceptPreviewConfig::lero_with_animation(self.lero.clone(), self.lero_animation)
+			}
 			ConceptSpecies::Spibmom => ConceptPreviewConfig::spibmom_with_animation(
 				self.spibmom.clone(),
 				self.spibmom_animation,

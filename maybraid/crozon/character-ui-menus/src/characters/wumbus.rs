@@ -1,20 +1,24 @@
-use character_ui_menu::{AssetSingleSelect, CameraFocus, MultiSelect, Section, SingleSelect, SwatchSingleSelect};
+use character_ui_menu::{
+	AssetSingleSelect, CameraFocus, MenuNode, MenuTree, PreviewColor, Section, SingleSelect,
+	SwatchSingleSelect,
+};
+use crozon_character_items::{ClothingMesh, ItemColor};
 use crozon_characters::{
 	species::{
-		braidman::{BraidmanColor, ClothingColor},
-		common::{ClothingMesh, EyeMesh, HairMesh},
+		common::EyeMesh,
 		wumbus::{
-			WumbusEarColor, WumbusEyeColor, WumbusHeadMesh, WumbusHornColor, WumbusHornMesh,
-			WumbusMouthColor, WumbusMouthMesh, WumbusSkinColor, WumbusSpineColor,
+			WumbusColors, WumbusConfig, WumbusEarColor, WumbusEyeColor, WumbusHeadMesh,
+			WumbusHornColor, WumbusHornMesh, WumbusMouthColor, WumbusMouthMesh, WumbusSkinColor,
+			WumbusSpineColor,
 		},
 	},
 	ConceptAnimation,
 };
 
 use crate::{
-	characters::braidman::AnimationMenu,
-	event::CharacterField,
+	event::{AssetValue, CharacterField, MenuEvent, SwatchValue},
 	focus::{BODY_FOCUS, CROWN_FOCUS, EYE_FOCUS, HEAD_ROOT_FOCUS, MOUTH_FOCUS},
+	shared::{AnimationMenu, ClothingMenu, HairMenu},
 };
 
 #[derive(Clone, Debug, PartialEq)]
@@ -36,29 +40,16 @@ pub struct WumbusHeadFeaturesMenu {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct WumbusHairMenu {
-	pub style: AssetSingleSelect<HairMesh>,
-	pub color: SwatchSingleSelect<BraidmanColor>,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct WumbusClothingMenu {
-	pub layers: MultiSelect<ClothingMesh>,
-	pub default_color: SwatchSingleSelect<BraidmanColor>,
-	pub item_colors: Vec<ClothingColor>,
-}
-
-#[derive(Clone, Debug, PartialEq)]
 pub struct WumbusMenu {
 	pub head: Section<WumbusHeadMenu>,
 	pub head_features: Section<WumbusHeadFeaturesMenu>,
-	pub hair: Section<WumbusHairMenu>,
-	pub clothing: Section<WumbusClothingMenu>,
+	pub hair: Section<HairMenu>,
+	pub clothing: Section<ClothingMenu>,
 	pub animation: Section<AnimationMenu>,
 }
 
-impl From<&crozon_characters::species::wumbus::WumbusConfig> for WumbusMenu {
-	fn from(config: &crozon_characters::species::wumbus::WumbusConfig) -> Self {
+impl From<&WumbusConfig> for WumbusMenu {
+	fn from(config: &WumbusConfig) -> Self {
 		Self {
 			head: Section::new(
 				"Head",
@@ -84,39 +75,30 @@ impl From<&crozon_characters::species::wumbus::WumbusConfig> for WumbusMenu {
 			),
 			hair: Section::new(
 				"Hair",
-				WumbusHairMenu {
-					style: AssetSingleSelect::new(config.hair).with_camera_focus(HEAD_ROOT_FOCUS),
-					color: SwatchSingleSelect::new(config.colors.hair),
-				},
+				HairMenu::new(config.hair, config.colors.hair, HEAD_ROOT_FOCUS),
 			),
 			clothing: Section::new(
 				"Clothing",
-				WumbusClothingMenu {
-					layers: MultiSelect::new(config.clothing.clone()),
-					default_color: SwatchSingleSelect::new(config.colors.clothing_default),
-					item_colors: config.colors.clothing.clone(),
-				},
+				ClothingMenu::new(
+					config.clothing.clone(),
+					config.colors.clothing_default,
+					config.colors.clothing.clone(),
+				),
 			)
 			.with_camera_focus(BODY_FOCUS),
-			animation: Section::new(
-				"Animation",
-				AnimationMenu {
-					clip: AssetSingleSelect::new(ConceptAnimation::Still)
-						.with_camera_focus(BODY_FOCUS),
-				},
-			),
+			animation: Section::new("Animation", AnimationMenu::new(BODY_FOCUS)),
 		}
 	}
 }
 
-impl From<&WumbusMenu> for crozon_characters::species::wumbus::WumbusConfig {
+impl From<&WumbusMenu> for WumbusConfig {
 	fn from(menu: &WumbusMenu) -> Self {
 		Self {
 			horns: menu.head.value.horns.value,
 			eye: menu.head_features.value.eye.value,
 			hair: menu.hair.value.style.value,
 			clothing: menu.clothing.value.layers.selected.clone(),
-			colors: crozon_characters::species::wumbus::WumbusColors {
+			colors: WumbusColors {
 				skin: menu.head.value.skin.value,
 				eyes: menu.head_features.value.eye_color.value,
 				ears: menu.head_features.value.ear_color.value,
@@ -131,6 +113,82 @@ impl From<&WumbusMenu> for crozon_characters::species::wumbus::WumbusConfig {
 	}
 }
 
+impl MenuTree<MenuEvent> for WumbusHeadMenu {
+	fn menu_nodes(&self) -> Vec<MenuNode<MenuEvent>> {
+		vec![
+			MenuNode::asset_grid("Head", &self.head, PreviewColor::of(self.skin.value), |value| {
+				MenuEvent::SetAsset(CharacterField::WumbusHead, AssetValue::WumbusHead(value))
+			}),
+			MenuNode::swatch("Fur", &self.skin, |color| {
+				MenuEvent::SetSwatch(
+					CharacterField::WumbusSkinColor,
+					SwatchValue::WumbusSkin(color),
+				)
+			}),
+			MenuNode::cycle("Horns", &self.horns, |delta| {
+				MenuEvent::Cycle(CharacterField::WumbusHorns, delta)
+			}),
+			MenuNode::swatch("Horn Color", &self.horn_color, |color| {
+				MenuEvent::SetSwatch(
+					CharacterField::WumbusHornColor,
+					SwatchValue::WumbusHorn(color),
+				)
+			}),
+			MenuNode::swatch("Spine Color", &self.spine_color, |color| {
+				MenuEvent::SetSwatch(
+					CharacterField::WumbusSpineColor,
+					SwatchValue::WumbusSpine(color),
+				)
+			}),
+		]
+	}
+}
+
+impl MenuTree<MenuEvent> for WumbusHeadFeaturesMenu {
+	fn menu_nodes(&self) -> Vec<MenuNode<MenuEvent>> {
+		vec![
+			MenuNode::asset_grid(
+				"Eyes",
+				&self.eye,
+				PreviewColor::of(self.eye_color.value),
+				|value| MenuEvent::SetAsset(CharacterField::Eye, AssetValue::Eye(value)),
+			),
+			MenuNode::swatch("Eye Color", &self.eye_color, |color| {
+				MenuEvent::SetSwatch(CharacterField::WumbusEyeColor, SwatchValue::WumbusEye(color))
+			}),
+			MenuNode::swatch("Ear Color", &self.ear_color, |color| {
+				MenuEvent::SetSwatch(CharacterField::WumbusEarColor, SwatchValue::WumbusEar(color))
+			}),
+			MenuNode::asset_grid(
+				"Snout",
+				&self.snout,
+				PreviewColor::of(self.mouth_color.value),
+				|value| {
+					MenuEvent::SetAsset(CharacterField::WumbusMouth, AssetValue::WumbusMouth(value))
+				},
+			),
+			MenuNode::swatch("Mouth Color", &self.mouth_color, |color| {
+				MenuEvent::SetSwatch(
+					CharacterField::WumbusMouthColor,
+					SwatchValue::WumbusMouth(color),
+				)
+			}),
+		]
+	}
+}
+
+impl MenuTree<MenuEvent> for WumbusMenu {
+	fn menu_nodes(&self) -> Vec<MenuNode<MenuEvent>> {
+		vec![
+			MenuNode::section(self.head.label, self.head.value.menu_nodes()),
+			MenuNode::section(self.head_features.label, self.head_features.value.menu_nodes()),
+			MenuNode::section(self.hair.label, self.hair.value.menu_nodes()),
+			MenuNode::section(self.clothing.label, self.clothing.value.menu_nodes()),
+			MenuNode::section(self.animation.label, self.animation.value.menu_nodes()),
+		]
+	}
+}
+
 impl WumbusMenu {
 	pub fn with_animation(mut self, animation: ConceptAnimation) -> Self {
 		self.animation.value.clip.value = animation;
@@ -141,28 +199,12 @@ impl WumbusMenu {
 		self.animation.value.clip.value
 	}
 
-	pub fn clothing_color(&self, clothing: ClothingMesh) -> BraidmanColor {
-		self.clothing
-			.value
-			.item_colors
-			.iter()
-			.find(|choice| choice.clothing == clothing)
-			.map(|choice| choice.color)
-			.unwrap_or(self.clothing.value.default_color.value)
+	pub fn clothing_color(&self, clothing: ClothingMesh) -> ItemColor {
+		self.clothing.value.color_for(clothing)
 	}
 
-	pub fn set_clothing_color(&mut self, clothing: ClothingMesh, color: BraidmanColor) {
-		if let Some(choice) = self
-			.clothing
-			.value
-			.item_colors
-			.iter_mut()
-			.find(|choice| choice.clothing == clothing)
-		{
-			choice.color = color;
-		} else {
-			self.clothing.value.item_colors.push(ClothingColor { clothing, color });
-		}
+	pub fn set_clothing_color(&mut self, clothing: ClothingMesh, color: ItemColor) {
+		self.clothing.value.set_color(clothing, color);
 	}
 
 	pub fn camera_focus_for_field(&self, field: CharacterField) -> Option<CameraFocus> {
@@ -186,6 +228,6 @@ impl WumbusMenu {
 
 impl Default for WumbusMenu {
 	fn default() -> Self {
-		Self::from(&crozon_characters::species::wumbus::WumbusConfig::default_preview())
+		Self::from(&WumbusConfig::default_preview())
 	}
 }

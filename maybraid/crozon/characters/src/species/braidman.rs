@@ -15,106 +15,43 @@ use crate::{
 	ResolvedCharacterAssembly,
 };
 
-use crate::species::common::{
-	BodyMesh, ClothingMesh, EarMesh, EyeMesh, HairMesh, HeadMesh, MouthMesh, NoseMesh,
-};
+use crate::species::common::{BodyMesh, EarMesh, EyeMesh, HairMesh, HeadMesh, MouthMesh, NoseMesh};
 use assets::BraidmanAssets;
+use crozon_character_items::{ClothingColor, ClothingMesh, ItemColor};
 use sliders::BraidmanSliders;
-
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
-pub enum BraidmanColor {
-	#[default]
-	Natural,
-	Warm,
-	Cool,
-	Dark,
-	Light,
-	Red,
-	Blue,
-	Green,
-	Gold,
-}
-
-impl BraidmanColor {
-	pub const VALUES: &'static [Self] = &[
-		Self::Natural,
-		Self::Warm,
-		Self::Cool,
-		Self::Dark,
-		Self::Light,
-		Self::Red,
-		Self::Blue,
-		Self::Green,
-		Self::Gold,
-	];
-
-	pub const fn label(self) -> &'static str {
-		match self {
-			Self::Natural => "natural",
-			Self::Warm => "warm",
-			Self::Cool => "cool",
-			Self::Dark => "dark",
-			Self::Light => "light",
-			Self::Red => "red",
-			Self::Blue => "blue",
-			Self::Green => "green",
-			Self::Gold => "gold",
-		}
-	}
-
-	pub fn color(self) -> bevy::prelude::Color {
-		match self {
-			Self::Natural => bevy::prelude::Color::srgb(0.72, 0.54, 0.42),
-			Self::Warm => bevy::prelude::Color::srgb(0.86, 0.58, 0.38),
-			Self::Cool => bevy::prelude::Color::srgb(0.46, 0.60, 0.72),
-			Self::Dark => bevy::prelude::Color::srgb(0.18, 0.16, 0.15),
-			Self::Light => bevy::prelude::Color::srgb(0.88, 0.80, 0.68),
-			Self::Red => bevy::prelude::Color::srgb(0.72, 0.18, 0.16),
-			Self::Blue => bevy::prelude::Color::srgb(0.18, 0.30, 0.76),
-			Self::Green => bevy::prelude::Color::srgb(0.22, 0.52, 0.28),
-			Self::Gold => bevy::prelude::Color::srgb(0.88, 0.68, 0.22),
-		}
-	}
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ClothingColor {
-	pub clothing: ClothingMesh,
-	pub color: BraidmanColor,
-}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BraidmanColors {
-	pub body: BraidmanColor,
-	pub head: BraidmanColor,
-	pub eyes: BraidmanColor,
-	pub nose: BraidmanColor,
-	pub mouth: BraidmanColor,
-	pub ears: BraidmanColor,
-	pub hair: BraidmanColor,
-	pub clothing_default: BraidmanColor,
+	pub body: ItemColor,
+	pub head: ItemColor,
+	pub eyes: ItemColor,
+	pub nose: ItemColor,
+	pub mouth: ItemColor,
+	pub ears: ItemColor,
+	pub hair: ItemColor,
+	pub clothing_default: ItemColor,
 	pub clothing: Vec<ClothingColor>,
 }
 
 impl Default for BraidmanColors {
 	fn default() -> Self {
-		let body = BraidmanColor::Natural;
+		let body = ItemColor::Natural;
 		Self {
 			body,
 			head: body,
-			eyes: BraidmanColor::Blue,
+			eyes: ItemColor::Blue,
 			nose: body,
-			mouth: BraidmanColor::Warm,
+			mouth: ItemColor::Warm,
 			ears: body,
-			hair: BraidmanColor::Dark,
-			clothing_default: BraidmanColor::Cool,
+			hair: ItemColor::Dark,
+			clothing_default: ItemColor::Cool,
 			clothing: Vec::new(),
 		}
 	}
 }
 
 impl BraidmanColors {
-	pub fn skin_color(&self) -> BraidmanColor {
+	pub fn skin_color(&self) -> ItemColor {
 		self.body
 	}
 
@@ -125,20 +62,12 @@ impl BraidmanColors {
 		self.ears = skin;
 	}
 
-	pub fn clothing_color(&self, clothing: ClothingMesh) -> BraidmanColor {
-		self.clothing
-			.iter()
-			.find(|choice| choice.clothing == clothing)
-			.map(|choice| choice.color)
-			.unwrap_or(self.clothing_default)
+	pub fn clothing_color(&self, clothing: ClothingMesh) -> ItemColor {
+		ClothingColor::resolve(&self.clothing, self.clothing_default, clothing)
 	}
 
-	pub fn set_clothing_color(&mut self, clothing: ClothingMesh, color: BraidmanColor) {
-		if let Some(choice) = self.clothing.iter_mut().find(|choice| choice.clothing == clothing) {
-			choice.color = color;
-		} else {
-			self.clothing.push(ClothingColor { clothing, color });
-		}
+	pub fn set_clothing_color(&mut self, clothing: ClothingMesh, color: ItemColor) {
+		ClothingColor::set(&mut self.clothing, clothing, color);
 	}
 }
 

@@ -1,5 +1,5 @@
 [package]
-name = "crozon-characters"
+name = "crozon-character-items"
 version = { workspace = true }
 edition = { workspace = true }
 license = { workspace = true }
@@ -14,8 +14,6 @@ bevy = { workspace = true }
 bevy_math = { workspace = true }
 character-ui-menu = { workspace = true }
 clap = { workspace = true }
-crozon-character-items = { workspace = true }
-crozon-rigs = { workspace = true }
 
 [lints]
 workspace = true

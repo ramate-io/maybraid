@@ -12,11 +12,11 @@ mod focus;
 mod focus_reference;
 mod ground;
 mod material;
+mod menu_listeners;
 mod preview;
 mod preview_color;
 mod skinning;
 mod species_session;
-mod menu_listeners;
 mod thumbnail;
 mod ui;
 
@@ -28,23 +28,20 @@ use bevy::prelude::*;
 use bevy::scene::SceneSpawnerSystems;
 use bevy_character_ui_menu_renderer::CharacterMenuRendererPlugin;
 use camera_controls::look::{CameraLookConfig, CameraLookPlugin};
-use crozon_character_ui_menus::CharacterMenu;
 use crozon_character_playground::{camera, checkerboard_material};
+use crozon_character_ui_menus::CharacterMenu;
 use game_commands::command::{capture_command_line_input, GameCommandPlugin};
 
 use animation::{animate_body_rig, init_limb_animators};
 use camera_focus::{apply_camera_suggestion, PendingCameraFocus};
+use focus::animate_focused_preview_asset;
+use focus_reference::{sync_focus_reference, FocusReferenceSyncState};
+use material::apply_preview_colors;
+use material::PreviewColorMaterials;
 use menu_listeners::{
 	dispatch_menu_interactions, init_character_menu_state, on_character_menu_event,
 	sync_menu_state_from_config, CharacterMenuState,
 };
-use species_session::{
-	ensure_species_camera_focus, persist_species_session, CameraFocusBootState, SpeciesSessionState,
-};
-use focus_reference::{sync_focus_reference, FocusReferenceSyncState};
-use focus::animate_focused_preview_asset;
-use material::apply_preview_colors;
-use material::PreviewColorMaterials;
 use preview::{
 	preview_pass_ready, reveal_ready_preview, sync_preview, tick_preview_respawn_cooldown,
 	ConceptPreviewConfig, ConceptPreviewSyncState, PreviewRespawnCooldown,
@@ -53,6 +50,9 @@ use skinning::{
 	attach_focus_reference_to_sockets, attach_parts_to_sockets, build_rig_bone_map,
 	dump_bones_to_console, maintain_resolved_pose, prune_duplicate_part_scenes,
 	remap_part_skin_to_rig, DumpBonesRequest,
+};
+use species_session::{
+	ensure_species_camera_focus, persist_species_session, CameraFocusBootState, SpeciesSessionState,
 };
 
 pub struct CrozonCharacterConceptsPlaygroundPlugin;
@@ -126,9 +126,7 @@ impl Plugin for CrozonCharacterConceptsPlaygroundPlugin {
 				Update,
 				(
 					attach_focus_reference_to_sockets.after(build_rig_bone_map),
-					attach_parts_to_sockets
-						.after(build_rig_bone_map)
-						.run_if(preview_pass_ready),
+					attach_parts_to_sockets.after(build_rig_bone_map).run_if(preview_pass_ready),
 					remap_part_skin_to_rig
 						.after(attach_parts_to_sockets)
 						.after(SceneSpawnerSystems::Spawn)
@@ -143,12 +141,8 @@ impl Plugin for CrozonCharacterConceptsPlaygroundPlugin {
 					apply_preview_colors
 						.after(prune_duplicate_part_scenes)
 						.run_if(preview_pass_ready),
-					init_limb_animators
-						.after(maintain_resolved_pose)
-						.run_if(preview_pass_ready),
-					animate_body_rig
-						.after(init_limb_animators)
-						.run_if(preview_pass_ready),
+					init_limb_animators.after(maintain_resolved_pose).run_if(preview_pass_ready),
+					animate_body_rig.after(init_limb_animators).run_if(preview_pass_ready),
 					dump_bones_to_console,
 					thumbnail::sync_thumbnail_camera_activity.after(ui::sync_creator_ui),
 					ui::sync_command_status_text.before(game_commands::ui::update_debug_ui),

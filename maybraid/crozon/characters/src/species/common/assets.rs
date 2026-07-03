@@ -37,26 +37,6 @@ pub const HAIR_FLOWING_EDGY_CURLS: AssetPath =
 	AssetPath::new("characters/hair/flowing_edgy_curls.glb");
 pub const HAIR_PERM_BRAID: AssetPath = AssetPath::new("characters/hair/perm_braid.glb");
 pub const HAIR_TECHNO_EDGE: AssetPath = AssetPath::new("characters/hair/techno_edge.glb");
-pub const CLOTHING_BASKETBALL_CUT_SHIRT: AssetPath =
-	AssetPath::new("characters/clothes/basketball_cut_shirt.glb");
-pub const CLOTHING_TUNIC: AssetPath = AssetPath::new("characters/clothes/tunic.glb");
-pub const CLOTHING_LONG_DRESS: AssetPath = AssetPath::new("characters/clothes/long_dress.glb");
-pub const CLOTHING_SHORT_DRESS: AssetPath = AssetPath::new("characters/clothes/short_dress.glb");
-pub const CLOTHING_FITTED_COAT: AssetPath = AssetPath::new("characters/clothes/fitted_coat.glb");
-pub const CLOTHING_QUARTER_COAT: AssetPath = AssetPath::new("characters/clothes/quarter_coat.glb");
-pub const CLOTHING_ROBE_COAT: AssetPath = AssetPath::new("characters/clothes/robe_coat.glb");
-pub const CLOTHING_SHORT_SLEEVED_ROBE_COAT: AssetPath =
-	AssetPath::new("characters/clothes/short_sleeved_robe_coat.glb");
-pub const CLOTHING_TAILORED_COAT: AssetPath =
-	AssetPath::new("characters/clothes/tailored_coat.glb");
-pub const CLOTHING_HOOD: AssetPath = AssetPath::new("characters/clothes/hood.glb");
-pub const CLOTHING_PANTS: AssetPath = AssetPath::new("characters/clothes/pants.glb");
-pub const CLOTHING_HAREM_PANTS: AssetPath =
-	AssetPath::new("characters/clothes/harem_pants_unified.glb");
-pub const CLOTHING_HAREM_PANTS_UPPER: AssetPath =
-	AssetPath::new("characters/clothes/harem_pants_top.glb");
-pub const CLOTHING_HAREM_PANTS_LOWER_WRAP: AssetPath =
-	AssetPath::new("characters/clothes/harem_pants_bottom_wrap.glb");
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, ValueEnum)]
 pub enum BodyMesh {
@@ -277,81 +257,6 @@ impl HairMesh {
 			Self::FlowingEdgyCurls => Some(HAIR_FLOWING_EDGY_CURLS),
 			Self::PermBraid => Some(HAIR_PERM_BRAID),
 			Self::TechnoEdge => Some(HAIR_TECHNO_EDGE),
-		}
-	}
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, ValueEnum)]
-pub enum ClothingMesh {
-	BasketballCutShirt,
-	Tunic,
-	LongDress,
-	ShortDress,
-	FittedCoat,
-	QuarterCoat,
-	RobeCoat,
-	ShortSleevedRobeCoat,
-	TailoredCoat,
-	Hood,
-	Pants,
-	HaremPants,
-	HaremPantsUpper,
-	HaremPantsLowerWrap,
-}
-
-impl ClothingMesh {
-	pub const VALUES: &'static [Self] = &[
-		Self::BasketballCutShirt,
-		Self::Tunic,
-		Self::LongDress,
-		Self::ShortDress,
-		Self::FittedCoat,
-		Self::QuarterCoat,
-		Self::RobeCoat,
-		Self::ShortSleevedRobeCoat,
-		Self::TailoredCoat,
-		Self::Hood,
-		Self::Pants,
-		Self::HaremPants,
-		Self::HaremPantsUpper,
-		Self::HaremPantsLowerWrap,
-	];
-
-	pub const fn label(self) -> &'static str {
-		match self {
-			Self::BasketballCutShirt => "basketball-cut-shirt",
-			Self::Tunic => "tunic",
-			Self::LongDress => "long-dress",
-			Self::ShortDress => "short-dress",
-			Self::FittedCoat => "fitted-coat",
-			Self::QuarterCoat => "quarter-coat",
-			Self::RobeCoat => "robe-coat",
-			Self::ShortSleevedRobeCoat => "short-sleeved-robe-coat",
-			Self::TailoredCoat => "tailored-coat",
-			Self::Hood => "hood",
-			Self::Pants => "pants",
-			Self::HaremPants => "harem-pants",
-			Self::HaremPantsUpper => "harem-pants-upper",
-			Self::HaremPantsLowerWrap => "harem-pants-lower-wrap",
-		}
-	}
-
-	pub const fn path(self) -> AssetPath {
-		match self {
-			Self::BasketballCutShirt => CLOTHING_BASKETBALL_CUT_SHIRT,
-			Self::Tunic => CLOTHING_TUNIC,
-			Self::LongDress => CLOTHING_LONG_DRESS,
-			Self::ShortDress => CLOTHING_SHORT_DRESS,
-			Self::FittedCoat => CLOTHING_FITTED_COAT,
-			Self::QuarterCoat => CLOTHING_QUARTER_COAT,
-			Self::RobeCoat => CLOTHING_ROBE_COAT,
-			Self::ShortSleevedRobeCoat => CLOTHING_SHORT_SLEEVED_ROBE_COAT,
-			Self::TailoredCoat => CLOTHING_TAILORED_COAT,
-			Self::Hood => CLOTHING_HOOD,
-			Self::Pants => CLOTHING_PANTS,
-			Self::HaremPants => CLOTHING_HAREM_PANTS,
-			Self::HaremPantsUpper => CLOTHING_HAREM_PANTS_UPPER,
-			Self::HaremPantsLowerWrap => CLOTHING_HAREM_PANTS_LOWER_WRAP,
 		}
 	}
 }

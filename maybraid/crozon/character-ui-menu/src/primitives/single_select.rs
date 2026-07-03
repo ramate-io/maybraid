@@ -16,16 +16,3 @@ impl<T> SingleSelect<T> {
 		self
 	}
 }
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct VecSelect<T> {
-	pub options: Vec<T>,
-	pub selected_index: usize,
-	pub camera_focus: Option<CameraFocus>,
-}
-
-impl<T> VecSelect<T> {
-	pub fn new(options: Vec<T>, selected_index: usize) -> Self {
-		Self { options, selected_index, camera_focus: None }
-	}
-}

@@ -1,17 +1,19 @@
-use character_ui_menu::{AssetSingleSelect, CameraFocus, MultiSelect, Section, SwatchSingleSelect};
+use character_ui_menu::{
+	AssetSingleSelect, CameraFocus, MenuNode, MenuTree, PreviewColor, Section, SwatchSingleSelect,
+};
+use crozon_character_items::{ClothingMesh, ItemColor};
 use crozon_characters::{
 	species::{
-		braidman::{BraidmanColor, ClothingColor},
-		common::{ClothingMesh, EyeMesh, HairMesh},
-		mygr::{MygrEyeColor, MygrHeadMesh, MygrMouthMesh, MygrSkinColor},
+		common::EyeMesh,
+		mygr::{MygrColors, MygrConfig, MygrEyeColor, MygrHeadMesh, MygrMouthMesh, MygrSkinColor},
 	},
 	ConceptAnimation,
 };
 
 use crate::{
-	characters::braidman::AnimationMenu,
-	event::CharacterField,
+	event::{AssetValue, CharacterField, MenuEvent, SwatchValue},
 	focus::{BODY_FOCUS, EYE_FOCUS, HEAD_ROOT_FOCUS, MOUTH_FOCUS},
+	shared::{AnimationMenu, ClothingMenu, HairMenu},
 };
 
 #[derive(Clone, Debug, PartialEq)]
@@ -25,33 +27,20 @@ pub struct MygrHeadFeaturesMenu {
 	pub eye: AssetSingleSelect<EyeMesh>,
 	pub snout: AssetSingleSelect<MygrMouthMesh>,
 	pub eye_color: SwatchSingleSelect<MygrEyeColor>,
-	pub mouth_color: SwatchSingleSelect<BraidmanColor>,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct MygrHairMenu {
-	pub style: AssetSingleSelect<HairMesh>,
-	pub color: SwatchSingleSelect<BraidmanColor>,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct MygrClothingMenu {
-	pub layers: MultiSelect<ClothingMesh>,
-	pub default_color: SwatchSingleSelect<BraidmanColor>,
-	pub item_colors: Vec<ClothingColor>,
+	pub mouth_color: SwatchSingleSelect<ItemColor>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct MygrMenu {
 	pub head: Section<MygrHeadMenu>,
 	pub head_features: Section<MygrHeadFeaturesMenu>,
-	pub hair: Section<MygrHairMenu>,
-	pub clothing: Section<MygrClothingMenu>,
+	pub hair: Section<HairMenu>,
+	pub clothing: Section<ClothingMenu>,
 	pub animation: Section<AnimationMenu>,
 }
 
-impl From<&crozon_characters::species::mygr::MygrConfig> for MygrMenu {
-	fn from(config: &crozon_characters::species::mygr::MygrConfig) -> Self {
+impl From<&MygrConfig> for MygrMenu {
+	fn from(config: &MygrConfig) -> Self {
 		Self {
 			head: Section::new(
 				"Head",
@@ -73,38 +62,29 @@ impl From<&crozon_characters::species::mygr::MygrConfig> for MygrMenu {
 			),
 			hair: Section::new(
 				"Hair",
-				MygrHairMenu {
-					style: AssetSingleSelect::new(config.hair).with_camera_focus(HEAD_ROOT_FOCUS),
-					color: SwatchSingleSelect::new(config.colors.hair),
-				},
+				HairMenu::new(config.hair, config.colors.hair, HEAD_ROOT_FOCUS),
 			),
 			clothing: Section::new(
 				"Clothing",
-				MygrClothingMenu {
-					layers: MultiSelect::new(config.clothing.clone()),
-					default_color: SwatchSingleSelect::new(config.colors.clothing_default),
-					item_colors: config.colors.clothing.clone(),
-				},
+				ClothingMenu::new(
+					config.clothing.clone(),
+					config.colors.clothing_default,
+					config.colors.clothing.clone(),
+				),
 			)
 			.with_camera_focus(BODY_FOCUS),
-			animation: Section::new(
-				"Animation",
-				AnimationMenu {
-					clip: AssetSingleSelect::new(ConceptAnimation::Still)
-						.with_camera_focus(BODY_FOCUS),
-				},
-			),
+			animation: Section::new("Animation", AnimationMenu::new(BODY_FOCUS)),
 		}
 	}
 }
 
-impl From<&MygrMenu> for crozon_characters::species::mygr::MygrConfig {
+impl From<&MygrMenu> for MygrConfig {
 	fn from(menu: &MygrMenu) -> Self {
 		Self {
 			eye: menu.head_features.value.eye.value,
 			hair: menu.hair.value.style.value,
 			clothing: menu.clothing.value.layers.selected.clone(),
-			colors: crozon_characters::species::mygr::MygrColors {
+			colors: MygrColors {
 				skin: menu.head.value.skin.value,
 				eyes: menu.head_features.value.eye_color.value,
 				mouth: menu.head_features.value.mouth_color.value,
@@ -113,6 +93,58 @@ impl From<&MygrMenu> for crozon_characters::species::mygr::MygrConfig {
 				clothing: menu.clothing.value.item_colors.clone(),
 			},
 		}
+	}
+}
+
+impl MenuTree<MenuEvent> for MygrHeadMenu {
+	fn menu_nodes(&self) -> Vec<MenuNode<MenuEvent>> {
+		vec![
+			MenuNode::asset_grid("Head", &self.head, PreviewColor::of(self.skin.value), |value| {
+				MenuEvent::SetAsset(CharacterField::MygrHead, AssetValue::MygrHead(value))
+			}),
+			MenuNode::swatch("Fur", &self.skin, |color| {
+				MenuEvent::SetSwatch(CharacterField::MygrSkinColor, SwatchValue::MygrSkin(color))
+			}),
+		]
+	}
+}
+
+impl MenuTree<MenuEvent> for MygrHeadFeaturesMenu {
+	fn menu_nodes(&self) -> Vec<MenuNode<MenuEvent>> {
+		vec![
+			MenuNode::asset_grid(
+				"Eyes",
+				&self.eye,
+				PreviewColor::of(self.eye_color.value),
+				|value| MenuEvent::SetAsset(CharacterField::Eye, AssetValue::Eye(value)),
+			),
+			MenuNode::swatch("Eye Color", &self.eye_color, |color| {
+				MenuEvent::SetSwatch(CharacterField::MygrEyeColor, SwatchValue::MygrEye(color))
+			}),
+			MenuNode::asset_grid(
+				"Snout",
+				&self.snout,
+				PreviewColor::of(self.mouth_color.value),
+				|value| {
+					MenuEvent::SetAsset(CharacterField::MygrMouth, AssetValue::MygrMouth(value))
+				},
+			),
+			MenuNode::swatch("Mouth Color", &self.mouth_color, |color| {
+				MenuEvent::SetSwatch(CharacterField::MouthColor, SwatchValue::Item(color))
+			}),
+		]
+	}
+}
+
+impl MenuTree<MenuEvent> for MygrMenu {
+	fn menu_nodes(&self) -> Vec<MenuNode<MenuEvent>> {
+		vec![
+			MenuNode::section(self.head.label, self.head.value.menu_nodes()),
+			MenuNode::section(self.head_features.label, self.head_features.value.menu_nodes()),
+			MenuNode::section(self.hair.label, self.hair.value.menu_nodes()),
+			MenuNode::section(self.clothing.label, self.clothing.value.menu_nodes()),
+			MenuNode::section(self.animation.label, self.animation.value.menu_nodes()),
+		]
 	}
 }
 
@@ -126,28 +158,12 @@ impl MygrMenu {
 		self.animation.value.clip.value
 	}
 
-	pub fn clothing_color(&self, clothing: ClothingMesh) -> BraidmanColor {
-		self.clothing
-			.value
-			.item_colors
-			.iter()
-			.find(|choice| choice.clothing == clothing)
-			.map(|choice| choice.color)
-			.unwrap_or(self.clothing.value.default_color.value)
+	pub fn clothing_color(&self, clothing: ClothingMesh) -> ItemColor {
+		self.clothing.value.color_for(clothing)
 	}
 
-	pub fn set_clothing_color(&mut self, clothing: ClothingMesh, color: BraidmanColor) {
-		if let Some(choice) = self
-			.clothing
-			.value
-			.item_colors
-			.iter_mut()
-			.find(|choice| choice.clothing == clothing)
-		{
-			choice.color = color;
-		} else {
-			self.clothing.value.item_colors.push(ClothingColor { clothing, color });
-		}
+	pub fn set_clothing_color(&mut self, clothing: ClothingMesh, color: ItemColor) {
+		self.clothing.value.set_color(clothing, color);
 	}
 
 	pub fn camera_focus_for_field(&self, field: CharacterField) -> Option<CameraFocus> {
@@ -164,6 +180,6 @@ impl MygrMenu {
 
 impl Default for MygrMenu {
 	fn default() -> Self {
-		Self::from(&crozon_characters::species::mygr::MygrConfig::default_preview())
+		Self::from(&MygrConfig::default_preview())
 	}
 }

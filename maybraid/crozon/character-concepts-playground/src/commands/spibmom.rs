@@ -2,8 +2,9 @@
 
 use bevy::prelude::*;
 use clap::{Args, Subcommand};
+use crozon_character_items::ClothingMesh;
 use crozon_characters::species::{
-	common::{ClothingMesh, EyeMesh, HairMesh},
+	common::{EyeMesh, HairMesh},
 	spibmom::{
 		SpibmomConfig, SpibmomCrownColor, SpibmomEarColor, SpibmomEyeColor, SpibmomMouthColor,
 		SpibmomSkinColor, SpibmomSpineColor,
@@ -76,12 +77,7 @@ impl PreviewArgs {
 		colors.crown = self.crown;
 		colors.spine = self.spine;
 		ConceptPreviewConfig::spibmom_with_animation(
-			SpibmomConfig {
-				eye: self.eye,
-				hair: self.hair,
-				clothing: self.clothing,
-				colors,
-			},
+			SpibmomConfig { eye: self.eye, hair: self.hair, clothing: self.clothing, colors },
 			self.animation,
 		)
 	}

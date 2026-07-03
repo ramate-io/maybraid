@@ -103,9 +103,10 @@ fn spawn_focus_reference(
 ) {
 	let body_rig = commands
 		.spawn((
-			SceneRoot(asset_server.load(
-				GltfAssetLabel::Scene(0).from_asset(assembly.body_rig.path.as_str()),
-			)),
+			SceneRoot(
+				asset_server
+					.load(GltfAssetLabel::Scene(0).from_asset(assembly.body_rig.path.as_str())),
+			),
 			CharacterRig { role: CharacterRigRole::Body },
 			FocusReferenceRig,
 			BoneMap::default(),
@@ -118,16 +119,18 @@ fn spawn_focus_reference(
 		))
 		.id();
 
-	let Some(head_part) = assembly.parts.iter().find(|part| part.slot == CharacterPartSlot::HeadRig)
+	let Some(head_part) =
+		assembly.parts.iter().find(|part| part.slot == CharacterPartSlot::HeadRig)
 	else {
 		return;
 	};
 
 	let head_rig = commands
 		.spawn((
-			SceneRoot(asset_server.load(
-				GltfAssetLabel::Scene(0).from_asset(head_part.asset.path.as_str()),
-			)),
+			SceneRoot(
+				asset_server
+					.load(GltfAssetLabel::Scene(0).from_asset(head_part.asset.path.as_str())),
+			),
 			CharacterRig { role: CharacterRigRole::Head },
 			FocusReferenceRig,
 			BoneMap::default(),

@@ -20,13 +20,14 @@ pub struct FpsDiagnosticsPlugin;
 
 impl Plugin for FpsDiagnosticsPlugin {
 	fn build(&self, app: &mut App) {
-		app.add_plugins(FrameTimeDiagnosticsPlugin::default()).add_plugins(LogDiagnosticsPlugin {
-			wait_duration: Duration::from_secs_f32(LOG_INTERVAL_SECS),
-			filter: Some(HashSet::from_iter([
-				FrameTimeDiagnosticsPlugin::FPS,
-				FrameTimeDiagnosticsPlugin::FRAME_TIME,
-			])),
-			debug: false,
-		});
+		app.add_plugins(FrameTimeDiagnosticsPlugin::default())
+			.add_plugins(LogDiagnosticsPlugin {
+				wait_duration: Duration::from_secs_f32(LOG_INTERVAL_SECS),
+				filter: Some(HashSet::from_iter([
+					FrameTimeDiagnosticsPlugin::FPS,
+					FrameTimeDiagnosticsPlugin::FRAME_TIME,
+				])),
+				debug: false,
+			});
 	}
 }

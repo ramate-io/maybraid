@@ -19,7 +19,7 @@ use crate::{
 };
 
 pub use crate::species::common::{
-	BodyMesh, ClothingMesh, EarMesh, EyeMesh, HairMesh, HeadMesh, MouthMesh, NoseMesh,
+	BodyMesh, EarMesh, EyeMesh, HairMesh, HeadMesh, MouthMesh, NoseMesh,
 };
 
 /// Species-local resolver for Braidman asset choices.
@@ -47,10 +47,9 @@ impl BraidmanAssets {
 			Some(hair) => assembly.with_part(hair),
 			None => assembly,
 		};
-		config
-			.clothing
-			.iter()
-			.fold(assembly, |assembly, clothing| assembly.with_part(Self::clothing(*clothing)))
+		config.clothing.iter().fold(assembly, |assembly, clothing| {
+			assembly.with_part(ResolvedCharacterPart::clothing(*clothing))
+		})
 	}
 
 	fn body_mesh(body: BodyMesh) -> ResolvedCharacterPart {
@@ -170,15 +169,6 @@ impl BraidmanAssets {
 				Transform::from_translation(Vec3::new(0.0, -0.1, 0.1)),
 			)),
 		))
-	}
-
-	fn clothing(clothing: ClothingMesh) -> ResolvedCharacterPart {
-		ResolvedCharacterPart::new(
-			CharacterPartSlot::Clothing,
-			CharacterAsset::new(clothing.label(), clothing.path(), AssetNormalization::IDENTITY),
-			SkinTarget::BodyRig,
-			None,
-		)
 	}
 
 	fn head_socket(bone: &'static str, local_transform: Transform) -> SocketAttachment {

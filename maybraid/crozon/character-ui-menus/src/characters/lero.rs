@@ -1,20 +1,19 @@
-use character_ui_menu::{AssetSingleSelect, CameraFocus, MultiSelect, Section, SwatchSingleSelect};
+use character_ui_menu::{
+	AssetSingleSelect, CameraFocus, MenuNode, MenuTree, PreviewColor, Section, SwatchSingleSelect,
+};
+use crozon_character_items::{ClothingMesh, ItemColor};
 use crozon_characters::{
-	species::{
-		braidman::{BraidmanColor, ClothingColor},
-		common::{ClothingMesh, HairMesh},
-		lero::{
-			LeroEyeColor, LeroHeadMesh, LeroMouthColor, LeroMouthMesh, LeroSkinColor, LeroSpineColor,
-			LeroTailColor,
-		},
+	species::lero::{
+		LeroColors, LeroConfig, LeroEyeColor, LeroHeadMesh, LeroMouthColor, LeroMouthMesh,
+		LeroSkinColor, LeroSpineColor, LeroTailColor,
 	},
 	ConceptAnimation,
 };
 
 use crate::{
-	characters::braidman::AnimationMenu,
-	event::CharacterField,
+	event::{AssetValue, CharacterField, MenuEvent, SwatchValue},
 	focus::{BODY_FOCUS, EYE_FOCUS, HEAD_ROOT_FOCUS, MOUTH_FOCUS},
+	shared::{AnimationMenu, ClothingMenu, HairMenu},
 };
 
 #[derive(Clone, Debug, PartialEq)]
@@ -37,30 +36,17 @@ pub struct LeroBodyMenu {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct LeroHairMenu {
-	pub style: AssetSingleSelect<HairMesh>,
-	pub color: SwatchSingleSelect<BraidmanColor>,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct LeroClothingMenu {
-	pub layers: MultiSelect<ClothingMesh>,
-	pub default_color: SwatchSingleSelect<BraidmanColor>,
-	pub item_colors: Vec<ClothingColor>,
-}
-
-#[derive(Clone, Debug, PartialEq)]
 pub struct LeroMenu {
 	pub head: Section<LeroHeadMenu>,
 	pub head_features: Section<LeroHeadFeaturesMenu>,
 	pub body: Section<LeroBodyMenu>,
-	pub hair: Section<LeroHairMenu>,
-	pub clothing: Section<LeroClothingMenu>,
+	pub hair: Section<HairMenu>,
+	pub clothing: Section<ClothingMenu>,
 	pub animation: Section<AnimationMenu>,
 }
 
-impl From<&crozon_characters::species::lero::LeroConfig> for LeroMenu {
-	fn from(config: &crozon_characters::species::lero::LeroConfig) -> Self {
+impl From<&LeroConfig> for LeroMenu {
+	fn from(config: &LeroConfig) -> Self {
 		Self {
 			head: Section::new(
 				"Head",
@@ -90,38 +76,29 @@ impl From<&crozon_characters::species::lero::LeroConfig> for LeroMenu {
 			.with_camera_focus(BODY_FOCUS),
 			hair: Section::new(
 				"Hair",
-				LeroHairMenu {
-					style: AssetSingleSelect::new(config.hair).with_camera_focus(HEAD_ROOT_FOCUS),
-					color: SwatchSingleSelect::new(config.colors.hair),
-				},
+				HairMenu::new(config.hair, config.colors.hair, HEAD_ROOT_FOCUS),
 			),
 			clothing: Section::new(
 				"Clothing",
-				LeroClothingMenu {
-					layers: MultiSelect::new(config.clothing.clone()),
-					default_color: SwatchSingleSelect::new(config.colors.clothing_default),
-					item_colors: config.colors.clothing.clone(),
-				},
+				ClothingMenu::new(
+					config.clothing.clone(),
+					config.colors.clothing_default,
+					config.colors.clothing.clone(),
+				),
 			)
 			.with_camera_focus(BODY_FOCUS),
-			animation: Section::new(
-				"Animation",
-				AnimationMenu {
-					clip: AssetSingleSelect::new(ConceptAnimation::Still)
-						.with_camera_focus(BODY_FOCUS),
-				},
-			),
+			animation: Section::new("Animation", AnimationMenu::new(BODY_FOCUS)),
 		}
 	}
 }
 
-impl From<&LeroMenu> for crozon_characters::species::lero::LeroConfig {
+impl From<&LeroMenu> for LeroConfig {
 	fn from(menu: &LeroMenu) -> Self {
 		Self {
 			mouth: menu.head_features.value.snout.value,
 			hair: menu.hair.value.style.value,
 			clothing: menu.clothing.value.layers.selected.clone(),
-			colors: crozon_characters::species::lero::LeroColors {
+			colors: LeroColors {
 				skin: menu.head.value.skin.value,
 				eyes: menu.head_features.value.eye_color.value,
 				mouth: menu.head_features.value.mouth_color.value,
@@ -135,6 +112,69 @@ impl From<&LeroMenu> for crozon_characters::species::lero::LeroConfig {
 	}
 }
 
+impl MenuTree<MenuEvent> for LeroHeadMenu {
+	fn menu_nodes(&self) -> Vec<MenuNode<MenuEvent>> {
+		vec![
+			MenuNode::asset_grid("Head", &self.head, PreviewColor::of(self.skin.value), |value| {
+				MenuEvent::SetAsset(CharacterField::LeroHead, AssetValue::LeroHead(value))
+			}),
+			MenuNode::swatch("Skin", &self.skin, |color| {
+				MenuEvent::SetSwatch(CharacterField::LeroSkinColor, SwatchValue::LeroSkin(color))
+			}),
+		]
+	}
+}
+
+impl MenuTree<MenuEvent> for LeroHeadFeaturesMenu {
+	fn menu_nodes(&self) -> Vec<MenuNode<MenuEvent>> {
+		vec![
+			MenuNode::asset_grid(
+				"Snout",
+				&self.snout,
+				PreviewColor::of(self.mouth_color.value),
+				|value| {
+					MenuEvent::SetAsset(CharacterField::LeroMouth, AssetValue::LeroMouth(value))
+				},
+			),
+			MenuNode::swatch("Mouth Color", &self.mouth_color, |color| {
+				MenuEvent::SetSwatch(
+					CharacterField::LeroMouthColor,
+					SwatchValue::LeroMouthColor(color),
+				)
+			}),
+			MenuNode::swatch("Eye Color", &self.eye_color, |color| {
+				MenuEvent::SetSwatch(CharacterField::LeroEyeColor, SwatchValue::LeroEye(color))
+			}),
+		]
+	}
+}
+
+impl MenuTree<MenuEvent> for LeroBodyMenu {
+	fn menu_nodes(&self) -> Vec<MenuNode<MenuEvent>> {
+		vec![
+			MenuNode::swatch("Tail Color", &self.tail_color, |color| {
+				MenuEvent::SetSwatch(CharacterField::LeroTailColor, SwatchValue::LeroTail(color))
+			}),
+			MenuNode::swatch("Spine Color", &self.spine_color, |color| {
+				MenuEvent::SetSwatch(CharacterField::LeroSpineColor, SwatchValue::LeroSpine(color))
+			}),
+		]
+	}
+}
+
+impl MenuTree<MenuEvent> for LeroMenu {
+	fn menu_nodes(&self) -> Vec<MenuNode<MenuEvent>> {
+		vec![
+			MenuNode::section(self.head.label, self.head.value.menu_nodes()),
+			MenuNode::section(self.head_features.label, self.head_features.value.menu_nodes()),
+			MenuNode::section(self.body.label, self.body.value.menu_nodes()),
+			MenuNode::section(self.hair.label, self.hair.value.menu_nodes()),
+			MenuNode::section(self.clothing.label, self.clothing.value.menu_nodes()),
+			MenuNode::section(self.animation.label, self.animation.value.menu_nodes()),
+		]
+	}
+}
+
 impl LeroMenu {
 	pub fn with_animation(mut self, animation: ConceptAnimation) -> Self {
 		self.animation.value.clip.value = animation;
@@ -145,28 +185,12 @@ impl LeroMenu {
 		self.animation.value.clip.value
 	}
 
-	pub fn clothing_color(&self, clothing: ClothingMesh) -> BraidmanColor {
-		self.clothing
-			.value
-			.item_colors
-			.iter()
-			.find(|choice| choice.clothing == clothing)
-			.map(|choice| choice.color)
-			.unwrap_or(self.clothing.value.default_color.value)
+	pub fn clothing_color(&self, clothing: ClothingMesh) -> ItemColor {
+		self.clothing.value.color_for(clothing)
 	}
 
-	pub fn set_clothing_color(&mut self, clothing: ClothingMesh, color: BraidmanColor) {
-		if let Some(choice) = self
-			.clothing
-			.value
-			.item_colors
-			.iter_mut()
-			.find(|choice| choice.clothing == clothing)
-		{
-			choice.color = color;
-		} else {
-			self.clothing.value.item_colors.push(ClothingColor { clothing, color });
-		}
+	pub fn set_clothing_color(&mut self, clothing: ClothingMesh, color: ItemColor) {
+		self.clothing.value.set_color(clothing, color);
 	}
 
 	pub fn camera_focus_for_field(&self, field: CharacterField) -> Option<CameraFocus> {
@@ -176,7 +200,9 @@ impl LeroMenu {
 			CharacterField::LeroMouthColor => self.head_features.value.mouth_color.camera_focus,
 			CharacterField::LeroEyeColor => self.head_features.value.eye_color.camera_focus,
 			CharacterField::Hair => self.hair.value.style.camera_focus,
-			CharacterField::Clothing(_) | CharacterField::Animation | CharacterField::LeroTailColor
+			CharacterField::Clothing(_)
+			| CharacterField::Animation
+			| CharacterField::LeroTailColor
 			| CharacterField::LeroSpineColor => Some(BODY_FOCUS),
 			_ => None,
 		}
@@ -185,6 +211,6 @@ impl LeroMenu {
 
 impl Default for LeroMenu {
 	fn default() -> Self {
-		Self::from(&crozon_characters::species::lero::LeroConfig::default_preview())
+		Self::from(&LeroConfig::default_preview())
 	}
 }

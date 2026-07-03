@@ -1,23 +1,26 @@
-use character_ui_menu::{AssetSingleSelect, CameraFocus, MultiSelect, Section, SwatchSingleSelect};
+use character_ui_menu::{
+	AssetSingleSelect, CameraFocus, MenuNode, MenuTree, PreviewColor, Section, SwatchSingleSelect,
+};
+use crozon_character_items::{ClothingMesh, ItemColor};
 use crozon_characters::{
 	species::{
-		braidman::{BraidmanColor, ClothingColor},
-		common::{ClothingMesh, EyeMesh, HairMesh},
+		common::EyeMesh,
 		spibmom::{
-			SpibmomCrownColor, SpibmomEarColor, SpibmomEyeColor, SpibmomHeadMesh, SpibmomMouthColor,
-			SpibmomMouthMesh, SpibmomSkinColor, SpibmomSpineColor,
+			SpibmomColors, SpibmomConfig, SpibmomCrownColor, SpibmomEarColor, SpibmomEyeColor,
+			SpibmomHeadMesh, SpibmomMouthColor, SpibmomMouthMesh, SpibmomSkinColor,
+			SpibmomSpineColor,
 		},
 	},
 	ConceptAnimation,
 };
 
 use crate::{
-	characters::braidman::AnimationMenu,
-	event::CharacterField,
+	event::{AssetValue, CharacterField, MenuEvent, SwatchValue},
 	focus::{
 		SPIBMOM_BODY_FOCUS, SPIBMOM_CROWN_FOCUS, SPIBMOM_EYE_FOCUS, SPIBMOM_HEAD_ROOT_FOCUS,
 		SPIBMOM_NOSE_FOCUS,
 	},
+	shared::{AnimationMenu, ClothingMenu, HairMenu},
 };
 
 #[derive(Clone, Debug, PartialEq)]
@@ -38,29 +41,16 @@ pub struct SpibmomHeadFeaturesMenu {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct SpibmomHairMenu {
-	pub style: AssetSingleSelect<HairMesh>,
-	pub color: SwatchSingleSelect<BraidmanColor>,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct SpibmomClothingMenu {
-	pub layers: MultiSelect<ClothingMesh>,
-	pub default_color: SwatchSingleSelect<BraidmanColor>,
-	pub item_colors: Vec<ClothingColor>,
-}
-
-#[derive(Clone, Debug, PartialEq)]
 pub struct SpibmomMenu {
 	pub head: Section<SpibmomHeadMenu>,
 	pub head_features: Section<SpibmomHeadFeaturesMenu>,
-	pub hair: Section<SpibmomHairMenu>,
-	pub clothing: Section<SpibmomClothingMenu>,
+	pub hair: Section<HairMenu>,
+	pub clothing: Section<ClothingMenu>,
 	pub animation: Section<AnimationMenu>,
 }
 
-impl From<&crozon_characters::species::spibmom::SpibmomConfig> for SpibmomMenu {
-	fn from(config: &crozon_characters::species::spibmom::SpibmomConfig) -> Self {
+impl From<&SpibmomConfig> for SpibmomMenu {
+	fn from(config: &SpibmomConfig) -> Self {
 		Self {
 			head: Section::new(
 				"Head",
@@ -86,38 +76,29 @@ impl From<&crozon_characters::species::spibmom::SpibmomConfig> for SpibmomMenu {
 			),
 			hair: Section::new(
 				"Hair",
-				SpibmomHairMenu {
-					style: AssetSingleSelect::new(config.hair).with_camera_focus(SPIBMOM_HEAD_ROOT_FOCUS),
-					color: SwatchSingleSelect::new(config.colors.hair),
-				},
+				HairMenu::new(config.hair, config.colors.hair, SPIBMOM_HEAD_ROOT_FOCUS),
 			),
 			clothing: Section::new(
 				"Clothing",
-				SpibmomClothingMenu {
-					layers: MultiSelect::new(config.clothing.clone()),
-					default_color: SwatchSingleSelect::new(config.colors.clothing_default),
-					item_colors: config.colors.clothing.clone(),
-				},
+				ClothingMenu::new(
+					config.clothing.clone(),
+					config.colors.clothing_default,
+					config.colors.clothing.clone(),
+				),
 			)
 			.with_camera_focus(SPIBMOM_BODY_FOCUS),
-			animation: Section::new(
-				"Animation",
-				AnimationMenu {
-					clip: AssetSingleSelect::new(ConceptAnimation::Still)
-						.with_camera_focus(SPIBMOM_BODY_FOCUS),
-				},
-			),
+			animation: Section::new("Animation", AnimationMenu::new(SPIBMOM_BODY_FOCUS)),
 		}
 	}
 }
 
-impl From<&SpibmomMenu> for crozon_characters::species::spibmom::SpibmomConfig {
+impl From<&SpibmomMenu> for SpibmomConfig {
 	fn from(menu: &SpibmomMenu) -> Self {
 		Self {
 			eye: menu.head_features.value.eye.value,
 			hair: menu.hair.value.style.value,
 			clothing: menu.clothing.value.layers.selected.clone(),
-			colors: crozon_characters::species::spibmom::SpibmomColors {
+			colors: SpibmomColors {
 				skin: menu.head.value.skin.value,
 				eyes: menu.head_features.value.eye_color.value,
 				ears: menu.head_features.value.ear_color.value,
@@ -132,6 +113,88 @@ impl From<&SpibmomMenu> for crozon_characters::species::spibmom::SpibmomConfig {
 	}
 }
 
+impl MenuTree<MenuEvent> for SpibmomHeadMenu {
+	fn menu_nodes(&self) -> Vec<MenuNode<MenuEvent>> {
+		vec![
+			MenuNode::asset_grid("Head", &self.head, PreviewColor::of(self.skin.value), |value| {
+				MenuEvent::SetAsset(CharacterField::SpibmomHead, AssetValue::SpibmomHead(value))
+			}),
+			MenuNode::swatch("Skin", &self.skin, |color| {
+				MenuEvent::SetSwatch(
+					CharacterField::SpibmomSkinColor,
+					SwatchValue::SpibmomSkin(color),
+				)
+			}),
+			MenuNode::swatch("Crown Color", &self.crown_color, |color| {
+				MenuEvent::SetSwatch(
+					CharacterField::SpibmomCrownColor,
+					SwatchValue::SpibmomCrown(color),
+				)
+			}),
+			MenuNode::swatch("Spine Color", &self.spine_color, |color| {
+				MenuEvent::SetSwatch(
+					CharacterField::SpibmomSpineColor,
+					SwatchValue::SpibmomSpine(color),
+				)
+			}),
+		]
+	}
+}
+
+impl MenuTree<MenuEvent> for SpibmomHeadFeaturesMenu {
+	fn menu_nodes(&self) -> Vec<MenuNode<MenuEvent>> {
+		vec![
+			MenuNode::asset_grid(
+				"Eyes",
+				&self.eye,
+				PreviewColor::of(self.eye_color.value),
+				|value| MenuEvent::SetAsset(CharacterField::Eye, AssetValue::Eye(value)),
+			),
+			MenuNode::swatch("Eye Color", &self.eye_color, |color| {
+				MenuEvent::SetSwatch(
+					CharacterField::SpibmomEyeColor,
+					SwatchValue::SpibmomEye(color),
+				)
+			}),
+			MenuNode::swatch("Ear Color", &self.ear_color, |color| {
+				MenuEvent::SetSwatch(
+					CharacterField::SpibmomEarColor,
+					SwatchValue::SpibmomEar(color),
+				)
+			}),
+			MenuNode::asset_grid(
+				"Snout",
+				&self.snout,
+				PreviewColor::of(self.mouth_color.value),
+				|value| {
+					MenuEvent::SetAsset(
+						CharacterField::SpibmomMouth,
+						AssetValue::SpibmomMouth(value),
+					)
+				},
+			),
+			MenuNode::swatch("Mouth Color", &self.mouth_color, |color| {
+				MenuEvent::SetSwatch(
+					CharacterField::SpibmomMouthColor,
+					SwatchValue::SpibmomMouthColor(color),
+				)
+			}),
+		]
+	}
+}
+
+impl MenuTree<MenuEvent> for SpibmomMenu {
+	fn menu_nodes(&self) -> Vec<MenuNode<MenuEvent>> {
+		vec![
+			MenuNode::section(self.head.label, self.head.value.menu_nodes()),
+			MenuNode::section(self.head_features.label, self.head_features.value.menu_nodes()),
+			MenuNode::section(self.hair.label, self.hair.value.menu_nodes()),
+			MenuNode::section(self.clothing.label, self.clothing.value.menu_nodes()),
+			MenuNode::section(self.animation.label, self.animation.value.menu_nodes()),
+		]
+	}
+}
+
 impl SpibmomMenu {
 	pub fn with_animation(mut self, animation: ConceptAnimation) -> Self {
 		self.animation.value.clip.value = animation;
@@ -142,28 +205,12 @@ impl SpibmomMenu {
 		self.animation.value.clip.value
 	}
 
-	pub fn clothing_color(&self, clothing: ClothingMesh) -> BraidmanColor {
-		self.clothing
-			.value
-			.item_colors
-			.iter()
-			.find(|choice| choice.clothing == clothing)
-			.map(|choice| choice.color)
-			.unwrap_or(self.clothing.value.default_color.value)
+	pub fn clothing_color(&self, clothing: ClothingMesh) -> ItemColor {
+		self.clothing.value.color_for(clothing)
 	}
 
-	pub fn set_clothing_color(&mut self, clothing: ClothingMesh, color: BraidmanColor) {
-		if let Some(choice) = self
-			.clothing
-			.value
-			.item_colors
-			.iter_mut()
-			.find(|choice| choice.clothing == clothing)
-		{
-			choice.color = color;
-		} else {
-			self.clothing.value.item_colors.push(ClothingColor { clothing, color });
-		}
+	pub fn set_clothing_color(&mut self, clothing: ClothingMesh, color: ItemColor) {
+		self.clothing.value.set_color(clothing, color);
 	}
 
 	pub fn camera_focus_for_field(&self, field: CharacterField) -> Option<CameraFocus> {
@@ -173,9 +220,9 @@ impl SpibmomMenu {
 			CharacterField::SpibmomMouth => self.head_features.value.snout.camera_focus,
 			CharacterField::SpibmomCrownColor => self.head.value.crown_color.camera_focus,
 			CharacterField::Hair => self.hair.value.style.camera_focus,
-			CharacterField::Clothing(_) | CharacterField::Animation | CharacterField::SpibmomSpineColor => {
-				Some(SPIBMOM_BODY_FOCUS)
-			}
+			CharacterField::Clothing(_)
+			| CharacterField::Animation
+			| CharacterField::SpibmomSpineColor => Some(SPIBMOM_BODY_FOCUS),
 			_ => None,
 		}
 	}
@@ -183,6 +230,6 @@ impl SpibmomMenu {
 
 impl Default for SpibmomMenu {
 	fn default() -> Self {
-		Self::from(&crozon_characters::species::spibmom::SpibmomConfig::default_preview())
+		Self::from(&SpibmomConfig::default_preview())
 	}
 }

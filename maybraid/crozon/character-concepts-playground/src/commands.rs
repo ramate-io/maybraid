@@ -3,21 +3,21 @@
 pub mod braidman;
 pub mod brodler;
 pub mod dui;
-pub mod mygr;
-pub mod wumbus;
 pub mod lero;
+pub mod mygr;
 pub mod spibmom;
+pub mod wumbus;
 
 use bevy::prelude::*;
 pub use braidman::Braidman;
 pub use brodler::Brodler;
+use clap::Parser;
 pub use dui::Dui;
+use game_commands::command::{CommandScript, GameCommand};
 pub use lero::Lero;
 pub use mygr::Mygr;
 pub use spibmom::Spibmom;
 pub use wumbus::Wumbus;
-use clap::Parser;
-use game_commands::command::{CommandScript, GameCommand};
 
 use crate::skinning::request_dump_bones;
 

@@ -2,8 +2,9 @@
 
 use bevy::prelude::*;
 use clap::{Args, Subcommand};
+use crozon_character_items::ClothingMesh;
 use crozon_characters::species::{
-	common::{ClothingMesh, HairMesh},
+	common::HairMesh,
 	dui::{DuiConfig, DuiMouthColor, DuiNoseMesh, DuiSkinColor},
 };
 
@@ -57,12 +58,7 @@ impl PreviewArgs {
 		colors.skin = self.skin;
 		colors.mouth = self.mouth_color;
 		ConceptPreviewConfig::dui_with_animation(
-			DuiConfig {
-				nose: self.nose,
-				hair: self.hair,
-				clothing: self.clothing,
-				colors,
-			},
+			DuiConfig { nose: self.nose, hair: self.hair, clothing: self.clothing, colors },
 			self.animation,
 		)
 	}

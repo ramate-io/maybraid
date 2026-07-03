@@ -2,11 +2,10 @@
 
 use bevy::prelude::*;
 use clap::{Args, Subcommand};
+use crozon_character_items::ClothingMesh;
 use crozon_characters::species::{
-	common::{ClothingMesh, EyeMesh, HairMesh},
-	wumbus::{
-		WumbusConfig, WumbusEarColor, WumbusEyeColor, WumbusHornMesh, WumbusSkinColor,
-	},
+	common::{EyeMesh, HairMesh},
+	wumbus::{WumbusConfig, WumbusEarColor, WumbusEyeColor, WumbusHornMesh, WumbusSkinColor},
 };
 
 use crate::{animation::ConceptAnimation, preview::ConceptPreviewConfig};

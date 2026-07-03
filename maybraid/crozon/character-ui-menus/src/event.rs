@@ -1,26 +1,24 @@
+use crozon_character_items::{ClothingMesh, ItemColor};
 use crozon_characters::{
 	presets::{BuildPreset, GenderPreset},
 	species::{
-		braidman::BraidmanColor,
 		brodler::{
 			assets::HornMesh, BrodlerEyeColor, BrodlerHeadMesh, BrodlerHornColor, BrodlerSkinColor,
 		},
-		mygr::{MygrEyeColor, MygrHeadMesh, MygrMouthMesh, MygrSkinColor},
-		wumbus::{
-            WumbusEarColor, WumbusEyeColor, WumbusHeadMesh, WumbusHornColor,
-			WumbusMouthColor, WumbusMouthMesh, WumbusSkinColor, WumbusSpineColor,
-		},
-		dui::{DuiEyeMesh, DuiHeadMesh, DuiMouthMesh, DuiMouthColor, DuiSkinColor},
+		common::{BodyMesh, EarMesh, EyeMesh, HairMesh, HeadMesh, MouthMesh, NoseMesh},
+		dui::{DuiEyeMesh, DuiHeadMesh, DuiMouthColor, DuiMouthMesh, DuiSkinColor},
 		lero::{
 			LeroEyeColor, LeroHeadMesh, LeroMouthColor, LeroMouthMesh, LeroSkinColor,
 			LeroSpineColor, LeroTailColor,
 		},
+		mygr::{MygrEyeColor, MygrHeadMesh, MygrMouthMesh, MygrSkinColor},
 		spibmom::{
-			SpibmomCrownColor, SpibmomEarColor, SpibmomEyeColor, SpibmomHeadMesh, SpibmomMouthColor,
-			SpibmomMouthMesh, SpibmomSkinColor, SpibmomSpineColor,
+			SpibmomCrownColor, SpibmomEarColor, SpibmomEyeColor, SpibmomHeadMesh,
+			SpibmomMouthColor, SpibmomMouthMesh, SpibmomSkinColor, SpibmomSpineColor,
 		},
-		common::{
-			BodyMesh, ClothingMesh, EarMesh, EyeMesh, HairMesh, HeadMesh, MouthMesh, NoseMesh,
+		wumbus::{
+			WumbusEarColor, WumbusEyeColor, WumbusHeadMesh, WumbusHornColor, WumbusMouthColor,
+			WumbusMouthMesh, WumbusSkinColor, WumbusSpineColor,
 		},
 	},
 	ConceptAnimation,
@@ -158,7 +156,8 @@ pub enum AssetValue {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SwatchValue {
-	Braidman(BraidmanColor),
+	/// Shared item palette: hair everywhere, plus Braidman body/eye/mouth.
+	Item(ItemColor),
 	BrodlerSkin(BrodlerSkinColor),
 	BrodlerEye(BrodlerEyeColor),
 	BrodlerHorn(BrodlerHornColor),
@@ -183,108 +182,6 @@ pub enum SwatchValue {
 	SpibmomMouthColor(SpibmomMouthColor),
 	SpibmomCrown(SpibmomCrownColor),
 	SpibmomSpine(SpibmomSpineColor),
-}
-
-impl SwatchValue {
-	pub fn with_braidman(self, color: BraidmanColor) -> Self {
-		Self::Braidman(color)
-	}
-
-	pub fn with_brodler_skin(self, color: BrodlerSkinColor) -> Self {
-		Self::BrodlerSkin(color)
-	}
-
-	pub fn with_brodler_eye(self, color: BrodlerEyeColor) -> Self {
-		Self::BrodlerEye(color)
-	}
-
-	pub fn with_brodler_horn(self, color: BrodlerHornColor) -> Self {
-		Self::BrodlerHorn(color)
-	}
-
-	pub fn with_mygr_skin(self, color: MygrSkinColor) -> Self {
-		Self::MygrSkin(color)
-	}
-
-	pub fn with_mygr_eye(self, color: MygrEyeColor) -> Self {
-		Self::MygrEye(color)
-	}
-
-	pub fn with_dui_skin(self, color: DuiSkinColor) -> Self {
-		Self::DuiSkin(color)
-	}
-
-	pub fn with_dui_mouth(self, color: DuiMouthColor) -> Self {
-		Self::DuiMouth(color)
-	}
-
-	pub fn with_wumbus_skin(self, color: WumbusSkinColor) -> Self {
-		Self::WumbusSkin(color)
-	}
-
-	pub fn with_wumbus_eye(self, color: WumbusEyeColor) -> Self {
-		Self::WumbusEye(color)
-	}
-
-	pub fn with_wumbus_ear(self, color: WumbusEarColor) -> Self {
-		Self::WumbusEar(color)
-	}
-
-	pub fn with_wumbus_mouth(self, color: WumbusMouthColor) -> Self {
-		Self::WumbusMouth(color)
-	}
-
-	pub fn with_wumbus_horn(self, color: WumbusHornColor) -> Self {
-		Self::WumbusHorn(color)
-	}
-
-	pub fn with_wumbus_spine(self, color: WumbusSpineColor) -> Self {
-		Self::WumbusSpine(color)
-	}
-
-	pub fn with_lero_skin(self, color: LeroSkinColor) -> Self {
-		Self::LeroSkin(color)
-	}
-
-	pub fn with_lero_eye(self, color: LeroEyeColor) -> Self {
-		Self::LeroEye(color)
-	}
-
-	pub fn with_lero_tail(self, color: LeroTailColor) -> Self {
-		Self::LeroTail(color)
-	}
-
-	pub fn with_lero_spine(self, color: LeroSpineColor) -> Self {
-		Self::LeroSpine(color)
-	}
-
-	pub fn with_lero_mouth_color(self, color: LeroMouthColor) -> Self {
-		Self::LeroMouthColor(color)
-	}
-
-	pub fn with_spibmom_skin(self, color: SpibmomSkinColor) -> Self {
-		Self::SpibmomSkin(color)
-	}
-
-	pub fn with_spibmom_eye(self, color: SpibmomEyeColor) -> Self {
-		Self::SpibmomEye(color)
-	}
-
-	pub fn with_spibmom_ear(self, color: SpibmomEarColor) -> Self {
-		Self::SpibmomEar(color)
-	}
-
-	pub fn with_spibmom_mouth_color(self, color: SpibmomMouthColor) -> Self {
-		Self::SpibmomMouthColor(color)
-	}
-
-	pub fn with_spibmom_crown(self, color: SpibmomCrownColor) -> Self {
-		Self::SpibmomCrown(color)
-	}
-
-	pub fn with_spibmom_spine(self, color: SpibmomSpineColor) -> Self {
-		Self::SpibmomSpine(color)
-	}
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]

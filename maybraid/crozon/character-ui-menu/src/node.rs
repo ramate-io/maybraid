@@ -1,0 +1,230 @@
+//! Renderer-agnostic menu intermediate representation.
+//!
+//! Species menus lower their typed state into a tree of well-known
+//! [`MenuNode`]s. Renderers implement a narrow forward contract over these
+//! variants and never see species-specific types. Values that used to be
+//! resolved imperatively while painting (labels, option lists, preview tints)
+//! are resolved here, at lowering time, so the tree is plain data.
+
+use crate::{
+	AssetOption, AssetSingleSelect, LabelOption, ListValues, SingleSelect, Slider, SwatchOption,
+	SwatchSingleSelect, ThumbnailCamera,
+};
+
+/// sRGBA tint applied to asset thumbnails, resolved when a menu lowers to IR.
+///
+/// This replaces the old imperative `RenderContext.preview_color` scoping:
+/// every node that previews assets carries its tint explicitly.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct PreviewColor {
+	pub red: f32,
+	pub green: f32,
+	pub blue: f32,
+	pub alpha: f32,
+}
+
+impl PreviewColor {
+	pub const WHITE: Self = Self { red: 1.0, green: 1.0, blue: 1.0, alpha: 1.0 };
+
+	pub const fn srgb(red: f32, green: f32, blue: f32) -> Self {
+		Self { red, green, blue, alpha: 1.0 }
+	}
+
+	/// Resolves a palette value's preview tint from its swatch hex.
+	pub fn of<T: SwatchOption>(value: T) -> Self {
+		Self::from_hex(value.color_hex())
+	}
+
+	/// Parses a `#RRGGBB` hex string; malformed input falls back to white.
+	pub fn from_hex(hex: &str) -> Self {
+		let hex = hex.strip_prefix('#').unwrap_or(hex);
+		if hex.len() != 6 {
+			return Self::WHITE;
+		}
+		let channel = |range: core::ops::Range<usize>| u8::from_str_radix(&hex[range], 16).ok();
+		match (channel(0..2), channel(2..4), channel(4..6)) {
+			(Some(red), Some(green), Some(blue)) => {
+				Self::srgb(red as f32 / 255.0, green as f32 / 255.0, blue as f32 / 255.0)
+			}
+			_ => Self::WHITE,
+		}
+	}
+}
+
+/// One tile in a select row (species picker and similar).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct SelectChoice<E> {
+	pub label: &'static str,
+	pub selected: bool,
+	pub event: E,
+}
+
+/// One color swatch in a swatch row.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct SwatchChoice<E> {
+	pub label: &'static str,
+	pub color_hex: &'static str,
+	pub selected: bool,
+	pub event: E,
+}
+
+impl<E> SwatchChoice<E> {
+	/// Lowers every value of a [`SwatchOption`] enum into a swatch row.
+	pub fn from_values<T>(active: T, mut event: impl FnMut(T) -> E) -> Vec<Self>
+	where
+		T: SwatchOption + ListValues + PartialEq + Copy,
+	{
+		T::values()
+			.iter()
+			.map(|value| Self {
+				label: value.label(),
+				color_hex: value.color_hex(),
+				selected: *value == active,
+				event: event(*value),
+			})
+			.collect()
+	}
+}
+
+/// One asset button in an asset grid or item row.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct AssetChoice<E> {
+	pub label: &'static str,
+	pub path: &'static str,
+	pub thumbnail_camera: ThumbnailCamera,
+	pub selected: bool,
+	pub event: E,
+}
+
+impl<E> AssetChoice<E> {
+	pub fn new<T>(value: T, selected: bool, event: E) -> Self
+	where
+		T: AssetOption + Copy,
+	{
+		let asset = value.asset();
+		Self {
+			label: asset.label,
+			path: asset.path,
+			thumbnail_camera: asset.thumbnail_camera,
+			selected,
+			event,
+		}
+	}
+}
+
+/// One toggleable item with its own preview tint and per-item color swatches.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ItemRow<E> {
+	pub asset: AssetChoice<E>,
+	pub preview: PreviewColor,
+	pub colors: Vec<SwatchChoice<E>>,
+}
+
+/// Renderer-agnostic menu tree. Generic over the host event type `E`, which is
+/// embedded in leaves at lowering time; renderers forward it verbatim.
+#[derive(Clone, Debug, PartialEq)]
+pub enum MenuNode<E> {
+	/// Collapsible labeled section. Open state is keyed by label via
+	/// [`crate::SectionOpen`].
+	Section { label: &'static str, children: Vec<MenuNode<E>> },
+	/// Tile picker whose selection decides the subtree below it
+	/// (e.g. the species picker). Only the selected subtree is lowered.
+	SectionSelect { label: &'static str, choices: Vec<SelectChoice<E>>, children: Vec<MenuNode<E>> },
+	/// `<` value `>` control with an inline label.
+	LabeledCycle { label: &'static str, value: &'static str, minus: E, plus: E },
+	/// `-` value `+` stepped scalar control with an inline label.
+	LabeledSlider { label: &'static str, value: f32, decrease: E, increase: E },
+	/// Inline-labeled row of color swatches.
+	LabeledSwatch { label: &'static str, choices: Vec<SwatchChoice<E>> },
+	/// Block-labeled grid of asset buttons with thumbnail previews.
+	BlockAsset { label: &'static str, preview: PreviewColor, choices: Vec<AssetChoice<E>> },
+	/// Block-labeled multi-select of items, each row pairing a toggle button
+	/// with its color swatches (e.g. clothing layers).
+	ItemMultiSelect { label: &'static str, rows: Vec<ItemRow<E>> },
+}
+
+impl<E> MenuNode<E> {
+	pub fn section(label: &'static str, children: Vec<MenuNode<E>>) -> Self {
+		Self::Section { label, children }
+	}
+
+	pub fn section_select<T>(
+		label: &'static str,
+		selected: T,
+		mut event: impl FnMut(T) -> E,
+		children: Vec<MenuNode<E>>,
+	) -> Self
+	where
+		T: ListValues + LabelOption + PartialEq + Copy,
+	{
+		Self::SectionSelect {
+			label,
+			choices: T::values()
+				.iter()
+				.map(|value| SelectChoice {
+					label: value.label(),
+					selected: *value == selected,
+					event: event(*value),
+				})
+				.collect(),
+			children,
+		}
+	}
+
+	/// `event` receives the cycle delta (`-1` / `1`).
+	pub fn cycle<T>(
+		label: &'static str,
+		select: &SingleSelect<T>,
+		mut event: impl FnMut(i32) -> E,
+	) -> Self
+	where
+		T: LabelOption + Copy,
+	{
+		Self::LabeledCycle { label, value: select.value.label(), minus: event(-1), plus: event(1) }
+	}
+
+	/// `event` receives the signed step delta (`-step` / `step`).
+	pub fn slider(label: &'static str, slider: &Slider, mut event: impl FnMut(f32) -> E) -> Self {
+		Self::LabeledSlider {
+			label,
+			value: slider.value,
+			decrease: event(-slider.step),
+			increase: event(slider.step),
+		}
+	}
+
+	pub fn swatch<T>(
+		label: &'static str,
+		swatch: &SwatchSingleSelect<T>,
+		event: impl FnMut(T) -> E,
+	) -> Self
+	where
+		T: SwatchOption + ListValues + PartialEq + Copy,
+	{
+		Self::LabeledSwatch { label, choices: SwatchChoice::from_values(swatch.value, event) }
+	}
+
+	pub fn asset_grid<T>(
+		label: &'static str,
+		select: &AssetSingleSelect<T>,
+		preview: PreviewColor,
+		mut event: impl FnMut(T) -> E,
+	) -> Self
+	where
+		T: AssetOption + ListValues + PartialEq + Copy,
+	{
+		Self::BlockAsset {
+			label,
+			preview,
+			choices: T::values()
+				.iter()
+				.map(|value| AssetChoice::new(*value, *value == select.value, event(*value)))
+				.collect(),
+		}
+	}
+}
+
+/// Lowers typed menu state to a renderer-agnostic [`MenuNode`] tree.
+pub trait MenuTree<E> {
+	fn menu_nodes(&self) -> Vec<MenuNode<E>>;
+}

@@ -2417,12 +2417,23 @@ dependencies = [
  "camera-controls",
  "character-ui-menu",
  "clap",
+ "crozon-character-items",
  "crozon-character-playground",
  "crozon-character-ui-menus",
  "crozon-characters",
  "crozon-rigs",
  "game-commands",
  "malo-animations",
+]
+
+[[package]]
+name = "crozon-character-items"
+version = "0.0.1"
+dependencies = [
+ "bevy",
+ "bevy_math",
+ "character-ui-menu",
+ "clap",
 ]
 
 [[package]]
@@ -2447,6 +2458,7 @@ dependencies = [
  "bevy-character-ui-menu-renderer",
  "bevy_math",
  "character-ui-menu",
+ "crozon-character-items",
  "crozon-characters",
 ]
 
@@ -2458,6 +2470,7 @@ dependencies = [
  "bevy_math",
  "character-ui-menu",
  "clap",
+ "crozon-character-items",
  "crozon-rigs",
 ]
 

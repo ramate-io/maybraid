@@ -1,6 +1,6 @@
-use crozon_characters::species::{
-	braidman::BraidmanConfig, brodler::BrodlerConfig, common::ClothingMesh,
-};
+use character_ui_menu::{MenuNode, MenuTree};
+use crozon_character_items::ClothingMesh;
+use crozon_characters::species::{braidman::BraidmanConfig, brodler::BrodlerConfig};
 
 use crate::{
 	character::CharacterMenu,
@@ -96,7 +96,7 @@ fn spibmom_config_round_trip() -> anyhow::Result<()> {
 
 #[test]
 fn clothing_toggle_and_color() -> anyhow::Result<()> {
-	use crozon_characters::species::braidman::BraidmanColor;
+	use crozon_character_items::ItemColor;
 
 	use crate::{CharacterField, MenuEvent, SwatchValue};
 
@@ -106,26 +106,60 @@ fn clothing_toggle_and_color() -> anyhow::Result<()> {
 	assert!(menu.braidman.clothing.value.layers.contains(coat));
 	assert!(menu.apply(MenuEvent::SetSwatch(
 		CharacterField::Clothing(coat),
-		SwatchValue::Braidman(BraidmanColor::Red),
+		SwatchValue::Item(ItemColor::Red),
 	)));
-	assert_eq!(menu.braidman.clothing_color(coat), BraidmanColor::Red);
+	assert_eq!(menu.braidman.clothing_color(coat), ItemColor::Red);
+	Ok(())
+}
+
+#[test]
+fn character_menu_lowers_to_species_select_tree() -> anyhow::Result<()> {
+	let menu = CharacterMenu::default();
+	let nodes = menu.menu_nodes();
+	assert_eq!(nodes.len(), 1);
+	let MenuNode::SectionSelect { label, choices, children } = &nodes[0] else {
+		anyhow::bail!("expected a species SectionSelect at the root");
+	};
+	assert_eq!(*label, "Species");
+	assert_eq!(choices.len(), 7);
+	assert!(choices[0].selected, "default species should be braidman");
+	// Braidman: presets, body, head & features, hair, clothing, animation.
+	assert_eq!(children.len(), 6);
+	assert!(children.iter().all(|child| matches!(child, MenuNode::Section { .. })));
+	Ok(())
+}
+
+#[test]
+fn clothing_swatches_only_lower_for_worn_layers() -> anyhow::Result<()> {
+	use crate::MenuEvent;
+
+	let mut menu = CharacterMenu::default();
+	let coat = ClothingMesh::FittedCoat;
+	assert!(menu.apply(MenuEvent::ToggleClothing(coat)));
+	let nodes = menu.braidman.clothing.value.menu_nodes();
+	let MenuNode::ItemMultiSelect { rows, .. } = &nodes[0] else {
+		anyhow::bail!("expected clothing to lower to an ItemMultiSelect");
+	};
+	for row in rows {
+		assert_eq!(row.asset.selected, !row.colors.is_empty());
+	}
 	Ok(())
 }
 
 #[test]
 fn body_color_syncs_skin() -> anyhow::Result<()> {
-	use crozon_characters::species::braidman::BraidmanColor;
+	use crozon_character_items::ItemColor;
 
 	use crate::{CharacterField, MenuEvent, SwatchValue};
 
 	let mut menu = CharacterMenu::default();
 	assert!(menu.apply(MenuEvent::SetSwatch(
 		CharacterField::BodyColor,
-		SwatchValue::Braidman(BraidmanColor::Warm),
+		SwatchValue::Item(ItemColor::Warm),
 	)));
 	let config = menu.braidman_config();
-	assert_eq!(config.colors.body, BraidmanColor::Warm);
-	assert_eq!(config.colors.head, BraidmanColor::Warm);
-	assert_eq!(config.colors.nose, BraidmanColor::Warm);
+	assert_eq!(config.colors.body, ItemColor::Warm);
+	assert_eq!(config.colors.head, ItemColor::Warm);
+	assert_eq!(config.colors.nose, ItemColor::Warm);
 	Ok(())
 }

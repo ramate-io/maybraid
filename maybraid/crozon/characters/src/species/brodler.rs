@@ -4,22 +4,24 @@
 //! species-owned skin/eye colors, and shared hair/clothing catalogs.
 
 pub mod assets;
+pub mod palette;
 pub mod pose;
 
 use crate::{
 	species::{
-		braidman::{BraidmanColor, ClothingColor},
-		common::{ClothingMesh, EarMesh, EyeMesh, HairMesh, MouthMesh, NoseMesh},
+		common::{EarMesh, EyeMesh, HairMesh, MouthMesh, NoseMesh},
 		SpeciesConfig,
 	},
 	ResolvedCharacterAssembly,
 };
 
 use clap::ValueEnum;
+use crozon_character_items::{ClothingColor, ClothingMesh, ItemColor};
 
 use assets::BrodlerAssets;
 
 pub use assets::HornMesh;
+pub use palette::{BrodlerEyeColor, BrodlerHornColor, BrodlerSkinColor};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, ValueEnum)]
 pub enum BrodlerHeadMesh {
@@ -47,95 +49,14 @@ impl BrodlerHeadMesh {
 	}
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, ValueEnum)]
-pub enum BrodlerSkinColor {
-	#[default]
-	Crimson,
-	Umber,
-	Ochre,
-}
-
-impl BrodlerSkinColor {
-	pub const VALUES: &'static [Self] = &[Self::Crimson, Self::Umber, Self::Ochre];
-
-	pub const fn label(self) -> &'static str {
-		match self {
-			Self::Crimson => "crimson",
-			Self::Umber => "umber",
-			Self::Ochre => "ochre",
-		}
-	}
-
-	pub fn color(self) -> bevy::prelude::Color {
-		match self {
-			Self::Crimson => bevy::prelude::Color::srgb(0.58, 0.14, 0.12),
-			Self::Umber => bevy::prelude::Color::srgb(0.30, 0.20, 0.16),
-			Self::Ochre => bevy::prelude::Color::srgb(0.68, 0.52, 0.26),
-		}
-	}
-}
-
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, ValueEnum)]
-pub enum BrodlerEyeColor {
-	Black,
-	#[default]
-	LightBlue,
-	Yellow,
-}
-
-impl BrodlerEyeColor {
-	pub const VALUES: &'static [Self] = &[Self::Black, Self::LightBlue, Self::Yellow];
-
-	pub const fn label(self) -> &'static str {
-		match self {
-			Self::Black => "black",
-			Self::LightBlue => "light-blue",
-			Self::Yellow => "yellow",
-		}
-	}
-
-	pub fn color(self) -> bevy::prelude::Color {
-		match self {
-			Self::Black => bevy::prelude::Color::srgb(0.08, 0.08, 0.10),
-			Self::LightBlue => bevy::prelude::Color::srgb(0.52, 0.70, 0.82),
-			Self::Yellow => bevy::prelude::Color::srgb(0.82, 0.72, 0.28),
-		}
-	}
-}
-
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, ValueEnum)]
-pub enum BrodlerHornColor {
-	#[default]
-	LightBrown,
-	Yellow,
-}
-
-impl BrodlerHornColor {
-	pub const VALUES: &'static [Self] = &[Self::LightBrown, Self::Yellow];
-
-	pub const fn label(self) -> &'static str {
-		match self {
-			Self::LightBrown => "light-brown",
-			Self::Yellow => "yellow",
-		}
-	}
-
-	pub fn color(self) -> bevy::prelude::Color {
-		match self {
-			Self::LightBrown => bevy::prelude::Color::srgb(0.62, 0.48, 0.30),
-			Self::Yellow => bevy::prelude::Color::srgb(0.78, 0.66, 0.28),
-		}
-	}
-}
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BrodlerColors {
 	pub skin: BrodlerSkinColor,
 	pub eyes: BrodlerEyeColor,
 	pub horns: BrodlerHornColor,
-	pub mouth: BraidmanColor,
-	pub hair: BraidmanColor,
-	pub clothing_default: BraidmanColor,
+	pub mouth: ItemColor,
+	pub hair: ItemColor,
+	pub clothing_default: ItemColor,
 	pub clothing: Vec<ClothingColor>,
 }
 
@@ -145,29 +66,21 @@ impl Default for BrodlerColors {
 			skin: BrodlerSkinColor::Crimson,
 			eyes: BrodlerEyeColor::LightBlue,
 			horns: BrodlerHornColor::LightBrown,
-			mouth: BraidmanColor::Natural,
-			hair: BraidmanColor::Dark,
-			clothing_default: BraidmanColor::Cool,
+			mouth: ItemColor::Natural,
+			hair: ItemColor::Dark,
+			clothing_default: ItemColor::Cool,
 			clothing: Vec::new(),
 		}
 	}
 }
 
 impl BrodlerColors {
-	pub fn clothing_color(&self, clothing: ClothingMesh) -> BraidmanColor {
-		self.clothing
-			.iter()
-			.find(|choice| choice.clothing == clothing)
-			.map(|choice| choice.color)
-			.unwrap_or(self.clothing_default)
+	pub fn clothing_color(&self, clothing: ClothingMesh) -> ItemColor {
+		ClothingColor::resolve(&self.clothing, self.clothing_default, clothing)
 	}
 
-	pub fn set_clothing_color(&mut self, clothing: ClothingMesh, color: BraidmanColor) {
-		if let Some(choice) = self.clothing.iter_mut().find(|choice| choice.clothing == clothing) {
-			choice.color = color;
-		} else {
-			self.clothing.push(ClothingColor { clothing, color });
-		}
+	pub fn set_clothing_color(&mut self, clothing: ClothingMesh, color: ItemColor) {
+		ClothingColor::set(&mut self.clothing, clothing, color);
 	}
 }
 

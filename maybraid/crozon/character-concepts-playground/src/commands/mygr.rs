@@ -2,8 +2,9 @@
 
 use bevy::prelude::*;
 use clap::{Args, Subcommand};
+use crozon_character_items::ClothingMesh;
 use crozon_characters::species::{
-	common::{ClothingMesh, EyeMesh, HairMesh},
+	common::{EyeMesh, HairMesh},
 	mygr::{MygrConfig, MygrEyeColor, MygrSkinColor},
 };
 
@@ -57,12 +58,7 @@ impl PreviewArgs {
 		colors.skin = self.skin;
 		colors.eyes = self.eyes;
 		ConceptPreviewConfig::mygr_with_animation(
-			MygrConfig {
-				eye: self.eye,
-				hair: self.hair,
-				clothing: self.clothing,
-				colors,
-			},
+			MygrConfig { eye: self.eye, hair: self.hair, clothing: self.clothing, colors },
 			self.animation,
 		)
 	}

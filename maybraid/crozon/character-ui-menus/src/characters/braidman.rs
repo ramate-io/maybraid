@@ -1,24 +1,23 @@
 use character_ui_menu::{
-	AssetSingleSelect, CameraFocus, MultiSelect, Section, SingleSelect, Slider, SwatchSingleSelect,
+	AssetSingleSelect, CameraFocus, MenuNode, MenuTree, PreviewColor, Section, SingleSelect,
+	Slider, SwatchSingleSelect,
 };
+use crozon_character_items::{ClothingMesh, ItemColor};
 use crozon_characters::{
 	presets::{BuildPreset, GenderPreset},
 	species::{
-		braidman::{
-			sliders::BraidmanSliders, BraidmanColor, BraidmanColors, BraidmanConfig, ClothingColor,
-		},
-		common::{
-			BodyMesh, ClothingMesh, EarMesh, EyeMesh, HairMesh, HeadMesh, MouthMesh, NoseMesh,
-		},
+		braidman::{sliders::BraidmanSliders, BraidmanColors, BraidmanConfig},
+		common::{BodyMesh, EarMesh, EyeMesh, HeadMesh, MouthMesh, NoseMesh},
 	},
 	ConceptAnimation,
 };
 
 use crate::{
-	event::CharacterField,
+	event::{AssetValue, CharacterField, MenuEvent, SwatchValue},
 	focus::{
 		BODY_FOCUS, CROWN_FOCUS, EAR_FOCUS, EYE_FOCUS, HEAD_ROOT_FOCUS, MOUTH_FOCUS, NOSE_FOCUS,
 	},
+	shared::{AnimationMenu, ClothingMenu, HairMenu},
 };
 
 #[derive(Clone, Debug, PartialEq)]
@@ -59,7 +58,7 @@ pub struct BraidmanHeadFeatureSliders {
 pub struct BraidmanBodyMenu {
 	pub body: AssetSingleSelect<BodyMesh>,
 	pub sliders: BraidmanBodyProportionSliders,
-	pub color: SwatchSingleSelect<BraidmanColor>,
+	pub color: SwatchSingleSelect<ItemColor>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -69,27 +68,12 @@ pub struct BraidmanHeadFeaturesMenu {
 	pub nose: AssetSingleSelect<NoseMesh>,
 	pub mouth: AssetSingleSelect<MouthMesh>,
 	pub ear: AssetSingleSelect<EarMesh>,
-	pub eye_color: SwatchSingleSelect<BraidmanColor>,
-	pub mouth_color: SwatchSingleSelect<BraidmanColor>,
+	pub eye_color: SwatchSingleSelect<ItemColor>,
+	pub mouth_color: SwatchSingleSelect<ItemColor>,
 	pub feature_sliders: BraidmanHeadFeatureSliders,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct BraidmanHairMenu {
-	pub style: AssetSingleSelect<HairMesh>,
-	pub color: SwatchSingleSelect<BraidmanColor>,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct BraidmanClothingMenu {
-	pub layers: MultiSelect<ClothingMesh>,
-	pub default_color: SwatchSingleSelect<BraidmanColor>,
-	pub item_colors: Vec<ClothingColor>,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct AnimationMenu {
-	pub clip: AssetSingleSelect<ConceptAnimation>,
+	/// Mirror of the body color; tints the meshes that inherit it
+	/// (head, nose, ears). Kept in sync when the body swatch changes.
+	pub body_color: ItemColor,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -97,8 +81,8 @@ pub struct BraidmanMenu {
 	pub presets: Section<BraidmanPresetsMenu>,
 	pub body: Section<BraidmanBodyMenu>,
 	pub head_features: Section<BraidmanHeadFeaturesMenu>,
-	pub hair: Section<BraidmanHairMenu>,
-	pub clothing: Section<BraidmanClothingMenu>,
+	pub hair: Section<HairMenu>,
+	pub clothing: Section<ClothingMenu>,
 	pub animation: Section<AnimationMenu>,
 }
 
@@ -135,6 +119,46 @@ impl BraidmanBodyProportionSliders {
 		sliders.arm_length = self.arm_length.value;
 		sliders.arm_thickness = self.arm_thickness.value;
 		sliders.leg_length = self.leg_length.value;
+	}
+}
+
+impl MenuTree<MenuEvent> for BraidmanBodyProportionSliders {
+	fn menu_nodes(&self) -> Vec<MenuNode<MenuEvent>> {
+		vec![
+			MenuNode::slider("Shoulder Width", &self.shoulder_width, |delta| {
+				MenuEvent::SliderDelta(CharacterField::ShoulderWidth, delta)
+			}),
+			MenuNode::slider("Hip Width", &self.hip_width, |delta| {
+				MenuEvent::SliderDelta(CharacterField::HipWidth, delta)
+			}),
+			MenuNode::slider("Chest Thickness", &self.chest_thickness, |delta| {
+				MenuEvent::SliderDelta(CharacterField::ChestThickness, delta)
+			}),
+			MenuNode::slider("Hip Thickness", &self.hip_thickness, |delta| {
+				MenuEvent::SliderDelta(CharacterField::HipThickness, delta)
+			}),
+			MenuNode::slider("Leg Thickness", &self.leg_thickness, |delta| {
+				MenuEvent::SliderDelta(CharacterField::LegThickness, delta)
+			}),
+			MenuNode::slider("Buttocks Thickness", &self.buttocks_thickness, |delta| {
+				MenuEvent::SliderDelta(CharacterField::ButtocksThickness, delta)
+			}),
+			MenuNode::slider("Waist Thickness", &self.waist_thickness, |delta| {
+				MenuEvent::SliderDelta(CharacterField::WaistThickness, delta)
+			}),
+			MenuNode::slider("Lower Trunk Thickness", &self.lower_trunk_thickness, |delta| {
+				MenuEvent::SliderDelta(CharacterField::LowerTrunkThickness, delta)
+			}),
+			MenuNode::slider("Arm Length", &self.arm_length, |delta| {
+				MenuEvent::SliderDelta(CharacterField::ArmLength, delta)
+			}),
+			MenuNode::slider("Arm Thickness", &self.arm_thickness, |delta| {
+				MenuEvent::SliderDelta(CharacterField::ArmThickness, delta)
+			}),
+			MenuNode::slider("Leg Length", &self.leg_length, |delta| {
+				MenuEvent::SliderDelta(CharacterField::LegLength, delta)
+			}),
+		]
 	}
 }
 
@@ -196,31 +220,20 @@ impl From<&BraidmanConfig> for BraidmanMenu {
 					eye_color: SwatchSingleSelect::new(config.colors.eyes),
 					mouth_color: SwatchSingleSelect::new(config.colors.mouth),
 					feature_sliders: BraidmanHeadFeatureSliders::from_config(config.sliders),
+					body_color: config.colors.body,
 				},
 			),
-			hair: Section::new(
-				"Hair",
-				BraidmanHairMenu {
-					style: AssetSingleSelect::new(config.hair).with_camera_focus(CROWN_FOCUS),
-					color: SwatchSingleSelect::new(config.colors.hair),
-				},
-			),
+			hair: Section::new("Hair", HairMenu::new(config.hair, config.colors.hair, CROWN_FOCUS)),
 			clothing: Section::new(
 				"Clothing",
-				BraidmanClothingMenu {
-					layers: MultiSelect::new(config.clothing.clone()),
-					default_color: SwatchSingleSelect::new(config.colors.clothing_default),
-					item_colors: config.colors.clothing.clone(),
-				},
+				ClothingMenu::new(
+					config.clothing.clone(),
+					config.colors.clothing_default,
+					config.colors.clothing.clone(),
+				),
 			)
 			.with_camera_focus(BODY_FOCUS),
-			animation: Section::new(
-				"Animation",
-				AnimationMenu {
-					clip: AssetSingleSelect::new(ConceptAnimation::Still)
-						.with_camera_focus(BODY_FOCUS),
-				},
-			),
+			animation: Section::new("Animation", AnimationMenu::new(BODY_FOCUS)),
 		}
 	}
 }
@@ -260,6 +273,110 @@ impl From<&BraidmanMenu> for BraidmanConfig {
 	}
 }
 
+impl MenuTree<MenuEvent> for BraidmanPresetsMenu {
+	fn menu_nodes(&self) -> Vec<MenuNode<MenuEvent>> {
+		vec![
+			MenuNode::cycle("Gender", &self.gender, |delta| {
+				MenuEvent::Cycle(CharacterField::Gender, delta)
+			}),
+			MenuNode::cycle("Build", &self.build, |delta| {
+				MenuEvent::Cycle(CharacterField::Build, delta)
+			}),
+		]
+	}
+}
+
+impl MenuTree<MenuEvent> for BraidmanBodyMenu {
+	fn menu_nodes(&self) -> Vec<MenuNode<MenuEvent>> {
+		let mut nodes = vec![MenuNode::asset_grid(
+			"Body Mesh",
+			&self.body,
+			PreviewColor::of(self.color.value),
+			|value| MenuEvent::SetAsset(CharacterField::BodyMesh, AssetValue::Body(value)),
+		)];
+		nodes.extend(self.sliders.menu_nodes());
+		nodes.push(MenuNode::swatch("Body Color", &self.color, |color| {
+			MenuEvent::SetSwatch(CharacterField::BodyColor, SwatchValue::Item(color))
+		}));
+		nodes
+	}
+}
+
+impl MenuTree<MenuEvent> for BraidmanHeadFeaturesMenu {
+	fn menu_nodes(&self) -> Vec<MenuNode<MenuEvent>> {
+		let base = PreviewColor::of(self.body_color);
+		vec![
+			MenuNode::asset_grid("Head", &self.head, base, |value| {
+				MenuEvent::SetAsset(CharacterField::HeadMesh, AssetValue::Head(value))
+			}),
+			MenuNode::asset_grid(
+				"Eyes",
+				&self.eye,
+				PreviewColor::of(self.eye_color.value),
+				|value| MenuEvent::SetAsset(CharacterField::Eye, AssetValue::Eye(value)),
+			),
+			MenuNode::slider("Eye Width", &self.feature_sliders.eye_width, |delta| {
+				MenuEvent::SliderDelta(CharacterField::EyeWidth, delta)
+			}),
+			MenuNode::slider("Eye Height", &self.feature_sliders.eye_height, |delta| {
+				MenuEvent::SliderDelta(CharacterField::EyeHeight, delta)
+			}),
+			MenuNode::slider("Eye Tilt", &self.feature_sliders.eye_tilt, |delta| {
+				MenuEvent::SliderDelta(CharacterField::EyeTilt, delta)
+			}),
+			MenuNode::swatch("Eye Color", &self.eye_color, |color| {
+				MenuEvent::SetSwatch(CharacterField::EyeColor, SwatchValue::Item(color))
+			}),
+			MenuNode::asset_grid("Nose", &self.nose, base, |value| {
+				MenuEvent::SetAsset(CharacterField::Nose, AssetValue::Nose(value))
+			}),
+			MenuNode::slider("Nose Width", &self.feature_sliders.nose_width, |delta| {
+				MenuEvent::SliderDelta(CharacterField::NoseWidth, delta)
+			}),
+			MenuNode::slider("Nose Height", &self.feature_sliders.nose_height, |delta| {
+				MenuEvent::SliderDelta(CharacterField::NoseHeight, delta)
+			}),
+			MenuNode::asset_grid(
+				"Mouth",
+				&self.mouth,
+				PreviewColor::of(self.mouth_color.value),
+				|value| MenuEvent::SetAsset(CharacterField::Mouth, AssetValue::Mouth(value)),
+			),
+			MenuNode::slider("Mouth Width", &self.feature_sliders.mouth_width, |delta| {
+				MenuEvent::SliderDelta(CharacterField::MouthWidth, delta)
+			}),
+			MenuNode::slider("Mouth Height", &self.feature_sliders.mouth_height, |delta| {
+				MenuEvent::SliderDelta(CharacterField::MouthHeight, delta)
+			}),
+			MenuNode::swatch("Mouth Color", &self.mouth_color, |color| {
+				MenuEvent::SetSwatch(CharacterField::MouthColor, SwatchValue::Item(color))
+			}),
+			MenuNode::asset_grid("Ears", &self.ear, base, |value| {
+				MenuEvent::SetAsset(CharacterField::Ear, AssetValue::Ear(value))
+			}),
+			MenuNode::slider("Ear Width", &self.feature_sliders.ear_width, |delta| {
+				MenuEvent::SliderDelta(CharacterField::EarWidth, delta)
+			}),
+			MenuNode::slider("Ear Height", &self.feature_sliders.ear_height, |delta| {
+				MenuEvent::SliderDelta(CharacterField::EarHeight, delta)
+			}),
+		]
+	}
+}
+
+impl MenuTree<MenuEvent> for BraidmanMenu {
+	fn menu_nodes(&self) -> Vec<MenuNode<MenuEvent>> {
+		vec![
+			MenuNode::section(self.presets.label, self.presets.value.menu_nodes()),
+			MenuNode::section(self.body.label, self.body.value.menu_nodes()),
+			MenuNode::section(self.head_features.label, self.head_features.value.menu_nodes()),
+			MenuNode::section(self.hair.label, self.hair.value.menu_nodes()),
+			MenuNode::section(self.clothing.label, self.clothing.value.menu_nodes()),
+			MenuNode::section(self.animation.label, self.animation.value.menu_nodes()),
+		]
+	}
+}
+
 impl BraidmanMenu {
 	pub fn with_animation(mut self, animation: ConceptAnimation) -> Self {
 		self.animation.value.clip.value = animation;
@@ -270,28 +387,12 @@ impl BraidmanMenu {
 		self.animation.value.clip.value
 	}
 
-	pub fn clothing_color(&self, clothing: ClothingMesh) -> BraidmanColor {
-		self.clothing
-			.value
-			.item_colors
-			.iter()
-			.find(|choice| choice.clothing == clothing)
-			.map(|choice| choice.color)
-			.unwrap_or(self.clothing.value.default_color.value)
+	pub fn clothing_color(&self, clothing: ClothingMesh) -> ItemColor {
+		self.clothing.value.color_for(clothing)
 	}
 
-	pub fn set_clothing_color(&mut self, clothing: ClothingMesh, color: BraidmanColor) {
-		if let Some(choice) = self
-			.clothing
-			.value
-			.item_colors
-			.iter_mut()
-			.find(|choice| choice.clothing == clothing)
-		{
-			choice.color = color;
-		} else {
-			self.clothing.value.item_colors.push(ClothingColor { clothing, color });
-		}
+	pub fn set_clothing_color(&mut self, clothing: ClothingMesh, color: ItemColor) {
+		self.clothing.value.set_color(clothing, color);
 	}
 
 	pub fn camera_focus_for_field(&self, field: CharacterField) -> Option<CameraFocus> {

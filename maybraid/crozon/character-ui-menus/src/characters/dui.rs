@@ -1,19 +1,20 @@
 use character_ui_menu::{
-	AssetSingleSelect, CameraFocus, MultiSelect, Section, SingleSelect, SwatchSingleSelect,
+	AssetSingleSelect, CameraFocus, MenuNode, MenuTree, PreviewColor, Section, SingleSelect,
+	SwatchSingleSelect,
 };
+use crozon_character_items::{ClothingMesh, ItemColor};
 use crozon_characters::{
-	species::{
-		braidman::{BraidmanColor, ClothingColor},
-		common::{ClothingMesh, HairMesh},
-		dui::{DuiEyeMesh, DuiHeadMesh, DuiMouthMesh, DuiMouthColor, DuiNoseMesh, DuiSkinColor},
+	species::dui::{
+		DuiColors, DuiConfig, DuiEyeColor, DuiEyeMesh, DuiHeadMesh, DuiMouthColor, DuiMouthMesh,
+		DuiNoseColor, DuiNoseMesh, DuiSkinColor,
 	},
 	ConceptAnimation,
 };
 
 use crate::{
-	characters::braidman::AnimationMenu,
-	event::CharacterField,
+	event::{AssetValue, CharacterField, MenuEvent, SwatchValue},
 	focus::{BODY_FOCUS, EYE_FOCUS, HEAD_ROOT_FOCUS, MOUTH_FOCUS, NOSE_FOCUS},
+	shared::{AnimationMenu, ClothingMenu, HairMenu},
 };
 
 #[derive(Clone, Debug, PartialEq)]
@@ -31,29 +32,16 @@ pub struct DuiHeadFeaturesMenu {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct DuiHairMenu {
-	pub style: AssetSingleSelect<HairMesh>,
-	pub color: SwatchSingleSelect<BraidmanColor>,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct DuiClothingMenu {
-	pub layers: MultiSelect<ClothingMesh>,
-	pub default_color: SwatchSingleSelect<BraidmanColor>,
-	pub item_colors: Vec<ClothingColor>,
-}
-
-#[derive(Clone, Debug, PartialEq)]
 pub struct DuiMenu {
 	pub head: Section<DuiHeadMenu>,
 	pub head_features: Section<DuiHeadFeaturesMenu>,
-	pub hair: Section<DuiHairMenu>,
-	pub clothing: Section<DuiClothingMenu>,
+	pub hair: Section<HairMenu>,
+	pub clothing: Section<ClothingMenu>,
 	pub animation: Section<AnimationMenu>,
 }
 
-impl From<&crozon_characters::species::dui::DuiConfig> for DuiMenu {
-	fn from(config: &crozon_characters::species::dui::DuiConfig) -> Self {
+impl From<&DuiConfig> for DuiMenu {
+	fn from(config: &DuiConfig) -> Self {
 		Self {
 			head: Section::new(
 				"Head",
@@ -66,8 +54,7 @@ impl From<&crozon_characters::species::dui::DuiConfig> for DuiMenu {
 			head_features: Section::new(
 				"Head & Features",
 				DuiHeadFeaturesMenu {
-					eye: AssetSingleSelect::new(DuiEyeMesh::Thorn)
-						.with_camera_focus(EYE_FOCUS),
+					eye: AssetSingleSelect::new(DuiEyeMesh::Thorn).with_camera_focus(EYE_FOCUS),
 					nose: SingleSelect::new(config.nose),
 					mouth: AssetSingleSelect::new(DuiMouthMesh::SmallCommon)
 						.with_camera_focus(MOUTH_FOCUS),
@@ -76,47 +63,88 @@ impl From<&crozon_characters::species::dui::DuiConfig> for DuiMenu {
 			),
 			hair: Section::new(
 				"Hair",
-				DuiHairMenu {
-					style: AssetSingleSelect::new(config.hair).with_camera_focus(HEAD_ROOT_FOCUS),
-					color: SwatchSingleSelect::new(config.colors.hair),
-				},
+				HairMenu::new(config.hair, config.colors.hair, HEAD_ROOT_FOCUS),
 			),
 			clothing: Section::new(
 				"Clothing",
-				DuiClothingMenu {
-					layers: MultiSelect::new(config.clothing.clone()),
-					default_color: SwatchSingleSelect::new(config.colors.clothing_default),
-					item_colors: config.colors.clothing.clone(),
-				},
+				ClothingMenu::new(
+					config.clothing.clone(),
+					config.colors.clothing_default,
+					config.colors.clothing.clone(),
+				),
 			)
 			.with_camera_focus(BODY_FOCUS),
-			animation: Section::new(
-				"Animation",
-				AnimationMenu {
-					clip: AssetSingleSelect::new(ConceptAnimation::Still)
-						.with_camera_focus(BODY_FOCUS),
-				},
-			),
+			animation: Section::new("Animation", AnimationMenu::new(BODY_FOCUS)),
 		}
 	}
 }
 
-impl From<&DuiMenu> for crozon_characters::species::dui::DuiConfig {
+impl From<&DuiMenu> for DuiConfig {
 	fn from(menu: &DuiMenu) -> Self {
 		Self {
 			nose: menu.head_features.value.nose.value,
 			hair: menu.hair.value.style.value,
 			clothing: menu.clothing.value.layers.selected.clone(),
-			colors: crozon_characters::species::dui::DuiColors {
+			colors: DuiColors {
 				skin: menu.head.value.skin.value,
-				eyes: crozon_characters::species::dui::DuiEyeColor::Black,
-				nose_color: crozon_characters::species::dui::DuiNoseColor::Black,
+				eyes: DuiEyeColor::Black,
+				nose_color: DuiNoseColor::Black,
 				mouth: menu.head_features.value.mouth_color.value,
 				hair: menu.hair.value.color.value,
 				clothing_default: menu.clothing.value.default_color.value,
 				clothing: menu.clothing.value.item_colors.clone(),
 			},
 		}
+	}
+}
+
+impl MenuTree<MenuEvent> for DuiHeadMenu {
+	fn menu_nodes(&self) -> Vec<MenuNode<MenuEvent>> {
+		vec![
+			MenuNode::asset_grid("Head", &self.head, PreviewColor::of(self.skin.value), |value| {
+				MenuEvent::SetAsset(CharacterField::DuiHead, AssetValue::DuiHead(value))
+			}),
+			MenuNode::swatch("Skin", &self.skin, |color| {
+				MenuEvent::SetSwatch(CharacterField::DuiSkinColor, SwatchValue::DuiSkin(color))
+			}),
+		]
+	}
+}
+
+impl MenuTree<MenuEvent> for DuiHeadFeaturesMenu {
+	fn menu_nodes(&self) -> Vec<MenuNode<MenuEvent>> {
+		vec![
+			MenuNode::asset_grid(
+				"Eyes",
+				&self.eye,
+				PreviewColor::of(DuiEyeColor::Black),
+				|value| MenuEvent::SetAsset(CharacterField::DuiEye, AssetValue::DuiEye(value)),
+			),
+			MenuNode::cycle("Nose", &self.nose, |delta| {
+				MenuEvent::Cycle(CharacterField::DuiNose, delta)
+			}),
+			MenuNode::asset_grid(
+				"Mouth",
+				&self.mouth,
+				PreviewColor::of(self.mouth_color.value),
+				|value| MenuEvent::SetAsset(CharacterField::DuiMouth, AssetValue::DuiMouth(value)),
+			),
+			MenuNode::swatch("Mouth Color", &self.mouth_color, |color| {
+				MenuEvent::SetSwatch(CharacterField::DuiMouthColor, SwatchValue::DuiMouth(color))
+			}),
+		]
+	}
+}
+
+impl MenuTree<MenuEvent> for DuiMenu {
+	fn menu_nodes(&self) -> Vec<MenuNode<MenuEvent>> {
+		vec![
+			MenuNode::section(self.head.label, self.head.value.menu_nodes()),
+			MenuNode::section(self.head_features.label, self.head_features.value.menu_nodes()),
+			MenuNode::section(self.hair.label, self.hair.value.menu_nodes()),
+			MenuNode::section(self.clothing.label, self.clothing.value.menu_nodes()),
+			MenuNode::section(self.animation.label, self.animation.value.menu_nodes()),
+		]
 	}
 }
 
@@ -130,28 +158,12 @@ impl DuiMenu {
 		self.animation.value.clip.value
 	}
 
-	pub fn clothing_color(&self, clothing: ClothingMesh) -> BraidmanColor {
-		self.clothing
-			.value
-			.item_colors
-			.iter()
-			.find(|choice| choice.clothing == clothing)
-			.map(|choice| choice.color)
-			.unwrap_or(self.clothing.value.default_color.value)
+	pub fn clothing_color(&self, clothing: ClothingMesh) -> ItemColor {
+		self.clothing.value.color_for(clothing)
 	}
 
-	pub fn set_clothing_color(&mut self, clothing: ClothingMesh, color: BraidmanColor) {
-		if let Some(choice) = self
-			.clothing
-			.value
-			.item_colors
-			.iter_mut()
-			.find(|choice| choice.clothing == clothing)
-		{
-			choice.color = color;
-		} else {
-			self.clothing.value.item_colors.push(ClothingColor { clothing, color });
-		}
+	pub fn set_clothing_color(&mut self, clothing: ClothingMesh, color: ItemColor) {
+		self.clothing.value.set_color(clothing, color);
 	}
 
 	pub fn camera_focus_for_field(&self, field: CharacterField) -> Option<CameraFocus> {
@@ -175,6 +187,6 @@ impl DuiMenu {
 
 impl Default for DuiMenu {
 	fn default() -> Self {
-		Self::from(&crozon_characters::species::dui::DuiConfig::default_preview())
+		Self::from(&DuiConfig::default_preview())
 	}
 }

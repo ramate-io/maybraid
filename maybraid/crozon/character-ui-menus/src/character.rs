@@ -1,11 +1,17 @@
-use character_ui_menu::{CameraFocus, LabelOption, ListValues, Section, SingleSelect};
+use character_ui_menu::{CameraFocus, LabelOption, ListValues, MenuNode, MenuTree, SingleSelect};
 use crozon_characters::{
-	species::{braidman::BraidmanConfig, brodler::BrodlerConfig, dui::DuiConfig, lero::LeroConfig, mygr::MygrConfig, spibmom::SpibmomConfig, wumbus::WumbusConfig},
+	species::{
+		braidman::BraidmanConfig, brodler::BrodlerConfig, dui::DuiConfig, lero::LeroConfig,
+		mygr::MygrConfig, spibmom::SpibmomConfig, wumbus::WumbusConfig,
+	},
 	ConceptAnimation,
 };
 
 use crate::{
-	characters::{braidman::BraidmanMenu, brodler::BrodlerMenu, dui::DuiMenu, lero::LeroMenu, mygr::MygrMenu, spibmom::SpibmomMenu, wumbus::WumbusMenu},
+	characters::{
+		braidman::BraidmanMenu, brodler::BrodlerMenu, dui::DuiMenu, lero::LeroMenu, mygr::MygrMenu,
+		spibmom::SpibmomMenu, wumbus::WumbusMenu,
+	},
 	cycle_value,
 	event::{AssetValue, CharacterField, MenuEvent, SectionId, SwatchValue},
 };
@@ -37,7 +43,15 @@ impl ConceptSpecies {
 
 impl ListValues for ConceptSpecies {
 	fn values() -> &'static [Self] {
-		&[Self::Braidman, Self::Brodler, Self::Mygr, Self::Dui, Self::Wumbus, Self::Lero, Self::Spibmom]
+		&[
+			Self::Braidman,
+			Self::Brodler,
+			Self::Mygr,
+			Self::Dui,
+			Self::Wumbus,
+			Self::Lero,
+			Self::Spibmom,
+		]
 	}
 }
 
@@ -53,17 +67,6 @@ impl LabelOption for ConceptSpecies {
 			Self::Spibmom => "spibmom",
 		}
 	}
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub enum SpeciesMenu {
-	Braidman(Section<BraidmanMenu>),
-	Brodler(Section<BrodlerMenu>),
-	Mygr(Section<MygrMenu>),
-	Dui(Section<DuiMenu>),
-	Wumbus(Section<WumbusMenu>),
-	Lero(Section<LeroMenu>),
-	Spibmom(Section<SpibmomMenu>),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -170,23 +173,17 @@ impl CharacterMenu {
 		}
 	}
 
-	pub fn species_menu(&self) -> SpeciesMenu {
+	/// Lowers the currently selected species menu; the other species' state is
+	/// retained but not part of the tree.
+	fn species_nodes(&self) -> Vec<MenuNode<MenuEvent>> {
 		match self.species.value {
-			ConceptSpecies::Braidman => {
-				SpeciesMenu::Braidman(Section::new("Braidman", self.braidman.clone()))
-			}
-			ConceptSpecies::Brodler => {
-				SpeciesMenu::Brodler(Section::new("Brodler", self.brodler.clone()))
-			}
-			ConceptSpecies::Mygr => SpeciesMenu::Mygr(Section::new("Mygr", self.mygr.clone())),
-			ConceptSpecies::Dui => SpeciesMenu::Dui(Section::new("Dui", self.dui.clone())),
-			ConceptSpecies::Wumbus => {
-				SpeciesMenu::Wumbus(Section::new("Wumbus", self.wumbus.clone()))
-			}
-			ConceptSpecies::Lero => SpeciesMenu::Lero(Section::new("Lero", self.lero.clone())),
-			ConceptSpecies::Spibmom => {
-				SpeciesMenu::Spibmom(Section::new("Spibmom", self.spibmom.clone()))
-			}
+			ConceptSpecies::Braidman => self.braidman.menu_nodes(),
+			ConceptSpecies::Brodler => self.brodler.menu_nodes(),
+			ConceptSpecies::Mygr => self.mygr.menu_nodes(),
+			ConceptSpecies::Dui => self.dui.menu_nodes(),
+			ConceptSpecies::Wumbus => self.wumbus.menu_nodes(),
+			ConceptSpecies::Lero => self.lero.menu_nodes(),
+			ConceptSpecies::Spibmom => self.spibmom.menu_nodes(),
 		}
 	}
 
@@ -323,9 +320,10 @@ impl CharacterMenu {
 				menu.clothing.value.layers.toggle(clothing);
 				true
 			}
-			MenuEvent::SetSwatch(field, SwatchValue::Braidman(color)) => match field {
+			MenuEvent::SetSwatch(field, SwatchValue::Item(color)) => match field {
 				CharacterField::BodyColor => {
 					menu.body.value.color.value = color;
+					menu.head_features.value.body_color = color;
 					true
 				}
 				CharacterField::EyeColor => {
@@ -396,6 +394,7 @@ impl CharacterMenu {
 			MenuEvent::SetSwatch(field, value) => match (field, value) {
 				(CharacterField::SkinColor, SwatchValue::BrodlerSkin(color)) => {
 					menu.head.value.skin.value = color;
+					menu.head_features.value.skin_color = color;
 					true
 				}
 				(CharacterField::BrodlerEyeColor, SwatchValue::BrodlerEye(color)) => {
@@ -404,17 +403,18 @@ impl CharacterMenu {
 				}
 				(CharacterField::HornColor, SwatchValue::BrodlerHorn(color)) => {
 					menu.head_features.value.horn_color.value = color;
+					menu.head.value.horn_color = color;
 					true
 				}
-				(CharacterField::MouthColor, SwatchValue::Braidman(color)) => {
+				(CharacterField::MouthColor, SwatchValue::Item(color)) => {
 					menu.head_features.value.mouth_color.value = color;
 					true
 				}
-				(CharacterField::HairColor, SwatchValue::Braidman(color)) => {
+				(CharacterField::HairColor, SwatchValue::Item(color)) => {
 					menu.hair.value.color.value = color;
 					true
 				}
-				(CharacterField::Clothing(clothing), SwatchValue::Braidman(color)) => {
+				(CharacterField::Clothing(clothing), SwatchValue::Item(color)) => {
 					menu.set_clothing_color(clothing, color);
 					true
 				}
@@ -464,15 +464,15 @@ impl CharacterMenu {
 					menu.head_features.value.eye_color.value = color;
 					true
 				}
-				(CharacterField::MouthColor, SwatchValue::Braidman(color)) => {
+				(CharacterField::MouthColor, SwatchValue::Item(color)) => {
 					menu.head_features.value.mouth_color.value = color;
 					true
 				}
-				(CharacterField::HairColor, SwatchValue::Braidman(color)) => {
+				(CharacterField::HairColor, SwatchValue::Item(color)) => {
 					menu.hair.value.color.value = color;
 					true
 				}
-				(CharacterField::Clothing(clothing), SwatchValue::Braidman(color)) => {
+				(CharacterField::Clothing(clothing), SwatchValue::Item(color)) => {
 					menu.set_clothing_color(clothing, color);
 					true
 				}
@@ -527,11 +527,11 @@ impl CharacterMenu {
 					menu.head_features.value.mouth_color.value = color;
 					true
 				}
-				(CharacterField::HairColor, SwatchValue::Braidman(color)) => {
+				(CharacterField::HairColor, SwatchValue::Item(color)) => {
 					menu.hair.value.color.value = color;
 					true
 				}
-				(CharacterField::Clothing(clothing), SwatchValue::Braidman(color)) => {
+				(CharacterField::Clothing(clothing), SwatchValue::Item(color)) => {
 					menu.set_clothing_color(clothing, color);
 					true
 				}
@@ -546,8 +546,7 @@ impl CharacterMenu {
 		match event {
 			MenuEvent::ToggleSection(_) | MenuEvent::SetSpecies(_) => false,
 			MenuEvent::Cycle(CharacterField::WumbusHorns, delta) => {
-				menu.head.value.horns.value =
-					cycle_value(menu.head.value.horns.value, delta);
+				menu.head.value.horns.value = cycle_value(menu.head.value.horns.value, delta);
 				true
 			}
 			MenuEvent::SetAsset(field, value) => match (field, value) {
@@ -602,11 +601,11 @@ impl CharacterMenu {
 					menu.head.value.spine_color.value = color;
 					true
 				}
-				(CharacterField::HairColor, SwatchValue::Braidman(color)) => {
+				(CharacterField::HairColor, SwatchValue::Item(color)) => {
 					menu.hair.value.color.value = color;
 					true
 				}
-				(CharacterField::Clothing(clothing), SwatchValue::Braidman(color)) => {
+				(CharacterField::Clothing(clothing), SwatchValue::Item(color)) => {
 					menu.set_clothing_color(clothing, color);
 					true
 				}
@@ -664,11 +663,11 @@ impl CharacterMenu {
 					menu.body.value.spine_color.value = color;
 					true
 				}
-				(CharacterField::HairColor, SwatchValue::Braidman(color)) => {
+				(CharacterField::HairColor, SwatchValue::Item(color)) => {
 					menu.hair.value.color.value = color;
 					true
 				}
-				(CharacterField::Clothing(clothing), SwatchValue::Braidman(color)) => {
+				(CharacterField::Clothing(clothing), SwatchValue::Item(color)) => {
 					menu.set_clothing_color(clothing, color);
 					true
 				}
@@ -734,11 +733,11 @@ impl CharacterMenu {
 					menu.head.value.spine_color.value = color;
 					true
 				}
-				(CharacterField::HairColor, SwatchValue::Braidman(color)) => {
+				(CharacterField::HairColor, SwatchValue::Item(color)) => {
 					menu.hair.value.color.value = color;
 					true
 				}
-				(CharacterField::Clothing(clothing), SwatchValue::Braidman(color)) => {
+				(CharacterField::Clothing(clothing), SwatchValue::Item(color)) => {
 					menu.set_clothing_color(clothing, color);
 					true
 				}
@@ -746,6 +745,17 @@ impl CharacterMenu {
 			},
 			MenuEvent::Cycle(_, _) | MenuEvent::SliderDelta(_, _) => false,
 		}
+	}
+}
+
+impl MenuTree<MenuEvent> for CharacterMenu {
+	fn menu_nodes(&self) -> Vec<MenuNode<MenuEvent>> {
+		vec![MenuNode::section_select(
+			"Species",
+			self.species.value,
+			MenuEvent::SetSpecies,
+			self.species_nodes(),
+		)]
 	}
 }
 
@@ -765,7 +775,9 @@ fn apply_braidman_slider(menu: &mut BraidmanMenu, field: CharacterField, delta: 
 		CharacterField::ButtocksThickness => {
 			body.buttocks_thickness = body.buttocks_thickness.apply_delta(delta)
 		}
-		CharacterField::WaistThickness => body.waist_thickness = body.waist_thickness.apply_delta(delta),
+		CharacterField::WaistThickness => {
+			body.waist_thickness = body.waist_thickness.apply_delta(delta)
+		}
 		CharacterField::LowerTrunkThickness => {
 			body.lower_trunk_thickness = body.lower_trunk_thickness.apply_delta(delta)
 		}

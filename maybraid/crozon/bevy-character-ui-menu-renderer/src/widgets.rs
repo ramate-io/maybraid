@@ -1,6 +1,5 @@
 use bevy::prelude::*;
 use bevy::text::{LineBreak, TextBounds};
-use character_ui_menu::ThumbnailCamera;
 
 pub const BUTTON_HEIGHT: f32 = 22.0;
 pub const SELECT_TILE_SIZE: f32 = 52.0;
@@ -20,14 +19,6 @@ pub struct MenuButton<E: Copy + Send + Sync + 'static>(pub E);
 
 #[derive(Component, Clone, Copy, Debug)]
 pub struct ToggleSectionKey(pub &'static str);
-
-#[derive(Component, Clone, Copy, Debug)]
-pub struct AssetThumbnailHover {
-	pub label: &'static str,
-	pub path: &'static str,
-	pub color: Color,
-	pub camera: ThumbnailCamera,
-}
 
 pub fn render_button<E: Copy + Send + Sync + 'static>(
 	parent: &mut ChildSpawnerCommands,
@@ -181,10 +172,6 @@ pub fn compact_control_row() -> Node {
 		justify_content: JustifyContent::FlexStart,
 		..default()
 	}
-}
-
-pub fn row_node() -> Node {
-	compact_control_row()
 }
 
 pub fn color_from_hex(hex: &str) -> Color {

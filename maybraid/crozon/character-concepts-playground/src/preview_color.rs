@@ -1,25 +1,26 @@
 //! Shared preview color for material and thumbnail tinting.
 
 use bevy::prelude::*;
+use crozon_character_items::ItemColor;
 use crozon_characters::species::{
-	braidman::BraidmanColor,
 	brodler::{BrodlerEyeColor, BrodlerHornColor, BrodlerSkinColor},
-	mygr::{MygrEyeColor, MygrSkinColor},
 	dui::{DuiEyeColor, DuiMouthColor, DuiNoseColor, DuiSkinColor},
-	wumbus::{
-		WumbusEarColor, WumbusEyeColor, WumbusHornColor, WumbusMouthColor, WumbusSkinColor,
-		WumbusSpineColor,
-	},
 	lero::{LeroEyeColor, LeroMouthColor, LeroSkinColor, LeroSpineColor, LeroTailColor},
+	mygr::{MygrEyeColor, MygrSkinColor},
 	spibmom::{
 		SpibmomCrownColor, SpibmomEarColor, SpibmomEyeColor, SpibmomMouthColor, SpibmomSkinColor,
 		SpibmomSpineColor,
+	},
+	wumbus::{
+		WumbusEarColor, WumbusEyeColor, WumbusHornColor, WumbusMouthColor, WumbusSkinColor,
+		WumbusSpineColor,
 	},
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum PreviewColor {
-	Braidman(BraidmanColor),
+	/// Shared item palette: hair everywhere, plus Braidman body/eye/mouth.
+	Item(ItemColor),
 	BrodlerSkin(BrodlerSkinColor),
 	BrodlerEye(BrodlerEyeColor),
 	BrodlerHorn(BrodlerHornColor),
@@ -51,7 +52,7 @@ pub enum PreviewColor {
 impl PreviewColor {
 	pub fn bevy_color(self) -> Color {
 		match self {
-			Self::Braidman(color) => color.color(),
+			Self::Item(color) => color.color(),
 			Self::BrodlerSkin(color) => color.color(),
 			Self::BrodlerEye(color) => color.color(),
 			Self::BrodlerHorn(color) => color.color(),

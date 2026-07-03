@@ -2,9 +2,13 @@
 
 use bevy::prelude::*;
 use clap::{Args, Subcommand};
+use crozon_character_items::ClothingMesh;
 use crozon_characters::species::{
-	common::{ClothingMesh, HairMesh},
-	lero::{LeroConfig, LeroEyeColor, LeroMouthColor, LeroMouthMesh, LeroSkinColor, LeroSpineColor, LeroTailColor},
+	common::HairMesh,
+	lero::{
+		LeroConfig, LeroEyeColor, LeroMouthColor, LeroMouthMesh, LeroSkinColor, LeroSpineColor,
+		LeroTailColor,
+	},
 };
 
 use crate::{animation::ConceptAnimation, preview::ConceptPreviewConfig};
@@ -69,12 +73,7 @@ impl PreviewArgs {
 		colors.tail = self.tail;
 		colors.spine = self.spine;
 		ConceptPreviewConfig::lero_with_animation(
-			LeroConfig {
-				mouth: self.mouth,
-				hair: self.hair,
-				clothing: self.clothing,
-				colors,
-			},
+			LeroConfig { mouth: self.mouth, hair: self.hair, clothing: self.clothing, colors },
 			self.animation,
 		)
 	}

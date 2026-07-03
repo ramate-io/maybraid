@@ -2,7 +2,11 @@
 
 use std::collections::{HashMap, HashSet};
 
-use bevy::{mesh::skinning::SkinnedMesh, prelude::*, scene::{SceneInstance, SceneSpawner}};
+use bevy::{
+	mesh::skinning::SkinnedMesh,
+	prelude::*,
+	scene::{SceneInstance, SceneSpawner},
+};
 use crozon_characters::CharacterPartSlot;
 use crozon_rigs::ResolvedRigPose;
 

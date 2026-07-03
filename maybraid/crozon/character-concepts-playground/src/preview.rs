@@ -4,19 +4,18 @@
 //! `crozon-characters` and spawns Bevy scenes from the resulting assembly.
 
 use bevy::prelude::*;
+use crozon_character_items::ClothingMesh;
 use crozon_characters::{
 	assembly::{CharacterPartSlot, ResolvedCharacterAssembly},
 	species::{
 		braidman::BraidmanConfig,
 		brodler::{BrodlerConfig, BrodlerHeadMesh, HornMesh},
-		mygr::MygrConfig,
+		common::{BodyMesh, EarMesh, EyeMesh, HairMesh, HeadMesh, MouthMesh, NoseMesh},
 		dui::{DuiConfig, DuiNoseMesh},
-		wumbus::{WumbusConfig, WumbusHornMesh},
 		lero::{LeroConfig, LeroMouthMesh},
+		mygr::MygrConfig,
 		spibmom::SpibmomConfig,
-		common::{
-			BodyMesh, ClothingMesh, EarMesh, EyeMesh, HairMesh, HeadMesh, MouthMesh, NoseMesh,
-		},
+		wumbus::{WumbusConfig, WumbusHornMesh},
 		SpeciesConfig,
 	},
 	ResolvedCharacterPart, SkinTarget, SocketRig,
@@ -554,10 +553,10 @@ fn has_feature_transform(slot: CharacterPartSlot) -> bool {
 }
 
 fn preview_color_braidman(config: &BraidmanConfig, target: PreviewTarget) -> PreviewColor {
-	use crozon_characters::species::braidman::BraidmanColor;
+	use crozon_character_items::ItemColor;
 
 	let skin = config.colors.skin_color();
-	PreviewColor::Braidman(match target {
+	PreviewColor::Item(match target {
 		PreviewTarget::BraidmanBody(_) => config.colors.body,
 		PreviewTarget::BraidmanHead(_)
 		| PreviewTarget::BraidmanNose(_)
@@ -566,7 +565,7 @@ fn preview_color_braidman(config: &BraidmanConfig, target: PreviewTarget) -> Pre
 		PreviewTarget::BraidmanMouth(_) => config.colors.mouth,
 		PreviewTarget::BraidmanHair(_) => config.colors.hair,
 		PreviewTarget::BraidmanClothing(clothing) => config.colors.clothing_color(clothing),
-		_ => BraidmanColor::Natural,
+		_ => ItemColor::Natural,
 	})
 }
 
@@ -578,10 +577,10 @@ fn preview_color_brodler(config: &BrodlerConfig, target: PreviewTarget) -> Previ
 		| PreviewTarget::BrodlerEar(_) => PreviewColor::BrodlerSkin(config.colors.skin),
 		PreviewTarget::BrodlerHorns(_) => PreviewColor::BrodlerHorn(config.colors.horns),
 		PreviewTarget::BrodlerEye(_) => PreviewColor::BrodlerEye(config.colors.eyes),
-		PreviewTarget::BrodlerMouth(_) => PreviewColor::Braidman(config.colors.mouth),
-		PreviewTarget::BrodlerHair(_) => PreviewColor::Braidman(config.colors.hair),
+		PreviewTarget::BrodlerMouth(_) => PreviewColor::Item(config.colors.mouth),
+		PreviewTarget::BrodlerHair(_) => PreviewColor::Item(config.colors.hair),
 		PreviewTarget::BrodlerClothing(clothing) => {
-			PreviewColor::Braidman(config.colors.clothing_color(clothing))
+			PreviewColor::Item(config.colors.clothing_color(clothing))
 		}
 		_ => PreviewColor::BrodlerSkin(config.colors.skin),
 	}
@@ -594,10 +593,10 @@ fn preview_color_mygr(config: &MygrConfig, target: PreviewTarget) -> PreviewColo
 		| PreviewTarget::MygrEar
 		| PreviewTarget::MygrTail => PreviewColor::MygrSkin(config.colors.skin),
 		PreviewTarget::MygrEye(_) => PreviewColor::MygrEye(config.colors.eyes),
-		PreviewTarget::MygrMouth => PreviewColor::Braidman(config.colors.mouth),
-		PreviewTarget::MygrHair(_) => PreviewColor::Braidman(config.colors.hair),
+		PreviewTarget::MygrMouth => PreviewColor::Item(config.colors.mouth),
+		PreviewTarget::MygrHair(_) => PreviewColor::Item(config.colors.hair),
 		PreviewTarget::MygrClothing(clothing) => {
-			PreviewColor::Braidman(config.colors.clothing_color(clothing))
+			PreviewColor::Item(config.colors.clothing_color(clothing))
 		}
 		_ => PreviewColor::MygrSkin(config.colors.skin),
 	}
@@ -605,14 +604,15 @@ fn preview_color_mygr(config: &MygrConfig, target: PreviewTarget) -> PreviewColo
 
 fn preview_color_dui(config: &DuiConfig, target: PreviewTarget) -> PreviewColor {
 	match target {
-		PreviewTarget::DuiHead
-		| PreviewTarget::DuiBody => PreviewColor::DuiSkin(config.colors.skin),
+		PreviewTarget::DuiHead | PreviewTarget::DuiBody => {
+			PreviewColor::DuiSkin(config.colors.skin)
+		}
 		PreviewTarget::DuiNose(_) => PreviewColor::DuiNose(config.colors.nose_color),
 		PreviewTarget::DuiEye => PreviewColor::DuiEye(config.colors.eyes),
 		PreviewTarget::DuiMouth => PreviewColor::DuiMouth(config.colors.mouth),
-		PreviewTarget::DuiHair(_) => PreviewColor::Braidman(config.colors.hair),
+		PreviewTarget::DuiHair(_) => PreviewColor::Item(config.colors.hair),
 		PreviewTarget::DuiClothing(clothing) => {
-			PreviewColor::Braidman(config.colors.clothing_color(clothing))
+			PreviewColor::Item(config.colors.clothing_color(clothing))
 		}
 		_ => PreviewColor::DuiSkin(config.colors.skin),
 	}
@@ -628,9 +628,9 @@ fn preview_color_wumbus(config: &WumbusConfig, target: PreviewTarget) -> Preview
 		PreviewTarget::WumbusEye(_) => PreviewColor::WumbusEye(config.colors.eyes),
 		PreviewTarget::WumbusEar => PreviewColor::WumbusEar(config.colors.ears),
 		PreviewTarget::WumbusMouth => PreviewColor::WumbusMouth(config.colors.mouth),
-		PreviewTarget::WumbusHair(_) => PreviewColor::Braidman(config.colors.hair),
+		PreviewTarget::WumbusHair(_) => PreviewColor::Item(config.colors.hair),
 		PreviewTarget::WumbusClothing(clothing) => {
-			PreviewColor::Braidman(config.colors.clothing_color(clothing))
+			PreviewColor::Item(config.colors.clothing_color(clothing))
 		}
 		_ => PreviewColor::WumbusSkin(config.colors.skin),
 	}
@@ -638,14 +638,16 @@ fn preview_color_wumbus(config: &WumbusConfig, target: PreviewTarget) -> Preview
 
 fn preview_color_lero(config: &LeroConfig, target: PreviewTarget) -> PreviewColor {
 	match target {
-		PreviewTarget::LeroHead | PreviewTarget::LeroBody => PreviewColor::LeroSkin(config.colors.skin),
+		PreviewTarget::LeroHead | PreviewTarget::LeroBody => {
+			PreviewColor::LeroSkin(config.colors.skin)
+		}
 		PreviewTarget::LeroMouth(_) => PreviewColor::LeroMouth(config.colors.mouth),
 		PreviewTarget::LeroEye => PreviewColor::LeroEye(config.colors.eyes),
 		PreviewTarget::LeroTail => PreviewColor::LeroTail(config.colors.tail),
 		PreviewTarget::LeroSpine => PreviewColor::LeroSpine(config.colors.spine),
-		PreviewTarget::LeroHair(_) => PreviewColor::Braidman(config.colors.hair),
+		PreviewTarget::LeroHair(_) => PreviewColor::Item(config.colors.hair),
 		PreviewTarget::LeroClothing(clothing) => {
-			PreviewColor::Braidman(config.colors.clothing_color(clothing))
+			PreviewColor::Item(config.colors.clothing_color(clothing))
 		}
 		_ => PreviewColor::LeroSkin(config.colors.skin),
 	}
@@ -661,9 +663,9 @@ fn preview_color_spibmom(config: &SpibmomConfig, target: PreviewTarget) -> Previ
 		PreviewTarget::SpibmomEye(_) => PreviewColor::SpibmomEye(config.colors.eyes),
 		PreviewTarget::SpibmomEar => PreviewColor::SpibmomEar(config.colors.ears),
 		PreviewTarget::SpibmomMouth => PreviewColor::SpibmomMouth(config.colors.mouth),
-		PreviewTarget::SpibmomHair(_) => PreviewColor::Braidman(config.colors.hair),
+		PreviewTarget::SpibmomHair(_) => PreviewColor::Item(config.colors.hair),
 		PreviewTarget::SpibmomClothing(clothing) => {
-			PreviewColor::Braidman(config.colors.clothing_color(clothing))
+			PreviewColor::Item(config.colors.clothing_color(clothing))
 		}
 		_ => PreviewColor::SpibmomSkin(config.colors.skin),
 	}
@@ -903,12 +905,16 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 			ConceptPreviewConfig::Mygr { config, .. } => {
 				let target = match part.slot {
 					CharacterPartSlot::BodyMesh => PreviewTarget::MygrBody,
-					CharacterPartSlot::HeadRig | CharacterPartSlot::HeadMesh => PreviewTarget::MygrHead,
+					CharacterPartSlot::HeadRig | CharacterPartSlot::HeadMesh => {
+						PreviewTarget::MygrHead
+					}
 					CharacterPartSlot::EyeLeft | CharacterPartSlot::EyeRight => {
 						PreviewTarget::MygrEye(config.eye)
 					}
 					CharacterPartSlot::Mouth => PreviewTarget::MygrMouth,
-					CharacterPartSlot::EarLeft | CharacterPartSlot::EarRight => PreviewTarget::MygrEar,
+					CharacterPartSlot::EarLeft | CharacterPartSlot::EarRight => {
+						PreviewTarget::MygrEar
+					}
 					CharacterPartSlot::Tail => PreviewTarget::MygrTail,
 					CharacterPartSlot::Nose | CharacterPartSlot::Horns => PreviewTarget::MygrHead,
 					CharacterPartSlot::Hair => PreviewTarget::MygrHair(config.hair),
@@ -926,8 +932,12 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 			ConceptPreviewConfig::Dui { config, .. } => {
 				let target = match part.slot {
 					CharacterPartSlot::BodyMesh => PreviewTarget::DuiBody,
-					CharacterPartSlot::HeadRig | CharacterPartSlot::HeadMesh => PreviewTarget::DuiHead,
-					CharacterPartSlot::EyeLeft | CharacterPartSlot::EyeRight => PreviewTarget::DuiEye,
+					CharacterPartSlot::HeadRig | CharacterPartSlot::HeadMesh => {
+						PreviewTarget::DuiHead
+					}
+					CharacterPartSlot::EyeLeft | CharacterPartSlot::EyeRight => {
+						PreviewTarget::DuiEye
+					}
 					CharacterPartSlot::Nose => PreviewTarget::DuiNose(config.nose),
 					CharacterPartSlot::Mouth => PreviewTarget::DuiMouth,
 					CharacterPartSlot::EarLeft
@@ -949,12 +959,16 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 			ConceptPreviewConfig::Wumbus { config, .. } => {
 				let target = match part.slot {
 					CharacterPartSlot::BodyMesh => PreviewTarget::WumbusBody,
-					CharacterPartSlot::HeadRig | CharacterPartSlot::HeadMesh => PreviewTarget::WumbusHead,
+					CharacterPartSlot::HeadRig | CharacterPartSlot::HeadMesh => {
+						PreviewTarget::WumbusHead
+					}
 					CharacterPartSlot::EyeLeft | CharacterPartSlot::EyeRight => {
 						PreviewTarget::WumbusEye(config.eye)
 					}
 					CharacterPartSlot::Mouth => PreviewTarget::WumbusMouth,
-					CharacterPartSlot::EarLeft | CharacterPartSlot::EarRight => PreviewTarget::WumbusEar,
+					CharacterPartSlot::EarLeft | CharacterPartSlot::EarRight => {
+						PreviewTarget::WumbusEar
+					}
 					CharacterPartSlot::Horns => PreviewTarget::WumbusHorns(config.horns),
 					CharacterPartSlot::Spine => PreviewTarget::WumbusSpine,
 					CharacterPartSlot::Nose | CharacterPartSlot::Tail => PreviewTarget::WumbusHead,
@@ -972,8 +986,12 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 			ConceptPreviewConfig::Lero { config, .. } => {
 				let target = match part.slot {
 					CharacterPartSlot::BodyMesh => PreviewTarget::LeroBody,
-					CharacterPartSlot::HeadRig | CharacterPartSlot::HeadMesh => PreviewTarget::LeroHead,
-					CharacterPartSlot::EyeLeft | CharacterPartSlot::EyeRight => PreviewTarget::LeroEye,
+					CharacterPartSlot::HeadRig | CharacterPartSlot::HeadMesh => {
+						PreviewTarget::LeroHead
+					}
+					CharacterPartSlot::EyeLeft | CharacterPartSlot::EyeRight => {
+						PreviewTarget::LeroEye
+					}
 					CharacterPartSlot::Mouth => PreviewTarget::LeroMouth(config.mouth),
 					CharacterPartSlot::Tail => PreviewTarget::LeroTail,
 					CharacterPartSlot::Spine => PreviewTarget::LeroSpine,
@@ -995,15 +1013,21 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 			ConceptPreviewConfig::Spibmom { config, .. } => {
 				let target = match part.slot {
 					CharacterPartSlot::BodyMesh => PreviewTarget::SpibmomBody,
-					CharacterPartSlot::HeadRig | CharacterPartSlot::HeadMesh => PreviewTarget::SpibmomHead,
+					CharacterPartSlot::HeadRig | CharacterPartSlot::HeadMesh => {
+						PreviewTarget::SpibmomHead
+					}
 					CharacterPartSlot::EyeLeft | CharacterPartSlot::EyeRight => {
 						PreviewTarget::SpibmomEye(config.eye)
 					}
 					CharacterPartSlot::Nose => PreviewTarget::SpibmomMouth,
-					CharacterPartSlot::EarLeft | CharacterPartSlot::EarRight => PreviewTarget::SpibmomEar,
+					CharacterPartSlot::EarLeft | CharacterPartSlot::EarRight => {
+						PreviewTarget::SpibmomEar
+					}
 					CharacterPartSlot::Horns => PreviewTarget::SpibmomHorns,
 					CharacterPartSlot::Spine => PreviewTarget::SpibmomSpine,
-					CharacterPartSlot::Mouth | CharacterPartSlot::Tail => PreviewTarget::SpibmomHead,
+					CharacterPartSlot::Mouth | CharacterPartSlot::Tail => {
+						PreviewTarget::SpibmomHead
+					}
 					CharacterPartSlot::Hair => PreviewTarget::SpibmomHair(config.hair),
 					CharacterPartSlot::Clothing => config
 						.clothing

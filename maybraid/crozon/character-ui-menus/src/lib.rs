@@ -3,22 +3,19 @@
 pub mod character;
 pub mod characters;
 pub mod event;
-pub mod fields;
 pub mod focus;
-pub mod render;
 pub mod section_open;
+pub mod shared;
 
-pub use character::{CharacterMenu, ConceptSpecies, SectionOpenState, SpeciesMenu};
-pub use characters::{braidman::BraidmanMenu, brodler::BrodlerMenu, dui::DuiMenu, lero::LeroMenu, mygr::MygrMenu, spibmom::SpibmomMenu, wumbus::WumbusMenu};
-pub use event::{AssetValue, CharacterField, MenuEvent, SectionId, SwatchValue};
-pub use fields::{
-	AssetField, ColoredMultiSelectField, CycleField, PreviewColorSource, SliderField, SwatchField,
+pub use character::{CharacterMenu, ConceptSpecies, SectionOpenState};
+pub use characters::{
+	braidman::BraidmanMenu, brodler::BrodlerMenu, dui::DuiMenu, lero::LeroMenu, mygr::MygrMenu,
+	spibmom::SpibmomMenu, wumbus::WumbusMenu,
 };
+pub use event::{AssetValue, CharacterField, MenuEvent, SectionId, SwatchValue};
 pub use focus::BODY_FOCUS;
 
-pub use character_ui_menu::{
-	AssetOption, LabelOption, ListValues, StringIdentified, SwatchOption,
-};
+pub use character_ui_menu::{AssetOption, LabelOption, ListValues, StringIdentified, SwatchOption};
 
 pub(crate) fn cycle_value<T: ListValues>(value: T, delta: i32) -> T {
 	let values = T::values();

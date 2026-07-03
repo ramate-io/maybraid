@@ -50,10 +50,9 @@ impl WumbusAssets {
 			Some(hair) => assembly.with_part(hair),
 			None => assembly,
 		};
-		config
-			.clothing
-			.iter()
-			.fold(assembly, |assembly, clothing| assembly.with_part(Self::clothing(*clothing)))
+		config.clothing.iter().fold(assembly, |assembly, clothing| {
+			assembly.with_part(ResolvedCharacterPart::clothing(*clothing))
+		})
 	}
 
 	fn body_mesh() -> ResolvedCharacterPart {
@@ -190,15 +189,6 @@ impl WumbusAssets {
 				Transform::from_translation(Vec3::new(0.0, -0.1, 0.1)),
 			)),
 		))
-	}
-
-	fn clothing(clothing: crate::species::common::ClothingMesh) -> ResolvedCharacterPart {
-		ResolvedCharacterPart::new(
-			CharacterPartSlot::Clothing,
-			CharacterAsset::new(clothing.label(), clothing.path(), AssetNormalization::IDENTITY),
-			SkinTarget::BodyRig,
-			None,
-		)
 	}
 
 	fn head_socket(bone: &'static str, local_transform: Transform) -> SocketAttachment {

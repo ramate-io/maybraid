@@ -3,16 +3,14 @@ use bevy::input::mouse::{MouseScrollUnit, MouseWheel};
 use bevy::picking::hover::HoverMap;
 use bevy::prelude::*;
 use bevy_character_ui_menu_renderer::{
-	MenuThumbnailContext, RenderContext, Renderer,
+	BevyMenuSink, MenuSink, MenuThumbnailContext, RenderContext,
 };
-use character_ui_menu::{AssetThumbnailDisplay, ThumbnailRequest};
+use character_ui_menu::{AssetThumbnailDisplay, MenuTree, ThumbnailRequest};
 use crozon_character_ui_menus::SectionOpenState;
 use game_commands::ui::{GameCommandDrawerConfig, GameCommandStatusText, GameCommandUiConfig};
 
 use crate::{
-	menu_listeners::CharacterMenuState,
-	preview::ConceptPreviewConfig,
-	thumbnail::ThumbnailCache,
+	menu_listeners::CharacterMenuState, preview::ConceptPreviewConfig, thumbnail::ThumbnailCache,
 };
 
 pub use character_ui_menu::CameraFocus;
@@ -255,12 +253,9 @@ fn populate_creator_ui_panel(
 		sections: &ui_state.sections,
 		thumbnails: &mut cached,
 		asset_thumbnails: ui_state.asset_thumbnails,
-		preview_color: Color::WHITE,
-		base_preview_color: Color::WHITE,
-		accent_preview_color: Color::WHITE,
 		prewarm,
 	};
-	Renderer::default().render(panel, &menu_state.0, &mut context);
+	BevyMenuSink.render_nodes(&menu_state.0.menu_nodes(), panel, &mut context);
 }
 
 fn text(parent: &mut ChildSpawnerCommands, value: &str, size: f32, color: Color) {

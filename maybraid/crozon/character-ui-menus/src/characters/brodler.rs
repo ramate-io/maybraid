@@ -1,22 +1,24 @@
-use character_ui_menu::{AssetSingleSelect, CameraFocus, MultiSelect, Section, SwatchSingleSelect};
+use character_ui_menu::{
+	AssetSingleSelect, CameraFocus, MenuNode, MenuTree, PreviewColor, Section, SwatchSingleSelect,
+};
+use crozon_character_items::{ClothingMesh, ItemColor};
 use crozon_characters::{
 	species::{
-		braidman::{BraidmanColor, ClothingColor},
 		brodler::{
 			assets::HornMesh, BrodlerColors, BrodlerConfig, BrodlerEyeColor, BrodlerHeadMesh,
 			BrodlerHornColor, BrodlerSkinColor,
 		},
-		common::{ClothingMesh, EarMesh, EyeMesh, HairMesh, MouthMesh, NoseMesh},
+		common::{EarMesh, EyeMesh, MouthMesh, NoseMesh},
 	},
 	ConceptAnimation,
 };
 
 use crate::{
-	characters::braidman::AnimationMenu,
-	event::CharacterField,
+	event::{AssetValue, CharacterField, MenuEvent, SwatchValue},
 	focus::{
 		BODY_FOCUS, CROWN_FOCUS, EAR_FOCUS, EYE_FOCUS, HEAD_ROOT_FOCUS, MOUTH_FOCUS, NOSE_FOCUS,
 	},
+	shared::{AnimationMenu, ClothingMenu, HairMenu},
 };
 
 #[derive(Clone, Debug, PartialEq)]
@@ -24,6 +26,9 @@ pub struct BrodlerHeadMenu {
 	pub head: AssetSingleSelect<BrodlerHeadMesh>,
 	pub horns: AssetSingleSelect<HornMesh>,
 	pub skin: SwatchSingleSelect<BrodlerSkinColor>,
+	/// Mirror of the horn color swatch (owned by the features section);
+	/// tints the horn previews. Kept in sync when that swatch changes.
+	pub horn_color: BrodlerHornColor,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -34,28 +39,18 @@ pub struct BrodlerHeadFeaturesMenu {
 	pub ear: AssetSingleSelect<EarMesh>,
 	pub eye_color: SwatchSingleSelect<BrodlerEyeColor>,
 	pub horn_color: SwatchSingleSelect<BrodlerHornColor>,
-	pub mouth_color: SwatchSingleSelect<BraidmanColor>,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct BrodlerHairMenu {
-	pub style: AssetSingleSelect<HairMesh>,
-	pub color: SwatchSingleSelect<BraidmanColor>,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct BrodlerClothingMenu {
-	pub layers: MultiSelect<ClothingMesh>,
-	pub default_color: SwatchSingleSelect<BraidmanColor>,
-	pub item_colors: Vec<ClothingColor>,
+	pub mouth_color: SwatchSingleSelect<ItemColor>,
+	/// Mirror of the skin color swatch (owned by the head section); tints the
+	/// meshes that inherit it (nose, ears). Kept in sync when it changes.
+	pub skin_color: BrodlerSkinColor,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct BrodlerMenu {
 	pub head: Section<BrodlerHeadMenu>,
 	pub head_features: Section<BrodlerHeadFeaturesMenu>,
-	pub hair: Section<BrodlerHairMenu>,
-	pub clothing: Section<BrodlerClothingMenu>,
+	pub hair: Section<HairMenu>,
+	pub clothing: Section<ClothingMenu>,
 	pub animation: Section<AnimationMenu>,
 }
 
@@ -68,6 +63,7 @@ impl From<&BrodlerConfig> for BrodlerMenu {
 					head: AssetSingleSelect::new(config.head).with_camera_focus(HEAD_ROOT_FOCUS),
 					horns: AssetSingleSelect::new(config.horns).with_camera_focus(CROWN_FOCUS),
 					skin: SwatchSingleSelect::new(config.colors.skin),
+					horn_color: config.colors.horns,
 				},
 			),
 			head_features: Section::new(
@@ -80,31 +76,20 @@ impl From<&BrodlerConfig> for BrodlerMenu {
 					eye_color: SwatchSingleSelect::new(config.colors.eyes),
 					horn_color: SwatchSingleSelect::new(config.colors.horns),
 					mouth_color: SwatchSingleSelect::new(config.colors.mouth),
+					skin_color: config.colors.skin,
 				},
 			),
-			hair: Section::new(
-				"Hair",
-				BrodlerHairMenu {
-					style: AssetSingleSelect::new(config.hair).with_camera_focus(CROWN_FOCUS),
-					color: SwatchSingleSelect::new(config.colors.hair),
-				},
-			),
+			hair: Section::new("Hair", HairMenu::new(config.hair, config.colors.hair, CROWN_FOCUS)),
 			clothing: Section::new(
 				"Clothing",
-				BrodlerClothingMenu {
-					layers: MultiSelect::new(config.clothing.clone()),
-					default_color: SwatchSingleSelect::new(config.colors.clothing_default),
-					item_colors: config.colors.clothing.clone(),
-				},
+				ClothingMenu::new(
+					config.clothing.clone(),
+					config.colors.clothing_default,
+					config.colors.clothing.clone(),
+				),
 			)
 			.with_camera_focus(BODY_FOCUS),
-			animation: Section::new(
-				"Animation",
-				AnimationMenu {
-					clip: AssetSingleSelect::new(ConceptAnimation::Still)
-						.with_camera_focus(BODY_FOCUS),
-				},
-			),
+			animation: Section::new("Animation", AnimationMenu::new(BODY_FOCUS)),
 		}
 	}
 }
@@ -133,6 +118,76 @@ impl From<&BrodlerMenu> for BrodlerConfig {
 	}
 }
 
+impl MenuTree<MenuEvent> for BrodlerHeadMenu {
+	fn menu_nodes(&self) -> Vec<MenuNode<MenuEvent>> {
+		let base = PreviewColor::of(self.skin.value);
+		vec![
+			MenuNode::asset_grid("Head", &self.head, base, |value| {
+				MenuEvent::SetAsset(CharacterField::BrodlerHead, AssetValue::BrodlerHead(value))
+			}),
+			MenuNode::asset_grid(
+				"Horns",
+				&self.horns,
+				PreviewColor::of(self.horn_color),
+				|value| MenuEvent::SetAsset(CharacterField::Horns, AssetValue::Horns(value)),
+			),
+			MenuNode::swatch("Skin", &self.skin, |color| {
+				MenuEvent::SetSwatch(CharacterField::SkinColor, SwatchValue::BrodlerSkin(color))
+			}),
+		]
+	}
+}
+
+impl MenuTree<MenuEvent> for BrodlerHeadFeaturesMenu {
+	fn menu_nodes(&self) -> Vec<MenuNode<MenuEvent>> {
+		let base = PreviewColor::of(self.skin_color);
+		vec![
+			MenuNode::asset_grid(
+				"Eyes",
+				&self.eye,
+				PreviewColor::of(self.eye_color.value),
+				|value| MenuEvent::SetAsset(CharacterField::Eye, AssetValue::Eye(value)),
+			),
+			MenuNode::swatch("Eye Color", &self.eye_color, |color| {
+				MenuEvent::SetSwatch(
+					CharacterField::BrodlerEyeColor,
+					SwatchValue::BrodlerEye(color),
+				)
+			}),
+			MenuNode::swatch("Horn Color", &self.horn_color, |color| {
+				MenuEvent::SetSwatch(CharacterField::HornColor, SwatchValue::BrodlerHorn(color))
+			}),
+			MenuNode::asset_grid("Nose", &self.nose, base, |value| {
+				MenuEvent::SetAsset(CharacterField::Nose, AssetValue::Nose(value))
+			}),
+			MenuNode::asset_grid(
+				"Mouth",
+				&self.mouth,
+				PreviewColor::of(self.mouth_color.value),
+				|value| MenuEvent::SetAsset(CharacterField::Mouth, AssetValue::Mouth(value)),
+			),
+			MenuNode::swatch("Mouth Color", &self.mouth_color, |color| {
+				MenuEvent::SetSwatch(CharacterField::MouthColor, SwatchValue::Item(color))
+			}),
+			MenuNode::asset_grid("Ears", &self.ear, base, |value| {
+				MenuEvent::SetAsset(CharacterField::Ear, AssetValue::Ear(value))
+			}),
+		]
+	}
+}
+
+impl MenuTree<MenuEvent> for BrodlerMenu {
+	fn menu_nodes(&self) -> Vec<MenuNode<MenuEvent>> {
+		vec![
+			MenuNode::section(self.head.label, self.head.value.menu_nodes()),
+			MenuNode::section(self.head_features.label, self.head_features.value.menu_nodes()),
+			MenuNode::section(self.hair.label, self.hair.value.menu_nodes()),
+			MenuNode::section(self.clothing.label, self.clothing.value.menu_nodes()),
+			MenuNode::section(self.animation.label, self.animation.value.menu_nodes()),
+		]
+	}
+}
+
 impl BrodlerMenu {
 	pub fn with_animation(mut self, animation: ConceptAnimation) -> Self {
 		self.animation.value.clip.value = animation;
@@ -143,28 +198,12 @@ impl BrodlerMenu {
 		self.animation.value.clip.value
 	}
 
-	pub fn clothing_color(&self, clothing: ClothingMesh) -> BraidmanColor {
-		self.clothing
-			.value
-			.item_colors
-			.iter()
-			.find(|choice| choice.clothing == clothing)
-			.map(|choice| choice.color)
-			.unwrap_or(self.clothing.value.default_color.value)
+	pub fn clothing_color(&self, clothing: ClothingMesh) -> ItemColor {
+		self.clothing.value.color_for(clothing)
 	}
 
-	pub fn set_clothing_color(&mut self, clothing: ClothingMesh, color: BraidmanColor) {
-		if let Some(choice) = self
-			.clothing
-			.value
-			.item_colors
-			.iter_mut()
-			.find(|choice| choice.clothing == clothing)
-		{
-			choice.color = color;
-		} else {
-			self.clothing.value.item_colors.push(ClothingColor { clothing, color });
-		}
+	pub fn set_clothing_color(&mut self, clothing: ClothingMesh, color: ItemColor) {
+		self.clothing.value.set_color(clothing, color);
 	}
 
 	pub fn camera_focus_for_field(&self, field: CharacterField) -> Option<CameraFocus> {

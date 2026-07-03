@@ -2,8 +2,8 @@ use bevy::prelude::*;
 use camera_controls::look::CameraLookEnabled;
 use character_ui_menu::{CameraFocus, FocusRig};
 use crozon_character_playground::CameraController;
-use crozon_character_ui_menus::BODY_FOCUS;
 use crozon_character_ui_menus::focus::SPIBMOM_BODY_FOCUS;
+use crozon_character_ui_menus::BODY_FOCUS;
 
 use crate::{
 	animation::AnimatedBodyRig,
