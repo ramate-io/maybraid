@@ -84,14 +84,14 @@ pub fn image_for_asset(
 		.id();
 
 	commands.spawn((
-		SceneRoot(asset_server.load(GltfAssetLabel::Scene(0).from_asset(path))),
+		WorldAssetRoot(asset_server.load(GltfAssetLabel::Scene(0).from_asset(path))),
 		Transform::from_translation(base),
 		ThumbnailPreview { color },
 		Name::new(format!("thumbnail_asset_{label}")),
 	));
 
 	commands.spawn((
-		PointLight { intensity: 450.0, range: 6.0, shadows_enabled: false, ..default() },
+		PointLight { intensity: 450.0, range: 6.0, shadow_maps_enabled: false, ..default() },
 		Transform::from_translation(base + Vec3::new(0.3, 1.8, 1.6)),
 		Name::new(format!("thumbnail_light_{label}")),
 	));

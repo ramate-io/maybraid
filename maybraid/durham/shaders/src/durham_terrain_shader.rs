@@ -180,11 +180,11 @@ mod tests {
 			ImagePlugin::default(),
 			MeshPlugin::default(),
 			RenderPlugin {
-				render_creation: RenderCreation::Automatic(WgpuSettings {
+				render_creation: RenderCreation::Automatic(Box::new(WgpuSettings {
 					force_fallback_adapter: true,
-					priority: WgpuSettingsPriority::Compatibility,
+					priority: WgpuSettingsPriority::WebGL2,
 					..default()
-				}),
+				})),
 				..default()
 			},
 			CorePipelinePlugin::default(),

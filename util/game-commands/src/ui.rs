@@ -148,7 +148,7 @@ pub fn setup_debug_ui(
 		.with_children(|parent| {
 			parent.spawn((
 				Text::new(config.title.clone()),
-				TextFont { font_size: status_size, ..default() },
+				TextFont { font_size: FontSize::Px(status_size), ..default() },
 				TextColor(Color::WHITE),
 				HudStatusLine,
 			));
@@ -181,7 +181,7 @@ pub fn setup_debug_ui(
 						.with_children(|col| {
 							col.spawn((
 								Text::new(""),
-								TextFont { font_size: console_size, ..default() },
+								TextFont { font_size: FontSize::Px(console_size), ..default() },
 								TextColor(Color::srgba(0.95, 0.98, 1.0, 1.0)),
 								Pickable::IGNORE,
 								HudConsoleBlock,

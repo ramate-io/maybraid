@@ -730,7 +730,7 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 	fn spawn_body_rig(&mut self) -> Entity {
 		self.commands
 			.spawn((
-				SceneRoot(self.asset_server.load(
+				WorldAssetRoot(self.asset_server.load(
 					GltfAssetLabel::Scene(0).from_asset(self.assembly.body_rig.path.as_str()),
 				)),
 				CharacterRig { role: CharacterRigRole::Body },
@@ -752,7 +752,7 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 		let entity = self
 			.commands
 			.spawn((
-				SceneRoot(
+				WorldAssetRoot(
 					self.asset_server
 						.load(GltfAssetLabel::Scene(0).from_asset(part.asset.path.as_str())),
 				),
@@ -789,7 +789,7 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 		let entity = self
 			.commands
 			.spawn((
-				SceneRoot(
+				WorldAssetRoot(
 					self.asset_server
 						.load(GltfAssetLabel::Scene(0).from_asset(part.asset.path.as_str())),
 				),

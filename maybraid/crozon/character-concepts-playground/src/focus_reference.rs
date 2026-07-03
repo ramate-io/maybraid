@@ -103,7 +103,7 @@ fn spawn_focus_reference(
 ) {
 	let body_rig = commands
 		.spawn((
-			SceneRoot(
+			WorldAssetRoot(
 				asset_server
 					.load(GltfAssetLabel::Scene(0).from_asset(assembly.body_rig.path.as_str())),
 			),
@@ -127,7 +127,7 @@ fn spawn_focus_reference(
 
 	let head_rig = commands
 		.spawn((
-			SceneRoot(
+			WorldAssetRoot(
 				asset_server
 					.load(GltfAssetLabel::Scene(0).from_asset(head_part.asset.path.as_str())),
 			),

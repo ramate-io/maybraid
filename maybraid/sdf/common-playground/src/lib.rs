@@ -66,11 +66,11 @@ fn setup_preview_material(mut commands: Commands, mut materials: ResMut<Assets<S
 fn setup_lighting(mut commands: Commands) {
 	use std::f32::consts::PI;
 	commands.spawn((
-		DirectionalLight { illuminance: 10000.0, shadows_enabled: true, ..default() },
+		DirectionalLight { illuminance: 10000.0, shadow_maps_enabled: true, ..default() },
 		Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, -PI / 4.0, PI / 4.0, 0.0)),
 	));
 	commands.spawn((
-		DirectionalLight { illuminance: 500.0, shadows_enabled: false, ..default() },
+		DirectionalLight { illuminance: 500.0, shadow_maps_enabled: false, ..default() },
 		Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, PI / 4.0, -PI / 4.0, 0.0)),
 	));
 }

@@ -22,7 +22,7 @@ pub fn react_settings_checker_size(
 	for (entity, cmd) in &q {
 		playground.checker_size_meters = cmd.meters;
 		if let Some(mm) = ground_mat_q.iter().next() {
-			if let Some(m) = materials.get_mut(&mm.0) {
+			if let Some(mut m) = materials.get_mut(&mm.0) {
 				m.checker_size_m = cmd.meters;
 			}
 		}

@@ -54,7 +54,7 @@ impl Plugin for TerrainPlugin {
 fn setup_lighting(mut commands: Commands) {
 	// Main directional light (sun) - primary light source
 	commands.spawn((
-		DirectionalLight { illuminance: 10000.0, shadows_enabled: true, ..default() },
+		DirectionalLight { illuminance: 10000.0, shadow_maps_enabled: true, ..default() },
 		Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, -PI / 4.0, PI / 4.0, 0.0)),
 	));
 
@@ -62,7 +62,7 @@ fn setup_lighting(mut commands: Commands) {
 	commands.spawn((
 		DirectionalLight {
 			illuminance: 500.0,     // Increased fill light
-			shadows_enabled: false, // No shadows for fill light
+			shadow_maps_enabled: false, // No shadows for fill light
 			..default()
 		},
 		Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, PI / 4.0, -PI / 4.0, 0.0)),
@@ -71,19 +71,19 @@ fn setup_lighting(mut commands: Commands) {
 	// Additional fill lights from sides for omnidirectional illumination
 	// Left side
 	commands.spawn((
-		DirectionalLight { illuminance: 500.0, shadows_enabled: false, ..default() },
+		DirectionalLight { illuminance: 500.0, shadow_maps_enabled: false, ..default() },
 		Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, 0.0, PI / 2.0, 0.0)),
 	));
 
 	// Right side
 	commands.spawn((
-		DirectionalLight { illuminance: 500.0, shadows_enabled: false, ..default() },
+		DirectionalLight { illuminance: 500.0, shadow_maps_enabled: false, ..default() },
 		Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, 0.0, -PI / 2.0, 0.0)),
 	));
 
 	// Top-down fill light
 	commands.spawn((
-		DirectionalLight { illuminance: 500.0, shadows_enabled: false, ..default() },
+		DirectionalLight { illuminance: 500.0, shadow_maps_enabled: false, ..default() },
 		Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, -PI / 2.0, 0.0, 0.0)),
 	));
 }

@@ -5,7 +5,7 @@ use std::collections::{HashMap, HashSet};
 use bevy::{
 	mesh::skinning::SkinnedMesh,
 	prelude::*,
-	scene::{SceneInstance, SceneSpawner},
+	world_serialization::{WorldInstance, WorldInstanceSpawner},
 };
 use crozon_characters::CharacterPartSlot;
 use crozon_rigs::ResolvedRigPose;
@@ -175,8 +175,8 @@ pub fn remap_part_skin_to_rig(
 	children_q: Query<&Children>,
 	names_q: Query<&Name>,
 	mut skinned_meshes: Query<&mut SkinnedMesh>,
-	scene_instances: Query<&SceneInstance>,
-	scene_spawner: Res<SceneSpawner>,
+	scene_instances: Query<&WorldInstance>,
+	scene_spawner: Res<WorldInstanceSpawner>,
 ) {
 	for (part_root, children, part, rig_ref, _needs_remap) in &part_roots {
 		let Ok(rig_map) = rig_maps.get(rig_ref.rig_root) else {

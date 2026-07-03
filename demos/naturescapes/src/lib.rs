@@ -63,7 +63,7 @@ fn setup_lighting(mut commands: Commands) {
 			radius: 200.0,
 			intensity: 1000000000000000.0,
 			range: 1_000_000.0,
-			shadows_enabled: true,
+			shadow_maps_enabled: true,
 			..default()
 		},
 		// high in the sky

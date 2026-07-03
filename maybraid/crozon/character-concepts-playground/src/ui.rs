@@ -261,7 +261,7 @@ fn populate_creator_ui_panel(
 fn text(parent: &mut ChildSpawnerCommands, value: &str, size: f32, color: Color) {
 	parent.spawn((
 		Text::new(value.to_string()),
-		TextFont { font_size: size, ..default() },
+		TextFont { font_size: FontSize::Px(size), ..default() },
 		TextColor(color),
 		Pickable::IGNORE,
 	));

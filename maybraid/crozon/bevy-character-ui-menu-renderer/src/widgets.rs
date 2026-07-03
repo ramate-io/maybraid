@@ -81,7 +81,7 @@ pub fn render_asset_button<E: Copy + Send + Sync + 'static>(
 pub fn text(parent: &mut ChildSpawnerCommands, value: &str, size: f32, color: Color) {
 	parent.spawn((
 		Text::new(value.to_string()),
-		TextFont { font_size: size, ..default() },
+		TextFont { font_size: FontSize::Px(size), ..default() },
 		TextColor(color),
 		Pickable::IGNORE,
 	));
@@ -103,7 +103,7 @@ pub fn tile_text(parent: &mut ChildSpawnerCommands, label: &str, size: f32, colo
 	let bounds = (SELECT_TILE_SIZE - TILE_TEXT_INSET).max(12.0);
 	parent.spawn((
 		Text::new(tile_label(label)),
-		TextFont { font_size: size, ..default() },
+		TextFont { font_size: FontSize::Px(size), ..default() },
 		TextColor(color),
 		TextLayout::new(Justify::Center, LineBreak::WordBoundary),
 		TextBounds::new(bounds, bounds),

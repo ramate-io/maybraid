@@ -25,7 +25,7 @@ pub use diagnostics::fps_debug_enabled;
 pub use game_commands::command::PendingStartupCommand;
 
 use bevy::prelude::*;
-use bevy::scene::SceneSpawnerSystems;
+use bevy::app::SceneSpawnerSystems;
 use bevy_character_ui_menu_renderer::CharacterMenuRendererPlugin;
 use camera_controls::look::{CameraLookConfig, CameraLookPlugin};
 use crozon_character_playground::{camera, checkerboard_material};
@@ -129,7 +129,7 @@ impl Plugin for CrozonCharacterConceptsPlaygroundPlugin {
 					attach_parts_to_sockets.after(build_rig_bone_map).run_if(preview_pass_ready),
 					remap_part_skin_to_rig
 						.after(attach_parts_to_sockets)
-						.after(SceneSpawnerSystems::Spawn)
+						.after(SceneSpawnerSystems::WorldInstanceSpawn)
 						.run_if(preview_pass_ready),
 					prune_duplicate_part_scenes
 						.after(remap_part_skin_to_rig)
@@ -163,11 +163,11 @@ impl Plugin for CrozonCharacterConceptsPlaygroundPlugin {
 fn setup_lighting(mut commands: Commands) {
 	use std::f32::consts::PI;
 	commands.spawn((
-		DirectionalLight { illuminance: 10000.0, shadows_enabled: true, ..default() },
+		DirectionalLight { illuminance: 10000.0, shadow_maps_enabled: true, ..default() },
 		Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, -PI / 4.0, PI / 4.0, 0.0)),
 	));
 	commands.spawn((
-		DirectionalLight { illuminance: 500.0, shadows_enabled: false, ..default() },
+		DirectionalLight { illuminance: 500.0, shadow_maps_enabled: false, ..default() },
 		Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, PI / 4.0, -PI / 4.0, 0.0)),
 	));
 }
