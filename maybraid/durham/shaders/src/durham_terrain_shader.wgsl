@@ -34,6 +34,9 @@ var<uniform> terrain_noise: DurhamTerrainNoise;
 @group(#{MATERIAL_BIND_GROUP}) @binding(1)
 var<uniform> style_params: vec4<f32>;
 
+@group(#{MATERIAL_BIND_GROUP}) @binding(2)
+var<uniform> base_color: vec4<f32>;
+
 fn saturate(x: f32) -> f32 {
     return clamp(x, 0.0, 1.0);
 }
@@ -179,9 +182,10 @@ fn fragment(
     mesh: VertexOutput
 ) -> @location(0) vec4<f32> {
     var pbr_input: PbrInput = pbr_input_new();
-    let ground = ground_color(mesh.world_position.xyz);
+    let palette = ground_color(mesh.world_position.xyz);
+    let ground = palette * base_color.rgb;
 
-    pbr_input.material.base_color = vec4<f32>(ground, 1.0);
+    pbr_input.material.base_color = vec4<f32>(ground, base_color.a);
     pbr_input.material.metallic = 0.0;
     pbr_input.material.perceptual_roughness = 1.0;
     pbr_input.frag_coord = mesh.position;

@@ -30,6 +30,9 @@ pub struct DurhamTerrainShader {
 	/// `x` = reserved, `y` = edge strength, `z` = edge darkness, `w` = lit mix.
 	#[uniform(1)]
 	pub style_params: Vec4,
+	/// RGB tint multiplied into the palette noise color; **w** = alpha.
+	#[uniform(2)]
+	pub base_color: Vec4,
 }
 
 impl Default for DurhamTerrainShader {
@@ -37,6 +40,7 @@ impl Default for DurhamTerrainShader {
 		Self {
 			terrain_noise: DurhamTerrainNoiseUniform::default(),
 			style_params: Vec4::new(0.0, 2.0, 0.05, 0.72),
+			base_color: Vec4::new(1.0, 1.0, 1.0, 1.0),
 		}
 	}
 }
@@ -52,6 +56,13 @@ impl DurhamTerrainShader {
 	/// Sets global and every band FBM seed to **`seed`** ([`DurhamTerrainNoiseUniform::with_seed_uniform_across_bands`]).
 	pub fn with_noise_seed_uniform(mut self, seed: f32) -> Self {
 		self.terrain_noise = self.terrain_noise.with_seed_uniform_across_bands(seed);
+		self
+	}
+
+	/// Multiplies the procedural palette by this RGB(A) tint.
+	#[inline]
+	pub fn with_base_color(mut self, base_color: Vec4) -> Self {
+		self.base_color = base_color;
 		self
 	}
 }
@@ -83,6 +94,14 @@ mod tests {
 		assert!((m.terrain_noise.regional_blend.x - 0.00015).abs() < 1e-8);
 		assert!((m.terrain_noise.regional_blend.y - 0.5).abs() < 1e-8);
 		assert!((m.style_params.w - 0.72).abs() < 1e-5);
+		assert!((m.base_color.x - 1.0).abs() < 1e-5);
+	}
+
+	#[test]
+	fn with_base_color_sets_tint() {
+		let tint = Vec4::new(0.5, 0.2, 0.2, 1.0);
+		let m = DurhamTerrainShader::default().with_base_color(tint);
+		assert_eq!(m.base_color, tint);
 	}
 
 	#[test]
