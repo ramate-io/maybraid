@@ -122,7 +122,7 @@ where
 ///
 /// In theory, we could just make a single build path
 /// and use marker types to differentiate implementation behavior.
-pub trait BuildWithIdLod<S, T>: Sized {
+pub trait BuildWithIdLod<S>: Sized {
 	/// Builds the instance.
 	fn build_with_id(spatial_index: &mut S, id: Id) -> Option<(Self, Aabb3d)>;
 
@@ -157,7 +157,7 @@ pub trait GeneratingSpatialIndex<T>: SpatialIndex<T> {
 impl<T, S> GeneratingSpatialIndex<T> for S
 where
 	S: SpatialIndex<T>,
-	T: BuildWithIdLod<S, T>,
+	T: BuildWithIdLod<S>,
 {
 	fn get_or_generate(&mut self, id: Id, lod_ref: &LodRef) -> Option<&T> {
 		self.get(id).or_else(|| {
