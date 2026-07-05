@@ -220,6 +220,9 @@ impl<
 		self.spatial_index().get_bounds(id)
 	}
 
+	/// Overwrites the insertion system to use the scene spawner.
+	///
+	/// This means that get_or_generate and get_or_generate_region will use the scene spawner to load the scene.
 	fn insert(&mut self, id: Id, t: T, bounds: Aabb3d, lod_ref: &LodRef) {
 		let (spatial_index, spawner) = self.borrow_parts_mut();
 		spawner.spawn_scene(id, t.scene_for_lod(lod_ref), PhantomData::<T>);
