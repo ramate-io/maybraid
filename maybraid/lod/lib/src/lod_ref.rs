@@ -18,7 +18,7 @@ pub enum LodRequest {
 }
 
 #[derive(Debug, Clone)]
-pub struct LodRef<'a, T> {
+pub struct LodRef<'a> {
 	/// The entity that triggered the LOD change.
 	///
 	/// For the most part, the developer will not use this.
@@ -31,5 +31,4 @@ pub struct LodRef<'a, T> {
 	pub current_transform: &'a Transform,
 	/// The bounds of the entity that triggered the LOD change.
 	pub bounds: &'a Aabb3d,
-	marker: PhantomData<T>,
 }

@@ -1,6 +1,7 @@
 use crate::lod_ref::LodRef;
 use bevy::{math::bounding::Aabb3d, scene::Scene};
 use std::collections::HashSet;
+use std::marker::PhantomData;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Cell {}
@@ -54,7 +55,10 @@ pub trait BaseSpatialIndex<T> {
 	}
 
 	/// Inserts the type into the spatial index.
-	fn insert(&mut self, id: Id, t: T, bounds: Aabb3d);
+	///
+	/// For the most part, the developer will ignore the lod ref.
+	/// However, scene spawners may use it to determine how to spawn the scene.
+	fn insert(&mut self, id: Id, t: T, bounds: Aabb3d, lod_ref: &LodRef);
 }
 
 pub trait SpatialIndex<T>: BaseSpatialIndex<T> {
@@ -123,23 +127,23 @@ pub trait BuildWithIdLod<S, T>: Sized {
 	fn build_with_id(spatial_index: &mut S, id: Id) -> Option<(Self, Aabb3d)>;
 
 	/// Builds and populates the spatial index with any descendants for the give LOD
-	fn descendants_with_lod(&self, spatial_index: &mut S, lod_ref: &LodRef<T>);
+	fn descendants_with_lod(&self, spatial_index: &mut S, lod_ref: &LodRef);
 }
 
-pub trait LodScene<T> {
+pub trait LodScene {
 	/// Produces a scene for the given lod reference.
-	fn scene_for_lod(&self, lod_ref: &LodRef<T>) -> impl Scene;
+	fn scene_for_lod(&self, lod_ref: &LodRef) -> impl Scene;
 }
 
 pub trait GeneratingSpatialIndex<T>: SpatialIndex<T> {
 	/// Generates the type for the given id.
-	fn get_or_generate(&mut self, id: Id, lod_ref: &LodRef<T>) -> Option<&T>;
+	fn get_or_generate(&mut self, id: Id, lod_ref: &LodRef) -> Option<&T>;
 
 	/// Gets or generates the region
 	fn get_or_generate_region(
 		&mut self,
 		region: Aabb3d,
-		lod_ref: &LodRef<T>,
+		lod_ref: &LodRef,
 	) -> impl Iterator<Item = (Id, &T, Aabb3d)> {
 		self.deduplicated_ids_for(region)
 			.map(|id| {
@@ -155,10 +159,10 @@ where
 	S: SpatialIndex<T>,
 	T: BuildWithIdLod<S, T>,
 {
-	fn get_or_generate(&mut self, id: Id, lod_ref: &LodRef<T>) -> Option<&T> {
+	fn get_or_generate(&mut self, id: Id, lod_ref: &LodRef) -> Option<&T> {
 		self.get(id).or_else(|| {
 			let (instance, bounds) = T::build_with_id(self, id)?;
-			self.insert(id, instance, bounds);
+			self.insert(id, instance, bounds, &lod_ref);
 
 			// It'd be nice if we could find a way to short-circuit this.
 			// But, we need the instance in the spatial index
@@ -173,4 +177,52 @@ where
 	}
 }
 
-pub trait SceneGeneratingSpatialIndex<T>: SpatialIndex<T> {}
+pub trait SceneSpawner<T> {
+	/// Do we need this phanton data or should we just use as expressions?
+	fn spawn_scene(&mut self, id: Id, scene: impl Scene, marker: PhantomData<T>);
+}
+
+/// Scene loader mostly serves as middleware on the spatial index
+/// to load the scene in via the spawner.
+pub trait SceneLoader<
+	T: LodScene,
+	SpatialIndex: GeneratingSpatialIndex<T>,
+	Spawner: SceneSpawner<T>,
+>
+{
+	fn spatial_index(&self) -> &SpatialIndex;
+
+	fn spatial_index_mut(&mut self) -> &mut SpatialIndex;
+
+	fn borrow_parts_mut(&mut self) -> (&mut SpatialIndex, &mut Spawner);
+}
+
+impl<
+		T: LodScene,
+		SpatialIndex: GeneratingSpatialIndex<T> + 'static,
+		Spawner: SceneSpawner<T> + 'static,
+		Loader: SceneLoader<T, SpatialIndex, Spawner>,
+	> BaseSpatialIndex<T> for Loader
+{
+	fn tracked_ids_for(&self, region: Aabb3d) -> impl Iterator<Item = TrackedId> {
+		self.spatial_index().tracked_ids_for(region)
+	}
+
+	fn storage_status(&self, id: Id) -> StorageStatus {
+		self.spatial_index().storage_status(id)
+	}
+
+	fn get(&self, id: Id) -> Option<&T> {
+		self.spatial_index().get(id)
+	}
+
+	fn get_bounds(&self, id: Id) -> Option<Aabb3d> {
+		self.spatial_index().get_bounds(id)
+	}
+
+	fn insert(&mut self, id: Id, t: T, bounds: Aabb3d, lod_ref: &LodRef) {
+		let (spatial_index, spawner) = self.borrow_parts_mut();
+		spawner.spawn_scene(id, t.scene_for_lod(lod_ref), PhantomData::<T>);
+		spatial_index.insert(id, t, bounds, lod_ref);
+	}
+}
