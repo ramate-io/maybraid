@@ -1,8 +1,9 @@
-use crate::gen_v2::{
-	BaseSpatialIndex, BuildWithIdLod, GeneratingSpatialIndex, Id, LodRef, LodScene, Materialize,
+use crate::gen::{
+	BaseSpatialIndex, BuildWithIdLod, GeneratingSpatialIndex, Id, LodScene, Materialize,
 	MaterializeStatus, OriginalId, OriginalIds, SceneLoader, ScenePatchStatus, SceneSpawner,
 	StorageStatus, TrackedId,
 };
+use crate::lod_ref::LodRef;
 use bevy::math::bounding::{Aabb3d, IntersectsVolume};
 use bevy::scene::{ResolveContext, ResolvedScene, Scene, SceneFunction};
 use bevy::{math::Vec3, prelude::Entity};
@@ -33,16 +34,16 @@ pub fn moss_id(leaf: Id) -> Id {
 
 fn child_id(parent: Id, depth: u8) -> Id {
 	match parent {
-		Id::OriginCell(crate::gen_v2::OriginCell(crate::gen_v2::Cell(bounds))) => {
+		Id::OriginCell(crate::gen::OriginCell(crate::gen::Cell(bounds))) => {
 			let mut bytes = [0u8; 32];
 			bytes[0] = bounds.min.x as u8;
 			bytes[1] = depth;
-			Id::Bytes(crate::gen_v2::Bytes(bytes))
+			Id::Bytes(crate::gen::Bytes(bytes))
 		}
 		Id::Bytes(bytes) => {
 			let mut child = bytes.0;
 			child[1] = depth;
-			Id::Bytes(crate::gen_v2::Bytes(child))
+			Id::Bytes(crate::gen::Bytes(child))
 		}
 	}
 }
@@ -206,7 +207,7 @@ impl OriginalIds<WorldIndex> for Moss {
 	}
 }
 
-fn cell_from_bytes(bytes: crate::gen_v2::Bytes) -> Aabb3d {
+fn cell_from_bytes(bytes: crate::gen::Bytes) -> Aabb3d {
 	cell(bytes.0[0] as f32)
 }
 
@@ -244,7 +245,7 @@ where
 	fn build_with_id(spatial_index: &mut S, id: Id, _lod_ref: &LodRef) -> Option<(Self, Aabb3d)> {
 		let bounds = match id {
 			Id::Bytes(bytes) => cell_from_bytes(bytes),
-			Id::OriginCell(crate::gen_v2::OriginCell(crate::gen_v2::Cell(bounds))) => bounds,
+			Id::OriginCell(crate::gen::OriginCell(crate::gen::Cell(bounds))) => bounds,
 		};
 		let parent = Id::from_cell(bounds);
 		if BaseSpatialIndex::<Vegetation>::get(spatial_index, parent).is_none() {
@@ -265,7 +266,7 @@ where
 	fn build_with_id(spatial_index: &mut S, id: Id, _lod_ref: &LodRef) -> Option<(Self, Aabb3d)> {
 		let bounds = match id {
 			Id::Bytes(bytes) => cell_from_bytes(bytes),
-			Id::OriginCell(crate::gen_v2::OriginCell(crate::gen_v2::Cell(bounds))) => bounds,
+			Id::OriginCell(crate::gen::OriginCell(crate::gen::Cell(bounds))) => bounds,
 		};
 		let parent = tree_id(Id::from_cell(bounds));
 		if BaseSpatialIndex::<Tree>::get(spatial_index, parent).is_none() {
@@ -286,7 +287,7 @@ where
 	fn build_with_id(spatial_index: &mut S, id: Id, _lod_ref: &LodRef) -> Option<(Self, Aabb3d)> {
 		let bounds = match id {
 			Id::Bytes(bytes) => cell_from_bytes(bytes),
-			Id::OriginCell(crate::gen_v2::OriginCell(crate::gen_v2::Cell(bounds))) => bounds,
+			Id::OriginCell(crate::gen::OriginCell(crate::gen::Cell(bounds))) => bounds,
 		};
 		let parent = leaf_id(tree_id(Id::from_cell(bounds)));
 		if BaseSpatialIndex::<Leaf>::get(spatial_index, parent).is_none() {

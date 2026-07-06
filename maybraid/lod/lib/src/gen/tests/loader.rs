@@ -1,5 +1,5 @@
 use super::test_utils::*;
-use crate::gen_v2::{BaseSpatialIndex, Id, MaterializeStatus, SceneLoader};
+use crate::gen::{BaseSpatialIndex, Id, MaterializeStatus, SceneLoader};
 use anyhow::Result;
 
 #[test]

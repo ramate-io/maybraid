@@ -1,5 +1,5 @@
 use super::test_utils::*;
-use crate::gen_v2::{BaseSpatialIndex, GeneratingSpatialIndex, Id, MaterializeStatus};
+use crate::gen::{BaseSpatialIndex, GeneratingSpatialIndex, Id, MaterializeStatus};
 use anyhow::Result;
 
 #[test]
