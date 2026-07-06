@@ -21,10 +21,24 @@ pub trait LodScene {
 
 /// Presents one layer (`T`) of a spatial index over a region.
 ///
-/// A top-level controller overrides [`RegionPresenter::present_all`] to chain
-/// the descendant layers it wants visible; presentation order and selection
-/// are policy, unlike generation-tree recursion which is a data dependency and
-/// stays automatic in [`crate::gen::GeneratingSpatialIndex`].
+/// [`RegionPresenter::present`] is the per-layer algorithm: diff versions,
+/// handle new or changed ids, then [`RegionPresenter::remove_stale`].
+///
+/// Two extension points sit above it:
+///
+/// - [`RegionPresenter::present_with_descendants`] — compose the logical
+///   descendant layers of a generation chain. Override this on types that
+///   own a subtree and delegate to child-layer presenters.
+/// - [`RegionPresenter::present_all`] — liberal entry point for "present
+///   everything relevant in this region." A common pattern for types at the
+///   **root of a generation hierarchy** is to delegate here to that root's
+///   [`RegionPresenter::present_with_descendants`]. Types used this way are
+///   **index types**: they name a hierarchy and can be referred to when
+///   indexing that tree from its root.
+///
+/// Generation-tree recursion stays automatic in
+/// [`crate::gen::GeneratingSpatialIndex`]; presentation order and layer
+/// selection are policy, expressed through these overrides.
 pub trait RegionPresenter<T, S>
 where
 	T: LodScene,
@@ -67,8 +81,23 @@ where
 		self.remove_stale(region, &wanted);
 	}
 
-	/// By default presents just this layer. Top-level controllers override
-	/// this to also present descendant layers.
+	/// Present this layer and its logical descendants in the generation chain.
+	///
+	/// **Contract:** overrides should delegate to descendant-layer presenters,
+	/// composing the visible tree layer by layer. The default presents only
+	/// this layer ([`RegionPresenter::present`]).
+	fn present_with_descendants(&mut self, spatial_index: &S, region: Aabb3d, lod_ref: &LodRef) {
+		self.present(spatial_index, region, lod_ref);
+	}
+
+	/// Present everything relevant for this region.
+	///
+	/// **Contract:** intentionally liberal — callers may use this for ad-hoc
+	/// composition. A common pattern for an **index type** (the root of a
+	/// generation hierarchy) is to forward to that root's
+	/// [`RegionPresenter::present_with_descendants`], so referring to the
+	/// index type indexes the whole tree from its root. The default presents
+	/// only this layer ([`RegionPresenter::present`]).
 	fn present_all(&mut self, spatial_index: &S, region: Aabb3d, lod_ref: &LodRef) {
 		self.present(spatial_index, region, lod_ref);
 	}
