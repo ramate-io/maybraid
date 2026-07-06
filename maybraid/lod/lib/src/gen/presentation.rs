@@ -21,8 +21,9 @@ pub trait LodScene {
 
 /// Presents one layer (`T`) of a spatial index over a region.
 ///
-/// [`RegionPresenter::present`] is the per-layer algorithm: diff versions,
-/// handle new or changed ids, then [`RegionPresenter::remove_stale`].
+/// [`RegionPresenter::present`] is the per-layer entry point: wanted ids are
+/// spawned or patched first, then stale ids are removed. Healing is part of
+/// presentation, not a separate caller concern.
 ///
 /// Two extension points sit above it:
 ///
@@ -30,11 +31,12 @@ pub trait LodScene {
 ///   descendant layers of a generation chain. Override this on types that
 ///   own a subtree and delegate to child-layer presenters.
 /// - [`RegionPresenter::present_all`] — liberal entry point for "present
-///   everything relevant in this region." A common pattern for types at the
-///   **root of a generation hierarchy** is to delegate here to that root's
-///   [`RegionPresenter::present_with_descendants`]. Types used this way are
-///   **index types**: they name a hierarchy and can be referred to when
-///   indexing that tree from its root.
+///   everything relevant in this region." Defaults to
+///   [`RegionPresenter::present_with_descendants`]. A common pattern for types
+///   at the **root of a generation hierarchy** is to override
+///   `present_with_descendants` on that root; types used this way are **index
+///   types**: they name a hierarchy and can be referred to when indexing that
+///   tree from its root.
 ///
 /// Generation-tree recursion stays automatic in
 /// [`crate::gen::GeneratingSpatialIndex`]; presentation order and layer
@@ -53,13 +55,17 @@ where
 
 	/// Removes presented ids within the region that are not in `wanted`.
 	///
-	/// Contract: strictly removal. This runs *after* the handle pass in
-	/// [`RegionPresenter::present`], so every wanted id has already been
-	/// presented; the only remaining job is dropping stale ones. Moved assets
-	/// are covered by the pair: the old region's pass removes the id here,
-	/// the new region's handle pass presents it.
+	/// Contract: strictly removal. [`RegionPresenter::present`] invokes this
+	/// after the handle pass, so every wanted id has already been presented.
 	fn remove_stale(&mut self, region: Aabb3d, wanted: &HashSet<Id>);
 
+	/// Presents and heals this layer.
+	///
+	/// Contract:
+	///
+	/// - wanted ids are spawned or patched first
+	/// - stale ids are removed after
+	/// - callers should use this method for all normal presentation
 	fn present(&mut self, spatial_index: &S, region: Aabb3d, lod_ref: &LodRef) {
 		let wanted: HashSet<Id> = spatial_index
 			.tracked_ids_for(region)
@@ -71,7 +77,12 @@ where
 			let Some(version) = spatial_index.version(id) else {
 				continue;
 			};
-			if self.presented_version(id).is_none_or(|presented| presented < version) {
+
+			let needs_present = self
+				.presented_version(id)
+				.is_none_or(|presented| presented < version);
+
+			if needs_present || self.needs_repair(region, id, version) {
 				if let Some(instance) = spatial_index.get(id) {
 					self.handle(id, version, instance.scene_with_lod(lod_ref), lod_ref);
 				}
@@ -79,6 +90,15 @@ where
 		}
 
 		self.remove_stale(region, &wanted);
+	}
+
+	/// Optional runtime-world check.
+	///
+	/// Lets the presenter repair an id even when its version has not changed,
+	/// e.g. the entity was healed away, parented under the wrong chunk, or
+	/// otherwise missing from the expected region.
+	fn needs_repair(&self, _region: Aabb3d, _id: Id, _version: Version) -> bool {
+		false
 	}
 
 	/// Present this layer and its logical descendants in the generation chain.
@@ -93,12 +113,9 @@ where
 	/// Present everything relevant for this region.
 	///
 	/// **Contract:** intentionally liberal — callers may use this for ad-hoc
-	/// composition. A common pattern for an **index type** (the root of a
-	/// generation hierarchy) is to forward to that root's
-	/// [`RegionPresenter::present_with_descendants`], so referring to the
-	/// index type indexes the whole tree from its root. The default presents
-	/// only this layer ([`RegionPresenter::present`]).
+	/// composition. Defaults to [`RegionPresenter::present_with_descendants`].
+	/// Index types override `present_with_descendants` on the hierarchy root.
 	fn present_all(&mut self, spatial_index: &S, region: Aabb3d, lod_ref: &LodRef) {
-		self.present(spatial_index, region, lod_ref);
+		self.present_with_descendants(spatial_index, region, lod_ref);
 	}
 }

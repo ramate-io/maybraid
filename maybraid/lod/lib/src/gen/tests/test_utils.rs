@@ -343,12 +343,18 @@ pub struct RecordingPresenter {
 	pub leaves: HashMap<Id, Version>,
 	pub moss: HashMap<Id, Version>,
 	pub ops: Vec<PresenterOp>,
+	/// Ids flagged for repair even when storage version is unchanged.
+	pub repair_ids: HashSet<Id>,
 }
 
 macro_rules! presenter_methods {
 	($field:ident) => {
 		fn presented_version(&self, id: Id) -> Option<Version> {
 			self.$field.get(&id).copied()
+		}
+
+		fn needs_repair(&self, _region: Aabb3d, id: Id, _version: Version) -> bool {
+			self.repair_ids.contains(&id)
 		}
 
 		fn handle(&mut self, id: Id, version: Version, _scene: impl Scene, _lod_ref: &LodRef) {
@@ -382,12 +388,12 @@ impl_presenter!(Tree, trees);
 impl_presenter!(Leaf, leaves);
 impl_presenter!(Moss, moss);
 
-/// The vegetation layer acts as the top-level controller: `present_all`
-/// chains every layer the controller wants visible.
+/// Vegetation is the index type for this hierarchy: `present_with_descendants`
+/// composes every layer; `present_all` uses the default and forwards here.
 impl RegionPresenter<Vegetation, WorldIndex> for RecordingPresenter {
 	presenter_methods!(vegetation);
 
-	fn present_all(&mut self, spatial_index: &WorldIndex, region: Aabb3d, lod_ref: &LodRef) {
+	fn present_with_descendants(&mut self, spatial_index: &WorldIndex, region: Aabb3d, lod_ref: &LodRef) {
 		RegionPresenter::<Terrain, WorldIndex>::present(self, spatial_index, region, lod_ref);
 		RegionPresenter::<Vegetation, WorldIndex>::present(self, spatial_index, region, lod_ref);
 		RegionPresenter::<Tree, WorldIndex>::present(self, spatial_index, region, lod_ref);
