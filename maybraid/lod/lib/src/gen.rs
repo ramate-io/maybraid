@@ -1,26 +1,35 @@
-//! LOD spatial loading sketch.
+//! LOD spatial generation and presentation.
 //!
-//! Main idea:
+//! Three phases, three submodules:
 //!
-//! - `SpatialIndex<T>` owns spatial truth.
-//! - `GeneratingSpatialIndex<T>` materializes missing values.
-//! - `SceneLoader` is middleware over generation that can also spawn/heal.
+//! - [`spatial_index`]: storage truth. Values, bounds, and [`Version`] stamps
+//!   by [`Id`]. Never generates, never presents.
+//! - [`generation`]: pure materialization. [`GenerationScheme`] defines
+//!   origins, building, and descendants per type; the single blanket lift to
+//!   [`GeneratingSpatialIndex`] recurses the whole tree with no scene
+//!   side effects.
+//! - [`presentation`]: a separate pass after generation. [`RegionPresenter`]
+//!   diffs storage versions against what it has presented, handles new or
+//!   changed ids, then removes stale ones.
 //!
-//! Pitfall avoided:
-//! spawning from `insert()` is too implicit. It can make descendant generation
-//! accidentally spawn visuals and can miss moved assets that need healing first.
+//! Pitfalls avoided:
+//!
+//! - Spawning from `insert()` or from inside generation is too implicit; it
+//!   couples visual effects to data recursion and can present descendants
+//!   that were only meant to be indexed.
+//! - Transient "created" events between the phases would need a commit
+//!   protocol (who drains, when, how many consumers). Version stamps carry
+//!   the same information as plain data.
 
 mod generation;
 mod id;
-mod loader;
-mod scene;
+mod presentation;
 mod spatial_index;
 
 #[cfg(test)]
 mod tests;
 
-pub use generation::{BuildWithIdLod, GeneratingSpatialIndex, MaterializeStatus};
+pub use generation::{GeneratingSpatialIndex, GenerationScheme, MaterializeStatus};
 pub use id::{Bytes, Cell, Id, OriginCell, OriginalId, StorageStatus, TrackedId};
-pub use loader::{Materialize, SceneLoader};
-pub use scene::{LodScene, ScenePatchStatus, SceneSpawner};
-pub use spatial_index::{BaseSpatialIndex, OriginalIds, SpatialIndex};
+pub use presentation::{LodScene, RegionPresenter};
+pub use spatial_index::{SpatialIndex, Version};

@@ -1,14 +1,12 @@
 use crate::gen::{
-	BaseSpatialIndex, BuildWithIdLod, GeneratingSpatialIndex, Id, LodScene, Materialize,
-	MaterializeStatus, OriginalId, OriginalIds, SceneLoader, ScenePatchStatus, SceneSpawner,
-	StorageStatus, TrackedId,
+	GeneratingSpatialIndex, GenerationScheme, Id, LodScene, OriginalId, RegionPresenter,
+	SpatialIndex, StorageStatus, TrackedId, Version,
 };
 use crate::lod_ref::LodRef;
 use bevy::math::bounding::{Aabb3d, IntersectsVolume};
 use bevy::scene::{ResolveContext, ResolvedScene, Scene, SceneFunction};
 use bevy::{math::Vec3, prelude::Entity};
-use std::collections::HashMap;
-use std::marker::PhantomData;
+use std::collections::{HashMap, HashSet};
 
 pub fn empty_scene(_: &mut ResolveContext, _: &mut ResolvedScene) {}
 
@@ -18,6 +16,10 @@ pub fn stub_scene() -> impl Scene + 'static {
 
 pub fn cell(x: f32) -> Aabb3d {
 	Aabb3d::from_min_max(Vec3::new(x, 0.0, 0.0), Vec3::new(x + 1.0, 1.0, 1.0))
+}
+
+pub fn span(min_x: f32, max_x: f32) -> Aabb3d {
+	Aabb3d::from_min_max(Vec3::new(min_x, 0.0, 0.0), Vec3::new(max_x, 1.0, 1.0))
 }
 
 pub fn tree_id(veg_id: Id) -> Id {
@@ -48,6 +50,10 @@ fn child_id(parent: Id, depth: u8) -> Id {
 	}
 }
 
+fn cell_from_bytes(bytes: crate::gen::Bytes) -> Aabb3d {
+	cell(bytes.0[0] as f32)
+}
+
 pub struct TestLod {
 	pub entity: Entity,
 	prev: bevy::prelude::Transform,
@@ -74,6 +80,10 @@ impl TestLod {
 		}
 	}
 }
+
+// -----------------------------------------------------------------------------
+// Asset hierarchy: Vegetation depends on Terrain; descendants Tree → Leaf → Moss.
+// -----------------------------------------------------------------------------
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Terrain {
@@ -109,10 +119,6 @@ macro_rules! impl_lod_scene {
 			fn scene_with_lod(&self, _lod_ref: &LodRef) -> impl Scene + 'static {
 				stub_scene()
 			}
-
-			fn scene_patch_status(&self, _lod_ref: &LodRef) -> ScenePatchStatus {
-				ScenePatchStatus::Unchanged
-			}
 		}
 	};
 }
@@ -123,22 +129,40 @@ impl_lod_scene!(Tree);
 impl_lod_scene!(Leaf);
 impl_lod_scene!(Moss);
 
-#[derive(Default)]
-pub struct WorldIndex {
-	pub terrain: HashMap<Id, (Terrain, Aabb3d)>,
-	pub vegetation: HashMap<Id, (Vegetation, Aabb3d)>,
-	pub trees: HashMap<Id, (Tree, Aabb3d)>,
-	pub leaves: HashMap<Id, (Leaf, Aabb3d)>,
-	pub moss: HashMap<Id, (Moss, Aabb3d)>,
+// -----------------------------------------------------------------------------
+// Storage
+// -----------------------------------------------------------------------------
+
+pub struct StoredEntry<T> {
+	pub value: T,
+	pub bounds: Aabb3d,
+	pub version: Version,
 }
 
-macro_rules! impl_base_spatial_index {
+#[derive(Default)]
+pub struct WorldIndex {
+	next_version: u64,
+	pub terrain: HashMap<Id, StoredEntry<Terrain>>,
+	pub vegetation: HashMap<Id, StoredEntry<Vegetation>>,
+	pub trees: HashMap<Id, StoredEntry<Tree>>,
+	pub leaves: HashMap<Id, StoredEntry<Leaf>>,
+	pub moss: HashMap<Id, StoredEntry<Moss>>,
+}
+
+impl WorldIndex {
+	fn next_version(&mut self) -> Version {
+		self.next_version += 1;
+		Version(self.next_version)
+	}
+}
+
+macro_rules! impl_spatial_index {
 	($ty:ty, $field:ident) => {
-		impl BaseSpatialIndex<$ty> for WorldIndex {
+		impl SpatialIndex<$ty> for WorldIndex {
 			fn tracked_ids_for(&self, region: Aabb3d) -> Vec<TrackedId> {
 				self.$field
 					.iter()
-					.filter(|(_, (_, bounds))| region.intersects(bounds))
+					.filter(|(_, entry)| region.intersects(&entry.bounds))
 					.map(|(id, _)| TrackedId(*id))
 					.collect()
 			}
@@ -152,28 +176,40 @@ macro_rules! impl_base_spatial_index {
 			}
 
 			fn get(&self, id: Id) -> Option<&$ty> {
-				self.$field.get(&id).map(|(value, _)| value)
+				self.$field.get(&id).map(|entry| &entry.value)
 			}
 
 			fn get_bounds(&self, id: Id) -> Option<Aabb3d> {
-				self.$field.get(&id).map(|(_, bounds)| *bounds)
+				self.$field.get(&id).map(|entry| entry.bounds)
+			}
+
+			fn version(&self, id: Id) -> Option<Version> {
+				self.$field.get(&id).map(|entry| entry.version)
 			}
 
 			fn insert(&mut self, id: Id, value: $ty, bounds: Aabb3d, _lod_ref: &LodRef) {
-				self.$field.insert(id, (value, bounds));
+				let version = self.next_version();
+				self.$field.insert(id, StoredEntry { value, bounds, version });
 			}
 		}
 	};
 }
 
-impl_base_spatial_index!(Terrain, terrain);
-impl_base_spatial_index!(Vegetation, vegetation);
-impl_base_spatial_index!(Tree, trees);
-impl_base_spatial_index!(Leaf, leaves);
-impl_base_spatial_index!(Moss, moss);
+impl_spatial_index!(Terrain, terrain);
+impl_spatial_index!(Vegetation, vegetation);
+impl_spatial_index!(Tree, trees);
+impl_spatial_index!(Leaf, leaves);
+impl_spatial_index!(Moss, moss);
 
-impl OriginalIds<WorldIndex> for Terrain {
-	fn original_ids_for(_spatial_index: &mut WorldIndex, region: Aabb3d) -> Vec<OriginalId> {
+// -----------------------------------------------------------------------------
+// Generation schemes
+// -----------------------------------------------------------------------------
+
+impl<S> GenerationScheme<S> for Terrain
+where
+	S: SpatialIndex<Terrain>,
+{
+	fn original_ids_for(_spatial_index: &mut S, region: Aabb3d) -> Vec<OriginalId> {
 		let min_x = region.min.x.floor() as i32;
 		let max_x = region.max.x.ceil() as i32;
 		(min_x..=max_x)
@@ -181,40 +217,7 @@ impl OriginalIds<WorldIndex> for Terrain {
 			.filter(|OriginalId(id)| id.origin_cell_bounds().is_some_and(|b| region.intersects(&b)))
 			.collect()
 	}
-}
 
-impl OriginalIds<WorldIndex> for Vegetation {
-	fn original_ids_for(spatial_index: &mut WorldIndex, region: Aabb3d) -> Vec<OriginalId> {
-		Terrain::original_ids_for(spatial_index, region)
-	}
-}
-
-impl OriginalIds<WorldIndex> for Tree {
-	fn original_ids_for(_spatial_index: &mut WorldIndex, _region: Aabb3d) -> Vec<OriginalId> {
-		Vec::new()
-	}
-}
-
-impl OriginalIds<WorldIndex> for Leaf {
-	fn original_ids_for(_spatial_index: &mut WorldIndex, _region: Aabb3d) -> Vec<OriginalId> {
-		Vec::new()
-	}
-}
-
-impl OriginalIds<WorldIndex> for Moss {
-	fn original_ids_for(_spatial_index: &mut WorldIndex, _region: Aabb3d) -> Vec<OriginalId> {
-		Vec::new()
-	}
-}
-
-fn cell_from_bytes(bytes: crate::gen::Bytes) -> Aabb3d {
-	cell(bytes.0[0] as f32)
-}
-
-impl<S> BuildWithIdLod<S> for Terrain
-where
-	S: BaseSpatialIndex<Terrain>,
-{
 	fn build_with_id(_spatial_index: &mut S, id: Id, _lod_ref: &LodRef) -> Option<(Self, Aabb3d)> {
 		let bounds = id.origin_cell_bounds()?;
 		Some((Self { cell: bounds }, bounds))
@@ -223,74 +226,94 @@ where
 	fn descendants_with_lod(_id: Id, _spatial_index: &mut S, _lod_ref: &LodRef) {}
 }
 
-impl<S> BuildWithIdLod<S> for Vegetation
+impl<S> GenerationScheme<S> for Vegetation
 where
-	S: Materialize<Terrain> + Materialize<Tree> + BaseSpatialIndex<Vegetation>,
+	S: GeneratingSpatialIndex<Terrain> + GeneratingSpatialIndex<Tree>,
 {
+	fn original_ids_for(spatial_index: &mut S, region: Aabb3d) -> Vec<OriginalId> {
+		<Terrain as GenerationScheme<S>>::original_ids_for(spatial_index, region)
+	}
+
 	fn build_with_id(spatial_index: &mut S, id: Id, lod_ref: &LodRef) -> Option<(Self, Aabb3d)> {
 		let bounds = id.origin_cell_bounds()?;
-		Materialize::<Terrain>::materialize(spatial_index, Id::from_cell(bounds), lod_ref)?;
+		GeneratingSpatialIndex::<Terrain>::get_or_generate(
+			spatial_index,
+			Id::from_cell(bounds),
+			lod_ref,
+		)?;
 		Some((Self { cell: bounds }, bounds))
 	}
 
 	fn descendants_with_lod(id: Id, spatial_index: &mut S, lod_ref: &LodRef) {
-		Materialize::<Tree>::materialize(spatial_index, tree_id(id), lod_ref);
+		GeneratingSpatialIndex::<Tree>::get_or_generate(spatial_index, tree_id(id), lod_ref);
 	}
 }
 
-impl<S> BuildWithIdLod<S> for Tree
+impl<S> GenerationScheme<S> for Tree
 where
-	S: BaseSpatialIndex<Vegetation> + BaseSpatialIndex<Tree> + Materialize<Leaf>,
+	S: SpatialIndex<Vegetation> + GeneratingSpatialIndex<Leaf>,
 {
+	fn original_ids_for(_spatial_index: &mut S, _region: Aabb3d) -> Vec<OriginalId> {
+		Vec::new()
+	}
+
 	fn build_with_id(spatial_index: &mut S, id: Id, _lod_ref: &LodRef) -> Option<(Self, Aabb3d)> {
 		let bounds = match id {
 			Id::Bytes(bytes) => cell_from_bytes(bytes),
 			Id::OriginCell(crate::gen::OriginCell(crate::gen::Cell(bounds))) => bounds,
 		};
 		let parent = Id::from_cell(bounds);
-		if BaseSpatialIndex::<Vegetation>::get(spatial_index, parent).is_none() {
+		if SpatialIndex::<Vegetation>::get(spatial_index, parent).is_none() {
 			return None;
 		}
 		Some((Self { parent, cell: bounds }, bounds))
 	}
 
 	fn descendants_with_lod(id: Id, spatial_index: &mut S, lod_ref: &LodRef) {
-		Materialize::<Leaf>::materialize(spatial_index, leaf_id(id), lod_ref);
+		GeneratingSpatialIndex::<Leaf>::get_or_generate(spatial_index, leaf_id(id), lod_ref);
 	}
 }
 
-impl<S> BuildWithIdLod<S> for Leaf
+impl<S> GenerationScheme<S> for Leaf
 where
-	S: BaseSpatialIndex<Tree> + BaseSpatialIndex<Leaf> + Materialize<Moss>,
+	S: SpatialIndex<Tree> + GeneratingSpatialIndex<Moss>,
 {
+	fn original_ids_for(_spatial_index: &mut S, _region: Aabb3d) -> Vec<OriginalId> {
+		Vec::new()
+	}
+
 	fn build_with_id(spatial_index: &mut S, id: Id, _lod_ref: &LodRef) -> Option<(Self, Aabb3d)> {
 		let bounds = match id {
 			Id::Bytes(bytes) => cell_from_bytes(bytes),
 			Id::OriginCell(crate::gen::OriginCell(crate::gen::Cell(bounds))) => bounds,
 		};
 		let parent = tree_id(Id::from_cell(bounds));
-		if BaseSpatialIndex::<Tree>::get(spatial_index, parent).is_none() {
+		if SpatialIndex::<Tree>::get(spatial_index, parent).is_none() {
 			return None;
 		}
 		Some((Self { parent, cell: bounds }, bounds))
 	}
 
 	fn descendants_with_lod(id: Id, spatial_index: &mut S, lod_ref: &LodRef) {
-		Materialize::<Moss>::materialize(spatial_index, moss_id(id), lod_ref);
+		GeneratingSpatialIndex::<Moss>::get_or_generate(spatial_index, moss_id(id), lod_ref);
 	}
 }
 
-impl<S> BuildWithIdLod<S> for Moss
+impl<S> GenerationScheme<S> for Moss
 where
-	S: BaseSpatialIndex<Leaf> + BaseSpatialIndex<Moss>,
+	S: SpatialIndex<Leaf>,
 {
+	fn original_ids_for(_spatial_index: &mut S, _region: Aabb3d) -> Vec<OriginalId> {
+		Vec::new()
+	}
+
 	fn build_with_id(spatial_index: &mut S, id: Id, _lod_ref: &LodRef) -> Option<(Self, Aabb3d)> {
 		let bounds = match id {
 			Id::Bytes(bytes) => cell_from_bytes(bytes),
 			Id::OriginCell(crate::gen::OriginCell(crate::gen::Cell(bounds))) => bounds,
 		};
 		let parent = leaf_id(tree_id(Id::from_cell(bounds)));
-		if BaseSpatialIndex::<Leaf>::get(spatial_index, parent).is_none() {
+		if SpatialIndex::<Leaf>::get(spatial_index, parent).is_none() {
 			return None;
 		}
 		Some((Self { parent, cell: bounds }, bounds))
@@ -299,97 +322,76 @@ where
 	fn descendants_with_lod(_id: Id, _spatial_index: &mut S, _lod_ref: &LodRef) {}
 }
 
+// -----------------------------------------------------------------------------
+// Presenter
+// -----------------------------------------------------------------------------
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum PresenterOp {
+	Handle(Id, Version),
+	/// Ids actually removed by a `remove_stale` call.
+	RemoveStale(HashSet<Id>),
+}
+
+/// Records presentation per layer. Each layer keeps its own id → version map,
+/// mirroring how `remove_stale`'s wanted set is scoped to one layer's ids.
 #[derive(Default)]
-pub struct RecordingSpawner {
-	pub spawns: Vec<(Id, MaterializeStatus, ScenePatchStatus)>,
-	pub heals: Vec<Aabb3d>,
+pub struct RecordingPresenter {
+	pub terrain: HashMap<Id, Version>,
+	pub vegetation: HashMap<Id, Version>,
+	pub trees: HashMap<Id, Version>,
+	pub leaves: HashMap<Id, Version>,
+	pub moss: HashMap<Id, Version>,
+	pub ops: Vec<PresenterOp>,
 }
 
-impl SceneSpawner<Vegetation> for RecordingSpawner {
-	fn spawn_or_patch_scene(
-		&mut self,
-		id: Id,
-		materialize_status: MaterializeStatus,
-		scene_status: ScenePatchStatus,
-		_scene: impl Scene,
-		_marker: PhantomData<Vegetation>,
-	) {
-		self.spawns.push((id, materialize_status, scene_status));
-	}
-
-	fn heal_region(&mut self, region: Aabb3d, _wanted: &std::collections::HashSet<Id>, _marker: PhantomData<Vegetation>) {
-		self.heals.push(region);
-	}
-}
-
-pub struct VegetationLoader {
-	pub index: WorldIndex,
-	pub spawner: RecordingSpawner,
-	pub descendant_spawns: Vec<Id>,
-}
-
-impl VegetationLoader {
-	pub fn new() -> Self {
-		Self {
-			index: WorldIndex::default(),
-			spawner: RecordingSpawner::default(),
-			descendant_spawns: Vec::new(),
+macro_rules! presenter_methods {
+	($field:ident) => {
+		fn presented_version(&self, id: Id) -> Option<Version> {
+			self.$field.get(&id).copied()
 		}
-	}
+
+		fn handle(&mut self, id: Id, version: Version, _scene: impl Scene, _lod_ref: &LodRef) {
+			self.$field.insert(id, version);
+			self.ops.push(PresenterOp::Handle(id, version));
+		}
+
+		fn remove_stale(&mut self, _region: Aabb3d, wanted: &HashSet<Id>) {
+			// Test presenter treats its whole layer map as in-region; a real
+			// implementation scopes removal to ids presented within `region`.
+			let removed: HashSet<Id> =
+				self.$field.keys().copied().filter(|id| !wanted.contains(id)).collect();
+			for id in &removed {
+				self.$field.remove(id);
+			}
+			self.ops.push(PresenterOp::RemoveStale(removed));
+		}
+	};
 }
 
-impl Materialize<Terrain> for VegetationLoader {
-	fn materialize(&mut self, id: Id, lod_ref: &LodRef) -> Option<MaterializeStatus> {
-		GeneratingSpatialIndex::<Terrain>::get_or_generate(&mut self.index, id, lod_ref)
-	}
+macro_rules! impl_presenter {
+	($ty:ty, $field:ident) => {
+		impl RegionPresenter<$ty, WorldIndex> for RecordingPresenter {
+			presenter_methods!($field);
+		}
+	};
 }
 
-impl Materialize<Tree> for VegetationLoader {
-	fn materialize(&mut self, id: Id, lod_ref: &LodRef) -> Option<MaterializeStatus> {
-		let status = GeneratingSpatialIndex::<Tree>::get_or_generate(&mut self.index, id, lod_ref)?;
-		self.descendant_spawns.push(id);
-		// Index generation already materialized nested values; re-enter through the
-		// loader so nested levels also record spawns.
-		Materialize::<Leaf>::materialize(self, leaf_id(id), lod_ref);
-		Some(status)
-	}
-}
+impl_presenter!(Terrain, terrain);
+impl_presenter!(Tree, trees);
+impl_presenter!(Leaf, leaves);
+impl_presenter!(Moss, moss);
 
-impl Materialize<Leaf> for VegetationLoader {
-	fn materialize(&mut self, id: Id, lod_ref: &LodRef) -> Option<MaterializeStatus> {
-		let status = GeneratingSpatialIndex::<Leaf>::get_or_generate(&mut self.index, id, lod_ref)?;
-		self.descendant_spawns.push(id);
-		Materialize::<Moss>::materialize(self, moss_id(id), lod_ref);
-		Some(status)
-	}
-}
+/// The vegetation layer acts as the top-level controller: `present_all`
+/// chains every layer the controller wants visible.
+impl RegionPresenter<Vegetation, WorldIndex> for RecordingPresenter {
+	presenter_methods!(vegetation);
 
-impl Materialize<Moss> for VegetationLoader {
-	fn materialize(&mut self, id: Id, lod_ref: &LodRef) -> Option<MaterializeStatus> {
-		let status = GeneratingSpatialIndex::<Moss>::get_or_generate(&mut self.index, id, lod_ref)?;
-		self.descendant_spawns.push(id);
-		Some(status)
-	}
-}
-
-impl SceneLoader for VegetationLoader {
-	type Asset = Vegetation;
-	type Index = WorldIndex;
-	type Spawner = RecordingSpawner;
-
-	fn spatial_index(&self) -> &Self::Index {
-		&self.index
-	}
-
-	fn spatial_index_mut(&mut self) -> &mut Self::Index {
-		&mut self.index
-	}
-
-	fn spawner_mut(&mut self) -> &mut Self::Spawner {
-		&mut self.spawner
-	}
-
-	fn borrow_parts_mut(&mut self) -> (&mut Self::Index, &mut Self::Spawner) {
-		(&mut self.index, &mut self.spawner)
+	fn present_all(&mut self, spatial_index: &WorldIndex, region: Aabb3d, lod_ref: &LodRef) {
+		RegionPresenter::<Terrain, WorldIndex>::present(self, spatial_index, region, lod_ref);
+		RegionPresenter::<Vegetation, WorldIndex>::present(self, spatial_index, region, lod_ref);
+		RegionPresenter::<Tree, WorldIndex>::present(self, spatial_index, region, lod_ref);
+		RegionPresenter::<Leaf, WorldIndex>::present(self, spatial_index, region, lod_ref);
+		RegionPresenter::<Moss, WorldIndex>::present(self, spatial_index, region, lod_ref);
 	}
 }
