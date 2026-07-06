@@ -4,6 +4,5 @@
 
 pub use lod_cascade as cascade;
 pub use lod_cascade_system as cascade_system;
-pub mod gen;
 pub mod gen_v2;
 pub mod lod_ref;

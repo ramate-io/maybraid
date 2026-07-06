@@ -1,6 +1,5 @@
 use bevy::prelude::*;
 use lod_cascade::Aabb3d;
-use std::marker::PhantomData;
 
 /// A component type to mark fine LOD.
 /// This enables archetype filtering to ignore a lot of entities.
