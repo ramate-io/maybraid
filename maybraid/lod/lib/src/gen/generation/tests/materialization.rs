@@ -1,4 +1,4 @@
-use super::test_utils::*;
+use crate::gen::tests::test_utils::*;
 use crate::gen::{GeneratingSpatialIndex, Id, MaterializeStatus, SpatialIndex};
 use anyhow::{anyhow, Result};
 

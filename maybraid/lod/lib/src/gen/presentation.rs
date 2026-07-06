@@ -6,6 +6,9 @@
 //! opinion about its scene, and no commit phase is needed between generation
 //! and presentation.
 
+#[cfg(test)]
+pub mod tests;
+
 use crate::gen::id::Id;
 use crate::gen::spatial_index::{SpatialIndex, Version};
 use crate::lod_ref::LodRef;

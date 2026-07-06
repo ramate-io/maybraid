@@ -3,6 +3,9 @@
 //! It knows nothing about scenes; presentation is a separate pass
 //! (see [`crate::gen::presentation`]).
 
+#[cfg(test)]
+mod tests;
+
 use crate::gen::id::{Id, OriginalId, StorageStatus};
 use crate::gen::spatial_index::SpatialIndex;
 use crate::lod_ref::LodRef;
