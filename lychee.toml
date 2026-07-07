@@ -34,4 +34,4 @@ user_agent = "Mozilla/5.0 (compatible; lychee link checker)"
 include_mail = true
 
 # Enable checking of fragments/anchors in links (e.g., #section-name)
-include_fragments = true
+include_fragments = "full"

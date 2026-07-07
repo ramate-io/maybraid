@@ -99,7 +99,7 @@ In Maybraid, we align directly with a stampable pipeline: the global base can st
 
 #### 2.1.3: Hydraulic and thermal erosion
 
-Iterated sediment transport and slope-collapse models reshape noise into drainage-like networks; classic references appear in Musgrave’s line of work and in [*Texturing and Modeling*]() (Ebert et al.); see also surveys of interactive terrain erosion (e.g. [terrain deformation / erosion](https://en.wikipedia.org/wiki/Terrain_deformation)).
+Iterated sediment transport and slope-collapse models reshape noise into drainage-like networks; classic references appear in Musgrave’s line of work and in *Texturing and Modeling* (Ebert et al.); see also surveys of interactive terrain erosion (e.g. [terrain deformation / erosion](https://en.wikipedia.org/wiki/Terrain_deformation)).
 
 In other games, erosion appears both as offline bake (acceptable load times) and as GPU or chunk passes for live worlds; it sells valleys, talus, and river attachment better than raw noise alone.
 
@@ -115,7 +115,7 @@ In Maybraid, [Fractal Stamping](#34-fractal-stamping) and [Stamp Graphs](#37-sta
 
 #### 2.1.5: Scatter placement (Poisson disk, Worley noise)
 
-[Poisson disk sampling](https://en.wikipedia.org/wiki/Supersampling#Poisson_disc) yields even, non-grid spacing for props; [Worley noise](https://en.wikipedia.org/wiki/Worley_noise) builds Voronoi-like regions useful for biome patches, stone fields, or cellular variation that still looks organic.
+[Poisson disk sampling](https://en.wikipedia.org/wiki/Supersampling) yields even, non-grid spacing for props; [Worley noise](https://en.wikipedia.org/wiki/Worley_noise) builds Voronoi-like regions useful for biome patches, stone fields, or cellular variation that still looks organic.
 
 In other games, these drive trees, rocks, grass clumps, and loot placement on top of terrain; they are orthogonal to how height is formed but essential for readable open worlds.
 

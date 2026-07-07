@@ -18,7 +18,9 @@
         "CONSEQUENCES_OF_FOR",
         "EN_COMPOUNDS_POCKET_SIZE",
         "PHRASE_REPETITION",
-        "NUMBERS_IN_WORDS"
+        "NUMBERS_IN_WORDS",
+        "ARROWS",
+        "POSSESSIVE_APOSTROPHE"
       ]
     },
     "enabledRules": {
@@ -441,7 +443,26 @@
         "argv",
         "rachis",
         "trunkless",
-        "occiput"
+        "occiput",
+        "Braidman",
+        "brodler",
+        "Brodler",
+        "crozon-characters",
+        "character-ui-menus",
+        "Mygr",
+        "enums",
+        "args",
+        "RigPose",
+        "downscales",
+        "socketed",
+        "cutbanks",
+        "Esri",
+        "Minkowski",
+        "chaparral-conifer",
+        "Recon",
+        "pom",
+        "Docs.rs",
+        "Mumbus"
       ]
     },
     "bibtex": {

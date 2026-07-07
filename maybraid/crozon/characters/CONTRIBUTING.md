@@ -1,57 +1,55 @@
-# Contributing to the crozon-characters crate
+# Contributing to the `crozon-characters` crate
 
 ## General
 
 ## Adding a new species
 
 A species is a self-contained module under `src/species/` that owns its config,
-baseline pose, asset resolver, and color enums. Shared mesh catalogs (body, eye,
+baseline pose, asset resolver, and color `enums`. Shared mesh catalogs (body, eye,
 hair, clothing, etc.) live in `src/species/common/assets.rs`; species-specific
 meshes and swatches stay in the species module.
 
-Use **Brodler** as the template for a fixed-silhouette species (config + assets
-+ pose, no user sliders). Use **Braidman** when the species needs gender/build
+Use **`Brodler`** as the template for a fixed-silhouette species (config + assets
++ pose, no user sliders). Use **`Braidman`** when the species needs gender/build
 presets and rig or feature sliders.
 
 ### 1. `crozon-characters` (this crate)
 
 1. Create `src/species/<name>.rs` with:
    - `*Config` and `*Colors` structs
-   - species-local enums (skin, eye, head, mouth, etc.) with `VALUES`, `label()`,
+   - species-local `enums` (skin, eye, head, mouth, etc.) with `VALUES`, `label()`,
      and `color()` where needed
    - `impl SpeciesConfig for *Config` calling `*Assets::resolve(self)`
 2. Create `src/species/<name>/assets.rs`:
    - `*Assets::resolve()` building a [`ResolvedCharacterAssembly`](src/assembly.rs)
    - socket attachments for head features; omit parts the species does not use
-     (for example Mygr has no nose)
+     (for example `Mygr` has no nose)
 3. Create `src/species/<name>/pose.rs` when the species has a fixed baseline:
-   - compose [`RigPoseLayer`](../../crozon-rigs) scales via
+   - compose [`RigPoseLayer`](../rigs/src/pose.rs) scales via
      `BraidmanSliders::apply_*` helpers for leg length, thigh thickness, etc.
 4. Register the module in [`src/species.rs`](src/species.rs).
 5. Add shared asset paths to [`src/species/common/assets.rs`](src/species/common/assets.rs)
    when a mesh may be reused across species.
 6. Wire menu traits in [`src/menu_traits.rs`](src/menu_traits.rs):
-   - `impl_menu_identity!` for list/cycle enums
+   - `impl_menu_identity!` for list/cycle `enums`
    - `impl_asset_option!` for thumbnail meshes
-   - `SwatchOption` for species color enums
+   - `SwatchOption` for species color `enums`
 
 ### 2. `crozon-character-ui-menus`
 
 1. Add `src/characters/<name>.rs` — menu structs, `From` conversions to/from
    `*Config`, and `camera_focus_for_field`.
-2. Add `src/render/<name>.rs` — `RenderMenu` impls for each menu section.
+2. Register the module in [`src/characters.rs`](../character-ui-menus/src/characters.rs).
 3. Extend [`src/character.rs`](../character-ui-menus/src/character.rs):
    - `ConceptSpecies::<Name>`
    - `CharacterMenu::<name>` field
    - `from_<name>`, `apply_<name>`, config accessor
 4. Extend [`src/event.rs`](../character-ui-menus/src/event.rs) with any new
    `CharacterField`, `AssetValue`, and `SwatchValue` variants.
-5. Register the species in [`src/render.rs`](../character-ui-menus/src/render.rs)
-   and [`src/render/values.rs`](../character-ui-menus/src/render/values.rs).
 
 ### 3. `crozon-character-concepts-playground`
 
-1. Add `src/commands/<name>.rs` for CLI preview args.
+1. Add `src/commands/<name>.rs` for CLI preview `args`.
 2. Extend [`src/preview.rs`](../character-concepts-playground/src/preview.rs):
    - `ConceptPreviewConfig::<Name>`
    - `PreviewTarget::<Name>*` variants

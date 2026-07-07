@@ -1,10 +1,10 @@
-# Contributing to the character-ui-menus crate
+# Contributing to the `character-ui-menus` crate
 
 ## General
 
 ## Adding clothing options
 
-Braidman and brodler clothing menus share one catalog. The species menu structs in
+`Braidman` and `brodler` clothing menus share one catalog. The species menu structs in
 `src/characters/braidman.rs` and `src/characters/brodler.rs` store selected layers as
 `MultiSelect<ClothingMesh>`; their renderers in `src/render/braidman.rs` and
 `src/render/brodler.rs` call `render_colored_clothing`, which lists every value from

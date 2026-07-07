@@ -865,7 +865,7 @@ If a tracker wants production-managed culling, it should spawn results as childr
 
 #### 3.3.6: Integration with RFC-142: Gimme
 
-The proposed spatial storage engine is currently [Gimme](/rfc/rfc-000-000-142-gimme/README.md). Accordingly, we have prepared an integration guide [here](./integration-with-gimme/README.md).
+The proposed spatial storage engine is currently [Gimme](../rfc-000-000-142-gimme/README.md). Accordingly, we have prepared an integration guide [here](./integration-with-gimme/README.md).
 
 ---
 
