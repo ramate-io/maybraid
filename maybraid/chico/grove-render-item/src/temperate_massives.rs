@@ -11,14 +11,14 @@ use clap::Args;
 use procedural_common::{noise_params_from_scalar_str, BuildWithNoise, NoiseParams};
 use render_item::{CascadeChunk, RenderItem};
 
-use chico_groves::{
-	patch_spawned_leaf_material, placement_noise, FlatTerrainSample, GroveExtent, GroveFrontend,
-	GroveCellVariant, GroveWorldSample, WithPalette, DEFAULT_GROVE_EXTENT_XZ,
-};
 use crate::skipped_mesh_material::{
 	SkippedLeafMeshMaterial, SkippedStickMeshMaterial as GroveSkippedStickMeshMaterial,
 };
 use chico_groves::temperate_massives::{definition, TemperateMassivesCell, TemperateMassivesItem};
+use chico_groves::{
+	patch_spawned_leaf_material, placement_noise, FlatTerrainSample, GroveCellVariant, GroveExtent,
+	GroveFrontend, GroveWorldSample, WithPalette, DEFAULT_GROVE_EXTENT_XZ,
+};
 
 /// Typical [`ChicoStickMaterial`] / [`StandardMaterial`] Temperate Massives instance.
 pub type TemperateMassivesStd = TemperateMassives<
@@ -317,7 +317,8 @@ mod tests {
 		assert!(story_geom.scale.tree_height >= story.height.start.min(story.height.end));
 		assert!(story_geom.scale.tree_height <= story.height.start.max(story.height.end));
 
-		let TemperateMassivesItem::Rory(rory) = TemperateMassivesCell::RareMassiveRory.item() else {
+		let TemperateMassivesItem::Rory(rory) = TemperateMassivesCell::RareMassiveRory.item()
+		else {
 			anyhow::bail!("expected rory item");
 		};
 		let rory_geom = rory.build_with_noise(noise);

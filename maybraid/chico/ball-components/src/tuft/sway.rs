@@ -22,7 +22,7 @@ pub(crate) fn strand_sway_at(
 	let nx = seed as f32 + 0.13;
 	let nz = seed as f32 + 29.7;
 	let right = (noise.raw_3d(nx, coord, nz) * noise_amplitude).clamp(-max_sway, max_sway);
-	let forward = (noise.raw_3d(nx + 5.1, coord, nz + 2.3) * noise_amplitude)
-		.clamp(-max_sway, max_sway);
+	let forward =
+		(noise.raw_3d(nx + 5.1, coord, nz + 2.3) * noise_amplitude).clamp(-max_sway, max_sway);
 	StrandSway { right, forward }
 }

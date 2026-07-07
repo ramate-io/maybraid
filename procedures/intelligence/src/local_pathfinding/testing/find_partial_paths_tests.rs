@@ -29,12 +29,8 @@ fn find_partial_paths_one_layer_emits_one_path_per_fanout_child() {
 
 #[test]
 fn find_partial_paths_snaps_start_to_ground() {
-	let pf = LocalPathfinding::new(
-		FixedFanout {
-			points: vec![Vec3::new(1.0, 0.0, 0.0)],
-		},
-		OpenGround,
-	);
+	let pf =
+		LocalPathfinding::new(FixedFanout { points: vec![Vec3::new(1.0, 0.0, 0.0)] }, OpenGround);
 	let mut pf = pf;
 	pf.depth = 1;
 	let out = pf.find_partial_paths(Vec3::new(0.0, 0.0, 9.0), Vec3::ZERO);

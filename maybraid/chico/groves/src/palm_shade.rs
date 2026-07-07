@@ -14,7 +14,6 @@ use crate::grove::{
 	PlacementConstraints,
 };
 
-
 /// Moderate sampled canopy-density band ([`0.35`, `0.65`]).
 const MODERATE_CANOPY_DENSITY: UnitRange = UnitRange::new(0.35, 0.65);
 /// Dense sampled canopy-density band ([`0.50`, `0.85`]).
@@ -71,20 +70,14 @@ const TOWER_WAIALEA_PALM: PalmShadeWaialeaPalm = PalmShadeWaialeaPalm {
 	crown_density: MODERATE_CANOPY_DENSITY,
 };
 
-const LOWER_WAIALEA_PALM: PalmShadeWaialeaPalm = PalmShadeWaialeaPalm {
-	height: UnitRange::new(8.0, 20.0),
-	crown_density: DENSE_CANOPY_DENSITY,
-};
+const LOWER_WAIALEA_PALM: PalmShadeWaialeaPalm =
+	PalmShadeWaialeaPalm { height: UnitRange::new(8.0, 20.0), crown_density: DENSE_CANOPY_DENSITY };
 
-const SHADE_DATE_PALM: PalmShadeDatePalm = PalmShadeDatePalm {
-	height: UnitRange::new(6.0, 20.0),
-	crown_density: MODERATE_CANOPY_DENSITY,
-};
+const SHADE_DATE_PALM: PalmShadeDatePalm =
+	PalmShadeDatePalm { height: UnitRange::new(6.0, 20.0), crown_density: MODERATE_CANOPY_DENSITY };
 
-const CLUSTER_DATE_PALM: PalmShadeDatePalm = PalmShadeDatePalm {
-	height: UnitRange::new(6.0, 12.0),
-	crown_density: DENSE_CANOPY_DENSITY,
-};
+const CLUSTER_DATE_PALM: PalmShadeDatePalm =
+	PalmShadeDatePalm { height: UnitRange::new(6.0, 12.0), crown_density: DENSE_CANOPY_DENSITY };
 
 const WAIALEA_STICK_MIX: PaletteMix = PaletteMix::new(&[
 	PaletteSlot::new("palm_bark", "tan_bark"),
@@ -273,14 +266,26 @@ mod tests {
 		let prepared =
 			PalmShadeCell::distribution().prepare(0.0, 0.0, NoiseParams::default(), Vec3::ZERO);
 		let terrain = FlatTerrainSample { elevation: 0.30, steepness: 0.38 };
-		let shade_outcome = prepared.select_from(3, Vec3::new(5.0, 0.30, 5.0), 1.0, Cell::from_min_max(Vec3::ZERO, Vec3::ONE), &terrain);
+		let shade_outcome = prepared.select_from(
+			3,
+			Vec3::new(5.0, 0.30, 5.0),
+			1.0,
+			Cell::from_min_max(Vec3::ZERO, Vec3::ONE),
+			&terrain,
+		);
 		match shade_outcome {
 			GroveCellOutcome::Placed { variant, .. } => {
 				assert_eq!(variant, PalmShadeCell::ShadeDatePalm);
 			}
 			other => anyhow::bail!("expected ShadeDatePalm on moderate slope, got {other:?}"),
 		}
-		let cluster_outcome = prepared.select_from(5, Vec3::new(5.0, 0.30, 5.0), 1.0, Cell::from_min_max(Vec3::ZERO, Vec3::ONE), &terrain);
+		let cluster_outcome = prepared.select_from(
+			5,
+			Vec3::new(5.0, 0.30, 5.0),
+			1.0,
+			Cell::from_min_max(Vec3::ZERO, Vec3::ONE),
+			&terrain,
+		);
 		match cluster_outcome {
 			GroveCellOutcome::Placed { variant, .. } => {
 				assert_ne!(variant, PalmShadeCell::ClusterDatePalm);

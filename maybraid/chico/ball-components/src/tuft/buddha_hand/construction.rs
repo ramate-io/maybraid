@@ -43,12 +43,7 @@ impl BuddhaHandCluster {
 		noise_frequency: f32,
 		noise_amplitude: f32,
 	) -> Self {
-		Self {
-			elements,
-			height_segments,
-			noise_frequency,
-			noise_amplitude,
-		}
+		Self { elements, height_segments, noise_frequency, noise_amplitude }
 	}
 
 	pub fn into_mesh(self) -> Mesh {
@@ -134,8 +129,7 @@ fn append_finger(
 		let nx = element.seed as f32 + 0.13;
 		let nz = element.seed as f32 + 29.7;
 		let mut sway_x = noise.raw_3d(nx, y * noise_frequency, nz) * noise_amplitude;
-		let mut sway_z =
-			noise.raw_3d(nx + 5.1, y * noise_frequency, nz + 2.3) * noise_amplitude;
+		let mut sway_z = noise.raw_3d(nx + 5.1, y * noise_frequency, nz + 2.3) * noise_amplitude;
 		sway_x = sway_x.clamp(-max_sway, max_sway);
 		sway_z = sway_z.clamp(-max_sway, max_sway);
 
@@ -163,12 +157,7 @@ fn append_finger(
 			let i2 = base_vertex + (ring + 1) * sides + side;
 			let i3 = base_vertex + (ring + 1) * sides + (side + 1) % sides;
 			indices.extend_from_slice(&[
-				i0 as u32,
-				i2 as u32,
-				i1 as u32,
-				i1 as u32,
-				i2 as u32,
-				i3 as u32,
+				i0 as u32, i2 as u32, i1 as u32, i1 as u32, i2 as u32, i3 as u32,
 			]);
 		}
 	}
@@ -185,10 +174,7 @@ mod tests {
 			vec![BuddhaHandElement {
 				direction: Vec3::Y,
 				length: 1.0,
-				profile: BellyTipProfile {
-					base_half_width: 0.02,
-					belly_half_width: 0.06,
-				},
+				profile: BellyTipProfile { base_half_width: 0.02, belly_half_width: 0.06 },
 				seed: 0,
 			}],
 			4,

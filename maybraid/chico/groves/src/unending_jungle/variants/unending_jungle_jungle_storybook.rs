@@ -1,9 +1,9 @@
 //! [`BuildWithNoise`] for [`UnendingJungleJungleStorybook`].
 
-use chico_sbs_geometry::JungleStorybookTreeSbs;
 use chico_sbs_geometry::sbs::jungle_storybook_tree::{
 	JUNGLE_ANCHORS_PER_RING, JUNGLE_LEAF_RADIUS_FRACTION, JUNGLE_STALK_BASE_RADIUS_FRACTION,
 };
+use chico_sbs_geometry::JungleStorybookTreeSbs;
 use procedural_common::{BuildWithNoise, NoiseConfig, NoiseParams, UnitRange};
 
 use crate::unending_jungle::UnendingJungleJungleStorybook;

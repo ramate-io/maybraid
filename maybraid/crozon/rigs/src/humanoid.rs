@@ -1,4 +1,19 @@
-use crate::{BonePose, RigPose, Side};
+use bevy::prelude::*;
+
+use crate::{BonePose, Name, RigPose, RiggedAxis, Side};
+
+/// Rest-pose thigh and shin segment lengths used for analytic IK-style drop.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct LegSegmentLengths {
+	pub femur: f32,
+	pub shin: f32,
+}
+
+impl Default for LegSegmentLengths {
+	fn default() -> Self {
+		Self { femur: 0.5, shin: 0.5 }
+	}
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct HumanoidLeg {
@@ -89,6 +104,7 @@ fn hydrate_bone(pose: &RigPose, bone: &mut BonePose) {
 		bone.transform = stored.transform;
 		bone.swing = stored.swing;
 		bone.flex = stored.flex;
+		bone.twist = stored.twist;
 	}
 }
 
@@ -100,9 +116,32 @@ pub trait HumanoidRig {
 	fn pose(&self) -> &RigPose;
 	fn pose_mut(&mut self) -> &mut RigPose;
 
+	/// Bones driven by procedural animation in the playground.
+	fn animation_bones(&self) -> Vec<Name>;
+
+	fn segment_lengths(&self) -> LegSegmentLengths {
+		LegSegmentLengths::default()
+	}
+
 	/// +1 or −1 so mirrored forearms flex forward consistently in run animation.
 	fn forearm_flex_sign(&self, _side: Side) -> f32 {
 		1.0
+	}
+
+	/// Static per-bone swing/flex axes for the rig.
+	fn rigged_axis(&self, _bone: &Name) -> Option<RiggedAxis> {
+		None
+	}
+
+	/// Apply swing/flex about the bone's rig-defined local axes.
+	fn articulate_on_rig(&self, mut bone: BonePose, swing: f32, flex: f32) -> BonePose {
+		if let Some(axis) = self.rigged_axis(&bone.name) {
+			bone = bone.articulate(axis, swing, flex, 0.0);
+		} else {
+			bone.swing = swing;
+			bone.flex = flex;
+		}
+		bone
 	}
 
 	fn leg_pose(&self, side: Side) -> HumanoidLeg {
@@ -143,5 +182,30 @@ pub trait HumanoidRig {
 
 	fn pose_neck(&mut self, neck: HumanoidNeck) {
 		neck.apply_to(self.pose_mut());
+	}
+
+	/// World rotation of the bone's parent at the current pose (identity when unknown).
+	fn parent_world_rotation(&self, _bone: &Name) -> Quat {
+		Quat::IDENTITY
+	}
+
+	/// Shift every animation bone by a world-space displacement without shortening bind segments.
+	fn move_all(&mut self, world_displacement: Vec3) {
+		let bones = self.animation_bones();
+		for bone in bones {
+			let parent_world = self.parent_world_rotation(&bone);
+			let axis = self.rigged_axis(&bone).unwrap_or(RiggedAxis::DEFAULT);
+			let Some(pose) = self.pose_mut().get_mut(&bone) else {
+				continue;
+			};
+			let segment = pose.transform.translation;
+			let delta = crate::articulation::axis_aware_translation_delta(
+				segment,
+				axis,
+				world_displacement,
+				parent_world,
+			);
+			pose.transform.translation += delta;
+		}
 	}
 }

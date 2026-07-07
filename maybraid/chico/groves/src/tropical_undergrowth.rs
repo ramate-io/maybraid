@@ -16,7 +16,6 @@ use crate::grove::{
 	PaletteMix, PaletteSlot, PlacementConstraints,
 };
 
-
 /// Authored Tropical Undergrowth grove definition.
 ///
 /// Cell footprint sits at the RFC midpoint (`5.0` m). The offset range is signed and ± one cell so
@@ -548,7 +547,13 @@ mod tests {
 			Vec3::ZERO,
 		);
 		let terrain = FlatTerrainSample { elevation: 0.35, steepness: 0.65 };
-		let outcome = prepared.select_from(3, Vec3::new(5.0, 0.35, 5.0), 1.0, Cell::from_min_max(Vec3::ZERO, Vec3::ONE), &terrain);
+		let outcome = prepared.select_from(
+			3,
+			Vec3::new(5.0, 0.35, 5.0),
+			1.0,
+			Cell::from_min_max(Vec3::ZERO, Vec3::ONE),
+			&terrain,
+		);
 		match outcome {
 			GroveCellOutcome::Placed { variant, .. } => {
 				assert_eq!(variant, TropicalUndergrowthCell::MiniRoryHeadTrained);

@@ -147,7 +147,7 @@ The body GLB still needs to contain its own copy of the rig when exported, becau
 skin.joints = new_joints;
 ```
 
-Bevy’s `SkinnedMesh` is the component that stores the joint entity list and inverse bind poses, and Bevy’s skinned mesh examples show this same `SkinnedMesh { inverse_bindposes, joints }` data model. ([Docs.rs][1])
+Bevy’s `SkinnedMesh` is the component that stores the joint entity list and inverse bind poses, and Bevy’s skinned mesh examples show this same `SkinnedMesh { inverse_bindposes, joints }` data model. ([`Docs.rs`][1])
 
 [1]: https://docs.rs/bevy/latest/bevy/mesh/skinning/index.html?utm_source=chatgpt.com "bevy::mesh::skinning - Rust - Docs.rs"
 

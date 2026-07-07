@@ -1,6 +1,11 @@
+pub mod articulation;
+pub mod debug;
 pub mod humanoid;
+pub mod pose;
 pub mod rigs;
 pub mod sliders;
+
+pub use pose::{BoneScale, ResolvedRigPose, RigPoseLayer};
 
 use bevy::prelude::*;
 use std::{collections::HashMap, fmt};
@@ -51,24 +56,19 @@ impl Side {
 	}
 }
 
-/// The orientation of the bone in the rig,
-/// relative to the intended geometry.
+/// The local axes a rigged bone uses for procedural articulation.
 ///
-/// Useful when it is discovered that the default assumption is not correctly
-/// adhered to in in the rig:
+/// These are expressed in the same local space as the bone's `Transform.rotation`.
+/// Animation code supplies semantic `swing` and `flex` magnitudes; the rig decides
+/// which concrete local axes those magnitudes use.
 ///
-/// Default assumption:
-/// 1. -Y (Blender) = +Z (Bevy) is forward.
-/// 2. +Z (Blender) = +Y (Bevy) is up.
-/// 3. +X (Blender) = +X (Bevy) is right.
-///
-/// NOTE: I believe the below can be reduced from three axes to two,
-/// plus a sign.
+/// `twist_axis` is included for completeness, even though current animations only use
+/// swing and flex.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct RiggedAxis {
-	pub forward: Vec3,
-	pub up: Vec3,
-	pub right: Vec3,
+	pub swing_axis: Vec3,
+	pub flex_axis: Vec3,
+	pub twist_axis: Vec3,
 }
 
 impl Default for RiggedAxis {
@@ -78,7 +78,7 @@ impl Default for RiggedAxis {
 }
 
 impl RiggedAxis {
-	pub const DEFAULT: Self = Self { forward: Vec3::Z, up: Vec3::Y, right: Vec3::X };
+	pub const DEFAULT: Self = Self { swing_axis: Vec3::Y, flex_axis: Vec3::Z, twist_axis: Vec3::X };
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -145,15 +145,38 @@ pub struct BonePose {
 	pub swing: f32,
 	/// Pitch or hinge flex magnitude (radians) about the bone's flex axis.
 	pub flex: f32,
+	/// Roll or long-axis twist magnitude (radians) about the bone's twist axis.
+	pub twist: f32,
 }
 
 impl BonePose {
 	pub fn new(name: impl Into<Name>, transform: Transform) -> Self {
-		Self { name: name.into(), transform, swing: 0.0, flex: 0.0 }
+		Self { name: name.into(), transform, swing: 0.0, flex: 0.0, twist: 0.0 }
 	}
 
 	pub fn with_articulation(name: impl Into<Name>, swing: f32, flex: f32) -> Self {
-		Self { name: name.into(), transform: Transform::IDENTITY, swing, flex }
+		Self { name: name.into(), transform: Transform::IDENTITY, swing, flex, twist: 0.0 }
+	}
+
+	pub fn with_pose(name: impl Into<Name>, swing: f32, flex: f32, translation: Vec3) -> Self {
+		Self {
+			name: name.into(),
+			transform: Transform::from_translation(translation),
+			swing,
+			flex,
+			twist: 0.0,
+		}
+	}
+
+	/// Apply swing/flex/twist about this bone's rig-defined local axes.
+	pub fn articulate(mut self, axis: RiggedAxis, swing: f32, flex: f32, twist: f32) -> Self {
+		self.swing = swing;
+		self.flex = flex;
+		self.twist = twist;
+		let rest = self.transform.rotation;
+		self.transform.rotation =
+			articulation::compose_local_rotation(rest, axis, swing, flex, twist);
+		self
 	}
 }
 
@@ -204,6 +227,17 @@ impl RigPose {
 	pub fn is_empty(&self) -> bool {
 		self.0.is_empty()
 	}
+
+	/// Add the same translation to every named bone, preserving existing swing/flex.
+	/// Inserts identity articulation for bones not yet in the pose.
+	pub fn move_all(&mut self, bones: impl IntoIterator<Item = Name>, translation: Vec3) {
+		for name in bones {
+			self.0
+				.entry(name.clone())
+				.and_modify(|pose| pose.transform.translation += translation)
+				.or_insert_with(|| BonePose::new(name, Transform::from_translation(translation)));
+		}
+	}
 }
 
 impl Default for RigPose {
@@ -226,5 +260,29 @@ mod tests {
 
 		assert_eq!(pose.get(&name).map(|pose| pose.transform), Some(transform));
 		assert_eq!(pose.len(), 1);
+	}
+
+	#[test]
+	fn rig_pose_move_all_preserves_articulation() {
+		let mut pose = RigPose::new();
+		let name = Name::from("femur.L");
+		pose.insert(BonePose::with_pose(name.clone(), 0.5, 1.0, Vec3::X));
+		pose.move_all([name.clone()], Vec3::new(0.0, -0.1, 0.0));
+
+		let bone = pose.get(&name).expect("femur pose");
+		assert_eq!(bone.swing, 0.5);
+		assert_eq!(bone.flex, 1.0);
+		assert_eq!(bone.transform.translation, Vec3::new(1.0, -0.1, 0.0));
+	}
+
+	#[test]
+	fn rig_pose_move_all_inserts_missing_bones() {
+		let mut pose = RigPose::new();
+		let name = Name::from("root");
+		pose.move_all([name.clone()], Vec3::new(0.0, -0.2, 0.0));
+
+		let bone = pose.get(&name).expect("root pose");
+		assert_eq!(bone.transform.translation, Vec3::new(0.0, -0.2, 0.0));
+		assert_eq!(bone.swing, 0.0);
 	}
 }

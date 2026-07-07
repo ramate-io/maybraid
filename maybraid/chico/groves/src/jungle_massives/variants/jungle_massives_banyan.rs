@@ -59,8 +59,7 @@ impl BuildWithNoise<SopeBanyanSamples> for JungleMassivesBanyan {
 		geometry.scale.stalk_height = height;
 		geometry.scale.canopy_height = height * 2.0;
 		geometry.scale.stalk_base_radius = stalk_radius;
-		geometry.projection.length_fraction_of_height =
-			UnitRange::new(span * 0.05, span * 0.18);
+		geometry.projection.length_fraction_of_height = UnitRange::new(span * 0.05, span * 0.18);
 		geometry.growth.descender_threshold = descender_threshold;
 		geometry.leaf_ball_factor = 0.25 + canopy_density * 0.35;
 		geometry.canopy_noise = noise;

@@ -1,79 +1,86 @@
-use std::f32::consts::PI;
+use crozon_rigs::{humanoid::HumanoidRig, Side};
 
-use crozon_rigs::{humanoid::HumanoidRig, BonePose, Side};
+use crate::animations::{Run, UprightRun};
+use crate::rigs::humanoid::apply::apply_arm;
+use crate::{Animation, Effects, Progress};
 
-use crate::{animations::Run, Animation};
+impl<R: HumanoidRig> Animation<R> for Run {
+	fn apply(&self, rig: &mut R, progress: f32) -> Effects {
+		UprightRun::from_run(self).apply(rig, progress)
+	}
+}
 
-impl<R: HumanoidRig> Animation<R> for Run<R> {
-	fn apply(&self, rig: &mut R) {
-		let phase = self.phase.fract();
-		let left_arm_swing = -arm_swing(phase + 0.5);
-		let right_arm_swing = arm_swing(phase);
+impl<R: HumanoidRig> Animation<R> for UprightRun<R> {
+	fn apply(&self, rig: &mut R, progress: f32) -> Effects {
+		let phase = Progress(progress).cycle();
+		let left_arm_swing = -arm_swing(phase);
+		let right_arm_swing = arm_swing(phase + 0.5);
+		let run = self;
 
-		apply_leg(rig, Side::Left, phase + 0.5, -1.0, self);
-		apply_leg(rig, Side::Right, phase, 1.0, self);
-		apply_arm(
+		apply_leg(rig, Side::Left, phase, -1.0, run);
+		apply_leg(rig, Side::Right, phase, 1.0, run);
+		apply_run_arm(
 			rig,
 			Side::Left,
 			left_arm_swing,
 			phase,
 			rig.forearm_flex_sign(Side::Left),
-			-self.arm_down,
-			self,
+			-run.arm_down,
+			run,
 		);
-		apply_arm(
+		apply_run_arm(
 			rig,
 			Side::Right,
 			right_arm_swing,
 			phase,
 			rig.forearm_flex_sign(Side::Right),
-			self.arm_down,
-			self,
+			run.arm_down,
+			run,
 		);
+
+		Effects::default()
 	}
 }
 
-fn apply_leg<R: HumanoidRig>(rig: &mut R, side: Side, phase: f32, lift_sign: f32, run: &Run<R>) {
-	let mut leg = rig.leg(side);
+fn apply_leg<R: HumanoidRig>(
+	rig: &mut R,
+	side: Side,
+	phase: f32,
+	lift_sign: f32,
+	run: &UprightRun<R>,
+) {
+	let mut leg = rig.leg_pose(side);
+	let phase = if side == Side::Left { phase } else { phase + 0.5 };
 	let swing = thigh_swing(phase);
 
-	leg.pelvis = BonePose::with_articulation(
-		leg.pelvis.name,
+	leg.pelvis = rig.articulate_on_rig(
+		leg.pelvis,
 		swing * run.hip_swing,
 		hip_lift(swing, run.hip_lift) * lift_sign,
 	);
-	leg.femur = BonePose::with_articulation(leg.femur.name, swing * run.stride, 0.0);
-	leg.shin = BonePose::with_articulation(leg.shin.name, 0.0, knee_flex(phase, run));
+	leg.femur = rig.articulate_on_rig(leg.femur, swing * run.stride, 0.0);
+	leg.shin = rig.articulate_on_rig(leg.shin, 0.0, knee_flex(phase, run) - run.knee_extended);
 	rig.pose_leg(leg);
 }
 
-fn apply_arm<R: HumanoidRig>(
+fn apply_run_arm<R: HumanoidRig>(
 	rig: &mut R,
 	side: Side,
 	arm_swing_value: f32,
 	phase: f32,
 	flex_sign: f32,
-	arm_down: f32,
-	run: &Run<R>,
+	humerus_flex: f32,
+	run: &UprightRun<R>,
 ) {
-	let mut arm = rig.arm(side);
-
-	arm.shoulder = BonePose::with_articulation(
-		arm.shoulder.name,
+	apply_arm(
+		rig,
+		side,
 		arm_swing_value * run.shoulder_swing,
 		-shoulder_lift(arm_swing_value, run.shoulder_lift),
-	);
-	arm.humerus = BonePose::with_articulation(
-		arm.humerus.name,
 		arm_swing_value * run.humerus_swing_scale,
-		arm_down,
+		humerus_flex,
+		elbow_flex(arm_swing_value, phase, -flex_sign, run),
 	);
-	arm.forearm = BonePose::with_articulation(
-		arm.forearm.name,
-		0.0,
-		elbow_flex(arm_swing_value, phase, flex_sign, run),
-	);
-	rig.pose_arm(arm);
 }
 
 fn thigh_swing(phase: f32) -> f32 {
@@ -89,9 +96,9 @@ fn arm_swing(phase: f32) -> f32 {
 	thigh_swing(phase) * 0.75
 }
 
-fn elbow_flex<Rig>(arm_swing: f32, phase: f32, flex_sign: f32, run: &Run<Rig>) -> f32 {
+fn elbow_flex<Rig>(arm_swing: f32, phase: f32, flex_sign: f32, run: &UprightRun<Rig>) -> f32 {
 	let pump = arm_swing.abs();
-	let cycle = ((phase + arm_swing.signum() * 0.125) * PI * 4.0).sin().abs();
+	let cycle = ((phase + arm_swing.signum() * 0.125) * std::f32::consts::PI * 4.0).sin().abs();
 	flex_sign * (run.elbow_bend + pump * run.elbow_pump + cycle * run.elbow_cycle)
 }
 
@@ -103,25 +110,103 @@ fn hip_lift(leg_swing: f32, amplitude: f32) -> f32 {
 	leg_swing * amplitude
 }
 
-fn knee_flex<Rig>(leg_phase: f32, run: &Run<Rig>) -> f32 {
+fn knee_flex<Rig>(leg_phase: f32, run: &UprightRun<Rig>) -> f32 {
 	let p = leg_phase.fract();
 	let peak = if p < 0.5 { run.knee_extended } else { run.knee_contracted };
 	let t = if p < 0.5 { p * 2.0 } else { (p - 0.5) * 2.0 };
-	run.knee_neutral + (t * PI).sin() * (peak - run.knee_neutral)
+	run.knee_neutral + (t * std::f32::consts::PI).sin() * (peak - run.knee_neutral)
 }
 
 #[cfg(test)]
 mod tests {
-	use crozon_rigs::rigs::humanoid_v0::HumanoidV0Rig;
+	use crozon_rigs::{rigs::humanoid_v0::HumanoidV0Rig, Side};
 
 	use super::*;
+
+	fn assert_pose_matches_at_phases(phases: &[f32]) {
+		for &phase in phases {
+			let mut from_run = HumanoidV0Rig::imported();
+			let mut from_upright = HumanoidV0Rig::imported();
+			Run::default().apply(&mut from_run, phase);
+			UprightRun::<HumanoidV0Rig>::default().apply(&mut from_upright, phase);
+
+			for bone in from_run.animation_bones() {
+				let Some(run_pose) = from_run.pose().get(&bone) else {
+					continue;
+				};
+				let upright_pose = from_upright.pose().get(&bone).expect("upright pose");
+				assert_eq!(
+					run_pose.swing, upright_pose.swing,
+					"swing mismatch on {bone} at {phase}"
+				);
+				assert_eq!(run_pose.flex, upright_pose.flex, "flex mismatch on {bone} at {phase}");
+			}
+		}
+	}
+
+	#[test]
+	fn run_delegates_to_upright_default() {
+		assert_pose_matches_at_phases(&[0.0, 0.25, 0.5, 0.75]);
+	}
 
 	#[test]
 	fn run_writes_swing_flex_for_left_femur() {
 		let mut rig = HumanoidV0Rig::imported();
-		Run::<HumanoidV0Rig>::new(0.0).apply(&mut rig);
+		UprightRun::<HumanoidV0Rig>::default().apply(&mut rig, 0.0);
 
 		let femur = rig.pose().get(&rig.leg(Side::Left).femur.name).expect("femur pose");
 		assert!(femur.swing.abs() > 0.0);
+	}
+
+	#[test]
+	fn run_right_leg_uses_half_cycle_phase_offset() {
+		let mut rig = HumanoidV0Rig::imported();
+		UprightRun::<HumanoidV0Rig>::default().apply(&mut rig, 0.0);
+
+		let left = rig.pose().get(&rig.leg(Side::Left).femur.name).expect("left femur");
+		let right = rig.pose().get(&rig.leg(Side::Right).femur.name).expect("right femur");
+		assert_ne!(left.swing, right.swing);
+	}
+
+	#[test]
+	fn run_applies_knee_flex_to_shin() {
+		use bevy::prelude::*;
+
+		let mut rig = HumanoidV0Rig::imported();
+		let shin_name = rig.leg(Side::Left).shin.name.clone();
+		rig.pose_mut()
+			.insert(crozon_rigs::BonePose::new(shin_name.clone(), Transform::IDENTITY));
+
+		UprightRun::<HumanoidV0Rig>::default().apply(&mut rig, 0.25);
+		let extended = rig.pose().get(&shin_name).expect("left shin").clone();
+		assert!(extended.flex.abs() < 1e-4, "expected straight knee, flex={}", extended.flex);
+
+		UprightRun::<HumanoidV0Rig>::default().apply(&mut rig, 0.75);
+		let tucked = rig.pose().get(&shin_name).expect("left shin");
+		assert!(tucked.flex > 1.0, "expected knee tuck, flex={}", tucked.flex);
+		assert!(
+			extended.transform.rotation.dot(tucked.transform.rotation).abs() < 0.95,
+			"knee rotation should change across stride"
+		);
+	}
+
+	#[test]
+	fn run_applies_elbow_bend_to_forearm() {
+		let mut rig = HumanoidV0Rig::imported();
+		UprightRun::<HumanoidV0Rig>::default().apply(&mut rig, 0.0);
+
+		let left_forearm = rig.pose().get(&rig.arm(Side::Left).forearm.name).expect("left forearm");
+		assert!(left_forearm.flex.abs() > 1.0, "expected elbow bend baseline");
+	}
+
+	#[test]
+	fn run_applies_shoulder_and_hip_lift() {
+		let mut rig = HumanoidV0Rig::imported();
+		UprightRun::<HumanoidV0Rig>::default().apply(&mut rig, 0.0);
+
+		let shoulder = rig.pose().get(&rig.arm(Side::Left).shoulder.name).expect("shoulder");
+		let pelvis = rig.pose().get(&rig.leg(Side::Left).pelvis.name).expect("pelvis");
+		assert!(shoulder.flex.abs() > 0.0, "expected shoulder bounce");
+		assert!(pelvis.flex.abs() > 0.0, "expected hip bounce");
 	}
 }

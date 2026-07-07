@@ -1,4 +1,5 @@
 use bevy::prelude::*;
+use camera_controls::look::{look_input_active, CameraLookEnabled};
 use game_commands::command::TextEntryFocus;
 use std::f32::consts::PI;
 
@@ -35,24 +36,29 @@ pub fn camera_controller(
 	mut mouse_motion: MessageReader<bevy::input::mouse::MouseMotion>,
 	time: Res<Time>,
 	text_focus: Res<TextEntryFocus>,
+	look_enabled: Option<Res<CameraLookEnabled>>,
 	mut query: Query<(&mut Transform, &mut CameraController), With<Camera3d>>,
 ) {
 	let Ok((mut transform, mut controller)) = query.single_mut() else {
 		return;
 	};
 
-	let mut mouse_delta = Vec2::ZERO;
-	for event in mouse_motion.read() {
-		mouse_delta += event.delta;
+	if look_input_active(look_enabled) {
+		let mut mouse_delta = Vec2::ZERO;
+		for event in mouse_motion.read() {
+			mouse_delta += event.delta;
+		}
+
+		controller.yaw -= mouse_delta.x * controller.sensitivity;
+		controller.pitch -= mouse_delta.y * controller.sensitivity;
+		controller.pitch = controller.pitch.clamp(-PI / 2.0 + 0.1, PI / 2.0 - 0.1);
+
+		let yaw_quat = Quat::from_axis_angle(Vec3::Y, controller.yaw);
+		let pitch_quat = Quat::from_axis_angle(Vec3::X, controller.pitch);
+		transform.rotation = yaw_quat * pitch_quat;
+	} else {
+		mouse_motion.clear();
 	}
-
-	controller.yaw -= mouse_delta.x * controller.sensitivity;
-	controller.pitch -= mouse_delta.y * controller.sensitivity;
-	controller.pitch = controller.pitch.clamp(-PI / 2.0 + 0.1, PI / 2.0 - 0.1);
-
-	let yaw_quat = Quat::from_axis_angle(Vec3::Y, controller.yaw);
-	let pitch_quat = Quat::from_axis_angle(Vec3::X, controller.pitch);
-	transform.rotation = yaw_quat * pitch_quat;
 
 	if text_focus.0 {
 		return;

@@ -14,7 +14,6 @@ use crate::grove::{
 	PlacementConstraints,
 };
 
-
 /// Dense sampled canopy-density band ([`0.50`, `0.85`]).
 const DENSE_CANOPY_DENSITY: UnitRange = UnitRange::new(0.50, 0.85);
 /// Moderate sampled canopy-density band ([`0.35`, `0.65`]).
@@ -163,8 +162,7 @@ impl ConiferMassivesCell {
 			PlacementConstraints::new(UnitRange::new(0.0, 1.0), UnitRange::new(0.0, 0.70));
 		let friends =
 			PlacementConstraints::new(UnitRange::new(0.0, 1.0), UnitRange::new(0.0, 0.64));
-		let liams =
-			PlacementConstraints::new(UnitRange::new(0.0, 1.0), UnitRange::new(0.0, 0.76));
+		let liams = PlacementConstraints::new(UnitRange::new(0.0, 1.0), UnitRange::new(0.0, 0.76));
 		let temperate =
 			PlacementConstraints::new(UnitRange::new(0.0, 1.0), UnitRange::new(0.0, 0.58));
 		GroveDistribution::new(vec![
@@ -321,7 +319,13 @@ mod tests {
 			Vec3::ZERO,
 		);
 		let terrain = FlatTerrainSample { elevation: 0.40, steepness: 0.68 };
-		let outcome = prepared.select_from(3, Vec3::new(5.0, 0.40, 5.0), 1.0, Cell::from_min_max(Vec3::ZERO, Vec3::ONE), &terrain);
+		let outcome = prepared.select_from(
+			3,
+			Vec3::new(5.0, 0.40, 5.0),
+			1.0,
+			Cell::from_min_max(Vec3::ZERO, Vec3::ONE),
+			&terrain,
+		);
 		match outcome {
 			GroveCellOutcome::Placed { variant, .. } => {
 				assert_ne!(variant, ConiferMassivesCell::MassiveFriendsConifer);

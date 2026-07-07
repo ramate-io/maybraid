@@ -10,12 +10,12 @@ use clap::Args;
 use procedural_common::{noise_params_from_scalar_str, BuildWithNoise, NoiseParams};
 use render_item::{CascadeChunk, RenderItem};
 
+use crate::skipped_mesh_material::{SkippedLeafMeshMaterial, SkippedStickMeshMaterial};
 use chico_groves::bush_scrub::{definition, BushScrubCell, BushScrubItem};
 use chico_groves::{
-	patch_spawned_leaf_material, placement_noise, FlatTerrainSample, GroveExtent, GroveFrontend,
-	GroveCellVariant, GroveWorldSample, WithPalette, DEFAULT_GROVE_EXTENT_XZ,
+	patch_spawned_leaf_material, placement_noise, FlatTerrainSample, GroveCellVariant, GroveExtent,
+	GroveFrontend, GroveWorldSample, WithPalette, DEFAULT_GROVE_EXTENT_XZ,
 };
-use crate::skipped_mesh_material::{SkippedLeafMeshMaterial, SkippedStickMeshMaterial};
 
 /// Typical [`ChicoStickMaterial`] / [`StandardMaterial`] Bush Scrub instance.
 pub type BushScrubStd = BushScrub<
@@ -271,8 +271,8 @@ where
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use chico_tree_components::HighBushFoliageStyle;
 	use anyhow::Result;
+	use chico_tree_components::HighBushFoliageStyle;
 
 	#[test]
 	fn tuft_geometry_builds_within_authored_ranges() -> Result<()> {
@@ -384,7 +384,8 @@ mod tests {
 
 	#[test]
 	fn with_resolved_placements_skips_live_selection() -> Result<()> {
-		let placement = GroveCellVariant::new(BushScrubCell::DryTuft, Vec3::new(1.0, 0.0, 2.0), 1.0);
+		let placement =
+			GroveCellVariant::new(BushScrubCell::DryTuft, Vec3::new(1.0, 0.0, 2.0), 1.0);
 		let item = BushScrubStd::with_resolved_placements(
 			vec![placement.clone()],
 			FlatTerrainSample::default(),

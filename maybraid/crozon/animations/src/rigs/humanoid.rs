@@ -1,1 +1,12 @@
+pub mod apply;
+pub mod fall;
+pub mod fixed_tuck;
+pub mod land;
 pub mod run;
+pub mod spring;
+pub mod squat;
+pub mod tuck;
+pub mod tucked_flip;
+pub mod two_footed_jump;
+pub mod two_footed_tucked_flip;
+pub mod walk;

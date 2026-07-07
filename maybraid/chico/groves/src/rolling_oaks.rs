@@ -14,7 +14,6 @@ use crate::grove::{
 	PlacementConstraints,
 };
 
-
 /// Moderate sampled canopy-density band ([`0.35`, `0.65`]).
 const MODERATE_CANOPY_DENSITY: UnitRange = UnitRange::new(0.35, 0.65);
 
@@ -158,7 +157,9 @@ impl RollingOaksCell {
 	pub fn item(self) -> RollingOaksItem {
 		match self {
 			Self::RollingBraidOak => RollingOaksItem::BraidOak(&ROLLING_BRAID_OAK),
-			Self::RareTallRollingBraidOak => RollingOaksItem::BraidOak(&RARE_TALL_ROLLING_BRAID_OAK),
+			Self::RareTallRollingBraidOak => {
+				RollingOaksItem::BraidOak(&RARE_TALL_ROLLING_BRAID_OAK)
+			}
 			Self::RareSentinelRollingBraidOak => {
 				RollingOaksItem::BraidOak(&RARE_SENTINEL_ROLLING_BRAID_OAK)
 			}
@@ -231,7 +232,8 @@ mod tests {
 		assert_eq!(oak.height, UnitRange::new(5.0, 20.0));
 		assert_eq!(oak.canopy_density, MODERATE_CANOPY_DENSITY);
 
-		let RollingOaksItem::BraidOak(tall) = RollingOaksCell::RareTallRollingBraidOak.item() else {
+		let RollingOaksItem::BraidOak(tall) = RollingOaksCell::RareTallRollingBraidOak.item()
+		else {
 			anyhow::bail!("expected rare tall braid oak item");
 		};
 		assert_eq!(tall.height, UnitRange::new(20.0, 32.0));
@@ -295,14 +297,28 @@ mod tests {
 		let prepared =
 			RollingOaksCell::distribution().prepare(0.0, 0.0, NoiseParams::default(), Vec3::ZERO);
 		let terrain = FlatTerrainSample { elevation: 0.40, steepness: 0.50 };
-		let story_outcome = prepared.select_from(4, Vec3::new(5.0, 0.40, 5.0), 1.0, Cell::from_min_max(Vec3::ZERO, Vec3::ONE), &terrain);
+		let story_outcome = prepared.select_from(
+			4,
+			Vec3::new(5.0, 0.40, 5.0),
+			1.0,
+			Cell::from_min_max(Vec3::ZERO, Vec3::ONE),
+			&terrain,
+		);
 		match story_outcome {
 			GroveCellOutcome::Placed { variant, .. } => {
 				assert_eq!(variant, RollingOaksCell::RareRollingStorybook);
 			}
-			other => anyhow::bail!("expected RareRollingStorybook on moderate slope, got {other:?}"),
+			other => {
+				anyhow::bail!("expected RareRollingStorybook on moderate slope, got {other:?}")
+			}
 		}
-		let braid_outcome = prepared.select_from(1, Vec3::new(5.0, 0.40, 5.0), 1.0, Cell::from_min_max(Vec3::ZERO, Vec3::ONE), &terrain);
+		let braid_outcome = prepared.select_from(
+			1,
+			Vec3::new(5.0, 0.40, 5.0),
+			1.0,
+			Cell::from_min_max(Vec3::ZERO, Vec3::ONE),
+			&terrain,
+		);
 		match braid_outcome {
 			GroveCellOutcome::Placed { variant, .. } => {
 				assert_eq!(variant, RollingOaksCell::RareRollingStorybook);

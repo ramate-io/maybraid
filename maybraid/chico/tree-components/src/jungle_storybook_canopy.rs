@@ -13,8 +13,16 @@ use crate::JungleGrowth;
 
 /// Exactly one mesh cluster per canopy graph node (mutually exclusive variants).
 #[derive(Clone)]
-pub enum JungleStorybookCanopyFoliage<InnerM, InnerS, OuterM, OuterS, BodyM, BodyS, FoliageM, FoliageS>
-where
+pub enum JungleStorybookCanopyFoliage<
+	InnerM,
+	InnerS,
+	OuterM,
+	OuterS,
+	BodyM,
+	BodyS,
+	FoliageM,
+	FoliageS,
+> where
 	InnerM: Material,
 	InnerS: Clone + Into<MeshMaterial3d<InnerM>>,
 	OuterM: Material,

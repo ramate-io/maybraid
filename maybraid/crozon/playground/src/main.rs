@@ -32,10 +32,7 @@ fn main() {
 					}),
 					..default()
 				})
-				.set(AssetPlugin {
-					file_path: assets_path.to_string_lossy().into(),
-					..default()
-				}),
+				.set(AssetPlugin { file_path: assets_path.to_string_lossy().into(), ..default() }),
 		)
 		.insert_resource(ClearColor(Color::srgb(0.82, 0.88, 0.92)))
 		.insert_resource(PendingStartupCommand(startup))

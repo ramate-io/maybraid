@@ -119,7 +119,7 @@ pub(crate) fn sync_character(
 
 	let rig_entity = commands
 		.spawn((
-			SceneRoot(asset_server.load(GltfAssetLabel::Scene(0).from_asset(rig_path))),
+			WorldAssetRoot(asset_server.load(GltfAssetLabel::Scene(0).from_asset(rig_path))),
 			CharacterRig,
 			BoneMap::default(),
 			CharacterRoot,
@@ -130,7 +130,7 @@ pub(crate) fn sync_character(
 
 	for (label, path, kind) in parts {
 		let mut part = commands.spawn((
-			SceneRoot(asset_server.load(GltfAssetLabel::Scene(0).from_asset(path))),
+			WorldAssetRoot(asset_server.load(GltfAssetLabel::Scene(0).from_asset(path))),
 			ModularPart,
 			kind,
 			PartRigRef { rig_root: rig_entity },

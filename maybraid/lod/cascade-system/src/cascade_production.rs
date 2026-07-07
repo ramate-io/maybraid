@@ -4,7 +4,7 @@
 use std::collections::HashMap;
 use std::marker::PhantomData;
 
-use bevy::ecs::query::{QueryData, QueryFilter};
+use bevy::ecs::query::{IterQueryData, QueryData, QueryFilter};
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 use lod_cascade::{Cascade, Chunk};
@@ -88,7 +88,7 @@ pub trait RequirementBuilder: Component + Clone + Send + Sync + 'static + Defaul
 pub trait CascadeProductionSource: Send + Sync + 'static {
 	type PositionData: Component + Clone + Send + Sync + 'static;
 	type Builder: RequirementBuilder + Default;
-	type QueryData: QueryData;
+	type QueryData: QueryData + IterQueryData;
 	type QueryFilter: QueryFilter + Send + Sync + 'static;
 
 	fn entity(item: &<Self::QueryData as QueryData>::Item<'_, '_>) -> Entity;

@@ -1,7 +1,7 @@
 {
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/a7abebc31a8f60011277437e000eebcc01702b9f";
-    rust-overlay.url = "github:oxalica/rust-overlay/02227ca8c229c968dbb5de95584cfb12b4313104";
+    nixpkgs.url = "github:NixOS/nixpkgs/8c50a710ddca43d7a530fb805ad55bde8d0141c5";
+    rust-overlay.url = "github:oxalica/rust-overlay/e7a078c7feb51f37955a832b22a96de5fccb1f7a";
     flake-utils.url = "github:numtide/flake-utils";
     crane.url = "github:ipetkov/crane";
   };
@@ -13,14 +13,14 @@
           inherit system;
           overlays = [ (import rust-overlay) ];
         };
-        host = pkgs.stdenv.hostPlatform.config; # e.g., aarch64-apple-darwin
+        pre_host = pkgs.stdenv.hostPlatform.config; # e.g. arm64-apple-darwin on Apple Silicon
+        host = pkgs.lib.replaceStrings [ "arm64-" ] [ "aarch64-" ] pre_host;
 
         toolchain = p: (p.rust-bin.fromRustupToolchainFile ./rust-toolchain.toml).override {
           extensions = [ "rustfmt" "clippy" ];
           targets = [ host "wasm32-unknown-unknown" ];
         };
         craneLib = (crane.mkLib pkgs).overrideToolchain(toolchain);
-        frameworks = pkgs.darwin.apple_sdk.frameworks;
 
         macosBlenderApp = "/Applications/Blender.app/Contents/MacOS/Blender";
         macosBlender = pkgs.writeShellScriptBin "blender" ''
@@ -51,16 +51,8 @@
           coreutils
           gcc
           rust
-          wayland
           python311
         ] ++ lib.optionals stdenv.isDarwin [
-          frameworks.Security
-          frameworks.CoreServices
-          frameworks.SystemConfiguration
-          frameworks.AppKit
-          frameworks.IOKit
-          frameworks.CoreFoundation
-          frameworks.Foundation
           libelf
           macosBlender
         ] ++ lib.optionals stdenv.isLinux [
@@ -71,6 +63,7 @@
           jemalloc
           alsa-lib
           blender
+          wayland
         ];
 
         # Specific version of toolchain

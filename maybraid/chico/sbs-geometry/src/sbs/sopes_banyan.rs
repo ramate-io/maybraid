@@ -7,8 +7,7 @@ use procedural_common::{
 	parse_count_pair as parse_ring_layout, parse_unit_range, parse_usize_range as parse_depth_range,
 };
 use procedural_common::{
-	CountPair as RingLayout, NoiseConfig, NoiseParams, UnitRange,
-	UsizeRange as DepthRange,
+	CountPair as RingLayout, NoiseConfig, NoiseParams, UnitRange, UsizeRange as DepthRange,
 };
 
 use crate::anchors::sopes_banyan::{
@@ -42,10 +41,7 @@ impl Default for SopesBanyanScale {
 
 impl SopesBanyanScale {
 	pub fn to_stalk(&self) -> StrictStalk {
-		StrictStalk {
-			stalk_height: self.stalk_height,
-			stalk_base_radius: self.stalk_base_radius,
-		}
+		StrictStalk { stalk_height: self.stalk_height, stalk_base_radius: self.stalk_base_radius }
 	}
 }
 

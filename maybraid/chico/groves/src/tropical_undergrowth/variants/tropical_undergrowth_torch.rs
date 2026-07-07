@@ -3,10 +3,10 @@
 use chico_sbs_geometry::{KamakuraTorchSbs, PenmarchTorchSbs};
 use procedural_common::{BuildWithNoise, NoiseConfig, NoiseParams, UnitRange};
 
-use crate::tropical_undergrowth::TropicalUndergrowthTorch;
 use crate::tropical_undergrowth::variants::tropical_undergrowth_vase_tree::{
 	understory_ring_spacing, UNDERSTORY_ANCHORS_PER_RING,
 };
+use crate::tropical_undergrowth::TropicalUndergrowthTorch;
 
 fn sample_f32(config: &NoiseConfig, range: UnitRange, salt: f32) -> f32 {
 	let lo = range.start.min(range.end);

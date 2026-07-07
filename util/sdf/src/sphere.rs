@@ -18,4 +18,3 @@ impl Sdf for SphereSdf {
 		(p - self.center).length() - self.radius
 	}
 }
-

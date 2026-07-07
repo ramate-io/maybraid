@@ -16,7 +16,7 @@ Script: [`publish-gh-issue.sh`](publish-gh-issue.sh). It creates a GitHub issue 
 ./bin/publish-gh-issue.sh --dry-run path/to/issue.json
 ```
 
-Paths are usually next to draft bodies under [`issues/`]()--which is not tracked by Git.
+Paths are usually next to draft bodies under `issues/`—which is not tracked by Git.
 
 ## JSON schema
 

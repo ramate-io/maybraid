@@ -6,23 +6,23 @@
 //!
 //! Downstream [`Hysteresis`] implementations (e.g. Sope's Banyan) then grow branches from those seeds via [`Hysteresis::next_hysteresis`].
 
-pub mod date_palm;
-pub mod palm_bush;
-pub mod waialea_palm;
-pub mod storybook_tree;
 pub mod braid_oak;
-pub mod liams_conifer;
+pub mod date_palm;
 pub mod friends_conifer;
-pub mod sopes_banyan;
-pub mod honu_banyan;
-pub mod torch_tree;
-pub mod penmarch_torch;
-pub mod kamakura_torch;
-pub mod rorys_head_trained;
 pub mod high_bush;
-pub mod vase_tree;
+pub mod honu_banyan;
+pub mod kamakura_torch;
+pub mod liams_conifer;
+pub mod palm_bush;
+pub mod penmarch_torch;
+pub mod rorys_head_trained;
+pub mod sopes_banyan;
 pub mod stalk_perturbation;
+pub mod storybook_tree;
 pub mod strict_stalk;
+pub mod torch_tree;
+pub mod vase_tree;
+pub mod waialea_palm;
 
 use crate::{BallStickChain, Hysteresis};
 

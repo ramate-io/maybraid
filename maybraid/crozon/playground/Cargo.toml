@@ -11,6 +11,7 @@ rust-version = { workspace = true }
 
 [dependencies]
 bevy = { workspace = true }
+camera-controls = { workspace = true }
 clap = { workspace = true }
 crozon-rigs = { workspace = true }
 game-commands = { workspace = true }

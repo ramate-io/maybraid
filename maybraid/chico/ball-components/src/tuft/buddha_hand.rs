@@ -19,8 +19,7 @@ const HEIGHT_SEGMENTS: u32 = 5;
 pub use construction::{BuddhaHandCluster, BuddhaHandElement};
 
 /// [`StandardMaterial`] Buddha's-hand tuft (common default).
-pub type BuddhaHandTuftStd =
-	BuddhaHandTuft<StandardMaterial, MeshMaterial3d<StandardMaterial>>;
+pub type BuddhaHandTuftStd = BuddhaHandTuft<StandardMaterial, MeshMaterial3d<StandardMaterial>>;
 
 /// CLI / noise-driven shape parameters for [`BuddhaHandTuft`].
 #[derive(Clone, Debug, PartialEq)]
@@ -111,15 +110,12 @@ where
 	}
 
 	fn finger_directions(&self) -> Vec<Vec3> {
-		CapDirections::upward(
-			self.shape.finger_count,
-			self.shape.seed,
-			self.shape.max_tilt_radians,
-		)
+		CapDirections::upward(self.shape.finger_count, self.shape.seed, self.shape.max_tilt_radians)
 	}
 
 	fn finger_length_at(&self, index: u32, min: f32, max: f32, scale: f32) -> f32 {
-		(self.shape.finger_length * CapDirections::length_scale(index, self.shape.seed, min, max)
+		(self.shape.finger_length
+			* CapDirections::length_scale(index, self.shape.seed, min, max)
 			* scale)
 			.max(1e-4)
 	}
@@ -166,13 +162,7 @@ where
 		M: Send + Sync + 'static,
 		S: Send + Sync + 'static,
 	{
-		MergedTuft::spawn_render_items_under(
-			self,
-			commands,
-			cascade_chunk,
-			local_transform,
-			parent,
-		)
+		MergedTuft::spawn_render_items_under(self, commands, cascade_chunk, local_transform, parent)
 	}
 }
 

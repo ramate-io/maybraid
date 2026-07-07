@@ -1,0 +1,303 @@
+//! Forward contract from the [`MenuNode`] IR to Bevy UI widgets.
+//!
+//! [`BevyMenuSink`] is the only place that decides how each IR variant paints.
+//! It contains no species- or menu-specific knowledge; everything it needs is
+//! carried on the nodes.
+
+use bevy::prelude::*;
+use character_ui_menu::{
+	AssetChoice, AssetThumbnailDisplay, ItemRow, MenuNode, PreviewColor, SectionOpen, SwatchChoice,
+	ThumbnailRequest,
+};
+
+use crate::widgets::{
+	color_from_hex, compact_control_row, inline_chip_row, labeled_row, render_asset_button,
+	render_button, select_tile_node, swatch_node, text, tile_text, ToggleSectionKey, ACTIVE,
+	INACTIVE, MENU_VERTICAL_GAP, MUTED,
+};
+
+/// Renderer-owned thumbnail bridge. The playground adapts this to its cache.
+pub trait MenuThumbnailContext {
+	fn image_for_asset(
+		&mut self,
+		label: &'static str,
+		asset_path: &'static str,
+		color: Color,
+		camera: character_ui_menu::ThumbnailCamera,
+	) -> Option<Handle<Image>>;
+}
+
+/// Per-rebuild rendering state shared across the whole node tree.
+pub struct RenderContext<'a, T> {
+	pub sections: &'a dyn SectionOpen,
+	pub thumbnails: &'a mut T,
+	pub asset_thumbnails: AssetThumbnailDisplay,
+	pub prewarm: &'a mut Vec<ThumbnailRequest>,
+}
+
+/// Forward dispatcher over [`MenuNode`] trees.
+pub trait MenuSink<E: Copy + Send + Sync + 'static> {
+	fn render_node<C: MenuThumbnailContext>(
+		&self,
+		node: &MenuNode<E>,
+		parent: &mut ChildSpawnerCommands,
+		context: &mut RenderContext<'_, C>,
+	);
+
+	fn render_nodes<C: MenuThumbnailContext>(
+		&self,
+		nodes: &[MenuNode<E>],
+		parent: &mut ChildSpawnerCommands,
+		context: &mut RenderContext<'_, C>,
+	) {
+		for node in nodes {
+			self.render_node(node, parent, context);
+		}
+	}
+}
+
+/// Bevy UI implementation of the menu forward contract.
+#[derive(Default)]
+pub struct BevyMenuSink;
+
+impl<E: Copy + Send + Sync + 'static> MenuSink<E> for BevyMenuSink {
+	fn render_node<C: MenuThumbnailContext>(
+		&self,
+		node: &MenuNode<E>,
+		parent: &mut ChildSpawnerCommands,
+		context: &mut RenderContext<'_, C>,
+	) {
+		match node {
+			MenuNode::Fragment(children) => self.render_nodes(children, parent, context),
+			MenuNode::Section { label, children } => self.section(label, children, parent, context),
+			MenuNode::SectionSelect { label, choices, children } => {
+				block_label(parent, label);
+				parent.spawn((inline_chip_row(), Pickable::IGNORE)).with_children(|row| {
+					for choice in choices {
+						row.spawn((
+							Button,
+							select_tile_node(),
+							BackgroundColor(if choice.selected { ACTIVE } else { INACTIVE }),
+							crate::widgets::MenuButton(choice.event),
+						))
+						.with_children(|button| tile_text(button, choice.label, 9.0, Color::WHITE));
+					}
+				});
+				self.render_nodes(children, parent, context);
+			}
+			MenuNode::LabeledCycle { label, value, minus, plus } => {
+				inline_label_row(parent, label, |row| {
+					row.spawn((compact_control_row(), Pickable::IGNORE)).with_children(
+						|controls| {
+							render_button(controls, "<", *minus, false);
+							text(controls, value, 11.0, VALUE_COLOR);
+							render_button(controls, ">", *plus, false);
+						},
+					);
+				});
+			}
+			MenuNode::LabeledSlider { label, value, decrease, increase } => {
+				inline_label_row(parent, label, |row| {
+					row.spawn((compact_control_row(), Pickable::IGNORE)).with_children(
+						|controls| {
+							render_button(controls, "-", *decrease, false);
+							text(controls, &format!("{value:.2}"), 11.0, VALUE_COLOR);
+							render_button(controls, "+", *increase, false);
+						},
+					);
+				});
+			}
+			MenuNode::LabeledSwatch { label, choices } => {
+				inline_label_row(parent, label, |row| swatch_row(row, choices));
+			}
+			MenuNode::BlockAsset { label, preview, choices } => {
+				block_label(parent, label);
+				let preview = bevy_color(*preview);
+				parent
+					.spawn((
+						Node {
+							width: Val::Percent(100.0),
+							flex_direction: FlexDirection::Row,
+							flex_wrap: FlexWrap::Wrap,
+							column_gap: Val::Px(8.0),
+							row_gap: Val::Px(MENU_VERTICAL_GAP),
+							..default()
+						},
+						Pickable::IGNORE,
+					))
+					.with_children(|grid| {
+						for choice in choices {
+							let thumbnail = asset_thumbnail(choice, preview, context);
+							render_asset_button(
+								grid,
+								choice.label,
+								choice.event,
+								choice.selected,
+								thumbnail,
+							);
+						}
+					});
+			}
+			MenuNode::ItemMultiSelect { label, rows } => {
+				block_label(parent, label);
+				for row in rows {
+					self.item_row(row, parent, context);
+				}
+			}
+		}
+	}
+}
+
+const VALUE_COLOR: Color = Color::srgb(0.85, 0.95, 1.0);
+
+impl BevyMenuSink {
+	fn section<E: Copy + Send + Sync + 'static, C: MenuThumbnailContext>(
+		&self,
+		label: &'static str,
+		children: &[MenuNode<E>],
+		parent: &mut ChildSpawnerCommands,
+		context: &mut RenderContext<'_, C>,
+	) {
+		let open = context.sections.is_open(label);
+		parent
+			.spawn((
+				Node {
+					width: Val::Percent(100.0),
+					flex_direction: FlexDirection::Column,
+					row_gap: Val::Px(MENU_VERTICAL_GAP),
+					..default()
+				},
+				Pickable::IGNORE,
+			))
+			.with_children(|section| {
+				section
+					.spawn((
+						Button,
+						Node {
+							min_width: Val::Px(28.0),
+							height: Val::Px(crate::widgets::BUTTON_HEIGHT),
+							padding: UiRect::axes(
+								Val::Px(7.0),
+								Val::Px(crate::widgets::MENU_BUTTON_PADDING_V),
+							),
+							justify_content: JustifyContent::Center,
+							align_items: AlignItems::Center,
+							..default()
+						},
+						BackgroundColor(if open { ACTIVE } else { INACTIVE }),
+						ToggleSectionKey(label),
+					))
+					.with_children(|button| {
+						text(
+							button,
+							&format!("{} {}", if open { "v" } else { ">" }, label),
+							10.0,
+							Color::WHITE,
+						);
+					});
+				if open {
+					self.render_nodes(children, section, context);
+				}
+			});
+	}
+
+	fn item_row<E: Copy + Send + Sync + 'static, C: MenuThumbnailContext>(
+		&self,
+		row: &ItemRow<E>,
+		parent: &mut ChildSpawnerCommands,
+		context: &mut RenderContext<'_, C>,
+	) {
+		let thumbnail = asset_thumbnail(&row.asset, bevy_color(row.preview), context);
+		parent
+			.spawn((
+				Node {
+					width: Val::Percent(100.0),
+					flex_direction: FlexDirection::Row,
+					column_gap: Val::Px(6.0),
+					row_gap: Val::Px(MENU_VERTICAL_GAP),
+					align_items: AlignItems::Center,
+					..default()
+				},
+				Pickable::IGNORE,
+			))
+			.with_children(|item| {
+				render_asset_button(
+					item,
+					row.asset.label,
+					row.asset.event,
+					row.asset.selected,
+					thumbnail,
+				);
+				swatch_row(item, &row.colors);
+			});
+	}
+}
+
+fn block_label(parent: &mut ChildSpawnerCommands, label: &str) {
+	text(parent, label, 12.0, Color::srgb(0.78, 0.84, 0.92));
+}
+
+fn inline_label_row(
+	parent: &mut ChildSpawnerCommands,
+	label: &str,
+	controls: impl FnOnce(&mut ChildSpawnerCommands),
+) {
+	parent.spawn((labeled_row(), Pickable::IGNORE)).with_children(|row| {
+		text(row, label, 11.0, Color::WHITE);
+		controls(row);
+	});
+}
+
+fn swatch_row<E: Copy + Send + Sync + 'static>(
+	parent: &mut ChildSpawnerCommands,
+	choices: &[SwatchChoice<E>],
+) {
+	parent.spawn((inline_chip_row(), Pickable::IGNORE)).with_children(|row| {
+		for choice in choices {
+			row.spawn((
+				Button,
+				swatch_node(choice.selected),
+				BorderColor::all(if choice.selected { Color::WHITE } else { MUTED }),
+				BackgroundColor(color_from_hex(choice.color_hex)),
+				crate::widgets::MenuButton(choice.event),
+			));
+		}
+	});
+}
+
+fn asset_thumbnail<E: Copy + Send + Sync + 'static, C: MenuThumbnailContext>(
+	choice: &AssetChoice<E>,
+	preview: Color,
+	context: &mut RenderContext<'_, C>,
+) -> Option<Handle<Image>> {
+	if context.asset_thumbnails != AssetThumbnailDisplay::None && !choice.path.is_empty() {
+		context.prewarm.push(ThumbnailRequest::new(
+			choice.path,
+			color_key(preview),
+			choice.thumbnail_camera,
+		));
+	}
+	match context.asset_thumbnails {
+		AssetThumbnailDisplay::Inline => context.thumbnails.image_for_asset(
+			choice.label,
+			choice.path,
+			preview,
+			choice.thumbnail_camera,
+		),
+		_ => None,
+	}
+}
+
+fn bevy_color(preview: PreviewColor) -> Color {
+	Color::srgba(preview.red, preview.green, preview.blue, preview.alpha)
+}
+
+fn color_key(color: Color) -> [u8; 4] {
+	let srgba = color.to_srgba();
+	[
+		(srgba.red * 255.0) as u8,
+		(srgba.green * 255.0) as u8,
+		(srgba.blue * 255.0) as u8,
+		(srgba.alpha * 255.0) as u8,
+	]
+}

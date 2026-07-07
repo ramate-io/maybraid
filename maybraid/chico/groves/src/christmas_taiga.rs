@@ -14,7 +14,6 @@ use crate::grove::{
 	PlacementConstraints,
 };
 
-
 /// Dense sampled canopy-density band ([`0.50`, `0.85`]).
 const DENSE_CANOPY_DENSITY: UnitRange = UnitRange::new(0.50, 0.85);
 

@@ -14,7 +14,6 @@ use crate::grove::{
 	PlacementConstraints,
 };
 
-
 /// Moderate sampled canopy-density band ([`0.35`, `0.65`]).
 const MODERATE_CANOPY_DENSITY: UnitRange = UnitRange::new(0.35, 0.65);
 /// Dense sampled canopy-density band ([`0.50`, `0.85`]).
@@ -315,7 +314,13 @@ mod tests {
 		let prepared =
 			TradeWindsCell::distribution().prepare(0.0, 0.0, NoiseParams::default(), Vec3::ZERO);
 		let moderate = FlatTerrainSample { elevation: 0.40, steepness: 0.40 };
-		let sope_outcome = prepared.select_from(2, Vec3::new(5.0, 0.40, 5.0), 1.0, Cell::from_min_max(Vec3::ZERO, Vec3::ONE), &moderate);
+		let sope_outcome = prepared.select_from(
+			2,
+			Vec3::new(5.0, 0.40, 5.0),
+			1.0,
+			Cell::from_min_max(Vec3::ZERO, Vec3::ONE),
+			&moderate,
+		);
 		match sope_outcome {
 			GroveCellOutcome::Placed { variant, .. } => {
 				assert_eq!(variant, TradeWindsCell::TradeSopesBanyan);
@@ -323,7 +328,13 @@ mod tests {
 			other => anyhow::bail!("expected TradeSopesBanyan on moderate slope, got {other:?}"),
 		}
 		let steep = FlatTerrainSample { elevation: 0.40, steepness: 0.45 };
-		let steep_outcome = prepared.select_from(2, Vec3::new(5.0, 0.40, 5.0), 1.0, Cell::from_min_max(Vec3::ZERO, Vec3::ONE), &steep);
+		let steep_outcome = prepared.select_from(
+			2,
+			Vec3::new(5.0, 0.40, 5.0),
+			1.0,
+			Cell::from_min_max(Vec3::ZERO, Vec3::ONE),
+			&steep,
+		);
 		match steep_outcome {
 			GroveCellOutcome::Placed { variant, .. } => {
 				assert_eq!(variant, TradeWindsCell::RareTallTradeStorybook);

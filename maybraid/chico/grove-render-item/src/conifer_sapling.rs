@@ -10,13 +10,13 @@ use clap::Args;
 use procedural_common::{noise_params_from_scalar_str, BuildWithNoise, NoiseParams};
 use render_item::{CascadeChunk, RenderItem};
 
-use chico_groves::conifer_sapling::{definition, ConiferSaplingCell, ConiferSaplingItem};
-use chico_groves::{
-	patch_spawned_leaf_material, placement_noise, GroveExtent, GroveFrontend, GroveCellVariant,
-	GroveWorldSample, WithPalette, DEFAULT_GROVE_EXTENT_XZ,
-};
 use crate::skipped_mesh_material::{
 	SkippedLeafMeshMaterial, SkippedStickMeshMaterial as GroveSkippedStickMeshMaterial,
+};
+use chico_groves::conifer_sapling::{definition, ConiferSaplingCell, ConiferSaplingItem};
+use chico_groves::{
+	patch_spawned_leaf_material, placement_noise, GroveCellVariant, GroveExtent, GroveFrontend,
+	GroveWorldSample, WithPalette, DEFAULT_GROVE_EXTENT_XZ,
 };
 
 /// Uniform terrain tuned for conifer sapling placement constraints (RFC elevation bands overlap).

@@ -241,14 +241,8 @@ mod tests {
 		};
 		let max_y = positions.iter().map(|p| p[1]).fold(f32::NEG_INFINITY, f32::max);
 		let min_y = positions.iter().map(|p| p[1]).fold(f32::INFINITY, f32::min);
-		assert!(
-			max_y < 0.15,
-			"anchor should stay near origin; mesh max_y={max_y}"
-		);
-		assert!(
-			min_y < -0.35,
-			"strands should hang below anchor; mesh min_y={min_y}"
-		);
+		assert!(max_y < 0.15, "anchor should stay near origin; mesh max_y={max_y}");
+		assert!(min_y < -0.35, "strands should hang below anchor; mesh min_y={min_y}");
 		Ok(())
 	}
 }

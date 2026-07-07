@@ -17,7 +17,6 @@ use crate::grove::{
 	PlacementConstraints,
 };
 
-
 /// RFC `projection_count: Moderate` — dry high-bush varietal.
 const MODERATE_PROJECTION_RADIAL: UnitRange = UnitRange::new(0.32, 0.48);
 const MODERATE_PROJECTION_VERTICAL: UnitRange = UnitRange::new(0.58, 0.78);
@@ -394,7 +393,13 @@ mod tests {
 			Vec3::ZERO,
 		);
 		let terrain = FlatTerrainSample { elevation: 0.25, steepness: 0.30 };
-		let outcome = prepared.select_from(7, Vec3::new(5.0, 0.25, 5.0), 1.0, Cell::from_min_max(Vec3::ZERO, Vec3::ONE), &terrain);
+		let outcome = prepared.select_from(
+			7,
+			Vec3::new(5.0, 0.25, 5.0),
+			1.0,
+			Cell::from_min_max(Vec3::ZERO, Vec3::ONE),
+			&terrain,
+		);
 		match outcome {
 			GroveCellOutcome::Placed { variant, .. } => {
 				assert_eq!(variant, LevantineScrubCell::ScrubHedge);
@@ -413,7 +418,13 @@ mod tests {
 			Vec3::ZERO,
 		);
 		let terrain = FlatTerrainSample { elevation: 0.25, steepness: 0.69 };
-		let outcome = prepared.select_from(3, Vec3::new(5.0, 0.25, 5.0), 1.0, Cell::from_min_max(Vec3::ZERO, Vec3::ONE), &terrain);
+		let outcome = prepared.select_from(
+			3,
+			Vec3::new(5.0, 0.25, 5.0),
+			1.0,
+			Cell::from_min_max(Vec3::ZERO, Vec3::ONE),
+			&terrain,
+		);
 		match outcome {
 			GroveCellOutcome::Empty { .. } => {}
 			other => anyhow::bail!("expected Empty on steep slope, got {other:?}"),
@@ -430,7 +441,13 @@ mod tests {
 			Vec3::ZERO,
 		);
 		let terrain = FlatTerrainSample { elevation: 0.25, steepness: 0.62 };
-		let outcome = prepared.select_from(3, Vec3::new(5.0, 0.25, 5.0), 1.0, Cell::from_min_max(Vec3::ZERO, Vec3::ONE), &terrain);
+		let outcome = prepared.select_from(
+			3,
+			Vec3::new(5.0, 0.25, 5.0),
+			1.0,
+			Cell::from_min_max(Vec3::ZERO, Vec3::ONE),
+			&terrain,
+		);
 		match outcome {
 			GroveCellOutcome::Placed { variant, .. } => {
 				assert_eq!(variant, LevantineScrubCell::DryHighBush);

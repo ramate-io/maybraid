@@ -85,7 +85,11 @@ where
 	}
 
 	/// Palm-trunk banding: narrower at the segment base, wider at the top ([RFC §3.1.6.2](https://github.com/ramate-io/maybraid/tree/main/rfc/rfc-000-000-183-chico-vegetation/03-01-stalk-and-ball-stick-trees/06-well-known-component-constructions/02-palm-trunk/README.md)).
-	pub fn noisy_cylinder_taper(&self, base_radius: f32, top_radius: f32) -> chico_sdf::NoisyCylinder {
+	pub fn noisy_cylinder_taper(
+		&self,
+		base_radius: f32,
+		top_radius: f32,
+	) -> chico_sdf::NoisyCylinder {
 		let mut inner = TaperedCylinder::unit_segment(base_radius, top_radius);
 		inner.bounds_margin = self.cylinder_bounds_margin;
 		NoisySurface::from_params(

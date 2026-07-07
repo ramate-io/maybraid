@@ -62,12 +62,7 @@ impl SpearCluster {
 		noise_frequency: f32,
 		noise_amplitude: f32,
 	) -> Self {
-		Self {
-			elements,
-			height_segments,
-			noise_frequency,
-			noise_amplitude,
-		}
+		Self { elements, height_segments, noise_frequency, noise_amplitude }
 	}
 
 	pub fn into_mesh(self) -> Mesh {
@@ -143,14 +138,7 @@ fn strand_center(
 	noise_amplitude: f32,
 	max_sway: f32,
 ) -> Vec3 {
-	let sway = strand_sway_at(
-		noise,
-		seed,
-		t,
-		noise_frequency,
-		noise_amplitude,
-		max_sway,
-	);
+	let sway = strand_sway_at(noise, seed, t, noise_frequency, noise_amplitude, max_sway);
 	up * (t * length) + width * sway.right + outward * sway.forward
 }
 
@@ -184,7 +172,10 @@ fn push_cross_section(
 
 fn stitch_cross_sections(indices: &mut Vec<u32>, lower: CrossSection, upper: CrossSection) {
 	match (lower, upper) {
-		(CrossSection::Pair { left: l0, right: r0 }, CrossSection::Pair { left: l1, right: r1 }) => {
+		(
+			CrossSection::Pair { left: l0, right: r0 },
+			CrossSection::Pair { left: l1, right: r1 },
+		) => {
 			indices.extend_from_slice(&[l0, l1, r0, r0, l1, r1]);
 		}
 		(CrossSection::Pair { left: l0, right: r0 }, CrossSection::Apex { tip }) => {
@@ -265,9 +256,7 @@ fn append_ribbon(
 			noise_amplitude,
 			max_sway,
 		);
-		let Some(section) =
-			push_cross_section(positions, center, width, half, is_tip)
-		else {
+		let Some(section) = push_cross_section(positions, center, width, half, is_tip) else {
 			return;
 		};
 		sections.push(section);
@@ -291,10 +280,7 @@ mod tests {
 			vec![SpearElement {
 				direction,
 				length: 1.0,
-				profile: BellyTipProfile {
-					base_half_width: 0.01,
-					belly_half_width: 0.03,
-				},
+				profile: BellyTipProfile { base_half_width: 0.01, belly_half_width: 0.03 },
 				seed: 0,
 			}],
 			4,
@@ -363,10 +349,7 @@ mod tests {
 			vec![SpearElement {
 				direction,
 				length,
-				profile: BellyTipProfile {
-					base_half_width: 0.008,
-					belly_half_width: 0.022,
-				},
+				profile: BellyTipProfile { base_half_width: 0.008, belly_half_width: 0.022 },
 				seed: 0,
 			}],
 			2,
@@ -393,10 +376,7 @@ mod tests {
 			vec![SpearElement {
 				direction: Vec3::Y,
 				length: 1.0,
-				profile: BellyTipProfile {
-					base_half_width: 0.01,
-					belly_half_width: 0.03,
-				},
+				profile: BellyTipProfile { base_half_width: 0.01, belly_half_width: 0.03 },
 				seed: 0,
 			}],
 			1,
@@ -416,10 +396,7 @@ mod tests {
 			vec![SpearElement {
 				direction: Vec3::Y,
 				length: 1.0,
-				profile: BellyTipProfile {
-					base_half_width: 0.01,
-					belly_half_width: 0.03,
-				},
+				profile: BellyTipProfile { base_half_width: 0.01, belly_half_width: 0.03 },
 				seed: 0,
 			}],
 			2,
@@ -441,10 +418,7 @@ mod tests {
 		let element = SpearElement {
 			direction: Vec3::Y,
 			length: 1.0,
-			profile: BellyTipProfile {
-				base_half_width: 0.01,
-				belly_half_width: 0.03,
-			},
+			profile: BellyTipProfile { base_half_width: 0.01, belly_half_width: 0.03 },
 			seed: 0,
 		};
 		let straight = SpearCluster::new(vec![element.clone()], 1, 0.0, 0.0).into_mesh();

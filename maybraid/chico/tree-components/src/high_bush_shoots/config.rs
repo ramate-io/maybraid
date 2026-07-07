@@ -84,11 +84,11 @@ impl HighBushShootsShape {
 		}
 	}
 
-	pub fn build_chain(&self) -> chico_sbs_geometry::BallStickChain<chico_sbs_geometry::HighBushChain> {
+	pub fn build_chain(
+		&self,
+	) -> chico_sbs_geometry::BallStickChain<chico_sbs_geometry::HighBushChain> {
 		let noise = NoiseConfig::new(self.chain_noise);
-		chico_sbs_geometry::BallStickChain::build(
-			self.to_proto().hysteresis_seeds(noise),
-		)
+		chico_sbs_geometry::BallStickChain::build(self.to_proto().hysteresis_seeds(noise))
 	}
 
 	pub fn leaf_radius_world(&self) -> f32 {

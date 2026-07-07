@@ -88,7 +88,7 @@ pub fn update_checker_size(
 	if changed {
 		// Update the material with new checker size
 		if let Ok(mesh_material) = ground_query.single() {
-			if let Some(material) = materials.get_mut(&mesh_material.0) {
+			if let Some(mut material) = materials.get_mut(&mesh_material.0) {
 				material.checker_size_m = checker_size.size_m();
 			}
 		}

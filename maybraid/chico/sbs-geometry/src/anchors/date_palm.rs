@@ -8,9 +8,9 @@ use procedural_common::NoiseConfig;
 use super::strict_stalk::StrictStalk;
 use super::Anchors;
 use crate::chain::date_palm::{DatePalmChain, DatePalmPhase};
-use crate::palm_crown::vertical_bias_mix;
 use crate::chain::BranchOut;
 use crate::chain::DepthBudget;
+use crate::palm_crown::vertical_bias_mix;
 use crate::BallStickNode;
 
 /// Default stalk height for playground date palms (shorter than tall RFC reference trees).

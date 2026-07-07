@@ -3,46 +3,46 @@ use chico_ball_components::tuft::{
 	BladeTuft, BuddhaHandTuft, SpearTuft, SucculentTuft, WeepingTuft,
 };
 use chico_ball_components::{FrondCrown, ModerateLodFrondCrown};
+use chico_grove_render_items::alpine::AlpineStd;
+use chico_grove_render_items::arid_conifer_sapling::AridConiferSaplingStd;
 use chico_grove_render_items::braid_grass::BraidGrassStd;
 use chico_grove_render_items::bush_scrub::BushScrubStd;
+use chico_grove_render_items::christmas_taiga::ChristmasTaigaStd;
 use chico_grove_render_items::common_tufts::CommonTuftsStd;
-use chico_grove_render_items::arid_conifer_sapling::AridConiferSaplingStd;
+use chico_grove_render_items::conifer_massives::ConiferMassivesStd;
 use chico_grove_render_items::conifer_sapling::ConiferSaplingStd;
+use chico_grove_render_items::date_grove::DateGroveStd;
+use chico_grove_render_items::dryland::DrylandStd;
+use chico_grove_render_items::forlorn_savanna::ForlornSavannaStd;
 use chico_grove_render_items::goettingen_follow::GoettingenFollowStd;
 use chico_grove_render_items::high_bush::HighBushStd;
 use chico_grove_render_items::jerrys_chaparral::JerrysChaparralStd;
 use chico_grove_render_items::jungle_lower_massives::JungleLowerMassivesStd;
 use chico_grove_render_items::jungle_massives::JungleMassivesStd;
-use chico_grove_render_items::alpine::AlpineStd;
-use chico_grove_render_items::dryland::DrylandStd;
-use chico_grove_render_items::storytellers::StorytellersStd;
-use chico_grove_render_items::trade_winds::TradeWindsStd;
-use chico_grove_render_items::christmas_taiga::ChristmasTaigaStd;
-use chico_grove_render_items::conifer_massives::ConiferMassivesStd;
-use chico_grove_render_items::date_grove::DateGroveStd;
-use chico_grove_render_items::forlorn_savanna::ForlornSavannaStd;
 use chico_grove_render_items::leeward::LeewardStd;
-use chico_grove_render_items::orchard::OrchardStd;
-use chico_grove_render_items::riparian_general::RiparianGeneralStd;
-use chico_grove_render_items::rolling_oaks::RollingOaksStd;
-use chico_grove_render_items::temperate_massives::TemperateMassivesStd;
-use chico_grove_render_items::vineyard::VineyardStd;
-use chico_grove_render_items::wandering_acacia::WanderingAcaciaStd;
-use chico_grove_render_items::palm_shade::PalmShadeStd;
-use chico_grove_render_items::riparian_mix::RiparianMixStd;
-use chico_grove_render_items::temperate_lower_massives::TemperateLowerMassivesStd;
 use chico_grove_render_items::levantine_scrub::LevantineScrubStd;
 use chico_grove_render_items::low_bush::LowBushStd;
 use chico_grove_render_items::monster_grass::MonsterGrassStd;
+use chico_grove_render_items::orchard::OrchardStd;
+use chico_grove_render_items::palm_shade::PalmShadeStd;
+use chico_grove_render_items::riparian_general::RiparianGeneralStd;
+use chico_grove_render_items::riparian_mix::RiparianMixStd;
 use chico_grove_render_items::riverine_green::RiverineGreenStd;
+use chico_grove_render_items::rolling_oaks::RollingOaksStd;
 use chico_grove_render_items::shamanhome::ShamanhomeStd;
 use chico_grove_render_items::spotty_bushes::SpottyBushesStd;
+use chico_grove_render_items::storytellers::StorytellersStd;
 use chico_grove_render_items::strange_oasis::StrangeOasisStd;
 use chico_grove_render_items::tall_grass::TallGrassStd;
+use chico_grove_render_items::temperate_lower_massives::TemperateLowerMassivesStd;
+use chico_grove_render_items::temperate_massives::TemperateMassivesStd;
+use chico_grove_render_items::trade_winds::TradeWindsStd;
 use chico_grove_render_items::tropical_thicket::TropicalThicketStd;
 use chico_grove_render_items::tropical_tufts::TropicalTuftsStd;
 use chico_grove_render_items::tropical_undergrowth::TropicalUndergrowthStd;
 use chico_grove_render_items::unending_jungle::UnendingJungleStd;
+use chico_grove_render_items::vineyard::VineyardStd;
+use chico_grove_render_items::wandering_acacia::WanderingAcaciaStd;
 use chico_grove_render_items::wild_grass::WildGrassStd;
 use chico_sbs_trees::braid_oak_tree::BraidOakTree;
 use chico_sbs_trees::date_palm::DatePalm;
@@ -1100,7 +1100,9 @@ impl RenderSubject {
 			Self::AridConiferSapling(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::JungleLowerMassives(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::JungleMassives(item) => item.spawn_render_items(commands, chunk, transform),
-			Self::TemperateLowerMassives(item) => item.spawn_render_items(commands, chunk, transform),
+			Self::TemperateLowerMassives(item) => {
+				item.spawn_render_items(commands, chunk, transform)
+			}
 			Self::PalmShade(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::RiparianMix(item) => item.spawn_render_items(commands, chunk, transform),
 			Self::Alpine(item) => item.spawn_render_items(commands, chunk, transform),

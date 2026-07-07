@@ -1,7 +1,7 @@
 //! **Palm Bush** SBS frontend ([#231](https://github.com/ramate-io/maybraid/issues/231)).
 
 use bevy_math::Vec3;
-use procedural_common::{NoiseParams};
+use procedural_common::NoiseParams;
 
 use crate::anchors::palm_bush::{
 	PalmBushProtoAnchors, DEFAULT_CROWN_TUFT_SCALE_FRACTION, DEFAULT_FRONDS_PER_RING,

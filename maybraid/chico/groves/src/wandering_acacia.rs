@@ -16,7 +16,6 @@ use crate::grove::{
 	PlacementConstraints,
 };
 
-
 /// Sparse sampled canopy-density band ([`0.0`, `0.35`]).
 const SPARSE_CANOPY_DENSITY: UnitRange = UnitRange::new(0.0, 0.35);
 /// Moderate sampled canopy-density band ([`0.35`, `0.65`]).
@@ -357,7 +356,13 @@ mod tests {
 			Vec3::ZERO,
 		);
 		let moderate = FlatTerrainSample { elevation: 0.40, steepness: 0.55 };
-		let sope_outcome = prepared.select_from(2, Vec3::new(5.0, 0.40, 5.0), 1.0, Cell::from_min_max(Vec3::ZERO, Vec3::ONE), &moderate);
+		let sope_outcome = prepared.select_from(
+			2,
+			Vec3::new(5.0, 0.40, 5.0),
+			1.0,
+			Cell::from_min_max(Vec3::ZERO, Vec3::ONE),
+			&moderate,
+		);
 		match sope_outcome {
 			GroveCellOutcome::Placed { variant, .. } => {
 				assert_eq!(variant, WanderingAcaciaCell::DryWanderingSopesBanyan);
@@ -367,7 +372,13 @@ mod tests {
 			}
 		}
 		let steep = FlatTerrainSample { elevation: 0.40, steepness: 0.60 };
-		let steep_outcome = prepared.select_from(2, Vec3::new(5.0, 0.40, 5.0), 1.0, Cell::from_min_max(Vec3::ZERO, Vec3::ONE), &steep);
+		let steep_outcome = prepared.select_from(
+			2,
+			Vec3::new(5.0, 0.40, 5.0),
+			1.0,
+			Cell::from_min_max(Vec3::ZERO, Vec3::ONE),
+			&steep,
+		);
 		match steep_outcome {
 			GroveCellOutcome::Placed { variant, .. } => {
 				assert_eq!(variant, WanderingAcaciaCell::WanderingVaseTree);
@@ -376,7 +387,13 @@ mod tests {
 				"expected fall-through to WanderingVaseTree on steep slope, got {other:?}"
 			),
 		}
-		let bush_outcome = prepared.select_from(1, Vec3::new(5.0, 0.40, 5.0), 1.0, Cell::from_min_max(Vec3::ZERO, Vec3::ONE), &steep);
+		let bush_outcome = prepared.select_from(
+			1,
+			Vec3::new(5.0, 0.40, 5.0),
+			1.0,
+			Cell::from_min_max(Vec3::ZERO, Vec3::ONE),
+			&steep,
+		);
 		match bush_outcome {
 			GroveCellOutcome::Placed { variant, .. } => {
 				assert_eq!(variant, WanderingAcaciaCell::WanderingHighBush);

@@ -14,7 +14,6 @@ use crate::grove::{
 	PlacementConstraints,
 };
 
-
 /// Standard arid sapling height band ([`2.0`, `4.0`] m).
 const ARID_SAPLING_HEIGHT: UnitRange = UnitRange::new(2.0, 4.0);
 /// Sparse sampled canopy-density band ([`0.0`, `0.35`]).

@@ -133,9 +133,8 @@ impl<Item: RenderItem, Rule: BallRenderRule<Item, H> + FromScalarNoise, H: Hyste
 		frequency: f32,
 		octaves: u32,
 	) -> Self {
-		let rule = Rule::from_scalar(NoiseParams::from_scalar(
-			scalar, frequency, amplitude, octaves,
-		));
+		let rule =
+			Rule::from_scalar(NoiseParams::from_scalar(scalar, frequency, amplitude, octaves));
 		Self::new(chain, rule)
 	}
 }

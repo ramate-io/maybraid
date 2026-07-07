@@ -11,12 +11,12 @@ use clap::Args;
 use procedural_common::{noise_params_from_scalar_str, BuildWithNoise, NoiseParams};
 use render_item::{CascadeChunk, RenderItem};
 
-use chico_groves::{
-	patch_spawned_leaf_material, placement_noise, FlatTerrainSample, GroveExtent, GroveFrontend,
-	GroveCellVariant, GroveWorldSample, WithPalette, DEFAULT_GROVE_EXTENT_XZ,
-};
-use chico_groves::jerrys_chaparral::{definition, JerrysChaparralCell, JerrysChaparralItem};
 use crate::skipped_mesh_material::{SkippedLeafMeshMaterial, SkippedStickMeshMaterial};
+use chico_groves::jerrys_chaparral::{definition, JerrysChaparralCell, JerrysChaparralItem};
+use chico_groves::{
+	patch_spawned_leaf_material, placement_noise, FlatTerrainSample, GroveCellVariant, GroveExtent,
+	GroveFrontend, GroveWorldSample, WithPalette, DEFAULT_GROVE_EXTENT_XZ,
+};
 
 /// Uniform terrain tuned for chaparral placement constraints (RFC min elevation > 0).
 #[derive(Debug, Clone, Copy, PartialEq, Args)]

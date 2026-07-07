@@ -109,11 +109,7 @@ mod tests {
 		let cluster = FrondCluster::new(
 			vec![FrondElement {
 				direction: Vec3::new(0.2, -0.9, 0.1),
-				config: FrondConfig {
-					segments: 8,
-					leaflet_count: 24,
-					..FrondConfig::default()
-				},
+				config: FrondConfig { segments: 8, leaflet_count: 24, ..FrondConfig::default() },
 				seed: 0,
 			}],
 			0.02,

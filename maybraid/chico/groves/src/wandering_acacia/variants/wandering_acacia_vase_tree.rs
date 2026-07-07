@@ -18,7 +18,8 @@ fn span_fraction(canopy_spread: f32, height: f32) -> f32 {
 impl BuildWithNoise<VaseTreeSbs> for WanderingAcaciaVaseTree {
 	fn build_with_noise(&self, noise: NoiseParams) -> VaseTreeSbs {
 		let config = NoiseConfig::new(noise);
-		let height = sample_f32(&config, self.height, 1.0).max(self.height.start.min(self.height.end));
+		let height =
+			sample_f32(&config, self.height, 1.0).max(self.height.start.min(self.height.end));
 		let stalk_radius = sample_f32(&config, self.stalk_radius, 1.5);
 		let canopy_spread = sample_f32(&config, self.canopy_spread, 2.0);
 		let span = span_fraction(canopy_spread, height);

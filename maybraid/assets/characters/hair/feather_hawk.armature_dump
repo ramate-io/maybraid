@@ -1,0 +1,26 @@
+# armature object: OrthogradeHeadRig
+
+root
+  occiput
+  brow
+    nose
+      mouth
+        jaw
+          lower_mandible.R
+          lower_mandible.L
+        mandible.R
+        mandible.L
+      midcheek.R
+      midcheek.L
+    cheek.R
+    eye.R
+    cheek.L
+    eye.L
+  temple.R
+  forehead
+    crown
+      calvaria.R
+      calvaria.L
+    parietal.R
+    parietal.L
+  temple.L

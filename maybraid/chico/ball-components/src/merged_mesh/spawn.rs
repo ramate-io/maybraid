@@ -25,12 +25,7 @@ where
 	S: Clone + Into<MeshMaterial3d<M>> + Send + Sync + 'static,
 {
 	let item = item.clone();
-	let bundle = (
-		item,
-		cascade_chunk.clone(),
-		local_transform,
-		Visibility::default(),
-	);
+	let bundle = (item, cascade_chunk.clone(), local_transform, Visibility::default());
 
 	let root = match parent {
 		Some(parent) => {
@@ -46,9 +41,7 @@ where
 	commands.queue(move |world: &mut World| {
 		let mesh_handle = world.resource_mut::<Assets<Mesh>>().add(mesh);
 		let mesh_material: MeshMaterial3d<M> = material.into();
-		world
-			.entity_mut(root)
-			.insert((Mesh3d(mesh_handle), mesh_material));
+		world.entity_mut(root).insert((Mesh3d(mesh_handle), mesh_material));
 	});
 
 	root

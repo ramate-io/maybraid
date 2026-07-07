@@ -19,15 +19,17 @@ use clap::Args;
 use procedural_common::{noise_params_from_scalar_str, BuildWithNoise, NoiseParams};
 use render_item::{CascadeChunk, RenderItem};
 
-use chico_groves::{
-	patch_spawned_leaf_material, placement_noise, FlatTerrainSample, GroveExtent, GroveFrontend,
-	GroveCellVariant, GroveWorldSample, WithPalette, DEFAULT_GROVE_EXTENT_XZ,
-};
 use crate::skipped_mesh_material::{
 	SkippedLeafMeshMaterial, SkippedStickMeshMaterial as GroveSkippedStickMeshMaterial,
 };
-use chico_groves::unending_jungle::variants::unending_jungle_banyan::{HonuBanyanSamples, SopeBanyanSamples};
+use chico_groves::unending_jungle::variants::unending_jungle_banyan::{
+	HonuBanyanSamples, SopeBanyanSamples,
+};
 use chico_groves::unending_jungle::{definition, UnendingJungleCell, UnendingJungleItem};
+use chico_groves::{
+	patch_spawned_leaf_material, placement_noise, FlatTerrainSample, GroveCellVariant, GroveExtent,
+	GroveFrontend, GroveWorldSample, WithPalette, DEFAULT_GROVE_EXTENT_XZ,
+};
 
 /// Honu template for mini-banyan placements (material slots match playground [`RenderHonuBanyan`]).
 pub type JungleHonu = HonuBanyan<
@@ -271,7 +273,8 @@ where
 
 			let entities = match placed.variant.item() {
 				UnendingJungleItem::Honu(banyan) => {
-					let samples = BuildWithNoise::<HonuBanyanSamples>::build_with_noise(banyan, build_noise);
+					let samples =
+						BuildWithNoise::<HonuBanyanSamples>::build_with_noise(banyan, build_noise);
 					let mut tree = self.honu_template.clone();
 					tree.geometry = samples.geometry;
 					tree.construction.growth_spawn_fraction = samples.growth_spawn_fraction;
@@ -297,7 +300,8 @@ where
 					entities
 				}
 				UnendingJungleItem::Sope(banyan) => {
-					let samples = BuildWithNoise::<SopeBanyanSamples>::build_with_noise(banyan, build_noise);
+					let samples =
+						BuildWithNoise::<SopeBanyanSamples>::build_with_noise(banyan, build_noise);
 					let mut tree = self.sope_template.clone();
 					tree.geometry = samples.geometry;
 					tree.stick_surface_noise =
@@ -546,8 +550,11 @@ mod tests {
 
 	#[test]
 	fn with_resolved_placements_skips_live_selection() -> Result<()> {
-		let placement =
-			GroveCellVariant::new(UnendingJungleCell::LowerStorybook, Vec3::new(1.0, 0.0, 2.0), 1.0);
+		let placement = GroveCellVariant::new(
+			UnendingJungleCell::LowerStorybook,
+			Vec3::new(1.0, 0.0, 2.0),
+			1.0,
+		);
 		let item = UnendingJungleStd::with_resolved_placements(
 			vec![placement.clone()],
 			FlatTerrainSample::default(),

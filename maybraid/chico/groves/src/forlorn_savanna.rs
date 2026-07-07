@@ -16,7 +16,6 @@ use crate::grove::{
 	PlacementConstraints,
 };
 
-
 /// Sparse sampled canopy-density band ([`0.0`, `0.35`]).
 const SPARSE_CANOPY_DENSITY: UnitRange = UnitRange::new(0.0, 0.35);
 /// Flat sparse crown projection for acacia-like High Bush forms.
@@ -280,14 +279,26 @@ mod tests {
 			Vec3::ZERO,
 		);
 		let terrain = FlatTerrainSample { elevation: 0.40, steepness: 0.60 };
-		let bush_outcome = prepared.select_from(5, Vec3::new(5.0, 0.40, 5.0), 1.0, Cell::from_min_max(Vec3::ZERO, Vec3::ONE), &terrain);
+		let bush_outcome = prepared.select_from(
+			5,
+			Vec3::new(5.0, 0.40, 5.0),
+			1.0,
+			Cell::from_min_max(Vec3::ZERO, Vec3::ONE),
+			&terrain,
+		);
 		match bush_outcome {
 			GroveCellOutcome::Placed { variant, .. } => {
 				assert_eq!(variant, ForlornSavannaCell::AcaciaHighBush);
 			}
 			other => anyhow::bail!("expected AcaciaHighBush on moderate slope, got {other:?}"),
 		}
-		let rory_outcome = prepared.select_from(1, Vec3::new(5.0, 0.40, 5.0), 1.0, Cell::from_min_max(Vec3::ZERO, Vec3::ONE), &terrain);
+		let rory_outcome = prepared.select_from(
+			1,
+			Vec3::new(5.0, 0.40, 5.0),
+			1.0,
+			Cell::from_min_max(Vec3::ZERO, Vec3::ONE),
+			&terrain,
+		);
 		match rory_outcome {
 			GroveCellOutcome::Placed { variant, .. } => {
 				assert_ne!(variant, ForlornSavannaCell::SavannaRory);

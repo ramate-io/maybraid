@@ -79,10 +79,7 @@ impl HonuBanyanPhase {
 	}
 
 	pub fn is_canopy_limb(&self) -> bool {
-		matches!(
-			self,
-			Self::BranchOut(_) | Self::StartDescender(_) | Self::EndDescender(_)
-		)
+		matches!(self, Self::BranchOut(_) | Self::StartDescender(_) | Self::EndDescender(_))
 	}
 
 	pub fn is_descender_limb(&self) -> bool {
@@ -103,7 +100,12 @@ impl HonuBanyanPhase {
 		}
 	}
 
-	pub fn candidate_into(self, noise: &NoiseConfig, banyan_height: f32, descender_threshold: f32) -> Self {
+	pub fn candidate_into(
+		self,
+		noise: &NoiseConfig,
+		banyan_height: f32,
+		descender_threshold: f32,
+	) -> Self {
 		match self {
 			Self::BranchOut(b) => StartDescender::sample_from_candidate(
 				Self::BranchOut(b),
@@ -279,21 +281,15 @@ mod tests {
 
 	#[test]
 	fn phase_is_canopy_limb() -> anyhow::Result<()> {
-		assert!(!HonuBanyanPhase::Stalk(PointToPoint::new_from_vec3(
-			Vec3::ZERO,
-			Vec3::Y,
-			0.5,
-		))
-		.is_canopy_limb());
+		assert!(!HonuBanyanPhase::Stalk(PointToPoint::new_from_vec3(Vec3::ZERO, Vec3::Y, 0.5,))
+			.is_canopy_limb());
 		let noise = NoiseConfig::new(NoiseParams::default());
-		assert!(
-			HonuBanyanPhase::BranchOut(DepthBudget {
-				inner: BranchOut::radial_out_horizontal(BallStickNode::new(Vec3::ZERO, 0.05), Vec3::X)
-					.with_hysteresis_context(noise, 0, Vec3::X),
-				remaining: 3,
-			})
-			.is_canopy_limb()
-		);
+		assert!(HonuBanyanPhase::BranchOut(DepthBudget {
+			inner: BranchOut::radial_out_horizontal(BallStickNode::new(Vec3::ZERO, 0.05), Vec3::X)
+				.with_hysteresis_context(noise, 0, Vec3::X),
+			remaining: 3,
+		})
+		.is_canopy_limb());
 		Ok(())
 	}
 

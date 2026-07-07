@@ -42,10 +42,9 @@ impl<V> GroveBucket<V> {
 			return true;
 		}
 		world.allows_placement_at(position)
-			&& self.constraints.allows(
-				world.elevation_at(position),
-				world.steepness_at(position),
-			)
+			&& self
+				.constraints
+				.allows(world.elevation_at(position), world.steepness_at(position))
 	}
 }
 
@@ -242,8 +241,13 @@ mod tests {
 	#[test]
 	fn none_bucket_yields_empty() -> Result<()> {
 		let dist: GroveDistribution<()> = GroveDistribution::new(vec![GroveBucket::none(1.0)]);
-		let outcome =
-			prepared(dist).select_at(Vec3::ZERO, 1.0, Cell::from_min_max(Vec3::ZERO, Vec3::ONE), NoiseParams::default(), &flat(0.5, 0.1));
+		let outcome = prepared(dist).select_at(
+			Vec3::ZERO,
+			1.0,
+			Cell::from_min_max(Vec3::ZERO, Vec3::ONE),
+			NoiseParams::default(),
+			&flat(0.5, 0.1),
+		);
 		assert!(matches!(outcome, GroveCellOutcome::Empty { .. }));
 		Ok(())
 	}
@@ -262,7 +266,13 @@ mod tests {
 				"flat",
 			),
 		]);
-		let outcome = prepared(dist).select_from(0, Vec3::new(5.0, 0.0, 5.0), 1.0, Cell::from_min_max(Vec3::ZERO, Vec3::ONE), &flat(0.3, 0.2));
+		let outcome = prepared(dist).select_from(
+			0,
+			Vec3::new(5.0, 0.0, 5.0),
+			1.0,
+			Cell::from_min_max(Vec3::ZERO, Vec3::ONE),
+			&flat(0.3, 0.2),
+		);
 		match outcome {
 			GroveCellOutcome::Placed { variant, .. } => assert_eq!(variant, "flat"),
 			other => anyhow::bail!("expected Placed flat, got {other:?}"),
@@ -280,8 +290,13 @@ mod tests {
 			),
 			item: None,
 		}]);
-		let outcome =
-			prepared(dist).select_at(Vec3::ZERO, 1.0, Cell::from_min_max(Vec3::ZERO, Vec3::ONE), NoiseParams::default(), &flat(0.0, 0.99));
+		let outcome = prepared(dist).select_at(
+			Vec3::ZERO,
+			1.0,
+			Cell::from_min_max(Vec3::ZERO, Vec3::ONE),
+			NoiseParams::default(),
+			&flat(0.0, 0.99),
+		);
 		assert!(matches!(outcome, GroveCellOutcome::Empty { .. }));
 		Ok(())
 	}
@@ -293,8 +308,13 @@ mod tests {
 			PlacementConstraints::new(UnitRange::new(0.8, 1.0), UnitRange::new(0.0, 0.1)),
 			"high_only",
 		)]);
-		let outcome =
-			prepared(dist).select_at(Vec3::ZERO, 1.0, Cell::from_min_max(Vec3::ZERO, Vec3::ONE), NoiseParams::default(), &flat(0.1, 0.5));
+		let outcome = prepared(dist).select_at(
+			Vec3::ZERO,
+			1.0,
+			Cell::from_min_max(Vec3::ZERO, Vec3::ONE),
+			NoiseParams::default(),
+			&flat(0.1, 0.5),
+		);
 		assert!(matches!(outcome, GroveCellOutcome::Rejected { .. }));
 		Ok(())
 	}
@@ -312,7 +332,13 @@ mod tests {
 			for z in 0..3 {
 				let position = Vec3::new(x as f32 * 4.25, 0.0, z as f32 * 4.25);
 				if matches!(
-					prepared.select_at(position, 1.0, Cell::from_min_max(Vec3::ZERO, Vec3::ONE), noise, &terrain),
+					prepared.select_at(
+						position,
+						1.0,
+						Cell::from_min_max(Vec3::ZERO, Vec3::ONE),
+						noise,
+						&terrain
+					),
 					GroveCellOutcome::Placed { .. }
 				) {
 					placed += 1;

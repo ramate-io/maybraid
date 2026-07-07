@@ -14,11 +14,7 @@ pub fn logarithmic_rounding_projection(
 	let u = u.clamp(0.0, 1.0);
 	let alpha = alpha.max(1e-6);
 	let denom = (1.0 + alpha).ln();
-	let falloff = if denom.abs() < 1e-12 {
-		u
-	} else {
-		(1.0 + alpha * u.powf(beta)).ln() / denom
-	};
+	let falloff = if denom.abs() < 1e-12 { u } else { (1.0 + alpha * u.powf(beta)).ln() / denom };
 	ell_max + (ell_min - ell_max) * falloff
 }
 
@@ -46,8 +42,7 @@ pub fn vase_projection_length(
 ) -> f32 {
 	let h = height.max(1e-6);
 	let t = vase_profile(u, eps, center);
-	let f = min_fraction_of_height
-		+ (max_fraction_of_height - min_fraction_of_height) * t;
+	let f = min_fraction_of_height + (max_fraction_of_height - min_fraction_of_height) * t;
 	h * f
 }
 

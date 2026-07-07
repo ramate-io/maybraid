@@ -29,9 +29,15 @@ impl Plugin for NatureScapesPlugin {
 		app.add_plugins(water::WaterPlaygroundPlugin);
 		app.add_plugins(terrain::TerrainPlaygroundPlugin {
 			material: DurhamTerrainShader::default(),
-			rock_detail_material: DurhamTerrainShader::default(),
-			second_rock_detail_material: DurhamTerrainShader::default(),
-			tuft_detail_material: DurhamTerrainShader::default(),
+			// Sandstone rock detail material
+			rock_detail_material: DurhamTerrainShader::default()
+				.with_base_color(Vec4::new(0.8, 0.6, 0.4, 1.0)),
+			// Reddish brown rock detail material
+			second_rock_detail_material: DurhamTerrainShader::default()
+				.with_base_color(Vec4::new(0.5, 0.2, 0.2, 1.0)),
+			// Soft, pale light green tuft detail material
+			tuft_detail_material: DurhamTerrainShader::default()
+				.with_base_color(Vec4::new(0.412, 0.949, 0.592, 1.0)),
 		});
 		app.add_plugins(vegetation::VegetationPlaygroundPlugin::<
 			EdgeMaterial,
@@ -57,7 +63,7 @@ fn setup_lighting(mut commands: Commands) {
 			radius: 200.0,
 			intensity: 1000000000000000.0,
 			range: 1_000_000.0,
-			shadows_enabled: true,
+			shadow_maps_enabled: true,
 			..default()
 		},
 		// high in the sky

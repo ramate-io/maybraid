@@ -9,7 +9,7 @@ use bevy::input::ButtonState;
 use bevy::prelude::*;
 use clap::Parser;
 
-use crate::ui::{GameCommandUiConfig, GameCommandUiPlugin};
+use crate::ui::{GameCommandDrawerConfig, GameCommandUiConfig, GameCommandUiPlugin};
 
 pub const COMMAND_HISTORY_MAX: usize = 1024;
 
@@ -173,8 +173,13 @@ pub fn run_script_file<T: GameCommand>(path: &Path, commands: &mut Commands, con
 
 pub fn toggle_text_entry_focus(
 	keyboard: Res<ButtonInput<KeyCode>>,
+	drawer_visible: Option<Res<crate::ui::GameCommandDrawerVisible>>,
 	mut focus: ResMut<TextEntryFocus>,
 ) {
+	if drawer_visible.is_some_and(|visible| !visible.0) {
+		focus.0 = false;
+		return;
+	}
 	if keyboard.just_pressed(KeyCode::Slash) {
 		focus.0 = !focus.0;
 	}
@@ -268,12 +273,18 @@ pub fn run_pending_startup_command<T: GameCommand>(
 
 pub struct GameCommandPlugin<T> {
 	pub ui_config: GameCommandUiConfig,
+	pub drawer_config: GameCommandDrawerConfig,
 	_marker: PhantomData<fn() -> T>,
 }
 
 impl<T> GameCommandPlugin<T> {
 	pub fn with_config(ui_config: GameCommandUiConfig) -> Self {
-		Self { ui_config, _marker: PhantomData }
+		Self { ui_config, drawer_config: GameCommandDrawerConfig::default(), _marker: PhantomData }
+	}
+
+	pub fn with_drawer_config(mut self, drawer_config: GameCommandDrawerConfig) -> Self {
+		self.drawer_config = drawer_config;
+		self
 	}
 }
 
@@ -292,12 +303,12 @@ impl<T: GameCommand> Plugin for GameCommandPlugin<T> {
 		if !app.world().contains_resource::<PendingStartupCommand<T>>() {
 			app.init_resource::<PendingStartupCommand<T>>();
 		}
-		app.add_plugins(GameCommandUiPlugin { config: self.ui_config.clone() })
-			.add_systems(Startup, run_pending_startup_command::<T>)
-			.add_systems(
-				Update,
-				(toggle_text_entry_focus, capture_command_line_input::<T>),
-			);
+		app.add_plugins(GameCommandUiPlugin::new(
+			self.ui_config.clone(),
+			self.drawer_config.clone(),
+		))
+		.add_systems(Startup, run_pending_startup_command::<T>)
+		.add_systems(Update, (toggle_text_entry_focus, capture_command_line_input::<T>));
 	}
 }
 

@@ -263,9 +263,9 @@ impl SkillMapViewportPlugin {
 							overlay.spawn((
 								Text::new("DEBRAID"),
 								TextColor(Color::WHITE),
-								TextFont { font_size: 32.0, ..default() },
+								TextFont { font_size: FontSize::Px(32.0), ..default() },
 								// center the text
-								TextLayout::new_with_justify(Justify::Center),
+								TextLayout::justify(Justify::Center),
 							));
 						});
 				});

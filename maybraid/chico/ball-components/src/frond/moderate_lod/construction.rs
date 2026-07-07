@@ -3,9 +3,9 @@
 use bevy::mesh::{Indices, Mesh, PrimitiveTopology};
 use bevy::prelude::*;
 
-use super::leaflet::append_shoot_and_leaflets;
 use super::super::config::FrondConfig;
 use super::super::crown::align_frond_direction;
+use super::leaflet::append_shoot_and_leaflets;
 
 /// One moderate-LOD palm frond strand before cluster merge.
 #[derive(Clone, Debug, PartialEq)]
@@ -82,13 +82,7 @@ fn append_moderate_lod_frond(
 	leaflet_length_scale: f32,
 ) {
 	let base = positions.len();
-	append_shoot_and_leaflets(
-		positions,
-		indices,
-		config,
-		shoot_half_radius,
-		leaflet_length_scale,
-	);
+	append_shoot_and_leaflets(positions, indices, config, shoot_half_radius, leaflet_length_scale);
 	for p in &mut positions[base..] {
 		let v = rotation * Vec3::from_array(*p);
 		if v.is_finite() {
@@ -108,11 +102,7 @@ mod tests {
 		let cluster = ModerateLodPalmFrondCluster::new(
 			vec![ModerateLodPalmFrondElement {
 				direction: Vec3::new(0.2, -0.9, 0.1),
-				config: FrondConfig {
-					segments: 10,
-					leaflet_count: 24,
-					..FrondConfig::default()
-				},
+				config: FrondConfig { segments: 10, leaflet_count: 24, ..FrondConfig::default() },
 				seed: 0,
 			}],
 			0.028,

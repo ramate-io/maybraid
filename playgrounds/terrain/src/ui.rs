@@ -22,7 +22,7 @@ pub fn setup_debug_ui(mut commands: Commands) {
 		.with_children(|parent| {
 			parent.spawn((
 				Text::new("Position: (0.00, 0.00, 0.00)\nChunks: 0"),
-				TextFont { font_size: 20.0, ..default() },
+				TextFont { font_size: FontSize::Px(20.0), ..default() },
 				TextColor(Color::WHITE),
 			));
 		});

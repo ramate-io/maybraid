@@ -17,7 +17,6 @@ use crate::grove::{
 	PaletteMix, PaletteSlot, PlacementConstraints,
 };
 
-
 /// Authored Wild Grass grove definition.
 ///
 /// Cell footprint is the midpoint of the RFC's `CELL_SIZE_RANGE` (`1.0..2.5`). The offset range
@@ -383,7 +382,13 @@ mod tests {
 		let prepared =
 			WildGrassCell::distribution().prepare(0.0, 0.0, NoiseParams::default(), Vec3::ZERO);
 		let terrain = FlatTerrainSample { elevation: 0.45, steepness: 0.20 };
-		let outcome = prepared.select_from(4, Vec3::new(5.0, 0.45, 5.0), 1.0, Cell::from_min_max(Vec3::ZERO, Vec3::ONE), &terrain);
+		let outcome = prepared.select_from(
+			4,
+			Vec3::new(5.0, 0.45, 5.0),
+			1.0,
+			Cell::from_min_max(Vec3::ZERO, Vec3::ONE),
+			&terrain,
+		);
 		match outcome {
 			GroveCellOutcome::Placed { variant, .. } => {
 				assert_eq!(variant, WildGrassCell::PaleField);

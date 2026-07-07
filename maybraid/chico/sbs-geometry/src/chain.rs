@@ -1,24 +1,24 @@
 //! Ball-stick **chain** graph: nodes, edges, and pluggable [`Hysteresis`] state per node.
 
+pub mod arch_trunk;
 pub mod branch_out;
 pub mod child_count;
+pub mod date_palm;
 pub mod degree_range;
 pub mod depth_budget;
+pub mod high_bush;
+pub mod honu_banyan;
+pub mod kamakura_torch;
 pub mod length_range;
+pub mod liams_conifer;
+pub mod penmarch_torch;
 pub mod point_to_point;
 pub mod radius_range;
-pub mod arch_trunk;
-pub mod date_palm;
-pub mod liams_conifer;
-pub mod sopes_banyan;
-pub mod honu_banyan;
-pub mod waialea_palm;
-pub mod storybook_tree;
-pub mod penmarch_torch;
-pub mod kamakura_torch;
 pub mod rorys_head_trained;
-pub mod high_bush;
+pub mod sopes_banyan;
+pub mod storybook_tree;
 pub mod vase_tree;
+pub mod waialea_palm;
 
 use std::collections::VecDeque;
 

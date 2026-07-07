@@ -8,7 +8,9 @@ use procedural_common::NoiseConfig;
 use super::strict_stalk::StrictStalk;
 use super::Anchors;
 use crate::chain::waialea_palm::{WaialeaPalmChain, WaialeaPalmPhase};
-use crate::chain::{arch_horizontal_direction_from_yaw_degrees, ArchTrunk, ArchTrunkParams, DepthBudget};
+use crate::chain::{
+	arch_horizontal_direction_from_yaw_degrees, ArchTrunk, ArchTrunkParams, DepthBudget,
+};
 
 /// Default stalk height for playground Waialea palms.
 pub const DEFAULT_STALK_HEIGHT: f32 = 12.0;
@@ -116,10 +118,7 @@ impl WaialeaPalmProtoAnchors {
 
 		vec![WaialeaPalmChain::new(
 			chain_noise,
-			WaialeaPalmPhase::Trunk(DepthBudget {
-				inner: arch,
-				remaining: steps,
-			}),
+			WaialeaPalmPhase::Trunk(DepthBudget { inner: arch, remaining: steps }),
 		)]
 	}
 }

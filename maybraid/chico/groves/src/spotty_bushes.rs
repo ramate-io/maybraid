@@ -18,7 +18,6 @@ use crate::grove::{
 	PlacementConstraints,
 };
 
-
 /// RFC `projection_count: Moderate`.
 const MODERATE_PROJECTION_RADIAL: UnitRange = UnitRange::new(0.32, 0.48);
 const MODERATE_PROJECTION_VERTICAL: UnitRange = UnitRange::new(0.32, 0.78);
@@ -268,14 +267,26 @@ mod tests {
 		let prepared =
 			SpottyBushesCell::distribution().prepare(0.0, 0.0, NoiseParams::default(), Vec3::ZERO);
 		let terrain = FlatTerrainSample { elevation: 0.35, steepness: 0.45 };
-		let dry_outcome = prepared.select_from(2, Vec3::new(5.0, 0.35, 5.0), 1.0, Cell::from_min_max(Vec3::ZERO, Vec3::ONE), &terrain);
+		let dry_outcome = prepared.select_from(
+			2,
+			Vec3::new(5.0, 0.35, 5.0),
+			1.0,
+			Cell::from_min_max(Vec3::ZERO, Vec3::ONE),
+			&terrain,
+		);
 		match dry_outcome {
 			GroveCellOutcome::Placed { variant, .. } => {
 				assert_eq!(variant, SpottyBushesCell::DrySpotBush);
 			}
 			other => anyhow::bail!("expected DrySpotBush on moderate slope, got {other:?}"),
 		}
-		let dense_outcome = prepared.select_from(3, Vec3::new(5.0, 0.35, 5.0), 1.0, Cell::from_min_max(Vec3::ZERO, Vec3::ONE), &terrain);
+		let dense_outcome = prepared.select_from(
+			3,
+			Vec3::new(5.0, 0.35, 5.0),
+			1.0,
+			Cell::from_min_max(Vec3::ZERO, Vec3::ONE),
+			&terrain,
+		);
 		match dense_outcome {
 			GroveCellOutcome::Placed { variant, .. } => {
 				assert_ne!(variant, SpottyBushesCell::DenseSpotBush);
@@ -293,7 +304,13 @@ mod tests {
 		for (index, cell) in
 			[(3, SpottyBushesCell::DenseSpotBush), (4, SpottyBushesCell::FloweringSpotBush)]
 		{
-			let outcome = prepared.select_from(index, Vec3::new(5.0, 0.25, 5.0), 1.0, Cell::from_min_max(Vec3::ZERO, Vec3::ONE), &terrain);
+			let outcome = prepared.select_from(
+				index,
+				Vec3::new(5.0, 0.25, 5.0),
+				1.0,
+				Cell::from_min_max(Vec3::ZERO, Vec3::ONE),
+				&terrain,
+			);
 			match outcome {
 				GroveCellOutcome::Placed { variant, .. } => {
 					assert_ne!(variant, cell, "expected {cell:?} to reject steepness 0.45");

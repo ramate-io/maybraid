@@ -140,7 +140,9 @@ impl Hysteresis for LiamsConiferChain {
 }
 
 /// Highest [`BallStickNode`] on the vertical stalk phase (tree crown).
-pub fn stalk_tip_from_chain(chain: &crate::BallStickChain<LiamsConiferChain>) -> crate::BallStickNode {
+pub fn stalk_tip_from_chain(
+	chain: &crate::BallStickChain<LiamsConiferChain>,
+) -> crate::BallStickNode {
 	let mut tip = chain.nodes[0];
 	for (node, h) in chain.nodes_with_hysteresis() {
 		if matches!(h.phase, LiamsConiferPhase::Stalk(_)) && node.position.y >= tip.position.y {
@@ -178,11 +180,7 @@ mod tests {
 		);
 		let root = seed.ball_stick_node().position;
 		let chain = BallStickChain::build(vec![seed]);
-		let max_dist = chain
-			.nodes
-			.iter()
-			.map(|n| n.position.distance(root))
-			.fold(0.0f32, f32::max);
+		let max_dist = chain.nodes.iter().map(|n| n.position.distance(root)).fold(0.0f32, f32::max);
 		assert!(
 			max_dist > 4.5 * 0.85,
 			"limb span {max_dist} should approach projection length 4.5"

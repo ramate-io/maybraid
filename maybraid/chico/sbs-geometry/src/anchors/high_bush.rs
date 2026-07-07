@@ -125,13 +125,14 @@ impl HighBushProtoAnchors {
 			.map(|i| {
 				let theta = TAU * i as f32 / k as f32;
 				let radial = Vec3::new(theta.cos(), 0.0, theta.sin());
-				let bias = high_bush_shoot_direction(radial, self.radial_strength, self.vertical_bias);
+				let bias =
+					high_bush_shoot_direction(radial, self.radial_strength, self.vertical_bias);
 				ShootSeedSpec { radial_xz: radial, bias_ray: bias }
 			})
 			.collect();
 
-		let child_count = self.child_count_min as usize
-			..(self.child_count_max as usize).saturating_add(1);
+		let child_count =
+			self.child_count_min as usize..(self.child_count_max as usize).saturating_add(1);
 
 		vec![HighBushChain::new(
 			chain_noise,
@@ -230,10 +231,7 @@ mod tests {
 			assert!(delta.y > 0.0, "shoot should grow upward, delta {delta:?}");
 			let horiz = (delta.x * delta.x + delta.z * delta.z).sqrt();
 			let elev_deg = (delta.y / horiz.max(1e-6)).atan().to_degrees();
-			assert!(
-				elev_deg > 35.0,
-				"expected strong vertical bias, elevation {elev_deg}°"
-			);
+			assert!(elev_deg > 35.0, "expected strong vertical bias, elevation {elev_deg}°");
 		}
 		Ok(())
 	}
@@ -242,17 +240,16 @@ mod tests {
 	fn default_angle_tolerance_matches_torch_trees() {
 		let proto = HighBushProtoAnchors::default();
 		assert!(
-			(proto.angle_tolerance_radians.to_degrees() - DEFAULT_BRANCH_ANGLE_TOLERANCE_DEGREES).abs()
-				< 1e-4
+			(proto.angle_tolerance_radians.to_degrees() - DEFAULT_BRANCH_ANGLE_TOLERANCE_DEGREES)
+				.abs() < 1e-4
 		);
 		assert!((proto.bias_blend - DEFAULT_BIAS_BLEND).abs() < 1e-5);
 	}
 
 	#[test]
 	fn shoot_indices_are_distinct() -> anyhow::Result<()> {
-		let seeds = HighBushProtoAnchors::default().hysteresis_seeds(NoiseConfig::new(
-			procedural_common::NoiseParams::default(),
-		));
+		let seeds = HighBushProtoAnchors::default()
+			.hysteresis_seeds(NoiseConfig::new(procedural_common::NoiseParams::default()));
 		assert_eq!(seeds.len(), 1);
 		let root = &seeds[0];
 		let shoots = root.next_hysteresis();

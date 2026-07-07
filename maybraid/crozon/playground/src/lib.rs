@@ -13,8 +13,9 @@ pub use camera::CameraController;
 pub use commands::{PlaygroundCommand, PLAYGROUND_CLI_NAME};
 pub use game_commands::command::PendingStartupCommand;
 
-use animation::{animate_limbs, init_limb_animators};
+use animation::{animate_limbs, init_limb_animators, AnimationArticulationDebug};
 use bevy::prelude::*;
+use camera_controls::look::CameraLookPlugin;
 use character::CharacterConfig;
 use game_commands::command::{capture_command_line_input, GameCommandPlugin};
 use ground::setup_ground;
@@ -29,7 +30,9 @@ impl Plugin for CrozonCharacterPlaygroundPlugin {
 	fn build(&self, app: &mut App) {
 		app.init_resource::<CharacterConfig>()
 			.init_resource::<character::CharacterSyncState>()
+			.init_resource::<AnimationArticulationDebug>()
 			.init_resource::<DumpBonesRequest>()
+			.add_plugins(CameraLookPlugin::default())
 			.add_plugins(GameCommandPlugin::<PlaygroundCommand>::with_config(ui::ui_config()))
 			.add_plugins(
 				bevy::pbr::MaterialPlugin::<checkerboard_material::CheckerboardMaterial>::default(),
@@ -56,11 +59,11 @@ impl Plugin for CrozonCharacterPlaygroundPlugin {
 fn setup_lighting(mut commands: Commands) {
 	use std::f32::consts::PI;
 	commands.spawn((
-		DirectionalLight { illuminance: 10000.0, shadows_enabled: true, ..default() },
+		DirectionalLight { illuminance: 10000.0, shadow_maps_enabled: true, ..default() },
 		Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, -PI / 4.0, PI / 4.0, 0.0)),
 	));
 	commands.spawn((
-		DirectionalLight { illuminance: 500.0, shadows_enabled: false, ..default() },
+		DirectionalLight { illuminance: 500.0, shadow_maps_enabled: false, ..default() },
 		Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, PI / 4.0, -PI / 4.0, 0.0)),
 	));
 }

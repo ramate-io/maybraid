@@ -1,9 +1,29 @@
 use bevy::prelude::*;
 
 use crate::{
-	humanoid::{HumanoidArm, HumanoidLeg, HumanoidNeck, HumanoidRig, HumanoidSpine},
+	humanoid::{
+		HumanoidArm, HumanoidLeg, HumanoidNeck, HumanoidRig, HumanoidSpine, LegSegmentLengths,
+	},
 	BoneDefinition, BonePose, BoneTable, Name, RigPose, RiggedAxis, Side,
 };
+
+/// Left femur: sagittal stride on Y, medial/lateral on X, knee hinge lives on shin.
+const HUMANOID_V0_FEMUR_AXIS: RiggedAxis =
+	RiggedAxis { swing_axis: Vec3::Y, flex_axis: Vec3::X, twist_axis: Vec3::Z };
+
+const HUMANOID_V0_SHIN_AXIS: RiggedAxis =
+	RiggedAxis { swing_axis: Vec3::Y, flex_axis: Vec3::Z, twist_axis: Vec3::X };
+
+/// Mirrored right femur: negate swing and medial/lateral axes together.
+const HUMANOID_V0_RIGHT_FEMUR_AXIS: RiggedAxis =
+	RiggedAxis { swing_axis: Vec3::NEG_Y, flex_axis: Vec3::NEG_X, twist_axis: Vec3::Z };
+
+/// Mirrored right shin: negate flex so knee hinge matches the left leg semantically.
+const HUMANOID_V0_RIGHT_SHIN_AXIS: RiggedAxis =
+	RiggedAxis { swing_axis: Vec3::Y, flex_axis: Vec3::NEG_Z, twist_axis: Vec3::X };
+
+const HUMANOID_V0_RIGHT_FLEX_AXIS: RiggedAxis =
+	RiggedAxis { swing_axis: Vec3::Y, flex_axis: Vec3::NEG_Z, twist_axis: Vec3::X };
 
 /// Store the bones of the first imported humanoid rig in a semantically reasonable hierarchy.
 ///
@@ -14,7 +34,7 @@ use crate::{
 pub struct HumanoidV0Rig {
 	pub bones: BoneTable,
 	pub pose: RigPose,
-	pub forearm_flex_sign: [f32; 2],
+	pub segment_lengths: LegSegmentLengths,
 }
 
 impl HumanoidV0Rig {
@@ -24,7 +44,7 @@ impl HumanoidV0Rig {
 			bones.insert(BoneDefinition { name: Name::from(name), relative_axis });
 		}
 
-		Self { bones, pose: RigPose::new(), forearm_flex_sign: [1.0, 1.0] }
+		Self { bones, pose: RigPose::new(), segment_lengths: LegSegmentLengths::default() }
 	}
 }
 
@@ -32,34 +52,34 @@ impl HumanoidRig for HumanoidV0Rig {
 	fn leg(&self, side: Side) -> HumanoidLeg {
 		let suffix = side.suffix();
 		HumanoidLeg {
-			pelvis: BonePose::new(format!("pelvis.{suffix}"), Transform::IDENTITY),
-			femur: BonePose::new(format!("femur.{suffix}"), Transform::IDENTITY),
-			shin: BonePose::new(format!("shin.{suffix}"), Transform::IDENTITY),
+			pelvis: self.bone_pose(format!("pelvis.{suffix}")),
+			femur: self.bone_pose(format!("femur.{suffix}")),
+			shin: self.bone_pose(format!("shin.{suffix}")),
 		}
 	}
 
 	fn arm(&self, side: Side) -> HumanoidArm {
 		let suffix = side.suffix();
 		HumanoidArm {
-			shoulder: BonePose::new(format!("shoulder.{suffix}"), Transform::IDENTITY),
-			humerus: BonePose::new(format!("humerus.{suffix}"), Transform::IDENTITY),
-			forearm: BonePose::new(format!("forearm.{suffix}"), Transform::IDENTITY),
+			shoulder: self.bone_pose(format!("shoulder.{suffix}")),
+			humerus: self.bone_pose(format!("humerus.{suffix}")),
+			forearm: self.bone_pose(format!("forearm.{suffix}")),
 		}
 	}
 
 	fn spine(&self) -> HumanoidSpine {
 		HumanoidSpine {
-			root: BonePose::new("root", Transform::IDENTITY),
-			lumbar: BonePose::new("lumbar", Transform::IDENTITY),
-			midback: BonePose::new("midback", Transform::IDENTITY),
-			upper_back: BonePose::new("upper_back", Transform::IDENTITY),
+			root: self.bone_pose("root"),
+			lumbar: self.bone_pose("lumbar"),
+			midback: self.bone_pose("midback"),
+			upper_back: self.bone_pose("upper_back"),
 		}
 	}
 
 	fn neck(&self) -> HumanoidNeck {
 		HumanoidNeck {
-			lower_neck: BonePose::new("lower_neck", Transform::IDENTITY),
-			upper_neck: BonePose::new("upper_neck", Transform::IDENTITY),
+			lower_neck: self.bone_pose("lower_neck"),
+			upper_neck: self.bone_pose("upper_neck"),
 		}
 	}
 
@@ -71,22 +91,58 @@ impl HumanoidRig for HumanoidV0Rig {
 		&mut self.pose
 	}
 
-	fn forearm_flex_sign(&self, side: Side) -> f32 {
-		match side {
-			Side::Left => self.forearm_flex_sign[0],
-			Side::Right => self.forearm_flex_sign[1],
-		}
+	fn rigged_axis(&self, bone: &Name) -> Option<RiggedAxis> {
+		self.bones.get(bone).map(|bone| bone.relative_axis)
+	}
+
+	fn animation_bones(&self) -> Vec<Name> {
+		HumanoidV0Rig::animation_bones(self)
+	}
+
+	fn segment_lengths(&self) -> LegSegmentLengths {
+		self.segment_lengths
+	}
+
+	fn parent_world_rotation(&self, bone: &Name) -> Quat {
+		self.parent_world_rotation_for(bone)
 	}
 }
 
 impl HumanoidV0Rig {
+	fn bone_pose(&self, name: impl Into<Name>) -> BonePose {
+		let name = name.into();
+		self.pose
+			.get(&name)
+			.cloned()
+			.unwrap_or_else(|| BonePose::new(name, Transform::IDENTITY))
+	}
+
+	fn local_rotation(&self, bone: &Name) -> Quat {
+		self.pose
+			.get(bone)
+			.map(|pose| pose.transform.rotation)
+			.unwrap_or(Quat::IDENTITY)
+	}
+
+	fn world_rotation_for(&self, bone: &Name) -> Quat {
+		self.parent_world_rotation_for(bone) * self.local_rotation(bone)
+	}
+
+	fn parent_world_rotation_for(&self, bone: &Name) -> Quat {
+		humanoid_v0_parent(bone.as_str())
+			.map(|parent| self.world_rotation_for(&Name::from(parent)))
+			.unwrap_or(Quat::IDENTITY)
+	}
+
 	pub fn animation_bones(&self) -> Vec<Name> {
 		let left_arm = self.arm(Side::Left);
 		let right_arm = self.arm(Side::Right);
 		let left_leg = self.leg(Side::Left);
 		let right_leg = self.leg(Side::Right);
+		let root = self.spine().root;
 
 		vec![
+			root.name,
 			left_arm.shoulder.name,
 			right_arm.shoulder.name,
 			left_arm.humerus.name,
@@ -123,7 +179,7 @@ pub const HUMANOID_V0_BONE_DEFINITIONS: [(&str, RiggedAxis); 37] = [
 	("upper_neck", RiggedAxis::DEFAULT),
 	("shoulder.R", RiggedAxis::DEFAULT),
 	("humerus.R", RiggedAxis::DEFAULT),
-	("forearm.R", RiggedAxis::DEFAULT),
+	("forearm.R", HUMANOID_V0_RIGHT_FLEX_AXIS),
 	("lower_arm_thickness.R", RiggedAxis::DEFAULT),
 	("upper_arm_thickness.R", RiggedAxis::DEFAULT),
 	("chest.L", RiggedAxis::DEFAULT),
@@ -137,13 +193,13 @@ pub const HUMANOID_V0_BONE_DEFINITIONS: [(&str, RiggedAxis); 37] = [
 	("waist.R", RiggedAxis::DEFAULT),
 	("lower_belly", RiggedAxis::DEFAULT),
 	("pelvis.L", RiggedAxis::DEFAULT),
-	("femur.L", RiggedAxis::DEFAULT),
-	("shin.L", RiggedAxis::DEFAULT),
+	("femur.L", HUMANOID_V0_FEMUR_AXIS),
+	("shin.L", HUMANOID_V0_SHIN_AXIS),
 	("calf_thickness.L", RiggedAxis::DEFAULT),
 	("thigh_thickness.L", RiggedAxis::DEFAULT),
 	("pelvis.R", RiggedAxis::DEFAULT),
-	("femur.R", RiggedAxis::DEFAULT),
-	("shin.R", RiggedAxis::DEFAULT),
+	("femur.R", HUMANOID_V0_RIGHT_FEMUR_AXIS),
+	("shin.R", HUMANOID_V0_RIGHT_SHIN_AXIS),
 	("calf_thickness.R", RiggedAxis::DEFAULT),
 	("thigh_thickness.R", RiggedAxis::DEFAULT),
 	("buttocks", RiggedAxis::DEFAULT),
@@ -153,9 +209,69 @@ pub fn humanoid_v0_bone_names() -> impl Iterator<Item = &'static str> {
 	HUMANOID_V0_BONE_DEFINITIONS.into_iter().map(|(name, _axis)| name)
 }
 
+/// Parent links for world-space displacement (includes non-animated spine ancestors).
+const HUMANOID_V0_PARENT: &[(&str, &str)] = &[
+	("root", ""),
+	("lumbar", "root"),
+	("midback", "lumbar"),
+	("upper_back", "midback"),
+	("shoulder.L", "upper_back"),
+	("shoulder.R", "upper_back"),
+	("humerus.L", "shoulder.L"),
+	("humerus.R", "shoulder.R"),
+	("forearm.L", "humerus.L"),
+	("forearm.R", "humerus.R"),
+	("pelvis.L", ""),
+	("pelvis.R", ""),
+	("femur.L", "pelvis.L"),
+	("femur.R", "pelvis.R"),
+	("shin.L", "femur.L"),
+	("shin.R", "femur.R"),
+];
+
+fn humanoid_v0_parent(name: &str) -> Option<&'static str> {
+	HUMANOID_V0_PARENT
+		.iter()
+		.find(|(child, _)| *child == name)
+		.map(|(_, parent)| *parent)
+		.filter(|parent| !parent.is_empty())
+}
+
 #[cfg(test)]
 mod tests {
 	use super::*;
+
+	#[test]
+	fn humanoid_v0_default_segment_lengths() {
+		let rig = HumanoidV0Rig::imported();
+		assert_eq!(rig.segment_lengths, LegSegmentLengths::default());
+	}
+
+	#[test]
+	fn humanoid_v0_move_all_lowers_root_without_shortening_segments() {
+		let mut rig = HumanoidV0Rig::imported();
+		rig.pose
+			.insert(BonePose::new(Name::from("root"), Transform::from_translation(Vec3::ZERO)));
+		rig.pose.insert(BonePose::new(
+			Name::from("femur.L"),
+			Transform::from_translation(Vec3::new(0.0, 0.25, 0.0)),
+		));
+		rig.pose.insert(BonePose::new(
+			Name::from("shoulder.L"),
+			Transform::from_translation(Vec3::new(0.0, 0.1, 0.0)),
+		));
+
+		rig.move_all(Vec3::new(0.0, -0.15, 0.0));
+
+		let root = rig.pose().get(&Name::from("root")).expect("root pose");
+		assert_eq!(root.transform.translation, Vec3::new(0.0, -0.15, 0.0));
+
+		let femur = rig.pose().get(&Name::from("femur.L")).expect("femur pose");
+		assert_eq!(femur.transform.translation, Vec3::new(0.0, 0.25, 0.0));
+
+		let shoulder = rig.pose().get(&Name::from("shoulder.L")).expect("shoulder pose");
+		assert_eq!(shoulder.transform.translation, Vec3::new(0.0, 0.1, 0.0));
+	}
 
 	#[test]
 	fn humanoid_v0_accessors_map_to_imported_names() {
@@ -175,6 +291,24 @@ mod tests {
 		for name in rig.animation_bones() {
 			assert!(rig.bones.get(&name).is_some(), "missing animation bone {name}");
 		}
+	}
+
+	#[test]
+	fn humanoid_v0_mirrors_right_limb_axes_in_metadata() {
+		let rig = HumanoidV0Rig::imported();
+		let left_femur = rig.bones.get(&Name::from("femur.L")).expect("left femur");
+		let right_femur = rig.bones.get(&Name::from("femur.R")).expect("right femur");
+		let left_shin = rig.bones.get(&Name::from("shin.L")).expect("left shin");
+		let right_shin = rig.bones.get(&Name::from("shin.R")).expect("right shin");
+		let right_forearm = rig.bones.get(&Name::from("forearm.R")).expect("right forearm");
+
+		assert_eq!(left_femur.relative_axis.swing_axis, Vec3::Y);
+		assert_eq!(left_femur.relative_axis.flex_axis, Vec3::X);
+		assert_eq!(right_femur.relative_axis.swing_axis, Vec3::NEG_Y);
+		assert_eq!(right_femur.relative_axis.flex_axis, Vec3::NEG_X);
+		assert_eq!(left_shin.relative_axis.flex_axis, Vec3::Z);
+		assert_eq!(right_shin.relative_axis.flex_axis, Vec3::NEG_Z);
+		assert_eq!(right_forearm.relative_axis.flex_axis, Vec3::NEG_Z);
 	}
 
 	#[test]

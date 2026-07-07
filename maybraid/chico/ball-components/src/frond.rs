@@ -28,8 +28,8 @@ use spawn::MergedFrond;
 pub use config::FrondConfig as FrondGeometry;
 pub use construction::{FrondCluster, FrondElement};
 pub use moderate_lod::{
-	ModerateLodFrondCrown, ModerateLodFrondCrownShape, ModerateLodFrondCrownStd, ModerateLodPalmFrond,
-	ModerateLodPalmFrondCluster, ModerateLodPalmFrondElement,
+	ModerateLodFrondCrown, ModerateLodFrondCrownShape, ModerateLodFrondCrownStd,
+	ModerateLodPalmFrond, ModerateLodPalmFrondCluster, ModerateLodPalmFrondElement,
 };
 pub use render_item_plugin::FrondRenderItemPlugin;
 
@@ -127,11 +127,7 @@ where
 	S: Clone + Into<MeshMaterial3d<M>> + Default,
 {
 	fn default() -> Self {
-		Self {
-			shape: FrondCrownShape::default(),
-			material: S::default(),
-			__marker: PhantomData,
-		}
+		Self { shape: FrondCrownShape::default(), material: S::default(), __marker: PhantomData }
 	}
 }
 
@@ -141,10 +137,7 @@ where
 {
 	fn from_scalar(noise: NoiseParams) -> Self {
 		Self {
-			shape: FrondCrownShape {
-				seed: noise.seed,
-				..FrondCrownShape::default()
-			},
+			shape: FrondCrownShape { seed: noise.seed, ..FrondCrownShape::default() },
 			material: S::default(),
 			__marker: PhantomData,
 		}
@@ -179,8 +172,7 @@ where
 			.enumerate()
 			.map(|(i, direction)| {
 				let mut element_config = config;
-				element_config.length *=
-					length_scale(i as u32, self.shape.seed, 0.82, 1.08);
+				element_config.length *= length_scale(i as u32, self.shape.seed, 0.82, 1.08);
 				FrondElement {
 					direction,
 					config: element_config,
@@ -189,12 +181,8 @@ where
 			})
 			.collect();
 
-		FrondCluster::new(
-			elements,
-			self.shape.shoot_half_radius,
-			self.shape.leaflet_length_scale,
-		)
-		.into_mesh()
+		FrondCluster::new(elements, self.shape.shoot_half_radius, self.shape.leaflet_length_scale)
+			.into_mesh()
 	}
 
 	/// Spawn as a child of `parent` using assembly-local `local_transform` (scale sizes the mesh).
@@ -248,11 +236,7 @@ where
 		let shoot = (self.shoot_half_radius * scale).max(1e-6);
 
 		FrondCluster::new(
-			vec![FrondElement {
-				direction: self.direction,
-				config,
-				seed: self.seed,
-			}],
+			vec![FrondElement { direction: self.direction, config, seed: self.seed }],
 			shoot,
 			self.leaflet_length_scale,
 		)

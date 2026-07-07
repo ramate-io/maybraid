@@ -78,11 +78,8 @@ where
 	/// `sin(πt + φ)` is zero at both segment ends when `φ ∈ {0, π}`.
 	fn bend_phases(&self) -> (f32, f32) {
 		let phase_x = if self.segment_key & 1 == 0 { 0.0 } else { PI };
-		let phase_z = if self.segment_key.rotate_left(PHASE_Z_KEY_ROTATE) & 1 == 0 {
-			0.0
-		} else {
-			PI
-		};
+		let phase_z =
+			if self.segment_key.rotate_left(PHASE_Z_KEY_ROTATE) & 1 == 0 { 0.0 } else { PI };
 		(phase_x, phase_z)
 	}
 

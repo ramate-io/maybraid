@@ -39,11 +39,8 @@ impl BaseScale {
 	/// Canonical world-space bounds for grid slot `coord` at `level`.
 	pub fn cell_at(self, level: Level, coord: IVec3) -> Cell {
 		let size = self.cell_size_at(level);
-		let min = DVec3::new(
-			coord.x as f64 * size.x,
-			coord.y as f64 * size.y,
-			coord.z as f64 * size.z,
-		);
+		let min =
+			DVec3::new(coord.x as f64 * size.x, coord.y as f64 * size.y, coord.z as f64 * size.z);
 		let max = min + size;
 		Cell::from_min_max(
 			Vec3A::new(min.x as f32, min.y as f32, min.z as f32),
@@ -93,7 +90,11 @@ impl BaseScale {
 	/// RFC `ceil(log2(n))` for unsigned extent in base-cell units.
 	pub fn ceil_log2_u32(n: u32) -> Level {
 		debug_assert!(n > 0);
-		if n <= 1 { 0 } else { u32::BITS - (n - 1).leading_zeros() }
+		if n <= 1 {
+			0
+		} else {
+			u32::BITS - (n - 1).leading_zeros()
+		}
 	}
 
 	fn grid_coord(world: DVec3, cell_size: DVec3) -> IVec3 {

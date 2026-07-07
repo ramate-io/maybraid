@@ -16,7 +16,6 @@ use crate::grove::{
 	PaletteMix, PaletteSlot, PlacementConstraints,
 };
 
-
 /// Authored Tropical Tufts grove definition.
 ///
 /// The offset range is signed and wider than the RFC's nominal `0.0..1.0` (± one cell) so
@@ -297,7 +296,13 @@ mod tests {
 		let prepared =
 			TropicalTuftsCell::distribution().prepare(0.0, 0.0, NoiseParams::default(), Vec3::ZERO);
 		let terrain = FlatTerrainSample { elevation: 0.4, steepness: 0.1 };
-		let outcome = prepared.select_from(1, Vec3::new(5.0, 0.4, 5.0), 1.0, Cell::from_min_max(Vec3::ZERO, Vec3::ONE), &terrain);
+		let outcome = prepared.select_from(
+			1,
+			Vec3::new(5.0, 0.4, 5.0),
+			1.0,
+			Cell::from_min_max(Vec3::ZERO, Vec3::ONE),
+			&terrain,
+		);
 		assert!(matches!(outcome, GroveCellOutcome::Placed { .. }));
 		Ok(())
 	}

@@ -5,8 +5,8 @@ use std::ops::RangeInclusive;
 use chico_sbs_geometry::anchors::high_bush::{
 	DEFAULT_ANCHOR_LIFT_FRACTION, DEFAULT_HEIGHT, DEFAULT_RADIAL_STRENGTH,
 	DEFAULT_SEGMENT_LENGTH_FRACTION_HI, DEFAULT_SEGMENT_LENGTH_FRACTION_LO,
-	DEFAULT_SEGMENT_RADIUS_FRACTION_HI, DEFAULT_SEGMENT_RADIUS_FRACTION_LO,
-	DEFAULT_SHOOT_COUNT, DEFAULT_VERTICAL_BIAS,
+	DEFAULT_SEGMENT_RADIUS_FRACTION_HI, DEFAULT_SEGMENT_RADIUS_FRACTION_LO, DEFAULT_SHOOT_COUNT,
+	DEFAULT_VERTICAL_BIAS,
 };
 use procedural_common::NoiseParams;
 
@@ -107,9 +107,7 @@ mod tests {
 		let mut shape = generic_high_bush_shape();
 		apply_common_high_bush_preset(&mut shape);
 		assert_eq!(shape.shoot_count, DEFAULT_SHOOT_COUNT);
-		assert!(
-			(shape.radial_strength - COMMON_HIGH_BUSH_RADIAL_STRENGTH).abs() < 1e-5
-		);
+		assert!((shape.radial_strength - COMMON_HIGH_BUSH_RADIAL_STRENGTH).abs() < 1e-5);
 		Ok(())
 	}
 

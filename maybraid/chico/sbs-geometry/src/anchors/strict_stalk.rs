@@ -55,7 +55,8 @@ impl StrictStalk {
 			.map(|i| {
 				let t = i as f32 / n as f32;
 				let r = self.stalk_base_radius
-					* (1.0 - SEGMENTED_STALK_TAPER_RATE * t).max(SEGMENTED_STALK_MIN_RADIUS_FRACTION);
+					* (1.0 - SEGMENTED_STALK_TAPER_RATE * t)
+						.max(SEGMENTED_STALK_MIN_RADIUS_FRACTION);
 				BallStickNode::new(self.centroid_at_height_fraction(t), r)
 			})
 			.collect();

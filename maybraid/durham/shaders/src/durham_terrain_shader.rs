@@ -9,10 +9,7 @@ pub use noise_uniform::{DurhamTerrainNoiseUniform, EVEN_BAND_BLEND_WEIGHT};
 pub use swatch::{DurhamSwatchUniform, EVEN_SWATCH_FOLD_WEIGHT};
 
 use bevy::{
-	asset::embedded_asset,
-	prelude::*,
-	reflect::TypePath,
-	render::render_resource::AsBindGroup,
+	asset::embedded_asset, prelude::*, reflect::TypePath, render::render_resource::AsBindGroup,
 	shader::ShaderRef,
 };
 
@@ -33,6 +30,9 @@ pub struct DurhamTerrainShader {
 	/// `x` = reserved, `y` = edge strength, `z` = edge darkness, `w` = lit mix.
 	#[uniform(1)]
 	pub style_params: Vec4,
+	/// RGB tint multiplied into the palette noise color; **w** = alpha.
+	#[uniform(2)]
+	pub base_color: Vec4,
 }
 
 impl Default for DurhamTerrainShader {
@@ -40,6 +40,7 @@ impl Default for DurhamTerrainShader {
 		Self {
 			terrain_noise: DurhamTerrainNoiseUniform::default(),
 			style_params: Vec4::new(0.0, 2.0, 0.05, 0.72),
+			base_color: Vec4::new(1.0, 1.0, 1.0, 1.0),
 		}
 	}
 }
@@ -58,6 +59,12 @@ impl DurhamTerrainShader {
 		self
 	}
 
+	/// Multiplies the procedural palette by this RGB(A) tint.
+	#[inline]
+	pub fn with_base_color(mut self, base_color: Vec4) -> Self {
+		self.base_color = base_color;
+		self
+	}
 }
 
 impl Material for DurhamTerrainShader {
@@ -87,6 +94,14 @@ mod tests {
 		assert!((m.terrain_noise.regional_blend.x - 0.00015).abs() < 1e-8);
 		assert!((m.terrain_noise.regional_blend.y - 0.5).abs() < 1e-8);
 		assert!((m.style_params.w - 0.72).abs() < 1e-5);
+		assert!((m.base_color.x - 1.0).abs() < 1e-5);
+	}
+
+	#[test]
+	fn with_base_color_sets_tint() {
+		let tint = Vec4::new(0.5, 0.2, 0.2, 1.0);
+		let m = DurhamTerrainShader::default().with_base_color(tint);
+		assert_eq!(m.base_color, tint);
 	}
 
 	#[test]
@@ -165,11 +180,11 @@ mod tests {
 			ImagePlugin::default(),
 			MeshPlugin::default(),
 			RenderPlugin {
-				render_creation: RenderCreation::Automatic(WgpuSettings {
+				render_creation: RenderCreation::Automatic(Box::new(WgpuSettings {
 					force_fallback_adapter: true,
-					priority: WgpuSettingsPriority::Compatibility,
+					priority: WgpuSettingsPriority::WebGL2,
 					..default()
-				}),
+				})),
 				..default()
 			},
 			CorePipelinePlugin::default(),

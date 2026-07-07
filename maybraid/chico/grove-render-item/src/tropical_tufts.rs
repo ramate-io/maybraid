@@ -9,12 +9,12 @@ use clap::Args;
 use procedural_common::{noise_params_from_scalar_str, BuildWithNoise, NoiseParams};
 use render_item::{CascadeChunk, RenderItem};
 
-use chico_groves::{
-	patch_spawned_leaf_material, placement_noise, FlatTerrainSample, GroveExtent, GroveFrontend,
-	GroveCellVariant, GroveWorldSample, WithPalette, DEFAULT_GROVE_EXTENT_XZ,
-};
 use crate::skipped_mesh_material::SkippedLeafMeshMaterial;
 use chico_groves::tropical_tufts::{definition, TropicalTuftsCell, TropicalTuftsItem};
+use chico_groves::{
+	patch_spawned_leaf_material, placement_noise, FlatTerrainSample, GroveCellVariant, GroveExtent,
+	GroveFrontend, GroveWorldSample, WithPalette, DEFAULT_GROVE_EXTENT_XZ,
+};
 
 /// Typical [`StandardMaterial`] Tropical Tufts instance.
 pub type TropicalTuftsStd =

@@ -14,7 +14,6 @@ use crate::grove::{
 	PlacementConstraints,
 };
 
-
 /// Moderate sampled crown-density band ([`0.35`, `0.65`]).
 const MODERATE_CROWN_DENSITY: UnitRange = UnitRange::new(0.35, 0.65);
 

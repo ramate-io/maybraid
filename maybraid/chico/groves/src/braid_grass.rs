@@ -15,7 +15,6 @@ use crate::grove::{
 	PaletteMix, PaletteSlot, PlacementConstraints,
 };
 
-
 /// Authored Braid Grass grove definition.
 ///
 /// The cell footprint is denser than the RFC's nominal grid to keep preview groves visually
@@ -338,7 +337,13 @@ mod tests {
 		let prepared =
 			BraidGrassCell::distribution().prepare(0.0, 0.0, NoiseParams::default(), Vec3::ZERO);
 		let terrain = FlatTerrainSample { elevation: 0.3, steepness: 0.35 };
-		let outcome = prepared.select_from(3, Vec3::new(5.0, 0.3, 5.0), 1.0, Cell::from_min_max(Vec3::ZERO, Vec3::ONE), &terrain);
+		let outcome = prepared.select_from(
+			3,
+			Vec3::new(5.0, 0.3, 5.0),
+			1.0,
+			Cell::from_min_max(Vec3::ZERO, Vec3::ONE),
+			&terrain,
+		);
 		match outcome {
 			GroveCellOutcome::Placed { variant, .. } => {
 				assert_eq!(variant, BraidGrassCell::RedEdgeBlade);

@@ -5,9 +5,7 @@ pub mod testing;
 
 pub mod plugin;
 
-pub use plugin::{
-	FindPath, LocalPathPlan, LocalPathfindingPlugin, respond_to_find_path_requests,
-};
+pub use plugin::{respond_to_find_path_requests, FindPath, LocalPathPlan, LocalPathfindingPlugin};
 
 use bevy::prelude::*;
 

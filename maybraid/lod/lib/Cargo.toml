@@ -12,6 +12,10 @@ rust-version = { workspace = true }
 [dependencies]
 lod-cascade = { workspace = true }
 lod-cascade-system = { workspace = true }
+bevy = { workspace = true }
+
+[dev-dependencies]
+anyhow = { workspace = true }
 
 [lints]
 workspace = true
