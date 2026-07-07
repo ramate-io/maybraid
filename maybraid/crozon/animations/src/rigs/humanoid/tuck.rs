@@ -65,7 +65,7 @@ mod tests {
 	}
 
 	#[test]
-	fn tuck_drives_humerus_swing_flex_and_twist() -> anyhow::Result<()> {
+	fn tuck_drives_humerus_flex_twist_and_forearm() -> anyhow::Result<()> {
 		let mut rig = HumanoidV0Rig::imported();
 		let tuck = Tuck::<HumanoidV0Rig>::default();
 		tuck.apply(&mut rig, 0.5);
@@ -73,10 +73,9 @@ mod tests {
 		let profile = tuck.profile();
 		let humerus = rig.pose().get(&rig.arm(Side::Left).humerus.name).expect("humerus");
 		let forearm = rig.pose().get(&rig.arm(Side::Left).forearm.name).expect("forearm");
-		assert!(humerus.swing.abs() > 0.05);
+		assert!(humerus.swing.abs() < 1e-4, "tuck elevation is flex/twist, not swing");
 		assert!(humerus.flex.abs() > 0.05);
 		assert!(humerus.twist.abs() > 0.05);
-		assert!(humerus.swing.abs() <= profile.humerus_swing(Side::Left, 1.0).abs() + 1e-4);
 		assert!(humerus.flex.abs() <= profile.humerus_flex(Side::Left, 1.0).abs() + 1e-4);
 		assert!(humerus.twist.abs() <= profile.humerus_twist(Side::Left, 1.0).abs() + 1e-4);
 		assert!(forearm.flex.abs() > 0.05);
@@ -86,12 +85,14 @@ mod tests {
 	#[test]
 	fn tuck_shoulders_roll_inward_symmetrically() -> anyhow::Result<()> {
 		let mut rig = HumanoidV0Rig::imported();
+		let profile = Tuck::<HumanoidV0Rig>::default().profile();
 		Tuck::<HumanoidV0Rig>::default().apply(&mut rig, 1.0);
 
 		let left = rig.pose().get(&rig.arm(Side::Left).shoulder.name).expect("left shoulder");
 		let right = rig.pose().get(&rig.arm(Side::Right).shoulder.name).expect("right shoulder");
-		assert!(left.swing.abs() > 0.1);
-		assert!(right.swing.abs() > 0.1);
+		let expected = profile.shoulder_roll(Side::Left, 1.0).abs();
+		assert!((left.swing.abs() - expected).abs() < 1e-4);
+		assert!((right.swing.abs() - expected).abs() < 1e-4);
 		assert!(left.swing.signum() != right.swing.signum());
 		assert!(left.flex.abs() < 1e-4);
 		assert!(right.flex.abs() < 1e-4);
@@ -99,13 +100,15 @@ mod tests {
 	}
 
 	#[test]
-	fn tuck_humerus_twist_dominates_forearm_hinge() -> anyhow::Result<()> {
+	fn tuck_drives_humerus_twist_and_forearm_flex() -> anyhow::Result<()> {
 		let mut rig = HumanoidV0Rig::imported();
+		let profile = Tuck::<HumanoidV0Rig>::default().profile();
 		Tuck::<HumanoidV0Rig>::default().apply(&mut rig, 1.0);
 
 		let humerus = rig.pose().get(&rig.arm(Side::Left).humerus.name).expect("humerus");
 		let forearm = rig.pose().get(&rig.arm(Side::Left).forearm.name).expect("forearm");
-		assert!(humerus.twist.abs() > forearm.flex.abs());
+		assert!(humerus.twist.abs() + 1e-4 >= profile.humerus_twist(Side::Left, 1.0).abs());
+		assert!(forearm.flex.abs() + 1e-4 >= profile.forearm_flex(1.0).abs());
 		Ok(())
 	}
 }

@@ -4,8 +4,6 @@ resolver = "2"
 
 members = [
 
-  "silly-test",
-
   # maybraid game crates, typically following rfcs
   "maybraid/durham/lib",
   "maybraid/durham/shaders",

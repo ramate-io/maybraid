@@ -138,7 +138,7 @@ mod tests {
 	}
 
 	#[test]
-	fn land_transitions_from_tucked_pose() -> anyhow::Result<()> {
+	fn land_blends_leg_compression_with_neutral_arms() -> anyhow::Result<()> {
 		let mut rig = HumanoidV0Rig::imported();
 		crate::rigs::mix::seed_bind_pose(&mut rig);
 		let flip = default_flip();
@@ -148,10 +148,13 @@ mod tests {
 		flip.apply(&mut rig, timings.air_end() + blend * 0.5);
 
 		let shoulder = rig.pose().get(&rig.arm(Side::Left).shoulder.name).expect("shoulder");
-		let tucked_shoulder =
-			Tuck::<HumanoidV0Rig>::default().profile().shoulder_roll(Side::Left, 1.0);
-		assert!(shoulder.swing.abs() > 0.05);
-		assert!(shoulder.swing.abs() < tucked_shoulder.abs());
+		assert!(
+			shoulder.swing.abs() < 0.05,
+			"landing blends from tuck at progress 0, which keeps arms neutral"
+		);
+
+		let femur = rig.pose().get(&rig.leg(Side::Left).femur.name).expect("femur");
+		assert!(femur.swing.abs() > 0.01, "legs should be partway into landing squat");
 		Ok(())
 	}
 
