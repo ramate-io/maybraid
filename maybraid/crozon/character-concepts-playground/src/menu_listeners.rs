@@ -23,6 +23,7 @@ pub fn menu_to_preview_config(menu: &CharacterMenu) -> ConceptPreviewConfig {
 		ConceptSpecies::Braidman => {
 			ConceptPreviewConfig::braidman_with_animation(menu.braidman_config(), menu.animation())
 		}
+		ConceptSpecies::Brenal => ConceptPreviewConfig::brenal(menu.brenal_config()),
 		ConceptSpecies::Brodler => {
 			ConceptPreviewConfig::brodler_with_animation(menu.brodler_config(), menu.animation())
 		}
@@ -49,6 +50,7 @@ pub fn menu_from_preview_config(config: &ConceptPreviewConfig) -> CharacterMenu 
 		ConceptPreviewConfig::Braidman { config, animation } => {
 			CharacterMenu::from_braidman(config, *animation)
 		}
+		ConceptPreviewConfig::Brenal { config } => CharacterMenu::from_brenal(config),
 		ConceptPreviewConfig::Brodler { config, animation } => {
 			CharacterMenu::from_brodler(config, *animation)
 		}
@@ -90,6 +92,7 @@ pub fn sync_menu_state_from_config(
 fn preview_species(species: ConceptSpecies) -> crate::preview::ConceptSpecies {
 	match species {
 		ConceptSpecies::Braidman => crate::preview::ConceptSpecies::Braidman,
+		ConceptSpecies::Brenal => crate::preview::ConceptSpecies::Brenal,
 		ConceptSpecies::Brodler => crate::preview::ConceptSpecies::Brodler,
 		ConceptSpecies::Mygr => crate::preview::ConceptSpecies::Mygr,
 		ConceptSpecies::Dui => crate::preview::ConceptSpecies::Dui,

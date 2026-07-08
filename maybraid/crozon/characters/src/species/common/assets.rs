@@ -5,6 +5,13 @@ use clap::ValueEnum;
 use crate::assets::AssetPath;
 
 pub const BODY_RIG: AssetPath = AssetPath::new("characters/bodies/humanoid_rig.glb");
+pub const QUADRUPED_RIG: AssetPath = AssetPath::new("characters/bodies/quadruped_rig.glb");
+pub const BODY_GUMBUS: AssetPath =
+	AssetPath::new("characters/bodies/gumbus_quadruped_full_body.glb");
+pub const PRONOGRADE_HEAD_RIG: AssetPath = AssetPath::new("characters/heads/pronograde_head.glb");
+/// Pronograde canine head mesh (`bear_head.glb` shares the pronograde rig layout).
+pub const HEAD_CANINE: AssetPath = AssetPath::new("characters/heads/bear_head.glb");
+pub const TAIL_CAT: AssetPath = AssetPath::new("characters/tails/cat_tail.glb");
 pub const BODY_STANDARD: AssetPath = AssetPath::new("characters/bodies/humanoid_full_body.glb");
 pub const BODY_FULL: AssetPath = AssetPath::new("characters/bodies/leron_biped_full_body.glb");
 pub const HEAD_RIG: AssetPath = AssetPath::new("characters/heads/orthograde_head.glb");

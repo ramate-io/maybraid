@@ -1,6 +1,7 @@
 //! In-game clap command hierarchy for the concepts playground.
 
 pub mod braidman;
+pub mod brenal;
 pub mod brodler;
 pub mod dui;
 pub mod lero;
@@ -10,6 +11,7 @@ pub mod wumbus;
 
 use bevy::prelude::*;
 pub use braidman::Braidman;
+pub use brenal::Brenal;
 pub use brodler::Brodler;
 use clap::Parser;
 pub use dui::Dui;
@@ -38,6 +40,9 @@ pub enum ConceptsCommand {
 	/// Spawn or adjust the simplified Braidman concept preview.
 	#[command(subcommand)]
 	Braidman(Braidman),
+	/// Spawn or adjust the Brenal quadruped concept preview.
+	#[command(subcommand)]
+	Brenal(Brenal),
 	/// Spawn or adjust the Brodler concept preview.
 	#[command(subcommand)]
 	Brodler(Brodler),
@@ -74,6 +79,7 @@ impl ConceptsCommand {
 			Self::Help => *console = Self::long_help_string(),
 			Self::Script(script) => script.run(commands, console),
 			Self::Braidman(braidman) => braidman.react(commands),
+			Self::Brenal(brenal) => brenal.react(commands),
 			Self::Brodler(brodler) => brodler.react(commands),
 			Self::Mygr(mygr) => mygr.react(commands),
 			Self::Dui(dui) => dui.react(commands),

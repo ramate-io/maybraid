@@ -4,6 +4,7 @@
 //! mapping from resolved controls to rig/feature effects.
 
 pub mod braidman;
+pub mod brenal;
 pub mod brodler;
 pub mod common;
 pub mod dui;

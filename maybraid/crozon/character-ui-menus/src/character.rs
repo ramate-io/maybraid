@@ -3,7 +3,7 @@ use character_ui_menu::{
 };
 use crozon_characters::{
 	species::{
-		braidman::BraidmanConfig, brodler::BrodlerConfig, dui::DuiConfig, lero::LeroConfig,
+		braidman::BraidmanConfig, brenal::BrenalConfig, brodler::BrodlerConfig, dui::DuiConfig, lero::LeroConfig,
 		mygr::MygrConfig, spibmom::SpibmomConfig, wumbus::WumbusConfig,
 	},
 	ConceptAnimation,
@@ -11,7 +11,7 @@ use crozon_characters::{
 
 use crate::{
 	characters::{
-		braidman::BraidmanMenu, brodler::BrodlerMenu, dui::DuiMenu, lero::LeroMenu, mygr::MygrMenu,
+		braidman::BraidmanMenu, brenal::BrenalMenu, brodler::BrodlerMenu, dui::DuiMenu, lero::LeroMenu, mygr::MygrMenu,
 		spibmom::SpibmomMenu, wumbus::WumbusMenu,
 	},
 	cycle_value,
@@ -21,6 +21,7 @@ use crate::{
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ConceptSpecies {
 	Braidman,
+	Brenal,
 	Brodler,
 	Mygr,
 	Dui,
@@ -33,6 +34,7 @@ impl ConceptSpecies {
 	pub const fn label(self) -> &'static str {
 		match self {
 			Self::Braidman => "braidman",
+			Self::Brenal => "brenal",
 			Self::Brodler => "brodler",
 			Self::Mygr => "mygr",
 			Self::Dui => "dui",
@@ -47,6 +49,7 @@ impl ListValues for ConceptSpecies {
 	fn values() -> &'static [Self] {
 		&[
 			Self::Braidman,
+			Self::Brenal,
 			Self::Brodler,
 			Self::Mygr,
 			Self::Dui,
@@ -61,6 +64,7 @@ impl LabelOption for ConceptSpecies {
 	fn label(&self) -> &'static str {
 		match *self {
 			Self::Braidman => "braidman",
+			Self::Brenal => "brenal",
 			Self::Brodler => "brodler",
 			Self::Mygr => "mygr",
 			Self::Dui => "dui",
@@ -75,6 +79,7 @@ impl LabelOption for ConceptSpecies {
 pub struct CharacterMenu {
 	pub species: SingleSelect<ConceptSpecies>,
 	pub braidman: BraidmanMenu,
+	pub brenal: BrenalMenu,
 	pub brodler: BrodlerMenu,
 	pub mygr: MygrMenu,
 	pub dui: DuiMenu,
@@ -88,6 +93,21 @@ impl CharacterMenu {
 		Self {
 			species: SingleSelect::new(ConceptSpecies::Braidman),
 			braidman: BraidmanMenu::from(config).with_animation(animation),
+			brenal: BrenalMenu::default(),
+			brodler: BrodlerMenu::default(),
+			mygr: MygrMenu::default(),
+			dui: DuiMenu::default(),
+			wumbus: WumbusMenu::default(),
+			lero: LeroMenu::default(),
+			spibmom: SpibmomMenu::default(),
+		}
+	}
+
+	pub fn from_brenal(config: &BrenalConfig) -> Self {
+		Self {
+			species: SingleSelect::new(ConceptSpecies::Brenal),
+			braidman: BraidmanMenu::default(),
+			brenal: BrenalMenu::from(config),
 			brodler: BrodlerMenu::default(),
 			mygr: MygrMenu::default(),
 			dui: DuiMenu::default(),
@@ -101,6 +121,7 @@ impl CharacterMenu {
 		Self {
 			species: SingleSelect::new(ConceptSpecies::Brodler),
 			braidman: BraidmanMenu::default(),
+			brenal: BrenalMenu::default(),
 			brodler: BrodlerMenu::from(config).with_animation(animation),
 			mygr: MygrMenu::default(),
 			dui: DuiMenu::default(),
@@ -114,6 +135,7 @@ impl CharacterMenu {
 		Self {
 			species: SingleSelect::new(ConceptSpecies::Mygr),
 			braidman: BraidmanMenu::default(),
+			brenal: BrenalMenu::default(),
 			brodler: BrodlerMenu::default(),
 			mygr: MygrMenu::from(config).with_animation(animation),
 			dui: DuiMenu::default(),
@@ -127,6 +149,7 @@ impl CharacterMenu {
 		Self {
 			species: SingleSelect::new(ConceptSpecies::Dui),
 			braidman: BraidmanMenu::default(),
+			brenal: BrenalMenu::default(),
 			brodler: BrodlerMenu::default(),
 			mygr: MygrMenu::default(),
 			dui: DuiMenu::from(config).with_animation(animation),
@@ -140,6 +163,7 @@ impl CharacterMenu {
 		Self {
 			species: SingleSelect::new(ConceptSpecies::Wumbus),
 			braidman: BraidmanMenu::default(),
+			brenal: BrenalMenu::default(),
 			brodler: BrodlerMenu::default(),
 			mygr: MygrMenu::default(),
 			dui: DuiMenu::default(),
@@ -153,6 +177,7 @@ impl CharacterMenu {
 		Self {
 			species: SingleSelect::new(ConceptSpecies::Lero),
 			braidman: BraidmanMenu::default(),
+			brenal: BrenalMenu::default(),
 			brodler: BrodlerMenu::default(),
 			mygr: MygrMenu::default(),
 			dui: DuiMenu::default(),
@@ -166,6 +191,7 @@ impl CharacterMenu {
 		Self {
 			species: SingleSelect::new(ConceptSpecies::Spibmom),
 			braidman: BraidmanMenu::default(),
+			brenal: BrenalMenu::default(),
 			brodler: BrodlerMenu::default(),
 			mygr: MygrMenu::default(),
 			dui: DuiMenu::default(),
@@ -180,6 +206,7 @@ impl CharacterMenu {
 	fn species_node(&self) -> MenuNode<MenuEvent> {
 		match self.species.value {
 			ConceptSpecies::Braidman => self.braidman.menu_node(),
+			ConceptSpecies::Brenal => self.brenal.menu_node(),
 			ConceptSpecies::Brodler => self.brodler.menu_node(),
 			ConceptSpecies::Mygr => self.mygr.menu_node(),
 			ConceptSpecies::Dui => self.dui.menu_node(),
@@ -192,6 +219,7 @@ impl CharacterMenu {
 	pub fn animation(&self) -> ConceptAnimation {
 		match self.species.value {
 			ConceptSpecies::Braidman => self.braidman.animation(),
+			ConceptSpecies::Brenal => ConceptAnimation::Still,
 			ConceptSpecies::Brodler => self.brodler.animation(),
 			ConceptSpecies::Mygr => self.mygr.animation(),
 			ConceptSpecies::Dui => self.dui.animation(),
@@ -203,6 +231,10 @@ impl CharacterMenu {
 
 	pub fn braidman_config(&self) -> BraidmanConfig {
 		BraidmanConfig::from(&self.braidman)
+	}
+
+	pub fn brenal_config(&self) -> BrenalConfig {
+		BrenalConfig::from(&self.brenal)
 	}
 
 	pub fn brodler_config(&self) -> BrodlerConfig {
@@ -243,6 +275,7 @@ impl CharacterMenu {
 		}
 		match self.species.value {
 			ConceptSpecies::Braidman => self.apply_braidman(event),
+			ConceptSpecies::Brenal => self.apply_brenal(event),
 			ConceptSpecies::Brodler => self.apply_brodler(event),
 			ConceptSpecies::Mygr => self.apply_mygr(event),
 			ConceptSpecies::Dui => self.apply_dui(event),
@@ -260,6 +293,7 @@ impl CharacterMenu {
 		}?;
 		match self.species.value {
 			ConceptSpecies::Braidman => self.braidman.camera_focus_for_field(field),
+			ConceptSpecies::Brenal => self.brenal.camera_focus_for_field(field),
 			ConceptSpecies::Brodler => self.brodler.camera_focus_for_field(field),
 			ConceptSpecies::Mygr => self.mygr.camera_focus_for_field(field),
 			ConceptSpecies::Dui => self.dui.camera_focus_for_field(field),
@@ -347,6 +381,66 @@ impl CharacterMenu {
 				_ => false,
 			},
 			MenuEvent::SetSwatch(_, _) | MenuEvent::Cycle(_, _) => false,
+		}
+	}
+
+	fn apply_brenal(&mut self, event: MenuEvent) -> bool {
+		let menu = &mut self.brenal;
+		match event {
+			MenuEvent::ToggleSection(_) | MenuEvent::SetSpecies(_) => false,
+			MenuEvent::Cycle(CharacterField::Gender, delta) => {
+				menu.presets.value.gender.value =
+					cycle_value(menu.presets.value.gender.value, delta);
+				true
+			}
+			MenuEvent::Cycle(CharacterField::Build, delta) => {
+				menu.presets.value.build.value = cycle_value(menu.presets.value.build.value, delta);
+				true
+			}
+			MenuEvent::Cycle(CharacterField::BrenalHorns, delta) => {
+				menu.head_features.value.horns.value =
+					cycle_value(menu.head_features.value.horns.value, delta);
+				true
+			}
+			MenuEvent::SetAsset(field, value) => match (field, value) {
+				(CharacterField::BrenalBody, AssetValue::BrenalBody(value)) => {
+					menu.body.value.body.value = value;
+					true
+				}
+				(CharacterField::BrenalHead, AssetValue::BrenalHead(value)) => {
+					menu.head_features.value.head.value = value;
+					true
+				}
+				(CharacterField::Eye, AssetValue::Eye(value)) => {
+					menu.head_features.value.eye.value = value;
+					true
+				}
+				_ => false,
+			},
+			MenuEvent::SliderDelta(field, delta) => apply_brenal_slider(menu, field, delta),
+			MenuEvent::SetSwatch(field, SwatchValue::Item(color)) => match field {
+				CharacterField::BodyColor => {
+					menu.body.value.color.value = color;
+					menu.head_features.value.body_color = color;
+					true
+				}
+				CharacterField::EyeColor => {
+					menu.head_features.value.eye_color.value = color;
+					true
+				}
+				CharacterField::HornColor => {
+					menu.head_features.value.horn_color.value = color;
+					true
+				}
+				CharacterField::TailColor => {
+					menu.body.value.tail_color.value = color;
+					true
+				}
+				_ => false,
+			},
+			MenuEvent::SetSwatch(_, _)
+			| MenuEvent::Cycle(_, _)
+			| MenuEvent::ToggleClothing(_) => false,
 		}
 	}
 
@@ -759,6 +853,41 @@ impl MenuComponent<MenuEvent> for CharacterMenu {
 			self.species_node(),
 		)
 	}
+}
+
+fn apply_brenal_slider(menu: &mut BrenalMenu, field: CharacterField, delta: f32) -> bool {
+	let body = &mut menu.body.value.sliders;
+	let face = &mut menu.head_features.value.feature_sliders;
+	match field {
+		CharacterField::ShoulderWidth => {
+			body.shoulder_width = body.shoulder_width.apply_delta(delta)
+		}
+		CharacterField::HipWidth => body.hip_width = body.hip_width.apply_delta(delta),
+		CharacterField::ChestThickness => {
+			body.chest_thickness = body.chest_thickness.apply_delta(delta)
+		}
+		CharacterField::HipThickness => body.hip_thickness = body.hip_thickness.apply_delta(delta),
+		CharacterField::LegThickness => body.leg_thickness = body.leg_thickness.apply_delta(delta),
+		CharacterField::ButtocksThickness => {
+			body.buttocks_thickness = body.buttocks_thickness.apply_delta(delta)
+		}
+		CharacterField::WaistThickness => {
+			body.waist_thickness = body.waist_thickness.apply_delta(delta)
+		}
+		CharacterField::LowerTrunkThickness => {
+			body.lower_trunk_thickness = body.lower_trunk_thickness.apply_delta(delta)
+		}
+		CharacterField::ArmLength => body.arm_length = body.arm_length.apply_delta(delta),
+		CharacterField::ArmThickness => body.arm_thickness = body.arm_thickness.apply_delta(delta),
+		CharacterField::LegLength => body.leg_length = body.leg_length.apply_delta(delta),
+		CharacterField::EyeWidth => face.eye_width = face.eye_width.apply_delta(delta),
+		CharacterField::EyeHeight => face.eye_height = face.eye_height.apply_delta(delta),
+		CharacterField::EyeTilt => face.eye_tilt = face.eye_tilt.apply_delta(delta),
+		CharacterField::EarWidth => face.ear_width = face.ear_width.apply_delta(delta),
+		CharacterField::EarHeight => face.ear_height = face.ear_height.apply_delta(delta),
+		_ => return false,
+	}
+	true
 }
 
 fn apply_braidman_slider(menu: &mut BraidmanMenu, field: CharacterField, delta: f32) -> bool {

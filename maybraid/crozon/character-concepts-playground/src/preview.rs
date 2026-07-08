@@ -9,6 +9,7 @@ use crozon_characters::{
 	assembly::{CharacterPartSlot, ResolvedCharacterAssembly},
 	species::{
 		braidman::BraidmanConfig,
+		brenal::BrenalConfig,
 		brodler::{BrodlerConfig, BrodlerHeadMesh, HornMesh},
 		common::{BodyMesh, EarMesh, EyeMesh, HairMesh, HeadMesh, MouthMesh, NoseMesh},
 		dui::{DuiConfig, DuiNoseMesh},
@@ -33,6 +34,7 @@ use crate::skinning::{
 pub enum ConceptSpecies {
 	#[default]
 	Braidman,
+	Brenal,
 	Brodler,
 	Mygr,
 	Dui,
@@ -44,6 +46,7 @@ pub enum ConceptSpecies {
 #[derive(Resource, Debug, Clone, PartialEq)]
 pub enum ConceptPreviewConfig {
 	Braidman { config: BraidmanConfig, animation: ConceptAnimation },
+	Brenal { config: BrenalConfig },
 	Brodler { config: BrodlerConfig, animation: ConceptAnimation },
 	Mygr { config: MygrConfig, animation: ConceptAnimation },
 	Dui { config: DuiConfig, animation: ConceptAnimation },
@@ -62,6 +65,7 @@ impl ConceptPreviewConfig {
 	pub fn default_for(species: ConceptSpecies) -> Self {
 		match species {
 			ConceptSpecies::Braidman => Self::braidman(BraidmanConfig::default_preview()),
+			ConceptSpecies::Brenal => Self::brenal(BrenalConfig::default_preview()),
 			ConceptSpecies::Brodler => Self::brodler(BrodlerConfig::default_preview()),
 			ConceptSpecies::Mygr => Self::mygr(MygrConfig::default_preview()),
 			ConceptSpecies::Dui => Self::dui(DuiConfig::default_preview()),
@@ -74,6 +78,7 @@ impl ConceptPreviewConfig {
 	pub fn species(&self) -> ConceptSpecies {
 		match self {
 			Self::Braidman { .. } => ConceptSpecies::Braidman,
+			Self::Brenal { .. } => ConceptSpecies::Brenal,
 			Self::Brodler { .. } => ConceptSpecies::Brodler,
 			Self::Mygr { .. } => ConceptSpecies::Mygr,
 			Self::Dui { .. } => ConceptSpecies::Dui,
@@ -89,6 +94,10 @@ impl ConceptPreviewConfig {
 
 	pub fn braidman_with_animation(config: BraidmanConfig, animation: ConceptAnimation) -> Self {
 		Self::Braidman { config, animation }
+	}
+
+	pub fn brenal(config: BrenalConfig) -> Self {
+		Self::Brenal { config }
 	}
 
 	pub fn brodler(config: BrodlerConfig) -> Self {
@@ -142,6 +151,7 @@ impl ConceptPreviewConfig {
 	pub fn resolve(&self) -> ResolvedCharacterAssembly {
 		match self {
 			Self::Braidman { config, .. } => config.resolve(),
+			Self::Brenal { config } => config.resolve(),
 			Self::Brodler { config, .. } => config.resolve(),
 			Self::Mygr { config, .. } => config.resolve(),
 			Self::Dui { config, .. } => config.resolve(),
@@ -156,6 +166,7 @@ impl ConceptPreviewConfig {
 			Self::Braidman { config, animation } => {
 				format!("{} animation={}", config.status_label(), animation.label())
 			}
+			Self::Brenal { config } => config.status_label(),
 			Self::Brodler { config, animation } => {
 				format!("{} animation={}", config.status_label(), animation.label())
 			}
@@ -182,6 +193,7 @@ impl ConceptPreviewConfig {
 			Self::Braidman { config, animation } => {
 				format!("species=braidman {} animation={animation:?}", config.sync_key())
 			}
+			Self::Brenal { config } => format!("species=brenal {}", config.sync_key()),
 			Self::Brodler { config, animation } => {
 				format!("species=brodler {} animation={animation:?}", config.sync_key())
 			}
@@ -215,6 +227,11 @@ impl ConceptPreviewConfig {
 				config.ear,
 				config.hair,
 				config.clothing,
+			),
+			Self::Brenal { config } => format!(
+				"species=brenal horns={:?} eye={:?}",
+				config.horns,
+				config.eye,
 			),
 			Self::Brodler { config, .. } => format!(
 				"species=brodler head={:?} horns={:?} eye={:?} nose={:?} mouth={:?} ear={:?} hair={:?} clothing={:?}",
@@ -270,6 +287,7 @@ impl ConceptPreviewConfig {
 			| Self::Wumbus { animation, .. }
 			| Self::Lero { animation, .. }
 			| Self::Spibmom { animation, .. } => *animation,
+			Self::Brenal { .. } => ConceptAnimation::Still,
 		}
 	}
 }
@@ -339,6 +357,12 @@ pub enum PreviewTarget {
 	BraidmanEar(EarMesh),
 	BraidmanHair(HairMesh),
 	BraidmanClothing(ClothingMesh),
+	BrenalBody,
+	BrenalHead,
+	BrenalHorns(crozon_characters::species::brenal::BrenalHornMesh),
+	BrenalEye(EyeMesh),
+	BrenalEar,
+	BrenalTail,
 	BrodlerBody,
 	BrodlerHead(BrodlerHeadMesh),
 	BrodlerHorns(HornMesh),
@@ -471,6 +495,31 @@ fn sync_live_preview(
 				}
 			}
 		}
+		ConceptPreviewConfig::Brenal { config: brenal } => {
+			let sliders = brenal.sliders.clamped();
+			for (part, mut target, base, transform) in parts {
+				target.color = preview_color_brenal(brenal, target.target);
+				let Some(base) = base else {
+					continue;
+				};
+				let Some(mut transform) = transform else {
+					continue;
+				};
+				if !has_feature_transform(part.slot) {
+					continue;
+				}
+				let authored =
+					base.normalization.mul_transform(sliders.feature_transform(part.slot));
+				match base.socket {
+					Some(socket) => {
+						*transform = socket;
+						transform.scale *= authored.scale;
+						transform.rotation *= authored.rotation;
+					}
+					None => *transform = authored,
+				}
+			}
+		}
 		ConceptPreviewConfig::Brodler { config: brodler, .. } => {
 			for (_, mut target, ..) in parts {
 				target.color = preview_color_brodler(brodler, target.target);
@@ -565,6 +614,20 @@ fn preview_color_braidman(config: &BraidmanConfig, target: PreviewTarget) -> Pre
 		PreviewTarget::BraidmanMouth(_) => config.colors.mouth,
 		PreviewTarget::BraidmanHair(_) => config.colors.hair,
 		PreviewTarget::BraidmanClothing(clothing) => config.colors.clothing_color(clothing),
+		_ => ItemColor::Natural,
+	})
+}
+
+fn preview_color_brenal(config: &BrenalConfig, target: PreviewTarget) -> PreviewColor {
+	use crozon_character_items::ItemColor;
+
+	let skin = config.colors.skin_color();
+	PreviewColor::Item(match target {
+		PreviewTarget::BrenalBody => config.colors.body,
+		PreviewTarget::BrenalHead | PreviewTarget::BrenalEar => skin,
+		PreviewTarget::BrenalEye(_) => config.colors.eyes,
+		PreviewTarget::BrenalHorns(_) => config.colors.horns,
+		PreviewTarget::BrenalTail => config.colors.tail,
 		_ => ItemColor::Natural,
 	})
 }
@@ -705,6 +768,13 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 	fn part_transform(&self, part: &ResolvedCharacterPart) -> Transform {
 		match &self.config {
 			ConceptPreviewConfig::Braidman { config, .. } => {
+				let sliders = config.sliders.clamped();
+				part.asset
+					.normalization
+					.transform()
+					.mul_transform(sliders.feature_transform(part.slot))
+			}
+			ConceptPreviewConfig::Brenal { config } => {
 				let sliders = config.sliders.clamped();
 				part.asset
 					.normalization
@@ -873,6 +943,28 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 					CharacterPartSlot::Spine => PreviewTarget::BraidmanBody(config.body),
 				};
 				PreviewAssetTarget { target, color: preview_color_braidman(config, target) }
+			}
+			ConceptPreviewConfig::Brenal { config } => {
+				let target = match part.slot {
+					CharacterPartSlot::BodyMesh => PreviewTarget::BrenalBody,
+					CharacterPartSlot::HeadRig | CharacterPartSlot::HeadMesh => {
+						PreviewTarget::BrenalHead
+					}
+					CharacterPartSlot::EyeLeft | CharacterPartSlot::EyeRight => {
+						PreviewTarget::BrenalEye(config.eye)
+					}
+					CharacterPartSlot::EarLeft | CharacterPartSlot::EarRight => {
+						PreviewTarget::BrenalEar
+					}
+					CharacterPartSlot::Horns => PreviewTarget::BrenalHorns(config.horns),
+					CharacterPartSlot::Tail => PreviewTarget::BrenalTail,
+					CharacterPartSlot::Nose
+					| CharacterPartSlot::Mouth
+					| CharacterPartSlot::Hair
+					| CharacterPartSlot::Clothing
+					| CharacterPartSlot::Spine => PreviewTarget::BrenalHead,
+				};
+				PreviewAssetTarget { target, color: preview_color_brenal(config, target) }
 			}
 			ConceptPreviewConfig::Brodler { config, .. } => {
 				let target = match part.slot {

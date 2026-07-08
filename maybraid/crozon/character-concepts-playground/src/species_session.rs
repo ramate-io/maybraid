@@ -2,7 +2,7 @@
 
 use bevy::prelude::*;
 use crozon_characters::species::{
-	braidman::BraidmanConfig, brodler::BrodlerConfig, dui::DuiConfig, lero::LeroConfig,
+	braidman::BraidmanConfig, brenal::BrenalConfig, brodler::BrodlerConfig, dui::DuiConfig, lero::LeroConfig,
 	mygr::MygrConfig, spibmom::SpibmomConfig, wumbus::WumbusConfig,
 };
 
@@ -19,6 +19,7 @@ use crate::{
 #[derive(Resource, Debug, Clone)]
 pub struct SpeciesSessionState {
 	pub braidman: BraidmanConfig,
+	pub brenal: BrenalConfig,
 	pub brodler: BrodlerConfig,
 	pub mygr: MygrConfig,
 	pub dui: DuiConfig,
@@ -38,6 +39,7 @@ impl Default for SpeciesSessionState {
 	fn default() -> Self {
 		Self {
 			braidman: BraidmanConfig::default_preview(),
+			brenal: BrenalConfig::default_preview(),
 			brodler: BrodlerConfig::default_preview(),
 			mygr: MygrConfig::default_preview(),
 			dui: DuiConfig::default_preview(),
@@ -61,6 +63,9 @@ impl SpeciesSessionState {
 			ConceptPreviewConfig::Braidman { config, animation } => {
 				self.braidman.clone_from(config);
 				self.braidman_animation = *animation;
+			}
+			ConceptPreviewConfig::Brenal { config } => {
+				self.brenal.clone_from(config);
 			}
 			ConceptPreviewConfig::Brodler { config, animation } => {
 				self.brodler.clone_from(config);
@@ -95,6 +100,7 @@ impl SpeciesSessionState {
 				self.braidman.clone(),
 				self.braidman_animation,
 			),
+			ConceptSpecies::Brenal => ConceptPreviewConfig::brenal(self.brenal.clone()),
 			ConceptSpecies::Brodler => ConceptPreviewConfig::brodler_with_animation(
 				self.brodler.clone(),
 				self.brodler_animation,

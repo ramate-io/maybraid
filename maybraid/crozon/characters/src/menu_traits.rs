@@ -16,6 +16,7 @@ use crate::{
 		brodler::{
 			assets::HornMesh, BrodlerEyeColor, BrodlerHeadMesh, BrodlerHornColor, BrodlerSkinColor,
 		},
+		brenal::{BrenalBodyMesh, BrenalHeadMesh, BrenalHornMesh},
 		common::{BodyMesh, EarMesh, EyeMesh, HairMesh, HeadMesh, MouthMesh, NoseMesh},
 		dui::{
 			DuiEyeColor, DuiEyeMesh, DuiHeadMesh, DuiMouthColor, DuiMouthMesh, DuiNoseColor,
@@ -112,6 +113,9 @@ impl_menu_identity!(
 	DuiEyeColor,
 	DuiNoseColor,
 	DuiMouthColor,
+	BrenalBodyMesh,
+	BrenalHeadMesh,
+	BrenalHornMesh,
 );
 
 macro_rules! impl_swatch_option {
@@ -193,6 +197,8 @@ impl_asset_option!(LeroMouthMesh, FACE_FEATURE_THUMBNAIL_CAMERA);
 impl_asset_option!(SpibmomHeadMesh, HEAD_THUMBNAIL_CAMERA);
 impl_asset_option!(SpibmomMouthMesh, FACE_FEATURE_THUMBNAIL_CAMERA);
 impl_asset_option!(DuiHeadMesh, HEAD_THUMBNAIL_CAMERA);
+impl_asset_option!(BrenalBodyMesh, BODY_THUMBNAIL_CAMERA);
+impl_asset_option!(BrenalHeadMesh, HEAD_THUMBNAIL_CAMERA);
 impl_asset_option!(DuiEyeMesh, FACE_FEATURE_THUMBNAIL_CAMERA);
 impl_asset_option!(DuiMouthMesh, FACE_FEATURE_THUMBNAIL_CAMERA);
 
@@ -204,6 +210,19 @@ impl AssetOption for DuiNoseMesh {
 				let path = (*self).path();
 				IdentifiedAsset::new((*self).label(), (*self).label(), path.as_str())
 					.with_thumbnail_camera(FACE_FEATURE_THUMBNAIL_CAMERA)
+			}
+		}
+	}
+}
+
+impl AssetOption for BrenalHornMesh {
+	fn asset(&self) -> IdentifiedAsset {
+		match self {
+			Self::None => IdentifiedAsset::new("none", "none", ""),
+			Self::HarrowedCrown => {
+				let path = (*self).path();
+				IdentifiedAsset::new((*self).label(), (*self).label(), path.as_str())
+					.with_thumbnail_camera(CROWN_THUMBNAIL_CAMERA)
 			}
 		}
 	}
