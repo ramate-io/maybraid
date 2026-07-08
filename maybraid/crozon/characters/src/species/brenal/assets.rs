@@ -12,8 +12,8 @@ use crate::{
 	species::{
 		brenal::{pose::BrenalPose, BrenalConfig},
 		common::{
-			EAR_FLANK, HEAD_CANINE, HORNS_HARROWED_CROWN, PRONOGRADE_HEAD_RIG, QUADRUPED_RIG,
-			TAIL_CAT, BODY_GUMBUS,
+			BODY_GUMBUS, EAR_FLANK, HEAD_CANINE, HORNS_HARROWED_CROWN, PRONOGRADE_HEAD_RIG,
+			QUADRUPED_RIG, TAIL_CAT,
 		},
 	},
 };
@@ -65,7 +65,7 @@ impl BrenalAssets {
 			CharacterAsset::new(
 				"PronogradeHeadRig",
 				PRONOGRADE_HEAD_RIG,
-				AssetNormalization::IDENTITY,
+				AssetNormalization::base_y(0.2),
 			),
 			SkinTarget::OwnRig,
 			Some(SocketAttachment {
