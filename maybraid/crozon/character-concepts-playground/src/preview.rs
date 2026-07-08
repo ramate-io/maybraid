@@ -363,6 +363,7 @@ pub enum PreviewTarget {
 	BrenalHorns(crozon_characters::species::brenal::BrenalHornMesh),
 	BrenalEye(EyeMesh),
 	BrenalEar,
+	BrenalMouth,
 	BrenalTail,
 	BrodlerBody,
 	BrodlerHead(BrodlerHeadMesh),
@@ -685,6 +686,7 @@ fn preview_color_brenal(config: &BrenalConfig, target: PreviewTarget) -> Preview
 		PreviewTarget::BrenalBody => config.colors.body,
 		PreviewTarget::BrenalHead | PreviewTarget::BrenalEar => skin,
 		PreviewTarget::BrenalEye(_) => config.colors.eyes,
+		PreviewTarget::BrenalMouth => config.colors.mouth,
 		PreviewTarget::BrenalHorns(_) => config.colors.horns,
 		PreviewTarget::BrenalTail => config.colors.tail,
 		_ => ItemColor::Natural,
@@ -1025,9 +1027,9 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 						PreviewTarget::BrenalEar
 					}
 					CharacterPartSlot::Horns => PreviewTarget::BrenalHorns(config.horns),
+					CharacterPartSlot::Mouth => PreviewTarget::BrenalMouth,
 					CharacterPartSlot::Tail => PreviewTarget::BrenalTail,
 					CharacterPartSlot::Nose
-					| CharacterPartSlot::Mouth
 					| CharacterPartSlot::Hair
 					| CharacterPartSlot::Clothing
 					| CharacterPartSlot::Spine => PreviewTarget::BrenalHead,

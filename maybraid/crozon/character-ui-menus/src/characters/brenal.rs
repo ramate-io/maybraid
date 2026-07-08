@@ -8,7 +8,7 @@ use crozon_characters::{
 	species::{
 		brenal::{
 			sliders::BrenalSliders, BrenalBodyMesh, BrenalColors, BrenalConfig, BrenalHeadMesh,
-			BrenalHornMesh,
+			BrenalHornMesh, BrenalMouthMesh,
 		},
 		common::EyeMesh,
 	},
@@ -16,7 +16,7 @@ use crozon_characters::{
 
 use crate::{
 	event::{AssetValue, CharacterField, MenuEvent, SwatchValue},
-	focus::{BODY_FOCUS, CROWN_FOCUS, EYE_FOCUS, HEAD_ROOT_FOCUS},
+	focus::{BODY_FOCUS, CROWN_FOCUS, EYE_FOCUS, HEAD_ROOT_FOCUS, MOUTH_FOCUS},
 };
 
 #[derive(Clone, Debug, PartialEq)]
@@ -63,7 +63,9 @@ pub struct BrenalHeadFeaturesMenu {
 	pub horns: SingleSelect<BrenalHornMesh>,
 	pub horn_color: SwatchSingleSelect<ItemColor>,
 	pub eye: AssetSingleSelect<EyeMesh>,
+	pub snout: AssetSingleSelect<BrenalMouthMesh>,
 	pub eye_color: SwatchSingleSelect<ItemColor>,
+	pub mouth_color: SwatchSingleSelect<ItemColor>,
 	pub feature_sliders: BrenalHeadFeatureSliders,
 	pub body_color: ItemColor,
 }
@@ -221,7 +223,10 @@ impl From<&BrenalConfig> for BrenalMenu {
 					horns: SingleSelect::new(config.horns).with_camera_focus(CROWN_FOCUS),
 					horn_color: SwatchSingleSelect::new(config.colors.horns),
 					eye: AssetSingleSelect::new(config.eye).with_camera_focus(EYE_FOCUS),
+					snout: AssetSingleSelect::new(BrenalMouthMesh::CanineSnout)
+						.with_camera_focus(MOUTH_FOCUS),
 					eye_color: SwatchSingleSelect::new(config.colors.eyes),
+					mouth_color: SwatchSingleSelect::new(config.colors.mouth),
 					feature_sliders: BrenalHeadFeatureSliders::from_config(config.sliders),
 					body_color: config.colors.body,
 				},
@@ -243,6 +248,7 @@ impl From<&BrenalMenu> for BrenalConfig {
 				head: body_color,
 				eyes: menu.head_features.value.eye_color.value,
 				ears: body_color,
+				mouth: menu.head_features.value.mouth_color.value,
 				tail: menu.body.value.tail_color.value,
 				horns: menu.head_features.value.horn_color.value,
 			},
@@ -311,6 +317,17 @@ impl MenuComponent<MenuEvent> for BrenalHeadFeaturesMenu {
 			MenuNode::swatch("Eye Color", &self.eye_color, |color| {
 				MenuEvent::SetSwatch(CharacterField::EyeColor, SwatchValue::Item(color))
 			}),
+			MenuNode::asset_grid(
+				"Snout",
+				&self.snout,
+				PreviewColor::of(self.mouth_color.value),
+				|value| {
+					MenuEvent::SetAsset(CharacterField::BrenalMouth, AssetValue::BrenalMouth(value))
+				},
+			),
+			MenuNode::swatch("Mouth Color", &self.mouth_color, |color| {
+				MenuEvent::SetSwatch(CharacterField::MouthColor, SwatchValue::Item(color))
+			}),
 			self.feature_sliders.menu_node(),
 		])
 	}
@@ -339,6 +356,7 @@ impl BrenalMenu {
 				}
 			}
 			CharacterField::Eye => self.head_features.value.eye.camera_focus,
+			CharacterField::BrenalMouth => self.head_features.value.snout.camera_focus,
 			_ => None,
 		}
 	}

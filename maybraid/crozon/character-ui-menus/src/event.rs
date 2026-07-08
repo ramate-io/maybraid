@@ -5,7 +5,7 @@ use crozon_characters::{
 		brodler::{
 			assets::HornMesh, BrodlerEyeColor, BrodlerHeadMesh, BrodlerHornColor, BrodlerSkinColor,
 		},
-		brenal::{BrenalBodyMesh, BrenalHeadMesh},
+		brenal::{BrenalBodyMesh, BrenalHeadMesh, BrenalMouthMesh},
 		common::{BodyMesh, EarMesh, EyeMesh, HairMesh, HeadMesh, MouthMesh, NoseMesh},
 		dui::{DuiEyeMesh, DuiHeadMesh, DuiMouthColor, DuiMouthMesh, DuiSkinColor},
 		lero::{
@@ -66,6 +66,7 @@ pub enum CharacterField {
 	BrenalBody,
 	BrenalHead,
 	BrenalHorns,
+	BrenalMouth,
 	DuiHead,
 	DuiEye,
 	DuiNose,
@@ -146,6 +147,7 @@ pub enum AssetValue {
 	WumbusMouth(WumbusMouthMesh),
 	BrenalBody(BrenalBodyMesh),
 	BrenalHead(BrenalHeadMesh),
+	BrenalMouth(BrenalMouthMesh),
 	LeroHead(LeroHeadMesh),
 	LeroMouth(LeroMouthMesh),
 	SpibmomHead(SpibmomHeadMesh),

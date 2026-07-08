@@ -12,8 +12,8 @@ use crate::{
 	species::{
 		brenal::{pose::BrenalPose, BrenalConfig},
 		common::{
-			BODY_GUMBUS, EAR_FLANK, HEAD_CANINE, HORNS_HARROWED_CROWN, PRONOGRADE_HEAD_RIG,
-			QUADRUPED_RIG, TAIL_CAT,
+			BODY_GUMBUS, EAR_FLANK, HEAD_CANINE, HORNS_HARROWED_CROWN, MOUTH_CANINE_SNOUT,
+			PRONOGRADE_HEAD_RIG, QUADRUPED_RIG, TAIL_CAT,
 		},
 	},
 };
@@ -35,6 +35,7 @@ impl BrenalAssets {
 		.with_part(Self::head_mesh())
 		.with_part(Self::eye_left(config.eye))
 		.with_part(Self::eye_right(config.eye))
+		.with_part(Self::mouth())
 		.with_part(Self::ear_left())
 		.with_part(Self::ear_right())
 		.with_part(Self::tail());
@@ -92,18 +93,37 @@ impl BrenalAssets {
 	fn eye_left(eye: EyeMesh) -> ResolvedCharacterPart {
 		ResolvedCharacterPart::new(
 			CharacterPartSlot::EyeLeft,
-			CharacterAsset::new(eye.label(), eye.path(), AssetNormalization::centroid(0.2)),
+			CharacterAsset::new(eye.label(), eye.path(), AssetNormalization::centroid(0.4)),
 			SkinTarget::HeadRig,
-			Some(Self::head_socket("eye_socket.L", Transform::IDENTITY)),
+			Some(Self::head_socket(
+				"eye_socket.L",
+				Transform::from_translation(Vec3::new(0.0, 0.0, -0.25)),
+			)),
 		)
 	}
 
 	fn eye_right(eye: EyeMesh) -> ResolvedCharacterPart {
 		ResolvedCharacterPart::new(
 			CharacterPartSlot::EyeRight,
-			CharacterAsset::new(eye.label(), eye.path(), AssetNormalization::centroid(0.2)),
+			CharacterAsset::new(eye.label(), eye.path(), AssetNormalization::centroid(0.4)),
 			SkinTarget::HeadRig,
-			Some(Self::head_socket("eye_socket.R", Self::mirror_x())),
+			Some(Self::head_socket(
+				"eye_socket.R",
+				Self::mirror_x().with_translation(Vec3::new(0.0, 0.0, -0.25)),
+			)),
+		)
+	}
+
+	fn mouth() -> ResolvedCharacterPart {
+		ResolvedCharacterPart::new(
+			CharacterPartSlot::Mouth,
+			CharacterAsset::new(
+				BrenalMouthMesh::CanineSnout.label(),
+				MOUTH_CANINE_SNOUT,
+				AssetNormalization::centroid(0.8),
+			),
+			SkinTarget::HeadRig,
+			Some(Self::head_socket("mouth_socket", Transform::IDENTITY)),
 		)
 	}
 
@@ -189,6 +209,24 @@ impl BrenalHeadMesh {
 
 	pub const fn path(self) -> crate::assets::AssetPath {
 		HEAD_CANINE
+	}
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, ValueEnum)]
+pub enum BrenalMouthMesh {
+	#[default]
+	CanineSnout,
+}
+
+impl BrenalMouthMesh {
+	pub const VALUES: &'static [Self] = &[Self::CanineSnout];
+
+	pub const fn label(self) -> &'static str {
+		"canine-snout"
+	}
+
+	pub const fn path(self) -> crate::assets::AssetPath {
+		MOUTH_CANINE_SNOUT
 	}
 }
 

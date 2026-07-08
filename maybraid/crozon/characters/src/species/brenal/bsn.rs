@@ -83,6 +83,7 @@ fn part_color(colors: &BrenalColors, part: &ResolvedCharacterPart) -> Color {
 		CharacterPartSlot::HeadRig | CharacterPartSlot::HeadMesh => colors.head,
 		CharacterPartSlot::EyeLeft | CharacterPartSlot::EyeRight => colors.eyes,
 		CharacterPartSlot::EarLeft | CharacterPartSlot::EarRight => colors.ears,
+		CharacterPartSlot::Mouth => colors.mouth,
 		CharacterPartSlot::Horns => colors.horns,
 		CharacterPartSlot::Tail => colors.tail,
 		CharacterPartSlot::BodyMesh => colors.body,

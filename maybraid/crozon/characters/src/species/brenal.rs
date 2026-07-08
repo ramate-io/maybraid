@@ -20,7 +20,7 @@ use assets::BrenalAssets;
 use crozon_character_items::ItemColor;
 use sliders::BrenalSliders;
 
-pub use assets::{BrenalBodyMesh, BrenalHeadMesh, BrenalHornMesh};
+pub use assets::{BrenalBodyMesh, BrenalHeadMesh, BrenalHornMesh, BrenalMouthMesh};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BrenalColors {
@@ -28,6 +28,7 @@ pub struct BrenalColors {
 	pub head: ItemColor,
 	pub eyes: ItemColor,
 	pub ears: ItemColor,
+	pub mouth: ItemColor,
 	pub tail: ItemColor,
 	pub horns: ItemColor,
 }
@@ -40,6 +41,7 @@ impl Default for BrenalColors {
 			head: body,
 			eyes: ItemColor::Blue,
 			ears: body,
+			mouth: ItemColor::Natural,
 			tail: body,
 			horns: ItemColor::Warm,
 		}
@@ -104,7 +106,7 @@ impl BrenalConfig {
 
 	pub fn status_label(&self) -> String {
 		format!(
-			"brenal gender={} build={} horns={} eye={} colors=body:{} head:{} eyes:{} ears:{} tail:{} horns_color:{} sliders={}",
+			"brenal gender={} build={} horns={} eye={} colors=body:{} head:{} eyes:{} ears:{} mouth:{} tail:{} horns_color:{} sliders={}",
 			self.gender.label(),
 			self.build.label(),
 			self.horns.label(),
@@ -113,6 +115,7 @@ impl BrenalConfig {
 			self.colors.head.label(),
 			self.colors.eyes.label(),
 			self.colors.ears.label(),
+			self.colors.mouth.label(),
 			self.colors.tail.label(),
 			self.colors.horns.label(),
 			self.sliders.status_label(),

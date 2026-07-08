@@ -415,6 +415,10 @@ impl CharacterMenu {
 					menu.head_features.value.eye.value = value;
 					true
 				}
+				(CharacterField::BrenalMouth, AssetValue::BrenalMouth(value)) => {
+					menu.head_features.value.snout.value = value;
+					true
+				}
 				_ => false,
 			},
 			MenuEvent::SliderDelta(field, delta) => apply_brenal_slider(menu, field, delta),
@@ -426,6 +430,10 @@ impl CharacterMenu {
 				}
 				CharacterField::EyeColor => {
 					menu.head_features.value.eye_color.value = color;
+					true
+				}
+				CharacterField::MouthColor => {
+					menu.head_features.value.mouth_color.value = color;
 					true
 				}
 				CharacterField::HornColor => {
