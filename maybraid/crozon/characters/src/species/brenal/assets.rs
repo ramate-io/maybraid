@@ -94,10 +94,7 @@ impl BrenalAssets {
 			CharacterPartSlot::EyeLeft,
 			CharacterAsset::new(eye.label(), eye.path(), AssetNormalization::centroid(0.2)),
 			SkinTarget::HeadRig,
-			Some(Self::head_socket(
-				"eye_socket_protrusion.L",
-				Transform::from_translation(Vec3::new(0.0, 0.0, -0.05)),
-			)),
+			Some(Self::head_socket("eye_socket.L", Transform::IDENTITY)),
 		)
 	}
 
@@ -106,10 +103,7 @@ impl BrenalAssets {
 			CharacterPartSlot::EyeRight,
 			CharacterAsset::new(eye.label(), eye.path(), AssetNormalization::centroid(0.2)),
 			SkinTarget::HeadRig,
-			Some(Self::head_socket(
-				"eye_socket_protrusion.R",
-				Self::mirror_x().with_translation(Vec3::new(0.0, 0.0, -0.05)),
-			)),
+			Some(Self::head_socket("eye_socket.R", Self::mirror_x())),
 		)
 	}
 
@@ -118,11 +112,7 @@ impl BrenalAssets {
 			CharacterPartSlot::EarLeft,
 			CharacterAsset::new("flank", EAR_FLANK, AssetNormalization::centroid(0.4)),
 			SkinTarget::HeadRig,
-			Some(Self::head_socket(
-				"temple.L",
-				Transform::from_translation(Vec3::new(0.1, 0.0, -0.05))
-					.with_rotation(Quat::from_rotation_y(std::f32::consts::PI / 4.0)),
-			)),
+			Some(Self::head_socket("ear_socket.L", Transform::IDENTITY)),
 		)
 	}
 
@@ -131,12 +121,7 @@ impl BrenalAssets {
 			CharacterPartSlot::EarRight,
 			CharacterAsset::new("flank", EAR_FLANK, AssetNormalization::centroid(0.4)),
 			SkinTarget::HeadRig,
-			Some(Self::head_socket(
-				"temple.R",
-				Self::mirror_x()
-					.with_translation(Vec3::new(-0.1, 0.0, -0.05))
-					.with_rotation(Quat::from_rotation_y(-std::f32::consts::PI / 4.0)),
-			)),
+			Some(Self::head_socket("ear_socket.R", Self::mirror_x())),
 		)
 	}
 
@@ -154,10 +139,7 @@ impl BrenalAssets {
 			CharacterPartSlot::Horns,
 			CharacterAsset::new(horns.label(), horns.path(), AssetNormalization::centroid(0.7)),
 			SkinTarget::HeadRig,
-			Some(Self::head_socket(
-				"forehead",
-				Transform::from_translation(Vec3::new(0.0, 0.0, 0.05)),
-			)),
+			Some(Self::head_socket("crown_socket", Transform::IDENTITY)),
 		)
 	}
 
