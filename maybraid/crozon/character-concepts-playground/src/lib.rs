@@ -148,9 +148,11 @@ impl Plugin for CrozonCharacterConceptsPlaygroundPlugin {
 				PostUpdate,
 				(
 					maintain_resolved_pose.before(TransformSystems::Propagate),
+					// Runs after propagation so shadow-rig socket globals reflect
+					// the pose written this frame.
 					apply_camera_suggestion
 						.after(TransformSystems::Propagate)
-						.after(attach_focus_reference_to_sockets),
+						.after(maintain_resolved_pose),
 				),
 			);
 	}

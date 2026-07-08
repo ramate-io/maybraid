@@ -3,16 +3,22 @@ use character_ui_menu::{
 };
 use crozon_characters::{
 	species::{
-		braidman::BraidmanConfig, brenal::BrenalConfig, brodler::BrodlerConfig, dui::DuiConfig, lero::LeroConfig,
-		mygr::MygrConfig, spibmom::SpibmomConfig, wumbus::WumbusConfig,
+		braidman::BraidmanConfig, brenal::BrenalConfig, brodler::BrodlerConfig, dui::DuiConfig,
+		lero::LeroConfig, mygr::MygrConfig, spibmom::SpibmomConfig, wumbus::WumbusConfig,
 	},
 	ConceptAnimation,
 };
 
 use crate::{
 	characters::{
-		braidman::BraidmanMenu, brenal::{BrenalAnimationClip, BrenalMenu}, brodler::BrodlerMenu, dui::DuiMenu, lero::LeroMenu, mygr::MygrMenu,
-		spibmom::SpibmomMenu, wumbus::WumbusMenu,
+		braidman::BraidmanMenu,
+		brenal::{BrenalAnimationClip, BrenalMenu},
+		brodler::BrodlerMenu,
+		dui::DuiMenu,
+		lero::LeroMenu,
+		mygr::MygrMenu,
+		spibmom::SpibmomMenu,
+		wumbus::WumbusMenu,
 	},
 	cycle_value,
 	event::{AssetValue, CharacterField, MenuEvent, SectionId, SwatchValue},
@@ -450,9 +456,9 @@ impl CharacterMenu {
 				}
 				_ => false,
 			},
-			MenuEvent::SetSwatch(_, _)
-			| MenuEvent::Cycle(_, _)
-			| MenuEvent::ToggleClothing(_) => false,
+			MenuEvent::SetSwatch(_, _) | MenuEvent::Cycle(_, _) | MenuEvent::ToggleClothing(_) => {
+				false
+			}
 		}
 	}
 

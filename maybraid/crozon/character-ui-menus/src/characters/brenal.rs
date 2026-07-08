@@ -1,6 +1,7 @@
+use bevy_math::Vec3;
 use character_ui_menu::{
-	AssetSingleSelect, CameraFocus, IdentifiedAsset, MenuComponent, MenuNode, PreviewColor, Section,
-	SingleSelect, SwatchSingleSelect,
+	AssetSingleSelect, CameraFocus, FocusRig, IdentifiedAsset, MenuComponent, MenuNode,
+	PreviewColor, Section, SingleSelect, SwatchSingleSelect,
 };
 use crozon_character_items::ItemColor;
 use crozon_characters::{
@@ -17,8 +18,16 @@ use crozon_characters::{
 
 use crate::{
 	event::{AssetValue, CharacterField, MenuEvent, SwatchValue},
-	focus::{BODY_FOCUS, CROWN_FOCUS, EYE_FOCUS, HEAD_ROOT_FOCUS, MOUTH_FOCUS},
+	focus::{CROWN_FOCUS, EYE_FOCUS, HEAD_ROOT_FOCUS, MOUTH_FOCUS},
 };
+
+/// Brenal quadruped body framing; also the species' default camera focus.
+pub const BODY_FOCUS: CameraFocus = CameraFocus::new(
+	FocusRig::Body,
+	"back_ridge",
+	Vec3::new(2.0, 1.0, 4.0),
+	Vec3::new(1.0, 0.0, 0.0),
+);
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum BrenalAnimationClip {
@@ -288,7 +297,8 @@ impl From<&BrenalConfig> for BrenalMenu {
 			body: Section::new(
 				"Body",
 				BrenalBodyMenu {
-					body: AssetSingleSelect::new(BrenalBodyMesh::Gumbus).with_camera_focus(BODY_FOCUS),
+					body: AssetSingleSelect::new(BrenalBodyMesh::Gumbus)
+						.with_camera_focus(BODY_FOCUS),
 					sliders: BrenalBodyProportionSliders::from_config(config.sliders),
 					color: SwatchSingleSelect::new(config.colors.body),
 					tail_color: SwatchSingleSelect::new(config.colors.tail),
@@ -363,7 +373,9 @@ impl MenuComponent<MenuEvent> for BrenalBodyMenu {
 				"Body Mesh",
 				&self.body,
 				PreviewColor::of(self.color.value),
-				|value| MenuEvent::SetAsset(CharacterField::BrenalBody, AssetValue::BrenalBody(value)),
+				|value| {
+					MenuEvent::SetAsset(CharacterField::BrenalBody, AssetValue::BrenalBody(value))
+				},
 			),
 			self.sliders.menu_node(),
 			MenuNode::swatch("Body Color", &self.color, |color| {

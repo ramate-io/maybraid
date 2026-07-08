@@ -23,10 +23,9 @@ pub fn menu_to_preview_config(menu: &CharacterMenu) -> ConceptPreviewConfig {
 		ConceptSpecies::Braidman => {
 			ConceptPreviewConfig::braidman_with_animation(menu.braidman_config(), menu.animation())
 		}
-		ConceptSpecies::Brenal => ConceptPreviewConfig::brenal_with_animation(
-			menu.brenal_config(),
-			menu.animation(),
-		),
+		ConceptSpecies::Brenal => {
+			ConceptPreviewConfig::brenal_with_animation(menu.brenal_config(), menu.animation())
+		}
 		ConceptSpecies::Brodler => {
 			ConceptPreviewConfig::brodler_with_animation(menu.brodler_config(), menu.animation())
 		}
