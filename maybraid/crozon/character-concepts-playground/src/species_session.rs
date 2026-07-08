@@ -2,7 +2,7 @@
 
 use bevy::prelude::*;
 use crozon_characters::species::{
-	braidman::BraidmanConfig, brenal::BrenalConfig, brodler::BrodlerConfig, dui::DuiConfig, lero::LeroConfig,
+	braidman::BraidmanConfig, brenal::BrenalConfig, brodler::BrodlerConfig, caole::CaoleConfig, dui::DuiConfig, lero::LeroConfig,
 	mygr::MygrConfig, spibmom::SpibmomConfig, wumbus::WumbusConfig,
 };
 
@@ -20,6 +20,7 @@ use crate::{
 pub struct SpeciesSessionState {
 	pub braidman: BraidmanConfig,
 	pub brenal: BrenalConfig,
+	pub caole: CaoleConfig,
 	pub brodler: BrodlerConfig,
 	pub mygr: MygrConfig,
 	pub dui: DuiConfig,
@@ -27,6 +28,7 @@ pub struct SpeciesSessionState {
 	pub lero: LeroConfig,
 	pub spibmom: SpibmomConfig,
 	pub brenal_animation: crate::animation::ConceptAnimation,
+	pub caole_animation: crate::animation::ConceptAnimation,
 	pub braidman_animation: crate::animation::ConceptAnimation,
 	pub brodler_animation: crate::animation::ConceptAnimation,
 	pub mygr_animation: crate::animation::ConceptAnimation,
@@ -41,6 +43,7 @@ impl Default for SpeciesSessionState {
 		Self {
 			braidman: BraidmanConfig::default_preview(),
 			brenal: BrenalConfig::default_preview(),
+			caole: CaoleConfig::default_preview(),
 			brodler: BrodlerConfig::default_preview(),
 			mygr: MygrConfig::default_preview(),
 			dui: DuiConfig::default_preview(),
@@ -48,6 +51,7 @@ impl Default for SpeciesSessionState {
 			lero: LeroConfig::default_preview(),
 			spibmom: SpibmomConfig::default_preview(),
 			brenal_animation: crate::animation::ConceptAnimation::default(),
+			caole_animation: crate::animation::ConceptAnimation::default(),
 			braidman_animation: crate::animation::ConceptAnimation::default(),
 			brodler_animation: crate::animation::ConceptAnimation::default(),
 			mygr_animation: crate::animation::ConceptAnimation::default(),
@@ -69,6 +73,10 @@ impl SpeciesSessionState {
 			ConceptPreviewConfig::Brenal { config, animation } => {
 				self.brenal.clone_from(config);
 				self.brenal_animation = *animation;
+			}
+			ConceptPreviewConfig::Caole { config, animation } => {
+				self.caole.clone_from(config);
+				self.caole_animation = *animation;
 			}
 			ConceptPreviewConfig::Brodler { config, animation } => {
 				self.brodler.clone_from(config);
@@ -106,6 +114,10 @@ impl SpeciesSessionState {
 			ConceptSpecies::Brenal => ConceptPreviewConfig::brenal_with_animation(
 				self.brenal.clone(),
 				self.brenal_animation,
+			),
+			ConceptSpecies::Caole => ConceptPreviewConfig::caole_with_animation(
+				self.caole.clone(),
+				self.caole_animation,
 			),
 			ConceptSpecies::Brodler => ConceptPreviewConfig::brodler_with_animation(
 				self.brodler.clone(),
