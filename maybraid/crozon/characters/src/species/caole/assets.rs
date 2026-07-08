@@ -103,16 +103,16 @@ impl CaoleAssets {
 	fn mouth(mouth: CaoleMouthMesh) -> ResolvedCharacterPart {
 		ResolvedCharacterPart::new(
 			CharacterPartSlot::Mouth,
-			CharacterAsset::new(mouth.label(), mouth.path(), AssetNormalization::centroid(0.4)),
+			CharacterAsset::new(mouth.label(), mouth.path(), AssetNormalization::centroid(0.3)),
 			SkinTarget::HeadRig,
 			Some(Self::head_socket(
 				"mouth_socket",
 				// rotate down at 45 degrees to follow the shape of the head
 				Transform::from_rotation(Quat::from_rotation_x(std::f32::consts::FRAC_PI_4))
 					// move back slightly to avoid gap with the head
-					.with_translation(Vec3::new(0.0, 0.0, -0.25))
+					.with_translation(Vec3::new(0.0, -0.15, 0.05))
 					// increase the x scale to make the snout wider
-					.with_scale(Vec3::new(3.0, 2.0, 2.0)),
+					.with_scale(Vec3::new(4.0, 2.0, 2.0)),
 			)),
 		)
 	}

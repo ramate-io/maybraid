@@ -2,17 +2,19 @@
 
 use crate::{
 	presets::{BuildPreset, GenderPreset},
-	species::caole::{
-		assets::CaoleBodyMesh,
-		sliders::CaoleSliders,
-		CaoleConfig,
-	},
+	species::caole::{assets::CaoleBodyMesh, sliders::CaoleSliders, CaoleConfig},
 };
 use crozon_rigs::{BoneScale, ResolvedRigPose, RigPoseLayer};
 
 /// Gumbus: shorter back ridge and slimmer legs than the stock quadruped baseline.
 const GUMBUS_BACK_RIDGE_LENGTH: f32 = 0.84;
 const GUMBUS_LEG_THICKNESS: f32 = 0.75;
+
+/// Rumbler: longer back ridge and thicker legs than the stock quadruped baseline.
+const RUMBLER_BACK_RIDGE_LENGTH: f32 = 1.6;
+const TORSO_THICKNESS: f32 = 1.6;
+const RUMBLER_LEG_THICKNESS: f32 = 1.3;
+const RUMBLER_BELLEY_LENGTH: f32 = 2.2;
 
 /// Resolved proportional intent for Caole's quadruped rig.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -50,9 +52,24 @@ impl CaolePose {
 
 	fn body_mesh_layer(self) -> RigPoseLayer {
 		let mut layer = RigPoseLayer::new("body mesh baseline");
-		if self.body == CaoleBodyMesh::Gumbus {
-			layer = layer.with_scale(BoneScale::length("back_ridge", GUMBUS_BACK_RIDGE_LENGTH));
-			layer = CaoleSliders::apply_leg_thickness(layer, GUMBUS_LEG_THICKNESS);
+		match self.body {
+			CaoleBodyMesh::Gumbus => {
+				layer = layer.with_scale(BoneScale::length("back_ridge", GUMBUS_BACK_RIDGE_LENGTH));
+				layer = CaoleSliders::apply_leg_thickness(layer, GUMBUS_LEG_THICKNESS);
+			}
+			CaoleBodyMesh::Rumbler => {
+				layer =
+					layer.with_scale(BoneScale::length("back_ridge", RUMBLER_BACK_RIDGE_LENGTH));
+				layer = layer.with_scale(BoneScale::thickness("anterior_midback", TORSO_THICKNESS));
+				layer =
+					layer.with_scale(BoneScale::thickness("posterior_midback", TORSO_THICKNESS));
+				layer = layer.with_scale(BoneScale::uniform("waist.L", TORSO_THICKNESS));
+				layer = layer.with_scale(BoneScale::uniform("waist.R", TORSO_THICKNESS));
+				layer = layer.with_scale(BoneScale::uniform("lower_chest.L", TORSO_THICKNESS));
+				layer = layer.with_scale(BoneScale::uniform("lower_chest.R", TORSO_THICKNESS));
+				layer = CaoleSliders::apply_leg_thickness(layer, RUMBLER_LEG_THICKNESS);
+				layer = layer.with_scale(BoneScale::length("belly", RUMBLER_BELLEY_LENGTH));
+			}
 		}
 		layer
 	}
