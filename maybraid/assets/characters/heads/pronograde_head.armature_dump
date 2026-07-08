@@ -2,6 +2,7 @@
 
 nose_eye
   forehead
+    crown_socket
   eye_width.L
     temple.L
       ear_socket.L
