@@ -14,8 +14,8 @@ use crozon_rigs::{
 };
 use malo_animations::{
 	animations::{
-		Gallop, Run, Tuck, TuckedFlip, TwoFootedJump, TwoFootedTuckedFlip, Walk, DEFAULT_GRAVITY,
-		DEFAULT_LANDING_SQUAT_SPEED, DEFAULT_PRE_SQUAT_SPEED,
+		Gallop, QuadrupedRun, Run, Tuck, TuckedFlip, TwoFootedJump, TwoFootedTuckedFlip, Walk,
+		DEFAULT_GRAVITY, DEFAULT_LANDING_SQUAT_SPEED, DEFAULT_PRE_SQUAT_SPEED,
 	},
 	Animation, Effects,
 };
@@ -24,7 +24,8 @@ use crate::skinning::{BoneMap, CharacterRig, RigSkeletonKind};
 
 const RUN_CYCLE_SPEED: f32 = 0.5;
 const WALK_CYCLE_SPEED: f32 = 0.35;
-const GALLOP_CYCLE_SPEED: f32 = 0.65;
+const QUADRUPED_RUN_CYCLE_SPEED: f32 = 0.55;
+const GALLOP_CYCLE_SPEED: f32 = 0.85;
 const TUCK_CYCLE_SPEED: f32 = 0.6;
 const FRONT_FLIP_CYCLE_SPEED: f32 = 0.85;
 const JUMP_HEIGHT: f32 = 1.5;
@@ -175,6 +176,9 @@ fn apply_quadruped_animation(
 	t: f32,
 ) -> Effects {
 	match animation {
+		ConceptAnimation::Run => {
+			QuadrupedRun::default().apply(rig, t * QUADRUPED_RUN_CYCLE_SPEED)
+		}
 		ConceptAnimation::Gallop => Gallop::default().apply(rig, t * GALLOP_CYCLE_SPEED),
 		_ => Effects::default(),
 	}

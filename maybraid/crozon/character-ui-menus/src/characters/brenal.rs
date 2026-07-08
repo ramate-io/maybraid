@@ -23,12 +23,13 @@ use crate::{
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum BrenalAnimationClip {
 	Still,
+	Run,
 	Gallop,
 }
 
 impl character_ui_menu::ListValues for BrenalAnimationClip {
 	fn values() -> &'static [Self] {
-		&[Self::Still, Self::Gallop]
+		&[Self::Still, Self::Run, Self::Gallop]
 	}
 }
 
@@ -36,6 +37,7 @@ impl character_ui_menu::LabelOption for BrenalAnimationClip {
 	fn label(&self) -> &'static str {
 		match self {
 			Self::Still => "still",
+			Self::Run => "run",
 			Self::Gallop => "gallop",
 		}
 	}
@@ -45,6 +47,7 @@ impl character_ui_menu::AssetOption for BrenalAnimationClip {
 	fn asset(&self) -> IdentifiedAsset {
 		let label = match self {
 			Self::Still => "still",
+			Self::Run => "run",
 			Self::Gallop => "gallop",
 		};
 		IdentifiedAsset::new(label, label, "")
@@ -55,6 +58,7 @@ impl From<BrenalAnimationClip> for ConceptAnimation {
 	fn from(value: BrenalAnimationClip) -> Self {
 		match value {
 			BrenalAnimationClip::Still => ConceptAnimation::Still,
+			BrenalAnimationClip::Run => ConceptAnimation::Run,
 			BrenalAnimationClip::Gallop => ConceptAnimation::Gallop,
 		}
 	}
@@ -63,6 +67,7 @@ impl From<BrenalAnimationClip> for ConceptAnimation {
 impl From<ConceptAnimation> for BrenalAnimationClip {
 	fn from(value: ConceptAnimation) -> Self {
 		match value {
+			ConceptAnimation::Run => Self::Run,
 			ConceptAnimation::Gallop => Self::Gallop,
 			_ => Self::Still,
 		}

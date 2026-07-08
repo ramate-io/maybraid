@@ -18,24 +18,26 @@ pub struct QuadrupedGallop<Rig> {
 	pub knee_neutral: f32,
 	pub knee_contracted: f32,
 	pub knee_extended: f32,
-	pub spine_swing: f32,
-	pub neck_swing: f32,
+	pub hind_bound_pitch: f32,
+	pub front_bound_pitch: f32,
+	pub neck_follow: f32,
 	_rig: PhantomData<Rig>,
 }
 
 impl<Rig> Default for QuadrupedGallop<Rig> {
 	fn default() -> Self {
 		Self {
-			shoulder_swing: 0.12,
-			shoulder_lift: 0.05,
-			hip_swing: 0.14,
-			hip_lift: 0.06,
-			stride: 1.0,
+			shoulder_swing: 0.14,
+			shoulder_lift: 0.07,
+			hip_swing: 0.16,
+			hip_lift: 0.08,
+			stride: 1.1,
 			knee_neutral: PI * 0.5,
-			knee_contracted: 2.0,
-			knee_extended: 0.3,
-			spine_swing: 0.08,
-			neck_swing: 0.04,
+			knee_contracted: 2.25,
+			knee_extended: 0.25,
+			hind_bound_pitch: 0.12,
+			front_bound_pitch: 0.10,
+			neck_follow: 0.5,
 			_rig: PhantomData,
 		}
 	}
@@ -55,15 +57,16 @@ impl<Rig> QuadrupedGallop<Rig> {
 			stride: template.stride * stride_scale,
 			shoulder_lift: template.shoulder_lift * gallop.bounce,
 			hip_lift: template.hip_lift * gallop.bounce,
-			shoulder_swing: template.shoulder_swing * gallop.spine_pitch,
-			hip_swing: template.hip_swing * gallop.spine_pitch,
-			spine_swing: template.spine_swing * gallop.spine_pitch,
-			neck_swing: template.neck_swing * gallop.spine_pitch,
+			hind_bound_pitch: template.hind_bound_pitch * gallop.bound_pitch,
+			front_bound_pitch: template.front_bound_pitch * gallop.bound_pitch,
+			shoulder_swing: template.shoulder_swing,
+			hip_swing: template.hip_swing,
 			knee_extended: template.knee_extended,
 			knee_neutral: template.knee_extended + knee_neutral_delta * stride_scale,
 			knee_contracted: template.knee_extended
 				+ knee_neutral_delta * stride_scale
 				+ knee_contracted_delta * stride_scale,
+			neck_follow: template.neck_follow,
 			_rig: PhantomData,
 		}
 	}

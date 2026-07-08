@@ -5,6 +5,7 @@ pub mod gallop;
 pub mod land;
 pub mod mix;
 pub mod quadruped_gallop;
+pub mod quadruped_run;
 pub mod run;
 pub mod spring;
 pub mod squat;
@@ -37,6 +38,7 @@ pub use two_footed_jump::{
 };
 pub use two_footed_tucked_flip::TwoFootedTuckedFlip;
 pub use quadruped_gallop::QuadrupedGallop;
+pub use quadruped_run::{QuadrupedRun, QuadrupedRunPose};
 pub use upright_run::UprightRun;
 pub use upright_walk::UprightWalk;
 pub use walk::Walk;
