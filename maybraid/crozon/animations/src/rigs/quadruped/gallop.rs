@@ -18,9 +18,6 @@ const BOUNDS_PER_CYCLE: f32 = 2.0;
 /// leg's two strides unequal in duration.
 const PAIR_STAGGER: f32 = 0.06;
 
-/// Delay from the hind-pair strike to the front-pair strike (cycle units).
-const FRONT_DELAY: f32 = 0.22;
-
 /// Where in each bound the spine is maximally gathered (just after the hind strikes).
 const SPINE_GATHER_CENTER: f32 = 0.06;
 
@@ -46,7 +43,7 @@ impl<R: QuadrupedRig> Animation<R> for QuadrupedGallop<R> {
 				tuning,
 			);
 
-			let (front_first, front_second) = strike_times(FRONT_DELAY, side);
+			let (front_first, front_second) = strike_times(self.phase_separation, side);
 			apply_front_leg_stride(
 				rig,
 				side,
@@ -151,10 +148,11 @@ mod tests {
 
 	#[test]
 	fn gallop_footfall_order_swaps_lead_between_bounds() {
+		let phase_separation = QuadrupedGallop::<QuadrupedV0Rig>::default().phase_separation;
 		let (hind_left_first, hind_left_second) = strike_times(0.0, Side::Left);
 		let (hind_right_first, hind_right_second) = strike_times(0.0, Side::Right);
-		let (front_left_first, front_left_second) = strike_times(FRONT_DELAY, Side::Left);
-		let (front_right_first, front_right_second) = strike_times(FRONT_DELAY, Side::Right);
+		let (front_left_first, front_left_second) = strike_times(phase_separation, Side::Left);
+		let (front_right_first, front_right_second) = strike_times(phase_separation, Side::Right);
 
 		// First bound: BL, BR, FL, FR.
 		assert!(hind_left_first < hind_right_first);
@@ -165,6 +163,18 @@ mod tests {
 		assert!(hind_right_second < hind_left_second);
 		assert!(hind_left_second < front_right_second);
 		assert!(front_right_second < front_left_second);
+	}
+
+	#[test]
+	fn gallop_phase_separation_offsets_front_strikes() {
+		let mut tight = QuadrupedGallop::<QuadrupedV0Rig>::default();
+		let mut wide = QuadrupedGallop::<QuadrupedV0Rig>::default();
+		tight.phase_separation = 0.12;
+		wide.phase_separation = 0.32;
+
+		let (tight_first, _) = strike_times(tight.phase_separation, Side::Left);
+		let (wide_first, _) = strike_times(wide.phase_separation, Side::Left);
+		assert!(wide_first > tight_first);
 	}
 
 	#[test]

@@ -20,6 +20,8 @@ pub struct QuadrupedGallop<Rig> {
 	pub knee_extended: f32,
 	pub hind_bound_pitch: f32,
 	pub front_bound_pitch: f32,
+	/// Cycle fraction between the hind-pair and front-pair strikes.
+	pub phase_separation: f32,
 	pub neck_follow: f32,
 	_rig: PhantomData<Rig>,
 }
@@ -37,6 +39,7 @@ impl<Rig> Default for QuadrupedGallop<Rig> {
 			knee_extended: 0.25,
 			hind_bound_pitch: 0.12,
 			front_bound_pitch: 0.10,
+			phase_separation: 0.22,
 			neck_follow: 0.5,
 			_rig: PhantomData,
 		}
@@ -59,6 +62,7 @@ impl<Rig> QuadrupedGallop<Rig> {
 			hip_lift: template.hip_lift * gallop.bounce,
 			hind_bound_pitch: template.hind_bound_pitch * gallop.bound_pitch,
 			front_bound_pitch: template.front_bound_pitch * gallop.bound_pitch,
+			phase_separation: template.phase_separation * gallop.phase_separation,
 			shoulder_swing: template.shoulder_swing,
 			hip_swing: template.hip_swing,
 			knee_extended: template.knee_extended,
