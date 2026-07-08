@@ -31,9 +31,12 @@ impl CroconotPose {
 		let mut layer = RigPoseLayer::new("croconot species baseline")
 			.with_scale(BoneScale::uniform("chest_thickness", 1.0))
 			.with_scale(BoneScale::uniform("belly", 1.0));
+		// Low-slung stature and narrower frame; leg length is applied here once so
+		// slider defaults stay at 1.0 and front/hind legs stay matched.
+		layer = CroconotSliders::apply_shoulder_width(layer, 0.9);
+		layer = CroconotSliders::apply_hip_width(layer, 0.9);
 		layer = CroconotSliders::apply_arm_length(layer, 0.8);
-		layer = CroconotSliders::apply_leg_length(layer, 0.8);
-		layer
+		CroconotSliders::apply_leg_length(layer, 0.8)
 	}
 
 	fn gender_layer(self) -> RigPoseLayer {

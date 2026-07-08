@@ -20,8 +20,9 @@ use crate::{
 
 pub use crate::species::common::EyeMesh;
 
-/// Lerodon snout depth scale on the pronograde mouth socket (from Lero).
-const SNOUT_Z_SCALE: f32 = 2.5;
+/// Lerodon snout scale on the pronograde mouth socket (from Lero, enlarged for Croconot).
+const SNOUT_XY_SCALE: f32 = 1.25;
+const SNOUT_Z_SCALE: f32 = 3.2;
 
 /// Species-local resolver for Croconot asset choices.
 pub struct CroconotAssets;
@@ -129,8 +130,8 @@ impl CroconotAssets {
 			Some(Self::head_socket(
 				"mouth_socket",
 				Transform::from_translation(Vec3::new(0.0, 0.0, 0.1)).with_scale(Vec3::new(
-					1.0,
-					1.0,
+					SNOUT_XY_SCALE,
+					SNOUT_XY_SCALE,
 					SNOUT_Z_SCALE,
 				)),
 			)),
