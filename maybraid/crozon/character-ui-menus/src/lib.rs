@@ -9,7 +9,7 @@ pub mod shared;
 
 pub use character::{CharacterMenu, ConceptSpecies, SectionOpenState};
 pub use characters::{
-	braidman::BraidmanMenu, brenal::BrenalMenu, brodler::BrodlerMenu, dui::DuiMenu, lero::LeroMenu,
+	braidman::BraidmanMenu, brenal::BrenalMenu, croconot::CroconotMenu, brodler::BrodlerMenu, dui::DuiMenu, lero::LeroMenu,
 	mygr::MygrMenu, spibmom::SpibmomMenu, wumbus::WumbusMenu,
 };
 pub use event::{AssetValue, CharacterField, MenuEvent, SectionId, SwatchValue};

@@ -30,6 +30,18 @@ fn brenal_config_round_trip() -> anyhow::Result<()> {
 }
 
 #[test]
+fn croconot_config_round_trip() -> anyhow::Result<()> {
+	let config = crozon_characters::species::croconot::CroconotConfig::default_preview();
+	let menu = crate::characters::croconot::CroconotMenu::from(&config);
+	let restored = crozon_characters::species::croconot::CroconotConfig::from(&menu);
+	assert_eq!(config.gender, restored.gender);
+	assert_eq!(config.horns, restored.horns);
+	assert_eq!(config.sliders.arm_length, restored.sliders.arm_length);
+	assert_eq!(config.colors.body, restored.colors.body);
+	Ok(())
+}
+
+#[test]
 fn brodler_config_round_trip() -> anyhow::Result<()> {
 	let config = BrodlerConfig::default_preview();
 	let menu = BrodlerMenu::from(&config);
@@ -132,7 +144,7 @@ fn character_menu_lowers_to_species_select_tree() -> anyhow::Result<()> {
 		anyhow::bail!("expected a species SectionSelect at the root");
 	};
 	assert_eq!(*label, "Species");
-	assert_eq!(choices.len(), 8);
+	assert_eq!(choices.len(), 9);
 	assert!(choices[0].selected, "default species should be braidman");
 	// Braidman: presets, body, head & features, hair, clothing, animation.
 	assert_eq!(children.len(), 6);

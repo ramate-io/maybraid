@@ -5,6 +5,7 @@
 
 pub mod braidman;
 pub mod brenal;
+pub mod croconot;
 pub mod brodler;
 pub mod common;
 pub mod dui;

@@ -8,10 +8,13 @@ pub const BODY_RIG: AssetPath = AssetPath::new("characters/bodies/humanoid_rig.g
 pub const QUADRUPED_RIG: AssetPath = AssetPath::new("characters/bodies/quadruped_rig.glb");
 pub const BODY_GUMBUS: AssetPath =
 	AssetPath::new("characters/bodies/gumbus_quadruped_full_body.glb");
+pub const BODY_DRAGLOON: AssetPath =
+	AssetPath::new("characters/bodies/dragloon_quadruped_full_body.glb");
 pub const PRONOGRADE_HEAD_RIG: AssetPath = AssetPath::new("characters/heads/pronograde_head.glb");
 /// Pronograde canine head mesh (`bear_head.glb` shares the pronograde rig layout).
 pub const HEAD_CANINE: AssetPath = AssetPath::new("characters/heads/bear_head.glb");
 pub const TAIL_CAT: AssetPath = AssetPath::new("characters/tails/cat_tail.glb");
+pub const TAIL_LERODON: AssetPath = AssetPath::new("characters/tails/lerodon_tail.glb");
 pub const BODY_STANDARD: AssetPath = AssetPath::new("characters/bodies/humanoid_full_body.glb");
 pub const BODY_FULL: AssetPath = AssetPath::new("characters/bodies/leron_biped_full_body.glb");
 pub const HEAD_RIG: AssetPath = AssetPath::new("characters/heads/orthograde_head.glb");
@@ -27,6 +30,7 @@ pub const NOSE_LOAF: AssetPath = AssetPath::new("characters/noses/loaf_nose.glb"
 pub const NOSE_BALLOON: AssetPath = AssetPath::new("characters/noses/mumbus_nose.glb");
 pub const MOUTH_STANDARD: AssetPath = AssetPath::new("characters/mouths/common_mouth.glb");
 pub const MOUTH_CANINE_SNOUT: AssetPath = AssetPath::new("characters/snouts/canine.glb");
+pub const MOUTH_LERODON_SNOUT: AssetPath = AssetPath::new("characters/snouts/lerodon_snout.glb");
 pub const EAR_STANDARD: AssetPath =
 	AssetPath::new("characters/ears/round_scoop_lateral_ear_left.glb");
 pub const EAR_ROUND: AssetPath = AssetPath::new("characters/ears/round_lateral_ear_left.glb");

@@ -17,6 +17,7 @@ use crate::{
 			assets::HornMesh, BrodlerEyeColor, BrodlerHeadMesh, BrodlerHornColor, BrodlerSkinColor,
 		},
 		brenal::{BrenalBodyMesh, BrenalHeadMesh, BrenalHornMesh, BrenalMouthMesh},
+		croconot::{CroconotBodyMesh, CroconotHeadMesh, CroconotHornMesh, CroconotMouthMesh},
 		common::{BodyMesh, EarMesh, EyeMesh, HairMesh, HeadMesh, MouthMesh, NoseMesh},
 		dui::{
 			DuiEyeColor, DuiEyeMesh, DuiHeadMesh, DuiMouthColor, DuiMouthMesh, DuiNoseColor,
@@ -117,6 +118,10 @@ impl_menu_identity!(
 	BrenalHeadMesh,
 	BrenalMouthMesh,
 	BrenalHornMesh,
+	CroconotBodyMesh,
+	CroconotHeadMesh,
+	CroconotMouthMesh,
+	CroconotHornMesh,
 );
 
 macro_rules! impl_swatch_option {
@@ -201,6 +206,9 @@ impl_asset_option!(DuiHeadMesh, HEAD_THUMBNAIL_CAMERA);
 impl_asset_option!(BrenalBodyMesh, BODY_THUMBNAIL_CAMERA);
 impl_asset_option!(BrenalHeadMesh, HEAD_THUMBNAIL_CAMERA);
 impl_asset_option!(BrenalMouthMesh, FACE_FEATURE_THUMBNAIL_CAMERA);
+impl_asset_option!(CroconotBodyMesh, BODY_THUMBNAIL_CAMERA);
+impl_asset_option!(CroconotHeadMesh, HEAD_THUMBNAIL_CAMERA);
+impl_asset_option!(CroconotMouthMesh, FACE_FEATURE_THUMBNAIL_CAMERA);
 impl_asset_option!(DuiEyeMesh, FACE_FEATURE_THUMBNAIL_CAMERA);
 impl_asset_option!(DuiMouthMesh, FACE_FEATURE_THUMBNAIL_CAMERA);
 
@@ -218,6 +226,19 @@ impl AssetOption for DuiNoseMesh {
 }
 
 impl AssetOption for BrenalHornMesh {
+	fn asset(&self) -> IdentifiedAsset {
+		match self {
+			Self::None => IdentifiedAsset::new("none", "none", ""),
+			Self::HarrowedCrown => {
+				let path = (*self).path();
+				IdentifiedAsset::new((*self).label(), (*self).label(), path.as_str())
+					.with_thumbnail_camera(CROWN_THUMBNAIL_CAMERA)
+			}
+		}
+	}
+}
+
+impl AssetOption for CroconotHornMesh {
 	fn asset(&self) -> IdentifiedAsset {
 		match self {
 			Self::None => IdentifiedAsset::new("none", "none", ""),
