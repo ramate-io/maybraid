@@ -2,13 +2,26 @@
 
 use crate::{
 	presets::{BuildPreset, GenderPreset},
-	species::caole::{sliders::CaoleSliders, CaoleConfig},
+	species::caole::{
+		assets::CaoleBodyMesh,
+		sliders::CaoleSliders,
+		CaoleConfig,
+	},
 };
 use crozon_rigs::{BoneScale, ResolvedRigPose, RigPoseLayer};
+
+/// Gumbus: shorter back ridge and slimmer legs than the stock quadruped baseline.
+const GUMBUS_BACK_RIDGE_LENGTH: f32 = 0.90;
+const GUMBUS_LEG_THICKNESS: f32 = 0.90;
+
+/// Rumbler: longer belly and heavier legs than the stock quadruped baseline.
+const RUMBLER_BELLY_LENGTH: f32 = 1.12;
+const RUMBLER_LEG_THICKNESS: f32 = 1.12;
 
 /// Resolved proportional intent for Caole's quadruped rig.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct CaolePose {
+	pub body: CaoleBodyMesh,
 	pub gender: GenderPreset,
 	pub build: BuildPreset,
 	pub sliders: CaoleSliders,
@@ -16,12 +29,18 @@ pub struct CaolePose {
 
 impl CaolePose {
 	pub fn from_config(config: &CaoleConfig) -> Self {
-		Self { gender: config.gender, build: config.build, sliders: config.sliders.clamped() }
+		Self {
+			body: config.body,
+			gender: config.gender,
+			build: config.build,
+			sliders: config.sliders.clamped(),
+		}
 	}
 
 	pub fn resolve(self) -> ResolvedRigPose {
 		ResolvedRigPose::new()
 			.with_layer(self.species_baseline())
+			.with_layer(self.body_mesh_layer())
 			.with_layer(self.gender_layer())
 			.with_layer(self.build_layer())
 			.with_layer(self.slider_layer())
@@ -31,6 +50,21 @@ impl CaolePose {
 		RigPoseLayer::new("caole species baseline")
 			.with_scale(BoneScale::uniform("chest_thickness", 1.0))
 			.with_scale(BoneScale::uniform("belly", 1.0))
+	}
+
+	fn body_mesh_layer(self) -> RigPoseLayer {
+		let mut layer = RigPoseLayer::new("body mesh baseline");
+		match self.body {
+			CaoleBodyMesh::Gumbus => {
+				layer = layer.with_scale(BoneScale::length("back_ridge", GUMBUS_BACK_RIDGE_LENGTH));
+				layer = CaoleSliders::apply_leg_thickness(layer, GUMBUS_LEG_THICKNESS);
+			}
+			CaoleBodyMesh::Rumbler => {
+				layer = layer.with_scale(BoneScale::length("belly", RUMBLER_BELLY_LENGTH));
+				layer = CaoleSliders::apply_leg_thickness(layer, RUMBLER_LEG_THICKNESS);
+			}
+		}
+		layer
 	}
 
 	fn gender_layer(self) -> RigPoseLayer {

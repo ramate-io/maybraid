@@ -63,6 +63,7 @@ impl CaoleColors {
 pub struct CaoleConfig {
 	pub gender: GenderPreset,
 	pub build: BuildPreset,
+	pub body: CaoleBodyMesh,
 	pub head: CaoleHeadMesh,
 	pub mouth: CaoleMouthMesh,
 	pub eye: EyeMesh,
@@ -81,6 +82,7 @@ impl CaoleConfig {
 		Self {
 			gender: GenderPreset::Neutral,
 			build: BuildPreset::Average,
+			body: CaoleBodyMesh::Gumbus,
 			head: CaoleHeadMesh::Caole,
 			mouth: CaoleMouthMesh::Cow,
 			eye: EyeMesh::Standard,
@@ -106,9 +108,10 @@ impl CaoleConfig {
 
 	pub fn status_label(&self) -> String {
 		format!(
-			"caole gender={} build={} head={} mouth={} eye={} colors=body:{} head:{} eyes:{} ears:{} mouth:{} tail:{} sliders={}",
+			"caole gender={} build={} body={} head={} mouth={} eye={} colors=body:{} head:{} eyes:{} ears:{} mouth:{} tail:{} sliders={}",
 			self.gender.label(),
 			self.build.label(),
+			self.body.label(),
 			self.head.label(),
 			self.mouth.label(),
 			self.eye.label(),

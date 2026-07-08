@@ -21,6 +21,7 @@ use crate::{
 pub struct Caole {
 	pub gender: GenderPreset,
 	pub build: BuildPreset,
+	pub body: CaoleBodyMesh,
 	pub head: CaoleHeadMesh,
 	pub mouth: CaoleMouthMesh,
 	pub eye: EyeMesh,
@@ -33,6 +34,7 @@ impl Caole {
 		Self {
 			gender: config.gender,
 			build: config.build,
+			body: config.body,
 			head: config.head,
 			mouth: config.mouth,
 			eye: config.eye,
@@ -95,5 +97,6 @@ fn part_color(colors: &CaoleColors, part: &ResolvedCharacterPart) -> Color {
 
 // Keep fixed mesh enums referenced for compile-time asset wiring checks.
 const _: CaoleBodyMesh = CaoleBodyMesh::Gumbus;
+const _: CaoleBodyMesh = CaoleBodyMesh::Rumbler;
 const _: CaoleHeadMesh = CaoleHeadMesh::Caole;
 const _: CaoleMouthMesh = CaoleMouthMesh::Cow;

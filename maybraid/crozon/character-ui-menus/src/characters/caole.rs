@@ -295,8 +295,7 @@ impl From<&CaoleConfig> for CaoleMenu {
 			body: Section::new(
 				"Body",
 				CaoleBodyMenu {
-					body: AssetSingleSelect::new(CaoleBodyMesh::Gumbus)
-						.with_camera_focus(BODY_FOCUS),
+					body: AssetSingleSelect::new(config.body).with_camera_focus(BODY_FOCUS),
 					sliders: CaoleBodyProportionSliders::from_config(config.sliders),
 					color: SwatchSingleSelect::new(config.colors.body),
 					tail_color: SwatchSingleSelect::new(config.colors.tail),
@@ -326,6 +325,7 @@ impl From<&CaoleMenu> for CaoleConfig {
 		Self {
 			gender: menu.presets.value.gender.value,
 			build: menu.presets.value.build.value,
+			body: menu.body.value.body.value,
 			head: menu.head_features.value.head.value,
 			mouth: menu.head_features.value.snout.value,
 			eye: menu.head_features.value.eye.value,

@@ -8,6 +8,7 @@ pub const BODY_RIG: AssetPath = AssetPath::new("characters/bodies/humanoid_rig.g
 pub const QUADRUPED_RIG: AssetPath = AssetPath::new("characters/bodies/quadruped_rig.glb");
 pub const BODY_GUMBUS: AssetPath =
 	AssetPath::new("characters/bodies/gumbus_quadruped_full_body.glb");
+pub const BODY_RUMBLER: AssetPath = AssetPath::new("characters/bodies/rumbler.glb");
 pub const PRONOGRADE_HEAD_RIG: AssetPath = AssetPath::new("characters/heads/pronograde_head.glb");
 /// Pronograde canine head mesh (`bear_head.glb` shares the pronograde rig layout).
 pub const HEAD_CANINE: AssetPath = AssetPath::new("characters/heads/bear_head.glb");

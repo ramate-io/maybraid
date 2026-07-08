@@ -5,7 +5,7 @@ use clap::{Args, Subcommand};
 use crozon_characters::{
 	species::{
 		caole::{
-			assets::{CaoleHeadMesh, CaoleMouthMesh},
+			assets::{CaoleBodyMesh, CaoleHeadMesh, CaoleMouthMesh},
 			sliders::CaoleSliders,
 			CaoleConfig,
 		},
@@ -30,6 +30,9 @@ pub struct PreviewArgs {
 
 	#[arg(long, value_enum, default_value_t = BuildPreset::Average)]
 	pub build: BuildPreset,
+
+	#[arg(long, value_enum, default_value_t = CaoleBodyMesh::Gumbus)]
+	pub body: CaoleBodyMesh,
 
 	#[arg(long, value_enum, default_value_t = CaoleHeadMesh::Caole)]
 	pub head: CaoleHeadMesh,
@@ -76,6 +79,7 @@ impl PreviewArgs {
 			CaoleConfig {
 				gender: self.gender,
 				build: self.build,
+				body: self.body,
 				head: self.head,
 				mouth: self.snout,
 				eye: self.eye,

@@ -12,7 +12,7 @@ use crate::{
 	species::{
 		caole::{pose::CaolePose, CaoleConfig},
 		common::{
-			BODY_GUMBUS, EAR_FLANK, HEAD_CAOLE, HEAD_COWDER, MOUTH_COW_SNOUT,
+			BODY_GUMBUS, BODY_RUMBLER, EAR_FLANK, HEAD_CAOLE, HEAD_COWDER, MOUTH_COW_SNOUT,
 			PRONOGRADE_HEAD_RIG, QUADRUPED_RIG, TAIL_CAT,
 		},
 	},
@@ -30,7 +30,7 @@ impl CaoleAssets {
 			RigAsset::new("Quadruped", QUADRUPED_RIG),
 			CaolePose::from_config(config).resolve(),
 		)
-		.with_part(Self::body_mesh())
+		.with_part(Self::body_mesh(config.body))
 		.with_part(Self::head_rig())
 		.with_part(Self::head_mesh(config.head))
 		.with_part(Self::eye_left(config.eye))
@@ -41,14 +41,10 @@ impl CaoleAssets {
 		.with_part(Self::tail())
 	}
 
-	fn body_mesh() -> ResolvedCharacterPart {
+	fn body_mesh(body: CaoleBodyMesh) -> ResolvedCharacterPart {
 		ResolvedCharacterPart::new(
 			CharacterPartSlot::BodyMesh,
-			CharacterAsset::new(
-				CaoleBodyMesh::Gumbus.label(),
-				BODY_GUMBUS,
-				AssetNormalization::IDENTITY,
-			),
+			CharacterAsset::new(body.label(), body.path(), AssetNormalization::IDENTITY),
 			SkinTarget::BodyRig,
 			None,
 		)
@@ -60,7 +56,7 @@ impl CaoleAssets {
 			CharacterAsset::new(
 				"PronogradeHeadRig",
 				PRONOGRADE_HEAD_RIG,
-				AssetNormalization::base_y(0.2),
+				AssetNormalization::base_y(0.4),
 			),
 			SkinTarget::OwnRig,
 			Some(SocketAttachment {
@@ -87,7 +83,7 @@ impl CaoleAssets {
 			SkinTarget::HeadRig,
 			Some(Self::head_socket(
 				"eye_socket.L",
-				Transform::from_translation(Vec3::new(0.0, 0.0, -0.25)),
+				Transform::from_translation(Vec3::new(0.2, -0.25, -0.25)),
 			)),
 		)
 	}
@@ -99,7 +95,7 @@ impl CaoleAssets {
 			SkinTarget::HeadRig,
 			Some(Self::head_socket(
 				"eye_socket.R",
-				Self::mirror_x().with_translation(Vec3::new(0.0, 0.0, -0.25)),
+				Self::mirror_x().with_translation(Vec3::new(-0.2, -0.25, -0.25)),
 			)),
 		)
 	}
@@ -107,9 +103,17 @@ impl CaoleAssets {
 	fn mouth(mouth: CaoleMouthMesh) -> ResolvedCharacterPart {
 		ResolvedCharacterPart::new(
 			CharacterPartSlot::Mouth,
-			CharacterAsset::new(mouth.label(), mouth.path(), AssetNormalization::centroid(0.8)),
+			CharacterAsset::new(mouth.label(), mouth.path(), AssetNormalization::centroid(0.4)),
 			SkinTarget::HeadRig,
-			Some(Self::head_socket("mouth_socket", Transform::IDENTITY)),
+			Some(Self::head_socket(
+				"mouth_socket",
+				// rotate down at 45 degrees to follow the shape of the head
+				Transform::from_rotation(Quat::from_rotation_x(std::f32::consts::FRAC_PI_4))
+					// move back slightly to avoid gap with the head
+					.with_translation(Vec3::new(0.0, 0.0, -0.25))
+					// increase the x scale to make the snout wider
+					.with_scale(Vec3::new(3.0, 2.0, 2.0)),
+			)),
 		)
 	}
 
@@ -118,7 +122,11 @@ impl CaoleAssets {
 			CharacterPartSlot::EarLeft,
 			CharacterAsset::new("flank", EAR_FLANK, AssetNormalization::centroid(0.4)),
 			SkinTarget::HeadRig,
-			Some(Self::head_socket("ear_socket.L", Transform::IDENTITY)),
+			// move in closer to the head
+			Some(Self::head_socket(
+				"ear_socket.L",
+				Transform::from_translation(Vec3::new(-0.2, 0.0, 0.0)),
+			)),
 		)
 	}
 
@@ -127,7 +135,10 @@ impl CaoleAssets {
 			CharacterPartSlot::EarRight,
 			CharacterAsset::new("flank", EAR_FLANK, AssetNormalization::centroid(0.4)),
 			SkinTarget::HeadRig,
-			Some(Self::head_socket("ear_socket.R", Self::mirror_x())),
+			Some(Self::head_socket(
+				"ear_socket.R",
+				Self::mirror_x().with_translation(Vec3::new(0.2, 0.0, 0.0)),
+			)),
 		)
 	}
 
@@ -157,17 +168,24 @@ impl CaoleAssets {
 pub enum CaoleBodyMesh {
 	#[default]
 	Gumbus,
+	Rumbler,
 }
 
 impl CaoleBodyMesh {
-	pub const VALUES: &'static [Self] = &[Self::Gumbus];
+	pub const VALUES: &'static [Self] = &[Self::Gumbus, Self::Rumbler];
 
 	pub const fn label(self) -> &'static str {
-		"gumbus"
+		match self {
+			Self::Gumbus => "gumbus",
+			Self::Rumbler => "rumbler",
+		}
 	}
 
 	pub const fn path(self) -> crate::assets::AssetPath {
-		BODY_GUMBUS
+		match self {
+			Self::Gumbus => BODY_GUMBUS,
+			Self::Rumbler => BODY_RUMBLER,
+		}
 	}
 }
 
