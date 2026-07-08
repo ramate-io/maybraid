@@ -1,5 +1,6 @@
 pub mod braidman;
 pub mod brenal;
+pub mod caole;
 pub mod brodler;
 pub mod dui;
 pub mod lero;

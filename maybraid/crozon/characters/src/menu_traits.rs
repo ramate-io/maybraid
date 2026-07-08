@@ -17,6 +17,7 @@ use crate::{
 			assets::HornMesh, BrodlerEyeColor, BrodlerHeadMesh, BrodlerHornColor, BrodlerSkinColor,
 		},
 		brenal::{BrenalBodyMesh, BrenalHeadMesh, BrenalHornMesh, BrenalMouthMesh},
+		caole::{CaoleBodyMesh, CaoleMouthMesh},
 		common::{BodyMesh, EarMesh, EyeMesh, HairMesh, HeadMesh, MouthMesh, NoseMesh},
 		dui::{
 			DuiEyeColor, DuiEyeMesh, DuiHeadMesh, DuiMouthColor, DuiMouthMesh, DuiNoseColor,
@@ -117,6 +118,8 @@ impl_menu_identity!(
 	BrenalHeadMesh,
 	BrenalMouthMesh,
 	BrenalHornMesh,
+	CaoleBodyMesh,
+	CaoleMouthMesh,
 );
 
 macro_rules! impl_swatch_option {
@@ -201,6 +204,8 @@ impl_asset_option!(DuiHeadMesh, HEAD_THUMBNAIL_CAMERA);
 impl_asset_option!(BrenalBodyMesh, BODY_THUMBNAIL_CAMERA);
 impl_asset_option!(BrenalHeadMesh, HEAD_THUMBNAIL_CAMERA);
 impl_asset_option!(BrenalMouthMesh, FACE_FEATURE_THUMBNAIL_CAMERA);
+impl_asset_option!(CaoleBodyMesh, BODY_THUMBNAIL_CAMERA);
+impl_asset_option!(CaoleMouthMesh, FACE_FEATURE_THUMBNAIL_CAMERA);
 impl_asset_option!(DuiEyeMesh, FACE_FEATURE_THUMBNAIL_CAMERA);
 impl_asset_option!(DuiMouthMesh, FACE_FEATURE_THUMBNAIL_CAMERA);
 
