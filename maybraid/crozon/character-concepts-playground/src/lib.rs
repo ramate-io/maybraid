@@ -10,7 +10,6 @@ pub mod commands;
 mod diagnostics;
 mod focus;
 mod focus_reference;
-mod ground;
 mod material;
 mod menu_listeners;
 mod preview;
@@ -91,7 +90,6 @@ impl Plugin for CrozonCharacterConceptsPlaygroundPlugin {
 				(
 					camera::setup_camera,
 					setup_lighting,
-					ground::setup_ground,
 					init_character_menu_state,
 					ui::setup_creator_ui,
 				),
