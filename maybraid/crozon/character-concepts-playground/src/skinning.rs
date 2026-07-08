@@ -29,7 +29,7 @@ impl RigSkeletonKind {
 	pub fn landmark_bones(self) -> &'static [&'static str] {
 		match self {
 			Self::Humanoid => &["root", "pelvis.L", "chest.L", "waist.L"],
-			Self::Quadruped => &["neck", "shoulder.L", "tailbone", "waist.L"],
+			Self::Quadruped => &["head_socket", "shoulder.L", "tailbone", "waist.L"],
 		}
 	}
 }

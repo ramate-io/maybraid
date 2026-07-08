@@ -70,7 +70,7 @@ impl BrenalAssets {
 			SkinTarget::OwnRig,
 			Some(SocketAttachment {
 				rig: SocketRig::Body,
-				bone: "neck",
+				bone: "head_socket",
 				local_transform: Transform::IDENTITY,
 			}),
 		)

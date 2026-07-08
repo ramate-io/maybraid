@@ -604,6 +604,10 @@ pub fn reveal_ready_preview(
 	};
 	if !bone_map_ready(bone_map, rig.skeleton) || !bind_scales_ready(bind_scales, bone_map, rig.skeleton)
 	{
+		if bone_map.by_name.is_empty() {
+			// GLTF scene bones are not wired yet; wait without treating it as an error.
+			return;
+		}
 		if !debug.logged_block {
 			debug.logged_block = true;
 			let missing = missing_landmark_bones(bone_map, rig.skeleton);

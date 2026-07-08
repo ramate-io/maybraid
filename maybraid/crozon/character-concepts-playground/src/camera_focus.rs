@@ -144,7 +144,7 @@ pub fn apply_camera_suggestion(
 							.find(|(_, _, rig)| rig.role == CharacterRigRole::Body)
 							.map(|(map, scales, rig)| {
 								let landmark = match rig.skeleton {
-									RigSkeletonKind::Quadruped => "neck",
+									RigSkeletonKind::Quadruped => "head_socket",
 									RigSkeletonKind::Humanoid => "upper_neck",
 								};
 								format!(
@@ -323,7 +323,7 @@ fn body_pose_landmark_ready(
 	skeleton: RigSkeletonKind,
 ) -> bool {
 	let landmark = match skeleton {
-		RigSkeletonKind::Quadruped => "neck",
+		RigSkeletonKind::Quadruped => "head_socket",
 		RigSkeletonKind::Humanoid => "upper_neck",
 	};
 	bone_global_y(bone_map, bone_globals, landmark)
