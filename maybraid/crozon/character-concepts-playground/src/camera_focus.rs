@@ -11,6 +11,7 @@ use crate::{
 	preview::{ConceptPreviewConfig, ConceptPreviewRoot},
 	skinning::{
 		bind_scales_ready, bone_map_ready, ActiveRigPose, BoneMap, CharacterRig, CharacterRigRole,
+		RigSkeletonKind,
 		NeedsSocketPlacement, RigBindScales,
 	},
 	ui::CreatorUiState,
@@ -141,11 +142,15 @@ pub fn apply_camera_suggestion(
 						FocusRig::Body => shadow_body_pose
 							.iter()
 							.find(|(_, _, rig)| rig.role == CharacterRigRole::Body)
-							.map(|(map, scales, _)| {
+							.map(|(map, scales, rig)| {
+								let landmark = match rig.skeleton {
+									RigSkeletonKind::Quadruped => "neck",
+									RigSkeletonKind::Humanoid => "upper_neck",
+								};
 								format!(
-									"source=shadow upper_neck_y={} pose_ready={}",
-									fmt_y(bone_global_y(map, &bone_globals, "upper_neck")),
-									shadow_body_pose_ready(map, scales, &bone_globals),
+									"source=shadow {landmark}_y={} pose_ready={}",
+									fmt_y(bone_global_y(map, &bone_globals, landmark)),
+									shadow_body_pose_ready(map, scales, rig.skeleton, &bone_globals),
 								)
 							})
 							.unwrap_or_else(|| "source=shadow body_rig=missing".into()),
@@ -284,18 +289,19 @@ fn shadow_body_ready(
 ) -> bool {
 	shadow_body_pose.iter().any(|(bone_map, bind_scales, rig)| {
 		rig.role == CharacterRigRole::Body
-			&& shadow_body_pose_ready(bone_map, bind_scales, bone_globals)
+			&& shadow_body_pose_ready(bone_map, bind_scales, rig.skeleton, bone_globals)
 	})
 }
 
 fn shadow_body_pose_ready(
 	bone_map: &BoneMap,
 	bind_scales: &RigBindScales,
+	skeleton: RigSkeletonKind,
 	bone_globals: &Query<&GlobalTransform>,
 ) -> bool {
-	bone_map_ready(bone_map)
-		&& bind_scales_ready(bind_scales, bone_map)
-		&& body_pose_landmark_ready(bone_map, bone_globals)
+	bone_map_ready(bone_map, skeleton)
+		&& bind_scales_ready(bind_scales, bone_map, skeleton)
+		&& body_pose_landmark_ready(bone_map, bone_globals, skeleton)
 }
 
 fn preview_body_ready(
@@ -306,13 +312,21 @@ fn preview_body_ready(
 ) -> bool {
 	preview_body_pose.iter().any(|(bone_map, bind_scales, rig)| {
 		rig.role == CharacterRigRole::Body
-			&& bone_map_ready(bone_map)
-			&& bind_scales_ready(bind_scales, bone_map)
+			&& bone_map_ready(bone_map, rig.skeleton)
+			&& bind_scales_ready(bind_scales, bone_map, rig.skeleton)
 	})
 }
 
-fn body_pose_landmark_ready(bone_map: &BoneMap, bone_globals: &Query<&GlobalTransform>) -> bool {
-	bone_global_y(bone_map, bone_globals, "upper_neck")
+fn body_pose_landmark_ready(
+	bone_map: &BoneMap,
+	bone_globals: &Query<&GlobalTransform>,
+	skeleton: RigSkeletonKind,
+) -> bool {
+	let landmark = match skeleton {
+		RigSkeletonKind::Quadruped => "neck",
+		RigSkeletonKind::Humanoid => "upper_neck",
+	};
+	bone_global_y(bone_map, bone_globals, landmark)
 		.is_some_and(|y| y > BODY_POSE_LANDMARK_MIN_Y)
 }
 

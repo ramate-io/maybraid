@@ -9,6 +9,7 @@ use crozon_characters::assembly::{CharacterPartSlot, ResolvedCharacterAssembly};
 use crate::preview::{ConceptPreviewConfig, ConceptSpecies};
 use crate::skinning::{
 	ActiveRigPose, BoneMap, CharacterRig, CharacterRigRole, NeedsSocketPlacement, RigBindScales,
+	RigSkeletonKind,
 };
 
 #[derive(Component)]
@@ -103,13 +104,14 @@ fn spawn_focus_reference(
 	asset_server: &AssetServer,
 	assembly: &ResolvedCharacterAssembly,
 ) {
+	let skeleton = RigSkeletonKind::from_body_rig_label(assembly.body_rig.label);
 	let body_rig = commands
 		.spawn((
 			WorldAssetRoot(
 				asset_server
 					.load(GltfAssetLabel::Scene(0).from_asset(assembly.body_rig.path.as_str())),
 			),
-			CharacterRig { role: CharacterRigRole::Body },
+			CharacterRig { role: CharacterRigRole::Body, skeleton },
 			FocusReferenceRig,
 			BoneMap::default(),
 			ActiveRigPose { pose: assembly.pose.clone() },
@@ -133,7 +135,7 @@ fn spawn_focus_reference(
 				asset_server
 					.load(GltfAssetLabel::Scene(0).from_asset(head_part.asset.path.as_str())),
 			),
-			CharacterRig { role: CharacterRigRole::Head },
+			CharacterRig { role: CharacterRigRole::Head, skeleton: RigSkeletonKind::Humanoid },
 			FocusReferenceRig,
 			BoneMap::default(),
 			FocusReferenceRoot,

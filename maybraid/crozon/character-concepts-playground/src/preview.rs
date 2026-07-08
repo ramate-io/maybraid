@@ -25,9 +25,10 @@ use crozon_characters::{
 use crate::animation::{AnimatedBodyRig, BodyRigBindTransform, ConceptAnimation};
 use crate::preview_color::PreviewColor;
 use crate::skinning::{
-	bind_scales_ready, bone_map_ready, ActiveRigPose, BoneMap, CharacterPart, CharacterRig,
-	CharacterRigRole, NeedsDuplicateScenePrune, NeedsSkinRemap, NeedsSocketPlacement,
-	NoMatchingArmature, PartRigRef, RigBindScales,
+	bind_scales_ready, bone_map_ready, missing_landmark_bones, preview_debug_enabled,
+	ActiveRigPose, BoneMap, CharacterPart, CharacterRig, CharacterRigRole, NeedsDuplicateScenePrune,
+	NeedsSkinRemap, NeedsSocketPlacement, NoMatchingArmature, PartRigRef, RigBindScales,
+	RigSkeletonKind,
 };
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
@@ -553,12 +554,20 @@ fn sync_live_preview(
 	}
 }
 
+#[derive(Resource, Default)]
+pub struct PreviewRevealDebugState {
+	spawn_key: String,
+	logged_block: bool,
+}
+
 /// Reveal a respawned preview only after the body pose, socket attach, and skin
 /// remap passes have settled.
 pub fn reveal_ready_preview(
 	mut commands: Commands,
+	mut debug: ResMut<PreviewRevealDebugState>,
+	config: Res<ConceptPreviewConfig>,
 	pending: Query<Entity, With<PreviewAwaitingReveal>>,
-	body_rigs: Query<(&BoneMap, &RigBindScales), With<AnimatedBodyRig>>,
+	body_rigs: Query<(&BoneMap, &RigBindScales, &CharacterRig), With<AnimatedBodyRig>>,
 	awaiting_socket: Query<(), (With<NeedsSocketPlacement>, With<ConceptPreviewRoot>)>,
 	awaiting_remap: Query<
 		(),
@@ -574,14 +583,60 @@ pub fn reveal_ready_preview(
 		(With<NeedsDuplicateScenePrune>, With<CharacterPart>, With<ConceptPreviewRoot>),
 	>,
 ) {
-	let Ok((bone_map, bind_scales)) = body_rigs.single() else {
+	let spawn_key = config.spawn_key();
+	if debug.spawn_key != spawn_key {
+		debug.spawn_key.clone_from(&spawn_key);
+		debug.logged_block = false;
+		if preview_debug_enabled() {
+			info!(
+				"[preview] awaiting reveal for species={:?} spawn_key={spawn_key}",
+				config.species()
+			);
+		}
+	}
+
+	let Ok((bone_map, bind_scales, rig)) = body_rigs.single() else {
+		if !debug.logged_block {
+			debug.logged_block = true;
+			warn!("[preview] reveal blocked: no animated body rig entity");
+		}
 		return;
 	};
-	if !bone_map_ready(bone_map) || !bind_scales_ready(bind_scales, bone_map) {
+	if !bone_map_ready(bone_map, rig.skeleton) || !bind_scales_ready(bind_scales, bone_map, rig.skeleton)
+	{
+		if !debug.logged_block {
+			debug.logged_block = true;
+			let missing = missing_landmark_bones(bone_map, rig.skeleton);
+			warn!(
+				"[preview] reveal blocked: rig not ready skeleton={:?} missing_landmarks=[{}] mapped_bones={}",
+				rig.skeleton,
+				missing.join(", "),
+				bone_map.by_name.len()
+			);
+		}
 		return;
 	}
 	if !awaiting_socket.is_empty() || !awaiting_remap.is_empty() || !awaiting_prune.is_empty() {
+		if !debug.logged_block {
+			debug.logged_block = true;
+			warn!(
+				"[preview] reveal blocked: awaiting_socket={} awaiting_remap={} awaiting_prune={}",
+				awaiting_socket.iter().count(),
+				awaiting_remap.iter().count(),
+				awaiting_prune.iter().count()
+			);
+		}
 		return;
+	}
+	if pending.is_empty() {
+		return;
+	}
+	if preview_debug_enabled() {
+		info!(
+			"[preview] revealing {} preview entities for species={:?}",
+			pending.iter().count(),
+			config.species()
+		);
 	}
 	for entity in &pending {
 		commands.entity(entity).try_insert(Visibility::Inherited);
@@ -798,12 +853,21 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 	}
 
 	fn spawn_body_rig(&mut self) -> Entity {
+		let skeleton = RigSkeletonKind::from_body_rig_label(self.assembly.body_rig.label);
+		if preview_debug_enabled() {
+			info!(
+				"[preview] spawning body rig label={} skeleton={:?} path={}",
+				self.assembly.body_rig.label,
+				skeleton,
+				self.assembly.body_rig.path
+			);
+		}
 		self.commands
 			.spawn((
 				WorldAssetRoot(self.asset_server.load(
 					GltfAssetLabel::Scene(0).from_asset(self.assembly.body_rig.path.as_str()),
 				)),
-				CharacterRig { role: CharacterRigRole::Body },
+				CharacterRig { role: CharacterRigRole::Body, skeleton },
 				AnimatedBodyRig,
 				BoneMap::default(),
 				ActiveRigPose { pose: self.assembly.pose.clone() },
@@ -826,7 +890,7 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 					self.asset_server
 						.load(GltfAssetLabel::Scene(0).from_asset(part.asset.path.as_str())),
 				),
-				CharacterRig { role: CharacterRigRole::Head },
+				CharacterRig { role: CharacterRigRole::Head, skeleton: RigSkeletonKind::Humanoid },
 				CharacterPart { slot: part.slot },
 				BoneMap::default(),
 				ConceptPreviewRoot,
