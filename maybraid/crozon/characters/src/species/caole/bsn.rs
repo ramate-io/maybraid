@@ -8,7 +8,7 @@ use crate::{
 	assembly::{CharacterPartSlot, ResolvedCharacterPart},
 	presets::{BuildPreset, GenderPreset},
 	species::{
-		caole::assets::{CaoleBodyMesh, CaoleHeadMesh, CaoleMouthMesh},
+		caole::assets::{CaoleBodyMesh, CaoleMouthMesh},
 		common::{
 			bsn::{self as common_bsn, WithBaseColor},
 			EyeMesh,
@@ -22,7 +22,6 @@ pub struct Caole {
 	pub gender: GenderPreset,
 	pub build: BuildPreset,
 	pub body: CaoleBodyMesh,
-	pub head: CaoleHeadMesh,
 	pub mouth: CaoleMouthMesh,
 	pub eye: EyeMesh,
 	pub colors: CaoleColors,
@@ -35,7 +34,6 @@ impl Caole {
 			gender: config.gender,
 			build: config.build,
 			body: config.body,
-			head: config.head,
 			mouth: config.mouth,
 			eye: config.eye,
 			colors: config.colors.clone(),
@@ -98,5 +96,4 @@ fn part_color(colors: &CaoleColors, part: &ResolvedCharacterPart) -> Color {
 // Keep fixed mesh enums referenced for compile-time asset wiring checks.
 const _: CaoleBodyMesh = CaoleBodyMesh::Gumbus;
 const _: CaoleBodyMesh = CaoleBodyMesh::Rumbler;
-const _: CaoleHeadMesh = CaoleHeadMesh::Caole;
 const _: CaoleMouthMesh = CaoleMouthMesh::Cow;

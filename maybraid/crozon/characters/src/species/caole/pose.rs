@@ -11,12 +11,8 @@ use crate::{
 use crozon_rigs::{BoneScale, ResolvedRigPose, RigPoseLayer};
 
 /// Gumbus: shorter back ridge and slimmer legs than the stock quadruped baseline.
-const GUMBUS_BACK_RIDGE_LENGTH: f32 = 0.90;
-const GUMBUS_LEG_THICKNESS: f32 = 0.90;
-
-/// Rumbler: longer belly and heavier legs than the stock quadruped baseline.
-const RUMBLER_BELLY_LENGTH: f32 = 1.12;
-const RUMBLER_LEG_THICKNESS: f32 = 1.12;
+const GUMBUS_BACK_RIDGE_LENGTH: f32 = 0.84;
+const GUMBUS_LEG_THICKNESS: f32 = 0.75;
 
 /// Resolved proportional intent for Caole's quadruped rig.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -54,15 +50,9 @@ impl CaolePose {
 
 	fn body_mesh_layer(self) -> RigPoseLayer {
 		let mut layer = RigPoseLayer::new("body mesh baseline");
-		match self.body {
-			CaoleBodyMesh::Gumbus => {
-				layer = layer.with_scale(BoneScale::length("back_ridge", GUMBUS_BACK_RIDGE_LENGTH));
-				layer = CaoleSliders::apply_leg_thickness(layer, GUMBUS_LEG_THICKNESS);
-			}
-			CaoleBodyMesh::Rumbler => {
-				layer = layer.with_scale(BoneScale::length("belly", RUMBLER_BELLY_LENGTH));
-				layer = CaoleSliders::apply_leg_thickness(layer, RUMBLER_LEG_THICKNESS);
-			}
+		if self.body == CaoleBodyMesh::Gumbus {
+			layer = layer.with_scale(BoneScale::length("back_ridge", GUMBUS_BACK_RIDGE_LENGTH));
+			layer = CaoleSliders::apply_leg_thickness(layer, GUMBUS_LEG_THICKNESS);
 		}
 		layer
 	}

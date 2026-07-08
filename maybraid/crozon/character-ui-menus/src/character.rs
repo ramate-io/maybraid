@@ -518,10 +518,6 @@ impl CharacterMenu {
 					menu.body.value.body.value = value;
 					true
 				}
-				(CharacterField::CaoleHead, AssetValue::CaoleHead(value)) => {
-					menu.head_features.value.head.value = value;
-					true
-				}
 				(CharacterField::Eye, AssetValue::Eye(value)) => {
 					menu.head_features.value.eye.value = value;
 					true

@@ -12,7 +12,7 @@ use crate::{
 	species::{
 		caole::{pose::CaolePose, CaoleConfig},
 		common::{
-			BODY_GUMBUS, BODY_RUMBLER, EAR_FLANK, HEAD_CAOLE, HEAD_COWDER, MOUTH_COW_SNOUT,
+			BODY_GUMBUS, BODY_RUMBLER, EAR_FLANK, HEAD_COWDER, MOUTH_COW_SNOUT,
 			PRONOGRADE_HEAD_RIG, QUADRUPED_RIG, TAIL_CAT,
 		},
 	},
@@ -32,7 +32,7 @@ impl CaoleAssets {
 		)
 		.with_part(Self::body_mesh(config.body))
 		.with_part(Self::head_rig())
-		.with_part(Self::head_mesh(config.head))
+		.with_part(Self::head_mesh())
 		.with_part(Self::eye_left(config.eye))
 		.with_part(Self::eye_right(config.eye))
 		.with_part(Self::mouth(config.mouth))
@@ -67,10 +67,10 @@ impl CaoleAssets {
 		)
 	}
 
-	fn head_mesh(head: CaoleHeadMesh) -> ResolvedCharacterPart {
+	fn head_mesh() -> ResolvedCharacterPart {
 		ResolvedCharacterPart::new(
 			CharacterPartSlot::HeadMesh,
-			CharacterAsset::new(head.label(), head.path(), AssetNormalization::IDENTITY),
+			CharacterAsset::new("cowder", HEAD_COWDER, AssetNormalization::IDENTITY),
 			SkinTarget::HeadRig,
 			Some(Self::head_socket("root", Transform::IDENTITY)),
 		)
@@ -185,31 +185,6 @@ impl CaoleBodyMesh {
 		match self {
 			Self::Gumbus => BODY_GUMBUS,
 			Self::Rumbler => BODY_RUMBLER,
-		}
-	}
-}
-
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, ValueEnum)]
-pub enum CaoleHeadMesh {
-	#[default]
-	Caole,
-	Cowder,
-}
-
-impl CaoleHeadMesh {
-	pub const VALUES: &'static [Self] = &[Self::Caole, Self::Cowder];
-
-	pub const fn label(self) -> &'static str {
-		match self {
-			Self::Caole => "caole",
-			Self::Cowder => "cowder",
-		}
-	}
-
-	pub const fn path(self) -> crate::assets::AssetPath {
-		match self {
-			Self::Caole => HEAD_CAOLE,
-			Self::Cowder => HEAD_COWDER,
 		}
 	}
 }

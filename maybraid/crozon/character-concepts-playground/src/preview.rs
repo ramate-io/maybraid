@@ -255,8 +255,8 @@ impl ConceptPreviewConfig {
 				config.eye,
 			),
 			Self::Caole { config, .. } => format!(
-				"species=caole head={:?} mouth={:?} eye={:?}",
-				config.head,
+				"species=caole body={:?} mouth={:?} eye={:?}",
+				config.body,
 				config.mouth,
 				config.eye,
 			),
@@ -393,7 +393,7 @@ pub enum PreviewTarget {
 	BrenalMouth,
 	BrenalTail,
 	CaoleBody,
-	CaoleHead(crozon_characters::species::caole::CaoleHeadMesh),
+	CaoleHead,
 	CaoleEye(EyeMesh),
 	CaoleEar,
 	CaoleMouth,
@@ -757,7 +757,7 @@ fn preview_color_caole(config: &CaoleConfig, target: PreviewTarget) -> PreviewCo
 	let skin = config.colors.skin_color();
 	PreviewColor::Item(match target {
 		PreviewTarget::CaoleBody => config.colors.body,
-		PreviewTarget::CaoleHead(_) | PreviewTarget::CaoleEar => skin,
+		PreviewTarget::CaoleHead | PreviewTarget::CaoleEar => skin,
 		PreviewTarget::CaoleEye(_) => config.colors.eyes,
 		PreviewTarget::CaoleMouth => config.colors.mouth,
 		PreviewTarget::CaoleTail => config.colors.tail,
@@ -1119,7 +1119,7 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 				let target = match part.slot {
 					CharacterPartSlot::BodyMesh => PreviewTarget::CaoleBody,
 					CharacterPartSlot::HeadRig | CharacterPartSlot::HeadMesh => {
-						PreviewTarget::CaoleHead(config.head)
+						PreviewTarget::CaoleHead
 					}
 					CharacterPartSlot::EyeLeft | CharacterPartSlot::EyeRight => {
 						PreviewTarget::CaoleEye(config.eye)
@@ -1133,7 +1133,7 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 					| CharacterPartSlot::Hair
 					| CharacterPartSlot::Clothing
 					| CharacterPartSlot::Spine
-					| CharacterPartSlot::Horns => PreviewTarget::CaoleHead(config.head),
+					| CharacterPartSlot::Horns => PreviewTarget::CaoleHead,
 				};
 				PreviewAssetTarget { target, color: preview_color_caole(config, target) }
 			}

@@ -8,8 +8,7 @@ use crozon_characters::{
 	presets::{BuildPreset, GenderPreset},
 	species::{
 		caole::{
-			sliders::CaoleSliders, CaoleBodyMesh, CaoleColors, CaoleConfig, CaoleHeadMesh,
-			CaoleMouthMesh,
+			sliders::CaoleSliders, CaoleBodyMesh, CaoleColors, CaoleConfig, CaoleMouthMesh,
 		},
 		common::EyeMesh,
 	},
@@ -18,7 +17,7 @@ use crozon_characters::{
 
 use crate::{
 	event::{AssetValue, CharacterField, MenuEvent, SwatchValue},
-	focus::{EYE_FOCUS, HEAD_ROOT_FOCUS, MOUTH_FOCUS},
+	focus::{EYE_FOCUS, MOUTH_FOCUS},
 };
 
 /// Caole quadruped body framing; also the species' default camera focus.
@@ -147,7 +146,6 @@ pub struct CaoleBodyMenu {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct CaoleHeadFeaturesMenu {
-	pub head: AssetSingleSelect<CaoleHeadMesh>,
 	pub eye: AssetSingleSelect<EyeMesh>,
 	pub snout: AssetSingleSelect<CaoleMouthMesh>,
 	pub eye_color: SwatchSingleSelect<ItemColor>,
@@ -305,7 +303,6 @@ impl From<&CaoleConfig> for CaoleMenu {
 			head_features: Section::new(
 				"Head & Features",
 				CaoleHeadFeaturesMenu {
-					head: AssetSingleSelect::new(config.head).with_camera_focus(HEAD_ROOT_FOCUS),
 					eye: AssetSingleSelect::new(config.eye).with_camera_focus(EYE_FOCUS),
 					snout: AssetSingleSelect::new(config.mouth).with_camera_focus(MOUTH_FOCUS),
 					eye_color: SwatchSingleSelect::new(config.colors.eyes),
@@ -326,7 +323,6 @@ impl From<&CaoleMenu> for CaoleConfig {
 			gender: menu.presets.value.gender.value,
 			build: menu.presets.value.build.value,
 			body: menu.body.value.body.value,
-			head: menu.head_features.value.head.value,
 			mouth: menu.head_features.value.snout.value,
 			eye: menu.head_features.value.eye.value,
 			colors: CaoleColors {
@@ -384,11 +380,7 @@ impl MenuComponent<MenuEvent> for CaoleBodyMenu {
 
 impl MenuComponent<MenuEvent> for CaoleHeadFeaturesMenu {
 	fn menu_node(&self) -> MenuNode<MenuEvent> {
-		let base = PreviewColor::of(self.body_color);
 		MenuNode::fragment([
-			MenuNode::asset_grid("Head", &self.head, base, |value| {
-				MenuEvent::SetAsset(CharacterField::CaoleHead, AssetValue::CaoleHead(value))
-			}),
 			MenuNode::asset_grid(
 				"Eyes",
 				&self.eye,
@@ -438,7 +430,6 @@ impl CaoleMenu {
 	pub fn camera_focus_for_field(&self, field: CharacterField) -> Option<CameraFocus> {
 		match field {
 			CharacterField::CaoleBody => self.body.value.body.camera_focus,
-			CharacterField::CaoleHead => self.head_features.value.head.camera_focus,
 			CharacterField::Eye => self.head_features.value.eye.camera_focus,
 			CharacterField::CaoleMouth => self.head_features.value.snout.camera_focus,
 			CharacterField::Animation => Some(BODY_FOCUS),

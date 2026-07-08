@@ -36,7 +36,6 @@ fn caole_config_round_trip() -> anyhow::Result<()> {
 	let restored = crozon_characters::species::caole::CaoleConfig::from(&menu);
 	assert_eq!(config.gender, restored.gender);
 	assert_eq!(config.body, restored.body);
-	assert_eq!(config.head, restored.head);
 	assert_eq!(config.mouth, restored.mouth);
 	assert_eq!(config.sliders.shoulder_width, restored.sliders.shoulder_width);
 	Ok(())

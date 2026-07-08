@@ -1,6 +1,6 @@
 //! Caole species definition.
 //!
-//! Quadruped grazer: Gumbus body on the quadruped rig, pronograde head,
+//! Quadruped grazer: Gumbus or Rumbler body on the quadruped rig, Cowder head,
 //! flank ears, cat tail, and cow snout. Head mesh is Caole or Cowder.
 
 pub mod assets;
@@ -20,7 +20,7 @@ use assets::CaoleAssets;
 use crozon_character_items::ItemColor;
 use sliders::CaoleSliders;
 
-pub use assets::{CaoleBodyMesh, CaoleHeadMesh, CaoleMouthMesh};
+pub use assets::{CaoleBodyMesh, CaoleMouthMesh};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CaoleColors {
@@ -64,7 +64,6 @@ pub struct CaoleConfig {
 	pub gender: GenderPreset,
 	pub build: BuildPreset,
 	pub body: CaoleBodyMesh,
-	pub head: CaoleHeadMesh,
 	pub mouth: CaoleMouthMesh,
 	pub eye: EyeMesh,
 	pub colors: CaoleColors,
@@ -83,7 +82,6 @@ impl CaoleConfig {
 			gender: GenderPreset::Neutral,
 			build: BuildPreset::Average,
 			body: CaoleBodyMesh::Gumbus,
-			head: CaoleHeadMesh::Caole,
 			mouth: CaoleMouthMesh::Cow,
 			eye: EyeMesh::Standard,
 			colors: CaoleColors::default(),
@@ -108,11 +106,10 @@ impl CaoleConfig {
 
 	pub fn status_label(&self) -> String {
 		format!(
-			"caole gender={} build={} body={} head={} mouth={} eye={} colors=body:{} head:{} eyes:{} ears:{} mouth:{} tail:{} sliders={}",
+			"caole gender={} build={} body={} mouth={} eye={} colors=body:{} head:{} eyes:{} ears:{} mouth:{} tail:{} sliders={}",
 			self.gender.label(),
 			self.build.label(),
 			self.body.label(),
-			self.head.label(),
 			self.mouth.label(),
 			self.eye.label(),
 			self.colors.body.label(),
