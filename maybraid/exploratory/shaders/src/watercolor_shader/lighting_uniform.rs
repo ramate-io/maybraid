@@ -19,6 +19,8 @@ pub struct WatercolorLightingUniform {
 	pub diffuse_bias: f32,
 	/// Lighting level when no directional lights are present.
 	pub fallback_light: f32,
+	/// Half-width of soft transitions between value bands (`0.18` is a good starting point).
+	pub band_softness: f32,
 }
 
 impl WatercolorLightingUniform {
@@ -30,6 +32,7 @@ impl WatercolorLightingUniform {
 		diffuse_scale: f32,
 		diffuse_bias: f32,
 		fallback_light: f32,
+		band_softness: f32,
 	) -> Self {
 		Self {
 			band_count,
@@ -39,6 +42,7 @@ impl WatercolorLightingUniform {
 			diffuse_scale,
 			diffuse_bias,
 			fallback_light,
+			band_softness,
 		}
 	}
 
@@ -78,6 +82,12 @@ impl WatercolorLightingUniform {
 		self.fallback_light = fallback_light;
 		self
 	}
+
+	#[inline]
+	pub fn with_band_softness(mut self, band_softness: f32) -> Self {
+		self.band_softness = band_softness;
+		self
+	}
 }
 
 impl Default for WatercolorLightingUniform {
@@ -90,6 +100,7 @@ impl Default for WatercolorLightingUniform {
 			diffuse_scale: 0.55,
 			diffuse_bias: 0.25,
 			fallback_light: 0.65,
+			band_softness: 0.18,
 		}
 	}
 }

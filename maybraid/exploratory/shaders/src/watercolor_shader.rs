@@ -127,12 +127,12 @@ mod tests {
 	#[test]
 	fn default_material_uniforms() {
 		let m = WatercolorShader::default();
-		assert!((m.lighting.band_count - 4.0).abs() < 1e-5);
+		assert!((m.lighting.band_count - 16.0).abs() < 1e-5);
 		assert!((m.lighting.band_mix - 0.35).abs() < 1e-5);
 		assert!((m.lighting.light_smooth_min - 0.3).abs() < 1e-5);
 		assert!((m.lighting.light_smooth_max - 0.78).abs() < 1e-5);
-		assert!((m.lighting.diffuse_scale - 0.55).abs() < 1e-5);
-		assert!((m.lighting.diffuse_bias - 0.4).abs() < 1e-5);
+		assert!((m.lighting.diffuse_bias - 0.25).abs() < 1e-5);
+		assert!((m.lighting.band_softness - 0.18).abs() < 1e-5);
 		assert!((m.shadow.tint_r - 0.42).abs() < 1e-5);
 		assert!((m.paper.noise_strength - 0.15).abs() < 1e-5);
 		assert!((m.base_color.w - 1.0).abs() < 1e-5);

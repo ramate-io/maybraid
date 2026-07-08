@@ -17,6 +17,7 @@ struct WatercolorLighting {
     diffuse_scale: f32,
     diffuse_bias: f32,
     fallback_light: f32,
+    band_softness: f32,
 }
 
 struct WatercolorShadow {
@@ -74,6 +75,14 @@ fn paper_noise(world_pos: vec3<f32>) -> f32 {
     return value_noise_2d(uv, paper.seed);
 }
 
+fn soft_band(light: f32, bands: f32, softness: f32) -> f32 {
+    let x = light * bands;
+    let base = floor(x);
+    let f = fract(x);
+    let softened = smoothstep(0.5 - softness, 0.5 + softness, f);
+    return (base + softened) / bands;
+}
+
 fn watercolor_light(normal: vec3<f32>) -> f32 {
     var light = 0.0;
     let count = min(lights.n_directional_lights, 4u);
@@ -91,7 +100,7 @@ fn watercolor_light(normal: vec3<f32>) -> f32 {
     light = smoothstep(lighting.light_smooth_min, lighting.light_smooth_max, light);
 
     let band_count = max(lighting.band_count, 1.0);
-    let bands = floor(light * band_count) / band_count;
+    let bands = soft_band(light, band_count, lighting.band_softness);
     return mix(light, bands, saturate(lighting.band_mix));
 }
 

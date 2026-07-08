@@ -1,4 +1,5 @@
 use bevy::prelude::*;
+use exploratory_shaders::WatercolorPostProcess;
 use camera_controls::look::{look_input_active, CameraLookEnabled};
 use game_commands::command::TextEntryFocus;
 use std::f32::consts::PI;
@@ -25,6 +26,7 @@ pub fn setup_camera(mut commands: Commands) {
 
 	commands.spawn((
 		Camera3d::default(),
+		WatercolorPostProcess::default(),
 		transform,
 		Projection::Perspective(PerspectiveProjection { near: 0.1, far: 4000.0, ..default() }),
 		CameraController { speed: 6.0, sensitivity: 0.005, yaw, pitch },

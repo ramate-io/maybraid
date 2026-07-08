@@ -26,7 +26,7 @@ pub use game_commands::command::PendingStartupCommand;
 use bevy::prelude::*;
 use bevy::app::SceneSpawnerSystems;
 use bevy_character_ui_menu_renderer::CharacterMenuRendererPlugin;
-use exploratory_shaders::WatercolorShaderPlugin;
+use exploratory_shaders::{WatercolorPostProcessPlugin, WatercolorShaderPlugin};
 use camera_controls::look::{CameraLookConfig, CameraLookPlugin};
 use crozon_character_playground::camera;
 use crozon_character_ui_menus::CharacterMenu;
@@ -62,7 +62,7 @@ impl Plugin for CrozonCharacterConceptsPlaygroundPlugin {
 		if diagnostics::fps_debug_enabled() {
 			app.add_plugins(diagnostics::FpsDiagnosticsPlugin);
 		}
-		app.add_plugins(WatercolorShaderPlugin)
+		app.add_plugins((WatercolorShaderPlugin, WatercolorPostProcessPlugin))
 			.init_resource::<ConceptPreviewConfig>()
 			.init_resource::<ConceptPreviewSyncState>()
 			.init_resource::<FocusReferenceSyncState>()

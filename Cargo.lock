@@ -2614,6 +2614,7 @@ dependencies = [
  "camera-controls",
  "clap",
  "crozon-rigs",
+ "exploratory-shaders",
  "game-commands",
  "log",
  "malo-animations",
