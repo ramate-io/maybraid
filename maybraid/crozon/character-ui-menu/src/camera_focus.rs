@@ -27,16 +27,4 @@ impl CameraFocus {
 	) -> Self {
 		Self { rig, socket, camera_offset, look_at_offset }
 	}
-
-	pub fn uses_preview_sockets(self) -> bool {
-		matches!(self.rig, FocusRig::Head) && self.socket != "root"
-	}
-
-	pub fn resolve_source_label(self) -> &'static str {
-		if self.uses_preview_sockets() {
-			"preview"
-		} else {
-			"shadow"
-		}
-	}
 }

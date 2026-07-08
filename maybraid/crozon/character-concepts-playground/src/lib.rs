@@ -10,7 +10,6 @@ pub mod commands;
 mod diagnostics;
 mod focus;
 mod focus_reference;
-mod ground;
 mod material;
 mod menu_listeners;
 mod preview;
@@ -28,7 +27,7 @@ use bevy::prelude::*;
 use bevy::app::SceneSpawnerSystems;
 use bevy_character_ui_menu_renderer::CharacterMenuRendererPlugin;
 use camera_controls::look::{CameraLookConfig, CameraLookPlugin};
-use crozon_character_playground::{camera, checkerboard_material};
+use crozon_character_playground::camera;
 use crozon_character_ui_menus::CharacterMenu;
 use game_commands::command::{capture_command_line_input, GameCommandPlugin};
 
@@ -44,7 +43,7 @@ use menu_listeners::{
 };
 use preview::{
 	preview_pass_ready, reveal_ready_preview, sync_preview, tick_preview_respawn_cooldown,
-	ConceptPreviewConfig, ConceptPreviewSyncState, PreviewRespawnCooldown,
+	ConceptPreviewConfig, ConceptPreviewSyncState, PreviewRevealDebugState, PreviewRespawnCooldown,
 };
 use skinning::{
 	attach_focus_reference_to_sockets, attach_parts_to_sockets, build_rig_bone_map,
@@ -66,6 +65,7 @@ impl Plugin for CrozonCharacterConceptsPlaygroundPlugin {
 			.init_resource::<ConceptPreviewSyncState>()
 			.init_resource::<FocusReferenceSyncState>()
 			.init_resource::<PreviewRespawnCooldown>()
+			.init_resource::<PreviewRevealDebugState>()
 			.init_resource::<DumpBonesRequest>()
 			.init_resource::<PendingCameraFocus>()
 			.init_resource::<SpeciesSessionState>()
@@ -84,16 +84,12 @@ impl Plugin for CrozonCharacterConceptsPlaygroundPlugin {
 				GameCommandPlugin::<ConceptsCommand>::with_config(ui::ui_config())
 					.with_drawer_config(ui::drawer_config()),
 			)
-			.add_plugins(
-				bevy::pbr::MaterialPlugin::<checkerboard_material::CheckerboardMaterial>::default(),
-			)
 			.add_observer(ui::on_creator_ui_scroll)
 			.add_systems(
 				Startup,
 				(
 					camera::setup_camera,
 					setup_lighting,
-					ground::setup_ground,
 					init_character_menu_state,
 					ui::setup_creator_ui,
 				),
@@ -152,9 +148,11 @@ impl Plugin for CrozonCharacterConceptsPlaygroundPlugin {
 				PostUpdate,
 				(
 					maintain_resolved_pose.before(TransformSystems::Propagate),
+					// Runs after propagation so shadow-rig socket globals reflect
+					// the pose written this frame.
 					apply_camera_suggestion
 						.after(TransformSystems::Propagate)
-						.after(attach_focus_reference_to_sockets),
+						.after(maintain_resolved_pose),
 				),
 			);
 	}

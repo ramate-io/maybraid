@@ -2,15 +2,18 @@
 
 nose_eye
   forehead
+    crown_socket
   eye_width.L
     temple.L
+      ear_socket.L
     eye_socket_protrusion.L
-      frontal_eye_ridge.L
+      eye_socket.L
     eye_ridge.L
   eye_width.R
     temple.R
+      ear_socket.R
     eye_socket_protrusion.R
-      frontal_eye_ridge.R
+      eye_socket.R
     eye_ridge.R
 cheek_width.L
   cheek_fullness.L
@@ -19,9 +22,11 @@ nose_mouth
   mouth_protrusion
     jaw_box.L
     jaw_box.R
+    mouth_socket
   chin
   nape_width.R
 root
 nose_protrusion
+  nose_socket
 cheek_width.R
   cheek_fullness.R

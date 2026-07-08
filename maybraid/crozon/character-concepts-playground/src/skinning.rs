@@ -10,6 +10,30 @@ use bevy::{
 use crozon_characters::CharacterPartSlot;
 use crozon_rigs::ResolvedRigPose;
 
+#[derive(Component, Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum RigSkeletonKind {
+	#[default]
+	Humanoid,
+	Quadruped,
+}
+
+impl RigSkeletonKind {
+	pub fn from_body_rig_label(label: &str) -> Self {
+		if label == "Quadruped" {
+			Self::Quadruped
+		} else {
+			Self::Humanoid
+		}
+	}
+
+	pub fn landmark_bones(self) -> &'static [&'static str] {
+		match self {
+			Self::Humanoid => &["root", "pelvis.L", "chest.L", "waist.L"],
+			Self::Quadruped => &["head_socket", "shoulder.L", "tailbone", "waist.L"],
+		}
+	}
+}
+
 #[derive(Component, Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CharacterRigRole {
 	Body,
@@ -19,6 +43,7 @@ pub enum CharacterRigRole {
 #[derive(Component)]
 pub struct CharacterRig {
 	pub role: CharacterRigRole,
+	pub skeleton: RigSkeletonKind,
 }
 
 #[derive(Component, Debug)]
@@ -61,11 +86,32 @@ pub struct RigBindScales {
 	pub scales: HashMap<String, Vec3>,
 }
 
-pub fn bone_map_ready(map: &BoneMap) -> bool {
-	// Wait for a few landmarks so GLTF scene instantiation has finished wiring bones.
-	["root", "pelvis.L", "chest.L", "waist.L"]
+/// Inserted by [`maintain_resolved_pose`] the first frame it applies
+/// [`ActiveRigPose`] to a rig whose landmark bones are all mapped.
+///
+/// This is the imperative "proportions are live" signal. Downstream consumers
+/// (notably [`crate::camera_focus`]) should gate on this marker instead of
+/// re-deriving readiness from bone transforms. It never needs clearing: pose
+/// maintenance re-applies every frame, and rig respawns start from fresh
+/// entities without the marker.
+#[derive(Component)]
+pub struct ResolvedPoseApplied;
+
+pub fn preview_debug_enabled() -> bool {
+	std::env::var("CROZON_PREVIEW_DEBUG").is_ok()
+}
+
+pub fn bone_map_ready(map: &BoneMap, skeleton: RigSkeletonKind) -> bool {
+	skeleton.landmark_bones().iter().all(|bone| map.by_name.contains_key(*bone))
+}
+
+pub fn missing_landmark_bones(map: &BoneMap, skeleton: RigSkeletonKind) -> Vec<&'static str> {
+	skeleton
+		.landmark_bones()
 		.iter()
-		.all(|bone| map.by_name.contains_key(*bone))
+		.copied()
+		.filter(|bone| !map.by_name.contains_key(*bone))
+		.collect()
 }
 
 /// Part mesh was skinned to a skeleton that does not match the active rig.
@@ -148,9 +194,23 @@ fn attach_part_to_socket(
 	rig_maps: &Query<&BoneMap, With<CharacterRig>>,
 ) {
 	let Ok(rig_map) = rig_maps.get(placement.rig_root) else {
+		if preview_debug_enabled() {
+			warn!(
+				"Concept socket attach: rig root {:?} has no bone map yet (bone={})",
+				placement.rig_root, placement.socket_bone
+			);
+		}
 		return;
 	};
 	let Some(bone_entity) = rig_map.by_name.get(placement.socket_bone) else {
+		if preview_debug_enabled() {
+			warn!(
+				"Concept socket attach: bone `{}` not found on rig {:?} (known bones={})",
+				placement.socket_bone,
+				placement.rig_root,
+				rig_map.by_name.len()
+			);
+		}
 		return;
 	};
 
@@ -286,33 +346,49 @@ pub fn prune_duplicate_part_scenes(
 }
 
 /// True once landmark bind scales have been captured for a rig.
-pub fn bind_scales_ready(bind_scales: &RigBindScales, bone_map: &BoneMap) -> bool {
-	["root", "pelvis.L", "chest.L", "waist.L"]
+pub fn bind_scales_ready(
+	bind_scales: &RigBindScales,
+	bone_map: &BoneMap,
+	skeleton: RigSkeletonKind,
+) -> bool {
+	skeleton
+		.landmark_bones()
 		.iter()
 		.all(|bone| bind_scales.scales.contains_key(*bone) && bone_map.by_name.contains_key(*bone))
 }
 
 pub fn maintain_resolved_pose(
-	mut rig_roots: Query<(&BoneMap, &ActiveRigPose, &mut RigBindScales), With<CharacterRig>>,
+	mut commands: Commands,
+	mut rig_roots: Query<
+		(
+			Entity,
+			&BoneMap,
+			&ActiveRigPose,
+			&mut RigBindScales,
+			&CharacterRig,
+			Has<ResolvedPoseApplied>,
+		),
+		With<CharacterRig>,
+	>,
 	mut transforms: Query<&mut Transform>,
 ) {
-	for (bone_map, active_pose, mut bind_scales) in &mut rig_roots {
-		if !bone_map_ready(bone_map) {
+	for (entity, bone_map, active_pose, mut bind_scales, rig, pose_applied) in &mut rig_roots {
+		if !bone_map_ready(bone_map, rig.skeleton) {
 			continue;
 		}
 
-		for (bone_name, entity) in &bone_map.by_name {
+		for (bone_name, bone_entity) in &bone_map.by_name {
 			if bind_scales.scales.contains_key(bone_name) {
 				continue;
 			}
-			let Ok(transform) = transforms.get(*entity) else {
+			let Ok(transform) = transforms.get(*bone_entity) else {
 				continue;
 			};
 			// First sighting after load: treat current scale as bind snapshot.
 			bind_scales.scales.insert(bone_name.clone(), transform.scale);
 		}
 
-		for (bone_name, entity) in &bone_map.by_name {
+		for (bone_name, bone_entity) in &bone_map.by_name {
 			let multiplier = active_pose.pose.scale_for_bone(bone_name);
 			if multiplier == Vec3::ONE {
 				continue;
@@ -320,11 +396,17 @@ pub fn maintain_resolved_pose(
 			let Some(bind_scale) = bind_scales.scales.get(bone_name) else {
 				continue;
 			};
-			let Ok(mut transform) = transforms.get_mut(*entity) else {
+			let Ok(mut transform) = transforms.get_mut(*bone_entity) else {
 				continue;
 			};
 			// Reapply every frame because GLTF spawn can reset bone transforms.
 			transform.scale = *bind_scale * multiplier;
+		}
+
+		// Landmarks mapped, bind scales snapshotted, pose written: proportions
+		// are now live for this rig. Signal downstream consumers imperatively.
+		if !pose_applied && bind_scales_ready(&bind_scales, bone_map, rig.skeleton) {
+			commands.entity(entity).try_insert(ResolvedPoseApplied);
 		}
 	}
 }

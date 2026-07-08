@@ -9,6 +9,7 @@ use crozon_characters::{
 	assembly::{CharacterPartSlot, ResolvedCharacterAssembly},
 	species::{
 		braidman::BraidmanConfig,
+		brenal::BrenalConfig,
 		brodler::{BrodlerConfig, BrodlerHeadMesh, HornMesh},
 		common::{BodyMesh, EarMesh, EyeMesh, HairMesh, HeadMesh, MouthMesh, NoseMesh},
 		dui::{DuiConfig, DuiNoseMesh},
@@ -24,15 +25,17 @@ use crozon_characters::{
 use crate::animation::{AnimatedBodyRig, BodyRigBindTransform, ConceptAnimation};
 use crate::preview_color::PreviewColor;
 use crate::skinning::{
-	bind_scales_ready, bone_map_ready, ActiveRigPose, BoneMap, CharacterPart, CharacterRig,
-	CharacterRigRole, NeedsDuplicateScenePrune, NeedsSkinRemap, NeedsSocketPlacement,
-	NoMatchingArmature, PartRigRef, RigBindScales,
+	bind_scales_ready, bone_map_ready, missing_landmark_bones, preview_debug_enabled,
+	ActiveRigPose, BoneMap, CharacterPart, CharacterRig, CharacterRigRole, NeedsDuplicateScenePrune,
+	NeedsSkinRemap, NeedsSocketPlacement, NoMatchingArmature, PartRigRef, RigBindScales,
+	RigSkeletonKind,
 };
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub enum ConceptSpecies {
 	#[default]
 	Braidman,
+	Brenal,
 	Brodler,
 	Mygr,
 	Dui,
@@ -44,6 +47,7 @@ pub enum ConceptSpecies {
 #[derive(Resource, Debug, Clone, PartialEq)]
 pub enum ConceptPreviewConfig {
 	Braidman { config: BraidmanConfig, animation: ConceptAnimation },
+	Brenal { config: BrenalConfig, animation: ConceptAnimation },
 	Brodler { config: BrodlerConfig, animation: ConceptAnimation },
 	Mygr { config: MygrConfig, animation: ConceptAnimation },
 	Dui { config: DuiConfig, animation: ConceptAnimation },
@@ -62,6 +66,7 @@ impl ConceptPreviewConfig {
 	pub fn default_for(species: ConceptSpecies) -> Self {
 		match species {
 			ConceptSpecies::Braidman => Self::braidman(BraidmanConfig::default_preview()),
+			ConceptSpecies::Brenal => Self::brenal(BrenalConfig::default_preview()),
 			ConceptSpecies::Brodler => Self::brodler(BrodlerConfig::default_preview()),
 			ConceptSpecies::Mygr => Self::mygr(MygrConfig::default_preview()),
 			ConceptSpecies::Dui => Self::dui(DuiConfig::default_preview()),
@@ -74,6 +79,7 @@ impl ConceptPreviewConfig {
 	pub fn species(&self) -> ConceptSpecies {
 		match self {
 			Self::Braidman { .. } => ConceptSpecies::Braidman,
+			Self::Brenal { .. } => ConceptSpecies::Brenal,
 			Self::Brodler { .. } => ConceptSpecies::Brodler,
 			Self::Mygr { .. } => ConceptSpecies::Mygr,
 			Self::Dui { .. } => ConceptSpecies::Dui,
@@ -89,6 +95,14 @@ impl ConceptPreviewConfig {
 
 	pub fn braidman_with_animation(config: BraidmanConfig, animation: ConceptAnimation) -> Self {
 		Self::Braidman { config, animation }
+	}
+
+	pub fn brenal(config: BrenalConfig) -> Self {
+		Self::Brenal { config, animation: ConceptAnimation::default() }
+	}
+
+	pub fn brenal_with_animation(config: BrenalConfig, animation: ConceptAnimation) -> Self {
+		Self::Brenal { config, animation }
 	}
 
 	pub fn brodler(config: BrodlerConfig) -> Self {
@@ -142,6 +156,7 @@ impl ConceptPreviewConfig {
 	pub fn resolve(&self) -> ResolvedCharacterAssembly {
 		match self {
 			Self::Braidman { config, .. } => config.resolve(),
+			Self::Brenal { config, .. } => config.resolve(),
 			Self::Brodler { config, .. } => config.resolve(),
 			Self::Mygr { config, .. } => config.resolve(),
 			Self::Dui { config, .. } => config.resolve(),
@@ -156,6 +171,7 @@ impl ConceptPreviewConfig {
 			Self::Braidman { config, animation } => {
 				format!("{} animation={}", config.status_label(), animation.label())
 			}
+			Self::Brenal { config, .. } => config.status_label(),
 			Self::Brodler { config, animation } => {
 				format!("{} animation={}", config.status_label(), animation.label())
 			}
@@ -182,6 +198,7 @@ impl ConceptPreviewConfig {
 			Self::Braidman { config, animation } => {
 				format!("species=braidman {} animation={animation:?}", config.sync_key())
 			}
+			Self::Brenal { config, .. } => format!("species=brenal {}", config.sync_key()),
 			Self::Brodler { config, animation } => {
 				format!("species=brodler {} animation={animation:?}", config.sync_key())
 			}
@@ -215,6 +232,11 @@ impl ConceptPreviewConfig {
 				config.ear,
 				config.hair,
 				config.clothing,
+			),
+			Self::Brenal { config, .. } => format!(
+				"species=brenal horns={:?} eye={:?}",
+				config.horns,
+				config.eye,
 			),
 			Self::Brodler { config, .. } => format!(
 				"species=brodler head={:?} horns={:?} eye={:?} nose={:?} mouth={:?} ear={:?} hair={:?} clothing={:?}",
@@ -264,6 +286,7 @@ impl ConceptPreviewConfig {
 	pub const fn animation(&self) -> ConceptAnimation {
 		match self {
 			Self::Braidman { animation, .. }
+			| Self::Brenal { animation, .. }
 			| Self::Brodler { animation, .. }
 			| Self::Mygr { animation, .. }
 			| Self::Dui { animation, .. }
@@ -339,6 +362,13 @@ pub enum PreviewTarget {
 	BraidmanEar(EarMesh),
 	BraidmanHair(HairMesh),
 	BraidmanClothing(ClothingMesh),
+	BrenalBody,
+	BrenalHead,
+	BrenalHorns(crozon_characters::species::brenal::BrenalHornMesh),
+	BrenalEye(EyeMesh),
+	BrenalEar,
+	BrenalMouth,
+	BrenalTail,
 	BrodlerBody,
 	BrodlerHead(BrodlerHeadMesh),
 	BrodlerHorns(HornMesh),
@@ -471,6 +501,31 @@ fn sync_live_preview(
 				}
 			}
 		}
+		ConceptPreviewConfig::Brenal { config: brenal, .. } => {
+			let sliders = brenal.sliders.clamped();
+			for (part, mut target, base, transform) in parts {
+				target.color = preview_color_brenal(brenal, target.target);
+				let Some(base) = base else {
+					continue;
+				};
+				let Some(mut transform) = transform else {
+					continue;
+				};
+				if !has_feature_transform(part.slot) {
+					continue;
+				}
+				let authored =
+					base.normalization.mul_transform(sliders.feature_transform(part.slot));
+				match base.socket {
+					Some(socket) => {
+						*transform = socket;
+						transform.scale *= authored.scale;
+						transform.rotation *= authored.rotation;
+					}
+					None => *transform = authored,
+				}
+			}
+		}
 		ConceptPreviewConfig::Brodler { config: brodler, .. } => {
 			for (_, mut target, ..) in parts {
 				target.color = preview_color_brodler(brodler, target.target);
@@ -504,12 +559,20 @@ fn sync_live_preview(
 	}
 }
 
+#[derive(Resource, Default)]
+pub struct PreviewRevealDebugState {
+	spawn_key: String,
+	logged_block: bool,
+}
+
 /// Reveal a respawned preview only after the body pose, socket attach, and skin
 /// remap passes have settled.
 pub fn reveal_ready_preview(
 	mut commands: Commands,
+	mut debug: ResMut<PreviewRevealDebugState>,
+	config: Res<ConceptPreviewConfig>,
 	pending: Query<Entity, With<PreviewAwaitingReveal>>,
-	body_rigs: Query<(&BoneMap, &RigBindScales), With<AnimatedBodyRig>>,
+	body_rigs: Query<(&BoneMap, &RigBindScales, &CharacterRig), With<AnimatedBodyRig>>,
 	awaiting_socket: Query<(), (With<NeedsSocketPlacement>, With<ConceptPreviewRoot>)>,
 	awaiting_remap: Query<
 		(),
@@ -525,14 +588,64 @@ pub fn reveal_ready_preview(
 		(With<NeedsDuplicateScenePrune>, With<CharacterPart>, With<ConceptPreviewRoot>),
 	>,
 ) {
-	let Ok((bone_map, bind_scales)) = body_rigs.single() else {
+	let spawn_key = config.spawn_key();
+	if debug.spawn_key != spawn_key {
+		debug.spawn_key.clone_from(&spawn_key);
+		debug.logged_block = false;
+		if preview_debug_enabled() {
+			info!(
+				"[preview] awaiting reveal for species={:?} spawn_key={spawn_key}",
+				config.species()
+			);
+		}
+	}
+
+	let Ok((bone_map, bind_scales, rig)) = body_rigs.single() else {
+		if !debug.logged_block {
+			debug.logged_block = true;
+			warn!("[preview] reveal blocked: no animated body rig entity");
+		}
 		return;
 	};
-	if !bone_map_ready(bone_map) || !bind_scales_ready(bind_scales, bone_map) {
+	if !bone_map_ready(bone_map, rig.skeleton) || !bind_scales_ready(bind_scales, bone_map, rig.skeleton)
+	{
+		if bone_map.by_name.is_empty() {
+			// GLTF scene bones are not wired yet; wait without treating it as an error.
+			return;
+		}
+		if !debug.logged_block {
+			debug.logged_block = true;
+			let missing = missing_landmark_bones(bone_map, rig.skeleton);
+			warn!(
+				"[preview] reveal blocked: rig not ready skeleton={:?} missing_landmarks=[{}] mapped_bones={}",
+				rig.skeleton,
+				missing.join(", "),
+				bone_map.by_name.len()
+			);
+		}
 		return;
 	}
 	if !awaiting_socket.is_empty() || !awaiting_remap.is_empty() || !awaiting_prune.is_empty() {
+		if !debug.logged_block {
+			debug.logged_block = true;
+			warn!(
+				"[preview] reveal blocked: awaiting_socket={} awaiting_remap={} awaiting_prune={}",
+				awaiting_socket.iter().count(),
+				awaiting_remap.iter().count(),
+				awaiting_prune.iter().count()
+			);
+		}
 		return;
+	}
+	if pending.is_empty() {
+		return;
+	}
+	if preview_debug_enabled() {
+		info!(
+			"[preview] revealing {} preview entities for species={:?}",
+			pending.iter().count(),
+			config.species()
+		);
 	}
 	for entity in &pending {
 		commands.entity(entity).try_insert(Visibility::Inherited);
@@ -565,6 +678,21 @@ fn preview_color_braidman(config: &BraidmanConfig, target: PreviewTarget) -> Pre
 		PreviewTarget::BraidmanMouth(_) => config.colors.mouth,
 		PreviewTarget::BraidmanHair(_) => config.colors.hair,
 		PreviewTarget::BraidmanClothing(clothing) => config.colors.clothing_color(clothing),
+		_ => ItemColor::Natural,
+	})
+}
+
+fn preview_color_brenal(config: &BrenalConfig, target: PreviewTarget) -> PreviewColor {
+	use crozon_character_items::ItemColor;
+
+	let skin = config.colors.skin_color();
+	PreviewColor::Item(match target {
+		PreviewTarget::BrenalBody => config.colors.body,
+		PreviewTarget::BrenalHead | PreviewTarget::BrenalEar => skin,
+		PreviewTarget::BrenalEye(_) => config.colors.eyes,
+		PreviewTarget::BrenalMouth => config.colors.mouth,
+		PreviewTarget::BrenalHorns(_) => config.colors.horns,
+		PreviewTarget::BrenalTail => config.colors.tail,
 		_ => ItemColor::Natural,
 	})
 }
@@ -711,6 +839,13 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 					.transform()
 					.mul_transform(sliders.feature_transform(part.slot))
 			}
+			ConceptPreviewConfig::Brenal { config, .. } => {
+				let sliders = config.sliders.clamped();
+				part.asset
+					.normalization
+					.transform()
+					.mul_transform(sliders.feature_transform(part.slot))
+			}
 			ConceptPreviewConfig::Brodler { .. } => part.asset.normalization.transform(),
 			ConceptPreviewConfig::Mygr { .. } => part.asset.normalization.transform(),
 			ConceptPreviewConfig::Dui { .. } => part.asset.normalization.transform(),
@@ -728,12 +863,21 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 	}
 
 	fn spawn_body_rig(&mut self) -> Entity {
+		let skeleton = RigSkeletonKind::from_body_rig_label(self.assembly.body_rig.label);
+		if preview_debug_enabled() {
+			info!(
+				"[preview] spawning body rig label={} skeleton={:?} path={}",
+				self.assembly.body_rig.label,
+				skeleton,
+				self.assembly.body_rig.path
+			);
+		}
 		self.commands
 			.spawn((
 				WorldAssetRoot(self.asset_server.load(
 					GltfAssetLabel::Scene(0).from_asset(self.assembly.body_rig.path.as_str()),
 				)),
-				CharacterRig { role: CharacterRigRole::Body },
+				CharacterRig { role: CharacterRigRole::Body, skeleton },
 				AnimatedBodyRig,
 				BoneMap::default(),
 				ActiveRigPose { pose: self.assembly.pose.clone() },
@@ -756,7 +900,7 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 					self.asset_server
 						.load(GltfAssetLabel::Scene(0).from_asset(part.asset.path.as_str())),
 				),
-				CharacterRig { role: CharacterRigRole::Head },
+				CharacterRig { role: CharacterRigRole::Head, skeleton: RigSkeletonKind::Humanoid },
 				CharacterPart { slot: part.slot },
 				BoneMap::default(),
 				ConceptPreviewRoot,
@@ -873,6 +1017,28 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 					CharacterPartSlot::Spine => PreviewTarget::BraidmanBody(config.body),
 				};
 				PreviewAssetTarget { target, color: preview_color_braidman(config, target) }
+			}
+			ConceptPreviewConfig::Brenal { config, .. } => {
+				let target = match part.slot {
+					CharacterPartSlot::BodyMesh => PreviewTarget::BrenalBody,
+					CharacterPartSlot::HeadRig | CharacterPartSlot::HeadMesh => {
+						PreviewTarget::BrenalHead
+					}
+					CharacterPartSlot::EyeLeft | CharacterPartSlot::EyeRight => {
+						PreviewTarget::BrenalEye(config.eye)
+					}
+					CharacterPartSlot::EarLeft | CharacterPartSlot::EarRight => {
+						PreviewTarget::BrenalEar
+					}
+					CharacterPartSlot::Horns => PreviewTarget::BrenalHorns(config.horns),
+					CharacterPartSlot::Mouth => PreviewTarget::BrenalMouth,
+					CharacterPartSlot::Tail => PreviewTarget::BrenalTail,
+					CharacterPartSlot::Nose
+					| CharacterPartSlot::Hair
+					| CharacterPartSlot::Clothing
+					| CharacterPartSlot::Spine => PreviewTarget::BrenalHead,
+				};
+				PreviewAssetTarget { target, color: preview_color_brenal(config, target) }
 			}
 			ConceptPreviewConfig::Brodler { config, .. } => {
 				let target = match part.slot {
