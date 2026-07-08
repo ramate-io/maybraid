@@ -26,6 +26,7 @@ pub struct SpeciesSessionState {
 	pub wumbus: WumbusConfig,
 	pub lero: LeroConfig,
 	pub spibmom: SpibmomConfig,
+	pub brenal_animation: crate::animation::ConceptAnimation,
 	pub braidman_animation: crate::animation::ConceptAnimation,
 	pub brodler_animation: crate::animation::ConceptAnimation,
 	pub mygr_animation: crate::animation::ConceptAnimation,
@@ -46,6 +47,7 @@ impl Default for SpeciesSessionState {
 			wumbus: WumbusConfig::default_preview(),
 			lero: LeroConfig::default_preview(),
 			spibmom: SpibmomConfig::default_preview(),
+			brenal_animation: crate::animation::ConceptAnimation::default(),
 			braidman_animation: crate::animation::ConceptAnimation::default(),
 			brodler_animation: crate::animation::ConceptAnimation::default(),
 			mygr_animation: crate::animation::ConceptAnimation::default(),
@@ -64,8 +66,9 @@ impl SpeciesSessionState {
 				self.braidman.clone_from(config);
 				self.braidman_animation = *animation;
 			}
-			ConceptPreviewConfig::Brenal { config } => {
+			ConceptPreviewConfig::Brenal { config, animation } => {
 				self.brenal.clone_from(config);
+				self.brenal_animation = *animation;
 			}
 			ConceptPreviewConfig::Brodler { config, animation } => {
 				self.brodler.clone_from(config);
@@ -100,7 +103,10 @@ impl SpeciesSessionState {
 				self.braidman.clone(),
 				self.braidman_animation,
 			),
-			ConceptSpecies::Brenal => ConceptPreviewConfig::brenal(self.brenal.clone()),
+			ConceptSpecies::Brenal => ConceptPreviewConfig::brenal_with_animation(
+				self.brenal.clone(),
+				self.brenal_animation,
+			),
 			ConceptSpecies::Brodler => ConceptPreviewConfig::brodler_with_animation(
 				self.brodler.clone(),
 				self.brodler_animation,

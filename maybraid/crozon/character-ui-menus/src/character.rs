@@ -11,7 +11,7 @@ use crozon_characters::{
 
 use crate::{
 	characters::{
-		braidman::BraidmanMenu, brenal::BrenalMenu, brodler::BrodlerMenu, dui::DuiMenu, lero::LeroMenu, mygr::MygrMenu,
+		braidman::BraidmanMenu, brenal::{BrenalAnimationClip, BrenalMenu}, brodler::BrodlerMenu, dui::DuiMenu, lero::LeroMenu, mygr::MygrMenu,
 		spibmom::SpibmomMenu, wumbus::WumbusMenu,
 	},
 	cycle_value,
@@ -103,11 +103,11 @@ impl CharacterMenu {
 		}
 	}
 
-	pub fn from_brenal(config: &BrenalConfig) -> Self {
+	pub fn from_brenal(config: &BrenalConfig, animation: ConceptAnimation) -> Self {
 		Self {
 			species: SingleSelect::new(ConceptSpecies::Brenal),
 			braidman: BraidmanMenu::default(),
-			brenal: BrenalMenu::from(config),
+			brenal: BrenalMenu::from(config).with_animation(animation),
 			brodler: BrodlerMenu::default(),
 			mygr: MygrMenu::default(),
 			dui: DuiMenu::default(),
@@ -219,7 +219,7 @@ impl CharacterMenu {
 	pub fn animation(&self) -> ConceptAnimation {
 		match self.species.value {
 			ConceptSpecies::Braidman => self.braidman.animation(),
-			ConceptSpecies::Brenal => ConceptAnimation::Still,
+			ConceptSpecies::Brenal => self.brenal.animation(),
 			ConceptSpecies::Brodler => self.brodler.animation(),
 			ConceptSpecies::Mygr => self.mygr.animation(),
 			ConceptSpecies::Dui => self.dui.animation(),
@@ -417,6 +417,10 @@ impl CharacterMenu {
 				}
 				(CharacterField::BrenalMouth, AssetValue::BrenalMouth(value)) => {
 					menu.head_features.value.snout.value = value;
+					true
+				}
+				(CharacterField::Animation, AssetValue::Animation(value)) => {
+					menu.animation.value.clip.value = BrenalAnimationClip::from(value);
 					true
 				}
 				_ => false,

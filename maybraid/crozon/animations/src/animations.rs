@@ -1,8 +1,10 @@
 pub mod fall;
 pub mod fixed;
 pub mod fixed_tuck;
+pub mod gallop;
 pub mod land;
 pub mod mix;
+pub mod quadruped_gallop;
 pub mod run;
 pub mod spring;
 pub mod squat;
@@ -18,6 +20,7 @@ pub mod walk;
 pub use fall::Fall;
 pub use fixed::FixedPosition;
 pub use fixed_tuck::FixedTuck;
+pub use gallop::Gallop;
 pub use land::Land;
 pub use mix::{smoothstep, Mix, Smooth};
 pub use run::Run;
@@ -33,6 +36,7 @@ pub use two_footed_jump::{
 	LAND_POSE_BLEND_MAX_SECS,
 };
 pub use two_footed_tucked_flip::TwoFootedTuckedFlip;
+pub use quadruped_gallop::QuadrupedGallop;
 pub use upright_run::UprightRun;
 pub use upright_walk::UprightWalk;
 pub use walk::Walk;

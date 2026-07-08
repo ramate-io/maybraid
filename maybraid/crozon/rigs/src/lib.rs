@@ -1,6 +1,7 @@
 pub mod articulation;
 pub mod debug;
 pub mod humanoid;
+pub mod quadruped;
 pub mod pose;
 pub mod rigs;
 pub mod sliders;

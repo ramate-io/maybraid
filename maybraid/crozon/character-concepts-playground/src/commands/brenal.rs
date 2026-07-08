@@ -10,7 +10,7 @@ use crozon_characters::{
 	BuildPreset, GenderPreset,
 };
 
-use crate::preview::ConceptPreviewConfig;
+use crate::{animation::ConceptAnimation, preview::ConceptPreviewConfig};
 
 #[derive(Clone, Subcommand)]
 pub enum Brenal {
@@ -41,6 +41,9 @@ pub struct PreviewArgs {
 
 	#[arg(long, default_value_t = 1.0)]
 	pub chest_thickness: f32,
+
+	#[arg(long, value_enum, default_value_t = ConceptAnimation::Still)]
+	pub animation: ConceptAnimation,
 }
 
 impl Brenal {
@@ -62,13 +65,16 @@ impl PreviewArgs {
 			.with_shoulder_width(self.shoulder_width)
 			.with_hip_width(self.hip_width)
 			.with_chest_thickness(self.chest_thickness);
-		ConceptPreviewConfig::brenal(BrenalConfig {
-			gender: self.gender,
-			build: self.build,
-			horns: self.horns,
-			eye: self.eye,
-			colors: Default::default(),
-			sliders,
-		})
+		ConceptPreviewConfig::brenal_with_animation(
+			BrenalConfig {
+				gender: self.gender,
+				build: self.build,
+				horns: self.horns,
+				eye: self.eye,
+				colors: Default::default(),
+				sliders,
+			},
+			self.animation,
+		)
 	}
 }

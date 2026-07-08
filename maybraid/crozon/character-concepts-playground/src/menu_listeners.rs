@@ -23,7 +23,10 @@ pub fn menu_to_preview_config(menu: &CharacterMenu) -> ConceptPreviewConfig {
 		ConceptSpecies::Braidman => {
 			ConceptPreviewConfig::braidman_with_animation(menu.braidman_config(), menu.animation())
 		}
-		ConceptSpecies::Brenal => ConceptPreviewConfig::brenal(menu.brenal_config()),
+		ConceptSpecies::Brenal => ConceptPreviewConfig::brenal_with_animation(
+			menu.brenal_config(),
+			menu.animation(),
+		),
 		ConceptSpecies::Brodler => {
 			ConceptPreviewConfig::brodler_with_animation(menu.brodler_config(), menu.animation())
 		}
@@ -50,7 +53,9 @@ pub fn menu_from_preview_config(config: &ConceptPreviewConfig) -> CharacterMenu 
 		ConceptPreviewConfig::Braidman { config, animation } => {
 			CharacterMenu::from_braidman(config, *animation)
 		}
-		ConceptPreviewConfig::Brenal { config } => CharacterMenu::from_brenal(config),
+		ConceptPreviewConfig::Brenal { config, animation } => {
+			CharacterMenu::from_brenal(config, *animation)
+		}
 		ConceptPreviewConfig::Brodler { config, animation } => {
 			CharacterMenu::from_brodler(config, *animation)
 		}

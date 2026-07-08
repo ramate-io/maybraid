@@ -1,6 +1,6 @@
 use character_ui_menu::{
-	AssetSingleSelect, CameraFocus, MenuComponent, MenuNode, PreviewColor, Section, SingleSelect,
-	SwatchSingleSelect,
+	AssetSingleSelect, CameraFocus, IdentifiedAsset, MenuComponent, MenuNode, PreviewColor, Section,
+	SingleSelect, SwatchSingleSelect,
 };
 use crozon_character_items::ItemColor;
 use crozon_characters::{
@@ -12,12 +12,86 @@ use crozon_characters::{
 		},
 		common::EyeMesh,
 	},
+	ConceptAnimation,
 };
 
 use crate::{
 	event::{AssetValue, CharacterField, MenuEvent, SwatchValue},
 	focus::{BODY_FOCUS, CROWN_FOCUS, EYE_FOCUS, HEAD_ROOT_FOCUS, MOUTH_FOCUS},
 };
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BrenalAnimationClip {
+	Still,
+	Gallop,
+}
+
+impl character_ui_menu::ListValues for BrenalAnimationClip {
+	fn values() -> &'static [Self] {
+		&[Self::Still, Self::Gallop]
+	}
+}
+
+impl character_ui_menu::LabelOption for BrenalAnimationClip {
+	fn label(&self) -> &'static str {
+		match self {
+			Self::Still => "still",
+			Self::Gallop => "gallop",
+		}
+	}
+}
+
+impl character_ui_menu::AssetOption for BrenalAnimationClip {
+	fn asset(&self) -> IdentifiedAsset {
+		let label = match self {
+			Self::Still => "still",
+			Self::Gallop => "gallop",
+		};
+		IdentifiedAsset::new(label, label, "")
+	}
+}
+
+impl From<BrenalAnimationClip> for ConceptAnimation {
+	fn from(value: BrenalAnimationClip) -> Self {
+		match value {
+			BrenalAnimationClip::Still => ConceptAnimation::Still,
+			BrenalAnimationClip::Gallop => ConceptAnimation::Gallop,
+		}
+	}
+}
+
+impl From<ConceptAnimation> for BrenalAnimationClip {
+	fn from(value: ConceptAnimation) -> Self {
+		match value {
+			ConceptAnimation::Gallop => Self::Gallop,
+			_ => Self::Still,
+		}
+	}
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct BrenalAnimationMenu {
+	pub clip: AssetSingleSelect<BrenalAnimationClip>,
+}
+
+impl BrenalAnimationMenu {
+	pub fn new() -> Self {
+		Self {
+			clip: AssetSingleSelect::new(BrenalAnimationClip::Still).with_camera_focus(BODY_FOCUS),
+		}
+	}
+}
+
+impl MenuComponent<MenuEvent> for BrenalAnimationMenu {
+	fn menu_node(&self) -> MenuNode<MenuEvent> {
+		MenuNode::asset_grid("Clip", &self.clip, PreviewColor::WHITE, |value| {
+			MenuEvent::SetAsset(
+				CharacterField::Animation,
+				AssetValue::Animation(ConceptAnimation::from(value)),
+			)
+		})
+	}
+}
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct BrenalPresetsMenu {
@@ -75,6 +149,7 @@ pub struct BrenalMenu {
 	pub presets: Section<BrenalPresetsMenu>,
 	pub body: Section<BrenalBodyMenu>,
 	pub head_features: Section<BrenalHeadFeaturesMenu>,
+	pub animation: Section<BrenalAnimationMenu>,
 }
 
 fn slider(value: f32, min: f32, max: f32, step: f32) -> character_ui_menu::Slider {
@@ -231,6 +306,7 @@ impl From<&BrenalConfig> for BrenalMenu {
 					body_color: config.colors.body,
 				},
 			),
+			animation: Section::new("Animation", BrenalAnimationMenu::new()),
 		}
 	}
 }
@@ -339,11 +415,21 @@ impl MenuComponent<MenuEvent> for BrenalMenu {
 			MenuNode::section(self.presets.label, self.presets.value.menu_node()),
 			MenuNode::section(self.body.label, self.body.value.menu_node()),
 			MenuNode::section(self.head_features.label, self.head_features.value.menu_node()),
+			MenuNode::section(self.animation.label, self.animation.value.menu_node()),
 		])
 	}
 }
 
 impl BrenalMenu {
+	pub fn with_animation(mut self, animation: ConceptAnimation) -> Self {
+		self.animation.value.clip.value = BrenalAnimationClip::from(animation);
+		self
+	}
+
+	pub fn animation(&self) -> ConceptAnimation {
+		self.animation.value.clip.value.into()
+	}
+
 	pub fn camera_focus_for_field(&self, field: CharacterField) -> Option<CameraFocus> {
 		match field {
 			CharacterField::BrenalBody => self.body.value.body.camera_focus,
@@ -357,6 +443,7 @@ impl BrenalMenu {
 			}
 			CharacterField::Eye => self.head_features.value.eye.camera_focus,
 			CharacterField::BrenalMouth => self.head_features.value.snout.camera_focus,
+			CharacterField::Animation => Some(BODY_FOCUS),
 			_ => None,
 		}
 	}

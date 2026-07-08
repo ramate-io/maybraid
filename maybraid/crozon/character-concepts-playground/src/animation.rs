@@ -6,19 +6,25 @@
 
 use bevy::prelude::*;
 pub use crozon_characters::ConceptAnimation;
-use crozon_rigs::{rigs::humanoid_v0::HumanoidV0Rig, BonePose, Name as RigName};
+use crozon_rigs::{
+	humanoid::HumanoidRig,
+	quadruped::QuadrupedRig,
+	rigs::{humanoid_v0::HumanoidV0Rig, quadruped_v0::QuadrupedV0Rig},
+	BonePose, Name as RigName,
+};
 use malo_animations::{
 	animations::{
-		Run, Tuck, TuckedFlip, TwoFootedJump, TwoFootedTuckedFlip, Walk, DEFAULT_GRAVITY,
+		Gallop, Run, Tuck, TuckedFlip, TwoFootedJump, TwoFootedTuckedFlip, Walk, DEFAULT_GRAVITY,
 		DEFAULT_LANDING_SQUAT_SPEED, DEFAULT_PRE_SQUAT_SPEED,
 	},
 	Animation, Effects,
 };
 
-use crate::skinning::{BoneMap, CharacterRig};
+use crate::skinning::{BoneMap, CharacterRig, RigSkeletonKind};
 
 const RUN_CYCLE_SPEED: f32 = 0.5;
 const WALK_CYCLE_SPEED: f32 = 0.35;
+const GALLOP_CYCLE_SPEED: f32 = 0.65;
 const TUCK_CYCLE_SPEED: f32 = 0.6;
 const FRONT_FLIP_CYCLE_SPEED: f32 = 0.85;
 const JUMP_HEIGHT: f32 = 1.5;
@@ -42,37 +48,60 @@ pub struct LimbAnimator {
 pub fn init_limb_animators(
 	mut commands: Commands,
 	rig_roots: Query<
-		(Entity, &BoneMap),
-		(With<CharacterRig>, With<AnimatedBodyRig>, Without<HumanoidV0Rig>),
+		(Entity, &BoneMap, &CharacterRig),
+		(
+			With<CharacterRig>,
+			With<AnimatedBodyRig>,
+			Without<HumanoidV0Rig>,
+			Without<QuadrupedV0Rig>,
+		),
 	>,
 	transforms: Query<&Transform>,
 ) {
-	let Ok((rig_entity, bone_map)) = rig_roots.single() else {
+	let Ok((rig_entity, bone_map, character_rig)) = rig_roots.single() else {
 		return;
 	};
 	if bone_map.by_name.is_empty() {
 		return;
 	}
 
-	let humanoid = HumanoidV0Rig::imported();
-	for bone in humanoid.animation_bones() {
-		let Some(&entity) = bone_map.by_name.get(bone.as_str()) else {
-			continue;
-		};
-		let Ok(transform) = transforms.get(entity) else {
-			continue;
-		};
-		// Capture local bind transforms once; animation samples are reapplied from
-		// this baseline so procedural motion does not accumulate over time.
-		commands.entity(entity).insert(LimbAnimator { bone, rest: *transform });
+	match character_rig.skeleton {
+		RigSkeletonKind::Humanoid => {
+			let humanoid = HumanoidV0Rig::imported();
+			for bone in humanoid.animation_bones() {
+				insert_limb_animator(&mut commands, bone_map, &transforms, bone);
+			}
+			commands.entity(rig_entity).insert(humanoid);
+		}
+		RigSkeletonKind::Quadruped => {
+			let quadruped = QuadrupedV0Rig::imported();
+			for bone in quadruped.animation_bones() {
+				insert_limb_animator(&mut commands, bone_map, &transforms, bone);
+			}
+			commands.entity(rig_entity).insert(quadruped);
+		}
 	}
+}
 
-	commands.entity(rig_entity).insert(humanoid);
+fn insert_limb_animator(
+	commands: &mut Commands,
+	bone_map: &BoneMap,
+	transforms: &Query<&Transform>,
+	bone: RigName,
+) {
+	let Some(&entity) = bone_map.by_name.get(bone.as_str()) else {
+		return;
+	};
+	let Ok(transform) = transforms.get(entity) else {
+		return;
+	};
+	commands.entity(entity).insert(LimbAnimator { bone, rest: *transform });
 }
 
 pub fn animate_body_rig(
 	config: Res<crate::preview::ConceptPreviewConfig>,
-	mut rig: Query<&mut HumanoidV0Rig, With<AnimatedBodyRig>>,
+	mut humanoid_rig: Query<&mut HumanoidV0Rig, (With<AnimatedBodyRig>, Without<QuadrupedV0Rig>)>,
+	mut quadruped_rig: Query<&mut QuadrupedV0Rig, (With<AnimatedBodyRig>, Without<HumanoidV0Rig>)>,
 	mut armature: Query<
 		(&BodyRigBindTransform, &mut Transform),
 		(With<AnimatedBodyRig>, Without<LimbAnimator>),
@@ -85,29 +114,48 @@ pub fn animate_body_rig(
 		return;
 	}
 
-	let Ok(mut rig) = rig.single_mut() else {
-		return;
-	};
 	let t = time.elapsed_secs();
 
-	marshal_limbs_into_pose(&mut rig, &mut limbs);
-	let effects = match animation {
+	if let Ok(mut rig) = humanoid_rig.single_mut() {
+		marshal_limbs_into_pose(rig.pose_mut(), &mut limbs);
+		let effects = apply_humanoid_animation(animation, rig.as_mut(), t);
+		apply_effects(effects, &mut armature);
+		marshal_pose_to_limbs(rig.pose(), &mut limbs);
+		return;
+	}
+
+	let Ok(mut rig) = quadruped_rig.single_mut() else {
+		return;
+	};
+	marshal_limbs_into_pose(rig.pose_mut(), &mut limbs);
+	let effects = apply_quadruped_animation(animation, rig.as_mut(), t);
+	apply_effects(effects, &mut armature);
+	marshal_pose_to_limbs(rig.pose(), &mut limbs);
+}
+
+fn apply_humanoid_animation(
+	animation: ConceptAnimation,
+	rig: &mut HumanoidV0Rig,
+	t: f32,
+) -> Effects {
+	match animation {
 		ConceptAnimation::Still => Effects::default(),
-		ConceptAnimation::Walk => Walk::default().apply(rig.as_mut(), t * WALK_CYCLE_SPEED),
-		ConceptAnimation::Run => Run::default().apply(rig.as_mut(), t * RUN_CYCLE_SPEED),
+		ConceptAnimation::Walk => Walk::default().apply(rig, t * WALK_CYCLE_SPEED),
+		ConceptAnimation::Run => Run::default().apply(rig, t * RUN_CYCLE_SPEED),
+		ConceptAnimation::Gallop => Effects::default(),
 		ConceptAnimation::Jump => TwoFootedJump::<HumanoidV0Rig>::default()
 			.with_gravity(DEFAULT_GRAVITY)
 			.with_jump_height(JUMP_HEIGHT)
 			.with_pre_squat_speed(JUMP_PRE_SQUAT_SPEED)
 			.with_landing_squat_speed(JUMP_LANDING_SQUAT_SPEED)
-			.apply(rig.as_mut(), t),
+			.apply(rig, t),
 		ConceptAnimation::Tuck => {
 			let progress = (t * TUCK_CYCLE_SPEED).rem_euclid(1.0);
-			Tuck::<HumanoidV0Rig>::default().apply(rig.as_mut(), progress)
+			Tuck::<HumanoidV0Rig>::default().apply(rig, progress)
 		}
 		ConceptAnimation::TuckedFlip => {
 			let progress = (t * FRONT_FLIP_CYCLE_SPEED).rem_euclid(1.0);
-			TuckedFlip::<HumanoidV0Rig>::default().apply(rig.as_mut(), progress)
+			TuckedFlip::<HumanoidV0Rig>::default().apply(rig, progress)
 		}
 		ConceptAnimation::TwoFootedTuckedFlip => TwoFootedTuckedFlip::<HumanoidV0Rig>::default()
 			.with_jump(
@@ -117,10 +165,19 @@ pub fn animate_body_rig(
 					.with_pre_squat_speed(JUMP_PRE_SQUAT_SPEED)
 					.with_landing_squat_speed(JUMP_LANDING_SQUAT_SPEED),
 			)
-			.apply(rig.as_mut(), t),
-	};
-	apply_effects(effects, &mut armature);
-	marshal_pose_to_limbs(&rig, &mut limbs);
+			.apply(rig, t),
+	}
+}
+
+fn apply_quadruped_animation(
+	animation: ConceptAnimation,
+	rig: &mut QuadrupedV0Rig,
+	t: f32,
+) -> Effects {
+	match animation {
+		ConceptAnimation::Gallop => Gallop::default().apply(rig, t * GALLOP_CYCLE_SPEED),
+		_ => Effects::default(),
+	}
 }
 
 fn apply_effects(
@@ -143,18 +200,21 @@ fn apply_effects(
 }
 
 fn marshal_limbs_into_pose(
-	rig: &mut HumanoidV0Rig,
+	pose: &mut crozon_rigs::RigPose,
 	limbs: &mut Query<(&mut Transform, &LimbAnimator)>,
 ) {
 	for (_, animator) in limbs.iter_mut() {
-		rig.pose.insert(BonePose::new(animator.bone.clone(), animator.rest));
+		pose.insert(BonePose::new(animator.bone.clone(), animator.rest));
 	}
 }
 
-fn marshal_pose_to_limbs(rig: &HumanoidV0Rig, limbs: &mut Query<(&mut Transform, &LimbAnimator)>) {
+fn marshal_pose_to_limbs(
+	pose: &crozon_rigs::RigPose,
+	limbs: &mut Query<(&mut Transform, &LimbAnimator)>,
+) {
 	for (mut transform, animator) in limbs.iter_mut() {
-		if let Some(pose) = rig.pose.get(&animator.bone) {
-			*transform = pose.transform;
+		if let Some(bone_pose) = pose.get(&animator.bone) {
+			*transform = bone_pose.transform;
 		}
 	}
 }

@@ -41,7 +41,7 @@ impl FocusReferenceSyncState {
 fn focus_live_key(config: &ConceptPreviewConfig) -> String {
 	match config {
 		ConceptPreviewConfig::Braidman { config, .. } => config.sync_key(),
-		ConceptPreviewConfig::Brenal { config } => config.sync_key(),
+		ConceptPreviewConfig::Brenal { config, .. } => config.sync_key(),
 		ConceptPreviewConfig::Brodler { config, .. } => config.sync_key(),
 		ConceptPreviewConfig::Mygr { config, .. } => config.sync_key(),
 		ConceptPreviewConfig::Dui { config, .. } => config.sync_key(),

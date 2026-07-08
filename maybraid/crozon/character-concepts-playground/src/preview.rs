@@ -47,7 +47,7 @@ pub enum ConceptSpecies {
 #[derive(Resource, Debug, Clone, PartialEq)]
 pub enum ConceptPreviewConfig {
 	Braidman { config: BraidmanConfig, animation: ConceptAnimation },
-	Brenal { config: BrenalConfig },
+	Brenal { config: BrenalConfig, animation: ConceptAnimation },
 	Brodler { config: BrodlerConfig, animation: ConceptAnimation },
 	Mygr { config: MygrConfig, animation: ConceptAnimation },
 	Dui { config: DuiConfig, animation: ConceptAnimation },
@@ -98,7 +98,11 @@ impl ConceptPreviewConfig {
 	}
 
 	pub fn brenal(config: BrenalConfig) -> Self {
-		Self::Brenal { config }
+		Self::Brenal { config, animation: ConceptAnimation::default() }
+	}
+
+	pub fn brenal_with_animation(config: BrenalConfig, animation: ConceptAnimation) -> Self {
+		Self::Brenal { config, animation }
 	}
 
 	pub fn brodler(config: BrodlerConfig) -> Self {
@@ -152,7 +156,7 @@ impl ConceptPreviewConfig {
 	pub fn resolve(&self) -> ResolvedCharacterAssembly {
 		match self {
 			Self::Braidman { config, .. } => config.resolve(),
-			Self::Brenal { config } => config.resolve(),
+			Self::Brenal { config, .. } => config.resolve(),
 			Self::Brodler { config, .. } => config.resolve(),
 			Self::Mygr { config, .. } => config.resolve(),
 			Self::Dui { config, .. } => config.resolve(),
@@ -167,7 +171,7 @@ impl ConceptPreviewConfig {
 			Self::Braidman { config, animation } => {
 				format!("{} animation={}", config.status_label(), animation.label())
 			}
-			Self::Brenal { config } => config.status_label(),
+			Self::Brenal { config, .. } => config.status_label(),
 			Self::Brodler { config, animation } => {
 				format!("{} animation={}", config.status_label(), animation.label())
 			}
@@ -194,7 +198,7 @@ impl ConceptPreviewConfig {
 			Self::Braidman { config, animation } => {
 				format!("species=braidman {} animation={animation:?}", config.sync_key())
 			}
-			Self::Brenal { config } => format!("species=brenal {}", config.sync_key()),
+			Self::Brenal { config, .. } => format!("species=brenal {}", config.sync_key()),
 			Self::Brodler { config, animation } => {
 				format!("species=brodler {} animation={animation:?}", config.sync_key())
 			}
@@ -229,7 +233,7 @@ impl ConceptPreviewConfig {
 				config.hair,
 				config.clothing,
 			),
-			Self::Brenal { config } => format!(
+			Self::Brenal { config, .. } => format!(
 				"species=brenal horns={:?} eye={:?}",
 				config.horns,
 				config.eye,
@@ -282,13 +286,13 @@ impl ConceptPreviewConfig {
 	pub const fn animation(&self) -> ConceptAnimation {
 		match self {
 			Self::Braidman { animation, .. }
+			| Self::Brenal { animation, .. }
 			| Self::Brodler { animation, .. }
 			| Self::Mygr { animation, .. }
 			| Self::Dui { animation, .. }
 			| Self::Wumbus { animation, .. }
 			| Self::Lero { animation, .. }
 			| Self::Spibmom { animation, .. } => *animation,
-			Self::Brenal { .. } => ConceptAnimation::Still,
 		}
 	}
 }
@@ -497,7 +501,7 @@ fn sync_live_preview(
 				}
 			}
 		}
-		ConceptPreviewConfig::Brenal { config: brenal } => {
+		ConceptPreviewConfig::Brenal { config: brenal, .. } => {
 			let sliders = brenal.sliders.clamped();
 			for (part, mut target, base, transform) in parts {
 				target.color = preview_color_brenal(brenal, target.target);
@@ -835,7 +839,7 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 					.transform()
 					.mul_transform(sliders.feature_transform(part.slot))
 			}
-			ConceptPreviewConfig::Brenal { config } => {
+			ConceptPreviewConfig::Brenal { config, .. } => {
 				let sliders = config.sliders.clamped();
 				part.asset
 					.normalization
@@ -1014,7 +1018,7 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 				};
 				PreviewAssetTarget { target, color: preview_color_braidman(config, target) }
 			}
-			ConceptPreviewConfig::Brenal { config } => {
+			ConceptPreviewConfig::Brenal { config, .. } => {
 				let target = match part.slot {
 					CharacterPartSlot::BodyMesh => PreviewTarget::BrenalBody,
 					CharacterPartSlot::HeadRig | CharacterPartSlot::HeadMesh => {
