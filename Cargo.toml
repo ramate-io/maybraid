@@ -8,6 +8,8 @@ members = [
   "maybraid/durham/lib",
   "maybraid/durham/shaders",
 
+  "maybraid/exploratory/shaders",
+
   "maybraid/lod/lib",
   "maybraid/lod/cascade",
   "maybraid/lod/cascade-system",
@@ -171,6 +173,7 @@ skill-map = {"path" = "procedures/skill-map" }
 
 durham-terrain = { path = "maybraid/durham/lib" }
 durham-terrain-shaders = { path = "maybraid/durham/shaders" }
+exploratory-shaders = { path = "maybraid/exploratory/shaders" }
 
 lod = { path = "maybraid/lod/lib" }
 lod-cascade = { path = "maybraid/lod/cascade" }

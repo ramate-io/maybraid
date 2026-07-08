@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use bevy::prelude::*;
+use exploratory_shaders::WatercolorShader;
 
 use crate::{
 	preview::PreviewAssetTarget, preview_color::PreviewColor, skinning::CharacterPart,
@@ -15,24 +16,20 @@ pub(crate) struct AppliedThumbnailColor(Color);
 
 #[derive(Resource, Default)]
 pub struct PreviewColorMaterials {
-	handles: HashMap<PreviewColor, Handle<StandardMaterial>>,
-	thumbnail_handles: HashMap<[u8; 4], Handle<StandardMaterial>>,
+	handles: HashMap<PreviewColor, Handle<WatercolorShader>>,
+	thumbnail_handles: HashMap<[u8; 4], Handle<WatercolorShader>>,
 }
 
 impl PreviewColorMaterials {
 	fn handle(
 		&mut self,
 		color: PreviewColor,
-		materials: &mut Assets<StandardMaterial>,
-	) -> Handle<StandardMaterial> {
+		materials: &mut Assets<WatercolorShader>,
+	) -> Handle<WatercolorShader> {
 		self.handles
 			.entry(color)
 			.or_insert_with(|| {
-				materials.add(StandardMaterial {
-					base_color: color.bevy_color(),
-					cull_mode: None,
-					..default()
-				})
+				materials.add(WatercolorShader::default().with_base_color(color.bevy_color()))
 			})
 			.clone()
 	}
@@ -40,14 +37,12 @@ impl PreviewColorMaterials {
 	fn thumbnail_handle(
 		&mut self,
 		color: Color,
-		materials: &mut Assets<StandardMaterial>,
-	) -> Handle<StandardMaterial> {
+		materials: &mut Assets<WatercolorShader>,
+	) -> Handle<WatercolorShader> {
 		let key = color_key(color);
 		self.thumbnail_handles
 			.entry(key)
-			.or_insert_with(|| {
-				materials.add(StandardMaterial { base_color: color, cull_mode: None, ..default() })
-			})
+			.or_insert_with(|| materials.add(WatercolorShader::default().with_base_color(color)))
 			.clone()
 	}
 }
@@ -58,12 +53,13 @@ pub fn apply_preview_colors(
 	thumbnail_roots: Query<(Entity, &ThumbnailPreview, Option<&Children>)>,
 	character_parts: Query<Entity, With<CharacterPart>>,
 	children_q: Query<&Children>,
-	mut meshes: Query<(
+	standard_meshes: Query<Entity, With<MeshMaterial3d<StandardMaterial>>>,
+	watercolor_meshes: Query<(
 		Entity,
-		&mut MeshMaterial3d<StandardMaterial>,
+		&MeshMaterial3d<WatercolorShader>,
 		Option<&AppliedPreviewColor>,
 	)>,
-	mut materials: ResMut<Assets<StandardMaterial>>,
+	mut materials: ResMut<Assets<WatercolorShader>>,
 	mut color_materials: ResMut<PreviewColorMaterials>,
 ) {
 	for (root, target, children) in &preview_roots {
@@ -73,7 +69,8 @@ pub fn apply_preview_colors(
 			children,
 			&character_parts,
 			&children_q,
-			&mut meshes,
+			&standard_meshes,
+			&watercolor_meshes,
 			&mut materials,
 			&mut color_materials,
 			&mut commands,
@@ -86,7 +83,8 @@ pub fn apply_preview_colors(
 			children,
 			&character_parts,
 			&children_q,
-			&mut meshes,
+			&standard_meshes,
+			&watercolor_meshes,
 			&mut materials,
 			&mut color_materials,
 			&mut commands,
@@ -100,12 +98,13 @@ fn apply_preview_color_to_tree(
 	children: Option<&Children>,
 	character_parts: &Query<Entity, With<CharacterPart>>,
 	children_q: &Query<&Children>,
-	meshes: &mut Query<(
+	standard_meshes: &Query<Entity, With<MeshMaterial3d<StandardMaterial>>>,
+	watercolor_meshes: &Query<(
 		Entity,
-		&mut MeshMaterial3d<StandardMaterial>,
+		&MeshMaterial3d<WatercolorShader>,
 		Option<&AppliedPreviewColor>,
 	)>,
-	materials: &mut Assets<StandardMaterial>,
+	materials: &mut Assets<WatercolorShader>,
 	color_materials: &mut PreviewColorMaterials,
 	commands: &mut Commands,
 ) {
@@ -113,22 +112,24 @@ fn apply_preview_color_to_tree(
 		return;
 	};
 	let handle = color_materials.handle(color, materials);
-	let mut stack: Vec<(Entity, bool)> = children.iter().map(|entity| (entity, false)).collect();
-	while let Some((entity, is_entry)) = stack.pop() {
-		if !is_entry && character_parts.contains(entity) && entity != root {
+	let mut stack: Vec<Entity> = children.iter().collect();
+	while let Some(entity) = stack.pop() {
+		if character_parts.contains(entity) && entity != root {
 			continue;
 		}
-		if let Ok((mesh, mut material, applied)) = meshes.get_mut(entity) {
-			if applied.is_some_and(|applied| applied.0 == color) && material.0 == handle {
-				continue;
-			}
-			material.0 = handle.clone();
-			commands.entity(mesh).try_insert(AppliedPreviewColor(color));
-		}
+		try_apply_watercolor_material(
+			entity,
+			&handle,
+			standard_meshes,
+			watercolor_meshes,
+			commands,
+			|commands, entity| {
+				commands.entity(entity).try_insert(AppliedPreviewColor(color));
+			},
+			|applied| applied.is_some_and(|applied| applied.0 == color),
+		);
 		if let Ok(children) = children_q.get(entity) {
-			for child in children.iter() {
-				stack.push((child, false));
-			}
+			stack.extend(children.iter());
 		}
 	}
 }
@@ -139,12 +140,13 @@ fn apply_thumbnail_color_to_tree(
 	children: Option<&Children>,
 	character_parts: &Query<Entity, With<CharacterPart>>,
 	children_q: &Query<&Children>,
-	meshes: &mut Query<(
+	standard_meshes: &Query<Entity, With<MeshMaterial3d<StandardMaterial>>>,
+	watercolor_meshes: &Query<(
 		Entity,
-		&mut MeshMaterial3d<StandardMaterial>,
+		&MeshMaterial3d<WatercolorShader>,
 		Option<&AppliedPreviewColor>,
 	)>,
-	materials: &mut Assets<StandardMaterial>,
+	materials: &mut Assets<WatercolorShader>,
 	color_materials: &mut PreviewColorMaterials,
 	commands: &mut Commands,
 ) {
@@ -152,21 +154,61 @@ fn apply_thumbnail_color_to_tree(
 		return;
 	};
 	let handle = color_materials.thumbnail_handle(color, materials);
-	let mut stack: Vec<(Entity, bool)> = children.iter().map(|entity| (entity, false)).collect();
-	while let Some((entity, is_entry)) = stack.pop() {
-		if !is_entry && character_parts.contains(entity) && entity != root {
+	let mut stack: Vec<Entity> = children.iter().collect();
+	while let Some(entity) = stack.pop() {
+		if character_parts.contains(entity) && entity != root {
 			continue;
 		}
-		if let Ok((mesh, mut material, _applied)) = meshes.get_mut(entity) {
-			material.0 = handle.clone();
-			commands.entity(mesh).try_insert(AppliedThumbnailColor(color));
-		}
+		try_apply_watercolor_material(
+			entity,
+			&handle,
+			standard_meshes,
+			watercolor_meshes,
+			commands,
+			|commands, entity| {
+				commands.entity(entity).try_insert(AppliedThumbnailColor(color));
+			},
+			|_| false,
+		);
 		if let Ok(children) = children_q.get(entity) {
-			for child in children.iter() {
-				stack.push((child, false));
-			}
+			stack.extend(children.iter());
 		}
 	}
+}
+
+/// Swaps GLTF [`StandardMaterial`] meshes to [`WatercolorShader`], or updates an existing handle.
+fn try_apply_watercolor_material(
+	entity: Entity,
+	handle: &Handle<WatercolorShader>,
+	standard_meshes: &Query<Entity, With<MeshMaterial3d<StandardMaterial>>>,
+	watercolor_meshes: &Query<(
+		Entity,
+		&MeshMaterial3d<WatercolorShader>,
+		Option<&AppliedPreviewColor>,
+	)>,
+	commands: &mut Commands,
+	mark_applied: impl FnOnce(&mut Commands, Entity),
+	already_applied: impl FnOnce(Option<&AppliedPreviewColor>) -> bool,
+) -> bool {
+	if standard_meshes.contains(entity) {
+		commands
+			.entity(entity)
+			.remove::<MeshMaterial3d<StandardMaterial>>()
+			.insert(MeshMaterial3d(handle.clone()));
+		mark_applied(commands, entity);
+		return true;
+	}
+
+	if let Ok((_, material, applied)) = watercolor_meshes.get(entity) {
+		if already_applied(applied) && material.0 == *handle {
+			return true;
+		}
+		commands.entity(entity).insert(MeshMaterial3d(handle.clone()));
+		mark_applied(commands, entity);
+		return true;
+	}
+
+	false
 }
 
 fn color_key(color: Color) -> [u8; 4] {

@@ -20,6 +20,7 @@ crozon-character-playground = { workspace = true }
 crozon-character-ui-menus = { workspace = true }
 crozon-characters = { workspace = true }
 crozon-rigs = { workspace = true }
+exploratory-shaders = { workspace = true }
 game-commands = { workspace = true }
 malo-animations = { workspace = true }
 
