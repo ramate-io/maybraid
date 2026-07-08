@@ -25,7 +25,7 @@ use crate::skinning::{BoneMap, CharacterRig, RigSkeletonKind};
 const RUN_CYCLE_SPEED: f32 = 0.5;
 const WALK_CYCLE_SPEED: f32 = 0.35;
 const QUADRUPED_RUN_CYCLE_SPEED: f32 = 0.55;
-const GALLOP_CYCLE_SPEED: f32 = 0.85;
+const GALLOP_CYCLE_SPEED: f32 = 0.35;
 const TUCK_CYCLE_SPEED: f32 = 0.6;
 const FRONT_FLIP_CYCLE_SPEED: f32 = 0.85;
 const JUMP_HEIGHT: f32 = 1.5;

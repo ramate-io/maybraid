@@ -39,41 +39,15 @@ pub(crate) fn leg_phase_from_strike(cycle: f32, strike: f32) -> f32 {
 	(cycle - strike).rem_euclid(1.0)
 }
 
-/// Smooth bell envelope: 1 at `center`, 0 outside `center ± half_width`.
-pub(crate) fn smooth_pulse(u: f32, center: f32, half_width: f32) -> f32 {
-	if half_width <= 0.0 {
-		return 0.0;
-	}
-	let d = ((u - center) / half_width).abs();
-	if d >= 1.0 {
-		return 0.0;
-	}
-	let t = 1.0 - d;
-	t * t * (3.0 - 2.0 * t)
-}
-
-/// Smooth 0→1 transition used to crossfade hind- vs front-dominant bound poses.
-pub(crate) fn smooth_blend(edge0: f32, edge1: f32, u: f32) -> f32 {
-	if edge0 >= edge1 {
-		return if u >= edge0 { 1.0 } else { 0.0 };
-	}
-	let t = ((u - edge0) / (edge1 - edge0)).clamp(0.0, 1.0);
-	t * t * (3.0 - 2.0 * t)
-}
-
-pub(crate) fn apply_front_leg_enveloped<R: QuadrupedRig>(
+/// Continuous stride articulation at an arbitrary leg phase (`0` at foot strike).
+pub(crate) fn apply_front_leg_stride<R: QuadrupedRig>(
 	rig: &mut R,
 	side: Side,
 	leg_phase: f32,
-	envelope: f32,
 	tuning: LegStrideTuning,
 ) {
-	if envelope <= 1e-5 {
-		return;
-	}
-	let swing = thigh_swing(leg_phase) * envelope;
+	let swing = thigh_swing(leg_phase);
 	let lift_sign = if side == Side::Left { -1.0 } else { 1.0 };
-	let shin_flex = (knee_flex(leg_phase, tuning.knee) - tuning.knee.knee_extended) * envelope;
 
 	apply_front_leg(
 		rig,
@@ -81,23 +55,19 @@ pub(crate) fn apply_front_leg_enveloped<R: QuadrupedRig>(
 		swing * tuning.shoulder_swing,
 		swing * tuning.shoulder_lift * lift_sign,
 		swing * tuning.stride,
-		shin_flex,
+		knee_flex(leg_phase, tuning.knee) - tuning.knee.knee_extended,
 	);
 }
 
-pub(crate) fn apply_hind_leg_enveloped<R: QuadrupedRig>(
+/// Continuous stride articulation at an arbitrary leg phase (`0` at foot strike).
+pub(crate) fn apply_hind_leg_stride<R: QuadrupedRig>(
 	rig: &mut R,
 	side: Side,
 	leg_phase: f32,
-	envelope: f32,
 	tuning: LegStrideTuning,
 ) {
-	if envelope <= 1e-5 {
-		return;
-	}
-	let swing = thigh_swing(leg_phase) * envelope;
+	let swing = thigh_swing(leg_phase);
 	let lift_sign = if side == Side::Left { -1.0 } else { 1.0 };
-	let shin_flex = (knee_flex(leg_phase, tuning.knee) - tuning.knee.knee_extended) * envelope;
 
 	apply_hind_leg(
 		rig,
@@ -105,7 +75,7 @@ pub(crate) fn apply_hind_leg_enveloped<R: QuadrupedRig>(
 		swing * tuning.hip_swing,
 		swing * tuning.hip_lift * lift_sign,
 		swing * tuning.stride,
-		shin_flex,
+		knee_flex(leg_phase, tuning.knee) - tuning.knee.knee_extended,
 	);
 }
 
@@ -116,18 +86,7 @@ pub(crate) fn apply_front_leg_at_strike<R: QuadrupedRig>(
 	strike: f32,
 	tuning: LegStrideTuning,
 ) {
-	let leg_phase = leg_phase_from_strike(cycle, strike);
-	let swing = thigh_swing(leg_phase);
-	let lift_sign = if side == Side::Left { -1.0 } else { 1.0 };
-
-	apply_front_leg(
-		rig,
-		side,
-		swing * tuning.shoulder_swing,
-		swing * tuning.shoulder_lift * lift_sign,
-		swing * tuning.stride,
-		knee_flex(leg_phase, tuning.knee) - tuning.knee.knee_extended,
-	);
+	apply_front_leg_stride(rig, side, leg_phase_from_strike(cycle, strike), tuning);
 }
 
 pub(crate) fn apply_hind_leg_at_strike<R: QuadrupedRig>(
@@ -137,16 +96,5 @@ pub(crate) fn apply_hind_leg_at_strike<R: QuadrupedRig>(
 	strike: f32,
 	tuning: LegStrideTuning,
 ) {
-	let leg_phase = leg_phase_from_strike(cycle, strike);
-	let swing = thigh_swing(leg_phase);
-	let lift_sign = if side == Side::Left { -1.0 } else { 1.0 };
-
-	apply_hind_leg(
-		rig,
-		side,
-		swing * tuning.hip_swing,
-		swing * tuning.hip_lift * lift_sign,
-		swing * tuning.stride,
-		knee_flex(leg_phase, tuning.knee) - tuning.knee.knee_extended,
-	);
+	apply_hind_leg_stride(rig, side, leg_phase_from_strike(cycle, strike), tuning);
 }
