@@ -11,6 +11,11 @@ var albedo_sampler: sampler;
 
 @fragment
 fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
-    let albedo = textureSample(albedo_texture, albedo_sampler, mesh.uv);
+#ifdef VERTEX_UVS_A
+    let uv = mesh.uv;
+#else
+    let uv = mesh.world_position.xz * 0.25;
+#endif
+    let albedo = textureSample(albedo_texture, albedo_sampler, uv);
     return base_color * albedo;
 }

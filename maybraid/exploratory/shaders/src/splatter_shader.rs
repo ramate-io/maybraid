@@ -1,17 +1,12 @@
 //! Simple albedo-textured [`Material`] using embedded **`splatter.png`**.
 
 use bevy::{
-	asset::embedded_asset,
+	asset::{embedded_asset, load_embedded_asset},
 	prelude::*,
 	reflect::TypePath,
 	render::render_resource::AsBindGroup,
 	shader::ShaderRef,
 };
-
-/// Embedded asset path for the default splatter albedo texture.
-pub fn splatter_albedo_path() -> &'static str {
-	concat!("embedded://", env!("CARGO_CRATE_NAME"), "/assets/splatter.png")
-}
 
 /// Loaded by [`SplatterShaderPlugin`]; clone the handle when building [`SplatterShader`] instances.
 #[derive(Resource, Clone, Debug)]
@@ -23,14 +18,14 @@ pub struct SplatterShaderPlugin;
 impl Plugin for SplatterShaderPlugin {
 	fn build(&self, app: &mut App) {
 		embedded_asset!(app, "splatter_shader.wgsl");
-		embedded_asset!(app, "../../assets/splatter.png");
+		embedded_asset!(app, "splatter.png");
 		app.add_plugins(MaterialPlugin::<SplatterShader>::default())
 			.add_systems(Startup, load_splatter_albedo);
 	}
 }
 
 fn load_splatter_albedo(asset_server: Res<AssetServer>, mut commands: Commands) {
-	commands.insert_resource(SplatterAlbedo(asset_server.load(splatter_albedo_path())));
+	commands.insert_resource(SplatterAlbedo(load_embedded_asset!(&*asset_server, "splatter.png")));
 }
 
 #[derive(Asset, TypePath, AsBindGroup, Debug, Clone)]
@@ -61,12 +56,8 @@ impl SplatterShader {
 
 impl Material for SplatterShader {
 	fn fragment_shader() -> ShaderRef {
-		concat!(
-			"embedded://",
-			env!("CARGO_CRATE_NAME"),
-			"/splatter_shader/splatter_shader.wgsl"
-		)
-		.into()
+		// Must match `embedded_path!("splatter_shader.wgsl")` (module name, not package name).
+		concat!("embedded://exploratory_shaders/splatter_shader.wgsl").into()
 	}
 
 	fn alpha_mode(&self) -> AlphaMode {
@@ -77,11 +68,13 @@ impl Material for SplatterShader {
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use bevy::asset::embedded_path;
 	use bevy::asset::AssetPlugin;
 	use bevy::pbr::Material;
 	use bevy::prelude::App;
 	use bevy::shader::ShaderRef;
 	use bevy::MinimalPlugins;
+	use std::path::Path;
 
 	#[test]
 	fn with_base_color_sets_tint() {
@@ -95,11 +88,8 @@ mod tests {
 
 	#[test]
 	fn fragment_shader_ref_matches_embedded_asset_path() {
-		let expected = concat!(
-			"embedded://",
-			env!("CARGO_CRATE_NAME"),
-			"/splatter_shader/splatter_shader.wgsl"
-		);
+		let embedded = embedded_path!("splatter_shader.wgsl");
+		let expected = format!("embedded://{}", embedded.display());
 		match <SplatterShader as Material>::fragment_shader() {
 			ShaderRef::Path(p) => assert_eq!(p.to_string(), expected),
 			ShaderRef::Default => panic!("unexpected Default shader ref"),
@@ -108,9 +98,8 @@ mod tests {
 	}
 
 	#[test]
-	fn splatter_albedo_path_matches_embedded_asset() {
-		let expected = concat!("embedded://", env!("CARGO_CRATE_NAME"), "/assets/splatter.png");
-		assert_eq!(splatter_albedo_path(), expected);
+	fn splatter_albedo_embedded_path() {
+		assert_eq!(embedded_path!("splatter.png"), Path::new("exploratory_shaders/splatter.png"));
 	}
 
 	#[test]
@@ -119,7 +108,7 @@ mod tests {
 		app.add_plugins(MinimalPlugins);
 		app.add_plugins(AssetPlugin::default());
 		embedded_asset!(app, "splatter_shader.wgsl");
-		embedded_asset!(app, "../../assets/splatter.png");
+		embedded_asset!(app, "splatter.png");
 		app.update();
 	}
 }
