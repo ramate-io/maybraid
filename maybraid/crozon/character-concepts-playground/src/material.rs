@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use bevy::prelude::*;
-use exploratory_shaders::WatercolorShader;
+use exploratory_shaders::{SplatterAlbedo, SplatterShader};
 
 use crate::{
 	preview::PreviewAssetTarget, preview_color::PreviewColor, skinning::CharacterPart,
@@ -16,20 +16,21 @@ pub(crate) struct AppliedThumbnailColor(Color);
 
 #[derive(Resource, Default)]
 pub struct PreviewColorMaterials {
-	handles: HashMap<PreviewColor, Handle<WatercolorShader>>,
-	thumbnail_handles: HashMap<[u8; 4], Handle<WatercolorShader>>,
+	handles: HashMap<PreviewColor, Handle<SplatterShader>>,
+	thumbnail_handles: HashMap<[u8; 4], Handle<SplatterShader>>,
 }
 
 impl PreviewColorMaterials {
 	fn handle(
 		&mut self,
 		color: PreviewColor,
-		materials: &mut Assets<WatercolorShader>,
-	) -> Handle<WatercolorShader> {
+		materials: &mut Assets<SplatterShader>,
+		albedo: &Handle<Image>,
+	) -> Handle<SplatterShader> {
 		self.handles
 			.entry(color)
 			.or_insert_with(|| {
-				materials.add(WatercolorShader::default().with_base_color(color.bevy_color()))
+				materials.add(SplatterShader::new(albedo.clone()).with_base_color(color.bevy_color()))
 			})
 			.clone()
 	}
@@ -37,12 +38,15 @@ impl PreviewColorMaterials {
 	fn thumbnail_handle(
 		&mut self,
 		color: Color,
-		materials: &mut Assets<WatercolorShader>,
-	) -> Handle<WatercolorShader> {
+		materials: &mut Assets<SplatterShader>,
+		albedo: &Handle<Image>,
+	) -> Handle<SplatterShader> {
 		let key = color_key(color);
 		self.thumbnail_handles
 			.entry(key)
-			.or_insert_with(|| materials.add(WatercolorShader::default().with_base_color(color)))
+			.or_insert_with(|| {
+				materials.add(SplatterShader::new(albedo.clone()).with_base_color(color))
+			})
 			.clone()
 	}
 }
@@ -54,14 +58,16 @@ pub fn apply_preview_colors(
 	character_parts: Query<Entity, With<CharacterPart>>,
 	children_q: Query<&Children>,
 	standard_meshes: Query<Entity, With<MeshMaterial3d<StandardMaterial>>>,
-	watercolor_meshes: Query<(
+	splatter_meshes: Query<(
 		Entity,
-		&MeshMaterial3d<WatercolorShader>,
+		&MeshMaterial3d<SplatterShader>,
 		Option<&AppliedPreviewColor>,
 	)>,
-	mut materials: ResMut<Assets<WatercolorShader>>,
+	splatter_albedo: Res<SplatterAlbedo>,
+	mut materials: ResMut<Assets<SplatterShader>>,
 	mut color_materials: ResMut<PreviewColorMaterials>,
 ) {
+	let albedo = &splatter_albedo.0;
 	for (root, target, children) in &preview_roots {
 		apply_preview_color_to_tree(
 			root,
@@ -70,9 +76,10 @@ pub fn apply_preview_colors(
 			&character_parts,
 			&children_q,
 			&standard_meshes,
-			&watercolor_meshes,
+			&splatter_meshes,
 			&mut materials,
 			&mut color_materials,
+			albedo,
 			&mut commands,
 		);
 	}
@@ -84,9 +91,10 @@ pub fn apply_preview_colors(
 			&character_parts,
 			&children_q,
 			&standard_meshes,
-			&watercolor_meshes,
+			&splatter_meshes,
 			&mut materials,
 			&mut color_materials,
+			albedo,
 			&mut commands,
 		);
 	}
@@ -99,29 +107,30 @@ fn apply_preview_color_to_tree(
 	character_parts: &Query<Entity, With<CharacterPart>>,
 	children_q: &Query<&Children>,
 	standard_meshes: &Query<Entity, With<MeshMaterial3d<StandardMaterial>>>,
-	watercolor_meshes: &Query<(
+	splatter_meshes: &Query<(
 		Entity,
-		&MeshMaterial3d<WatercolorShader>,
+		&MeshMaterial3d<SplatterShader>,
 		Option<&AppliedPreviewColor>,
 	)>,
-	materials: &mut Assets<WatercolorShader>,
+	materials: &mut Assets<SplatterShader>,
 	color_materials: &mut PreviewColorMaterials,
+	albedo: &Handle<Image>,
 	commands: &mut Commands,
 ) {
 	let Some(children) = children else {
 		return;
 	};
-	let handle = color_materials.handle(color, materials);
+	let handle = color_materials.handle(color, materials, albedo);
 	let mut stack: Vec<Entity> = children.iter().collect();
 	while let Some(entity) = stack.pop() {
 		if character_parts.contains(entity) && entity != root {
 			continue;
 		}
-		try_apply_watercolor_material(
+		try_apply_splatter_material(
 			entity,
 			&handle,
 			standard_meshes,
-			watercolor_meshes,
+			splatter_meshes,
 			commands,
 			|commands, entity| {
 				commands.entity(entity).try_insert(AppliedPreviewColor(color));
@@ -141,29 +150,30 @@ fn apply_thumbnail_color_to_tree(
 	character_parts: &Query<Entity, With<CharacterPart>>,
 	children_q: &Query<&Children>,
 	standard_meshes: &Query<Entity, With<MeshMaterial3d<StandardMaterial>>>,
-	watercolor_meshes: &Query<(
+	splatter_meshes: &Query<(
 		Entity,
-		&MeshMaterial3d<WatercolorShader>,
+		&MeshMaterial3d<SplatterShader>,
 		Option<&AppliedPreviewColor>,
 	)>,
-	materials: &mut Assets<WatercolorShader>,
+	materials: &mut Assets<SplatterShader>,
 	color_materials: &mut PreviewColorMaterials,
+	albedo: &Handle<Image>,
 	commands: &mut Commands,
 ) {
 	let Some(children) = children else {
 		return;
 	};
-	let handle = color_materials.thumbnail_handle(color, materials);
+	let handle = color_materials.thumbnail_handle(color, materials, albedo);
 	let mut stack: Vec<Entity> = children.iter().collect();
 	while let Some(entity) = stack.pop() {
 		if character_parts.contains(entity) && entity != root {
 			continue;
 		}
-		try_apply_watercolor_material(
+		try_apply_splatter_material(
 			entity,
 			&handle,
 			standard_meshes,
-			watercolor_meshes,
+			splatter_meshes,
 			commands,
 			|commands, entity| {
 				commands.entity(entity).try_insert(AppliedThumbnailColor(color));
@@ -176,14 +186,14 @@ fn apply_thumbnail_color_to_tree(
 	}
 }
 
-/// Swaps GLTF [`StandardMaterial`] meshes to [`WatercolorShader`], or updates an existing handle.
-fn try_apply_watercolor_material(
+/// Swaps GLTF [`StandardMaterial`] meshes to [`SplatterShader`], or updates an existing handle.
+fn try_apply_splatter_material(
 	entity: Entity,
-	handle: &Handle<WatercolorShader>,
+	handle: &Handle<SplatterShader>,
 	standard_meshes: &Query<Entity, With<MeshMaterial3d<StandardMaterial>>>,
-	watercolor_meshes: &Query<(
+	splatter_meshes: &Query<(
 		Entity,
-		&MeshMaterial3d<WatercolorShader>,
+		&MeshMaterial3d<SplatterShader>,
 		Option<&AppliedPreviewColor>,
 	)>,
 	commands: &mut Commands,
@@ -199,7 +209,7 @@ fn try_apply_watercolor_material(
 		return true;
 	}
 
-	if let Ok((_, material, applied)) = watercolor_meshes.get(entity) {
+	if let Ok((_, material, applied)) = splatter_meshes.get(entity) {
 		if already_applied(applied) && material.0 == *handle {
 			return true;
 		}
