@@ -321,11 +321,11 @@ Albedos are also frequently reused in procedural workflows. Instead of treating 
 
 The texture remains an albedo because it still answers the question: **what color belongs on this part of the surface?** The shader simply transforms that information into different appearances.
 
-### [Stylized eye albedo](https://images.steamusercontent.com/ugc/918044322154558740/23B2F470E1D0A5B3F6F56B8F2E72B1FBEA8D17C7/)
+### [Stylized eye albedo](https://www.filterforge.com/filters/1174-diffuse.html)
 
 > A flat-painted anime eye texture with a dark upper iris, bright lower gradient, crisp pupil, and clean linework. Little of its appearance comes from physically simulated lighting; instead, the artist has already encoded the desired look into the texture itself. At render time the shader primarily places and composites the image, optionally adding specular highlights or subtle lighting on top.
 >
-> — [reference image](https://images.steamusercontent.com/ugc/918044322154558740/23B2F470E1D0A5B3F6F56B8F2E72B1FBEA8D17C7/) ([Steam Community](https://steamcommunity.com))
+> — [reference image](https://www.filterforge.com/filters/1174-diffuse.jpg) ([FilterForge](https://www.filterforge.com))
 
 ### [Character face albedo](https://learnopengl.com/img/pbr/rusted_iron/albedo.png)
 
@@ -333,14 +333,14 @@ The texture remains an albedo because it still answers the question: **what colo
 >
 > — [reference image](https://learnopengl.com/img/pbr/rusted_iron/albedo.png) ([LearnOpenGL](https://learnopengl.com/PBR/Theory))
 
-### [Painted fabric albedo](https://3dtextures.me/wp-content/uploads/2020/11/Fabric014_1K_Color.jpg)
+### [Painted fabric albedo](https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcS3Do6s3QPa1Bg1DT4Fp2w9MuLIZsfQZNtPCA2Rq8IgH4drTfct0wEEAk_Y&s=10)
 
-> The weave, dyed stripes, stains, and stitching are all encoded directly into the texture. Even if the cloth bends or wrinkles, these markings move with the surface because they describe the material itself rather than the current lighting conditions.
+> The weave, dyed stripes, stains, and stitching are all encoded directly into the texture. Even if the cloth bends or wrinkles, these markings move with the surface because they describe the material itself rather than the current lighting conditions. Full face albedos with features won't be common in Maybraid, as the nose and mouth are separate meshes. 
 >
-> — [reference image](https://3dtextures.me/wp-content/uploads/2020/11/Fabric014_1K_Color.jpg) ([3DTextures.me](https://3dtextures.me))
+> — [reference image](https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcS3Do6s3QPa1Bg1DT4Fp2w9MuLIZsfQZNtPCA2Rq8IgH4drTfct0wEEAk_Y&s=10) ([ResearchGate](https://www.researchgate.net/figure/Examples-of-simple-albedo-texture-editing-using-our-method-adding-a-star-decal-changing_fig3_403211392))
 
-### [Brick wall albedo](https://ambientcg.com/get?file=Bricks056_1K_Color.jpg)
+### [Brick wall albedo](https://cdnb.artstation.com/p/marketplace/presentation_assets/000/553/407/large/file.jpg?1602795841)
 
 > Variations in brick color, mortar, chipped paint, and accumulated dirt are painted into the albedo. Directional shadows between bricks are intentionally omitted so that illumination can be computed consistently from any light source.
 >
-> — [reference image](https://ambientcg.com/get?file=Bricks056_1K_Color.jpg) ([ambientCG](https://ambientcg.com))
+> — [reference image](https://cdnb.artstation.com/p/marketplace/presentation_assets/000/553/407/large/file.jpg?1602795841) ([ArtStation](https://gbaran.artstation.com/store/mP18/brick-wall-248-photogrammetry-based-environment-texture))
