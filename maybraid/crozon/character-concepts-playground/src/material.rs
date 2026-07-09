@@ -1,11 +1,11 @@
 use std::collections::HashMap;
 
 use bevy::prelude::*;
-use exploratory_shaders::{SplatterAlbedo, SplatterShader};
+use exploratory_shaders::{EyeballAlbedo, SplatterAlbedo, SplatterShader};
 
 use crate::{
 	preview::PreviewAssetTarget, preview_color::PreviewColor, skinning::CharacterPart,
-	thumbnail::ThumbnailPreview,
+	thumbnail::{self, ThumbnailPreview},
 };
 
 #[derive(Component, Clone, Copy, PartialEq, Eq)]
@@ -17,17 +17,19 @@ pub(crate) struct AppliedThumbnailColor(Color);
 #[derive(Resource, Default)]
 pub struct PreviewColorMaterials {
 	handles: HashMap<PreviewColor, Handle<SplatterShader>>,
+	eye_handles: HashMap<PreviewColor, Handle<SplatterShader>>,
 	thumbnail_handles: HashMap<[u8; 4], Handle<SplatterShader>>,
+	eye_thumbnail_handles: HashMap<[u8; 4], Handle<SplatterShader>>,
 }
 
 impl PreviewColorMaterials {
-	fn handle(
-		&mut self,
+	fn cached_handle(
+		cache: &mut HashMap<PreviewColor, Handle<SplatterShader>>,
 		color: PreviewColor,
 		materials: &mut Assets<SplatterShader>,
 		albedo: &Handle<Image>,
 	) -> Handle<SplatterShader> {
-		self.handles
+		cache
 			.entry(color)
 			.or_insert_with(|| {
 				materials.add(SplatterShader::new(albedo.clone()).with_base_color(color.bevy_color()))
@@ -35,14 +37,34 @@ impl PreviewColorMaterials {
 			.clone()
 	}
 
+	fn preview_handle(
+		&mut self,
+		color: PreviewColor,
+		materials: &mut Assets<SplatterShader>,
+		albedo: &Handle<Image>,
+		eye: bool,
+	) -> Handle<SplatterShader> {
+		if eye {
+			Self::cached_handle(&mut self.eye_handles, color, materials, albedo)
+		} else {
+			Self::cached_handle(&mut self.handles, color, materials, albedo)
+		}
+	}
+
 	fn thumbnail_handle(
 		&mut self,
 		color: Color,
 		materials: &mut Assets<SplatterShader>,
 		albedo: &Handle<Image>,
+		eye: bool,
 	) -> Handle<SplatterShader> {
 		let key = color_key(color);
-		self.thumbnail_handles
+		let cache = if eye {
+			&mut self.eye_thumbnail_handles
+		} else {
+			&mut self.thumbnail_handles
+		};
+		cache
 			.entry(key)
 			.or_insert_with(|| {
 				materials.add(SplatterShader::new(albedo.clone()).with_base_color(color))
@@ -64,14 +86,20 @@ pub fn apply_preview_colors(
 		Option<&AppliedPreviewColor>,
 	)>,
 	splatter_albedo: Res<SplatterAlbedo>,
+	eyeball_albedo: Res<EyeballAlbedo>,
 	mut materials: ResMut<Assets<SplatterShader>>,
 	mut color_materials: ResMut<PreviewColorMaterials>,
 ) {
-	let albedo = &splatter_albedo.0;
 	for (root, target, children) in &preview_roots {
+		let albedo = if target.target.is_eye() {
+			&eyeball_albedo.0
+		} else {
+			&splatter_albedo.0
+		};
 		apply_preview_color_to_tree(
 			root,
 			target.color,
+			target.target.is_eye(),
 			children,
 			&character_parts,
 			&children_q,
@@ -84,9 +112,15 @@ pub fn apply_preview_colors(
 		);
 	}
 	for (root, preview, children) in &thumbnail_roots {
+		let albedo = if thumbnail::is_eye_asset_path(preview.asset_path) {
+			&eyeball_albedo.0
+		} else {
+			&splatter_albedo.0
+		};
 		apply_thumbnail_color_to_tree(
 			root,
 			preview.color,
+			thumbnail::is_eye_asset_path(preview.asset_path),
 			children,
 			&character_parts,
 			&children_q,
@@ -103,6 +137,7 @@ pub fn apply_preview_colors(
 fn apply_preview_color_to_tree(
 	root: Entity,
 	color: PreviewColor,
+	eye: bool,
 	children: Option<&Children>,
 	character_parts: &Query<Entity, With<CharacterPart>>,
 	children_q: &Query<&Children>,
@@ -120,7 +155,7 @@ fn apply_preview_color_to_tree(
 	let Some(children) = children else {
 		return;
 	};
-	let handle = color_materials.handle(color, materials, albedo);
+	let handle = color_materials.preview_handle(color, materials, albedo, eye);
 	let mut stack: Vec<Entity> = children.iter().collect();
 	while let Some(entity) = stack.pop() {
 		if character_parts.contains(entity) && entity != root {
@@ -146,6 +181,7 @@ fn apply_preview_color_to_tree(
 fn apply_thumbnail_color_to_tree(
 	root: Entity,
 	color: Color,
+	eye: bool,
 	children: Option<&Children>,
 	character_parts: &Query<Entity, With<CharacterPart>>,
 	children_q: &Query<&Children>,
@@ -163,7 +199,7 @@ fn apply_thumbnail_color_to_tree(
 	let Some(children) = children else {
 		return;
 	};
-	let handle = color_materials.thumbnail_handle(color, materials, albedo);
+	let handle = color_materials.thumbnail_handle(color, materials, albedo, eye);
 	let mut stack: Vec<Entity> = children.iter().collect();
 	while let Some(entity) = stack.pop() {
 		if character_parts.contains(entity) && entity != root {

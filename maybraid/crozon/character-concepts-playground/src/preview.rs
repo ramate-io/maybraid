@@ -450,6 +450,23 @@ pub enum PreviewTarget {
 	SpibmomClothing(ClothingMesh),
 }
 
+impl PreviewTarget {
+	pub fn is_eye(self) -> bool {
+		matches!(
+			self,
+			Self::BraidmanEye(_)
+				| Self::BrenalEye(_)
+				| Self::CaoleEye(_)
+				| Self::BrodlerEye(_)
+				| Self::MygrEye(_)
+				| Self::DuiEye
+				| Self::WumbusEye(_)
+				| Self::LeroEye
+				| Self::SpibmomEye(_)
+		)
+	}
+}
+
 pub fn sync_preview(
 	mut commands: Commands,
 	asset_server: Res<AssetServer>,

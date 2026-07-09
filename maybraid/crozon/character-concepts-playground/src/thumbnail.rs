@@ -30,6 +30,11 @@ struct ThumbnailEntry {
 #[derive(Component)]
 pub struct ThumbnailPreview {
 	pub color: Color,
+	pub asset_path: &'static str,
+}
+
+pub fn is_eye_asset_path(path: &str) -> bool {
+	path.contains("/eyes/")
 }
 
 impl ThumbnailCache {
@@ -86,7 +91,7 @@ pub fn image_for_asset(
 	commands.spawn((
 		WorldAssetRoot(asset_server.load(GltfAssetLabel::Scene(0).from_asset(path))),
 		Transform::from_translation(base),
-		ThumbnailPreview { color },
+		ThumbnailPreview { color, asset_path: path },
 		Name::new(format!("thumbnail_asset_{label}")),
 	));
 
