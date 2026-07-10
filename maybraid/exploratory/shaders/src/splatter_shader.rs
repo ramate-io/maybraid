@@ -8,30 +8,24 @@ use bevy::{
 	shader::ShaderRef,
 };
 
-/// Loaded by [`SplatterShaderPlugin`]; clone the handle when building body/clothing materials.
+/// Loaded by [`SplatterShaderPlugin`]; clone the handle when building materials.
 #[derive(Resource, Clone, Debug)]
 pub struct SplatterAlbedo(pub Handle<Image>);
 
-/// Loaded by [`SplatterShaderPlugin`]; clone the handle when building eye materials.
-#[derive(Resource, Clone, Debug)]
-pub struct EyeballAlbedo(pub Handle<Image>);
-
-/// Registers embedded albedo textures, **`splatter_shader.wgsl`**, and [`MaterialPlugin`] for [`SplatterShader`].
+/// Registers embedded **`splatter_shader.wgsl`**, **`splatter.png`**, and [`MaterialPlugin`] for [`SplatterShader`].
 pub struct SplatterShaderPlugin;
 
 impl Plugin for SplatterShaderPlugin {
 	fn build(&self, app: &mut App) {
 		embedded_asset!(app, "splatter_shader.wgsl");
 		embedded_asset!(app, "splatter.png");
-		embedded_asset!(app, "eyeball.png");
 		app.add_plugins(MaterialPlugin::<SplatterShader>::default())
-			.add_systems(Startup, load_preview_albedos);
+			.add_systems(Startup, load_splatter_albedo);
 	}
 }
 
-fn load_preview_albedos(asset_server: Res<AssetServer>, mut commands: Commands) {
+fn load_splatter_albedo(asset_server: Res<AssetServer>, mut commands: Commands) {
 	commands.insert_resource(SplatterAlbedo(load_embedded_asset!(&*asset_server, "splatter.png")));
-	commands.insert_resource(EyeballAlbedo(load_embedded_asset!(&*asset_server, "eyeball.png")));
 }
 
 #[derive(Asset, TypePath, AsBindGroup, Debug, Clone)]
@@ -62,7 +56,6 @@ impl SplatterShader {
 
 impl Material for SplatterShader {
 	fn fragment_shader() -> ShaderRef {
-		// Must match `embedded_path!("splatter_shader.wgsl")` (module name, not package name).
 		concat!("embedded://exploratory_shaders/splatter_shader.wgsl").into()
 	}
 
@@ -109,18 +102,12 @@ mod tests {
 	}
 
 	#[test]
-	fn eyeball_albedo_embedded_path() {
-		assert_eq!(embedded_path!("eyeball.png"), Path::new("exploratory_shaders/eyeball.png"));
-	}
-
-	#[test]
 	fn embedded_assets_register_with_asset_plugin() {
 		let mut app = App::new();
 		app.add_plugins(MinimalPlugins);
 		app.add_plugins(AssetPlugin::default());
 		embedded_asset!(app, "splatter_shader.wgsl");
 		embedded_asset!(app, "splatter.png");
-		embedded_asset!(app, "eyeball.png");
 		app.update();
 	}
 }

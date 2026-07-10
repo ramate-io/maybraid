@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use bevy::prelude::*;
-use exploratory_shaders::{EyeballAlbedo, SplatterAlbedo, SplatterShader};
+use exploratory_shaders::{EyeballAlbedo, EyeballShader, SplatterAlbedo, SplatterShader};
 
 use crate::{
 	preview::PreviewAssetTarget, preview_color::PreviewColor, skinning::CharacterPart,
@@ -17,19 +17,19 @@ pub(crate) struct AppliedThumbnailColor(Color);
 #[derive(Resource, Default)]
 pub struct PreviewColorMaterials {
 	handles: HashMap<PreviewColor, Handle<SplatterShader>>,
-	eye_handles: HashMap<PreviewColor, Handle<SplatterShader>>,
+	eye_handle: Option<Handle<EyeballShader>>,
 	thumbnail_handles: HashMap<[u8; 4], Handle<SplatterShader>>,
-	eye_thumbnail_handles: HashMap<[u8; 4], Handle<SplatterShader>>,
+	eye_thumbnail_handle: Option<Handle<EyeballShader>>,
 }
 
 impl PreviewColorMaterials {
-	fn cached_handle(
-		cache: &mut HashMap<PreviewColor, Handle<SplatterShader>>,
+	fn splatter_handle(
+		&mut self,
 		color: PreviewColor,
 		materials: &mut Assets<SplatterShader>,
 		albedo: &Handle<Image>,
 	) -> Handle<SplatterShader> {
-		cache
+		self.handles
 			.entry(color)
 			.or_insert_with(|| {
 				materials.add(SplatterShader::new(albedo.clone()).with_base_color(color.bevy_color()))
@@ -37,39 +37,45 @@ impl PreviewColorMaterials {
 			.clone()
 	}
 
-	fn preview_handle(
+	fn eye_handle(
 		&mut self,
-		color: PreviewColor,
-		materials: &mut Assets<SplatterShader>,
+		materials: &mut Assets<EyeballShader>,
 		albedo: &Handle<Image>,
-		eye: bool,
-	) -> Handle<SplatterShader> {
-		if eye {
-			Self::cached_handle(&mut self.eye_handles, color, materials, albedo)
-		} else {
-			Self::cached_handle(&mut self.handles, color, materials, albedo)
+	) -> Handle<EyeballShader> {
+		if let Some(handle) = &self.eye_handle {
+			return handle.clone();
 		}
+		let handle = materials.add(EyeballShader::new(albedo.clone()));
+		self.eye_handle = Some(handle.clone());
+		handle
 	}
 
-	fn thumbnail_handle(
+	fn splatter_thumbnail_handle(
 		&mut self,
 		color: Color,
 		materials: &mut Assets<SplatterShader>,
 		albedo: &Handle<Image>,
-		eye: bool,
 	) -> Handle<SplatterShader> {
 		let key = color_key(color);
-		let cache = if eye {
-			&mut self.eye_thumbnail_handles
-		} else {
-			&mut self.thumbnail_handles
-		};
-		cache
+		self.thumbnail_handles
 			.entry(key)
 			.or_insert_with(|| {
 				materials.add(SplatterShader::new(albedo.clone()).with_base_color(color))
 			})
 			.clone()
+	}
+
+	fn eye_thumbnail_handle(
+		&mut self,
+		materials: &mut Assets<EyeballShader>,
+		albedo: &Handle<Image>,
+	) -> Handle<EyeballShader> {
+		if let Some(handle) = &self.eye_thumbnail_handle {
+			return handle.clone();
+		}
+		let handle = materials.add(EyeballShader::new(albedo.clone()));
+		self.eye_thumbnail_handle = Some(handle.clone());
+		handle
 	}
 }
 
@@ -80,82 +86,105 @@ pub fn apply_preview_colors(
 	character_parts: Query<Entity, With<CharacterPart>>,
 	children_q: Query<&Children>,
 	standard_meshes: Query<Entity, With<MeshMaterial3d<StandardMaterial>>>,
-	splatter_meshes: Query<(
-		Entity,
-		&MeshMaterial3d<SplatterShader>,
-		Option<&AppliedPreviewColor>,
-	)>,
+	splatter_meshes: Query<(Entity, &MeshMaterial3d<SplatterShader>)>,
+	eyeball_meshes: Query<(Entity, &MeshMaterial3d<EyeballShader>)>,
 	splatter_albedo: Res<SplatterAlbedo>,
 	eyeball_albedo: Res<EyeballAlbedo>,
-	mut materials: ResMut<Assets<SplatterShader>>,
+	mut splatter_materials: ResMut<Assets<SplatterShader>>,
+	mut eyeball_materials: ResMut<Assets<EyeballShader>>,
 	mut color_materials: ResMut<PreviewColorMaterials>,
 ) {
 	for (root, target, children) in &preview_roots {
-		let albedo = if target.target.is_eye() {
-			&eyeball_albedo.0
+		if target.target.is_eye() {
+			let handle =
+				color_materials.eye_handle(&mut eyeball_materials, &eyeball_albedo.0);
+			apply_eye_material_to_tree(
+				root,
+				children,
+				&character_parts,
+				&children_q,
+				&standard_meshes,
+				&splatter_meshes,
+				&eyeball_meshes,
+				&handle,
+				&mut commands,
+			);
 		} else {
-			&splatter_albedo.0
-		};
-		apply_preview_color_to_tree(
-			root,
-			target.color,
-			target.target.is_eye(),
-			children,
-			&character_parts,
-			&children_q,
-			&standard_meshes,
-			&splatter_meshes,
-			&mut materials,
-			&mut color_materials,
-			albedo,
-			&mut commands,
-		);
+			let handle = color_materials.splatter_handle(
+				target.color,
+				&mut splatter_materials,
+				&splatter_albedo.0,
+			);
+			apply_splatter_material_to_tree(
+				root,
+				children,
+				&character_parts,
+				&children_q,
+				&standard_meshes,
+				&splatter_meshes,
+				&eyeball_meshes,
+				&handle,
+				&mut commands,
+				|commands, entity| {
+					commands.entity(entity).try_insert(AppliedPreviewColor(target.color));
+				},
+			);
+		}
 	}
 	for (root, preview, children) in &thumbnail_roots {
-		let albedo = if thumbnail::is_eye_asset_path(preview.asset_path) {
-			&eyeball_albedo.0
+		if thumbnail::is_eye_asset_path(preview.asset_path) {
+			let handle =
+				color_materials.eye_thumbnail_handle(&mut eyeball_materials, &eyeball_albedo.0);
+			apply_eye_material_to_tree(
+				root,
+				children,
+				&character_parts,
+				&children_q,
+				&standard_meshes,
+				&splatter_meshes,
+				&eyeball_meshes,
+				&handle,
+				&mut commands,
+			);
 		} else {
-			&splatter_albedo.0
-		};
-		apply_thumbnail_color_to_tree(
-			root,
-			preview.color,
-			thumbnail::is_eye_asset_path(preview.asset_path),
-			children,
-			&character_parts,
-			&children_q,
-			&standard_meshes,
-			&splatter_meshes,
-			&mut materials,
-			&mut color_materials,
-			albedo,
-			&mut commands,
-		);
+			let handle = color_materials.splatter_thumbnail_handle(
+				preview.color,
+				&mut splatter_materials,
+				&splatter_albedo.0,
+			);
+			apply_splatter_material_to_tree(
+				root,
+				children,
+				&character_parts,
+				&children_q,
+				&standard_meshes,
+				&splatter_meshes,
+				&eyeball_meshes,
+				&handle,
+				&mut commands,
+				|commands, entity| {
+					commands.entity(entity).try_insert(AppliedThumbnailColor(preview.color));
+				},
+			);
+		}
 	}
 }
 
-fn apply_preview_color_to_tree(
+fn apply_splatter_material_to_tree(
 	root: Entity,
-	color: PreviewColor,
-	eye: bool,
 	children: Option<&Children>,
 	character_parts: &Query<Entity, With<CharacterPart>>,
 	children_q: &Query<&Children>,
 	standard_meshes: &Query<Entity, With<MeshMaterial3d<StandardMaterial>>>,
-	splatter_meshes: &Query<(
-		Entity,
-		&MeshMaterial3d<SplatterShader>,
-		Option<&AppliedPreviewColor>,
-	)>,
-	materials: &mut Assets<SplatterShader>,
-	color_materials: &mut PreviewColorMaterials,
-	albedo: &Handle<Image>,
+	splatter_meshes: &Query<(Entity, &MeshMaterial3d<SplatterShader>)>,
+	eyeball_meshes: &Query<(Entity, &MeshMaterial3d<EyeballShader>)>,
+	handle: &Handle<SplatterShader>,
 	commands: &mut Commands,
+	mark_applied: impl Fn(&mut Commands, Entity),
 ) {
 	let Some(children) = children else {
 		return;
 	};
-	let handle = color_materials.preview_handle(color, materials, albedo, eye);
 	let mut stack: Vec<Entity> = children.iter().collect();
 	while let Some(entity) = stack.pop() {
 		if character_parts.contains(entity) && entity != root {
@@ -163,14 +192,12 @@ fn apply_preview_color_to_tree(
 		}
 		try_apply_splatter_material(
 			entity,
-			&handle,
+			handle,
 			standard_meshes,
 			splatter_meshes,
+			eyeball_meshes,
 			commands,
-			|commands, entity| {
-				commands.entity(entity).try_insert(AppliedPreviewColor(color));
-			},
-			|applied| applied.is_some_and(|applied| applied.0 == color),
+			&mark_applied,
 		);
 		if let Ok(children) = children_q.get(entity) {
 			stack.extend(children.iter());
@@ -178,43 +205,32 @@ fn apply_preview_color_to_tree(
 	}
 }
 
-fn apply_thumbnail_color_to_tree(
+fn apply_eye_material_to_tree(
 	root: Entity,
-	color: Color,
-	eye: bool,
 	children: Option<&Children>,
 	character_parts: &Query<Entity, With<CharacterPart>>,
 	children_q: &Query<&Children>,
 	standard_meshes: &Query<Entity, With<MeshMaterial3d<StandardMaterial>>>,
-	splatter_meshes: &Query<(
-		Entity,
-		&MeshMaterial3d<SplatterShader>,
-		Option<&AppliedPreviewColor>,
-	)>,
-	materials: &mut Assets<SplatterShader>,
-	color_materials: &mut PreviewColorMaterials,
-	albedo: &Handle<Image>,
+	splatter_meshes: &Query<(Entity, &MeshMaterial3d<SplatterShader>)>,
+	eyeball_meshes: &Query<(Entity, &MeshMaterial3d<EyeballShader>)>,
+	handle: &Handle<EyeballShader>,
 	commands: &mut Commands,
 ) {
 	let Some(children) = children else {
 		return;
 	};
-	let handle = color_materials.thumbnail_handle(color, materials, albedo, eye);
 	let mut stack: Vec<Entity> = children.iter().collect();
 	while let Some(entity) = stack.pop() {
 		if character_parts.contains(entity) && entity != root {
 			continue;
 		}
-		try_apply_splatter_material(
+		try_apply_eyeball_material(
 			entity,
-			&handle,
+			handle,
 			standard_meshes,
 			splatter_meshes,
+			eyeball_meshes,
 			commands,
-			|commands, entity| {
-				commands.entity(entity).try_insert(AppliedThumbnailColor(color));
-			},
-			|_| false,
 		);
 		if let Ok(children) = children_q.get(entity) {
 			stack.extend(children.iter());
@@ -222,39 +238,57 @@ fn apply_thumbnail_color_to_tree(
 	}
 }
 
-/// Swaps GLTF [`StandardMaterial`] meshes to [`SplatterShader`], or updates an existing handle.
 fn try_apply_splatter_material(
 	entity: Entity,
 	handle: &Handle<SplatterShader>,
 	standard_meshes: &Query<Entity, With<MeshMaterial3d<StandardMaterial>>>,
-	splatter_meshes: &Query<(
-		Entity,
-		&MeshMaterial3d<SplatterShader>,
-		Option<&AppliedPreviewColor>,
-	)>,
+	splatter_meshes: &Query<(Entity, &MeshMaterial3d<SplatterShader>)>,
+	eyeball_meshes: &Query<(Entity, &MeshMaterial3d<EyeballShader>)>,
 	commands: &mut Commands,
-	mark_applied: impl FnOnce(&mut Commands, Entity),
-	already_applied: impl FnOnce(Option<&AppliedPreviewColor>) -> bool,
-) -> bool {
-	if standard_meshes.contains(entity) {
+	mark_applied: &impl Fn(&mut Commands, Entity),
+) {
+	if standard_meshes.contains(entity) || eyeball_meshes.get(entity).is_ok() {
 		commands
 			.entity(entity)
 			.remove::<MeshMaterial3d<StandardMaterial>>()
+			.remove::<MeshMaterial3d<EyeballShader>>()
 			.insert(MeshMaterial3d(handle.clone()));
 		mark_applied(commands, entity);
-		return true;
+		return;
 	}
 
-	if let Ok((_, material, applied)) = splatter_meshes.get(entity) {
-		if already_applied(applied) && material.0 == *handle {
-			return true;
+	if let Ok((_, material)) = splatter_meshes.get(entity) {
+		if material.0 == *handle {
+			return;
 		}
 		commands.entity(entity).insert(MeshMaterial3d(handle.clone()));
 		mark_applied(commands, entity);
-		return true;
+	}
+}
+
+fn try_apply_eyeball_material(
+	entity: Entity,
+	handle: &Handle<EyeballShader>,
+	standard_meshes: &Query<Entity, With<MeshMaterial3d<StandardMaterial>>>,
+	splatter_meshes: &Query<(Entity, &MeshMaterial3d<SplatterShader>)>,
+	eyeball_meshes: &Query<(Entity, &MeshMaterial3d<EyeballShader>)>,
+	commands: &mut Commands,
+) {
+	if standard_meshes.contains(entity) || splatter_meshes.get(entity).is_ok() {
+		commands
+			.entity(entity)
+			.remove::<MeshMaterial3d<StandardMaterial>>()
+			.remove::<MeshMaterial3d<SplatterShader>>()
+			.insert(MeshMaterial3d(handle.clone()));
+		return;
 	}
 
-	false
+	if let Ok((_, material)) = eyeball_meshes.get(entity) {
+		if material.0 == *handle {
+			return;
+		}
+		commands.entity(entity).insert(MeshMaterial3d(handle.clone()));
+	}
 }
 
 fn color_key(color: Color) -> [u8; 4] {
