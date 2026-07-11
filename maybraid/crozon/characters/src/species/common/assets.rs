@@ -15,6 +15,8 @@ pub const PRONOGRADE_HEAD_RIG: AssetPath = AssetPath::new("characters/heads/pron
 pub const HEAD_CANINE: AssetPath = AssetPath::new("characters/heads/bear_head.glb");
 pub const TAIL_CAT: AssetPath = AssetPath::new("characters/tails/cat_tail.glb");
 pub const TAIL_LERODON: AssetPath = AssetPath::new("characters/tails/lerodon_tail.glb");
+pub const TAIL_LERODON_QUADRUPED: AssetPath =
+	AssetPath::new("characters/tails/lerodon_tail_quadruped.glb");
 pub const BODY_STANDARD: AssetPath = AssetPath::new("characters/bodies/humanoid_full_body.glb");
 pub const BODY_FULL: AssetPath = AssetPath::new("characters/bodies/leron_biped_full_body.glb");
 pub const HEAD_RIG: AssetPath = AssetPath::new("characters/heads/orthograde_head.glb");

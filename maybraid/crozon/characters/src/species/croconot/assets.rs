@@ -12,7 +12,7 @@ use crate::{
 	species::{
 		common::{
 			BODY_DRAGLOON, EAR_FLANK, HEAD_CANINE, HORNS_HARROWED_CROWN, MOUTH_LERODON_SNOUT,
-			PRONOGRADE_HEAD_RIG, QUADRUPED_RIG, TAIL_LERODON,
+			PRONOGRADE_HEAD_RIG, QUADRUPED_RIG, TAIL_LERODON_QUADRUPED,
 		},
 		croconot::{pose::CroconotPose, CroconotConfig},
 	},
@@ -22,7 +22,7 @@ pub use crate::species::common::EyeMesh;
 
 /// Lerodon snout scale on the pronograde mouth socket (from Lero, enlarged for Croconot).
 const SNOUT_XY_SCALE: f32 = 2.25;
-const SNOUT_Z_SCALE: f32 = 7.2;
+const SNOUT_Z_SCALE: f32 = 6.2;
 
 /// Species-local resolver for Croconot asset choices.
 pub struct CroconotAssets;
@@ -159,9 +159,16 @@ impl CroconotAssets {
 	fn tail() -> ResolvedCharacterPart {
 		ResolvedCharacterPart::new(
 			CharacterPartSlot::Tail,
-			CharacterAsset::new("lerodon-tail", TAIL_LERODON, AssetNormalization::IDENTITY),
+			CharacterAsset::new(
+				"lerodon-tail",
+				TAIL_LERODON_QUADRUPED,
+				AssetNormalization::IDENTITY,
+			),
 			SkinTarget::BodyRig,
-			Some(Self::body_socket("tailbone", Transform::IDENTITY)),
+			Some(Self::body_socket(
+				"tailbone",
+				Transform::from_translation(Vec3::new(0.0, -0.5, 0.0)),
+			)),
 		)
 	}
 
