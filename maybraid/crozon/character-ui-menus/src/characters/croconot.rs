@@ -135,6 +135,7 @@ pub struct CroconotHeadFeatureSliders {
 	pub eye_tilt: character_ui_menu::Slider,
 	pub ear_width: character_ui_menu::Slider,
 	pub ear_height: character_ui_menu::Slider,
+	pub snout_length: character_ui_menu::Slider,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -250,6 +251,7 @@ impl CroconotHeadFeatureSliders {
 			eye_tilt: slider(sliders.eye_tilt, -30.0, 30.0, 0.5),
 			ear_width: slider(sliders.ear_width, 0.8, 1.2, 0.05),
 			ear_height: slider(sliders.ear_height, 0.8, 1.2, 0.05),
+			snout_length: slider(sliders.snout_length, 0.8, 1.2, 0.05),
 		}
 	}
 
@@ -259,6 +261,7 @@ impl CroconotHeadFeatureSliders {
 		sliders.eye_tilt = self.eye_tilt.value;
 		sliders.ear_width = self.ear_width.value;
 		sliders.ear_height = self.ear_height.value;
+		sliders.snout_length = self.snout_length.value;
 	}
 }
 
@@ -279,6 +282,9 @@ impl MenuComponent<MenuEvent> for CroconotHeadFeatureSliders {
 			}),
 			MenuNode::slider("Ear Height", &self.ear_height, |delta| {
 				MenuEvent::SliderDelta(CharacterField::EarHeight, delta)
+			}),
+			MenuNode::slider("Snout Length", &self.snout_length, |delta| {
+				MenuEvent::SliderDelta(CharacterField::SnoutLength, delta)
 			}),
 		])
 	}
@@ -459,7 +465,9 @@ impl CroconotMenu {
 				}
 			}
 			CharacterField::Eye => self.head_features.value.eye.camera_focus,
-			CharacterField::CroconotMouth => self.head_features.value.snout.camera_focus,
+			CharacterField::CroconotMouth | CharacterField::SnoutLength => {
+				self.head_features.value.snout.camera_focus
+			}
 			CharacterField::Animation => Some(BODY_FOCUS),
 			_ => None,
 		}

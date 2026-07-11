@@ -1047,6 +1047,7 @@ fn apply_croconot_slider(menu: &mut CroconotMenu, field: CharacterField, delta: 
 		CharacterField::EyeTilt => face.eye_tilt = face.eye_tilt.apply_delta(delta),
 		CharacterField::EarWidth => face.ear_width = face.ear_width.apply_delta(delta),
 		CharacterField::EarHeight => face.ear_height = face.ear_height.apply_delta(delta),
+		CharacterField::SnoutLength => face.snout_length = face.snout_length.apply_delta(delta),
 		_ => return false,
 	}
 	true

@@ -25,6 +25,7 @@ pub struct CroconotSliders {
 	pub eye_tilt: f32,
 	pub ear_width: f32,
 	pub ear_height: f32,
+	pub snout_length: f32,
 }
 
 impl Default for CroconotSliders {
@@ -47,6 +48,7 @@ impl Default for CroconotSliders {
 			eye_tilt: 0.0,
 			ear_width: 1.0,
 			ear_height: 1.0,
+			snout_length: 1.0,
 		}
 	}
 }
@@ -70,6 +72,7 @@ impl CroconotSliders {
 		self.eye_tilt = self.eye_tilt.clamp(-30.0, 30.0);
 		self.ear_width = self.ear_width.clamp(0.8, 1.2);
 		self.ear_height = self.ear_height.clamp(0.8, 1.2);
+		self.snout_length = self.snout_length.clamp(0.8, 1.2);
 		self
 	}
 
@@ -200,6 +203,10 @@ impl CroconotSliders {
 			CharacterPartSlot::EarLeft | CharacterPartSlot::EarRight => {
 				Transform::from_scale(Vec3::new(self.ear_width, self.ear_height, 1.0))
 			}
+			// Snout length is along local Z (matches the fixed SNOUT_Z_SCALE on the mouth socket).
+			CharacterPartSlot::Mouth => {
+				Transform::from_scale(Vec3::new(1.0, 1.0, self.snout_length))
+			}
 			_ => Transform::IDENTITY,
 		}
 	}
@@ -210,7 +217,7 @@ impl CroconotSliders {
 			 hip_thickness={:.2} leg_thickness={:.2} buttocks_thickness={:.2} \
 			 waist_thickness={:.2} lower_trunk_thickness={:.2} \
 			 arm_length={:.2} arm_thickness={:.2} leg_length={:.2} \
-			 eye={:.2}x{:.2} tilt={:.1} ear={:.2}x{:.2}",
+			 eye={:.2}x{:.2} tilt={:.1} ear={:.2}x{:.2} snout_length={:.2}",
 			self.shoulder_width,
 			self.hip_width,
 			self.chest_thickness,
@@ -227,6 +234,7 @@ impl CroconotSliders {
 			self.eye_tilt,
 			self.ear_width,
 			self.ear_height,
+			self.snout_length,
 		)
 	}
 }

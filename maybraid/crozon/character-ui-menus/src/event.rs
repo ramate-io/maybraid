@@ -136,6 +136,7 @@ pub enum CharacterField {
 	MouthHeight,
 	EarWidth,
 	EarHeight,
+	SnoutLength,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
