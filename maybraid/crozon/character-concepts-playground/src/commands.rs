@@ -3,6 +3,7 @@
 pub mod braidman;
 pub mod brenal;
 pub mod caole;
+pub mod hars;
 pub mod claber;
 pub mod croconot;
 pub mod brodler;
@@ -16,6 +17,7 @@ use bevy::prelude::*;
 pub use braidman::Braidman;
 pub use brenal::Brenal;
 pub use caole::Caole;
+pub use hars::Hars;
 pub use claber::Claber;
 pub use croconot::Croconot;
 pub use brodler::Brodler;
@@ -52,6 +54,9 @@ pub enum ConceptsCommand {
 	/// Spawn or adjust the Caole quadruped concept preview.
 	#[command(subcommand)]
 	Caole(Caole),
+	/// Spawn or adjust the Hars horse-like quadruped concept preview.
+	#[command(subcommand)]
+	Hars(Hars),
 	/// Spawn or adjust the Claber oversized low-slung quadruped concept preview.
 	#[command(subcommand)]
 	Claber(Claber),
@@ -96,6 +101,7 @@ impl ConceptsCommand {
 			Self::Braidman(braidman) => braidman.react(commands),
 			Self::Brenal(brenal) => brenal.react(commands),
 			Self::Caole(caole) => caole.react(commands),
+			Self::Hars(hars) => hars.react(commands),
 			Self::Claber(claber) => claber.react(commands),
 			Self::Croconot(croconot) => croconot.react(commands),
 			Self::Brodler(brodler) => brodler.react(commands),

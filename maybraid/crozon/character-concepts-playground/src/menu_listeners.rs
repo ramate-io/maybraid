@@ -29,6 +29,9 @@ pub fn menu_to_preview_config(menu: &CharacterMenu) -> ConceptPreviewConfig {
 		ConceptSpecies::Caole => {
 			ConceptPreviewConfig::caole_with_animation(menu.caole_config(), menu.animation())
 		}
+		ConceptSpecies::Hars => {
+			ConceptPreviewConfig::hars_with_animation(menu.hars_config(), menu.animation())
+		}
 		ConceptSpecies::Claber => {
 			ConceptPreviewConfig::claber_with_animation(menu.claber_config(), menu.animation())
 		}
@@ -66,6 +69,9 @@ pub fn menu_from_preview_config(config: &ConceptPreviewConfig) -> CharacterMenu 
 		}
 		ConceptPreviewConfig::Caole { config, animation } => {
 			CharacterMenu::from_caole(config, *animation)
+		}
+		ConceptPreviewConfig::Hars { config, animation } => {
+			CharacterMenu::from_hars(config, *animation)
 		}
 		ConceptPreviewConfig::Claber { config, animation } => {
 			CharacterMenu::from_claber(config, *animation)
@@ -116,6 +122,7 @@ fn preview_species(species: ConceptSpecies) -> crate::preview::ConceptSpecies {
 		ConceptSpecies::Braidman => crate::preview::ConceptSpecies::Braidman,
 		ConceptSpecies::Brenal => crate::preview::ConceptSpecies::Brenal,
 		ConceptSpecies::Caole => crate::preview::ConceptSpecies::Caole,
+		ConceptSpecies::Hars => crate::preview::ConceptSpecies::Hars,
 		ConceptSpecies::Claber => crate::preview::ConceptSpecies::Claber,
 		ConceptSpecies::Croconot => crate::preview::ConceptSpecies::Croconot,
 		ConceptSpecies::Brodler => crate::preview::ConceptSpecies::Brodler,

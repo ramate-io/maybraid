@@ -11,6 +11,7 @@ use crozon_characters::{
 		braidman::BraidmanConfig,
 		brenal::BrenalConfig,
 		caole::CaoleConfig,
+		hars::HarsConfig,
 		claber::{ClaberColor, ClaberConfig},
 		croconot::CroconotConfig,
 		brodler::{BrodlerConfig, BrodlerHeadMesh, HornMesh},
@@ -40,6 +41,7 @@ pub enum ConceptSpecies {
 	Braidman,
 	Brenal,
 	Caole,
+	Hars,
 	Claber,
 	Croconot,
 	Brodler,
@@ -55,6 +57,7 @@ pub enum ConceptPreviewConfig {
 	Braidman { config: BraidmanConfig, animation: ConceptAnimation },
 	Brenal { config: BrenalConfig, animation: ConceptAnimation },
 	Caole { config: CaoleConfig, animation: ConceptAnimation },
+	Hars { config: HarsConfig, animation: ConceptAnimation },
 	Claber { config: ClaberConfig, animation: ConceptAnimation },
 	Croconot { config: CroconotConfig, animation: ConceptAnimation },
 	Brodler { config: BrodlerConfig, animation: ConceptAnimation },
@@ -77,6 +80,7 @@ impl ConceptPreviewConfig {
 			ConceptSpecies::Braidman => Self::braidman(BraidmanConfig::default_preview()),
 			ConceptSpecies::Brenal => Self::brenal(BrenalConfig::default_preview()),
 			ConceptSpecies::Caole => Self::caole(CaoleConfig::default_preview()),
+			ConceptSpecies::Hars => Self::hars(HarsConfig::default_preview()),
 			ConceptSpecies::Claber => Self::claber(ClaberConfig::default_preview()),
 			ConceptSpecies::Croconot => Self::croconot(CroconotConfig::default_preview()),
 			ConceptSpecies::Brodler => Self::brodler(BrodlerConfig::default_preview()),
@@ -93,6 +97,7 @@ impl ConceptPreviewConfig {
 			Self::Braidman { .. } => ConceptSpecies::Braidman,
 			Self::Brenal { .. } => ConceptSpecies::Brenal,
 			Self::Caole { .. } => ConceptSpecies::Caole,
+			Self::Hars { .. } => ConceptSpecies::Hars,
 			Self::Claber { .. } => ConceptSpecies::Claber,
 			Self::Croconot { .. } => ConceptSpecies::Croconot,
 			Self::Brodler { .. } => ConceptSpecies::Brodler,
@@ -126,6 +131,14 @@ impl ConceptPreviewConfig {
 
 	pub fn caole_with_animation(config: CaoleConfig, animation: ConceptAnimation) -> Self {
 		Self::Caole { config, animation }
+	}
+
+	pub fn hars(config: HarsConfig) -> Self {
+		Self::Hars { config, animation: ConceptAnimation::default() }
+	}
+
+	pub fn hars_with_animation(config: HarsConfig, animation: ConceptAnimation) -> Self {
+		Self::Hars { config, animation }
 	}
 
 	pub fn croconot(config: CroconotConfig) -> Self {
@@ -197,6 +210,7 @@ impl ConceptPreviewConfig {
 			Self::Braidman { config, .. } => config.resolve(),
 			Self::Brenal { config, .. } => config.resolve(),
 			Self::Caole { config, .. } => config.resolve(),
+			Self::Hars { config, .. } => config.resolve(),
 			Self::Claber { config, .. } => config.resolve(),
 			Self::Croconot { config, .. } => config.resolve(),
 			Self::Brodler { config, .. } => config.resolve(),
@@ -215,6 +229,7 @@ impl ConceptPreviewConfig {
 			}
 			Self::Brenal { config, .. } => config.status_label(),
 			Self::Caole { config, .. } => config.status_label(),
+			Self::Hars { config, .. } => config.status_label(),
 			Self::Claber { config, .. } => config.status_label(),
 			Self::Croconot { config, .. } => config.status_label(),
 			Self::Brodler { config, animation } => {
@@ -245,6 +260,7 @@ impl ConceptPreviewConfig {
 			}
 			Self::Brenal { config, .. } => format!("species=brenal {}", config.sync_key()),
 			Self::Caole { config, .. } => format!("species=caole {}", config.sync_key()),
+			Self::Hars { config, .. } => format!("species=hars {}", config.sync_key()),
 			Self::Claber { config, .. } => format!("species=claber {}", config.sync_key()),
 			Self::Croconot { config, .. } => format!("species=croconot {}", config.sync_key()),
 			Self::Brodler { config, animation } => {
@@ -289,6 +305,11 @@ impl ConceptPreviewConfig {
 			Self::Caole { config, .. } => format!(
 				"species=caole body={:?} mouth={:?} eye={:?}",
 				config.body,
+				config.mouth,
+				config.eye,
+			),
+			Self::Hars { config, .. } => format!(
+				"species=hars mouth={:?} eye={:?}",
 				config.mouth,
 				config.eye,
 			),
@@ -352,6 +373,7 @@ impl ConceptPreviewConfig {
 			Self::Braidman { animation, .. }
 			| Self::Brenal { animation, .. }
 			| Self::Caole { animation, .. }
+			| Self::Hars { animation, .. }
 			| Self::Claber { animation, .. }
 			| Self::Croconot { animation, .. }
 			| Self::Brodler { animation, .. }
@@ -442,6 +464,12 @@ pub enum PreviewTarget {
 	CaoleEar,
 	CaoleMouth,
 	CaoleTail,
+	HarsBody,
+	HarsHead,
+	HarsEye(EyeMesh),
+	HarsEar,
+	HarsMouth,
+	HarsTail,
 	ClaberBody,
 	ClaberHead,
 	ClaberHorns(crozon_characters::species::claber::ClaberHornMesh),
@@ -617,6 +645,31 @@ fn sync_live_preview(
 			let sliders = caole.sliders.clamped();
 			for (part, mut target, base, transform) in parts {
 				target.color = preview_color_caole(caole, target.target);
+				let Some(base) = base else {
+					continue;
+				};
+				let Some(mut transform) = transform else {
+					continue;
+				};
+				if !has_feature_transform(part.slot) {
+					continue;
+				}
+				let authored =
+					base.normalization.mul_transform(sliders.feature_transform(part.slot));
+				match base.socket {
+					Some(socket) => {
+						*transform = socket;
+						transform.scale *= authored.scale;
+						transform.rotation *= authored.rotation;
+					}
+					None => *transform = authored,
+				}
+			}
+		}
+		ConceptPreviewConfig::Hars { config: hars, .. } => {
+			let sliders = hars.sliders.clamped();
+			for (part, mut target, base, transform) in parts {
+				target.color = preview_color_hars(hars, target.target);
 				let Some(base) = base else {
 					continue;
 				};
@@ -873,6 +926,20 @@ fn preview_color_caole(config: &CaoleConfig, target: PreviewTarget) -> PreviewCo
 	})
 }
 
+fn preview_color_hars(config: &HarsConfig, target: PreviewTarget) -> PreviewColor {
+	use crozon_character_items::ItemColor;
+
+	let skin = config.colors.skin_color();
+	PreviewColor::Item(match target {
+		PreviewTarget::HarsBody => config.colors.body,
+		PreviewTarget::HarsHead | PreviewTarget::HarsEar => skin,
+		PreviewTarget::HarsEye(_) => config.colors.eyes,
+		PreviewTarget::HarsMouth => config.colors.mouth,
+		PreviewTarget::HarsTail => config.colors.tail,
+		_ => ItemColor::Natural,
+	})
+}
+
 fn preview_color_claber(config: &ClaberConfig, target: PreviewTarget) -> PreviewColor {
 	let skin = config.colors.skin_color();
 	PreviewColor::Claber(match target {
@@ -1051,6 +1118,13 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 					.mul_transform(sliders.feature_transform(part.slot))
 			}
 			ConceptPreviewConfig::Caole { config, .. } => {
+				let sliders = config.sliders.clamped();
+				part.asset
+					.normalization
+					.transform()
+					.mul_transform(sliders.feature_transform(part.slot))
+			}
+			ConceptPreviewConfig::Hars { config, .. } => {
 				let sliders = config.sliders.clamped();
 				part.asset
 					.normalization
@@ -1286,6 +1360,28 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 					| CharacterPartSlot::Horns => PreviewTarget::CaoleHead,
 				};
 				PreviewAssetTarget { target, color: preview_color_caole(config, target) }
+			}
+			ConceptPreviewConfig::Hars { config, .. } => {
+				let target = match part.slot {
+					CharacterPartSlot::BodyMesh => PreviewTarget::HarsBody,
+					CharacterPartSlot::HeadRig | CharacterPartSlot::HeadMesh => {
+						PreviewTarget::HarsHead
+					}
+					CharacterPartSlot::EyeLeft | CharacterPartSlot::EyeRight => {
+						PreviewTarget::HarsEye(config.eye)
+					}
+					CharacterPartSlot::EarLeft | CharacterPartSlot::EarRight => {
+						PreviewTarget::HarsEar
+					}
+					CharacterPartSlot::Mouth => PreviewTarget::HarsMouth,
+					CharacterPartSlot::Tail => PreviewTarget::HarsTail,
+					CharacterPartSlot::Nose
+					| CharacterPartSlot::Hair
+					| CharacterPartSlot::Clothing
+					| CharacterPartSlot::Spine
+					| CharacterPartSlot::Horns => PreviewTarget::HarsHead,
+				};
+				PreviewAssetTarget { target, color: preview_color_hars(config, target) }
 			}
 			ConceptPreviewConfig::Claber { config, .. } => {
 				let target = match part.slot {

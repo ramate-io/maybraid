@@ -80,10 +80,12 @@ pub struct ActiveRigPose {
 	pub pose: ResolvedRigPose,
 }
 
-/// Bind-pose bone scales captured once each named bone appears in the rig map.
+/// Bind-pose bone scales/rotations captured once each named bone appears in the
+/// rig map.
 #[derive(Component, Default)]
 pub struct RigBindScales {
 	pub scales: HashMap<String, Vec3>,
+	pub rotations: HashMap<String, Quat>,
 }
 
 /// Inserted by [`maintain_resolved_pose`] the first frame it applies
@@ -371,6 +373,7 @@ pub fn maintain_resolved_pose(
 		With<CharacterRig>,
 	>,
 	mut transforms: Query<&mut Transform>,
+	limb_animators: Query<(), With<crate::animation::LimbAnimator>>,
 ) {
 	for (entity, bone_map, active_pose, mut bind_scales, rig, pose_applied) in &mut rig_roots {
 		if !bone_map_ready(bone_map, rig.skeleton) {
@@ -378,29 +381,41 @@ pub fn maintain_resolved_pose(
 		}
 
 		for (bone_name, bone_entity) in &bone_map.by_name {
-			if bind_scales.scales.contains_key(bone_name) {
+			if bind_scales.scales.contains_key(bone_name)
+				&& bind_scales.rotations.contains_key(bone_name)
+			{
 				continue;
 			}
 			let Ok(transform) = transforms.get(*bone_entity) else {
 				continue;
 			};
-			// First sighting after load: treat current scale as bind snapshot.
-			bind_scales.scales.insert(bone_name.clone(), transform.scale);
+			// First sighting after load: treat current transform as bind snapshot.
+			bind_scales.scales.entry(bone_name.clone()).or_insert(transform.scale);
+			bind_scales.rotations.entry(bone_name.clone()).or_insert(transform.rotation);
 		}
 
 		for (bone_name, bone_entity) in &bone_map.by_name {
-			let multiplier = active_pose.pose.scale_for_bone(bone_name);
-			if multiplier == Vec3::ONE {
+			let scale_mult = active_pose.pose.scale_for_bone(bone_name);
+			let rot_offset = active_pose.pose.rotation_for_bone(bone_name);
+			if scale_mult == Vec3::ONE && rot_offset == Quat::IDENTITY {
 				continue;
 			}
-			let Some(bind_scale) = bind_scales.scales.get(bone_name) else {
-				continue;
-			};
 			let Ok(mut transform) = transforms.get_mut(*bone_entity) else {
 				continue;
 			};
 			// Reapply every frame because GLTF spawn can reset bone transforms.
-			transform.scale = *bind_scale * multiplier;
+			if scale_mult != Vec3::ONE {
+				if let Some(bind_scale) = bind_scales.scales.get(bone_name) {
+					transform.scale = *bind_scale * scale_mult;
+				}
+			}
+			// Skip bones owned by limb animation once their rest has been
+			// captured (after the first pre-animator apply of this pitch).
+			if rot_offset != Quat::IDENTITY && !limb_animators.contains(*bone_entity) {
+				if let Some(bind_rot) = bind_scales.rotations.get(bone_name) {
+					transform.rotation = *bind_rot * rot_offset;
+				}
+			}
 		}
 
 		// Landmarks mapped, bind scales snapshotted, pose written: proportions

@@ -8,6 +8,7 @@ pub mod brenal;
 pub mod caole;
 pub mod claber;
 pub mod croconot;
+pub mod hars;
 pub mod brodler;
 pub mod common;
 pub mod dui;

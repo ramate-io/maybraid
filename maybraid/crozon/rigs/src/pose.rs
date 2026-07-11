@@ -1,9 +1,10 @@
 //! Layered bind-pose composition for rig proportions.
 //!
-//! These types describe proportional effects as ordered scale multipliers on top
-//! of a captured bind pose. They complement [`super::RigPose`], which stores
-//! absolute per-bone transforms for animation and slider insertion; use this
-//! module when effects should compose as `bind * layer1 * layer2 * …`.
+//! These types describe proportional effects as ordered scale multipliers (and
+//! optional local rotations) on top of a captured bind pose. They complement
+//! [`super::RigPose`], which stores absolute per-bone transforms for animation
+//! and slider insertion; use this module when effects should compose as
+//! `bind * layer1 * layer2 * …`.
 
 use bevy::prelude::*;
 
@@ -39,16 +40,34 @@ impl BoneScale {
 	}
 }
 
+/// Local rotation offset for one named bone, composed onto the bind rotation.
+#[derive(Debug, Clone, PartialEq)]
+pub struct BoneRotation {
+	pub bone: &'static str,
+	pub rotation: Quat,
+}
+
+impl BoneRotation {
+	pub const fn new(bone: &'static str, rotation: Quat) -> Self {
+		Self { bone, rotation }
+	}
+
+	pub fn pitch_x(bone: &'static str, radians: f32) -> Self {
+		Self { bone, rotation: Quat::from_rotation_x(radians) }
+	}
+}
+
 /// A named proportional layer in the bind-pose composition stack.
 #[derive(Debug, Clone, PartialEq)]
 pub struct RigPoseLayer {
 	pub label: &'static str,
 	pub scales: Vec<BoneScale>,
+	pub rotations: Vec<BoneRotation>,
 }
 
 impl RigPoseLayer {
 	pub fn new(label: &'static str) -> Self {
-		Self { label, scales: Vec::new() }
+		Self { label, scales: Vec::new(), rotations: Vec::new() }
 	}
 
 	pub fn with_scale(mut self, scale: BoneScale) -> Self {
@@ -56,8 +75,17 @@ impl RigPoseLayer {
 		self
 	}
 
+	pub fn with_rotation(mut self, rotation: BoneRotation) -> Self {
+		self.rotations.push(rotation);
+		self
+	}
+
 	pub fn scales(&self) -> impl Iterator<Item = &BoneScale> {
 		self.scales.iter()
+	}
+
+	pub fn rotations(&self) -> impl Iterator<Item = &BoneRotation> {
+		self.rotations.iter()
 	}
 }
 
@@ -88,5 +116,14 @@ impl ResolvedRigPose {
 			.flat_map(|layer| layer.scales())
 			.filter(|scale| scale.bone == bone)
 			.fold(Vec3::ONE, |acc, scale| acc * scale.scale)
+	}
+
+	pub fn rotation_for_bone(&self, bone: &str) -> Quat {
+		// Same bone may appear in multiple layers; compose in stack order.
+		self.layers
+			.iter()
+			.flat_map(|layer| layer.rotations())
+			.filter(|rotation| rotation.bone == bone)
+			.fold(Quat::IDENTITY, |acc, rotation| acc * rotation.rotation)
 	}
 }

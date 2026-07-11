@@ -42,6 +42,17 @@ fn caole_config_round_trip() -> anyhow::Result<()> {
 }
 
 #[test]
+fn hars_config_round_trip() -> anyhow::Result<()> {
+	let config = crozon_characters::species::hars::HarsConfig::default_preview();
+	let menu = crate::characters::hars::HarsMenu::from(&config);
+	let restored = crozon_characters::species::hars::HarsConfig::from(&menu);
+	assert_eq!(config.gender, restored.gender);
+	assert_eq!(config.mouth, restored.mouth);
+	assert_eq!(config.sliders.shoulder_width, restored.sliders.shoulder_width);
+	Ok(())
+}
+
+#[test]
 fn claber_config_round_trip() -> anyhow::Result<()> {
 	let config = crozon_characters::species::claber::ClaberConfig::default_preview();
 	let menu = crate::characters::claber::ClaberMenu::from(&config);
@@ -168,7 +179,7 @@ fn character_menu_lowers_to_species_select_tree() -> anyhow::Result<()> {
 		anyhow::bail!("expected a species SectionSelect at the root");
 	};
 	assert_eq!(*label, "Species");
-	assert_eq!(choices.len(), 9);
+	assert_eq!(choices.len(), 12);
 	assert!(choices[0].selected, "default species should be braidman");
 	// Braidman: presets, body, head & features, hair, clothing, animation.
 	assert_eq!(children.len(), 6);

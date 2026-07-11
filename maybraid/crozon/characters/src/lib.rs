@@ -18,5 +18,5 @@ pub use assembly::{
 };
 pub use assets::{AssetFacing, AssetNormalization, AssetPath, AuthoredAnchor};
 pub use concepts::ConceptAnimation;
-pub use crozon_rigs::{BoneScale, ResolvedRigPose, RigPoseLayer};
+pub use crozon_rigs::{BoneRotation, BoneScale, ResolvedRigPose, RigPoseLayer};
 pub use presets::{BuildPreset, GenderPreset};
