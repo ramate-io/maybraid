@@ -73,7 +73,7 @@ impl ClaberAssets {
 			CharacterAsset::new(
 				"PronogradeHeadRig",
 				PRONOGRADE_HEAD_RIG,
-				AssetNormalization::base_y(0.2),
+				AssetNormalization::base_y(0.35),
 			),
 			SkinTarget::OwnRig,
 			Some(SocketAttachment {
@@ -104,7 +104,7 @@ impl ClaberAssets {
 			SkinTarget::HeadRig,
 			Some(Self::head_socket(
 				"eye_socket.L",
-				Transform::from_translation(Vec3::new(0.0, -0.05, -0.12)),
+				Transform::from_translation(Vec3::new(0.2, -0.05, -0.3)),
 			)),
 		)
 	}
@@ -116,7 +116,7 @@ impl ClaberAssets {
 			SkinTarget::HeadRig,
 			Some(Self::head_socket(
 				"eye_socket.R",
-				Self::mirror_x().with_translation(Vec3::new(0.0, -0.05, -0.12)),
+				Self::mirror_x().with_translation(Vec3::new(-0.2, -0.05, -0.3)),
 			)),
 		)
 	}
@@ -182,7 +182,8 @@ impl ClaberAssets {
 			SkinTarget::HeadRig,
 			Some(Self::head_socket(
 				"crown_socket",
-				Transform::from_scale(Vec3::splat(CROWN_SCALE)),
+				Transform::from_scale(Vec3::splat(CROWN_SCALE))
+					.with_translation(Vec3::new(0.0, -0.2, 0.05)),
 			)),
 		)
 	}
