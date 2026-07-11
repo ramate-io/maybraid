@@ -21,8 +21,8 @@ use crate::{
 pub use crate::species::common::EyeMesh;
 
 /// Lerodon snout scale on the pronograde mouth socket (from Lero, enlarged for Croconot).
-const SNOUT_XY_SCALE: f32 = 1.25;
-const SNOUT_Z_SCALE: f32 = 3.2;
+const SNOUT_XY_SCALE: f32 = 2.25;
+const SNOUT_Z_SCALE: f32 = 7.2;
 
 /// Species-local resolver for Croconot asset choices.
 pub struct CroconotAssets;
@@ -97,7 +97,7 @@ impl CroconotAssets {
 	fn eye_left(eye: EyeMesh) -> ResolvedCharacterPart {
 		ResolvedCharacterPart::new(
 			CharacterPartSlot::EyeLeft,
-			CharacterAsset::new(eye.label(), eye.path(), AssetNormalization::centroid(0.2)),
+			CharacterAsset::new(eye.label(), eye.path(), AssetNormalization::centroid(0.4)),
 			SkinTarget::HeadRig,
 			Some(Self::head_socket(
 				"eye_socket.L",
@@ -109,7 +109,7 @@ impl CroconotAssets {
 	fn eye_right(eye: EyeMesh) -> ResolvedCharacterPart {
 		ResolvedCharacterPart::new(
 			CharacterPartSlot::EyeRight,
-			CharacterAsset::new(eye.label(), eye.path(), AssetNormalization::centroid(0.2)),
+			CharacterAsset::new(eye.label(), eye.path(), AssetNormalization::centroid(0.4)),
 			SkinTarget::HeadRig,
 			Some(Self::head_socket(
 				"eye_socket.R",

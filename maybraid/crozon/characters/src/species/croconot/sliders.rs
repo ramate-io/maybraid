@@ -11,6 +11,7 @@ pub struct CroconotSliders {
 	pub shoulder_width: f32,
 	pub hip_width: f32,
 	pub chest_thickness: f32,
+	pub chest_width: f32,
 	pub hip_thickness: f32,
 	pub leg_thickness: f32,
 	pub buttocks_thickness: f32,
@@ -32,6 +33,7 @@ impl Default for CroconotSliders {
 			shoulder_width: 1.0,
 			hip_width: 1.0,
 			chest_thickness: 1.0,
+			chest_width: 1.0,
 			hip_thickness: 1.0,
 			leg_thickness: 1.0,
 			buttocks_thickness: 1.0,
@@ -53,6 +55,7 @@ impl CroconotSliders {
 	pub fn clamped(mut self) -> Self {
 		self.shoulder_width = self.shoulder_width.clamp(0.8, 1.2);
 		self.hip_width = self.hip_width.clamp(0.8, 1.4);
+		self.chest_width = self.chest_width.clamp(0.6, 1.0);
 		self.chest_thickness = self.chest_thickness.clamp(0.8, 1.2);
 		self.hip_thickness = self.hip_thickness.clamp(0.8, 1.2);
 		self.leg_thickness = self.leg_thickness.clamp(0.8, 1.2);
@@ -174,6 +177,12 @@ impl CroconotSliders {
 			.with_scale(BoneScale::length("posterior_thigh.R", value))
 			.with_scale(BoneScale::length("posterior_shin.L", value))
 			.with_scale(BoneScale::length("posterior_shin.R", value))
+	}
+
+	pub fn apply_chest_width(layer: RigPoseLayer, value: f32) -> RigPoseLayer {
+		layer
+			.with_scale(BoneScale::uniform("lower_chest_width.L", value))
+			.with_scale(BoneScale::uniform("lower_chest_width.R", value))
 	}
 
 	pub fn feature_transform(self, slot: CharacterPartSlot) -> Transform {
