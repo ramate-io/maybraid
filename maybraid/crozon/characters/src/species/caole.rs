@@ -1,12 +1,10 @@
-//! Claber species definition.
+//! Caole species definition.
 //!
-//! Large low-slung quadruped: thinned Gumbus body on the quadruped rig (≈2×
-//! croconot midback span, short low limbs), Caole head, Robrek snout
-//! (shorter/wider), flank ears, lerodon tail, and a prominent harrowed crown.
+//! Quadruped grazer: Gumbus or Rumbler body on the quadruped rig, Cowder head,
+//! flank ears, cat tail, and cow snout. Head mesh is Caole or Cowder.
 
 pub mod assets;
 pub mod bsn;
-pub mod palette;
 pub mod pose;
 pub mod presets;
 pub mod sliders;
@@ -18,40 +16,38 @@ use crate::{
 };
 
 use crate::species::common::EyeMesh;
-use assets::ClaberAssets;
-use sliders::ClaberSliders;
+use assets::CaoleAssets;
+use crozon_character_items::ItemColor;
+use sliders::CaoleSliders;
 
-pub use assets::{ClaberBodyMesh, ClaberHeadMesh, ClaberHornMesh, ClaberMouthMesh};
-pub use palette::ClaberColor;
+pub use assets::{CaoleBodyMesh, CaoleMouthMesh};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ClaberColors {
-	pub body: ClaberColor,
-	pub head: ClaberColor,
-	pub eyes: ClaberColor,
-	pub ears: ClaberColor,
-	pub mouth: ClaberColor,
-	pub tail: ClaberColor,
-	pub horns: ClaberColor,
+pub struct CaoleColors {
+	pub body: ItemColor,
+	pub head: ItemColor,
+	pub eyes: ItemColor,
+	pub ears: ItemColor,
+	pub mouth: ItemColor,
+	pub tail: ItemColor,
 }
 
-impl Default for ClaberColors {
+impl Default for CaoleColors {
 	fn default() -> Self {
-		let body = ClaberColor::SoftPurple;
+		let body = ItemColor::Natural;
 		Self {
 			body,
 			head: body,
-			eyes: ClaberColor::SoftGold,
+			eyes: ItemColor::Blue,
 			ears: body,
-			mouth: ClaberColor::SoftRed,
+			mouth: ItemColor::Natural,
 			tail: body,
-			horns: ClaberColor::SoftGold,
 		}
 	}
 }
 
-impl ClaberColors {
-	pub fn skin_color(&self) -> ClaberColor {
+impl CaoleColors {
+	pub fn skin_color(&self) -> ItemColor {
 		self.body
 	}
 
@@ -64,30 +60,32 @@ impl ClaberColors {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct ClaberConfig {
+pub struct CaoleConfig {
 	pub gender: GenderPreset,
 	pub build: BuildPreset,
-	pub horns: ClaberHornMesh,
+	pub body: CaoleBodyMesh,
+	pub mouth: CaoleMouthMesh,
 	pub eye: EyeMesh,
-	pub colors: ClaberColors,
-	pub sliders: ClaberSliders,
+	pub colors: CaoleColors,
+	pub sliders: CaoleSliders,
 }
 
-impl Default for ClaberConfig {
+impl Default for CaoleConfig {
 	fn default() -> Self {
 		Self::default_preview()
 	}
 }
 
-impl ClaberConfig {
+impl CaoleConfig {
 	pub fn default_preview() -> Self {
 		Self {
 			gender: GenderPreset::Neutral,
 			build: BuildPreset::Average,
-			horns: ClaberHornMesh::HarrowedCrown,
+			body: CaoleBodyMesh::Gumbus,
+			mouth: CaoleMouthMesh::Cow,
 			eye: EyeMesh::Standard,
-			colors: ClaberColors::default(),
-			sliders: ClaberSliders::default(),
+			colors: CaoleColors::default(),
+			sliders: CaoleSliders::default(),
 		}
 	}
 
@@ -101,17 +99,18 @@ impl ClaberConfig {
 		self
 	}
 
-	pub fn with_sliders(mut self, sliders: ClaberSliders) -> Self {
+	pub fn with_sliders(mut self, sliders: CaoleSliders) -> Self {
 		self.sliders = sliders;
 		self
 	}
 
 	pub fn status_label(&self) -> String {
 		format!(
-			"claber gender={} build={} horns={} eye={} colors=body:{} head:{} eyes:{} ears:{} mouth:{} tail:{} horns_color:{} sliders={}",
+			"caole gender={} build={} body={} mouth={} eye={} colors=body:{} head:{} eyes:{} ears:{} mouth:{} tail:{} sliders={}",
 			self.gender.label(),
 			self.build.label(),
-			self.horns.label(),
+			self.body.label(),
+			self.mouth.label(),
 			self.eye.label(),
 			self.colors.body.label(),
 			self.colors.head.label(),
@@ -119,7 +118,6 @@ impl ClaberConfig {
 			self.colors.ears.label(),
 			self.colors.mouth.label(),
 			self.colors.tail.label(),
-			self.colors.horns.label(),
 			self.sliders.status_label(),
 		)
 	}
@@ -129,12 +127,12 @@ impl ClaberConfig {
 	}
 }
 
-impl SpeciesConfig for ClaberConfig {
+impl SpeciesConfig for CaoleConfig {
 	fn species_name(&self) -> &'static str {
-		"claber"
+		"caole"
 	}
 
 	fn resolve(&self) -> ResolvedCharacterAssembly {
-		ClaberAssets::resolve(self)
+		CaoleAssets::resolve(self)
 	}
 }

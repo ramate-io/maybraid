@@ -3,12 +3,12 @@ use character_ui_menu::{
 	AssetSingleSelect, CameraFocus, FocusRig, IdentifiedAsset, MenuComponent, MenuNode,
 	PreviewColor, Section, SingleSelect, SwatchSingleSelect,
 };
+use crozon_character_items::ItemColor;
 use crozon_characters::{
 	presets::{BuildPreset, GenderPreset},
 	species::{
-		claber::{
-			sliders::ClaberSliders, ClaberBodyMesh, ClaberColor, ClaberColors, ClaberConfig,
-			ClaberHeadMesh, ClaberHornMesh, ClaberMouthMesh,
+		caole::{
+			sliders::CaoleSliders, CaoleBodyMesh, CaoleColors, CaoleConfig, CaoleMouthMesh,
 		},
 		common::EyeMesh,
 	},
@@ -17,31 +17,31 @@ use crozon_characters::{
 
 use crate::{
 	event::{AssetValue, CharacterField, MenuEvent, SwatchValue},
-	focus::{CROWN_FOCUS, EYE_FOCUS, HEAD_ROOT_FOCUS, MOUTH_FOCUS},
+	focus::{EYE_FOCUS, MOUTH_FOCUS},
 };
 
-/// Claber oversized low-slung quadruped body framing; also the species' default camera focus.
+/// Caole quadruped body framing; also the species' default camera focus.
 pub const BODY_FOCUS: CameraFocus = CameraFocus::new(
 	FocusRig::Body,
 	"back_ridge",
-	Vec3::new(4.0, 1.2, 7.0),
-	Vec3::new(2.0, 0.0, 0.0),
+	Vec3::new(2.0, 1.0, 4.0),
+	Vec3::new(1.0, 0.0, 0.0),
 );
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum ClaberAnimationClip {
+pub enum CaoleAnimationClip {
 	Still,
 	Run,
 	Gallop,
 }
 
-impl character_ui_menu::ListValues for ClaberAnimationClip {
+impl character_ui_menu::ListValues for CaoleAnimationClip {
 	fn values() -> &'static [Self] {
 		&[Self::Still, Self::Run, Self::Gallop]
 	}
 }
 
-impl character_ui_menu::LabelOption for ClaberAnimationClip {
+impl character_ui_menu::LabelOption for CaoleAnimationClip {
 	fn label(&self) -> &'static str {
 		match self {
 			Self::Still => "still",
@@ -51,7 +51,7 @@ impl character_ui_menu::LabelOption for ClaberAnimationClip {
 	}
 }
 
-impl character_ui_menu::AssetOption for ClaberAnimationClip {
+impl character_ui_menu::AssetOption for CaoleAnimationClip {
 	fn asset(&self) -> IdentifiedAsset {
 		let label = match self {
 			Self::Still => "still",
@@ -62,17 +62,17 @@ impl character_ui_menu::AssetOption for ClaberAnimationClip {
 	}
 }
 
-impl From<ClaberAnimationClip> for ConceptAnimation {
-	fn from(value: ClaberAnimationClip) -> Self {
+impl From<CaoleAnimationClip> for ConceptAnimation {
+	fn from(value: CaoleAnimationClip) -> Self {
 		match value {
-			ClaberAnimationClip::Still => ConceptAnimation::Still,
-			ClaberAnimationClip::Run => ConceptAnimation::Run,
-			ClaberAnimationClip::Gallop => ConceptAnimation::Gallop,
+			CaoleAnimationClip::Still => ConceptAnimation::Still,
+			CaoleAnimationClip::Run => ConceptAnimation::Run,
+			CaoleAnimationClip::Gallop => ConceptAnimation::Gallop,
 		}
 	}
 }
 
-impl From<ConceptAnimation> for ClaberAnimationClip {
+impl From<ConceptAnimation> for CaoleAnimationClip {
 	fn from(value: ConceptAnimation) -> Self {
 		match value {
 			ConceptAnimation::Run => Self::Run,
@@ -83,19 +83,19 @@ impl From<ConceptAnimation> for ClaberAnimationClip {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct ClaberAnimationMenu {
-	pub clip: AssetSingleSelect<ClaberAnimationClip>,
+pub struct CaoleAnimationMenu {
+	pub clip: AssetSingleSelect<CaoleAnimationClip>,
 }
 
-impl ClaberAnimationMenu {
+impl CaoleAnimationMenu {
 	pub fn new() -> Self {
 		Self {
-			clip: AssetSingleSelect::new(ClaberAnimationClip::Still).with_camera_focus(BODY_FOCUS),
+			clip: AssetSingleSelect::new(CaoleAnimationClip::Still).with_camera_focus(BODY_FOCUS),
 		}
 	}
 }
 
-impl MenuComponent<MenuEvent> for ClaberAnimationMenu {
+impl MenuComponent<MenuEvent> for CaoleAnimationMenu {
 	fn menu_node(&self) -> MenuNode<MenuEvent> {
 		MenuNode::asset_grid("Clip", &self.clip, PreviewColor::WHITE, |value| {
 			MenuEvent::SetAsset(
@@ -107,13 +107,13 @@ impl MenuComponent<MenuEvent> for ClaberAnimationMenu {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct ClaberPresetsMenu {
+pub struct CaolePresetsMenu {
 	pub gender: SingleSelect<GenderPreset>,
 	pub build: SingleSelect<BuildPreset>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct ClaberBodyProportionSliders {
+pub struct CaoleBodyProportionSliders {
 	pub shoulder_width: character_ui_menu::Slider,
 	pub hip_width: character_ui_menu::Slider,
 	pub chest_thickness: character_ui_menu::Slider,
@@ -128,50 +128,46 @@ pub struct ClaberBodyProportionSliders {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct ClaberHeadFeatureSliders {
+pub struct CaoleHeadFeatureSliders {
 	pub eye_width: character_ui_menu::Slider,
 	pub eye_height: character_ui_menu::Slider,
 	pub eye_tilt: character_ui_menu::Slider,
 	pub ear_width: character_ui_menu::Slider,
 	pub ear_height: character_ui_menu::Slider,
-	pub snout_length: character_ui_menu::Slider,
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct ClaberBodyMenu {
-	pub body: AssetSingleSelect<ClaberBodyMesh>,
-	pub sliders: ClaberBodyProportionSliders,
-	pub color: SwatchSingleSelect<ClaberColor>,
-	pub tail_color: SwatchSingleSelect<ClaberColor>,
+pub struct CaoleBodyMenu {
+	pub body: AssetSingleSelect<CaoleBodyMesh>,
+	pub sliders: CaoleBodyProportionSliders,
+	pub color: SwatchSingleSelect<ItemColor>,
+	pub tail_color: SwatchSingleSelect<ItemColor>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct ClaberHeadFeaturesMenu {
-	pub head: AssetSingleSelect<ClaberHeadMesh>,
-	pub horns: SingleSelect<ClaberHornMesh>,
-	pub horn_color: SwatchSingleSelect<ClaberColor>,
+pub struct CaoleHeadFeaturesMenu {
 	pub eye: AssetSingleSelect<EyeMesh>,
-	pub snout: AssetSingleSelect<ClaberMouthMesh>,
-	pub eye_color: SwatchSingleSelect<ClaberColor>,
-	pub mouth_color: SwatchSingleSelect<ClaberColor>,
-	pub feature_sliders: ClaberHeadFeatureSliders,
-	pub body_color: ClaberColor,
+	pub snout: AssetSingleSelect<CaoleMouthMesh>,
+	pub eye_color: SwatchSingleSelect<ItemColor>,
+	pub mouth_color: SwatchSingleSelect<ItemColor>,
+	pub feature_sliders: CaoleHeadFeatureSliders,
+	pub body_color: ItemColor,
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct ClaberMenu {
-	pub presets: Section<ClaberPresetsMenu>,
-	pub body: Section<ClaberBodyMenu>,
-	pub head_features: Section<ClaberHeadFeaturesMenu>,
-	pub animation: Section<ClaberAnimationMenu>,
+pub struct CaoleMenu {
+	pub presets: Section<CaolePresetsMenu>,
+	pub body: Section<CaoleBodyMenu>,
+	pub head_features: Section<CaoleHeadFeaturesMenu>,
+	pub animation: Section<CaoleAnimationMenu>,
 }
 
 fn slider(value: f32, min: f32, max: f32, step: f32) -> character_ui_menu::Slider {
 	character_ui_menu::Slider::new(value, min, max, step)
 }
 
-impl ClaberBodyProportionSliders {
-	pub fn from_config(sliders: ClaberSliders) -> Self {
+impl CaoleBodyProportionSliders {
+	pub fn from_config(sliders: CaoleSliders) -> Self {
 		Self {
 			shoulder_width: slider(sliders.shoulder_width, 0.8, 1.2, 0.05),
 			hip_width: slider(sliders.hip_width, 0.8, 1.4, 0.05),
@@ -187,7 +183,7 @@ impl ClaberBodyProportionSliders {
 		}
 	}
 
-	pub fn write_config(&self, sliders: &mut ClaberSliders) {
+	pub fn write_config(&self, sliders: &mut CaoleSliders) {
 		sliders.shoulder_width = self.shoulder_width.value;
 		sliders.hip_width = self.hip_width.value;
 		sliders.chest_thickness = self.chest_thickness.value;
@@ -202,7 +198,7 @@ impl ClaberBodyProportionSliders {
 	}
 }
 
-impl MenuComponent<MenuEvent> for ClaberBodyProportionSliders {
+impl MenuComponent<MenuEvent> for CaoleBodyProportionSliders {
 	fn menu_node(&self) -> MenuNode<MenuEvent> {
 		MenuNode::fragment([
 			MenuNode::slider("Shoulder Width", &self.shoulder_width, |delta| {
@@ -242,29 +238,27 @@ impl MenuComponent<MenuEvent> for ClaberBodyProportionSliders {
 	}
 }
 
-impl ClaberHeadFeatureSliders {
-	pub fn from_config(sliders: ClaberSliders) -> Self {
+impl CaoleHeadFeatureSliders {
+	pub fn from_config(sliders: CaoleSliders) -> Self {
 		Self {
 			eye_width: slider(sliders.eye_width, 0.8, 1.2, 0.05),
 			eye_height: slider(sliders.eye_height, 0.8, 1.2, 0.05),
 			eye_tilt: slider(sliders.eye_tilt, -30.0, 30.0, 0.5),
 			ear_width: slider(sliders.ear_width, 0.8, 1.2, 0.05),
 			ear_height: slider(sliders.ear_height, 0.8, 1.2, 0.05),
-			snout_length: slider(sliders.snout_length, 0.8, 1.2, 0.05),
 		}
 	}
 
-	pub fn write_config(&self, sliders: &mut ClaberSliders) {
+	pub fn write_config(&self, sliders: &mut CaoleSliders) {
 		sliders.eye_width = self.eye_width.value;
 		sliders.eye_height = self.eye_height.value;
 		sliders.eye_tilt = self.eye_tilt.value;
 		sliders.ear_width = self.ear_width.value;
 		sliders.ear_height = self.ear_height.value;
-		sliders.snout_length = self.snout_length.value;
 	}
 }
 
-impl MenuComponent<MenuEvent> for ClaberHeadFeatureSliders {
+impl MenuComponent<MenuEvent> for CaoleHeadFeatureSliders {
 	fn menu_node(&self) -> MenuNode<MenuEvent> {
 		MenuNode::fragment([
 			MenuNode::slider("Eye Width", &self.eye_width, |delta| {
@@ -282,29 +276,25 @@ impl MenuComponent<MenuEvent> for ClaberHeadFeatureSliders {
 			MenuNode::slider("Ear Height", &self.ear_height, |delta| {
 				MenuEvent::SliderDelta(CharacterField::EarHeight, delta)
 			}),
-			MenuNode::slider("Snout Length", &self.snout_length, |delta| {
-				MenuEvent::SliderDelta(CharacterField::SnoutLength, delta)
-			}),
 		])
 	}
 }
 
-impl From<&ClaberConfig> for ClaberMenu {
-	fn from(config: &ClaberConfig) -> Self {
+impl From<&CaoleConfig> for CaoleMenu {
+	fn from(config: &CaoleConfig) -> Self {
 		Self {
 			presets: Section::new(
 				"Presets",
-				ClaberPresetsMenu {
+				CaolePresetsMenu {
 					gender: SingleSelect::new(config.gender),
 					build: SingleSelect::new(config.build),
 				},
 			),
 			body: Section::new(
 				"Body",
-				ClaberBodyMenu {
-					body: AssetSingleSelect::new(ClaberBodyMesh::Gumbus)
-						.with_camera_focus(BODY_FOCUS),
-					sliders: ClaberBodyProportionSliders::from_config(config.sliders),
+				CaoleBodyMenu {
+					body: AssetSingleSelect::new(config.body).with_camera_focus(BODY_FOCUS),
+					sliders: CaoleBodyProportionSliders::from_config(config.sliders),
 					color: SwatchSingleSelect::new(config.colors.body),
 					tail_color: SwatchSingleSelect::new(config.colors.tail),
 				},
@@ -312,44 +302,39 @@ impl From<&ClaberConfig> for ClaberMenu {
 			.with_camera_focus(BODY_FOCUS),
 			head_features: Section::new(
 				"Head & Features",
-				ClaberHeadFeaturesMenu {
-					head: AssetSingleSelect::new(ClaberHeadMesh::Caole)
-						.with_camera_focus(HEAD_ROOT_FOCUS),
-					horns: SingleSelect::new(config.horns).with_camera_focus(CROWN_FOCUS),
-					horn_color: SwatchSingleSelect::new(config.colors.horns),
+				CaoleHeadFeaturesMenu {
 					eye: AssetSingleSelect::new(config.eye).with_camera_focus(EYE_FOCUS),
-					snout: AssetSingleSelect::new(ClaberMouthMesh::Robrek)
-						.with_camera_focus(MOUTH_FOCUS),
+					snout: AssetSingleSelect::new(config.mouth).with_camera_focus(MOUTH_FOCUS),
 					eye_color: SwatchSingleSelect::new(config.colors.eyes),
 					mouth_color: SwatchSingleSelect::new(config.colors.mouth),
-					feature_sliders: ClaberHeadFeatureSliders::from_config(config.sliders),
+					feature_sliders: CaoleHeadFeatureSliders::from_config(config.sliders),
 					body_color: config.colors.body,
 				},
 			),
-			animation: Section::new("Animation", ClaberAnimationMenu::new()),
+			animation: Section::new("Animation", CaoleAnimationMenu::new()),
 		}
 	}
 }
 
-impl From<&ClaberMenu> for ClaberConfig {
-	fn from(menu: &ClaberMenu) -> Self {
+impl From<&CaoleMenu> for CaoleConfig {
+	fn from(menu: &CaoleMenu) -> Self {
 		let body_color = menu.body.value.color.value;
 		Self {
 			gender: menu.presets.value.gender.value,
 			build: menu.presets.value.build.value,
-			horns: menu.head_features.value.horns.value,
+			body: menu.body.value.body.value,
+			mouth: menu.head_features.value.snout.value,
 			eye: menu.head_features.value.eye.value,
-			colors: ClaberColors {
+			colors: CaoleColors {
 				body: body_color,
 				head: body_color,
 				eyes: menu.head_features.value.eye_color.value,
 				ears: body_color,
 				mouth: menu.head_features.value.mouth_color.value,
 				tail: menu.body.value.tail_color.value,
-				horns: menu.head_features.value.horn_color.value,
 			},
 			sliders: {
-				let mut sliders = ClaberSliders::default();
+				let mut sliders = CaoleSliders::default();
 				menu.body.value.sliders.write_config(&mut sliders);
 				menu.head_features.value.feature_sliders.write_config(&mut sliders);
 				sliders.clamped()
@@ -358,7 +343,7 @@ impl From<&ClaberMenu> for ClaberConfig {
 	}
 }
 
-impl MenuComponent<MenuEvent> for ClaberPresetsMenu {
+impl MenuComponent<MenuEvent> for CaolePresetsMenu {
 	fn menu_node(&self) -> MenuNode<MenuEvent> {
 		MenuNode::fragment([
 			MenuNode::cycle("Gender", &self.gender, |delta| {
@@ -371,7 +356,7 @@ impl MenuComponent<MenuEvent> for ClaberPresetsMenu {
 	}
 }
 
-impl MenuComponent<MenuEvent> for ClaberBodyMenu {
+impl MenuComponent<MenuEvent> for CaoleBodyMenu {
 	fn menu_node(&self) -> MenuNode<MenuEvent> {
 		MenuNode::fragment([
 			MenuNode::asset_grid(
@@ -379,33 +364,23 @@ impl MenuComponent<MenuEvent> for ClaberBodyMenu {
 				&self.body,
 				PreviewColor::of(self.color.value),
 				|value| {
-					MenuEvent::SetAsset(CharacterField::ClaberBody, AssetValue::ClaberBody(value))
+					MenuEvent::SetAsset(CharacterField::CaoleBody, AssetValue::CaoleBody(value))
 				},
 			),
 			self.sliders.menu_node(),
 			MenuNode::swatch("Body Color", &self.color, |color| {
-				MenuEvent::SetSwatch(CharacterField::BodyColor, SwatchValue::Claber(color))
+				MenuEvent::SetSwatch(CharacterField::BodyColor, SwatchValue::Item(color))
 			}),
 			MenuNode::swatch("Tail Color", &self.tail_color, |color| {
-				MenuEvent::SetSwatch(CharacterField::TailColor, SwatchValue::Claber(color))
+				MenuEvent::SetSwatch(CharacterField::TailColor, SwatchValue::Item(color))
 			}),
 		])
 	}
 }
 
-impl MenuComponent<MenuEvent> for ClaberHeadFeaturesMenu {
+impl MenuComponent<MenuEvent> for CaoleHeadFeaturesMenu {
 	fn menu_node(&self) -> MenuNode<MenuEvent> {
-		let base = PreviewColor::of(self.body_color);
 		MenuNode::fragment([
-			MenuNode::asset_grid("Head", &self.head, base, |value| {
-				MenuEvent::SetAsset(CharacterField::ClaberHead, AssetValue::ClaberHead(value))
-			}),
-			MenuNode::cycle("Horns", &self.horns, |delta| {
-				MenuEvent::Cycle(CharacterField::ClaberHorns, delta)
-			}),
-			MenuNode::swatch("Horn Color", &self.horn_color, |color| {
-				MenuEvent::SetSwatch(CharacterField::HornColor, SwatchValue::Claber(color))
-			}),
 			MenuNode::asset_grid(
 				"Eyes",
 				&self.eye,
@@ -413,25 +388,25 @@ impl MenuComponent<MenuEvent> for ClaberHeadFeaturesMenu {
 				|value| MenuEvent::SetAsset(CharacterField::Eye, AssetValue::Eye(value)),
 			),
 			MenuNode::swatch("Eye Color", &self.eye_color, |color| {
-				MenuEvent::SetSwatch(CharacterField::EyeColor, SwatchValue::Claber(color))
+				MenuEvent::SetSwatch(CharacterField::EyeColor, SwatchValue::Item(color))
 			}),
 			MenuNode::asset_grid(
 				"Snout",
 				&self.snout,
 				PreviewColor::of(self.mouth_color.value),
 				|value| {
-					MenuEvent::SetAsset(CharacterField::ClaberMouth, AssetValue::ClaberMouth(value))
+					MenuEvent::SetAsset(CharacterField::CaoleMouth, AssetValue::CaoleMouth(value))
 				},
 			),
 			MenuNode::swatch("Mouth Color", &self.mouth_color, |color| {
-				MenuEvent::SetSwatch(CharacterField::MouthColor, SwatchValue::Claber(color))
+				MenuEvent::SetSwatch(CharacterField::MouthColor, SwatchValue::Item(color))
 			}),
 			self.feature_sliders.menu_node(),
 		])
 	}
 }
 
-impl MenuComponent<MenuEvent> for ClaberMenu {
+impl MenuComponent<MenuEvent> for CaoleMenu {
 	fn menu_node(&self) -> MenuNode<MenuEvent> {
 		MenuNode::fragment([
 			MenuNode::section(self.presets.label, self.presets.value.menu_node()),
@@ -442,9 +417,9 @@ impl MenuComponent<MenuEvent> for ClaberMenu {
 	}
 }
 
-impl ClaberMenu {
+impl CaoleMenu {
 	pub fn with_animation(mut self, animation: ConceptAnimation) -> Self {
-		self.animation.value.clip.value = ClaberAnimationClip::from(animation);
+		self.animation.value.clip.value = CaoleAnimationClip::from(animation);
 		self
 	}
 
@@ -454,27 +429,17 @@ impl ClaberMenu {
 
 	pub fn camera_focus_for_field(&self, field: CharacterField) -> Option<CameraFocus> {
 		match field {
-			CharacterField::ClaberBody => self.body.value.body.camera_focus,
-			CharacterField::ClaberHead => self.head_features.value.head.camera_focus,
-			CharacterField::ClaberHorns => {
-				if self.head_features.value.horns.value == ClaberHornMesh::None {
-					self.head_features.value.head.camera_focus
-				} else {
-					self.head_features.value.horns.camera_focus
-				}
-			}
+			CharacterField::CaoleBody => self.body.value.body.camera_focus,
 			CharacterField::Eye => self.head_features.value.eye.camera_focus,
-			CharacterField::ClaberMouth | CharacterField::SnoutLength => {
-				self.head_features.value.snout.camera_focus
-			}
+			CharacterField::CaoleMouth => self.head_features.value.snout.camera_focus,
 			CharacterField::Animation => Some(BODY_FOCUS),
 			_ => None,
 		}
 	}
 }
 
-impl Default for ClaberMenu {
+impl Default for CaoleMenu {
 	fn default() -> Self {
-		Self::from(&ClaberConfig::default_preview())
+		Self::from(&CaoleConfig::default_preview())
 	}
 }

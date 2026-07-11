@@ -26,6 +26,9 @@ pub fn menu_to_preview_config(menu: &CharacterMenu) -> ConceptPreviewConfig {
 		ConceptSpecies::Brenal => {
 			ConceptPreviewConfig::brenal_with_animation(menu.brenal_config(), menu.animation())
 		}
+		ConceptSpecies::Caole => {
+			ConceptPreviewConfig::caole_with_animation(menu.caole_config(), menu.animation())
+		}
 		ConceptSpecies::Claber => {
 			ConceptPreviewConfig::claber_with_animation(menu.claber_config(), menu.animation())
 		}
@@ -60,6 +63,9 @@ pub fn menu_from_preview_config(config: &ConceptPreviewConfig) -> CharacterMenu 
 		}
 		ConceptPreviewConfig::Brenal { config, animation } => {
 			CharacterMenu::from_brenal(config, *animation)
+		}
+		ConceptPreviewConfig::Caole { config, animation } => {
+			CharacterMenu::from_caole(config, *animation)
 		}
 		ConceptPreviewConfig::Claber { config, animation } => {
 			CharacterMenu::from_claber(config, *animation)
@@ -109,6 +115,7 @@ fn preview_species(species: ConceptSpecies) -> crate::preview::ConceptSpecies {
 	match species {
 		ConceptSpecies::Braidman => crate::preview::ConceptSpecies::Braidman,
 		ConceptSpecies::Brenal => crate::preview::ConceptSpecies::Brenal,
+		ConceptSpecies::Caole => crate::preview::ConceptSpecies::Caole,
 		ConceptSpecies::Claber => crate::preview::ConceptSpecies::Claber,
 		ConceptSpecies::Croconot => crate::preview::ConceptSpecies::Croconot,
 		ConceptSpecies::Brodler => crate::preview::ConceptSpecies::Brodler,

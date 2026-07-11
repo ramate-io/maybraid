@@ -12,7 +12,7 @@ use crate::{
 	species::{
 		claber::{pose::ClaberPose, ClaberConfig},
 		common::{
-			BODY_GUMBUS, EAR_FLANK, HEAD_CACOLE, HORNS_HARROWED_CROWN, MOUTH_ROBREK_SNOUT,
+			BODY_GUMBUS, EAR_FLANK, HEAD_CAOLE, HORNS_HARROWED_CROWN, MOUTH_ROBREK_SNOUT,
 			PRONOGRADE_HEAD_RIG, QUADRUPED_RIG, TAIL_LERODON_QUADRUPED,
 		},
 	},
@@ -88,8 +88,8 @@ impl ClaberAssets {
 		ResolvedCharacterPart::new(
 			CharacterPartSlot::HeadMesh,
 			CharacterAsset::new(
-				ClaberHeadMesh::Cacole.label(),
-				HEAD_CACOLE,
+				ClaberHeadMesh::Caole.label(),
+				HEAD_CAOLE,
 				AssetNormalization::IDENTITY,
 			),
 			SkinTarget::HeadRig,
@@ -221,18 +221,18 @@ impl ClaberBodyMesh {
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, ValueEnum)]
 pub enum ClaberHeadMesh {
 	#[default]
-	Cacole,
+	Caole,
 }
 
 impl ClaberHeadMesh {
-	pub const VALUES: &'static [Self] = &[Self::Cacole];
+	pub const VALUES: &'static [Self] = &[Self::Caole];
 
 	pub const fn label(self) -> &'static str {
-		"cacole-head"
+		"caole-head"
 	}
 
 	pub const fn path(self) -> crate::assets::AssetPath {
-		HEAD_CACOLE
+		HEAD_CAOLE
 	}
 }
 
