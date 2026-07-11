@@ -13,6 +13,8 @@ pub const BODY_DRAGLOON: AssetPath =
 pub const PRONOGRADE_HEAD_RIG: AssetPath = AssetPath::new("characters/heads/pronograde_head.glb");
 /// Pronograde canine head mesh (`bear_head.glb` shares the pronograde rig layout).
 pub const HEAD_CANINE: AssetPath = AssetPath::new("characters/heads/bear_head.glb");
+/// Pronograde Cacole head mesh (shares the pronograde rig layout).
+pub const HEAD_CACOLE: AssetPath = AssetPath::new("characters/heads/cacole_head.glb");
 pub const TAIL_CAT: AssetPath = AssetPath::new("characters/tails/cat_tail.glb");
 pub const TAIL_LERODON: AssetPath = AssetPath::new("characters/tails/lerodon_tail.glb");
 pub const TAIL_LERODON_QUADRUPED: AssetPath =
@@ -33,6 +35,7 @@ pub const NOSE_BALLOON: AssetPath = AssetPath::new("characters/noses/mumbus_nose
 pub const MOUTH_STANDARD: AssetPath = AssetPath::new("characters/mouths/common_mouth.glb");
 pub const MOUTH_CANINE_SNOUT: AssetPath = AssetPath::new("characters/snouts/canine.glb");
 pub const MOUTH_LERODON_SNOUT: AssetPath = AssetPath::new("characters/snouts/lerodon_snout.glb");
+pub const MOUTH_ROBREK_SNOUT: AssetPath = AssetPath::new("characters/snouts/robrek_snout.glb");
 pub const EAR_STANDARD: AssetPath =
 	AssetPath::new("characters/ears/round_scoop_lateral_ear_left.glb");
 pub const EAR_ROUND: AssetPath = AssetPath::new("characters/ears/round_lateral_ear_left.glb");

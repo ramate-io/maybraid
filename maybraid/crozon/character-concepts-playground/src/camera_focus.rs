@@ -37,6 +37,7 @@ use camera_controls::look::CameraLookEnabled;
 use character_ui_menu::{CameraFocus, FocusRig};
 use crozon_character_playground::CameraController;
 use crozon_character_ui_menus::characters::brenal::BODY_FOCUS as BRENAL_BODY_FOCUS;
+use crozon_character_ui_menus::characters::claber::BODY_FOCUS as CLABER_BODY_FOCUS;
 use crozon_character_ui_menus::characters::croconot::BODY_FOCUS as CROCONOT_BODY_FOCUS;
 use crozon_character_ui_menus::focus::SPIBMOM_BODY_FOCUS;
 use crozon_character_ui_menus::BODY_FOCUS;
@@ -96,6 +97,7 @@ pub fn queue_species_default_camera_focus(
 pub fn default_focus_target(config: &ConceptPreviewConfig) -> CameraFocus {
 	match config.species() {
 		crate::preview::ConceptSpecies::Brenal => BRENAL_BODY_FOCUS,
+		crate::preview::ConceptSpecies::Claber => CLABER_BODY_FOCUS,
 		crate::preview::ConceptSpecies::Croconot => CROCONOT_BODY_FOCUS,
 		crate::preview::ConceptSpecies::Spibmom => SPIBMOM_BODY_FOCUS,
 		_ => BODY_FOCUS,

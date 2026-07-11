@@ -2,6 +2,7 @@
 
 pub mod braidman;
 pub mod brenal;
+pub mod claber;
 pub mod croconot;
 pub mod brodler;
 pub mod dui;
@@ -13,6 +14,7 @@ pub mod wumbus;
 use bevy::prelude::*;
 pub use braidman::Braidman;
 pub use brenal::Brenal;
+pub use claber::Claber;
 pub use croconot::Croconot;
 pub use brodler::Brodler;
 use clap::Parser;
@@ -45,6 +47,9 @@ pub enum ConceptsCommand {
 	/// Spawn or adjust the Brenal quadruped concept preview.
 	#[command(subcommand)]
 	Brenal(Brenal),
+	/// Spawn or adjust the Claber oversized low-slung quadruped concept preview.
+	#[command(subcommand)]
+	Claber(Claber),
 	/// Spawn or adjust the Croconot low-slung quadruped concept preview.
 	#[command(subcommand)]
 	Croconot(Croconot),
@@ -85,6 +90,7 @@ impl ConceptsCommand {
 			Self::Script(script) => script.run(commands, console),
 			Self::Braidman(braidman) => braidman.react(commands),
 			Self::Brenal(brenal) => brenal.react(commands),
+			Self::Claber(claber) => claber.react(commands),
 			Self::Croconot(croconot) => croconot.react(commands),
 			Self::Brodler(brodler) => brodler.react(commands),
 			Self::Mygr(mygr) => mygr.react(commands),

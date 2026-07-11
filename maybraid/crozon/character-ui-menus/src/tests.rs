@@ -30,6 +30,18 @@ fn brenal_config_round_trip() -> anyhow::Result<()> {
 }
 
 #[test]
+fn claber_config_round_trip() -> anyhow::Result<()> {
+	let config = crozon_characters::species::claber::ClaberConfig::default_preview();
+	let menu = crate::characters::claber::ClaberMenu::from(&config);
+	let restored = crozon_characters::species::claber::ClaberConfig::from(&menu);
+	assert_eq!(config.gender, restored.gender);
+	assert_eq!(config.horns, restored.horns);
+	assert_eq!(config.sliders.arm_length, restored.sliders.arm_length);
+	assert_eq!(config.colors.body, restored.colors.body);
+	Ok(())
+}
+
+#[test]
 fn croconot_config_round_trip() -> anyhow::Result<()> {
 	let config = crozon_characters::species::croconot::CroconotConfig::default_preview();
 	let menu = crate::characters::croconot::CroconotMenu::from(&config);

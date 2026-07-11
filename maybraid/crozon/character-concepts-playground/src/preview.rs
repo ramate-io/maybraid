@@ -10,6 +10,7 @@ use crozon_characters::{
 	species::{
 		braidman::BraidmanConfig,
 		brenal::BrenalConfig,
+		claber::{ClaberColor, ClaberConfig},
 		croconot::CroconotConfig,
 		brodler::{BrodlerConfig, BrodlerHeadMesh, HornMesh},
 		common::{BodyMesh, EarMesh, EyeMesh, HairMesh, HeadMesh, MouthMesh, NoseMesh},
@@ -37,6 +38,7 @@ pub enum ConceptSpecies {
 	#[default]
 	Braidman,
 	Brenal,
+	Claber,
 	Croconot,
 	Brodler,
 	Mygr,
@@ -50,6 +52,7 @@ pub enum ConceptSpecies {
 pub enum ConceptPreviewConfig {
 	Braidman { config: BraidmanConfig, animation: ConceptAnimation },
 	Brenal { config: BrenalConfig, animation: ConceptAnimation },
+	Claber { config: ClaberConfig, animation: ConceptAnimation },
 	Croconot { config: CroconotConfig, animation: ConceptAnimation },
 	Brodler { config: BrodlerConfig, animation: ConceptAnimation },
 	Mygr { config: MygrConfig, animation: ConceptAnimation },
@@ -70,6 +73,7 @@ impl ConceptPreviewConfig {
 		match species {
 			ConceptSpecies::Braidman => Self::braidman(BraidmanConfig::default_preview()),
 			ConceptSpecies::Brenal => Self::brenal(BrenalConfig::default_preview()),
+			ConceptSpecies::Claber => Self::claber(ClaberConfig::default_preview()),
 			ConceptSpecies::Croconot => Self::croconot(CroconotConfig::default_preview()),
 			ConceptSpecies::Brodler => Self::brodler(BrodlerConfig::default_preview()),
 			ConceptSpecies::Mygr => Self::mygr(MygrConfig::default_preview()),
@@ -84,6 +88,7 @@ impl ConceptPreviewConfig {
 		match self {
 			Self::Braidman { .. } => ConceptSpecies::Braidman,
 			Self::Brenal { .. } => ConceptSpecies::Brenal,
+			Self::Claber { .. } => ConceptSpecies::Claber,
 			Self::Croconot { .. } => ConceptSpecies::Croconot,
 			Self::Brodler { .. } => ConceptSpecies::Brodler,
 			Self::Mygr { .. } => ConceptSpecies::Mygr,
@@ -116,6 +121,14 @@ impl ConceptPreviewConfig {
 
 	pub fn croconot_with_animation(config: CroconotConfig, animation: ConceptAnimation) -> Self {
 		Self::Croconot { config, animation }
+	}
+
+	pub fn claber(config: ClaberConfig) -> Self {
+		Self::Claber { config, animation: ConceptAnimation::default() }
+	}
+
+	pub fn claber_with_animation(config: ClaberConfig, animation: ConceptAnimation) -> Self {
+		Self::Claber { config, animation }
 	}
 
 	pub fn brodler(config: BrodlerConfig) -> Self {
@@ -170,6 +183,7 @@ impl ConceptPreviewConfig {
 		match self {
 			Self::Braidman { config, .. } => config.resolve(),
 			Self::Brenal { config, .. } => config.resolve(),
+			Self::Claber { config, .. } => config.resolve(),
 			Self::Croconot { config, .. } => config.resolve(),
 			Self::Brodler { config, .. } => config.resolve(),
 			Self::Mygr { config, .. } => config.resolve(),
@@ -186,6 +200,7 @@ impl ConceptPreviewConfig {
 				format!("{} animation={}", config.status_label(), animation.label())
 			}
 			Self::Brenal { config, .. } => config.status_label(),
+			Self::Claber { config, .. } => config.status_label(),
 			Self::Croconot { config, .. } => config.status_label(),
 			Self::Brodler { config, animation } => {
 				format!("{} animation={}", config.status_label(), animation.label())
@@ -214,6 +229,7 @@ impl ConceptPreviewConfig {
 				format!("species=braidman {} animation={animation:?}", config.sync_key())
 			}
 			Self::Brenal { config, .. } => format!("species=brenal {}", config.sync_key()),
+			Self::Claber { config, .. } => format!("species=claber {}", config.sync_key()),
 			Self::Croconot { config, .. } => format!("species=croconot {}", config.sync_key()),
 			Self::Brodler { config, animation } => {
 				format!("species=brodler {} animation={animation:?}", config.sync_key())
@@ -251,6 +267,11 @@ impl ConceptPreviewConfig {
 			),
 			Self::Brenal { config, .. } => format!(
 				"species=brenal horns={:?} eye={:?}",
+				config.horns,
+				config.eye,
+			),
+			Self::Claber { config, .. } => format!(
+				"species=claber horns={:?} eye={:?}",
 				config.horns,
 				config.eye,
 			),
@@ -308,6 +329,7 @@ impl ConceptPreviewConfig {
 		match self {
 			Self::Braidman { animation, .. }
 			| Self::Brenal { animation, .. }
+			| Self::Claber { animation, .. }
 			| Self::Croconot { animation, .. }
 			| Self::Brodler { animation, .. }
 			| Self::Mygr { animation, .. }
@@ -391,6 +413,13 @@ pub enum PreviewTarget {
 	BrenalEar,
 	BrenalMouth,
 	BrenalTail,
+	ClaberBody,
+	ClaberHead,
+	ClaberHorns(crozon_characters::species::claber::ClaberHornMesh),
+	ClaberEye(EyeMesh),
+	ClaberEar,
+	ClaberMouth,
+	ClaberTail,
 	CroconotBody,
 	CroconotHead,
 	CroconotHorns(crozon_characters::species::croconot::CroconotHornMesh),
@@ -534,6 +563,31 @@ fn sync_live_preview(
 			let sliders = brenal.sliders.clamped();
 			for (part, mut target, base, transform) in parts {
 				target.color = preview_color_brenal(brenal, target.target);
+				let Some(base) = base else {
+					continue;
+				};
+				let Some(mut transform) = transform else {
+					continue;
+				};
+				if !has_feature_transform(part.slot) {
+					continue;
+				}
+				let authored =
+					base.normalization.mul_transform(sliders.feature_transform(part.slot));
+				match base.socket {
+					Some(socket) => {
+						*transform = socket;
+						transform.scale *= authored.scale;
+						transform.rotation *= authored.rotation;
+					}
+					None => *transform = authored,
+				}
+			}
+		}
+		ConceptPreviewConfig::Claber { config: claber, .. } => {
+			let sliders = claber.sliders.clamped();
+			for (part, mut target, base, transform) in parts {
+				target.color = preview_color_claber(claber, target.target);
 				let Some(base) = base else {
 					continue;
 				};
@@ -751,6 +805,19 @@ fn preview_color_brenal(config: &BrenalConfig, target: PreviewTarget) -> Preview
 	})
 }
 
+fn preview_color_claber(config: &ClaberConfig, target: PreviewTarget) -> PreviewColor {
+	let skin = config.colors.skin_color();
+	PreviewColor::Claber(match target {
+		PreviewTarget::ClaberBody => config.colors.body,
+		PreviewTarget::ClaberHead | PreviewTarget::ClaberEar => skin,
+		PreviewTarget::ClaberEye(_) => config.colors.eyes,
+		PreviewTarget::ClaberMouth => config.colors.mouth,
+		PreviewTarget::ClaberHorns(_) => config.colors.horns,
+		PreviewTarget::ClaberTail => config.colors.tail,
+		_ => ClaberColor::DesertBrown,
+	})
+}
+
 fn preview_color_croconot(config: &CroconotConfig, target: PreviewTarget) -> PreviewColor {
 	use crozon_character_items::ItemColor;
 
@@ -909,6 +976,13 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 					.mul_transform(sliders.feature_transform(part.slot))
 			}
 			ConceptPreviewConfig::Brenal { config, .. } => {
+				let sliders = config.sliders.clamped();
+				part.asset
+					.normalization
+					.transform()
+					.mul_transform(sliders.feature_transform(part.slot))
+			}
+			ConceptPreviewConfig::Claber { config, .. } => {
 				let sliders = config.sliders.clamped();
 				part.asset
 					.normalization
@@ -1115,6 +1189,28 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 					| CharacterPartSlot::Spine => PreviewTarget::BrenalHead,
 				};
 				PreviewAssetTarget { target, color: preview_color_brenal(config, target) }
+			}
+			ConceptPreviewConfig::Claber { config, .. } => {
+				let target = match part.slot {
+					CharacterPartSlot::BodyMesh => PreviewTarget::ClaberBody,
+					CharacterPartSlot::HeadRig | CharacterPartSlot::HeadMesh => {
+						PreviewTarget::ClaberHead
+					}
+					CharacterPartSlot::EyeLeft | CharacterPartSlot::EyeRight => {
+						PreviewTarget::ClaberEye(config.eye)
+					}
+					CharacterPartSlot::EarLeft | CharacterPartSlot::EarRight => {
+						PreviewTarget::ClaberEar
+					}
+					CharacterPartSlot::Horns => PreviewTarget::ClaberHorns(config.horns),
+					CharacterPartSlot::Mouth => PreviewTarget::ClaberMouth,
+					CharacterPartSlot::Tail => PreviewTarget::ClaberTail,
+					CharacterPartSlot::Nose
+					| CharacterPartSlot::Hair
+					| CharacterPartSlot::Clothing
+					| CharacterPartSlot::Spine => PreviewTarget::ClaberHead,
+				};
+				PreviewAssetTarget { target, color: preview_color_claber(config, target) }
 			}
 			ConceptPreviewConfig::Croconot { config, .. } => {
 				let target = match part.slot {

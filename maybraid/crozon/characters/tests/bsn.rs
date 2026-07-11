@@ -4,6 +4,7 @@ use bevy::prelude::StandardMaterial;
 use crozon_characters::species::{
 	braidman::{bsn::Braidman, BraidmanConfig},
 	brenal::{bsn::Brenal, BrenalConfig},
+	claber::{bsn::Claber, ClaberConfig},
 	croconot::{bsn::Croconot, CroconotConfig},
 	brodler::{bsn::Brodler, BrodlerConfig},
 	dui::{bsn::Dui, DuiConfig},
@@ -26,6 +27,15 @@ fn braidman_bsn_scenes_build() {
 fn brenal_bsn_scenes_build() {
 	let config = BrenalConfig::default();
 	let _root = Brenal::from_config(&config);
+	let _data = config.data_scene();
+	let _visual = config.visual_scene::<StandardMaterial>();
+	let _scene = config.scene::<StandardMaterial>();
+}
+
+#[test]
+fn claber_bsn_scenes_build() {
+	let config = ClaberConfig::default();
+	let _root = Claber::from_config(&config);
 	let _data = config.data_scene();
 	let _visual = config.visual_scene::<StandardMaterial>();
 	let _scene = config.scene::<StandardMaterial>();
