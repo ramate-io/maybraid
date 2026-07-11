@@ -166,8 +166,8 @@ impl CroconotAssets {
 			),
 			SkinTarget::BodyRig,
 			Some(Self::body_socket(
-				"tailbone",
-				Transform::from_translation(Vec3::new(0.0, -0.5, 0.0)),
+				"haunch_vertical_thickness", // this is perpendicular to the ground, so it is better for asset normalization
+				Transform::from_translation(Vec3::new(0.0, -0.05, -0.05)),
 			)),
 		)
 	}
