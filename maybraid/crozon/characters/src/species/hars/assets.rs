@@ -94,7 +94,7 @@ impl HarsAssets {
 			CharacterAsset::new(
 				"PronogradeHeadRig",
 				PRONOGRADE_HEAD_RIG,
-				AssetNormalization::base_y(0.4),
+				AssetNormalization::base_y(0.6),
 			),
 			SkinTarget::OwnRig,
 			// Counter-pitch is on the neck tip bone; head sockets in identity.

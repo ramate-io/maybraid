@@ -1,12 +1,8 @@
 //! Hars proportion layers on the quadruped body + triple-join neck.
 //!
-//! Carriage: pitch the separate neck armature and uniform-scale it. The mesh is
-//! authored long (`basic_3_1`); do not lengthen via non-uniform bone scale.
-//! Counter-pitch the neck tip `head_socket` so the head stays level.
-//!
-//! After the neck's +90° Z armature rest, length is local Y and world-up maps to
-//! local X, so raise is about **−Z** ([`BoneRotation::pitch_z`] with a negative
-//! [`NECK_PITCH`]). Local +X yaws; local +Z pitches down.
+//! Carriage: pitch the body `head_socket` up so the socketed neck raises, and
+//! counter-pitch the neck tip `head_socket` so the head stays level. Prefer
+//! authored neck length + optional uniform scale — not non-uniform lengthening.
 
 use std::f32::consts::FRAC_PI_4;
 
@@ -16,14 +12,10 @@ use crate::{
 };
 use crozon_rigs::{BoneRotation, BoneScale, ResolvedRigPose, RigPoseLayer};
 
-/// Raise magnitude about local −Z (negative = tip up after armature rest).
-pub const NECK_PITCH: f32 = -FRAC_PI_4;
+/// Raise the body `head_socket` (neck follows).
+pub const NECK_PITCH: f32 = FRAC_PI_4;
 /// Counter-pitch on the neck tip `head_socket` so the head stays level.
 pub const HEAD_SOCKET_PITCH: f32 = -NECK_PITCH;
-/// Uniform size of the neck armature (authored mesh length; no Y-stretch).
-pub const NECK_SCALE: f32 = 1.0;
-
-const SEGMENT_PITCH: f32 = NECK_PITCH / 3.0;
 
 /// Elevated limb length relative to the stock quadruped / caole baselines.
 const LIMB_LENGTH: f32 = 1.35;
@@ -46,27 +38,25 @@ impl HarsPose {
 		Self { gender: config.gender, build: config.build, sliders: config.sliders.clamped() }
 	}
 
-	/// Body-rig layers (torso / limbs). Neck pitch lives on [`Self::neck_pose`].
+	/// Body-rig layers: torso / limbs plus body `head_socket` raise.
 	pub fn resolve(self) -> ResolvedRigPose {
 		ResolvedRigPose::new()
 			.with_layer(self.species_baseline())
+			.with_layer(
+				RigPoseLayer::new("hars body head socket pitch")
+					.with_rotation(BoneRotation::pitch_x("head_socket", NECK_PITCH)),
+			)
 			.with_layer(self.gender_layer())
 			.with_layer(self.build_layer())
 			.with_layer(self.slider_layer())
 	}
 
-	/// Triple-join neck OwnRig layers: distribute pitch, counter-pitch tip,
-	/// optional uniform scale.
+	/// Neck OwnRig: counter-pitch the tip `head_socket`.
 	pub fn neck_pose(self) -> ResolvedRigPose {
-		let mut layer = RigPoseLayer::new("hars neck pitch")
-			.with_rotation(BoneRotation::pitch_z("neck_base", SEGMENT_PITCH))
-			.with_rotation(BoneRotation::pitch_z("mid_neck", SEGMENT_PITCH))
-			.with_rotation(BoneRotation::pitch_z("upper_neck", SEGMENT_PITCH))
-			.with_rotation(BoneRotation::pitch_z("head_socket", HEAD_SOCKET_PITCH));
-		if NECK_SCALE != 1.0 {
-			layer = layer.with_scale(BoneScale::uniform("neck_base", NECK_SCALE));
-		}
-		ResolvedRigPose::new().with_layer(layer)
+		ResolvedRigPose::new().with_layer(
+			RigPoseLayer::new("hars neck tip counterpitch")
+				.with_rotation(BoneRotation::pitch_x("head_socket", HEAD_SOCKET_PITCH)),
+		)
 	}
 
 	fn species_baseline(self) -> RigPoseLayer {
