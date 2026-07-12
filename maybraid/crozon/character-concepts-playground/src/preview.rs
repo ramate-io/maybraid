@@ -13,6 +13,7 @@ use crozon_characters::{
 		caole::CaoleConfig,
 		hars::HarsConfig,
 		ylter::YilterConfig,
+		sonyak::SonyakConfig,
 		claber::{ClaberColor, ClaberConfig},
 		croconot::CroconotConfig,
 		brodler::{BrodlerConfig, BrodlerHeadMesh, HornMesh},
@@ -44,6 +45,7 @@ pub enum ConceptSpecies {
 	Caole,
 	Hars,
 	Yilter,
+	Sonyak,
 	Claber,
 	Croconot,
 	Brodler,
@@ -61,6 +63,7 @@ pub enum ConceptPreviewConfig {
 	Caole { config: CaoleConfig, animation: ConceptAnimation },
 	Hars { config: HarsConfig, animation: ConceptAnimation },
 	Yilter { config: YilterConfig, animation: ConceptAnimation },
+	Sonyak { config: SonyakConfig, animation: ConceptAnimation },
 	Claber { config: ClaberConfig, animation: ConceptAnimation },
 	Croconot { config: CroconotConfig, animation: ConceptAnimation },
 	Brodler { config: BrodlerConfig, animation: ConceptAnimation },
@@ -85,6 +88,7 @@ impl ConceptPreviewConfig {
 			ConceptSpecies::Caole => Self::caole(CaoleConfig::default_preview()),
 			ConceptSpecies::Hars => Self::hars(HarsConfig::default_preview()),
 			ConceptSpecies::Yilter => Self::ylter(YilterConfig::default_preview()),
+			ConceptSpecies::Sonyak => Self::sonyak(SonyakConfig::default_preview()),
 			ConceptSpecies::Claber => Self::claber(ClaberConfig::default_preview()),
 			ConceptSpecies::Croconot => Self::croconot(CroconotConfig::default_preview()),
 			ConceptSpecies::Brodler => Self::brodler(BrodlerConfig::default_preview()),
@@ -103,6 +107,7 @@ impl ConceptPreviewConfig {
 			Self::Caole { .. } => ConceptSpecies::Caole,
 			Self::Hars { .. } => ConceptSpecies::Hars,
 			Self::Yilter { .. } => ConceptSpecies::Yilter,
+			Self::Sonyak { .. } => ConceptSpecies::Sonyak,
 			Self::Claber { .. } => ConceptSpecies::Claber,
 			Self::Croconot { .. } => ConceptSpecies::Croconot,
 			Self::Brodler { .. } => ConceptSpecies::Brodler,
@@ -152,6 +157,14 @@ impl ConceptPreviewConfig {
 
 	pub fn ylter_with_animation(config: YilterConfig, animation: ConceptAnimation) -> Self {
 		Self::Yilter { config, animation }
+	}
+
+	pub fn sonyak(config: SonyakConfig) -> Self {
+		Self::Sonyak { config, animation: ConceptAnimation::default() }
+	}
+
+	pub fn sonyak_with_animation(config: SonyakConfig, animation: ConceptAnimation) -> Self {
+		Self::Sonyak { config, animation }
 	}
 
 	pub fn croconot(config: CroconotConfig) -> Self {
@@ -225,6 +238,7 @@ impl ConceptPreviewConfig {
 			Self::Caole { config, .. } => config.resolve(),
 			Self::Hars { config, .. } => config.resolve(),
 			Self::Yilter { config, .. } => config.resolve(),
+			Self::Sonyak { config, .. } => config.resolve(),
 			Self::Claber { config, .. } => config.resolve(),
 			Self::Croconot { config, .. } => config.resolve(),
 			Self::Brodler { config, .. } => config.resolve(),
@@ -245,6 +259,7 @@ impl ConceptPreviewConfig {
 			Self::Caole { config, .. } => config.status_label(),
 			Self::Hars { config, .. } => config.status_label(),
 			Self::Yilter { config, .. } => config.status_label(),
+			Self::Sonyak { config, .. } => config.status_label(),
 			Self::Claber { config, .. } => config.status_label(),
 			Self::Croconot { config, .. } => config.status_label(),
 			Self::Brodler { config, animation } => {
@@ -277,6 +292,7 @@ impl ConceptPreviewConfig {
 			Self::Caole { config, .. } => format!("species=caole {}", config.sync_key()),
 			Self::Hars { config, .. } => format!("species=hars {}", config.sync_key()),
 			Self::Yilter { config, .. } => format!("species=ylter {}", config.sync_key()),
+			Self::Sonyak { config, .. } => format!("species=sonyak {}", config.sync_key()),
 			Self::Claber { config, .. } => format!("species=claber {}", config.sync_key()),
 			Self::Croconot { config, .. } => format!("species=croconot {}", config.sync_key()),
 			Self::Brodler { config, animation } => {
@@ -331,6 +347,10 @@ impl ConceptPreviewConfig {
 			),
 			Self::Yilter { config, .. } => format!(
 				"species=ylter mouth={:?}",
+				config.mouth,
+			),
+			Self::Sonyak { config, .. } => format!(
+				"species=sonyak mouth={:?}",
 				config.mouth,
 			),
 			Self::Claber { config, .. } => format!(
@@ -395,6 +415,7 @@ impl ConceptPreviewConfig {
 			| Self::Caole { animation, .. }
 			| Self::Hars { animation, .. }
 			| Self::Yilter { animation, .. }
+			| Self::Sonyak { animation, .. }
 			| Self::Claber { animation, .. }
 			| Self::Croconot { animation, .. }
 			| Self::Brodler { animation, .. }
@@ -497,6 +518,12 @@ pub enum PreviewTarget {
 	YilterNeck,
 	YilterMouth,
 	YilterTail,
+	SonyakBody,
+	SonyakHead,
+	SonyakEye,
+	SonyakHair,
+	SonyakMouth,
+	SonyakTail,
 	ClaberBody,
 	ClaberHead,
 	ClaberHorns(crozon_characters::species::claber::ClaberHornMesh),
@@ -743,6 +770,31 @@ fn sync_live_preview(
 			let sliders = ylter.sliders.clamped();
 			for (part, mut target, base, transform) in parts {
 				target.color = preview_color_ylter(ylter, target.target);
+				let Some(base) = base else {
+					continue;
+				};
+				let Some(mut transform) = transform else {
+					continue;
+				};
+				if !has_feature_transform(part.slot) {
+					continue;
+				}
+				let authored =
+					base.normalization.mul_transform(sliders.feature_transform(part.slot));
+				match base.socket {
+					Some(socket) => {
+						*transform = socket;
+						transform.scale *= authored.scale;
+						transform.rotation *= authored.rotation;
+					}
+					None => *transform = authored,
+				}
+			}
+		}
+		ConceptPreviewConfig::Sonyak { config: sonyak, .. } => {
+			let sliders = sonyak.sliders.clamped();
+			for (part, mut target, base, transform) in parts {
+				target.color = preview_color_sonyak(sonyak, target.target);
 				let Some(base) = base else {
 					continue;
 				};
@@ -1027,6 +1079,20 @@ fn preview_color_ylter(config: &YilterConfig, target: PreviewTarget) -> PreviewC
 	})
 }
 
+fn preview_color_sonyak(config: &SonyakConfig, target: PreviewTarget) -> PreviewColor {
+	use crozon_character_items::ItemColor;
+
+	PreviewColor::Item(match target {
+		PreviewTarget::SonyakBody => config.colors.body,
+		PreviewTarget::SonyakHead => config.colors.head,
+		PreviewTarget::SonyakEye => config.colors.eyes,
+		PreviewTarget::SonyakHair => config.colors.hair,
+		PreviewTarget::SonyakMouth => config.colors.mouth,
+		PreviewTarget::SonyakTail => config.colors.tail,
+		_ => ItemColor::Natural,
+	})
+}
+
 fn preview_color_claber(config: &ClaberConfig, target: PreviewTarget) -> PreviewColor {
 	let skin = config.colors.skin_color();
 	PreviewColor::Claber(match target {
@@ -1263,6 +1329,13 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 					.mul_transform(sliders.feature_transform(part.slot))
 			}
 			ConceptPreviewConfig::Yilter { config, .. } => {
+				let sliders = config.sliders.clamped();
+				part.asset
+					.normalization
+					.transform()
+					.mul_transform(sliders.feature_transform(part.slot))
+			}
+			ConceptPreviewConfig::Sonyak { config, .. } => {
 				let sliders = config.sliders.clamped();
 				part.asset
 					.normalization
@@ -1534,6 +1607,28 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 					| CharacterPartSlot::Horns => PreviewTarget::YilterHead,
 				};
 				PreviewAssetTarget { target, color: preview_color_ylter(config, target) }
+			}
+			ConceptPreviewConfig::Sonyak { config, .. } => {
+				let target = match part.slot {
+					CharacterPartSlot::BodyMesh => PreviewTarget::SonyakBody,
+					CharacterPartSlot::NeckRig | CharacterPartSlot::NeckMesh => PreviewTarget::SonyakBody,
+					CharacterPartSlot::HeadRig | CharacterPartSlot::HeadMesh => {
+						PreviewTarget::SonyakHead
+					}
+					CharacterPartSlot::EyeLeft | CharacterPartSlot::EyeRight => {
+						PreviewTarget::SonyakEye
+					}
+					CharacterPartSlot::Hair => PreviewTarget::SonyakHair,
+					CharacterPartSlot::Mouth => PreviewTarget::SonyakMouth,
+					CharacterPartSlot::Tail => PreviewTarget::SonyakTail,
+					CharacterPartSlot::EarLeft
+					| CharacterPartSlot::EarRight
+					| CharacterPartSlot::Nose
+					| CharacterPartSlot::Clothing
+					| CharacterPartSlot::Spine
+					| CharacterPartSlot::Horns => PreviewTarget::SonyakHead,
+				};
+				PreviewAssetTarget { target, color: preview_color_sonyak(config, target) }
 			}
 			ConceptPreviewConfig::Claber { config, .. } => {
 				let target = match part.slot {

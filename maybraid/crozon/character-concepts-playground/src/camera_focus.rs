@@ -40,6 +40,7 @@ use crozon_character_ui_menus::characters::brenal::BODY_FOCUS as BRENAL_BODY_FOC
 use crozon_character_ui_menus::characters::caole::BODY_FOCUS as CAOLE_BODY_FOCUS;
 use crozon_character_ui_menus::characters::hars::BODY_FOCUS as HARS_BODY_FOCUS;
 use crozon_character_ui_menus::characters::ylter::BODY_FOCUS as YILTER_BODY_FOCUS;
+use crozon_character_ui_menus::characters::sonyak::BODY_FOCUS as SONYAK_BODY_FOCUS;
 use crozon_character_ui_menus::characters::claber::BODY_FOCUS as CLABER_BODY_FOCUS;
 use crozon_character_ui_menus::characters::croconot::BODY_FOCUS as CROCONOT_BODY_FOCUS;
 use crozon_character_ui_menus::focus::SPIBMOM_BODY_FOCUS;
@@ -103,6 +104,7 @@ pub fn default_focus_target(config: &ConceptPreviewConfig) -> CameraFocus {
 		crate::preview::ConceptSpecies::Caole => CAOLE_BODY_FOCUS,
 		crate::preview::ConceptSpecies::Hars => HARS_BODY_FOCUS,
 		crate::preview::ConceptSpecies::Yilter => YILTER_BODY_FOCUS,
+		crate::preview::ConceptSpecies::Sonyak => SONYAK_BODY_FOCUS,
 		crate::preview::ConceptSpecies::Claber => CLABER_BODY_FOCUS,
 		crate::preview::ConceptSpecies::Croconot => CROCONOT_BODY_FOCUS,
 		crate::preview::ConceptSpecies::Spibmom => SPIBMOM_BODY_FOCUS,
