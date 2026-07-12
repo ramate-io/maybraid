@@ -10,3 +10,5 @@ pub mod lero;
 pub mod mygr;
 pub mod spibmom;
 pub mod wumbus;
+pub mod ylter;
+pub mod sonyak;

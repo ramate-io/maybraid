@@ -32,6 +32,12 @@ pub fn menu_to_preview_config(menu: &CharacterMenu) -> ConceptPreviewConfig {
 		ConceptSpecies::Hars => {
 			ConceptPreviewConfig::hars_with_animation(menu.hars_config(), menu.animation())
 		}
+		ConceptSpecies::Yilter => {
+			ConceptPreviewConfig::ylter_with_animation(menu.ylter_config(), menu.animation())
+		}
+		ConceptSpecies::Sonyak => {
+			ConceptPreviewConfig::sonyak_with_animation(menu.sonyak_config(), menu.animation())
+		}
 		ConceptSpecies::Claber => {
 			ConceptPreviewConfig::claber_with_animation(menu.claber_config(), menu.animation())
 		}
@@ -72,6 +78,12 @@ pub fn menu_from_preview_config(config: &ConceptPreviewConfig) -> CharacterMenu 
 		}
 		ConceptPreviewConfig::Hars { config, animation } => {
 			CharacterMenu::from_hars(config, *animation)
+		}
+		ConceptPreviewConfig::Yilter { config, animation } => {
+			CharacterMenu::from_ylter(config, *animation)
+		}
+		ConceptPreviewConfig::Sonyak { config, animation } => {
+			CharacterMenu::from_sonyak(config, *animation)
 		}
 		ConceptPreviewConfig::Claber { config, animation } => {
 			CharacterMenu::from_claber(config, *animation)
@@ -123,6 +135,8 @@ fn preview_species(species: ConceptSpecies) -> crate::preview::ConceptSpecies {
 		ConceptSpecies::Brenal => crate::preview::ConceptSpecies::Brenal,
 		ConceptSpecies::Caole => crate::preview::ConceptSpecies::Caole,
 		ConceptSpecies::Hars => crate::preview::ConceptSpecies::Hars,
+		ConceptSpecies::Yilter => crate::preview::ConceptSpecies::Yilter,
+		ConceptSpecies::Sonyak => crate::preview::ConceptSpecies::Sonyak,
 		ConceptSpecies::Claber => crate::preview::ConceptSpecies::Claber,
 		ConceptSpecies::Croconot => crate::preview::ConceptSpecies::Croconot,
 		ConceptSpecies::Brodler => crate::preview::ConceptSpecies::Brodler,

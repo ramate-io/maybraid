@@ -2,7 +2,7 @@
 
 use bevy::prelude::*;
 use crozon_characters::species::{
-	braidman::BraidmanConfig, brenal::BrenalConfig, caole::CaoleConfig, hars::HarsConfig, claber::ClaberConfig, croconot::CroconotConfig, brodler::BrodlerConfig, dui::DuiConfig, lero::LeroConfig,
+	braidman::BraidmanConfig, brenal::BrenalConfig, caole::CaoleConfig, hars::HarsConfig, sonyak::SonyakConfig, ylter::YilterConfig, claber::ClaberConfig, croconot::CroconotConfig, brodler::BrodlerConfig, dui::DuiConfig, lero::LeroConfig,
 	mygr::MygrConfig, spibmom::SpibmomConfig, wumbus::WumbusConfig,
 };
 
@@ -22,6 +22,8 @@ pub struct SpeciesSessionState {
 	pub brenal: BrenalConfig,
 	pub caole: CaoleConfig,
 	pub hars: HarsConfig,
+	pub ylter: YilterConfig,
+	pub sonyak: SonyakConfig,
 	pub claber: ClaberConfig,
 	pub croconot: CroconotConfig,
 	pub brodler: BrodlerConfig,
@@ -32,6 +34,8 @@ pub struct SpeciesSessionState {
 	pub spibmom: SpibmomConfig,
 	pub caole_animation: crate::animation::ConceptAnimation,
 	pub hars_animation: crate::animation::ConceptAnimation,
+	pub ylter_animation: crate::animation::ConceptAnimation,
+	pub sonyak_animation: crate::animation::ConceptAnimation,
 	pub brenal_animation: crate::animation::ConceptAnimation,
 	pub claber_animation: crate::animation::ConceptAnimation,
 	pub croconot_animation: crate::animation::ConceptAnimation,
@@ -51,6 +55,8 @@ impl Default for SpeciesSessionState {
 			brenal: BrenalConfig::default_preview(),
 			caole: CaoleConfig::default_preview(),
 			hars: HarsConfig::default_preview(),
+			ylter: YilterConfig::default_preview(),
+			sonyak: SonyakConfig::default_preview(),
 			claber: ClaberConfig::default_preview(),
 			croconot: CroconotConfig::default_preview(),
 			brodler: BrodlerConfig::default_preview(),
@@ -62,6 +68,8 @@ impl Default for SpeciesSessionState {
 			brenal_animation: crate::animation::ConceptAnimation::default(),
 			caole_animation: crate::animation::ConceptAnimation::default(),
 			hars_animation: crate::animation::ConceptAnimation::default(),
+			ylter_animation: crate::animation::ConceptAnimation::default(),
+			sonyak_animation: crate::animation::ConceptAnimation::default(),
 			claber_animation: crate::animation::ConceptAnimation::default(),
 			croconot_animation: crate::animation::ConceptAnimation::default(),
 			braidman_animation: crate::animation::ConceptAnimation::default(),
@@ -93,6 +101,14 @@ impl SpeciesSessionState {
 			ConceptPreviewConfig::Hars { config, animation } => {
 				self.hars.clone_from(config);
 				self.hars_animation = *animation;
+			}
+			ConceptPreviewConfig::Yilter { config, animation } => {
+				self.ylter.clone_from(config);
+				self.ylter_animation = *animation;
+			}
+			ConceptPreviewConfig::Sonyak { config, animation } => {
+				self.sonyak.clone_from(config);
+				self.sonyak_animation = *animation;
 			}
 			ConceptPreviewConfig::Claber { config, animation } => {
 				self.claber.clone_from(config);
@@ -146,6 +162,14 @@ impl SpeciesSessionState {
 			ConceptSpecies::Hars => ConceptPreviewConfig::hars_with_animation(
 				self.hars.clone(),
 				self.hars_animation,
+			),
+			ConceptSpecies::Yilter => ConceptPreviewConfig::ylter_with_animation(
+				self.ylter.clone(),
+				self.ylter_animation,
+			),
+			ConceptSpecies::Sonyak => ConceptPreviewConfig::sonyak_with_animation(
+				self.sonyak.clone(),
+				self.sonyak_animation,
 			),
 			ConceptSpecies::Claber => ConceptPreviewConfig::claber_with_animation(
 				self.claber.clone(),
