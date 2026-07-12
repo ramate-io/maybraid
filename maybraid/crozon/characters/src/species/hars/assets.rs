@@ -69,7 +69,8 @@ impl HarsAssets {
 			Some(SocketAttachment {
 				rig: SocketRig::Body,
 				bone: "head_socket",
-				local_transform: Transform::IDENTITY,
+				// Sink the neck into the body to help cover joints.
+				local_transform: Transform::from_translation(Vec3::new(0.0, 0.2, -0.2)),
 			}),
 		)
 		.with_pose(pose.neck_pose())
@@ -94,7 +95,7 @@ impl HarsAssets {
 			CharacterAsset::new(
 				"PronogradeHeadRig",
 				PRONOGRADE_HEAD_RIG,
-				AssetNormalization::base_y(0.6),
+				AssetNormalization::base_y(0.7),
 			),
 			SkinTarget::OwnRig,
 			// Counter-pitch is on the neck tip bone; head sockets in identity.
