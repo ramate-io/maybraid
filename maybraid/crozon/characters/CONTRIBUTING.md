@@ -72,3 +72,40 @@ Spawn from the playground UI (species picker) or CLI:
 ```bash
 crozon-concepts mygr preview --skin ginger --eyes green
 ```
+
+Preview socket/skin debug:
+
+```bash
+CROZON_PREVIEW_DEBUG=1 crozon-concepts hars preview
+```
+
+### Socketing, scale, and shear
+
+Parts attach with [`SocketAttachment`](src/assembly.rs): a `ChildOf(bone)` plus a
+local `Transform`. Bevy propagates the full parent affine, so **non-uniform scale
+on an ancestor combined with rotation on or under that socket shears** the
+attached mesh. Intermediate bones do not fix this if the part remains a transform
+child of the scaled chain.
+
+Nested armatures use [`SocketRig::Neck`](src/assembly.rs) /
+[`CharacterPartSlot::NeckRig`](src/assembly.rs) (+ optional `NeckMesh`):
+
+1. Socket the neck OwnRig to the body `head_socket`.
+2. Apply **pitch** (and optional **uniform** scale) via [`ResolvedCharacterPart::pose`].
+3. Socket the head to the neck tip `head_socket` (counter-pitch on the tip bone).
+
+With a dedicated neck armature/mesh, **prefer authored length + pitch + uniform
+scale** — do not lengthen via `BoneScale::length` / bind translation on that path.
+Check armature rest orientation: a 90° export flip can make local-X pitch yaw in
+world space (Hars raises about local −Z on the triple-join neck).
+
+Until rigid (no-scale) sockets land ([#516](https://github.com/ramate-io/maybraid/issues/516)):
+
+- Prefer **uniform** scale on any bone that still parents a pitched socket or head.
+- Avoid `BoneScale::length` / `thickness` on bones that rotate or parent a rotated
+  `head_socket` / feature socket.
+- Keep mesh and armature as separate assets when needed (`NeckRig` armature +
+  `NeckMesh` skinned to it), matching the head rig / head mesh split.
+
+[#516](https://github.com/ramate-io/maybraid/issues/516) tracks an opt-in rigid
+socket path (follow bone translation + orthonormal rotation, ignore scale/shear).

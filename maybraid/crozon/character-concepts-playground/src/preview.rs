@@ -11,6 +11,9 @@ use crozon_characters::{
 		braidman::BraidmanConfig,
 		brenal::BrenalConfig,
 		caole::CaoleConfig,
+		hars::HarsConfig,
+		claber::{ClaberColor, ClaberConfig},
+		croconot::CroconotConfig,
 		brodler::{BrodlerConfig, BrodlerHeadMesh, HornMesh},
 		common::{BodyMesh, EarMesh, EyeMesh, HairMesh, HeadMesh, MouthMesh, NoseMesh},
 		dui::{DuiConfig, DuiNoseMesh},
@@ -38,6 +41,9 @@ pub enum ConceptSpecies {
 	Braidman,
 	Brenal,
 	Caole,
+	Hars,
+	Claber,
+	Croconot,
 	Brodler,
 	Mygr,
 	Dui,
@@ -51,6 +57,9 @@ pub enum ConceptPreviewConfig {
 	Braidman { config: BraidmanConfig, animation: ConceptAnimation },
 	Brenal { config: BrenalConfig, animation: ConceptAnimation },
 	Caole { config: CaoleConfig, animation: ConceptAnimation },
+	Hars { config: HarsConfig, animation: ConceptAnimation },
+	Claber { config: ClaberConfig, animation: ConceptAnimation },
+	Croconot { config: CroconotConfig, animation: ConceptAnimation },
 	Brodler { config: BrodlerConfig, animation: ConceptAnimation },
 	Mygr { config: MygrConfig, animation: ConceptAnimation },
 	Dui { config: DuiConfig, animation: ConceptAnimation },
@@ -71,6 +80,9 @@ impl ConceptPreviewConfig {
 			ConceptSpecies::Braidman => Self::braidman(BraidmanConfig::default_preview()),
 			ConceptSpecies::Brenal => Self::brenal(BrenalConfig::default_preview()),
 			ConceptSpecies::Caole => Self::caole(CaoleConfig::default_preview()),
+			ConceptSpecies::Hars => Self::hars(HarsConfig::default_preview()),
+			ConceptSpecies::Claber => Self::claber(ClaberConfig::default_preview()),
+			ConceptSpecies::Croconot => Self::croconot(CroconotConfig::default_preview()),
 			ConceptSpecies::Brodler => Self::brodler(BrodlerConfig::default_preview()),
 			ConceptSpecies::Mygr => Self::mygr(MygrConfig::default_preview()),
 			ConceptSpecies::Dui => Self::dui(DuiConfig::default_preview()),
@@ -85,6 +97,9 @@ impl ConceptPreviewConfig {
 			Self::Braidman { .. } => ConceptSpecies::Braidman,
 			Self::Brenal { .. } => ConceptSpecies::Brenal,
 			Self::Caole { .. } => ConceptSpecies::Caole,
+			Self::Hars { .. } => ConceptSpecies::Hars,
+			Self::Claber { .. } => ConceptSpecies::Claber,
+			Self::Croconot { .. } => ConceptSpecies::Croconot,
 			Self::Brodler { .. } => ConceptSpecies::Brodler,
 			Self::Mygr { .. } => ConceptSpecies::Mygr,
 			Self::Dui { .. } => ConceptSpecies::Dui,
@@ -116,6 +131,30 @@ impl ConceptPreviewConfig {
 
 	pub fn caole_with_animation(config: CaoleConfig, animation: ConceptAnimation) -> Self {
 		Self::Caole { config, animation }
+	}
+
+	pub fn hars(config: HarsConfig) -> Self {
+		Self::Hars { config, animation: ConceptAnimation::default() }
+	}
+
+	pub fn hars_with_animation(config: HarsConfig, animation: ConceptAnimation) -> Self {
+		Self::Hars { config, animation }
+	}
+
+	pub fn croconot(config: CroconotConfig) -> Self {
+		Self::Croconot { config, animation: ConceptAnimation::default() }
+	}
+
+	pub fn croconot_with_animation(config: CroconotConfig, animation: ConceptAnimation) -> Self {
+		Self::Croconot { config, animation }
+	}
+
+	pub fn claber(config: ClaberConfig) -> Self {
+		Self::Claber { config, animation: ConceptAnimation::default() }
+	}
+
+	pub fn claber_with_animation(config: ClaberConfig, animation: ConceptAnimation) -> Self {
+		Self::Claber { config, animation }
 	}
 
 	pub fn brodler(config: BrodlerConfig) -> Self {
@@ -171,6 +210,9 @@ impl ConceptPreviewConfig {
 			Self::Braidman { config, .. } => config.resolve(),
 			Self::Brenal { config, .. } => config.resolve(),
 			Self::Caole { config, .. } => config.resolve(),
+			Self::Hars { config, .. } => config.resolve(),
+			Self::Claber { config, .. } => config.resolve(),
+			Self::Croconot { config, .. } => config.resolve(),
 			Self::Brodler { config, .. } => config.resolve(),
 			Self::Mygr { config, .. } => config.resolve(),
 			Self::Dui { config, .. } => config.resolve(),
@@ -187,6 +229,9 @@ impl ConceptPreviewConfig {
 			}
 			Self::Brenal { config, .. } => config.status_label(),
 			Self::Caole { config, .. } => config.status_label(),
+			Self::Hars { config, .. } => config.status_label(),
+			Self::Claber { config, .. } => config.status_label(),
+			Self::Croconot { config, .. } => config.status_label(),
 			Self::Brodler { config, animation } => {
 				format!("{} animation={}", config.status_label(), animation.label())
 			}
@@ -215,6 +260,9 @@ impl ConceptPreviewConfig {
 			}
 			Self::Brenal { config, .. } => format!("species=brenal {}", config.sync_key()),
 			Self::Caole { config, .. } => format!("species=caole {}", config.sync_key()),
+			Self::Hars { config, .. } => format!("species=hars {}", config.sync_key()),
+			Self::Claber { config, .. } => format!("species=claber {}", config.sync_key()),
+			Self::Croconot { config, .. } => format!("species=croconot {}", config.sync_key()),
 			Self::Brodler { config, animation } => {
 				format!("species=brodler {} animation={animation:?}", config.sync_key())
 			}
@@ -258,6 +306,21 @@ impl ConceptPreviewConfig {
 				"species=caole body={:?} mouth={:?} eye={:?}",
 				config.body,
 				config.mouth,
+				config.eye,
+			),
+			Self::Hars { config, .. } => format!(
+				"species=hars mouth={:?} eye={:?}",
+				config.mouth,
+				config.eye,
+			),
+			Self::Claber { config, .. } => format!(
+				"species=claber horns={:?} eye={:?}",
+				config.horns,
+				config.eye,
+			),
+			Self::Croconot { config, .. } => format!(
+				"species=croconot horns={:?} eye={:?}",
+				config.horns,
 				config.eye,
 			),
 			Self::Brodler { config, .. } => format!(
@@ -310,6 +373,9 @@ impl ConceptPreviewConfig {
 			Self::Braidman { animation, .. }
 			| Self::Brenal { animation, .. }
 			| Self::Caole { animation, .. }
+			| Self::Hars { animation, .. }
+			| Self::Claber { animation, .. }
+			| Self::Croconot { animation, .. }
 			| Self::Brodler { animation, .. }
 			| Self::Mygr { animation, .. }
 			| Self::Dui { animation, .. }
@@ -398,6 +464,26 @@ pub enum PreviewTarget {
 	CaoleEar,
 	CaoleMouth,
 	CaoleTail,
+	HarsBody,
+	HarsHead,
+	HarsEye(EyeMesh),
+	HarsEar,
+	HarsMouth,
+	HarsTail,
+	ClaberBody,
+	ClaberHead,
+	ClaberHorns(crozon_characters::species::claber::ClaberHornMesh),
+	ClaberEye(EyeMesh),
+	ClaberEar,
+	ClaberMouth,
+	ClaberTail,
+	CroconotBody,
+	CroconotHead,
+	CroconotHorns(crozon_characters::species::croconot::CroconotHornMesh),
+	CroconotEye(EyeMesh),
+	CroconotEar,
+	CroconotMouth,
+	CroconotTail,
 	BrodlerBody,
 	BrodlerHead(BrodlerHeadMesh),
 	BrodlerHorns(HornMesh),
@@ -457,6 +543,10 @@ pub fn sync_preview(
 	mut sync_state: ResMut<ConceptPreviewSyncState>,
 	mut respawn_cooldown: ResMut<PreviewRespawnCooldown>,
 	mut body_poses: Query<&mut ActiveRigPose, With<AnimatedBodyRig>>,
+	mut neck_poses: Query<
+		(&mut ActiveRigPose, &CharacterPart),
+		(With<CharacterRig>, Without<AnimatedBodyRig>),
+	>,
 	mut parts: Query<(
 		&CharacterPart,
 		&mut PreviewAssetTarget,
@@ -474,7 +564,7 @@ pub fn sync_preview(
 	let assembly = config.resolve();
 	if sync_state.spawn_key == spawn_key {
 		sync_state.live_key = live_key;
-		sync_live_preview(&config, &assembly, &mut body_poses, &mut parts);
+		sync_live_preview(&config, &assembly, &mut body_poses, &mut neck_poses, &mut parts);
 		return;
 	}
 
@@ -493,6 +583,10 @@ fn sync_live_preview(
 	config: &ConceptPreviewConfig,
 	assembly: &ResolvedCharacterAssembly,
 	body_poses: &mut Query<&mut ActiveRigPose, With<AnimatedBodyRig>>,
+	neck_poses: &mut Query<
+		(&mut ActiveRigPose, &CharacterPart),
+		(With<CharacterRig>, Without<AnimatedBodyRig>),
+	>,
 	parts: &mut Query<(
 		&CharacterPart,
 		&mut PreviewAssetTarget,
@@ -502,6 +596,19 @@ fn sync_live_preview(
 ) {
 	for mut pose in body_poses {
 		pose.pose = assembly.pose.clone();
+	}
+
+	if let Some(neck_pose) = assembly
+		.parts
+		.iter()
+		.find(|part| part.slot == CharacterPartSlot::NeckRig)
+		.and_then(|part| part.pose.clone())
+	{
+		for (mut pose, part) in neck_poses {
+			if part.slot == CharacterPartSlot::NeckRig {
+				pose.pose = neck_pose.clone();
+			}
+		}
 	}
 
 	match config {
@@ -559,6 +666,81 @@ fn sync_live_preview(
 			let sliders = caole.sliders.clamped();
 			for (part, mut target, base, transform) in parts {
 				target.color = preview_color_caole(caole, target.target);
+				let Some(base) = base else {
+					continue;
+				};
+				let Some(mut transform) = transform else {
+					continue;
+				};
+				if !has_feature_transform(part.slot) {
+					continue;
+				}
+				let authored =
+					base.normalization.mul_transform(sliders.feature_transform(part.slot));
+				match base.socket {
+					Some(socket) => {
+						*transform = socket;
+						transform.scale *= authored.scale;
+						transform.rotation *= authored.rotation;
+					}
+					None => *transform = authored,
+				}
+			}
+		}
+		ConceptPreviewConfig::Hars { config: hars, .. } => {
+			let sliders = hars.sliders.clamped();
+			for (part, mut target, base, transform) in parts {
+				target.color = preview_color_hars(hars, target.target);
+				let Some(base) = base else {
+					continue;
+				};
+				let Some(mut transform) = transform else {
+					continue;
+				};
+				if !has_feature_transform(part.slot) {
+					continue;
+				}
+				let authored =
+					base.normalization.mul_transform(sliders.feature_transform(part.slot));
+				match base.socket {
+					Some(socket) => {
+						*transform = socket;
+						transform.scale *= authored.scale;
+						transform.rotation *= authored.rotation;
+					}
+					None => *transform = authored,
+				}
+			}
+		}
+		ConceptPreviewConfig::Claber { config: claber, .. } => {
+			let sliders = claber.sliders.clamped();
+			for (part, mut target, base, transform) in parts {
+				target.color = preview_color_claber(claber, target.target);
+				let Some(base) = base else {
+					continue;
+				};
+				let Some(mut transform) = transform else {
+					continue;
+				};
+				if !has_feature_transform(part.slot) {
+					continue;
+				}
+				let authored =
+					base.normalization.mul_transform(sliders.feature_transform(part.slot));
+				match base.socket {
+					Some(socket) => {
+						*transform = socket;
+						transform.scale *= authored.scale;
+						transform.rotation *= authored.rotation;
+					}
+					None => *transform = authored,
+				}
+			}
+		}
+		ConceptPreviewConfig::Croconot { config: croconot, .. } => {
+			let sliders = croconot.sliders.clamped();
+			for (part, mut target, base, transform) in parts {
+				target.color = preview_color_croconot(croconot, target.target);
 				let Some(base) = base else {
 					continue;
 				};
@@ -765,6 +947,48 @@ fn preview_color_caole(config: &CaoleConfig, target: PreviewTarget) -> PreviewCo
 	})
 }
 
+fn preview_color_hars(config: &HarsConfig, target: PreviewTarget) -> PreviewColor {
+	use crozon_character_items::ItemColor;
+
+	let skin = config.colors.skin_color();
+	PreviewColor::Item(match target {
+		PreviewTarget::HarsBody => config.colors.body,
+		PreviewTarget::HarsHead | PreviewTarget::HarsEar => skin,
+		PreviewTarget::HarsEye(_) => config.colors.eyes,
+		PreviewTarget::HarsMouth => config.colors.mouth,
+		PreviewTarget::HarsTail => config.colors.tail,
+		_ => ItemColor::Natural,
+	})
+}
+
+fn preview_color_claber(config: &ClaberConfig, target: PreviewTarget) -> PreviewColor {
+	let skin = config.colors.skin_color();
+	PreviewColor::Claber(match target {
+		PreviewTarget::ClaberBody => config.colors.body,
+		PreviewTarget::ClaberHead | PreviewTarget::ClaberEar => skin,
+		PreviewTarget::ClaberEye(_) => config.colors.eyes,
+		PreviewTarget::ClaberMouth => config.colors.mouth,
+		PreviewTarget::ClaberHorns(_) => config.colors.horns,
+		PreviewTarget::ClaberTail => config.colors.tail,
+		_ => ClaberColor::DesertBrown,
+	})
+}
+
+fn preview_color_croconot(config: &CroconotConfig, target: PreviewTarget) -> PreviewColor {
+	use crozon_character_items::ItemColor;
+
+	let skin = config.colors.skin_color();
+	PreviewColor::Item(match target {
+		PreviewTarget::CroconotBody => config.colors.body,
+		PreviewTarget::CroconotHead | PreviewTarget::CroconotEar => skin,
+		PreviewTarget::CroconotEye(_) => config.colors.eyes,
+		PreviewTarget::CroconotMouth => config.colors.mouth,
+		PreviewTarget::CroconotHorns(_) => config.colors.horns,
+		PreviewTarget::CroconotTail => config.colors.tail,
+		_ => ItemColor::Natural,
+	})
+}
+
 fn preview_color_brodler(config: &BrodlerConfig, target: PreviewTarget) -> PreviewColor {
 	match target {
 		PreviewTarget::BrodlerHead(_)
@@ -867,6 +1091,31 @@ fn preview_color_spibmom(config: &SpibmomConfig, target: PreviewTarget) -> Previ
 	}
 }
 
+struct SocketRigMap {
+	body: Entity,
+	neck: Option<Entity>,
+	head: Option<Entity>,
+}
+
+impl SocketRigMap {
+	fn resolve(&self, target: SocketRig) -> Option<Entity> {
+		match target {
+			SocketRig::Body => Some(self.body),
+			SocketRig::Neck => self.neck,
+			SocketRig::Head => self.head,
+		}
+	}
+
+	fn resolve_skin(&self, target: SkinTarget) -> Option<Entity> {
+		match target {
+			SkinTarget::BodyRig => Some(self.body),
+			SkinTarget::NeckRig => self.neck,
+			SkinTarget::HeadRig => self.head,
+			SkinTarget::OwnRig | SkinTarget::None => None,
+		}
+	}
+}
+
 struct PreviewSpawner<'w, 's, 'a> {
 	commands: &'a mut Commands<'w, 's>,
 	asset_server: &'a AssetServer,
@@ -885,16 +1134,35 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 	}
 
 	fn spawn(mut self) {
-		let body_rig = self.spawn_body_rig();
-		let mut head_rig = None;
+		let mut sockets = SocketRigMap { body: self.spawn_body_rig(), neck: None, head: None };
 
-		let parts = self.assembly.parts.clone();
+		let mut parts = self.assembly.parts.clone();
+		parts.sort_by_key(|part| match part.slot {
+			CharacterPartSlot::NeckRig => 0,
+			CharacterPartSlot::HeadRig => 1,
+			_ => 2,
+		});
+
 		for part in parts {
-			if part.slot == CharacterPartSlot::HeadRig {
-				head_rig = self.spawn_head_rig(body_rig, &part);
-				continue;
+			match part.slot {
+				CharacterPartSlot::NeckRig => {
+					sockets.neck = Some(self.spawn_own_rig(
+						&part,
+						CharacterRigRole::Neck,
+						RigSkeletonKind::Neck,
+						&sockets,
+					));
+				}
+				CharacterPartSlot::HeadRig => {
+					sockets.head = Some(self.spawn_own_rig(
+						&part,
+						CharacterRigRole::Head,
+						RigSkeletonKind::Humanoid,
+						&sockets,
+					));
+				}
+				_ => self.spawn_part(&sockets, &part),
 			}
-			self.spawn_part(body_rig, head_rig, &part);
 		}
 	}
 
@@ -915,6 +1183,27 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 					.mul_transform(sliders.feature_transform(part.slot))
 			}
 			ConceptPreviewConfig::Caole { config, .. } => {
+				let sliders = config.sliders.clamped();
+				part.asset
+					.normalization
+					.transform()
+					.mul_transform(sliders.feature_transform(part.slot))
+			}
+			ConceptPreviewConfig::Hars { config, .. } => {
+				let sliders = config.sliders.clamped();
+				part.asset
+					.normalization
+					.transform()
+					.mul_transform(sliders.feature_transform(part.slot))
+			}
+			ConceptPreviewConfig::Claber { config, .. } => {
+				let sliders = config.sliders.clamped();
+				part.asset
+					.normalization
+					.transform()
+					.mul_transform(sliders.feature_transform(part.slot))
+			}
+			ConceptPreviewConfig::Croconot { config, .. } => {
 				let sliders = config.sliders.clamped();
 				part.asset
 					.normalization
@@ -967,44 +1256,55 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 			.id()
 	}
 
-	fn spawn_head_rig(&mut self, body_rig: Entity, part: &ResolvedCharacterPart) -> Option<Entity> {
-		let entity = self
-			.commands
-			.spawn((
-				WorldAssetRoot(
-					self.asset_server
-						.load(GltfAssetLabel::Scene(0).from_asset(part.asset.path.as_str())),
-				),
-				CharacterRig { role: CharacterRigRole::Head, skeleton: RigSkeletonKind::Humanoid },
-				CharacterPart { slot: part.slot },
-				BoneMap::default(),
-				ConceptPreviewRoot,
-				PreviewAwaitingReveal,
-				Visibility::Hidden,
-				self.part_base_transform(part),
-				self.part_transform(part),
-				self.preview_target(part),
-				Name::new(format!("character_{:?}", part.slot)),
-			))
-			.id();
+	fn spawn_own_rig(
+		&mut self,
+		part: &ResolvedCharacterPart,
+		role: CharacterRigRole,
+		skeleton: RigSkeletonKind,
+		sockets: &SocketRigMap,
+	) -> Entity {
+		let mut entity = self.commands.spawn((
+			WorldAssetRoot(
+				self.asset_server
+					.load(GltfAssetLabel::Scene(0).from_asset(part.asset.path.as_str())),
+			),
+			CharacterRig { role, skeleton },
+			CharacterPart { slot: part.slot },
+			BoneMap::default(),
+			ConceptPreviewRoot,
+			PreviewAwaitingReveal,
+			Visibility::Hidden,
+			self.part_base_transform(part),
+			self.part_transform(part),
+			self.preview_target(part),
+			Name::new(format!("character_{:?}", part.slot)),
+		));
 
-		if let Some(socket) = part.socket {
-			self.commands.entity(entity).insert(NeedsSocketPlacement {
-				rig_root: body_rig,
-				socket_bone: socket.bone,
-				local_transform: socket.local_transform,
-			});
+		if let Some(pose) = &part.pose {
+			entity.insert((ActiveRigPose { pose: pose.clone() }, RigBindScales::default()));
 		}
 
-		Some(entity)
+		let entity = entity.id();
+
+		if let Some(socket) = part.socket {
+			if let Some(rig_root) = sockets.resolve(socket.rig) {
+				self.commands.entity(entity).insert(NeedsSocketPlacement {
+					rig_root,
+					socket_bone: socket.bone,
+					local_transform: socket.local_transform,
+				});
+			} else if preview_debug_enabled() {
+				warn!(
+					"[preview] {:?} socket target {:?} not spawned yet (bone={})",
+					part.slot, socket.rig, socket.bone
+				);
+			}
+		}
+
+		entity
 	}
 
-	fn spawn_part(
-		&mut self,
-		body_rig: Entity,
-		head_rig: Option<Entity>,
-		part: &ResolvedCharacterPart,
-	) {
+	fn spawn_part(&mut self, sockets: &SocketRigMap, part: &ResolvedCharacterPart) {
 		let entity = self
 			.commands
 			.spawn((
@@ -1023,12 +1323,12 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 			))
 			.id();
 
-		if let Some(rig_root) = self.skin_target_rig(body_rig, head_rig, part.skin_target) {
+		if let Some(rig_root) = sockets.resolve_skin(part.skin_target) {
 			self.commands.entity(entity).insert((PartRigRef { rig_root }, NeedsSkinRemap));
 		}
 
 		if let Some(socket) = part.socket {
-			if let Some(rig_root) = self.socket_rig(body_rig, head_rig, socket.rig) {
+			if let Some(rig_root) = sockets.resolve(socket.rig) {
 				self.commands.entity(entity).insert(NeedsSocketPlacement {
 					rig_root,
 					socket_bone: socket.bone,
@@ -1038,36 +1338,12 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 		}
 	}
 
-	fn skin_target_rig(
-		&self,
-		body_rig: Entity,
-		head_rig: Option<Entity>,
-		target: SkinTarget,
-	) -> Option<Entity> {
-		match target {
-			SkinTarget::BodyRig => Some(body_rig),
-			SkinTarget::HeadRig => head_rig,
-			SkinTarget::OwnRig | SkinTarget::None => None,
-		}
-	}
-
-	fn socket_rig(
-		&self,
-		body_rig: Entity,
-		head_rig: Option<Entity>,
-		target: SocketRig,
-	) -> Option<Entity> {
-		match target {
-			SocketRig::Body => Some(body_rig),
-			SocketRig::Head => head_rig,
-		}
-	}
-
 	fn preview_target(&self, part: &ResolvedCharacterPart) -> PreviewAssetTarget {
 		match &self.config {
 			ConceptPreviewConfig::Braidman { config, .. } => {
 				let target = match part.slot {
 					CharacterPartSlot::BodyMesh => PreviewTarget::BraidmanBody(config.body),
+					CharacterPartSlot::NeckRig | CharacterPartSlot::NeckMesh => PreviewTarget::BraidmanBody(config.body),
 					CharacterPartSlot::HeadRig | CharacterPartSlot::HeadMesh => {
 						PreviewTarget::BraidmanHead(config.head)
 					}
@@ -1096,6 +1372,7 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 			ConceptPreviewConfig::Brenal { config, .. } => {
 				let target = match part.slot {
 					CharacterPartSlot::BodyMesh => PreviewTarget::BrenalBody,
+					CharacterPartSlot::NeckRig | CharacterPartSlot::NeckMesh => PreviewTarget::BrenalBody,
 					CharacterPartSlot::HeadRig | CharacterPartSlot::HeadMesh => {
 						PreviewTarget::BrenalHead
 					}
@@ -1118,6 +1395,7 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 			ConceptPreviewConfig::Caole { config, .. } => {
 				let target = match part.slot {
 					CharacterPartSlot::BodyMesh => PreviewTarget::CaoleBody,
+					CharacterPartSlot::NeckRig | CharacterPartSlot::NeckMesh => PreviewTarget::CaoleBody,
 					CharacterPartSlot::HeadRig | CharacterPartSlot::HeadMesh => {
 						PreviewTarget::CaoleHead
 					}
@@ -1137,9 +1415,79 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 				};
 				PreviewAssetTarget { target, color: preview_color_caole(config, target) }
 			}
+			ConceptPreviewConfig::Hars { config, .. } => {
+				let target = match part.slot {
+					CharacterPartSlot::BodyMesh => PreviewTarget::HarsBody,
+					CharacterPartSlot::NeckRig | CharacterPartSlot::NeckMesh => PreviewTarget::HarsBody,
+					CharacterPartSlot::HeadRig | CharacterPartSlot::HeadMesh => {
+						PreviewTarget::HarsHead
+					}
+					CharacterPartSlot::EyeLeft | CharacterPartSlot::EyeRight => {
+						PreviewTarget::HarsEye(config.eye)
+					}
+					CharacterPartSlot::EarLeft | CharacterPartSlot::EarRight => {
+						PreviewTarget::HarsEar
+					}
+					CharacterPartSlot::Mouth => PreviewTarget::HarsMouth,
+					CharacterPartSlot::Tail => PreviewTarget::HarsTail,
+					CharacterPartSlot::Nose
+					| CharacterPartSlot::Hair
+					| CharacterPartSlot::Clothing
+					| CharacterPartSlot::Spine
+					| CharacterPartSlot::Horns => PreviewTarget::HarsHead,
+				};
+				PreviewAssetTarget { target, color: preview_color_hars(config, target) }
+			}
+			ConceptPreviewConfig::Claber { config, .. } => {
+				let target = match part.slot {
+					CharacterPartSlot::BodyMesh => PreviewTarget::ClaberBody,
+					CharacterPartSlot::NeckRig | CharacterPartSlot::NeckMesh => PreviewTarget::ClaberBody,
+					CharacterPartSlot::HeadRig | CharacterPartSlot::HeadMesh => {
+						PreviewTarget::ClaberHead
+					}
+					CharacterPartSlot::EyeLeft | CharacterPartSlot::EyeRight => {
+						PreviewTarget::ClaberEye(config.eye)
+					}
+					CharacterPartSlot::EarLeft | CharacterPartSlot::EarRight => {
+						PreviewTarget::ClaberEar
+					}
+					CharacterPartSlot::Horns => PreviewTarget::ClaberHorns(config.horns),
+					CharacterPartSlot::Mouth => PreviewTarget::ClaberMouth,
+					CharacterPartSlot::Tail => PreviewTarget::ClaberTail,
+					CharacterPartSlot::Nose
+					| CharacterPartSlot::Hair
+					| CharacterPartSlot::Clothing
+					| CharacterPartSlot::Spine => PreviewTarget::ClaberHead,
+				};
+				PreviewAssetTarget { target, color: preview_color_claber(config, target) }
+			}
+			ConceptPreviewConfig::Croconot { config, .. } => {
+				let target = match part.slot {
+					CharacterPartSlot::BodyMesh => PreviewTarget::CroconotBody,
+					CharacterPartSlot::NeckRig | CharacterPartSlot::NeckMesh => PreviewTarget::CroconotBody,
+					CharacterPartSlot::HeadRig | CharacterPartSlot::HeadMesh => {
+						PreviewTarget::CroconotHead
+					}
+					CharacterPartSlot::EyeLeft | CharacterPartSlot::EyeRight => {
+						PreviewTarget::CroconotEye(config.eye)
+					}
+					CharacterPartSlot::EarLeft | CharacterPartSlot::EarRight => {
+						PreviewTarget::CroconotEar
+					}
+					CharacterPartSlot::Horns => PreviewTarget::CroconotHorns(config.horns),
+					CharacterPartSlot::Mouth => PreviewTarget::CroconotMouth,
+					CharacterPartSlot::Tail => PreviewTarget::CroconotTail,
+					CharacterPartSlot::Nose
+					| CharacterPartSlot::Hair
+					| CharacterPartSlot::Clothing
+					| CharacterPartSlot::Spine => PreviewTarget::CroconotHead,
+				};
+				PreviewAssetTarget { target, color: preview_color_croconot(config, target) }
+			}
 			ConceptPreviewConfig::Brodler { config, .. } => {
 				let target = match part.slot {
 					CharacterPartSlot::BodyMesh => PreviewTarget::BrodlerBody,
+					CharacterPartSlot::NeckRig | CharacterPartSlot::NeckMesh => PreviewTarget::BrodlerBody,
 					CharacterPartSlot::HeadRig | CharacterPartSlot::HeadMesh => {
 						PreviewTarget::BrodlerHead(config.head)
 					}
@@ -1168,6 +1516,7 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 			ConceptPreviewConfig::Mygr { config, .. } => {
 				let target = match part.slot {
 					CharacterPartSlot::BodyMesh => PreviewTarget::MygrBody,
+					CharacterPartSlot::NeckRig | CharacterPartSlot::NeckMesh => PreviewTarget::MygrBody,
 					CharacterPartSlot::HeadRig | CharacterPartSlot::HeadMesh => {
 						PreviewTarget::MygrHead
 					}
@@ -1195,6 +1544,7 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 			ConceptPreviewConfig::Dui { config, .. } => {
 				let target = match part.slot {
 					CharacterPartSlot::BodyMesh => PreviewTarget::DuiBody,
+					CharacterPartSlot::NeckRig | CharacterPartSlot::NeckMesh => PreviewTarget::DuiBody,
 					CharacterPartSlot::HeadRig | CharacterPartSlot::HeadMesh => {
 						PreviewTarget::DuiHead
 					}
@@ -1222,6 +1572,7 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 			ConceptPreviewConfig::Wumbus { config, .. } => {
 				let target = match part.slot {
 					CharacterPartSlot::BodyMesh => PreviewTarget::WumbusBody,
+					CharacterPartSlot::NeckRig | CharacterPartSlot::NeckMesh => PreviewTarget::WumbusBody,
 					CharacterPartSlot::HeadRig | CharacterPartSlot::HeadMesh => {
 						PreviewTarget::WumbusHead
 					}
@@ -1249,6 +1600,7 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 			ConceptPreviewConfig::Lero { config, .. } => {
 				let target = match part.slot {
 					CharacterPartSlot::BodyMesh => PreviewTarget::LeroBody,
+					CharacterPartSlot::NeckRig | CharacterPartSlot::NeckMesh => PreviewTarget::LeroBody,
 					CharacterPartSlot::HeadRig | CharacterPartSlot::HeadMesh => {
 						PreviewTarget::LeroHead
 					}
@@ -1276,6 +1628,7 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 			ConceptPreviewConfig::Spibmom { config, .. } => {
 				let target = match part.slot {
 					CharacterPartSlot::BodyMesh => PreviewTarget::SpibmomBody,
+					CharacterPartSlot::NeckRig | CharacterPartSlot::NeckMesh => PreviewTarget::SpibmomBody,
 					CharacterPartSlot::HeadRig | CharacterPartSlot::HeadMesh => {
 						PreviewTarget::SpibmomHead
 					}

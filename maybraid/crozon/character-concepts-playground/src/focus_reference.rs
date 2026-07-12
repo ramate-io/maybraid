@@ -10,18 +10,6 @@
 //! rendered ([`Visibility::Hidden`]). Socket lookups against them therefore
 //! reflect the character's proportions without any animation transforms.
 //!
-//! # Head-rig scale must match the preview
-//!
-//! Orthograde / pronograde head armatures are authored large and brought down
-//! with [`AssetNormalization`](crozon_characters::assets::AssetNormalization)
-//! at preview spawn (e.g. Brodler / Braidman `base_y(0.26)`). The shadow head
-//! must use that same transform: `attach_focus_reference_to_sockets` parents
-//! the head to the body socket and **preserves** the entity's authored scale
-//! into the final local transform. Spawning the shadow head at
-//! [`Transform::IDENTITY`] leaves sockets at full authored size while the neck
-//! attachment stays posed correctly, so nose / eye / crown world Y values come
-//! out far too large (roughly `1 / normalization.scale` relative to the neck).
-//!
 //! # Lifecycle
 //!
 //! Readiness is signalled by imperative state changes, never approximated from
@@ -29,8 +17,7 @@
 //!
 //! 1. [`sync_focus_reference`] spawns a shadow body rig (plus a head rig when
 //!    the assembly has a `HeadRig` part) whenever the spawn key — body-rig and
-//!    head-rig asset paths — changes. Old shadow roots are despawned. The head
-//!    is spawned with `part.asset.normalization.transform()`, matching preview.
+//!    head-rig asset paths — changes. Old shadow roots are despawned.
 //! 2. `build_rig_bone_map` (skinning) fills [`BoneMap`] as the GLTF scenes
 //!    spawn bones.
 //! 3. `maintain_resolved_pose` (skinning) applies the proportional pose and
@@ -38,14 +25,17 @@
 //!    on the body rig once the pose is fully written. Camera focus gates on
 //!    that marker.
 //! 4. `attach_focus_reference_to_sockets` (skinning) parents the head rig to
-//!    its socket bone, keeps the normalization scale, and removes
-//!    [`NeedsSocketPlacement`] — the readiness signal for head-socket focuses.
+//!    its socket bone and removes [`NeedsSocketPlacement`] — the readiness
+//!    signal for head-socket focuses.
 //! 5. Config tweaks that keep the same armatures (sliders, colors) only update
 //!    [`ActiveRigPose`] in place; pose maintenance re-applies it every frame,
 //!    so no respawn and no readiness reset is needed.
 
 use bevy::prelude::*;
-use crozon_characters::assembly::{CharacterPartSlot, ResolvedCharacterAssembly};
+use crozon_characters::{
+	assembly::{CharacterPartSlot, ResolvedCharacterAssembly},
+	SocketRig,
+};
 
 use crate::preview::ConceptPreviewConfig;
 use crate::skinning::{
@@ -85,6 +75,9 @@ fn focus_live_key(config: &ConceptPreviewConfig) -> String {
 		ConceptPreviewConfig::Braidman { config, .. } => config.sync_key(),
 		ConceptPreviewConfig::Brenal { config, .. } => config.sync_key(),
 		ConceptPreviewConfig::Caole { config, .. } => config.sync_key(),
+		ConceptPreviewConfig::Hars { config, .. } => config.sync_key(),
+		ConceptPreviewConfig::Claber { config, .. } => config.sync_key(),
+		ConceptPreviewConfig::Croconot { config, .. } => config.sync_key(),
 		ConceptPreviewConfig::Brodler { config, .. } => config.sync_key(),
 		ConceptPreviewConfig::Mygr { config, .. } => config.sync_key(),
 		ConceptPreviewConfig::Dui { config, .. } => config.sync_key(),
@@ -95,16 +88,25 @@ fn focus_live_key(config: &ConceptPreviewConfig) -> String {
 }
 
 /// Shadow rigs must respawn when the underlying armature assets change: a new
-/// body rig or head rig carries different socket bones. Cosmetic part swaps on
+/// body, neck, or head rig carries different socket bones. Cosmetic part swaps on
 /// the same armatures only refresh the live pose.
 fn focus_spawn_key(assembly: &ResolvedCharacterAssembly) -> String {
+	let neck_rig_path = assembly
+		.parts
+		.iter()
+		.find(|part| part.slot == CharacterPartSlot::NeckRig)
+		.map(|part| part.asset.path.as_str())
+		.unwrap_or("");
 	let head_rig_path = assembly
 		.parts
 		.iter()
 		.find(|part| part.slot == CharacterPartSlot::HeadRig)
 		.map(|part| part.asset.path.as_str())
 		.unwrap_or("");
-	format!("body={} head={head_rig_path}", assembly.body_rig.path.as_str())
+	format!(
+		"body={} neck={neck_rig_path} head={head_rig_path}",
+		assembly.body_rig.path.as_str()
+	)
 }
 
 pub fn sync_focus_reference(
@@ -112,7 +114,7 @@ pub fn sync_focus_reference(
 	asset_server: Res<AssetServer>,
 	config: Res<ConceptPreviewConfig>,
 	mut sync_state: ResMut<FocusReferenceSyncState>,
-	mut body_poses: Query<&mut ActiveRigPose, With<FocusReferenceRig>>,
+	mut poses: Query<(&mut ActiveRigPose, &CharacterRig), With<FocusReferenceRig>>,
 	roots: Query<Entity, With<FocusReferenceRoot>>,
 ) {
 	let live_key = focus_live_key(&config);
@@ -123,11 +125,24 @@ pub fn sync_focus_reference(
 	let assembly = config.resolve();
 	let spawn_key = focus_spawn_key(&assembly);
 	if sync_state.spawn_key == spawn_key {
-		// Same armatures: update the pose in place. `maintain_resolved_pose`
-		// re-applies it every frame, so nothing else needs to be invalidated.
+		// Same armatures: update poses in place. `maintain_resolved_pose`
+		// re-applies them every frame, so nothing else needs to be invalidated.
 		sync_state.live_key = live_key;
-		for mut pose in &mut body_poses {
-			pose.pose = assembly.pose.clone();
+		let neck_pose = assembly
+			.parts
+			.iter()
+			.find(|part| part.slot == CharacterPartSlot::NeckRig)
+			.and_then(|part| part.pose.clone());
+		for (mut pose, rig) in &mut poses {
+			match rig.role {
+				CharacterRigRole::Body => pose.pose = assembly.pose.clone(),
+				CharacterRigRole::Neck => {
+					if let Some(neck_pose) = &neck_pose {
+						pose.pose = neck_pose.clone();
+					}
+				}
+				CharacterRigRole::Head => {}
+			}
 		}
 		return;
 	}
@@ -169,20 +184,43 @@ fn spawn_focus_reference(
 		))
 		.id();
 
+	let mut neck_rig = None;
+	if let Some(neck_part) =
+		assembly.parts.iter().find(|part| part.slot == CharacterPartSlot::NeckRig)
+	{
+		let mut entity = commands.spawn((
+			WorldAssetRoot(
+				asset_server
+					.load(GltfAssetLabel::Scene(0).from_asset(neck_part.asset.path.as_str())),
+			),
+			CharacterRig { role: CharacterRigRole::Neck, skeleton: RigSkeletonKind::Neck },
+			FocusReferenceRig,
+			BoneMap::default(),
+			FocusReferenceRoot,
+			Visibility::Hidden,
+			Transform::IDENTITY,
+			Name::new("focus_neck_rig"),
+		));
+		if let Some(pose) = &neck_part.pose {
+			entity.insert((ActiveRigPose { pose: pose.clone() }, RigBindScales::default()));
+		}
+		let entity = entity.id();
+		if let Some(socket) = neck_part.socket {
+			commands.entity(entity).insert(NeedsSocketPlacement {
+				rig_root: body_rig,
+				socket_bone: socket.bone,
+				local_transform: socket.local_transform,
+			});
+		}
+		neck_rig = Some(entity);
+	}
+
 	let Some(head_part) =
 		assembly.parts.iter().find(|part| part.slot == CharacterPartSlot::HeadRig)
 	else {
 		return;
 	};
 
-	// CRITICAL: same authored scale as `PreviewSpawner::spawn_head_rig`.
-	//
-	// Head GLTFs are normalized at spawn (often `AssetNormalization::base_y(0.26)`).
-	// `attach_part_to_socket` does `local_transform.scale *= authored_scale`, so
-	// this value must already be on the entity when the head is parented to the
-	// body socket. Identity scale here is what made camera-focus nose/crown Y
-	// resolve several times too high after shadow-only focus resolution landed.
-	let head_transform = head_part.asset.normalization.transform();
 	let head_rig = commands
 		.spawn((
 			WorldAssetRoot(
@@ -194,16 +232,23 @@ fn spawn_focus_reference(
 			BoneMap::default(),
 			FocusReferenceRoot,
 			Visibility::Hidden,
-			head_transform,
+			Transform::IDENTITY,
 			Name::new("focus_head_rig"),
 		))
 		.id();
 
 	if let Some(socket) = head_part.socket {
-		commands.entity(head_rig).insert(NeedsSocketPlacement {
-			rig_root: body_rig,
-			socket_bone: socket.bone,
-			local_transform: socket.local_transform,
-		});
+		let rig_root = match socket.rig {
+			SocketRig::Body => Some(body_rig),
+			SocketRig::Neck => neck_rig,
+			SocketRig::Head => None,
+		};
+		if let Some(rig_root) = rig_root {
+			commands.entity(head_rig).insert(NeedsSocketPlacement {
+				rig_root,
+				socket_bone: socket.bone,
+				local_transform: socket.local_transform,
+			});
+		}
 	}
 }
