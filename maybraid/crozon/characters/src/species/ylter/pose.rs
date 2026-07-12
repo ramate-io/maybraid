@@ -13,8 +13,8 @@ pub const NECK_PITCH: f32 = FRAC_PI_4;
 /// Counter-pitch on the neck tip `head_socket` so the head stays level.
 pub const HEAD_SOCKET_PITCH: f32 = -NECK_PITCH;
 
-/// Longer limbs than Hars for a lanky silhouette.
-const LIMB_LENGTH: f32 = 1.75;
+/// Limb length (~0.8× the prior 1.75 lanky baseline).
+const LIMB_LENGTH: f32 = 1.4;
 const TORSO_THICKNESS: f32 = 1.2;
 const RUMBLER_BACK_RIDGE_LENGTH: f32 = 1.35;
 const RUMBLER_LEG_THICKNESS: f32 = 1.05;
