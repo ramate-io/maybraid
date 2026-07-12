@@ -1,8 +1,12 @@
 //! Hars proportion layers on the quadruped body + triple-join neck.
 //!
-//! Carriage comes from pitching the separate neck armature (uniform path, no
-//! non-uniform body-neck scale). The head sockets onto the neck tip with a
-//! matching counter-pitch on the neck's `head_socket` bone.
+//! Carriage: pitch the separate neck armature and uniform-scale it. The mesh is
+//! authored long (`basic_3_1`); do not lengthen via non-uniform bone scale.
+//! Counter-pitch the neck tip `head_socket` so the head stays level.
+//!
+//! After the neck's +90° Z armature rest, length is local Y and world-up maps to
+//! local X, so raise is about **−Z** ([`BoneRotation::pitch_z`] with a negative
+//! [`NECK_PITCH`]). Local +X yaws; local +Z pitches down.
 
 use std::f32::consts::FRAC_PI_4;
 
@@ -12,10 +16,12 @@ use crate::{
 };
 use crozon_rigs::{BoneRotation, BoneScale, ResolvedRigPose, RigPoseLayer};
 
-/// Total raise across the triple-join neck; distributed evenly per segment.
-pub const NECK_PITCH: f32 = FRAC_PI_4;
+/// Raise magnitude about local −Z (negative = tip up after armature rest).
+pub const NECK_PITCH: f32 = -FRAC_PI_4;
 /// Counter-pitch on the neck tip `head_socket` so the head stays level.
 pub const HEAD_SOCKET_PITCH: f32 = -NECK_PITCH;
+/// Uniform size of the neck armature (authored mesh length; no Y-stretch).
+pub const NECK_SCALE: f32 = 1.0;
 
 const SEGMENT_PITCH: f32 = NECK_PITCH / 3.0;
 
@@ -49,15 +55,18 @@ impl HarsPose {
 			.with_layer(self.slider_layer())
 	}
 
-	/// Triple-join neck OwnRig layers: distribute pitch, counter-pitch tip.
+	/// Triple-join neck OwnRig layers: distribute pitch, counter-pitch tip,
+	/// optional uniform scale.
 	pub fn neck_pose(self) -> ResolvedRigPose {
-		ResolvedRigPose::new().with_layer(
-			RigPoseLayer::new("hars neck pitch")
-				.with_rotation(BoneRotation::pitch_x("neck_base", SEGMENT_PITCH))
-				.with_rotation(BoneRotation::pitch_x("mid_neck", SEGMENT_PITCH))
-				.with_rotation(BoneRotation::pitch_x("upper_neck", SEGMENT_PITCH))
-				.with_rotation(BoneRotation::pitch_x("head_socket", HEAD_SOCKET_PITCH)),
-		)
+		let mut layer = RigPoseLayer::new("hars neck pitch")
+			.with_rotation(BoneRotation::pitch_z("neck_base", SEGMENT_PITCH))
+			.with_rotation(BoneRotation::pitch_z("mid_neck", SEGMENT_PITCH))
+			.with_rotation(BoneRotation::pitch_z("upper_neck", SEGMENT_PITCH))
+			.with_rotation(BoneRotation::pitch_z("head_socket", HEAD_SOCKET_PITCH));
+		if NECK_SCALE != 1.0 {
+			layer = layer.with_scale(BoneScale::uniform("neck_base", NECK_SCALE));
+		}
+		ResolvedRigPose::new().with_layer(layer)
 	}
 
 	fn species_baseline(self) -> RigPoseLayer {

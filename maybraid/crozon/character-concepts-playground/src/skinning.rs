@@ -227,6 +227,13 @@ fn attach_part_to_socket(
 	transform.scale *= authored_scale;
 	transform.rotation *= authored_rotation;
 
+	if preview_debug_enabled() {
+		info!(
+			"Concept socket attach: {:?} → bone `{}` on {:?}",
+			entity, placement.socket_bone, placement.rig_root
+		);
+	}
+
 	commands.entity(entity).try_insert(ChildOf(*bone_entity));
 	commands.entity(entity).try_remove::<NeedsSocketPlacement>();
 }
@@ -299,6 +306,13 @@ pub fn remap_part_skin_to_rig(
 			};
 			if !scene_spawner.instance_is_ready(**instance) {
 				continue;
+			}
+			if preview_debug_enabled() {
+				warn!(
+					"Concept part {:?} has NeedsSkinRemap but no SkinnedMesh under the scene (rig joints={})",
+					part.slot,
+					rig_map.by_name.len()
+				);
 			}
 			commands.entity(part_root).try_remove::<NeedsSkinRemap>();
 			continue;

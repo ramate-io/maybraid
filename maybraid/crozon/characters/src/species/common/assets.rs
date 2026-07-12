@@ -17,8 +17,10 @@ pub const HEAD_CANINE: AssetPath = AssetPath::new("characters/heads/bear_head.gl
 /// Pronograde Caole head mesh.
 pub const HEAD_CAOLE: AssetPath = AssetPath::new("characters/heads/caole.glb");
 pub const HEAD_COWDER: AssetPath = AssetPath::new("characters/heads/cowder.glb");
-/// Triple-joint neck armature + mesh (`neck_base` → `mid_neck` → `upper_neck` → `head_socket`).
+/// Triple-joint neck armature only (`neck_base` → `mid_neck` → `upper_neck` → `head_socket`).
 pub const NECK_TRIPLE_JOIN: AssetPath = AssetPath::new("characters/necks/triple_join_3_1.glb");
+/// Skinned neck mesh authored against the triple-join joint names.
+pub const NECK_BASIC: AssetPath = AssetPath::new("characters/necks/basic_3_1.glb");
 pub const TAIL_CAT: AssetPath = AssetPath::new("characters/tails/cat_tail.glb");
 pub const TAIL_LERODON: AssetPath = AssetPath::new("characters/tails/lerodon_tail.glb");
 pub const TAIL_LERODON_QUADRUPED: AssetPath =

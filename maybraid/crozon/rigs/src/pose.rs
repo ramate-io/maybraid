@@ -84,6 +84,12 @@ impl BoneRotation {
 	pub fn pitch_x(bone: &'static str, radians: f32) -> Self {
 		Self { bone, rotation: Quat::from_rotation_x(radians) }
 	}
+
+	/// Pitch about local Z — use when the armature rest orients length along Y
+	/// after a 90° Z export flip (common for Blender Y-up necks).
+	pub fn pitch_z(bone: &'static str, radians: f32) -> Self {
+		Self { bone, rotation: Quat::from_rotation_z(radians) }
+	}
 }
 
 /// A named proportional layer in the bind-pose composition stack.

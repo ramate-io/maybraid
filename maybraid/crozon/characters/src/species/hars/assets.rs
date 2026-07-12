@@ -11,7 +11,7 @@ use crate::{
 	assets::AssetNormalization,
 	species::{
 		common::{
-			BODY_RUMBLER, EAR_FLANK, HEAD_COWDER, MOUTH_COW_SNOUT, NECK_TRIPLE_JOIN,
+			BODY_RUMBLER, EAR_FLANK, HEAD_COWDER, MOUTH_COW_SNOUT, NECK_BASIC, NECK_TRIPLE_JOIN,
 			PRONOGRADE_HEAD_RIG, QUADRUPED_RIG, TAIL_CAT,
 		},
 		hars::{pose::HarsPose, HarsConfig},
@@ -33,6 +33,7 @@ impl HarsAssets {
 		)
 		.with_part(Self::body_mesh())
 		.with_part(Self::neck_rig(pose))
+		.with_part(Self::neck_mesh())
 		.with_part(Self::head_rig())
 		.with_part(Self::head_mesh())
 		.with_part(Self::eye_left(config.eye))
@@ -62,7 +63,7 @@ impl HarsAssets {
 			CharacterAsset::new(
 				"TripleJoinNeck",
 				NECK_TRIPLE_JOIN,
-				AssetNormalization::IDENTITY,
+				AssetNormalization::base_y(0.4),
 			),
 			SkinTarget::OwnRig,
 			Some(SocketAttachment {
@@ -72,6 +73,19 @@ impl HarsAssets {
 			}),
 		)
 		.with_pose(pose.neck_pose())
+	}
+
+	fn neck_mesh() -> ResolvedCharacterPart {
+		ResolvedCharacterPart::new(
+			CharacterPartSlot::NeckMesh,
+			CharacterAsset::new("basic-neck", NECK_BASIC, AssetNormalization::IDENTITY),
+			SkinTarget::NeckRig,
+			Some(SocketAttachment {
+				rig: SocketRig::Neck,
+				bone: "neck_base",
+				local_transform: Transform::IDENTITY,
+			}),
+		)
 	}
 
 	fn head_rig() -> ResolvedCharacterPart {

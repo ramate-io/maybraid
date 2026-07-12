@@ -73,6 +73,12 @@ Spawn from the playground UI (species picker) or CLI:
 crozon-concepts mygr preview --skin ginger --eyes green
 ```
 
+Preview socket/skin debug:
+
+```bash
+CROZON_PREVIEW_DEBUG=1 crozon-concepts hars preview
+```
+
 ### Socketing, scale, and shear
 
 Parts attach with [`SocketAttachment`](src/assembly.rs): a `ChildOf(bone)` plus a
@@ -81,23 +87,25 @@ on an ancestor combined with rotation on or under that socket shears** the
 attached mesh. Intermediate bones do not fix this if the part remains a transform
 child of the scaled chain.
 
-Nested armatures are supported via [`SocketRig::Neck`](src/assembly.rs) /
-[`CharacterPartSlot::NeckRig`](src/assembly.rs): socket a neck OwnRig to the body
-`head_socket`, apply pitch on the neck bones through [`ResolvedCharacterPart::pose`],
-and socket the head to the neck tip `head_socket`. Prefer **uniform** scale (or
-authored length) on that path — avoid `BoneScale::length` / `thickness` on bones
-that still parent a rotated head.
+Nested armatures use [`SocketRig::Neck`](src/assembly.rs) /
+[`CharacterPartSlot::NeckRig`](src/assembly.rs) (+ optional `NeckMesh`):
+
+1. Socket the neck OwnRig to the body `head_socket`.
+2. Apply **pitch** (and optional **uniform** scale) via [`ResolvedCharacterPart::pose`].
+3. Socket the head to the neck tip `head_socket` (counter-pitch on the tip bone).
+
+With a dedicated neck armature/mesh, **prefer authored length + pitch + uniform
+scale** — do not lengthen via `BoneScale::length` / bind translation on that path.
+Check armature rest orientation: a 90° export flip can make local-X pitch yaw in
+world space (Hars raises about local −Z on the triple-join neck).
 
 Until rigid (no-scale) sockets land ([#516](https://github.com/ramate-io/maybraid/issues/516)):
 
-- Prefer **uniform** scale (`BoneScale::uniform` / equal XYZ) on any bone that
-  still parents a pitched socket or an attached head/feature.
-- Avoid `BoneScale::length` / `thickness` (non-uniform) on bones that rotate or
-  that parent a rotated `head_socket` / feature socket.
-- For a long raised neck without shear: author a long-neck mesh (or uniform-scale
-  it), pitch the neck armature, and counter-pitch the tip `head_socket`.
-- Lengthen via bind **translation** along the pitched axis when you must stretch
-  a joint without non-uniform scale.
+- Prefer **uniform** scale on any bone that still parents a pitched socket or head.
+- Avoid `BoneScale::length` / `thickness` on bones that rotate or parent a rotated
+  `head_socket` / feature socket.
+- Keep mesh and armature as separate assets when needed (`NeckRig` armature +
+  `NeckMesh` skinned to it), matching the head rig / head mesh split.
 
 [#516](https://github.com/ramate-io/maybraid/issues/516) tracks an opt-in rigid
 socket path (follow bone translation + orthonormal rotation, ignore scale/shear).
