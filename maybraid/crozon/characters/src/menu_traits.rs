@@ -39,6 +39,7 @@ use crate::{
 			WumbusEarColor, WumbusEyeColor, WumbusHeadMesh, WumbusHornColor, WumbusHornMesh,
 			WumbusMouthColor, WumbusMouthMesh, WumbusSkinColor, WumbusSpineColor,
 		},
+		ylter::{YilterBodyMesh, YilterMouthMesh},
 	},
 	ConceptAnimation,
 };
@@ -125,6 +126,8 @@ impl_menu_identity!(
 	CaoleMouthMesh,
 	HarsBodyMesh,
 	HarsMouthMesh,
+	YilterBodyMesh,
+	YilterMouthMesh,
 	ClaberBodyMesh,
 	ClaberHeadMesh,
 	ClaberMouthMesh,
@@ -223,6 +226,8 @@ impl_asset_option!(CaoleBodyMesh, BODY_THUMBNAIL_CAMERA);
 impl_asset_option!(CaoleMouthMesh, FACE_FEATURE_THUMBNAIL_CAMERA);
 impl_asset_option!(HarsBodyMesh, BODY_THUMBNAIL_CAMERA);
 impl_asset_option!(HarsMouthMesh, FACE_FEATURE_THUMBNAIL_CAMERA);
+impl_asset_option!(YilterBodyMesh, BODY_THUMBNAIL_CAMERA);
+impl_asset_option!(YilterMouthMesh, FACE_FEATURE_THUMBNAIL_CAMERA);
 impl_asset_option!(ClaberBodyMesh, BODY_THUMBNAIL_CAMERA);
 impl_asset_option!(ClaberHeadMesh, HEAD_THUMBNAIL_CAMERA);
 impl_asset_option!(ClaberMouthMesh, FACE_FEATURE_THUMBNAIL_CAMERA);

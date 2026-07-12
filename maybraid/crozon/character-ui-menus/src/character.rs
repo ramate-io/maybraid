@@ -4,7 +4,7 @@ use character_ui_menu::{
 use crozon_characters::{
 	species::{
 		braidman::BraidmanConfig, brenal::BrenalConfig, caole::CaoleConfig, hars::HarsConfig, claber::ClaberConfig, croconot::CroconotConfig, brodler::BrodlerConfig, dui::DuiConfig,
-		lero::LeroConfig, mygr::MygrConfig, spibmom::SpibmomConfig, wumbus::WumbusConfig,
+		lero::LeroConfig, mygr::MygrConfig, spibmom::SpibmomConfig, wumbus::WumbusConfig, ylter::YilterConfig,
 	},
 	ConceptAnimation,
 };
@@ -23,6 +23,7 @@ use crate::{
 		mygr::MygrMenu,
 		spibmom::SpibmomMenu,
 		wumbus::WumbusMenu,
+		ylter::{YilterAnimationClip, YilterMenu},
 	},
 	cycle_value,
 	event::{AssetValue, CharacterField, MenuEvent, SectionId, SwatchValue},
@@ -34,6 +35,7 @@ pub enum ConceptSpecies {
 	Brenal,
 	Caole,
 	Hars,
+	Yilter,
 	Claber,
 	Croconot,
 	Brodler,
@@ -51,6 +53,7 @@ impl ConceptSpecies {
 			Self::Brenal => "brenal",
 			Self::Caole => "caole",
 			Self::Hars => "hars",
+			Self::Yilter => "ylter",
 			Self::Claber => "claber",
 			Self::Croconot => "croconot",
 			Self::Brodler => "brodler",
@@ -70,6 +73,7 @@ impl ListValues for ConceptSpecies {
 			Self::Brenal,
 			Self::Caole,
 			Self::Hars,
+			Self::Yilter,
 			Self::Claber,
 			Self::Croconot,
 			Self::Brodler,
@@ -89,6 +93,7 @@ impl LabelOption for ConceptSpecies {
 			Self::Brenal => "brenal",
 			Self::Caole => "caole",
 			Self::Hars => "hars",
+			Self::Yilter => "ylter",
 			Self::Claber => "claber",
 			Self::Croconot => "croconot",
 			Self::Brodler => "brodler",
@@ -108,6 +113,7 @@ pub struct CharacterMenu {
 	pub brenal: BrenalMenu,
 	pub caole: CaoleMenu,
 	pub hars: HarsMenu,
+	pub ylter: YilterMenu,
 	pub claber: ClaberMenu,
 	pub croconot: CroconotMenu,
 	pub brodler: BrodlerMenu,
@@ -126,6 +132,7 @@ impl CharacterMenu {
 			brenal: BrenalMenu::default(),
 			caole: CaoleMenu::default(),
 			hars: HarsMenu::default(),
+			ylter: YilterMenu::default(),
 			croconot: CroconotMenu::default(),
 			claber: ClaberMenu::default(),
 			brodler: BrodlerMenu::default(),
@@ -144,6 +151,7 @@ impl CharacterMenu {
 			brenal: BrenalMenu::from(config).with_animation(animation),
 			caole: CaoleMenu::default(),
 			hars: HarsMenu::default(),
+			ylter: YilterMenu::default(),
 			croconot: CroconotMenu::default(),
 			claber: ClaberMenu::default(),
 			brodler: BrodlerMenu::default(),
@@ -162,6 +170,7 @@ impl CharacterMenu {
 			brenal: BrenalMenu::default(),
 			caole: CaoleMenu::from(config).with_animation(animation),
 			hars: HarsMenu::default(),
+			ylter: YilterMenu::default(),
 			claber: ClaberMenu::default(),
 			croconot: CroconotMenu::default(),
 			brodler: BrodlerMenu::default(),
@@ -180,6 +189,26 @@ impl CharacterMenu {
 			brenal: BrenalMenu::default(),
 			caole: CaoleMenu::default(),
 			hars: HarsMenu::from(config).with_animation(animation),
+			ylter: YilterMenu::default(),
+			claber: ClaberMenu::default(),
+			croconot: CroconotMenu::default(),
+			brodler: BrodlerMenu::default(),
+			mygr: MygrMenu::default(),
+			dui: DuiMenu::default(),
+			wumbus: WumbusMenu::default(),
+			lero: LeroMenu::default(),
+			spibmom: SpibmomMenu::default(),
+		}
+	}
+
+	pub fn from_ylter(config: &YilterConfig, animation: ConceptAnimation) -> Self {
+		Self {
+			species: SingleSelect::new(ConceptSpecies::Yilter),
+			braidman: BraidmanMenu::default(),
+			brenal: BrenalMenu::default(),
+			caole: CaoleMenu::default(),
+			hars: HarsMenu::default(),
+			ylter: YilterMenu::from(config).with_animation(animation),
 			claber: ClaberMenu::default(),
 			croconot: CroconotMenu::default(),
 			brodler: BrodlerMenu::default(),
@@ -199,6 +228,7 @@ impl CharacterMenu {
 			brenal: BrenalMenu::default(),
 			caole: CaoleMenu::default(),
 			hars: HarsMenu::default(),
+			ylter: YilterMenu::default(),
 			croconot: CroconotMenu::from(config).with_animation(animation),
 			claber: ClaberMenu::default(),
 			brodler: BrodlerMenu::default(),
@@ -217,6 +247,7 @@ impl CharacterMenu {
 			brenal: BrenalMenu::default(),
 			caole: CaoleMenu::default(),
 			hars: HarsMenu::default(),
+			ylter: YilterMenu::default(),
 			claber: ClaberMenu::from(config).with_animation(animation),
 			croconot: CroconotMenu::default(),
 			brodler: BrodlerMenu::default(),
@@ -235,6 +266,7 @@ impl CharacterMenu {
 			brenal: BrenalMenu::default(),
 			caole: CaoleMenu::default(),
 			hars: HarsMenu::default(),
+			ylter: YilterMenu::default(),
 			croconot: CroconotMenu::default(),
 			claber: ClaberMenu::default(),
 			brodler: BrodlerMenu::from(config).with_animation(animation),
@@ -253,6 +285,7 @@ impl CharacterMenu {
 			brenal: BrenalMenu::default(),
 			caole: CaoleMenu::default(),
 			hars: HarsMenu::default(),
+			ylter: YilterMenu::default(),
 			croconot: CroconotMenu::default(),
 			claber: ClaberMenu::default(),
 			brodler: BrodlerMenu::default(),
@@ -271,6 +304,7 @@ impl CharacterMenu {
 			brenal: BrenalMenu::default(),
 			caole: CaoleMenu::default(),
 			hars: HarsMenu::default(),
+			ylter: YilterMenu::default(),
 			croconot: CroconotMenu::default(),
 			claber: ClaberMenu::default(),
 			brodler: BrodlerMenu::default(),
@@ -289,6 +323,7 @@ impl CharacterMenu {
 			brenal: BrenalMenu::default(),
 			caole: CaoleMenu::default(),
 			hars: HarsMenu::default(),
+			ylter: YilterMenu::default(),
 			croconot: CroconotMenu::default(),
 			claber: ClaberMenu::default(),
 			brodler: BrodlerMenu::default(),
@@ -307,6 +342,7 @@ impl CharacterMenu {
 			brenal: BrenalMenu::default(),
 			caole: CaoleMenu::default(),
 			hars: HarsMenu::default(),
+			ylter: YilterMenu::default(),
 			croconot: CroconotMenu::default(),
 			claber: ClaberMenu::default(),
 			brodler: BrodlerMenu::default(),
@@ -325,6 +361,7 @@ impl CharacterMenu {
 			brenal: BrenalMenu::default(),
 			caole: CaoleMenu::default(),
 			hars: HarsMenu::default(),
+			ylter: YilterMenu::default(),
 			croconot: CroconotMenu::default(),
 			claber: ClaberMenu::default(),
 			brodler: BrodlerMenu::default(),
@@ -344,6 +381,7 @@ impl CharacterMenu {
 			ConceptSpecies::Brenal => self.brenal.menu_node(),
 			ConceptSpecies::Caole => self.caole.menu_node(),
 			ConceptSpecies::Hars => self.hars.menu_node(),
+			ConceptSpecies::Yilter => self.ylter.menu_node(),
 			ConceptSpecies::Claber => self.claber.menu_node(),
 			ConceptSpecies::Croconot => self.croconot.menu_node(),
 			ConceptSpecies::Brodler => self.brodler.menu_node(),
@@ -361,6 +399,7 @@ impl CharacterMenu {
 			ConceptSpecies::Brenal => self.brenal.animation(),
 			ConceptSpecies::Caole => self.caole.animation(),
 			ConceptSpecies::Hars => self.hars.animation(),
+			ConceptSpecies::Yilter => self.ylter.animation(),
 			ConceptSpecies::Claber => self.claber.animation(),
 			ConceptSpecies::Croconot => self.croconot.animation(),
 			ConceptSpecies::Brodler => self.brodler.animation(),
@@ -386,6 +425,10 @@ impl CharacterMenu {
 
 	pub fn hars_config(&self) -> HarsConfig {
 		HarsConfig::from(&self.hars)
+	}
+
+	pub fn ylter_config(&self) -> YilterConfig {
+		YilterConfig::from(&self.ylter)
 	}
 
 	pub fn claber_config(&self) -> ClaberConfig {
@@ -437,6 +480,7 @@ impl CharacterMenu {
 			ConceptSpecies::Brenal => self.apply_brenal(event),
 			ConceptSpecies::Caole => self.apply_caole(event),
 			ConceptSpecies::Hars => self.apply_hars(event),
+			ConceptSpecies::Yilter => self.apply_ylter(event),
 			ConceptSpecies::Claber => self.apply_claber(event),
 			ConceptSpecies::Croconot => self.apply_croconot(event),
 			ConceptSpecies::Brodler => self.apply_brodler(event),
@@ -459,6 +503,7 @@ impl CharacterMenu {
 			ConceptSpecies::Brenal => self.brenal.camera_focus_for_field(field),
 			ConceptSpecies::Caole => self.caole.camera_focus_for_field(field),
 			ConceptSpecies::Hars => self.hars.camera_focus_for_field(field),
+			ConceptSpecies::Yilter => self.ylter.camera_focus_for_field(field),
 			ConceptSpecies::Claber => self.claber.camera_focus_for_field(field),
 			ConceptSpecies::Croconot => self.croconot.camera_focus_for_field(field),
 			ConceptSpecies::Brodler => self.brodler.camera_focus_for_field(field),
@@ -715,6 +760,61 @@ impl CharacterMenu {
 				_ => false,
 			},
 			MenuEvent::SliderDelta(field, delta) => apply_hars_slider(menu, field, delta),
+			MenuEvent::SetSwatch(field, SwatchValue::Item(color)) => match field {
+				CharacterField::BodyColor => {
+					menu.body.value.color.value = color;
+					menu.head_features.value.body_color = color;
+					true
+				}
+				CharacterField::EyeColor => {
+					menu.head_features.value.eye_color.value = color;
+					true
+				}
+				CharacterField::MouthColor => {
+					menu.head_features.value.mouth_color.value = color;
+					true
+				}
+				CharacterField::TailColor => {
+					menu.body.value.tail_color.value = color;
+					true
+				}
+				_ => false,
+			},
+			MenuEvent::SetSwatch(_, _) | MenuEvent::Cycle(_, _) | MenuEvent::ToggleClothing(_) => {
+				false
+			}
+		}
+	}
+
+	fn apply_ylter(&mut self, event: MenuEvent) -> bool {
+		let menu = &mut self.ylter;
+		match event {
+			MenuEvent::ToggleSection(_) | MenuEvent::SetSpecies(_) => false,
+			MenuEvent::Cycle(CharacterField::Gender, delta) => {
+				menu.presets.value.gender.value =
+					cycle_value(menu.presets.value.gender.value, delta);
+				true
+			}
+			MenuEvent::Cycle(CharacterField::Build, delta) => {
+				menu.presets.value.build.value = cycle_value(menu.presets.value.build.value, delta);
+				true
+			}
+			MenuEvent::SetAsset(field, value) => match (field, value) {
+				(CharacterField::YilterBody, AssetValue::YilterBody(value)) => {
+					menu.body.value.body.value = value;
+					true
+				}
+				(CharacterField::YilterMouth, AssetValue::YilterMouth(value)) => {
+					menu.head_features.value.snout.value = value;
+					true
+				}
+				(CharacterField::Animation, AssetValue::Animation(value)) => {
+					menu.animation.value.clip.value = YilterAnimationClip::from(value);
+					true
+				}
+				_ => false,
+			},
+			MenuEvent::SliderDelta(field, delta) => apply_ylter_slider(menu, field, delta),
 			MenuEvent::SetSwatch(field, SwatchValue::Item(color)) => match field {
 				CharacterField::BodyColor => {
 					menu.body.value.color.value = color;
@@ -1368,6 +1468,41 @@ fn apply_caole_slider(menu: &mut CaoleMenu, field: CharacterField, delta: f32) -
 }
 
 fn apply_hars_slider(menu: &mut HarsMenu, field: CharacterField, delta: f32) -> bool {
+	let body = &mut menu.body.value.sliders;
+	let face = &mut menu.head_features.value.feature_sliders;
+	match field {
+		CharacterField::ShoulderWidth => {
+			body.shoulder_width = body.shoulder_width.apply_delta(delta)
+		}
+		CharacterField::HipWidth => body.hip_width = body.hip_width.apply_delta(delta),
+		CharacterField::ChestThickness => {
+			body.chest_thickness = body.chest_thickness.apply_delta(delta)
+		}
+		CharacterField::HipThickness => body.hip_thickness = body.hip_thickness.apply_delta(delta),
+		CharacterField::LegThickness => body.leg_thickness = body.leg_thickness.apply_delta(delta),
+		CharacterField::ButtocksThickness => {
+			body.buttocks_thickness = body.buttocks_thickness.apply_delta(delta)
+		}
+		CharacterField::WaistThickness => {
+			body.waist_thickness = body.waist_thickness.apply_delta(delta)
+		}
+		CharacterField::LowerTrunkThickness => {
+			body.lower_trunk_thickness = body.lower_trunk_thickness.apply_delta(delta)
+		}
+		CharacterField::ArmLength => body.arm_length = body.arm_length.apply_delta(delta),
+		CharacterField::ArmThickness => body.arm_thickness = body.arm_thickness.apply_delta(delta),
+		CharacterField::LegLength => body.leg_length = body.leg_length.apply_delta(delta),
+		CharacterField::EyeWidth => face.eye_width = face.eye_width.apply_delta(delta),
+		CharacterField::EyeHeight => face.eye_height = face.eye_height.apply_delta(delta),
+		CharacterField::EyeTilt => face.eye_tilt = face.eye_tilt.apply_delta(delta),
+		CharacterField::EarWidth => face.ear_width = face.ear_width.apply_delta(delta),
+		CharacterField::EarHeight => face.ear_height = face.ear_height.apply_delta(delta),
+		_ => return false,
+	}
+	true
+}
+
+fn apply_ylter_slider(menu: &mut YilterMenu, field: CharacterField, delta: f32) -> bool {
 	let body = &mut menu.body.value.sliders;
 	let face = &mut menu.head_features.value.feature_sliders;
 	match field {

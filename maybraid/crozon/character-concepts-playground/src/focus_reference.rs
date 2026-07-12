@@ -76,6 +76,7 @@ fn focus_live_key(config: &ConceptPreviewConfig) -> String {
 		ConceptPreviewConfig::Brenal { config, .. } => config.sync_key(),
 		ConceptPreviewConfig::Caole { config, .. } => config.sync_key(),
 		ConceptPreviewConfig::Hars { config, .. } => config.sync_key(),
+		ConceptPreviewConfig::Yilter { config, .. } => config.sync_key(),
 		ConceptPreviewConfig::Claber { config, .. } => config.sync_key(),
 		ConceptPreviewConfig::Croconot { config, .. } => config.sync_key(),
 		ConceptPreviewConfig::Brodler { config, .. } => config.sync_key(),
