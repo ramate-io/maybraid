@@ -11,8 +11,8 @@ use crate::{
 	assets::AssetNormalization,
 	species::{
 		common::{
-			BODY_RUMBLER, EAR_FLANK, HEAD_COWDER, MOUTH_COW_SNOUT, PRONOGRADE_HEAD_RIG,
-			QUADRUPED_RIG, TAIL_CAT,
+			BODY_RUMBLER, EAR_FLANK, HEAD_COWDER, MOUTH_COW_SNOUT, NECK_TRIPLE_JOIN,
+			PRONOGRADE_HEAD_RIG, QUADRUPED_RIG, TAIL_CAT,
 		},
 		hars::{pose::HarsPose, HarsConfig},
 	},
@@ -25,12 +25,14 @@ pub struct HarsAssets;
 
 impl HarsAssets {
 	pub fn resolve(config: &HarsConfig) -> ResolvedCharacterAssembly {
+		let pose = HarsPose::from_config(config);
 		ResolvedCharacterAssembly::new(
 			"Hars",
 			RigAsset::new("Quadruped", QUADRUPED_RIG),
-			HarsPose::from_config(config).resolve(),
+			pose.resolve(),
 		)
 		.with_part(Self::body_mesh())
+		.with_part(Self::neck_rig(pose))
 		.with_part(Self::head_rig())
 		.with_part(Self::head_mesh())
 		.with_part(Self::eye_left(config.eye))
@@ -54,6 +56,24 @@ impl HarsAssets {
 		)
 	}
 
+	fn neck_rig(pose: HarsPose) -> ResolvedCharacterPart {
+		ResolvedCharacterPart::new(
+			CharacterPartSlot::NeckRig,
+			CharacterAsset::new(
+				"TripleJoinNeck",
+				NECK_TRIPLE_JOIN,
+				AssetNormalization::IDENTITY,
+			),
+			SkinTarget::OwnRig,
+			Some(SocketAttachment {
+				rig: SocketRig::Body,
+				bone: "head_socket",
+				local_transform: Transform::IDENTITY,
+			}),
+		)
+		.with_pose(pose.neck_pose())
+	}
+
 	fn head_rig() -> ResolvedCharacterPart {
 		ResolvedCharacterPart::new(
 			CharacterPartSlot::HeadRig,
@@ -63,9 +83,9 @@ impl HarsAssets {
 				AssetNormalization::base_y(0.4),
 			),
 			SkinTarget::OwnRig,
-			// Pitch is on the `head_socket` bone pose; attachment is identity.
+			// Counter-pitch is on the neck tip bone; head sockets in identity.
 			Some(SocketAttachment {
-				rig: SocketRig::Body,
+				rig: SocketRig::Neck,
 				bone: "head_socket",
 				local_transform: Transform::IDENTITY,
 			}),

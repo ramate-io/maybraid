@@ -15,6 +15,8 @@ pub enum RigSkeletonKind {
 	#[default]
 	Humanoid,
 	Quadruped,
+	/// Multi-bone neck armature (`neck_base` … `head_socket`).
+	Neck,
 }
 
 impl RigSkeletonKind {
@@ -30,6 +32,7 @@ impl RigSkeletonKind {
 		match self {
 			Self::Humanoid => &["root", "pelvis.L", "chest.L", "waist.L"],
 			Self::Quadruped => &["head_socket", "shoulder.L", "tailbone", "waist.L"],
+			Self::Neck => &["neck_base", "head_socket"],
 		}
 	}
 }
@@ -37,6 +40,7 @@ impl RigSkeletonKind {
 #[derive(Component, Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CharacterRigRole {
 	Body,
+	Neck,
 	Head,
 }
 

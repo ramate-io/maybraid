@@ -207,11 +207,15 @@ fn resolve_focus_transform(
 		return None;
 	}
 
+	let neck_awaiting = shadow_rigs
+		.iter()
+		.any(|(_, rig, _, _, awaiting_socket)| rig.role == CharacterRigRole::Neck && awaiting_socket);
+
 	for (bone_map, rig, rig_global, _, awaiting_socket) in shadow_rigs.iter() {
 		if !rig_role_matches(focus.rig, rig.role) {
 			continue;
 		}
-		if rig.role == CharacterRigRole::Head && awaiting_socket {
+		if rig.role == CharacterRigRole::Head && (awaiting_socket || neck_awaiting) {
 			continue;
 		}
 		let Some(socket) = focus_socket_global(focus, bone_map, rig_global, bone_globals) else {

@@ -32,7 +32,10 @@
 //!    so no respawn and no readiness reset is needed.
 
 use bevy::prelude::*;
-use crozon_characters::assembly::{CharacterPartSlot, ResolvedCharacterAssembly};
+use crozon_characters::{
+	assembly::{CharacterPartSlot, ResolvedCharacterAssembly},
+	SocketRig,
+};
 
 use crate::preview::ConceptPreviewConfig;
 use crate::skinning::{
@@ -85,16 +88,25 @@ fn focus_live_key(config: &ConceptPreviewConfig) -> String {
 }
 
 /// Shadow rigs must respawn when the underlying armature assets change: a new
-/// body rig or head rig carries different socket bones. Cosmetic part swaps on
+/// body, neck, or head rig carries different socket bones. Cosmetic part swaps on
 /// the same armatures only refresh the live pose.
 fn focus_spawn_key(assembly: &ResolvedCharacterAssembly) -> String {
+	let neck_rig_path = assembly
+		.parts
+		.iter()
+		.find(|part| part.slot == CharacterPartSlot::NeckRig)
+		.map(|part| part.asset.path.as_str())
+		.unwrap_or("");
 	let head_rig_path = assembly
 		.parts
 		.iter()
 		.find(|part| part.slot == CharacterPartSlot::HeadRig)
 		.map(|part| part.asset.path.as_str())
 		.unwrap_or("");
-	format!("body={} head={head_rig_path}", assembly.body_rig.path.as_str())
+	format!(
+		"body={} neck={neck_rig_path} head={head_rig_path}",
+		assembly.body_rig.path.as_str()
+	)
 }
 
 pub fn sync_focus_reference(
@@ -102,7 +114,7 @@ pub fn sync_focus_reference(
 	asset_server: Res<AssetServer>,
 	config: Res<ConceptPreviewConfig>,
 	mut sync_state: ResMut<FocusReferenceSyncState>,
-	mut body_poses: Query<&mut ActiveRigPose, With<FocusReferenceRig>>,
+	mut poses: Query<(&mut ActiveRigPose, &CharacterRig), With<FocusReferenceRig>>,
 	roots: Query<Entity, With<FocusReferenceRoot>>,
 ) {
 	let live_key = focus_live_key(&config);
@@ -113,11 +125,24 @@ pub fn sync_focus_reference(
 	let assembly = config.resolve();
 	let spawn_key = focus_spawn_key(&assembly);
 	if sync_state.spawn_key == spawn_key {
-		// Same armatures: update the pose in place. `maintain_resolved_pose`
-		// re-applies it every frame, so nothing else needs to be invalidated.
+		// Same armatures: update poses in place. `maintain_resolved_pose`
+		// re-applies them every frame, so nothing else needs to be invalidated.
 		sync_state.live_key = live_key;
-		for mut pose in &mut body_poses {
-			pose.pose = assembly.pose.clone();
+		let neck_pose = assembly
+			.parts
+			.iter()
+			.find(|part| part.slot == CharacterPartSlot::NeckRig)
+			.and_then(|part| part.pose.clone());
+		for (mut pose, rig) in &mut poses {
+			match rig.role {
+				CharacterRigRole::Body => pose.pose = assembly.pose.clone(),
+				CharacterRigRole::Neck => {
+					if let Some(neck_pose) = &neck_pose {
+						pose.pose = neck_pose.clone();
+					}
+				}
+				CharacterRigRole::Head => {}
+			}
 		}
 		return;
 	}
@@ -159,6 +184,37 @@ fn spawn_focus_reference(
 		))
 		.id();
 
+	let mut neck_rig = None;
+	if let Some(neck_part) =
+		assembly.parts.iter().find(|part| part.slot == CharacterPartSlot::NeckRig)
+	{
+		let mut entity = commands.spawn((
+			WorldAssetRoot(
+				asset_server
+					.load(GltfAssetLabel::Scene(0).from_asset(neck_part.asset.path.as_str())),
+			),
+			CharacterRig { role: CharacterRigRole::Neck, skeleton: RigSkeletonKind::Neck },
+			FocusReferenceRig,
+			BoneMap::default(),
+			FocusReferenceRoot,
+			Visibility::Hidden,
+			Transform::IDENTITY,
+			Name::new("focus_neck_rig"),
+		));
+		if let Some(pose) = &neck_part.pose {
+			entity.insert((ActiveRigPose { pose: pose.clone() }, RigBindScales::default()));
+		}
+		let entity = entity.id();
+		if let Some(socket) = neck_part.socket {
+			commands.entity(entity).insert(NeedsSocketPlacement {
+				rig_root: body_rig,
+				socket_bone: socket.bone,
+				local_transform: socket.local_transform,
+			});
+		}
+		neck_rig = Some(entity);
+	}
+
 	let Some(head_part) =
 		assembly.parts.iter().find(|part| part.slot == CharacterPartSlot::HeadRig)
 	else {
@@ -182,10 +238,17 @@ fn spawn_focus_reference(
 		.id();
 
 	if let Some(socket) = head_part.socket {
-		commands.entity(head_rig).insert(NeedsSocketPlacement {
-			rig_root: body_rig,
-			socket_bone: socket.bone,
-			local_transform: socket.local_transform,
-		});
+		let rig_root = match socket.rig {
+			SocketRig::Body => Some(body_rig),
+			SocketRig::Neck => neck_rig,
+			SocketRig::Head => None,
+		};
+		if let Some(rig_root) = rig_root {
+			commands.entity(head_rig).insert(NeedsSocketPlacement {
+				rig_root,
+				socket_bone: socket.bone,
+				local_transform: socket.local_transform,
+			});
+		}
 	}
 }

@@ -81,6 +81,7 @@ pub fn init_limb_animators(
 			}
 			commands.entity(rig_entity).insert(quadruped);
 		}
+		RigSkeletonKind::Neck => {}
 	}
 }
 

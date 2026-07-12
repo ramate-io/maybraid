@@ -543,6 +543,10 @@ pub fn sync_preview(
 	mut sync_state: ResMut<ConceptPreviewSyncState>,
 	mut respawn_cooldown: ResMut<PreviewRespawnCooldown>,
 	mut body_poses: Query<&mut ActiveRigPose, With<AnimatedBodyRig>>,
+	mut neck_poses: Query<
+		(&mut ActiveRigPose, &CharacterPart),
+		(With<CharacterRig>, Without<AnimatedBodyRig>),
+	>,
 	mut parts: Query<(
 		&CharacterPart,
 		&mut PreviewAssetTarget,
@@ -560,7 +564,7 @@ pub fn sync_preview(
 	let assembly = config.resolve();
 	if sync_state.spawn_key == spawn_key {
 		sync_state.live_key = live_key;
-		sync_live_preview(&config, &assembly, &mut body_poses, &mut parts);
+		sync_live_preview(&config, &assembly, &mut body_poses, &mut neck_poses, &mut parts);
 		return;
 	}
 
@@ -579,6 +583,10 @@ fn sync_live_preview(
 	config: &ConceptPreviewConfig,
 	assembly: &ResolvedCharacterAssembly,
 	body_poses: &mut Query<&mut ActiveRigPose, With<AnimatedBodyRig>>,
+	neck_poses: &mut Query<
+		(&mut ActiveRigPose, &CharacterPart),
+		(With<CharacterRig>, Without<AnimatedBodyRig>),
+	>,
 	parts: &mut Query<(
 		&CharacterPart,
 		&mut PreviewAssetTarget,
@@ -588,6 +596,19 @@ fn sync_live_preview(
 ) {
 	for mut pose in body_poses {
 		pose.pose = assembly.pose.clone();
+	}
+
+	if let Some(neck_pose) = assembly
+		.parts
+		.iter()
+		.find(|part| part.slot == CharacterPartSlot::NeckRig)
+		.and_then(|part| part.pose.clone())
+	{
+		for (mut pose, part) in neck_poses {
+			if part.slot == CharacterPartSlot::NeckRig {
+				pose.pose = neck_pose.clone();
+			}
+		}
 	}
 
 	match config {
@@ -1070,6 +1091,31 @@ fn preview_color_spibmom(config: &SpibmomConfig, target: PreviewTarget) -> Previ
 	}
 }
 
+struct SocketRigMap {
+	body: Entity,
+	neck: Option<Entity>,
+	head: Option<Entity>,
+}
+
+impl SocketRigMap {
+	fn resolve(&self, target: SocketRig) -> Option<Entity> {
+		match target {
+			SocketRig::Body => Some(self.body),
+			SocketRig::Neck => self.neck,
+			SocketRig::Head => self.head,
+		}
+	}
+
+	fn resolve_skin(&self, target: SkinTarget) -> Option<Entity> {
+		match target {
+			SkinTarget::BodyRig => Some(self.body),
+			SkinTarget::NeckRig => self.neck,
+			SkinTarget::HeadRig => self.head,
+			SkinTarget::OwnRig | SkinTarget::None => None,
+		}
+	}
+}
+
 struct PreviewSpawner<'w, 's, 'a> {
 	commands: &'a mut Commands<'w, 's>,
 	asset_server: &'a AssetServer,
@@ -1088,16 +1134,35 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 	}
 
 	fn spawn(mut self) {
-		let body_rig = self.spawn_body_rig();
-		let mut head_rig = None;
+		let mut sockets = SocketRigMap { body: self.spawn_body_rig(), neck: None, head: None };
 
-		let parts = self.assembly.parts.clone();
+		let mut parts = self.assembly.parts.clone();
+		parts.sort_by_key(|part| match part.slot {
+			CharacterPartSlot::NeckRig => 0,
+			CharacterPartSlot::HeadRig => 1,
+			_ => 2,
+		});
+
 		for part in parts {
-			if part.slot == CharacterPartSlot::HeadRig {
-				head_rig = self.spawn_head_rig(body_rig, &part);
-				continue;
+			match part.slot {
+				CharacterPartSlot::NeckRig => {
+					sockets.neck = Some(self.spawn_own_rig(
+						&part,
+						CharacterRigRole::Neck,
+						RigSkeletonKind::Neck,
+						&sockets,
+					));
+				}
+				CharacterPartSlot::HeadRig => {
+					sockets.head = Some(self.spawn_own_rig(
+						&part,
+						CharacterRigRole::Head,
+						RigSkeletonKind::Humanoid,
+						&sockets,
+					));
+				}
+				_ => self.spawn_part(&sockets, &part),
 			}
-			self.spawn_part(body_rig, head_rig, &part);
 		}
 	}
 
@@ -1191,44 +1256,55 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 			.id()
 	}
 
-	fn spawn_head_rig(&mut self, body_rig: Entity, part: &ResolvedCharacterPart) -> Option<Entity> {
-		let entity = self
-			.commands
-			.spawn((
-				WorldAssetRoot(
-					self.asset_server
-						.load(GltfAssetLabel::Scene(0).from_asset(part.asset.path.as_str())),
-				),
-				CharacterRig { role: CharacterRigRole::Head, skeleton: RigSkeletonKind::Humanoid },
-				CharacterPart { slot: part.slot },
-				BoneMap::default(),
-				ConceptPreviewRoot,
-				PreviewAwaitingReveal,
-				Visibility::Hidden,
-				self.part_base_transform(part),
-				self.part_transform(part),
-				self.preview_target(part),
-				Name::new(format!("character_{:?}", part.slot)),
-			))
-			.id();
+	fn spawn_own_rig(
+		&mut self,
+		part: &ResolvedCharacterPart,
+		role: CharacterRigRole,
+		skeleton: RigSkeletonKind,
+		sockets: &SocketRigMap,
+	) -> Entity {
+		let mut entity = self.commands.spawn((
+			WorldAssetRoot(
+				self.asset_server
+					.load(GltfAssetLabel::Scene(0).from_asset(part.asset.path.as_str())),
+			),
+			CharacterRig { role, skeleton },
+			CharacterPart { slot: part.slot },
+			BoneMap::default(),
+			ConceptPreviewRoot,
+			PreviewAwaitingReveal,
+			Visibility::Hidden,
+			self.part_base_transform(part),
+			self.part_transform(part),
+			self.preview_target(part),
+			Name::new(format!("character_{:?}", part.slot)),
+		));
 
-		if let Some(socket) = part.socket {
-			self.commands.entity(entity).insert(NeedsSocketPlacement {
-				rig_root: body_rig,
-				socket_bone: socket.bone,
-				local_transform: socket.local_transform,
-			});
+		if let Some(pose) = &part.pose {
+			entity.insert((ActiveRigPose { pose: pose.clone() }, RigBindScales::default()));
 		}
 
-		Some(entity)
+		let entity = entity.id();
+
+		if let Some(socket) = part.socket {
+			if let Some(rig_root) = sockets.resolve(socket.rig) {
+				self.commands.entity(entity).insert(NeedsSocketPlacement {
+					rig_root,
+					socket_bone: socket.bone,
+					local_transform: socket.local_transform,
+				});
+			} else if preview_debug_enabled() {
+				warn!(
+					"[preview] {:?} socket target {:?} not spawned yet (bone={})",
+					part.slot, socket.rig, socket.bone
+				);
+			}
+		}
+
+		entity
 	}
 
-	fn spawn_part(
-		&mut self,
-		body_rig: Entity,
-		head_rig: Option<Entity>,
-		part: &ResolvedCharacterPart,
-	) {
+	fn spawn_part(&mut self, sockets: &SocketRigMap, part: &ResolvedCharacterPart) {
 		let entity = self
 			.commands
 			.spawn((
@@ -1247,12 +1323,12 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 			))
 			.id();
 
-		if let Some(rig_root) = self.skin_target_rig(body_rig, head_rig, part.skin_target) {
+		if let Some(rig_root) = sockets.resolve_skin(part.skin_target) {
 			self.commands.entity(entity).insert((PartRigRef { rig_root }, NeedsSkinRemap));
 		}
 
 		if let Some(socket) = part.socket {
-			if let Some(rig_root) = self.socket_rig(body_rig, head_rig, socket.rig) {
+			if let Some(rig_root) = sockets.resolve(socket.rig) {
 				self.commands.entity(entity).insert(NeedsSocketPlacement {
 					rig_root,
 					socket_bone: socket.bone,
@@ -1262,36 +1338,12 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 		}
 	}
 
-	fn skin_target_rig(
-		&self,
-		body_rig: Entity,
-		head_rig: Option<Entity>,
-		target: SkinTarget,
-	) -> Option<Entity> {
-		match target {
-			SkinTarget::BodyRig => Some(body_rig),
-			SkinTarget::HeadRig => head_rig,
-			SkinTarget::OwnRig | SkinTarget::None => None,
-		}
-	}
-
-	fn socket_rig(
-		&self,
-		body_rig: Entity,
-		head_rig: Option<Entity>,
-		target: SocketRig,
-	) -> Option<Entity> {
-		match target {
-			SocketRig::Body => Some(body_rig),
-			SocketRig::Head => head_rig,
-		}
-	}
-
 	fn preview_target(&self, part: &ResolvedCharacterPart) -> PreviewAssetTarget {
 		match &self.config {
 			ConceptPreviewConfig::Braidman { config, .. } => {
 				let target = match part.slot {
 					CharacterPartSlot::BodyMesh => PreviewTarget::BraidmanBody(config.body),
+					CharacterPartSlot::NeckRig | CharacterPartSlot::NeckMesh => PreviewTarget::BraidmanBody(config.body),
 					CharacterPartSlot::HeadRig | CharacterPartSlot::HeadMesh => {
 						PreviewTarget::BraidmanHead(config.head)
 					}
@@ -1320,6 +1372,7 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 			ConceptPreviewConfig::Brenal { config, .. } => {
 				let target = match part.slot {
 					CharacterPartSlot::BodyMesh => PreviewTarget::BrenalBody,
+					CharacterPartSlot::NeckRig | CharacterPartSlot::NeckMesh => PreviewTarget::BrenalBody,
 					CharacterPartSlot::HeadRig | CharacterPartSlot::HeadMesh => {
 						PreviewTarget::BrenalHead
 					}
@@ -1342,6 +1395,7 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 			ConceptPreviewConfig::Caole { config, .. } => {
 				let target = match part.slot {
 					CharacterPartSlot::BodyMesh => PreviewTarget::CaoleBody,
+					CharacterPartSlot::NeckRig | CharacterPartSlot::NeckMesh => PreviewTarget::CaoleBody,
 					CharacterPartSlot::HeadRig | CharacterPartSlot::HeadMesh => {
 						PreviewTarget::CaoleHead
 					}
@@ -1364,6 +1418,7 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 			ConceptPreviewConfig::Hars { config, .. } => {
 				let target = match part.slot {
 					CharacterPartSlot::BodyMesh => PreviewTarget::HarsBody,
+					CharacterPartSlot::NeckRig | CharacterPartSlot::NeckMesh => PreviewTarget::HarsBody,
 					CharacterPartSlot::HeadRig | CharacterPartSlot::HeadMesh => {
 						PreviewTarget::HarsHead
 					}
@@ -1386,6 +1441,7 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 			ConceptPreviewConfig::Claber { config, .. } => {
 				let target = match part.slot {
 					CharacterPartSlot::BodyMesh => PreviewTarget::ClaberBody,
+					CharacterPartSlot::NeckRig | CharacterPartSlot::NeckMesh => PreviewTarget::ClaberBody,
 					CharacterPartSlot::HeadRig | CharacterPartSlot::HeadMesh => {
 						PreviewTarget::ClaberHead
 					}
@@ -1408,6 +1464,7 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 			ConceptPreviewConfig::Croconot { config, .. } => {
 				let target = match part.slot {
 					CharacterPartSlot::BodyMesh => PreviewTarget::CroconotBody,
+					CharacterPartSlot::NeckRig | CharacterPartSlot::NeckMesh => PreviewTarget::CroconotBody,
 					CharacterPartSlot::HeadRig | CharacterPartSlot::HeadMesh => {
 						PreviewTarget::CroconotHead
 					}
@@ -1430,6 +1487,7 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 			ConceptPreviewConfig::Brodler { config, .. } => {
 				let target = match part.slot {
 					CharacterPartSlot::BodyMesh => PreviewTarget::BrodlerBody,
+					CharacterPartSlot::NeckRig | CharacterPartSlot::NeckMesh => PreviewTarget::BrodlerBody,
 					CharacterPartSlot::HeadRig | CharacterPartSlot::HeadMesh => {
 						PreviewTarget::BrodlerHead(config.head)
 					}
@@ -1458,6 +1516,7 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 			ConceptPreviewConfig::Mygr { config, .. } => {
 				let target = match part.slot {
 					CharacterPartSlot::BodyMesh => PreviewTarget::MygrBody,
+					CharacterPartSlot::NeckRig | CharacterPartSlot::NeckMesh => PreviewTarget::MygrBody,
 					CharacterPartSlot::HeadRig | CharacterPartSlot::HeadMesh => {
 						PreviewTarget::MygrHead
 					}
@@ -1485,6 +1544,7 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 			ConceptPreviewConfig::Dui { config, .. } => {
 				let target = match part.slot {
 					CharacterPartSlot::BodyMesh => PreviewTarget::DuiBody,
+					CharacterPartSlot::NeckRig | CharacterPartSlot::NeckMesh => PreviewTarget::DuiBody,
 					CharacterPartSlot::HeadRig | CharacterPartSlot::HeadMesh => {
 						PreviewTarget::DuiHead
 					}
@@ -1512,6 +1572,7 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 			ConceptPreviewConfig::Wumbus { config, .. } => {
 				let target = match part.slot {
 					CharacterPartSlot::BodyMesh => PreviewTarget::WumbusBody,
+					CharacterPartSlot::NeckRig | CharacterPartSlot::NeckMesh => PreviewTarget::WumbusBody,
 					CharacterPartSlot::HeadRig | CharacterPartSlot::HeadMesh => {
 						PreviewTarget::WumbusHead
 					}
@@ -1539,6 +1600,7 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 			ConceptPreviewConfig::Lero { config, .. } => {
 				let target = match part.slot {
 					CharacterPartSlot::BodyMesh => PreviewTarget::LeroBody,
+					CharacterPartSlot::NeckRig | CharacterPartSlot::NeckMesh => PreviewTarget::LeroBody,
 					CharacterPartSlot::HeadRig | CharacterPartSlot::HeadMesh => {
 						PreviewTarget::LeroHead
 					}
@@ -1566,6 +1628,7 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 			ConceptPreviewConfig::Spibmom { config, .. } => {
 				let target = match part.slot {
 					CharacterPartSlot::BodyMesh => PreviewTarget::SpibmomBody,
+					CharacterPartSlot::NeckRig | CharacterPartSlot::NeckMesh => PreviewTarget::SpibmomBody,
 					CharacterPartSlot::HeadRig | CharacterPartSlot::HeadMesh => {
 						PreviewTarget::SpibmomHead
 					}

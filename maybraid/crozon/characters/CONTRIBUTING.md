@@ -81,6 +81,13 @@ on an ancestor combined with rotation on or under that socket shears** the
 attached mesh. Intermediate bones do not fix this if the part remains a transform
 child of the scaled chain.
 
+Nested armatures are supported via [`SocketRig::Neck`](src/assembly.rs) /
+[`CharacterPartSlot::NeckRig`](src/assembly.rs): socket a neck OwnRig to the body
+`head_socket`, apply pitch on the neck bones through [`ResolvedCharacterPart::pose`],
+and socket the head to the neck tip `head_socket`. Prefer **uniform** scale (or
+authored length) on that path — avoid `BoneScale::length` / `thickness` on bones
+that still parent a rotated head.
+
 Until rigid (no-scale) sockets land ([#516](https://github.com/ramate-io/maybraid/issues/516)):
 
 - Prefer **uniform** scale (`BoneScale::uniform` / equal XYZ) on any bone that
@@ -88,8 +95,7 @@ Until rigid (no-scale) sockets land ([#516](https://github.com/ramate-io/maybrai
 - Avoid `BoneScale::length` / `thickness` (non-uniform) on bones that rotate or
   that parent a rotated `head_socket` / feature socket.
 - For a long raised neck without shear: author a long-neck mesh (or uniform-scale
-  it), pitch the body `head_socket`, socket the neck there, and counter-pitch the
-  real head on the neck tip.
+  it), pitch the neck armature, and counter-pitch the tip `head_socket`.
 - Lengthen via bind **translation** along the pitched axis when you must stretch
   a joint without non-uniform scale.
 
