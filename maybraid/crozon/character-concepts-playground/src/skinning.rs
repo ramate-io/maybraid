@@ -80,11 +80,11 @@ pub struct ActiveRigPose {
 	pub pose: ResolvedRigPose,
 }
 
-/// Bind-pose bone scales/rotations captured once each named bone appears in the
-/// rig map.
+/// Bind-pose bone TRS captured once each named bone appears in the rig map.
 #[derive(Component, Default)]
 pub struct RigBindScales {
 	pub scales: HashMap<String, Vec3>,
+	pub translations: HashMap<String, Vec3>,
 	pub rotations: HashMap<String, Quat>,
 }
 
@@ -382,6 +382,7 @@ pub fn maintain_resolved_pose(
 
 		for (bone_name, bone_entity) in &bone_map.by_name {
 			if bind_scales.scales.contains_key(bone_name)
+				&& bind_scales.translations.contains_key(bone_name)
 				&& bind_scales.rotations.contains_key(bone_name)
 			{
 				continue;
@@ -391,13 +392,18 @@ pub fn maintain_resolved_pose(
 			};
 			// First sighting after load: treat current transform as bind snapshot.
 			bind_scales.scales.entry(bone_name.clone()).or_insert(transform.scale);
+			bind_scales
+				.translations
+				.entry(bone_name.clone())
+				.or_insert(transform.translation);
 			bind_scales.rotations.entry(bone_name.clone()).or_insert(transform.rotation);
 		}
 
 		for (bone_name, bone_entity) in &bone_map.by_name {
 			let scale_mult = active_pose.pose.scale_for_bone(bone_name);
+			let trans_mult = active_pose.pose.translation_for_bone(bone_name);
 			let rot_offset = active_pose.pose.rotation_for_bone(bone_name);
-			if scale_mult == Vec3::ONE && rot_offset == Quat::IDENTITY {
+			if scale_mult == Vec3::ONE && trans_mult == Vec3::ONE && rot_offset == Quat::IDENTITY {
 				continue;
 			}
 			let Ok(mut transform) = transforms.get_mut(*bone_entity) else {
@@ -409,11 +415,18 @@ pub fn maintain_resolved_pose(
 					transform.scale = *bind_scale * scale_mult;
 				}
 			}
+			if trans_mult != Vec3::ONE {
+				if let Some(bind_trans) = bind_scales.translations.get(bone_name) {
+					transform.translation = *bind_trans * trans_mult;
+				}
+			}
 			// Skip bones owned by limb animation once their rest has been
 			// captured (after the first pre-animator apply of this pitch).
 			if rot_offset != Quat::IDENTITY && !limb_animators.contains(*bone_entity) {
 				if let Some(bind_rot) = bind_scales.rotations.get(bone_name) {
-					transform.rotation = *bind_rot * rot_offset;
+					// Parent-space: `delta * bind`. Needed so `-neck_pitch` on
+					// non-identity-rest `head_socket` cancels neck pitch.
+					transform.rotation = rot_offset * *bind_rot;
 				}
 			}
 		}

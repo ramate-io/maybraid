@@ -6,7 +6,7 @@ pub mod pose;
 pub mod rigs;
 pub mod sliders;
 
-pub use pose::{BoneRotation, BoneScale, ResolvedRigPose, RigPoseLayer};
+pub use pose::{BoneRotation, BoneScale, BoneTranslation, ResolvedRigPose, RigPoseLayer};
 
 use bevy::prelude::*;
 use std::{collections::HashMap, fmt};

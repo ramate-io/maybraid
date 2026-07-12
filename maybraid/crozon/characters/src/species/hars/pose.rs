@@ -1,24 +1,34 @@
 //! Hars proportion layers on the quadruped rig.
 //!
-//! Horse-like carriage: rumbler torso baseline with a very long pitched neck
-//! and taller limbs so the silhouette reads elevated rather than low-slung.
+//! Horse-like carriage: rumbler torso baseline with a lengthened pitched neck
+//! and taller limbs. Head leveling is a counter-pitch on the `head_socket`
+//! bone — the head rig sockets in with an identity transform.
+//!
+//! Length is a bind-translation stretch on `head_socket` (along neck-local Y),
+//! not non-uniform scale on `neck`. Scaling `neck` on Y while rotating
+//! `head_socket` shears the head; stretching `neck`'s own translation extends
+//! in parent space (along the spine) and flattens the raised silhouette.
 
 use std::f32::consts::FRAC_PI_4;
 
 use crate::{
 	presets::{BuildPreset, GenderPreset},
-	species::{
-		common::quadruped,
-		hars::{sliders::HarsSliders, HarsConfig},
-	},
+	species::hars::{sliders::HarsSliders, HarsConfig},
 };
-use crozon_rigs::{BoneScale, ResolvedRigPose, RigPoseLayer};
+use crozon_rigs::{
+	BoneRotation, BoneScale, BoneTranslation, ResolvedRigPose, RigPoseLayer,
+};
 
-/// Horse-like neck pitch; assets counterpose the head socket by the inverse.
+/// Raise the neck bone.
 pub const NECK_PITCH: f32 = FRAC_PI_4;
+/// Counter-pitch on `head_socket`. Equal magnitude opposite sign to
+/// [`NECK_PITCH`] restores the head's pre-neck-pitch alignment.
+pub const HEAD_SOCKET_PITCH: f32 = -NECK_PITCH;
 
-/// Experimentally long neck — stretch hard to see how the pitched bone behaves.
+/// Push `head_socket` out along neck-local Y so the pitched neck reads long.
 const NECK_LENGTH: f32 = 4.5;
+/// Bulk the neck mesh on XZ (length stays on `head_socket` translation).
+const NECK_THICKNESS: f32 = 2.0;
 /// Elevated limb length relative to the stock quadruped / caole baselines.
 const LIMB_LENGTH: f32 = 1.35;
 /// Rumbler torso mass (same bones as caole rumbler).
@@ -43,7 +53,14 @@ impl HarsPose {
 	pub fn resolve(self) -> ResolvedRigPose {
 		ResolvedRigPose::new()
 			.with_layer(self.species_baseline())
-			.with_layer(quadruped::neck_pitch_layer("hars neck pitch", NECK_PITCH))
+			.with_layer(
+				RigPoseLayer::new("hars neck pitch")
+					.with_rotation(BoneRotation::pitch_x("neck", NECK_PITCH)),
+			)
+			.with_layer(
+				RigPoseLayer::new("hars head socket pitch")
+					.with_rotation(BoneRotation::pitch_x("head_socket", HEAD_SOCKET_PITCH)),
+			)
 			.with_layer(self.gender_layer())
 			.with_layer(self.build_layer())
 			.with_layer(self.slider_layer())
@@ -51,7 +68,8 @@ impl HarsPose {
 
 	fn species_baseline(self) -> RigPoseLayer {
 		let mut layer = RigPoseLayer::new("hars species baseline")
-			.with_scale(BoneScale::length("neck", NECK_LENGTH))
+			.with_translation(BoneTranslation::length("head_socket", NECK_LENGTH))
+			.with_scale(BoneScale::thickness("neck", NECK_THICKNESS))
 			.with_scale(BoneScale::length("back_ridge", RUMBLER_BACK_RIDGE_LENGTH))
 			.with_scale(BoneScale::thickness("anterior_mid_back", TORSO_THICKNESS))
 			.with_scale(BoneScale::thickness("posterior_mid_back", TORSO_THICKNESS))

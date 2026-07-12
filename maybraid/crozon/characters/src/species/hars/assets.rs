@@ -11,11 +11,10 @@ use crate::{
 	assets::AssetNormalization,
 	species::{
 		common::{
-			quadruped::{self, head_socket_attachment},
 			BODY_RUMBLER, EAR_FLANK, HEAD_COWDER, MOUTH_COW_SNOUT, PRONOGRADE_HEAD_RIG,
 			QUADRUPED_RIG, TAIL_CAT,
 		},
-		hars::{pose::{HarsPose, NECK_PITCH}, HarsConfig},
+		hars::{pose::HarsPose, HarsConfig},
 	},
 };
 
@@ -64,8 +63,12 @@ impl HarsAssets {
 				AssetNormalization::base_y(0.4),
 			),
 			SkinTarget::OwnRig,
-			// Counterpose the pitched neck so the head stays level.
-			Some(head_socket_attachment(NECK_PITCH)),
+			// Pitch is on the `head_socket` bone pose; attachment is identity.
+			Some(SocketAttachment {
+				rig: SocketRig::Body,
+				bone: "head_socket",
+				local_transform: Transform::IDENTITY,
+			}),
 		)
 	}
 
@@ -165,9 +168,6 @@ impl HarsAssets {
 		Transform::from_scale(Vec3::new(-1.0, 1.0, 1.0))
 	}
 }
-
-// Keep the shared helper referenced so refactors don't drop the pairing.
-const _: fn(f32) -> crozon_rigs::BoneRotation = quadruped::neck_pitch_rotation;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, ValueEnum)]
 pub enum HarsBodyMesh {

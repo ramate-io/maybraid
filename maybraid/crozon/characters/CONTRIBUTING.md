@@ -72,3 +72,26 @@ Spawn from the playground UI (species picker) or CLI:
 ```bash
 crozon-concepts mygr preview --skin ginger --eyes green
 ```
+
+### Socketing, scale, and shear
+
+Parts attach with [`SocketAttachment`](src/assembly.rs): a `ChildOf(bone)` plus a
+local `Transform`. Bevy propagates the full parent affine, so **non-uniform scale
+on an ancestor combined with rotation on or under that socket shears** the
+attached mesh. Intermediate bones do not fix this if the part remains a transform
+child of the scaled chain.
+
+Until rigid (no-scale) sockets land ([#516](https://github.com/ramate-io/maybraid/issues/516)):
+
+- Prefer **uniform** scale (`BoneScale::uniform` / equal XYZ) on any bone that
+  still parents a pitched socket or an attached head/feature.
+- Avoid `BoneScale::length` / `thickness` (non-uniform) on bones that rotate or
+  that parent a rotated `head_socket` / feature socket.
+- For a long raised neck without shear: author a long-neck mesh (or uniform-scale
+  it), pitch the body `head_socket`, socket the neck there, and counter-pitch the
+  real head on the neck tip.
+- Lengthen via bind **translation** along the pitched axis when you must stretch
+  a joint without non-uniform scale.
+
+[#516](https://github.com/ramate-io/maybraid/issues/516) tracks an opt-in rigid
+socket path (follow bone translation + orthonormal rotation, ignore scale/shear).
