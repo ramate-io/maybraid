@@ -60,7 +60,7 @@ impl EpiphantAssets {
 			CharacterAsset::new(
 				"PronogradeHeadRig",
 				PRONOGRADE_HEAD_RIG,
-				AssetNormalization::base_y(0.2),
+				AssetNormalization::base_y(0.3),
 			),
 			SkinTarget::OwnRig,
 			Some(SocketAttachment {
