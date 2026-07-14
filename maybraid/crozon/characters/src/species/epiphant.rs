@@ -1,6 +1,6 @@
 //! Epiphant species definition.
 //!
-//! Elephant-like quadruped: Epiphant body on the quadruped rig, orthograde
+//! Elephant-like quadruped: Epiphant body on the quadruped rig, pronograde
 //! meerkat head, Epiphant ears, trunkish nose, and cat tail.
 
 pub mod assets;

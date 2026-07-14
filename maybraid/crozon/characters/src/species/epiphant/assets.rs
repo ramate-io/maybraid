@@ -10,7 +10,9 @@ use crate::{
 	},
 	assets::{AssetNormalization, AssetPath},
 	species::{
-		common::{assets::HEAD_STANDARD_PRONOGRADE, HEAD_RIG, QUADRUPED_RIG, TAIL_CAT},
+		common::{
+			assets::HEAD_STANDARD_PRONOGRADE, PRONOGRADE_HEAD_RIG, QUADRUPED_RIG, TAIL_CAT,
+		},
 		epiphant::{pose::EpiphantPose, EpiphantConfig},
 	},
 };
@@ -21,7 +23,7 @@ const BODY_EPIPHANT: AssetPath = AssetPath::new("characters/bodies/epiphant.glb"
 const EAR_EPIPHANT: AssetPath = AssetPath::new("characters/ears/epiphant_ear_left.glb");
 const NOSE_TRUNKISH: AssetPath = AssetPath::new("characters/noses/trunkish_nose.glb");
 
-/// Enlarge the orthograde head stack so the meerkat head reads as "large" on the body.
+/// Enlarge the pronograde head stack so the meerkat head reads as "large" on the body.
 const HEAD_RIG_SOCKET_SCALE: f32 = 1.45;
 /// Epiphant ears are the silhouette cue; bias them larger than flank/round defaults.
 const EAR_SOCKET_SCALE: f32 = 1.75;
@@ -59,7 +61,11 @@ impl EpiphantAssets {
 	fn head_rig() -> ResolvedCharacterPart {
 		ResolvedCharacterPart::new(
 			CharacterPartSlot::HeadRig,
-			CharacterAsset::new("OrthogradeHeadRig", HEAD_RIG, AssetNormalization::base_y(0.6)),
+			CharacterAsset::new(
+				"PronogradeHeadRig",
+				PRONOGRADE_HEAD_RIG,
+				AssetNormalization::base_y(0.4),
+			),
 			SkinTarget::OwnRig,
 			Some(SocketAttachment {
 				rig: SocketRig::Body,
