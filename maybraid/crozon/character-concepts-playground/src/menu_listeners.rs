@@ -29,6 +29,9 @@ pub fn menu_to_preview_config(menu: &CharacterMenu) -> ConceptPreviewConfig {
 		ConceptSpecies::Caole => {
 			ConceptPreviewConfig::caole_with_animation(menu.caole_config(), menu.animation())
 		}
+		ConceptSpecies::Epiphant => {
+			ConceptPreviewConfig::epiphant_with_animation(menu.epiphant_config(), menu.animation())
+		}
 		ConceptSpecies::Hars => {
 			ConceptPreviewConfig::hars_with_animation(menu.hars_config(), menu.animation())
 		}
@@ -75,6 +78,9 @@ pub fn menu_from_preview_config(config: &ConceptPreviewConfig) -> CharacterMenu 
 		}
 		ConceptPreviewConfig::Caole { config, animation } => {
 			CharacterMenu::from_caole(config, *animation)
+		}
+		ConceptPreviewConfig::Epiphant { config, animation } => {
+			CharacterMenu::from_epiphant(config, *animation)
 		}
 		ConceptPreviewConfig::Hars { config, animation } => {
 			CharacterMenu::from_hars(config, *animation)
@@ -134,6 +140,7 @@ fn preview_species(species: ConceptSpecies) -> crate::preview::ConceptSpecies {
 		ConceptSpecies::Braidman => crate::preview::ConceptSpecies::Braidman,
 		ConceptSpecies::Brenal => crate::preview::ConceptSpecies::Brenal,
 		ConceptSpecies::Caole => crate::preview::ConceptSpecies::Caole,
+		ConceptSpecies::Epiphant => crate::preview::ConceptSpecies::Epiphant,
 		ConceptSpecies::Hars => crate::preview::ConceptSpecies::Hars,
 		ConceptSpecies::Yilter => crate::preview::ConceptSpecies::Yilter,
 		ConceptSpecies::Sonyak => crate::preview::ConceptSpecies::Sonyak,

@@ -42,6 +42,19 @@ fn caole_config_round_trip() -> anyhow::Result<()> {
 }
 
 #[test]
+fn epiphant_config_round_trip() -> anyhow::Result<()> {
+	let config = crozon_characters::species::epiphant::EpiphantConfig::default_preview();
+	let menu = crate::characters::epiphant::EpiphantMenu::from(&config);
+	let restored = crozon_characters::species::epiphant::EpiphantConfig::from(&menu);
+	assert_eq!(config.gender, restored.gender);
+	assert_eq!(config.body, restored.body);
+	assert_eq!(config.nose, restored.nose);
+	assert_eq!(config.eye, restored.eye);
+	assert_eq!(config.sliders.shoulder_width, restored.sliders.shoulder_width);
+	Ok(())
+}
+
+#[test]
 fn hars_config_round_trip() -> anyhow::Result<()> {
 	let config = crozon_characters::species::hars::HarsConfig::default_preview();
 	let menu = crate::characters::hars::HarsMenu::from(&config);
