@@ -10,9 +10,7 @@ use crate::{
 	},
 	assets::{AssetNormalization, AssetPath},
 	species::{
-		common::{
-			assets::HEAD_STANDARD_PRONOGRADE, PRONOGRADE_HEAD_RIG, QUADRUPED_RIG, TAIL_CAT,
-		},
+		common::{assets::HEAD_STANDARD_PRONOGRADE, PRONOGRADE_HEAD_RIG, QUADRUPED_RIG, TAIL_CAT},
 		epiphant::{pose::EpiphantPose, EpiphantConfig},
 	},
 };
@@ -64,7 +62,7 @@ impl EpiphantAssets {
 			CharacterAsset::new(
 				"PronogradeHeadRig",
 				PRONOGRADE_HEAD_RIG,
-				AssetNormalization::base_y(0.4),
+				AssetNormalization::base_y(0.2),
 			),
 			SkinTarget::OwnRig,
 			Some(SocketAttachment {
