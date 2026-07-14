@@ -3,9 +3,8 @@ use character_ui_menu::{
 };
 use crozon_characters::{
 	species::{
-		braidman::BraidmanConfig, brenal::BrenalConfig, brodler::BrodlerConfig,
-		caole::CaoleConfig, dui::DuiConfig, lero::LeroConfig, mygr::MygrConfig,
-		spibmom::SpibmomConfig, wumbus::WumbusConfig,
+		braidman::BraidmanConfig, brenal::BrenalConfig, caole::CaoleConfig, hars::HarsConfig, claber::ClaberConfig, croconot::CroconotConfig, brodler::BrodlerConfig, dui::DuiConfig,
+		lero::LeroConfig, mygr::MygrConfig, spibmom::SpibmomConfig, sonyak::SonyakConfig, wumbus::WumbusConfig, ylter::YilterConfig,
 	},
 	ConceptAnimation,
 };
@@ -15,12 +14,17 @@ use crate::{
 		braidman::BraidmanMenu,
 		brenal::{BrenalAnimationClip, BrenalMenu},
 		caole::{CaoleAnimationClip, CaoleMenu},
+		hars::{HarsAnimationClip, HarsMenu},
+		claber::{ClaberAnimationClip, ClaberMenu},
+		croconot::{CroconotAnimationClip, CroconotMenu},
 		brodler::BrodlerMenu,
 		dui::DuiMenu,
 		lero::LeroMenu,
 		mygr::MygrMenu,
 		spibmom::SpibmomMenu,
+		sonyak::{SonyakAnimationClip, SonyakMenu},
 		wumbus::WumbusMenu,
+		ylter::{YilterAnimationClip, YilterMenu},
 	},
 	cycle_value,
 	event::{AssetValue, CharacterField, MenuEvent, SectionId, SwatchValue},
@@ -31,6 +35,11 @@ pub enum ConceptSpecies {
 	Braidman,
 	Brenal,
 	Caole,
+	Hars,
+	Yilter,
+	Sonyak,
+	Claber,
+	Croconot,
 	Brodler,
 	Mygr,
 	Dui,
@@ -45,6 +54,11 @@ impl ConceptSpecies {
 			Self::Braidman => "braidman",
 			Self::Brenal => "brenal",
 			Self::Caole => "caole",
+			Self::Hars => "hars",
+			Self::Yilter => "ylter",
+			Self::Sonyak => "sonyak",
+			Self::Claber => "claber",
+			Self::Croconot => "croconot",
 			Self::Brodler => "brodler",
 			Self::Mygr => "mygr",
 			Self::Dui => "dui",
@@ -61,6 +75,11 @@ impl ListValues for ConceptSpecies {
 			Self::Braidman,
 			Self::Brenal,
 			Self::Caole,
+			Self::Hars,
+			Self::Yilter,
+			Self::Sonyak,
+			Self::Claber,
+			Self::Croconot,
 			Self::Brodler,
 			Self::Mygr,
 			Self::Dui,
@@ -77,6 +96,11 @@ impl LabelOption for ConceptSpecies {
 			Self::Braidman => "braidman",
 			Self::Brenal => "brenal",
 			Self::Caole => "caole",
+			Self::Hars => "hars",
+			Self::Yilter => "ylter",
+			Self::Sonyak => "sonyak",
+			Self::Claber => "claber",
+			Self::Croconot => "croconot",
 			Self::Brodler => "brodler",
 			Self::Mygr => "mygr",
 			Self::Dui => "dui",
@@ -93,6 +117,11 @@ pub struct CharacterMenu {
 	pub braidman: BraidmanMenu,
 	pub brenal: BrenalMenu,
 	pub caole: CaoleMenu,
+	pub hars: HarsMenu,
+	pub ylter: YilterMenu,
+	pub sonyak: SonyakMenu,
+	pub claber: ClaberMenu,
+	pub croconot: CroconotMenu,
 	pub brodler: BrodlerMenu,
 	pub mygr: MygrMenu,
 	pub dui: DuiMenu,
@@ -108,6 +137,11 @@ impl CharacterMenu {
 			braidman: BraidmanMenu::from(config).with_animation(animation),
 			brenal: BrenalMenu::default(),
 			caole: CaoleMenu::default(),
+			hars: HarsMenu::default(),
+			ylter: YilterMenu::default(),
+			sonyak: SonyakMenu::default(),
+			croconot: CroconotMenu::default(),
+			claber: ClaberMenu::default(),
 			brodler: BrodlerMenu::default(),
 			mygr: MygrMenu::default(),
 			dui: DuiMenu::default(),
@@ -123,6 +157,11 @@ impl CharacterMenu {
 			braidman: BraidmanMenu::default(),
 			brenal: BrenalMenu::from(config).with_animation(animation),
 			caole: CaoleMenu::default(),
+			hars: HarsMenu::default(),
+			ylter: YilterMenu::default(),
+			sonyak: SonyakMenu::default(),
+			croconot: CroconotMenu::default(),
+			claber: ClaberMenu::default(),
 			brodler: BrodlerMenu::default(),
 			mygr: MygrMenu::default(),
 			dui: DuiMenu::default(),
@@ -138,6 +177,112 @@ impl CharacterMenu {
 			braidman: BraidmanMenu::default(),
 			brenal: BrenalMenu::default(),
 			caole: CaoleMenu::from(config).with_animation(animation),
+			hars: HarsMenu::default(),
+			ylter: YilterMenu::default(),
+			sonyak: SonyakMenu::default(),
+			claber: ClaberMenu::default(),
+			croconot: CroconotMenu::default(),
+			brodler: BrodlerMenu::default(),
+			mygr: MygrMenu::default(),
+			dui: DuiMenu::default(),
+			wumbus: WumbusMenu::default(),
+			lero: LeroMenu::default(),
+			spibmom: SpibmomMenu::default(),
+		}
+	}
+
+	pub fn from_hars(config: &HarsConfig, animation: ConceptAnimation) -> Self {
+		Self {
+			species: SingleSelect::new(ConceptSpecies::Hars),
+			braidman: BraidmanMenu::default(),
+			brenal: BrenalMenu::default(),
+			caole: CaoleMenu::default(),
+			hars: HarsMenu::from(config).with_animation(animation),
+			ylter: YilterMenu::default(),
+			sonyak: SonyakMenu::default(),
+			claber: ClaberMenu::default(),
+			croconot: CroconotMenu::default(),
+			brodler: BrodlerMenu::default(),
+			mygr: MygrMenu::default(),
+			dui: DuiMenu::default(),
+			wumbus: WumbusMenu::default(),
+			lero: LeroMenu::default(),
+			spibmom: SpibmomMenu::default(),
+		}
+	}
+
+	pub fn from_ylter(config: &YilterConfig, animation: ConceptAnimation) -> Self {
+		Self {
+			species: SingleSelect::new(ConceptSpecies::Yilter),
+			braidman: BraidmanMenu::default(),
+			brenal: BrenalMenu::default(),
+			caole: CaoleMenu::default(),
+			hars: HarsMenu::default(),
+			ylter: YilterMenu::from(config).with_animation(animation),
+			sonyak: SonyakMenu::default(),
+			claber: ClaberMenu::default(),
+			croconot: CroconotMenu::default(),
+			brodler: BrodlerMenu::default(),
+			mygr: MygrMenu::default(),
+			dui: DuiMenu::default(),
+			wumbus: WumbusMenu::default(),
+			lero: LeroMenu::default(),
+			spibmom: SpibmomMenu::default(),
+		}
+	}
+
+	pub fn from_sonyak(config: &SonyakConfig, animation: ConceptAnimation) -> Self {
+		Self {
+			species: SingleSelect::new(ConceptSpecies::Sonyak),
+			braidman: BraidmanMenu::default(),
+			brenal: BrenalMenu::default(),
+			caole: CaoleMenu::default(),
+			hars: HarsMenu::default(),
+			ylter: YilterMenu::default(),
+			sonyak: SonyakMenu::from(config).with_animation(animation),
+			claber: ClaberMenu::default(),
+			croconot: CroconotMenu::default(),
+			brodler: BrodlerMenu::default(),
+			mygr: MygrMenu::default(),
+			dui: DuiMenu::default(),
+			wumbus: WumbusMenu::default(),
+			lero: LeroMenu::default(),
+			spibmom: SpibmomMenu::default(),
+		}
+	}
+
+
+	pub fn from_croconot(config: &CroconotConfig, animation: ConceptAnimation) -> Self {
+		Self {
+			species: SingleSelect::new(ConceptSpecies::Croconot),
+			braidman: BraidmanMenu::default(),
+			brenal: BrenalMenu::default(),
+			caole: CaoleMenu::default(),
+			hars: HarsMenu::default(),
+			ylter: YilterMenu::default(),
+			sonyak: SonyakMenu::default(),
+			croconot: CroconotMenu::from(config).with_animation(animation),
+			claber: ClaberMenu::default(),
+			brodler: BrodlerMenu::default(),
+			mygr: MygrMenu::default(),
+			dui: DuiMenu::default(),
+			wumbus: WumbusMenu::default(),
+			lero: LeroMenu::default(),
+			spibmom: SpibmomMenu::default(),
+		}
+	}
+
+	pub fn from_claber(config: &ClaberConfig, animation: ConceptAnimation) -> Self {
+		Self {
+			species: SingleSelect::new(ConceptSpecies::Claber),
+			braidman: BraidmanMenu::default(),
+			brenal: BrenalMenu::default(),
+			caole: CaoleMenu::default(),
+			hars: HarsMenu::default(),
+			ylter: YilterMenu::default(),
+			sonyak: SonyakMenu::default(),
+			claber: ClaberMenu::from(config).with_animation(animation),
+			croconot: CroconotMenu::default(),
 			brodler: BrodlerMenu::default(),
 			mygr: MygrMenu::default(),
 			dui: DuiMenu::default(),
@@ -153,6 +298,11 @@ impl CharacterMenu {
 			braidman: BraidmanMenu::default(),
 			brenal: BrenalMenu::default(),
 			caole: CaoleMenu::default(),
+			hars: HarsMenu::default(),
+			ylter: YilterMenu::default(),
+			sonyak: SonyakMenu::default(),
+			croconot: CroconotMenu::default(),
+			claber: ClaberMenu::default(),
 			brodler: BrodlerMenu::from(config).with_animation(animation),
 			mygr: MygrMenu::default(),
 			dui: DuiMenu::default(),
@@ -168,6 +318,11 @@ impl CharacterMenu {
 			braidman: BraidmanMenu::default(),
 			brenal: BrenalMenu::default(),
 			caole: CaoleMenu::default(),
+			hars: HarsMenu::default(),
+			ylter: YilterMenu::default(),
+			sonyak: SonyakMenu::default(),
+			croconot: CroconotMenu::default(),
+			claber: ClaberMenu::default(),
 			brodler: BrodlerMenu::default(),
 			mygr: MygrMenu::from(config).with_animation(animation),
 			dui: DuiMenu::default(),
@@ -183,6 +338,11 @@ impl CharacterMenu {
 			braidman: BraidmanMenu::default(),
 			brenal: BrenalMenu::default(),
 			caole: CaoleMenu::default(),
+			hars: HarsMenu::default(),
+			ylter: YilterMenu::default(),
+			sonyak: SonyakMenu::default(),
+			croconot: CroconotMenu::default(),
+			claber: ClaberMenu::default(),
 			brodler: BrodlerMenu::default(),
 			mygr: MygrMenu::default(),
 			dui: DuiMenu::from(config).with_animation(animation),
@@ -198,6 +358,11 @@ impl CharacterMenu {
 			braidman: BraidmanMenu::default(),
 			brenal: BrenalMenu::default(),
 			caole: CaoleMenu::default(),
+			hars: HarsMenu::default(),
+			ylter: YilterMenu::default(),
+			sonyak: SonyakMenu::default(),
+			croconot: CroconotMenu::default(),
+			claber: ClaberMenu::default(),
 			brodler: BrodlerMenu::default(),
 			mygr: MygrMenu::default(),
 			dui: DuiMenu::default(),
@@ -213,6 +378,11 @@ impl CharacterMenu {
 			braidman: BraidmanMenu::default(),
 			brenal: BrenalMenu::default(),
 			caole: CaoleMenu::default(),
+			hars: HarsMenu::default(),
+			ylter: YilterMenu::default(),
+			sonyak: SonyakMenu::default(),
+			croconot: CroconotMenu::default(),
+			claber: ClaberMenu::default(),
 			brodler: BrodlerMenu::default(),
 			mygr: MygrMenu::default(),
 			dui: DuiMenu::default(),
@@ -228,6 +398,11 @@ impl CharacterMenu {
 			braidman: BraidmanMenu::default(),
 			brenal: BrenalMenu::default(),
 			caole: CaoleMenu::default(),
+			hars: HarsMenu::default(),
+			ylter: YilterMenu::default(),
+			sonyak: SonyakMenu::default(),
+			croconot: CroconotMenu::default(),
+			claber: ClaberMenu::default(),
 			brodler: BrodlerMenu::default(),
 			mygr: MygrMenu::default(),
 			dui: DuiMenu::default(),
@@ -244,6 +419,11 @@ impl CharacterMenu {
 			ConceptSpecies::Braidman => self.braidman.menu_node(),
 			ConceptSpecies::Brenal => self.brenal.menu_node(),
 			ConceptSpecies::Caole => self.caole.menu_node(),
+			ConceptSpecies::Hars => self.hars.menu_node(),
+			ConceptSpecies::Yilter => self.ylter.menu_node(),
+			ConceptSpecies::Sonyak => self.sonyak.menu_node(),
+			ConceptSpecies::Claber => self.claber.menu_node(),
+			ConceptSpecies::Croconot => self.croconot.menu_node(),
 			ConceptSpecies::Brodler => self.brodler.menu_node(),
 			ConceptSpecies::Mygr => self.mygr.menu_node(),
 			ConceptSpecies::Dui => self.dui.menu_node(),
@@ -258,6 +438,11 @@ impl CharacterMenu {
 			ConceptSpecies::Braidman => self.braidman.animation(),
 			ConceptSpecies::Brenal => self.brenal.animation(),
 			ConceptSpecies::Caole => self.caole.animation(),
+			ConceptSpecies::Hars => self.hars.animation(),
+			ConceptSpecies::Yilter => self.ylter.animation(),
+			ConceptSpecies::Sonyak => self.sonyak.animation(),
+			ConceptSpecies::Claber => self.claber.animation(),
+			ConceptSpecies::Croconot => self.croconot.animation(),
 			ConceptSpecies::Brodler => self.brodler.animation(),
 			ConceptSpecies::Mygr => self.mygr.animation(),
 			ConceptSpecies::Dui => self.dui.animation(),
@@ -277,6 +462,26 @@ impl CharacterMenu {
 
 	pub fn caole_config(&self) -> CaoleConfig {
 		CaoleConfig::from(&self.caole)
+	}
+
+	pub fn hars_config(&self) -> HarsConfig {
+		HarsConfig::from(&self.hars)
+	}
+
+	pub fn ylter_config(&self) -> YilterConfig {
+		YilterConfig::from(&self.ylter)
+	}
+
+	pub fn sonyak_config(&self) -> SonyakConfig {
+		SonyakConfig::from(&self.sonyak)
+	}
+
+	pub fn claber_config(&self) -> ClaberConfig {
+		ClaberConfig::from(&self.claber)
+	}
+
+	pub fn croconot_config(&self) -> CroconotConfig {
+		CroconotConfig::from(&self.croconot)
 	}
 
 	pub fn brodler_config(&self) -> BrodlerConfig {
@@ -319,6 +524,11 @@ impl CharacterMenu {
 			ConceptSpecies::Braidman => self.apply_braidman(event),
 			ConceptSpecies::Brenal => self.apply_brenal(event),
 			ConceptSpecies::Caole => self.apply_caole(event),
+			ConceptSpecies::Hars => self.apply_hars(event),
+			ConceptSpecies::Yilter => self.apply_ylter(event),
+			ConceptSpecies::Sonyak => self.apply_sonyak(event),
+			ConceptSpecies::Claber => self.apply_claber(event),
+			ConceptSpecies::Croconot => self.apply_croconot(event),
 			ConceptSpecies::Brodler => self.apply_brodler(event),
 			ConceptSpecies::Mygr => self.apply_mygr(event),
 			ConceptSpecies::Dui => self.apply_dui(event),
@@ -338,6 +548,11 @@ impl CharacterMenu {
 			ConceptSpecies::Braidman => self.braidman.camera_focus_for_field(field),
 			ConceptSpecies::Brenal => self.brenal.camera_focus_for_field(field),
 			ConceptSpecies::Caole => self.caole.camera_focus_for_field(field),
+			ConceptSpecies::Hars => self.hars.camera_focus_for_field(field),
+			ConceptSpecies::Yilter => self.ylter.camera_focus_for_field(field),
+			ConceptSpecies::Sonyak => self.sonyak.camera_focus_for_field(field),
+			ConceptSpecies::Claber => self.claber.camera_focus_for_field(field),
+			ConceptSpecies::Croconot => self.croconot.camera_focus_for_field(field),
 			ConceptSpecies::Brodler => self.brodler.camera_focus_for_field(field),
 			ConceptSpecies::Mygr => self.mygr.camera_focus_for_field(field),
 			ConceptSpecies::Dui => self.dui.camera_focus_for_field(field),
@@ -545,6 +760,324 @@ impl CharacterMenu {
 				}
 				CharacterField::MouthColor => {
 					menu.head_features.value.mouth_color.value = color;
+					true
+				}
+				CharacterField::TailColor => {
+					menu.body.value.tail_color.value = color;
+					true
+				}
+				_ => false,
+			},
+			MenuEvent::SetSwatch(_, _) | MenuEvent::Cycle(_, _) | MenuEvent::ToggleClothing(_) => {
+				false
+			}
+		}
+	}
+
+	fn apply_hars(&mut self, event: MenuEvent) -> bool {
+		let menu = &mut self.hars;
+		match event {
+			MenuEvent::ToggleSection(_) | MenuEvent::SetSpecies(_) => false,
+			MenuEvent::Cycle(CharacterField::Gender, delta) => {
+				menu.presets.value.gender.value =
+					cycle_value(menu.presets.value.gender.value, delta);
+				true
+			}
+			MenuEvent::Cycle(CharacterField::Build, delta) => {
+				menu.presets.value.build.value = cycle_value(menu.presets.value.build.value, delta);
+				true
+			}
+			MenuEvent::SetAsset(field, value) => match (field, value) {
+				(CharacterField::HarsBody, AssetValue::HarsBody(value)) => {
+					menu.body.value.body.value = value;
+					true
+				}
+				(CharacterField::Eye, AssetValue::Eye(value)) => {
+					menu.head_features.value.eye.value = value;
+					true
+				}
+				(CharacterField::HarsMouth, AssetValue::HarsMouth(value)) => {
+					menu.head_features.value.snout.value = value;
+					true
+				}
+				(CharacterField::Animation, AssetValue::Animation(value)) => {
+					menu.animation.value.clip.value = HarsAnimationClip::from(value);
+					true
+				}
+				_ => false,
+			},
+			MenuEvent::SliderDelta(field, delta) => apply_hars_slider(menu, field, delta),
+			MenuEvent::SetSwatch(field, SwatchValue::Item(color)) => match field {
+				CharacterField::BodyColor => {
+					menu.body.value.color.value = color;
+					menu.head_features.value.body_color = color;
+					true
+				}
+				CharacterField::EyeColor => {
+					menu.head_features.value.eye_color.value = color;
+					true
+				}
+				CharacterField::MouthColor => {
+					menu.head_features.value.mouth_color.value = color;
+					true
+				}
+				CharacterField::TailColor => {
+					menu.body.value.tail_color.value = color;
+					true
+				}
+				_ => false,
+			},
+			MenuEvent::SetSwatch(_, _) | MenuEvent::Cycle(_, _) | MenuEvent::ToggleClothing(_) => {
+				false
+			}
+		}
+	}
+
+	fn apply_ylter(&mut self, event: MenuEvent) -> bool {
+		let menu = &mut self.ylter;
+		match event {
+			MenuEvent::ToggleSection(_) | MenuEvent::SetSpecies(_) => false,
+			MenuEvent::Cycle(CharacterField::Gender, delta) => {
+				menu.presets.value.gender.value =
+					cycle_value(menu.presets.value.gender.value, delta);
+				true
+			}
+			MenuEvent::Cycle(CharacterField::Build, delta) => {
+				menu.presets.value.build.value = cycle_value(menu.presets.value.build.value, delta);
+				true
+			}
+			MenuEvent::SetAsset(field, value) => match (field, value) {
+				(CharacterField::YilterBody, AssetValue::YilterBody(value)) => {
+					menu.body.value.body.value = value;
+					true
+				}
+				(CharacterField::YilterMouth, AssetValue::YilterMouth(value)) => {
+					menu.head_features.value.snout.value = value;
+					true
+				}
+				(CharacterField::Animation, AssetValue::Animation(value)) => {
+					menu.animation.value.clip.value = YilterAnimationClip::from(value);
+					true
+				}
+				_ => false,
+			},
+			MenuEvent::SliderDelta(field, delta) => apply_ylter_slider(menu, field, delta),
+			MenuEvent::SetSwatch(field, SwatchValue::Item(color)) => match field {
+				CharacterField::BodyColor => {
+					menu.body.value.color.value = color;
+					menu.head_features.value.body_color = color;
+					true
+				}
+				CharacterField::EyeColor => {
+					menu.head_features.value.eye_color.value = color;
+					true
+				}
+				CharacterField::MouthColor => {
+					menu.head_features.value.mouth_color.value = color;
+					true
+				}
+				CharacterField::TailColor => {
+					menu.body.value.tail_color.value = color;
+					true
+				}
+				_ => false,
+			},
+			MenuEvent::SetSwatch(_, _) | MenuEvent::Cycle(_, _) | MenuEvent::ToggleClothing(_) => {
+				false
+			}
+		}
+	}
+
+	fn apply_sonyak(&mut self, event: MenuEvent) -> bool {
+		let menu = &mut self.sonyak;
+		match event {
+			MenuEvent::ToggleSection(_) | MenuEvent::SetSpecies(_) => false,
+			MenuEvent::Cycle(CharacterField::Gender, delta) => {
+				menu.presets.value.gender.value =
+					cycle_value(menu.presets.value.gender.value, delta);
+				true
+			}
+			MenuEvent::Cycle(CharacterField::Build, delta) => {
+				menu.presets.value.build.value = cycle_value(menu.presets.value.build.value, delta);
+				true
+			}
+			MenuEvent::SetAsset(field, value) => match (field, value) {
+				(CharacterField::SonyakBody, AssetValue::SonyakBody(value)) => {
+					menu.body.value.body.value = value;
+					true
+				}
+				(CharacterField::SonyakMouth, AssetValue::SonyakMouth(value)) => {
+					menu.head_features.value.snout.value = value;
+					true
+				}
+				(CharacterField::Animation, AssetValue::Animation(value)) => {
+					menu.animation.value.clip.value = SonyakAnimationClip::from(value);
+					true
+				}
+				_ => false,
+			},
+			MenuEvent::SliderDelta(field, delta) => apply_sonyak_slider(menu, field, delta),
+			MenuEvent::SetSwatch(field, SwatchValue::Item(color)) => match field {
+				CharacterField::BodyColor => {
+					menu.body.value.color.value = color;
+					menu.head_features.value.body_color = color;
+					true
+				}
+				CharacterField::EyeColor => {
+					menu.head_features.value.eye_color.value = color;
+					true
+				}
+				CharacterField::MouthColor => {
+					menu.head_features.value.mouth_color.value = color;
+					true
+				}
+				CharacterField::HairColor => {
+					menu.head_features.value.hair_color.value = color;
+					true
+				}
+				CharacterField::TailColor => {
+					menu.body.value.tail_color.value = color;
+					true
+				}
+				_ => false,
+			},
+			MenuEvent::SetSwatch(_, _) | MenuEvent::Cycle(_, _) | MenuEvent::ToggleClothing(_) => {
+				false
+			}
+		}
+	}
+
+
+	fn apply_croconot(&mut self, event: MenuEvent) -> bool {
+		let menu = &mut self.croconot;
+		match event {
+			MenuEvent::ToggleSection(_) | MenuEvent::SetSpecies(_) => false,
+			MenuEvent::Cycle(CharacterField::Gender, delta) => {
+				menu.presets.value.gender.value =
+					cycle_value(menu.presets.value.gender.value, delta);
+				true
+			}
+			MenuEvent::Cycle(CharacterField::Build, delta) => {
+				menu.presets.value.build.value = cycle_value(menu.presets.value.build.value, delta);
+				true
+			}
+			MenuEvent::Cycle(CharacterField::CroconotHorns, delta) => {
+				menu.head_features.value.horns.value =
+					cycle_value(menu.head_features.value.horns.value, delta);
+				true
+			}
+			MenuEvent::SetAsset(field, value) => match (field, value) {
+				(CharacterField::CroconotBody, AssetValue::CroconotBody(value)) => {
+					menu.body.value.body.value = value;
+					true
+				}
+				(CharacterField::CroconotHead, AssetValue::CroconotHead(value)) => {
+					menu.head_features.value.head.value = value;
+					true
+				}
+				(CharacterField::Eye, AssetValue::Eye(value)) => {
+					menu.head_features.value.eye.value = value;
+					true
+				}
+				(CharacterField::CroconotMouth, AssetValue::CroconotMouth(value)) => {
+					menu.head_features.value.snout.value = value;
+					true
+				}
+				(CharacterField::Animation, AssetValue::Animation(value)) => {
+					menu.animation.value.clip.value = CroconotAnimationClip::from(value);
+					true
+				}
+				_ => false,
+			},
+			MenuEvent::SliderDelta(field, delta) => apply_croconot_slider(menu, field, delta),
+			MenuEvent::SetSwatch(field, SwatchValue::Item(color)) => match field {
+				CharacterField::BodyColor => {
+					menu.body.value.color.value = color;
+					menu.head_features.value.body_color = color;
+					true
+				}
+				CharacterField::EyeColor => {
+					menu.head_features.value.eye_color.value = color;
+					true
+				}
+				CharacterField::MouthColor => {
+					menu.head_features.value.mouth_color.value = color;
+					true
+				}
+				CharacterField::HornColor => {
+					menu.head_features.value.horn_color.value = color;
+					true
+				}
+				CharacterField::TailColor => {
+					menu.body.value.tail_color.value = color;
+					true
+				}
+				_ => false,
+			},
+			MenuEvent::SetSwatch(_, _) | MenuEvent::Cycle(_, _) | MenuEvent::ToggleClothing(_) => {
+				false
+			}
+		}
+	}
+
+	fn apply_claber(&mut self, event: MenuEvent) -> bool {
+		let menu = &mut self.claber;
+		match event {
+			MenuEvent::ToggleSection(_) | MenuEvent::SetSpecies(_) => false,
+			MenuEvent::Cycle(CharacterField::Gender, delta) => {
+				menu.presets.value.gender.value =
+					cycle_value(menu.presets.value.gender.value, delta);
+				true
+			}
+			MenuEvent::Cycle(CharacterField::Build, delta) => {
+				menu.presets.value.build.value = cycle_value(menu.presets.value.build.value, delta);
+				true
+			}
+			MenuEvent::Cycle(CharacterField::ClaberHorns, delta) => {
+				menu.head_features.value.horns.value =
+					cycle_value(menu.head_features.value.horns.value, delta);
+				true
+			}
+			MenuEvent::SetAsset(field, value) => match (field, value) {
+				(CharacterField::ClaberBody, AssetValue::ClaberBody(value)) => {
+					menu.body.value.body.value = value;
+					true
+				}
+				(CharacterField::ClaberHead, AssetValue::ClaberHead(value)) => {
+					menu.head_features.value.head.value = value;
+					true
+				}
+				(CharacterField::Eye, AssetValue::Eye(value)) => {
+					menu.head_features.value.eye.value = value;
+					true
+				}
+				(CharacterField::ClaberMouth, AssetValue::ClaberMouth(value)) => {
+					menu.head_features.value.snout.value = value;
+					true
+				}
+				(CharacterField::Animation, AssetValue::Animation(value)) => {
+					menu.animation.value.clip.value = ClaberAnimationClip::from(value);
+					true
+				}
+				_ => false,
+			},
+			MenuEvent::SliderDelta(field, delta) => apply_claber_slider(menu, field, delta),
+			MenuEvent::SetSwatch(field, SwatchValue::Claber(color)) => match field {
+				CharacterField::BodyColor => {
+					menu.body.value.color.value = color;
+					menu.head_features.value.body_color = color;
+					true
+				}
+				CharacterField::EyeColor => {
+					menu.head_features.value.eye_color.value = color;
+					true
+				}
+				CharacterField::MouthColor => {
+					menu.head_features.value.mouth_color.value = color;
+					true
+				}
+				CharacterField::HornColor => {
+					menu.head_features.value.horn_color.value = color;
 					true
 				}
 				CharacterField::TailColor => {
@@ -970,6 +1503,41 @@ impl MenuComponent<MenuEvent> for CharacterMenu {
 	}
 }
 
+fn apply_brenal_slider(menu: &mut BrenalMenu, field: CharacterField, delta: f32) -> bool {
+	let body = &mut menu.body.value.sliders;
+	let face = &mut menu.head_features.value.feature_sliders;
+	match field {
+		CharacterField::ShoulderWidth => {
+			body.shoulder_width = body.shoulder_width.apply_delta(delta)
+		}
+		CharacterField::HipWidth => body.hip_width = body.hip_width.apply_delta(delta),
+		CharacterField::ChestThickness => {
+			body.chest_thickness = body.chest_thickness.apply_delta(delta)
+		}
+		CharacterField::HipThickness => body.hip_thickness = body.hip_thickness.apply_delta(delta),
+		CharacterField::LegThickness => body.leg_thickness = body.leg_thickness.apply_delta(delta),
+		CharacterField::ButtocksThickness => {
+			body.buttocks_thickness = body.buttocks_thickness.apply_delta(delta)
+		}
+		CharacterField::WaistThickness => {
+			body.waist_thickness = body.waist_thickness.apply_delta(delta)
+		}
+		CharacterField::LowerTrunkThickness => {
+			body.lower_trunk_thickness = body.lower_trunk_thickness.apply_delta(delta)
+		}
+		CharacterField::ArmLength => body.arm_length = body.arm_length.apply_delta(delta),
+		CharacterField::ArmThickness => body.arm_thickness = body.arm_thickness.apply_delta(delta),
+		CharacterField::LegLength => body.leg_length = body.leg_length.apply_delta(delta),
+		CharacterField::EyeWidth => face.eye_width = face.eye_width.apply_delta(delta),
+		CharacterField::EyeHeight => face.eye_height = face.eye_height.apply_delta(delta),
+		CharacterField::EyeTilt => face.eye_tilt = face.eye_tilt.apply_delta(delta),
+		CharacterField::EarWidth => face.ear_width = face.ear_width.apply_delta(delta),
+		CharacterField::EarHeight => face.ear_height = face.ear_height.apply_delta(delta),
+		_ => return false,
+	}
+	true
+}
+
 fn apply_caole_slider(menu: &mut CaoleMenu, field: CharacterField, delta: f32) -> bool {
 	let body = &mut menu.body.value.sliders;
 	let face = &mut menu.head_features.value.feature_sliders;
@@ -1005,7 +1573,7 @@ fn apply_caole_slider(menu: &mut CaoleMenu, field: CharacterField, delta: f32) -
 	true
 }
 
-fn apply_brenal_slider(menu: &mut BrenalMenu, field: CharacterField, delta: f32) -> bool {
+fn apply_hars_slider(menu: &mut HarsMenu, field: CharacterField, delta: f32) -> bool {
 	let body = &mut menu.body.value.sliders;
 	let face = &mut menu.head_features.value.feature_sliders;
 	match field {
@@ -1035,6 +1603,149 @@ fn apply_brenal_slider(menu: &mut BrenalMenu, field: CharacterField, delta: f32)
 		CharacterField::EyeTilt => face.eye_tilt = face.eye_tilt.apply_delta(delta),
 		CharacterField::EarWidth => face.ear_width = face.ear_width.apply_delta(delta),
 		CharacterField::EarHeight => face.ear_height = face.ear_height.apply_delta(delta),
+		_ => return false,
+	}
+	true
+}
+
+fn apply_ylter_slider(menu: &mut YilterMenu, field: CharacterField, delta: f32) -> bool {
+	let body = &mut menu.body.value.sliders;
+	let face = &mut menu.head_features.value.feature_sliders;
+	match field {
+		CharacterField::ShoulderWidth => {
+			body.shoulder_width = body.shoulder_width.apply_delta(delta)
+		}
+		CharacterField::HipWidth => body.hip_width = body.hip_width.apply_delta(delta),
+		CharacterField::ChestThickness => {
+			body.chest_thickness = body.chest_thickness.apply_delta(delta)
+		}
+		CharacterField::HipThickness => body.hip_thickness = body.hip_thickness.apply_delta(delta),
+		CharacterField::LegThickness => body.leg_thickness = body.leg_thickness.apply_delta(delta),
+		CharacterField::ButtocksThickness => {
+			body.buttocks_thickness = body.buttocks_thickness.apply_delta(delta)
+		}
+		CharacterField::WaistThickness => {
+			body.waist_thickness = body.waist_thickness.apply_delta(delta)
+		}
+		CharacterField::LowerTrunkThickness => {
+			body.lower_trunk_thickness = body.lower_trunk_thickness.apply_delta(delta)
+		}
+		CharacterField::ArmLength => body.arm_length = body.arm_length.apply_delta(delta),
+		CharacterField::ArmThickness => body.arm_thickness = body.arm_thickness.apply_delta(delta),
+		CharacterField::LegLength => body.leg_length = body.leg_length.apply_delta(delta),
+		CharacterField::EyeWidth => face.eye_width = face.eye_width.apply_delta(delta),
+		CharacterField::EyeHeight => face.eye_height = face.eye_height.apply_delta(delta),
+		CharacterField::EyeTilt => face.eye_tilt = face.eye_tilt.apply_delta(delta),
+		CharacterField::EarWidth => face.ear_width = face.ear_width.apply_delta(delta),
+		CharacterField::EarHeight => face.ear_height = face.ear_height.apply_delta(delta),
+		_ => return false,
+	}
+	true
+}
+
+fn apply_sonyak_slider(menu: &mut SonyakMenu, field: CharacterField, delta: f32) -> bool {
+	let body = &mut menu.body.value.sliders;
+	let face = &mut menu.head_features.value.feature_sliders;
+	match field {
+		CharacterField::ShoulderWidth => {
+			body.shoulder_width = body.shoulder_width.apply_delta(delta)
+		}
+		CharacterField::HipWidth => body.hip_width = body.hip_width.apply_delta(delta),
+		CharacterField::ChestThickness => {
+			body.chest_thickness = body.chest_thickness.apply_delta(delta)
+		}
+		CharacterField::HipThickness => body.hip_thickness = body.hip_thickness.apply_delta(delta),
+		CharacterField::LegThickness => body.leg_thickness = body.leg_thickness.apply_delta(delta),
+		CharacterField::ButtocksThickness => {
+			body.buttocks_thickness = body.buttocks_thickness.apply_delta(delta)
+		}
+		CharacterField::WaistThickness => {
+			body.waist_thickness = body.waist_thickness.apply_delta(delta)
+		}
+		CharacterField::LowerTrunkThickness => {
+			body.lower_trunk_thickness = body.lower_trunk_thickness.apply_delta(delta)
+		}
+		CharacterField::ArmLength => body.arm_length = body.arm_length.apply_delta(delta),
+		CharacterField::ArmThickness => body.arm_thickness = body.arm_thickness.apply_delta(delta),
+		CharacterField::LegLength => body.leg_length = body.leg_length.apply_delta(delta),
+		CharacterField::EyeWidth => face.eye_width = face.eye_width.apply_delta(delta),
+		CharacterField::EyeHeight => face.eye_height = face.eye_height.apply_delta(delta),
+		CharacterField::EyeTilt => face.eye_tilt = face.eye_tilt.apply_delta(delta),
+		CharacterField::EarWidth => face.ear_width = face.ear_width.apply_delta(delta),
+		CharacterField::EarHeight => face.ear_height = face.ear_height.apply_delta(delta),
+		_ => return false,
+	}
+	true
+}
+
+
+fn apply_croconot_slider(menu: &mut CroconotMenu, field: CharacterField, delta: f32) -> bool {
+	let body = &mut menu.body.value.sliders;
+	let face = &mut menu.head_features.value.feature_sliders;
+	match field {
+		CharacterField::ShoulderWidth => {
+			body.shoulder_width = body.shoulder_width.apply_delta(delta)
+		}
+		CharacterField::HipWidth => body.hip_width = body.hip_width.apply_delta(delta),
+		CharacterField::ChestThickness => {
+			body.chest_thickness = body.chest_thickness.apply_delta(delta)
+		}
+		CharacterField::HipThickness => body.hip_thickness = body.hip_thickness.apply_delta(delta),
+		CharacterField::LegThickness => body.leg_thickness = body.leg_thickness.apply_delta(delta),
+		CharacterField::ButtocksThickness => {
+			body.buttocks_thickness = body.buttocks_thickness.apply_delta(delta)
+		}
+		CharacterField::WaistThickness => {
+			body.waist_thickness = body.waist_thickness.apply_delta(delta)
+		}
+		CharacterField::LowerTrunkThickness => {
+			body.lower_trunk_thickness = body.lower_trunk_thickness.apply_delta(delta)
+		}
+		CharacterField::ArmLength => body.arm_length = body.arm_length.apply_delta(delta),
+		CharacterField::ArmThickness => body.arm_thickness = body.arm_thickness.apply_delta(delta),
+		CharacterField::LegLength => body.leg_length = body.leg_length.apply_delta(delta),
+		CharacterField::EyeWidth => face.eye_width = face.eye_width.apply_delta(delta),
+		CharacterField::EyeHeight => face.eye_height = face.eye_height.apply_delta(delta),
+		CharacterField::EyeTilt => face.eye_tilt = face.eye_tilt.apply_delta(delta),
+		CharacterField::EarWidth => face.ear_width = face.ear_width.apply_delta(delta),
+		CharacterField::EarHeight => face.ear_height = face.ear_height.apply_delta(delta),
+		CharacterField::SnoutLength => face.snout_length = face.snout_length.apply_delta(delta),
+		_ => return false,
+	}
+	true
+}
+
+fn apply_claber_slider(menu: &mut ClaberMenu, field: CharacterField, delta: f32) -> bool {
+	let body = &mut menu.body.value.sliders;
+	let face = &mut menu.head_features.value.feature_sliders;
+	match field {
+		CharacterField::ShoulderWidth => {
+			body.shoulder_width = body.shoulder_width.apply_delta(delta)
+		}
+		CharacterField::HipWidth => body.hip_width = body.hip_width.apply_delta(delta),
+		CharacterField::ChestThickness => {
+			body.chest_thickness = body.chest_thickness.apply_delta(delta)
+		}
+		CharacterField::HipThickness => body.hip_thickness = body.hip_thickness.apply_delta(delta),
+		CharacterField::LegThickness => body.leg_thickness = body.leg_thickness.apply_delta(delta),
+		CharacterField::ButtocksThickness => {
+			body.buttocks_thickness = body.buttocks_thickness.apply_delta(delta)
+		}
+		CharacterField::WaistThickness => {
+			body.waist_thickness = body.waist_thickness.apply_delta(delta)
+		}
+		CharacterField::LowerTrunkThickness => {
+			body.lower_trunk_thickness = body.lower_trunk_thickness.apply_delta(delta)
+		}
+		CharacterField::ArmLength => body.arm_length = body.arm_length.apply_delta(delta),
+		CharacterField::ArmThickness => body.arm_thickness = body.arm_thickness.apply_delta(delta),
+		CharacterField::LegLength => body.leg_length = body.leg_length.apply_delta(delta),
+		CharacterField::EyeWidth => face.eye_width = face.eye_width.apply_delta(delta),
+		CharacterField::EyeHeight => face.eye_height = face.eye_height.apply_delta(delta),
+		CharacterField::EyeTilt => face.eye_tilt = face.eye_tilt.apply_delta(delta),
+		CharacterField::EarWidth => face.ear_width = face.ear_width.apply_delta(delta),
+		CharacterField::EarHeight => face.ear_height = face.ear_height.apply_delta(delta),
+		CharacterField::SnoutLength => face.snout_length = face.snout_length.apply_delta(delta),
 		_ => return false,
 	}
 	true

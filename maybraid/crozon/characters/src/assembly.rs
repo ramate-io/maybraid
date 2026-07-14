@@ -45,6 +45,9 @@ impl CharacterAsset {
 pub enum CharacterPartSlot {
 	#[default]
 	BodyMesh,
+	/// Intermediate OwnRig armature socketed between body and head (e.g. multi-bone neck).
+	NeckRig,
+	NeckMesh,
 	HeadRig,
 	HeadMesh,
 	EyeLeft,
@@ -65,18 +68,23 @@ pub enum CharacterPartSlot {
 pub enum SkinTarget {
 	#[default]
 	BodyRig,
+	NeckRig,
 	HeadRig,
-	/// Part keeps its embedded armature (e.g. head rig scene before socket attach).
+	/// Part keeps its embedded armature (e.g. head / neck rig scene before socket attach).
 	OwnRig,
 	/// Socketed prop with no skinning, or mesh follows parent transform only.
 	None,
 }
 
 /// The rig hierarchy that owns a socket bone.
+///
+/// Preview spawn resolves these to concrete rig entities. Prefer nesting via
+/// [`SocketRig::Neck`] when a species ships a separate neck armature.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum SocketRig {
 	#[default]
 	Body,
+	Neck,
 	Head,
 }
 
@@ -101,6 +109,9 @@ pub struct ResolvedCharacterPart {
 	pub asset: CharacterAsset,
 	pub skin_target: SkinTarget,
 	pub socket: Option<SocketAttachment>,
+	/// Optional bind-pose layers for intermediate OwnRig armatures (neck pitch, etc.).
+	/// Body pose still lives on [`ResolvedCharacterAssembly::pose`].
+	pub pose: Option<ResolvedRigPose>,
 }
 
 impl ResolvedCharacterPart {
@@ -110,21 +121,27 @@ impl ResolvedCharacterPart {
 		skin_target: SkinTarget,
 		socket: Option<SocketAttachment>,
 	) -> Self {
-		Self { slot, asset, skin_target, socket }
+		Self { slot, asset, skin_target, socket, pose: None }
+	}
+
+	pub fn with_pose(mut self, pose: ResolvedRigPose) -> Self {
+		self.pose = Some(pose);
+		self
 	}
 
 	/// Adapter from the shared item catalog: clothing skins onto the body rig.
 	pub const fn clothing(clothing: crozon_character_items::ClothingMesh) -> Self {
-		Self::new(
-			CharacterPartSlot::Clothing,
-			CharacterAsset::new(
+		Self {
+			slot: CharacterPartSlot::Clothing,
+			asset: CharacterAsset::new(
 				clothing.label(),
 				AssetPath::new(clothing.path()),
 				AssetNormalization::IDENTITY,
 			),
-			SkinTarget::BodyRig,
-			None,
-		)
+			skin_target: SkinTarget::BodyRig,
+			socket: None,
+			pose: None,
+		}
 	}
 }
 
