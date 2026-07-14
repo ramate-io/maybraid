@@ -1106,16 +1106,16 @@ fn preview_color_caole(config: &CaoleConfig, target: PreviewTarget) -> PreviewCo
 }
 
 fn preview_color_epiphant(config: &EpiphantConfig, target: PreviewTarget) -> PreviewColor {
-	use crozon_character_items::ItemColor;
+	use crozon_characters::species::epiphant::EpiphantColor;
 
-	PreviewColor::Item(match target {
+	PreviewColor::Epiphant(match target {
 		PreviewTarget::EpiphantBody => config.colors.body,
 		PreviewTarget::EpiphantHead => config.colors.head,
 		PreviewTarget::EpiphantEye(_) => config.colors.eyes,
 		PreviewTarget::EpiphantEar => config.colors.ears,
 		PreviewTarget::EpiphantNose => config.colors.nose,
 		PreviewTarget::EpiphantTail => config.colors.tail,
-		_ => ItemColor::Natural,
+		_ => EpiphantColor::Slate,
 	})
 }
 

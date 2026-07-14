@@ -858,7 +858,7 @@ impl CharacterMenu {
 				_ => false,
 			},
 			MenuEvent::SliderDelta(field, delta) => apply_epiphant_slider(menu, field, delta),
-			MenuEvent::SetSwatch(field, SwatchValue::Item(color)) => match field {
+			MenuEvent::SetSwatch(field, SwatchValue::Epiphant(color)) => match field {
 				CharacterField::BodyColor => {
 					menu.body.value.color.value = color;
 					menu.head_features.value.body_color = color;

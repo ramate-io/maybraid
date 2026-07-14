@@ -5,6 +5,7 @@
 
 pub mod assets;
 pub mod bsn;
+pub mod palette;
 pub mod pose;
 pub mod presets;
 pub mod sliders;
@@ -17,37 +18,37 @@ use crate::{
 
 use crate::species::common::EyeMesh;
 use assets::EpiphantAssets;
-use crozon_character_items::ItemColor;
 use sliders::EpiphantSliders;
 
 pub use assets::{EpiphantBodyMesh, EpiphantEarMesh, EpiphantHeadMesh, EpiphantNoseMesh};
+pub use palette::EpiphantColor;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EpiphantColors {
-	pub body: ItemColor,
-	pub head: ItemColor,
-	pub eyes: ItemColor,
-	pub ears: ItemColor,
-	pub nose: ItemColor,
-	pub tail: ItemColor,
+	pub body: EpiphantColor,
+	pub head: EpiphantColor,
+	pub eyes: EpiphantColor,
+	pub ears: EpiphantColor,
+	pub nose: EpiphantColor,
+	pub tail: EpiphantColor,
 }
 
 impl Default for EpiphantColors {
 	fn default() -> Self {
-		let body = ItemColor::Natural;
+		let body = EpiphantColor::Slate;
 		Self {
 			body,
 			head: body,
-			eyes: ItemColor::Blue,
+			eyes: EpiphantColor::Blue,
 			ears: body,
-			nose: ItemColor::Natural,
+			nose: EpiphantColor::SoftEarthRed,
 			tail: body,
 		}
 	}
 }
 
 impl EpiphantColors {
-	pub fn skin_color(&self) -> ItemColor {
+	pub fn skin_color(&self) -> EpiphantColor {
 		self.body
 	}
 

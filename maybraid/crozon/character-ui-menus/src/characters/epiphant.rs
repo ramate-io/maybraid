@@ -3,13 +3,12 @@ use character_ui_menu::{
 	AssetSingleSelect, CameraFocus, FocusRig, IdentifiedAsset, MenuComponent, MenuNode,
 	PreviewColor, Section, SingleSelect, SwatchSingleSelect,
 };
-use crozon_character_items::ItemColor;
 use crozon_characters::{
 	presets::{BuildPreset, GenderPreset},
 	species::{
 		common::EyeMesh,
 		epiphant::{
-			sliders::EpiphantSliders, EpiphantBodyMesh, EpiphantColors, EpiphantConfig,
+			sliders::EpiphantSliders, EpiphantBodyMesh, EpiphantColor, EpiphantColors, EpiphantConfig,
 			EpiphantEarMesh, EpiphantHeadMesh, EpiphantNoseMesh,
 		},
 	},
@@ -141,19 +140,19 @@ pub struct EpiphantHeadFeatureSliders {
 pub struct EpiphantBodyMenu {
 	pub body: AssetSingleSelect<EpiphantBodyMesh>,
 	pub sliders: EpiphantBodyProportionSliders,
-	pub color: SwatchSingleSelect<ItemColor>,
-	pub tail_color: SwatchSingleSelect<ItemColor>,
+	pub color: SwatchSingleSelect<EpiphantColor>,
+	pub tail_color: SwatchSingleSelect<EpiphantColor>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct EpiphantHeadFeaturesMenu {
 	pub eye: AssetSingleSelect<EyeMesh>,
 	pub nose: AssetSingleSelect<EpiphantNoseMesh>,
-	pub eye_color: SwatchSingleSelect<ItemColor>,
-	pub nose_color: SwatchSingleSelect<ItemColor>,
-	pub ear_color: SwatchSingleSelect<ItemColor>,
+	pub eye_color: SwatchSingleSelect<EpiphantColor>,
+	pub nose_color: SwatchSingleSelect<EpiphantColor>,
+	pub ear_color: SwatchSingleSelect<EpiphantColor>,
 	pub feature_sliders: EpiphantHeadFeatureSliders,
-	pub body_color: ItemColor,
+	pub body_color: EpiphantColor,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -374,10 +373,10 @@ impl MenuComponent<MenuEvent> for EpiphantBodyMenu {
 			),
 			self.sliders.menu_node(),
 			MenuNode::swatch("Body Color", &self.color, |color| {
-				MenuEvent::SetSwatch(CharacterField::BodyColor, SwatchValue::Item(color))
+				MenuEvent::SetSwatch(CharacterField::BodyColor, SwatchValue::Epiphant(color))
 			}),
 			MenuNode::swatch("Tail Color", &self.tail_color, |color| {
-				MenuEvent::SetSwatch(CharacterField::TailColor, SwatchValue::Item(color))
+				MenuEvent::SetSwatch(CharacterField::TailColor, SwatchValue::Epiphant(color))
 			}),
 		])
 	}
@@ -393,7 +392,7 @@ impl MenuComponent<MenuEvent> for EpiphantHeadFeaturesMenu {
 				|value| MenuEvent::SetAsset(CharacterField::Eye, AssetValue::Eye(value)),
 			),
 			MenuNode::swatch("Eye Color", &self.eye_color, |color| {
-				MenuEvent::SetSwatch(CharacterField::EyeColor, SwatchValue::Item(color))
+				MenuEvent::SetSwatch(CharacterField::EyeColor, SwatchValue::Epiphant(color))
 			}),
 			MenuNode::asset_grid(
 				"Trunk",
@@ -404,10 +403,10 @@ impl MenuComponent<MenuEvent> for EpiphantHeadFeaturesMenu {
 				},
 			),
 			MenuNode::swatch("Trunk Color", &self.nose_color, |color| {
-				MenuEvent::SetSwatch(CharacterField::NoseColor, SwatchValue::Item(color))
+				MenuEvent::SetSwatch(CharacterField::NoseColor, SwatchValue::Epiphant(color))
 			}),
 			MenuNode::swatch("Ear Color", &self.ear_color, |color| {
-				MenuEvent::SetSwatch(CharacterField::EarColor, SwatchValue::Item(color))
+				MenuEvent::SetSwatch(CharacterField::EarColor, SwatchValue::Epiphant(color))
 			}),
 			self.feature_sliders.menu_node(),
 		])

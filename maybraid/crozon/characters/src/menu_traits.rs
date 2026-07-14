@@ -18,7 +18,7 @@ use crate::{
 		},
 		brenal::{BrenalBodyMesh, BrenalHeadMesh, BrenalHornMesh, BrenalMouthMesh},
 		caole::{CaoleBodyMesh, CaoleMouthMesh},
-		epiphant::{EpiphantBodyMesh, EpiphantEarMesh, EpiphantHeadMesh, EpiphantNoseMesh},
+		epiphant::{EpiphantBodyMesh, EpiphantColor, EpiphantEarMesh, EpiphantHeadMesh, EpiphantNoseMesh},
 		hars::{HarsBodyMesh, HarsMouthMesh},
 		claber::{ClaberBodyMesh, ClaberColor, ClaberHeadMesh, ClaberHornMesh, ClaberMouthMesh},
 		croconot::{CroconotBodyMesh, CroconotHeadMesh, CroconotHornMesh, CroconotMouthMesh},
@@ -130,6 +130,7 @@ impl_menu_identity!(
 	EpiphantHeadMesh,
 	EpiphantEarMesh,
 	EpiphantNoseMesh,
+	EpiphantColor,
 	HarsBodyMesh,
 	HarsMouthMesh,
 	YilterBodyMesh,
@@ -185,6 +186,7 @@ impl_swatch_option!(
 	SpibmomCrownColor,
 	SpibmomSpineColor,
 	ClaberColor,
+	EpiphantColor,
 );
 
 macro_rules! impl_asset_option {
