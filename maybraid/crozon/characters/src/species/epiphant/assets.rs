@@ -10,7 +10,7 @@ use crate::{
 	},
 	assets::{AssetNormalization, AssetPath},
 	species::{
-		common::{HEAD_RIG, HEAD_STANDARD, QUADRUPED_RIG, TAIL_CAT},
+		common::{assets::HEAD_STANDARD_PRONOGRADE, HEAD_RIG, QUADRUPED_RIG, TAIL_CAT},
 		epiphant::{pose::EpiphantPose, EpiphantConfig},
 	},
 };
@@ -59,11 +59,7 @@ impl EpiphantAssets {
 	fn head_rig() -> ResolvedCharacterPart {
 		ResolvedCharacterPart::new(
 			CharacterPartSlot::HeadRig,
-			CharacterAsset::new(
-				"OrthogradeHeadRig",
-				HEAD_RIG,
-				AssetNormalization::base_y(0.6),
-			),
+			CharacterAsset::new("OrthogradeHeadRig", HEAD_RIG, AssetNormalization::base_y(0.6)),
 			SkinTarget::OwnRig,
 			Some(SocketAttachment {
 				rig: SocketRig::Body,
@@ -199,7 +195,7 @@ impl EpiphantHeadMesh {
 	}
 
 	pub const fn path(self) -> AssetPath {
-		HEAD_STANDARD
+		HEAD_STANDARD_PRONOGRADE
 	}
 }
 
