@@ -23,8 +23,6 @@ const NOSE_TRUNKISH: AssetPath = AssetPath::new("characters/noses/trunkish_nose.
 
 /// Enlarge the pronograde head stack so the meerkat head reads as "large" on the body.
 const HEAD_RIG_SOCKET_SCALE: f32 = 1.45;
-/// Epiphant ears are the silhouette cue; bias them larger than flank/round defaults.
-const EAR_SOCKET_SCALE: f32 = 1.75;
 
 /// Species-local resolver for Epiphant asset choices.
 pub struct EpiphantAssets;
@@ -85,11 +83,11 @@ impl EpiphantAssets {
 	fn eye_left(eye: EyeMesh) -> ResolvedCharacterPart {
 		ResolvedCharacterPart::new(
 			CharacterPartSlot::EyeLeft,
-			CharacterAsset::new(eye.label(), eye.path(), AssetNormalization::centroid(0.2)),
+			CharacterAsset::new(eye.label(), eye.path(), AssetNormalization::centroid(0.35)),
 			SkinTarget::HeadRig,
 			Some(Self::head_socket(
 				"eye_socket.L",
-				Transform::from_translation(Vec3::new(0.0, -0.15, -0.12)),
+				Transform::from_translation(Vec3::new(0.0, -0.3, -0.2)),
 			)),
 		)
 	}
@@ -97,11 +95,11 @@ impl EpiphantAssets {
 	fn eye_right(eye: EyeMesh) -> ResolvedCharacterPart {
 		ResolvedCharacterPart::new(
 			CharacterPartSlot::EyeRight,
-			CharacterAsset::new(eye.label(), eye.path(), AssetNormalization::centroid(0.2)),
+			CharacterAsset::new(eye.label(), eye.path(), AssetNormalization::centroid(0.3)),
 			SkinTarget::HeadRig,
 			Some(Self::head_socket(
 				"eye_socket.R",
-				Self::mirror_x().with_translation(Vec3::new(0.0, -0.15, -0.12)),
+				Self::mirror_x().with_translation(Vec3::new(0.0, -0.35, -0.2)),
 			)),
 		)
 	}
@@ -109,7 +107,7 @@ impl EpiphantAssets {
 	fn nose(nose: EpiphantNoseMesh) -> ResolvedCharacterPart {
 		ResolvedCharacterPart::new(
 			CharacterPartSlot::Nose,
-			CharacterAsset::new(nose.label(), nose.path(), AssetNormalization::centroid(0.2)),
+			CharacterAsset::new(nose.label(), nose.path(), AssetNormalization::centroid(0.6)),
 			SkinTarget::HeadRig,
 			Some(Self::head_socket(
 				"nose_socket",
@@ -121,12 +119,11 @@ impl EpiphantAssets {
 	fn ear_left(ear: EpiphantEarMesh) -> ResolvedCharacterPart {
 		ResolvedCharacterPart::new(
 			CharacterPartSlot::EarLeft,
-			CharacterAsset::new(ear.label(), ear.path(), AssetNormalization::centroid(0.4)),
+			CharacterAsset::new(ear.label(), ear.path(), AssetNormalization::centroid(0.6)),
 			SkinTarget::HeadRig,
 			Some(Self::head_socket(
 				"ear_socket.L",
-				Transform::from_translation(Vec3::new(0.1, 0.15, -0.05))
-					.with_scale(Vec3::splat(EAR_SOCKET_SCALE)),
+				Transform::from_translation(Vec3::new(-0.4, 0.15, -0.05)),
 			)),
 		)
 	}
@@ -134,13 +131,11 @@ impl EpiphantAssets {
 	fn ear_right(ear: EpiphantEarMesh) -> ResolvedCharacterPart {
 		ResolvedCharacterPart::new(
 			CharacterPartSlot::EarRight,
-			CharacterAsset::new(ear.label(), ear.path(), AssetNormalization::centroid(0.4)),
+			CharacterAsset::new(ear.label(), ear.path(), AssetNormalization::centroid(0.6)),
 			SkinTarget::HeadRig,
 			Some(Self::head_socket(
 				"ear_socket.R",
-				Self::mirror_x()
-					.with_translation(Vec3::new(-0.1, 0.15, -0.05))
-					.with_scale(Vec3::splat(EAR_SOCKET_SCALE)),
+				Self::mirror_x().with_translation(Vec3::new(0.4, 0.15, -0.05)),
 			)),
 		)
 	}
