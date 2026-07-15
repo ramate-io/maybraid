@@ -14,6 +14,7 @@ mod material;
 mod menu_listeners;
 mod preview;
 mod preview_color;
+mod scale_reference;
 mod skinning;
 mod species_session;
 mod thumbnail;
@@ -90,6 +91,7 @@ impl Plugin for CrozonCharacterConceptsPlaygroundPlugin {
 				(
 					camera::setup_camera,
 					setup_lighting,
+					scale_reference::setup_scale_reference,
 					init_character_menu_state,
 					ui::setup_creator_ui,
 				),
