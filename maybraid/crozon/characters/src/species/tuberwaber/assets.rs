@@ -82,11 +82,11 @@ impl TuberwaberAssets {
 	fn eye_left(eye: EyeMesh) -> ResolvedCharacterPart {
 		ResolvedCharacterPart::new(
 			CharacterPartSlot::EyeLeft,
-			CharacterAsset::new(eye.label(), eye.path(), AssetNormalization::centroid(0.16)),
+			CharacterAsset::new(eye.label(), eye.path(), AssetNormalization::centroid(0.24)),
 			SkinTarget::HeadRig,
 			Some(Self::head_socket(
 				"eye_socket.L",
-				Transform::from_translation(Vec3::new(0.3, 0.1, -0.075)),
+				Transform::from_translation(Vec3::new(0.3, 0.05, -0.12)),
 			)),
 		)
 	}
@@ -94,11 +94,11 @@ impl TuberwaberAssets {
 	fn eye_right(eye: EyeMesh) -> ResolvedCharacterPart {
 		ResolvedCharacterPart::new(
 			CharacterPartSlot::EyeRight,
-			CharacterAsset::new(eye.label(), eye.path(), AssetNormalization::centroid(0.16)),
+			CharacterAsset::new(eye.label(), eye.path(), AssetNormalization::centroid(0.24)),
 			SkinTarget::HeadRig,
 			Some(Self::head_socket(
 				"eye_socket.R",
-				Self::mirror_x().with_translation(Vec3::new(-0.3, 0.1, -0.075)),
+				Self::mirror_x().with_translation(Vec3::new(-0.3, 0.05, -0.12)),
 			)),
 		)
 	}
@@ -110,7 +110,7 @@ impl TuberwaberAssets {
 			SkinTarget::HeadRig,
 			Some(Self::head_socket(
 				"nose_socket",
-				Transform::from_translation(Vec3::new(0.0, 0.0, 0.1)),
+				Transform::from_translation(Vec3::new(0.0, 0.05, 0.1)),
 			)),
 		)
 	}
@@ -122,7 +122,8 @@ impl TuberwaberAssets {
 			SkinTarget::HeadRig,
 			Some(Self::head_socket(
 				"mouth_socket",
-				Transform::from_translation(Vec3::new(0.0, 0.0, 0.1)),
+				Transform::from_translation(Vec3::new(0.0, 0.0, 0.0))
+					.with_scale(Vec3::new(2.2, 1.0, 1.0)),
 			)),
 		)
 	}

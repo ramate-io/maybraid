@@ -39,7 +39,7 @@ pub struct PreviewArgs {
 	#[arg(long, value_enum, default_value_t = EyeMesh::Standard)]
 	pub eye: EyeMesh,
 
-	#[arg(long, value_enum, default_value_t = NoseMesh::Standard)]
+	#[arg(long, value_enum, default_value_t = NoseMesh::Loaf)]
 	pub nose: NoseMesh,
 
 	#[arg(long, value_enum, default_value_t = MouthMesh::Standard)]

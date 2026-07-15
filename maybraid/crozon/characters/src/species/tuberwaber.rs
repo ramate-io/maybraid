@@ -104,7 +104,7 @@ impl TuberwaberConfig {
 			body: TuberwaberBodyMesh::Tuberwaber,
 			head: TuberwaberHeadMesh::Tuberwaber,
 			eye: EyeMesh::Standard,
-			nose: NoseMesh::Standard,
+			nose: NoseMesh::Loaf,
 			mouth: MouthMesh::Standard,
 			hair: HairMesh::None,
 			clothing: Vec::new(),
