@@ -14,8 +14,9 @@ use crozon_rigs::{
 };
 use malo_animations::{
 	animations::{
-		Gallop, QuadrupedRun, Run, Tuck, TuckedFlip, TwoFootedJump, TwoFootedTuckedFlip, Walk,
-		DEFAULT_GRAVITY, DEFAULT_LANDING_SQUAT_SPEED, DEFAULT_PRE_SQUAT_SPEED,
+		Flapping, Gallop, QuadrupedRun, Run, Soaring, Tuck, TuckedFlip, TwoFootedJump,
+		TwoFootedTuckedFlip, Walk, DEFAULT_GRAVITY, DEFAULT_LANDING_SQUAT_SPEED,
+		DEFAULT_PRE_SQUAT_SPEED,
 	},
 	Animation, Effects,
 };
@@ -168,6 +169,8 @@ fn apply_humanoid_animation(
 					.with_landing_squat_speed(JUMP_LANDING_SQUAT_SPEED),
 			)
 			.apply(rig, t),
+		ConceptAnimation::Soaring => Soaring::default().apply(rig, t),
+		ConceptAnimation::Flapping => Flapping::default().apply(rig, t),
 	}
 }
 

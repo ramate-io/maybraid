@@ -134,12 +134,24 @@ pub trait HumanoidRig {
 	}
 
 	/// Apply swing/flex about the bone's rig-defined local axes.
-	fn articulate_on_rig(&self, mut bone: BonePose, swing: f32, flex: f32) -> BonePose {
+	fn articulate_on_rig(&self, bone: BonePose, swing: f32, flex: f32) -> BonePose {
+		self.articulate_on_rig_twisted(bone, swing, flex, 0.0)
+	}
+
+	/// Apply swing/flex/twist about the bone's rig-defined local axes.
+	fn articulate_on_rig_twisted(
+		&self,
+		mut bone: BonePose,
+		swing: f32,
+		flex: f32,
+		twist: f32,
+	) -> BonePose {
 		if let Some(axis) = self.rigged_axis(&bone.name) {
-			bone = bone.articulate(axis, swing, flex, 0.0);
+			bone = bone.articulate(axis, swing, flex, twist);
 		} else {
 			bone.swing = swing;
 			bone.flex = flex;
+			bone.twist = twist;
 		}
 		bone
 	}

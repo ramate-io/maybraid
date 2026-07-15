@@ -13,6 +13,8 @@ pub enum ConceptAnimation {
 	Tuck,
 	TuckedFlip,
 	TwoFootedTuckedFlip,
+	Soaring,
+	Flapping,
 }
 
 impl ConceptAnimation {
@@ -25,6 +27,8 @@ impl ConceptAnimation {
 		Self::Tuck,
 		Self::TuckedFlip,
 		Self::TwoFootedTuckedFlip,
+		Self::Soaring,
+		Self::Flapping,
 	];
 
 	pub const fn label(self) -> &'static str {
@@ -37,6 +41,8 @@ impl ConceptAnimation {
 			Self::Tuck => "tuck",
 			Self::TuckedFlip => "tucked-flip",
 			Self::TwoFootedTuckedFlip => "two-footed-tucked-flip",
+			Self::Soaring => "soaring",
+			Self::Flapping => "flapping",
 		}
 	}
 }
