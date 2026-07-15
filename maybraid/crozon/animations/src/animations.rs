@@ -1,9 +1,11 @@
+pub mod dorsoventral_undulation;
 pub mod fall;
 pub mod fixed;
 pub mod fixed_tuck;
 pub mod flapping;
 pub mod gallop;
 pub mod land;
+pub mod lateral_undulation;
 pub mod mix;
 pub mod quadruped_gallop;
 pub mod quadruped_run;
@@ -20,12 +22,14 @@ pub mod upright_run;
 pub mod upright_walk;
 pub mod walk;
 
+pub use dorsoventral_undulation::DorsoventralUndulation;
 pub use fall::Fall;
 pub use fixed::FixedPosition;
 pub use fixed_tuck::FixedTuck;
 pub use flapping::Flapping;
 pub use gallop::Gallop;
 pub use land::Land;
+pub use lateral_undulation::LateralUndulation;
 pub use mix::{smoothstep, Mix, Smooth};
 pub use run::Run;
 pub use soaring::Soaring;

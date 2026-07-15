@@ -6,6 +6,10 @@ use crate::assets::AssetPath;
 
 pub const BODY_RIG: AssetPath = AssetPath::new("characters/bodies/humanoid_rig.glb");
 pub const QUADRUPED_RIG: AssetPath = AssetPath::new("characters/bodies/quadruped_rig.glb");
+pub const FORELIMBED_RIG: AssetPath = AssetPath::new("characters/bodies/forelimbed_rig.glb");
+pub const BODY_SHARK: AssetPath = AssetPath::new("characters/bodies/shark.glb");
+pub const BODY_WHALE: AssetPath = AssetPath::new("characters/bodies/whale.glb");
+pub const BODY_SPRITE_FISH: AssetPath = AssetPath::new("characters/bodies/sprite_fish.glb");
 pub const BODY_GUMBUS: AssetPath =
 	AssetPath::new("characters/bodies/gumbus_quadruped_full_body.glb");
 pub const BODY_DRAGLOON: AssetPath =

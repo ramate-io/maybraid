@@ -7,16 +7,19 @@
 use bevy::prelude::*;
 pub use crozon_characters::ConceptAnimation;
 use crozon_rigs::{
+	forelimbed::ForelimbedRig,
 	humanoid::HumanoidRig,
 	quadruped::QuadrupedRig,
-	rigs::{humanoid_v0::HumanoidV0Rig, quadruped_v0::QuadrupedV0Rig},
+	rigs::{
+		forelimbed_v0::ForelimbedV0Rig, humanoid_v0::HumanoidV0Rig, quadruped_v0::QuadrupedV0Rig,
+	},
 	BonePose, Name as RigName,
 };
 use malo_animations::{
 	animations::{
-		Flapping, Gallop, QuadrupedRun, Run, Soaring, Tuck, TuckedFlip, TwoFootedJump,
-		TwoFootedTuckedFlip, Walk, DEFAULT_GRAVITY, DEFAULT_LANDING_SQUAT_SPEED,
-		DEFAULT_PRE_SQUAT_SPEED,
+		DorsoventralUndulation, Flapping, Gallop, LateralUndulation, QuadrupedRun, Run, Soaring,
+		Tuck, TuckedFlip, TwoFootedJump, TwoFootedTuckedFlip, Walk, DEFAULT_GRAVITY,
+		DEFAULT_LANDING_SQUAT_SPEED, DEFAULT_PRE_SQUAT_SPEED,
 	},
 	Animation, Effects,
 };
@@ -56,6 +59,7 @@ pub fn init_limb_animators(
 			With<AnimatedBodyRig>,
 			Without<HumanoidV0Rig>,
 			Without<QuadrupedV0Rig>,
+			Without<ForelimbedV0Rig>,
 		),
 	>,
 	transforms: Query<&Transform>,
@@ -82,6 +86,13 @@ pub fn init_limb_animators(
 			}
 			commands.entity(rig_entity).insert(quadruped);
 		}
+		RigSkeletonKind::Forelimbed => {
+			let forelimbed = ForelimbedV0Rig::imported();
+			for bone in ForelimbedRig::animation_bones(&forelimbed) {
+				insert_limb_animator(&mut commands, bone_map, &transforms, bone);
+			}
+			commands.entity(rig_entity).insert(forelimbed);
+		}
 		RigSkeletonKind::Neck => {}
 	}
 }
@@ -103,8 +114,18 @@ fn insert_limb_animator(
 
 pub fn animate_body_rig(
 	config: Res<crate::preview::ConceptPreviewConfig>,
-	mut humanoid_rig: Query<&mut HumanoidV0Rig, (With<AnimatedBodyRig>, Without<QuadrupedV0Rig>)>,
-	mut quadruped_rig: Query<&mut QuadrupedV0Rig, (With<AnimatedBodyRig>, Without<HumanoidV0Rig>)>,
+	mut humanoid_rig: Query<
+		&mut HumanoidV0Rig,
+		(With<AnimatedBodyRig>, Without<QuadrupedV0Rig>, Without<ForelimbedV0Rig>),
+	>,
+	mut quadruped_rig: Query<
+		&mut QuadrupedV0Rig,
+		(With<AnimatedBodyRig>, Without<HumanoidV0Rig>, Without<ForelimbedV0Rig>),
+	>,
+	mut forelimbed_rig: Query<
+		&mut ForelimbedV0Rig,
+		(With<AnimatedBodyRig>, Without<HumanoidV0Rig>, Without<QuadrupedV0Rig>),
+	>,
 	mut armature: Query<
 		(&BodyRigBindTransform, &mut Transform),
 		(With<AnimatedBodyRig>, Without<LimbAnimator>),
@@ -127,11 +148,19 @@ pub fn animate_body_rig(
 		return;
 	}
 
-	let Ok(mut rig) = quadruped_rig.single_mut() else {
+	if let Ok(mut rig) = quadruped_rig.single_mut() {
+		marshal_limbs_into_pose(rig.pose_mut(), &mut limbs);
+		let effects = apply_quadruped_animation(animation, rig.as_mut(), t);
+		apply_effects(effects, &mut armature);
+		marshal_pose_to_limbs(rig.pose(), &mut limbs);
+		return;
+	}
+
+	let Ok(mut rig) = forelimbed_rig.single_mut() else {
 		return;
 	};
 	marshal_limbs_into_pose(rig.pose_mut(), &mut limbs);
-	let effects = apply_quadruped_animation(animation, rig.as_mut(), t);
+	let effects = apply_forelimbed_animation(animation, rig.as_mut(), t);
 	apply_effects(effects, &mut armature);
 	marshal_pose_to_limbs(rig.pose(), &mut limbs);
 }
@@ -171,6 +200,9 @@ fn apply_humanoid_animation(
 			.apply(rig, t),
 		ConceptAnimation::Soaring => Soaring::default().apply(rig, t),
 		ConceptAnimation::Flapping => Flapping::default().apply(rig, t),
+		ConceptAnimation::LateralUndulation | ConceptAnimation::DorsoventralUndulation => {
+			Effects::default()
+		}
 	}
 }
 
@@ -184,6 +216,20 @@ fn apply_quadruped_animation(
 			QuadrupedRun::default().apply(rig, t * QUADRUPED_RUN_CYCLE_SPEED)
 		}
 		ConceptAnimation::Gallop => Gallop::default().apply(rig, t * GALLOP_CYCLE_SPEED),
+		_ => Effects::default(),
+	}
+}
+
+fn apply_forelimbed_animation(
+	animation: ConceptAnimation,
+	rig: &mut ForelimbedV0Rig,
+	t: f32,
+) -> Effects {
+	match animation {
+		ConceptAnimation::LateralUndulation => LateralUndulation::default().apply(rig, t),
+		ConceptAnimation::DorsoventralUndulation => {
+			DorsoventralUndulation::default().apply(rig, t)
+		}
 		_ => Effects::default(),
 	}
 }

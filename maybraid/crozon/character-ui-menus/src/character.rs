@@ -8,8 +8,8 @@ use crozon_characters::{
 		dui::DuiConfig, brokker::BrokkerConfig, chupri::ChupriConfig, kispar::KisparConfig,
 		kaller::KallerConfig, kappler::KapplerConfig, lidder::LidderConfig, lero::LeroConfig,
 		mygr::MygrConfig, spibmom::SpibmomConfig, sonyak::SonyakConfig, tipple::TippleConfig,
-		topple::ToppleConfig, tapp::TappConfig, tuberwaber::TuberwaberConfig, wumbus::WumbusConfig,
-		ylter::YilterConfig,
+		topple::ToppleConfig, tapp::TappConfig, wumbus::WumbusConfig, ylter::YilterConfig,
+		grener::GrenerConfig, thumplus::ThumplusConfig, mistler::MistlerConfig, tuberwaber::TuberwaberConfig,
 	},
 	ConceptAnimation,
 };
@@ -37,8 +37,11 @@ use crate::{
 		lero::LeroMenu,
 		mygr::MygrMenu,
 		spibmom::SpibmomMenu,
-		sonyak::{SonyakAnimationClip, SonyakMenu},
+		grener::GrenerMenu,
+		thumplus::ThumplusMenu,
+		mistler::MistlerMenu,
 		tuberwaber::TuberwaberMenu,
+		sonyak::{SonyakAnimationClip, SonyakMenu},
 		wumbus::WumbusMenu,
 		ylter::{YilterAnimationClip, YilterMenu},
 	},
@@ -72,6 +75,9 @@ pub enum ConceptSpecies {
 	Wumbus,
 	Lero,
 	Spibmom,
+	Grener,
+	Thumplus,
+	Mistler,
 	Tuberwaber,
 }
 
@@ -102,6 +108,9 @@ impl ConceptSpecies {
 			Self::Wumbus => "wumbus",
 			Self::Lero => "lero",
 			Self::Spibmom => "spibmom",
+			Self::Grener => "grener",
+			Self::Thumplus => "thumplus",
+			Self::Mistler => "mistler",
 			Self::Tuberwaber => "tuberwaber",
 		}
 	}
@@ -134,6 +143,9 @@ impl ListValues for ConceptSpecies {
 			Self::Wumbus,
 			Self::Lero,
 			Self::Spibmom,
+			Self::Grener,
+			Self::Thumplus,
+			Self::Mistler,
 			Self::Tuberwaber,
 		]
 	}
@@ -166,6 +178,9 @@ impl LabelOption for ConceptSpecies {
 			Self::Wumbus => "wumbus",
 			Self::Lero => "lero",
 			Self::Spibmom => "spibmom",
+			Self::Grener => "grener",
+			Self::Thumplus => "thumplus",
+			Self::Mistler => "mistler",
 			Self::Tuberwaber => "tuberwaber",
 		}
 	}
@@ -198,6 +213,9 @@ pub struct CharacterMenu {
 	pub wumbus: WumbusMenu,
 	pub lero: LeroMenu,
 	pub spibmom: SpibmomMenu,
+	pub grener: GrenerMenu,
+	pub thumplus: ThumplusMenu,
+	pub mistler: MistlerMenu,
 	pub tuberwaber: TuberwaberMenu,
 }
 
@@ -229,6 +247,9 @@ impl CharacterMenu {
 			wumbus: WumbusMenu::default(),
 			lero: LeroMenu::default(),
 			spibmom: SpibmomMenu::default(),
+			grener: GrenerMenu::default(),
+			thumplus: ThumplusMenu::default(),
+			mistler: MistlerMenu::default(),
 			tuberwaber: TuberwaberMenu::default(),
 		}
 	}
@@ -260,6 +281,9 @@ impl CharacterMenu {
 			wumbus: WumbusMenu::default(),
 			lero: LeroMenu::default(),
 			spibmom: SpibmomMenu::default(),
+			grener: GrenerMenu::default(),
+			thumplus: ThumplusMenu::default(),
+			mistler: MistlerMenu::default(),
 			tuberwaber: TuberwaberMenu::default(),
 		}
 	}
@@ -291,6 +315,9 @@ impl CharacterMenu {
 			wumbus: WumbusMenu::default(),
 			lero: LeroMenu::default(),
 			spibmom: SpibmomMenu::default(),
+			grener: GrenerMenu::default(),
+			thumplus: ThumplusMenu::default(),
+			mistler: MistlerMenu::default(),
 			tuberwaber: TuberwaberMenu::default(),
 		}
 	}
@@ -322,6 +349,9 @@ impl CharacterMenu {
 			wumbus: WumbusMenu::default(),
 			lero: LeroMenu::default(),
 			spibmom: SpibmomMenu::default(),
+			grener: GrenerMenu::default(),
+			thumplus: ThumplusMenu::default(),
+			mistler: MistlerMenu::default(),
 			tuberwaber: TuberwaberMenu::default(),
 		}
 	}
@@ -353,6 +383,9 @@ impl CharacterMenu {
 			wumbus: WumbusMenu::default(),
 			lero: LeroMenu::default(),
 			spibmom: SpibmomMenu::default(),
+			grener: GrenerMenu::default(),
+			thumplus: ThumplusMenu::default(),
+			mistler: MistlerMenu::default(),
 			tuberwaber: TuberwaberMenu::default(),
 		}
 	}
@@ -384,6 +417,9 @@ impl CharacterMenu {
 			wumbus: WumbusMenu::default(),
 			lero: LeroMenu::default(),
 			spibmom: SpibmomMenu::default(),
+			grener: GrenerMenu::default(),
+			thumplus: ThumplusMenu::default(),
+			mistler: MistlerMenu::default(),
 			tuberwaber: TuberwaberMenu::default(),
 		}
 	}
@@ -415,6 +451,9 @@ impl CharacterMenu {
 			wumbus: WumbusMenu::default(),
 			lero: LeroMenu::default(),
 			spibmom: SpibmomMenu::default(),
+			grener: GrenerMenu::default(),
+			thumplus: ThumplusMenu::default(),
+			mistler: MistlerMenu::default(),
 			tuberwaber: TuberwaberMenu::default(),
 		}
 	}
@@ -447,6 +486,9 @@ impl CharacterMenu {
 			wumbus: WumbusMenu::default(),
 			lero: LeroMenu::default(),
 			spibmom: SpibmomMenu::default(),
+			grener: GrenerMenu::default(),
+			thumplus: ThumplusMenu::default(),
+			mistler: MistlerMenu::default(),
 			tuberwaber: TuberwaberMenu::default(),
 		}
 	}
@@ -478,6 +520,9 @@ impl CharacterMenu {
 			wumbus: WumbusMenu::default(),
 			lero: LeroMenu::default(),
 			spibmom: SpibmomMenu::default(),
+			grener: GrenerMenu::default(),
+			thumplus: ThumplusMenu::default(),
+			mistler: MistlerMenu::default(),
 			tuberwaber: TuberwaberMenu::default(),
 		}
 	}
@@ -509,6 +554,9 @@ impl CharacterMenu {
 			wumbus: WumbusMenu::default(),
 			lero: LeroMenu::default(),
 			spibmom: SpibmomMenu::default(),
+			grener: GrenerMenu::default(),
+			thumplus: ThumplusMenu::default(),
+			mistler: MistlerMenu::default(),
 			tuberwaber: TuberwaberMenu::default(),
 		}
 	}
@@ -540,6 +588,9 @@ impl CharacterMenu {
 			wumbus: WumbusMenu::default(),
 			lero: LeroMenu::default(),
 			spibmom: SpibmomMenu::default(),
+			grener: GrenerMenu::default(),
+			thumplus: ThumplusMenu::default(),
+			mistler: MistlerMenu::default(),
 			tuberwaber: TuberwaberMenu::default(),
 		}
 	}
@@ -571,6 +622,9 @@ impl CharacterMenu {
 			wumbus: WumbusMenu::default(),
 			lero: LeroMenu::default(),
 			spibmom: SpibmomMenu::default(),
+			grener: GrenerMenu::default(),
+			thumplus: ThumplusMenu::default(),
+			mistler: MistlerMenu::default(),
 			tuberwaber: TuberwaberMenu::default(),
 		}
 	}
@@ -603,6 +657,9 @@ impl CharacterMenu {
 			wumbus: WumbusMenu::default(),
 			lero: LeroMenu::default(),
 			spibmom: SpibmomMenu::default(),
+			grener: GrenerMenu::default(),
+			thumplus: ThumplusMenu::default(),
+			mistler: MistlerMenu::default(),
 			tuberwaber: TuberwaberMenu::default(),
 		}
 	}
@@ -634,6 +691,9 @@ impl CharacterMenu {
 			wumbus: WumbusMenu::default(),
 			lero: LeroMenu::default(),
 			spibmom: SpibmomMenu::default(),
+			grener: GrenerMenu::default(),
+			thumplus: ThumplusMenu::default(),
+			mistler: MistlerMenu::default(),
 			tuberwaber: TuberwaberMenu::default(),
 		}
 	}
@@ -665,6 +725,9 @@ impl CharacterMenu {
 			wumbus: WumbusMenu::default(),
 			lero: LeroMenu::default(),
 			spibmom: SpibmomMenu::default(),
+			grener: GrenerMenu::default(),
+			thumplus: ThumplusMenu::default(),
+			mistler: MistlerMenu::default(),
 			tuberwaber: TuberwaberMenu::default(),
 		}
 	}
@@ -696,6 +759,9 @@ impl CharacterMenu {
 			wumbus: WumbusMenu::default(),
 			lero: LeroMenu::default(),
 			spibmom: SpibmomMenu::default(),
+			grener: GrenerMenu::default(),
+			thumplus: ThumplusMenu::default(),
+			mistler: MistlerMenu::default(),
 			tuberwaber: TuberwaberMenu::default(),
 		}
 	}
@@ -727,6 +793,9 @@ impl CharacterMenu {
 			wumbus: WumbusMenu::default(),
 			lero: LeroMenu::default(),
 			spibmom: SpibmomMenu::default(),
+			grener: GrenerMenu::default(),
+			thumplus: ThumplusMenu::default(),
+			mistler: MistlerMenu::default(),
 			tuberwaber: TuberwaberMenu::default(),
 		}
 	}
@@ -758,6 +827,9 @@ impl CharacterMenu {
 			wumbus: WumbusMenu::default(),
 			lero: LeroMenu::default(),
 			spibmom: SpibmomMenu::default(),
+			grener: GrenerMenu::default(),
+			thumplus: ThumplusMenu::default(),
+			mistler: MistlerMenu::default(),
 			tuberwaber: TuberwaberMenu::default(),
 		}
 	}
@@ -789,6 +861,9 @@ impl CharacterMenu {
 			wumbus: WumbusMenu::default(),
 			lero: LeroMenu::default(),
 			spibmom: SpibmomMenu::default(),
+			grener: GrenerMenu::default(),
+			thumplus: ThumplusMenu::default(),
+			mistler: MistlerMenu::default(),
 			tuberwaber: TuberwaberMenu::default(),
 		}
 	}
@@ -820,6 +895,9 @@ impl CharacterMenu {
 			wumbus: WumbusMenu::default(),
 			lero: LeroMenu::default(),
 			spibmom: SpibmomMenu::default(),
+			grener: GrenerMenu::default(),
+			thumplus: ThumplusMenu::default(),
+			mistler: MistlerMenu::default(),
 			tuberwaber: TuberwaberMenu::default(),
 		}
 	}
@@ -851,6 +929,9 @@ impl CharacterMenu {
 			wumbus: WumbusMenu::default(),
 			lero: LeroMenu::default(),
 			spibmom: SpibmomMenu::default(),
+			grener: GrenerMenu::default(),
+			thumplus: ThumplusMenu::default(),
+			mistler: MistlerMenu::default(),
 			tuberwaber: TuberwaberMenu::default(),
 		}
 	}
@@ -882,6 +963,9 @@ impl CharacterMenu {
 			wumbus: WumbusMenu::from(config).with_animation(animation),
 			lero: LeroMenu::default(),
 			spibmom: SpibmomMenu::default(),
+			grener: GrenerMenu::default(),
+			thumplus: ThumplusMenu::default(),
+			mistler: MistlerMenu::default(),
 			tuberwaber: TuberwaberMenu::default(),
 		}
 	}
@@ -913,6 +997,9 @@ impl CharacterMenu {
 			wumbus: WumbusMenu::default(),
 			lero: LeroMenu::from(config).with_animation(animation),
 			spibmom: SpibmomMenu::default(),
+			grener: GrenerMenu::default(),
+			thumplus: ThumplusMenu::default(),
+			mistler: MistlerMenu::default(),
 			tuberwaber: TuberwaberMenu::default(),
 		}
 	}
@@ -944,6 +1031,111 @@ impl CharacterMenu {
 			wumbus: WumbusMenu::default(),
 			lero: LeroMenu::default(),
 			spibmom: SpibmomMenu::from(config).with_animation(animation),
+			grener: GrenerMenu::default(),
+			thumplus: ThumplusMenu::default(),
+			mistler: MistlerMenu::default(),
+			tuberwaber: TuberwaberMenu::default(),
+		}
+	}
+
+	pub fn from_grener(config: &GrenerConfig, animation: ConceptAnimation) -> Self {
+		Self {
+			species: SingleSelect::new(ConceptSpecies::Grener),
+			braidman: BraidmanMenu::default(),
+			brenal: BrenalMenu::default(),
+			caole: CaoleMenu::default(),
+			epiphant: EpiphantMenu::default(),
+			hars: HarsMenu::default(),
+			ylter: YilterMenu::default(),
+			sonyak: SonyakMenu::default(),
+			croconot: CroconotMenu::default(),
+			claber: ClaberMenu::default(),
+			brodler: BrodlerMenu::default(),
+			mygr: MygrMenu::default(),
+			dui: DuiMenu::default(),
+			lidder: LidderMenu::default(),
+			chupri: ChupriMenu::default(),
+			brokker: BrokkerMenu::default(),
+			tipple: TippleMenu::default(),
+			topple: ToppleMenu::default(),
+			kispar: KisparMenu::default(),
+			tapp: TappMenu::default(),
+			kaller: KallerMenu::default(),
+			kappler: KapplerMenu::default(),
+			wumbus: WumbusMenu::default(),
+			lero: LeroMenu::default(),
+			spibmom: SpibmomMenu::default(),
+			grener: GrenerMenu::from(config).with_animation(animation),
+			thumplus: ThumplusMenu::default(),
+			mistler: MistlerMenu::default(),
+			tuberwaber: TuberwaberMenu::default(),
+		}
+	}
+
+	pub fn from_thumplus(config: &ThumplusConfig, animation: ConceptAnimation) -> Self {
+		Self {
+			species: SingleSelect::new(ConceptSpecies::Thumplus),
+			braidman: BraidmanMenu::default(),
+			brenal: BrenalMenu::default(),
+			caole: CaoleMenu::default(),
+			epiphant: EpiphantMenu::default(),
+			hars: HarsMenu::default(),
+			ylter: YilterMenu::default(),
+			sonyak: SonyakMenu::default(),
+			croconot: CroconotMenu::default(),
+			claber: ClaberMenu::default(),
+			brodler: BrodlerMenu::default(),
+			mygr: MygrMenu::default(),
+			dui: DuiMenu::default(),
+			lidder: LidderMenu::default(),
+			chupri: ChupriMenu::default(),
+			brokker: BrokkerMenu::default(),
+			tipple: TippleMenu::default(),
+			topple: ToppleMenu::default(),
+			kispar: KisparMenu::default(),
+			tapp: TappMenu::default(),
+			kaller: KallerMenu::default(),
+			kappler: KapplerMenu::default(),
+			wumbus: WumbusMenu::default(),
+			lero: LeroMenu::default(),
+			spibmom: SpibmomMenu::default(),
+			grener: GrenerMenu::default(),
+			thumplus: ThumplusMenu::from(config).with_animation(animation),
+			mistler: MistlerMenu::default(),
+			tuberwaber: TuberwaberMenu::default(),
+		}
+	}
+
+	pub fn from_mistler(config: &MistlerConfig, animation: ConceptAnimation) -> Self {
+		Self {
+			species: SingleSelect::new(ConceptSpecies::Mistler),
+			braidman: BraidmanMenu::default(),
+			brenal: BrenalMenu::default(),
+			caole: CaoleMenu::default(),
+			epiphant: EpiphantMenu::default(),
+			hars: HarsMenu::default(),
+			ylter: YilterMenu::default(),
+			sonyak: SonyakMenu::default(),
+			croconot: CroconotMenu::default(),
+			claber: ClaberMenu::default(),
+			brodler: BrodlerMenu::default(),
+			mygr: MygrMenu::default(),
+			dui: DuiMenu::default(),
+			lidder: LidderMenu::default(),
+			chupri: ChupriMenu::default(),
+			brokker: BrokkerMenu::default(),
+			tipple: TippleMenu::default(),
+			topple: ToppleMenu::default(),
+			kispar: KisparMenu::default(),
+			tapp: TappMenu::default(),
+			kaller: KallerMenu::default(),
+			kappler: KapplerMenu::default(),
+			wumbus: WumbusMenu::default(),
+			lero: LeroMenu::default(),
+			spibmom: SpibmomMenu::default(),
+			grener: GrenerMenu::default(),
+			thumplus: ThumplusMenu::default(),
+			mistler: MistlerMenu::from(config).with_animation(animation),
 			tuberwaber: TuberwaberMenu::default(),
 		}
 	}
@@ -975,6 +1167,9 @@ impl CharacterMenu {
 			wumbus: WumbusMenu::default(),
 			lero: LeroMenu::default(),
 			spibmom: SpibmomMenu::default(),
+			grener: GrenerMenu::default(),
+			thumplus: ThumplusMenu::default(),
+			mistler: MistlerMenu::default(),
 			tuberwaber: TuberwaberMenu::from(config).with_animation(animation),
 		}
 	}
@@ -1007,6 +1202,9 @@ impl CharacterMenu {
 			ConceptSpecies::Wumbus => self.wumbus.menu_node(),
 			ConceptSpecies::Lero => self.lero.menu_node(),
 			ConceptSpecies::Spibmom => self.spibmom.menu_node(),
+			ConceptSpecies::Grener => self.grener.menu_node(),
+			ConceptSpecies::Thumplus => self.thumplus.menu_node(),
+			ConceptSpecies::Mistler => self.mistler.menu_node(),
 			ConceptSpecies::Tuberwaber => self.tuberwaber.menu_node(),
 		}
 	}
@@ -1037,6 +1235,9 @@ impl CharacterMenu {
 			ConceptSpecies::Wumbus => self.wumbus.animation(),
 			ConceptSpecies::Lero => self.lero.animation(),
 			ConceptSpecies::Spibmom => self.spibmom.animation(),
+			ConceptSpecies::Grener => self.grener.animation(),
+			ConceptSpecies::Thumplus => self.thumplus.animation(),
+			ConceptSpecies::Mistler => self.mistler.animation(),
 			ConceptSpecies::Tuberwaber => self.tuberwaber.animation(),
 		}
 	}
@@ -1137,6 +1338,18 @@ impl CharacterMenu {
 		SpibmomConfig::from(&self.spibmom)
 	}
 
+	pub fn grener_config(&self) -> GrenerConfig {
+		GrenerConfig::from(&self.grener)
+	}
+
+	pub fn thumplus_config(&self) -> ThumplusConfig {
+		ThumplusConfig::from(&self.thumplus)
+	}
+
+	pub fn mistler_config(&self) -> MistlerConfig {
+		MistlerConfig::from(&self.mistler)
+	}
+
 	pub fn tuberwaber_config(&self) -> TuberwaberConfig {
 		TuberwaberConfig::from(&self.tuberwaber)
 	}
@@ -1178,6 +1391,9 @@ impl CharacterMenu {
 			ConceptSpecies::Wumbus => self.apply_wumbus(event),
 			ConceptSpecies::Lero => self.apply_lero(event),
 			ConceptSpecies::Spibmom => self.apply_spibmom(event),
+			ConceptSpecies::Grener => self.apply_grener(event),
+			ConceptSpecies::Thumplus => self.apply_thumplus(event),
+			ConceptSpecies::Mistler => self.apply_mistler(event),
 			ConceptSpecies::Tuberwaber => self.apply_tuberwaber(event),
 		}
 	}
@@ -1213,6 +1429,9 @@ impl CharacterMenu {
 			ConceptSpecies::Wumbus => self.wumbus.camera_focus_for_field(field),
 			ConceptSpecies::Lero => self.lero.camera_focus_for_field(field),
 			ConceptSpecies::Spibmom => self.spibmom.camera_focus_for_field(field),
+			ConceptSpecies::Grener => self.grener.camera_focus_for_field(field),
+			ConceptSpecies::Thumplus => self.thumplus.camera_focus_for_field(field),
+			ConceptSpecies::Mistler => self.mistler.camera_focus_for_field(field),
 			ConceptSpecies::Tuberwaber => self.tuberwaber.camera_focus_for_field(field),
 		}
 	}
@@ -1297,91 +1516,6 @@ impl CharacterMenu {
 			MenuEvent::SetSwatch(_, _) | MenuEvent::Cycle(_, _) => false,
 		}
 	}
-
-	fn apply_tuberwaber(&mut self, event: MenuEvent) -> bool {
-		let menu = &mut self.tuberwaber;
-		match event {
-			MenuEvent::ToggleSection(_) | MenuEvent::SetSpecies(_) => false,
-			MenuEvent::Cycle(CharacterField::Gender, delta) => {
-				menu.presets.value.gender.value =
-					cycle_value(menu.presets.value.gender.value, delta);
-				true
-			}
-			MenuEvent::Cycle(CharacterField::Build, delta) => {
-				menu.presets.value.build.value = cycle_value(menu.presets.value.build.value, delta);
-				true
-			}
-			MenuEvent::SetAsset(field, value) => match (field, value) {
-				(CharacterField::TuberwaberBody, AssetValue::TuberwaberBody(value)) => {
-					menu.body.value.body.value = value;
-					true
-				}
-				(CharacterField::TuberwaberHead, AssetValue::TuberwaberHead(value)) => {
-					menu.head_features.value.head.value = value;
-					true
-				}
-				(CharacterField::Eye, AssetValue::Eye(value)) => {
-					menu.head_features.value.eye.value = value;
-					true
-				}
-				(CharacterField::Nose, AssetValue::Nose(value)) => {
-					menu.head_features.value.nose.value = value;
-					true
-				}
-				(CharacterField::Mouth, AssetValue::Mouth(value)) => {
-					menu.head_features.value.mouth.value = value;
-					true
-				}
-				(CharacterField::Hair, AssetValue::Hair(value)) => {
-					menu.hair.value.style.value = value;
-					true
-				}
-				(CharacterField::Animation, AssetValue::Animation(value)) => {
-					menu.animation.value.clip.value = value;
-					true
-				}
-				_ => false,
-			},
-			MenuEvent::SliderDelta(field, delta) => apply_tuberwaber_slider(menu, field, delta),
-			MenuEvent::ToggleClothing(clothing) => {
-				menu.clothing.value.layers.toggle(clothing);
-				true
-			}
-			MenuEvent::SetSwatch(field, SwatchValue::Tuberwaber(color)) => match field {
-				CharacterField::BodyColor => {
-					menu.body.value.color.value = color;
-					menu.head_features.value.body_color = color;
-					true
-				}
-				CharacterField::EyeColor => {
-					menu.head_features.value.eye_color.value = color;
-					true
-				}
-				CharacterField::MouthColor => {
-					menu.head_features.value.mouth_color.value = color;
-					true
-				}
-				CharacterField::HornColor => {
-					menu.head_features.value.horn_color.value = color;
-					true
-				}
-				_ => false,
-			},
-			MenuEvent::SetSwatch(field, SwatchValue::Item(color)) => match field {
-				CharacterField::HairColor => {
-					menu.hair.value.color.value = color;
-					true
-				}
-				CharacterField::Clothing(clothing) => {
-					menu.set_clothing_color(clothing, color);
-					true
-				}
-				_ => false,
-			},
-			MenuEvent::SetSwatch(_, _) | MenuEvent::Cycle(_, _) => false,
-		}
-	}
-
 
 	fn apply_brenal(&mut self, event: MenuEvent) -> bool {
 		let menu = &mut self.brenal;
@@ -2811,6 +2945,159 @@ impl CharacterMenu {
 				_ => false,
 			},
 			MenuEvent::Cycle(_, _) | MenuEvent::SliderDelta(_, _) => false,
+		}
+	}
+
+	fn apply_grener(&mut self, event: MenuEvent) -> bool {
+		let menu = &mut self.grener;
+		match event {
+			MenuEvent::ToggleSection(_) | MenuEvent::SetSpecies(_) => false,
+			MenuEvent::SetAsset(field, value) => match (field, value) {
+				(CharacterField::Animation, AssetValue::Animation(value)) => {
+					menu.animation.value.clip.value = value;
+					true
+				}
+				_ => false,
+			},
+			MenuEvent::ToggleClothing(_) => false,
+			MenuEvent::SetSwatch(field, value) => match (field, value) {
+				(CharacterField::GrenerBodyColor, SwatchValue::GrenerBody(color)) => {
+					menu.body.value.body.value = color;
+					true
+				}
+				_ => false,
+			},
+			MenuEvent::Cycle(_, _) | MenuEvent::SliderDelta(_, _) => false,
+		}
+	}
+
+	fn apply_thumplus(&mut self, event: MenuEvent) -> bool {
+		let menu = &mut self.thumplus;
+		match event {
+			MenuEvent::ToggleSection(_) | MenuEvent::SetSpecies(_) => false,
+			MenuEvent::SetAsset(field, value) => match (field, value) {
+				(CharacterField::Animation, AssetValue::Animation(value)) => {
+					menu.animation.value.clip.value = value;
+					true
+				}
+				_ => false,
+			},
+			MenuEvent::ToggleClothing(_) => false,
+			MenuEvent::SetSwatch(field, value) => match (field, value) {
+				(CharacterField::ThumplusBodyColor, SwatchValue::ThumplusBody(color)) => {
+					menu.body.value.body.value = color;
+					true
+				}
+				_ => false,
+			},
+			MenuEvent::Cycle(_, _) | MenuEvent::SliderDelta(_, _) => false,
+		}
+	}
+
+	fn apply_mistler(&mut self, event: MenuEvent) -> bool {
+		let menu = &mut self.mistler;
+		match event {
+			MenuEvent::ToggleSection(_) | MenuEvent::SetSpecies(_) => false,
+			MenuEvent::SetAsset(field, value) => match (field, value) {
+				(CharacterField::Animation, AssetValue::Animation(value)) => {
+					menu.animation.value.clip.value = value;
+					true
+				}
+				_ => false,
+			},
+			MenuEvent::ToggleClothing(_) => false,
+			MenuEvent::SetSwatch(field, value) => match (field, value) {
+				(CharacterField::MistlerBodyColor, SwatchValue::MistlerBody(color)) => {
+					menu.body.value.body.value = color;
+					true
+				}
+				_ => false,
+			},
+			MenuEvent::Cycle(_, _) | MenuEvent::SliderDelta(_, _) => false,
+		}
+	}
+
+	fn apply_tuberwaber(&mut self, event: MenuEvent) -> bool {
+		let menu = &mut self.tuberwaber;
+		match event {
+			MenuEvent::ToggleSection(_) | MenuEvent::SetSpecies(_) => false,
+			MenuEvent::Cycle(CharacterField::Gender, delta) => {
+				menu.presets.value.gender.value =
+					cycle_value(menu.presets.value.gender.value, delta);
+				true
+			}
+			MenuEvent::Cycle(CharacterField::Build, delta) => {
+				menu.presets.value.build.value = cycle_value(menu.presets.value.build.value, delta);
+				true
+			}
+			MenuEvent::SetAsset(field, value) => match (field, value) {
+				(CharacterField::TuberwaberBody, AssetValue::TuberwaberBody(value)) => {
+					menu.body.value.body.value = value;
+					true
+				}
+				(CharacterField::TuberwaberHead, AssetValue::TuberwaberHead(value)) => {
+					menu.head_features.value.head.value = value;
+					true
+				}
+				(CharacterField::Eye, AssetValue::Eye(value)) => {
+					menu.head_features.value.eye.value = value;
+					true
+				}
+				(CharacterField::Nose, AssetValue::Nose(value)) => {
+					menu.head_features.value.nose.value = value;
+					true
+				}
+				(CharacterField::Mouth, AssetValue::Mouth(value)) => {
+					menu.head_features.value.mouth.value = value;
+					true
+				}
+				(CharacterField::Hair, AssetValue::Hair(value)) => {
+					menu.hair.value.style.value = value;
+					true
+				}
+				(CharacterField::Animation, AssetValue::Animation(value)) => {
+					menu.animation.value.clip.value = value;
+					true
+				}
+				_ => false,
+			},
+			MenuEvent::SliderDelta(field, delta) => apply_tuberwaber_slider(menu, field, delta),
+			MenuEvent::ToggleClothing(clothing) => {
+				menu.clothing.value.layers.toggle(clothing);
+				true
+			}
+			MenuEvent::SetSwatch(field, SwatchValue::Tuberwaber(color)) => match field {
+				CharacterField::BodyColor => {
+					menu.body.value.color.value = color;
+					menu.head_features.value.body_color = color;
+					true
+				}
+				CharacterField::EyeColor => {
+					menu.head_features.value.eye_color.value = color;
+					true
+				}
+				CharacterField::MouthColor => {
+					menu.head_features.value.mouth_color.value = color;
+					true
+				}
+				CharacterField::HornColor => {
+					menu.head_features.value.horn_color.value = color;
+					true
+				}
+				_ => false,
+			},
+			MenuEvent::SetSwatch(field, SwatchValue::Item(color)) => match field {
+				CharacterField::HairColor => {
+					menu.hair.value.color.value = color;
+					true
+				}
+				CharacterField::Clothing(clothing) => {
+					menu.set_clothing_color(clothing, color);
+					true
+				}
+				_ => false,
+			},
+			MenuEvent::SetSwatch(_, _) | MenuEvent::Cycle(_, _) => false,
 		}
 	}
 }
