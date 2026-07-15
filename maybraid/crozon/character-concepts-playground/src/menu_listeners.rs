@@ -101,6 +101,9 @@ pub fn menu_to_preview_config(menu: &CharacterMenu) -> ConceptPreviewConfig {
 		ConceptSpecies::Mistler => {
 			ConceptPreviewConfig::mistler_with_animation(menu.mistler_config(), menu.animation())
 		}
+		ConceptSpecies::Tuberwaber => {
+			ConceptPreviewConfig::tuberwaber_with_animation(menu.tuberwaber_config(), menu.animation())
+		}
 	}
 }
 
@@ -187,6 +190,9 @@ pub fn menu_from_preview_config(config: &ConceptPreviewConfig) -> CharacterMenu 
 		ConceptPreviewConfig::Mistler { config, animation } => {
 			CharacterMenu::from_mistler(config, *animation)
 		}
+		ConceptPreviewConfig::Tuberwaber { config, animation } => {
+			CharacterMenu::from_tuberwaber(config, *animation)
+		}
 	}
 }
 
@@ -236,6 +242,7 @@ fn preview_species(species: ConceptSpecies) -> crate::preview::ConceptSpecies {
 		ConceptSpecies::Grener => crate::preview::ConceptSpecies::Grener,
 		ConceptSpecies::Thumplus => crate::preview::ConceptSpecies::Thumplus,
 		ConceptSpecies::Mistler => crate::preview::ConceptSpecies::Mistler,
+		ConceptSpecies::Tuberwaber => crate::preview::ConceptSpecies::Tuberwaber,
 	}
 }
 

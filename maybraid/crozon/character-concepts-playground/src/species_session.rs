@@ -8,7 +8,7 @@ use crozon_characters::species::{
 	chupri::ChupriConfig, kispar::KisparConfig, kaller::KallerConfig, kappler::KapplerConfig,
 	lidder::LidderConfig, lero::LeroConfig, mygr::MygrConfig, spibmom::SpibmomConfig,
 	tipple::TippleConfig, topple::ToppleConfig, tapp::TappConfig, wumbus::WumbusConfig,
-	grener::GrenerConfig, thumplus::ThumplusConfig, mistler::MistlerConfig,
+	grener::GrenerConfig, thumplus::ThumplusConfig, mistler::MistlerConfig, tuberwaber::TuberwaberConfig,
 };
 
 use crate::{
@@ -50,6 +50,7 @@ pub struct SpeciesSessionState {
 	pub grener: GrenerConfig,
 	pub thumplus: ThumplusConfig,
 	pub mistler: MistlerConfig,
+	pub tuberwaber: TuberwaberConfig,
 	pub caole_animation: crate::animation::ConceptAnimation,
 	pub epiphant_animation: crate::animation::ConceptAnimation,
 	pub hars_animation: crate::animation::ConceptAnimation,
@@ -77,6 +78,7 @@ pub struct SpeciesSessionState {
 	pub grener_animation: crate::animation::ConceptAnimation,
 	pub thumplus_animation: crate::animation::ConceptAnimation,
 	pub mistler_animation: crate::animation::ConceptAnimation,
+	pub tuberwaber_animation: crate::animation::ConceptAnimation,
 }
 
 impl Default for SpeciesSessionState {
@@ -109,6 +111,7 @@ impl Default for SpeciesSessionState {
 			grener: GrenerConfig::default_preview(),
 			thumplus: ThumplusConfig::default_preview(),
 			mistler: MistlerConfig::default_preview(),
+			tuberwaber: TuberwaberConfig::default_preview(),
 			brenal_animation: crate::animation::ConceptAnimation::default(),
 			caole_animation: crate::animation::ConceptAnimation::default(),
 			epiphant_animation: crate::animation::ConceptAnimation::default(),
@@ -136,6 +139,7 @@ impl Default for SpeciesSessionState {
 			grener_animation: crate::animation::ConceptAnimation::default(),
 			thumplus_animation: crate::animation::ConceptAnimation::default(),
 			mistler_animation: crate::animation::ConceptAnimation::default(),
+			tuberwaber_animation: crate::animation::ConceptAnimation::default(),
 		}
 	}
 }
@@ -251,6 +255,10 @@ impl SpeciesSessionState {
 				self.mistler.clone_from(config);
 				self.mistler_animation = *animation;
 			}
+			ConceptPreviewConfig::Tuberwaber { config, animation } => {
+				self.tuberwaber.clone_from(config);
+				self.tuberwaber_animation = *animation;
+			}
 		}
 	}
 
@@ -351,6 +359,10 @@ impl SpeciesSessionState {
 			ConceptSpecies::Mistler => ConceptPreviewConfig::mistler_with_animation(
 				self.mistler.clone(),
 				self.mistler_animation,
+			),
+			ConceptSpecies::Tuberwaber => ConceptPreviewConfig::tuberwaber_with_animation(
+				self.tuberwaber.clone(),
+				self.tuberwaber_animation,
 			),
 		}
 	}

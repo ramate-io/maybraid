@@ -28,6 +28,7 @@ pub mod topple;
 pub mod tapp;
 pub mod kaller;
 pub mod kappler;
+pub mod tuberwaber;
 pub mod wumbus;
 pub mod ylter;
 pub mod sonyak;

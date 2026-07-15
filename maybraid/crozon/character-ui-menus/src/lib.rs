@@ -16,6 +16,7 @@ pub use characters::{
 	mistler::MistlerMenu, mygr::MygrMenu, spibmom::SpibmomMenu, sonyak::SonyakMenu,
 	thumplus::ThumplusMenu, tipple::TippleMenu, topple::ToppleMenu, tapp::TappMenu,
 	wumbus::WumbusMenu, ylter::YilterMenu,
+	tuberwaber::TuberwaberMenu,
 };
 pub use event::{AssetValue, CharacterField, MenuEvent, SectionId, SwatchValue};
 pub use focus::BODY_FOCUS;

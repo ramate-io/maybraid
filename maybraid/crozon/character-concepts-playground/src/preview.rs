@@ -35,6 +35,7 @@ use crozon_characters::{
 		grener::GrenerConfig,
 		thumplus::ThumplusConfig,
 		mistler::MistlerConfig,
+		tuberwaber::{TuberwaberBodyMesh, TuberwaberConfig, TuberwaberHeadMesh},
 		wumbus::{WumbusConfig, WumbusHornMesh},
 		SpeciesConfig,
 	},
@@ -80,6 +81,7 @@ pub enum ConceptSpecies {
 	Grener,
 	Thumplus,
 	Mistler,
+	Tuberwaber,
 }
 
 #[derive(Resource, Debug, Clone, PartialEq)]
@@ -111,6 +113,7 @@ pub enum ConceptPreviewConfig {
 	Grener { config: GrenerConfig, animation: ConceptAnimation },
 	Thumplus { config: ThumplusConfig, animation: ConceptAnimation },
 	Mistler { config: MistlerConfig, animation: ConceptAnimation },
+	Tuberwaber { config: TuberwaberConfig, animation: ConceptAnimation },
 }
 
 impl Default for ConceptPreviewConfig {
@@ -149,6 +152,7 @@ impl ConceptPreviewConfig {
 			ConceptSpecies::Grener => Self::grener(GrenerConfig::default_preview()),
 			ConceptSpecies::Thumplus => Self::thumplus(ThumplusConfig::default_preview()),
 			ConceptSpecies::Mistler => Self::mistler(MistlerConfig::default_preview()),
+			ConceptSpecies::Tuberwaber => Self::tuberwaber(TuberwaberConfig::default_preview()),
 		}
 	}
 
@@ -181,6 +185,7 @@ impl ConceptPreviewConfig {
 			Self::Grener { .. } => ConceptSpecies::Grener,
 			Self::Thumplus { .. } => ConceptSpecies::Thumplus,
 			Self::Mistler { .. } => ConceptSpecies::Mistler,
+			Self::Tuberwaber { .. } => ConceptSpecies::Tuberwaber,
 		}
 	}
 
@@ -401,6 +406,14 @@ impl ConceptPreviewConfig {
 		Self::Mistler { config, animation }
 	}
 
+	pub fn tuberwaber(config: TuberwaberConfig) -> Self {
+		Self::Tuberwaber { config, animation: ConceptAnimation::default() }
+	}
+
+	pub fn tuberwaber_with_animation(config: TuberwaberConfig, animation: ConceptAnimation) -> Self {
+		Self::Tuberwaber { config, animation }
+	}
+
 	pub fn resolve(&self) -> ResolvedCharacterAssembly {
 		match self {
 			Self::Braidman { config, .. } => config.resolve(),
@@ -430,6 +443,7 @@ impl ConceptPreviewConfig {
 			Self::Grener { config, .. } => config.resolve(),
 			Self::Thumplus { config, .. } => config.resolve(),
 			Self::Mistler { config, .. } => config.resolve(),
+			Self::Tuberwaber { config, .. } => config.resolve(),
 		}
 	}
 
@@ -498,6 +512,9 @@ impl ConceptPreviewConfig {
 				format!("{} animation={}", config.status_label(), animation.label())
 			}
 			Self::Mistler { config, animation } => {
+				format!("{} animation={}", config.status_label(), animation.label())
+			}
+			Self::Tuberwaber { config, animation } => {
 				format!("{} animation={}", config.status_label(), animation.label())
 			}
 		}
@@ -569,6 +586,9 @@ impl ConceptPreviewConfig {
 			}
 			Self::Mistler { config, animation } => {
 				format!("species=mistler {} animation={animation:?}", config.sync_key())
+			}
+			Self::Tuberwaber { config, animation } => {
+				format!("species=tuberwaber {} animation={animation:?}", config.sync_key())
 			}
 		}
 	}
@@ -741,6 +761,16 @@ impl ConceptPreviewConfig {
 				"species=mistler body={:?}",
 				config.colors.body,
 			),
+			Self::Tuberwaber { config, .. } => format!(
+				"species=tuberwaber body={:?} head={:?} eye={:?} nose={:?} mouth={:?} hair={:?} clothing={:?}",
+				config.body,
+				config.head,
+				config.eye,
+				config.nose,
+				config.mouth,
+				config.hair,
+				config.clothing,
+			),
 		}
 	}
 
@@ -772,7 +802,8 @@ impl ConceptPreviewConfig {
 			| Self::Spibmom { animation, .. }
 			| Self::Grener { animation, .. }
 			| Self::Thumplus { animation, .. }
-			| Self::Mistler { animation, .. } => *animation,
+			| Self::Mistler { animation, .. }
+			| Self::Tuberwaber { animation, .. } => *animation,
 		}
 	}
 }
@@ -1001,6 +1032,14 @@ pub enum PreviewTarget {
 	GrenerBody,
 	ThumplusBody,
 	MistlerBody,
+	TuberwaberBody(TuberwaberBodyMesh),
+	TuberwaberHead(TuberwaberHeadMesh),
+	TuberwaberEye(EyeMesh),
+	TuberwaberNose(NoseMesh),
+	TuberwaberMouth(MouthMesh),
+	TuberwaberHorns,
+	TuberwaberHair(HairMesh),
+	TuberwaberClothing(ClothingMesh),
 }
 
 pub fn sync_preview(
@@ -1392,6 +1431,31 @@ fn sync_live_preview(
 		ConceptPreviewConfig::Mistler { config: mistler, .. } => {
 			for (_, mut target, ..) in parts {
 				target.color = preview_color_mistler(mistler, target.target);
+			}
+		}
+		ConceptPreviewConfig::Tuberwaber { config: tuberwaber, .. } => {
+			let sliders = tuberwaber.sliders.clamped();
+			for (part, mut target, base, transform) in parts {
+				target.color = preview_color_tuberwaber(tuberwaber, target.target);
+				let Some(base) = base else {
+					continue;
+				};
+				let Some(mut transform) = transform else {
+					continue;
+				};
+				if !has_feature_transform(part.slot) {
+					continue;
+				}
+				let authored =
+					base.normalization.mul_transform(sliders.feature_transform(part.slot));
+				match base.socket {
+					Some(socket) => {
+						*transform = socket;
+						transform.scale *= authored.scale;
+						transform.rotation *= authored.rotation;
+					}
+					None => *transform = authored,
+				}
 			}
 		}
 	}
@@ -1892,6 +1956,25 @@ fn preview_color_mistler(config: &MistlerConfig, target: PreviewTarget) -> Previ
 	}
 }
 
+fn preview_color_tuberwaber(config: &TuberwaberConfig, target: PreviewTarget) -> PreviewColor {
+	use crozon_characters::species::tuberwaber::TuberwaberColor;
+
+	match target {
+		PreviewTarget::TuberwaberHair(_) => PreviewColor::Item(config.colors.hair),
+		PreviewTarget::TuberwaberClothing(clothing) => {
+			PreviewColor::Item(config.colors.clothing_color(clothing))
+		}
+		PreviewTarget::TuberwaberBody(_) => PreviewColor::Tuberwaber(config.colors.body),
+		PreviewTarget::TuberwaberHead(_) | PreviewTarget::TuberwaberNose(_) => {
+			PreviewColor::Tuberwaber(config.colors.skin_color())
+		}
+		PreviewTarget::TuberwaberEye(_) => PreviewColor::Tuberwaber(config.colors.eyes),
+		PreviewTarget::TuberwaberMouth(_) => PreviewColor::Tuberwaber(config.colors.mouth),
+		PreviewTarget::TuberwaberHorns => PreviewColor::Tuberwaber(config.colors.horns),
+		_ => PreviewColor::Tuberwaber(TuberwaberColor::MistBlue),
+	}
+}
+
 
 struct SocketRigMap {
 	body: Entity,
@@ -2051,6 +2134,13 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 			ConceptPreviewConfig::Grener { .. } => part.asset.normalization.transform(),
 			ConceptPreviewConfig::Thumplus { .. } => part.asset.normalization.transform(),
 			ConceptPreviewConfig::Mistler { .. } => part.asset.normalization.transform(),
+			ConceptPreviewConfig::Tuberwaber { config, .. } => {
+				let sliders = config.sliders.clamped();
+				part.asset
+					.normalization
+					.transform()
+					.mul_transform(sliders.feature_transform(part.slot))
+			}
 		}
 	}
 
@@ -2829,6 +2919,36 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 			ConceptPreviewConfig::Mistler { config, .. } => {
 				let target = PreviewTarget::MistlerBody;
 				PreviewAssetTarget { target, color: preview_color_mistler(config, target) }
+			}
+			ConceptPreviewConfig::Tuberwaber { config, .. } => {
+				let target = match part.slot {
+					CharacterPartSlot::BodyMesh => PreviewTarget::TuberwaberBody(config.body),
+					CharacterPartSlot::NeckRig | CharacterPartSlot::NeckMesh => {
+						PreviewTarget::TuberwaberBody(config.body)
+					}
+					CharacterPartSlot::HeadRig | CharacterPartSlot::HeadMesh => {
+						PreviewTarget::TuberwaberHead(config.head)
+					}
+					CharacterPartSlot::EyeLeft | CharacterPartSlot::EyeRight => {
+						PreviewTarget::TuberwaberEye(config.eye)
+					}
+					CharacterPartSlot::Nose => PreviewTarget::TuberwaberNose(config.nose),
+					CharacterPartSlot::Mouth => PreviewTarget::TuberwaberMouth(config.mouth),
+					CharacterPartSlot::Horns => PreviewTarget::TuberwaberHorns,
+					CharacterPartSlot::Hair => PreviewTarget::TuberwaberHair(config.hair),
+					CharacterPartSlot::Clothing => config
+						.clothing
+						.iter()
+						.copied()
+						.find(|clothing| clothing.label() == part.asset.label)
+						.map(PreviewTarget::TuberwaberClothing)
+						.unwrap_or(PreviewTarget::TuberwaberHead(config.head)),
+					CharacterPartSlot::EarLeft
+					| CharacterPartSlot::EarRight
+					| CharacterPartSlot::Tail
+					| CharacterPartSlot::Spine => PreviewTarget::TuberwaberBody(config.body),
+				};
+				PreviewAssetTarget { target, color: preview_color_tuberwaber(config, target) }
 			}
 		}
 	}

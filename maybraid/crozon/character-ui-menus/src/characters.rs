@@ -22,6 +22,7 @@ pub mod kappler;
 pub mod grener;
 pub mod thumplus;
 pub mod mistler;
+pub mod tuberwaber;
 pub mod wumbus;
 pub mod ylter;
 pub mod sonyak;

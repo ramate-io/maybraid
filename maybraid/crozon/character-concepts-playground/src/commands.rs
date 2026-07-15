@@ -26,6 +26,7 @@ pub mod mistler;
 pub mod lero;
 pub mod mygr;
 pub mod spibmom;
+pub mod tuberwaber;
 pub mod wumbus;
 
 use bevy::prelude::*;
@@ -57,6 +58,7 @@ pub use mistler::Mistler;
 pub use lero::Lero;
 pub use mygr::Mygr;
 pub use spibmom::Spibmom;
+pub use tuberwaber::Tuberwaber;
 pub use wumbus::Wumbus;
 
 use crate::skinning::request_dump_bones;
@@ -156,6 +158,9 @@ pub enum ConceptsCommand {
 	/// Spawn or adjust the Mistler sprite-fish concept preview.
 	#[command(subcommand)]
 	Mistler(Mistler),
+	/// Spawn or adjust the Tuberwaber biped concept preview.
+	#[command(subcommand)]
+	Tuberwaber(Tuberwaber),
 	/// Print the live rig bone hierarchy to the HUD console.
 	DumpBones,
 }
@@ -200,6 +205,7 @@ impl ConceptsCommand {
 			Self::Grener(grener) => grener.react(commands),
 			Self::Thumplus(thumplus) => thumplus.react(commands),
 			Self::Mistler(mistler) => mistler.react(commands),
+			Self::Tuberwaber(tuberwaber) => tuberwaber.react(commands),
 			Self::DumpBones => request_dump_bones(commands),
 		}
 	}

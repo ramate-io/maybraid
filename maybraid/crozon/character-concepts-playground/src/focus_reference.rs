@@ -99,6 +99,7 @@ fn focus_live_key(config: &ConceptPreviewConfig) -> String {
 		ConceptPreviewConfig::Grener { config, .. } => config.sync_key(),
 		ConceptPreviewConfig::Thumplus { config, .. } => config.sync_key(),
 		ConceptPreviewConfig::Mistler { config, .. } => config.sync_key(),
+		ConceptPreviewConfig::Tuberwaber { config, .. } => config.sync_key(),
 	}
 }
 
