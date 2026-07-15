@@ -10,6 +10,7 @@ pub mod claber;
 pub mod croconot;
 pub mod hars;
 pub mod brodler;
+pub mod chupri;
 pub mod common;
 pub mod dui;
 pub mod lero;

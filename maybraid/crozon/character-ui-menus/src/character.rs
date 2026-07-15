@@ -4,7 +4,7 @@ use character_ui_menu::{
 use crozon_characters::{
 	species::{
 		braidman::BraidmanConfig, brenal::BrenalConfig, caole::CaoleConfig, hars::HarsConfig, claber::ClaberConfig, croconot::CroconotConfig, brodler::BrodlerConfig, dui::DuiConfig,
-		lidder::LidderConfig, lero::LeroConfig, mygr::MygrConfig, spibmom::SpibmomConfig, sonyak::SonyakConfig, wumbus::WumbusConfig, ylter::YilterConfig,
+		chupri::ChupriConfig, lidder::LidderConfig, lero::LeroConfig, mygr::MygrConfig, spibmom::SpibmomConfig, sonyak::SonyakConfig, wumbus::WumbusConfig, ylter::YilterConfig,
 	},
 	ConceptAnimation,
 };
@@ -19,6 +19,7 @@ use crate::{
 		croconot::{CroconotAnimationClip, CroconotMenu},
 		brodler::BrodlerMenu,
 		dui::DuiMenu,
+		chupri::ChupriMenu,
 		lidder::LidderMenu,
 		lero::LeroMenu,
 		mygr::MygrMenu,
@@ -45,6 +46,7 @@ pub enum ConceptSpecies {
 	Mygr,
 	Dui,
 	Lidder,
+	Chupri,
 	Wumbus,
 	Lero,
 	Spibmom,
@@ -65,6 +67,7 @@ impl ConceptSpecies {
 			Self::Mygr => "mygr",
 			Self::Dui => "dui",
 			Self::Lidder => "lidder",
+			Self::Chupri => "chupri",
 			Self::Wumbus => "wumbus",
 			Self::Lero => "lero",
 			Self::Spibmom => "spibmom",
@@ -87,6 +90,7 @@ impl ListValues for ConceptSpecies {
 			Self::Mygr,
 			Self::Dui,
 			Self::Lidder,
+			Self::Chupri,
 			Self::Wumbus,
 			Self::Lero,
 			Self::Spibmom,
@@ -109,6 +113,7 @@ impl LabelOption for ConceptSpecies {
 			Self::Mygr => "mygr",
 			Self::Dui => "dui",
 			Self::Lidder => "lidder",
+			Self::Chupri => "chupri",
 			Self::Wumbus => "wumbus",
 			Self::Lero => "lero",
 			Self::Spibmom => "spibmom",
@@ -131,6 +136,7 @@ pub struct CharacterMenu {
 	pub mygr: MygrMenu,
 	pub dui: DuiMenu,
 	pub lidder: LidderMenu,
+	pub chupri: ChupriMenu,
 	pub wumbus: WumbusMenu,
 	pub lero: LeroMenu,
 	pub spibmom: SpibmomMenu,
@@ -152,6 +158,7 @@ impl CharacterMenu {
 			mygr: MygrMenu::default(),
 			dui: DuiMenu::default(),
 			lidder: LidderMenu::default(),
+			chupri: ChupriMenu::default(),
 			wumbus: WumbusMenu::default(),
 			lero: LeroMenu::default(),
 			spibmom: SpibmomMenu::default(),
@@ -173,6 +180,7 @@ impl CharacterMenu {
 			mygr: MygrMenu::default(),
 			dui: DuiMenu::default(),
 			lidder: LidderMenu::default(),
+			chupri: ChupriMenu::default(),
 			wumbus: WumbusMenu::default(),
 			lero: LeroMenu::default(),
 			spibmom: SpibmomMenu::default(),
@@ -194,6 +202,7 @@ impl CharacterMenu {
 			mygr: MygrMenu::default(),
 			dui: DuiMenu::default(),
 			lidder: LidderMenu::default(),
+			chupri: ChupriMenu::default(),
 			wumbus: WumbusMenu::default(),
 			lero: LeroMenu::default(),
 			spibmom: SpibmomMenu::default(),
@@ -215,6 +224,7 @@ impl CharacterMenu {
 			mygr: MygrMenu::default(),
 			dui: DuiMenu::default(),
 			lidder: LidderMenu::default(),
+			chupri: ChupriMenu::default(),
 			wumbus: WumbusMenu::default(),
 			lero: LeroMenu::default(),
 			spibmom: SpibmomMenu::default(),
@@ -236,6 +246,7 @@ impl CharacterMenu {
 			mygr: MygrMenu::default(),
 			dui: DuiMenu::default(),
 			lidder: LidderMenu::default(),
+			chupri: ChupriMenu::default(),
 			wumbus: WumbusMenu::default(),
 			lero: LeroMenu::default(),
 			spibmom: SpibmomMenu::default(),
@@ -257,6 +268,7 @@ impl CharacterMenu {
 			mygr: MygrMenu::default(),
 			dui: DuiMenu::default(),
 			lidder: LidderMenu::default(),
+			chupri: ChupriMenu::default(),
 			wumbus: WumbusMenu::default(),
 			lero: LeroMenu::default(),
 			spibmom: SpibmomMenu::default(),
@@ -279,6 +291,7 @@ impl CharacterMenu {
 			mygr: MygrMenu::default(),
 			dui: DuiMenu::default(),
 			lidder: LidderMenu::default(),
+			chupri: ChupriMenu::default(),
 			wumbus: WumbusMenu::default(),
 			lero: LeroMenu::default(),
 			spibmom: SpibmomMenu::default(),
@@ -300,6 +313,7 @@ impl CharacterMenu {
 			mygr: MygrMenu::default(),
 			dui: DuiMenu::default(),
 			lidder: LidderMenu::default(),
+			chupri: ChupriMenu::default(),
 			wumbus: WumbusMenu::default(),
 			lero: LeroMenu::default(),
 			spibmom: SpibmomMenu::default(),
@@ -321,6 +335,7 @@ impl CharacterMenu {
 			mygr: MygrMenu::default(),
 			dui: DuiMenu::default(),
 			lidder: LidderMenu::default(),
+			chupri: ChupriMenu::default(),
 			wumbus: WumbusMenu::default(),
 			lero: LeroMenu::default(),
 			spibmom: SpibmomMenu::default(),
@@ -342,6 +357,7 @@ impl CharacterMenu {
 			mygr: MygrMenu::from(config).with_animation(animation),
 			dui: DuiMenu::default(),
 			lidder: LidderMenu::default(),
+			chupri: ChupriMenu::default(),
 			wumbus: WumbusMenu::default(),
 			lero: LeroMenu::default(),
 			spibmom: SpibmomMenu::default(),
@@ -363,6 +379,7 @@ impl CharacterMenu {
 			mygr: MygrMenu::default(),
 			dui: DuiMenu::from(config).with_animation(animation),
 			lidder: LidderMenu::default(),
+			chupri: ChupriMenu::default(),
 			wumbus: WumbusMenu::default(),
 			lero: LeroMenu::default(),
 			spibmom: SpibmomMenu::default(),
@@ -385,6 +402,29 @@ impl CharacterMenu {
 			mygr: MygrMenu::default(),
 			dui: DuiMenu::default(),
 			lidder: LidderMenu::from(config).with_animation(animation),
+			chupri: ChupriMenu::default(),
+			wumbus: WumbusMenu::default(),
+			lero: LeroMenu::default(),
+			spibmom: SpibmomMenu::default(),
+		}
+	}
+
+	pub fn from_chupri(config: &ChupriConfig, animation: ConceptAnimation) -> Self {
+		Self {
+			species: SingleSelect::new(ConceptSpecies::Chupri),
+			braidman: BraidmanMenu::default(),
+			brenal: BrenalMenu::default(),
+			caole: CaoleMenu::default(),
+			hars: HarsMenu::default(),
+			ylter: YilterMenu::default(),
+			sonyak: SonyakMenu::default(),
+			croconot: CroconotMenu::default(),
+			claber: ClaberMenu::default(),
+			brodler: BrodlerMenu::default(),
+			mygr: MygrMenu::default(),
+			dui: DuiMenu::default(),
+			lidder: LidderMenu::default(),
+			chupri: ChupriMenu::from(config).with_animation(animation),
 			wumbus: WumbusMenu::default(),
 			lero: LeroMenu::default(),
 			spibmom: SpibmomMenu::default(),
@@ -406,6 +446,7 @@ impl CharacterMenu {
 			mygr: MygrMenu::default(),
 			dui: DuiMenu::default(),
 			lidder: LidderMenu::default(),
+			chupri: ChupriMenu::default(),
 			wumbus: WumbusMenu::from(config).with_animation(animation),
 			lero: LeroMenu::default(),
 			spibmom: SpibmomMenu::default(),
@@ -427,6 +468,7 @@ impl CharacterMenu {
 			mygr: MygrMenu::default(),
 			dui: DuiMenu::default(),
 			lidder: LidderMenu::default(),
+			chupri: ChupriMenu::default(),
 			wumbus: WumbusMenu::default(),
 			lero: LeroMenu::from(config).with_animation(animation),
 			spibmom: SpibmomMenu::default(),
@@ -448,6 +490,7 @@ impl CharacterMenu {
 			mygr: MygrMenu::default(),
 			dui: DuiMenu::default(),
 			lidder: LidderMenu::default(),
+			chupri: ChupriMenu::default(),
 			wumbus: WumbusMenu::default(),
 			lero: LeroMenu::default(),
 			spibmom: SpibmomMenu::from(config).with_animation(animation),
@@ -470,6 +513,7 @@ impl CharacterMenu {
 			ConceptSpecies::Mygr => self.mygr.menu_node(),
 			ConceptSpecies::Dui => self.dui.menu_node(),
 			ConceptSpecies::Lidder => self.lidder.menu_node(),
+			ConceptSpecies::Chupri => self.chupri.menu_node(),
 			ConceptSpecies::Wumbus => self.wumbus.menu_node(),
 			ConceptSpecies::Lero => self.lero.menu_node(),
 			ConceptSpecies::Spibmom => self.spibmom.menu_node(),
@@ -490,6 +534,7 @@ impl CharacterMenu {
 			ConceptSpecies::Mygr => self.mygr.animation(),
 			ConceptSpecies::Dui => self.dui.animation(),
 			ConceptSpecies::Lidder => self.lidder.animation(),
+			ConceptSpecies::Chupri => self.chupri.animation(),
 			ConceptSpecies::Wumbus => self.wumbus.animation(),
 			ConceptSpecies::Lero => self.lero.animation(),
 			ConceptSpecies::Spibmom => self.spibmom.animation(),
@@ -544,6 +589,10 @@ impl CharacterMenu {
 		LidderConfig::from(&self.lidder)
 	}
 
+	pub fn chupri_config(&self) -> ChupriConfig {
+		ChupriConfig::from(&self.chupri)
+	}
+
 	pub fn wumbus_config(&self) -> WumbusConfig {
 		WumbusConfig::from(&self.wumbus)
 	}
@@ -581,6 +630,7 @@ impl CharacterMenu {
 			ConceptSpecies::Mygr => self.apply_mygr(event),
 			ConceptSpecies::Dui => self.apply_dui(event),
 			ConceptSpecies::Lidder => self.apply_lidder(event),
+			ConceptSpecies::Chupri => self.apply_chupri(event),
 			ConceptSpecies::Wumbus => self.apply_wumbus(event),
 			ConceptSpecies::Lero => self.apply_lero(event),
 			ConceptSpecies::Spibmom => self.apply_spibmom(event),
@@ -606,6 +656,7 @@ impl CharacterMenu {
 			ConceptSpecies::Mygr => self.mygr.camera_focus_for_field(field),
 			ConceptSpecies::Dui => self.dui.camera_focus_for_field(field),
 			ConceptSpecies::Lidder => self.lidder.camera_focus_for_field(field),
+			ConceptSpecies::Chupri => self.chupri.camera_focus_for_field(field),
 			ConceptSpecies::Wumbus => self.wumbus.camera_focus_for_field(field),
 			ConceptSpecies::Lero => self.lero.camera_focus_for_field(field),
 			ConceptSpecies::Spibmom => self.spibmom.camera_focus_for_field(field),
@@ -1377,6 +1428,64 @@ impl CharacterMenu {
 					true
 				}
 				(CharacterField::LidderBeakColor, SwatchValue::LidderBeak(color)) => {
+					menu.head_features.value.beak_color.value = color;
+					true
+				}
+				(CharacterField::HairColor, SwatchValue::Item(color)) => {
+					menu.hair.value.color.value = color;
+					true
+				}
+				(CharacterField::Clothing(clothing), SwatchValue::Item(color)) => {
+					menu.set_clothing_color(clothing, color);
+					true
+				}
+				_ => false,
+			},
+			MenuEvent::Cycle(_, _) | MenuEvent::SliderDelta(_, _) => false,
+		}
+	}
+
+	fn apply_chupri(&mut self, event: MenuEvent) -> bool {
+		let menu = &mut self.chupri;
+		match event {
+			MenuEvent::ToggleSection(_) | MenuEvent::SetSpecies(_) => false,
+			MenuEvent::SetAsset(field, value) => match (field, value) {
+				(CharacterField::ChupriHead, AssetValue::ChupriHead(value)) => {
+					menu.head.value.head.value = value;
+					true
+				}
+				(CharacterField::Eye, AssetValue::Eye(value)) => {
+					menu.head_features.value.eye.value = value;
+					true
+				}
+				(CharacterField::ChupriBeak, AssetValue::ChupriBeak(value)) => {
+					menu.head_features.value.beak.value = value;
+					true
+				}
+				(CharacterField::Hair, AssetValue::Hair(value)) => {
+					menu.hair.value.style.value = value;
+					true
+				}
+				(CharacterField::Animation, AssetValue::Animation(value)) => {
+					menu.animation.value.clip.value = value;
+					true
+				}
+				_ => false,
+			},
+			MenuEvent::ToggleClothing(clothing) => {
+				menu.clothing.value.layers.toggle(clothing);
+				true
+			}
+			MenuEvent::SetSwatch(field, value) => match (field, value) {
+				(CharacterField::ChupriPlumageColor, SwatchValue::ChupriPlumage(color)) => {
+					menu.head.value.plumage.value = color;
+					true
+				}
+				(CharacterField::ChupriEyeColor, SwatchValue::ChupriEye(color)) => {
+					menu.head_features.value.eye_color.value = color;
+					true
+				}
+				(CharacterField::ChupriBeakColor, SwatchValue::ChupriBeak(color)) => {
 					menu.head_features.value.beak_color.value = color;
 					true
 				}

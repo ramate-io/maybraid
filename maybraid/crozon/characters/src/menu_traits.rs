@@ -18,6 +18,9 @@ use crate::{
 		},
 		brenal::{BrenalBodyMesh, BrenalHeadMesh, BrenalHornMesh, BrenalMouthMesh},
 		caole::{CaoleBodyMesh, CaoleMouthMesh},
+		chupri::{
+			ChupriBeakColor, ChupriBeakMesh, ChupriEyeColor, ChupriHeadMesh, ChupriPlumageColor,
+		},
 		hars::{HarsBodyMesh, HarsMouthMesh},
 		claber::{ClaberBodyMesh, ClaberColor, ClaberHeadMesh, ClaberHornMesh, ClaberMouthMesh},
 		croconot::{CroconotBodyMesh, CroconotHeadMesh, CroconotHornMesh, CroconotMouthMesh},
@@ -125,6 +128,11 @@ impl_menu_identity!(
 	LidderPlumageColor,
 	LidderEyeColor,
 	LidderBeakColor,
+	ChupriHeadMesh,
+	ChupriBeakMesh,
+	ChupriPlumageColor,
+	ChupriEyeColor,
+	ChupriBeakColor,
 	BrenalBodyMesh,
 	BrenalHeadMesh,
 	BrenalMouthMesh,
@@ -171,6 +179,9 @@ impl_swatch_option!(
 	LidderPlumageColor,
 	LidderEyeColor,
 	LidderBeakColor,
+	ChupriPlumageColor,
+	ChupriEyeColor,
+	ChupriBeakColor,
 	WumbusSkinColor,
 	WumbusEyeColor,
 	WumbusEarColor,
@@ -233,6 +244,8 @@ impl_asset_option!(SpibmomMouthMesh, FACE_FEATURE_THUMBNAIL_CAMERA);
 impl_asset_option!(DuiHeadMesh, HEAD_THUMBNAIL_CAMERA);
 impl_asset_option!(LidderHeadMesh, HEAD_THUMBNAIL_CAMERA);
 impl_asset_option!(LidderBeakMesh, FACE_FEATURE_THUMBNAIL_CAMERA);
+impl_asset_option!(ChupriHeadMesh, HEAD_THUMBNAIL_CAMERA);
+impl_asset_option!(ChupriBeakMesh, FACE_FEATURE_THUMBNAIL_CAMERA);
 impl_asset_option!(BrenalBodyMesh, BODY_THUMBNAIL_CAMERA);
 impl_asset_option!(BrenalHeadMesh, HEAD_THUMBNAIL_CAMERA);
 impl_asset_option!(BrenalMouthMesh, FACE_FEATURE_THUMBNAIL_CAMERA);

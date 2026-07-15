@@ -11,6 +11,7 @@ pub mod croconot;
 pub mod brodler;
 pub mod dui;
 pub mod lidder;
+pub mod chupri;
 pub mod lero;
 pub mod mygr;
 pub mod spibmom;
@@ -30,6 +31,7 @@ use clap::Parser;
 pub use dui::Dui;
 use game_commands::command::{CommandScript, GameCommand};
 pub use lidder::Lidder;
+pub use chupri::Chupri;
 pub use lero::Lero;
 pub use mygr::Mygr;
 pub use spibmom::Spibmom;
@@ -87,6 +89,9 @@ pub enum ConceptsCommand {
 	/// Spawn or adjust the Lidder concept preview.
 	#[command(subcommand)]
 	Lidder(Lidder),
+	/// Spawn or adjust the Chupri concept preview.
+	#[command(subcommand)]
+	Chupri(Chupri),
 	/// Spawn or adjust the Wumbus concept preview.
 	#[command(subcommand)]
 	Wumbus(Wumbus),
@@ -125,6 +130,7 @@ impl ConceptsCommand {
 			Self::Mygr(mygr) => mygr.react(commands),
 			Self::Dui(dui) => dui.react(commands),
 			Self::Lidder(lidder) => lidder.react(commands),
+			Self::Chupri(chupri) => chupri.react(commands),
 			Self::Wumbus(wumbus) => wumbus.react(commands),
 			Self::Lero(lero) => lero.react(commands),
 			Self::Spibmom(spibmom) => spibmom.react(commands),

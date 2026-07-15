@@ -5,6 +5,7 @@ pub mod hars;
 pub mod claber;
 pub mod croconot;
 pub mod brodler;
+pub mod chupri;
 pub mod dui;
 pub mod lero;
 pub mod lidder;

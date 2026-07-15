@@ -22,6 +22,10 @@ pub const MOUTH_FOCUS: CameraFocus =
 pub const EAR_FOCUS: CameraFocus =
 	CameraFocus::new(FocusRig::Head, "ear_socket.L", Vec3::new(0.55, 0.0, 0.3), Vec3::ZERO);
 
+/// Chupri framing — closer for the ~1ft (~0.15×) creature.
+pub const CHUPRI_BODY_FOCUS: CameraFocus =
+	CameraFocus::new(FocusRig::Body, "root", Vec3::new(-0.2, 0.2, 0.8), Vec3::new(0.3, 0.05, -0.3));
+
 /// Spibmom framing — pulled back for the 2× head rig and long neck.
 pub const SPIBMOM_BODY_FOCUS: CameraFocus =
 	CameraFocus::new(FocusRig::Body, "root", Vec3::new(-1.2, 2.0, 10.0), Vec3::new(2.0, 0.0, -2.0));

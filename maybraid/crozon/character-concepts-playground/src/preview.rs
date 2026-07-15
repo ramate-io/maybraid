@@ -20,6 +20,7 @@ use crozon_characters::{
 		common::{BodyMesh, EarMesh, EyeMesh, HairMesh, HeadMesh, MouthMesh, NoseMesh},
 		dui::{DuiConfig, DuiNoseMesh},
 		lidder::{LidderBeakMesh, LidderConfig},
+		chupri::{ChupriBeakMesh, ChupriConfig},
 		lero::{LeroConfig, LeroMouthMesh},
 		mygr::MygrConfig,
 		spibmom::SpibmomConfig,
@@ -53,6 +54,7 @@ pub enum ConceptSpecies {
 	Mygr,
 	Dui,
 	Lidder,
+	Chupri,
 	Wumbus,
 	Lero,
 	Spibmom,
@@ -72,6 +74,7 @@ pub enum ConceptPreviewConfig {
 	Mygr { config: MygrConfig, animation: ConceptAnimation },
 	Dui { config: DuiConfig, animation: ConceptAnimation },
 	Lidder { config: LidderConfig, animation: ConceptAnimation },
+	Chupri { config: ChupriConfig, animation: ConceptAnimation },
 	Wumbus { config: WumbusConfig, animation: ConceptAnimation },
 	Lero { config: LeroConfig, animation: ConceptAnimation },
 	Spibmom { config: SpibmomConfig, animation: ConceptAnimation },
@@ -98,6 +101,7 @@ impl ConceptPreviewConfig {
 			ConceptSpecies::Mygr => Self::mygr(MygrConfig::default_preview()),
 			ConceptSpecies::Dui => Self::dui(DuiConfig::default_preview()),
 			ConceptSpecies::Lidder => Self::lidder(LidderConfig::default_preview()),
+			ConceptSpecies::Chupri => Self::chupri(ChupriConfig::default_preview()),
 			ConceptSpecies::Wumbus => Self::wumbus(WumbusConfig::default_preview()),
 			ConceptSpecies::Lero => Self::lero(LeroConfig::default_preview()),
 			ConceptSpecies::Spibmom => Self::spibmom(SpibmomConfig::default_preview()),
@@ -118,6 +122,7 @@ impl ConceptPreviewConfig {
 			Self::Mygr { .. } => ConceptSpecies::Mygr,
 			Self::Dui { .. } => ConceptSpecies::Dui,
 			Self::Lidder { .. } => ConceptSpecies::Lidder,
+			Self::Chupri { .. } => ConceptSpecies::Chupri,
 			Self::Wumbus { .. } => ConceptSpecies::Wumbus,
 			Self::Lero { .. } => ConceptSpecies::Lero,
 			Self::Spibmom { .. } => ConceptSpecies::Spibmom,
@@ -221,6 +226,14 @@ impl ConceptPreviewConfig {
 		Self::Lidder { config, animation }
 	}
 
+	pub fn chupri(config: ChupriConfig) -> Self {
+		Self::Chupri { config, animation: ConceptAnimation::default() }
+	}
+
+	pub fn chupri_with_animation(config: ChupriConfig, animation: ConceptAnimation) -> Self {
+		Self::Chupri { config, animation }
+	}
+
 	pub fn wumbus(config: WumbusConfig) -> Self {
 		Self::Wumbus { config, animation: ConceptAnimation::default() }
 	}
@@ -259,6 +272,7 @@ impl ConceptPreviewConfig {
 			Self::Mygr { config, .. } => config.resolve(),
 			Self::Dui { config, .. } => config.resolve(),
 			Self::Lidder { config, .. } => config.resolve(),
+			Self::Chupri { config, .. } => config.resolve(),
 			Self::Wumbus { config, .. } => config.resolve(),
 			Self::Lero { config, .. } => config.resolve(),
 			Self::Spibmom { config, .. } => config.resolve(),
@@ -287,6 +301,9 @@ impl ConceptPreviewConfig {
 				format!("{} animation={}", config.status_label(), animation.label())
 			}
 			Self::Lidder { config, animation } => {
+				format!("{} animation={}", config.status_label(), animation.label())
+			}
+			Self::Chupri { config, animation } => {
 				format!("{} animation={}", config.status_label(), animation.label())
 			}
 			Self::Wumbus { config, animation } => {
@@ -324,6 +341,9 @@ impl ConceptPreviewConfig {
 			}
 			Self::Lidder { config, animation } => {
 				format!("species=lidder {} animation={animation:?}", config.sync_key())
+			}
+			Self::Chupri { config, animation } => {
+				format!("species=chupri {} animation={animation:?}", config.sync_key())
 			}
 			Self::Wumbus { config, animation } => {
 				format!("species=wumbus {} animation={animation:?}", config.sync_key())
@@ -414,6 +434,13 @@ impl ConceptPreviewConfig {
 				config.hair,
 				config.clothing,
 			),
+			Self::Chupri { config, .. } => format!(
+				"species=chupri beak={:?} eye={:?} hair={:?} clothing={:?}",
+				config.beak,
+				config.eye,
+				config.hair,
+				config.clothing,
+			),
 			Self::Wumbus { config, .. } => format!(
 				"species=wumbus horns={:?} eye={:?} hair={:?} clothing={:?}",
 				config.horns,
@@ -450,6 +477,7 @@ impl ConceptPreviewConfig {
 			| Self::Mygr { animation, .. }
 			| Self::Dui { animation, .. }
 			| Self::Lidder { animation, .. }
+			| Self::Chupri { animation, .. }
 			| Self::Wumbus { animation, .. }
 			| Self::Lero { animation, .. }
 			| Self::Spibmom { animation, .. } => *animation,
@@ -597,6 +625,12 @@ pub enum PreviewTarget {
 	LidderBeak(LidderBeakMesh),
 	LidderHair(HairMesh),
 	LidderClothing(ClothingMesh),
+	ChupriBody,
+	ChupriHead,
+	ChupriEye,
+	ChupriBeak(ChupriBeakMesh),
+	ChupriHair(HairMesh),
+	ChupriClothing(ClothingMesh),
 	WumbusBody,
 	WumbusHead,
 	WumbusHorns(WumbusHornMesh),
@@ -921,6 +955,11 @@ fn sync_live_preview(
 				target.color = preview_color_lidder(lidder, target.target);
 			}
 		}
+		ConceptPreviewConfig::Chupri { config: chupri, .. } => {
+			for (_, mut target, ..) in parts {
+				target.color = preview_color_chupri(chupri, target.target);
+			}
+		}
 		ConceptPreviewConfig::Wumbus { config: wumbus, .. } => {
 			for (_, mut target, ..) in parts {
 				target.color = preview_color_wumbus(wumbus, target.target);
@@ -1225,6 +1264,21 @@ fn preview_color_lidder(config: &LidderConfig, target: PreviewTarget) -> Preview
 	}
 }
 
+fn preview_color_chupri(config: &ChupriConfig, target: PreviewTarget) -> PreviewColor {
+	match target {
+		PreviewTarget::ChupriHead | PreviewTarget::ChupriBody => {
+			PreviewColor::ChupriPlumage(config.colors.plumage)
+		}
+		PreviewTarget::ChupriEye => PreviewColor::ChupriEye(config.colors.eyes),
+		PreviewTarget::ChupriBeak(_) => PreviewColor::ChupriBeak(config.colors.beak),
+		PreviewTarget::ChupriHair(_) => PreviewColor::ChupriPlumage(config.colors.plumage),
+		PreviewTarget::ChupriClothing(clothing) => {
+			PreviewColor::Item(config.colors.clothing_color(clothing))
+		}
+		_ => PreviewColor::ChupriPlumage(config.colors.plumage),
+	}
+}
+
 
 fn preview_color_wumbus(config: &WumbusConfig, target: PreviewTarget) -> PreviewColor {
 	match target {
@@ -1416,6 +1470,7 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 			ConceptPreviewConfig::Mygr { .. } => part.asset.normalization.transform(),
 			ConceptPreviewConfig::Dui { .. } => part.asset.normalization.transform(),
 			ConceptPreviewConfig::Lidder { .. } => part.asset.normalization.transform(),
+			ConceptPreviewConfig::Chupri { .. } => part.asset.normalization.transform(),
 			ConceptPreviewConfig::Wumbus { .. } => part.asset.normalization.transform(),
 			ConceptPreviewConfig::Lero { .. } => part.asset.normalization.transform(),
 			ConceptPreviewConfig::Spibmom { .. } => part.asset.normalization.transform(),
@@ -1431,12 +1486,14 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 
 	fn spawn_body_rig(&mut self) -> Entity {
 		let skeleton = RigSkeletonKind::from_body_rig_label(self.assembly.body_rig.label);
+		let transform = self.assembly.body_rig.normalization.transform();
 		if preview_debug_enabled() {
 			info!(
-				"[preview] spawning body rig label={} skeleton={:?} path={}",
+				"[preview] spawning body rig label={} skeleton={:?} path={} scale={}",
 				self.assembly.body_rig.label,
 				skeleton,
-				self.assembly.body_rig.path
+				self.assembly.body_rig.path,
+				self.assembly.body_rig.normalization.scale
 			);
 		}
 		self.commands
@@ -1449,11 +1506,11 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 				BoneMap::default(),
 				ActiveRigPose { pose: self.assembly.pose.clone() },
 				RigBindScales::default(),
-				BodyRigBindTransform(Transform::IDENTITY),
+				BodyRigBindTransform(transform),
 				ConceptPreviewRoot,
 				PreviewAwaitingReveal,
 				Visibility::Hidden,
-				Transform::IDENTITY,
+				transform,
 				Name::new(format!("{}_body_rig", self.assembly.label)),
 			))
 			.id()
@@ -1845,6 +1902,34 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 						.unwrap_or(PreviewTarget::LidderHead),
 				};
 				PreviewAssetTarget { target, color: preview_color_lidder(config, target) }
+			}
+			ConceptPreviewConfig::Chupri { config, .. } => {
+				let target = match part.slot {
+					CharacterPartSlot::BodyMesh => PreviewTarget::ChupriBody,
+					CharacterPartSlot::NeckRig | CharacterPartSlot::NeckMesh => PreviewTarget::ChupriBody,
+					CharacterPartSlot::HeadRig | CharacterPartSlot::HeadMesh => {
+						PreviewTarget::ChupriHead
+					}
+					CharacterPartSlot::EyeLeft | CharacterPartSlot::EyeRight => {
+						PreviewTarget::ChupriEye
+					}
+					CharacterPartSlot::Mouth => PreviewTarget::ChupriBeak(config.beak),
+					CharacterPartSlot::Nose
+					| CharacterPartSlot::EarLeft
+					| CharacterPartSlot::EarRight
+					| CharacterPartSlot::Horns
+					| CharacterPartSlot::Tail
+					| CharacterPartSlot::Spine => PreviewTarget::ChupriHead,
+					CharacterPartSlot::Hair => PreviewTarget::ChupriHair(config.hair),
+					CharacterPartSlot::Clothing => config
+						.clothing
+						.iter()
+						.copied()
+						.find(|clothing| clothing.label() == part.asset.label)
+						.map(PreviewTarget::ChupriClothing)
+						.unwrap_or(PreviewTarget::ChupriHead),
+				};
+				PreviewAssetTarget { target, color: preview_color_chupri(config, target) }
 			}
 			ConceptPreviewConfig::Wumbus { config, .. } => {
 				let target = match part.slot {
