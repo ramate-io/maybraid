@@ -11,10 +11,12 @@ pub use character::{CharacterMenu, ConceptSpecies, SectionOpenState};
 pub use characters::{
 	braidman::BraidmanMenu, brenal::BrenalMenu, brokker::BrokkerMenu, caole::CaoleMenu,
 	epiphant::EpiphantMenu, hars::HarsMenu, claber::ClaberMenu, croconot::CroconotMenu,
-	brodler::BrodlerMenu, chupri::ChupriMenu, dui::DuiMenu, kispar::KisparMenu, kaller::KallerMenu,
-	kappler::KapplerMenu, lero::LeroMenu, lidder::LidderMenu, mygr::MygrMenu, spibmom::SpibmomMenu,
-	sonyak::SonyakMenu, tipple::TippleMenu, topple::ToppleMenu, tapp::TappMenu,
-	tuberwaber::TuberwaberMenu, wumbus::WumbusMenu, ylter::YilterMenu,
+	brodler::BrodlerMenu, chupri::ChupriMenu, dui::DuiMenu, grener::GrenerMenu, kispar::KisparMenu,
+	kaller::KallerMenu, kappler::KapplerMenu, lero::LeroMenu, lidder::LidderMenu,
+	mistler::MistlerMenu, mygr::MygrMenu, spibmom::SpibmomMenu, sonyak::SonyakMenu,
+	thumplus::ThumplusMenu, tipple::TippleMenu, topple::ToppleMenu, tapp::TappMenu,
+	wumbus::WumbusMenu, ylter::YilterMenu,
+	tuberwaber::TuberwaberMenu,
 };
 pub use event::{AssetValue, CharacterField, MenuEvent, SectionId, SwatchValue};
 pub use focus::BODY_FOCUS;

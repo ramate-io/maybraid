@@ -96,6 +96,9 @@ fn focus_live_key(config: &ConceptPreviewConfig) -> String {
 		ConceptPreviewConfig::Wumbus { config, .. } => config.sync_key(),
 		ConceptPreviewConfig::Lero { config, .. } => config.sync_key(),
 		ConceptPreviewConfig::Spibmom { config, .. } => config.sync_key(),
+		ConceptPreviewConfig::Grener { config, .. } => config.sync_key(),
+		ConceptPreviewConfig::Thumplus { config, .. } => config.sync_key(),
+		ConceptPreviewConfig::Mistler { config, .. } => config.sync_key(),
 		ConceptPreviewConfig::Tuberwaber { config, .. } => config.sync_key(),
 	}
 }

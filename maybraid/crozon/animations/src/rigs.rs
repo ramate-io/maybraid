@@ -1,3 +1,4 @@
+pub mod forelimbed;
 pub mod humanoid;
 pub mod mix;
 pub mod quadruped;

@@ -20,6 +20,9 @@ pub mod kispar;
 pub mod tapp;
 pub mod kaller;
 pub mod kappler;
+pub mod grener;
+pub mod thumplus;
+pub mod mistler;
 pub mod lero;
 pub mod mygr;
 pub mod spibmom;
@@ -49,6 +52,9 @@ pub use kispar::Kispar;
 pub use tapp::Tapp;
 pub use kaller::Kaller;
 pub use kappler::Kappler;
+pub use grener::Grener;
+pub use thumplus::Thumplus;
+pub use mistler::Mistler;
 pub use lero::Lero;
 pub use mygr::Mygr;
 pub use spibmom::Spibmom;
@@ -143,6 +149,15 @@ pub enum ConceptsCommand {
 	/// Spawn or adjust the Spibmom concept preview.
 	#[command(subcommand)]
 	Spibmom(Spibmom),
+	/// Spawn or adjust the Grener shark concept preview.
+	#[command(subcommand)]
+	Grener(Grener),
+	/// Spawn or adjust the Thumplus whale concept preview.
+	#[command(subcommand)]
+	Thumplus(Thumplus),
+	/// Spawn or adjust the Mistler sprite-fish concept preview.
+	#[command(subcommand)]
+	Mistler(Mistler),
 	/// Spawn or adjust the Tuberwaber biped concept preview.
 	#[command(subcommand)]
 	Tuberwaber(Tuberwaber),
@@ -187,6 +202,9 @@ impl ConceptsCommand {
 			Self::Wumbus(wumbus) => wumbus.react(commands),
 			Self::Lero(lero) => lero.react(commands),
 			Self::Spibmom(spibmom) => spibmom.react(commands),
+			Self::Grener(grener) => grener.react(commands),
+			Self::Thumplus(thumplus) => thumplus.react(commands),
+			Self::Mistler(mistler) => mistler.react(commands),
 			Self::Tuberwaber(tuberwaber) => tuberwaber.react(commands),
 			Self::DumpBones => request_dump_bones(commands),
 		}
