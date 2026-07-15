@@ -1,0 +1,20 @@
+# armature object: Armature
+
+lower_mid_spine
+  lower_spine
+    tailbone
+      tail_socket
+upper_mid_spine
+  upper_spine
+    head_socket
+    shoulder.L
+      upper_arm.L
+        lower_arm.L
+    shoulder.R
+      upper_arm.R
+        lower_arm.R
+torso_thickness.L
+belly
+back_ridge
+  dorsal_socket
+torso_thickness.R
