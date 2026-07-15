@@ -206,6 +206,49 @@ fn kispar_config_round_trip() -> anyhow::Result<()> {
 	Ok(())
 }
 
+
+#[test]
+fn tapp_config_round_trip() -> anyhow::Result<()> {
+	let config = crozon_characters::species::tapp::TappConfig::default_preview();
+	let menu = crate::characters::tapp::TappMenu::from(&config);
+	let restored = crozon_characters::species::tapp::TappConfig::from(&menu);
+	assert_eq!(config.beak, restored.beak);
+	assert_eq!(config.eye, restored.eye);
+	assert_eq!(config.hair, restored.hair);
+	assert_eq!(config.colors.plumage, restored.colors.plumage);
+	assert_eq!(config.colors.eyes, restored.colors.eyes);
+	assert_eq!(config.colors.beak, restored.colors.beak);
+	Ok(())
+}
+
+#[test]
+fn kaller_config_round_trip() -> anyhow::Result<()> {
+	let config = crozon_characters::species::kaller::KallerConfig::default_preview();
+	let menu = crate::characters::kaller::KallerMenu::from(&config);
+	let restored = crozon_characters::species::kaller::KallerConfig::from(&menu);
+	assert_eq!(config.eye, restored.eye);
+	assert_eq!(config.hair, restored.hair);
+	assert_eq!(config.colors.plumage, restored.colors.plumage);
+	assert_eq!(config.colors.eyes, restored.colors.eyes);
+	assert_eq!(config.colors.snout, restored.colors.snout);
+	assert_eq!(config.colors.crown, restored.colors.crown);
+	Ok(())
+}
+
+#[test]
+fn kappler_config_round_trip() -> anyhow::Result<()> {
+	let config = crozon_characters::species::kappler::KapplerConfig::default_preview();
+	let menu = crate::characters::kappler::KapplerMenu::from(&config);
+	let restored = crozon_characters::species::kappler::KapplerConfig::from(&menu);
+	assert_eq!(config.beak, restored.beak);
+	assert_eq!(config.eye, restored.eye);
+	assert_eq!(config.hair, restored.hair);
+	assert_eq!(config.colors.plumage, restored.colors.plumage);
+	assert_eq!(config.colors.eyes, restored.colors.eyes);
+	assert_eq!(config.colors.beak, restored.colors.beak);
+	Ok(())
+}
+
 #[test]
 fn mygr_config_round_trip() -> anyhow::Result<()> {
 	let config = crozon_characters::species::mygr::MygrConfig::default_preview();
@@ -285,7 +328,7 @@ fn character_menu_lowers_to_species_select_tree() -> anyhow::Result<()> {
 		anyhow::bail!("expected a species SectionSelect at the root");
 	};
 	assert_eq!(*label, "Species");
-	assert_eq!(choices.len(), 20);
+	assert_eq!(choices.len(), 23);
 	assert!(choices[0].selected, "default species should be braidman");
 	// Braidman: presets, body, head & features, hair, clothing, animation.
 	assert_eq!(children.len(), 6);

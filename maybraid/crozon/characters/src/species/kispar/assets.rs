@@ -113,13 +113,15 @@ impl KisparAssets {
 	}
 
 	fn beak(beak: KisparBeakMesh) -> ResolvedCharacterPart {
+		// Default kite silhouette: stretch the beak forward so it reads longer.
 		ResolvedCharacterPart::new(
 			CharacterPartSlot::Mouth,
-			CharacterAsset::new(beak.label(), beak.path(), AssetNormalization::centroid(0.35)),
+			CharacterAsset::new(beak.label(), beak.path(), AssetNormalization::centroid(0.45)),
 			SkinTarget::HeadRig,
 			Some(Self::head_socket(
 				"mouth_socket",
-				Transform::from_translation(Vec3::new(0.0, 0.0, 0.1)),
+				Transform::from_translation(Vec3::new(0.0, 0.0, 0.1))
+					.with_scale(Vec3::new(0.85, 0.85, 1.65)),
 			)),
 		)
 	}

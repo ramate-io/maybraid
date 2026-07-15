@@ -113,7 +113,11 @@ pub fn default_focus_target(config: &ConceptPreviewConfig) -> CameraFocus {
 		crate::preview::ConceptSpecies::Spibmom => SPIBMOM_BODY_FOCUS,
 		crate::preview::ConceptSpecies::Chupri => CHUPRI_BODY_FOCUS,
 		crate::preview::ConceptSpecies::Tipple => TIPPLE_BODY_FOCUS,
-		crate::preview::ConceptSpecies::Topple | crate::preview::ConceptSpecies::Kispar => {
+		crate::preview::ConceptSpecies::Topple
+		| crate::preview::ConceptSpecies::Kispar
+		| crate::preview::ConceptSpecies::Tapp
+		| crate::preview::ConceptSpecies::Kaller
+		| crate::preview::ConceptSpecies::Kappler => {
 			SMALL_BIRD_BODY_FOCUS
 		}
 		_ => BODY_FOCUS,

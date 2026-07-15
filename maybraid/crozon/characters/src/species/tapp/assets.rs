@@ -1,4 +1,4 @@
-//! Topple asset catalog and assembly resolver.
+//! Tapp asset catalog and assembly resolver.
 
 use bevy::prelude::*;
 use clap::ValueEnum;
@@ -14,9 +14,9 @@ use crate::{
 			assets::{BODY_RIG, HEAD_RIG, HEAD_STANDARD},
 			HairMesh,
 		},
-		topple::{
-			pose::{TopplePose, TOPPLE_OVERALL_SCALE},
-			ToppleConfig,
+		tapp::{
+			pose::{TappPose, TAPP_OVERALL_SCALE},
+			TappConfig,
 		},
 	},
 };
@@ -26,19 +26,19 @@ const BEAK: AssetPath = AssetPath::new("characters/snouts/beak.glb");
 const HOOK_BEAK: AssetPath = AssetPath::new("characters/snouts/hook_beak.glb");
 const SHARP_BEAK: AssetPath = AssetPath::new("characters/snouts/sharp_beak.glb");
 
-/// Cartoonishly large head relative to the ~2 ft whelp body.
+/// Cartoonishly large head relative to the ~2 ft whelp body (same as Topple).
 const HEAD_RIG_SOCKET_SCALE: f32 = 1.85;
 
-/// Species-local resolver for Topple asset choices.
-pub struct ToppleAssets;
+/// Species-local resolver for Tapp asset choices.
+pub struct TappAssets;
 
-impl ToppleAssets {
-	pub fn resolve(config: &ToppleConfig) -> ResolvedCharacterAssembly {
+impl TappAssets {
+	pub fn resolve(config: &TappConfig) -> ResolvedCharacterAssembly {
 		let assembly = ResolvedCharacterAssembly::new(
-			"Topple",
+			"Tapp",
 			RigAsset::new("Humanoid", BODY_RIG)
-				.with_normalization(AssetNormalization::centroid(TOPPLE_OVERALL_SCALE)),
-			TopplePose.resolve(),
+				.with_normalization(AssetNormalization::centroid(TAPP_OVERALL_SCALE)),
+			TappPose.resolve(),
 		)
 		.with_part(Self::body_mesh())
 		.with_part(Self::head_rig())
@@ -82,7 +82,7 @@ impl ToppleAssets {
 		ResolvedCharacterPart::new(
 			CharacterPartSlot::HeadMesh,
 			CharacterAsset::new(
-				ToppleHeadMesh::Meerkat.label(),
+				TappHeadMesh::Meerkat.label(),
 				HEAD_STANDARD,
 				AssetNormalization::IDENTITY,
 			),
@@ -115,14 +115,16 @@ impl ToppleAssets {
 		)
 	}
 
-	fn beak(beak: ToppleBeakMesh) -> ResolvedCharacterPart {
+	fn beak(beak: TappBeakMesh) -> ResolvedCharacterPart {
+		// Long beak silhouette (Kispar-style forward stretch, slightly longer).
 		ResolvedCharacterPart::new(
 			CharacterPartSlot::Mouth,
-			CharacterAsset::new(beak.label(), beak.path(), AssetNormalization::centroid(0.35)),
+			CharacterAsset::new(beak.label(), beak.path(), AssetNormalization::centroid(0.5)),
 			SkinTarget::HeadRig,
 			Some(Self::head_socket(
 				"mouth_socket",
-				Transform::from_translation(Vec3::new(0.0, 0.0, 0.1)),
+				Transform::from_translation(Vec3::new(0.0, 0.0, 0.1))
+					.with_scale(Vec3::new(0.8, 0.8, 1.8)),
 			)),
 		)
 	}
@@ -154,12 +156,12 @@ impl ToppleAssets {
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, ValueEnum)]
-pub enum ToppleHeadMesh {
+pub enum TappHeadMesh {
 	#[default]
 	Meerkat,
 }
 
-impl ToppleHeadMesh {
+impl TappHeadMesh {
 	pub const VALUES: &'static [Self] = &[Self::Meerkat];
 
 	pub const fn label(self) -> &'static str {
@@ -172,14 +174,14 @@ impl ToppleHeadMesh {
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, ValueEnum)]
-pub enum ToppleBeakMesh {
-	#[default]
+pub enum TappBeakMesh {
 	Beak,
 	Hook,
+	#[default]
 	Sharp,
 }
 
-impl ToppleBeakMesh {
+impl TappBeakMesh {
 	pub const VALUES: &'static [Self] = &[Self::Beak, Self::Hook, Self::Sharp];
 
 	pub const fn label(self) -> &'static str {

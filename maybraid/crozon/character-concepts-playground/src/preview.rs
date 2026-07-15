@@ -25,6 +25,9 @@ use crozon_characters::{
 		tipple::{TippleBeakMesh, TippleConfig},
 		topple::{ToppleBeakMesh, ToppleConfig},
 		kispar::{KisparBeakMesh, KisparConfig},
+		tapp::{TappBeakMesh, TappConfig},
+		kaller::{KallerConfig, KallerSnoutMesh},
+		kappler::{KapplerBeakMesh, KapplerConfig},
 		lero::{LeroConfig, LeroMouthMesh},
 		mygr::MygrConfig,
 		spibmom::SpibmomConfig,
@@ -63,6 +66,9 @@ pub enum ConceptSpecies {
 	Tipple,
 	Topple,
 	Kispar,
+	Tapp,
+	Kaller,
+	Kappler,
 	Wumbus,
 	Lero,
 	Spibmom,
@@ -87,6 +93,9 @@ pub enum ConceptPreviewConfig {
 	Tipple { config: TippleConfig, animation: ConceptAnimation },
 	Topple { config: ToppleConfig, animation: ConceptAnimation },
 	Kispar { config: KisparConfig, animation: ConceptAnimation },
+	Tapp { config: TappConfig, animation: ConceptAnimation },
+	Kaller { config: KallerConfig, animation: ConceptAnimation },
+	Kappler { config: KapplerConfig, animation: ConceptAnimation },
 	Wumbus { config: WumbusConfig, animation: ConceptAnimation },
 	Lero { config: LeroConfig, animation: ConceptAnimation },
 	Spibmom { config: SpibmomConfig, animation: ConceptAnimation },
@@ -118,6 +127,9 @@ impl ConceptPreviewConfig {
 			ConceptSpecies::Tipple => Self::tipple(TippleConfig::default_preview()),
 			ConceptSpecies::Topple => Self::topple(ToppleConfig::default_preview()),
 			ConceptSpecies::Kispar => Self::kispar(KisparConfig::default_preview()),
+			ConceptSpecies::Tapp => Self::tapp(TappConfig::default_preview()),
+			ConceptSpecies::Kaller => Self::kaller(KallerConfig::default_preview()),
+			ConceptSpecies::Kappler => Self::kappler(KapplerConfig::default_preview()),
 			ConceptSpecies::Wumbus => Self::wumbus(WumbusConfig::default_preview()),
 			ConceptSpecies::Lero => Self::lero(LeroConfig::default_preview()),
 			ConceptSpecies::Spibmom => Self::spibmom(SpibmomConfig::default_preview()),
@@ -143,6 +155,9 @@ impl ConceptPreviewConfig {
 			Self::Tipple { .. } => ConceptSpecies::Tipple,
 			Self::Topple { .. } => ConceptSpecies::Topple,
 			Self::Kispar { .. } => ConceptSpecies::Kispar,
+			Self::Tapp { .. } => ConceptSpecies::Tapp,
+			Self::Kaller { .. } => ConceptSpecies::Kaller,
+			Self::Kappler { .. } => ConceptSpecies::Kappler,
 			Self::Wumbus { .. } => ConceptSpecies::Wumbus,
 			Self::Lero { .. } => ConceptSpecies::Lero,
 			Self::Spibmom { .. } => ConceptSpecies::Spibmom,
@@ -286,6 +301,30 @@ impl ConceptPreviewConfig {
 		Self::Kispar { config, animation }
 	}
 
+	pub fn tapp(config: TappConfig) -> Self {
+		Self::Tapp { config, animation: ConceptAnimation::default() }
+	}
+
+	pub fn tapp_with_animation(config: TappConfig, animation: ConceptAnimation) -> Self {
+		Self::Tapp { config, animation }
+	}
+
+	pub fn kaller(config: KallerConfig) -> Self {
+		Self::Kaller { config, animation: ConceptAnimation::default() }
+	}
+
+	pub fn kaller_with_animation(config: KallerConfig, animation: ConceptAnimation) -> Self {
+		Self::Kaller { config, animation }
+	}
+
+	pub fn kappler(config: KapplerConfig) -> Self {
+		Self::Kappler { config, animation: ConceptAnimation::default() }
+	}
+
+	pub fn kappler_with_animation(config: KapplerConfig, animation: ConceptAnimation) -> Self {
+		Self::Kappler { config, animation }
+	}
+
 	pub fn wumbus(config: WumbusConfig) -> Self {
 		Self::Wumbus { config, animation: ConceptAnimation::default() }
 	}
@@ -329,6 +368,9 @@ impl ConceptPreviewConfig {
 			Self::Tipple { config, .. } => config.resolve(),
 			Self::Topple { config, .. } => config.resolve(),
 			Self::Kispar { config, .. } => config.resolve(),
+			Self::Tapp { config, .. } => config.resolve(),
+			Self::Kaller { config, .. } => config.resolve(),
+			Self::Kappler { config, .. } => config.resolve(),
 			Self::Wumbus { config, .. } => config.resolve(),
 			Self::Lero { config, .. } => config.resolve(),
 			Self::Spibmom { config, .. } => config.resolve(),
@@ -372,6 +414,15 @@ impl ConceptPreviewConfig {
 				format!("{} animation={}", config.status_label(), animation.label())
 			}
 			Self::Kispar { config, animation } => {
+				format!("{} animation={}", config.status_label(), animation.label())
+			}
+			Self::Tapp { config, animation } => {
+				format!("{} animation={}", config.status_label(), animation.label())
+			}
+			Self::Kaller { config, animation } => {
+				format!("{} animation={}", config.status_label(), animation.label())
+			}
+			Self::Kappler { config, animation } => {
 				format!("{} animation={}", config.status_label(), animation.label())
 			}
 			Self::Wumbus { config, animation } => {
@@ -424,6 +475,15 @@ impl ConceptPreviewConfig {
 			}
 			Self::Kispar { config, animation } => {
 				format!("species=kispar {} animation={animation:?}", config.sync_key())
+			}
+			Self::Tapp { config, animation } => {
+				format!("species=tapp {} animation={animation:?}", config.sync_key())
+			}
+			Self::Kaller { config, animation } => {
+				format!("species=kaller {} animation={animation:?}", config.sync_key())
+			}
+			Self::Kappler { config, animation } => {
+				format!("species=kappler {} animation={animation:?}", config.sync_key())
 			}
 			Self::Wumbus { config, animation } => {
 				format!("species=wumbus {} animation={animation:?}", config.sync_key())
@@ -548,6 +608,26 @@ impl ConceptPreviewConfig {
 				config.hair,
 				config.clothing,
 			),
+			Self::Tapp { config, .. } => format!(
+				"species=tapp beak={:?} eye={:?} hair={:?} clothing={:?}",
+				config.beak,
+				config.eye,
+				config.hair,
+				config.clothing,
+			),
+			Self::Kaller { config, .. } => format!(
+				"species=kaller eye={:?} hair={:?} clothing={:?}",
+				config.eye,
+				config.hair,
+				config.clothing,
+			),
+			Self::Kappler { config, .. } => format!(
+				"species=kappler beak={:?} eye={:?} hair={:?} clothing={:?}",
+				config.beak,
+				config.eye,
+				config.hair,
+				config.clothing,
+			),
 			Self::Wumbus { config, .. } => format!(
 				"species=wumbus horns={:?} eye={:?} hair={:?} clothing={:?}",
 				config.horns,
@@ -589,6 +669,9 @@ impl ConceptPreviewConfig {
 			| Self::Tipple { animation, .. }
 			| Self::Topple { animation, .. }
 			| Self::Kispar { animation, .. }
+			| Self::Tapp { animation, .. }
+			| Self::Kaller { animation, .. }
+			| Self::Kappler { animation, .. }
 			| Self::Wumbus { animation, .. }
 			| Self::Lero { animation, .. }
 			| Self::Spibmom { animation, .. } => *animation,
@@ -766,6 +849,25 @@ pub enum PreviewTarget {
 	KisparBeak(KisparBeakMesh),
 	KisparHair(HairMesh),
 	KisparClothing(ClothingMesh),
+	TappBody,
+	TappHead,
+	TappEye,
+	TappBeak(TappBeakMesh),
+	TappHair(HairMesh),
+	TappClothing(ClothingMesh),
+	KallerBody,
+	KallerHead,
+	KallerEye,
+	KallerSnout(KallerSnoutMesh),
+	KallerCrown,
+	KallerHair(HairMesh),
+	KallerClothing(ClothingMesh),
+	KapplerBody,
+	KapplerHead,
+	KapplerEye,
+	KapplerBeak(KapplerBeakMesh),
+	KapplerHair(HairMesh),
+	KapplerClothing(ClothingMesh),
 	WumbusBody,
 	WumbusHead,
 	WumbusHorns(WumbusHornMesh),
@@ -1113,6 +1215,21 @@ fn sync_live_preview(
 		ConceptPreviewConfig::Kispar { config: kispar, .. } => {
 			for (_, mut target, ..) in parts {
 				target.color = preview_color_kispar(kispar, target.target);
+			}
+		}
+		ConceptPreviewConfig::Tapp { config: tapp, .. } => {
+			for (_, mut target, ..) in parts {
+				target.color = preview_color_tapp(tapp, target.target);
+			}
+		}
+		ConceptPreviewConfig::Kaller { config: kaller, .. } => {
+			for (_, mut target, ..) in parts {
+				target.color = preview_color_kaller(kaller, target.target);
+			}
+		}
+		ConceptPreviewConfig::Kappler { config: kappler, .. } => {
+			for (_, mut target, ..) in parts {
+				target.color = preview_color_kappler(kappler, target.target);
 			}
 		}
 		ConceptPreviewConfig::Wumbus { config: wumbus, .. } => {
@@ -1494,6 +1611,52 @@ fn preview_color_kispar(config: &KisparConfig, target: PreviewTarget) -> Preview
 	}
 }
 
+fn preview_color_tapp(config: &TappConfig, target: PreviewTarget) -> PreviewColor {
+	match target {
+		PreviewTarget::TappHead | PreviewTarget::TappBody => {
+			PreviewColor::TappPlumage(config.colors.plumage)
+		}
+		PreviewTarget::TappEye => PreviewColor::TappEye(config.colors.eyes),
+		PreviewTarget::TappBeak(_) => PreviewColor::TappBeak(config.colors.beak),
+		PreviewTarget::TappHair(_) => PreviewColor::TappPlumage(config.colors.plumage),
+		PreviewTarget::TappClothing(clothing) => {
+			PreviewColor::Item(config.colors.clothing_color(clothing))
+		}
+		_ => PreviewColor::TappPlumage(config.colors.plumage),
+	}
+}
+
+fn preview_color_kaller(config: &KallerConfig, target: PreviewTarget) -> PreviewColor {
+	match target {
+		PreviewTarget::KallerHead | PreviewTarget::KallerBody => {
+			PreviewColor::KallerPlumage(config.colors.plumage)
+		}
+		PreviewTarget::KallerEye => PreviewColor::KallerEye(config.colors.eyes),
+		PreviewTarget::KallerSnout(_) => PreviewColor::KallerSnout(config.colors.snout),
+		PreviewTarget::KallerCrown => PreviewColor::KallerCrown(config.colors.crown),
+		PreviewTarget::KallerHair(_) => PreviewColor::KallerPlumage(config.colors.plumage),
+		PreviewTarget::KallerClothing(clothing) => {
+			PreviewColor::Item(config.colors.clothing_color(clothing))
+		}
+		_ => PreviewColor::KallerPlumage(config.colors.plumage),
+	}
+}
+
+fn preview_color_kappler(config: &KapplerConfig, target: PreviewTarget) -> PreviewColor {
+	match target {
+		PreviewTarget::KapplerHead | PreviewTarget::KapplerBody => {
+			PreviewColor::KapplerPlumage(config.colors.plumage)
+		}
+		PreviewTarget::KapplerEye => PreviewColor::KapplerEye(config.colors.eyes),
+		PreviewTarget::KapplerBeak(_) => PreviewColor::KapplerBeak(config.colors.beak),
+		PreviewTarget::KapplerHair(_) => PreviewColor::KapplerPlumage(config.colors.plumage),
+		PreviewTarget::KapplerClothing(clothing) => {
+			PreviewColor::Item(config.colors.clothing_color(clothing))
+		}
+		_ => PreviewColor::KapplerPlumage(config.colors.plumage),
+	}
+}
+
 fn preview_color_wumbus(config: &WumbusConfig, target: PreviewTarget) -> PreviewColor {
 	match target {
 		PreviewTarget::WumbusHead | PreviewTarget::WumbusBody => {
@@ -1689,6 +1852,9 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 			ConceptPreviewConfig::Tipple { .. } => part.asset.normalization.transform(),
 			ConceptPreviewConfig::Topple { .. } => part.asset.normalization.transform(),
 			ConceptPreviewConfig::Kispar { .. } => part.asset.normalization.transform(),
+			ConceptPreviewConfig::Tapp { .. } => part.asset.normalization.transform(),
+			ConceptPreviewConfig::Kaller { .. } => part.asset.normalization.transform(),
+			ConceptPreviewConfig::Kappler { .. } => part.asset.normalization.transform(),
 			ConceptPreviewConfig::Wumbus { .. } => part.asset.normalization.transform(),
 			ConceptPreviewConfig::Lero { .. } => part.asset.normalization.transform(),
 			ConceptPreviewConfig::Spibmom { .. } => part.asset.normalization.transform(),
@@ -2263,6 +2429,90 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 						.unwrap_or(PreviewTarget::KisparHead),
 				};
 				PreviewAssetTarget { target, color: preview_color_kispar(config, target) }
+			}
+			ConceptPreviewConfig::Tapp { config, .. } => {
+				let target = match part.slot {
+					CharacterPartSlot::BodyMesh => PreviewTarget::TappBody,
+					CharacterPartSlot::NeckRig | CharacterPartSlot::NeckMesh => PreviewTarget::TappBody,
+					CharacterPartSlot::HeadRig | CharacterPartSlot::HeadMesh => {
+						PreviewTarget::TappHead
+					}
+					CharacterPartSlot::EyeLeft | CharacterPartSlot::EyeRight => {
+						PreviewTarget::TappEye
+					}
+					CharacterPartSlot::Mouth => PreviewTarget::TappBeak(config.beak),
+					CharacterPartSlot::Nose
+					| CharacterPartSlot::EarLeft
+					| CharacterPartSlot::EarRight
+					| CharacterPartSlot::Horns
+					| CharacterPartSlot::Tail
+					| CharacterPartSlot::Spine => PreviewTarget::TappHead,
+					CharacterPartSlot::Hair => PreviewTarget::TappHair(config.hair),
+					CharacterPartSlot::Clothing => config
+						.clothing
+						.iter()
+						.copied()
+						.find(|clothing| clothing.label() == part.asset.label)
+						.map(PreviewTarget::TappClothing)
+						.unwrap_or(PreviewTarget::TappHead),
+				};
+				PreviewAssetTarget { target, color: preview_color_tapp(config, target) }
+			}
+			ConceptPreviewConfig::Kaller { config, .. } => {
+				let target = match part.slot {
+					CharacterPartSlot::BodyMesh => PreviewTarget::KallerBody,
+					CharacterPartSlot::NeckRig | CharacterPartSlot::NeckMesh => PreviewTarget::KallerBody,
+					CharacterPartSlot::HeadRig | CharacterPartSlot::HeadMesh => {
+						PreviewTarget::KallerHead
+					}
+					CharacterPartSlot::EyeLeft | CharacterPartSlot::EyeRight => {
+						PreviewTarget::KallerEye
+					}
+					CharacterPartSlot::Mouth => PreviewTarget::KallerSnout(KallerSnoutMesh::Robrek),
+					CharacterPartSlot::Horns => PreviewTarget::KallerCrown,
+					CharacterPartSlot::Nose
+					| CharacterPartSlot::EarLeft
+					| CharacterPartSlot::EarRight
+					| CharacterPartSlot::Tail
+					| CharacterPartSlot::Spine => PreviewTarget::KallerHead,
+					CharacterPartSlot::Hair => PreviewTarget::KallerHair(config.hair),
+					CharacterPartSlot::Clothing => config
+						.clothing
+						.iter()
+						.copied()
+						.find(|clothing| clothing.label() == part.asset.label)
+						.map(PreviewTarget::KallerClothing)
+						.unwrap_or(PreviewTarget::KallerHead),
+				};
+				PreviewAssetTarget { target, color: preview_color_kaller(config, target) }
+			}
+			ConceptPreviewConfig::Kappler { config, .. } => {
+				let target = match part.slot {
+					CharacterPartSlot::BodyMesh => PreviewTarget::KapplerBody,
+					CharacterPartSlot::NeckRig | CharacterPartSlot::NeckMesh => PreviewTarget::KapplerBody,
+					CharacterPartSlot::HeadRig | CharacterPartSlot::HeadMesh => {
+						PreviewTarget::KapplerHead
+					}
+					CharacterPartSlot::EyeLeft | CharacterPartSlot::EyeRight => {
+						PreviewTarget::KapplerEye
+					}
+					CharacterPartSlot::Mouth => PreviewTarget::KapplerBeak(config.beak),
+					CharacterPartSlot::Nose
+					| CharacterPartSlot::EarLeft
+					| CharacterPartSlot::EarRight
+					| CharacterPartSlot::Horns
+					| CharacterPartSlot::Tail
+					| CharacterPartSlot::Spine => PreviewTarget::KapplerHead,
+					CharacterPartSlot::Hair => PreviewTarget::KapplerHair(config.hair),
+					CharacterPartSlot::Clothing => config
+						.clothing
+						.iter()
+						.copied()
+						.find(|clothing| clothing.label() == part.asset.label)
+						.map(PreviewTarget::KapplerClothing)
+						.unwrap_or(PreviewTarget::KapplerHead),
+				};
+				PreviewAssetTarget { target, color: preview_color_kappler(config, target) }
 			}
 			ConceptPreviewConfig::Wumbus { config, .. } => {
 				let target = match part.slot {

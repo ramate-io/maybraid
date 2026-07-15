@@ -1,8 +1,8 @@
-//! Topple species definition.
+//! Kaller species definition.
 //!
-//! Softer, taller Tipple sibling (~2 ft): whelp body, cartoonishly large meerkat
-//! head, selectable beak, pastel plumage. Overall size via body-rig asset
-//! normalization (~0.30×).
+//! Kispar-scale (~2 ft) sparrow body with meerkat head, fixed robrek snout, and
+//! a fixed harrowed crown. Reptilian olive/moss palette. Overall size via
+//! body-rig asset normalization (~0.30×).
 
 pub mod assets;
 pub mod bsn;
@@ -19,27 +19,29 @@ use crate::{
 
 use crozon_character_items::{ClothingColor, ClothingMesh, ItemColor};
 
-use assets::ToppleAssets;
+use assets::KallerAssets;
 
-pub use assets::{ToppleBeakMesh, ToppleHeadMesh};
-pub use palette::{ToppleBeakColor, ToppleEyeColor, TopplePlumageColor};
+pub use assets::{KallerHeadMesh, KallerHornMesh, KallerSnoutMesh};
+pub use palette::{KallerCrownColor, KallerEyeColor, KallerPlumageColor, KallerSnoutColor};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ToppleColors {
-	pub plumage: TopplePlumageColor,
-	pub eyes: ToppleEyeColor,
-	pub beak: ToppleBeakColor,
+pub struct KallerColors {
+	pub plumage: KallerPlumageColor,
+	pub eyes: KallerEyeColor,
+	pub snout: KallerSnoutColor,
+	pub crown: KallerCrownColor,
 	pub hair: ItemColor,
 	pub clothing_default: ItemColor,
 	pub clothing: Vec<ClothingColor>,
 }
 
-impl Default for ToppleColors {
+impl Default for KallerColors {
 	fn default() -> Self {
 		Self {
-			plumage: TopplePlumageColor::Cream,
-			eyes: ToppleEyeColor::SoftAmber,
-			beak: ToppleBeakColor::Peach,
+			plumage: KallerPlumageColor::Olive,
+			eyes: KallerEyeColor::Amber,
+			snout: KallerSnoutColor::Horn,
+			crown: KallerCrownColor::Charcoal,
 			hair: ItemColor::Dark,
 			clothing_default: ItemColor::Cool,
 			clothing: Vec::new(),
@@ -47,7 +49,7 @@ impl Default for ToppleColors {
 	}
 }
 
-impl ToppleColors {
+impl KallerColors {
 	pub fn clothing_color(&self, clothing: ClothingMesh) -> ItemColor {
 		ClothingColor::resolve(&self.clothing, self.clothing_default, clothing)
 	}
@@ -58,28 +60,26 @@ impl ToppleColors {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ToppleConfig {
-	pub beak: ToppleBeakMesh,
+pub struct KallerConfig {
 	pub eye: EyeMesh,
 	pub hair: HairMesh,
 	pub clothing: Vec<ClothingMesh>,
-	pub colors: ToppleColors,
+	pub colors: KallerColors,
 }
 
-impl Default for ToppleConfig {
+impl Default for KallerConfig {
 	fn default() -> Self {
 		Self::default_preview()
 	}
 }
 
-impl ToppleConfig {
+impl KallerConfig {
 	pub fn default_preview() -> Self {
 		Self {
-			beak: ToppleBeakMesh::Beak,
 			eye: EyeMesh::Falcon,
-			hair: HairMesh::FeatherHawk,
+			hair: HairMesh::None,
 			clothing: Vec::new(),
-			colors: ToppleColors::default(),
+			colors: KallerColors::default(),
 		}
 	}
 
@@ -94,14 +94,14 @@ impl ToppleConfig {
 				.join(",")
 		};
 		format!(
-			"topple beak={} eye={} hair={} clothing={} plumage={} eyes={} beak_color={}",
-			self.beak.label(),
+			"kaller eye={} hair={} clothing={} plumage={} eyes={} snout_color={} crown_color={}",
 			self.eye.label(),
 			self.hair.label(),
 			clothing,
 			self.colors.plumage.label(),
 			self.colors.eyes.label(),
-			self.colors.beak.label(),
+			self.colors.snout.label(),
+			self.colors.crown.label(),
 		)
 	}
 
@@ -110,12 +110,12 @@ impl ToppleConfig {
 	}
 }
 
-impl SpeciesConfig for ToppleConfig {
+impl SpeciesConfig for KallerConfig {
 	fn species_name(&self) -> &'static str {
-		"topple"
+		"kaller"
 	}
 
 	fn resolve(&self) -> ResolvedCharacterAssembly {
-		ToppleAssets::resolve(self)
+		KallerAssets::resolve(self)
 	}
 }

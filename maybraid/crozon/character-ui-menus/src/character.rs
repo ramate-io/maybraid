@@ -4,7 +4,7 @@ use character_ui_menu::{
 use crozon_characters::{
 	species::{
 		braidman::BraidmanConfig, brenal::BrenalConfig, caole::CaoleConfig, hars::HarsConfig, claber::ClaberConfig, croconot::CroconotConfig, brodler::BrodlerConfig, dui::DuiConfig,
-		brokker::BrokkerConfig, chupri::ChupriConfig, kispar::KisparConfig, lidder::LidderConfig, lero::LeroConfig, mygr::MygrConfig, spibmom::SpibmomConfig, sonyak::SonyakConfig, tipple::TippleConfig, topple::ToppleConfig, wumbus::WumbusConfig, ylter::YilterConfig,
+		brokker::BrokkerConfig, chupri::ChupriConfig, kispar::KisparConfig, kaller::KallerConfig, kappler::KapplerConfig, lidder::LidderConfig, lero::LeroConfig, mygr::MygrConfig, spibmom::SpibmomConfig, sonyak::SonyakConfig, tipple::TippleConfig, topple::ToppleConfig, tapp::TappConfig, wumbus::WumbusConfig, ylter::YilterConfig,
 	},
 	ConceptAnimation,
 };
@@ -22,9 +22,12 @@ use crate::{
 		brokker::BrokkerMenu,
 		chupri::ChupriMenu,
 		kispar::KisparMenu,
+		kaller::KallerMenu,
+		kappler::KapplerMenu,
 		lidder::LidderMenu,
 		tipple::TippleMenu,
 		topple::ToppleMenu,
+		tapp::TappMenu,
 		lero::LeroMenu,
 		mygr::MygrMenu,
 		spibmom::SpibmomMenu,
@@ -55,6 +58,9 @@ pub enum ConceptSpecies {
 	Tipple,
 	Topple,
 	Kispar,
+	Tapp,
+	Kaller,
+	Kappler,
 	Wumbus,
 	Lero,
 	Spibmom,
@@ -80,6 +86,9 @@ impl ConceptSpecies {
 			Self::Tipple => "tipple",
 			Self::Topple => "topple",
 			Self::Kispar => "kispar",
+			Self::Tapp => "tapp",
+			Self::Kaller => "kaller",
+			Self::Kappler => "kappler",
 			Self::Wumbus => "wumbus",
 			Self::Lero => "lero",
 			Self::Spibmom => "spibmom",
@@ -107,6 +116,9 @@ impl ListValues for ConceptSpecies {
 			Self::Tipple,
 			Self::Topple,
 			Self::Kispar,
+			Self::Tapp,
+			Self::Kaller,
+			Self::Kappler,
 			Self::Wumbus,
 			Self::Lero,
 			Self::Spibmom,
@@ -134,6 +146,9 @@ impl LabelOption for ConceptSpecies {
 			Self::Tipple => "tipple",
 			Self::Topple => "topple",
 			Self::Kispar => "kispar",
+			Self::Tapp => "tapp",
+			Self::Kaller => "kaller",
+			Self::Kappler => "kappler",
 			Self::Wumbus => "wumbus",
 			Self::Lero => "lero",
 			Self::Spibmom => "spibmom",
@@ -161,6 +176,9 @@ pub struct CharacterMenu {
 	pub tipple: TippleMenu,
 	pub topple: ToppleMenu,
 	pub kispar: KisparMenu,
+	pub tapp: TappMenu,
+	pub kaller: KallerMenu,
+	pub kappler: KapplerMenu,
 	pub wumbus: WumbusMenu,
 	pub lero: LeroMenu,
 	pub spibmom: SpibmomMenu,
@@ -187,6 +205,9 @@ impl CharacterMenu {
 			tipple: TippleMenu::default(),
 			topple: ToppleMenu::default(),
 			kispar: KisparMenu::default(),
+			tapp: TappMenu::default(),
+			kaller: KallerMenu::default(),
+			kappler: KapplerMenu::default(),
 			wumbus: WumbusMenu::default(),
 			lero: LeroMenu::default(),
 			spibmom: SpibmomMenu::default(),
@@ -213,6 +234,9 @@ impl CharacterMenu {
 			tipple: TippleMenu::default(),
 			topple: ToppleMenu::default(),
 			kispar: KisparMenu::default(),
+			tapp: TappMenu::default(),
+			kaller: KallerMenu::default(),
+			kappler: KapplerMenu::default(),
 			wumbus: WumbusMenu::default(),
 			lero: LeroMenu::default(),
 			spibmom: SpibmomMenu::default(),
@@ -239,6 +263,9 @@ impl CharacterMenu {
 			tipple: TippleMenu::default(),
 			topple: ToppleMenu::default(),
 			kispar: KisparMenu::default(),
+			tapp: TappMenu::default(),
+			kaller: KallerMenu::default(),
+			kappler: KapplerMenu::default(),
 			wumbus: WumbusMenu::default(),
 			lero: LeroMenu::default(),
 			spibmom: SpibmomMenu::default(),
@@ -265,6 +292,9 @@ impl CharacterMenu {
 			tipple: TippleMenu::default(),
 			topple: ToppleMenu::default(),
 			kispar: KisparMenu::default(),
+			tapp: TappMenu::default(),
+			kaller: KallerMenu::default(),
+			kappler: KapplerMenu::default(),
 			wumbus: WumbusMenu::default(),
 			lero: LeroMenu::default(),
 			spibmom: SpibmomMenu::default(),
@@ -291,6 +321,9 @@ impl CharacterMenu {
 			tipple: TippleMenu::default(),
 			topple: ToppleMenu::default(),
 			kispar: KisparMenu::default(),
+			tapp: TappMenu::default(),
+			kaller: KallerMenu::default(),
+			kappler: KapplerMenu::default(),
 			wumbus: WumbusMenu::default(),
 			lero: LeroMenu::default(),
 			spibmom: SpibmomMenu::default(),
@@ -317,6 +350,9 @@ impl CharacterMenu {
 			tipple: TippleMenu::default(),
 			topple: ToppleMenu::default(),
 			kispar: KisparMenu::default(),
+			tapp: TappMenu::default(),
+			kaller: KallerMenu::default(),
+			kappler: KapplerMenu::default(),
 			wumbus: WumbusMenu::default(),
 			lero: LeroMenu::default(),
 			spibmom: SpibmomMenu::default(),
@@ -344,6 +380,9 @@ impl CharacterMenu {
 			tipple: TippleMenu::default(),
 			topple: ToppleMenu::default(),
 			kispar: KisparMenu::default(),
+			tapp: TappMenu::default(),
+			kaller: KallerMenu::default(),
+			kappler: KapplerMenu::default(),
 			wumbus: WumbusMenu::default(),
 			lero: LeroMenu::default(),
 			spibmom: SpibmomMenu::default(),
@@ -370,6 +409,9 @@ impl CharacterMenu {
 			tipple: TippleMenu::default(),
 			topple: ToppleMenu::default(),
 			kispar: KisparMenu::default(),
+			tapp: TappMenu::default(),
+			kaller: KallerMenu::default(),
+			kappler: KapplerMenu::default(),
 			wumbus: WumbusMenu::default(),
 			lero: LeroMenu::default(),
 			spibmom: SpibmomMenu::default(),
@@ -396,6 +438,9 @@ impl CharacterMenu {
 			tipple: TippleMenu::default(),
 			topple: ToppleMenu::default(),
 			kispar: KisparMenu::default(),
+			tapp: TappMenu::default(),
+			kaller: KallerMenu::default(),
+			kappler: KapplerMenu::default(),
 			wumbus: WumbusMenu::default(),
 			lero: LeroMenu::default(),
 			spibmom: SpibmomMenu::default(),
@@ -422,6 +467,9 @@ impl CharacterMenu {
 			tipple: TippleMenu::default(),
 			topple: ToppleMenu::default(),
 			kispar: KisparMenu::default(),
+			tapp: TappMenu::default(),
+			kaller: KallerMenu::default(),
+			kappler: KapplerMenu::default(),
 			wumbus: WumbusMenu::default(),
 			lero: LeroMenu::default(),
 			spibmom: SpibmomMenu::default(),
@@ -448,6 +496,9 @@ impl CharacterMenu {
 			tipple: TippleMenu::default(),
 			topple: ToppleMenu::default(),
 			kispar: KisparMenu::default(),
+			tapp: TappMenu::default(),
+			kaller: KallerMenu::default(),
+			kappler: KapplerMenu::default(),
 			wumbus: WumbusMenu::default(),
 			lero: LeroMenu::default(),
 			spibmom: SpibmomMenu::default(),
@@ -475,6 +526,9 @@ impl CharacterMenu {
 			tipple: TippleMenu::default(),
 			topple: ToppleMenu::default(),
 			kispar: KisparMenu::default(),
+			tapp: TappMenu::default(),
+			kaller: KallerMenu::default(),
+			kappler: KapplerMenu::default(),
 			wumbus: WumbusMenu::default(),
 			lero: LeroMenu::default(),
 			spibmom: SpibmomMenu::default(),
@@ -501,6 +555,9 @@ impl CharacterMenu {
 			tipple: TippleMenu::default(),
 			topple: ToppleMenu::default(),
 			kispar: KisparMenu::default(),
+			tapp: TappMenu::default(),
+			kaller: KallerMenu::default(),
+			kappler: KapplerMenu::default(),
 			wumbus: WumbusMenu::default(),
 			lero: LeroMenu::default(),
 			spibmom: SpibmomMenu::default(),
@@ -527,6 +584,9 @@ impl CharacterMenu {
 			tipple: TippleMenu::default(),
 			topple: ToppleMenu::default(),
 			kispar: KisparMenu::default(),
+			tapp: TappMenu::default(),
+			kaller: KallerMenu::default(),
+			kappler: KapplerMenu::default(),
 			wumbus: WumbusMenu::default(),
 			lero: LeroMenu::default(),
 			spibmom: SpibmomMenu::default(),
@@ -553,6 +613,9 @@ impl CharacterMenu {
 			tipple: TippleMenu::from(config).with_animation(animation),
 			topple: ToppleMenu::default(),
 			kispar: KisparMenu::default(),
+			tapp: TappMenu::default(),
+			kaller: KallerMenu::default(),
+			kappler: KapplerMenu::default(),
 			wumbus: WumbusMenu::default(),
 			lero: LeroMenu::default(),
 			spibmom: SpibmomMenu::default(),
@@ -579,6 +642,9 @@ impl CharacterMenu {
 			tipple: TippleMenu::default(),
 			topple: ToppleMenu::from(config).with_animation(animation),
 			kispar: KisparMenu::default(),
+			tapp: TappMenu::default(),
+			kaller: KallerMenu::default(),
+			kappler: KapplerMenu::default(),
 			wumbus: WumbusMenu::default(),
 			lero: LeroMenu::default(),
 			spibmom: SpibmomMenu::default(),
@@ -605,6 +671,96 @@ impl CharacterMenu {
 			tipple: TippleMenu::default(),
 			topple: ToppleMenu::default(),
 			kispar: KisparMenu::from(config).with_animation(animation),
+			tapp: TappMenu::default(),
+			kaller: KallerMenu::default(),
+			kappler: KapplerMenu::default(),
+			wumbus: WumbusMenu::default(),
+			lero: LeroMenu::default(),
+			spibmom: SpibmomMenu::default(),
+		}
+	}
+
+	pub fn from_tapp(config: &TappConfig, animation: ConceptAnimation) -> Self {
+		Self {
+			species: SingleSelect::new(ConceptSpecies::Tapp),
+			braidman: BraidmanMenu::default(),
+			brenal: BrenalMenu::default(),
+			caole: CaoleMenu::default(),
+			hars: HarsMenu::default(),
+			ylter: YilterMenu::default(),
+			sonyak: SonyakMenu::default(),
+			croconot: CroconotMenu::default(),
+			claber: ClaberMenu::default(),
+			brodler: BrodlerMenu::default(),
+			mygr: MygrMenu::default(),
+			dui: DuiMenu::default(),
+			lidder: LidderMenu::default(),
+			chupri: ChupriMenu::default(),
+			brokker: BrokkerMenu::default(),
+			tipple: TippleMenu::default(),
+			topple: ToppleMenu::default(),
+			kispar: KisparMenu::default(),
+			tapp: TappMenu::from(config).with_animation(animation),
+			kaller: KallerMenu::default(),
+			kappler: KapplerMenu::default(),
+			wumbus: WumbusMenu::default(),
+			lero: LeroMenu::default(),
+			spibmom: SpibmomMenu::default(),
+		}
+	}
+
+	pub fn from_kaller(config: &KallerConfig, animation: ConceptAnimation) -> Self {
+		Self {
+			species: SingleSelect::new(ConceptSpecies::Kaller),
+			braidman: BraidmanMenu::default(),
+			brenal: BrenalMenu::default(),
+			caole: CaoleMenu::default(),
+			hars: HarsMenu::default(),
+			ylter: YilterMenu::default(),
+			sonyak: SonyakMenu::default(),
+			croconot: CroconotMenu::default(),
+			claber: ClaberMenu::default(),
+			brodler: BrodlerMenu::default(),
+			mygr: MygrMenu::default(),
+			dui: DuiMenu::default(),
+			lidder: LidderMenu::default(),
+			chupri: ChupriMenu::default(),
+			brokker: BrokkerMenu::default(),
+			tipple: TippleMenu::default(),
+			topple: ToppleMenu::default(),
+			kispar: KisparMenu::default(),
+			tapp: TappMenu::default(),
+			kaller: KallerMenu::from(config).with_animation(animation),
+			kappler: KapplerMenu::default(),
+			wumbus: WumbusMenu::default(),
+			lero: LeroMenu::default(),
+			spibmom: SpibmomMenu::default(),
+		}
+	}
+
+	pub fn from_kappler(config: &KapplerConfig, animation: ConceptAnimation) -> Self {
+		Self {
+			species: SingleSelect::new(ConceptSpecies::Kappler),
+			braidman: BraidmanMenu::default(),
+			brenal: BrenalMenu::default(),
+			caole: CaoleMenu::default(),
+			hars: HarsMenu::default(),
+			ylter: YilterMenu::default(),
+			sonyak: SonyakMenu::default(),
+			croconot: CroconotMenu::default(),
+			claber: ClaberMenu::default(),
+			brodler: BrodlerMenu::default(),
+			mygr: MygrMenu::default(),
+			dui: DuiMenu::default(),
+			lidder: LidderMenu::default(),
+			chupri: ChupriMenu::default(),
+			brokker: BrokkerMenu::default(),
+			tipple: TippleMenu::default(),
+			topple: ToppleMenu::default(),
+			kispar: KisparMenu::default(),
+			tapp: TappMenu::default(),
+			kaller: KallerMenu::default(),
+			kappler: KapplerMenu::from(config).with_animation(animation),
 			wumbus: WumbusMenu::default(),
 			lero: LeroMenu::default(),
 			spibmom: SpibmomMenu::default(),
@@ -631,6 +787,9 @@ impl CharacterMenu {
 			tipple: TippleMenu::default(),
 			topple: ToppleMenu::default(),
 			kispar: KisparMenu::default(),
+			tapp: TappMenu::default(),
+			kaller: KallerMenu::default(),
+			kappler: KapplerMenu::default(),
 			wumbus: WumbusMenu::from(config).with_animation(animation),
 			lero: LeroMenu::default(),
 			spibmom: SpibmomMenu::default(),
@@ -657,6 +816,9 @@ impl CharacterMenu {
 			tipple: TippleMenu::default(),
 			topple: ToppleMenu::default(),
 			kispar: KisparMenu::default(),
+			tapp: TappMenu::default(),
+			kaller: KallerMenu::default(),
+			kappler: KapplerMenu::default(),
 			wumbus: WumbusMenu::default(),
 			lero: LeroMenu::from(config).with_animation(animation),
 			spibmom: SpibmomMenu::default(),
@@ -683,6 +845,9 @@ impl CharacterMenu {
 			tipple: TippleMenu::default(),
 			topple: ToppleMenu::default(),
 			kispar: KisparMenu::default(),
+			tapp: TappMenu::default(),
+			kaller: KallerMenu::default(),
+			kappler: KapplerMenu::default(),
 			wumbus: WumbusMenu::default(),
 			lero: LeroMenu::default(),
 			spibmom: SpibmomMenu::from(config).with_animation(animation),
@@ -710,6 +875,9 @@ impl CharacterMenu {
 			ConceptSpecies::Tipple => self.tipple.menu_node(),
 			ConceptSpecies::Topple => self.topple.menu_node(),
 			ConceptSpecies::Kispar => self.kispar.menu_node(),
+			ConceptSpecies::Tapp => self.tapp.menu_node(),
+			ConceptSpecies::Kaller => self.kaller.menu_node(),
+			ConceptSpecies::Kappler => self.kappler.menu_node(),
 			ConceptSpecies::Wumbus => self.wumbus.menu_node(),
 			ConceptSpecies::Lero => self.lero.menu_node(),
 			ConceptSpecies::Spibmom => self.spibmom.menu_node(),
@@ -735,6 +903,9 @@ impl CharacterMenu {
 			ConceptSpecies::Tipple => self.tipple.animation(),
 			ConceptSpecies::Topple => self.topple.animation(),
 			ConceptSpecies::Kispar => self.kispar.animation(),
+			ConceptSpecies::Tapp => self.tapp.animation(),
+			ConceptSpecies::Kaller => self.kaller.animation(),
+			ConceptSpecies::Kappler => self.kappler.animation(),
 			ConceptSpecies::Wumbus => self.wumbus.animation(),
 			ConceptSpecies::Lero => self.lero.animation(),
 			ConceptSpecies::Spibmom => self.spibmom.animation(),
@@ -809,6 +980,18 @@ impl CharacterMenu {
 		KisparConfig::from(&self.kispar)
 	}
 
+	pub fn tapp_config(&self) -> TappConfig {
+		TappConfig::from(&self.tapp)
+	}
+
+	pub fn kaller_config(&self) -> KallerConfig {
+		KallerConfig::from(&self.kaller)
+	}
+
+	pub fn kappler_config(&self) -> KapplerConfig {
+		KapplerConfig::from(&self.kappler)
+	}
+
 	pub fn wumbus_config(&self) -> WumbusConfig {
 		WumbusConfig::from(&self.wumbus)
 	}
@@ -851,6 +1034,9 @@ impl CharacterMenu {
 			ConceptSpecies::Tipple => self.apply_tipple(event),
 			ConceptSpecies::Topple => self.apply_topple(event),
 			ConceptSpecies::Kispar => self.apply_kispar(event),
+			ConceptSpecies::Tapp => self.apply_tapp(event),
+			ConceptSpecies::Kaller => self.apply_kaller(event),
+			ConceptSpecies::Kappler => self.apply_kappler(event),
 			ConceptSpecies::Wumbus => self.apply_wumbus(event),
 			ConceptSpecies::Lero => self.apply_lero(event),
 			ConceptSpecies::Spibmom => self.apply_spibmom(event),
@@ -881,6 +1067,9 @@ impl CharacterMenu {
 			ConceptSpecies::Tipple => self.tipple.camera_focus_for_field(field),
 			ConceptSpecies::Topple => self.topple.camera_focus_for_field(field),
 			ConceptSpecies::Kispar => self.kispar.camera_focus_for_field(field),
+			ConceptSpecies::Tapp => self.tapp.camera_focus_for_field(field),
+			ConceptSpecies::Kaller => self.kaller.camera_focus_for_field(field),
+			ConceptSpecies::Kappler => self.kappler.camera_focus_for_field(field),
 			ConceptSpecies::Wumbus => self.wumbus.camera_focus_for_field(field),
 			ConceptSpecies::Lero => self.lero.camera_focus_for_field(field),
 			ConceptSpecies::Spibmom => self.spibmom.camera_focus_for_field(field),
@@ -1939,6 +2128,180 @@ impl CharacterMenu {
 					true
 				}
 				(CharacterField::KisparBeakColor, SwatchValue::KisparBeak(color)) => {
+					menu.head_features.value.beak_color.value = color;
+					true
+				}
+				(CharacterField::HairColor, SwatchValue::Item(color)) => {
+					menu.hair.value.color.value = color;
+					true
+				}
+				(CharacterField::Clothing(clothing), SwatchValue::Item(color)) => {
+					menu.set_clothing_color(clothing, color);
+					true
+				}
+				_ => false,
+			},
+			MenuEvent::Cycle(_, _) | MenuEvent::SliderDelta(_, _) => false,
+		}
+	}
+
+	fn apply_tapp(&mut self, event: MenuEvent) -> bool {
+		let menu = &mut self.tapp;
+		match event {
+			MenuEvent::ToggleSection(_) | MenuEvent::SetSpecies(_) => false,
+			MenuEvent::SetAsset(field, value) => match (field, value) {
+				(CharacterField::TappHead, AssetValue::TappHead(value)) => {
+					menu.head.value.head.value = value;
+					true
+				}
+				(CharacterField::Eye, AssetValue::Eye(value)) => {
+					menu.head_features.value.eye.value = value;
+					true
+				}
+				(CharacterField::TappBeak, AssetValue::TappBeak(value)) => {
+					menu.head_features.value.beak.value = value;
+					true
+				}
+				(CharacterField::Hair, AssetValue::Hair(value)) => {
+					menu.hair.value.style.value = value;
+					true
+				}
+				(CharacterField::Animation, AssetValue::Animation(value)) => {
+					menu.animation.value.clip.value = value;
+					true
+				}
+				_ => false,
+			},
+			MenuEvent::ToggleClothing(clothing) => {
+				menu.clothing.value.layers.toggle(clothing);
+				true
+			}
+			MenuEvent::SetSwatch(field, value) => match (field, value) {
+				(CharacterField::TappPlumageColor, SwatchValue::TappPlumage(color)) => {
+					menu.head.value.plumage.value = color;
+					true
+				}
+				(CharacterField::TappEyeColor, SwatchValue::TappEye(color)) => {
+					menu.head_features.value.eye_color.value = color;
+					true
+				}
+				(CharacterField::TappBeakColor, SwatchValue::TappBeak(color)) => {
+					menu.head_features.value.beak_color.value = color;
+					true
+				}
+				(CharacterField::HairColor, SwatchValue::Item(color)) => {
+					menu.hair.value.color.value = color;
+					true
+				}
+				(CharacterField::Clothing(clothing), SwatchValue::Item(color)) => {
+					menu.set_clothing_color(clothing, color);
+					true
+				}
+				_ => false,
+			},
+			MenuEvent::Cycle(_, _) | MenuEvent::SliderDelta(_, _) => false,
+		}
+	}
+
+	fn apply_kaller(&mut self, event: MenuEvent) -> bool {
+		let menu = &mut self.kaller;
+		match event {
+			MenuEvent::ToggleSection(_) | MenuEvent::SetSpecies(_) => false,
+			MenuEvent::SetAsset(field, value) => match (field, value) {
+				(CharacterField::KallerHead, AssetValue::KallerHead(value)) => {
+					menu.head.value.head.value = value;
+					true
+				}
+				(CharacterField::Eye, AssetValue::Eye(value)) => {
+					menu.head_features.value.eye.value = value;
+					true
+				}
+				(CharacterField::Hair, AssetValue::Hair(value)) => {
+					menu.hair.value.style.value = value;
+					true
+				}
+				(CharacterField::Animation, AssetValue::Animation(value)) => {
+					menu.animation.value.clip.value = value;
+					true
+				}
+				_ => false,
+			},
+			MenuEvent::ToggleClothing(clothing) => {
+				menu.clothing.value.layers.toggle(clothing);
+				true
+			}
+			MenuEvent::SetSwatch(field, value) => match (field, value) {
+				(CharacterField::KallerPlumageColor, SwatchValue::KallerPlumage(color)) => {
+					menu.head.value.plumage.value = color;
+					true
+				}
+				(CharacterField::KallerEyeColor, SwatchValue::KallerEye(color)) => {
+					menu.head_features.value.eye_color.value = color;
+					true
+				}
+				(CharacterField::KallerSnoutColor, SwatchValue::KallerSnout(color)) => {
+					menu.head_features.value.snout_color.value = color;
+					true
+				}
+				(CharacterField::KallerCrownColor, SwatchValue::KallerCrown(color)) => {
+					menu.head_features.value.crown_color.value = color;
+					true
+				}
+				(CharacterField::HairColor, SwatchValue::Item(color)) => {
+					menu.hair.value.color.value = color;
+					true
+				}
+				(CharacterField::Clothing(clothing), SwatchValue::Item(color)) => {
+					menu.set_clothing_color(clothing, color);
+					true
+				}
+				_ => false,
+			},
+			MenuEvent::Cycle(_, _) | MenuEvent::SliderDelta(_, _) => false,
+		}
+	}
+
+	fn apply_kappler(&mut self, event: MenuEvent) -> bool {
+		let menu = &mut self.kappler;
+		match event {
+			MenuEvent::ToggleSection(_) | MenuEvent::SetSpecies(_) => false,
+			MenuEvent::SetAsset(field, value) => match (field, value) {
+				(CharacterField::KapplerHead, AssetValue::KapplerHead(value)) => {
+					menu.head.value.head.value = value;
+					true
+				}
+				(CharacterField::Eye, AssetValue::Eye(value)) => {
+					menu.head_features.value.eye.value = value;
+					true
+				}
+				(CharacterField::KapplerBeak, AssetValue::KapplerBeak(value)) => {
+					menu.head_features.value.beak.value = value;
+					true
+				}
+				(CharacterField::Hair, AssetValue::Hair(value)) => {
+					menu.hair.value.style.value = value;
+					true
+				}
+				(CharacterField::Animation, AssetValue::Animation(value)) => {
+					menu.animation.value.clip.value = value;
+					true
+				}
+				_ => false,
+			},
+			MenuEvent::ToggleClothing(clothing) => {
+				menu.clothing.value.layers.toggle(clothing);
+				true
+			}
+			MenuEvent::SetSwatch(field, value) => match (field, value) {
+				(CharacterField::KapplerPlumageColor, SwatchValue::KapplerPlumage(color)) => {
+					menu.head.value.plumage.value = color;
+					true
+				}
+				(CharacterField::KapplerEyeColor, SwatchValue::KapplerEye(color)) => {
+					menu.head_features.value.eye_color.value = color;
+					true
+				}
+				(CharacterField::KapplerBeakColor, SwatchValue::KapplerBeak(color)) => {
 					menu.head_features.value.beak_color.value = color;
 					true
 				}

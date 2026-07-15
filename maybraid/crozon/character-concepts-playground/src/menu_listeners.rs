@@ -71,6 +71,15 @@ pub fn menu_to_preview_config(menu: &CharacterMenu) -> ConceptPreviewConfig {
 		ConceptSpecies::Kispar => {
 			ConceptPreviewConfig::kispar_with_animation(menu.kispar_config(), menu.animation())
 		}
+		ConceptSpecies::Tapp => {
+			ConceptPreviewConfig::tapp_with_animation(menu.tapp_config(), menu.animation())
+		}
+		ConceptSpecies::Kaller => {
+			ConceptPreviewConfig::kaller_with_animation(menu.kaller_config(), menu.animation())
+		}
+		ConceptSpecies::Kappler => {
+			ConceptPreviewConfig::kappler_with_animation(menu.kappler_config(), menu.animation())
+		}
 		ConceptSpecies::Wumbus => {
 			ConceptPreviewConfig::wumbus_with_animation(menu.wumbus_config(), menu.animation())
 		}
@@ -136,6 +145,15 @@ pub fn menu_from_preview_config(config: &ConceptPreviewConfig) -> CharacterMenu 
 		ConceptPreviewConfig::Kispar { config, animation } => {
 			CharacterMenu::from_kispar(config, *animation)
 		}
+		ConceptPreviewConfig::Tapp { config, animation } => {
+			CharacterMenu::from_tapp(config, *animation)
+		}
+		ConceptPreviewConfig::Kaller { config, animation } => {
+			CharacterMenu::from_kaller(config, *animation)
+		}
+		ConceptPreviewConfig::Kappler { config, animation } => {
+			CharacterMenu::from_kappler(config, *animation)
+		}
 		ConceptPreviewConfig::Wumbus { config, animation } => {
 			CharacterMenu::from_wumbus(config, *animation)
 		}
@@ -184,6 +202,9 @@ fn preview_species(species: ConceptSpecies) -> crate::preview::ConceptSpecies {
 		ConceptSpecies::Tipple => crate::preview::ConceptSpecies::Tipple,
 		ConceptSpecies::Topple => crate::preview::ConceptSpecies::Topple,
 		ConceptSpecies::Kispar => crate::preview::ConceptSpecies::Kispar,
+		ConceptSpecies::Tapp => crate::preview::ConceptSpecies::Tapp,
+		ConceptSpecies::Kaller => crate::preview::ConceptSpecies::Kaller,
+		ConceptSpecies::Kappler => crate::preview::ConceptSpecies::Kappler,
 		ConceptSpecies::Wumbus => crate::preview::ConceptSpecies::Wumbus,
 		ConceptSpecies::Lero => crate::preview::ConceptSpecies::Lero,
 		ConceptSpecies::Spibmom => crate::preview::ConceptSpecies::Spibmom,

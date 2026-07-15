@@ -9,8 +9,8 @@ pub mod shared;
 
 pub use character::{CharacterMenu, ConceptSpecies, SectionOpenState};
 pub use characters::{
-	braidman::BraidmanMenu, brenal::BrenalMenu, brokker::BrokkerMenu, caole::CaoleMenu, hars::HarsMenu, claber::ClaberMenu, croconot::CroconotMenu, brodler::BrodlerMenu, chupri::ChupriMenu, dui::DuiMenu, kispar::KisparMenu, lero::LeroMenu,
-	lidder::LidderMenu, mygr::MygrMenu, spibmom::SpibmomMenu, sonyak::SonyakMenu, tipple::TippleMenu, topple::ToppleMenu, wumbus::WumbusMenu, ylter::YilterMenu,
+	braidman::BraidmanMenu, brenal::BrenalMenu, brokker::BrokkerMenu, caole::CaoleMenu, hars::HarsMenu, claber::ClaberMenu, croconot::CroconotMenu, brodler::BrodlerMenu, chupri::ChupriMenu, dui::DuiMenu, kispar::KisparMenu, kaller::KallerMenu, kappler::KapplerMenu, lero::LeroMenu,
+	lidder::LidderMenu, mygr::MygrMenu, spibmom::SpibmomMenu, sonyak::SonyakMenu, tipple::TippleMenu, topple::ToppleMenu, tapp::TappMenu, wumbus::WumbusMenu, ylter::YilterMenu,
 };
 pub use event::{AssetValue, CharacterField, MenuEvent, SectionId, SwatchValue};
 pub use focus::BODY_FOCUS;

@@ -1,8 +1,8 @@
-//! Topple species definition.
+//! Tapp species definition.
 //!
-//! Softer, taller Tipple sibling (~2 ft): whelp body, cartoonishly large meerkat
-//! head, selectable beak, pastel plumage. Overall size via body-rig asset
-//! normalization (~0.30×).
+//! Thin Topple sibling (~2 ft): whelp body, cartoon meerkat head, long selectable
+//! beak (default Sharp), cooler pastel plumage. Overall size via body-rig asset
+//! normalization (~0.30×); thin proportions via BraidmanSliders.
 
 pub mod assets;
 pub mod bsn;
@@ -19,27 +19,27 @@ use crate::{
 
 use crozon_character_items::{ClothingColor, ClothingMesh, ItemColor};
 
-use assets::ToppleAssets;
+use assets::TappAssets;
 
-pub use assets::{ToppleBeakMesh, ToppleHeadMesh};
-pub use palette::{ToppleBeakColor, ToppleEyeColor, TopplePlumageColor};
+pub use assets::{TappBeakMesh, TappHeadMesh};
+pub use palette::{TappBeakColor, TappEyeColor, TappPlumageColor};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ToppleColors {
-	pub plumage: TopplePlumageColor,
-	pub eyes: ToppleEyeColor,
-	pub beak: ToppleBeakColor,
+pub struct TappColors {
+	pub plumage: TappPlumageColor,
+	pub eyes: TappEyeColor,
+	pub beak: TappBeakColor,
 	pub hair: ItemColor,
 	pub clothing_default: ItemColor,
 	pub clothing: Vec<ClothingColor>,
 }
 
-impl Default for ToppleColors {
+impl Default for TappColors {
 	fn default() -> Self {
 		Self {
-			plumage: TopplePlumageColor::Cream,
-			eyes: ToppleEyeColor::SoftAmber,
-			beak: ToppleBeakColor::Peach,
+			plumage: TappPlumageColor::Mist,
+			eyes: TappEyeColor::SoftBlue,
+			beak: TappBeakColor::Slate,
 			hair: ItemColor::Dark,
 			clothing_default: ItemColor::Cool,
 			clothing: Vec::new(),
@@ -47,7 +47,7 @@ impl Default for ToppleColors {
 	}
 }
 
-impl ToppleColors {
+impl TappColors {
 	pub fn clothing_color(&self, clothing: ClothingMesh) -> ItemColor {
 		ClothingColor::resolve(&self.clothing, self.clothing_default, clothing)
 	}
@@ -58,28 +58,28 @@ impl ToppleColors {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ToppleConfig {
-	pub beak: ToppleBeakMesh,
+pub struct TappConfig {
+	pub beak: TappBeakMesh,
 	pub eye: EyeMesh,
 	pub hair: HairMesh,
 	pub clothing: Vec<ClothingMesh>,
-	pub colors: ToppleColors,
+	pub colors: TappColors,
 }
 
-impl Default for ToppleConfig {
+impl Default for TappConfig {
 	fn default() -> Self {
 		Self::default_preview()
 	}
 }
 
-impl ToppleConfig {
+impl TappConfig {
 	pub fn default_preview() -> Self {
 		Self {
-			beak: ToppleBeakMesh::Beak,
+			beak: TappBeakMesh::Sharp,
 			eye: EyeMesh::Falcon,
 			hair: HairMesh::FeatherHawk,
 			clothing: Vec::new(),
-			colors: ToppleColors::default(),
+			colors: TappColors::default(),
 		}
 	}
 
@@ -94,7 +94,7 @@ impl ToppleConfig {
 				.join(",")
 		};
 		format!(
-			"topple beak={} eye={} hair={} clothing={} plumage={} eyes={} beak_color={}",
+			"tapp beak={} eye={} hair={} clothing={} plumage={} eyes={} beak_color={}",
 			self.beak.label(),
 			self.eye.label(),
 			self.hair.label(),
@@ -110,12 +110,12 @@ impl ToppleConfig {
 	}
 }
 
-impl SpeciesConfig for ToppleConfig {
+impl SpeciesConfig for TappConfig {
 	fn species_name(&self) -> &'static str {
-		"topple"
+		"tapp"
 	}
 
 	fn resolve(&self) -> ResolvedCharacterAssembly {
-		ToppleAssets::resolve(self)
+		TappAssets::resolve(self)
 	}
 }

@@ -1,4 +1,4 @@
-//! Topple asset catalog and assembly resolver.
+//! Kaller asset catalog and assembly resolver.
 
 use bevy::prelude::*;
 use clap::ValueEnum;
@@ -11,41 +11,35 @@ use crate::{
 	assets::{AssetNormalization, AssetPath},
 	species::{
 		common::{
-			assets::{BODY_RIG, HEAD_RIG, HEAD_STANDARD},
-			HairMesh,
+			HairMesh, BODY_RIG, HEAD_RIG, HEAD_STANDARD, HORNS_HARROWED_CROWN, MOUTH_ROBREK_SNOUT,
 		},
-		topple::{
-			pose::{TopplePose, TOPPLE_OVERALL_SCALE},
-			ToppleConfig,
+		kaller::{
+			pose::{KallerPose, KALLER_OVERALL_SCALE},
+			KallerConfig,
 		},
 	},
 };
 
-const BODY_WHELP: AssetPath = AssetPath::new("characters/bodies/whelp_bird.glb");
-const BEAK: AssetPath = AssetPath::new("characters/snouts/beak.glb");
-const HOOK_BEAK: AssetPath = AssetPath::new("characters/snouts/hook_beak.glb");
-const SHARP_BEAK: AssetPath = AssetPath::new("characters/snouts/sharp_beak.glb");
+const BODY_SPARROW: AssetPath = AssetPath::new("characters/bodies/sparrow_body.glb");
 
-/// Cartoonishly large head relative to the ~2 ft whelp body.
-const HEAD_RIG_SOCKET_SCALE: f32 = 1.85;
+/// Species-local resolver for Kaller asset choices.
+pub struct KallerAssets;
 
-/// Species-local resolver for Topple asset choices.
-pub struct ToppleAssets;
-
-impl ToppleAssets {
-	pub fn resolve(config: &ToppleConfig) -> ResolvedCharacterAssembly {
+impl KallerAssets {
+	pub fn resolve(config: &KallerConfig) -> ResolvedCharacterAssembly {
 		let assembly = ResolvedCharacterAssembly::new(
-			"Topple",
+			"Kaller",
 			RigAsset::new("Humanoid", BODY_RIG)
-				.with_normalization(AssetNormalization::centroid(TOPPLE_OVERALL_SCALE)),
-			TopplePose.resolve(),
+				.with_normalization(AssetNormalization::centroid(KALLER_OVERALL_SCALE)),
+			KallerPose.resolve(),
 		)
 		.with_part(Self::body_mesh())
 		.with_part(Self::head_rig())
 		.with_part(Self::head_mesh())
 		.with_part(Self::eye_left(config.eye))
 		.with_part(Self::eye_right(config.eye))
-		.with_part(Self::beak(config.beak));
+		.with_part(Self::snout())
+		.with_part(Self::horns());
 
 		let assembly = match Self::hair(config.hair) {
 			Some(hair) => assembly.with_part(hair),
@@ -59,7 +53,7 @@ impl ToppleAssets {
 	fn body_mesh() -> ResolvedCharacterPart {
 		ResolvedCharacterPart::new(
 			CharacterPartSlot::BodyMesh,
-			CharacterAsset::new("whelp", BODY_WHELP, AssetNormalization::IDENTITY),
+			CharacterAsset::new("sparrow", BODY_SPARROW, AssetNormalization::IDENTITY),
 			SkinTarget::BodyRig,
 			None,
 		)
@@ -73,7 +67,7 @@ impl ToppleAssets {
 			Some(SocketAttachment {
 				rig: SocketRig::Body,
 				bone: "upper_neck",
-				local_transform: Transform::from_scale(Vec3::splat(HEAD_RIG_SOCKET_SCALE)),
+				local_transform: Transform::IDENTITY,
 			}),
 		)
 	}
@@ -82,7 +76,7 @@ impl ToppleAssets {
 		ResolvedCharacterPart::new(
 			CharacterPartSlot::HeadMesh,
 			CharacterAsset::new(
-				ToppleHeadMesh::Meerkat.label(),
+				KallerHeadMesh::Meerkat.label(),
 				HEAD_STANDARD,
 				AssetNormalization::IDENTITY,
 			),
@@ -115,14 +109,36 @@ impl ToppleAssets {
 		)
 	}
 
-	fn beak(beak: ToppleBeakMesh) -> ResolvedCharacterPart {
+	fn snout() -> ResolvedCharacterPart {
+		// Mild forward scale so the robrek snout reads on the meerkat head.
 		ResolvedCharacterPart::new(
 			CharacterPartSlot::Mouth,
-			CharacterAsset::new(beak.label(), beak.path(), AssetNormalization::centroid(0.35)),
+			CharacterAsset::new(
+				KallerSnoutMesh::Robrek.label(),
+				MOUTH_ROBREK_SNOUT,
+				AssetNormalization::centroid(0.35),
+			),
 			SkinTarget::HeadRig,
 			Some(Self::head_socket(
 				"mouth_socket",
-				Transform::from_translation(Vec3::new(0.0, 0.0, 0.1)),
+				Transform::from_translation(Vec3::new(0.0, 0.0, 0.1))
+					.with_scale(Vec3::new(1.0, 1.0, 1.15)),
+			)),
+		)
+	}
+
+	fn horns() -> ResolvedCharacterPart {
+		ResolvedCharacterPart::new(
+			CharacterPartSlot::Horns,
+			CharacterAsset::new(
+				KallerHornMesh::HarrowedCrown.label(),
+				HORNS_HARROWED_CROWN,
+				AssetNormalization::centroid(0.7),
+			),
+			SkinTarget::HeadRig,
+			Some(Self::head_socket(
+				"crown_socket",
+				Transform::from_translation(Vec3::new(0.0, -0.1, 0.1)),
 			)),
 		)
 	}
@@ -154,12 +170,12 @@ impl ToppleAssets {
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, ValueEnum)]
-pub enum ToppleHeadMesh {
+pub enum KallerHeadMesh {
 	#[default]
 	Meerkat,
 }
 
-impl ToppleHeadMesh {
+impl KallerHeadMesh {
 	pub const VALUES: &'static [Self] = &[Self::Meerkat];
 
 	pub const fn label(self) -> &'static str {
@@ -171,30 +187,40 @@ impl ToppleHeadMesh {
 	}
 }
 
+/// Fixed robrek snout — always attached; kept as an enum for menu identity traits.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, ValueEnum)]
-pub enum ToppleBeakMesh {
+pub enum KallerSnoutMesh {
 	#[default]
-	Beak,
-	Hook,
-	Sharp,
+	Robrek,
 }
 
-impl ToppleBeakMesh {
-	pub const VALUES: &'static [Self] = &[Self::Beak, Self::Hook, Self::Sharp];
+impl KallerSnoutMesh {
+	pub const VALUES: &'static [Self] = &[Self::Robrek];
 
 	pub const fn label(self) -> &'static str {
-		match self {
-			Self::Beak => "beak",
-			Self::Hook => "hook",
-			Self::Sharp => "sharp",
-		}
+		"robrek"
 	}
 
 	pub const fn path(self) -> AssetPath {
-		match self {
-			Self::Beak => BEAK,
-			Self::Hook => HOOK_BEAK,
-			Self::Sharp => SHARP_BEAK,
-		}
+		MOUTH_ROBREK_SNOUT
+	}
+}
+
+/// Fixed harrowed crown — always attached; kept as an enum for menu identity traits.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, ValueEnum)]
+pub enum KallerHornMesh {
+	#[default]
+	HarrowedCrown,
+}
+
+impl KallerHornMesh {
+	pub const VALUES: &'static [Self] = &[Self::HarrowedCrown];
+
+	pub const fn label(self) -> &'static str {
+		"harrowed-crown"
+	}
+
+	pub const fn path(self) -> AssetPath {
+		HORNS_HARROWED_CROWN
 	}
 }

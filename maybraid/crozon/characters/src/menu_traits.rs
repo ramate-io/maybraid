@@ -36,6 +36,16 @@ use crate::{
 		kispar::{
 			KisparBeakColor, KisparBeakMesh, KisparEyeColor, KisparHeadMesh, KisparPlumageColor,
 		},
+		tapp::{
+			TappBeakColor, TappBeakMesh, TappEyeColor, TappHeadMesh, TappPlumageColor,
+		},
+		kaller::{
+			KallerCrownColor, KallerEyeColor, KallerHeadMesh, KallerHornMesh, KallerPlumageColor,
+			KallerSnoutColor, KallerSnoutMesh,
+		},
+		kappler::{
+			KapplerBeakColor, KapplerBeakMesh, KapplerEyeColor, KapplerHeadMesh, KapplerPlumageColor,
+		},
 		lero::{
 			LeroEyeColor, LeroHeadMesh, LeroMouthColor, LeroMouthMesh, LeroSkinColor,
 			LeroSpineColor, LeroTailColor,
@@ -166,6 +176,23 @@ impl_menu_identity!(
 	KisparPlumageColor,
 	KisparEyeColor,
 	KisparBeakColor,
+	TappHeadMesh,
+	TappBeakMesh,
+	TappPlumageColor,
+	TappEyeColor,
+	TappBeakColor,
+	KallerHeadMesh,
+	KallerSnoutMesh,
+	KallerHornMesh,
+	KallerPlumageColor,
+	KallerEyeColor,
+	KallerSnoutColor,
+	KallerCrownColor,
+	KapplerHeadMesh,
+	KapplerBeakMesh,
+	KapplerPlumageColor,
+	KapplerEyeColor,
+	KapplerBeakColor,
 	BrenalBodyMesh,
 	BrenalHeadMesh,
 	BrenalMouthMesh,
@@ -227,6 +254,16 @@ impl_swatch_option!(
 	KisparPlumageColor,
 	KisparEyeColor,
 	KisparBeakColor,
+	TappPlumageColor,
+	TappEyeColor,
+	TappBeakColor,
+	KallerPlumageColor,
+	KallerEyeColor,
+	KallerSnoutColor,
+	KallerCrownColor,
+	KapplerPlumageColor,
+	KapplerEyeColor,
+	KapplerBeakColor,
 	WumbusSkinColor,
 	WumbusEyeColor,
 	WumbusEarColor,
@@ -299,6 +336,13 @@ impl_asset_option!(ToppleHeadMesh, HEAD_THUMBNAIL_CAMERA);
 impl_asset_option!(ToppleBeakMesh, FACE_FEATURE_THUMBNAIL_CAMERA);
 impl_asset_option!(KisparHeadMesh, HEAD_THUMBNAIL_CAMERA);
 impl_asset_option!(KisparBeakMesh, FACE_FEATURE_THUMBNAIL_CAMERA);
+impl_asset_option!(TappHeadMesh, HEAD_THUMBNAIL_CAMERA);
+impl_asset_option!(TappBeakMesh, FACE_FEATURE_THUMBNAIL_CAMERA);
+impl_asset_option!(KallerHeadMesh, HEAD_THUMBNAIL_CAMERA);
+impl_asset_option!(KallerSnoutMesh, FACE_FEATURE_THUMBNAIL_CAMERA);
+impl_asset_option!(KallerHornMesh, CROWN_THUMBNAIL_CAMERA);
+impl_asset_option!(KapplerHeadMesh, HEAD_THUMBNAIL_CAMERA);
+impl_asset_option!(KapplerBeakMesh, FACE_FEATURE_THUMBNAIL_CAMERA);
 impl_asset_option!(BrenalBodyMesh, BODY_THUMBNAIL_CAMERA);
 impl_asset_option!(BrenalHeadMesh, HEAD_THUMBNAIL_CAMERA);
 impl_asset_option!(BrenalMouthMesh, FACE_FEATURE_THUMBNAIL_CAMERA);

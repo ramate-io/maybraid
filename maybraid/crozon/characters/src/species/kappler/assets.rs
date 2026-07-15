@@ -1,4 +1,4 @@
-//! Topple asset catalog and assembly resolver.
+//! Kappler asset catalog and assembly resolver.
 
 use bevy::prelude::*;
 use clap::ValueEnum;
@@ -14,9 +14,9 @@ use crate::{
 			assets::{BODY_RIG, HEAD_RIG, HEAD_STANDARD},
 			HairMesh,
 		},
-		topple::{
-			pose::{TopplePose, TOPPLE_OVERALL_SCALE},
-			ToppleConfig,
+		kappler::{
+			pose::{KapplerPose, KAPPLER_OVERALL_SCALE},
+			KapplerConfig,
 		},
 	},
 };
@@ -26,19 +26,19 @@ const BEAK: AssetPath = AssetPath::new("characters/snouts/beak.glb");
 const HOOK_BEAK: AssetPath = AssetPath::new("characters/snouts/hook_beak.glb");
 const SHARP_BEAK: AssetPath = AssetPath::new("characters/snouts/sharp_beak.glb");
 
-/// Cartoonishly large head relative to the ~2 ft whelp body.
+/// Cartoonishly large head (same as Topple).
 const HEAD_RIG_SOCKET_SCALE: f32 = 1.85;
 
-/// Species-local resolver for Topple asset choices.
-pub struct ToppleAssets;
+/// Species-local resolver for Kappler asset choices.
+pub struct KapplerAssets;
 
-impl ToppleAssets {
-	pub fn resolve(config: &ToppleConfig) -> ResolvedCharacterAssembly {
+impl KapplerAssets {
+	pub fn resolve(config: &KapplerConfig) -> ResolvedCharacterAssembly {
 		let assembly = ResolvedCharacterAssembly::new(
-			"Topple",
+			"Kappler",
 			RigAsset::new("Humanoid", BODY_RIG)
-				.with_normalization(AssetNormalization::centroid(TOPPLE_OVERALL_SCALE)),
-			TopplePose.resolve(),
+				.with_normalization(AssetNormalization::centroid(KAPPLER_OVERALL_SCALE)),
+			KapplerPose.resolve(),
 		)
 		.with_part(Self::body_mesh())
 		.with_part(Self::head_rig())
@@ -82,7 +82,7 @@ impl ToppleAssets {
 		ResolvedCharacterPart::new(
 			CharacterPartSlot::HeadMesh,
 			CharacterAsset::new(
-				ToppleHeadMesh::Meerkat.label(),
+				KapplerHeadMesh::Meerkat.label(),
 				HEAD_STANDARD,
 				AssetNormalization::IDENTITY,
 			),
@@ -115,7 +115,7 @@ impl ToppleAssets {
 		)
 	}
 
-	fn beak(beak: ToppleBeakMesh) -> ResolvedCharacterPart {
+	fn beak(beak: KapplerBeakMesh) -> ResolvedCharacterPart {
 		ResolvedCharacterPart::new(
 			CharacterPartSlot::Mouth,
 			CharacterAsset::new(beak.label(), beak.path(), AssetNormalization::centroid(0.35)),
@@ -154,12 +154,12 @@ impl ToppleAssets {
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, ValueEnum)]
-pub enum ToppleHeadMesh {
+pub enum KapplerHeadMesh {
 	#[default]
 	Meerkat,
 }
 
-impl ToppleHeadMesh {
+impl KapplerHeadMesh {
 	pub const VALUES: &'static [Self] = &[Self::Meerkat];
 
 	pub const fn label(self) -> &'static str {
@@ -172,14 +172,14 @@ impl ToppleHeadMesh {
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, ValueEnum)]
-pub enum ToppleBeakMesh {
+pub enum KapplerBeakMesh {
 	#[default]
 	Beak,
 	Hook,
 	Sharp,
 }
 
-impl ToppleBeakMesh {
+impl KapplerBeakMesh {
 	pub const VALUES: &'static [Self] = &[Self::Beak, Self::Hook, Self::Sharp];
 
 	pub const fn label(self) -> &'static str {

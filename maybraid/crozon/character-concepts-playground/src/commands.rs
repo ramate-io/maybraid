@@ -16,6 +16,9 @@ pub mod brokker;
 pub mod tipple;
 pub mod topple;
 pub mod kispar;
+pub mod tapp;
+pub mod kaller;
+pub mod kappler;
 pub mod lero;
 pub mod mygr;
 pub mod spibmom;
@@ -40,6 +43,9 @@ pub use brokker::Brokker;
 pub use tipple::Tipple;
 pub use topple::Topple;
 pub use kispar::Kispar;
+pub use tapp::Tapp;
+pub use kaller::Kaller;
+pub use kappler::Kappler;
 pub use lero::Lero;
 pub use mygr::Mygr;
 pub use spibmom::Spibmom;
@@ -112,6 +118,15 @@ pub enum ConceptsCommand {
 	/// Spawn or adjust the Kispar concept preview.
 	#[command(subcommand)]
 	Kispar(Kispar),
+	/// Spawn or adjust the Tapp concept preview.
+	#[command(subcommand)]
+	Tapp(Tapp),
+	/// Spawn or adjust the Kaller concept preview.
+	#[command(subcommand)]
+	Kaller(Kaller),
+	/// Spawn or adjust the Kappler concept preview.
+	#[command(subcommand)]
+	Kappler(Kappler),
 	/// Spawn or adjust the Wumbus concept preview.
 	#[command(subcommand)]
 	Wumbus(Wumbus),
@@ -155,6 +170,9 @@ impl ConceptsCommand {
 			Self::Tipple(tipple) => tipple.react(commands),
 			Self::Topple(topple) => topple.react(commands),
 			Self::Kispar(kispar) => kispar.react(commands),
+			Self::Tapp(tapp) => tapp.react(commands),
+			Self::Kaller(kaller) => kaller.react(commands),
+			Self::Kappler(kappler) => kappler.react(commands),
 			Self::Wumbus(wumbus) => wumbus.react(commands),
 			Self::Lero(lero) => lero.react(commands),
 			Self::Spibmom(spibmom) => spibmom.react(commands),

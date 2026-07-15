@@ -2,8 +2,8 @@
 
 use bevy::prelude::*;
 use crozon_characters::species::{
-	braidman::BraidmanConfig, brenal::BrenalConfig, caole::CaoleConfig, hars::HarsConfig, sonyak::SonyakConfig, ylter::YilterConfig, claber::ClaberConfig, croconot::CroconotConfig, brodler::BrodlerConfig, dui::DuiConfig, brokker::BrokkerConfig, chupri::ChupriConfig, kispar::KisparConfig, lidder::LidderConfig, lero::LeroConfig,
-	mygr::MygrConfig, spibmom::SpibmomConfig, tipple::TippleConfig, topple::ToppleConfig, wumbus::WumbusConfig,
+	braidman::BraidmanConfig, brenal::BrenalConfig, caole::CaoleConfig, hars::HarsConfig, sonyak::SonyakConfig, ylter::YilterConfig, claber::ClaberConfig, croconot::CroconotConfig, brodler::BrodlerConfig, dui::DuiConfig, brokker::BrokkerConfig, chupri::ChupriConfig, kispar::KisparConfig, kaller::KallerConfig, kappler::KapplerConfig, lidder::LidderConfig, lero::LeroConfig,
+	mygr::MygrConfig, spibmom::SpibmomConfig, tipple::TippleConfig, topple::ToppleConfig, tapp::TappConfig, wumbus::WumbusConfig,
 };
 
 use crate::{
@@ -35,6 +35,9 @@ pub struct SpeciesSessionState {
 	pub tipple: TippleConfig,
 	pub topple: ToppleConfig,
 	pub kispar: KisparConfig,
+	pub tapp: TappConfig,
+	pub kaller: KallerConfig,
+	pub kappler: KapplerConfig,
 	pub wumbus: WumbusConfig,
 	pub lero: LeroConfig,
 	pub spibmom: SpibmomConfig,
@@ -55,6 +58,9 @@ pub struct SpeciesSessionState {
 	pub tipple_animation: crate::animation::ConceptAnimation,
 	pub topple_animation: crate::animation::ConceptAnimation,
 	pub kispar_animation: crate::animation::ConceptAnimation,
+	pub tapp_animation: crate::animation::ConceptAnimation,
+	pub kaller_animation: crate::animation::ConceptAnimation,
+	pub kappler_animation: crate::animation::ConceptAnimation,
 	pub wumbus_animation: crate::animation::ConceptAnimation,
 	pub lero_animation: crate::animation::ConceptAnimation,
 	pub spibmom_animation: crate::animation::ConceptAnimation,
@@ -80,6 +86,9 @@ impl Default for SpeciesSessionState {
 			tipple: TippleConfig::default_preview(),
 			topple: ToppleConfig::default_preview(),
 			kispar: KisparConfig::default_preview(),
+			tapp: TappConfig::default_preview(),
+			kaller: KallerConfig::default_preview(),
+			kappler: KapplerConfig::default_preview(),
 			wumbus: WumbusConfig::default_preview(),
 			lero: LeroConfig::default_preview(),
 			spibmom: SpibmomConfig::default_preview(),
@@ -100,6 +109,9 @@ impl Default for SpeciesSessionState {
 			tipple_animation: crate::animation::ConceptAnimation::default(),
 			topple_animation: crate::animation::ConceptAnimation::default(),
 			kispar_animation: crate::animation::ConceptAnimation::default(),
+			tapp_animation: crate::animation::ConceptAnimation::default(),
+			kaller_animation: crate::animation::ConceptAnimation::default(),
+			kappler_animation: crate::animation::ConceptAnimation::default(),
 			wumbus_animation: crate::animation::ConceptAnimation::default(),
 			lero_animation: crate::animation::ConceptAnimation::default(),
 			spibmom_animation: crate::animation::ConceptAnimation::default(),
@@ -178,6 +190,18 @@ impl SpeciesSessionState {
 				self.kispar.clone_from(config);
 				self.kispar_animation = *animation;
 			}
+			ConceptPreviewConfig::Tapp { config, animation } => {
+				self.tapp.clone_from(config);
+				self.tapp_animation = *animation;
+			}
+			ConceptPreviewConfig::Kaller { config, animation } => {
+				self.kaller.clone_from(config);
+				self.kaller_animation = *animation;
+			}
+			ConceptPreviewConfig::Kappler { config, animation } => {
+				self.kappler.clone_from(config);
+				self.kappler_animation = *animation;
+			}
 			ConceptPreviewConfig::Wumbus { config, animation } => {
 				self.wumbus.clone_from(config);
 				self.wumbus_animation = *animation;
@@ -254,6 +278,15 @@ impl SpeciesSessionState {
 			}
 			ConceptSpecies::Kispar => {
 				ConceptPreviewConfig::kispar_with_animation(self.kispar.clone(), self.kispar_animation)
+			}
+			ConceptSpecies::Tapp => {
+				ConceptPreviewConfig::tapp_with_animation(self.tapp.clone(), self.tapp_animation)
+			}
+			ConceptSpecies::Kaller => {
+				ConceptPreviewConfig::kaller_with_animation(self.kaller.clone(), self.kaller_animation)
+			}
+			ConceptSpecies::Kappler => {
+				ConceptPreviewConfig::kappler_with_animation(self.kappler.clone(), self.kappler_animation)
 			}
 			ConceptSpecies::Wumbus => ConceptPreviewConfig::wumbus_with_animation(
 				self.wumbus.clone(),
