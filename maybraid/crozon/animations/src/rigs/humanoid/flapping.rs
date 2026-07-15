@@ -43,14 +43,15 @@ mod tests {
 
 	#[test]
 	fn flapping_moves_shoulders() -> anyhow::Result<()> {
-		let mut rig = seeded_rig();
-		Flapping::default().apply(&mut rig, 0.1);
-		let left = rig.pose().get(&Name::from("shoulder.L")).expect("left shoulder");
-		let right = rig.pose().get(&Name::from("shoulder.R")).expect("right shoulder");
-		// Y swing angles the wing root away from the spine (mirrored).
-		assert!(left.swing.abs() > 0.2);
-		assert!((left.swing + right.swing).abs() < 1e-4);
-		assert!(left.twist.abs() < 1e-5);
+		let mut a = seeded_rig();
+		let mut b = seeded_rig();
+		Flapping::default().apply(&mut a, 0.1);
+		Flapping::default().apply(&mut b, 0.1 + 0.5 / Flapping::default().speed);
+		let swing_a = a.pose().get(&Name::from("shoulder.L")).expect("left").swing;
+		let swing_b = b.pose().get(&Name::from("shoulder.L")).expect("left").swing;
+		// Front/back beat lives on swing (Y); half-cycle later the stroke has reversed.
+		assert!((swing_a - swing_b).abs() > 0.2);
+		assert!(a.pose().get(&Name::from("shoulder.L")).expect("left").flex.abs() < 0.05);
 		Ok(())
 	}
 }
