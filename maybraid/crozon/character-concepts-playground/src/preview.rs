@@ -21,6 +21,10 @@ use crozon_characters::{
 		dui::{DuiConfig, DuiNoseMesh},
 		lidder::{LidderBeakMesh, LidderConfig},
 		chupri::{ChupriBeakMesh, ChupriConfig},
+		brokker::{BrokkerConfig, BrokkerSnoutMesh},
+		tipple::{TippleBeakMesh, TippleConfig},
+		topple::{ToppleBeakMesh, ToppleConfig},
+		kispar::{KisparBeakMesh, KisparConfig},
 		lero::{LeroConfig, LeroMouthMesh},
 		mygr::MygrConfig,
 		spibmom::SpibmomConfig,
@@ -55,6 +59,10 @@ pub enum ConceptSpecies {
 	Dui,
 	Lidder,
 	Chupri,
+	Brokker,
+	Tipple,
+	Topple,
+	Kispar,
 	Wumbus,
 	Lero,
 	Spibmom,
@@ -75,6 +83,10 @@ pub enum ConceptPreviewConfig {
 	Dui { config: DuiConfig, animation: ConceptAnimation },
 	Lidder { config: LidderConfig, animation: ConceptAnimation },
 	Chupri { config: ChupriConfig, animation: ConceptAnimation },
+	Brokker { config: BrokkerConfig, animation: ConceptAnimation },
+	Tipple { config: TippleConfig, animation: ConceptAnimation },
+	Topple { config: ToppleConfig, animation: ConceptAnimation },
+	Kispar { config: KisparConfig, animation: ConceptAnimation },
 	Wumbus { config: WumbusConfig, animation: ConceptAnimation },
 	Lero { config: LeroConfig, animation: ConceptAnimation },
 	Spibmom { config: SpibmomConfig, animation: ConceptAnimation },
@@ -102,6 +114,10 @@ impl ConceptPreviewConfig {
 			ConceptSpecies::Dui => Self::dui(DuiConfig::default_preview()),
 			ConceptSpecies::Lidder => Self::lidder(LidderConfig::default_preview()),
 			ConceptSpecies::Chupri => Self::chupri(ChupriConfig::default_preview()),
+			ConceptSpecies::Brokker => Self::brokker(BrokkerConfig::default_preview()),
+			ConceptSpecies::Tipple => Self::tipple(TippleConfig::default_preview()),
+			ConceptSpecies::Topple => Self::topple(ToppleConfig::default_preview()),
+			ConceptSpecies::Kispar => Self::kispar(KisparConfig::default_preview()),
 			ConceptSpecies::Wumbus => Self::wumbus(WumbusConfig::default_preview()),
 			ConceptSpecies::Lero => Self::lero(LeroConfig::default_preview()),
 			ConceptSpecies::Spibmom => Self::spibmom(SpibmomConfig::default_preview()),
@@ -123,6 +139,10 @@ impl ConceptPreviewConfig {
 			Self::Dui { .. } => ConceptSpecies::Dui,
 			Self::Lidder { .. } => ConceptSpecies::Lidder,
 			Self::Chupri { .. } => ConceptSpecies::Chupri,
+			Self::Brokker { .. } => ConceptSpecies::Brokker,
+			Self::Tipple { .. } => ConceptSpecies::Tipple,
+			Self::Topple { .. } => ConceptSpecies::Topple,
+			Self::Kispar { .. } => ConceptSpecies::Kispar,
 			Self::Wumbus { .. } => ConceptSpecies::Wumbus,
 			Self::Lero { .. } => ConceptSpecies::Lero,
 			Self::Spibmom { .. } => ConceptSpecies::Spibmom,
@@ -234,6 +254,38 @@ impl ConceptPreviewConfig {
 		Self::Chupri { config, animation }
 	}
 
+	pub fn brokker(config: BrokkerConfig) -> Self {
+		Self::Brokker { config, animation: ConceptAnimation::default() }
+	}
+
+	pub fn brokker_with_animation(config: BrokkerConfig, animation: ConceptAnimation) -> Self {
+		Self::Brokker { config, animation }
+	}
+
+	pub fn tipple(config: TippleConfig) -> Self {
+		Self::Tipple { config, animation: ConceptAnimation::default() }
+	}
+
+	pub fn tipple_with_animation(config: TippleConfig, animation: ConceptAnimation) -> Self {
+		Self::Tipple { config, animation }
+	}
+
+	pub fn topple(config: ToppleConfig) -> Self {
+		Self::Topple { config, animation: ConceptAnimation::default() }
+	}
+
+	pub fn topple_with_animation(config: ToppleConfig, animation: ConceptAnimation) -> Self {
+		Self::Topple { config, animation }
+	}
+
+	pub fn kispar(config: KisparConfig) -> Self {
+		Self::Kispar { config, animation: ConceptAnimation::default() }
+	}
+
+	pub fn kispar_with_animation(config: KisparConfig, animation: ConceptAnimation) -> Self {
+		Self::Kispar { config, animation }
+	}
+
 	pub fn wumbus(config: WumbusConfig) -> Self {
 		Self::Wumbus { config, animation: ConceptAnimation::default() }
 	}
@@ -273,6 +325,10 @@ impl ConceptPreviewConfig {
 			Self::Dui { config, .. } => config.resolve(),
 			Self::Lidder { config, .. } => config.resolve(),
 			Self::Chupri { config, .. } => config.resolve(),
+			Self::Brokker { config, .. } => config.resolve(),
+			Self::Tipple { config, .. } => config.resolve(),
+			Self::Topple { config, .. } => config.resolve(),
+			Self::Kispar { config, .. } => config.resolve(),
 			Self::Wumbus { config, .. } => config.resolve(),
 			Self::Lero { config, .. } => config.resolve(),
 			Self::Spibmom { config, .. } => config.resolve(),
@@ -304,6 +360,18 @@ impl ConceptPreviewConfig {
 				format!("{} animation={}", config.status_label(), animation.label())
 			}
 			Self::Chupri { config, animation } => {
+				format!("{} animation={}", config.status_label(), animation.label())
+			}
+			Self::Brokker { config, animation } => {
+				format!("{} animation={}", config.status_label(), animation.label())
+			}
+			Self::Tipple { config, animation } => {
+				format!("{} animation={}", config.status_label(), animation.label())
+			}
+			Self::Topple { config, animation } => {
+				format!("{} animation={}", config.status_label(), animation.label())
+			}
+			Self::Kispar { config, animation } => {
 				format!("{} animation={}", config.status_label(), animation.label())
 			}
 			Self::Wumbus { config, animation } => {
@@ -344,6 +412,18 @@ impl ConceptPreviewConfig {
 			}
 			Self::Chupri { config, animation } => {
 				format!("species=chupri {} animation={animation:?}", config.sync_key())
+			}
+			Self::Brokker { config, animation } => {
+				format!("species=brokker {} animation={animation:?}", config.sync_key())
+			}
+			Self::Tipple { config, animation } => {
+				format!("species=tipple {} animation={animation:?}", config.sync_key())
+			}
+			Self::Topple { config, animation } => {
+				format!("species=topple {} animation={animation:?}", config.sync_key())
+			}
+			Self::Kispar { config, animation } => {
+				format!("species=kispar {} animation={animation:?}", config.sync_key())
 			}
 			Self::Wumbus { config, animation } => {
 				format!("species=wumbus {} animation={animation:?}", config.sync_key())
@@ -441,6 +521,33 @@ impl ConceptPreviewConfig {
 				config.hair,
 				config.clothing,
 			),
+			Self::Brokker { config, .. } => format!(
+				"species=brokker eye={:?} hair={:?} clothing={:?}",
+				config.eye,
+				config.hair,
+				config.clothing,
+			),
+			Self::Tipple { config, .. } => format!(
+				"species=tipple beak={:?} eye={:?} hair={:?} clothing={:?}",
+				config.beak,
+				config.eye,
+				config.hair,
+				config.clothing,
+			),
+			Self::Topple { config, .. } => format!(
+				"species=topple beak={:?} eye={:?} hair={:?} clothing={:?}",
+				config.beak,
+				config.eye,
+				config.hair,
+				config.clothing,
+			),
+			Self::Kispar { config, .. } => format!(
+				"species=kispar beak={:?} eye={:?} hair={:?} clothing={:?}",
+				config.beak,
+				config.eye,
+				config.hair,
+				config.clothing,
+			),
 			Self::Wumbus { config, .. } => format!(
 				"species=wumbus horns={:?} eye={:?} hair={:?} clothing={:?}",
 				config.horns,
@@ -478,6 +585,10 @@ impl ConceptPreviewConfig {
 			| Self::Dui { animation, .. }
 			| Self::Lidder { animation, .. }
 			| Self::Chupri { animation, .. }
+			| Self::Brokker { animation, .. }
+			| Self::Tipple { animation, .. }
+			| Self::Topple { animation, .. }
+			| Self::Kispar { animation, .. }
 			| Self::Wumbus { animation, .. }
 			| Self::Lero { animation, .. }
 			| Self::Spibmom { animation, .. } => *animation,
@@ -631,6 +742,30 @@ pub enum PreviewTarget {
 	ChupriBeak(ChupriBeakMesh),
 	ChupriHair(HairMesh),
 	ChupriClothing(ClothingMesh),
+	BrokkerBody,
+	BrokkerHead,
+	BrokkerEye,
+	BrokkerSnout(BrokkerSnoutMesh),
+	BrokkerHair(HairMesh),
+	BrokkerClothing(ClothingMesh),
+	TippleBody,
+	TippleHead,
+	TippleEye,
+	TippleBeak(TippleBeakMesh),
+	TippleHair(HairMesh),
+	TippleClothing(ClothingMesh),
+	ToppleBody,
+	ToppleHead,
+	ToppleEye,
+	ToppleBeak(ToppleBeakMesh),
+	ToppleHair(HairMesh),
+	ToppleClothing(ClothingMesh),
+	KisparBody,
+	KisparHead,
+	KisparEye,
+	KisparBeak(KisparBeakMesh),
+	KisparHair(HairMesh),
+	KisparClothing(ClothingMesh),
 	WumbusBody,
 	WumbusHead,
 	WumbusHorns(WumbusHornMesh),
@@ -960,6 +1095,26 @@ fn sync_live_preview(
 				target.color = preview_color_chupri(chupri, target.target);
 			}
 		}
+		ConceptPreviewConfig::Brokker { config: brokker, .. } => {
+			for (_, mut target, ..) in parts {
+				target.color = preview_color_brokker(brokker, target.target);
+			}
+		}
+		ConceptPreviewConfig::Tipple { config: tipple, .. } => {
+			for (_, mut target, ..) in parts {
+				target.color = preview_color_tipple(tipple, target.target);
+			}
+		}
+		ConceptPreviewConfig::Topple { config: topple, .. } => {
+			for (_, mut target, ..) in parts {
+				target.color = preview_color_topple(topple, target.target);
+			}
+		}
+		ConceptPreviewConfig::Kispar { config: kispar, .. } => {
+			for (_, mut target, ..) in parts {
+				target.color = preview_color_kispar(kispar, target.target);
+			}
+		}
 		ConceptPreviewConfig::Wumbus { config: wumbus, .. } => {
 			for (_, mut target, ..) in parts {
 				target.color = preview_color_wumbus(wumbus, target.target);
@@ -1279,6 +1434,65 @@ fn preview_color_chupri(config: &ChupriConfig, target: PreviewTarget) -> Preview
 	}
 }
 
+fn preview_color_brokker(config: &BrokkerConfig, target: PreviewTarget) -> PreviewColor {
+	match target {
+		PreviewTarget::BrokkerHead | PreviewTarget::BrokkerBody => {
+			PreviewColor::BrokkerPlumage(config.colors.plumage)
+		}
+		PreviewTarget::BrokkerEye => PreviewColor::BrokkerEye(config.colors.eyes),
+		PreviewTarget::BrokkerSnout(_) => PreviewColor::BrokkerSnout(config.colors.snout),
+		PreviewTarget::BrokkerHair(_) => PreviewColor::BrokkerPlumage(config.colors.plumage),
+		PreviewTarget::BrokkerClothing(clothing) => {
+			PreviewColor::Item(config.colors.clothing_color(clothing))
+		}
+		_ => PreviewColor::BrokkerPlumage(config.colors.plumage),
+	}
+}
+
+fn preview_color_tipple(config: &TippleConfig, target: PreviewTarget) -> PreviewColor {
+	match target {
+		PreviewTarget::TippleHead | PreviewTarget::TippleBody => {
+			PreviewColor::TipplePlumage(config.colors.plumage)
+		}
+		PreviewTarget::TippleEye => PreviewColor::TippleEye(config.colors.eyes),
+		PreviewTarget::TippleBeak(_) => PreviewColor::TippleBeak(config.colors.beak),
+		PreviewTarget::TippleHair(_) => PreviewColor::TipplePlumage(config.colors.plumage),
+		PreviewTarget::TippleClothing(clothing) => {
+			PreviewColor::Item(config.colors.clothing_color(clothing))
+		}
+		_ => PreviewColor::TipplePlumage(config.colors.plumage),
+	}
+}
+
+fn preview_color_topple(config: &ToppleConfig, target: PreviewTarget) -> PreviewColor {
+	match target {
+		PreviewTarget::ToppleHead | PreviewTarget::ToppleBody => {
+			PreviewColor::TopplePlumage(config.colors.plumage)
+		}
+		PreviewTarget::ToppleEye => PreviewColor::ToppleEye(config.colors.eyes),
+		PreviewTarget::ToppleBeak(_) => PreviewColor::ToppleBeak(config.colors.beak),
+		PreviewTarget::ToppleHair(_) => PreviewColor::TopplePlumage(config.colors.plumage),
+		PreviewTarget::ToppleClothing(clothing) => {
+			PreviewColor::Item(config.colors.clothing_color(clothing))
+		}
+		_ => PreviewColor::TopplePlumage(config.colors.plumage),
+	}
+}
+
+fn preview_color_kispar(config: &KisparConfig, target: PreviewTarget) -> PreviewColor {
+	match target {
+		PreviewTarget::KisparHead | PreviewTarget::KisparBody => {
+			PreviewColor::KisparPlumage(config.colors.plumage)
+		}
+		PreviewTarget::KisparEye => PreviewColor::KisparEye(config.colors.eyes),
+		PreviewTarget::KisparBeak(_) => PreviewColor::KisparBeak(config.colors.beak),
+		PreviewTarget::KisparHair(_) => PreviewColor::KisparPlumage(config.colors.plumage),
+		PreviewTarget::KisparClothing(clothing) => {
+			PreviewColor::Item(config.colors.clothing_color(clothing))
+		}
+		_ => PreviewColor::KisparPlumage(config.colors.plumage),
+	}
+}
 
 fn preview_color_wumbus(config: &WumbusConfig, target: PreviewTarget) -> PreviewColor {
 	match target {
@@ -1471,6 +1685,10 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 			ConceptPreviewConfig::Dui { .. } => part.asset.normalization.transform(),
 			ConceptPreviewConfig::Lidder { .. } => part.asset.normalization.transform(),
 			ConceptPreviewConfig::Chupri { .. } => part.asset.normalization.transform(),
+			ConceptPreviewConfig::Brokker { .. } => part.asset.normalization.transform(),
+			ConceptPreviewConfig::Tipple { .. } => part.asset.normalization.transform(),
+			ConceptPreviewConfig::Topple { .. } => part.asset.normalization.transform(),
+			ConceptPreviewConfig::Kispar { .. } => part.asset.normalization.transform(),
 			ConceptPreviewConfig::Wumbus { .. } => part.asset.normalization.transform(),
 			ConceptPreviewConfig::Lero { .. } => part.asset.normalization.transform(),
 			ConceptPreviewConfig::Spibmom { .. } => part.asset.normalization.transform(),
@@ -1930,6 +2148,121 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 						.unwrap_or(PreviewTarget::ChupriHead),
 				};
 				PreviewAssetTarget { target, color: preview_color_chupri(config, target) }
+			}
+			ConceptPreviewConfig::Brokker { config, .. } => {
+				let target = match part.slot {
+					CharacterPartSlot::BodyMesh => PreviewTarget::BrokkerBody,
+					CharacterPartSlot::NeckRig | CharacterPartSlot::NeckMesh => PreviewTarget::BrokkerBody,
+					CharacterPartSlot::HeadRig | CharacterPartSlot::HeadMesh => {
+						PreviewTarget::BrokkerHead
+					}
+					CharacterPartSlot::EyeLeft | CharacterPartSlot::EyeRight => {
+						PreviewTarget::BrokkerEye
+					}
+					CharacterPartSlot::Mouth => PreviewTarget::BrokkerSnout(BrokkerSnoutMesh::Igny),
+					CharacterPartSlot::Nose
+					| CharacterPartSlot::EarLeft
+					| CharacterPartSlot::EarRight
+					| CharacterPartSlot::Horns
+					| CharacterPartSlot::Tail
+					| CharacterPartSlot::Spine => PreviewTarget::BrokkerHead,
+					CharacterPartSlot::Hair => PreviewTarget::BrokkerHair(config.hair),
+					CharacterPartSlot::Clothing => config
+						.clothing
+						.iter()
+						.copied()
+						.find(|clothing| clothing.label() == part.asset.label)
+						.map(PreviewTarget::BrokkerClothing)
+						.unwrap_or(PreviewTarget::BrokkerHead),
+				};
+				PreviewAssetTarget { target, color: preview_color_brokker(config, target) }
+			}
+
+			ConceptPreviewConfig::Tipple { config, .. } => {
+				let target = match part.slot {
+					CharacterPartSlot::BodyMesh => PreviewTarget::TippleBody,
+					CharacterPartSlot::NeckRig | CharacterPartSlot::NeckMesh => PreviewTarget::TippleBody,
+					CharacterPartSlot::HeadRig | CharacterPartSlot::HeadMesh => {
+						PreviewTarget::TippleHead
+					}
+					CharacterPartSlot::EyeLeft | CharacterPartSlot::EyeRight => {
+						PreviewTarget::TippleEye
+					}
+					CharacterPartSlot::Mouth => PreviewTarget::TippleBeak(config.beak),
+					CharacterPartSlot::Nose
+					| CharacterPartSlot::EarLeft
+					| CharacterPartSlot::EarRight
+					| CharacterPartSlot::Horns
+					| CharacterPartSlot::Tail
+					| CharacterPartSlot::Spine => PreviewTarget::TippleHead,
+					CharacterPartSlot::Hair => PreviewTarget::TippleHair(config.hair),
+					CharacterPartSlot::Clothing => config
+						.clothing
+						.iter()
+						.copied()
+						.find(|clothing| clothing.label() == part.asset.label)
+						.map(PreviewTarget::TippleClothing)
+						.unwrap_or(PreviewTarget::TippleHead),
+				};
+				PreviewAssetTarget { target, color: preview_color_tipple(config, target) }
+			}
+
+			ConceptPreviewConfig::Topple { config, .. } => {
+				let target = match part.slot {
+					CharacterPartSlot::BodyMesh => PreviewTarget::ToppleBody,
+					CharacterPartSlot::NeckRig | CharacterPartSlot::NeckMesh => PreviewTarget::ToppleBody,
+					CharacterPartSlot::HeadRig | CharacterPartSlot::HeadMesh => {
+						PreviewTarget::ToppleHead
+					}
+					CharacterPartSlot::EyeLeft | CharacterPartSlot::EyeRight => {
+						PreviewTarget::ToppleEye
+					}
+					CharacterPartSlot::Mouth => PreviewTarget::ToppleBeak(config.beak),
+					CharacterPartSlot::Nose
+					| CharacterPartSlot::EarLeft
+					| CharacterPartSlot::EarRight
+					| CharacterPartSlot::Horns
+					| CharacterPartSlot::Tail
+					| CharacterPartSlot::Spine => PreviewTarget::ToppleHead,
+					CharacterPartSlot::Hair => PreviewTarget::ToppleHair(config.hair),
+					CharacterPartSlot::Clothing => config
+						.clothing
+						.iter()
+						.copied()
+						.find(|clothing| clothing.label() == part.asset.label)
+						.map(PreviewTarget::ToppleClothing)
+						.unwrap_or(PreviewTarget::ToppleHead),
+				};
+				PreviewAssetTarget { target, color: preview_color_topple(config, target) }
+			}
+
+			ConceptPreviewConfig::Kispar { config, .. } => {
+				let target = match part.slot {
+					CharacterPartSlot::BodyMesh => PreviewTarget::KisparBody,
+					CharacterPartSlot::NeckRig | CharacterPartSlot::NeckMesh => PreviewTarget::KisparBody,
+					CharacterPartSlot::HeadRig | CharacterPartSlot::HeadMesh => {
+						PreviewTarget::KisparHead
+					}
+					CharacterPartSlot::EyeLeft | CharacterPartSlot::EyeRight => {
+						PreviewTarget::KisparEye
+					}
+					CharacterPartSlot::Mouth => PreviewTarget::KisparBeak(config.beak),
+					CharacterPartSlot::Nose
+					| CharacterPartSlot::EarLeft
+					| CharacterPartSlot::EarRight
+					| CharacterPartSlot::Horns
+					| CharacterPartSlot::Tail
+					| CharacterPartSlot::Spine => PreviewTarget::KisparHead,
+					CharacterPartSlot::Hair => PreviewTarget::KisparHair(config.hair),
+					CharacterPartSlot::Clothing => config
+						.clothing
+						.iter()
+						.copied()
+						.find(|clothing| clothing.label() == part.asset.label)
+						.map(PreviewTarget::KisparClothing)
+						.unwrap_or(PreviewTarget::KisparHead),
+				};
+				PreviewAssetTarget { target, color: preview_color_kispar(config, target) }
 			}
 			ConceptPreviewConfig::Wumbus { config, .. } => {
 				let target = match part.slot {

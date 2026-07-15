@@ -18,6 +18,10 @@ use crate::{
 		},
 		brenal::{BrenalBodyMesh, BrenalHeadMesh, BrenalHornMesh, BrenalMouthMesh},
 		caole::{CaoleBodyMesh, CaoleMouthMesh},
+		brokker::{
+			BrokkerEyeColor, BrokkerHeadMesh, BrokkerPlumageColor, BrokkerSnoutColor,
+			BrokkerSnoutMesh,
+		},
 		chupri::{
 			ChupriBeakColor, ChupriBeakMesh, ChupriEyeColor, ChupriHeadMesh, ChupriPlumageColor,
 		},
@@ -29,6 +33,9 @@ use crate::{
 			DuiEyeColor, DuiEyeMesh, DuiHeadMesh, DuiMouthColor, DuiMouthMesh, DuiNoseColor,
 			DuiNoseMesh, DuiSkinColor,
 		},
+		kispar::{
+			KisparBeakColor, KisparBeakMesh, KisparEyeColor, KisparHeadMesh, KisparPlumageColor,
+		},
 		lero::{
 			LeroEyeColor, LeroHeadMesh, LeroMouthColor, LeroMouthMesh, LeroSkinColor,
 			LeroSpineColor, LeroTailColor,
@@ -38,6 +45,12 @@ use crate::{
 		spibmom::{
 			SpibmomCrownColor, SpibmomEarColor, SpibmomEyeColor, SpibmomHeadMesh,
 			SpibmomMouthColor, SpibmomMouthMesh, SpibmomSkinColor, SpibmomSpineColor,
+		},
+		tipple::{
+			TippleBeakColor, TippleBeakMesh, TippleEyeColor, TippleHeadMesh, TipplePlumageColor,
+		},
+		topple::{
+			ToppleBeakColor, ToppleBeakMesh, ToppleEyeColor, ToppleHeadMesh, TopplePlumageColor,
 		},
 		wumbus::{
 			WumbusEarColor, WumbusEyeColor, WumbusHeadMesh, WumbusHornColor, WumbusHornMesh,
@@ -133,6 +146,26 @@ impl_menu_identity!(
 	ChupriPlumageColor,
 	ChupriEyeColor,
 	ChupriBeakColor,
+	BrokkerHeadMesh,
+	BrokkerSnoutMesh,
+	BrokkerPlumageColor,
+	BrokkerEyeColor,
+	BrokkerSnoutColor,
+	TippleHeadMesh,
+	TippleBeakMesh,
+	TipplePlumageColor,
+	TippleEyeColor,
+	TippleBeakColor,
+	ToppleHeadMesh,
+	ToppleBeakMesh,
+	TopplePlumageColor,
+	ToppleEyeColor,
+	ToppleBeakColor,
+	KisparHeadMesh,
+	KisparBeakMesh,
+	KisparPlumageColor,
+	KisparEyeColor,
+	KisparBeakColor,
 	BrenalBodyMesh,
 	BrenalHeadMesh,
 	BrenalMouthMesh,
@@ -182,6 +215,18 @@ impl_swatch_option!(
 	ChupriPlumageColor,
 	ChupriEyeColor,
 	ChupriBeakColor,
+	BrokkerPlumageColor,
+	BrokkerEyeColor,
+	BrokkerSnoutColor,
+	TipplePlumageColor,
+	TippleEyeColor,
+	TippleBeakColor,
+	TopplePlumageColor,
+	ToppleEyeColor,
+	ToppleBeakColor,
+	KisparPlumageColor,
+	KisparEyeColor,
+	KisparBeakColor,
 	WumbusSkinColor,
 	WumbusEyeColor,
 	WumbusEarColor,
@@ -246,6 +291,14 @@ impl_asset_option!(LidderHeadMesh, HEAD_THUMBNAIL_CAMERA);
 impl_asset_option!(LidderBeakMesh, FACE_FEATURE_THUMBNAIL_CAMERA);
 impl_asset_option!(ChupriHeadMesh, HEAD_THUMBNAIL_CAMERA);
 impl_asset_option!(ChupriBeakMesh, FACE_FEATURE_THUMBNAIL_CAMERA);
+impl_asset_option!(BrokkerHeadMesh, HEAD_THUMBNAIL_CAMERA);
+impl_asset_option!(BrokkerSnoutMesh, FACE_FEATURE_THUMBNAIL_CAMERA);
+impl_asset_option!(TippleHeadMesh, HEAD_THUMBNAIL_CAMERA);
+impl_asset_option!(TippleBeakMesh, FACE_FEATURE_THUMBNAIL_CAMERA);
+impl_asset_option!(ToppleHeadMesh, HEAD_THUMBNAIL_CAMERA);
+impl_asset_option!(ToppleBeakMesh, FACE_FEATURE_THUMBNAIL_CAMERA);
+impl_asset_option!(KisparHeadMesh, HEAD_THUMBNAIL_CAMERA);
+impl_asset_option!(KisparBeakMesh, FACE_FEATURE_THUMBNAIL_CAMERA);
 impl_asset_option!(BrenalBodyMesh, BODY_THUMBNAIL_CAMERA);
 impl_asset_option!(BrenalHeadMesh, HEAD_THUMBNAIL_CAMERA);
 impl_asset_option!(BrenalMouthMesh, FACE_FEATURE_THUMBNAIL_CAMERA);

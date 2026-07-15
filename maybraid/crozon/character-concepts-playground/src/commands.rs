@@ -12,6 +12,10 @@ pub mod brodler;
 pub mod dui;
 pub mod lidder;
 pub mod chupri;
+pub mod brokker;
+pub mod tipple;
+pub mod topple;
+pub mod kispar;
 pub mod lero;
 pub mod mygr;
 pub mod spibmom;
@@ -32,6 +36,10 @@ pub use dui::Dui;
 use game_commands::command::{CommandScript, GameCommand};
 pub use lidder::Lidder;
 pub use chupri::Chupri;
+pub use brokker::Brokker;
+pub use tipple::Tipple;
+pub use topple::Topple;
+pub use kispar::Kispar;
 pub use lero::Lero;
 pub use mygr::Mygr;
 pub use spibmom::Spibmom;
@@ -92,6 +100,18 @@ pub enum ConceptsCommand {
 	/// Spawn or adjust the Chupri concept preview.
 	#[command(subcommand)]
 	Chupri(Chupri),
+	/// Spawn or adjust the Brokker concept preview.
+	#[command(subcommand)]
+	Brokker(Brokker),
+	/// Spawn or adjust the Tipple concept preview.
+	#[command(subcommand)]
+	Tipple(Tipple),
+	/// Spawn or adjust the Topple concept preview.
+	#[command(subcommand)]
+	Topple(Topple),
+	/// Spawn or adjust the Kispar concept preview.
+	#[command(subcommand)]
+	Kispar(Kispar),
 	/// Spawn or adjust the Wumbus concept preview.
 	#[command(subcommand)]
 	Wumbus(Wumbus),
@@ -131,6 +151,10 @@ impl ConceptsCommand {
 			Self::Dui(dui) => dui.react(commands),
 			Self::Lidder(lidder) => lidder.react(commands),
 			Self::Chupri(chupri) => chupri.react(commands),
+			Self::Brokker(brokker) => brokker.react(commands),
+			Self::Tipple(tipple) => tipple.react(commands),
+			Self::Topple(topple) => topple.react(commands),
+			Self::Kispar(kispar) => kispar.react(commands),
 			Self::Wumbus(wumbus) => wumbus.react(commands),
 			Self::Lero(lero) => lero.react(commands),
 			Self::Spibmom(spibmom) => spibmom.react(commands),
