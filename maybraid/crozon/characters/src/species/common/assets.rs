@@ -29,6 +29,8 @@ pub const BODY_STANDARD: AssetPath = AssetPath::new("characters/bodies/humanoid_
 pub const BODY_FULL: AssetPath = AssetPath::new("characters/bodies/leron_biped_full_body.glb");
 pub const HEAD_RIG: AssetPath = AssetPath::new("characters/heads/orthograde_head.glb");
 pub const HEAD_STANDARD: AssetPath = AssetPath::new("characters/heads/meerkat_head_v2.glb");
+pub const HEAD_STANDARD_PRONOGRADE: AssetPath =
+	AssetPath::new("characters/heads/meerkat_head_pronograde.glb");
 pub const HEAD_GAUNT: AssetPath = AssetPath::new("characters/heads/gaunt_ortho_humanoid_head.glb");
 pub const HEAD_FULL: AssetPath = AssetPath::new("characters/heads/full_ortho_humanoid_head.glb");
 pub const HEAD_ORTHO_BEAR: AssetPath = AssetPath::new("characters/heads/ortho_bear_head.glb");

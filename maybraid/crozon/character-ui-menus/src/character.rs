@@ -3,8 +3,12 @@ use character_ui_menu::{
 };
 use crozon_characters::{
 	species::{
-		braidman::BraidmanConfig, brenal::BrenalConfig, caole::CaoleConfig, hars::HarsConfig, claber::ClaberConfig, croconot::CroconotConfig, brodler::BrodlerConfig, dui::DuiConfig,
-		brokker::BrokkerConfig, chupri::ChupriConfig, kispar::KisparConfig, kaller::KallerConfig, kappler::KapplerConfig, lidder::LidderConfig, lero::LeroConfig, mygr::MygrConfig, spibmom::SpibmomConfig, sonyak::SonyakConfig, tipple::TippleConfig, topple::ToppleConfig, tapp::TappConfig, wumbus::WumbusConfig, ylter::YilterConfig,
+		braidman::BraidmanConfig, brenal::BrenalConfig, caole::CaoleConfig, epiphant::EpiphantConfig,
+		hars::HarsConfig, claber::ClaberConfig, croconot::CroconotConfig, brodler::BrodlerConfig,
+		dui::DuiConfig, brokker::BrokkerConfig, chupri::ChupriConfig, kispar::KisparConfig,
+		kaller::KallerConfig, kappler::KapplerConfig, lidder::LidderConfig, lero::LeroConfig,
+		mygr::MygrConfig, spibmom::SpibmomConfig, sonyak::SonyakConfig, tipple::TippleConfig,
+		topple::ToppleConfig, tapp::TappConfig, wumbus::WumbusConfig, ylter::YilterConfig,
 	},
 	ConceptAnimation,
 };
@@ -14,6 +18,7 @@ use crate::{
 		braidman::BraidmanMenu,
 		brenal::{BrenalAnimationClip, BrenalMenu},
 		caole::{CaoleAnimationClip, CaoleMenu},
+		epiphant::{EpiphantAnimationClip, EpiphantMenu},
 		hars::{HarsAnimationClip, HarsMenu},
 		claber::{ClaberAnimationClip, ClaberMenu},
 		croconot::{CroconotAnimationClip, CroconotMenu},
@@ -44,6 +49,7 @@ pub enum ConceptSpecies {
 	Braidman,
 	Brenal,
 	Caole,
+	Epiphant,
 	Hars,
 	Yilter,
 	Sonyak,
@@ -72,6 +78,7 @@ impl ConceptSpecies {
 			Self::Braidman => "braidman",
 			Self::Brenal => "brenal",
 			Self::Caole => "caole",
+			Self::Epiphant => "epiphant",
 			Self::Hars => "hars",
 			Self::Yilter => "ylter",
 			Self::Sonyak => "sonyak",
@@ -102,6 +109,7 @@ impl ListValues for ConceptSpecies {
 			Self::Braidman,
 			Self::Brenal,
 			Self::Caole,
+			Self::Epiphant,
 			Self::Hars,
 			Self::Yilter,
 			Self::Sonyak,
@@ -132,6 +140,7 @@ impl LabelOption for ConceptSpecies {
 			Self::Braidman => "braidman",
 			Self::Brenal => "brenal",
 			Self::Caole => "caole",
+			Self::Epiphant => "epiphant",
 			Self::Hars => "hars",
 			Self::Yilter => "ylter",
 			Self::Sonyak => "sonyak",
@@ -162,6 +171,7 @@ pub struct CharacterMenu {
 	pub braidman: BraidmanMenu,
 	pub brenal: BrenalMenu,
 	pub caole: CaoleMenu,
+	pub epiphant: EpiphantMenu,
 	pub hars: HarsMenu,
 	pub ylter: YilterMenu,
 	pub sonyak: SonyakMenu,
@@ -191,6 +201,7 @@ impl CharacterMenu {
 			braidman: BraidmanMenu::from(config).with_animation(animation),
 			brenal: BrenalMenu::default(),
 			caole: CaoleMenu::default(),
+			epiphant: EpiphantMenu::default(),
 			hars: HarsMenu::default(),
 			ylter: YilterMenu::default(),
 			sonyak: SonyakMenu::default(),
@@ -220,6 +231,7 @@ impl CharacterMenu {
 			braidman: BraidmanMenu::default(),
 			brenal: BrenalMenu::from(config).with_animation(animation),
 			caole: CaoleMenu::default(),
+			epiphant: EpiphantMenu::default(),
 			hars: HarsMenu::default(),
 			ylter: YilterMenu::default(),
 			sonyak: SonyakMenu::default(),
@@ -249,6 +261,37 @@ impl CharacterMenu {
 			braidman: BraidmanMenu::default(),
 			brenal: BrenalMenu::default(),
 			caole: CaoleMenu::from(config).with_animation(animation),
+			epiphant: EpiphantMenu::default(),
+			hars: HarsMenu::default(),
+			ylter: YilterMenu::default(),
+			sonyak: SonyakMenu::default(),
+			claber: ClaberMenu::default(),
+			croconot: CroconotMenu::default(),
+			brodler: BrodlerMenu::default(),
+			mygr: MygrMenu::default(),
+			dui: DuiMenu::default(),
+			lidder: LidderMenu::default(),
+			chupri: ChupriMenu::default(),
+			brokker: BrokkerMenu::default(),
+			tipple: TippleMenu::default(),
+			topple: ToppleMenu::default(),
+			kispar: KisparMenu::default(),
+			tapp: TappMenu::default(),
+			kaller: KallerMenu::default(),
+			kappler: KapplerMenu::default(),
+			wumbus: WumbusMenu::default(),
+			lero: LeroMenu::default(),
+			spibmom: SpibmomMenu::default(),
+		}
+	}
+
+	pub fn from_epiphant(config: &EpiphantConfig, animation: ConceptAnimation) -> Self {
+		Self {
+			species: SingleSelect::new(ConceptSpecies::Epiphant),
+			braidman: BraidmanMenu::default(),
+			brenal: BrenalMenu::default(),
+			caole: CaoleMenu::default(),
+			epiphant: EpiphantMenu::from(config).with_animation(animation),
 			hars: HarsMenu::default(),
 			ylter: YilterMenu::default(),
 			sonyak: SonyakMenu::default(),
@@ -278,6 +321,7 @@ impl CharacterMenu {
 			braidman: BraidmanMenu::default(),
 			brenal: BrenalMenu::default(),
 			caole: CaoleMenu::default(),
+			epiphant: EpiphantMenu::default(),
 			hars: HarsMenu::from(config).with_animation(animation),
 			ylter: YilterMenu::default(),
 			sonyak: SonyakMenu::default(),
@@ -307,6 +351,7 @@ impl CharacterMenu {
 			braidman: BraidmanMenu::default(),
 			brenal: BrenalMenu::default(),
 			caole: CaoleMenu::default(),
+			epiphant: EpiphantMenu::default(),
 			hars: HarsMenu::default(),
 			ylter: YilterMenu::from(config).with_animation(animation),
 			sonyak: SonyakMenu::default(),
@@ -336,6 +381,7 @@ impl CharacterMenu {
 			braidman: BraidmanMenu::default(),
 			brenal: BrenalMenu::default(),
 			caole: CaoleMenu::default(),
+			epiphant: EpiphantMenu::default(),
 			hars: HarsMenu::default(),
 			ylter: YilterMenu::default(),
 			sonyak: SonyakMenu::from(config).with_animation(animation),
@@ -366,6 +412,7 @@ impl CharacterMenu {
 			braidman: BraidmanMenu::default(),
 			brenal: BrenalMenu::default(),
 			caole: CaoleMenu::default(),
+			epiphant: EpiphantMenu::default(),
 			hars: HarsMenu::default(),
 			ylter: YilterMenu::default(),
 			sonyak: SonyakMenu::default(),
@@ -395,6 +442,7 @@ impl CharacterMenu {
 			braidman: BraidmanMenu::default(),
 			brenal: BrenalMenu::default(),
 			caole: CaoleMenu::default(),
+			epiphant: EpiphantMenu::default(),
 			hars: HarsMenu::default(),
 			ylter: YilterMenu::default(),
 			sonyak: SonyakMenu::default(),
@@ -424,6 +472,7 @@ impl CharacterMenu {
 			braidman: BraidmanMenu::default(),
 			brenal: BrenalMenu::default(),
 			caole: CaoleMenu::default(),
+			epiphant: EpiphantMenu::default(),
 			hars: HarsMenu::default(),
 			ylter: YilterMenu::default(),
 			sonyak: SonyakMenu::default(),
@@ -453,6 +502,7 @@ impl CharacterMenu {
 			braidman: BraidmanMenu::default(),
 			brenal: BrenalMenu::default(),
 			caole: CaoleMenu::default(),
+			epiphant: EpiphantMenu::default(),
 			hars: HarsMenu::default(),
 			ylter: YilterMenu::default(),
 			sonyak: SonyakMenu::default(),
@@ -482,6 +532,7 @@ impl CharacterMenu {
 			braidman: BraidmanMenu::default(),
 			brenal: BrenalMenu::default(),
 			caole: CaoleMenu::default(),
+			epiphant: EpiphantMenu::default(),
 			hars: HarsMenu::default(),
 			ylter: YilterMenu::default(),
 			sonyak: SonyakMenu::default(),
@@ -512,6 +563,7 @@ impl CharacterMenu {
 			braidman: BraidmanMenu::default(),
 			brenal: BrenalMenu::default(),
 			caole: CaoleMenu::default(),
+			epiphant: EpiphantMenu::default(),
 			hars: HarsMenu::default(),
 			ylter: YilterMenu::default(),
 			sonyak: SonyakMenu::default(),
@@ -541,6 +593,7 @@ impl CharacterMenu {
 			braidman: BraidmanMenu::default(),
 			brenal: BrenalMenu::default(),
 			caole: CaoleMenu::default(),
+			epiphant: EpiphantMenu::default(),
 			hars: HarsMenu::default(),
 			ylter: YilterMenu::default(),
 			sonyak: SonyakMenu::default(),
@@ -570,6 +623,7 @@ impl CharacterMenu {
 			braidman: BraidmanMenu::default(),
 			brenal: BrenalMenu::default(),
 			caole: CaoleMenu::default(),
+			epiphant: EpiphantMenu::default(),
 			hars: HarsMenu::default(),
 			ylter: YilterMenu::default(),
 			sonyak: SonyakMenu::default(),
@@ -599,6 +653,7 @@ impl CharacterMenu {
 			braidman: BraidmanMenu::default(),
 			brenal: BrenalMenu::default(),
 			caole: CaoleMenu::default(),
+			epiphant: EpiphantMenu::default(),
 			hars: HarsMenu::default(),
 			ylter: YilterMenu::default(),
 			sonyak: SonyakMenu::default(),
@@ -628,6 +683,7 @@ impl CharacterMenu {
 			braidman: BraidmanMenu::default(),
 			brenal: BrenalMenu::default(),
 			caole: CaoleMenu::default(),
+			epiphant: EpiphantMenu::default(),
 			hars: HarsMenu::default(),
 			ylter: YilterMenu::default(),
 			sonyak: SonyakMenu::default(),
@@ -657,6 +713,7 @@ impl CharacterMenu {
 			braidman: BraidmanMenu::default(),
 			brenal: BrenalMenu::default(),
 			caole: CaoleMenu::default(),
+			epiphant: EpiphantMenu::default(),
 			hars: HarsMenu::default(),
 			ylter: YilterMenu::default(),
 			sonyak: SonyakMenu::default(),
@@ -686,6 +743,7 @@ impl CharacterMenu {
 			braidman: BraidmanMenu::default(),
 			brenal: BrenalMenu::default(),
 			caole: CaoleMenu::default(),
+			epiphant: EpiphantMenu::default(),
 			hars: HarsMenu::default(),
 			ylter: YilterMenu::default(),
 			sonyak: SonyakMenu::default(),
@@ -715,6 +773,7 @@ impl CharacterMenu {
 			braidman: BraidmanMenu::default(),
 			brenal: BrenalMenu::default(),
 			caole: CaoleMenu::default(),
+			epiphant: EpiphantMenu::default(),
 			hars: HarsMenu::default(),
 			ylter: YilterMenu::default(),
 			sonyak: SonyakMenu::default(),
@@ -744,6 +803,7 @@ impl CharacterMenu {
 			braidman: BraidmanMenu::default(),
 			brenal: BrenalMenu::default(),
 			caole: CaoleMenu::default(),
+			epiphant: EpiphantMenu::default(),
 			hars: HarsMenu::default(),
 			ylter: YilterMenu::default(),
 			sonyak: SonyakMenu::default(),
@@ -773,6 +833,7 @@ impl CharacterMenu {
 			braidman: BraidmanMenu::default(),
 			brenal: BrenalMenu::default(),
 			caole: CaoleMenu::default(),
+			epiphant: EpiphantMenu::default(),
 			hars: HarsMenu::default(),
 			ylter: YilterMenu::default(),
 			sonyak: SonyakMenu::default(),
@@ -802,6 +863,7 @@ impl CharacterMenu {
 			braidman: BraidmanMenu::default(),
 			brenal: BrenalMenu::default(),
 			caole: CaoleMenu::default(),
+			epiphant: EpiphantMenu::default(),
 			hars: HarsMenu::default(),
 			ylter: YilterMenu::default(),
 			sonyak: SonyakMenu::default(),
@@ -831,6 +893,7 @@ impl CharacterMenu {
 			braidman: BraidmanMenu::default(),
 			brenal: BrenalMenu::default(),
 			caole: CaoleMenu::default(),
+			epiphant: EpiphantMenu::default(),
 			hars: HarsMenu::default(),
 			ylter: YilterMenu::default(),
 			sonyak: SonyakMenu::default(),
@@ -861,6 +924,7 @@ impl CharacterMenu {
 			ConceptSpecies::Braidman => self.braidman.menu_node(),
 			ConceptSpecies::Brenal => self.brenal.menu_node(),
 			ConceptSpecies::Caole => self.caole.menu_node(),
+			ConceptSpecies::Epiphant => self.epiphant.menu_node(),
 			ConceptSpecies::Hars => self.hars.menu_node(),
 			ConceptSpecies::Yilter => self.ylter.menu_node(),
 			ConceptSpecies::Sonyak => self.sonyak.menu_node(),
@@ -889,6 +953,7 @@ impl CharacterMenu {
 			ConceptSpecies::Braidman => self.braidman.animation(),
 			ConceptSpecies::Brenal => self.brenal.animation(),
 			ConceptSpecies::Caole => self.caole.animation(),
+			ConceptSpecies::Epiphant => self.epiphant.animation(),
 			ConceptSpecies::Hars => self.hars.animation(),
 			ConceptSpecies::Yilter => self.ylter.animation(),
 			ConceptSpecies::Sonyak => self.sonyak.animation(),
@@ -922,6 +987,10 @@ impl CharacterMenu {
 
 	pub fn caole_config(&self) -> CaoleConfig {
 		CaoleConfig::from(&self.caole)
+	}
+
+	pub fn epiphant_config(&self) -> EpiphantConfig {
+		EpiphantConfig::from(&self.epiphant)
 	}
 
 	pub fn hars_config(&self) -> HarsConfig {
@@ -1020,6 +1089,7 @@ impl CharacterMenu {
 			ConceptSpecies::Braidman => self.apply_braidman(event),
 			ConceptSpecies::Brenal => self.apply_brenal(event),
 			ConceptSpecies::Caole => self.apply_caole(event),
+			ConceptSpecies::Epiphant => self.apply_epiphant(event),
 			ConceptSpecies::Hars => self.apply_hars(event),
 			ConceptSpecies::Yilter => self.apply_ylter(event),
 			ConceptSpecies::Sonyak => self.apply_sonyak(event),
@@ -1053,6 +1123,7 @@ impl CharacterMenu {
 			ConceptSpecies::Braidman => self.braidman.camera_focus_for_field(field),
 			ConceptSpecies::Brenal => self.brenal.camera_focus_for_field(field),
 			ConceptSpecies::Caole => self.caole.camera_focus_for_field(field),
+			ConceptSpecies::Epiphant => self.epiphant.camera_focus_for_field(field),
 			ConceptSpecies::Hars => self.hars.camera_focus_for_field(field),
 			ConceptSpecies::Yilter => self.ylter.camera_focus_for_field(field),
 			ConceptSpecies::Sonyak => self.sonyak.camera_focus_for_field(field),
@@ -1274,6 +1345,69 @@ impl CharacterMenu {
 				}
 				CharacterField::MouthColor => {
 					menu.head_features.value.mouth_color.value = color;
+					true
+				}
+				CharacterField::TailColor => {
+					menu.body.value.tail_color.value = color;
+					true
+				}
+				_ => false,
+			},
+			MenuEvent::SetSwatch(_, _) | MenuEvent::Cycle(_, _) | MenuEvent::ToggleClothing(_) => {
+				false
+			}
+		}
+	}
+
+	fn apply_epiphant(&mut self, event: MenuEvent) -> bool {
+		let menu = &mut self.epiphant;
+		match event {
+			MenuEvent::ToggleSection(_) | MenuEvent::SetSpecies(_) => false,
+			MenuEvent::Cycle(CharacterField::Gender, delta) => {
+				menu.presets.value.gender.value =
+					cycle_value(menu.presets.value.gender.value, delta);
+				true
+			}
+			MenuEvent::Cycle(CharacterField::Build, delta) => {
+				menu.presets.value.build.value = cycle_value(menu.presets.value.build.value, delta);
+				true
+			}
+			MenuEvent::SetAsset(field, value) => match (field, value) {
+				(CharacterField::EpiphantBody, AssetValue::EpiphantBody(value)) => {
+					menu.body.value.body.value = value;
+					true
+				}
+				(CharacterField::Eye, AssetValue::Eye(value)) => {
+					menu.head_features.value.eye.value = value;
+					true
+				}
+				(CharacterField::EpiphantNose, AssetValue::EpiphantNose(value)) => {
+					menu.head_features.value.nose.value = value;
+					true
+				}
+				(CharacterField::Animation, AssetValue::Animation(value)) => {
+					menu.animation.value.clip.value = EpiphantAnimationClip::from(value);
+					true
+				}
+				_ => false,
+			},
+			MenuEvent::SliderDelta(field, delta) => apply_epiphant_slider(menu, field, delta),
+			MenuEvent::SetSwatch(field, SwatchValue::Epiphant(color)) => match field {
+				CharacterField::BodyColor => {
+					menu.body.value.color.value = color;
+					menu.head_features.value.body_color = color;
+					true
+				}
+				CharacterField::EyeColor => {
+					menu.head_features.value.eye_color.value = color;
+					true
+				}
+				CharacterField::NoseColor => {
+					menu.head_features.value.nose_color.value = color;
+					true
+				}
+				CharacterField::EarColor => {
+					menu.head_features.value.ear_color.value = color;
 					true
 				}
 				CharacterField::TailColor => {
@@ -2573,6 +2707,41 @@ fn apply_brenal_slider(menu: &mut BrenalMenu, field: CharacterField, delta: f32)
 }
 
 fn apply_caole_slider(menu: &mut CaoleMenu, field: CharacterField, delta: f32) -> bool {
+	let body = &mut menu.body.value.sliders;
+	let face = &mut menu.head_features.value.feature_sliders;
+	match field {
+		CharacterField::ShoulderWidth => {
+			body.shoulder_width = body.shoulder_width.apply_delta(delta)
+		}
+		CharacterField::HipWidth => body.hip_width = body.hip_width.apply_delta(delta),
+		CharacterField::ChestThickness => {
+			body.chest_thickness = body.chest_thickness.apply_delta(delta)
+		}
+		CharacterField::HipThickness => body.hip_thickness = body.hip_thickness.apply_delta(delta),
+		CharacterField::LegThickness => body.leg_thickness = body.leg_thickness.apply_delta(delta),
+		CharacterField::ButtocksThickness => {
+			body.buttocks_thickness = body.buttocks_thickness.apply_delta(delta)
+		}
+		CharacterField::WaistThickness => {
+			body.waist_thickness = body.waist_thickness.apply_delta(delta)
+		}
+		CharacterField::LowerTrunkThickness => {
+			body.lower_trunk_thickness = body.lower_trunk_thickness.apply_delta(delta)
+		}
+		CharacterField::ArmLength => body.arm_length = body.arm_length.apply_delta(delta),
+		CharacterField::ArmThickness => body.arm_thickness = body.arm_thickness.apply_delta(delta),
+		CharacterField::LegLength => body.leg_length = body.leg_length.apply_delta(delta),
+		CharacterField::EyeWidth => face.eye_width = face.eye_width.apply_delta(delta),
+		CharacterField::EyeHeight => face.eye_height = face.eye_height.apply_delta(delta),
+		CharacterField::EyeTilt => face.eye_tilt = face.eye_tilt.apply_delta(delta),
+		CharacterField::EarWidth => face.ear_width = face.ear_width.apply_delta(delta),
+		CharacterField::EarHeight => face.ear_height = face.ear_height.apply_delta(delta),
+		_ => return false,
+	}
+	true
+}
+
+fn apply_epiphant_slider(menu: &mut EpiphantMenu, field: CharacterField, delta: f32) -> bool {
 	let body = &mut menu.body.value.sliders;
 	let face = &mut menu.head_features.value.feature_sliders;
 	match field {

@@ -25,6 +25,9 @@ use crate::{
 		chupri::{
 			ChupriBeakColor, ChupriBeakMesh, ChupriEyeColor, ChupriHeadMesh, ChupriPlumageColor,
 		},
+		epiphant::{
+			EpiphantBodyMesh, EpiphantColor, EpiphantEarMesh, EpiphantHeadMesh, EpiphantNoseMesh,
+		},
 		hars::{HarsBodyMesh, HarsMouthMesh},
 		claber::{ClaberBodyMesh, ClaberColor, ClaberHeadMesh, ClaberHornMesh, ClaberMouthMesh},
 		croconot::{CroconotBodyMesh, CroconotHeadMesh, CroconotHornMesh, CroconotMouthMesh},
@@ -199,6 +202,11 @@ impl_menu_identity!(
 	BrenalHornMesh,
 	CaoleBodyMesh,
 	CaoleMouthMesh,
+	EpiphantBodyMesh,
+	EpiphantHeadMesh,
+	EpiphantEarMesh,
+	EpiphantNoseMesh,
+	EpiphantColor,
 	HarsBodyMesh,
 	HarsMouthMesh,
 	YilterBodyMesh,
@@ -282,6 +290,7 @@ impl_swatch_option!(
 	SpibmomCrownColor,
 	SpibmomSpineColor,
 	ClaberColor,
+	EpiphantColor,
 );
 
 macro_rules! impl_asset_option {
@@ -348,6 +357,10 @@ impl_asset_option!(BrenalHeadMesh, HEAD_THUMBNAIL_CAMERA);
 impl_asset_option!(BrenalMouthMesh, FACE_FEATURE_THUMBNAIL_CAMERA);
 impl_asset_option!(CaoleBodyMesh, BODY_THUMBNAIL_CAMERA);
 impl_asset_option!(CaoleMouthMesh, FACE_FEATURE_THUMBNAIL_CAMERA);
+impl_asset_option!(EpiphantBodyMesh, BODY_THUMBNAIL_CAMERA);
+impl_asset_option!(EpiphantHeadMesh, HEAD_THUMBNAIL_CAMERA);
+impl_asset_option!(EpiphantEarMesh, EAR_THUMBNAIL_CAMERA);
+impl_asset_option!(EpiphantNoseMesh, FACE_FEATURE_THUMBNAIL_CAMERA);
 impl_asset_option!(HarsBodyMesh, BODY_THUMBNAIL_CAMERA);
 impl_asset_option!(HarsMouthMesh, FACE_FEATURE_THUMBNAIL_CAMERA);
 impl_asset_option!(YilterBodyMesh, BODY_THUMBNAIL_CAMERA);

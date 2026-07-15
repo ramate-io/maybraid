@@ -1,6 +1,7 @@
 pub mod braidman;
 pub mod brenal;
 pub mod caole;
+pub mod epiphant;
 pub mod hars;
 pub mod claber;
 pub mod croconot;

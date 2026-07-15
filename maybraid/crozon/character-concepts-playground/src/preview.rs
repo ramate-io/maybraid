@@ -11,6 +11,7 @@ use crozon_characters::{
 		braidman::BraidmanConfig,
 		brenal::BrenalConfig,
 		caole::CaoleConfig,
+		epiphant::EpiphantConfig,
 		hars::HarsConfig,
 		ylter::YilterConfig,
 		sonyak::SonyakConfig,
@@ -52,6 +53,7 @@ pub enum ConceptSpecies {
 	Braidman,
 	Brenal,
 	Caole,
+	Epiphant,
 	Hars,
 	Yilter,
 	Sonyak,
@@ -79,6 +81,7 @@ pub enum ConceptPreviewConfig {
 	Braidman { config: BraidmanConfig, animation: ConceptAnimation },
 	Brenal { config: BrenalConfig, animation: ConceptAnimation },
 	Caole { config: CaoleConfig, animation: ConceptAnimation },
+	Epiphant { config: EpiphantConfig, animation: ConceptAnimation },
 	Hars { config: HarsConfig, animation: ConceptAnimation },
 	Yilter { config: YilterConfig, animation: ConceptAnimation },
 	Sonyak { config: SonyakConfig, animation: ConceptAnimation },
@@ -113,6 +116,7 @@ impl ConceptPreviewConfig {
 			ConceptSpecies::Braidman => Self::braidman(BraidmanConfig::default_preview()),
 			ConceptSpecies::Brenal => Self::brenal(BrenalConfig::default_preview()),
 			ConceptSpecies::Caole => Self::caole(CaoleConfig::default_preview()),
+			ConceptSpecies::Epiphant => Self::epiphant(EpiphantConfig::default_preview()),
 			ConceptSpecies::Hars => Self::hars(HarsConfig::default_preview()),
 			ConceptSpecies::Yilter => Self::ylter(YilterConfig::default_preview()),
 			ConceptSpecies::Sonyak => Self::sonyak(SonyakConfig::default_preview()),
@@ -141,6 +145,7 @@ impl ConceptPreviewConfig {
 			Self::Braidman { .. } => ConceptSpecies::Braidman,
 			Self::Brenal { .. } => ConceptSpecies::Brenal,
 			Self::Caole { .. } => ConceptSpecies::Caole,
+			Self::Epiphant { .. } => ConceptSpecies::Epiphant,
 			Self::Hars { .. } => ConceptSpecies::Hars,
 			Self::Yilter { .. } => ConceptSpecies::Yilter,
 			Self::Sonyak { .. } => ConceptSpecies::Sonyak,
@@ -186,6 +191,14 @@ impl ConceptPreviewConfig {
 
 	pub fn caole_with_animation(config: CaoleConfig, animation: ConceptAnimation) -> Self {
 		Self::Caole { config, animation }
+	}
+
+	pub fn epiphant(config: EpiphantConfig) -> Self {
+		Self::Epiphant { config, animation: ConceptAnimation::default() }
+	}
+
+	pub fn epiphant_with_animation(config: EpiphantConfig, animation: ConceptAnimation) -> Self {
+		Self::Epiphant { config, animation }
 	}
 
 	pub fn hars(config: HarsConfig) -> Self {
@@ -354,6 +367,7 @@ impl ConceptPreviewConfig {
 			Self::Braidman { config, .. } => config.resolve(),
 			Self::Brenal { config, .. } => config.resolve(),
 			Self::Caole { config, .. } => config.resolve(),
+			Self::Epiphant { config, .. } => config.resolve(),
 			Self::Hars { config, .. } => config.resolve(),
 			Self::Yilter { config, .. } => config.resolve(),
 			Self::Sonyak { config, .. } => config.resolve(),
@@ -384,6 +398,7 @@ impl ConceptPreviewConfig {
 			}
 			Self::Brenal { config, .. } => config.status_label(),
 			Self::Caole { config, .. } => config.status_label(),
+			Self::Epiphant { config, .. } => config.status_label(),
 			Self::Hars { config, .. } => config.status_label(),
 			Self::Yilter { config, .. } => config.status_label(),
 			Self::Sonyak { config, .. } => config.status_label(),
@@ -444,6 +459,7 @@ impl ConceptPreviewConfig {
 			}
 			Self::Brenal { config, .. } => format!("species=brenal {}", config.sync_key()),
 			Self::Caole { config, .. } => format!("species=caole {}", config.sync_key()),
+			Self::Epiphant { config, .. } => format!("species=epiphant {}", config.sync_key()),
 			Self::Hars { config, .. } => format!("species=hars {}", config.sync_key()),
 			Self::Yilter { config, .. } => format!("species=ylter {}", config.sync_key()),
 			Self::Sonyak { config, .. } => format!("species=sonyak {}", config.sync_key()),
@@ -519,6 +535,12 @@ impl ConceptPreviewConfig {
 				"species=caole body={:?} mouth={:?} eye={:?}",
 				config.body,
 				config.mouth,
+				config.eye,
+			),
+			Self::Epiphant { config, .. } => format!(
+				"species=epiphant body={:?} nose={:?} eye={:?}",
+				config.body,
+				config.nose,
 				config.eye,
 			),
 			Self::Hars { config, .. } => format!(
@@ -655,6 +677,7 @@ impl ConceptPreviewConfig {
 			Self::Braidman { animation, .. }
 			| Self::Brenal { animation, .. }
 			| Self::Caole { animation, .. }
+			| Self::Epiphant { animation, .. }
 			| Self::Hars { animation, .. }
 			| Self::Yilter { animation, .. }
 			| Self::Sonyak { animation, .. }
@@ -757,6 +780,12 @@ pub enum PreviewTarget {
 	CaoleEar,
 	CaoleMouth,
 	CaoleTail,
+	EpiphantBody,
+	EpiphantHead,
+	EpiphantEye(EyeMesh),
+	EpiphantEar,
+	EpiphantNose,
+	EpiphantTail,
 	HarsBody,
 	HarsHead,
 	HarsEye(EyeMesh),
@@ -1026,6 +1055,31 @@ fn sync_live_preview(
 			let sliders = caole.sliders.clamped();
 			for (part, mut target, base, transform) in parts {
 				target.color = preview_color_caole(caole, target.target);
+				let Some(base) = base else {
+					continue;
+				};
+				let Some(mut transform) = transform else {
+					continue;
+				};
+				if !has_feature_transform(part.slot) {
+					continue;
+				}
+				let authored =
+					base.normalization.mul_transform(sliders.feature_transform(part.slot));
+				match base.socket {
+					Some(socket) => {
+						*transform = socket;
+						transform.scale *= authored.scale;
+						transform.rotation *= authored.rotation;
+					}
+					None => *transform = authored,
+				}
+			}
+		}
+		ConceptPreviewConfig::Epiphant { config: epiphant, .. } => {
+			let sliders = epiphant.sliders.clamped();
+			for (part, mut target, base, transform) in parts {
+				target.color = preview_color_epiphant(epiphant, target.target);
 				let Some(base) = base else {
 					continue;
 				};
@@ -1399,6 +1453,20 @@ fn preview_color_caole(config: &CaoleConfig, target: PreviewTarget) -> PreviewCo
 		PreviewTarget::CaoleMouth => config.colors.mouth,
 		PreviewTarget::CaoleTail => config.colors.tail,
 		_ => ItemColor::Natural,
+	})
+}
+
+fn preview_color_epiphant(config: &EpiphantConfig, target: PreviewTarget) -> PreviewColor {
+	use crozon_characters::species::epiphant::EpiphantColor;
+
+	PreviewColor::Epiphant(match target {
+		PreviewTarget::EpiphantBody => config.colors.body,
+		PreviewTarget::EpiphantHead => config.colors.head,
+		PreviewTarget::EpiphantEye(_) => config.colors.eyes,
+		PreviewTarget::EpiphantEar => config.colors.ears,
+		PreviewTarget::EpiphantNose => config.colors.nose,
+		PreviewTarget::EpiphantTail => config.colors.tail,
+		_ => EpiphantColor::Slate,
 	})
 }
 
@@ -1808,6 +1876,13 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 					.transform()
 					.mul_transform(sliders.feature_transform(part.slot))
 			}
+			ConceptPreviewConfig::Epiphant { config, .. } => {
+				let sliders = config.sliders.clamped();
+				part.asset
+					.normalization
+					.transform()
+					.mul_transform(sliders.feature_transform(part.slot))
+			}
 			ConceptPreviewConfig::Hars { config, .. } => {
 				let sliders = config.sliders.clamped();
 				part.asset
@@ -2058,6 +2133,31 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 					| CharacterPartSlot::Horns => PreviewTarget::CaoleHead,
 				};
 				PreviewAssetTarget { target, color: preview_color_caole(config, target) }
+			}
+			ConceptPreviewConfig::Epiphant { config, .. } => {
+				let target = match part.slot {
+					CharacterPartSlot::BodyMesh => PreviewTarget::EpiphantBody,
+					CharacterPartSlot::NeckRig | CharacterPartSlot::NeckMesh => {
+						PreviewTarget::EpiphantBody
+					}
+					CharacterPartSlot::HeadRig | CharacterPartSlot::HeadMesh => {
+						PreviewTarget::EpiphantHead
+					}
+					CharacterPartSlot::EyeLeft | CharacterPartSlot::EyeRight => {
+						PreviewTarget::EpiphantEye(config.eye)
+					}
+					CharacterPartSlot::EarLeft | CharacterPartSlot::EarRight => {
+						PreviewTarget::EpiphantEar
+					}
+					CharacterPartSlot::Nose => PreviewTarget::EpiphantNose,
+					CharacterPartSlot::Tail => PreviewTarget::EpiphantTail,
+					CharacterPartSlot::Mouth
+					| CharacterPartSlot::Hair
+					| CharacterPartSlot::Clothing
+					| CharacterPartSlot::Spine
+					| CharacterPartSlot::Horns => PreviewTarget::EpiphantHead,
+				};
+				PreviewAssetTarget { target, color: preview_color_epiphant(config, target) }
 			}
 			ConceptPreviewConfig::Hars { config, .. } => {
 				let target = match part.slot {
