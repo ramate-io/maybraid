@@ -10,6 +10,18 @@
 //! rendered ([`Visibility::Hidden`]). Socket lookups against them therefore
 //! reflect the character's proportions without any animation transforms.
 //!
+//! # Head-rig scale must match the preview
+//!
+//! Orthograde / pronograde head armatures are authored large and brought down
+//! with [`AssetNormalization`](crozon_characters::assets::AssetNormalization)
+//! at preview spawn (e.g. Brodler / Braidman `base_y(0.26)`). The shadow head
+//! must use that same transform: `attach_focus_reference_to_sockets` parents
+//! the head to the body socket and **preserves** the entity's authored scale
+//! into the final local transform. Spawning the shadow head at
+//! [`Transform::IDENTITY`] leaves sockets at full authored size while the neck
+//! attachment stays posed correctly, so nose / eye / crown world Y values come
+//! out far too large (roughly `1 / normalization.scale` relative to the neck).
+//!
 //! # Lifecycle
 //!
 //! Readiness is signalled by imperative state changes, never approximated from
@@ -17,7 +29,8 @@
 //!
 //! 1. [`sync_focus_reference`] spawns a shadow body rig (plus a head rig when
 //!    the assembly has a `HeadRig` part) whenever the spawn key — body-rig and
-//!    head-rig asset paths — changes. Old shadow roots are despawned.
+//!    head-rig asset paths — changes. Old shadow roots are despawned. The head
+//!    is spawned with `part.asset.normalization.transform()`, matching preview.
 //! 2. `build_rig_bone_map` (skinning) fills [`BoneMap`] as the GLTF scenes
 //!    spawn bones.
 //! 3. `maintain_resolved_pose` (skinning) applies the proportional pose and
@@ -25,8 +38,8 @@
 //!    on the body rig once the pose is fully written. Camera focus gates on
 //!    that marker.
 //! 4. `attach_focus_reference_to_sockets` (skinning) parents the head rig to
-//!    its socket bone and removes [`NeedsSocketPlacement`] — the readiness
-//!    signal for head-socket focuses.
+//!    its socket bone, keeps the normalization scale, and removes
+//!    [`NeedsSocketPlacement`] — the readiness signal for head-socket focuses.
 //! 5. Config tweaks that keep the same armatures (sliders, colors) only update
 //!    [`ActiveRigPose`] in place; pose maintenance re-applies it every frame,
 //!    so no respawn and no readiness reset is needed.
@@ -235,6 +248,14 @@ fn spawn_focus_reference(
 		return;
 	};
 
+	// CRITICAL: same authored scale as `PreviewSpawner::spawn_head_rig`.
+	//
+	// Head GLTFs are normalized at spawn (often `AssetNormalization::base_y(0.26)`).
+	// `attach_part_to_socket` does `local_transform.scale *= authored_scale`, so
+	// this value must already be on the entity when the head is parented to the
+	// body socket. Identity scale here is what made camera-focus nose/crown Y
+	// resolve several times too high after shadow-only focus resolution landed.
+	let head_transform = head_part.asset.normalization.transform();
 	let head_rig = commands
 		.spawn((
 			WorldAssetRoot(
@@ -246,7 +267,7 @@ fn spawn_focus_reference(
 			BoneMap::default(),
 			FocusReferenceRoot,
 			Visibility::Hidden,
-			Transform::IDENTITY,
+			head_transform,
 			Name::new("focus_head_rig"),
 		))
 		.id();
