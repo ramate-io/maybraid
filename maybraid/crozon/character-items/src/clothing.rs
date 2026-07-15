@@ -15,6 +15,7 @@ const CLOTHING_SHORT_SLEEVED_ROBE_COAT: &str = "characters/clothes/short_sleeved
 const CLOTHING_TAILORED_COAT: &str = "characters/clothes/tailored_coat.glb";
 const CLOTHING_HOOD: &str = "characters/clothes/hood.glb";
 const CLOTHING_PANTS: &str = "characters/clothes/pants.glb";
+const CLOTHING_KNEE_HIGH_BOOTS: &str = "characters/clothes/knee_high_boots.glb";
 const CLOTHING_HAREM_PANTS: &str = "characters/clothes/harem_pants_unified.glb";
 const CLOTHING_HAREM_PANTS_UPPER: &str = "characters/clothes/harem_pants_top.glb";
 const CLOTHING_HAREM_PANTS_LOWER_WRAP: &str = "characters/clothes/harem_pants_bottom_wrap.glb";
@@ -33,6 +34,7 @@ pub enum ClothingMesh {
 	TailoredCoat,
 	Hood,
 	Pants,
+	KneeHighBoots,
 	HaremPants,
 	HaremPantsUpper,
 	HaremPantsLowerWrap,
@@ -51,6 +53,7 @@ impl ClothingMesh {
 		Self::TailoredCoat,
 		Self::Hood,
 		Self::Pants,
+		Self::KneeHighBoots,
 		Self::HaremPants,
 		Self::HaremPantsUpper,
 		Self::HaremPantsLowerWrap,
@@ -69,6 +72,7 @@ impl ClothingMesh {
 			Self::TailoredCoat => "tailored-coat",
 			Self::Hood => "hood",
 			Self::Pants => "pants",
+			Self::KneeHighBoots => "knee-high-boots",
 			Self::HaremPants => "harem-pants",
 			Self::HaremPantsUpper => "harem-pants-upper",
 			Self::HaremPantsLowerWrap => "harem-pants-lower-wrap",
@@ -89,6 +93,7 @@ impl ClothingMesh {
 			Self::TailoredCoat => CLOTHING_TAILORED_COAT,
 			Self::Hood => CLOTHING_HOOD,
 			Self::Pants => CLOTHING_PANTS,
+			Self::KneeHighBoots => CLOTHING_KNEE_HIGH_BOOTS,
 			Self::HaremPants => CLOTHING_HAREM_PANTS,
 			Self::HaremPantsUpper => CLOTHING_HAREM_PANTS_UPPER,
 			Self::HaremPantsLowerWrap => CLOTHING_HAREM_PANTS_LOWER_WRAP,
