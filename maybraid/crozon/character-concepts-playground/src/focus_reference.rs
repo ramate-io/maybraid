@@ -83,6 +83,7 @@ fn focus_live_key(config: &ConceptPreviewConfig) -> String {
 		ConceptPreviewConfig::Brodler { config, .. } => config.sync_key(),
 		ConceptPreviewConfig::Mygr { config, .. } => config.sync_key(),
 		ConceptPreviewConfig::Dui { config, .. } => config.sync_key(),
+		ConceptPreviewConfig::Lidder { config, .. } => config.sync_key(),
 		ConceptPreviewConfig::Wumbus { config, .. } => config.sync_key(),
 		ConceptPreviewConfig::Lero { config, .. } => config.sync_key(),
 		ConceptPreviewConfig::Spibmom { config, .. } => config.sync_key(),

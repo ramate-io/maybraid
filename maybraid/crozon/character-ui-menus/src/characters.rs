@@ -7,6 +7,7 @@ pub mod croconot;
 pub mod brodler;
 pub mod dui;
 pub mod lero;
+pub mod lidder;
 pub mod mygr;
 pub mod spibmom;
 pub mod wumbus;

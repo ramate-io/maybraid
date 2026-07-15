@@ -2,7 +2,7 @@
 
 use bevy::prelude::*;
 use crozon_characters::species::{
-	braidman::BraidmanConfig, brenal::BrenalConfig, caole::CaoleConfig, hars::HarsConfig, sonyak::SonyakConfig, ylter::YilterConfig, claber::ClaberConfig, croconot::CroconotConfig, brodler::BrodlerConfig, dui::DuiConfig, lero::LeroConfig,
+	braidman::BraidmanConfig, brenal::BrenalConfig, caole::CaoleConfig, hars::HarsConfig, sonyak::SonyakConfig, ylter::YilterConfig, claber::ClaberConfig, croconot::CroconotConfig, brodler::BrodlerConfig, dui::DuiConfig, lidder::LidderConfig, lero::LeroConfig,
 	mygr::MygrConfig, spibmom::SpibmomConfig, wumbus::WumbusConfig,
 };
 
@@ -29,6 +29,7 @@ pub struct SpeciesSessionState {
 	pub brodler: BrodlerConfig,
 	pub mygr: MygrConfig,
 	pub dui: DuiConfig,
+	pub lidder: LidderConfig,
 	pub wumbus: WumbusConfig,
 	pub lero: LeroConfig,
 	pub spibmom: SpibmomConfig,
@@ -43,6 +44,7 @@ pub struct SpeciesSessionState {
 	pub brodler_animation: crate::animation::ConceptAnimation,
 	pub mygr_animation: crate::animation::ConceptAnimation,
 	pub dui_animation: crate::animation::ConceptAnimation,
+	pub lidder_animation: crate::animation::ConceptAnimation,
 	pub wumbus_animation: crate::animation::ConceptAnimation,
 	pub lero_animation: crate::animation::ConceptAnimation,
 	pub spibmom_animation: crate::animation::ConceptAnimation,
@@ -62,6 +64,7 @@ impl Default for SpeciesSessionState {
 			brodler: BrodlerConfig::default_preview(),
 			mygr: MygrConfig::default_preview(),
 			dui: DuiConfig::default_preview(),
+			lidder: LidderConfig::default_preview(),
 			wumbus: WumbusConfig::default_preview(),
 			lero: LeroConfig::default_preview(),
 			spibmom: SpibmomConfig::default_preview(),
@@ -76,6 +79,7 @@ impl Default for SpeciesSessionState {
 			brodler_animation: crate::animation::ConceptAnimation::default(),
 			mygr_animation: crate::animation::ConceptAnimation::default(),
 			dui_animation: crate::animation::ConceptAnimation::default(),
+			lidder_animation: crate::animation::ConceptAnimation::default(),
 			wumbus_animation: crate::animation::ConceptAnimation::default(),
 			lero_animation: crate::animation::ConceptAnimation::default(),
 			spibmom_animation: crate::animation::ConceptAnimation::default(),
@@ -129,6 +133,10 @@ impl SpeciesSessionState {
 			ConceptPreviewConfig::Dui { config, animation } => {
 				self.dui.clone_from(config);
 				self.dui_animation = *animation;
+			}
+			ConceptPreviewConfig::Lidder { config, animation } => {
+				self.lidder.clone_from(config);
+				self.lidder_animation = *animation;
 			}
 			ConceptPreviewConfig::Wumbus { config, animation } => {
 				self.wumbus.clone_from(config);
@@ -188,6 +196,9 @@ impl SpeciesSessionState {
 			}
 			ConceptSpecies::Dui => {
 				ConceptPreviewConfig::dui_with_animation(self.dui.clone(), self.dui_animation)
+			}
+			ConceptSpecies::Lidder => {
+				ConceptPreviewConfig::lidder_with_animation(self.lidder.clone(), self.lidder_animation)
 			}
 			ConceptSpecies::Wumbus => ConceptPreviewConfig::wumbus_with_animation(
 				self.wumbus.clone(),

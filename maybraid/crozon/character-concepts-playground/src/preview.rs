@@ -19,6 +19,7 @@ use crozon_characters::{
 		brodler::{BrodlerConfig, BrodlerHeadMesh, HornMesh},
 		common::{BodyMesh, EarMesh, EyeMesh, HairMesh, HeadMesh, MouthMesh, NoseMesh},
 		dui::{DuiConfig, DuiNoseMesh},
+		lidder::{LidderBeakMesh, LidderConfig},
 		lero::{LeroConfig, LeroMouthMesh},
 		mygr::MygrConfig,
 		spibmom::SpibmomConfig,
@@ -51,6 +52,7 @@ pub enum ConceptSpecies {
 	Brodler,
 	Mygr,
 	Dui,
+	Lidder,
 	Wumbus,
 	Lero,
 	Spibmom,
@@ -69,6 +71,7 @@ pub enum ConceptPreviewConfig {
 	Brodler { config: BrodlerConfig, animation: ConceptAnimation },
 	Mygr { config: MygrConfig, animation: ConceptAnimation },
 	Dui { config: DuiConfig, animation: ConceptAnimation },
+	Lidder { config: LidderConfig, animation: ConceptAnimation },
 	Wumbus { config: WumbusConfig, animation: ConceptAnimation },
 	Lero { config: LeroConfig, animation: ConceptAnimation },
 	Spibmom { config: SpibmomConfig, animation: ConceptAnimation },
@@ -94,6 +97,7 @@ impl ConceptPreviewConfig {
 			ConceptSpecies::Brodler => Self::brodler(BrodlerConfig::default_preview()),
 			ConceptSpecies::Mygr => Self::mygr(MygrConfig::default_preview()),
 			ConceptSpecies::Dui => Self::dui(DuiConfig::default_preview()),
+			ConceptSpecies::Lidder => Self::lidder(LidderConfig::default_preview()),
 			ConceptSpecies::Wumbus => Self::wumbus(WumbusConfig::default_preview()),
 			ConceptSpecies::Lero => Self::lero(LeroConfig::default_preview()),
 			ConceptSpecies::Spibmom => Self::spibmom(SpibmomConfig::default_preview()),
@@ -113,6 +117,7 @@ impl ConceptPreviewConfig {
 			Self::Brodler { .. } => ConceptSpecies::Brodler,
 			Self::Mygr { .. } => ConceptSpecies::Mygr,
 			Self::Dui { .. } => ConceptSpecies::Dui,
+			Self::Lidder { .. } => ConceptSpecies::Lidder,
 			Self::Wumbus { .. } => ConceptSpecies::Wumbus,
 			Self::Lero { .. } => ConceptSpecies::Lero,
 			Self::Spibmom { .. } => ConceptSpecies::Spibmom,
@@ -207,6 +212,15 @@ impl ConceptPreviewConfig {
 		Self::Dui { config, animation }
 	}
 
+
+	pub fn lidder(config: LidderConfig) -> Self {
+		Self::Lidder { config, animation: ConceptAnimation::default() }
+	}
+
+	pub fn lidder_with_animation(config: LidderConfig, animation: ConceptAnimation) -> Self {
+		Self::Lidder { config, animation }
+	}
+
 	pub fn wumbus(config: WumbusConfig) -> Self {
 		Self::Wumbus { config, animation: ConceptAnimation::default() }
 	}
@@ -244,6 +258,7 @@ impl ConceptPreviewConfig {
 			Self::Brodler { config, .. } => config.resolve(),
 			Self::Mygr { config, .. } => config.resolve(),
 			Self::Dui { config, .. } => config.resolve(),
+			Self::Lidder { config, .. } => config.resolve(),
 			Self::Wumbus { config, .. } => config.resolve(),
 			Self::Lero { config, .. } => config.resolve(),
 			Self::Spibmom { config, .. } => config.resolve(),
@@ -269,6 +284,9 @@ impl ConceptPreviewConfig {
 				format!("{} animation={}", config.status_label(), animation.label())
 			}
 			Self::Dui { config, animation } => {
+				format!("{} animation={}", config.status_label(), animation.label())
+			}
+			Self::Lidder { config, animation } => {
 				format!("{} animation={}", config.status_label(), animation.label())
 			}
 			Self::Wumbus { config, animation } => {
@@ -303,6 +321,9 @@ impl ConceptPreviewConfig {
 			}
 			Self::Dui { config, animation } => {
 				format!("species=dui {} animation={animation:?}", config.sync_key())
+			}
+			Self::Lidder { config, animation } => {
+				format!("species=lidder {} animation={animation:?}", config.sync_key())
 			}
 			Self::Wumbus { config, animation } => {
 				format!("species=wumbus {} animation={animation:?}", config.sync_key())
@@ -386,6 +407,13 @@ impl ConceptPreviewConfig {
 				config.hair,
 				config.clothing,
 			),
+			Self::Lidder { config, .. } => format!(
+				"species=lidder beak={:?} eye={:?} hair={:?} clothing={:?}",
+				config.beak,
+				config.eye,
+				config.hair,
+				config.clothing,
+			),
 			Self::Wumbus { config, .. } => format!(
 				"species=wumbus horns={:?} eye={:?} hair={:?} clothing={:?}",
 				config.horns,
@@ -421,6 +449,7 @@ impl ConceptPreviewConfig {
 			| Self::Brodler { animation, .. }
 			| Self::Mygr { animation, .. }
 			| Self::Dui { animation, .. }
+			| Self::Lidder { animation, .. }
 			| Self::Wumbus { animation, .. }
 			| Self::Lero { animation, .. }
 			| Self::Spibmom { animation, .. } => *animation,
@@ -562,6 +591,12 @@ pub enum PreviewTarget {
 	DuiMouth,
 	DuiHair(HairMesh),
 	DuiClothing(ClothingMesh),
+	LidderBody,
+	LidderHead,
+	LidderEye,
+	LidderBeak(LidderBeakMesh),
+	LidderHair(HairMesh),
+	LidderClothing(ClothingMesh),
 	WumbusBody,
 	WumbusHead,
 	WumbusHorns(WumbusHornMesh),
@@ -881,6 +916,11 @@ fn sync_live_preview(
 				target.color = preview_color_dui(dui, target.target);
 			}
 		}
+		ConceptPreviewConfig::Lidder { config: lidder, .. } => {
+			for (_, mut target, ..) in parts {
+				target.color = preview_color_lidder(lidder, target.target);
+			}
+		}
 		ConceptPreviewConfig::Wumbus { config: wumbus, .. } => {
 			for (_, mut target, ..) in parts {
 				target.color = preview_color_wumbus(wumbus, target.target);
@@ -1170,6 +1210,22 @@ fn preview_color_dui(config: &DuiConfig, target: PreviewTarget) -> PreviewColor 
 	}
 }
 
+fn preview_color_lidder(config: &LidderConfig, target: PreviewTarget) -> PreviewColor {
+	match target {
+		PreviewTarget::LidderHead | PreviewTarget::LidderBody => {
+			PreviewColor::LidderPlumage(config.colors.plumage)
+		}
+		PreviewTarget::LidderEye => PreviewColor::LidderEye(config.colors.eyes),
+		PreviewTarget::LidderBeak(_) => PreviewColor::LidderBeak(config.colors.beak),
+		PreviewTarget::LidderHair(_) => PreviewColor::LidderPlumage(config.colors.plumage),
+		PreviewTarget::LidderClothing(clothing) => {
+			PreviewColor::Item(config.colors.clothing_color(clothing))
+		}
+		_ => PreviewColor::LidderPlumage(config.colors.plumage),
+	}
+}
+
+
 fn preview_color_wumbus(config: &WumbusConfig, target: PreviewTarget) -> PreviewColor {
 	match target {
 		PreviewTarget::WumbusHead | PreviewTarget::WumbusBody => {
@@ -1359,6 +1415,7 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 			ConceptPreviewConfig::Brodler { .. } => part.asset.normalization.transform(),
 			ConceptPreviewConfig::Mygr { .. } => part.asset.normalization.transform(),
 			ConceptPreviewConfig::Dui { .. } => part.asset.normalization.transform(),
+			ConceptPreviewConfig::Lidder { .. } => part.asset.normalization.transform(),
 			ConceptPreviewConfig::Wumbus { .. } => part.asset.normalization.transform(),
 			ConceptPreviewConfig::Lero { .. } => part.asset.normalization.transform(),
 			ConceptPreviewConfig::Spibmom { .. } => part.asset.normalization.transform(),
@@ -1760,6 +1817,34 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 						.unwrap_or(PreviewTarget::DuiHead),
 				};
 				PreviewAssetTarget { target, color: preview_color_dui(config, target) }
+			}
+			ConceptPreviewConfig::Lidder { config, .. } => {
+				let target = match part.slot {
+					CharacterPartSlot::BodyMesh => PreviewTarget::LidderBody,
+					CharacterPartSlot::NeckRig | CharacterPartSlot::NeckMesh => PreviewTarget::LidderBody,
+					CharacterPartSlot::HeadRig | CharacterPartSlot::HeadMesh => {
+						PreviewTarget::LidderHead
+					}
+					CharacterPartSlot::EyeLeft | CharacterPartSlot::EyeRight => {
+						PreviewTarget::LidderEye
+					}
+					CharacterPartSlot::Mouth => PreviewTarget::LidderBeak(config.beak),
+					CharacterPartSlot::Nose
+					| CharacterPartSlot::EarLeft
+					| CharacterPartSlot::EarRight
+					| CharacterPartSlot::Horns
+					| CharacterPartSlot::Tail
+					| CharacterPartSlot::Spine => PreviewTarget::LidderHead,
+					CharacterPartSlot::Hair => PreviewTarget::LidderHair(config.hair),
+					CharacterPartSlot::Clothing => config
+						.clothing
+						.iter()
+						.copied()
+						.find(|clothing| clothing.label() == part.asset.label)
+						.map(PreviewTarget::LidderClothing)
+						.unwrap_or(PreviewTarget::LidderHead),
+				};
+				PreviewAssetTarget { target, color: preview_color_lidder(config, target) }
 			}
 			ConceptPreviewConfig::Wumbus { config, .. } => {
 				let target = match part.slot {

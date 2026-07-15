@@ -30,6 +30,7 @@ use crate::{
 			LeroEyeColor, LeroHeadMesh, LeroMouthColor, LeroMouthMesh, LeroSkinColor,
 			LeroSpineColor, LeroTailColor,
 		},
+		lidder::{LidderBeakColor, LidderBeakMesh, LidderEyeColor, LidderHeadMesh, LidderPlumageColor},
 		mygr::{MygrEyeColor, MygrHeadMesh, MygrMouthMesh, MygrSkinColor},
 		spibmom::{
 			SpibmomCrownColor, SpibmomEarColor, SpibmomEyeColor, SpibmomHeadMesh,
@@ -119,6 +120,11 @@ impl_menu_identity!(
 	DuiEyeColor,
 	DuiNoseColor,
 	DuiMouthColor,
+	LidderHeadMesh,
+	LidderBeakMesh,
+	LidderPlumageColor,
+	LidderEyeColor,
+	LidderBeakColor,
 	BrenalBodyMesh,
 	BrenalHeadMesh,
 	BrenalMouthMesh,
@@ -162,6 +168,9 @@ impl_swatch_option!(
 	DuiEyeColor,
 	DuiNoseColor,
 	DuiMouthColor,
+	LidderPlumageColor,
+	LidderEyeColor,
+	LidderBeakColor,
 	WumbusSkinColor,
 	WumbusEyeColor,
 	WumbusEarColor,
@@ -222,6 +231,8 @@ impl_asset_option!(LeroMouthMesh, FACE_FEATURE_THUMBNAIL_CAMERA);
 impl_asset_option!(SpibmomHeadMesh, HEAD_THUMBNAIL_CAMERA);
 impl_asset_option!(SpibmomMouthMesh, FACE_FEATURE_THUMBNAIL_CAMERA);
 impl_asset_option!(DuiHeadMesh, HEAD_THUMBNAIL_CAMERA);
+impl_asset_option!(LidderHeadMesh, HEAD_THUMBNAIL_CAMERA);
+impl_asset_option!(LidderBeakMesh, FACE_FEATURE_THUMBNAIL_CAMERA);
 impl_asset_option!(BrenalBodyMesh, BODY_THUMBNAIL_CAMERA);
 impl_asset_option!(BrenalHeadMesh, HEAD_THUMBNAIL_CAMERA);
 impl_asset_option!(BrenalMouthMesh, FACE_FEATURE_THUMBNAIL_CAMERA);

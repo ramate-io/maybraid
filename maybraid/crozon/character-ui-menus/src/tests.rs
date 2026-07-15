@@ -124,6 +124,20 @@ fn dui_config_round_trip() -> anyhow::Result<()> {
 }
 
 #[test]
+fn lidder_config_round_trip() -> anyhow::Result<()> {
+	let config = crozon_characters::species::lidder::LidderConfig::default_preview();
+	let menu = crate::characters::lidder::LidderMenu::from(&config);
+	let restored = crozon_characters::species::lidder::LidderConfig::from(&menu);
+	assert_eq!(config.beak, restored.beak);
+	assert_eq!(config.eye, restored.eye);
+	assert_eq!(config.hair, restored.hair);
+	assert_eq!(config.colors.plumage, restored.colors.plumage);
+	assert_eq!(config.colors.eyes, restored.colors.eyes);
+	assert_eq!(config.colors.beak, restored.colors.beak);
+	Ok(())
+}
+
+#[test]
 fn mygr_config_round_trip() -> anyhow::Result<()> {
 	let config = crozon_characters::species::mygr::MygrConfig::default_preview();
 	let menu = crate::characters::mygr::MygrMenu::from(&config);
@@ -202,7 +216,7 @@ fn character_menu_lowers_to_species_select_tree() -> anyhow::Result<()> {
 		anyhow::bail!("expected a species SectionSelect at the root");
 	};
 	assert_eq!(*label, "Species");
-	assert_eq!(choices.len(), 14);
+	assert_eq!(choices.len(), 15);
 	assert!(choices[0].selected, "default species should be braidman");
 	// Braidman: presets, body, head & features, hair, clothing, animation.
 	assert_eq!(children.len(), 6);
