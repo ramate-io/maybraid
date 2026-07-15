@@ -1,10 +1,10 @@
 use character_ui_menu::{MenuComponent, MenuNode};
 use crozon_character_items::ClothingMesh;
-use crozon_characters::species::{braidman::BraidmanConfig, brodler::BrodlerConfig};
+use crozon_characters::species::{braidman::BraidmanConfig, brodler::BrodlerConfig, tuberwaber::TuberwaberConfig};
 
 use crate::{
 	character::CharacterMenu,
-	characters::{braidman::BraidmanMenu, brodler::BrodlerMenu},
+	characters::{braidman::BraidmanMenu, brodler::BrodlerMenu, tuberwaber::TuberwaberMenu},
 };
 
 #[test]
@@ -315,6 +315,25 @@ fn spibmom_config_round_trip() -> anyhow::Result<()> {
 }
 
 #[test]
+fn tuberwaber_config_round_trip() -> anyhow::Result<()> {
+	let config = TuberwaberConfig::default_preview();
+	let menu = TuberwaberMenu::from(&config);
+	let restored = TuberwaberConfig::from(&menu);
+	assert_eq!(config.gender, restored.gender);
+	assert_eq!(config.build, restored.build);
+	assert_eq!(config.body, restored.body);
+	assert_eq!(config.head, restored.head);
+	assert_eq!(config.eye, restored.eye);
+	assert_eq!(config.nose, restored.nose);
+	assert_eq!(config.mouth, restored.mouth);
+	assert_eq!(config.hair, restored.hair);
+	assert_eq!(config.clothing, restored.clothing);
+	assert_eq!(config.colors, restored.colors);
+	Ok(())
+}
+
+
+#[test]
 fn clothing_toggle_and_color() -> anyhow::Result<()> {
 	use crozon_character_items::ItemColor;
 
@@ -341,7 +360,7 @@ fn character_menu_lowers_to_species_select_tree() -> anyhow::Result<()> {
 		anyhow::bail!("expected a species SectionSelect at the root");
 	};
 	assert_eq!(*label, "Species");
-	assert_eq!(choices.len(), 24);
+	assert_eq!(choices.len(), 25);
 	assert!(choices[0].selected, "default species should be braidman");
 	// Braidman: presets, body, head & features, hair, clothing, animation.
 	assert_eq!(children.len(), 6);

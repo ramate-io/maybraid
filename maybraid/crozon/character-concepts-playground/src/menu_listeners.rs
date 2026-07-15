@@ -92,6 +92,9 @@ pub fn menu_to_preview_config(menu: &CharacterMenu) -> ConceptPreviewConfig {
 		ConceptSpecies::Spibmom => {
 			ConceptPreviewConfig::spibmom_with_animation(menu.spibmom_config(), menu.animation())
 		}
+		ConceptSpecies::Tuberwaber => {
+			ConceptPreviewConfig::tuberwaber_with_animation(menu.tuberwaber_config(), menu.animation())
+		}
 	}
 }
 
@@ -169,6 +172,9 @@ pub fn menu_from_preview_config(config: &ConceptPreviewConfig) -> CharacterMenu 
 		ConceptPreviewConfig::Spibmom { config, animation } => {
 			CharacterMenu::from_spibmom(config, *animation)
 		}
+		ConceptPreviewConfig::Tuberwaber { config, animation } => {
+			CharacterMenu::from_tuberwaber(config, *animation)
+		}
 	}
 }
 
@@ -215,6 +221,7 @@ fn preview_species(species: ConceptSpecies) -> crate::preview::ConceptSpecies {
 		ConceptSpecies::Wumbus => crate::preview::ConceptSpecies::Wumbus,
 		ConceptSpecies::Lero => crate::preview::ConceptSpecies::Lero,
 		ConceptSpecies::Spibmom => crate::preview::ConceptSpecies::Spibmom,
+		ConceptSpecies::Tuberwaber => crate::preview::ConceptSpecies::Tuberwaber,
 	}
 }
 

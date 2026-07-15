@@ -47,6 +47,7 @@ use crozon_characters::{
 		topple::{
 			ToppleBeakColor, ToppleBeakMesh, ToppleEyeColor, ToppleHeadMesh, TopplePlumageColor,
 		},
+		tuberwaber::{TuberwaberBodyMesh, TuberwaberColor, TuberwaberHeadMesh},
 		wumbus::{
 			WumbusEarColor, WumbusEyeColor, WumbusHeadMesh, WumbusHornColor, WumbusMouthColor,
 			WumbusMouthMesh, WumbusSkinColor, WumbusSpineColor,
@@ -101,6 +102,8 @@ pub enum CharacterField {
 	CaoleMouth,
 	EpiphantBody,
 	EpiphantNose,
+	TuberwaberBody,
+	TuberwaberHead,
 	HarsBody,
 	HarsMouth,
 	YilterBody,
@@ -247,6 +250,8 @@ pub enum AssetValue {
 	CaoleMouth(CaoleMouthMesh),
 	EpiphantBody(EpiphantBodyMesh),
 	EpiphantNose(EpiphantNoseMesh),
+	TuberwaberBody(TuberwaberBodyMesh),
+	TuberwaberHead(TuberwaberHeadMesh),
 	HarsBody(HarsBodyMesh),
 	HarsMouth(HarsMouthMesh),
 	YilterBody(YilterBodyMesh),
@@ -337,6 +342,7 @@ pub enum SwatchValue {
 	KapplerBeak(KapplerBeakColor),
 	Claber(ClaberColor),
 	Epiphant(EpiphantColor),
+	Tuberwaber(TuberwaberColor),
 	LeroSkin(LeroSkinColor),
 	LeroEye(LeroEyeColor),
 	LeroMouthColor(LeroMouthColor),

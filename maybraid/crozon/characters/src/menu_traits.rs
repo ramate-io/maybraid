@@ -65,6 +65,7 @@ use crate::{
 		topple::{
 			ToppleBeakColor, ToppleBeakMesh, ToppleEyeColor, ToppleHeadMesh, TopplePlumageColor,
 		},
+		tuberwaber::{TuberwaberBodyMesh, TuberwaberColor, TuberwaberHeadMesh},
 		wumbus::{
 			WumbusEarColor, WumbusEyeColor, WumbusHeadMesh, WumbusHornColor, WumbusHornMesh,
 			WumbusMouthColor, WumbusMouthMesh, WumbusSkinColor, WumbusSpineColor,
@@ -213,6 +214,9 @@ impl_menu_identity!(
 	YilterMouthMesh,
 	SonyakBodyMesh,
 	SonyakMouthMesh,
+	TuberwaberBodyMesh,
+	TuberwaberHeadMesh,
+	TuberwaberColor,
 	ClaberBodyMesh,
 	ClaberHeadMesh,
 	ClaberMouthMesh,
@@ -291,6 +295,7 @@ impl_swatch_option!(
 	SpibmomSpineColor,
 	ClaberColor,
 	EpiphantColor,
+	TuberwaberColor,
 );
 
 macro_rules! impl_asset_option {
@@ -367,6 +372,8 @@ impl_asset_option!(YilterBodyMesh, BODY_THUMBNAIL_CAMERA);
 impl_asset_option!(YilterMouthMesh, FACE_FEATURE_THUMBNAIL_CAMERA);
 impl_asset_option!(SonyakBodyMesh, BODY_THUMBNAIL_CAMERA);
 impl_asset_option!(SonyakMouthMesh, FACE_FEATURE_THUMBNAIL_CAMERA);
+impl_asset_option!(TuberwaberBodyMesh, BODY_THUMBNAIL_CAMERA);
+impl_asset_option!(TuberwaberHeadMesh, HEAD_THUMBNAIL_CAMERA);
 impl_asset_option!(ClaberBodyMesh, BODY_THUMBNAIL_CAMERA);
 impl_asset_option!(ClaberHeadMesh, HEAD_THUMBNAIL_CAMERA);
 impl_asset_option!(ClaberMouthMesh, FACE_FEATURE_THUMBNAIL_CAMERA);

@@ -13,8 +13,8 @@ pub use characters::{
 	epiphant::EpiphantMenu, hars::HarsMenu, claber::ClaberMenu, croconot::CroconotMenu,
 	brodler::BrodlerMenu, chupri::ChupriMenu, dui::DuiMenu, kispar::KisparMenu, kaller::KallerMenu,
 	kappler::KapplerMenu, lero::LeroMenu, lidder::LidderMenu, mygr::MygrMenu, spibmom::SpibmomMenu,
-	sonyak::SonyakMenu, tipple::TippleMenu, topple::ToppleMenu, tapp::TappMenu, wumbus::WumbusMenu,
-	ylter::YilterMenu,
+	sonyak::SonyakMenu, tipple::TippleMenu, topple::ToppleMenu, tapp::TappMenu,
+	tuberwaber::TuberwaberMenu, wumbus::WumbusMenu, ylter::YilterMenu,
 };
 pub use event::{AssetValue, CharacterField, MenuEvent, SectionId, SwatchValue};
 pub use focus::BODY_FOCUS;

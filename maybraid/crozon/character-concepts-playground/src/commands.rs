@@ -23,6 +23,7 @@ pub mod kappler;
 pub mod lero;
 pub mod mygr;
 pub mod spibmom;
+pub mod tuberwaber;
 pub mod wumbus;
 
 use bevy::prelude::*;
@@ -51,6 +52,7 @@ pub use kappler::Kappler;
 pub use lero::Lero;
 pub use mygr::Mygr;
 pub use spibmom::Spibmom;
+pub use tuberwaber::Tuberwaber;
 pub use wumbus::Wumbus;
 
 use crate::skinning::request_dump_bones;
@@ -141,6 +143,9 @@ pub enum ConceptsCommand {
 	/// Spawn or adjust the Spibmom concept preview.
 	#[command(subcommand)]
 	Spibmom(Spibmom),
+	/// Spawn or adjust the Tuberwaber biped concept preview.
+	#[command(subcommand)]
+	Tuberwaber(Tuberwaber),
 	/// Print the live rig bone hierarchy to the HUD console.
 	DumpBones,
 }
@@ -182,6 +187,7 @@ impl ConceptsCommand {
 			Self::Wumbus(wumbus) => wumbus.react(commands),
 			Self::Lero(lero) => lero.react(commands),
 			Self::Spibmom(spibmom) => spibmom.react(commands),
+			Self::Tuberwaber(tuberwaber) => tuberwaber.react(commands),
 			Self::DumpBones => request_dump_bones(commands),
 		}
 	}
