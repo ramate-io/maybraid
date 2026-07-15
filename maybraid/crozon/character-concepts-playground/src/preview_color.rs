@@ -5,6 +5,7 @@ use crozon_character_items::ItemColor;
 use crozon_characters::species::{
 	brodler::{BrodlerEyeColor, BrodlerHornColor, BrodlerSkinColor},
 	claber::ClaberColor,
+	epiphant::EpiphantColor,
 	dui::{DuiEyeColor, DuiMouthColor, DuiNoseColor, DuiSkinColor},
 	lero::{LeroEyeColor, LeroMouthColor, LeroSkinColor, LeroSpineColor, LeroTailColor},
 	mygr::{MygrEyeColor, MygrSkinColor},
@@ -32,6 +33,7 @@ pub enum PreviewColor {
 	DuiNose(DuiNoseColor),
 	DuiMouth(DuiMouthColor),
 	Claber(ClaberColor),
+	Epiphant(EpiphantColor),
 	WumbusSkin(WumbusSkinColor),
 	WumbusEye(WumbusEyeColor),
 	WumbusEar(WumbusEarColor),
@@ -65,6 +67,7 @@ impl PreviewColor {
 			Self::DuiNose(color) => color.color(),
 			Self::DuiMouth(color) => color.color(),
 			Self::Claber(color) => color.color(),
+			Self::Epiphant(color) => color.color(),
 			Self::WumbusSkin(color) => color.color(),
 			Self::WumbusEye(color) => color.color(),
 			Self::WumbusEar(color) => color.color(),

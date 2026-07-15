@@ -3,6 +3,7 @@
 pub mod braidman;
 pub mod brenal;
 pub mod caole;
+pub mod epiphant;
 pub mod hars;
 pub mod ylter;
 pub mod sonyak;
@@ -19,6 +20,7 @@ use bevy::prelude::*;
 pub use braidman::Braidman;
 pub use brenal::Brenal;
 pub use caole::Caole;
+pub use epiphant::Epiphant;
 pub use hars::Hars;
 pub use ylter::Yilter;
 pub use sonyak::Sonyak;
@@ -58,6 +60,9 @@ pub enum ConceptsCommand {
 	/// Spawn or adjust the Caole quadruped concept preview.
 	#[command(subcommand)]
 	Caole(Caole),
+	/// Spawn or adjust the Epiphant elephant-like quadruped concept preview.
+	#[command(subcommand)]
+	Epiphant(Epiphant),
 	/// Spawn or adjust the Hars horse-like quadruped concept preview.
 	#[command(subcommand)]
 	Hars(Hars),
@@ -111,6 +116,7 @@ impl ConceptsCommand {
 			Self::Braidman(braidman) => braidman.react(commands),
 			Self::Brenal(brenal) => brenal.react(commands),
 			Self::Caole(caole) => caole.react(commands),
+			Self::Epiphant(epiphant) => epiphant.react(commands),
 			Self::Hars(hars) => hars.react(commands),
 			Self::Yilter(ylter) => ylter.react(commands),
 			Self::Sonyak(sonyak) => sonyak.react(commands),

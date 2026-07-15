@@ -38,6 +38,7 @@ use character_ui_menu::{CameraFocus, FocusRig};
 use crozon_character_playground::CameraController;
 use crozon_character_ui_menus::characters::brenal::BODY_FOCUS as BRENAL_BODY_FOCUS;
 use crozon_character_ui_menus::characters::caole::BODY_FOCUS as CAOLE_BODY_FOCUS;
+use crozon_character_ui_menus::characters::epiphant::BODY_FOCUS as EPIPHANT_BODY_FOCUS;
 use crozon_character_ui_menus::characters::hars::BODY_FOCUS as HARS_BODY_FOCUS;
 use crozon_character_ui_menus::characters::ylter::BODY_FOCUS as YILTER_BODY_FOCUS;
 use crozon_character_ui_menus::characters::sonyak::BODY_FOCUS as SONYAK_BODY_FOCUS;
@@ -102,6 +103,7 @@ pub fn default_focus_target(config: &ConceptPreviewConfig) -> CameraFocus {
 	match config.species() {
 		crate::preview::ConceptSpecies::Brenal => BRENAL_BODY_FOCUS,
 		crate::preview::ConceptSpecies::Caole => CAOLE_BODY_FOCUS,
+		crate::preview::ConceptSpecies::Epiphant => EPIPHANT_BODY_FOCUS,
 		crate::preview::ConceptSpecies::Hars => HARS_BODY_FOCUS,
 		crate::preview::ConceptSpecies::Yilter => YILTER_BODY_FOCUS,
 		crate::preview::ConceptSpecies::Sonyak => SONYAK_BODY_FOCUS,
