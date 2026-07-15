@@ -6,7 +6,7 @@ use crozon_characters::{
 		braidman::BraidmanConfig, brenal::BrenalConfig, caole::CaoleConfig, epiphant::EpiphantConfig,
 		hars::HarsConfig, claber::ClaberConfig, croconot::CroconotConfig, brodler::BrodlerConfig,
 		dui::DuiConfig, lero::LeroConfig, mygr::MygrConfig, spibmom::SpibmomConfig,
-		sonyak::SonyakConfig, wumbus::WumbusConfig, ylter::YilterConfig,
+		sonyak::SonyakConfig, tuberwaber::TuberwaberConfig, wumbus::WumbusConfig, ylter::YilterConfig,
 	},
 	ConceptAnimation,
 };
@@ -26,6 +26,7 @@ use crate::{
 		mygr::MygrMenu,
 		spibmom::SpibmomMenu,
 		sonyak::{SonyakAnimationClip, SonyakMenu},
+		tuberwaber::TuberwaberMenu,
 		wumbus::WumbusMenu,
 		ylter::{YilterAnimationClip, YilterMenu},
 	},
@@ -50,6 +51,7 @@ pub enum ConceptSpecies {
 	Wumbus,
 	Lero,
 	Spibmom,
+	Tuberwaber,
 }
 
 impl ConceptSpecies {
@@ -70,6 +72,7 @@ impl ConceptSpecies {
 			Self::Wumbus => "wumbus",
 			Self::Lero => "lero",
 			Self::Spibmom => "spibmom",
+			Self::Tuberwaber => "tuberwaber",
 		}
 	}
 }
@@ -92,6 +95,7 @@ impl ListValues for ConceptSpecies {
 			Self::Wumbus,
 			Self::Lero,
 			Self::Spibmom,
+			Self::Tuberwaber,
 		]
 	}
 }
@@ -114,6 +118,7 @@ impl LabelOption for ConceptSpecies {
 			Self::Wumbus => "wumbus",
 			Self::Lero => "lero",
 			Self::Spibmom => "spibmom",
+			Self::Tuberwaber => "tuberwaber",
 		}
 	}
 }
@@ -136,6 +141,7 @@ pub struct CharacterMenu {
 	pub wumbus: WumbusMenu,
 	pub lero: LeroMenu,
 	pub spibmom: SpibmomMenu,
+	pub tuberwaber: TuberwaberMenu,
 }
 
 impl CharacterMenu {
@@ -157,6 +163,7 @@ impl CharacterMenu {
 			wumbus: WumbusMenu::default(),
 			lero: LeroMenu::default(),
 			spibmom: SpibmomMenu::default(),
+			tuberwaber: TuberwaberMenu::default(),
 		}
 	}
 
@@ -178,6 +185,7 @@ impl CharacterMenu {
 			wumbus: WumbusMenu::default(),
 			lero: LeroMenu::default(),
 			spibmom: SpibmomMenu::default(),
+			tuberwaber: TuberwaberMenu::default(),
 		}
 	}
 
@@ -199,6 +207,7 @@ impl CharacterMenu {
 			wumbus: WumbusMenu::default(),
 			lero: LeroMenu::default(),
 			spibmom: SpibmomMenu::default(),
+			tuberwaber: TuberwaberMenu::default(),
 		}
 	}
 
@@ -220,6 +229,7 @@ impl CharacterMenu {
 			wumbus: WumbusMenu::default(),
 			lero: LeroMenu::default(),
 			spibmom: SpibmomMenu::default(),
+			tuberwaber: TuberwaberMenu::default(),
 		}
 	}
 
@@ -241,6 +251,7 @@ impl CharacterMenu {
 			wumbus: WumbusMenu::default(),
 			lero: LeroMenu::default(),
 			spibmom: SpibmomMenu::default(),
+			tuberwaber: TuberwaberMenu::default(),
 		}
 	}
 
@@ -262,6 +273,7 @@ impl CharacterMenu {
 			wumbus: WumbusMenu::default(),
 			lero: LeroMenu::default(),
 			spibmom: SpibmomMenu::default(),
+			tuberwaber: TuberwaberMenu::default(),
 		}
 	}
 
@@ -283,6 +295,7 @@ impl CharacterMenu {
 			wumbus: WumbusMenu::default(),
 			lero: LeroMenu::default(),
 			spibmom: SpibmomMenu::default(),
+			tuberwaber: TuberwaberMenu::default(),
 		}
 	}
 
@@ -305,6 +318,7 @@ impl CharacterMenu {
 			wumbus: WumbusMenu::default(),
 			lero: LeroMenu::default(),
 			spibmom: SpibmomMenu::default(),
+			tuberwaber: TuberwaberMenu::default(),
 		}
 	}
 
@@ -326,6 +340,7 @@ impl CharacterMenu {
 			wumbus: WumbusMenu::default(),
 			lero: LeroMenu::default(),
 			spibmom: SpibmomMenu::default(),
+			tuberwaber: TuberwaberMenu::default(),
 		}
 	}
 
@@ -347,6 +362,7 @@ impl CharacterMenu {
 			wumbus: WumbusMenu::default(),
 			lero: LeroMenu::default(),
 			spibmom: SpibmomMenu::default(),
+			tuberwaber: TuberwaberMenu::default(),
 		}
 	}
 
@@ -368,6 +384,7 @@ impl CharacterMenu {
 			wumbus: WumbusMenu::default(),
 			lero: LeroMenu::default(),
 			spibmom: SpibmomMenu::default(),
+			tuberwaber: TuberwaberMenu::default(),
 		}
 	}
 
@@ -389,6 +406,7 @@ impl CharacterMenu {
 			wumbus: WumbusMenu::default(),
 			lero: LeroMenu::default(),
 			spibmom: SpibmomMenu::default(),
+			tuberwaber: TuberwaberMenu::default(),
 		}
 	}
 
@@ -410,6 +428,7 @@ impl CharacterMenu {
 			wumbus: WumbusMenu::from(config).with_animation(animation),
 			lero: LeroMenu::default(),
 			spibmom: SpibmomMenu::default(),
+			tuberwaber: TuberwaberMenu::default(),
 		}
 	}
 
@@ -431,6 +450,7 @@ impl CharacterMenu {
 			wumbus: WumbusMenu::default(),
 			lero: LeroMenu::from(config).with_animation(animation),
 			spibmom: SpibmomMenu::default(),
+			tuberwaber: TuberwaberMenu::default(),
 		}
 	}
 
@@ -452,6 +472,29 @@ impl CharacterMenu {
 			wumbus: WumbusMenu::default(),
 			lero: LeroMenu::default(),
 			spibmom: SpibmomMenu::from(config).with_animation(animation),
+			tuberwaber: TuberwaberMenu::default(),
+		}
+	}
+
+	pub fn from_tuberwaber(config: &TuberwaberConfig, animation: ConceptAnimation) -> Self {
+		Self {
+			species: SingleSelect::new(ConceptSpecies::Tuberwaber),
+			braidman: BraidmanMenu::default(),
+			brenal: BrenalMenu::default(),
+			caole: CaoleMenu::default(),
+			epiphant: EpiphantMenu::default(),
+			hars: HarsMenu::default(),
+			ylter: YilterMenu::default(),
+			sonyak: SonyakMenu::default(),
+			croconot: CroconotMenu::default(),
+			claber: ClaberMenu::default(),
+			brodler: BrodlerMenu::default(),
+			mygr: MygrMenu::default(),
+			dui: DuiMenu::default(),
+			wumbus: WumbusMenu::default(),
+			lero: LeroMenu::default(),
+			spibmom: SpibmomMenu::default(),
+			tuberwaber: TuberwaberMenu::from(config).with_animation(animation),
 		}
 	}
 
@@ -474,6 +517,7 @@ impl CharacterMenu {
 			ConceptSpecies::Wumbus => self.wumbus.menu_node(),
 			ConceptSpecies::Lero => self.lero.menu_node(),
 			ConceptSpecies::Spibmom => self.spibmom.menu_node(),
+			ConceptSpecies::Tuberwaber => self.tuberwaber.menu_node(),
 		}
 	}
 
@@ -494,6 +538,7 @@ impl CharacterMenu {
 			ConceptSpecies::Wumbus => self.wumbus.animation(),
 			ConceptSpecies::Lero => self.lero.animation(),
 			ConceptSpecies::Spibmom => self.spibmom.animation(),
+			ConceptSpecies::Tuberwaber => self.tuberwaber.animation(),
 		}
 	}
 
@@ -557,6 +602,10 @@ impl CharacterMenu {
 		SpibmomConfig::from(&self.spibmom)
 	}
 
+	pub fn tuberwaber_config(&self) -> TuberwaberConfig {
+		TuberwaberConfig::from(&self.tuberwaber)
+	}
+
 	pub fn apply(&mut self, event: MenuEvent) -> bool {
 		match event {
 			MenuEvent::SetSpecies(species) => {
@@ -585,6 +634,7 @@ impl CharacterMenu {
 			ConceptSpecies::Wumbus => self.apply_wumbus(event),
 			ConceptSpecies::Lero => self.apply_lero(event),
 			ConceptSpecies::Spibmom => self.apply_spibmom(event),
+			ConceptSpecies::Tuberwaber => self.apply_tuberwaber(event),
 		}
 	}
 
@@ -610,6 +660,7 @@ impl CharacterMenu {
 			ConceptSpecies::Wumbus => self.wumbus.camera_focus_for_field(field),
 			ConceptSpecies::Lero => self.lero.camera_focus_for_field(field),
 			ConceptSpecies::Spibmom => self.spibmom.camera_focus_for_field(field),
+			ConceptSpecies::Tuberwaber => self.tuberwaber.camera_focus_for_field(field),
 		}
 	}
 
@@ -693,6 +744,91 @@ impl CharacterMenu {
 			MenuEvent::SetSwatch(_, _) | MenuEvent::Cycle(_, _) => false,
 		}
 	}
+
+	fn apply_tuberwaber(&mut self, event: MenuEvent) -> bool {
+		let menu = &mut self.tuberwaber;
+		match event {
+			MenuEvent::ToggleSection(_) | MenuEvent::SetSpecies(_) => false,
+			MenuEvent::Cycle(CharacterField::Gender, delta) => {
+				menu.presets.value.gender.value =
+					cycle_value(menu.presets.value.gender.value, delta);
+				true
+			}
+			MenuEvent::Cycle(CharacterField::Build, delta) => {
+				menu.presets.value.build.value = cycle_value(menu.presets.value.build.value, delta);
+				true
+			}
+			MenuEvent::SetAsset(field, value) => match (field, value) {
+				(CharacterField::TuberwaberBody, AssetValue::TuberwaberBody(value)) => {
+					menu.body.value.body.value = value;
+					true
+				}
+				(CharacterField::TuberwaberHead, AssetValue::TuberwaberHead(value)) => {
+					menu.head_features.value.head.value = value;
+					true
+				}
+				(CharacterField::Eye, AssetValue::Eye(value)) => {
+					menu.head_features.value.eye.value = value;
+					true
+				}
+				(CharacterField::Nose, AssetValue::Nose(value)) => {
+					menu.head_features.value.nose.value = value;
+					true
+				}
+				(CharacterField::Mouth, AssetValue::Mouth(value)) => {
+					menu.head_features.value.mouth.value = value;
+					true
+				}
+				(CharacterField::Ear, AssetValue::Ear(value)) => {
+					menu.head_features.value.ear.value = value;
+					true
+				}
+				(CharacterField::Hair, AssetValue::Hair(value)) => {
+					menu.hair.value.style.value = value;
+					true
+				}
+				(CharacterField::Animation, AssetValue::Animation(value)) => {
+					menu.animation.value.clip.value = value;
+					true
+				}
+				_ => false,
+			},
+			MenuEvent::SliderDelta(field, delta) => apply_tuberwaber_slider(menu, field, delta),
+			MenuEvent::ToggleClothing(clothing) => {
+				menu.clothing.value.layers.toggle(clothing);
+				true
+			}
+			MenuEvent::SetSwatch(field, SwatchValue::Tuberwaber(color)) => match field {
+				CharacterField::BodyColor => {
+					menu.body.value.color.value = color;
+					menu.head_features.value.body_color = color;
+					true
+				}
+				CharacterField::EyeColor => {
+					menu.head_features.value.eye_color.value = color;
+					true
+				}
+				CharacterField::MouthColor => {
+					menu.head_features.value.mouth_color.value = color;
+					true
+				}
+				_ => false,
+			},
+			MenuEvent::SetSwatch(field, SwatchValue::Item(color)) => match field {
+				CharacterField::HairColor => {
+					menu.hair.value.color.value = color;
+					true
+				}
+				CharacterField::Clothing(clothing) => {
+					menu.set_clothing_color(clothing, color);
+					true
+				}
+				_ => false,
+			},
+			MenuEvent::SetSwatch(_, _) | MenuEvent::Cycle(_, _) => false,
+		}
+	}
+
 
 	fn apply_brenal(&mut self, event: MenuEvent) -> bool {
 		let menu = &mut self.brenal;
@@ -1901,6 +2037,45 @@ fn apply_claber_slider(menu: &mut ClaberMenu, field: CharacterField, delta: f32)
 }
 
 fn apply_braidman_slider(menu: &mut BraidmanMenu, field: CharacterField, delta: f32) -> bool {
+	let body = &mut menu.body.value.sliders;
+	let face = &mut menu.head_features.value.feature_sliders;
+	match field {
+		CharacterField::ShoulderWidth => {
+			body.shoulder_width = body.shoulder_width.apply_delta(delta)
+		}
+		CharacterField::HipWidth => body.hip_width = body.hip_width.apply_delta(delta),
+		CharacterField::ChestThickness => {
+			body.chest_thickness = body.chest_thickness.apply_delta(delta)
+		}
+		CharacterField::HipThickness => body.hip_thickness = body.hip_thickness.apply_delta(delta),
+		CharacterField::LegThickness => body.leg_thickness = body.leg_thickness.apply_delta(delta),
+		CharacterField::ButtocksThickness => {
+			body.buttocks_thickness = body.buttocks_thickness.apply_delta(delta)
+		}
+		CharacterField::WaistThickness => {
+			body.waist_thickness = body.waist_thickness.apply_delta(delta)
+		}
+		CharacterField::LowerTrunkThickness => {
+			body.lower_trunk_thickness = body.lower_trunk_thickness.apply_delta(delta)
+		}
+		CharacterField::ArmLength => body.arm_length = body.arm_length.apply_delta(delta),
+		CharacterField::ArmThickness => body.arm_thickness = body.arm_thickness.apply_delta(delta),
+		CharacterField::LegLength => body.leg_length = body.leg_length.apply_delta(delta),
+		CharacterField::EyeWidth => face.eye_width = face.eye_width.apply_delta(delta),
+		CharacterField::EyeHeight => face.eye_height = face.eye_height.apply_delta(delta),
+		CharacterField::EyeTilt => face.eye_tilt = face.eye_tilt.apply_delta(delta),
+		CharacterField::NoseWidth => face.nose_width = face.nose_width.apply_delta(delta),
+		CharacterField::NoseHeight => face.nose_height = face.nose_height.apply_delta(delta),
+		CharacterField::MouthWidth => face.mouth_width = face.mouth_width.apply_delta(delta),
+		CharacterField::MouthHeight => face.mouth_height = face.mouth_height.apply_delta(delta),
+		CharacterField::EarWidth => face.ear_width = face.ear_width.apply_delta(delta),
+		CharacterField::EarHeight => face.ear_height = face.ear_height.apply_delta(delta),
+		_ => return false,
+	}
+	true
+}
+
+fn apply_tuberwaber_slider(menu: &mut TuberwaberMenu, field: CharacterField, delta: f32) -> bool {
 	let body = &mut menu.body.value.sliders;
 	let face = &mut menu.head_features.value.feature_sliders;
 	match field {

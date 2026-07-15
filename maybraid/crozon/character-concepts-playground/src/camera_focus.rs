@@ -44,6 +44,7 @@ use crozon_character_ui_menus::characters::ylter::BODY_FOCUS as YILTER_BODY_FOCU
 use crozon_character_ui_menus::characters::sonyak::BODY_FOCUS as SONYAK_BODY_FOCUS;
 use crozon_character_ui_menus::characters::claber::BODY_FOCUS as CLABER_BODY_FOCUS;
 use crozon_character_ui_menus::characters::croconot::BODY_FOCUS as CROCONOT_BODY_FOCUS;
+use crozon_character_ui_menus::characters::tuberwaber::BODY_FOCUS as TUBERWABER_BODY_FOCUS;
 use crozon_character_ui_menus::focus::SPIBMOM_BODY_FOCUS;
 use crozon_character_ui_menus::BODY_FOCUS;
 
@@ -110,6 +111,7 @@ pub fn default_focus_target(config: &ConceptPreviewConfig) -> CameraFocus {
 		crate::preview::ConceptSpecies::Claber => CLABER_BODY_FOCUS,
 		crate::preview::ConceptSpecies::Croconot => CROCONOT_BODY_FOCUS,
 		crate::preview::ConceptSpecies::Spibmom => SPIBMOM_BODY_FOCUS,
+		crate::preview::ConceptSpecies::Tuberwaber => TUBERWABER_BODY_FOCUS,
 		_ => BODY_FOCUS,
 	}
 }
