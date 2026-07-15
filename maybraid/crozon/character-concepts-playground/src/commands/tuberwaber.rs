@@ -5,7 +5,7 @@ use clap::{Args, Subcommand};
 use crozon_character_items::ClothingMesh;
 use crozon_characters::{
 	species::{
-		common::{EarMesh, EyeMesh, HairMesh, MouthMesh, NoseMesh},
+		common::{EyeMesh, HairMesh, MouthMesh, NoseMesh},
 		tuberwaber::{
 			sliders::TuberwaberSliders, TuberwaberBodyMesh, TuberwaberConfig, TuberwaberHeadMesh,
 		},
@@ -44,9 +44,6 @@ pub struct PreviewArgs {
 
 	#[arg(long, value_enum, default_value_t = MouthMesh::Standard)]
 	pub mouth: MouthMesh,
-
-	#[arg(long, value_enum, default_value_t = EarMesh::Standard)]
-	pub ear: EarMesh,
 
 	#[arg(long, value_enum, default_value_t = HairMesh::None)]
 	pub hair: HairMesh,
@@ -100,7 +97,6 @@ impl PreviewArgs {
 				eye: self.eye,
 				nose: self.nose,
 				mouth: self.mouth,
-				ear: self.ear,
 				hair: self.hair,
 				clothing: self.clothing,
 				colors: Default::default(),

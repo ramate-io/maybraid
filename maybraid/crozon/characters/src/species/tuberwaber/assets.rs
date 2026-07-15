@@ -10,12 +10,12 @@ use crate::{
 	},
 	assets::{AssetNormalization, AssetPath},
 	species::{
-		common::BODY_RIG,
+		common::{BODY_RIG, HEAD_RIG, HORNS_HARROWED_CROWN},
 		tuberwaber::{pose::TuberwaberPose, TuberwaberConfig},
 	},
 };
 
-pub use crate::species::common::{EarMesh, EyeMesh, HairMesh, MouthMesh, NoseMesh};
+pub use crate::species::common::{EyeMesh, HairMesh, MouthMesh, NoseMesh};
 
 const BODY_TUBERWABER: AssetPath = AssetPath::new("characters/bodies/tuberwaber_body.glb");
 const HEAD_TUBERWABER: AssetPath = AssetPath::new("characters/heads/tuberwaber_head.glb");
@@ -31,14 +31,13 @@ impl TuberwaberAssets {
 			TuberwaberPose::from_config(config).resolve(),
 		)
 		.with_part(Self::body_mesh(config.body))
-		// Tuberwaber head carries its own facial armature (no orthograde sockets).
-		.with_part(Self::head_rig(config.head))
+		.with_part(Self::head_rig())
+		.with_part(Self::head_mesh(config.head))
 		.with_part(Self::eye_left(config.eye))
 		.with_part(Self::eye_right(config.eye))
 		.with_part(Self::nose(config.nose))
 		.with_part(Self::mouth(config.mouth))
-		.with_part(Self::ear_left(config.ear))
-		.with_part(Self::ear_right(config.ear));
+		.with_part(Self::horns());
 
 		let assembly = match Self::hair(config.hair) {
 			Some(hair) => assembly.with_part(hair),
@@ -58,10 +57,10 @@ impl TuberwaberAssets {
 		)
 	}
 
-	fn head_rig(head: TuberwaberHeadMesh) -> ResolvedCharacterPart {
+	fn head_rig() -> ResolvedCharacterPart {
 		ResolvedCharacterPart::new(
 			CharacterPartSlot::HeadRig,
-			CharacterAsset::new(head.label(), head.path(), AssetNormalization::base_y(0.26)),
+			CharacterAsset::new("OrthogradeHeadRig", HEAD_RIG, AssetNormalization::base_y(0.26)),
 			SkinTarget::OwnRig,
 			Some(SocketAttachment {
 				rig: SocketRig::Body,
@@ -71,13 +70,22 @@ impl TuberwaberAssets {
 		)
 	}
 
+	fn head_mesh(head: TuberwaberHeadMesh) -> ResolvedCharacterPart {
+		ResolvedCharacterPart::new(
+			CharacterPartSlot::HeadMesh,
+			CharacterAsset::new(head.label(), head.path(), AssetNormalization::IDENTITY),
+			SkinTarget::HeadRig,
+			Some(Self::head_socket("root", Transform::IDENTITY)),
+		)
+	}
+
 	fn eye_left(eye: EyeMesh) -> ResolvedCharacterPart {
 		ResolvedCharacterPart::new(
 			CharacterPartSlot::EyeLeft,
 			CharacterAsset::new(eye.label(), eye.path(), AssetNormalization::centroid(0.16)),
 			SkinTarget::HeadRig,
 			Some(Self::head_socket(
-				"eye.L",
+				"eye_socket.L",
 				Transform::from_translation(Vec3::new(0.0, -0.1, -0.075)),
 			)),
 		)
@@ -89,7 +97,7 @@ impl TuberwaberAssets {
 			CharacterAsset::new(eye.label(), eye.path(), AssetNormalization::centroid(0.16)),
 			SkinTarget::HeadRig,
 			Some(Self::head_socket(
-				"eye.R",
+				"eye_socket.R",
 				Self::mirror_x().with_translation(Vec3::new(0.0, -0.1, -0.075)),
 			)),
 		)
@@ -101,7 +109,7 @@ impl TuberwaberAssets {
 			CharacterAsset::new(nose.label(), nose.path(), nose.normalization()),
 			SkinTarget::HeadRig,
 			Some(Self::head_socket(
-				"nose",
+				"nose_socket",
 				Transform::from_translation(Vec3::new(0.0, 0.0, 0.1)),
 			)),
 		)
@@ -113,36 +121,22 @@ impl TuberwaberAssets {
 			CharacterAsset::new(mouth.label(), mouth.path(), AssetNormalization::centroid(0.12)),
 			SkinTarget::HeadRig,
 			Some(Self::head_socket(
-				"mouth",
+				"mouth_socket",
 				Transform::from_translation(Vec3::new(0.0, 0.0, 0.1)),
 			)),
 		)
 	}
 
-	fn ear_left(ear: EarMesh) -> ResolvedCharacterPart {
+	fn horns() -> ResolvedCharacterPart {
 		ResolvedCharacterPart::new(
-			CharacterPartSlot::EarLeft,
-			CharacterAsset::new(ear.label(), ear.path(), AssetNormalization::centroid(0.15)),
+			CharacterPartSlot::Horns,
+			CharacterAsset::new(
+				"harrowed-crown",
+				HORNS_HARROWED_CROWN,
+				AssetNormalization::centroid(0.7),
+			),
 			SkinTarget::HeadRig,
-			Some(Self::head_socket(
-				"temple.L",
-				Transform::from_translation(Vec3::new(0.1, -0.1, 0.00))
-					.with_rotation(Quat::from_rotation_y(std::f32::consts::PI / 4.0)),
-			)),
-		)
-	}
-
-	fn ear_right(ear: EarMesh) -> ResolvedCharacterPart {
-		ResolvedCharacterPart::new(
-			CharacterPartSlot::EarRight,
-			CharacterAsset::new(ear.label(), ear.path(), AssetNormalization::centroid(0.15)),
-			SkinTarget::HeadRig,
-			Some(Self::head_socket(
-				"temple.R",
-				Self::mirror_x()
-					.with_translation(Vec3::new(-0.1, -0.1, 0.00))
-					.with_rotation(Quat::from_rotation_y(-std::f32::consts::PI / 4.0)),
-			)),
+			Some(Self::head_socket("crown_socket", Transform::IDENTITY)),
 		)
 	}
 
@@ -153,7 +147,7 @@ impl TuberwaberAssets {
 			CharacterAsset::new(hair.label(), path, AssetNormalization::centroid(1.0)),
 			SkinTarget::HeadRig,
 			Some(Self::head_socket(
-				"crown",
+				"crown_socket",
 				Transform::from_translation(Vec3::new(0.0, -0.1, 0.1)),
 			)),
 		))

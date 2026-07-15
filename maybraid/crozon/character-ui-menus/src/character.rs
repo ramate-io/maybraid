@@ -779,10 +779,6 @@ impl CharacterMenu {
 					menu.head_features.value.mouth.value = value;
 					true
 				}
-				(CharacterField::Ear, AssetValue::Ear(value)) => {
-					menu.head_features.value.ear.value = value;
-					true
-				}
 				(CharacterField::Hair, AssetValue::Hair(value)) => {
 					menu.hair.value.style.value = value;
 					true
@@ -810,6 +806,10 @@ impl CharacterMenu {
 				}
 				CharacterField::MouthColor => {
 					menu.head_features.value.mouth_color.value = color;
+					true
+				}
+				CharacterField::HornColor => {
+					menu.head_features.value.horn_color.value = color;
 					true
 				}
 				_ => false,
@@ -2107,8 +2107,6 @@ fn apply_tuberwaber_slider(menu: &mut TuberwaberMenu, field: CharacterField, del
 		CharacterField::NoseHeight => face.nose_height = face.nose_height.apply_delta(delta),
 		CharacterField::MouthWidth => face.mouth_width = face.mouth_width.apply_delta(delta),
 		CharacterField::MouthHeight => face.mouth_height = face.mouth_height.apply_delta(delta),
-		CharacterField::EarWidth => face.ear_width = face.ear_width.apply_delta(delta),
-		CharacterField::EarHeight => face.ear_height = face.ear_height.apply_delta(delta),
 		_ => return false,
 	}
 	true

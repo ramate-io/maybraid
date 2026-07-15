@@ -448,13 +448,12 @@ impl ConceptPreviewConfig {
 				config.clothing,
 			),
 			Self::Tuberwaber { config, .. } => format!(
-				"species=tuberwaber body={:?} head={:?} eye={:?} nose={:?} mouth={:?} ear={:?} hair={:?} clothing={:?}",
+				"species=tuberwaber body={:?} head={:?} eye={:?} nose={:?} mouth={:?} hair={:?} clothing={:?}",
 				config.body,
 				config.head,
 				config.eye,
 				config.nose,
 				config.mouth,
-				config.ear,
 				config.hair,
 				config.clothing,
 			),
@@ -654,7 +653,7 @@ pub enum PreviewTarget {
 	TuberwaberEye(EyeMesh),
 	TuberwaberNose(NoseMesh),
 	TuberwaberMouth(MouthMesh),
-	TuberwaberEar(EarMesh),
+	TuberwaberHorns,
 	TuberwaberHair(HairMesh),
 	TuberwaberClothing(ClothingMesh),
 }
@@ -1150,12 +1149,13 @@ fn preview_color_tuberwaber(config: &TuberwaberConfig, target: PreviewTarget) ->
 			PreviewColor::Item(config.colors.clothing_color(clothing))
 		}
 		PreviewTarget::TuberwaberBody(_) => PreviewColor::Tuberwaber(config.colors.body),
-		PreviewTarget::TuberwaberHead(_)
-		| PreviewTarget::TuberwaberNose(_)
-		| PreviewTarget::TuberwaberEar(_) => PreviewColor::Tuberwaber(config.colors.skin_color()),
+		PreviewTarget::TuberwaberHead(_) | PreviewTarget::TuberwaberNose(_) => {
+			PreviewColor::Tuberwaber(config.colors.skin_color())
+		}
 		PreviewTarget::TuberwaberEye(_) => PreviewColor::Tuberwaber(config.colors.eyes),
 		PreviewTarget::TuberwaberMouth(_) => PreviewColor::Tuberwaber(config.colors.mouth),
-		_ => PreviewColor::Tuberwaber(TuberwaberColor::Clay),
+		PreviewTarget::TuberwaberHorns => PreviewColor::Tuberwaber(config.colors.horns),
+		_ => PreviewColor::Tuberwaber(TuberwaberColor::MistBlue),
 	}
 }
 
@@ -2040,7 +2040,9 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 			ConceptPreviewConfig::Tuberwaber { config, .. } => {
 				let target = match part.slot {
 					CharacterPartSlot::BodyMesh => PreviewTarget::TuberwaberBody(config.body),
-					CharacterPartSlot::NeckRig | CharacterPartSlot::NeckMesh => PreviewTarget::TuberwaberBody(config.body),
+					CharacterPartSlot::NeckRig | CharacterPartSlot::NeckMesh => {
+						PreviewTarget::TuberwaberBody(config.body)
+					}
 					CharacterPartSlot::HeadRig | CharacterPartSlot::HeadMesh => {
 						PreviewTarget::TuberwaberHead(config.head)
 					}
@@ -2049,11 +2051,8 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 					}
 					CharacterPartSlot::Nose => PreviewTarget::TuberwaberNose(config.nose),
 					CharacterPartSlot::Mouth => PreviewTarget::TuberwaberMouth(config.mouth),
-					CharacterPartSlot::EarLeft | CharacterPartSlot::EarRight => {
-						PreviewTarget::TuberwaberEar(config.ear)
-					}
+					CharacterPartSlot::Horns => PreviewTarget::TuberwaberHorns,
 					CharacterPartSlot::Hair => PreviewTarget::TuberwaberHair(config.hair),
-					CharacterPartSlot::Horns => PreviewTarget::TuberwaberHead(config.head),
 					CharacterPartSlot::Clothing => config
 						.clothing
 						.iter()
@@ -2061,8 +2060,10 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 						.find(|clothing| clothing.label() == part.asset.label)
 						.map(PreviewTarget::TuberwaberClothing)
 						.unwrap_or(PreviewTarget::TuberwaberHead(config.head)),
-					CharacterPartSlot::Tail => PreviewTarget::TuberwaberBody(config.body),
-					CharacterPartSlot::Spine => PreviewTarget::TuberwaberBody(config.body),
+					CharacterPartSlot::EarLeft
+					| CharacterPartSlot::EarRight
+					| CharacterPartSlot::Tail
+					| CharacterPartSlot::Spine => PreviewTarget::TuberwaberBody(config.body),
 				};
 				PreviewAssetTarget { target, color: preview_color_tuberwaber(config, target) }
 			}

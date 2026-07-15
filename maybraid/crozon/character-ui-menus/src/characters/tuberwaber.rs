@@ -7,7 +7,7 @@ use crozon_character_items::{ClothingMesh, ItemColor};
 use crozon_characters::{
 	presets::{BuildPreset, GenderPreset},
 	species::{
-		common::{EarMesh, EyeMesh, MouthMesh, NoseMesh},
+		common::{EyeMesh, MouthMesh, NoseMesh},
 		tuberwaber::{
 			sliders::TuberwaberSliders, TuberwaberBodyMesh, TuberwaberColor, TuberwaberColors,
 			TuberwaberConfig, TuberwaberHeadMesh,
@@ -28,19 +28,16 @@ pub const HEAD_ROOT_FOCUS: CameraFocus =
 	CameraFocus::new(FocusRig::Head, "root", Vec3::new(0.0, 0.0, 1.0), Vec3::new(0.0, 0.05, 0.0));
 
 pub const CROWN_FOCUS: CameraFocus =
-	CameraFocus::new(FocusRig::Head, "crown", Vec3::new(0.0, 0.15, 1.0), Vec3::ZERO);
+	CameraFocus::new(FocusRig::Head, "crown_socket", Vec3::new(0.0, 0.15, 1.0), Vec3::ZERO);
 
 pub const EYE_FOCUS: CameraFocus =
-	CameraFocus::new(FocusRig::Head, "eye.L", Vec3::new(0.0, 0.0, 0.35), Vec3::ZERO);
+	CameraFocus::new(FocusRig::Head, "eye_socket.L", Vec3::new(0.0, 0.0, 0.35), Vec3::ZERO);
 
 pub const NOSE_FOCUS: CameraFocus =
-	CameraFocus::new(FocusRig::Head, "nose", Vec3::new(0.0, 0.0, 0.25), Vec3::ZERO);
+	CameraFocus::new(FocusRig::Head, "nose_socket", Vec3::new(0.0, 0.0, 0.25), Vec3::ZERO);
 
 pub const MOUTH_FOCUS: CameraFocus =
-	CameraFocus::new(FocusRig::Head, "mouth", Vec3::new(0.0, 0.0, 0.25), Vec3::ZERO);
-
-pub const EAR_FOCUS: CameraFocus =
-	CameraFocus::new(FocusRig::Head, "temple.L", Vec3::new(0.55, 0.0, 0.3), Vec3::ZERO);
+	CameraFocus::new(FocusRig::Head, "mouth_socket", Vec3::new(0.0, 0.0, 0.25), Vec3::ZERO);
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct TuberwaberPresetsMenu {
@@ -72,8 +69,6 @@ pub struct TuberwaberHeadFeatureSliders {
 	pub nose_height: Slider,
 	pub mouth_width: Slider,
 	pub mouth_height: Slider,
-	pub ear_width: Slider,
-	pub ear_height: Slider,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -89,9 +84,9 @@ pub struct TuberwaberHeadFeaturesMenu {
 	pub eye: AssetSingleSelect<EyeMesh>,
 	pub nose: AssetSingleSelect<NoseMesh>,
 	pub mouth: AssetSingleSelect<MouthMesh>,
-	pub ear: AssetSingleSelect<EarMesh>,
 	pub eye_color: SwatchSingleSelect<TuberwaberColor>,
 	pub mouth_color: SwatchSingleSelect<TuberwaberColor>,
+	pub horn_color: SwatchSingleSelect<TuberwaberColor>,
 	pub feature_sliders: TuberwaberHeadFeatureSliders,
 	pub body_color: TuberwaberColor,
 }
@@ -192,8 +187,6 @@ impl TuberwaberHeadFeatureSliders {
 			nose_height: slider(sliders.nose_height, 0.8, 1.2, 0.05),
 			mouth_width: slider(sliders.mouth_width, 0.8, 1.2, 0.05),
 			mouth_height: slider(sliders.mouth_height, 0.8, 1.2, 0.05),
-			ear_width: slider(sliders.ear_width, 0.8, 1.2, 0.05),
-			ear_height: slider(sliders.ear_height, 0.8, 1.2, 0.05),
 		}
 	}
 
@@ -205,8 +198,6 @@ impl TuberwaberHeadFeatureSliders {
 		sliders.nose_height = self.nose_height.value;
 		sliders.mouth_width = self.mouth_width.value;
 		sliders.mouth_height = self.mouth_height.value;
-		sliders.ear_width = self.ear_width.value;
-		sliders.ear_height = self.ear_height.value;
 	}
 }
 
@@ -236,9 +227,9 @@ impl From<&TuberwaberConfig> for TuberwaberMenu {
 					eye: AssetSingleSelect::new(config.eye).with_camera_focus(EYE_FOCUS),
 					nose: AssetSingleSelect::new(config.nose).with_camera_focus(NOSE_FOCUS),
 					mouth: AssetSingleSelect::new(config.mouth).with_camera_focus(MOUTH_FOCUS),
-					ear: AssetSingleSelect::new(config.ear).with_camera_focus(EAR_FOCUS),
 					eye_color: SwatchSingleSelect::new(config.colors.eyes),
 					mouth_color: SwatchSingleSelect::new(config.colors.mouth),
+					horn_color: SwatchSingleSelect::new(config.colors.horns),
 					feature_sliders: TuberwaberHeadFeatureSliders::from_config(config.sliders),
 					body_color: config.colors.body,
 				},
@@ -269,7 +260,6 @@ impl From<&TuberwaberMenu> for TuberwaberConfig {
 			eye: menu.head_features.value.eye.value,
 			nose: menu.head_features.value.nose.value,
 			mouth: menu.head_features.value.mouth.value,
-			ear: menu.head_features.value.ear.value,
 			hair: menu.hair.value.style.value,
 			clothing: menu.clothing.value.layers.selected.clone(),
 			colors: TuberwaberColors {
@@ -278,7 +268,7 @@ impl From<&TuberwaberMenu> for TuberwaberConfig {
 				eyes: menu.head_features.value.eye_color.value,
 				nose: body_color,
 				mouth: menu.head_features.value.mouth_color.value,
-				ears: body_color,
+				horns: menu.head_features.value.horn_color.value,
 				hair: menu.hair.value.color.value,
 				clothing_default: menu.clothing.value.default_color.value,
 				clothing: menu.clothing.value.item_colors.clone(),
@@ -377,14 +367,8 @@ impl MenuComponent<MenuEvent> for TuberwaberHeadFeaturesMenu {
 			MenuNode::swatch("Mouth Color", &self.mouth_color, |color| {
 				MenuEvent::SetSwatch(CharacterField::MouthColor, SwatchValue::Tuberwaber(color))
 			}),
-			MenuNode::asset_grid("Ears", &self.ear, base, |value| {
-				MenuEvent::SetAsset(CharacterField::Ear, AssetValue::Ear(value))
-			}),
-			MenuNode::slider("Ear Width", &self.feature_sliders.ear_width, |delta| {
-				MenuEvent::SliderDelta(CharacterField::EarWidth, delta)
-			}),
-			MenuNode::slider("Ear Height", &self.feature_sliders.ear_height, |delta| {
-				MenuEvent::SliderDelta(CharacterField::EarHeight, delta)
+			MenuNode::swatch("Crown Color", &self.horn_color, |color| {
+				MenuEvent::SetSwatch(CharacterField::HornColor, SwatchValue::Tuberwaber(color))
 			}),
 		])
 	}
@@ -428,8 +412,7 @@ impl TuberwaberMenu {
 			CharacterField::Eye => self.head_features.value.eye.camera_focus,
 			CharacterField::Nose => self.head_features.value.nose.camera_focus,
 			CharacterField::Mouth => self.head_features.value.mouth.camera_focus,
-			CharacterField::Ear => self.head_features.value.ear.camera_focus,
-			CharacterField::Hair => self.hair.value.style.camera_focus,
+			CharacterField::Hair | CharacterField::HornColor => Some(CROWN_FOCUS),
 			CharacterField::Clothing(_) | CharacterField::Animation => Some(BODY_FOCUS),
 			_ => None,
 		}

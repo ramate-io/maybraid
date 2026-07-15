@@ -12,7 +12,7 @@ use crate::{
 	species::{
 		common::{
 			bsn::{self as common_bsn, WithBaseColor},
-			EarMesh, EyeMesh, HairMesh, MouthMesh, NoseMesh,
+			EyeMesh, HairMesh, MouthMesh, NoseMesh,
 		},
 		tuberwaber::assets::{TuberwaberBodyMesh, TuberwaberHeadMesh},
 	},
@@ -28,7 +28,6 @@ pub struct Tuberwaber {
 	pub eye: EyeMesh,
 	pub nose: NoseMesh,
 	pub mouth: MouthMesh,
-	pub ear: EarMesh,
 	pub hair: HairMesh,
 	pub colors: TuberwaberColors,
 	pub sliders: TuberwaberSliders,
@@ -44,7 +43,6 @@ impl Tuberwaber {
 			eye: config.eye,
 			nose: config.nose,
 			mouth: config.mouth,
-			ear: config.ear,
 			hair: config.hair,
 			colors: config.colors.clone(),
 			sliders: config.sliders,
@@ -92,13 +90,11 @@ impl TuberwaberConfig {
 
 fn part_color(colors: &TuberwaberColors, part: &ResolvedCharacterPart) -> Color {
 	match part.slot {
-		CharacterPartSlot::HeadRig | CharacterPartSlot::HeadMesh | CharacterPartSlot::Horns => {
-			colors.head.color()
-		}
+		CharacterPartSlot::HeadRig | CharacterPartSlot::HeadMesh => colors.head.color(),
 		CharacterPartSlot::EyeLeft | CharacterPartSlot::EyeRight => colors.eyes.color(),
 		CharacterPartSlot::Nose => colors.nose.color(),
 		CharacterPartSlot::Mouth => colors.mouth.color(),
-		CharacterPartSlot::EarLeft | CharacterPartSlot::EarRight => colors.ears.color(),
+		CharacterPartSlot::Horns => colors.horns.color(),
 		CharacterPartSlot::Hair => colors.hair.color(),
 		_ => colors.body.color(),
 	}

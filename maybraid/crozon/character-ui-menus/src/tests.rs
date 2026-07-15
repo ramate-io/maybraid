@@ -200,7 +200,6 @@ fn tuberwaber_config_round_trip() -> anyhow::Result<()> {
 	assert_eq!(config.eye, restored.eye);
 	assert_eq!(config.nose, restored.nose);
 	assert_eq!(config.mouth, restored.mouth);
-	assert_eq!(config.ear, restored.ear);
 	assert_eq!(config.hair, restored.hair);
 	assert_eq!(config.clothing, restored.clothing);
 	assert_eq!(config.colors, restored.colors);

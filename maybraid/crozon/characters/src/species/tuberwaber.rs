@@ -1,8 +1,8 @@
 //! Tuberwaber species definition.
 //!
-//! Biped similar to Braidman: humanoid rig with the tuberwaber body and head,
-//! shared feature meshes (eyes/nose/mouth/ears/hair/clothing), and a more
-//! colorful earth-tone skin palette.
+//! Biped similar to Braidman: humanoid rig with the tuberwaber body and head on
+//! an orthograde head stack, shared features (eyes/nose/mouth/hair/clothing), a
+//! fixed harrowed crown, and a colorful cool-toned skin palette (no ears).
 
 pub mod assets;
 pub mod bsn;
@@ -17,7 +17,7 @@ use crate::{
 	ResolvedCharacterAssembly,
 };
 
-use crate::species::common::{EarMesh, EyeMesh, HairMesh, MouthMesh, NoseMesh};
+use crate::species::common::{EyeMesh, HairMesh, MouthMesh, NoseMesh};
 use assets::TuberwaberAssets;
 use crozon_character_items::{ClothingColor, ClothingMesh, ItemColor};
 use sliders::TuberwaberSliders;
@@ -32,7 +32,7 @@ pub struct TuberwaberColors {
 	pub eyes: TuberwaberColor,
 	pub nose: TuberwaberColor,
 	pub mouth: TuberwaberColor,
-	pub ears: TuberwaberColor,
+	pub horns: TuberwaberColor,
 	pub hair: ItemColor,
 	pub clothing_default: ItemColor,
 	pub clothing: Vec<ClothingColor>,
@@ -40,16 +40,16 @@ pub struct TuberwaberColors {
 
 impl Default for TuberwaberColors {
 	fn default() -> Self {
-		let body = TuberwaberColor::Clay;
+		let body = TuberwaberColor::MistBlue;
 		Self {
 			body,
 			head: body,
-			eyes: TuberwaberColor::Jade,
+			eyes: TuberwaberColor::Teal,
 			nose: body,
-			mouth: TuberwaberColor::Terracotta,
-			ears: body,
+			mouth: TuberwaberColor::Coral,
+			horns: TuberwaberColor::Slate,
 			hair: ItemColor::Dark,
-			clothing_default: ItemColor::Warm,
+			clothing_default: ItemColor::Cool,
 			clothing: Vec::new(),
 		}
 	}
@@ -64,7 +64,6 @@ impl TuberwaberColors {
 		let skin = self.body;
 		self.head = skin;
 		self.nose = skin;
-		self.ears = skin;
 	}
 
 	pub fn clothing_color(&self, clothing: ClothingMesh) -> ItemColor {
@@ -85,7 +84,6 @@ pub struct TuberwaberConfig {
 	pub eye: EyeMesh,
 	pub nose: NoseMesh,
 	pub mouth: MouthMesh,
-	pub ear: EarMesh,
 	pub hair: HairMesh,
 	pub clothing: Vec<ClothingMesh>,
 	pub colors: TuberwaberColors,
@@ -108,7 +106,6 @@ impl TuberwaberConfig {
 			eye: EyeMesh::Standard,
 			nose: NoseMesh::Standard,
 			mouth: MouthMesh::Standard,
-			ear: EarMesh::Standard,
 			hair: HairMesh::None,
 			clothing: Vec::new(),
 			colors: TuberwaberColors::default(),
@@ -142,7 +139,7 @@ impl TuberwaberConfig {
 				.join(",")
 		};
 		format!(
-			"tuberwaber gender={} build={} body={} head={} eye={} nose={} mouth={} ear={} hair={} clothing={} colors=body:{} head:{} eyes:{} nose:{} mouth:{} ears:{} hair:{} sliders={}",
+			"tuberwaber gender={} build={} body={} head={} eye={} nose={} mouth={} hair={} clothing={} colors=body:{} head:{} eyes:{} nose:{} mouth:{} horns:{} hair:{} sliders={}",
 			self.gender.label(),
 			self.build.label(),
 			self.body.label(),
@@ -150,7 +147,6 @@ impl TuberwaberConfig {
 			self.eye.label(),
 			self.nose.label(),
 			self.mouth.label(),
-			self.ear.label(),
 			self.hair.label(),
 			clothing,
 			self.colors.body.label(),
@@ -158,7 +154,7 @@ impl TuberwaberConfig {
 			self.colors.eyes.label(),
 			self.colors.nose.label(),
 			self.colors.mouth.label(),
-			self.colors.ears.label(),
+			self.colors.horns.label(),
 			self.colors.hair.label(),
 			self.sliders.status_label(),
 		)
