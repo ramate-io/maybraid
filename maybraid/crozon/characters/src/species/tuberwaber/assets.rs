@@ -86,7 +86,7 @@ impl TuberwaberAssets {
 			SkinTarget::HeadRig,
 			Some(Self::head_socket(
 				"eye_socket.L",
-				Transform::from_translation(Vec3::new(0.0, -0.1, -0.075)),
+				Transform::from_translation(Vec3::new(0.3, 0.1, -0.075)),
 			)),
 		)
 	}
@@ -98,7 +98,7 @@ impl TuberwaberAssets {
 			SkinTarget::HeadRig,
 			Some(Self::head_socket(
 				"eye_socket.R",
-				Self::mirror_x().with_translation(Vec3::new(0.0, -0.1, -0.075)),
+				Self::mirror_x().with_translation(Vec3::new(-0.3, 0.1, -0.075)),
 			)),
 		)
 	}
