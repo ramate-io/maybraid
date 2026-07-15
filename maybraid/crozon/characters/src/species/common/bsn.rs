@@ -121,12 +121,13 @@ pub struct PartBaseColorApplied;
 /// The body rig GLTF as its own scene, composable by species and consumers.
 pub fn body_rig_scene(rig: &RigAsset, label: &'static str) -> impl Scene {
 	let path = rig.path.gltf_scene_0();
+	let transform = rig.normalization.transform();
 	bsn! {
 		#BodyRig
 		Name({format!("{label}_body_rig")})
 		WorldAssetRoot({path})
 		CharacterBodyRig
-		Transform::default()
+		template_value(transform)
 	}
 }
 

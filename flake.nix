@@ -135,11 +135,9 @@
               # Include repository-local Git aliases
               git config --local include.path ../.gitconfig
 
-              # chafa --size 30x30 --animate false --colors 8 --center true ./assets/ramate-transparent.png
-
               echo ""
-              echo "Roadline"
-              echo "Create roadmaps from Markdown."
+              echo "Maybraid"
+              echo "A game of peer-based state."
             '';
           };
         };

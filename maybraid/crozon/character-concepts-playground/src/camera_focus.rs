@@ -45,6 +45,9 @@ use crozon_character_ui_menus::characters::sonyak::BODY_FOCUS as SONYAK_BODY_FOC
 use crozon_character_ui_menus::characters::claber::BODY_FOCUS as CLABER_BODY_FOCUS;
 use crozon_character_ui_menus::characters::croconot::BODY_FOCUS as CROCONOT_BODY_FOCUS;
 use crozon_character_ui_menus::focus::SPIBMOM_BODY_FOCUS;
+use crozon_character_ui_menus::focus::CHUPRI_BODY_FOCUS;
+use crozon_character_ui_menus::focus::TIPPLE_BODY_FOCUS;
+use crozon_character_ui_menus::focus::SMALL_BIRD_BODY_FOCUS;
 use crozon_character_ui_menus::BODY_FOCUS;
 
 use crate::{
@@ -110,6 +113,15 @@ pub fn default_focus_target(config: &ConceptPreviewConfig) -> CameraFocus {
 		crate::preview::ConceptSpecies::Claber => CLABER_BODY_FOCUS,
 		crate::preview::ConceptSpecies::Croconot => CROCONOT_BODY_FOCUS,
 		crate::preview::ConceptSpecies::Spibmom => SPIBMOM_BODY_FOCUS,
+		crate::preview::ConceptSpecies::Chupri => CHUPRI_BODY_FOCUS,
+		crate::preview::ConceptSpecies::Tipple => TIPPLE_BODY_FOCUS,
+		crate::preview::ConceptSpecies::Topple
+		| crate::preview::ConceptSpecies::Kispar
+		| crate::preview::ConceptSpecies::Tapp
+		| crate::preview::ConceptSpecies::Kaller
+		| crate::preview::ConceptSpecies::Kappler => {
+			SMALL_BIRD_BODY_FOCUS
+		}
 		_ => BODY_FOCUS,
 	}
 }

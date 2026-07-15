@@ -1,0 +1,122 @@
+//! Lidder species definition.
+//!
+//! Small bipedal bird: crane body on the humanoid rig, meerkat head, beak in the
+//! mouth slot (no nose), about half Braidman height with a modest wingspan and a
+//! small plumage-tinted featherhawk crest.
+
+pub mod assets;
+pub mod bsn;
+pub mod palette;
+pub mod pose;
+
+use crate::{
+	species::{
+		common::{EyeMesh, HairMesh},
+		SpeciesConfig,
+	},
+	ResolvedCharacterAssembly,
+};
+
+use crozon_character_items::{ClothingColor, ClothingMesh, ItemColor};
+
+use assets::LidderAssets;
+
+pub use assets::{LidderBeakMesh, LidderHeadMesh};
+pub use palette::{LidderBeakColor, LidderEyeColor, LidderPlumageColor};
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LidderColors {
+	pub plumage: LidderPlumageColor,
+	pub eyes: LidderEyeColor,
+	pub beak: LidderBeakColor,
+	pub hair: ItemColor,
+	pub clothing_default: ItemColor,
+	pub clothing: Vec<ClothingColor>,
+}
+
+impl Default for LidderColors {
+	fn default() -> Self {
+		Self {
+			plumage: LidderPlumageColor::Slate,
+			eyes: LidderEyeColor::Amber,
+			beak: LidderBeakColor::Horn,
+			// Crest tint follows plumage; this field is only for shared hair menus.
+			hair: ItemColor::Dark,
+			clothing_default: ItemColor::Cool,
+			clothing: Vec::new(),
+		}
+	}
+}
+
+impl LidderColors {
+	pub fn clothing_color(&self, clothing: ClothingMesh) -> ItemColor {
+		ClothingColor::resolve(&self.clothing, self.clothing_default, clothing)
+	}
+
+	pub fn set_clothing_color(&mut self, clothing: ClothingMesh, color: ItemColor) {
+		ClothingColor::set(&mut self.clothing, clothing, color);
+	}
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LidderConfig {
+	pub beak: LidderBeakMesh,
+	pub eye: EyeMesh,
+	pub hair: HairMesh,
+	pub clothing: Vec<ClothingMesh>,
+	pub colors: LidderColors,
+}
+
+impl Default for LidderConfig {
+	fn default() -> Self {
+		Self::default_preview()
+	}
+}
+
+impl LidderConfig {
+	pub fn default_preview() -> Self {
+		Self {
+			beak: LidderBeakMesh::Beak,
+			eye: EyeMesh::Falcon,
+			hair: HairMesh::FeatherHawk,
+			clothing: Vec::new(),
+			colors: LidderColors::default(),
+		}
+	}
+
+	pub fn status_label(&self) -> String {
+		let clothing = if self.clothing.is_empty() {
+			"none".into()
+		} else {
+			self.clothing
+				.iter()
+				.map(|clothing| clothing.label())
+				.collect::<Vec<_>>()
+				.join(",")
+		};
+		format!(
+			"lidder beak={} eye={} hair={} clothing={} plumage={} eyes={} beak_color={}",
+			self.beak.label(),
+			self.eye.label(),
+			self.hair.label(),
+			clothing,
+			self.colors.plumage.label(),
+			self.colors.eyes.label(),
+			self.colors.beak.label(),
+		)
+	}
+
+	pub fn sync_key(&self) -> String {
+		format!("{self:?}")
+	}
+}
+
+impl SpeciesConfig for LidderConfig {
+	fn species_name(&self) -> &'static str {
+		"lidder"
+	}
+
+	fn resolve(&self) -> ResolvedCharacterAssembly {
+		LidderAssets::resolve(self)
+	}
+}

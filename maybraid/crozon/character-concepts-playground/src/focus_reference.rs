@@ -84,6 +84,15 @@ fn focus_live_key(config: &ConceptPreviewConfig) -> String {
 		ConceptPreviewConfig::Brodler { config, .. } => config.sync_key(),
 		ConceptPreviewConfig::Mygr { config, .. } => config.sync_key(),
 		ConceptPreviewConfig::Dui { config, .. } => config.sync_key(),
+		ConceptPreviewConfig::Lidder { config, .. } => config.sync_key(),
+		ConceptPreviewConfig::Chupri { config, .. } => config.sync_key(),
+		ConceptPreviewConfig::Brokker { config, .. } => config.sync_key(),
+		ConceptPreviewConfig::Tipple { config, .. } => config.sync_key(),
+		ConceptPreviewConfig::Topple { config, .. } => config.sync_key(),
+		ConceptPreviewConfig::Kispar { config, .. } => config.sync_key(),
+		ConceptPreviewConfig::Tapp { config, .. } => config.sync_key(),
+		ConceptPreviewConfig::Kaller { config, .. } => config.sync_key(),
+		ConceptPreviewConfig::Kappler { config, .. } => config.sync_key(),
 		ConceptPreviewConfig::Wumbus { config, .. } => config.sync_key(),
 		ConceptPreviewConfig::Lero { config, .. } => config.sync_key(),
 		ConceptPreviewConfig::Spibmom { config, .. } => config.sync_key(),
@@ -169,6 +178,7 @@ fn spawn_focus_reference(
 	assembly: &ResolvedCharacterAssembly,
 ) {
 	let skeleton = RigSkeletonKind::from_body_rig_label(assembly.body_rig.label);
+	let transform = assembly.body_rig.normalization.transform();
 	let body_rig = commands
 		.spawn((
 			WorldAssetRoot(
@@ -182,7 +192,7 @@ fn spawn_focus_reference(
 			RigBindScales::default(),
 			FocusReferenceRoot,
 			Visibility::Hidden,
-			Transform::IDENTITY,
+			transform,
 			Name::new(format!("focus_{}_body_rig", assembly.label)),
 		))
 		.id();

@@ -56,6 +56,33 @@ pub fn menu_to_preview_config(menu: &CharacterMenu) -> ConceptPreviewConfig {
 		ConceptSpecies::Dui => {
 			ConceptPreviewConfig::dui_with_animation(menu.dui_config(), menu.animation())
 		}
+		ConceptSpecies::Lidder => {
+			ConceptPreviewConfig::lidder_with_animation(menu.lidder_config(), menu.animation())
+		}
+		ConceptSpecies::Chupri => {
+			ConceptPreviewConfig::chupri_with_animation(menu.chupri_config(), menu.animation())
+		}
+		ConceptSpecies::Brokker => {
+			ConceptPreviewConfig::brokker_with_animation(menu.brokker_config(), menu.animation())
+		}
+		ConceptSpecies::Tipple => {
+			ConceptPreviewConfig::tipple_with_animation(menu.tipple_config(), menu.animation())
+		}
+		ConceptSpecies::Topple => {
+			ConceptPreviewConfig::topple_with_animation(menu.topple_config(), menu.animation())
+		}
+		ConceptSpecies::Kispar => {
+			ConceptPreviewConfig::kispar_with_animation(menu.kispar_config(), menu.animation())
+		}
+		ConceptSpecies::Tapp => {
+			ConceptPreviewConfig::tapp_with_animation(menu.tapp_config(), menu.animation())
+		}
+		ConceptSpecies::Kaller => {
+			ConceptPreviewConfig::kaller_with_animation(menu.kaller_config(), menu.animation())
+		}
+		ConceptSpecies::Kappler => {
+			ConceptPreviewConfig::kappler_with_animation(menu.kappler_config(), menu.animation())
+		}
 		ConceptSpecies::Wumbus => {
 			ConceptPreviewConfig::wumbus_with_animation(menu.wumbus_config(), menu.animation())
 		}
@@ -106,6 +133,33 @@ pub fn menu_from_preview_config(config: &ConceptPreviewConfig) -> CharacterMenu 
 		ConceptPreviewConfig::Dui { config, animation } => {
 			CharacterMenu::from_dui(config, *animation)
 		}
+		ConceptPreviewConfig::Lidder { config, animation } => {
+			CharacterMenu::from_lidder(config, *animation)
+		}
+		ConceptPreviewConfig::Chupri { config, animation } => {
+			CharacterMenu::from_chupri(config, *animation)
+		}
+		ConceptPreviewConfig::Brokker { config, animation } => {
+			CharacterMenu::from_brokker(config, *animation)
+		}
+		ConceptPreviewConfig::Tipple { config, animation } => {
+			CharacterMenu::from_tipple(config, *animation)
+		}
+		ConceptPreviewConfig::Topple { config, animation } => {
+			CharacterMenu::from_topple(config, *animation)
+		}
+		ConceptPreviewConfig::Kispar { config, animation } => {
+			CharacterMenu::from_kispar(config, *animation)
+		}
+		ConceptPreviewConfig::Tapp { config, animation } => {
+			CharacterMenu::from_tapp(config, *animation)
+		}
+		ConceptPreviewConfig::Kaller { config, animation } => {
+			CharacterMenu::from_kaller(config, *animation)
+		}
+		ConceptPreviewConfig::Kappler { config, animation } => {
+			CharacterMenu::from_kappler(config, *animation)
+		}
 		ConceptPreviewConfig::Wumbus { config, animation } => {
 			CharacterMenu::from_wumbus(config, *animation)
 		}
@@ -149,6 +203,15 @@ fn preview_species(species: ConceptSpecies) -> crate::preview::ConceptSpecies {
 		ConceptSpecies::Brodler => crate::preview::ConceptSpecies::Brodler,
 		ConceptSpecies::Mygr => crate::preview::ConceptSpecies::Mygr,
 		ConceptSpecies::Dui => crate::preview::ConceptSpecies::Dui,
+		ConceptSpecies::Lidder => crate::preview::ConceptSpecies::Lidder,
+		ConceptSpecies::Chupri => crate::preview::ConceptSpecies::Chupri,
+		ConceptSpecies::Brokker => crate::preview::ConceptSpecies::Brokker,
+		ConceptSpecies::Tipple => crate::preview::ConceptSpecies::Tipple,
+		ConceptSpecies::Topple => crate::preview::ConceptSpecies::Topple,
+		ConceptSpecies::Kispar => crate::preview::ConceptSpecies::Kispar,
+		ConceptSpecies::Tapp => crate::preview::ConceptSpecies::Tapp,
+		ConceptSpecies::Kaller => crate::preview::ConceptSpecies::Kaller,
+		ConceptSpecies::Kappler => crate::preview::ConceptSpecies::Kappler,
 		ConceptSpecies::Wumbus => crate::preview::ConceptSpecies::Wumbus,
 		ConceptSpecies::Lero => crate::preview::ConceptSpecies::Lero,
 		ConceptSpecies::Spibmom => crate::preview::ConceptSpecies::Spibmom,

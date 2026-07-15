@@ -1,0 +1,121 @@
+//! Topple species definition.
+//!
+//! Softer, taller Tipple sibling (~2 ft): whelp body, cartoonishly large meerkat
+//! head, selectable beak, pastel plumage. Overall size via body-rig asset
+//! normalization (~0.30×).
+
+pub mod assets;
+pub mod bsn;
+pub mod palette;
+pub mod pose;
+
+use crate::{
+	species::{
+		common::{EyeMesh, HairMesh},
+		SpeciesConfig,
+	},
+	ResolvedCharacterAssembly,
+};
+
+use crozon_character_items::{ClothingColor, ClothingMesh, ItemColor};
+
+use assets::ToppleAssets;
+
+pub use assets::{ToppleBeakMesh, ToppleHeadMesh};
+pub use palette::{ToppleBeakColor, ToppleEyeColor, TopplePlumageColor};
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ToppleColors {
+	pub plumage: TopplePlumageColor,
+	pub eyes: ToppleEyeColor,
+	pub beak: ToppleBeakColor,
+	pub hair: ItemColor,
+	pub clothing_default: ItemColor,
+	pub clothing: Vec<ClothingColor>,
+}
+
+impl Default for ToppleColors {
+	fn default() -> Self {
+		Self {
+			plumage: TopplePlumageColor::Cream,
+			eyes: ToppleEyeColor::SoftAmber,
+			beak: ToppleBeakColor::Peach,
+			hair: ItemColor::Dark,
+			clothing_default: ItemColor::Cool,
+			clothing: Vec::new(),
+		}
+	}
+}
+
+impl ToppleColors {
+	pub fn clothing_color(&self, clothing: ClothingMesh) -> ItemColor {
+		ClothingColor::resolve(&self.clothing, self.clothing_default, clothing)
+	}
+
+	pub fn set_clothing_color(&mut self, clothing: ClothingMesh, color: ItemColor) {
+		ClothingColor::set(&mut self.clothing, clothing, color);
+	}
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ToppleConfig {
+	pub beak: ToppleBeakMesh,
+	pub eye: EyeMesh,
+	pub hair: HairMesh,
+	pub clothing: Vec<ClothingMesh>,
+	pub colors: ToppleColors,
+}
+
+impl Default for ToppleConfig {
+	fn default() -> Self {
+		Self::default_preview()
+	}
+}
+
+impl ToppleConfig {
+	pub fn default_preview() -> Self {
+		Self {
+			beak: ToppleBeakMesh::Beak,
+			eye: EyeMesh::Falcon,
+			hair: HairMesh::FeatherHawk,
+			clothing: Vec::new(),
+			colors: ToppleColors::default(),
+		}
+	}
+
+	pub fn status_label(&self) -> String {
+		let clothing = if self.clothing.is_empty() {
+			"none".into()
+		} else {
+			self.clothing
+				.iter()
+				.map(|clothing| clothing.label())
+				.collect::<Vec<_>>()
+				.join(",")
+		};
+		format!(
+			"topple beak={} eye={} hair={} clothing={} plumage={} eyes={} beak_color={}",
+			self.beak.label(),
+			self.eye.label(),
+			self.hair.label(),
+			clothing,
+			self.colors.plumage.label(),
+			self.colors.eyes.label(),
+			self.colors.beak.label(),
+		)
+	}
+
+	pub fn sync_key(&self) -> String {
+		format!("{self:?}")
+	}
+}
+
+impl SpeciesConfig for ToppleConfig {
+	fn species_name(&self) -> &'static str {
+		"topple"
+	}
+
+	fn resolve(&self) -> ResolvedCharacterAssembly {
+		ToppleAssets::resolve(self)
+	}
+}

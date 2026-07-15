@@ -14,11 +14,19 @@ use crozon_rigs::ResolvedRigPose;
 pub struct RigAsset {
 	pub label: &'static str,
 	pub path: AssetPath,
+	/// Uniform scene-root scale for the whole armature (including sibling
+	/// chains like humanoid `pelvis.*` / `buttocks` that are not under `root`).
+	pub normalization: AssetNormalization,
 }
 
 impl RigAsset {
 	pub const fn new(label: &'static str, path: AssetPath) -> Self {
-		Self { label, path }
+		Self { label, path, normalization: AssetNormalization::IDENTITY }
+	}
+
+	pub const fn with_normalization(mut self, normalization: AssetNormalization) -> Self {
+		self.normalization = normalization;
+		self
 	}
 }
 
