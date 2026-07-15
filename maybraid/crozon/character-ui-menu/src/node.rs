@@ -59,6 +59,46 @@ pub struct SelectChoice<E> {
 	pub event: E,
 }
 
+/// Labeled subgroup of select tiles inside a [`MenuNode::SectionSelect`].
+#[derive(Clone, Debug, PartialEq)]
+pub struct SelectGroup<E> {
+	/// Subheading above the choice row; omit for a single unlabeled row.
+	pub label: Option<&'static str>,
+	pub choices: Vec<SelectChoice<E>>,
+}
+
+impl<E> SelectGroup<E> {
+	pub fn unlabeled(choices: Vec<SelectChoice<E>>) -> Self {
+		Self { label: None, choices }
+	}
+
+	pub fn labeled(label: &'static str, choices: Vec<SelectChoice<E>>) -> Self {
+		Self { label: Some(label), choices }
+	}
+
+	pub fn from_values<T>(
+		group_label: Option<&'static str>,
+		selected: T,
+		mut event: impl FnMut(T) -> E,
+		values: &[T],
+	) -> Self
+	where
+		T: LabelOption + PartialEq + Copy,
+	{
+		Self {
+			label: group_label,
+			choices: values
+				.iter()
+				.map(|value| SelectChoice {
+					label: value.label(),
+					selected: *value == selected,
+					event: event(*value),
+				})
+				.collect(),
+		}
+	}
+}
+
 /// One color swatch in a swatch row.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct SwatchChoice<E> {
@@ -131,8 +171,13 @@ pub enum MenuNode<E> {
 	/// [`crate::SectionOpen`].
 	Section { label: &'static str, children: Vec<MenuNode<E>> },
 	/// Tile picker whose selection decides the subtree below it
-	/// (e.g. the species picker). Only the selected subtree is lowered.
-	SectionSelect { label: &'static str, choices: Vec<SelectChoice<E>>, children: Vec<MenuNode<E>> },
+	/// (e.g. the species picker). Choices may be split into labeled groups for
+	/// readability; only the selected subtree is lowered into `children`.
+	SectionSelect {
+		label: &'static str,
+		groups: Vec<SelectGroup<E>>,
+		children: Vec<MenuNode<E>>,
+	},
 	/// `<` value `>` control with an inline label.
 	LabeledCycle { label: &'static str, value: &'static str, minus: E, plus: E },
 	/// `-` value `+` stepped scalar control with an inline label.
@@ -173,12 +218,28 @@ impl<E> MenuNode<E> {
 	{
 		Self::SectionSelect {
 			label,
-			choices: T::values()
+			groups: vec![SelectGroup::from_values(None, selected, &mut event, T::values())],
+			children: normalize(vec![child]),
+		}
+	}
+
+	/// Like [`Self::section_select`], but splits choices into labeled groups.
+	pub fn section_select_grouped<T>(
+		label: &'static str,
+		selected: T,
+		mut event: impl FnMut(T) -> E,
+		groups: &[(&'static str, &[T])],
+		child: MenuNode<E>,
+	) -> Self
+	where
+		T: LabelOption + PartialEq + Copy,
+	{
+		Self::SectionSelect {
+			label,
+			groups: groups
 				.iter()
-				.map(|value| SelectChoice {
-					label: value.label(),
-					selected: *value == selected,
-					event: event(*value),
+				.map(|(group_label, values)| {
+					SelectGroup::from_values(Some(*group_label), selected, &mut event, values)
 				})
 				.collect(),
 			children: normalize(vec![child]),
