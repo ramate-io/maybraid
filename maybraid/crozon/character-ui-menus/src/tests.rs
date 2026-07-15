@@ -341,7 +341,7 @@ fn character_menu_lowers_to_species_select_tree() -> anyhow::Result<()> {
 		anyhow::bail!("expected a species SectionSelect at the root");
 	};
 	assert_eq!(*label, "Species");
-	assert_eq!(choices.len(), 24);
+	assert_eq!(choices.len(), 27);
 	assert!(choices[0].selected, "default species should be braidman");
 	// Braidman: presets, body, head & features, hair, clothing, animation.
 	assert_eq!(children.len(), 6);

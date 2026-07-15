@@ -32,6 +32,9 @@ use crozon_characters::{
 		lero::{LeroConfig, LeroMouthMesh},
 		mygr::MygrConfig,
 		spibmom::SpibmomConfig,
+		grener::GrenerConfig,
+		thumplus::ThumplusConfig,
+		mistler::MistlerConfig,
 		wumbus::{WumbusConfig, WumbusHornMesh},
 		SpeciesConfig,
 	},
@@ -74,6 +77,9 @@ pub enum ConceptSpecies {
 	Wumbus,
 	Lero,
 	Spibmom,
+	Grener,
+	Thumplus,
+	Mistler,
 }
 
 #[derive(Resource, Debug, Clone, PartialEq)]
@@ -102,6 +108,9 @@ pub enum ConceptPreviewConfig {
 	Wumbus { config: WumbusConfig, animation: ConceptAnimation },
 	Lero { config: LeroConfig, animation: ConceptAnimation },
 	Spibmom { config: SpibmomConfig, animation: ConceptAnimation },
+	Grener { config: GrenerConfig, animation: ConceptAnimation },
+	Thumplus { config: ThumplusConfig, animation: ConceptAnimation },
+	Mistler { config: MistlerConfig, animation: ConceptAnimation },
 }
 
 impl Default for ConceptPreviewConfig {
@@ -137,6 +146,9 @@ impl ConceptPreviewConfig {
 			ConceptSpecies::Wumbus => Self::wumbus(WumbusConfig::default_preview()),
 			ConceptSpecies::Lero => Self::lero(LeroConfig::default_preview()),
 			ConceptSpecies::Spibmom => Self::spibmom(SpibmomConfig::default_preview()),
+			ConceptSpecies::Grener => Self::grener(GrenerConfig::default_preview()),
+			ConceptSpecies::Thumplus => Self::thumplus(ThumplusConfig::default_preview()),
+			ConceptSpecies::Mistler => Self::mistler(MistlerConfig::default_preview()),
 		}
 	}
 
@@ -166,6 +178,9 @@ impl ConceptPreviewConfig {
 			Self::Wumbus { .. } => ConceptSpecies::Wumbus,
 			Self::Lero { .. } => ConceptSpecies::Lero,
 			Self::Spibmom { .. } => ConceptSpecies::Spibmom,
+			Self::Grener { .. } => ConceptSpecies::Grener,
+			Self::Thumplus { .. } => ConceptSpecies::Thumplus,
+			Self::Mistler { .. } => ConceptSpecies::Mistler,
 		}
 	}
 
@@ -362,6 +377,30 @@ impl ConceptPreviewConfig {
 		Self::Spibmom { config, animation }
 	}
 
+	pub fn grener(config: GrenerConfig) -> Self {
+		Self::Grener { config, animation: ConceptAnimation::default() }
+	}
+
+	pub fn grener_with_animation(config: GrenerConfig, animation: ConceptAnimation) -> Self {
+		Self::Grener { config, animation }
+	}
+
+	pub fn thumplus(config: ThumplusConfig) -> Self {
+		Self::Thumplus { config, animation: ConceptAnimation::default() }
+	}
+
+	pub fn thumplus_with_animation(config: ThumplusConfig, animation: ConceptAnimation) -> Self {
+		Self::Thumplus { config, animation }
+	}
+
+	pub fn mistler(config: MistlerConfig) -> Self {
+		Self::Mistler { config, animation: ConceptAnimation::default() }
+	}
+
+	pub fn mistler_with_animation(config: MistlerConfig, animation: ConceptAnimation) -> Self {
+		Self::Mistler { config, animation }
+	}
+
 	pub fn resolve(&self) -> ResolvedCharacterAssembly {
 		match self {
 			Self::Braidman { config, .. } => config.resolve(),
@@ -388,6 +427,9 @@ impl ConceptPreviewConfig {
 			Self::Wumbus { config, .. } => config.resolve(),
 			Self::Lero { config, .. } => config.resolve(),
 			Self::Spibmom { config, .. } => config.resolve(),
+			Self::Grener { config, .. } => config.resolve(),
+			Self::Thumplus { config, .. } => config.resolve(),
+			Self::Mistler { config, .. } => config.resolve(),
 		}
 	}
 
@@ -447,6 +489,15 @@ impl ConceptPreviewConfig {
 				format!("{} animation={}", config.status_label(), animation.label())
 			}
 			Self::Spibmom { config, animation } => {
+				format!("{} animation={}", config.status_label(), animation.label())
+			}
+			Self::Grener { config, animation } => {
+				format!("{} animation={}", config.status_label(), animation.label())
+			}
+			Self::Thumplus { config, animation } => {
+				format!("{} animation={}", config.status_label(), animation.label())
+			}
+			Self::Mistler { config, animation } => {
 				format!("{} animation={}", config.status_label(), animation.label())
 			}
 		}
@@ -509,6 +560,15 @@ impl ConceptPreviewConfig {
 			}
 			Self::Spibmom { config, animation } => {
 				format!("species=spibmom {} animation={animation:?}", config.sync_key())
+			}
+			Self::Grener { config, animation } => {
+				format!("species=grener {} animation={animation:?}", config.sync_key())
+			}
+			Self::Thumplus { config, animation } => {
+				format!("species=thumplus {} animation={animation:?}", config.sync_key())
+			}
+			Self::Mistler { config, animation } => {
+				format!("species=mistler {} animation={animation:?}", config.sync_key())
 			}
 		}
 	}
@@ -669,6 +729,18 @@ impl ConceptPreviewConfig {
 				config.hair,
 				config.clothing,
 			),
+			Self::Grener { config, .. } => format!(
+				"species=grener body={:?}",
+				config.colors.body,
+			),
+			Self::Thumplus { config, .. } => format!(
+				"species=thumplus body={:?}",
+				config.colors.body,
+			),
+			Self::Mistler { config, .. } => format!(
+				"species=mistler body={:?}",
+				config.colors.body,
+			),
 		}
 	}
 
@@ -697,7 +769,10 @@ impl ConceptPreviewConfig {
 			| Self::Kappler { animation, .. }
 			| Self::Wumbus { animation, .. }
 			| Self::Lero { animation, .. }
-			| Self::Spibmom { animation, .. } => *animation,
+			| Self::Spibmom { animation, .. }
+			| Self::Grener { animation, .. }
+			| Self::Thumplus { animation, .. }
+			| Self::Mistler { animation, .. } => *animation,
 		}
 	}
 }
@@ -923,6 +998,9 @@ pub enum PreviewTarget {
 	SpibmomEar,
 	SpibmomHair(HairMesh),
 	SpibmomClothing(ClothingMesh),
+	GrenerBody,
+	ThumplusBody,
+	MistlerBody,
 }
 
 pub fn sync_preview(
@@ -1299,6 +1377,21 @@ fn sync_live_preview(
 		ConceptPreviewConfig::Spibmom { config: spibmom, .. } => {
 			for (_, mut target, ..) in parts {
 				target.color = preview_color_spibmom(spibmom, target.target);
+			}
+		}
+		ConceptPreviewConfig::Grener { config: grener, .. } => {
+			for (_, mut target, ..) in parts {
+				target.color = preview_color_grener(grener, target.target);
+			}
+		}
+		ConceptPreviewConfig::Thumplus { config: thumplus, .. } => {
+			for (_, mut target, ..) in parts {
+				target.color = preview_color_thumplus(thumplus, target.target);
+			}
+		}
+		ConceptPreviewConfig::Mistler { config: mistler, .. } => {
+			for (_, mut target, ..) in parts {
+				target.color = preview_color_mistler(mistler, target.target);
 			}
 		}
 	}
@@ -1778,6 +1871,28 @@ fn preview_color_spibmom(config: &SpibmomConfig, target: PreviewTarget) -> Previ
 	}
 }
 
+fn preview_color_grener(config: &GrenerConfig, target: PreviewTarget) -> PreviewColor {
+	match target {
+		PreviewTarget::GrenerBody => PreviewColor::GrenerBody(config.colors.body),
+		_ => PreviewColor::GrenerBody(config.colors.body),
+	}
+}
+
+fn preview_color_thumplus(config: &ThumplusConfig, target: PreviewTarget) -> PreviewColor {
+	match target {
+		PreviewTarget::ThumplusBody => PreviewColor::ThumplusBody(config.colors.body),
+		_ => PreviewColor::ThumplusBody(config.colors.body),
+	}
+}
+
+fn preview_color_mistler(config: &MistlerConfig, target: PreviewTarget) -> PreviewColor {
+	match target {
+		PreviewTarget::MistlerBody => PreviewColor::MistlerBody(config.colors.body),
+		_ => PreviewColor::MistlerBody(config.colors.body),
+	}
+}
+
+
 struct SocketRigMap {
 	body: Entity,
 	neck: Option<Entity>,
@@ -1933,6 +2048,9 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 			ConceptPreviewConfig::Wumbus { .. } => part.asset.normalization.transform(),
 			ConceptPreviewConfig::Lero { .. } => part.asset.normalization.transform(),
 			ConceptPreviewConfig::Spibmom { .. } => part.asset.normalization.transform(),
+			ConceptPreviewConfig::Grener { .. } => part.asset.normalization.transform(),
+			ConceptPreviewConfig::Thumplus { .. } => part.asset.normalization.transform(),
+			ConceptPreviewConfig::Mistler { .. } => part.asset.normalization.transform(),
 		}
 	}
 
@@ -2699,6 +2817,18 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 						.unwrap_or(PreviewTarget::SpibmomHead),
 				};
 				PreviewAssetTarget { target, color: preview_color_spibmom(config, target) }
+			}
+			ConceptPreviewConfig::Grener { config, .. } => {
+				let target = PreviewTarget::GrenerBody;
+				PreviewAssetTarget { target, color: preview_color_grener(config, target) }
+			}
+			ConceptPreviewConfig::Thumplus { config, .. } => {
+				let target = PreviewTarget::ThumplusBody;
+				PreviewAssetTarget { target, color: preview_color_thumplus(config, target) }
+			}
+			ConceptPreviewConfig::Mistler { config, .. } => {
+				let target = PreviewTarget::MistlerBody;
+				PreviewAssetTarget { target, color: preview_color_mistler(config, target) }
 			}
 		}
 	}

@@ -15,16 +15,17 @@ pub enum RigSkeletonKind {
 	#[default]
 	Humanoid,
 	Quadruped,
+	Forelimbed,
 	/// Multi-bone neck armature (`neck_base` … `head_socket`).
 	Neck,
 }
 
 impl RigSkeletonKind {
 	pub fn from_body_rig_label(label: &str) -> Self {
-		if label == "Quadruped" {
-			Self::Quadruped
-		} else {
-			Self::Humanoid
+		match label {
+			"Quadruped" => Self::Quadruped,
+			"Forelimbed" => Self::Forelimbed,
+			_ => Self::Humanoid,
 		}
 	}
 
@@ -32,6 +33,7 @@ impl RigSkeletonKind {
 		match self {
 			Self::Humanoid => &["root", "pelvis.L", "chest.L", "waist.L"],
 			Self::Quadruped => &["head_socket", "shoulder.L", "tailbone", "waist.L"],
+			Self::Forelimbed => &["head_socket", "shoulder.L", "tailbone", "upper_mid_spine"],
 			Self::Neck => &["neck_base", "head_socket"],
 		}
 	}

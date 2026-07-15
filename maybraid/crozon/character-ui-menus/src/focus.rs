@@ -37,6 +37,30 @@ pub const SMALL_BIRD_BODY_FOCUS: CameraFocus =
 pub const SPIBMOM_BODY_FOCUS: CameraFocus =
 	CameraFocus::new(FocusRig::Body, "root", Vec3::new(-1.2, 2.0, 10.0), Vec3::new(2.0, 0.0, -2.0));
 
+/// Grener (~3 m shark) framing on the forelimbed axial chain.
+pub const GRENER_BODY_FOCUS: CameraFocus = CameraFocus::new(
+	FocusRig::Body,
+	"upper_mid_spine",
+	Vec3::new(-2.0, 1.5, 7.0),
+	Vec3::new(1.5, 0.0, -1.5),
+);
+
+/// Thumplus (~6 m whale) framing — pulled further back.
+pub const THUMPLUS_BODY_FOCUS: CameraFocus = CameraFocus::new(
+	FocusRig::Body,
+	"upper_mid_spine",
+	Vec3::new(-4.0, 2.5, 14.0),
+	Vec3::new(3.0, 0.0, -3.0),
+);
+
+/// Mistler (~1 ft sprite fish) framing — close in.
+pub const MISTLER_BODY_FOCUS: CameraFocus = CameraFocus::new(
+	FocusRig::Body,
+	"upper_mid_spine",
+	Vec3::new(-0.25, 0.2, 0.9),
+	Vec3::new(0.3, 0.05, -0.3),
+);
+
 pub const SPIBMOM_HEAD_ROOT_FOCUS: CameraFocus =
 	CameraFocus::new(FocusRig::Head, "root", Vec3::new(0.0, 1.0, 7.0), Vec3::new(0.0, 0.05, 0.0));
 
