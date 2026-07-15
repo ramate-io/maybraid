@@ -18,7 +18,16 @@ use crate::{
 		},
 		brenal::{BrenalBodyMesh, BrenalHeadMesh, BrenalHornMesh, BrenalMouthMesh},
 		caole::{CaoleBodyMesh, CaoleMouthMesh},
-		epiphant::{EpiphantBodyMesh, EpiphantColor, EpiphantEarMesh, EpiphantHeadMesh, EpiphantNoseMesh},
+		brokker::{
+			BrokkerEyeColor, BrokkerHeadMesh, BrokkerPlumageColor, BrokkerSnoutColor,
+			BrokkerSnoutMesh,
+		},
+		chupri::{
+			ChupriBeakColor, ChupriBeakMesh, ChupriEyeColor, ChupriHeadMesh, ChupriPlumageColor,
+		},
+		epiphant::{
+			EpiphantBodyMesh, EpiphantColor, EpiphantEarMesh, EpiphantHeadMesh, EpiphantNoseMesh,
+		},
 		hars::{HarsBodyMesh, HarsMouthMesh},
 		claber::{ClaberBodyMesh, ClaberColor, ClaberHeadMesh, ClaberHornMesh, ClaberMouthMesh},
 		croconot::{CroconotBodyMesh, CroconotHeadMesh, CroconotHornMesh, CroconotMouthMesh},
@@ -27,14 +36,34 @@ use crate::{
 			DuiEyeColor, DuiEyeMesh, DuiHeadMesh, DuiMouthColor, DuiMouthMesh, DuiNoseColor,
 			DuiNoseMesh, DuiSkinColor,
 		},
+		kispar::{
+			KisparBeakColor, KisparBeakMesh, KisparEyeColor, KisparHeadMesh, KisparPlumageColor,
+		},
+		tapp::{
+			TappBeakColor, TappBeakMesh, TappEyeColor, TappHeadMesh, TappPlumageColor,
+		},
+		kaller::{
+			KallerCrownColor, KallerEyeColor, KallerHeadMesh, KallerHornMesh, KallerPlumageColor,
+			KallerSnoutColor, KallerSnoutMesh,
+		},
+		kappler::{
+			KapplerBeakColor, KapplerBeakMesh, KapplerEyeColor, KapplerHeadMesh, KapplerPlumageColor,
+		},
 		lero::{
 			LeroEyeColor, LeroHeadMesh, LeroMouthColor, LeroMouthMesh, LeroSkinColor,
 			LeroSpineColor, LeroTailColor,
 		},
+		lidder::{LidderBeakColor, LidderBeakMesh, LidderEyeColor, LidderHeadMesh, LidderPlumageColor},
 		mygr::{MygrEyeColor, MygrHeadMesh, MygrMouthMesh, MygrSkinColor},
 		spibmom::{
 			SpibmomCrownColor, SpibmomEarColor, SpibmomEyeColor, SpibmomHeadMesh,
 			SpibmomMouthColor, SpibmomMouthMesh, SpibmomSkinColor, SpibmomSpineColor,
+		},
+		tipple::{
+			TippleBeakColor, TippleBeakMesh, TippleEyeColor, TippleHeadMesh, TipplePlumageColor,
+		},
+		topple::{
+			ToppleBeakColor, ToppleBeakMesh, ToppleEyeColor, ToppleHeadMesh, TopplePlumageColor,
 		},
 		tuberwaber::{TuberwaberBodyMesh, TuberwaberColor, TuberwaberHeadMesh},
 		wumbus::{
@@ -121,6 +150,53 @@ impl_menu_identity!(
 	DuiEyeColor,
 	DuiNoseColor,
 	DuiMouthColor,
+	LidderHeadMesh,
+	LidderBeakMesh,
+	LidderPlumageColor,
+	LidderEyeColor,
+	LidderBeakColor,
+	ChupriHeadMesh,
+	ChupriBeakMesh,
+	ChupriPlumageColor,
+	ChupriEyeColor,
+	ChupriBeakColor,
+	BrokkerHeadMesh,
+	BrokkerSnoutMesh,
+	BrokkerPlumageColor,
+	BrokkerEyeColor,
+	BrokkerSnoutColor,
+	TippleHeadMesh,
+	TippleBeakMesh,
+	TipplePlumageColor,
+	TippleEyeColor,
+	TippleBeakColor,
+	ToppleHeadMesh,
+	ToppleBeakMesh,
+	TopplePlumageColor,
+	ToppleEyeColor,
+	ToppleBeakColor,
+	KisparHeadMesh,
+	KisparBeakMesh,
+	KisparPlumageColor,
+	KisparEyeColor,
+	KisparBeakColor,
+	TappHeadMesh,
+	TappBeakMesh,
+	TappPlumageColor,
+	TappEyeColor,
+	TappBeakColor,
+	KallerHeadMesh,
+	KallerSnoutMesh,
+	KallerHornMesh,
+	KallerPlumageColor,
+	KallerEyeColor,
+	KallerSnoutColor,
+	KallerCrownColor,
+	KapplerHeadMesh,
+	KapplerBeakMesh,
+	KapplerPlumageColor,
+	KapplerEyeColor,
+	KapplerBeakColor,
 	BrenalBodyMesh,
 	BrenalHeadMesh,
 	BrenalMouthMesh,
@@ -172,6 +248,34 @@ impl_swatch_option!(
 	DuiEyeColor,
 	DuiNoseColor,
 	DuiMouthColor,
+	LidderPlumageColor,
+	LidderEyeColor,
+	LidderBeakColor,
+	ChupriPlumageColor,
+	ChupriEyeColor,
+	ChupriBeakColor,
+	BrokkerPlumageColor,
+	BrokkerEyeColor,
+	BrokkerSnoutColor,
+	TipplePlumageColor,
+	TippleEyeColor,
+	TippleBeakColor,
+	TopplePlumageColor,
+	ToppleEyeColor,
+	ToppleBeakColor,
+	KisparPlumageColor,
+	KisparEyeColor,
+	KisparBeakColor,
+	TappPlumageColor,
+	TappEyeColor,
+	TappBeakColor,
+	KallerPlumageColor,
+	KallerEyeColor,
+	KallerSnoutColor,
+	KallerCrownColor,
+	KapplerPlumageColor,
+	KapplerEyeColor,
+	KapplerBeakColor,
 	WumbusSkinColor,
 	WumbusEyeColor,
 	WumbusEarColor,
@@ -234,6 +338,25 @@ impl_asset_option!(LeroMouthMesh, FACE_FEATURE_THUMBNAIL_CAMERA);
 impl_asset_option!(SpibmomHeadMesh, HEAD_THUMBNAIL_CAMERA);
 impl_asset_option!(SpibmomMouthMesh, FACE_FEATURE_THUMBNAIL_CAMERA);
 impl_asset_option!(DuiHeadMesh, HEAD_THUMBNAIL_CAMERA);
+impl_asset_option!(LidderHeadMesh, HEAD_THUMBNAIL_CAMERA);
+impl_asset_option!(LidderBeakMesh, FACE_FEATURE_THUMBNAIL_CAMERA);
+impl_asset_option!(ChupriHeadMesh, HEAD_THUMBNAIL_CAMERA);
+impl_asset_option!(ChupriBeakMesh, FACE_FEATURE_THUMBNAIL_CAMERA);
+impl_asset_option!(BrokkerHeadMesh, HEAD_THUMBNAIL_CAMERA);
+impl_asset_option!(BrokkerSnoutMesh, FACE_FEATURE_THUMBNAIL_CAMERA);
+impl_asset_option!(TippleHeadMesh, HEAD_THUMBNAIL_CAMERA);
+impl_asset_option!(TippleBeakMesh, FACE_FEATURE_THUMBNAIL_CAMERA);
+impl_asset_option!(ToppleHeadMesh, HEAD_THUMBNAIL_CAMERA);
+impl_asset_option!(ToppleBeakMesh, FACE_FEATURE_THUMBNAIL_CAMERA);
+impl_asset_option!(KisparHeadMesh, HEAD_THUMBNAIL_CAMERA);
+impl_asset_option!(KisparBeakMesh, FACE_FEATURE_THUMBNAIL_CAMERA);
+impl_asset_option!(TappHeadMesh, HEAD_THUMBNAIL_CAMERA);
+impl_asset_option!(TappBeakMesh, FACE_FEATURE_THUMBNAIL_CAMERA);
+impl_asset_option!(KallerHeadMesh, HEAD_THUMBNAIL_CAMERA);
+impl_asset_option!(KallerSnoutMesh, FACE_FEATURE_THUMBNAIL_CAMERA);
+impl_asset_option!(KallerHornMesh, CROWN_THUMBNAIL_CAMERA);
+impl_asset_option!(KapplerHeadMesh, HEAD_THUMBNAIL_CAMERA);
+impl_asset_option!(KapplerBeakMesh, FACE_FEATURE_THUMBNAIL_CAMERA);
 impl_asset_option!(BrenalBodyMesh, BODY_THUMBNAIL_CAMERA);
 impl_asset_option!(BrenalHeadMesh, HEAD_THUMBNAIL_CAMERA);
 impl_asset_option!(BrenalMouthMesh, FACE_FEATURE_THUMBNAIL_CAMERA);
