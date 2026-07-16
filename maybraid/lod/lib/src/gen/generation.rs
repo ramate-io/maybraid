@@ -30,7 +30,9 @@ pub trait GenerationScheme<S>: Sized {
 	fn build_with_id(spatial_index: &mut S, id: Id, lod_ref: &LodRef) -> Option<(Self, Aabb3d)>;
 
 	/// Materializes descendants through `S` for the given LOD.
-	fn descendants_with_lod(id: Id, spatial_index: &mut S, lod_ref: &LodRef);
+	///
+	/// Typically, this will materialize the next descendant type, allow that to recurse.
+	fn descendants_with_lod(_id: Id, _spatial_index: &mut S, _lod_ref: &LodRef) {}
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

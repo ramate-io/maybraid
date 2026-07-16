@@ -5,7 +5,7 @@ use noise::{NoiseFn, Perlin};
 /// A 3D ellipse defining the cross-section shape of the tube.
 /// The ellipse lies in a local plane spanned by `axes[0]` and `axes[1]`,
 /// centered at `center`.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub struct Ellipse3d {
 	/// Center of the ellipse
 	pub center: Vec3,
@@ -34,6 +34,7 @@ impl Ellipse3d {
 
 /// A tube SDF with elliptical cross-section.
 /// Supports end rounding, Perlin noise surface perturbation, and flanging.
+#[derive(Clone, Debug)]
 pub struct TubeSdf {
 	/// Tube start point (axis)
 	pub ray_start: Vec3,
