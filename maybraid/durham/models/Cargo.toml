@@ -11,6 +11,13 @@ rust-version = { workspace = true }
 
 [dependencies]
 bevy = { workspace = true }
+lod = { workspace = true }
+procedural-common = { workspace = true }
+sdf = { workspace = true }
+chunk = { workspace = true }
+render-item = { workspace = true }
+avian3d = { workspace = true }
+log = { workspace = true }
 
 [lints]
 workspace = true
