@@ -209,6 +209,9 @@ pub fn cell_bounds(ix: i32, iz: i32, cell_size: f32, vertical_half_extent: f32) 
 }
 
 /// Integer cell coordinates covering a region on XZ (Y ignored for tiling).
+///
+/// Uses half-open style on the max edge (`ceil(max/size) - 1`), so a query whose
+/// max lies exactly on a cell boundary does not include the next cell.
 pub fn cell_coords_for_region(
 	region: Aabb3d,
 	cell_size: f32,
@@ -220,6 +223,28 @@ pub fn cell_coords_for_region(
 	let max_z = (region.max.z / size).ceil() as i32 - 1;
 	(min_x..=max_x).flat_map(move |ix| (min_z..=max_z).map(move |iz| (ix, iz)))
 }
+
+/// Cell coordinates for closed/inclusive region coverage, plus a Moore halo.
+///
+/// Inclusive max (`floor(max/size)`) picks up cells that only share a face with
+/// `region`. `halo` then expands that range by that many cells in each direction
+/// so softmask spill from neighboring jersey tiles is still discovered.
+pub fn cell_coords_for_region_inclusive_halo(
+	region: Aabb3d,
+	cell_size: f32,
+	halo: i32,
+) -> impl Iterator<Item = (i32, i32)> {
+	let size = cell_size.max(1e-3);
+	let halo = halo.max(0);
+	let min_x = (region.min.x / size).floor() as i32 - halo;
+	let max_x = (region.max.x / size).floor() as i32 + halo;
+	let min_z = (region.min.z / size).floor() as i32 - halo;
+	let max_z = (region.max.z / size).floor() as i32 + halo;
+	(min_x..=max_x).flat_map(move |ix| (min_z..=max_z).map(move |iz| (ix, iz)))
+}
+
+/// Halo width (cells) for jersey stamp discovery around a query region.
+pub const JERSEY_CELL_QUERY_HALO: i32 = 1;
 
 /// Origin-cell [`OriginalId`]s covering `region`, using Universal [`TerrainCellLayout`].
 pub fn original_ids_for_origin_cells<S>(
@@ -263,6 +288,10 @@ where
 }
 
 /// Jersey-stamp-cell [`OriginalId`]s covering `region`, using Universal [`JerseyStampCellLayout`].
+///
+/// Uses inclusive tiling plus [`JERSEY_CELL_QUERY_HALO`] so face-adjacent and
+/// softmask-spilling neighbors are materialized when Terrain pulls by region.
+/// Does not filter with `region.intersects` — that would drop the halo.
 pub fn original_ids_for_jersey_cells<S>(
 	spatial_index: &mut S,
 	region: Aabb3d,
@@ -292,13 +321,10 @@ where
 		return Vec::new();
 	};
 	let layout = layout.clone();
-	cell_coords_for_region(region, layout.cell_size)
+	cell_coords_for_region_inclusive_halo(region, layout.cell_size, JERSEY_CELL_QUERY_HALO)
 		.map(|(ix, iz)| {
 			let bounds = cell_bounds(ix, iz, layout.cell_size, layout.vertical_half_extent);
 			OriginalId(Id::from_cell(bounds))
-		})
-		.filter(|OriginalId(id)| {
-			id.origin_cell_bounds().is_some_and(|b| region.intersects(&b))
 		})
 		.collect()
 }
