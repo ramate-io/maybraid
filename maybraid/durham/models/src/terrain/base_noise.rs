@@ -1,7 +1,7 @@
 //! Universal base terrain noise — one value for the whole world (`Id::Universal`).
 
 use crate::terrain::cell::universal_bounds;
-use crate::terrain::compose::TerrainConfig;
+use crate::terrain::config::TerrainConfig;
 use crate::terrain::presentation::TerrainPresentationAssets;
 use crate::terrain::sdf::{ComposedTerrain, TerrainSdf};
 use bevy::math::bounding::Aabb3d;

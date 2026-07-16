@@ -2950,6 +2950,7 @@ dependencies = [
  "bevy",
  "chunk",
  "durham-terrain",
+ "jersey-terrain-stamps",
  "lod",
  "log",
  "procedural-common",

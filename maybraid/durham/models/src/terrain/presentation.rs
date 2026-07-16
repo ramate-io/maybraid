@@ -4,7 +4,7 @@
 //! spawns each cell's [`lod::gen::LodScene`] via [`Commands::spawn_scene`].
 
 use crate::terrain::cell::{universal_bounds, TerrainCellLayout};
-use crate::terrain::compose::TerrainConfig;
+use crate::terrain::config::TerrainConfig;
 use crate::terrain::index::TerrainEntryStore;
 use crate::terrain::Terrain;
 use bevy::ecs::system::SystemParam;

@@ -2,11 +2,12 @@
 
 use crate::terrain::base_noise::BaseTerrainNoise;
 use crate::terrain::cell::{BootstrapTerrainCellLayout, TerrainCellLayout};
-use crate::terrain::grading_graph::GradingGraph;
+use crate::terrain::cell_noise::CellTerrainNoise;
+use crate::terrain::jersey_plan::JerseyStampPlan;
+use crate::terrain::jersey_stamp::JerseyStamp;
 use crate::terrain::presentation::{
 	BootstrapTerrainPresentationAssets, TerrainPresentationAssets,
 };
-use crate::terrain::region_stamps::RegionStamps;
 use crate::terrain::Terrain;
 use avian3d::prelude::*;
 use bevy::ecs::system::SystemParam;
@@ -34,8 +35,9 @@ pub struct TerrainEntryStore {
 	next_version: u64,
 	pub(crate) terrain: HashMap<Id, StoredEntry<Terrain>>,
 	pub(crate) base_noise: HashMap<Id, StoredEntry<BaseTerrainNoise>>,
-	pub(crate) grading: HashMap<Id, StoredEntry<GradingGraph>>,
-	pub(crate) stamps: HashMap<Id, StoredEntry<RegionStamps>>,
+	pub(crate) cell_noise: HashMap<Id, StoredEntry<CellTerrainNoise>>,
+	pub(crate) jersey_plan: HashMap<Id, StoredEntry<JerseyStampPlan>>,
+	pub(crate) jersey_stamp: HashMap<Id, StoredEntry<JerseyStamp>>,
 	pub(crate) cell_layout: HashMap<Id, StoredEntry<TerrainCellLayout>>,
 	pub(crate) presentation: HashMap<Id, StoredEntry<TerrainPresentationAssets>>,
 	entity_to_id: HashMap<Entity, Id>,
@@ -54,8 +56,9 @@ impl TerrainEntryStore {
 	pub fn is_empty(&self) -> bool {
 		self.terrain.is_empty()
 			&& self.base_noise.is_empty()
-			&& self.grading.is_empty()
-			&& self.stamps.is_empty()
+			&& self.cell_noise.is_empty()
+			&& self.jersey_plan.is_empty()
+			&& self.jersey_stamp.is_empty()
 			&& self.cell_layout.is_empty()
 			&& self.presentation.is_empty()
 	}
@@ -123,8 +126,9 @@ impl<'w, 's> AvianTerrainIndex<'w, 's> {
 		}
 		self.store.terrain.clear();
 		self.store.base_noise.clear();
-		self.store.grading.clear();
-		self.store.stamps.clear();
+		self.store.cell_noise.clear();
+		self.store.jersey_plan.clear();
+		self.store.jersey_stamp.clear();
 		self.store.cell_layout.clear();
 		self.store.presentation.clear();
 		self.store.entity_to_id.clear();
@@ -193,8 +197,9 @@ macro_rules! impl_map_spatial_index {
 }
 
 impl_map_spatial_index!(BaseTerrainNoise, base_noise);
-impl_map_spatial_index!(GradingGraph, grading);
-impl_map_spatial_index!(RegionStamps, stamps);
+impl_map_spatial_index!(CellTerrainNoise, cell_noise);
+impl_map_spatial_index!(JerseyStampPlan, jersey_plan);
+impl_map_spatial_index!(JerseyStamp, jersey_stamp);
 impl_map_spatial_index!(TerrainCellLayout, cell_layout);
 impl_map_spatial_index!(TerrainPresentationAssets, presentation);
 

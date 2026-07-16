@@ -1,9 +1,9 @@
 //! Terrain cell size and origin tiling helpers.
 
-use bevy::math::bounding::Aabb3d;
+use bevy::math::bounding::{Aabb3d, IntersectsVolume};
 use bevy::math::{IVec2, UVec2, Vec3};
 use bevy::prelude::*;
-use lod::gen::{GenerationScheme, Id, OriginalId};
+use lod::gen::{GeneratingSpatialIndex, GenerationScheme, Id, OriginalId, SpatialIndex};
 use lod::lod_ref::LodRef;
 
 /// Naturescapes cascade `min_size`.
@@ -168,4 +168,45 @@ pub fn cell_coords_for_region(
 	let min_z = (region.min.z / size).floor() as i32;
 	let max_z = (region.max.z / size).ceil() as i32 - 1;
 	(min_x..=max_x).flat_map(move |ix| (min_z..=max_z).map(move |iz| (ix, iz)))
+}
+
+/// Origin-cell [`OriginalId`]s covering `region`, using Universal [`TerrainCellLayout`].
+pub fn original_ids_for_origin_cells<S>(
+	spatial_index: &mut S,
+	region: Aabb3d,
+) -> Vec<OriginalId>
+where
+	S: GeneratingSpatialIndex<TerrainCellLayout>,
+{
+	let identity = Transform::IDENTITY;
+	let lod_ref = LodRef {
+		entity: Entity::PLACEHOLDER,
+		previous_transform: &identity,
+		current_transform: &identity,
+		bounds: &region,
+	};
+	if GeneratingSpatialIndex::<TerrainCellLayout>::get_or_generate(
+		spatial_index,
+		Id::Universal,
+		&lod_ref,
+	)
+	.is_none()
+	{
+		return Vec::new();
+	}
+	let Some(layout) =
+		<S as SpatialIndex<TerrainCellLayout>>::get(spatial_index, Id::Universal)
+	else {
+		return Vec::new();
+	};
+	let layout = layout.clone();
+	cell_coords_for_region(region, layout.cell_size)
+		.map(|(ix, iz)| {
+			let bounds = cell_bounds(ix, iz, layout.cell_size, layout.vertical_half_extent);
+			OriginalId(Id::from_cell(bounds))
+		})
+		.filter(|OriginalId(id)| {
+			id.origin_cell_bounds().is_some_and(|b| region.intersects(&b))
+		})
+		.collect()
 }
