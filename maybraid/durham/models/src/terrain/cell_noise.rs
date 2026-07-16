@@ -1,7 +1,7 @@
-//! Per-origin-cell height view over Universal [`BaseTerrainNoise`].
+//! Per-jersey-cell height view over Universal [`BaseTerrainNoise`].
 
 use crate::terrain::base_noise::BaseTerrainNoise;
-use crate::terrain::cell::{original_ids_for_origin_cells, TerrainCellLayout};
+use crate::terrain::cell::{original_ids_for_jersey_cells, JerseyStampCellLayout};
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 use lod::gen::{GeneratingSpatialIndex, GenerationScheme, Id, OriginalId, SpatialIndex};
@@ -9,7 +9,7 @@ use lod::lod_ref::LodRef;
 
 const SAMPLE_GRID: u32 = 5;
 
-/// Local height oracle and cheap stats for one terrain origin cell.
+/// Local height oracle and cheap stats for one jersey stamp cell.
 #[derive(Debug, Clone, Component)]
 pub struct CellTerrainNoise {
 	pub cell: Aabb3d,
@@ -87,10 +87,10 @@ fn sample_cell_stats(
 
 impl<S> GenerationScheme<S> for CellTerrainNoise
 where
-	S: GeneratingSpatialIndex<BaseTerrainNoise> + GeneratingSpatialIndex<TerrainCellLayout>,
+	S: GeneratingSpatialIndex<BaseTerrainNoise> + GeneratingSpatialIndex<JerseyStampCellLayout>,
 {
 	fn original_ids_for(spatial_index: &mut S, region: Aabb3d) -> Vec<OriginalId> {
-		original_ids_for_origin_cells(spatial_index, region)
+		original_ids_for_jersey_cells(spatial_index, region)
 	}
 
 	fn build_with_id(spatial_index: &mut S, id: Id, lod_ref: &LodRef) -> Option<(Self, Aabb3d)> {

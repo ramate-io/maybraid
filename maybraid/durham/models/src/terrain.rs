@@ -6,9 +6,10 @@ pub mod cell_noise;
 pub mod collider;
 pub mod config;
 pub mod index;
+pub mod jersey_compose;
+pub mod jersey_configs;
+pub mod jersey_layers;
 pub mod jersey_modulation;
-pub mod jersey_plan;
-pub mod jersey_stamp;
 pub mod plugin;
 pub mod presentation;
 pub mod render;
@@ -27,13 +28,20 @@ use lod::lod_ref::LodRef;
 use render_item::mesh::handle::Cached;
 
 pub use base_noise::BaseTerrainNoise;
-pub use cell::{MacroCellLayout, TerrainCellLayout, MACRO_CELL_SIZE, TERRAIN_CELL_SIZE};
+pub use cell::{
+	JerseyStampCellLayout, MacroCellLayout, TerrainCellLayout, JERSEY_STAMP_CELL_SIZE,
+	MACRO_CELL_SIZE, TERRAIN_CELL_SIZE,
+};
 pub use cell_noise::CellTerrainNoise;
 pub use collider::TerrainTrimeshCollider;
 pub use config::TerrainConfig;
 pub use index::{AvianTerrainIndex, TerrainCellId, TerrainEntryStore};
-pub use jersey_plan::JerseyStampPlan;
-pub use jersey_stamp::JerseyStamp;
+pub use jersey_compose::JerseyModulations;
+pub use jersey_configs::JerseyLayerConfigs;
+pub use jersey_layers::{
+	CanyonLayer, PlateauCapLayer, PocketWaterLayer, RollingGroundLayer, RuggedMassifLayer,
+	ValleyBasinLayer,
+};
 pub use plugin::{register_terrain_plugin, TerrainPlugin};
 pub use presentation::{
 	TerrainPresentationAssets, TerrainPresenterState, TerrainRegionPresenter, TerrainStoreView,
@@ -49,18 +57,20 @@ pub use sdf::{ComposedTerrain, ElevationModulation, TerrainSdf};
 pub struct Terrain {
 	pub cell: Aabb3d,
 	pub base: BaseTerrainNoise,
-	pub stamp: JerseyStamp,
+	pub jersey: Vec<JerseyModulations>,
 	pub sdf: ComposedTerrain,
 	pub material: Handle<DurhamTerrainShader>,
 	pub res_2: u8,
 }
 
 impl Terrain {
-	/// Compose an SDF from cloned base noise and jersey stamp modulations.
-	pub fn compose_sdf(base: &BaseTerrainNoise, stamp: &JerseyStamp) -> ComposedTerrain {
+	/// Compose an SDF from cloned base noise and intersecting jersey modulations.
+	pub fn compose_sdf(base: &BaseTerrainNoise, jersey: &[JerseyModulations]) -> ComposedTerrain {
 		let mut sdf = base.sdf.clone();
-		for modulation in &stamp.stamp_set.modulations {
-			sdf.add_elevation_modulation(Box::new(modulation.clone()));
+		for cell in jersey {
+			for modulation in &cell.modulations {
+				sdf.add_elevation_modulation(Box::new(modulation.clone()));
+			}
 		}
 		ComposedTerrain::from_terrain(sdf)
 	}
@@ -88,11 +98,11 @@ impl LodScene for Terrain {
 	}
 }
 
-/// Terrain loads base noise and the jersey stamp for this origin cell.
+/// Terrain loads base noise and intersecting jersey modulation cells.
 impl<S> GenerationScheme<S> for Terrain
 where
 	S: GeneratingSpatialIndex<BaseTerrainNoise>
-		+ GeneratingSpatialIndex<JerseyStamp>
+		+ GeneratingSpatialIndex<JerseyModulations>
 		+ GeneratingSpatialIndex<TerrainCellLayout>
 		+ GeneratingSpatialIndex<TerrainPresentationAssets>,
 {
@@ -110,10 +120,19 @@ where
 		)?;
 		let base = <S as SpatialIndex<BaseTerrainNoise>>::get(spatial_index, Id::Universal)?.clone();
 
-		GeneratingSpatialIndex::<JerseyStamp>::get_or_generate(spatial_index, id, lod_ref)?;
-		let stamp = <S as SpatialIndex<JerseyStamp>>::get(spatial_index, id)?.clone();
+		let jersey_ids = GeneratingSpatialIndex::<JerseyModulations>::get_or_generate_region(
+			spatial_index,
+			bounds,
+			lod_ref,
+		);
+		let jersey: Vec<JerseyModulations> = jersey_ids
+			.iter()
+			.filter_map(|(jid, _)| {
+				<S as SpatialIndex<JerseyModulations>>::get(spatial_index, *jid).cloned()
+			})
+			.collect();
 
-		let sdf = Self::compose_sdf(&base, &stamp);
+		let sdf = Self::compose_sdf(&base, &jersey);
 		GeneratingSpatialIndex::<TerrainPresentationAssets>::get_or_generate(
 			spatial_index,
 			Id::Universal,
@@ -124,7 +143,7 @@ where
 		let material = assets.material.clone();
 		let res_2 = assets.res_2;
 
-		Some((Self { cell: bounds, base, stamp, sdf, material, res_2 }, bounds))
+		Some((Self { cell: bounds, base, jersey, sdf, material, res_2 }, bounds))
 	}
 
 	fn descendants_with_lod(_id: Id, _spatial_index: &mut S, _lod_ref: &LodRef) {}
