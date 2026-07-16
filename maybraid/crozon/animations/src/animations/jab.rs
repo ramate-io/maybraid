@@ -1,3 +1,4 @@
+use std::f32::consts::{FRAC_PI_2, FRAC_PI_4};
 use std::marker::PhantomData;
 
 use bevy::prelude::Vec3;
@@ -16,29 +17,39 @@ const EXTEND_END: f32 = 0.42;
 const HOLD_END: f32 = 0.52;
 
 /// Semantic pose magnitudes (radians / blends). Rig impls map these onto bone axes.
-const GUARD_ELBOW: f32 = 1.45;
+///
+/// Bind tee pose (hand tips, world-ish): right ≈ `(-1.0, 1.7)`, left ≈ `(1.0, 1.7)`.
+/// Shoulders stay at rest. Side hang (Z), X cock for the elbow plane, Y swing to bring
+/// the arm ventral out of the torso. Punch is elbow extension + trunk Y roll.
+const GUARD_ELBOW: f32 = 1.5;
 const CHAMBER_ELBOW: f32 = 1.65;
-const EXTEND_ELBOW: f32 = 0.08;
+const EXTEND_ELBOW: f32 = 0.05;
 
-/// Sagittal reach from a high guard toward the target (`1.0` = full jab).
-const GUARD_FORWARD: f32 = 0.4;
-const CHAMBER_FORWARD: f32 = 0.12;
-const EXTEND_FORWARD: f32 = 1.15;
+/// Drop the humerus to the side from the tee's y≈1.7 line (DEFAULT flex / Z).
+const HUMERUS_DROP: f32 = 0.85;
+/// Extra drop on the covering arm so it sits lower across the chest.
+const GUARD_HUMERUS_DROP: f32 = 0.95;
+/// Elbow-plane cock on DEFAULT twist / X: π/2 aligns the hinge with Y; +π/4 → ~45° to X/Y.
+const HUMERUS_ELBOW_ROLL: f32 = FRAC_PI_2 + FRAC_PI_4;
+/// Extra X tip on top of the elbow cock.
+const HUMERUS_FORWARD: f32 = 0.45;
+/// Bring the arm ventral (DEFAULT swing / Y) so it sits in front of the torso, not inside it.
+const HUMERUS_VENTRAL: f32 = 0.5;
+/// Light midline pull (tuck ±X). Kept small — stronger values yank the arm into the body.
+const HUMERUS_MIDLINE: f32 = 0.12;
 
-/// How tightly the guard arm folds in from the T-pose toward the chest.
-const GUARD_FOLD: f32 = 0.85;
-const GUARD_WRAP: f32 = 0.7;
-
-const ROOT_LEAN: f32 = 0.14;
-const LEAD_FEMUR: f32 = 0.2;
-const REAR_FEMUR: f32 = -0.14;
-const STANCE_SHIN: f32 = 0.18;
+/// Trunk turn into the punch via midback / upper-back Y roll.
+const TORSO_TURN: f32 = 0.55;
+const ROOT_LEAN: f32 = 0.05;
+const LEAD_FEMUR: f32 = 0.16;
+const REAR_FEMUR: f32 = -0.1;
+const STANCE_SHIN: f32 = 0.14;
 
 /// Boxing jab: chamber, snap to a relative target, then recover to guard.
 ///
-/// Progress is cyclic. Knobs expose *semantic* fight-pose amounts (forward reach,
-/// elbow bend, chest fold). Humanoid (and later) rig impls map those onto concrete
-/// swing/flex axes — including any sign corrections for bind-pose quirks.
+/// Progress is cyclic. Knobs expose *semantic* fight-pose amounts (elbow bend,
+/// humerus drop, trunk turn). Humanoid (and later) rig impls map those onto concrete
+/// axes — including any sign corrections for bind-pose quirks.
 #[derive(Debug, Clone)]
 pub struct Jab<Rig> {
 	/// The side of the body that is throwing the jab.
@@ -94,16 +105,6 @@ impl<Rig> Jab<Rig> {
 		(self.target.z / reference).clamp(0.4, 1.5)
 	}
 
-	/// Vertical aim offset relative to the default chest-height target.
-	pub fn height_bias(&self) -> f32 {
-		(self.target.y - DEFAULT_JAB_TARGET.y) * 0.85
-	}
-
-	/// Lateral aim from the target's X component (toward/across centerline).
-	pub fn lateral_aim(&self) -> f32 {
-		self.target.x * 0.65
-	}
-
 	/// Chamber envelope: peaks during the preparatory phase, then clears for the snap.
 	pub fn chamber_amount(&self, progress: f32) -> f32 {
 		let t = Progress(progress).cycle();
@@ -133,8 +134,17 @@ impl<Rig> Jab<Rig> {
 		}
 	}
 
+	/// Slight sagittal lean — kept small; the punch turn lives in [`Self::torso_turn`].
 	pub fn root_lean(&self, progress: f32) -> f32 {
 		self.extension_amount(progress) * ROOT_LEAN * self.reach_scale()
+	}
+
+	/// Trunk turn into the jab side (peaks with extension; mid/upper-back Y roll).
+	pub fn torso_turn(&self, progress: f32) -> f32 {
+		let chamber = self.chamber_amount(progress);
+		let extend = self.extension_amount(progress);
+		// Slight wind-up opposite the punch, then turn into it.
+		TORSO_TURN * (extend - 0.35 * chamber) * self.reach_scale()
 	}
 
 	pub fn lead_femur_swing(&self, progress: f32) -> f32 {
@@ -151,16 +161,7 @@ impl<Rig> Jab<Rig> {
 		STANCE_SHIN * (0.7 + 0.3 * self.extension_amount(progress))
 	}
 
-	/// Sagittal forward amount for the jab arm (`0` = tucked back, larger = more ventral).
-	pub fn jab_forward(&self, progress: f32) -> f32 {
-		let chamber = self.chamber_amount(progress);
-		let extend = self.extension_amount(progress);
-		GUARD_FORWARD * (1.0 - chamber.max(extend))
-			+ CHAMBER_FORWARD * chamber
-			+ EXTEND_FORWARD * extend * self.reach_scale()
-	}
-
-	/// Elbow bend on the jab arm (larger = more flexed).
+	/// Elbow bend on the jab arm (larger = more flexed). Primary punch driver.
 	pub fn jab_elbow(&self, progress: f32) -> f32 {
 		let chamber = self.chamber_amount(progress);
 		let extend = self.extension_amount(progress);
@@ -169,34 +170,45 @@ impl<Rig> Jab<Rig> {
 			+ EXTEND_ELBOW * extend
 	}
 
-	/// How much the jab arm drops/raises from the default chest line.
-	pub fn jab_height(&self, progress: f32) -> f32 {
-		self.height_bias() * self.extension_amount(progress)
-	}
-
-	/// Lateral aim blend for the jab arm (positive = toward +X in target space).
-	pub fn jab_lateral(&self, progress: f32) -> f32 {
-		self.lateral_aim() * self.extension_amount(progress)
-	}
-
 	/// Elbow bend on the covering / guard arm.
 	pub fn guard_elbow(&self, progress: f32) -> f32 {
-		GUARD_ELBOW + self.extension_amount(progress) * 0.12
+		GUARD_ELBOW + self.extension_amount(progress) * 0.08
 	}
 
-	/// How tightly the guard arm is clutched in from the T-pose toward the chest.
-	pub fn guard_fold(&self, progress: f32) -> f32 {
-		GUARD_FOLD + self.extension_amount(progress) * 0.1
+	/// Humerus drop from the tee's y≈1.7 line on the jab arm (eases slightly at full reach).
+	pub fn jab_humerus_drop(&self, progress: f32) -> f32 {
+		let extend = self.extension_amount(progress);
+		HUMERUS_DROP * (1.0 - 0.2 * extend)
 	}
 
-	/// How far the guard forearm wraps across the sternum.
-	pub fn guard_wrap(&self, progress: f32) -> f32 {
-		GUARD_WRAP + self.extension_amount(progress) * 0.08
+	/// Humerus drop on the covering arm — tucked lower across the chest.
+	pub fn guard_humerus_drop(&self, progress: f32) -> f32 {
+		let _ = progress;
+		GUARD_HUMERUS_DROP
 	}
 
-	/// Modest forward hold so the guard fist stays in front of the face, not out to the side.
-	pub fn guard_forward(&self, progress: f32) -> f32 {
-		GUARD_FORWARD + self.extension_amount(progress) * 0.06
+	/// Forward tip of the side-hung humerus (about X), on top of the elbow cock.
+	pub fn humerus_forward(&self, progress: f32) -> f32 {
+		let extend = self.extension_amount(progress);
+		HUMERUS_FORWARD * (0.9 + 0.1 * extend)
+	}
+
+	/// Ventral carry (about Y) so the arm clears the torso.
+	pub fn humerus_ventral(&self, progress: f32) -> f32 {
+		let _ = progress;
+		HUMERUS_VENTRAL
+	}
+
+	/// Midline adduction of the upper arm (tuck-style local-X flex).
+	pub fn humerus_midline(&self, progress: f32) -> f32 {
+		let _ = progress;
+		HUMERUS_MIDLINE
+	}
+
+	/// Elbow-plane cock about X (~135° so extension sits ~45° between X and Y).
+	pub fn humerus_elbow_roll(&self, progress: f32) -> f32 {
+		let _ = progress;
+		HUMERUS_ELBOW_ROLL
 	}
 }
 
@@ -220,7 +232,17 @@ mod tests {
 		assert!(jab.extension_amount(peak) > 0.95);
 		assert!(jab.chamber_amount(peak) < 0.05);
 		assert!(jab.jab_elbow(peak) < GUARD_ELBOW * 0.25);
-		assert!(jab.jab_forward(peak) > jab.jab_forward(0.0));
+		Ok(())
+	}
+
+	#[test]
+	fn jab_is_elbow_and_torso_driven() -> anyhow::Result<()> {
+		let jab = Jab::<()>::default();
+		let guard = 0.0;
+		let peak = (EXTEND_END + HOLD_END) * 0.5;
+		let elbow_delta = (jab.jab_elbow(guard) - jab.jab_elbow(peak)).abs();
+		assert!(elbow_delta > 1.0);
+		assert!(jab.torso_turn(peak).abs() > jab.torso_turn(guard).abs());
 		Ok(())
 	}
 
@@ -250,10 +272,18 @@ mod tests {
 	}
 
 	#[test]
-	fn chamber_pulls_jab_arm_back_from_guard() -> anyhow::Result<()> {
+	fn chamber_deepens_elbow_bend() -> anyhow::Result<()> {
 		let jab = Jab::<()>::default();
 		let mid_chamber = BACKSWING_END * 0.5;
-		assert!(jab.jab_forward(mid_chamber) < jab.jab_forward(0.0));
+		assert!(jab.jab_elbow(mid_chamber) > jab.jab_elbow(0.0));
+		Ok(())
+	}
+
+	#[test]
+	fn torso_turns_into_the_extension() -> anyhow::Result<()> {
+		let jab = Jab::<()>::default();
+		let peak = (EXTEND_END + HOLD_END) * 0.5;
+		assert!(jab.torso_turn(peak) > jab.torso_turn(0.0));
 		Ok(())
 	}
 }
