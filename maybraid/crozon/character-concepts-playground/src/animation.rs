@@ -17,8 +17,8 @@ use crozon_rigs::{
 };
 use malo_animations::{
 	animations::{
-		DorsoventralUndulation, Flapping, Gallop, LateralUndulation, QuadrupedRun, Run, Soaring,
-		Tuck, TuckedFlip, TwoFootedJump, TwoFootedTuckedFlip, Walk, DEFAULT_GRAVITY,
+		DorsoventralUndulation, Flapping, Gallop, Jab, LateralUndulation, QuadrupedRun, Run,
+		Soaring, Tuck, TuckedFlip, TwoFootedJump, TwoFootedTuckedFlip, Walk, DEFAULT_GRAVITY,
 		DEFAULT_LANDING_SQUAT_SPEED, DEFAULT_PRE_SQUAT_SPEED,
 	},
 	Animation, Effects,
@@ -32,6 +32,7 @@ const QUADRUPED_RUN_CYCLE_SPEED: f32 = 0.55;
 const GALLOP_CYCLE_SPEED: f32 = 0.35;
 const TUCK_CYCLE_SPEED: f32 = 0.6;
 const FRONT_FLIP_CYCLE_SPEED: f32 = 0.85;
+const JAB_CYCLE_SPEED: f32 = 0.9;
 const JUMP_HEIGHT: f32 = 1.5;
 const JUMP_PRE_SQUAT_SPEED: f32 = DEFAULT_PRE_SQUAT_SPEED * 1.2;
 const JUMP_LANDING_SQUAT_SPEED: f32 = DEFAULT_LANDING_SQUAT_SPEED * 1.3;
@@ -200,6 +201,10 @@ fn apply_humanoid_animation(
 			.apply(rig, t),
 		ConceptAnimation::Soaring => Soaring::default().apply(rig, t),
 		ConceptAnimation::Flapping => Flapping::default().apply(rig, t),
+		ConceptAnimation::Jab => {
+			let progress = (t * JAB_CYCLE_SPEED).rem_euclid(1.0);
+			Jab::<HumanoidV0Rig>::default().apply(rig, progress)
+		}
 		ConceptAnimation::LateralUndulation | ConceptAnimation::DorsoventralUndulation => {
 			Effects::default()
 		}
