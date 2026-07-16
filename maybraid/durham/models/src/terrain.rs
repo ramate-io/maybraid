@@ -1,6 +1,7 @@
 //! Durham terrain model: SDF composition, LOD generation, Avian index, render.
 
 pub mod cell;
+pub mod collider;
 pub mod compose;
 pub mod index;
 pub mod plugin;
@@ -12,6 +13,7 @@ pub mod sdf;
 use crate::terrain::cell::{cell_bounds, cell_coords_for_region, HasTerrainCellLayout};
 use crate::terrain::presentation::HasTerrainPresentationAssets;
 use crate::terrain::render::cascade_chunk_for_cell;
+use avian3d::prelude::RigidBody;
 use bevy::ecs::template::template;
 use bevy::math::bounding::{Aabb3d, IntersectsVolume};
 use bevy::prelude::*;
@@ -22,6 +24,7 @@ use lod::lod_ref::LodRef;
 use render_item::mesh::handle::Cached;
 
 pub use cell::TERRAIN_CELL_SIZE;
+pub use collider::TerrainTrimeshCollider;
 pub use compose::{create_terrain, TerrainConfig};
 pub use index::{AvianTerrainIndex, TerrainCellId, TerrainEntryStore};
 pub use plugin::{register_terrain_plugin, TerrainPlugin};
@@ -63,6 +66,11 @@ impl Terrain {
 			template_value(chunk)
 			template(move |_ctx| Ok(Cached::new(sdf.clone())))
 			MeshMaterial3d::<DurhamTerrainShader>({material.clone()})
+			// Static body + marker; trimesh colliders are queued on mesh children
+			// once `fetch_meshes` spawns them (see `collider::queue_terrain_trimesh_colliders`).
+			// `RigidBody` lacks VariantDefaults, so use `template` for Static.
+			template(move |_ctx| Ok(RigidBody::Static))
+			TerrainTrimeshCollider
 		}
 	}
 }
