@@ -13,8 +13,7 @@ pub mod region_stamps;
 pub mod render;
 pub mod sdf;
 
-use crate::terrain::cell::{cell_bounds, cell_coords_for_region, HasTerrainCellLayout};
-use crate::terrain::presentation::HasTerrainPresentationAssets;
+use crate::terrain::cell::{cell_bounds, cell_coords_for_region};
 use crate::terrain::render::cascade_chunk_for_cell;
 use avian3d::prelude::RigidBody;
 use bevy::ecs::template::template;
@@ -106,11 +105,32 @@ where
 	S: GeneratingSpatialIndex<BaseTerrainNoise>
 		+ GeneratingSpatialIndex<GradingGraph>
 		+ GeneratingSpatialIndex<RegionStamps>
-		+ HasTerrainCellLayout
-		+ HasTerrainPresentationAssets,
+		+ GeneratingSpatialIndex<TerrainCellLayout>
+		+ GeneratingSpatialIndex<TerrainPresentationAssets>,
 {
 	fn original_ids_for(spatial_index: &mut S, region: Aabb3d) -> Vec<OriginalId> {
-		let layout = spatial_index.cell_layout().clone();
+		let identity = Transform::IDENTITY;
+		let lod_ref = LodRef {
+			entity: Entity::PLACEHOLDER,
+			previous_transform: &identity,
+			current_transform: &identity,
+			bounds: &region,
+		};
+		if GeneratingSpatialIndex::<TerrainCellLayout>::get_or_generate(
+			spatial_index,
+			Id::Universal,
+			&lod_ref,
+		)
+		.is_none()
+		{
+			return Vec::new();
+		}
+		let Some(layout) =
+			<S as SpatialIndex<TerrainCellLayout>>::get(spatial_index, Id::Universal)
+		else {
+			return Vec::new();
+		};
+		let layout = layout.clone();
 		cell_coords_for_region(region, layout.cell_size)
 			.map(|(ix, iz)| {
 				let bounds =
@@ -158,7 +178,13 @@ where
 			.collect();
 
 		let sdf = Self::compose_sdf(&base, &stamps, &grading);
-		let assets = spatial_index.presentation_assets();
+		GeneratingSpatialIndex::<TerrainPresentationAssets>::get_or_generate(
+			spatial_index,
+			Id::Universal,
+			lod_ref,
+		)?;
+		let assets =
+			<S as SpatialIndex<TerrainPresentationAssets>>::get(spatial_index, Id::Universal)?;
 		let material = assets.material.clone();
 		let res_2 = assets.res_2;
 

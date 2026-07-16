@@ -3,7 +3,7 @@
 //! Generation and presentation stay separate: present reads the entry store and
 //! spawns each cell's [`lod::gen::LodScene`] via [`Commands::spawn_scene`].
 
-use crate::terrain::cell::TerrainCellLayout;
+use crate::terrain::cell::{universal_bounds, TerrainCellLayout};
 use crate::terrain::compose::TerrainConfig;
 use crate::terrain::index::TerrainEntryStore;
 use crate::terrain::Terrain;
@@ -12,11 +12,13 @@ use bevy::math::bounding::{Aabb3d, IntersectsVolume};
 use bevy::prelude::*;
 use bevy::scene::Scene;
 use durham_terrain::shaders::DurhamTerrainShader;
-use lod::gen::{Id, RegionPresenter, SpatialIndex, StorageStatus, TrackedId, Version};
+use lod::gen::{GenerationScheme, Id, OriginalId, RegionPresenter, SpatialIndex, StorageStatus, TrackedId, Version};
 use lod::lod_ref::LodRef;
 use std::collections::{HashMap, HashSet};
 
 /// Config / material / mesh resolution used when building terrain instances.
+///
+/// Materialized once under [`Id::Universal`] via [`GenerationScheme`].
 #[derive(Resource, Clone)]
 pub struct TerrainPresentationAssets {
 	pub config: TerrainConfig,
@@ -24,9 +26,32 @@ pub struct TerrainPresentationAssets {
 	pub res_2: u8,
 }
 
-/// Types that can supply [`TerrainPresentationAssets`] during generation.
-pub trait HasTerrainPresentationAssets {
-	fn presentation_assets(&self) -> &TerrainPresentationAssets;
+/// Bootstrap source used only when first materializing [`TerrainPresentationAssets`]
+/// at [`Id::Universal`]. Consumers should depend on
+/// [`lod::gen::GeneratingSpatialIndex`]`<TerrainPresentationAssets>` instead.
+pub trait BootstrapTerrainPresentationAssets {
+	fn bootstrap_terrain_presentation_assets(&self) -> TerrainPresentationAssets;
+}
+
+impl<S> GenerationScheme<S> for TerrainPresentationAssets
+where
+	S: BootstrapTerrainPresentationAssets,
+{
+	fn original_ids_for(_spatial_index: &mut S, _region: Aabb3d) -> Vec<OriginalId> {
+		vec![OriginalId::universal()]
+	}
+
+	fn build_with_id(spatial_index: &mut S, id: Id, _lod_ref: &LodRef) -> Option<(Self, Aabb3d)> {
+		if id != Id::Universal {
+			return None;
+		}
+		Some((
+			spatial_index.bootstrap_terrain_presentation_assets(),
+			universal_bounds(),
+		))
+	}
+
+	fn descendants_with_lod(_id: Id, _spatial_index: &mut S, _lod_ref: &LodRef) {}
 }
 
 /// Runtime presentation bookkeeping: last presented version and root entity per id.

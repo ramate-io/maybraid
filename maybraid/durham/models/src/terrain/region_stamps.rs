@@ -1,15 +1,15 @@
 //! Per-macro-cell region stamps placed via hysteresis point search.
 
 use crate::terrain::cell::{
-	cell_bounds, cell_coords_for_region, HasMacroCellLayout,
+	cell_bounds, cell_coords_for_region, TerrainCellLayout,
 };
-use crate::terrain::presentation::HasTerrainPresentationAssets;
+use crate::terrain::presentation::TerrainPresentationAssets;
 use crate::terrain::region::affine::RegionAffineModulation;
 use crate::terrain::region::{CircleRegion, Region2D, RegionNoise};
 use bevy::math::bounding::{Aabb3d, IntersectsVolume};
 use bevy::math::Vec2;
 use bevy::prelude::*;
-use lod::gen::{GenerationScheme, Id, OriginalId};
+use lod::gen::{GeneratingSpatialIndex, GenerationScheme, Id, OriginalId, SpatialIndex};
 use lod::lod_ref::LodRef;
 use procedural_common::{Bounds2, HysteresisConfig, HysteresisGraph, SeededHash};
 
@@ -82,14 +82,40 @@ impl RegionStamps {
 
 impl<S> GenerationScheme<S> for RegionStamps
 where
-	S: HasMacroCellLayout + HasTerrainPresentationAssets,
+	S: GeneratingSpatialIndex<TerrainCellLayout>
+		+ GeneratingSpatialIndex<TerrainPresentationAssets>,
 {
 	fn original_ids_for(spatial_index: &mut S, region: Aabb3d) -> Vec<OriginalId> {
-		let layout = spatial_index.macro_cell_layout().clone();
-		cell_coords_for_region(region, layout.cell_size)
+		let identity = Transform::IDENTITY;
+		let lod_ref = LodRef {
+			entity: Entity::PLACEHOLDER,
+			previous_transform: &identity,
+			current_transform: &identity,
+			bounds: &region,
+		};
+		if GeneratingSpatialIndex::<TerrainCellLayout>::get_or_generate(
+			spatial_index,
+			Id::Universal,
+			&lod_ref,
+		)
+		.is_none()
+		{
+			return Vec::new();
+		}
+		let Some(layout) =
+			<S as SpatialIndex<TerrainCellLayout>>::get(spatial_index, Id::Universal)
+		else {
+			return Vec::new();
+		};
+		let macro_layout = layout.macro_layout();
+		cell_coords_for_region(region, macro_layout.cell_size)
 			.map(|(ix, iz)| {
-				let bounds =
-					cell_bounds(ix, iz, layout.cell_size, layout.vertical_half_extent);
+				let bounds = cell_bounds(
+					ix,
+					iz,
+					macro_layout.cell_size,
+					macro_layout.vertical_half_extent,
+				);
 				OriginalId(Id::from_cell(bounds))
 			})
 			.filter(|OriginalId(id)| {
@@ -98,10 +124,23 @@ where
 			.collect()
 	}
 
-	fn build_with_id(spatial_index: &mut S, id: Id, _lod_ref: &LodRef) -> Option<(Self, Aabb3d)> {
+	fn build_with_id(spatial_index: &mut S, id: Id, lod_ref: &LodRef) -> Option<(Self, Aabb3d)> {
 		let bounds = id.origin_cell_bounds()?;
-		let seed = spatial_index.presentation_assets().config.seed;
-		let cell_size = spatial_index.macro_cell_layout().cell_size;
+		GeneratingSpatialIndex::<TerrainPresentationAssets>::get_or_generate(
+			spatial_index,
+			Id::Universal,
+			lod_ref,
+		)?;
+		let seed = <S as SpatialIndex<TerrainPresentationAssets>>::get(spatial_index, Id::Universal)?
+			.config
+			.seed;
+		GeneratingSpatialIndex::<TerrainCellLayout>::get_or_generate(
+			spatial_index,
+			Id::Universal,
+			lod_ref,
+		)?;
+		let cell_size = <S as SpatialIndex<TerrainCellLayout>>::get(spatial_index, Id::Universal)?
+			.macro_cell_size();
 		let stamps = Self::from_macro_cell(bounds, seed, cell_size);
 		Some((stamps, bounds))
 	}

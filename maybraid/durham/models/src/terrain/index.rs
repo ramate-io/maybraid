@@ -1,9 +1,11 @@
 //! System-local multi-type spatial index for Durham terrain generation.
 
 use crate::terrain::base_noise::BaseTerrainNoise;
-use crate::terrain::cell::{HasMacroCellLayout, HasTerrainCellLayout, MacroCellLayout, TerrainCellLayout};
+use crate::terrain::cell::{BootstrapTerrainCellLayout, TerrainCellLayout};
 use crate::terrain::grading_graph::GradingGraph;
-use crate::terrain::presentation::{HasTerrainPresentationAssets, TerrainPresentationAssets};
+use crate::terrain::presentation::{
+	BootstrapTerrainPresentationAssets, TerrainPresentationAssets,
+};
 use crate::terrain::region_stamps::RegionStamps;
 use crate::terrain::Terrain;
 use avian3d::prelude::*;
@@ -34,6 +36,8 @@ pub struct TerrainEntryStore {
 	pub(crate) base_noise: HashMap<Id, StoredEntry<BaseTerrainNoise>>,
 	pub(crate) grading: HashMap<Id, StoredEntry<GradingGraph>>,
 	pub(crate) stamps: HashMap<Id, StoredEntry<RegionStamps>>,
+	pub(crate) cell_layout: HashMap<Id, StoredEntry<TerrainCellLayout>>,
+	pub(crate) presentation: HashMap<Id, StoredEntry<TerrainPresentationAssets>>,
 	entity_to_id: HashMap<Entity, Id>,
 }
 
@@ -52,6 +56,8 @@ impl TerrainEntryStore {
 			&& self.base_noise.is_empty()
 			&& self.grading.is_empty()
 			&& self.stamps.is_empty()
+			&& self.cell_layout.is_empty()
+			&& self.presentation.is_empty()
 	}
 
 	pub fn base_noise(&self) -> Option<&BaseTerrainNoise> {
@@ -60,31 +66,27 @@ impl TerrainEntryStore {
 }
 
 /// System-local wrapper used as `S` for [`lod::gen::GeneratingSpatialIndex`].
+///
+/// Bevy Resources remain the bootstrap source for universal layout / presentation;
+/// once materialized they live in [`TerrainEntryStore`] under [`Id::Universal`].
 #[derive(SystemParam)]
 pub struct AvianTerrainIndex<'w, 's> {
 	commands: Commands<'w, 's>,
 	spatial: SpatialQuery<'w, 's>,
 	store: ResMut<'w, TerrainEntryStore>,
 	layout: ResMut<'w, TerrainCellLayout>,
-	macro_layout: ResMut<'w, MacroCellLayout>,
 	presentation: Res<'w, TerrainPresentationAssets>,
 }
 
-impl<'w, 's> HasTerrainCellLayout for AvianTerrainIndex<'w, 's> {
-	fn cell_layout(&self) -> &TerrainCellLayout {
-		&self.layout
+impl<'w, 's> BootstrapTerrainCellLayout for AvianTerrainIndex<'w, 's> {
+	fn bootstrap_terrain_cell_layout(&self) -> TerrainCellLayout {
+		self.layout.clone()
 	}
 }
 
-impl<'w, 's> HasMacroCellLayout for AvianTerrainIndex<'w, 's> {
-	fn macro_cell_layout(&self) -> &MacroCellLayout {
-		&self.macro_layout
-	}
-}
-
-impl<'w, 's> HasTerrainPresentationAssets for AvianTerrainIndex<'w, 's> {
-	fn presentation_assets(&self) -> &TerrainPresentationAssets {
-		&self.presentation
+impl<'w, 's> BootstrapTerrainPresentationAssets for AvianTerrainIndex<'w, 's> {
+	fn bootstrap_terrain_presentation_assets(&self) -> TerrainPresentationAssets {
+		self.presentation.clone()
 	}
 }
 
@@ -123,6 +125,8 @@ impl<'w, 's> AvianTerrainIndex<'w, 's> {
 		self.store.base_noise.clear();
 		self.store.grading.clear();
 		self.store.stamps.clear();
+		self.store.cell_layout.clear();
+		self.store.presentation.clear();
 		self.store.entity_to_id.clear();
 	}
 
@@ -191,6 +195,8 @@ macro_rules! impl_map_spatial_index {
 impl_map_spatial_index!(BaseTerrainNoise, base_noise);
 impl_map_spatial_index!(GradingGraph, grading);
 impl_map_spatial_index!(RegionStamps, stamps);
+impl_map_spatial_index!(TerrainCellLayout, cell_layout);
+impl_map_spatial_index!(TerrainPresentationAssets, presentation);
 
 impl<'w, 's> SpatialIndex<Terrain> for AvianTerrainIndex<'w, 's> {
 	fn tracked_ids_for(&self, region: Aabb3d) -> Vec<TrackedId> {
