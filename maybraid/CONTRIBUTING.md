@@ -12,7 +12,7 @@ While the assets associated with these layers should continue to sit behind this
 
 ### `-models` Crates
 
-The term "model" and suffix `-models` is used to refer to a layer that defining the base behavior of a game object. Typically, this means taking a lower-order asset, such as tree from [`chico-sbs-trees`](./chico/sbs-trees/), and integrating it with standard game systems such as LOD, generation, and physics. 
+The term "model" and suffix `-models` is used to refer to a layer that defining the base behavior of a game object. Typically, this means taking a lower-order asset, such as tree from [`chico-sbs-trees`](./chico/sbs-trees/), and integrating it with standard game systems such as LOD, generation, and physics. Accordingly, models should typically define plugins that idempotently make available the needed systems for base behaviors. 
 
 Particularly bespoke systems, like player damage, movement, and inventory, are not necessarily considered parts of models until the underlying API is generalized. Before that point, they are expected to be implemented as separate systems acting on the types that the models define. 
 
