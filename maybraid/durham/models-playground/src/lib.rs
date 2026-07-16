@@ -2,6 +2,7 @@
 
 pub mod camera;
 pub mod commands;
+mod debug_bounds;
 mod player;
 mod ui;
 
@@ -17,6 +18,7 @@ use commands::{
 	PendingCellLayoutPatch, RequestCellShow, RequestModeCharacter, RequestModeFree,
 };
 use durham_terrain::shaders::{DurhamTerrainShader, DurhamTerrainShaderPlugin};
+use debug_bounds::draw_chunk_boundary_boxes;
 use durham_terrain_models::{
 	AvianTerrainIndex, BaseTerrainNoise, ComposedTerrain, DurhamTerrainModelsPlugin, Terrain,
 	TerrainCellLayout, TerrainConfig, TerrainEntryStore, TerrainPresentationAssets,
@@ -66,6 +68,7 @@ impl Plugin for TerrainModelsPlaygroundPlugin {
 					apply_mode_commands.after(apply_cell_commands),
 					generate_cells.after(apply_mode_commands),
 					present_cells.after(generate_cells),
+					draw_chunk_boundary_boxes.after(present_cells),
 					ui::sync_command_status_text.before(game_commands::ui::update_debug_ui),
 				),
 			);
