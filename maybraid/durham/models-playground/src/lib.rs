@@ -2,15 +2,20 @@
 
 pub mod camera;
 pub mod commands;
+mod player;
 mod ui;
 
 pub use camera::CameraController;
 pub use commands::{PlaygroundCommand, PLAYGROUND_CLI_NAME};
 pub use game_commands::command::PendingStartupCommand;
+pub use player::PlaygroundMode;
 
+use avian3d::prelude::LinearVelocity;
 use bevy::prelude::*;
 use camera::{camera_controller, refocus_camera_on_layout, setup_camera};
-use commands::{PendingCellLayoutPatch, RequestCellShow};
+use commands::{
+	PendingCellLayoutPatch, RequestCellShow, RequestModeCharacter, RequestModeFree,
+};
 use durham_terrain::shaders::{DurhamTerrainShader, DurhamTerrainShaderPlugin};
 use durham_terrain_models::{
 	create_terrain, AvianTerrainIndex, ComposedTerrain, DurhamTerrainModelsPlugin, Terrain,
@@ -21,6 +26,7 @@ use game_commands::command::{capture_command_line_input, GameCommandPlugin};
 use game_commands::ui::GameCommandStatusText;
 use lod::gen::{GeneratingSpatialIndex, RegionPresenter};
 use lod::lod_ref::LodRef;
+use player::{respawn_player_on_layout, Player, PlayerPlugin};
 use render_item::mesh::handle::EnforceCachingPlugin;
 use std::f32::consts::PI;
 
@@ -44,6 +50,7 @@ impl Plugin for TerrainModelsPlaygroundPlugin {
 			.add_plugins(DurhamTerrainShaderPlugin)
 			.add_plugins(EnforceCachingPlugin::<ComposedTerrain, DurhamTerrainShader>::default())
 			.add_plugins(GameCommandPlugin::<PlaygroundCommand>::with_config(ui::ui_config()))
+			.add_plugins(PlayerPlugin)
 			.insert_resource(ClearColor(Color::hsla(201.0, 0.69, 0.62, 1.0)))
 			.insert_resource(config)
 			.insert_resource(WorldTerrainSdf(sdf))
@@ -55,7 +62,8 @@ impl Plugin for TerrainModelsPlaygroundPlugin {
 				(
 					camera_controller,
 					apply_cell_commands.after(capture_command_line_input::<PlaygroundCommand>),
-					generate_cells.after(apply_cell_commands),
+					apply_mode_commands.after(apply_cell_commands),
+					generate_cells.after(apply_mode_commands),
 					present_cells.after(generate_cells),
 					ui::sync_command_status_text.before(game_commands::ui::update_debug_ui),
 				),
@@ -82,7 +90,7 @@ fn setup_lighting(mut commands: Commands) {
 	));
 }
 
-fn setup_presentation_assets(
+pub(crate) fn setup_presentation_assets(
 	mut commands: Commands,
 	mut materials: ResMut<Assets<DurhamTerrainShader>>,
 	sdf: Res<WorldTerrainSdf>,
@@ -138,12 +146,44 @@ fn apply_cell_commands(
 	}
 }
 
+fn apply_mode_commands(
+	mut commands: Commands,
+	mut mode: ResMut<PlaygroundMode>,
+	mut status: ResMut<GameCommandStatusText>,
+	layout: Res<TerrainCellLayout>,
+	sdf: Res<WorldTerrainSdf>,
+	free: Query<Entity, With<RequestModeFree>>,
+	character: Query<Entity, With<RequestModeCharacter>>,
+	mut players: Query<(&mut Transform, &mut LinearVelocity), With<Player>>,
+	mut cameras: Query<(&mut Transform, &mut CameraController), (With<Camera3d>, Without<Player>)>,
+) {
+	for entity in &free {
+		*mode = PlaygroundMode::Free;
+		status.0 = "mode free".into();
+		if let Ok((mut cam_t, mut controller)) = cameras.single_mut() {
+			refocus_camera_on_layout(&layout, &sdf.0, &mut cam_t, &mut controller);
+		}
+		commands.entity(entity).despawn();
+	}
+
+	for entity in &character {
+		*mode = PlaygroundMode::Character;
+		status.0 = "mode character — WASD move, mouse look, Space jump".into();
+		if let Ok((mut transform, mut velocity)) = players.single_mut() {
+			respawn_player_on_layout(&layout, &sdf.0, &mut transform, &mut velocity);
+		}
+		commands.entity(entity).despawn();
+	}
+}
+
 fn generate_cells(
 	mut index: AvianTerrainIndex,
 	mut dirty: ResMut<TerrainPresentationDirty>,
 	mut pending: ResMut<TerrainPresentPending>,
+	mode: Res<PlaygroundMode>,
 	world_sdf: Res<WorldTerrainSdf>,
-	mut cameras: Query<(&mut Transform, &mut CameraController), With<Camera3d>>,
+	mut cameras: Query<(&mut Transform, &mut CameraController), (With<Camera3d>, Without<Player>)>,
+	mut players: Query<(&mut Transform, &mut LinearVelocity), With<Player>>,
 ) {
 	if !dirty.0 {
 		return;
@@ -166,8 +206,14 @@ fn generate_cells(
 		GeneratingSpatialIndex::<Terrain>::get_or_generate_region(&mut index, region, &lod_ref)
 			.len();
 
-	if let Ok((mut transform, mut controller)) = cameras.single_mut() {
-		refocus_camera_on_layout(&layout, &world_sdf.0, &mut transform, &mut controller);
+	if let Ok((mut transform, mut velocity)) = players.single_mut() {
+		respawn_player_on_layout(&layout, &world_sdf.0, &mut transform, &mut velocity);
+	}
+
+	if *mode == PlaygroundMode::Free {
+		if let Ok((mut transform, mut controller)) = cameras.single_mut() {
+			refocus_camera_on_layout(&layout, &world_sdf.0, &mut transform, &mut controller);
+		}
 	}
 
 	dirty.0 = false;

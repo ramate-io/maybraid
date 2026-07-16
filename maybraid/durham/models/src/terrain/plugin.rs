@@ -1,6 +1,7 @@
 //! Idempotent plugin for the Durham terrain model.
 
 use crate::terrain::cell::TerrainCellLayout;
+use crate::terrain::collider::queue_terrain_trimesh_colliders;
 use crate::terrain::index::TerrainEntryStore;
 use crate::terrain::presentation::TerrainPresenterState;
 use avian3d::prelude::PhysicsPlugins;
@@ -31,6 +32,7 @@ impl Plugin for TerrainPlugin {
 		}
 		app.init_resource::<TerrainEntryStore>()
 			.init_resource::<TerrainCellLayout>()
-			.init_resource::<TerrainPresenterState>();
+			.init_resource::<TerrainPresenterState>()
+			.add_systems(Update, queue_terrain_trimesh_colliders);
 	}
 }

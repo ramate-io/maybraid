@@ -21,6 +21,9 @@ pub enum PlaygroundCommand {
 	/// Configure the fixed terrain cell request region and regenerate.
 	#[command(subcommand)]
 	Cells(Cells),
+	/// Switch between free-look fly camera and third-person character control.
+	#[command(subcommand)]
+	Mode(Mode),
 }
 
 #[derive(Clone, Subcommand)]
@@ -48,8 +51,23 @@ pub enum Cells {
 	},
 }
 
+#[derive(Clone, Subcommand)]
+#[command(rename_all = "kebab-case")]
+pub enum Mode {
+	/// Free-look fly camera (WASD + mouse, Space/Shift vertical).
+	Free,
+	/// Capsule character with third-person camera (WASD move, Space jump).
+	Character,
+}
+
 #[derive(Component, Debug, Clone, Copy)]
 pub struct RequestCellShow;
+
+#[derive(Component, Debug, Clone, Copy)]
+pub struct RequestModeFree;
+
+#[derive(Component, Debug, Clone, Copy)]
+pub struct RequestModeCharacter;
 
 impl PlaygroundCommand {
 	pub fn long_help_string() -> String {
@@ -65,6 +83,7 @@ impl PlaygroundCommand {
 			PlaygroundCommand::Help => *console = Self::long_help_string(),
 			PlaygroundCommand::Script(s) => s.run(commands, console),
 			PlaygroundCommand::Cells(cells) => cells.react(commands, console),
+			PlaygroundCommand::Mode(mode) => mode.react(commands, console),
 		}
 	}
 
@@ -89,6 +108,21 @@ impl Cells {
 					extent_z,
 				});
 				*console = "cells set: regenerating".into();
+			}
+		}
+	}
+}
+
+impl Mode {
+	fn react(self, commands: &mut Commands, console: &mut String) {
+		match self {
+			Mode::Free => {
+				commands.spawn(RequestModeFree);
+				*console = "mode free: pending".into();
+			}
+			Mode::Character => {
+				commands.spawn(RequestModeCharacter);
+				*console = "mode character: pending".into();
 			}
 		}
 	}

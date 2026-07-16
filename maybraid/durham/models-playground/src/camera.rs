@@ -4,6 +4,8 @@ use durham_terrain_models::{ComposedTerrain, TerrainCellLayout};
 use game_commands::command::TextEntryFocus;
 use std::f32::consts::PI;
 
+use crate::player::PlaygroundMode;
+
 #[derive(Component)]
 pub struct CameraController {
 	pub speed: f32,
@@ -69,6 +71,7 @@ pub fn camera_controller(
 	mut mouse_motion: MessageReader<bevy::input::mouse::MouseMotion>,
 	time: Res<Time>,
 	text_focus: Res<TextEntryFocus>,
+	mode: Res<PlaygroundMode>,
 	mut query: Query<(&mut Transform, &mut CameraController), With<Camera3d>>,
 ) {
 	let Ok((mut transform, mut controller)) = query.single_mut() else {
@@ -83,6 +86,11 @@ pub fn camera_controller(
 	controller.yaw -= mouse_delta.x * controller.sensitivity;
 	controller.pitch -= mouse_delta.y * controller.sensitivity;
 	controller.pitch = controller.pitch.clamp(-PI / 2.0 + 0.1, PI / 2.0 - 0.1);
+
+	// Character mode owns camera pose via `follow_character_camera`.
+	if *mode == PlaygroundMode::Character {
+		return;
+	}
 
 	let yaw_quat = Quat::from_axis_angle(Vec3::Y, controller.yaw);
 	let pitch_quat = Quat::from_axis_angle(Vec3::X, controller.pitch);

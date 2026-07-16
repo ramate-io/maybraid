@@ -1,0 +1,274 @@
+//! Capsule player + third-person character mode for the terrain playground.
+//!
+//! Movement logic follows Avian's `dynamic_character_3d` example (dynamic body,
+//! shape-cast grounded check, jump impulse), with walk direction relative to
+//! the camera yaw.
+
+use avian3d::prelude::*;
+use bevy::ecs::query::Has;
+use bevy::prelude::*;
+use durham_terrain_models::{ComposedTerrain, TerrainCellLayout};
+use game_commands::command::TextEntryFocus;
+use std::f32::consts::PI;
+
+use crate::camera::CameraController;
+use crate::WorldTerrainSdf;
+
+const CAPSULE_RADIUS: f32 = 0.4;
+const CAPSULE_LENGTH: f32 = 1.0;
+const MOVE_ACCEL: f32 = 40.0;
+const MOVE_DAMPING: f32 = 0.92;
+const JUMP_IMPULSE: f32 = 8.0;
+const MAX_SLOPE_ANGLE: f32 = PI * 0.45;
+const CAMERA_DISTANCE: f32 = 8.0;
+const CAMERA_HEIGHT: f32 = 2.5;
+
+/// Playground interaction mode.
+#[derive(Resource, Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum PlaygroundMode {
+	/// Free-look fly camera (default).
+	#[default]
+	Free,
+	/// Capsule character with third-person camera.
+	Character,
+}
+
+#[derive(Component)]
+pub struct Player;
+
+#[derive(Component)]
+struct CharacterController;
+
+#[derive(Component)]
+#[component(storage = "SparseSet")]
+struct Grounded;
+
+#[derive(Component)]
+struct MovementAcceleration(f32);
+
+#[derive(Component)]
+struct MovementDampingFactor(f32);
+
+#[derive(Component)]
+struct JumpImpulse(f32);
+
+#[derive(Component)]
+struct MaxSlopeAngle(f32);
+
+#[derive(Message)]
+enum MovementAction {
+	Move(Vec2),
+	Jump,
+}
+
+pub struct PlayerPlugin;
+
+impl Plugin for PlayerPlugin {
+	fn build(&self, app: &mut App) {
+		app.init_resource::<PlaygroundMode>()
+			.add_message::<MovementAction>()
+			.add_systems(Startup, spawn_player)
+			.add_systems(
+				Update,
+				(
+					keyboard_movement_input,
+					update_grounded,
+					apply_character_movement,
+					apply_movement_damping,
+					follow_character_camera,
+				)
+					.chain(),
+			);
+	}
+}
+
+fn spawn_player(
+	mut commands: Commands,
+	mut meshes: ResMut<Assets<Mesh>>,
+	mut materials: ResMut<Assets<StandardMaterial>>,
+	layout: Res<TerrainCellLayout>,
+	sdf: Res<WorldTerrainSdf>,
+) {
+	let spawn = player_spawn_point(&layout, &sdf.0);
+	let collider = Collider::capsule(CAPSULE_RADIUS, CAPSULE_LENGTH);
+	let mut caster_shape = collider.clone();
+	caster_shape.set_scale(Vec3::splat(0.99), 10);
+
+	commands.spawn((
+		Name::new("Player"),
+		Player,
+		CharacterController,
+		Mesh3d(meshes.add(Capsule3d::new(CAPSULE_RADIUS, CAPSULE_LENGTH))),
+		MeshMaterial3d(materials.add(Color::srgb(0.85, 0.55, 0.35))),
+		Transform::from_translation(spawn),
+		RigidBody::Dynamic,
+		collider,
+		ShapeCaster::new(caster_shape, Vec3::ZERO, Quat::IDENTITY, Dir3::NEG_Y)
+			.with_max_distance(0.2),
+		LockedAxes::ROTATION_LOCKED,
+	))
+	.insert((
+		MovementAcceleration(MOVE_ACCEL),
+		MovementDampingFactor(MOVE_DAMPING),
+		JumpImpulse(JUMP_IMPULSE),
+		MaxSlopeAngle(MAX_SLOPE_ANGLE),
+		Friction::ZERO.with_combine_rule(CoefficientCombine::Min),
+		Restitution::ZERO.with_combine_rule(CoefficientCombine::Min),
+		GravityScale(2.0),
+	));
+}
+
+pub fn player_spawn_point(layout: &TerrainCellLayout, sdf: &ComposedTerrain) -> Vec3 {
+	let center = layout.region_center_xz();
+	let elevation = sdf.terrain.height_at_with_all_modulations(center.x, center.z);
+	Vec3::new(
+		center.x,
+		elevation + CAPSULE_RADIUS + CAPSULE_LENGTH * 0.5 + 0.5,
+		center.z,
+	)
+}
+
+/// Reposition the player after terrain layout regeneration.
+pub fn respawn_player_on_layout(
+	layout: &TerrainCellLayout,
+	sdf: &ComposedTerrain,
+	transform: &mut Transform,
+	velocity: &mut LinearVelocity,
+) {
+	transform.translation = player_spawn_point(layout, sdf);
+	**velocity = Vec3::ZERO;
+}
+
+fn keyboard_movement_input(
+	mode: Res<PlaygroundMode>,
+	text_focus: Res<TextEntryFocus>,
+	keyboard: Res<ButtonInput<KeyCode>>,
+	mut writer: MessageWriter<MovementAction>,
+) {
+	if *mode != PlaygroundMode::Character || text_focus.0 {
+		return;
+	}
+
+	let up = keyboard.any_pressed([KeyCode::KeyW, KeyCode::ArrowUp]);
+	let down = keyboard.any_pressed([KeyCode::KeyS, KeyCode::ArrowDown]);
+	let left = keyboard.any_pressed([KeyCode::KeyA, KeyCode::ArrowLeft]);
+	let right = keyboard.any_pressed([KeyCode::KeyD, KeyCode::ArrowRight]);
+
+	let direction = Vec2::new(
+		right as i8 as f32 - left as i8 as f32,
+		up as i8 as f32 - down as i8 as f32,
+	)
+	.clamp_length_max(1.0);
+
+	if direction != Vec2::ZERO {
+		writer.write(MovementAction::Move(direction));
+	}
+	if keyboard.just_pressed(KeyCode::Space) {
+		writer.write(MovementAction::Jump);
+	}
+}
+
+fn update_grounded(
+	mode: Res<PlaygroundMode>,
+	mut commands: Commands,
+	query: Query<(Entity, &ShapeHits, Option<&MaxSlopeAngle>), With<CharacterController>>,
+) {
+	if *mode != PlaygroundMode::Character {
+		return;
+	}
+
+	for (entity, hits, max_slope_angle) in &query {
+		let is_grounded = hits.iter().any(|hit| {
+			if let Some(angle) = max_slope_angle {
+				(-hit.normal2).angle_between(Vec3::Y).abs() <= angle.0
+			} else {
+				true
+			}
+		});
+		if is_grounded {
+			commands.entity(entity).insert(Grounded);
+		} else {
+			commands.entity(entity).remove::<Grounded>();
+		}
+	}
+}
+
+fn apply_character_movement(
+	mode: Res<PlaygroundMode>,
+	time: Res<Time>,
+	cameras: Query<&CameraController, With<Camera3d>>,
+	mut reader: MessageReader<MovementAction>,
+	mut controllers: Query<
+		(&MovementAcceleration, &JumpImpulse, &mut LinearVelocity, Has<Grounded>),
+		With<CharacterController>,
+	>,
+) {
+	if *mode != PlaygroundMode::Character {
+		for _ in reader.read() {}
+		return;
+	}
+
+	let Ok(camera) = cameras.single() else {
+		for _ in reader.read() {}
+		return;
+	};
+
+	let yaw = Quat::from_axis_angle(Vec3::Y, camera.yaw);
+	let forward = yaw * -Vec3::Z;
+	let right = yaw * Vec3::X;
+	let dt = time.delta_secs();
+
+	for action in reader.read() {
+		for (accel, jump, mut velocity, grounded) in &mut controllers {
+			match action {
+				MovementAction::Move(direction) => {
+					let wish = (right * direction.x + forward * direction.y).normalize_or_zero();
+					velocity.x += wish.x * accel.0 * dt;
+					velocity.z += wish.z * accel.0 * dt;
+				}
+				MovementAction::Jump => {
+					if grounded {
+						velocity.y = jump.0;
+					}
+				}
+			}
+		}
+	}
+}
+
+fn apply_movement_damping(
+	mode: Res<PlaygroundMode>,
+	mut query: Query<(&MovementDampingFactor, &mut LinearVelocity), With<CharacterController>>,
+) {
+	if *mode != PlaygroundMode::Character {
+		return;
+	}
+	for (damping, mut velocity) in &mut query {
+		velocity.x *= damping.0;
+		velocity.z *= damping.0;
+	}
+}
+
+fn follow_character_camera(
+	mode: Res<PlaygroundMode>,
+	players: Query<&Transform, (With<Player>, Without<Camera3d>)>,
+	mut cameras: Query<(&mut Transform, &CameraController), With<Camera3d>>,
+) {
+	if *mode != PlaygroundMode::Character {
+		return;
+	}
+	let Ok(player) = players.single() else {
+		return;
+	};
+	let Ok((mut camera_transform, controller)) = cameras.single_mut() else {
+		return;
+	};
+
+	let yaw = Quat::from_axis_angle(Vec3::Y, controller.yaw);
+	let pitch = Quat::from_axis_angle(Vec3::X, controller.pitch);
+	let rotation = yaw * pitch;
+	let offset = rotation * Vec3::new(0.0, 0.0, CAMERA_DISTANCE) + Vec3::Y * CAMERA_HEIGHT;
+	let target = player.translation + Vec3::Y * 1.0;
+	camera_transform.translation = target + offset;
+	camera_transform.look_at(target, Vec3::Y);
+}

@@ -82,15 +82,13 @@ impl<'w, 's> AvianTerrainIndex<'w, 's> {
 		let min = Vec3::from(bounds.min);
 		let max = Vec3::from(bounds.max);
 		let center = (min + max) * 0.5;
-		let size = max - min;
+		// Index entities are bookkeeping only — solid trimesh colliders live on
+		// presented mesh scenes. Tall sensor cuboids would fight ground checks.
 		self.commands
 			.spawn((
 				Name::new("TerrainCell"),
 				TerrainCellId(id),
 				terrain.clone(),
-				RigidBody::Static,
-				Collider::cuboid(size.x, size.y, size.z),
-				Sensor,
 				Transform::from_translation(center),
 				GlobalTransform::default(),
 			))
