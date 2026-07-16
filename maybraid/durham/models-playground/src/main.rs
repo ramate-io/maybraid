@@ -8,11 +8,6 @@ fn main() {
 		eprintln!("{e}");
 		std::process::exit(2);
 	});
-	if startup.is_some() {
-		println!("Startup command from argv (same as in-game / text).");
-	} else {
-		println!("Durham terrain models playground — press / for commands.");
-	}
 
 	App::new()
 		.add_plugins(DefaultPlugins.set(WindowPlugin {

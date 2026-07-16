@@ -20,6 +20,7 @@ use commands::{
 use durham_terrain::shaders::{DurhamTerrainShader, DurhamTerrainShaderPlugin};
 use debug_bounds::{
 	draw_chunk_boundary_boxes, setup_cell_location_hud, update_cell_location_hud,
+	PlaygroundDebugOverlay,
 };
 use durham_terrain_models::{
 	AvianTerrainIndex, BaseTerrainNoise, ComposedTerrain, DurhamTerrainModelsPlugin, Terrain,
@@ -27,7 +28,7 @@ use durham_terrain_models::{
 	TerrainRegionPresenter, TerrainStoreView,
 };
 use game_commands::command::{capture_command_line_input, GameCommandPlugin};
-use game_commands::ui::GameCommandStatusText;
+use game_commands::ui::{GameCommandDrawerConfig, GameCommandStatusText};
 use lod::gen::{GeneratingSpatialIndex, RegionPresenter};
 use lod::lod_ref::LodRef;
 use player::{respawn_player_on_layout, Player, PlayerPlugin};
@@ -54,13 +55,21 @@ impl Plugin for TerrainModelsPlaygroundPlugin {
 		app.add_plugins(DurhamTerrainModelsPlugin)
 			.add_plugins(DurhamTerrainShaderPlugin)
 			.add_plugins(EnforceCachingPlugin::<ComposedTerrain, DurhamTerrainShader>::default())
-			.add_plugins(GameCommandPlugin::<PlaygroundCommand>::with_config(ui::ui_config()))
+			.add_plugins(
+				GameCommandPlugin::<PlaygroundCommand>::with_config(ui::ui_config())
+					.with_drawer_config(GameCommandDrawerConfig {
+						open_at_start: false,
+						toggle_keys: vec![KeyCode::F1, KeyCode::KeyY],
+						..default()
+					}),
+			)
 			.add_plugins(PlayerPlugin)
 			.insert_resource(ClearColor(Color::hsla(201.0, 0.69, 0.62, 1.0)))
 			.insert_resource(config.clone())
 			.insert_resource(WorldBaseTerrain(base))
 			.insert_resource(TerrainPresentationDirty(true))
 			.init_resource::<TerrainPresentPending>()
+			.init_resource::<PlaygroundDebugOverlay>()
 			.add_systems(
 				Startup,
 				(
@@ -216,9 +225,8 @@ fn generate_cells(
 		bounds: &region,
 	};
 
-	let cell_count =
-		GeneratingSpatialIndex::<Terrain>::get_or_generate_region(&mut index, region, &lod_ref)
-			.len();
+	let _ =
+		GeneratingSpatialIndex::<Terrain>::get_or_generate_region(&mut index, region, &lod_ref);
 
 	if let Some(base) = index.base_noise() {
 		world_base.0 = base.clone();
@@ -236,10 +244,6 @@ fn generate_cells(
 
 	dirty.0 = false;
 	pending.0 = true;
-	info!(
-		"Generated {cell_count} terrain cells (size={:.1}, origin=({}, {}), extents={}×{})",
-		layout.cell_size, layout.origin.x, layout.origin.y, layout.extents.x, layout.extents.y
-	);
 }
 
 fn present_cells(
@@ -264,5 +268,4 @@ fn present_cells(
 	RegionPresenter::<Terrain, _>::present(&mut presenter, &view, region, &lod_ref);
 
 	pending.0 = false;
-	info!("Presented terrain region via TerrainRegionPresenter");
 }

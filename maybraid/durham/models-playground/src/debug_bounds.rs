@@ -1,4 +1,4 @@
-//! Debug visualization of Terrain / jersey cell bounds and a camera-location HUD.
+//! Optional debug visualization of Terrain / jersey cell bounds and a cell HUD.
 
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
@@ -14,8 +14,29 @@ use crate::WorldBaseTerrain;
 /// Half-height of surface-fitted jersey boxes (world units).
 const JERSEY_BOX_HALF_HEIGHT: f32 = 30.0;
 
+/// Playground debug overlays (wire bounds + cell HUD). Off by default.
+#[derive(Resource, Debug, Clone, Copy)]
+pub struct PlaygroundDebugOverlay {
+	pub show_bounds: bool,
+	pub show_cell_hud: bool,
+	pub log_cell_changes: bool,
+}
+
+impl Default for PlaygroundDebugOverlay {
+	fn default() -> Self {
+		Self {
+			show_bounds: false,
+			show_cell_hud: false,
+			log_cell_changes: false,
+		}
+	}
+}
+
 #[derive(Component)]
 pub(crate) struct CellLocationHudText;
+
+#[derive(Component)]
+pub(crate) struct CellLocationHudRoot;
 
 #[derive(Resource, Default)]
 pub(crate) struct LastLoggedCellLocation {
@@ -25,7 +46,7 @@ pub(crate) struct LastLoggedCellLocation {
 	terrain_present: Option<bool>,
 }
 
-/// Spawn a small top-of-screen panel for camera cell / stamp inspection.
+/// Spawn a small top-of-screen panel for camera cell / stamp inspection (hidden by default).
 pub fn setup_cell_location_hud(mut commands: Commands) {
 	commands.insert_resource(LastLoggedCellLocation::default());
 	commands
@@ -41,6 +62,8 @@ pub fn setup_cell_location_hud(mut commands: Commands) {
 				..default()
 			},
 			BackgroundColor(Color::srgba(0.05, 0.08, 0.12, 0.82)),
+			Visibility::Hidden,
+			CellLocationHudRoot,
 		))
 		.with_children(|parent| {
 			parent.spawn((
@@ -55,14 +78,19 @@ pub fn setup_cell_location_hud(mut commands: Commands) {
 		});
 }
 
-/// Draw wire AABBs only (labels live in the top HUD).
+/// Draw wire AABBs when [`PlaygroundDebugOverlay::show_bounds`] is on.
 pub fn draw_chunk_boundary_boxes(
 	mut gizmos: Gizmos,
+	overlay: Res<PlaygroundDebugOverlay>,
 	terrains: Query<&Terrain>,
 	layout: Res<TerrainCellLayout>,
 	jersey_layout: Res<JerseyStampCellLayout>,
 	base: Res<WorldBaseTerrain>,
 ) {
+	if !overlay.show_bounds {
+		return;
+	}
+
 	let terrain_color = Color::srgb(1.0, 0.2, 0.25);
 	for terrain in &terrains {
 		let chunk = cascade_chunk_for_cell(terrain.cell, terrain.res_2);
@@ -90,18 +118,29 @@ pub fn draw_chunk_boundary_boxes(
 
 /// Update the top HUD with terrain / jersey cell under the camera.
 pub fn update_cell_location_hud(
+	overlay: Res<PlaygroundDebugOverlay>,
 	cameras: Query<&GlobalTransform, With<Camera3d>>,
 	layout: Res<TerrainCellLayout>,
 	jersey_layout: Res<JerseyStampCellLayout>,
 	store: Res<TerrainEntryStore>,
 	terrains: Query<&Terrain>,
+	mut hud_root: Query<&mut Visibility, With<CellLocationHudRoot>>,
 	mut hud: Query<&mut Text, With<CellLocationHudText>>,
 	mut last: ResMut<LastLoggedCellLocation>,
 ) {
-	let Ok(camera) = cameras.single() else {
+	if let Ok(mut visibility) = hud_root.single_mut() {
+		*visibility = if overlay.show_cell_hud {
+			Visibility::Visible
+		} else {
+			Visibility::Hidden
+		};
+	}
+
+	if !overlay.show_cell_hud && !overlay.log_cell_changes {
 		return;
-	};
-	let Ok(mut text) = hud.single_mut() else {
+	}
+
+	let Ok(camera) = cameras.single() else {
 		return;
 	};
 
@@ -133,7 +172,15 @@ pub fn update_cell_location_hud(
 	};
 
 	let rendered = report.to_string();
-	*text = Text::new(rendered.clone());
+	if overlay.show_cell_hud {
+		if let Ok(mut text) = hud.single_mut() {
+			*text = Text::new(rendered.clone());
+		}
+	}
+
+	if !overlay.log_cell_changes {
+		return;
+	}
 
 	let terrain_present = report.terrain.is_some();
 	let jersey_loaded = report.jersey.is_some();
