@@ -49,9 +49,10 @@ pub struct Terrain {
 impl Terrain {
 	/// Visual scene for one cell: cascade chunk + cached SDF mesh dispatch.
 	///
-	/// Cascade/mesh types are not yet `Default`/`FromTemplate`, so they are
-	/// inserted via [`template`] rather than [`template_value`]. Transform is
-	/// the BSN-native piece that shows the intended `bsn!` organization.
+	/// Bare locals (`transform`, `chunk`) are not valid `bsn!` entries — those
+	/// positions are type/patch syntax. Pre-built `Template` values go through
+	/// [`template_value`]; [`Cached`] is not `Default`/`FromTemplate` yet, so it
+	/// uses [`template`].
 	pub fn scene(&self) -> impl Scene + 'static {
 		let chunk = cascade_chunk_for_cell(self.cell, self.res_2);
 		let transform = Transform::from_translation(chunk.origin);
@@ -59,9 +60,9 @@ impl Terrain {
 		let material = self.material.clone();
 		bsn! {
 			template_value(transform)
-			{template(move |_ctx| Ok(chunk))}
-			{template(move |_ctx| Ok(Cached::new(sdf.clone())))}
-			{template(move |_ctx| Ok(MeshMaterial3d(material.clone())))}
+			template_value(chunk)
+			template(move |_ctx| Ok(Cached::new(sdf.clone())))
+			MeshMaterial3d::<DurhamTerrainShader>({material.clone()})
 		}
 	}
 }
@@ -84,13 +85,10 @@ where
 		let layout = spatial_index.cell_layout().clone();
 		cell_coords_for_region(region, layout.cell_size)
 			.map(|(ix, iz)| {
-				let bounds =
-					cell_bounds(ix, iz, layout.cell_size, layout.vertical_half_extent);
+				let bounds = cell_bounds(ix, iz, layout.cell_size, layout.vertical_half_extent);
 				OriginalId(Id::from_cell(bounds))
 			})
-			.filter(|OriginalId(id)| {
-				id.origin_cell_bounds().is_some_and(|b| region.intersects(&b))
-			})
+			.filter(|OriginalId(id)| id.origin_cell_bounds().is_some_and(|b| region.intersects(&b)))
 			.collect()
 	}
 
