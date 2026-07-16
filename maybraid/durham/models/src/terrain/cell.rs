@@ -158,6 +158,9 @@ pub fn cell_bounds(ix: i32, iz: i32, cell_size: f32, vertical_half_extent: f32) 
 }
 
 /// Integer cell coordinates covering a region on XZ (Y ignored for tiling).
+///
+/// Uses half-open style on the max edge (`ceil(max/size) - 1`), so a query whose
+/// max lies exactly on a cell boundary does not include the next cell.
 pub fn cell_coords_for_region(
 	region: Aabb3d,
 	cell_size: f32,
@@ -167,5 +170,23 @@ pub fn cell_coords_for_region(
 	let max_x = (region.max.x / size).ceil() as i32 - 1;
 	let min_z = (region.min.z / size).floor() as i32;
 	let max_z = (region.max.z / size).ceil() as i32 - 1;
+	(min_x..=max_x).flat_map(move |ix| (min_z..=max_z).map(move |iz| (ix, iz)))
+}
+
+/// Cell coordinates for closed AABB overlap with half-open tiles `[i·s,(i+1)·s]`.
+///
+/// Includes macros that only share a face with `region` (e.g. when the query
+/// min sits exactly on a macro boundary). Does not add an extra halo for
+/// softmask that reaches past a non-touching macro cell — pad that later if needed.
+pub fn cell_coords_for_region_inclusive(
+	region: Aabb3d,
+	cell_size: f32,
+) -> impl Iterator<Item = (i32, i32)> {
+	let size = cell_size.max(1e-3);
+	// Closed overlap: max >= i·s  ∧  min <= (i+1)·s
+	let min_x = (region.min.x / size).ceil() as i32 - 1;
+	let max_x = (region.max.x / size).floor() as i32;
+	let min_z = (region.min.z / size).ceil() as i32 - 1;
+	let max_z = (region.max.z / size).floor() as i32;
 	(min_x..=max_x).flat_map(move |ix| (min_z..=max_z).map(move |iz| (ix, iz)))
 }

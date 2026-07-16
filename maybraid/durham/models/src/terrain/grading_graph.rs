@@ -2,12 +2,12 @@
 
 use crate::terrain::base_noise::BaseTerrainNoise;
 use crate::terrain::cell::{
-	cell_bounds, cell_coords_for_region, TerrainCellLayout,
+	cell_bounds, cell_coords_for_region_inclusive, TerrainCellLayout,
 };
 use crate::terrain::presentation::TerrainPresentationAssets;
 use crate::terrain::region::grading::RegionGradingModulation;
 use crate::terrain::region::{RectRegion, Region2D};
-use bevy::math::bounding::{Aabb3d, IntersectsVolume};
+use bevy::math::bounding::Aabb3d;
 use bevy::math::Vec2;
 use bevy::prelude::*;
 use lod::gen::{GeneratingSpatialIndex, GenerationScheme, Id, OriginalId, SpatialIndex};
@@ -138,7 +138,8 @@ where
 			return Vec::new();
 		};
 		let macro_layout = layout.macro_layout();
-		cell_coords_for_region(region, macro_layout.cell_size)
+		// Closed/inclusive: face-adjacent macros whose softmask can still spill in.
+		cell_coords_for_region_inclusive(region, macro_layout.cell_size)
 			.map(|(ix, iz)| {
 				let bounds = cell_bounds(
 					ix,
@@ -147,9 +148,6 @@ where
 					macro_layout.vertical_half_extent,
 				);
 				OriginalId(Id::from_cell(bounds))
-			})
-			.filter(|OriginalId(id)| {
-				id.origin_cell_bounds().is_some_and(|b| region.intersects(&b))
 			})
 			.collect()
 	}
