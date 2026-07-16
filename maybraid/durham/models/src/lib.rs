@@ -9,7 +9,8 @@ pub use terrain::render::cascade_chunk_for_cell;
 pub use terrain::{
 	create_terrain, register_terrain_plugin, AvianTerrainIndex, ComposedTerrain, Terrain,
 	TerrainCellId, TerrainCellLayout, TerrainConfig, TerrainEntryStore, TerrainPlugin,
-	TerrainRenderItem, TerrainSdf, TERRAIN_CELL_SIZE,
+	TerrainPresentationAssets, TerrainPresenterState, TerrainRegionPresenter, TerrainRenderItem,
+	TerrainSdf, TerrainStoreView, TERRAIN_CELL_SIZE,
 };
 
 use bevy::prelude::*;

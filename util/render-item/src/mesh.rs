@@ -83,7 +83,7 @@ impl<T: MeshBuilder + MeshCache + MeshHandleCache> MeshFetcher for T {
 /// A mesh dispatch signals an intent for the item to be spawned into the world.
 /// This is set up for asynchronous pipelines
 /// wherein the mesh may need to be built, fetched from cache, etc.
-#[derive(Component)]
+#[derive(Component, Clone)]
 pub struct MeshDispatch<T: MeshFetcher> {
 	fetcher: T,
 }

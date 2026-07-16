@@ -1,6 +1,7 @@
 //! System-local Avian-backed [`SpatialIndex`] for terrain cells.
 
 use crate::terrain::cell::{HasTerrainCellLayout, TerrainCellLayout};
+use crate::terrain::presentation::{HasTerrainPresentationAssets, TerrainPresentationAssets};
 use crate::terrain::Terrain;
 use avian3d::prelude::*;
 use bevy::ecs::system::SystemParam;
@@ -15,11 +16,11 @@ use std::collections::HashMap;
 pub struct TerrainCellId(pub Id);
 
 #[derive(Debug, Clone)]
-struct StoredEntry {
-	value: Terrain,
-	bounds: Aabb3d,
-	version: Version,
-	entity: Entity,
+pub(crate) struct StoredEntry {
+	pub(crate) value: Terrain,
+	pub(crate) bounds: Aabb3d,
+	pub(crate) version: Version,
+	pub(crate) entity: Entity,
 }
 
 /// Side table for terrain values / versions / entity mapping.
@@ -29,7 +30,7 @@ struct StoredEntry {
 #[derive(Resource, Default)]
 pub struct TerrainEntryStore {
 	next_version: u64,
-	entries: HashMap<Id, StoredEntry>,
+	pub(crate) entries: HashMap<Id, StoredEntry>,
 	entity_to_id: HashMap<Entity, Id>,
 }
 
@@ -57,11 +58,18 @@ pub struct AvianTerrainIndex<'w, 's> {
 	spatial: SpatialQuery<'w, 's>,
 	store: ResMut<'w, TerrainEntryStore>,
 	layout: ResMut<'w, TerrainCellLayout>,
+	presentation: Res<'w, TerrainPresentationAssets>,
 }
 
 impl<'w, 's> HasTerrainCellLayout for AvianTerrainIndex<'w, 's> {
 	fn cell_layout(&self) -> &TerrainCellLayout {
 		&self.layout
+	}
+}
+
+impl<'w, 's> HasTerrainPresentationAssets for AvianTerrainIndex<'w, 's> {
+	fn presentation_assets(&self) -> &TerrainPresentationAssets {
+		&self.presentation
 	}
 }
 

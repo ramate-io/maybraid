@@ -2949,6 +2949,7 @@ dependencies = [
  "avian3d",
  "bevy",
  "chunk",
+ "durham-terrain",
  "lod",
  "log",
  "procedural-common",

@@ -2,6 +2,7 @@
 
 use crate::terrain::cell::TerrainCellLayout;
 use crate::terrain::index::TerrainEntryStore;
+use crate::terrain::presentation::TerrainPresenterState;
 use avian3d::prelude::PhysicsPlugins;
 use avian3d::schedule::PhysicsSchedulePlugin;
 use bevy::prelude::*;
@@ -29,6 +30,7 @@ impl Plugin for TerrainPlugin {
 			app.add_plugins(PhysicsPlugins::default());
 		}
 		app.init_resource::<TerrainEntryStore>()
-			.init_resource::<TerrainCellLayout>();
+			.init_resource::<TerrainCellLayout>()
+			.init_resource::<TerrainPresenterState>();
 	}
 }

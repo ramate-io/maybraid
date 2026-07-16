@@ -17,6 +17,7 @@ sdf = { workspace = true }
 chunk = { workspace = true }
 render-item = { workspace = true }
 avian3d = { workspace = true }
+durham-terrain = { workspace = true }
 log = { workspace = true }
 
 [lints]
