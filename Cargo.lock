@@ -2950,6 +2950,7 @@ dependencies = [
  "bevy",
  "chunk",
  "durham-terrain",
+ "jersey-terrain-stamps",
  "lod",
  "log",
  "procedural-common",
@@ -3936,6 +3937,15 @@ name = "itoa"
 version = "1.0.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4a5f13b858c8d314ee3e8f639011f7ccefe71f97f96e50151fb991f267928e2c"
+
+[[package]]
+name = "jersey-terrain-stamps"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "bevy_math",
+ "procedural-common",
+]
 
 [[package]]
 name = "jni"
