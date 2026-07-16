@@ -57,6 +57,7 @@ impl<M: Material> RenderItem for TerrainRenderItem<M> {
 				cascade_chunk.clone(),
 				MeshDispatch::new(mesh_handle),
 				transform,
+				Visibility::default(),
 				self.material.clone(),
 			))
 			.id();

@@ -1,4 +1,4 @@
-//! Compose the Durham playground-style terrain SDF.
+//! Compose the naturescapes-style Durham terrain SDF (heightfield modulations only).
 
 use crate::terrain::region::affine::RegionAffineModulation;
 use crate::terrain::region::branching::BranchingPlan;
@@ -7,7 +7,6 @@ use crate::terrain::region::rounding::RegionRoundingModulation;
 use crate::terrain::region::{CircleRegion, RectRegion, Region2D, RegionNoise};
 use crate::terrain::sdf::{ComposedTerrain, TerrainSdf};
 use bevy::prelude::*;
-use sdf::{Ellipse3d, TubeSdf};
 
 /// Configuration for terrain composition.
 #[derive(Resource, Clone, Debug)]
@@ -17,12 +16,14 @@ pub struct TerrainConfig {
 }
 
 impl TerrainConfig {
+	/// Naturescapes-scale defaults (`seed=42`, `height_scale=500`).
 	pub fn new(seed: u32) -> Self {
-		Self { seed, height_scale: 5.0 }
+		Self { seed, height_scale: 500.0 }
 	}
 }
 
-/// Create the composed terrain SDF (heightfield modulations + optional tube carve).
+/// Create the composed terrain SDF matching the naturescapes playground setup
+/// (valleys, branching, road, graded road — no detail layers, no tube carve).
 pub fn create_terrain(config: &TerrainConfig) -> ComposedTerrain {
 	let mut sdf = TerrainSdf::new(config.seed, config.height_scale);
 
@@ -89,26 +90,5 @@ pub fn create_terrain(config: &TerrainConfig) -> ComposedTerrain {
 	);
 	sdf.add_elevation_modulation(Box::new(graded_road));
 
-	let tube_start = Vec3::new(-30.0, -1.0, -30.0);
-	let tube_end = Vec3::new(-50.0, 4.0, -50.0);
-	let tube_center = Vec3::new(20.0, 0.0, 20.0);
-	let tube_axis = (tube_end - tube_start).normalize();
-
-	let right = if tube_axis.x.abs() > tube_axis.z.abs() {
-		Vec3::new(-tube_axis.y, tube_axis.x, 0.0).normalize()
-	} else {
-		Vec3::new(0.0, -tube_axis.z, tube_axis.y).normalize()
-	};
-	let up = tube_axis.cross(right).normalize();
-
-	let tube_ellipse = Ellipse3d {
-		center: tube_center,
-		axes: [right, up],
-		radii: Vec2::new(2.0, 2.0),
-	};
-
-	// Tube without surface noise (procedural-common migration path omits Perlin on util/sdf).
-	let tube_sdf = TubeSdf::new(tube_start, tube_end, tube_ellipse);
-
-	ComposedTerrain::from_terrain(sdf).with_tube(tube_sdf)
+	ComposedTerrain::from_terrain(sdf)
 }

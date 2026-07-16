@@ -48,10 +48,11 @@ where
 	S: SpatialIndex<Terrain> + HasTerrainCellLayout,
 {
 	fn original_ids_for(spatial_index: &mut S, region: Aabb3d) -> Vec<OriginalId> {
-		let cell_size = spatial_index.cell_layout().cell_size;
-		cell_coords_for_region(region, cell_size)
+		let layout = spatial_index.cell_layout().clone();
+		cell_coords_for_region(region, layout.cell_size)
 			.map(|(ix, iz)| {
-				let bounds = cell_bounds(ix, iz, cell_size);
+				let bounds =
+					cell_bounds(ix, iz, layout.cell_size, layout.vertical_half_extent);
 				OriginalId(Id::from_cell(bounds))
 			})
 			.filter(|OriginalId(id)| {

@@ -11,9 +11,10 @@ pub use game_commands::command::PendingStartupCommand;
 use bevy::prelude::*;
 use camera::{camera_controller, refocus_camera_on_layout, setup_camera};
 use commands::{PendingCellLayoutPatch, RequestCellShow};
+use durham_terrain::shaders::{DurhamTerrainShader, DurhamTerrainShaderPlugin};
 use durham_terrain_models::{
-	cascade_chunk_for_cell, create_terrain, AvianTerrainIndex, ComposedTerrain, DurhamTerrainModelsPlugin,
-	Terrain, TerrainCellLayout, TerrainConfig, TerrainRenderItem,
+	cascade_chunk_for_cell, create_terrain, AvianTerrainIndex, ComposedTerrain,
+	DurhamTerrainModelsPlugin, Terrain, TerrainCellLayout, TerrainConfig, TerrainRenderItem,
 };
 use game_commands::command::{capture_command_line_input, GameCommandPlugin};
 use game_commands::ui::GameCommandStatusText;
@@ -27,7 +28,7 @@ use std::f32::consts::PI;
 pub struct WorldTerrainSdf(pub ComposedTerrain);
 
 #[derive(Resource)]
-struct TerrainMaterial(Handle<StandardMaterial>);
+struct TerrainMaterial(Handle<DurhamTerrainShader>);
 
 #[derive(Resource)]
 struct TerrainPresentationDirty(bool);
@@ -44,7 +45,8 @@ impl Plugin for TerrainModelsPlaygroundPlugin {
 		let sdf = create_terrain(&config);
 
 		app.add_plugins(DurhamTerrainModelsPlugin)
-			.add_plugins(EnforceCachingPlugin::<ComposedTerrain, StandardMaterial>::default())
+			.add_plugins(DurhamTerrainShaderPlugin)
+			.add_plugins(EnforceCachingPlugin::<ComposedTerrain, DurhamTerrainShader>::default())
 			.add_plugins(GameCommandPlugin::<PlaygroundCommand>::with_config(ui::ui_config()))
 			.insert_resource(ClearColor(Color::hsla(201.0, 0.69, 0.62, 1.0)))
 			.insert_resource(config)
@@ -82,12 +84,8 @@ fn setup_lighting(mut commands: Commands) {
 	));
 }
 
-fn setup_material(mut commands: Commands, mut materials: ResMut<Assets<StandardMaterial>>) {
-	let handle = materials.add(StandardMaterial {
-		base_color: Color::srgb(0.35, 0.55, 0.28),
-		perceptual_roughness: 0.9,
-		..default()
-	});
+fn setup_material(mut commands: Commands, mut materials: ResMut<Assets<DurhamTerrainShader>>) {
+	let handle = materials.add(DurhamTerrainShader::default());
 	commands.insert_resource(TerrainMaterial(handle));
 }
 

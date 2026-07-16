@@ -2964,6 +2964,7 @@ dependencies = [
  "bevy",
  "chunk",
  "clap",
+ "durham-terrain",
  "durham-terrain-models",
  "game-commands",
  "lod",

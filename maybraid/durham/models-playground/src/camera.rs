@@ -1,3 +1,4 @@
+use bevy::core_pipeline::prepass::DepthPrepass;
 use bevy::prelude::*;
 use durham_terrain_models::{ComposedTerrain, TerrainCellLayout};
 use game_commands::command::TextEntryFocus;
@@ -17,15 +18,18 @@ pub fn setup_camera(
 	world_sdf: Res<crate::WorldTerrainSdf>,
 ) {
 	let look_at = camera_look_at(&layout, &world_sdf.0);
-	let camera_pos = look_at + Vec3::new(0.0, layout.cell_size * 1.2, layout.cell_size * 2.0);
+	let camera_pos = look_at + Vec3::new(0.0, layout.cell_size * 8.0, layout.cell_size * 12.0);
 	let transform = Transform::from_translation(camera_pos).looking_at(look_at, Vec3::Y);
 	let (yaw, pitch) = yaw_pitch_from_rotation(transform.rotation);
 
 	commands.spawn((
 		Camera3d::default(),
 		transform,
-		Projection::Perspective(PerspectiveProjection { near: 0.1, far: 4000.0, ..default() }),
-		CameraController { speed: 24.0, sensitivity: 0.005, yaw, pitch },
+		Projection::Perspective(PerspectiveProjection { near: 0.1, far: 20_000.0, ..default() }),
+		CameraController { speed: 80.0, sensitivity: 0.005, yaw, pitch },
+		// DurhamTerrainShader samples `prepass_depth` for edge darkening (see naturescapes).
+		Msaa::Off,
+		DepthPrepass,
 	));
 }
 
@@ -37,7 +41,7 @@ pub fn refocus_camera_on_layout(
 	controller: &mut CameraController,
 ) {
 	let look_at = camera_look_at(layout, sdf);
-	let camera_pos = look_at + Vec3::new(0.0, layout.cell_size * 1.2, layout.cell_size * 2.0);
+	let camera_pos = look_at + Vec3::new(0.0, layout.cell_size * 8.0, layout.cell_size * 12.0);
 	*transform = Transform::from_translation(camera_pos).looking_at(look_at, Vec3::Y);
 	let (yaw, pitch) = yaw_pitch_from_rotation(transform.rotation);
 	controller.yaw = yaw;
