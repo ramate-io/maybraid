@@ -87,6 +87,20 @@ impl TerrainEntryStore {
 	pub fn base_noise(&self) -> Option<&BaseTerrainNoise> {
 		self.base_noise.get(&Id::Universal).map(|e| &e.value)
 	}
+
+	/// Lookup a materialized jersey modulation cell by id (debug / inspection).
+	pub fn jersey_modulation(&self, id: Id) -> Option<&JerseyModulations> {
+		self.jersey_modulations.get(&id).map(|e| &e.value)
+	}
+
+	/// Iterate materialized jersey modulation cells (debug / inspection).
+	pub fn iter_jersey_modulations(
+		&self,
+	) -> impl Iterator<Item = (Id, &JerseyModulations)> + '_ {
+		self.jersey_modulations
+			.iter()
+			.map(|(id, entry)| (*id, &entry.value))
+	}
 }
 
 /// System-local wrapper used as `S` for [`lod::gen::GeneratingSpatialIndex`].

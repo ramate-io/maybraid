@@ -1,0 +1,40 @@
+───────────────────────────────────────────────────
+2026-07-16T17:52:30.959208Z  INFO durham_terrain_models_playground::debug_bounds: 
+── camera cell report ──────────────────────────────
+cam          (230.91287, 170.75185, 1302.0967)
+
+terrain      T(1, 8)  layout_size=160.000
+  cell AABB  min=(160.000, -2000.000, 1280.000)  max=(320.000, 2000.000, 1440.000)
+  status     GENERATED  res_2=5
+  cell AABB  min=(160.000, -2000.000, 1280.000)  max=(320.000, 2000.000, 1440.000)
+  chunk AABB min=(160.000, -2000.000, 1280.000)  max=(320.000, 2000.000, 1440.000)
+  stamps     n=2
+    [0] ops=44  families=[JerseyFamilySummary { name: "valley", modulation_count: 9 }, JerseyFamilySummary { name: "plateau", modulation_count: 2 }, JerseyFamilySummary { name: "massif", modulation_count: 8 }, JerseyFamilySummary { name: "canyon", modulation_count: 9 }, JerseyFamilySummary { name: "water", modulation_count: 12 }, JerseyFamilySummary { name: "rolling", modulation_count: 4 }]
+        AABB min=(23.000, -2000.000, 663.000)  max=(663.000, 2000.000, 1303.000)
+    [1] ops=47  families=[JerseyFamilySummary { name: "valley", modulation_count: 8 }, JerseyFamilySummary { name: "plateau", modulation_count: 2 }, JerseyFamilySummary { name: "massif", modulation_count: 10 }, JerseyFamilySummary { name: "canyon", modulation_count: 12 }, JerseyFamilySummary { name: "water", modulation_count: 11 }, JerseyFamilySummary { name: "rolling", modulation_count: 4 }]
+        AABB min=(23.000, -2000.000, 1303.000)  max=(663.000, 2000.000, 1943.000)
+
+jersey       J(0, 1)  layout_size=640.000  origin_offset=(23.0, 23.0)
+  cell AABB  min=(23.000, -2000.000, 663.000)  max=(663.000, 2000.000, 1303.000)
+  status     LOADED  ops=44
+  families   [JerseyFamilySummary { name: "valley", modulation_count: 9 }, JerseyFamilySummary { name: "plateau", modulation_count: 2 }, JerseyFamilySummary { name: "massif", modulation_count: 8 }, JerseyFamilySummary { name: "canyon", modulation_count: 9 }, JerseyFamilySummary { name: "water", modulation_count: 12 }, JerseyFamilySummary { name: "rolling", modulation_count: 4 }]
+  store AABB min=(23.000, -2000.000, 663.000)  max=(663.000, 2000.000, 1303.000)
+───────────────────────────────────────────────────
+2026-07-16T17:53:28.142709Z  INFO durham_terrain_models_playground::debug_bounds: 
+── camera cell report ──────────────────────────────
+cam          (238.00139, 165.40492, 1279.9548)
+
+terrain      T(1, 7)  layout_size=160.000
+  cell AABB  min=(160.000, -2000.000, 1120.000)  max=(320.000, 2000.000, 1280.000)
+  status     GENERATED  res_2=5
+  cell AABB  min=(160.000, -2000.000, 1120.000)  max=(320.000, 2000.000, 1280.000)
+  chunk AABB min=(160.000, -2000.000, 1120.000)  max=(320.000, 2000.000, 1280.000)
+  stamps     n=1
+    [0] ops=44  families=[JerseyFamilySummary { name: "valley", modulation_count: 9 }, JerseyFamilySummary { name: "plateau", modulation_count: 2 }, JerseyFamilySummary { name: "massif", modulation_count: 8 }, JerseyFamilySummary { name: "canyon", modulation_count: 9 }, JerseyFamilySummary { name: "water", modulation_count: 12 }, JerseyFamilySummary { name: "rolling", modulation_count: 4 }]
+        AABB min=(23.000, -2000.000, 663.000)  max=(663.000, 2000.000, 1303.000)
+
+jersey       J(0, 1)  layout_size=640.000  origin_offset=(23.0, 23.0)
+  cell AABB  min=(23.000, -2000.000, 663.000)  max=(663.000, 2000.000, 1303.000)
+  status     LOADED  ops=44
+  families   [JerseyFamilySummary { name: "valley", modulation_count: 9 }, JerseyFamilySummary { name: "plateau", modulation_count: 2 }, JerseyFamilySummary { name: "massif", modulation_count: 8 }, JerseyFamilySummary { name: "canyon", modulation_count: 9 }, JerseyFamilySummary { name: "water", modulation_count: 12 }, JerseyFamilySummary { name: "rolling", modulation_count: 4 }]
+  store AABB min=(23.000, -2000.000, 663.000)  max=(663.000, 2000.000, 1303.000)

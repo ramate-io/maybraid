@@ -18,7 +18,9 @@ use commands::{
 	PendingCellLayoutPatch, RequestCellShow, RequestModeCharacter, RequestModeFree,
 };
 use durham_terrain::shaders::{DurhamTerrainShader, DurhamTerrainShaderPlugin};
-use debug_bounds::draw_chunk_boundary_boxes;
+use debug_bounds::{
+	draw_chunk_boundary_boxes, setup_cell_location_hud, update_cell_location_hud,
+};
 use durham_terrain_models::{
 	AvianTerrainIndex, BaseTerrainNoise, ComposedTerrain, DurhamTerrainModelsPlugin, Terrain,
 	TerrainCellLayout, TerrainConfig, TerrainEntryStore, TerrainPresentationAssets,
@@ -59,7 +61,15 @@ impl Plugin for TerrainModelsPlaygroundPlugin {
 			.insert_resource(WorldBaseTerrain(base))
 			.insert_resource(TerrainPresentationDirty(true))
 			.init_resource::<TerrainPresentPending>()
-			.add_systems(Startup, (setup_camera, setup_lighting, setup_presentation_assets))
+			.add_systems(
+				Startup,
+				(
+					setup_camera,
+					setup_lighting,
+					setup_presentation_assets,
+					setup_cell_location_hud,
+				),
+			)
 			.add_systems(
 				Update,
 				(
@@ -69,6 +79,7 @@ impl Plugin for TerrainModelsPlaygroundPlugin {
 					generate_cells.after(apply_mode_commands),
 					present_cells.after(generate_cells),
 					draw_chunk_boundary_boxes.after(present_cells),
+					update_cell_location_hud.after(draw_chunk_boundary_boxes),
 					ui::sync_command_status_text.before(game_commands::ui::update_debug_ui),
 				),
 			);

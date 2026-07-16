@@ -1,4 +1,5 @@
 use bevy::math::bounding::Aabb3d;
+use core::cmp::Ordering;
 
 /// Spatial cell bounds for procedural origin ids.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -20,7 +21,41 @@ impl core::hash::Hash for Cell {
 	}
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+impl PartialOrd for Cell {
+	fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+		Some(self.cmp(other))
+	}
+}
+
+impl Ord for Cell {
+	fn cmp(&self, other: &Self) -> Ordering {
+		fn key(c: &Cell) -> [u32; 6] {
+			[
+				c.0.min.x.to_bits(),
+				c.0.min.y.to_bits(),
+				c.0.min.z.to_bits(),
+				c.0.max.x.to_bits(),
+				c.0.max.y.to_bits(),
+				c.0.max.z.to_bits(),
+			]
+		}
+		key(self).cmp(&key(other))
+	}
+}
+
+impl PartialOrd for OriginCell {
+	fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+		Some(self.cmp(other))
+	}
+}
+
+impl Ord for OriginCell {
+	fn cmp(&self, other: &Self) -> Ordering {
+		self.0.cmp(&other.0)
+	}
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Bytes(pub [u8; 32]);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -33,6 +68,26 @@ pub enum Id {
 	OriginCell(OriginCell),
 	/// The universal identifier, used for types that do not vary.
 	Universal,
+}
+
+impl PartialOrd for Id {
+	fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+		Some(self.cmp(other))
+	}
+}
+
+impl Ord for Id {
+	fn cmp(&self, other: &Self) -> Ordering {
+		match (self, other) {
+			(Self::Bytes(a), Self::Bytes(b)) => a.cmp(b),
+			(Self::Bytes(_), _) => Ordering::Less,
+			(_, Self::Bytes(_)) => Ordering::Greater,
+			(Self::OriginCell(a), Self::OriginCell(b)) => a.cmp(b),
+			(Self::OriginCell(_), Self::Universal) => Ordering::Less,
+			(Self::Universal, Self::OriginCell(_)) => Ordering::Greater,
+			(Self::Universal, Self::Universal) => Ordering::Equal,
+		}
+	}
 }
 
 impl Id {
@@ -50,7 +105,7 @@ impl Id {
 }
 
 /// Ids that originate in the region.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct OriginalId(pub Id);
 
 impl OriginalId {
@@ -64,7 +119,7 @@ impl OriginalId {
 }
 
 /// Ids that are tracked in the region.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct TrackedId(pub Id);
 
 /// Whether or not a given id is tracked in the region.

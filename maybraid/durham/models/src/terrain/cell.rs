@@ -30,6 +30,12 @@ pub const MACRO_CELL_SIZE: f32 = TERRAIN_CELL_SIZE * 4.0;
 /// domain (~50m–1km; default matches [`MACRO_CELL_SIZE`] = 640).
 pub const JERSEY_STAMP_CELL_SIZE: f32 = MACRO_CELL_SIZE;
 
+/// Default XZ origin offset for the jersey stamp grid (world units).
+///
+/// Small shift so jersey cell faces do not coincide with presentation Terrain
+/// seams (debug / seam isolation).
+pub const JERSEY_STAMP_GRID_OFFSET: f32 = 23.0;
+
 /// Default cell count along +X / +Z (`2 * grid_radius + 1`).
 pub const TERRAIN_CELL_EXTENTS_XZ: u32 = (2 * NATURESCAPES_GRID_RADIUS_XZ + 1) as u32;
 
@@ -161,6 +167,8 @@ impl Default for MacroCellLayout {
 pub struct JerseyStampCellLayout {
 	pub cell_size: f32,
 	pub vertical_half_extent: f32,
+	/// World-space XZ shift of the jersey grid origin relative to world zero.
+	pub origin_offset: Vec2,
 }
 
 impl Default for JerseyStampCellLayout {
@@ -168,7 +176,31 @@ impl Default for JerseyStampCellLayout {
 		Self {
 			cell_size: JERSEY_STAMP_CELL_SIZE,
 			vertical_half_extent: TERRAIN_CELL_VERTICAL_HALF_EXTENT,
+			origin_offset: Vec2::splat(JERSEY_STAMP_GRID_OFFSET),
 		}
+	}
+}
+
+impl JerseyStampCellLayout {
+	/// World AABB for jersey cell `(ix, iz)`.
+	pub fn cell_bounds(&self, ix: i32, iz: i32) -> Aabb3d {
+		let size = self.cell_size.max(1e-3);
+		let vy = self.vertical_half_extent.max(size);
+		let ox = self.origin_offset.x;
+		let oz = self.origin_offset.y;
+		let min = Vec3::new(ix as f32 * size + ox, -vy, iz as f32 * size + oz);
+		let max = Vec3::new((ix + 1) as f32 * size + ox, vy, (iz + 1) as f32 * size + oz);
+		Aabb3d::from_min_max(min, max)
+	}
+
+	/// Shift a world-space query into jersey grid coordinates (subtract origin offset).
+	pub fn region_in_grid_space(&self, region: Aabb3d) -> Aabb3d {
+		let ox = self.origin_offset.x;
+		let oz = self.origin_offset.y;
+		Aabb3d::from_min_max(
+			Vec3::new(region.min.x - ox, region.min.y, region.min.z - oz),
+			Vec3::new(region.max.x - ox, region.max.y, region.max.z - oz),
+		)
 	}
 }
 
@@ -321,10 +353,12 @@ where
 		return Vec::new();
 	};
 	let layout = layout.clone();
-	cell_coords_for_region_inclusive_halo(region, layout.cell_size, JERSEY_CELL_QUERY_HALO)
-		.map(|(ix, iz)| {
-			let bounds = cell_bounds(ix, iz, layout.cell_size, layout.vertical_half_extent);
-			OriginalId(Id::from_cell(bounds))
-		})
-		.collect()
+	let grid_region = layout.region_in_grid_space(region);
+	cell_coords_for_region_inclusive_halo(
+		grid_region,
+		layout.cell_size,
+		JERSEY_CELL_QUERY_HALO,
+	)
+	.map(|(ix, iz)| OriginalId(Id::from_cell(layout.cell_bounds(ix, iz))))
+	.collect()
 }

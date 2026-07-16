@@ -30,13 +30,13 @@ use render_item::mesh::handle::Cached;
 pub use base_noise::BaseTerrainNoise;
 pub use cell::{
 	JerseyStampCellLayout, MacroCellLayout, TerrainCellLayout, JERSEY_STAMP_CELL_SIZE,
-	MACRO_CELL_SIZE, TERRAIN_CELL_SIZE,
+	JERSEY_STAMP_GRID_OFFSET, MACRO_CELL_SIZE, TERRAIN_CELL_SIZE,
 };
 pub use cell_noise::CellTerrainNoise;
 pub use collider::TerrainTrimeshCollider;
 pub use config::TerrainConfig;
 pub use index::{AvianTerrainIndex, TerrainCellId, TerrainEntryStore};
-pub use jersey_compose::JerseyModulations;
+pub use jersey_compose::{JerseyFamilySummary, JerseyModulations};
 pub use jersey_configs::JerseyLayerConfigs;
 pub use jersey_layers::{
 	CanyonLayer, PlateauCapLayer, PocketWaterLayer, RollingGroundLayer, RuggedMassifLayer,
@@ -120,11 +120,15 @@ where
 		)?;
 		let base = <S as SpatialIndex<BaseTerrainNoise>>::get(spatial_index, Id::Universal)?.clone();
 
-		let jersey_ids = GeneratingSpatialIndex::<JerseyModulations>::get_or_generate_region(
-			spatial_index,
-			bounds,
-			lod_ref,
-		);
+		let mut jersey_ids =
+			GeneratingSpatialIndex::<JerseyModulations>::get_or_generate_region(
+				spatial_index,
+				bounds,
+				lod_ref,
+			);
+		// Region results are sorted by Id; keep that order when composing so
+		// neighboring Terrain cells apply non-commutative jersey ops identically.
+		jersey_ids.sort_by(|(a, _), (b, _)| a.cmp(b));
 		let jersey: Vec<JerseyModulations> = jersey_ids
 			.iter()
 			.filter_map(|(jid, _)| {
