@@ -153,11 +153,12 @@ where
 		)?;
 		let base = <S as SpatialIndex<BaseTerrainNoise>>::get(spatial_index, Id::Universal)?.clone();
 
-		let grading_ids = GeneratingSpatialIndex::<GradingGraph>::get_or_generate_region(
+		let mut grading_ids = GeneratingSpatialIndex::<GradingGraph>::get_or_generate_region(
 			spatial_index,
 			bounds,
 			lod_ref,
 		);
+		grading_ids.sort_by(|(a, _), (b, _)| a.cmp(b));
 		let grading: Vec<GradingGraph> = grading_ids
 			.iter()
 			.filter_map(|(gid, _)| {
@@ -165,11 +166,12 @@ where
 			})
 			.collect();
 
-		let stamp_ids = GeneratingSpatialIndex::<RegionStamps>::get_or_generate_region(
+		let mut stamp_ids = GeneratingSpatialIndex::<RegionStamps>::get_or_generate_region(
 			spatial_index,
 			bounds,
 			lod_ref,
 		);
+		stamp_ids.sort_by(|(a, _), (b, _)| a.cmp(b));
 		let stamps: Vec<RegionStamps> = stamp_ids
 			.iter()
 			.filter_map(|(sid, _)| {
