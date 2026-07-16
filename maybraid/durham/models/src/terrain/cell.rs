@@ -24,6 +24,12 @@ pub const TERRAIN_CELL_SIZE: f32 =
 /// Macro-cell edge length for grading graphs and region stamps (`4 ×` terrain cell).
 pub const MACRO_CELL_SIZE: f32 = TERRAIN_CELL_SIZE * 4.0;
 
+/// Inside-macro fade distance for stamp/grading modulations.
+///
+/// Strength reaches zero by the owning macro face so softmask cannot spill into
+/// a neighboring macro cell (cellular generation stays tile-local).
+pub const MACRO_CELL_MODULATION_APRON: f32 = 16.0;
+
 /// Default cell count along +X / +Z (`2 * grid_radius + 1`).
 pub const TERRAIN_CELL_EXTENTS_XZ: u32 = (2 * NATURESCAPES_GRID_RADIUS_XZ + 1) as u32;
 

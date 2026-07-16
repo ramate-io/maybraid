@@ -1,7 +1,10 @@
 pub mod affine;
 pub mod branching;
+pub mod cell_apron;
 pub mod grading;
 pub mod rounding;
+
+pub use cell_apron::CellApron;
 
 use bevy::prelude::*;
 use procedural_common::{NoiseConfig, NoiseParams, NoiseType};

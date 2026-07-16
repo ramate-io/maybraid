@@ -1,4 +1,4 @@
-use crate::terrain::region::{Region2D, RegionNoise};
+use crate::terrain::region::{CellApron, Region2D, RegionNoise};
 use crate::terrain::sdf::{ElevationModulation, TerrainSdf};
 use bevy::prelude::*;
 
@@ -11,6 +11,8 @@ pub struct RegionAffineModulation {
 	pub inner_radius: f32,
 	pub outer_radius: f32,
 	pub noise: Option<RegionNoise>,
+	/// When set, strength fades to zero by the owning cell face.
+	pub cell_apron: Option<CellApron>,
 }
 
 impl RegionAffineModulation {
@@ -28,11 +30,17 @@ impl RegionAffineModulation {
 			inner_radius,
 			outer_radius: outer_radius.max(inner_radius + 0.001),
 			noise: None,
+			cell_apron: None,
 		}
 	}
 
 	pub fn with_noise(mut self, noise: RegionNoise) -> Self {
 		self.noise = Some(noise);
+		self
+	}
+
+	pub fn with_cell_apron(mut self, apron: CellApron) -> Self {
+		self.cell_apron = Some(apron);
 		self
 	}
 
@@ -42,6 +50,7 @@ impl RegionAffineModulation {
 		t * t * (3.0 - 2.0 * t)
 	}
 
+	/// Softmask weight: 0 = full modulation, 1 = identity.
 	#[inline(always)]
 	fn region_weight(&self, p: Vec2) -> f32 {
 		let d = self.region.sdf_with_noise(p, self.noise.as_ref());
@@ -53,6 +62,17 @@ impl RegionAffineModulation {
 			let t = (d + self.inner_radius) / (self.inner_radius + self.outer_radius);
 			Self::smoothstep(t)
 		}
+	}
+
+	/// Combine region softmask with optional cell apron (still 0 = full, 1 = identity).
+	#[inline(always)]
+	fn effective_weight(&self, p: Vec2) -> f32 {
+		let w = self.region_weight(p);
+		let Some(apron) = self.cell_apron.as_ref() else {
+			return w;
+		};
+		let interior = apron.interior_weight(p);
+		1.0 - (1.0 - w) * interior
 	}
 
 	pub fn branch_region(&self, noise: &RegionNoise) -> Self {
@@ -88,6 +108,7 @@ impl RegionAffineModulation {
 			inner_radius: new_inner_radius,
 			outer_radius: new_outer_radius,
 			noise: Some(noise.clone()),
+			cell_apron: self.cell_apron.clone(),
 		}
 	}
 }
@@ -102,7 +123,7 @@ impl ElevationModulation for RegionAffineModulation {
 		_index: usize,
 	) -> f32 {
 		let p = Vec2::new(x, z);
-		let w = self.region_weight(p);
+		let w = self.effective_weight(p);
 		let a = self.inner_scale + (1.0 - self.inner_scale) * w;
 		let b = self.inner_offset * (1.0 - w);
 		a * elevation + b

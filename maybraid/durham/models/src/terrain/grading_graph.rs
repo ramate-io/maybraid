@@ -3,10 +3,11 @@
 use crate::terrain::base_noise::BaseTerrainNoise;
 use crate::terrain::cell::{
 	cell_bounds, cell_coords_for_region_inclusive, TerrainCellLayout,
+	MACRO_CELL_MODULATION_APRON,
 };
 use crate::terrain::presentation::TerrainPresentationAssets;
 use crate::terrain::region::grading::RegionGradingModulation;
-use crate::terrain::region::{RectRegion, Region2D};
+use crate::terrain::region::{CellApron, RectRegion, Region2D};
 use bevy::math::bounding::Aabb3d;
 use bevy::math::Vec2;
 use bevy::prelude::*;
@@ -25,7 +26,7 @@ pub struct GradingSegment {
 }
 
 impl GradingSegment {
-	pub fn to_modulation(&self) -> RegionGradingModulation {
+	pub fn to_modulation(&self, cell: Aabb3d) -> RegionGradingModulation {
 		let mid = (self.start + self.end) * 0.5;
 		let len = self.start.distance(self.end).max(1.0);
 		RegionGradingModulation::new(
@@ -42,6 +43,7 @@ impl GradingSegment {
 			self.half_width.max(0.2),
 			self.half_width.max(0.1) * 0.5,
 		)
+		.with_cell_apron(CellApron::from_aabb(cell, MACRO_CELL_MODULATION_APRON))
 	}
 }
 
@@ -55,7 +57,8 @@ pub struct GradingGraph {
 
 impl GradingGraph {
 	pub fn modulations(&self) -> impl Iterator<Item = RegionGradingModulation> + '_ {
-		self.segments.iter().map(GradingSegment::to_modulation)
+		let cell = self.cell;
+		self.segments.iter().map(move |s| s.to_modulation(cell))
 	}
 
 	/// Build grading for one macro origin cell from base noise samples.

@@ -1,4 +1,4 @@
-use crate::terrain::region::{Region2D, RegionNoise};
+use crate::terrain::region::{CellApron, Region2D, RegionNoise};
 use crate::terrain::sdf::{ElevationModulation, TerrainSdf};
 use bevy::prelude::*;
 
@@ -13,6 +13,8 @@ pub struct RegionGradingModulation {
 	pub noise: Option<RegionNoise>,
 	pub inner_radius: f32,
 	pub outer_radius: f32,
+	/// When set, strength fades to zero by the owning cell face.
+	pub cell_apron: Option<CellApron>,
 }
 
 impl RegionGradingModulation {
@@ -35,7 +37,13 @@ impl RegionGradingModulation {
 			noise,
 			inner_radius,
 			outer_radius,
+			cell_apron: None,
 		}
+	}
+
+	pub fn with_cell_apron(mut self, apron: CellApron) -> Self {
+		self.cell_apron = Some(apron);
+		self
 	}
 
 	#[inline(always)]
@@ -56,6 +64,16 @@ impl RegionGradingModulation {
 			Self::smoothstep(t)
 		}
 	}
+
+	#[inline(always)]
+	fn effective_weight(&self, p: Vec2) -> f32 {
+		let w = self.region_weight(p);
+		let Some(apron) = self.cell_apron.as_ref() else {
+			return w;
+		};
+		let interior = apron.interior_weight(p);
+		1.0 - (1.0 - w) * interior
+	}
 }
 
 impl ElevationModulation for RegionGradingModulation {
@@ -72,7 +90,7 @@ impl ElevationModulation for RegionGradingModulation {
 		let progress = distance_to_start / (distance_to_start + distance_to_end);
 		let interpolated_elevation =
 			self.start_elevation + (self.end_elevation - self.start_elevation) * progress;
-		let weight = self.region_weight(Vec2::new(x, z));
+		let weight = self.effective_weight(Vec2::new(x, z));
 		weight * elevation + (1.0 - weight) * interpolated_elevation
 	}
 }

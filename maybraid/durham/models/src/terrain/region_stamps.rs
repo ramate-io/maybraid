@@ -2,10 +2,11 @@
 
 use crate::terrain::cell::{
 	cell_bounds, cell_coords_for_region_inclusive, TerrainCellLayout,
+	MACRO_CELL_MODULATION_APRON,
 };
 use crate::terrain::presentation::TerrainPresentationAssets;
 use crate::terrain::region::affine::RegionAffineModulation;
-use crate::terrain::region::{CircleRegion, Region2D, RegionNoise};
+use crate::terrain::region::{CellApron, CircleRegion, Region2D, RegionNoise};
 use bevy::math::bounding::Aabb3d;
 use bevy::math::Vec2;
 use bevy::prelude::*;
@@ -23,7 +24,7 @@ pub struct RegionStamp {
 }
 
 impl RegionStamp {
-	pub fn to_modulation(&self, seed: u32) -> RegionAffineModulation {
+	pub fn to_modulation(&self, seed: u32, cell: Aabb3d) -> RegionAffineModulation {
 		RegionAffineModulation::new(
 			Region2D::Circle(CircleRegion { center: self.center, radius: self.radius }),
 			self.inner_scale,
@@ -32,6 +33,7 @@ impl RegionStamp {
 			self.radius * 0.2,
 		)
 		.with_noise(RegionNoise::from_seed(seed, 0.2, 2.0))
+		.with_cell_apron(CellApron::from_aabb(cell, MACRO_CELL_MODULATION_APRON))
 	}
 }
 
@@ -44,7 +46,8 @@ pub struct RegionStamps {
 
 impl RegionStamps {
 	pub fn modulations(&self, seed: u32) -> impl Iterator<Item = RegionAffineModulation> + '_ {
-		self.stamps.iter().map(move |s| s.to_modulation(seed))
+		let cell = self.cell;
+		self.stamps.iter().map(move |s| s.to_modulation(seed, cell))
 	}
 
 	/// Place stamps inside one macro origin cell via radial hysteresis tips.
