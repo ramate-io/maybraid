@@ -1,6 +1,6 @@
 use bevy::core_pipeline::prepass::DepthPrepass;
 use bevy::prelude::*;
-use durham_terrain_models::{ComposedTerrain, TerrainCellLayout};
+use durham_terrain_models::{BaseTerrainNoise, TerrainCellLayout};
 use game_commands::command::TextEntryFocus;
 use std::f32::consts::PI;
 
@@ -17,9 +17,9 @@ pub struct CameraController {
 pub fn setup_camera(
 	mut commands: Commands,
 	layout: Res<TerrainCellLayout>,
-	world_sdf: Res<crate::WorldTerrainSdf>,
+	world_base: Res<crate::WorldBaseTerrain>,
 ) {
-	let look_at = camera_look_at(&layout, &world_sdf.0);
+	let look_at = camera_look_at(&layout, &world_base.0);
 	let camera_pos = look_at + Vec3::new(0.0, layout.cell_size * 8.0, layout.cell_size * 12.0);
 	let transform = Transform::from_translation(camera_pos).looking_at(look_at, Vec3::Y);
 	let (yaw, pitch) = yaw_pitch_from_rotation(transform.rotation);
@@ -29,20 +29,19 @@ pub fn setup_camera(
 		transform,
 		Projection::Perspective(PerspectiveProjection { near: 0.1, far: 20_000.0, ..default() }),
 		CameraController { speed: 80.0, sensitivity: 0.005, yaw, pitch },
-		// DurhamTerrainShader samples `prepass_depth` for edge darkening (see naturescapes).
 		Msaa::Off,
 		DepthPrepass,
 	));
 }
 
-/// Recenters the camera above the current cell-layout region using SDF elevation.
+/// Recenters the camera above the current cell-layout region using base elevation.
 pub fn refocus_camera_on_layout(
 	layout: &TerrainCellLayout,
-	sdf: &ComposedTerrain,
+	base: &BaseTerrainNoise,
 	transform: &mut Transform,
 	controller: &mut CameraController,
 ) {
-	let look_at = camera_look_at(layout, sdf);
+	let look_at = camera_look_at(layout, base);
 	let camera_pos = look_at + Vec3::new(0.0, layout.cell_size * 8.0, layout.cell_size * 12.0);
 	*transform = Transform::from_translation(camera_pos).looking_at(look_at, Vec3::Y);
 	let (yaw, pitch) = yaw_pitch_from_rotation(transform.rotation);
@@ -50,9 +49,9 @@ pub fn refocus_camera_on_layout(
 	controller.pitch = pitch;
 }
 
-fn camera_look_at(layout: &TerrainCellLayout, sdf: &ComposedTerrain) -> Vec3 {
+fn camera_look_at(layout: &TerrainCellLayout, base: &BaseTerrainNoise) -> Vec3 {
 	let center = layout.region_center_xz();
-	let elevation = sdf.terrain.height_at_with_all_modulations(center.x, center.z);
+	let elevation = base.height_at(center.x, center.z);
 	Vec3::new(center.x, elevation, center.z)
 }
 
@@ -87,7 +86,6 @@ pub fn camera_controller(
 	controller.pitch -= mouse_delta.y * controller.sensitivity;
 	controller.pitch = controller.pitch.clamp(-PI / 2.0 + 0.1, PI / 2.0 - 0.1);
 
-	// Character mode owns camera pose via `follow_character_camera`.
 	if *mode == PlaygroundMode::Character {
 		return;
 	}

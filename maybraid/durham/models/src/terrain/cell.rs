@@ -19,6 +19,9 @@ pub const NATURESCAPES_GRID_RADIUS_XZ: i32 = 12;
 pub const TERRAIN_CELL_SIZE: f32 =
 	NATURESCAPES_MIN_SIZE * (1_u32 << NATURESCAPES_GRID_MULTIPLE_2) as f32;
 
+/// Macro-cell edge length for grading graphs and region stamps (`4 ×` terrain cell).
+pub const MACRO_CELL_SIZE: f32 = TERRAIN_CELL_SIZE * 4.0;
+
 /// Default cell count along +X / +Z (`2 * grid_radius + 1`).
 pub const TERRAIN_CELL_EXTENTS_XZ: u32 = (2 * NATURESCAPES_GRID_RADIUS_XZ + 1) as u32;
 
@@ -83,6 +86,27 @@ impl TerrainCellLayout {
 /// Types that expose the active terrain cell layout for generation.
 pub trait HasTerrainCellLayout {
 	fn cell_layout(&self) -> &TerrainCellLayout;
+}
+
+/// Layout for macro cells (grading graphs, region stamps).
+#[derive(Resource, Debug, Clone, PartialEq)]
+pub struct MacroCellLayout {
+	pub cell_size: f32,
+	pub vertical_half_extent: f32,
+}
+
+impl Default for MacroCellLayout {
+	fn default() -> Self {
+		Self {
+			cell_size: MACRO_CELL_SIZE,
+			vertical_half_extent: TERRAIN_CELL_VERTICAL_HALF_EXTENT,
+		}
+	}
+}
+
+/// Types that expose the macro-cell layout for generation.
+pub trait HasMacroCellLayout {
+	fn macro_cell_layout(&self) -> &MacroCellLayout;
 }
 
 /// Build an origin-cell AABB from integer cell coordinates on the XZ plane.

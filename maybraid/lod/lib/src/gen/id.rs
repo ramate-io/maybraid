@@ -31,6 +31,8 @@ pub enum Id {
 	/// Some entities, particularly procedural ones, are identified by their
 	/// origin cell.
 	OriginCell(OriginCell),
+	/// The universal identifier, used for types that do not vary.
+	Universal,
 }
 
 impl Id {
@@ -42,6 +44,7 @@ impl Id {
 		match self {
 			Self::OriginCell(OriginCell(Cell(bounds))) => Some(bounds),
 			Self::Bytes(_) => None,
+			Self::Universal => None,
 		}
 	}
 }
@@ -49,6 +52,16 @@ impl Id {
 /// Ids that originate in the region.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct OriginalId(pub Id);
+
+impl OriginalId {
+	pub fn new(id: Id) -> Self {
+		Self(id)
+	}
+
+	pub fn universal() -> Self {
+		Self(Id::Universal)
+	}
+}
 
 /// Ids that are tracked in the region.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

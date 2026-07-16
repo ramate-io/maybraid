@@ -1,36 +1,39 @@
-//! System-local Avian-backed [`SpatialIndex`] for terrain cells.
+//! System-local multi-type spatial index for Durham terrain generation.
 
-use crate::terrain::cell::{HasTerrainCellLayout, TerrainCellLayout};
+use crate::terrain::base_noise::BaseTerrainNoise;
+use crate::terrain::cell::{HasMacroCellLayout, HasTerrainCellLayout, MacroCellLayout, TerrainCellLayout};
+use crate::terrain::grading_graph::GradingGraph;
 use crate::terrain::presentation::{HasTerrainPresentationAssets, TerrainPresentationAssets};
+use crate::terrain::region_stamps::RegionStamps;
 use crate::terrain::Terrain;
 use avian3d::prelude::*;
 use bevy::ecs::system::SystemParam;
-use bevy::math::bounding::Aabb3d;
+use bevy::math::bounding::{Aabb3d, IntersectsVolume};
 use bevy::prelude::*;
 use lod::gen::{Id, SpatialIndex, StorageStatus, TrackedId, Version};
 use lod::lod_ref::LodRef;
 use std::collections::HashMap;
 
-/// Marks an Avian collider entity as a tracked terrain cell.
+/// Marks a bookkeeping entity as a tracked terrain cell.
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct TerrainCellId(pub Id);
 
 #[derive(Debug, Clone)]
-pub(crate) struct StoredEntry {
-	pub(crate) value: Terrain,
+pub(crate) struct StoredEntry<T> {
+	pub(crate) value: T,
 	pub(crate) bounds: Aabb3d,
 	pub(crate) version: Version,
-	pub(crate) entity: Entity,
+	pub(crate) entity: Option<Entity>,
 }
 
-/// Side table for terrain values / versions / entity mapping.
-///
-/// ECS + Avian colliders are the spatial truth for region queries; this resource
-/// holds payloads that [`SpatialIndex::get`] must return by reference.
+/// Side table for all Durham terrain generation layers.
 #[derive(Resource, Default)]
 pub struct TerrainEntryStore {
 	next_version: u64,
-	pub(crate) entries: HashMap<Id, StoredEntry>,
+	pub(crate) terrain: HashMap<Id, StoredEntry<Terrain>>,
+	pub(crate) base_noise: HashMap<Id, StoredEntry<BaseTerrainNoise>>,
+	pub(crate) grading: HashMap<Id, StoredEntry<GradingGraph>>,
+	pub(crate) stamps: HashMap<Id, StoredEntry<RegionStamps>>,
 	entity_to_id: HashMap<Entity, Id>,
 }
 
@@ -41,29 +44,41 @@ impl TerrainEntryStore {
 	}
 
 	pub fn len(&self) -> usize {
-		self.entries.len()
+		self.terrain.len()
 	}
 
 	pub fn is_empty(&self) -> bool {
-		self.entries.is_empty()
+		self.terrain.is_empty()
+			&& self.base_noise.is_empty()
+			&& self.grading.is_empty()
+			&& self.stamps.is_empty()
+	}
+
+	pub fn base_noise(&self) -> Option<&BaseTerrainNoise> {
+		self.base_noise.get(&Id::Universal).map(|e| &e.value)
 	}
 }
 
-/// System-local wrapper: Avian [`SpatialQuery`] + commands + entry store.
-///
-/// Construct inside a Bevy system and use as `S` for [`lod::gen::GeneratingSpatialIndex`].
+/// System-local wrapper used as `S` for [`lod::gen::GeneratingSpatialIndex`].
 #[derive(SystemParam)]
 pub struct AvianTerrainIndex<'w, 's> {
 	commands: Commands<'w, 's>,
 	spatial: SpatialQuery<'w, 's>,
 	store: ResMut<'w, TerrainEntryStore>,
 	layout: ResMut<'w, TerrainCellLayout>,
+	macro_layout: ResMut<'w, MacroCellLayout>,
 	presentation: Res<'w, TerrainPresentationAssets>,
 }
 
 impl<'w, 's> HasTerrainCellLayout for AvianTerrainIndex<'w, 's> {
 	fn cell_layout(&self) -> &TerrainCellLayout {
 		&self.layout
+	}
+}
+
+impl<'w, 's> HasMacroCellLayout for AvianTerrainIndex<'w, 's> {
+	fn macro_cell_layout(&self) -> &MacroCellLayout {
+		&self.macro_layout
 	}
 }
 
@@ -82,8 +97,6 @@ impl<'w, 's> AvianTerrainIndex<'w, 's> {
 		let min = Vec3::from(bounds.min);
 		let max = Vec3::from(bounds.max);
 		let center = (min + max) * 0.5;
-		// Index entities are bookkeeping only — solid trimesh colliders live on
-		// presented mesh scenes. Tall sensor cuboids would fight ground checks.
 		self.commands
 			.spawn((
 				Name::new("TerrainCell"),
@@ -95,13 +108,21 @@ impl<'w, 's> AvianTerrainIndex<'w, 's> {
 			.id()
 	}
 
-	/// Despawn all tracked cell entities and clear the entry store.
+	/// Despawn terrain bookkeeping entities and clear all generation layers.
 	pub fn clear(&mut self) {
-		let entities: Vec<Entity> = self.store.entries.values().map(|e| e.entity).collect();
+		let entities: Vec<Entity> = self
+			.store
+			.terrain
+			.values()
+			.filter_map(|e| e.entity)
+			.collect();
 		for entity in entities {
 			self.commands.entity(entity).despawn();
 		}
-		self.store.entries.clear();
+		self.store.terrain.clear();
+		self.store.base_noise.clear();
+		self.store.grading.clear();
+		self.store.stamps.clear();
 		self.store.entity_to_id.clear();
 	}
 
@@ -112,7 +133,64 @@ impl<'w, 's> AvianTerrainIndex<'w, 's> {
 	pub fn layout(&self) -> &TerrainCellLayout {
 		&self.layout
 	}
+
+	pub fn base_noise(&self) -> Option<&BaseTerrainNoise> {
+		self.store.base_noise()
+	}
 }
+
+macro_rules! impl_map_spatial_index {
+	($ty:ty, $field:ident) => {
+		impl<'w, 's> SpatialIndex<$ty> for AvianTerrainIndex<'w, 's> {
+			fn tracked_ids_for(&self, region: Aabb3d) -> Vec<TrackedId> {
+				self.store
+					.$field
+					.iter()
+					.filter(|(_, entry)| region.intersects(&entry.bounds))
+					.map(|(id, _)| TrackedId(*id))
+					.collect()
+			}
+
+			fn storage_status(&self, id: Id) -> StorageStatus {
+				if self.store.$field.contains_key(&id) {
+					StorageStatus::TrackedWithin
+				} else {
+					StorageStatus::NotTracked
+				}
+			}
+
+			fn get(&self, id: Id) -> Option<&$ty> {
+				self.store.$field.get(&id).map(|e| &e.value)
+			}
+
+			fn get_bounds(&self, id: Id) -> Option<Aabb3d> {
+				self.store.$field.get(&id).map(|e| e.bounds)
+			}
+
+			fn version(&self, id: Id) -> Option<Version> {
+				self.store.$field.get(&id).map(|e| e.version)
+			}
+
+			fn insert(&mut self, id: Id, value: $ty, bounds: Aabb3d, _lod_ref: &LodRef) {
+				if let Some(existing) = self.store.$field.remove(&id) {
+					if let Some(entity) = existing.entity {
+						self.store.entity_to_id.remove(&entity);
+						self.commands.entity(entity).despawn();
+					}
+				}
+				let version = self.store.next_version();
+				self.store.$field.insert(
+					id,
+					StoredEntry { value, bounds, version, entity: None },
+				);
+			}
+		}
+	};
+}
+
+impl_map_spatial_index!(BaseTerrainNoise, base_noise);
+impl_map_spatial_index!(GradingGraph, grading);
+impl_map_spatial_index!(RegionStamps, stamps);
 
 impl<'w, 's> SpatialIndex<Terrain> for AvianTerrainIndex<'w, 's> {
 	fn tracked_ids_for(&self, region: Aabb3d) -> Vec<TrackedId> {
@@ -126,9 +204,7 @@ impl<'w, 's> SpatialIndex<Terrain> for AvianTerrainIndex<'w, 's> {
 			})
 			.collect();
 
-		// Same-frame inserts are not yet in Avian's BVH; include store hits by bounds.
-		use bevy::math::bounding::IntersectsVolume;
-		for (id, entry) in &self.store.entries {
+		for (id, entry) in &self.store.terrain {
 			if region.intersects(&entry.bounds) {
 				let tracked = TrackedId(*id);
 				if !ids.contains(&tracked) {
@@ -141,7 +217,7 @@ impl<'w, 's> SpatialIndex<Terrain> for AvianTerrainIndex<'w, 's> {
 	}
 
 	fn storage_status(&self, id: Id) -> StorageStatus {
-		if self.store.entries.contains_key(&id) {
+		if self.store.terrain.contains_key(&id) {
 			StorageStatus::TrackedWithin
 		} else {
 			StorageStatus::NotTracked
@@ -149,29 +225,31 @@ impl<'w, 's> SpatialIndex<Terrain> for AvianTerrainIndex<'w, 's> {
 	}
 
 	fn get(&self, id: Id) -> Option<&Terrain> {
-		self.store.entries.get(&id).map(|e| &e.value)
+		self.store.terrain.get(&id).map(|e| &e.value)
 	}
 
 	fn get_bounds(&self, id: Id) -> Option<Aabb3d> {
-		self.store.entries.get(&id).map(|e| e.bounds)
+		self.store.terrain.get(&id).map(|e| e.bounds)
 	}
 
 	fn version(&self, id: Id) -> Option<Version> {
-		self.store.entries.get(&id).map(|e| e.version)
+		self.store.terrain.get(&id).map(|e| e.version)
 	}
 
 	fn insert(&mut self, id: Id, t: Terrain, bounds: Aabb3d, _lod_ref: &LodRef) {
-		if let Some(existing) = self.store.entries.remove(&id) {
-			self.store.entity_to_id.remove(&existing.entity);
-			self.commands.entity(existing.entity).despawn();
+		if let Some(existing) = self.store.terrain.remove(&id) {
+			if let Some(entity) = existing.entity {
+				self.store.entity_to_id.remove(&entity);
+				self.commands.entity(entity).despawn();
+			}
 		}
 
 		let entity = self.spawn_cell_entity(id, &t, bounds);
 		let version = self.store.next_version();
 		self.store.entity_to_id.insert(entity, id);
-		self.store.entries.insert(
+		self.store.terrain.insert(
 			id,
-			StoredEntry { value: t, bounds, version, entity },
+			StoredEntry { value: t, bounds, version, entity: Some(entity) },
 		);
 	}
 }

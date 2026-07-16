@@ -390,9 +390,10 @@ pub trait CpuShotSdf: Sdf + Clone {
 		log::debug!("UVs time: {:?}", duration);
 
 		// ---------- Mesh ---------------------------------------------------------
+		// MAIN_WORLD keeps attributes readable for Avian `TrimeshFromMesh` after extract.
 		let mut mesh = Mesh::new(
 			bevy::mesh::PrimitiveTopology::TriangleList,
-			bevy::asset::RenderAssetUsages::RENDER_WORLD,
+			bevy::asset::RenderAssetUsages::MAIN_WORLD | bevy::asset::RenderAssetUsages::RENDER_WORLD,
 		);
 		mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, vertices);
 		mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);

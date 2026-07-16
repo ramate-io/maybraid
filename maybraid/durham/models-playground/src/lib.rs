@@ -18,7 +18,7 @@ use commands::{
 };
 use durham_terrain::shaders::{DurhamTerrainShader, DurhamTerrainShaderPlugin};
 use durham_terrain_models::{
-	create_terrain, AvianTerrainIndex, ComposedTerrain, DurhamTerrainModelsPlugin, Terrain,
+	AvianTerrainIndex, BaseTerrainNoise, ComposedTerrain, DurhamTerrainModelsPlugin, Terrain,
 	TerrainCellLayout, TerrainConfig, TerrainEntryStore, TerrainPresentationAssets,
 	TerrainRegionPresenter, TerrainStoreView,
 };
@@ -30,8 +30,9 @@ use player::{respawn_player_on_layout, Player, PlayerPlugin};
 use render_item::mesh::handle::EnforceCachingPlugin;
 use std::f32::consts::PI;
 
+/// Base noise used for camera / player height before (and alongside) generation.
 #[derive(Resource)]
-pub struct WorldTerrainSdf(pub ComposedTerrain);
+pub struct WorldBaseTerrain(pub BaseTerrainNoise);
 
 #[derive(Resource)]
 struct TerrainPresentationDirty(bool);
@@ -44,7 +45,7 @@ pub struct TerrainModelsPlaygroundPlugin;
 impl Plugin for TerrainModelsPlaygroundPlugin {
 	fn build(&self, app: &mut App) {
 		let config = TerrainConfig::new(42);
-		let sdf = create_terrain(&config);
+		let base = BaseTerrainNoise::from_config(&config);
 
 		app.add_plugins(DurhamTerrainModelsPlugin)
 			.add_plugins(DurhamTerrainShaderPlugin)
@@ -52,8 +53,8 @@ impl Plugin for TerrainModelsPlaygroundPlugin {
 			.add_plugins(GameCommandPlugin::<PlaygroundCommand>::with_config(ui::ui_config()))
 			.add_plugins(PlayerPlugin)
 			.insert_resource(ClearColor(Color::hsla(201.0, 0.69, 0.62, 1.0)))
-			.insert_resource(config)
-			.insert_resource(WorldTerrainSdf(sdf))
+			.insert_resource(config.clone())
+			.insert_resource(WorldBaseTerrain(base))
 			.insert_resource(TerrainPresentationDirty(true))
 			.init_resource::<TerrainPresentPending>()
 			.add_systems(Startup, (setup_camera, setup_lighting, setup_presentation_assets))
@@ -93,11 +94,11 @@ fn setup_lighting(mut commands: Commands) {
 pub(crate) fn setup_presentation_assets(
 	mut commands: Commands,
 	mut materials: ResMut<Assets<DurhamTerrainShader>>,
-	sdf: Res<WorldTerrainSdf>,
+	config: Res<TerrainConfig>,
 ) {
 	let material = materials.add(DurhamTerrainShader::default());
 	commands.insert_resource(TerrainPresentationAssets {
-		sdf: sdf.0.clone(),
+		config: config.clone(),
 		material,
 		res_2: 5,
 	});
@@ -151,7 +152,7 @@ fn apply_mode_commands(
 	mut mode: ResMut<PlaygroundMode>,
 	mut status: ResMut<GameCommandStatusText>,
 	layout: Res<TerrainCellLayout>,
-	sdf: Res<WorldTerrainSdf>,
+	base: Res<WorldBaseTerrain>,
 	free: Query<Entity, With<RequestModeFree>>,
 	character: Query<Entity, With<RequestModeCharacter>>,
 	mut players: Query<(&mut Transform, &mut LinearVelocity), With<Player>>,
@@ -161,7 +162,7 @@ fn apply_mode_commands(
 		*mode = PlaygroundMode::Free;
 		status.0 = "mode free".into();
 		if let Ok((mut cam_t, mut controller)) = cameras.single_mut() {
-			refocus_camera_on_layout(&layout, &sdf.0, &mut cam_t, &mut controller);
+			refocus_camera_on_layout(&layout, &base.0, &mut cam_t, &mut controller);
 		}
 		commands.entity(entity).despawn();
 	}
@@ -170,7 +171,7 @@ fn apply_mode_commands(
 		*mode = PlaygroundMode::Character;
 		status.0 = "mode character — WASD move, mouse look, Space jump".into();
 		if let Ok((mut transform, mut velocity)) = players.single_mut() {
-			respawn_player_on_layout(&layout, &sdf.0, &mut transform, &mut velocity);
+			respawn_player_on_layout(&layout, &base.0, &mut transform, &mut velocity);
 		}
 		commands.entity(entity).despawn();
 	}
@@ -181,7 +182,7 @@ fn generate_cells(
 	mut dirty: ResMut<TerrainPresentationDirty>,
 	mut pending: ResMut<TerrainPresentPending>,
 	mode: Res<PlaygroundMode>,
-	world_sdf: Res<WorldTerrainSdf>,
+	mut world_base: ResMut<WorldBaseTerrain>,
 	mut cameras: Query<(&mut Transform, &mut CameraController), (With<Camera3d>, Without<Player>)>,
 	mut players: Query<(&mut Transform, &mut LinearVelocity), With<Player>>,
 ) {
@@ -191,7 +192,6 @@ fn generate_cells(
 
 	index.clear();
 
-	// Clone layout up front: `AvianTerrainIndex` already owns `ResMut<TerrainCellLayout>`.
 	let layout = index.layout().clone();
 	let region = layout.request_region();
 	let identity = Transform::IDENTITY;
@@ -206,13 +206,17 @@ fn generate_cells(
 		GeneratingSpatialIndex::<Terrain>::get_or_generate_region(&mut index, region, &lod_ref)
 			.len();
 
+	if let Some(base) = index.base_noise() {
+		world_base.0 = base.clone();
+	}
+
 	if let Ok((mut transform, mut velocity)) = players.single_mut() {
-		respawn_player_on_layout(&layout, &world_sdf.0, &mut transform, &mut velocity);
+		respawn_player_on_layout(&layout, &world_base.0, &mut transform, &mut velocity);
 	}
 
 	if *mode == PlaygroundMode::Free {
 		if let Ok((mut transform, mut controller)) = cameras.single_mut() {
-			refocus_camera_on_layout(&layout, &world_sdf.0, &mut transform, &mut controller);
+			refocus_camera_on_layout(&layout, &world_base.0, &mut transform, &mut controller);
 		}
 	}
 

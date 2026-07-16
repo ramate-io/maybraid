@@ -30,3 +30,7 @@ Sometimes, particularly during early development of a model, the game object may
 
 > [!IMPORTANT]
 > Please update this section if increasing or different layers are consistently implemented at the `-models` level.
+
+## Rust Style
+
+Follow the top-level [Rust Style](../CONTRIBUTING.md#rust-style) guidance: prefer methods on structs/enums over free-floating helpers, and keep **"cell"** naming for LOD cellular generation—not for generic bounded rectangles in shared procedural code (`procedural-common`, etc.).

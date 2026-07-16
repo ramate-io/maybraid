@@ -47,6 +47,7 @@ fn child_id(parent: Id, depth: u8) -> Id {
 			child[1] = depth;
 			Id::Bytes(crate::gen::Bytes(child))
 		}
+		Id::Universal => Id::Universal,
 	}
 }
 
@@ -261,6 +262,7 @@ where
 		let bounds = match id {
 			Id::Bytes(bytes) => cell_from_bytes(bytes),
 			Id::OriginCell(crate::gen::OriginCell(crate::gen::Cell(bounds))) => bounds,
+			Id::Universal => return None,
 		};
 		let parent = Id::from_cell(bounds);
 		if SpatialIndex::<Vegetation>::get(spatial_index, parent).is_none() {
@@ -286,6 +288,7 @@ where
 		let bounds = match id {
 			Id::Bytes(bytes) => cell_from_bytes(bytes),
 			Id::OriginCell(crate::gen::OriginCell(crate::gen::Cell(bounds))) => bounds,
+			Id::Universal => return None,
 		};
 		let parent = tree_id(Id::from_cell(bounds));
 		if SpatialIndex::<Tree>::get(spatial_index, parent).is_none() {
@@ -311,6 +314,7 @@ where
 		let bounds = match id {
 			Id::Bytes(bytes) => cell_from_bytes(bytes),
 			Id::OriginCell(crate::gen::OriginCell(crate::gen::Cell(bounds))) => bounds,
+			Id::Universal => return None,
 		};
 		let parent = leaf_id(tree_id(Id::from_cell(bounds)));
 		if SpatialIndex::<Leaf>::get(spatial_index, parent).is_none() {
