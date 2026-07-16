@@ -3938,6 +3938,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4a5f13b858c8d314ee3e8f639011f7ccefe71f97f96e50151fb991f267928e2c"
 
 [[package]]
+name = "jersey-terrain-stamps"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "bevy_math",
+ "procedural-common",
+]
+
+[[package]]
 name = "jni"
 version = "0.21.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"

@@ -9,6 +9,7 @@ members = [
   "maybraid/durham/shaders",
   "maybraid/durham/models",
   "maybraid/durham/models-playground",
+  "maybraid/durham/jersey",
 
   "maybraid/lod/lib",
   "maybraid/lod/cascade",
@@ -175,6 +176,7 @@ durham-terrain = { path = "maybraid/durham/lib" }
 durham-terrain-shaders = { path = "maybraid/durham/shaders" }
 durham-terrain-models = { path = "maybraid/durham/models" }
 durham-terrain-models-playground = { path = "maybraid/durham/models-playground" }
+jersey-terrain-stamps = { path = "maybraid/durham/jersey" }
 
 avian3d = "0.7"
 
