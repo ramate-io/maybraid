@@ -1,5 +1,8 @@
 //! [`RenderItem`] that meshes terrain cells via SDF sampling.
 
+use crate::terrain::cell::{
+	expand_aabb_xz_y, TERRAIN_MESH_PAD_VOXELS, TERRAIN_MESH_PAD_Y_SLOPE,
+};
 use crate::terrain::sdf::ComposedTerrain;
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
@@ -66,9 +69,20 @@ impl<M: Material> RenderItem for TerrainRenderItem<M> {
 }
 
 /// Build a cascade chunk covering a terrain cell AABB for SDF meshing.
+///
+/// Pads XZ by [`TERRAIN_MESH_PAD_VOXELS`] sample pitches and Y by that times
+/// [`TERRAIN_MESH_PAD_Y_SLOPE`] so steep ridges still overlap across cell faces.
 pub fn cascade_chunk_for_cell(bounds: Aabb3d, res_2: u8) -> CascadeChunk {
-	let min = Vec3::from(bounds.min);
-	let max = Vec3::from(bounds.max);
+	let min0 = Vec3::from(bounds.min);
+	let max0 = Vec3::from(bounds.max);
+	let base = max0 - min0;
+	let res = 2_f32.powi(res_2 as i32).max(1.0);
+	let xz_pitch = base.x.min(base.z) / res;
+	let pad_xz = xz_pitch * TERRAIN_MESH_PAD_VOXELS;
+	let pad_y = pad_xz * TERRAIN_MESH_PAD_Y_SLOPE;
+	let padded = expand_aabb_xz_y(bounds, pad_xz, pad_y);
+	let min = Vec3::from(padded.min);
+	let max = Vec3::from(padded.max);
 	let extent = max - min;
 	CascadeChunk {
 		world: 0,

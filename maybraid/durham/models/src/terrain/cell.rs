@@ -30,6 +30,19 @@ pub const MACRO_CELL_SIZE: f32 = TERRAIN_CELL_SIZE * 4.0;
 /// a neighboring macro cell (cellular generation stays tile-local).
 pub const MACRO_CELL_MODULATION_APRON: f32 = 16.0;
 
+/// Extra macro tiles (Moore) pulled around a Terrain query for stamps/grading.
+pub const MACRO_CELL_QUERY_HALO: i32 = 1;
+
+/// Mesh overflow past each Terrain cell face, in voxels at the cell's `res_2`.
+///
+/// Sharp ridges need more than one shared sample: steep isosurfaces can open a
+/// crack that a single-voxel skirt does not cover. Three voxels is a starting
+/// apron; neighbors share that strip in XZ (and a slope-scaled band in Y).
+pub const TERRAIN_MESH_PAD_VOXELS: f32 = 3.0;
+
+/// Extra Y overflow as a multiple of the XZ pad (covers steep ridge crests).
+pub const TERRAIN_MESH_PAD_Y_SLOPE: f32 = 4.0;
+
 /// Default cell count along +X / +Z (`2 * grid_radius + 1`).
 pub const TERRAIN_CELL_EXTENTS_XZ: u32 = (2 * NATURESCAPES_GRID_RADIUS_XZ + 1) as u32;
 
@@ -182,17 +195,41 @@ pub fn cell_coords_for_region(
 /// Cell coordinates for closed AABB overlap with half-open tiles `[i·s,(i+1)·s]`.
 ///
 /// Includes macros that only share a face with `region` (e.g. when the query
-/// min sits exactly on a macro boundary). Does not add an extra halo for
-/// softmask that reaches past a non-touching macro cell — pad that later if needed.
+/// min sits exactly on a macro boundary).
 pub fn cell_coords_for_region_inclusive(
 	region: Aabb3d,
 	cell_size: f32,
 ) -> impl Iterator<Item = (i32, i32)> {
+	cell_coords_for_region_inclusive_halo(region, cell_size, 0)
+}
+
+/// Closed overlap plus a Moore halo of `halo` cells (for softmask / apron reach).
+pub fn cell_coords_for_region_inclusive_halo(
+	region: Aabb3d,
+	cell_size: f32,
+	halo: i32,
+) -> impl Iterator<Item = (i32, i32)> {
 	let size = cell_size.max(1e-3);
+	let halo = halo.max(0);
 	// Closed overlap: max >= i·s  ∧  min <= (i+1)·s
-	let min_x = (region.min.x / size).ceil() as i32 - 1;
-	let max_x = (region.max.x / size).floor() as i32;
-	let min_z = (region.min.z / size).ceil() as i32 - 1;
-	let max_z = (region.max.z / size).floor() as i32;
+	let min_x = (region.min.x / size).ceil() as i32 - 1 - halo;
+	let max_x = (region.max.x / size).floor() as i32 + halo;
+	let min_z = (region.min.z / size).ceil() as i32 - 1 - halo;
+	let max_z = (region.max.z / size).floor() as i32 + halo;
 	(min_x..=max_x).flat_map(move |ix| (min_z..=max_z).map(move |iz| (ix, iz)))
+}
+
+/// Expand an AABB on XZ only (Y unchanged).
+pub fn expand_aabb_xz(region: Aabb3d, pad: f32) -> Aabb3d {
+	expand_aabb_xz_y(region, pad, 0.0)
+}
+
+/// Expand an AABB with independent XZ and Y pads.
+pub fn expand_aabb_xz_y(region: Aabb3d, pad_xz: f32, pad_y: f32) -> Aabb3d {
+	let pad_xz = pad_xz.max(0.0);
+	let pad_y = pad_y.max(0.0);
+	Aabb3d::from_min_max(
+		Vec3::new(region.min.x - pad_xz, region.min.y - pad_y, region.min.z - pad_xz),
+		Vec3::new(region.max.x + pad_xz, region.max.y + pad_y, region.max.z + pad_xz),
+	)
 }

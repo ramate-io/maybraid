@@ -2,8 +2,8 @@
 
 use crate::terrain::base_noise::BaseTerrainNoise;
 use crate::terrain::cell::{
-	cell_bounds, cell_coords_for_region_inclusive, TerrainCellLayout,
-	MACRO_CELL_MODULATION_APRON,
+	cell_bounds, cell_coords_for_region_inclusive_halo, TerrainCellLayout,
+	MACRO_CELL_MODULATION_APRON, MACRO_CELL_QUERY_HALO,
 };
 use crate::terrain::presentation::TerrainPresentationAssets;
 use crate::terrain::region::grading::RegionGradingModulation;
@@ -141,18 +141,21 @@ where
 			return Vec::new();
 		};
 		let macro_layout = layout.macro_layout();
-		// Closed/inclusive: face-adjacent macros whose softmask can still spill in.
-		cell_coords_for_region_inclusive(region, macro_layout.cell_size)
-			.map(|(ix, iz)| {
-				let bounds = cell_bounds(
-					ix,
-					iz,
-					macro_layout.cell_size,
-					macro_layout.vertical_half_extent,
-				);
-				OriginalId(Id::from_cell(bounds))
-			})
-			.collect()
+		cell_coords_for_region_inclusive_halo(
+			region,
+			macro_layout.cell_size,
+			MACRO_CELL_QUERY_HALO,
+		)
+		.map(|(ix, iz)| {
+			let bounds = cell_bounds(
+				ix,
+				iz,
+				macro_layout.cell_size,
+				macro_layout.vertical_half_extent,
+			);
+			OriginalId(Id::from_cell(bounds))
+		})
+		.collect()
 	}
 
 	fn build_with_id(spatial_index: &mut S, id: Id, lod_ref: &LodRef) -> Option<(Self, Aabb3d)> {
