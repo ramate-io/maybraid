@@ -118,14 +118,14 @@ where
 			Id::Universal,
 			lod_ref,
 		)?;
-		let base = <S as SpatialIndex<BaseTerrainNoise>>::get(spatial_index, Id::Universal)?.clone();
+		let base =
+			<S as SpatialIndex<BaseTerrainNoise>>::get(spatial_index, Id::Universal)?.clone();
 
-		let mut jersey_ids =
-			GeneratingSpatialIndex::<JerseyModulations>::get_or_generate_region(
-				spatial_index,
-				bounds,
-				lod_ref,
-			);
+		let mut jersey_ids = GeneratingSpatialIndex::<JerseyModulations>::get_or_generate_region(
+			spatial_index,
+			bounds,
+			lod_ref,
+		);
 		// Region results are sorted by Id; keep that order when composing so
 		// neighboring Terrain cells apply non-commutative jersey ops identically.
 		jersey_ids.sort_by(|(a, _), (b, _)| a.cmp(b));
