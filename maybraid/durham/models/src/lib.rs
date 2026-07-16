@@ -7,10 +7,11 @@ pub mod terrain;
 
 pub use terrain::render::cascade_chunk_for_cell;
 pub use terrain::{
-	create_terrain, register_terrain_plugin, AvianTerrainIndex, ComposedTerrain, Terrain,
-	TerrainCellId, TerrainCellLayout, TerrainConfig, TerrainEntryStore, TerrainPlugin,
-	TerrainPresentationAssets, TerrainPresenterState, TerrainRegionPresenter, TerrainRenderItem,
-	TerrainSdf, TerrainStoreView, TerrainTrimeshCollider, TERRAIN_CELL_SIZE,
+	create_terrain, register_terrain_plugin, AvianTerrainIndex, BaseTerrainNoise, ComposedTerrain,
+	GradingGraph, MacroCellLayout, RegionStamps, Terrain, TerrainCellId, TerrainCellLayout,
+	TerrainConfig, TerrainEntryStore, TerrainPlugin, TerrainPresentationAssets,
+	TerrainPresenterState, TerrainRegionPresenter, TerrainRenderItem, TerrainSdf, TerrainStoreView,
+	TerrainTrimeshCollider, MACRO_CELL_SIZE, TERRAIN_CELL_SIZE,
 };
 
 use bevy::prelude::*;

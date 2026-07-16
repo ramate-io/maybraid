@@ -3,6 +3,8 @@
 use bevy::math::bounding::Aabb3d;
 use bevy::math::{IVec2, UVec2, Vec3};
 use bevy::prelude::*;
+use lod::gen::{GenerationScheme, Id, OriginalId};
+use lod::lod_ref::LodRef;
 
 /// Naturescapes cascade `min_size`.
 pub const NATURESCAPES_MIN_SIZE: f32 = 20.0;
@@ -19,6 +21,9 @@ pub const NATURESCAPES_GRID_RADIUS_XZ: i32 = 12;
 pub const TERRAIN_CELL_SIZE: f32 =
 	NATURESCAPES_MIN_SIZE * (1_u32 << NATURESCAPES_GRID_MULTIPLE_2) as f32;
 
+/// Macro-cell edge length for grading graphs and region stamps (`4 ×` terrain cell).
+pub const MACRO_CELL_SIZE: f32 = TERRAIN_CELL_SIZE * 4.0;
+
 /// Default cell count along +X / +Z (`2 * grid_radius + 1`).
 pub const TERRAIN_CELL_EXTENTS_XZ: u32 = (2 * NATURESCAPES_GRID_RADIUS_XZ + 1) as u32;
 
@@ -30,7 +35,14 @@ pub const TERRAIN_CELL_ORIGIN: IVec2 =
 /// (`height_scale=500`, bedrock at `-4 * height_scale`).
 pub const TERRAIN_CELL_VERTICAL_HALF_EXTENT: f32 = 2000.0;
 
+/// Large AABB for universal (`Id::Universal`) generation deps.
+pub fn universal_bounds() -> Aabb3d {
+	Aabb3d::from_min_max(Vec3::splat(-1_000_000.0), Vec3::splat(1_000_000.0))
+}
+
 /// Layout for tiling terrain origin cells in the XZ plane.
+///
+/// Materialized once under [`Id::Universal`] via [`GenerationScheme`].
 #[derive(Resource, Debug, Clone, PartialEq)]
 pub struct TerrainCellLayout {
 	/// Edge length of each origin cell in world units.
@@ -78,11 +90,62 @@ impl TerrainCellLayout {
 		let max = Vec3::from(region.max);
 		Vec3::new((min.x + max.x) * 0.5, 0.0, (min.z + max.z) * 0.5)
 	}
+
+	/// Macro-cell edge length, preserving the default `MACRO / TERRAIN` ratio.
+	pub fn macro_cell_size(&self) -> f32 {
+		self.cell_size * (MACRO_CELL_SIZE / TERRAIN_CELL_SIZE)
+	}
+
+	/// Macro tiling params derived from this layout.
+	pub fn macro_layout(&self) -> MacroCellLayout {
+		MacroCellLayout {
+			cell_size: self.macro_cell_size(),
+			vertical_half_extent: self.vertical_half_extent,
+		}
+	}
 }
 
-/// Types that expose the active terrain cell layout for generation.
-pub trait HasTerrainCellLayout {
-	fn cell_layout(&self) -> &TerrainCellLayout;
+/// Bootstrap source used only when first materializing [`TerrainCellLayout`] at
+/// [`Id::Universal`]. Consumers should depend on
+/// [`lod::gen::GeneratingSpatialIndex`]`<TerrainCellLayout>` instead.
+pub trait BootstrapTerrainCellLayout {
+	fn bootstrap_terrain_cell_layout(&self) -> TerrainCellLayout;
+}
+
+impl<S> GenerationScheme<S> for TerrainCellLayout
+where
+	S: BootstrapTerrainCellLayout,
+{
+	fn original_ids_for(_spatial_index: &mut S, _region: Aabb3d) -> Vec<OriginalId> {
+		vec![OriginalId::universal()]
+	}
+
+	fn build_with_id(spatial_index: &mut S, id: Id, _lod_ref: &LodRef) -> Option<(Self, Aabb3d)> {
+		if id != Id::Universal {
+			return None;
+		}
+		Some((spatial_index.bootstrap_terrain_cell_layout(), universal_bounds()))
+	}
+
+	fn descendants_with_lod(_id: Id, _spatial_index: &mut S, _lod_ref: &LodRef) {}
+}
+
+/// Layout for macro cells (grading graphs, region stamps).
+///
+/// Derived from [`TerrainCellLayout::macro_layout`]; not a separate generation type.
+#[derive(Debug, Clone, PartialEq)]
+pub struct MacroCellLayout {
+	pub cell_size: f32,
+	pub vertical_half_extent: f32,
+}
+
+impl Default for MacroCellLayout {
+	fn default() -> Self {
+		Self {
+			cell_size: MACRO_CELL_SIZE,
+			vertical_half_extent: TERRAIN_CELL_VERTICAL_HALF_EXTENT,
+		}
+	}
 }
 
 /// Build an origin-cell AABB from integer cell coordinates on the XZ plane.

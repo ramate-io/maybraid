@@ -147,6 +147,12 @@ Common external knowledge bases include:
 > gh project item-add 17 --owner ramate-io --url https://github.com/ramate-io/maybraid/issues/<NEW#>
 > ```
 
+## Rust Style
+
+Prefer **methods on types** over free-floating functions. If logic is about constructing, querying, or transforming a value, put it on the relevant struct/enum (`Foo::build…`, `Foo::from_…`, `foo.sample…`) rather than a module-level helper that takes that type as its first argument. Free functions are fine for true utilities with no natural owner (e.g. tiny pure math), trait impls, and macros—but default to attaching behavior to a type so call sites stay discoverable and naming stays coherent.
+
+Reserve generation **"cell"** terminology for LOD / cellular generation (`OriginCell`, `GenerationScheme`, cell layouts). Bounded rectangles used by shared procedural walks should use names like `Bounds2`, not `*Cell`.
+
 ## Rust Tests
 
 Do **not** use [`.unwrap()`](https://doc.rust-lang.org/std/option/enum.Option.html#method.unwrap), [`.expect(...)`](https://doc.rust-lang.org/std/option/enum.Option.html#method.expect), or [`panic!(...)`](https://doc.rust-lang.org/std/macro.panic.html) in test bodies—those snippets are often copied into production code and keep failing habits.

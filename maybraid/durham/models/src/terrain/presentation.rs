@@ -3,30 +3,55 @@
 //! Generation and presentation stay separate: present reads the entry store and
 //! spawns each cell's [`lod::gen::LodScene`] via [`Commands::spawn_scene`].
 
-use crate::terrain::cell::TerrainCellLayout;
+use crate::terrain::cell::{universal_bounds, TerrainCellLayout};
+use crate::terrain::compose::TerrainConfig;
 use crate::terrain::index::TerrainEntryStore;
-use crate::terrain::sdf::ComposedTerrain;
 use crate::terrain::Terrain;
 use bevy::ecs::system::SystemParam;
 use bevy::math::bounding::{Aabb3d, IntersectsVolume};
 use bevy::prelude::*;
 use bevy::scene::Scene;
 use durham_terrain::shaders::DurhamTerrainShader;
-use lod::gen::{Id, RegionPresenter, SpatialIndex, StorageStatus, TrackedId, Version};
+use lod::gen::{GenerationScheme, Id, OriginalId, RegionPresenter, SpatialIndex, StorageStatus, TrackedId, Version};
 use lod::lod_ref::LodRef;
 use std::collections::{HashMap, HashSet};
 
-/// Shared SDF / material / mesh resolution used when building terrain instances.
+/// Config / material / mesh resolution used when building terrain instances.
+///
+/// Materialized once under [`Id::Universal`] via [`GenerationScheme`].
 #[derive(Resource, Clone)]
 pub struct TerrainPresentationAssets {
-	pub sdf: ComposedTerrain,
+	pub config: TerrainConfig,
 	pub material: Handle<DurhamTerrainShader>,
 	pub res_2: u8,
 }
 
-/// Types that can supply [`TerrainPresentationAssets`] during generation.
-pub trait HasTerrainPresentationAssets {
-	fn presentation_assets(&self) -> &TerrainPresentationAssets;
+/// Bootstrap source used only when first materializing [`TerrainPresentationAssets`]
+/// at [`Id::Universal`]. Consumers should depend on
+/// [`lod::gen::GeneratingSpatialIndex`]`<TerrainPresentationAssets>` instead.
+pub trait BootstrapTerrainPresentationAssets {
+	fn bootstrap_terrain_presentation_assets(&self) -> TerrainPresentationAssets;
+}
+
+impl<S> GenerationScheme<S> for TerrainPresentationAssets
+where
+	S: BootstrapTerrainPresentationAssets,
+{
+	fn original_ids_for(_spatial_index: &mut S, _region: Aabb3d) -> Vec<OriginalId> {
+		vec![OriginalId::universal()]
+	}
+
+	fn build_with_id(spatial_index: &mut S, id: Id, _lod_ref: &LodRef) -> Option<(Self, Aabb3d)> {
+		if id != Id::Universal {
+			return None;
+		}
+		Some((
+			spatial_index.bootstrap_terrain_presentation_assets(),
+			universal_bounds(),
+		))
+	}
+
+	fn descendants_with_lod(_id: Id, _spatial_index: &mut S, _lod_ref: &LodRef) {}
 }
 
 /// Runtime presentation bookkeeping: last presented version and root entity per id.
@@ -54,7 +79,7 @@ impl TerrainPresenterState {
 	}
 }
 
-/// Read-only spatial-index view over the entry store for presentation.
+/// Read-only spatial-index view over the terrain entry map for presentation.
 ///
 /// Insert is unsupported; generate through [`crate::terrain::AvianTerrainIndex`] first.
 pub struct TerrainStoreView<'a> {
@@ -71,7 +96,7 @@ impl<'a> TerrainStoreView<'a> {
 impl SpatialIndex<Terrain> for TerrainStoreView<'_> {
 	fn tracked_ids_for(&self, region: Aabb3d) -> Vec<TrackedId> {
 		self.store
-			.entries
+			.terrain
 			.iter()
 			.filter(|(_, entry)| region.intersects(&entry.bounds))
 			.map(|(id, _)| TrackedId(*id))
@@ -79,7 +104,7 @@ impl SpatialIndex<Terrain> for TerrainStoreView<'_> {
 	}
 
 	fn storage_status(&self, id: Id) -> StorageStatus {
-		if self.store.entries.contains_key(&id) {
+		if self.store.terrain.contains_key(&id) {
 			StorageStatus::TrackedWithin
 		} else {
 			StorageStatus::NotTracked
@@ -87,15 +112,15 @@ impl SpatialIndex<Terrain> for TerrainStoreView<'_> {
 	}
 
 	fn get(&self, id: Id) -> Option<&Terrain> {
-		self.store.entries.get(&id).map(|e| &e.value)
+		self.store.terrain.get(&id).map(|e| &e.value)
 	}
 
 	fn get_bounds(&self, id: Id) -> Option<Aabb3d> {
-		self.store.entries.get(&id).map(|e| e.bounds)
+		self.store.terrain.get(&id).map(|e| e.bounds)
 	}
 
 	fn version(&self, id: Id) -> Option<Version> {
-		self.store.entries.get(&id).map(|e| e.version)
+		self.store.terrain.get(&id).map(|e| e.version)
 	}
 
 	fn insert(&mut self, _id: Id, _t: Terrain, _bounds: Aabb3d, _lod_ref: &LodRef) {
