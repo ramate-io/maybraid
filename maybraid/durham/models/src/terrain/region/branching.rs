@@ -19,7 +19,7 @@ impl BranchingPlan {
 	) -> Self {
 		let noise = NoiseConfig::new(NoiseParams {
 			seed: seed as i32,
-			frequency: 1.0,
+			frequency: 0.2,
 			amplitude: 1.0,
 			octaves: 1,
 			noise_type: NoiseType::Perlin,
@@ -31,11 +31,7 @@ impl BranchingPlan {
 		let mut total_regions = Vec::new();
 		let mut last_regions = self.regions.clone();
 
-		let fallback_noise = RegionNoise {
-			noise: self.noise.clone(),
-			amplitude: 1.0,
-			frequency: 0.2,
-		};
+		let fallback_noise = RegionNoise::new(self.noise.clone());
 
 		for i in 0..self.depth {
 			let mut new_regions = Vec::new();

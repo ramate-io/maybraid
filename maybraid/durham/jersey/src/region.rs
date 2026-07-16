@@ -25,7 +25,10 @@ pub enum Region2D {
 
 /// Optional noise for perturbing region boundaries (wobbly footprints).
 ///
-/// Frequency and amplitude live on [`NoiseParams`] inside [`NoiseConfig`];
+/// Holds a ready [`NoiseConfig`] because this type is internal to stamp
+/// evaluation (not an authoring / CLI surface). Prefer constructing from
+/// [`NoiseParams`] ([`Self::from_params`], [`Self::from_seed`]) when you need
+/// the flexible param bundle; frequency and amplitude live there, and
 /// [`Self::sample_boundary`] is a thin alias of [`NoiseConfig::sample_2d`].
 #[derive(Clone)]
 pub struct RegionNoise {
