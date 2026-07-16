@@ -24,47 +24,43 @@ pub enum Region2D {
 }
 
 /// Optional noise for perturbing region boundaries (wobbly footprints).
+///
+/// Frequency and amplitude live on [`NoiseParams`] inside [`NoiseConfig`];
+/// [`Self::sample_boundary`] is a thin alias of [`NoiseConfig::sample_2d`].
 #[derive(Clone)]
 pub struct RegionNoise {
 	pub noise: NoiseConfig,
-	pub frequency: f32,
-	pub amplitude: f32,
 }
 
 impl std::fmt::Debug for RegionNoise {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		f.debug_struct("RegionNoise")
 			.field("noise_params", self.noise.params())
-			.field("frequency", &self.frequency)
-			.field("amplitude", &self.amplitude)
 			.finish()
 	}
 }
 
 impl RegionNoise {
+	pub fn new(noise: NoiseConfig) -> Self {
+		Self { noise }
+	}
+
+	pub fn from_params(params: NoiseParams) -> Self {
+		Self::new(NoiseConfig::new(params))
+	}
+
 	pub fn from_seed(seed: u32, frequency: f32, amplitude: f32) -> Self {
-		Self {
-			noise: NoiseConfig::new(NoiseParams {
-				seed: seed as i32,
-				frequency: 1.0,
-				amplitude: 1.0,
-				octaves: 1,
-				noise_type: NoiseType::Perlin,
-			}),
+		Self::from_params(NoiseParams {
+			seed: seed as i32,
 			frequency,
 			amplitude,
-		}
+			octaves: 1,
+			noise_type: NoiseType::Perlin,
+		})
 	}
 
 	pub fn sample_boundary(&self, p: Vec2) -> f32 {
-		let config = NoiseConfig::new(NoiseParams {
-			seed: self.noise.params().seed,
-			frequency: self.frequency,
-			amplitude: 1.0,
-			octaves: 1,
-			noise_type: NoiseType::Perlin,
-		});
-		config.sample_2d(p) * self.amplitude
+		self.noise.sample_2d(p)
 	}
 }
 
