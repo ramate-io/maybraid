@@ -356,12 +356,19 @@ fn character_menu_lowers_to_species_select_tree() -> anyhow::Result<()> {
 	let menu = CharacterMenu::default();
 	let nodes = menu.menu_nodes();
 	assert_eq!(nodes.len(), 1);
-	let MenuNode::SectionSelect { label, choices, children } = &nodes[0] else {
+	let MenuNode::SectionSelect { label, groups, children } = &nodes[0] else {
 		anyhow::bail!("expected a species SectionSelect at the root");
 	};
 	assert_eq!(*label, "Species");
-	assert_eq!(choices.len(), 28);
-	assert!(choices[0].selected, "default species should be braidman");
+	assert_eq!(groups.len(), 4);
+	assert_eq!(groups[0].label, Some("Humanoids"));
+	assert_eq!(groups[1].label, Some("Quadrupeds"));
+	assert_eq!(groups[2].label, Some("Birds"));
+	assert_eq!(groups[3].label, Some("Aquatic"));
+	let choice_count: usize = groups.iter().map(|group| group.choices.len()).sum();
+	assert_eq!(choice_count, 28);
+	assert!(groups[0].choices[0].selected, "default species should be braidman");
+	assert_eq!(groups[0].choices[0].label, "braidman");
 	// Braidman: presets, body, head & features, hair, clothing, animation.
 	assert_eq!(children.len(), 6);
 	assert!(children.iter().all(|child| matches!(child, MenuNode::Section { .. })));

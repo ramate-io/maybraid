@@ -70,19 +70,26 @@ impl<E: Copy + Send + Sync + 'static> MenuSink<E> for BevyMenuSink {
 		match node {
 			MenuNode::Fragment(children) => self.render_nodes(children, parent, context),
 			MenuNode::Section { label, children } => self.section(label, children, parent, context),
-			MenuNode::SectionSelect { label, choices, children } => {
+			MenuNode::SectionSelect { label, groups, children } => {
 				block_label(parent, label);
-				parent.spawn((inline_chip_row(), Pickable::IGNORE)).with_children(|row| {
-					for choice in choices {
-						row.spawn((
-							Button,
-							select_tile_node(),
-							BackgroundColor(if choice.selected { ACTIVE } else { INACTIVE }),
-							crate::widgets::MenuButton(choice.event),
-						))
-						.with_children(|button| tile_text(button, choice.label, 9.0, Color::WHITE));
+				for group in groups {
+					if let Some(group_label) = group.label {
+						text(parent, group_label, 10.0, MUTED);
 					}
-				});
+					parent.spawn((inline_chip_row(), Pickable::IGNORE)).with_children(|row| {
+						for choice in &group.choices {
+							row.spawn((
+								Button,
+								select_tile_node(),
+								BackgroundColor(if choice.selected { ACTIVE } else { INACTIVE }),
+								crate::widgets::MenuButton(choice.event),
+							))
+							.with_children(|button| {
+								tile_text(button, choice.label, 9.0, Color::WHITE)
+							});
+						}
+					});
+				}
 				self.render_nodes(children, parent, context);
 			}
 			MenuNode::LabeledCycle { label, value, minus, plus } => {

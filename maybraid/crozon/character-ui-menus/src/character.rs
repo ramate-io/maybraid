@@ -119,7 +119,16 @@ impl ConceptSpecies {
 impl ListValues for ConceptSpecies {
 	fn values() -> &'static [Self] {
 		&[
+			// Humanoids
 			Self::Braidman,
+			Self::Brodler,
+			Self::Mygr,
+			Self::Dui,
+			Self::Wumbus,
+			Self::Lero,
+			Self::Spibmom,
+			Self::Tuberwaber,
+			// Quadrupeds
 			Self::Brenal,
 			Self::Caole,
 			Self::Epiphant,
@@ -128,9 +137,7 @@ impl ListValues for ConceptSpecies {
 			Self::Sonyak,
 			Self::Claber,
 			Self::Croconot,
-			Self::Brodler,
-			Self::Mygr,
-			Self::Dui,
+			// Birds
 			Self::Lidder,
 			Self::Chupri,
 			Self::Brokker,
@@ -140,13 +147,10 @@ impl ListValues for ConceptSpecies {
 			Self::Tapp,
 			Self::Kaller,
 			Self::Kappler,
-			Self::Wumbus,
-			Self::Lero,
-			Self::Spibmom,
+			// Aquatic
 			Self::Grener,
 			Self::Thumplus,
 			Self::Mistler,
-			Self::Tuberwaber,
 		]
 	}
 }
@@ -3104,10 +3108,60 @@ impl CharacterMenu {
 
 impl MenuComponent<MenuEvent> for CharacterMenu {
 	fn menu_node(&self) -> MenuNode<MenuEvent> {
-		MenuNode::section_select(
+		MenuNode::section_select_grouped(
 			"Species",
 			self.species.value,
 			MenuEvent::SetSpecies,
+			&[
+				(
+					"Humanoids",
+					&[
+						ConceptSpecies::Braidman,
+						ConceptSpecies::Brodler,
+						ConceptSpecies::Mygr,
+						ConceptSpecies::Dui,
+						ConceptSpecies::Wumbus,
+						ConceptSpecies::Lero,
+						ConceptSpecies::Spibmom,
+						ConceptSpecies::Tuberwaber,
+					],
+				),
+				(
+					"Quadrupeds",
+					&[
+						ConceptSpecies::Brenal,
+						ConceptSpecies::Caole,
+						ConceptSpecies::Epiphant,
+						ConceptSpecies::Hars,
+						ConceptSpecies::Yilter,
+						ConceptSpecies::Sonyak,
+						ConceptSpecies::Claber,
+						ConceptSpecies::Croconot,
+					],
+				),
+				(
+					"Birds",
+					&[
+						ConceptSpecies::Lidder,
+						ConceptSpecies::Chupri,
+						ConceptSpecies::Brokker,
+						ConceptSpecies::Tipple,
+						ConceptSpecies::Topple,
+						ConceptSpecies::Kispar,
+						ConceptSpecies::Tapp,
+						ConceptSpecies::Kaller,
+						ConceptSpecies::Kappler,
+					],
+				),
+				(
+					"Aquatic",
+					&[
+						ConceptSpecies::Grener,
+						ConceptSpecies::Thumplus,
+						ConceptSpecies::Mistler,
+					],
+				),
+			],
 			self.species_node(),
 		)
 	}
