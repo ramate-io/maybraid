@@ -8,11 +8,25 @@ use bevy_math::Vec2;
 pub struct StampSemantics {
 	/// Tags such as `bank`, `arroyo`, `spillway_ready`.
 	pub tags: Vec<&'static str>,
+	/// Shared drainage identity for hydrology-shaped stamp chains.
+	pub drainage_id: Option<u32>,
+	/// Shared complex identity for multi-part landforms.
+	pub complex_id: Option<u32>,
 }
 
 impl StampSemantics {
 	pub fn with_tag(mut self, tag: &'static str) -> Self {
 		self.tags.push(tag);
+		self
+	}
+
+	pub fn with_drainage_id(mut self, id: u32) -> Self {
+		self.drainage_id = Some(id);
+		self
+	}
+
+	pub fn with_complex_id(mut self, id: u32) -> Self {
+		self.complex_id = Some(id);
 		self
 	}
 }
@@ -39,5 +53,26 @@ impl StampSet {
 			elevation = m.modify_elevation(elevation, x, z);
 		}
 		elevation
+	}
+
+	/// Append another stamp's modulations/spine; prefer `other`'s ids when set.
+	pub fn extend_with(&mut self, other: StampSet) {
+		self.modulations.extend(other.modulations);
+		if self.spine.is_empty() {
+			self.spine = other.spine;
+		} else {
+			self.spine.extend(other.spine);
+		}
+		for tag in other.semantics.tags {
+			if !self.semantics.tags.contains(&tag) {
+				self.semantics.tags.push(tag);
+			}
+		}
+		if other.semantics.drainage_id.is_some() {
+			self.semantics.drainage_id = other.semantics.drainage_id;
+		}
+		if other.semantics.complex_id.is_some() {
+			self.semantics.complex_id = other.semantics.complex_id;
+		}
 	}
 }

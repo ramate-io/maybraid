@@ -1,10 +1,11 @@
 //! Jersey Valley Basins (unchained) — [RFC-105 §3.8.1](https://github.com/ramate-io/maybraid/tree/main/rfc/rfc-000-000-105-procedural-terrain#381-jersey-valley-basins-unchained).
 
+use crate::config::{FractalAnchors, HysteresisSpine, DownhillPair};
 use crate::modulation::{JerseyModulation, RegionAffineModulation, RegionGradingModulation};
 use crate::region::{CircleRegion, Region2D, RegionNoise};
 use crate::stamp::{StampSemantics, StampSet};
 use bevy_math::Vec2;
-use procedural_common::{Bounds2, HysteresisConfig, HysteresisGraph, SeededHash};
+use procedural_common::{Bounds2, SeededHash};
 
 /// Valley cross-section family.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -113,31 +114,11 @@ impl ValleyBasin {
 		height_at: Option<&dyn Fn(f32, f32) -> f32>,
 	) -> Self {
 		let hash = SeededHash::new(seed);
-		let extent = bounds.extent();
-		let short = extent.min_element().max(1.0);
+		let short = bounds.extent().min_element().max(1.0);
 		let profile = CrossProfile::from_params(&params);
 
-		// Low-frequency unit noise picks axis anchors so related seeds correlate
-		// across neighboring bounds (fractal stamping placement, not pure cell dice).
-		let start = bounds.project(Vec2::new(
-			bounds.min.x + (0.12 + 0.28 * hash.unit(1)) * extent.x,
-			bounds.min.y + (0.18 + 0.30 * hash.unit(2)) * extent.y,
-		));
-		let end = bounds.project(Vec2::new(
-			bounds.min.x + (0.55 + 0.30 * hash.unit(3)) * extent.x,
-			bounds.min.y + (0.50 + 0.32 * hash.unit(4)) * extent.y,
-		));
-
-		let step = (short * 0.08).clamp(8.0, 40.0);
-		let config = HysteresisConfig {
-			max_segments: 28,
-			step_len: step,
-			snap_radius: step * 0.75,
-			connect_radius: step * 1.6,
-			..HysteresisConfig::default()
-		};
-		let graph = HysteresisGraph::degree1(bounds, seed.wrapping_add(17), start, end, &config);
-		let path = graph.primary_polyline();
+		let (start, end) = FractalAnchors::default().sample(bounds, seed, 0);
+		let path = HysteresisSpine::default().build(bounds, seed.wrapping_add(17), start, end);
 		let a = *path.first().unwrap_or(&start);
 		let b = *path.last().unwrap_or(&end);
 
@@ -151,20 +132,14 @@ impl ValleyBasin {
 			Vec2::ZERO
 		};
 
-		let h0 = height_at.map(|f| f(a.x, a.y)).unwrap_or(0.0);
-		let h1 = height_at.map(|f| f(b.x, b.y)).unwrap_or(0.0);
-		let (start_pt, start_h, end_pt, end_h) = if h0 >= h1 {
-			(a, h0, b, h1)
-		} else {
-			(b, h1, a, h0)
-		};
+		let (start_pt, start_h, end_pt, end_h) = DownhillPair::order(a, b, height_at);
 
 		let bank_noise = RegionNoise::from_seed(seed.wrapping_add(41), 0.02, half_width * 0.12);
 		let inner_r = half_width * profile.bank_inner;
 		let outer_r = half_width * profile.bank_outer;
 
 		// Circle softmasks along the spine follow curved hysteresis paths better
-		// than a single axis-aligned rect.
+		// than a single axis-aligned rect. Bank falloff stays landform-specific.
 		let mut modulations = Vec::new();
 		let sample_stride = ((path.len() / 6).max(1)).min(4);
 		for (i, p) in path.iter().enumerate().step_by(sample_stride) {
@@ -226,7 +201,12 @@ impl ValleyBasin {
 
 	/// Convenience: default params, no height oracle.
 	pub fn from_bounds_default(bounds: Bounds2, seed: u32) -> Self {
-		Self::from_bounds(bounds, seed, ValleyBasinParams::default(), None)
+		Self::from_bounds(
+			bounds,
+			seed,
+			ValleyBasinParams::default(),
+			None,
+		)
 	}
 }
 
