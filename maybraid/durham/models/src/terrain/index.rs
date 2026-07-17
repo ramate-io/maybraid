@@ -6,7 +6,6 @@ use crate::terrain::cell::{
 	TerrainCellLayout,
 };
 use crate::terrain::cell_noise::CellTerrainNoise;
-use crate::terrain::jersey_compose::JerseyModulations;
 use crate::terrain::jersey_configs::{BootstrapJerseyLayerConfigs, JerseyLayerConfigs};
 use crate::terrain::jersey_layers::{
 	CanyonLayer, PlateauCapLayer, PocketWaterLayer, RollingGroundLayer, RuggedMassifLayer,
@@ -49,7 +48,6 @@ pub struct TerrainEntryStore {
 	pub(crate) canyon: HashMap<Id, StoredEntry<CanyonLayer>>,
 	pub(crate) pocket_water: HashMap<Id, StoredEntry<PocketWaterLayer>>,
 	pub(crate) rolling_ground: HashMap<Id, StoredEntry<RollingGroundLayer>>,
-	pub(crate) jersey_modulations: HashMap<Id, StoredEntry<JerseyModulations>>,
 	pub(crate) jersey_configs: HashMap<Id, StoredEntry<JerseyLayerConfigs>>,
 	pub(crate) jersey_layout: HashMap<Id, StoredEntry<JerseyStampCellLayout>>,
 	pub(crate) cell_layout: HashMap<Id, StoredEntry<TerrainCellLayout>>,
@@ -77,7 +75,6 @@ impl TerrainEntryStore {
 			&& self.canyon.is_empty()
 			&& self.pocket_water.is_empty()
 			&& self.rolling_ground.is_empty()
-			&& self.jersey_modulations.is_empty()
 			&& self.jersey_configs.is_empty()
 			&& self.jersey_layout.is_empty()
 			&& self.cell_layout.is_empty()
@@ -86,20 +83,6 @@ impl TerrainEntryStore {
 
 	pub fn base_noise(&self) -> Option<&BaseTerrainNoise> {
 		self.base_noise.get(&Id::Universal).map(|e| &e.value)
-	}
-
-	/// Lookup a materialized jersey modulation cell by id (debug / inspection).
-	pub fn jersey_modulation(&self, id: Id) -> Option<&JerseyModulations> {
-		self.jersey_modulations.get(&id).map(|e| &e.value)
-	}
-
-	/// Iterate materialized jersey modulation cells (debug / inspection).
-	pub fn iter_jersey_modulations(
-		&self,
-	) -> impl Iterator<Item = (Id, &JerseyModulations)> + '_ {
-		self.jersey_modulations
-			.iter()
-			.map(|(id, entry)| (*id, &entry.value))
 	}
 }
 
@@ -182,7 +165,6 @@ impl<'w, 's> AvianTerrainIndex<'w, 's> {
 		self.store.canyon.clear();
 		self.store.pocket_water.clear();
 		self.store.rolling_ground.clear();
-		self.store.jersey_modulations.clear();
 		self.store.jersey_configs.clear();
 		self.store.jersey_layout.clear();
 		self.store.cell_layout.clear();
@@ -260,7 +242,6 @@ impl_map_spatial_index!(RuggedMassifLayer, rugged_massif);
 impl_map_spatial_index!(CanyonLayer, canyon);
 impl_map_spatial_index!(PocketWaterLayer, pocket_water);
 impl_map_spatial_index!(RollingGroundLayer, rolling_ground);
-impl_map_spatial_index!(JerseyModulations, jersey_modulations);
 impl_map_spatial_index!(JerseyLayerConfigs, jersey_configs);
 impl_map_spatial_index!(JerseyStampCellLayout, jersey_layout);
 impl_map_spatial_index!(TerrainCellLayout, cell_layout);

@@ -15,7 +15,7 @@ pub mod presentation;
 pub mod render;
 pub mod sdf;
 
-use crate::terrain::cell::original_ids_for_origin_cells;
+use crate::terrain::cell::{original_ids_for_jersey_cells, original_ids_for_origin_cells};
 use crate::terrain::render::cascade_chunk_for_cell;
 use avian3d::prelude::RigidBody;
 use bevy::ecs::template::template;
@@ -57,6 +57,7 @@ pub use sdf::{ComposedTerrain, ElevationModulation, TerrainSdf};
 pub struct Terrain {
 	pub cell: Aabb3d,
 	pub base: BaseTerrainNoise,
+	/// Jersey stamp cells that intersect this terrain cell (family layers flattened).
 	pub jersey: Vec<JerseyModulations>,
 	pub sdf: ComposedTerrain,
 	pub material: Handle<DurhamTerrainShader>,
@@ -98,11 +99,71 @@ impl LodScene for Terrain {
 	}
 }
 
-/// Terrain loads base noise and intersecting jersey modulation cells.
+/// Pull every jersey family at `id` and flatten into one [`JerseyModulations`] bundle.
+fn jersey_modulations_for_cell<S>(
+	spatial_index: &mut S,
+	id: Id,
+	lod_ref: &LodRef,
+) -> Option<JerseyModulations>
+where
+	S: GeneratingSpatialIndex<ValleyBasinLayer>
+		+ GeneratingSpatialIndex<PlateauCapLayer>
+		+ GeneratingSpatialIndex<RuggedMassifLayer>
+		+ GeneratingSpatialIndex<CanyonLayer>
+		+ GeneratingSpatialIndex<PocketWaterLayer>
+		+ GeneratingSpatialIndex<RollingGroundLayer>,
+{
+	let bounds = id.origin_cell_bounds()?;
+	let mut bundle = JerseyModulations {
+		cell: bounds,
+		modulations: Vec::new(),
+		families: Vec::new(),
+	};
+
+	GeneratingSpatialIndex::<ValleyBasinLayer>::get_or_generate(spatial_index, id, lod_ref)?;
+	if let Some(layer) = <S as SpatialIndex<ValleyBasinLayer>>::get(spatial_index, id) {
+		bundle.append_layer("valley", &layer.modulations);
+	}
+
+	GeneratingSpatialIndex::<PlateauCapLayer>::get_or_generate(spatial_index, id, lod_ref)?;
+	if let Some(layer) = <S as SpatialIndex<PlateauCapLayer>>::get(spatial_index, id) {
+		bundle.append_layer("plateau", &layer.modulations);
+	}
+
+	GeneratingSpatialIndex::<RuggedMassifLayer>::get_or_generate(spatial_index, id, lod_ref)?;
+	if let Some(layer) = <S as SpatialIndex<RuggedMassifLayer>>::get(spatial_index, id) {
+		bundle.append_layer("massif", &layer.modulations);
+	}
+
+	GeneratingSpatialIndex::<CanyonLayer>::get_or_generate(spatial_index, id, lod_ref)?;
+	if let Some(layer) = <S as SpatialIndex<CanyonLayer>>::get(spatial_index, id) {
+		bundle.append_layer("canyon", &layer.modulations);
+	}
+
+	GeneratingSpatialIndex::<PocketWaterLayer>::get_or_generate(spatial_index, id, lod_ref)?;
+	if let Some(layer) = <S as SpatialIndex<PocketWaterLayer>>::get(spatial_index, id) {
+		bundle.append_layer("water", &layer.modulations);
+	}
+
+	GeneratingSpatialIndex::<RollingGroundLayer>::get_or_generate(spatial_index, id, lod_ref)?;
+	if let Some(layer) = <S as SpatialIndex<RollingGroundLayer>>::get(spatial_index, id) {
+		bundle.append_layer("rolling", &layer.modulations);
+	}
+
+	Some(bundle)
+}
+
+/// Terrain loads base noise and intersecting jersey family layers directly.
 impl<S> GenerationScheme<S> for Terrain
 where
 	S: GeneratingSpatialIndex<BaseTerrainNoise>
-		+ GeneratingSpatialIndex<JerseyModulations>
+		+ GeneratingSpatialIndex<ValleyBasinLayer>
+		+ GeneratingSpatialIndex<PlateauCapLayer>
+		+ GeneratingSpatialIndex<RuggedMassifLayer>
+		+ GeneratingSpatialIndex<CanyonLayer>
+		+ GeneratingSpatialIndex<PocketWaterLayer>
+		+ GeneratingSpatialIndex<RollingGroundLayer>
+		+ GeneratingSpatialIndex<JerseyStampCellLayout>
 		+ GeneratingSpatialIndex<TerrainCellLayout>
 		+ GeneratingSpatialIndex<TerrainPresentationAssets>,
 {
@@ -121,18 +182,14 @@ where
 		let base =
 			<S as SpatialIndex<BaseTerrainNoise>>::get(spatial_index, Id::Universal)?.clone();
 
-		let mut jersey_ids = GeneratingSpatialIndex::<JerseyModulations>::get_or_generate_region(
-			spatial_index,
-			bounds,
-			lod_ref,
-		);
+		let mut jersey_ids = original_ids_for_jersey_cells(spatial_index, bounds);
 		// Keep Id order when composing so neighboring Terrain cells apply
 		// non-commutative jersey ops identically.
-		jersey_ids.sort_by(|(a, _), (b, _)| a.cmp(b));
+		jersey_ids.sort_by(|a, b| a.0.cmp(&b.0));
 		let jersey: Vec<JerseyModulations> = jersey_ids
-			.iter()
-			.filter_map(|(jid, _)| {
-				<S as SpatialIndex<JerseyModulations>>::get(spatial_index, *jid).cloned()
+			.into_iter()
+			.filter_map(|OriginalId(jid)| {
+				jersey_modulations_for_cell(spatial_index, jid, lod_ref)
 			})
 			.collect();
 

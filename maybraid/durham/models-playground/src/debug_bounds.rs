@@ -4,9 +4,8 @@ use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 use durham_terrain_models::{
 	cascade_chunk_for_cell, JerseyFamilySummary, JerseyModulations, JerseyStampCellLayout, Terrain,
-	TerrainCellLayout, TerrainEntryStore,
+	TerrainCellLayout,
 };
-use lod::gen::Id;
 use std::fmt::{Display, Formatter, Result as FmtResult};
 
 use crate::WorldBaseTerrain;
@@ -122,7 +121,6 @@ pub fn update_cell_location_hud(
 	cameras: Query<&GlobalTransform, With<Camera3d>>,
 	layout: Res<TerrainCellLayout>,
 	jersey_layout: Res<JerseyStampCellLayout>,
-	store: Res<TerrainEntryStore>,
 	terrains: Query<&Terrain>,
 	mut hud_root: Query<&mut Visibility, With<CellLocationHudRoot>>,
 	mut hud: Query<&mut Text, With<CellLocationHudText>>,
@@ -151,10 +149,12 @@ pub fn update_cell_location_hud(
 	let t_size = layout.cell_size.max(1e-3);
 	let t_cell = terrain_cell_aabb(tix, tiz, t_size, layout.vertical_half_extent);
 	let j_cell = jersey_layout.cell_bounds(jix, jiz);
-	let j_id = Id::from_cell(j_cell);
 
 	let terrain = terrains.iter().find(|t| cells_match_xz(&t.cell, &t_cell));
-	let jersey = store.jersey_modulation(j_id);
+	let jersey = terrains
+		.iter()
+		.flat_map(|t| t.jersey.iter())
+		.find(|j| cells_match_xz(&j.cell, &j_cell));
 
 	let report = CellLocationReport {
 		cam: p,
