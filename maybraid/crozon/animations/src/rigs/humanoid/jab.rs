@@ -6,8 +6,9 @@
 //! (local Y) along a world direction from [`Jab::humerus_along`], then apply
 //! [`Jab::punch_roll`] about that length so roll cannot fight aim via swing/flex.
 //!
-//! Punch travel is still mostly forearm flex. The cover arm shares the same aim frame
-//! with a tucked elbow.
+//! Punch travel is a whip: jab-arm [`Jab::humerus_along`] tips further +Z with
+//! extension while the elbow uncoils. The cover arm holds the guard aim frame with a
+//! tucked elbow.
 //!
 //! # Bind tee pose (hand tips)
 //!
