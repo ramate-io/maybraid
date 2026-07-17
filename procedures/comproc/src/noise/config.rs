@@ -75,6 +75,40 @@ impl<const D: usize, N: NoiseFn<f64, D> + Seedable> NoiseConfig<D, N> {
 		self.noise = self.noise.set_seed(seed);
 		self
 	}
+
+	/// Sample at an array position with frequency applied (raw noise domain, typically ~`[-1, 1]`).
+	pub fn position_freqo(&self, position: [f32; D]) -> f64 {
+		let mut coords = [0.0_f64; D];
+		let f = self.frequency as f64;
+		for i in 0..D {
+			coords[i] = position[i] as f64 * f;
+		}
+		self.noise.get(coords)
+	}
+
+	/// Map [`Self::position_freqo`] from ~`[-1, 1]` onto `[0, 1]` and clamp.
+	pub fn position_on_unit(&self, position: [f32; D]) -> f64 {
+		(self.position_freqo(position) * 0.5 + 0.5).clamp(0.0, 1.0)
+	}
+
+	/// Deterministically map a sample at `position` into the float range `[lo, hi]`.
+	pub fn sample_range_f32(&self, lo: f32, hi: f32, position: [f32; D]) -> f32 {
+		if hi <= lo {
+			return lo;
+		}
+		let u = self.position_on_unit(position) as f32;
+		lo + u * (hi - lo)
+	}
+
+	/// Deterministically map a sample at `position` into the half-open integer range `[lo, hi)`.
+	pub fn sample_range_usize(&self, lo: usize, hi: usize, position: [f32; D]) -> usize {
+		if hi <= lo {
+			return lo;
+		}
+		let u = self.position_on_unit(position) as f32;
+		let span = hi - lo;
+		lo + ((u * span as f32).floor() as usize).min(span - 1)
+	}
 }
 
 impl<N: NoiseFn<f64, 2> + Seedable> NoiseConfig<2, N> {
@@ -83,6 +117,12 @@ impl<N: NoiseFn<f64, 2> + Seedable> NoiseConfig<2, N> {
 			position.x as f64 * self.frequency as f64,
 			position.y as f64 * self.frequency as f64,
 		])
+	}
+
+	/// Gets on vec2 only applies frequency to obtain a value on the unit interval.
+	pub fn vec2_on_unit(&self, position: Vec2) -> f64 {
+		let noise = self.vec2_freqo(position);
+		noise * 0.5 + 0.5
 	}
 }
 
