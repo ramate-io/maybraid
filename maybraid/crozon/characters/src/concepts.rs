@@ -15,6 +15,7 @@ pub enum ConceptAnimation {
 	TwoFootedTuckedFlip,
 	Soaring,
 	Flapping,
+	Jab,
 	LateralUndulation,
 	DorsoventralUndulation,
 }
@@ -31,6 +32,7 @@ impl ConceptAnimation {
 		Self::TwoFootedTuckedFlip,
 		Self::Soaring,
 		Self::Flapping,
+		Self::Jab,
 		Self::LateralUndulation,
 		Self::DorsoventralUndulation,
 	];
@@ -47,6 +49,7 @@ impl ConceptAnimation {
 			Self::TwoFootedTuckedFlip => "two-footed-tucked-flip",
 			Self::Soaring => "soaring",
 			Self::Flapping => "flapping",
+			Self::Jab => "jab",
 			Self::LateralUndulation => "lateral-undulation",
 			Self::DorsoventralUndulation => "dorsoventral-undulation",
 		}

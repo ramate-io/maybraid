@@ -2,6 +2,32 @@ use bevy::prelude::*;
 
 use crate::RiggedAxis;
 
+/// Local axis along which humanoid bones typically carry their bind length.
+pub const BONE_LENGTH_AXIS: Vec3 = Vec3::Y;
+
+/// Local bone rotation that aims [`BONE_LENGTH_AXIS`] along `along_parent`, then rolls.
+///
+/// `along_parent` is the desired length direction in the bone's **parent** space.
+/// Aim uses the shortest arc from the rest length direction; `roll` is then applied
+/// about the bone's local length axis so it does not disturb the aim.
+pub fn rotation_along_with_roll(
+	rest: Quat,
+	along_parent: Vec3,
+	roll: f32,
+	length_axis: Vec3,
+) -> Quat {
+	let Some(along) = along_parent.try_normalize() else {
+		return rest * Quat::from_axis_angle(length_axis, roll);
+	};
+	let rest_along = (rest * length_axis).normalize_or_zero();
+	let Some(rest_along) = rest_along.try_normalize() else {
+		return rest * Quat::from_axis_angle(length_axis, roll);
+	};
+	let aim = Quat::from_rotation_arc(rest_along, along);
+	// Aim in parent space, then roll about local length (compensated — does not re-aim).
+	aim * rest * Quat::from_axis_angle(length_axis, roll)
+}
+
 /// Compose a local bone rotation: flex, twist, then swing applied to the rest rotation.
 ///
 /// Axes come directly from the bone's [`RiggedAxis`], so the result is written straight
@@ -86,6 +112,30 @@ mod tests {
 		let rest = Quat::from_rotation_y(0.2);
 		let composed = compose_local_rotation(rest, RiggedAxis::DEFAULT, 0.0, 0.0, 0.0);
 		assert!((composed.dot(rest).abs() - 1.0).abs() < 1e-6);
+	}
+
+	#[test]
+	fn rotation_along_with_roll_aims_length_axis() {
+		let rest = Quat::IDENTITY;
+		let along = Vec3::new(-0.3, -1.0, -0.5).normalize();
+		let rot = rotation_along_with_roll(rest, along, 0.0, BONE_LENGTH_AXIS);
+		let aimed = (rot * BONE_LENGTH_AXIS).normalize();
+		assert!(
+			aimed.dot(along) > 0.999,
+			"expected length along target, got {aimed:?} vs {along:?}"
+		);
+	}
+
+	#[test]
+	fn rotation_along_with_roll_keeps_aim_when_rolling() {
+		let rest = Quat::IDENTITY;
+		let along = Vec3::new(0.2, -1.0, -0.4).normalize();
+		let rot = rotation_along_with_roll(rest, along, FRAC_PI_2, BONE_LENGTH_AXIS);
+		let aimed = (rot * BONE_LENGTH_AXIS).normalize();
+		assert!(
+			aimed.dot(along) > 0.999,
+			"roll must not disturb aim, got {aimed:?} vs {along:?}"
+		);
 	}
 
 	#[test]
