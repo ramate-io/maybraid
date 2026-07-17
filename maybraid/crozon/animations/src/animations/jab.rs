@@ -42,11 +42,12 @@ const EXTEND_ELBOW: f32 = 0.05;
 /// ~90° from tee — reorients the elbow hinge into the sagittal (front/back) plane.
 const PUNCH_ROLL: f32 = FRAC_PI_2;
 /// Down component of the humerus aim direction (world −Y weight).
-const ARM_DROP: f32 = 0.75;
+/// Kept moderate so the default hang sits at sternum height, not hip.
+const ARM_DROP: f32 = 0.42;
 /// Forward component of the humerus aim direction (body +Z, same as [`DEFAULT_JAB_TARGET`]).
-const HUMERUS_FORWARD: f32 = 0.55;
-/// Slight outboard bias so arms don't aim through the torso.
-const HUMERUS_LATERAL: f32 = 0.35;
+const HUMERUS_FORWARD: f32 = 0.9;
+/// Slight outboard bias; small so the punch lines up on the sternum, not the hip flank.
+const HUMERUS_LATERAL: f32 = -0.12;
 /// Tiny shoulder aim/height; not the punch driver.
 const SHOULDER_CARRY: f32 = 0.12;
 
@@ -247,10 +248,8 @@ impl<Rig> Jab<Rig> {
 		// Slight wind-up opposite the punch, then turn into it.
 		let base = TORSO_TURN * (extend - 0.35 * chamber) * self.reach_scale();
 		// Across-body targets (toward the far side) add turn into the jab.
-		let lateral = AIM_YAW_X
-			* Self::lateral_sign(self.side)
-			* self.aim_lateral()
-			* (0.35 + 0.65 * extend);
+		let lateral =
+			AIM_YAW_X * Self::lateral_sign(self.side) * self.aim_lateral() * (0.35 + 0.65 * extend);
 		base + lateral
 	}
 
