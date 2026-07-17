@@ -23,7 +23,14 @@ const HOLD_END: f32 = 0.52;
 /// Tee: humerus roll leaves forearm flex bending **up**.
 /// Punch: ~90° ventral roll so the same flex bends **front ↔ back**. That roll is the
 /// primary constant; drop and elbow are tuned against it. Punch travel is mostly elbow
-/// extension. Trunk/hips add weight; shoulder carry stays tiny for aim only.
+/// extension.
+///
+/// # Approximate aim (not IK)
+///
+/// [`Jab::target`] is relative to body COM. Offsets from [`DEFAULT_JAB_TARGET`] bias:
+/// - **y** → arm drop (+ slight roll / shoulder carry)
+/// - **x** → torso/hip yaw (+ slight roll); across-body increases turn into the jab
+/// - **z** → [`reach_scale`] (trunk lean / turn magnitude)
 ///
 /// Bind tee tips (world-ish): right ≈ `(-1.0, 1.7)`, left ≈ `(1.0, 1.7)`.
 const GUARD_ELBOW: f32 = 1.5;
@@ -43,8 +50,19 @@ const ROOT_LEAN: f32 = 0.05;
 const LEAD_FEMUR: f32 = 0.16;
 const REAR_FEMUR: f32 = -0.1;
 const STANCE_SHIN: f32 = 0.14;
-/// Pelvis contribution toward the jab side (fraction of [`TORSO_TURN`]).
+/// Pelvis contribution toward the jab side (fraction of base torso turn).
 const HIP_TURN: f32 = 0.35;
+
+/// Aim gains: radians (or drop units) per metre of target offset from the default.
+const AIM_DROP_Y: f32 = 0.85;
+const AIM_CARRY_Y: f32 = 0.3;
+const AIM_ROLL_Y: f32 = 0.45;
+const AIM_ROLL_X: f32 = 0.35;
+const AIM_YAW_X: f32 = 0.55;
+/// Keep punch-roll deltas inside the sagittal-ish band (~±17°).
+const AIM_ROLL_DELTA_MAX: f32 = 0.3;
+const ARM_DROP_MIN: f32 = 0.22;
+const ARM_DROP_MAX: f32 = 0.9;
 
 /// Boxing jab: chamber, snap to a relative target, then recover to guard.
 ///
@@ -105,6 +123,23 @@ impl<Rig> Jab<Rig> {
 		(self.target.z / reference).clamp(0.4, 1.5)
 	}
 
+	/// Height offset from [`DEFAULT_JAB_TARGET`] (positive = higher / toward the chin).
+	pub fn aim_height(&self) -> f32 {
+		self.target.y - DEFAULT_JAB_TARGET.y
+	}
+
+	/// Lateral offset from [`DEFAULT_JAB_TARGET`] in body COM space (Bevy +X = right).
+	pub fn aim_lateral(&self) -> f32 {
+		self.target.x - DEFAULT_JAB_TARGET.x
+	}
+
+	fn lateral_sign(side: Side) -> f32 {
+		match side {
+			Side::Left => 1.0,
+			Side::Right => -1.0,
+		}
+	}
+
 	/// Chamber envelope: peaks during the preparatory phase, then clears for the snap.
 	pub fn chamber_amount(&self, progress: f32) -> f32 {
 		let t = Progress(progress).cycle();
@@ -134,22 +169,32 @@ impl<Rig> Jab<Rig> {
 		}
 	}
 
-	/// Punch-frame humerus roll (~90° from tee). Held for the whole clip.
+	/// Punch-frame humerus roll (~90° from tee), plus a clamped aim tilt.
+	///
+	/// Held for the whole clip (aim is pose-level, not progress-blended).
 	pub fn punch_roll(&self, progress: f32) -> f32 {
 		let _ = progress;
-		PUNCH_ROLL
+		let dy = self.aim_height();
+		let dx = self.aim_lateral();
+		let delta = (AIM_ROLL_Y * dy + AIM_ROLL_X * Self::lateral_sign(self.side) * dx)
+			.clamp(-AIM_ROLL_DELTA_MAX, AIM_ROLL_DELTA_MAX);
+		PUNCH_ROLL + delta
 	}
 
-	/// Arm drop from the tee once punch roll is set (eases slightly at full reach).
+	/// Arm drop from the tee once punch roll is set.
+	///
+	/// Higher [`Self::target`].y → less hang; eases slightly at full reach.
 	pub fn arm_drop(&self, progress: f32) -> f32 {
 		let extend = self.extension_amount(progress);
-		ARM_DROP * (1.0 - 0.15 * extend)
+		let aimed = (ARM_DROP - AIM_DROP_Y * self.aim_height()).clamp(ARM_DROP_MIN, ARM_DROP_MAX);
+		aimed * (1.0 - 0.15 * extend)
 	}
 
-	/// Tiny shoulder aim/height — not the punch driver.
+	/// Tiny shoulder aim/height — assists [`Self::aim_height`], not the punch driver.
 	pub fn shoulder_carry(&self, progress: f32) -> f32 {
 		let extend = self.extension_amount(progress);
-		SHOULDER_CARRY * (0.85 + 0.15 * extend)
+		let aimed = (SHOULDER_CARRY + AIM_CARRY_Y * self.aim_height()).clamp(0.0, 0.45);
+		aimed * (0.85 + 0.15 * extend)
 	}
 
 	/// Elbow bend on the jab arm (larger = more flexed). Primary punch travel.
@@ -166,15 +211,21 @@ impl<Rig> Jab<Rig> {
 		self.extension_amount(progress) * ROOT_LEAN * self.reach_scale()
 	}
 
-	/// Trunk turn into the jab side (peaks with extension; rig distributes across spine/hips).
+	/// Trunk turn into the jab side (peaks with extension; + lateral aim bias).
 	pub fn torso_turn(&self, progress: f32) -> f32 {
 		let chamber = self.chamber_amount(progress);
 		let extend = self.extension_amount(progress);
 		// Slight wind-up opposite the punch, then turn into it.
-		TORSO_TURN * (extend - 0.35 * chamber) * self.reach_scale()
+		let base = TORSO_TURN * (extend - 0.35 * chamber) * self.reach_scale();
+		// Across-body targets (toward the far side) add turn into the jab.
+		let lateral = AIM_YAW_X
+			* Self::lateral_sign(self.side)
+			* self.aim_lateral()
+			* (0.35 + 0.65 * extend);
+		base + lateral
 	}
 
-	/// Pelvis yaw contribution (semantic amount; rig maps onto pelvis bones).
+	/// Pelvis yaw contribution (tracks torso turn, including lateral aim).
 	pub fn hip_turn(&self, progress: f32) -> f32 {
 		self.torso_turn(progress) * HIP_TURN
 	}
@@ -233,6 +284,44 @@ mod tests {
 		let jab = Jab::<()>::default();
 		assert!((jab.punch_roll(0.0) - FRAC_PI_2).abs() < 1e-4);
 		assert!((jab.punch_roll(0.47) - jab.punch_roll(0.0)).abs() < 1e-4);
+		Ok(())
+	}
+
+	#[test]
+	fn higher_target_reduces_arm_drop() -> anyhow::Result<()> {
+		let sternum = Jab::<()>::default();
+		let chin = Jab::<()>::default().with_target(Vec3::new(0.0, 0.55, 0.7));
+		assert!(chin.arm_drop(0.0) < sternum.arm_drop(0.0));
+		assert!(chin.shoulder_carry(0.0) > sternum.shoulder_carry(0.0));
+		Ok(())
+	}
+
+	#[test]
+	fn lower_target_increases_arm_drop() -> anyhow::Result<()> {
+		let sternum = Jab::<()>::default();
+		let gut = Jab::<()>::default().with_target(Vec3::new(0.0, 0.15, 0.7));
+		assert!(gut.arm_drop(0.0) > sternum.arm_drop(0.0));
+		Ok(())
+	}
+
+	#[test]
+	fn across_body_target_increases_torso_turn_for_right_jab() -> anyhow::Result<()> {
+		let center = Jab::<()>::default().with_side(Side::Right);
+		let across = Jab::<()>::default()
+			.with_side(Side::Right)
+			.with_target(Vec3::new(-0.25, 0.35, 0.7));
+		let peak = (EXTEND_END + HOLD_END) * 0.5;
+		assert!(across.torso_turn(peak) > center.torso_turn(peak));
+		Ok(())
+	}
+
+	#[test]
+	fn aim_keeps_punch_roll_near_sagittal_band() -> anyhow::Result<()> {
+		let high_across = Jab::<()>::default()
+			.with_side(Side::Right)
+			.with_target(Vec3::new(-0.4, 0.7, 0.7));
+		let delta = (high_across.punch_roll(0.0) - FRAC_PI_2).abs();
+		assert!(delta <= AIM_ROLL_DELTA_MAX + 1e-4);
 		Ok(())
 	}
 

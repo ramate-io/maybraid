@@ -3,8 +3,9 @@
 //! # Punch-roll-first
 //!
 //! Tee forearm flex bends **up**. [`Jab::punch_roll`] (~π/2 on humerus twist X) rotates
-//! that hinge ~90° ventrally so flex bends **front ↔ back**. Tune drop and elbow only
-//! after that roll is locked. Humerus DEFAULT swing (Y) stays unused (long-axis spin).
+//! that hinge ~90° ventrally so flex bends **front ↔ back**. Aim offsets on
+//! [`Jab::target`] bias roll / drop / carry / torso in the knobs layer; this file only
+//! maps those amounts. Humerus DEFAULT swing (Y) stays unused (long-axis spin).
 //!
 //! # Bind tee pose (hand tips)
 //!
@@ -222,6 +223,34 @@ mod tests {
 			jab.shoulder_carry(0.0) < 0.2,
 			"shoulder carry should stay tiny, got {}",
 			jab.shoulder_carry(0.0)
+		);
+		Ok(())
+	}
+
+	#[test]
+	fn higher_target_applies_less_humerus_drop() -> anyhow::Result<()> {
+		let sternum = Jab::<HumanoidV0Rig>::default().with_side(Side::Right);
+		let chin = Jab::<HumanoidV0Rig>::default()
+			.with_side(Side::Right)
+			.with_target(bevy::prelude::Vec3::new(0.0, 0.55, 0.7));
+		let mut sternum_rig = HumanoidV0Rig::imported();
+		let mut chin_rig = HumanoidV0Rig::imported();
+		sternum.apply(&mut sternum_rig, 0.0);
+		chin.apply(&mut chin_rig, 0.0);
+
+		let sternum_h = sternum_rig
+			.pose()
+			.get(&sternum_rig.arm(Side::Right).humerus.name)
+			.ok_or_else(|| anyhow::anyhow!("sternum humerus"))?;
+		let chin_h = chin_rig
+			.pose()
+			.get(&chin_rig.arm(Side::Right).humerus.name)
+			.ok_or_else(|| anyhow::anyhow!("chin humerus"))?;
+		assert!(
+			chin_h.flex.abs() < sternum_h.flex.abs(),
+			"higher aim should drop less, chin={} sternum={}",
+			chin_h.flex,
+			sternum_h.flex
 		);
 		Ok(())
 	}
