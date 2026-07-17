@@ -3,7 +3,7 @@
 //! Humerus: [`HumanoidRig::humerus_along_with_roll`] with [`Jab::humerus_along`] + punch
 //! roll. Punch travel = humerus +Z whip + elbow uncoil. Cover arm holds the guard along
 //! frame with a tucked elbow. Trunk yaw spreads across lumbar → midback → upper_back and
-//! both pelves.
+//! both pelves; waist bend (lumbar/midback twist = sagittal pitch) folds into the punch.
 
 use crozon_rigs::humanoid::HumanoidRig;
 use crozon_rigs::Side;
@@ -20,7 +20,12 @@ impl<R: HumanoidRig> Animation<R> for Jab<R> {
 		apply_leg(rig, jab_side, self.lead_femur_swing(progress), self.stance_shin_flex(progress));
 		apply_leg(rig, guard_side, self.rear_femur_swing(progress), self.stance_shin_flex(progress));
 		apply_root(rig, self.root_lean(progress));
-		apply_torso_turn(rig, jab_side, self.torso_turn(progress));
+		apply_trunk(
+			rig,
+			jab_side,
+			self.torso_turn(progress),
+			self.waist_bend(progress),
+		);
 		apply_hip_turn(rig, jab_side, self.hip_turn(progress));
 
 		apply_arm(
@@ -64,11 +69,14 @@ fn apply_arm<R: HumanoidRig>(
 	rig.pose_arm(arm);
 }
 
-fn apply_torso_turn<R: HumanoidRig>(rig: &mut R, jab_side: Side, turn: f32) {
+fn apply_trunk<R: HumanoidRig>(rig: &mut R, jab_side: Side, turn: f32, waist_bend: f32) {
 	let yaw = turn * -jab_side.sign();
 	let mut spine = rig.spine_pose();
-	spine.lumbar = rig.articulate_on_rig(spine.lumbar, yaw * 0.35, 0.0);
-	spine.midback = rig.articulate_on_rig(spine.midback, yaw * 0.4, 0.0);
+	// DEFAULT spine: swing Y ≈ yaw, flex Z ≈ coronal, twist X ≈ sagittal pitch.
+	spine.lumbar =
+		rig.articulate_on_rig_twisted(spine.lumbar, yaw * 0.35, 0.0, waist_bend * 0.7);
+	spine.midback =
+		rig.articulate_on_rig_twisted(spine.midback, yaw * 0.4, 0.0, waist_bend * 0.3);
 	spine.upper_back = rig.articulate_on_rig(spine.upper_back, yaw * 0.25, 0.0);
 	rig.pose_spine(spine);
 }
@@ -205,6 +213,25 @@ mod tests {
 		assert!(lumbar.swing.abs() > 0.05);
 		assert!(midback.swing.abs() > 0.05);
 		assert!(upper.swing.abs() > 0.03);
+		Ok(())
+	}
+
+	#[test]
+	fn waist_bend_pitches_lumbar_on_extension() -> anyhow::Result<()> {
+		let jab = Jab::<HumanoidV0Rig>::default();
+		let mut rig = HumanoidV0Rig::imported();
+		jab.apply(&mut rig, 0.47);
+
+		let lumbar = rig
+			.pose()
+			.get(&rig.spine().lumbar.name)
+			.ok_or_else(|| anyhow::anyhow!("missing lumbar pose"))?;
+		assert!(
+			lumbar.twist > 0.05,
+			"expected sagittal waist twist, got {}",
+			lumbar.twist
+		);
+		assert!(lumbar.flex.abs() < 1e-4, "coronal flex should stay clear");
 		Ok(())
 	}
 

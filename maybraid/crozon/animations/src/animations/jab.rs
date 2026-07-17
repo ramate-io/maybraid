@@ -53,6 +53,8 @@ const SHOULDER_CARRY: f32 = 0.12;
 
 // --- Trunk / stance ---
 const TORSO_TURN: f32 = 1.0;
+/// Sagittal waist fold into the punch (lumbar / midback twist), radians at full extend.
+const WAIST_BEND: f32 = 0.35;
 const ROOT_LEAN: f32 = 0.05;
 const LEAD_FEMUR: f32 = 0.16;
 const REAR_FEMUR: f32 = -0.1;
@@ -161,7 +163,7 @@ impl<Rig> Jab<Rig> {
 	pub fn punch_roll(&self, _progress: f32) -> f32 {
 		let delta = (AIM_ROLL_Y * self.aim_height()
 			+ AIM_ROLL_X * self.side.sign() * self.aim_lateral())
-			.clamp(-AIM_ROLL_DELTA_MAX, AIM_ROLL_DELTA_MAX);
+		.clamp(-AIM_ROLL_DELTA_MAX, AIM_ROLL_DELTA_MAX);
 		PUNCH_ROLL + delta
 	}
 
@@ -231,13 +233,22 @@ impl<Rig> Jab<Rig> {
 		self.extension_amount(progress) * ROOT_LEAN * self.reach_scale()
 	}
 
+	/// Sagittal bend at the waist into the punch (peaks with extension).
+	///
+	/// Humanoid maps this to spine **twist** (pitch); DEFAULT flex is coronal.
+	pub fn waist_bend(&self, progress: f32) -> f32 {
+		let chamber = self.chamber_amount(progress);
+		let extend = self.extension_amount(progress);
+		// Slight upright wind-up, then fold forward with the snap.
+		WAIST_BEND * (extend - 0.25 * chamber).max(0.0) * self.reach_scale()
+	}
+
 	/// Trunk turn into the jab (peaks with extension; + lateral aim bias).
 	pub fn torso_turn(&self, progress: f32) -> f32 {
 		let chamber = self.chamber_amount(progress);
 		let extend = self.extension_amount(progress);
 		let base = TORSO_TURN * (extend - 0.35 * chamber) * self.reach_scale();
-		let lateral =
-			AIM_YAW_X * self.side.sign() * self.aim_lateral() * (0.35 + 0.65 * extend);
+		let lateral = AIM_YAW_X * self.side.sign() * self.aim_lateral() * (0.35 + 0.65 * extend);
 		base + lateral
 	}
 
@@ -290,9 +301,14 @@ mod tests {
 		let guard = 0.0;
 		let p = peak();
 		assert!((jab.jab_elbow(guard) - jab.jab_elbow(p)).abs() > 1.0);
-		assert!(jab.humerus_forward(Side::Right, p) > jab.humerus_forward(Side::Right, guard) + 0.4);
+		assert!(
+			jab.humerus_forward(Side::Right, p) > jab.humerus_forward(Side::Right, guard) + 0.4
+		);
 		assert!(jab.humerus_along(Side::Right, p).z > jab.humerus_along(Side::Right, guard).z);
-		assert!((jab.humerus_forward(Side::Left, p) - jab.humerus_forward(Side::Left, guard)).abs() < 1e-4);
+		assert!(
+			(jab.humerus_forward(Side::Left, p) - jab.humerus_forward(Side::Left, guard)).abs()
+				< 1e-4
+		);
 		assert!(jab.torso_turn(p).abs() > jab.torso_turn(guard).abs());
 		Ok(())
 	}
@@ -395,6 +411,14 @@ mod tests {
 		let jab = Jab::<()>::default();
 		assert!(jab.torso_turn(peak()) > jab.torso_turn(0.0));
 		assert!(jab.hip_turn(peak()).abs() > 0.0);
+		Ok(())
+	}
+
+	#[test]
+	fn waist_bends_into_the_extension() -> anyhow::Result<()> {
+		let jab = Jab::<()>::default();
+		assert!(jab.waist_bend(0.0) < 0.02);
+		assert!(jab.waist_bend(peak()) > 0.1);
 		Ok(())
 	}
 
