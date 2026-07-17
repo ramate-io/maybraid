@@ -1,3 +1,6 @@
+//! The arm and upper body animations for the jab.
+//! Some pelvis turn is applied, but leg stance is left alone.
+
 use std::f32::consts::FRAC_PI_2;
 use std::marker::PhantomData;
 
@@ -58,7 +61,7 @@ const HUMERUS_LATERAL_BLEND: f32 = 0.55;
 const SHOULDER_CARRY: f32 = 0.12;
 
 /// Total trunk turn into the punch (rig spreads across lumbar / mid / upper / hips).
-const TORSO_TURN: f32 = 0.55;
+const TORSO_TURN: f32 = 1.0;
 const ROOT_LEAN: f32 = 0.05;
 const LEAD_FEMUR: f32 = 0.16;
 const REAR_FEMUR: f32 = -0.1;
