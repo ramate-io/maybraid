@@ -158,9 +158,10 @@ pub trait HumanoidRig {
 
 	/// Aim the humerus length axis along a **world-space** direction, then apply long-axis roll.
 	///
-	/// This bypasses swing/flex coupling: aim is solved with a shortest-arc from the bind
-	/// length direction, and `roll` is applied about the bone's local length axis so it
-	/// cannot re-aim the arm. Humanoid bones carry length along local Y.
+	/// Prefer this over stacking swing/flex/twist when an animation needs a stable aim
+	/// (punches, reaches). Aim is a shortest-arc from the bind length direction; `roll`
+	/// is about local length (Y) and cannot re-aim the arm. Callers should pass directions
+	/// in a documented body/world convention (jab uses body +Z = fight-forward).
 	fn humerus_along_with_roll(&self, side: Side, along_world: Vec3, roll: f32) -> BonePose {
 		let arm = self.arm_pose(side);
 		let mut humerus = arm.humerus;

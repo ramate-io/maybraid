@@ -1,5 +1,17 @@
-//! The arm and upper body animations for the jab.
-//! Some pelvis turn is applied, but leg stance is left alone.
+//! Boxing jab: chamber, snap toward a body-space target, recover to guard.
+//!
+//! # Body-space aim (stylized, not IK)
+//!
+//! [`Jab::target`] is relative to the body COM (root on humanoid v0). Axes match the
+//! target vector — **not** Bevy camera forward:
+//! - **+X** = right
+//! - **+Y** = up
+//! - **+Z** = ahead (fight forward)
+//!
+//! [`Jab::humerus_along`] builds a length direction from that space. Humanoid apply
+//! aims with [`crozon_rigs::humanoid::HumanoidRig::humerus_along_with_roll`] so long-axis
+//! roll cannot fight aim via swing/flex. Related punches (cross, hook) should reuse the
+//! same contract: body-space target → along vector → along-with-roll → elbow uncoil.
 
 use std::f32::consts::FRAC_PI_2;
 use std::marker::PhantomData;
@@ -10,7 +22,7 @@ use crozon_rigs::Side;
 use crate::animations::smoothstep;
 use crate::Progress;
 
-/// Default jab aim relative to the body COM: chest height, straight ahead.
+/// Default jab aim: sternum height, straight ahead.
 pub const DEFAULT_JAB_TARGET: Vec3 = Vec3::new(0.0, 0.35, 0.7);
 /// Nominal chamber depth (`1.0` matches the tuned preparatory motion).
 pub const DEFAULT_BACKSWING: f32 = 1.0;
@@ -19,78 +31,49 @@ const BACKSWING_END: f32 = 0.18;
 const EXTEND_END: f32 = 0.42;
 const HOLD_END: f32 = 0.52;
 
-/// Semantic pose magnitudes (radians / blends). Rig impls map these onto bone axes.
-///
-/// # Punch-roll-first model
-///
-/// Tee: humerus roll leaves forearm flex bending **up**.
-/// Punch: ~90° ventral roll so the same flex bends **front ↔ back**. That roll is the
-/// primary constant; drop and elbow are tuned against it. Punch travel is a whip:
-/// humerus swings forward with [`Self::extension_amount`], and the elbow uncoils with it.
-///
-/// # Approximate aim (not IK)
-///
-/// [`Jab::humerus_along`] builds a world length direction (down + forward + lateral).
-/// Humanoid apply aims with `humerus_along_with_roll` so roll cannot fight aim.
-/// [`Jab::target`] offsets from [`DEFAULT_JAB_TARGET`] also bias:
-/// - **y** → drop weight (+ slight roll / shoulder carry)
-/// - **x** → torso/hip yaw (+ slight roll); across-body increases turn into the jab
-/// - **z** → [`reach_scale`] (forward weight / trunk lean / turn)
-///
-/// Bind tee tips (world-ish): right ≈ `(-1.0, 1.7)`, left ≈ `(1.0, 1.7)`.
+// --- Elbow ---
 const GUARD_ELBOW: f32 = 1.5;
 const CHAMBER_ELBOW: f32 = 1.65;
 const EXTEND_ELBOW: f32 = 0.05;
 
-/// ~90° from tee — reorients the elbow hinge into the sagittal (front/back) plane.
+// --- Humerus aim / whip (body-space weights before normalize) ---
+/// ~90° ventral roll so forearm flex bends front ↔ back once aimed.
 const PUNCH_ROLL: f32 = FRAC_PI_2;
-/// Down component of the humerus aim direction (world −Y weight).
-/// Kept moderate so the default hang sits at sternum height, not hip.
 const ARM_DROP: f32 = 0.42;
-/// Guard-frame forward weight for the humerus aim (body +Z).
+const ARM_DROP_MIN: f32 = 0.22;
+const ARM_DROP_MAX: f32 = 0.9;
 const HUMERUS_FORWARD: f32 = 0.7;
-/// Extra +Z on the jab arm at full extension — the humerus whip.
 const HUMERUS_WHIP: f32 = 0.85;
-/// Chamber pulls the jab humerus slightly back so the whip has somewhere to go from.
 const HUMERUS_CHAMBER_RESERVE: f32 = 0.22;
-/// Slight outboard bias; small so the punch lines up on the sternum, not the hip flank.
-const HUMERUS_LATERAL: f32 = -0.2;
-/// How hard the jab humerus X chases [`Jab::target`].x by full extension (0..1 blend).
+/// Guard-frame inboard |X|; left → −X, right → +X.
+const HUMERUS_ADDUCT: f32 = 0.2;
+/// Blend of jab-arm X toward [`Jab::target`].x by full extension.
 const HUMERUS_LATERAL_BLEND: f32 = 0.55;
-/// Tiny shoulder aim/height; not the punch driver.
 const SHOULDER_CARRY: f32 = 0.12;
 
-/// Total trunk turn into the punch (rig spreads across lumbar / mid / upper / hips).
+// --- Trunk / stance ---
 const TORSO_TURN: f32 = 1.0;
 const ROOT_LEAN: f32 = 0.05;
 const LEAD_FEMUR: f32 = 0.16;
 const REAR_FEMUR: f32 = -0.1;
 const STANCE_SHIN: f32 = 0.14;
-/// Pelvis contribution toward the jab side (fraction of base torso turn).
 const HIP_TURN: f32 = 0.35;
 
-/// Aim gains: radians (or drop units) per metre of target offset from the default.
+// --- Target offset gains ---
 const AIM_DROP_Y: f32 = 0.85;
 const AIM_CARRY_Y: f32 = 0.3;
 const AIM_ROLL_Y: f32 = 0.45;
 const AIM_ROLL_X: f32 = 0.35;
 const AIM_YAW_X: f32 = 0.55;
-/// Keep punch-roll deltas inside the sagittal-ish band (~±17°).
 const AIM_ROLL_DELTA_MAX: f32 = 0.3;
-const ARM_DROP_MIN: f32 = 0.22;
-const ARM_DROP_MAX: f32 = 0.9;
 
-/// Boxing jab: chamber, snap to a relative target, then recover to guard.
-///
-/// Progress is cyclic. Knobs expose *semantic* fight-pose amounts. Humanoid (and later)
-/// rig impls map those onto concrete axes — including bind-pose sign corrections.
+/// Boxing jab knobs. Rig impls map these onto concrete axes.
 #[derive(Debug, Clone)]
 pub struct Jab<Rig> {
-	/// The side of the body that is throwing the jab.
 	pub side: Side,
-	/// The extent of the backswing of the jab (all preparatory motions).
+	/// Preparatory chamber depth scale.
 	pub backswing: f32,
-	/// The target of the jab relative to the body's center of mass (root on most humanoid rigs).
+	/// Aim point relative to body COM ([`DEFAULT_JAB_TARGET`] axes).
 	pub target: Vec3,
 	_rig: PhantomData<Rig>,
 }
@@ -127,36 +110,26 @@ impl<Rig> Jab<Rig> {
 	}
 
 	pub fn opposite_side(&self) -> Side {
-		match self.side {
-			Side::Left => Side::Right,
-			Side::Right => Side::Left,
-		}
+		self.side.opposite()
 	}
 
-	/// Reach scale from the forward component of [`Self::target`].
+	/// Reach scale from [`Self::target`].z vs [`DEFAULT_JAB_TARGET`].z.
 	pub fn reach_scale(&self) -> f32 {
 		let reference = DEFAULT_JAB_TARGET.z.max(f32::EPSILON);
 		(self.target.z / reference).clamp(0.4, 1.5)
 	}
 
-	/// Height offset from [`DEFAULT_JAB_TARGET`] (positive = higher / toward the chin).
+	/// Height offset from default (positive = higher / toward the chin).
 	pub fn aim_height(&self) -> f32 {
 		self.target.y - DEFAULT_JAB_TARGET.y
 	}
 
-	/// Lateral offset from [`DEFAULT_JAB_TARGET`] in body COM space (Bevy +X = right).
+	/// Lateral offset from default (body +X = right).
 	pub fn aim_lateral(&self) -> f32 {
 		self.target.x - DEFAULT_JAB_TARGET.x
 	}
 
-	fn lateral_sign(side: Side) -> f32 {
-		match side {
-			Side::Left => 1.0,
-			Side::Right => -1.0,
-		}
-	}
-
-	/// Chamber envelope: peaks during the preparatory phase, then clears for the snap.
+	/// Chamber envelope: peaks in prep, clears for the snap.
 	pub fn chamber_amount(&self, progress: f32) -> f32 {
 		let t = Progress(progress).cycle();
 		let raw = if t < BACKSWING_END {
@@ -169,14 +142,13 @@ impl<Rig> Jab<Rig> {
 		raw * self.backswing.clamp(0.0, 2.0)
 	}
 
-	/// Extension envelope: snaps out after the chamber, holds briefly, then recovers.
+	/// Extension envelope: snap, brief hold, recover.
 	pub fn extension_amount(&self, progress: f32) -> f32 {
 		let t = Progress(progress).cycle();
 		if t < BACKSWING_END {
 			0.0
 		} else if t < EXTEND_END {
 			let u = (t - BACKSWING_END) / (EXTEND_END - BACKSWING_END);
-			// Ease-out snap.
 			1.0 - (1.0 - u).powi(2)
 		} else if t < HOLD_END {
 			1.0
@@ -185,69 +157,47 @@ impl<Rig> Jab<Rig> {
 		}
 	}
 
-	/// Punch-frame humerus roll (~90° from tee), plus a clamped aim tilt.
-	///
-	/// Held for the whole clip (aim is pose-level, not progress-blended).
-	pub fn punch_roll(&self, progress: f32) -> f32 {
-		let _ = progress;
-		let dy = self.aim_height();
-		let dx = self.aim_lateral();
-		let delta = (AIM_ROLL_Y * dy + AIM_ROLL_X * Self::lateral_sign(self.side) * dx)
+	/// Punch-frame humerus roll (~π/2), plus a clamped aim tilt. Held for the clip.
+	pub fn punch_roll(&self, _progress: f32) -> f32 {
+		let delta = (AIM_ROLL_Y * self.aim_height()
+			+ AIM_ROLL_X * self.side.sign() * self.aim_lateral())
 			.clamp(-AIM_ROLL_DELTA_MAX, AIM_ROLL_DELTA_MAX);
 		PUNCH_ROLL + delta
 	}
 
-	/// Down weight for [`Self::humerus_along`] (world −Y).
-	///
-	/// Higher [`Self::target`].y → less hang. The jab arm raises a little as it whips
-	/// forward; the cover arm holds the guard hang.
+	/// Down weight for [`Self::humerus_along`] (−Y). Jab arm raises slightly with the whip.
 	pub fn arm_drop(&self, side: Side, progress: f32) -> f32 {
-		let extend = self.extension_amount(progress);
 		let aimed = (ARM_DROP - AIM_DROP_Y * self.aim_height()).clamp(ARM_DROP_MIN, ARM_DROP_MAX);
 		if side == self.side {
-			// Raise with the whip so the hand climbs toward the sternum line.
-			aimed * (1.0 - 0.35 * extend)
+			aimed * (1.0 - 0.35 * self.extension_amount(progress))
 		} else {
 			aimed
 		}
 	}
 
-	/// Forward weight for [`Self::humerus_along`] (body +Z).
-	///
-	/// Jab arm: chamber reserves a bit of reach, then [`HUMERUS_WHIP`] snaps +Z with
-	/// extension. Cover arm holds the guard-frame forward.
+	/// Forward weight for [`Self::humerus_along`] (+Z). Jab arm whips; cover holds guard.
 	pub fn humerus_forward(&self, side: Side, progress: f32) -> f32 {
 		let base = HUMERUS_FORWARD * self.reach_scale();
 		if side != self.side {
 			return base;
 		}
 		let extend = self.extension_amount(progress);
-		let chamber = self.chamber_amount(progress);
-		let reserved = HUMERUS_CHAMBER_RESERVE * chamber.min(1.0);
+		let reserved = HUMERUS_CHAMBER_RESERVE * self.chamber_amount(progress).min(1.0);
 		let whip = HUMERUS_WHIP * extend * self.reach_scale();
 		(base - reserved + whip).max(0.2)
 	}
 
-	/// Lateral weight for [`Self::humerus_along`] (body +X).
-	///
-	/// Guard frame uses the side bias; the jab arm eases toward [`Self::target`].x
-	/// with extension so the whip tracks the aim point.
+	/// Lateral weight for [`Self::humerus_along`] (+X). Jab arm eases toward [`Self::target`].x.
 	pub fn humerus_lateral(&self, side: Side, progress: f32) -> f32 {
-		let base = match side {
-			Side::Left => HUMERUS_LATERAL,
-			Side::Right => -HUMERUS_LATERAL,
-		};
+		// Inboard: left −X, right +X.
+		let base = -side.sign() * HUMERUS_ADDUCT;
 		if side != self.side {
 			return base;
 		}
-		let extend = self.extension_amount(progress);
-		base + (self.target.x - base) * HUMERUS_LATERAL_BLEND * extend
+		base + (self.target.x - base) * HUMERUS_LATERAL_BLEND * self.extension_amount(progress)
 	}
 
-	/// World-space humerus length direction: down + forward + slight outboard.
-	///
-	/// Forward is **+Z** to match [`Self::target`] / [`DEFAULT_JAB_TARGET`] (not Bevy camera −Z).
-	/// Rig apply uses [`crozon_rigs::humanoid::HumanoidRig::humerus_along_with_roll`].
+	/// Body-space humerus length direction for [`HumanoidRig::humerus_along_with_roll`](crozon_rigs::humanoid::HumanoidRig::humerus_along_with_roll).
 	pub fn humerus_along(&self, side: Side, progress: f32) -> Vec3 {
 		Vec3::new(
 			self.humerus_lateral(side, progress),
@@ -257,14 +207,13 @@ impl<Rig> Jab<Rig> {
 		.normalize()
 	}
 
-	/// Tiny shoulder aim/height — assists [`Self::aim_height`], not the punch driver.
+	/// Tiny shoulder aim/height assist.
 	pub fn shoulder_carry(&self, progress: f32) -> f32 {
-		let extend = self.extension_amount(progress);
 		let aimed = (SHOULDER_CARRY + AIM_CARRY_Y * self.aim_height()).clamp(0.0, 0.45);
-		aimed * (0.85 + 0.15 * extend)
+		aimed * (0.85 + 0.15 * self.extension_amount(progress))
 	}
 
-	/// Elbow bend on the jab arm (larger = more flexed). Whips with humerus forward.
+	/// Jab-arm elbow (larger = more flexed). Uncoils with the humerus whip.
 	pub fn jab_elbow(&self, progress: f32) -> f32 {
 		let chamber = self.chamber_amount(progress);
 		let extend = self.extension_amount(progress);
@@ -273,41 +222,35 @@ impl<Rig> Jab<Rig> {
 			+ EXTEND_ELBOW * extend
 	}
 
-	/// Cover arm stays tucked (slight ease with the punch frame).
+	/// Cover elbow stays tucked.
 	pub fn guard_elbow(&self, progress: f32) -> f32 {
 		GUARD_ELBOW * (0.9 + 0.1 * self.extension_amount(progress))
 	}
 
-	/// Slight sagittal lean — kept small; the punch turn lives in [`Self::torso_turn`].
 	pub fn root_lean(&self, progress: f32) -> f32 {
 		self.extension_amount(progress) * ROOT_LEAN * self.reach_scale()
 	}
 
-	/// Trunk turn into the jab side (peaks with extension; + lateral aim bias).
+	/// Trunk turn into the jab (peaks with extension; + lateral aim bias).
 	pub fn torso_turn(&self, progress: f32) -> f32 {
 		let chamber = self.chamber_amount(progress);
 		let extend = self.extension_amount(progress);
-		// Slight wind-up opposite the punch, then turn into it.
 		let base = TORSO_TURN * (extend - 0.35 * chamber) * self.reach_scale();
-		// Across-body targets (toward the far side) add turn into the jab.
 		let lateral =
-			AIM_YAW_X * Self::lateral_sign(self.side) * self.aim_lateral() * (0.35 + 0.65 * extend);
+			AIM_YAW_X * self.side.sign() * self.aim_lateral() * (0.35 + 0.65 * extend);
 		base + lateral
 	}
 
-	/// Pelvis yaw contribution (tracks torso turn, including lateral aim).
 	pub fn hip_turn(&self, progress: f32) -> f32 {
 		self.torso_turn(progress) * HIP_TURN
 	}
 
 	pub fn lead_femur_swing(&self, progress: f32) -> f32 {
-		let stance = 0.55 + 0.45 * self.extension_amount(progress);
-		LEAD_FEMUR * stance
+		LEAD_FEMUR * (0.55 + 0.45 * self.extension_amount(progress))
 	}
 
 	pub fn rear_femur_swing(&self, progress: f32) -> f32 {
-		let stance = 0.55 + 0.45 * self.extension_amount(progress);
-		REAR_FEMUR * stance
+		REAR_FEMUR * (0.55 + 0.45 * self.extension_amount(progress))
 	}
 
 	pub fn stance_shin_flex(&self, progress: f32) -> f32 {
@@ -318,6 +261,10 @@ impl<Rig> Jab<Rig> {
 #[cfg(test)]
 mod tests {
 	use super::*;
+
+	fn peak() -> f32 {
+		(EXTEND_END + HOLD_END) * 0.5
+	}
 
 	#[test]
 	fn jab_chambers_before_extension() -> anyhow::Result<()> {
@@ -331,44 +278,22 @@ mod tests {
 	#[test]
 	fn jab_reaches_near_full_extension() -> anyhow::Result<()> {
 		let jab = Jab::<()>::default();
-		let peak = (EXTEND_END + HOLD_END) * 0.5;
-		assert!(jab.extension_amount(peak) > 0.95);
-		assert!(jab.chamber_amount(peak) < 0.05);
-		assert!(jab.jab_elbow(peak) < GUARD_ELBOW * 0.25);
+		assert!(jab.extension_amount(peak()) > 0.95);
+		assert!(jab.chamber_amount(peak()) < 0.05);
+		assert!(jab.jab_elbow(peak()) < GUARD_ELBOW * 0.25);
 		Ok(())
 	}
 
 	#[test]
-	fn jab_is_elbow_and_torso_driven() -> anyhow::Result<()> {
-		let jab = Jab::<()>::default();
-		let guard = 0.0;
-		let peak = (EXTEND_END + HOLD_END) * 0.5;
-		let elbow_delta = (jab.jab_elbow(guard) - jab.jab_elbow(peak)).abs();
-		assert!(elbow_delta > 1.0);
-		assert!(jab.torso_turn(peak).abs() > jab.torso_turn(guard).abs());
-		Ok(())
-	}
-
-	#[test]
-	fn jab_humerus_whips_forward_on_extension() -> anyhow::Result<()> {
+	fn jab_whips_humerus_and_uncoils_elbow() -> anyhow::Result<()> {
 		let jab = Jab::<()>::default().with_side(Side::Right);
 		let guard = 0.0;
-		let peak = (EXTEND_END + HOLD_END) * 0.5;
-		let jab_fwd_guard = jab.humerus_forward(Side::Right, guard);
-		let jab_fwd_peak = jab.humerus_forward(Side::Right, peak);
-		let cover_fwd_peak = jab.humerus_forward(Side::Left, peak);
-		assert!(
-			jab_fwd_peak > jab_fwd_guard + 0.4,
-			"jab humerus should whip forward, guard={jab_fwd_guard} peak={jab_fwd_peak}"
-		);
-		assert!(
-			jab.humerus_along(Side::Right, peak).z > jab.humerus_along(Side::Right, guard).z,
-			"normalized along should tip further +Z at peak"
-		);
-		assert!(
-			(cover_fwd_peak - jab.humerus_forward(Side::Left, guard)).abs() < 1e-4,
-			"cover arm should not whip"
-		);
+		let p = peak();
+		assert!((jab.jab_elbow(guard) - jab.jab_elbow(p)).abs() > 1.0);
+		assert!(jab.humerus_forward(Side::Right, p) > jab.humerus_forward(Side::Right, guard) + 0.4);
+		assert!(jab.humerus_along(Side::Right, p).z > jab.humerus_along(Side::Right, guard).z);
+		assert!((jab.humerus_forward(Side::Left, p) - jab.humerus_forward(Side::Left, guard)).abs() < 1e-4);
+		assert!(jab.torso_turn(p).abs() > jab.torso_turn(guard).abs());
 		Ok(())
 	}
 
@@ -377,13 +302,9 @@ mod tests {
 		let across = Jab::<()>::default()
 			.with_side(Side::Right)
 			.with_target(Vec3::new(-0.25, 0.35, 0.7));
-		let peak = (EXTEND_END + HOLD_END) * 0.5;
 		let guard_x = across.humerus_lateral(Side::Right, 0.0);
-		let peak_x = across.humerus_lateral(Side::Right, peak);
-		assert!(
-			peak_x < guard_x,
-			"should swing toward target.x=-0.25, guard={guard_x} peak={peak_x}"
-		);
+		let peak_x = across.humerus_lateral(Side::Right, peak());
+		assert!(peak_x < guard_x);
 		assert!((peak_x - guard_x).abs() > 0.05);
 		Ok(())
 	}
@@ -423,8 +344,7 @@ mod tests {
 		let across = Jab::<()>::default()
 			.with_side(Side::Right)
 			.with_target(Vec3::new(-0.25, 0.35, 0.7));
-		let peak = (EXTEND_END + HOLD_END) * 0.5;
-		assert!(across.torso_turn(peak) > center.torso_turn(peak));
+		assert!(across.torso_turn(peak()) > center.torso_turn(peak()));
 		Ok(())
 	}
 
@@ -433,8 +353,7 @@ mod tests {
 		let high_across = Jab::<()>::default()
 			.with_side(Side::Right)
 			.with_target(Vec3::new(-0.4, 0.7, 0.7));
-		let delta = (high_across.punch_roll(0.0) - FRAC_PI_2).abs();
-		assert!(delta <= AIM_ROLL_DELTA_MAX + 1e-4);
+		assert!((high_across.punch_roll(0.0) - FRAC_PI_2).abs() <= AIM_ROLL_DELTA_MAX + 1e-4);
 		Ok(())
 	}
 
@@ -474,9 +393,16 @@ mod tests {
 	#[test]
 	fn torso_turns_into_the_extension() -> anyhow::Result<()> {
 		let jab = Jab::<()>::default();
-		let peak = (EXTEND_END + HOLD_END) * 0.5;
-		assert!(jab.torso_turn(peak) > jab.torso_turn(0.0));
-		assert!(jab.hip_turn(peak).abs() > 0.0);
+		assert!(jab.torso_turn(peak()) > jab.torso_turn(0.0));
+		assert!(jab.hip_turn(peak()).abs() > 0.0);
+		Ok(())
+	}
+
+	#[test]
+	fn guard_lateral_is_inboard_for_both_sides() -> anyhow::Result<()> {
+		let jab = Jab::<()>::default();
+		assert!(jab.humerus_lateral(Side::Left, 0.0) < 0.0);
+		assert!(jab.humerus_lateral(Side::Right, 0.0) > 0.0);
 		Ok(())
 	}
 }

@@ -56,6 +56,21 @@ impl Side {
 			Self::Right => "R",
 		}
 	}
+
+	pub fn opposite(self) -> Self {
+		match self {
+			Self::Left => Self::Right,
+			Self::Right => Self::Left,
+		}
+	}
+
+	/// Left = `+1`, right = `−1`. Useful for mirroring yaw / roll magnitudes.
+	pub fn sign(self) -> f32 {
+		match self {
+			Self::Left => 1.0,
+			Self::Right => -1.0,
+		}
+	}
 }
 
 /// The local axes a rigged bone uses for procedural articulation.

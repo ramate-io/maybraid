@@ -212,3 +212,19 @@ Transition progress:
 ```
 
 This is a much cleaner model than storing `phase` inside each animation. The animation becomes a pure sampler, while the animation controller owns time.
+
+## Stylized arm aim (jab and related punches)
+
+Full IK is not required for fight snaps. The jab uses a **body-space target** plus
+`HumanoidRig::humerus_along_with_roll`:
+
+| Convention | Meaning |
+|------------|---------|
+| `target` space | Body COM; **+X** right, **+Y** up, **+Z** fight-forward |
+| Humerus placement | Aim bone length (local Y) along a direction built from drop / forward / lateral weights, then roll about that length |
+| Punch travel | Humerus +Z whip + elbow uncoil (not elbow alone) |
+| Cover arm | Same guard along-frame; tucked elbow; no whip |
+
+Related concepts (cross, hook, uppercut) should keep this contract: knobs stay in body
+space, humanoid apply aims with along-with-roll, and swing/flex stacking is avoided for
+humerus aim. See [`jab.rs`](jab.rs).
