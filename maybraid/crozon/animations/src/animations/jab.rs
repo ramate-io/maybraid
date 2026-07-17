@@ -51,7 +51,9 @@ const HUMERUS_WHIP: f32 = 0.85;
 /// Chamber pulls the jab humerus slightly back so the whip has somewhere to go from.
 const HUMERUS_CHAMBER_RESERVE: f32 = 0.22;
 /// Slight outboard bias; small so the punch lines up on the sternum, not the hip flank.
-const HUMERUS_LATERAL: f32 = -0.12;
+const HUMERUS_LATERAL: f32 = -0.2;
+/// How hard the jab humerus X chases [`Jab::target`].x by full extension (0..1 blend).
+const HUMERUS_LATERAL_BLEND: f32 = 0.55;
 /// Tiny shoulder aim/height; not the punch driver.
 const SHOULDER_CARRY: f32 = 0.12;
 
@@ -223,17 +225,29 @@ impl<Rig> Jab<Rig> {
 		(base - reserved + whip).max(0.2)
 	}
 
+	/// Lateral weight for [`Self::humerus_along`] (body +X).
+	///
+	/// Guard frame uses the side bias; the jab arm eases toward [`Self::target`].x
+	/// with extension so the whip tracks the aim point.
+	pub fn humerus_lateral(&self, side: Side, progress: f32) -> f32 {
+		let base = match side {
+			Side::Left => HUMERUS_LATERAL,
+			Side::Right => -HUMERUS_LATERAL,
+		};
+		if side != self.side {
+			return base;
+		}
+		let extend = self.extension_amount(progress);
+		base + (self.target.x - base) * HUMERUS_LATERAL_BLEND * extend
+	}
+
 	/// World-space humerus length direction: down + forward + slight outboard.
 	///
 	/// Forward is **+Z** to match [`Self::target`] / [`DEFAULT_JAB_TARGET`] (not Bevy camera −Z).
 	/// Rig apply uses [`crozon_rigs::humanoid::HumanoidRig::humerus_along_with_roll`].
 	pub fn humerus_along(&self, side: Side, progress: f32) -> Vec3 {
-		let lateral = match side {
-			Side::Left => HUMERUS_LATERAL,
-			Side::Right => -HUMERUS_LATERAL,
-		};
 		Vec3::new(
-			lateral,
+			self.humerus_lateral(side, progress),
 			-self.arm_drop(side, progress),
 			self.humerus_forward(side, progress),
 		)
@@ -352,6 +366,22 @@ mod tests {
 			(cover_fwd_peak - jab.humerus_forward(Side::Left, guard)).abs() < 1e-4,
 			"cover arm should not whip"
 		);
+		Ok(())
+	}
+
+	#[test]
+	fn jab_humerus_swings_toward_target_x_on_extension() -> anyhow::Result<()> {
+		let across = Jab::<()>::default()
+			.with_side(Side::Right)
+			.with_target(Vec3::new(-0.25, 0.35, 0.7));
+		let peak = (EXTEND_END + HOLD_END) * 0.5;
+		let guard_x = across.humerus_lateral(Side::Right, 0.0);
+		let peak_x = across.humerus_lateral(Side::Right, peak);
+		assert!(
+			peak_x < guard_x,
+			"should swing toward target.x=-0.25, guard={guard_x} peak={peak_x}"
+		);
+		assert!((peak_x - guard_x).abs() > 0.05);
 		Ok(())
 	}
 
