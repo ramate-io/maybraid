@@ -43,7 +43,7 @@ const EXTEND_ELBOW: f32 = 0.05;
 const PUNCH_ROLL: f32 = FRAC_PI_2;
 /// Down component of the humerus aim direction (world −Y weight).
 const ARM_DROP: f32 = 0.75;
-/// Forward component of the humerus aim direction (world −Z weight).
+/// Forward component of the humerus aim direction (body +Z, same as [`DEFAULT_JAB_TARGET`]).
 const HUMERUS_FORWARD: f32 = 0.55;
 /// Slight outboard bias so arms don't aim through the torso.
 const HUMERUS_LATERAL: f32 = 0.35;
@@ -196,7 +196,7 @@ impl<Rig> Jab<Rig> {
 		aimed * (1.0 - 0.15 * extend)
 	}
 
-	/// Forward weight for [`Self::humerus_along`] (world −Z).
+	/// Forward weight for [`Self::humerus_along`] (body +Z).
 	pub fn humerus_forward(&self, progress: f32) -> f32 {
 		let extend = self.extension_amount(progress);
 		HUMERUS_FORWARD * self.reach_scale() * (0.85 + 0.15 * extend)
@@ -204,13 +204,14 @@ impl<Rig> Jab<Rig> {
 
 	/// World-space humerus length direction: down + forward + slight outboard.
 	///
+	/// Forward is **+Z** to match [`Self::target`] / [`DEFAULT_JAB_TARGET`] (not Bevy camera −Z).
 	/// Rig apply uses [`crozon_rigs::humanoid::HumanoidRig::humerus_along_with_roll`].
 	pub fn humerus_along(&self, side: Side, progress: f32) -> Vec3 {
 		let lateral = match side {
 			Side::Left => HUMERUS_LATERAL,
 			Side::Right => -HUMERUS_LATERAL,
 		};
-		Vec3::new(lateral, -self.arm_drop(progress), -self.humerus_forward(progress)).normalize()
+		Vec3::new(lateral, -self.arm_drop(progress), self.humerus_forward(progress)).normalize()
 	}
 
 	/// Tiny shoulder aim/height — assists [`Self::aim_height`], not the punch driver.
