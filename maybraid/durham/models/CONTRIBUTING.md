@@ -4,27 +4,70 @@ Guide for contributing to the Durham terrain models layer.
 
 ## Safe cellular generation
 
-Terrain and jersey stamps are generated per cell and composed across neighbors.
-Seams appear when two adjacent cells disagree about height at a shared face.
-Keep cells **safe**: a modulation owned by cell A must not change elevation on
-or outside A's boundary in a way that cell B (which may not pull A) cannot
-reproduce.
+Chunks must **sample** one global height field \(H\), not invent chunk-local
+fields. At a shared world point \(x\),
 
-Practical rules:
+\[
+H_A(x)=H(x)=H_B(x)
+\]
 
-1. **Bound softmask / falloff to the owning cell.** Softmask inside the tile is
-   fine; strength should reach identity by the cell face (or a known interior
-   apron). Do not rely on neighbors discovering spill.
-2. **Discover with closed coverage + a small halo when influence can reach.**
-   Half-open tiling plus `intersects` drops face-adjacent tiles. Prefer inclusive
-   face overlap; add a Moore halo only when reach can exceed one face.
-3. **Compose in a deterministic order.** Sort region results by `Id` before
-   applying non-commutative elevation ops so neighboring Terrain cells see the
-   same sequence.
-4. **Mesh extract may still notch on sharp ridges.** Presentation cells use a
-   multi-voxel apron on the cascade chunk (horizontal plus a slope-scaled
-   vertical band), so neighbors share a sample strip. That hides extract gaps;
-   it does not fix SDF disagreement.
+automatically when both sides evaluate the same \(H\).
 
-When in doubt: two Terrain cells that share a face must evaluate the same world
-`(x, z)` height if both have finished generation with the same universal deps.
+### Continuity is a modulation duty
+
+Write chunk evaluations as
+
+\[
+H_A(x)=F_x\!\bigl(G_x(h_0(x))\bigr),\qquad
+H_B(x)=F_x\!\bigl(h_0(x)\bigr).
+\]
+
+Face continuity needs \(F_x(G_x(z))=F_x(z)\) for \(z=h_0(x)\). A sufficient
+condition is \(G_x=\mathrm{Id}\) on the shared boundary (and throughout any
+region \(B\) may omit). Do not rely on \(F\) “erasing” a nonzero \(G\).
+
+Give every modulation a compact weight \(w_i(x)\) with **exact** \(w_i=0\)
+outside its support, and identity-blend before compose:
+
+\[
+\widetilde M_i(x,z)=z+w_i(x)\bigl(M_i(x,z)-z\bigr),
+\qquad
+w_i(x)=0\;\Rightarrow\;\widetilde M_i(x,z)=z.
+\]
+
+Then
+
+\[
+H(x)=\widetilde M_n\!\bigl(x,\widetilde M_{n-1}(\ldots\widetilde M_1(x,h_0(x))\ldots)\bigr).
+\]
+
+Omitting \(M_i\) wherever \(w_i(x)=0\) is identical to applying it. Soft
+aggregates (e.g. log-sum-exp) have **no** finite identity: differing candidate
+sets alone can seam—prefer exact identity blending.
+
+For \(C^1\)/\(C^2\) normals, also make \(\nabla w_i\) (and preferably higher
+derivatives) vanish at the support edge (e.g. smootherstep fade).
+
+### Discovery vs influence
+
+Ask **which modulations influence this world sample?** Chunk–modulation
+intersection is only a conservative broad-phase. Query a halo covering support
+(+ filter / dependency radius), then apply only \(w_i(x)>0\), in deterministic
+global order. If \(F\) depends on \(G\), pull the dependency closure; support
+is not always the geometric cell.
+
+### Mesh apron
+
+A mesh apron duplicates samples into the neighbor. It helps only when both
+chunks evaluate the same \(H\) there. Expanding two inconsistent chunk-local
+fields into an overlap **worsens** marching-cubes seams (boundary \(C^0\) is
+weaker than stencil agreement). Prefer fixing modulation identity; keep apron
+width minimal unless the global field is already agreed in the overlap.
+
+### Practical checklist
+
+1. Exact identity at \(w_i=0\) (not “almost zero”).
+2. Compact support; optional smootherstep for derivative continuity.
+3. Conservative halo query; per-sample influence + sorted `Id` compose.
+4. Dependency closure when operators sample neighbors / gradients / soft max.
+5. Mesh apron only after (1)–(4); shared lattice / edge ownership if needed.
