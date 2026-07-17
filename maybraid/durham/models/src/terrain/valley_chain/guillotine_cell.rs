@@ -7,11 +7,16 @@ use lod::gen::{GeneratingSpatialIndex, GenerationScheme, Id, OriginalId, Spatial
 use lod::lod_ref::LodRef;
 
 /// One guillotine leaf under a ValleyChain controller.
+///
+/// The leaf [`Id`] is `Id::from_cell(leaf_aabb)` and is assumed to uniquely
+/// identify this entry: `build_with_id` only down-levels that Id to its cell
+/// bounds. We do not re-walk controllers to confirm ownership or recover a
+/// leaf index. If that identity contract needs hardening later (e.g. proving
+/// the leaf still appears in some controller's cut set), refine here rather
+/// than baking healing into every consumer.
 #[derive(Debug, Clone, Component)]
 pub struct JerseyValleyChainGuillotineCell {
 	pub cell: Aabb3d,
-	pub controller_id: Id,
-	pub leaf_index: u32,
 }
 
 /// Discover leaf [`OriginalId`]s by materializing overlapping controllers and
@@ -62,35 +67,9 @@ where
 		original_ids_for_guillotine_leaves(spatial_index, region)
 	}
 
-	fn build_with_id(spatial_index: &mut S, id: Id, lod_ref: &LodRef) -> Option<(Self, Aabb3d)> {
+	fn build_with_id(_spatial_index: &mut S, id: Id, _lod_ref: &LodRef) -> Option<(Self, Aabb3d)> {
 		let bounds = id.origin_cell_bounds()?;
-		let controllers =
-			GeneratingSpatialIndex::<JerseyValleyChainControllerCell>::get_or_generate_region(
-				spatial_index,
-				bounds,
-				lod_ref,
-			);
-		for (controller_id, _) in controllers {
-			let Some(controller) = <S as SpatialIndex<JerseyValleyChainControllerCell>>::get(
-				spatial_index,
-				controller_id,
-			) else {
-				continue;
-			};
-			for (leaf_index, leaf) in controller.leaf_aabbs().into_iter().enumerate() {
-				if Id::from_cell(leaf) == id {
-					return Some((
-						Self {
-							cell: bounds,
-							controller_id,
-							leaf_index: leaf_index as u32,
-						},
-						bounds,
-					));
-				}
-			}
-		}
-		None
+		Some((Self { cell: bounds }, bounds))
 	}
 
 	fn descendants_with_lod(_id: Id, _spatial_index: &mut S, _lod_ref: &LodRef) {}

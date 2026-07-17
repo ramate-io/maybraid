@@ -4,7 +4,7 @@ use crate::terrain::base_noise::BaseTerrainNoise;
 use crate::terrain::cell::{original_ids_for_jersey_cells, JerseyStampCellLayout};
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
-use lod::gen::{GeneratingSpatialIndex, GenerationScheme, Id, OriginalId, SpatialIndex};
+use lod::gen::{GeneratingSpatialIndex, GenerationScheme, Id, OriginalId};
 use lod::lod_ref::LodRef;
 
 const SAMPLE_GRID: u32 = 5;
@@ -95,13 +95,12 @@ where
 
 	fn build_with_id(spatial_index: &mut S, id: Id, lod_ref: &LodRef) -> Option<(Self, Aabb3d)> {
 		let bounds = id.origin_cell_bounds()?;
-		GeneratingSpatialIndex::<BaseTerrainNoise>::get_or_generate(
+		let base = GeneratingSpatialIndex::<BaseTerrainNoise>::get_one_or_generate(
 			spatial_index,
 			Id::Universal,
 			lod_ref,
-		)?;
-		let base =
-			<S as SpatialIndex<BaseTerrainNoise>>::get(spatial_index, Id::Universal)?.clone();
+		)?
+		.clone();
 		Some((Self::from_base(bounds, base), bounds))
 	}
 

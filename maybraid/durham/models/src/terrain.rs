@@ -19,8 +19,7 @@ use crate::terrain::cell::{original_ids_for_jersey_cells, original_ids_for_origi
 use crate::terrain::render::cascade_chunk_for_cell;
 use crate::terrain::valley_chain::{
 	original_ids_for_guillotine_leaves, JerseyValleyChainControllerCell,
-	JerseyValleyChainControllerLayout, JerseyValleyChainGuillotineCell,
-	JerseyValleyChainLayerConfig, JerseyValleyChainStampCell,
+	JerseyValleyChainControllerLayout, JerseyValleyChainLayerConfig, JerseyValleyChainStampCell,
 };
 use avian3d::prelude::RigidBody;
 use bevy::ecs::template::template;
@@ -29,7 +28,7 @@ use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, template_value, Scene};
 use durham_terrain::shaders::DurhamTerrainShader;
 use jersey_terrain_stamps::JerseyModulation;
-use lod::gen::{GeneratingSpatialIndex, GenerationScheme, Id, LodScene, OriginalId, SpatialIndex};
+use lod::gen::{GeneratingSpatialIndex, GenerationScheme, Id, LodScene, OriginalId};
 use lod::lod_ref::LodRef;
 use render_item::mesh::handle::Cached;
 
@@ -127,30 +126,48 @@ where
 		+ GeneratingSpatialIndex<PocketWaterLayer>
 		+ GeneratingSpatialIndex<RollingGroundLayer>,
 {
-	GeneratingSpatialIndex::<PlateauCapLayer>::get_or_generate(spatial_index, id, lod_ref)?;
-	if let Some(layer) = <S as SpatialIndex<PlateauCapLayer>>::get(spatial_index, id) {
-		out.extend(layer.modulations.iter().cloned());
-	}
-
-	GeneratingSpatialIndex::<RuggedMassifLayer>::get_or_generate(spatial_index, id, lod_ref)?;
-	if let Some(layer) = <S as SpatialIndex<RuggedMassifLayer>>::get(spatial_index, id) {
-		out.extend(layer.modulations.iter().cloned());
-	}
-
-	GeneratingSpatialIndex::<CanyonLayer>::get_or_generate(spatial_index, id, lod_ref)?;
-	if let Some(layer) = <S as SpatialIndex<CanyonLayer>>::get(spatial_index, id) {
-		out.extend(layer.modulations.iter().cloned());
-	}
-
-	GeneratingSpatialIndex::<PocketWaterLayer>::get_or_generate(spatial_index, id, lod_ref)?;
-	if let Some(layer) = <S as SpatialIndex<PocketWaterLayer>>::get(spatial_index, id) {
-		out.extend(layer.modulations.iter().cloned());
-	}
-
-	GeneratingSpatialIndex::<RollingGroundLayer>::get_or_generate(spatial_index, id, lod_ref)?;
-	if let Some(layer) = <S as SpatialIndex<RollingGroundLayer>>::get(spatial_index, id) {
-		out.extend(layer.modulations.iter().cloned());
-	}
+	out.extend(
+		GeneratingSpatialIndex::<PlateauCapLayer>::get_one_or_generate(spatial_index, id, lod_ref)?
+			.modulations
+			.iter()
+			.cloned(),
+	);
+	out.extend(
+		GeneratingSpatialIndex::<RuggedMassifLayer>::get_one_or_generate(
+			spatial_index,
+			id,
+			lod_ref,
+		)?
+		.modulations
+		.iter()
+		.cloned(),
+	);
+	out.extend(
+		GeneratingSpatialIndex::<CanyonLayer>::get_one_or_generate(spatial_index, id, lod_ref)?
+			.modulations
+			.iter()
+			.cloned(),
+	);
+	out.extend(
+		GeneratingSpatialIndex::<PocketWaterLayer>::get_one_or_generate(
+			spatial_index,
+			id,
+			lod_ref,
+		)?
+		.modulations
+		.iter()
+		.cloned(),
+	);
+	out.extend(
+		GeneratingSpatialIndex::<RollingGroundLayer>::get_one_or_generate(
+			spatial_index,
+			id,
+			lod_ref,
+		)?
+		.modulations
+		.iter()
+		.cloned(),
+	);
 
 	Some(())
 }
@@ -165,7 +182,6 @@ where
 		+ GeneratingSpatialIndex<PocketWaterLayer>
 		+ GeneratingSpatialIndex<RollingGroundLayer>
 		+ GeneratingSpatialIndex<JerseyValleyChainStampCell>
-		+ GeneratingSpatialIndex<JerseyValleyChainGuillotineCell>
 		+ GeneratingSpatialIndex<JerseyValleyChainControllerCell>
 		+ GeneratingSpatialIndex<JerseyValleyChainLayerConfig>
 		+ GeneratingSpatialIndex<JerseyValleyChainControllerLayout>
@@ -180,13 +196,12 @@ where
 	fn build_with_id(spatial_index: &mut S, id: Id, lod_ref: &LodRef) -> Option<(Self, Aabb3d)> {
 		let bounds = id.origin_cell_bounds()?;
 
-		GeneratingSpatialIndex::<BaseTerrainNoise>::get_or_generate(
+		let base = GeneratingSpatialIndex::<BaseTerrainNoise>::get_one_or_generate(
 			spatial_index,
 			Id::Universal,
 			lod_ref,
-		)?;
-		let base =
-			<S as SpatialIndex<BaseTerrainNoise>>::get(spatial_index, Id::Universal)?.clone();
+		)?
+		.clone();
 
 		let mut modulations = Vec::new();
 
@@ -203,27 +218,21 @@ where
 		leaf_ids.sort_by(|a, b| a.0.cmp(&b.0));
 		let mut valley_leaves = Vec::new();
 		for OriginalId(lid) in leaf_ids {
-			GeneratingSpatialIndex::<JerseyValleyChainStampCell>::get_or_generate(
+			let stamp = GeneratingSpatialIndex::<JerseyValleyChainStampCell>::get_one_or_generate(
 				spatial_index,
 				lid,
 				lod_ref,
 			)?;
-			if let Some(stamp) =
-				<S as SpatialIndex<JerseyValleyChainStampCell>>::get(spatial_index, lid)
-			{
-				valley_leaves.push(stamp.cell);
-				modulations.extend(stamp.modulations.iter().cloned());
-			}
+			valley_leaves.push(stamp.cell);
+			modulations.extend(stamp.modulations.iter().cloned());
 		}
 
 		let sdf = Self::compose_sdf(&base, &modulations);
-		GeneratingSpatialIndex::<TerrainPresentationAssets>::get_or_generate(
+		let assets = GeneratingSpatialIndex::<TerrainPresentationAssets>::get_one_or_generate(
 			spatial_index,
 			Id::Universal,
 			lod_ref,
 		)?;
-		let assets =
-			<S as SpatialIndex<TerrainPresentationAssets>>::get(spatial_index, Id::Universal)?;
 		let material = assets.material.clone();
 		let res_2 = assets.res_2;
 

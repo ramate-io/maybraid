@@ -9,7 +9,7 @@ use bevy::math::Vec2;
 use bevy::prelude::*;
 use comproc::guillotine::{Bounds2, Guillotine, GuillotineCuts};
 use comproc::noise::config::NoiseConfig;
-use lod::gen::{GeneratingSpatialIndex, GenerationScheme, Id, OriginalId, SpatialIndex};
+use lod::gen::{GeneratingSpatialIndex, GenerationScheme, Id, OriginalId};
 use lod::lod_ref::LodRef;
 use noise::Perlin;
 
@@ -74,14 +74,10 @@ where
 
 	fn build_with_id(spatial_index: &mut S, id: Id, lod_ref: &LodRef) -> Option<(Self, Aabb3d)> {
 		let bounds = id.origin_cell_bounds()?;
-		GeneratingSpatialIndex::<JerseyValleyChainLayerConfig>::get_or_generate(
+		let config = GeneratingSpatialIndex::<JerseyValleyChainLayerConfig>::get_one_or_generate(
 			spatial_index,
 			Id::Universal,
 			lod_ref,
-		)?;
-		let config = <S as SpatialIndex<JerseyValleyChainLayerConfig>>::get(
-			spatial_index,
-			Id::Universal,
 		)?
 		.clone();
 		Some((Self::from_config(bounds, &config), bounds))
