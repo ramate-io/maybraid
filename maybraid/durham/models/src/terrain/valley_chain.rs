@@ -26,9 +26,7 @@ mod tests;
 
 pub use config::{BootstrapJerseyValleyChainLayerConfig, JerseyValleyChainLayerConfig};
 pub use controller::JerseyValleyChainControllerCell;
-pub use guillotine_cell::{
-	original_ids_for_guillotine_leaves, JerseyValleyChainGuillotineCell,
-};
+pub use guillotine_cell::{original_ids_for_guillotine_leaves, JerseyValleyChainGuillotineCell};
 pub use layout::{
 	BootstrapJerseyValleyChainControllerLayout, JerseyValleyChainControllerLayout,
 	VALLEY_CHAIN_CONTROLLER_CELL_SIZE,
