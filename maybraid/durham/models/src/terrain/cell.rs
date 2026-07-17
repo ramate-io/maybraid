@@ -38,10 +38,10 @@ pub const JERSEY_STAMP_GRID_OFFSET: f32 = 0.0;
 
 /// Mesh overflow past each Terrain cell face, in voxels at the cell's `res_2`.
 ///
-/// Sharp ridges need more than one shared sample: steep isosurfaces can open a
-/// crack that a single-voxel skirt does not cover. Neighbors share that strip in
-/// XZ (and a slope-scaled band in Y).
-pub const TERRAIN_MESH_PAD_VOXELS: f32 = 3.0;
+/// `0` keeps the cascade chunk flush with the cell AABB (no shared skirt).
+/// Non-zero values expand XZ by that many sample pitches (and Y by
+/// [`TERRAIN_MESH_PAD_Y_SLOPE`] × that pad) so neighbors share a strip.
+pub const TERRAIN_MESH_PAD_VOXELS: f32 = 0.0;
 
 /// Extra Y overflow as a multiple of the XZ pad (covers steep ridge crests).
 pub const TERRAIN_MESH_PAD_Y_SLOPE: f32 = 4.0;
