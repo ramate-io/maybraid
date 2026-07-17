@@ -6,14 +6,17 @@ use crate::terrain::cell::{
 	TerrainCellLayout,
 };
 use crate::terrain::cell_noise::CellTerrainNoise;
-use crate::terrain::jersey_compose::JerseyModulations;
 use crate::terrain::jersey_configs::{BootstrapJerseyLayerConfigs, JerseyLayerConfigs};
 use crate::terrain::jersey_layers::{
 	CanyonLayer, PlateauCapLayer, PocketWaterLayer, RollingGroundLayer, RuggedMassifLayer,
-	ValleyBasinLayer,
 };
 use crate::terrain::presentation::{
 	BootstrapTerrainPresentationAssets, TerrainPresentationAssets,
+};
+use crate::terrain::valley_chain::{
+	BootstrapJerseyValleyChainControllerLayout, BootstrapJerseyValleyChainLayerConfig,
+	JerseyValleyChainControllerCell, JerseyValleyChainControllerLayout,
+	JerseyValleyChainGuillotineCell, JerseyValleyChainLayerConfig, JerseyValleyChainStampCell,
 };
 use crate::terrain::Terrain;
 use avian3d::prelude::*;
@@ -43,17 +46,20 @@ pub struct TerrainEntryStore {
 	pub(crate) terrain: HashMap<Id, StoredEntry<Terrain>>,
 	pub(crate) base_noise: HashMap<Id, StoredEntry<BaseTerrainNoise>>,
 	pub(crate) cell_noise: HashMap<Id, StoredEntry<CellTerrainNoise>>,
-	pub(crate) valley_basin: HashMap<Id, StoredEntry<ValleyBasinLayer>>,
 	pub(crate) plateau_cap: HashMap<Id, StoredEntry<PlateauCapLayer>>,
 	pub(crate) rugged_massif: HashMap<Id, StoredEntry<RuggedMassifLayer>>,
 	pub(crate) canyon: HashMap<Id, StoredEntry<CanyonLayer>>,
 	pub(crate) pocket_water: HashMap<Id, StoredEntry<PocketWaterLayer>>,
 	pub(crate) rolling_ground: HashMap<Id, StoredEntry<RollingGroundLayer>>,
-	pub(crate) jersey_modulations: HashMap<Id, StoredEntry<JerseyModulations>>,
 	pub(crate) jersey_configs: HashMap<Id, StoredEntry<JerseyLayerConfigs>>,
 	pub(crate) jersey_layout: HashMap<Id, StoredEntry<JerseyStampCellLayout>>,
 	pub(crate) cell_layout: HashMap<Id, StoredEntry<TerrainCellLayout>>,
 	pub(crate) presentation: HashMap<Id, StoredEntry<TerrainPresentationAssets>>,
+	pub(crate) valley_chain_config: HashMap<Id, StoredEntry<JerseyValleyChainLayerConfig>>,
+	pub(crate) valley_chain_layout: HashMap<Id, StoredEntry<JerseyValleyChainControllerLayout>>,
+	pub(crate) valley_chain_controller: HashMap<Id, StoredEntry<JerseyValleyChainControllerCell>>,
+	pub(crate) valley_chain_guillotine: HashMap<Id, StoredEntry<JerseyValleyChainGuillotineCell>>,
+	pub(crate) valley_chain_stamp: HashMap<Id, StoredEntry<JerseyValleyChainStampCell>>,
 	entity_to_id: HashMap<Entity, Id>,
 }
 
@@ -71,35 +77,24 @@ impl TerrainEntryStore {
 		self.terrain.is_empty()
 			&& self.base_noise.is_empty()
 			&& self.cell_noise.is_empty()
-			&& self.valley_basin.is_empty()
 			&& self.plateau_cap.is_empty()
 			&& self.rugged_massif.is_empty()
 			&& self.canyon.is_empty()
 			&& self.pocket_water.is_empty()
 			&& self.rolling_ground.is_empty()
-			&& self.jersey_modulations.is_empty()
 			&& self.jersey_configs.is_empty()
 			&& self.jersey_layout.is_empty()
 			&& self.cell_layout.is_empty()
 			&& self.presentation.is_empty()
+			&& self.valley_chain_config.is_empty()
+			&& self.valley_chain_layout.is_empty()
+			&& self.valley_chain_controller.is_empty()
+			&& self.valley_chain_guillotine.is_empty()
+			&& self.valley_chain_stamp.is_empty()
 	}
 
 	pub fn base_noise(&self) -> Option<&BaseTerrainNoise> {
 		self.base_noise.get(&Id::Universal).map(|e| &e.value)
-	}
-
-	/// Lookup a materialized jersey modulation cell by id (debug / inspection).
-	pub fn jersey_modulation(&self, id: Id) -> Option<&JerseyModulations> {
-		self.jersey_modulations.get(&id).map(|e| &e.value)
-	}
-
-	/// Iterate materialized jersey modulation cells (debug / inspection).
-	pub fn iter_jersey_modulations(
-		&self,
-	) -> impl Iterator<Item = (Id, &JerseyModulations)> + '_ {
-		self.jersey_modulations
-			.iter()
-			.map(|(id, entry)| (*id, &entry.value))
 	}
 }
 
@@ -115,6 +110,8 @@ pub struct AvianTerrainIndex<'w, 's> {
 	layout: ResMut<'w, TerrainCellLayout>,
 	jersey_layout: ResMut<'w, JerseyStampCellLayout>,
 	jersey_configs: Res<'w, JerseyLayerConfigs>,
+	valley_chain_config: Res<'w, JerseyValleyChainLayerConfig>,
+	valley_chain_layout: ResMut<'w, JerseyValleyChainControllerLayout>,
 	presentation: Res<'w, TerrainPresentationAssets>,
 }
 
@@ -133,6 +130,18 @@ impl<'w, 's> BootstrapJerseyStampCellLayout for AvianTerrainIndex<'w, 's> {
 impl<'w, 's> BootstrapJerseyLayerConfigs for AvianTerrainIndex<'w, 's> {
 	fn bootstrap_jersey_layer_configs(&self) -> JerseyLayerConfigs {
 		self.jersey_configs.clone()
+	}
+}
+
+impl<'w, 's> BootstrapJerseyValleyChainLayerConfig for AvianTerrainIndex<'w, 's> {
+	fn bootstrap_jersey_valley_chain_layer_config(&self) -> JerseyValleyChainLayerConfig {
+		self.valley_chain_config.clone()
+	}
+}
+
+impl<'w, 's> BootstrapJerseyValleyChainControllerLayout for AvianTerrainIndex<'w, 's> {
+	fn bootstrap_jersey_valley_chain_controller_layout(&self) -> JerseyValleyChainControllerLayout {
+		self.valley_chain_layout.clone()
 	}
 }
 
@@ -176,17 +185,20 @@ impl<'w, 's> AvianTerrainIndex<'w, 's> {
 		self.store.terrain.clear();
 		self.store.base_noise.clear();
 		self.store.cell_noise.clear();
-		self.store.valley_basin.clear();
 		self.store.plateau_cap.clear();
 		self.store.rugged_massif.clear();
 		self.store.canyon.clear();
 		self.store.pocket_water.clear();
 		self.store.rolling_ground.clear();
-		self.store.jersey_modulations.clear();
 		self.store.jersey_configs.clear();
 		self.store.jersey_layout.clear();
 		self.store.cell_layout.clear();
 		self.store.presentation.clear();
+		self.store.valley_chain_config.clear();
+		self.store.valley_chain_layout.clear();
+		self.store.valley_chain_controller.clear();
+		self.store.valley_chain_guillotine.clear();
+		self.store.valley_chain_stamp.clear();
 		self.store.entity_to_id.clear();
 	}
 
@@ -254,17 +266,20 @@ macro_rules! impl_map_spatial_index {
 
 impl_map_spatial_index!(BaseTerrainNoise, base_noise);
 impl_map_spatial_index!(CellTerrainNoise, cell_noise);
-impl_map_spatial_index!(ValleyBasinLayer, valley_basin);
 impl_map_spatial_index!(PlateauCapLayer, plateau_cap);
 impl_map_spatial_index!(RuggedMassifLayer, rugged_massif);
 impl_map_spatial_index!(CanyonLayer, canyon);
 impl_map_spatial_index!(PocketWaterLayer, pocket_water);
 impl_map_spatial_index!(RollingGroundLayer, rolling_ground);
-impl_map_spatial_index!(JerseyModulations, jersey_modulations);
 impl_map_spatial_index!(JerseyLayerConfigs, jersey_configs);
 impl_map_spatial_index!(JerseyStampCellLayout, jersey_layout);
 impl_map_spatial_index!(TerrainCellLayout, cell_layout);
 impl_map_spatial_index!(TerrainPresentationAssets, presentation);
+impl_map_spatial_index!(JerseyValleyChainLayerConfig, valley_chain_config);
+impl_map_spatial_index!(JerseyValleyChainControllerLayout, valley_chain_layout);
+impl_map_spatial_index!(JerseyValleyChainControllerCell, valley_chain_controller);
+impl_map_spatial_index!(JerseyValleyChainGuillotineCell, valley_chain_guillotine);
+impl_map_spatial_index!(JerseyValleyChainStampCell, valley_chain_stamp);
 
 impl<'w, 's> SpatialIndex<Terrain> for AvianTerrainIndex<'w, 's> {
 	fn tracked_ids_for(&self, region: Aabb3d) -> Vec<TrackedId> {

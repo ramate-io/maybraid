@@ -6,7 +6,6 @@ pub mod cell_noise;
 pub mod collider;
 pub mod config;
 pub mod index;
-pub mod jersey_compose;
 pub mod jersey_configs;
 pub mod jersey_layers;
 pub mod jersey_modulation;
@@ -14,15 +13,22 @@ pub mod plugin;
 pub mod presentation;
 pub mod render;
 pub mod sdf;
+pub mod valley_chain;
 
-use crate::terrain::cell::original_ids_for_origin_cells;
+use crate::terrain::cell::{original_ids_for_jersey_cells, original_ids_for_origin_cells};
 use crate::terrain::render::cascade_chunk_for_cell;
+use crate::terrain::valley_chain::{
+	original_ids_for_guillotine_leaves, JerseyValleyChainControllerCell,
+	JerseyValleyChainControllerLayout, JerseyValleyChainGuillotineCell,
+	JerseyValleyChainLayerConfig, JerseyValleyChainStampCell,
+};
 use avian3d::prelude::RigidBody;
 use bevy::ecs::template::template;
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, template_value, Scene};
 use durham_terrain::shaders::DurhamTerrainShader;
+use jersey_terrain_stamps::JerseyModulation;
 use lod::gen::{GeneratingSpatialIndex, GenerationScheme, Id, LodScene, OriginalId, SpatialIndex};
 use lod::lod_ref::LodRef;
 use render_item::mesh::handle::Cached;
@@ -36,11 +42,9 @@ pub use cell_noise::CellTerrainNoise;
 pub use collider::TerrainTrimeshCollider;
 pub use config::TerrainConfig;
 pub use index::{AvianTerrainIndex, TerrainCellId, TerrainEntryStore};
-pub use jersey_compose::{JerseyFamilySummary, JerseyModulations};
 pub use jersey_configs::JerseyLayerConfigs;
 pub use jersey_layers::{
 	CanyonLayer, PlateauCapLayer, PocketWaterLayer, RollingGroundLayer, RuggedMassifLayer,
-	ValleyBasinLayer,
 };
 pub use plugin::{register_terrain_plugin, TerrainPlugin};
 pub use presentation::{
@@ -48,6 +52,13 @@ pub use presentation::{
 };
 pub use render::TerrainRenderItem;
 pub use sdf::{ComposedTerrain, ElevationModulation, TerrainSdf};
+pub use valley_chain::{
+	JerseyValleyChainControllerCell as ValleyChainControllerCell,
+	JerseyValleyChainControllerLayout as ValleyChainControllerLayout,
+	JerseyValleyChainGuillotineCell as ValleyChainGuillotineCell,
+	JerseyValleyChainLayerConfig as ValleyChainLayerConfig,
+	JerseyValleyChainStampCell as ValleyChainStampCell, VALLEY_CHAIN_CONTROLLER_CELL_SIZE,
+};
 
 /// Top-level terrain cell model.
 ///
@@ -57,20 +68,24 @@ pub use sdf::{ComposedTerrain, ElevationModulation, TerrainSdf};
 pub struct Terrain {
 	pub cell: Aabb3d,
 	pub base: BaseTerrainNoise,
-	pub jersey: Vec<JerseyModulations>,
+	/// Flattened jersey + ValleyChain modulations (deterministic source order).
+	pub modulations: Vec<JerseyModulation>,
+	/// ValleyChain leaf AABBs whose stamps contributed (debug / HUD).
+	pub valley_leaves: Vec<Aabb3d>,
 	pub sdf: ComposedTerrain,
 	pub material: Handle<DurhamTerrainShader>,
 	pub res_2: u8,
 }
 
 impl Terrain {
-	/// Compose an SDF from cloned base noise and intersecting jersey modulations.
-	pub fn compose_sdf(base: &BaseTerrainNoise, jersey: &[JerseyModulations]) -> ComposedTerrain {
+	/// Compose an SDF from cloned base noise and flattened modulations.
+	pub fn compose_sdf(
+		base: &BaseTerrainNoise,
+		modulations: &[JerseyModulation],
+	) -> ComposedTerrain {
 		let mut sdf = base.sdf.clone();
-		for cell in jersey {
-			for modulation in &cell.modulations {
-				sdf.add_elevation_modulation(Box::new(modulation.clone()));
-			}
+		for modulation in modulations {
+			sdf.add_elevation_modulation(Box::new(modulation.clone()));
 		}
 		ComposedTerrain::from_terrain(sdf)
 	}
@@ -98,11 +113,63 @@ impl LodScene for Terrain {
 	}
 }
 
-/// Terrain loads base noise and intersecting jersey modulation cells.
+/// Pull coexist jersey stamp families at `id` (ValleyBasin replaced by ValleyChain).
+fn append_jersey_families_at_cell<S>(
+	spatial_index: &mut S,
+	id: Id,
+	lod_ref: &LodRef,
+	out: &mut Vec<JerseyModulation>,
+) -> Option<()>
+where
+	S: GeneratingSpatialIndex<PlateauCapLayer>
+		+ GeneratingSpatialIndex<RuggedMassifLayer>
+		+ GeneratingSpatialIndex<CanyonLayer>
+		+ GeneratingSpatialIndex<PocketWaterLayer>
+		+ GeneratingSpatialIndex<RollingGroundLayer>,
+{
+	GeneratingSpatialIndex::<PlateauCapLayer>::get_or_generate(spatial_index, id, lod_ref)?;
+	if let Some(layer) = <S as SpatialIndex<PlateauCapLayer>>::get(spatial_index, id) {
+		out.extend(layer.modulations.iter().cloned());
+	}
+
+	GeneratingSpatialIndex::<RuggedMassifLayer>::get_or_generate(spatial_index, id, lod_ref)?;
+	if let Some(layer) = <S as SpatialIndex<RuggedMassifLayer>>::get(spatial_index, id) {
+		out.extend(layer.modulations.iter().cloned());
+	}
+
+	GeneratingSpatialIndex::<CanyonLayer>::get_or_generate(spatial_index, id, lod_ref)?;
+	if let Some(layer) = <S as SpatialIndex<CanyonLayer>>::get(spatial_index, id) {
+		out.extend(layer.modulations.iter().cloned());
+	}
+
+	GeneratingSpatialIndex::<PocketWaterLayer>::get_or_generate(spatial_index, id, lod_ref)?;
+	if let Some(layer) = <S as SpatialIndex<PocketWaterLayer>>::get(spatial_index, id) {
+		out.extend(layer.modulations.iter().cloned());
+	}
+
+	GeneratingSpatialIndex::<RollingGroundLayer>::get_or_generate(spatial_index, id, lod_ref)?;
+	if let Some(layer) = <S as SpatialIndex<RollingGroundLayer>>::get(spatial_index, id) {
+		out.extend(layer.modulations.iter().cloned());
+	}
+
+	Some(())
+}
+
+/// Terrain loads base noise, jersey stamp families, and ValleyChain leaf stamps directly.
 impl<S> GenerationScheme<S> for Terrain
 where
 	S: GeneratingSpatialIndex<BaseTerrainNoise>
-		+ GeneratingSpatialIndex<JerseyModulations>
+		+ GeneratingSpatialIndex<PlateauCapLayer>
+		+ GeneratingSpatialIndex<RuggedMassifLayer>
+		+ GeneratingSpatialIndex<CanyonLayer>
+		+ GeneratingSpatialIndex<PocketWaterLayer>
+		+ GeneratingSpatialIndex<RollingGroundLayer>
+		+ GeneratingSpatialIndex<JerseyValleyChainStampCell>
+		+ GeneratingSpatialIndex<JerseyValleyChainGuillotineCell>
+		+ GeneratingSpatialIndex<JerseyValleyChainControllerCell>
+		+ GeneratingSpatialIndex<JerseyValleyChainLayerConfig>
+		+ GeneratingSpatialIndex<JerseyValleyChainControllerLayout>
+		+ GeneratingSpatialIndex<JerseyStampCellLayout>
 		+ GeneratingSpatialIndex<TerrainCellLayout>
 		+ GeneratingSpatialIndex<TerrainPresentationAssets>,
 {
@@ -121,22 +188,35 @@ where
 		let base =
 			<S as SpatialIndex<BaseTerrainNoise>>::get(spatial_index, Id::Universal)?.clone();
 
-		let mut jersey_ids = GeneratingSpatialIndex::<JerseyModulations>::get_or_generate_region(
-			spatial_index,
-			bounds,
-			lod_ref,
-		);
+		let mut modulations = Vec::new();
+
+		// Jersey stamp grid families first (sorted cell Id), then ValleyChain leaves.
 		// Keep Id order when composing so neighboring Terrain cells apply
 		// non-commutative jersey ops identically.
-		jersey_ids.sort_by(|(a, _), (b, _)| a.cmp(b));
-		let jersey: Vec<JerseyModulations> = jersey_ids
-			.iter()
-			.filter_map(|(jid, _)| {
-				<S as SpatialIndex<JerseyModulations>>::get(spatial_index, *jid).cloned()
-			})
-			.collect();
+		let mut jersey_ids = original_ids_for_jersey_cells(spatial_index, bounds);
+		jersey_ids.sort_by(|a, b| a.0.cmp(&b.0));
+		for OriginalId(jid) in jersey_ids {
+			append_jersey_families_at_cell(spatial_index, jid, lod_ref, &mut modulations)?;
+		}
 
-		let sdf = Self::compose_sdf(&base, &jersey);
+		let mut leaf_ids = original_ids_for_guillotine_leaves(spatial_index, bounds);
+		leaf_ids.sort_by(|a, b| a.0.cmp(&b.0));
+		let mut valley_leaves = Vec::new();
+		for OriginalId(lid) in leaf_ids {
+			GeneratingSpatialIndex::<JerseyValleyChainStampCell>::get_or_generate(
+				spatial_index,
+				lid,
+				lod_ref,
+			)?;
+			if let Some(stamp) =
+				<S as SpatialIndex<JerseyValleyChainStampCell>>::get(spatial_index, lid)
+			{
+				valley_leaves.push(stamp.cell);
+				modulations.extend(stamp.modulations.iter().cloned());
+			}
+		}
+
+		let sdf = Self::compose_sdf(&base, &modulations);
 		GeneratingSpatialIndex::<TerrainPresentationAssets>::get_or_generate(
 			spatial_index,
 			Id::Universal,
@@ -147,7 +227,18 @@ where
 		let material = assets.material.clone();
 		let res_2 = assets.res_2;
 
-		Some((Self { cell: bounds, base, jersey, sdf, material, res_2 }, bounds))
+		Some((
+			Self {
+				cell: bounds,
+				base,
+				modulations,
+				valley_leaves,
+				sdf,
+				material,
+				res_2,
+			},
+			bounds,
+		))
 	}
 
 	fn descendants_with_lod(_id: Id, _spatial_index: &mut S, _lod_ref: &LodRef) {}

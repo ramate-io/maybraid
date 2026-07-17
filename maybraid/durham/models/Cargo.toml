@@ -19,7 +19,12 @@ render-item = { workspace = true }
 avian3d = { workspace = true }
 durham-terrain = { workspace = true }
 jersey-terrain-stamps = { workspace = true }
+comproc = { workspace = true }
+noise = { workspace = true }
 log = { workspace = true }
+
+[dev-dependencies]
+anyhow = { workspace = true }
 
 [lints]
 workspace = true

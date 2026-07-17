@@ -2946,13 +2946,16 @@ dependencies = [
 name = "durham-terrain-models"
 version = "0.0.1"
 dependencies = [
+ "anyhow",
  "avian3d",
  "bevy",
  "chunk",
+ "comproc",
  "durham-terrain",
  "jersey-terrain-stamps",
  "lod",
  "log",
+ "noise",
  "procedural-common",
  "render-item",
  "sdf",

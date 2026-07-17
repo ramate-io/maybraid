@@ -3,10 +3,8 @@
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 use durham_terrain_models::{
-	cascade_chunk_for_cell, JerseyFamilySummary, JerseyModulations, JerseyStampCellLayout, Terrain,
-	TerrainCellLayout, TerrainEntryStore,
+	cascade_chunk_for_cell, JerseyStampCellLayout, Terrain, TerrainCellLayout,
 };
-use lod::gen::Id;
 use std::fmt::{Display, Formatter, Result as FmtResult};
 
 use crate::WorldBaseTerrain;
@@ -42,7 +40,7 @@ pub(crate) struct CellLocationHudRoot;
 pub(crate) struct LastLoggedCellLocation {
 	terrain: Option<(i32, i32)>,
 	jersey: Option<(i32, i32)>,
-	jersey_loaded: Option<bool>,
+	modulation_count: Option<usize>,
 	terrain_present: Option<bool>,
 }
 
@@ -92,11 +90,16 @@ pub fn draw_chunk_boundary_boxes(
 	}
 
 	let terrain_color = Color::srgb(1.0, 0.2, 0.25);
+	let valley_color = Color::srgb(0.25, 0.9, 0.35);
 	for terrain in &terrains {
 		let chunk = cascade_chunk_for_cell(terrain.cell, terrain.res_2);
 		let extent = chunk.extent_vec();
 		let aabb = Aabb3d::from_min_max(chunk.origin, chunk.origin + extent);
 		gizmos.aabb_3d(aabb, Transform::IDENTITY, terrain_color);
+		for leaf in &terrain.valley_leaves {
+			let aabb = surface_footprint_box(leaf, &base.0);
+			gizmos.aabb_3d(aabb, Transform::IDENTITY, valley_color);
+		}
 	}
 
 	let jersey_color = Color::srgb(0.2, 0.85, 1.0);
@@ -122,7 +125,6 @@ pub fn update_cell_location_hud(
 	cameras: Query<&GlobalTransform, With<Camera3d>>,
 	layout: Res<TerrainCellLayout>,
 	jersey_layout: Res<JerseyStampCellLayout>,
-	store: Res<TerrainEntryStore>,
 	terrains: Query<&Terrain>,
 	mut hud_root: Query<&mut Visibility, With<CellLocationHudRoot>>,
 	mut hud: Query<&mut Text, With<CellLocationHudText>>,
@@ -151,10 +153,14 @@ pub fn update_cell_location_hud(
 	let t_size = layout.cell_size.max(1e-3);
 	let t_cell = terrain_cell_aabb(tix, tiz, t_size, layout.vertical_half_extent);
 	let j_cell = jersey_layout.cell_bounds(jix, jiz);
-	let j_id = Id::from_cell(j_cell);
 
 	let terrain = terrains.iter().find(|t| cells_match_xz(&t.cell, &t_cell));
-	let jersey = store.jersey_modulation(j_id);
+	let valley_under_cam = terrain.and_then(|t| {
+		t.valley_leaves
+			.iter()
+			.find(|leaf| point_in_xz(p, leaf))
+			.copied()
+	});
 
 	let report = CellLocationReport {
 		cam: p,
@@ -168,7 +174,7 @@ pub fn update_cell_location_hud(
 		jersey_layout_size: jersey_layout.cell_size,
 		jersey_origin_offset: jersey_layout.origin_offset,
 		jersey_cell: j_cell,
-		jersey: jersey.map(JerseyReport::from_mods),
+		valley_leaf: valley_under_cam,
 	};
 
 	let rendered = report.to_string();
@@ -183,16 +189,16 @@ pub fn update_cell_location_hud(
 	}
 
 	let terrain_present = report.terrain.is_some();
-	let jersey_loaded = report.jersey.is_some();
+	let modulation_count = report.terrain.as_ref().map(|t| t.ops).unwrap_or(0);
 	let changed = last.terrain != Some((tix, tiz))
 		|| last.jersey != Some((jix, jiz))
 		|| last.terrain_present != Some(terrain_present)
-		|| last.jersey_loaded != Some(jersey_loaded);
+		|| last.modulation_count != Some(modulation_count);
 	if changed {
 		last.terrain = Some((tix, tiz));
 		last.jersey = Some((jix, jiz));
 		last.terrain_present = Some(terrain_present);
-		last.jersey_loaded = Some(jersey_loaded);
+		last.modulation_count = Some(modulation_count);
 		info!("\n{rendered}");
 	}
 }
@@ -210,7 +216,7 @@ struct CellLocationReport {
 	jersey_layout_size: f32,
 	jersey_origin_offset: Vec2,
 	jersey_cell: Aabb3d,
-	jersey: Option<JerseyReport>,
+	valley_leaf: Option<Aabb3d>,
 }
 
 #[derive(Debug, Clone)]
@@ -218,14 +224,8 @@ struct TerrainReport {
 	cell: Aabb3d,
 	chunk: Aabb3d,
 	res_2: u8,
-	stamps: Vec<JerseyReport>,
-}
-
-#[derive(Debug, Clone)]
-struct JerseyReport {
-	cell: Aabb3d,
 	ops: usize,
-	families: Vec<JerseyFamilySummary>,
+	valley_leaves: usize,
 }
 
 impl TerrainReport {
@@ -236,17 +236,8 @@ impl TerrainReport {
 			cell: t.cell,
 			chunk: Aabb3d::from_min_max(chunk.origin, chunk.origin + extent),
 			res_2: t.res_2,
-			stamps: t.jersey.iter().map(JerseyReport::from_mods).collect(),
-		}
-	}
-}
-
-impl JerseyReport {
-	fn from_mods(m: &JerseyModulations) -> Self {
-		Self {
-			cell: m.cell,
-			ops: m.modulations.len(),
-			families: m.families.clone(),
+			ops: t.modulations.len(),
+			valley_leaves: t.valley_leaves.len(),
 		}
 	}
 }
@@ -271,18 +262,11 @@ impl Display for CellLocationReport {
 				writeln!(f, "  status     GENERATED  res_2={}", t.res_2)?;
 				writeln!(f, "  cell AABB  {}", fmt_aabb(&t.cell))?;
 				writeln!(f, "  chunk AABB {}", fmt_aabb(&t.chunk))?;
-				writeln!(f, "  stamps     n={}", t.stamps.len())?;
-				if t.stamps.is_empty() {
-					writeln!(f, "    (none composed onto this Terrain)")?;
-				}
-				for (i, stamp) in t.stamps.iter().enumerate() {
-					writeln!(
-						f,
-						"    [{i}] ops={}  families={:?}",
-						stamp.ops, stamp.families
-					)?;
-					writeln!(f, "        AABB {}", fmt_aabb(&stamp.cell))?;
-				}
+				writeln!(
+					f,
+					"  modulations n={}  valley_leaves n={}",
+					t.ops, t.valley_leaves
+				)?;
 			}
 			None => writeln!(f, "  status     NOT GENERATED")?,
 		}
@@ -299,13 +283,12 @@ impl Display for CellLocationReport {
 			)
 		)?;
 		writeln!(f, "  cell AABB  {}", fmt_aabb(&self.jersey_cell))?;
-		match &self.jersey {
-			Some(j) => {
-				writeln!(f, "  status     LOADED  ops={}", j.ops)?;
-				writeln!(f, "  families   {:?}", j.families)?;
-				writeln!(f, "  store AABB {}", fmt_aabb(&j.cell))?;
+		match self.valley_leaf {
+			Some(leaf) => {
+				writeln!(f, "valley leaf  UNDER CAMERA")?;
+				writeln!(f, "  leaf AABB  {}", fmt_aabb(&leaf))?;
 			}
-			None => writeln!(f, "  status     NOT LOADED")?,
+			None => writeln!(f, "valley leaf  (none under camera)")?,
 		}
 		write!(f, "───────────────────────────────────────────────────")
 	}
@@ -344,6 +327,10 @@ fn cells_match_xz(a: &Aabb3d, b: &Aabb3d) -> bool {
 		&& (a.min.z - b.min.z).abs() < 1e-3
 		&& (a.max.x - b.max.x).abs() < 1e-3
 		&& (a.max.z - b.max.z).abs() < 1e-3
+}
+
+fn point_in_xz(p: Vec3, cell: &Aabb3d) -> bool {
+	p.x >= cell.min.x && p.x < cell.max.x && p.z >= cell.min.z && p.z < cell.max.z
 }
 
 fn surface_footprint_box(

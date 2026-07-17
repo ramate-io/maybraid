@@ -5,6 +5,9 @@ use crate::terrain::collider::queue_terrain_trimesh_colliders;
 use crate::terrain::index::TerrainEntryStore;
 use crate::terrain::jersey_configs::JerseyLayerConfigs;
 use crate::terrain::presentation::TerrainPresenterState;
+use crate::terrain::valley_chain::{
+	JerseyValleyChainControllerLayout, JerseyValleyChainLayerConfig,
+};
 use avian3d::prelude::PhysicsPlugins;
 use avian3d::schedule::PhysicsSchedulePlugin;
 use bevy::prelude::*;
@@ -35,6 +38,8 @@ impl Plugin for TerrainPlugin {
 			.init_resource::<TerrainCellLayout>()
 			.init_resource::<JerseyStampCellLayout>()
 			.init_resource::<JerseyLayerConfigs>()
+			.init_resource::<JerseyValleyChainLayerConfig>()
+			.init_resource::<JerseyValleyChainControllerLayout>()
 			.init_resource::<TerrainPresenterState>()
 			.add_systems(Update, queue_terrain_trimesh_colliders);
 	}

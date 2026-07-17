@@ -5,15 +5,16 @@ use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 use jersey_terrain_stamps::{
 	CanyonParams, PlateauCapParams, PocketWaterParams, RollingGroundParams, RuggedMassifParams,
-	ValleyBasinParams,
 };
 use lod::gen::{GenerationScheme, Id, OriginalId};
 use lod::lod_ref::LodRef;
 
 /// Per-family params applied on every jersey stamp cell (layers coexist).
+///
+/// Valley trains are authored via [`crate::terrain::valley_chain::JerseyValleyChainLayerConfig`],
+/// not this grid-family set.
 #[derive(Resource, Debug, Clone)]
 pub struct JerseyLayerConfigs {
-	pub valley: ValleyBasinParams,
 	pub plateau: PlateauCapParams,
 	pub massif: RuggedMassifParams,
 	pub canyon: CanyonParams,
@@ -24,7 +25,6 @@ pub struct JerseyLayerConfigs {
 impl Default for JerseyLayerConfigs {
 	fn default() -> Self {
 		Self {
-			valley: ValleyBasinParams::default(),
 			plateau: PlateauCapParams::default(),
 			massif: RuggedMassifParams::default(),
 			canyon: CanyonParams::default(),
