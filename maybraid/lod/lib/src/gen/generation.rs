@@ -82,11 +82,15 @@ where
 			.collect();
 		ids.extend(self.tracked_ids_for(region).into_iter().map(|tracked| tracked.0));
 
-		ids.into_iter()
+		let mut out: Vec<(Id, Aabb3d)> = ids
+			.into_iter()
 			.filter_map(|id| {
 				self.get_or_generate(id, lod_ref)?;
 				self.get_bounds(id).map(|bounds| (id, bounds))
 			})
-			.collect()
+			.collect();
+		// Deterministic compose order across neighboring queries (HashSet is unordered).
+		out.sort_by(|(a, _), (b, _)| a.cmp(b));
+		out
 	}
 }
