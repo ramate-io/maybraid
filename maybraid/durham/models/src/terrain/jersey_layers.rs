@@ -6,7 +6,7 @@ use crate::terrain::jersey_configs::JerseyLayerConfigs;
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 use jersey_terrain_stamps::{
-	Canyon, JerseyModulation, PlateauCap, PocketWater, RollingGround, RuggedMassif, ValleyBasin,
+	Canyon, JerseyModulation, PlateauCap, PocketWater, RollingGround, RuggedMassif,
 };
 use lod::gen::{GeneratingSpatialIndex, GenerationScheme, Id, OriginalId, SpatialIndex};
 use lod::lod_ref::LodRef;
@@ -93,12 +93,6 @@ macro_rules! jersey_family_layer {
 		}
 	};
 }
-
-jersey_family_layer!(ValleyBasinLayer, 11, |bounds, seed, height_at, configs| {
-	ValleyBasin::from_bounds(bounds, seed, configs.valley, height_at)
-		.stamp
-		.modulations
-});
 
 jersey_family_layer!(PlateauCapLayer, 22, |bounds, seed, height_at, configs| {
 	PlateauCap::from_bounds(bounds, seed, configs.plateau, height_at)

@@ -8,12 +8,14 @@ pub mod terrain;
 pub use terrain::render::cascade_chunk_for_cell;
 pub use terrain::{
 	register_terrain_plugin, AvianTerrainIndex, BaseTerrainNoise, CanyonLayer, CellTerrainNoise,
-	ComposedTerrain, JerseyFamilySummary, JerseyLayerConfigs, JerseyModulations,
-	JerseyStampCellLayout, MacroCellLayout, PlateauCapLayer, PocketWaterLayer, RollingGroundLayer,
-	RuggedMassifLayer, Terrain, TerrainCellId, TerrainCellLayout, TerrainConfig, TerrainEntryStore,
-	TerrainPlugin, TerrainPresentationAssets, TerrainPresenterState, TerrainRegionPresenter,
-	TerrainRenderItem, TerrainSdf, TerrainStoreView, TerrainTrimeshCollider, ValleyBasinLayer,
+	ComposedTerrain, JerseyLayerConfigs, JerseyStampCellLayout, MacroCellLayout, PlateauCapLayer,
+	PocketWaterLayer, RollingGroundLayer, RuggedMassifLayer, Terrain, TerrainCellId,
+	TerrainCellLayout, TerrainConfig, TerrainEntryStore, TerrainPlugin, TerrainPresentationAssets,
+	TerrainPresenterState, TerrainRegionPresenter, TerrainRenderItem, TerrainSdf, TerrainStoreView,
+	TerrainTrimeshCollider, ValleyChainControllerCell, ValleyChainControllerLayout,
+	ValleyChainGuillotineCell, ValleyChainLayerConfig, ValleyChainStampCell,
 	JERSEY_STAMP_CELL_SIZE, JERSEY_STAMP_GRID_OFFSET, MACRO_CELL_SIZE, TERRAIN_CELL_SIZE,
+	VALLEY_CHAIN_CONTROLLER_CELL_SIZE,
 };
 
 use bevy::prelude::*;
