@@ -1,38 +1,37 @@
 //! Humanoid mapping for [`Jab`](crate::animations::Jab).
 //!
+//! # Punch-roll-first
+//!
+//! Tee forearm flex bends **up**. [`Jab::punch_roll`] (~π/2 on humerus twist X) rotates
+//! that hinge ~90° ventrally so flex bends **front ↔ back**. Tune drop and elbow only
+//! after that roll is locked. Humerus DEFAULT swing (Y) stays unused (long-axis spin).
+//!
 //! # Bind tee pose (hand tips)
 //!
 //! Right ≈ `(-1.0, 1.7)`, left ≈ `(1.0, 1.7)`.
 //!
-//! # Axis assumptions (DEFAULT humerus: `swing=Y`, `flex=Z`, `twist=X`)
+//! # Current scope
 //!
-//! | Channel | Local axis | Used for |
-//! |---------|------------|----------|
-//! | flex    | Z          | Drop to a side hang from the tee |
-//! | twist   | X          | Elbow-plane cock + forward tip. π/2 aligns the hinge with Y; π/2+π/4
-//! |         |            | cocks it ~45° between X and Y. Extra X tips the shaft. |
-//! | swing   | Y          | **Ventral** carry so the arm sits in front of the torso (not inside it) |
+//! Only the **right** arm is posed. The left arm stays at tee until left-side signs are
+//! sorted out.
 //!
-//! Light midline uses tuck's ±X flex, composed after DEFAULT. Magnitudes stay modest so
-//! the left arm does not flatten into a horizontal bind.
+//! # Axis map (DEFAULT: `swing=Y`, `flex=Z`, `twist=X`)
+//!
+//! | Bone            | Channel | Used for |
+//! |-----------------|---------|----------|
+//! | humerus         | twist X | Punch roll (~90° from tee) |
+//! | humerus         | flex Z  | Arm drop from tee |
+//! | shoulder        | swing Y | Tiny aim/height carry |
+//! | forearm         | flex    | Guard / chamber / extend |
+//! | lumbar→upper    | swing Y | Distributed trunk turn |
+//! | pelvis          | swing Y | Hip contribution into the punch |
 
-use bevy::prelude::Vec3;
 use crozon_rigs::humanoid::HumanoidRig;
-use crozon_rigs::{RiggedAxis, Side};
+use crozon_rigs::Side;
 
 use crate::animations::Jab;
 use crate::rigs::humanoid::apply::{apply_leg, apply_root};
 use crate::{Animation, Effects};
-
-/// Tuck midline frame: flex on ±X only.
-fn humerus_midline_axis(side: Side) -> RiggedAxis {
-	match side {
-		Side::Left => RiggedAxis { swing_axis: Vec3::Y, flex_axis: Vec3::X, twist_axis: Vec3::Z },
-		Side::Right => {
-			RiggedAxis { swing_axis: Vec3::Y, flex_axis: Vec3::NEG_X, twist_axis: Vec3::Z }
-		}
-	}
-}
 
 impl<R: HumanoidRig> Animation<R> for Jab<R> {
 	fn apply(&self, rig: &mut R, progress: f32) -> Effects {
@@ -42,31 +41,32 @@ impl<R: HumanoidRig> Animation<R> for Jab<R> {
 		apply_leg(rig, jab_side, self.lead_femur_swing(progress), self.stance_shin_flex(progress));
 		apply_leg(rig, guard_side, self.rear_femur_swing(progress), self.stance_shin_flex(progress));
 		apply_root(rig, self.root_lean(progress));
-		apply_torso_roll(rig, jab_side, self.torso_turn(progress));
+		apply_torso_turn(rig, jab_side, self.torso_turn(progress));
+		apply_hip_turn(rig, jab_side, self.hip_turn(progress));
 
-		apply_jab_arm(
-			rig,
-			jab_side,
-			self.jab_humerus_drop(progress),
-			self.humerus_ventral(progress),
-			self.humerus_elbow_roll(progress),
-			self.humerus_forward(progress),
-			self.humerus_midline(progress),
-			self.jab_elbow(progress),
-		);
-		apply_jab_arm(
-			rig,
-			guard_side,
-			self.guard_humerus_drop(progress),
-			self.humerus_ventral(progress),
-			self.humerus_elbow_roll(progress),
-			self.humerus_forward(progress),
-			self.humerus_midline(progress),
-			self.guard_elbow(progress),
-		);
+		// Left arm: force tee / bind rest until left-side tuning is ready.
+		park_arm_at_tee(rig, Side::Left);
+
+		if self.side == Side::Right {
+			apply_right_jab_arm(
+				rig,
+				self.punch_roll(progress),
+				self.arm_drop(progress),
+				self.shoulder_carry(progress),
+				self.jab_elbow(progress),
+			);
+		}
 
 		Effects::default()
 	}
+}
+
+fn park_arm_at_tee<R: HumanoidRig>(rig: &mut R, side: Side) {
+	let mut arm = rig.arm_pose(side);
+	arm.shoulder = rig.articulate_on_rig(arm.shoulder, 0.0, 0.0);
+	arm.humerus = rig.articulate_on_rig_twisted(arm.humerus, 0.0, 0.0, 0.0);
+	arm.forearm = rig.articulate_on_rig(arm.forearm, 0.0, 0.0);
+	rig.pose_arm(arm);
 }
 
 fn lateral_sign(side: Side) -> f32 {
@@ -81,68 +81,63 @@ fn humerus_drop(side: Side, drop: f32) -> f32 {
 	-drop * lateral_sign(side)
 }
 
-/// Ventral on DEFAULT swing Y. +lateral_sign read dorsal earlier; invert for ventral.
-fn humerus_ventral(side: Side, amount: f32) -> f32 {
-	-amount * lateral_sign(side)
+/// Right-arm punch roll on DEFAULT twist X. Positive ~π/2 takes tee "flex up" → "flex ventral".
+fn right_punch_roll(roll: f32) -> f32 {
+	roll
 }
 
-/// Elbow cock + forward tip on DEFAULT twist X.
-/// Sign is inverted vs [`lateral_sign`]: +lateral on the right read as behind the back.
-fn humerus_x_twist(side: Side, elbow_roll: f32, forward: f32) -> f32 {
-	-(elbow_roll + forward) * lateral_sign(side)
-}
-
-/// Midline on tuck ±X flex.
-fn humerus_midline(side: Side, amount: f32) -> f32 {
-	amount * lateral_sign(side)
-}
-
-fn apply_jab_arm<R: HumanoidRig>(
+fn apply_right_jab_arm<R: HumanoidRig>(
 	rig: &mut R,
-	side: Side,
+	punch_roll: f32,
 	drop: f32,
-	ventral: f32,
-	elbow_roll: f32,
-	forward: f32,
-	midline: f32,
+	shoulder_carry: f32,
 	elbow: f32,
 ) {
+	let side = Side::Right;
 	let mut arm = rig.arm_pose(side);
 
-	// Shoulders stay at rest.
-	arm.shoulder = rig.articulate_on_rig(arm.shoulder, 0.0, 0.0);
+	// Tiny aim only — punch travel is elbow extension in the rolled frame.
+	arm.shoulder = rig.articulate_on_rig(arm.shoulder, shoulder_carry, 0.0);
 
-	// DEFAULT: ventral (Y) + side hang (Z) + X cock/forward.
+	// Order in compose is flex → twist → swing; we still author roll as the primary DOF.
 	arm.humerus = rig.articulate_on_rig_twisted(
 		arm.humerus,
-		humerus_ventral(side, ventral),
+		0.0,
 		humerus_drop(side, drop),
-		humerus_x_twist(side, elbow_roll, forward),
-	);
-	// Light midline on tuck ±X.
-	arm.humerus = arm.humerus.articulate(
-		humerus_midline_axis(side),
-		0.0,
-		humerus_midline(side, midline),
-		0.0,
+		right_punch_roll(punch_roll),
 	);
 
 	arm.forearm = rig.articulate_on_rig(arm.forearm, 0.0, elbow);
 	rig.pose_arm(arm);
 }
 
-/// Trunk roll into the jab: midback / upper-back **swing (Y)**.
-fn apply_torso_roll<R: HumanoidRig>(rig: &mut R, jab_side: Side, turn: f32) {
+/// Distribute trunk yaw across lumbar → midback → upper_back (swing Y).
+fn apply_torso_turn<R: HumanoidRig>(rig: &mut R, jab_side: Side, turn: f32) {
 	let roll = turn * -lateral_sign(jab_side);
 	let mut spine = rig.spine_pose();
-	spine.midback = rig.articulate_on_rig(spine.midback, roll, 0.0);
-	spine.upper_back = rig.articulate_on_rig(spine.upper_back, roll * 0.8, 0.0);
+	spine.lumbar = rig.articulate_on_rig(spine.lumbar, roll * 0.35, 0.0);
+	spine.midback = rig.articulate_on_rig(spine.midback, roll * 0.4, 0.0);
+	spine.upper_back = rig.articulate_on_rig(spine.upper_back, roll * 0.25, 0.0);
 	rig.pose_spine(spine);
+}
+
+/// Hip contribution: both pelves yaw with the trunk (jab-side slightly more).
+fn apply_hip_turn<R: HumanoidRig>(rig: &mut R, jab_side: Side, hip: f32) {
+	let yaw = hip * -lateral_sign(jab_side);
+	for (side, weight) in [(jab_side, 1.0), (match jab_side {
+		Side::Left => Side::Right,
+		Side::Right => Side::Left,
+	}, 0.65)]
+	{
+		let mut leg = rig.leg_pose(side);
+		leg.pelvis = rig.articulate_on_rig(leg.pelvis, yaw * weight, 0.0);
+		rig.pose_leg(leg);
+	}
 }
 
 #[cfg(test)]
 mod tests {
-	use std::f32::consts::{FRAC_PI_2, FRAC_PI_4};
+	use std::f32::consts::FRAC_PI_2;
 
 	use crozon_rigs::rigs::humanoid_v0::HumanoidV0Rig;
 
@@ -158,13 +153,9 @@ mod tests {
 
 		let forearm = rig
 			.pose()
-			.get(&rig.arm(jab.side).forearm.name)
+			.get(&rig.arm(Side::Right).forearm.name)
 			.ok_or_else(|| anyhow::anyhow!("missing jab forearm pose"))?;
-		let guard = rig
-			.pose()
-			.get(&rig.arm(jab.opposite_side()).forearm.name)
-			.ok_or_else(|| anyhow::anyhow!("missing guard forearm pose"))?;
-		assert!(forearm.flex.abs() < guard.flex.abs());
+		assert!(forearm.flex.abs() < 0.2);
 		Ok(())
 	}
 
@@ -188,77 +179,74 @@ mod tests {
 	}
 
 	#[test]
-	fn shoulders_stay_at_rest() -> anyhow::Result<()> {
+	fn left_arm_stays_at_tee() -> anyhow::Result<()> {
 		let jab = Jab::<HumanoidV0Rig>::default();
 		let mut rig = HumanoidV0Rig::imported();
 		jab.apply(&mut rig, 0.47);
 
-		for side in [jab.side, jab.opposite_side()] {
-			let shoulder = rig
-				.pose()
-				.get(&rig.arm(side).shoulder.name)
-				.ok_or_else(|| anyhow::anyhow!("missing shoulder pose"))?;
-			assert!(
-				shoulder.swing.abs() < 1e-4
-					&& shoulder.flex.abs() < 1e-4
-					&& shoulder.twist.abs() < 1e-4,
-				"expected resting shoulder, got swing={} flex={} twist={}",
-				shoulder.swing,
-				shoulder.flex,
-				shoulder.twist
-			);
-		}
+		let shoulder = rig
+			.pose()
+			.get(&rig.arm(Side::Left).shoulder.name)
+			.ok_or_else(|| anyhow::anyhow!("left shoulder"))?;
+		let humerus = rig
+			.pose()
+			.get(&rig.arm(Side::Left).humerus.name)
+			.ok_or_else(|| anyhow::anyhow!("left humerus"))?;
+		let forearm = rig
+			.pose()
+			.get(&rig.arm(Side::Left).forearm.name)
+			.ok_or_else(|| anyhow::anyhow!("left forearm"))?;
+		assert!(shoulder.swing.abs() < 1e-4 && shoulder.flex.abs() < 1e-4);
+		assert!(humerus.swing.abs() < 1e-4 && humerus.flex.abs() < 1e-4 && humerus.twist.abs() < 1e-4);
+		assert!(forearm.flex.abs() < 1e-4);
 		Ok(())
 	}
 
 	#[test]
-	fn right_humerus_cocks_past_y_aligned_roll() -> anyhow::Result<()> {
-		let expected = FRAC_PI_2 + FRAC_PI_4;
+	fn punch_roll_locks_humerus_twist_near_ninety() -> anyhow::Result<()> {
 		let jab = Jab::<HumanoidV0Rig>::default().with_side(Side::Right);
-		assert!((jab.humerus_elbow_roll(0.0) - expected).abs() < 1e-4);
-		assert!(jab.humerus_forward(0.0) > 0.3);
+		let mut rig = HumanoidV0Rig::imported();
+		jab.apply(&mut rig, 0.0);
 
-		let twist = humerus_x_twist(Side::Right, expected, jab.humerus_forward(0.0));
-		// Right: flipped so X cock/forward goes in front, not behind the back.
-		assert!(twist > 0.0);
-		assert!(twist.abs() > expected);
-		Ok(())
-	}
-
-	#[test]
-	fn right_humerus_swings_ventral() -> anyhow::Result<()> {
-		// Right lateral_sign is -1; ventral uses -lateral_sign → positive Y swing.
-		assert!(humerus_ventral(Side::Right, 1.0) > 0.0);
-		assert!(humerus_ventral(Side::Left, 1.0) < 0.0);
+		let humerus = rig
+			.pose()
+			.get(&rig.arm(Side::Right).humerus.name)
+			.ok_or_else(|| anyhow::anyhow!("right humerus"))?;
+		assert!(
+			(humerus.twist - FRAC_PI_2).abs() < 1e-3,
+			"expected punch roll on twist, got {}",
+			humerus.twist
+		);
+		assert!(humerus.swing.abs() < 1e-4, "humerus Y unused, got {}", humerus.swing);
+		assert!(
+			jab.shoulder_carry(0.0) < 0.2,
+			"shoulder carry should stay tiny, got {}",
+			jab.shoulder_carry(0.0)
+		);
 		Ok(())
 	}
 
 	#[test]
 	fn humerus_drops_to_side_on_z() -> anyhow::Result<()> {
-		let jab = Jab::<HumanoidV0Rig>::default();
 		let rig = HumanoidV0Rig::imported();
-		let mut arm = rig.arm_pose(jab.side);
+		let mut arm = rig.arm_pose(Side::Right);
 		arm.humerus =
-			rig.articulate_on_rig_twisted(arm.humerus, 0.0, humerus_drop(jab.side, 0.85), 0.0);
-		assert_eq!(arm.humerus.flex.signum(), -lateral_sign(jab.side));
-		assert!(arm.humerus.flex.abs() > 0.6);
+			rig.articulate_on_rig_twisted(arm.humerus, 0.0, humerus_drop(Side::Right, 0.55), 0.0);
+		assert_eq!(arm.humerus.flex.signum(), -lateral_sign(Side::Right));
+		assert!(arm.humerus.flex.abs() > 0.4);
 		Ok(())
 	}
 
 	#[test]
-	fn midline_stays_modest() -> anyhow::Result<()> {
-		let jab = Jab::<HumanoidV0Rig>::default();
-		assert!(jab.humerus_midline(0.0) < 0.2);
-		assert!(jab.humerus_ventral(0.0) < 0.6);
-		Ok(())
-	}
-
-	#[test]
-	fn torso_rolls_on_mid_and_upper_back_swing() -> anyhow::Result<()> {
+	fn torso_turn_spreads_across_spine() -> anyhow::Result<()> {
 		let jab = Jab::<HumanoidV0Rig>::default();
 		let mut rig = HumanoidV0Rig::imported();
 		jab.apply(&mut rig, 0.47);
 
+		let lumbar = rig
+			.pose()
+			.get(&rig.spine().lumbar.name)
+			.ok_or_else(|| anyhow::anyhow!("missing lumbar pose"))?;
 		let midback = rig
 			.pose()
 			.get(&rig.spine().midback.name)
@@ -267,15 +255,26 @@ mod tests {
 			.pose()
 			.get(&rig.spine().upper_back.name)
 			.ok_or_else(|| anyhow::anyhow!("missing upper_back pose"))?;
+		assert!(lumbar.swing.abs() > 0.05, "lumbar swing={}", lumbar.swing);
+		assert!(midback.swing.abs() > 0.05, "midback swing={}", midback.swing);
+		assert!(upper.swing.abs() > 0.03, "upper_back swing={}", upper.swing);
+		Ok(())
+	}
+
+	#[test]
+	fn hip_turn_drives_pelvis_swing() -> anyhow::Result<()> {
+		let jab = Jab::<HumanoidV0Rig>::default().with_side(Side::Right);
+		let mut rig = HumanoidV0Rig::imported();
+		jab.apply(&mut rig, 0.47);
+
+		let jab_pelvis = rig
+			.pose()
+			.get(&rig.leg(Side::Right).pelvis.name)
+			.ok_or_else(|| anyhow::anyhow!("jab pelvis"))?;
 		assert!(
-			midback.swing.abs() > 0.2,
-			"expected midback Y roll, got swing={}",
-			midback.swing
-		);
-		assert!(
-			upper.swing.abs() > 0.15,
-			"expected upper_back Y roll, got swing={}",
-			upper.swing
+			jab_pelvis.swing.abs() > 0.02,
+			"expected pelvis yaw, got swing={}",
+			jab_pelvis.swing
 		);
 		Ok(())
 	}
