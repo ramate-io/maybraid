@@ -53,7 +53,7 @@ const SHOULDER_CARRY: f32 = 0.12;
 
 // --- Trunk / stance ---
 const TORSO_TURN: f32 = 1.0;
-/// Sagittal waist fold into the punch (lumbar / midback twist), radians at full extend.
+/// Sagittal waist fold into the punch (root + lumbar), radians at full extend.
 const WAIST_BEND: f32 = 0.35;
 const ROOT_LEAN: f32 = 0.05;
 const LEAD_FEMUR: f32 = 0.16;
@@ -235,7 +235,7 @@ impl<Rig> Jab<Rig> {
 
 	/// Sagittal bend at the waist into the punch (peaks with extension).
 	///
-	/// Humanoid maps this to spine **twist** (pitch); DEFAULT flex is coronal.
+	/// Humanoid maps this to spine **twist** (sagittal pitch), weighted toward root/lumbar.
 	pub fn waist_bend(&self, progress: f32) -> f32 {
 		let chamber = self.chamber_amount(progress);
 		let extend = self.extension_amount(progress);

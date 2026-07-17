@@ -3,13 +3,14 @@
 //! Humerus: [`HumanoidRig::humerus_along_with_roll`] with [`Jab::humerus_along`] + punch
 //! roll. Punch travel = humerus +Z whip + elbow uncoil. Cover arm holds the guard along
 //! frame with a tucked elbow. Trunk yaw spreads across lumbar → midback → upper_back and
-//! both pelves; waist bend (lumbar/midback twist = sagittal pitch) folds into the punch.
+//! both pelves; waist bend (spine twist = sagittal pitch) folds into the punch, weighted
+//! toward root / lumbar with lighter mid / upper.
 
 use crozon_rigs::humanoid::HumanoidRig;
 use crozon_rigs::Side;
 
 use crate::animations::Jab;
-use crate::rigs::humanoid::apply::{apply_leg, apply_root};
+use crate::rigs::humanoid::apply::apply_leg;
 use crate::{Animation, Effects};
 
 impl<R: HumanoidRig> Animation<R> for Jab<R> {
@@ -19,12 +20,12 @@ impl<R: HumanoidRig> Animation<R> for Jab<R> {
 
 		apply_leg(rig, jab_side, self.lead_femur_swing(progress), self.stance_shin_flex(progress));
 		apply_leg(rig, guard_side, self.rear_femur_swing(progress), self.stance_shin_flex(progress));
-		apply_root(rig, self.root_lean(progress));
 		apply_trunk(
 			rig,
 			jab_side,
 			self.torso_turn(progress),
 			self.waist_bend(progress),
+			self.root_lean(progress),
 		);
 		apply_hip_turn(rig, jab_side, self.hip_turn(progress));
 
@@ -69,15 +70,42 @@ fn apply_arm<R: HumanoidRig>(
 	rig.pose_arm(arm);
 }
 
-fn apply_trunk<R: HumanoidRig>(rig: &mut R, jab_side: Side, turn: f32, waist_bend: f32) {
+fn apply_trunk<R: HumanoidRig>(
+	rig: &mut R,
+	jab_side: Side,
+	turn: f32,
+	waist_bend: f32,
+	root_lean: f32,
+) {
 	let yaw = turn * -jab_side.sign();
 	let mut spine = rig.spine_pose();
 	// DEFAULT spine: swing Y ≈ yaw, flex Z ≈ coronal, twist X ≈ sagittal pitch.
-	spine.lumbar =
-		rig.articulate_on_rig_twisted(spine.lumbar, yaw * 0.35, 0.0, waist_bend * 0.7);
-	spine.midback =
-		rig.articulate_on_rig_twisted(spine.midback, yaw * 0.4, 0.0, waist_bend * 0.3);
-	spine.upper_back = rig.articulate_on_rig(spine.upper_back, yaw * 0.25, 0.0);
+	// Pitch is mostly root + lumbar; mid/upper keep a lighter share so the fold
+	// still reads through the thoracic stack without living only up high.
+	spine.root = rig.articulate_on_rig_twisted(
+		spine.root,
+		root_lean,
+		0.0,
+		waist_bend * 0.40,
+	);
+	spine.lumbar = rig.articulate_on_rig_twisted(
+		spine.lumbar,
+		yaw * 0.35,
+		0.0,
+		waist_bend * 0.35,
+	);
+	spine.midback = rig.articulate_on_rig_twisted(
+		spine.midback,
+		yaw * 0.4,
+		0.0,
+		waist_bend * 0.15,
+	);
+	spine.upper_back = rig.articulate_on_rig_twisted(
+		spine.upper_back,
+		yaw * 0.25,
+		0.0,
+		waist_bend * 0.10,
+	);
 	rig.pose_spine(spine);
 }
 
@@ -217,21 +245,32 @@ mod tests {
 	}
 
 	#[test]
-	fn waist_bend_pitches_lumbar_on_extension() -> anyhow::Result<()> {
+	fn waist_bend_loads_full_spine_pitch() -> anyhow::Result<()> {
 		let jab = Jab::<HumanoidV0Rig>::default();
 		let mut rig = HumanoidV0Rig::imported();
 		jab.apply(&mut rig, 0.47);
 
+		let root = rig
+			.pose()
+			.get(&rig.spine().root.name)
+			.ok_or_else(|| anyhow::anyhow!("missing root pose"))?;
 		let lumbar = rig
 			.pose()
 			.get(&rig.spine().lumbar.name)
 			.ok_or_else(|| anyhow::anyhow!("missing lumbar pose"))?;
-		assert!(
-			lumbar.twist > 0.05,
-			"expected sagittal waist twist, got {}",
-			lumbar.twist
-		);
-		assert!(lumbar.flex.abs() < 1e-4, "coronal flex should stay clear");
+		let midback = rig
+			.pose()
+			.get(&rig.spine().midback.name)
+			.ok_or_else(|| anyhow::anyhow!("missing midback pose"))?;
+		let upper = rig
+			.pose()
+			.get(&rig.spine().upper_back.name)
+			.ok_or_else(|| anyhow::anyhow!("missing upper_back pose"))?;
+		assert!(root.twist > lumbar.twist, "root should carry more pitch than lumbar");
+		assert!(lumbar.twist > midback.twist, "lumbar should carry more pitch than mid");
+		assert!(midback.twist > 0.0);
+		assert!(upper.twist > 0.0);
+		assert!(upper.twist < midback.twist);
 		Ok(())
 	}
 
