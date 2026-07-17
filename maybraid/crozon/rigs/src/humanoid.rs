@@ -156,6 +156,30 @@ pub trait HumanoidRig {
 		bone
 	}
 
+	/// Aim the humerus length axis along a **world-space** direction, then apply long-axis roll.
+	///
+	/// This bypasses swing/flex coupling: aim is solved with a shortest-arc from the bind
+	/// length direction, and `roll` is applied about the bone's local length axis so it
+	/// cannot re-aim the arm. Humanoid bones carry length along local Y.
+	fn humerus_along_with_roll(&self, side: Side, along_world: Vec3, roll: f32) -> BonePose {
+		let arm = self.arm_pose(side);
+		let mut humerus = arm.humerus;
+		let parent_world = self.parent_world_rotation(&humerus.name);
+		let along_parent = parent_world.inverse() * along_world;
+		let rest = humerus.transform.rotation;
+		humerus.transform.rotation = crate::articulation::rotation_along_with_roll(
+			rest,
+			along_parent,
+			roll,
+			crate::articulation::BONE_LENGTH_AXIS,
+		);
+		// Semantic channels: only roll is meaningful after an aim solve.
+		humerus.swing = 0.0;
+		humerus.flex = 0.0;
+		humerus.twist = roll;
+		humerus
+	}
+
 	fn leg_pose(&self, side: Side) -> HumanoidLeg {
 		let mut leg = self.leg(side);
 		leg.hydrate_from(self.pose());

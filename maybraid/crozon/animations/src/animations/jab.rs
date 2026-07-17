@@ -27,10 +27,12 @@ const HOLD_END: f32 = 0.52;
 ///
 /// # Approximate aim (not IK)
 ///
-/// [`Jab::target`] is relative to body COM. Offsets from [`DEFAULT_JAB_TARGET`] bias:
-/// - **y** → arm drop (+ slight roll / shoulder carry)
+/// [`Jab::humerus_along`] builds a world length direction (down + forward + lateral).
+/// Humanoid apply aims with `humerus_along_with_roll` so roll cannot fight aim.
+/// [`Jab::target`] offsets from [`DEFAULT_JAB_TARGET`] also bias:
+/// - **y** → drop weight (+ slight roll / shoulder carry)
 /// - **x** → torso/hip yaw (+ slight roll); across-body increases turn into the jab
-/// - **z** → [`reach_scale`] (trunk lean / turn magnitude)
+/// - **z** → [`reach_scale`] (forward weight / trunk lean / turn)
 ///
 /// Bind tee tips (world-ish): right ≈ `(-1.0, 1.7)`, left ≈ `(1.0, 1.7)`.
 const GUARD_ELBOW: f32 = 1.5;
@@ -39,8 +41,12 @@ const EXTEND_ELBOW: f32 = 0.05;
 
 /// ~90° from tee — reorients the elbow hinge into the sagittal (front/back) plane.
 const PUNCH_ROLL: f32 = FRAC_PI_2;
-/// Side hang from the tee once punch roll is established.
-const ARM_DROP: f32 = 0.55;
+/// Down component of the humerus aim direction (world −Y weight).
+const ARM_DROP: f32 = 0.75;
+/// Forward component of the humerus aim direction (world −Z weight).
+const HUMERUS_FORWARD: f32 = 0.55;
+/// Slight outboard bias so arms don't aim through the torso.
+const HUMERUS_LATERAL: f32 = 0.35;
 /// Tiny shoulder aim/height; not the punch driver.
 const SHOULDER_CARRY: f32 = 0.12;
 
@@ -181,13 +187,30 @@ impl<Rig> Jab<Rig> {
 		PUNCH_ROLL + delta
 	}
 
-	/// Arm drop from the tee once punch roll is set.
+	/// Down weight for [`Self::humerus_along`] (world −Y).
 	///
 	/// Higher [`Self::target`].y → less hang; eases slightly at full reach.
 	pub fn arm_drop(&self, progress: f32) -> f32 {
 		let extend = self.extension_amount(progress);
 		let aimed = (ARM_DROP - AIM_DROP_Y * self.aim_height()).clamp(ARM_DROP_MIN, ARM_DROP_MAX);
 		aimed * (1.0 - 0.15 * extend)
+	}
+
+	/// Forward weight for [`Self::humerus_along`] (world −Z).
+	pub fn humerus_forward(&self, progress: f32) -> f32 {
+		let extend = self.extension_amount(progress);
+		HUMERUS_FORWARD * self.reach_scale() * (0.85 + 0.15 * extend)
+	}
+
+	/// World-space humerus length direction: down + forward + slight outboard.
+	///
+	/// Rig apply uses [`crozon_rigs::humanoid::HumanoidRig::humerus_along_with_roll`].
+	pub fn humerus_along(&self, side: Side, progress: f32) -> Vec3 {
+		let lateral = match side {
+			Side::Left => HUMERUS_LATERAL,
+			Side::Right => -HUMERUS_LATERAL,
+		};
+		Vec3::new(lateral, -self.arm_drop(progress), -self.humerus_forward(progress)).normalize()
 	}
 
 	/// Tiny shoulder aim/height — assists [`Self::aim_height`], not the punch driver.
@@ -204,6 +227,11 @@ impl<Rig> Jab<Rig> {
 		GUARD_ELBOW * (1.0 - extend) * (1.0 - chamber)
 			+ CHAMBER_ELBOW * chamber
 			+ EXTEND_ELBOW * extend
+	}
+
+	/// Cover arm stays tucked (slight ease with the punch frame).
+	pub fn guard_elbow(&self, progress: f32) -> f32 {
+		GUARD_ELBOW * (0.9 + 0.1 * self.extension_amount(progress))
 	}
 
 	/// Slight sagittal lean — kept small; the punch turn lives in [`Self::torso_turn`].
