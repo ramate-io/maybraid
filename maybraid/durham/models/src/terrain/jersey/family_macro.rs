@@ -205,7 +205,12 @@ macro_rules! define_jersey_family {
 				let $params = family.stamp.clone();
 				let height = |x: f32, z: f32| base.height_at(x, z);
 				let $height_at: Option<&dyn Fn(f32, f32) -> f32> = Some(&height);
-				let modulations = $build;
+				// Hard-clip + edge ease to the leaf AABB so support is identity
+				// outside the leaf (neighbors may omit this stamp).
+				let modulations = jersey_terrain_stamps::JerseyModulation::bind_all(
+					$build,
+					$bounds,
+				);
 				Some((Self { cell, modulations }, cell))
 			}
 

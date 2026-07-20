@@ -16,7 +16,10 @@ pub use config::{
 	DownhillPair, FractalAnchors, HysteresisSpine, JitteredCenter, MidpointGrading,
 	SoftmaskAlongSpine,
 };
-pub use modulation::{JerseyModulation, RegionAffineModulation, RegionGradingModulation};
+pub use modulation::{
+	CellDomainMask, JerseyModulation, RegionAffineModulation, RegionGradingModulation,
+	CELL_DOMAIN_EASE_FRAC, DEFAULT_CELL_DOMAIN_EASE,
+};
 pub use region::{CircleRegion, RectRegion, Region2D, RegionNoise};
 pub use stamp::{StampSemantics, StampSet};
 pub use stamps::{
