@@ -2,7 +2,10 @@
 //!
 //! Height shaping only: pond bowl, outlet lip, short run. Wet rendering is deferred.
 
-use crate::config::{FractalAnchors, JitteredCenter, HysteresisSpine, SoftmaskAlongSpine, MidpointGrading, DownhillPair};
+use crate::config::{
+	DownhillPair, FractalAnchors, HysteresisSpine, JitteredCenter, MidpointGrading,
+	SoftmaskAlongSpine,
+};
 use crate::modulation::{JerseyModulation, RegionAffineModulation};
 use crate::region::{CircleRegion, Region2D, RegionNoise};
 use crate::stamp::{StampSemantics, StampSet};
@@ -29,9 +32,9 @@ impl Default for PocketWaterParams {
 	fn default() -> Self {
 		Self {
 			termination: PocketTermination::HandOff,
-			pond_frac: 0.16,
+			pond_frac: 0.18,
 			pond_depth: 10.0,
-			run_width_frac: 0.07,
+			run_width_frac: 0.09,
 			run_depth: 6.0,
 		}
 	}
@@ -58,34 +61,40 @@ impl PocketWater {
 		let short = bounds.extent().min_element().max(1.0);
 		let drainage_id = seed.wrapping_mul(0x9E37_79B9);
 		let pond_center = JitteredCenter::default().sample(bounds, seed, 500);
-		let pond_r = short * params.pond_frac.clamp(0.08, 0.3);
-		let pond_noise = RegionNoise::from_seed(seed.wrapping_add(1), 0.025, pond_r * 0.1);
+		let pond_r = short * params.pond_frac.clamp(0.1, 0.35);
+		let pond_noise = RegionNoise::from_seed(seed.wrapping_add(1), 0.014, pond_r * 0.08);
 
+		// Relative pond bowl (scale=1). Soft outer apron is the bank/rim — no lift.
 		let mut modulations = vec![JerseyModulation::Affine(
 			RegionAffineModulation::new(
-				Region2D::Circle(CircleRegion { center: pond_center, radius: pond_r }),
-				0.4,
+				Region2D::Circle(CircleRegion {
+					center: pond_center,
+					radius: pond_r,
+				}),
+				1.0,
 				-params.pond_depth,
-				pond_r * 0.35,
-				pond_r * 0.9,
+				pond_r * 0.45,
+				pond_r * 1.1,
 			)
 			.with_noise(pond_noise.clone()),
 		)];
-		// Outlet lip: shallow raise ring side toward the run.
+
+		// Outlet geometry for the run start only. A shallow *extra* cut toward the
+		// outlet (still depression-only) reads as a lip without raising terrain.
 		let (_, end_anchor) = FractalAnchors::default().sample(bounds, seed, 510);
 		let lip = pond_center.lerp(end_anchor, 0.35);
 		modulations.push(JerseyModulation::Affine(
 			RegionAffineModulation::new(
 				Region2D::Circle(CircleRegion {
 					center: lip,
-					radius: pond_r * 0.35,
+					radius: pond_r * 0.4,
 				}),
-				1.05,
-				params.pond_depth * 0.15,
-				pond_r * 0.1,
-				pond_r * 0.35,
+				1.0,
+				-params.pond_depth * 0.12,
+				pond_r * 0.15,
+				pond_r * 0.45,
 			)
-			.with_noise(pond_noise.clone()),
+			.with_noise(pond_noise),
 		));
 
 		let run = HysteresisSpine::default().build(
@@ -97,14 +106,14 @@ impl PocketWater {
 		let a = *run.first().unwrap_or(&lip);
 		let b = *run.last().unwrap_or(&end_anchor);
 		let (s, sh, e, eh) = DownhillPair::order(a, b, height_at);
-		let run_w = short * params.run_width_frac.clamp(0.04, 0.2);
-		let run_noise = RegionNoise::from_seed(seed.wrapping_add(2), 0.02, run_w * 0.08);
+		let run_w = short * params.run_width_frac.clamp(0.05, 0.22);
+		let run_noise = RegionNoise::from_seed(seed.wrapping_add(2), 0.018, run_w * 0.08);
 		modulations.extend(SoftmaskAlongSpine::corridor().build_incision(
 			&run,
 			run_w,
 			params.run_depth,
-			0.35,
-			0.95,
+			0.4,
+			1.15,
 			&run_noise,
 			Vec2::ZERO,
 		));
@@ -113,7 +122,7 @@ impl PocketWater {
 			sh - params.run_depth * 0.3,
 			e,
 			eh - params.run_depth * 0.1,
-			run_w * 1.25,
+			run_w * 1.35,
 			run_noise,
 		));
 
@@ -152,12 +161,7 @@ impl PocketWater {
 	}
 
 	pub fn from_bounds_default(bounds: Bounds2, seed: u32) -> Self {
-		Self::from_bounds(
-			bounds,
-			seed,
-			PocketWaterParams::default(),
-			None,
-		)
+		Self::from_bounds(bounds, seed, PocketWaterParams::default(), None)
 	}
 }
 
@@ -170,6 +174,33 @@ mod tests {
 		let p = PocketWater::from_bounds_default(Bounds2::from_xz(0.0, 0.0, 320.0, 320.0), 11);
 		assert_eq!(p.stamp.semantics.drainage_id, Some(p.drainage_id));
 		assert!(p.stamp.modulations.len() >= 3);
+		Ok(())
+	}
+
+	#[test]
+	fn pocket_never_raises_terrain() -> anyhow::Result<()> {
+		let p = PocketWater::from_bounds(
+			Bounds2::from_xz(0.0, 0.0, 320.0, 320.0),
+			11,
+			PocketWaterParams::default(),
+			Some(&|_, _| 40.0),
+		);
+		let base = 40.0;
+		let probes = [
+			p.pond_center,
+			p.run.first().copied().unwrap_or(p.pond_center),
+			p.run.get(p.run.len() / 2).copied().unwrap_or(p.pond_center),
+			p.run.last().copied().unwrap_or(p.pond_center),
+			p.pond_center + Vec2::new(p.params.pond_frac * 160.0, 0.0),
+		];
+		for q in probes {
+			assert!(
+				p.stamp.apply_elevation(base, q.x, q.y) <= base + 1e-3,
+				"raised at {q:?}"
+			);
+		}
+		// Pond floor should still cut.
+		assert!(p.stamp.apply_elevation(base, p.pond_center.x, p.pond_center.y) < base);
 		Ok(())
 	}
 }

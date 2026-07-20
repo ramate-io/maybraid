@@ -185,6 +185,7 @@ where
 			modulations,
 			jersey_leaves
 		);
+
 		pull_family_stamps!(
 			spatial_index,
 			lod_ref,
