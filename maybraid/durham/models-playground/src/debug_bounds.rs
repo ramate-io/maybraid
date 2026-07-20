@@ -3,7 +3,8 @@
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 use durham_terrain_models::{
-	cascade_chunk_for_cell, PlateauControllerLayout, Terrain, TerrainCellLayout,
+	cascade_chunk_for_cell, JerseyControllerLayouts, PlateauLowPassControllerLayout, Terrain,
+	TerrainCellLayout,
 };
 use std::fmt::{Display, Formatter, Result as FmtResult};
 
@@ -82,7 +83,7 @@ pub fn draw_chunk_boundary_boxes(
 	overlay: Res<PlaygroundDebugOverlay>,
 	terrains: Query<&Terrain>,
 	layout: Res<TerrainCellLayout>,
-	plateau_layout: Res<PlateauControllerLayout>,
+	jersey_layouts: Res<JerseyControllerLayouts>,
 	base: Res<WorldBaseTerrain>,
 ) {
 	if !overlay.show_bounds {
@@ -102,7 +103,8 @@ pub fn draw_chunk_boundary_boxes(
 		}
 	}
 
-	// Plateau controller grid as a representative family grid overlay.
+	// Low-pass plateau controller grid as a representative family grid overlay.
+	let plateau_layout = &jersey_layouts.plateau_low_pass;
 	let controller_color = Color::srgb(0.2, 0.85, 1.0);
 	let region = layout.request_region();
 	let grid_region = plateau_layout.region_in_grid_space(region);
@@ -125,12 +127,13 @@ pub fn update_cell_location_hud(
 	overlay: Res<PlaygroundDebugOverlay>,
 	cameras: Query<&GlobalTransform, With<Camera3d>>,
 	layout: Res<TerrainCellLayout>,
-	plateau_layout: Res<PlateauControllerLayout>,
+	jersey_layouts: Res<JerseyControllerLayouts>,
 	terrains: Query<&Terrain>,
 	mut hud_root: Query<&mut Visibility, With<CellLocationHudRoot>>,
 	mut hud: Query<&mut Text, With<CellLocationHudText>>,
 	mut last: ResMut<LastLoggedCellLocation>,
 ) {
+	let plateau_layout = &jersey_layouts.plateau_low_pass;
 	if let Ok(mut visibility) = hud_root.single_mut() {
 		*visibility = if overlay.show_cell_hud {
 			Visibility::Visible
@@ -316,7 +319,7 @@ fn terrain_cell_coords(layout: &TerrainCellLayout, p: Vec3) -> (i32, i32) {
 	((p.x / s).floor() as i32, (p.z / s).floor() as i32)
 }
 
-fn controller_cell_coords(layout: &PlateauControllerLayout, p: Vec3) -> (i32, i32) {
+fn controller_cell_coords(layout: &PlateauLowPassControllerLayout, p: Vec3) -> (i32, i32) {
 	let s = layout.grid.cell_size.max(1e-3);
 	let gx = p.x - layout.grid.origin_offset.x;
 	let gz = p.z - layout.grid.origin_offset.y;

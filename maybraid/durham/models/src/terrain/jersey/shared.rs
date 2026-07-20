@@ -67,6 +67,44 @@ pub fn family_seed(base_seed: u32, cell: Aabb3d, family_salt: u32) -> u32 {
 		.wrapping_add(family_salt)
 }
 
+/// Spatially correlated leaf occupancy via low-frequency Perlin at the leaf center.
+///
+/// `occupancy_seed` must be **band-stable** (no per-cell salt) so nearby leaves
+/// share correlated noise. `likelihood >= 1` always accepts; `<= 0` always rejects.
+pub fn leaf_selected(
+	cell: Aabb3d,
+	occupancy_seed: u32,
+	likelihood: f32,
+	frequency: f32,
+) -> bool {
+	let p = likelihood.clamp(0.0, 1.0);
+	if p >= 1.0 {
+		return true;
+	}
+	if p <= 0.0 {
+		return false;
+	}
+	let center = Vec2::new(
+		(cell.min.x + cell.max.x) * 0.5,
+		(cell.min.z + cell.max.z) * 0.5,
+	);
+	let noise = NoiseConfig::new(Perlin::default())
+		.with_seed(occupancy_seed)
+		.with_frequency(frequency.max(1e-6))
+		.with_amplitude(1.0)
+		.with_octaves(1);
+	let u = noise.vec2_on_unit(center).clamp(0.0, 1.0) as f32;
+	u < p
+}
+
+/// Band-stable seed for occupancy noise (world seed ⊕ family cut seed ⊕ salt).
+pub fn occupancy_seed(base_seed: u32, family_cut_seed: u32, family_salt: u32) -> u32 {
+	base_seed
+		.wrapping_add(family_cut_seed)
+		.wrapping_add(family_salt)
+		.wrapping_add(0x0CC_5E1D)
+}
+
 fn root_bounds2(cell: Aabb3d) -> Bounds2 {
 	Bounds2::from_vec2(
 		Vec2::new(cell.min.x, cell.min.z),

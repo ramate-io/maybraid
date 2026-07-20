@@ -14,11 +14,12 @@ pub mod sdf;
 
 use crate::terrain::cell::original_ids_for_origin_cells;
 use crate::terrain::jersey::{
-	original_ids_for_canyon_leaves, original_ids_for_massif_leaves,
-	original_ids_for_plateau_leaves, original_ids_for_pocket_water_leaves,
-	original_ids_for_rolling_leaves, original_ids_for_valley_leaves, CanyonControllerCell,
-	MassifControllerCell, PlateauControllerCell, PocketWaterControllerCell, RollingControllerCell,
-	ValleyControllerCell,
+	original_ids_for_canyon_high_pass_leaves, original_ids_for_canyon_low_pass_leaves,
+	original_ids_for_massif_high_pass_leaves, original_ids_for_massif_low_pass_leaves,
+	original_ids_for_plateau_high_pass_leaves, original_ids_for_plateau_low_pass_leaves,
+	original_ids_for_pocket_water_high_pass_leaves, original_ids_for_pocket_water_low_pass_leaves,
+	original_ids_for_rolling_high_pass_leaves, original_ids_for_rolling_low_pass_leaves,
+	original_ids_for_valley_high_pass_leaves, original_ids_for_valley_low_pass_leaves,
 };
 use crate::terrain::render::cascade_chunk_for_cell;
 use avian3d::prelude::RigidBody;
@@ -38,10 +39,25 @@ pub use collider::TerrainTrimeshCollider;
 pub use config::TerrainConfig;
 pub use index::{AvianTerrainIndex, TerrainCellId, TerrainEntryStore};
 pub use jersey::{
-	CanyonControllerLayout, CanyonStampCell, JerseyStampConfigs, MassifControllerLayout,
-	MassifStampCell, PlateauControllerLayout, PlateauStampCell, PocketWaterControllerLayout,
-	PocketWaterStampCell, RollingControllerLayout, RollingStampCell, ValleyControllerLayout,
-	ValleyStampCell,
+	CanyonHighPassControllerCell, CanyonHighPassControllerLayout, CanyonHighPassStampCell,
+	CanyonLowPassControllerCell, CanyonLowPassControllerLayout, CanyonLowPassStampCell,
+	JerseyControllerLayouts, JerseyStampConfigs, MassifHighPassControllerCell,
+	MassifHighPassControllerLayout, MassifHighPassStampCell, MassifLowPassControllerCell,
+	MassifLowPassControllerLayout, MassifLowPassStampCell, PlateauControllerLayout,
+	PlateauHighPassControllerCell, PlateauHighPassControllerLayout, PlateauHighPassStampCell,
+	PlateauLowPassControllerCell, PlateauLowPassControllerLayout, PlateauLowPassStampCell,
+	PocketWaterHighPassControllerCell, PocketWaterHighPassControllerLayout,
+	PocketWaterHighPassStampCell, PocketWaterLowPassControllerCell,
+	PocketWaterLowPassControllerLayout, PocketWaterLowPassStampCell, RollingHighPassControllerCell,
+	RollingHighPassControllerLayout, RollingHighPassStampCell, RollingLowPassControllerCell,
+	RollingLowPassControllerLayout, RollingLowPassStampCell, ValleyHighPassControllerCell,
+	ValleyHighPassControllerLayout, ValleyHighPassStampCell, ValleyLowPassControllerCell,
+	ValleyLowPassControllerLayout, ValleyLowPassStampCell,
+};
+pub use jersey::{
+	CanyonLowPassStampCell as CanyonStampCell, MassifLowPassStampCell as MassifStampCell,
+	PlateauLowPassStampCell as PlateauStampCell, PocketWaterLowPassStampCell as PocketWaterStampCell,
+	RollingLowPassStampCell as RollingStampCell, ValleyLowPassStampCell as ValleyStampCell,
 };
 pub use plugin::{register_terrain_plugin, TerrainPlugin};
 pub use presentation::{
@@ -108,6 +124,9 @@ macro_rules! pull_family_stamps {
 				lid,
 				$lod_ref,
 			)?;
+			if stamp.modulations.is_empty() {
+				continue;
+			}
 			$leaf_out.push(stamp.cell);
 			$mods.extend(stamp.modulations.iter().cloned());
 		}
@@ -119,24 +138,42 @@ impl<S> GenerationScheme<S> for Terrain
 where
 	S: GeneratingSpatialIndex<BaseTerrainNoise>
 		+ GeneratingSpatialIndex<JerseyStampConfigs>
-		+ GeneratingSpatialIndex<PlateauStampCell>
-		+ GeneratingSpatialIndex<PlateauControllerCell>
-		+ GeneratingSpatialIndex<PlateauControllerLayout>
-		+ GeneratingSpatialIndex<MassifStampCell>
-		+ GeneratingSpatialIndex<MassifControllerCell>
-		+ GeneratingSpatialIndex<MassifControllerLayout>
-		+ GeneratingSpatialIndex<CanyonStampCell>
-		+ GeneratingSpatialIndex<CanyonControllerCell>
-		+ GeneratingSpatialIndex<CanyonControllerLayout>
-		+ GeneratingSpatialIndex<PocketWaterStampCell>
-		+ GeneratingSpatialIndex<PocketWaterControllerCell>
-		+ GeneratingSpatialIndex<PocketWaterControllerLayout>
-		+ GeneratingSpatialIndex<RollingStampCell>
-		+ GeneratingSpatialIndex<RollingControllerCell>
-		+ GeneratingSpatialIndex<RollingControllerLayout>
-		+ GeneratingSpatialIndex<ValleyStampCell>
-		+ GeneratingSpatialIndex<ValleyControllerCell>
-		+ GeneratingSpatialIndex<ValleyControllerLayout>
+		+ GeneratingSpatialIndex<PlateauHighPassStampCell>
+		+ GeneratingSpatialIndex<PlateauHighPassControllerCell>
+		+ GeneratingSpatialIndex<PlateauHighPassControllerLayout>
+		+ GeneratingSpatialIndex<PlateauLowPassStampCell>
+		+ GeneratingSpatialIndex<PlateauLowPassControllerCell>
+		+ GeneratingSpatialIndex<PlateauLowPassControllerLayout>
+		+ GeneratingSpatialIndex<MassifHighPassStampCell>
+		+ GeneratingSpatialIndex<MassifHighPassControllerCell>
+		+ GeneratingSpatialIndex<MassifHighPassControllerLayout>
+		+ GeneratingSpatialIndex<MassifLowPassStampCell>
+		+ GeneratingSpatialIndex<MassifLowPassControllerCell>
+		+ GeneratingSpatialIndex<MassifLowPassControllerLayout>
+		+ GeneratingSpatialIndex<CanyonHighPassStampCell>
+		+ GeneratingSpatialIndex<CanyonHighPassControllerCell>
+		+ GeneratingSpatialIndex<CanyonHighPassControllerLayout>
+		+ GeneratingSpatialIndex<CanyonLowPassStampCell>
+		+ GeneratingSpatialIndex<CanyonLowPassControllerCell>
+		+ GeneratingSpatialIndex<CanyonLowPassControllerLayout>
+		+ GeneratingSpatialIndex<PocketWaterHighPassStampCell>
+		+ GeneratingSpatialIndex<PocketWaterHighPassControllerCell>
+		+ GeneratingSpatialIndex<PocketWaterHighPassControllerLayout>
+		+ GeneratingSpatialIndex<PocketWaterLowPassStampCell>
+		+ GeneratingSpatialIndex<PocketWaterLowPassControllerCell>
+		+ GeneratingSpatialIndex<PocketWaterLowPassControllerLayout>
+		+ GeneratingSpatialIndex<RollingHighPassStampCell>
+		+ GeneratingSpatialIndex<RollingHighPassControllerCell>
+		+ GeneratingSpatialIndex<RollingHighPassControllerLayout>
+		+ GeneratingSpatialIndex<RollingLowPassStampCell>
+		+ GeneratingSpatialIndex<RollingLowPassControllerCell>
+		+ GeneratingSpatialIndex<RollingLowPassControllerLayout>
+		+ GeneratingSpatialIndex<ValleyHighPassStampCell>
+		+ GeneratingSpatialIndex<ValleyHighPassControllerCell>
+		+ GeneratingSpatialIndex<ValleyHighPassControllerLayout>
+		+ GeneratingSpatialIndex<ValleyLowPassStampCell>
+		+ GeneratingSpatialIndex<ValleyLowPassControllerCell>
+		+ GeneratingSpatialIndex<ValleyLowPassControllerLayout>
 		+ GeneratingSpatialIndex<TerrainCellLayout>
 		+ GeneratingSpatialIndex<TerrainPresentationAssets>,
 {
@@ -157,13 +194,14 @@ where
 		let mut modulations = Vec::new();
 		let mut jersey_leaves = Vec::new();
 
-		// Fixed family order so neighboring Terrain cells compose identically.
+		// High-pass (regional) first, then low-pass (detail). Fixed family order
+		// so neighboring Terrain cells compose identically.
 		pull_family_stamps!(
 			spatial_index,
 			lod_ref,
 			bounds,
-			original_ids_for_plateau_leaves,
-			PlateauStampCell,
+			original_ids_for_plateau_high_pass_leaves,
+			PlateauHighPassStampCell,
 			modulations,
 			jersey_leaves
 		);
@@ -171,8 +209,8 @@ where
 			spatial_index,
 			lod_ref,
 			bounds,
-			original_ids_for_massif_leaves,
-			MassifStampCell,
+			original_ids_for_massif_high_pass_leaves,
+			MassifHighPassStampCell,
 			modulations,
 			jersey_leaves
 		);
@@ -180,8 +218,35 @@ where
 			spatial_index,
 			lod_ref,
 			bounds,
-			original_ids_for_canyon_leaves,
-			CanyonStampCell,
+			original_ids_for_canyon_high_pass_leaves,
+			CanyonHighPassStampCell,
+			modulations,
+			jersey_leaves
+		);
+		pull_family_stamps!(
+			spatial_index,
+			lod_ref,
+			bounds,
+			original_ids_for_pocket_water_high_pass_leaves,
+			PocketWaterHighPassStampCell,
+			modulations,
+			jersey_leaves
+		);
+		pull_family_stamps!(
+			spatial_index,
+			lod_ref,
+			bounds,
+			original_ids_for_rolling_high_pass_leaves,
+			RollingHighPassStampCell,
+			modulations,
+			jersey_leaves
+		);
+		pull_family_stamps!(
+			spatial_index,
+			lod_ref,
+			bounds,
+			original_ids_for_valley_high_pass_leaves,
+			ValleyHighPassStampCell,
 			modulations,
 			jersey_leaves
 		);
@@ -190,8 +255,8 @@ where
 			spatial_index,
 			lod_ref,
 			bounds,
-			original_ids_for_pocket_water_leaves,
-			PocketWaterStampCell,
+			original_ids_for_plateau_low_pass_leaves,
+			PlateauLowPassStampCell,
 			modulations,
 			jersey_leaves
 		);
@@ -199,8 +264,8 @@ where
 			spatial_index,
 			lod_ref,
 			bounds,
-			original_ids_for_rolling_leaves,
-			RollingStampCell,
+			original_ids_for_massif_low_pass_leaves,
+			MassifLowPassStampCell,
 			modulations,
 			jersey_leaves
 		);
@@ -208,8 +273,35 @@ where
 			spatial_index,
 			lod_ref,
 			bounds,
-			original_ids_for_valley_leaves,
-			ValleyStampCell,
+			original_ids_for_canyon_low_pass_leaves,
+			CanyonLowPassStampCell,
+			modulations,
+			jersey_leaves
+		);
+		pull_family_stamps!(
+			spatial_index,
+			lod_ref,
+			bounds,
+			original_ids_for_pocket_water_low_pass_leaves,
+			PocketWaterLowPassStampCell,
+			modulations,
+			jersey_leaves
+		);
+		pull_family_stamps!(
+			spatial_index,
+			lod_ref,
+			bounds,
+			original_ids_for_rolling_low_pass_leaves,
+			RollingLowPassStampCell,
+			modulations,
+			jersey_leaves
+		);
+		pull_family_stamps!(
+			spatial_index,
+			lod_ref,
+			bounds,
+			original_ids_for_valley_low_pass_leaves,
+			ValleyLowPassStampCell,
 			modulations,
 			jersey_leaves
 		);
@@ -224,7 +316,15 @@ where
 		let res_2 = assets.res_2;
 
 		Some((
-			Self { cell: bounds, base, modulations, jersey_leaves, sdf, material, res_2 },
+			Self {
+				cell: bounds,
+				base,
+				modulations,
+				jersey_leaves,
+				sdf,
+				material,
+				res_2,
+			},
 			bounds,
 		))
 	}

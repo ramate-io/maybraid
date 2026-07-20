@@ -1,11 +1,13 @@
-//! Expand one jersey family: controller layout + controller cell + leaf stamp.
+//! Expand one jersey family band: controller layout + controller cell + leaf stamp.
 
-/// Defines an independent guillotine stack for one stamp family.
+/// Defines an independent guillotine stack for one stamp family **band**.
 ///
-/// Each family owns its own controller grid (`cell_size` / `origin_offset`) and
+/// Each band owns its own controller grid (`cell_size` / `origin_offset`) and
 /// cut seed (via [`crate::terrain::jersey::configs::JerseyStampConfigs`]). Leaf
 /// identities are not stored: stamp `build_with_id` down-levels `Id` to cell
-/// bounds. Discovery walks that family's controllers only.
+/// bounds. Discovery walks that band's controllers only.
+///
+/// `config_family` / `config_band` select e.g. `configs.massif.low_pass`.
 macro_rules! define_jersey_family {
 	(
 		layout: $Layout:ident,
@@ -16,10 +18,11 @@ macro_rules! define_jersey_family {
 		family_salt: $family_salt:expr,
 		cell_size: $cell_size:expr,
 		origin_offset: ($ox:expr, $oz:expr),
-		config_field: $config_field:ident,
+		config_family: $config_family:ident,
+		config_band: $config_band:ident,
 		|$bounds:ident, $seed:ident, $height_at:ident, $params:ident| $build:expr
 	) => {
-		/// Controller-grid layout for this jersey family.
+		/// Controller-grid layout for this jersey family band.
 		#[derive(bevy::prelude::Resource, Debug, Clone, PartialEq)]
 		pub struct $Layout {
 			pub grid: $crate::terrain::jersey::shared::OffsetControllerGrid,
@@ -86,7 +89,7 @@ macro_rules! define_jersey_family {
 			}
 		}
 
-		/// Controller cell: owns this family's guillotine cuts.
+		/// Controller cell: owns this band's guillotine cuts.
 		#[derive(Debug, Clone, bevy::prelude::Component)]
 		pub struct $Controller {
 			pub cell: bevy::math::bounding::Aabb3d,
@@ -136,7 +139,7 @@ macro_rules! define_jersey_family {
 				let configs = lod::gen::GeneratingSpatialIndex::<
 					$crate::terrain::jersey::configs::JerseyStampConfigs,
 				>::get_one_or_generate(spatial_index, lod::gen::Id::Universal, lod_ref)?;
-				let family = &configs.$config_field;
+				let family = &configs.$config_family.$config_band;
 				Some((Self::from_family_config(bounds, family), bounds))
 			}
 
@@ -148,7 +151,7 @@ macro_rules! define_jersey_family {
 			}
 		}
 
-		/// Discover leaf ids for this family's controller grid.
+		/// Discover leaf ids for this family band's controller grid.
 		pub fn $leaves_fn<S>(
 			spatial_index: &mut S,
 			region: bevy::math::bounding::Aabb3d,
@@ -162,7 +165,7 @@ macro_rules! define_jersey_family {
 			)
 		}
 
-		/// Stamp output on one leaf of this family's guillotine partition.
+		/// Stamp output on one leaf of this band's guillotine partition.
 		#[derive(Debug, Clone, bevy::prelude::Component)]
 		pub struct $Stamp {
 			pub cell: bevy::math::bounding::Aabb3d,
@@ -195,13 +198,33 @@ macro_rules! define_jersey_family {
 				let base = lod::gen::GeneratingSpatialIndex::<
 					$crate::terrain::base_noise::BaseTerrainNoise,
 				>::get_one_or_generate(spatial_index, lod::gen::Id::Universal, lod_ref)?;
-				let family = &configs.$config_field;
-				let $bounds = $crate::terrain::jersey::shared::bounds2(cell);
+				let family = &configs.$config_family.$config_band;
 				let $seed = $crate::terrain::jersey::shared::family_seed(
 					base.seed,
 					cell,
 					$family_salt,
 				);
+				// Occupancy gate: spatially correlated Perlin at leaf center.
+				let occ_seed = $crate::terrain::jersey::shared::occupancy_seed(
+					base.seed,
+					family.seed,
+					$family_salt,
+				);
+				if !$crate::terrain::jersey::shared::leaf_selected(
+					cell,
+					occ_seed,
+					family.likelihood,
+					family.occupancy_frequency,
+				) {
+					return Some((
+						Self {
+							cell,
+							modulations: Vec::new(),
+						},
+						cell,
+					));
+				}
+				let $bounds = $crate::terrain::jersey::shared::bounds2(cell);
 				let $params = family.stamp.clone();
 				let height = |x: f32, z: f32| base.height_at(x, z);
 				let $height_at: Option<&dyn Fn(f32, f32) -> f32> = Some(&height);

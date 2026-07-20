@@ -1,9 +1,9 @@
 //! Unit tests for per-family jersey guillotine grids.
 
 use crate::terrain::jersey::configs::JerseyStampConfigs;
-use crate::terrain::jersey::plateau::{PlateauControllerCell, PlateauControllerLayout};
-use crate::terrain::jersey::shared::LeafAabbs;
-use crate::terrain::jersey::valley::{ValleyControllerCell, ValleyControllerLayout};
+use crate::terrain::jersey::plateau::{PlateauLowPassControllerCell, PlateauLowPassControllerLayout};
+use crate::terrain::jersey::shared::{leaf_selected, LeafAabbs};
+use crate::terrain::jersey::valley::{ValleyLowPassControllerCell, ValleyLowPassControllerLayout};
 use anyhow::{bail, Result};
 use bevy::math::bounding::{Aabb3d, IntersectsVolume};
 use bevy::math::Vec3;
@@ -27,9 +27,9 @@ fn assert_tiles_parent(parent: Aabb3d, leaves: &[Aabb3d]) -> Result<()> {
 #[test]
 fn plateau_cuts_are_deterministic() -> Result<()> {
 	let configs = JerseyStampConfigs::default();
-	let cell = PlateauControllerLayout::default().cell_bounds(0, 0);
-	let a = PlateauControllerCell::from_family_config(cell, &configs.plateau);
-	let b = PlateauControllerCell::from_family_config(cell, &configs.plateau);
+	let cell = PlateauLowPassControllerLayout::default().cell_bounds(0, 0);
+	let a = PlateauLowPassControllerCell::from_family_config(cell, &configs.plateau.low_pass);
+	let b = PlateauLowPassControllerCell::from_family_config(cell, &configs.plateau.low_pass);
 	assert_eq!(a.cuts, b.cuts);
 	assert_eq!(a.leaf_aabbs(), b.leaf_aabbs());
 	Ok(())
@@ -38,8 +38,9 @@ fn plateau_cuts_are_deterministic() -> Result<()> {
 #[test]
 fn plateau_leaves_tile_parent() -> Result<()> {
 	let configs = JerseyStampConfigs::default();
-	let cell = PlateauControllerLayout::default().cell_bounds(1, -2);
-	let controller = PlateauControllerCell::from_family_config(cell, &configs.plateau);
+	let cell = PlateauLowPassControllerLayout::default().cell_bounds(1, -2);
+	let controller =
+		PlateauLowPassControllerCell::from_family_config(cell, &configs.plateau.low_pass);
 	let leaves = controller.leaf_aabbs();
 	assert!(leaves.len() > 1, "expected multiple leaves, got {}", leaves.len());
 	assert_tiles_parent(cell, &leaves)?;
@@ -48,10 +49,9 @@ fn plateau_leaves_tile_parent() -> Result<()> {
 
 #[test]
 fn family_controller_grids_are_offset_apart() -> Result<()> {
-	let plateau = PlateauControllerLayout::default().cell_bounds(0, 0);
-	let valley = ValleyControllerLayout::default().cell_bounds(0, 0);
-	if (plateau.min.x - valley.min.x).abs() < 1e-3 && (plateau.min.z - valley.min.z).abs() < 1e-3
-	{
+	let plateau = PlateauLowPassControllerLayout::default().cell_bounds(0, 0);
+	let valley = ValleyLowPassControllerLayout::default().cell_bounds(0, 0);
+	if (plateau.min.x - valley.min.x).abs() < 1e-3 && (plateau.min.z - valley.min.z).abs() < 1e-3 {
 		bail!("expected plateau and valley controller origins to differ");
 	}
 	Ok(())
@@ -60,8 +60,8 @@ fn family_controller_grids_are_offset_apart() -> Result<()> {
 #[test]
 fn valley_leaf_ids_stable() -> Result<()> {
 	let configs = JerseyStampConfigs::default();
-	let cell = ValleyControllerLayout::default().cell_bounds(0, 0);
-	let controller = ValleyControllerCell::from_family_config(cell, &configs.valley);
+	let cell = ValleyLowPassControllerLayout::default().cell_bounds(0, 0);
+	let controller = ValleyLowPassControllerCell::from_family_config(cell, &configs.valley.low_pass);
 	let leaves = controller.leaf_aabbs();
 	let ids: Vec<Id> = leaves.iter().copied().map(Id::from_cell).collect();
 	let mut unique = ids.clone();
@@ -85,5 +85,41 @@ fn valley_leaf_ids_stable() -> Result<()> {
 		),
 	);
 	assert!(leaves.iter().any(|leaf| probe.intersects(leaf)));
+	Ok(())
+}
+
+#[test]
+fn leaf_selected_respects_likelihood_extremes() -> Result<()> {
+	let cell = Aabb3d::from_min_max(Vec3::new(0.0, -1.0, 0.0), Vec3::new(10.0, 1.0, 10.0));
+	assert!(leaf_selected(cell, 123, 1.0, 0.001));
+	assert!(!leaf_selected(cell, 123, 0.0, 0.001));
+	Ok(())
+}
+
+#[test]
+fn leaf_selected_is_spatially_correlated() -> Result<()> {
+	let freq = 0.0005;
+	let seed = 99u32;
+	let likelihood = 0.55;
+	let mk = |x: f32, z: f32| {
+		Aabb3d::from_min_max(Vec3::new(x, -1.0, z), Vec3::new(x + 100.0, 1.0, z + 100.0))
+	};
+	let a = leaf_selected(mk(0.0, 0.0), seed, likelihood, freq);
+	let near = leaf_selected(mk(80.0, 0.0), seed, likelihood, freq);
+	let far = leaf_selected(mk(50_000.0, 50_000.0), seed, likelihood, freq);
+	// Neighboring samples usually match; far sample may differ (not required).
+	assert_eq!(a, near, "nearby leaves should share occupancy for low-frequency noise");
+	let _ = far;
+	Ok(())
+}
+
+#[test]
+fn high_pass_cells_are_much_larger_than_low_pass() -> Result<()> {
+	use crate::terrain::jersey::massif::{
+		MassifHighPassControllerLayout, MassifLowPassControllerLayout,
+	};
+	let low = MassifLowPassControllerLayout::default().grid.cell_size;
+	let high = MassifHighPassControllerLayout::default().grid.cell_size;
+	assert!(high > low * 5.0, "high={high} low={low}");
 	Ok(())
 }

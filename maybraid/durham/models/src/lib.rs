@@ -7,14 +7,17 @@ pub mod terrain;
 
 pub use terrain::render::cascade_chunk_for_cell;
 pub use terrain::{
-	register_terrain_plugin, AvianTerrainIndex, BaseTerrainNoise, CanyonControllerLayout,
-	CanyonStampCell, ComposedTerrain, JerseyStampConfigs, MacroCellLayout, MassifControllerLayout,
-	MassifStampCell, PlateauControllerLayout, PlateauStampCell, PocketWaterControllerLayout,
-	PocketWaterStampCell, RollingControllerLayout, RollingStampCell, Terrain, TerrainCellId,
-	TerrainCellLayout, TerrainConfig, TerrainEntryStore, TerrainPlugin, TerrainPresentationAssets,
-	TerrainPresenterState, TerrainRegionPresenter, TerrainRenderItem, TerrainSdf, TerrainStoreView,
-	TerrainTrimeshCollider, ValleyControllerLayout, ValleyStampCell, MACRO_CELL_SIZE,
-	TERRAIN_CELL_SIZE,
+	register_terrain_plugin, AvianTerrainIndex, BaseTerrainNoise, CanyonHighPassControllerLayout,
+	CanyonLowPassControllerLayout, CanyonStampCell, ComposedTerrain, JerseyControllerLayouts,
+	JerseyStampConfigs, MacroCellLayout, MassifHighPassControllerLayout,
+	MassifLowPassControllerLayout, MassifStampCell, PlateauControllerLayout,
+	PlateauHighPassControllerLayout, PlateauLowPassControllerLayout, PlateauStampCell,
+	PocketWaterHighPassControllerLayout, PocketWaterLowPassControllerLayout, PocketWaterStampCell,
+	RollingHighPassControllerLayout, RollingLowPassControllerLayout, RollingStampCell, Terrain,
+	TerrainCellId, TerrainCellLayout, TerrainConfig, TerrainEntryStore, TerrainPlugin,
+	TerrainPresentationAssets, TerrainPresenterState, TerrainRegionPresenter, TerrainRenderItem,
+	TerrainSdf, TerrainStoreView, TerrainTrimeshCollider, ValleyHighPassControllerLayout,
+	ValleyLowPassControllerLayout, ValleyStampCell, MACRO_CELL_SIZE, TERRAIN_CELL_SIZE,
 };
 
 use bevy::prelude::*;
