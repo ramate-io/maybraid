@@ -10,8 +10,8 @@
 ///
 /// `config_family` / `config_band` select e.g. `configs.massif.low_pass`.
 ///
-/// Defaults for `likelihood`, `spatial_correlation`, and guillotine `cell_size`
-/// live here and are copied into
+/// Defaults for `likelihood`, `spatial_correlation`, `strength`, and guillotine
+/// `cell_size` live here and are copied into
 /// [`crate::terrain::jersey::configs::JerseyStampConfigs`]`::default`.
 macro_rules! define_jersey_family {
 	(
@@ -26,6 +26,7 @@ macro_rules! define_jersey_family {
 		origin_offset: ($ox:expr, $oz:expr),
 		likelihood: $likelihood:expr,
 		spatial_correlation: $spatial_correlation:expr,
+		strength: ($strength_min:expr, $strength_max:expr),
 		config_family: $config_family:ident,
 		config_band: $config_band:ident,
 		|$bounds:ident, $seed:ident, $height_at:ident, $params:ident| $build:expr
@@ -56,6 +57,10 @@ macro_rules! define_jersey_family {
 			pub const LIKELIHOOD: f32 = $likelihood;
 			/// Occupancy spatial correlation length (world units).
 			pub const SPATIAL_CORRELATION: f32 = $spatial_correlation;
+			/// Stamp strength lower bound (`1.0` ≈ default vertical knobs).
+			pub const STRENGTH_MIN: f32 = $strength_min;
+			/// Stamp strength upper bound.
+			pub const STRENGTH_MAX: f32 = $strength_max;
 
 			pub fn cell_bounds(&self, ix: i32, iz: i32) -> bevy::math::bounding::Aabb3d {
 				self.grid.cell_bounds(ix, iz)
@@ -242,7 +247,15 @@ macro_rules! define_jersey_family {
 					));
 				}
 				let $bounds = $crate::terrain::jersey::shared::bounds2(cell);
-				let $params = family.stamp.clone();
+				let strength = $crate::terrain::jersey::shared::sample_strength(
+					$seed,
+					family.strength_min,
+					family.strength_max,
+				);
+				let $params = jersey_terrain_stamps::StampStrength::with_strength(
+					family.stamp.clone(),
+					strength,
+				);
 				let height = |x: f32, z: f32| base.height_at(x, z);
 				let $height_at: Option<&dyn Fn(f32, f32) -> f32> = Some(&height);
 				// Hard-clip + edge ease to the leaf AABB so support is identity

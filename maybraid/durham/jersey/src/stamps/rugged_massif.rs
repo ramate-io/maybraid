@@ -2,7 +2,7 @@
 
 use crate::config::{FractalAnchors, HysteresisSpine, SoftmaskAlongSpine};
 use crate::region::RegionNoise;
-use crate::stamp::{relief_scale, StampSemantics, StampSet};
+use crate::stamp::{scale_additive, scale_near_one, StampSemantics, StampSet, StampStrength};
 use bevy_math::Vec2;
 use procedural_common::{Bounds2, SeededHash};
 
@@ -17,14 +17,27 @@ pub enum MassifStyle {
 pub struct RuggedMassifParams {
 	pub style: MassifStyle,
 	pub width_frac: f32,
-	/// Crest raise at [`crate::RELIEF_REFERENCE_SHORT`]; scales with leaf short edge.
+	/// Crest raise (world units); modulated by [`StampStrength`].
 	pub lift: f32,
 	pub crest_scale: f32,
 }
 
 impl Default for RuggedMassifParams {
 	fn default() -> Self {
-		Self { style: MassifStyle::Ridged, width_frac: 0.14, lift: 22.0, crest_scale: 1.15 }
+		Self {
+			style: MassifStyle::Ridged,
+			width_frac: 0.14,
+			lift: 22.0,
+			crest_scale: 1.15,
+		}
+	}
+}
+
+impl StampStrength for RuggedMassifParams {
+	fn with_strength(mut self, strength: f32) -> Self {
+		self.lift = scale_additive(self.lift, strength);
+		self.crest_scale = scale_near_one(self.crest_scale, strength);
+		self
 	}
 }
 
@@ -41,8 +54,6 @@ impl RuggedMassif {
 	pub fn from_bounds(bounds: Bounds2, seed: u32, params: RuggedMassifParams) -> Self {
 		let hash = SeededHash::new(seed);
 		let short = bounds.extent().min_element().max(1.0);
-		let scale = relief_scale(bounds);
-		let lift = params.lift * scale;
 		let (start, end) = FractalAnchors::default().sample(bounds, seed, 100);
 		let path = HysteresisSpine::default().build(bounds, seed.wrapping_add(19), start, end);
 		let half_width = short * params.width_frac.clamp(0.06, 0.3);
@@ -61,7 +72,7 @@ impl RuggedMassif {
 			&path,
 			half_width * width_mul,
 			params.crest_scale,
-			lift,
+			params.lift,
 			inner,
 			outer,
 			&noise,
@@ -77,7 +88,7 @@ impl RuggedMassif {
 				&path,
 				half_width * 0.55,
 				params.crest_scale * 0.9,
-				lift * 0.7,
+				params.lift * 0.7,
 				inner,
 				outer,
 				&noise,
@@ -100,7 +111,11 @@ impl RuggedMassif {
 			seed,
 			params,
 			path: path.clone(),
-			stamp: StampSet { modulations, spine: path, semantics },
+			stamp: StampSet {
+				modulations,
+				spine: path,
+				semantics,
+			},
 		}
 	}
 
@@ -125,16 +140,22 @@ mod tests {
 	}
 
 	#[test]
-	fn massif_lift_scales_with_leaf_extent() -> anyhow::Result<()> {
-		let small = Bounds2::from_xz(0.0, 0.0, 400.0, 400.0);
-		let large = Bounds2::from_xz(0.0, 0.0, 1600.0, 1600.0);
-		let a = RuggedMassif::from_bounds_default(small, 3);
-		let b = RuggedMassif::from_bounds_default(large, 3);
-		let pa = a.path[a.path.len() / 2];
-		let pb = b.path[b.path.len() / 2];
-		let da = a.stamp.apply_elevation(40.0, pa.x, pa.y) - 40.0;
-		let db = b.stamp.apply_elevation(40.0, pb.x, pb.y) - 40.0;
-		assert!(db > da * 1.5, "large={db} small={da}");
+	fn massif_strength_scales_lift() -> anyhow::Result<()> {
+		let bounds = Bounds2::from_xz(0.0, 0.0, 400.0, 400.0);
+		let weak = RuggedMassif::from_bounds(
+			bounds,
+			3,
+			RuggedMassifParams::default().with_strength(0.5),
+		);
+		let strong = RuggedMassif::from_bounds(
+			bounds,
+			3,
+			RuggedMassifParams::default().with_strength(2.0),
+		);
+		let p = weak.path[weak.path.len() / 2];
+		let dw = weak.stamp.apply_elevation(40.0, p.x, p.y) - 40.0;
+		let ds = strong.stamp.apply_elevation(40.0, p.x, p.y) - 40.0;
+		assert!(ds > dw * 1.5, "strong={ds} weak={dw}");
 		Ok(())
 	}
 }

@@ -37,6 +37,10 @@ pub struct FamilyGuillotineConfig<P> {
 	/// Prefer setting defaults in `define_jersey_family!` (`likelihood:`); this
 	/// field is the runtime override on the resource.
 	pub likelihood: f32,
+	/// Per-leaf stamp strength lower bound (`1.0` ≈ default vertical knobs).
+	pub strength_min: f32,
+	/// Per-leaf stamp strength upper bound.
+	pub strength_max: f32,
 	pub stamp: P,
 }
 
@@ -45,6 +49,8 @@ impl<P: Default> FamilyGuillotineConfig<P> {
 		seed: u32,
 		likelihood: f32,
 		spatial_correlation: f32,
+		strength_min: f32,
+		strength_max: f32,
 		cell_size_min: f32,
 		cell_size_max: f32,
 	) -> Self {
@@ -55,6 +61,8 @@ impl<P: Default> FamilyGuillotineConfig<P> {
 			noise_frequency: 0.05,
 			spatial_correlation,
 			likelihood: likelihood.clamp(0.0, 1.0),
+			strength_min: strength_min.max(0.0),
+			strength_max: strength_max.max(0.0),
 			stamp: P::default(),
 		}
 	}
@@ -63,6 +71,8 @@ impl<P: Default> FamilyGuillotineConfig<P> {
 		seed: u32,
 		likelihood: f32,
 		spatial_correlation: f32,
+		strength_min: f32,
+		strength_max: f32,
 		cell_size_min: f32,
 		cell_size_max: f32,
 	) -> Self {
@@ -73,6 +83,8 @@ impl<P: Default> FamilyGuillotineConfig<P> {
 			noise_frequency: 0.02,
 			spatial_correlation,
 			likelihood: likelihood.clamp(0.0, 1.0),
+			strength_min: strength_min.max(0.0),
+			strength_max: strength_max.max(0.0),
 			stamp: P::default(),
 		}
 	}
@@ -102,6 +114,8 @@ macro_rules! band_from_layout {
 			$seed,
 			<$Layout>::LIKELIHOOD,
 			<$Layout>::SPATIAL_CORRELATION,
+			<$Layout>::STRENGTH_MIN,
+			<$Layout>::STRENGTH_MAX,
 			<$Layout>::CELL_SIZE_MIN,
 			<$Layout>::CELL_SIZE_MAX,
 		)
@@ -111,6 +125,8 @@ macro_rules! band_from_layout {
 			$seed,
 			<$Layout>::LIKELIHOOD,
 			<$Layout>::SPATIAL_CORRELATION,
+			<$Layout>::STRENGTH_MIN,
+			<$Layout>::STRENGTH_MAX,
 			<$Layout>::CELL_SIZE_MIN,
 			<$Layout>::CELL_SIZE_MAX,
 		)

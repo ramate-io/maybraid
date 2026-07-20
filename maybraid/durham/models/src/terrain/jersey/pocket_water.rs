@@ -16,6 +16,7 @@ define_jersey_family! {
 	origin_offset: (0.0, MACRO_CELL_SIZE * 0.25),
 	likelihood: 0.88,
 	spatial_correlation: MACRO_CELL_SIZE * 12.0,
+	strength: (0.6, 1.1),
 	config_family: pocket_water,
 	config_band: low_pass,
 	|bounds, seed, height_at, params| {
@@ -37,6 +38,7 @@ define_jersey_family! {
 	origin_offset: (MACRO_CELL_SIZE * 3.0, MACRO_CELL_SIZE * 5.0),
 	likelihood: 0.2,
 	spatial_correlation: MACRO_CELL_SIZE * 80.0,
+	strength: (1.0, 2.0),
 	config_family: pocket_water,
 	config_band: high_pass,
 	|bounds, seed, height_at, params| {

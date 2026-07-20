@@ -1,7 +1,7 @@
 //! Jersey Valley Trains (chained valleys) — [RFC-105 §3.8.6](https://github.com/ramate-io/maybraid/tree/main/rfc/rfc-000-000-105-procedural-terrain#386-jersey-valley-trains-chained-valleys).
 
 use crate::config::{FractalAnchors, HysteresisSpine};
-use crate::stamp::{StampSemantics, StampSet};
+use crate::stamp::{scale_additive, StampSemantics, StampSet, StampStrength};
 use crate::stamps::valley_basin::{
 	ValleyBasin, ValleyBasinParams, ValleyCrossSection, ValleyFloorKind,
 };
@@ -18,11 +18,23 @@ pub enum ValleyTrainSegmentRole {
 #[derive(Debug, Clone, Copy)]
 pub struct ValleyTrainParams {
 	pub segment_count: usize,
+	/// Scales role depths; set via [`StampStrength`] (default `1.0`).
+	pub strength: f32,
 }
 
 impl Default for ValleyTrainParams {
 	fn default() -> Self {
-		Self { segment_count: 3 }
+		Self {
+			segment_count: 3,
+			strength: 1.0,
+		}
+	}
+}
+
+impl StampStrength for ValleyTrainParams {
+	fn with_strength(mut self, strength: f32) -> Self {
+		self.strength = strength.max(0.0);
+		self
 	}
 }
 
@@ -77,6 +89,7 @@ impl ValleyTrain {
 					(ValleyCrossSection::U, 8.0, 0.28, false)
 				}
 			};
+			let depth = scale_additive(depth, params.strength);
 			let t0 = i as f32 / n as f32;
 			let t1 = (i + 1) as f32 / n as f32;
 			let seg_bounds = sub_bounds_along_spine(bounds, &spine, t0, t1);

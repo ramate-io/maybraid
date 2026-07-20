@@ -131,6 +131,25 @@ fn layout_defaults_feed_configs() -> Result<()> {
 		configs.massif.low_pass.guillotine.step_max,
 		MassifLowPassControllerLayout::CELL_SIZE_MAX
 	);
+	assert_eq!(
+		configs.massif.low_pass.strength_min,
+		MassifLowPassControllerLayout::STRENGTH_MIN
+	);
+	assert_eq!(
+		configs.massif.low_pass.strength_max,
+		MassifLowPassControllerLayout::STRENGTH_MAX
+	);
+	Ok(())
+}
+
+#[test]
+fn sample_strength_stays_in_range() -> Result<()> {
+	use crate::terrain::jersey::shared::sample_strength;
+	for seed in 0..64u32 {
+		let s = sample_strength(seed, 0.5, 1.5);
+		assert!((0.5..=1.5).contains(&s), "seed={seed} s={s}");
+	}
+	assert_eq!(sample_strength(1, 1.0, 1.0), 1.0);
 	Ok(())
 }
 

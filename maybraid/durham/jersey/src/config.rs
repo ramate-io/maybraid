@@ -181,7 +181,7 @@ impl SoftmaskAlongSpine {
 	/// Keeps regional (high-pass) spines more evenly graded instead of collapsing
 	/// to a short crest on a multi‑kilometre path.
 	pub fn even_for_extent(mut self, short_edge: f32) -> Self {
-		let t = (short_edge / crate::stamp::RELIEF_REFERENCE_SHORT).clamp(0.25, 8.0);
+		let t = (short_edge / crate::stamp::SOFTMASK_REFERENCE_SHORT).clamp(0.25, 8.0);
 		let soften = t.sqrt();
 		self.longitudinal_falloff =
 			(self.longitudinal_falloff / soften).clamp(0.04, 0.5);

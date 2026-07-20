@@ -3,7 +3,7 @@
 use crate::config::{JitteredCenter};
 use crate::modulation::{JerseyModulation, RegionAffineModulation};
 use crate::region::{CircleRegion, Region2D, RegionNoise};
-use crate::stamp::{relief_scale, StampSemantics, StampSet};
+use crate::stamp::{scale_additive, StampSemantics, StampSet, StampStrength};
 use procedural_common::{Bounds2, SeededHash};
 
 #[derive(Debug, Clone, Copy)]
@@ -11,13 +11,24 @@ pub struct RollingGroundParams {
 	/// Number of gentle swell / swale blobs.
 	pub count: usize,
 	pub size_frac: f32,
-	/// Peak |offset| at [`crate::RELIEF_REFERENCE_SHORT`]; scales with leaf short edge.
+	/// Peak |offset|; modulated by [`StampStrength`].
 	pub amplitude: f32,
 }
 
 impl Default for RollingGroundParams {
 	fn default() -> Self {
-		Self { count: 4, size_frac: 0.12, amplitude: 3.5 }
+		Self {
+			count: 4,
+			size_frac: 0.12,
+			amplitude: 3.5,
+		}
+	}
+}
+
+impl StampStrength for RollingGroundParams {
+	fn with_strength(mut self, strength: f32) -> Self {
+		self.amplitude = scale_additive(self.amplitude, strength);
+		self
 	}
 }
 
@@ -37,7 +48,7 @@ impl RollingGround {
 	) -> Self {
 		let hash = SeededHash::new(seed);
 		let short = bounds.extent().min_element().max(1.0);
-		let amp0 = params.amplitude * relief_scale(bounds);
+		let amp0 = params.amplitude;
 		let radius = short * params.size_frac.clamp(0.05, 0.25);
 		let noise = RegionNoise::from_seed(seed.wrapping_add(2), 0.05, radius * 0.1);
 		let mut modulations = Vec::new();
