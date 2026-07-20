@@ -21,20 +21,8 @@ pub const NATURESCAPES_GRID_RADIUS_XZ: i32 = 12;
 pub const TERRAIN_CELL_SIZE: f32 =
 	NATURESCAPES_MIN_SIZE * (1_u32 << NATURESCAPES_GRID_MULTIPLE_2) as f32;
 
-/// Macro-cell edge length (`4 ×` terrain cell). Used as the default jersey stamp size.
+/// Macro-cell edge length (`4 ×` terrain cell). Used by jersey guillotine step windows.
 pub const MACRO_CELL_SIZE: f32 = TERRAIN_CELL_SIZE * 4.0;
-
-/// Default jersey stamp / modulation cell edge length (world units).
-///
-/// Larger than [`TERRAIN_CELL_SIZE`] so many presentation cells share one landform
-/// domain (~50m–1km; default matches [`MACRO_CELL_SIZE`] = 640).
-pub const JERSEY_STAMP_CELL_SIZE: f32 = MACRO_CELL_SIZE;
-
-/// World-space XZ origin offset for the jersey stamp grid.
-///
-/// Prefer `0` so jersey faces stay aligned with the presentation grid; seam fixes
-/// come from inclusive/halo discovery and mesh apron, not deliberate misalignment.
-pub const JERSEY_STAMP_GRID_OFFSET: f32 = 0.0;
 
 /// Mesh overflow past each Terrain cell face, in voxels at the cell's `res_2`.
 ///
@@ -45,9 +33,6 @@ pub const TERRAIN_MESH_PAD_VOXELS: f32 = 0.0;
 
 /// Extra Y overflow as a multiple of the XZ pad (covers steep ridge crests).
 pub const TERRAIN_MESH_PAD_Y_SLOPE: f32 = 4.0;
-
-/// Halo width (cells) for jersey stamp discovery around a query region.
-pub const JERSEY_CELL_QUERY_HALO: i32 = 1;
 
 /// Default cell count along +X / +Z (`2 * grid_radius + 1`).
 pub const TERRAIN_CELL_EXTENTS_XZ: u32 = (2 * NATURESCAPES_GRID_RADIUS_XZ + 1) as u32;
@@ -173,77 +158,6 @@ impl Default for MacroCellLayout {
 	}
 }
 
-/// Layout for jersey stamp / landform cells (larger than presentation terrain cells).
-///
-/// Materialized once under [`Id::Universal`] via [`GenerationScheme`].
-#[derive(Resource, Debug, Clone, PartialEq)]
-pub struct JerseyStampCellLayout {
-	pub cell_size: f32,
-	pub vertical_half_extent: f32,
-	/// World-space XZ shift of the jersey grid origin relative to world zero.
-	pub origin_offset: Vec2,
-}
-
-impl Default for JerseyStampCellLayout {
-	fn default() -> Self {
-		Self {
-			cell_size: JERSEY_STAMP_CELL_SIZE,
-			vertical_half_extent: TERRAIN_CELL_VERTICAL_HALF_EXTENT,
-			origin_offset: Vec2::splat(JERSEY_STAMP_GRID_OFFSET),
-		}
-	}
-}
-
-impl JerseyStampCellLayout {
-	/// World AABB for jersey cell `(ix, iz)`.
-	pub fn cell_bounds(&self, ix: i32, iz: i32) -> Aabb3d {
-		let size = self.cell_size.max(1e-3);
-		let vy = self.vertical_half_extent.max(size);
-		let ox = self.origin_offset.x;
-		let oz = self.origin_offset.y;
-		let min = Vec3::new(ix as f32 * size + ox, -vy, iz as f32 * size + oz);
-		let max = Vec3::new((ix + 1) as f32 * size + ox, vy, (iz + 1) as f32 * size + oz);
-		Aabb3d::from_min_max(min, max)
-	}
-
-	/// Shift a world-space query into jersey grid coordinates (subtract origin offset).
-	pub fn region_in_grid_space(&self, region: Aabb3d) -> Aabb3d {
-		let ox = self.origin_offset.x;
-		let oz = self.origin_offset.y;
-		Aabb3d::from_min_max(
-			Vec3::new(region.min.x - ox, region.min.y, region.min.z - oz),
-			Vec3::new(region.max.x - ox, region.max.y, region.max.z - oz),
-		)
-	}
-}
-
-/// Bootstrap source used only when first materializing [`JerseyStampCellLayout`] at
-/// [`Id::Universal`].
-pub trait BootstrapJerseyStampCellLayout {
-	fn bootstrap_jersey_stamp_cell_layout(&self) -> JerseyStampCellLayout;
-}
-
-impl<S> GenerationScheme<S> for JerseyStampCellLayout
-where
-	S: BootstrapJerseyStampCellLayout,
-{
-	fn original_ids_for(_spatial_index: &mut S, _region: Aabb3d) -> Vec<OriginalId> {
-		vec![OriginalId::universal()]
-	}
-
-	fn build_with_id(spatial_index: &mut S, id: Id, _lod_ref: &LodRef) -> Option<(Self, Aabb3d)> {
-		if id != Id::Universal {
-			return None;
-		}
-		Some((
-			spatial_index.bootstrap_jersey_stamp_cell_layout(),
-			universal_bounds(),
-		))
-	}
-
-	fn descendants_with_lod(_id: Id, _spatial_index: &mut S, _lod_ref: &LodRef) {}
-}
-
 /// Build an origin-cell AABB from integer cell coordinates on the XZ plane.
 pub fn cell_bounds(ix: i32, iz: i32, cell_size: f32, vertical_half_extent: f32) -> Aabb3d {
 	let size = cell_size.max(1e-3);
@@ -348,48 +262,4 @@ where
 			id.origin_cell_bounds().is_some_and(|b| region.intersects(&b))
 		})
 		.collect()
-}
-
-/// Jersey-stamp-cell [`OriginalId`]s covering `region`, using Universal [`JerseyStampCellLayout`].
-///
-/// Uses closed/inclusive tiling plus [`JERSEY_CELL_QUERY_HALO`] so face-adjacent and
-/// softmask-spilling neighbors are materialized when Terrain pulls by region.
-/// Does not filter with `region.intersects` — that would drop the halo.
-pub fn original_ids_for_jersey_cells<S>(
-	spatial_index: &mut S,
-	region: Aabb3d,
-) -> Vec<OriginalId>
-where
-	S: GeneratingSpatialIndex<JerseyStampCellLayout>,
-{
-	let identity = Transform::IDENTITY;
-	let lod_ref = LodRef {
-		entity: Entity::PLACEHOLDER,
-		previous_transform: &identity,
-		current_transform: &identity,
-		bounds: &region,
-	};
-	if GeneratingSpatialIndex::<JerseyStampCellLayout>::get_or_generate(
-		spatial_index,
-		Id::Universal,
-		&lod_ref,
-	)
-	.is_none()
-	{
-		return Vec::new();
-	}
-	let Some(layout) =
-		<S as SpatialIndex<JerseyStampCellLayout>>::get(spatial_index, Id::Universal)
-	else {
-		return Vec::new();
-	};
-	let layout = layout.clone();
-	let grid_region = layout.region_in_grid_space(region);
-	cell_coords_for_region_inclusive_halo(
-		grid_region,
-		layout.cell_size,
-		JERSEY_CELL_QUERY_HALO,
-	)
-	.map(|(ix, iz)| OriginalId(Id::from_cell(layout.cell_bounds(ix, iz))))
-	.collect()
 }

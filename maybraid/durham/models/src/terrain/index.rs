@@ -1,22 +1,31 @@
 //! System-local multi-type spatial index for Durham terrain generation.
 
 use crate::terrain::base_noise::BaseTerrainNoise;
-use crate::terrain::cell::{
-	BootstrapJerseyStampCellLayout, BootstrapTerrainCellLayout, JerseyStampCellLayout,
-	TerrainCellLayout,
-};
-use crate::terrain::cell_noise::CellTerrainNoise;
-use crate::terrain::jersey_configs::{BootstrapJerseyLayerConfigs, JerseyLayerConfigs};
-use crate::terrain::jersey_layers::{
-	CanyonLayer, PlateauCapLayer, PocketWaterLayer, RollingGroundLayer, RuggedMassifLayer,
+use crate::terrain::cell::{BootstrapTerrainCellLayout, TerrainCellLayout};
+use crate::terrain::jersey::{
+	BootstrapCanyonHighPassControllerLayout, BootstrapCanyonLowPassControllerLayout,
+	BootstrapJerseyStampConfigs, BootstrapMassifHighPassControllerLayout,
+	BootstrapMassifLowPassControllerLayout, BootstrapPlateauHighPassControllerLayout,
+	BootstrapPlateauLowPassControllerLayout, BootstrapPocketWaterHighPassControllerLayout,
+	BootstrapPocketWaterLowPassControllerLayout, BootstrapRollingHighPassControllerLayout,
+	BootstrapRollingLowPassControllerLayout, BootstrapValleyHighPassControllerLayout,
+	BootstrapValleyLowPassControllerLayout, CanyonHighPassControllerCell,
+	CanyonHighPassControllerLayout, CanyonHighPassStampCell, CanyonLowPassControllerCell,
+	CanyonLowPassControllerLayout, CanyonLowPassStampCell, JerseyStampConfigs,
+	MassifHighPassControllerCell, MassifHighPassControllerLayout, MassifHighPassStampCell,
+	MassifLowPassControllerCell, MassifLowPassControllerLayout, MassifLowPassStampCell,
+	PlateauHighPassControllerCell, PlateauHighPassControllerLayout, PlateauHighPassStampCell,
+	PlateauLowPassControllerCell, PlateauLowPassControllerLayout, PlateauLowPassStampCell,
+	PocketWaterHighPassControllerCell, PocketWaterHighPassControllerLayout,
+	PocketWaterHighPassStampCell, PocketWaterLowPassControllerCell,
+	PocketWaterLowPassControllerLayout, PocketWaterLowPassStampCell, RollingHighPassControllerCell,
+	RollingHighPassControllerLayout, RollingHighPassStampCell, RollingLowPassControllerCell,
+	RollingLowPassControllerLayout, RollingLowPassStampCell, ValleyHighPassControllerCell,
+	ValleyHighPassControllerLayout, ValleyHighPassStampCell, ValleyLowPassControllerCell,
+	ValleyLowPassControllerLayout, ValleyLowPassStampCell, JerseyControllerLayouts,
 };
 use crate::terrain::presentation::{
 	BootstrapTerrainPresentationAssets, TerrainPresentationAssets,
-};
-use crate::terrain::valley_chain::{
-	BootstrapJerseyValleyChainControllerLayout, BootstrapJerseyValleyChainLayerConfig,
-	JerseyValleyChainControllerCell, JerseyValleyChainControllerLayout,
-	JerseyValleyChainGuillotineCell, JerseyValleyChainLayerConfig, JerseyValleyChainStampCell,
 };
 use crate::terrain::Terrain;
 use avian3d::prelude::*;
@@ -45,21 +54,49 @@ pub struct TerrainEntryStore {
 	next_version: u64,
 	pub(crate) terrain: HashMap<Id, StoredEntry<Terrain>>,
 	pub(crate) base_noise: HashMap<Id, StoredEntry<BaseTerrainNoise>>,
-	pub(crate) cell_noise: HashMap<Id, StoredEntry<CellTerrainNoise>>,
-	pub(crate) plateau_cap: HashMap<Id, StoredEntry<PlateauCapLayer>>,
-	pub(crate) rugged_massif: HashMap<Id, StoredEntry<RuggedMassifLayer>>,
-	pub(crate) canyon: HashMap<Id, StoredEntry<CanyonLayer>>,
-	pub(crate) pocket_water: HashMap<Id, StoredEntry<PocketWaterLayer>>,
-	pub(crate) rolling_ground: HashMap<Id, StoredEntry<RollingGroundLayer>>,
-	pub(crate) jersey_configs: HashMap<Id, StoredEntry<JerseyLayerConfigs>>,
-	pub(crate) jersey_layout: HashMap<Id, StoredEntry<JerseyStampCellLayout>>,
 	pub(crate) cell_layout: HashMap<Id, StoredEntry<TerrainCellLayout>>,
 	pub(crate) presentation: HashMap<Id, StoredEntry<TerrainPresentationAssets>>,
-	pub(crate) valley_chain_config: HashMap<Id, StoredEntry<JerseyValleyChainLayerConfig>>,
-	pub(crate) valley_chain_layout: HashMap<Id, StoredEntry<JerseyValleyChainControllerLayout>>,
-	pub(crate) valley_chain_controller: HashMap<Id, StoredEntry<JerseyValleyChainControllerCell>>,
-	pub(crate) valley_chain_guillotine: HashMap<Id, StoredEntry<JerseyValleyChainGuillotineCell>>,
-	pub(crate) valley_chain_stamp: HashMap<Id, StoredEntry<JerseyValleyChainStampCell>>,
+	pub(crate) jersey_configs: HashMap<Id, StoredEntry<JerseyStampConfigs>>,
+	pub(crate) plateau_low_pass_layout: HashMap<Id, StoredEntry<PlateauLowPassControllerLayout>>,
+	pub(crate) plateau_low_pass_controller: HashMap<Id, StoredEntry<PlateauLowPassControllerCell>>,
+	pub(crate) plateau_low_pass_stamp: HashMap<Id, StoredEntry<PlateauLowPassStampCell>>,
+	pub(crate) plateau_high_pass_layout: HashMap<Id, StoredEntry<PlateauHighPassControllerLayout>>,
+	pub(crate) plateau_high_pass_controller: HashMap<Id, StoredEntry<PlateauHighPassControllerCell>>,
+	pub(crate) plateau_high_pass_stamp: HashMap<Id, StoredEntry<PlateauHighPassStampCell>>,
+	pub(crate) massif_low_pass_layout: HashMap<Id, StoredEntry<MassifLowPassControllerLayout>>,
+	pub(crate) massif_low_pass_controller: HashMap<Id, StoredEntry<MassifLowPassControllerCell>>,
+	pub(crate) massif_low_pass_stamp: HashMap<Id, StoredEntry<MassifLowPassStampCell>>,
+	pub(crate) massif_high_pass_layout: HashMap<Id, StoredEntry<MassifHighPassControllerLayout>>,
+	pub(crate) massif_high_pass_controller: HashMap<Id, StoredEntry<MassifHighPassControllerCell>>,
+	pub(crate) massif_high_pass_stamp: HashMap<Id, StoredEntry<MassifHighPassStampCell>>,
+	pub(crate) canyon_low_pass_layout: HashMap<Id, StoredEntry<CanyonLowPassControllerLayout>>,
+	pub(crate) canyon_low_pass_controller: HashMap<Id, StoredEntry<CanyonLowPassControllerCell>>,
+	pub(crate) canyon_low_pass_stamp: HashMap<Id, StoredEntry<CanyonLowPassStampCell>>,
+	pub(crate) canyon_high_pass_layout: HashMap<Id, StoredEntry<CanyonHighPassControllerLayout>>,
+	pub(crate) canyon_high_pass_controller: HashMap<Id, StoredEntry<CanyonHighPassControllerCell>>,
+	pub(crate) canyon_high_pass_stamp: HashMap<Id, StoredEntry<CanyonHighPassStampCell>>,
+	pub(crate) pocket_water_low_pass_layout:
+		HashMap<Id, StoredEntry<PocketWaterLowPassControllerLayout>>,
+	pub(crate) pocket_water_low_pass_controller:
+		HashMap<Id, StoredEntry<PocketWaterLowPassControllerCell>>,
+	pub(crate) pocket_water_low_pass_stamp: HashMap<Id, StoredEntry<PocketWaterLowPassStampCell>>,
+	pub(crate) pocket_water_high_pass_layout:
+		HashMap<Id, StoredEntry<PocketWaterHighPassControllerLayout>>,
+	pub(crate) pocket_water_high_pass_controller:
+		HashMap<Id, StoredEntry<PocketWaterHighPassControllerCell>>,
+	pub(crate) pocket_water_high_pass_stamp: HashMap<Id, StoredEntry<PocketWaterHighPassStampCell>>,
+	pub(crate) rolling_low_pass_layout: HashMap<Id, StoredEntry<RollingLowPassControllerLayout>>,
+	pub(crate) rolling_low_pass_controller: HashMap<Id, StoredEntry<RollingLowPassControllerCell>>,
+	pub(crate) rolling_low_pass_stamp: HashMap<Id, StoredEntry<RollingLowPassStampCell>>,
+	pub(crate) rolling_high_pass_layout: HashMap<Id, StoredEntry<RollingHighPassControllerLayout>>,
+	pub(crate) rolling_high_pass_controller: HashMap<Id, StoredEntry<RollingHighPassControllerCell>>,
+	pub(crate) rolling_high_pass_stamp: HashMap<Id, StoredEntry<RollingHighPassStampCell>>,
+	pub(crate) valley_low_pass_layout: HashMap<Id, StoredEntry<ValleyLowPassControllerLayout>>,
+	pub(crate) valley_low_pass_controller: HashMap<Id, StoredEntry<ValleyLowPassControllerCell>>,
+	pub(crate) valley_low_pass_stamp: HashMap<Id, StoredEntry<ValleyLowPassStampCell>>,
+	pub(crate) valley_high_pass_layout: HashMap<Id, StoredEntry<ValleyHighPassControllerLayout>>,
+	pub(crate) valley_high_pass_controller: HashMap<Id, StoredEntry<ValleyHighPassControllerCell>>,
+	pub(crate) valley_high_pass_stamp: HashMap<Id, StoredEntry<ValleyHighPassStampCell>>,
 	entity_to_id: HashMap<Entity, Id>,
 }
 
@@ -75,22 +112,6 @@ impl TerrainEntryStore {
 
 	pub fn is_empty(&self) -> bool {
 		self.terrain.is_empty()
-			&& self.base_noise.is_empty()
-			&& self.cell_noise.is_empty()
-			&& self.plateau_cap.is_empty()
-			&& self.rugged_massif.is_empty()
-			&& self.canyon.is_empty()
-			&& self.pocket_water.is_empty()
-			&& self.rolling_ground.is_empty()
-			&& self.jersey_configs.is_empty()
-			&& self.jersey_layout.is_empty()
-			&& self.cell_layout.is_empty()
-			&& self.presentation.is_empty()
-			&& self.valley_chain_config.is_empty()
-			&& self.valley_chain_layout.is_empty()
-			&& self.valley_chain_controller.is_empty()
-			&& self.valley_chain_guillotine.is_empty()
-			&& self.valley_chain_stamp.is_empty()
 	}
 
 	pub fn base_noise(&self) -> Option<&BaseTerrainNoise> {
@@ -99,19 +120,14 @@ impl TerrainEntryStore {
 }
 
 /// System-local wrapper used as `S` for [`lod::gen::GeneratingSpatialIndex`].
-///
-/// Bevy Resources remain the bootstrap source for universal layout / presentation;
-/// once materialized they live in [`TerrainEntryStore`] under [`Id::Universal`].
 #[derive(SystemParam)]
 pub struct AvianTerrainIndex<'w, 's> {
 	commands: Commands<'w, 's>,
 	spatial: SpatialQuery<'w, 's>,
 	store: ResMut<'w, TerrainEntryStore>,
 	layout: ResMut<'w, TerrainCellLayout>,
-	jersey_layout: ResMut<'w, JerseyStampCellLayout>,
-	jersey_configs: Res<'w, JerseyLayerConfigs>,
-	valley_chain_config: Res<'w, JerseyValleyChainLayerConfig>,
-	valley_chain_layout: ResMut<'w, JerseyValleyChainControllerLayout>,
+	jersey_configs: Res<'w, JerseyStampConfigs>,
+	jersey_layouts: ResMut<'w, JerseyControllerLayouts>,
 	presentation: Res<'w, TerrainPresentationAssets>,
 }
 
@@ -121,29 +137,94 @@ impl<'w, 's> BootstrapTerrainCellLayout for AvianTerrainIndex<'w, 's> {
 	}
 }
 
-impl<'w, 's> BootstrapJerseyStampCellLayout for AvianTerrainIndex<'w, 's> {
-	fn bootstrap_jersey_stamp_cell_layout(&self) -> JerseyStampCellLayout {
-		self.jersey_layout.clone()
-	}
-}
-
-impl<'w, 's> BootstrapJerseyLayerConfigs for AvianTerrainIndex<'w, 's> {
-	fn bootstrap_jersey_layer_configs(&self) -> JerseyLayerConfigs {
+impl<'w, 's> BootstrapJerseyStampConfigs for AvianTerrainIndex<'w, 's> {
+	fn bootstrap_jersey_stamp_configs(&self) -> JerseyStampConfigs {
 		self.jersey_configs.clone()
 	}
 }
 
-impl<'w, 's> BootstrapJerseyValleyChainLayerConfig for AvianTerrainIndex<'w, 's> {
-	fn bootstrap_jersey_valley_chain_layer_config(&self) -> JerseyValleyChainLayerConfig {
-		self.valley_chain_config.clone()
-	}
+macro_rules! impl_bootstrap_layout {
+	($trait:ident, $method:ident, $field:ident, $ty:ty) => {
+		impl<'w, 's> $trait for AvianTerrainIndex<'w, 's> {
+			fn $method(&self) -> $ty {
+				self.jersey_layouts.$field.clone()
+			}
+		}
+	};
 }
 
-impl<'w, 's> BootstrapJerseyValleyChainControllerLayout for AvianTerrainIndex<'w, 's> {
-	fn bootstrap_jersey_valley_chain_controller_layout(&self) -> JerseyValleyChainControllerLayout {
-		self.valley_chain_layout.clone()
-	}
-}
+impl_bootstrap_layout!(
+	BootstrapPlateauLowPassControllerLayout,
+	bootstrap_plateau_low_pass_controller_layout,
+	plateau_low_pass,
+	PlateauLowPassControllerLayout
+);
+impl_bootstrap_layout!(
+	BootstrapPlateauHighPassControllerLayout,
+	bootstrap_plateau_high_pass_controller_layout,
+	plateau_high_pass,
+	PlateauHighPassControllerLayout
+);
+impl_bootstrap_layout!(
+	BootstrapMassifLowPassControllerLayout,
+	bootstrap_massif_low_pass_controller_layout,
+	massif_low_pass,
+	MassifLowPassControllerLayout
+);
+impl_bootstrap_layout!(
+	BootstrapMassifHighPassControllerLayout,
+	bootstrap_massif_high_pass_controller_layout,
+	massif_high_pass,
+	MassifHighPassControllerLayout
+);
+impl_bootstrap_layout!(
+	BootstrapCanyonLowPassControllerLayout,
+	bootstrap_canyon_low_pass_controller_layout,
+	canyon_low_pass,
+	CanyonLowPassControllerLayout
+);
+impl_bootstrap_layout!(
+	BootstrapCanyonHighPassControllerLayout,
+	bootstrap_canyon_high_pass_controller_layout,
+	canyon_high_pass,
+	CanyonHighPassControllerLayout
+);
+impl_bootstrap_layout!(
+	BootstrapPocketWaterLowPassControllerLayout,
+	bootstrap_pocket_water_low_pass_controller_layout,
+	pocket_water_low_pass,
+	PocketWaterLowPassControllerLayout
+);
+impl_bootstrap_layout!(
+	BootstrapPocketWaterHighPassControllerLayout,
+	bootstrap_pocket_water_high_pass_controller_layout,
+	pocket_water_high_pass,
+	PocketWaterHighPassControllerLayout
+);
+impl_bootstrap_layout!(
+	BootstrapRollingLowPassControllerLayout,
+	bootstrap_rolling_low_pass_controller_layout,
+	rolling_low_pass,
+	RollingLowPassControllerLayout
+);
+impl_bootstrap_layout!(
+	BootstrapRollingHighPassControllerLayout,
+	bootstrap_rolling_high_pass_controller_layout,
+	rolling_high_pass,
+	RollingHighPassControllerLayout
+);
+impl_bootstrap_layout!(
+	BootstrapValleyLowPassControllerLayout,
+	bootstrap_valley_low_pass_controller_layout,
+	valley_low_pass,
+	ValleyLowPassControllerLayout
+);
+impl_bootstrap_layout!(
+	BootstrapValleyHighPassControllerLayout,
+	bootstrap_valley_high_pass_controller_layout,
+	valley_high_pass,
+	ValleyHighPassControllerLayout
+);
 
 impl<'w, 's> BootstrapTerrainPresentationAssets for AvianTerrainIndex<'w, 's> {
 	fn bootstrap_terrain_presentation_assets(&self) -> TerrainPresentationAssets {
@@ -171,7 +252,6 @@ impl<'w, 's> AvianTerrainIndex<'w, 's> {
 			.id()
 	}
 
-	/// Despawn terrain bookkeeping entities and clear all generation layers.
 	pub fn clear(&mut self) {
 		let entities: Vec<Entity> = self
 			.store
@@ -182,24 +262,7 @@ impl<'w, 's> AvianTerrainIndex<'w, 's> {
 		for entity in entities {
 			self.commands.entity(entity).despawn();
 		}
-		self.store.terrain.clear();
-		self.store.base_noise.clear();
-		self.store.cell_noise.clear();
-		self.store.plateau_cap.clear();
-		self.store.rugged_massif.clear();
-		self.store.canyon.clear();
-		self.store.pocket_water.clear();
-		self.store.rolling_ground.clear();
-		self.store.jersey_configs.clear();
-		self.store.jersey_layout.clear();
-		self.store.cell_layout.clear();
-		self.store.presentation.clear();
-		self.store.valley_chain_config.clear();
-		self.store.valley_chain_layout.clear();
-		self.store.valley_chain_controller.clear();
-		self.store.valley_chain_guillotine.clear();
-		self.store.valley_chain_stamp.clear();
-		self.store.entity_to_id.clear();
+		*self.store = TerrainEntryStore::default();
 	}
 
 	pub fn set_layout(&mut self, layout: TerrainCellLayout) {
@@ -257,7 +320,12 @@ macro_rules! impl_map_spatial_index {
 				let version = self.store.next_version();
 				self.store.$field.insert(
 					id,
-					StoredEntry { value, bounds, version, entity: None },
+					StoredEntry {
+						value,
+						bounds,
+						version,
+						entity: None,
+					},
 				);
 			}
 		}
@@ -265,21 +333,51 @@ macro_rules! impl_map_spatial_index {
 }
 
 impl_map_spatial_index!(BaseTerrainNoise, base_noise);
-impl_map_spatial_index!(CellTerrainNoise, cell_noise);
-impl_map_spatial_index!(PlateauCapLayer, plateau_cap);
-impl_map_spatial_index!(RuggedMassifLayer, rugged_massif);
-impl_map_spatial_index!(CanyonLayer, canyon);
-impl_map_spatial_index!(PocketWaterLayer, pocket_water);
-impl_map_spatial_index!(RollingGroundLayer, rolling_ground);
-impl_map_spatial_index!(JerseyLayerConfigs, jersey_configs);
-impl_map_spatial_index!(JerseyStampCellLayout, jersey_layout);
 impl_map_spatial_index!(TerrainCellLayout, cell_layout);
 impl_map_spatial_index!(TerrainPresentationAssets, presentation);
-impl_map_spatial_index!(JerseyValleyChainLayerConfig, valley_chain_config);
-impl_map_spatial_index!(JerseyValleyChainControllerLayout, valley_chain_layout);
-impl_map_spatial_index!(JerseyValleyChainControllerCell, valley_chain_controller);
-impl_map_spatial_index!(JerseyValleyChainGuillotineCell, valley_chain_guillotine);
-impl_map_spatial_index!(JerseyValleyChainStampCell, valley_chain_stamp);
+impl_map_spatial_index!(JerseyStampConfigs, jersey_configs);
+
+impl_map_spatial_index!(PlateauLowPassControllerLayout, plateau_low_pass_layout);
+impl_map_spatial_index!(PlateauLowPassControllerCell, plateau_low_pass_controller);
+impl_map_spatial_index!(PlateauLowPassStampCell, plateau_low_pass_stamp);
+impl_map_spatial_index!(PlateauHighPassControllerLayout, plateau_high_pass_layout);
+impl_map_spatial_index!(PlateauHighPassControllerCell, plateau_high_pass_controller);
+impl_map_spatial_index!(PlateauHighPassStampCell, plateau_high_pass_stamp);
+
+impl_map_spatial_index!(MassifLowPassControllerLayout, massif_low_pass_layout);
+impl_map_spatial_index!(MassifLowPassControllerCell, massif_low_pass_controller);
+impl_map_spatial_index!(MassifLowPassStampCell, massif_low_pass_stamp);
+impl_map_spatial_index!(MassifHighPassControllerLayout, massif_high_pass_layout);
+impl_map_spatial_index!(MassifHighPassControllerCell, massif_high_pass_controller);
+impl_map_spatial_index!(MassifHighPassStampCell, massif_high_pass_stamp);
+
+impl_map_spatial_index!(CanyonLowPassControllerLayout, canyon_low_pass_layout);
+impl_map_spatial_index!(CanyonLowPassControllerCell, canyon_low_pass_controller);
+impl_map_spatial_index!(CanyonLowPassStampCell, canyon_low_pass_stamp);
+impl_map_spatial_index!(CanyonHighPassControllerLayout, canyon_high_pass_layout);
+impl_map_spatial_index!(CanyonHighPassControllerCell, canyon_high_pass_controller);
+impl_map_spatial_index!(CanyonHighPassStampCell, canyon_high_pass_stamp);
+
+impl_map_spatial_index!(PocketWaterLowPassControllerLayout, pocket_water_low_pass_layout);
+impl_map_spatial_index!(PocketWaterLowPassControllerCell, pocket_water_low_pass_controller);
+impl_map_spatial_index!(PocketWaterLowPassStampCell, pocket_water_low_pass_stamp);
+impl_map_spatial_index!(PocketWaterHighPassControllerLayout, pocket_water_high_pass_layout);
+impl_map_spatial_index!(PocketWaterHighPassControllerCell, pocket_water_high_pass_controller);
+impl_map_spatial_index!(PocketWaterHighPassStampCell, pocket_water_high_pass_stamp);
+
+impl_map_spatial_index!(RollingLowPassControllerLayout, rolling_low_pass_layout);
+impl_map_spatial_index!(RollingLowPassControllerCell, rolling_low_pass_controller);
+impl_map_spatial_index!(RollingLowPassStampCell, rolling_low_pass_stamp);
+impl_map_spatial_index!(RollingHighPassControllerLayout, rolling_high_pass_layout);
+impl_map_spatial_index!(RollingHighPassControllerCell, rolling_high_pass_controller);
+impl_map_spatial_index!(RollingHighPassStampCell, rolling_high_pass_stamp);
+
+impl_map_spatial_index!(ValleyLowPassControllerLayout, valley_low_pass_layout);
+impl_map_spatial_index!(ValleyLowPassControllerCell, valley_low_pass_controller);
+impl_map_spatial_index!(ValleyLowPassStampCell, valley_low_pass_stamp);
+impl_map_spatial_index!(ValleyHighPassControllerLayout, valley_high_pass_layout);
+impl_map_spatial_index!(ValleyHighPassControllerCell, valley_high_pass_controller);
+impl_map_spatial_index!(ValleyHighPassStampCell, valley_high_pass_stamp);
 
 impl<'w, 's> SpatialIndex<Terrain> for AvianTerrainIndex<'w, 's> {
 	fn tracked_ids_for(&self, region: Aabb3d) -> Vec<TrackedId> {
@@ -338,7 +436,12 @@ impl<'w, 's> SpatialIndex<Terrain> for AvianTerrainIndex<'w, 's> {
 		self.store.entity_to_id.insert(entity, id);
 		self.store.terrain.insert(
 			id,
-			StoredEntry { value: t, bounds, version, entity: Some(entity) },
+			StoredEntry {
+				value: t,
+				bounds,
+				version,
+				entity: Some(entity),
+			},
 		);
 	}
 }

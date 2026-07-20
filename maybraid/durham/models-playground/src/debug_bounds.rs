@@ -1,9 +1,10 @@
-//! Optional debug visualization of Terrain / jersey cell bounds and a cell HUD.
+//! Optional debug visualization of Terrain / jersey leaf bounds and a cell HUD.
 
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 use durham_terrain_models::{
-	cascade_chunk_for_cell, JerseyStampCellLayout, Terrain, TerrainCellLayout,
+	cascade_chunk_for_cell, JerseyControllerLayouts, PlateauLowPassControllerLayout, Terrain,
+	TerrainCellLayout,
 };
 use std::fmt::{Display, Formatter, Result as FmtResult};
 
@@ -39,7 +40,7 @@ pub(crate) struct CellLocationHudRoot;
 #[derive(Resource, Default)]
 pub(crate) struct LastLoggedCellLocation {
 	terrain: Option<(i32, i32)>,
-	jersey: Option<(i32, i32)>,
+	controller: Option<(i32, i32)>,
 	modulation_count: Option<usize>,
 	terrain_present: Option<bool>,
 }
@@ -82,7 +83,7 @@ pub fn draw_chunk_boundary_boxes(
 	overlay: Res<PlaygroundDebugOverlay>,
 	terrains: Query<&Terrain>,
 	layout: Res<TerrainCellLayout>,
-	jersey_layout: Res<JerseyStampCellLayout>,
+	jersey_layouts: Res<JerseyControllerLayouts>,
 	base: Res<WorldBaseTerrain>,
 ) {
 	if !overlay.show_bounds {
@@ -90,31 +91,33 @@ pub fn draw_chunk_boundary_boxes(
 	}
 
 	let terrain_color = Color::srgb(1.0, 0.2, 0.25);
-	let valley_color = Color::srgb(0.25, 0.9, 0.35);
+	let leaf_color = Color::srgb(0.25, 0.9, 0.35);
 	for terrain in &terrains {
 		let chunk = cascade_chunk_for_cell(terrain.cell, terrain.res_2);
 		let extent = chunk.extent_vec();
 		let aabb = Aabb3d::from_min_max(chunk.origin, chunk.origin + extent);
 		gizmos.aabb_3d(aabb, Transform::IDENTITY, terrain_color);
-		for leaf in &terrain.valley_leaves {
+		for leaf in &terrain.jersey_leaves {
 			let aabb = surface_footprint_box(leaf, &base.0);
-			gizmos.aabb_3d(aabb, Transform::IDENTITY, valley_color);
+			gizmos.aabb_3d(aabb, Transform::IDENTITY, leaf_color);
 		}
 	}
 
-	let jersey_color = Color::srgb(0.2, 0.85, 1.0);
+	// Low-pass plateau controller grid as a representative family grid overlay.
+	let plateau_layout = &jersey_layouts.plateau_low_pass;
+	let controller_color = Color::srgb(0.2, 0.85, 1.0);
 	let region = layout.request_region();
-	let grid_region = jersey_layout.region_in_grid_space(region);
-	let size = jersey_layout.cell_size.max(1e-3);
+	let grid_region = plateau_layout.region_in_grid_space(region);
+	let size = plateau_layout.grid.cell_size.max(1e-3);
 	let min_x = (grid_region.min.x / size).floor() as i32;
 	let max_x = (grid_region.max.x / size).ceil() as i32 - 1;
 	let min_z = (grid_region.min.z / size).floor() as i32;
 	let max_z = (grid_region.max.z / size).ceil() as i32 - 1;
 	for ix in min_x..=max_x {
 		for iz in min_z..=max_z {
-			let cell = jersey_layout.cell_bounds(ix, iz);
+			let cell = plateau_layout.cell_bounds(ix, iz);
 			let aabb = surface_footprint_box(&cell, &base.0);
-			gizmos.aabb_3d(aabb, Transform::IDENTITY, jersey_color);
+			gizmos.aabb_3d(aabb, Transform::IDENTITY, controller_color);
 		}
 	}
 }
@@ -124,12 +127,13 @@ pub fn update_cell_location_hud(
 	overlay: Res<PlaygroundDebugOverlay>,
 	cameras: Query<&GlobalTransform, With<Camera3d>>,
 	layout: Res<TerrainCellLayout>,
-	jersey_layout: Res<JerseyStampCellLayout>,
+	jersey_layouts: Res<JerseyControllerLayouts>,
 	terrains: Query<&Terrain>,
 	mut hud_root: Query<&mut Visibility, With<CellLocationHudRoot>>,
 	mut hud: Query<&mut Text, With<CellLocationHudText>>,
 	mut last: ResMut<LastLoggedCellLocation>,
 ) {
+	let plateau_layout = &jersey_layouts.plateau_low_pass;
 	if let Ok(mut visibility) = hud_root.single_mut() {
 		*visibility = if overlay.show_cell_hud {
 			Visibility::Visible
@@ -148,15 +152,15 @@ pub fn update_cell_location_hud(
 
 	let p = camera.translation();
 	let (tix, tiz) = terrain_cell_coords(&layout, p);
-	let (jix, jiz) = jersey_cell_coords(&jersey_layout, p);
+	let (cix, ciz) = controller_cell_coords(&plateau_layout, p);
 
 	let t_size = layout.cell_size.max(1e-3);
 	let t_cell = terrain_cell_aabb(tix, tiz, t_size, layout.vertical_half_extent);
-	let j_cell = jersey_layout.cell_bounds(jix, jiz);
+	let c_cell = plateau_layout.cell_bounds(cix, ciz);
 
 	let terrain = terrains.iter().find(|t| cells_match_xz(&t.cell, &t_cell));
-	let valley_under_cam = terrain.and_then(|t| {
-		t.valley_leaves
+	let leaf_under_cam = terrain.and_then(|t| {
+		t.jersey_leaves
 			.iter()
 			.find(|leaf| point_in_xz(p, leaf))
 			.copied()
@@ -169,12 +173,12 @@ pub fn update_cell_location_hud(
 		terrain_layout_size: t_size,
 		terrain_cell: t_cell,
 		terrain: terrain.map(TerrainReport::from_terrain),
-		jersey_ix: jix,
-		jersey_iz: jiz,
-		jersey_layout_size: jersey_layout.cell_size,
-		jersey_origin_offset: jersey_layout.origin_offset,
-		jersey_cell: j_cell,
-		valley_leaf: valley_under_cam,
+		controller_ix: cix,
+		controller_iz: ciz,
+		controller_layout_size: plateau_layout.grid.cell_size,
+		controller_origin_offset: plateau_layout.grid.origin_offset,
+		controller_cell: c_cell,
+		jersey_leaf: leaf_under_cam,
 	};
 
 	let rendered = report.to_string();
@@ -191,12 +195,12 @@ pub fn update_cell_location_hud(
 	let terrain_present = report.terrain.is_some();
 	let modulation_count = report.terrain.as_ref().map(|t| t.ops).unwrap_or(0);
 	let changed = last.terrain != Some((tix, tiz))
-		|| last.jersey != Some((jix, jiz))
+		|| last.controller != Some((cix, ciz))
 		|| last.terrain_present != Some(terrain_present)
 		|| last.modulation_count != Some(modulation_count);
 	if changed {
 		last.terrain = Some((tix, tiz));
-		last.jersey = Some((jix, jiz));
+		last.controller = Some((cix, ciz));
 		last.terrain_present = Some(terrain_present);
 		last.modulation_count = Some(modulation_count);
 		info!("\n{rendered}");
@@ -211,12 +215,12 @@ struct CellLocationReport {
 	terrain_layout_size: f32,
 	terrain_cell: Aabb3d,
 	terrain: Option<TerrainReport>,
-	jersey_ix: i32,
-	jersey_iz: i32,
-	jersey_layout_size: f32,
-	jersey_origin_offset: Vec2,
-	jersey_cell: Aabb3d,
-	valley_leaf: Option<Aabb3d>,
+	controller_ix: i32,
+	controller_iz: i32,
+	controller_layout_size: f32,
+	controller_origin_offset: Vec2,
+	controller_cell: Aabb3d,
+	jersey_leaf: Option<Aabb3d>,
 }
 
 #[derive(Debug, Clone)]
@@ -225,7 +229,7 @@ struct TerrainReport {
 	chunk: Aabb3d,
 	res_2: u8,
 	ops: usize,
-	valley_leaves: usize,
+	jersey_leaves: usize,
 }
 
 impl TerrainReport {
@@ -237,7 +241,7 @@ impl TerrainReport {
 			chunk: Aabb3d::from_min_max(chunk.origin, chunk.origin + extent),
 			res_2: t.res_2,
 			ops: t.modulations.len(),
-			valley_leaves: t.valley_leaves.len(),
+			jersey_leaves: t.jersey_leaves.len(),
 		}
 	}
 }
@@ -264,8 +268,8 @@ impl Display for CellLocationReport {
 				writeln!(f, "  chunk AABB {}", fmt_aabb(&t.chunk))?;
 				writeln!(
 					f,
-					"  modulations n={}  valley_leaves n={}",
-					t.ops, t.valley_leaves
+					"  modulations n={}  jersey_leaves n={}",
+					t.ops, t.jersey_leaves
 				)?;
 			}
 			None => writeln!(f, "  status     NOT GENERATED")?,
@@ -273,22 +277,22 @@ impl Display for CellLocationReport {
 		writeln!(f)?;
 		writeln!(
 			f,
-			"jersey       J({}, {})  layout_size={:.3}  origin_offset={:?}",
-			self.jersey_ix,
-			self.jersey_iz,
-			self.jersey_layout_size,
+			"plateau ctl  C({}, {})  layout_size={:.3}  origin_offset={:?}",
+			self.controller_ix,
+			self.controller_iz,
+			self.controller_layout_size,
 			(
-				self.jersey_origin_offset.x,
-				self.jersey_origin_offset.y
+				self.controller_origin_offset.x,
+				self.controller_origin_offset.y
 			)
 		)?;
-		writeln!(f, "  cell AABB  {}", fmt_aabb(&self.jersey_cell))?;
-		match self.valley_leaf {
+		writeln!(f, "  cell AABB  {}", fmt_aabb(&self.controller_cell))?;
+		match self.jersey_leaf {
 			Some(leaf) => {
-				writeln!(f, "valley leaf  UNDER CAMERA")?;
+				writeln!(f, "jersey leaf  UNDER CAMERA")?;
 				writeln!(f, "  leaf AABB  {}", fmt_aabb(&leaf))?;
 			}
-			None => writeln!(f, "valley leaf  (none under camera)")?,
+			None => writeln!(f, "jersey leaf  (none under camera)")?,
 		}
 		write!(f, "───────────────────────────────────────────────────")
 	}
@@ -315,10 +319,10 @@ fn terrain_cell_coords(layout: &TerrainCellLayout, p: Vec3) -> (i32, i32) {
 	((p.x / s).floor() as i32, (p.z / s).floor() as i32)
 }
 
-fn jersey_cell_coords(layout: &JerseyStampCellLayout, p: Vec3) -> (i32, i32) {
-	let s = layout.cell_size.max(1e-3);
-	let gx = p.x - layout.origin_offset.x;
-	let gz = p.z - layout.origin_offset.y;
+fn controller_cell_coords(layout: &PlateauLowPassControllerLayout, p: Vec3) -> (i32, i32) {
+	let s = layout.grid.cell_size.max(1e-3);
+	let gx = p.x - layout.grid.origin_offset.x;
+	let gz = p.z - layout.grid.origin_offset.y;
 	((gx / s).floor() as i32, (gz / s).floor() as i32)
 }
 
