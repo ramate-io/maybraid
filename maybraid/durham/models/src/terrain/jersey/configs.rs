@@ -1,6 +1,18 @@
 //! Universal per-family guillotine + stamp authoring knobs (dual band).
 
 use crate::terrain::cell::{universal_bounds, MACRO_CELL_SIZE, TERRAIN_CELL_SIZE};
+use crate::terrain::jersey::canyon::{CanyonHighPassControllerLayout, CanyonLowPassControllerLayout};
+use crate::terrain::jersey::massif::{MassifHighPassControllerLayout, MassifLowPassControllerLayout};
+use crate::terrain::jersey::plateau::{
+	PlateauHighPassControllerLayout, PlateauLowPassControllerLayout,
+};
+use crate::terrain::jersey::pocket_water::{
+	PocketWaterHighPassControllerLayout, PocketWaterLowPassControllerLayout,
+};
+use crate::terrain::jersey::rolling::{
+	RollingHighPassControllerLayout, RollingLowPassControllerLayout,
+};
+use crate::terrain::jersey::valley::{ValleyHighPassControllerLayout, ValleyLowPassControllerLayout};
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 use comproc::guillotine::GuillotineConfig;
@@ -18,38 +30,38 @@ pub struct FamilyGuillotineConfig<P> {
 	pub depth: u8,
 	pub guillotine: GuillotineConfig,
 	pub noise_frequency: f32,
-	/// World-space frequency for occupancy Perlin (spatial correlation scale).
+	/// World-space frequency of the occupancy value-noise lattice.
 	pub occupancy_frequency: f32,
-	/// Soft threshold on occupancy noise (`0.0..=1.0`); higher → more leaves accepted.
+	/// Approximate leaf acceptance rate (`0.0..=1.0`) for value-noise occupancy.
+	///
+	/// Prefer setting defaults in `define_jersey_family!` (`likelihood:`); this
+	/// field is the runtime override on the resource.
 	pub likelihood: f32,
 	pub stamp: P,
 }
 
 impl<P: Default> FamilyGuillotineConfig<P> {
-	fn low_pass(seed: u32, likelihood: f32) -> Self {
+	fn low_pass(seed: u32, likelihood: f32, occupancy_frequency: f32) -> Self {
 		Self {
 			seed,
 			depth: 6,
 			guillotine: GuillotineConfig::new(TERRAIN_CELL_SIZE * 1.25, MACRO_CELL_SIZE * 1.5)
 				.with_snap_quantum(20.0),
 			noise_frequency: 0.05,
-			// Correlation on the order of a few low-pass controller cells.
-			occupancy_frequency: 1.0 / (MACRO_CELL_SIZE * 12.0),
+			occupancy_frequency,
 			likelihood: likelihood.clamp(0.0, 1.0),
 			stamp: P::default(),
 		}
 	}
 
-	fn high_pass(seed: u32, likelihood: f32) -> Self {
+	fn high_pass(seed: u32, likelihood: f32, occupancy_frequency: f32) -> Self {
 		Self {
 			seed,
 			depth: 4,
-			// Large preferred leaves for regional features.
 			guillotine: GuillotineConfig::new(MACRO_CELL_SIZE * 2.0, MACRO_CELL_SIZE * 8.0)
 				.with_snap_quantum(40.0),
 			noise_frequency: 0.02,
-			// Broader regional occupancy blobs.
-			occupancy_frequency: 1.0 / (MACRO_CELL_SIZE * 80.0),
+			occupancy_frequency,
 			likelihood: likelihood.clamp(0.0, 1.0),
 			stamp: P::default(),
 		}
@@ -76,30 +88,80 @@ pub struct JerseyStampConfigs {
 
 impl Default for JerseyStampConfigs {
 	fn default() -> Self {
+		// Likelihood / occupancy_frequency defaults come from each band's layout
+		// consts (set in `define_jersey_family!`).
 		Self {
 			plateau: DualBandFamilyConfig {
-				low_pass: FamilyGuillotineConfig::low_pass(42, 0.82),
-				high_pass: FamilyGuillotineConfig::high_pass(1042, 0.28),
+				low_pass: FamilyGuillotineConfig::low_pass(
+					42,
+					PlateauLowPassControllerLayout::LIKELIHOOD,
+					PlateauLowPassControllerLayout::OCCUPANCY_FREQUENCY,
+				),
+				high_pass: FamilyGuillotineConfig::high_pass(
+					1042,
+					PlateauHighPassControllerLayout::LIKELIHOOD,
+					PlateauHighPassControllerLayout::OCCUPANCY_FREQUENCY,
+				),
 			},
 			massif: DualBandFamilyConfig {
-				low_pass: FamilyGuillotineConfig::low_pass(43, 0.78),
-				high_pass: FamilyGuillotineConfig::high_pass(1043, 0.24),
+				low_pass: FamilyGuillotineConfig::low_pass(
+					43,
+					MassifLowPassControllerLayout::LIKELIHOOD,
+					MassifLowPassControllerLayout::OCCUPANCY_FREQUENCY,
+				),
+				high_pass: FamilyGuillotineConfig::high_pass(
+					1043,
+					MassifHighPassControllerLayout::LIKELIHOOD,
+					MassifHighPassControllerLayout::OCCUPANCY_FREQUENCY,
+				),
 			},
 			canyon: DualBandFamilyConfig {
-				low_pass: FamilyGuillotineConfig::low_pass(44, 0.78),
-				high_pass: FamilyGuillotineConfig::high_pass(1044, 0.24),
+				low_pass: FamilyGuillotineConfig::low_pass(
+					44,
+					CanyonLowPassControllerLayout::LIKELIHOOD,
+					CanyonLowPassControllerLayout::OCCUPANCY_FREQUENCY,
+				),
+				high_pass: FamilyGuillotineConfig::high_pass(
+					1044,
+					CanyonHighPassControllerLayout::LIKELIHOOD,
+					CanyonHighPassControllerLayout::OCCUPANCY_FREQUENCY,
+				),
 			},
 			pocket_water: DualBandFamilyConfig {
-				low_pass: FamilyGuillotineConfig::low_pass(45, 0.88),
-				high_pass: FamilyGuillotineConfig::high_pass(1045, 0.2),
+				low_pass: FamilyGuillotineConfig::low_pass(
+					45,
+					PocketWaterLowPassControllerLayout::LIKELIHOOD,
+					PocketWaterLowPassControllerLayout::OCCUPANCY_FREQUENCY,
+				),
+				high_pass: FamilyGuillotineConfig::high_pass(
+					1045,
+					PocketWaterHighPassControllerLayout::LIKELIHOOD,
+					PocketWaterHighPassControllerLayout::OCCUPANCY_FREQUENCY,
+				),
 			},
 			rolling: DualBandFamilyConfig {
-				low_pass: FamilyGuillotineConfig::low_pass(46, 0.92),
-				high_pass: FamilyGuillotineConfig::high_pass(1046, 0.35),
+				low_pass: FamilyGuillotineConfig::low_pass(
+					46,
+					RollingLowPassControllerLayout::LIKELIHOOD,
+					RollingLowPassControllerLayout::OCCUPANCY_FREQUENCY,
+				),
+				high_pass: FamilyGuillotineConfig::high_pass(
+					1046,
+					RollingHighPassControllerLayout::LIKELIHOOD,
+					RollingHighPassControllerLayout::OCCUPANCY_FREQUENCY,
+				),
 			},
 			valley: DualBandFamilyConfig {
-				low_pass: FamilyGuillotineConfig::low_pass(47, 0.85),
-				high_pass: FamilyGuillotineConfig::high_pass(1047, 0.28),
+				low_pass: FamilyGuillotineConfig::low_pass(
+					47,
+					ValleyLowPassControllerLayout::LIKELIHOOD,
+					ValleyLowPassControllerLayout::OCCUPANCY_FREQUENCY,
+				),
+				high_pass: FamilyGuillotineConfig::high_pass(
+					1047,
+					ValleyHighPassControllerLayout::LIKELIHOOD,
+					ValleyHighPassControllerLayout::OCCUPANCY_FREQUENCY,
+				),
 			},
 		}
 	}

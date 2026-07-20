@@ -106,10 +106,23 @@ fn leaf_selected_is_spatially_correlated() -> Result<()> {
 	};
 	let a = leaf_selected(mk(0.0, 0.0), seed, likelihood, freq);
 	let near = leaf_selected(mk(80.0, 0.0), seed, likelihood, freq);
-	let far = leaf_selected(mk(50_000.0, 50_000.0), seed, likelihood, freq);
-	// Neighboring samples usually match; far sample may differ (not required).
 	assert_eq!(a, near, "nearby leaves should share occupancy for low-frequency noise");
-	let _ = far;
+	Ok(())
+}
+
+#[test]
+fn layout_likelihood_defaults_feed_configs() -> Result<()> {
+	use crate::terrain::jersey::massif::MassifLowPassControllerLayout;
+	use crate::terrain::jersey::configs::JerseyStampConfigs;
+	let configs = JerseyStampConfigs::default();
+	assert_eq!(
+		configs.massif.low_pass.likelihood,
+		MassifLowPassControllerLayout::LIKELIHOOD
+	);
+	assert_eq!(
+		configs.massif.low_pass.occupancy_frequency,
+		MassifLowPassControllerLayout::OCCUPANCY_FREQUENCY
+	);
 	Ok(())
 }
 

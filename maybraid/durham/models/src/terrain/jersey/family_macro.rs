@@ -8,6 +8,10 @@
 /// bounds. Discovery walks that band's controllers only.
 ///
 /// `config_family` / `config_band` select e.g. `configs.massif.low_pass`.
+///
+/// Occupancy defaults live here (`likelihood`, `occupancy_frequency`) and are
+/// copied into [`crate::terrain::jersey::configs::JerseyStampConfigs`]`::default`.
+/// Prefer tuning them at the call site rather than only in configs.
 macro_rules! define_jersey_family {
 	(
 		layout: $Layout:ident,
@@ -18,6 +22,8 @@ macro_rules! define_jersey_family {
 		family_salt: $family_salt:expr,
 		cell_size: $cell_size:expr,
 		origin_offset: ($ox:expr, $oz:expr),
+		likelihood: $likelihood:expr,
+		occupancy_frequency: $occupancy_frequency:expr,
 		config_family: $config_family:ident,
 		config_band: $config_band:ident,
 		|$bounds:ident, $seed:ident, $height_at:ident, $params:ident| $build:expr
@@ -40,6 +46,11 @@ macro_rules! define_jersey_family {
 		}
 
 		impl $Layout {
+			/// Default target acceptance rate for this band (`0.0..=1.0`).
+			pub const LIKELIHOOD: f32 = $likelihood;
+			/// Default occupancy lattice frequency (world units⁻¹).
+			pub const OCCUPANCY_FREQUENCY: f32 = $occupancy_frequency;
+
 			pub fn cell_bounds(&self, ix: i32, iz: i32) -> bevy::math::bounding::Aabb3d {
 				self.grid.cell_bounds(ix, iz)
 			}

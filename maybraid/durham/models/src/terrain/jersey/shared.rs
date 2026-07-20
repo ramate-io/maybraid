@@ -67,10 +67,13 @@ pub fn family_seed(base_seed: u32, cell: Aabb3d, family_salt: u32) -> u32 {
 		.wrapping_add(family_salt)
 }
 
-/// Spatially correlated leaf occupancy via low-frequency Perlin at the leaf center.
+/// Spatially correlated leaf occupancy via bilinear **value noise** at the leaf center.
 ///
-/// `occupancy_seed` must be **band-stable** (no per-cell salt) so nearby leaves
-/// share correlated noise. `likelihood >= 1` always accepts; `<= 0` always rejects.
+/// Lattice corner hashes are ~uniform on `[0, 1]`, so `likelihood` approximately
+/// matches the fraction of leaves accepted (unlike raw Perlin, which piles mass
+/// near 0.5). Interpolation still softens extremes slightly. `occupancy_seed`
+/// must be **band-stable** (no per-cell salt). `likelihood >= 1` always accepts;
+/// `<= 0` always rejects.
 pub fn leaf_selected(
 	cell: Aabb3d,
 	occupancy_seed: u32,
@@ -88,13 +91,35 @@ pub fn leaf_selected(
 		(cell.min.x + cell.max.x) * 0.5,
 		(cell.min.z + cell.max.z) * 0.5,
 	);
-	let noise = NoiseConfig::new(Perlin::default())
-		.with_seed(occupancy_seed)
-		.with_frequency(frequency.max(1e-6))
-		.with_amplitude(1.0)
-		.with_octaves(1);
-	let u = noise.vec2_on_unit(center).clamp(0.0, 1.0) as f32;
-	u < p
+	occupancy_unit(center, occupancy_seed, frequency) < p
+}
+
+/// Smooth value noise in `[0, 1]` with correlation length `1 / frequency`.
+fn occupancy_unit(p: Vec2, seed: u32, frequency: f32) -> f32 {
+	let spacing = 1.0 / frequency.max(1e-6);
+	let fx = p.x / spacing;
+	let fz = p.y / spacing;
+	let x0 = fx.floor() as i32;
+	let z0 = fz.floor() as i32;
+	let tx = fx - x0 as f32;
+	let tz = fz - z0 as f32;
+	let sx = tx * tx * (3.0 - 2.0 * tx);
+	let sz = tz * tz * (3.0 - 2.0 * tz);
+	let n00 = lattice_unit(seed, x0, z0);
+	let n10 = lattice_unit(seed, x0 + 1, z0);
+	let n01 = lattice_unit(seed, x0, z0 + 1);
+	let n11 = lattice_unit(seed, x0 + 1, z0 + 1);
+	let nx0 = n00 + (n10 - n00) * sx;
+	let nx1 = n01 + (n11 - n01) * sx;
+	nx0 + (nx1 - nx0) * sz
+}
+
+fn lattice_unit(seed: u32, ix: i32, iz: i32) -> f32 {
+	let mut n = seed
+		.wrapping_add((ix as u32).wrapping_mul(73856093))
+		.wrapping_add((iz as u32).wrapping_mul(19349663));
+	n = n.wrapping_mul(0x9E37_79B9) ^ (n >> 16);
+	(n >> 8) as f32 / ((u32::MAX >> 8) as f32)
 }
 
 /// Band-stable seed for occupancy noise (world seed ⊕ family cut seed ⊕ salt).

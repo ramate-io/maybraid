@@ -13,6 +13,8 @@ define_jersey_family! {
 	family_salt: 33,
 	cell_size: MACRO_CELL_SIZE * 6.0,
 	origin_offset: (MACRO_CELL_SIZE * 0.5, MACRO_CELL_SIZE * 0.5),
+	likelihood: 0.78,
+	occupancy_frequency: 1.0 / (MACRO_CELL_SIZE * 12.0),
 	config_family: massif,
 	config_band: low_pass,
 	|bounds, seed, height_at, params| {
@@ -32,6 +34,8 @@ define_jersey_family! {
 	family_salt: 133,
 	cell_size: MACRO_CELL_SIZE * 40.0,
 	origin_offset: (MACRO_CELL_SIZE * 2.0, MACRO_CELL_SIZE * 3.0),
+	likelihood: 0.24,
+	occupancy_frequency: 1.0 / (MACRO_CELL_SIZE * 80.0),
 	config_family: massif,
 	config_band: high_pass,
 	|bounds, seed, height_at, params| {
