@@ -49,6 +49,12 @@ pub enum MaterializeStatus {
 pub trait GeneratingSpatialIndex<T>: SpatialIndex<T> {
 	fn get_or_generate(&mut self, id: Id, lod_ref: &LodRef) -> Option<MaterializeStatus>;
 
+	/// Materialize `id` if needed, then return the stored entry.
+	fn get_one_or_generate(&mut self, id: Id, lod_ref: &LodRef) -> Option<&T> {
+		self.get_or_generate(id, lod_ref)?;
+		self.get(id)
+	}
+
 	/// Materializes everything originating or tracked in the region and
 	/// returns the ids with their bounds.
 	fn get_or_generate_region(&mut self, region: Aabb3d, lod_ref: &LodRef) -> Vec<(Id, Aabb3d)>;

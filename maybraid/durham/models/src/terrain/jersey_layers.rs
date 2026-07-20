@@ -8,7 +8,7 @@ use bevy::prelude::*;
 use jersey_terrain_stamps::{
 	Canyon, JerseyModulation, PlateauCap, PocketWater, RollingGround, RuggedMassif,
 };
-use lod::gen::{GeneratingSpatialIndex, GenerationScheme, Id, OriginalId, SpatialIndex};
+use lod::gen::{GeneratingSpatialIndex, GenerationScheme, Id, OriginalId};
 use lod::lod_ref::LodRef;
 use procedural_common::Bounds2;
 
@@ -70,22 +70,18 @@ macro_rules! jersey_family_layer {
 				lod_ref: &LodRef,
 			) -> Option<(Self, Aabb3d)> {
 				let bounds = id.origin_cell_bounds()?;
-				GeneratingSpatialIndex::<JerseyLayerConfigs>::get_or_generate(
-					spatial_index,
-					Id::Universal,
-					lod_ref,
-				)?;
-				let configs = <S as SpatialIndex<JerseyLayerConfigs>>::get(
-					spatial_index,
-					Id::Universal,
-				)?
-				.clone();
-				GeneratingSpatialIndex::<CellTerrainNoise>::get_or_generate(
+				let configs =
+					GeneratingSpatialIndex::<JerseyLayerConfigs>::get_one_or_generate(
+						spatial_index,
+						Id::Universal,
+						lod_ref,
+					)?
+					.clone();
+				let noise = GeneratingSpatialIndex::<CellTerrainNoise>::get_one_or_generate(
 					spatial_index,
 					id,
 					lod_ref,
 				)?;
-				let noise = <S as SpatialIndex<CellTerrainNoise>>::get(spatial_index, id)?;
 				Some((Self::from_noise(bounds, noise, &configs), bounds))
 			}
 
