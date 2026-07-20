@@ -1,13 +1,13 @@
 //! Idempotent plugin for the Durham terrain model.
 
-use crate::terrain::cell::{JerseyStampCellLayout, TerrainCellLayout};
+use crate::terrain::cell::TerrainCellLayout;
 use crate::terrain::collider::queue_terrain_trimesh_colliders;
 use crate::terrain::index::TerrainEntryStore;
-use crate::terrain::jersey_configs::JerseyLayerConfigs;
-use crate::terrain::presentation::TerrainPresenterState;
-use crate::terrain::valley_chain::{
-	JerseyValleyChainControllerLayout, JerseyValleyChainLayerConfig,
+use crate::terrain::jersey::{
+	CanyonControllerLayout, JerseyStampConfigs, MassifControllerLayout, PlateauControllerLayout,
+	PocketWaterControllerLayout, RollingControllerLayout, ValleyControllerLayout,
 };
+use crate::terrain::presentation::TerrainPresenterState;
 use avian3d::prelude::PhysicsPlugins;
 use avian3d::schedule::PhysicsSchedulePlugin;
 use bevy::prelude::*;
@@ -36,10 +36,13 @@ impl Plugin for TerrainPlugin {
 		}
 		app.init_resource::<TerrainEntryStore>()
 			.init_resource::<TerrainCellLayout>()
-			.init_resource::<JerseyStampCellLayout>()
-			.init_resource::<JerseyLayerConfigs>()
-			.init_resource::<JerseyValleyChainLayerConfig>()
-			.init_resource::<JerseyValleyChainControllerLayout>()
+			.init_resource::<JerseyStampConfigs>()
+			.init_resource::<PlateauControllerLayout>()
+			.init_resource::<MassifControllerLayout>()
+			.init_resource::<CanyonControllerLayout>()
+			.init_resource::<PocketWaterControllerLayout>()
+			.init_resource::<RollingControllerLayout>()
+			.init_resource::<ValleyControllerLayout>()
 			.init_resource::<TerrainPresenterState>()
 			.add_systems(Update, queue_terrain_trimesh_colliders);
 	}
