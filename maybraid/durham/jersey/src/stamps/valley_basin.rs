@@ -45,9 +45,10 @@ impl Default for ValleyBasinParams {
 		Self {
 			cross_section: ValleyCrossSection::U,
 			floor: ValleyFloorKind::SpillwayReady,
-			width_frac: 0.18,
+			width_frac: 0.22,
 			depth: 12.0,
-			floor_scale: 0.55,
+			// Keep base relief; depth comes from the negative offset.
+			floor_scale: 1.0,
 		}
 	}
 }
@@ -66,24 +67,24 @@ impl CrossProfile {
 	fn from_params(params: &ValleyBasinParams) -> Self {
 		match params.cross_section {
 			ValleyCrossSection::V => Self {
-				floor_scale: params.floor_scale * 0.85,
+				floor_scale: params.floor_scale,
 				depth: params.depth * 1.15,
-				bank_inner: 0.15,
-				bank_outer: 0.55,
+				bank_inner: 0.3,
+				bank_outer: 0.9,
 				width_scale: 1.0,
 			},
 			ValleyCrossSection::U => Self {
 				floor_scale: params.floor_scale,
 				depth: params.depth,
-				bank_inner: 0.35,
-				bank_outer: 0.75,
+				bank_inner: 0.4,
+				bank_outer: 1.0,
 				width_scale: 1.0,
 			},
 			ValleyCrossSection::Asymmetric => Self {
-				floor_scale: params.floor_scale * 0.95,
+				floor_scale: params.floor_scale,
 				depth: params.depth,
-				bank_inner: 0.25,
-				bank_outer: 0.7,
+				bank_inner: 0.35,
+				bank_outer: 0.95,
 				width_scale: 1.1,
 			},
 		}
@@ -134,19 +135,21 @@ impl ValleyBasin {
 
 		let (start_pt, start_h, end_pt, end_h) = DownhillPair::order(a, b, height_at);
 
-		let bank_noise = RegionNoise::from_seed(seed.wrapping_add(41), 0.02, half_width * 0.12);
+		let bank_noise = RegionNoise::from_seed(seed.wrapping_add(41), 0.012, half_width * 0.08);
 		let inner_r = half_width * profile.bank_inner;
 		let outer_r = half_width * profile.bank_outer;
 
-		// Circle softmasks along the spine follow curved hysteresis paths better
-		// than a single axis-aligned rect. Bank falloff stays landform-specific.
+		// Denser circle softmasks along the spine — relative incision only.
 		let mut modulations = Vec::new();
-		let sample_stride = ((path.len() / 6).max(1)).min(4);
+		let sample_stride = ((path.len() / 4).max(1)).min(2);
 		for (i, p) in path.iter().enumerate().step_by(sample_stride) {
 			let center = *p + lateral;
-			let region = Region2D::Circle(CircleRegion { center, radius: half_width });
+			let region = Region2D::Circle(CircleRegion {
+				center,
+				radius: half_width,
+			});
 			let depth_t = i as f32 / path.len().saturating_sub(1).max(1) as f32;
-			let local_depth = profile.depth * (1.0 - 0.25 * depth_t);
+			let local_depth = profile.depth * (1.0 - 0.3 * depth_t);
 			modulations.push(JerseyModulation::Affine(
 				RegionAffineModulation::new(
 					region,
@@ -159,11 +162,11 @@ impl ValleyBasin {
 			));
 		}
 
-		// One grading corridor on a widened circle at the midpoint for downhill bias.
+		// Downhill floor bias that never raises natural lows.
 		let grade_center = (start_pt + end_pt) * 0.5 + lateral;
 		let grade_region = Region2D::Circle(CircleRegion {
 			center: grade_center,
-			radius: half_width * 1.35,
+			radius: half_width * 1.5,
 		});
 		modulations.push(JerseyModulation::Grading(
 			RegionGradingModulation::new(
@@ -172,10 +175,11 @@ impl ValleyBasin {
 				start_h - profile.depth * 0.35,
 				end_pt,
 				end_h - profile.depth * 0.15,
-				inner_r * 0.8,
-				outer_r * 1.1,
+				inner_r * 0.9,
+				outer_r * 1.15,
 			)
-			.with_noise(bank_noise),
+			.with_noise(bank_noise)
+			.depression_only(),
 		));
 
 		let mut semantics = StampSemantics::default().with_tag("bank");
@@ -236,7 +240,7 @@ mod tests {
 				floor: ValleyFloorKind::Arroyo,
 				width_frac: 0.2,
 				depth: 20.0,
-				floor_scale: 0.5,
+				floor_scale: 1.0,
 			},
 			Some(&|_, _| 100.0),
 		);
@@ -246,6 +250,20 @@ mod tests {
 		let h_out = basin.stamp.apply_elevation(100.0, outside.x, outside.y);
 		assert!(h_mid < h_out);
 		assert!(basin.stamp.semantics.tags.contains(&"arroyo"));
+		Ok(())
+	}
+
+	#[test]
+	fn valley_does_not_raise_natural_lows() -> anyhow::Result<()> {
+		let bounds = Bounds2::from_xz(0.0, 0.0, 400.0, 400.0);
+		let basin = ValleyBasin::from_bounds(
+			bounds,
+			7,
+			ValleyBasinParams::default(),
+			Some(&|_, _| 80.0),
+		);
+		let mid = (basin.start + basin.end) * 0.5;
+		assert!(basin.stamp.apply_elevation(15.0, mid.x, mid.y) <= 15.0);
 		Ok(())
 	}
 }

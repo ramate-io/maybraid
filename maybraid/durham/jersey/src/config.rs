@@ -150,6 +150,16 @@ impl Default for SoftmaskAlongSpine {
 }
 
 impl SoftmaskAlongSpine {
+	/// Denser samples for incision corridors (canyon / valley / runs).
+	pub fn corridor() -> Self {
+		Self {
+			stride_divisor: 4,
+			stride_min: 1,
+			stride_max: 2,
+			longitudinal_falloff: 0.3,
+		}
+	}
+
 	/// Depression when `offset` is negative; lift when positive.
 	pub fn build(
 		&self,
@@ -184,6 +194,29 @@ impl SoftmaskAlongSpine {
 		}
 		out
 	}
+
+	/// Relative incision: keep base relief (`scale = 1`) and apply a negative offset.
+	pub fn build_incision(
+		&self,
+		path: &[Vec2],
+		half_width: f32,
+		depth: f32,
+		inner_frac: f32,
+		outer_frac: f32,
+		noise: &RegionNoise,
+		lateral: Vec2,
+	) -> Vec<JerseyModulation> {
+		self.build(
+			path,
+			half_width,
+			1.0,
+			-depth.abs(),
+			inner_frac,
+			outer_frac,
+			noise,
+			lateral,
+		)
+	}
 }
 
 /// Single grading region centered between two endpoints.
@@ -200,9 +233,9 @@ pub struct MidpointGrading {
 impl Default for MidpointGrading {
 	fn default() -> Self {
 		Self {
-			radius_half_width_mul: 1.35,
-			inner_half_width_frac: 0.25,
-			outer_half_width_frac: 0.85,
+			radius_half_width_mul: 1.5,
+			inner_half_width_frac: 0.4,
+			outer_half_width_frac: 1.05,
 		}
 	}
 }
@@ -217,23 +250,51 @@ impl MidpointGrading {
 		half_width: f32,
 		noise: RegionNoise,
 	) -> JerseyModulation {
+		self.build_inner(start, start_h, end, end_h, half_width, noise, false)
+	}
+
+	/// Downhill floor bias that never raises above the incoming surface.
+	pub fn build_depression(
+		&self,
+		start: Vec2,
+		start_h: f32,
+		end: Vec2,
+		end_h: f32,
+		half_width: f32,
+		noise: RegionNoise,
+	) -> JerseyModulation {
+		self.build_inner(start, start_h, end, end_h, half_width, noise, true)
+	}
+
+	fn build_inner(
+		&self,
+		start: Vec2,
+		start_h: f32,
+		end: Vec2,
+		end_h: f32,
+		half_width: f32,
+		noise: RegionNoise,
+		depression_only: bool,
+	) -> JerseyModulation {
 		let center = (start + end) * 0.5;
 		let region = Region2D::Circle(CircleRegion {
 			center,
 			radius: half_width * self.radius_half_width_mul,
 		});
-		JerseyModulation::Grading(
-			RegionGradingModulation::new(
-				region,
-				start,
-				start_h,
-				end,
-				end_h,
-				half_width * self.inner_half_width_frac,
-				half_width * self.outer_half_width_frac,
-			)
-			.with_noise(noise),
+		let mut grading = RegionGradingModulation::new(
+			region,
+			start,
+			start_h,
+			end,
+			end_h,
+			half_width * self.inner_half_width_frac,
+			half_width * self.outer_half_width_frac,
 		)
+		.with_noise(noise);
+		if depression_only {
+			grading = grading.depression_only();
+		}
+		JerseyModulation::Grading(grading)
 	}
 }
 

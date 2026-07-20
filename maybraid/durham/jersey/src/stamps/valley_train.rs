@@ -68,13 +68,13 @@ impl ValleyTrain {
 			};
 			let (cross, depth, width_frac, active_channel) = match role {
 				ValleyTrainSegmentRole::UpperGorge => {
-					(ValleyCrossSection::V, 16.0, 0.12, true)
+					(ValleyCrossSection::V, 16.0, 0.16, true)
 				}
 				ValleyTrainSegmentRole::MiddleGlide => {
-					(ValleyCrossSection::U, 12.0, 0.16, true)
+					(ValleyCrossSection::U, 12.0, 0.22, true)
 				}
 				ValleyTrainSegmentRole::LowerFloor => {
-					(ValleyCrossSection::U, 8.0, 0.22, false)
+					(ValleyCrossSection::U, 8.0, 0.28, false)
 				}
 			};
 			let t0 = i as f32 / n as f32;
@@ -88,7 +88,7 @@ impl ValleyTrain {
 					floor: ValleyFloorKind::SpillwayReady,
 					width_frac,
 					depth,
-					floor_scale: 0.55,
+					floor_scale: 1.0,
 				},
 				height_at,
 			);

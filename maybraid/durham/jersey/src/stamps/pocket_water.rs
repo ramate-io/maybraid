@@ -97,24 +97,23 @@ impl PocketWater {
 		let a = *run.first().unwrap_or(&lip);
 		let b = *run.last().unwrap_or(&end_anchor);
 		let (s, sh, e, eh) = DownhillPair::order(a, b, height_at);
-		let run_w = short * params.run_width_frac.clamp(0.03, 0.15);
-		let run_noise = RegionNoise::from_seed(seed.wrapping_add(2), 0.04, run_w * 0.12);
-		modulations.extend(SoftmaskAlongSpine::default().build(
+		let run_w = short * params.run_width_frac.clamp(0.04, 0.2);
+		let run_noise = RegionNoise::from_seed(seed.wrapping_add(2), 0.02, run_w * 0.08);
+		modulations.extend(SoftmaskAlongSpine::corridor().build_incision(
 			&run,
 			run_w,
-			0.55,
-			-params.run_depth,
-			0.2,
-			0.65,
+			params.run_depth,
+			0.35,
+			0.95,
 			&run_noise,
 			Vec2::ZERO,
 		));
-		modulations.push(MidpointGrading::default().build(
+		modulations.push(MidpointGrading::default().build_depression(
 			s,
 			sh - params.run_depth * 0.3,
 			e,
 			eh - params.run_depth * 0.1,
-			run_w * 1.2,
+			run_w * 1.25,
 			run_noise,
 		));
 

@@ -23,12 +23,7 @@ pub struct RuggedMassifParams {
 
 impl Default for RuggedMassifParams {
 	fn default() -> Self {
-		Self {
-			style: MassifStyle::Ridged,
-			width_frac: 0.14,
-			lift: 22.0,
-			crest_scale: 1.15,
-		}
+		Self { style: MassifStyle::Ridged, width_frac: 0.14, lift: 22.0, crest_scale: 1.15 }
 	}
 }
 
@@ -42,19 +37,15 @@ pub struct RuggedMassif {
 }
 
 impl RuggedMassif {
-	pub fn from_bounds(
-		bounds: Bounds2,
-		seed: u32,
-		params: RuggedMassifParams,
-	) -> Self {
+	pub fn from_bounds(bounds: Bounds2, seed: u32, params: RuggedMassifParams) -> Self {
 		let hash = SeededHash::new(seed);
 		let short = bounds.extent().min_element().max(1.0);
 		let (start, end) = FractalAnchors::default().sample(bounds, seed, 100);
 		let path = HysteresisSpine::default().build(bounds, seed.wrapping_add(19), start, end);
 		let half_width = short * params.width_frac.clamp(0.06, 0.3);
 		let (inner, outer, width_mul) = match params.style {
-			MassifStyle::Ridged => (0.2, 0.65, 1.0),
-			MassifStyle::Serrated => (0.1, 0.55, 0.85),
+			MassifStyle::Ridged => (0.4, 0.65, 1.4),
+			MassifStyle::Serrated => (0.3, 0.55, 1.4),
 			MassifStyle::CliffBanded => (0.35, 0.7, 1.2),
 		};
 		let noise = RegionNoise::from_seed(
@@ -110,11 +101,7 @@ impl RuggedMassif {
 	}
 
 	pub fn from_bounds_default(bounds: Bounds2, seed: u32) -> Self {
-		Self::from_bounds(
-			bounds,
-			seed,
-			RuggedMassifParams::default(),
-		)
+		Self::from_bounds(bounds, seed, RuggedMassifParams::default())
 	}
 }
 
