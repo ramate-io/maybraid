@@ -158,7 +158,7 @@ where
 		let mut jersey_leaves = Vec::new();
 
 		// Fixed family order so neighboring Terrain cells compose identically.
-		/*pull_family_stamps!(
+		pull_family_stamps!(
 			spatial_index,
 			lod_ref,
 			bounds,
@@ -175,7 +175,7 @@ where
 			MassifStampCell,
 			modulations,
 			jersey_leaves
-		);*/
+		);
 		pull_family_stamps!(
 			spatial_index,
 			lod_ref,
@@ -185,7 +185,7 @@ where
 			modulations,
 			jersey_leaves
 		);
-		/*pull_family_stamps!(
+		pull_family_stamps!(
 			spatial_index,
 			lod_ref,
 			bounds,
@@ -202,7 +202,7 @@ where
 			RollingStampCell,
 			modulations,
 			jersey_leaves
-		);*/
+		);
 		pull_family_stamps!(
 			spatial_index,
 			lod_ref,

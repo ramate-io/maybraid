@@ -131,11 +131,20 @@ impl HysteresisSpine {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct SoftmaskAlongSpine {
 	/// Target samples ≈ `len / stride_divisor` (then clamped).
+	/// Ignored when [`Self::spacing_half_width_frac`] is set.
 	pub stride_divisor: usize,
 	pub stride_min: usize,
 	pub stride_max: usize,
 	/// Depth/lift falls off by this fraction from head to tail of the spine.
 	pub longitudinal_falloff: f32,
+	/// When set, densify the path and place one sample every
+	/// `frac * half_width` world units (connected corridor without sample-time
+	/// polyline SDF).
+	pub spacing_half_width_frac: Option<f32>,
+	/// Multiplies circle radius (wider apron / more overlap along the path).
+	pub radius_scale: f32,
+	/// Hard cap on emitted softmask samples after densify.
+	pub max_samples: usize,
 }
 
 impl Default for SoftmaskAlongSpine {
@@ -145,18 +154,25 @@ impl Default for SoftmaskAlongSpine {
 			stride_min: 1,
 			stride_max: 4,
 			longitudinal_falloff: 0.2,
+			spacing_half_width_frac: None,
+			radius_scale: 1.0,
+			max_samples: 48,
 		}
 	}
 }
 
 impl SoftmaskAlongSpine {
-	/// Denser samples for incision corridors (canyon / valley / runs).
+	/// Connected incision corridor: densified nodes + wider overlapping circles.
 	pub fn corridor() -> Self {
 		Self {
 			stride_divisor: 4,
 			stride_min: 1,
-			stride_max: 2,
-			longitudinal_falloff: 0.3,
+			stride_max: 1,
+			longitudinal_falloff: 0.25,
+			// Spacing < diameter so neighboring full-strength cores overlap.
+			spacing_half_width_frac: Some(0.55),
+			radius_scale: 1.35,
+			max_samples: 40,
 		}
 	}
 
@@ -176,16 +192,28 @@ impl SoftmaskAlongSpine {
 		if path.is_empty() {
 			return out;
 		}
-		let stride = ((path.len() / self.stride_divisor.max(1)).max(self.stride_min))
-			.min(self.stride_max);
-		let inner_r = half_width * inner_frac;
-		let outer_r = half_width * outer_frac;
-		for (i, p) in path.iter().enumerate().step_by(stride) {
-			let t = i as f32 / path.len().saturating_sub(1).max(1) as f32;
+		let radius = (half_width * self.radius_scale).max(1.0);
+		let samples = match self.spacing_half_width_frac {
+			Some(frac) => densify_polyline(path, (half_width * frac).max(1.0), self.max_samples),
+			None => {
+				let stride = ((path.len() / self.stride_divisor.max(1)).max(self.stride_min))
+					.min(self.stride_max);
+				path.iter()
+					.step_by(stride)
+					.copied()
+					.take(self.max_samples.max(1))
+					.collect()
+			}
+		};
+		let n = samples.len().saturating_sub(1).max(1) as f32;
+		let inner_r = radius * inner_frac;
+		let outer_r = radius * outer_frac;
+		for (i, p) in samples.iter().enumerate() {
+			let t = i as f32 / n;
 			let local = offset * (1.0 - self.longitudinal_falloff * t);
 			let region = Region2D::Circle(CircleRegion {
 				center: *p + lateral,
-				radius: half_width,
+				radius,
 			});
 			out.push(JerseyModulation::Affine(
 				RegionAffineModulation::new(region, scale, local, inner_r, outer_r)
@@ -216,6 +244,86 @@ impl SoftmaskAlongSpine {
 			noise,
 			lateral,
 		)
+	}
+}
+
+/// Insert vertices so consecutive points are at most `max_spacing` apart.
+///
+/// Build-time only — evaluation still uses plain circle softmasks.
+fn densify_polyline(path: &[Vec2], max_spacing: f32, max_samples: usize) -> Vec<Vec2> {
+	let max_samples = max_samples.max(2);
+	if path.is_empty() {
+		return Vec::new();
+	}
+	if path.len() == 1 {
+		return vec![path[0]];
+	}
+	let max_spacing = max_spacing.max(1.0);
+	let mut out = Vec::with_capacity(path.len() * 2);
+	out.push(path[0]);
+	for window in path.windows(2) {
+		if out.len() >= max_samples {
+			break;
+		}
+		let a = window[0];
+		let b = window[1];
+		let dist = a.distance(b);
+		if dist <= max_spacing {
+			if out.last().map(|p| p.distance(b) > 1e-3).unwrap_or(true) {
+				out.push(b);
+			}
+			continue;
+		}
+		let steps = (dist / max_spacing).ceil() as usize;
+		for i in 1..=steps {
+			if out.len() >= max_samples {
+				break;
+			}
+			let t = i as f32 / steps as f32;
+			let p = a.lerp(b, t);
+			if out.last().map(|q| q.distance(p) > 1e-3).unwrap_or(true) {
+				out.push(p);
+			}
+		}
+	}
+	let end = path[path.len() - 1];
+	if out.len() < max_samples && out.last().map(|p| p.distance(end) > 1e-3).unwrap_or(true) {
+		out.push(end);
+	}
+	out
+}
+
+#[cfg(test)]
+mod densify_tests {
+	use super::*;
+
+	#[test]
+	fn densify_fills_long_segments() -> anyhow::Result<()> {
+		let path = vec![Vec2::ZERO, Vec2::new(100.0, 0.0)];
+		let dense = densify_polyline(&path, 25.0, 40);
+		assert!(dense.len() >= 5);
+		for w in dense.windows(2) {
+			assert!(w[0].distance(w[1]) <= 25.0 + 1e-3);
+		}
+		Ok(())
+	}
+
+	#[test]
+	fn corridor_emits_overlapping_samples() -> anyhow::Result<()> {
+		let path = vec![Vec2::ZERO, Vec2::new(200.0, 0.0)];
+		let noise = RegionNoise::from_seed(1, 0.02, 1.0);
+		let mods = SoftmaskAlongSpine::corridor().build_incision(
+			&path,
+			20.0,
+			10.0,
+			0.4,
+			1.15,
+			&noise,
+			Vec2::ZERO,
+		);
+		// Sparse 2-point path should densify into many overlapping softmasks.
+		assert!(mods.len() >= 8);
+		Ok(())
 	}
 }
 

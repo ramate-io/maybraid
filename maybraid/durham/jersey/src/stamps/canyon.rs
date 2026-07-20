@@ -61,9 +61,11 @@ impl Canyon {
 		let base_w =
 			short * params.width_frac.clamp(0.05, 0.28) * params.confinement.clamp(0.4, 1.2);
 		let noise = RegionNoise::from_seed(seed.wrapping_add(4), 0.02, base_w * 0.08);
+		// Densified overlapping circles (build-time); no polyline SDF at sample time.
 		let spine = SoftmaskAlongSpine::corridor();
 
 		// Relative incision along the path (scale=1, negative offset). No absolute floor.
+		// Soft outer apron keeps depth connected between densified nodes.
 		let mut modulations = Vec::new();
 		match params.variant {
 			CanyonVariant::Unchained => {
@@ -71,8 +73,8 @@ impl Canyon {
 					&path,
 					base_w,
 					params.depth,
-					0.35,
-					0.95,
+					0.4,
+					1.15,
 					&noise,
 					Vec2::ZERO,
 				));
@@ -96,21 +98,21 @@ impl Canyon {
 						seg,
 						w,
 						d,
-						0.35,
-						0.95,
+						0.4,
+						1.15,
 						&noise,
 						Vec2::ZERO,
 					));
 				}
 			}
 		}
-		// Downhill bias only — never raise natural lows toward baked endpoint heights.
+		// Mild downhill bias only — never raise natural lows toward baked floors.
 		modulations.push(MidpointGrading::default().build_depression(
 			start_pt,
 			start_h - params.depth * 0.4,
 			end_pt,
 			end_h - params.depth * 0.15,
-			base_w * 1.25,
+			base_w * 1.4,
 			noise,
 		));
 
