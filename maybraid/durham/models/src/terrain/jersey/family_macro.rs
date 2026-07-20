@@ -2,16 +2,17 @@
 
 /// Defines an independent guillotine stack for one stamp family **band**.
 ///
-/// Each band owns its own controller grid (`cell_size` / `origin_offset`) and
-/// cut seed (via [`crate::terrain::jersey::configs::JerseyStampConfigs`]). Leaf
-/// identities are not stored: stamp `build_with_id` down-levels `Id` to cell
-/// bounds. Discovery walks that band's controllers only.
+/// Each band owns its own controller grid (`controller_cell_size` /
+/// `origin_offset`), guillotine preferred leaf range (`cell_size: (min, max)`),
+/// and cut seed (via [`crate::terrain::jersey::configs::JerseyStampConfigs`]).
+/// Leaf identities are not stored: stamp `build_with_id` down-levels `Id` to
+/// cell bounds. Discovery walks that band's controllers only.
 ///
 /// `config_family` / `config_band` select e.g. `configs.massif.low_pass`.
 ///
-/// Occupancy defaults live here (`likelihood`, `occupancy_frequency`) and are
-/// copied into [`crate::terrain::jersey::configs::JerseyStampConfigs`]`::default`.
-/// Prefer tuning them at the call site rather than only in configs.
+/// Defaults for `likelihood`, `spatial_correlation`, and guillotine `cell_size`
+/// live here and are copied into
+/// [`crate::terrain::jersey::configs::JerseyStampConfigs`]`::default`.
 macro_rules! define_jersey_family {
 	(
 		layout: $Layout:ident,
@@ -20,10 +21,11 @@ macro_rules! define_jersey_family {
 		stamp: $Stamp:ident,
 		leaves_fn: $leaves_fn:ident,
 		family_salt: $family_salt:expr,
-		cell_size: $cell_size:expr,
+		cell_size: ($cell_min:expr, $cell_max:expr),
+		controller_cell_size: $controller_cell_size:expr,
 		origin_offset: ($ox:expr, $oz:expr),
 		likelihood: $likelihood:expr,
-		occupancy_frequency: $occupancy_frequency:expr,
+		spatial_correlation: $spatial_correlation:expr,
 		config_family: $config_family:ident,
 		config_band: $config_band:ident,
 		|$bounds:ident, $seed:ident, $height_at:ident, $params:ident| $build:expr
@@ -38,7 +40,7 @@ macro_rules! define_jersey_family {
 			fn default() -> Self {
 				Self {
 					grid: $crate::terrain::jersey::shared::OffsetControllerGrid::new(
-						$cell_size,
+						$controller_cell_size,
 						bevy::math::Vec2::new($ox, $oz),
 					),
 				}
@@ -46,10 +48,14 @@ macro_rules! define_jersey_family {
 		}
 
 		impl $Layout {
+			/// Preferred guillotine leaf size lower bound (world units).
+			pub const CELL_SIZE_MIN: f32 = $cell_min;
+			/// Preferred guillotine leaf size upper bound (world units).
+			pub const CELL_SIZE_MAX: f32 = $cell_max;
 			/// Default target acceptance rate for this band (`0.0..=1.0`).
 			pub const LIKELIHOOD: f32 = $likelihood;
-			/// Default occupancy lattice frequency (world units⁻¹).
-			pub const OCCUPANCY_FREQUENCY: f32 = $occupancy_frequency;
+			/// Occupancy spatial correlation length (world units).
+			pub const SPATIAL_CORRELATION: f32 = $spatial_correlation;
 
 			pub fn cell_bounds(&self, ix: i32, iz: i32) -> bevy::math::bounding::Aabb3d {
 				self.grid.cell_bounds(ix, iz)
@@ -215,7 +221,7 @@ macro_rules! define_jersey_family {
 					cell,
 					$family_salt,
 				);
-				// Occupancy gate: spatially correlated Perlin at leaf center.
+				// Occupancy gate: spatially correlated value noise at leaf center.
 				let occ_seed = $crate::terrain::jersey::shared::occupancy_seed(
 					base.seed,
 					family.seed,
@@ -225,7 +231,7 @@ macro_rules! define_jersey_family {
 					cell,
 					occ_seed,
 					family.likelihood,
-					family.occupancy_frequency,
+					family.spatial_correlation,
 				) {
 					return Some((
 						Self {

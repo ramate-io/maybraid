@@ -1,9 +1,10 @@
 //! Jersey landform stamps on per-family dual-band guillotine partitions.
 //!
 //! Each family owns independent **low-pass** (detail) and **high-pass**
-//! (regional) controller grids — different cell sizes, origin offsets, cut
-//! seeds, and occupancy likelihoods. Leaf seams therefore do not coincide
-//! across families or bands.
+//! (regional) controller grids — different guillotine cell-size ranges,
+//! controller roots, origin offsets, cut seeds, likelihoods, and spatial
+//! correlation lengths. Leaf seams therefore do not coincide across families
+//! or bands.
 //!
 //! Stack per band:
 //!

@@ -1,6 +1,6 @@
 //! Universal per-family guillotine + stamp authoring knobs (dual band).
 
-use crate::terrain::cell::{universal_bounds, MACRO_CELL_SIZE, TERRAIN_CELL_SIZE};
+use crate::terrain::cell::universal_bounds;
 use crate::terrain::jersey::canyon::{CanyonHighPassControllerLayout, CanyonLowPassControllerLayout};
 use crate::terrain::jersey::massif::{MassifHighPassControllerLayout, MassifLowPassControllerLayout};
 use crate::terrain::jersey::plateau::{
@@ -30,8 +30,8 @@ pub struct FamilyGuillotineConfig<P> {
 	pub depth: u8,
 	pub guillotine: GuillotineConfig,
 	pub noise_frequency: f32,
-	/// World-space frequency of the occupancy value-noise lattice.
-	pub occupancy_frequency: f32,
+	/// Occupancy value-noise lattice spacing (world units) — spatial correlation length.
+	pub spatial_correlation: f32,
 	/// Approximate leaf acceptance rate (`0.0..=1.0`) for value-noise occupancy.
 	///
 	/// Prefer setting defaults in `define_jersey_family!` (`likelihood:`); this
@@ -41,27 +41,37 @@ pub struct FamilyGuillotineConfig<P> {
 }
 
 impl<P: Default> FamilyGuillotineConfig<P> {
-	fn low_pass(seed: u32, likelihood: f32, occupancy_frequency: f32) -> Self {
+	fn low_pass(
+		seed: u32,
+		likelihood: f32,
+		spatial_correlation: f32,
+		cell_size_min: f32,
+		cell_size_max: f32,
+	) -> Self {
 		Self {
 			seed,
 			depth: 6,
-			guillotine: GuillotineConfig::new(TERRAIN_CELL_SIZE * 1.25, MACRO_CELL_SIZE * 1.5)
-				.with_snap_quantum(20.0),
+			guillotine: GuillotineConfig::new(cell_size_min, cell_size_max).with_snap_quantum(20.0),
 			noise_frequency: 0.05,
-			occupancy_frequency,
+			spatial_correlation,
 			likelihood: likelihood.clamp(0.0, 1.0),
 			stamp: P::default(),
 		}
 	}
 
-	fn high_pass(seed: u32, likelihood: f32, occupancy_frequency: f32) -> Self {
+	fn high_pass(
+		seed: u32,
+		likelihood: f32,
+		spatial_correlation: f32,
+		cell_size_min: f32,
+		cell_size_max: f32,
+	) -> Self {
 		Self {
 			seed,
 			depth: 4,
-			guillotine: GuillotineConfig::new(MACRO_CELL_SIZE * 2.0, MACRO_CELL_SIZE * 8.0)
-				.with_snap_quantum(40.0),
+			guillotine: GuillotineConfig::new(cell_size_min, cell_size_max).with_snap_quantum(40.0),
 			noise_frequency: 0.02,
-			occupancy_frequency,
+			spatial_correlation,
 			likelihood: likelihood.clamp(0.0, 1.0),
 			stamp: P::default(),
 		}
@@ -86,82 +96,54 @@ pub struct JerseyStampConfigs {
 	pub valley: DualBandFamilyConfig<ValleyTrainParams>,
 }
 
+macro_rules! band_from_layout {
+	(low_pass, $seed:expr, $Layout:ty) => {
+		FamilyGuillotineConfig::low_pass(
+			$seed,
+			<$Layout>::LIKELIHOOD,
+			<$Layout>::SPATIAL_CORRELATION,
+			<$Layout>::CELL_SIZE_MIN,
+			<$Layout>::CELL_SIZE_MAX,
+		)
+	};
+	(high_pass, $seed:expr, $Layout:ty) => {
+		FamilyGuillotineConfig::high_pass(
+			$seed,
+			<$Layout>::LIKELIHOOD,
+			<$Layout>::SPATIAL_CORRELATION,
+			<$Layout>::CELL_SIZE_MIN,
+			<$Layout>::CELL_SIZE_MAX,
+		)
+	};
+}
+
 impl Default for JerseyStampConfigs {
 	fn default() -> Self {
-		// Likelihood / occupancy_frequency defaults come from each band's layout
-		// consts (set in `define_jersey_family!`).
+		// Defaults come from each band's layout consts (`define_jersey_family!`).
 		Self {
 			plateau: DualBandFamilyConfig {
-				low_pass: FamilyGuillotineConfig::low_pass(
-					42,
-					PlateauLowPassControllerLayout::LIKELIHOOD,
-					PlateauLowPassControllerLayout::OCCUPANCY_FREQUENCY,
-				),
-				high_pass: FamilyGuillotineConfig::high_pass(
-					1042,
-					PlateauHighPassControllerLayout::LIKELIHOOD,
-					PlateauHighPassControllerLayout::OCCUPANCY_FREQUENCY,
-				),
+				low_pass: band_from_layout!(low_pass, 42, PlateauLowPassControllerLayout),
+				high_pass: band_from_layout!(high_pass, 1042, PlateauHighPassControllerLayout),
 			},
 			massif: DualBandFamilyConfig {
-				low_pass: FamilyGuillotineConfig::low_pass(
-					43,
-					MassifLowPassControllerLayout::LIKELIHOOD,
-					MassifLowPassControllerLayout::OCCUPANCY_FREQUENCY,
-				),
-				high_pass: FamilyGuillotineConfig::high_pass(
-					1043,
-					MassifHighPassControllerLayout::LIKELIHOOD,
-					MassifHighPassControllerLayout::OCCUPANCY_FREQUENCY,
-				),
+				low_pass: band_from_layout!(low_pass, 43, MassifLowPassControllerLayout),
+				high_pass: band_from_layout!(high_pass, 1043, MassifHighPassControllerLayout),
 			},
 			canyon: DualBandFamilyConfig {
-				low_pass: FamilyGuillotineConfig::low_pass(
-					44,
-					CanyonLowPassControllerLayout::LIKELIHOOD,
-					CanyonLowPassControllerLayout::OCCUPANCY_FREQUENCY,
-				),
-				high_pass: FamilyGuillotineConfig::high_pass(
-					1044,
-					CanyonHighPassControllerLayout::LIKELIHOOD,
-					CanyonHighPassControllerLayout::OCCUPANCY_FREQUENCY,
-				),
+				low_pass: band_from_layout!(low_pass, 44, CanyonLowPassControllerLayout),
+				high_pass: band_from_layout!(high_pass, 1044, CanyonHighPassControllerLayout),
 			},
 			pocket_water: DualBandFamilyConfig {
-				low_pass: FamilyGuillotineConfig::low_pass(
-					45,
-					PocketWaterLowPassControllerLayout::LIKELIHOOD,
-					PocketWaterLowPassControllerLayout::OCCUPANCY_FREQUENCY,
-				),
-				high_pass: FamilyGuillotineConfig::high_pass(
-					1045,
-					PocketWaterHighPassControllerLayout::LIKELIHOOD,
-					PocketWaterHighPassControllerLayout::OCCUPANCY_FREQUENCY,
-				),
+				low_pass: band_from_layout!(low_pass, 45, PocketWaterLowPassControllerLayout),
+				high_pass: band_from_layout!(high_pass, 1045, PocketWaterHighPassControllerLayout),
 			},
 			rolling: DualBandFamilyConfig {
-				low_pass: FamilyGuillotineConfig::low_pass(
-					46,
-					RollingLowPassControllerLayout::LIKELIHOOD,
-					RollingLowPassControllerLayout::OCCUPANCY_FREQUENCY,
-				),
-				high_pass: FamilyGuillotineConfig::high_pass(
-					1046,
-					RollingHighPassControllerLayout::LIKELIHOOD,
-					RollingHighPassControllerLayout::OCCUPANCY_FREQUENCY,
-				),
+				low_pass: band_from_layout!(low_pass, 46, RollingLowPassControllerLayout),
+				high_pass: band_from_layout!(high_pass, 1046, RollingHighPassControllerLayout),
 			},
 			valley: DualBandFamilyConfig {
-				low_pass: FamilyGuillotineConfig::low_pass(
-					47,
-					ValleyLowPassControllerLayout::LIKELIHOOD,
-					ValleyLowPassControllerLayout::OCCUPANCY_FREQUENCY,
-				),
-				high_pass: FamilyGuillotineConfig::high_pass(
-					1047,
-					ValleyHighPassControllerLayout::LIKELIHOOD,
-					ValleyHighPassControllerLayout::OCCUPANCY_FREQUENCY,
-				),
+				low_pass: band_from_layout!(low_pass, 47, ValleyLowPassControllerLayout),
+				high_pass: band_from_layout!(high_pass, 1047, ValleyHighPassControllerLayout),
 			},
 		}
 	}

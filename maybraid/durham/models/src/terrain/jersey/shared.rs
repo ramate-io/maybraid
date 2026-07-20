@@ -70,15 +70,14 @@ pub fn family_seed(base_seed: u32, cell: Aabb3d, family_salt: u32) -> u32 {
 /// Spatially correlated leaf occupancy via bilinear **value noise** at the leaf center.
 ///
 /// Lattice corner hashes are ~uniform on `[0, 1]`, so `likelihood` approximately
-/// matches the fraction of leaves accepted (unlike raw Perlin, which piles mass
-/// near 0.5). Interpolation still softens extremes slightly. `occupancy_seed`
-/// must be **band-stable** (no per-cell salt). `likelihood >= 1` always accepts;
-/// `<= 0` always rejects.
+/// matches the fraction of leaves accepted. `spatial_correlation` is the lattice
+/// spacing (world units). `occupancy_seed` must be **band-stable** (no per-cell
+/// salt). `likelihood >= 1` always accepts; `<= 0` always rejects.
 pub fn leaf_selected(
 	cell: Aabb3d,
 	occupancy_seed: u32,
 	likelihood: f32,
-	frequency: f32,
+	spatial_correlation: f32,
 ) -> bool {
 	let p = likelihood.clamp(0.0, 1.0);
 	if p >= 1.0 {
@@ -91,12 +90,12 @@ pub fn leaf_selected(
 		(cell.min.x + cell.max.x) * 0.5,
 		(cell.min.z + cell.max.z) * 0.5,
 	);
-	occupancy_unit(center, occupancy_seed, frequency) < p
+	occupancy_unit(center, occupancy_seed, spatial_correlation) < p
 }
 
-/// Smooth value noise in `[0, 1]` with correlation length `1 / frequency`.
-fn occupancy_unit(p: Vec2, seed: u32, frequency: f32) -> f32 {
-	let spacing = 1.0 / frequency.max(1e-6);
+/// Smooth value noise in `[0, 1]` with lattice spacing `spatial_correlation`.
+fn occupancy_unit(p: Vec2, seed: u32, spatial_correlation: f32) -> f32 {
+	let spacing = spatial_correlation.max(1.0);
 	let fx = p.x / spacing;
 	let fz = p.y / spacing;
 	let x0 = fx.floor() as i32;

@@ -91,37 +91,45 @@ fn valley_leaf_ids_stable() -> Result<()> {
 #[test]
 fn leaf_selected_respects_likelihood_extremes() -> Result<()> {
 	let cell = Aabb3d::from_min_max(Vec3::new(0.0, -1.0, 0.0), Vec3::new(10.0, 1.0, 10.0));
-	assert!(leaf_selected(cell, 123, 1.0, 0.001));
-	assert!(!leaf_selected(cell, 123, 0.0, 0.001));
+	assert!(leaf_selected(cell, 123, 1.0, 100.0));
+	assert!(!leaf_selected(cell, 123, 0.0, 100.0));
 	Ok(())
 }
 
 #[test]
 fn leaf_selected_is_spatially_correlated() -> Result<()> {
-	let freq = 0.0005;
+	let correlation = 2000.0;
 	let seed = 99u32;
 	let likelihood = 0.55;
 	let mk = |x: f32, z: f32| {
 		Aabb3d::from_min_max(Vec3::new(x, -1.0, z), Vec3::new(x + 100.0, 1.0, z + 100.0))
 	};
-	let a = leaf_selected(mk(0.0, 0.0), seed, likelihood, freq);
-	let near = leaf_selected(mk(80.0, 0.0), seed, likelihood, freq);
-	assert_eq!(a, near, "nearby leaves should share occupancy for low-frequency noise");
+	let a = leaf_selected(mk(0.0, 0.0), seed, likelihood, correlation);
+	let near = leaf_selected(mk(80.0, 0.0), seed, likelihood, correlation);
+	assert_eq!(a, near, "nearby leaves should share occupancy for long correlation");
 	Ok(())
 }
 
 #[test]
-fn layout_likelihood_defaults_feed_configs() -> Result<()> {
-	use crate::terrain::jersey::massif::MassifLowPassControllerLayout;
+fn layout_defaults_feed_configs() -> Result<()> {
 	use crate::terrain::jersey::configs::JerseyStampConfigs;
+	use crate::terrain::jersey::massif::MassifLowPassControllerLayout;
 	let configs = JerseyStampConfigs::default();
 	assert_eq!(
 		configs.massif.low_pass.likelihood,
 		MassifLowPassControllerLayout::LIKELIHOOD
 	);
 	assert_eq!(
-		configs.massif.low_pass.occupancy_frequency,
-		MassifLowPassControllerLayout::OCCUPANCY_FREQUENCY
+		configs.massif.low_pass.spatial_correlation,
+		MassifLowPassControllerLayout::SPATIAL_CORRELATION
+	);
+	assert_eq!(
+		configs.massif.low_pass.guillotine.step_min,
+		MassifLowPassControllerLayout::CELL_SIZE_MIN
+	);
+	assert_eq!(
+		configs.massif.low_pass.guillotine.step_max,
+		MassifLowPassControllerLayout::CELL_SIZE_MAX
 	);
 	Ok(())
 }
@@ -131,6 +139,10 @@ fn high_pass_cells_are_much_larger_than_low_pass() -> Result<()> {
 	use crate::terrain::jersey::massif::{
 		MassifHighPassControllerLayout, MassifLowPassControllerLayout,
 	};
+	assert!(
+		MassifHighPassControllerLayout::CELL_SIZE_MAX
+			> MassifLowPassControllerLayout::CELL_SIZE_MAX * 4.0
+	);
 	let low = MassifLowPassControllerLayout::default().grid.cell_size;
 	let high = MassifHighPassControllerLayout::default().grid.cell_size;
 	assert!(high > low * 5.0, "high={high} low={low}");
