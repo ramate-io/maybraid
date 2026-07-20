@@ -21,7 +21,7 @@ pub use modulation::{
 	CELL_DOMAIN_EASE_FRAC, DEFAULT_CELL_DOMAIN_EASE,
 };
 pub use region::{CircleRegion, RectRegion, Region2D, RegionNoise};
-pub use stamp::{StampSemantics, StampSet};
+pub use stamp::{relief_scale, StampSemantics, StampSet, RELIEF_REFERENCE_SHORT};
 pub use stamps::{
 	BasinWater, BasinWaterParams, Canyon, CanyonParams, CanyonVariant, CaveNetwork,
 	CaveNetworkParams, CaveSegment, CaveSegmentKind, HydrologyComplex, HydrologyComplexKind,

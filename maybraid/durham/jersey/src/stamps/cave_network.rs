@@ -60,16 +60,10 @@ impl CaveNetwork {
 		let path = HysteresisSpine::default().build(bounds, seed.wrapping_add(81), start, end);
 		let half_w = short * params.width_frac.clamp(0.04, 0.18);
 		let noise = RegionNoise::from_seed(seed.wrapping_add(3), 0.05, half_w * 0.12);
-		let modulations = SoftmaskAlongSpine::default().build(
-			&path,
-			half_w,
-			0.4,
-			-params.depth,
-			0.2,
-			0.7,
-			&noise,
-			Vec2::ZERO,
-		);
+		let depth = params.depth * crate::stamp::relief_scale(bounds);
+		let modulations = SoftmaskAlongSpine::default()
+			.even_for_extent(short)
+			.build(&path, half_w, 0.4, -depth, 0.2, 0.7, &noise, Vec2::ZERO);
 
 		let kinds = [
 			CaveSegmentKind::Mouth,

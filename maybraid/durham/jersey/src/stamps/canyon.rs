@@ -4,7 +4,7 @@ use crate::config::{
 	DownhillPair, FractalAnchors, HysteresisSpine, MidpointGrading, SoftmaskAlongSpine,
 };
 use crate::region::RegionNoise;
-use crate::stamp::{StampSemantics, StampSet};
+use crate::stamp::{relief_scale, StampSemantics, StampSet};
 use bevy_math::Vec2;
 use procedural_common::Bounds2;
 
@@ -20,6 +20,7 @@ pub enum CanyonVariant {
 pub struct CanyonParams {
 	pub variant: CanyonVariant,
 	pub width_frac: f32,
+	/// Incision depth at [`crate::RELIEF_REFERENCE_SHORT`]; scales with leaf short edge.
 	pub depth: f32,
 	pub confinement: f32,
 }
@@ -52,6 +53,7 @@ impl Canyon {
 		height_at: Option<&dyn Fn(f32, f32) -> f32>,
 	) -> Self {
 		let short = bounds.extent().min_element().max(1.0);
+		let depth = params.depth * relief_scale(bounds);
 		let (start, end) = FractalAnchors::default().sample(bounds, seed, 300);
 		let path = HysteresisSpine::default().build(bounds, seed.wrapping_add(31), start, end);
 		let a = *path.first().unwrap_or(&start);
@@ -62,7 +64,7 @@ impl Canyon {
 			short * params.width_frac.clamp(0.05, 0.28) * params.confinement.clamp(0.4, 1.2);
 		let noise = RegionNoise::from_seed(seed.wrapping_add(4), 0.02, base_w * 0.08);
 		// Densified overlapping circles (build-time); no polyline SDF at sample time.
-		let spine = SoftmaskAlongSpine::corridor();
+		let spine = SoftmaskAlongSpine::corridor().even_for_extent(short);
 
 		// Relative incision along the path (scale=1, negative offset). No absolute floor.
 		// Soft outer apron keeps depth connected between densified nodes.
@@ -72,7 +74,7 @@ impl Canyon {
 				modulations.extend(spine.build_incision(
 					&path,
 					base_w,
-					params.depth,
+					depth,
 					0.4,
 					1.15,
 					&noise,
@@ -85,13 +87,13 @@ impl Canyon {
 				let s1 = n / 3;
 				let s2 = (2 * n) / 3;
 				let segments = [
-					(&path[s0..=s1.min(n - 1)], base_w * 0.7, params.depth * 1.2),
+					(&path[s0..=s1.min(n - 1)], base_w * 0.7, depth * 1.2),
 					(
 						&path[s1.min(n - 1)..=s2.min(n - 1)],
 						base_w * 1.15,
-						params.depth,
+						depth,
 					),
-					(&path[s2.min(n - 1)..], base_w * 1.35, params.depth * 0.65),
+					(&path[s2.min(n - 1)..], base_w * 1.35, depth * 0.65),
 				];
 				for (seg, w, d) in segments {
 					modulations.extend(spine.build_incision(
@@ -109,9 +111,9 @@ impl Canyon {
 		// Mild downhill bias only — never raise natural lows toward baked floors.
 		modulations.push(MidpointGrading::default().build_depression(
 			start_pt,
-			start_h - params.depth * 0.4,
+			start_h - depth * 0.4,
 			end_pt,
-			end_h - params.depth * 0.15,
+			end_h - depth * 0.15,
 			base_w * 1.4,
 			noise,
 		));

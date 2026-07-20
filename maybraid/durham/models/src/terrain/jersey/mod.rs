@@ -6,6 +6,10 @@
 //! correlation lengths. Leaf seams therefore do not coincide across families
 //! or bands.
 //!
+//! Stamp vertical relief (`lift` / `depth` / …) scales with leaf short-edge via
+//! [`jersey_terrain_stamps::relief_scale`], so high-pass leaves get
+//! proportionally stronger highs/lows and more even spine grading.
+//!
 //! Stack per band:
 //!
 //! `ControllerLayout` → `ControllerCell` (cuts) → leaf `Id` → `StampCell`

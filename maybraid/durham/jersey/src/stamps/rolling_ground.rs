@@ -3,7 +3,7 @@
 use crate::config::{JitteredCenter};
 use crate::modulation::{JerseyModulation, RegionAffineModulation};
 use crate::region::{CircleRegion, Region2D, RegionNoise};
-use crate::stamp::{StampSemantics, StampSet};
+use crate::stamp::{relief_scale, StampSemantics, StampSet};
 use procedural_common::{Bounds2, SeededHash};
 
 #[derive(Debug, Clone, Copy)]
@@ -11,7 +11,7 @@ pub struct RollingGroundParams {
 	/// Number of gentle swell / swale blobs.
 	pub count: usize,
 	pub size_frac: f32,
-	/// Peak |offset| for swells (+) and swales (−).
+	/// Peak |offset| at [`crate::RELIEF_REFERENCE_SHORT`]; scales with leaf short edge.
 	pub amplitude: f32,
 }
 
@@ -37,6 +37,7 @@ impl RollingGround {
 	) -> Self {
 		let hash = SeededHash::new(seed);
 		let short = bounds.extent().min_element().max(1.0);
+		let amp0 = params.amplitude * relief_scale(bounds);
 		let radius = short * params.size_frac.clamp(0.05, 0.25);
 		let noise = RegionNoise::from_seed(seed.wrapping_add(2), 0.05, radius * 0.1);
 		let mut modulations = Vec::new();
@@ -46,7 +47,7 @@ impl RollingGround {
 			let center = JitteredCenter::default().sample(bounds, seed, 200 + i as u32 * 13);
 			centers.push(center);
 			let sign = if hash.unit(i as u32 + 3) > 0.45 { 1.0 } else { -1.0 };
-			let amp = params.amplitude * (0.6 + 0.4 * hash.unit(i as u32 + 9)) * sign;
+			let amp = amp0 * (0.6 + 0.4 * hash.unit(i as u32 + 9)) * sign;
 			let region = Region2D::Circle(CircleRegion { center, radius });
 			modulations.push(JerseyModulation::Affine(
 				RegionAffineModulation::new(

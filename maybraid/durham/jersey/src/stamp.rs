@@ -2,6 +2,19 @@
 
 use crate::modulation::JerseyModulation;
 use bevy_math::Vec2;
+use procedural_common::Bounds2;
+
+/// Short-edge length at which absolute relief knobs (`lift`, `depth`, …) apply 1:1.
+///
+/// Larger leaves (high-pass / regional) scale those knobs by
+/// `short / RELIEF_REFERENCE_SHORT` so vertical amplitude tracks footprint.
+pub const RELIEF_REFERENCE_SHORT: f32 = 400.0;
+
+/// Scale factor so absolute vertical knobs track the leaf short edge.
+#[inline]
+pub fn relief_scale(bounds: Bounds2) -> f32 {
+	bounds.extent().min_element().max(1.0) / RELIEF_REFERENCE_SHORT
+}
 
 /// Non-geometric facts for later gameplay / hydrology hand-off ([RFC-105 §3.6](https://github.com/ramate-io/maybraid/tree/main/rfc/rfc-000-000-105-procedural-terrain)).
 #[derive(Debug, Clone, Default, PartialEq, Eq)]

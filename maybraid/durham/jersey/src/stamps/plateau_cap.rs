@@ -3,7 +3,7 @@
 use crate::config::{JitteredCenter};
 use crate::modulation::{JerseyModulation, RegionAffineModulation, RegionGradingModulation};
 use crate::region::{CircleRegion, RectRegion, Region2D, RegionNoise};
-use crate::stamp::{StampSemantics, StampSet};
+use crate::stamp::{relief_scale, StampSemantics, StampSet};
 use bevy_math::Vec2;
 use procedural_common::{Bounds2, SeededHash};
 
@@ -27,11 +27,11 @@ pub struct PlateauCapParams {
 	pub surface: PlateauSurfaceClass,
 	/// Cap radius / half-extent as a fraction of the shorter bound edge.
 	pub size_frac: f32,
-	/// Raise amount (world units) on the interior.
+	/// Interior raise at [`crate::RELIEF_REFERENCE_SHORT`]; scales with leaf short edge.
 	pub lift: f32,
 	/// Soft scale on base elevation under the cap.
 	pub interior_scale: f32,
-	/// Gentle tilt along +X of the bound (elevation delta across the cap).
+	/// Cap tilt delta at reference short edge; scales with leaf short edge.
 	pub tilt: f32,
 }
 
@@ -66,6 +66,9 @@ impl PlateauCap {
 	) -> Self {
 		let hash = SeededHash::new(seed);
 		let short = bounds.extent().min_element().max(1.0);
+		let scale = relief_scale(bounds);
+		let lift = params.lift * scale;
+		let tilt = params.tilt * scale;
 		let center = JitteredCenter::default().sample(bounds, seed, 11);
 		let size = short * params.size_frac.clamp(0.1, 0.45);
 		let rim_noise = RegionNoise::from_seed(seed.wrapping_add(3), 0.015, size * 0.08);
@@ -82,7 +85,6 @@ impl PlateauCap {
 			}
 		};
 
-		let lift = params.lift;
 		let affine = RegionAffineModulation::new(
 			region.clone(),
 			params.interior_scale,
@@ -105,9 +107,9 @@ impl PlateauCap {
 				RegionGradingModulation::new(
 					region,
 					start,
-					base_h + lift - params.tilt * 0.5,
+					base_h + lift - tilt * 0.5,
 					end,
-					base_h + lift + params.tilt * 0.5,
+					base_h + lift + tilt * 0.5,
 					size * 0.3,
 					size * 0.9,
 				)

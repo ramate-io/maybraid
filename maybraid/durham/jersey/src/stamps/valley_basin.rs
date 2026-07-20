@@ -3,7 +3,7 @@
 use crate::config::{FractalAnchors, HysteresisSpine, DownhillPair};
 use crate::modulation::{JerseyModulation, RegionAffineModulation, RegionGradingModulation};
 use crate::region::{CircleRegion, Region2D, RegionNoise};
-use crate::stamp::{StampSemantics, StampSet};
+use crate::stamp::{relief_scale, StampSemantics, StampSet};
 use bevy_math::Vec2;
 use procedural_common::{Bounds2, SeededHash};
 
@@ -34,7 +34,7 @@ pub struct ValleyBasinParams {
 	pub floor: ValleyFloorKind,
 	/// Corridor half-width as a fraction of the shorter bound edge (`0.05..0.45`).
 	pub width_frac: f32,
-	/// Depression strength (world units of negative offset at the floor).
+	/// Floor depression at [`crate::RELIEF_REFERENCE_SHORT`]; scales with leaf short edge.
 	pub depth: f32,
 	/// Scale applied to base elevation inside the corridor (`< 1` softens relief).
 	pub floor_scale: f32,
@@ -116,7 +116,12 @@ impl ValleyBasin {
 	) -> Self {
 		let hash = SeededHash::new(seed);
 		let short = bounds.extent().min_element().max(1.0);
-		let profile = CrossProfile::from_params(&params);
+		let scale = relief_scale(bounds);
+		let mut scaled = params;
+		scaled.depth *= scale;
+		let profile = CrossProfile::from_params(&scaled);
+		// Larger leaves: keep floor depth more even along the reach.
+		let depth_falloff = (0.3 / scale.sqrt().clamp(1.0, 3.0)).clamp(0.05, 0.3);
 
 		let (start, end) = FractalAnchors::default().sample(bounds, seed, 0);
 		let path = HysteresisSpine::default().build(bounds, seed.wrapping_add(17), start, end);
@@ -149,7 +154,7 @@ impl ValleyBasin {
 				radius: half_width,
 			});
 			let depth_t = i as f32 / path.len().saturating_sub(1).max(1) as f32;
-			let local_depth = profile.depth * (1.0 - 0.3 * depth_t);
+			let local_depth = profile.depth * (1.0 - depth_falloff * depth_t);
 			modulations.push(JerseyModulation::Affine(
 				RegionAffineModulation::new(
 					region,

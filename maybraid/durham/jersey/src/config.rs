@@ -176,6 +176,20 @@ impl SoftmaskAlongSpine {
 		}
 	}
 
+	/// Gentler head→tail falloff and denser samples on larger leaves.
+	///
+	/// Keeps regional (high-pass) spines more evenly graded instead of collapsing
+	/// to a short crest on a multi‑kilometre path.
+	pub fn even_for_extent(mut self, short_edge: f32) -> Self {
+		let t = (short_edge / crate::stamp::RELIEF_REFERENCE_SHORT).clamp(0.25, 8.0);
+		let soften = t.sqrt();
+		self.longitudinal_falloff =
+			(self.longitudinal_falloff / soften).clamp(0.04, 0.5);
+		let samples = (self.max_samples as f32 * soften).round() as usize;
+		self.max_samples = samples.clamp(8, 96);
+		self
+	}
+
 	/// Depression when `offset` is negative; lift when positive.
 	pub fn build(
 		&self,

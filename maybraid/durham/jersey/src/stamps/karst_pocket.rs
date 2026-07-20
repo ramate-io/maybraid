@@ -57,7 +57,7 @@ impl KarstPocket {
 		let dip = RegionAffineModulation::new(
 			region,
 			0.35 + 0.2 * hash.unit(2),
-			-params.depth,
+			-params.depth * crate::stamp::relief_scale(bounds),
 			radius * 0.25,
 			radius * 0.9,
 		)

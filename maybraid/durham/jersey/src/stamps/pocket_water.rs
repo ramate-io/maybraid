@@ -8,7 +8,7 @@ use crate::config::{
 };
 use crate::modulation::{JerseyModulation, RegionAffineModulation};
 use crate::region::{CircleRegion, Region2D, RegionNoise};
-use crate::stamp::{StampSemantics, StampSet};
+use crate::stamp::{relief_scale, StampSemantics, StampSet};
 use bevy_math::Vec2;
 use procedural_common::Bounds2;
 
@@ -23,8 +23,10 @@ pub enum PocketTermination {
 pub struct PocketWaterParams {
 	pub termination: PocketTermination,
 	pub pond_frac: f32,
+	/// Pond depth at [`crate::RELIEF_REFERENCE_SHORT`]; scales with leaf short edge.
 	pub pond_depth: f32,
 	pub run_width_frac: f32,
+	/// Run incision depth at reference short edge; scales with leaf short edge.
 	pub run_depth: f32,
 }
 
@@ -59,6 +61,9 @@ impl PocketWater {
 		height_at: Option<&dyn Fn(f32, f32) -> f32>,
 	) -> Self {
 		let short = bounds.extent().min_element().max(1.0);
+		let scale = relief_scale(bounds);
+		let pond_depth = params.pond_depth * scale;
+		let run_depth = params.run_depth * scale;
 		let drainage_id = seed.wrapping_mul(0x9E37_79B9);
 		let pond_center = JitteredCenter::default().sample(bounds, seed, 500);
 		let pond_r = short * params.pond_frac.clamp(0.1, 0.35);
@@ -72,7 +77,7 @@ impl PocketWater {
 					radius: pond_r,
 				}),
 				1.0,
-				-params.pond_depth,
+				-pond_depth,
 				pond_r * 0.45,
 				pond_r * 1.1,
 			)
@@ -90,7 +95,7 @@ impl PocketWater {
 					radius: pond_r * 0.4,
 				}),
 				1.0,
-				-params.pond_depth * 0.12,
+				-pond_depth * 0.12,
 				pond_r * 0.15,
 				pond_r * 0.45,
 			)
@@ -108,20 +113,16 @@ impl PocketWater {
 		let (s, sh, e, eh) = DownhillPair::order(a, b, height_at);
 		let run_w = short * params.run_width_frac.clamp(0.05, 0.22);
 		let run_noise = RegionNoise::from_seed(seed.wrapping_add(2), 0.018, run_w * 0.08);
-		modulations.extend(SoftmaskAlongSpine::corridor().build_incision(
-			&run,
-			run_w,
-			params.run_depth,
-			0.4,
-			1.15,
-			&run_noise,
-			Vec2::ZERO,
-		));
+		modulations.extend(
+			SoftmaskAlongSpine::corridor()
+				.even_for_extent(short)
+				.build_incision(&run, run_w, run_depth, 0.4, 1.15, &run_noise, Vec2::ZERO),
+		);
 		modulations.push(MidpointGrading::default().build_depression(
 			s,
-			sh - params.run_depth * 0.3,
+			sh - run_depth * 0.3,
 			e,
-			eh - params.run_depth * 0.1,
+			eh - run_depth * 0.1,
 			run_w * 1.35,
 			run_noise,
 		));
