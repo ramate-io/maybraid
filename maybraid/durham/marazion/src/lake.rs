@@ -65,8 +65,12 @@ pub struct LakeParams {
 	pub rim_noise_frac: f32,
 	/// Outward-only noise on the **apron** fade as a fraction of apron width.
 	pub apron_noise_frac: f32,
-	/// Frequency for rim/apron expand-only boundary noise.
+	/// Frequency for rim elevation (kept low — broad vertical lobes).
 	pub bank_noise_freq: f32,
+	/// Max bipolar shore indent/expand as a fraction of water radius (breaks circular shores).
+	pub shore_indent_frac: f32,
+	/// Boundary-noise frequency for shore indent/expand (needs angular lobes around the lake).
+	pub shore_noise_freq: f32,
 	/// Extra rim elevation amplitude above [`Self::rim_lift`] (add-only height noise).
 	pub rim_vert_amp: f32,
 	/// Spatial frequency for rim elevation noise.
@@ -106,8 +110,12 @@ impl Default for LakeParams {
 			shore_fade: 2.0,
 			rim_noise_frac: 0.35,
 			apron_noise_frac: 0.28,
-			// Low-frequency bank wobble so rim/apron read as broad lobes, not chatter.
+			// Low-frequency rim *elevation* wobble (vertical), not shore outline.
 			bank_noise_freq: 0.008,
+			// Indent/expand shores by up to a quarter of the water radius.
+			shore_indent_frac: 0.25,
+			// High enough for several lobes around a typical lake (not a uniform radius scale).
+			shore_noise_freq: 0.045,
 			rim_vert_amp: 2.75,
 			rim_vert_freq: 0.016,
 			rim_width_min: 0.5,
@@ -229,7 +237,8 @@ impl Lake {
 		let Some(budget) = LakeBandBudget::try_from_short_half(short_half, params, u, rim_u) else {
 			return cell_c;
 		};
-		let outer = budget.plateau_radius + budget.apron_width;
+		let shore_amp = budget.water_radius * params.shore_indent_frac.clamp(0.0, 0.45);
+		let outer = budget.plateau_radius + budget.apron_width + shore_amp;
 		let lo = min + Vec2::splat(outer.max(budget.mu));
 		let hi = max - Vec2::splat(outer.max(budget.mu));
 		let ox = n11_at(seed, 0x1A7E_C001, min) * params.centroid_jitter * short_half;
@@ -296,23 +305,25 @@ impl Lake {
 		let water_region = Region2D::Circle(CircleRegion { center, radius: water_r });
 		let fill_region = Region2D::Circle(CircleRegion { center, radius: fill_r });
 
-		// Separate expand-only noises so rim/apron wobble without shrinking the
-		// geometric bands, and without coupling to the fill softmask.
-		let rim_noise_amp = (rim_w * params.rim_noise_frac.max(0.0)).max(0.0);
-		let apron_noise_amp = (apron_w * params.apron_noise_frac.max(0.0)).max(0.0);
-		let bank_amp = rim_noise_amp.max(apron_noise_amp);
-		let bank_noise = RegionNoise::from_seed_expand_only(
-			seed.wrapping_add(5),
-			params.bank_noise_freq.max(1.0e-4),
-			bank_amp.max(0.01),
-		);
-		// Softmask outer must cover base apron + max outward bulge.
-		let apron_outer = apron_w + bank_amp;
+		// Shared bipolar shore noise: indent *and* expand by up to ~¼ of water radius so
+		// bowl, wet fill, and rim/apron stop reading as perfect circles. Same field on
+		// all three keeps the bands aligned (no pie-slice fill mismatch).
+		let shore_amp = (water_r * params.shore_indent_frac.clamp(0.0, 0.45))
+			// Keep a sliver of rim even at max indent.
+			.min(rim_w * 0.85)
+			.max(0.01);
+		// Floor freq by lake size so small bowls still get angular lobes.
+		let shore_freq = params
+			.shore_noise_freq
+			.max(2.2 / water_r.max(1.0))
+			.clamp(1.0e-4, 0.14);
+		let shore_noise = RegionNoise::from_seed(seed.wrapping_add(5), shore_freq, shore_amp);
+		// Softmask outer must cover base apron + max outward shore bulge.
+		let apron_outer = apron_w + shore_amp;
 
-		let fill_noise = RegionNoise::from_seed(seed.wrapping_add(3), 0.016, water_r * 0.05);
 		let rim_vert = RegionNoise::from_seed(
 			seed.wrapping_add(7),
-			params.rim_vert_freq.max(1.0e-4),
+			params.rim_vert_freq.max(params.bank_noise_freq).max(1.0e-4),
 			params.rim_vert_amp.max(0.0),
 		);
 		let depth_noise_freq = (1.6 / water_r.max(1.0)).clamp(0.04, 0.18);
@@ -324,7 +335,7 @@ impl Lake {
 
 		let plateau = JerseyModulation::Affine(
 			RegionAffineModulation::new(plateau_region, 0.0, rim_level, 0.0, apron_outer)
-				.with_noise(bank_noise)
+				.with_noise(shore_noise.clone())
 				.with_height_noise_add_only(rim_vert),
 		);
 
@@ -340,9 +351,10 @@ impl Lake {
 		});
 		let bowl_shallow = JerseyModulation::Affine(
 			RegionAffineModulation::new(water_region, 1.0, -shallow_cut, 0.0, bowl_fade)
-				.with_noise(fill_noise.clone())
+				.with_noise(shore_noise.clone())
 				.with_height_noise(depth_noise.clone()),
 		);
+		// Center bowl stays geometrically quiet — depth noise only, no shore amp.
 		let bowl_deep = JerseyModulation::Affine(
 			RegionAffineModulation::new(
 				deep_region,
@@ -351,7 +363,6 @@ impl Lake {
 				deep_r * 0.2,
 				(deep_r * 0.55).max(bowl_fade),
 			)
-			.with_noise(fill_noise.clone())
 			.with_height_noise(depth_noise),
 		);
 
@@ -359,7 +370,7 @@ impl Lake {
 			region: fill_region,
 			inner_radius: 0.0,
 			outer_radius: fill_fade,
-			noise: Some(fill_noise),
+			noise: Some(shore_noise),
 			water_level,
 			terrain_undercut: params.terrain_undercut.max(0.0),
 		};
@@ -509,7 +520,9 @@ mod tests {
 		let base = 40.0;
 		let params = LakeParams::default();
 		let lake = Lake::from_bounds(bounds, 11, params, Some(&|_, _| base));
-		let mid_r = lake.water_radius + lake.rim_width * 0.5;
+		// Sit outward of max shore expand so we stay on the shelf, not the bowl.
+		let shore_amp = lake.water_radius * params.shore_indent_frac;
+		let mid_r = lake.water_radius + shore_amp + lake.rim_width * 0.55;
 		let p = lake.center + Vec2::new(mid_r, 0.0);
 		let h = apply_mods(&lake.modulations, base, p.x, p.y);
 		let rim_base = lake.water_level + params.rim_lift + params.water_sink;
@@ -557,6 +570,30 @@ mod tests {
 		assert!(
 			h_c < h_m - 1.5,
 			"center {h_c} should sit deeper than mid-bowl {h_m}"
+		);
+		Ok(())
+	}
+
+	#[test]
+	fn shore_noise_indents_and_expands_water_disc() -> anyhow::Result<()> {
+		let bounds = Bounds2::from_xz(0.0, 0.0, 320.0, 320.0);
+		let lake = Lake::from_bounds_default(bounds, 11);
+		let fill = lake.fills.first().expect("fill");
+		// Sample the geometric fill edge (padded past water_r); water_r sits inside the pad.
+		let mut wet = 0usize;
+		let mut dry = 0usize;
+		for i in 0..48 {
+			let ang = i as f32 * std::f32::consts::TAU / 48.0;
+			let p = lake.center + Vec2::new(ang.cos(), ang.sin()) * lake.fill_radius;
+			if softmask_at(fill, p.x, p.y) < 0.5 {
+				wet += 1;
+			} else {
+				dry += 1;
+			}
+		}
+		assert!(
+			wet > 0 && dry > 0,
+			"bipolar shore noise should both indent and expand at R_fill (wet={wet} dry={dry})"
 		);
 		Ok(())
 	}
