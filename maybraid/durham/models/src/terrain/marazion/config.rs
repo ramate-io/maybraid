@@ -11,6 +11,11 @@ use marazion_watersheds::LakeParams;
 pub const DEFAULT_LAKE_LEAF_SIZE: f32 = TERRAIN_CELL_SIZE * 2.0;
 
 /// Universal Marazion watershed configs (lake-first slice).
+///
+/// Lake look: tune [`Self::lake`]'s authoring knobs
+/// (`rim_frac`, `apron_frac`, `water_sink`, `terrain_undercut`) in
+/// [`LakeParams::default`](marazion_watersheds::LakeParams::default)
+/// or override this resource before generation.
 #[derive(Resource, Debug, Clone)]
 pub struct MarazionWatershedConfigs {
 	pub seed: u32,

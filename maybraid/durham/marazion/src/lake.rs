@@ -20,53 +20,53 @@ const MIN_WATER_RADIUS: f32 = 8.0;
 
 #[derive(Debug, Clone, Copy)]
 pub struct LakeParams {
+	// ── Authoring knobs (tune these) ───────────────────────────────────────
+	/// Rim shelf width as a fraction of the leaf radius budget.
+	pub rim_frac: f32,
+	/// Apron (blend-to-identity) width as a fraction of the leaf radius budget.
+	pub apron_frac: f32,
+	/// How far below the shelf anchor the water surface `W` sits (world units).
+	pub water_sink: f32,
+	/// How far the water difference bites into terrain (`h − undercut`).
+	///
+	/// This is the real shoreline bleed; keep it a bit above `rim_lift + water_sink`.
+	pub terrain_undercut: f32,
+
+	// ── Secondary / internal ───────────────────────────────────────────────
 	/// Inward margin μ (world units) from cell boundary to the outer apron.
 	pub mu: f32,
-	/// Fraction of the post-μ budget spent on the rim shelf.
-	pub rim_frac: f32,
-	/// Fraction of the post-μ budget spent on the apron blend.
-	pub apron_frac: f32,
 	/// Max centroid offset as a fraction of the smaller cell half-extent.
 	pub centroid_jitter: f32,
-	/// Surface offset amplitude relative to pre-stamp height at centroid.
+	/// Shelf-anchor noise amplitude (world units).
 	pub surface_noise_amp: f32,
 	/// Bowl depth scale (world units).
 	pub depth: f32,
-	/// How far the rim shelf sits above water surface `W` (world units).
+	/// How far the rim shelf sits **above** the shelf anchor (world units).
+	/// Bank height above water ≈ `rim_lift + water_sink`.
 	pub rim_lift: f32,
-	/// Bleed past the bowl edge as a multiple of rim width (`1` = full rim).
-	///
-	/// Values above `1` spill into the apron (`1.25` ≈ full rim + 0.25·rim into apron
-	/// unless [`Self::apron_bleed_frac`] adds more). Absorbs marching-cubes shoreline inset.
+	/// Horizontal softmask pad past the bowl, as a fraction of rim width.
 	pub rim_bleed_frac: f32,
-	/// Extra wet bleed into the apron as a fraction of apron width (after rim bleed).
-	pub apron_bleed_frac: f32,
-	/// Extra SDF-relative fade past the bled fill edge.
+	/// SDF-relative fade past the fill disc edge.
 	pub shore_fade: f32,
-	/// Vertical undercut for the water difference SDF (world units).
-	///
-	/// Exact `Difference(Below(W), Terrain)` has no volume where the rim sits
-	/// above `W`. Undercut evaluates against `h - terrain_undercut` so water
-	/// actually bleeds into the bank (not only a wider softmask).
-	pub terrain_undercut: f32,
 }
 
 impl Default for LakeParams {
 	fn default() -> Self {
 		Self {
+			// Authoring — start here:
+			rim_frac: 0.28,
+			apron_frac: 0.30,
+			water_sink: 0.9,
+			terrain_undercut: 2.5,
+
 			mu: 12.0,
-			rim_frac: 0.30,
-			apron_frac: 0.34,
 			centroid_jitter: 0.12,
 			surface_noise_amp: 2.0,
 			depth: 14.0,
-			rim_lift: 1.75,
-			// Full rim + into apron so MC shoreline inset still meets the bank.
-			rim_bleed_frac: 1.15,
-			apron_bleed_frac: 0.35,
-			shore_fade: 4.0,
-			// ≥ rim_lift plus slack so raised banks do not block the fill volume.
-			terrain_undercut: 4.0,
+			rim_lift: 1.25,
+			// Modest horizontal pad; vertical undercut does the real bleed.
+			rim_bleed_frac: 0.35,
+			shore_fade: 2.0,
 		}
 	}
 }
@@ -196,8 +196,10 @@ impl Lake {
 		let base_h = height_at
 			.map(|f| f(center.x, center.y))
 			.unwrap_or(0.0);
-		let surface =
+		let shelf_anchor =
 			base_h + n11_at(seed, 0x1A7E_50F1, anchor) * params.surface_noise_amp;
+		let water_level = shelf_anchor - params.water_sink.max(0.0);
+		let rim_level = shelf_anchor + params.rim_lift.max(0.0);
 		let depth = params.depth * (0.65 + 0.7 * n01_at(seed, 0x1A7E_DE07, anchor));
 
 		let water_r = budget.water_radius;
@@ -206,17 +208,11 @@ impl Lake {
 		let apron_w = budget.apron_width.max(1.0);
 		let bowl_fade = (rim_w * 0.25).max(0.5).min(water_r * 0.2);
 
-		// Wet fill: past bowl into rim (and optionally apron). Cap before leaf edge.
+		// Modest horizontal pad; terrain_undercut owns shoreline bleed.
 		let rim_bleed = rim_w * params.rim_bleed_frac.max(0.0);
-		let apron_bleed = apron_w * params.apron_bleed_frac.max(0.0);
 		let max_fill = plateau_r + apron_w - 0.5;
-		let fill_r = (water_r + rim_bleed + apron_bleed)
-			.min(max_fill)
-			.max(water_r);
-		let fill_fade = params
-			.shore_fade
-			.max(1.0)
-			.min((max_fill - fill_r + params.shore_fade).max(1.0));
+		let fill_r = (water_r + rim_bleed).min(max_fill).max(water_r);
+		let fill_fade = params.shore_fade.max(1.0);
 
 		let plateau_region = Region2D::Circle(CircleRegion {
 			center,
@@ -232,15 +228,12 @@ impl Lake {
 		});
 		let noise = RegionNoise::from_seed(seed.wrapping_add(3), 0.016, water_r * 0.05);
 
-		// Bank shelf sits above water: plateau → W + rim_lift, apron blends to identity.
-		let rim_level = surface + params.rim_lift.max(0.0);
 		let plateau = JerseyModulation::Affine(
 			RegionAffineModulation::new(plateau_region, 0.0, rim_level, 0.0, apron_w)
 				.with_noise(noise.clone()),
 		);
-		// Bowl depresses only the water disc; rim annulus stays at rim_level.
-		// Depth is measured from the raised shelf so the floor still sits below W.
-		let bowl_depth = depth + params.rim_lift.max(0.0);
+		// Bowl from raised shelf down past W.
+		let bowl_depth = depth + (rim_level - water_level).max(0.0);
 		let bowl = JerseyModulation::Affine(
 			RegionAffineModulation::new(water_region, 1.0, -bowl_depth, 0.0, bowl_fade)
 				.with_noise(noise.clone()),
@@ -251,11 +244,8 @@ impl Lake {
 			inner_radius: 0.0,
 			outer_radius: fill_fade,
 			noise: Some(noise),
-			water_level: surface,
-			terrain_undercut: params
-				.terrain_undercut
-				.max(params.rim_lift + 0.5)
-				.max(0.0),
+			water_level,
+			terrain_undercut: params.terrain_undercut.max(0.0),
 		};
 
 		Self {
@@ -267,7 +257,7 @@ impl Lake {
 			rim_width: rim_w,
 			apron_width: budget.apron_width,
 			fill_radius: fill_r,
-			water_level: surface,
+			water_level,
 			modulations: vec![plateau, bowl],
 			fills: vec![fill],
 		}
@@ -352,7 +342,7 @@ mod tests {
 		let mid_r = lake.water_radius + lake.rim_width * 0.5;
 		let p = lake.center + Vec2::new(mid_r, 0.0);
 		let h = apply_mods(&lake.modulations, base, p.x, p.y);
-		let rim_level = lake.water_level + params.rim_lift;
+		let rim_level = lake.water_level + params.rim_lift + params.water_sink;
 		assert!(
 			(h - rim_level).abs() < 1.5,
 			"rim {h} should stay near rim shelf {rim_level}"
@@ -374,7 +364,7 @@ mod tests {
 		let apron_mid = lake.plateau_radius + lake.apron_width * 0.5;
 		let p = lake.center + Vec2::new(apron_mid, 0.0);
 		let h = apply_mods(&lake.modulations, base, p.x, p.y);
-		let rim_level = lake.water_level + params.rim_lift;
+		let rim_level = lake.water_level + params.rim_lift + params.water_sink;
 		let lo = base.min(rim_level);
 		let hi = base.max(rim_level);
 		assert!(
@@ -398,33 +388,22 @@ mod tests {
 	}
 
 	#[test]
-	fn fill_bleeds_into_rim_not_apron() -> anyhow::Result<()> {
+	fn fill_pad_stays_near_bowl() -> anyhow::Result<()> {
 		let bounds = Bounds2::from_xz(0.0, 0.0, 320.0, 320.0);
 		let params = LakeParams::default();
 		let lake = Lake::from_bounds_default(bounds, 11);
+		assert!(lake.fill_radius >= lake.water_radius);
 		assert!(
-			lake.fill_radius > lake.water_radius + lake.rim_width * 0.9,
-			"fill {} should cover most of the rim past bowl {}",
-			lake.fill_radius,
-			lake.water_radius
-		);
-		let max_fill = lake.plateau_radius + lake.apron_width;
-		assert!(
-			lake.fill_radius <= max_fill + 1e-3,
-			"fill {} must stay within apron outer {}",
-			lake.fill_radius,
-			max_fill
+			lake.fill_radius <= lake.water_radius + lake.rim_width + 1e-3,
+			"horizontal pad should stay on the rim"
 		);
 		let fill = lake.fills.first().expect("fill");
-		let rim_in = lake.center
-			+ Vec2::new(lake.water_radius + lake.rim_width * 0.5, 0.0);
-		assert!(
-			softmask_at(fill, rim_in.x, rim_in.y) < 0.5,
-			"rim bleed should stay wet"
-		);
-		// Far past apron fade should stay dry.
+		assert!(softmask_at(fill, lake.center.x, lake.center.y) < 0.25);
 		let outside = lake.center
-			+ Vec2::new(max_fill + params.shore_fade + lake.apron_width * 0.5, 0.0);
+			+ Vec2::new(
+				lake.plateau_radius + lake.apron_width + params.shore_fade + 5.0,
+				0.0,
+			);
 		assert!(softmask_at(fill, outside.x, outside.y) >= 0.999);
 		Ok(())
 	}
