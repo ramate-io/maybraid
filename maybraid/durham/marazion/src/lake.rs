@@ -11,7 +11,7 @@ use crate::fill::WaterFill;
 use crate::noise::{n01_at, n11_at};
 use bevy_math::Vec2;
 use jersey_terrain_stamps::{
-	CircleRegion, JerseyModulation, RegionAffineModulation, Region2D, RegionNoise,
+	CircleRegion, JerseyModulation, Region2D, RegionAffineModulation, RegionNoise,
 };
 use procedural_common::Bounds2;
 
@@ -48,14 +48,20 @@ pub struct LakeParams {
 	pub rim_bleed_frac: f32,
 	/// SDF-relative fade past the fill disc edge.
 	pub shore_fade: f32,
+	/// Outward-only noise on the **rim outer** (plateau disc) as a fraction of rim width.
+	pub rim_noise_frac: f32,
+	/// Outward-only noise on the **apron** fade as a fraction of apron width.
+	pub apron_noise_frac: f32,
+	/// Frequency for rim/apron expand-only boundary noise.
+	pub bank_noise_freq: f32,
 }
 
 impl Default for LakeParams {
 	fn default() -> Self {
 		Self {
 			// Authoring — start here:
-			rim_frac: 0.28,
-			apron_frac: 0.30,
+			rim_frac: 0.22,
+			apron_frac: 1.30,
 			water_sink: 0.9,
 			terrain_undercut: 2.5,
 
@@ -67,6 +73,9 @@ impl Default for LakeParams {
 			// Modest horizontal pad; vertical undercut does the real bleed.
 			rim_bleed_frac: 0.35,
 			shore_fade: 2.0,
+			rim_noise_frac: 0.22,
+			apron_noise_frac: 0.28,
+			bank_noise_freq: 0.018,
 		}
 	}
 }
@@ -101,9 +110,10 @@ impl LakeBandBudget {
 		let rim = (available * params.rim_frac.clamp(0.05, 0.45))
 			.max(available * 0.12)
 			.min(available * 0.42);
-		let apron = (available * params.apron_frac.clamp(0.05, 0.5))
+		// Allow large authored aprons (e.g. apron_frac > 1); still leave room for water+rim.
+		let apron = (available * params.apron_frac.max(0.05))
 			.max(available * 0.14)
-			.min(available * 0.45);
+			.min(available * 0.72);
 		let water = (available - rim - apron).min(max_water);
 		if water < MIN_WATER_RADIUS {
 			return None;
@@ -193,11 +203,8 @@ impl Lake {
 
 		let center = Self::planned_center(bounds, seed, params);
 		let anchor = min;
-		let base_h = height_at
-			.map(|f| f(center.x, center.y))
-			.unwrap_or(0.0);
-		let shelf_anchor =
-			base_h + n11_at(seed, 0x1A7E_50F1, anchor) * params.surface_noise_amp;
+		let base_h = height_at.map(|f| f(center.x, center.y)).unwrap_or(0.0);
+		let shelf_anchor = base_h + n11_at(seed, 0x1A7E_50F1, anchor) * params.surface_noise_amp;
 		let water_level = shelf_anchor - params.water_sink.max(0.0);
 		let rim_level = shelf_anchor + params.rim_lift.max(0.0);
 		let depth = params.depth * (0.65 + 0.7 * n01_at(seed, 0x1A7E_DE07, anchor));
@@ -214,36 +221,41 @@ impl Lake {
 		let fill_r = (water_r + rim_bleed).min(max_fill).max(water_r);
 		let fill_fade = params.shore_fade.max(1.0);
 
-		let plateau_region = Region2D::Circle(CircleRegion {
-			center,
-			radius: plateau_r,
-		});
-		let water_region = Region2D::Circle(CircleRegion {
-			center,
-			radius: water_r,
-		});
-		let fill_region = Region2D::Circle(CircleRegion {
-			center,
-			radius: fill_r,
-		});
-		let noise = RegionNoise::from_seed(seed.wrapping_add(3), 0.016, water_r * 0.05);
+		let plateau_region = Region2D::Circle(CircleRegion { center, radius: plateau_r });
+		let water_region = Region2D::Circle(CircleRegion { center, radius: water_r });
+		let fill_region = Region2D::Circle(CircleRegion { center, radius: fill_r });
+
+		// Separate expand-only noises so rim/apron wobble without shrinking the
+		// geometric bands, and without coupling to the fill softmask.
+		let rim_noise_amp = (rim_w * params.rim_noise_frac.max(0.0)).max(0.0);
+		let apron_noise_amp = (apron_w * params.apron_noise_frac.max(0.0)).max(0.0);
+		let bank_amp = rim_noise_amp.max(apron_noise_amp);
+		let bank_noise = RegionNoise::from_seed_expand_only(
+			seed.wrapping_add(5),
+			params.bank_noise_freq.max(1.0e-4),
+			bank_amp.max(0.01),
+		);
+		// Softmask outer must cover base apron + max outward bulge.
+		let apron_outer = apron_w + bank_amp;
+
+		let fill_noise = RegionNoise::from_seed(seed.wrapping_add(3), 0.016, water_r * 0.05);
 
 		let plateau = JerseyModulation::Affine(
-			RegionAffineModulation::new(plateau_region, 0.0, rim_level, 0.0, apron_w)
-				.with_noise(noise.clone()),
+			RegionAffineModulation::new(plateau_region, 0.0, rim_level, 0.0, apron_outer)
+				.with_noise(bank_noise),
 		);
-		// Bowl from raised shelf down past W.
+		// Bowl from raised shelf down past W (no bank expand noise — keeps min rim).
 		let bowl_depth = depth + (rim_level - water_level).max(0.0);
 		let bowl = JerseyModulation::Affine(
 			RegionAffineModulation::new(water_region, 1.0, -bowl_depth, 0.0, bowl_fade)
-				.with_noise(noise.clone()),
+				.with_noise(fill_noise.clone()),
 		);
 
 		let fill = WaterFill {
 			region: fill_region,
 			inner_radius: 0.0,
 			outer_radius: fill_fade,
-			noise: Some(noise),
+			noise: Some(fill_noise),
 			water_level,
 			terrain_undercut: params.terrain_undercut.max(0.0),
 		};
@@ -305,8 +317,8 @@ mod tests {
 	#[test]
 	fn budget_enforces_two_x_body() -> anyhow::Result<()> {
 		let short_half = 160.0;
-		let budget = LakeBandBudget::try_from_short_half(short_half, LakeParams::default())
-			.expect("budget");
+		let budget =
+			LakeBandBudget::try_from_short_half(short_half, LakeParams::default()).expect("budget");
 		let leaf_short = 2.0 * short_half;
 		let body_diameter = 2.0 * budget.water_radius;
 		assert!(
@@ -343,15 +355,8 @@ mod tests {
 		let p = lake.center + Vec2::new(mid_r, 0.0);
 		let h = apply_mods(&lake.modulations, base, p.x, p.y);
 		let rim_level = lake.water_level + params.rim_lift + params.water_sink;
-		assert!(
-			(h - rim_level).abs() < 1.5,
-			"rim {h} should stay near rim shelf {rim_level}"
-		);
-		assert!(
-			h > lake.water_level + 0.25,
-			"rim {h} should sit above water {}",
-			lake.water_level
-		);
+		assert!((h - rim_level).abs() < 1.5, "rim {h} should stay near rim shelf {rim_level}");
+		assert!(h > lake.water_level + 0.25, "rim {h} should sit above water {}", lake.water_level);
 		Ok(())
 	}
 
@@ -381,8 +386,7 @@ mod tests {
 		let fill = lake.fills.first().expect("fill");
 		let mid = lake.center;
 		assert!(softmask_at(fill, mid.x, mid.y) < 0.25);
-		let outside = lake.center
-			+ Vec2::new(lake.plateau_radius + lake.apron_width + 20.0, 0.0);
+		let outside = lake.center + Vec2::new(lake.plateau_radius + lake.apron_width + 20.0, 0.0);
 		assert!(softmask_at(fill, outside.x, outside.y) >= 0.999);
 		Ok(())
 	}
@@ -400,10 +404,7 @@ mod tests {
 		let fill = lake.fills.first().expect("fill");
 		assert!(softmask_at(fill, lake.center.x, lake.center.y) < 0.25);
 		let outside = lake.center
-			+ Vec2::new(
-				lake.plateau_radius + lake.apron_width + params.shore_fade + 5.0,
-				0.0,
-			);
+			+ Vec2::new(lake.plateau_radius + lake.apron_width + params.shore_fade + 5.0, 0.0);
 		assert!(softmask_at(fill, outside.x, outside.y) >= 0.999);
 		Ok(())
 	}
