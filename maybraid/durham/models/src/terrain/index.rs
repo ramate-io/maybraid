@@ -1,7 +1,7 @@
 //! System-local multi-type spatial index for Durham terrain generation.
 
 use crate::terrain::base_noise::BaseTerrainNoise;
-use crate::terrain::cell::{BootstrapTerrainCellLayout, TerrainCellLayout};
+use crate::terrain::cell::{cell_bounds, BootstrapTerrainCellLayout, TerrainCellLayout};
 use crate::terrain::jersey::{
 	BootstrapCanyonHighPassControllerLayout, BootstrapCanyonLowPassControllerLayout,
 	BootstrapJerseyStampConfigs, BootstrapMassifHighPassControllerLayout,
@@ -129,6 +129,18 @@ impl TerrainEntryStore {
 
 	pub fn base_noise(&self) -> Option<&BaseTerrainNoise> {
 		self.base_noise.get(&Id::Universal).map(|e| &e.value)
+	}
+
+	/// Composed terrain height (jersey + Marazion) at `(x, z)`, if that cell is stored.
+	pub fn composed_height_at(&self, layout: &TerrainCellLayout, x: f32, z: f32) -> Option<f32> {
+		let size = layout.cell_size.max(1e-3);
+		let ix = (x / size).floor() as i32;
+		let iz = (z / size).floor() as i32;
+		let cell = cell_bounds(ix, iz, size, layout.vertical_half_extent);
+		let id = Id::from_cell(cell);
+		self.terrain
+			.get(&id)
+			.map(|e| e.value.sdf.terrain.height_at_with_all_modulations(x, z))
 	}
 }
 
@@ -309,6 +321,11 @@ impl<'w, 's> AvianTerrainIndex<'w, 's> {
 
 	pub fn base_noise(&self) -> Option<&BaseTerrainNoise> {
 		self.store.base_noise()
+	}
+
+	/// Composed terrain height at `(x, z)` when the cell is in the store.
+	pub fn composed_height_at(&self, x: f32, z: f32) -> Option<f32> {
+		self.store.composed_height_at(&self.layout, x, z)
 	}
 }
 
