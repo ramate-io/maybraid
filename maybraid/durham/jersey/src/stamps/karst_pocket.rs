@@ -5,7 +5,7 @@
 use crate::config::{JitteredCenter};
 use crate::modulation::{JerseyModulation, RegionAffineModulation};
 use crate::region::{CircleRegion, Region2D, RegionNoise};
-use crate::stamp::{StampSemantics, StampSet};
+use crate::stamp::{scale_additive, StampSemantics, StampSet, StampStrength};
 use bevy_math::Vec2;
 use procedural_common::{Bounds2, SeededHash};
 
@@ -33,6 +33,13 @@ impl Default for KarstPocketParams {
 	}
 }
 
+impl StampStrength for KarstPocketParams {
+	fn with_strength(mut self, strength: f32) -> Self {
+		self.depth = scale_additive(self.depth, strength);
+		self
+	}
+}
+
 #[derive(Debug, Clone)]
 pub struct KarstPocket {
 	pub bounds: Bounds2,
@@ -57,7 +64,7 @@ impl KarstPocket {
 		let dip = RegionAffineModulation::new(
 			region,
 			0.35 + 0.2 * hash.unit(2),
-			-params.depth * crate::stamp::relief_scale(bounds),
+			-params.depth,
 			radius * 0.25,
 			radius * 0.9,
 		)

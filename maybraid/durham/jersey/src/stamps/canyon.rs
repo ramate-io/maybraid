@@ -4,7 +4,7 @@ use crate::config::{
 	DownhillPair, FractalAnchors, HysteresisSpine, MidpointGrading, SoftmaskAlongSpine,
 };
 use crate::region::RegionNoise;
-use crate::stamp::{relief_scale, StampSemantics, StampSet};
+use crate::stamp::{scale_additive, StampSemantics, StampSet, StampStrength};
 use bevy_math::Vec2;
 use procedural_common::Bounds2;
 
@@ -20,7 +20,7 @@ pub enum CanyonVariant {
 pub struct CanyonParams {
 	pub variant: CanyonVariant,
 	pub width_frac: f32,
-	/// Incision depth at [`crate::RELIEF_REFERENCE_SHORT`]; scales with leaf short edge.
+	/// Incision depth (world units); modulated by [`StampStrength`].
 	pub depth: f32,
 	pub confinement: f32,
 }
@@ -33,6 +33,13 @@ impl Default for CanyonParams {
 			depth: 28.0,
 			confinement: 0.8,
 		}
+	}
+}
+
+impl StampStrength for CanyonParams {
+	fn with_strength(mut self, strength: f32) -> Self {
+		self.depth = scale_additive(self.depth, strength);
+		self
 	}
 }
 
@@ -53,7 +60,7 @@ impl Canyon {
 		height_at: Option<&dyn Fn(f32, f32) -> f32>,
 	) -> Self {
 		let short = bounds.extent().min_element().max(1.0);
-		let depth = params.depth * relief_scale(bounds);
+		let depth = params.depth;
 		let (start, end) = FractalAnchors::default().sample(bounds, seed, 300);
 		let path = HysteresisSpine::default().build(bounds, seed.wrapping_add(31), start, end);
 		let a = *path.first().unwrap_or(&start);

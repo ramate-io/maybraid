@@ -8,7 +8,7 @@ use crate::config::{
 };
 use crate::modulation::{JerseyModulation, RegionAffineModulation};
 use crate::region::{CircleRegion, Region2D, RegionNoise};
-use crate::stamp::{relief_scale, StampSemantics, StampSet};
+use crate::stamp::{scale_additive, StampSemantics, StampSet, StampStrength};
 use bevy_math::Vec2;
 use procedural_common::Bounds2;
 
@@ -23,10 +23,10 @@ pub enum PocketTermination {
 pub struct PocketWaterParams {
 	pub termination: PocketTermination,
 	pub pond_frac: f32,
-	/// Pond depth at [`crate::RELIEF_REFERENCE_SHORT`]; scales with leaf short edge.
+	/// Pond depth (world units); modulated by [`StampStrength`].
 	pub pond_depth: f32,
 	pub run_width_frac: f32,
-	/// Run incision depth at reference short edge; scales with leaf short edge.
+	/// Run incision depth; modulated by [`StampStrength`].
 	pub run_depth: f32,
 }
 
@@ -39,6 +39,14 @@ impl Default for PocketWaterParams {
 			run_width_frac: 0.09,
 			run_depth: 6.0,
 		}
+	}
+}
+
+impl StampStrength for PocketWaterParams {
+	fn with_strength(mut self, strength: f32) -> Self {
+		self.pond_depth = scale_additive(self.pond_depth, strength);
+		self.run_depth = scale_additive(self.run_depth, strength);
+		self
 	}
 }
 
@@ -61,9 +69,8 @@ impl PocketWater {
 		height_at: Option<&dyn Fn(f32, f32) -> f32>,
 	) -> Self {
 		let short = bounds.extent().min_element().max(1.0);
-		let scale = relief_scale(bounds);
-		let pond_depth = params.pond_depth * scale;
-		let run_depth = params.run_depth * scale;
+		let pond_depth = params.pond_depth;
+		let run_depth = params.run_depth;
 		let drainage_id = seed.wrapping_mul(0x9E37_79B9);
 		let pond_center = JitteredCenter::default().sample(bounds, seed, 500);
 		let pond_r = short * params.pond_frac.clamp(0.1, 0.35);

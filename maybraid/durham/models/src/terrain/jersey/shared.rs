@@ -129,6 +129,19 @@ pub fn occupancy_seed(base_seed: u32, family_cut_seed: u32, family_salt: u32) ->
 		.wrapping_add(0x0CC_5E1D)
 }
 
+/// Sample stamp strength in `[min, max]` from a leaf-stable seed mix.
+pub fn sample_strength(seed: u32, min: f32, max: f32) -> f32 {
+	let lo = min.min(max);
+	let hi = min.max(max);
+	if (hi - lo).abs() < 1e-6 {
+		return lo.max(0.0);
+	}
+	let mut n = seed.wrapping_mul(0x9E37_79B9) ^ seed.wrapping_add(0x51A3_E1B5);
+	n = n.wrapping_mul(0x85EB_CA6B) ^ (n >> 13);
+	let u = (n >> 8) as f32 / ((u32::MAX >> 8) as f32);
+	(lo + (hi - lo) * u).max(0.0)
+}
+
 fn root_bounds2(cell: Aabb3d) -> Bounds2 {
 	Bounds2::from_vec2(
 		Vec2::new(cell.min.x, cell.min.z),

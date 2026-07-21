@@ -22,6 +22,7 @@ use debug_bounds::{
 	draw_chunk_boundary_boxes, setup_cell_location_hud, update_cell_location_hud,
 	PlaygroundDebugOverlay,
 };
+use bevy::math::{IVec2, UVec2};
 use durham_terrain_models::{
 	AvianTerrainIndex, BaseTerrainNoise, ComposedTerrain, DurhamTerrainModelsPlugin, Terrain,
 	TerrainCellLayout, TerrainConfig, TerrainEntryStore, TerrainPresentationAssets,
@@ -35,9 +36,23 @@ use player::{respawn_player_on_layout, Player, PlayerPlugin};
 use render_item::mesh::handle::EnforceCachingPlugin;
 use std::f32::consts::PI;
 
+/// Grid radius for the playground request region (`[-r, r]` → `2r + 1` cells).
+///
+/// About 2× the durham default naturescapes radius (12), so the visible patch
+/// is roughly doubled in each horizontal extent.
+const PLAYGROUND_GRID_RADIUS_XZ: i32 = 24;
+
 /// Base noise used for camera / player height before (and alongside) generation.
 #[derive(Resource)]
 pub struct WorldBaseTerrain(pub BaseTerrainNoise);
+
+fn playground_cell_layout() -> TerrainCellLayout {
+	let mut layout = TerrainCellLayout::default();
+	layout.origin = IVec2::new(-PLAYGROUND_GRID_RADIUS_XZ, -PLAYGROUND_GRID_RADIUS_XZ);
+	let n = (2 * PLAYGROUND_GRID_RADIUS_XZ + 1) as u32;
+	layout.extents = UVec2::new(n, n);
+	layout
+}
 
 #[derive(Resource)]
 struct TerrainPresentationDirty(bool);
@@ -67,6 +82,8 @@ impl Plugin for TerrainModelsPlaygroundPlugin {
 			.insert_resource(ClearColor(Color::hsla(201.0, 0.69, 0.62, 1.0)))
 			.insert_resource(config.clone())
 			.insert_resource(WorldBaseTerrain(base))
+			// After `DurhamTerrainModelsPlugin` so this replaces the default layout.
+			.insert_resource(playground_cell_layout())
 			.insert_resource(TerrainPresentationDirty(true))
 			.init_resource::<TerrainPresentPending>()
 			.init_resource::<PlaygroundDebugOverlay>()

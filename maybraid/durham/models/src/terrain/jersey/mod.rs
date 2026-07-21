@@ -2,13 +2,13 @@
 //!
 //! Each family owns independent **low-pass** (detail) and **high-pass**
 //! (regional) controller grids — different guillotine cell-size ranges,
-//! controller roots, origin offsets, cut seeds, likelihoods, and spatial
-//! correlation lengths. Leaf seams therefore do not coincide across families
-//! or bands.
+//! controller roots, origin offsets, cut seeds, likelihoods, spatial
+//! correlation lengths, and stamp **strength** ranges. Leaf seams therefore do
+//! not coincide across families or bands.
 //!
-//! Stamp vertical relief (`lift` / `depth` / …) scales with leaf short-edge via
-//! [`jersey_terrain_stamps::relief_scale`], so high-pass leaves get
-//! proportionally stronger highs/lows and more even spine grading.
+//! Horizontal footprint follows leaf/cell size (`*_frac`). Vertical amplitude
+//! is driven by per-leaf [`jersey_terrain_stamps::StampStrength`] sampled from
+//! each band's `strength: (min, max)`.
 //!
 //! Stack per band:
 //!
