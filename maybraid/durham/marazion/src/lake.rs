@@ -72,7 +72,7 @@ impl Default for LakeParams {
 		Self {
 			// Authoring — start here:
 			rim_frac: 0.1,
-			apron_frac: 1.30,
+			apron_frac: 0.6,
 			water_sink: 0.9,
 			terrain_undercut: 2.5,
 			// Wide undershoot so similar-sized leaves still read as different lakes.
@@ -116,7 +116,11 @@ impl LakeBandBudget {
 	/// [`Lake::from_bounds`]).
 	///
 	/// Returns `None` when the leaf cannot host a meaningful three-band lake.
-	pub fn try_from_short_half(short_half: f32, params: LakeParams, water_u01: f32) -> Option<Self> {
+	pub fn try_from_short_half(
+		short_half: f32,
+		params: LakeParams,
+		water_u01: f32,
+	) -> Option<Self> {
 		let s = short_half.max(0.0);
 		if s < MIN_WATER_RADIUS * 2.0 {
 			return None;
@@ -350,8 +354,8 @@ mod tests {
 	#[test]
 	fn budget_enforces_two_x_body() -> anyhow::Result<()> {
 		let short_half = 160.0;
-		let budget =
-			LakeBandBudget::try_from_short_half(short_half, LakeParams::default(), 1.0).expect("budget");
+		let budget = LakeBandBudget::try_from_short_half(short_half, LakeParams::default(), 1.0)
+			.expect("budget");
 		let leaf_short = 2.0 * short_half;
 		let body_diameter = 2.0 * budget.water_radius;
 		assert!(
@@ -367,12 +371,9 @@ mod tests {
 	fn water_size_undershoot_varies_radius() -> anyhow::Result<()> {
 		let short_half = 160.0;
 		let params = LakeParams::default();
-		let full =
-			LakeBandBudget::try_from_short_half(short_half, params, 1.0).expect("full");
-		let mid =
-			LakeBandBudget::try_from_short_half(short_half, params, 0.5).expect("mid");
-		let small =
-			LakeBandBudget::try_from_short_half(short_half, params, 0.0).expect("small");
+		let full = LakeBandBudget::try_from_short_half(short_half, params, 1.0).expect("full");
+		let mid = LakeBandBudget::try_from_short_half(short_half, params, 0.5).expect("mid");
+		let small = LakeBandBudget::try_from_short_half(short_half, params, 0.0).expect("small");
 		assert!(full.water_radius > mid.water_radius);
 		assert!(mid.water_radius > small.water_radius);
 		// Apron stays claimed; size variation is water-only.
