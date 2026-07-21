@@ -106,9 +106,10 @@ impl Default for LakeParams {
 			shore_fade: 2.0,
 			rim_noise_frac: 0.35,
 			apron_noise_frac: 0.28,
-			bank_noise_freq: 0.022,
+			// Low-frequency bank wobble so rim/apron read as broad lobes, not chatter.
+			bank_noise_freq: 0.008,
 			rim_vert_amp: 2.75,
-			rim_vert_freq: 0.045,
+			rim_vert_freq: 0.016,
 			rim_width_min: 0.5,
 			rim_width_freq: 0.1,
 			depth_center_frac: 0.55,
@@ -314,7 +315,7 @@ impl Lake {
 			params.rim_vert_freq.max(1.0e-4),
 			params.rim_vert_amp.max(0.0),
 		);
-		let depth_noise_freq = (0.55 / water_r.max(1.0)).clamp(0.012, 0.08);
+		let depth_noise_freq = (1.6 / water_r.max(1.0)).clamp(0.04, 0.18);
 		let depth_noise = RegionNoise::from_seed(
 			seed.wrapping_add(9),
 			depth_noise_freq,
