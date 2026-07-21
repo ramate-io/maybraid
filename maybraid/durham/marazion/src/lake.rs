@@ -62,6 +62,9 @@ pub struct LakeParams {
 	pub terrain_undercut: f32,
 	/// Per-leaf jitter on the shelf anchor height that sets `W` and rim base.
 	pub shelf_amp: f32,
+	/// How many pre-watershed heights to sample on a ring around the centroid
+	/// (at mid-rim radius) when setting the shelf anchor. `1` = centroid only.
+	pub shelf_sample_count: u8,
 
 	// ── Bowl depth ─────────────────────────────────────────────────────────
 	/// Bowl depth scale (world units).
@@ -113,6 +116,7 @@ impl Default for LakeParams {
 			rim_lift: 1.25,
 			terrain_undercut: 2.5,
 			shelf_amp: 2.0,
+			shelf_sample_count: 6,
 
 			depth: 14.0,
 			depth_center_frac: 0.55,
@@ -214,6 +218,49 @@ fn rim_width_u01(seed: u32, leaf_min: Vec2, params: LakeParams) -> f32 {
 	n01_freq(seed, RIM_WIDTH_SALT, leaf_min, params.rim_width_freq)
 }
 
+/// Mid-rim radius used when surveying surrounding terrain for the shelf anchor.
+fn shelf_survey_radius(budget: &LakeBandBudget) -> f32 {
+	(budget.water_radius + budget.rim_width * 0.5).max(1.0)
+}
+
+/// Median of `samples` (in-place select). Empty → `0.0`.
+fn median_f32(samples: &mut [f32]) -> f32 {
+	let n = samples.len();
+	if n == 0 {
+		return 0.0;
+	}
+	let mid = n / 2;
+	let (_, med, _) = samples.select_nth_unstable_by(mid, |a, b| a.total_cmp(b));
+	*med
+}
+
+/// Sample pre-watershed height around `center` to set the shelf / rim base.
+///
+/// With `count ≤ 1` (or no sampler), returns the centroid height. Otherwise
+/// takes the **median** of `count` evenly spaced samples on a ring at
+/// `sample_radius` so a single spike or dip at the center does not own `W`.
+pub fn shelf_base_height(
+	center: Vec2,
+	sample_radius: f32,
+	count: u8,
+	height_at: Option<&dyn Fn(f32, f32) -> f32>,
+) -> f32 {
+	let Some(f) = height_at else {
+		return 0.0;
+	};
+	let n = usize::from(count.max(1));
+	if n == 1 || sample_radius <= 1e-3 {
+		return f(center.x, center.y);
+	}
+	let mut hs = Vec::with_capacity(n);
+	for i in 0..n {
+		let ang = (i as f32) * std::f32::consts::TAU / (n as f32);
+		let p = center + Vec2::new(ang.cos(), ang.sin()) * sample_radius;
+		hs.push(f(p.x, p.y));
+	}
+	median_f32(&mut hs)
+}
+
 /// Lake stamp products for one pocket-water leaf.
 #[derive(Debug, Clone)]
 pub struct Lake {
@@ -232,7 +279,7 @@ pub struct Lake {
 }
 
 impl Lake {
-	/// Jittered lake centroid used by [`Self::from_bounds`] (for height prefetch).
+	/// Jittered lake centroid used by [`Self::from_bounds`] (for shelf survey).
 	pub fn planned_center(bounds: Bounds2, seed: u32, params: LakeParams) -> Vec2 {
 		let min = bounds.min;
 		let max = bounds.max;
@@ -290,16 +337,21 @@ impl Lake {
 
 		let center = Self::planned_center(bounds, seed, params);
 		let anchor = min;
-		let base_h = height_at.map(|f| f(center.x, center.y)).unwrap_or(0.0);
-		let shelf_anchor = base_h + n11_at(seed, 0x1A7E_50F1, anchor) * params.shelf_amp;
-		let water_level = shelf_anchor - params.water_sink.max(0.0);
-		let rim_level = shelf_anchor + params.rim_lift.max(0.0);
-		let depth = params.depth * (0.65 + 0.7 * n01_at(seed, 0x1A7E_DE07, anchor));
-
 		let water_r = budget.water_radius;
 		let plateau_r = budget.plateau_radius;
 		let rim_w = budget.rim_width;
 		let apron_w = budget.apron_width.max(1.0);
+
+		let base_h = shelf_base_height(
+			center,
+			shelf_survey_radius(&budget),
+			params.shelf_sample_count,
+			height_at,
+		);
+		let shelf_anchor = base_h + n11_at(seed, 0x1A7E_50F1, anchor) * params.shelf_amp;
+		let water_level = shelf_anchor - params.water_sink.max(0.0);
+		let rim_level = shelf_anchor + params.rim_lift.max(0.0);
+		let depth = params.depth * (0.65 + 0.7 * n01_at(seed, 0x1A7E_DE07, anchor));
 		let bowl_fade = (rim_w * 0.25).max(0.5).min(water_r * 0.2);
 
 		// Modest horizontal pad; terrain_undercut owns shoreline bleed.
@@ -427,6 +479,33 @@ mod tests {
 		let bounds = Bounds2::from_xz(0.0, 0.0, 20.0, 20.0);
 		let lake = Lake::from_bounds_default(bounds, 11);
 		assert!(lake.is_empty());
+		Ok(())
+	}
+
+	#[test]
+	fn shelf_anchor_uses_ring_median_not_centroid() -> anyhow::Result<()> {
+		let bounds = Bounds2::from_xz(0.0, 0.0, 320.0, 320.0);
+		let mut params = LakeParams::default();
+		params.shelf_amp = 0.0;
+		params.shelf_sample_count = 6;
+		let center = Lake::planned_center(bounds, 11, params);
+		// Flat ring at 40; deep spike only at the centroid.
+		let height = |x: f32, z: f32| {
+			let d = Vec2::new(x, z).distance(center);
+			if d < 2.0 {
+				0.0
+			} else {
+				40.0
+			}
+		};
+		let lake = Lake::from_bounds(bounds, 11, params, Some(&height));
+		assert!(!lake.is_empty());
+		let expected_w = 40.0 - params.water_sink;
+		assert!(
+			(lake.water_level - expected_w).abs() < 1e-3,
+			"water_level {} should follow ring median 40, not centroid 0 (got vs {expected_w})",
+			lake.water_level
+		);
 		Ok(())
 	}
 

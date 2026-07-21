@@ -380,16 +380,18 @@ macro_rules! define_marazion_band {
 				);
 				let lake_params = band.lake;
 
-				let lake_c =
-					marazion_watersheds::Lake::planned_center(bounds, seed, lake_params);
-				let pre_h = $crate::terrain::marazion::lake::pre_watershed_height_at(
-					spatial_index,
-					lake_c.x,
-					lake_c.y,
-					lod_ref,
-				)
-				.unwrap_or(0.0);
-				let height_fn = |_: f32, _: f32| pre_h;
+				// Live pre-watershed sampler: each shelf survey point may land in a
+				// different terrain origin cell (`get_one_or_generate` per query).
+				let spatial_index = std::cell::RefCell::new(spatial_index);
+				let height_fn = |x: f32, z: f32| {
+					$crate::terrain::marazion::lake::pre_watershed_height_at(
+						*spatial_index.borrow_mut(),
+						x,
+						z,
+						lod_ref,
+					)
+					.unwrap_or(0.0)
+				};
 				let height_at: Option<&dyn Fn(f32, f32) -> f32> = Some(&height_fn);
 
 				let lake = marazion_watersheds::Lake::from_bounds(

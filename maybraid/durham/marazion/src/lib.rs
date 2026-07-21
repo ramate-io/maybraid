@@ -13,7 +13,7 @@ pub mod pocket_cell;
 pub mod pre_pocket;
 
 pub use fill::WaterFill;
-pub use lake::{Lake, LakeBandBudget, LakeParams};
+pub use lake::{shelf_base_height, Lake, LakeBandBudget, LakeParams};
 pub use pocket_cell::{guillotine_partition, PocketGuillotineParams};
 pub use pre_pocket::{
 	PrePocket, PrePocketParams, DEFAULT_POCKET_PITCHES, DEFAULT_POCKET_PITCHES_HIGH,
