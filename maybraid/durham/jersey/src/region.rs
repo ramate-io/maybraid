@@ -92,6 +92,11 @@ impl RegionNoise {
 			raw
 		}
 	}
+
+	/// Raw height-domain sample (bipolar, amplitude from noise params).
+	pub fn sample_height(&self, p: Vec2) -> f32 {
+		self.noise.sample_2d(p)
+	}
 }
 
 impl Region2D {

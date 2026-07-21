@@ -20,6 +20,8 @@ const MIN_WATER_RADIUS: f32 = 8.0;
 
 /// Salt for per-leaf water-radius undershoot.
 const WATER_SIZE_SALT: u32 = 0x1A7E_512E;
+/// Salt for per-leaf rim-width undershoot.
+const RIM_WIDTH_SALT: u32 = 0x1A7E_71B7;
 
 #[derive(Debug, Clone, Copy)]
 pub struct LakeParams {
@@ -65,6 +67,18 @@ pub struct LakeParams {
 	pub apron_noise_frac: f32,
 	/// Frequency for rim/apron expand-only boundary noise.
 	pub bank_noise_freq: f32,
+	/// Extra rim elevation amplitude above [`Self::rim_lift`] (add-only height noise).
+	pub rim_vert_amp: f32,
+	/// Spatial frequency for rim elevation noise.
+	pub rim_vert_freq: f32,
+	/// Min rim width as a fraction of the claimed rim budget (per-leaf undershoot).
+	pub rim_width_min: f32,
+	/// Spatial frequency for the per-leaf rim-width draw.
+	pub rim_width_freq: f32,
+	/// Fraction of bowl depth reserved for a nested center cut (deeper toward center).
+	pub depth_center_frac: f32,
+	/// Extra bipolar depth noise amplitude (world units) on the bowl Affines.
+	pub depth_noise_amp: f32,
 }
 
 impl Default for LakeParams {
@@ -90,9 +104,15 @@ impl Default for LakeParams {
 			// Modest horizontal pad; vertical undercut does the real bleed.
 			rim_bleed_frac: 0.35,
 			shore_fade: 2.0,
-			rim_noise_frac: 0.22,
+			rim_noise_frac: 0.35,
 			apron_noise_frac: 0.28,
-			bank_noise_freq: 0.018,
+			bank_noise_freq: 0.022,
+			rim_vert_amp: 2.75,
+			rim_vert_freq: 0.045,
+			rim_width_min: 0.5,
+			rim_width_freq: 0.1,
+			depth_center_frac: 0.55,
+			depth_noise_amp: 2.5,
 		}
 	}
 }
@@ -111,8 +131,8 @@ impl LakeBandBudget {
 	/// Budget water / rim / apron so the leaf is ≥2× the body diameter.
 	///
 	/// Rim + apron claim first; water takes a noisy fraction of the leftover so
-	/// lakes vary in size without shrinking the apron. `water_u01` ∈ `[0, 1)`
-	/// should be stable per leaf (same draw in [`Lake::planned_center`] /
+	/// lakes vary in size without shrinking the apron. `water_u01` / `rim_u01`
+	/// ∈ `[0, 1)` should be stable per leaf (same draws in [`Lake::planned_center`] /
 	/// [`Lake::from_bounds`]).
 	///
 	/// Returns `None` when the leaf cannot host a meaningful three-band lake.
@@ -120,6 +140,7 @@ impl LakeBandBudget {
 		short_half: f32,
 		params: LakeParams,
 		water_u01: f32,
+		rim_u01: f32,
 	) -> Option<Self> {
 		let s = short_half.max(0.0);
 		if s < MIN_WATER_RADIUS * 2.0 {
@@ -133,14 +154,18 @@ impl LakeBandBudget {
 
 		// Enforce leaf_short ≥ 2 · body_diameter ⇒ R_water ≤ short/4 = S/2.
 		let max_water = (s * 0.5).min(available * 0.45);
-		let rim = (available * params.rim_frac.clamp(0.05, 0.45))
+		let rim_claim = (available * params.rim_frac.clamp(0.05, 0.45))
 			.max(available * 0.12)
 			.min(available * 0.42);
+		let rim_hi = 1.0;
+		let rim_lo = params.rim_width_min.clamp(0.2, rim_hi);
+		let rim = rim_claim * (rim_lo + (rim_hi - rim_lo) * rim_u01.clamp(0.0, 1.0));
 		// Allow large authored aprons (e.g. apron_frac > 1); still leave room for water+rim.
 		let apron = (available * params.apron_frac.max(0.05))
 			.max(available * 0.14)
 			.min(available * 0.72);
-		let leftover = (available - rim - apron).min(max_water);
+		// Leftover uses the *claimed* rim so water undershoot stays independent of rim draw.
+		let leftover = (available - rim_claim - apron).min(max_water);
 		let size_hi = params.water_size.clamp(0.05, 1.0);
 		let size_lo = params.water_size_min.clamp(0.05, size_hi);
 		let size_frac = size_lo + (size_hi - size_lo) * water_u01.clamp(0.0, 1.0);
@@ -166,6 +191,11 @@ impl LakeBandBudget {
 /// Per-leaf water-size unit sample (shared by centroid planning and stamp build).
 fn water_size_u01(seed: u32, leaf_min: Vec2, params: LakeParams) -> f32 {
 	n01_freq(seed, WATER_SIZE_SALT, leaf_min, params.water_size_freq)
+}
+
+/// Per-leaf rim-width unit sample (shared by centroid planning and stamp build).
+fn rim_width_u01(seed: u32, leaf_min: Vec2, params: LakeParams) -> f32 {
+	n01_freq(seed, RIM_WIDTH_SALT, leaf_min, params.rim_width_freq)
 }
 
 /// Lake stamp products for one pocket-water leaf.
@@ -194,7 +224,8 @@ impl Lake {
 		let half = Vec2::new((max.x - min.x) * 0.5, (max.y - min.y) * 0.5);
 		let short_half = half.x.min(half.y).max(1.0);
 		let u = water_size_u01(seed, min, params);
-		let Some(budget) = LakeBandBudget::try_from_short_half(short_half, params, u) else {
+		let rim_u = rim_width_u01(seed, min, params);
+		let Some(budget) = LakeBandBudget::try_from_short_half(short_half, params, u, rim_u) else {
 			return cell_c;
 		};
 		let outer = budget.plateau_radius + budget.apron_width;
@@ -234,7 +265,9 @@ impl Lake {
 		};
 
 		let u = water_size_u01(seed, min, params);
-		let Some(budget) = LakeBandBudget::try_from_short_half(short_half, params, u) else {
+		let rim_u = rim_width_u01(seed, min, params);
+		let Some(budget) = LakeBandBudget::try_from_short_half(short_half, params, u, rim_u)
+		else {
 			return empty(Vec2::new((min.x + max.x) * 0.5, (min.y + max.y) * 0.5));
 		};
 
@@ -276,16 +309,49 @@ impl Lake {
 		let apron_outer = apron_w + bank_amp;
 
 		let fill_noise = RegionNoise::from_seed(seed.wrapping_add(3), 0.016, water_r * 0.05);
+		let rim_vert = RegionNoise::from_seed(
+			seed.wrapping_add(7),
+			params.rim_vert_freq.max(1.0e-4),
+			params.rim_vert_amp.max(0.0),
+		);
+		let depth_noise_freq = (0.55 / water_r.max(1.0)).clamp(0.012, 0.08);
+		let depth_noise = RegionNoise::from_seed(
+			seed.wrapping_add(9),
+			depth_noise_freq,
+			params.depth_noise_amp.max(0.0),
+		);
 
 		let plateau = JerseyModulation::Affine(
 			RegionAffineModulation::new(plateau_region, 0.0, rim_level, 0.0, apron_outer)
-				.with_noise(bank_noise),
+				.with_noise(bank_noise)
+				.with_height_noise_add_only(rim_vert),
 		);
-		// Bowl from raised shelf down past W (no bank expand noise — keeps min rim).
-		let bowl_depth = depth + (rim_level - water_level).max(0.0);
-		let bowl = JerseyModulation::Affine(
-			RegionAffineModulation::new(water_region, 1.0, -bowl_depth, 0.0, bowl_fade)
-				.with_noise(fill_noise.clone()),
+
+		// Graded bowl: shallow full disc + deeper nested center (depth ↑ toward center).
+		let shelf_to_water = (rim_level - water_level).max(0.0);
+		let center_frac = params.depth_center_frac.clamp(0.15, 0.75);
+		let shallow_cut = depth * (1.0 - center_frac) + shelf_to_water;
+		let deep_cut = depth * center_frac;
+		let deep_r = (water_r * 0.42).max(MIN_WATER_RADIUS * 0.5).min(water_r * 0.65);
+		let deep_region = Region2D::Circle(CircleRegion {
+			center,
+			radius: deep_r,
+		});
+		let bowl_shallow = JerseyModulation::Affine(
+			RegionAffineModulation::new(water_region, 1.0, -shallow_cut, 0.0, bowl_fade)
+				.with_noise(fill_noise.clone())
+				.with_height_noise(depth_noise.clone()),
+		);
+		let bowl_deep = JerseyModulation::Affine(
+			RegionAffineModulation::new(
+				deep_region,
+				1.0,
+				-deep_cut,
+				deep_r * 0.2,
+				(deep_r * 0.55).max(bowl_fade),
+			)
+			.with_noise(fill_noise.clone())
+			.with_height_noise(depth_noise),
 		);
 
 		let fill = WaterFill {
@@ -307,7 +373,7 @@ impl Lake {
 			apron_width: budget.apron_width,
 			fill_radius: fill_r,
 			water_level,
-			modulations: vec![plateau, bowl],
+			modulations: vec![plateau, bowl_shallow, bowl_deep],
 			fills: vec![fill],
 		}
 	}
@@ -354,8 +420,9 @@ mod tests {
 	#[test]
 	fn budget_enforces_two_x_body() -> anyhow::Result<()> {
 		let short_half = 160.0;
-		let budget = LakeBandBudget::try_from_short_half(short_half, LakeParams::default(), 1.0)
-			.expect("budget");
+		let budget =
+			LakeBandBudget::try_from_short_half(short_half, LakeParams::default(), 1.0, 1.0)
+				.expect("budget");
 		let leaf_short = 2.0 * short_half;
 		let body_diameter = 2.0 * budget.water_radius;
 		assert!(
@@ -371,14 +438,30 @@ mod tests {
 	fn water_size_undershoot_varies_radius() -> anyhow::Result<()> {
 		let short_half = 160.0;
 		let params = LakeParams::default();
-		let full = LakeBandBudget::try_from_short_half(short_half, params, 1.0).expect("full");
-		let mid = LakeBandBudget::try_from_short_half(short_half, params, 0.5).expect("mid");
-		let small = LakeBandBudget::try_from_short_half(short_half, params, 0.0).expect("small");
+		let full =
+			LakeBandBudget::try_from_short_half(short_half, params, 1.0, 1.0).expect("full");
+		let mid =
+			LakeBandBudget::try_from_short_half(short_half, params, 0.5, 1.0).expect("mid");
+		let small =
+			LakeBandBudget::try_from_short_half(short_half, params, 0.0, 1.0).expect("small");
 		assert!(full.water_radius > mid.water_radius);
 		assert!(mid.water_radius > small.water_radius);
 		// Apron stays claimed; size variation is water-only.
 		assert!((full.apron_width - small.apron_width).abs() < 1e-4);
 		assert!(small.water_radius + 1e-3 >= MIN_WATER_RADIUS);
+		Ok(())
+	}
+
+	#[test]
+	fn rim_width_undershoot_varies_radius() -> anyhow::Result<()> {
+		let short_half = 160.0;
+		let params = LakeParams::default();
+		let wide =
+			LakeBandBudget::try_from_short_half(short_half, params, 1.0, 1.0).expect("wide");
+		let narrow =
+			LakeBandBudget::try_from_short_half(short_half, params, 1.0, 0.0).expect("narrow");
+		assert!(wide.rim_width > narrow.rim_width);
+		assert!((wide.water_radius - narrow.water_radius).abs() < 1e-4);
 		Ok(())
 	}
 
@@ -428,8 +511,15 @@ mod tests {
 		let mid_r = lake.water_radius + lake.rim_width * 0.5;
 		let p = lake.center + Vec2::new(mid_r, 0.0);
 		let h = apply_mods(&lake.modulations, base, p.x, p.y);
-		let rim_level = lake.water_level + params.rim_lift + params.water_sink;
-		assert!((h - rim_level).abs() < 1.5, "rim {h} should stay near rim shelf {rim_level}");
+		let rim_base = lake.water_level + params.rim_lift + params.water_sink;
+		assert!(
+			h + 0.25 >= rim_base,
+			"rim {h} should sit at/above base rim {rim_base}"
+		);
+		assert!(
+			h <= rim_base + params.rim_vert_amp + 0.75,
+			"rim {h} should stay within add-only amp of {rim_base}"
+		);
 		assert!(h > lake.water_level + 0.25, "rim {h} should sit above water {}", lake.water_level);
 		Ok(())
 	}
@@ -443,12 +533,29 @@ mod tests {
 		let apron_mid = lake.plateau_radius + lake.apron_width * 0.5;
 		let p = lake.center + Vec2::new(apron_mid, 0.0);
 		let h = apply_mods(&lake.modulations, base, p.x, p.y);
-		let rim_level = lake.water_level + params.rim_lift + params.water_sink;
-		let lo = base.min(rim_level);
-		let hi = base.max(rim_level);
+		let rim_base = lake.water_level + params.rim_lift + params.water_sink;
+		let rim_hi = rim_base + params.rim_vert_amp;
+		let lo = base.min(rim_base);
+		let hi = base.max(rim_hi);
 		assert!(
-			h >= lo - 0.5 && h <= hi + 0.5,
-			"apron {h} should sit between identity {base} and rim {rim_level}"
+			h >= lo - 0.75 && h <= hi + 0.75,
+			"apron {h} should sit between identity {base} and rim band [{rim_base}, {rim_hi}]"
+		);
+		Ok(())
+	}
+
+	#[test]
+	fn bowl_deeper_at_center() -> anyhow::Result<()> {
+		let bounds = Bounds2::from_xz(0.0, 0.0, 320.0, 320.0);
+		let base = 40.0;
+		let lake = Lake::from_bounds(bounds, 11, LakeParams::default(), Some(&|_, _| base));
+		assert!(!lake.is_empty());
+		let h_c = apply_mods(&lake.modulations, base, lake.center.x, lake.center.y);
+		let mid = lake.center + Vec2::new(lake.water_radius * 0.72, 0.0);
+		let h_m = apply_mods(&lake.modulations, base, mid.x, mid.y);
+		assert!(
+			h_c < h_m - 1.5,
+			"center {h_c} should sit deeper than mid-bowl {h_m}"
 		);
 		Ok(())
 	}
