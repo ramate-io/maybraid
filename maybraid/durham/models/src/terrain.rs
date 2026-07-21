@@ -7,6 +7,7 @@ pub mod config;
 pub mod index;
 pub mod jersey;
 pub mod jersey_modulation;
+pub mod marazion;
 pub mod plugin;
 pub mod presentation;
 pub mod render;
@@ -21,6 +22,7 @@ use crate::terrain::jersey::{
 	original_ids_for_rolling_high_pass_leaves, original_ids_for_rolling_low_pass_leaves,
 	original_ids_for_valley_high_pass_leaves, original_ids_for_valley_low_pass_leaves,
 };
+use crate::terrain::marazion::{original_ids_for_marazion_lake_leaves, MarazionLakeCell};
 use crate::terrain::render::cascade_chunk_for_cell;
 use avian3d::prelude::RigidBody;
 use bevy::ecs::template::template;
@@ -59,6 +61,10 @@ pub use jersey::{
 	PlateauLowPassStampCell as PlateauStampCell, PocketWaterLowPassStampCell as PocketWaterStampCell,
 	RollingLowPassStampCell as RollingStampCell, ValleyLowPassStampCell as ValleyStampCell,
 };
+pub use marazion::{
+	MarazionLakeCell as MarazionLakeStampCell, MarazionLakeLayout, MarazionWatershedConfigs,
+	DEFAULT_LAKE_LEAF_SIZE,
+};
 pub use plugin::{register_terrain_plugin, TerrainPlugin};
 pub use presentation::{
 	TerrainPresentationAssets, TerrainPresenterState, TerrainRegionPresenter, TerrainStoreView,
@@ -66,15 +72,40 @@ pub use presentation::{
 pub use render::TerrainRenderItem;
 pub use sdf::{ComposedTerrain, ElevationModulation, TerrainSdf};
 
-/// Top-level terrain cell model.
+/// Jersey-composed terrain **before** Marazion watershed stamps.
+#[derive(Debug, Clone, Component)]
+pub struct PreWatershedTerrain {
+	pub cell: Aabb3d,
+	pub base: BaseTerrainNoise,
+	pub modulations: Vec<JerseyModulation>,
+	pub jersey_leaves: Vec<Aabb3d>,
+	pub sdf: ComposedTerrain,
+}
+
+impl PreWatershedTerrain {
+	pub fn compose_sdf(
+		base: &BaseTerrainNoise,
+		modulations: &[JerseyModulation],
+	) -> ComposedTerrain {
+		let mut sdf = base.sdf.clone();
+		for modulation in modulations {
+			sdf.add_elevation_modulation(Box::new(modulation.clone()));
+		}
+		ComposedTerrain::from_terrain(sdf)
+	}
+}
+
+/// Final terrain cell: pre-watershed heightfield + Marazion lake stamps.
 #[derive(Debug, Clone, Component)]
 pub struct Terrain {
 	pub cell: Aabb3d,
 	pub base: BaseTerrainNoise,
-	/// Flattened jersey leaf modulations (deterministic family + leaf Id order).
+	/// Flattened jersey + marazion leaf modulations.
 	pub modulations: Vec<JerseyModulation>,
-	/// Leaf AABBs whose stamps contributed (debug / HUD), all families.
+	/// Leaf AABBs whose jersey stamps contributed (debug / HUD).
 	pub jersey_leaves: Vec<Aabb3d>,
+	/// Leaf AABBs whose Marazion lake stamps contributed.
+	pub marazion_leaves: Vec<Aabb3d>,
 	pub sdf: ComposedTerrain,
 	pub material: Handle<DurhamTerrainShader>,
 	pub res_2: u8,
@@ -133,8 +164,8 @@ macro_rules! pull_family_stamps {
 	}};
 }
 
-/// Terrain loads base noise and per-family jersey leaf stamps directly.
-impl<S> GenerationScheme<S> for Terrain
+/// Pre-watershed: base noise + jersey landform stamps (including pocket-water height).
+impl<S> GenerationScheme<S> for PreWatershedTerrain
 where
 	S: GeneratingSpatialIndex<BaseTerrainNoise>
 		+ GeneratingSpatialIndex<JerseyStampConfigs>
@@ -174,8 +205,7 @@ where
 		+ GeneratingSpatialIndex<ValleyLowPassStampCell>
 		+ GeneratingSpatialIndex<ValleyLowPassControllerCell>
 		+ GeneratingSpatialIndex<ValleyLowPassControllerLayout>
-		+ GeneratingSpatialIndex<TerrainCellLayout>
-		+ GeneratingSpatialIndex<TerrainPresentationAssets>,
+		+ GeneratingSpatialIndex<TerrainCellLayout>,
 {
 	fn original_ids_for(spatial_index: &mut S, region: Aabb3d) -> Vec<OriginalId> {
 		original_ids_for_origin_cells(spatial_index, region)
@@ -194,8 +224,6 @@ where
 		let mut modulations = Vec::new();
 		let mut jersey_leaves = Vec::new();
 
-		// High-pass (regional) first, then low-pass (detail). Fixed family order
-		// so neighboring Terrain cells compose identically.
 		pull_family_stamps!(
 			spatial_index,
 			lod_ref,
@@ -307,6 +335,60 @@ where
 		);
 
 		let sdf = Self::compose_sdf(&base, &modulations);
+		Some((
+			Self {
+				cell: bounds,
+				base,
+				modulations,
+				jersey_leaves,
+				sdf,
+			},
+			bounds,
+		))
+	}
+
+	fn descendants_with_lod(_id: Id, _spatial_index: &mut S, _lod_ref: &LodRef) {}
+}
+
+/// Final terrain: pre-watershed + Marazion lake leaf stamps.
+impl<S> GenerationScheme<S> for Terrain
+where
+	S: GeneratingSpatialIndex<PreWatershedTerrain>
+		+ GeneratingSpatialIndex<MarazionWatershedConfigs>
+		+ GeneratingSpatialIndex<MarazionLakeLayout>
+		+ GeneratingSpatialIndex<MarazionLakeCell>
+		+ GeneratingSpatialIndex<TerrainCellLayout>
+		+ GeneratingSpatialIndex<TerrainPresentationAssets>,
+{
+	fn original_ids_for(spatial_index: &mut S, region: Aabb3d) -> Vec<OriginalId> {
+		original_ids_for_origin_cells(spatial_index, region)
+	}
+
+	fn build_with_id(spatial_index: &mut S, id: Id, lod_ref: &LodRef) -> Option<(Self, Aabb3d)> {
+		let bounds = id.origin_cell_bounds()?;
+
+		let pre = GeneratingSpatialIndex::<PreWatershedTerrain>::get_one_or_generate(
+			spatial_index,
+			id,
+			lod_ref,
+		)?
+		.clone();
+
+		let mut modulations = pre.modulations.clone();
+		let jersey_leaves = pre.jersey_leaves.clone();
+		let mut marazion_leaves = Vec::new();
+
+		pull_family_stamps!(
+			spatial_index,
+			lod_ref,
+			bounds,
+			original_ids_for_marazion_lake_leaves,
+			MarazionLakeCell,
+			modulations,
+			marazion_leaves
+		);
+
+		let sdf = Self::compose_sdf(&pre.base, &modulations);
 		let assets = GeneratingSpatialIndex::<TerrainPresentationAssets>::get_one_or_generate(
 			spatial_index,
 			Id::Universal,
@@ -318,9 +400,10 @@ where
 		Some((
 			Self {
 				cell: bounds,
-				base,
+				base: pre.base,
 				modulations,
 				jersey_leaves,
+				marazion_leaves,
 				sdf,
 				material,
 				res_2,

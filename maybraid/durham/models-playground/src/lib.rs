@@ -24,13 +24,14 @@ use debug_bounds::{
 };
 use bevy::math::{IVec2, UVec2};
 use durham_terrain_models::{
-	AvianTerrainIndex, BaseTerrainNoise, ComposedTerrain, DurhamTerrainModelsPlugin, Terrain,
-	TerrainCellLayout, TerrainConfig, TerrainEntryStore, TerrainPresentationAssets,
-	TerrainRegionPresenter, TerrainStoreView,
+	AvianTerrainIndex, BaseTerrainNoise, ComposedTerrain, ComposedWater, DurhamTerrainModelsPlugin,
+	Terrain, TerrainCellLayout, TerrainConfig, TerrainEntryStore, TerrainPresentationAssets,
+	TerrainRegionPresenter, TerrainStoreView, Water, WaterPresentationAssets, WaterRegionPresenter,
+	WaterStoreView,
 };
 use game_commands::command::{capture_command_line_input, GameCommandPlugin};
 use game_commands::ui::{GameCommandDrawerConfig, GameCommandStatusText};
-use lod::gen::{GeneratingSpatialIndex, RegionPresenter};
+use lod::gen::{GeneratingSpatialIndex, RegionPresenter, SpatialIndex};
 use lod::lod_ref::LodRef;
 use player::{respawn_player_on_layout, Player, PlayerPlugin};
 use render_item::mesh::handle::EnforceCachingPlugin;
@@ -70,6 +71,7 @@ impl Plugin for TerrainModelsPlaygroundPlugin {
 		app.add_plugins(DurhamTerrainModelsPlugin)
 			.add_plugins(DurhamTerrainShaderPlugin)
 			.add_plugins(EnforceCachingPlugin::<ComposedTerrain, DurhamTerrainShader>::default())
+			.add_plugins(EnforceCachingPlugin::<ComposedWater, StandardMaterial>::default())
 			.add_plugins(
 				GameCommandPlugin::<PlaygroundCommand>::with_config(ui::ui_config())
 					.with_drawer_config(GameCommandDrawerConfig {
@@ -133,13 +135,25 @@ fn setup_lighting(mut commands: Commands) {
 
 pub(crate) fn setup_presentation_assets(
 	mut commands: Commands,
-	mut materials: ResMut<Assets<DurhamTerrainShader>>,
+	mut terrain_materials: ResMut<Assets<DurhamTerrainShader>>,
+	mut standard_materials: ResMut<Assets<StandardMaterial>>,
 	config: Res<TerrainConfig>,
 ) {
-	let material = materials.add(DurhamTerrainShader::default());
+	let material = terrain_materials.add(DurhamTerrainShader::default());
 	commands.insert_resource(TerrainPresentationAssets {
 		config: config.clone(),
 		material,
+		res_2: 5,
+	});
+	let water_material = standard_materials.add(StandardMaterial {
+		base_color: Color::srgba(0.15, 0.45, 0.75, 0.72),
+		alpha_mode: AlphaMode::Blend,
+		perceptual_roughness: 0.08,
+		reflectance: 0.6,
+		..default()
+	});
+	commands.insert_resource(WaterPresentationAssets {
+		material: water_material,
 		res_2: 5,
 	});
 }
@@ -242,8 +256,27 @@ fn generate_cells(
 		bounds: &region,
 	};
 
-	let _ =
+	let terrains =
 		GeneratingSpatialIndex::<Terrain>::get_or_generate_region(&mut index, region, &lod_ref);
+	let waters =
+		GeneratingSpatialIndex::<Water>::get_or_generate_region(&mut index, region, &lod_ref);
+	let water_fills: usize = waters
+		.iter()
+		.filter_map(|(id, _)| SpatialIndex::<Water>::get(&index, *id).map(|w| w.fills.len()))
+		.sum();
+	let marazion_leaves: usize = terrains
+		.iter()
+		.filter_map(|(id, _)| {
+			SpatialIndex::<Terrain>::get(&index, *id).map(|t| t.marazion_leaves.len())
+		})
+		.sum();
+	info!(
+		"generated terrain_cells={} marazion_leaves={} water_cells={} water_fills={}",
+		terrains.len(),
+		marazion_leaves,
+		waters.len(),
+		water_fills
+	);
 
 	if let Some(base) = index.base_noise() {
 		world_base.0 = base.clone();
@@ -264,7 +297,8 @@ fn generate_cells(
 }
 
 fn present_cells(
-	mut presenter: TerrainRegionPresenter,
+	mut terrain_presenter: TerrainRegionPresenter,
+	mut water_presenter: WaterRegionPresenter,
 	store: Res<TerrainEntryStore>,
 	layout: Res<TerrainCellLayout>,
 	mut pending: ResMut<TerrainPresentPending>,
@@ -281,8 +315,10 @@ fn present_cells(
 		current_transform: &identity,
 		bounds: &region,
 	};
-	let view = TerrainStoreView::new(&store, &layout);
-	RegionPresenter::<Terrain, _>::present(&mut presenter, &view, region, &lod_ref);
+	let terrain_view = TerrainStoreView::new(&store, &layout);
+	RegionPresenter::<Terrain, _>::present(&mut terrain_presenter, &terrain_view, region, &lod_ref);
+	let water_view = WaterStoreView::new(&store, &layout);
+	RegionPresenter::<Water, _>::present(&mut water_presenter, &water_view, region, &lod_ref);
 
 	pending.0 = false;
 }

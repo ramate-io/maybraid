@@ -92,6 +92,7 @@ pub fn draw_chunk_boundary_boxes(
 
 	let terrain_color = Color::srgb(1.0, 0.2, 0.25);
 	let leaf_color = Color::srgb(0.25, 0.9, 0.35);
+	let marazion_color = Color::srgb(0.2, 0.55, 1.0);
 	for terrain in &terrains {
 		let chunk = cascade_chunk_for_cell(terrain.cell, terrain.res_2);
 		let extent = chunk.extent_vec();
@@ -100,6 +101,10 @@ pub fn draw_chunk_boundary_boxes(
 		for leaf in &terrain.jersey_leaves {
 			let aabb = surface_footprint_box(leaf, &base.0);
 			gizmos.aabb_3d(aabb, Transform::IDENTITY, leaf_color);
+		}
+		for leaf in &terrain.marazion_leaves {
+			let aabb = surface_footprint_box(leaf, &base.0);
+			gizmos.aabb_3d(aabb, Transform::IDENTITY, marazion_color);
 		}
 	}
 
@@ -230,6 +235,7 @@ struct TerrainReport {
 	res_2: u8,
 	ops: usize,
 	jersey_leaves: usize,
+	marazion_leaves: usize,
 }
 
 impl TerrainReport {
@@ -242,6 +248,7 @@ impl TerrainReport {
 			res_2: t.res_2,
 			ops: t.modulations.len(),
 			jersey_leaves: t.jersey_leaves.len(),
+			marazion_leaves: t.marazion_leaves.len(),
 		}
 	}
 }
@@ -268,8 +275,8 @@ impl Display for CellLocationReport {
 				writeln!(f, "  chunk AABB {}", fmt_aabb(&t.chunk))?;
 				writeln!(
 					f,
-					"  modulations n={}  jersey_leaves n={}",
-					t.ops, t.jersey_leaves
+					"  modulations n={}  jersey_leaves n={}  marazion_leaves n={}",
+					t.ops, t.jersey_leaves, t.marazion_leaves
 				)?;
 			}
 			None => writeln!(f, "  status     NOT GENERATED")?,

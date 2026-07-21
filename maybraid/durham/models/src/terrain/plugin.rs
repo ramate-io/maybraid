@@ -4,6 +4,9 @@ use crate::terrain::cell::TerrainCellLayout;
 use crate::terrain::collider::queue_terrain_trimesh_colliders;
 use crate::terrain::index::TerrainEntryStore;
 use crate::terrain::jersey::{JerseyControllerLayouts, JerseyStampConfigs};
+use crate::terrain::marazion::{
+	lake_layout_from_configs, MarazionWatershedConfigs,
+};
 use crate::terrain::presentation::TerrainPresenterState;
 use avian3d::prelude::PhysicsPlugins;
 use avian3d::schedule::PhysicsSchedulePlugin;
@@ -31,10 +34,14 @@ impl Plugin for TerrainPlugin {
 		if !app.is_plugin_added::<PhysicsSchedulePlugin>() {
 			app.add_plugins(PhysicsPlugins::default());
 		}
+		let marazion = MarazionWatershedConfigs::default();
+		let lake_layout = lake_layout_from_configs(&marazion);
 		app.init_resource::<TerrainEntryStore>()
 			.init_resource::<TerrainCellLayout>()
 			.init_resource::<JerseyStampConfigs>()
 			.init_resource::<JerseyControllerLayouts>()
+			.insert_resource(marazion)
+			.insert_resource(lake_layout)
 			.init_resource::<TerrainPresenterState>()
 			.add_systems(Update, queue_terrain_trimesh_colliders);
 	}
