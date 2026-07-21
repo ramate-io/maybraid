@@ -3,10 +3,18 @@
 //! Pure stamp / layout construction — no LOD `GenerationScheme` wiring.
 //! Durham models consume [`jersey_terrain_stamps::JerseyModulation`] and
 //! [`WaterFill`] outputs after pre-watershed terrain is composed.
+//!
+//! Pocket hierarchy: [`pre_pocket`] → [`pocket_cell`] guillotine → [`lake`] leaves.
 
 pub mod fill;
 pub mod lake;
 pub mod noise;
+pub mod pocket_cell;
+pub mod pre_pocket;
 
 pub use fill::WaterFill;
 pub use lake::{Lake, LakeBandBudget, LakeParams};
+pub use pocket_cell::{guillotine_partition, PocketGuillotineParams};
+pub use pre_pocket::{
+	PrePocket, PrePocketParams, DEFAULT_POCKET_PITCHES, DEFAULT_PRE_POCKET_PITCH,
+};

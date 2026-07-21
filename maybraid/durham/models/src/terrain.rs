@@ -62,8 +62,8 @@ pub use jersey::{
 	RollingLowPassStampCell as RollingStampCell, ValleyLowPassStampCell as ValleyStampCell,
 };
 pub use marazion::{
-	MarazionLakeCell as MarazionLakeStampCell, MarazionLakeLayout, MarazionWatershedConfigs,
-	DEFAULT_LAKE_LEAF_SIZE,
+	MarazionLakeCell as MarazionLakeStampCell, MarazionWatershedConfigs, PocketCell,
+	PrePocketCell, PrePocketLayout,
 };
 pub use plugin::{register_terrain_plugin, TerrainPlugin};
 pub use presentation::{
@@ -355,7 +355,9 @@ impl<S> GenerationScheme<S> for Terrain
 where
 	S: GeneratingSpatialIndex<PreWatershedTerrain>
 		+ GeneratingSpatialIndex<MarazionWatershedConfigs>
-		+ GeneratingSpatialIndex<MarazionLakeLayout>
+		+ GeneratingSpatialIndex<PrePocketLayout>
+		+ GeneratingSpatialIndex<PrePocketCell>
+		+ GeneratingSpatialIndex<PocketCell>
 		+ GeneratingSpatialIndex<MarazionLakeCell>
 		+ GeneratingSpatialIndex<TerrainCellLayout>
 		+ GeneratingSpatialIndex<TerrainPresentationAssets>,

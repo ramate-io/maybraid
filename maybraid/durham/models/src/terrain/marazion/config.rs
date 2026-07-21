@@ -1,40 +1,47 @@
-//! Authoring knobs for Marazion lake leaves.
+//! Authoring knobs for Marazion pocket-water lakes.
 
-use crate::terrain::cell::{universal_bounds, TERRAIN_CELL_SIZE};
+use crate::terrain::cell::universal_bounds;
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 use lod::gen::{GenerationScheme, Id, OriginalId};
 use lod::lod_ref::LodRef;
-use marazion_watersheds::LakeParams;
-
-/// Default lake leaf edge length: 2× terrain cell so rim + apron fit around a body.
-pub const DEFAULT_LAKE_LEAF_SIZE: f32 = TERRAIN_CELL_SIZE * 2.0;
+use marazion_watersheds::{
+	LakeParams, PocketGuillotineParams, PrePocketParams, DEFAULT_PRE_POCKET_PITCH,
+};
 
 /// Universal Marazion watershed configs (lake-first slice).
 ///
-/// Lake look: tune [`Self::lake`]'s authoring knobs
-/// (`rim_frac`, `apron_frac`, `water_sink`, `terrain_undercut`) in
-/// [`LakeParams::default`](marazion_watersheds::LakeParams::default)
-/// or override this resource before generation.
+/// Hierarchy: [`PrePocketParams`] → guillotine leaves → [`LakeParams`].
+/// Lake look: keep [`LakeParams::apron_frac`] large; rim/apron claim budget and
+/// water takes the remainder. Tune in
+/// [`LakeParams::default`](marazion_watersheds::LakeParams::default).
 #[derive(Resource, Debug, Clone)]
 pub struct MarazionWatershedConfigs {
 	pub seed: u32,
+	pub pre_pocket: PrePocketParams,
+	pub guillotine: PocketGuillotineParams,
 	pub lake: LakeParams,
 	/// Fraction of lake leaves that stamp.
 	pub leaf_likelihood: f32,
 	pub spatial_correlation: f32,
-	/// Lake leaf edge length (world units); should be ≈2×+ intended body diameter.
-	pub leaf_size: f32,
 }
 
 impl Default for MarazionWatershedConfigs {
 	fn default() -> Self {
 		Self {
 			seed: 127,
+			pre_pocket: PrePocketParams {
+				pitch: DEFAULT_PRE_POCKET_PITCH,
+				seed: 127,
+				..Default::default()
+			},
+			guillotine: PocketGuillotineParams {
+				seed: 127,
+				..Default::default()
+			},
 			lake: LakeParams::default(),
-			leaf_likelihood: 0.45,
-			spatial_correlation: DEFAULT_LAKE_LEAF_SIZE * 0.5,
-			leaf_size: DEFAULT_LAKE_LEAF_SIZE,
+			leaf_likelihood: 0.65,
+			spatial_correlation: DEFAULT_PRE_POCKET_PITCH * 0.25,
 		}
 	}
 }

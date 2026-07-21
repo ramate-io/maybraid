@@ -10,7 +10,8 @@ pub mod presentation;
 
 use crate::terrain::cell::{original_ids_for_origin_cells, TerrainCellLayout};
 use crate::terrain::marazion::{
-	original_ids_for_marazion_lake_leaves, MarazionLakeCell, MarazionLakeLayout,
+	original_ids_for_marazion_lake_leaves, MarazionLakeCell, PocketCell, PrePocketCell,
+	PrePocketLayout,
 };
 use crate::terrain::render::cascade_chunk_for_water_cell;
 use crate::terrain::sdf::TerrainSdf;
@@ -133,7 +134,10 @@ fn collect_marazion_lake_fills<S>(
 	lod_ref: &LodRef,
 ) -> Option<Vec<WaterFill>>
 where
-	S: GeneratingSpatialIndex<MarazionLakeCell> + GeneratingSpatialIndex<MarazionLakeLayout>,
+	S: GeneratingSpatialIndex<MarazionLakeCell>
+		+ GeneratingSpatialIndex<PocketCell>
+		+ GeneratingSpatialIndex<PrePocketCell>
+		+ GeneratingSpatialIndex<PrePocketLayout>,
 {
 	let mut fills = Vec::new();
 	let mut ids = original_ids_for_marazion_lake_leaves(spatial_index, region);
@@ -157,7 +161,9 @@ impl<S> GenerationScheme<S> for Water
 where
 	S: GeneratingSpatialIndex<Terrain>
 		+ GeneratingSpatialIndex<MarazionLakeCell>
-		+ GeneratingSpatialIndex<MarazionLakeLayout>
+		+ GeneratingSpatialIndex<PocketCell>
+		+ GeneratingSpatialIndex<PrePocketCell>
+		+ GeneratingSpatialIndex<PrePocketLayout>
 		+ GeneratingSpatialIndex<TerrainCellLayout>
 		+ GeneratingSpatialIndex<WaterPresentationAssets>,
 {

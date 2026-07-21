@@ -60,7 +60,7 @@ impl Default for LakeParams {
 	fn default() -> Self {
 		Self {
 			// Authoring — start here:
-			rim_frac: 0.22,
+			rim_frac: 0.1,
 			apron_frac: 1.30,
 			water_sink: 0.9,
 			terrain_undercut: 2.5,
