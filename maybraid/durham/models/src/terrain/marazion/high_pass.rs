@@ -17,6 +17,6 @@ define_marazion_band! {
 	pre_pocket_pitch: 3000.0,
 	pocket_pitches: [3000.0, 1500.0, 1000.0, 1000.0],
 	origin_offset: (640.0, 1280.0),
-	likelihood: 0.14,
+	likelihood: 1.0,
 	spatial_correlation: 6000.0,
 }

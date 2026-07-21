@@ -35,6 +35,7 @@ use durham_terrain::shaders::DurhamTerrainShader;
 use jersey_terrain_stamps::JerseyModulation;
 use lod::gen::{GeneratingSpatialIndex, GenerationScheme, Id, LodScene, OriginalId};
 use lod::lod_ref::LodRef;
+use marazion_watersheds::WaterFill;
 use render_item::mesh::handle::Cached;
 
 pub use base_noise::BaseTerrainNoise;
@@ -114,6 +115,12 @@ pub struct Terrain {
 	pub jersey_leaves: Vec<Aabb3d>,
 	/// Leaf AABBs whose Marazion lake stamps contributed.
 	pub marazion_leaves: Vec<Aabb3d>,
+	/// Stamp-owned fills from every Marazion lake composed into this cell.
+	///
+	/// Collected **with** elevation mods (both bands) before SDF compose, so
+	/// [`crate::water::Water`] can evaluate wet volume against the finished
+	/// heightfield without re-discovering / regenerating lake leaves.
+	pub marazion_fills: Vec<WaterFill>,
 	pub sdf: ComposedTerrain,
 	pub material: Handle<DurhamTerrainShader>,
 	pub res_2: u8,
@@ -168,6 +175,29 @@ macro_rules! pull_family_stamps {
 			}
 			$leaf_out.push(stamp.cell);
 			$mods.extend(stamp.modulations.iter().cloned());
+		}
+	}};
+}
+
+/// Like [`pull_family_stamps`], but also gathers stamp-owned [`WaterFill`]s.
+macro_rules! pull_marazion_lakes {
+	($spatial_index:expr, $lod_ref:expr, $bounds:expr, $leaves_fn:path, $Stamp:ty, $mods:expr, $leaf_out:expr, $fills_out:expr) => {{
+		let mut leaf_ids = $leaves_fn($spatial_index, $bounds);
+		leaf_ids.sort_by(|a, b| a.0.cmp(&b.0));
+		for OriginalId(lid) in leaf_ids {
+			let stamp = GeneratingSpatialIndex::<$Stamp>::get_one_or_generate(
+				$spatial_index,
+				lid,
+				$lod_ref,
+			)?;
+			if stamp.modulations.is_empty() && stamp.fills.is_empty() {
+				continue;
+			}
+			if !stamp.modulations.is_empty() {
+				$leaf_out.push(stamp.cell);
+				$mods.extend(stamp.modulations.iter().cloned());
+			}
+			$fills_out.extend(stamp.fills.iter().cloned());
 		}
 	}};
 }
@@ -391,24 +421,31 @@ where
 		let mut modulations = pre.modulations.clone();
 		let jersey_leaves = pre.jersey_leaves.clone();
 		let mut marazion_leaves = Vec::new();
+		let mut marazion_fills = Vec::new();
 
-		pull_family_stamps!(
-			spatial_index,
-			lod_ref,
-			bounds,
-			original_ids_for_marazion_lake_low_pass_leaves,
-			MarazionLakeLowPassCell,
-			modulations,
-			marazion_leaves
-		);
-		pull_family_stamps!(
+		// Sample/author **all** watershed stamps first (high-pass, then low-pass —
+		// same band order as jersey), collecting elevation mods + fills together.
+		// Compose the heightfield only after both bands are in hand so water fill
+		// evaluation never sees a half-applied watershed stack.
+		pull_marazion_lakes!(
 			spatial_index,
 			lod_ref,
 			bounds,
 			original_ids_for_marazion_lake_high_pass_leaves,
 			MarazionLakeHighPassCell,
 			modulations,
-			marazion_leaves
+			marazion_leaves,
+			marazion_fills
+		);
+		pull_marazion_lakes!(
+			spatial_index,
+			lod_ref,
+			bounds,
+			original_ids_for_marazion_lake_low_pass_leaves,
+			MarazionLakeLowPassCell,
+			modulations,
+			marazion_leaves,
+			marazion_fills
 		);
 
 		let sdf = Self::compose_sdf(&pre.base, &modulations);
@@ -427,6 +464,7 @@ where
 				modulations,
 				jersey_leaves,
 				marazion_leaves,
+				marazion_fills,
 				sdf,
 				material,
 				res_2,

@@ -3,17 +3,18 @@
 //! Parallel to [`crate::terrain`]: terrain owns the heightfield; this module owns
 //! water fill products, evaluation, and presentation. Surface level / softmask
 //! boundary remain decisions of **Marazion** lake stamps.
+//!
+//! **Order:** [`Terrain`] must compose **all** Marazion watershed bands (high-pass
+//! then low-pass) before fills are evaluated. [`Water`] therefore reads
+//! [`Terrain::marazion_fills`] from an already-built cell and samples wet volume
+//! only against that finished heightfield — never by regenerating lake leaves
+//! mid-compose.
 
 pub mod composed;
 pub mod plugin;
 pub mod presentation;
 
 use crate::terrain::cell::{original_ids_for_origin_cells, TerrainCellLayout};
-use crate::terrain::marazion::{
-	original_ids_for_marazion_lake_high_pass_leaves, original_ids_for_marazion_lake_low_pass_leaves,
-	MarazionLakeHighPassCell, MarazionLakeLowPassCell, PocketHighPassCell, PocketLowPassCell,
-	PrePocketHighPassCell, PrePocketHighPassLayout, PrePocketLowPassCell, PrePocketLowPassLayout,
-};
 use crate::terrain::render::cascade_chunk_for_water_cell;
 use crate::terrain::sdf::TerrainSdf;
 use crate::terrain::Terrain;
@@ -129,64 +130,9 @@ fn water_mesh_y_span(fills: &[WaterFill], terrain: &TerrainSdf) -> (f32, f32) {
 	(y_lo - pad, y_hi + pad)
 }
 
-fn collect_marazion_lake_fills<S>(
-	spatial_index: &mut S,
-	region: Aabb3d,
-	lod_ref: &LodRef,
-) -> Option<Vec<WaterFill>>
-where
-	S: GeneratingSpatialIndex<MarazionLakeLowPassCell>
-		+ GeneratingSpatialIndex<PocketLowPassCell>
-		+ GeneratingSpatialIndex<PrePocketLowPassCell>
-		+ GeneratingSpatialIndex<PrePocketLowPassLayout>
-		+ GeneratingSpatialIndex<MarazionLakeHighPassCell>
-		+ GeneratingSpatialIndex<PocketHighPassCell>
-		+ GeneratingSpatialIndex<PrePocketHighPassCell>
-		+ GeneratingSpatialIndex<PrePocketHighPassLayout>,
-{
-	let mut fills = Vec::new();
-	let mut low_ids = original_ids_for_marazion_lake_low_pass_leaves(spatial_index, region);
-	low_ids.sort_by(|a, b| a.0.cmp(&b.0));
-	for OriginalId(id) in low_ids {
-		fills.extend(
-			GeneratingSpatialIndex::<MarazionLakeLowPassCell>::get_one_or_generate(
-				spatial_index,
-				id,
-				lod_ref,
-			)?
-			.fills
-			.iter()
-			.cloned(),
-		);
-	}
-	let mut high_ids = original_ids_for_marazion_lake_high_pass_leaves(spatial_index, region);
-	high_ids.sort_by(|a, b| a.0.cmp(&b.0));
-	for OriginalId(id) in high_ids {
-		fills.extend(
-			GeneratingSpatialIndex::<MarazionLakeHighPassCell>::get_one_or_generate(
-				spatial_index,
-				id,
-				lod_ref,
-			)?
-			.fills
-			.iter()
-			.cloned(),
-		);
-	}
-	Some(fills)
-}
-
 impl<S> GenerationScheme<S> for Water
 where
 	S: GeneratingSpatialIndex<Terrain>
-		+ GeneratingSpatialIndex<MarazionLakeLowPassCell>
-		+ GeneratingSpatialIndex<PocketLowPassCell>
-		+ GeneratingSpatialIndex<PrePocketLowPassCell>
-		+ GeneratingSpatialIndex<PrePocketLowPassLayout>
-		+ GeneratingSpatialIndex<MarazionLakeHighPassCell>
-		+ GeneratingSpatialIndex<PocketHighPassCell>
-		+ GeneratingSpatialIndex<PrePocketHighPassCell>
-		+ GeneratingSpatialIndex<PrePocketHighPassLayout>
 		+ GeneratingSpatialIndex<TerrainCellLayout>
 		+ GeneratingSpatialIndex<WaterPresentationAssets>,
 {
@@ -196,6 +142,7 @@ where
 
 	fn build_with_id(spatial_index: &mut S, id: Id, lod_ref: &LodRef) -> Option<(Self, Aabb3d)> {
 		let bounds = id.origin_cell_bounds()?;
+		// Terrain composes every Marazion band before returning; fills ride along.
 		let terrain = GeneratingSpatialIndex::<Terrain>::get_one_or_generate(
 			spatial_index,
 			id,
@@ -203,9 +150,10 @@ where
 		)?;
 		let res_2 = terrain.res_2;
 		let terrain_sdf = terrain.sdf.terrain.clone();
-		let fills = collect_marazion_lake_fills(spatial_index, bounds, lod_ref)?;
-		let fills: Vec<_> = fills
-			.into_iter()
+		let fills: Vec<_> = terrain
+			.marazion_fills
+			.iter()
+			.cloned()
 			.filter(|fill| fill_has_wet_volume(fill, &terrain_sdf))
 			.collect();
 		if fills.is_empty() {
