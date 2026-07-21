@@ -4,12 +4,20 @@ use crate::noise::n01;
 use bevy_math::Vec2;
 use procedural_common::Bounds2;
 
-/// Default pre-pocket pitch (world units) — top of the ~400m–3km cell range.
+/// High-pass pre-pocket pitch (world units) — top of the ~800m–3km leaf range.
 pub const DEFAULT_PRE_POCKET_PITCH: f32 = 3000.0;
+/// Low-pass pre-pocket pitch (world units) — covers the ~200m–600m leaf range.
+pub const DEFAULT_PRE_POCKET_PITCH_LOW: f32 = 1200.0;
 
-/// Discrete pocket pitches that must divide [`DEFAULT_PRE_POCKET_PITCH`].
-/// Spans full pre tiles down toward ~500m (guillotine floor ≈400m).
-pub const DEFAULT_POCKET_PITCHES: [f32; 4] = [3000.0, 1500.0, 750.0, 500.0];
+/// High-pass pocket pitches (must divide [`DEFAULT_PRE_POCKET_PITCH`]).
+/// Leaves sit near `[min_span≈800, pocket]` after guillotine.
+pub const DEFAULT_POCKET_PITCHES_HIGH: [f32; 4] = [3000.0, 1500.0, 1000.0, 1000.0];
+/// Low-pass pocket pitches (must divide [`DEFAULT_PRE_POCKET_PITCH_LOW`]).
+/// Leaves sit near `[min_span≈200, pocket≤600]` after guillotine.
+pub const DEFAULT_POCKET_PITCHES_LOW: [f32; 4] = [600.0, 400.0, 300.0, 300.0];
+
+/// Backward-compatible alias of the high-pass pocket pitch table.
+pub const DEFAULT_POCKET_PITCHES: [f32; 4] = DEFAULT_POCKET_PITCHES_HIGH;
 
 #[derive(Debug, Clone, Copy)]
 pub struct PrePocketParams {
@@ -25,7 +33,7 @@ impl Default for PrePocketParams {
 		Self {
 			pitch: DEFAULT_PRE_POCKET_PITCH,
 			origin: Vec2::ZERO,
-			pocket_pitches: DEFAULT_POCKET_PITCHES,
+			pocket_pitches: DEFAULT_POCKET_PITCHES_HIGH,
 			seed: 0,
 		}
 	}
@@ -52,7 +60,13 @@ impl PrePocket {
 		let nx = (w / pocket_pitch).round() as u32;
 		let nz = nx;
 		let bounds = Bounds2::from_xz(anchor.x, anchor.y, anchor.x + w, anchor.y + w);
-		Self { bounds, anchor, pocket_pitch, nx: nx.max(1), nz: nz.max(1) }
+		Self {
+			bounds,
+			anchor,
+			pocket_pitch,
+			nx: nx.max(1),
+			nz: nz.max(1),
+		}
 	}
 
 	/// Axis-aligned pocket tile `(px, pz)` inside this pre-pocket (`0..nx`, `0..nz`).
@@ -95,18 +109,34 @@ fn choose_pocket_pitch(anchor: Vec2, params: &PrePocketParams) -> f32 {
 mod tests {
 	use super::*;
 
-	#[test]
-	fn pocket_pitch_divides_pre() -> anyhow::Result<()> {
-		let params = PrePocketParams::default();
+	fn assert_pitches_divide(params: &PrePocketParams) -> anyhow::Result<()> {
 		for (i, j) in [(0, 0), (1, -2), (7, 3)] {
 			let x = params.origin.x + i as f32 * params.pitch + 10.0;
 			let z = params.origin.y + j as f32 * params.pitch + 10.0;
-			let pre = PrePocket::containing(x, z, &params);
+			let pre = PrePocket::containing(x, z, params);
 			let n = params.pitch / pre.pocket_pitch;
 			assert!((n - n.round()).abs() < 1e-3);
 			assert_eq!(pre.nx as f32, n.round());
 		}
 		Ok(())
+	}
+
+	#[test]
+	fn high_pass_pocket_pitch_divides_pre() -> anyhow::Result<()> {
+		assert_pitches_divide(&PrePocketParams {
+			pitch: DEFAULT_PRE_POCKET_PITCH,
+			pocket_pitches: DEFAULT_POCKET_PITCHES_HIGH,
+			..Default::default()
+		})
+	}
+
+	#[test]
+	fn low_pass_pocket_pitch_divides_pre() -> anyhow::Result<()> {
+		assert_pitches_divide(&PrePocketParams {
+			pitch: DEFAULT_PRE_POCKET_PITCH_LOW,
+			pocket_pitches: DEFAULT_POCKET_PITCHES_LOW,
+			..Default::default()
+		})
 	}
 
 	#[test]
@@ -127,13 +157,32 @@ mod tests {
 	}
 
 	#[test]
-	fn pitches_span_400m_to_3km() -> anyhow::Result<()> {
-		let params = PrePocketParams::default();
-		assert!((params.pitch - 3000.0).abs() < 1e-3);
-		let min_p = params.pocket_pitches.iter().copied().fold(f32::INFINITY, f32::min);
-		let max_p = params.pocket_pitches.iter().copied().fold(0.0_f32, f32::max);
-		assert!(min_p <= 500.0);
+	fn high_pass_pitches_span_800m_to_3km() -> anyhow::Result<()> {
+		let min_p = DEFAULT_POCKET_PITCHES_HIGH
+			.iter()
+			.copied()
+			.fold(f32::INFINITY, f32::min);
+		let max_p = DEFAULT_POCKET_PITCHES_HIGH
+			.iter()
+			.copied()
+			.fold(0.0_f32, f32::max);
+		assert!(min_p >= 800.0);
 		assert!(max_p >= 3000.0);
+		Ok(())
+	}
+
+	#[test]
+	fn low_pass_pitches_span_200m_to_600m() -> anyhow::Result<()> {
+		let min_p = DEFAULT_POCKET_PITCHES_LOW
+			.iter()
+			.copied()
+			.fold(f32::INFINITY, f32::min);
+		let max_p = DEFAULT_POCKET_PITCHES_LOW
+			.iter()
+			.copied()
+			.fold(0.0_f32, f32::max);
+		assert!(min_p >= 200.0);
+		assert!(max_p <= 600.0);
 		Ok(())
 	}
 }

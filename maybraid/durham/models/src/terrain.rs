@@ -22,7 +22,9 @@ use crate::terrain::jersey::{
 	original_ids_for_rolling_high_pass_leaves, original_ids_for_rolling_low_pass_leaves,
 	original_ids_for_valley_high_pass_leaves, original_ids_for_valley_low_pass_leaves,
 };
-use crate::terrain::marazion::{original_ids_for_marazion_lake_leaves, MarazionLakeCell};
+use crate::terrain::marazion::{
+	original_ids_for_marazion_lake_high_pass_leaves, original_ids_for_marazion_lake_low_pass_leaves,
+};
 use crate::terrain::render::cascade_chunk_for_cell;
 use avian3d::prelude::RigidBody;
 use bevy::ecs::template::template;
@@ -62,8 +64,14 @@ pub use jersey::{
 	RollingLowPassStampCell as RollingStampCell, ValleyLowPassStampCell as ValleyStampCell,
 };
 pub use marazion::{
-	MarazionLakeCell as MarazionLakeStampCell, MarazionWatershedConfigs, PocketCell,
-	PrePocketCell, PrePocketLayout,
+	MarazionLakeHighPassCell, MarazionLakeLowPassCell, MarazionWatershedConfigs,
+	PocketHighPassCell, PocketLowPassCell, PrePocketHighPassCell, PrePocketHighPassLayout,
+	PrePocketLowPassCell, PrePocketLowPassLayout,
+};
+/// Low-pass aliases kept for older HUD / call sites.
+pub use marazion::{
+	MarazionLakeLowPassCell as MarazionLakeStampCell, PocketLowPassCell as PocketCell,
+	PrePocketLowPassCell as PrePocketCell, PrePocketLowPassLayout as PrePocketLayout,
 };
 pub use plugin::{register_terrain_plugin, TerrainPlugin};
 pub use presentation::{
@@ -350,15 +358,19 @@ where
 	fn descendants_with_lod(_id: Id, _spatial_index: &mut S, _lod_ref: &LodRef) {}
 }
 
-/// Final terrain: pre-watershed + Marazion lake leaf stamps.
+/// Final terrain: pre-watershed + Marazion lake leaf stamps (both bands).
 impl<S> GenerationScheme<S> for Terrain
 where
 	S: GeneratingSpatialIndex<PreWatershedTerrain>
 		+ GeneratingSpatialIndex<MarazionWatershedConfigs>
-		+ GeneratingSpatialIndex<PrePocketLayout>
-		+ GeneratingSpatialIndex<PrePocketCell>
-		+ GeneratingSpatialIndex<PocketCell>
-		+ GeneratingSpatialIndex<MarazionLakeCell>
+		+ GeneratingSpatialIndex<PrePocketLowPassLayout>
+		+ GeneratingSpatialIndex<PrePocketLowPassCell>
+		+ GeneratingSpatialIndex<PocketLowPassCell>
+		+ GeneratingSpatialIndex<MarazionLakeLowPassCell>
+		+ GeneratingSpatialIndex<PrePocketHighPassLayout>
+		+ GeneratingSpatialIndex<PrePocketHighPassCell>
+		+ GeneratingSpatialIndex<PocketHighPassCell>
+		+ GeneratingSpatialIndex<MarazionLakeHighPassCell>
 		+ GeneratingSpatialIndex<TerrainCellLayout>
 		+ GeneratingSpatialIndex<TerrainPresentationAssets>,
 {
@@ -384,8 +396,17 @@ where
 			spatial_index,
 			lod_ref,
 			bounds,
-			original_ids_for_marazion_lake_leaves,
-			MarazionLakeCell,
+			original_ids_for_marazion_lake_low_pass_leaves,
+			MarazionLakeLowPassCell,
+			modulations,
+			marazion_leaves
+		);
+		pull_family_stamps!(
+			spatial_index,
+			lod_ref,
+			bounds,
+			original_ids_for_marazion_lake_high_pass_leaves,
+			MarazionLakeHighPassCell,
 			modulations,
 			marazion_leaves
 		);

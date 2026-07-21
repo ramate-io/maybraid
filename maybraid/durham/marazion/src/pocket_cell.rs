@@ -10,7 +10,8 @@ const CUT_SALT: u32 = 0x0C07_AA11;
 #[derive(Debug, Clone, Copy)]
 pub struct PocketGuillotineParams {
 	pub max_depth: u8,
-	/// Minimum leaf span (world units) on either axis — floor of the cell range (~400m).
+	/// Minimum leaf span (world units) on either axis.
+	/// Band defaults: low-pass ≈200, high-pass ≈800.
 	pub min_span: f32,
 	/// Cut ratio window `[lo, hi]` along the chosen axis.
 	pub cut_lo: f32,

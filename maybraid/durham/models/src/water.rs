@@ -10,8 +10,9 @@ pub mod presentation;
 
 use crate::terrain::cell::{original_ids_for_origin_cells, TerrainCellLayout};
 use crate::terrain::marazion::{
-	original_ids_for_marazion_lake_leaves, MarazionLakeCell, PocketCell, PrePocketCell,
-	PrePocketLayout,
+	original_ids_for_marazion_lake_high_pass_leaves, original_ids_for_marazion_lake_low_pass_leaves,
+	MarazionLakeHighPassCell, MarazionLakeLowPassCell, PocketHighPassCell, PocketLowPassCell,
+	PrePocketHighPassCell, PrePocketHighPassLayout, PrePocketLowPassCell, PrePocketLowPassLayout,
 };
 use crate::terrain::render::cascade_chunk_for_water_cell;
 use crate::terrain::sdf::TerrainSdf;
@@ -134,17 +135,35 @@ fn collect_marazion_lake_fills<S>(
 	lod_ref: &LodRef,
 ) -> Option<Vec<WaterFill>>
 where
-	S: GeneratingSpatialIndex<MarazionLakeCell>
-		+ GeneratingSpatialIndex<PocketCell>
-		+ GeneratingSpatialIndex<PrePocketCell>
-		+ GeneratingSpatialIndex<PrePocketLayout>,
+	S: GeneratingSpatialIndex<MarazionLakeLowPassCell>
+		+ GeneratingSpatialIndex<PocketLowPassCell>
+		+ GeneratingSpatialIndex<PrePocketLowPassCell>
+		+ GeneratingSpatialIndex<PrePocketLowPassLayout>
+		+ GeneratingSpatialIndex<MarazionLakeHighPassCell>
+		+ GeneratingSpatialIndex<PocketHighPassCell>
+		+ GeneratingSpatialIndex<PrePocketHighPassCell>
+		+ GeneratingSpatialIndex<PrePocketHighPassLayout>,
 {
 	let mut fills = Vec::new();
-	let mut ids = original_ids_for_marazion_lake_leaves(spatial_index, region);
-	ids.sort_by(|a, b| a.0.cmp(&b.0));
-	for OriginalId(id) in ids {
+	let mut low_ids = original_ids_for_marazion_lake_low_pass_leaves(spatial_index, region);
+	low_ids.sort_by(|a, b| a.0.cmp(&b.0));
+	for OriginalId(id) in low_ids {
 		fills.extend(
-			GeneratingSpatialIndex::<MarazionLakeCell>::get_one_or_generate(
+			GeneratingSpatialIndex::<MarazionLakeLowPassCell>::get_one_or_generate(
+				spatial_index,
+				id,
+				lod_ref,
+			)?
+			.fills
+			.iter()
+			.cloned(),
+		);
+	}
+	let mut high_ids = original_ids_for_marazion_lake_high_pass_leaves(spatial_index, region);
+	high_ids.sort_by(|a, b| a.0.cmp(&b.0));
+	for OriginalId(id) in high_ids {
+		fills.extend(
+			GeneratingSpatialIndex::<MarazionLakeHighPassCell>::get_one_or_generate(
 				spatial_index,
 				id,
 				lod_ref,
@@ -160,10 +179,14 @@ where
 impl<S> GenerationScheme<S> for Water
 where
 	S: GeneratingSpatialIndex<Terrain>
-		+ GeneratingSpatialIndex<MarazionLakeCell>
-		+ GeneratingSpatialIndex<PocketCell>
-		+ GeneratingSpatialIndex<PrePocketCell>
-		+ GeneratingSpatialIndex<PrePocketLayout>
+		+ GeneratingSpatialIndex<MarazionLakeLowPassCell>
+		+ GeneratingSpatialIndex<PocketLowPassCell>
+		+ GeneratingSpatialIndex<PrePocketLowPassCell>
+		+ GeneratingSpatialIndex<PrePocketLowPassLayout>
+		+ GeneratingSpatialIndex<MarazionLakeHighPassCell>
+		+ GeneratingSpatialIndex<PocketHighPassCell>
+		+ GeneratingSpatialIndex<PrePocketHighPassCell>
+		+ GeneratingSpatialIndex<PrePocketHighPassLayout>
 		+ GeneratingSpatialIndex<TerrainCellLayout>
 		+ GeneratingSpatialIndex<WaterPresentationAssets>,
 {

@@ -16,5 +16,6 @@ pub use fill::WaterFill;
 pub use lake::{Lake, LakeBandBudget, LakeParams};
 pub use pocket_cell::{guillotine_partition, PocketGuillotineParams};
 pub use pre_pocket::{
-	PrePocket, PrePocketParams, DEFAULT_POCKET_PITCHES, DEFAULT_PRE_POCKET_PITCH,
+	PrePocket, PrePocketParams, DEFAULT_POCKET_PITCHES, DEFAULT_POCKET_PITCHES_HIGH,
+	DEFAULT_POCKET_PITCHES_LOW, DEFAULT_PRE_POCKET_PITCH, DEFAULT_PRE_POCKET_PITCH_LOW,
 };

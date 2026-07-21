@@ -5,7 +5,8 @@ use crate::terrain::collider::queue_terrain_trimesh_colliders;
 use crate::terrain::index::TerrainEntryStore;
 use crate::terrain::jersey::{JerseyControllerLayouts, JerseyStampConfigs};
 use crate::terrain::marazion::{
-	pre_pocket_layout_from_configs, MarazionWatershedConfigs,
+	bootstrap_pre_pocket_high_pass_layout, bootstrap_pre_pocket_low_pass_layout,
+	MarazionWatershedConfigs,
 };
 use crate::terrain::presentation::TerrainPresenterState;
 use avian3d::prelude::PhysicsPlugins;
@@ -35,13 +36,15 @@ impl Plugin for TerrainPlugin {
 			app.add_plugins(PhysicsPlugins::default());
 		}
 		let marazion = MarazionWatershedConfigs::default();
-		let pre_pocket = pre_pocket_layout_from_configs(&marazion);
+		let pre_pocket_low = bootstrap_pre_pocket_low_pass_layout(&marazion);
+		let pre_pocket_high = bootstrap_pre_pocket_high_pass_layout(&marazion);
 		app.init_resource::<TerrainEntryStore>()
 			.init_resource::<TerrainCellLayout>()
 			.init_resource::<JerseyStampConfigs>()
 			.init_resource::<JerseyControllerLayouts>()
 			.insert_resource(marazion)
-			.insert_resource(pre_pocket)
+			.insert_resource(pre_pocket_low)
+			.insert_resource(pre_pocket_high)
 			.init_resource::<TerrainPresenterState>()
 			.add_systems(Update, queue_terrain_trimesh_colliders);
 	}

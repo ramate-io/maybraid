@@ -25,8 +25,10 @@ use crate::terrain::jersey::{
 	ValleyLowPassControllerLayout, ValleyLowPassStampCell,
 };
 use crate::terrain::marazion::{
-	BootstrapMarazionWatershedConfigs, BootstrapPrePocketLayout, MarazionLakeCell,
-	MarazionWatershedConfigs, PocketCell, PrePocketCell, PrePocketLayout,
+	BootstrapMarazionWatershedConfigs, BootstrapPrePocketHighPassLayout,
+	BootstrapPrePocketLowPassLayout, MarazionLakeHighPassCell, MarazionLakeLowPassCell,
+	MarazionWatershedConfigs, PocketHighPassCell, PocketLowPassCell, PrePocketHighPassCell,
+	PrePocketHighPassLayout, PrePocketLowPassCell, PrePocketLowPassLayout,
 };
 use crate::terrain::presentation::{
 	BootstrapTerrainPresentationAssets, TerrainPresentationAssets,
@@ -66,10 +68,14 @@ pub struct TerrainEntryStore {
 	pub(crate) water_presentation: HashMap<Id, StoredEntry<WaterPresentationAssets>>,
 	pub(crate) jersey_configs: HashMap<Id, StoredEntry<JerseyStampConfigs>>,
 	pub(crate) marazion_configs: HashMap<Id, StoredEntry<MarazionWatershedConfigs>>,
-	pub(crate) pre_pocket_layout: HashMap<Id, StoredEntry<PrePocketLayout>>,
-	pub(crate) pre_pocket_cell: HashMap<Id, StoredEntry<PrePocketCell>>,
-	pub(crate) pocket_cell: HashMap<Id, StoredEntry<PocketCell>>,
-	pub(crate) marazion_lake_cell: HashMap<Id, StoredEntry<MarazionLakeCell>>,
+	pub(crate) pre_pocket_low_pass_layout: HashMap<Id, StoredEntry<PrePocketLowPassLayout>>,
+	pub(crate) pre_pocket_low_pass_cell: HashMap<Id, StoredEntry<PrePocketLowPassCell>>,
+	pub(crate) pocket_low_pass_cell: HashMap<Id, StoredEntry<PocketLowPassCell>>,
+	pub(crate) marazion_lake_low_pass_cell: HashMap<Id, StoredEntry<MarazionLakeLowPassCell>>,
+	pub(crate) pre_pocket_high_pass_layout: HashMap<Id, StoredEntry<PrePocketHighPassLayout>>,
+	pub(crate) pre_pocket_high_pass_cell: HashMap<Id, StoredEntry<PrePocketHighPassCell>>,
+	pub(crate) pocket_high_pass_cell: HashMap<Id, StoredEntry<PocketHighPassCell>>,
+	pub(crate) marazion_lake_high_pass_cell: HashMap<Id, StoredEntry<MarazionLakeHighPassCell>>,
 	pub(crate) plateau_low_pass_layout: HashMap<Id, StoredEntry<PlateauLowPassControllerLayout>>,
 	pub(crate) plateau_low_pass_controller: HashMap<Id, StoredEntry<PlateauLowPassControllerCell>>,
 	pub(crate) plateau_low_pass_stamp: HashMap<Id, StoredEntry<PlateauLowPassStampCell>>,
@@ -154,7 +160,8 @@ pub struct AvianTerrainIndex<'w, 's> {
 	jersey_configs: Res<'w, JerseyStampConfigs>,
 	jersey_layouts: ResMut<'w, JerseyControllerLayouts>,
 	marazion_configs: Res<'w, MarazionWatershedConfigs>,
-	pre_pocket_layout: ResMut<'w, PrePocketLayout>,
+	pre_pocket_low_pass_layout: ResMut<'w, PrePocketLowPassLayout>,
+	pre_pocket_high_pass_layout: ResMut<'w, PrePocketHighPassLayout>,
 	presentation: Res<'w, TerrainPresentationAssets>,
 	water_presentation: Res<'w, WaterPresentationAssets>,
 }
@@ -177,9 +184,15 @@ impl<'w, 's> BootstrapMarazionWatershedConfigs for AvianTerrainIndex<'w, 's> {
 	}
 }
 
-impl<'w, 's> BootstrapPrePocketLayout for AvianTerrainIndex<'w, 's> {
-	fn bootstrap_pre_pocket_layout(&self) -> PrePocketLayout {
-		self.pre_pocket_layout.clone()
+impl<'w, 's> BootstrapPrePocketLowPassLayout for AvianTerrainIndex<'w, 's> {
+	fn bootstrap_pre_pocket_low_pass_layout(&self) -> PrePocketLowPassLayout {
+		self.pre_pocket_low_pass_layout.clone()
+	}
+}
+
+impl<'w, 's> BootstrapPrePocketHighPassLayout for AvianTerrainIndex<'w, 's> {
+	fn bootstrap_pre_pocket_high_pass_layout(&self) -> PrePocketHighPassLayout {
+		self.pre_pocket_high_pass_layout.clone()
 	}
 }
 
@@ -389,10 +402,14 @@ impl_map_spatial_index!(TerrainPresentationAssets, presentation);
 impl_map_spatial_index!(WaterPresentationAssets, water_presentation);
 impl_map_spatial_index!(JerseyStampConfigs, jersey_configs);
 impl_map_spatial_index!(MarazionWatershedConfigs, marazion_configs);
-impl_map_spatial_index!(PrePocketLayout, pre_pocket_layout);
-impl_map_spatial_index!(PrePocketCell, pre_pocket_cell);
-impl_map_spatial_index!(PocketCell, pocket_cell);
-impl_map_spatial_index!(MarazionLakeCell, marazion_lake_cell);
+impl_map_spatial_index!(PrePocketLowPassLayout, pre_pocket_low_pass_layout);
+impl_map_spatial_index!(PrePocketLowPassCell, pre_pocket_low_pass_cell);
+impl_map_spatial_index!(PocketLowPassCell, pocket_low_pass_cell);
+impl_map_spatial_index!(MarazionLakeLowPassCell, marazion_lake_low_pass_cell);
+impl_map_spatial_index!(PrePocketHighPassLayout, pre_pocket_high_pass_layout);
+impl_map_spatial_index!(PrePocketHighPassCell, pre_pocket_high_pass_cell);
+impl_map_spatial_index!(PocketHighPassCell, pocket_high_pass_cell);
+impl_map_spatial_index!(MarazionLakeHighPassCell, marazion_lake_high_pass_cell);
 impl_map_spatial_index!(PreWatershedTerrain, pre_watershed);
 impl_map_spatial_index!(Water, water);
 
