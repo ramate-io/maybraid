@@ -13,9 +13,9 @@ use marazion_watersheds::{
 ///
 /// Hierarchy: [`PrePocketParams`] → guillotine leaves → [`LakeParams`].
 /// Lake look: keep [`LakeParams::apron_frac`] large; rim/apron claim budget and
-/// water takes a noisy fraction of the leftover ([`LakeParams::water_size`] /
-/// [`LakeParams::water_size_min`], high-freq [`LakeParams::water_size_freq`]).
-/// Tune in [`LakeParams::default`](marazion_watersheds::LakeParams::default).
+/// water takes a noisy fraction of the leftover ([`LakeParams::water_scale`] /
+/// [`LakeParams::water_scale_min`]). Tune in
+/// [`LakeParams::default`](marazion_watersheds::LakeParams::default).
 #[derive(Resource, Debug, Clone)]
 pub struct MarazionWatershedConfigs {
 	pub seed: u32,
