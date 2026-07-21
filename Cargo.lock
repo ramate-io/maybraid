@@ -2955,6 +2955,7 @@ dependencies = [
  "jersey-terrain-stamps",
  "lod",
  "log",
+ "marazion-watersheds",
  "noise",
  "procedural-common",
  "render-item",
@@ -4187,6 +4188,16 @@ dependencies = [
  "crozon-rigs",
  "game-commands",
  "log",
+]
+
+[[package]]
+name = "marazion-watersheds"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "bevy_math",
+ "jersey-terrain-stamps",
+ "procedural-common",
 ]
 
 [[package]]

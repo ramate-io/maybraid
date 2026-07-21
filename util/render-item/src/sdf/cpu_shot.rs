@@ -390,6 +390,12 @@ pub trait CpuShotSdf: Sdf + Clone {
 		log::debug!("UVs time: {:?}", duration);
 
 		// ---------- Mesh ---------------------------------------------------------
+		// Empty meshes trip Bevy's mesh slab allocator
+		// (`Use-after-free: attempted to copy element data for an unallocated key`).
+		if vertices.is_empty() {
+			return None;
+		}
+
 		// MAIN_WORLD keeps attributes readable for Avian `TrimeshFromMesh` after extract.
 		let mut mesh = Mesh::new(
 			bevy::mesh::PrimitiveTopology::TriangleList,

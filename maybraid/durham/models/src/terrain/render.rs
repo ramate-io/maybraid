@@ -81,8 +81,40 @@ pub fn cascade_chunk_for_cell(bounds: Aabb3d, res_2: u8) -> CascadeChunk {
 	let pad_xz = xz_pitch * TERRAIN_MESH_PAD_VOXELS;
 	let pad_y = pad_xz * TERRAIN_MESH_PAD_Y_SLOPE;
 	let padded = expand_aabb_xz_y(bounds, pad_xz, pad_y);
-	let min = Vec3::from(padded.min);
-	let max = Vec3::from(padded.max);
+	cascade_chunk_from_aabb(padded, res_2)
+}
+
+/// Cascade chunk for water meshing: **same XZ grid as terrain**, fitted Y span.
+///
+/// Terrain cells use a huge vertical half-extent (~±2000). Reusing that AABB for
+/// water makes `cube_cell.y` hundreds of meters — thicker than a lake — so the
+/// slab never fills the carved basin. Keep XZ origin/extent/`res_2` matched to
+/// [`cascade_chunk_for_cell`] so shore samples align with the terrain mesh.
+pub fn cascade_chunk_for_water_cell(
+	bounds: Aabb3d,
+	res_2: u8,
+	y_min: f32,
+	y_max: f32,
+) -> CascadeChunk {
+	let min0 = Vec3::from(bounds.min);
+	let max0 = Vec3::from(bounds.max);
+	let base = max0 - min0;
+	let res = 2_f32.powi(res_2 as i32).max(1.0);
+	let xz_pitch = base.x.min(base.z) / res;
+	let pad_xz = xz_pitch * TERRAIN_MESH_PAD_VOXELS;
+	let padded_xz = expand_aabb_xz_y(bounds, pad_xz, 0.0);
+	let y0 = y_min.min(y_max);
+	let y1 = y_min.max(y_max).max(y0 + 1.0);
+	let water_bounds = Aabb3d::from_min_max(
+		Vec3::new(padded_xz.min.x, y0, padded_xz.min.z),
+		Vec3::new(padded_xz.max.x, y1, padded_xz.max.z),
+	);
+	cascade_chunk_from_aabb(water_bounds, res_2)
+}
+
+fn cascade_chunk_from_aabb(bounds: Aabb3d, res_2: u8) -> CascadeChunk {
+	let min = Vec3::from(bounds.min);
+	let max = Vec3::from(bounds.max);
 	let extent = max - min;
 	CascadeChunk {
 		world: 0,

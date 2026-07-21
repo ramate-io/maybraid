@@ -4,20 +4,26 @@
 //! crate-root [`DurhamTerrainModelsPlugin`] composes those model plugins.
 
 pub mod terrain;
+pub mod water;
 
 pub use terrain::render::cascade_chunk_for_cell;
 pub use terrain::{
 	register_terrain_plugin, AvianTerrainIndex, BaseTerrainNoise, CanyonHighPassControllerLayout,
 	CanyonLowPassControllerLayout, CanyonStampCell, ComposedTerrain, JerseyControllerLayouts,
 	JerseyStampConfigs, MacroCellLayout, MassifHighPassControllerLayout,
-	MassifLowPassControllerLayout, MassifStampCell, PlateauControllerLayout,
-	PlateauHighPassControllerLayout, PlateauLowPassControllerLayout, PlateauStampCell,
-	PocketWaterHighPassControllerLayout, PocketWaterLowPassControllerLayout, PocketWaterStampCell,
-	RollingHighPassControllerLayout, RollingLowPassControllerLayout, RollingStampCell, Terrain,
-	TerrainCellId, TerrainCellLayout, TerrainConfig, TerrainEntryStore, TerrainPlugin,
-	TerrainPresentationAssets, TerrainPresenterState, TerrainRegionPresenter, TerrainRenderItem,
-	TerrainSdf, TerrainStoreView, TerrainTrimeshCollider, ValleyHighPassControllerLayout,
-	ValleyLowPassControllerLayout, ValleyStampCell, MACRO_CELL_SIZE, TERRAIN_CELL_SIZE,
+	MassifLowPassControllerLayout, MassifStampCell, MarazionLakeLayout, MarazionWatershedConfigs,
+	PlateauControllerLayout, PlateauHighPassControllerLayout, PlateauLowPassControllerLayout,
+	PlateauStampCell, PocketWaterHighPassControllerLayout, PocketWaterLowPassControllerLayout,
+	PocketWaterStampCell, PreWatershedTerrain, RollingHighPassControllerLayout,
+	RollingLowPassControllerLayout, RollingStampCell, Terrain, TerrainCellId, TerrainCellLayout,
+	TerrainConfig, TerrainEntryStore, TerrainPlugin, TerrainPresentationAssets,
+	TerrainPresenterState, TerrainRegionPresenter, TerrainRenderItem, TerrainSdf, TerrainStoreView,
+	TerrainTrimeshCollider, ValleyHighPassControllerLayout, ValleyLowPassControllerLayout,
+	ValleyStampCell, DEFAULT_LAKE_LEAF_SIZE, MACRO_CELL_SIZE, TERRAIN_CELL_SIZE,
+};
+pub use water::{
+	register_water_plugin, ComposedWater, Water, WaterPlugin, WaterPresentationAssets,
+	WaterPresenterState, WaterRegionPresenter, WaterStoreView,
 };
 
 use bevy::prelude::*;
@@ -44,6 +50,6 @@ pub fn register_durham_terrain_models_plugin(app: &mut App) {
 impl Plugin for DurhamTerrainModelsPlugin {
 	fn build(&self, app: &mut App) {
 		register_terrain_plugin(app);
-		// Future models: register_hydrology_plugin(app); …
+		register_water_plugin(app);
 	}
 }

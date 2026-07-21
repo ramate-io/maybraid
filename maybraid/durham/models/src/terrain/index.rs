@@ -11,23 +11,28 @@ use crate::terrain::jersey::{
 	BootstrapRollingLowPassControllerLayout, BootstrapValleyHighPassControllerLayout,
 	BootstrapValleyLowPassControllerLayout, CanyonHighPassControllerCell,
 	CanyonHighPassControllerLayout, CanyonHighPassStampCell, CanyonLowPassControllerCell,
-	CanyonLowPassControllerLayout, CanyonLowPassStampCell, JerseyStampConfigs,
-	MassifHighPassControllerCell, MassifHighPassControllerLayout, MassifHighPassStampCell,
-	MassifLowPassControllerCell, MassifLowPassControllerLayout, MassifLowPassStampCell,
-	PlateauHighPassControllerCell, PlateauHighPassControllerLayout, PlateauHighPassStampCell,
-	PlateauLowPassControllerCell, PlateauLowPassControllerLayout, PlateauLowPassStampCell,
-	PocketWaterHighPassControllerCell, PocketWaterHighPassControllerLayout,
+	CanyonLowPassControllerLayout, CanyonLowPassStampCell, JerseyControllerLayouts,
+	JerseyStampConfigs, MassifHighPassControllerCell, MassifHighPassControllerLayout,
+	MassifHighPassStampCell, MassifLowPassControllerCell, MassifLowPassControllerLayout,
+	MassifLowPassStampCell, PlateauHighPassControllerCell, PlateauHighPassControllerLayout,
+	PlateauHighPassStampCell, PlateauLowPassControllerCell, PlateauLowPassControllerLayout,
+	PlateauLowPassStampCell, PocketWaterHighPassControllerCell, PocketWaterHighPassControllerLayout,
 	PocketWaterHighPassStampCell, PocketWaterLowPassControllerCell,
 	PocketWaterLowPassControllerLayout, PocketWaterLowPassStampCell, RollingHighPassControllerCell,
 	RollingHighPassControllerLayout, RollingHighPassStampCell, RollingLowPassControllerCell,
 	RollingLowPassControllerLayout, RollingLowPassStampCell, ValleyHighPassControllerCell,
 	ValleyHighPassControllerLayout, ValleyHighPassStampCell, ValleyLowPassControllerCell,
-	ValleyLowPassControllerLayout, ValleyLowPassStampCell, JerseyControllerLayouts,
+	ValleyLowPassControllerLayout, ValleyLowPassStampCell,
+};
+use crate::terrain::marazion::{
+	BootstrapMarazionLakeLayout, BootstrapMarazionWatershedConfigs, MarazionLakeCell,
+	MarazionLakeLayout, MarazionWatershedConfigs,
 };
 use crate::terrain::presentation::{
 	BootstrapTerrainPresentationAssets, TerrainPresentationAssets,
 };
-use crate::terrain::Terrain;
+use crate::terrain::{PreWatershedTerrain, Terrain};
+use crate::water::{BootstrapWaterPresentationAssets, Water, WaterPresentationAssets};
 use avian3d::prelude::*;
 use bevy::ecs::system::SystemParam;
 use bevy::math::bounding::{Aabb3d, IntersectsVolume};
@@ -53,10 +58,16 @@ pub(crate) struct StoredEntry<T> {
 pub struct TerrainEntryStore {
 	next_version: u64,
 	pub(crate) terrain: HashMap<Id, StoredEntry<Terrain>>,
+	pub(crate) pre_watershed: HashMap<Id, StoredEntry<PreWatershedTerrain>>,
+	pub(crate) water: HashMap<Id, StoredEntry<Water>>,
 	pub(crate) base_noise: HashMap<Id, StoredEntry<BaseTerrainNoise>>,
 	pub(crate) cell_layout: HashMap<Id, StoredEntry<TerrainCellLayout>>,
 	pub(crate) presentation: HashMap<Id, StoredEntry<TerrainPresentationAssets>>,
+	pub(crate) water_presentation: HashMap<Id, StoredEntry<WaterPresentationAssets>>,
 	pub(crate) jersey_configs: HashMap<Id, StoredEntry<JerseyStampConfigs>>,
+	pub(crate) marazion_configs: HashMap<Id, StoredEntry<MarazionWatershedConfigs>>,
+	pub(crate) marazion_lake_layout: HashMap<Id, StoredEntry<MarazionLakeLayout>>,
+	pub(crate) marazion_lake_cell: HashMap<Id, StoredEntry<MarazionLakeCell>>,
 	pub(crate) plateau_low_pass_layout: HashMap<Id, StoredEntry<PlateauLowPassControllerLayout>>,
 	pub(crate) plateau_low_pass_controller: HashMap<Id, StoredEntry<PlateauLowPassControllerCell>>,
 	pub(crate) plateau_low_pass_stamp: HashMap<Id, StoredEntry<PlateauLowPassStampCell>>,
@@ -128,7 +139,10 @@ pub struct AvianTerrainIndex<'w, 's> {
 	layout: ResMut<'w, TerrainCellLayout>,
 	jersey_configs: Res<'w, JerseyStampConfigs>,
 	jersey_layouts: ResMut<'w, JerseyControllerLayouts>,
+	marazion_configs: Res<'w, MarazionWatershedConfigs>,
+	marazion_lake_layout: Res<'w, MarazionLakeLayout>,
 	presentation: Res<'w, TerrainPresentationAssets>,
+	water_presentation: Res<'w, WaterPresentationAssets>,
 }
 
 impl<'w, 's> BootstrapTerrainCellLayout for AvianTerrainIndex<'w, 's> {
@@ -140,6 +154,18 @@ impl<'w, 's> BootstrapTerrainCellLayout for AvianTerrainIndex<'w, 's> {
 impl<'w, 's> BootstrapJerseyStampConfigs for AvianTerrainIndex<'w, 's> {
 	fn bootstrap_jersey_stamp_configs(&self) -> JerseyStampConfigs {
 		self.jersey_configs.clone()
+	}
+}
+
+impl<'w, 's> BootstrapMarazionWatershedConfigs for AvianTerrainIndex<'w, 's> {
+	fn bootstrap_marazion_watershed_configs(&self) -> MarazionWatershedConfigs {
+		self.marazion_configs.clone()
+	}
+}
+
+impl<'w, 's> BootstrapMarazionLakeLayout for AvianTerrainIndex<'w, 's> {
+	fn bootstrap_marazion_lake_layout(&self) -> MarazionLakeLayout {
+		self.marazion_lake_layout.clone()
 	}
 }
 
@@ -229,6 +255,12 @@ impl_bootstrap_layout!(
 impl<'w, 's> BootstrapTerrainPresentationAssets for AvianTerrainIndex<'w, 's> {
 	fn bootstrap_terrain_presentation_assets(&self) -> TerrainPresentationAssets {
 		self.presentation.clone()
+	}
+}
+
+impl<'w, 's> BootstrapWaterPresentationAssets for AvianTerrainIndex<'w, 's> {
+	fn bootstrap_water_presentation_assets(&self) -> WaterPresentationAssets {
+		self.water_presentation.clone()
 	}
 }
 
@@ -335,7 +367,13 @@ macro_rules! impl_map_spatial_index {
 impl_map_spatial_index!(BaseTerrainNoise, base_noise);
 impl_map_spatial_index!(TerrainCellLayout, cell_layout);
 impl_map_spatial_index!(TerrainPresentationAssets, presentation);
+impl_map_spatial_index!(WaterPresentationAssets, water_presentation);
 impl_map_spatial_index!(JerseyStampConfigs, jersey_configs);
+impl_map_spatial_index!(MarazionWatershedConfigs, marazion_configs);
+impl_map_spatial_index!(MarazionLakeLayout, marazion_lake_layout);
+impl_map_spatial_index!(MarazionLakeCell, marazion_lake_cell);
+impl_map_spatial_index!(PreWatershedTerrain, pre_watershed);
+impl_map_spatial_index!(Water, water);
 
 impl_map_spatial_index!(PlateauLowPassControllerLayout, plateau_low_pass_layout);
 impl_map_spatial_index!(PlateauLowPassControllerCell, plateau_low_pass_controller);
