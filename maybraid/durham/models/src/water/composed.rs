@@ -38,18 +38,13 @@ impl Sdf for ComposedWater {
 		let mut wet_bottom = f32::INFINITY;
 		let mut wet_top = f32::NEG_INFINITY;
 		for fill in &self.fills {
-			let w = fill.region.softmask_weight(
-				p_xz,
-				fill.inner_radius,
-				fill.outer_radius,
-				fill.noise.as_ref(),
-			);
+			let w = fill.softmask_at(p_xz.x, p_xz.y);
 			if w >= SOFTMASK_DRY {
 				continue;
 			}
-			if fill.water_level > h {
-				wet_bottom = wet_bottom.min(h);
-				wet_top = wet_top.max(fill.water_level);
+			if let Some((lo, hi)) = fill.wet_y_span(h) {
+				wet_bottom = wet_bottom.min(lo);
+				wet_top = wet_top.max(hi);
 			}
 		}
 

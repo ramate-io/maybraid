@@ -91,17 +91,17 @@ pub fn water_distance(fills: &[WaterFill], p: Vec3, terrain_height: f32) -> f32 
 		.fold(f32::INFINITY, f32::min)
 }
 
-/// True when the stamp surface sits above terrain at the fill footprint center.
+/// True when the stamp has wet volume at the fill footprint center (with undercut).
 fn fill_has_wet_volume(fill: &WaterFill, terrain: &TerrainSdf) -> bool {
 	let center = match &fill.region {
 		Region2D::Circle(c) => c.center,
 		Region2D::Rect(r) => r.center,
 	};
 	let h = terrain.height_at_with_all_modulations(center.x, center.y);
-	fill.water_level > h + 1.0e-2
+	fill.wet_y_span(h).is_some()
 }
 
-/// Vertical span for water meshing: cover `[terrain_h, W]` per fill with pad.
+/// Vertical span for water meshing: cover `[h_eff, W]` per fill with pad.
 fn water_mesh_y_span(fills: &[WaterFill], terrain: &TerrainSdf) -> (f32, f32) {
 	let mut y_lo = f32::INFINITY;
 	let mut y_hi = f32::NEG_INFINITY;
@@ -111,8 +111,13 @@ fn water_mesh_y_span(fills: &[WaterFill], terrain: &TerrainSdf) -> (f32, f32) {
 			Region2D::Rect(r) => r.center,
 		};
 		let h = terrain.height_at_with_all_modulations(center.x, center.y);
-		y_lo = y_lo.min(h).min(fill.water_level);
-		y_hi = y_hi.max(h).max(fill.water_level);
+		if let Some((lo, hi)) = fill.wet_y_span(h) {
+			y_lo = y_lo.min(lo);
+			y_hi = y_hi.max(hi);
+		} else {
+			y_lo = y_lo.min(h).min(fill.water_level);
+			y_hi = y_hi.max(h).max(fill.water_level);
+		}
 	}
 	if !y_lo.is_finite() || !y_hi.is_finite() {
 		return (-50.0, 50.0);

@@ -2,7 +2,7 @@
 //!
 //! Three-band footprint (center → edge):
 //! - **Water** — bowl disc depressed below surface `W`
-//! - **Rim** — flat plateau shelf at `W` between water edge and plateau edge
+//! - **Rim** — flat plateau shelf slightly **above** `W` between water edge and plateau edge
 //! - **Apron** — soft blend from plateau edge back to identity terrain
 //!
 //! Leaves must be ≈2×+ the water body so rim + apron fit without collapsing bands.
@@ -32,20 +32,41 @@ pub struct LakeParams {
 	pub surface_noise_amp: f32,
 	/// Bowl depth scale (world units).
 	pub depth: f32,
-	/// SDF-relative shore fade for [`WaterFill`] at the water disc edge.
+	/// How far the rim shelf sits above water surface `W` (world units).
+	pub rim_lift: f32,
+	/// Bleed past the bowl edge as a multiple of rim width (`1` = full rim).
+	///
+	/// Values above `1` spill into the apron (`1.25` ≈ full rim + 0.25·rim into apron
+	/// unless [`Self::apron_bleed_frac`] adds more). Absorbs marching-cubes shoreline inset.
+	pub rim_bleed_frac: f32,
+	/// Extra wet bleed into the apron as a fraction of apron width (after rim bleed).
+	pub apron_bleed_frac: f32,
+	/// Extra SDF-relative fade past the bled fill edge.
 	pub shore_fade: f32,
+	/// Vertical undercut for the water difference SDF (world units).
+	///
+	/// Exact `Difference(Below(W), Terrain)` has no volume where the rim sits
+	/// above `W`. Undercut evaluates against `h - terrain_undercut` so water
+	/// actually bleeds into the bank (not only a wider softmask).
+	pub terrain_undercut: f32,
 }
 
 impl Default for LakeParams {
 	fn default() -> Self {
 		Self {
 			mu: 12.0,
-			rim_frac: 0.18,
-			apron_frac: 0.22,
+			rim_frac: 0.30,
+			apron_frac: 0.34,
 			centroid_jitter: 0.12,
 			surface_noise_amp: 2.0,
 			depth: 14.0,
-			shore_fade: 2.5,
+			rim_lift: 1.75,
+			// Full rim + into apron so MC shoreline inset still meets the bank.
+			rim_bleed_frac: 1.15,
+			apron_bleed_frac: 0.35,
+			shore_fade: 4.0,
+			// ≥ rim_lift plus slack so raised banks do not block the fill volume.
+			terrain_undercut: 4.0,
 		}
 	}
 }
@@ -76,13 +97,13 @@ impl LakeBandBudget {
 		}
 
 		// Enforce leaf_short ≥ 2 · body_diameter ⇒ R_water ≤ short/4 = S/2.
-		let max_water = (s * 0.5).min(available * 0.55);
-		let rim = (available * params.rim_frac.clamp(0.05, 0.4))
-			.max(available * 0.08)
-			.min(available * 0.35);
-		let apron = (available * params.apron_frac.clamp(0.05, 0.45))
-			.max(available * 0.1)
-			.min(available * 0.4);
+		let max_water = (s * 0.5).min(available * 0.45);
+		let rim = (available * params.rim_frac.clamp(0.05, 0.45))
+			.max(available * 0.12)
+			.min(available * 0.42);
+		let apron = (available * params.apron_frac.clamp(0.05, 0.5))
+			.max(available * 0.14)
+			.min(available * 0.45);
 		let water = (available - rim - apron).min(max_water);
 		if water < MIN_WATER_RADIUS {
 			return None;
@@ -112,6 +133,8 @@ pub struct Lake {
 	pub plateau_radius: f32,
 	pub rim_width: f32,
 	pub apron_width: f32,
+	/// Fill disc radius (≥ [`Self::water_radius`]); bleeds into the rim shelf.
+	pub fill_radius: f32,
 	pub water_level: f32,
 	pub modulations: Vec<JerseyModulation>,
 	pub fills: Vec<WaterFill>,
@@ -158,6 +181,7 @@ impl Lake {
 			plateau_radius: 0.0,
 			rim_width: 0.0,
 			apron_width: 0.0,
+			fill_radius: 0.0,
 			water_level: 0.0,
 			modulations: Vec::new(),
 			fills: Vec::new(),
@@ -178,9 +202,21 @@ impl Lake {
 
 		let water_r = budget.water_radius;
 		let plateau_r = budget.plateau_radius;
+		let rim_w = budget.rim_width;
 		let apron_w = budget.apron_width.max(1.0);
-		let bowl_fade = (budget.rim_width * 0.25).max(0.5).min(water_r * 0.2);
-		let shore_fade = params.shore_fade.max(0.5).min(water_r * 0.15);
+		let bowl_fade = (rim_w * 0.25).max(0.5).min(water_r * 0.2);
+
+		// Wet fill: past bowl into rim (and optionally apron). Cap before leaf edge.
+		let rim_bleed = rim_w * params.rim_bleed_frac.max(0.0);
+		let apron_bleed = apron_w * params.apron_bleed_frac.max(0.0);
+		let max_fill = plateau_r + apron_w - 0.5;
+		let fill_r = (water_r + rim_bleed + apron_bleed)
+			.min(max_fill)
+			.max(water_r);
+		let fill_fade = params
+			.shore_fade
+			.max(1.0)
+			.min((max_fill - fill_r + params.shore_fade).max(1.0));
 
 		let plateau_region = Region2D::Circle(CircleRegion {
 			center,
@@ -190,25 +226,36 @@ impl Lake {
 			center,
 			radius: water_r,
 		});
+		let fill_region = Region2D::Circle(CircleRegion {
+			center,
+			radius: fill_r,
+		});
 		let noise = RegionNoise::from_seed(seed.wrapping_add(3), 0.016, water_r * 0.05);
 
-		// Plateau covers water + rim; outer SDF apron blends to identity terrain.
+		// Bank shelf sits above water: plateau → W + rim_lift, apron blends to identity.
+		let rim_level = surface + params.rim_lift.max(0.0);
 		let plateau = JerseyModulation::Affine(
-			RegionAffineModulation::new(plateau_region, 0.0, surface, 0.0, apron_w)
+			RegionAffineModulation::new(plateau_region, 0.0, rim_level, 0.0, apron_w)
 				.with_noise(noise.clone()),
 		);
-		// Bowl depresses only the water disc; rim annulus stays at W.
+		// Bowl depresses only the water disc; rim annulus stays at rim_level.
+		// Depth is measured from the raised shelf so the floor still sits below W.
+		let bowl_depth = depth + params.rim_lift.max(0.0);
 		let bowl = JerseyModulation::Affine(
-			RegionAffineModulation::new(water_region.clone(), 1.0, -depth, 0.0, bowl_fade)
+			RegionAffineModulation::new(water_region, 1.0, -bowl_depth, 0.0, bowl_fade)
 				.with_noise(noise.clone()),
 		);
 
 		let fill = WaterFill {
-			region: water_region,
+			region: fill_region,
 			inner_radius: 0.0,
-			outer_radius: shore_fade,
+			outer_radius: fill_fade,
 			noise: Some(noise),
 			water_level: surface,
+			terrain_undercut: params
+				.terrain_undercut
+				.max(params.rim_lift + 0.5)
+				.max(0.0),
 		};
 
 		Self {
@@ -217,8 +264,9 @@ impl Lake {
 			center,
 			water_radius: water_r,
 			plateau_radius: plateau_r,
-			rim_width: budget.rim_width,
+			rim_width: rim_w,
 			apron_width: budget.apron_width,
+			fill_radius: fill_r,
 			water_level: surface,
 			modulations: vec![plateau, bowl],
 			fills: vec![fill],
@@ -299,13 +347,19 @@ mod tests {
 	fn rim_annulus_stays_near_surface() -> anyhow::Result<()> {
 		let bounds = Bounds2::from_xz(0.0, 0.0, 320.0, 320.0);
 		let base = 40.0;
-		let lake = Lake::from_bounds(bounds, 11, LakeParams::default(), Some(&|_, _| base));
+		let params = LakeParams::default();
+		let lake = Lake::from_bounds(bounds, 11, params, Some(&|_, _| base));
 		let mid_r = lake.water_radius + lake.rim_width * 0.5;
 		let p = lake.center + Vec2::new(mid_r, 0.0);
 		let h = apply_mods(&lake.modulations, base, p.x, p.y);
+		let rim_level = lake.water_level + params.rim_lift;
 		assert!(
-			(h - lake.water_level).abs() < 1.5,
-			"rim {h} should stay near surface {}",
+			(h - rim_level).abs() < 1.5,
+			"rim {h} should stay near rim shelf {rim_level}"
+		);
+		assert!(
+			h > lake.water_level + 0.25,
+			"rim {h} should sit above water {}",
 			lake.water_level
 		);
 		Ok(())
@@ -315,16 +369,18 @@ mod tests {
 	fn apron_blends_toward_identity() -> anyhow::Result<()> {
 		let bounds = Bounds2::from_xz(0.0, 0.0, 320.0, 320.0);
 		let base = 40.0;
-		let lake = Lake::from_bounds(bounds, 11, LakeParams::default(), Some(&|_, _| base));
+		let params = LakeParams::default();
+		let lake = Lake::from_bounds(bounds, 11, params, Some(&|_, _| base));
 		let apron_mid = lake.plateau_radius + lake.apron_width * 0.5;
 		let p = lake.center + Vec2::new(apron_mid, 0.0);
 		let h = apply_mods(&lake.modulations, base, p.x, p.y);
+		let rim_level = lake.water_level + params.rim_lift;
+		let lo = base.min(rim_level);
+		let hi = base.max(rim_level);
 		assert!(
-			h < lake.water_level - 0.25 || (h - base).abs() < (lake.water_level - base).abs(),
-			"apron {h} should sit between identity {base} and surface {}",
-			lake.water_level
+			h >= lo - 0.5 && h <= hi + 0.5,
+			"apron {h} should sit between identity {base} and rim {rim_level}"
 		);
-		assert!((h - base).abs() > 0.1 || (lake.water_level - base).abs() < 0.5);
 		Ok(())
 	}
 
@@ -335,7 +391,40 @@ mod tests {
 		let fill = lake.fills.first().expect("fill");
 		let mid = lake.center;
 		assert!(softmask_at(fill, mid.x, mid.y) < 0.25);
-		let outside = lake.center + Vec2::new(lake.plateau_radius + lake.apron_width, 0.0);
+		let outside = lake.center
+			+ Vec2::new(lake.plateau_radius + lake.apron_width + 20.0, 0.0);
+		assert!(softmask_at(fill, outside.x, outside.y) >= 0.999);
+		Ok(())
+	}
+
+	#[test]
+	fn fill_bleeds_into_rim_not_apron() -> anyhow::Result<()> {
+		let bounds = Bounds2::from_xz(0.0, 0.0, 320.0, 320.0);
+		let params = LakeParams::default();
+		let lake = Lake::from_bounds_default(bounds, 11);
+		assert!(
+			lake.fill_radius > lake.water_radius + lake.rim_width * 0.9,
+			"fill {} should cover most of the rim past bowl {}",
+			lake.fill_radius,
+			lake.water_radius
+		);
+		let max_fill = lake.plateau_radius + lake.apron_width;
+		assert!(
+			lake.fill_radius <= max_fill + 1e-3,
+			"fill {} must stay within apron outer {}",
+			lake.fill_radius,
+			max_fill
+		);
+		let fill = lake.fills.first().expect("fill");
+		let rim_in = lake.center
+			+ Vec2::new(lake.water_radius + lake.rim_width * 0.5, 0.0);
+		assert!(
+			softmask_at(fill, rim_in.x, rim_in.y) < 0.5,
+			"rim bleed should stay wet"
+		);
+		// Far past apron fade should stay dry.
+		let outside = lake.center
+			+ Vec2::new(max_fill + params.shore_fade + lake.apron_width * 0.5, 0.0);
 		assert!(softmask_at(fill, outside.x, outside.y) >= 0.999);
 		Ok(())
 	}
