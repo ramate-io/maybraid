@@ -57,7 +57,6 @@ where
 	)?;
 	Some(pre.sdf.terrain.height_at_with_all_modulations(x, z))
 }
-
 impl<S> GenerationScheme<S> for MarazionLakeCell
 where
 	S: GeneratingSpatialIndex<MarazionWatershedConfigs>
@@ -131,3 +130,4 @@ where
 
 	fn descendants_with_lod(_id: Id, _spatial_index: &mut S, _lod_ref: &LodRef) {}
 }
+

@@ -13,8 +13,9 @@ use marazion_watersheds::{
 ///
 /// Hierarchy: [`PrePocketParams`] → guillotine leaves → [`LakeParams`].
 /// Lake look: keep [`LakeParams::apron_frac`] large; rim/apron claim budget and
-/// water takes the remainder. Tune in
-/// [`LakeParams::default`](marazion_watersheds::LakeParams::default).
+/// water takes a noisy fraction of the leftover ([`LakeParams::water_size`] /
+/// [`LakeParams::water_size_min`], high-freq [`LakeParams::water_size_freq`]).
+/// Tune in [`LakeParams::default`](marazion_watersheds::LakeParams::default).
 #[derive(Resource, Debug, Clone)]
 pub struct MarazionWatershedConfigs {
 	pub seed: u32,
@@ -35,10 +36,7 @@ impl Default for MarazionWatershedConfigs {
 				seed: 127,
 				..Default::default()
 			},
-			guillotine: PocketGuillotineParams {
-				seed: 127,
-				..Default::default()
-			},
+			guillotine: PocketGuillotineParams { seed: 127, ..Default::default() },
 			lake: LakeParams::default(),
 			leaf_likelihood: 0.65,
 			spatial_correlation: DEFAULT_PRE_POCKET_PITCH * 0.25,
@@ -62,10 +60,7 @@ where
 		if id != Id::Universal {
 			return None;
 		}
-		Some((
-			spatial_index.bootstrap_marazion_watershed_configs(),
-			universal_bounds(),
-		))
+		Some((spatial_index.bootstrap_marazion_watershed_configs(), universal_bounds()))
 	}
 
 	fn descendants_with_lod(_id: Id, _spatial_index: &mut S, _lod_ref: &LodRef) {}

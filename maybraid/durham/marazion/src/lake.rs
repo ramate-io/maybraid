@@ -8,7 +8,7 @@
 //! Leaves must be ≈2×+ the water body so rim + apron fit without collapsing bands.
 
 use crate::fill::WaterFill;
-use crate::noise::{n01_at, n11_at};
+use crate::noise::{n01_at, n01_freq, n11_at};
 use bevy_math::Vec2;
 use jersey_terrain_stamps::{
 	CircleRegion, JerseyModulation, Region2D, RegionAffineModulation, RegionNoise,
@@ -17,6 +17,9 @@ use procedural_common::Bounds2;
 
 /// Minimum water radius (world units); smaller budgets skip the stamp.
 const MIN_WATER_RADIUS: f32 = 8.0;
+
+/// Salt for per-leaf water-radius undershoot.
+const WATER_SIZE_SALT: u32 = 0x1A7E_512E;
 
 #[derive(Debug, Clone, Copy)]
 pub struct LakeParams {
@@ -31,6 +34,14 @@ pub struct LakeParams {
 	///
 	/// This is the real shoreline bleed; keep it a bit above `rim_lift + water_sink`.
 	pub terrain_undercut: f32,
+	/// Max water radius as a fraction of the leftover after rim+apron claim.
+	///
+	/// `1.0` = use the full leftover; lower values shrink the bowl (apron stays large).
+	pub water_size: f32,
+	/// Min water radius fraction of leftover (paired with [`Self::water_size`] via leaf noise).
+	pub water_size_min: f32,
+	/// Spatial frequency for the water-size draw (higher ⇒ more leaf-to-leaf variation).
+	pub water_size_freq: f32,
 
 	// ── Secondary / internal ───────────────────────────────────────────────
 	/// Inward margin μ (world units) from cell boundary to the outer apron.
@@ -64,6 +75,12 @@ impl Default for LakeParams {
 			apron_frac: 1.30,
 			water_sink: 0.9,
 			terrain_undercut: 2.5,
+			// Wide undershoot so similar-sized leaves still read as different lakes.
+			water_size: 1.0,
+			// Floor keeps leftover·min ≥ MIN_WATER_RADIUS on typical ~160 half leaves.
+			water_size_min: 0.35,
+			// ~8 world-unit lattice + fine octave; adjacent leaves decorrelate hard.
+			water_size_freq: 0.12,
 
 			mu: 12.0,
 			centroid_jitter: 0.12,
@@ -93,8 +110,13 @@ pub struct LakeBandBudget {
 impl LakeBandBudget {
 	/// Budget water / rim / apron so the leaf is ≥2× the body diameter.
 	///
+	/// Rim + apron claim first; water takes a noisy fraction of the leftover so
+	/// lakes vary in size without shrinking the apron. `water_u01` ∈ `[0, 1)`
+	/// should be stable per leaf (same draw in [`Lake::planned_center`] /
+	/// [`Lake::from_bounds`]).
+	///
 	/// Returns `None` when the leaf cannot host a meaningful three-band lake.
-	pub fn try_from_short_half(short_half: f32, params: LakeParams) -> Option<Self> {
+	pub fn try_from_short_half(short_half: f32, params: LakeParams, water_u01: f32) -> Option<Self> {
 		let s = short_half.max(0.0);
 		if s < MIN_WATER_RADIUS * 2.0 {
 			return None;
@@ -114,7 +136,11 @@ impl LakeBandBudget {
 		let apron = (available * params.apron_frac.max(0.05))
 			.max(available * 0.14)
 			.min(available * 0.72);
-		let water = (available - rim - apron).min(max_water);
+		let leftover = (available - rim - apron).min(max_water);
+		let size_hi = params.water_size.clamp(0.05, 1.0);
+		let size_lo = params.water_size_min.clamp(0.05, size_hi);
+		let size_frac = size_lo + (size_hi - size_lo) * water_u01.clamp(0.0, 1.0);
+		let water = leftover * size_frac;
 		if water < MIN_WATER_RADIUS {
 			return None;
 		}
@@ -131,6 +157,11 @@ impl LakeBandBudget {
 			mu,
 		})
 	}
+}
+
+/// Per-leaf water-size unit sample (shared by centroid planning and stamp build).
+fn water_size_u01(seed: u32, leaf_min: Vec2, params: LakeParams) -> f32 {
+	n01_freq(seed, WATER_SIZE_SALT, leaf_min, params.water_size_freq)
 }
 
 /// Lake stamp products for one pocket-water leaf.
@@ -158,7 +189,8 @@ impl Lake {
 		let cell_c = Vec2::new((min.x + max.x) * 0.5, (min.y + max.y) * 0.5);
 		let half = Vec2::new((max.x - min.x) * 0.5, (max.y - min.y) * 0.5);
 		let short_half = half.x.min(half.y).max(1.0);
-		let Some(budget) = LakeBandBudget::try_from_short_half(short_half, params) else {
+		let u = water_size_u01(seed, min, params);
+		let Some(budget) = LakeBandBudget::try_from_short_half(short_half, params, u) else {
 			return cell_c;
 		};
 		let outer = budget.plateau_radius + budget.apron_width;
@@ -197,7 +229,8 @@ impl Lake {
 			fills: Vec::new(),
 		};
 
-		let Some(budget) = LakeBandBudget::try_from_short_half(short_half, params) else {
+		let u = water_size_u01(seed, min, params);
+		let Some(budget) = LakeBandBudget::try_from_short_half(short_half, params, u) else {
 			return empty(Vec2::new((min.x + max.x) * 0.5, (min.y + max.y) * 0.5));
 		};
 
@@ -318,7 +351,7 @@ mod tests {
 	fn budget_enforces_two_x_body() -> anyhow::Result<()> {
 		let short_half = 160.0;
 		let budget =
-			LakeBandBudget::try_from_short_half(short_half, LakeParams::default()).expect("budget");
+			LakeBandBudget::try_from_short_half(short_half, LakeParams::default(), 1.0).expect("budget");
 		let leaf_short = 2.0 * short_half;
 		let body_diameter = 2.0 * budget.water_radius;
 		assert!(
@@ -327,6 +360,46 @@ mod tests {
 		);
 		assert!(budget.rim_width > 0.0);
 		assert!(budget.apron_width > 0.0);
+		Ok(())
+	}
+
+	#[test]
+	fn water_size_undershoot_varies_radius() -> anyhow::Result<()> {
+		let short_half = 160.0;
+		let params = LakeParams::default();
+		let full =
+			LakeBandBudget::try_from_short_half(short_half, params, 1.0).expect("full");
+		let mid =
+			LakeBandBudget::try_from_short_half(short_half, params, 0.5).expect("mid");
+		let small =
+			LakeBandBudget::try_from_short_half(short_half, params, 0.0).expect("small");
+		assert!(full.water_radius > mid.water_radius);
+		assert!(mid.water_radius > small.water_radius);
+		// Apron stays claimed; size variation is water-only.
+		assert!((full.apron_width - small.apron_width).abs() < 1e-4);
+		assert!(small.water_radius + 1e-3 >= MIN_WATER_RADIUS);
+		Ok(())
+	}
+
+	#[test]
+	fn nearby_leaves_draw_different_water_sizes() -> anyhow::Result<()> {
+		let params = LakeParams::default();
+		let seed = 11u32;
+		let mut radii = Vec::new();
+		for i in 0..12 {
+			let ox = (i as f32) * 37.0;
+			let oz = (i as f32) * 29.0;
+			let bounds = Bounds2::from_xz(ox, oz, ox + 320.0, oz + 320.0);
+			let lake = Lake::from_bounds(bounds, seed, params, Some(&|_, _| 40.0));
+			assert!(!lake.is_empty());
+			radii.push(lake.water_radius);
+		}
+		let min_r = radii.iter().cloned().fold(f32::INFINITY, f32::min);
+		let max_r = radii.iter().cloned().fold(0.0_f32, f32::max);
+		assert!(
+			max_r - min_r > 8.0,
+			"high-freq size noise should spread water radii across nearby leaves: {radii:?}"
+		);
 		Ok(())
 	}
 

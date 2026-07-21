@@ -52,13 +52,7 @@ impl PrePocket {
 		let nx = (w / pocket_pitch).round() as u32;
 		let nz = nx;
 		let bounds = Bounds2::from_xz(anchor.x, anchor.y, anchor.x + w, anchor.y + w);
-		Self {
-			bounds,
-			anchor,
-			pocket_pitch,
-			nx: nx.max(1),
-			nz: nz.max(1),
-		}
+		Self { bounds, anchor, pocket_pitch, nx: nx.max(1), nz: nz.max(1) }
 	}
 
 	/// Axis-aligned pocket tile `(px, pz)` inside this pre-pocket (`0..nx`, `0..nz`).
@@ -86,8 +80,8 @@ fn choose_pocket_pitch(anchor: Vec2, params: &PrePocketParams) -> f32 {
 	let ix = (anchor.x / params.pitch.max(1.0)).floor() as i32;
 	let iz = (anchor.y / params.pitch.max(1.0)).floor() as i32;
 	let u = n01(params.seed, 0x70C_AE70, ix, iz);
-	let idx = ((u * params.pocket_pitches.len() as f32) as usize)
-		.min(params.pocket_pitches.len() - 1);
+	let idx =
+		((u * params.pocket_pitches.len() as f32) as usize).min(params.pocket_pitches.len() - 1);
 	let pitch = params.pocket_pitches[idx];
 	debug_assert!(
 		(params.pitch / pitch).fract().abs() < 1e-3,
@@ -136,16 +130,8 @@ mod tests {
 	fn pitches_span_400m_to_3km() -> anyhow::Result<()> {
 		let params = PrePocketParams::default();
 		assert!((params.pitch - 3000.0).abs() < 1e-3);
-		let min_p = params
-			.pocket_pitches
-			.iter()
-			.copied()
-			.fold(f32::INFINITY, f32::min);
-		let max_p = params
-			.pocket_pitches
-			.iter()
-			.copied()
-			.fold(0.0_f32, f32::max);
+		let min_p = params.pocket_pitches.iter().copied().fold(f32::INFINITY, f32::min);
+		let max_p = params.pocket_pitches.iter().copied().fold(0.0_f32, f32::max);
 		assert!(min_p <= 500.0);
 		assert!(max_p >= 3000.0);
 		Ok(())
