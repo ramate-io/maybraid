@@ -2,42 +2,32 @@
 //!
 //! Dual-band: **low-pass** (leaf sides ≈200–600m) + **high-pass** (≈800m–3km).
 //! Each band is `PrePocketLayout` → `PrePocketCell` → `PocketCell` → `MarazionLakeCell`.
+//!
+//! Author likelihood / cell size in [`low_pass`] / [`high_pass`] via
+//! `define_marazion_band!` (same idea as Jersey `define_jersey_family!`).
 
-#[macro_use]
 pub mod band_macro;
 pub mod config;
+pub mod high_pass;
 pub mod lake;
+pub mod low_pass;
 pub mod pre_pocket;
 
 pub use config::{
 	BootstrapMarazionWatershedConfigs, MarazionBandConfig, MarazionWatershedConfigs,
 };
-
-define_marazion_band! {
-	layout: PrePocketLowPassLayout,
-	bootstrap_layout: BootstrapPrePocketLowPassLayout / bootstrap_pre_pocket_low_pass_layout,
-	pre_cell: PrePocketLowPassCell,
-	pocket: PocketLowPassCell,
-	lake: MarazionLakeLowPassCell,
-	pre_ids: original_ids_for_pre_pocket_low_pass_cells,
-	pocket_ids: original_ids_for_pocket_low_pass_cells,
-	lake_ids: original_ids_for_marazion_lake_low_pass_leaves,
-	band_field: low_pass,
-	default_fn: low_pass_default,
-}
-
-define_marazion_band! {
-	layout: PrePocketHighPassLayout,
-	bootstrap_layout: BootstrapPrePocketHighPassLayout / bootstrap_pre_pocket_high_pass_layout,
-	pre_cell: PrePocketHighPassCell,
-	pocket: PocketHighPassCell,
-	lake: MarazionLakeHighPassCell,
-	pre_ids: original_ids_for_pre_pocket_high_pass_cells,
-	pocket_ids: original_ids_for_pocket_high_pass_cells,
-	lake_ids: original_ids_for_marazion_lake_high_pass_leaves,
-	band_field: high_pass,
-	default_fn: high_pass_default,
-}
+pub use high_pass::{
+	original_ids_for_marazion_lake_high_pass_leaves, original_ids_for_pocket_high_pass_cells,
+	original_ids_for_pre_pocket_high_pass_cells, bootstrap_pre_pocket_high_pass_layout,
+	BootstrapPrePocketHighPassLayout, MarazionLakeHighPassCell, PocketHighPassCell,
+	PrePocketHighPassCell, PrePocketHighPassLayout,
+};
+pub use low_pass::{
+	original_ids_for_marazion_lake_low_pass_leaves, original_ids_for_pocket_low_pass_cells,
+	original_ids_for_pre_pocket_low_pass_cells, bootstrap_pre_pocket_low_pass_layout,
+	BootstrapPrePocketLowPassLayout, MarazionLakeLowPassCell, PocketLowPassCell,
+	PrePocketLowPassCell, PrePocketLowPassLayout,
+};
 
 /// Convenience aliases (low-pass) for call sites that still expect singular names.
 pub type PrePocketLayout = PrePocketLowPassLayout;

@@ -1,7 +1,9 @@
 //! Dual-band Marazion LOD stack macro (low-pass = small, high-pass = large).
+//!
+//! Authoring knobs (`cell_size`, `likelihood`, …) live on the call site — same
+//! pattern as [`crate::terrain::jersey::family_macro::define_jersey_family`].
 
 /// Defines `PrePocketLayout` → `PrePocketCell` → `PocketCell` → `MarazionLakeCell` for one band.
-#[macro_export]
 macro_rules! define_marazion_band {
 	(
 		layout: $Layout:ident,
@@ -13,8 +15,15 @@ macro_rules! define_marazion_band {
 		pocket_ids: $pocket_ids:ident,
 		lake_ids: $lake_ids:ident,
 		band_field: $band_field:ident,
-		default_fn: $default_fn:ident,
+		family_salt: $family_salt:expr,
+		cell_size: ($cell_min:expr, $cell_max:expr),
+		pre_pocket_pitch: $pre_pitch:expr,
+		pocket_pitches: $pocket_pitches:expr,
+		origin_offset: ($ox:expr, $oz:expr),
+		likelihood: $likelihood:expr,
+		spatial_correlation: $spatial_correlation:expr,
 	) => {
+		/// Pre-pocket controller grid for this Marazion band.
 		#[derive(bevy::prelude::Resource, Debug, Clone, PartialEq)]
 		pub struct $Layout {
 			pub grid: $crate::terrain::jersey::shared::OffsetControllerGrid,
@@ -22,15 +31,32 @@ macro_rules! define_marazion_band {
 
 		impl Default for $Layout {
 			fn default() -> Self {
-				let band =
-					$crate::terrain::marazion::config::MarazionBandConfig::$default_fn();
 				Self {
 					grid: $crate::terrain::jersey::shared::OffsetControllerGrid::new(
-						band.pre_pocket.pitch.max(1.0),
-						band.pre_pocket.origin,
+						$pre_pitch,
+						bevy::math::Vec2::new($ox, $oz),
 					),
 				}
 			}
+		}
+
+		impl $Layout {
+			/// Guillotine leaf size lower bound / `min_span` (world units).
+			pub const CELL_SIZE_MIN: f32 = $cell_min;
+			/// Preferred max leaf / pocket side (world units).
+			pub const CELL_SIZE_MAX: f32 = $cell_max;
+			/// Pre-pocket controller pitch (world units).
+			pub const PRE_POCKET_PITCH: f32 = $pre_pitch;
+			/// Discrete pocket pitches (each must divide [`Self::PRE_POCKET_PITCH`]).
+			pub const POCKET_PITCHES: [f32; 4] = $pocket_pitches;
+			/// World origin offset for this band's controller grid.
+			pub const ORIGIN_OFFSET: (f32, f32) = ($ox, $oz);
+			/// Default leaf acceptance rate (`0.0..=1.0`).
+			pub const LIKELIHOOD: f32 = $likelihood;
+			/// Occupancy spatial correlation length (world units).
+			pub const SPATIAL_CORRELATION: f32 = $spatial_correlation;
+			/// Occupancy / cut salt for this band.
+			pub const FAMILY_SALT: u32 = $family_salt;
 		}
 
 		pub fn $bootstrap_fn(
@@ -334,7 +360,7 @@ macro_rules! define_marazion_band {
 				if !$crate::terrain::jersey::shared::leaf_selected(
 					cell,
 					occ_seed,
-					band.leaf_likelihood,
+					band.likelihood,
 					band.spatial_correlation,
 				) {
 					return Some((
@@ -403,3 +429,5 @@ macro_rules! define_marazion_band {
 		}
 	};
 }
+
+pub(crate) use define_marazion_band;
