@@ -27,7 +27,7 @@ impl Plugin for DurhamTerrainShaderPlugin {
 pub struct DurhamTerrainShader {
 	#[uniform(0)]
 	pub terrain_noise: DurhamTerrainNoiseUniform,
-	/// `x` = reserved, `y` = edge strength, `z` = edge darkness, `w` = lit mix.
+	/// `x` = normal soften (blend toward up), `y` = edge strength, `z` = edge darkness, `w` = lit mix.
 	#[uniform(1)]
 	pub style_params: Vec4,
 	/// RGB tint multiplied into the palette noise color; **w** = alpha.
@@ -39,7 +39,7 @@ impl Default for DurhamTerrainShader {
 	fn default() -> Self {
 		Self {
 			terrain_noise: DurhamTerrainNoiseUniform::default(),
-			style_params: Vec4::new(0.0, 2.0, 0.05, 0.72),
+			style_params: Vec4::new(0.35, 2.0, 0.05, 0.5),
 			base_color: Vec4::new(1.0, 1.0, 1.0, 1.0),
 		}
 	}
@@ -93,7 +93,8 @@ mod tests {
 		assert!((m.terrain_noise.bands[0].config.x - 120_079.0).abs() < 1e-3);
 		assert!((m.terrain_noise.regional_blend.x - 0.00015).abs() < 1e-8);
 		assert!((m.terrain_noise.regional_blend.y - 0.5).abs() < 1e-8);
-		assert!((m.style_params.w - 0.72).abs() < 1e-5);
+		assert!((m.style_params.x - 0.35).abs() < 1e-5);
+		assert!((m.style_params.w - 0.5).abs() < 1e-5);
 		assert!((m.base_color.x - 1.0).abs() < 1e-5);
 	}
 

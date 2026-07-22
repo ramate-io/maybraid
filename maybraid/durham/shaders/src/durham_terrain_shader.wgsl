@@ -200,8 +200,17 @@ fn fragment(
         is_front,
     );
 
+    // Blend toward up so low-poly N·L faceting is less sharp; 0 = mesh, 1 = flat lit.
+    let soften = saturate(style_params.x);
+    let soft_n = normalize(mix(
+        pbr_input.world_normal,
+        vec3<f32>(0.0, 1.0, 0.0),
+        soften,
+    ));
+    pbr_input.world_normal = soft_n;
+
     pbr_input.is_orthographic = view.clip_from_view[3].w == 1.0;
-    pbr_input.N = normalize(pbr_input.world_normal);
+    pbr_input.N = soft_n;
     pbr_input.V = fns::calculate_view(mesh.world_position, pbr_input.is_orthographic);
 
     let lit_color = fns::apply_pbr_lighting(pbr_input);
