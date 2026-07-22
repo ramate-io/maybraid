@@ -116,9 +116,11 @@ pub struct Terrain {
 	pub jersey_leaves: Vec<Aabb3d>,
 	/// Leaf AABBs whose Marazion lake stamps contributed (plus empties for debug).
 	pub marazion_leaves: Vec<MarazionLeafBounds>,
-	/// Stamp-owned fills from every Marazion lake composed into this cell.
+	/// Stamp-owned fills from every Marazion leaf composed into this cell.
 	///
-	/// Collected **with** elevation mods (both bands) before SDF compose, so
+	/// Each leaf stores a [`marazion_watersheds::WatershedDepressionComplex`];
+	/// terrain pull compiles complexes (per-leaf apron → carve → backfill) and
+	/// collects fills **with** elevation mods before SDF compose, so
 	/// [`crate::water::Water`] can evaluate wet volume against the finished
 	/// heightfield without re-discovering / regenerating lake leaves.
 	pub marazion_fills: Vec<WaterFill>,
@@ -181,9 +183,11 @@ macro_rules! pull_family_stamps {
 	}};
 }
 
-/// Like [`pull_family_stamps`], but also gathers stamp-owned [`WaterFill`]s.
+/// Like [`pull_family_stamps`], but compiles each Marazion leaf complex
+/// (per-complex apron → carve → backfill) and gathers stamp-owned [`WaterFill`]s.
 macro_rules! pull_marazion_lakes {
 	($spatial_index:expr, $lod_ref:expr, $bounds:expr, $leaves_fn:path, $Stamp:ty, $mods:expr, $leaf_out:expr, $fills_out:expr) => {{
+		use procedural_common::Bounds2;
 		let mut leaf_ids = $leaves_fn($spatial_index, $bounds);
 		leaf_ids.sort_by(|a, b| a.0.cmp(&b.0));
 		for OriginalId(lid) in leaf_ids {
@@ -198,10 +202,17 @@ macro_rules! pull_marazion_lakes {
 				kind: stamp.kind,
 				band: stamp.band,
 			});
-			if !stamp.modulations.is_empty() {
-				$mods.extend(stamp.modulations.iter().cloned());
+			if stamp.complex.is_empty() {
+				continue;
 			}
-			$fills_out.extend(stamp.fills.iter().cloned());
+			let compiled = stamp.complex.compile();
+			let leaf_bounds =
+				Bounds2::from_xz(stamp.cell.min.x, stamp.cell.min.z, stamp.cell.max.x, stamp.cell.max.z);
+			$mods.extend(jersey_terrain_stamps::JerseyModulation::bind_all(
+				compiled.modulations,
+				leaf_bounds,
+			));
+			$fills_out.extend(compiled.fills);
 		}
 	}};
 }

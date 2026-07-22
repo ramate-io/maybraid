@@ -2,7 +2,9 @@
 //!
 //! A depression owns the **inner carve** and a candidate [`WaterFill`]. Convert it
 //! into a [`crate::complex::WatershedDepressionComplex`] with a shared apron via
-//! [`Self::into_complex`]; modulations are compiled from that graph.
+//! [`Self::into_complex`]. Authored plans (`Lake` / `Stream` / `Bog`) realize that
+//! complex; terrain emit compiles modulations from the graph.
+
 
 use crate::complex::{WatershedApronShelf, WatershedDepressionComplex, WatershedEdge, WatershedNode};
 use crate::fill::WaterFill;

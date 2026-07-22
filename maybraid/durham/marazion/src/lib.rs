@@ -5,8 +5,9 @@
 //! [`WaterFill`] outputs after pre-watershed terrain is composed.
 //!
 //! Pocket hierarchy: [`pre_pocket`] → [`pocket_cell`] guillotine → [`lake`] /
-//! [`stream`] / [`bog`] leaves (each a thin facade over
-//! [`complex::WatershedDepressionComplex`]).
+//! [`stream`] / [`bog`] **plans**. Each plan realizes a
+//! [`complex::WatershedDepressionComplex`]; Durham compiles that graph when
+//! pulling into terrain (per-complex apron → carve → backfill order).
 
 pub mod apron;
 pub mod backfill;

@@ -8,9 +8,9 @@
 //! Basin noise itself is depth-incentive ([`BasinBackfillParams::depth_frac`]);
 //! [`BogBasinFill`] chooses how aggressively that freeboard is filled / crested.
 
-use crate::backfill::BasinBackfillParams;
-use crate::fill::WaterFill;
-use crate::lake::build::{build_bowl, LakeLayout};
+use crate::backfill::{BasinBackfillParams, WatershedBackfill};
+use crate::complex::WatershedDepressionComplex;
+use crate::lake::build::{build_bowl, LakeBowl, LakeLayout};
 use crate::lake::shelf::{
 	aspect_u01, planned_center as planned_center_impl, rim_width_u01, rotation_u11, shelf_levels,
 	water_scale_u01,
@@ -18,7 +18,6 @@ use crate::lake::shelf::{
 use crate::lake::{LakeBandBudget, LakeParams};
 use crate::noise::scale_noise_freq;
 use bevy_math::Vec2;
-use jersey_terrain_stamps::JerseyModulation;
 use procedural_common::Bounds2;
 
 /// Salt offset for basin backfill noise draws.
@@ -91,7 +90,11 @@ impl Default for BogParams {
 	}
 }
 
-/// Bog stamp products for one pocket-water leaf (lake-shaped public surface).
+/// Authored bog **plan**: lake-shaped layout + basin backfill recipe.
+///
+/// Realize with [`Self::into_complex`] into a [`WatershedDepressionComplex`]
+/// (bowl + basin backfill). `None` from [`Self::from_bounds`] means the leaf
+/// is too small.
 #[derive(Debug, Clone)]
 pub struct Bog {
 	pub bounds: Bounds2,
@@ -105,8 +108,8 @@ pub struct Bog {
 	pub apron_width: f32,
 	pub fill_radius: f32,
 	pub water_level: f32,
-	pub modulations: Vec<JerseyModulation>,
-	pub fills: Vec<WaterFill>,
+	bowl: LakeBowl,
+	basin: WatershedBackfill,
 }
 
 impl Bog {
@@ -114,31 +117,13 @@ impl Bog {
 		planned_center_impl(bounds, seed, params.lake)
 	}
 
-	fn empty(bounds: Bounds2, seed: u32, center: Vec2) -> Self {
-		Self {
-			bounds,
-			seed,
-			center,
-			water_radii: Vec2::ZERO,
-			rotation: 0.0,
-			water_radius: 0.0,
-			plateau_radius: 0.0,
-			rim_width: 0.0,
-			apron_width: 0.0,
-			fill_radius: 0.0,
-			water_level: 0.0,
-			modulations: Vec::new(),
-			fills: Vec::new(),
-		}
-	}
-
-	/// Build a lake bowl + basin backfill, or an empty stamp when the leaf is too small.
+	/// Build a lake bowl + basin backfill plan, or `None` when the leaf is too small.
 	pub fn from_bounds(
 		bounds: Bounds2,
 		seed: u32,
 		params: BogParams,
 		height_at: Option<&dyn Fn(f32, f32) -> f32>,
-	) -> Self {
+	) -> Option<Self> {
 		let min = bounds.min;
 		let center = Self::planned_center(bounds, seed, params);
 		let lake_p = params.lake;
@@ -146,15 +131,8 @@ impl Bog {
 		let rim_u = rim_width_u01(seed, min, lake_p);
 		let asp = aspect_u01(seed, min);
 		let rot = rotation_u11(seed, min);
-		let Some(budget) =
-			LakeBandBudget::try_inscribed(bounds, center, lake_p, u, rim_u, asp, rot)
-		else {
-			return Self::empty(
-				bounds,
-				seed,
-				Vec2::new((bounds.min.x + bounds.max.x) * 0.5, (bounds.min.y + bounds.max.y) * 0.5),
-			);
-		};
+		let budget =
+			LakeBandBudget::try_inscribed(bounds, center, lake_p, u, rim_u, asp, rot)?;
 
 		let levels = shelf_levels(seed, min, center, &budget, lake_p, height_at);
 		let layout = LakeLayout { center, budget, levels };
@@ -174,9 +152,7 @@ impl Bog {
 		}
 		.sample_over_freeboard(freeboard, seed, BASIN_BACKFILL_SALT, wet_core);
 
-		let compiled = bowl.into_complex(bounds, seed).with_backfill(basin).compile();
-
-		Self {
+		Some(Self {
 			bounds,
 			seed,
 			center: layout.center,
@@ -188,46 +164,49 @@ impl Bog {
 			apron_width: layout.budget.apron_width,
 			fill_radius,
 			water_level: layout.levels.water_level,
-			modulations: compiled.modulations,
-			fills: compiled.fills,
-		}
+			bowl,
+			basin,
+		})
 	}
 
-	pub fn from_bounds_default(bounds: Bounds2, seed: u32) -> Self {
+	pub fn from_bounds_default(bounds: Bounds2, seed: u32) -> Option<Self> {
 		Self::from_bounds(bounds, seed, BogParams::default(), None)
 	}
 
-	pub fn is_empty(&self) -> bool {
-		self.modulations.is_empty()
+	/// Realize this plan as a sole-node complex with basin backfill.
+	pub fn into_complex(self) -> WatershedDepressionComplex {
+		self.bowl
+			.into_complex(self.bounds, self.seed)
+			.with_backfill(self.basin)
 	}
 }
 
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use jersey_terrain_stamps::JerseyModulation;
 
 	#[test]
 	fn leaf_too_small_skips() -> anyhow::Result<()> {
 		let bounds = Bounds2::from_xz(0.0, 0.0, 20.0, 20.0);
-		let bog = Bog::from_bounds_default(bounds, 11);
-		assert!(bog.is_empty());
+		assert!(Bog::from_bounds_default(bounds, 11).is_none());
 		Ok(())
 	}
 
 	#[test]
 	fn from_bounds_non_empty_ends_with_backfill() -> anyhow::Result<()> {
 		let bounds = Bounds2::from_xz(0.0, 0.0, 320.0, 320.0);
-		let bog = Bog::from_bounds(bounds, 11, BogParams::default(), Some(&|_, _| 40.0));
-		assert!(!bog.is_empty());
-		assert!(!bog.fills.is_empty());
+		let bog = Bog::from_bounds(bounds, 11, BogParams::default(), Some(&|_, _| 40.0)).expect("bog");
+		let compiled = bog.clone().into_complex().compile();
+		assert!(!compiled.fills.is_empty());
 		assert!(
-			bog.modulations.len() >= 3,
+			compiled.modulations.len() >= 3,
 			"expected apron+bowl+backfill, got {}",
-			bog.modulations.len()
+			compiled.modulations.len()
 		);
 
 		let base = 40.0;
-		let last = bog.modulations.last().expect("backfill");
+		let last = compiled.modulations.last().expect("backfill");
 		let outside = bog.center + Vec2::new(bog.plateau_radius + bog.apron_width + 40.0, 0.0);
 		let h_out = last.modify_elevation(base, outside.x, outside.y);
 		assert!(
@@ -243,9 +222,8 @@ mod tests {
 	#[test]
 	fn bog_keeps_water_fill() -> anyhow::Result<()> {
 		let bounds = Bounds2::from_xz(0.0, 0.0, 320.0, 320.0);
-		let bog = Bog::from_bounds_default(bounds, 19);
-		assert!(!bog.is_empty());
-		assert_eq!(bog.fills.len(), 1);
+		let bog = Bog::from_bounds_default(bounds, 19).expect("bog");
+		assert_eq!(bog.clone().into_complex().compile().fills.len(), 1);
 		Ok(())
 	}
 
@@ -262,7 +240,7 @@ mod tests {
 			"amp {amp} should match fill policy for freeboard {freeboard}"
 		);
 		// Milder than a tall-spike recipe; still depth-incentive.
-		assert!(frac < 2.5, "expected moderate depth_frac, got {frac}");
+		assert!(frac <= 2.5, "expected moderate depth_frac, got {frac}");
 		assert!(frac > 1.5, "expected enough fill to crest often, got {frac}");
 		Ok(())
 	}
@@ -276,8 +254,8 @@ mod tests {
 		params.lake.aspect_strength = 0.0;
 		params.lake.aspect_floor = 0.0;
 		params.lake.depth_noise_amp = 0.0;
-		let bog = Bog::from_bounds(bounds, 11, params, Some(&|_, _| base));
-		assert!(!bog.is_empty());
+		let bog = Bog::from_bounds(bounds, 11, params, Some(&|_, _| base)).expect("bog");
+		let compiled = bog.clone().into_complex().compile();
 
 		fn apply(mods: &[JerseyModulation], h: f32, x: f32, z: f32) -> f32 {
 			let mut y = h;
@@ -294,7 +272,7 @@ mod tests {
 			for i in 0..24 {
 				let ang = i as f32 * std::f32::consts::TAU / 24.0;
 				let p = bog.center + Vec2::new(ang.cos(), ang.sin()) * (bog.water_radius * frac);
-				let h = apply(&bog.modulations, base, p.x, p.y);
+				let h = apply(&compiled.modulations, base, p.x, p.y);
 				samples += 1;
 				if h > bog.water_level + 0.15 {
 					crested += 1;

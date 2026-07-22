@@ -25,7 +25,8 @@ pub(crate) struct StreamLayout {
 
 /// Stream-specific stamp: one corridor depression + its shared apron.
 ///
-/// Convert with [`Self::into_complex`] → [`WatershedDepressionComplex`] → `compile()`.
+/// Convert with [`Self::into_complex`] → [`WatershedDepressionComplex`].
+#[derive(Debug, Clone)]
 pub(crate) struct StreamCorridor {
 	pub depression: WatershedDepression,
 	pub apron: WatershedApronShelf,

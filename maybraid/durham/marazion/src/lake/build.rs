@@ -33,7 +33,8 @@ pub(crate) struct LakeLayout {
 
 /// Lake-specific stamp: one bowl depression + its shared apron.
 ///
-/// Convert with [`Self::into_complex`] → [`WatershedDepressionComplex`] → `compile()`.
+/// Convert with [`Self::into_complex`] → [`WatershedDepressionComplex`].
+#[derive(Debug, Clone)]
 pub(crate) struct LakeBowl {
 	pub depression: WatershedDepression,
 	pub apron: WatershedApronShelf,

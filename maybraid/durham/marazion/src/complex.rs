@@ -163,11 +163,22 @@ impl WatershedDepressionComplex {
 		id
 	}
 
+	/// True when there is nothing to emit (no apron, carves, fills, or backfills).
+	pub fn is_empty(&self) -> bool {
+		let has_depression = self.nodes.iter().any(|n| {
+			n.depression
+				.as_ref()
+				.is_some_and(|d| !d.is_empty())
+		}) || self.edges.iter().any(|e| !e.depression.is_empty());
+		!has_depression && self.apron.is_none() && self.backfills.is_empty()
+	}
+
 	/// Compile shared apron + wet-core carves/fills + post-carve backfills.
 	///
 	/// Order: apron → node/edge carves → backfills (backfill last so hummocks
-	/// rise into an already-carved basin).
-	pub fn compile(self) -> CompiledWatershed {
+	/// rise into an already-carved basin). Per-complex emit preserves this
+	/// contiguous block when several complexes are pulled into terrain.
+	pub fn compile(&self) -> CompiledWatershed {
 		let mut wet_cores: Vec<Region2D> = Vec::new();
 		let mut carve: Vec<JerseyModulation> = Vec::new();
 		let mut fills: Vec<WaterFill> = Vec::new();
@@ -190,11 +201,11 @@ impl WatershedDepressionComplex {
 		}
 
 		let mut modulations = Vec::new();
-		if let Some(apron) = self.apron {
+		if let Some(apron) = self.apron.clone() {
 			modulations.push(apron.into_modulation());
 		}
 		modulations.extend(carve);
-		modulations.extend(self.backfills.into_iter().map(|b| b.into_modulation()));
+		modulations.extend(self.backfills.iter().cloned().map(|b| b.into_modulation()));
 
 		let wet_union = match wet_cores.len() {
 			0 => None,
