@@ -4,10 +4,14 @@
 //! Durham models consume [`jersey_terrain_stamps::JerseyModulation`] and
 //! [`WaterFill`] outputs after pre-watershed terrain is composed.
 //!
-//! Pocket hierarchy: [`pre_pocket`] → [`pocket_cell`] guillotine → [`lake`] / [`stream`] leaves
-//! (each a thin facade over [`complex::WatershedDepressionComplex`]).
+//! Pocket hierarchy: [`pre_pocket`] → [`pocket_cell`] guillotine → [`lake`] /
+//! [`stream`] / [`bog`] **plans**. Each plan realizes a
+//! [`complex::WatershedDepressionComplex`]; Durham compiles that graph when
+//! pulling into terrain (per-complex apron → carve → backfill order).
 
 pub mod apron;
+pub mod backfill;
+pub mod bog;
 pub mod complex;
 pub mod depression;
 pub mod fill;
@@ -19,6 +23,10 @@ pub mod pre_pocket;
 pub mod stream;
 
 pub use apron::{ApronNoiseSalts, WatershedApronParams};
+pub use backfill::{
+	BasinBackfillParams, WatershedBackfill, WatershedBackfillKind,
+};
+pub use bog::{Bog, BogBasinFill, BogParams};
 pub use complex::{
 	CompiledWatershed, WatershedApronShelf, WatershedDepressionComplex, WatershedEdge,
 	WatershedEdgeId, WatershedNode, WatershedNodeId,

@@ -11,14 +11,14 @@ mod build;
 mod path;
 
 use crate::apron::WatershedApronParams;
-use crate::fill::WaterFill;
+use crate::complex::WatershedDepressionComplex;
 use crate::noise::n01_freq;
-use crate::stream::build::{build_corridor, resolve_node_blend, StreamLayout};
+use crate::stream::build::{build_corridor, resolve_node_blend, StreamCorridor, StreamLayout};
 use crate::stream::path::{
 	node_water_levels, sample_endpoint, ENDPOINT_A_SALT, ENDPOINT_B_SALT,
 };
 use bevy_math::Vec2;
-use jersey_terrain_stamps::{DownhillPair, HysteresisSpine, JerseyModulation};
+use jersey_terrain_stamps::{DownhillPair, HysteresisSpine};
 use procedural_common::Bounds2;
 
 /// Minimum channel half-width (world units); smaller budgets skip the stamp.
@@ -76,7 +76,7 @@ pub struct StreamParams {
 	/// How far below the water surface \(W\) the channel floor grade sits.
 	///
 	/// Keeps the carved bed under \(W\) so the wet-column gate stays open;
-	/// fill itself is a half-space below \(W\) (see [`WaterFill`]).
+	/// fill itself is a half-space below \(W\) (see [`crate::fill::WaterFill`]).
 	pub channel_freeboard: f32,
 
 	/// Fill support half-width as a multiple of the carved channel half-width.
@@ -171,7 +171,10 @@ fn width_scale_u01(seed: u32, leaf_min: Vec2, params: StreamParams) -> f32 {
 	n01_freq(seed, WIDTH_SCALE_SALT, leaf_min, params.half_width_freq)
 }
 
-/// Stream stamp products for one pocket-water leaf.
+/// Authored stream **plan**: layout metadata for one pocket-water leaf.
+///
+/// Realize with [`Self::into_complex`] into a [`WatershedDepressionComplex`].
+/// `None` from [`Self::from_bounds`] means the leaf / path is too small.
 #[derive(Debug, Clone)]
 pub struct Stream {
 	pub bounds: Bounds2,
@@ -184,65 +187,46 @@ pub struct Stream {
 	pub skirt_half: f32,
 	pub head_water: f32,
 	pub toe_water: f32,
-	pub modulations: Vec<JerseyModulation>,
-	pub fills: Vec<WaterFill>,
+	corridor: StreamCorridor,
 }
 
 impl Stream {
-	fn empty(bounds: Bounds2, seed: u32) -> Self {
-		Self {
-			bounds,
-			seed,
-			path: Vec::new(),
-			levels: Vec::new(),
-			half_width: 0.0,
-			thalweg_half: 0.0,
-			skirt_half: 0.0,
-			head_water: 0.0,
-			toe_water: 0.0,
-			modulations: Vec::new(),
-			fills: Vec::new(),
-		}
-	}
-
-	/// Build a graded stream, or an empty stamp when the leaf / path is too small.
+	/// Build a graded stream plan, or `None` when the leaf / path is too small.
 	pub fn from_bounds(
 		bounds: Bounds2,
 		seed: u32,
 		params: StreamParams,
 		height_at: Option<&dyn Fn(f32, f32) -> f32>,
-	) -> Self {
+	) -> Option<Self> {
 		let min = bounds.min;
 		let max = bounds.max;
 		let half = Vec2::new((max.x - min.x) * 0.5, (max.y - min.y) * 0.5);
 		let short_half = half.x.min(half.y).max(1.0);
 
 		let width_u = width_scale_u01(seed, min, params);
-		let Some(budget) = StreamBandBudget::try_from_short_half(short_half, params, width_u) else {
-			return Self::empty(bounds, seed);
-		};
+		let budget = StreamBandBudget::try_from_short_half(short_half, params, width_u)?;
 
 		let inset = budget.apron_half.max(budget.mu);
 		let lo = min + Vec2::splat(inset);
 		let hi = max - Vec2::splat(inset);
 		if lo.x >= hi.x || lo.y >= hi.y {
-			return Self::empty(bounds, seed);
+			return None;
 		}
 
 		let a0 = sample_endpoint(seed, ENDPOINT_A_SALT, lo, hi);
 		let b0 = sample_endpoint(seed, ENDPOINT_B_SALT, lo, hi);
 		if a0.distance(b0) < MIN_PATH_LEN * 0.5 {
-			return Self::empty(bounds, seed);
+			return None;
 		}
 
 		let (head_xz, _, toe_xz, _) = DownhillPair::order(a0, b0, height_at);
 		let path = params.spine.build(bounds, seed.wrapping_add(21), head_xz, toe_xz);
 		if path.len() < 2 {
-			return Self::empty(bounds, seed);
+			return None;
 		}
 		let path_len: f32 = path.windows(2).map(|w| w[0].distance(w[1])).sum();
 		if path_len < MIN_PATH_LEN {
-			return Self::empty(bounds, seed);
+			return None;
 		}
 
 		let levels = node_water_levels(&path, height_at, params.water_sink, params.min_drop);
@@ -254,12 +238,9 @@ impl Stream {
 			levels,
 			budget,
 		};
-		// StreamCorridor → WatershedDepression → WatershedDepressionComplex → mods/fills.
-		let compiled = build_corridor(seed, min, params, &layout)
-			.into_complex(bounds, seed)
-			.compile();
+		let corridor = build_corridor(seed, min, params, &layout);
 
-		Self {
+		Some(Self {
 			bounds,
 			seed,
 			path: layout.path,
@@ -269,17 +250,17 @@ impl Stream {
 			skirt_half: layout.budget.skirt_half,
 			head_water,
 			toe_water,
-			modulations: compiled.modulations,
-			fills: compiled.fills,
-		}
+			corridor,
+		})
 	}
 
-	pub fn from_bounds_default(bounds: Bounds2, seed: u32) -> Self {
+	pub fn from_bounds_default(bounds: Bounds2, seed: u32) -> Option<Self> {
 		Self::from_bounds(bounds, seed, StreamParams::default(), None)
 	}
 
-	pub fn is_empty(&self) -> bool {
-		self.modulations.is_empty()
+	/// Realize this plan as a sole-edge [`WatershedDepressionComplex`].
+	pub fn into_complex(self) -> WatershedDepressionComplex {
+		self.corridor.into_complex(self.bounds, self.seed)
 	}
 }
 
@@ -291,8 +272,7 @@ mod tests {
 	#[test]
 	fn leaf_too_small_skips() -> anyhow::Result<()> {
 		let bounds = Bounds2::from_xz(0.0, 0.0, 20.0, 20.0);
-		let stream = Stream::from_bounds_default(bounds, 11);
-		assert!(stream.is_empty());
+		assert!(Stream::from_bounds_default(bounds, 11).is_none());
 		Ok(())
 	}
 
@@ -300,10 +280,10 @@ mod tests {
 	fn graded_fill_decreases_along_path() -> anyhow::Result<()> {
 		let bounds = Bounds2::from_xz(0.0, 0.0, 400.0, 400.0);
 		let height = |x: f32, z: f32| 100.0 - 0.05 * x - 0.01 * z;
-		let stream = Stream::from_bounds(bounds, 42, StreamParams::default(), Some(&height));
-		assert!(!stream.is_empty());
+		let stream = Stream::from_bounds(bounds, 42, StreamParams::default(), Some(&height)).expect("stream");
 		assert!(stream.head_water > stream.toe_water);
-		let fill = stream.fills.first().expect("fill");
+		let compiled = stream.clone().into_complex().compile();
+		let fill = compiled.fills.first().expect("fill");
 		let head = *stream.path.first().expect("path head");
 		let toe = *stream.path.last().expect("path toe");
 		let w_head = fill.surface_level_at(head.x, head.y);
@@ -323,9 +303,9 @@ mod tests {
 		let bounds = Bounds2::from_xz(0.0, 0.0, 400.0, 400.0);
 		let height = |x: f32, z: f32| 100.0 - 0.05 * x - 0.01 * z;
 		let params = StreamParams::default();
-		let stream = Stream::from_bounds(bounds, 42, params, Some(&height));
-		assert!(!stream.is_empty());
-		let fill = stream.fills.first().expect("fill");
+		let stream = Stream::from_bounds(bounds, 42, params, Some(&height)).expect("stream");
+		let compiled = stream.clone().into_complex().compile();
+		let fill = compiled.fills.first().expect("fill");
 		assert!(fill.terrain_undercut >= params.fill_undercut - 1e-3);
 		assert!(fill.noise.is_none());
 		match &fill.region {
@@ -350,15 +330,15 @@ mod tests {
 		let height = |x: f32, z: f32| 100.0 - 0.04 * x - 0.02 * z;
 		let params = StreamParams::default();
 		let freeboard = params.channel_freeboard;
-		let stream = Stream::from_bounds(bounds, 19, params, Some(&height));
-		assert!(!stream.is_empty());
-		let fill = stream.fills.first().expect("fill");
+		let stream = Stream::from_bounds(bounds, 19, params, Some(&height)).expect("stream");
+		let compiled = stream.clone().into_complex().compile();
+		let fill = compiled.fills.first().expect("fill");
 		assert!(stream.path.len() >= 2);
 		for window in stream.path.windows(2) {
 			let mid = window[0].lerp(window[1], 0.5);
 			let w = fill.surface_level_at(mid.x, mid.y);
 			let mut h = height(mid.x, mid.y);
-			for m in &stream.modulations {
+			for m in &compiled.modulations {
 				h = m.modify_elevation(h, mid.x, mid.y);
 			}
 			assert!(
@@ -386,10 +366,10 @@ mod tests {
 		let mut params = StreamParams::default();
 		params.min_drop = 0.0;
 		params.water_sink = 0.0;
-		let stream = Stream::from_bounds(bounds, 7, params, Some(&height));
-		assert!(!stream.is_empty());
+		let stream = Stream::from_bounds(bounds, 7, params, Some(&height)).expect("stream");
 		assert_eq!(stream.path.len(), stream.levels.len());
-		let fill = stream.fills.first().expect("fill");
+		let compiled = stream.clone().into_complex().compile();
+		let fill = compiled.fills.first().expect("fill");
 		for (p, &w) in stream.path.iter().zip(stream.levels.iter()) {
 			let got = fill.surface_level_at(p.x, p.y);
 			assert!(
@@ -418,12 +398,11 @@ mod tests {
 		let params = StreamParams::default();
 		assert!(params.apron.rim_height_amp_max >= 15.0);
 		assert!(params.apron.indent_frac_max > params.apron.indent_frac_min);
-		let stream = Stream::from_bounds(bounds, 42, params, Some(&height));
-		assert!(!stream.is_empty());
-		assert_eq!(stream.modulations.len(), 4);
+		let stream = Stream::from_bounds(bounds, 42, params, Some(&height)).expect("stream");
+		assert_eq!(stream.clone().into_complex().compile().modulations.len(), 4);
 		let far = Vec2::new(bounds.min.x - 120.0, bounds.min.y - 120.0);
 		let h0 = height(far.x, far.y);
-		let h1 = stream.modulations[0].modify_elevation(h0, far.x, far.y);
+		let h1 = stream.clone().into_complex().compile().modulations[0].modify_elevation(h0, far.x, far.y);
 		assert!((h1 - h0).abs() < 1e-3);
 		Ok(())
 	}

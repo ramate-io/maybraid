@@ -15,6 +15,7 @@ macro_rules! define_marazion_band {
 		pocket_ids: $pocket_ids:ident,
 		lake_ids: $lake_ids:ident,
 		band_field: $band_field:ident,
+		band_pass: $band_pass:ident,
 		family_salt: $family_salt:expr,
 		cell_size: ($cell_min:expr, $cell_max:expr),
 		pre_pocket_pitch: $pre_pitch:expr,
@@ -307,8 +308,10 @@ macro_rules! define_marazion_band {
 		#[derive(Debug, Clone, bevy::prelude::Component)]
 		pub struct $LakeCell {
 			pub cell: bevy::math::bounding::Aabb3d,
-			pub modulations: Vec<jersey_terrain_stamps::JerseyModulation>,
-			pub fills: Vec<marazion_watersheds::WaterFill>,
+			pub kind: $crate::terrain::marazion::leaf_kind::MarazionLeafKind,
+			pub band: $crate::terrain::marazion::leaf_kind::MarazionBandPass,
+			/// Authored watershed graph; compiled when pulled into [`crate::terrain::Terrain`].
+			pub complex: marazion_watersheds::WatershedDepressionComplex,
 		}
 
 		pub fn $lake_ids<S>(
@@ -357,27 +360,25 @@ macro_rules! define_marazion_band {
 					0,
 					band.family_salt,
 				);
+				let bounds = Bounds2::from_xz(cell.min.x, cell.min.z, cell.max.x, cell.max.z);
+				let seed = configs.seed.wrapping_add(band.family_salt).wrapping_add(
+					cell.min.x.to_bits().wrapping_mul(73856093)
+						^ cell.min.z.to_bits().wrapping_mul(19349663),
+				);
+				let empty_cell = || Self {
+					cell,
+					kind: $crate::terrain::marazion::leaf_kind::MarazionLeafKind::Empty,
+					band: $crate::terrain::marazion::leaf_kind::MarazionBandPass::$band_pass,
+					complex: marazion_watersheds::WatershedDepressionComplex::new(bounds, seed),
+				};
 				if !$crate::terrain::jersey::shared::leaf_selected(
 					cell,
 					occ_seed,
 					band.likelihood,
 					band.spatial_correlation,
 				) {
-					return Some((
-						Self {
-							cell,
-							modulations: Vec::new(),
-							fills: Vec::new(),
-						},
-						cell,
-					));
+					return Some((empty_cell(), cell));
 				}
-
-				let bounds = Bounds2::from_xz(cell.min.x, cell.min.z, cell.max.x, cell.max.z);
-				let seed = configs.seed.wrapping_add(band.family_salt).wrapping_add(
-					cell.min.x.to_bits().wrapping_mul(73856093)
-						^ cell.min.z.to_bits().wrapping_mul(19349663),
-				);
 
 				// Live pre-watershed sampler: each shelf / endpoint survey point may
 				// land in a different terrain origin cell.
@@ -393,65 +394,96 @@ macro_rules! define_marazion_band {
 				};
 				let height_at: Option<&dyn Fn(f32, f32) -> f32> = Some(&height_fn);
 
-				// Occupied leaves are typed lake vs stream from a stable unit draw.
+				// Occupied leaves: stream / bog / lake from a stable unit draw.
 				let type_u =
 					procedural_common::SeededHash::new(seed.wrapping_add(0x57EA_71FE)).unit(0);
-				let prefer_stream = type_u < band.stream_frac.clamp(0.0, 1.0);
+				let stream_cut = band.stream_frac.clamp(0.0, 1.0);
+				let bog_cut = (stream_cut + band.bog_frac.clamp(0.0, 1.0)).min(1.0);
+				let prefer = if type_u < stream_cut {
+					0u8 // stream
+				} else if type_u < bog_cut {
+					1u8 // bog
+				} else {
+					2u8 // lake
+				};
 
-				let (mods, fills) = if prefer_stream {
-					let stream = marazion_watersheds::Stream::from_bounds(
+				type LeafStamp = (
+					$crate::terrain::marazion::leaf_kind::MarazionLeafKind,
+					marazion_watersheds::WatershedDepressionComplex,
+				);
+				let try_stream = || -> Option<LeafStamp> {
+					marazion_watersheds::Stream::from_bounds(
 						bounds,
 						seed,
 						band.stream,
 						height_at,
-					);
-					if stream.is_empty() {
-						let lake = marazion_watersheds::Lake::from_bounds(
-							bounds,
-							seed,
-							band.lake,
-							height_at,
-						);
-						(lake.modulations, lake.fills)
-					} else {
-						(stream.modulations, stream.fills)
-					}
-				} else {
-					let lake = marazion_watersheds::Lake::from_bounds(
+					)
+					.map(|stream| {
+						(
+							$crate::terrain::marazion::leaf_kind::MarazionLeafKind::Stream,
+							stream.into_complex(),
+						)
+					})
+				};
+				let try_bog = || -> Option<LeafStamp> {
+					marazion_watersheds::Bog::from_bounds(
+						bounds,
+						seed,
+						band.bog,
+						height_at,
+					)
+					.map(|bog| {
+						(
+							$crate::terrain::marazion::leaf_kind::MarazionLeafKind::Bog,
+							bog.into_complex(),
+						)
+					})
+				};
+				let try_lake = || -> Option<LeafStamp> {
+					marazion_watersheds::Lake::from_bounds(
 						bounds,
 						seed,
 						band.lake,
 						height_at,
-					);
-					if lake.is_empty() {
-						let stream = marazion_watersheds::Stream::from_bounds(
-							bounds,
-							seed,
-							band.stream,
-							height_at,
-						);
-						(stream.modulations, stream.fills)
-					} else {
-						(lake.modulations, lake.fills)
-					}
+					)
+					.map(|lake| {
+						(
+							$crate::terrain::marazion::leaf_kind::MarazionLeafKind::Lake,
+							lake.into_complex(),
+						)
+					})
 				};
 
-				if mods.is_empty() {
-					return Some((
-						Self {
-							cell,
-							modulations: Vec::new(),
-							fills: Vec::new(),
-						},
-						cell,
-					));
+				let empty_stamp = || {
+					(
+						$crate::terrain::marazion::leaf_kind::MarazionLeafKind::Empty,
+						marazion_watersheds::WatershedDepressionComplex::new(bounds, seed),
+					)
+				};
+				let (kind, complex) = match prefer {
+					0 => try_stream()
+						.or_else(try_bog)
+						.or_else(try_lake)
+						.unwrap_or_else(empty_stamp),
+					1 => try_bog()
+						.or_else(try_stream)
+						.or_else(try_lake)
+						.unwrap_or_else(empty_stamp),
+					_ => try_lake()
+						.or_else(try_stream)
+						.or_else(try_bog)
+						.unwrap_or_else(empty_stamp),
+				};
+
+				if complex.is_empty() {
+					return Some((empty_cell(), cell));
 				}
-				let modulations = jersey_terrain_stamps::JerseyModulation::bind_all(mods, bounds);
 				Some((
 					Self {
 						cell,
-						modulations,
-						fills,
+						kind,
+						band: $crate::terrain::marazion::leaf_kind::MarazionBandPass::$band_pass,
+						complex,
 					},
 					cell,
 				))

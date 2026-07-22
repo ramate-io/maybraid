@@ -12,6 +12,7 @@ define_marazion_band! {
 	pocket_ids: original_ids_for_pocket_high_pass_cells,
 	lake_ids: original_ids_for_marazion_lake_high_pass_leaves,
 	band_field: high_pass,
+	band_pass: High,
 	family_salt: 0x1270_0002,
 	cell_size: (1200.0, 4500.0),
 	pre_pocket_pitch: 32_000.0,

@@ -1,16 +1,18 @@
 //! Marazion pocket-water LOD stack ([RFC-127 §3.1](https://github.com/ramate-io/maybraid/tree/main/rfc/rfc-000-000-127-marazion-watersheds#31-marazion-pocket-water-stamping)).
 //!
 //! Dual-band: **low-pass** (leaf sides ≈200–600m) + **high-pass** (≈800m–3km).
-//! Each band is `PrePocketLayout` → `PrePocketCell` → `PocketCell` → lake|stream leaves.
+//! Each band is `PrePocketLayout` → `PrePocketCell` → `PocketCell` → lake|stream|bog leaves.
 //!
 //! Author likelihood / cell size in [`low_pass`] / [`high_pass`] via
 //! `define_marazion_band!` (same idea as Jersey `define_jersey_family!`).
 
 pub mod band_macro;
+pub mod bog;
 pub mod config;
 pub mod height;
 pub mod high_pass;
 pub mod lake;
+pub mod leaf_kind;
 pub mod low_pass;
 pub mod pre_pocket;
 pub mod stream;
@@ -22,6 +24,7 @@ pub use high_pass::{
 	BootstrapPrePocketHighPassLayout, MarazionLakeHighPassCell, PocketHighPassCell,
 	PrePocketHighPassCell, PrePocketHighPassLayout,
 };
+pub use leaf_kind::{MarazionBandPass, MarazionLeafBounds, MarazionLeafKind};
 pub use low_pass::{
 	bootstrap_pre_pocket_low_pass_layout, original_ids_for_marazion_lake_low_pass_leaves,
 	original_ids_for_pocket_low_pass_cells, original_ids_for_pre_pocket_low_pass_cells,

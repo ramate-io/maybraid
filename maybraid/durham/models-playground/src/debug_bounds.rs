@@ -1,10 +1,10 @@
-//! Optional debug visualization of Terrain / jersey leaf bounds and a cell HUD.
+//! Optional debug visualization of Terrain / jersey / Marazion leaf bounds and a cell HUD.
 
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 use durham_terrain_models::{
-	cascade_chunk_for_cell, JerseyControllerLayouts, PlateauLowPassControllerLayout, Terrain,
-	TerrainCellLayout,
+	cascade_chunk_for_cell, JerseyControllerLayouts, MarazionBandPass, MarazionLeafKind,
+	PlateauLowPassControllerLayout, Terrain, TerrainCellLayout,
 };
 use std::fmt::{Display, Formatter, Result as FmtResult};
 
@@ -13,7 +13,7 @@ use crate::WorldBaseTerrain;
 /// Half-height of surface-fitted jersey boxes (world units).
 const JERSEY_BOX_HALF_HEIGHT: f32 = 30.0;
 
-/// Playground debug overlays (wire bounds + cell HUD). Off by default.
+/// Playground debug overlays (wire bounds + cell HUD).
 #[derive(Resource, Debug, Clone, Copy)]
 pub struct PlaygroundDebugOverlay {
 	pub show_bounds: bool,
@@ -36,6 +36,12 @@ pub(crate) struct CellLocationHudText;
 
 #[derive(Component)]
 pub(crate) struct CellLocationHudRoot;
+
+#[derive(Component)]
+pub(crate) struct BoundsLegendHudRoot;
+
+#[derive(Component)]
+pub(crate) struct BoundsLegendHudText;
 
 #[derive(Resource, Default)]
 pub(crate) struct LastLoggedCellLocation {
@@ -75,6 +81,64 @@ pub fn setup_cell_location_hud(mut commands: Commands) {
 				CellLocationHudText,
 			));
 		});
+
+	commands
+		.spawn((
+			Node {
+				position_type: PositionType::Absolute,
+				bottom: Val::Px(12.0),
+				left: Val::Px(12.0),
+				padding: UiRect::axes(Val::Px(10.0), Val::Px(8.0)),
+				flex_direction: FlexDirection::Column,
+				row_gap: Val::Px(2.0),
+				..default()
+			},
+			BackgroundColor(Color::srgba(0.05, 0.08, 0.12, 0.82)),
+			Visibility::Visible,
+			BoundsLegendHudRoot,
+		))
+		.with_children(|parent| {
+			parent.spawn((
+				Text::new(bounds_legend_text()),
+				TextFont {
+					font_size: bevy::text::FontSize::Px(12.0),
+					..default()
+				},
+				TextColor(Color::srgb(0.92, 0.96, 1.0)),
+				BoundsLegendHudText,
+			));
+		});
+}
+
+fn bounds_legend_text() -> String {
+	"pocket water leaves (B toggle)\n\
+	 blue=lake  cyan=stream  olive=bog  gray=empty\n\
+	 high-pass boxes are dimmer than low-pass"
+		.into()
+}
+
+/// Toggle wire bounds with `B`.
+pub fn toggle_bounds_overlay(
+	keys: Res<ButtonInput<KeyCode>>,
+	mut overlay: ResMut<PlaygroundDebugOverlay>,
+) {
+	if keys.just_pressed(KeyCode::KeyB) {
+		overlay.show_bounds = !overlay.show_bounds;
+	}
+}
+
+/// Sync bottom legend visibility with the bounds overlay.
+pub fn update_bounds_legend_visibility(
+	overlay: Res<PlaygroundDebugOverlay>,
+	mut legend: Query<&mut Visibility, With<BoundsLegendHudRoot>>,
+) {
+	if let Ok(mut visibility) = legend.single_mut() {
+		*visibility = if overlay.show_bounds {
+			Visibility::Visible
+		} else {
+			Visibility::Hidden
+		};
+	}
 }
 
 /// Draw wire AABBs when [`PlaygroundDebugOverlay::show_bounds`] is on.
@@ -92,7 +156,6 @@ pub fn draw_chunk_boundary_boxes(
 
 	let terrain_color = Color::srgb(1.0, 0.2, 0.25);
 	let leaf_color = Color::srgb(0.25, 0.9, 0.35);
-	let marazion_color = Color::srgb(0.2, 0.55, 1.0);
 	for terrain in &terrains {
 		let chunk = cascade_chunk_for_cell(terrain.cell, terrain.res_2);
 		let extent = chunk.extent_vec();
@@ -103,8 +166,19 @@ pub fn draw_chunk_boundary_boxes(
 			gizmos.aabb_3d(aabb, Transform::IDENTITY, leaf_color);
 		}
 		for leaf in &terrain.marazion_leaves {
-			let aabb = surface_footprint_box(leaf, &base.0);
-			gizmos.aabb_3d(aabb, Transform::IDENTITY, marazion_color);
+			let mut color = leaf.kind.debug_color();
+			if leaf.band == MarazionBandPass::High {
+				// Dim high-pass so low-pass partition reads first.
+				let srgba = color.to_srgba();
+				color = Color::srgba(
+					srgba.red * 0.65 + 0.2,
+					srgba.green * 0.65 + 0.2,
+					srgba.blue * 0.65 + 0.2,
+					0.85,
+				);
+			}
+			let aabb = surface_footprint_box(&leaf.cell, &base.0);
+			gizmos.aabb_3d(aabb, Transform::IDENTITY, color);
 		}
 	}
 
@@ -170,6 +244,12 @@ pub fn update_cell_location_hud(
 			.find(|leaf| point_in_xz(p, leaf))
 			.copied()
 	});
+	let marazion_under_cam = terrain.and_then(|t| {
+		t.marazion_leaves
+			.iter()
+			.find(|leaf| point_in_xz(p, &leaf.cell))
+			.copied()
+	});
 
 	let report = CellLocationReport {
 		cam: p,
@@ -184,6 +264,7 @@ pub fn update_cell_location_hud(
 		controller_origin_offset: plateau_layout.grid.origin_offset,
 		controller_cell: c_cell,
 		jersey_leaf: leaf_under_cam,
+		marazion_leaf: marazion_under_cam,
 	};
 
 	let rendered = report.to_string();
@@ -226,6 +307,7 @@ struct CellLocationReport {
 	controller_origin_offset: Vec2,
 	controller_cell: Aabb3d,
 	jersey_leaf: Option<Aabb3d>,
+	marazion_leaf: Option<durham_terrain_models::MarazionLeafBounds>,
 }
 
 #[derive(Debug, Clone)]
@@ -236,12 +318,28 @@ struct TerrainReport {
 	ops: usize,
 	jersey_leaves: usize,
 	marazion_leaves: usize,
+	marazion_lake: usize,
+	marazion_stream: usize,
+	marazion_bog: usize,
+	marazion_empty: usize,
 }
 
 impl TerrainReport {
 	fn from_terrain(t: &Terrain) -> Self {
 		let chunk = cascade_chunk_for_cell(t.cell, t.res_2);
 		let extent = chunk.extent_vec();
+		let mut marazion_lake = 0usize;
+		let mut marazion_stream = 0usize;
+		let mut marazion_bog = 0usize;
+		let mut marazion_empty = 0usize;
+		for leaf in &t.marazion_leaves {
+			match leaf.kind {
+				MarazionLeafKind::Lake => marazion_lake += 1,
+				MarazionLeafKind::Stream => marazion_stream += 1,
+				MarazionLeafKind::Bog => marazion_bog += 1,
+				MarazionLeafKind::Empty => marazion_empty += 1,
+			}
+		}
 		Self {
 			cell: t.cell,
 			chunk: Aabb3d::from_min_max(chunk.origin, chunk.origin + extent),
@@ -249,6 +347,10 @@ impl TerrainReport {
 			ops: t.modulations.len(),
 			jersey_leaves: t.jersey_leaves.len(),
 			marazion_leaves: t.marazion_leaves.len(),
+			marazion_lake,
+			marazion_stream,
+			marazion_bog,
+			marazion_empty,
 		}
 	}
 }
@@ -278,6 +380,11 @@ impl Display for CellLocationReport {
 					"  modulations n={}  jersey_leaves n={}  marazion_leaves n={}",
 					t.ops, t.jersey_leaves, t.marazion_leaves
 				)?;
+				writeln!(
+					f,
+					"  marazion    lake={} stream={} bog={} empty={}",
+					t.marazion_lake, t.marazion_stream, t.marazion_bog, t.marazion_empty
+				)?;
 			}
 			None => writeln!(f, "  status     NOT GENERATED")?,
 		}
@@ -300,6 +407,18 @@ impl Display for CellLocationReport {
 				writeln!(f, "  leaf AABB  {}", fmt_aabb(&leaf))?;
 			}
 			None => writeln!(f, "jersey leaf  (none under camera)")?,
+		}
+		match self.marazion_leaf {
+			Some(leaf) => {
+				writeln!(
+					f,
+					"marazion     UNDER CAMERA  kind={}  band={}",
+					leaf.kind.label(),
+					leaf.band.label()
+				)?;
+				writeln!(f, "  leaf AABB  {}", fmt_aabb(&leaf.cell))?;
+			}
+			None => writeln!(f, "marazion     (none under camera)")?,
 		}
 		write!(f, "───────────────────────────────────────────────────")
 	}
