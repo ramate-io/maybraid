@@ -1,5 +1,11 @@
 //! 2D stamp footprints with optional boundary noise.
 
+mod polyline;
+
+pub use polyline::{
+	closest_on_polyline, grade_along_polyline, ClosestOnPolyline, PolylineRegion,
+};
+
 use bevy_math::Vec2;
 use procedural_common::{NoiseConfig, NoiseParams, NoiseType};
 
@@ -32,6 +38,8 @@ pub enum Region2D {
 	Rect(RectRegion),
 	Circle(CircleRegion),
 	Ellipse(EllipseRegion),
+	/// Stadium-chain corridor along a polyline.
+	Polyline(PolylineRegion),
 }
 
 /// Optional noise for perturbing region boundaries (wobbly footprints).
@@ -142,7 +150,13 @@ impl Region2D {
 			Self::Rect(r) => r.center,
 			Self::Circle(c) => c.center,
 			Self::Ellipse(e) => e.center,
+			Self::Polyline(p) => p.sample_point(),
 		}
+	}
+
+	/// Representative interior sample point (same as [`Self::center`] for most shapes).
+	pub fn sample_point(&self) -> Vec2 {
+		self.center()
 	}
 
 	/// Normalized radial coordinate: `0` at center, `1` on the geometric shore.
@@ -159,6 +173,10 @@ impl Region2D {
 			}) => {
 				let q = (p - *center).abs() / half_extents.max(Vec2::splat(1e-3));
 				q.max_element()
+			}
+			Self::Polyline(poly) => {
+				let half = poly.half_width.max(1e-3);
+				(poly.sdf(p) / half + 1.0).clamp(0.0, 2.0)
 			}
 		}
 	}
@@ -181,6 +199,7 @@ impl Region2D {
 			}
 			Region2D::Circle(CircleRegion { center, radius }) => (p - *center).length() - *radius,
 			Region2D::Ellipse(e) => e.sdf(p),
+			Region2D::Polyline(poly) => poly.sdf(p),
 		};
 		if let Some(noise_config) = noise {
 			d += noise_config.sample_boundary(p);

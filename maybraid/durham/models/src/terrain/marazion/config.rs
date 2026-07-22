@@ -1,4 +1,4 @@
-//! Authoring knobs for Marazion pocket-water lakes (dual-band).
+//! Authoring knobs for Marazion pocket-water lakes and streams (dual-band).
 //!
 //! Defaults for likelihood / cell size / correlation come from each band's
 //! layout consts (`define_marazion_band!` in [`super::low_pass`] /
@@ -12,7 +12,7 @@ use bevy::math::Vec2;
 use bevy::prelude::*;
 use lod::gen::{GenerationScheme, Id, OriginalId};
 use lod::lod_ref::LodRef;
-use marazion_watersheds::{LakeParams, PocketGuillotineParams, PrePocketParams};
+use marazion_watersheds::{LakeParams, PocketGuillotineParams, PrePocketParams, StreamParams};
 
 /// One occupancy / scale band (low-pass = small, high-pass = large).
 #[derive(Debug, Clone)]
@@ -20,6 +20,9 @@ pub struct MarazionBandConfig {
 	pub pre_pocket: PrePocketParams,
 	pub guillotine: PocketGuillotineParams,
 	pub lake: LakeParams,
+	pub stream: StreamParams,
+	/// Fraction of occupied leaves typed as stream (`0.0..=1.0`); remainder lakes.
+	pub stream_frac: f32,
 	/// Approximate leaf acceptance rate (`0.0..=1.0`). Prefer setting defaults
 	/// in `define_marazion_band!` (`likelihood:`); this field is the runtime override.
 	pub likelihood: f32,
@@ -29,7 +32,7 @@ pub struct MarazionBandConfig {
 
 impl MarazionBandConfig {
 	/// Build runtime knobs from a band layout's authored consts.
-	pub fn from_layout<L>(seed: u32, lake: LakeParams) -> Self
+	pub fn from_layout<L>(seed: u32, lake: LakeParams, stream: StreamParams) -> Self
 	where
 		L: MarazionBandLayoutConsts,
 	{
@@ -47,6 +50,8 @@ impl MarazionBandConfig {
 				..Default::default()
 			},
 			lake,
+			stream,
+			stream_frac: 0.35,
 			likelihood: L::LIKELIHOOD.clamp(0.0, 1.0),
 			spatial_correlation: L::SPATIAL_CORRELATION,
 			family_salt: L::FAMILY_SALT,
@@ -101,10 +106,19 @@ impl Default for MarazionWatershedConfigs {
 		let mut high_lake = LakeParams::default();
 		high_lake.depth = 18.0;
 		high_lake.water_scale_min = 0.40;
+		let mut low_stream = StreamParams::default();
+		low_stream.depth = 6.5;
+		let mut high_stream = StreamParams::default();
+		high_stream.depth = 10.0;
+		high_stream.half_width_frac = 0.06;
 		Self {
 			seed,
-			low_pass: MarazionBandConfig::from_layout::<PrePocketLowPassLayout>(seed, low_lake),
-			high_pass: MarazionBandConfig::from_layout::<PrePocketHighPassLayout>(seed, high_lake),
+			low_pass: MarazionBandConfig::from_layout::<PrePocketLowPassLayout>(
+				seed, low_lake, low_stream,
+			),
+			high_pass: MarazionBandConfig::from_layout::<PrePocketHighPassLayout>(
+				seed, high_lake, high_stream,
+			),
 		}
 	}
 }

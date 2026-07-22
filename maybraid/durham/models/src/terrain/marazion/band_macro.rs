@@ -378,13 +378,12 @@ macro_rules! define_marazion_band {
 					cell.min.x.to_bits().wrapping_mul(73856093)
 						^ cell.min.z.to_bits().wrapping_mul(19349663),
 				);
-				let lake_params = band.lake;
 
-				// Live pre-watershed sampler: each shelf survey point may land in a
-				// different terrain origin cell (`get_one_or_generate` per query).
+				// Live pre-watershed sampler: each shelf / endpoint survey point may
+				// land in a different terrain origin cell.
 				let spatial_index = std::cell::RefCell::new(spatial_index);
 				let height_fn = |x: f32, z: f32| {
-					$crate::terrain::marazion::lake::pre_watershed_height_at(
+					$crate::terrain::marazion::height::pre_watershed_height_at(
 						*spatial_index.borrow_mut(),
 						x,
 						z,
@@ -394,13 +393,50 @@ macro_rules! define_marazion_band {
 				};
 				let height_at: Option<&dyn Fn(f32, f32) -> f32> = Some(&height_fn);
 
-				let lake = marazion_watersheds::Lake::from_bounds(
-					bounds,
-					seed,
-					lake_params,
-					height_at,
-				);
-				if lake.is_empty() {
+				// Occupied leaves are typed lake vs stream from a stable unit draw.
+				let type_u =
+					procedural_common::SeededHash::new(seed.wrapping_add(0x57EA_71FE)).unit(0);
+				let prefer_stream = type_u < band.stream_frac.clamp(0.0, 1.0);
+
+				let (mods, fills) = if prefer_stream {
+					let stream = marazion_watersheds::Stream::from_bounds(
+						bounds,
+						seed,
+						band.stream,
+						height_at,
+					);
+					if stream.is_empty() {
+						let lake = marazion_watersheds::Lake::from_bounds(
+							bounds,
+							seed,
+							band.lake,
+							height_at,
+						);
+						(lake.modulations, lake.fills)
+					} else {
+						(stream.modulations, stream.fills)
+					}
+				} else {
+					let lake = marazion_watersheds::Lake::from_bounds(
+						bounds,
+						seed,
+						band.lake,
+						height_at,
+					);
+					if lake.is_empty() {
+						let stream = marazion_watersheds::Stream::from_bounds(
+							bounds,
+							seed,
+							band.stream,
+							height_at,
+						);
+						(stream.modulations, stream.fills)
+					} else {
+						(lake.modulations, lake.fills)
+					}
+				};
+
+				if mods.is_empty() {
 					return Some((
 						Self {
 							cell,
@@ -410,13 +446,12 @@ macro_rules! define_marazion_band {
 						cell,
 					));
 				}
-				let modulations =
-					jersey_terrain_stamps::JerseyModulation::bind_all(lake.modulations, bounds);
+				let modulations = jersey_terrain_stamps::JerseyModulation::bind_all(mods, bounds);
 				Some((
 					Self {
 						cell,
 						modulations,
-						fills: lake.fills,
+						fills,
 					},
 					cell,
 				))
