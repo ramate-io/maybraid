@@ -3,6 +3,31 @@
 use bevy_math::Vec2;
 use procedural_common::SeededHash;
 
+/// Authored `*_freq` knobs are defined at this characteristic water radius.
+/// [`scale_noise_freq`] applies a **geometric** (power-law) scale
+/// `(ref / radius)^power` — the geometric mean of constant-wavelength and
+/// constant-lobe-count when `power = 0.5`.
+pub const NOISE_FREQ_REF_RADIUS: f32 = 80.0;
+
+/// Scale an authored frequency from [`NOISE_FREQ_REF_RADIUS`] to `radius`.
+///
+/// ```text
+/// f = f_ref * (ref / radius)^power
+/// ```
+///
+/// `power = 0.5` is the geometric mean of constant wavelength (`^0`) and
+/// constant lobe count (`^1`). Linear `power = 1` over-harshens small features
+/// and over-smooths the path between bands; √ tracks perceived roughness better.
+///
+/// Sub-ref radii still clamp the scale to ≤ 1 so small features never exceed the
+/// authored reference roughness.
+pub fn scale_noise_freq(authored_at_ref: f32, radius: f32, power: f32) -> f32 {
+	let r = radius.max(1.0);
+	let ratio = NOISE_FREQ_REF_RADIUS / r;
+	let scale = ratio.powf(power.clamp(0.15, 2.0)).min(1.0);
+	(authored_at_ref.max(0.0) * scale).clamp(1.0e-4, 0.14)
+}
+
 /// Unit sample in `[0, 1)` from `seed` ⊕ `salt` at integer lattice coords.
 pub fn n01(seed: u32, salt: u32, ix: i32, iz: i32) -> f32 {
 	SeededHash::new(seed.wrapping_add(salt)).unit_i32(ix, iz)
