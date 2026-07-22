@@ -12,6 +12,7 @@ pub mod config;
 pub mod height;
 pub mod high_pass;
 pub mod lake;
+pub mod leaf_kind;
 pub mod low_pass;
 pub mod pre_pocket;
 pub mod stream;
@@ -23,6 +24,7 @@ pub use high_pass::{
 	BootstrapPrePocketHighPassLayout, MarazionLakeHighPassCell, PocketHighPassCell,
 	PrePocketHighPassCell, PrePocketHighPassLayout,
 };
+pub use leaf_kind::{MarazionBandPass, MarazionLeafBounds, MarazionLeafKind};
 pub use low_pass::{
 	bootstrap_pre_pocket_low_pass_layout, original_ids_for_marazion_lake_low_pass_leaves,
 	original_ids_for_pocket_low_pass_cells, original_ids_for_pre_pocket_low_pass_cells,

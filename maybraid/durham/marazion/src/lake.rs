@@ -92,6 +92,10 @@ pub struct LakeParams {
 	pub depth: f32,
 	/// Exponent on `(1 - r)` for the radial depth falloff.
 	pub depth_falloff_power: f32,
+	/// How much of [`Self::depth`] remains at the geometric shore (`0` = shore at
+	/// `W`, `1` = flat floor at centroid depth). Softmask fade still blends past
+	/// the shore.
+	pub depth_shore_frac: f32,
 	/// Bipolar bed-noise amplitude (world units); may raise bed above `W`.
 	pub depth_noise_amp: f32,
 	/// Bed-noise frequency at [`crate::noise::NOISE_FREQ_REF_RADIUS`] (scaled in
@@ -146,6 +150,7 @@ impl Default for LakeParams {
 
 			depth: 14.0,
 			depth_falloff_power: 1.35,
+			depth_shore_frac: 0.0,
 			depth_noise_amp: 8.0,
 			depth_noise_freq: 0.016,
 			island_lift: 5.5,
@@ -468,6 +473,29 @@ mod tests {
 			"bowl {h} should sit below surface {}",
 			lake.water_level
 		);
+		Ok(())
+	}
+
+	#[test]
+	fn depth_shore_frac_one_flattens_floor() -> anyhow::Result<()> {
+		let bounds = Bounds2::from_xz(0.0, 0.0, 320.0, 320.0);
+		let base = 40.0;
+		let mut params = LakeParams::default();
+		params.depth_noise_amp = 0.0;
+		params.depth_shore_frac = 1.0;
+		params.rotation_amp = 0.0;
+		params.aspect_strength = 0.0;
+		params.aspect_floor = 0.0;
+		let lake = Lake::from_bounds(bounds, 11, params, Some(&|_, _| base));
+		assert!(!lake.is_empty());
+		let h_c = apply_mods(&lake.modulations, base, lake.center.x, lake.center.y);
+		let mid = lake.center + Vec2::new(lake.water_radius * 0.55, 0.0);
+		let h_m = apply_mods(&lake.modulations, base, mid.x, mid.y);
+		assert!(
+			(h_c - h_m).abs() < 1.25,
+			"flat-floor shore_frac should keep mid-bowl {h_m} near center {h_c}"
+		);
+		assert!(h_c < lake.water_level - 1.0);
 		Ok(())
 	}
 

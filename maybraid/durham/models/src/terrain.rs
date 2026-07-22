@@ -66,9 +66,9 @@ pub use jersey::{
 	RollingLowPassStampCell as RollingStampCell, ValleyLowPassStampCell as ValleyStampCell,
 };
 pub use marazion::{
-	MarazionLakeHighPassCell, MarazionLakeLowPassCell, MarazionWatershedConfigs,
-	PocketHighPassCell, PocketLowPassCell, PrePocketHighPassCell, PrePocketHighPassLayout,
-	PrePocketLowPassCell, PrePocketLowPassLayout,
+	MarazionBandPass, MarazionLakeHighPassCell, MarazionLakeLowPassCell, MarazionLeafBounds,
+	MarazionLeafKind, MarazionWatershedConfigs, PocketHighPassCell, PocketLowPassCell,
+	PrePocketHighPassCell, PrePocketHighPassLayout, PrePocketLowPassCell, PrePocketLowPassLayout,
 };
 /// Low-pass aliases kept for older HUD / call sites.
 pub use marazion::{
@@ -114,8 +114,8 @@ pub struct Terrain {
 	pub modulations: Vec<JerseyModulation>,
 	/// Leaf AABBs whose jersey stamps contributed (debug / HUD).
 	pub jersey_leaves: Vec<Aabb3d>,
-	/// Leaf AABBs whose Marazion lake stamps contributed.
-	pub marazion_leaves: Vec<Aabb3d>,
+	/// Leaf AABBs whose Marazion lake stamps contributed (plus empties for debug).
+	pub marazion_leaves: Vec<MarazionLeafBounds>,
 	/// Stamp-owned fills from every Marazion lake composed into this cell.
 	///
 	/// Collected **with** elevation mods (both bands) before SDF compose, so
@@ -192,11 +192,13 @@ macro_rules! pull_marazion_lakes {
 				lid,
 				$lod_ref,
 			)?;
-			if stamp.modulations.is_empty() && stamp.fills.is_empty() {
-				continue;
-			}
+			// Always retain leaf bounds for color-coded pocket-water debug overlays.
+			$leaf_out.push($crate::terrain::marazion::MarazionLeafBounds {
+				cell: stamp.cell,
+				kind: stamp.kind,
+				band: stamp.band,
+			});
 			if !stamp.modulations.is_empty() {
-				$leaf_out.push(stamp.cell);
 				$mods.extend(stamp.modulations.iter().cloned());
 			}
 			$fills_out.extend(stamp.fills.iter().cloned());

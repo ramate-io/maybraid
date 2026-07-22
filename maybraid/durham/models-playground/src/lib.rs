@@ -19,8 +19,8 @@ use commands::{
 };
 use durham_terrain::shaders::{DurhamTerrainShader, DurhamTerrainShaderPlugin};
 use debug_bounds::{
-	draw_chunk_boundary_boxes, setup_cell_location_hud, update_cell_location_hud,
-	PlaygroundDebugOverlay,
+	draw_chunk_boundary_boxes, setup_cell_location_hud, toggle_bounds_overlay,
+	update_bounds_legend_visibility, update_cell_location_hud, PlaygroundDebugOverlay,
 };
 use bevy::math::{IVec2, UVec2};
 use durham_terrain_models::{
@@ -106,6 +106,8 @@ impl Plugin for TerrainModelsPlaygroundPlugin {
 					apply_mode_commands.after(apply_cell_commands),
 					generate_cells.after(apply_mode_commands),
 					present_cells.after(generate_cells),
+					toggle_bounds_overlay,
+					update_bounds_legend_visibility.after(toggle_bounds_overlay),
 					draw_chunk_boundary_boxes.after(present_cells),
 					update_cell_location_hud.after(draw_chunk_boundary_boxes),
 					ui::sync_command_status_text.before(game_commands::ui::update_debug_ui),

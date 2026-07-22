@@ -33,15 +33,20 @@ pub struct BogParams {
 impl Default for BogParams {
 	fn default() -> Self {
 		let mut lake = LakeParams::default();
-		// Shallower bowl; hummocks come from basin backfill rather than bed noise.
-		lake.depth = 9.0;
-		lake.depth_noise_amp = 3.0;
+		// Shallower, near-flat floor so basin backfill crests across the wet core.
+		lake.depth = 7.0;
+		lake.depth_noise_amp = 2.0;
+		lake.depth_shore_frac = 0.9;
 		Self {
 			lake,
 			basin: BasinBackfillParams {
-				amp: 7.0,
-				freq: 0.035,
+				// Tall enough to crest above W as islands / hummocks.
+				amp: 12.0,
+				// Higher base frequency → denser mound field across the wet core.
+				freq: 0.06,
 				fade: 2.5,
+				octaves: 3,
+				add_only: true,
 			},
 		}
 	}
@@ -204,11 +209,11 @@ mod tests {
 			"final backfill should be near-identity outside basin: {h_out}"
 		);
 
-		// Inside wet core, backfill alone should move height (bipolar noise).
+		// Inside wet core, raise-only backfill should lift height.
 		let h_in = last.modify_elevation(base, bog.center.x, bog.center.y);
 		assert!(
-			(h_in - base).abs() > 0.05,
-			"final backfill should perturb basin center: {h_in} vs {base}"
+			h_in > base + 0.05,
+			"final backfill should raise basin (mounds): {h_in} vs {base}"
 		);
 		Ok(())
 	}

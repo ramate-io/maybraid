@@ -15,6 +15,7 @@ macro_rules! define_marazion_band {
 		pocket_ids: $pocket_ids:ident,
 		lake_ids: $lake_ids:ident,
 		band_field: $band_field:ident,
+		band_pass: $band_pass:ident,
 		family_salt: $family_salt:expr,
 		cell_size: ($cell_min:expr, $cell_max:expr),
 		pre_pocket_pitch: $pre_pitch:expr,
@@ -307,6 +308,8 @@ macro_rules! define_marazion_band {
 		#[derive(Debug, Clone, bevy::prelude::Component)]
 		pub struct $LakeCell {
 			pub cell: bevy::math::bounding::Aabb3d,
+			pub kind: $crate::terrain::marazion::leaf_kind::MarazionLeafKind,
+			pub band: $crate::terrain::marazion::leaf_kind::MarazionBandPass,
 			pub modulations: Vec<jersey_terrain_stamps::JerseyModulation>,
 			pub fills: Vec<marazion_watersheds::WaterFill>,
 		}
@@ -366,6 +369,8 @@ macro_rules! define_marazion_band {
 					return Some((
 						Self {
 							cell,
+							kind: $crate::terrain::marazion::leaf_kind::MarazionLeafKind::Empty,
+							band: $crate::terrain::marazion::leaf_kind::MarazionBandPass::$band_pass,
 							modulations: Vec::new(),
 							fills: Vec::new(),
 						},
@@ -406,53 +411,84 @@ macro_rules! define_marazion_band {
 					2u8 // lake
 				};
 
-				let try_stream = || {
+				type LeafStamp = (
+					$crate::terrain::marazion::leaf_kind::MarazionLeafKind,
+					Vec<jersey_terrain_stamps::JerseyModulation>,
+					Vec<marazion_watersheds::WaterFill>,
+				);
+				let try_stream = || -> Option<LeafStamp> {
 					let stream = marazion_watersheds::Stream::from_bounds(
 						bounds,
 						seed,
 						band.stream,
 						height_at,
 					);
-					(!stream.is_empty()).then_some((stream.modulations, stream.fills))
+					(!stream.is_empty()).then_some((
+						$crate::terrain::marazion::leaf_kind::MarazionLeafKind::Stream,
+						stream.modulations,
+						stream.fills,
+					))
 				};
-				let try_bog = || {
+				let try_bog = || -> Option<LeafStamp> {
 					let bog = marazion_watersheds::Bog::from_bounds(
 						bounds,
 						seed,
 						band.bog,
 						height_at,
 					);
-					(!bog.is_empty()).then_some((bog.modulations, bog.fills))
+					(!bog.is_empty()).then_some((
+						$crate::terrain::marazion::leaf_kind::MarazionLeafKind::Bog,
+						bog.modulations,
+						bog.fills,
+					))
 				};
-				let try_lake = || {
+				let try_lake = || -> Option<LeafStamp> {
 					let lake = marazion_watersheds::Lake::from_bounds(
 						bounds,
 						seed,
 						band.lake,
 						height_at,
 					);
-					(!lake.is_empty()).then_some((lake.modulations, lake.fills))
+					(!lake.is_empty()).then_some((
+						$crate::terrain::marazion::leaf_kind::MarazionLeafKind::Lake,
+						lake.modulations,
+						lake.fills,
+					))
 				};
 
-				let (mods, fills) = match prefer {
+				let (kind, mods, fills) = match prefer {
 					0 => try_stream()
 						.or_else(try_bog)
 						.or_else(try_lake)
-						.unwrap_or_else(|| (Vec::new(), Vec::new())),
+						.unwrap_or((
+							$crate::terrain::marazion::leaf_kind::MarazionLeafKind::Empty,
+							Vec::new(),
+							Vec::new(),
+						)),
 					1 => try_bog()
 						.or_else(try_stream)
 						.or_else(try_lake)
-						.unwrap_or_else(|| (Vec::new(), Vec::new())),
+						.unwrap_or((
+							$crate::terrain::marazion::leaf_kind::MarazionLeafKind::Empty,
+							Vec::new(),
+							Vec::new(),
+						)),
 					_ => try_lake()
 						.or_else(try_stream)
 						.or_else(try_bog)
-						.unwrap_or_else(|| (Vec::new(), Vec::new())),
+						.unwrap_or((
+							$crate::terrain::marazion::leaf_kind::MarazionLeafKind::Empty,
+							Vec::new(),
+							Vec::new(),
+						)),
 				};
 
 				if mods.is_empty() {
 					return Some((
 						Self {
 							cell,
+							kind: $crate::terrain::marazion::leaf_kind::MarazionLeafKind::Empty,
+							band: $crate::terrain::marazion::leaf_kind::MarazionBandPass::$band_pass,
 							modulations: Vec::new(),
 							fills: Vec::new(),
 						},
@@ -463,6 +499,8 @@ macro_rules! define_marazion_band {
 				Some((
 					Self {
 						cell,
+						kind,
+						band: $crate::terrain::marazion::leaf_kind::MarazionBandPass::$band_pass,
 						modulations,
 						fills,
 					},

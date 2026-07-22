@@ -103,11 +103,14 @@ pub(crate) fn build_bowl(
 	let undercut = params.terrain_undercut.max(0.0);
 	let bed_ceiling = (rim_level + params.island_lift.max(0.0))
 		.max(water_level + undercut + params.depth_noise_amp.max(0.0) * 0.85);
+	let shore_frac = params.depth_shore_frac.clamp(0.0, 1.0);
+	let center_bed = water_level - depth;
+	let shore_bed = water_level - depth * shore_frac;
 	let bowl = JerseyModulation::Bowl(
 		RegionBowlModulation::new(
 			water_region.clone(),
-			water_level - depth,
-			water_level,
+			center_bed,
+			shore_bed,
 			bed_ceiling,
 			params.depth_falloff_power,
 			bowl_fade,

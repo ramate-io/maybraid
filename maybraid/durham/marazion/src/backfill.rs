@@ -27,6 +27,8 @@ pub struct WatershedBackfill {
 	pub noise: RegionNoise,
 	/// Softmask fade past the region SDF zero (world units).
 	pub fade: f32,
+	/// When true, height noise only raises (`+|sample|`) — mound fill, no digs.
+	pub add_only: bool,
 }
 
 impl WatershedBackfill {
@@ -37,6 +39,7 @@ impl WatershedBackfill {
 			region,
 			noise,
 			fade: fade.max(0.25),
+			add_only: false,
 		}
 	}
 
@@ -47,6 +50,7 @@ impl WatershedBackfill {
 			region,
 			noise,
 			fade: fade.max(0.25),
+			add_only: false,
 		}
 	}
 
@@ -57,17 +61,26 @@ impl WatershedBackfill {
 			region,
 			noise,
 			fade: fade.max(0.25),
+			add_only: false,
 		}
+	}
+
+	pub fn add_only(mut self) -> Self {
+		self.add_only = true;
+		self
 	}
 
 	/// Compile to an additive-in-region jersey op: `h' = h + (1−w)·noise`.
 	///
-	/// Uses affine with `inner_scale = 1`, `inner_offset = 0`, bipolar height noise.
+	/// Uses affine with `inner_scale = 1`, `inner_offset = 0`, and optional
+	/// raise-only height noise.
 	pub fn into_modulation(self) -> JerseyModulation {
-		JerseyModulation::Affine(
-			RegionAffineModulation::new(self.region, 1.0, 0.0, 0.0, self.fade)
-				.with_height_noise(self.noise),
-		)
+		let affine = RegionAffineModulation::new(self.region, 1.0, 0.0, 0.0, self.fade);
+		JerseyModulation::Affine(if self.add_only {
+			affine.with_height_noise_add_only(self.noise)
+		} else {
+			affine.with_height_noise(self.noise)
+		})
 	}
 }
 
@@ -77,6 +90,10 @@ pub struct BasinBackfillParams {
 	pub amp: f32,
 	pub freq: f32,
 	pub fade: f32,
+	/// FBM octave count (≥1). Extra octaves densify mound packing.
+	pub octaves: u8,
+	/// Raise-only mounds (no bipolar digs into the carved bed).
+	pub add_only: bool,
 }
 
 impl Default for BasinBackfillParams {
@@ -85,6 +102,8 @@ impl Default for BasinBackfillParams {
 			amp: 6.0,
 			freq: 0.04,
 			fade: 2.0,
+			octaves: 1,
+			add_only: false,
 		}
 	}
 }
@@ -92,12 +111,20 @@ impl Default for BasinBackfillParams {
 impl BasinBackfillParams {
 	/// Sample noise and wrap a basin backfill on `region`.
 	pub fn sample(&self, seed: u32, salt_offset: u32, region: Region2D) -> WatershedBackfill {
-		let noise = RegionNoise::from_seed(
-			seed.wrapping_add(salt_offset),
-			self.freq.max(1.0e-4).clamp(1.0e-4, 0.14),
-			self.amp.max(0.0),
-		);
-		WatershedBackfill::basin(region, noise, self.fade)
+		use procedural_common::{NoiseParams, NoiseType};
+
+		let noise = RegionNoise::from_params(NoiseParams {
+			seed: seed.wrapping_add(salt_offset) as i32,
+			frequency: self.freq.max(1.0e-4).clamp(1.0e-4, 0.14),
+			amplitude: self.amp.max(0.0),
+			octaves: self.octaves.max(1) as u32,
+			noise_type: NoiseType::Perlin,
+		});
+		let mut backfill = WatershedBackfill::basin(region, noise, self.fade);
+		if self.add_only {
+			backfill = backfill.add_only();
+		}
+		backfill
 	}
 }
 
