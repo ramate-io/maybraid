@@ -21,6 +21,12 @@ use procedural_common::Bounds2;
 /// Minimum water half-axis (world units); smaller budgets skip the stamp.
 const MIN_WATER_RADIUS: f32 = 8.0;
 
+/// Authored `*_freq` knobs are defined at this characteristic water radius.
+/// [`scale_noise_freq`] applies a **geometric** (power-law) scale
+/// `(ref / radius)^power` — the geometric mean of constant-wavelength and
+/// constant-lobe-count when `power = 0.5`.
+const NOISE_FREQ_REF_RADIUS: f32 = 80.0;
+
 /// Salt for per-leaf water-radius undershoot.
 const WATER_SCALE_SALT: u32 = 0x1A7E_512E;
 /// Salt for per-leaf rim-width undershoot.
@@ -45,10 +51,24 @@ pub struct LakeParams {
 	pub mu: f32,
 	/// Max centroid offset as a fraction of the smaller cell half-extent.
 	pub centroid_jitter: f32,
-	/// How far toward full leaf aspect (`1`) vs circular (`0`) the ellipse goes.
+	/// How far toward full leaf aspect (`1`) vs circular (`0`) on **large** leaves.
 	pub aspect_strength: f32,
+	/// Fraction of [`Self::aspect_strength`] applied on small leaves (≤
+	/// [`Self::aspect_scale_ref`]). Ramps geometrically toward full strength.
+	pub aspect_small: f32,
+	/// Floor on the aspect draw at large scale (mild oval even when the draw is 0).
+	/// Small leaves use ~0; climbs with size via [`Self::aspect_scale_ref`].
+	pub aspect_floor: f32,
+	/// Short leaf half-extent (world units) where anti-circle is still “small”
+	/// ([`Self::aspect_small`]). Above this, strength/floor ramp up geometrically.
+	pub aspect_scale_ref: f32,
+	/// Max fraction of long-axis clearance the water body may claim (after rim/apron).
+	pub long_axis_frac: f32,
 	/// Max |rotation| of the ellipse (radians).
 	pub rotation_amp: f32,
+	/// Power for noise frequency scaling: `f ∝ (ref / radius)^power`.
+	/// `0.5` ≈ geometric mean of constant Hz and constant lobe count; `1.0` = linear.
+	pub noise_freq_power: f32,
 
 	// ── Per-leaf water scale (fraction of leftover after rim+apron claim) ───
 	/// Max water radius scale (`1.0` = full leftover).
@@ -84,7 +104,8 @@ pub struct LakeParams {
 	pub depth_falloff_power: f32,
 	/// Bipolar bed-noise amplitude (world units); may raise bed above `W`.
 	pub depth_noise_amp: f32,
-	/// Spatial frequency for bed noise (island / peninsula shaping).
+	/// Bed-noise frequency at [`NOISE_FREQ_REF_RADIUS`] (scaled in
+	/// [`Lake::from_bounds`] by `(ref / short_water)^noise_freq_power`).
 	pub depth_noise_freq: f32,
 	/// Extra headroom above the rim shelf for island / peninsula peaks.
 	pub island_lift: f32,
@@ -92,17 +113,20 @@ pub struct LakeParams {
 	// ── Shore outline (water bowl + wet fill) — higher frequency ───────────
 	/// Max bipolar shore indent/expand as a fraction of the short water axis.
 	pub shore_indent_frac: f32,
-	/// Boundary-noise frequency for the water shore (angular lobes).
+	/// Shore boundary frequency at [`NOISE_FREQ_REF_RADIUS`] (scaled geometrically
+	/// in [`Lake::from_bounds`]).
 	pub shore_freq: f32,
 
 	// ── Apron / plateau outer outline — lower frequency ────────────────────
 	/// Max bipolar apron indent/expand as a fraction of apron width.
 	pub apron_indent_frac: f32,
-	/// Boundary-noise frequency for the apron/plateau outer (broad lobes).
+	/// Apron boundary frequency at [`NOISE_FREQ_REF_RADIUS`] (scaled geometrically
+	/// in [`Lake::from_bounds`]).
 	pub apron_freq: f32,
 
 	// ── Rim height (add-only above [`Self::rim_lift`]) ──────────────────────
 	pub rim_height_amp: f32,
+	/// Rim height-noise frequency at [`NOISE_FREQ_REF_RADIUS`] (scaled like shore).
 	pub rim_height_freq: f32,
 
 	// ── Fill pad ───────────────────────────────────────────────────────────
@@ -119,8 +143,13 @@ impl Default for LakeParams {
 			apron_frac: 0.6,
 			mu: 12.0,
 			centroid_jitter: 0.12,
-			aspect_strength: 0.85,
+			aspect_strength: 0.95,
+			aspect_small: 0.22,
+			aspect_floor: 0.55,
+			aspect_scale_ref: 280.0,
+			long_axis_frac: 0.78,
 			rotation_amp: 0.55,
+			noise_freq_power: 0.5,
 
 			water_scale: 1.0,
 			water_scale_min: 0.35,
@@ -138,17 +167,20 @@ impl Default for LakeParams {
 			depth: 14.0,
 			depth_falloff_power: 1.35,
 			depth_noise_amp: 8.0,
-			depth_noise_freq: 0.028,
+			depth_noise_freq: 0.016,
 			island_lift: 5.5,
 
 			shore_indent_frac: 0.18,
-			shore_freq: 0.04,
+			// Authored at ref; √ scale + min(1). Slightly below the old linear-era
+			// knobs so high-pass effective Hz stay near the look that worked, while
+			// sub-ref ponds no longer inherit an amplified harshness.
+			shore_freq: 0.022,
 
 			apron_indent_frac: 0.22,
-			apron_freq: 0.02,
+			apron_freq: 0.011,
 
 			rim_height_amp: 2.75,
-			rim_height_freq: 0.016,
+			rim_height_freq: 0.009,
 
 			rim_bleed_frac: 0.35,
 			shore_fade: 2.0,
@@ -233,16 +265,17 @@ impl LakeBandBudget {
 			(available.x - rim_claim - apron).max(0.0),
 			(available.y - rim_claim - apron).max(0.0),
 		);
+		let long_frac = params.long_axis_frac.clamp(0.45, 0.95);
 		let leftover = Vec2::new(
 			if available.x <= available.y {
 				leftover.x.min(max_water_short)
 			} else {
-				leftover.x.min(available.x * 0.55)
+				leftover.x.min(available.x * long_frac)
 			},
 			if available.y <= available.x {
 				leftover.y.min(max_water_short)
 			} else {
-				leftover.y.min(available.y * 0.55)
+				leftover.y.min(available.y * long_frac)
 			},
 		);
 
@@ -252,7 +285,7 @@ impl LakeBandBudget {
 
 		let circ = leftover.min_element() * size_frac;
 		let full = leftover * size_frac;
-		let aspect = (params.aspect_strength.clamp(0.0, 1.0) * aspect_u01.clamp(0.0, 1.0)).clamp(0.0, 1.0);
+		let aspect = aspect_blend(params, short_room, aspect_u01);
 		let mut water = Vec2::new(
 			circ + (full.x - circ) * aspect,
 			circ + (full.y - circ) * aspect,
@@ -303,6 +336,44 @@ impl LakeBandBudget {
 		let bounds = Bounds2::from_xz(-s, -s, s, s);
 		Self::try_inscribed(bounds, Vec2::ZERO, params, water_u01, rim_u01, 0.0, 0.0)
 	}
+}
+
+/// Scale an authored frequency from [`NOISE_FREQ_REF_RADIUS`] to `radius`.
+///
+/// ```text
+/// f = f_ref * (ref / radius)^power
+/// ```
+///
+/// `power = 0.5` is the geometric mean of constant wavelength (`^0`) and
+/// constant lobe count (`^1`). Linear `power = 1` over-harshens small lakes
+/// and over-smooths the path between bands; √ tracks perceived roughness better.
+///
+/// Sub-ref radii still clamp the scale to ≤ 1 so ponds never exceed the
+/// authored reference roughness.
+fn scale_noise_freq(authored_at_ref: f32, radius: f32, power: f32) -> f32 {
+	let r = radius.max(1.0);
+	let ratio = NOISE_FREQ_REF_RADIUS / r;
+	let scale = ratio.powf(power.clamp(0.15, 2.0)).min(1.0);
+	(authored_at_ref.max(0.0) * scale).clamp(1.0e-4, 0.14)
+}
+
+/// Aspect blend ∈ `[0, 1]` — weak on small leaves, strong on large.
+///
+/// ```text
+/// t = 1 - 1/sqrt(max(short_room/ref, 1))   // 0 at ref, →1 as size grows
+/// strength = aspect_strength * lerp(aspect_small, 1, t)
+/// floor    = aspect_floor * t
+/// blend    = strength * lerp(floor, 1, aspect_u01)
+/// ```
+fn aspect_blend(params: LakeParams, short_room: f32, aspect_u01: f32) -> f32 {
+	let u = aspect_u01.clamp(0.0, 1.0);
+	let ratio = (short_room / params.aspect_scale_ref.max(1.0)).max(1.0e-3);
+	// Geometric size factor: flat (0) while small_room ≤ ref, then √ ramp.
+	let t = (1.0 - 1.0 / ratio.max(1.0).sqrt()).clamp(0.0, 1.0);
+	let small = params.aspect_small.clamp(0.0, 1.0);
+	let strength = params.aspect_strength.clamp(0.0, 1.0) * (small + (1.0 - small) * t);
+	let floor = (params.aspect_floor.clamp(0.0, 0.95) * t).clamp(0.0, 0.9);
+	(strength * (floor + (1.0 - floor) * u)).clamp(0.0, 1.0)
 }
 
 /// Per-leaf water-scale unit sample (shared by centroid planning and stamp build).
@@ -493,28 +564,34 @@ impl Lake {
 		let water_region = ellipse_region(center, water_r, rotation);
 		let fill_region = ellipse_region(center, fill_r, rotation);
 
+		// ── Size-scaled noise (authored freqs @ NOISE_FREQ_REF_RADIUS) ─────
+		// Shore / apron / rim / bed all use the short water axis so relative
+		// lobe counts stay consistent from low-pass ponds to high-pass lakes.
 		let shore_amp = (short_water * params.shore_indent_frac.clamp(0.0, 0.45))
 			.min(rim_w * 0.85)
 			.max(0.01);
-		let shore_freq = params
-			.shore_freq
-			.max(2.2 / short_water.max(1.0))
-			.clamp(1.0e-4, 0.14);
+		let shore_freq =
+			scale_noise_freq(params.shore_freq, short_water, params.noise_freq_power);
 		let shore_noise = RegionNoise::from_seed(seed.wrapping_add(5), shore_freq, shore_amp);
 
 		let apron_amp = (apron_w * params.apron_indent_frac.clamp(0.0, 0.5)).max(0.01);
-		let apron_noise =
-			RegionNoise::from_seed(seed.wrapping_add(6), params.apron_freq.max(1.0e-4), apron_amp);
+		let apron_freq =
+			scale_noise_freq(params.apron_freq, short_water, params.noise_freq_power);
+		let apron_noise = RegionNoise::from_seed(seed.wrapping_add(6), apron_freq, apron_amp);
 		let apron_outer = apron_w + apron_amp;
 
+		let rim_height_freq =
+			scale_noise_freq(params.rim_height_freq, short_water, params.noise_freq_power);
 		let rim_height = RegionNoise::from_seed(
 			seed.wrapping_add(7),
-			params.rim_height_freq.max(1.0e-4),
+			rim_height_freq,
 			params.rim_height_amp.max(0.0),
 		);
+		let depth_noise_freq =
+			scale_noise_freq(params.depth_noise_freq, short_water, params.noise_freq_power);
 		let depth_noise = RegionNoise::from_seed(
 			seed.wrapping_add(9),
-			params.depth_noise_freq.max(1.0e-4),
+			depth_noise_freq,
 			params.depth_noise_amp.max(0.0),
 		);
 
@@ -700,6 +777,48 @@ mod tests {
 	}
 
 	#[test]
+	fn noise_freq_scales_geometrically_and_caps_small() -> anyhow::Result<()> {
+		let power = 0.5;
+		let f_ref = scale_noise_freq(0.04, NOISE_FREQ_REF_RADIUS, power);
+		let f_small = scale_noise_freq(0.04, NOISE_FREQ_REF_RADIUS * 0.5, power);
+		let f_large = scale_noise_freq(0.04, NOISE_FREQ_REF_RADIUS * 10.0, power);
+		assert!((f_ref - 0.04).abs() < 1e-5);
+		assert!(
+			(f_small - f_ref).abs() < 1e-5,
+			"sub-ref lakes must not exceed authored freq (linear over-harshened them)"
+		);
+		let expected_large = 0.04 * (0.1_f32).sqrt();
+		assert!(
+			(f_large - expected_large).abs() < 1e-4,
+			"10× radius with √ power: got {f_large}, want ~{expected_large}"
+		);
+		let f_linear = scale_noise_freq(0.04, NOISE_FREQ_REF_RADIUS * 10.0, 1.0);
+		assert!(
+			f_large > f_linear * 1.5,
+			"√ scale should quiet large lakes less aggressively than linear"
+		);
+		Ok(())
+	}
+
+	#[test]
+	fn aspect_blend_strengthens_on_large_leaves() -> anyhow::Result<()> {
+		let params = LakeParams::default();
+		let small = aspect_blend(params, params.aspect_scale_ref * 0.5, 0.5);
+		let large = aspect_blend(params, params.aspect_scale_ref * 4.0, 0.5);
+		assert!(
+			large > small + 0.15,
+			"large-leaf aspect should exceed small-leaf: small={small} large={large}"
+		);
+		// Small leaves stay near aspect_small * strength * u (no floor).
+		let small_hi = aspect_blend(params, params.aspect_scale_ref * 0.5, 1.0);
+		assert!(
+			small_hi < params.aspect_strength * 0.45,
+			"small-leaf max aspect should stay mild, got {small_hi}"
+		);
+		Ok(())
+	}
+
+	#[test]
 	fn nearby_leaves_draw_different_water_sizes() -> anyhow::Result<()> {
 		let params = LakeParams::default();
 		let seed = 11u32;
@@ -809,18 +928,25 @@ mod tests {
 		params.depth_noise_freq = 0.04;
 		params.rotation_amp = 0.0;
 		params.aspect_strength = 0.0;
+		params.aspect_floor = 0.0;
 		let lake = Lake::from_bounds(bounds, 11, params, Some(&|_, _| base));
 		let mut raised = false;
-		for i in 0..48 {
-			let ang = i as f32 * std::f32::consts::TAU / 48.0;
-			let p = lake.center + Vec2::new(ang.cos(), ang.sin()) * (lake.water_radius * 0.35);
-			let h = apply_mods(&lake.modulations, base, p.x, p.y);
-			if h > lake.water_level + 0.25 {
-				raised = true;
+		// Near-shore rings: base bed is closer to W so amp can crest above it.
+		for &frac in &[0.55_f32, 0.72, 0.85] {
+			for i in 0..48 {
+				let ang = i as f32 * std::f32::consts::TAU / 48.0;
+				let p = lake.center + Vec2::new(ang.cos(), ang.sin()) * (lake.water_radius * frac);
+				let h = apply_mods(&lake.modulations, base, p.x, p.y);
+				if h > lake.water_level + 0.25 {
+					raised = true;
+					break;
+				}
+			}
+			if raised {
 				break;
 			}
 		}
-		assert!(raised, "bed noise should lift some interior samples above W");
+		assert!(raised, "bed noise should lift some near-shore samples above W");
 		Ok(())
 	}
 
