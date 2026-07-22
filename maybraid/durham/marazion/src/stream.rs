@@ -11,10 +11,9 @@ mod build;
 mod path;
 
 use crate::apron::WatershedApronParams;
-use crate::complex::WatershedDepressionComplex;
 use crate::fill::WaterFill;
 use crate::noise::n01_freq;
-use crate::stream::build::{build_parts, resolve_node_blend, StreamLayout};
+use crate::stream::build::{build_corridor, resolve_node_blend, StreamLayout};
 use crate::stream::path::{
 	node_water_levels, sample_endpoint, ENDPOINT_A_SALT, ENDPOINT_B_SALT,
 };
@@ -255,14 +254,10 @@ impl Stream {
 			levels,
 			budget,
 		};
-		let parts = build_parts(seed, min, params, &layout);
-		let compiled = WatershedDepressionComplex::from_stream_edge(
-			bounds,
-			seed,
-			parts.depression,
-			parts.apron,
-		)
-		.compile();
+		// StreamCorridor → WatershedDepression → WatershedDepressionComplex → mods/fills.
+		let compiled = build_corridor(seed, min, params, &layout)
+			.into_complex(bounds, seed)
+			.compile();
 
 		Self {
 			bounds,

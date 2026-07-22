@@ -1,7 +1,7 @@
 //! Assemble stream corridor depression + shared apron from a laid-out path.
 
 use crate::apron::{jittered_depth, ApronNoiseSalts};
-use crate::complex::WatershedApronShelf;
+use crate::complex::{WatershedApronShelf, WatershedDepressionComplex};
 use crate::depression::{WatershedDepression, WatershedDepressionKind};
 use crate::fill::{WaterFill, WaterSurface};
 use crate::stream::path::{bank_levels, bed_levels};
@@ -23,10 +23,19 @@ pub(crate) struct StreamLayout {
 	pub node_blend: f32,
 }
 
-/// Wet-core corridor + shared raise-only apron shelf.
-pub(crate) struct StreamStampParts {
+/// Stream-specific stamp: one corridor depression + its shared apron.
+///
+/// Convert with [`Self::into_complex`] → [`WatershedDepressionComplex`] → `compile()`.
+pub(crate) struct StreamCorridor {
 	pub depression: WatershedDepression,
 	pub apron: WatershedApronShelf,
+}
+
+impl StreamCorridor {
+	/// `StreamCorridor` → sole-edge [`WatershedDepressionComplex`].
+	pub fn into_complex(self, bounds: Bounds2, seed: u32) -> WatershedDepressionComplex {
+		self.depression.into_complex(bounds, seed, self.apron)
+	}
 }
 
 pub(crate) fn resolve_node_blend(
@@ -42,12 +51,12 @@ pub(crate) fn resolve_node_blend(
 	}
 }
 
-pub(crate) fn build_parts(
+pub(crate) fn build_corridor(
 	seed: u32,
 	anchor: Vec2,
 	params: StreamParams,
 	layout: &StreamLayout,
-) -> StreamStampParts {
+) -> StreamCorridor {
 	let path = &layout.path;
 	let levels = &layout.levels;
 	let half_w = layout.budget.half_width;
@@ -143,5 +152,5 @@ pub(crate) fn build_parts(
 		rim_height: apron_noise.rim_height,
 	};
 
-	StreamStampParts { depression, apron }
+	StreamCorridor { depression, apron }
 }

@@ -17,9 +17,8 @@ pub use budget::LakeBandBudget;
 pub use shelf::shelf_base_height;
 
 use crate::apron::WatershedApronParams;
-use crate::complex::WatershedDepressionComplex;
 use crate::fill::WaterFill;
-use crate::lake::build::{build_parts, LakeLayout};
+use crate::lake::build::{build_bowl, LakeLayout};
 use crate::lake::shelf::{
 	aspect_u01, planned_center as planned_center_impl, rim_width_u01, rotation_u11, shelf_levels,
 	water_scale_u01,
@@ -240,14 +239,10 @@ impl Lake {
 			budget,
 			levels,
 		};
-		let parts = build_parts(seed, min, params, &layout);
-		let compiled = WatershedDepressionComplex::from_lake_node(
-			bounds,
-			seed,
-			parts.depression,
-			parts.apron,
-		)
-		.compile();
+		// LakeBowl → WatershedDepression → WatershedDepressionComplex → mods/fills.
+		let bowl = build_bowl(seed, min, params, &layout);
+		let fill_radius = bowl.fill_radius;
+		let compiled = bowl.into_complex(bounds, seed).compile();
 
 		Self {
 			bounds,
@@ -259,7 +254,7 @@ impl Lake {
 			plateau_radius: layout.budget.plateau_radius(),
 			rim_width: layout.budget.rim_width,
 			apron_width: layout.budget.apron_width,
-			fill_radius: parts.fill_radius,
+			fill_radius,
 			water_level: layout.levels.water_level,
 			modulations: compiled.modulations,
 			fills: compiled.fills,

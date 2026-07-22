@@ -1,7 +1,7 @@
 //! Assemble lake bowl depression + shared plateau apron from a laid-out footprint.
 
 use crate::apron::{jittered_depth, ApronNoiseSalts};
-use crate::complex::WatershedApronShelf;
+use crate::complex::{WatershedApronShelf, WatershedDepressionComplex};
 use crate::depression::{WatershedDepression, WatershedDepressionKind};
 use crate::fill::{WaterFill, WaterSurface};
 use crate::lake::budget::LakeBandBudget;
@@ -12,6 +12,7 @@ use bevy_math::Vec2;
 use jersey_terrain_stamps::{
 	EllipseRegion, JerseyModulation, Region2D, RegionBowlModulation, RegionNoise,
 };
+use procedural_common::Bounds2;
 
 const DEPTH_SALT: u32 = 0x1A7E_DE07;
 
@@ -30,19 +31,28 @@ pub(crate) struct LakeLayout {
 	pub levels: ShelfLevels,
 }
 
-/// Bowl depression + shared flatten apron + characteristic fill radius.
-pub(crate) struct LakeStampParts {
+/// Lake-specific stamp: one bowl depression + its shared apron.
+///
+/// Convert with [`Self::into_complex`] → [`WatershedDepressionComplex`] → `compile()`.
+pub(crate) struct LakeBowl {
 	pub depression: WatershedDepression,
 	pub apron: WatershedApronShelf,
 	pub fill_radius: f32,
 }
 
-pub(crate) fn build_parts(
+impl LakeBowl {
+	/// `LakeBowl` → sole-node [`WatershedDepressionComplex`].
+	pub fn into_complex(self, bounds: Bounds2, seed: u32) -> WatershedDepressionComplex {
+		self.depression.into_complex(bounds, seed, self.apron)
+	}
+}
+
+pub(crate) fn build_bowl(
 	seed: u32,
 	anchor: Vec2,
 	params: LakeParams,
 	layout: &LakeLayout,
-) -> LakeStampParts {
+) -> LakeBowl {
 	let center = layout.center;
 	let budget = &layout.budget;
 	let water_r = budget.water_radii;
@@ -129,7 +139,7 @@ pub(crate) fn build_parts(
 		rim_height: apron_noise.rim_height,
 	};
 
-	LakeStampParts {
+	LakeBowl {
 		depression,
 		apron,
 		fill_radius: fill_r.min_element(),

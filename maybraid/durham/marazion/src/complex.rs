@@ -155,38 +155,6 @@ impl WatershedDepressionComplex {
 		id
 	}
 
-	/// Single-node lake complex (no edges).
-	pub fn from_lake_node(
-		bounds: Bounds2,
-		seed: u32,
-		depression: WatershedDepression,
-		apron: WatershedApronShelf,
-	) -> Self {
-		let mut complex = Self::new(bounds, seed);
-		complex.push_node(WatershedNode::with_depression(depression));
-		complex.apron = Some(apron);
-		complex
-	}
-
-	/// Single-edge stream complex with empty endpoint nodes.
-	pub fn from_stream_edge(
-		bounds: Bounds2,
-		seed: u32,
-		depression: WatershedDepression,
-		apron: WatershedApronShelf,
-	) -> Self {
-		let mut complex = Self::new(bounds, seed);
-		let from = complex.push_node(WatershedNode::empty());
-		let to = complex.push_node(WatershedNode::empty());
-		complex.push_edge(WatershedEdge {
-			from,
-			to,
-			depression,
-		});
-		complex.apron = Some(apron);
-		complex
-	}
-
 	/// Compile shared apron + wet-core carves/fills.
 	///
 	/// Order: apron shelf first, then node depressions, then edge depressions

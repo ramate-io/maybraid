@@ -1,10 +1,13 @@
 //! Wet-core watershed depressions (stream corridors and lake bowls).
 //!
-//! A depression owns the **inner carve** and a candidate [`WaterFill`]; the
-//! outer apron / rim shelf is applied once by [`crate::complex::WatershedDepressionComplex`].
+//! A depression owns the **inner carve** and a candidate [`WaterFill`]. Convert it
+//! into a [`crate::complex::WatershedDepressionComplex`] with a shared apron via
+//! [`Self::into_complex`]; modulations are compiled from that graph.
 
+use crate::complex::{WatershedApronShelf, WatershedDepressionComplex, WatershedEdge, WatershedNode};
 use crate::fill::WaterFill;
 use jersey_terrain_stamps::{JerseyModulation, Region2D};
+use procedural_common::Bounds2;
 
 /// Wet-core recipe for one hydrology part.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -46,5 +49,40 @@ impl WatershedDepression {
 
 	pub fn is_empty(&self) -> bool {
 		self.carve_modulations.is_empty() && self.fill.is_none()
+	}
+
+	/// Lift this single wet core into a one-part [`WatershedDepressionComplex`].
+	///
+	/// Placement follows [`WatershedDepressionKind`]:
+	/// - [`WatershedDepressionKind::LakeBowl`] / [`WatershedDepressionKind::JointPolyline`]
+	///   → sole node (no edges)
+	/// - [`WatershedDepressionKind::StreamCorridor`] → sole edge between empty hubs
+	///
+	/// Multi-part pocket complexes that already own several nodes/edges should
+	/// build [`WatershedDepressionComplex`] directly instead of going through here.
+	pub fn into_complex(
+		self,
+		bounds: Bounds2,
+		seed: u32,
+		apron: WatershedApronShelf,
+	) -> WatershedDepressionComplex {
+		match self.kind {
+			WatershedDepressionKind::LakeBowl | WatershedDepressionKind::JointPolyline => {
+				let mut complex = WatershedDepressionComplex::new(bounds, seed);
+				complex.push_node(WatershedNode::with_depression(self));
+				complex.with_apron(apron)
+			}
+			WatershedDepressionKind::StreamCorridor => {
+				let mut complex = WatershedDepressionComplex::new(bounds, seed);
+				let from = complex.push_node(WatershedNode::empty());
+				let to = complex.push_node(WatershedNode::empty());
+				complex.push_edge(WatershedEdge {
+					from,
+					to,
+					depression: self,
+				});
+				complex.with_apron(apron)
+			}
+		}
 	}
 }
