@@ -39,6 +39,10 @@ const ROTATION_SALT: u32 = 0x1A7E_207A;
 const RIM_HEIGHT_AMP_SALT: u32 = 0x1A7E_A17A;
 /// Salt for per-leaf rim height frequency draw.
 const RIM_HEIGHT_FREQ_SALT: u32 = 0x1A7E_F7E9;
+/// Salt for per-leaf apron indent amplitude draw.
+const APRON_AMP_SALT: u32 = 0x1A7E_A70A;
+/// Salt for per-leaf apron frequency draw.
+const APRON_FREQ_SALT: u32 = 0x1A7E_AF7E;
 
 /// Authoring knobs for a Marazion lake stamp.
 ///
@@ -122,11 +126,14 @@ pub struct LakeParams {
 	pub shore_freq: f32,
 
 	// ── Apron / plateau outer outline — lower frequency ────────────────────
-	/// Max bipolar apron indent/expand as a fraction of apron width.
-	pub apron_indent_frac: f32,
-	/// Apron boundary frequency at [`NOISE_FREQ_REF_RADIUS`] (scaled geometrically
-	/// in [`Lake::from_bounds`]).
-	pub apron_freq: f32,
+	/// Per-leaf apron boundary indent as a fraction of apron width (low).
+	pub apron_indent_frac_min: f32,
+	/// Per-leaf apron boundary indent as a fraction of apron width (high).
+	pub apron_indent_frac_max: f32,
+	/// Per-leaf apron boundary frequency low (at [`NOISE_FREQ_REF_RADIUS`]).
+	pub apron_freq_min: f32,
+	/// Per-leaf apron boundary frequency high (at [`NOISE_FREQ_REF_RADIUS`]).
+	pub apron_freq_max: f32,
 
 	// ── Rim height (add-only above [`Self::rim_lift`]) ──────────────────────
 	/// Per-leaf rim height-noise amplitude low (world units); [`Lake::from_bounds`]
@@ -186,8 +193,10 @@ impl Default for LakeParams {
 			// sub-ref ponds no longer inherit an amplified harshness.
 			shore_freq: 0.022,
 
-			apron_indent_frac: 0.22,
-			apron_freq: 0.011,
+			apron_indent_frac_min: 0.12,
+			apron_indent_frac_max: 0.40,
+			apron_freq_min: 0.005,
+			apron_freq_max: 0.012,
 
 			rim_height_amp_min: 15.0,
 			rim_height_amp_max: 120.0,
@@ -486,7 +495,11 @@ impl Lake {
 			return cell_c;
 		};
 		let shore_amp = probe.water_radius() * params.shore_indent_frac.clamp(0.0, 0.45);
-		let apron_amp = probe.apron_width * params.apron_indent_frac.clamp(0.0, 0.5);
+		let apron_indent = params
+			.apron_indent_frac_min
+			.max(params.apron_indent_frac_max)
+			.clamp(0.0, 0.5);
+		let apron_amp = probe.apron_width * apron_indent;
 		let outer = probe.plateau_radius() + probe.apron_width + shore_amp.max(apron_amp);
 		let lo = min + Vec2::splat(outer.max(probe.mu));
 		let hi = max - Vec2::splat(outer.max(probe.mu));
@@ -576,8 +589,23 @@ impl Lake {
 		let shore_freq = scale_noise_freq(params.shore_freq, short_water, params.noise_freq_power);
 		let shore_noise = RegionNoise::from_seed(seed.wrapping_add(5), shore_freq, shore_amp);
 
-		let apron_amp = (apron_w * params.apron_indent_frac.clamp(0.0, 0.5)).max(0.01);
-		let apron_freq = scale_noise_freq(params.apron_freq, short_water, params.noise_freq_power);
+		let apron_frac_lo = params
+			.apron_indent_frac_min
+			.min(params.apron_indent_frac_max)
+			.clamp(0.0, 0.5);
+		let apron_frac_hi = params
+			.apron_indent_frac_min
+			.max(params.apron_indent_frac_max)
+			.clamp(0.0, 0.5);
+		let apron_freq_lo = params.apron_freq_min.min(params.apron_freq_max).max(0.0);
+		let apron_freq_hi = params.apron_freq_min.max(params.apron_freq_max).max(0.0);
+		let apron_indent_frac =
+			apron_frac_lo + (apron_frac_hi - apron_frac_lo) * n01_at(seed, APRON_AMP_SALT, anchor);
+		let apron_amp = (apron_w * apron_indent_frac).max(0.01);
+		let apron_freq_authored =
+			apron_freq_lo + (apron_freq_hi - apron_freq_lo) * n01_at(seed, APRON_FREQ_SALT, anchor);
+		let apron_freq =
+			scale_noise_freq(apron_freq_authored, short_water, params.noise_freq_power);
 		let apron_noise = RegionNoise::from_seed(seed.wrapping_add(6), apron_freq, apron_amp);
 		let apron_outer = apron_w + apron_amp;
 
