@@ -10,8 +10,8 @@
 //! rim + apron outside the water body.
 
 mod budget;
-mod build;
-mod shelf;
+pub(crate) mod build;
+pub(crate) mod shelf;
 
 pub use budget::LakeBandBudget;
 pub use shelf::shelf_base_height;

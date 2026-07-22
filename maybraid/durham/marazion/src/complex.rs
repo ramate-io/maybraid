@@ -4,6 +4,7 @@
 //! anticipates multi-part pocket complexes; v1 realizes standalone stream / lake
 //! leaves as single-edge / single-node graphs compiled through this type.
 
+use crate::backfill::WatershedBackfill;
 use crate::depression::WatershedDepression;
 use crate::fill::WaterFill;
 use bevy_math::Vec2;
@@ -117,7 +118,7 @@ impl CompiledWatershed {
 	}
 }
 
-/// Graph of depressions with one shared apron shelf.
+/// Graph of depressions with one shared apron shelf and optional post-carve backfills.
 #[derive(Debug, Clone)]
 pub struct WatershedDepressionComplex {
 	pub bounds: Bounds2,
@@ -125,6 +126,7 @@ pub struct WatershedDepressionComplex {
 	pub nodes: Vec<WatershedNode>,
 	pub edges: Vec<WatershedEdge>,
 	pub apron: Option<WatershedApronShelf>,
+	pub backfills: Vec<WatershedBackfill>,
 }
 
 impl WatershedDepressionComplex {
@@ -135,11 +137,17 @@ impl WatershedDepressionComplex {
 			nodes: Vec::new(),
 			edges: Vec::new(),
 			apron: None,
+			backfills: Vec::new(),
 		}
 	}
 
 	pub fn with_apron(mut self, apron: WatershedApronShelf) -> Self {
 		self.apron = Some(apron);
+		self
+	}
+
+	pub fn with_backfill(mut self, backfill: WatershedBackfill) -> Self {
+		self.backfills.push(backfill);
 		self
 	}
 
@@ -155,10 +163,10 @@ impl WatershedDepressionComplex {
 		id
 	}
 
-	/// Compile shared apron + wet-core carves/fills.
+	/// Compile shared apron + wet-core carves/fills + post-carve backfills.
 	///
-	/// Order: apron shelf first, then node depressions, then edge depressions
-	/// (matches lake plateau→bowl and stream skirt→channel→cuts).
+	/// Order: apron → node/edge carves → backfills (backfill last so hummocks
+	/// rise into an already-carved basin).
 	pub fn compile(self) -> CompiledWatershed {
 		let mut wet_cores: Vec<Region2D> = Vec::new();
 		let mut carve: Vec<JerseyModulation> = Vec::new();
@@ -186,6 +194,7 @@ impl WatershedDepressionComplex {
 			modulations.push(apron.into_modulation());
 		}
 		modulations.extend(carve);
+		modulations.extend(self.backfills.into_iter().map(|b| b.into_modulation()));
 
 		let wet_union = match wet_cores.len() {
 			0 => None,
@@ -207,7 +216,9 @@ impl WatershedDepressionComplex {
 mod tests {
 	use super::*;
 	use crate::depression::{WatershedDepression, WatershedDepressionKind};
-	use jersey_terrain_stamps::{CircleRegion, Region2D};
+	use jersey_terrain_stamps::{
+		CircleRegion, JerseyModulation, Region2D, RegionAffineModulation, RegionNoise,
+	};
 
 	#[test]
 	fn empty_complex_compiles_empty() -> anyhow::Result<()> {
@@ -216,6 +227,39 @@ mod tests {
 		assert!(out.is_empty());
 		assert!(out.fills.is_empty());
 		assert!(out.wet_union.is_none());
+		Ok(())
+	}
+
+	#[test]
+	fn backfill_appends_after_carve() -> anyhow::Result<()> {
+		use crate::backfill::WatershedBackfill;
+
+		let core = Region2D::Circle(CircleRegion {
+			center: Vec2::ZERO,
+			radius: 10.0,
+		});
+		let mut complex =
+			WatershedDepressionComplex::new(Bounds2::from_xz(-40.0, -40.0, 40.0, 40.0), 3);
+		complex.push_node(WatershedNode::with_depression(WatershedDepression::new(
+			WatershedDepressionKind::LakeBowl,
+			core.clone(),
+			vec![JerseyModulation::Affine(RegionAffineModulation::new(
+				core.clone(),
+				1.0,
+				0.0,
+				0.0,
+				1.0,
+			))],
+			None,
+		)));
+		let out = complex
+			.with_backfill(WatershedBackfill::basin(
+				core,
+				RegionNoise::from_seed(1, 0.05, 4.0),
+				2.0,
+			))
+			.compile();
+		assert_eq!(out.modulations.len(), 2);
 		Ok(())
 	}
 

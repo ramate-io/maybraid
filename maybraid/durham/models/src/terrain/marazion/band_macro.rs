@@ -393,47 +393,60 @@ macro_rules! define_marazion_band {
 				};
 				let height_at: Option<&dyn Fn(f32, f32) -> f32> = Some(&height_fn);
 
-				// Occupied leaves are typed lake vs stream from a stable unit draw.
+				// Occupied leaves: stream / bog / lake from a stable unit draw.
 				let type_u =
 					procedural_common::SeededHash::new(seed.wrapping_add(0x57EA_71FE)).unit(0);
-				let prefer_stream = type_u < band.stream_frac.clamp(0.0, 1.0);
+				let stream_cut = band.stream_frac.clamp(0.0, 1.0);
+				let bog_cut = (stream_cut + band.bog_frac.clamp(0.0, 1.0)).min(1.0);
+				let prefer = if type_u < stream_cut {
+					0u8 // stream
+				} else if type_u < bog_cut {
+					1u8 // bog
+				} else {
+					2u8 // lake
+				};
 
-				let (mods, fills) = if prefer_stream {
+				let try_stream = || {
 					let stream = marazion_watersheds::Stream::from_bounds(
 						bounds,
 						seed,
 						band.stream,
 						height_at,
 					);
-					if stream.is_empty() {
-						let lake = marazion_watersheds::Lake::from_bounds(
-							bounds,
-							seed,
-							band.lake,
-							height_at,
-						);
-						(lake.modulations, lake.fills)
-					} else {
-						(stream.modulations, stream.fills)
-					}
-				} else {
+					(!stream.is_empty()).then_some((stream.modulations, stream.fills))
+				};
+				let try_bog = || {
+					let bog = marazion_watersheds::Bog::from_bounds(
+						bounds,
+						seed,
+						band.bog,
+						height_at,
+					);
+					(!bog.is_empty()).then_some((bog.modulations, bog.fills))
+				};
+				let try_lake = || {
 					let lake = marazion_watersheds::Lake::from_bounds(
 						bounds,
 						seed,
 						band.lake,
 						height_at,
 					);
-					if lake.is_empty() {
-						let stream = marazion_watersheds::Stream::from_bounds(
-							bounds,
-							seed,
-							band.stream,
-							height_at,
-						);
-						(stream.modulations, stream.fills)
-					} else {
-						(lake.modulations, lake.fills)
-					}
+					(!lake.is_empty()).then_some((lake.modulations, lake.fills))
+				};
+
+				let (mods, fills) = match prefer {
+					0 => try_stream()
+						.or_else(try_bog)
+						.or_else(try_lake)
+						.unwrap_or_else(|| (Vec::new(), Vec::new())),
+					1 => try_bog()
+						.or_else(try_stream)
+						.or_else(try_lake)
+						.unwrap_or_else(|| (Vec::new(), Vec::new())),
+					_ => try_lake()
+						.or_else(try_stream)
+						.or_else(try_bog)
+						.unwrap_or_else(|| (Vec::new(), Vec::new())),
 				};
 
 				if mods.is_empty() {
