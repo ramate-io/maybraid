@@ -40,6 +40,8 @@ pub enum Region2D {
 	Ellipse(EllipseRegion),
 	/// Stadium-chain corridor along a polyline.
 	Polyline(PolylineRegion),
+	/// Boolean union of child footprints (`sdf = min(children)`).
+	Union(Vec<Region2D>),
 }
 
 /// Optional noise for perturbing region boundaries (wobbly footprints).
@@ -145,12 +147,21 @@ impl EllipseRegion {
 }
 
 impl Region2D {
+	/// Convenience constructor for a boolean union of footprints.
+	pub fn union(children: Vec<Region2D>) -> Self {
+		Self::Union(children)
+	}
+
 	pub fn center(&self) -> Vec2 {
 		match self {
 			Self::Rect(r) => r.center,
 			Self::Circle(c) => c.center,
 			Self::Ellipse(e) => e.center,
 			Self::Polyline(p) => p.sample_point(),
+			Self::Union(children) => children
+				.first()
+				.map(|c| c.center())
+				.unwrap_or(Vec2::ZERO),
 		}
 	}
 
@@ -178,6 +189,10 @@ impl Region2D {
 				let half = poly.half_width.max(1e-3);
 				(poly.sdf(p) / half + 1.0).clamp(0.0, 2.0)
 			}
+			Self::Union(children) => children
+				.iter()
+				.map(|c| c.radial_norm(p))
+				.fold(f32::INFINITY, f32::min),
 		}
 	}
 
@@ -200,6 +215,16 @@ impl Region2D {
 			Region2D::Circle(CircleRegion { center, radius }) => (p - *center).length() - *radius,
 			Region2D::Ellipse(e) => e.sdf(p),
 			Region2D::Polyline(poly) => poly.sdf(p),
+			Region2D::Union(children) => {
+				if children.is_empty() {
+					f32::INFINITY
+				} else {
+					children
+						.iter()
+						.map(|c| c.sdf(p))
+						.fold(f32::INFINITY, f32::min)
+				}
+			}
 		};
 		if let Some(noise_config) = noise {
 			d += noise_config.sample_boundary(p);
@@ -282,6 +307,46 @@ mod tests {
 		assert!((region.radial_norm(Vec2::new(40.0, 0.0)) - 1.0).abs() < 1e-4);
 		assert!((region.radial_norm(Vec2::new(0.0, 20.0)) - 1.0).abs() < 1e-4);
 		assert!(region.radial_norm(Vec2::new(20.0, 0.0)) < 0.6);
+		Ok(())
+	}
+
+	#[test]
+	fn union_sdf_is_min_of_children() -> anyhow::Result<()> {
+		let a = Region2D::Circle(CircleRegion {
+			center: Vec2::new(-20.0, 0.0),
+			radius: 8.0,
+		});
+		let b = Region2D::Circle(CircleRegion {
+			center: Vec2::new(20.0, 0.0),
+			radius: 8.0,
+		});
+		let u = Region2D::union(vec![a.clone(), b.clone()]);
+		let p_a = Vec2::new(-20.0, 0.0);
+		let p_b = Vec2::new(20.0, 0.0);
+		let p_mid = Vec2::ZERO;
+		assert!((u.sdf(p_a) - a.sdf(p_a)).abs() < 1e-5);
+		assert!((u.sdf(p_b) - b.sdf(p_b)).abs() < 1e-5);
+		assert!((u.sdf(p_mid) - a.sdf(p_mid).min(b.sdf(p_mid))).abs() < 1e-5);
+		assert!(u.sdf(p_a) < 0.0);
+		assert!(u.sdf(p_b) < 0.0);
+		assert!(u.sdf(p_mid) > 0.0);
+		Ok(())
+	}
+
+	#[test]
+	fn union_softmask_wet_inside_either_child() -> anyhow::Result<()> {
+		let a = Region2D::Circle(CircleRegion {
+			center: Vec2::new(-15.0, 0.0),
+			radius: 6.0,
+		});
+		let b = Region2D::Circle(CircleRegion {
+			center: Vec2::new(15.0, 0.0),
+			radius: 6.0,
+		});
+		let u = Region2D::union(vec![a, b]);
+		assert!(u.softmask_weight(Vec2::new(-15.0, 0.0), 0.0, 2.0, None) < 0.05);
+		assert!(u.softmask_weight(Vec2::new(15.0, 0.0), 0.0, 2.0, None) < 0.05);
+		assert!(u.softmask_weight(Vec2::ZERO, 0.0, 2.0, None) >= 0.99);
 		Ok(())
 	}
 }

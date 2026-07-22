@@ -7,8 +7,11 @@
 //!
 //! Fill / channel grade is piecewise along path nodes (segment lerp + pitch blend).
 
+use crate::apron::WatershedApronParams;
+use crate::complex::{WatershedApronShelf, WatershedDepressionComplex};
+use crate::depression::{WatershedDepression, WatershedDepressionKind};
 use crate::fill::{WaterFill, WaterSurface};
-use crate::noise::{n01_at, n01_freq, scale_noise_freq};
+use crate::noise::{n01_at, n01_freq};
 use bevy_math::Vec2;
 use jersey_terrain_stamps::{
 	DownhillPair, HysteresisSpine, JerseyModulation, PolylineRegion, RegionAffineModulation,
@@ -71,30 +74,8 @@ pub struct StreamParams {
 	pub shore_indent_frac: f32,
 	pub shore_freq: f32,
 
-	/// Power for noise frequency scaling: `f ∝ (ref / radius)^power`.
-	/// `0.5` ≈ geometric mean of constant Hz and constant lobe count; `1.0` = linear.
-	pub noise_freq_power: f32,
-
-	// ── Apron / skirt outer outline — lower frequency ──────────────────────
-	/// Per-leaf apron boundary indent as a fraction of apron-band width (low).
-	pub apron_indent_frac_min: f32,
-	/// Per-leaf apron boundary indent as a fraction of apron-band width (high).
-	pub apron_indent_frac_max: f32,
-	/// Per-leaf apron boundary frequency low (at [`crate::noise::NOISE_FREQ_REF_RADIUS`]).
-	pub apron_freq_min: f32,
-	/// Per-leaf apron boundary frequency high (at [`crate::noise::NOISE_FREQ_REF_RADIUS`]).
-	pub apron_freq_max: f32,
-
-	// ── Rim height (add-only above [`Self::rim_lift`]) ──────────────────────
-	/// Per-leaf rim height-noise amplitude low (world units); [`Stream::from_bounds`]
-	/// draws uniformly in `[min, max]`.
-	pub rim_height_amp_min: f32,
-	/// Per-leaf rim height-noise amplitude high (world units).
-	pub rim_height_amp_max: f32,
-	/// Per-leaf rim height-noise frequency low (at [`crate::noise::NOISE_FREQ_REF_RADIUS`]).
-	pub rim_height_freq_min: f32,
-	/// Per-leaf rim height-noise frequency high (at [`crate::noise::NOISE_FREQ_REF_RADIUS`]).
-	pub rim_height_freq_max: f32,
+	/// Shared apron outline + add-only rim height.
+	pub apron: WatershedApronParams,
 
 	/// Softmask fade past the fill support edge (world units). Stacks on
 	/// [`Self::fill_half_width_scale`] so the wet ribbon is liberal vs the carve.
@@ -141,17 +122,7 @@ impl Default for StreamParams {
 			shore_indent_frac: 0.2,
 			shore_freq: 0.04,
 
-			noise_freq_power: 0.5,
-
-			apron_indent_frac_min: 0.12,
-			apron_indent_frac_max: 0.40,
-			apron_freq_min: 0.005,
-			apron_freq_max: 0.012,
-
-			rim_height_amp_min: 15.0,
-			rim_height_amp_max: 120.0,
-			rim_height_freq_min: 0.005,
-			rim_height_freq_max: 0.012,
+			apron: WatershedApronParams::default(),
 
 			shore_fade: 4.0,
 			channel_freeboard: 2.0,
@@ -360,42 +331,16 @@ impl Stream {
 		let shore_freq = params.shore_freq.max(1.5 / half_w.max(1.0)).clamp(1.0e-4, 0.14);
 		let shore_noise = RegionNoise::from_seed(seed.wrapping_add(5), shore_freq, shore_amp);
 
-		// Size-scaled apron / rim noise (authored freqs @ NOISE_FREQ_REF_RADIUS).
-		// Channel half-width is the stream analog of lake short_water.
 		let apron_band = (apron_w - skirt_w).max(0.5);
-		let apron_frac_lo = params
-			.apron_indent_frac_min
-			.min(params.apron_indent_frac_max)
-			.clamp(0.0, 0.5);
-		let apron_frac_hi = params
-			.apron_indent_frac_min
-			.max(params.apron_indent_frac_max)
-			.clamp(0.0, 0.5);
-		let apron_freq_lo = params.apron_freq_min.min(params.apron_freq_max).max(0.0);
-		let apron_freq_hi = params.apron_freq_min.max(params.apron_freq_max).max(0.0);
-		let apron_indent_frac =
-			apron_frac_lo + (apron_frac_hi - apron_frac_lo) * n01_at(seed, APRON_AMP_SALT, min);
-		let apron_amp = (apron_band * apron_indent_frac).max(0.01);
-		let apron_freq_authored =
-			apron_freq_lo + (apron_freq_hi - apron_freq_lo) * n01_at(seed, APRON_FREQ_SALT, min);
-		let apron_freq =
-			scale_noise_freq(apron_freq_authored, half_w, params.noise_freq_power);
-		let apron_noise = RegionNoise::from_seed(seed.wrapping_add(6), apron_freq, apron_amp);
-
-		let rim_amp_lo = params.rim_height_amp_min.min(params.rim_height_amp_max).max(0.0);
-		let rim_amp_hi = params.rim_height_amp_min.max(params.rim_height_amp_max).max(0.0);
-		let rim_freq_lo = params.rim_height_freq_min.min(params.rim_height_freq_max).max(0.0);
-		let rim_freq_hi = params.rim_height_freq_min.max(params.rim_height_freq_max).max(0.0);
-		let rim_height_amp =
-			rim_amp_lo + (rim_amp_hi - rim_amp_lo) * n01_at(seed, RIM_HEIGHT_AMP_SALT, min);
-		let rim_freq_authored =
-			rim_freq_lo + (rim_freq_hi - rim_freq_lo) * n01_at(seed, RIM_HEIGHT_FREQ_SALT, min);
-		let rim_height_freq =
-			scale_noise_freq(rim_freq_authored, half_w, params.noise_freq_power);
-		let rim_height = RegionNoise::from_seed(
-			seed.wrapping_add(7),
-			rim_height_freq,
-			rim_height_amp,
+		let apron_noise = params.apron.sample_noise(
+			seed,
+			min,
+			apron_band,
+			half_w,
+			APRON_AMP_SALT,
+			APRON_FREQ_SALT,
+			RIM_HEIGHT_AMP_SALT,
+			RIM_HEIGHT_FREQ_SALT,
 		);
 		let depth_noise = RegionNoise::from_seed(
 			seed.wrapping_add(9),
@@ -408,24 +353,6 @@ impl Stream {
 		let thalweg_region = Region2D::Polyline(PolylineRegion::new(path.clone(), thalweg_w));
 
 		let apron_fade = ((apron_w - skirt_w) * 0.85).max(1.0);
-		let skirt = JerseyModulation::PolylineGrading(
-			RegionPolylineGradingModulation::new(
-				apron_region,
-				path.clone(),
-				bank,
-				0.0,
-				apron_fade,
-			)
-			.with_node_blend(node_blend)
-			.with_noise(apron_noise)
-			.with_height_noise_add_only(rim_height)
-			.raise_only(),
-		);
-
-		// Floor grade sits a freeboard below W across the full channel so the
-		// exact W−h fill slab has continuous thickness between path nodes.
-		// No boundary / height noise on this pass — those pinched the corridor
-		// and left mid-segment beds at or above W.
 		let freeboard = params.channel_freeboard.max(0.25);
 		let bed = bed_levels(&levels, freeboard);
 		let channel_fade = (half_w * 0.15).max(0.35).min(half_w * 0.35);
@@ -448,20 +375,17 @@ impl Stream {
 				.with_height_noise(depth_noise),
 		);
 
-		// Extra relative cut on the wet channel (below the freeboard bed).
 		let channel_cut = JerseyModulation::Affine(
 			RegionAffineModulation::new(
-				channel_region,
+				channel_region.clone(),
 				1.0,
 				-(freeboard * 0.25 + depth * 0.1),
 				0.0,
 				channel_fade,
 			)
-			.with_noise(shore_noise.clone()),
+			.with_noise(shore_noise),
 		);
 
-		// Fill is a graded free-surface half-space on the shared terrain lattice.
-		// Support is intentionally wider than the carve; undercut keeps bank columns wet.
 		let fill_fade = params.shore_fade.max(0.25);
 		let fill_half = (half_w * params.fill_half_width_scale.max(1.0)).max(half_w);
 		let fill_region = Region2D::Polyline(PolylineRegion::new(path.clone(), fill_half));
@@ -478,6 +402,26 @@ impl Stream {
 			terrain_undercut: params.fill_undercut.max(0.0),
 		};
 
+		let depression = WatershedDepression::new(
+			WatershedDepressionKind::StreamCorridor,
+			channel_region,
+			vec![channel, channel_cut, thalweg],
+			Some(fill),
+		);
+		let apron = WatershedApronShelf::StreamRaiseOnly {
+			region: apron_region,
+			path: path.clone(),
+			bank_levels: bank,
+			node_blend,
+			fade: apron_fade,
+			apron_noise: apron_noise.apron,
+			rim_height: apron_noise.rim_height,
+		};
+		let compiled = WatershedDepressionComplex::from_stream_edge(
+			bounds, seed, depression, apron,
+		)
+		.compile();
+
 		Self {
 			bounds,
 			seed,
@@ -488,8 +432,8 @@ impl Stream {
 			skirt_half: skirt_w,
 			head_water,
 			toe_water,
-			modulations: vec![skirt, channel, channel_cut, thalweg],
-			fills: vec![fill],
+			modulations: compiled.modulations,
+			fills: compiled.fills,
 		}
 	}
 
@@ -636,8 +580,8 @@ mod tests {
 		let bounds = Bounds2::from_xz(0.0, 0.0, 400.0, 400.0);
 		let height = |x: f32, z: f32| 100.0 - 0.05 * x - 0.01 * z;
 		let params = StreamParams::default();
-		assert!(params.rim_height_amp_max >= 15.0);
-		assert!(params.apron_indent_frac_max > params.apron_indent_frac_min);
+		assert!(params.apron.rim_height_amp_max >= 15.0);
+		assert!(params.apron.indent_frac_max > params.apron.indent_frac_min);
 		let stream = Stream::from_bounds(bounds, 42, params, Some(&height));
 		assert!(!stream.is_empty());
 		assert_eq!(stream.modulations.len(), 4);

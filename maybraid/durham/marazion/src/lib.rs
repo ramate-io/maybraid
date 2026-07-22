@@ -4,8 +4,12 @@
 //! Durham models consume [`jersey_terrain_stamps::JerseyModulation`] and
 //! [`WaterFill`] outputs after pre-watershed terrain is composed.
 //!
-//! Pocket hierarchy: [`pre_pocket`] → [`pocket_cell`] guillotine → [`lake`] / [`stream`] leaves.
+//! Pocket hierarchy: [`pre_pocket`] → [`pocket_cell`] guillotine → [`lake`] / [`stream`] leaves
+//! (each a thin facade over [`complex::WatershedDepressionComplex`]).
 
+pub mod apron;
+pub mod complex;
+pub mod depression;
 pub mod fill;
 pub mod lake;
 pub mod noise;
@@ -14,6 +18,12 @@ pub mod polyline;
 pub mod pre_pocket;
 pub mod stream;
 
+pub use apron::WatershedApronParams;
+pub use complex::{
+	CompiledWatershed, WatershedApronShelf, WatershedDepressionComplex, WatershedEdge,
+	WatershedEdgeId, WatershedNode, WatershedNodeId,
+};
+pub use depression::{WatershedDepression, WatershedDepressionKind};
 pub use fill::{WaterFill, WaterSurface};
 pub use lake::{shelf_base_height, Lake, LakeBandBudget, LakeParams};
 pub use pocket_cell::{guillotine_partition, PocketGuillotineParams};
