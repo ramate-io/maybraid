@@ -1,4 +1,19 @@
-//! Water volume SDF for meshing stamp-owned pocket fills.
+//! Water-fill composition layer — parallel to [`crate::terrain::sdf::ComposedTerrain`].
+//!
+//! [`Terrain`](crate::terrain::Terrain) composes elevation mods into a heightfield SDF
+//! and meshes it on the origin-cell cascade lattice
+//! ([`cascade_chunk_for_cell`](crate::terrain::render::cascade_chunk_for_cell)).
+//! This module is the matching **water** composition: stamp-owned [`WaterFill`]s
+//! unioned against that finished heightfield into one meshable [`ComposedWater`].
+//!
+//! **Same sample space as terrain.** Water cells are the same origin cells as
+//! [`TerrainCellLayout`](crate::terrain::cell::TerrainCellLayout), use the same
+//! `res_2`, and mesh with the same cascade chunk bounds (including full cell Y).
+//! Lake fills are free-surface half-spaces below \(W\) (see [`WaterFill`]) so the
+//! tall terrain Y lattice can resolve them the way it resolves terrain.
+//!
+//! Softmask bleed and empty-cell skips live at the stamp / [`Water`](crate::water::Water)
+//! collector layer; this type only evaluates the composed wet SDF.
 
 use crate::terrain::sdf::TerrainSdf;
 use crate::water::water_distance as fill_water_distance;
@@ -12,16 +27,30 @@ use sdf::{Sdf, Sign, SignBoundary, SignUniformIntervals};
 /// Softmask weight above which a column is treated as dry for Y-interval skips.
 const SOFTMASK_DRY: f32 = 0.999;
 
-/// Meshable water volume: union of stamp fills against a composed heightfield.
+/// Composed wet volume for one terrain origin cell: union of stamp fills against
+/// the cell's finished heightfield.
+///
+/// Analogous to [`ComposedTerrain`](crate::terrain::sdf::ComposedTerrain): stamps
+/// author fills; this type is the meshable product the water model presents on
+/// the shared cascade chunk.
 #[derive(Clone, Debug)]
 pub struct ComposedWater {
+	/// Finished heightfield (same instance the sibling [`Terrain`](crate::terrain::Terrain) cell composed).
 	pub terrain: TerrainSdf,
+	/// Stamp-owned fills whose support intersects this cell's collection pass.
 	pub fills: Vec<WaterFill>,
 }
 
 impl ComposedWater {
-	pub fn new(terrain: TerrainSdf, fills: Vec<WaterFill>) -> Self {
+	/// Compose stamp fills against a finished heightfield (water analogue of
+	/// [`Terrain::compose_sdf`](crate::terrain::Terrain::compose_sdf)).
+	pub fn compose(terrain: TerrainSdf, fills: Vec<WaterFill>) -> Self {
 		Self { terrain, fills }
+	}
+
+	/// Backward-compatible alias of [`Self::compose`].
+	pub fn new(terrain: TerrainSdf, fills: Vec<WaterFill>) -> Self {
+		Self::compose(terrain, fills)
 	}
 }
 
@@ -35,31 +64,34 @@ impl Sdf for ComposedWater {
 		let h = self.terrain.height_at_with_all_modulations(x, z);
 		let p_xz = Vec2::new(x, z);
 
-		let mut wet_bottom = f32::INFINITY;
+		// Lake fills are half-spaces below W: union of wet columns → (-∞, W_max].
 		let mut wet_top = f32::NEG_INFINITY;
+		let mut any_wet = false;
 		for fill in &self.fills {
 			let w = fill.softmask_at(p_xz.x, p_xz.y);
 			if w >= SOFTMASK_DRY {
 				continue;
 			}
-			if let Some((lo, hi)) = fill.wet_y_span(h) {
-				wet_bottom = wet_bottom.min(lo);
+			if let Some((_lo, hi)) = fill.wet_y_span(h) {
+				any_wet = true;
 				wet_top = wet_top.max(hi);
 			}
 		}
 
 		let mut intervals = SignUniformIntervals::default();
-		intervals.insert_boundary(SignBoundary {
-			min: f32::NEG_INFINITY,
-			sign: Sign::Positive,
-		});
-		if wet_bottom.is_finite() && wet_top > wet_bottom {
+		if any_wet && wet_top.is_finite() {
+			// Half-space below free surface — same shape as terrain's solid under h.
 			intervals.insert_boundary(SignBoundary {
-				min: wet_bottom,
+				min: f32::NEG_INFINITY,
 				sign: Sign::Negative,
 			});
 			intervals.insert_boundary(SignBoundary {
 				min: wet_top,
+				sign: Sign::Positive,
+			});
+		} else {
+			intervals.insert_boundary(SignBoundary {
+				min: f32::NEG_INFINITY,
 				sign: Sign::Positive,
 			});
 		}

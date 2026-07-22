@@ -140,6 +140,7 @@ impl Terrain {
 	}
 
 	pub fn scene(&self) -> impl Scene + 'static {
+		// Shared origin-cell lattice with [`crate::water::Water::scene`].
 		let chunk = cascade_chunk_for_cell(self.cell, self.res_2);
 		let transform = Transform::from_translation(chunk.origin);
 		let sdf = self.sdf.clone();

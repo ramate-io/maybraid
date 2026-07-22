@@ -154,7 +154,6 @@ pub(crate) fn setup_presentation_assets(
 	});
 	commands.insert_resource(WaterPresentationAssets {
 		material: water_material,
-		res_2: 5,
 	});
 }
 

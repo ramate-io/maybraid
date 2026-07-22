@@ -14,11 +14,14 @@ use lod::gen::{
 use lod::lod_ref::LodRef;
 use std::collections::{HashMap, HashSet};
 
-/// Material / mesh resolution used when building water instances.
+/// Material used when building water instances.
+///
+/// Mesh `res_2` and origin-cell bounds come from the sibling [`crate::terrain::Terrain`]
+/// cell / [`crate::terrain::cell::TerrainCellLayout`] — not from this resource — so
+/// water and terrain always share one cascade lattice.
 #[derive(Resource, Clone)]
 pub struct WaterPresentationAssets {
 	pub material: Handle<StandardMaterial>,
-	pub res_2: u8,
 }
 
 /// Bootstrap source used only when first materializing [`WaterPresentationAssets`]

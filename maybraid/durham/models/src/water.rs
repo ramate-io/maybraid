@@ -1,21 +1,29 @@
-//! Durham water model: collect stamp-owned fills against composed terrain and mesh them.
+//! Durham water model: compose stamp-owned lake fills and mesh them on the **terrain** lattice.
 //!
-//! Parallel to [`crate::terrain`]: terrain owns the heightfield; this module owns
-//! water fill products, evaluation, and presentation. Surface level / softmask
-//! boundary remain decisions of **Marazion** lake stamps.
+//! # Parallel to terrain
 //!
-//! **Order:** [`Terrain`] must compose **all** Marazion watershed bands (high-pass
-//! then low-pass) before fills are evaluated. [`Water`] therefore reads
-//! [`Terrain::marazion_fills`] from an already-built cell and samples wet volume
-//! only against that finished heightfield — never by regenerating lake leaves
-//! mid-compose.
+//! | Layer | Terrain | Water |
+//! | --- | --- | --- |
+//! | Origin tiling | [`TerrainCellLayout`] | same (`original_ids_for_origin_cells`) |
+//! | Composition | [`ComposedTerrain`] / [`Terrain::compose_sdf`] | [`ComposedWater`] / [`ComposedWater::compose`] |
+//! | Cascade chunk | [`cascade_chunk_for_cell`] | **same helper**, same `cell` + `res_2` |
+//! | Mesh resolution | [`TerrainPresentationAssets::res_2`](crate::terrain::presentation::TerrainPresentationAssets) via the sibling [`Terrain`] cell | inherited from that [`Terrain::res_2`] — never a separate water grid |
+//!
+//! Marazion lake stamps author [`WaterFill`] (surface \(W\), softmask, undercut gate).
+//! Fills are free-surface half-spaces below \(W\) so they resolve on the tall
+//! terrain Y lattice. This module collects those fills from an already composed
+//! [`Terrain`] cell and presents [`ComposedWater`] on that shared sample space.
+//!
+//! **Order:** [`Terrain`] must compose **all** Marazion watershed bands before
+//! fills are evaluated. [`Water`] reads [`Terrain::marazion_fills`] from that
+//! finished cell — never by regenerating leaves mid-compose.
 
 pub mod composed;
 pub mod plugin;
 pub mod presentation;
 
 use crate::terrain::cell::{original_ids_for_origin_cells, TerrainCellLayout};
-use crate::terrain::render::cascade_chunk_for_water_cell;
+use crate::terrain::render::cascade_chunk_for_cell;
 use crate::terrain::sdf::TerrainSdf;
 use crate::terrain::Terrain;
 use bevy::ecs::template::template;
@@ -35,17 +43,19 @@ pub use presentation::{
 	WaterPresenterState, WaterRegionPresenter, WaterStoreView,
 };
 
-/// Cell-level water collector over [`Terrain`] plus Marazion stamp fills.
+/// Cell-level water collector: same origin cell as [`Terrain`], composed fills + mesh.
 #[derive(Debug, Clone, Component)]
 pub struct Water {
+	/// Origin-cell AABB — identical to the sibling [`Terrain`] cell.
 	pub cell: Aabb3d,
 	/// Composed terrain heightfield used when evaluating fills.
 	pub terrain: TerrainSdf,
-	/// Stamp-owned lake fills (no re-derivation of W / shore).
+	/// Stamp-owned lake fills collected on this cell (wet-volume filtered).
 	pub fills: Vec<WaterFill>,
-	/// Meshable union of fills against [`Self::terrain`].
+	/// Meshable union of fills against [`Self::terrain`] ([`ComposedWater`]).
 	pub sdf: ComposedWater,
 	pub material: Handle<StandardMaterial>,
+	/// Cascade `res_2` copied from the sibling [`Terrain`] cell (shared lattice).
 	pub res_2: u8,
 }
 
@@ -60,13 +70,10 @@ impl Water {
 		self.sdf.distance(p)
 	}
 
-	/// Visual scene for one cell: cascade chunk + cached SDF mesh dispatch.
-	///
-	/// Uses the same XZ/`res_2` grid as terrain, with Y fitted to the water slab
-	/// so marching cubes can resolve basin depth (terrain cell Y is ~km-scale).
+	/// Visual scene for one cell: **same** cascade chunk as [`Terrain::scene`], then
+	/// cached [`ComposedWater`] mesh dispatch.
 	pub fn scene(&self) -> impl Scene + 'static {
-		let (y_min, y_max) = water_mesh_y_span(&self.fills, &self.terrain);
-		let chunk = cascade_chunk_for_water_cell(self.cell, self.res_2, y_min, y_max);
+		let chunk = cascade_chunk_for_cell(self.cell, self.res_2);
 		let transform = Transform::from_translation(chunk.origin);
 		let sdf = self.sdf.clone();
 		let material = self.material.clone();
@@ -100,29 +107,6 @@ fn fill_has_wet_volume(fill: &WaterFill, terrain: &TerrainSdf) -> bool {
 	fill.wet_y_span(h).is_some()
 }
 
-/// Vertical span for water meshing: cover `[h_eff, W]` per fill with pad.
-fn water_mesh_y_span(fills: &[WaterFill], terrain: &TerrainSdf) -> (f32, f32) {
-	let mut y_lo = f32::INFINITY;
-	let mut y_hi = f32::NEG_INFINITY;
-	for fill in fills {
-		let center = fill.region.center();
-		let h = terrain.height_at_with_all_modulations(center.x, center.y);
-		if let Some((lo, hi)) = fill.wet_y_span(h) {
-			y_lo = y_lo.min(lo);
-			y_hi = y_hi.max(hi);
-		} else {
-			y_lo = y_lo.min(h).min(fill.water_level);
-			y_hi = y_hi.max(h).max(fill.water_level);
-		}
-	}
-	if !y_lo.is_finite() || !y_hi.is_finite() {
-		return (-50.0, 50.0);
-	}
-	let depth = (y_hi - y_lo).abs().max(4.0);
-	let pad = (depth * 0.5).max(8.0);
-	(y_lo - pad, y_hi + pad)
-}
-
 impl<S> GenerationScheme<S> for Water
 where
 	S: GeneratingSpatialIndex<Terrain>
@@ -130,6 +114,7 @@ where
 		+ GeneratingSpatialIndex<WaterPresentationAssets>,
 {
 	fn original_ids_for(spatial_index: &mut S, region: Aabb3d) -> Vec<OriginalId> {
+		// Same origin-cell tiling controller as terrain.
 		original_ids_for_origin_cells(spatial_index, region)
 	}
 
@@ -141,6 +126,7 @@ where
 			id,
 			lod_ref,
 		)?;
+		// Lattice resolution comes from the terrain cell — not a water-only knob.
 		let res_2 = terrain.res_2;
 		let terrain_sdf = terrain.sdf.terrain.clone();
 		let fills: Vec<_> = terrain
@@ -157,7 +143,7 @@ where
 			Id::Universal,
 			lod_ref,
 		)?;
-		let sdf = ComposedWater::new(terrain_sdf.clone(), fills.clone());
+		let sdf = ComposedWater::compose(terrain_sdf.clone(), fills.clone());
 		Some((
 			Self {
 				cell: bounds,
