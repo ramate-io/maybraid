@@ -22,7 +22,6 @@ use bevy::ecs::template::template;
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, template_value, Scene};
-use jersey_terrain_stamps::Region2D;
 use lod::gen::{GeneratingSpatialIndex, GenerationScheme, Id, LodScene, OriginalId};
 use lod::lod_ref::LodRef;
 use marazion_watersheds::WaterFill;
@@ -96,10 +95,7 @@ pub fn water_distance(fills: &[WaterFill], p: Vec3, terrain_height: f32) -> f32 
 
 /// True when the stamp has wet volume at the fill footprint center (with undercut).
 fn fill_has_wet_volume(fill: &WaterFill, terrain: &TerrainSdf) -> bool {
-	let center = match &fill.region {
-		Region2D::Circle(c) => c.center,
-		Region2D::Rect(r) => r.center,
-	};
+	let center = fill.region.center();
 	let h = terrain.height_at_with_all_modulations(center.x, center.y);
 	fill.wet_y_span(h).is_some()
 }
@@ -109,10 +105,7 @@ fn water_mesh_y_span(fills: &[WaterFill], terrain: &TerrainSdf) -> (f32, f32) {
 	let mut y_lo = f32::INFINITY;
 	let mut y_hi = f32::NEG_INFINITY;
 	for fill in fills {
-		let center = match &fill.region {
-			Region2D::Circle(c) => c.center,
-			Region2D::Rect(r) => r.center,
-		};
+		let center = fill.region.center();
 		let h = terrain.height_at_with_all_modulations(center.x, center.y);
 		if let Some((lo, hi)) = fill.wet_y_span(h) {
 			y_lo = y_lo.min(lo);
