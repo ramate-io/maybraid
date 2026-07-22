@@ -179,8 +179,8 @@ impl Default for LakeParams {
 			apron_indent_frac: 0.22,
 			apron_freq: 0.011,
 
-			rim_height_amp: 2.75,
-			rim_height_freq: 0.009,
+			rim_height_amp: 100.0,
+			rim_height_freq: 0.01,
 
 			rim_bleed_frac: 0.35,
 			shore_fade: 2.0,
@@ -286,10 +286,7 @@ impl LakeBandBudget {
 		let circ = leftover.min_element() * size_frac;
 		let full = leftover * size_frac;
 		let aspect = aspect_blend(params, short_room, aspect_u01);
-		let mut water = Vec2::new(
-			circ + (full.x - circ) * aspect,
-			circ + (full.y - circ) * aspect,
-		);
+		let mut water = Vec2::new(circ + (full.x - circ) * aspect, circ + (full.y - circ) * aspect);
 		if water.min_element() < MIN_WATER_RADIUS {
 			return None;
 		}
@@ -307,9 +304,7 @@ impl LakeBandBudget {
 			((fit_radii.x * c).abs().powi(2) + (fit_radii.y * s).abs().powi(2)).sqrt(),
 			((fit_radii.x * s).abs().powi(2) + (fit_radii.y * c).abs().powi(2)).sqrt(),
 		);
-		let scale = (available / aabb.max(Vec2::splat(1e-3)))
-			.min_element()
-			.clamp(0.0, 1.0);
+		let scale = (available / aabb.max(Vec2::splat(1e-3))).min_element().clamp(0.0, 1.0);
 		water *= scale;
 		if water.min_element() < MIN_WATER_RADIUS {
 			return None;
@@ -395,11 +390,7 @@ fn rotation_u11(seed: u32, leaf_min: Vec2) -> f32 {
 }
 
 fn ellipse_region(center: Vec2, radii: Vec2, rotation: f32) -> Region2D {
-	Region2D::Ellipse(EllipseRegion {
-		center,
-		radii: radii.max(Vec2::splat(1e-3)),
-		rotation,
-	})
+	Region2D::Ellipse(EllipseRegion { center, radii: radii.max(Vec2::splat(1e-3)), rotation })
 }
 
 /// Mid-rim characteristic radius used when surveying surrounding terrain.
@@ -570,13 +561,11 @@ impl Lake {
 		let shore_amp = (short_water * params.shore_indent_frac.clamp(0.0, 0.45))
 			.min(rim_w * 0.85)
 			.max(0.01);
-		let shore_freq =
-			scale_noise_freq(params.shore_freq, short_water, params.noise_freq_power);
+		let shore_freq = scale_noise_freq(params.shore_freq, short_water, params.noise_freq_power);
 		let shore_noise = RegionNoise::from_seed(seed.wrapping_add(5), shore_freq, shore_amp);
 
 		let apron_amp = (apron_w * params.apron_indent_frac.clamp(0.0, 0.5)).max(0.01);
-		let apron_freq =
-			scale_noise_freq(params.apron_freq, short_water, params.noise_freq_power);
+		let apron_freq = scale_noise_freq(params.apron_freq, short_water, params.noise_freq_power);
 		let apron_noise = RegionNoise::from_seed(seed.wrapping_add(6), apron_freq, apron_amp);
 		let apron_outer = apron_w + apron_amp;
 
