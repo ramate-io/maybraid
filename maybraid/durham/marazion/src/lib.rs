@@ -25,7 +25,7 @@ pub use apron::{ApronNoiseSalts, WatershedApronParams};
 pub use backfill::{
 	BasinBackfillParams, WatershedBackfill, WatershedBackfillKind,
 };
-pub use bog::{Bog, BogParams};
+pub use bog::{Bog, BogBasinFill, BogParams};
 pub use complex::{
 	CompiledWatershed, WatershedApronShelf, WatershedDepressionComplex, WatershedEdge,
 	WatershedEdgeId, WatershedNode, WatershedNodeId,

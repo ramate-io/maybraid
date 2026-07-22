@@ -5,6 +5,10 @@
 //! - [`WatershedBackfillKind::Basin`] — anywhere inside the wet core
 //! - [`WatershedBackfillKind::Rim`] — near / overlapping the rim (later)
 //! - [`WatershedBackfillKind::Cell`] — anywhere in the leaf cell (later)
+//!
+//! Amplitude is **depth-incentive**: callers supply a freeboard (depth below
+//! \(W\)) and a [`BasinBackfillParams::depth_frac`]. Consumers such as bog
+//! stamps decide how aggressively to fill (peaking policy → `depth_frac`).
 
 use jersey_terrain_stamps::{JerseyModulation, Region2D, RegionAffineModulation, RegionNoise};
 
@@ -84,10 +88,16 @@ impl WatershedBackfill {
 	}
 }
 
-/// Authoring knobs for a basin backfill noise draw.
+/// Depth-incentive authoring for a basin backfill noise draw.
+///
+/// World amplitude is `freeboard * depth_frac` via [`Self::amp_for_freeboard`].
+/// Stamp facades (bog, later rim/cell recipes) choose `depth_frac` from their
+/// own fill / peaking policy.
 #[derive(Debug, Clone, Copy)]
 pub struct BasinBackfillParams {
-	pub amp: f32,
+	/// Noise amplitude as a multiple of bowl freeboard (`1` ≈ full-scale raise
+	/// equals depth below \(W\)).
+	pub depth_frac: f32,
 	pub freq: f32,
 	pub fade: f32,
 	/// FBM octave count (≥1). Extra octaves densify mound packing.
@@ -99,7 +109,7 @@ pub struct BasinBackfillParams {
 impl Default for BasinBackfillParams {
 	fn default() -> Self {
 		Self {
-			amp: 6.0,
+			depth_frac: 1.0,
 			freq: 0.04,
 			fade: 2.0,
 			octaves: 1,
@@ -109,14 +119,25 @@ impl Default for BasinBackfillParams {
 }
 
 impl BasinBackfillParams {
-	/// Sample noise and wrap a basin backfill on `region`.
-	pub fn sample(&self, seed: u32, salt_offset: u32, region: Region2D) -> WatershedBackfill {
+	/// `freeboard * depth_frac` (both non-negative).
+	pub fn amp_for_freeboard(&self, freeboard: f32) -> f32 {
+		freeboard.max(0.0) * self.depth_frac.max(0.0)
+	}
+
+	/// Sample over `region` with amplitude resolved from `freeboard`.
+	pub fn sample_over_freeboard(
+		&self,
+		freeboard: f32,
+		seed: u32,
+		salt_offset: u32,
+		region: Region2D,
+	) -> WatershedBackfill {
 		use procedural_common::{NoiseParams, NoiseType};
 
 		let noise = RegionNoise::from_params(NoiseParams {
 			seed: seed.wrapping_add(salt_offset) as i32,
 			frequency: self.freq.max(1.0e-4).clamp(1.0e-4, 0.14),
-			amplitude: self.amp.max(0.0),
+			amplitude: self.amp_for_freeboard(freeboard),
 			octaves: self.octaves.max(1) as u32,
 			noise_type: NoiseType::Perlin,
 		});
@@ -143,7 +164,6 @@ mod tests {
 		let noise = RegionNoise::from_seed(7, 0.05, 5.0);
 		let m = WatershedBackfill::basin(region, noise, 2.0).into_modulation();
 		let base = 40.0;
-		// Perlin can be ~0 on lattice points; probe a few interior samples.
 		let mut max_delta = 0.0_f32;
 		for &(x, z) in &[(0.0, 0.0), (3.0, 5.0), (-7.0, 2.0), (4.0, -6.0)] {
 			max_delta = max_delta.max((m.modify_elevation(base, x, z) - base).abs());
@@ -157,6 +177,17 @@ mod tests {
 			(outside - base).abs() < 1e-3,
 			"outside should stay identity: {outside} vs {base}"
 		);
+		Ok(())
+	}
+
+	#[test]
+	fn amp_scales_with_freeboard_and_depth_frac() -> anyhow::Result<()> {
+		let p = BasinBackfillParams {
+			depth_frac: 1.25,
+			..BasinBackfillParams::default()
+		};
+		assert!((p.amp_for_freeboard(8.0) - 10.0).abs() < 1e-4);
+		assert!((p.amp_for_freeboard(4.0) - 5.0).abs() < 1e-4);
 		Ok(())
 	}
 }

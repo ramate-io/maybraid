@@ -4,6 +4,9 @@
 //! (carve + fill + apron), then add [`crate::backfill::WatershedBackfill`]
 //! elevation noise inside the wet core so the bed reads hummocky / islanded
 //! after water is placed.
+//!
+//! Basin noise itself is depth-incentive ([`BasinBackfillParams::depth_frac`]);
+//! [`BogBasinFill`] chooses how aggressively that freeboard is filled / crested.
 
 use crate::backfill::BasinBackfillParams;
 use crate::fill::WaterFill;
@@ -21,33 +24,69 @@ use procedural_common::Bounds2;
 /// Salt offset for basin backfill noise draws.
 const BASIN_BACKFILL_SALT: u32 = 0xB06_BACF1;
 
-/// Authoring knobs: lake footprint/bowl + basin backfill height noise.
+/// How a bog fills its basin relative to bowl freeboard / \(W\).
+///
+/// Converts to a [`BasinBackfillParams::depth_frac`] so backfill stays
+/// depth-incentive while bog owns peaking taste.
+#[derive(Debug, Clone, Copy)]
+pub struct BogBasinFill {
+	/// Target crest height above \(W\) at full-scale raise-only noise.
+	pub peak_above_w: f32,
+	/// Unit-noise fraction (`|sample| / amp`) at which the bed reaches \(W\).
+	/// Higher → gentler mounds / fewer hard peaks. Clamped to `(0.05, 1]`.
+	pub crest_unit: f32,
+}
+
+impl Default for BogBasinFill {
+	fn default() -> Self {
+		Self {
+			// Short islands — frequent but not tall (~15% shorter than prior).
+			peak_above_w: 0.95,
+			crest_unit: 0.4,
+		}
+	}
+}
+
+impl BogBasinFill {
+	/// Depth-incentive fraction: `amp / freeboard`.
+	pub fn depth_frac(&self, freeboard: f32) -> f32 {
+		let fb = freeboard.max(1e-3);
+		let u = self.crest_unit.clamp(0.05, 1.0);
+		let peak = self.peak_above_w.max(0.0);
+		let amp = (fb / u).max(fb + peak);
+		amp / fb
+	}
+}
+
+/// Authoring knobs: lake footprint/bowl + basin noise + bog fill policy.
 #[derive(Debug, Clone, Copy)]
 pub struct BogParams {
-	/// Lake bowl / apron / fill knobs (bog-tuned defaults are shallower).
+	/// Lake bowl / apron / fill knobs (bog-tuned defaults are shallow + flat).
 	pub lake: LakeParams,
-	/// Post-carve basin height noise over the wet core.
+	/// Spatial basin backfill knobs (`depth_frac` is set from [`Self::fill`]).
 	pub basin: BasinBackfillParams,
+	/// Peaking / fill policy mapped onto basin freeboard.
+	pub fill: BogBasinFill,
 }
 
 impl Default for BogParams {
 	fn default() -> Self {
 		let mut lake = LakeParams::default();
-		// Shallower, near-flat floor so basin backfill crests across the wet core.
-		lake.depth = 7.0;
-		lake.depth_noise_amp = 2.0;
-		lake.depth_shore_frac = 0.9;
+		// Short freeboard so depth-incentive fill crests often and gently.
+		lake.depth = 2.2;
+		lake.depth_noise_amp = 0.65;
+		lake.depth_shore_frac = 0.95;
 		Self {
 			lake,
 			basin: BasinBackfillParams {
-				// Tall enough to crest above W as islands / hummocks.
-				amp: 12.0,
-				// Higher base frequency → denser mound field across the wet core.
-				freq: 0.06,
+				// Overwritten from `fill` at stamp time.
+				depth_frac: 1.0,
+				freq: 0.035,
 				fade: 2.5,
-				octaves: 3,
+				octaves: 2,
 				add_only: true,
 			},
+			fill: BogBasinFill::default(),
 		}
 	}
 }
@@ -113,39 +152,29 @@ impl Bog {
 			return Self::empty(
 				bounds,
 				seed,
-				Vec2::new(
-					(bounds.min.x + bounds.max.x) * 0.5,
-					(bounds.min.y + bounds.max.y) * 0.5,
-				),
+				Vec2::new((bounds.min.x + bounds.max.x) * 0.5, (bounds.min.y + bounds.max.y) * 0.5),
 			);
 		};
 
 		let levels = shelf_levels(seed, min, center, &budget, lake_p, height_at);
-		let layout = LakeLayout {
-			center,
-			budget,
-			levels,
-		};
+		let layout = LakeLayout { center, budget, levels };
 		let bowl = build_bowl(seed, min, lake_p, &layout);
 		let fill_radius = bowl.fill_radius;
 		let wet_core = bowl.depression.wet_core.clone();
 
 		let short_water = layout.budget.water_radius();
-		let basin_freq = scale_noise_freq(
-			params.basin.freq,
-			short_water,
-			lake_p.apron.noise_freq_power,
-		);
+		let basin_freq =
+			scale_noise_freq(params.basin.freq, short_water, lake_p.apron.noise_freq_power);
+		// Cover jittered_depth high end (~1.35× authored).
+		let freeboard = lake_p.depth.max(0.0) * 1.35;
 		let basin = BasinBackfillParams {
+			depth_frac: params.fill.depth_frac(freeboard),
 			freq: basin_freq,
 			..params.basin
 		}
-		.sample(seed, BASIN_BACKFILL_SALT, wet_core);
+		.sample_over_freeboard(freeboard, seed, BASIN_BACKFILL_SALT, wet_core);
 
-		let compiled = bowl
-			.into_complex(bounds, seed)
-			.with_backfill(basin)
-			.compile();
+		let compiled = bowl.into_complex(bounds, seed).with_backfill(basin).compile();
 
 		Self {
 			bounds,
@@ -191,7 +220,6 @@ mod tests {
 		let bog = Bog::from_bounds(bounds, 11, BogParams::default(), Some(&|_, _| 40.0));
 		assert!(!bog.is_empty());
 		assert!(!bog.fills.is_empty());
-		// Apron + bowl + basin backfill.
 		assert!(
 			bog.modulations.len() >= 3,
 			"expected apron+bowl+backfill, got {}",
@@ -200,21 +228,15 @@ mod tests {
 
 		let base = 40.0;
 		let last = bog.modulations.last().expect("backfill");
-		// Identity outside the basin: last op alone should not move far-field.
-		let outside = bog.center
-			+ Vec2::new(bog.plateau_radius + bog.apron_width + 40.0, 0.0);
+		let outside = bog.center + Vec2::new(bog.plateau_radius + bog.apron_width + 40.0, 0.0);
 		let h_out = last.modify_elevation(base, outside.x, outside.y);
 		assert!(
 			(h_out - base).abs() < 1e-3,
 			"final backfill should be near-identity outside basin: {h_out}"
 		);
 
-		// Inside wet core, raise-only backfill should lift height.
 		let h_in = last.modify_elevation(base, bog.center.x, bog.center.y);
-		assert!(
-			h_in > base + 0.05,
-			"final backfill should raise basin (mounds): {h_in} vs {base}"
-		);
+		assert!(h_in > base + 0.05, "final backfill should raise basin (mounds): {h_in} vs {base}");
 		Ok(())
 	}
 
@@ -224,6 +246,65 @@ mod tests {
 		let bog = Bog::from_bounds_default(bounds, 19);
 		assert!(!bog.is_empty());
 		assert_eq!(bog.fills.len(), 1);
+		Ok(())
+	}
+
+	#[test]
+	fn fill_policy_sets_depth_frac_from_freeboard() -> anyhow::Result<()> {
+		let params = BogParams::default();
+		let freeboard = params.lake.depth * 1.35;
+		let frac = params.fill.depth_frac(freeboard);
+		let amp =
+			BasinBackfillParams { depth_frac: frac, ..params.basin }.amp_for_freeboard(freeboard);
+		let u = params.fill.crest_unit;
+		assert!(
+			(amp - (freeboard / u).max(freeboard + params.fill.peak_above_w)).abs() < 1e-3,
+			"amp {amp} should match fill policy for freeboard {freeboard}"
+		);
+		// Milder than a tall-spike recipe; still depth-incentive.
+		assert!(frac < 2.5, "expected moderate depth_frac, got {frac}");
+		assert!(frac > 1.5, "expected enough fill to crest often, got {frac}");
+		Ok(())
+	}
+
+	#[test]
+	fn some_interior_samples_crest_above_water() -> anyhow::Result<()> {
+		let bounds = Bounds2::from_xz(0.0, 0.0, 320.0, 320.0);
+		let base = 40.0;
+		let mut params = BogParams::default();
+		params.lake.rotation_amp = 0.0;
+		params.lake.aspect_strength = 0.0;
+		params.lake.aspect_floor = 0.0;
+		params.lake.depth_noise_amp = 0.0;
+		let bog = Bog::from_bounds(bounds, 11, params, Some(&|_, _| base));
+		assert!(!bog.is_empty());
+
+		fn apply(mods: &[JerseyModulation], h: f32, x: f32, z: f32) -> f32 {
+			let mut y = h;
+			for m in mods {
+				y = m.modify_elevation(y, x, z);
+			}
+			y
+		}
+
+		let mut crested = 0usize;
+		let mut samples = 0usize;
+		let mut max_above = 0.0_f32;
+		for &frac in &[0.15_f32, 0.35, 0.55, 0.7] {
+			for i in 0..24 {
+				let ang = i as f32 * std::f32::consts::TAU / 24.0;
+				let p = bog.center + Vec2::new(ang.cos(), ang.sin()) * (bog.water_radius * frac);
+				let h = apply(&bog.modulations, base, p.x, p.y);
+				samples += 1;
+				if h > bog.water_level + 0.15 {
+					crested += 1;
+					max_above = max_above.max(h - bog.water_level);
+				}
+			}
+		}
+		assert!(crested >= 3, "expected some island crests above W (crested={crested}/{samples})");
+		// Mild fill: peaks should not tower far above W.
+		assert!(max_above < 4.0, "crests should stay modest above W, got +{max_above}");
 		Ok(())
 	}
 }

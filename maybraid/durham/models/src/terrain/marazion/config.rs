@@ -125,11 +125,11 @@ impl Default for MarazionWatershedConfigs {
 		high_stream.depth = 10.0;
 		high_stream.half_width_frac = 0.06;
 		let mut low_bog = BogParams::default();
-		low_bog.lake.depth = 5.5;
-		low_bog.basin.amp = 11.0;
+		low_bog.lake.depth = 1.9;
+		low_bog.fill.peak_above_w = 0.75;
 		let mut high_bog = BogParams::default();
-		high_bog.lake.depth = 9.0;
-		high_bog.basin.amp = 14.0;
+		high_bog.lake.depth = 2.65;
+		high_bog.fill.peak_above_w = 1.0;
 		Self {
 			seed,
 			low_pass: MarazionBandConfig::from_layout::<PrePocketLowPassLayout>(
