@@ -7,16 +7,19 @@
 //!
 //! Fill / channel grade is piecewise along path nodes (segment lerp + pitch blend).
 
+mod build;
+mod path;
+
 use crate::apron::WatershedApronParams;
-use crate::complex::{WatershedApronShelf, WatershedDepressionComplex};
-use crate::depression::{WatershedDepression, WatershedDepressionKind};
-use crate::fill::{WaterFill, WaterSurface};
-use crate::noise::{n01_at, n01_freq};
-use bevy_math::Vec2;
-use jersey_terrain_stamps::{
-	DownhillPair, HysteresisSpine, JerseyModulation, PolylineRegion, RegionAffineModulation,
-	Region2D, RegionNoise, RegionPolylineGradingModulation,
+use crate::complex::WatershedDepressionComplex;
+use crate::fill::WaterFill;
+use crate::noise::n01_freq;
+use crate::stream::build::{build_parts, resolve_node_blend, StreamLayout};
+use crate::stream::path::{
+	node_water_levels, sample_endpoint, ENDPOINT_A_SALT, ENDPOINT_B_SALT,
 };
+use bevy_math::Vec2;
+use jersey_terrain_stamps::{DownhillPair, HysteresisSpine, JerseyModulation};
 use procedural_common::Bounds2;
 
 /// Minimum channel half-width (world units); smaller budgets skip the stamp.
@@ -25,16 +28,6 @@ const MIN_HALF_WIDTH: f32 = 3.0;
 const MIN_PATH_LEN: f32 = 24.0;
 
 const WIDTH_SCALE_SALT: u32 = 0x57EA_512E;
-const ENDPOINT_A_SALT: u32 = 0x57EA_E001;
-const ENDPOINT_B_SALT: u32 = 0x57EA_E002;
-/// Salt for per-leaf rim height amplitude draw.
-const RIM_HEIGHT_AMP_SALT: u32 = 0x57EA_A17A;
-/// Salt for per-leaf rim height frequency draw.
-const RIM_HEIGHT_FREQ_SALT: u32 = 0x57EA_F7E9;
-/// Salt for per-leaf apron indent amplitude draw.
-const APRON_AMP_SALT: u32 = 0x57EA_A70A;
-/// Salt for per-leaf apron frequency draw.
-const APRON_FREQ_SALT: u32 = 0x57EA_AF7E;
 
 /// Authoring knobs for a Marazion stream stamp.
 #[derive(Debug, Clone, Copy)]
@@ -124,10 +117,10 @@ impl Default for StreamParams {
 
 			apron: WatershedApronParams::default(),
 
-			shore_fade: 4.0,
+			shore_fade: 5.5,
 			channel_freeboard: 2.0,
-			fill_half_width_scale: 1.35,
-			fill_undercut: 2.0,
+			fill_half_width_scale: 1.55,
+			fill_undercut: 2.75,
 
 			spine: HysteresisSpine::default(),
 		}
@@ -179,61 +172,6 @@ fn width_scale_u01(seed: u32, leaf_min: Vec2, params: StreamParams) -> f32 {
 	n01_freq(seed, WIDTH_SCALE_SALT, leaf_min, params.half_width_freq)
 }
 
-fn sample_endpoint(seed: u32, salt: u32, lo: Vec2, hi: Vec2) -> Vec2 {
-	let ux = n01_at(seed, salt, lo);
-	let uz = n01_at(seed, salt.wrapping_add(1), lo);
-	Vec2::new(
-		lo.x + (hi.x - lo.x) * ux,
-		lo.y + (hi.y - lo.y) * uz,
-	)
-}
-
-/// Sample per-node water elevations along a path (pre-watershed heights − sink).
-///
-/// Local segment pitches follow the samples; uphill chords are clamped so each
-/// node is non-increasing vs its upstream neighbor. If the whole reach is nearly
-/// flat, the toe is pulled down by `min_drop`.
-fn node_water_levels(
-	path: &[Vec2],
-	height_at: Option<&dyn Fn(f32, f32) -> f32>,
-	sink: f32,
-	min_drop: f32,
-) -> Vec<f32> {
-	let sink = sink.max(0.0);
-	let min_drop = min_drop.max(0.0);
-	let mut levels: Vec<f32> = path
-		.iter()
-		.map(|p| height_at.map(|f| f(p.x, p.y)).unwrap_or(0.0) - sink)
-		.collect();
-	for i in 1..levels.len() {
-		levels[i] = levels[i].min(levels[i - 1]);
-	}
-	if levels.len() >= 2 {
-		let head = levels[0];
-		let last = levels.len() - 1;
-		if head - levels[last] < min_drop {
-			levels[last] = head - min_drop;
-			for i in (1..last).rev() {
-				levels[i] = levels[i]
-					.min(levels[i - 1])
-					.max(levels[last]);
-			}
-		}
-	}
-	levels
-}
-
-fn bank_levels(water_levels: &[f32], rim_lift: f32) -> Vec<f32> {
-	let lift = rim_lift.max(0.0);
-	water_levels.iter().map(|w| w + lift).collect()
-}
-
-/// Channel floor grade: water surface levels minus freeboard (strictly below \(W\)).
-fn bed_levels(water_levels: &[f32], freeboard: f32) -> Vec<f32> {
-	let fb = freeboard.max(0.25);
-	water_levels.iter().map(|w| w - fb).collect()
-}
-
 /// Stream stamp products for one pocket-water leaf.
 #[derive(Debug, Clone)]
 pub struct Stream {
@@ -252,18 +190,8 @@ pub struct Stream {
 }
 
 impl Stream {
-	/// Build a graded stream, or an empty stamp when the leaf / path is too small.
-	pub fn from_bounds(
-		bounds: Bounds2,
-		seed: u32,
-		params: StreamParams,
-		height_at: Option<&dyn Fn(f32, f32) -> f32>,
-	) -> Self {
-		let min = bounds.min;
-		let max = bounds.max;
-		let half = Vec2::new((max.x - min.x) * 0.5, (max.y - min.y) * 0.5);
-		let short_half = half.x.min(half.y).max(1.0);
-		let empty = Self {
+	fn empty(bounds: Bounds2, seed: u32) -> Self {
+		Self {
 			bounds,
 			seed,
 			path: Vec::new(),
@@ -275,161 +203,75 @@ impl Stream {
 			toe_water: 0.0,
 			modulations: Vec::new(),
 			fills: Vec::new(),
-		};
+		}
+	}
+
+	/// Build a graded stream, or an empty stamp when the leaf / path is too small.
+	pub fn from_bounds(
+		bounds: Bounds2,
+		seed: u32,
+		params: StreamParams,
+		height_at: Option<&dyn Fn(f32, f32) -> f32>,
+	) -> Self {
+		let min = bounds.min;
+		let max = bounds.max;
+		let half = Vec2::new((max.x - min.x) * 0.5, (max.y - min.y) * 0.5);
+		let short_half = half.x.min(half.y).max(1.0);
 
 		let width_u = width_scale_u01(seed, min, params);
 		let Some(budget) = StreamBandBudget::try_from_short_half(short_half, params, width_u) else {
-			return empty;
+			return Self::empty(bounds, seed);
 		};
 
 		let inset = budget.apron_half.max(budget.mu);
 		let lo = min + Vec2::splat(inset);
 		let hi = max - Vec2::splat(inset);
 		if lo.x >= hi.x || lo.y >= hi.y {
-			return empty;
+			return Self::empty(bounds, seed);
 		}
 
 		let a0 = sample_endpoint(seed, ENDPOINT_A_SALT, lo, hi);
 		let b0 = sample_endpoint(seed, ENDPOINT_B_SALT, lo, hi);
 		if a0.distance(b0) < MIN_PATH_LEN * 0.5 {
-			return empty;
+			return Self::empty(bounds, seed);
 		}
 
 		let (head_xz, _, toe_xz, _) = DownhillPair::order(a0, b0, height_at);
 		let path = params.spine.build(bounds, seed.wrapping_add(21), head_xz, toe_xz);
 		if path.len() < 2 {
-			return empty;
+			return Self::empty(bounds, seed);
 		}
 		let path_len: f32 = path.windows(2).map(|w| w[0].distance(w[1])).sum();
 		if path_len < MIN_PATH_LEN {
-			return empty;
+			return Self::empty(bounds, seed);
 		}
 
 		let levels = node_water_levels(&path, height_at, params.water_sink, params.min_drop);
 		let head_water = levels.first().copied().unwrap_or(0.0);
 		let toe_water = levels.last().copied().unwrap_or(head_water);
-
-		let half_w = budget.half_width;
-		let thalweg_w = budget.thalweg_half;
-		let skirt_w = budget.skirt_half;
-		let apron_w = budget.apron_half;
-		let rim_lift = params.rim_lift.max(0.0);
-		let bank = bank_levels(&levels, rim_lift);
-		let step_guess = params
-			.spine
-			.walk_config(bounds)
-			.step_len
-			.max(half_w);
-		let node_blend = if params.node_blend > 0.0 {
-			params.node_blend
-		} else {
-			(step_guess * 0.45).max(half_w * 0.5)
+		let layout = StreamLayout {
+			node_blend: resolve_node_blend(params, bounds, budget.half_width),
+			path,
+			levels,
+			budget,
 		};
-
-		let depth = params.depth * (0.7 + 0.6 * n01_at(seed, 0x57EA_DE07, min));
-		let shore_amp = (half_w * params.shore_indent_frac.clamp(0.0, 0.4)).max(0.01);
-		let shore_freq = params.shore_freq.max(1.5 / half_w.max(1.0)).clamp(1.0e-4, 0.14);
-		let shore_noise = RegionNoise::from_seed(seed.wrapping_add(5), shore_freq, shore_amp);
-
-		let apron_band = (apron_w - skirt_w).max(0.5);
-		let apron_noise = params.apron.sample_noise(
-			seed,
-			min,
-			apron_band,
-			half_w,
-			APRON_AMP_SALT,
-			APRON_FREQ_SALT,
-			RIM_HEIGHT_AMP_SALT,
-			RIM_HEIGHT_FREQ_SALT,
-		);
-		let depth_noise = RegionNoise::from_seed(
-			seed.wrapping_add(9),
-			(1.4 / half_w.max(1.0)).clamp(0.04, 0.2),
-			params.depth_noise_amp.max(0.0),
-		);
-
-		let apron_region = Region2D::Polyline(PolylineRegion::new(path.clone(), apron_w));
-		let channel_region = Region2D::Polyline(PolylineRegion::new(path.clone(), half_w));
-		let thalweg_region = Region2D::Polyline(PolylineRegion::new(path.clone(), thalweg_w));
-
-		let apron_fade = ((apron_w - skirt_w) * 0.85).max(1.0);
-		let freeboard = params.channel_freeboard.max(0.25);
-		let bed = bed_levels(&levels, freeboard);
-		let channel_fade = (half_w * 0.15).max(0.35).min(half_w * 0.35);
-		let channel = JerseyModulation::PolylineGrading(
-			RegionPolylineGradingModulation::new(
-				channel_region.clone(),
-				path.clone(),
-				bed,
-				0.0,
-				channel_fade,
-			)
-			.with_node_blend(node_blend)
-			.depression_only(),
-		);
-
-		let thalweg_fade = (thalweg_w * 0.35).max(0.4);
-		let thalweg = JerseyModulation::Affine(
-			RegionAffineModulation::new(thalweg_region, 1.0, -depth, 0.0, thalweg_fade)
-				.with_noise(shore_noise.clone())
-				.with_height_noise(depth_noise),
-		);
-
-		let channel_cut = JerseyModulation::Affine(
-			RegionAffineModulation::new(
-				channel_region.clone(),
-				1.0,
-				-(freeboard * 0.25 + depth * 0.1),
-				0.0,
-				channel_fade,
-			)
-			.with_noise(shore_noise),
-		);
-
-		let fill_fade = params.shore_fade.max(0.25);
-		let fill_half = (half_w * params.fill_half_width_scale.max(1.0)).max(half_w);
-		let fill_region = Region2D::Polyline(PolylineRegion::new(path.clone(), fill_half));
-		let fill = WaterFill {
-			region: fill_region,
-			inner_radius: 0.0,
-			outer_radius: fill_fade,
-			noise: None,
-			surface: WaterSurface::Graded {
-				path: path.clone(),
-				levels: levels.clone(),
-				node_blend,
-			},
-			terrain_undercut: params.fill_undercut.max(0.0),
-		};
-
-		let depression = WatershedDepression::new(
-			WatershedDepressionKind::StreamCorridor,
-			channel_region,
-			vec![channel, channel_cut, thalweg],
-			Some(fill),
-		);
-		let apron = WatershedApronShelf::StreamRaiseOnly {
-			region: apron_region,
-			path: path.clone(),
-			bank_levels: bank,
-			node_blend,
-			fade: apron_fade,
-			apron_noise: apron_noise.apron,
-			rim_height: apron_noise.rim_height,
-		};
+		let parts = build_parts(seed, min, params, &layout);
 		let compiled = WatershedDepressionComplex::from_stream_edge(
-			bounds, seed, depression, apron,
+			bounds,
+			seed,
+			parts.depression,
+			parts.apron,
 		)
 		.compile();
 
 		Self {
 			bounds,
 			seed,
-			path,
-			levels,
-			half_width: half_w,
-			thalweg_half: thalweg_w,
-			skirt_half: skirt_w,
+			path: layout.path,
+			levels: layout.levels,
+			half_width: layout.budget.half_width,
+			thalweg_half: layout.budget.thalweg_half,
+			skirt_half: layout.budget.skirt_half,
 			head_water,
 			toe_water,
 			modulations: compiled.modulations,
@@ -449,6 +291,7 @@ impl Stream {
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use jersey_terrain_stamps::Region2D;
 
 	#[test]
 	fn leaf_too_small_skips() -> anyhow::Result<()> {
@@ -538,7 +381,6 @@ mod tests {
 	#[test]
 	fn fill_tracks_piecewise_node_samples() -> anyhow::Result<()> {
 		let bounds = Bounds2::from_xz(0.0, 0.0, 400.0, 400.0);
-		// Steep then flat — a global head→toe grade would mis-place the mid node.
 		let height = |x: f32, _z: f32| {
 			if x < 200.0 {
 				120.0 - 0.2 * x
@@ -562,7 +404,6 @@ mod tests {
 				p.y
 			);
 		}
-		// Interior segment sample should sit between its endpoints.
 		if stream.path.len() >= 2 {
 			let a = stream.path[0];
 			let b = stream.path[1];
@@ -585,7 +426,6 @@ mod tests {
 		let stream = Stream::from_bounds(bounds, 42, params, Some(&height));
 		assert!(!stream.is_empty());
 		assert_eq!(stream.modulations.len(), 4);
-		// Skirt is first; raise-only bank grade should not lower far-field terrain.
 		let far = Vec2::new(bounds.min.x - 120.0, bounds.min.y - 120.0);
 		let h0 = height(far.x, far.y);
 		let h1 = stream.modulations[0].modify_elevation(h0, far.x, far.y);

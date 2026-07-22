@@ -4,6 +4,33 @@ use crate::noise::{n01_at, scale_noise_freq};
 use bevy_math::Vec2;
 use jersey_terrain_stamps::RegionNoise;
 
+/// Deterministic salts for [`WatershedApronParams::sample_noise`].
+#[derive(Debug, Clone, Copy)]
+pub struct ApronNoiseSalts {
+	pub indent_amp: u32,
+	pub indent_freq: u32,
+	pub rim_amp: u32,
+	pub rim_freq: u32,
+}
+
+impl ApronNoiseSalts {
+	/// Lake leaf salt family (`0x1A7E_*`).
+	pub const LAKE: Self = Self {
+		indent_amp: 0x1A7E_A70A,
+		indent_freq: 0x1A7E_AF7E,
+		rim_amp: 0x1A7E_A17A,
+		rim_freq: 0x1A7E_F7E9,
+	};
+
+	/// Stream leaf salt family (`0x57EA_*`).
+	pub const STREAM: Self = Self {
+		indent_amp: 0x57EA_A70A,
+		indent_freq: 0x57EA_AF7E,
+		rim_amp: 0x57EA_A17A,
+		rim_freq: 0x57EA_F7E9,
+	};
+}
+
 /// Per-leaf apron outline + add-only rim height knobs (shared by lake and stream).
 #[derive(Debug, Clone, Copy)]
 pub struct WatershedApronParams {
@@ -64,10 +91,7 @@ impl WatershedApronParams {
 		anchor: Vec2,
 		apron_width_for_amp: f32,
 		scale_radius: f32,
-		apron_amp_salt: u32,
-		apron_freq_salt: u32,
-		rim_amp_salt: u32,
-		rim_freq_salt: u32,
+		salts: ApronNoiseSalts,
 	) -> WatershedApronNoise {
 		let apron_frac_lo = self
 			.indent_frac_min
@@ -79,11 +103,11 @@ impl WatershedApronParams {
 			.clamp(0.0, 0.5);
 		let apron_freq_lo = self.freq_min.min(self.freq_max).max(0.0);
 		let apron_freq_hi = self.freq_min.max(self.freq_max).max(0.0);
-		let apron_indent_frac =
-			apron_frac_lo + (apron_frac_hi - apron_frac_lo) * n01_at(seed, apron_amp_salt, anchor);
+		let apron_indent_frac = apron_frac_lo
+			+ (apron_frac_hi - apron_frac_lo) * n01_at(seed, salts.indent_amp, anchor);
 		let apron_amp = (apron_width_for_amp.max(0.0) * apron_indent_frac).max(0.01);
-		let apron_freq_authored =
-			apron_freq_lo + (apron_freq_hi - apron_freq_lo) * n01_at(seed, apron_freq_salt, anchor);
+		let apron_freq_authored = apron_freq_lo
+			+ (apron_freq_hi - apron_freq_lo) * n01_at(seed, salts.indent_freq, anchor);
 		let apron_freq =
 			scale_noise_freq(apron_freq_authored, scale_radius, self.noise_freq_power);
 		let apron = RegionNoise::from_seed(seed.wrapping_add(6), apron_freq, apron_amp);
@@ -93,9 +117,9 @@ impl WatershedApronParams {
 		let rim_freq_lo = self.rim_height_freq_min.min(self.rim_height_freq_max).max(0.0);
 		let rim_freq_hi = self.rim_height_freq_min.max(self.rim_height_freq_max).max(0.0);
 		let rim_height_amp =
-			rim_amp_lo + (rim_amp_hi - rim_amp_lo) * n01_at(seed, rim_amp_salt, anchor);
+			rim_amp_lo + (rim_amp_hi - rim_amp_lo) * n01_at(seed, salts.rim_amp, anchor);
 		let rim_freq_authored =
-			rim_freq_lo + (rim_freq_hi - rim_freq_lo) * n01_at(seed, rim_freq_salt, anchor);
+			rim_freq_lo + (rim_freq_hi - rim_freq_lo) * n01_at(seed, salts.rim_freq, anchor);
 		let rim_height_freq =
 			scale_noise_freq(rim_freq_authored, scale_radius, self.noise_freq_power);
 		let rim_height =
@@ -107,4 +131,9 @@ impl WatershedApronParams {
 			rim_height,
 		}
 	}
+}
+
+/// Per-leaf depth scale: `depth * (lo + span * u01)`.
+pub fn jittered_depth(seed: u32, salt: u32, anchor: Vec2, depth: f32, lo: f32, span: f32) -> f32 {
+	depth * (lo + span * n01_at(seed, salt, anchor))
 }

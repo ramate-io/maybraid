@@ -18,7 +18,7 @@ pub mod polyline;
 pub mod pre_pocket;
 pub mod stream;
 
-pub use apron::WatershedApronParams;
+pub use apron::{ApronNoiseSalts, WatershedApronParams};
 pub use complex::{
 	CompiledWatershed, WatershedApronShelf, WatershedDepressionComplex, WatershedEdge,
 	WatershedEdgeId, WatershedNode, WatershedNodeId,
