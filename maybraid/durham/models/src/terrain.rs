@@ -61,7 +61,8 @@ pub use jersey::{
 };
 pub use jersey::{
 	CanyonLowPassStampCell as CanyonStampCell, MassifLowPassStampCell as MassifStampCell,
-	PlateauLowPassStampCell as PlateauStampCell, PocketWaterLowPassStampCell as PocketWaterStampCell,
+	PlateauLowPassStampCell as PlateauStampCell,
+	PocketWaterLowPassStampCell as PocketWaterStampCell,
 	RollingLowPassStampCell as RollingStampCell, ValleyLowPassStampCell as ValleyStampCell,
 };
 pub use marazion::{
@@ -373,16 +374,7 @@ where
 		);
 
 		let sdf = Self::compose_sdf(&base, &modulations);
-		Some((
-			Self {
-				cell: bounds,
-				base,
-				modulations,
-				jersey_leaves,
-				sdf,
-			},
-			bounds,
-		))
+		Some((Self { cell: bounds, base, modulations, jersey_leaves, sdf }, bounds))
 	}
 
 	fn descendants_with_lod(_id: Id, _spatial_index: &mut S, _lod_ref: &LodRef) {}

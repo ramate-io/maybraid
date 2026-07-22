@@ -1,10 +1,12 @@
 //! Height operators produced by Jersey stamps.
 
 pub mod affine;
+pub mod bowl;
 pub mod cell_domain;
 pub mod grading;
 
 pub use affine::RegionAffineModulation;
+pub use bowl::RegionBowlModulation;
 pub use cell_domain::{CellDomainMask, CELL_DOMAIN_EASE_FRAC, DEFAULT_CELL_DOMAIN_EASE};
 pub use grading::RegionGradingModulation;
 
@@ -15,6 +17,7 @@ use procedural_common::Bounds2;
 pub enum JerseyModulation {
 	Affine(RegionAffineModulation),
 	Grading(RegionGradingModulation),
+	Bowl(RegionBowlModulation),
 	/// Construction op bound to a cell / leaf domain (hard-clip + edge ease).
 	CellBound {
 		domain: CellDomainMask,
@@ -27,6 +30,7 @@ impl JerseyModulation {
 		match self {
 			Self::Affine(m) => m.modify_elevation(elevation, x, z),
 			Self::Grading(m) => m.modify_elevation(elevation, x, z),
+			Self::Bowl(m) => m.modify_elevation(elevation, x, z),
 			Self::CellBound { domain, inner } => {
 				let w = domain.weight(x, z);
 				if w <= 0.0 {

@@ -16,11 +16,22 @@ pub struct CircleRegion {
 	pub radius: f32,
 }
 
+/// Axis-aligned in a local frame: half-axes [`Self::radii`] after [`Self::rotation`].
+#[derive(Debug, Clone)]
+pub struct EllipseRegion {
+	pub center: Vec2,
+	/// Half-axes in the local frame (`x` along the rotated major/minor basis).
+	pub radii: Vec2,
+	/// Radians; local +x is rotated by this from world +x.
+	pub rotation: f32,
+}
+
 /// 2D region types with signed distance φ(x, z).
 #[derive(Debug, Clone)]
 pub enum Region2D {
 	Rect(RectRegion),
 	Circle(CircleRegion),
+	Ellipse(EllipseRegion),
 }
 
 /// Optional noise for perturbing region boundaries (wobbly footprints).
@@ -99,7 +110,59 @@ impl RegionNoise {
 	}
 }
 
+impl EllipseRegion {
+	/// World-space point → local frame scaled by inverse radii (`length` = 1 on shore).
+	pub fn unit_local(&self, p: Vec2) -> Vec2 {
+		let d = p - self.center;
+		let (s, c) = self.rotation.sin_cos();
+		let local = Vec2::new(c * d.x + s * d.y, -s * d.x + c * d.y);
+		let rx = self.radii.x.max(1e-3);
+		let rz = self.radii.y.max(1e-3);
+		Vec2::new(local.x / rx, local.y / rz)
+	}
+
+	/// Approximate analytic SDF (Inigo Quilez `k0*(k0-1)/k1` form).
+	pub fn sdf(&self, p: Vec2) -> f32 {
+		let d = p - self.center;
+		let (s, c) = self.rotation.sin_cos();
+		let local = Vec2::new(c * d.x + s * d.y, -s * d.x + c * d.y);
+		let ab = self.radii.max(Vec2::splat(1e-3));
+		let k0 = (local / ab).length();
+		if k0 < 1e-8 {
+			return -ab.min_element();
+		}
+		let k1 = (local / (ab * ab)).length();
+		k0 * (k0 - 1.0) / k1.max(1e-6)
+	}
+}
+
 impl Region2D {
+	pub fn center(&self) -> Vec2 {
+		match self {
+			Self::Rect(r) => r.center,
+			Self::Circle(c) => c.center,
+			Self::Ellipse(e) => e.center,
+		}
+	}
+
+	/// Normalized radial coordinate: `0` at center, `1` on the geometric shore.
+	pub fn radial_norm(&self, p: Vec2) -> f32 {
+		match self {
+			Self::Circle(CircleRegion { center, radius }) => {
+				(p - *center).length() / radius.max(1e-3)
+			}
+			Self::Ellipse(e) => e.unit_local(p).length(),
+			Self::Rect(RectRegion {
+				center,
+				half_extents,
+				..
+			}) => {
+				let q = (p - *center).abs() / half_extents.max(Vec2::splat(1e-3));
+				q.max_element()
+			}
+		}
+	}
+
 	pub fn sdf(&self, p: Vec2) -> f32 {
 		self.sdf_with_noise(p, None)
 	}
@@ -117,6 +180,7 @@ impl Region2D {
 				outside + inside
 			}
 			Region2D::Circle(CircleRegion { center, radius }) => (p - *center).length() - *radius,
+			Region2D::Ellipse(e) => e.sdf(p),
 		};
 		if let Some(noise_config) = noise {
 			d += noise_config.sample_boundary(p);
@@ -171,6 +235,34 @@ mod tests {
 				"expand-only must not increase SDF (shrink): d0={d0} d1={d1}"
 			);
 		}
+		Ok(())
+	}
+
+	#[test]
+	fn ellipse_sdf_negative_inside_positive_outside() -> anyhow::Result<()> {
+		let e = EllipseRegion {
+			center: Vec2::ZERO,
+			radii: Vec2::new(20.0, 10.0),
+			rotation: 0.0,
+		};
+		assert!(e.sdf(Vec2::ZERO) < -1.0);
+		assert!(e.sdf(Vec2::new(19.0, 0.0)) < 0.0);
+		assert!(e.sdf(Vec2::new(21.0, 0.0)) > 0.0);
+		assert!(e.sdf(Vec2::new(0.0, 11.0)) > 0.0);
+		assert!((e.unit_local(Vec2::new(20.0, 0.0)).length() - 1.0).abs() < 1e-4);
+		Ok(())
+	}
+
+	#[test]
+	fn ellipse_radial_norm_respects_axes() -> anyhow::Result<()> {
+		let region = Region2D::Ellipse(EllipseRegion {
+			center: Vec2::ZERO,
+			radii: Vec2::new(40.0, 20.0),
+			rotation: 0.0,
+		});
+		assert!((region.radial_norm(Vec2::new(40.0, 0.0)) - 1.0).abs() < 1e-4);
+		assert!((region.radial_norm(Vec2::new(0.0, 20.0)) - 1.0).abs() < 1e-4);
+		assert!(region.radial_norm(Vec2::new(20.0, 0.0)) < 0.6);
 		Ok(())
 	}
 }

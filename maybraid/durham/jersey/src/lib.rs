@@ -17,10 +17,10 @@ pub use config::{
 	SoftmaskAlongSpine,
 };
 pub use modulation::{
-	CellDomainMask, JerseyModulation, RegionAffineModulation, RegionGradingModulation,
-	CELL_DOMAIN_EASE_FRAC, DEFAULT_CELL_DOMAIN_EASE,
+	CellDomainMask, JerseyModulation, RegionAffineModulation, RegionBowlModulation,
+	RegionGradingModulation, CELL_DOMAIN_EASE_FRAC, DEFAULT_CELL_DOMAIN_EASE,
 };
-pub use region::{CircleRegion, RectRegion, Region2D, RegionNoise};
+pub use region::{CircleRegion, EllipseRegion, RectRegion, Region2D, RegionNoise};
 pub use stamp::{
 	scale_additive, scale_near_one, StampSemantics, StampSet, StampStrength,
 	SOFTMASK_REFERENCE_SHORT,
