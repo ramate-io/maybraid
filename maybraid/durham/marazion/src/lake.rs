@@ -10,7 +10,7 @@
 //! rim + apron outside the water body.
 
 use crate::fill::{WaterFill, WaterSurface};
-use crate::noise::{n01_at, n01_freq, n11_at};
+use crate::noise::{n01_at, n01_freq, n11_at, scale_noise_freq};
 use bevy_math::Vec2;
 use jersey_terrain_stamps::{
 	EllipseRegion, JerseyModulation, Region2D, RegionAffineModulation, RegionBowlModulation,
@@ -20,12 +20,6 @@ use procedural_common::Bounds2;
 
 /// Minimum water half-axis (world units); smaller budgets skip the stamp.
 const MIN_WATER_RADIUS: f32 = 8.0;
-
-/// Authored `*_freq` knobs are defined at this characteristic water radius.
-/// [`scale_noise_freq`] applies a **geometric** (power-law) scale
-/// `(ref / radius)^power` — the geometric mean of constant-wavelength and
-/// constant-lobe-count when `power = 0.5`.
-const NOISE_FREQ_REF_RADIUS: f32 = 80.0;
 
 /// Salt for per-leaf water-radius undershoot.
 const WATER_SCALE_SALT: u32 = 0x1A7E_512E;
@@ -114,7 +108,7 @@ pub struct LakeParams {
 	pub depth_falloff_power: f32,
 	/// Bipolar bed-noise amplitude (world units); may raise bed above `W`.
 	pub depth_noise_amp: f32,
-	/// Bed-noise frequency at [`NOISE_FREQ_REF_RADIUS`] (scaled in
+	/// Bed-noise frequency at [`crate::noise::NOISE_FREQ_REF_RADIUS`] (scaled in
 	/// [`Lake::from_bounds`] by `(ref / short_water)^noise_freq_power`).
 	pub depth_noise_freq: f32,
 	/// Extra headroom above the rim shelf for island / peninsula peaks.
@@ -123,7 +117,7 @@ pub struct LakeParams {
 	// ── Shore outline (water bowl + wet fill) — higher frequency ───────────
 	/// Max bipolar shore indent/expand as a fraction of the short water axis.
 	pub shore_indent_frac: f32,
-	/// Shore boundary frequency at [`NOISE_FREQ_REF_RADIUS`] (scaled geometrically
+	/// Shore boundary frequency at [`crate::noise::NOISE_FREQ_REF_RADIUS`] (scaled geometrically
 	/// in [`Lake::from_bounds`]).
 	pub shore_freq: f32,
 
@@ -132,9 +126,9 @@ pub struct LakeParams {
 	pub apron_indent_frac_min: f32,
 	/// Per-leaf apron boundary indent as a fraction of apron width (high).
 	pub apron_indent_frac_max: f32,
-	/// Per-leaf apron boundary frequency low (at [`NOISE_FREQ_REF_RADIUS`]).
+	/// Per-leaf apron boundary frequency low (at [`crate::noise::NOISE_FREQ_REF_RADIUS`]).
 	pub apron_freq_min: f32,
-	/// Per-leaf apron boundary frequency high (at [`NOISE_FREQ_REF_RADIUS`]).
+	/// Per-leaf apron boundary frequency high (at [`crate::noise::NOISE_FREQ_REF_RADIUS`]).
 	pub apron_freq_max: f32,
 
 	// ── Rim height (add-only above [`Self::rim_lift`]) ──────────────────────
@@ -143,9 +137,9 @@ pub struct LakeParams {
 	pub rim_height_amp_min: f32,
 	/// Per-leaf rim height-noise amplitude high (world units).
 	pub rim_height_amp_max: f32,
-	/// Per-leaf rim height-noise frequency low (at [`NOISE_FREQ_REF_RADIUS`]).
+	/// Per-leaf rim height-noise frequency low (at [`crate::noise::NOISE_FREQ_REF_RADIUS`]).
 	pub rim_height_freq_min: f32,
-	/// Per-leaf rim height-noise frequency high (at [`NOISE_FREQ_REF_RADIUS`]).
+	/// Per-leaf rim height-noise frequency high (at [`crate::noise::NOISE_FREQ_REF_RADIUS`]).
 	pub rim_height_freq_max: f32,
 
 	// ── Fill pad ───────────────────────────────────────────────────────────
@@ -354,25 +348,6 @@ impl LakeBandBudget {
 		let bounds = Bounds2::from_xz(-s, -s, s, s);
 		Self::try_inscribed(bounds, Vec2::ZERO, params, water_u01, rim_u01, 0.0, 0.0)
 	}
-}
-
-/// Scale an authored frequency from [`NOISE_FREQ_REF_RADIUS`] to `radius`.
-///
-/// ```text
-/// f = f_ref * (ref / radius)^power
-/// ```
-///
-/// `power = 0.5` is the geometric mean of constant wavelength (`^0`) and
-/// constant lobe count (`^1`). Linear `power = 1` over-harshens small lakes
-/// and over-smooths the path between bands; √ tracks perceived roughness better.
-///
-/// Sub-ref radii still clamp the scale to ≤ 1 so ponds never exceed the
-/// authored reference roughness.
-fn scale_noise_freq(authored_at_ref: f32, radius: f32, power: f32) -> f32 {
-	let r = radius.max(1.0);
-	let ratio = NOISE_FREQ_REF_RADIUS / r;
-	let scale = ratio.powf(power.clamp(0.15, 2.0)).min(1.0);
-	(authored_at_ref.max(0.0) * scale).clamp(1.0e-4, 0.14)
 }
 
 /// Aspect blend ∈ `[0, 1]` — weak on small leaves, strong on large.
@@ -817,6 +792,7 @@ mod tests {
 
 	#[test]
 	fn noise_freq_scales_geometrically_and_caps_small() -> anyhow::Result<()> {
+		use crate::noise::NOISE_FREQ_REF_RADIUS;
 		let power = 0.5;
 		let f_ref = scale_noise_freq(0.04, NOISE_FREQ_REF_RADIUS, power);
 		let f_small = scale_noise_freq(0.04, NOISE_FREQ_REF_RADIUS * 0.5, power);

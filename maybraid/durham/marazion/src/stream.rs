@@ -8,7 +8,7 @@
 //! Fill / channel grade is piecewise along path nodes (segment lerp + pitch blend).
 
 use crate::fill::{WaterFill, WaterSurface};
-use crate::noise::{n01_at, n01_freq};
+use crate::noise::{n01_at, n01_freq, scale_noise_freq};
 use bevy_math::Vec2;
 use jersey_terrain_stamps::{
 	DownhillPair, HysteresisSpine, JerseyModulation, PolylineRegion, RegionAffineModulation,
@@ -24,6 +24,14 @@ const MIN_PATH_LEN: f32 = 24.0;
 const WIDTH_SCALE_SALT: u32 = 0x57EA_512E;
 const ENDPOINT_A_SALT: u32 = 0x57EA_E001;
 const ENDPOINT_B_SALT: u32 = 0x57EA_E002;
+/// Salt for per-leaf rim height amplitude draw.
+const RIM_HEIGHT_AMP_SALT: u32 = 0x57EA_A17A;
+/// Salt for per-leaf rim height frequency draw.
+const RIM_HEIGHT_FREQ_SALT: u32 = 0x57EA_F7E9;
+/// Salt for per-leaf apron indent amplitude draw.
+const APRON_AMP_SALT: u32 = 0x57EA_A70A;
+/// Salt for per-leaf apron frequency draw.
+const APRON_FREQ_SALT: u32 = 0x57EA_AF7E;
 
 /// Authoring knobs for a Marazion stream stamp.
 #[derive(Debug, Clone, Copy)]
@@ -63,8 +71,30 @@ pub struct StreamParams {
 	pub shore_indent_frac: f32,
 	pub shore_freq: f32,
 
-	pub rim_height_amp: f32,
-	pub rim_height_freq: f32,
+	/// Power for noise frequency scaling: `f ∝ (ref / radius)^power`.
+	/// `0.5` ≈ geometric mean of constant Hz and constant lobe count; `1.0` = linear.
+	pub noise_freq_power: f32,
+
+	// ── Apron / skirt outer outline — lower frequency ──────────────────────
+	/// Per-leaf apron boundary indent as a fraction of apron-band width (low).
+	pub apron_indent_frac_min: f32,
+	/// Per-leaf apron boundary indent as a fraction of apron-band width (high).
+	pub apron_indent_frac_max: f32,
+	/// Per-leaf apron boundary frequency low (at [`crate::noise::NOISE_FREQ_REF_RADIUS`]).
+	pub apron_freq_min: f32,
+	/// Per-leaf apron boundary frequency high (at [`crate::noise::NOISE_FREQ_REF_RADIUS`]).
+	pub apron_freq_max: f32,
+
+	// ── Rim height (add-only above [`Self::rim_lift`]) ──────────────────────
+	/// Per-leaf rim height-noise amplitude low (world units); [`Stream::from_bounds`]
+	/// draws uniformly in `[min, max]`.
+	pub rim_height_amp_min: f32,
+	/// Per-leaf rim height-noise amplitude high (world units).
+	pub rim_height_amp_max: f32,
+	/// Per-leaf rim height-noise frequency low (at [`crate::noise::NOISE_FREQ_REF_RADIUS`]).
+	pub rim_height_freq_min: f32,
+	/// Per-leaf rim height-noise frequency high (at [`crate::noise::NOISE_FREQ_REF_RADIUS`]).
+	pub rim_height_freq_max: f32,
 
 	/// Softmask fade past the fill support edge (world units). Stacks on
 	/// [`Self::fill_half_width_scale`] so the wet ribbon is liberal vs the carve.
@@ -111,8 +141,17 @@ impl Default for StreamParams {
 			shore_indent_frac: 0.2,
 			shore_freq: 0.04,
 
-			rim_height_amp: 1.75,
-			rim_height_freq: 0.02,
+			noise_freq_power: 0.5,
+
+			apron_indent_frac_min: 0.12,
+			apron_indent_frac_max: 0.40,
+			apron_freq_min: 0.005,
+			apron_freq_max: 0.012,
+
+			rim_height_amp_min: 15.0,
+			rim_height_amp_max: 120.0,
+			rim_height_freq_min: 0.005,
+			rim_height_freq_max: 0.012,
 
 			shore_fade: 4.0,
 			channel_freeboard: 2.0,
@@ -320,15 +359,43 @@ impl Stream {
 		let shore_amp = (half_w * params.shore_indent_frac.clamp(0.0, 0.4)).max(0.01);
 		let shore_freq = params.shore_freq.max(1.5 / half_w.max(1.0)).clamp(1.0e-4, 0.14);
 		let shore_noise = RegionNoise::from_seed(seed.wrapping_add(5), shore_freq, shore_amp);
-		let apron_noise = RegionNoise::from_seed(
-			seed.wrapping_add(6),
-			(params.shore_freq * 0.45).max(1.0e-4),
-			(apron_w - skirt_w).max(0.5) * 0.25,
-		);
+
+		// Size-scaled apron / rim noise (authored freqs @ NOISE_FREQ_REF_RADIUS).
+		// Channel half-width is the stream analog of lake short_water.
+		let apron_band = (apron_w - skirt_w).max(0.5);
+		let apron_frac_lo = params
+			.apron_indent_frac_min
+			.min(params.apron_indent_frac_max)
+			.clamp(0.0, 0.5);
+		let apron_frac_hi = params
+			.apron_indent_frac_min
+			.max(params.apron_indent_frac_max)
+			.clamp(0.0, 0.5);
+		let apron_freq_lo = params.apron_freq_min.min(params.apron_freq_max).max(0.0);
+		let apron_freq_hi = params.apron_freq_min.max(params.apron_freq_max).max(0.0);
+		let apron_indent_frac =
+			apron_frac_lo + (apron_frac_hi - apron_frac_lo) * n01_at(seed, APRON_AMP_SALT, min);
+		let apron_amp = (apron_band * apron_indent_frac).max(0.01);
+		let apron_freq_authored =
+			apron_freq_lo + (apron_freq_hi - apron_freq_lo) * n01_at(seed, APRON_FREQ_SALT, min);
+		let apron_freq =
+			scale_noise_freq(apron_freq_authored, half_w, params.noise_freq_power);
+		let apron_noise = RegionNoise::from_seed(seed.wrapping_add(6), apron_freq, apron_amp);
+
+		let rim_amp_lo = params.rim_height_amp_min.min(params.rim_height_amp_max).max(0.0);
+		let rim_amp_hi = params.rim_height_amp_min.max(params.rim_height_amp_max).max(0.0);
+		let rim_freq_lo = params.rim_height_freq_min.min(params.rim_height_freq_max).max(0.0);
+		let rim_freq_hi = params.rim_height_freq_min.max(params.rim_height_freq_max).max(0.0);
+		let rim_height_amp =
+			rim_amp_lo + (rim_amp_hi - rim_amp_lo) * n01_at(seed, RIM_HEIGHT_AMP_SALT, min);
+		let rim_freq_authored =
+			rim_freq_lo + (rim_freq_hi - rim_freq_lo) * n01_at(seed, RIM_HEIGHT_FREQ_SALT, min);
+		let rim_height_freq =
+			scale_noise_freq(rim_freq_authored, half_w, params.noise_freq_power);
 		let rim_height = RegionNoise::from_seed(
 			seed.wrapping_add(7),
-			params.rim_height_freq.max(1.0e-4),
-			params.rim_height_amp.max(0.0),
+			rim_height_freq,
+			rim_height_amp,
 		);
 		let depth_noise = RegionNoise::from_seed(
 			seed.wrapping_add(9),
@@ -351,7 +418,7 @@ impl Stream {
 			)
 			.with_node_blend(node_blend)
 			.with_noise(apron_noise)
-			.with_height_noise(rim_height)
+			.with_height_noise_add_only(rim_height)
 			.raise_only(),
 		);
 
@@ -561,6 +628,24 @@ mod tests {
 			let hi = stream.levels[0].max(stream.levels[1]);
 			assert!(w_mid >= lo - 0.2 && w_mid <= hi + 0.2);
 		}
+		Ok(())
+	}
+
+	#[test]
+	fn skirt_uses_add_only_rim_with_lake_scale_defaults() -> anyhow::Result<()> {
+		let bounds = Bounds2::from_xz(0.0, 0.0, 400.0, 400.0);
+		let height = |x: f32, z: f32| 100.0 - 0.05 * x - 0.01 * z;
+		let params = StreamParams::default();
+		assert!(params.rim_height_amp_max >= 15.0);
+		assert!(params.apron_indent_frac_max > params.apron_indent_frac_min);
+		let stream = Stream::from_bounds(bounds, 42, params, Some(&height));
+		assert!(!stream.is_empty());
+		assert_eq!(stream.modulations.len(), 4);
+		// Skirt is first; raise-only bank grade should not lower far-field terrain.
+		let far = Vec2::new(bounds.min.x - 120.0, bounds.min.y - 120.0);
+		let h0 = height(far.x, far.y);
+		let h1 = stream.modulations[0].modify_elevation(h0, far.x, far.y);
+		assert!((h1 - h0).abs() < 1e-3);
 		Ok(())
 	}
 }

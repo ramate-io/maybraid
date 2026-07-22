@@ -32,6 +32,8 @@ pub struct RegionPolylineGradingModulation {
 	pub mode: PolylineGradeMode,
 	/// Optional additive height noise on the graded target.
 	pub height_noise: Option<RegionNoise>,
+	/// When true, height noise only raises above the grade (`|sample|`).
+	pub height_noise_add_only: bool,
 }
 
 impl RegionPolylineGradingModulation {
@@ -52,6 +54,7 @@ impl RegionPolylineGradingModulation {
 			outer_radius: outer_radius.max(inner_radius + 0.001),
 			mode: PolylineGradeMode::Blend,
 			height_noise: None,
+			height_noise_add_only: false,
 		}
 	}
 
@@ -89,6 +92,14 @@ impl RegionPolylineGradingModulation {
 
 	pub fn with_height_noise(mut self, noise: RegionNoise) -> Self {
 		self.height_noise = Some(noise);
+		self.height_noise_add_only = false;
+		self
+	}
+
+	/// Height noise that only raises above the grade (never lowers).
+	pub fn with_height_noise_add_only(mut self, noise: RegionNoise) -> Self {
+		self.height_noise = Some(noise);
+		self.height_noise_add_only = true;
 		self
 	}
 
@@ -111,7 +122,12 @@ impl RegionPolylineGradingModulation {
 			self.node_blend,
 		);
 		if let Some(hn) = &self.height_noise {
-			graded += hn.sample_height(Vec2::new(x, z));
+			let s = hn.sample_height(Vec2::new(x, z));
+			graded += if self.height_noise_add_only {
+				s.abs()
+			} else {
+				s
+			};
 		}
 		graded
 	}
@@ -163,6 +179,32 @@ mod tests {
 			.depression_only();
 		assert_eq!(g.modify_elevation(30.0, 10.0, 0.0), 30.0);
 		assert!(g.modify_elevation(80.0, 10.0, 0.0) < 80.0);
+		Ok(())
+	}
+
+	#[test]
+	fn add_only_height_noise_never_lowers_grade() -> anyhow::Result<()> {
+		let path = vec![Vec2::new(0.0, 0.0), Vec2::new(40.0, 0.0)];
+		let levels = vec![20.0, 20.0];
+		let region = Region2D::Polyline(PolylineRegion::new(path.clone(), 8.0));
+		let noise = RegionNoise::from_seed(1, 0.05, 4.0);
+		let bipolar = RegionPolylineGradingModulation::new(
+			region.clone(),
+			path.clone(),
+			levels.clone(),
+			0.0,
+			2.0,
+		)
+		.with_height_noise(noise.clone());
+		let add_only = RegionPolylineGradingModulation::new(region, path, levels, 0.0, 2.0)
+			.with_height_noise_add_only(noise);
+		let x = 20.0;
+		let z = 0.0;
+		let base = 20.0;
+		assert!(add_only.grade_at(x, z) >= base - 1.0e-4);
+		assert!(
+			(add_only.grade_at(x, z) - base - (bipolar.grade_at(x, z) - base).abs()).abs() < 1.0e-4
+		);
 		Ok(())
 	}
 }
