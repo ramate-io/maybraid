@@ -1,7 +1,7 @@
 //! System-local multi-type spatial index for Durham terrain generation.
 
 use crate::terrain::base_noise::BaseTerrainNoise;
-use crate::terrain::cell::{BootstrapTerrainCellLayout, TerrainCellLayout};
+use crate::terrain::cell::{cell_bounds, BootstrapTerrainCellLayout, TerrainCellLayout};
 use crate::terrain::jersey::{
 	BootstrapCanyonHighPassControllerLayout, BootstrapCanyonLowPassControllerLayout,
 	BootstrapJerseyStampConfigs, BootstrapMassifHighPassControllerLayout,
@@ -25,8 +25,10 @@ use crate::terrain::jersey::{
 	ValleyLowPassControllerLayout, ValleyLowPassStampCell,
 };
 use crate::terrain::marazion::{
-	BootstrapMarazionLakeLayout, BootstrapMarazionWatershedConfigs, MarazionLakeCell,
-	MarazionLakeLayout, MarazionWatershedConfigs,
+	BootstrapMarazionWatershedConfigs, BootstrapPrePocketHighPassLayout,
+	BootstrapPrePocketLowPassLayout, MarazionLakeHighPassCell, MarazionLakeLowPassCell,
+	MarazionWatershedConfigs, PocketHighPassCell, PocketLowPassCell, PrePocketHighPassCell,
+	PrePocketHighPassLayout, PrePocketLowPassCell, PrePocketLowPassLayout,
 };
 use crate::terrain::presentation::{
 	BootstrapTerrainPresentationAssets, TerrainPresentationAssets,
@@ -66,8 +68,14 @@ pub struct TerrainEntryStore {
 	pub(crate) water_presentation: HashMap<Id, StoredEntry<WaterPresentationAssets>>,
 	pub(crate) jersey_configs: HashMap<Id, StoredEntry<JerseyStampConfigs>>,
 	pub(crate) marazion_configs: HashMap<Id, StoredEntry<MarazionWatershedConfigs>>,
-	pub(crate) marazion_lake_layout: HashMap<Id, StoredEntry<MarazionLakeLayout>>,
-	pub(crate) marazion_lake_cell: HashMap<Id, StoredEntry<MarazionLakeCell>>,
+	pub(crate) pre_pocket_low_pass_layout: HashMap<Id, StoredEntry<PrePocketLowPassLayout>>,
+	pub(crate) pre_pocket_low_pass_cell: HashMap<Id, StoredEntry<PrePocketLowPassCell>>,
+	pub(crate) pocket_low_pass_cell: HashMap<Id, StoredEntry<PocketLowPassCell>>,
+	pub(crate) marazion_lake_low_pass_cell: HashMap<Id, StoredEntry<MarazionLakeLowPassCell>>,
+	pub(crate) pre_pocket_high_pass_layout: HashMap<Id, StoredEntry<PrePocketHighPassLayout>>,
+	pub(crate) pre_pocket_high_pass_cell: HashMap<Id, StoredEntry<PrePocketHighPassCell>>,
+	pub(crate) pocket_high_pass_cell: HashMap<Id, StoredEntry<PocketHighPassCell>>,
+	pub(crate) marazion_lake_high_pass_cell: HashMap<Id, StoredEntry<MarazionLakeHighPassCell>>,
 	pub(crate) plateau_low_pass_layout: HashMap<Id, StoredEntry<PlateauLowPassControllerLayout>>,
 	pub(crate) plateau_low_pass_controller: HashMap<Id, StoredEntry<PlateauLowPassControllerCell>>,
 	pub(crate) plateau_low_pass_stamp: HashMap<Id, StoredEntry<PlateauLowPassStampCell>>,
@@ -128,6 +136,18 @@ impl TerrainEntryStore {
 	pub fn base_noise(&self) -> Option<&BaseTerrainNoise> {
 		self.base_noise.get(&Id::Universal).map(|e| &e.value)
 	}
+
+	/// Composed terrain height (jersey + Marazion) at `(x, z)`, if that cell is stored.
+	pub fn composed_height_at(&self, layout: &TerrainCellLayout, x: f32, z: f32) -> Option<f32> {
+		let size = layout.cell_size.max(1e-3);
+		let ix = (x / size).floor() as i32;
+		let iz = (z / size).floor() as i32;
+		let cell = cell_bounds(ix, iz, size, layout.vertical_half_extent);
+		let id = Id::from_cell(cell);
+		self.terrain
+			.get(&id)
+			.map(|e| e.value.sdf.terrain.height_at_with_all_modulations(x, z))
+	}
 }
 
 /// System-local wrapper used as `S` for [`lod::gen::GeneratingSpatialIndex`].
@@ -140,7 +160,8 @@ pub struct AvianTerrainIndex<'w, 's> {
 	jersey_configs: Res<'w, JerseyStampConfigs>,
 	jersey_layouts: ResMut<'w, JerseyControllerLayouts>,
 	marazion_configs: Res<'w, MarazionWatershedConfigs>,
-	marazion_lake_layout: Res<'w, MarazionLakeLayout>,
+	pre_pocket_low_pass_layout: ResMut<'w, PrePocketLowPassLayout>,
+	pre_pocket_high_pass_layout: ResMut<'w, PrePocketHighPassLayout>,
 	presentation: Res<'w, TerrainPresentationAssets>,
 	water_presentation: Res<'w, WaterPresentationAssets>,
 }
@@ -163,9 +184,15 @@ impl<'w, 's> BootstrapMarazionWatershedConfigs for AvianTerrainIndex<'w, 's> {
 	}
 }
 
-impl<'w, 's> BootstrapMarazionLakeLayout for AvianTerrainIndex<'w, 's> {
-	fn bootstrap_marazion_lake_layout(&self) -> MarazionLakeLayout {
-		self.marazion_lake_layout.clone()
+impl<'w, 's> BootstrapPrePocketLowPassLayout for AvianTerrainIndex<'w, 's> {
+	fn bootstrap_pre_pocket_low_pass_layout(&self) -> PrePocketLowPassLayout {
+		self.pre_pocket_low_pass_layout.clone()
+	}
+}
+
+impl<'w, 's> BootstrapPrePocketHighPassLayout for AvianTerrainIndex<'w, 's> {
+	fn bootstrap_pre_pocket_high_pass_layout(&self) -> PrePocketHighPassLayout {
+		self.pre_pocket_high_pass_layout.clone()
 	}
 }
 
@@ -308,6 +335,11 @@ impl<'w, 's> AvianTerrainIndex<'w, 's> {
 	pub fn base_noise(&self) -> Option<&BaseTerrainNoise> {
 		self.store.base_noise()
 	}
+
+	/// Composed terrain height at `(x, z)` when the cell is in the store.
+	pub fn composed_height_at(&self, x: f32, z: f32) -> Option<f32> {
+		self.store.composed_height_at(&self.layout, x, z)
+	}
 }
 
 macro_rules! impl_map_spatial_index {
@@ -370,8 +402,14 @@ impl_map_spatial_index!(TerrainPresentationAssets, presentation);
 impl_map_spatial_index!(WaterPresentationAssets, water_presentation);
 impl_map_spatial_index!(JerseyStampConfigs, jersey_configs);
 impl_map_spatial_index!(MarazionWatershedConfigs, marazion_configs);
-impl_map_spatial_index!(MarazionLakeLayout, marazion_lake_layout);
-impl_map_spatial_index!(MarazionLakeCell, marazion_lake_cell);
+impl_map_spatial_index!(PrePocketLowPassLayout, pre_pocket_low_pass_layout);
+impl_map_spatial_index!(PrePocketLowPassCell, pre_pocket_low_pass_cell);
+impl_map_spatial_index!(PocketLowPassCell, pocket_low_pass_cell);
+impl_map_spatial_index!(MarazionLakeLowPassCell, marazion_lake_low_pass_cell);
+impl_map_spatial_index!(PrePocketHighPassLayout, pre_pocket_high_pass_layout);
+impl_map_spatial_index!(PrePocketHighPassCell, pre_pocket_high_pass_cell);
+impl_map_spatial_index!(PocketHighPassCell, pocket_high_pass_cell);
+impl_map_spatial_index!(MarazionLakeHighPassCell, marazion_lake_high_pass_cell);
 impl_map_spatial_index!(PreWatershedTerrain, pre_watershed);
 impl_map_spatial_index!(Water, water);
 

@@ -12,6 +12,10 @@ pub struct RegionAffineModulation {
 	pub inner_radius: f32,
 	pub outer_radius: f32,
 	pub noise: Option<RegionNoise>,
+	/// Optional vertical noise added to [`Self::inner_offset`] inside the softmask.
+	pub height_noise: Option<RegionNoise>,
+	/// When true, height noise only **adds** above the base offset (`+|sample|`).
+	pub height_noise_add_only: bool,
 }
 
 impl RegionAffineModulation {
@@ -29,6 +33,8 @@ impl RegionAffineModulation {
 			inner_radius,
 			outer_radius: outer_radius.max(inner_radius + 0.001),
 			noise: None,
+			height_noise: None,
+			height_noise_add_only: false,
 		}
 	}
 
@@ -37,15 +43,38 @@ impl RegionAffineModulation {
 		self
 	}
 
+	pub fn with_height_noise(mut self, noise: RegionNoise) -> Self {
+		self.height_noise = Some(noise);
+		self.height_noise_add_only = false;
+		self
+	}
+
+	/// Height noise that only raises above [`Self::inner_offset`] (never lowers).
+	pub fn with_height_noise_add_only(mut self, noise: RegionNoise) -> Self {
+		self.height_noise = Some(noise);
+		self.height_noise_add_only = true;
+		self
+	}
+
 	pub fn modify_elevation(&self, elevation: f32, x: f32, z: f32) -> f32 {
+		let p = Vec2::new(x, z);
 		let w = self.region.softmask_weight(
-			Vec2::new(x, z),
+			p,
 			self.inner_radius,
 			self.outer_radius,
 			self.noise.as_ref(),
 		);
+		let mut offset = self.inner_offset;
+		if let Some(hn) = &self.height_noise {
+			let s = hn.sample_height(p);
+			offset += if self.height_noise_add_only {
+				s.abs()
+			} else {
+				s
+			};
+		}
 		let a = self.inner_scale + (1.0 - self.inner_scale) * w;
-		let b = self.inner_offset * (1.0 - w);
+		let b = offset * (1.0 - w);
 		a * elevation + b
 	}
 }

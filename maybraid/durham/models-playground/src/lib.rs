@@ -207,6 +207,7 @@ fn apply_mode_commands(
 	mut status: ResMut<GameCommandStatusText>,
 	layout: Res<TerrainCellLayout>,
 	base: Res<WorldBaseTerrain>,
+	store: Res<TerrainEntryStore>,
 	free: Query<Entity, With<RequestModeFree>>,
 	character: Query<Entity, With<RequestModeCharacter>>,
 	mut players: Query<(&mut Transform, &mut LinearVelocity), With<Player>>,
@@ -225,7 +226,11 @@ fn apply_mode_commands(
 		*mode = PlaygroundMode::Character;
 		status.0 = "mode character — WASD move, mouse look, Space jump".into();
 		if let Ok((mut transform, mut velocity)) = players.single_mut() {
-			respawn_player_on_layout(&layout, &base.0, &mut transform, &mut velocity);
+			let center = layout.region_center_xz();
+			let elevation = store
+				.composed_height_at(&layout, center.x, center.z)
+				.unwrap_or_else(|| base.0.height_at(center.x, center.z));
+			respawn_player_on_layout(&layout, elevation, &mut transform, &mut velocity);
 		}
 		commands.entity(entity).despawn();
 	}
@@ -283,7 +288,11 @@ fn generate_cells(
 	}
 
 	if let Ok((mut transform, mut velocity)) = players.single_mut() {
-		respawn_player_on_layout(&layout, &world_base.0, &mut transform, &mut velocity);
+		let center = layout.region_center_xz();
+		let elevation = index
+			.composed_height_at(center.x, center.z)
+			.unwrap_or_else(|| world_base.0.height_at(center.x, center.z));
+		respawn_player_on_layout(&layout, elevation, &mut transform, &mut velocity);
 	}
 
 	if *mode == PlaygroundMode::Free {

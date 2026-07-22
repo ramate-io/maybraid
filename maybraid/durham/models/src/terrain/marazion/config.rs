@@ -1,40 +1,110 @@
-//! Authoring knobs for Marazion lake leaves.
+//! Authoring knobs for Marazion pocket-water lakes (dual-band).
+//!
+//! Defaults for likelihood / cell size / correlation come from each band's
+//! layout consts (`define_marazion_band!` in [`super::low_pass`] /
+//! [`super::high_pass`]) — same pattern as Jersey `define_jersey_family!`.
 
-use crate::terrain::cell::{universal_bounds, TERRAIN_CELL_SIZE};
+use crate::terrain::cell::universal_bounds;
+use crate::terrain::marazion::high_pass::PrePocketHighPassLayout;
+use crate::terrain::marazion::low_pass::PrePocketLowPassLayout;
 use bevy::math::bounding::Aabb3d;
+use bevy::math::Vec2;
 use bevy::prelude::*;
 use lod::gen::{GenerationScheme, Id, OriginalId};
 use lod::lod_ref::LodRef;
-use marazion_watersheds::LakeParams;
+use marazion_watersheds::{LakeParams, PocketGuillotineParams, PrePocketParams};
 
-/// Default lake leaf edge length: 2× terrain cell so rim + apron fit around a body.
-pub const DEFAULT_LAKE_LEAF_SIZE: f32 = TERRAIN_CELL_SIZE * 2.0;
+/// One occupancy / scale band (low-pass = small, high-pass = large).
+#[derive(Debug, Clone)]
+pub struct MarazionBandConfig {
+	pub pre_pocket: PrePocketParams,
+	pub guillotine: PocketGuillotineParams,
+	pub lake: LakeParams,
+	/// Approximate leaf acceptance rate (`0.0..=1.0`). Prefer setting defaults
+	/// in `define_marazion_band!` (`likelihood:`); this field is the runtime override.
+	pub likelihood: f32,
+	pub spatial_correlation: f32,
+	pub family_salt: u32,
+}
 
-/// Universal Marazion watershed configs (lake-first slice).
-///
-/// Lake look: tune [`Self::lake`]'s authoring knobs
-/// (`rim_frac`, `apron_frac`, `water_sink`, `terrain_undercut`) in
-/// [`LakeParams::default`](marazion_watersheds::LakeParams::default)
-/// or override this resource before generation.
+impl MarazionBandConfig {
+	/// Build runtime knobs from a band layout's authored consts.
+	pub fn from_layout<L>(seed: u32, lake: LakeParams) -> Self
+	where
+		L: MarazionBandLayoutConsts,
+	{
+		Self {
+			pre_pocket: PrePocketParams {
+				pitch: L::PRE_POCKET_PITCH,
+				origin: Vec2::new(L::ORIGIN_OFFSET.0, L::ORIGIN_OFFSET.1),
+				pocket_pitches: L::POCKET_PITCHES,
+				seed,
+			},
+			guillotine: PocketGuillotineParams {
+				max_depth: 3,
+				min_span: L::CELL_SIZE_MIN,
+				seed,
+				..Default::default()
+			},
+			lake,
+			likelihood: L::LIKELIHOOD.clamp(0.0, 1.0),
+			spatial_correlation: L::SPATIAL_CORRELATION,
+			family_salt: L::FAMILY_SALT,
+		}
+	}
+}
+
+/// Layout consts authored by `define_marazion_band!` in the band modules.
+pub trait MarazionBandLayoutConsts {
+	const CELL_SIZE_MIN: f32;
+	const CELL_SIZE_MAX: f32;
+	const PRE_POCKET_PITCH: f32;
+	const POCKET_PITCHES: [f32; 4];
+	const ORIGIN_OFFSET: (f32, f32);
+	const LIKELIHOOD: f32;
+	const SPATIAL_CORRELATION: f32;
+	const FAMILY_SALT: u32;
+}
+
+macro_rules! impl_band_layout_consts {
+	($Layout:ty) => {
+		impl MarazionBandLayoutConsts for $Layout {
+			const CELL_SIZE_MIN: f32 = <$Layout>::CELL_SIZE_MIN;
+			const CELL_SIZE_MAX: f32 = <$Layout>::CELL_SIZE_MAX;
+			const PRE_POCKET_PITCH: f32 = <$Layout>::PRE_POCKET_PITCH;
+			const POCKET_PITCHES: [f32; 4] = <$Layout>::POCKET_PITCHES;
+			const ORIGIN_OFFSET: (f32, f32) = <$Layout>::ORIGIN_OFFSET;
+			const LIKELIHOOD: f32 = <$Layout>::LIKELIHOOD;
+			const SPATIAL_CORRELATION: f32 = <$Layout>::SPATIAL_CORRELATION;
+			const FAMILY_SALT: u32 = <$Layout>::FAMILY_SALT;
+		}
+	};
+}
+
+impl_band_layout_consts!(PrePocketLowPassLayout);
+impl_band_layout_consts!(PrePocketHighPassLayout);
+
+/// Universal Marazion configs: parallel low-pass + high-pass stacks.
 #[derive(Resource, Debug, Clone)]
 pub struct MarazionWatershedConfigs {
 	pub seed: u32,
-	pub lake: LakeParams,
-	/// Fraction of lake leaves that stamp.
-	pub leaf_likelihood: f32,
-	pub spatial_correlation: f32,
-	/// Lake leaf edge length (world units); should be ≈2×+ intended body diameter.
-	pub leaf_size: f32,
+	pub low_pass: MarazionBandConfig,
+	pub high_pass: MarazionBandConfig,
 }
 
 impl Default for MarazionWatershedConfigs {
 	fn default() -> Self {
+		let seed = 127;
+		let mut low_lake = LakeParams::default();
+		low_lake.depth = 11.0;
+		low_lake.water_scale_min = 0.45;
+		let mut high_lake = LakeParams::default();
+		high_lake.depth = 18.0;
+		high_lake.water_scale_min = 0.40;
 		Self {
-			seed: 127,
-			lake: LakeParams::default(),
-			leaf_likelihood: 0.45,
-			spatial_correlation: DEFAULT_LAKE_LEAF_SIZE * 0.5,
-			leaf_size: DEFAULT_LAKE_LEAF_SIZE,
+			seed,
+			low_pass: MarazionBandConfig::from_layout::<PrePocketLowPassLayout>(seed, low_lake),
+			high_pass: MarazionBandConfig::from_layout::<PrePocketHighPassLayout>(seed, high_lake),
 		}
 	}
 }
@@ -55,10 +125,7 @@ where
 		if id != Id::Universal {
 			return None;
 		}
-		Some((
-			spatial_index.bootstrap_marazion_watershed_configs(),
-			universal_bounds(),
-		))
+		Some((spatial_index.bootstrap_marazion_watershed_configs(), universal_bounds()))
 	}
 
 	fn descendants_with_lod(_id: Id, _spatial_index: &mut S, _lod_ref: &LodRef) {}

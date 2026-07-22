@@ -28,24 +28,32 @@ pub enum Region2D {
 /// Holds a ready [`NoiseConfig`] because this type is internal to stamp
 /// evaluation (not an authoring / CLI surface). Prefer constructing from
 /// [`NoiseParams`] ([`Self::from_params`], [`Self::from_seed`]) when you need
-/// the flexible param bundle; frequency and amplitude live there, and
-/// [`Self::sample_boundary`] is a thin alias of [`NoiseConfig::sample_2d`].
+/// the flexible param bundle; frequency and amplitude live there.
+///
+/// Set [`Self::expand_only`] so samples never shrink the geometric footprint
+/// (`d += −|raw|`).
 #[derive(Clone)]
 pub struct RegionNoise {
 	pub noise: NoiseConfig,
+	/// When true, boundary samples only **expand** the region (never shrink).
+	pub expand_only: bool,
 }
 
 impl std::fmt::Debug for RegionNoise {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		f.debug_struct("RegionNoise")
 			.field("noise_params", self.noise.params())
+			.field("expand_only", &self.expand_only)
 			.finish()
 	}
 }
 
 impl RegionNoise {
 	pub fn new(noise: NoiseConfig) -> Self {
-		Self { noise }
+		Self {
+			noise,
+			expand_only: false,
+		}
 	}
 
 	pub fn from_params(params: NoiseParams) -> Self {
@@ -62,7 +70,31 @@ impl RegionNoise {
 		})
 	}
 
+	/// Like [`Self::from_seed`], but boundary noise only expands the footprint.
+	pub fn from_seed_expand_only(seed: u32, frequency: f32, amplitude: f32) -> Self {
+		Self {
+			expand_only: true,
+			..Self::from_seed(seed, frequency, amplitude)
+		}
+	}
+
+	pub fn expand_only(mut self) -> Self {
+		self.expand_only = true;
+		self
+	}
+
 	pub fn sample_boundary(&self, p: Vec2) -> f32 {
+		let raw = self.noise.sample_2d(p);
+		if self.expand_only {
+			// `Region2D` does `d += sample`; negative sample expands.
+			-raw.abs()
+		} else {
+			raw
+		}
+	}
+
+	/// Raw height-domain sample (bipolar, amplitude from noise params).
+	pub fn sample_height(&self, p: Vec2) -> f32 {
 		self.noise.sample_2d(p)
 	}
 }
@@ -74,7 +106,11 @@ impl Region2D {
 
 	pub fn sdf_with_noise(&self, p: Vec2, noise: Option<&RegionNoise>) -> f32 {
 		let mut d = match self {
-			Region2D::Rect(RectRegion { center, half_extents, round }) => {
+			Region2D::Rect(RectRegion {
+				center,
+				half_extents,
+				round,
+			}) => {
 				let q = (p - *center).abs() - *half_extents + Vec2::splat(*round);
 				let outside = q.max(Vec2::ZERO).length() - *round;
 				let inside = q.x.max(q.y).min(0.0);
@@ -112,4 +148,29 @@ impl Region2D {
 fn smoothstep(t: f32) -> f32 {
 	let t = t.clamp(0.0, 1.0);
 	t * t * (3.0 - 2.0 * t)
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn expand_only_never_shrinks_circle() -> anyhow::Result<()> {
+		let region = Region2D::Circle(CircleRegion {
+			center: Vec2::ZERO,
+			radius: 10.0,
+		});
+		let noise = RegionNoise::from_seed_expand_only(7, 0.05, 2.0);
+		for i in 0..32 {
+			let ang = i as f32 * std::f32::consts::TAU / 32.0;
+			let p = Vec2::new(ang.cos(), ang.sin()) * 10.0;
+			let d0 = region.sdf(p);
+			let d1 = region.sdf_with_noise(p, Some(&noise));
+			assert!(
+				d1 <= d0 + 1e-4,
+				"expand-only must not increase SDF (shrink): d0={d0} d1={d1}"
+			);
+		}
+		Ok(())
+	}
 }

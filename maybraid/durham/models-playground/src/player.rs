@@ -7,7 +7,7 @@
 use avian3d::prelude::*;
 use bevy::ecs::query::Has;
 use bevy::prelude::*;
-use durham_terrain_models::{BaseTerrainNoise, TerrainCellLayout};
+use durham_terrain_models::TerrainCellLayout;
 use game_commands::command::TextEntryFocus;
 use std::f32::consts::PI;
 
@@ -89,7 +89,9 @@ fn spawn_player(
 	layout: Res<TerrainCellLayout>,
 	base: Res<WorldBaseTerrain>,
 ) {
-	let spawn = player_spawn_point(&layout, &base.0);
+	// Startup: only base noise exists yet; `generate_cells` repositions onto composed height.
+	let center = layout.region_center_xz();
+	let spawn = player_spawn_point(&layout, base.0.height_at(center.x, center.z));
 	let collider = Collider::capsule(CAPSULE_RADIUS, CAPSULE_LENGTH);
 	let mut caster_shape = collider.clone();
 	caster_shape.set_scale(Vec3::splat(0.99), 10);
@@ -118,9 +120,8 @@ fn spawn_player(
 	));
 }
 
-pub fn player_spawn_point(layout: &TerrainCellLayout, base: &BaseTerrainNoise) -> Vec3 {
+pub fn player_spawn_point(layout: &TerrainCellLayout, elevation: f32) -> Vec3 {
 	let center = layout.region_center_xz();
-	let elevation = base.height_at(center.x, center.z);
 	Vec3::new(
 		center.x,
 		elevation + CAPSULE_RADIUS + CAPSULE_LENGTH * 0.5 + 0.5,
@@ -131,11 +132,11 @@ pub fn player_spawn_point(layout: &TerrainCellLayout, base: &BaseTerrainNoise) -
 /// Reposition the player after terrain layout regeneration.
 pub fn respawn_player_on_layout(
 	layout: &TerrainCellLayout,
-	base: &BaseTerrainNoise,
+	elevation: f32,
 	transform: &mut Transform,
 	velocity: &mut LinearVelocity,
 ) {
-	transform.translation = player_spawn_point(layout, base);
+	transform.translation = player_spawn_point(layout, elevation);
 	**velocity = Vec3::ZERO;
 }
 
