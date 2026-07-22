@@ -35,6 +35,10 @@ const RIM_WIDTH_SALT: u32 = 0x1A7E_71B7;
 const ASPECT_SALT: u32 = 0x1A7E_A5EC;
 /// Salt for ellipse rotation.
 const ROTATION_SALT: u32 = 0x1A7E_207A;
+/// Salt for per-leaf rim height amplitude draw.
+const RIM_HEIGHT_AMP_SALT: u32 = 0x1A7E_A17A;
+/// Salt for per-leaf rim height frequency draw.
+const RIM_HEIGHT_FREQ_SALT: u32 = 0x1A7E_F7E9;
 
 /// Authoring knobs for a Marazion lake stamp.
 ///
@@ -125,9 +129,15 @@ pub struct LakeParams {
 	pub apron_freq: f32,
 
 	// ── Rim height (add-only above [`Self::rim_lift`]) ──────────────────────
-	pub rim_height_amp: f32,
-	/// Rim height-noise frequency at [`NOISE_FREQ_REF_RADIUS`] (scaled like shore).
-	pub rim_height_freq: f32,
+	/// Per-leaf rim height-noise amplitude low (world units); [`Lake::from_bounds`]
+	/// draws uniformly in `[min, max]`.
+	pub rim_height_amp_min: f32,
+	/// Per-leaf rim height-noise amplitude high (world units).
+	pub rim_height_amp_max: f32,
+	/// Per-leaf rim height-noise frequency low (at [`NOISE_FREQ_REF_RADIUS`]).
+	pub rim_height_freq_min: f32,
+	/// Per-leaf rim height-noise frequency high (at [`NOISE_FREQ_REF_RADIUS`]).
+	pub rim_height_freq_max: f32,
 
 	// ── Fill pad ───────────────────────────────────────────────────────────
 	/// Horizontal softmask pad past the bowl, as a fraction of rim width.
@@ -179,8 +189,10 @@ impl Default for LakeParams {
 			apron_indent_frac: 0.22,
 			apron_freq: 0.011,
 
-			rim_height_amp: 100.0,
-			rim_height_freq: 0.01,
+			rim_height_amp_min: 15.0,
+			rim_height_amp_max: 120.0,
+			rim_height_freq_min: 0.005,
+			rim_height_freq_max: 0.012,
 
 			rim_bleed_frac: 0.35,
 			shore_fade: 2.0,
@@ -569,12 +581,20 @@ impl Lake {
 		let apron_noise = RegionNoise::from_seed(seed.wrapping_add(6), apron_freq, apron_amp);
 		let apron_outer = apron_w + apron_amp;
 
+		let rim_amp_lo = params.rim_height_amp_min.min(params.rim_height_amp_max).max(0.0);
+		let rim_amp_hi = params.rim_height_amp_min.max(params.rim_height_amp_max).max(0.0);
+		let rim_freq_lo = params.rim_height_freq_min.min(params.rim_height_freq_max).max(0.0);
+		let rim_freq_hi = params.rim_height_freq_min.max(params.rim_height_freq_max).max(0.0);
+		let rim_height_amp =
+			rim_amp_lo + (rim_amp_hi - rim_amp_lo) * n01_at(seed, RIM_HEIGHT_AMP_SALT, anchor);
+		let rim_freq_authored =
+			rim_freq_lo + (rim_freq_hi - rim_freq_lo) * n01_at(seed, RIM_HEIGHT_FREQ_SALT, anchor);
 		let rim_height_freq =
-			scale_noise_freq(params.rim_height_freq, short_water, params.noise_freq_power);
+			scale_noise_freq(rim_freq_authored, short_water, params.noise_freq_power);
 		let rim_height = RegionNoise::from_seed(
 			seed.wrapping_add(7),
 			rim_height_freq,
-			params.rim_height_amp.max(0.0),
+			rim_height_amp,
 		);
 		let depth_noise_freq =
 			scale_noise_freq(params.depth_noise_freq, short_water, params.noise_freq_power);
@@ -862,7 +882,7 @@ mod tests {
 		let rim_base = lake.water_level + params.rim_lift + params.water_sink;
 		assert!(h + 0.25 >= rim_base, "rim {h} should sit at/above base rim {rim_base}");
 		assert!(
-			h <= rim_base + params.rim_height_amp + 0.75,
+			h <= rim_base + params.rim_height_amp_max + 0.75,
 			"rim {h} should stay within add-only amp of {rim_base}"
 		);
 		assert!(h > lake.water_level + 0.25, "rim {h} should sit above water {}", lake.water_level);
@@ -881,7 +901,7 @@ mod tests {
 		let p = lake.center + Vec2::new(apron_mid, 0.0);
 		let h = apply_mods(&lake.modulations, base, p.x, p.y);
 		let rim_base = lake.water_level + params.rim_lift + params.water_sink;
-		let rim_hi = rim_base + params.rim_height_amp;
+		let rim_hi = rim_base + params.rim_height_amp_max;
 		let lo = base.min(rim_base);
 		let hi = base.max(rim_hi);
 		assert!(
