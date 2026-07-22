@@ -89,7 +89,9 @@ pub struct LakeParams {
 	pub water_sink: f32,
 	/// How far the rim shelf sits **above** the shelf anchor (world units).
 	pub rim_lift: f32,
-	/// How far the water difference bites into terrain (`h − undercut`).
+	/// How far the wet-column gate bites into terrain (`h − undercut`).
+	/// Wet columns are half-spaces below \(W\); undercut only decides which
+	/// columns count as wet (shoreline under raised rims).
 	pub terrain_undercut: f32,
 	/// Per-leaf jitter on the shelf anchor height that sets `W` and rim base.
 	pub shelf_amp: f32,

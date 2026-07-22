@@ -115,3 +115,31 @@ identity outside its bounded support. No apron or overlap region is required.
    sample domain.
 4. Chunks never evaluate terrain beyond their owned sample domain.
 5. Modulation composition order is globally deterministic.
+
+## Water fill composition (same lattice as terrain)
+
+Water is a **second composition pass** on the same origin cells as terrain — not a
+separate spatial tiling and not a fitted vertical AABB.
+
+| Concern | Owner |
+| --- | --- |
+| Origin-cell tiling / cell size | [`TerrainCellLayout`](src/terrain/cell.rs) via `original_ids_for_origin_cells` (shared by `Terrain` and `Water`) |
+| Heightfield composition | [`ComposedTerrain`](src/terrain/sdf.rs) / `Terrain::compose_sdf` |
+| Wet-volume composition | [`ComposedWater`](src/water/composed.rs) / `ComposedWater::compose` |
+| Cascade chunk (`origin`, extent, Y, `res_2`) | [`cascade_chunk_for_cell`](src/terrain/render.rs) for **both** `Terrain::scene` and `Water::scene` |
+| Mesh resolution | `TerrainPresentationAssets.res_2` on the terrain cell; `Water` copies `terrain.res_2` |
+
+Marazion lake stamps author [`WaterFill`](../marazion/src/fill.rs): softmask + undercut
+gate columns, then a **half-space below \(W\)** (not a thin \([h, W]\) slab). That is
+what lets water share terrain's tall cell Y without vanishing under marching cubes.
+Subterranean wet volume is intentional.
+
+### Rules
+
+1. **Do not** introduce a water-only cell layout or a water-only `res_2`.
+2. **Do not** fit a water-only Y span for meshing. Prefer free-surface half-spaces
+   (or otherwise thick wet solids) on the shared lattice.
+3. Softmask bleed / overspill stays on the fill region; empty cells may skip the
+   water pass entirely.
+4. Optional later: split chunks per feature (e.g. water material/color) while
+   keeping the same cascade lattice.
