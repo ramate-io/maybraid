@@ -17,10 +17,14 @@ pub use config::{
 	SoftmaskAlongSpine,
 };
 pub use modulation::{
-	CellDomainMask, JerseyModulation, RegionAffineModulation, RegionBowlModulation,
-	RegionGradingModulation, CELL_DOMAIN_EASE_FRAC, DEFAULT_CELL_DOMAIN_EASE,
+	CellDomainMask, JerseyModulation, PolylineGradeMode, RegionAffineModulation,
+	RegionBowlModulation, RegionGradingModulation, RegionPolylineGradingModulation,
+	CELL_DOMAIN_EASE_FRAC, DEFAULT_CELL_DOMAIN_EASE,
 };
-pub use region::{CircleRegion, EllipseRegion, RectRegion, Region2D, RegionNoise};
+pub use region::{
+	closest_on_polyline, grade_along_polyline, CircleRegion, ClosestOnPolyline, EllipseRegion,
+	PolylineRegion, RectRegion, Region2D, RegionNoise,
+};
 pub use stamp::{
 	scale_additive, scale_near_one, StampSemantics, StampSet, StampStrength,
 	SOFTMASK_REFERENCE_SHORT,

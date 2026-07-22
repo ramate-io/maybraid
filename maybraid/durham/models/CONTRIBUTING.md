@@ -129,10 +129,11 @@ separate spatial tiling and not a fitted vertical AABB.
 | Cascade chunk (`origin`, extent, Y, `res_2`) | [`cascade_chunk_for_cell`](src/terrain/render.rs) for **both** `Terrain::scene` and `Water::scene` |
 | Mesh resolution | `TerrainPresentationAssets.res_2` on the terrain cell; `Water` copies `terrain.res_2` |
 
-Marazion lake stamps author [`WaterFill`](../marazion/src/fill.rs): softmask + undercut
-gate columns, then a **half-space below \(W\)** (not a thin \([h, W]\) slab). That is
+Marazion lake and stream stamps author [`WaterFill`](../marazion/src/fill.rs): softmask +
+undercut gate columns, then a **half-space below \(W\)** (flat or graded). That is
 what lets water share terrain's tall cell Y without vanishing under marching cubes.
-Subterranean wet volume is intentional.
+Subterranean wet volume is intentional. Stream fills should stay **liberal** vs the
+carved channel (wider support / undercut); narrow look comes from terrain.
 
 ### Rules
 

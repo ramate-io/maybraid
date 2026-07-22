@@ -9,7 +9,7 @@
 //! | Cascade chunk | [`cascade_chunk_for_cell`] | **same helper**, same `cell` + `res_2` |
 //! | Mesh resolution | [`TerrainPresentationAssets::res_2`](crate::terrain::presentation::TerrainPresentationAssets) via the sibling [`Terrain`] cell | inherited from that [`Terrain::res_2`] — never a separate water grid |
 //!
-//! Marazion lake stamps author [`WaterFill`] (surface \(W\), softmask, undercut gate).
+//! Marazion lake stamps author flat [`WaterFill`]s; streams author graded ones.
 //! Fills are free-surface half-spaces below \(W\) so they resolve on the tall
 //! terrain Y lattice. This module collects those fills from an already composed
 //! [`Terrain`] cell and presents [`ComposedWater`] on that shared sample space.
@@ -100,11 +100,11 @@ pub fn water_distance(fills: &[WaterFill], p: Vec3, terrain_height: f32) -> f32 
 		.fold(f32::INFINITY, f32::min)
 }
 
-/// True when the stamp has wet volume at the fill footprint center (with undercut).
+/// True when the stamp has wet volume at a representative footprint sample.
 fn fill_has_wet_volume(fill: &WaterFill, terrain: &TerrainSdf) -> bool {
-	let center = fill.region.center();
+	let center = fill.region.sample_point();
 	let h = terrain.height_at_with_all_modulations(center.x, center.y);
-	fill.wet_y_span(h).is_some()
+	fill.wet_y_span_at(center.x, center.y, h).is_some()
 }
 
 impl<S> GenerationScheme<S> for Water

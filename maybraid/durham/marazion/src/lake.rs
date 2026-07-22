@@ -9,7 +9,7 @@
 //! clearance), with a small noisy rotation. Leaves must still leave room for
 //! rim + apron outside the water body.
 
-use crate::fill::WaterFill;
+use crate::fill::{WaterFill, WaterSurface};
 use crate::noise::{n01_at, n01_freq, n11_at};
 use bevy_math::Vec2;
 use jersey_terrain_stamps::{
@@ -629,7 +629,7 @@ impl Lake {
 			inner_radius: 0.0,
 			outer_radius: fill_fade,
 			noise: Some(shore_noise),
-			water_level,
+			surface: WaterSurface::Flat { level: water_level },
 			terrain_undercut: undercut,
 		};
 

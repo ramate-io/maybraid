@@ -9,7 +9,7 @@
 //! **Same sample space as terrain.** Water cells are the same origin cells as
 //! [`TerrainCellLayout`](crate::terrain::cell::TerrainCellLayout), use the same
 //! `res_2`, and mesh with the same cascade chunk bounds (including full cell Y).
-//! Lake fills are free-surface half-spaces below \(W\) (see [`WaterFill`]) so the
+//! Lake and stream fills are free-surface half-spaces below \(W\) (see [`WaterFill`]) so the
 //! tall terrain Y lattice can resolve them the way it resolves terrain.
 //!
 //! Softmask bleed and empty-cell skips live at the stamp / [`Water`](crate::water::Water)
@@ -72,7 +72,7 @@ impl Sdf for ComposedWater {
 			if w >= SOFTMASK_DRY {
 				continue;
 			}
-			if let Some((_lo, hi)) = fill.wet_y_span(h) {
+			if let Some((_lo, hi)) = fill.wet_y_span_at(p_xz.x, p_xz.y, h) {
 				any_wet = true;
 				wet_top = wet_top.max(hi);
 			}
