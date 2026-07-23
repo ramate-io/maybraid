@@ -229,8 +229,9 @@ impl Lake {
 			rotation: layout.budget.rotation,
 			water_radius: layout.budget.water_radius(),
 			plateau_radius: layout.budget.plateau_radius(),
-			rim_width: layout.budget.rim_width,
-			apron_width: layout.budget.apron_width,
+			// Authored hydro rim (may differ from the band-budget claim).
+			rim_width: bowl.node.parameters.rim_width,
+			apron_width: bowl.node.parameters.apron_width,
 			fill_radius,
 			water_level: layout.levels.water_level,
 			bowl,

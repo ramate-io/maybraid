@@ -5,7 +5,7 @@ use bevy_math::Vec2;
 use jersey_terrain_stamps::RegionNoise;
 
 /// Target berm width outside wet support for lake / stream rims (world units).
-pub const TARGET_RIM_WIDTH: f32 = 10.0;
+pub const TARGET_RIM_WIDTH: f32 = 25.0;
 
 /// Deterministic salts for [`WatershedApronParams::sample_noise`].
 #[derive(Debug, Clone, Copy)]
@@ -105,14 +105,8 @@ impl WatershedApronParams {
 		scale_radius: f32,
 		salts: ApronNoiseSalts,
 	) -> WatershedApronNoise {
-		let apron_frac_lo = self
-			.indent_frac_min
-			.min(self.indent_frac_max)
-			.clamp(0.0, 0.5);
-		let apron_frac_hi = self
-			.indent_frac_min
-			.max(self.indent_frac_max)
-			.clamp(0.0, 0.5);
+		let apron_frac_lo = self.indent_frac_min.min(self.indent_frac_max).clamp(0.0, 0.5);
+		let apron_frac_hi = self.indent_frac_min.max(self.indent_frac_max).clamp(0.0, 0.5);
 		let apron_freq_lo = self.freq_min.min(self.freq_max).max(0.0);
 		let apron_freq_hi = self.freq_min.max(self.freq_max).max(0.0);
 		let apron_indent_frac = apron_frac_lo
@@ -120,8 +114,7 @@ impl WatershedApronParams {
 		let apron_amp = (apron_width_for_amp.max(0.0) * apron_indent_frac).max(0.01);
 		let apron_freq_authored = apron_freq_lo
 			+ (apron_freq_hi - apron_freq_lo) * n01_at(seed, salts.indent_freq, anchor);
-		let apron_freq =
-			scale_noise_freq(apron_freq_authored, scale_radius, self.noise_freq_power);
+		let apron_freq = scale_noise_freq(apron_freq_authored, scale_radius, self.noise_freq_power);
 		let apron = RegionNoise::from_seed(seed.wrapping_add(6), apron_freq, apron_amp);
 
 		let rim_amp_lo = self.rim_height_amp_min.min(self.rim_height_amp_max).max(0.0);
@@ -137,11 +130,7 @@ impl WatershedApronParams {
 		let rim_height =
 			RegionNoise::from_seed(seed.wrapping_add(7), rim_height_freq, rim_height_amp);
 
-		WatershedApronNoise {
-			apron,
-			apron_amp,
-			rim_height,
-		}
+		WatershedApronNoise { apron, apron_amp, rim_height }
 	}
 }
 

@@ -143,30 +143,43 @@ impl HydrologyNode {
 		}
 	}
 
-	/// Lower terrain toward this node's bed (carve candidate).
-	pub fn carve_candidate(&self, _elevation: f32, p: Vec2) -> f32 {
-		self.bed_level(p)
-	}
-
-	/// Raise-only rim berm: hold the bank across the rim band.
+	/// Absolute bowl bed, graded to the free surface at the noisy shore.
 	///
-	/// Fade-to-identity belongs on the apron. Fading here created a dead mid-rim
-	/// and a discontinuous jump back up to full bank at the apron seam.
-	pub fn rim_candidate(&self, elevation: f32, p: Vec2) -> f32 {
-		let bank = self.parameters.bank_target(self.surface_level(p), p);
-		elevation.max(bank)
+	/// Geometric bed falloff can disagree with [`Self::phi`]'s boundary noise;
+	/// this forces depth → 0 as \(\phi \to 0^-\) so the carve meets the same
+	/// shoreline the rim uses.
+	pub fn carve_candidate(&self, _elevation: f32, p: Vec2) -> f32 {
+		let w = self.surface_level(p);
+		let geo_bed = self.primitive.surface_and_bed(p).1;
+		let geo_depth = (w - geo_bed).max(0.0);
+		let phi = self.phi(p);
+		if phi >= 0.0 {
+			return w;
+		}
+		let edge = self.parameters.boundary_noise_amp().max(2.0);
+		let t = (-phi / edge).clamp(0.0, 1.0);
+		let keep = t * t * (3.0 - 2.0 * t);
+		w - geo_depth * keep
 	}
 
-	/// Raise-only apron: fade from bank (inner) toward identity (outer).
+	/// Absolute bank across the rim band (classification uses noisy [`Self::phi`]).
+	pub fn rim_candidate(&self, _elevation: f32, p: Vec2) -> f32 {
+		self.parameters.bank_target(self.surface_level(p), p)
+	}
+
+	/// Grade from bank at the (noisy) rim edge toward identity at the apron outer.
+	///
+	/// Uses occupancy \(\phi\) so the grade tracks the same shoreline as carve/rim.
 	pub fn apron_candidate(&self, elevation: f32, p: Vec2) -> f32 {
 		let d = self.phi(p);
 		let rim_w = self.parameters.rim_width.max(0.0);
 		let apron_w = self.parameters.apron_width.max(1e-3);
+		// Smoothstep grade: 0 at rim/apron seam (full bank), 1 at outer (terrain).
 		let u = ((d - rim_w) / apron_w).clamp(0.0, 1.0);
 		let fade = u * u * (3.0 - 2.0 * u);
 		let bank = self.parameters.bank_target(self.surface_level(p), p);
-		let toward = elevation * fade + bank * (1.0 - fade);
-		toward.max(elevation)
+		// Raise-only: never cut below the incoming elevation while grading out.
+		(elevation * fade + bank * (1.0 - fade)).max(elevation)
 	}
 
 	/// Blend intersecting nodes at `p` by class priority: carve → rim → apron.

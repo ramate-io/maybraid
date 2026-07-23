@@ -63,8 +63,7 @@ pub(crate) fn build_bowl(
 	let budget = &layout.budget;
 	let water_r = budget.water_radii;
 	let plateau_r = budget.plateau_radii;
-	// Keep the berm on the order of [`TARGET_RIM_WIDTH`], not a wide terrace.
-	let rim_w = budget.rim_width.max(0.5).min(TARGET_RIM_WIDTH);
+	let rim_w = TARGET_RIM_WIDTH;
 	let apron_w = budget.apron_width.max(1.0);
 	let rotation = budget.rotation;
 	let short_water = budget.water_radius();
