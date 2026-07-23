@@ -149,18 +149,3 @@ impl WatershedApronParams {
 pub fn jittered_depth(seed: u32, salt: u32, anchor: Vec2, depth: f32, lo: f32, span: f32) -> f32 {
 	depth * (lo + span * n01_at(seed, salt, anchor))
 }
-
-/// Shore outline noise: warps wet occupancy (`φ += sample_boundary`).
-///
-/// `scale_radius` is the characteristic water size (lake short axis / stream half-width).
-pub fn shore_boundary_noise(
-	seed: u32,
-	scale_radius: f32,
-	indent_frac: f32,
-	freq: f32,
-	noise_freq_power: f32,
-) -> RegionNoise {
-	let amp = (scale_radius.max(1.0) * indent_frac.clamp(0.0, 0.45)).max(0.01);
-	let shore_freq = scale_noise_freq(freq.max(0.0), scale_radius, noise_freq_power);
-	RegionNoise::from_seed(seed.wrapping_add(5), shore_freq, amp)
-}

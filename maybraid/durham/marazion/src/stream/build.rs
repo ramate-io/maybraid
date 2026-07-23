@@ -1,12 +1,13 @@
 //! Assemble stream corridor as hydrology reach-segment nodes.
 
-use crate::apron::{jittered_depth, shore_boundary_noise, ApronNoiseSalts, TARGET_RIM_WIDTH};
+use crate::apron::{jittered_depth, ApronNoiseSalts, TARGET_RIM_WIDTH};
 use crate::complex::HydrologyComplex;
 use crate::depression::{WatershedDepression, WatershedDepressionKind};
 use crate::node::{nodes_from_polyline, HydroParameters};
+use crate::noise::scale_noise_freq;
 use crate::stream::{StreamBandBudget, StreamParams};
 use bevy_math::Vec2;
-use jersey_terrain_stamps::{PolylineRegion, Region2D};
+use jersey_terrain_stamps::{PolylineRegion, Region2D, RegionNoise};
 use procedural_common::Bounds2;
 
 const DEPTH_SALT: u32 = 0x57EA_DE07;
@@ -86,14 +87,13 @@ pub(crate) fn build_corridor(
 	let channel_region = Region2D::Polyline(PolylineRegion::new(path.clone(), half_w));
 	let rim_w = TARGET_RIM_WIDTH;
 	let apron_width = (apron_w - skirt_w).max(apron_band);
-	let boundary_noise = shore_boundary_noise(
-		seed,
+	let shore_amp = (half_w.max(1.0) * params.shore_indent_frac.clamp(0.0, 0.45)).max(0.01);
+	let shore_freq = scale_noise_freq(
+		params.shore_freq.max(0.0),
 		half_w,
-		params.shore_indent_frac,
-		params.shore_freq,
 		params.apron.noise_freq_power,
 	);
-	let shore_amp = boundary_noise.noise.params().amplitude.abs();
+	let boundary_noise = RegionNoise::from_seed(seed.wrapping_add(5), shore_freq, shore_amp);
 	let max_correction_extent = (rim_w + apron_width + shore_amp).max(0.0);
 	let rim_uplift_cap = params
 		.apron

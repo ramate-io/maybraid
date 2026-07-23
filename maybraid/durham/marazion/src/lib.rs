@@ -25,9 +25,7 @@ pub mod pre_pocket;
 pub mod stream;
 pub mod streams_graph;
 
-pub use apron::{
-	shore_boundary_noise, ApronNoiseSalts, WatershedApronParams, TARGET_RIM_WIDTH,
-};
+pub use apron::{ApronNoiseSalts, WatershedApronParams, TARGET_RIM_WIDTH};
 pub use backfill::{
 	BasinBackfillParams, WatershedBackfill, WatershedBackfillKind,
 };

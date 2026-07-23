@@ -1,6 +1,6 @@
 //! Assemble lake bowl as a hydrology node (ellipse + radial bowl).
 
-use crate::apron::{jittered_depth, shore_boundary_noise, ApronNoiseSalts, TARGET_RIM_WIDTH};
+use crate::apron::{jittered_depth, ApronNoiseSalts, TARGET_RIM_WIDTH};
 use crate::complex::{HydrologyComplex, WatershedNode};
 use crate::depression::{WatershedDepression, WatershedDepressionKind};
 use crate::hydro::{HydroElevation, HydroFootprint, HydroPrimitive};
@@ -8,8 +8,9 @@ use crate::lake::budget::LakeBandBudget;
 use crate::lake::shelf::ShelfLevels;
 use crate::lake::LakeParams;
 use crate::node::{HydrologyNode, HydroParameters};
+use crate::noise::scale_noise_freq;
 use bevy_math::Vec2;
-use jersey_terrain_stamps::{EllipseRegion, Region2D};
+use jersey_terrain_stamps::{EllipseRegion, Region2D, RegionNoise};
 use procedural_common::Bounds2;
 
 const DEPTH_SALT: u32 = 0x1A7E_DE07;
@@ -86,14 +87,13 @@ pub(crate) fn build_bowl(
 		ApronNoiseSalts::LAKE,
 	);
 	let apron_outer = (apron_w + apron_noise.apron_amp).max(apron_w);
-	let boundary_noise = shore_boundary_noise(
-		seed,
+	let shore_amp = (short_water.max(1.0) * params.shore_indent_frac.clamp(0.0, 0.45)).max(0.01);
+	let shore_freq = scale_noise_freq(
+		params.shore_freq.max(0.0),
 		short_water,
-		params.shore_indent_frac,
-		params.shore_freq,
 		params.apron.noise_freq_power,
 	);
-	let shore_amp = boundary_noise.noise.params().amplitude.abs();
+	let boundary_noise = RegionNoise::from_seed(seed.wrapping_add(5), shore_freq, shore_amp);
 
 	let max_correction_extent = (rim_w + apron_outer + shore_amp).max(0.0);
 	let rim_uplift_cap = params

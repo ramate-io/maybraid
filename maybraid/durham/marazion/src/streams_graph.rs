@@ -4,17 +4,17 @@
 //! keypoints into corridors, then emits segment [`crate::node::HydrologyNode`]s
 //! into one [`HydrologyComplex`] (sample-time union blend).
 
-use crate::apron::{shore_boundary_noise, ApronNoiseSalts, TARGET_RIM_WIDTH};
+use crate::apron::{ApronNoiseSalts, TARGET_RIM_WIDTH};
 use crate::complex::{HydrologyComplex, WatershedEdge, WatershedNode};
 use crate::depression::{WatershedDepression, WatershedDepressionKind};
 use crate::node::{nodes_from_polyline, HydroParameters};
-use crate::noise::n01_freq;
+use crate::noise::{n01_freq, scale_noise_freq};
 use crate::stream::{
 	collapse_degenerate_vertices, node_water_levels, sample_endpoint, StreamBandBudget,
 	StreamParams, DEGENERATE_VERTEX_EPS, ENDPOINT_A_SALT, ENDPOINT_B_SALT,
 };
 use bevy_math::Vec2;
-use jersey_terrain_stamps::{DownhillPair, PolylineRegion, Region2D};
+use jersey_terrain_stamps::{DownhillPair, PolylineRegion, Region2D, RegionNoise};
 use procedural_common::{Bounds2, HysteresisGraph, SeededHash};
 
 /// Minimum channel half-width (world units); smaller budgets skip the stamp.
@@ -301,14 +301,14 @@ impl StreamsGraph {
 
 		let rim_w = TARGET_RIM_WIDTH;
 		let apron_w = (budget.apron_half - budget.skirt_half).max(apron_band);
-		let boundary_noise = shore_boundary_noise(
-			seed,
+		let shore_amp =
+			(budget.half_width.max(1.0) * stream_p.shore_indent_frac.clamp(0.0, 0.45)).max(0.01);
+		let shore_freq = scale_noise_freq(
+			stream_p.shore_freq.max(0.0),
 			budget.half_width,
-			stream_p.shore_indent_frac,
-			stream_p.shore_freq,
 			stream_p.apron.noise_freq_power,
 		);
-		let shore_amp = boundary_noise.noise.params().amplitude.abs();
+		let boundary_noise = RegionNoise::from_seed(seed.wrapping_add(5), shore_freq, shore_amp);
 		let max_correction_extent = (rim_w + apron_w + shore_amp).max(0.0);
 		let parameters = HydroParameters {
 			shelf_anchor: None,
