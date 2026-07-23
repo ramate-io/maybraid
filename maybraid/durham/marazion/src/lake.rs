@@ -87,7 +87,8 @@ pub struct LakeParams {
 	pub shelf_sample_count: u8,
 
 	// ── Bowl depth ─────────────────────────────────────────────────────────
-	/// Bowl depth scale at the centroid (world units below `W`).
+	/// Max bowl depth at the centroid for a lake whose short water axis equals
+	/// [`crate::noise::NOISE_FREQ_REF_RADIUS`] (scales with water radius in build).
 	pub depth: f32,
 	/// Exponent on `(1 - r)` for the radial depth falloff.
 	pub depth_falloff_power: f32,

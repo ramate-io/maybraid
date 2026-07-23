@@ -8,7 +8,7 @@ use crate::lake::budget::LakeBandBudget;
 use crate::lake::shelf::ShelfLevels;
 use crate::lake::LakeParams;
 use crate::node::{HydrologyNode, HydroParameters};
-use crate::noise::scale_noise_freq;
+use crate::noise::{scale_noise_freq, NOISE_FREQ_REF_RADIUS};
 use bevy_math::Vec2;
 use jersey_terrain_stamps::{EllipseRegion, Region2D, RegionNoise};
 use procedural_common::Bounds2;
@@ -70,7 +70,11 @@ pub(crate) fn build_bowl(
 	let short_water = budget.water_radius();
 	let water_level = layout.levels.water_level;
 
-	let depth = jittered_depth(seed, DEPTH_SALT, anchor, params.depth, 0.65, 0.7);
+	// Deeper bowls for larger lakes: `params.depth` is the centroid depth at
+	// [`NOISE_FREQ_REF_RADIUS`].
+	let depth_scaled = params.depth.max(0.25)
+		* (short_water / NOISE_FREQ_REF_RADIUS).clamp(0.35, 4.0);
+	let depth = jittered_depth(seed, DEPTH_SALT, anchor, depth_scaled, 0.65, 0.7);
 
 	let rim_bleed = rim_w * params.rim_bleed_frac.max(0.0);
 	let fill_r = water_r + Vec2::splat(rim_bleed);
