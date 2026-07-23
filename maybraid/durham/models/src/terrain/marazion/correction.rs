@@ -13,7 +13,7 @@ use crate::terrain::marazion::high_pass::{MarazionPocketWatersHighPass, PocketHi
 use crate::terrain::marazion::low_pass::{MarazionPocketWatersLowPass, PocketLowPassCell};
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
-use lod::gen::{GeneratingSpatialIndex, GenerationScheme, Id, OriginalId, SpatialIndex};
+use lod::gen::{GeneratingSpatialIndex, GenerationScheme, Id, OriginalId};
 use lod::lod_ref::LodRef;
 use marazion_watersheds::{
 	CorrectionStage, PreparedHydroComplex, WatershedDepressionComplex,
@@ -70,29 +70,19 @@ where
 		let seed = cell_seed(cell, configs.seed);
 
 		let mut hydrology = Vec::new();
-
-		let high = GeneratingSpatialIndex::<MarazionPocketWatersHighPass>::get_or_generate_region(
+		for pass in GeneratingSpatialIndex::<MarazionPocketWatersHighPass>::get_or_generate_region_values(
 			spatial_index,
 			cell,
 			lod_ref,
-		);
-		for (leaf_id, _) in high {
-			if let Some(pass) = SpatialIndex::<MarazionPocketWatersHighPass>::get(spatial_index, leaf_id)
-			{
-				hydrology.extend(pass.hydrology_nodes());
-			}
+		) {
+			hydrology.extend(pass.hydrology_nodes());
 		}
-
-		let low = GeneratingSpatialIndex::<MarazionPocketWatersLowPass>::get_or_generate_region(
+		for pass in GeneratingSpatialIndex::<MarazionPocketWatersLowPass>::get_or_generate_region_values(
 			spatial_index,
 			cell,
 			lod_ref,
-		);
-		for (leaf_id, _) in low {
-			if let Some(pass) = SpatialIndex::<MarazionPocketWatersLowPass>::get(spatial_index, leaf_id)
-			{
-				hydrology.extend(pass.hydrology_nodes());
-			}
+		) {
+			hydrology.extend(pass.hydrology_nodes());
 		}
 
 		let complex =
