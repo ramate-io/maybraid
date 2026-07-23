@@ -242,22 +242,33 @@ impl HydrologyComplex {
 		HydrologyNode::blend_terrain_elevation(&nodes, elevation, p)
 	}
 
-	/// Soft-min free surface for fill: carve/rim, or liberal fill support band.
+	/// Soft-min free surface for the wet-column gate.
+	///
+	/// Contributors match terrain carve ownership: only **Carve** nodes (plus the
+	/// liberal [`Self::fill_support_pad`] band when no carve is present). Neighbor
+	/// **Rim** surfaces are excluded — otherwise a lower pitched reach can pull
+	/// \(W\) below the local carved bed and dry the column.
 	pub fn surface_at(&self, x: f32, z: f32) -> Option<f32> {
 		let p = Vec2::new(x, z);
 		let fill_core = self.fill_support_pad.max(0.0);
-		let mut surfaces = Vec::new();
+		let mut carve_surfaces = Vec::new();
+		let mut support_surfaces = Vec::new();
 		for node in self.nodes_intersecting(p) {
 			let d = node.phi(p);
-			let in_fill_core = d <= fill_core;
-			let in_bank = matches!(
+			if matches!(
 				node.point_classification(p),
-				Some(CorrectionStage::Carve) | Some(CorrectionStage::Rim)
-			);
-			if in_fill_core || in_bank {
-				surfaces.push(node.surface_level(p));
+				Some(CorrectionStage::Carve)
+			) {
+				carve_surfaces.push(node.surface_level(p));
+			} else if d <= fill_core {
+				support_surfaces.push(node.surface_level(p));
 			}
 		}
+		let surfaces = if !carve_surfaces.is_empty() {
+			carve_surfaces
+		} else {
+			support_surfaces
+		};
 		if surfaces.is_empty() {
 			None
 		} else {
@@ -396,6 +407,76 @@ mod tests {
 		let u = out.wet_union.expect("union");
 		let p = Vec2::new(-10.0, 0.0);
 		assert!((u.sdf(p) - a.sdf(p).min(b.sdf(p))).abs() < 1e-5);
+		Ok(())
+	}
+
+	#[test]
+	fn pitched_neighbor_rim_does_not_dry_upstream_carve() -> anyhow::Result<()> {
+		// Colinear reaches with a steep drop. Mid of the upstream segment sits in
+		// the downstream rim band; fill W must not soft-min that lower surface.
+		let half_w = 8.0;
+		let rim_w = 25.0;
+		let depth = 4.0;
+		let params = HydroParameters {
+			rim_width: rim_w,
+			apron_width: 8.0,
+			fill_support_pad: 0.0,
+			shore_fade: 2.0,
+			fill_undercut: 2.0,
+			..HydroParameters::default()
+		};
+		let a = Vec2::new(0.0, 0.0);
+		let b = Vec2::new(40.0, 0.0);
+		let c = Vec2::new(80.0, 0.0);
+		let upstream = HydrologyNode::new(
+			HydroPrimitive {
+				footprint: HydroFootprint::ReachSegment {
+					a,
+					b,
+					half_width: half_w,
+				},
+				elevation: HydroElevation::ReachProfile {
+					surface_a: 100.0,
+					surface_b: 80.0,
+					center_depth: depth,
+				},
+				influence_pad: rim_w + 8.0,
+			},
+			params.clone(),
+			rim_w + 8.0,
+		);
+		let downstream = HydrologyNode::new(
+			HydroPrimitive {
+				footprint: HydroFootprint::ReachSegment {
+					a: b,
+					b: c,
+					half_width: half_w,
+				},
+				elevation: HydroElevation::ReachProfile {
+					surface_a: 80.0,
+					surface_b: 60.0,
+					center_depth: depth,
+				},
+				influence_pad: rim_w + 8.0,
+			},
+			params,
+			rim_w + 8.0,
+		);
+		let complex = HydrologyComplex::new(Bounds2::from_xz(-20.0, -40.0, 100.0, 40.0), 1)
+			.with_hydrology(vec![upstream, downstream]);
+		let mid = Vec2::new(20.0, 0.0);
+		let w = complex.surface_at(mid.x, mid.y).expect("surface");
+		// Local upstream mid grade is 90; a rim soft-min would drag toward ~80.
+		assert!(
+			w > 85.0,
+			"fill W should track upstream carve grade, got {w}"
+		);
+		let h = complex.modify_elevation(100.0, mid.x, mid.y);
+		let fill = complex.water_fill();
+		assert!(
+			fill.wet_y_span_at(mid.x, mid.y, h).is_some(),
+			"pitched mid-channel should stay wet: W={w} h={h}"
+		);
 		Ok(())
 	}
 
