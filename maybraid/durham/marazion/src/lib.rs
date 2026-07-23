@@ -16,6 +16,7 @@ pub mod complex;
 pub mod compose;
 pub mod depression;
 pub mod fill;
+pub mod hydro;
 pub mod lake;
 pub mod noise;
 pub mod pocket_cell;
@@ -34,11 +35,15 @@ pub use complex::{
 	WatershedEdgeId, WatershedNode, WatershedNodeId,
 };
 pub use compose::{
-	StreamBandComposer, StreamBandPart, DEFAULT_RIM_UPLIFT_CAP, OWNERSHIP_GAMMA_HARD,
-	OWNERSHIP_GAMMA_SOFT,
+	StreamBandComposer, StreamBandPart, OWNERSHIP_GAMMA_HARD, OWNERSHIP_GAMMA_SOFT,
 };
 pub use depression::{WatershedDepression, WatershedDepressionKind};
 pub use fill::{WaterFill, WaterGradePart, WaterSurface};
+pub use hydro::{
+	primitives_from_polyline, water_fill_from_prepared, ComplexApronParams, FootprintIndex,
+	HydroElevation, HydroFootprint, HydroPrimitive, PreparedHydroComplex, DEFAULT_RIM_UPLIFT_CAP,
+	SURFACE_SMOOTHMIN_K,
+};
 pub use lake::{shelf_base_height, Lake, LakeBandBudget, LakeParams};
 pub use pocket_cell::{guillotine_partition, PocketGuillotineParams};
 pub use polyline::{closest_on_polyline, grade_along_polyline, ClosestOnPolyline};

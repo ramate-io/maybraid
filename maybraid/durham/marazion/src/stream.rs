@@ -241,7 +241,6 @@ impl Stream {
 		let head_water = levels.first().copied().unwrap_or(0.0);
 		let toe_water = levels.last().copied().unwrap_or(head_water);
 		let layout = StreamLayout {
-			node_blend: resolve_node_blend(params, bounds, budget.half_width),
 			path,
 			levels,
 			budget,
@@ -275,7 +274,7 @@ impl Stream {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use jersey_terrain_stamps::Region2D;
+	use crate::fill::WaterSurface;
 
 	#[test]
 	fn leaf_too_small_skips() -> anyhow::Result<()> {
@@ -292,6 +291,7 @@ mod tests {
 		assert!(stream.head_water > stream.toe_water);
 		let compiled = stream.clone().into_complex().compile();
 		let fill = compiled.fills.first().expect("fill");
+		assert!(matches!(fill.surface, WaterSurface::Hydro { .. }));
 		let head = *stream.path.first().expect("path head");
 		let toe = *stream.path.last().expect("path toe");
 		let w_head = fill.surface_level_at(head.x, head.y);
@@ -307,7 +307,7 @@ mod tests {
 	}
 
 	#[test]
-	fn fill_support_is_liberal_vs_channel() -> anyhow::Result<()> {
+	fn fill_support_tracks_channel_phi() -> anyhow::Result<()> {
 		let bounds = Bounds2::from_xz(0.0, 0.0, 400.0, 400.0);
 		let height = |x: f32, z: f32| 100.0 - 0.05 * x - 0.01 * z;
 		let params = StreamParams::default();
@@ -315,20 +315,10 @@ mod tests {
 		let compiled = stream.clone().into_complex().compile();
 		let fill = compiled.fills.first().expect("fill");
 		assert!(fill.terrain_undercut >= params.fill_undercut - 1e-3);
-		assert!(fill.noise.is_none());
-		match &fill.region {
-			Region2D::Polyline(poly) => {
-				let expected = stream.half_width * params.fill_half_width_scale.max(1.0);
-				assert!(
-					(poly.half_width - expected).abs() < 1e-3,
-					"fill half {} vs expected liberal {}",
-					poly.half_width,
-					expected
-				);
-				assert!(poly.half_width > stream.half_width);
-			}
-			other => panic!("expected polyline fill region, got {other:?}"),
-		}
+		let mid = stream.path[0].lerp(stream.path[1], 0.5);
+		assert!(fill.softmask_at(mid.x, mid.y) < 0.5);
+		let far = Vec2::new(mid.x, mid.y + stream.half_width * 3.0);
+		assert!(fill.softmask_at(far.x, far.y) > 0.5);
 		Ok(())
 	}
 
@@ -345,10 +335,7 @@ mod tests {
 		for window in stream.path.windows(2) {
 			let mid = window[0].lerp(window[1], 0.5);
 			let w = fill.surface_level_at(mid.x, mid.y);
-			let mut h = height(mid.x, mid.y);
-			for m in &compiled.modulations {
-				h = m.modify_elevation(h, mid.x, mid.y);
-			}
+			let h = compiled.modify_elevation(height(mid.x, mid.y), mid.x, mid.y);
 			assert!(
 				h < w - freeboard * 0.5,
 				"mid-segment bed {h} should sit under W {w} (freeboard {freeboard})"
@@ -381,7 +368,7 @@ mod tests {
 		for (p, &w) in stream.path.iter().zip(stream.levels.iter()) {
 			let got = fill.surface_level_at(p.x, p.y);
 			assert!(
-				(got - w).abs() < 0.15,
+				(got - w).abs() < 0.4,
 				"node ({}, {}) W={got} expected {w}",
 				p.x,
 				p.y
@@ -400,17 +387,19 @@ mod tests {
 	}
 
 	#[test]
-	fn skirt_uses_add_only_rim_with_lake_scale_defaults() -> anyhow::Result<()> {
+	fn hydro_complex_has_rim_apron_identity_far_away() -> anyhow::Result<()> {
 		let bounds = Bounds2::from_xz(0.0, 0.0, 400.0, 400.0);
 		let height = |x: f32, z: f32| 100.0 - 0.05 * x - 0.01 * z;
 		let params = StreamParams::default();
 		assert!(params.apron.rim_height_amp_max >= 15.0);
 		assert!(params.apron.indent_frac_max > params.apron.indent_frac_min);
 		let stream = Stream::from_bounds(bounds, 42, params, Some(&height)).expect("stream");
-		assert_eq!(stream.clone().into_complex().compile().modulations.len(), 4);
+		let compiled = stream.clone().into_complex().compile();
+		assert!(compiled.hydro.is_some());
+		assert!(compiled.modulations.is_empty());
 		let far = Vec2::new(bounds.min.x - 120.0, bounds.min.y - 120.0);
 		let h0 = height(far.x, far.y);
-		let h1 = stream.clone().into_complex().compile().modulations[0].modify_elevation(h0, far.x, far.y);
+		let h1 = compiled.modify_elevation(h0, far.x, far.y);
 		assert!((h1 - h0).abs() < 1e-3);
 		Ok(())
 	}

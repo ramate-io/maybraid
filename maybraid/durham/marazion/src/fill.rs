@@ -16,6 +16,7 @@
 //! Lakes use a flat \(W\); streams use a piecewise grade along a polyline.
 
 use bevy_math::{Vec2, Vec3};
+use crate::hydro::PreparedHydroComplex;
 use jersey_terrain_stamps::{
 	closest_on_polyline, grade_along_polyline, soft_voronoi_weights, Region2D, RegionNoise,
 };
@@ -52,6 +53,8 @@ pub enum WaterSurface {
 		/// Soft-voronoi sharpness; high ≈ hard nearest-path ownership.
 		ownership_gamma: f32,
 	},
+	/// Sample-time union surface from a prepared hydro complex.
+	Hydro { prepared: PreparedHydroComplex },
 }
 
 impl WaterSurface {
@@ -68,6 +71,7 @@ impl WaterSurface {
 				parts,
 				ownership_gamma,
 			} => owned_grade_at(parts, *ownership_gamma, Vec2::new(x, z)),
+			Self::Hydro { prepared } => prepared.surface_at(x, z).unwrap_or(0.0),
 		}
 	}
 }
@@ -126,6 +130,9 @@ pub struct WaterFill {
 impl WaterFill {
 	/// Softmask weight in `[0, 1]` (`0` = fully inside / wet, `1` = outside / dry).
 	pub fn softmask_at(&self, x: f32, z: f32) -> f32 {
+		if let WaterSurface::Hydro { prepared } = &self.surface {
+			return prepared.fill_softmask_at(x, z);
+		}
 		self.region.softmask_weight(
 			Vec2::new(x, z),
 			self.inner_radius,

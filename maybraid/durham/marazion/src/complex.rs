@@ -2,14 +2,20 @@
 //!
 //! [RFC-127 §3.1.3.4](https://github.com/ramate-io/maybraid/tree/main/rfc/rfc-000-000-127-marazion-watersheds#3134-pocket-complex)
 //! anticipates multi-part pocket complexes; v1 realizes standalone stream / lake
-//! leaves as single-edge / single-node graphs compiled through this type.
-//! Multi-stream graphs attach a [`crate::compose::StreamBandComposer`] so apron /
-//! channel / \(W\) compose with soft-voronoi ownership instead of stacking solo stamps.
+//! / bog / streams-graph leaves as graphs compiled through this type.
+//!
+//! Authored leaves emit [`crate::hydro::HydroPrimitive`] nodes. [`Self::compile`]
+//! prepares a [`crate::hydro::PreparedHydroComplex`] for sample-time union blend.
+//! Optional [`WatershedBackfill`]s stay a **post-depression** jersey layer
+//! (applied after hydro). The legacy jersey apron/carve branch remains only for
+//! empty / test fixtures that still push jersey depressions directly.
 
 use crate::backfill::WatershedBackfill;
-use crate::compose::StreamBandComposer;
 use crate::depression::WatershedDepression;
 use crate::fill::WaterFill;
+use crate::hydro::{
+	water_fill_from_prepared, ComplexApronParams, HydroPrimitive, PreparedHydroComplex,
+};
 use bevy_math::Vec2;
 use jersey_terrain_stamps::{
 	JerseyModulation, Region2D, RegionAffineModulation, RegionNoise,
@@ -109,7 +115,10 @@ impl WatershedApronShelf {
 pub struct CompiledWatershed {
 	pub bounds: Bounds2,
 	pub seed: u32,
+	/// Legacy jersey elevation ops (lake/bog carves, backfills).
 	pub modulations: Vec<JerseyModulation>,
+	/// Prepared hydro complex when the leaf uses sample-time union blend.
+	pub hydro: Option<PreparedHydroComplex>,
 	pub fills: Vec<WaterFill>,
 	/// Union of all wet-core footprints (for future multi-part aprons).
 	pub wet_union: Option<Region2D>,
@@ -118,6 +127,22 @@ pub struct CompiledWatershed {
 impl CompiledWatershed {
 	pub fn is_empty(&self) -> bool {
 		self.modulations.is_empty()
+			&& self
+				.hydro
+				.as_ref()
+				.map_or(true, |h| h.is_empty())
+	}
+
+	/// Apply hydro (if any) then jersey mods in compile order.
+	pub fn modify_elevation(&self, elevation: f32, x: f32, z: f32) -> f32 {
+		let mut h = elevation;
+		if let Some(hydro) = &self.hydro {
+			h = hydro.modify_elevation(h, x, z);
+		}
+		for m in &self.modulations {
+			h = m.modify_elevation(h, x, z);
+		}
+		h
 	}
 }
 
@@ -130,9 +155,9 @@ pub struct WatershedDepressionComplex {
 	pub edges: Vec<WatershedEdge>,
 	pub apron: Option<WatershedApronShelf>,
 	pub backfills: Vec<WatershedBackfill>,
-	/// When set, compile uses soft-voronoi multi-stream composition instead of
-	/// concatenating per-edge carves + a single [`WatershedApronShelf`].
-	pub stream_bands: Option<StreamBandComposer>,
+	/// When set, compile prepares a sample-time hydro complex (streams path).
+	pub hydro_primitives: Vec<HydroPrimitive>,
+	pub hydro_apron: Option<ComplexApronParams>,
 }
 
 impl WatershedDepressionComplex {
@@ -144,7 +169,8 @@ impl WatershedDepressionComplex {
 			edges: Vec::new(),
 			apron: None,
 			backfills: Vec::new(),
-			stream_bands: None,
+			hydro_primitives: Vec::new(),
+			hydro_apron: None,
 		}
 	}
 
@@ -153,8 +179,13 @@ impl WatershedDepressionComplex {
 		self
 	}
 
-	pub fn with_stream_bands(mut self, bands: StreamBandComposer) -> Self {
-		self.stream_bands = Some(bands);
+	pub fn with_hydro(
+		mut self,
+		primitives: Vec<HydroPrimitive>,
+		apron: ComplexApronParams,
+	) -> Self {
+		self.hydro_primitives = primitives;
+		self.hydro_apron = Some(apron);
 		self
 	}
 
@@ -175,13 +206,9 @@ impl WatershedDepressionComplex {
 		id
 	}
 
-	/// True when there is nothing to emit (no apron, carves, fills, or backfills).
+	/// True when there is nothing to emit (no apron, carves, fills, hydro, or backfills).
 	pub fn is_empty(&self) -> bool {
-		if self
-			.stream_bands
-			.as_ref()
-			.is_some_and(|b| !b.parts.is_empty())
-		{
+		if !self.hydro_primitives.is_empty() {
 			return false;
 		}
 		let has_depression = self.nodes.iter().any(|n| {
@@ -192,25 +219,47 @@ impl WatershedDepressionComplex {
 		!has_depression && self.apron.is_none() && self.backfills.is_empty()
 	}
 
-	/// Compile shared apron + wet-core carves/fills + post-carve backfills.
+	/// Compile hydro primitives (when present) or legacy jersey apron/carves.
 	///
-	/// Order: apron → node/edge carves → backfills (backfill last so hummocks
-	/// rise into an already-carved basin). Per-complex emit preserves this
-	/// contiguous block when several complexes are pulled into terrain.
+	/// **Authored leaves** (Stream / StreamsGraph / Lake / Bog) set
+	/// [`Self::hydro_primitives`]: prepare a broadphase index, emit one hydro fill,
+	/// and append [`Self::backfills`] as jersey mods **after** the depression.
 	///
-	/// When [`Self::stream_bands`] is set, apron / channel / thalweg / fill come
-	/// from the composer (graph node/edge carves and fills are skipped).
+	/// **Legacy / tests** that only push jersey node/edge depressions +
+	/// [`Self::apron`] still compile apron → carve → backfill as jersey ops.
 	pub fn compile(&self) -> CompiledWatershed {
-		if let Some(bands) = &self.stream_bands {
-			let composed = bands.compose();
-			let mut modulations = composed.modulations;
+		if !self.hydro_primitives.is_empty() {
+			let apron = self.hydro_apron.clone().unwrap_or_default();
+			let prepared = PreparedHydroComplex::prepare(
+				self.bounds,
+				self.seed,
+				self.hydro_primitives.clone(),
+				apron,
+			);
+			let fill = water_fill_from_prepared(prepared.clone());
+			let mut wet_cores: Vec<Region2D> = Vec::new();
+			for node in &self.nodes {
+				if let Some(dep) = &node.depression {
+					wet_cores.push(dep.wet_core.clone());
+				}
+			}
+			for edge in &self.edges {
+				wet_cores.push(edge.depression.wet_core.clone());
+			}
+			let wet_union = match wet_cores.len() {
+				0 => None,
+				1 => wet_cores.pop(),
+				_ => Some(Region2D::union(wet_cores)),
+			};
+			let mut modulations = Vec::new();
 			modulations.extend(self.backfills.iter().cloned().map(|b| b.into_modulation()));
 			return CompiledWatershed {
 				bounds: self.bounds,
 				seed: self.seed,
 				modulations,
-				fills: composed.fill.into_iter().collect(),
-				wet_union: composed.wet_union,
+				hydro: Some(prepared),
+				fills: vec![fill],
+				wet_union,
 			};
 		}
 
@@ -252,6 +301,7 @@ impl WatershedDepressionComplex {
 			bounds: self.bounds,
 			seed: self.seed,
 			modulations,
+			hydro: None,
 			fills,
 			wet_union,
 		}

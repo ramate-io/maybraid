@@ -1,17 +1,16 @@
-//! Assemble lake bowl depression + shared plateau apron from a laid-out footprint.
+//! Assemble lake bowl as a hydro ellipse + shared complex apron.
 
 use crate::apron::{jittered_depth, ApronNoiseSalts};
-use crate::complex::{WatershedApronShelf, WatershedDepressionComplex};
+use crate::complex::{WatershedDepressionComplex, WatershedNode};
 use crate::depression::{WatershedDepression, WatershedDepressionKind};
-use crate::fill::{WaterFill, WaterSurface};
+use crate::hydro::{
+	ComplexApronParams, HydroElevation, HydroFootprint, HydroPrimitive, DEFAULT_RIM_UPLIFT_CAP,
+};
 use crate::lake::budget::LakeBandBudget;
 use crate::lake::shelf::ShelfLevels;
 use crate::lake::LakeParams;
-use crate::noise::scale_noise_freq;
 use bevy_math::Vec2;
-use jersey_terrain_stamps::{
-	EllipseRegion, JerseyModulation, Region2D, RegionBowlModulation, RegionNoise,
-};
+use jersey_terrain_stamps::{EllipseRegion, Region2D};
 use procedural_common::Bounds2;
 
 const DEPTH_SALT: u32 = 0x1A7E_DE07;
@@ -31,20 +30,29 @@ pub(crate) struct LakeLayout {
 	pub levels: ShelfLevels,
 }
 
-/// Lake-specific stamp: one bowl depression + its shared apron.
+/// Lake-specific stamp: one radial-bowl primitive + complex apron params.
 ///
 /// Convert with [`Self::into_complex`] → [`WatershedDepressionComplex`].
 #[derive(Debug, Clone)]
 pub(crate) struct LakeBowl {
-	pub depression: WatershedDepression,
-	pub apron: WatershedApronShelf,
+	pub wet_core: Region2D,
+	pub primitive: HydroPrimitive,
+	pub hydro_apron: ComplexApronParams,
+	/// Authoring metadata: water radius + rim bleed (fill softmask follows \(\phi\)).
 	pub fill_radius: f32,
 }
 
 impl LakeBowl {
-	/// `LakeBowl` → sole-node [`WatershedDepressionComplex`].
+	/// `LakeBowl` → sole-node [`WatershedDepressionComplex`] with hydro emit.
 	pub fn into_complex(self, bounds: Bounds2, seed: u32) -> WatershedDepressionComplex {
-		self.depression.into_complex(bounds, seed, self.apron)
+		let mut complex = WatershedDepressionComplex::new(bounds, seed);
+		complex.push_node(WatershedNode::with_depression(WatershedDepression::new(
+			WatershedDepressionKind::LakeBowl,
+			self.wet_core,
+			Vec::new(),
+			None,
+		)));
+		complex.with_hydro(vec![self.primitive], self.hydro_apron)
 	}
 }
 
@@ -58,31 +66,20 @@ pub(crate) fn build_bowl(
 	let budget = &layout.budget;
 	let water_r = budget.water_radii;
 	let plateau_r = budget.plateau_radii;
-	let rim_w = budget.rim_width;
+	let rim_w = budget.rim_width.max(0.5);
 	let apron_w = budget.apron_width.max(1.0);
 	let rotation = budget.rotation;
 	let short_water = budget.water_radius();
 	let water_level = layout.levels.water_level;
-	let rim_level = layout.levels.rim_level;
 
 	let depth = jittered_depth(seed, DEPTH_SALT, anchor, params.depth, 0.65, 0.7);
-	let bowl_fade = (rim_w * 0.25).max(0.5).min(short_water * 0.2);
 
 	let rim_bleed = rim_w * params.rim_bleed_frac.max(0.0);
 	let fill_r = water_r + Vec2::splat(rim_bleed);
 	let max_fill = plateau_r + Vec2::splat(apron_w - 0.5);
 	let fill_r = Vec2::new(fill_r.x.min(max_fill.x), fill_r.y.min(max_fill.y)).max(water_r);
 
-	let plateau_region = ellipse_region(center, plateau_r, rotation);
 	let water_region = ellipse_region(center, water_r, rotation);
-	let fill_region = ellipse_region(center, fill_r, rotation);
-
-	let shore_amp = (short_water * params.shore_indent_frac.clamp(0.0, 0.45))
-		.min(rim_w * 0.85)
-		.max(0.01);
-	let shore_freq =
-		scale_noise_freq(params.shore_freq, short_water, params.apron.noise_freq_power);
-	let shore_noise = RegionNoise::from_seed(seed.wrapping_add(5), shore_freq, shore_amp);
 
 	let apron_noise = params.apron.sample_noise(
 		seed,
@@ -91,61 +88,36 @@ pub(crate) fn build_bowl(
 		short_water,
 		ApronNoiseSalts::LAKE,
 	);
-	let apron_outer = apron_w + apron_noise.apron_amp;
+	let apron_outer = (apron_w + apron_noise.apron_amp).max(apron_w);
 
-	let depth_noise_freq =
-		scale_noise_freq(params.depth_noise_freq, short_water, params.apron.noise_freq_power);
-	let depth_noise = RegionNoise::from_seed(
-		seed.wrapping_add(9),
-		depth_noise_freq,
-		params.depth_noise_amp.max(0.0),
-	);
-
-	let undercut = params.terrain_undercut.max(0.0);
-	let bed_ceiling = (rim_level + params.island_lift.max(0.0))
-		.max(water_level + undercut + params.depth_noise_amp.max(0.0) * 0.85);
-	let shore_frac = params.depth_shore_frac.clamp(0.0, 1.0);
-	let center_bed = water_level - depth;
-	let shore_bed = water_level - depth * shore_frac;
-	let bowl = JerseyModulation::Bowl(
-		RegionBowlModulation::new(
-			water_region.clone(),
-			center_bed,
-			shore_bed,
-			bed_ceiling,
-			params.depth_falloff_power,
-			bowl_fade,
-		)
-		.with_boundary_noise(shore_noise.clone())
-		.with_bed_noise(depth_noise),
-	);
-
-	let fill = WaterFill {
-		region: fill_region,
-		inner_radius: 0.0,
-		outer_radius: params.shore_fade.max(1.0),
-		noise: Some(shore_noise),
-		surface: WaterSurface::Flat { level: water_level },
-		terrain_undercut: undercut,
+	let influence = rim_w + apron_outer;
+	let primitive = HydroPrimitive {
+		footprint: HydroFootprint::Ellipse {
+			center,
+			radii: water_r.max(Vec2::splat(1e-3)),
+			rotation,
+		},
+		elevation: HydroElevation::RadialBowl {
+			surface: water_level,
+			center_depth: depth.max(0.25),
+		},
+		influence_pad: influence,
 	};
 
-	let depression = WatershedDepression::new(
-		WatershedDepressionKind::LakeBowl,
-		water_region,
-		vec![bowl],
-		Some(fill),
-	);
-	let apron = WatershedApronShelf::LakeFlatten {
-		region: plateau_region,
-		rim_level,
-		outer_radius: apron_outer,
-		apron_noise: apron_noise.apron,
+	let hydro_apron = ComplexApronParams {
+		rim_lift: params.rim_lift.max(0.0),
+		rim_width: rim_w,
+		apron_width: apron_outer,
 		rim_height: apron_noise.rim_height,
+		rim_uplift_cap: DEFAULT_RIM_UPLIFT_CAP,
+		shore_fade: params.shore_fade.max(1.0),
+		fill_undercut: params.terrain_undercut.max(0.0),
 	};
 
 	LakeBowl {
-		depression,
-		apron,
+		wet_core: water_region,
+		primitive,
+		hydro_apron,
 		fill_radius: fill_r.min_element(),
 	}
 }

@@ -1,18 +1,19 @@
 //! Streams graph — multi-corridor stream leaf for composition practice.
 //!
 //! Grows a degree-bounded [`HysteresisGraph`], collapses chains between
-//! keypoints into corridors, then emits one [`WatershedDepressionComplex`]
-//! through [`crate::compose::StreamBandComposer`] (soft-voronoi apron blend,
-//! owned thalweg/rim, one \(W\) field). No lake/bog decoration yet.
+//! keypoints into corridors, then emits segment [`crate::hydro::HydroPrimitive`]s
+//! into one [`WatershedDepressionComplex`] (sample-time union blend).
 
 use crate::apron::{ApronNoiseSalts, WatershedApronParams};
 use crate::complex::{WatershedDepressionComplex, WatershedEdge, WatershedNode};
-use crate::compose::{StreamBandComposer, StreamBandPart, DEFAULT_RIM_UPLIFT_CAP};
 use crate::depression::{WatershedDepression, WatershedDepressionKind};
+use crate::hydro::{
+	primitives_from_polyline, ComplexApronParams, DEFAULT_RIM_UPLIFT_CAP,
+};
 use crate::noise::n01_freq;
 use crate::stream::{
-	collapse_degenerate_vertices, node_water_levels, resolve_node_blend, sample_endpoint,
-	StreamBandBudget, StreamParams, DEGENERATE_VERTEX_EPS, ENDPOINT_A_SALT, ENDPOINT_B_SALT,
+	collapse_degenerate_vertices, node_water_levels, sample_endpoint, StreamBandBudget,
+	StreamParams, DEGENERATE_VERTEX_EPS, ENDPOINT_A_SALT, ENDPOINT_B_SALT,
 };
 use bevy_math::Vec2;
 use jersey_terrain_stamps::{DownhillPair, PolylineRegion, Region2D};
@@ -34,7 +35,6 @@ const GRAPH_RIM_AMP_MAX: f32 = 1.25;
 /// stacking another full depth digs canyons that glue to leftover ridges.
 const GRAPH_THALWEG_DEPTH_FRAC: f32 = 0.3;
 const GRAPH_THALWEG_DEPTH_MAX: f32 = 2.5;
-const GRAPH_DEPTH_NOISE_FRAC: f32 = 0.35;
 
 /// Authoring knobs for a streams-graph leaf.
 #[derive(Debug, Clone, Copy)]
@@ -94,36 +94,40 @@ fn pin_junction_water_levels(
 		.collect();
 	let n_keys = key_w.len();
 	for c in corridors.iter_mut() {
-		let n = c.band.levels.len();
+		let n = c.levels.len();
 		if n < 2 || c.from_key >= n_keys || c.to_key >= n_keys {
 			continue;
 		}
 		let head = key_w[c.from_key];
 		let toe = key_w[c.to_key].min(head);
-		c.band.levels[0] = head;
-		c.band.levels[n - 1] = toe;
+		c.levels[0] = head;
+		c.levels[n - 1] = toe;
 		for i in 1..n {
-			c.band.levels[i] = c.band.levels[i].min(c.band.levels[i - 1]);
+			c.levels[i] = c.levels[i].min(c.levels[i - 1]);
 		}
-		c.band.levels[n - 1] = toe;
+		c.levels[n - 1] = toe;
 		for i in (1..n - 1).rev() {
-			c.band.levels[i] = c.band.levels[i]
-				.min(c.band.levels[i - 1])
-				.max(c.band.levels[n - 1]);
+			c.levels[i] = c.levels[i]
+				.min(c.levels[i - 1])
+				.max(c.levels[n - 1]);
 		}
 	}
 }
 
-/// One collapsed corridor between keypoints (composer input + graph edge).
+/// One collapsed corridor between keypoints.
 #[derive(Debug, Clone)]
 struct CorridorPart {
 	from_key: usize,
 	to_key: usize,
-	band: StreamBandPart,
+	path: Vec<Vec2>,
+	levels: Vec<f32>,
+	half_width: f32,
+	freeboard: f32,
+	depth: f32,
 	wet_core: Region2D,
 }
 
-/// Authored streams-graph **plan**: hysteresis corridors → one composed complex.
+/// Authored streams-graph **plan**: hysteresis corridors → one hydro complex.
 #[derive(Debug, Clone)]
 pub struct StreamsGraph {
 	pub bounds: Bounds2,
@@ -133,7 +137,7 @@ pub struct StreamsGraph {
 	pub edge_count: usize,
 	corridors: Vec<CorridorPart>,
 	key_points: Vec<Vec2>,
-	composer: StreamBandComposer,
+	hydro_apron: ComplexApronParams,
 }
 
 impl StreamsGraph {
@@ -193,14 +197,11 @@ impl StreamsGraph {
 			return None;
 		}
 
-		let node_blend = resolve_node_blend(stream_p, bounds, budget.half_width);
 		// Channel already absolute-grades to \(W - \mathrm{freeboard}\); keep the
 		// extra thalweg nick shallow so min-compose overlaps cannot canyon.
 		let depth = (stream_p.depth.max(0.0) * GRAPH_THALWEG_DEPTH_FRAC)
 			.min(GRAPH_THALWEG_DEPTH_MAX)
 			.max(0.35);
-		let depth_noise_amp =
-			(stream_p.depth_noise_amp.max(0.0) * GRAPH_DEPTH_NOISE_FRAC).min(0.75);
 		let apron_band = (budget.apron_half - budget.skirt_half).max(0.5);
 		let apron_noise = stream_p.apron.sample_noise(
 			seed,
@@ -273,43 +274,16 @@ impl StreamsGraph {
 					continue;
 				}
 
-				let shore_amp = (budget.half_width * stream_p.shore_indent_frac.clamp(0.0, 0.4))
-					.max(0.01);
-				let shore_freq = stream_p
-					.shore_freq
-					.max(1.5 / budget.half_width.max(1.0))
-					.clamp(1.0e-4, 0.14);
-				let shore_noise = jersey_terrain_stamps::RegionNoise::from_seed(
-					seed.wrapping_add(5).wrapping_add(corridors.len() as u32),
-					shore_freq,
-					shore_amp,
-				);
-				let depth_noise = jersey_terrain_stamps::RegionNoise::from_seed(
-					seed.wrapping_add(9).wrapping_add(corridors.len() as u32),
-					(1.4 / budget.half_width.max(1.0)).clamp(0.04, 0.2),
-					depth_noise_amp,
-				);
-
 				let wet_core =
 					Region2D::Polyline(PolylineRegion::new(path.clone(), budget.half_width));
 				corridors.push(CorridorPart {
 					from_key,
 					to_key,
-					band: StreamBandPart {
-						path,
-						levels,
-						half_width: budget.half_width,
-						thalweg_half: budget.thalweg_half,
-						skirt_half: budget.skirt_half,
-						apron_half: budget.apron_half,
-						node_blend,
-						freeboard: stream_p.channel_freeboard.max(0.25),
-						rim_lift: stream_p.rim_lift.max(0.0),
-						depth,
-						shore_indent_noise: Some(shore_noise),
-						depth_noise: Some(depth_noise),
-						apron_boundary_noise: Some(apron_noise.apron.clone()),
-					},
+					path,
+					levels,
+					half_width: budget.half_width,
+					freeboard: stream_p.channel_freeboard.max(0.25),
+					depth,
 					wet_core,
 				});
 			}
@@ -331,11 +305,17 @@ impl StreamsGraph {
 			stream_p.water_sink,
 		);
 
-		let band_parts: Vec<StreamBandPart> = corridors.iter().map(|c| c.band.clone()).collect();
-		let composer = StreamBandComposer::new(band_parts, apron_noise.rim_height)
-			.with_rim_uplift_cap(params.rim_uplift_cap.min(DEFAULT_RIM_UPLIFT_CAP))
-			.with_fill_undercut(stream_p.fill_undercut.max(0.0))
-			.with_shore_fade(stream_p.shore_fade.max(0.25));
+		let rim_w = (budget.skirt_half * 0.35).max(2.0).min(budget.half_width);
+		let apron_w = (budget.apron_half - budget.skirt_half).max(apron_band);
+		let hydro_apron = ComplexApronParams {
+			rim_lift: stream_p.rim_lift.max(0.0),
+			rim_width: rim_w,
+			apron_width: apron_w,
+			rim_height: apron_noise.rim_height,
+			rim_uplift_cap: params.rim_uplift_cap.min(DEFAULT_RIM_UPLIFT_CAP),
+			shore_fade: stream_p.shore_fade.max(0.25),
+			fill_undercut: stream_p.fill_undercut.max(0.0),
+		};
 
 		Some(Self {
 			bounds,
@@ -345,7 +325,7 @@ impl StreamsGraph {
 			edge_count: corridors.len(),
 			corridors,
 			key_points,
-			composer,
+			hydro_apron,
 		})
 	}
 
@@ -353,13 +333,15 @@ impl StreamsGraph {
 		Self::from_bounds(bounds, seed, StreamsGraphParams::default(), None)
 	}
 
-	/// Realize as a multi-edge complex with soft-voronoi stream-band composition.
+	/// Realize as a multi-edge complex with sample-time hydro composition.
 	pub fn into_complex(self) -> WatershedDepressionComplex {
 		let mut complex = WatershedDepressionComplex::new(self.bounds, self.seed);
 		let mut node_ids = Vec::with_capacity(self.key_points.len());
 		for _ in &self.key_points {
 			node_ids.push(complex.push_node(WatershedNode::empty()));
 		}
+		let mut primitives = Vec::new();
+		let influence = self.hydro_apron.rim_width + self.hydro_apron.apron_width;
 		for corridor in &self.corridors {
 			let from = node_ids[corridor.from_key];
 			let to = node_ids[corridor.to_key];
@@ -373,8 +355,17 @@ impl StreamsGraph {
 					None,
 				),
 			});
+			// Bed at centerline ≈ W − freeboard − shallow thalweg nick.
+			let center_depth = corridor.freeboard + corridor.depth;
+			primitives.extend(primitives_from_polyline(
+				&corridor.path,
+				&corridor.levels,
+				corridor.half_width,
+				center_depth,
+				influence,
+			));
 		}
-		complex.with_stream_bands(self.composer)
+		complex.with_hydro(primitives, self.hydro_apron)
 	}
 }
 
@@ -406,11 +397,12 @@ mod tests {
 		.expect("streams graph");
 		assert!(g.edge_count >= 1);
 		let compiled = g.into_complex().compile();
-		assert_eq!(compiled.modulations.len(), 3);
+		assert!(compiled.hydro.is_some());
+		assert!(compiled.modulations.is_empty());
 		assert_eq!(compiled.fills.len(), 1);
 		assert!(matches!(
 			compiled.fills[0].surface,
-			WaterSurface::OwnedGraded { .. }
+			WaterSurface::Hydro { .. }
 		));
 		Ok(())
 	}
@@ -427,7 +419,7 @@ mod tests {
 		.expect("streams graph");
 		let compiled = g.clone().into_complex().compile();
 		let fill = compiled.fills.first().expect("fill");
-		// Sample near each keypoint — owned W should be finite and locally smooth.
+		// Sample near each keypoint — union W should be finite and locally smooth.
 		for p in &g.key_points {
 			let w0 = fill.surface_level_at(p.x, p.y);
 			let w1 = fill.surface_level_at(p.x + 0.5, p.y);
@@ -450,17 +442,14 @@ mod tests {
 		let compiled = g.clone().into_complex().compile();
 		let fill = compiled.fills.first().expect("fill");
 		for corridor in &g.corridors {
-			assert!(corridor.band.path.len() >= 2);
-			for window in corridor.band.path.windows(2) {
+			assert!(corridor.path.len() >= 2);
+			for window in corridor.path.windows(2) {
 				let mid = window[0].lerp(window[1], 0.5);
 				if fill.softmask_at(mid.x, mid.y) > 0.85 {
 					continue;
 				}
 				let w = fill.surface_level_at(mid.x, mid.y);
-				let mut h = slope_height(mid.x, mid.y);
-				for m in &compiled.modulations {
-					h = m.modify_elevation(h, mid.x, mid.y);
-				}
+				let h = compiled.modify_elevation(slope_height(mid.x, mid.y), mid.x, mid.y);
 				assert!(
 					h <= w - freeboard * 0.35,
 					"bed {h} should sit under W {w} (freeboard {freeboard}) at {mid:?}"
@@ -483,10 +472,7 @@ mod tests {
 				let x = bounds.min.x + (i as f32 + 0.5) * (bounds.max.x - bounds.min.x) / 40.0;
 				let z = bounds.min.y + (j as f32 + 0.5) * (bounds.max.y - bounds.min.y) / 40.0;
 				let h0 = slope_height(x, z);
-				let mut h = h0;
-				for m in &compiled.modulations {
-					h = m.modify_elevation(h, x, z);
-				}
+				let h = compiled.modify_elevation(h0, x, z);
 				max_rise = max_rise.max((h - h0).max(0.0));
 			}
 		}
@@ -511,27 +497,23 @@ mod tests {
 			.min(GRAPH_THALWEG_DEPTH_MAX);
 		let g = StreamsGraph::from_bounds(bounds, 11, params, Some(&height)).expect("graph");
 		let compiled = g.clone().into_complex().compile();
+		let fill = compiled.fills.first().expect("fill");
 		for corridor in &g.corridors {
-			let head = corridor.band.path[0];
-			let head_w = corridor.band.levels[0];
+			let head = corridor.path[0];
+			let head_w = corridor.levels[0];
 			let head_local = height(head.x, head.y) - sink;
 			assert!(
 				(head_local - head_w).abs() < 0.75,
 				"head W {head_w} should match local sample {head_local} at {head:?}"
 			);
-			for (p, &w) in corridor
-				.band
-				.path
-				.iter()
-				.zip(corridor.band.levels.iter())
-			{
-				let mut h = height(p.x, p.y);
-				for m in &compiled.modulations {
-					h = m.modify_elevation(h, p.x, p.y);
-				}
+			for p in &corridor.path {
+				let w = fill.surface_level_at(p.x, p.y);
+				let h0 = height(p.x, p.y);
+				let h = compiled.modify_elevation(h0, p.x, p.y);
+				let floor = (w - freeboard - thalweg).min(h0);
 				assert!(
-					h >= w - freeboard - thalweg - 3.0,
-					"bed {h} far below corridor W {w} at {p:?} (over-deep thalweg / bad W)"
+					h >= floor - 0.75,
+					"bed {h} below expected floor {floor} (W={w}, h0={h0}) at {p:?}"
 				);
 			}
 		}

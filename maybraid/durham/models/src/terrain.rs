@@ -81,6 +81,7 @@ pub use presentation::{
 };
 pub use render::TerrainRenderItem;
 pub use sdf::{ComposedTerrain, ElevationModulation, TerrainSdf};
+pub use jersey_modulation::ComposedElevationOp;
 
 /// Jersey-composed terrain **before** Marazion watershed stamps.
 #[derive(Debug, Clone, Component)]
@@ -110,8 +111,8 @@ impl PreWatershedTerrain {
 pub struct Terrain {
 	pub cell: Aabb3d,
 	pub base: BaseTerrainNoise,
-	/// Flattened jersey + marazion leaf modulations.
-	pub modulations: Vec<JerseyModulation>,
+	/// Flattened jersey + marazion leaf elevation ops.
+	pub modulations: Vec<ComposedElevationOp>,
 	/// Leaf AABBs whose jersey stamps contributed (debug / HUD).
 	pub jersey_leaves: Vec<Aabb3d>,
 	/// Leaf AABBs whose Marazion lake stamps contributed (plus empties for debug).
@@ -132,7 +133,7 @@ pub struct Terrain {
 impl Terrain {
 	pub fn compose_sdf(
 		base: &BaseTerrainNoise,
-		modulations: &[JerseyModulation],
+		modulations: &[ComposedElevationOp],
 	) -> ComposedTerrain {
 		let mut sdf = base.sdf.clone();
 		for modulation in modulations {
@@ -187,6 +188,7 @@ macro_rules! pull_family_stamps {
 /// (per-complex apron → carve → backfill) and gathers stamp-owned [`WaterFill`]s.
 macro_rules! pull_marazion_lakes {
 	($spatial_index:expr, $lod_ref:expr, $bounds:expr, $leaves_fn:path, $Stamp:ty, $mods:expr, $leaf_out:expr, $fills_out:expr) => {{
+		use crate::terrain::jersey_modulation::ComposedElevationOp;
 		use procedural_common::Bounds2;
 		let mut leaf_ids = $leaves_fn($spatial_index, $bounds);
 		leaf_ids.sort_by(|a, b| a.0.cmp(&b.0));
@@ -208,10 +210,16 @@ macro_rules! pull_marazion_lakes {
 			let compiled = stamp.complex.compile();
 			let leaf_bounds =
 				Bounds2::from_xz(stamp.cell.min.x, stamp.cell.min.z, stamp.cell.max.x, stamp.cell.max.z);
-			$mods.extend(jersey_terrain_stamps::JerseyModulation::bind_all(
-				compiled.modulations,
-				leaf_bounds,
-			));
+			if let Some(hydro) = compiled.hydro {
+				// Cell-domain identity is already the complex leaf AABB.
+				let _ = leaf_bounds;
+				$mods.push(ComposedElevationOp::Watershed(hydro));
+			}
+			$mods.extend(
+				jersey_terrain_stamps::JerseyModulation::bind_all(compiled.modulations, leaf_bounds)
+					.into_iter()
+					.map(ComposedElevationOp::Jersey),
+			);
 			$fills_out.extend(compiled.fills);
 		}
 	}};
@@ -424,7 +432,12 @@ where
 		)?
 		.clone();
 
-		let mut modulations = pre.modulations.clone();
+		let mut modulations: Vec<ComposedElevationOp> = pre
+			.modulations
+			.iter()
+			.cloned()
+			.map(ComposedElevationOp::Jersey)
+			.collect();
 		let jersey_leaves = pre.jersey_leaves.clone();
 		let mut marazion_leaves = Vec::new();
 		let mut marazion_fills = Vec::new();
