@@ -14,6 +14,7 @@ use lod::gen::{GenerationScheme, Id, OriginalId};
 use lod::lod_ref::LodRef;
 use marazion_watersheds::{
 	BogParams, LakeParams, PocketGuillotineParams, PrePocketParams, StreamParams,
+	StreamsGraphParams,
 };
 
 /// One occupancy / scale band (low-pass = small, high-pass = large).
@@ -24,10 +25,14 @@ pub struct MarazionBandConfig {
 	pub lake: LakeParams,
 	pub stream: StreamParams,
 	pub bog: BogParams,
+	pub streams_graph: StreamsGraphParams,
 	/// Fraction of occupied leaves typed as stream (`0.0..=1.0`).
 	pub stream_frac: f32,
+	/// Fraction of occupied leaves typed as streams-graph (`0.0..=1.0`); applied
+	/// after [`Self::stream_frac`].
+	pub streams_graph_frac: f32,
 	/// Fraction of occupied leaves typed as bog (`0.0..=1.0`); applied after
-	/// [`Self::stream_frac`]. Remainder are lakes.
+	/// [`Self::streams_graph_frac`]. Remainder are lakes.
 	pub bog_frac: f32,
 	/// Approximate leaf acceptance rate (`0.0..=1.0`). Prefer setting defaults
 	/// in `define_marazion_band!` (`likelihood:`); this field is the runtime override.
@@ -47,6 +52,15 @@ impl MarazionBandConfig {
 	where
 		L: MarazionBandLayoutConsts,
 	{
+		let mut streams_graph = StreamsGraphParams::default();
+		streams_graph.stream = stream;
+		// Graph composition contract: fill ⊆ carve + bounded rim budget.
+		streams_graph.stream.fill_half_width_scale = 1.0;
+		streams_graph.stream.shore_fade = streams_graph.stream.shore_fade.min(2.5);
+		streams_graph.stream.apron.rim_height_amp_min = 0.0;
+		streams_graph.stream.apron.rim_height_amp_max =
+			streams_graph.stream.apron.rim_height_amp_max.min(1.25);
+		streams_graph.rim_uplift_cap = streams_graph.rim_uplift_cap.min(1.5);
 		Self {
 			pre_pocket: PrePocketParams {
 				pitch: L::PRE_POCKET_PITCH,
@@ -63,7 +77,9 @@ impl MarazionBandConfig {
 			lake,
 			stream,
 			bog,
-			stream_frac: 0.30,
+			streams_graph,
+			stream_frac: 0.22,
+			streams_graph_frac: 0.12,
 			bog_frac: 0.20,
 			likelihood: L::LIKELIHOOD.clamp(0.0, 1.0),
 			spatial_correlation: L::SPATIAL_CORRELATION,

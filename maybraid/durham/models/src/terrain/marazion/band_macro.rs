@@ -394,17 +394,21 @@ macro_rules! define_marazion_band {
 				};
 				let height_at: Option<&dyn Fn(f32, f32) -> f32> = Some(&height_fn);
 
-				// Occupied leaves: stream / bog / lake from a stable unit draw.
+				// Occupied leaves: stream / streams-graph / bog / lake from a stable unit draw.
 				let type_u =
 					procedural_common::SeededHash::new(seed.wrapping_add(0x57EA_71FE)).unit(0);
 				let stream_cut = band.stream_frac.clamp(0.0, 1.0);
-				let bog_cut = (stream_cut + band.bog_frac.clamp(0.0, 1.0)).min(1.0);
+				let graph_cut =
+					(stream_cut + band.streams_graph_frac.clamp(0.0, 1.0)).min(1.0);
+				let bog_cut = (graph_cut + band.bog_frac.clamp(0.0, 1.0)).min(1.0);
 				let prefer = if type_u < stream_cut {
 					0u8 // stream
+				} else if type_u < graph_cut {
+					1u8 // streams graph
 				} else if type_u < bog_cut {
-					1u8 // bog
+					2u8 // bog
 				} else {
-					2u8 // lake
+					3u8 // lake
 				};
 
 				type LeafStamp = (
@@ -422,6 +426,20 @@ macro_rules! define_marazion_band {
 						(
 							$crate::terrain::marazion::leaf_kind::MarazionLeafKind::Stream,
 							stream.into_complex(),
+						)
+					})
+				};
+				let try_streams_graph = || -> Option<LeafStamp> {
+					marazion_watersheds::StreamsGraph::from_bounds(
+						bounds,
+						seed,
+						band.streams_graph,
+						height_at,
+					)
+					.map(|graph| {
+						(
+							$crate::terrain::marazion::leaf_kind::MarazionLeafKind::StreamsGraph,
+							graph.into_complex(),
 						)
 					})
 				};
@@ -462,15 +480,23 @@ macro_rules! define_marazion_band {
 				};
 				let (kind, complex) = match prefer {
 					0 => try_stream()
+						.or_else(try_streams_graph)
 						.or_else(try_bog)
 						.or_else(try_lake)
 						.unwrap_or_else(empty_stamp),
-					1 => try_bog()
+					1 => try_streams_graph()
 						.or_else(try_stream)
+						.or_else(try_bog)
+						.or_else(try_lake)
+						.unwrap_or_else(empty_stamp),
+					2 => try_bog()
+						.or_else(try_stream)
+						.or_else(try_streams_graph)
 						.or_else(try_lake)
 						.unwrap_or_else(empty_stamp),
 					_ => try_lake()
 						.or_else(try_stream)
+						.or_else(try_streams_graph)
 						.or_else(try_bog)
 						.unwrap_or_else(empty_stamp),
 				};

@@ -3,8 +3,11 @@
 //! [RFC-127 §3.1.3.4](https://github.com/ramate-io/maybraid/tree/main/rfc/rfc-000-000-127-marazion-watersheds#3134-pocket-complex)
 //! anticipates multi-part pocket complexes; v1 realizes standalone stream / lake
 //! leaves as single-edge / single-node graphs compiled through this type.
+//! Multi-stream graphs attach a [`crate::compose::StreamBandComposer`] so apron /
+//! channel / \(W\) compose with soft-voronoi ownership instead of stacking solo stamps.
 
 use crate::backfill::WatershedBackfill;
+use crate::compose::StreamBandComposer;
 use crate::depression::WatershedDepression;
 use crate::fill::WaterFill;
 use bevy_math::Vec2;
@@ -127,6 +130,9 @@ pub struct WatershedDepressionComplex {
 	pub edges: Vec<WatershedEdge>,
 	pub apron: Option<WatershedApronShelf>,
 	pub backfills: Vec<WatershedBackfill>,
+	/// When set, compile uses soft-voronoi multi-stream composition instead of
+	/// concatenating per-edge carves + a single [`WatershedApronShelf`].
+	pub stream_bands: Option<StreamBandComposer>,
 }
 
 impl WatershedDepressionComplex {
@@ -138,11 +144,17 @@ impl WatershedDepressionComplex {
 			edges: Vec::new(),
 			apron: None,
 			backfills: Vec::new(),
+			stream_bands: None,
 		}
 	}
 
 	pub fn with_apron(mut self, apron: WatershedApronShelf) -> Self {
 		self.apron = Some(apron);
+		self
+	}
+
+	pub fn with_stream_bands(mut self, bands: StreamBandComposer) -> Self {
+		self.stream_bands = Some(bands);
 		self
 	}
 
@@ -165,6 +177,13 @@ impl WatershedDepressionComplex {
 
 	/// True when there is nothing to emit (no apron, carves, fills, or backfills).
 	pub fn is_empty(&self) -> bool {
+		if self
+			.stream_bands
+			.as_ref()
+			.is_some_and(|b| !b.parts.is_empty())
+		{
+			return false;
+		}
 		let has_depression = self.nodes.iter().any(|n| {
 			n.depression
 				.as_ref()
@@ -178,7 +197,23 @@ impl WatershedDepressionComplex {
 	/// Order: apron → node/edge carves → backfills (backfill last so hummocks
 	/// rise into an already-carved basin). Per-complex emit preserves this
 	/// contiguous block when several complexes are pulled into terrain.
+	///
+	/// When [`Self::stream_bands`] is set, apron / channel / thalweg / fill come
+	/// from the composer (graph node/edge carves and fills are skipped).
 	pub fn compile(&self) -> CompiledWatershed {
+		if let Some(bands) = &self.stream_bands {
+			let composed = bands.compose();
+			let mut modulations = composed.modulations;
+			modulations.extend(self.backfills.iter().cloned().map(|b| b.into_modulation()));
+			return CompiledWatershed {
+				bounds: self.bounds,
+				seed: self.seed,
+				modulations,
+				fills: composed.fill.into_iter().collect(),
+				wet_union: composed.wet_union,
+			};
+		}
+
 		let mut wet_cores: Vec<Region2D> = Vec::new();
 		let mut carve: Vec<JerseyModulation> = Vec::new();
 		let mut fills: Vec<WaterFill> = Vec::new();

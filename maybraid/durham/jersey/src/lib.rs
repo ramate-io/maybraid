@@ -17,9 +17,10 @@ pub use config::{
 	SoftmaskAlongSpine,
 };
 pub use modulation::{
-	CellDomainMask, JerseyModulation, PolylineGradeMode, RegionAffineModulation,
-	RegionBowlModulation, RegionGradingModulation, RegionPolylineGradingModulation,
-	CELL_DOMAIN_EASE_FRAC, DEFAULT_CELL_DOMAIN_EASE,
+	soft_voronoi_weights, CellDomainMask, JerseyModulation, MultiPolylineBandModulation,
+	MultiPolylineBandPart, MultiPolylineOffsetModulation, MultiPolylineOffsetPart,
+	PolylineGradeMode, RegionAffineModulation, RegionBowlModulation, RegionGradingModulation,
+	RegionPolylineGradingModulation, CELL_DOMAIN_EASE_FRAC, DEFAULT_CELL_DOMAIN_EASE,
 };
 pub use region::{
 	closest_on_polyline, grade_along_polyline, CircleRegion, ClosestOnPolyline, EllipseRegion,

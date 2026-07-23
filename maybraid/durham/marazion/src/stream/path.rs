@@ -3,6 +3,8 @@
 use crate::noise::n01_at;
 use bevy_math::Vec2;
 
+pub(crate) const DEGENERATE_VERTEX_EPS: f32 = 1e-3;
+
 pub(crate) const ENDPOINT_A_SALT: u32 = 0x57EA_E001;
 pub(crate) const ENDPOINT_B_SALT: u32 = 0x57EA_E002;
 
@@ -53,6 +55,37 @@ pub(crate) fn node_water_levels(
 pub(crate) fn bank_levels(water_levels: &[f32], rim_lift: f32) -> Vec<f32> {
 	let lift = rim_lift.max(0.0);
 	water_levels.iter().map(|w| w + lift).collect()
+}
+
+/// Drop zero-length hysteresis vertices so node-pitch blend cannot explode grades.
+pub(crate) fn collapse_degenerate_vertices(
+	path: &mut Vec<Vec2>,
+	levels: &mut Vec<f32>,
+	eps: f32,
+) {
+	let n = path.len().min(levels.len());
+	if n < 2 {
+		path.truncate(n);
+		levels.truncate(n);
+		return;
+	}
+	let eps = eps.max(0.0);
+	let mut out_p = Vec::with_capacity(n);
+	let mut out_l = Vec::with_capacity(n);
+	out_p.push(path[0]);
+	out_l.push(levels[0]);
+	for i in 1..n {
+		if path[i].distance(*out_p.last().expect("non-empty")) <= eps {
+			// Keep the lower water (downstream-friendly) on the shared vertex.
+			let last = out_l.len() - 1;
+			out_l[last] = out_l[last].min(levels[i]);
+			continue;
+		}
+		out_p.push(path[i]);
+		out_l.push(levels[i]);
+	}
+	*path = out_p;
+	*levels = out_l;
 }
 
 /// Channel floor grade: water surface levels minus freeboard (strictly below \(W\)).

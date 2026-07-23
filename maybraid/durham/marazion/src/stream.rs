@@ -10,13 +10,16 @@
 mod build;
 mod path;
 
+pub(crate) use build::resolve_node_blend;
+pub(crate) use path::{
+	bank_levels, bed_levels, collapse_degenerate_vertices, node_water_levels, sample_endpoint,
+	DEGENERATE_VERTEX_EPS, ENDPOINT_A_SALT, ENDPOINT_B_SALT,
+};
+
 use crate::apron::WatershedApronParams;
 use crate::complex::WatershedDepressionComplex;
 use crate::noise::n01_freq;
-use crate::stream::build::{build_corridor, resolve_node_blend, StreamCorridor, StreamLayout};
-use crate::stream::path::{
-	node_water_levels, sample_endpoint, ENDPOINT_A_SALT, ENDPOINT_B_SALT,
-};
+use crate::stream::build::{build_corridor, StreamCorridor, StreamLayout};
 use bevy_math::Vec2;
 use jersey_terrain_stamps::{DownhillPair, HysteresisSpine};
 use procedural_common::Bounds2;
@@ -229,7 +232,12 @@ impl Stream {
 			return None;
 		}
 
-		let levels = node_water_levels(&path, height_at, params.water_sink, params.min_drop);
+		let mut path = path;
+		let mut levels = node_water_levels(&path, height_at, params.water_sink, params.min_drop);
+		collapse_degenerate_vertices(&mut path, &mut levels, DEGENERATE_VERTEX_EPS);
+		if path.len() < 2 {
+			return None;
+		}
 		let head_water = levels.first().copied().unwrap_or(0.0);
 		let toe_water = levels.last().copied().unwrap_or(head_water);
 		let layout = StreamLayout {
