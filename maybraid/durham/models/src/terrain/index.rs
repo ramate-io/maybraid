@@ -26,7 +26,7 @@ use crate::terrain::jersey::{
 };
 use crate::terrain::marazion::{
 	BootstrapMarazionWatershedConfigs, BootstrapPrePocketHighPassLayout,
-	BootstrapPrePocketLowPassLayout, MarazionLakeHighPassCell, MarazionLakeLowPassCell,
+	BootstrapPrePocketLowPassLayout, MarazionPocketWatersHighPass, MarazionPocketWatersLowPass,
 	MarazionWatershedConfigs, PocketHighPassCell, PocketLowPassCell, PrePocketHighPassCell,
 	PrePocketHighPassLayout, PrePocketLowPassCell, PrePocketLowPassLayout,
 	WatershedAproningCell, WatershedCarvingCell, WatershedDepressionComplexCell,
@@ -73,11 +73,13 @@ pub struct TerrainEntryStore {
 	pub(crate) pre_pocket_low_pass_layout: HashMap<Id, StoredEntry<PrePocketLowPassLayout>>,
 	pub(crate) pre_pocket_low_pass_cell: HashMap<Id, StoredEntry<PrePocketLowPassCell>>,
 	pub(crate) pocket_low_pass_cell: HashMap<Id, StoredEntry<PocketLowPassCell>>,
-	pub(crate) marazion_lake_low_pass_cell: HashMap<Id, StoredEntry<MarazionLakeLowPassCell>>,
+	pub(crate) marazion_pocket_waters_low_pass:
+		HashMap<Id, StoredEntry<MarazionPocketWatersLowPass>>,
 	pub(crate) pre_pocket_high_pass_layout: HashMap<Id, StoredEntry<PrePocketHighPassLayout>>,
 	pub(crate) pre_pocket_high_pass_cell: HashMap<Id, StoredEntry<PrePocketHighPassCell>>,
 	pub(crate) pocket_high_pass_cell: HashMap<Id, StoredEntry<PocketHighPassCell>>,
-	pub(crate) marazion_lake_high_pass_cell: HashMap<Id, StoredEntry<MarazionLakeHighPassCell>>,
+	pub(crate) marazion_pocket_waters_high_pass:
+		HashMap<Id, StoredEntry<MarazionPocketWatersHighPass>>,
 	pub(crate) watershed_complex_cell: HashMap<Id, StoredEntry<WatershedDepressionComplexCell>>,
 	pub(crate) watershed_carving_cell: HashMap<Id, StoredEntry<WatershedCarvingCell>>,
 	pub(crate) watershed_rimming_cell: HashMap<Id, StoredEntry<WatershedRimmingCell>>,
@@ -411,11 +413,11 @@ impl_map_spatial_index!(MarazionWatershedConfigs, marazion_configs);
 impl_map_spatial_index!(PrePocketLowPassLayout, pre_pocket_low_pass_layout);
 impl_map_spatial_index!(PrePocketLowPassCell, pre_pocket_low_pass_cell);
 impl_map_spatial_index!(PocketLowPassCell, pocket_low_pass_cell);
-impl_map_spatial_index!(MarazionLakeLowPassCell, marazion_lake_low_pass_cell);
+impl_map_spatial_index!(MarazionPocketWatersLowPass, marazion_pocket_waters_low_pass);
 impl_map_spatial_index!(PrePocketHighPassLayout, pre_pocket_high_pass_layout);
 impl_map_spatial_index!(PrePocketHighPassCell, pre_pocket_high_pass_cell);
 impl_map_spatial_index!(PocketHighPassCell, pocket_high_pass_cell);
-impl_map_spatial_index!(MarazionLakeHighPassCell, marazion_lake_high_pass_cell);
+impl_map_spatial_index!(MarazionPocketWatersHighPass, marazion_pocket_waters_high_pass);
 impl_map_spatial_index!(WatershedDepressionComplexCell, watershed_complex_cell);
 impl_map_spatial_index!(WatershedCarvingCell, watershed_carving_cell);
 impl_map_spatial_index!(WatershedRimmingCell, watershed_rimming_cell);

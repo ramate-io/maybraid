@@ -173,6 +173,11 @@ impl Bog {
 		Self::from_bounds(bounds, seed, BogParams::default(), None)
 	}
 
+	/// Hydrology nodes authored by this bog (lake-shaped bowl; backfill is separate).
+	pub fn hydrology_nodes(&self) -> Vec<crate::node::HydrologyNode> {
+		vec![self.bowl.node.clone()]
+	}
+
 	/// Realize this plan as a sole-node complex with basin backfill.
 	pub fn into_complex(self) -> WatershedDepressionComplex {
 		self.bowl

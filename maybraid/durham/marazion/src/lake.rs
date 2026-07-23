@@ -240,6 +240,11 @@ impl Lake {
 		Self::from_bounds(bounds, seed, LakeParams::default(), None)
 	}
 
+	/// Hydrology nodes authored by this lake (one radial bowl).
+	pub fn hydrology_nodes(&self) -> Vec<crate::node::HydrologyNode> {
+		vec![self.bowl.node.clone()]
+	}
+
 	/// Realize this plan as a sole-node [`WatershedDepressionComplex`].
 	pub fn into_complex(self) -> WatershedDepressionComplex {
 		self.bowl.into_complex(self.bounds, self.seed)

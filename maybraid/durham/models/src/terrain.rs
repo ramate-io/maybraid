@@ -23,9 +23,9 @@ use crate::terrain::jersey::{
 	original_ids_for_valley_high_pass_leaves, original_ids_for_valley_low_pass_leaves,
 };
 use crate::terrain::marazion::{
-	original_ids_for_marazion_lake_high_pass_leaves, original_ids_for_marazion_lake_low_pass_leaves,
-	WatershedAproningCell, WatershedCarvingCell, WatershedDepressionComplexCell,
-	WatershedRimmingCell,
+	original_ids_for_marazion_pocket_waters_high_pass_leaves,
+	original_ids_for_marazion_pocket_waters_low_pass_leaves, WatershedAproningCell,
+	WatershedCarvingCell, WatershedDepressionComplexCell, WatershedRimmingCell,
 };
 use crate::terrain::render::cascade_chunk_for_cell;
 use avian3d::prelude::RigidBody;
@@ -68,13 +68,14 @@ pub use jersey::{
 	RollingLowPassStampCell as RollingStampCell, ValleyLowPassStampCell as ValleyStampCell,
 };
 pub use marazion::{
-	MarazionBandPass, MarazionLakeHighPassCell, MarazionLakeLowPassCell, MarazionLeafBounds,
-	MarazionLeafKind, MarazionWatershedConfigs, PocketHighPassCell, PocketLowPassCell,
-	PrePocketHighPassCell, PrePocketHighPassLayout, PrePocketLowPassCell, PrePocketLowPassLayout,
+	MarazionBandPass, MarazionLeafBounds, MarazionLeafKind, MarazionPocketWater,
+	MarazionPocketWatersHighPass, MarazionPocketWatersLowPass, MarazionWatershedConfigs,
+	PocketHighPassCell, PocketLowPassCell, PrePocketHighPassCell, PrePocketHighPassLayout,
+	PrePocketLowPassCell, PrePocketLowPassLayout,
 };
 /// Low-pass aliases kept for older HUD / call sites.
 pub use marazion::{
-	MarazionLakeLowPassCell as MarazionLakeStampCell, PocketLowPassCell as PocketCell,
+	MarazionPocketWatersLowPass as MarazionLakeStampCell, PocketLowPassCell as PocketCell,
 	PrePocketLowPassCell as PrePocketCell, PrePocketLowPassLayout as PrePocketLayout,
 };
 pub use plugin::{register_terrain_plugin, TerrainPlugin};
@@ -198,7 +199,7 @@ macro_rules! pull_marazion_leaf_bounds {
 			)?;
 			$leaf_out.push($crate::terrain::marazion::MarazionLeafBounds {
 				cell: stamp.cell,
-				kind: stamp.kind,
+				kind: stamp.kind(),
 				band: stamp.band,
 			});
 		}
@@ -390,11 +391,11 @@ where
 		+ GeneratingSpatialIndex<PrePocketLowPassLayout>
 		+ GeneratingSpatialIndex<PrePocketLowPassCell>
 		+ GeneratingSpatialIndex<PocketLowPassCell>
-		+ GeneratingSpatialIndex<MarazionLakeLowPassCell>
+		+ GeneratingSpatialIndex<MarazionPocketWatersLowPass>
 		+ GeneratingSpatialIndex<PrePocketHighPassLayout>
 		+ GeneratingSpatialIndex<PrePocketHighPassCell>
 		+ GeneratingSpatialIndex<PocketHighPassCell>
-		+ GeneratingSpatialIndex<MarazionLakeHighPassCell>
+		+ GeneratingSpatialIndex<MarazionPocketWatersHighPass>
 		+ GeneratingSpatialIndex<WatershedDepressionComplexCell>
 		+ GeneratingSpatialIndex<WatershedCarvingCell>
 		+ GeneratingSpatialIndex<WatershedRimmingCell>
@@ -407,7 +408,6 @@ where
 	}
 
 	fn build_with_id(spatial_index: &mut S, id: Id, lod_ref: &LodRef) -> Option<(Self, Aabb3d)> {
-		use procedural_common::Bounds2;
 		let bounds = id.origin_cell_bounds()?;
 
 		let pre = GeneratingSpatialIndex::<PreWatershedTerrain>::get_one_or_generate(
@@ -431,16 +431,16 @@ where
 			spatial_index,
 			lod_ref,
 			bounds,
-			original_ids_for_marazion_lake_high_pass_leaves,
-			MarazionLakeHighPassCell,
+			original_ids_for_marazion_pocket_waters_high_pass_leaves,
+			MarazionPocketWatersHighPass,
 			marazion_leaves
 		);
 		pull_marazion_leaf_bounds!(
 			spatial_index,
 			lod_ref,
 			bounds,
-			original_ids_for_marazion_lake_low_pass_leaves,
-			MarazionLakeLowPassCell,
+			original_ids_for_marazion_pocket_waters_low_pass_leaves,
+			MarazionPocketWatersLowPass,
 			marazion_leaves
 		);
 
@@ -452,13 +452,6 @@ where
 			)?
 			.clone();
 		let compiled = complex_cell.complex.compile();
-		let cell_bounds2 =
-			Bounds2::from_xz(bounds.min.x, bounds.min.z, bounds.max.x, bounds.max.z);
-		let backfills: Vec<ComposedElevationOp> =
-			jersey_terrain_stamps::JerseyModulation::bind_all(compiled.modulations, cell_bounds2)
-				.into_iter()
-				.map(ComposedElevationOp::Jersey)
-				.collect();
 		let marazion_fills = compiled.fills;
 
 		let carving = GeneratingSpatialIndex::<WatershedCarvingCell>::get_one_or_generate(
@@ -480,7 +473,7 @@ where
 		)?
 		.clone();
 
-		// Ordered watershed correction over the cellular union, then backfills.
+		// Ordered watershed correction over the cellular union.
 		if let Some(hydro) = carving.prepared {
 			modulations.push(ComposedElevationOp::WatershedCarve(hydro));
 		}
@@ -490,7 +483,6 @@ where
 		if let Some(hydro) = aproning.prepared {
 			modulations.push(ComposedElevationOp::WatershedApron(hydro));
 		}
-		modulations.extend(backfills);
 
 		let sdf = Self::compose_sdf(&pre.base, &modulations);
 		let assets = GeneratingSpatialIndex::<TerrainPresentationAssets>::get_one_or_generate(

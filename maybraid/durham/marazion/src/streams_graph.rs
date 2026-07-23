@@ -336,6 +336,23 @@ impl StreamsGraph {
 		Self::from_bounds(bounds, seed, StreamsGraphParams::default(), None)
 	}
 
+	/// Hydrology nodes authored by this graph (reach segments across all corridors).
+	pub fn hydrology_nodes(&self) -> Vec<crate::node::HydrologyNode> {
+		let mut hydrology = Vec::new();
+		for corridor in &self.corridors {
+			let center_depth = corridor.freeboard + corridor.depth;
+			hydrology.extend(nodes_from_polyline(
+				&corridor.path,
+				&corridor.levels,
+				corridor.half_width,
+				center_depth,
+				&self.parameters,
+				self.max_correction_extent,
+			));
+		}
+		hydrology
+	}
+
 	/// Realize as a multi-edge complex with sample-time hydro composition.
 	pub fn into_complex(self) -> WatershedDepressionComplex {
 		let mut complex = WatershedDepressionComplex::new(self.bounds, self.seed);
@@ -343,7 +360,6 @@ impl StreamsGraph {
 		for _ in &self.key_points {
 			node_ids.push(complex.push_node(WatershedNode::empty()));
 		}
-		let mut hydrology = Vec::new();
 		for corridor in &self.corridors {
 			let from = node_ids[corridor.from_key];
 			let to = node_ids[corridor.to_key];
@@ -355,18 +371,8 @@ impl StreamsGraph {
 					corridor.wet_core.clone(),
 				),
 			});
-			// Bed at centerline ≈ W − freeboard − shallow thalweg nick.
-			let center_depth = corridor.freeboard + corridor.depth;
-			hydrology.extend(nodes_from_polyline(
-				&corridor.path,
-				&corridor.levels,
-				corridor.half_width,
-				center_depth,
-				&self.parameters,
-				self.max_correction_extent,
-			));
 		}
-		complex.with_hydrology(hydrology)
+		complex.with_hydrology(self.hydrology_nodes())
 	}
 }
 

@@ -264,6 +264,18 @@ impl Stream {
 		Self::from_bounds(bounds, seed, StreamParams::default(), None)
 	}
 
+	/// Hydrology nodes authored by this stream (one reach segment per polyline edge).
+	pub fn hydrology_nodes(&self) -> Vec<crate::node::HydrologyNode> {
+		crate::node::nodes_from_polyline(
+			&self.corridor.path,
+			&self.corridor.levels,
+			self.corridor.half_width,
+			self.corridor.center_depth,
+			&self.corridor.parameters,
+			self.corridor.max_correction_extent,
+		)
+	}
+
 	/// Realize this plan as a sole-edge [`WatershedDepressionComplex`].
 	pub fn into_complex(self) -> WatershedDepressionComplex {
 		self.corridor.into_complex(self.bounds, self.seed)
