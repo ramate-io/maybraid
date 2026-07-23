@@ -1,7 +1,7 @@
 //! Union-first hydro primitives + broadphase helpers.
 //!
-//! Indexed composition and carve → rim → apron live on
-//! [`crate::complex::HydrologyComplex`].
+//! Terrain blend (class-priority carve / rim / apron) lives on
+//! [`crate::node::HydrologyNode`]; complexes gather intersecting nodes.
 
 use crate::node::HydrologyNode;
 use bevy_math::{FloatExt, Vec2};
@@ -17,7 +17,7 @@ pub enum CorrectionStage {
 	Apron,
 }
 
-/// Soft-min length scale for free-surface blending (world units).
+/// Soft-min / soft-max length scale for surface and elevation blends (world units).
 pub const SURFACE_SMOOTHMIN_K: f32 = 1.5;
 /// Default hard cap on add-only rim height noise.
 pub const DEFAULT_RIM_UPLIFT_CAP: f32 = 1.5;
@@ -245,18 +245,6 @@ impl HydroPrimitive {
 	}
 }
 
-/// Fold result with blended rim/apron policy from contributing members.
-#[derive(Debug, Clone, Copy)]
-pub struct HydroFold {
-	pub phi: f32,
-	pub bed: f32,
-	pub water: f32,
-	pub rim_width: f32,
-	pub apron_width: f32,
-	pub bank: f32,
-	pub shore_fade: f32,
-}
-
 /// Decompose a graded corridor into per-segment reach primitives.
 pub fn primitives_from_polyline(
 	path: &[Vec2],
@@ -361,6 +349,19 @@ pub(crate) fn smoothmin_fold(values: &[f32], k: f32) -> f32 {
 	acc
 }
 
+/// Polynomial smooth maximum over a list (dual of [`smoothmin_fold`]).
+pub(crate) fn smoothmax_fold(values: &[f32], k: f32) -> f32 {
+	if values.is_empty() {
+		return 0.0;
+	}
+	let k = k.max(1e-3);
+	let mut acc = values[0];
+	for &v in &values[1..] {
+		acc = -smoothmin2(-acc, -v, k);
+	}
+	acc
+}
+
 fn smoothmin2(a: f32, b: f32, k: f32) -> f32 {
 	// Exact ties must preserve the value (polynomial softmin otherwise dips by k/4).
 	if (a - b).abs() <= 1e-5 {
@@ -436,13 +437,10 @@ mod tests {
 			vec![a, b],
 			ComplexApronParams::default(),
 		);
-		let fold = prep
-			.fold_fields(Vec2::new(20.0, 1.0))
-			.expect("overlap");
+		let h = prep.modify_elevation(50.0, 20.0, 1.0);
 		assert!(
-			fold.bed <= 50.0 - 7.0,
-			"min bed should prefer deeper channel: {}",
-			fold.bed
+			h <= 50.0 - 7.0,
+			"carve soft-min should prefer deeper channel: {h}"
 		);
 		Ok(())
 	}

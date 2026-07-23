@@ -3,8 +3,14 @@
 //! See [`crate::WATERSHED_CORRECTION`](../WATERSHED_CORRECTION.md): nodes are the
 //! source of truth for hydraulic geometry and parameters;
 //! [`Self::max_correction_extent`] only governs spatial discoverability.
+//!
+//! Terrain correction blends per-node candidates by
+//! [`Self::point_classification`] priority: carve → rim → apron.
 
-use crate::hydro::{HydroPrimitive, DEFAULT_RIM_UPLIFT_CAP};
+use crate::hydro::{
+	smoothmax_fold, smoothmin_fold, CorrectionStage, HydroPrimitive, DEFAULT_RIM_UPLIFT_CAP,
+	SURFACE_SMOOTHMIN_K,
+};
 use bevy_math::Vec2;
 use jersey_terrain_stamps::RegionNoise;
 use procedural_common::Bounds2;
@@ -97,6 +103,121 @@ impl HydrologyNode {
 			max: mx + Vec2::splat(pad),
 		}
 	}
+
+	pub fn phi(&self, p: Vec2) -> f32 {
+		self.primitive.phi(p)
+	}
+
+	pub fn surface_level(&self, p: Vec2) -> f32 {
+		self.primitive.surface_and_bed(p).0
+	}
+
+	pub fn bed_level(&self, p: Vec2) -> f32 {
+		self.primitive.surface_and_bed(p).1
+	}
+
+	/// Where `p` sits relative to this node's hydraulic support and bands.
+	///
+	/// - Carve: inside wet support (\(\phi \le 0\))
+	/// - Rim: \(0 < \phi < r_{\mathrm{rim}}\)
+	/// - Apron: \(r_{\mathrm{rim}} \le \phi < r_{\mathrm{rim}} + r_{\mathrm{apron}}\)
+	pub fn point_classification(&self, p: Vec2) -> Option<CorrectionStage> {
+		let d = self.phi(p);
+		let rim_w = self.parameters.rim_width.max(0.0);
+		let apron_w = self.parameters.apron_width.max(0.0);
+		if d <= 0.0 {
+			Some(CorrectionStage::Carve)
+		} else if d < rim_w {
+			Some(CorrectionStage::Rim)
+		} else if d < rim_w + apron_w {
+			Some(CorrectionStage::Apron)
+		} else {
+			None
+		}
+	}
+
+	/// Lower terrain toward this node's bed (carve candidate).
+	pub fn carve_candidate(&self, elevation: f32, p: Vec2) -> f32 {
+		elevation.min(self.bed_level(p))
+	}
+
+	/// Raise-only rim candidate toward this node's bank.
+	pub fn rim_candidate(&self, elevation: f32, p: Vec2) -> f32 {
+		let d = self.phi(p);
+		let rim_w = self.parameters.rim_width.max(1e-3);
+		let t = (1.0 - d / rim_w).clamp(0.0, 1.0);
+		let bank = self.parameters.bank_target(self.surface_level(p), p);
+		let toward = elevation * (1.0 - t) + bank * t;
+		toward.max(elevation)
+	}
+
+	/// Raise-only apron candidate fading from bank toward identity.
+	pub fn apron_candidate(&self, elevation: f32, p: Vec2) -> f32 {
+		let d = self.phi(p);
+		let rim_w = self.parameters.rim_width.max(0.0);
+		let apron_w = self.parameters.apron_width.max(1e-3);
+		let u = ((d - rim_w) / apron_w).clamp(0.0, 1.0);
+		let fade = u * u * (3.0 - 2.0 * u);
+		let bank = self.parameters.bank_target(self.surface_level(p), p);
+		let toward = elevation * fade + bank * (1.0 - fade);
+		toward.max(elevation)
+	}
+
+	/// Blend intersecting nodes at `p` by class priority: carve → rim → apron.
+	///
+	/// Classify first, then evaluate candidates only for the winning class:
+	/// - Carve: soft-min of carve candidates
+	/// - Rim: soft-max of rim candidates, floored by soft-min of rim-node surfaces
+	/// - Apron: soft-max of apron candidates
+	/// - Else: `elevation` unchanged
+	pub fn blend_terrain_elevation(nodes: &[&Self], elevation: f32, p: Vec2) -> f32 {
+		let mut carves: Vec<&Self> = Vec::new();
+		let mut rims: Vec<&Self> = Vec::new();
+		let mut aprons: Vec<&Self> = Vec::new();
+
+		for node in nodes {
+			match node.point_classification(p) {
+				Some(CorrectionStage::Carve) => carves.push(node),
+				Some(CorrectionStage::Rim) => {
+					if carves.is_empty() {
+						rims.push(node);
+					}
+				}
+				Some(CorrectionStage::Apron) => {
+					if carves.is_empty() && rims.is_empty() {
+						aprons.push(node);
+					}
+				}
+				None => {}
+			}
+		}
+
+		if !carves.is_empty() {
+			let vals: Vec<f32> = carves
+				.iter()
+				.map(|n| n.carve_candidate(elevation, p))
+				.collect();
+			return smoothmin_fold(&vals, SURFACE_SMOOTHMIN_K);
+		}
+		if !rims.is_empty() {
+			let mut surfaces = Vec::with_capacity(rims.len());
+			let mut raised = Vec::with_capacity(rims.len());
+			for n in &rims {
+				surfaces.push(n.surface_level(p));
+				raised.push(n.rim_candidate(elevation, p));
+			}
+			let water = smoothmin_fold(&surfaces, SURFACE_SMOOTHMIN_K);
+			return smoothmax_fold(&raised, SURFACE_SMOOTHMIN_K).max(water);
+		}
+		if !aprons.is_empty() {
+			let vals: Vec<f32> = aprons
+				.iter()
+				.map(|n| n.apron_candidate(elevation, p))
+				.collect();
+			return smoothmax_fold(&vals, SURFACE_SMOOTHMIN_K);
+		}
+		elevation
+	}
 }
 
 /// Build reach-segment nodes from a graded polyline (one node per segment).
@@ -144,4 +265,83 @@ pub fn nodes_from_polyline(
 		));
 	}
 	out
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use crate::hydro::{HydroElevation, HydroFootprint};
+
+	fn reach_node(half_width: f32) -> HydrologyNode {
+		let mut parameters = HydroParameters::default();
+		parameters.rim_width = 4.0;
+		parameters.apron_width = 8.0;
+		HydrologyNode::new(
+			HydroPrimitive {
+				footprint: HydroFootprint::ReachSegment {
+					a: Vec2::new(0.0, 0.0),
+					b: Vec2::new(40.0, 0.0),
+					half_width,
+				},
+				elevation: HydroElevation::ReachProfile {
+					surface_a: 30.0,
+					surface_b: 30.0,
+					center_depth: 3.0,
+				},
+				influence_pad: 12.0,
+			},
+			parameters,
+			12.0,
+		)
+	}
+
+	#[test]
+	fn classifies_carve_rim_apron_bands() -> anyhow::Result<()> {
+		let node = reach_node(8.0);
+		assert_eq!(
+			node.point_classification(Vec2::new(20.0, 0.0)),
+			Some(CorrectionStage::Carve)
+		);
+		assert_eq!(
+			node.point_classification(Vec2::new(20.0, 10.0)),
+			Some(CorrectionStage::Rim)
+		);
+		assert_eq!(
+			node.point_classification(Vec2::new(20.0, 14.0)),
+			Some(CorrectionStage::Apron)
+		);
+		assert_eq!(node.point_classification(Vec2::new(20.0, 30.0)), None);
+		Ok(())
+	}
+
+	#[test]
+	fn blend_prefers_carve_over_rim() -> anyhow::Result<()> {
+		let deep = reach_node(8.0);
+		let mut shallow_params = HydroParameters::default();
+		shallow_params.rim_width = 4.0;
+		shallow_params.apron_width = 8.0;
+		let offset = HydrologyNode::new(
+			HydroPrimitive {
+				footprint: HydroFootprint::ReachSegment {
+					a: Vec2::new(0.0, 6.0),
+					b: Vec2::new(40.0, 6.0),
+					half_width: 4.0,
+				},
+				elevation: HydroElevation::ReachProfile {
+					surface_a: 30.0,
+					surface_b: 30.0,
+					center_depth: 1.0,
+				},
+				influence_pad: 12.0,
+			},
+			shallow_params,
+			12.0,
+		);
+		// Inside deep channel; offset node may classify rim/apron nearby.
+		let p = Vec2::new(20.0, 0.0);
+		assert_eq!(deep.point_classification(p), Some(CorrectionStage::Carve));
+		let h = HydrologyNode::blend_terrain_elevation(&[&deep, &offset], 40.0, p);
+		assert!(h < 30.0 - 1.0, "carve should win: {h}");
+		Ok(())
+	}
 }

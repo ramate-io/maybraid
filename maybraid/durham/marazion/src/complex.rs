@@ -1,15 +1,16 @@
 //! Indexed hydrology complex: member nodes + sample-time correction.
 //!
 //! Authored leaves emit [`crate::node::HydrologyNode`]s. [`HydrologyComplex`]
-//! indexes them and applies carve → rim → apron. Optional backfills stay a
+//! indexes them and blends terrain via
+//! [`HydrologyNode::blend_terrain_elevation`]. Optional backfills stay a
 //! post-depression jersey layer via [`Self::compile`].
 
 use crate::backfill::WatershedBackfill;
 use crate::depression::WatershedDepression;
 use crate::fill::{WaterFill, WaterSurface};
 use crate::hydro::{
-	smoothmin_fold, ComplexApronParams, CorrectionStage, FootprintIndex, HydroFold,
-	HydroPrimitive, SURFACE_SMOOTHMIN_K,
+	smoothmin_fold, ComplexApronParams, CorrectionStage, FootprintIndex, HydroPrimitive,
+	SURFACE_SMOOTHMIN_K,
 };
 use crate::node::{HydrologyNode, HydroParameters};
 use bevy_math::Vec2;
@@ -208,139 +209,58 @@ impl HydrologyComplex {
 		ids
 	}
 
-	/// Fold \(\phi\), bed, \(W\), and blended rim/apron policy.
-	pub fn fold_fields(&self, p: Vec2) -> Option<HydroFold> {
-		let ids = self.candidate_ids(p);
-		if ids.is_empty() {
-			return None;
-		}
-		let mut phi = f32::INFINITY;
-		let mut bed = f32::INFINITY;
-		let mut surfaces: Vec<f32> = Vec::new();
-		let mut rim_w = 0.25_f32;
-		let mut apron_w = 0.25_f32;
-		let mut bank = f32::NEG_INFINITY;
-		let mut shore_fade = self.shore_fade;
-		for &id in &ids {
+	/// Nodes whose correction support contains `p` (index pad + SDF filter).
+	pub fn nodes_intersecting(&self, p: Vec2) -> Vec<&HydrologyNode> {
+		let mut out = Vec::new();
+		for id in self.candidate_ids(p) {
 			let Some(node) = self.hydrology.get(id as usize) else {
 				continue;
 			};
-			let pad = node.index_pad();
-			let d = node.primitive.phi(p);
-			if d > pad {
+			if node.phi(p) > node.index_pad() {
 				continue;
 			}
-			phi = phi.min(d);
-			let (w, b) = node.primitive.surface_and_bed(p);
-			rim_w = rim_w.max(node.parameters.rim_width.max(0.25));
-			apron_w = apron_w.max(node.parameters.apron_width.max(0.25));
-			shore_fade = shore_fade.max(node.parameters.shore_fade.max(0.25));
-			let node_bank = node.parameters.bank_target(w, p);
-			if d <= 0.0 {
-				bed = bed.min(b);
-				surfaces.push(w);
-				bank = bank.max(node_bank);
-			} else if d < (rim_w + apron_w).max(1.0) {
-				surfaces.push(w);
-				bank = bank.max(node_bank);
+			out.push(node);
+		}
+		out
+	}
+
+	/// Class-priority blend over intersecting nodes (carve → rim → apron).
+	pub fn modify_elevation(&self, elevation: f32, x: f32, z: f32) -> f32 {
+		let p = Vec2::new(x, z);
+		if !self.bounds.contains(p) {
+			return elevation;
+		}
+		let nodes = self.nodes_intersecting(p);
+		HydrologyNode::blend_terrain_elevation(&nodes, elevation, p)
+	}
+
+	/// Soft-min free surface over carve/rim nodes at the sample (for fill).
+	pub fn surface_at(&self, x: f32, z: f32) -> Option<f32> {
+		let p = Vec2::new(x, z);
+		let mut surfaces = Vec::new();
+		for node in self.nodes_intersecting(p) {
+			match node.point_classification(p) {
+				Some(CorrectionStage::Carve) | Some(CorrectionStage::Rim) => {
+					surfaces.push(node.surface_level(p));
+				}
+				_ => {}
 			}
 		}
-		if !phi.is_finite() {
-			return None;
-		}
-		let water = if surfaces.is_empty() {
-			bed
+		if surfaces.is_empty() {
+			None
 		} else {
-			smoothmin_fold(&surfaces, SURFACE_SMOOTHMIN_K)
-		};
-		let bed = if bed.is_finite() { bed } else { water };
-		let bank = if bank.is_finite() {
-			bank
-		} else {
-			water + 1.1
-		};
-		Some(HydroFold {
-			phi,
-			bed,
-			water,
-			rim_width: rim_w,
-			apron_width: apron_w,
-			bank,
-			shore_fade,
-		})
-	}
-
-	pub fn carve_elevation(&self, elevation: f32, x: f32, z: f32) -> f32 {
-		let p = Vec2::new(x, z);
-		if !self.bounds.contains(p) {
-			return elevation;
-		}
-		let Some(fold) = self.fold_fields(p) else {
-			return elevation;
-		};
-		if fold.phi <= 0.0 {
-			elevation.min(fold.bed)
-		} else {
-			elevation
+			Some(smoothmin_fold(&surfaces, SURFACE_SMOOTHMIN_K))
 		}
 	}
 
-	pub fn rim_elevation(&self, elevation: f32, x: f32, z: f32) -> f32 {
-		let p = Vec2::new(x, z);
-		if !self.bounds.contains(p) {
-			return elevation;
-		}
-		let Some(fold) = self.fold_fields(p) else {
-			return elevation;
-		};
-		if fold.phi <= 0.0 || fold.phi >= fold.rim_width {
-			return elevation;
-		}
-		let t = (1.0 - fold.phi / fold.rim_width).clamp(0.0, 1.0);
-		let toward = elevation * (1.0 - t) + fold.bank * t;
-		toward.max(elevation)
-	}
-
-	pub fn apron_elevation(&self, elevation: f32, x: f32, z: f32) -> f32 {
-		let p = Vec2::new(x, z);
-		if !self.bounds.contains(p) {
-			return elevation;
-		}
-		let Some(fold) = self.fold_fields(p) else {
-			return elevation;
-		};
-		let rim_w = fold.rim_width;
-		let apron_w = fold.apron_width;
-		if fold.phi < rim_w || fold.phi >= rim_w + apron_w {
-			return elevation;
-		}
-		let u = ((fold.phi - rim_w) / apron_w).clamp(0.0, 1.0);
-		let fade = u * u * (3.0 - 2.0 * u);
-		let toward = elevation * fade + fold.bank * (1.0 - fade);
-		toward.max(elevation)
-	}
-
-	pub fn apply_stage(&self, stage: CorrectionStage, elevation: f32, x: f32, z: f32) -> f32 {
-		match stage {
-			CorrectionStage::Carve => self.carve_elevation(elevation, x, z),
-			CorrectionStage::Rim => self.rim_elevation(elevation, x, z),
-			CorrectionStage::Apron => self.apron_elevation(elevation, x, z),
-		}
-	}
-
-	/// Full carve → rim → apron.
-	pub fn modify_elevation(&self, elevation: f32, x: f32, z: f32) -> f32 {
-		let h = self.carve_elevation(elevation, x, z);
-		let h = self.rim_elevation(h, x, z);
-		self.apron_elevation(h, x, z)
-	}
-
-	pub fn surface_at(&self, x: f32, z: f32) -> Option<f32> {
-		self.fold_fields(Vec2::new(x, z)).map(|f| f.water)
-	}
-
+	/// Min occupancy \(\phi\) over intersecting nodes (for fill softmask).
 	pub fn occupancy_at(&self, x: f32, z: f32) -> Option<f32> {
-		self.fold_fields(Vec2::new(x, z)).map(|f| f.phi)
+		let p = Vec2::new(x, z);
+		let mut phi = f32::INFINITY;
+		for node in self.nodes_intersecting(p) {
+			phi = phi.min(node.phi(p));
+		}
+		phi.is_finite().then_some(phi)
 	}
 
 	pub fn fill_softmask_at(&self, x: f32, z: f32) -> f32 {
