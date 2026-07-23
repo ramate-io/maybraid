@@ -116,7 +116,7 @@ impl Default for StreamParams {
 			shore_indent_frac: 0.2,
 			shore_freq: 0.04,
 
-			apron: WatershedApronParams::default(),
+			apron: WatershedApronParams::default().with_visible_rim_bank(),
 
 			shore_fade: 5.5,
 			channel_freeboard: 2.0,

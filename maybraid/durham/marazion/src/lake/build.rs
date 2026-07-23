@@ -1,6 +1,6 @@
 //! Assemble lake bowl as a hydrology node (ellipse + radial bowl).
 
-use crate::apron::{jittered_depth, ApronNoiseSalts};
+use crate::apron::{jittered_depth, ApronNoiseSalts, TARGET_RIM_WIDTH};
 use crate::complex::{HydrologyComplex, WatershedNode};
 use crate::depression::{WatershedDepression, WatershedDepressionKind};
 use crate::hydro::{HydroElevation, HydroFootprint, HydroPrimitive};
@@ -62,7 +62,8 @@ pub(crate) fn build_bowl(
 	let budget = &layout.budget;
 	let water_r = budget.water_radii;
 	let plateau_r = budget.plateau_radii;
-	let rim_w = budget.rim_width.max(0.5);
+	// Keep the berm on the order of [`TARGET_RIM_WIDTH`], not a wide terrace.
+	let rim_w = budget.rim_width.max(0.5).min(TARGET_RIM_WIDTH);
 	let apron_w = budget.apron_width.max(1.0);
 	let rotation = budget.rotation;
 	let short_water = budget.water_radius();
@@ -87,7 +88,6 @@ pub(crate) fn build_bowl(
 	let apron_outer = (apron_w + apron_noise.apron_amp).max(apron_w);
 
 	let max_correction_extent = (rim_w + apron_outer).max(0.0);
-	// Lake rims keep authored height noise (streams still use the tight default cap).
 	let rim_uplift_cap = params
 		.apron
 		.rim_height_amp_max

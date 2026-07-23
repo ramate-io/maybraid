@@ -1,11 +1,10 @@
 //! Assemble stream corridor as hydrology reach-segment nodes.
 
-use crate::apron::{jittered_depth, ApronNoiseSalts};
+use crate::apron::{jittered_depth, ApronNoiseSalts, TARGET_RIM_WIDTH};
 use crate::complex::HydrologyComplex;
 use crate::depression::{WatershedDepression, WatershedDepressionKind};
 use crate::node::{nodes_from_polyline, HydroParameters};
 use crate::stream::{StreamBandBudget, StreamParams};
-use crate::hydro::DEFAULT_RIM_UPLIFT_CAP;
 use bevy_math::Vec2;
 use jersey_terrain_stamps::{PolylineRegion, Region2D};
 use procedural_common::Bounds2;
@@ -85,16 +84,21 @@ pub(crate) fn build_corridor(
 	);
 
 	let channel_region = Region2D::Polyline(PolylineRegion::new(path.clone(), half_w));
-	let rim_w = (skirt_w * 0.35).max(2.0).min(half_w);
+	let rim_w = TARGET_RIM_WIDTH;
 	let apron_width = (apron_w - skirt_w).max(apron_band);
 	let max_correction_extent = (rim_w + apron_width).max(0.0);
+	let rim_uplift_cap = params
+		.apron
+		.rim_height_amp_max
+		.max(params.apron.rim_height_amp_min)
+		.max(0.0);
 	let parameters = HydroParameters {
 		shelf_anchor: None,
 		rim_lift: params.rim_lift.max(0.0),
 		rim_width: rim_w,
 		apron_width,
 		rim_height: apron_noise.rim_height,
-		rim_uplift_cap: DEFAULT_RIM_UPLIFT_CAP,
+		rim_uplift_cap,
 		shore_fade: params.shore_fade.max(0.25),
 		fill_undercut: params.fill_undercut.max(0.0),
 	};

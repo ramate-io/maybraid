@@ -123,7 +123,7 @@ pub struct LakeParams {
 impl Default for LakeParams {
 	fn default() -> Self {
 		Self {
-			rim_frac: 0.035,
+			rim_frac: 0.025,
 			apron_frac: 0.35,
 			mu: 12.0,
 			centroid_jitter: 0.12,
@@ -157,14 +157,7 @@ impl Default for LakeParams {
 			shore_indent_frac: 0.18,
 			shore_freq: 0.022,
 
-			// Noisier lake banks for visual iteration (streams keep apron defaults).
-			apron: WatershedApronParams {
-				rim_height_amp_min: 4.0,
-				rim_height_amp_max: 12.0,
-				rim_height_freq_min: 0.04,
-				rim_height_freq_max: 0.10,
-				..WatershedApronParams::default()
-			},
+			apron: WatershedApronParams::default().with_visible_rim_bank(),
 
 			rim_bleed_frac: 0.5,
 			shore_fade: 3.0,

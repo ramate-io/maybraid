@@ -4,6 +4,9 @@ use crate::noise::{n01_at, scale_noise_freq};
 use bevy_math::Vec2;
 use jersey_terrain_stamps::RegionNoise;
 
+/// Target berm width outside wet support for lake / stream rims (world units).
+pub const TARGET_RIM_WIDTH: f32 = 10.0;
+
 /// Deterministic salts for [`WatershedApronParams::sample_noise`].
 #[derive(Debug, Clone, Copy)]
 pub struct ApronNoiseSalts {
@@ -80,6 +83,15 @@ pub struct WatershedApronNoise {
 }
 
 impl WatershedApronParams {
+	/// Shared lake/stream rim-height noise: stronger, longer-wavelength berm.
+	pub fn with_visible_rim_bank(mut self) -> Self {
+		self.rim_height_amp_min = 10.0;
+		self.rim_height_amp_max = 20.0;
+		self.rim_height_freq_min = 0.008;
+		self.rim_height_freq_max = 0.02;
+		self
+	}
+
 	/// Sample per-leaf apron + rim noises at `anchor`.
 	///
 	/// `apron_width_for_amp` is the width the indent fraction multiplies

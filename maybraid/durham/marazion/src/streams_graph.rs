@@ -4,10 +4,9 @@
 //! keypoints into corridors, then emits segment [`crate::node::HydrologyNode`]s
 //! into one [`HydrologyComplex`] (sample-time union blend).
 
-use crate::apron::{ApronNoiseSalts, WatershedApronParams};
+use crate::apron::{ApronNoiseSalts, TARGET_RIM_WIDTH};
 use crate::complex::{HydrologyComplex, WatershedEdge, WatershedNode};
 use crate::depression::{WatershedDepression, WatershedDepressionKind};
-use crate::hydro::DEFAULT_RIM_UPLIFT_CAP;
 use crate::node::{nodes_from_polyline, HydroParameters};
 use crate::noise::n01_freq;
 use crate::stream::{
@@ -26,9 +25,6 @@ const MIN_PATH_LEN: f32 = 20.0;
 const WIDTH_SCALE_SALT: u32 = 0x57EA_512E;
 const DEGREE_SALT: u32 = 0x57EA_D6EE;
 
-/// Shared rim budget for stream graphs (not solo 15–120 m defaults).
-const GRAPH_RIM_AMP_MIN: f32 = 0.0;
-const GRAPH_RIM_AMP_MAX: f32 = 1.25;
 /// Extra thalweg cut on top of the freeboard bed grade. Solo streams use full
 /// `StreamParams::depth` (6–10 m); graphs already absolute-grade the channel, so
 /// stacking another full depth digs canyons that glue to leftover ridges.
@@ -54,20 +50,18 @@ impl Default for StreamsGraphParams {
 		stream.fill_half_width_scale = 1.0;
 		stream.shore_fade = 2.5;
 		stream.fill_undercut = 2.0;
-		stream.apron = muted_graph_apron_params(stream.apron);
+		let rim_uplift_cap = stream
+			.apron
+			.rim_height_amp_max
+			.max(stream.apron.rim_height_amp_min)
+			.max(0.0);
 		Self {
 			stream,
 			degree_min: 2,
 			degree_max: 3,
-			rim_uplift_cap: DEFAULT_RIM_UPLIFT_CAP,
+			rim_uplift_cap,
 		}
 	}
-}
-
-fn muted_graph_apron_params(mut apron: WatershedApronParams) -> WatershedApronParams {
-	apron.rim_height_amp_min = GRAPH_RIM_AMP_MIN;
-	apron.rim_height_amp_max = GRAPH_RIM_AMP_MAX;
-	apron
 }
 
 fn width_scale_u01(seed: u32, leaf_min: Vec2, params: StreamParams) -> f32 {
@@ -305,7 +299,7 @@ impl StreamsGraph {
 			stream_p.water_sink,
 		);
 
-		let rim_w = (budget.skirt_half * 0.35).max(2.0).min(budget.half_width);
+		let rim_w = TARGET_RIM_WIDTH;
 		let apron_w = (budget.apron_half - budget.skirt_half).max(apron_band);
 		let max_correction_extent = (rim_w + apron_w).max(0.0);
 		let parameters = HydroParameters {
@@ -314,7 +308,7 @@ impl StreamsGraph {
 			rim_width: rim_w,
 			apron_width: apron_w,
 			rim_height: apron_noise.rim_height,
-			rim_uplift_cap: params.rim_uplift_cap.min(DEFAULT_RIM_UPLIFT_CAP),
+			rim_uplift_cap: params.rim_uplift_cap.max(0.0),
 			shore_fade: stream_p.shore_fade.max(0.25),
 			fill_undercut: stream_p.fill_undercut.max(0.0),
 		};
@@ -469,8 +463,9 @@ mod tests {
 	#[test]
 	fn overlap_does_not_pillar_above_rim_cap() -> anyhow::Result<()> {
 		let bounds = Bounds2::from_xz(0.0, 0.0, 500.0, 500.0);
-		let mut params = StreamsGraphParams::default();
-		params.rim_uplift_cap = 1.5;
+		let params = StreamsGraphParams::default();
+		let rise_budget =
+			params.stream.rim_lift.max(0.0) + params.rim_uplift_cap.max(0.0) + 4.0;
 		let g = StreamsGraph::from_bounds(bounds, 3, params, Some(&slope_height)).expect("graph");
 		let compiled = g.into_complex().compile();
 		let mut max_rise = 0.0f32;
@@ -483,10 +478,10 @@ mod tests {
 				max_rise = max_rise.max((h - h0).max(0.0));
 			}
 		}
-		// Bank lift (~rim_lift) + capped rim noise; stacked solo aprons would be >> 20 m.
+		// Soft-max of raise-only banks should stay near rim_lift + uplift cap.
 		assert!(
-			max_rise < 12.0,
-			"composed graph should not pillar: max_rise={max_rise}"
+			max_rise < rise_budget,
+			"composed graph should not pillar: max_rise={max_rise} budget={rise_budget}"
 		);
 		Ok(())
 	}
