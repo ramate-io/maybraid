@@ -2,10 +2,10 @@
 //!
 //! Grows a degree-bounded [`HysteresisGraph`], collapses chains between
 //! keypoints into corridors, then emits segment [`crate::node::HydrologyNode`]s
-//! into one [`WatershedDepressionComplex`] (sample-time union blend).
+//! into one [`HydrologyComplex`] (sample-time union blend).
 
 use crate::apron::{ApronNoiseSalts, WatershedApronParams};
-use crate::complex::{WatershedDepressionComplex, WatershedEdge, WatershedNode};
+use crate::complex::{HydrologyComplex, WatershedEdge, WatershedNode};
 use crate::depression::{WatershedDepression, WatershedDepressionKind};
 use crate::hydro::DEFAULT_RIM_UPLIFT_CAP;
 use crate::node::{nodes_from_polyline, HydroParameters};
@@ -354,8 +354,8 @@ impl StreamsGraph {
 	}
 
 	/// Realize as a multi-edge complex with sample-time hydro composition.
-	pub fn into_complex(self) -> WatershedDepressionComplex {
-		let mut complex = WatershedDepressionComplex::new(self.bounds, self.seed);
+	pub fn into_complex(self) -> HydrologyComplex {
+		let mut complex = HydrologyComplex::new(self.bounds, self.seed);
 		let mut node_ids = Vec::with_capacity(self.key_points.len());
 		for _ in &self.key_points {
 			node_ids.push(complex.push_node(WatershedNode::empty()));
@@ -404,7 +404,7 @@ mod tests {
 		.expect("streams graph");
 		assert!(g.edge_count >= 1);
 		let compiled = g.into_complex().compile();
-		assert!(compiled.hydro.is_some());
+		assert!(compiled.has_hydro());
 		assert!(compiled.modulations.is_empty());
 		assert_eq!(compiled.fills.len(), 1);
 		assert!(matches!(

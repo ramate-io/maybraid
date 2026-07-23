@@ -1,7 +1,7 @@
 //! Assemble lake bowl as a hydrology node (ellipse + radial bowl).
 
 use crate::apron::{jittered_depth, ApronNoiseSalts};
-use crate::complex::{WatershedDepressionComplex, WatershedNode};
+use crate::complex::{HydrologyComplex, WatershedNode};
 use crate::depression::{WatershedDepression, WatershedDepressionKind};
 use crate::hydro::{HydroElevation, HydroFootprint, HydroPrimitive, DEFAULT_RIM_UPLIFT_CAP};
 use crate::lake::budget::LakeBandBudget;
@@ -31,7 +31,7 @@ pub(crate) struct LakeLayout {
 
 /// Lake-specific stamp: one radial-bowl hydrology node.
 ///
-/// Convert with [`Self::into_complex`] → [`WatershedDepressionComplex`].
+/// Convert with [`Self::into_complex`] → [`HydrologyComplex`].
 #[derive(Debug, Clone)]
 pub(crate) struct LakeBowl {
 	pub wet_core: Region2D,
@@ -41,9 +41,9 @@ pub(crate) struct LakeBowl {
 }
 
 impl LakeBowl {
-	/// `LakeBowl` → sole-node [`WatershedDepressionComplex`] with hydrology emit.
-	pub fn into_complex(self, bounds: Bounds2, seed: u32) -> WatershedDepressionComplex {
-		let mut complex = WatershedDepressionComplex::new(bounds, seed);
+	/// `LakeBowl` → sole-node [`HydrologyComplex`] with hydrology emit.
+	pub fn into_complex(self, bounds: Bounds2, seed: u32) -> HydrologyComplex {
+		let mut complex = HydrologyComplex::new(bounds, seed);
 		complex.push_node(WatershedNode::with_depression(WatershedDepression::new(
 			WatershedDepressionKind::LakeBowl,
 			self.wet_core,

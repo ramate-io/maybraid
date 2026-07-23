@@ -16,7 +16,7 @@ pub(crate) use path::{
 };
 
 use crate::apron::WatershedApronParams;
-use crate::complex::WatershedDepressionComplex;
+use crate::complex::HydrologyComplex;
 use crate::noise::n01_freq;
 use crate::stream::build::{build_corridor, StreamCorridor, StreamLayout};
 use bevy_math::Vec2;
@@ -175,7 +175,7 @@ fn width_scale_u01(seed: u32, leaf_min: Vec2, params: StreamParams) -> f32 {
 
 /// Authored stream **plan**: layout metadata for one pocket-water leaf.
 ///
-/// Realize with [`Self::into_complex`] into a [`WatershedDepressionComplex`].
+/// Realize with [`Self::into_complex`] into a [`HydrologyComplex`].
 /// `None` from [`Self::from_bounds`] means the leaf / path is too small.
 #[derive(Debug, Clone)]
 pub struct Stream {
@@ -276,8 +276,8 @@ impl Stream {
 		)
 	}
 
-	/// Realize this plan as a sole-edge [`WatershedDepressionComplex`].
-	pub fn into_complex(self) -> WatershedDepressionComplex {
+	/// Realize this plan as a sole-edge [`HydrologyComplex`].
+	pub fn into_complex(self) -> HydrologyComplex {
 		self.corridor.into_complex(self.bounds, self.seed)
 	}
 }
@@ -406,7 +406,7 @@ mod tests {
 		assert!(params.apron.indent_frac_max > params.apron.indent_frac_min);
 		let stream = Stream::from_bounds(bounds, 42, params, Some(&height)).expect("stream");
 		let compiled = stream.clone().into_complex().compile();
-		assert!(compiled.hydro.is_some());
+		assert!(compiled.has_hydro());
 		assert!(compiled.modulations.is_empty());
 		let far = Vec2::new(bounds.min.x - 120.0, bounds.min.y - 120.0);
 		let h0 = height(far.x, far.y);

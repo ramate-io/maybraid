@@ -1,13 +1,13 @@
 //! Marazion watershed stamps ([RFC-127](https://github.com/ramate-io/maybraid/tree/main/rfc/rfc-000-000-127-marazion-watersheds)).
 //!
 //! Pure stamp / layout construction — no LOD `GenerationScheme` wiring.
-//! Durham models consume prepared hydro complexes and [`WaterFill`] outputs
+//! Durham models consume [`HydrologyComplex`] and [`WaterFill`] outputs
 //! after pre-watershed terrain is composed.
 //!
 //! Pocket hierarchy: [`pre_pocket`] → [`pocket_cell`] guillotine → [`lake`] /
 //! [`stream`] / [`bog`] / [`streams_graph`] **plans**. Each plan emits
-//! [`node::HydrologyNode`]s into a [`complex::WatershedDepressionComplex`];
-//! Durham gathers complexes into carve → rim → apron correction stages.
+//! [`node::HydrologyNode`]s into a [`complex::HydrologyComplex`];
+//! Durham gathers those into cellular complexes for terrain modulation.
 
 pub mod apron;
 pub mod backfill;
@@ -31,15 +31,14 @@ pub use backfill::{
 };
 pub use bog::{Bog, BogBasinFill, BogParams};
 pub use complex::{
-	CompiledWatershed, WatershedDepressionComplex, WatershedEdge, WatershedEdgeId, WatershedNode,
+	CompiledWatershed, HydrologyComplex, WatershedEdge, WatershedEdgeId, WatershedNode,
 	WatershedNodeId,
 };
 pub use depression::{WatershedDepression, WatershedDepressionKind};
 pub use fill::{WaterFill, WaterSurface};
 pub use hydro::{
-	primitives_from_polyline, water_fill_from_prepared, ComplexApronParams, CorrectionStage,
-	FootprintIndex, HydroElevation, HydroFootprint, HydroPrimitive, PreparedHydroComplex,
-	DEFAULT_RIM_UPLIFT_CAP, SURFACE_SMOOTHMIN_K,
+	primitives_from_polyline, ComplexApronParams, CorrectionStage, FootprintIndex, HydroElevation,
+	HydroFootprint, HydroPrimitive, DEFAULT_RIM_UPLIFT_CAP, SURFACE_SMOOTHMIN_K,
 };
 pub use lake::{shelf_base_height, Lake, LakeBandBudget, LakeParams};
 pub use node::{nodes_from_polyline, HydrologyNode, HydroParameters};

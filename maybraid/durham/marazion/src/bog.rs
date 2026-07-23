@@ -9,7 +9,7 @@
 //! [`BogBasinFill`] chooses how aggressively that freeboard is filled / crested.
 
 use crate::backfill::{BasinBackfillParams, WatershedBackfill};
-use crate::complex::WatershedDepressionComplex;
+use crate::complex::HydrologyComplex;
 use crate::lake::build::{build_bowl, LakeBowl, LakeLayout};
 use crate::lake::shelf::{
 	aspect_u01, planned_center as planned_center_impl, rim_width_u01, rotation_u11, shelf_levels,
@@ -92,7 +92,7 @@ impl Default for BogParams {
 
 /// Authored bog **plan**: lake-shaped layout + basin backfill recipe.
 ///
-/// Realize with [`Self::into_complex`] into a [`WatershedDepressionComplex`]
+/// Realize with [`Self::into_complex`] into a [`HydrologyComplex`]
 /// (bowl + basin backfill). `None` from [`Self::from_bounds`] means the leaf
 /// is too small.
 #[derive(Debug, Clone)]
@@ -179,7 +179,7 @@ impl Bog {
 	}
 
 	/// Realize this plan as a sole-node complex with basin backfill.
-	pub fn into_complex(self) -> WatershedDepressionComplex {
+	pub fn into_complex(self) -> HydrologyComplex {
 		self.bowl
 			.into_complex(self.bounds, self.seed)
 			.with_backfill(self.basin)
@@ -203,7 +203,7 @@ mod tests {
 		let bounds = Bounds2::from_xz(0.0, 0.0, 320.0, 320.0);
 		let bog = Bog::from_bounds(bounds, 11, BogParams::default(), Some(&|_, _| 40.0)).expect("bog");
 		let compiled = bog.clone().into_complex().compile();
-		assert!(compiled.hydro.is_some());
+		assert!(compiled.has_hydro());
 		assert!(!compiled.fills.is_empty());
 		assert!(matches!(
 			compiled.fills[0].surface,

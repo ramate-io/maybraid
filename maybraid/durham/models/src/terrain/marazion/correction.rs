@@ -3,9 +3,9 @@
 //! Pipeline:
 //! ```text
 //! MarazionPocketWaters{High,Low}Pass (authored enum → HydrologyNodes)
-//!   → WatershedDepressionComplexCell (origin grid: union nodes from both passes)
-//!   → CarvingCell / RimmingCell / AproningCell
-//!   → Terrain (carve → rim → apron)
+//!   → HydrologyComplexCell (origin grid: union nodes from both passes)
+//!   → CarvingCell / RimmingCell / AproningCell (stage bones)
+//!   → Terrain applies HydrologyComplex (internal carve → rim → apron)
 //! ```
 
 use crate::terrain::cell::original_ids_for_origin_cells;
@@ -15,21 +15,20 @@ use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 use lod::gen::{GeneratingSpatialIndex, GenerationScheme, Id, OriginalId};
 use lod::lod_ref::LodRef;
-use marazion_watersheds::{
-	CorrectionStage, PreparedHydroComplex, WatershedDepressionComplex,
-};
+use marazion_watersheds::{CorrectionStage, HydrologyComplex};
 use procedural_common::Bounds2;
 
-/// Origin-grid watershed complex: unions hydrology nodes from both pocket-water passes.
+/// Origin-grid hydrology complex: unions hydrology nodes from both pocket-water passes.
 #[derive(Debug, Clone, Component)]
-pub struct WatershedDepressionComplexCell {
+pub struct HydrologyComplexCell {
 	pub cell: Aabb3d,
-	pub complex: WatershedDepressionComplex,
+	pub complex: HydrologyComplex,
 }
 
-impl WatershedDepressionComplexCell {
-	pub fn compile_prepared(&self) -> Option<PreparedHydroComplex> {
-		self.complex.compile().hydro
+impl HydrologyComplexCell {
+	/// Indexed complex when it has hydrology members.
+	pub fn indexed(&self) -> Option<&HydrologyComplex> {
+		(!self.complex.is_empty()).then_some(&self.complex)
 	}
 }
 
@@ -42,7 +41,7 @@ fn cell_seed(cell: Aabb3d, salt: u32) -> u32 {
 		.wrapping_add(cell.min.z.to_bits().wrapping_mul(19349663))
 }
 
-impl<S> GenerationScheme<S> for WatershedDepressionComplexCell
+impl<S> GenerationScheme<S> for HydrologyComplexCell
 where
 	S: GeneratingSpatialIndex<MarazionPocketWatersHighPass>
 		+ GeneratingSpatialIndex<MarazionPocketWatersLowPass>
@@ -86,7 +85,7 @@ where
 		}
 
 		let complex =
-			WatershedDepressionComplex::new(cell_bounds, seed).with_hydrology(hydrology);
+			HydrologyComplex::new(cell_bounds, seed).with_hydrology(hydrology);
 
 		Some((Self { cell, complex }, cell))
 	}
@@ -94,34 +93,34 @@ where
 	fn descendants_with_lod(_id: Id, _spatial_index: &mut S, _lod_ref: &LodRef) {}
 }
 
-/// Origin-cell carve stage over the cellular [`WatershedDepressionComplexCell`].
+/// Origin-cell carve stage over the cellular [`HydrologyComplexCell`].
 #[derive(Debug, Clone, Component)]
 pub struct WatershedCarvingCell {
 	pub cell: Aabb3d,
-	pub prepared: Option<PreparedHydroComplex>,
+	pub complex: Option<HydrologyComplex>,
 }
 
 /// Rim correction (raise-only bank toward shelf_anchor + rim_lift).
 #[derive(Debug, Clone, Component)]
 pub struct WatershedRimmingCell {
 	pub cell: Aabb3d,
-	pub prepared: Option<PreparedHydroComplex>,
+	pub complex: Option<HydrologyComplex>,
 }
 
 /// Apron correction (fade from bank toward identity).
 #[derive(Debug, Clone, Component)]
 pub struct WatershedAproningCell {
 	pub cell: Aabb3d,
-	pub prepared: Option<PreparedHydroComplex>,
+	pub complex: Option<HydrologyComplex>,
 }
 
-fn prepared_from_complex_cell<S>(
+fn complex_from_complex_cell<S>(
 	spatial_index: &mut S,
 	id: Id,
 	lod_ref: &LodRef,
-) -> Option<(Aabb3d, Option<PreparedHydroComplex>)>
+) -> Option<(Aabb3d, Option<HydrologyComplex>)>
 where
-	S: GeneratingSpatialIndex<WatershedDepressionComplexCell>
+	S: GeneratingSpatialIndex<HydrologyComplexCell>
 		+ GeneratingSpatialIndex<MarazionPocketWatersHighPass>
 		+ GeneratingSpatialIndex<MarazionPocketWatersLowPass>
 		+ GeneratingSpatialIndex<PocketHighPassCell>
@@ -131,19 +130,22 @@ where
 		+ GeneratingSpatialIndex<crate::terrain::cell::TerrainCellLayout>,
 {
 	let complex_cell =
-		GeneratingSpatialIndex::<WatershedDepressionComplexCell>::get_one_or_generate(
+		GeneratingSpatialIndex::<HydrologyComplexCell>::get_one_or_generate(
 			spatial_index,
 			id,
 			lod_ref,
 		)?;
-	Some((complex_cell.cell, complex_cell.compile_prepared()))
+	Some((
+		complex_cell.cell,
+		complex_cell.indexed().cloned(),
+	))
 }
 
 macro_rules! impl_correction_stage_cell {
 	($Cell:ty) => {
 		impl<S> GenerationScheme<S> for $Cell
 		where
-			S: GeneratingSpatialIndex<WatershedDepressionComplexCell>
+			S: GeneratingSpatialIndex<HydrologyComplexCell>
 				+ GeneratingSpatialIndex<MarazionPocketWatersHighPass>
 				+ GeneratingSpatialIndex<MarazionPocketWatersLowPass>
 				+ GeneratingSpatialIndex<PocketHighPassCell>
@@ -164,8 +166,8 @@ macro_rules! impl_correction_stage_cell {
 				id: Id,
 				lod_ref: &LodRef,
 			) -> Option<(Self, Aabb3d)> {
-				let (cell, prepared) = prepared_from_complex_cell(spatial_index, id, lod_ref)?;
-				Some((Self { cell, prepared }, cell))
+				let (cell, complex) = complex_from_complex_cell(spatial_index, id, lod_ref)?;
+				Some((Self { cell, complex }, cell))
 			}
 
 			fn descendants_with_lod(

@@ -11,8 +11,8 @@
 //! (plus softmask fade). Authored leaves use [`WaterSurface::Hydro`]; [`WaterSurface::Flat`]
 //! remains for unit tests of the fill half-space gate.
 
+use crate::complex::HydrologyComplex;
 use bevy_math::{Vec2, Vec3};
-use crate::hydro::PreparedHydroComplex;
 use jersey_terrain_stamps::{Region2D, RegionNoise};
 
 /// Large positive distance used when a sample is outside the softmask boundary
@@ -24,8 +24,8 @@ const OUTSIDE_FILL_DISTANCE: f32 = 1.0e6;
 pub enum WaterSurface {
 	/// Constant lake (or pool) surface.
 	Flat { level: f32 },
-	/// Sample-time union surface from a prepared hydro complex.
-	Hydro { prepared: PreparedHydroComplex },
+	/// Sample-time union surface from an indexed hydrology complex.
+	Hydro { complex: HydrologyComplex },
 }
 
 impl WaterSurface {
@@ -33,7 +33,7 @@ impl WaterSurface {
 	pub fn level_at(&self, x: f32, z: f32) -> f32 {
 		match self {
 			Self::Flat { level } => *level,
-			Self::Hydro { prepared } => prepared.surface_at(x, z).unwrap_or(0.0),
+			Self::Hydro { complex } => complex.surface_at(x, z).unwrap_or(0.0),
 		}
 	}
 }
@@ -63,8 +63,8 @@ pub struct WaterFill {
 impl WaterFill {
 	/// Softmask weight in `[0, 1]` (`0` = fully inside / wet, `1` = outside / dry).
 	pub fn softmask_at(&self, x: f32, z: f32) -> f32 {
-		if let WaterSurface::Hydro { prepared } = &self.surface {
-			return prepared.fill_softmask_at(x, z);
+		if let WaterSurface::Hydro { complex } = &self.surface {
+			return complex.fill_softmask_at(x, z);
 		}
 		self.region.softmask_weight(
 			Vec2::new(x, z),

@@ -25,7 +25,7 @@ use crate::terrain::jersey::{
 use crate::terrain::marazion::{
 	original_ids_for_marazion_pocket_waters_high_pass_leaves,
 	original_ids_for_marazion_pocket_waters_low_pass_leaves, WatershedAproningCell,
-	WatershedCarvingCell, WatershedDepressionComplexCell, WatershedRimmingCell,
+	WatershedCarvingCell, HydrologyComplexCell, WatershedRimmingCell,
 };
 use crate::terrain::render::cascade_chunk_for_cell;
 use avian3d::prelude::RigidBody;
@@ -120,7 +120,7 @@ pub struct Terrain {
 	pub jersey_leaves: Vec<Aabb3d>,
 	/// Leaf AABBs whose Marazion lake stamps contributed (plus empties for debug).
 	pub marazion_leaves: Vec<MarazionLeafBounds>,
-	/// Fills from this origin cell's cellular [`WatershedDepressionComplexCell`].
+	/// Fills from this origin cell's cellular [`HydrologyComplexCell`].
 	///
 	/// ComplexCell unions hydrology nodes from intersecting authored leaves
 	/// (all bands); fills share that union φ. Collected with carve → rim →
@@ -396,7 +396,7 @@ where
 		+ GeneratingSpatialIndex<PrePocketHighPassCell>
 		+ GeneratingSpatialIndex<PocketHighPassCell>
 		+ GeneratingSpatialIndex<MarazionPocketWatersHighPass>
-		+ GeneratingSpatialIndex<WatershedDepressionComplexCell>
+		+ GeneratingSpatialIndex<HydrologyComplexCell>
 		+ GeneratingSpatialIndex<WatershedCarvingCell>
 		+ GeneratingSpatialIndex<WatershedRimmingCell>
 		+ GeneratingSpatialIndex<WatershedAproningCell>
@@ -445,7 +445,7 @@ where
 		);
 
 		let complex_cell =
-			GeneratingSpatialIndex::<WatershedDepressionComplexCell>::get_one_or_generate(
+			GeneratingSpatialIndex::<HydrologyComplexCell>::get_one_or_generate(
 				spatial_index,
 				id,
 				lod_ref,
@@ -454,34 +454,26 @@ where
 		let compiled = complex_cell.complex.compile();
 		let marazion_fills = compiled.fills;
 
-		let carving = GeneratingSpatialIndex::<WatershedCarvingCell>::get_one_or_generate(
+		// Keep stage cells materialized for later policy work; elevation uses
+		// the cellular HydrologyComplex directly (internal carve → rim → apron).
+		let _ = GeneratingSpatialIndex::<WatershedCarvingCell>::get_one_or_generate(
 			spatial_index,
 			id,
 			lod_ref,
-		)?
-		.clone();
-		let rimming = GeneratingSpatialIndex::<WatershedRimmingCell>::get_one_or_generate(
+		)?;
+		let _ = GeneratingSpatialIndex::<WatershedRimmingCell>::get_one_or_generate(
 			spatial_index,
 			id,
 			lod_ref,
-		)?
-		.clone();
-		let aproning = GeneratingSpatialIndex::<WatershedAproningCell>::get_one_or_generate(
+		)?;
+		let _ = GeneratingSpatialIndex::<WatershedAproningCell>::get_one_or_generate(
 			spatial_index,
 			id,
 			lod_ref,
-		)?
-		.clone();
+		)?;
 
-		// Ordered watershed correction over the cellular union.
-		if let Some(hydro) = carving.prepared {
-			modulations.push(ComposedElevationOp::WatershedCarve(hydro));
-		}
-		if let Some(hydro) = rimming.prepared {
-			modulations.push(ComposedElevationOp::WatershedRim(hydro));
-		}
-		if let Some(hydro) = aproning.prepared {
-			modulations.push(ComposedElevationOp::WatershedApron(hydro));
+		if !complex_cell.complex.is_empty() {
+			modulations.push(ComposedElevationOp::Hydrology(complex_cell.complex));
 		}
 
 		let sdf = Self::compose_sdf(&pre.base, &modulations);

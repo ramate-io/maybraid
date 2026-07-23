@@ -17,7 +17,7 @@ pub use budget::LakeBandBudget;
 pub use shelf::shelf_base_height;
 
 use crate::apron::WatershedApronParams;
-use crate::complex::WatershedDepressionComplex;
+use crate::complex::HydrologyComplex;
 use crate::lake::build::{build_bowl, LakeBowl, LakeLayout};
 use crate::lake::shelf::{
 	aspect_u01, planned_center as planned_center_impl, rim_width_u01, rotation_u11, shelf_levels,
@@ -167,7 +167,7 @@ impl Default for LakeParams {
 
 /// Authored lake **plan**: layout metadata for one pocket-water leaf.
 ///
-/// Realize with [`Self::into_complex`] into a [`WatershedDepressionComplex`]
+/// Realize with [`Self::into_complex`] into a [`HydrologyComplex`]
 /// (the representation stored on terrain cells). `None` from [`Self::from_bounds`]
 /// means the leaf is too small to host a lake.
 #[derive(Debug, Clone)]
@@ -245,8 +245,8 @@ impl Lake {
 		vec![self.bowl.node.clone()]
 	}
 
-	/// Realize this plan as a sole-node [`WatershedDepressionComplex`].
-	pub fn into_complex(self) -> WatershedDepressionComplex {
+	/// Realize this plan as a sole-node [`HydrologyComplex`].
+	pub fn into_complex(self) -> HydrologyComplex {
 		self.bowl.into_complex(self.bounds, self.seed)
 	}
 }
@@ -424,7 +424,7 @@ mod tests {
 		let bounds = Bounds2::from_xz(0.0, 0.0, 320.0, 320.0);
 		let lake = Lake::from_bounds(bounds, 11, LakeParams::default(), Some(&|_, _| 40.0)).expect("lake");
 		let compiled = lake.into_complex().compile();
-		assert!(compiled.hydro.is_some());
+		assert!(compiled.has_hydro());
 		assert!(compiled.modulations.is_empty());
 		assert_eq!(compiled.fills.len(), 1);
 		assert!(matches!(

@@ -1,7 +1,7 @@
 //! Assemble stream corridor as hydrology reach-segment nodes.
 
 use crate::apron::{jittered_depth, ApronNoiseSalts};
-use crate::complex::WatershedDepressionComplex;
+use crate::complex::HydrologyComplex;
 use crate::depression::{WatershedDepression, WatershedDepressionKind};
 use crate::node::{nodes_from_polyline, HydroParameters};
 use crate::stream::{StreamBandBudget, StreamParams};
@@ -21,7 +21,7 @@ pub(crate) struct StreamLayout {
 
 /// Stream-specific stamp: one corridor as hydrology nodes.
 ///
-/// Convert with [`Self::into_complex`] → [`WatershedDepressionComplex`].
+/// Convert with [`Self::into_complex`] → [`HydrologyComplex`].
 #[derive(Debug, Clone)]
 pub(crate) struct StreamCorridor {
 	pub path: Vec<Vec2>,
@@ -34,8 +34,8 @@ pub(crate) struct StreamCorridor {
 }
 
 impl StreamCorridor {
-	/// `StreamCorridor` → sole-edge [`WatershedDepressionComplex`].
-	pub fn into_complex(self, bounds: Bounds2, seed: u32) -> WatershedDepressionComplex {
+	/// `StreamCorridor` → sole-edge [`HydrologyComplex`].
+	pub fn into_complex(self, bounds: Bounds2, seed: u32) -> HydrologyComplex {
 		let nodes = nodes_from_polyline(
 			&self.path,
 			&self.levels,
@@ -44,7 +44,7 @@ impl StreamCorridor {
 			&self.parameters,
 			self.max_correction_extent,
 		);
-		let mut complex = WatershedDepressionComplex::new(bounds, seed);
+		let mut complex = HydrologyComplex::new(bounds, seed);
 		let from = complex.push_node(crate::complex::WatershedNode::empty());
 		let to = complex.push_node(crate::complex::WatershedNode::empty());
 		complex.push_edge(crate::complex::WatershedEdge {
