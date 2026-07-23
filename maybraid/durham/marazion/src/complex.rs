@@ -209,12 +209,8 @@ impl HydrologyComplex {
 	}
 
 	/// Fold \(\phi\), bed, \(W\), and blended rim/apron policy.
-	pub fn fold_fields(&self, p: Vec2, use_index: bool) -> Option<HydroFold> {
-		let ids: Vec<u16> = if use_index {
-			self.candidate_ids(p)
-		} else {
-			self.index.all_ids(self.hydrology.len())
-		};
+	pub fn fold_fields(&self, p: Vec2) -> Option<HydroFold> {
+		let ids = self.candidate_ids(p);
 		if ids.is_empty() {
 			return None;
 		}
@@ -279,7 +275,7 @@ impl HydrologyComplex {
 		if !self.bounds.contains(p) {
 			return elevation;
 		}
-		let Some(fold) = self.fold_fields(p, true) else {
+		let Some(fold) = self.fold_fields(p) else {
 			return elevation;
 		};
 		if fold.phi <= 0.0 {
@@ -294,7 +290,7 @@ impl HydrologyComplex {
 		if !self.bounds.contains(p) {
 			return elevation;
 		}
-		let Some(fold) = self.fold_fields(p, true) else {
+		let Some(fold) = self.fold_fields(p) else {
 			return elevation;
 		};
 		if fold.phi <= 0.0 || fold.phi >= fold.rim_width {
@@ -310,7 +306,7 @@ impl HydrologyComplex {
 		if !self.bounds.contains(p) {
 			return elevation;
 		}
-		let Some(fold) = self.fold_fields(p, true) else {
+		let Some(fold) = self.fold_fields(p) else {
 			return elevation;
 		};
 		let rim_w = fold.rim_width;
@@ -340,11 +336,11 @@ impl HydrologyComplex {
 	}
 
 	pub fn surface_at(&self, x: f32, z: f32) -> Option<f32> {
-		self.fold_fields(Vec2::new(x, z), true).map(|f| f.water)
+		self.fold_fields(Vec2::new(x, z)).map(|f| f.water)
 	}
 
 	pub fn occupancy_at(&self, x: f32, z: f32) -> Option<f32> {
-		self.fold_fields(Vec2::new(x, z), true).map(|f| f.phi)
+		self.fold_fields(Vec2::new(x, z)).map(|f| f.phi)
 	}
 
 	pub fn fill_softmask_at(&self, x: f32, z: f32) -> f32 {

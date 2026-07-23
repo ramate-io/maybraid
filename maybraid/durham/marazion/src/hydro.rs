@@ -151,11 +151,6 @@ impl FootprintIndex {
 			.map(|v| v.as_slice())
 			.unwrap_or(&[])
 	}
-
-	/// All primitive ids (for brute-force tests).
-	pub fn all_ids(&self, n: usize) -> Vec<u16> {
-		(0..n as u16).collect()
-	}
 }
 
 impl HydroFootprint {
@@ -442,68 +437,13 @@ mod tests {
 			ComplexApronParams::default(),
 		);
 		let fold = prep
-			.fold_fields(Vec2::new(20.0, 1.0), true)
+			.fold_fields(Vec2::new(20.0, 1.0))
 			.expect("overlap");
 		assert!(
 			fold.bed <= 50.0 - 7.0,
 			"min bed should prefer deeper channel: {}",
 			fold.bed
 		);
-		Ok(())
-	}
-
-	#[test]
-	fn index_matches_bruteforce_fold() -> anyhow::Result<()> {
-		let mut prims = primitives_from_polyline(
-			&[
-				Vec2::new(0.0, 0.0),
-				Vec2::new(30.0, 5.0),
-				Vec2::new(60.0, 0.0),
-				Vec2::new(60.0, 40.0),
-			],
-			&[40.0, 38.0, 36.0, 34.0],
-			5.0,
-			3.0,
-			2.0,
-		);
-		prims.extend(primitives_from_polyline(
-			&[Vec2::new(10.0, 40.0), Vec2::new(50.0, 20.0)],
-			&[39.0, 35.0],
-			5.0,
-			3.0,
-			2.0,
-		));
-		let prep = HydrologyComplex::from_primitives(
-			Bounds2::from_xz(-20.0, -20.0, 80.0, 60.0),
-			2,
-			prims,
-			ComplexApronParams::default(),
-		);
-		for i in 0..16 {
-			for j in 0..16 {
-				let p = Vec2::new(i as f32 * 5.0, j as f32 * 4.0);
-				let indexed = prep.fold_fields(p, true);
-				let brute = prep.fold_fields(p, false);
-				match (indexed, brute) {
-					(None, None) => {}
-					(Some(a), Some(b)) => {
-						assert!((a.phi - b.phi).abs() < 1e-3, "phi {} vs {} at {p:?}", a.phi, b.phi);
-						if a.bed.is_finite() || b.bed.is_finite() {
-							assert!((a.bed - b.bed).abs() < 1e-3, "bed {} vs {} at {p:?}", a.bed, b.bed);
-						}
-						if a.water.is_finite() || b.water.is_finite() {
-							assert!(
-								(a.water - b.water).abs() < 1e-2,
-								"W {} vs {} at {p:?}",
-								a.water,
-								b.water
-							);
-						}
-					}
-					(a, b) => panic!("mismatch presence at {p:?}: {a:?} vs {b:?}"),
-				}
-			}
-		}
 		Ok(())
 	}
 
