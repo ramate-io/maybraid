@@ -310,6 +310,8 @@ impl StreamsGraph {
 		);
 		let boundary_noise = RegionNoise::from_seed(seed.wrapping_add(5), shore_freq, shore_amp);
 		let max_correction_extent = (rim_w + apron_w + shore_amp).max(0.0);
+		let fill_scale = stream_p.fill_half_width_scale.max(1.0);
+		let fill_support_pad = budget.half_width.max(0.0) * (fill_scale - 1.0);
 		let parameters = HydroParameters {
 			shelf_anchor: None,
 			rim_lift: stream_p.rim_lift.max(0.0),
@@ -320,6 +322,7 @@ impl StreamsGraph {
 			boundary_noise: Some(boundary_noise),
 			shore_fade: stream_p.shore_fade.max(0.25),
 			fill_undercut: stream_p.fill_undercut.max(0.0),
+			fill_support_pad,
 		};
 
 		Some(Self {

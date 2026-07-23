@@ -61,6 +61,28 @@ pub struct WaterFill {
 }
 
 impl WaterFill {
+	/// Representative horizontal samples for wet-volume gating.
+	///
+	/// Hydro fills probe authored node interiors (ellipse centers / reach midpoints)
+	/// so a lake parked in a cell corner is not dropped when the region proxy
+	/// (or a cell-covering circle) samples dry land at its centroid.
+	pub fn wet_volume_probe_points(&self) -> Vec<Vec2> {
+		match &self.surface {
+			WaterSurface::Hydro { complex } => {
+				let mut pts: Vec<Vec2> = complex
+					.hydrology
+					.iter()
+					.map(|node| node.sample_point())
+					.collect();
+				if pts.is_empty() {
+					pts.push(self.region.sample_point());
+				}
+				pts
+			}
+			WaterSurface::Flat { .. } => vec![self.region.sample_point()],
+		}
+	}
+
 	/// Softmask weight in `[0, 1]` (`0` = fully inside / wet, `1` = outside / dry).
 	pub fn softmask_at(&self, x: f32, z: f32) -> f32 {
 		if let WaterSurface::Hydro { complex } = &self.surface {

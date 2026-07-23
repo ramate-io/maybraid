@@ -91,6 +91,8 @@ pub struct HydrologyComplex {
 	pub index: FootprintIndex,
 	pub shore_fade: f32,
 	pub fill_undercut: f32,
+	/// Max liberal fill overhang beyond \(\phi = 0\) (from member nodes).
+	pub fill_support_pad: f32,
 }
 
 impl HydrologyComplex {
@@ -105,6 +107,7 @@ impl HydrologyComplex {
 			index: FootprintIndex::empty(),
 			shore_fade: 2.5,
 			fill_undercut: 0.0,
+			fill_support_pad: 0.0,
 		};
 		complex.reindex();
 		complex
@@ -127,6 +130,7 @@ impl HydrologyComplex {
 			boundary_noise: None,
 			shore_fade: apron.shore_fade,
 			fill_undercut: apron.fill_undercut,
+			fill_support_pad: 0.0,
 		};
 		let extent = params.correction_pad();
 		let hydrology = primitives
@@ -177,6 +181,11 @@ impl HydrologyComplex {
 			.hydrology
 			.iter()
 			.map(|m| m.parameters.fill_undercut)
+			.fold(0.0_f32, f32::max);
+		self.fill_support_pad = self
+			.hydrology
+			.iter()
+			.map(|m| m.parameters.fill_support_pad)
 			.fold(0.0_f32, f32::max);
 	}
 
@@ -233,16 +242,20 @@ impl HydrologyComplex {
 		HydrologyNode::blend_terrain_elevation(&nodes, elevation, p)
 	}
 
-	/// Soft-min free surface over carve/rim nodes at the sample (for fill).
+	/// Soft-min free surface for fill: carve/rim, or liberal fill support band.
 	pub fn surface_at(&self, x: f32, z: f32) -> Option<f32> {
 		let p = Vec2::new(x, z);
+		let fill_core = self.fill_support_pad.max(0.0);
 		let mut surfaces = Vec::new();
 		for node in self.nodes_intersecting(p) {
-			match node.point_classification(p) {
-				Some(CorrectionStage::Carve) | Some(CorrectionStage::Rim) => {
-					surfaces.push(node.surface_level(p));
-				}
-				_ => {}
+			let d = node.phi(p);
+			let in_fill_core = d <= fill_core;
+			let in_bank = matches!(
+				node.point_classification(p),
+				Some(CorrectionStage::Carve) | Some(CorrectionStage::Rim)
+			);
+			if in_fill_core || in_bank {
+				surfaces.push(node.surface_level(p));
 			}
 		}
 		if surfaces.is_empty() {
@@ -262,14 +275,17 @@ impl HydrologyComplex {
 		phi.is_finite().then_some(phi)
 	}
 
+	/// Softmask with liberal overhang: wet while \(\phi \le\) [`Self::fill_support_pad`],
+	/// then fade over [`Self::shore_fade`].
 	pub fn fill_softmask_at(&self, x: f32, z: f32) -> f32 {
+		let pad = self.fill_support_pad.max(0.0);
 		let fade = self.shore_fade.max(0.25);
 		match self.occupancy_at(x, z) {
 			None => 1.0,
-			Some(phi) if phi <= 0.0 => 0.0,
-			Some(phi) if phi >= fade => 1.0,
+			Some(phi) if phi <= pad => 0.0,
+			Some(phi) if phi >= pad + fade => 1.0,
 			Some(phi) => {
-				let t = (phi / fade).clamp(0.0, 1.0);
+				let t = ((phi - pad) / fade).clamp(0.0, 1.0);
 				t * t * (3.0 - 2.0 * t)
 			}
 		}
@@ -277,14 +293,20 @@ impl HydrologyComplex {
 
 	/// Build a [`WaterFill`] that samples \(W\) / softmask from this complex.
 	pub fn water_fill(&self) -> WaterFill {
-		let center = self.bounds.center();
-		let radius = self.bounds.extent().max_element() * 0.75;
+		// Prefer authored wet union for probes; fall back to a cell-covering circle.
+		let region = self.wet_union_from_graph().unwrap_or_else(|| {
+			let center = self.bounds.center();
+			let radius = self.bounds.extent().max_element() * 0.75;
+			Region2D::Circle(CircleRegion { center, radius })
+		});
 		WaterFill {
-			region: Region2D::Circle(CircleRegion { center, radius }),
+			region,
 			inner_radius: 0.0,
-			outer_radius: self.shore_fade.max(0.25),
+			outer_radius: (self.fill_support_pad + self.shore_fade).max(0.25),
 			noise: None,
-			surface: WaterSurface::Hydro { complex: self.clone() },
+			surface: WaterSurface::Hydro {
+				complex: self.clone(),
+			},
 			terrain_undercut: self.fill_undercut.max(0.0),
 		}
 	}
@@ -374,6 +396,73 @@ mod tests {
 		let u = out.wet_union.expect("union");
 		let p = Vec2::new(-10.0, 0.0);
 		assert!((u.sdf(p) - a.sdf(p).min(b.sdf(p))).abs() < 1e-5);
+		Ok(())
+	}
+
+	#[test]
+	fn fill_softmask_honors_support_pad() -> anyhow::Result<()> {
+		let mut params = HydroParameters::default();
+		params.fill_support_pad = 6.0;
+		params.shore_fade = 2.0;
+		let node = HydrologyNode::new(
+			HydroPrimitive {
+				footprint: HydroFootprint::Ellipse {
+					center: Vec2::ZERO,
+					radii: Vec2::splat(10.0),
+					rotation: 0.0,
+				},
+				elevation: HydroElevation::RadialBowl {
+					surface: 40.0,
+					center_depth: 3.0,
+				},
+				influence_pad: 20.0,
+			},
+			params,
+			20.0,
+		);
+		let mut complex = HydrologyComplex::new(Bounds2::from_xz(-40.0, -40.0, 40.0, 40.0), 4);
+		complex = complex.with_hydrology(vec![node]);
+		// Just outside the bowl but inside the liberal pad → fully wet softmask.
+		assert!(complex.fill_softmask_at(12.0, 0.0) < 0.05);
+		// Outside pad + fade → dry.
+		assert!(complex.fill_softmask_at(20.0, 0.0) > 0.95);
+		// Surface remains defined in the pad band.
+		assert!(complex.surface_at(12.0, 0.0).is_some());
+		Ok(())
+	}
+
+	#[test]
+	fn water_fill_probes_node_interior() -> anyhow::Result<()> {
+		let node = HydrologyNode::new(
+			HydroPrimitive {
+				footprint: HydroFootprint::Ellipse {
+					center: Vec2::new(30.0, -25.0),
+					radii: Vec2::splat(8.0),
+					rotation: 0.0,
+				},
+				elevation: HydroElevation::RadialBowl {
+					surface: 40.0,
+					center_depth: 3.0,
+				},
+				influence_pad: 12.0,
+			},
+			HydroParameters::default(),
+			12.0,
+		);
+		let mut complex = HydrologyComplex::new(Bounds2::from_xz(-40.0, -40.0, 40.0, 40.0), 5);
+		complex.push_node(WatershedNode::with_depression(WatershedDepression::new(
+			WatershedDepressionKind::LakeBowl,
+			Region2D::Circle(CircleRegion {
+				center: Vec2::new(30.0, -25.0),
+				radius: 8.0,
+			}),
+		)));
+		let fill = complex.with_hydrology(vec![node]).water_fill();
+		let probes = fill.wet_volume_probe_points();
+		assert!(
+			probes.iter().any(|p| (p.x - 30.0).abs() < 1e-3 && (p.y + 25.0).abs() < 1e-3),
+			"expected lake-center probe, got {probes:?}"
+		);
 		Ok(())
 	}
 }

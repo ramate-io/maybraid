@@ -8,8 +8,8 @@
 //! [`Self::point_classification`] priority: carve → rim → apron.
 
 use crate::hydro::{
-	smoothmax_fold, smoothmin_fold, CorrectionStage, HydroPrimitive, DEFAULT_RIM_UPLIFT_CAP,
-	SURFACE_SMOOTHMIN_K,
+	smoothmax_fold, smoothmin_fold, CorrectionStage, HydroFootprint, HydroPrimitive,
+	DEFAULT_RIM_UPLIFT_CAP, SURFACE_SMOOTHMIN_K,
 };
 use bevy_math::Vec2;
 use jersey_terrain_stamps::RegionNoise;
@@ -32,6 +32,11 @@ pub struct HydroParameters {
 	pub boundary_noise: Option<RegionNoise>,
 	pub shore_fade: f32,
 	pub fill_undercut: f32,
+	/// Extra wet support beyond \(\phi = 0\) for fill softmask (liberal ribbon).
+	///
+	/// Streams: \(\approx half\_width \cdot (fill\_half\_width\_scale - 1)\).
+	/// Lakes: rim-bleed style overhang past the bowl.
+	pub fill_support_pad: f32,
 }
 
 impl Default for HydroParameters {
@@ -46,6 +51,7 @@ impl Default for HydroParameters {
 			boundary_noise: None,
 			shore_fade: 2.5,
 			fill_undercut: 2.0,
+			fill_support_pad: 0.0,
 		}
 	}
 }
@@ -96,7 +102,16 @@ impl HydrologyNode {
 		self.max_correction_extent
 			.max(self.parameters.correction_pad())
 			.max(self.primitive.influence_pad)
+			.max(self.parameters.fill_support_pad + self.parameters.shore_fade)
 			+ self.parameters.boundary_noise_amp()
+	}
+
+	/// Representative interior sample (ellipse center / reach midpoint).
+	pub fn sample_point(&self) -> Vec2 {
+		match &self.primitive.footprint {
+			HydroFootprint::ReachSegment { a, b, .. } => (*a + *b) * 0.5,
+			HydroFootprint::Ellipse { center, .. } => *center,
+		}
 	}
 
 	/// AABB of hydraulic support expanded by [`Self::index_pad`].
