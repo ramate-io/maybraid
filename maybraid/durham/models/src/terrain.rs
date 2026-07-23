@@ -24,6 +24,8 @@ use crate::terrain::jersey::{
 };
 use crate::terrain::marazion::{
 	original_ids_for_marazion_lake_high_pass_leaves, original_ids_for_marazion_lake_low_pass_leaves,
+	WatershedAproningCell, WatershedCarvingCell, WatershedDepressionComplexCell,
+	WatershedRimmingCell,
 };
 use crate::terrain::render::cascade_chunk_for_cell;
 use avian3d::prelude::RigidBody;
@@ -117,13 +119,12 @@ pub struct Terrain {
 	pub jersey_leaves: Vec<Aabb3d>,
 	/// Leaf AABBs whose Marazion lake stamps contributed (plus empties for debug).
 	pub marazion_leaves: Vec<MarazionLeafBounds>,
-	/// Stamp-owned fills from every Marazion leaf composed into this cell.
+	/// Fills from this origin cell's cellular [`WatershedDepressionComplexCell`].
 	///
-	/// Each leaf stores a [`marazion_watersheds::WatershedDepressionComplex`];
-	/// terrain pull compiles complexes (per-leaf apron → carve → backfill) and
-	/// collects fills **with** elevation mods before SDF compose, so
-	/// [`crate::water::Water`] can evaluate wet volume against the finished
-	/// heightfield without re-discovering / regenerating lake leaves.
+	/// ComplexCell unions hydrology nodes from intersecting authored leaves
+	/// (all bands); fills share that union φ. Collected with carve → rim →
+	/// apron before SDF compose so [`crate::water::Water`] can evaluate wet
+	/// volume against the finished heightfield.
 	pub marazion_fills: Vec<WaterFill>,
 	pub sdf: ComposedTerrain,
 	pub material: Handle<DurhamTerrainShader>,
@@ -184,12 +185,9 @@ macro_rules! pull_family_stamps {
 	}};
 }
 
-/// Like [`pull_family_stamps`], but compiles each Marazion leaf complex
-/// (per-complex apron → carve → backfill) and gathers stamp-owned [`WaterFill`]s.
-macro_rules! pull_marazion_lakes {
-	($spatial_index:expr, $lod_ref:expr, $bounds:expr, $leaves_fn:path, $Stamp:ty, $mods:expr, $leaf_out:expr, $fills_out:expr) => {{
-		use crate::terrain::jersey_modulation::ComposedElevationOp;
-		use procedural_common::Bounds2;
+/// Retain authored leaf AABBs for color-coded pocket-water debug overlays.
+macro_rules! pull_marazion_leaf_bounds {
+	($spatial_index:expr, $lod_ref:expr, $bounds:expr, $leaves_fn:path, $Stamp:ty, $leaf_out:expr) => {{
 		let mut leaf_ids = $leaves_fn($spatial_index, $bounds);
 		leaf_ids.sort_by(|a, b| a.0.cmp(&b.0));
 		for OriginalId(lid) in leaf_ids {
@@ -198,29 +196,11 @@ macro_rules! pull_marazion_lakes {
 				lid,
 				$lod_ref,
 			)?;
-			// Always retain leaf bounds for color-coded pocket-water debug overlays.
 			$leaf_out.push($crate::terrain::marazion::MarazionLeafBounds {
 				cell: stamp.cell,
 				kind: stamp.kind,
 				band: stamp.band,
 			});
-			if stamp.complex.is_empty() {
-				continue;
-			}
-			let compiled = stamp.complex.compile();
-			let leaf_bounds =
-				Bounds2::from_xz(stamp.cell.min.x, stamp.cell.min.z, stamp.cell.max.x, stamp.cell.max.z);
-			if let Some(hydro) = compiled.hydro {
-				// Cell-domain identity is already the complex leaf AABB.
-				let _ = leaf_bounds;
-				$mods.push(ComposedElevationOp::Watershed(hydro));
-			}
-			$mods.extend(
-				jersey_terrain_stamps::JerseyModulation::bind_all(compiled.modulations, leaf_bounds)
-					.into_iter()
-					.map(ComposedElevationOp::Jersey),
-			);
-			$fills_out.extend(compiled.fills);
 		}
 	}};
 }
@@ -402,7 +382,7 @@ where
 	fn descendants_with_lod(_id: Id, _spatial_index: &mut S, _lod_ref: &LodRef) {}
 }
 
-/// Final terrain: pre-watershed + Marazion lake leaf stamps (both bands).
+/// Final terrain: pre-watershed + Marazion correction stages (carve → rim → apron).
 impl<S> GenerationScheme<S> for Terrain
 where
 	S: GeneratingSpatialIndex<PreWatershedTerrain>
@@ -415,6 +395,10 @@ where
 		+ GeneratingSpatialIndex<PrePocketHighPassCell>
 		+ GeneratingSpatialIndex<PocketHighPassCell>
 		+ GeneratingSpatialIndex<MarazionLakeHighPassCell>
+		+ GeneratingSpatialIndex<WatershedDepressionComplexCell>
+		+ GeneratingSpatialIndex<WatershedCarvingCell>
+		+ GeneratingSpatialIndex<WatershedRimmingCell>
+		+ GeneratingSpatialIndex<WatershedAproningCell>
 		+ GeneratingSpatialIndex<TerrainCellLayout>
 		+ GeneratingSpatialIndex<TerrainPresentationAssets>,
 {
@@ -423,6 +407,7 @@ where
 	}
 
 	fn build_with_id(spatial_index: &mut S, id: Id, lod_ref: &LodRef) -> Option<(Self, Aabb3d)> {
+		use procedural_common::Bounds2;
 		let bounds = id.origin_cell_bounds()?;
 
 		let pre = GeneratingSpatialIndex::<PreWatershedTerrain>::get_one_or_generate(
@@ -440,32 +425,72 @@ where
 			.collect();
 		let jersey_leaves = pre.jersey_leaves.clone();
 		let mut marazion_leaves = Vec::new();
-		let mut marazion_fills = Vec::new();
 
-		// Sample/author **all** watershed stamps first (high-pass, then low-pass —
-		// same band order as jersey), collecting elevation mods + fills together.
-		// Compose the heightfield only after both bands are in hand so water fill
-		// evaluation never sees a half-applied watershed stack.
-		pull_marazion_lakes!(
+		// Authored leaf overlays (banded); hydrology composition is cellular below.
+		pull_marazion_leaf_bounds!(
 			spatial_index,
 			lod_ref,
 			bounds,
 			original_ids_for_marazion_lake_high_pass_leaves,
 			MarazionLakeHighPassCell,
-			modulations,
-			marazion_leaves,
-			marazion_fills
+			marazion_leaves
 		);
-		pull_marazion_lakes!(
+		pull_marazion_leaf_bounds!(
 			spatial_index,
 			lod_ref,
 			bounds,
 			original_ids_for_marazion_lake_low_pass_leaves,
 			MarazionLakeLowPassCell,
-			modulations,
-			marazion_leaves,
-			marazion_fills
+			marazion_leaves
 		);
+
+		let complex_cell =
+			GeneratingSpatialIndex::<WatershedDepressionComplexCell>::get_one_or_generate(
+				spatial_index,
+				id,
+				lod_ref,
+			)?
+			.clone();
+		let compiled = complex_cell.complex.compile();
+		let cell_bounds2 =
+			Bounds2::from_xz(bounds.min.x, bounds.min.z, bounds.max.x, bounds.max.z);
+		let backfills: Vec<ComposedElevationOp> =
+			jersey_terrain_stamps::JerseyModulation::bind_all(compiled.modulations, cell_bounds2)
+				.into_iter()
+				.map(ComposedElevationOp::Jersey)
+				.collect();
+		let marazion_fills = compiled.fills;
+
+		let carving = GeneratingSpatialIndex::<WatershedCarvingCell>::get_one_or_generate(
+			spatial_index,
+			id,
+			lod_ref,
+		)?
+		.clone();
+		let rimming = GeneratingSpatialIndex::<WatershedRimmingCell>::get_one_or_generate(
+			spatial_index,
+			id,
+			lod_ref,
+		)?
+		.clone();
+		let aproning = GeneratingSpatialIndex::<WatershedAproningCell>::get_one_or_generate(
+			spatial_index,
+			id,
+			lod_ref,
+		)?
+		.clone();
+
+		// Ordered watershed correction over the cellular union, then backfills.
+		if let Some(hydro) = carving.prepared {
+			modulations.push(ComposedElevationOp::WatershedCarve(hydro));
+		}
+		if let Some(hydro) = rimming.prepared {
+			modulations.push(ComposedElevationOp::WatershedRim(hydro));
+		}
+		if let Some(hydro) = aproning.prepared {
+			modulations.push(ComposedElevationOp::WatershedApron(hydro));
+		}
+		modulations.extend(backfills);
 
 		let sdf = Self::compose_sdf(&pre.base, &modulations);
 		let assets = GeneratingSpatialIndex::<TerrainPresentationAssets>::get_one_or_generate(

@@ -1,15 +1,22 @@
 //! Union-first hydro composition: primitives + broadphase + sample-time blend.
 //!
-//! Authored plans emit [`HydroPrimitive`] nodes into a
-//! [`crate::complex::WatershedDepressionComplex`]. The complex modulates terrain
-//! directly: each sample does continuous `min` / `smoothmin` over a
-//! broadphase-culled candidate set. Rim/apron come from \(\phi_{\mathrm{union}}\)
-//! with one shared [`ComplexApronParams`].
+//! Authored plans emit [`crate::node::HydrologyNode`]s into a
+//! [`crate::complex::WatershedDepressionComplex`]. Correction stages
+//! (carve / rim / apron) share a member fold over \(\phi_{\mathrm{union}}\).
 
+use crate::node::{HydrologyNode, HydroParameters};
 use bevy_math::{FloatExt, Vec2};
 use jersey_terrain_stamps::RegionNoise;
 use procedural_common::Bounds2;
 use std::collections::HashMap;
+
+/// Which watershed correction pass to apply.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CorrectionStage {
+	Carve,
+	Rim,
+	Apron,
+}
 
 /// Soft-min length scale for free-surface blending (world units).
 pub const SURFACE_SMOOTHMIN_K: f32 = 1.5;
@@ -103,15 +110,15 @@ pub struct FootprintIndex {
 }
 
 impl FootprintIndex {
-	pub fn build(bounds: Bounds2, primitives: &[HydroPrimitive], cell: f32, support_pad: f32) -> Self {
+	/// Broadphase over node hydraulic AABBs expanded by each node's index pad.
+	pub fn build_nodes(bounds: Bounds2, nodes: &[HydrologyNode], cell: f32) -> Self {
 		let cell = cell.max(1.0);
 		let origin = bounds.min;
-		let support_pad = support_pad.max(0.0);
 		let mut buckets: HashMap<(i32, i32), Vec<u16>> = HashMap::new();
-		for (i, prim) in primitives.iter().enumerate() {
+		for (i, node) in nodes.iter().enumerate() {
 			let id = i as u16;
-			let (mn, mx) = prim.aabb();
-			let pad = prim.influence_pad.max(0.0) + support_pad;
+			let (mn, mx) = node.primitive.aabb();
+			let pad = node.index_pad();
 			let i0 = ((mn.x - pad - origin.x) / cell).floor() as i32;
 			let i1 = ((mx.x + pad - origin.x) / cell).floor() as i32;
 			let j0 = ((mn.y - pad - origin.y) / cell).floor() as i32;
@@ -236,41 +243,82 @@ impl HydroPrimitive {
 	}
 }
 
-/// Prepared hydro complex: sample-time modulation + shared fill surface.
+/// Fold result with blended rim/apron policy from contributing members.
+#[derive(Debug, Clone, Copy)]
+pub struct HydroFold {
+	pub phi: f32,
+	pub bed: f32,
+	pub water: f32,
+	pub rim_width: f32,
+	pub apron_width: f32,
+	pub bank: f32,
+	pub shore_fade: f32,
+}
+
+/// Prepared hydro complex: member nodes + broadphase + staged correction.
 #[derive(Debug, Clone)]
 pub struct PreparedHydroComplex {
 	pub bounds: Bounds2,
 	pub seed: u32,
-	pub primitives: Vec<HydroPrimitive>,
+	pub members: Vec<HydrologyNode>,
 	pub index: FootprintIndex,
-	pub apron: ComplexApronParams,
+	pub shore_fade: f32,
+	pub fill_undercut: f32,
 }
 
 impl PreparedHydroComplex {
-	pub fn prepare(
+	pub fn prepare(bounds: Bounds2, seed: u32, members: Vec<HydrologyNode>) -> Self {
+		let short = bounds.extent().min_element().max(1.0);
+		let cell = (short * 0.08).clamp(8.0, 64.0);
+		let index = FootprintIndex::build_nodes(bounds, &members, cell);
+		let shore_fade = members
+			.iter()
+			.map(|m| m.parameters.shore_fade)
+			.fold(2.5_f32, f32::max)
+			.max(0.25);
+		let fill_undercut = members
+			.iter()
+			.map(|m| m.parameters.fill_undercut)
+			.fold(0.0_f32, f32::max);
+		Self {
+			bounds,
+			seed,
+			members,
+			index,
+			shore_fade,
+			fill_undercut,
+		}
+	}
+
+	/// Test helper: wrap bare primitives with shared apron parameters.
+	pub fn prepare_from_primitives(
 		bounds: Bounds2,
 		seed: u32,
 		primitives: Vec<HydroPrimitive>,
 		apron: ComplexApronParams,
 	) -> Self {
-		let short = bounds.extent().min_element().max(1.0);
-		let cell = (short * 0.08).clamp(8.0, 64.0);
-		let support = apron.rim_width + apron.apron_width;
-		let index = FootprintIndex::build(bounds, &primitives, cell, support);
-		Self {
-			bounds,
-			seed,
-			primitives,
-			index,
-			apron,
-		}
+		let params = HydroParameters {
+			shelf_anchor: None,
+			rim_lift: apron.rim_lift,
+			rim_width: apron.rim_width,
+			apron_width: apron.apron_width,
+			rim_height: apron.rim_height,
+			rim_uplift_cap: apron.rim_uplift_cap,
+			shore_fade: apron.shore_fade,
+			fill_undercut: apron.fill_undercut,
+		};
+		let extent = params.correction_pad();
+		let members = primitives
+			.into_iter()
+			.map(|primitive| HydrologyNode::new(primitive, params.clone(), extent))
+			.collect();
+		Self::prepare(bounds, seed, members)
 	}
 
 	pub fn is_empty(&self) -> bool {
-		self.primitives.is_empty()
+		self.members.is_empty()
 	}
 
-	/// Candidates from broadphase (deduped).
 	pub fn candidate_ids(&self, p: Vec2) -> Vec<u16> {
 		let raw = self.index.candidates(p);
 		if raw.is_empty() {
@@ -282,101 +330,147 @@ impl PreparedHydroComplex {
 		ids
 	}
 
-	/// Fold \(\phi\), bed, \(W\) over candidates (or all if `use_index` is false).
-	pub fn fold_fields(&self, p: Vec2, use_index: bool) -> Option<(f32, f32, f32)> {
+	/// Fold \(\phi\), bed, \(W\), and blended rim/apron policy.
+	pub fn fold_fields(&self, p: Vec2, use_index: bool) -> Option<HydroFold> {
 		let ids: Vec<u16> = if use_index {
 			self.candidate_ids(p)
 		} else {
-			self.index.all_ids(self.primitives.len())
+			self.index.all_ids(self.members.len())
 		};
 		if ids.is_empty() {
 			return None;
 		}
-		let pad = self.apron.rim_width + self.apron.apron_width;
 		let mut phi = f32::INFINITY;
 		let mut bed = f32::INFINITY;
 		let mut surfaces: Vec<f32> = Vec::new();
+		let mut rim_w = 0.25_f32;
+		let mut apron_w = 0.25_f32;
+		let mut bank = f32::NEG_INFINITY;
+		let mut shore_fade = self.shore_fade;
 		for &id in &ids {
-			let Some(prim) = self.primitives.get(id as usize) else {
+			let Some(node) = self.members.get(id as usize) else {
 				continue;
 			};
-			let d = prim.phi(p);
-			if d > pad + prim.influence_pad {
+			let pad = node.index_pad();
+			let d = node.primitive.phi(p);
+			if d > pad {
 				continue;
 			}
 			phi = phi.min(d);
-			let (w, b) = prim.surface_and_bed(p);
-			// Bed only unions inside wet footprints; surface also feeds apron banks.
+			let (w, b) = node.primitive.surface_and_bed(p);
+			rim_w = rim_w.max(node.parameters.rim_width.max(0.25));
+			apron_w = apron_w.max(node.parameters.apron_width.max(0.25));
+			shore_fade = shore_fade.max(node.parameters.shore_fade.max(0.25));
+			let node_bank = node.parameters.bank_target(w, p);
 			if d <= 0.0 {
 				bed = bed.min(b);
 				surfaces.push(w);
-			} else if d < pad.max(1.0) {
+				bank = bank.max(node_bank);
+			} else if d < (rim_w + apron_w).max(1.0) {
 				surfaces.push(w);
+				bank = bank.max(node_bank);
 			}
 		}
 		if !phi.is_finite() {
 			return None;
 		}
-		let w = if surfaces.is_empty() {
+		let water = if surfaces.is_empty() {
 			bed
 		} else {
 			smoothmin_fold(&surfaces, SURFACE_SMOOTHMIN_K)
 		};
-		let bed = if bed.is_finite() { bed } else { w };
-		Some((phi, bed, w))
+		let bed = if bed.is_finite() { bed } else { water };
+		let bank = if bank.is_finite() {
+			bank
+		} else {
+			water + 1.1
+		};
+		Some(HydroFold {
+			phi,
+			bed,
+			water,
+			rim_width: rim_w,
+			apron_width: apron_w,
+			bank,
+			shore_fade,
+		})
 	}
 
-	pub fn modify_elevation(&self, elevation: f32, x: f32, z: f32) -> f32 {
+	pub fn carve_elevation(&self, elevation: f32, x: f32, z: f32) -> f32 {
 		let p = Vec2::new(x, z);
-		// Hard identity outside leaf AABB (+ small ease handled by caller bind if any).
-		if p.x < self.bounds.min.x
-			|| p.x > self.bounds.max.x
-			|| p.y < self.bounds.min.y
-			|| p.y > self.bounds.max.y
-		{
+		if !self.bounds.contains(p) {
 			return elevation;
 		}
-		let Some((phi, bed, w)) = self.fold_fields(p, true) else {
+		let Some(fold) = self.fold_fields(p, true) else {
 			return elevation;
 		};
-		let rim_w = self.apron.rim_width.max(0.25);
-		let apron_w = self.apron.apron_width.max(0.25);
-		let bank = w + self.apron.rim_lift.max(0.0);
-		let mut rim_noise = self.apron.rim_height.sample_height(p).abs();
-		rim_noise = rim_noise.min(self.apron.rim_uplift_cap.max(0.0));
-		let bank = bank + rim_noise;
+		if fold.phi <= 0.0 {
+			elevation.min(fold.bed)
+		} else {
+			elevation
+		}
+	}
 
-		if phi <= 0.0 {
-			// Interior: depression-only toward union bed.
-			return elevation.min(bed);
+	pub fn rim_elevation(&self, elevation: f32, x: f32, z: f32) -> f32 {
+		let p = Vec2::new(x, z);
+		if !self.bounds.contains(p) {
+			return elevation;
 		}
-		if phi < rim_w {
-			// Rim band: raise-only toward bank, full weight inside rim.
-			let t = (1.0 - phi / rim_w).clamp(0.0, 1.0);
-			let toward = elevation * (1.0 - t) + bank * t;
-			return toward.max(elevation);
+		let Some(fold) = self.fold_fields(p, true) else {
+			return elevation;
+		};
+		if fold.phi <= 0.0 || fold.phi >= fold.rim_width {
+			return elevation;
 		}
-		if phi < rim_w + apron_w {
-			let u = ((phi - rim_w) / apron_w).clamp(0.0, 1.0);
-			// Smoothstep out to identity.
-			let fade = u * u * (3.0 - 2.0 * u);
-			let toward = elevation * fade + bank * (1.0 - fade);
-			return toward.max(elevation);
+		let t = (1.0 - fold.phi / fold.rim_width).clamp(0.0, 1.0);
+		let toward = elevation * (1.0 - t) + fold.bank * t;
+		toward.max(elevation)
+	}
+
+	pub fn apron_elevation(&self, elevation: f32, x: f32, z: f32) -> f32 {
+		let p = Vec2::new(x, z);
+		if !self.bounds.contains(p) {
+			return elevation;
 		}
-		elevation
+		let Some(fold) = self.fold_fields(p, true) else {
+			return elevation;
+		};
+		let rim_w = fold.rim_width;
+		let apron_w = fold.apron_width;
+		if fold.phi < rim_w || fold.phi >= rim_w + apron_w {
+			return elevation;
+		}
+		let u = ((fold.phi - rim_w) / apron_w).clamp(0.0, 1.0);
+		let fade = u * u * (3.0 - 2.0 * u);
+		let toward = elevation * fade + fold.bank * (1.0 - fade);
+		toward.max(elevation)
+	}
+
+	pub fn apply_stage(&self, stage: CorrectionStage, elevation: f32, x: f32, z: f32) -> f32 {
+		match stage {
+			CorrectionStage::Carve => self.carve_elevation(elevation, x, z),
+			CorrectionStage::Rim => self.rim_elevation(elevation, x, z),
+			CorrectionStage::Apron => self.apron_elevation(elevation, x, z),
+		}
+	}
+
+	/// Full carve → rim → apron (legacy single-op path / tests).
+	pub fn modify_elevation(&self, elevation: f32, x: f32, z: f32) -> f32 {
+		let h = self.carve_elevation(elevation, x, z);
+		let h = self.rim_elevation(h, x, z);
+		self.apron_elevation(h, x, z)
 	}
 
 	pub fn surface_at(&self, x: f32, z: f32) -> Option<f32> {
-		self.fold_fields(Vec2::new(x, z), true).map(|(_, _, w)| w)
+		self.fold_fields(Vec2::new(x, z), true).map(|f| f.water)
 	}
 
 	pub fn occupancy_at(&self, x: f32, z: f32) -> Option<f32> {
-		self.fold_fields(Vec2::new(x, z), true).map(|(phi, _, _)| phi)
+		self.fold_fields(Vec2::new(x, z), true).map(|f| f.phi)
 	}
 
-	/// Softmask weight in `[0,1]` (`0` wet interior, `1` dry) from \(\phi_{\mathrm{union}}\).
 	pub fn fill_softmask_at(&self, x: f32, z: f32) -> f32 {
-		let fade = self.apron.shore_fade.max(0.25);
+		let fade = self.shore_fade.max(0.25);
 		match self.occupancy_at(x, z) {
 			None => 1.0,
 			Some(phi) if phi <= 0.0 => 0.0,
@@ -396,15 +490,14 @@ pub fn water_fill_from_prepared(prepared: PreparedHydroComplex) -> crate::fill::
 	let center = prepared.bounds.center();
 	let radius = prepared.bounds.extent().max_element() * 0.75;
 	WaterFill {
-		// Softmask is driven by `WaterSurface::Hydro`; region is a conservative AABB proxy.
 		region: Region2D::Circle(CircleRegion { center, radius }),
 		inner_radius: 0.0,
-		outer_radius: prepared.apron.shore_fade.max(0.25),
+		outer_radius: prepared.shore_fade.max(0.25),
 		noise: None,
 		surface: WaterSurface::Hydro {
 			prepared: prepared.clone(),
 		},
-		terrain_undercut: prepared.apron.fill_undercut.max(0.0),
+		terrain_undercut: prepared.fill_undercut.max(0.0),
 	}
 }
 
@@ -580,18 +673,19 @@ mod tests {
 			},
 			influence_pad: 1.0,
 		};
-		let prep = PreparedHydroComplex::prepare(
+		let prep = PreparedHydroComplex::prepare_from_primitives(
 			Bounds2::from_xz(-10.0, -20.0, 50.0, 30.0),
 			1,
 			vec![a, b],
 			ComplexApronParams::default(),
 		);
-		let (_, bed, _) = prep
+		let fold = prep
 			.fold_fields(Vec2::new(20.0, 1.0), true)
 			.expect("overlap");
 		assert!(
-			bed <= 50.0 - 7.0,
-			"min bed should prefer deeper channel: {bed}"
+			fold.bed <= 50.0 - 7.0,
+			"min bed should prefer deeper channel: {}",
+			fold.bed
 		);
 		Ok(())
 	}
@@ -617,7 +711,7 @@ mod tests {
 			3.0,
 			2.0,
 		));
-		let prep = PreparedHydroComplex::prepare(
+		let prep = PreparedHydroComplex::prepare_from_primitives(
 			Bounds2::from_xz(-20.0, -20.0, 80.0, 60.0),
 			2,
 			prims,
@@ -630,13 +724,18 @@ mod tests {
 				let brute = prep.fold_fields(p, false);
 				match (indexed, brute) {
 					(None, None) => {}
-					(Some((p0, b0, w0)), Some((p1, b1, w1))) => {
-						assert!((p0 - p1).abs() < 1e-3, "phi {p0} vs {p1} at {p:?}");
-						if b0.is_finite() || b1.is_finite() {
-							assert!((b0 - b1).abs() < 1e-3, "bed {b0} vs {b1} at {p:?}");
+					(Some(a), Some(b)) => {
+						assert!((a.phi - b.phi).abs() < 1e-3, "phi {} vs {} at {p:?}", a.phi, b.phi);
+						if a.bed.is_finite() || b.bed.is_finite() {
+							assert!((a.bed - b.bed).abs() < 1e-3, "bed {} vs {} at {p:?}", a.bed, b.bed);
 						}
-						if w0.is_finite() || w1.is_finite() {
-							assert!((w0 - w1).abs() < 1e-2, "W {w0} vs {w1} at {p:?}");
+						if a.water.is_finite() || b.water.is_finite() {
+							assert!(
+								(a.water - b.water).abs() < 1e-2,
+								"W {} vs {} at {p:?}",
+								a.water,
+								b.water
+							);
 						}
 					}
 					(a, b) => panic!("mismatch presence at {p:?}: {a:?} vs {b:?}"),
@@ -679,7 +778,7 @@ mod tests {
 		apron.rim_width = 3.0;
 		apron.apron_width = 6.0;
 		apron.rim_height = RegionNoise::from_seed(1, 0.05, 0.0);
-		let prep = PreparedHydroComplex::prepare(
+		let prep = PreparedHydroComplex::prepare_from_primitives(
 			Bounds2::from_xz(-30.0, -40.0, 60.0, 40.0),
 			3,
 			vec![a, b],

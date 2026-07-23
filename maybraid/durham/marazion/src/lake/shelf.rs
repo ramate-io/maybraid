@@ -98,6 +98,8 @@ pub fn planned_center(bounds: Bounds2, seed: u32, params: LakeParams) -> Vec2 {
 
 /// Vertical shelf levels derived from a terrain survey + params.
 pub(crate) struct ShelfLevels {
+	/// Surveyed shelf / plateau anchor used for rim bank (`+ rim_lift`).
+	pub shelf_anchor: f32,
 	pub water_level: f32,
 }
 
@@ -117,6 +119,7 @@ pub(crate) fn shelf_levels(
 	);
 	let shelf_anchor = base_h + n11_at(seed, SHELF_AMP_SALT, anchor) * params.shelf_amp;
 	ShelfLevels {
+		shelf_anchor,
 		water_level: shelf_anchor - params.water_sink.max(0.0),
 	}
 }

@@ -1,15 +1,14 @@
 //! Streams graph — multi-corridor stream leaf for composition practice.
 //!
 //! Grows a degree-bounded [`HysteresisGraph`], collapses chains between
-//! keypoints into corridors, then emits segment [`crate::hydro::HydroPrimitive`]s
+//! keypoints into corridors, then emits segment [`crate::node::HydrologyNode`]s
 //! into one [`WatershedDepressionComplex`] (sample-time union blend).
 
 use crate::apron::{ApronNoiseSalts, WatershedApronParams};
 use crate::complex::{WatershedDepressionComplex, WatershedEdge, WatershedNode};
 use crate::depression::{WatershedDepression, WatershedDepressionKind};
-use crate::hydro::{
-	primitives_from_polyline, ComplexApronParams, DEFAULT_RIM_UPLIFT_CAP,
-};
+use crate::hydro::DEFAULT_RIM_UPLIFT_CAP;
+use crate::node::{nodes_from_polyline, HydroParameters};
 use crate::noise::n01_freq;
 use crate::stream::{
 	collapse_degenerate_vertices, node_water_levels, sample_endpoint, StreamBandBudget,
@@ -137,7 +136,8 @@ pub struct StreamsGraph {
 	pub edge_count: usize,
 	corridors: Vec<CorridorPart>,
 	key_points: Vec<Vec2>,
-	hydro_apron: ComplexApronParams,
+	parameters: HydroParameters,
+	max_correction_extent: f32,
 }
 
 impl StreamsGraph {
@@ -307,7 +307,9 @@ impl StreamsGraph {
 
 		let rim_w = (budget.skirt_half * 0.35).max(2.0).min(budget.half_width);
 		let apron_w = (budget.apron_half - budget.skirt_half).max(apron_band);
-		let hydro_apron = ComplexApronParams {
+		let max_correction_extent = (rim_w + apron_w).max(0.0);
+		let parameters = HydroParameters {
+			shelf_anchor: None,
 			rim_lift: stream_p.rim_lift.max(0.0),
 			rim_width: rim_w,
 			apron_width: apron_w,
@@ -325,7 +327,8 @@ impl StreamsGraph {
 			edge_count: corridors.len(),
 			corridors,
 			key_points,
-			hydro_apron,
+			parameters,
+			max_correction_extent,
 		})
 	}
 
@@ -340,8 +343,7 @@ impl StreamsGraph {
 		for _ in &self.key_points {
 			node_ids.push(complex.push_node(WatershedNode::empty()));
 		}
-		let mut primitives = Vec::new();
-		let influence = self.hydro_apron.rim_width + self.hydro_apron.apron_width;
+		let mut hydrology = Vec::new();
 		for corridor in &self.corridors {
 			let from = node_ids[corridor.from_key];
 			let to = node_ids[corridor.to_key];
@@ -355,15 +357,16 @@ impl StreamsGraph {
 			});
 			// Bed at centerline ≈ W − freeboard − shallow thalweg nick.
 			let center_depth = corridor.freeboard + corridor.depth;
-			primitives.extend(primitives_from_polyline(
+			hydrology.extend(nodes_from_polyline(
 				&corridor.path,
 				&corridor.levels,
 				corridor.half_width,
 				center_depth,
-				influence,
+				&self.parameters,
+				self.max_correction_extent,
 			));
 		}
-		complex.with_hydro(primitives, self.hydro_apron)
+		complex.with_hydrology(hydrology)
 	}
 }
 

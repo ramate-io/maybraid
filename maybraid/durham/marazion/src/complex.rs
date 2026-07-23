@@ -1,24 +1,19 @@
 //! Graph of watershed depressions with shared hydro composition.
 //!
-//! [RFC-127 §3.1.3.4](https://github.com/ramate-io/maybraid/tree/main/rfc/rfc-000-000-127-marazion-watersheds#3134-pocket-complex)
-//! anticipates multi-part pocket complexes; v1 realizes standalone stream / lake
-//! / bog / streams-graph leaves as graphs compiled through this type.
-//!
-//! Authored leaves emit [`crate::hydro::HydroPrimitive`] nodes. [`Self::compile`]
-//! prepares a [`crate::hydro::PreparedHydroComplex`] for sample-time union blend.
-//! Optional [`WatershedBackfill`]s stay a **post-depression** jersey layer
-//! (applied after hydro).
+//! Authored leaves emit [`crate::node::HydrologyNode`]s. [`Self::compile`]
+//! prepares a [`crate::hydro::PreparedHydroComplex`] (member refs / owned nodes)
+//! for staged carve → rim → apron correction. Optional backfills stay a
+//! post-depression jersey layer.
 
 use crate::backfill::WatershedBackfill;
 use crate::depression::WatershedDepression;
 use crate::fill::WaterFill;
-use crate::hydro::{
-	water_fill_from_prepared, ComplexApronParams, HydroPrimitive, PreparedHydroComplex,
-};
+use crate::hydro::{water_fill_from_prepared, PreparedHydroComplex};
+use crate::node::HydrologyNode;
 use jersey_terrain_stamps::{JerseyModulation, Region2D};
 use procedural_common::Bounds2;
 
-/// Stable index into [`WatershedDepressionComplex::nodes`].
+/// Stable index into [`WatershedDepressionComplex::graph_nodes`].
 pub type WatershedNodeId = usize;
 /// Stable index into [`WatershedDepressionComplex::edges`].
 pub type WatershedEdgeId = usize;
@@ -54,12 +49,11 @@ pub struct WatershedEdge {
 pub struct CompiledWatershed {
 	pub bounds: Bounds2,
 	pub seed: u32,
-	/// Post-depression jersey ops (backfills). Empty when there are none.
+	/// Post-depression jersey ops (backfills).
 	pub modulations: Vec<JerseyModulation>,
-	/// Prepared hydro complex for sample-time union blend.
+	/// Prepared hydro complex (member nodes + staged correction).
 	pub hydro: Option<PreparedHydroComplex>,
 	pub fills: Vec<WaterFill>,
-	/// Union of all wet-core footprints (debug / overlays).
 	pub wet_union: Option<Region2D>,
 }
 
@@ -72,7 +66,6 @@ impl CompiledWatershed {
 				.map_or(true, |h| h.is_empty())
 	}
 
-	/// Apply hydro (if any) then jersey mods in compile order.
 	pub fn modify_elevation(&self, elevation: f32, x: f32, z: f32) -> f32 {
 		let mut h = elevation;
 		if let Some(hydro) = &self.hydro {
@@ -85,16 +78,16 @@ impl CompiledWatershed {
 	}
 }
 
-/// Graph of depressions with hydro primitives and optional post-carve backfills.
+/// Assembled watershed: graph bookkeeping + member [`HydrologyNode`]s.
 #[derive(Debug, Clone)]
 pub struct WatershedDepressionComplex {
 	pub bounds: Bounds2,
 	pub seed: u32,
-	pub nodes: Vec<WatershedNode>,
+	pub graph_nodes: Vec<WatershedNode>,
 	pub edges: Vec<WatershedEdge>,
 	pub backfills: Vec<WatershedBackfill>,
-	pub hydro_primitives: Vec<HydroPrimitive>,
-	pub hydro_apron: Option<ComplexApronParams>,
+	/// Member hydrology nodes (source of truth for correction).
+	pub hydrology: Vec<HydrologyNode>,
 }
 
 impl WatershedDepressionComplex {
@@ -102,21 +95,15 @@ impl WatershedDepressionComplex {
 		Self {
 			bounds,
 			seed,
-			nodes: Vec::new(),
+			graph_nodes: Vec::new(),
 			edges: Vec::new(),
 			backfills: Vec::new(),
-			hydro_primitives: Vec::new(),
-			hydro_apron: None,
+			hydrology: Vec::new(),
 		}
 	}
 
-	pub fn with_hydro(
-		mut self,
-		primitives: Vec<HydroPrimitive>,
-		apron: ComplexApronParams,
-	) -> Self {
-		self.hydro_primitives = primitives;
-		self.hydro_apron = Some(apron);
+	pub fn with_hydrology(mut self, nodes: Vec<HydrologyNode>) -> Self {
+		self.hydrology = nodes;
 		self
 	}
 
@@ -126,8 +113,8 @@ impl WatershedDepressionComplex {
 	}
 
 	pub fn push_node(&mut self, node: WatershedNode) -> WatershedNodeId {
-		let id = self.nodes.len();
-		self.nodes.push(node);
+		let id = self.graph_nodes.len();
+		self.graph_nodes.push(node);
 		id
 	}
 
@@ -137,14 +124,13 @@ impl WatershedDepressionComplex {
 		id
 	}
 
-	/// True when there is nothing to emit.
 	pub fn is_empty(&self) -> bool {
-		self.hydro_primitives.is_empty() && self.backfills.is_empty()
+		self.hydrology.is_empty() && self.backfills.is_empty()
 	}
 
 	fn wet_union_from_graph(&self) -> Option<Region2D> {
 		let mut wet_cores: Vec<Region2D> = Vec::new();
-		for node in &self.nodes {
+		for node in &self.graph_nodes {
 			if let Some(dep) = &node.depression {
 				wet_cores.push(dep.wet_core.clone());
 			}
@@ -159,7 +145,6 @@ impl WatershedDepressionComplex {
 		}
 	}
 
-	/// Prepare hydro (when primitives are present) and append backfills as jersey.
 	pub fn compile(&self) -> CompiledWatershed {
 		let wet_union = self.wet_union_from_graph();
 		let modulations: Vec<_> = self
@@ -169,7 +154,7 @@ impl WatershedDepressionComplex {
 			.map(|b| b.into_modulation())
 			.collect();
 
-		if self.hydro_primitives.is_empty() {
+		if self.hydrology.is_empty() {
 			return CompiledWatershed {
 				bounds: self.bounds,
 				seed: self.seed,
@@ -180,12 +165,10 @@ impl WatershedDepressionComplex {
 			};
 		}
 
-		let apron = self.hydro_apron.clone().unwrap_or_default();
 		let prepared = PreparedHydroComplex::prepare(
 			self.bounds,
 			self.seed,
-			self.hydro_primitives.clone(),
-			apron,
+			self.hydrology.clone(),
 		);
 		let fill = water_fill_from_prepared(prepared.clone());
 		CompiledWatershed {
@@ -204,7 +187,8 @@ mod tests {
 	use super::*;
 	use crate::backfill::WatershedBackfill;
 	use crate::depression::{WatershedDepression, WatershedDepressionKind};
-	use crate::hydro::{HydroElevation, HydroFootprint};
+	use crate::hydro::{HydroElevation, HydroFootprint, HydroPrimitive};
+	use crate::node::{HydrologyNode, HydroParameters};
 	use bevy_math::Vec2;
 	use jersey_terrain_stamps::{CircleRegion, Region2D, RegionNoise};
 
@@ -214,7 +198,6 @@ mod tests {
 		let out = c.compile();
 		assert!(out.is_empty());
 		assert!(out.fills.is_empty());
-		assert!(out.wet_union.is_none());
 		Ok(())
 	}
 
@@ -224,18 +207,22 @@ mod tests {
 			center: Vec2::ZERO,
 			radius: 10.0,
 		});
-		let prim = HydroPrimitive {
-			footprint: HydroFootprint::Ellipse {
-				center: Vec2::ZERO,
-				radii: Vec2::splat(8.0),
-				rotation: 0.0,
+		let node = HydrologyNode::new(
+			HydroPrimitive {
+				footprint: HydroFootprint::Ellipse {
+					center: Vec2::ZERO,
+					radii: Vec2::splat(8.0),
+					rotation: 0.0,
+				},
+				elevation: HydroElevation::RadialBowl {
+					surface: 40.0,
+					center_depth: 3.0,
+				},
+				influence_pad: 4.0,
 			},
-			elevation: HydroElevation::RadialBowl {
-				surface: 40.0,
-				center_depth: 3.0,
-			},
-			influence_pad: 4.0,
-		};
+			HydroParameters::default(),
+			12.0,
+		);
 		let mut complex =
 			WatershedDepressionComplex::new(Bounds2::from_xz(-40.0, -40.0, 40.0, 40.0), 3);
 		complex.push_node(WatershedNode::with_depression(WatershedDepression::new(
@@ -243,7 +230,7 @@ mod tests {
 			core.clone(),
 		)));
 		let out = complex
-			.with_hydro(vec![prim], ComplexApronParams::default())
+			.with_hydrology(vec![node])
 			.with_backfill(WatershedBackfill::basin(
 				core,
 				RegionNoise::from_seed(1, 0.05, 4.0),

@@ -471,9 +471,10 @@ mod tests {
 			"rim {h} should sit above water {}",
 			lake.water_level
 		);
+		let shelf = lake.water_level + params.water_sink.max(0.0);
 		assert!(
-			h <= lake.water_level + params.rim_lift + 2.0,
-			"rim {h} should stay near W+rim_lift"
+			h <= shelf + params.rim_lift + 2.0,
+			"rim {h} should stay near shelf_anchor+rim_lift"
 		);
 		Ok(())
 	}

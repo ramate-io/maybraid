@@ -5,9 +5,9 @@
 //! after pre-watershed terrain is composed.
 //!
 //! Pocket hierarchy: [`pre_pocket`] → [`pocket_cell`] guillotine → [`lake`] /
-//! [`stream`] / [`bog`] / [`streams_graph`] **plans**. Each plan realizes a
-//! [`complex::WatershedDepressionComplex`]; Durham compiles that graph when
-//! pulling into terrain (hydro depression → optional backfill).
+//! [`stream`] / [`bog`] / [`streams_graph`] **plans**. Each plan emits
+//! [`node::HydrologyNode`]s into a [`complex::WatershedDepressionComplex`];
+//! Durham gathers complexes into carve → rim → apron correction stages.
 
 pub mod apron;
 pub mod backfill;
@@ -17,6 +17,7 @@ pub mod depression;
 pub mod fill;
 pub mod hydro;
 pub mod lake;
+pub mod node;
 pub mod noise;
 pub mod pocket_cell;
 pub mod polyline;
@@ -36,11 +37,12 @@ pub use complex::{
 pub use depression::{WatershedDepression, WatershedDepressionKind};
 pub use fill::{WaterFill, WaterSurface};
 pub use hydro::{
-	primitives_from_polyline, water_fill_from_prepared, ComplexApronParams, FootprintIndex,
-	HydroElevation, HydroFootprint, HydroPrimitive, PreparedHydroComplex, DEFAULT_RIM_UPLIFT_CAP,
-	SURFACE_SMOOTHMIN_K,
+	primitives_from_polyline, water_fill_from_prepared, ComplexApronParams, CorrectionStage,
+	FootprintIndex, HydroElevation, HydroFootprint, HydroPrimitive, PreparedHydroComplex,
+	DEFAULT_RIM_UPLIFT_CAP, SURFACE_SMOOTHMIN_K,
 };
 pub use lake::{shelf_base_height, Lake, LakeBandBudget, LakeParams};
+pub use node::{nodes_from_polyline, HydrologyNode, HydroParameters};
 pub use pocket_cell::{guillotine_partition, PocketGuillotineParams};
 pub use polyline::{closest_on_polyline, grade_along_polyline, ClosestOnPolyline};
 pub use pre_pocket::{

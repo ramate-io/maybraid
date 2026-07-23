@@ -29,6 +29,8 @@ use crate::terrain::marazion::{
 	BootstrapPrePocketLowPassLayout, MarazionLakeHighPassCell, MarazionLakeLowPassCell,
 	MarazionWatershedConfigs, PocketHighPassCell, PocketLowPassCell, PrePocketHighPassCell,
 	PrePocketHighPassLayout, PrePocketLowPassCell, PrePocketLowPassLayout,
+	WatershedAproningCell, WatershedCarvingCell, WatershedDepressionComplexCell,
+	WatershedRimmingCell,
 };
 use crate::terrain::presentation::{
 	BootstrapTerrainPresentationAssets, TerrainPresentationAssets,
@@ -76,6 +78,10 @@ pub struct TerrainEntryStore {
 	pub(crate) pre_pocket_high_pass_cell: HashMap<Id, StoredEntry<PrePocketHighPassCell>>,
 	pub(crate) pocket_high_pass_cell: HashMap<Id, StoredEntry<PocketHighPassCell>>,
 	pub(crate) marazion_lake_high_pass_cell: HashMap<Id, StoredEntry<MarazionLakeHighPassCell>>,
+	pub(crate) watershed_complex_cell: HashMap<Id, StoredEntry<WatershedDepressionComplexCell>>,
+	pub(crate) watershed_carving_cell: HashMap<Id, StoredEntry<WatershedCarvingCell>>,
+	pub(crate) watershed_rimming_cell: HashMap<Id, StoredEntry<WatershedRimmingCell>>,
+	pub(crate) watershed_aproning_cell: HashMap<Id, StoredEntry<WatershedAproningCell>>,
 	pub(crate) plateau_low_pass_layout: HashMap<Id, StoredEntry<PlateauLowPassControllerLayout>>,
 	pub(crate) plateau_low_pass_controller: HashMap<Id, StoredEntry<PlateauLowPassControllerCell>>,
 	pub(crate) plateau_low_pass_stamp: HashMap<Id, StoredEntry<PlateauLowPassStampCell>>,
@@ -410,6 +416,10 @@ impl_map_spatial_index!(PrePocketHighPassLayout, pre_pocket_high_pass_layout);
 impl_map_spatial_index!(PrePocketHighPassCell, pre_pocket_high_pass_cell);
 impl_map_spatial_index!(PocketHighPassCell, pocket_high_pass_cell);
 impl_map_spatial_index!(MarazionLakeHighPassCell, marazion_lake_high_pass_cell);
+impl_map_spatial_index!(WatershedDepressionComplexCell, watershed_complex_cell);
+impl_map_spatial_index!(WatershedCarvingCell, watershed_carving_cell);
+impl_map_spatial_index!(WatershedRimmingCell, watershed_rimming_cell);
+impl_map_spatial_index!(WatershedAproningCell, watershed_aproning_cell);
 impl_map_spatial_index!(PreWatershedTerrain, pre_watershed);
 impl_map_spatial_index!(Water, water);
 

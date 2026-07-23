@@ -9,6 +9,7 @@
 pub mod band_macro;
 pub mod bog;
 pub mod config;
+pub mod correction;
 pub mod height;
 pub mod high_pass;
 pub mod lake;
@@ -18,6 +19,10 @@ pub mod pre_pocket;
 pub mod stream;
 
 pub use config::{BootstrapMarazionWatershedConfigs, MarazionBandConfig, MarazionWatershedConfigs};
+pub use correction::{
+	WatershedAproningCell, WatershedCarvingCell, WatershedDepressionComplexCell,
+	WatershedRimmingCell,
+};
 pub use high_pass::{
 	bootstrap_pre_pocket_high_pass_layout, original_ids_for_marazion_lake_high_pass_leaves,
 	original_ids_for_pocket_high_pass_cells, original_ids_for_pre_pocket_high_pass_cells,

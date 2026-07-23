@@ -1,14 +1,13 @@
-//! Assemble lake bowl as a hydro ellipse + shared complex apron.
+//! Assemble lake bowl as a hydrology node (ellipse + radial bowl).
 
 use crate::apron::{jittered_depth, ApronNoiseSalts};
 use crate::complex::{WatershedDepressionComplex, WatershedNode};
 use crate::depression::{WatershedDepression, WatershedDepressionKind};
-use crate::hydro::{
-	ComplexApronParams, HydroElevation, HydroFootprint, HydroPrimitive, DEFAULT_RIM_UPLIFT_CAP,
-};
+use crate::hydro::{HydroElevation, HydroFootprint, HydroPrimitive, DEFAULT_RIM_UPLIFT_CAP};
 use crate::lake::budget::LakeBandBudget;
 use crate::lake::shelf::ShelfLevels;
 use crate::lake::LakeParams;
+use crate::node::{HydrologyNode, HydroParameters};
 use bevy_math::Vec2;
 use jersey_terrain_stamps::{EllipseRegion, Region2D};
 use procedural_common::Bounds2;
@@ -30,27 +29,26 @@ pub(crate) struct LakeLayout {
 	pub levels: ShelfLevels,
 }
 
-/// Lake-specific stamp: one radial-bowl primitive + complex apron params.
+/// Lake-specific stamp: one radial-bowl hydrology node.
 ///
 /// Convert with [`Self::into_complex`] → [`WatershedDepressionComplex`].
 #[derive(Debug, Clone)]
 pub(crate) struct LakeBowl {
 	pub wet_core: Region2D,
-	pub primitive: HydroPrimitive,
-	pub hydro_apron: ComplexApronParams,
+	pub node: HydrologyNode,
 	/// Authoring metadata: water radius + rim bleed (fill softmask follows \(\phi\)).
 	pub fill_radius: f32,
 }
 
 impl LakeBowl {
-	/// `LakeBowl` → sole-node [`WatershedDepressionComplex`] with hydro emit.
+	/// `LakeBowl` → sole-node [`WatershedDepressionComplex`] with hydrology emit.
 	pub fn into_complex(self, bounds: Bounds2, seed: u32) -> WatershedDepressionComplex {
 		let mut complex = WatershedDepressionComplex::new(bounds, seed);
 		complex.push_node(WatershedNode::with_depression(WatershedDepression::new(
 			WatershedDepressionKind::LakeBowl,
 			self.wet_core,
 		)));
-		complex.with_hydro(vec![self.primitive], self.hydro_apron)
+		complex.with_hydrology(vec![self.node])
 	}
 }
 
@@ -88,21 +86,9 @@ pub(crate) fn build_bowl(
 	);
 	let apron_outer = (apron_w + apron_noise.apron_amp).max(apron_w);
 
-	let influence = rim_w + apron_outer;
-	let primitive = HydroPrimitive {
-		footprint: HydroFootprint::Ellipse {
-			center,
-			radii: water_r.max(Vec2::splat(1e-3)),
-			rotation,
-		},
-		elevation: HydroElevation::RadialBowl {
-			surface: water_level,
-			center_depth: depth.max(0.25),
-		},
-		influence_pad: influence,
-	};
-
-	let hydro_apron = ComplexApronParams {
+	let max_correction_extent = (rim_w + apron_outer).max(0.0);
+	let parameters = HydroParameters {
+		shelf_anchor: Some(layout.levels.shelf_anchor),
 		rim_lift: params.rim_lift.max(0.0),
 		rim_width: rim_w,
 		apron_width: apron_outer,
@@ -111,11 +97,26 @@ pub(crate) fn build_bowl(
 		shore_fade: params.shore_fade.max(1.0),
 		fill_undercut: params.terrain_undercut.max(0.0),
 	};
+	let node = HydrologyNode::new(
+		HydroPrimitive {
+			footprint: HydroFootprint::Ellipse {
+				center,
+				radii: water_r.max(Vec2::splat(1e-3)),
+				rotation,
+			},
+			elevation: HydroElevation::RadialBowl {
+				surface: water_level,
+				center_depth: depth.max(0.25),
+			},
+			influence_pad: max_correction_extent,
+		},
+		parameters,
+		max_correction_extent,
+	);
 
 	LakeBowl {
 		wet_core: water_region,
-		primitive,
-		hydro_apron,
+		node,
 		fill_radius: fill_r.min_element(),
 	}
 }
