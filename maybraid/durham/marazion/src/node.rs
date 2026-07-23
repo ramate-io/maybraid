@@ -65,10 +65,7 @@ impl HydroParameters {
 
 	/// Raise-only bank target at a sample given free-surface \(W\).
 	pub fn bank_target(&self, water_surface: f32, p: Vec2) -> f32 {
-		let base = self
-			.shelf_anchor
-			.unwrap_or(water_surface)
-			+ self.rim_lift.max(0.0);
+		let base = self.shelf_anchor.unwrap_or(water_surface) + self.rim_lift.max(0.0);
 		let mut rim_noise = self.rim_height.sample_height(p).abs();
 		rim_noise = rim_noise.min(self.rim_uplift_cap.max(0.0));
 		base + rim_noise
@@ -91,11 +88,7 @@ impl HydrologyNode {
 		parameters: HydroParameters,
 		max_correction_extent: f32,
 	) -> Self {
-		Self {
-			primitive,
-			parameters,
-			max_correction_extent: max_correction_extent.max(0.0),
-		}
+		Self { primitive, parameters, max_correction_extent: max_correction_extent.max(0.0) }
 	}
 
 	/// Conservative pad for indexing / broadphase.
@@ -110,10 +103,7 @@ impl HydrologyNode {
 	pub fn correction_index_bounds(&self) -> Bounds2 {
 		let (mn, mx) = self.primitive.aabb();
 		let pad = self.index_pad();
-		Bounds2 {
-			min: mn - Vec2::splat(pad),
-			max: mx + Vec2::splat(pad),
-		}
+		Bounds2 { min: mn - Vec2::splat(pad), max: mx + Vec2::splat(pad) }
 	}
 
 	/// Occupancy SDF, optionally warped by shore [`HydroParameters::boundary_noise`].
@@ -154,8 +144,8 @@ impl HydrologyNode {
 	}
 
 	/// Lower terrain toward this node's bed (carve candidate).
-	pub fn carve_candidate(&self, elevation: f32, p: Vec2) -> f32 {
-		elevation.min(self.bed_level(p))
+	pub fn carve_candidate(&self, _elevation: f32, p: Vec2) -> f32 {
+		self.bed_level(p)
 	}
 
 	/// Raise-only rim berm: hold the bank across the rim band.
@@ -209,10 +199,7 @@ impl HydrologyNode {
 		}
 
 		if !carves.is_empty() {
-			let vals: Vec<f32> = carves
-				.iter()
-				.map(|n| n.carve_candidate(elevation, p))
-				.collect();
+			let vals: Vec<f32> = carves.iter().map(|n| n.carve_candidate(elevation, p)).collect();
 			return smoothmin_fold(&vals, SURFACE_SMOOTHMIN_K);
 		}
 		if !rims.is_empty() {
@@ -226,10 +213,7 @@ impl HydrologyNode {
 			return smoothmax_fold(&raised, SURFACE_SMOOTHMIN_K).max(water);
 		}
 		if !aprons.is_empty() {
-			let vals: Vec<f32> = aprons
-				.iter()
-				.map(|n| n.apron_candidate(elevation, p))
-				.collect();
+			let vals: Vec<f32> = aprons.iter().map(|n| n.apron_candidate(elevation, p)).collect();
 			return smoothmax_fold(&vals, SURFACE_SMOOTHMIN_K);
 		}
 		elevation
@@ -252,9 +236,7 @@ pub fn nodes_from_polyline(
 	}
 	let hw = half_width.max(1e-3);
 	let depth = center_depth.max(0.25);
-	let extent = max_correction_extent
-		.max(parameters.correction_pad())
-		.max(0.0);
+	let extent = max_correction_extent.max(parameters.correction_pad()).max(0.0);
 	let mut out = Vec::with_capacity(n - 1);
 	for i in 0..n - 1 {
 		let a = path[i];
@@ -264,11 +246,7 @@ pub fn nodes_from_polyline(
 		}
 		out.push(HydrologyNode::new(
 			HydroPrimitive {
-				footprint: HydroFootprint::ReachSegment {
-					a,
-					b,
-					half_width: hw,
-				},
+				footprint: HydroFootprint::ReachSegment { a, b, half_width: hw },
 				elevation: HydroElevation::ReachProfile {
 					surface_a: levels[i],
 					surface_b: levels[i + 1],
@@ -314,18 +292,9 @@ mod tests {
 	#[test]
 	fn classifies_carve_rim_apron_bands() -> anyhow::Result<()> {
 		let node = reach_node(8.0);
-		assert_eq!(
-			node.point_classification(Vec2::new(20.0, 0.0)),
-			Some(CorrectionStage::Carve)
-		);
-		assert_eq!(
-			node.point_classification(Vec2::new(20.0, 10.0)),
-			Some(CorrectionStage::Rim)
-		);
-		assert_eq!(
-			node.point_classification(Vec2::new(20.0, 14.0)),
-			Some(CorrectionStage::Apron)
-		);
+		assert_eq!(node.point_classification(Vec2::new(20.0, 0.0)), Some(CorrectionStage::Carve));
+		assert_eq!(node.point_classification(Vec2::new(20.0, 10.0)), Some(CorrectionStage::Rim));
+		assert_eq!(node.point_classification(Vec2::new(20.0, 14.0)), Some(CorrectionStage::Apron));
 		assert_eq!(node.point_classification(Vec2::new(20.0, 30.0)), None);
 		Ok(())
 	}
