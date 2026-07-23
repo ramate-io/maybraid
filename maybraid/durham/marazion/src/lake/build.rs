@@ -1,6 +1,6 @@
 //! Assemble lake bowl as a hydrology node (ellipse + radial bowl).
 
-use crate::apron::{jittered_depth, ApronNoiseSalts, TARGET_RIM_WIDTH};
+use crate::apron::{jittered_depth, shore_boundary_noise, ApronNoiseSalts, TARGET_RIM_WIDTH};
 use crate::complex::{HydrologyComplex, WatershedNode};
 use crate::depression::{WatershedDepression, WatershedDepressionKind};
 use crate::hydro::{HydroElevation, HydroFootprint, HydroPrimitive};
@@ -86,8 +86,16 @@ pub(crate) fn build_bowl(
 		ApronNoiseSalts::LAKE,
 	);
 	let apron_outer = (apron_w + apron_noise.apron_amp).max(apron_w);
+	let boundary_noise = shore_boundary_noise(
+		seed,
+		short_water,
+		params.shore_indent_frac,
+		params.shore_freq,
+		params.apron.noise_freq_power,
+	);
+	let shore_amp = boundary_noise.noise.params().amplitude.abs();
 
-	let max_correction_extent = (rim_w + apron_outer).max(0.0);
+	let max_correction_extent = (rim_w + apron_outer + shore_amp).max(0.0);
 	let rim_uplift_cap = params
 		.apron
 		.rim_height_amp_max
@@ -100,6 +108,7 @@ pub(crate) fn build_bowl(
 		apron_width: apron_outer,
 		rim_height: apron_noise.rim_height,
 		rim_uplift_cap,
+		boundary_noise: Some(boundary_noise),
 		shore_fade: params.shore_fade.max(1.0),
 		fill_undercut: params.terrain_undercut.max(0.0),
 	};

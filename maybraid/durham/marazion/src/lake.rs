@@ -463,6 +463,7 @@ mod tests {
 		params.aspect_strength = 0.0;
 		params.apron.rim_height_amp_min = 0.0;
 		params.apron.rim_height_amp_max = 0.0;
+		params.shore_indent_frac = 0.0;
 		let lake = Lake::from_bounds(bounds, 11, params, Some(&|_, _| base)).expect("lake");
 		let mid_r = lake.water_radius + lake.rim_width * 0.4;
 		let p = lake.center + Vec2::new(mid_r, 0.0);

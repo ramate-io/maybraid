@@ -4,7 +4,7 @@
 //! keypoints into corridors, then emits segment [`crate::node::HydrologyNode`]s
 //! into one [`HydrologyComplex`] (sample-time union blend).
 
-use crate::apron::{ApronNoiseSalts, TARGET_RIM_WIDTH};
+use crate::apron::{shore_boundary_noise, ApronNoiseSalts, TARGET_RIM_WIDTH};
 use crate::complex::{HydrologyComplex, WatershedEdge, WatershedNode};
 use crate::depression::{WatershedDepression, WatershedDepressionKind};
 use crate::node::{nodes_from_polyline, HydroParameters};
@@ -301,7 +301,15 @@ impl StreamsGraph {
 
 		let rim_w = TARGET_RIM_WIDTH;
 		let apron_w = (budget.apron_half - budget.skirt_half).max(apron_band);
-		let max_correction_extent = (rim_w + apron_w).max(0.0);
+		let boundary_noise = shore_boundary_noise(
+			seed,
+			budget.half_width,
+			stream_p.shore_indent_frac,
+			stream_p.shore_freq,
+			stream_p.apron.noise_freq_power,
+		);
+		let shore_amp = boundary_noise.noise.params().amplitude.abs();
+		let max_correction_extent = (rim_w + apron_w + shore_amp).max(0.0);
 		let parameters = HydroParameters {
 			shelf_anchor: None,
 			rim_lift: stream_p.rim_lift.max(0.0),
@@ -309,6 +317,7 @@ impl StreamsGraph {
 			apron_width: apron_w,
 			rim_height: apron_noise.rim_height,
 			rim_uplift_cap: params.rim_uplift_cap.max(0.0),
+			boundary_noise: Some(boundary_noise),
 			shore_fade: stream_p.shore_fade.max(0.25),
 			fill_undercut: stream_p.fill_undercut.max(0.0),
 		};

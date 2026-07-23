@@ -28,6 +28,8 @@ pub struct HydroParameters {
 	pub apron_width: f32,
 	pub rim_height: RegionNoise,
 	pub rim_uplift_cap: f32,
+	/// Optional shore outline: warps occupancy via `φ += sample_boundary`.
+	pub boundary_noise: Option<RegionNoise>,
 	pub shore_fade: f32,
 	pub fill_undercut: f32,
 }
@@ -41,6 +43,7 @@ impl Default for HydroParameters {
 			apron_width: 8.0,
 			rim_height: RegionNoise::from_seed(0, 0.02, 0.0),
 			rim_uplift_cap: DEFAULT_RIM_UPLIFT_CAP,
+			boundary_noise: None,
 			shore_fade: 2.5,
 			fill_undercut: 2.0,
 		}
@@ -50,6 +53,14 @@ impl Default for HydroParameters {
 impl HydroParameters {
 	pub fn correction_pad(&self) -> f32 {
 		(self.rim_width + self.apron_width).max(0.0)
+	}
+
+	/// Peak absolute amplitude of [`Self::boundary_noise`] (0 when unset).
+	pub fn boundary_noise_amp(&self) -> f32 {
+		self.boundary_noise
+			.as_ref()
+			.map(|n| n.noise.params().amplitude.abs())
+			.unwrap_or(0.0)
 	}
 
 	/// Raise-only bank target at a sample given free-surface \(W\).
@@ -92,6 +103,7 @@ impl HydrologyNode {
 		self.max_correction_extent
 			.max(self.parameters.correction_pad())
 			.max(self.primitive.influence_pad)
+			+ self.parameters.boundary_noise_amp()
 	}
 
 	/// AABB of hydraulic support expanded by [`Self::index_pad`].
@@ -104,8 +116,13 @@ impl HydrologyNode {
 		}
 	}
 
+	/// Occupancy SDF, optionally warped by shore [`HydroParameters::boundary_noise`].
 	pub fn phi(&self, p: Vec2) -> f32 {
-		self.primitive.phi(p)
+		let mut d = self.primitive.phi(p);
+		if let Some(noise) = &self.parameters.boundary_noise {
+			d += noise.sample_boundary(p);
+		}
+		d
 	}
 
 	pub fn surface_level(&self, p: Vec2) -> f32 {

@@ -124,6 +124,7 @@ impl HydrologyComplex {
 			apron_width: apron.apron_width,
 			rim_height: apron.rim_height,
 			rim_uplift_cap: apron.rim_uplift_cap,
+			boundary_noise: None,
 			shore_fade: apron.shore_fade,
 			fill_undercut: apron.fill_undercut,
 		};
