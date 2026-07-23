@@ -1,19 +1,18 @@
 //! Marazion watershed stamps ([RFC-127](https://github.com/ramate-io/maybraid/tree/main/rfc/rfc-000-000-127-marazion-watersheds)).
 //!
 //! Pure stamp / layout construction — no LOD `GenerationScheme` wiring.
-//! Durham models consume [`jersey_terrain_stamps::JerseyModulation`] and
-//! [`WaterFill`] outputs after pre-watershed terrain is composed.
+//! Durham models consume prepared hydro complexes and [`WaterFill`] outputs
+//! after pre-watershed terrain is composed.
 //!
 //! Pocket hierarchy: [`pre_pocket`] → [`pocket_cell`] guillotine → [`lake`] /
 //! [`stream`] / [`bog`] / [`streams_graph`] **plans**. Each plan realizes a
 //! [`complex::WatershedDepressionComplex`]; Durham compiles that graph when
-//! pulling into terrain (per-complex apron → carve → backfill order).
+//! pulling into terrain (hydro depression → optional backfill).
 
 pub mod apron;
 pub mod backfill;
 pub mod bog;
 pub mod complex;
-pub mod compose;
 pub mod depression;
 pub mod fill;
 pub mod hydro;
@@ -31,14 +30,11 @@ pub use backfill::{
 };
 pub use bog::{Bog, BogBasinFill, BogParams};
 pub use complex::{
-	CompiledWatershed, WatershedApronShelf, WatershedDepressionComplex, WatershedEdge,
-	WatershedEdgeId, WatershedNode, WatershedNodeId,
-};
-pub use compose::{
-	StreamBandComposer, StreamBandPart, OWNERSHIP_GAMMA_HARD, OWNERSHIP_GAMMA_SOFT,
+	CompiledWatershed, WatershedDepressionComplex, WatershedEdge, WatershedEdgeId, WatershedNode,
+	WatershedNodeId,
 };
 pub use depression::{WatershedDepression, WatershedDepressionKind};
-pub use fill::{WaterFill, WaterGradePart, WaterSurface};
+pub use fill::{WaterFill, WaterSurface};
 pub use hydro::{
 	primitives_from_polyline, water_fill_from_prepared, ComplexApronParams, FootprintIndex,
 	HydroElevation, HydroFootprint, HydroPrimitive, PreparedHydroComplex, DEFAULT_RIM_UPLIFT_CAP,

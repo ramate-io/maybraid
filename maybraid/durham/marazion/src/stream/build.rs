@@ -51,24 +51,9 @@ impl StreamCorridor {
 			depression: WatershedDepression::new(
 				WatershedDepressionKind::StreamCorridor,
 				self.wet_core,
-				Vec::new(),
-				None,
 			),
 		});
 		complex.with_hydro(primitives, self.hydro_apron)
-	}
-}
-
-pub(crate) fn resolve_node_blend(
-	params: StreamParams,
-	bounds: Bounds2,
-	half_w: f32,
-) -> f32 {
-	if params.node_blend > 0.0 {
-		params.node_blend
-	} else {
-		let step_guess = params.spine.walk_config(bounds).step_len.max(half_w);
-		(step_guess * 0.45).max(half_w * 0.5)
 	}
 }
 

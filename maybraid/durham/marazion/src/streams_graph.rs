@@ -351,8 +351,6 @@ impl StreamsGraph {
 				depression: WatershedDepression::new(
 					WatershedDepressionKind::StreamCorridor,
 					corridor.wet_core.clone(),
-					Vec::new(),
-					None,
 				),
 			});
 			// Bed at centerline ≈ W − freeboard − shallow thalweg nick.

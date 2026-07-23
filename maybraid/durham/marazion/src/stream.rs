@@ -10,10 +10,9 @@
 mod build;
 mod path;
 
-pub(crate) use build::resolve_node_blend;
 pub(crate) use path::{
-	bank_levels, bed_levels, collapse_degenerate_vertices, node_water_levels, sample_endpoint,
-	DEGENERATE_VERTEX_EPS, ENDPOINT_A_SALT, ENDPOINT_B_SALT,
+	collapse_degenerate_vertices, node_water_levels, sample_endpoint, DEGENERATE_VERTEX_EPS,
+	ENDPOINT_A_SALT, ENDPOINT_B_SALT,
 };
 
 use crate::apron::WatershedApronParams;

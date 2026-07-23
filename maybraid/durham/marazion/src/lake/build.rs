@@ -49,8 +49,6 @@ impl LakeBowl {
 		complex.push_node(WatershedNode::with_depression(WatershedDepression::new(
 			WatershedDepressionKind::LakeBowl,
 			self.wet_core,
-			Vec::new(),
-			None,
 		)));
 		complex.with_hydro(vec![self.primitive], self.hydro_apron)
 	}

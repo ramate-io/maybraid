@@ -1,4 +1,4 @@
-//! Stream path placement and graded water / bank / bed levels.
+//! Stream path placement and graded water levels.
 
 use crate::noise::n01_at;
 use bevy_math::Vec2;
@@ -52,11 +52,6 @@ pub(crate) fn node_water_levels(
 	levels
 }
 
-pub(crate) fn bank_levels(water_levels: &[f32], rim_lift: f32) -> Vec<f32> {
-	let lift = rim_lift.max(0.0);
-	water_levels.iter().map(|w| w + lift).collect()
-}
-
 /// Drop zero-length hysteresis vertices so node-pitch blend cannot explode grades.
 pub(crate) fn collapse_degenerate_vertices(
 	path: &mut Vec<Vec2>,
@@ -86,10 +81,4 @@ pub(crate) fn collapse_degenerate_vertices(
 	}
 	*path = out_p;
 	*levels = out_l;
-}
-
-/// Channel floor grade: water surface levels minus freeboard (strictly below \(W\)).
-pub(crate) fn bed_levels(water_levels: &[f32], freeboard: f32) -> Vec<f32> {
-	let fb = freeboard.max(0.25);
-	water_levels.iter().map(|w| w - fb).collect()
 }
