@@ -141,17 +141,16 @@ impl HydrologyNode {
 		elevation.min(self.bed_level(p))
 	}
 
-	/// Raise-only rim candidate toward this node's bank.
+	/// Raise-only rim berm: hold the bank across the rim band.
+	///
+	/// Fade-to-identity belongs on the apron. Fading here created a dead mid-rim
+	/// and a discontinuous jump back up to full bank at the apron seam.
 	pub fn rim_candidate(&self, elevation: f32, p: Vec2) -> f32 {
-		let d = self.phi(p);
-		let rim_w = self.parameters.rim_width.max(1e-3);
-		let t = (1.0 - d / rim_w).clamp(0.0, 1.0);
 		let bank = self.parameters.bank_target(self.surface_level(p), p);
-		let toward = elevation * (1.0 - t) + bank * t;
-		toward.max(elevation)
+		elevation.max(bank)
 	}
 
-	/// Raise-only apron candidate fading from bank toward identity.
+	/// Raise-only apron: fade from bank (inner) toward identity (outer).
 	pub fn apron_candidate(&self, elevation: f32, p: Vec2) -> f32 {
 		let d = self.phi(p);
 		let rim_w = self.parameters.rim_width.max(0.0);

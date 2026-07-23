@@ -35,17 +35,9 @@ pub struct HydroPrimitive {
 #[derive(Debug, Clone)]
 pub enum HydroFootprint {
 	/// Capsule / stadium for one reach segment.
-	ReachSegment {
-		a: Vec2,
-		b: Vec2,
-		half_width: f32,
-	},
+	ReachSegment { a: Vec2, b: Vec2, half_width: f32 },
 	/// Rotated elliptical disc (lake body).
-	Ellipse {
-		center: Vec2,
-		radii: Vec2,
-		rotation: f32,
-	},
+	Ellipse { center: Vec2, radii: Vec2, rotation: f32 },
 }
 
 /// Depth / surface field over the footprint (local coordinates).
@@ -59,10 +51,7 @@ pub enum HydroElevation {
 		center_depth: f32,
 	},
 	/// Flat \(W\); bowl in ellipse-normalized \(u\).
-	RadialBowl {
-		surface: f32,
-		center_depth: f32,
-	},
+	RadialBowl { surface: f32, center_depth: f32 },
 }
 
 /// One complex-wide rim / apron policy (not per-primitive).
@@ -110,11 +99,7 @@ pub struct FootprintIndex {
 
 impl FootprintIndex {
 	pub fn empty() -> Self {
-		Self {
-			origin: Vec2::ZERO,
-			cell: 1.0,
-			buckets: HashMap::new(),
-		}
+		Self { origin: Vec2::ZERO, cell: 1.0, buckets: HashMap::new() }
 	}
 
 	/// Broadphase over node hydraulic AABBs expanded by each node's index pad.
@@ -136,20 +121,13 @@ impl FootprintIndex {
 				}
 			}
 		}
-		Self {
-			origin,
-			cell,
-			buckets,
-		}
+		Self { origin, cell, buckets }
 	}
 
 	pub fn candidates(&self, p: Vec2) -> &[u16] {
 		let ix = ((p.x - self.origin.x) / self.cell).floor() as i32;
 		let iz = ((p.y - self.origin.y) / self.cell).floor() as i32;
-		self.buckets
-			.get(&(ix, iz))
-			.map(|v| v.as_slice())
-			.unwrap_or(&[])
+		self.buckets.get(&(ix, iz)).map(|v| v.as_slice()).unwrap_or(&[])
 	}
 }
 
@@ -159,11 +137,7 @@ impl HydroFootprint {
 			Self::ReachSegment { a, b, half_width } => {
 				segment_distance(p, *a, *b) - half_width.max(1e-3)
 			}
-			Self::Ellipse {
-				center,
-				radii,
-				rotation,
-			} => ellipse_sdf(p, *center, *radii, *rotation),
+			Self::Ellipse { center, radii, rotation } => ellipse_sdf(p, *center, *radii, *rotation),
 		}
 	}
 
@@ -175,11 +149,7 @@ impl HydroFootprint {
 				let mx = Vec2::new(a.x.max(b.x), a.y.max(b.y)) + Vec2::splat(hw);
 				(mn, mx)
 			}
-			Self::Ellipse {
-				center,
-				radii,
-				rotation,
-			} => {
+			Self::Ellipse { center, radii, rotation } => {
 				// Conservative AABB of rotated ellipse.
 				let (s, c) = rotation.sin_cos();
 				let rx = radii.x.max(1e-3);
@@ -206,11 +176,7 @@ impl HydroPrimitive {
 		match (&self.footprint, &self.elevation) {
 			(
 				HydroFootprint::ReachSegment { a, b, half_width },
-				HydroElevation::ReachProfile {
-					surface_a,
-					surface_b,
-					center_depth,
-				},
+				HydroElevation::ReachProfile { surface_a, surface_b, center_depth },
 			) => {
 				let (z, x_signed) = reach_frame(p, *a, *b);
 				let w = surface_a + (surface_b - surface_a) * z;
@@ -219,15 +185,8 @@ impl HydroPrimitive {
 				(w, w - depth)
 			}
 			(
-				HydroFootprint::Ellipse {
-					center,
-					radii,
-					rotation,
-				},
-				HydroElevation::RadialBowl {
-					surface,
-					center_depth,
-				},
+				HydroFootprint::Ellipse { center, radii, rotation },
+				HydroElevation::RadialBowl { surface, center_depth },
 			) => {
 				let u = ellipse_radial_norm(p, *center, *radii, *rotation).clamp(0.0, 1.0);
 				let depth = center_depth.max(0.0) * transverse_bowl(u);
@@ -267,11 +226,7 @@ pub fn primitives_from_polyline(
 			continue;
 		}
 		out.push(HydroPrimitive {
-			footprint: HydroFootprint::ReachSegment {
-				a,
-				b,
-				half_width: hw,
-			},
+			footprint: HydroFootprint::ReachSegment { a, b, half_width: hw },
 			elevation: HydroElevation::ReachProfile {
 				surface_a: levels[i],
 				surface_b: levels[i + 1],
@@ -396,10 +351,7 @@ mod tests {
 		assert!((bed_mid - (45.0 - 4.0)).abs() < 1e-3);
 		let (w_bank, bed_bank) = prim.surface_and_bed(Vec2::new(20.0, 8.0));
 		assert!((w_bank - 45.0).abs() < 1e-3, "W independent of X");
-		assert!(
-			bed_bank > bed_mid + 2.0,
-			"bed rises toward bank: mid={bed_mid} bank={bed_bank}"
-		);
+		assert!(bed_bank > bed_mid + 2.0, "bed rises toward bank: mid={bed_mid} bank={bed_bank}");
 		Ok(())
 	}
 
@@ -438,10 +390,7 @@ mod tests {
 			ComplexApronParams::default(),
 		);
 		let h = prep.modify_elevation(50.0, 20.0, 1.0);
-		assert!(
-			h <= 50.0 - 7.0,
-			"carve soft-min should prefer deeper channel: {h}"
-		);
+		assert!(h <= 50.0 - 7.0, "carve soft-min should prefer deeper channel: {h}");
 		Ok(())
 	}
 
@@ -487,10 +436,7 @@ mod tests {
 		// Junction interior should be below surface (carved), not raised.
 		let h0 = 28.0;
 		let h1 = prep.modify_elevation(h0, 20.0, 0.0);
-		assert!(
-			h1 <= h0 + 0.05,
-			"confluence interior must not raise: {h0} -> {h1}"
-		);
+		assert!(h1 <= h0 + 0.05, "confluence interior must not raise: {h0} -> {h1}");
 		assert!(h1 < 30.0 - 1.0, "should sit in the carved bowl: {h1}");
 		Ok(())
 	}

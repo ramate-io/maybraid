@@ -67,9 +67,10 @@ impl LakeBandBudget {
 		}
 
 		let max_water_short = (short_room * 0.5).min(short_avail * 0.45);
-		let rim_claim = (short_avail * params.rim_frac.clamp(0.05, 0.45))
-			.max(short_avail * 0.12)
-			.min(short_avail * 0.42);
+		// Keep the rim claim modest — it is a berm, not a wide terrace.
+		let rim_claim = (short_avail * params.rim_frac.clamp(0.015, 0.25))
+			.max(short_avail * 0.02)
+			.min(short_avail * 0.18);
 		let rim_hi = 1.0;
 		let rim_lo = params.rim_width_min.clamp(0.2, rim_hi);
 		let rim = rim_claim * (rim_lo + (rim_hi - rim_lo) * rim_u01.clamp(0.0, 1.0));

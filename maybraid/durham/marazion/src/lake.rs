@@ -123,8 +123,8 @@ pub struct LakeParams {
 impl Default for LakeParams {
 	fn default() -> Self {
 		Self {
-			rim_frac: 0.1,
-			apron_frac: 0.6,
+			rim_frac: 0.035,
+			apron_frac: 0.35,
 			mu: 12.0,
 			centroid_jitter: 0.12,
 			aspect_strength: 0.95,
@@ -157,7 +157,14 @@ impl Default for LakeParams {
 			shore_indent_frac: 0.18,
 			shore_freq: 0.022,
 
-			apron: WatershedApronParams::default(),
+			// Noisier lake banks for visual iteration (streams keep apron defaults).
+			apron: WatershedApronParams {
+				rim_height_amp_min: 4.0,
+				rim_height_amp_max: 12.0,
+				rim_height_freq_min: 0.04,
+				rim_height_freq_max: 0.10,
+				..WatershedApronParams::default()
+			},
 
 			rim_bleed_frac: 0.5,
 			shore_fade: 3.0,
@@ -478,8 +485,8 @@ mod tests {
 		);
 		let shelf = lake.water_level + params.water_sink.max(0.0);
 		assert!(
-			h <= shelf + params.rim_lift + 2.0,
-			"rim {h} should stay near shelf_anchor+rim_lift"
+			h <= shelf + params.rim_lift + params.apron.rim_height_amp_max + 2.0,
+			"rim {h} should stay near shelf_anchor+rim_lift (+ capped noise)"
 		);
 		Ok(())
 	}

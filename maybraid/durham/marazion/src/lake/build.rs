@@ -3,7 +3,7 @@
 use crate::apron::{jittered_depth, ApronNoiseSalts};
 use crate::complex::{HydrologyComplex, WatershedNode};
 use crate::depression::{WatershedDepression, WatershedDepressionKind};
-use crate::hydro::{HydroElevation, HydroFootprint, HydroPrimitive, DEFAULT_RIM_UPLIFT_CAP};
+use crate::hydro::{HydroElevation, HydroFootprint, HydroPrimitive};
 use crate::lake::budget::LakeBandBudget;
 use crate::lake::shelf::ShelfLevels;
 use crate::lake::LakeParams;
@@ -87,13 +87,19 @@ pub(crate) fn build_bowl(
 	let apron_outer = (apron_w + apron_noise.apron_amp).max(apron_w);
 
 	let max_correction_extent = (rim_w + apron_outer).max(0.0);
+	// Lake rims keep authored height noise (streams still use the tight default cap).
+	let rim_uplift_cap = params
+		.apron
+		.rim_height_amp_max
+		.max(params.apron.rim_height_amp_min)
+		.max(0.0);
 	let parameters = HydroParameters {
 		shelf_anchor: Some(layout.levels.shelf_anchor),
 		rim_lift: params.rim_lift.max(0.0),
 		rim_width: rim_w,
 		apron_width: apron_outer,
 		rim_height: apron_noise.rim_height,
-		rim_uplift_cap: DEFAULT_RIM_UPLIFT_CAP,
+		rim_uplift_cap,
 		shore_fade: params.shore_fade.max(1.0),
 		fill_undercut: params.terrain_undercut.max(0.0),
 	};

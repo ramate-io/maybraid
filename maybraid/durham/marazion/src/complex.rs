@@ -12,7 +12,7 @@ use crate::hydro::{
 	smoothmin_fold, ComplexApronParams, CorrectionStage, FootprintIndex, HydroPrimitive,
 	SURFACE_SMOOTHMIN_K,
 };
-use crate::node::{HydrologyNode, HydroParameters};
+use crate::node::{HydroParameters, HydrologyNode};
 use bevy_math::Vec2;
 use jersey_terrain_stamps::{CircleRegion, JerseyModulation, Region2D};
 use procedural_common::Bounds2;
@@ -34,9 +34,7 @@ impl WatershedNode {
 	}
 
 	pub fn with_depression(depression: WatershedDepression) -> Self {
-		Self {
-			depression: Some(depression),
-		}
+		Self { depression: Some(depression) }
 	}
 }
 
@@ -285,26 +283,16 @@ impl HydrologyComplex {
 			inner_radius: 0.0,
 			outer_radius: self.shore_fade.max(0.25),
 			noise: None,
-			surface: WaterSurface::Hydro {
-				complex: self.clone(),
-			},
+			surface: WaterSurface::Hydro { complex: self.clone() },
 			terrain_undercut: self.fill_undercut.max(0.0),
 		}
 	}
 
 	pub fn compile(&self) -> CompiledWatershed {
 		let wet_union = self.wet_union_from_graph();
-		let modulations: Vec<_> = self
-			.backfills
-			.iter()
-			.cloned()
-			.map(|b| b.into_modulation())
-			.collect();
-		let fills = if self.is_empty() {
-			Vec::new()
-		} else {
-			vec![self.water_fill()]
-		};
+		let modulations: Vec<_> =
+			self.backfills.iter().cloned().map(|b| b.into_modulation()).collect();
+		let fills = if self.is_empty() { Vec::new() } else { vec![self.water_fill()] };
 		CompiledWatershed {
 			bounds: self.bounds,
 			seed: self.seed,
@@ -322,7 +310,7 @@ mod tests {
 	use crate::backfill::WatershedBackfill;
 	use crate::depression::{WatershedDepression, WatershedDepressionKind};
 	use crate::hydro::{HydroElevation, HydroFootprint, HydroPrimitive};
-	use crate::node::{HydrologyNode, HydroParameters};
+	use crate::node::{HydroParameters, HydrologyNode};
 	use jersey_terrain_stamps::{CircleRegion, Region2D, RegionNoise};
 
 	#[test]
@@ -336,10 +324,7 @@ mod tests {
 
 	#[test]
 	fn backfill_appends_after_hydro() -> anyhow::Result<()> {
-		let core = Region2D::Circle(CircleRegion {
-			center: Vec2::ZERO,
-			radius: 10.0,
-		});
+		let core = Region2D::Circle(CircleRegion { center: Vec2::ZERO, radius: 10.0 });
 		let node = HydrologyNode::new(
 			HydroPrimitive {
 				footprint: HydroFootprint::Ellipse {
@@ -347,10 +332,7 @@ mod tests {
 					radii: Vec2::splat(8.0),
 					rotation: 0.0,
 				},
-				elevation: HydroElevation::RadialBowl {
-					surface: 40.0,
-					center_depth: 3.0,
-				},
+				elevation: HydroElevation::RadialBowl { surface: 40.0, center_depth: 3.0 },
 				influence_pad: 4.0,
 			},
 			HydroParameters::default(),
@@ -376,14 +358,8 @@ mod tests {
 
 	#[test]
 	fn wet_union_of_two_cores_is_min_sdf() -> anyhow::Result<()> {
-		let a = Region2D::Circle(CircleRegion {
-			center: Vec2::new(-10.0, 0.0),
-			radius: 4.0,
-		});
-		let b = Region2D::Circle(CircleRegion {
-			center: Vec2::new(10.0, 0.0),
-			radius: 4.0,
-		});
+		let a = Region2D::Circle(CircleRegion { center: Vec2::new(-10.0, 0.0), radius: 4.0 });
+		let b = Region2D::Circle(CircleRegion { center: Vec2::new(10.0, 0.0), radius: 4.0 });
 		let mut complex = HydrologyComplex::new(Bounds2::from_xz(-40.0, -40.0, 40.0, 40.0), 2);
 		complex.push_node(WatershedNode::with_depression(WatershedDepression::new(
 			WatershedDepressionKind::LakeBowl,
