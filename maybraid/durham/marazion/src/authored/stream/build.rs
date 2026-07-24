@@ -3,7 +3,7 @@
 use crate::authored::apron::{jittered_depth, sample_apron_rim_noise, ApronNoiseSalts};
 use crate::authored::noise::scale_noise_freq;
 use crate::authored::stream::{StreamBandBudget, StreamParams};
-use crate::primitive::backfill::{HydroBackfill, RimBackfillParams};
+use crate::primitive::backfill::HydroBackfill;
 use crate::primitive::complex::HydroComplex;
 use crate::primitive::node::nodes_from_polyline;
 use crate::primitive::parameters::{HydroParams, TARGET_RIM_WIDTH};
@@ -94,7 +94,7 @@ pub(crate) fn build_corridor(
 	let rim_boundary_noise = Some(apron_noise.apron.clone());
 	let rim_boundary_amp = apron_noise.apron_amp;
 	let rim_backfill_params = {
-		let mut p = RimBackfillParams::for_stream(half_w);
+		let mut p = StreamParams::rim_backfill_params(half_w);
 		p.freq = scale_noise_freq(p.freq, half_w, params.apron.noise_freq_power);
 		p
 	};

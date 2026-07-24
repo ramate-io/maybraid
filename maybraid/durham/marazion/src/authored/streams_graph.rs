@@ -5,7 +5,7 @@
 //! into one [`HydroComplex`] (sample-time union blend).
 
 use crate::authored::apron::{sample_apron_rim_noise, ApronNoiseSalts};
-use crate::primitive::backfill::{HydroBackfill, RimBackfillParams};
+use crate::primitive::backfill::HydroBackfill;
 use crate::primitive::parameters::{HydroParams, TARGET_RIM_WIDTH};
 use crate::primitive::complex::HydroComplex;
 use crate::primitive::node::nodes_from_polyline;
@@ -311,7 +311,7 @@ impl StreamsGraph {
 		let rim_boundary_amp = apron_noise.apron_amp;
 		const RIM_BACKFILL_SALT: u32 = 0x57EA_BF11;
 		let rim_backfill_params = {
-			let mut p = RimBackfillParams::for_stream(budget.half_width);
+			let mut p = StreamParams::rim_backfill_params(budget.half_width);
 			p.freq = scale_noise_freq(
 				p.freq,
 				budget.half_width,

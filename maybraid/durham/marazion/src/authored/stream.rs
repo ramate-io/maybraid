@@ -17,6 +17,7 @@ pub(crate) use path::{
 
 use crate::authored::noise::n01_freq;
 use crate::authored::stream::build::{build_corridor, StreamCorridor, StreamLayout};
+use crate::primitive::backfill::RimBackfillParams;
 use crate::primitive::complex::HydroComplex;
 use crate::primitive::parameters::{ApronParams, RimParams};
 use bevy_math::Vec2;
@@ -111,6 +112,15 @@ impl Default for StreamParams {
 
 			spine: HysteresisSpine::default(),
 		}
+	}
+}
+
+impl StreamParams {
+	/// Rim-shore backfill recipe from channel half-width (~80% band, low freq).
+	pub fn rim_backfill_params(half_width: f32) -> RimBackfillParams {
+		let mut p = RimBackfillParams::from_extent(half_width, 0.80);
+		p.freq = 0.02;
+		p
 	}
 }
 

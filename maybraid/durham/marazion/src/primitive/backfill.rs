@@ -3,6 +3,9 @@
 //! Applied **after** carve → rim → apron elevation blend so hummocks / shore
 //! grit can rise into an already-corrected bed. One optional
 //! [`HydroBackfill`] lives on each [`crate::primitive::node::HydroNode`].
+//! Multi-node terrain blends soft-max each node's raise over bare \(h_0\)
+//! (see [`crate::primitive::node::HydroNode::elevation_blend`]) so corridor
+//! overlaps do not sum grit.
 //!
 //! Amplitude for basin recipes is **depth-incentive**: callers supply a
 //! freeboard (depth below \(W\)) and a [`BasinBackfillParams::depth_frac`].
@@ -251,7 +254,7 @@ impl RimBackfillParams {
 	/// Size band (and a matching amp) from a characteristic leaf extent.
 	///
 	/// `band = extent * band_frac`; amp scales with band so grit stays visible.
-	/// Leaves pick `band_frac` via [`Self::for_lake`] / [`Self::for_stream`].
+	/// Leaf stamps choose `band_frac` / freq in their authored modules.
 	pub fn from_extent(extent: f32, band_frac: f32) -> Self {
 		let e = extent.max(1.0);
 		let frac = band_frac.clamp(0.05, 0.95);
@@ -259,18 +262,6 @@ impl RimBackfillParams {
 		// ~55% of band height, floored so small leaves still punch.
 		let amp = (band * 0.55).clamp(5.0, 18.0);
 		Self { band, amp, ..Self::default() }
-	}
-
-	/// Lake shore grit: ~45% of short water radius either side of \(\phi = 0\).
-	pub fn for_lake(water_radius: f32) -> Self {
-		Self::from_extent(water_radius, 0.45)
-	}
-
-	/// Stream shore grit: ~70% of channel half-width, high frequency, hot amp.
-	pub fn for_stream(half_width: f32) -> Self {
-		let mut p = Self::from_extent(half_width, 0.80);
-		p.freq = 0.02;
-		p
 	}
 
 	/// Build a [`HydroBackfill::Rim`].
@@ -403,14 +394,10 @@ mod tests {
 	}
 
 	#[test]
-	fn rim_params_scale_from_leaf_extent() -> anyhow::Result<()> {
-		let lake = RimBackfillParams::for_lake(80.0);
-		anyhow::ensure!((lake.band - 36.0).abs() < 1e-3, "lake band={}", lake.band);
-		anyhow::ensure!(lake.amp >= 12.0, "lake amp should be hot, got {}", lake.amp);
-		let stream = RimBackfillParams::for_stream(20.0);
-		anyhow::ensure!((stream.band - 14.0).abs() < 1e-3, "stream band={}", stream.band);
-		anyhow::ensure!(stream.amp >= 20.0, "stream amp tripled, got {}", stream.amp);
-		anyhow::ensure!(stream.freq >= 0.10, "stream freq raised, got {}", stream.freq);
+	fn rim_params_scale_from_extent() -> anyhow::Result<()> {
+		let p = RimBackfillParams::from_extent(80.0, 0.45);
+		anyhow::ensure!((p.band - 36.0).abs() < 1e-3, "band={}", p.band);
+		anyhow::ensure!(p.amp >= 12.0, "amp should scale with band, got {}", p.amp);
 		Ok(())
 	}
 }

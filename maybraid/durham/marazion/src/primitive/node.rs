@@ -291,16 +291,27 @@ impl HydroNode {
 		elevation
 	}
 
-	/// Terrain elevation: [`Self::elevation_blend_without_backfill`] then sum
-	/// weighted backfill deltas from each node that carries one.
+	/// Terrain elevation: [`Self::elevation_blend_without_backfill`], then soft-max
+	/// with each intersecting node's backfill-raised height.
+	///
+	/// Soft-max (not a sum) so overlapping stream-graph segments do not stack
+	/// rim grit into runaway pillars — same spirit as rim bank soft-max.
 	pub fn elevation_blend(nodes: &[&Self], elevation: f32, p: Vec2) -> f32 {
-		let mut h = Self::elevation_blend_without_backfill(nodes, elevation, p);
+		let h0 = Self::elevation_blend_without_backfill(nodes, elevation, p);
+		let mut raised = Vec::with_capacity(nodes.len() + 1);
+		raised.push(h0);
 		for node in nodes {
 			if let Some(bf) = &node.backfill {
-				h = bf.compose(h, node, p);
+				if bf.weight(node, p) > 1e-6 {
+					raised.push(bf.compose(h0, node, p));
+				}
 			}
 		}
-		h
+		if raised.len() == 1 {
+			h0
+		} else {
+			smoothmax_fold(&raised, SURFACE_SMOOTHMIN_K)
+		}
 	}
 
 	/// Alias for [`Self::elevation_blend`] (historical name).
@@ -477,6 +488,34 @@ mod tests {
 		anyhow::ensure!(
 			(bare_f - full_f).abs() < 1e-3,
 			"far field should match bare and full"
+		);
+		Ok(())
+	}
+
+	#[test]
+	fn elevation_blend_soft_maxes_overlapping_backfills() -> anyhow::Result<()> {
+		use crate::primitive::backfill::{HydroBackfill, RimBackfill};
+		let bf = HydroBackfill::Rim(RimBackfill {
+			noise: jersey_terrain_stamps::RegionNoise::from_seed(11, 0.05, 4.0),
+			band: 8.0,
+			add_only: true,
+		});
+		let mut a = reach_node(8.0);
+		a.backfill = Some(bf.clone());
+		let mut b = a.clone();
+		b.backfill = Some(bf);
+		let p = Vec2::new(20.0, 8.0);
+		let h0 = HydroNode::elevation_blend_without_backfill(&[&a, &b], 40.0, p);
+		let one = HydroNode::elevation_blend(&[&a], 40.0, p);
+		let two = HydroNode::elevation_blend(&[&a, &b], 40.0, p);
+		let w = a.backfill.as_ref().unwrap().weight(&a, p);
+		anyhow::ensure!(w > 0.2, "rim weight should be active at shore, got {w}");
+		// Soft-max of identical candidates ≈ one raise, not 2× the delta.
+		let delta_one = one - h0;
+		let delta_two = two - h0;
+		anyhow::ensure!(
+			delta_two < delta_one * 1.35,
+			"overlapping identical backfills must not stack: Δ1={delta_one} Δ2={delta_two}"
 		);
 		Ok(())
 	}

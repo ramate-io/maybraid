@@ -5,7 +5,6 @@ use crate::authored::lake::budget::LakeBandBudget;
 use crate::authored::lake::shelf::ShelfLevels;
 use crate::authored::lake::LakeParams;
 use crate::authored::noise::{scale_noise_freq, NOISE_FREQ_REF_RADIUS};
-use crate::primitive::backfill::RimBackfillParams;
 use crate::primitive::complex::HydroComplex;
 use crate::primitive::hydro::{
 	Ellipse, HydroElevation, HydroFootprint, HydroPrimitive, RadialBowl,
@@ -109,7 +108,7 @@ pub(crate) fn build_bowl(
 	let rim_boundary_amp = apron_noise.apron_amp;
 
 	let rim_backfill_params = {
-		let mut p = RimBackfillParams::for_lake(short_water);
+		let mut p = LakeParams::rim_backfill_params(short_water);
 		p.freq = scale_noise_freq(p.freq, short_water, params.apron.noise_freq_power);
 		p
 	};

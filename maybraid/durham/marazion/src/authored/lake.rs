@@ -16,6 +16,7 @@ pub(crate) mod shelf;
 pub use budget::LakeBandBudget;
 pub use shelf::shelf_base_height;
 
+use crate::primitive::backfill::RimBackfillParams;
 use crate::primitive::complex::HydroComplex;
 use crate::primitive::parameters::{ApronParams, RimParams};
 use crate::authored::lake::build::{build_bowl, LakeBowl, LakeLayout};
@@ -159,6 +160,13 @@ impl Default for LakeParams {
 
 			rim_bleed_frac: 0.5,
 		}
+	}
+}
+
+impl LakeParams {
+	/// Rim-shore backfill recipe from the short water radius (~45% band).
+	pub fn rim_backfill_params(water_radius: f32) -> RimBackfillParams {
+		RimBackfillParams::from_extent(water_radius, 0.45)
 	}
 }
 
@@ -476,9 +484,7 @@ mod tests {
 		);
 		let shelf = lake.water_level + params.water_sink.max(0.0);
 		// Rim backfill can add several wu of shore grit on top of bank_target.
-		let rim_bf_budget = crate::primitive::backfill::RimBackfillParams::for_lake(lake.water_radius)
-			.amp
-			+ 2.0;
+		let rim_bf_budget = LakeParams::rim_backfill_params(lake.water_radius).amp + 2.0;
 		assert!(
 			h <= shelf + params.rim.lift + params.rim.height_amp_max + rim_bf_budget,
 			"rim {h} should stay near shelf_anchor+rim_lift (+ rim backfill)"
