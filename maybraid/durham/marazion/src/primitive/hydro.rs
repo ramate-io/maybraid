@@ -1,7 +1,8 @@
 //! Union-first hydro primitives + broadphase helpers.
 //!
+//! Rim / apron bands live on [`crate::primitive::parameters::HydroParams`].
 //! Terrain blend (class-priority carve / rim / apron) lives on
-//! [`crate::primitive::node::HydrologyNode`]; complexes gather intersecting nodes.
+//! [`crate::primitive::node::HydroNode`]; complexes gather intersecting nodes.
 
 pub mod elevation;
 pub mod footprint;
@@ -12,20 +13,9 @@ pub use footprint::{Ellipse, HydroFootprint, ReachSegment};
 pub use index::FootprintIndex;
 
 use bevy_math::{FloatExt, Vec2};
-use jersey_terrain_stamps::RegionNoise;
-
-/// Which watershed correction pass to apply.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum CorrectionStage {
-	Carve,
-	Rim,
-	Apron,
-}
 
 /// Soft-min / soft-max length scale for surface and elevation blends (world units).
 pub const SURFACE_SMOOTHMIN_K: f32 = 1.5;
-/// Default hard cap on add-only rim height noise.
-pub const DEFAULT_RIM_UPLIFT_CAP: f32 = 1.5;
 
 /// One hydraulic node: footprint + local elevation field.
 #[derive(Debug, Clone)]
@@ -34,36 +24,6 @@ pub struct HydroPrimitive {
 	pub elevation: HydroElevation,
 	/// Extra AABB pad for broadphase / apron support (world units).
 	pub influence_pad: f32,
-}
-
-/// One complex-wide rim / apron policy (not per-primitive).
-#[derive(Debug, Clone)]
-pub struct ComplexApronParams {
-	pub rim_lift: f32,
-	pub rim_width: f32,
-	pub apron_width: f32,
-	pub rim_height: RegionNoise,
-	pub rim_uplift_cap: f32,
-}
-
-impl Default for ComplexApronParams {
-	fn default() -> Self {
-		Self {
-			rim_lift: 1.1,
-			rim_width: 4.0,
-			apron_width: 8.0,
-			rim_height: RegionNoise::from_seed(0, 0.02, 0.0),
-			rim_uplift_cap: DEFAULT_RIM_UPLIFT_CAP,
-		}
-	}
-}
-
-impl ComplexApronParams {
-	pub fn with_rim_noise(mut self, noise: RegionNoise, cap: f32) -> Self {
-		self.rim_height = noise;
-		self.rim_uplift_cap = cap.max(0.0);
-		self
-	}
 }
 
 impl HydroPrimitive {
@@ -184,7 +144,9 @@ fn smoothmin2(a: f32, b: f32, k: f32) -> f32 {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use crate::primitive::complex::HydrologyComplex;
+	use crate::primitive::parameters::ComplexParams;
+	use crate::primitive::complex::HydroComplex;
+	use jersey_terrain_stamps::RegionNoise;
 	use procedural_common::Bounds2;
 
 	#[test]
@@ -242,11 +204,11 @@ mod tests {
 			}),
 			influence_pad: 1.0,
 		};
-		let prep = HydrologyComplex::from_primitives(
+		let prep = HydroComplex::from_primitives(
 			Bounds2::from_xz(-10.0, -20.0, 50.0, 30.0),
 			1,
 			vec![a, b],
-			ComplexApronParams::default(),
+			ComplexParams::default(),
 		);
 		let h = prep.modify_elevation(50.0, 20.0, 1.0);
 		assert!(
@@ -284,12 +246,12 @@ mod tests {
 			}),
 			influence_pad: 1.0,
 		};
-		let mut apron = ComplexApronParams::default();
+		let mut apron = ComplexParams::default();
 		apron.rim_lift = 2.0;
 		apron.rim_width = 3.0;
 		apron.apron_width = 6.0;
 		apron.rim_height = RegionNoise::from_seed(1, 0.05, 0.0);
-		let prep = HydrologyComplex::from_primitives(
+		let prep = HydroComplex::from_primitives(
 			Bounds2::from_xz(-30.0, -40.0, 60.0, 40.0),
 			3,
 			vec![a, b],

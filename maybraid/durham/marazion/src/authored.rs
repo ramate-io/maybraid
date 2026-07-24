@@ -1,4 +1,4 @@
-//! Leaf / graph authoring plans that emit [`crate::primitive::node::HydrologyNode`]s.
+//! Leaf / graph authoring plans that emit [`crate::primitive::node::HydroNode`]s.
 
 pub mod apron;
 pub mod bog;

@@ -1,10 +1,10 @@
 //! Stamp-owned water fill for Marazion pocket bodies (lakes and streams).
 //!
-//! Hydro fills delegate to [`HydrologyComplex::water_distance`]: outside the carve,
+//! Hydro fills delegate to [`HydroComplex::water_distance`]: outside the carve,
 //! approximate distance to \(\phi = 0\); inside, half-space below the blended free
 //! surface \(W\) (`y - W`). Flat fills (unit tests) carry an explicit region for XZ.
 
-use crate::primitive::complex::HydrologyComplex;
+use crate::primitive::complex::HydroComplex;
 use bevy_math::{Vec2, Vec3};
 use jersey_terrain_stamps::Region2D;
 
@@ -18,7 +18,7 @@ pub enum WaterSurface {
 		region: Region2D,
 	},
 	/// Indexed hydrology complex (owns \(W\) blend + water SDF).
-	Hydro { complex: HydrologyComplex },
+	Hydro { complex: HydroComplex },
 }
 
 impl WaterSurface {
@@ -33,7 +33,7 @@ impl WaterSurface {
 
 /// Stamp-owned water volume (Lake / Stream).
 ///
-/// Hydro: [`Self::distance`] delegates to [`HydrologyComplex::water_distance`].
+/// Hydro: [`Self::distance`] delegates to [`HydroComplex::water_distance`].
 /// Flat: region exterior ∪ half-space below \(W\).
 #[derive(Debug, Clone)]
 pub struct WaterFill {

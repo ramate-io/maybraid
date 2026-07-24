@@ -10,7 +10,7 @@
 //! [`TerrainCellLayout`](crate::terrain::cell::TerrainCellLayout), use the same
 //! `res_2`, and mesh with the same cascade chunk bounds (including full cell Y).
 //! Hydro fills are carve × half-space below \(W\) (see [`WaterFill`] /
-//! [`HydrologyComplex::water_distance`](marazion_watersheds::HydrologyComplex::water_distance)).
+//! [`HydroComplex::water_distance`](marazion_watersheds::HydroComplex::water_distance)).
 
 use crate::terrain::sdf::TerrainSdf;
 use crate::water::water_distance as fill_water_distance;

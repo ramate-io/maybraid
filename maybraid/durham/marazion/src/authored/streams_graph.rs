@@ -1,12 +1,13 @@
 //! Streams graph — multi-corridor stream leaf for composition practice.
 //!
 //! Grows a degree-bounded [`HysteresisGraph`], collapses chains between
-//! keypoints into corridors, then emits segment [`crate::primitive::node::HydrologyNode`]s
-//! into one [`HydrologyComplex`] (sample-time union blend).
+//! keypoints into corridors, then emits segment [`crate::primitive::node::HydroNode`]s
+//! into one [`HydroComplex`] (sample-time union blend).
 
-use crate::authored::apron::{ApronNoiseSalts, TARGET_RIM_WIDTH};
-use crate::primitive::complex::HydrologyComplex;
-use crate::primitive::node::{nodes_from_polyline, HydroParameters};
+use crate::authored::apron::{sample_apron_rim_noise, ApronNoiseSalts};
+use crate::primitive::parameters::{HydroParams, TARGET_RIM_WIDTH};
+use crate::primitive::complex::HydroComplex;
+use crate::primitive::node::nodes_from_polyline;
 use crate::authored::noise::{n01_freq, scale_noise_freq};
 use crate::authored::stream::{
 	collapse_degenerate_vertices, node_water_levels, sample_endpoint, StreamBandBudget,
@@ -45,11 +46,7 @@ pub struct StreamsGraphParams {
 impl Default for StreamsGraphParams {
 	fn default() -> Self {
 		let stream = StreamParams::default();
-		let rim_uplift_cap = stream
-			.apron
-			.rim_height_amp_max
-			.max(stream.apron.rim_height_amp_min)
-			.max(0.0);
+		let rim_uplift_cap = stream.rim.recipe_uplift_cap();
 		Self {
 			stream,
 			degree_min: 2,
@@ -126,7 +123,7 @@ pub struct StreamsGraph {
 	/// Junction / endpoint samples used while grading corridor \(W\).
 	#[allow(dead_code)] // retained for junction continuity tests
 	pub(crate) key_points: Vec<Vec2>,
-	parameters: HydroParameters,
+	params: HydroParams,
 	max_correction_extent: f32,
 }
 
@@ -193,7 +190,9 @@ impl StreamsGraph {
 			.min(GRAPH_THALWEG_DEPTH_MAX)
 			.max(0.35);
 		let apron_band = (budget.apron_half - budget.skirt_half).max(0.5);
-		let apron_noise = stream_p.apron.sample_noise(
+		let apron_noise = sample_apron_rim_noise(
+			&stream_p.apron,
+			&stream_p.rim,
 			seed,
 			min,
 			apron_band,
@@ -303,13 +302,17 @@ impl StreamsGraph {
 		);
 		let boundary_noise = RegionNoise::from_seed(seed.wrapping_add(5), shore_freq, shore_amp);
 		let max_correction_extent = (rim_w + apron_w + shore_amp).max(0.0);
-		let parameters = HydroParameters {
-			shelf_anchor: None,
-			rim_lift: stream_p.rim_lift.max(0.0),
-			rim_width: rim_w,
-			apron_width: apron_w,
+		let mut rim = stream_p.rim;
+		rim.width = rim_w;
+		rim.lift = stream_p.rim.lift.max(0.0);
+		rim.shelf_anchor = None;
+		rim.uplift_cap = params.rim_uplift_cap.max(0.0);
+		let mut apron = stream_p.apron;
+		apron.width = apron_w;
+		let params = HydroParams {
+			rim,
+			apron,
 			rim_height: apron_noise.rim_height,
-			rim_uplift_cap: params.rim_uplift_cap.max(0.0),
 			boundary_noise: Some(boundary_noise),
 		};
 
@@ -321,7 +324,7 @@ impl StreamsGraph {
 			edge_count: corridors.len(),
 			corridors,
 			key_points,
-			parameters,
+			params,
 			max_correction_extent,
 		})
 	}
@@ -331,7 +334,7 @@ impl StreamsGraph {
 	}
 
 	/// Hydrology nodes authored by this graph (reach segments across all corridors).
-	pub fn hydrology_nodes(&self) -> Vec<crate::primitive::node::HydrologyNode> {
+	pub fn hydro_nodes(&self) -> Vec<crate::primitive::node::HydroNode> {
 		let mut hydrology = Vec::new();
 		for corridor in &self.corridors {
 			let center_depth = corridor.freeboard + corridor.depth;
@@ -340,7 +343,7 @@ impl StreamsGraph {
 				&corridor.levels,
 				corridor.half_width,
 				center_depth,
-				&self.parameters,
+				&self.params,
 				self.max_correction_extent,
 			));
 		}
@@ -348,8 +351,8 @@ impl StreamsGraph {
 	}
 
 	/// Realize as a multi-corridor complex with sample-time hydro composition.
-	pub fn into_complex(self) -> HydrologyComplex {
-		HydrologyComplex::new(self.bounds, self.seed).with_hydrology(self.hydrology_nodes())
+	pub fn into_complex(self) -> HydroComplex {
+		HydroComplex::new(self.bounds, self.seed).with_hydro(self.hydro_nodes())
 	}
 }
 
@@ -448,7 +451,7 @@ mod tests {
 		let bounds = Bounds2::from_xz(0.0, 0.0, 500.0, 500.0);
 		let params = StreamsGraphParams::default();
 		let rise_budget =
-			params.stream.rim_lift.max(0.0) + params.rim_uplift_cap.max(0.0) + 4.0;
+			params.stream.rim.lift.max(0.0) + params.rim_uplift_cap.max(0.0) + 4.0;
 		let g = StreamsGraph::from_bounds(bounds, 3, params, Some(&slope_height)).expect("graph");
 		let compiled = g.into_complex().compile();
 		let mut max_rise = 0.0f32;

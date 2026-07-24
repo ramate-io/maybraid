@@ -16,8 +16,8 @@ pub(crate) mod shelf;
 pub use budget::LakeBandBudget;
 pub use shelf::shelf_base_height;
 
-use crate::authored::apron::WatershedApronParams;
-use crate::primitive::complex::HydrologyComplex;
+use crate::primitive::complex::HydroComplex;
+use crate::primitive::parameters::{ApronParams, RimParams};
 use crate::authored::lake::build::{build_bowl, LakeBowl, LakeLayout};
 use crate::authored::lake::shelf::{
 	aspect_u01, planned_center as planned_center_impl, rim_width_u01, rotation_u11, shelf_levels,
@@ -74,8 +74,6 @@ pub struct LakeParams {
 	// ── Vertical levels ────────────────────────────────────────────────────
 	/// How far below the shelf anchor the water surface `W` sits (world units).
 	pub water_sink: f32,
-	/// How far the rim shelf sits **above** the shelf anchor (world units).
-	pub rim_lift: f32,
 	/// Per-leaf jitter on the shelf anchor height that sets `W` and rim base.
 	pub shelf_amp: f32,
 	/// How many pre-watershed heights to sample on a ring around the centroid
@@ -107,8 +105,10 @@ pub struct LakeParams {
 	/// in [`Lake::from_bounds`]).
 	pub shore_freq: f32,
 
-	/// Shared apron outline + add-only rim height (`noise_freq_power` also scales shore/bed).
-	pub apron: WatershedApronParams,
+	/// Apron band + indent-noise recipe (`noise_freq_power` also scales shore/bed).
+	pub apron: ApronParams,
+	/// Rim band + height-noise recipe (`lift` is bank above the shelf anchor).
+	pub rim: RimParams,
 
 	/// Horizontal fill metadata pad past the bowl, as a fraction of rim width
 	/// (plan `fill_radius` only — water SDF follows carve \(\phi\)).
@@ -137,7 +137,6 @@ impl Default for LakeParams {
 			rim_width_freq: 0.1,
 
 			water_sink: 0.9,
-			rim_lift: 1.25,
 			shelf_amp: 2.0,
 			shelf_sample_count: 6,
 
@@ -151,7 +150,12 @@ impl Default for LakeParams {
 			shore_indent_frac: 0.18,
 			shore_freq: 0.022,
 
-			apron: WatershedApronParams::default().with_visible_rim_bank(),
+			apron: ApronParams::default(),
+			rim: {
+				let mut rim = RimParams::default().with_visible_rim_bank();
+				rim.lift = 1.25;
+				rim
+			},
 
 			rim_bleed_frac: 0.5,
 		}
@@ -160,7 +164,7 @@ impl Default for LakeParams {
 
 /// Authored lake **plan**: layout metadata for one pocket-water leaf.
 ///
-/// Realize with [`Self::into_complex`] into a [`HydrologyComplex`]
+/// Realize with [`Self::into_complex`] into a [`HydroComplex`]
 /// (the representation stored on terrain cells). `None` from [`Self::from_bounds`]
 /// means the leaf is too small to host a lake.
 #[derive(Debug, Clone)]
@@ -222,8 +226,8 @@ impl Lake {
 			water_radius: layout.budget.water_radius(),
 			plateau_radius: layout.budget.plateau_radius(),
 			// Authored hydro rim (may differ from the band-budget claim).
-			rim_width: bowl.node.parameters.rim_width,
-			apron_width: bowl.node.parameters.apron_width,
+			rim_width: bowl.node.params.rim.width,
+			apron_width: bowl.node.params.apron.width,
 			fill_radius,
 			water_level: layout.levels.water_level,
 			bowl,
@@ -235,12 +239,12 @@ impl Lake {
 	}
 
 	/// Hydrology nodes authored by this lake (one radial bowl).
-	pub fn hydrology_nodes(&self) -> Vec<crate::primitive::node::HydrologyNode> {
+	pub fn hydro_nodes(&self) -> Vec<crate::primitive::node::HydroNode> {
 		vec![self.bowl.node.clone()]
 	}
 
-	/// Realize this plan as a sole-node [`HydrologyComplex`].
-	pub fn into_complex(self) -> HydrologyComplex {
+	/// Realize this plan as a sole-node [`HydroComplex`].
+	pub fn into_complex(self) -> HydroComplex {
 		self.bowl.into_complex(self.bounds, self.seed)
 	}
 }
@@ -455,8 +459,8 @@ mod tests {
 		let mut params = LakeParams::default();
 		params.rotation_amp = 0.0;
 		params.aspect_strength = 0.0;
-		params.apron.rim_height_amp_min = 0.0;
-		params.apron.rim_height_amp_max = 0.0;
+		params.rim.height_amp_min = 0.0;
+		params.rim.height_amp_max = 0.0;
 		params.shore_indent_frac = 0.0;
 		let lake = Lake::from_bounds(bounds, 11, params, Some(&|_, _| base)).expect("lake");
 		let mid_r = lake.water_radius + lake.rim_width * 0.4;
@@ -473,7 +477,7 @@ mod tests {
 		);
 		let shelf = lake.water_level + params.water_sink.max(0.0);
 		assert!(
-			h <= shelf + params.rim_lift + params.apron.rim_height_amp_max + 2.0,
+			h <= shelf + params.rim.lift + params.rim.height_amp_max + 2.0,
 			"rim {h} should stay near shelf_anchor+rim_lift (+ capped noise)"
 		);
 		Ok(())

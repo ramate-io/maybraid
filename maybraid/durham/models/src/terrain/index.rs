@@ -29,7 +29,7 @@ use crate::terrain::marazion::{
 	BootstrapPrePocketLowPassLayout, MarazionPocketWatersHighPass, MarazionPocketWatersLowPass,
 	MarazionWatershedConfigs, PocketHighPassCell, PocketLowPassCell, PrePocketHighPassCell,
 	PrePocketHighPassLayout, PrePocketLowPassCell, PrePocketLowPassLayout,
-	WatershedAproningCell, WatershedCarvingCell, HydrologyComplexCell,
+	WatershedAproningCell, WatershedCarvingCell, HydroComplexCell,
 	WatershedRimmingCell,
 };
 use crate::terrain::presentation::{
@@ -80,7 +80,7 @@ pub struct TerrainEntryStore {
 	pub(crate) pocket_high_pass_cell: HashMap<Id, StoredEntry<PocketHighPassCell>>,
 	pub(crate) marazion_pocket_waters_high_pass:
 		HashMap<Id, StoredEntry<MarazionPocketWatersHighPass>>,
-	pub(crate) watershed_complex_cell: HashMap<Id, StoredEntry<HydrologyComplexCell>>,
+	pub(crate) watershed_complex_cell: HashMap<Id, StoredEntry<HydroComplexCell>>,
 	pub(crate) watershed_carving_cell: HashMap<Id, StoredEntry<WatershedCarvingCell>>,
 	pub(crate) watershed_rimming_cell: HashMap<Id, StoredEntry<WatershedRimmingCell>>,
 	pub(crate) watershed_aproning_cell: HashMap<Id, StoredEntry<WatershedAproningCell>>,
@@ -418,7 +418,7 @@ impl_map_spatial_index!(PrePocketHighPassLayout, pre_pocket_high_pass_layout);
 impl_map_spatial_index!(PrePocketHighPassCell, pre_pocket_high_pass_cell);
 impl_map_spatial_index!(PocketHighPassCell, pocket_high_pass_cell);
 impl_map_spatial_index!(MarazionPocketWatersHighPass, marazion_pocket_waters_high_pass);
-impl_map_spatial_index!(HydrologyComplexCell, watershed_complex_cell);
+impl_map_spatial_index!(HydroComplexCell, watershed_complex_cell);
 impl_map_spatial_index!(WatershedCarvingCell, watershed_carving_cell);
 impl_map_spatial_index!(WatershedRimmingCell, watershed_rimming_cell);
 impl_map_spatial_index!(WatershedAproningCell, watershed_aproning_cell);

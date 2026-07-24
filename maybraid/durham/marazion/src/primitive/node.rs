@@ -1,4 +1,4 @@
-//! Authored hydrology nodes with conservative correction extents.
+//! Hydrology nodes: hydraulic primitive + rim/apron [`HydroParams`].
 //!
 //! See [`crate::WATERSHED_CORRECTION`](../WATERSHED_CORRECTION.md): nodes are the
 //! source of truth for hydraulic geometry and parameters;
@@ -7,92 +7,40 @@
 //! Terrain correction blends per-node candidates by
 //! [`Self::point_classification`] priority: carve → rim → apron.
 
+use crate::primitive::parameters::CorrectionStage;
 use crate::primitive::hydro::{
-	smoothmax_fold, smoothmin_fold, CorrectionStage, HydroFootprint, HydroPrimitive,
-	DEFAULT_RIM_UPLIFT_CAP, SURFACE_SMOOTHMIN_K,
+	smoothmax_fold, smoothmin_fold, HydroFootprint, HydroPrimitive, SURFACE_SMOOTHMIN_K,
 };
 use bevy_math::Vec2;
-use jersey_terrain_stamps::RegionNoise;
 use procedural_common::Bounds2;
 
-/// Authored carve / rim / apron knobs on a [`HydrologyNode`].
-///
-/// First try: full parameters on the node; correction cells blend rim/apron.
-/// Fallback (if blending fails): demote to carve fields + extent only.
+pub use crate::primitive::parameters::HydroParams;
+
+/// One hydrology entity indexed by hydraulic support ⊕ correction extent.
 #[derive(Debug, Clone)]
-pub struct HydroParameters {
-	/// Absolute shelf / rim anchor (lakes). When set, rim bank ≈ `shelf_anchor + rim_lift`.
-	pub shelf_anchor: Option<f32>,
-	pub rim_lift: f32,
-	pub rim_width: f32,
-	pub apron_width: f32,
-	pub rim_height: RegionNoise,
-	pub rim_uplift_cap: f32,
-	/// Optional shore outline: warps occupancy via `φ += sample_boundary`.
-	pub boundary_noise: Option<RegionNoise>,
-}
-
-impl Default for HydroParameters {
-	fn default() -> Self {
-		Self {
-			shelf_anchor: None,
-			rim_lift: 1.1,
-			rim_width: 4.0,
-			apron_width: 8.0,
-			rim_height: RegionNoise::from_seed(0, 0.02, 0.0),
-			rim_uplift_cap: DEFAULT_RIM_UPLIFT_CAP,
-			boundary_noise: None,
-		}
-	}
-}
-
-impl HydroParameters {
-	pub fn correction_pad(&self) -> f32 {
-		(self.rim_width + self.apron_width).max(0.0)
-	}
-
-	/// Peak absolute amplitude of [`Self::boundary_noise`] (0 when unset).
-	pub fn boundary_noise_amp(&self) -> f32 {
-		self.boundary_noise
-			.as_ref()
-			.map(|n| n.noise.params().amplitude.abs())
-			.unwrap_or(0.0)
-	}
-
-	/// Raise-only bank target at a sample given free-surface \(W\).
-	pub fn bank_target(&self, water_surface: f32, p: Vec2) -> f32 {
-		let base = self.shelf_anchor.unwrap_or(water_surface) + self.rim_lift.max(0.0);
-		let mut rim_noise = self.rim_height.sample_height(p).abs();
-		rim_noise = rim_noise.min(self.rim_uplift_cap.max(0.0));
-		base + rim_noise
-	}
-}
-
-/// One authored hydrology entity indexed by hydraulic support ⊕ correction extent.
-#[derive(Debug, Clone)]
-pub struct HydrologyNode {
+pub struct HydroNode {
 	pub primitive: HydroPrimitive,
-	pub parameters: HydroParameters,
+	pub params: HydroParams,
 	/// Max distance beyond hydraulic support at which any correction pass may
 	/// need this node. Indexing only — not the final apron profile.
 	pub max_correction_extent: f32,
 }
 
-impl HydrologyNode {
+impl HydroNode {
 	pub fn new(
 		primitive: HydroPrimitive,
-		parameters: HydroParameters,
+		params: HydroParams,
 		max_correction_extent: f32,
 	) -> Self {
-		Self { primitive, parameters, max_correction_extent: max_correction_extent.max(0.0) }
+		Self { primitive, params, max_correction_extent: max_correction_extent.max(0.0) }
 	}
 
 	/// Conservative pad for indexing / broadphase.
 	pub fn index_pad(&self) -> f32 {
 		self.max_correction_extent
-			.max(self.parameters.correction_pad())
+			.max(self.params.correction_pad())
 			.max(self.primitive.influence_pad)
-			+ self.parameters.boundary_noise_amp()
+			+ self.params.boundary_noise_amp()
 	}
 
 	/// Representative interior sample (ellipse center / reach midpoint).
@@ -110,10 +58,10 @@ impl HydrologyNode {
 		Bounds2 { min: mn - Vec2::splat(pad), max: mx + Vec2::splat(pad) }
 	}
 
-	/// Occupancy SDF, optionally warped by shore [`HydroParameters::boundary_noise`].
+	/// Occupancy SDF, optionally warped by shore [`HydroParams::boundary_noise`].
 	pub fn phi(&self, p: Vec2) -> f32 {
 		let mut d = self.primitive.phi(p);
-		if let Some(noise) = &self.parameters.boundary_noise {
+		if let Some(noise) = &self.params.boundary_noise {
 			d += noise.sample_boundary(p);
 		}
 		d
@@ -134,8 +82,8 @@ impl HydrologyNode {
 	/// - Apron: \(r_{\mathrm{rim}} \le \phi < r_{\mathrm{rim}} + r_{\mathrm{apron}}\)
 	pub fn point_classification(&self, p: Vec2) -> Option<CorrectionStage> {
 		let d = self.phi(p);
-		let rim_w = self.parameters.rim_width.max(0.0);
-		let apron_w = self.parameters.apron_width.max(0.0);
+		let rim_w = self.params.rim.width.max(0.0);
+		let apron_w = self.params.apron.width.max(0.0);
 		if d <= 0.0 {
 			Some(CorrectionStage::Carve)
 		} else if d < rim_w {
@@ -160,7 +108,7 @@ impl HydrologyNode {
 		if phi >= 0.0 {
 			return w;
 		}
-		let edge = self.parameters.boundary_noise_amp().max(2.0);
+		let edge = self.params.boundary_noise_amp().max(2.0);
 		let t = (-phi / edge).clamp(0.0, 1.0);
 		let keep = t * t * (3.0 - 2.0 * t);
 		w - geo_depth * keep
@@ -168,7 +116,7 @@ impl HydrologyNode {
 
 	/// Absolute bank across the rim band (classification uses noisy [`Self::phi`]).
 	pub fn rim_candidate(&self, _elevation: f32, p: Vec2) -> f32 {
-		self.parameters.bank_target(self.surface_level(p), p)
+		self.params.bank_target(self.surface_level(p), p)
 	}
 
 	/// Grade from bank at the (noisy) rim edge toward identity at the apron outer.
@@ -176,12 +124,12 @@ impl HydrologyNode {
 	/// Uses occupancy \(\phi\) so the grade tracks the same shoreline as carve/rim.
 	pub fn apron_candidate(&self, elevation: f32, p: Vec2) -> f32 {
 		let d = self.phi(p);
-		let rim_w = self.parameters.rim_width.max(0.0);
-		let apron_w = self.parameters.apron_width.max(1e-3);
+		let rim_w = self.params.rim.width.max(0.0);
+		let apron_w = self.params.apron.width.max(1e-3);
 		// Smoothstep grade: 0 at rim/apron seam (full bank), 1 at outer (terrain).
 		let u = ((d - rim_w) / apron_w).clamp(0.0, 1.0);
 		let fade = u * u * (3.0 - 2.0 * u);
-		let bank = self.parameters.bank_target(self.surface_level(p), p);
+		let bank = self.params.bank_target(self.surface_level(p), p);
 		// Raise-only: never cut below the incoming elevation while grading out.
 		(elevation * fade + bank * (1.0 - fade)).max(elevation)
 	}
@@ -263,9 +211,9 @@ pub fn nodes_from_polyline(
 	levels: &[f32],
 	half_width: f32,
 	center_depth: f32,
-	parameters: &HydroParameters,
+	params: &HydroParams,
 	max_correction_extent: f32,
-) -> Vec<HydrologyNode> {
+) -> Vec<HydroNode> {
 	use crate::primitive::hydro::{
 		HydroElevation, HydroFootprint, ReachProfile, ReachSegment,
 	};
@@ -275,7 +223,7 @@ pub fn nodes_from_polyline(
 	}
 	let hw = half_width.max(1e-3);
 	let depth = center_depth.max(0.25);
-	let extent = max_correction_extent.max(parameters.correction_pad()).max(0.0);
+	let extent = max_correction_extent.max(params.correction_pad()).max(0.0);
 	let mut out = Vec::with_capacity(n - 1);
 	for i in 0..n - 1 {
 		let a = path[i];
@@ -283,7 +231,7 @@ pub fn nodes_from_polyline(
 		if a.distance(b) <= 1e-4 {
 			continue;
 		}
-		out.push(HydrologyNode::new(
+		out.push(HydroNode::new(
 			HydroPrimitive {
 				footprint: HydroFootprint::Reach(ReachSegment {
 					a,
@@ -297,7 +245,7 @@ pub fn nodes_from_polyline(
 				}),
 				influence_pad: extent,
 			},
-			parameters.clone(),
+			params.clone(),
 			extent,
 		));
 	}
@@ -311,11 +259,11 @@ mod tests {
 		HydroElevation, HydroFootprint, ReachProfile, ReachSegment,
 	};
 
-	fn reach_node(half_width: f32) -> HydrologyNode {
-		let mut parameters = HydroParameters::default();
-		parameters.rim_width = 4.0;
-		parameters.apron_width = 8.0;
-		HydrologyNode::new(
+	fn reach_node(half_width: f32) -> HydroNode {
+		let mut params = HydroParams::default();
+		params.rim.width = 4.0;
+		params.apron.width = 8.0;
+		HydroNode::new(
 			HydroPrimitive {
 				footprint: HydroFootprint::Reach(ReachSegment {
 					a: Vec2::new(0.0, 0.0),
@@ -329,7 +277,7 @@ mod tests {
 				}),
 				influence_pad: 12.0,
 			},
-			parameters,
+			params,
 			12.0,
 		)
 	}
@@ -347,10 +295,10 @@ mod tests {
 	#[test]
 	fn blend_prefers_carve_over_rim() -> anyhow::Result<()> {
 		let deep = reach_node(8.0);
-		let mut shallow_params = HydroParameters::default();
-		shallow_params.rim_width = 4.0;
-		shallow_params.apron_width = 8.0;
-		let offset = HydrologyNode::new(
+		let mut shallow_params = HydroParams::default();
+		shallow_params.rim.width = 4.0;
+		shallow_params.apron.width = 8.0;
+		let offset = HydroNode::new(
 			HydroPrimitive {
 				footprint: HydroFootprint::Reach(ReachSegment {
 					a: Vec2::new(0.0, 6.0),
@@ -370,7 +318,7 @@ mod tests {
 		// Inside deep channel; offset node may classify rim/apron nearby.
 		let p = Vec2::new(20.0, 0.0);
 		assert_eq!(deep.point_classification(p), Some(CorrectionStage::Carve));
-		let h = HydrologyNode::blend_terrain_elevation(&[&deep, &offset], 40.0, p);
+		let h = HydroNode::blend_terrain_elevation(&[&deep, &offset], 40.0, p);
 		assert!(h < 30.0 - 1.0, "carve should win: {h}");
 		Ok(())
 	}

@@ -1,10 +1,11 @@
 //! Assemble stream corridor as hydrology reach-segment nodes.
 
-use crate::authored::apron::{jittered_depth, ApronNoiseSalts, TARGET_RIM_WIDTH};
+use crate::authored::apron::{jittered_depth, sample_apron_rim_noise, ApronNoiseSalts};
 use crate::authored::noise::scale_noise_freq;
 use crate::authored::stream::{StreamBandBudget, StreamParams};
-use crate::primitive::complex::HydrologyComplex;
-use crate::primitive::node::{nodes_from_polyline, HydroParameters};
+use crate::primitive::complex::HydroComplex;
+use crate::primitive::node::nodes_from_polyline;
+use crate::primitive::parameters::{HydroParams, TARGET_RIM_WIDTH};
 use bevy_math::Vec2;
 use jersey_terrain_stamps::RegionNoise;
 use procedural_common::Bounds2;
@@ -20,29 +21,29 @@ pub(crate) struct StreamLayout {
 
 /// Stream-specific stamp: one corridor as hydrology nodes.
 ///
-/// Convert with [`Self::into_complex`] → [`HydrologyComplex`].
+/// Convert with [`Self::into_complex`] → [`HydroComplex`].
 #[derive(Debug, Clone)]
 pub(crate) struct StreamCorridor {
 	pub path: Vec<Vec2>,
 	pub levels: Vec<f32>,
 	pub half_width: f32,
 	pub center_depth: f32,
-	pub parameters: HydroParameters,
+	pub params: HydroParams,
 	pub max_correction_extent: f32,
 }
 
 impl StreamCorridor {
-	/// `StreamCorridor` → sole-corridor [`HydrologyComplex`].
-	pub fn into_complex(self, bounds: Bounds2, seed: u32) -> HydrologyComplex {
+	/// `StreamCorridor` → sole-corridor [`HydroComplex`].
+	pub fn into_complex(self, bounds: Bounds2, seed: u32) -> HydroComplex {
 		let nodes = nodes_from_polyline(
 			&self.path,
 			&self.levels,
 			self.half_width,
 			self.center_depth,
-			&self.parameters,
+			&self.params,
 			self.max_correction_extent,
 		);
-		HydrologyComplex::new(bounds, seed).with_hydrology(nodes)
+		HydroComplex::new(bounds, seed).with_hydro(nodes)
 	}
 }
 
@@ -63,7 +64,9 @@ pub(crate) fn build_corridor(
 	let center_depth = freeboard + depth;
 
 	let apron_band = (apron_w - skirt_w).max(0.5);
-	let apron_noise = params.apron.sample_noise(
+	let apron_noise = sample_apron_rim_noise(
+		&params.apron,
+		&params.rim,
 		seed,
 		anchor,
 		apron_band,
@@ -81,18 +84,17 @@ pub(crate) fn build_corridor(
 	);
 	let boundary_noise = RegionNoise::from_seed(seed.wrapping_add(5), shore_freq, shore_amp);
 	let max_correction_extent = (rim_w + apron_width + shore_amp).max(0.0);
-	let rim_uplift_cap = params
-		.apron
-		.rim_height_amp_max
-		.max(params.apron.rim_height_amp_min)
-		.max(0.0);
-	let parameters = HydroParameters {
-		shelf_anchor: None,
-		rim_lift: params.rim_lift.max(0.0),
-		rim_width: rim_w,
-		apron_width,
+	let mut rim = params.rim;
+	rim.width = rim_w;
+	rim.lift = params.rim.lift.max(0.0);
+	rim.shelf_anchor = None;
+	rim.uplift_cap = params.rim.recipe_uplift_cap();
+	let mut apron = params.apron;
+	apron.width = apron_width;
+	let hydro_params = HydroParams {
+		rim,
+		apron,
 		rim_height: apron_noise.rim_height,
-		rim_uplift_cap,
 		boundary_noise: Some(boundary_noise),
 	};
 
@@ -101,7 +103,7 @@ pub(crate) fn build_corridor(
 		levels,
 		half_width: half_w,
 		center_depth,
-		parameters,
+		params: hydro_params,
 		max_correction_extent,
 	}
 }

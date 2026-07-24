@@ -1,15 +1,16 @@
 //! Assemble lake bowl as a hydrology node (ellipse + radial bowl).
 
-use crate::authored::apron::{jittered_depth, ApronNoiseSalts, TARGET_RIM_WIDTH};
+use crate::authored::apron::{jittered_depth, sample_apron_rim_noise, ApronNoiseSalts};
 use crate::authored::lake::budget::LakeBandBudget;
 use crate::authored::lake::shelf::ShelfLevels;
 use crate::authored::lake::LakeParams;
 use crate::authored::noise::{scale_noise_freq, NOISE_FREQ_REF_RADIUS};
-use crate::primitive::complex::HydrologyComplex;
+use crate::primitive::complex::HydroComplex;
 use crate::primitive::hydro::{
 	Ellipse, HydroElevation, HydroFootprint, HydroPrimitive, RadialBowl,
 };
-use crate::primitive::node::{HydrologyNode, HydroParameters};
+use crate::primitive::node::HydroNode;
+use crate::primitive::parameters::{HydroParams, TARGET_RIM_WIDTH};
 use bevy_math::Vec2;
 use jersey_terrain_stamps::{EllipseRegion, Region2D, RegionNoise};
 use procedural_common::Bounds2;
@@ -33,20 +34,20 @@ pub(crate) struct LakeLayout {
 
 /// Lake-specific stamp: one radial-bowl hydrology node.
 ///
-/// Convert with [`Self::into_complex`] → [`HydrologyComplex`].
+/// Convert with [`Self::into_complex`] → [`HydroComplex`].
 #[derive(Debug, Clone)]
 pub(crate) struct LakeBowl {
 	/// Wet footprint (basin backfill / overlays).
 	pub wet_core: Region2D,
-	pub node: HydrologyNode,
+	pub node: HydroNode,
 	/// Authoring metadata: water radius + rim bleed (water SDF follows carve \(\phi\)).
 	pub fill_radius: f32,
 }
 
 impl LakeBowl {
-	/// `LakeBowl` → sole-node [`HydrologyComplex`] with hydrology emit.
-	pub fn into_complex(self, bounds: Bounds2, seed: u32) -> HydrologyComplex {
-		HydrologyComplex::new(bounds, seed).with_hydrology(vec![self.node])
+	/// `LakeBowl` → sole-node [`HydroComplex`] with hydrology emit.
+	pub fn into_complex(self, bounds: Bounds2, seed: u32) -> HydroComplex {
+		HydroComplex::new(bounds, seed).with_hydro(vec![self.node])
 	}
 }
 
@@ -79,7 +80,9 @@ pub(crate) fn build_bowl(
 
 	let water_region = ellipse_region(center, water_r, rotation);
 
-	let apron_noise = params.apron.sample_noise(
+	let apron_noise = sample_apron_rim_noise(
+		&params.apron,
+		&params.rim,
 		seed,
 		anchor,
 		apron_w,
@@ -96,21 +99,21 @@ pub(crate) fn build_bowl(
 	let boundary_noise = RegionNoise::from_seed(seed.wrapping_add(5), shore_freq, shore_amp);
 
 	let max_correction_extent = (rim_w + apron_outer + shore_amp).max(0.0);
-	let rim_uplift_cap = params
-		.apron
-		.rim_height_amp_max
-		.max(params.apron.rim_height_amp_min)
-		.max(0.0);
-	let parameters = HydroParameters {
-		shelf_anchor: Some(layout.levels.shelf_anchor),
-		rim_lift: params.rim_lift.max(0.0),
-		rim_width: rim_w,
-		apron_width: apron_outer,
+	let mut rim = params.rim;
+	rim.width = rim_w;
+	rim.lift = params.rim.lift.max(0.0);
+	rim.shelf_anchor = Some(layout.levels.shelf_anchor);
+	rim.uplift_cap = params.rim.recipe_uplift_cap();
+	let mut apron = params.apron;
+	apron.width = apron_outer;
+
+	let hydro_params = HydroParams {
+		rim,
+		apron,
 		rim_height: apron_noise.rim_height,
-		rim_uplift_cap,
 		boundary_noise: Some(boundary_noise),
 	};
-	let node = HydrologyNode::new(
+	let node = HydroNode::new(
 		HydroPrimitive {
 			footprint: HydroFootprint::Ellipse(Ellipse {
 				center,
@@ -123,7 +126,7 @@ pub(crate) fn build_bowl(
 			}),
 			influence_pad: max_correction_extent,
 		},
-		parameters,
+		hydro_params,
 		max_correction_extent,
 	);
 

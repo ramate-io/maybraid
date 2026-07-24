@@ -21,7 +21,7 @@ pub mod stream;
 
 pub use config::{BootstrapMarazionWatershedConfigs, MarazionBandConfig, MarazionWatershedConfigs};
 pub use correction::{
-	WatershedAproningCell, WatershedCarvingCell, HydrologyComplexCell,
+	WatershedAproningCell, WatershedCarvingCell, HydroComplexCell,
 	WatershedRimmingCell,
 };
 pub use high_pass::{

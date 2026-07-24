@@ -2,21 +2,21 @@
 
 use crate::terrain::sdf::{ElevationModulation, TerrainSdf};
 use jersey_terrain_stamps::JerseyModulation;
-use marazion_watersheds::HydrologyComplex;
+use marazion_watersheds::HydroComplex;
 
 /// One elevation op in the final terrain stack.
 #[derive(Debug, Clone)]
 pub enum ComposedElevationOp {
 	Jersey(JerseyModulation),
 	/// Indexed hydrology complex (internally carve → rim → apron).
-	Hydrology(HydrologyComplex),
+	Hydro(HydroComplex),
 }
 
 impl ComposedElevationOp {
 	pub fn modify_elevation_xz(&self, elevation: f32, x: f32, z: f32) -> f32 {
 		match self {
 			Self::Jersey(m) => JerseyModulation::modify_elevation(m, elevation, x, z),
-			Self::Hydrology(h) => HydrologyComplex::modify_elevation(h, elevation, x, z),
+			Self::Hydro(h) => HydroComplex::modify_elevation(h, elevation, x, z),
 		}
 	}
 }
@@ -47,7 +47,7 @@ impl ElevationModulation for ComposedElevationOp {
 	}
 }
 
-impl ElevationModulation for HydrologyComplex {
+impl ElevationModulation for HydroComplex {
 	fn modify_elevation(
 		&self,
 		_terrain: &TerrainSdf,
@@ -56,6 +56,6 @@ impl ElevationModulation for HydrologyComplex {
 		z: f32,
 		_index: usize,
 	) -> f32 {
-		HydrologyComplex::modify_elevation(self, elevation, x, z)
+		HydroComplex::modify_elevation(self, elevation, x, z)
 	}
 }

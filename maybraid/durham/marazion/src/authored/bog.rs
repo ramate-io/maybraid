@@ -9,7 +9,7 @@
 //! [`BogBasinFill`] chooses how aggressively that freeboard is filled / crested.
 
 use crate::primitive::backfill::{BasinBackfillParams, WatershedBackfill};
-use crate::primitive::complex::HydrologyComplex;
+use crate::primitive::complex::HydroComplex;
 use crate::authored::lake::build::{build_bowl, LakeBowl, LakeLayout};
 use crate::authored::lake::shelf::{
 	aspect_u01, planned_center as planned_center_impl, rim_width_u01, rotation_u11, shelf_levels,
@@ -92,7 +92,7 @@ impl Default for BogParams {
 
 /// Authored bog **plan**: lake-shaped layout + basin backfill recipe.
 ///
-/// Realize with [`Self::into_complex`] into a [`HydrologyComplex`]
+/// Realize with [`Self::into_complex`] into a [`HydroComplex`]
 /// (bowl + basin backfill). `None` from [`Self::from_bounds`] means the leaf
 /// is too small.
 #[derive(Debug, Clone)]
@@ -174,12 +174,12 @@ impl Bog {
 	}
 
 	/// Hydrology nodes authored by this bog (lake-shaped bowl; backfill is separate).
-	pub fn hydrology_nodes(&self) -> Vec<crate::primitive::node::HydrologyNode> {
+	pub fn hydro_nodes(&self) -> Vec<crate::primitive::node::HydroNode> {
 		vec![self.bowl.node.clone()]
 	}
 
 	/// Realize this plan as a sole-node complex with basin backfill.
-	pub fn into_complex(self) -> HydrologyComplex {
+	pub fn into_complex(self) -> HydroComplex {
 		self.bowl
 			.into_complex(self.bounds, self.seed)
 			.with_backfill(self.basin)

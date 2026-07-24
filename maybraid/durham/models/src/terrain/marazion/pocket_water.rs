@@ -1,7 +1,7 @@
 //! Shared authored pocket-water stamp enum for Marazion high/low passes.
 
 use crate::terrain::marazion::leaf_kind::MarazionLeafKind;
-use marazion_watersheds::{Bog, HydrologyNode, Lake, Stream, StreamsGraph};
+use marazion_watersheds::{Bog, HydroNode, Lake, Stream, StreamsGraph};
 
 /// Authored Marazion pocket-water stamp held by a pass leaf (not a compiled complex).
 #[derive(Debug, Clone)]
@@ -25,13 +25,13 @@ impl MarazionPocketWater {
 	}
 
 	/// Hydrology nodes from this authored stamp (empty when unoccupied).
-	pub fn hydrology_nodes(&self) -> Vec<HydrologyNode> {
+	pub fn hydro_nodes(&self) -> Vec<HydroNode> {
 		match self {
 			Self::Empty => Vec::new(),
-			Self::Stream(s) => s.hydrology_nodes(),
-			Self::StreamsGraph(g) => g.hydrology_nodes(),
-			Self::Bog(b) => b.hydrology_nodes(),
-			Self::Lake(l) => l.hydrology_nodes(),
+			Self::Stream(s) => s.hydro_nodes(),
+			Self::StreamsGraph(g) => g.hydro_nodes(),
+			Self::Bog(b) => b.hydro_nodes(),
+			Self::Lake(l) => l.hydro_nodes(),
 		}
 	}
 

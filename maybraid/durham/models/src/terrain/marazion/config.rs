@@ -54,9 +54,9 @@ impl MarazionBandConfig {
 	{
 		let mut streams_graph = StreamsGraphParams::default();
 		streams_graph.stream = stream;
-		streams_graph.stream.apron.rim_height_amp_min = 0.0;
-		streams_graph.stream.apron.rim_height_amp_max =
-			streams_graph.stream.apron.rim_height_amp_max.min(1.25);
+		streams_graph.stream.rim.height_amp_min = 0.0;
+		streams_graph.stream.rim.height_amp_max =
+			streams_graph.stream.rim.height_amp_max.min(1.25);
 		streams_graph.rim_uplift_cap = streams_graph.rim_uplift_cap.min(1.5);
 		Self {
 			pre_pocket: PrePocketParams {

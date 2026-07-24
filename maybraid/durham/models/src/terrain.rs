@@ -25,7 +25,7 @@ use crate::terrain::jersey::{
 use crate::terrain::marazion::{
 	original_ids_for_marazion_pocket_waters_high_pass_leaves,
 	original_ids_for_marazion_pocket_waters_low_pass_leaves, WatershedAproningCell,
-	WatershedCarvingCell, HydrologyComplexCell, WatershedRimmingCell,
+	WatershedCarvingCell, HydroComplexCell, WatershedRimmingCell,
 };
 use crate::terrain::render::cascade_chunk_for_cell;
 use avian3d::prelude::RigidBody;
@@ -120,7 +120,7 @@ pub struct Terrain {
 	pub jersey_leaves: Vec<Aabb3d>,
 	/// Leaf AABBs whose Marazion lake stamps contributed (plus empties for debug).
 	pub marazion_leaves: Vec<MarazionLeafBounds>,
-	/// Fills from this origin cell's cellular [`HydrologyComplexCell`].
+	/// Fills from this origin cell's cellular [`HydroComplexCell`].
 	///
 	/// ComplexCell unions hydrology nodes from intersecting authored leaves
 	/// (all bands); fills share that union φ. Collected with carve → rim →
@@ -396,7 +396,7 @@ where
 		+ GeneratingSpatialIndex<PrePocketHighPassCell>
 		+ GeneratingSpatialIndex<PocketHighPassCell>
 		+ GeneratingSpatialIndex<MarazionPocketWatersHighPass>
-		+ GeneratingSpatialIndex<HydrologyComplexCell>
+		+ GeneratingSpatialIndex<HydroComplexCell>
 		+ GeneratingSpatialIndex<WatershedCarvingCell>
 		+ GeneratingSpatialIndex<WatershedRimmingCell>
 		+ GeneratingSpatialIndex<WatershedAproningCell>
@@ -445,7 +445,7 @@ where
 		);
 
 		let complex_cell =
-			GeneratingSpatialIndex::<HydrologyComplexCell>::get_one_or_generate(
+			GeneratingSpatialIndex::<HydroComplexCell>::get_one_or_generate(
 				spatial_index,
 				id,
 				lod_ref,
@@ -455,7 +455,7 @@ where
 		let marazion_fills = compiled.fills;
 
 		// Keep stage cells materialized for later policy work; elevation uses
-		// the cellular HydrologyComplex directly (internal carve → rim → apron).
+		// the cellular HydroComplex directly (internal carve → rim → apron).
 		let _ = GeneratingSpatialIndex::<WatershedCarvingCell>::get_one_or_generate(
 			spatial_index,
 			id,
@@ -473,7 +473,7 @@ where
 		)?;
 
 		if !complex_cell.complex.is_empty() {
-			modulations.push(ComposedElevationOp::Hydrology(complex_cell.complex));
+			modulations.push(ComposedElevationOp::Hydro(complex_cell.complex));
 		}
 
 		let sdf = Self::compose_sdf(&pre.base, &modulations);

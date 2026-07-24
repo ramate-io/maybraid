@@ -314,8 +314,8 @@ macro_rules! define_marazion_band {
 		}
 
 		impl $PocketWaters {
-			pub fn hydrology_nodes(&self) -> Vec<marazion_watersheds::HydrologyNode> {
-				self.authored.hydrology_nodes()
+			pub fn hydro_nodes(&self) -> Vec<marazion_watersheds::HydroNode> {
+				self.authored.hydro_nodes()
 			}
 
 			pub fn kind(&self) -> $crate::terrain::marazion::leaf_kind::MarazionLeafKind {

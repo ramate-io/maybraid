@@ -15,10 +15,10 @@ pub(crate) use path::{
 	ENDPOINT_A_SALT, ENDPOINT_B_SALT,
 };
 
-use crate::authored::apron::WatershedApronParams;
-use crate::primitive::complex::HydrologyComplex;
 use crate::authored::noise::n01_freq;
 use crate::authored::stream::build::{build_corridor, StreamCorridor, StreamLayout};
+use crate::primitive::complex::HydroComplex;
+use crate::primitive::parameters::{ApronParams, RimParams};
 use bevy_math::Vec2;
 use jersey_terrain_stamps::{DownhillPair, HysteresisSpine};
 use procedural_common::Bounds2;
@@ -52,8 +52,6 @@ pub struct StreamParams {
 
 	/// How far below endpoint terrain the water surface sits.
 	pub water_sink: f32,
-	/// Bank lift above the graded surface.
-	pub rim_lift: f32,
 	/// Minimum forced drop between consecutive nodes when a segment is flat/uphill.
 	pub min_drop: f32,
 	/// Path-distance radius for inbound/outbound pitch blending at vertices.
@@ -68,8 +66,10 @@ pub struct StreamParams {
 	pub shore_indent_frac: f32,
 	pub shore_freq: f32,
 
-	/// Shared apron outline + add-only rim height.
-	pub apron: WatershedApronParams,
+	/// Apron band + indent-noise recipe.
+	pub apron: ApronParams,
+	/// Rim band + height-noise recipe (`lift` is bank above \(W\)).
+	pub rim: RimParams,
 
 	/// How far below the water surface \(W\) the channel floor grade sits.
 	///
@@ -95,7 +95,6 @@ impl Default for StreamParams {
 			mu: 10.0,
 
 			water_sink: 0.7,
-			rim_lift: 1.1,
 			min_drop: 0.75,
 			node_blend: 0.0,
 
@@ -105,7 +104,8 @@ impl Default for StreamParams {
 			shore_indent_frac: 0.2,
 			shore_freq: 0.04,
 
-			apron: WatershedApronParams::default().with_visible_rim_bank(),
+			apron: ApronParams::default(),
+			rim: RimParams::default().with_visible_rim_bank(),
 
 			channel_freeboard: 2.0,
 
@@ -161,7 +161,7 @@ fn width_scale_u01(seed: u32, leaf_min: Vec2, params: StreamParams) -> f32 {
 
 /// Authored stream **plan**: layout metadata for one pocket-water leaf.
 ///
-/// Realize with [`Self::into_complex`] into a [`HydrologyComplex`].
+/// Realize with [`Self::into_complex`] into a [`HydroComplex`].
 /// `None` from [`Self::from_bounds`] means the leaf / path is too small.
 #[derive(Debug, Clone)]
 pub struct Stream {
@@ -251,19 +251,19 @@ impl Stream {
 	}
 
 	/// Hydrology nodes authored by this stream (one reach segment per polyline edge).
-	pub fn hydrology_nodes(&self) -> Vec<crate::primitive::node::HydrologyNode> {
+	pub fn hydro_nodes(&self) -> Vec<crate::primitive::node::HydroNode> {
 		crate::primitive::node::nodes_from_polyline(
 			&self.corridor.path,
 			&self.corridor.levels,
 			self.corridor.half_width,
 			self.corridor.center_depth,
-			&self.corridor.parameters,
+			&self.corridor.params,
 			self.corridor.max_correction_extent,
 		)
 	}
 
-	/// Realize this plan as a sole-corridor [`HydrologyComplex`].
-	pub fn into_complex(self) -> HydrologyComplex {
+	/// Realize this plan as a sole-corridor [`HydroComplex`].
+	pub fn into_complex(self) -> HydroComplex {
 		self.corridor.into_complex(self.bounds, self.seed)
 	}
 }
@@ -387,7 +387,7 @@ mod tests {
 		let bounds = Bounds2::from_xz(0.0, 0.0, 400.0, 400.0);
 		let height = |x: f32, z: f32| 100.0 - 0.05 * x - 0.01 * z;
 		let params = StreamParams::default();
-		assert!(params.apron.rim_height_amp_max >= 15.0);
+		assert!(params.rim.height_amp_max >= 10.0);
 		assert!(params.apron.indent_frac_max > params.apron.indent_frac_min);
 		let stream = Stream::from_bounds(bounds, 42, params, Some(&height)).expect("stream");
 		let compiled = stream.clone().into_complex().compile();

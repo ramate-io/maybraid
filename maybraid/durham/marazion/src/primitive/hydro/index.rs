@@ -1,6 +1,6 @@
 //! Uniform-grid broadphase over conservative node AABBs.
 
-use crate::primitive::node::HydrologyNode;
+use crate::primitive::node::HydroNode;
 use bevy_math::Vec2;
 use procedural_common::Bounds2;
 use std::collections::HashMap;
@@ -23,7 +23,7 @@ impl FootprintIndex {
 	}
 
 	/// Broadphase over node hydraulic AABBs expanded by each node's index pad.
-	pub fn build_nodes(bounds: Bounds2, nodes: &[HydrologyNode], cell: f32) -> Self {
+	pub fn build_nodes(bounds: Bounds2, nodes: &[HydroNode], cell: f32) -> Self {
 		let cell = cell.max(1.0);
 		let origin = bounds.min;
 		let mut buckets: HashMap<(i32, i32), Vec<u16>> = HashMap::new();

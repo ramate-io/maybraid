@@ -1,24 +1,25 @@
 //! Indexed hydrology complex: member nodes + sample-time correction.
 //!
-//! Authored leaves emit [`crate::primitive::node::HydrologyNode`]s.
-//! [`HydrologyComplex`] is a bag of nodes to blend — no graph / connectivity.
+//! Authored leaves emit [`crate::primitive::node::HydroNode`]s.
+//! [`HydroComplex`] is a bag of nodes to blend — no graph / connectivity.
 //! Optional backfills stay a post-depression jersey layer via [`Self::compile`].
 
 use crate::primitive::backfill::WatershedBackfill;
 use crate::primitive::fill::{WaterFill, WaterSurface};
-use crate::primitive::hydro::{ComplexApronParams, FootprintIndex, HydroPrimitive};
-use crate::primitive::node::{HydroParameters, HydrologyNode};
+use crate::primitive::parameters::ComplexParams;
+use crate::primitive::hydro::{FootprintIndex, HydroPrimitive};
+use crate::primitive::node::HydroNode;
 use bevy_math::{Vec2, Vec3};
 use jersey_terrain_stamps::JerseyModulation;
 use procedural_common::Bounds2;
 
-/// Stamp products derived from a [`HydrologyComplex`] (fills + optional backfills).
+/// Stamp products derived from a [`HydroComplex`] (fills + optional backfills).
 #[derive(Debug, Clone)]
 pub struct CompiledWatershed {
 	pub bounds: Bounds2,
 	pub seed: u32,
 	/// Indexed complex used for elevation / fill sampling.
-	pub complex: HydrologyComplex,
+	pub complex: HydroComplex,
 	/// Post-depression jersey ops (backfills).
 	pub modulations: Vec<JerseyModulation>,
 	pub fills: Vec<WaterFill>,
@@ -45,17 +46,17 @@ impl CompiledWatershed {
 /// Captures and indexes hydrology nodes; owns carve → rim → apron modulation
 /// and the pocket water SDF (carve × half-space below \(W\)).
 #[derive(Debug, Clone)]
-pub struct HydrologyComplex {
+pub struct HydroComplex {
 	pub bounds: Bounds2,
 	pub seed: u32,
 	pub backfills: Vec<WatershedBackfill>,
 	/// Member hydrology nodes (source of truth for correction).
-	pub hydrology: Vec<HydrologyNode>,
+	pub hydrology: Vec<HydroNode>,
 	/// Broadphase over [`Self::hydrology`] (rebuilt when nodes change).
 	pub index: FootprintIndex,
 }
 
-impl HydrologyComplex {
+impl HydroComplex {
 	pub fn new(bounds: Bounds2, seed: u32) -> Self {
 		let mut complex = Self {
 			bounds,
@@ -73,26 +74,18 @@ impl HydrologyComplex {
 		bounds: Bounds2,
 		seed: u32,
 		primitives: Vec<HydroPrimitive>,
-		apron: ComplexApronParams,
+		apron: ComplexParams,
 	) -> Self {
-		let params = HydroParameters {
-			shelf_anchor: None,
-			rim_lift: apron.rim_lift,
-			rim_width: apron.rim_width,
-			apron_width: apron.apron_width,
-			rim_height: apron.rim_height,
-			rim_uplift_cap: apron.rim_uplift_cap,
-			boundary_noise: None,
-		};
+		let params = apron.into_params();
 		let extent = params.correction_pad();
 		let hydrology = primitives
 			.into_iter()
-			.map(|primitive| HydrologyNode::new(primitive, params.clone(), extent))
+			.map(|primitive| HydroNode::new(primitive, params.clone(), extent))
 			.collect();
-		Self::new(bounds, seed).with_hydrology(hydrology)
+		Self::new(bounds, seed).with_hydro(hydrology)
 	}
 
-	pub fn with_hydrology(mut self, nodes: Vec<HydrologyNode>) -> Self {
+	pub fn with_hydro(mut self, nodes: Vec<HydroNode>) -> Self {
 		self.hydrology = nodes;
 		self.reindex();
 		self
@@ -125,7 +118,7 @@ impl HydrologyComplex {
 	}
 
 	/// Nodes whose correction support contains `p` (index pad + SDF filter).
-	pub fn nodes_intersecting(&self, p: Vec2) -> Vec<&HydrologyNode> {
+	pub fn nodes_intersecting(&self, p: Vec2) -> Vec<&HydroNode> {
 		let mut out = Vec::new();
 		for id in self.candidate_ids(p) {
 			let Some(node) = self.hydrology.get(id as usize) else {
@@ -146,14 +139,14 @@ impl HydrologyComplex {
 			return elevation;
 		}
 		let nodes = self.nodes_intersecting(p);
-		HydrologyNode::blend_terrain_elevation(&nodes, elevation, p)
+		HydroNode::blend_terrain_elevation(&nodes, elevation, p)
 	}
 
 	/// Soft-min free surface over carve-owned nodes at `(x, z)`.
 	pub fn surface_at(&self, x: f32, z: f32) -> Option<f32> {
 		let p = Vec2::new(x, z);
 		let nodes = self.nodes_intersecting(p);
-		HydrologyNode::blend_surface_elevation(&nodes, p)
+		HydroNode::blend_surface_elevation(&nodes, p)
 	}
 
 	/// Min \(\phi\) over intersecting nodes (`None` if none in index).
@@ -243,12 +236,13 @@ mod tests {
 		Ellipse, HydroElevation, HydroFootprint, HydroPrimitive, RadialBowl, ReachProfile,
 		ReachSegment,
 	};
-	use crate::primitive::node::{HydroParameters, HydrologyNode};
+	use crate::primitive::parameters::HydroParams;
+	use crate::primitive::node::HydroNode;
 	use jersey_terrain_stamps::{CircleRegion, Region2D, RegionNoise};
 
 	#[test]
 	fn empty_complex_compiles_empty() -> anyhow::Result<()> {
-		let c = HydrologyComplex::new(Bounds2::from_xz(0.0, 0.0, 10.0, 10.0), 1);
+		let c = HydroComplex::new(Bounds2::from_xz(0.0, 0.0, 10.0, 10.0), 1);
 		let out = c.compile();
 		assert!(out.is_empty());
 		assert!(out.fills.is_empty());
@@ -261,7 +255,7 @@ mod tests {
 			center: Vec2::ZERO,
 			radius: 10.0,
 		});
-		let node = HydrologyNode::new(
+		let node = HydroNode::new(
 			HydroPrimitive {
 				footprint: HydroFootprint::Ellipse(Ellipse {
 					center: Vec2::ZERO,
@@ -274,11 +268,11 @@ mod tests {
 				}),
 				influence_pad: 4.0,
 			},
-			HydroParameters::default(),
+			HydroParams::default(),
 			12.0,
 		);
-		let out = HydrologyComplex::new(Bounds2::from_xz(-40.0, -40.0, 40.0, 40.0), 3)
-			.with_hydrology(vec![node])
+		let out = HydroComplex::new(Bounds2::from_xz(-40.0, -40.0, 40.0, 40.0), 3)
+			.with_hydro(vec![node])
 			.with_backfill(WatershedBackfill::basin(
 				core,
 				RegionNoise::from_seed(1, 0.05, 4.0),
@@ -297,15 +291,13 @@ mod tests {
 		let half_w = 8.0;
 		let rim_w = 25.0;
 		let depth = 4.0;
-		let params = HydroParameters {
-			rim_width: rim_w,
-			apron_width: 8.0,
-			..HydroParameters::default()
-		};
+		let mut params = HydroParams::default();
+		params.rim.width = rim_w;
+		params.apron.width = 8.0;
 		let a = Vec2::new(0.0, 0.0);
 		let b = Vec2::new(40.0, 0.0);
 		let c = Vec2::new(80.0, 0.0);
-		let upstream = HydrologyNode::new(
+		let upstream = HydroNode::new(
 			HydroPrimitive {
 				footprint: HydroFootprint::Reach(ReachSegment {
 					a,
@@ -322,7 +314,7 @@ mod tests {
 			params.clone(),
 			rim_w + 8.0,
 		);
-		let downstream = HydrologyNode::new(
+		let downstream = HydroNode::new(
 			HydroPrimitive {
 				footprint: HydroFootprint::Reach(ReachSegment {
 					a: b,
@@ -339,8 +331,8 @@ mod tests {
 			params,
 			rim_w + 8.0,
 		);
-		let complex = HydrologyComplex::new(Bounds2::from_xz(-20.0, -40.0, 100.0, 40.0), 1)
-			.with_hydrology(vec![upstream, downstream]);
+		let complex = HydroComplex::new(Bounds2::from_xz(-20.0, -40.0, 100.0, 40.0), 1)
+			.with_hydro(vec![upstream, downstream]);
 		let mid = Vec2::new(20.0, 0.0);
 		let w = complex.surface_at(mid.x, mid.y).expect("surface");
 		assert!(
@@ -360,7 +352,7 @@ mod tests {
 
 	#[test]
 	fn water_exterior_uses_carve_distance_not_sentinel() -> anyhow::Result<()> {
-		let node = HydrologyNode::new(
+		let node = HydroNode::new(
 			HydroPrimitive {
 				footprint: HydroFootprint::Ellipse(Ellipse {
 					center: Vec2::ZERO,
@@ -373,11 +365,11 @@ mod tests {
 				}),
 				influence_pad: 20.0,
 			},
-			HydroParameters::default(),
+			HydroParams::default(),
 			20.0,
 		);
 		let complex =
-			HydrologyComplex::new(Bounds2::from_xz(-40.0, -40.0, 40.0, 40.0), 7).with_hydrology(vec![
+			HydroComplex::new(Bounds2::from_xz(-40.0, -40.0, 40.0, 40.0), 7).with_hydro(vec![
 				node,
 			]);
 		// Just outside the bowl: positive φ, finite, not a 1e6 cliff.
@@ -393,7 +385,7 @@ mod tests {
 
 	#[test]
 	fn water_fill_probes_node_interior() -> anyhow::Result<()> {
-		let node = HydrologyNode::new(
+		let node = HydroNode::new(
 			HydroPrimitive {
 				footprint: HydroFootprint::Ellipse(Ellipse {
 					center: Vec2::new(30.0, -25.0),
@@ -406,11 +398,11 @@ mod tests {
 				}),
 				influence_pad: 12.0,
 			},
-			HydroParameters::default(),
+			HydroParams::default(),
 			12.0,
 		);
-		let fill = HydrologyComplex::new(Bounds2::from_xz(-40.0, -40.0, 40.0, 40.0), 5)
-			.with_hydrology(vec![node])
+		let fill = HydroComplex::new(Bounds2::from_xz(-40.0, -40.0, 40.0, 40.0), 5)
+			.with_hydro(vec![node])
 			.water_fill();
 		let probes = fill.wet_volume_probe_points();
 		assert!(
