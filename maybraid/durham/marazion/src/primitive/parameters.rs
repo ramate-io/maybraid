@@ -30,10 +30,28 @@ pub const TARGET_RIM_WIDTH: f32 = 25.0;
 /// Default hard cap on add-only rim height noise.
 pub const DEFAULT_RIM_UPLIFT_CAP: f32 = 1.5;
 
+/// Temporary shoreline A/B: when true, lake / stream / graph leaves emit
+/// [`HydroParams::boundary_noise`] = `None` (geometric \(\phi = 0\), no indent warp).
+///
+/// The old path always attached `Some(...)` with a `.max(0.01)` amp floor, so
+/// `shore_indent_frac = 0` never fully disabled outline noise.
+pub const DISABLE_SHORE_BOUNDARY_NOISE: bool = true;
+
+/// Temporary shoreline A/B: when true, drawn rim height noise amp is forced to 0
+/// so `bank_target` is flat along the shore (lift / shelf only).
+pub const DISABLE_RIM_HEIGHT_NOISE: bool = true;
+
+/// Temporary shoreline A/B: when true, rim lift is forced to 0 so the bank sits
+/// at shelf / \(W\) (tests steep iso-φ ridge faceting vs freeboard cliff).
+pub const DISABLE_RIM_LIFT: bool = true;
+
 /// Per-node carve / rim / apron knobs.
 ///
 /// Classification bands: carve \(\phi \le 0\), rim \(0 < \phi < r_{\mathrm{rim}}\),
 /// apron \(r_{\mathrm{rim}} \le \phi < r_{\mathrm{rim}} + r_{\mathrm{apron}}\).
+/// Terrain softens carve↔rim across \(\phi \in [-s, +s]\) and rim↔apron across
+/// \(\phi \in [r_{\mathrm{rim}}-a, r_{\mathrm{rim}}+a]\) (water ownership stays hard
+/// at \(\phi = 0\)).
 #[derive(Debug, Clone)]
 pub struct HydroParams {
 	pub rim: RimParams,
@@ -42,6 +60,14 @@ pub struct HydroParams {
 	pub rim_height: RegionNoise,
 	/// Optional shore outline: warps \(\phi\) via `φ += sample_boundary`.
 	pub boundary_noise: Option<RegionNoise>,
+	/// Half-width (wu) of soft terrain blend across \(\phi = 0\) (carve ↔ rim).
+	///
+	/// `0` restores a hard class switch. Typical leaves use a few world units so
+	/// the bank meets the carved bed without a vertical cliff along \(\phi = 0\).
+	pub shore_blend: f32,
+	/// Half-width (wu) of soft terrain blend across \(\phi = r_{\mathrm{rim}}\)
+	/// (rim ↔ apron). `0` restores a hard class switch at the berm outer.
+	pub rim_apron_blend: f32,
 }
 
 impl Default for HydroParams {
@@ -51,6 +77,8 @@ impl Default for HydroParams {
 			apron: ApronParams::default(),
 			rim_height: RegionNoise::from_seed(0, 0.02, 0.0),
 			boundary_noise: None,
+			shore_blend: 4.0,
+			rim_apron_blend: 4.0,
 		}
 	}
 }
@@ -66,6 +94,27 @@ impl HydroParams {
 			.as_ref()
 			.map(|n| n.noise.params().amplitude.abs())
 			.unwrap_or(0.0)
+	}
+
+	/// Effective shore-blend half-width, clamped into the rim band.
+	pub fn shore_blend_half(&self) -> f32 {
+		let rim_w = self.rim.width.max(0.0);
+		self.shore_blend.max(0.0).min(rim_w.max(0.0) * 0.95)
+	}
+
+	/// Effective rim↔apron blend half-width, clamped into both bands.
+	pub fn rim_apron_blend_half(&self) -> f32 {
+		let rim_w = self.rim.width.max(0.0);
+		let apron_w = self.apron.width.max(0.0);
+		let cap = (rim_w * 0.45).min(apron_w * 0.45);
+		self.rim_apron_blend.max(0.0).min(cap)
+	}
+
+	/// Leaf default: a slice of rim width, at least half the shore-indent amp.
+	pub fn recommend_shore_blend(rim_w: f32, shore_amp: f32) -> f32 {
+		(rim_w.max(0.0) * 0.2)
+			.clamp(2.0, 8.0)
+			.max(shore_amp.max(0.0) * 0.5)
 	}
 
 	/// Raise-only bank target at a sample given free-surface \(W\).
@@ -122,6 +171,8 @@ impl ComplexParams {
 			},
 			rim_height: self.rim_height,
 			boundary_noise: None,
+			shore_blend: HydroParams::default().shore_blend,
+			rim_apron_blend: HydroParams::default().rim_apron_blend,
 		}
 	}
 }

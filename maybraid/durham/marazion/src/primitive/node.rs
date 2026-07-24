@@ -16,6 +16,12 @@ use procedural_common::Bounds2;
 
 pub use crate::primitive::parameters::HydroParams;
 
+#[inline]
+fn smoothstep01(t: f32) -> f32 {
+	let t = t.clamp(0.0, 1.0);
+	t * t * (3.0 - 2.0 * t)
+}
+
 /// One hydrology entity indexed by hydraulic support ⊕ correction extent.
 #[derive(Debug, Clone)]
 pub struct HydroNode {
@@ -77,9 +83,8 @@ impl HydroNode {
 
 	/// Where `p` sits relative to this node's hydraulic support and bands.
 	///
-	/// - Carve: inside wet support (\(\phi \le 0\))
-	/// - Rim: \(0 < \phi < r_{\mathrm{rim}}\)
-	/// - Apron: \(r_{\mathrm{rim}} \le \phi < r_{\mathrm{rim}} + r_{\mathrm{apron}}\)
+	/// Hard bands (water / debug): carve \(\phi \le 0\), rim, apron.
+	/// Terrain blend uses [`Self::shore_blend_half`] to soften carve↔rim.
 	pub fn point_classification(&self, p: Vec2) -> Option<CorrectionStage> {
 		let d = self.phi(p);
 		let rim_w = self.params.rim.width.max(0.0);
@@ -95,12 +100,13 @@ impl HydroNode {
 		}
 	}
 
-	/// Absolute bowl bed, graded to the free surface at the noisy shore.
-	///
-	/// Geometric bed falloff can disagree with [`Self::phi`]'s boundary noise;
-	/// this forces depth → 0 as \(\phi \to 0^-\) so the carve meets the same
-	/// shoreline the rim uses.
-	pub fn carve_candidate(&self, _elevation: f32, p: Vec2) -> f32 {
+	#[inline]
+	fn shore_blend_half(&self) -> f32 {
+		self.params.shore_blend_half()
+	}
+
+	/// Bed graded toward free surface \(W\) as \(\phi \to 0^-\) (no bank lift).
+	fn carve_bed_toward_w(&self, p: Vec2) -> f32 {
 		let w = self.surface_level(p);
 		let geo_bed = self.primitive.surface_and_bed(p).1;
 		let geo_depth = (w - geo_bed).max(0.0);
@@ -119,6 +125,31 @@ impl HydroNode {
 		self.params.bank_target(self.surface_level(p), p)
 	}
 
+	/// Soft carve↔rim height across \(\phi \in [-\mu, +\mu]\).
+	///
+	/// Geometric bed falloff can disagree with [`Self::phi`]'s boundary noise;
+	/// depth → 0 as \(\phi \to 0^-\) ([`Self::carve_bed_toward_w`]). Without
+	/// shore blend the terrain meets at \(W\) then jumps to `bank_target` on the
+	/// rim side — a vertical cliff along \(\phi = 0\). Soft blend removes that
+	/// cliff (water ownership stays hard at \(\phi = 0\)).
+	pub fn carve_candidate(&self, elevation: f32, p: Vec2) -> f32 {
+		self.shore_terrain_candidate(elevation, p)
+	}
+
+	/// Soft carve↔rim height for \(\phi \in [-\mu, +\mu]\); outside that, bed or bank.
+	fn shore_terrain_candidate(&self, elevation: f32, p: Vec2) -> f32 {
+		let phi = self.phi(p);
+		let mu = self.shore_blend_half();
+		let bed = self.carve_bed_toward_w(p);
+		let bank = self.rim_candidate(elevation, p);
+		if mu <= 1e-6 {
+			return if phi <= 0.0 { bed } else { bank };
+		}
+		// t = 0 at φ = -μ, t = 1 at φ = +μ.
+		let t = smoothstep01((phi + mu) / (2.0 * mu));
+		bed * (1.0 - t) + bank * t
+	}
+
 	/// Grade from bank at the (noisy) rim edge toward identity at the apron outer.
 	///
 	/// Uses occupancy \(\phi\) so the grade tracks the same shoreline as carve/rim.
@@ -134,37 +165,75 @@ impl HydroNode {
 		(elevation * fade + bank * (1.0 - fade)).max(elevation)
 	}
 
+	#[inline]
+	fn rim_apron_blend_half(&self) -> f32 {
+		self.params.rim_apron_blend_half()
+	}
+
+	/// Soft rim↔apron height across \(\phi \in [r_{\mathrm{rim}}-\nu, r_{\mathrm{rim}}+\nu]\).
+	fn rim_apron_terrain_candidate(&self, elevation: f32, p: Vec2) -> f32 {
+		let d = self.phi(p);
+		let rim_w = self.params.rim.width.max(0.0);
+		let nu = self.rim_apron_blend_half();
+		let rim_h = self.rim_candidate(elevation, p);
+		let apron_h = self.apron_candidate(elevation, p);
+		if nu <= 1e-6 {
+			return if d < rim_w { rim_h } else { apron_h };
+		}
+		// t = 0 at φ = rim_w - ν, t = 1 at φ = rim_w + ν.
+		let t = smoothstep01((d - (rim_w - nu)) / (2.0 * nu));
+		rim_h * (1.0 - t) + apron_h * t
+	}
+
 	/// Blend intersecting nodes at `p` by class priority: carve → rim → apron.
 	///
-	/// Classify first, then evaluate candidates only for the winning class:
-	/// - Carve: soft-min of carve candidates
-	/// - Rim: soft-max of rim candidates, floored by soft-min of rim-node surfaces
-	/// - Apron: soft-max of apron candidates
-	/// - Else: `elevation` unchanged
+	/// Soft shore: wet nodes (\(\phi \le 0\)) use [`Self::shore_terrain_candidate`]
+	/// so height lifts toward the bank as \(\phi \to 0^-\). Samples with
+	/// \(0 < \phi \le \mu\) (rim-side blend) apply only when no wet carve owns
+	/// the column — keeps soft-min membership stable (extra rim-side terms were
+	/// dipping beds via polynomial soft-min).
+	///
+	/// Soft rim↔apron: pure rim stays soft-max banks; a band around
+	/// \(r_{\mathrm{rim}}\) uses [`Self::rim_apron_terrain_candidate`] when no
+	/// pure-rim node owns the column.
 	pub fn blend_terrain_elevation(nodes: &[&Self], elevation: f32, p: Vec2) -> f32 {
 		let mut carves: Vec<&Self> = Vec::new();
+		let mut soft_shores: Vec<&Self> = Vec::new();
 		let mut rims: Vec<&Self> = Vec::new();
+		let mut soft_rim_aprons: Vec<&Self> = Vec::new();
 		let mut aprons: Vec<&Self> = Vec::new();
 
 		for node in nodes {
-			match node.point_classification(p) {
-				Some(CorrectionStage::Carve) => carves.push(node),
-				Some(CorrectionStage::Rim) => {
-					if carves.is_empty() {
-						rims.push(node);
-					}
-				}
-				Some(CorrectionStage::Apron) => {
-					if carves.is_empty() && rims.is_empty() {
-						aprons.push(node);
-					}
-				}
-				None => {}
+			let d = node.phi(p);
+			let mu = node.shore_blend_half();
+			let nu = node.rim_apron_blend_half();
+			let rim_w = node.params.rim.width.max(0.0);
+			let apron_w = node.params.apron.width.max(0.0);
+			if d <= 0.0 {
+				carves.push(node);
+			} else if d <= mu {
+				soft_shores.push(node);
+			} else if d < rim_w - nu {
+				rims.push(node);
+			} else if d <= rim_w + nu {
+				soft_rim_aprons.push(node);
+			} else if d < rim_w + apron_w {
+				aprons.push(node);
 			}
 		}
 
 		if !carves.is_empty() {
-			let vals: Vec<f32> = carves.iter().map(|n| n.carve_candidate(elevation, p)).collect();
+			let vals: Vec<f32> = carves
+				.iter()
+				.map(|n| n.shore_terrain_candidate(elevation, p))
+				.collect();
+			return smoothmin_fold(&vals, SURFACE_SMOOTHMIN_K);
+		}
+		if !soft_shores.is_empty() {
+			let vals: Vec<f32> = soft_shores
+				.iter()
+				.map(|n| n.shore_terrain_candidate(elevation, p))
+				.collect();
 			return smoothmin_fold(&vals, SURFACE_SMOOTHMIN_K);
 		}
 		if !rims.is_empty() {
@@ -176,6 +245,13 @@ impl HydroNode {
 			}
 			let water = smoothmin_fold(&surfaces, SURFACE_SMOOTHMIN_K);
 			return smoothmax_fold(&raised, SURFACE_SMOOTHMIN_K).max(water);
+		}
+		if !soft_rim_aprons.is_empty() {
+			let vals: Vec<f32> = soft_rim_aprons
+				.iter()
+				.map(|n| n.rim_apron_terrain_candidate(elevation, p))
+				.collect();
+			return smoothmax_fold(&vals, SURFACE_SMOOTHMIN_K);
 		}
 		if !aprons.is_empty() {
 			let vals: Vec<f32> = aprons.iter().map(|n| n.apron_candidate(elevation, p)).collect();
@@ -289,6 +365,55 @@ mod tests {
 		assert_eq!(node.point_classification(Vec2::new(20.0, 10.0)), Some(CorrectionStage::Rim));
 		assert_eq!(node.point_classification(Vec2::new(20.0, 14.0)), Some(CorrectionStage::Apron));
 		assert_eq!(node.point_classification(Vec2::new(20.0, 30.0)), None);
+		Ok(())
+	}
+
+	#[test]
+	fn soft_shore_meets_bank_across_phi_zero() -> anyhow::Result<()> {
+		let mut node = reach_node(8.0);
+		node.params.shore_blend = 4.0;
+		node.params.rim.lift = 2.0;
+		node.params.rim_height = jersey_terrain_stamps::RegionNoise::from_seed(0, 0.02, 0.0);
+		// Lateral transect across the wet edge (half_width = 8).
+		let y_in = 8.0 - 2.0;
+		let y_out = 8.0 + 2.0;
+		let p_in = Vec2::new(20.0, y_in);
+		let p_shore = Vec2::new(20.0, 8.0);
+		let p_out = Vec2::new(20.0, y_out);
+		let h_in = HydroNode::blend_terrain_elevation(&[&node], 40.0, p_in);
+		let h_shore = HydroNode::blend_terrain_elevation(&[&node], 40.0, p_shore);
+		let h_out = HydroNode::blend_terrain_elevation(&[&node], 40.0, p_out);
+		let bank = node.params.bank_target(node.surface_level(p_shore), p_shore);
+		// No cliff: shore samples stay near the bank, and the step across φ=0 is small.
+		assert!(
+			(h_shore - bank).abs() < 1.25,
+			"shore height {h_shore} should approach bank {bank}"
+		);
+		assert!(
+			(h_out - h_in).abs() < 2.5,
+			"soft shore should limit jump across edge: in={h_in} out={h_out}"
+		);
+		Ok(())
+	}
+
+	#[test]
+	fn soft_rim_apron_limits_jump_at_berm_outer() -> anyhow::Result<()> {
+		let mut node = reach_node(8.0);
+		node.params.rim.width = 4.0;
+		node.params.apron.width = 8.0;
+		node.params.rim_apron_blend = 2.0;
+		node.params.rim.lift = 2.0;
+		node.params.rim_height = jersey_terrain_stamps::RegionNoise::from_seed(0, 0.02, 0.0);
+		// half_width=8 → φ≈0 at y=8; rim outer at y≈12.
+		let rim_outer = 8.0 + 4.0;
+		let p_in = Vec2::new(20.0, rim_outer - 1.5);
+		let p_out = Vec2::new(20.0, rim_outer + 1.5);
+		let h_in = HydroNode::blend_terrain_elevation(&[&node], 28.0, p_in);
+		let h_out = HydroNode::blend_terrain_elevation(&[&node], 28.0, p_out);
+		assert!(
+			(h_out - h_in).abs() < 1.5,
+			"soft rim↔apron should limit jump at berm outer: in={h_in} out={h_out}"
+		);
 		Ok(())
 	}
 
