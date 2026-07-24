@@ -15,12 +15,30 @@ use jersey_terrain_stamps::RegionNoise;
 
 /// Which watershed correction pass to apply at a sample.
 ///
-/// Still used by [`crate::primitive::node::HydroNode::point_classification`] and
-/// Durham carve / rim / apron stage cells.
+/// Hard bands (water / debug): [`crate::primitive::node::HydroNode::point_classification`]
+/// and Durham carve / rim / apron stage cells. Terrain soft zones use
+/// [`TerrainBlendStage`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CorrectionStage {
 	Carve,
 	Rim,
+	Apron,
+}
+
+/// Soft-aware terrain band for elevation blend (includes shore / rim↔apron zones).
+///
+/// See [`crate::primitive::node::HydroNode::terrain_blend_classification`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TerrainBlendStage {
+	/// Wet carve: \(\phi \le 0\).
+	Carve,
+	/// Rim-side shore blend: \(0 < \phi \le \mu\).
+	SoftShore,
+	/// Pure rim bank: \(\mu < \phi < r_{\mathrm{rim}}(p) - \nu\).
+	Rim,
+	/// Soft rim↔apron: \(\lvert\phi - r_{\mathrm{rim}}(p)\rvert \le \nu\).
+	SoftRimApron,
+	/// Pure apron grade beyond the soft rim outer.
 	Apron,
 }
 
@@ -78,7 +96,9 @@ impl Default for HydroParams {
 
 impl HydroParams {
 	pub fn correction_pad(&self) -> f32 {
-		(self.rim.width + self.apron.width + self.rim_boundary_noise_amp()).max(0.0)
+		// Shore / rim-outer noise amps are fractions of these bands — do not
+		// stack them again on top of rim + apron.
+		(self.rim.width + self.apron.width).max(0.0)
 	}
 
 	/// Peak absolute amplitude of [`Self::boundary_noise`] (0 when unset).

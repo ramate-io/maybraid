@@ -319,8 +319,8 @@ impl StreamsGraph {
 			);
 			p
 		};
-		let max_correction_extent =
-			(rim_w + apron_w + shore_amp + rim_boundary_amp + rim_backfill_params.band).max(0.0);
+		// Rim backfill + shore/rim noise sit inside rim/apron — pad is band widths.
+		let max_correction_extent = (rim_w + apron_w).max(0.0);
 		let mut rim = stream_p.rim;
 		rim.width = rim_w;
 		rim.lift = stream_p.rim.lift.max(0.0);
@@ -360,20 +360,24 @@ impl StreamsGraph {
 		Self::from_bounds(bounds, seed, StreamsGraphParams::default(), None)
 	}
 
-	/// Hydrology nodes authored by this graph (reach segments across all corridors).
+	/// Hydrology nodes authored by this graph (reach segments that fit the leaf).
 	pub fn hydro_nodes(&self) -> Vec<crate::primitive::node::HydroNode> {
 		let mut hydrology = Vec::new();
 		for corridor in &self.corridors {
 			let center_depth = corridor.freeboard + corridor.depth;
-			hydrology.extend(nodes_from_polyline(
-				&corridor.path,
-				&corridor.levels,
-				corridor.half_width,
-				center_depth,
-				&self.params,
-				self.max_correction_extent,
-				Some(&self.rim_backfill),
-			));
+			hydrology.extend(
+				nodes_from_polyline(
+					&corridor.path,
+					&corridor.levels,
+					corridor.half_width,
+					center_depth,
+					&self.params,
+					self.max_correction_extent,
+					Some(&self.rim_backfill),
+				)
+				.into_iter()
+				.filter(|n| n.inbounds(self.bounds)),
+			);
 		}
 		hydrology
 	}

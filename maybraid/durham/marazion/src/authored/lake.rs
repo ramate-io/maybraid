@@ -16,14 +16,14 @@ pub(crate) mod shelf;
 pub use budget::LakeBandBudget;
 pub use shelf::shelf_base_height;
 
-use crate::primitive::backfill::RimBackfillParams;
-use crate::primitive::complex::HydroComplex;
-use crate::primitive::parameters::{ApronParams, RimParams};
 use crate::authored::lake::build::{build_bowl, LakeBowl, LakeLayout};
 use crate::authored::lake::shelf::{
 	aspect_u01, planned_center as planned_center_impl, rim_width_u01, rotation_u11, shelf_levels,
 	water_scale_u01,
 };
+use crate::primitive::backfill::RimBackfillParams;
+use crate::primitive::complex::HydroComplex;
+use crate::primitive::parameters::{ApronParams, RimParams};
 use bevy_math::Vec2;
 use procedural_common::Bounds2;
 
@@ -166,7 +166,10 @@ impl Default for LakeParams {
 impl LakeParams {
 	/// Rim-shore backfill recipe from the short water radius (~45% band).
 	pub fn rim_backfill_params(water_radius: f32) -> RimBackfillParams {
-		RimBackfillParams::from_extent(water_radius, 0.45)
+		let mut p = RimBackfillParams::from_extent(water_radius, 0.65);
+		p.freq = 0.02;
+		p.amp = p.amp * 2.0;
+		p
 	}
 }
 
@@ -217,11 +220,7 @@ impl Lake {
 		let budget = LakeBandBudget::try_inscribed(bounds, center, params, u, rim_u, asp, rot)?;
 
 		let levels = shelf_levels(seed, min, center, &budget, params, height_at);
-		let layout = LakeLayout {
-			center,
-			budget,
-			levels,
-		};
+		let layout = LakeLayout { center, budget, levels };
 		let bowl = build_bowl(seed, min, params, &layout);
 		let fill_radius = bowl.fill_radius;
 
@@ -246,23 +245,28 @@ impl Lake {
 		Self::from_bounds(bounds, seed, LakeParams::default(), None)
 	}
 
-	/// Hydrology nodes authored by this lake (one radial bowl).
+	/// Hydrology nodes authored by this lake (one radial bowl), if inbounds.
 	pub fn hydro_nodes(&self) -> Vec<crate::primitive::node::HydroNode> {
-		vec![self.bowl.node.clone()]
+		let node = self.bowl.node.clone();
+		if node.inbounds(self.bounds) {
+			vec![node]
+		} else {
+			Vec::new()
+		}
 	}
 
 	/// Realize this plan as a sole-node [`HydroComplex`].
 	pub fn into_complex(self) -> HydroComplex {
-		self.bowl.into_complex(self.bounds, self.seed)
+		HydroComplex::new(self.bounds, self.seed).with_hydro(self.hydro_nodes())
 	}
 }
 
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use crate::primitive::fill::{WaterFill, WaterSurface};
 	use crate::authored::lake::budget::{aspect_blend, MIN_WATER_RADIUS};
 	use crate::authored::noise::scale_noise_freq;
+	use crate::primitive::fill::{WaterFill, WaterSurface};
 	use bevy_math::Vec2;
 
 	fn inside_fill(fill: &WaterFill, x: f32, z: f32) -> bool {
@@ -334,14 +338,16 @@ mod tests {
 	}
 
 	#[test]
-	fn rim_width_undershoot_varies_radius() -> anyhow::Result<()> {
+	fn rim_width_matches_target_for_extent_fit() -> anyhow::Result<()> {
+		use crate::primitive::parameters::TARGET_RIM_WIDTH;
 		let short_half = 160.0;
 		let params = LakeParams::default();
-		let wide = LakeBandBudget::try_from_short_half(short_half, params, 1.0, 1.0).expect("wide");
-		let narrow =
-			LakeBandBudget::try_from_short_half(short_half, params, 1.0, 0.0).expect("narrow");
-		assert!(wide.rim_width > narrow.rim_width);
-		assert!((wide.water_radius() - narrow.water_radius()).abs() < 1e-4);
+		let a = LakeBandBudget::try_from_short_half(short_half, params, 1.0, 1.0).expect("a");
+		let b = LakeBandBudget::try_from_short_half(short_half, params, 1.0, 0.0).expect("b");
+		// Fixed to authored hydro rim so correction extents match the inscription.
+		anyhow::ensure!((a.rim_width - TARGET_RIM_WIDTH).abs() < 1e-3);
+		anyhow::ensure!((b.rim_width - TARGET_RIM_WIDTH).abs() < 1e-3);
+		anyhow::ensure!((a.water_radius() - b.water_radius()).abs() < 1e-4);
 		Ok(())
 	}
 
@@ -428,14 +434,12 @@ mod tests {
 	#[test]
 	fn compiles_to_hydro_not_jersey_carve() -> anyhow::Result<()> {
 		let bounds = Bounds2::from_xz(0.0, 0.0, 320.0, 320.0);
-		let lake = Lake::from_bounds(bounds, 11, LakeParams::default(), Some(&|_, _| 40.0)).expect("lake");
+		let lake =
+			Lake::from_bounds(bounds, 11, LakeParams::default(), Some(&|_, _| 40.0)).expect("lake");
 		let compiled = lake.into_complex().compile();
 		assert!(compiled.has_hydro());
 		assert_eq!(compiled.fills.len(), 1);
-		assert!(matches!(
-			compiled.fills[0].surface,
-			WaterSurface::Hydro { .. }
-		));
+		assert!(matches!(compiled.fills[0].surface, WaterSurface::Hydro { .. }));
 		Ok(())
 	}
 
@@ -446,11 +450,11 @@ mod tests {
 		let mut params = LakeParams::default();
 		params.depth_noise_amp = 0.0;
 		let lake = Lake::from_bounds(bounds, 11, params, Some(&|_, _| base)).expect("lake");
-		let h = lake
-			.clone()
-			.into_complex()
-			.compile()
-			.modify_elevation(base, lake.center.x, lake.center.y);
+		let h = lake.clone().into_complex().compile().modify_elevation(
+			base,
+			lake.center.x,
+			lake.center.y,
+		);
 		assert!(
 			h < lake.water_level - 1.0,
 			"bowl {h} should sit below surface {}",
@@ -472,16 +476,8 @@ mod tests {
 		let lake = Lake::from_bounds(bounds, 11, params, Some(&|_, _| base)).expect("lake");
 		let mid_r = lake.water_radius + lake.rim_width * 0.4;
 		let p = lake.center + Vec2::new(mid_r, 0.0);
-		let h = lake
-			.clone()
-			.into_complex()
-			.compile()
-			.modify_elevation(base, p.x, p.y);
-		assert!(
-			h > lake.water_level + 0.1,
-			"rim {h} should sit above water {}",
-			lake.water_level
-		);
+		let h = lake.clone().into_complex().compile().modify_elevation(base, p.x, p.y);
+		assert!(h > lake.water_level + 0.1, "rim {h} should sit above water {}", lake.water_level);
 		let shelf = lake.water_level + params.water_sink.max(0.0);
 		// Rim backfill can add several wu of shore grit on top of bank_target.
 		let rim_bf_budget = LakeParams::rim_backfill_params(lake.water_radius).amp + 2.0;
@@ -500,13 +496,8 @@ mod tests {
 		params.rotation_amp = 0.0;
 		params.aspect_strength = 0.0;
 		let lake = Lake::from_bounds(bounds, 11, params, Some(&|_, _| base)).expect("lake");
-		let far = lake.center
-			+ Vec2::new(lake.plateau_radius + lake.apron_width + 40.0, 0.0);
-		let h = lake
-			.clone()
-			.into_complex()
-			.compile()
-			.modify_elevation(base, far.x, far.y);
+		let far = lake.center + Vec2::new(lake.plateau_radius + lake.apron_width + 40.0, 0.0);
+		let h = lake.clone().into_complex().compile().modify_elevation(base, far.x, far.y);
 		assert!((h - base).abs() < 1e-3, "far sample should be identity: {h}");
 		Ok(())
 	}
@@ -553,8 +544,7 @@ mod tests {
 		let compiled = lake.clone().into_complex().compile();
 		let fill = compiled.fills.first().expect("fill");
 		assert!(inside_fill(fill, lake.center.x, lake.center.y));
-		let outside = lake.center
-			+ Vec2::new(lake.plateau_radius + lake.apron_width + 5.0, 0.0);
+		let outside = lake.center + Vec2::new(lake.plateau_radius + lake.apron_width + 5.0, 0.0);
 		assert!(!inside_fill(fill, outside.x, outside.y));
 		Ok(())
 	}

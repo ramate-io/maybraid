@@ -5,10 +5,11 @@
 //! [`Self::max_correction_extent`] only governs spatial discoverability.
 //!
 //! Terrain correction blends per-node candidates by
-//! [`Self::point_classification`] priority: carve → rim → apron.
+//! [`Self::terrain_blend_classification`] priority: carve → soft shore →
+//! rim → soft rim↔apron → apron.
 
 use crate::primitive::backfill::HydroBackfill;
-use crate::primitive::parameters::CorrectionStage;
+use crate::primitive::parameters::{CorrectionStage, TerrainBlendStage};
 use crate::primitive::hydro::{
 	smoothmax_fold, smoothmin_fold, HydroFootprint, HydroPrimitive, SURFACE_SMOOTHMIN_K,
 };
@@ -56,12 +57,13 @@ impl HydroNode {
 	}
 
 	/// Conservative pad for indexing / broadphase.
+	///
+	/// Max of authored [`Self::max_correction_extent`], influence pad, and
+	/// param rim+apron. Shore / rim-outer noise stays inside those bands.
 	pub fn index_pad(&self) -> f32 {
 		self.max_correction_extent
-			.max(self.params.correction_pad())
 			.max(self.primitive.influence_pad)
-			+ self.params.boundary_noise_amp()
-			+ self.params.rim_boundary_noise_amp()
+			.max(self.params.correction_pad())
 	}
 
 	/// Representative interior sample (ellipse center / reach midpoint).
@@ -77,6 +79,15 @@ impl HydroNode {
 		let (mn, mx) = self.primitive.aabb();
 		let pad = self.index_pad();
 		Bounds2 { min: mn - Vec2::splat(pad), max: mx + Vec2::splat(pad) }
+	}
+
+	/// True when [`Self::correction_index_bounds`] fits entirely inside `cell`.
+	///
+	/// Authored leaves use this in `hydro_nodes()` so oversized correction
+	/// support never leaves the pocket cell.
+	pub fn inbounds(&self, cell: Bounds2) -> bool {
+		let b = self.correction_index_bounds();
+		cell.contains(b.min) && cell.contains(b.max)
 	}
 
 	/// Occupancy SDF, optionally warped by shore [`HydroParams::boundary_noise`]
@@ -112,7 +123,7 @@ impl HydroNode {
 	/// Where `p` sits relative to this node's hydraulic support and bands.
 	///
 	/// Hard bands (water / debug): carve \(\phi \le 0\), rim, apron.
-	/// Terrain blend uses [`Self::shore_blend_half`] to soften carve↔rim.
+	/// Terrain blend uses [`Self::terrain_blend_classification`].
 	pub fn point_classification(&self, p: Vec2) -> Option<CorrectionStage> {
 		let d = self.phi(p);
 		let rim_edge = self.rim_outer(p);
@@ -123,6 +134,28 @@ impl HydroNode {
 			Some(CorrectionStage::Rim)
 		} else if d < rim_edge + apron_w {
 			Some(CorrectionStage::Apron)
+		} else {
+			None
+		}
+	}
+
+	/// Soft-aware band for terrain elevation blend (shore + rim↔apron zones).
+	pub fn terrain_blend_classification(&self, p: Vec2) -> Option<TerrainBlendStage> {
+		let d = self.phi(p);
+		let mu = self.shore_blend_half();
+		let nu = self.rim_apron_blend_half();
+		let rim_edge = self.rim_outer(p);
+		let apron_w = self.params.apron.width.max(0.0);
+		if d <= 0.0 {
+			Some(TerrainBlendStage::Carve)
+		} else if d <= mu {
+			Some(TerrainBlendStage::SoftShore)
+		} else if d < rim_edge - nu {
+			Some(TerrainBlendStage::Rim)
+		} else if d <= rim_edge + nu {
+			Some(TerrainBlendStage::SoftRimApron)
+		} else if d < rim_edge + apron_w {
+			Some(TerrainBlendStage::Apron)
 		} else {
 			None
 		}
@@ -235,21 +268,13 @@ impl HydroNode {
 		let mut aprons: Vec<&Self> = Vec::new();
 
 		for node in nodes {
-			let d = node.phi(p);
-			let mu = node.shore_blend_half();
-			let nu = node.rim_apron_blend_half();
-			let rim_edge = node.rim_outer(p);
-			let apron_w = node.params.apron.width.max(0.0);
-			if d <= 0.0 {
-				carves.push(node);
-			} else if d <= mu {
-				soft_shores.push(node);
-			} else if d < rim_edge - nu {
-				rims.push(node);
-			} else if d <= rim_edge + nu {
-				soft_rim_aprons.push(node);
-			} else if d < rim_edge + apron_w {
-				aprons.push(node);
+			match node.terrain_blend_classification(p) {
+				Some(TerrainBlendStage::Carve) => carves.push(node),
+				Some(TerrainBlendStage::SoftShore) => soft_shores.push(node),
+				Some(TerrainBlendStage::Rim) => rims.push(node),
+				Some(TerrainBlendStage::SoftRimApron) => soft_rim_aprons.push(node),
+				Some(TerrainBlendStage::Apron) => aprons.push(node),
+				None => {}
 			}
 		}
 
@@ -423,6 +448,16 @@ mod tests {
 			params,
 			12.0,
 		)
+	}
+
+	#[test]
+	fn inbounds_requires_correction_aabb_inside_cell() -> anyhow::Result<()> {
+		let node = reach_node(8.0);
+		let tight = Bounds2::from_xz(0.0, -10.0, 40.0, 10.0);
+		anyhow::ensure!(!node.inbounds(tight), "pad should spill past tight cell");
+		let roomy = Bounds2::from_xz(-80.0, -80.0, 120.0, 80.0);
+		anyhow::ensure!(node.inbounds(roomy), "roomy cell should contain index AABB");
+		Ok(())
 	}
 
 	#[test]

@@ -118,8 +118,9 @@ impl Default for StreamParams {
 impl StreamParams {
 	/// Rim-shore backfill recipe from channel half-width (~80% band, low freq).
 	pub fn rim_backfill_params(half_width: f32) -> RimBackfillParams {
-		let mut p = RimBackfillParams::from_extent(half_width, 0.80);
+		let mut p = RimBackfillParams::from_extent(half_width, 0.65);
 		p.freq = 0.02;
+		p.amp = p.amp * 2.1;
 		p
 	}
 }
@@ -136,7 +137,11 @@ pub struct StreamBandBudget {
 
 impl StreamBandBudget {
 	/// Returns `None` when the leaf cannot host a meaningful stream corridor.
-	pub fn try_from_short_half(short_half: f32, params: StreamParams, width_u01: f32) -> Option<Self> {
+	pub fn try_from_short_half(
+		short_half: f32,
+		params: StreamParams,
+		width_u01: f32,
+	) -> Option<Self> {
 		let s = short_half.max(0.0);
 		let mu = params.mu.min(s * 0.25).max(0.0);
 		let available = (s - mu).max(0.0);
@@ -235,11 +240,7 @@ impl Stream {
 		}
 		let head_water = levels.first().copied().unwrap_or(0.0);
 		let toe_water = levels.last().copied().unwrap_or(head_water);
-		let layout = StreamLayout {
-			path,
-			levels,
-			budget,
-		};
+		let layout = StreamLayout { path, levels, budget };
 		let corridor = build_corridor(seed, min, params, &layout);
 
 		Some(Self {
@@ -260,7 +261,7 @@ impl Stream {
 		Self::from_bounds(bounds, seed, StreamParams::default(), None)
 	}
 
-	/// Hydrology nodes authored by this stream (one reach segment per polyline edge).
+	/// Hydrology nodes authored by this stream (reach segments that fit the leaf).
 	pub fn hydro_nodes(&self) -> Vec<crate::primitive::node::HydroNode> {
 		crate::primitive::node::nodes_from_polyline(
 			&self.corridor.path,
@@ -271,11 +272,14 @@ impl Stream {
 			self.corridor.max_correction_extent,
 			Some(&self.corridor.rim_backfill),
 		)
+		.into_iter()
+		.filter(|n| n.inbounds(self.bounds))
+		.collect()
 	}
 
 	/// Realize this plan as a sole-corridor [`HydroComplex`].
 	pub fn into_complex(self) -> HydroComplex {
-		self.corridor.into_complex(self.bounds, self.seed)
+		HydroComplex::new(self.bounds, self.seed).with_hydro(self.hydro_nodes())
 	}
 }
 
@@ -295,7 +299,8 @@ mod tests {
 	fn graded_fill_decreases_along_path() -> anyhow::Result<()> {
 		let bounds = Bounds2::from_xz(0.0, 0.0, 400.0, 400.0);
 		let height = |x: f32, z: f32| 100.0 - 0.05 * x - 0.01 * z;
-		let stream = Stream::from_bounds(bounds, 42, StreamParams::default(), Some(&height)).expect("stream");
+		let stream = Stream::from_bounds(bounds, 42, StreamParams::default(), Some(&height))
+			.expect("stream");
 		assert!(stream.head_water > stream.toe_water);
 		let compiled = stream.clone().into_complex().compile();
 		let fill = compiled.fills.first().expect("fill");
@@ -304,10 +309,7 @@ mod tests {
 		let toe = *stream.path.last().expect("path toe");
 		let w_head = fill.surface_level_at(head.x, head.y);
 		let w_toe = fill.surface_level_at(toe.x, toe.y);
-		assert!(
-			w_head > w_toe + 0.2,
-			"graded fill should drop along path: {w_head} → {w_toe}"
-		);
+		assert!(w_head > w_toe + 0.2, "graded fill should drop along path: {w_head} → {w_toe}");
 		assert!(fill.inside_horizontal(head.x, head.y));
 		let far = Vec2::new(bounds.min.x - 80.0, bounds.min.y - 80.0);
 		assert!(!fill.inside_horizontal(far.x, far.y));
@@ -374,12 +376,7 @@ mod tests {
 		let fill = compiled.fills.first().expect("fill");
 		for (p, &w) in stream.path.iter().zip(stream.levels.iter()) {
 			let got = fill.surface_level_at(p.x, p.y);
-			assert!(
-				(got - w).abs() < 0.4,
-				"node ({}, {}) W={got} expected {w}",
-				p.x,
-				p.y
-			);
+			assert!((got - w).abs() < 0.4, "node ({}, {}) W={got} expected {w}", p.x, p.y);
 		}
 		if stream.path.len() >= 2 {
 			let a = stream.path[0];

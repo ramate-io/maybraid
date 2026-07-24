@@ -5,15 +5,13 @@ use crate::authored::lake::budget::LakeBandBudget;
 use crate::authored::lake::shelf::ShelfLevels;
 use crate::authored::lake::LakeParams;
 use crate::authored::noise::{scale_noise_freq, NOISE_FREQ_REF_RADIUS};
-use crate::primitive::complex::HydroComplex;
 use crate::primitive::hydro::{
 	Ellipse, HydroElevation, HydroFootprint, HydroPrimitive, RadialBowl,
 };
 use crate::primitive::node::HydroNode;
-use crate::primitive::parameters::{HydroParams, TARGET_RIM_WIDTH};
+use crate::primitive::parameters::HydroParams;
 use bevy_math::Vec2;
 use jersey_terrain_stamps::{EllipseRegion, Region2D, RegionNoise};
-use procedural_common::Bounds2;
 
 const DEPTH_SALT: u32 = 0x1A7E_DE07;
 const RIM_BACKFILL_SALT: u32 = 0x1A7E_BF11;
@@ -34,8 +32,6 @@ pub(crate) struct LakeLayout {
 }
 
 /// Lake-specific stamp: one radial-bowl hydrology node.
-///
-/// Convert with [`Self::into_complex`] → [`HydroComplex`].
 #[derive(Debug, Clone)]
 pub(crate) struct LakeBowl {
 	/// Wet footprint (overlays / future stamps).
@@ -44,13 +40,6 @@ pub(crate) struct LakeBowl {
 	pub node: HydroNode,
 	/// Authoring metadata: water radius + rim bleed (water SDF follows carve \(\phi\)).
 	pub fill_radius: f32,
-}
-
-impl LakeBowl {
-	/// `LakeBowl` → sole-node [`HydroComplex`] with hydrology emit.
-	pub fn into_complex(self, bounds: Bounds2, seed: u32) -> HydroComplex {
-		HydroComplex::new(bounds, seed).with_hydro(vec![self.node])
-	}
 }
 
 pub(crate) fn build_bowl(
@@ -63,7 +52,8 @@ pub(crate) fn build_bowl(
 	let budget = &layout.budget;
 	let water_r = budget.water_radii;
 	let plateau_r = budget.plateau_radii;
-	let rim_w = TARGET_RIM_WIDTH;
+	// Budget reserves [`TARGET_RIM_WIDTH`] so index extents match inscription.
+	let rim_w = budget.rim_width.max(1.0);
 	let apron_w = budget.apron_width.max(1.0);
 	let rotation = budget.rotation;
 	let short_water = budget.water_radius();
@@ -112,8 +102,8 @@ pub(crate) fn build_bowl(
 		p.freq = scale_noise_freq(p.freq, short_water, params.apron.noise_freq_power);
 		p
 	};
-	let max_correction_extent =
-		(rim_w + apron_w + shore_amp + rim_boundary_amp + rim_backfill_params.band).max(0.0);
+	// Rim backfill + shore/rim noise sit inside rim/apron — pad is band widths.
+	let max_correction_extent = (rim_w + apron_w).max(0.0);
 	let mut rim = params.rim;
 	rim.width = rim_w;
 	rim.lift = params.rim.lift.max(0.0);

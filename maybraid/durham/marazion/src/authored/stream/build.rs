@@ -4,12 +4,9 @@ use crate::authored::apron::{jittered_depth, sample_apron_rim_noise, ApronNoiseS
 use crate::authored::noise::scale_noise_freq;
 use crate::authored::stream::{StreamBandBudget, StreamParams};
 use crate::primitive::backfill::HydroBackfill;
-use crate::primitive::complex::HydroComplex;
-use crate::primitive::node::nodes_from_polyline;
 use crate::primitive::parameters::{HydroParams, TARGET_RIM_WIDTH};
 use bevy_math::Vec2;
 use jersey_terrain_stamps::RegionNoise;
-use procedural_common::Bounds2;
 
 const DEPTH_SALT: u32 = 0x57EA_DE07;
 const RIM_BACKFILL_SALT: u32 = 0x57EA_BF11;
@@ -22,8 +19,6 @@ pub(crate) struct StreamLayout {
 }
 
 /// Stream-specific stamp: one corridor as hydrology nodes.
-///
-/// Convert with [`Self::into_complex`] → [`HydroComplex`].
 #[derive(Debug, Clone)]
 pub(crate) struct StreamCorridor {
 	pub path: Vec<Vec2>,
@@ -33,22 +28,6 @@ pub(crate) struct StreamCorridor {
 	pub params: HydroParams,
 	pub max_correction_extent: f32,
 	pub rim_backfill: HydroBackfill,
-}
-
-impl StreamCorridor {
-	/// `StreamCorridor` → sole-corridor [`HydroComplex`].
-	pub fn into_complex(self, bounds: Bounds2, seed: u32) -> HydroComplex {
-		let nodes = nodes_from_polyline(
-			&self.path,
-			&self.levels,
-			self.half_width,
-			self.center_depth,
-			&self.params,
-			self.max_correction_extent,
-			Some(&self.rim_backfill),
-		);
-		HydroComplex::new(bounds, seed).with_hydro(nodes)
-	}
 }
 
 pub(crate) fn build_corridor(
@@ -98,8 +77,8 @@ pub(crate) fn build_corridor(
 		p.freq = scale_noise_freq(p.freq, half_w, params.apron.noise_freq_power);
 		p
 	};
-	let max_correction_extent =
-		(rim_w + apron_width + shore_amp + rim_boundary_amp + rim_backfill_params.band).max(0.0);
+	// Rim backfill + shore/rim noise sit inside rim/apron — pad is band widths.
+	let max_correction_extent = (rim_w + apron_width).max(0.0);
 	let mut rim = params.rim;
 	rim.width = rim_w;
 	rim.lift = params.rim.lift.max(0.0);

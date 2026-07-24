@@ -172,14 +172,19 @@ impl Bog {
 		Self::from_bounds(bounds, seed, BogParams::default(), None)
 	}
 
-	/// Hydrology nodes authored by this bog (lake bowl + basin backfill).
+	/// Hydrology nodes authored by this bog (lake bowl + basin backfill), if inbounds.
 	pub fn hydro_nodes(&self) -> Vec<crate::primitive::node::HydroNode> {
-		vec![self.bowl.node.clone()]
+		let node = self.bowl.node.clone();
+		if node.inbounds(self.bounds) {
+			vec![node]
+		} else {
+			Vec::new()
+		}
 	}
 
 	/// Realize this plan as a sole-node complex (basin rides on the node).
 	pub fn into_complex(self) -> HydroComplex {
-		self.bowl.into_complex(self.bounds, self.seed)
+		HydroComplex::new(self.bounds, self.seed).with_hydro(self.hydro_nodes())
 	}
 }
 

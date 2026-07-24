@@ -39,6 +39,6 @@ pub use primitive::hydro::{
 };
 pub use primitive::node::{nodes_from_polyline, HydroNode};
 pub use primitive::parameters::{
-	ApronParams, ComplexParams, CorrectionStage, HydroParams, RimParams,
+	ApronParams, ComplexParams, CorrectionStage, HydroParams, RimParams, TerrainBlendStage,
 	DEFAULT_RIM_UPLIFT_CAP, TARGET_RIM_WIDTH,
 };
