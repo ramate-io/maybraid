@@ -11,7 +11,7 @@ use crate::fill::{WaterFill, WaterSurface};
 use crate::hydro::{ComplexApronParams, FootprintIndex, HydroPrimitive};
 use crate::node::{HydroParameters, HydrologyNode};
 use bevy_math::{Vec2, Vec3};
-use jersey_terrain_stamps::{CircleRegion, JerseyModulation, Region2D};
+use jersey_terrain_stamps::{JerseyModulation, Region2D};
 use procedural_common::Bounds2;
 
 /// Stable index into [`HydrologyComplex::graph_nodes`].
@@ -271,13 +271,7 @@ impl HydrologyComplex {
 
 	/// Build a [`WaterFill`] that delegates SDF / \(W\) to this complex.
 	pub fn water_fill(&self) -> WaterFill {
-		let region = self.wet_union_from_graph().unwrap_or_else(|| {
-			let center = self.bounds.center();
-			let radius = self.bounds.extent().max_element() * 0.75;
-			Region2D::Circle(CircleRegion { center, radius })
-		});
 		WaterFill {
-			region,
 			surface: WaterSurface::Hydro {
 				complex: self.clone(),
 			},

@@ -101,8 +101,8 @@ pub fn water_distance(fills: &[WaterFill], p: Vec3, terrain_height: f32) -> f32 
 
 /// True when the stamp has wet volume at a representative footprint sample.
 ///
-/// Hydro fills probe node interiors (not only `region.sample_point()`), so a
-/// lake/stream that misses the cell-center proxy still keeps its water cell.
+/// Hydro fills probe node interiors (carve samples), so a lake/stream that
+/// misses a single cell-center proxy still keeps its water cell.
 fn fill_has_wet_volume(fill: &WaterFill, terrain: &TerrainSdf) -> bool {
 	for p in fill.wet_volume_probe_points() {
 		let h = terrain.height_at_with_all_modulations(p.x, p.y);
