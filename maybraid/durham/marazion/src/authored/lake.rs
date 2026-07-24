@@ -423,7 +423,6 @@ mod tests {
 		let lake = Lake::from_bounds(bounds, 11, LakeParams::default(), Some(&|_, _| 40.0)).expect("lake");
 		let compiled = lake.into_complex().compile();
 		assert!(compiled.has_hydro());
-		assert!(compiled.modulations.is_empty());
 		assert_eq!(compiled.fills.len(), 1);
 		assert!(matches!(
 			compiled.fills[0].surface,

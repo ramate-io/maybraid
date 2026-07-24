@@ -7,6 +7,7 @@
 //! Terrain correction blends per-node candidates by
 //! [`Self::point_classification`] priority: carve → rim → apron.
 
+use crate::primitive::backfill::HydroBackfill;
 use crate::primitive::parameters::CorrectionStage;
 use crate::primitive::hydro::{
 	smoothmax_fold, smoothmin_fold, HydroFootprint, HydroPrimitive, SURFACE_SMOOTHMIN_K,
@@ -30,6 +31,8 @@ pub struct HydroNode {
 	/// Max distance beyond hydraulic support at which any correction pass may
 	/// need this node. Indexing only — not the final apron profile.
 	pub max_correction_extent: f32,
+	/// Optional post-blend height noise (at most one kind for now).
+	pub backfill: Option<HydroBackfill>,
 }
 
 impl HydroNode {
@@ -38,7 +41,18 @@ impl HydroNode {
 		params: HydroParams,
 		max_correction_extent: f32,
 	) -> Self {
-		Self { primitive, params, max_correction_extent: max_correction_extent.max(0.0) }
+		Self {
+			primitive,
+			params,
+			max_correction_extent: max_correction_extent.max(0.0),
+			backfill: None,
+		}
+	}
+
+	/// Attach a single backfill recipe (replaces any previous).
+	pub fn with_backfill(mut self, backfill: HydroBackfill) -> Self {
+		self.backfill = Some(backfill);
+		self
 	}
 
 	/// Conservative pad for indexing / broadphase.
@@ -200,7 +214,7 @@ impl HydroNode {
 		rim_h * (1.0 - t) + apron_h * t
 	}
 
-	/// Blend intersecting nodes at `p` by class priority: carve → rim → apron.
+	/// Carve → rim → apron blend **without** per-node backfill.
 	///
 	/// Soft shore: wet nodes (\(\phi \le 0\)) use [`Self::shore_terrain_candidate`]
 	/// so height lifts toward the bank as \(\phi \to 0^-\). Samples with
@@ -211,7 +225,9 @@ impl HydroNode {
 	/// Soft rim↔apron: pure rim stays soft-max banks; a band around
 	/// \(r_{\mathrm{rim}}(p)\) uses [`Self::rim_apron_terrain_candidate`] when no
 	/// pure-rim node owns the column.
-	pub fn blend_terrain_elevation(nodes: &[&Self], elevation: f32, p: Vec2) -> f32 {
+	///
+	/// WaterFill / bare-bed callers use this; terrain uses [`Self::elevation_blend`].
+	pub fn elevation_blend_without_backfill(nodes: &[&Self], elevation: f32, p: Vec2) -> f32 {
 		let mut carves: Vec<&Self> = Vec::new();
 		let mut soft_shores: Vec<&Self> = Vec::new();
 		let mut rims: Vec<&Self> = Vec::new();
@@ -275,6 +291,24 @@ impl HydroNode {
 		elevation
 	}
 
+	/// Terrain elevation: [`Self::elevation_blend_without_backfill`] then sum
+	/// weighted backfill deltas from each node that carries one.
+	pub fn elevation_blend(nodes: &[&Self], elevation: f32, p: Vec2) -> f32 {
+		let mut h = Self::elevation_blend_without_backfill(nodes, elevation, p);
+		for node in nodes {
+			if let Some(bf) = &node.backfill {
+				h = bf.compose(h, node, p);
+			}
+		}
+		h
+	}
+
+	/// Alias for [`Self::elevation_blend`] (historical name).
+	#[inline]
+	pub fn blend_terrain_elevation(nodes: &[&Self], elevation: f32, p: Vec2) -> f32 {
+		Self::elevation_blend(nodes, elevation, p)
+	}
+
 	/// Soft-min free surface over **Carve** nodes at `p` (same ownership as terrain carve).
 	///
 	/// Rim / apron do not contribute — keeps \(W\) coupled to the local carved bed.
@@ -297,6 +331,8 @@ impl HydroNode {
 }
 
 /// Build reach-segment nodes from a graded polyline (one node per segment).
+///
+/// When `backfill` is `Some`, each segment node clones that recipe.
 pub fn nodes_from_polyline(
 	path: &[Vec2],
 	levels: &[f32],
@@ -304,6 +340,7 @@ pub fn nodes_from_polyline(
 	center_depth: f32,
 	params: &HydroParams,
 	max_correction_extent: f32,
+	backfill: Option<&HydroBackfill>,
 ) -> Vec<HydroNode> {
 	use crate::primitive::hydro::{
 		HydroElevation, HydroFootprint, ReachProfile, ReachSegment,
@@ -322,7 +359,7 @@ pub fn nodes_from_polyline(
 		if a.distance(b) <= 1e-4 {
 			continue;
 		}
-		out.push(HydroNode::new(
+		let mut node = HydroNode::new(
 			HydroPrimitive {
 				footprint: HydroFootprint::Reach(ReachSegment {
 					a,
@@ -338,7 +375,11 @@ pub fn nodes_from_polyline(
 			},
 			params.clone(),
 			extent,
-		));
+		);
+		if let Some(bf) = backfill {
+			node.backfill = Some(bf.clone());
+		}
+		out.push(node);
 	}
 	out
 }
@@ -411,6 +452,32 @@ mod tests {
 			None
 		};
 		assert_eq!(node.point_classification(p), expected);
+		Ok(())
+	}
+
+	#[test]
+	fn elevation_blend_composes_backfill_over_bare() -> anyhow::Result<()> {
+		use crate::primitive::backfill::{HydroBackfill, RimBackfill};
+		let mut node = reach_node(8.0);
+		node.backfill = Some(HydroBackfill::Rim(RimBackfill {
+			noise: jersey_terrain_stamps::RegionNoise::from_seed(9, 0.06, 3.0),
+			band: 6.0,
+			add_only: true,
+		}));
+		let p = Vec2::new(20.0, 8.0);
+		let bare = HydroNode::elevation_blend_without_backfill(&[&node], 40.0, p);
+		let full = HydroNode::elevation_blend(&[&node], 40.0, p);
+		anyhow::ensure!(
+			(full - bare).abs() > 1e-3 || node.backfill.as_ref().unwrap().weight(&node, p) < 0.05,
+			"with-backfill should differ when rim weight is active: bare={bare} full={full}"
+		);
+		let far = Vec2::new(20.0, 40.0);
+		let bare_f = HydroNode::elevation_blend_without_backfill(&[&node], 40.0, far);
+		let full_f = HydroNode::elevation_blend(&[&node], 40.0, far);
+		anyhow::ensure!(
+			(bare_f - full_f).abs() < 1e-3,
+			"far field should match bare and full"
+		);
 		Ok(())
 	}
 

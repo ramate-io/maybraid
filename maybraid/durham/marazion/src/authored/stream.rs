@@ -259,6 +259,7 @@ impl Stream {
 			self.corridor.center_depth,
 			&self.corridor.params,
 			self.corridor.max_correction_extent,
+			Some(&self.corridor.rim_backfill),
 		)
 	}
 
@@ -392,7 +393,6 @@ mod tests {
 		let stream = Stream::from_bounds(bounds, 42, params, Some(&height)).expect("stream");
 		let compiled = stream.clone().into_complex().compile();
 		assert!(compiled.has_hydro());
-		assert!(compiled.modulations.is_empty());
 		let far = Vec2::new(bounds.min.x - 120.0, bounds.min.y - 120.0);
 		let h0 = height(far.x, far.y);
 		let h1 = compiled.modify_elevation(h0, far.x, far.y);

@@ -27,7 +27,10 @@ pub use authored::pre_pocket::{
 };
 pub use authored::stream::{Stream, StreamBandBudget, StreamParams};
 pub use authored::streams_graph::{StreamsGraph, StreamsGraphParams};
-pub use primitive::backfill::{BasinBackfillParams, WatershedBackfill, WatershedBackfillKind};
+pub use primitive::backfill::{
+	BasinBackfill, BasinBackfillParams, HydroBackfill, HydroBackfillKind, NodeBackfill,
+	NodeBackfillParams, RimBackfill, RimBackfillParams,
+};
 pub use primitive::complex::{CompiledWatershed, HydroComplex};
 pub use primitive::fill::{WaterFill, WaterSurface};
 pub use primitive::hydro::{

@@ -1,14 +1,14 @@
 //! Bog pocket water — lake bowl with post-carve basin backfill.
 //!
 //! Not the RFC-127 §3.1.3.3 micro-lake lattice. Instead: stamp a normal lake
-//! (hydro radial bowl + fill + shared apron), then add
-//! [`crate::primitive::backfill::WatershedBackfill`] elevation noise inside the wet core so
+//! (hydro radial bowl + fill + shared apron), then attach a
+//! [`crate::primitive::backfill::HydroBackfill::Basin`] on the bowl node so
 //! the bed reads hummocky / islanded after water is placed.
 //!
 //! Basin noise itself is depth-incentive ([`BasinBackfillParams::depth_frac`]);
 //! [`BogBasinFill`] chooses how aggressively that freeboard is filled / crested.
 
-use crate::primitive::backfill::{BasinBackfillParams, WatershedBackfill};
+use crate::primitive::backfill::BasinBackfillParams;
 use crate::primitive::complex::HydroComplex;
 use crate::authored::lake::build::{build_bowl, LakeBowl, LakeLayout};
 use crate::authored::lake::shelf::{
@@ -90,11 +90,10 @@ impl Default for BogParams {
 	}
 }
 
-/// Authored bog **plan**: lake-shaped layout + basin backfill recipe.
+/// Authored bog **plan**: lake-shaped layout + basin backfill on the bowl node.
 ///
-/// Realize with [`Self::into_complex`] into a [`HydroComplex`]
-/// (bowl + basin backfill). `None` from [`Self::from_bounds`] means the leaf
-/// is too small.
+/// Realize with [`Self::into_complex`] into a [`HydroComplex`].
+/// `None` from [`Self::from_bounds`] means the leaf is too small.
 #[derive(Debug, Clone)]
 pub struct Bog {
 	pub bounds: Bounds2,
@@ -109,7 +108,6 @@ pub struct Bog {
 	pub fill_radius: f32,
 	pub water_level: f32,
 	bowl: LakeBowl,
-	basin: WatershedBackfill,
 }
 
 impl Bog {
@@ -136,9 +134,8 @@ impl Bog {
 
 		let levels = shelf_levels(seed, min, center, &budget, lake_p, height_at);
 		let layout = LakeLayout { center, budget, levels };
-		let bowl = build_bowl(seed, min, lake_p, &layout);
+		let mut bowl = build_bowl(seed, min, lake_p, &layout);
 		let fill_radius = bowl.fill_radius;
-		let wet_core = bowl.wet_core.clone();
 
 		let short_water = layout.budget.water_radius();
 		let basin_freq =
@@ -146,11 +143,14 @@ impl Bog {
 		// Cover jittered_depth high end (~1.35× authored).
 		let freeboard = lake_p.depth.max(0.0) * 1.35;
 		let basin = BasinBackfillParams {
-			depth_frac: params.fill.depth_frac(freeboard),
 			freq: basin_freq,
 			..params.basin
 		}
-		.sample_over_freeboard(freeboard, seed, BASIN_BACKFILL_SALT, wet_core);
+		.near_surface(freeboard, params.fill.peak_above_w, params.fill.crest_unit)
+		.sample_over_freeboard(freeboard, seed, BASIN_BACKFILL_SALT);
+
+		// Basin replaces the lake's abundant rim backfill for bog peaking.
+		bowl.node.backfill = Some(basin);
 
 		Some(Self {
 			bounds,
@@ -165,7 +165,6 @@ impl Bog {
 			fill_radius,
 			water_level: layout.levels.water_level,
 			bowl,
-			basin,
 		})
 	}
 
@@ -173,23 +172,23 @@ impl Bog {
 		Self::from_bounds(bounds, seed, BogParams::default(), None)
 	}
 
-	/// Hydrology nodes authored by this bog (lake-shaped bowl; backfill is separate).
+	/// Hydrology nodes authored by this bog (lake bowl + basin backfill).
 	pub fn hydro_nodes(&self) -> Vec<crate::primitive::node::HydroNode> {
 		vec![self.bowl.node.clone()]
 	}
 
-	/// Realize this plan as a sole-node complex with basin backfill.
+	/// Realize this plan as a sole-node complex (basin rides on the node).
 	pub fn into_complex(self) -> HydroComplex {
-		self.bowl
-			.into_complex(self.bounds, self.seed)
-			.with_backfill(self.basin)
+		self.bowl.into_complex(self.bounds, self.seed)
 	}
 }
 
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use crate::primitive::backfill::HydroBackfill;
 	use crate::primitive::fill::WaterSurface;
+	use crate::primitive::node::HydroNode;
 
 	#[test]
 	fn leaf_too_small_skips() -> anyhow::Result<()> {
@@ -199,7 +198,7 @@ mod tests {
 	}
 
 	#[test]
-	fn from_bounds_hydro_plus_backfill() -> anyhow::Result<()> {
+	fn from_bounds_hydro_plus_basin_backfill() -> anyhow::Result<()> {
 		let bounds = Bounds2::from_xz(0.0, 0.0, 320.0, 320.0);
 		let bog = Bog::from_bounds(bounds, 11, BogParams::default(), Some(&|_, _| 40.0)).expect("bog");
 		let compiled = bog.clone().into_complex().compile();
@@ -209,24 +208,27 @@ mod tests {
 			compiled.fills[0].surface,
 			WaterSurface::Hydro { .. }
 		));
-		assert_eq!(
-			compiled.modulations.len(),
-			1,
-			"expected only post-hydro backfill jersey, got {}",
-			compiled.modulations.len()
+		let node = &compiled.complex.hydrology[0];
+		anyhow::ensure!(
+			matches!(node.backfill, Some(HydroBackfill::Basin(_))),
+			"bog node should carry basin backfill"
 		);
 
 		let base = 40.0;
-		let last = compiled.modulations.last().expect("backfill");
+		let nodes = [&compiled.complex.hydrology[0]];
+		let p_in = bog.center;
 		let outside = bog.center + Vec2::new(bog.plateau_radius + bog.apron_width + 40.0, 0.0);
-		let h_out = last.modify_elevation(base, outside.x, outside.y);
-		assert!(
-			(h_out - base).abs() < 1e-3,
-			"final backfill should be near-identity outside basin: {h_out}"
+		let h_bare = HydroNode::elevation_blend_without_backfill(&nodes, base, p_in);
+		let h_full = HydroNode::elevation_blend(&nodes, base, p_in);
+		anyhow::ensure!(
+			h_full > h_bare + 0.05,
+			"basin backfill should raise interior: bare={h_bare} full={h_full}"
 		);
-
-		let h_in = last.modify_elevation(base, bog.center.x, bog.center.y);
-		assert!(h_in > base + 0.05, "final backfill should raise basin (mounds): {h_in} vs {base}");
+		let h_out = compiled.modify_elevation(base, outside.x, outside.y);
+		anyhow::ensure!(
+			(h_out - base).abs() < 1e-3,
+			"far field identity: {h_out}"
+		);
 		Ok(())
 	}
 
