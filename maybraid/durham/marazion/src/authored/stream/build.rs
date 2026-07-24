@@ -1,13 +1,12 @@
 //! Assemble stream corridor as hydrology reach-segment nodes.
 
-use crate::apron::{jittered_depth, ApronNoiseSalts, TARGET_RIM_WIDTH};
-use crate::complex::HydrologyComplex;
-use crate::depression::{WatershedDepression, WatershedDepressionKind};
-use crate::node::{nodes_from_polyline, HydroParameters};
-use crate::noise::scale_noise_freq;
-use crate::stream::{StreamBandBudget, StreamParams};
+use crate::authored::apron::{jittered_depth, ApronNoiseSalts, TARGET_RIM_WIDTH};
+use crate::authored::noise::scale_noise_freq;
+use crate::authored::stream::{StreamBandBudget, StreamParams};
+use crate::primitive::complex::HydrologyComplex;
+use crate::primitive::node::{nodes_from_polyline, HydroParameters};
 use bevy_math::Vec2;
-use jersey_terrain_stamps::{PolylineRegion, Region2D, RegionNoise};
+use jersey_terrain_stamps::RegionNoise;
 use procedural_common::Bounds2;
 
 const DEPTH_SALT: u32 = 0x57EA_DE07;
@@ -27,14 +26,13 @@ pub(crate) struct StreamCorridor {
 	pub path: Vec<Vec2>,
 	pub levels: Vec<f32>,
 	pub half_width: f32,
-	pub wet_core: Region2D,
 	pub center_depth: f32,
 	pub parameters: HydroParameters,
 	pub max_correction_extent: f32,
 }
 
 impl StreamCorridor {
-	/// `StreamCorridor` → sole-edge [`HydrologyComplex`].
+	/// `StreamCorridor` → sole-corridor [`HydrologyComplex`].
 	pub fn into_complex(self, bounds: Bounds2, seed: u32) -> HydrologyComplex {
 		let nodes = nodes_from_polyline(
 			&self.path,
@@ -44,18 +42,7 @@ impl StreamCorridor {
 			&self.parameters,
 			self.max_correction_extent,
 		);
-		let mut complex = HydrologyComplex::new(bounds, seed);
-		let from = complex.push_node(crate::complex::WatershedNode::empty());
-		let to = complex.push_node(crate::complex::WatershedNode::empty());
-		complex.push_edge(crate::complex::WatershedEdge {
-			from,
-			to,
-			depression: WatershedDepression::new(
-				WatershedDepressionKind::StreamCorridor,
-				self.wet_core,
-			),
-		});
-		complex.with_hydrology(nodes)
+		HydrologyComplex::new(bounds, seed).with_hydrology(nodes)
 	}
 }
 
@@ -84,7 +71,6 @@ pub(crate) fn build_corridor(
 		ApronNoiseSalts::STREAM,
 	);
 
-	let channel_region = Region2D::Polyline(PolylineRegion::new(path.clone(), half_w));
 	let rim_w = TARGET_RIM_WIDTH;
 	let apron_width = (apron_w - skirt_w).max(apron_band);
 	let shore_amp = (half_w.max(1.0) * params.shore_indent_frac.clamp(0.0, 0.45)).max(0.01);
@@ -114,7 +100,6 @@ pub(crate) fn build_corridor(
 		path,
 		levels,
 		half_width: half_w,
-		wet_core: channel_region,
 		center_depth,
 		parameters,
 		max_correction_extent,

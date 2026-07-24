@@ -15,10 +15,10 @@ pub(crate) use path::{
 	ENDPOINT_A_SALT, ENDPOINT_B_SALT,
 };
 
-use crate::apron::WatershedApronParams;
-use crate::complex::HydrologyComplex;
-use crate::noise::n01_freq;
-use crate::stream::build::{build_corridor, StreamCorridor, StreamLayout};
+use crate::authored::apron::WatershedApronParams;
+use crate::primitive::complex::HydrologyComplex;
+use crate::authored::noise::n01_freq;
+use crate::authored::stream::build::{build_corridor, StreamCorridor, StreamLayout};
 use bevy_math::Vec2;
 use jersey_terrain_stamps::{DownhillPair, HysteresisSpine};
 use procedural_common::Bounds2;
@@ -74,7 +74,7 @@ pub struct StreamParams {
 	/// How far below the water surface \(W\) the channel floor grade sits.
 	///
 	/// Keeps the carved bed under \(W\) so wet columns stay open under the
-	/// free-surface half-space (see [`crate::fill::WaterFill`]).
+	/// free-surface half-space (see [`crate::primitive::fill::WaterFill`]).
 	pub channel_freeboard: f32,
 
 	/// Hysteresis spine walk (step / snap) — uses Jersey defaults when left at default.
@@ -251,8 +251,8 @@ impl Stream {
 	}
 
 	/// Hydrology nodes authored by this stream (one reach segment per polyline edge).
-	pub fn hydrology_nodes(&self) -> Vec<crate::node::HydrologyNode> {
-		crate::node::nodes_from_polyline(
+	pub fn hydrology_nodes(&self) -> Vec<crate::primitive::node::HydrologyNode> {
+		crate::primitive::node::nodes_from_polyline(
 			&self.corridor.path,
 			&self.corridor.levels,
 			self.corridor.half_width,
@@ -262,7 +262,7 @@ impl Stream {
 		)
 	}
 
-	/// Realize this plan as a sole-edge [`HydrologyComplex`].
+	/// Realize this plan as a sole-corridor [`HydrologyComplex`].
 	pub fn into_complex(self) -> HydrologyComplex {
 		self.corridor.into_complex(self.bounds, self.seed)
 	}
@@ -271,7 +271,7 @@ impl Stream {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use crate::fill::WaterSurface;
+	use crate::primitive::fill::WaterSurface;
 
 	#[test]
 	fn leaf_too_small_skips() -> anyhow::Result<()> {

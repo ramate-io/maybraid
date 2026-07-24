@@ -1,6 +1,6 @@
 //! Lake pocket water — [RFC-127 §3.1.3.1](https://github.com/ramate-io/maybraid/tree/main/rfc/rfc-000-000-127-marazion-watersheds#3131-lake).
 //!
-//! Authored as an ellipse [`crate::hydro::HydroPrimitive`] (`RadialBowl`) with a
+//! Authored as an ellipse [`crate::primitive::hydro::HydroPrimitive`] (`RadialBowl`) with a
 //! shared complex rim/apron from \(\phi_{\mathrm{union}}\):
 //! - **Water** — elliptical bowl depressed below surface \(W\) (deeper toward centroid)
 //! - **Rim / apron** — one complex-wide raise-only band outside \(\phi=0\)
@@ -16,10 +16,10 @@ pub(crate) mod shelf;
 pub use budget::LakeBandBudget;
 pub use shelf::shelf_base_height;
 
-use crate::apron::WatershedApronParams;
-use crate::complex::HydrologyComplex;
-use crate::lake::build::{build_bowl, LakeBowl, LakeLayout};
-use crate::lake::shelf::{
+use crate::authored::apron::WatershedApronParams;
+use crate::primitive::complex::HydrologyComplex;
+use crate::authored::lake::build::{build_bowl, LakeBowl, LakeLayout};
+use crate::authored::lake::shelf::{
 	aspect_u01, planned_center as planned_center_impl, rim_width_u01, rotation_u11, shelf_levels,
 	water_scale_u01,
 };
@@ -84,7 +84,7 @@ pub struct LakeParams {
 
 	// ── Bowl depth ─────────────────────────────────────────────────────────
 	/// Max bowl depth at the centroid for a lake whose short water axis equals
-	/// [`crate::noise::NOISE_FREQ_REF_RADIUS`] (scales with water radius in build).
+	/// [`crate::authored::noise::NOISE_FREQ_REF_RADIUS`] (scales with water radius in build).
 	pub depth: f32,
 	/// Exponent on `(1 - r)` for the radial depth falloff.
 	pub depth_falloff_power: f32,
@@ -94,7 +94,7 @@ pub struct LakeParams {
 	pub depth_shore_frac: f32,
 	/// Bipolar bed-noise amplitude (world units); may raise bed above `W`.
 	pub depth_noise_amp: f32,
-	/// Bed-noise frequency at [`crate::noise::NOISE_FREQ_REF_RADIUS`] (scaled in
+	/// Bed-noise frequency at [`crate::authored::noise::NOISE_FREQ_REF_RADIUS`] (scaled in
 	/// [`Lake::from_bounds`] by `(ref / short_water)^apron.noise_freq_power`).
 	pub depth_noise_freq: f32,
 	/// Extra headroom above the rim shelf for island / peninsula peaks.
@@ -103,7 +103,7 @@ pub struct LakeParams {
 	// ── Shore outline (water bowl + wet fill) — higher frequency ───────────
 	/// Max bipolar shore indent/expand as a fraction of the short water axis.
 	pub shore_indent_frac: f32,
-	/// Shore boundary frequency at [`crate::noise::NOISE_FREQ_REF_RADIUS`] (scaled geometrically
+	/// Shore boundary frequency at [`crate::authored::noise::NOISE_FREQ_REF_RADIUS`] (scaled geometrically
 	/// in [`Lake::from_bounds`]).
 	pub shore_freq: f32,
 
@@ -235,7 +235,7 @@ impl Lake {
 	}
 
 	/// Hydrology nodes authored by this lake (one radial bowl).
-	pub fn hydrology_nodes(&self) -> Vec<crate::node::HydrologyNode> {
+	pub fn hydrology_nodes(&self) -> Vec<crate::primitive::node::HydrologyNode> {
 		vec![self.bowl.node.clone()]
 	}
 
@@ -248,9 +248,9 @@ impl Lake {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use crate::fill::{WaterFill, WaterSurface};
-	use crate::lake::budget::{aspect_blend, MIN_WATER_RADIUS};
-	use crate::noise::scale_noise_freq;
+	use crate::primitive::fill::{WaterFill, WaterSurface};
+	use crate::authored::lake::budget::{aspect_blend, MIN_WATER_RADIUS};
+	use crate::authored::noise::scale_noise_freq;
 	use bevy_math::Vec2;
 
 	fn inside_fill(fill: &WaterFill, x: f32, z: f32) -> bool {
@@ -352,7 +352,7 @@ mod tests {
 
 	#[test]
 	fn noise_freq_scales_geometrically_and_caps_small() -> anyhow::Result<()> {
-		use crate::noise::NOISE_FREQ_REF_RADIUS;
+		use crate::authored::noise::NOISE_FREQ_REF_RADIUS;
 		let power = 0.5;
 		let f_ref = scale_noise_freq(0.04, NOISE_FREQ_REF_RADIUS, power);
 		let f_small = scale_noise_freq(0.04, NOISE_FREQ_REF_RADIUS * 0.5, power);

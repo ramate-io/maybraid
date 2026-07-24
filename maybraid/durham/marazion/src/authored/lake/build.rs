@@ -1,14 +1,15 @@
 //! Assemble lake bowl as a hydrology node (ellipse + radial bowl).
 
-use crate::apron::{jittered_depth, ApronNoiseSalts, TARGET_RIM_WIDTH};
-use crate::complex::{HydrologyComplex, WatershedNode};
-use crate::depression::{WatershedDepression, WatershedDepressionKind};
-use crate::hydro::{HydroElevation, HydroFootprint, HydroPrimitive};
-use crate::lake::budget::LakeBandBudget;
-use crate::lake::shelf::ShelfLevels;
-use crate::lake::LakeParams;
-use crate::node::{HydrologyNode, HydroParameters};
-use crate::noise::{scale_noise_freq, NOISE_FREQ_REF_RADIUS};
+use crate::authored::apron::{jittered_depth, ApronNoiseSalts, TARGET_RIM_WIDTH};
+use crate::authored::lake::budget::LakeBandBudget;
+use crate::authored::lake::shelf::ShelfLevels;
+use crate::authored::lake::LakeParams;
+use crate::authored::noise::{scale_noise_freq, NOISE_FREQ_REF_RADIUS};
+use crate::primitive::complex::HydrologyComplex;
+use crate::primitive::hydro::{
+	Ellipse, HydroElevation, HydroFootprint, HydroPrimitive, RadialBowl,
+};
+use crate::primitive::node::{HydrologyNode, HydroParameters};
 use bevy_math::Vec2;
 use jersey_terrain_stamps::{EllipseRegion, Region2D, RegionNoise};
 use procedural_common::Bounds2;
@@ -35,6 +36,7 @@ pub(crate) struct LakeLayout {
 /// Convert with [`Self::into_complex`] → [`HydrologyComplex`].
 #[derive(Debug, Clone)]
 pub(crate) struct LakeBowl {
+	/// Wet footprint (basin backfill / overlays).
 	pub wet_core: Region2D,
 	pub node: HydrologyNode,
 	/// Authoring metadata: water radius + rim bleed (water SDF follows carve \(\phi\)).
@@ -44,12 +46,7 @@ pub(crate) struct LakeBowl {
 impl LakeBowl {
 	/// `LakeBowl` → sole-node [`HydrologyComplex`] with hydrology emit.
 	pub fn into_complex(self, bounds: Bounds2, seed: u32) -> HydrologyComplex {
-		let mut complex = HydrologyComplex::new(bounds, seed);
-		complex.push_node(WatershedNode::with_depression(WatershedDepression::new(
-			WatershedDepressionKind::LakeBowl,
-			self.wet_core,
-		)));
-		complex.with_hydrology(vec![self.node])
+		HydrologyComplex::new(bounds, seed).with_hydrology(vec![self.node])
 	}
 }
 
@@ -115,15 +112,15 @@ pub(crate) fn build_bowl(
 	};
 	let node = HydrologyNode::new(
 		HydroPrimitive {
-			footprint: HydroFootprint::Ellipse {
+			footprint: HydroFootprint::Ellipse(Ellipse {
 				center,
 				radii: water_r.max(Vec2::splat(1e-3)),
 				rotation,
-			},
-			elevation: HydroElevation::RadialBowl {
+			}),
+			elevation: HydroElevation::Radial(RadialBowl {
 				surface: water_level,
 				center_depth: depth.max(0.25),
-			},
+			}),
 			influence_pad: max_correction_extent,
 		},
 		parameters,

@@ -1,6 +1,6 @@
 //! Shared apron / rim-height authoring for watershed depressions and complexes.
 
-use crate::noise::{n01_at, scale_noise_freq};
+use crate::authored::noise::{n01_at, scale_noise_freq};
 use bevy_math::Vec2;
 use jersey_terrain_stamps::RegionNoise;
 
@@ -43,17 +43,17 @@ pub struct WatershedApronParams {
 	pub indent_frac_min: f32,
 	/// Per-leaf apron boundary indent as a fraction of apron width (high).
 	pub indent_frac_max: f32,
-	/// Per-leaf apron boundary frequency low (at [`crate::noise::NOISE_FREQ_REF_RADIUS`]).
+	/// Per-leaf apron boundary frequency low (at [`crate::authored::noise::NOISE_FREQ_REF_RADIUS`]).
 	pub freq_min: f32,
-	/// Per-leaf apron boundary frequency high (at [`crate::noise::NOISE_FREQ_REF_RADIUS`]).
+	/// Per-leaf apron boundary frequency high (at [`crate::authored::noise::NOISE_FREQ_REF_RADIUS`]).
 	pub freq_max: f32,
 	/// Per-leaf rim height-noise amplitude low (world units).
 	pub rim_height_amp_min: f32,
 	/// Per-leaf rim height-noise amplitude high (world units).
 	pub rim_height_amp_max: f32,
-	/// Per-leaf rim height-noise frequency low (at [`crate::noise::NOISE_FREQ_REF_RADIUS`]).
+	/// Per-leaf rim height-noise frequency low (at [`crate::authored::noise::NOISE_FREQ_REF_RADIUS`]).
 	pub rim_height_freq_min: f32,
-	/// Per-leaf rim height-noise frequency high (at [`crate::noise::NOISE_FREQ_REF_RADIUS`]).
+	/// Per-leaf rim height-noise frequency high (at [`crate::authored::noise::NOISE_FREQ_REF_RADIUS`]).
 	pub rim_height_freq_max: f32,
 }
 

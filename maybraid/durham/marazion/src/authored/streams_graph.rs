@@ -1,20 +1,19 @@
 //! Streams graph — multi-corridor stream leaf for composition practice.
 //!
 //! Grows a degree-bounded [`HysteresisGraph`], collapses chains between
-//! keypoints into corridors, then emits segment [`crate::node::HydrologyNode`]s
+//! keypoints into corridors, then emits segment [`crate::primitive::node::HydrologyNode`]s
 //! into one [`HydrologyComplex`] (sample-time union blend).
 
-use crate::apron::{ApronNoiseSalts, TARGET_RIM_WIDTH};
-use crate::complex::{HydrologyComplex, WatershedEdge, WatershedNode};
-use crate::depression::{WatershedDepression, WatershedDepressionKind};
-use crate::node::{nodes_from_polyline, HydroParameters};
-use crate::noise::{n01_freq, scale_noise_freq};
-use crate::stream::{
+use crate::authored::apron::{ApronNoiseSalts, TARGET_RIM_WIDTH};
+use crate::primitive::complex::HydrologyComplex;
+use crate::primitive::node::{nodes_from_polyline, HydroParameters};
+use crate::authored::noise::{n01_freq, scale_noise_freq};
+use crate::authored::stream::{
 	collapse_degenerate_vertices, node_water_levels, sample_endpoint, StreamBandBudget,
 	StreamParams, DEGENERATE_VERTEX_EPS, ENDPOINT_A_SALT, ENDPOINT_B_SALT,
 };
 use bevy_math::Vec2;
-use jersey_terrain_stamps::{DownhillPair, PolylineRegion, Region2D, RegionNoise};
+use jersey_terrain_stamps::{DownhillPair, RegionNoise};
 use procedural_common::{Bounds2, HysteresisGraph, SeededHash};
 
 /// Minimum channel half-width (world units); smaller budgets skip the stamp.
@@ -113,7 +112,6 @@ struct CorridorPart {
 	half_width: f32,
 	freeboard: f32,
 	depth: f32,
-	wet_core: Region2D,
 }
 
 /// Authored streams-graph **plan**: hysteresis corridors → one hydro complex.
@@ -125,7 +123,9 @@ pub struct StreamsGraph {
 	pub half_width: f32,
 	pub edge_count: usize,
 	corridors: Vec<CorridorPart>,
-	key_points: Vec<Vec2>,
+	/// Junction / endpoint samples used while grading corridor \(W\).
+	#[allow(dead_code)] // retained for junction continuity tests
+	pub(crate) key_points: Vec<Vec2>,
 	parameters: HydroParameters,
 	max_correction_extent: f32,
 }
@@ -264,8 +264,6 @@ impl StreamsGraph {
 					continue;
 				}
 
-				let wet_core =
-					Region2D::Polyline(PolylineRegion::new(path.clone(), budget.half_width));
 				corridors.push(CorridorPart {
 					from_key,
 					to_key,
@@ -274,7 +272,6 @@ impl StreamsGraph {
 					half_width: budget.half_width,
 					freeboard: stream_p.channel_freeboard.max(0.25),
 					depth,
-					wet_core,
 				});
 			}
 		}
@@ -334,7 +331,7 @@ impl StreamsGraph {
 	}
 
 	/// Hydrology nodes authored by this graph (reach segments across all corridors).
-	pub fn hydrology_nodes(&self) -> Vec<crate::node::HydrologyNode> {
+	pub fn hydrology_nodes(&self) -> Vec<crate::primitive::node::HydrologyNode> {
 		let mut hydrology = Vec::new();
 		for corridor in &self.corridors {
 			let center_depth = corridor.freeboard + corridor.depth;
@@ -350,33 +347,16 @@ impl StreamsGraph {
 		hydrology
 	}
 
-	/// Realize as a multi-edge complex with sample-time hydro composition.
+	/// Realize as a multi-corridor complex with sample-time hydro composition.
 	pub fn into_complex(self) -> HydrologyComplex {
-		let mut complex = HydrologyComplex::new(self.bounds, self.seed);
-		let mut node_ids = Vec::with_capacity(self.key_points.len());
-		for _ in &self.key_points {
-			node_ids.push(complex.push_node(WatershedNode::empty()));
-		}
-		for corridor in &self.corridors {
-			let from = node_ids[corridor.from_key];
-			let to = node_ids[corridor.to_key];
-			complex.push_edge(WatershedEdge {
-				from,
-				to,
-				depression: WatershedDepression::new(
-					WatershedDepressionKind::StreamCorridor,
-					corridor.wet_core.clone(),
-				),
-			});
-		}
-		complex.with_hydrology(self.hydrology_nodes())
+		HydrologyComplex::new(self.bounds, self.seed).with_hydrology(self.hydrology_nodes())
 	}
 }
 
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use crate::fill::WaterSurface;
+	use crate::primitive::fill::WaterSurface;
 
 	fn slope_height(x: f32, z: f32) -> f32 {
 		100.0 - 0.05 * x - 0.02 * z
@@ -538,14 +518,12 @@ mod tests {
 		let half = g.half_width;
 		let compiled = g.into_complex().compile();
 		let fill = compiled.fills.first().expect("fill");
-		if let Some(corridor) = compiled.wet_union.as_ref() {
-			let c = corridor.center();
-			let far = Vec2::new(c.x, c.y + half * 2.5);
-			assert!(
-				!fill.inside_horizontal(far.x, far.y),
-				"fill should not extend far past channel carve"
-			);
-		}
+		// Outside the leaf AABB: carve support cannot reach here.
+		let far = compiled.bounds.max + Vec2::splat(half * 3.0);
+		assert!(
+			!fill.inside_horizontal(far.x, far.y),
+			"fill should not extend far past channel carve"
+		);
 		Ok(())
 	}
 }

@@ -1,6 +1,6 @@
 //! Inscribed elliptical band budget for lake leaves.
 
-use crate::lake::LakeParams;
+use crate::authored::lake::LakeParams;
 use bevy_math::Vec2;
 use procedural_common::Bounds2;
 

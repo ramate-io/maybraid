@@ -4,7 +4,7 @@
 //! approximate distance to \(\phi = 0\); inside, half-space below the blended free
 //! surface \(W\) (`y - W`). Flat fills (unit tests) carry an explicit region for XZ.
 
-use crate::complex::HydrologyComplex;
+use crate::primitive::complex::HydrologyComplex;
 use bevy_math::{Vec2, Vec3};
 use jersey_terrain_stamps::Region2D;
 

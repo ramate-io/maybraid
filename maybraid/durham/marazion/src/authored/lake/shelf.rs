@@ -1,8 +1,8 @@
 //! Lake centroid planning and shelf-anchor survey.
 
-use crate::lake::budget::{shelf_survey_radius, LakeBandBudget};
-use crate::lake::LakeParams;
-use crate::noise::{n01_at, n01_freq, n11_at};
+use crate::authored::lake::budget::{shelf_survey_radius, LakeBandBudget};
+use crate::authored::lake::LakeParams;
+use crate::authored::noise::{n01_at, n01_freq, n11_at};
 use bevy_math::Vec2;
 use procedural_common::Bounds2;
 

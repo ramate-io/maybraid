@@ -7,7 +7,7 @@
 //! Terrain correction blends per-node candidates by
 //! [`Self::point_classification`] priority: carve → rim → apron.
 
-use crate::hydro::{
+use crate::primitive::hydro::{
 	smoothmax_fold, smoothmin_fold, CorrectionStage, HydroFootprint, HydroPrimitive,
 	DEFAULT_RIM_UPLIFT_CAP, SURFACE_SMOOTHMIN_K,
 };
@@ -98,8 +98,8 @@ impl HydrologyNode {
 	/// Representative interior sample (ellipse center / reach midpoint).
 	pub fn sample_point(&self) -> Vec2 {
 		match &self.primitive.footprint {
-			HydroFootprint::ReachSegment { a, b, .. } => (*a + *b) * 0.5,
-			HydroFootprint::Ellipse { center, .. } => *center,
+			HydroFootprint::Reach(seg) => (seg.a + seg.b) * 0.5,
+			HydroFootprint::Ellipse(e) => e.center,
 		}
 	}
 
@@ -266,7 +266,9 @@ pub fn nodes_from_polyline(
 	parameters: &HydroParameters,
 	max_correction_extent: f32,
 ) -> Vec<HydrologyNode> {
-	use crate::hydro::{HydroElevation, HydroFootprint};
+	use crate::primitive::hydro::{
+		HydroElevation, HydroFootprint, ReachProfile, ReachSegment,
+	};
 	let n = path.len().min(levels.len());
 	if n < 2 {
 		return Vec::new();
@@ -283,12 +285,16 @@ pub fn nodes_from_polyline(
 		}
 		out.push(HydrologyNode::new(
 			HydroPrimitive {
-				footprint: HydroFootprint::ReachSegment { a, b, half_width: hw },
-				elevation: HydroElevation::ReachProfile {
+				footprint: HydroFootprint::Reach(ReachSegment {
+					a,
+					b,
+					half_width: hw,
+				}),
+				elevation: HydroElevation::Reach(ReachProfile {
 					surface_a: levels[i],
 					surface_b: levels[i + 1],
 					center_depth: depth,
-				},
+				}),
 				influence_pad: extent,
 			},
 			parameters.clone(),
@@ -301,7 +307,9 @@ pub fn nodes_from_polyline(
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use crate::hydro::{HydroElevation, HydroFootprint};
+	use crate::primitive::hydro::{
+		HydroElevation, HydroFootprint, ReachProfile, ReachSegment,
+	};
 
 	fn reach_node(half_width: f32) -> HydrologyNode {
 		let mut parameters = HydroParameters::default();
@@ -309,16 +317,16 @@ mod tests {
 		parameters.apron_width = 8.0;
 		HydrologyNode::new(
 			HydroPrimitive {
-				footprint: HydroFootprint::ReachSegment {
+				footprint: HydroFootprint::Reach(ReachSegment {
 					a: Vec2::new(0.0, 0.0),
 					b: Vec2::new(40.0, 0.0),
 					half_width,
-				},
-				elevation: HydroElevation::ReachProfile {
+				}),
+				elevation: HydroElevation::Reach(ReachProfile {
 					surface_a: 30.0,
 					surface_b: 30.0,
 					center_depth: 3.0,
-				},
+				}),
 				influence_pad: 12.0,
 			},
 			parameters,
@@ -344,16 +352,16 @@ mod tests {
 		shallow_params.apron_width = 8.0;
 		let offset = HydrologyNode::new(
 			HydroPrimitive {
-				footprint: HydroFootprint::ReachSegment {
+				footprint: HydroFootprint::Reach(ReachSegment {
 					a: Vec2::new(0.0, 6.0),
 					b: Vec2::new(40.0, 6.0),
 					half_width: 4.0,
-				},
-				elevation: HydroElevation::ReachProfile {
+				}),
+				elevation: HydroElevation::Reach(ReachProfile {
 					surface_a: 30.0,
 					surface_b: 30.0,
 					center_depth: 1.0,
-				},
+				}),
 				influence_pad: 12.0,
 			},
 			shallow_params,

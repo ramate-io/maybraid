@@ -1,6 +1,6 @@
 //! Stream path placement and graded water levels.
 
-use crate::noise::n01_at;
+use crate::authored::noise::n01_at;
 use bevy_math::Vec2;
 
 pub(crate) const DEGENERATE_VERTEX_EPS: f32 = 1e-3;

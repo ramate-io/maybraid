@@ -2,21 +2,21 @@
 //!
 //! Not the RFC-127 §3.1.3.3 micro-lake lattice. Instead: stamp a normal lake
 //! (hydro radial bowl + fill + shared apron), then add
-//! [`crate::backfill::WatershedBackfill`] elevation noise inside the wet core so
+//! [`crate::primitive::backfill::WatershedBackfill`] elevation noise inside the wet core so
 //! the bed reads hummocky / islanded after water is placed.
 //!
 //! Basin noise itself is depth-incentive ([`BasinBackfillParams::depth_frac`]);
 //! [`BogBasinFill`] chooses how aggressively that freeboard is filled / crested.
 
-use crate::backfill::{BasinBackfillParams, WatershedBackfill};
-use crate::complex::HydrologyComplex;
-use crate::lake::build::{build_bowl, LakeBowl, LakeLayout};
-use crate::lake::shelf::{
+use crate::primitive::backfill::{BasinBackfillParams, WatershedBackfill};
+use crate::primitive::complex::HydrologyComplex;
+use crate::authored::lake::build::{build_bowl, LakeBowl, LakeLayout};
+use crate::authored::lake::shelf::{
 	aspect_u01, planned_center as planned_center_impl, rim_width_u01, rotation_u11, shelf_levels,
 	water_scale_u01,
 };
-use crate::lake::{LakeBandBudget, LakeParams};
-use crate::noise::scale_noise_freq;
+use crate::authored::lake::{LakeBandBudget, LakeParams};
+use crate::authored::noise::scale_noise_freq;
 use bevy_math::Vec2;
 use procedural_common::Bounds2;
 
@@ -174,7 +174,7 @@ impl Bog {
 	}
 
 	/// Hydrology nodes authored by this bog (lake-shaped bowl; backfill is separate).
-	pub fn hydrology_nodes(&self) -> Vec<crate::node::HydrologyNode> {
+	pub fn hydrology_nodes(&self) -> Vec<crate::primitive::node::HydrologyNode> {
 		vec![self.bowl.node.clone()]
 	}
 
@@ -189,7 +189,7 @@ impl Bog {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use crate::fill::WaterSurface;
+	use crate::primitive::fill::WaterSurface;
 
 	#[test]
 	fn leaf_too_small_skips() -> anyhow::Result<()> {
