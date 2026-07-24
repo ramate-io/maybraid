@@ -71,22 +71,10 @@ pub struct StreamParams {
 	/// Shared apron outline + add-only rim height.
 	pub apron: WatershedApronParams,
 
-	/// Softmask fade past the fill support edge (world units). Stacks on
-	/// [`Self::fill_half_width_scale`] so the wet ribbon is liberal vs the carve.
-	pub shore_fade: f32,
-
 	/// How far below the water surface \(W\) the channel floor grade sits.
 	///
-	/// Keeps the carved bed under \(W\) so the wet-column gate stays open;
-	/// fill itself is a half-space below \(W\) (see [`crate::fill::WaterFill`]).
+	/// Keeps the carved bed under \(W\) so the wet slab \([h, W]\) has thickness.
 	pub channel_freeboard: f32,
-
-	/// Fill support half-width as a multiple of the carved channel half-width.
-	/// Prefer `> 1` so MC gets a wider wet ribbon than the visible cut.
-	pub fill_half_width_scale: f32,
-
-	/// Extra fill undercut for the wet-column gate under banks / noise.
-	pub fill_undercut: f32,
 
 	/// Hysteresis spine walk (step / snap) — uses Jersey defaults when left at default.
 	pub spine: HysteresisSpine,
@@ -118,10 +106,7 @@ impl Default for StreamParams {
 
 			apron: WatershedApronParams::default().with_visible_rim_bank(),
 
-			shore_fade: 5.5,
 			channel_freeboard: 2.0,
-			fill_half_width_scale: 1.55,
-			fill_undercut: 2.75,
 
 			spine: HysteresisSpine::default(),
 		}
@@ -311,25 +296,24 @@ mod tests {
 			w_head > w_toe + 0.2,
 			"graded fill should drop along path: {w_head} → {w_toe}"
 		);
-		assert!(fill.softmask_at(head.x, head.y) < 0.5);
+		assert!(fill.inside_horizontal(head.x, head.y));
 		let far = Vec2::new(bounds.min.x - 80.0, bounds.min.y - 80.0);
-		assert!(fill.softmask_at(far.x, far.y) >= 1.0);
+		assert!(!fill.inside_horizontal(far.x, far.y));
 		Ok(())
 	}
 
 	#[test]
-	fn fill_support_tracks_channel_phi() -> anyhow::Result<()> {
+	fn fill_tracks_channel_carve() -> anyhow::Result<()> {
 		let bounds = Bounds2::from_xz(0.0, 0.0, 400.0, 400.0);
 		let height = |x: f32, z: f32| 100.0 - 0.05 * x - 0.01 * z;
 		let params = StreamParams::default();
 		let stream = Stream::from_bounds(bounds, 42, params, Some(&height)).expect("stream");
 		let compiled = stream.clone().into_complex().compile();
 		let fill = compiled.fills.first().expect("fill");
-		assert!(fill.terrain_undercut >= params.fill_undercut - 1e-3);
 		let mid = stream.path[0].lerp(stream.path[1], 0.5);
-		assert!(fill.softmask_at(mid.x, mid.y) < 0.5);
+		assert!(fill.inside_horizontal(mid.x, mid.y));
 		let far = Vec2::new(mid.x, mid.y + stream.half_width * 3.0);
-		assert!(fill.softmask_at(far.x, far.y) > 0.5);
+		assert!(!fill.inside_horizontal(far.x, far.y));
 		Ok(())
 	}
 

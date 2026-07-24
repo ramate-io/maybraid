@@ -100,8 +100,6 @@ pub(crate) fn build_corridor(
 		.rim_height_amp_max
 		.max(params.apron.rim_height_amp_min)
 		.max(0.0);
-	let fill_scale = params.fill_half_width_scale.max(1.0);
-	let fill_support_pad = half_w.max(0.0) * (fill_scale - 1.0);
 	let parameters = HydroParameters {
 		shelf_anchor: None,
 		rim_lift: params.rim_lift.max(0.0),
@@ -110,9 +108,6 @@ pub(crate) fn build_corridor(
 		rim_height: apron_noise.rim_height,
 		rim_uplift_cap,
 		boundary_noise: Some(boundary_noise),
-		shore_fade: params.shore_fade.max(0.25),
-		fill_undercut: params.fill_undercut.max(0.0),
-		fill_support_pad,
 	};
 
 	StreamCorridor {

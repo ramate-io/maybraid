@@ -9,9 +9,8 @@
 //! | Cascade chunk | [`cascade_chunk_for_cell`] | **same helper**, same `cell` + `res_2` |
 //! | Mesh resolution | [`TerrainPresentationAssets::res_2`](crate::terrain::presentation::TerrainPresentationAssets) via the sibling [`Terrain`] cell | inherited from that [`Terrain::res_2`] — never a separate water grid |
 //!
-//! Marazion lake stamps author flat [`WaterFill`]s; streams author graded ones.
-//! Fills are free-surface half-spaces below \(W\) so they resolve on the tall
-//! terrain Y lattice. This module collects those fills from an already composed
+//! Marazion stamps author [`WaterFill`]s backed by [`HydrologyComplex`] (carve ×
+//! slab \([h, W]\)). This module collects those fills from an already composed
 //! [`Terrain`] cell and presents [`ComposedWater`] on that shared sample space.
 //!
 //! **Order:** [`Terrain`] must compose **all** Marazion watershed bands before

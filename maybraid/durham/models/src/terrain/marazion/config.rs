@@ -54,9 +54,6 @@ impl MarazionBandConfig {
 	{
 		let mut streams_graph = StreamsGraphParams::default();
 		streams_graph.stream = stream;
-		// Graph composition contract: fill ⊆ carve + bounded rim budget.
-		streams_graph.stream.fill_half_width_scale = 1.0;
-		streams_graph.stream.shore_fade = streams_graph.stream.shore_fade.min(2.5);
 		streams_graph.stream.apron.rim_height_amp_min = 0.0;
 		streams_graph.stream.apron.rim_height_amp_max =
 			streams_graph.stream.apron.rim_height_amp_max.min(1.25);

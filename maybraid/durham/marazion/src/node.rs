@@ -30,13 +30,6 @@ pub struct HydroParameters {
 	pub rim_uplift_cap: f32,
 	/// Optional shore outline: warps occupancy via `φ += sample_boundary`.
 	pub boundary_noise: Option<RegionNoise>,
-	pub shore_fade: f32,
-	pub fill_undercut: f32,
-	/// Extra wet support beyond \(\phi = 0\) for fill softmask (liberal ribbon).
-	///
-	/// Streams: \(\approx half\_width \cdot (fill\_half\_width\_scale - 1)\).
-	/// Lakes: rim-bleed style overhang past the bowl.
-	pub fill_support_pad: f32,
 }
 
 impl Default for HydroParameters {
@@ -49,9 +42,6 @@ impl Default for HydroParameters {
 			rim_height: RegionNoise::from_seed(0, 0.02, 0.0),
 			rim_uplift_cap: DEFAULT_RIM_UPLIFT_CAP,
 			boundary_noise: None,
-			shore_fade: 2.5,
-			fill_undercut: 2.0,
-			fill_support_pad: 0.0,
 		}
 	}
 }
@@ -102,7 +92,6 @@ impl HydrologyNode {
 		self.max_correction_extent
 			.max(self.parameters.correction_pad())
 			.max(self.primitive.influence_pad)
-			.max(self.parameters.fill_support_pad + self.parameters.shore_fade)
 			+ self.parameters.boundary_noise_amp()
 	}
 
@@ -245,6 +234,26 @@ impl HydrologyNode {
 			return smoothmax_fold(&vals, SURFACE_SMOOTHMIN_K);
 		}
 		elevation
+	}
+
+	/// Soft-min free surface over **Carve** nodes at `p` (same ownership as terrain carve).
+	///
+	/// Rim / apron do not contribute — keeps \(W\) coupled to the local carved bed.
+	pub fn blend_surface_elevation(nodes: &[&Self], p: Vec2) -> Option<f32> {
+		let mut surfaces = Vec::new();
+		for node in nodes {
+			if matches!(
+				node.point_classification(p),
+				Some(CorrectionStage::Carve)
+			) {
+				surfaces.push(node.surface_level(p));
+			}
+		}
+		if surfaces.is_empty() {
+			None
+		} else {
+			Some(smoothmin_fold(&surfaces, SURFACE_SMOOTHMIN_K))
+		}
 	}
 }
 

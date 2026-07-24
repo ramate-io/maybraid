@@ -152,18 +152,15 @@ Use lakes / streams as the template. The failure mode to avoid is a **thin**
 that then fights graded surfaces sharing a cell).
 
 1. **Stamp owns the fill product.** In Marazion (or the relevant stamp crate),
-   emit a [`WaterFill`](../marazion/src/fill.rs): horizontal `region` + softmask
-   radii, a `WaterSurface` (`Flat` or `Graded`), and `terrain_undercut` for the
-   wet-column gate. Do not invent a second meshing grid in the stamp.
-2. **Wet solid = half-space below \(W\).** Inside a wet column
-   (\(W > h - u\) and softmask open), distance is \(d = y - W\) (plus softmask
-   fade). Islands / beds above \(W\) stay dry via the gate. Subterranean volume
-   under the free surface is fine — terrain occludes it.
-3. **Carve for look; fill for MC.** Terrain mods (bowl, polyline channel, etc.)
-   shape the visible bed. The fill support should be **at least as wide** as the
-   wet look you want on the lattice — usually a bit **wider** than the carve
-   (streams use `fill_half_width_scale` / `shore_fade`). Narrow silhouettes come
-   from the heightfield, not from starving the wet softmask.
+   emit a [`WaterFill`](../marazion/src/fill.rs) whose hydro surface is a
+   [`HydrologyComplex`](../marazion/src/complex.rs). The complex owns \(W\) blend
+   and the water SDF — do not invent a second meshing grid in the stamp.
+2. **Wet solid = carve × slab.** Outside carve, return approximate distance to
+   \(\phi = 0\) (not a huge sentinel). Inside carve, distance is
+   \(\max(y-W,\, h-y)\). Optional later: small \(\mu\) on \(\phi\), \(\alpha\) on \(h\).
+3. **Carve for look; fill follows carve.** Terrain mods shape the visible bed.
+   Water XZ support is the same carve occupancy (hard boundary). Narrow
+   silhouettes come from the heightfield, not from starving a softmask.
 4. **Collect on the terrain cell.** Ride fills on `Terrain::marazion_fills` (or
    the analogue) after the heightfield is fully composed. `Water` filters empty
    fills and builds [`ComposedWater`](src/water/composed.rs) for that same origin

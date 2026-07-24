@@ -76,10 +76,6 @@ pub struct LakeParams {
 	pub water_sink: f32,
 	/// How far the rim shelf sits **above** the shelf anchor (world units).
 	pub rim_lift: f32,
-	/// How far the wet-column gate bites into terrain (`h − undercut`).
-	/// Wet columns are half-spaces below \(W\); undercut only decides which
-	/// columns count as wet (shoreline under raised rims).
-	pub terrain_undercut: f32,
 	/// Per-leaf jitter on the shelf anchor height that sets `W` and rim base.
 	pub shelf_amp: f32,
 	/// How many pre-watershed heights to sample on a ring around the centroid
@@ -114,11 +110,9 @@ pub struct LakeParams {
 	/// Shared apron outline + add-only rim height (`noise_freq_power` also scales shore/bed).
 	pub apron: WatershedApronParams,
 
-	// ── Fill pad ───────────────────────────────────────────────────────────
-	/// Horizontal softmask pad past the bowl, as a fraction of rim width.
+	/// Horizontal fill metadata pad past the bowl, as a fraction of rim width
+	/// (plan `fill_radius` only — water SDF follows carve \(\phi\)).
 	pub rim_bleed_frac: f32,
-	/// SDF-relative fade past the fill edge.
-	pub shore_fade: f32,
 }
 
 impl Default for LakeParams {
@@ -144,7 +138,6 @@ impl Default for LakeParams {
 
 			water_sink: 0.9,
 			rim_lift: 1.25,
-			terrain_undercut: 2.5,
 			shelf_amp: 2.0,
 			shelf_sample_count: 6,
 
@@ -161,7 +154,6 @@ impl Default for LakeParams {
 			apron: WatershedApronParams::default().with_visible_rim_bank(),
 
 			rim_bleed_frac: 0.5,
-			shore_fade: 3.0,
 		}
 	}
 }
@@ -261,8 +253,8 @@ mod tests {
 	use crate::noise::scale_noise_freq;
 	use bevy_math::Vec2;
 
-	fn softmask_at(fill: &WaterFill, x: f32, z: f32) -> f32 {
-		fill.softmask_at(x, z)
+	fn inside_fill(fill: &WaterFill, x: f32, z: f32) -> bool {
+		fill.inside_horizontal(x, z)
 	}
 
 	#[test]
@@ -524,22 +516,21 @@ mod tests {
 	}
 
 	#[test]
-	fn wet_softmask_inside_water_disc() -> anyhow::Result<()> {
+	fn wet_inside_water_disc() -> anyhow::Result<()> {
 		let bounds = Bounds2::from_xz(0.0, 0.0, 320.0, 320.0);
 		let lake = Lake::from_bounds_default(bounds, 11).expect("lake");
 		let compiled = lake.clone().into_complex().compile();
 		let fill = compiled.fills.first().expect("fill");
 		let mid = lake.center;
-		assert!(softmask_at(fill, mid.x, mid.y) < 0.25);
+		assert!(inside_fill(fill, mid.x, mid.y));
 		let outside = lake.center + Vec2::new(lake.plateau_radius + lake.apron_width + 20.0, 0.0);
-		assert!(softmask_at(fill, outside.x, outside.y) >= 0.999);
+		assert!(!inside_fill(fill, outside.x, outside.y));
 		Ok(())
 	}
 
 	#[test]
-	fn fill_pad_stays_near_bowl() -> anyhow::Result<()> {
+	fn fill_radius_stays_near_bowl() -> anyhow::Result<()> {
 		let bounds = Bounds2::from_xz(0.0, 0.0, 320.0, 320.0);
-		let params = LakeParams::default();
 		let lake = Lake::from_bounds_default(bounds, 11).expect("lake");
 		assert!(lake.fill_radius + 1e-3 >= lake.water_radius);
 		assert!(
@@ -548,10 +539,10 @@ mod tests {
 		);
 		let compiled = lake.clone().into_complex().compile();
 		let fill = compiled.fills.first().expect("fill");
-		assert!(softmask_at(fill, lake.center.x, lake.center.y) < 0.25);
+		assert!(inside_fill(fill, lake.center.x, lake.center.y));
 		let outside = lake.center
-			+ Vec2::new(lake.plateau_radius + lake.apron_width + params.shore_fade + 5.0, 0.0);
-		assert!(softmask_at(fill, outside.x, outside.y) >= 0.999);
+			+ Vec2::new(lake.plateau_radius + lake.apron_width + 5.0, 0.0);
+		assert!(!inside_fill(fill, outside.x, outside.y));
 		Ok(())
 	}
 

@@ -8,12 +8,9 @@
 use crate::backfill::WatershedBackfill;
 use crate::depression::WatershedDepression;
 use crate::fill::{WaterFill, WaterSurface};
-use crate::hydro::{
-	smoothmin_fold, ComplexApronParams, CorrectionStage, FootprintIndex, HydroPrimitive,
-	SURFACE_SMOOTHMIN_K,
-};
+use crate::hydro::{ComplexApronParams, FootprintIndex, HydroPrimitive};
 use crate::node::{HydroParameters, HydrologyNode};
-use bevy_math::Vec2;
+use bevy_math::{Vec2, Vec3};
 use jersey_terrain_stamps::{CircleRegion, JerseyModulation, Region2D};
 use procedural_common::Bounds2;
 
@@ -77,7 +74,8 @@ impl CompiledWatershed {
 	}
 }
 
-/// Captures and indexes hydrology nodes; owns carve → rim → apron modulation.
+/// Captures and indexes hydrology nodes; owns carve → rim → apron modulation
+/// and the pocket water SDF (carve × slab).
 #[derive(Debug, Clone)]
 pub struct HydrologyComplex {
 	pub bounds: Bounds2,
@@ -89,10 +87,6 @@ pub struct HydrologyComplex {
 	pub hydrology: Vec<HydrologyNode>,
 	/// Broadphase over [`Self::hydrology`] (rebuilt when nodes change).
 	pub index: FootprintIndex,
-	pub shore_fade: f32,
-	pub fill_undercut: f32,
-	/// Max liberal fill overhang beyond \(\phi = 0\) (from member nodes).
-	pub fill_support_pad: f32,
 }
 
 impl HydrologyComplex {
@@ -105,9 +99,6 @@ impl HydrologyComplex {
 			backfills: Vec::new(),
 			hydrology: Vec::new(),
 			index: FootprintIndex::empty(),
-			shore_fade: 2.5,
-			fill_undercut: 0.0,
-			fill_support_pad: 0.0,
 		};
 		complex.reindex();
 		complex
@@ -128,9 +119,6 @@ impl HydrologyComplex {
 			rim_height: apron.rim_height,
 			rim_uplift_cap: apron.rim_uplift_cap,
 			boundary_noise: None,
-			shore_fade: apron.shore_fade,
-			fill_undercut: apron.fill_undercut,
-			fill_support_pad: 0.0,
 		};
 		let extent = params.correction_pad();
 		let hydrology = primitives
@@ -171,22 +159,6 @@ impl HydrologyComplex {
 		let short = self.bounds.extent().min_element().max(1.0);
 		let cell = (short * 0.08).clamp(8.0, 64.0);
 		self.index = FootprintIndex::build_nodes(self.bounds, &self.hydrology, cell);
-		self.shore_fade = self
-			.hydrology
-			.iter()
-			.map(|m| m.parameters.shore_fade)
-			.fold(2.5_f32, f32::max)
-			.max(0.25);
-		self.fill_undercut = self
-			.hydrology
-			.iter()
-			.map(|m| m.parameters.fill_undercut)
-			.fold(0.0_f32, f32::max);
-		self.fill_support_pad = self
-			.hydrology
-			.iter()
-			.map(|m| m.parameters.fill_support_pad)
-			.fold(0.0_f32, f32::max);
 	}
 
 	fn wet_union_from_graph(&self) -> Option<Region2D> {
@@ -242,41 +214,14 @@ impl HydrologyComplex {
 		HydrologyNode::blend_terrain_elevation(&nodes, elevation, p)
 	}
 
-	/// Soft-min free surface for the wet-column gate.
-	///
-	/// Contributors match terrain carve ownership: only **Carve** nodes (plus the
-	/// liberal [`Self::fill_support_pad`] band when no carve is present). Neighbor
-	/// **Rim** surfaces are excluded — otherwise a lower pitched reach can pull
-	/// \(W\) below the local carved bed and dry the column.
+	/// Soft-min free surface over carve-owned nodes at `(x, z)`.
 	pub fn surface_at(&self, x: f32, z: f32) -> Option<f32> {
 		let p = Vec2::new(x, z);
-		let fill_core = self.fill_support_pad.max(0.0);
-		let mut carve_surfaces = Vec::new();
-		let mut support_surfaces = Vec::new();
-		for node in self.nodes_intersecting(p) {
-			let d = node.phi(p);
-			if matches!(
-				node.point_classification(p),
-				Some(CorrectionStage::Carve)
-			) {
-				carve_surfaces.push(node.surface_level(p));
-			} else if d <= fill_core {
-				support_surfaces.push(node.surface_level(p));
-			}
-		}
-		let surfaces = if !carve_surfaces.is_empty() {
-			carve_surfaces
-		} else {
-			support_surfaces
-		};
-		if surfaces.is_empty() {
-			None
-		} else {
-			Some(smoothmin_fold(&surfaces, SURFACE_SMOOTHMIN_K))
-		}
+		let nodes = self.nodes_intersecting(p);
+		HydrologyNode::blend_surface_elevation(&nodes, p)
 	}
 
-	/// Min occupancy \(\phi\) over intersecting nodes (for fill softmask).
+	/// Min occupancy \(\phi\) over intersecting nodes (`None` if none in index).
 	pub fn occupancy_at(&self, x: f32, z: f32) -> Option<f32> {
 		let p = Vec2::new(x, z);
 		let mut phi = f32::INFINITY;
@@ -286,25 +231,45 @@ impl HydrologyComplex {
 		phi.is_finite().then_some(phi)
 	}
 
-	/// Softmask with liberal overhang: wet while \(\phi \le\) [`Self::fill_support_pad`],
-	/// then fade over [`Self::shore_fade`].
-	pub fn fill_softmask_at(&self, x: f32, z: f32) -> f32 {
-		let pad = self.fill_support_pad.max(0.0);
-		let fade = self.shore_fade.max(0.25);
-		match self.occupancy_at(x, z) {
-			None => 1.0,
-			Some(phi) if phi <= pad => 0.0,
-			Some(phi) if phi >= pad + fade => 1.0,
-			Some(phi) => {
-				let t = ((phi - pad) / fade).clamp(0.0, 1.0);
-				t * t * (3.0 - 2.0 * t)
-			}
-		}
+	/// Hard carve test: any intersecting node classifies as Carve.
+	pub fn inside_carve(&self, x: f32, z: f32) -> bool {
+		self.surface_at(x, z).is_some()
 	}
 
-	/// Build a [`WaterFill`] that samples \(W\) / softmask from this complex.
+	/// Cheap exterior distance toward the wet carve (\(\phi = 0\)).
+	///
+	/// Prefer indexed occupancy; if the sample misses the broadphase, fall back to
+	/// a full member scan so MC sees a continuous field instead of a huge sentinel.
+	pub fn approximate_distance_to_carve(&self, x: f32, z: f32) -> f32 {
+		if let Some(phi) = self.occupancy_at(x, z) {
+			return phi;
+		}
+		let p = Vec2::new(x, z);
+		let mut phi = f32::INFINITY;
+		for node in &self.hydrology {
+			phi = phi.min(node.phi(p));
+		}
+		if phi.is_finite() {
+			return phi;
+		}
+		// Empty complex: distance to the leaf AABB (still Lipschitz-ish for MC).
+		let dx = (self.bounds.min.x - x).max(x - self.bounds.max.x).max(0.0);
+		let dz = (self.bounds.min.y - z).max(z - self.bounds.max.y).max(0.0);
+		(dx * dx + dz * dz).sqrt()
+	}
+
+	/// Pocket water SDF: outside carve → distance to carve; inside → slab \([h, W]\).
+	pub fn water_distance(&self, p: Vec3, terrain_height: f32) -> f32 {
+		let Some(w) = self.surface_at(p.x, p.z) else {
+			return self.approximate_distance_to_carve(p.x, p.z);
+		};
+		let d_top = p.y - w;
+		let d_bot = terrain_height - p.y;
+		d_top.max(d_bot)
+	}
+
+	/// Build a [`WaterFill`] that delegates SDF / \(W\) to this complex.
 	pub fn water_fill(&self) -> WaterFill {
-		// Prefer authored wet union for probes; fall back to a cell-covering circle.
 		let region = self.wet_union_from_graph().unwrap_or_else(|| {
 			let center = self.bounds.center();
 			let radius = self.bounds.extent().max_element() * 0.75;
@@ -312,13 +277,9 @@ impl HydrologyComplex {
 		});
 		WaterFill {
 			region,
-			inner_radius: 0.0,
-			outer_radius: (self.fill_support_pad + self.shore_fade).max(0.25),
-			noise: None,
 			surface: WaterSurface::Hydro {
 				complex: self.clone(),
 			},
-			terrain_undercut: self.fill_undercut.max(0.0),
 		}
 	}
 
@@ -420,9 +381,6 @@ mod tests {
 		let params = HydroParameters {
 			rim_width: rim_w,
 			apron_width: 8.0,
-			fill_support_pad: 0.0,
-			shore_fade: 2.0,
-			fill_undercut: 2.0,
 			..HydroParameters::default()
 		};
 		let a = Vec2::new(0.0, 0.0);
@@ -466,7 +424,6 @@ mod tests {
 			.with_hydrology(vec![upstream, downstream]);
 		let mid = Vec2::new(20.0, 0.0);
 		let w = complex.surface_at(mid.x, mid.y).expect("surface");
-		// Local upstream mid grade is 90; a rim soft-min would drag toward ~80.
 		assert!(
 			w > 85.0,
 			"fill W should track upstream carve grade, got {w}"
@@ -477,14 +434,13 @@ mod tests {
 			fill.wet_y_span_at(mid.x, mid.y, h).is_some(),
 			"pitched mid-channel should stay wet: W={w} h={h}"
 		);
+		let d = fill.distance(bevy_math::Vec3::new(mid.x, (h + w) * 0.5, mid.y), h);
+		assert!(d < 0.0, "slab interior should be negative, got {d}");
 		Ok(())
 	}
 
 	#[test]
-	fn fill_softmask_honors_support_pad() -> anyhow::Result<()> {
-		let mut params = HydroParameters::default();
-		params.fill_support_pad = 6.0;
-		params.shore_fade = 2.0;
+	fn water_exterior_uses_carve_distance_not_sentinel() -> anyhow::Result<()> {
 		let node = HydrologyNode::new(
 			HydroPrimitive {
 				footprint: HydroFootprint::Ellipse {
@@ -498,17 +454,21 @@ mod tests {
 				},
 				influence_pad: 20.0,
 			},
-			params,
+			HydroParameters::default(),
 			20.0,
 		);
-		let mut complex = HydrologyComplex::new(Bounds2::from_xz(-40.0, -40.0, 40.0, 40.0), 4);
-		complex = complex.with_hydrology(vec![node]);
-		// Just outside the bowl but inside the liberal pad → fully wet softmask.
-		assert!(complex.fill_softmask_at(12.0, 0.0) < 0.05);
-		// Outside pad + fade → dry.
-		assert!(complex.fill_softmask_at(20.0, 0.0) > 0.95);
-		// Surface remains defined in the pad band.
-		assert!(complex.surface_at(12.0, 0.0).is_some());
+		let complex =
+			HydrologyComplex::new(Bounds2::from_xz(-40.0, -40.0, 40.0, 40.0), 7).with_hydrology(vec![
+				node,
+			]);
+		// Just outside the bowl: positive φ, finite, not a 1e6 cliff.
+		let d = complex.approximate_distance_to_carve(12.0, 0.0);
+		assert!(d > 0.0 && d < 20.0, "expected modest carve distance, got {d}");
+		let far = complex.water_distance(Vec3::new(12.0, 38.0, 0.0), 36.0);
+		assert!(
+			(far - d).abs() < 1e-3,
+			"outside carve water_distance should equal carve approx"
+		);
 		Ok(())
 	}
 

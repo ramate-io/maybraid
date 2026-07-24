@@ -45,11 +45,7 @@ pub struct StreamsGraphParams {
 
 impl Default for StreamsGraphParams {
 	fn default() -> Self {
-		let mut stream = StreamParams::default();
-		// Fill ⊆ carve for graph composition (autopsy water-wall fix).
-		stream.fill_half_width_scale = 1.0;
-		stream.shore_fade = 2.5;
-		stream.fill_undercut = 2.0;
+		let stream = StreamParams::default();
 		let rim_uplift_cap = stream
 			.apron
 			.rim_height_amp_max
@@ -310,8 +306,6 @@ impl StreamsGraph {
 		);
 		let boundary_noise = RegionNoise::from_seed(seed.wrapping_add(5), shore_freq, shore_amp);
 		let max_correction_extent = (rim_w + apron_w + shore_amp).max(0.0);
-		let fill_scale = stream_p.fill_half_width_scale.max(1.0);
-		let fill_support_pad = budget.half_width.max(0.0) * (fill_scale - 1.0);
 		let parameters = HydroParameters {
 			shelf_anchor: None,
 			rim_lift: stream_p.rim_lift.max(0.0),
@@ -320,9 +314,6 @@ impl StreamsGraph {
 			rim_height: apron_noise.rim_height,
 			rim_uplift_cap: params.rim_uplift_cap.max(0.0),
 			boundary_noise: Some(boundary_noise),
-			shore_fade: stream_p.shore_fade.max(0.25),
-			fill_undercut: stream_p.fill_undercut.max(0.0),
-			fill_support_pad,
 		};
 
 		Some(Self {
@@ -447,7 +438,7 @@ mod tests {
 	}
 
 	#[test]
-	fn freeboard_under_wet_softmask() -> anyhow::Result<()> {
+	fn freeboard_under_wet_carve() -> anyhow::Result<()> {
 		let bounds = Bounds2::from_xz(0.0, 0.0, 500.0, 500.0);
 		let params = StreamsGraphParams::default();
 		let freeboard = params.stream.channel_freeboard;
@@ -458,7 +449,7 @@ mod tests {
 			assert!(corridor.path.len() >= 2);
 			for window in corridor.path.windows(2) {
 				let mid = window[0].lerp(window[1], 0.5);
-				if fill.softmask_at(mid.x, mid.y) > 0.85 {
+				if !fill.inside_horizontal(mid.x, mid.y) {
 					continue;
 				}
 				let w = fill.surface_level_at(mid.x, mid.y);
@@ -535,7 +526,7 @@ mod tests {
 	}
 
 	#[test]
-	fn fill_half_width_not_liberal() -> anyhow::Result<()> {
+	fn fill_stays_near_channel_carve() -> anyhow::Result<()> {
 		let bounds = Bounds2::from_xz(0.0, 0.0, 500.0, 500.0);
 		let g = StreamsGraph::from_bounds(
 			bounds,
@@ -547,12 +538,11 @@ mod tests {
 		let half = g.half_width;
 		let compiled = g.into_complex().compile();
 		let fill = compiled.fills.first().expect("fill");
-		// Spot-check: a point just outside channel half-width should be mostly dry.
 		if let Some(corridor) = compiled.wet_union.as_ref() {
 			let c = corridor.center();
 			let far = Vec2::new(c.x, c.y + half * 2.5);
 			assert!(
-				fill.softmask_at(far.x, far.y) > 0.5,
+				!fill.inside_horizontal(far.x, far.y),
 				"fill should not extend far past channel carve"
 			);
 		}

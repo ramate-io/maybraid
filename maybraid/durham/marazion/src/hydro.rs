@@ -62,9 +62,6 @@ pub struct ComplexApronParams {
 	pub apron_width: f32,
 	pub rim_height: RegionNoise,
 	pub rim_uplift_cap: f32,
-	/// Softmask fade for fill past \(\phi=0\).
-	pub shore_fade: f32,
-	pub fill_undercut: f32,
 }
 
 impl Default for ComplexApronParams {
@@ -75,8 +72,6 @@ impl Default for ComplexApronParams {
 			apron_width: 8.0,
 			rim_height: RegionNoise::from_seed(0, 0.02, 0.0),
 			rim_uplift_cap: DEFAULT_RIM_UPLIFT_CAP,
-			shore_fade: 2.5,
-			fill_undercut: 2.0,
 		}
 	}
 }

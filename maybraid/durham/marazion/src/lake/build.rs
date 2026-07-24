@@ -37,7 +37,7 @@ pub(crate) struct LakeLayout {
 pub(crate) struct LakeBowl {
 	pub wet_core: Region2D,
 	pub node: HydrologyNode,
-	/// Authoring metadata: water radius + rim bleed (fill softmask follows \(\phi\)).
+	/// Authoring metadata: water radius + rim bleed (water SDF follows carve \(\phi\)).
 	pub fill_radius: f32,
 }
 
@@ -112,10 +112,6 @@ pub(crate) fn build_bowl(
 		rim_height: apron_noise.rim_height,
 		rim_uplift_cap,
 		boundary_noise: Some(boundary_noise),
-		shore_fade: params.shore_fade.max(1.0),
-		fill_undercut: params.terrain_undercut.max(0.0),
-		// Liberal softmask past \(\phi = 0\) (rim-bleed style overhang).
-		fill_support_pad: rim_bleed.max(0.0),
 	};
 	let node = HydrologyNode::new(
 		HydroPrimitive {
