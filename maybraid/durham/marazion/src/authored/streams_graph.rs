@@ -5,9 +5,7 @@
 //! into one [`HydroComplex`] (sample-time union blend).
 
 use crate::authored::apron::{sample_apron_rim_noise, ApronNoiseSalts};
-use crate::primitive::parameters::{
-	HydroParams, DISABLE_RIM_LIFT, DISABLE_SHORE_BOUNDARY_NOISE, TARGET_RIM_WIDTH,
-};
+use crate::primitive::parameters::{HydroParams, TARGET_RIM_WIDTH};
 use crate::primitive::complex::HydroComplex;
 use crate::primitive::node::nodes_from_polyline;
 use crate::authored::noise::{n01_freq, scale_noise_freq};
@@ -295,29 +293,24 @@ impl StreamsGraph {
 
 		let rim_w = TARGET_RIM_WIDTH;
 		let apron_w = (budget.apron_half - budget.skirt_half).max(apron_band);
-		let shore_amp = if DISABLE_SHORE_BOUNDARY_NOISE {
-			0.0
-		} else {
-			(budget.half_width.max(1.0) * stream_p.shore_indent_frac.clamp(0.0, 0.45)).max(0.01)
-		};
-		let boundary_noise = if DISABLE_SHORE_BOUNDARY_NOISE {
-			None
-		} else {
-			let shore_freq = scale_noise_freq(
-				stream_p.shore_freq.max(0.0),
-				budget.half_width,
-				stream_p.apron.noise_freq_power,
-			);
-			Some(RegionNoise::from_seed(seed.wrapping_add(5), shore_freq, shore_amp))
-		};
-		let max_correction_extent = (rim_w + apron_w + shore_amp).max(0.0);
+		let shore_amp =
+			(budget.half_width.max(1.0) * stream_p.shore_indent_frac.clamp(0.0, 0.45)).max(0.01);
+		let shore_freq = scale_noise_freq(
+			stream_p.shore_freq.max(0.0),
+			budget.half_width,
+			stream_p.apron.noise_freq_power,
+		);
+		let boundary_noise = Some(RegionNoise::from_seed(
+			seed.wrapping_add(5),
+			shore_freq,
+			shore_amp,
+		));
+		let rim_boundary_noise = Some(apron_noise.apron.clone());
+		let rim_boundary_amp = apron_noise.apron_amp;
+		let max_correction_extent = (rim_w + apron_w + shore_amp + rim_boundary_amp).max(0.0);
 		let mut rim = stream_p.rim;
 		rim.width = rim_w;
-		rim.lift = if DISABLE_RIM_LIFT {
-			0.0
-		} else {
-			stream_p.rim.lift.max(0.0)
-		};
+		rim.lift = stream_p.rim.lift.max(0.0);
 		rim.shelf_anchor = None;
 		rim.uplift_cap = params.rim_uplift_cap.max(0.0);
 		let mut apron = stream_p.apron;
@@ -327,8 +320,12 @@ impl StreamsGraph {
 			apron,
 			rim_height: apron_noise.rim_height,
 			boundary_noise,
+			rim_boundary_noise,
 			shore_blend: HydroParams::recommend_shore_blend(rim_w, shore_amp),
-			rim_apron_blend: HydroParams::recommend_shore_blend(rim_w, shore_amp),
+			rim_apron_blend: HydroParams::recommend_shore_blend(
+				rim_w,
+				shore_amp.max(rim_boundary_amp),
+			),
 		};
 
 		Some(Self {

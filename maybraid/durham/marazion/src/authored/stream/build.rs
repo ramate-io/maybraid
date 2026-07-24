@@ -5,9 +5,7 @@ use crate::authored::noise::scale_noise_freq;
 use crate::authored::stream::{StreamBandBudget, StreamParams};
 use crate::primitive::complex::HydroComplex;
 use crate::primitive::node::nodes_from_polyline;
-use crate::primitive::parameters::{
-	HydroParams, DISABLE_RIM_LIFT, DISABLE_SHORE_BOUNDARY_NOISE, TARGET_RIM_WIDTH,
-};
+use crate::primitive::parameters::{HydroParams, TARGET_RIM_WIDTH};
 use bevy_math::Vec2;
 use jersey_terrain_stamps::RegionNoise;
 use procedural_common::Bounds2;
@@ -78,29 +76,23 @@ pub(crate) fn build_corridor(
 
 	let rim_w = TARGET_RIM_WIDTH;
 	let apron_width = (apron_w - skirt_w).max(apron_band);
-	let shore_amp = if DISABLE_SHORE_BOUNDARY_NOISE {
-		0.0
-	} else {
-		(half_w.max(1.0) * params.shore_indent_frac.clamp(0.0, 0.45)).max(0.01)
-	};
-	let boundary_noise = if DISABLE_SHORE_BOUNDARY_NOISE {
-		None
-	} else {
-		let shore_freq = scale_noise_freq(
-			params.shore_freq.max(0.0),
-			half_w,
-			params.apron.noise_freq_power,
-		);
-		Some(RegionNoise::from_seed(seed.wrapping_add(5), shore_freq, shore_amp))
-	};
-	let max_correction_extent = (rim_w + apron_width + shore_amp).max(0.0);
+	let shore_amp = (half_w.max(1.0) * params.shore_indent_frac.clamp(0.0, 0.45)).max(0.01);
+	let shore_freq = scale_noise_freq(
+		params.shore_freq.max(0.0),
+		half_w,
+		params.apron.noise_freq_power,
+	);
+	let boundary_noise = Some(RegionNoise::from_seed(
+		seed.wrapping_add(5),
+		shore_freq,
+		shore_amp,
+	));
+	let rim_boundary_noise = Some(apron_noise.apron.clone());
+	let rim_boundary_amp = apron_noise.apron_amp;
+	let max_correction_extent = (rim_w + apron_width + shore_amp + rim_boundary_amp).max(0.0);
 	let mut rim = params.rim;
 	rim.width = rim_w;
-	rim.lift = if DISABLE_RIM_LIFT {
-		0.0
-	} else {
-		params.rim.lift.max(0.0)
-	};
+	rim.lift = params.rim.lift.max(0.0);
 	rim.shelf_anchor = None;
 	rim.uplift_cap = params.rim.recipe_uplift_cap();
 	let mut apron = params.apron;
@@ -110,8 +102,12 @@ pub(crate) fn build_corridor(
 		apron,
 		rim_height: apron_noise.rim_height,
 		boundary_noise,
+		rim_boundary_noise,
 		shore_blend: HydroParams::recommend_shore_blend(rim_w, shore_amp),
-		rim_apron_blend: HydroParams::recommend_shore_blend(rim_w, shore_amp),
+		rim_apron_blend: HydroParams::recommend_shore_blend(
+			rim_w,
+			shore_amp.max(rim_boundary_amp),
+		),
 	};
 
 	StreamCorridor {

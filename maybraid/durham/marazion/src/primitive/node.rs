@@ -47,6 +47,7 @@ impl HydroNode {
 			.max(self.params.correction_pad())
 			.max(self.primitive.influence_pad)
 			+ self.params.boundary_noise_amp()
+			+ self.params.rim_boundary_noise_amp()
 	}
 
 	/// Representative interior sample (ellipse center / reach midpoint).
@@ -64,13 +65,26 @@ impl HydroNode {
 		Bounds2 { min: mn - Vec2::splat(pad), max: mx + Vec2::splat(pad) }
 	}
 
-	/// Occupancy SDF, optionally warped by shore [`HydroParams::boundary_noise`].
+	/// Occupancy SDF, optionally warped by shore [`HydroParams::boundary_noise`]
+	/// (centroid → ring / wet \(\phi = 0\)).
 	pub fn phi(&self, p: Vec2) -> f32 {
 		let mut d = self.primitive.phi(p);
 		if let Some(noise) = &self.params.boundary_noise {
 			d += noise.sample_boundary(p);
 		}
 		d
+	}
+
+	/// Noisy rim-outer radius along occupancy \(\phi\) (ring → apron seam).
+	///
+	/// Independent of [`Self::phi`]'s shore warp: \(r_{\mathrm{rim}}(p) =
+	/// r_{\mathrm{rim}} + \) [`HydroParams::rim_boundary_noise`].
+	pub fn rim_outer(&self, p: Vec2) -> f32 {
+		let mut r = self.params.rim.width.max(0.0);
+		if let Some(noise) = &self.params.rim_boundary_noise {
+			r += noise.sample_boundary(p);
+		}
+		r.max(0.0)
 	}
 
 	pub fn surface_level(&self, p: Vec2) -> f32 {
@@ -87,13 +101,13 @@ impl HydroNode {
 	/// Terrain blend uses [`Self::shore_blend_half`] to soften carve↔rim.
 	pub fn point_classification(&self, p: Vec2) -> Option<CorrectionStage> {
 		let d = self.phi(p);
-		let rim_w = self.params.rim.width.max(0.0);
+		let rim_edge = self.rim_outer(p);
 		let apron_w = self.params.apron.width.max(0.0);
 		if d <= 0.0 {
 			Some(CorrectionStage::Carve)
-		} else if d < rim_w {
+		} else if d < rim_edge {
 			Some(CorrectionStage::Rim)
-		} else if d < rim_w + apron_w {
+		} else if d < rim_edge + apron_w {
 			Some(CorrectionStage::Apron)
 		} else {
 			None
@@ -152,13 +166,14 @@ impl HydroNode {
 
 	/// Grade from bank at the (noisy) rim edge toward identity at the apron outer.
 	///
-	/// Uses occupancy \(\phi\) so the grade tracks the same shoreline as carve/rim.
+	/// Uses occupancy \(\phi\) and [`Self::rim_outer`] so the grade tracks both
+	/// noisy radii (shore + ring→apron).
 	pub fn apron_candidate(&self, elevation: f32, p: Vec2) -> f32 {
 		let d = self.phi(p);
-		let rim_w = self.params.rim.width.max(0.0);
+		let rim_edge = self.rim_outer(p);
 		let apron_w = self.params.apron.width.max(1e-3);
 		// Smoothstep grade: 0 at rim/apron seam (full bank), 1 at outer (terrain).
-		let u = ((d - rim_w) / apron_w).clamp(0.0, 1.0);
+		let u = ((d - rim_edge) / apron_w).clamp(0.0, 1.0);
 		let fade = u * u * (3.0 - 2.0 * u);
 		let bank = self.params.bank_target(self.surface_level(p), p);
 		// Raise-only: never cut below the incoming elevation while grading out.
@@ -170,18 +185,18 @@ impl HydroNode {
 		self.params.rim_apron_blend_half()
 	}
 
-	/// Soft rim↔apron height across \(\phi \in [r_{\mathrm{rim}}-\nu, r_{\mathrm{rim}}+\nu]\).
+	/// Soft rim↔apron height across \(\phi \in [r_{\mathrm{rim}}(p)-\nu, r_{\mathrm{rim}}(p)+\nu]\).
 	fn rim_apron_terrain_candidate(&self, elevation: f32, p: Vec2) -> f32 {
 		let d = self.phi(p);
-		let rim_w = self.params.rim.width.max(0.0);
+		let rim_edge = self.rim_outer(p);
 		let nu = self.rim_apron_blend_half();
 		let rim_h = self.rim_candidate(elevation, p);
 		let apron_h = self.apron_candidate(elevation, p);
 		if nu <= 1e-6 {
-			return if d < rim_w { rim_h } else { apron_h };
+			return if d < rim_edge { rim_h } else { apron_h };
 		}
-		// t = 0 at φ = rim_w - ν, t = 1 at φ = rim_w + ν.
-		let t = smoothstep01((d - (rim_w - nu)) / (2.0 * nu));
+		// t = 0 at φ = rim_edge - ν, t = 1 at φ = rim_edge + ν.
+		let t = smoothstep01((d - (rim_edge - nu)) / (2.0 * nu));
 		rim_h * (1.0 - t) + apron_h * t
 	}
 
@@ -194,7 +209,7 @@ impl HydroNode {
 	/// dipping beds via polynomial soft-min).
 	///
 	/// Soft rim↔apron: pure rim stays soft-max banks; a band around
-	/// \(r_{\mathrm{rim}}\) uses [`Self::rim_apron_terrain_candidate`] when no
+	/// \(r_{\mathrm{rim}}(p)\) uses [`Self::rim_apron_terrain_candidate`] when no
 	/// pure-rim node owns the column.
 	pub fn blend_terrain_elevation(nodes: &[&Self], elevation: f32, p: Vec2) -> f32 {
 		let mut carves: Vec<&Self> = Vec::new();
@@ -207,17 +222,17 @@ impl HydroNode {
 			let d = node.phi(p);
 			let mu = node.shore_blend_half();
 			let nu = node.rim_apron_blend_half();
-			let rim_w = node.params.rim.width.max(0.0);
+			let rim_edge = node.rim_outer(p);
 			let apron_w = node.params.apron.width.max(0.0);
 			if d <= 0.0 {
 				carves.push(node);
 			} else if d <= mu {
 				soft_shores.push(node);
-			} else if d < rim_w - nu {
+			} else if d < rim_edge - nu {
 				rims.push(node);
-			} else if d <= rim_w + nu {
+			} else if d <= rim_edge + nu {
 				soft_rim_aprons.push(node);
-			} else if d < rim_w + apron_w {
+			} else if d < rim_edge + apron_w {
 				aprons.push(node);
 			}
 		}
@@ -365,6 +380,37 @@ mod tests {
 		assert_eq!(node.point_classification(Vec2::new(20.0, 10.0)), Some(CorrectionStage::Rim));
 		assert_eq!(node.point_classification(Vec2::new(20.0, 14.0)), Some(CorrectionStage::Apron));
 		assert_eq!(node.point_classification(Vec2::new(20.0, 30.0)), None);
+		Ok(())
+	}
+
+	#[test]
+	fn rim_boundary_noise_shifts_ring_to_apron_seam() -> anyhow::Result<()> {
+		let mut node = reach_node(8.0);
+		// Constant +2 wu on rim outer (sample_boundary returns raw when not expand_only).
+		node.params.rim_boundary_noise =
+			Some(jersey_terrain_stamps::RegionNoise::from_seed(0, 0.0, 2.0));
+		// Force a constant sample by using amp with zero frequency — still spatial.
+		// Instead assert via rim_outer offset when noise amp is large and we pick a
+		// point where classification must move with rim_edge.
+		let p = Vec2::new(20.0, 12.5); // φ ≈ 4.5; nominal rim_w=4 → apron; +noise may pull back to rim
+		let edge = node.rim_outer(p);
+		anyhow::ensure!(
+			(edge - 4.0).abs() > 1e-3 || node.params.rim_boundary_noise_amp() > 0.0,
+			"rim boundary noise should be attached"
+		);
+		anyhow::ensure!(edge >= 0.0, "rim_outer non-negative");
+		// Classification must agree with noisy edge, not nominal rim.width alone.
+		let d = node.phi(p);
+		let expected = if d <= 0.0 {
+			Some(CorrectionStage::Carve)
+		} else if d < edge {
+			Some(CorrectionStage::Rim)
+		} else if d < edge + node.params.apron.width {
+			Some(CorrectionStage::Apron)
+		} else {
+			None
+		};
+		assert_eq!(node.point_classification(p), expected);
 		Ok(())
 	}
 

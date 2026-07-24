@@ -37,6 +37,5 @@ pub use primitive::hydro::{
 pub use primitive::node::{nodes_from_polyline, HydroNode};
 pub use primitive::parameters::{
 	ApronParams, ComplexParams, CorrectionStage, HydroParams, RimParams,
-	DEFAULT_RIM_UPLIFT_CAP, DISABLE_RIM_HEIGHT_NOISE, DISABLE_RIM_LIFT,
-	DISABLE_SHORE_BOUNDARY_NOISE, TARGET_RIM_WIDTH,
+	DEFAULT_RIM_UPLIFT_CAP, TARGET_RIM_WIDTH,
 };
