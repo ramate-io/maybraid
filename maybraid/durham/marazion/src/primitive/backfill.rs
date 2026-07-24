@@ -179,13 +179,7 @@ pub struct BasinBackfillParams {
 
 impl Default for BasinBackfillParams {
 	fn default() -> Self {
-		Self {
-			depth_frac: 1.0,
-			freq: 0.04,
-			fade: 2.0,
-			octaves: 1,
-			add_only: false,
-		}
+		Self { depth_frac: 1.0, freq: 0.04, fade: 2.0, octaves: 1, add_only: false }
 	}
 }
 
@@ -249,13 +243,7 @@ pub struct RimBackfillParams {
 
 impl Default for RimBackfillParams {
 	fn default() -> Self {
-		Self {
-			band: 14.0,
-			amp: 3.5,
-			freq: 0.045,
-			octaves: 2,
-			add_only: true,
-		}
+		Self { band: 14.0, amp: 3.5, freq: 0.045, octaves: 2, add_only: true }
 	}
 }
 
@@ -263,29 +251,26 @@ impl RimBackfillParams {
 	/// Size band (and a matching amp) from a characteristic leaf extent.
 	///
 	/// `band = extent * band_frac`; amp scales with band so grit stays visible.
-	/// Leaves pick `band_frac` from their geometry (e.g. lake ≈ 0.25 of water
-	/// radius, stream ≈ 0.30 of half-width).
+	/// Leaves pick `band_frac` via [`Self::for_lake`] / [`Self::for_stream`].
 	pub fn from_extent(extent: f32, band_frac: f32) -> Self {
 		let e = extent.max(1.0);
-		let frac = band_frac.clamp(0.05, 0.9);
+		let frac = band_frac.clamp(0.05, 0.95);
 		let band = (e * frac).max(4.0);
-		// ~45% of band height, floored so small streams still punch.
-		let amp = (band * 0.45).clamp(4.0, 14.0);
-		Self {
-			band,
-			amp,
-			..Self::default()
-		}
+		// ~55% of band height, floored so small leaves still punch.
+		let amp = (band * 0.55).clamp(5.0, 18.0);
+		Self { band, amp, ..Self::default() }
 	}
 
-	/// Lake shore grit: ~25% of short water radius either side of \(\phi = 0\).
+	/// Lake shore grit: ~45% of short water radius either side of \(\phi = 0\).
 	pub fn for_lake(water_radius: f32) -> Self {
-		Self::from_extent(water_radius, 0.25)
+		Self::from_extent(water_radius, 0.45)
 	}
 
-	/// Stream shore grit: ~30% of channel half-width either side of \(\phi = 0\).
+	/// Stream shore grit: ~70% of channel half-width, high frequency, hot amp.
 	pub fn for_stream(half_width: f32) -> Self {
-		Self::from_extent(half_width, 0.30)
+		let mut p = Self::from_extent(half_width, 0.80);
+		p.freq = 0.02;
+		p
 	}
 
 	/// Build a [`HydroBackfill::Rim`].
@@ -299,11 +284,7 @@ impl RimBackfillParams {
 			octaves: self.octaves.max(1) as u32,
 			noise_type: NoiseType::Perlin,
 		});
-		HydroBackfill::Rim(RimBackfill {
-			noise,
-			band: self.band.max(0.5),
-			add_only: self.add_only,
-		})
+		HydroBackfill::Rim(RimBackfill { noise, band: self.band.max(0.5), add_only: self.add_only })
 	}
 }
 
@@ -319,13 +300,7 @@ pub struct NodeBackfillParams {
 
 impl Default for NodeBackfillParams {
 	fn default() -> Self {
-		Self {
-			amp: 1.5,
-			freq: 0.03,
-			fade: 3.0,
-			octaves: 1,
-			add_only: true,
-		}
+		Self { amp: 1.5, freq: 0.03, fade: 3.0, octaves: 1, add_only: true }
 	}
 }
 
@@ -352,10 +327,8 @@ impl NodeBackfillParams {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use crate::primitive::hydro::{
-		HydroElevation, HydroFootprint, ReachProfile, ReachSegment,
-	};
 	use crate::primitive::hydro::HydroPrimitive;
+	use crate::primitive::hydro::{HydroElevation, HydroFootprint, ReachProfile, ReachSegment};
 	use crate::primitive::parameters::HydroParams;
 
 	fn reach_node(half_width: f32) -> HydroNode {
@@ -399,11 +372,8 @@ mod tests {
 	#[test]
 	fn rim_weight_peaks_at_shore() -> anyhow::Result<()> {
 		let node = reach_node(8.0);
-		let bf = RimBackfill {
-			noise: RegionNoise::from_seed(2, 0.05, 2.0),
-			band: 4.0,
-			add_only: true,
-		};
+		let bf =
+			RimBackfill { noise: RegionNoise::from_seed(2, 0.05, 2.0), band: 4.0, add_only: true };
 		let w_shore = bf.weight(&node, Vec2::new(20.0, 8.0));
 		let w_far = bf.weight(&node, Vec2::new(20.0, 20.0));
 		anyhow::ensure!(w_shore > 0.9, "shore weight {w_shore}");
@@ -414,11 +384,8 @@ mod tests {
 	#[test]
 	fn node_weight_covers_apron_support() -> anyhow::Result<()> {
 		let node = reach_node(8.0);
-		let bf = NodeBackfill {
-			noise: RegionNoise::from_seed(3, 0.05, 2.0),
-			fade: 2.0,
-			add_only: true,
-		};
+		let bf =
+			NodeBackfill { noise: RegionNoise::from_seed(3, 0.05, 2.0), fade: 2.0, add_only: true };
 		// rim 4 + apron 8 → support 12; φ≈10 at y=18.
 		let w_mid = bf.weight(&node, Vec2::new(20.0, 14.0));
 		let w_far = bf.weight(&node, Vec2::new(20.0, 40.0));
@@ -429,10 +396,7 @@ mod tests {
 
 	#[test]
 	fn amp_scales_with_freeboard_and_depth_frac() -> anyhow::Result<()> {
-		let p = BasinBackfillParams {
-			depth_frac: 1.25,
-			..BasinBackfillParams::default()
-		};
+		let p = BasinBackfillParams { depth_frac: 1.25, ..BasinBackfillParams::default() };
 		anyhow::ensure!((p.amp_for_freeboard(8.0) - 10.0).abs() < 1e-4);
 		anyhow::ensure!((p.amp_for_freeboard(4.0) - 5.0).abs() < 1e-4);
 		Ok(())
@@ -441,10 +405,12 @@ mod tests {
 	#[test]
 	fn rim_params_scale_from_leaf_extent() -> anyhow::Result<()> {
 		let lake = RimBackfillParams::for_lake(80.0);
-		anyhow::ensure!((lake.band - 20.0).abs() < 1e-3, "lake band={}", lake.band);
-		anyhow::ensure!(lake.amp >= 8.0, "lake amp should be visible, got {}", lake.amp);
+		anyhow::ensure!((lake.band - 36.0).abs() < 1e-3, "lake band={}", lake.band);
+		anyhow::ensure!(lake.amp >= 12.0, "lake amp should be hot, got {}", lake.amp);
 		let stream = RimBackfillParams::for_stream(20.0);
-		anyhow::ensure!((stream.band - 6.0).abs() < 1e-3, "stream band={}", stream.band);
+		anyhow::ensure!((stream.band - 14.0).abs() < 1e-3, "stream band={}", stream.band);
+		anyhow::ensure!(stream.amp >= 20.0, "stream amp tripled, got {}", stream.amp);
+		anyhow::ensure!(stream.freq >= 0.10, "stream freq raised, got {}", stream.freq);
 		Ok(())
 	}
 }

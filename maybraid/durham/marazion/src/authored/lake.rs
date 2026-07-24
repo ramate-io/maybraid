@@ -475,9 +475,13 @@ mod tests {
 			lake.water_level
 		);
 		let shelf = lake.water_level + params.water_sink.max(0.0);
+		// Rim backfill can add several wu of shore grit on top of bank_target.
+		let rim_bf_budget = crate::primitive::backfill::RimBackfillParams::for_lake(lake.water_radius)
+			.amp
+			+ 2.0;
 		assert!(
-			h <= shelf + params.rim.lift + params.rim.height_amp_max + 2.0,
-			"rim {h} should stay near shelf_anchor+rim_lift (+ capped noise)"
+			h <= shelf + params.rim.lift + params.rim.height_amp_max + rim_bf_budget,
+			"rim {h} should stay near shelf_anchor+rim_lift (+ rim backfill)"
 		);
 		Ok(())
 	}
