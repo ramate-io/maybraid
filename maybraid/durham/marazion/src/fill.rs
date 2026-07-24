@@ -1,9 +1,9 @@
 //! Stamp-owned water fill for Marazion pocket bodies (lakes and streams).
 //!
 //! Hydro fills delegate to [`HydrologyComplex::water_distance`]: outside the carve,
-//! approximate distance to \(\phi = 0\); inside, the vertical slab between terrain
-//! \(h\) and blended free surface \(W\). Flat fills (unit tests) use the same slab
-//! idea against a circle/region SDF.
+//! approximate distance to \(\phi = 0\); inside, half-space below the blended free
+//! surface \(W\) (`y - W`). Flat fills (unit tests) use the same pattern against a
+//! region SDF.
 
 use crate::complex::HydrologyComplex;
 use bevy_math::{Vec2, Vec3};
@@ -31,10 +31,10 @@ impl WaterSurface {
 /// Stamp-owned water volume (Lake / Stream).
 ///
 /// Hydro: [`Self::distance`] delegates to [`HydrologyComplex::water_distance`].
-/// Flat: region SDF ∩ slab \([h, W]\).
+/// Flat: region exterior ∪ half-space below \(W\).
 #[derive(Debug, Clone)]
 pub struct WaterFill {
-	/// Horizontal footprint proxy (probes / Flat SDF). Hydro soft-support is \(\phi\).
+	/// Horizontal footprint proxy (probes / Flat SDF). Hydro support is carve \(\phi\).
 	pub region: Region2D,
 	/// Water surface elevation model decided by the stamp.
 	pub surface: WaterSurface,
@@ -72,17 +72,12 @@ impl WaterFill {
 		}
 	}
 
-	/// Vertical wet interval when the column is wet: \((h, W]\) with \(W > h\).
-	pub fn wet_y_span_at(&self, x: f32, z: f32, terrain_height: f32) -> Option<(f32, f32)> {
+	/// Vertical wet interval when the column is wet: \((-\infty, W]\).
+	pub fn wet_y_span_at(&self, x: f32, z: f32, _terrain_height: f32) -> Option<(f32, f32)> {
 		if !self.inside_horizontal(x, z) {
 			return None;
 		}
-		let w = self.surface_level_at(x, z);
-		if w > terrain_height {
-			Some((terrain_height, w))
-		} else {
-			None
-		}
+		Some((f32::NEG_INFINITY, self.surface_level_at(x, z)))
 	}
 
 	/// Water SDF at `p` given composed terrain height `terrain_height`.
@@ -91,9 +86,11 @@ impl WaterFill {
 			WaterSurface::Hydro { complex } => complex.water_distance(p, terrain_height),
 			WaterSurface::Flat { level } => {
 				let d_xz = self.region.sdf(Vec2::new(p.x, p.z));
-				let d_top = p.y - *level;
-				let d_bot = terrain_height - p.y;
-				d_xz.max(d_top).max(d_bot)
+				if d_xz > 0.0 {
+					d_xz
+				} else {
+					p.y - *level
+				}
 			}
 		}
 	}
@@ -105,7 +102,7 @@ mod tests {
 	use jersey_terrain_stamps::CircleRegion;
 
 	#[test]
-	fn flat_slab_is_between_terrain_and_w() -> anyhow::Result<()> {
+	fn flat_half_space_below_w_inside_region() -> anyhow::Result<()> {
 		let w = 40.0;
 		let fill = WaterFill {
 			region: Region2D::Circle(CircleRegion {
@@ -115,13 +112,14 @@ mod tests {
 			surface: WaterSurface::Flat { level: w },
 		};
 		let h = 36.0;
-		assert!(fill.wet_y_span_at(0.0, 0.0, h).is_some());
-		assert!(fill.distance(Vec3::new(0.0, 38.0, 0.0), h) < 0.0);
+		let span = fill.wet_y_span_at(0.0, 0.0, h).expect("wet");
+		assert!(span.0.is_infinite() && span.0.is_sign_negative());
+		assert_eq!(span.1, w);
+		assert!(fill.distance(Vec3::new(0.0, w - 1.0, 0.0), h) < 0.0);
 		assert!(fill.distance(Vec3::new(0.0, w + 1.0, 0.0), h) > 0.0);
-		assert!(fill.distance(Vec3::new(0.0, h - 1.0, 0.0), h) > 0.0);
-		// Bank above W → dry column.
-		assert!(fill.wet_y_span_at(0.0, 0.0, w + 1.75).is_none());
-		// Outside region → outside.
+		// Half-space continues below the bed (terrain occludes in the scene).
+		assert!(fill.distance(Vec3::new(0.0, h - 1.0, 0.0), h) < 0.0);
+		// Outside region → positive XZ distance.
 		assert!(fill.distance(Vec3::new(80.0, 38.0, 0.0), h) > 0.0);
 		Ok(())
 	}

@@ -155,9 +155,9 @@ that then fights graded surfaces sharing a cell).
    emit a [`WaterFill`](../marazion/src/fill.rs) whose hydro surface is a
    [`HydrologyComplex`](../marazion/src/complex.rs). The complex owns \(W\) blend
    and the water SDF — do not invent a second meshing grid in the stamp.
-2. **Wet solid = carve × slab.** Outside carve, return approximate distance to
-   \(\phi = 0\) (not a huge sentinel). Inside carve, distance is
-   \(\max(y-W,\, h-y)\). Optional later: small \(\mu\) on \(\phi\), \(\alpha\) on \(h\).
+2. **Wet solid = carve × half-space.** Outside carve, return approximate distance
+   to \(\phi = 0\). Inside carve, distance is \(y - W\) (flat free surface;
+   terrain occludes subterranean volume). Optional later: small \(\mu\) on \(\phi\).
 3. **Carve for look; fill follows carve.** Terrain mods shape the visible bed.
    Water XZ support is the same carve occupancy (hard boundary). Narrow
    silhouettes come from the heightfield, not from starving a softmask.

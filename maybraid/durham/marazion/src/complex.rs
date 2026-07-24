@@ -75,7 +75,7 @@ impl CompiledWatershed {
 }
 
 /// Captures and indexes hydrology nodes; owns carve → rim → apron modulation
-/// and the pocket water SDF (carve × slab).
+/// and the pocket water SDF (carve × half-space below \(W\)).
 #[derive(Debug, Clone)]
 pub struct HydrologyComplex {
 	pub bounds: Bounds2,
@@ -258,14 +258,15 @@ impl HydrologyComplex {
 		(dx * dx + dz * dz).sqrt()
 	}
 
-	/// Pocket water SDF: outside carve → distance to carve; inside → slab \([h, W]\).
-	pub fn water_distance(&self, p: Vec3, terrain_height: f32) -> f32 {
+	/// Pocket water SDF: outside carve → distance to carve; inside → half-space below \(W\).
+	///
+	/// Terrain occludes subterranean volume; the free surface stays flat at \(W\)
+	/// across the carve (not a slab against \(h\)).
+	pub fn water_distance(&self, p: Vec3, _terrain_height: f32) -> f32 {
 		let Some(w) = self.surface_at(p.x, p.z) else {
 			return self.approximate_distance_to_carve(p.x, p.z);
 		};
-		let d_top = p.y - w;
-		let d_bot = terrain_height - p.y;
-		d_top.max(d_bot)
+		p.y - w
 	}
 
 	/// Build a [`WaterFill`] that delegates SDF / \(W\) to this complex.
@@ -435,7 +436,7 @@ mod tests {
 			"pitched mid-channel should stay wet: W={w} h={h}"
 		);
 		let d = fill.distance(bevy_math::Vec3::new(mid.x, (h + w) * 0.5, mid.y), h);
-		assert!(d < 0.0, "slab interior should be negative, got {d}");
+		assert!(d < 0.0, "half-space interior should be negative, got {d}");
 		Ok(())
 	}
 

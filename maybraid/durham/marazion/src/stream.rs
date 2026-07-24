@@ -73,7 +73,8 @@ pub struct StreamParams {
 
 	/// How far below the water surface \(W\) the channel floor grade sits.
 	///
-	/// Keeps the carved bed under \(W\) so the wet slab \([h, W]\) has thickness.
+	/// Keeps the carved bed under \(W\) so wet columns stay open under the
+	/// free-surface half-space (see [`crate::fill::WaterFill`]).
 	pub channel_freeboard: f32,
 
 	/// Hysteresis spine walk (step / snap) — uses Jersey defaults when left at default.

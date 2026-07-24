@@ -10,7 +10,7 @@
 //! | Mesh resolution | [`TerrainPresentationAssets::res_2`](crate::terrain::presentation::TerrainPresentationAssets) via the sibling [`Terrain`] cell | inherited from that [`Terrain::res_2`] — never a separate water grid |
 //!
 //! Marazion stamps author [`WaterFill`]s backed by [`HydrologyComplex`] (carve ×
-//! slab \([h, W]\)). This module collects those fills from an already composed
+//! half-space below \(W\)). This module collects those fills from an already composed
 //! [`Terrain`] cell and presents [`ComposedWater`] on that shared sample space.
 //!
 //! **Order:** [`Terrain`] must compose **all** Marazion watershed bands before

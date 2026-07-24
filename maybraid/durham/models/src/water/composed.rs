@@ -9,7 +9,7 @@
 //! **Same sample space as terrain.** Water cells are the same origin cells as
 //! [`TerrainCellLayout`](crate::terrain::cell::TerrainCellLayout), use the same
 //! `res_2`, and mesh with the same cascade chunk bounds (including full cell Y).
-//! Hydro fills are carve × slab \([h, W]\) (see [`WaterFill`] /
+//! Hydro fills are carve × half-space below \(W\) (see [`WaterFill`] /
 //! [`HydrologyComplex::water_distance`](marazion_watersheds::HydrologyComplex::water_distance)).
 
 use crate::terrain::sdf::TerrainSdf;
@@ -58,26 +58,20 @@ impl Sdf for ComposedWater {
 		let h = self.terrain.height_at_with_all_modulations(x, z);
 		let p_xz = Vec2::new(x, z);
 
-		// Union of wet slabs (h, W] over fills → [h_min, W_max] when any wet.
-		let mut wet_lo = f32::INFINITY;
+		// Half-space below W: union of wet columns → (-∞, W_max].
 		let mut wet_top = f32::NEG_INFINITY;
 		let mut any_wet = false;
 		for fill in &self.fills {
-			if let Some((lo, hi)) = fill.wet_y_span_at(p_xz.x, p_xz.y, h) {
+			if let Some((_lo, hi)) = fill.wet_y_span_at(p_xz.x, p_xz.y, h) {
 				any_wet = true;
-				wet_lo = wet_lo.min(lo);
 				wet_top = wet_top.max(hi);
 			}
 		}
 
 		let mut intervals = SignUniformIntervals::default();
-		if any_wet && wet_top.is_finite() && wet_lo.is_finite() && wet_top > wet_lo {
+		if any_wet && wet_top.is_finite() {
 			intervals.insert_boundary(SignBoundary {
 				min: f32::NEG_INFINITY,
-				sign: Sign::Positive,
-			});
-			intervals.insert_boundary(SignBoundary {
-				min: wet_lo,
 				sign: Sign::Negative,
 			});
 			intervals.insert_boundary(SignBoundary {
