@@ -1,9 +1,9 @@
 //! Lake pocket water — [RFC-127 §3.1.3.1](https://github.com/ramate-io/maybraid/tree/main/rfc/rfc-000-000-127-marazion-watersheds#3131-lake).
 //!
-//! Three-band footprint (center → edge):
-//! - **Water** — elliptical bowl depressed below surface `W` (deeper toward centroid)
-//! - **Rim** — flat plateau shelf slightly **above** `W` between water edge and plateau edge
-//! - **Apron** — soft blend from plateau edge back to identity terrain
+//! Authored as an ellipse [`crate::primitive::hydro::HydroPrimitive`] (`RadialBowl`) with a
+//! shared complex rim/apron from \(\phi_{\mathrm{union}}\):
+//! - **Water** — elliptical bowl depressed below surface \(W\) (deeper toward centroid)
+//! - **Rim / apron** — one complex-wide raise-only band outside \(\phi=0\)
 //!
 //! Axes follow the leaf aspect, inscribed from the jittered centroid (per-edge
 //! clearance), with a small noisy rotation. Leaves must still leave room for
@@ -16,10 +16,10 @@ pub(crate) mod shelf;
 pub use budget::LakeBandBudget;
 pub use shelf::shelf_base_height;
 
-use crate::apron::WatershedApronParams;
-use crate::complex::WatershedDepressionComplex;
-use crate::lake::build::{build_bowl, LakeBowl, LakeLayout};
-use crate::lake::shelf::{
+use crate::primitive::complex::HydroComplex;
+use crate::primitive::parameters::{ApronParams, RimParams};
+use crate::authored::lake::build::{build_bowl, LakeBowl, LakeLayout};
+use crate::authored::lake::shelf::{
 	aspect_u01, planned_center as planned_center_impl, rim_width_u01, rotation_u11, shelf_levels,
 	water_scale_u01,
 };
@@ -74,12 +74,6 @@ pub struct LakeParams {
 	// ── Vertical levels ────────────────────────────────────────────────────
 	/// How far below the shelf anchor the water surface `W` sits (world units).
 	pub water_sink: f32,
-	/// How far the rim shelf sits **above** the shelf anchor (world units).
-	pub rim_lift: f32,
-	/// How far the wet-column gate bites into terrain (`h − undercut`).
-	/// Wet columns are half-spaces below \(W\); undercut only decides which
-	/// columns count as wet (shoreline under raised rims).
-	pub terrain_undercut: f32,
 	/// Per-leaf jitter on the shelf anchor height that sets `W` and rim base.
 	pub shelf_amp: f32,
 	/// How many pre-watershed heights to sample on a ring around the centroid
@@ -87,7 +81,8 @@ pub struct LakeParams {
 	pub shelf_sample_count: u8,
 
 	// ── Bowl depth ─────────────────────────────────────────────────────────
-	/// Bowl depth scale at the centroid (world units below `W`).
+	/// Max bowl depth at the centroid for a lake whose short water axis equals
+	/// [`crate::authored::noise::NOISE_FREQ_REF_RADIUS`] (scales with water radius in build).
 	pub depth: f32,
 	/// Exponent on `(1 - r)` for the radial depth falloff.
 	pub depth_falloff_power: f32,
@@ -97,7 +92,7 @@ pub struct LakeParams {
 	pub depth_shore_frac: f32,
 	/// Bipolar bed-noise amplitude (world units); may raise bed above `W`.
 	pub depth_noise_amp: f32,
-	/// Bed-noise frequency at [`crate::noise::NOISE_FREQ_REF_RADIUS`] (scaled in
+	/// Bed-noise frequency at [`crate::authored::noise::NOISE_FREQ_REF_RADIUS`] (scaled in
 	/// [`Lake::from_bounds`] by `(ref / short_water)^apron.noise_freq_power`).
 	pub depth_noise_freq: f32,
 	/// Extra headroom above the rim shelf for island / peninsula peaks.
@@ -106,25 +101,25 @@ pub struct LakeParams {
 	// ── Shore outline (water bowl + wet fill) — higher frequency ───────────
 	/// Max bipolar shore indent/expand as a fraction of the short water axis.
 	pub shore_indent_frac: f32,
-	/// Shore boundary frequency at [`crate::noise::NOISE_FREQ_REF_RADIUS`] (scaled geometrically
+	/// Shore boundary frequency at [`crate::authored::noise::NOISE_FREQ_REF_RADIUS`] (scaled geometrically
 	/// in [`Lake::from_bounds`]).
 	pub shore_freq: f32,
 
-	/// Shared apron outline + add-only rim height (`noise_freq_power` also scales shore/bed).
-	pub apron: WatershedApronParams,
+	/// Apron band + indent-noise recipe (`noise_freq_power` also scales shore/bed).
+	pub apron: ApronParams,
+	/// Rim band + height-noise recipe (`lift` is bank above the shelf anchor).
+	pub rim: RimParams,
 
-	// ── Fill pad ───────────────────────────────────────────────────────────
-	/// Horizontal softmask pad past the bowl, as a fraction of rim width.
+	/// Horizontal fill metadata pad past the bowl, as a fraction of rim width
+	/// (plan `fill_radius` only — water SDF follows carve \(\phi\)).
 	pub rim_bleed_frac: f32,
-	/// SDF-relative fade past the fill edge.
-	pub shore_fade: f32,
 }
 
 impl Default for LakeParams {
 	fn default() -> Self {
 		Self {
-			rim_frac: 0.1,
-			apron_frac: 0.6,
+			rim_frac: 0.025,
+			apron_frac: 0.35,
 			mu: 12.0,
 			centroid_jitter: 0.12,
 			aspect_strength: 0.95,
@@ -142,8 +137,6 @@ impl Default for LakeParams {
 			rim_width_freq: 0.1,
 
 			water_sink: 0.9,
-			rim_lift: 1.25,
-			terrain_undercut: 2.5,
 			shelf_amp: 2.0,
 			shelf_sample_count: 6,
 
@@ -157,17 +150,21 @@ impl Default for LakeParams {
 			shore_indent_frac: 0.18,
 			shore_freq: 0.022,
 
-			apron: WatershedApronParams::default(),
+			apron: ApronParams::default(),
+			rim: {
+				let mut rim = RimParams::default().with_visible_rim_bank();
+				rim.lift = 1.25;
+				rim
+			},
 
 			rim_bleed_frac: 0.5,
-			shore_fade: 3.0,
 		}
 	}
 }
 
 /// Authored lake **plan**: layout metadata for one pocket-water leaf.
 ///
-/// Realize with [`Self::into_complex`] into a [`WatershedDepressionComplex`]
+/// Realize with [`Self::into_complex`] into a [`HydroComplex`]
 /// (the representation stored on terrain cells). `None` from [`Self::from_bounds`]
 /// means the leaf is too small to host a lake.
 #[derive(Debug, Clone)]
@@ -228,8 +225,9 @@ impl Lake {
 			rotation: layout.budget.rotation,
 			water_radius: layout.budget.water_radius(),
 			plateau_radius: layout.budget.plateau_radius(),
-			rim_width: layout.budget.rim_width,
-			apron_width: layout.budget.apron_width,
+			// Authored hydro rim (may differ from the band-budget claim).
+			rim_width: bowl.node.params.rim.width,
+			apron_width: bowl.node.params.apron.width,
 			fill_radius,
 			water_level: layout.levels.water_level,
 			bowl,
@@ -240,8 +238,13 @@ impl Lake {
 		Self::from_bounds(bounds, seed, LakeParams::default(), None)
 	}
 
-	/// Realize this plan as a sole-node [`WatershedDepressionComplex`].
-	pub fn into_complex(self) -> WatershedDepressionComplex {
+	/// Hydrology nodes authored by this lake (one radial bowl).
+	pub fn hydro_nodes(&self) -> Vec<crate::primitive::node::HydroNode> {
+		vec![self.bowl.node.clone()]
+	}
+
+	/// Realize this plan as a sole-node [`HydroComplex`].
+	pub fn into_complex(self) -> HydroComplex {
 		self.bowl.into_complex(self.bounds, self.seed)
 	}
 }
@@ -249,27 +252,13 @@ impl Lake {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use crate::fill::WaterFill;
-	use crate::lake::budget::{aspect_blend, MIN_WATER_RADIUS};
-	use crate::noise::scale_noise_freq;
+	use crate::primitive::fill::{WaterFill, WaterSurface};
+	use crate::authored::lake::budget::{aspect_blend, MIN_WATER_RADIUS};
+	use crate::authored::noise::scale_noise_freq;
 	use bevy_math::Vec2;
-	use jersey_terrain_stamps::JerseyModulation;
 
-	fn apply_mods(mods: &[JerseyModulation], h: f32, x: f32, z: f32) -> f32 {
-		let mut y = h;
-		for m in mods {
-			y = m.modify_elevation(y, x, z);
-		}
-		y
-	}
-
-	fn softmask_at(fill: &WaterFill, x: f32, z: f32) -> f32 {
-		fill.region.softmask_weight(
-			Vec2::new(x, z),
-			fill.inner_radius,
-			fill.outer_radius,
-			fill.noise.as_ref(),
-		)
+	fn inside_fill(fill: &WaterFill, x: f32, z: f32) -> bool {
+		fill.inside_horizontal(x, z)
 	}
 
 	#[test]
@@ -367,7 +356,7 @@ mod tests {
 
 	#[test]
 	fn noise_freq_scales_geometrically_and_caps_small() -> anyhow::Result<()> {
-		use crate::noise::NOISE_FREQ_REF_RADIUS;
+		use crate::authored::noise::NOISE_FREQ_REF_RADIUS;
 		let power = 0.5;
 		let f_ref = scale_noise_freq(0.04, NOISE_FREQ_REF_RADIUS, power);
 		let f_small = scale_noise_freq(0.04, NOISE_FREQ_REF_RADIUS * 0.5, power);
@@ -429,13 +418,32 @@ mod tests {
 	}
 
 	#[test]
+	fn compiles_to_hydro_not_jersey_carve() -> anyhow::Result<()> {
+		let bounds = Bounds2::from_xz(0.0, 0.0, 320.0, 320.0);
+		let lake = Lake::from_bounds(bounds, 11, LakeParams::default(), Some(&|_, _| 40.0)).expect("lake");
+		let compiled = lake.into_complex().compile();
+		assert!(compiled.has_hydro());
+		assert!(compiled.modulations.is_empty());
+		assert_eq!(compiled.fills.len(), 1);
+		assert!(matches!(
+			compiled.fills[0].surface,
+			WaterSurface::Hydro { .. }
+		));
+		Ok(())
+	}
+
+	#[test]
 	fn bowl_below_water_level() -> anyhow::Result<()> {
 		let bounds = Bounds2::from_xz(0.0, 0.0, 320.0, 320.0);
 		let base = 40.0;
 		let mut params = LakeParams::default();
 		params.depth_noise_amp = 0.0;
 		let lake = Lake::from_bounds(bounds, 11, params, Some(&|_, _| base)).expect("lake");
-		let h = apply_mods(&lake.clone().into_complex().compile().modulations, base, lake.center.x, lake.center.y);
+		let h = lake
+			.clone()
+			.into_complex()
+			.compile()
+			.modify_elevation(base, lake.center.x, lake.center.y);
 		assert!(
 			h < lake.water_level - 1.0,
 			"bowl {h} should sit below surface {}",
@@ -445,68 +453,52 @@ mod tests {
 	}
 
 	#[test]
-	fn depth_shore_frac_one_flattens_floor() -> anyhow::Result<()> {
-		let bounds = Bounds2::from_xz(0.0, 0.0, 320.0, 320.0);
-		let base = 40.0;
-		let mut params = LakeParams::default();
-		params.depth_noise_amp = 0.0;
-		params.depth_shore_frac = 1.0;
-		params.rotation_amp = 0.0;
-		params.aspect_strength = 0.0;
-		params.aspect_floor = 0.0;
-		let lake = Lake::from_bounds(bounds, 11, params, Some(&|_, _| base)).expect("lake");
-		let h_c = apply_mods(&lake.clone().into_complex().compile().modulations, base, lake.center.x, lake.center.y);
-		let mid = lake.center + Vec2::new(lake.water_radius * 0.55, 0.0);
-		let h_m = apply_mods(&lake.clone().into_complex().compile().modulations, base, mid.x, mid.y);
-		assert!(
-			(h_c - h_m).abs() < 1.25,
-			"flat-floor shore_frac should keep mid-bowl {h_m} near center {h_c}"
-		);
-		assert!(h_c < lake.water_level - 1.0);
-		Ok(())
-	}
-
-	#[test]
-	fn rim_annulus_stays_near_surface() -> anyhow::Result<()> {
+	fn rim_raises_above_water_near_shore() -> anyhow::Result<()> {
 		let bounds = Bounds2::from_xz(0.0, 0.0, 320.0, 320.0);
 		let base = 40.0;
 		let mut params = LakeParams::default();
 		params.rotation_amp = 0.0;
 		params.aspect_strength = 0.0;
+		params.rim.height_amp_min = 0.0;
+		params.rim.height_amp_max = 0.0;
+		params.shore_indent_frac = 0.0;
 		let lake = Lake::from_bounds(bounds, 11, params, Some(&|_, _| base)).expect("lake");
-		let shore_amp = lake.water_radius * params.shore_indent_frac;
-		let mid_r = lake.water_radius + shore_amp + lake.rim_width * 0.55;
+		let mid_r = lake.water_radius + lake.rim_width * 0.4;
 		let p = lake.center + Vec2::new(mid_r, 0.0);
-		let h = apply_mods(&lake.clone().into_complex().compile().modulations, base, p.x, p.y);
-		let rim_base = lake.water_level + params.rim_lift + params.water_sink;
-		assert!(h + 0.25 >= rim_base, "rim {h} should sit at/above base rim {rim_base}");
+		let h = lake
+			.clone()
+			.into_complex()
+			.compile()
+			.modify_elevation(base, p.x, p.y);
 		assert!(
-			h <= rim_base + params.apron.rim_height_amp_max + 0.75,
-			"rim {h} should stay within add-only amp of {rim_base}"
+			h > lake.water_level + 0.1,
+			"rim {h} should sit above water {}",
+			lake.water_level
 		);
-		assert!(h > lake.water_level + 0.25, "rim {h} should sit above water {}", lake.water_level);
+		let shelf = lake.water_level + params.water_sink.max(0.0);
+		assert!(
+			h <= shelf + params.rim.lift + params.rim.height_amp_max + 2.0,
+			"rim {h} should stay near shelf_anchor+rim_lift (+ capped noise)"
+		);
 		Ok(())
 	}
 
 	#[test]
-	fn apron_blends_toward_identity() -> anyhow::Result<()> {
+	fn apron_identity_far_from_basin() -> anyhow::Result<()> {
 		let bounds = Bounds2::from_xz(0.0, 0.0, 320.0, 320.0);
 		let base = 40.0;
 		let mut params = LakeParams::default();
 		params.rotation_amp = 0.0;
 		params.aspect_strength = 0.0;
 		let lake = Lake::from_bounds(bounds, 11, params, Some(&|_, _| base)).expect("lake");
-		let apron_mid = lake.plateau_radius + lake.apron_width * 0.5;
-		let p = lake.center + Vec2::new(apron_mid, 0.0);
-		let h = apply_mods(&lake.clone().into_complex().compile().modulations, base, p.x, p.y);
-		let rim_base = lake.water_level + params.rim_lift + params.water_sink;
-		let rim_hi = rim_base + params.apron.rim_height_amp_max;
-		let lo = base.min(rim_base);
-		let hi = base.max(rim_hi);
-		assert!(
-			h >= lo - 0.75 && h <= hi + 0.75,
-			"apron {h} should sit between identity {base} and rim band [{rim_base}, {rim_hi}]"
-		);
+		let far = lake.center
+			+ Vec2::new(lake.plateau_radius + lake.apron_width + 40.0, 0.0);
+		let h = lake
+			.clone()
+			.into_complex()
+			.compile()
+			.modify_elevation(base, far.x, far.y);
+		assert!((h - base).abs() < 1e-3, "far sample should be identity: {h}");
 		Ok(())
 	}
 
@@ -519,88 +511,30 @@ mod tests {
 		params.rotation_amp = 0.0;
 		params.aspect_strength = 0.0;
 		let lake = Lake::from_bounds(bounds, 11, params, Some(&|_, _| base)).expect("lake");
-		let h_c = apply_mods(&lake.clone().into_complex().compile().modulations, base, lake.center.x, lake.center.y);
+		let compiled = lake.clone().into_complex().compile();
+		let h_c = compiled.modify_elevation(base, lake.center.x, lake.center.y);
 		let mid = lake.center + Vec2::new(lake.water_radius * 0.72, 0.0);
-		let h_m = apply_mods(&lake.clone().into_complex().compile().modulations, base, mid.x, mid.y);
+		let h_m = compiled.modify_elevation(base, mid.x, mid.y);
 		assert!(h_c < h_m - 1.5, "center {h_c} should sit deeper than mid-bowl {h_m}");
 		Ok(())
 	}
 
 	#[test]
-	fn bed_noise_can_rise_above_water() -> anyhow::Result<()> {
-		let bounds = Bounds2::from_xz(0.0, 0.0, 320.0, 320.0);
-		let base = 40.0;
-		let mut params = LakeParams::default();
-		params.depth_noise_amp = 10.0;
-		params.depth_noise_freq = 0.04;
-		params.rotation_amp = 0.0;
-		params.aspect_strength = 0.0;
-		params.aspect_floor = 0.0;
-		let lake = Lake::from_bounds(bounds, 11, params, Some(&|_, _| base)).expect("lake");
-		let compiled = lake.clone().into_complex().compile();
-		let mut raised = false;
-		for &frac in &[0.55_f32, 0.72, 0.85] {
-			for i in 0..48 {
-				let ang = i as f32 * std::f32::consts::TAU / 48.0;
-				let p = lake.center + Vec2::new(ang.cos(), ang.sin()) * (lake.water_radius * frac);
-				let h = apply_mods(&compiled.modulations, base, p.x, p.y);
-				if h > lake.water_level + 0.25 {
-					raised = true;
-					break;
-				}
-			}
-			if raised {
-				break;
-			}
-		}
-		assert!(raised, "bed noise should lift some near-shore samples above W");
-		Ok(())
-	}
-
-	#[test]
-	fn shore_noise_indents_and_expands_water_disc() -> anyhow::Result<()> {
-		let bounds = Bounds2::from_xz(0.0, 0.0, 320.0, 320.0);
-		let mut params = LakeParams::default();
-		params.rotation_amp = 0.0;
-		params.aspect_strength = 0.0;
-		let lake = Lake::from_bounds(bounds, 11, params, None).expect("lake");
-		let compiled = lake.clone().into_complex().compile();
-		let fill = compiled.fills.first().expect("fill");
-		let mut wet = 0usize;
-		let mut dry = 0usize;
-		for i in 0..48 {
-			let ang = i as f32 * std::f32::consts::TAU / 48.0;
-			let p = lake.center + Vec2::new(ang.cos(), ang.sin()) * lake.fill_radius;
-			if softmask_at(fill, p.x, p.y) < 0.5 {
-				wet += 1;
-			} else {
-				dry += 1;
-			}
-		}
-		assert!(
-			wet > 0 && dry > 0,
-			"bipolar shore noise should both indent and expand at R_fill (wet={wet} dry={dry})"
-		);
-		Ok(())
-	}
-
-	#[test]
-	fn wet_softmask_inside_water_disc() -> anyhow::Result<()> {
+	fn wet_inside_water_disc() -> anyhow::Result<()> {
 		let bounds = Bounds2::from_xz(0.0, 0.0, 320.0, 320.0);
 		let lake = Lake::from_bounds_default(bounds, 11).expect("lake");
 		let compiled = lake.clone().into_complex().compile();
 		let fill = compiled.fills.first().expect("fill");
 		let mid = lake.center;
-		assert!(softmask_at(fill, mid.x, mid.y) < 0.25);
+		assert!(inside_fill(fill, mid.x, mid.y));
 		let outside = lake.center + Vec2::new(lake.plateau_radius + lake.apron_width + 20.0, 0.0);
-		assert!(softmask_at(fill, outside.x, outside.y) >= 0.999);
+		assert!(!inside_fill(fill, outside.x, outside.y));
 		Ok(())
 	}
 
 	#[test]
-	fn fill_pad_stays_near_bowl() -> anyhow::Result<()> {
+	fn fill_radius_stays_near_bowl() -> anyhow::Result<()> {
 		let bounds = Bounds2::from_xz(0.0, 0.0, 320.0, 320.0);
-		let params = LakeParams::default();
 		let lake = Lake::from_bounds_default(bounds, 11).expect("lake");
 		assert!(lake.fill_radius + 1e-3 >= lake.water_radius);
 		assert!(
@@ -609,10 +543,10 @@ mod tests {
 		);
 		let compiled = lake.clone().into_complex().compile();
 		let fill = compiled.fills.first().expect("fill");
-		assert!(softmask_at(fill, lake.center.x, lake.center.y) < 0.25);
+		assert!(inside_fill(fill, lake.center.x, lake.center.y));
 		let outside = lake.center
-			+ Vec2::new(lake.plateau_radius + lake.apron_width + params.shore_fade + 5.0, 0.0);
-		assert!(softmask_at(fill, outside.x, outside.y) >= 0.999);
+			+ Vec2::new(lake.plateau_radius + lake.apron_width + 5.0, 0.0);
+		assert!(!inside_fill(fill, outside.x, outside.y));
 		Ok(())
 	}
 

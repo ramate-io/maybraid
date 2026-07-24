@@ -1,22 +1,22 @@
 //! Bog pocket water — lake bowl with post-carve basin backfill.
 //!
 //! Not the RFC-127 §3.1.3.3 micro-lake lattice. Instead: stamp a normal lake
-//! (carve + fill + apron), then add [`crate::backfill::WatershedBackfill`]
-//! elevation noise inside the wet core so the bed reads hummocky / islanded
-//! after water is placed.
+//! (hydro radial bowl + fill + shared apron), then add
+//! [`crate::primitive::backfill::WatershedBackfill`] elevation noise inside the wet core so
+//! the bed reads hummocky / islanded after water is placed.
 //!
 //! Basin noise itself is depth-incentive ([`BasinBackfillParams::depth_frac`]);
 //! [`BogBasinFill`] chooses how aggressively that freeboard is filled / crested.
 
-use crate::backfill::{BasinBackfillParams, WatershedBackfill};
-use crate::complex::WatershedDepressionComplex;
-use crate::lake::build::{build_bowl, LakeBowl, LakeLayout};
-use crate::lake::shelf::{
+use crate::primitive::backfill::{BasinBackfillParams, WatershedBackfill};
+use crate::primitive::complex::HydroComplex;
+use crate::authored::lake::build::{build_bowl, LakeBowl, LakeLayout};
+use crate::authored::lake::shelf::{
 	aspect_u01, planned_center as planned_center_impl, rim_width_u01, rotation_u11, shelf_levels,
 	water_scale_u01,
 };
-use crate::lake::{LakeBandBudget, LakeParams};
-use crate::noise::scale_noise_freq;
+use crate::authored::lake::{LakeBandBudget, LakeParams};
+use crate::authored::noise::scale_noise_freq;
 use bevy_math::Vec2;
 use procedural_common::Bounds2;
 
@@ -92,7 +92,7 @@ impl Default for BogParams {
 
 /// Authored bog **plan**: lake-shaped layout + basin backfill recipe.
 ///
-/// Realize with [`Self::into_complex`] into a [`WatershedDepressionComplex`]
+/// Realize with [`Self::into_complex`] into a [`HydroComplex`]
 /// (bowl + basin backfill). `None` from [`Self::from_bounds`] means the leaf
 /// is too small.
 #[derive(Debug, Clone)]
@@ -138,7 +138,7 @@ impl Bog {
 		let layout = LakeLayout { center, budget, levels };
 		let bowl = build_bowl(seed, min, lake_p, &layout);
 		let fill_radius = bowl.fill_radius;
-		let wet_core = bowl.depression.wet_core.clone();
+		let wet_core = bowl.wet_core.clone();
 
 		let short_water = layout.budget.water_radius();
 		let basin_freq =
@@ -173,8 +173,13 @@ impl Bog {
 		Self::from_bounds(bounds, seed, BogParams::default(), None)
 	}
 
+	/// Hydrology nodes authored by this bog (lake-shaped bowl; backfill is separate).
+	pub fn hydro_nodes(&self) -> Vec<crate::primitive::node::HydroNode> {
+		vec![self.bowl.node.clone()]
+	}
+
 	/// Realize this plan as a sole-node complex with basin backfill.
-	pub fn into_complex(self) -> WatershedDepressionComplex {
+	pub fn into_complex(self) -> HydroComplex {
 		self.bowl
 			.into_complex(self.bounds, self.seed)
 			.with_backfill(self.basin)
@@ -184,7 +189,7 @@ impl Bog {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use jersey_terrain_stamps::JerseyModulation;
+	use crate::primitive::fill::WaterSurface;
 
 	#[test]
 	fn leaf_too_small_skips() -> anyhow::Result<()> {
@@ -194,14 +199,20 @@ mod tests {
 	}
 
 	#[test]
-	fn from_bounds_non_empty_ends_with_backfill() -> anyhow::Result<()> {
+	fn from_bounds_hydro_plus_backfill() -> anyhow::Result<()> {
 		let bounds = Bounds2::from_xz(0.0, 0.0, 320.0, 320.0);
 		let bog = Bog::from_bounds(bounds, 11, BogParams::default(), Some(&|_, _| 40.0)).expect("bog");
 		let compiled = bog.clone().into_complex().compile();
+		assert!(compiled.has_hydro());
 		assert!(!compiled.fills.is_empty());
-		assert!(
-			compiled.modulations.len() >= 3,
-			"expected apron+bowl+backfill, got {}",
+		assert!(matches!(
+			compiled.fills[0].surface,
+			WaterSurface::Hydro { .. }
+		));
+		assert_eq!(
+			compiled.modulations.len(),
+			1,
+			"expected only post-hydro backfill jersey, got {}",
 			compiled.modulations.len()
 		);
 
@@ -257,14 +268,6 @@ mod tests {
 		let bog = Bog::from_bounds(bounds, 11, params, Some(&|_, _| base)).expect("bog");
 		let compiled = bog.clone().into_complex().compile();
 
-		fn apply(mods: &[JerseyModulation], h: f32, x: f32, z: f32) -> f32 {
-			let mut y = h;
-			for m in mods {
-				y = m.modify_elevation(y, x, z);
-			}
-			y
-		}
-
 		let mut crested = 0usize;
 		let mut samples = 0usize;
 		let mut max_above = 0.0_f32;
@@ -272,7 +275,7 @@ mod tests {
 			for i in 0..24 {
 				let ang = i as f32 * std::f32::consts::TAU / 24.0;
 				let p = bog.center + Vec2::new(ang.cos(), ang.sin()) * (bog.water_radius * frac);
-				let h = apply(&compiled.modulations, base, p.x, p.y);
+				let h = compiled.modify_elevation(base, p.x, p.y);
 				samples += 1;
 				if h > bog.water_level + 0.15 {
 					crested += 1;

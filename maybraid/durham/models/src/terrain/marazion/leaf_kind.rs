@@ -9,6 +9,8 @@ pub enum MarazionLeafKind {
 	/// Occupancy miss or every stamp recipe skipped.
 	Empty,
 	Stream,
+	/// Multi-corridor stream graph (composed soft-voronoi bands).
+	StreamsGraph,
 	Bog,
 	Lake,
 }
@@ -19,6 +21,7 @@ impl MarazionLeafKind {
 		match self {
 			Self::Empty => Color::srgba(0.55, 0.55, 0.6, 0.35),
 			Self::Stream => Color::srgb(0.15, 0.85, 0.95),
+			Self::StreamsGraph => Color::srgb(0.05, 0.65, 0.85),
 			Self::Bog => Color::srgb(0.55, 0.75, 0.2),
 			Self::Lake => Color::srgb(0.2, 0.45, 1.0),
 		}
@@ -28,6 +31,7 @@ impl MarazionLeafKind {
 		match self {
 			Self::Empty => "empty",
 			Self::Stream => "stream",
+			Self::StreamsGraph => "streams_graph",
 			Self::Bog => "bog",
 			Self::Lake => "lake",
 		}

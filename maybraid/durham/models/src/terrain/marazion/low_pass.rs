@@ -1,4 +1,4 @@
-//! Marazion **low-pass** band: small lakes (leaf sides ≈200–600m).
+//! Marazion **low-pass** band: small pocket water (leaf sides ≈200–600m).
 
 use crate::terrain::marazion::band_macro::define_marazion_band;
 
@@ -7,10 +7,10 @@ define_marazion_band! {
 	bootstrap_layout: BootstrapPrePocketLowPassLayout / bootstrap_pre_pocket_low_pass_layout,
 	pre_cell: PrePocketLowPassCell,
 	pocket: PocketLowPassCell,
-	lake: MarazionLakeLowPassCell,
+	pocket_waters: MarazionPocketWatersLowPass,
 	pre_ids: original_ids_for_pre_pocket_low_pass_cells,
 	pocket_ids: original_ids_for_pocket_low_pass_cells,
-	lake_ids: original_ids_for_marazion_lake_low_pass_leaves,
+	pocket_waters_ids: original_ids_for_marazion_pocket_waters_low_pass_leaves,
 	band_field: low_pass,
 	band_pass: Low,
 	family_salt: 0x1270_0001,

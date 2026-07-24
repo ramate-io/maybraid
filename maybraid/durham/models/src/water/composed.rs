@@ -9,11 +9,8 @@
 //! **Same sample space as terrain.** Water cells are the same origin cells as
 //! [`TerrainCellLayout`](crate::terrain::cell::TerrainCellLayout), use the same
 //! `res_2`, and mesh with the same cascade chunk bounds (including full cell Y).
-//! Lake and stream fills are free-surface half-spaces below \(W\) (see [`WaterFill`]) so the
-//! tall terrain Y lattice can resolve them the way it resolves terrain.
-//!
-//! Softmask bleed and empty-cell skips live at the stamp / [`Water`](crate::water::Water)
-//! collector layer; this type only evaluates the composed wet SDF.
+//! Hydro fills are carve × half-space below \(W\) (see [`WaterFill`] /
+//! [`HydroComplex::water_distance`](marazion_watersheds::HydroComplex::water_distance)).
 
 use crate::terrain::sdf::TerrainSdf;
 use crate::water::water_distance as fill_water_distance;
@@ -23,9 +20,6 @@ use marazion_watersheds::WaterFill;
 use render_item::mesh::{IdentifiedMesh, MeshId};
 use render_item::NormalizeChunk;
 use sdf::{Sdf, Sign, SignBoundary, SignUniformIntervals};
-
-/// Softmask weight above which a column is treated as dry for Y-interval skips.
-const SOFTMASK_DRY: f32 = 0.999;
 
 /// Composed wet volume for one terrain origin cell: union of stamp fills against
 /// the cell's finished heightfield.
@@ -64,14 +58,10 @@ impl Sdf for ComposedWater {
 		let h = self.terrain.height_at_with_all_modulations(x, z);
 		let p_xz = Vec2::new(x, z);
 
-		// Lake fills are half-spaces below W: union of wet columns → (-∞, W_max].
+		// Half-space below W: union of wet columns → (-∞, W_max].
 		let mut wet_top = f32::NEG_INFINITY;
 		let mut any_wet = false;
 		for fill in &self.fills {
-			let w = fill.softmask_at(p_xz.x, p_xz.y);
-			if w >= SOFTMASK_DRY {
-				continue;
-			}
 			if let Some((_lo, hi)) = fill.wet_y_span_at(p_xz.x, p_xz.y, h) {
 				any_wet = true;
 				wet_top = wet_top.max(hi);
@@ -80,7 +70,6 @@ impl Sdf for ComposedWater {
 
 		let mut intervals = SignUniformIntervals::default();
 		if any_wet && wet_top.is_finite() {
-			// Half-space below free surface — same shape as terrain's solid under h.
 			intervals.insert_boundary(SignBoundary {
 				min: f32::NEG_INFINITY,
 				sign: Sign::Negative,

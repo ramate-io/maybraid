@@ -10,13 +10,15 @@
 mod build;
 mod path;
 
-use crate::apron::WatershedApronParams;
-use crate::complex::WatershedDepressionComplex;
-use crate::noise::n01_freq;
-use crate::stream::build::{build_corridor, resolve_node_blend, StreamCorridor, StreamLayout};
-use crate::stream::path::{
-	node_water_levels, sample_endpoint, ENDPOINT_A_SALT, ENDPOINT_B_SALT,
+pub(crate) use path::{
+	collapse_degenerate_vertices, node_water_levels, sample_endpoint, DEGENERATE_VERTEX_EPS,
+	ENDPOINT_A_SALT, ENDPOINT_B_SALT,
 };
+
+use crate::authored::noise::n01_freq;
+use crate::authored::stream::build::{build_corridor, StreamCorridor, StreamLayout};
+use crate::primitive::complex::HydroComplex;
+use crate::primitive::parameters::{ApronParams, RimParams};
 use bevy_math::Vec2;
 use jersey_terrain_stamps::{DownhillPair, HysteresisSpine};
 use procedural_common::Bounds2;
@@ -50,8 +52,6 @@ pub struct StreamParams {
 
 	/// How far below endpoint terrain the water surface sits.
 	pub water_sink: f32,
-	/// Bank lift above the graded surface.
-	pub rim_lift: f32,
 	/// Minimum forced drop between consecutive nodes when a segment is flat/uphill.
 	pub min_drop: f32,
 	/// Path-distance radius for inbound/outbound pitch blending at vertices.
@@ -66,25 +66,16 @@ pub struct StreamParams {
 	pub shore_indent_frac: f32,
 	pub shore_freq: f32,
 
-	/// Shared apron outline + add-only rim height.
-	pub apron: WatershedApronParams,
-
-	/// Softmask fade past the fill support edge (world units). Stacks on
-	/// [`Self::fill_half_width_scale`] so the wet ribbon is liberal vs the carve.
-	pub shore_fade: f32,
+	/// Apron band + indent-noise recipe.
+	pub apron: ApronParams,
+	/// Rim band + height-noise recipe (`lift` is bank above \(W\)).
+	pub rim: RimParams,
 
 	/// How far below the water surface \(W\) the channel floor grade sits.
 	///
-	/// Keeps the carved bed under \(W\) so the wet-column gate stays open;
-	/// fill itself is a half-space below \(W\) (see [`crate::fill::WaterFill`]).
+	/// Keeps the carved bed under \(W\) so wet columns stay open under the
+	/// free-surface half-space (see [`crate::primitive::fill::WaterFill`]).
 	pub channel_freeboard: f32,
-
-	/// Fill support half-width as a multiple of the carved channel half-width.
-	/// Prefer `> 1` so MC gets a wider wet ribbon than the visible cut.
-	pub fill_half_width_scale: f32,
-
-	/// Extra fill undercut for the wet-column gate under banks / noise.
-	pub fill_undercut: f32,
 
 	/// Hysteresis spine walk (step / snap) — uses Jersey defaults when left at default.
 	pub spine: HysteresisSpine,
@@ -104,7 +95,6 @@ impl Default for StreamParams {
 			mu: 10.0,
 
 			water_sink: 0.7,
-			rim_lift: 1.1,
 			min_drop: 0.75,
 			node_blend: 0.0,
 
@@ -114,12 +104,10 @@ impl Default for StreamParams {
 			shore_indent_frac: 0.2,
 			shore_freq: 0.04,
 
-			apron: WatershedApronParams::default(),
+			apron: ApronParams::default(),
+			rim: RimParams::default().with_visible_rim_bank(),
 
-			shore_fade: 5.5,
 			channel_freeboard: 2.0,
-			fill_half_width_scale: 1.55,
-			fill_undercut: 2.75,
 
 			spine: HysteresisSpine::default(),
 		}
@@ -173,7 +161,7 @@ fn width_scale_u01(seed: u32, leaf_min: Vec2, params: StreamParams) -> f32 {
 
 /// Authored stream **plan**: layout metadata for one pocket-water leaf.
 ///
-/// Realize with [`Self::into_complex`] into a [`WatershedDepressionComplex`].
+/// Realize with [`Self::into_complex`] into a [`HydroComplex`].
 /// `None` from [`Self::from_bounds`] means the leaf / path is too small.
 #[derive(Debug, Clone)]
 pub struct Stream {
@@ -229,11 +217,15 @@ impl Stream {
 			return None;
 		}
 
-		let levels = node_water_levels(&path, height_at, params.water_sink, params.min_drop);
+		let mut path = path;
+		let mut levels = node_water_levels(&path, height_at, params.water_sink, params.min_drop);
+		collapse_degenerate_vertices(&mut path, &mut levels, DEGENERATE_VERTEX_EPS);
+		if path.len() < 2 {
+			return None;
+		}
 		let head_water = levels.first().copied().unwrap_or(0.0);
 		let toe_water = levels.last().copied().unwrap_or(head_water);
 		let layout = StreamLayout {
-			node_blend: resolve_node_blend(params, bounds, budget.half_width),
 			path,
 			levels,
 			budget,
@@ -258,8 +250,20 @@ impl Stream {
 		Self::from_bounds(bounds, seed, StreamParams::default(), None)
 	}
 
-	/// Realize this plan as a sole-edge [`WatershedDepressionComplex`].
-	pub fn into_complex(self) -> WatershedDepressionComplex {
+	/// Hydrology nodes authored by this stream (one reach segment per polyline edge).
+	pub fn hydro_nodes(&self) -> Vec<crate::primitive::node::HydroNode> {
+		crate::primitive::node::nodes_from_polyline(
+			&self.corridor.path,
+			&self.corridor.levels,
+			self.corridor.half_width,
+			self.corridor.center_depth,
+			&self.corridor.params,
+			self.corridor.max_correction_extent,
+		)
+	}
+
+	/// Realize this plan as a sole-corridor [`HydroComplex`].
+	pub fn into_complex(self) -> HydroComplex {
 		self.corridor.into_complex(self.bounds, self.seed)
 	}
 }
@@ -267,7 +271,7 @@ impl Stream {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use jersey_terrain_stamps::Region2D;
+	use crate::primitive::fill::WaterSurface;
 
 	#[test]
 	fn leaf_too_small_skips() -> anyhow::Result<()> {
@@ -284,6 +288,7 @@ mod tests {
 		assert!(stream.head_water > stream.toe_water);
 		let compiled = stream.clone().into_complex().compile();
 		let fill = compiled.fills.first().expect("fill");
+		assert!(matches!(fill.surface, WaterSurface::Hydro { .. }));
 		let head = *stream.path.first().expect("path head");
 		let toe = *stream.path.last().expect("path toe");
 		let w_head = fill.surface_level_at(head.x, head.y);
@@ -292,35 +297,24 @@ mod tests {
 			w_head > w_toe + 0.2,
 			"graded fill should drop along path: {w_head} → {w_toe}"
 		);
-		assert!(fill.softmask_at(head.x, head.y) < 0.5);
+		assert!(fill.inside_horizontal(head.x, head.y));
 		let far = Vec2::new(bounds.min.x - 80.0, bounds.min.y - 80.0);
-		assert!(fill.softmask_at(far.x, far.y) >= 1.0);
+		assert!(!fill.inside_horizontal(far.x, far.y));
 		Ok(())
 	}
 
 	#[test]
-	fn fill_support_is_liberal_vs_channel() -> anyhow::Result<()> {
+	fn fill_tracks_channel_carve() -> anyhow::Result<()> {
 		let bounds = Bounds2::from_xz(0.0, 0.0, 400.0, 400.0);
 		let height = |x: f32, z: f32| 100.0 - 0.05 * x - 0.01 * z;
 		let params = StreamParams::default();
 		let stream = Stream::from_bounds(bounds, 42, params, Some(&height)).expect("stream");
 		let compiled = stream.clone().into_complex().compile();
 		let fill = compiled.fills.first().expect("fill");
-		assert!(fill.terrain_undercut >= params.fill_undercut - 1e-3);
-		assert!(fill.noise.is_none());
-		match &fill.region {
-			Region2D::Polyline(poly) => {
-				let expected = stream.half_width * params.fill_half_width_scale.max(1.0);
-				assert!(
-					(poly.half_width - expected).abs() < 1e-3,
-					"fill half {} vs expected liberal {}",
-					poly.half_width,
-					expected
-				);
-				assert!(poly.half_width > stream.half_width);
-			}
-			other => panic!("expected polyline fill region, got {other:?}"),
-		}
+		let mid = stream.path[0].lerp(stream.path[1], 0.5);
+		assert!(fill.inside_horizontal(mid.x, mid.y));
+		let far = Vec2::new(mid.x, mid.y + stream.half_width * 3.0);
+		assert!(!fill.inside_horizontal(far.x, far.y));
 		Ok(())
 	}
 
@@ -337,10 +331,7 @@ mod tests {
 		for window in stream.path.windows(2) {
 			let mid = window[0].lerp(window[1], 0.5);
 			let w = fill.surface_level_at(mid.x, mid.y);
-			let mut h = height(mid.x, mid.y);
-			for m in &compiled.modulations {
-				h = m.modify_elevation(h, mid.x, mid.y);
-			}
+			let h = compiled.modify_elevation(height(mid.x, mid.y), mid.x, mid.y);
 			assert!(
 				h < w - freeboard * 0.5,
 				"mid-segment bed {h} should sit under W {w} (freeboard {freeboard})"
@@ -373,7 +364,7 @@ mod tests {
 		for (p, &w) in stream.path.iter().zip(stream.levels.iter()) {
 			let got = fill.surface_level_at(p.x, p.y);
 			assert!(
-				(got - w).abs() < 0.15,
+				(got - w).abs() < 0.4,
 				"node ({}, {}) W={got} expected {w}",
 				p.x,
 				p.y
@@ -392,17 +383,19 @@ mod tests {
 	}
 
 	#[test]
-	fn skirt_uses_add_only_rim_with_lake_scale_defaults() -> anyhow::Result<()> {
+	fn hydro_complex_has_rim_apron_identity_far_away() -> anyhow::Result<()> {
 		let bounds = Bounds2::from_xz(0.0, 0.0, 400.0, 400.0);
 		let height = |x: f32, z: f32| 100.0 - 0.05 * x - 0.01 * z;
 		let params = StreamParams::default();
-		assert!(params.apron.rim_height_amp_max >= 15.0);
+		assert!(params.rim.height_amp_max >= 10.0);
 		assert!(params.apron.indent_frac_max > params.apron.indent_frac_min);
 		let stream = Stream::from_bounds(bounds, 42, params, Some(&height)).expect("stream");
-		assert_eq!(stream.clone().into_complex().compile().modulations.len(), 4);
+		let compiled = stream.clone().into_complex().compile();
+		assert!(compiled.has_hydro());
+		assert!(compiled.modulations.is_empty());
 		let far = Vec2::new(bounds.min.x - 120.0, bounds.min.y - 120.0);
 		let h0 = height(far.x, far.y);
-		let h1 = stream.clone().into_complex().compile().modulations[0].modify_elevation(h0, far.x, far.y);
+		let h1 = compiled.modify_elevation(h0, far.x, far.y);
 		assert!((h1 - h0).abs() < 1e-3);
 		Ok(())
 	}

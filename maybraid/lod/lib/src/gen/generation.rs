@@ -58,6 +58,20 @@ pub trait GeneratingSpatialIndex<T>: SpatialIndex<T> {
 	/// Materializes everything originating or tracked in the region and
 	/// returns the ids with their bounds.
 	fn get_or_generate_region(&mut self, region: Aabb3d, lod_ref: &LodRef) -> Vec<(Id, Aabb3d)>;
+
+	/// Like [`Self::get_or_generate_region`], but returns stored values (skips misses).
+	fn get_or_generate_region_values(
+		&mut self,
+		region: Aabb3d,
+		lod_ref: &LodRef,
+	) -> Vec<&T> {
+		let ids: Vec<Id> = self
+			.get_or_generate_region(region, lod_ref)
+			.into_iter()
+			.map(|(id, _)| id)
+			.collect();
+		ids.into_iter().filter_map(|id| self.get(id)).collect()
+	}
 }
 
 impl<T, S> GeneratingSpatialIndex<T> for S

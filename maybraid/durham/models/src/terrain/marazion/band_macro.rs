@@ -3,17 +3,17 @@
 //! Authoring knobs (`cell_size`, `likelihood`, …) live on the call site — same
 //! pattern as [`crate::terrain::jersey::family_macro::define_jersey_family`].
 
-/// Defines `PrePocketLayout` → `PrePocketCell` → `PocketCell` → `MarazionLakeCell` for one band.
+/// Defines `PrePocketLayout` → `PrePocketCell` → `PocketCell` → `MarazionPocketWaters*` for one band.
 macro_rules! define_marazion_band {
 	(
 		layout: $Layout:ident,
 		bootstrap_layout: $Bootstrap:ident / $bootstrap_fn:ident,
 		pre_cell: $PreCell:ident,
 		pocket: $Pocket:ident,
-		lake: $LakeCell:ident,
+		pocket_waters: $PocketWaters:ident,
 		pre_ids: $pre_ids:ident,
 		pocket_ids: $pocket_ids:ident,
-		lake_ids: $lake_ids:ident,
+		pocket_waters_ids: $pocket_waters_ids:ident,
 		band_field: $band_field:ident,
 		band_pass: $band_pass:ident,
 		family_salt: $family_salt:expr,
@@ -305,16 +305,25 @@ macro_rules! define_marazion_band {
 			}
 		}
 
+		/// Guillotine leaf holding one authored pocket-water stamp (not a compiled complex).
 		#[derive(Debug, Clone, bevy::prelude::Component)]
-		pub struct $LakeCell {
+		pub struct $PocketWaters {
 			pub cell: bevy::math::bounding::Aabb3d,
-			pub kind: $crate::terrain::marazion::leaf_kind::MarazionLeafKind,
 			pub band: $crate::terrain::marazion::leaf_kind::MarazionBandPass,
-			/// Authored watershed graph; compiled when pulled into [`crate::terrain::Terrain`].
-			pub complex: marazion_watersheds::WatershedDepressionComplex,
+			pub authored: $crate::terrain::marazion::pocket_water::MarazionPocketWater,
 		}
 
-		pub fn $lake_ids<S>(
+		impl $PocketWaters {
+			pub fn hydro_nodes(&self) -> Vec<marazion_watersheds::HydroNode> {
+				self.authored.hydro_nodes()
+			}
+
+			pub fn kind(&self) -> $crate::terrain::marazion::leaf_kind::MarazionLeafKind {
+				self.authored.kind()
+			}
+		}
+
+		pub fn $pocket_waters_ids<S>(
 			spatial_index: &mut S,
 			region: bevy::math::bounding::Aabb3d,
 		) -> Vec<lod::gen::OriginalId>
@@ -327,7 +336,7 @@ macro_rules! define_marazion_band {
 			)
 		}
 
-		impl<S> lod::gen::GenerationScheme<S> for $LakeCell
+		impl<S> lod::gen::GenerationScheme<S> for $PocketWaters
 		where
 			S: lod::gen::GeneratingSpatialIndex<
 					$crate::terrain::marazion::config::MarazionWatershedConfigs,
@@ -339,7 +348,7 @@ macro_rules! define_marazion_band {
 				spatial_index: &mut S,
 				region: bevy::math::bounding::Aabb3d,
 			) -> Vec<lod::gen::OriginalId> {
-				$lake_ids(spatial_index, region)
+				$pocket_waters_ids(spatial_index, region)
 			}
 
 			fn build_with_id(
@@ -367,9 +376,8 @@ macro_rules! define_marazion_band {
 				);
 				let empty_cell = || Self {
 					cell,
-					kind: $crate::terrain::marazion::leaf_kind::MarazionLeafKind::Empty,
 					band: $crate::terrain::marazion::leaf_kind::MarazionBandPass::$band_pass,
-					complex: marazion_watersheds::WatershedDepressionComplex::new(bounds, seed),
+					authored: $crate::terrain::marazion::pocket_water::MarazionPocketWater::Empty,
 				};
 				if !$crate::terrain::jersey::shared::leaf_selected(
 					cell,
@@ -394,96 +402,92 @@ macro_rules! define_marazion_band {
 				};
 				let height_at: Option<&dyn Fn(f32, f32) -> f32> = Some(&height_fn);
 
-				// Occupied leaves: stream / bog / lake from a stable unit draw.
+				// Occupied leaves: stream / streams-graph / bog / lake from a stable unit draw.
 				let type_u =
 					procedural_common::SeededHash::new(seed.wrapping_add(0x57EA_71FE)).unit(0);
 				let stream_cut = band.stream_frac.clamp(0.0, 1.0);
-				let bog_cut = (stream_cut + band.bog_frac.clamp(0.0, 1.0)).min(1.0);
+				let graph_cut =
+					(stream_cut + band.streams_graph_frac.clamp(0.0, 1.0)).min(1.0);
+				let bog_cut = (graph_cut + band.bog_frac.clamp(0.0, 1.0)).min(1.0);
 				let prefer = if type_u < stream_cut {
 					0u8 // stream
+				} else if type_u < graph_cut {
+					1u8 // streams graph
 				} else if type_u < bog_cut {
-					1u8 // bog
+					2u8 // bog
 				} else {
-					2u8 // lake
+					3u8 // lake
 				};
 
-				type LeafStamp = (
-					$crate::terrain::marazion::leaf_kind::MarazionLeafKind,
-					marazion_watersheds::WatershedDepressionComplex,
-				);
-				let try_stream = || -> Option<LeafStamp> {
+				use $crate::terrain::marazion::pocket_water::MarazionPocketWater;
+				let try_stream = || -> Option<MarazionPocketWater> {
 					marazion_watersheds::Stream::from_bounds(
 						bounds,
 						seed,
 						band.stream,
 						height_at,
 					)
-					.map(|stream| {
-						(
-							$crate::terrain::marazion::leaf_kind::MarazionLeafKind::Stream,
-							stream.into_complex(),
-						)
-					})
+					.map(MarazionPocketWater::Stream)
 				};
-				let try_bog = || -> Option<LeafStamp> {
+				let try_streams_graph = || -> Option<MarazionPocketWater> {
+					marazion_watersheds::StreamsGraph::from_bounds(
+						bounds,
+						seed,
+						band.streams_graph,
+						height_at,
+					)
+					.map(MarazionPocketWater::StreamsGraph)
+				};
+				let try_bog = || -> Option<MarazionPocketWater> {
 					marazion_watersheds::Bog::from_bounds(
 						bounds,
 						seed,
 						band.bog,
 						height_at,
 					)
-					.map(|bog| {
-						(
-							$crate::terrain::marazion::leaf_kind::MarazionLeafKind::Bog,
-							bog.into_complex(),
-						)
-					})
+					.map(MarazionPocketWater::Bog)
 				};
-				let try_lake = || -> Option<LeafStamp> {
+				let try_lake = || -> Option<MarazionPocketWater> {
 					marazion_watersheds::Lake::from_bounds(
 						bounds,
 						seed,
 						band.lake,
 						height_at,
 					)
-					.map(|lake| {
-						(
-							$crate::terrain::marazion::leaf_kind::MarazionLeafKind::Lake,
-							lake.into_complex(),
-						)
-					})
+					.map(MarazionPocketWater::Lake)
 				};
 
-				let empty_stamp = || {
-					(
-						$crate::terrain::marazion::leaf_kind::MarazionLeafKind::Empty,
-						marazion_watersheds::WatershedDepressionComplex::new(bounds, seed),
-					)
-				};
-				let (kind, complex) = match prefer {
+				let authored = match prefer {
 					0 => try_stream()
+						.or_else(try_streams_graph)
 						.or_else(try_bog)
 						.or_else(try_lake)
-						.unwrap_or_else(empty_stamp),
-					1 => try_bog()
+						.unwrap_or(MarazionPocketWater::Empty),
+					1 => try_streams_graph()
 						.or_else(try_stream)
+						.or_else(try_bog)
 						.or_else(try_lake)
-						.unwrap_or_else(empty_stamp),
+						.unwrap_or(MarazionPocketWater::Empty),
+					2 => try_bog()
+						.or_else(try_stream)
+						.or_else(try_streams_graph)
+						.or_else(try_lake)
+						.unwrap_or(MarazionPocketWater::Empty),
 					_ => try_lake()
 						.or_else(try_stream)
+						.or_else(try_streams_graph)
 						.or_else(try_bog)
-						.unwrap_or_else(empty_stamp),
+						.unwrap_or(MarazionPocketWater::Empty),
 				};
 
-				if complex.is_empty() {
+				if authored.is_empty() {
 					return Some((empty_cell(), cell));
 				}
 				Some((
 					Self {
 						cell,
-						kind,
 						band: $crate::terrain::marazion::leaf_kind::MarazionBandPass::$band_pass,
-						complex,
+						authored,
 					},
 					cell,
 				))

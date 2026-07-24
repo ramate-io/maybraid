@@ -1,6 +1,6 @@
 //! Pre-pocket cells — [RFC-127 §3.1.1](https://github.com/ramate-io/maybraid/tree/main/rfc/rfc-000-000-127-marazion-watersheds#311-pre-pocket-cells).
 
-use crate::noise::n01;
+use crate::authored::noise::n01;
 use bevy_math::Vec2;
 use procedural_common::Bounds2;
 

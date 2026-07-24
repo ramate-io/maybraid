@@ -1,8 +1,8 @@
 //! Lake centroid planning and shelf-anchor survey.
 
-use crate::lake::budget::{shelf_survey_radius, LakeBandBudget};
-use crate::lake::LakeParams;
-use crate::noise::{n01_at, n01_freq, n11_at};
+use crate::authored::lake::budget::{shelf_survey_radius, LakeBandBudget};
+use crate::authored::lake::LakeParams;
+use crate::authored::noise::{n01_at, n01_freq, n11_at};
 use bevy_math::Vec2;
 use procedural_common::Bounds2;
 
@@ -98,8 +98,9 @@ pub fn planned_center(bounds: Bounds2, seed: u32, params: LakeParams) -> Vec2 {
 
 /// Vertical shelf levels derived from a terrain survey + params.
 pub(crate) struct ShelfLevels {
+	/// Surveyed shelf / plateau anchor used for rim bank (`+ rim_lift`).
+	pub shelf_anchor: f32,
 	pub water_level: f32,
-	pub rim_level: f32,
 }
 
 pub(crate) fn shelf_levels(
@@ -118,7 +119,7 @@ pub(crate) fn shelf_levels(
 	);
 	let shelf_anchor = base_h + n11_at(seed, SHELF_AMP_SALT, anchor) * params.shelf_amp;
 	ShelfLevels {
+		shelf_anchor,
 		water_level: shelf_anchor - params.water_sink.max(0.0),
-		rim_level: shelf_anchor + params.rim_lift.max(0.0),
 	}
 }

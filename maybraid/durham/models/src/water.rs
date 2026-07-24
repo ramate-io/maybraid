@@ -9,9 +9,8 @@
 //! | Cascade chunk | [`cascade_chunk_for_cell`] | **same helper**, same `cell` + `res_2` |
 //! | Mesh resolution | [`TerrainPresentationAssets::res_2`](crate::terrain::presentation::TerrainPresentationAssets) via the sibling [`Terrain`] cell | inherited from that [`Terrain::res_2`] — never a separate water grid |
 //!
-//! Marazion lake stamps author flat [`WaterFill`]s; streams author graded ones.
-//! Fills are free-surface half-spaces below \(W\) so they resolve on the tall
-//! terrain Y lattice. This module collects those fills from an already composed
+//! Marazion stamps author [`WaterFill`]s backed by [`HydroComplex`] (carve ×
+//! half-space below \(W\)). This module collects those fills from an already composed
 //! [`Terrain`] cell and presents [`ComposedWater`] on that shared sample space.
 //!
 //! **Order:** [`Terrain`] must compose **all** Marazion watershed bands before
@@ -101,10 +100,17 @@ pub fn water_distance(fills: &[WaterFill], p: Vec3, terrain_height: f32) -> f32 
 }
 
 /// True when the stamp has wet volume at a representative footprint sample.
+///
+/// Hydro fills probe node interiors (carve samples), so a lake/stream that
+/// misses a single cell-center proxy still keeps its water cell.
 fn fill_has_wet_volume(fill: &WaterFill, terrain: &TerrainSdf) -> bool {
-	let center = fill.region.sample_point();
-	let h = terrain.height_at_with_all_modulations(center.x, center.y);
-	fill.wet_y_span_at(center.x, center.y, h).is_some()
+	for p in fill.wet_volume_probe_points() {
+		let h = terrain.height_at_with_all_modulations(p.x, p.y);
+		if fill.wet_y_span_at(p.x, p.y, h).is_some() {
+			return true;
+		}
+	}
+	false
 }
 
 impl<S> GenerationScheme<S> for Water

@@ -1,4 +1,4 @@
-//! Marazion **high-pass** band: large lakes (leaf sides ≈800m–3km).
+//! Marazion **high-pass** band: large pocket water (leaf sides ≈800m–3km).
 
 use crate::terrain::marazion::band_macro::define_marazion_band;
 
@@ -7,10 +7,10 @@ define_marazion_band! {
 	bootstrap_layout: BootstrapPrePocketHighPassLayout / bootstrap_pre_pocket_high_pass_layout,
 	pre_cell: PrePocketHighPassCell,
 	pocket: PocketHighPassCell,
-	lake: MarazionLakeHighPassCell,
+	pocket_waters: MarazionPocketWatersHighPass,
 	pre_ids: original_ids_for_pre_pocket_high_pass_cells,
 	pocket_ids: original_ids_for_pocket_high_pass_cells,
-	lake_ids: original_ids_for_marazion_lake_high_pass_leaves,
+	pocket_waters_ids: original_ids_for_marazion_pocket_waters_high_pass_leaves,
 	band_field: high_pass,
 	band_pass: High,
 	family_salt: 0x1270_0002,

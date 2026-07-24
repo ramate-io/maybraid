@@ -320,6 +320,7 @@ struct TerrainReport {
 	marazion_leaves: usize,
 	marazion_lake: usize,
 	marazion_stream: usize,
+	marazion_streams_graph: usize,
 	marazion_bog: usize,
 	marazion_empty: usize,
 }
@@ -330,12 +331,14 @@ impl TerrainReport {
 		let extent = chunk.extent_vec();
 		let mut marazion_lake = 0usize;
 		let mut marazion_stream = 0usize;
+		let mut marazion_streams_graph = 0usize;
 		let mut marazion_bog = 0usize;
 		let mut marazion_empty = 0usize;
 		for leaf in &t.marazion_leaves {
 			match leaf.kind {
 				MarazionLeafKind::Lake => marazion_lake += 1,
 				MarazionLeafKind::Stream => marazion_stream += 1,
+				MarazionLeafKind::StreamsGraph => marazion_streams_graph += 1,
 				MarazionLeafKind::Bog => marazion_bog += 1,
 				MarazionLeafKind::Empty => marazion_empty += 1,
 			}
@@ -349,6 +352,7 @@ impl TerrainReport {
 			marazion_leaves: t.marazion_leaves.len(),
 			marazion_lake,
 			marazion_stream,
+			marazion_streams_graph,
 			marazion_bog,
 			marazion_empty,
 		}
@@ -382,8 +386,12 @@ impl Display for CellLocationReport {
 				)?;
 				writeln!(
 					f,
-					"  marazion    lake={} stream={} bog={} empty={}",
-					t.marazion_lake, t.marazion_stream, t.marazion_bog, t.marazion_empty
+					"  marazion    lake={} stream={} streams_graph={} bog={} empty={}",
+					t.marazion_lake,
+					t.marazion_stream,
+					t.marazion_streams_graph,
+					t.marazion_bog,
+					t.marazion_empty
 				)?;
 			}
 			None => writeln!(f, "  status     NOT GENERATED")?,
