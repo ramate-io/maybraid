@@ -1,3 +1,12 @@
+//! A common constraint representation for building generation.
+//!
+//! Often, for complicated patterns, authors will use a combination of
+//! this representation and direct access to parent types to build
+//! the authored type.
+//!
+//! At the same time, common constructions built only requiring this representation
+//! can be reused within authored types.
+
 use bevy_math::bounding::{Aabb2d, Aabb3d};
 use std::collections::HashMap;
 
