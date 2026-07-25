@@ -4,7 +4,9 @@ resolver = "2"
 
 members = [
 
-  # maybraid game crates, typically following rfcs
+  # maybraid game crates, typically following rfcs  
+  "maybraid/richmond/buildings",
+
   "maybraid/durham/lib",
   "maybraid/durham/shaders",
   "maybraid/durham/models",
@@ -54,7 +56,7 @@ members = [
   "playgrounds/skill-map",
   "playgrounds/pathfinding",
 
-  # legacy still being refactored out: proceudres
+  # legacy still being refactored out: procedures
   "procedures/terrain",
   "procedures/vegetation",
   "procedures/buildings",

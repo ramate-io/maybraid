@@ -5518,6 +5518,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "19b30a45b0cd0bcca8037f3d0dc3421eaf95327a17cad11964fb8179b4fc4832"
 
 [[package]]
+name = "richmond-buildings"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "bevy_math",
+ "jersey-terrain-stamps",
+ "procedural-common",
+]
+
+[[package]]
 name = "robust"
 version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
