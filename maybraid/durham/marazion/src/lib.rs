@@ -27,7 +27,10 @@ pub use authored::pre_pocket::{
 };
 pub use authored::stream::{Stream, StreamBandBudget, StreamParams};
 pub use authored::streams_graph::{StreamsGraph, StreamsGraphParams};
-pub use primitive::backfill::{BasinBackfillParams, WatershedBackfill, WatershedBackfillKind};
+pub use primitive::backfill::{
+	BasinBackfill, BasinBackfillParams, HydroBackfill, HydroBackfillKind, NodeBackfill,
+	NodeBackfillParams, RimBackfill, RimBackfillParams,
+};
 pub use primitive::complex::{CompiledWatershed, HydroComplex};
 pub use primitive::fill::{WaterFill, WaterSurface};
 pub use primitive::hydro::{
@@ -36,6 +39,6 @@ pub use primitive::hydro::{
 };
 pub use primitive::node::{nodes_from_polyline, HydroNode};
 pub use primitive::parameters::{
-	ApronParams, ComplexParams, CorrectionStage, HydroParams, RimParams, DEFAULT_RIM_UPLIFT_CAP,
-	TARGET_RIM_WIDTH,
+	ApronParams, ComplexParams, CorrectionStage, HydroParams, RimParams, TerrainBlendStage,
+	DEFAULT_RIM_UPLIFT_CAP, TARGET_RIM_WIDTH,
 };

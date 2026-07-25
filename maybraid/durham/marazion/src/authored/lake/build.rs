@@ -5,17 +5,16 @@ use crate::authored::lake::budget::LakeBandBudget;
 use crate::authored::lake::shelf::ShelfLevels;
 use crate::authored::lake::LakeParams;
 use crate::authored::noise::{scale_noise_freq, NOISE_FREQ_REF_RADIUS};
-use crate::primitive::complex::HydroComplex;
 use crate::primitive::hydro::{
 	Ellipse, HydroElevation, HydroFootprint, HydroPrimitive, RadialBowl,
 };
 use crate::primitive::node::HydroNode;
-use crate::primitive::parameters::{HydroParams, TARGET_RIM_WIDTH};
+use crate::primitive::parameters::HydroParams;
 use bevy_math::Vec2;
 use jersey_terrain_stamps::{EllipseRegion, Region2D, RegionNoise};
-use procedural_common::Bounds2;
 
 const DEPTH_SALT: u32 = 0x1A7E_DE07;
+const RIM_BACKFILL_SALT: u32 = 0x1A7E_BF11;
 
 fn ellipse_region(center: Vec2, radii: Vec2, rotation: f32) -> Region2D {
 	Region2D::Ellipse(EllipseRegion {
@@ -33,22 +32,14 @@ pub(crate) struct LakeLayout {
 }
 
 /// Lake-specific stamp: one radial-bowl hydrology node.
-///
-/// Convert with [`Self::into_complex`] → [`HydroComplex`].
 #[derive(Debug, Clone)]
 pub(crate) struct LakeBowl {
-	/// Wet footprint (basin backfill / overlays).
+	/// Wet footprint (overlays / future stamps).
+	#[allow(dead_code)]
 	pub wet_core: Region2D,
 	pub node: HydroNode,
 	/// Authoring metadata: water radius + rim bleed (water SDF follows carve \(\phi\)).
 	pub fill_radius: f32,
-}
-
-impl LakeBowl {
-	/// `LakeBowl` → sole-node [`HydroComplex`] with hydrology emit.
-	pub fn into_complex(self, bounds: Bounds2, seed: u32) -> HydroComplex {
-		HydroComplex::new(bounds, seed).with_hydro(vec![self.node])
-	}
 }
 
 pub(crate) fn build_bowl(
@@ -61,7 +52,8 @@ pub(crate) fn build_bowl(
 	let budget = &layout.budget;
 	let water_r = budget.water_radii;
 	let plateau_r = budget.plateau_radii;
-	let rim_w = TARGET_RIM_WIDTH;
+	// Budget reserves [`TARGET_RIM_WIDTH`] so index extents match inscription.
+	let rim_w = budget.rim_width.max(1.0);
 	let apron_w = budget.apron_width.max(1.0);
 	let rotation = budget.rotation;
 	let short_water = budget.water_radius();
@@ -89,30 +81,50 @@ pub(crate) fn build_bowl(
 		short_water,
 		ApronNoiseSalts::LAKE,
 	);
-	let apron_outer = (apron_w + apron_noise.apron_amp).max(apron_w);
 	let shore_amp = (short_water.max(1.0) * params.shore_indent_frac.clamp(0.0, 0.45)).max(0.01);
 	let shore_freq = scale_noise_freq(
 		params.shore_freq.max(0.0),
 		short_water,
 		params.apron.noise_freq_power,
 	);
-	let boundary_noise = RegionNoise::from_seed(seed.wrapping_add(5), shore_freq, shore_amp);
+	let boundary_noise = Some(RegionNoise::from_seed(
+		seed.wrapping_add(5),
+		shore_freq,
+		shore_amp,
+	));
+	// Spatial ring→apron warp (independent of shore φ noise). Nominal apron
+	// width stays `apron_w`; pad includes indent amp for the noisy rim outer.
+	let rim_boundary_noise = Some(apron_noise.apron.clone());
+	let rim_boundary_amp = apron_noise.apron_amp;
 
-	let max_correction_extent = (rim_w + apron_outer + shore_amp).max(0.0);
+	let rim_backfill_params = {
+		let mut p = LakeParams::rim_backfill_params(short_water);
+		p.freq = scale_noise_freq(p.freq, short_water, params.apron.noise_freq_power);
+		p
+	};
+	// Rim backfill + shore/rim noise sit inside rim/apron — pad is band widths.
+	let max_correction_extent = (rim_w + apron_w).max(0.0);
 	let mut rim = params.rim;
 	rim.width = rim_w;
 	rim.lift = params.rim.lift.max(0.0);
 	rim.shelf_anchor = Some(layout.levels.shelf_anchor);
 	rim.uplift_cap = params.rim.recipe_uplift_cap();
 	let mut apron = params.apron;
-	apron.width = apron_outer;
+	apron.width = apron_w;
 
 	let hydro_params = HydroParams {
 		rim,
 		apron,
 		rim_height: apron_noise.rim_height,
-		boundary_noise: Some(boundary_noise),
+		boundary_noise,
+		rim_boundary_noise,
+		shore_blend: HydroParams::recommend_shore_blend(rim_w, shore_amp),
+		rim_apron_blend: HydroParams::recommend_shore_blend(
+			rim_w,
+			shore_amp.max(rim_boundary_amp),
+		),
 	};
+	let rim_backfill = rim_backfill_params.sample(seed, RIM_BACKFILL_SALT);
 	let node = HydroNode::new(
 		HydroPrimitive {
 			footprint: HydroFootprint::Ellipse(Ellipse {
@@ -128,7 +140,8 @@ pub(crate) fn build_bowl(
 		},
 		hydro_params,
 		max_correction_extent,
-	);
+	)
+	.with_backfill(rim_backfill);
 
 	LakeBowl {
 		wet_core: water_region,

@@ -1,33 +1,29 @@
 //! Indexed hydrology complex: member nodes + sample-time correction.
 //!
-//! Authored leaves emit [`crate::primitive::node::HydroNode`]s.
+//! Authored leaves emit [`crate::primitive::node::HydroNode`]s (optional
+//! per-node [`crate::primitive::backfill::HydroBackfill`]).
 //! [`HydroComplex`] is a bag of nodes to blend — no graph / connectivity.
-//! Optional backfills stay a post-depression jersey layer via [`Self::compile`].
 
-use crate::primitive::backfill::WatershedBackfill;
 use crate::primitive::fill::{WaterFill, WaterSurface};
 use crate::primitive::parameters::ComplexParams;
 use crate::primitive::hydro::{FootprintIndex, HydroPrimitive};
 use crate::primitive::node::HydroNode;
 use bevy_math::{Vec2, Vec3};
-use jersey_terrain_stamps::JerseyModulation;
 use procedural_common::Bounds2;
 
-/// Stamp products derived from a [`HydroComplex`] (fills + optional backfills).
+/// Stamp products derived from a [`HydroComplex`] (fills).
 #[derive(Debug, Clone)]
 pub struct CompiledWatershed {
 	pub bounds: Bounds2,
 	pub seed: u32,
 	/// Indexed complex used for elevation / fill sampling.
 	pub complex: HydroComplex,
-	/// Post-depression jersey ops (backfills).
-	pub modulations: Vec<JerseyModulation>,
 	pub fills: Vec<WaterFill>,
 }
 
 impl CompiledWatershed {
 	pub fn is_empty(&self) -> bool {
-		self.complex.is_empty() && self.modulations.is_empty()
+		self.complex.is_empty()
 	}
 
 	pub fn has_hydro(&self) -> bool {
@@ -35,21 +31,16 @@ impl CompiledWatershed {
 	}
 
 	pub fn modify_elevation(&self, elevation: f32, x: f32, z: f32) -> f32 {
-		let mut h = self.complex.modify_elevation(elevation, x, z);
-		for m in &self.modulations {
-			h = m.modify_elevation(h, x, z);
-		}
-		h
+		self.complex.modify_elevation(elevation, x, z)
 	}
 }
 
 /// Captures and indexes hydrology nodes; owns carve → rim → apron modulation
-/// and the pocket water SDF (carve × half-space below \(W\)).
+/// (plus optional per-node backfill) and the pocket water SDF (carve × half-space below \(W\)).
 #[derive(Debug, Clone)]
 pub struct HydroComplex {
 	pub bounds: Bounds2,
 	pub seed: u32,
-	pub backfills: Vec<WatershedBackfill>,
 	/// Member hydrology nodes (source of truth for correction).
 	pub hydrology: Vec<HydroNode>,
 	/// Broadphase over [`Self::hydrology`] (rebuilt when nodes change).
@@ -61,7 +52,6 @@ impl HydroComplex {
 		let mut complex = Self {
 			bounds,
 			seed,
-			backfills: Vec::new(),
 			hydrology: Vec::new(),
 			index: FootprintIndex::empty(),
 		};
@@ -88,11 +78,6 @@ impl HydroComplex {
 	pub fn with_hydro(mut self, nodes: Vec<HydroNode>) -> Self {
 		self.hydrology = nodes;
 		self.reindex();
-		self
-	}
-
-	pub fn with_backfill(mut self, backfill: WatershedBackfill) -> Self {
-		self.backfills.push(backfill);
 		self
 	}
 
@@ -132,14 +117,14 @@ impl HydroComplex {
 		out
 	}
 
-	/// Class-priority blend over intersecting nodes (carve → rim → apron).
+	/// Class-priority blend over intersecting nodes (carve → rim → apron + backfill).
 	pub fn modify_elevation(&self, elevation: f32, x: f32, z: f32) -> f32 {
 		let p = Vec2::new(x, z);
 		if !self.bounds.contains(p) {
 			return elevation;
 		}
 		let nodes = self.nodes_intersecting(p);
-		HydroNode::blend_terrain_elevation(&nodes, elevation, p)
+		HydroNode::elevation_blend(&nodes, elevation, p)
 	}
 
 	/// Soft-min free surface over carve-owned nodes at `(x, z)`.
@@ -207,12 +192,6 @@ impl HydroComplex {
 	}
 
 	pub fn compile(&self) -> CompiledWatershed {
-		let modulations: Vec<_> = self
-			.backfills
-			.iter()
-			.cloned()
-			.map(|b| b.into_modulation())
-			.collect();
 		let fills = if self.is_empty() {
 			Vec::new()
 		} else {
@@ -222,7 +201,6 @@ impl HydroComplex {
 			bounds: self.bounds,
 			seed: self.seed,
 			complex: self.clone(),
-			modulations,
 			fills,
 		}
 	}
@@ -231,14 +209,14 @@ impl HydroComplex {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use crate::primitive::backfill::WatershedBackfill;
+	use crate::primitive::backfill::{BasinBackfill, HydroBackfill};
 	use crate::primitive::hydro::{
 		Ellipse, HydroElevation, HydroFootprint, HydroPrimitive, RadialBowl, ReachProfile,
 		ReachSegment,
 	};
 	use crate::primitive::parameters::HydroParams;
 	use crate::primitive::node::HydroNode;
-	use jersey_terrain_stamps::{CircleRegion, Region2D, RegionNoise};
+	use jersey_terrain_stamps::RegionNoise;
 
 	#[test]
 	fn empty_complex_compiles_empty() -> anyhow::Result<()> {
@@ -250,11 +228,7 @@ mod tests {
 	}
 
 	#[test]
-	fn backfill_appends_after_hydro() -> anyhow::Result<()> {
-		let core = Region2D::Circle(CircleRegion {
-			center: Vec2::ZERO,
-			radius: 10.0,
-		});
+	fn node_basin_backfill_raises_interior() -> anyhow::Result<()> {
 		let node = HydroNode::new(
 			HydroPrimitive {
 				footprint: HydroFootprint::Ellipse(Ellipse {
@@ -270,17 +244,36 @@ mod tests {
 			},
 			HydroParams::default(),
 			12.0,
+		)
+		.with_backfill(HydroBackfill::Basin(BasinBackfill {
+			noise: RegionNoise::from_seed(1, 0.08, 4.0),
+			fade: 2.0,
+			add_only: true,
+		}));
+		let complex = HydroComplex::new(Bounds2::from_xz(-40.0, -40.0, 40.0, 40.0), 3)
+			.with_hydro(vec![node]);
+		let base = 40.0;
+		let mut max_raise = 0.0_f32;
+		for &(x, z) in &[
+			(0.0, 0.0),
+			(2.0, 1.0),
+			(-3.0, 2.0),
+			(1.5, -2.5),
+			(-1.0, -1.0),
+		] {
+			let bare = {
+				let nodes = complex.nodes_intersecting(Vec2::new(x, z));
+				HydroNode::elevation_blend_without_backfill(&nodes, base, Vec2::new(x, z))
+			};
+			let full = complex.modify_elevation(base, x, z);
+			max_raise = max_raise.max(full - bare);
+		}
+		anyhow::ensure!(max_raise > 0.05, "interior should raise somewhere, max Δ={max_raise}");
+		let h_out = complex.modify_elevation(base, 35.0, 0.0);
+		anyhow::ensure!(
+			(h_out - base).abs() < 1e-3,
+			"far field identity, got {h_out}"
 		);
-		let out = HydroComplex::new(Bounds2::from_xz(-40.0, -40.0, 40.0, 40.0), 3)
-			.with_hydro(vec![node])
-			.with_backfill(WatershedBackfill::basin(
-				core,
-				RegionNoise::from_seed(1, 0.05, 4.0),
-				2.0,
-			))
-			.compile();
-		assert!(out.has_hydro());
-		assert_eq!(out.modulations.len(), 1);
 		Ok(())
 	}
 

@@ -35,11 +35,12 @@ impl ApronNoiseSalts {
 	};
 }
 
-/// Drawn apron boundary + add-only rim height noises for one leaf bake.
+/// Drawn apron (ring→apron) boundary + add-only rim height noises for one leaf bake.
 #[derive(Debug, Clone)]
 pub struct ApronRimNoise {
+	/// Spatial warp for [`crate::primitive::parameters::HydroParams::rim_boundary_noise`].
 	pub apron: RegionNoise,
-	/// Indent amplitude used when expanding lake-style outer width.
+	/// Peak indent amplitude (broadphase pad / blend sizing).
 	pub apron_amp: f32,
 	pub rim_height: RegionNoise,
 }
@@ -81,8 +82,7 @@ pub fn sample_apron_rim_noise(
 		rim_freq_lo + (rim_freq_hi - rim_freq_lo) * n01_at(seed, salts.rim_freq, anchor);
 	let rim_height_freq =
 		scale_noise_freq(rim_freq_authored, scale_radius, apron.noise_freq_power);
-	let rim_height =
-		RegionNoise::from_seed(seed.wrapping_add(7), rim_height_freq, rim_height_amp);
+	let rim_height = RegionNoise::from_seed(seed.wrapping_add(7), rim_height_freq, rim_height_amp);
 
 	ApronRimNoise {
 		apron: apron_noise,

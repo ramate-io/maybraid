@@ -1,6 +1,7 @@
 //! Inscribed elliptical band budget for lake leaves.
 
 use crate::authored::lake::LakeParams;
+use crate::primitive::parameters::TARGET_RIM_WIDTH;
 use bevy_math::Vec2;
 use procedural_common::Bounds2;
 
@@ -67,13 +68,15 @@ impl LakeBandBudget {
 		}
 
 		let max_water_short = (short_room * 0.5).min(short_avail * 0.45);
-		// Keep the rim claim modest — it is a berm, not a wide terrace.
-		let rim_claim = (short_avail * params.rim_frac.clamp(0.015, 0.25))
-			.max(short_avail * 0.02)
-			.min(short_avail * 0.18);
-		let rim_hi = 1.0;
-		let rim_lo = params.rim_width_min.clamp(0.2, rim_hi);
-		let rim = rim_claim * (rim_lo + (rim_hi - rim_lo) * rim_u01.clamp(0.0, 1.0));
+		// Match authored hydro rim ([`TARGET_RIM_WIDTH`]) so index extents fit.
+		let rim_claim = TARGET_RIM_WIDTH
+			.min(short_avail * 0.35)
+			.max(params.rim_width_min.clamp(0.2, TARGET_RIM_WIDTH));
+		if short_avail < rim_claim + MIN_WATER_RADIUS * 2.0 {
+			return None;
+		}
+		let _ = rim_u01; // reserved for later rim undershoot once extents are stable
+		let rim = rim_claim;
 		let apron = (short_avail * params.apron_frac.max(0.05))
 			.max(short_avail * 0.14)
 			.min(short_avail * 0.72);

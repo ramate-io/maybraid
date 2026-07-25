@@ -5,6 +5,7 @@
 //! into one [`HydroComplex`] (sample-time union blend).
 
 use crate::authored::apron::{sample_apron_rim_noise, ApronNoiseSalts};
+use crate::primitive::backfill::HydroBackfill;
 use crate::primitive::parameters::{HydroParams, TARGET_RIM_WIDTH};
 use crate::primitive::complex::HydroComplex;
 use crate::primitive::node::nodes_from_polyline;
@@ -125,6 +126,7 @@ pub struct StreamsGraph {
 	pub(crate) key_points: Vec<Vec2>,
 	params: HydroParams,
 	max_correction_extent: f32,
+	rim_backfill: HydroBackfill,
 }
 
 impl StreamsGraph {
@@ -300,8 +302,25 @@ impl StreamsGraph {
 			budget.half_width,
 			stream_p.apron.noise_freq_power,
 		);
-		let boundary_noise = RegionNoise::from_seed(seed.wrapping_add(5), shore_freq, shore_amp);
-		let max_correction_extent = (rim_w + apron_w + shore_amp).max(0.0);
+		let boundary_noise = Some(RegionNoise::from_seed(
+			seed.wrapping_add(5),
+			shore_freq,
+			shore_amp,
+		));
+		let rim_boundary_noise = Some(apron_noise.apron.clone());
+		let rim_boundary_amp = apron_noise.apron_amp;
+		const RIM_BACKFILL_SALT: u32 = 0x57EA_BF11;
+		let rim_backfill_params = {
+			let mut p = StreamParams::rim_backfill_params(budget.half_width);
+			p.freq = scale_noise_freq(
+				p.freq,
+				budget.half_width,
+				stream_p.apron.noise_freq_power,
+			);
+			p
+		};
+		// Rim backfill + shore/rim noise sit inside rim/apron — pad is band widths.
+		let max_correction_extent = (rim_w + apron_w).max(0.0);
 		let mut rim = stream_p.rim;
 		rim.width = rim_w;
 		rim.lift = stream_p.rim.lift.max(0.0);
@@ -313,8 +332,15 @@ impl StreamsGraph {
 			rim,
 			apron,
 			rim_height: apron_noise.rim_height,
-			boundary_noise: Some(boundary_noise),
+			boundary_noise,
+			rim_boundary_noise,
+			shore_blend: HydroParams::recommend_shore_blend(rim_w, shore_amp),
+			rim_apron_blend: HydroParams::recommend_shore_blend(
+				rim_w,
+				shore_amp.max(rim_boundary_amp),
+			),
 		};
+		let rim_backfill = rim_backfill_params.sample(seed, RIM_BACKFILL_SALT);
 
 		Some(Self {
 			bounds,
@@ -326,6 +352,7 @@ impl StreamsGraph {
 			key_points,
 			params,
 			max_correction_extent,
+			rim_backfill,
 		})
 	}
 
@@ -333,19 +360,24 @@ impl StreamsGraph {
 		Self::from_bounds(bounds, seed, StreamsGraphParams::default(), None)
 	}
 
-	/// Hydrology nodes authored by this graph (reach segments across all corridors).
+	/// Hydrology nodes authored by this graph (reach segments that fit the leaf).
 	pub fn hydro_nodes(&self) -> Vec<crate::primitive::node::HydroNode> {
 		let mut hydrology = Vec::new();
 		for corridor in &self.corridors {
 			let center_depth = corridor.freeboard + corridor.depth;
-			hydrology.extend(nodes_from_polyline(
-				&corridor.path,
-				&corridor.levels,
-				corridor.half_width,
-				center_depth,
-				&self.params,
-				self.max_correction_extent,
-			));
+			hydrology.extend(
+				nodes_from_polyline(
+					&corridor.path,
+					&corridor.levels,
+					corridor.half_width,
+					center_depth,
+					&self.params,
+					self.max_correction_extent,
+					Some(&self.rim_backfill),
+				)
+				.into_iter()
+				.filter(|n| n.inbounds(self.bounds)),
+			);
 		}
 		hydrology
 	}
@@ -385,7 +417,6 @@ mod tests {
 		assert!(g.edge_count >= 1);
 		let compiled = g.into_complex().compile();
 		assert!(compiled.has_hydro());
-		assert!(compiled.modulations.is_empty());
 		assert_eq!(compiled.fills.len(), 1);
 		assert!(matches!(
 			compiled.fills[0].surface,
@@ -422,6 +453,7 @@ mod tests {
 
 	#[test]
 	fn freeboard_under_wet_carve() -> anyhow::Result<()> {
+		use crate::primitive::node::HydroNode;
 		let bounds = Bounds2::from_xz(0.0, 0.0, 500.0, 500.0);
 		let params = StreamsGraphParams::default();
 		let freeboard = params.stream.channel_freeboard;
@@ -436,10 +468,16 @@ mod tests {
 					continue;
 				}
 				let w = fill.surface_level_at(mid.x, mid.y);
-				let h = compiled.modify_elevation(slope_height(mid.x, mid.y), mid.x, mid.y);
+				// Freeboard is a bare hydro invariant; rim backfill may raise near shore.
+				let nodes = compiled.complex.nodes_intersecting(mid);
+				let h = HydroNode::elevation_blend_without_backfill(
+					&nodes,
+					slope_height(mid.x, mid.y),
+					mid,
+				);
 				assert!(
 					h <= w - freeboard * 0.35,
-					"bed {h} should sit under W {w} (freeboard {freeboard}) at {mid:?}"
+					"bare bed {h} should sit under W {w} (freeboard {freeboard}) at {mid:?}"
 				);
 			}
 		}
