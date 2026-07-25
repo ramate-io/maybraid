@@ -6,9 +6,20 @@
 //!
 //! At the same time, common constructions built only requiring this representation
 //! can be reused within authored types.
+//!
+//! The cells are rectangular prisms, describing authoring bounds.
+//! The authored types do not need, however, to author strictly rectangular geometry.
 
 use bevy_math::bounding::{Aabb2d, Aabb3d};
 use std::collections::HashMap;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct BoundaryThicknessEntry {
+	/// The fallback thickness for the boundary (common when the boundary is one thickness)
+	fallback: f32,
+	/// The thickness for each sub-region of the boundary.
+	sub_regions: HashMap<Aabb2d, f32>,
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum BoundaryOwnershipStatus {
@@ -82,13 +93,13 @@ pub struct CellBoundaryTable<T: Clone> {
 	pub top: Option<T>,
 	/// Bevy -Y
 	pub bottom: Option<T>,
-	/// Bevy +X (double-check this)
+	/// Bevy -X (double-check this)
 	pub left: Option<T>,
-	/// Bevy -X
+	/// Bevy +X
 	pub right: Option<T>,
-	/// Bevy +Z (double-check this)
+	/// Bevy -Z (double-check this)
 	pub front: Option<T>,
-	/// Bevy -Z
+	/// Bevy +Z
 	pub back: Option<T>,
 }
 
@@ -96,6 +107,8 @@ pub struct CellBoundaryTable<T: Clone> {
 pub struct CellConstraints {
 	/// The spatial constraints of the cell, within these bounds, the cell has write authority.
 	pub aabb: Aabb3d,
+	/// The boundary thickness for the cell.
+	pub boundary_thickness: CellBoundaryTable<BoundaryThicknessEntry>,
 	/// The boundary ownership map for the cell.
 	pub boundary_ownership: CellBoundaryTable<BoundaryOwnershipEntry>,
 	/// The circulation requirements for the cell.
