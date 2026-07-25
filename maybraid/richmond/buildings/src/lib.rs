@@ -10,7 +10,10 @@
 //! The cells are rectangular prisms, describing authoring bounds.
 //! The authored types do not need, however, to author strictly rectangular geometry.
 
-use bevy_math::bounding::{Aabb2d, Aabb3d};
+use bevy_math::{
+	bounding::{Aabb2d, Aabb3d},
+	Vec3,
+};
 use std::collections::HashMap;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -79,6 +82,27 @@ pub enum CirculationRequestStatus {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct CirculationEntry(HashMap<Aabb2d, Vec<CirculationRequestStatus>>);
 
+/// A sample of the incoming boundary geometry before the joint point.
+///
+/// A series of three dimensional points, probably normalized to boundary space.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct PreJointSweep(Vec<Vec3>);
+
+/// The coordinate of a joint on the boundary.
+///
+/// Interestingly, joints will typically fall on the edge of ownership boundaries.
+/// We should probably provide a behavioral unificaiton path for this case.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct JointCoordinate {
+	/// The distance along the boundary segment.
+	pub t: f32,
+	/// The height up the boundary segment.
+	pub h: f32,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct JointEntry(HashMap<JointCoordinate, PreJointSweep>);
+
 /// The complete boundary table for the cell.
 ///
 /// Often, a lower order cell will subset boundary table from its parent,
@@ -113,4 +137,6 @@ pub struct CellConstraints {
 	pub boundary_ownership: CellBoundaryTable<BoundaryOwnershipEntry>,
 	/// The circulation requirements for the cell.
 	pub circulation: CellBoundaryTable<CirculationEntry>,
+	/// The joints for the cell.
+	pub joints: CellBoundaryTable<JointEntry>,
 }
