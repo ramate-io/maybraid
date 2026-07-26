@@ -22,3 +22,5 @@ We have not yet defined a sweeping tool. The plan is to make it take linear segm
     - Z = [-0.2, 0.2]
     - Y = [0.0, 0.3]
     - X = [-1.0, 1.0]
+
+A common approach to building door frames is to use a header component with various 15 degree arc sweeps to create the frame.
