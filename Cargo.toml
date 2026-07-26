@@ -5,6 +5,7 @@ resolver = "2"
 members = [
 
   # maybraid game crates, typically following rfcs  
+  "maybraid/richmond/building-components",
   "maybraid/richmond/buildings",
 
   "maybraid/durham/lib",
