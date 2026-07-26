@@ -183,6 +183,8 @@ durham-terrain-models-playground = { path = "maybraid/durham/models-playground" 
 jersey-terrain-stamps = { path = "maybraid/durham/jersey" }
 marazion-watersheds = { path = "maybraid/durham/marazion" }
 
+richmond-building-components = { path = "maybraid/richmond/building-components" }
+
 avian3d = "0.7"
 
 lod = { path = "maybraid/lod/lib" }

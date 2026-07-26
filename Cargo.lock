@@ -5523,7 +5523,7 @@ version = "0.0.1"
 dependencies = [
  "anyhow",
  "bevy_math",
- "jersey-terrain-stamps",
+ "lod",
  "procedural-common",
 ]
 
@@ -5533,8 +5533,9 @@ version = "0.0.1"
 dependencies = [
  "anyhow",
  "bevy_math",
- "jersey-terrain-stamps",
+ "lod",
  "procedural-common",
+ "richmond-building-components",
 ]
 
 [[package]]
