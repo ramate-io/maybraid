@@ -487,27 +487,26 @@ fn interval_overlap_unwrap(a: ArcRegion, b: ArcRegion) -> bool {
 	false
 }
 
-/// Cardinal door + windows used by the Wizard's Tower storeys (full 360° arc).
-pub fn wizard_tower_must_assign() -> Vec<MustAssignPortal> {
-	vec![
-		MustAssignPortal::at(0.0, Portal::Door),
-		MustAssignPortal::at(0.25, Portal::Window),
-		MustAssignPortal::at(0.5, Portal::Window),
-		MustAssignPortal::at(0.75, Portal::Window),
-	]
-}
-
 #[cfg(test)]
 mod tests {
 	use super::*;
 
-	fn tower_arc(optional: (u32, u32), seed: i32) -> ArcWall {
+	fn cardinal_must_assign() -> Vec<MustAssignPortal> {
+		vec![
+			MustAssignPortal::at(0.0, Portal::Door),
+			MustAssignPortal::at(0.25, Portal::Window),
+			MustAssignPortal::at(0.5, Portal::Window),
+			MustAssignPortal::at(0.75, Portal::Window),
+		]
+	}
+
+	fn closed_arc(optional: (u32, u32), seed: i32) -> ArcWall {
 		ArcWall::new(ArcWallParams {
 			center_xz: Vec3::ZERO,
 			radius: 4.0,
 			storey_height: 3.0,
 			arc_degrees: 360.0,
-			must_assign: wizard_tower_must_assign(),
+			must_assign: cardinal_must_assign(),
 			must_not_assign: vec![],
 			portal_noise: NoiseParams {
 				seed,
@@ -519,7 +518,7 @@ mod tests {
 
 	#[test]
 	fn must_assign_cardinals_without_optional() -> anyhow::Result<()> {
-		let wall = tower_arc((0, 0), 1);
+		let wall = closed_arc((0, 0), 1);
 		assert_eq!(wall.portals.len(), 4);
 		assert!(matches!(wall.portals[0].portal, Portal::Door));
 		assert!((wall.portals[0].t - 0.0).abs() < 1e-5);
@@ -536,7 +535,7 @@ mod tests {
 
 	#[test]
 	fn optional_portals_stay_in_can_assign() -> anyhow::Result<()> {
-		let wall = tower_arc((0, 4), 42);
+		let wall = closed_arc((0, 4), 42);
 		assert!(wall.portals.len() >= 4);
 		assert!(wall.portals.len() <= 8);
 		for i in 0..wall.portals.len() {
@@ -590,7 +589,6 @@ mod tests {
 		});
 		assert!((wall.arc_degrees - 180.0).abs() < 1e-3);
 		assert_eq!(wall.portals.len(), 2);
-		// Three solid runs: before, between, after — no wrap-around fourth.
 		let solids = wall
 			.walls
 			.iter()

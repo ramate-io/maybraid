@@ -1,6 +1,6 @@
 //! A floor of the Wizard's Tower.
 //!
-//! Geometry: outer [`ArcWall`] with door/window portals, squared-off floor
+//! Geometry: outer crate-level [`crate::ArcWall`] with door/window portals, squared-off floor
 //! with a centered spire hole, and a circular rough-stone tread run inside the spire
 //! square that rises one storey. Each storey also carries a lantern-like point light
 //! (mesh TBD).
@@ -16,8 +16,9 @@ use richmond_building_components::partitions::rough_stone_wall;
 use richmond_building_components::stairs::{rough_stone_stair, Stair};
 use richmond_building_components::{scene_children, Placed};
 
-use crate::wizards_tower::arc_wall::{wizard_tower_must_assign, ArcWall, ArcWallParams};
+use crate::arc_wall::{ArcWall, ArcWallParams};
 use crate::wizards_tower::floor_fill::{squared_floor_with_spire_hole, SPIRE_HALF_FRAC};
+use crate::wizards_tower::must_assign_cardinal_portals;
 use crate::CellConstraints;
 
 /// One storey of the circular tower.
@@ -73,7 +74,7 @@ impl WizardsTowerFloor {
 			radius,
 			storey_height,
 			arc_degrees: 360.0,
-			must_assign: wizard_tower_must_assign(),
+			must_assign: must_assign_cardinal_portals(),
 			must_not_assign: vec![],
 			portal_noise,
 			optional_portals: (0, 2),

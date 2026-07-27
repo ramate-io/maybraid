@@ -10,10 +10,14 @@
 //! The cells are rectangular prisms, describing authoring bounds.
 //! The authored types do not need, however, to author strictly rectangular geometry.
 
+pub mod arc_wall;
 pub mod constraints;
 pub mod stacked_rings;
 pub mod wizards_tower;
 
+pub use arc_wall::{
+	ArcRegion, ArcWall, ArcWallParams, AssignedPortal, MustAssignPortal, Portal,
+};
 pub use constraints::{
 	BoundaryOwnershipEntry, BoundaryOwnershipStatus, BoundaryRegionList, BoundaryThicknessEntry,
 	CellBoundaryTable, CellConstraints, CirculationEntry, CirculationRequestStatus, FaceKind,

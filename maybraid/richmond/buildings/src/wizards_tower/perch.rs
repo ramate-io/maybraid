@@ -1,6 +1,6 @@
 //! Larger top-floor perch capping the Wizard's Tower.
 //!
-//! Same treatment as a regular storey for now: [`ArcWall`] + squared floor.
+//! Same treatment as a regular storey for now: crate-level [`crate::ArcWall`] + squared floor.
 
 use bevy::scene::prelude::Scene;
 use bevy_math::Vec3;
@@ -11,8 +11,9 @@ use richmond_building_components::floors::{rough_stone_floor, Floor};
 use richmond_building_components::partitions::rough_stone_wall;
 use richmond_building_components::{scene_children, Placed};
 
-use crate::wizards_tower::arc_wall::{wizard_tower_must_assign, ArcWall, ArcWallParams};
+use crate::arc_wall::{ArcWall, ArcWallParams};
 use crate::wizards_tower::floor_fill::{squared_floor_with_spire_hole, SPIRE_HALF_FRAC};
+use crate::wizards_tower::must_assign_cardinal_portals;
 use crate::CellConstraints;
 
 /// Top perch: wider circular platform over the column.
@@ -49,7 +50,7 @@ impl WizardsTowerPerch {
 			radius,
 			storey_height,
 			arc_degrees: 360.0,
-			must_assign: wizard_tower_must_assign(),
+			must_assign: must_assign_cardinal_portals(),
 			must_not_assign: vec![],
 			portal_noise,
 			optional_portals: (0, 2),

@@ -5,12 +5,11 @@
 //!
 //! # Layering (current sketch)
 //!
-//! Each storey draws a parameterized [`ArcWall`] (must / must-not / noise portals,
-//! configurable arc degrees) and a squared-off **floor** (circle−inscribed-square
-//! caps + rectangular slabs around a spire hole). Internal partitions, rooms, and
-//! spire geometry are deferred.
+//! Each storey draws a parameterized crate-level [`crate::ArcWall`] (must / must-not /
+//! noise portals, configurable arc degrees) and a squared-off **floor**
+//! (circle−inscribed-square caps + rectangular slabs around a spire hole). Internal
+//! partitions, rooms, and spire geometry are deferred.
 
-pub mod arc_wall;
 pub mod floor;
 pub mod floor_fill;
 pub mod perch;
@@ -18,9 +17,6 @@ pub mod room;
 pub mod spire;
 pub mod tower;
 
-pub use arc_wall::{
-	ArcRegion, ArcWall, ArcWallParams, AssignedPortal, MustAssignPortal, Portal,
-};
 pub use floor::WizardsTowerFloor;
 pub use perch::WizardsTowerPerch;
 pub use room::WizardsTowerRoom;
@@ -34,8 +30,19 @@ use procedural_common::NoiseParams;
 
 use richmond_building_components::scene_children;
 
+use crate::arc_wall::{MustAssignPortal, Portal};
 use crate::wizards_tower::floor_fill::WALL_HEIGHT_METERS;
 use crate::CellConstraints;
+
+/// Cardinal door + windows on a full 360° storey arc.
+pub fn must_assign_cardinal_portals() -> Vec<MustAssignPortal> {
+	vec![
+		MustAssignPortal::at(0.0, Portal::Door),
+		MustAssignPortal::at(0.25, Portal::Window),
+		MustAssignPortal::at(0.5, Portal::Window),
+		MustAssignPortal::at(0.75, Portal::Window),
+	]
+}
 
 /// Root authored building: a circular tower column stack with a central spire
 /// and a larger perch on the top floor.
