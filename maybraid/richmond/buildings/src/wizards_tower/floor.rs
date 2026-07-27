@@ -1,6 +1,6 @@
 //! A floor of the Wizard's Tower.
 //!
-//! Geometry: circular outer [`RingWall`] with door/window portals, squared-off floor
+//! Geometry: outer [`ArcWall`] with door/window portals, squared-off floor
 //! with a centered spire hole, and a circular rough-stone tread run inside the spire
 //! square that rises one storey. Each storey also carries a lantern-like point light
 //! (mesh TBD).
@@ -16,20 +16,18 @@ use richmond_building_components::partitions::rough_stone_wall;
 use richmond_building_components::stairs::{rough_stone_stair, Stair};
 use richmond_building_components::{scene_children, Placed};
 
+use crate::wizards_tower::arc_wall::{wizard_tower_must_assign, ArcWall, ArcWallParams};
 use crate::wizards_tower::floor_fill::{squared_floor_with_spire_hole, SPIRE_HALF_FRAC};
-use crate::wizards_tower::ring_wall::{
-	wizard_tower_must_assign, RingWall, RingWallParams,
-};
 use crate::CellConstraints;
 
 /// One storey of the circular tower.
 #[derive(Debug, Clone, PartialEq)]
 pub struct WizardsTowerFloor {
 	pub constraints: CellConstraints,
-	/// Storey height in meters (outer ring wall \(Y\) scale).
+	/// Storey height in meters (outer wall \(Y\) scale).
 	pub storey_height: f32,
-	/// Circular outer ring with portals.
-	pub ring: RingWall,
+	/// Outer arc wall with portals.
+	pub arc_wall: ArcWall,
 	/// Four circle−inscribed-square caps that square off the circular footprint.
 	pub floor_caps: [Placed<Floor>; 4],
 	/// Rectangular slabs filling the inscribed square around the spire hole.
@@ -70,20 +68,20 @@ impl WizardsTowerFloor {
 			center.z,
 		);
 
-		let ring = RingWall::new(RingWallParams {
+		let arc_wall = ArcWall::new(ArcWallParams {
 			center_xz,
 			radius,
 			storey_height,
+			arc_degrees: 360.0,
 			must_assign: wizard_tower_must_assign(),
 			must_not_assign: vec![],
 			portal_noise,
-			// Attempt a few extra windows in the free arcs.
 			optional_portals: (0, 2),
 		});
 
 		Self {
 			storey_height,
-			ring,
+			arc_wall,
 			floor_caps,
 			floor_rects,
 			stairs: Placed::new(
@@ -115,7 +113,7 @@ fn floor_lantern(at: Vec3, storey_height: f32) -> impl Scene + 'static {
 impl LodScene for WizardsTowerFloor {
 	fn scene_with_lod(&self, lod_ref: &LodRef) -> impl Scene + 'static {
 		let mut children: Vec<Box<dyn Scene>> = Vec::new();
-		for wall in &self.ring.walls {
+		for wall in &self.arc_wall.walls {
 			children.push(Box::new(rough_stone_wall(wall, lod_ref)));
 		}
 		for cap in &self.floor_caps {

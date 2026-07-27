@@ -5,23 +5,24 @@
 //!
 //! # Layering (current sketch)
 //!
-//! Each storey draws a parameterized circular [`RingWall`] (must / must-not / noise
-//! portals) and a squared-off **floor** (circle−inscribed-square caps + rectangular
-//! slabs around a spire hole). Internal partitions, rooms, and spire geometry are deferred.
+//! Each storey draws a parameterized [`ArcWall`] (must / must-not / noise portals,
+//! configurable arc degrees) and a squared-off **floor** (circle−inscribed-square
+//! caps + rectangular slabs around a spire hole). Internal partitions, rooms, and
+//! spire geometry are deferred.
 
+pub mod arc_wall;
 pub mod floor;
 pub mod floor_fill;
 pub mod perch;
-pub mod ring_wall;
 pub mod room;
 pub mod spire;
 pub mod tower;
 
+pub use arc_wall::{
+	ArcRegion, ArcWall, ArcWallParams, AssignedPortal, MustAssignPortal, Portal,
+};
 pub use floor::WizardsTowerFloor;
 pub use perch::WizardsTowerPerch;
-pub use ring_wall::{
-	ArcRegion, AssignedPortal, MustAssignPortal, Portal, RingWall, RingWallParams,
-};
 pub use room::WizardsTowerRoom;
 pub use spire::WizardsTowerSpire;
 pub use tower::WizardsTowerColumn;

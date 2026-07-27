@@ -1,6 +1,6 @@
 //! Larger top-floor perch capping the Wizard's Tower.
 //!
-//! Same treatment as a regular storey for now: [`RingWall`] + squared floor.
+//! Same treatment as a regular storey for now: [`ArcWall`] + squared floor.
 
 use bevy::scene::prelude::Scene;
 use bevy_math::Vec3;
@@ -11,10 +11,8 @@ use richmond_building_components::floors::{rough_stone_floor, Floor};
 use richmond_building_components::partitions::rough_stone_wall;
 use richmond_building_components::{scene_children, Placed};
 
+use crate::wizards_tower::arc_wall::{wizard_tower_must_assign, ArcWall, ArcWallParams};
 use crate::wizards_tower::floor_fill::{squared_floor_with_spire_hole, SPIRE_HALF_FRAC};
-use crate::wizards_tower::ring_wall::{
-	wizard_tower_must_assign, RingWall, RingWallParams,
-};
 use crate::CellConstraints;
 
 /// Top perch: wider circular platform over the column.
@@ -23,7 +21,7 @@ pub struct WizardsTowerPerch {
 	pub constraints: CellConstraints,
 	/// Storey height in meters (outer ring wall \(Y\) scale).
 	pub storey_height: f32,
-	pub ring: RingWall,
+	pub arc_wall: ArcWall,
 	pub floor_caps: [Placed<Floor>; 4],
 	pub floor_rects: [Placed<Floor>; 4],
 }
@@ -46,10 +44,11 @@ impl WizardsTowerPerch {
 		let (floor_caps, floor_rects) =
 			squared_floor_with_spire_hole(center_xz, radius, spire_half);
 
-		let ring = RingWall::new(RingWallParams {
+		let arc_wall = ArcWall::new(ArcWallParams {
 			center_xz,
 			radius,
 			storey_height,
+			arc_degrees: 360.0,
 			must_assign: wizard_tower_must_assign(),
 			must_not_assign: vec![],
 			portal_noise,
@@ -58,7 +57,7 @@ impl WizardsTowerPerch {
 
 		Self {
 			storey_height,
-			ring,
+			arc_wall,
 			floor_caps,
 			floor_rects,
 			constraints,
@@ -69,7 +68,7 @@ impl WizardsTowerPerch {
 impl LodScene for WizardsTowerPerch {
 	fn scene_with_lod(&self, lod_ref: &LodRef) -> impl Scene + 'static {
 		let mut children: Vec<Box<dyn Scene>> = Vec::new();
-		for wall in &self.ring.walls {
+		for wall in &self.arc_wall.walls {
 			children.push(Box::new(rough_stone_wall(wall, lod_ref)));
 		}
 		for cap in &self.floor_caps {

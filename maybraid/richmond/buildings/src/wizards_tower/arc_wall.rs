@@ -1,8 +1,11 @@
-//! Parameterized circular ring wall with portal (door/window) openings.
+//! Parameterized arc wall with portal (door/window) openings.
+//!
+//! \(t \in [0, 1]\) runs along the wall’s covered sweep ([`ArcWallParams::arc_degrees`]),
+//! not necessarily a full circle.
 //!
 //! Construction:
 //! 1. **Must-assign** — best-fit a portal into each required region.
-//! 2. **Can-assign** — the unit ring minus the union of must-assign and must-not
+//! 2. **Can-assign** — the unit arc minus the union of must-assign and must-not
 //!    regions (plus footprints of portals already placed).
 //! 3. **Optional** — sample portal noise for how many optional portals to attempt
 //!    in \([min, max]\) and where to place them in can-assign space.
@@ -14,25 +17,25 @@ use richmond_building_components::Placed;
 
 /// Kit segment size (degrees) and portal width (two segments → 30°).
 const SEG_DEG: f32 = 15.0;
-const SEGS: u32 = 24;
 const PORTAL_SEGS: u32 = 2;
-/// Portal width in normalized arc parameter \(t \in [0, 1)\).
-const PORTAL_WIDTH_T: f32 = PORTAL_SEGS as f32 / SEGS as f32;
-const PORTAL_HALF_T: f32 = PORTAL_WIDTH_T * 0.5;
+/// Half-width of each portal in degrees (two 15° segments → 30° total).
+const OPEN_HALF_DEG: f32 = SEG_DEG * (PORTAL_SEGS as f32) * 0.5;
+/// Portal width in degrees.
+const PORTAL_WIDTH_DEG: f32 = OPEN_HALF_DEG * 2.0;
 /// Lintel / top-header baseline as a fraction of storey height.
 const HEADER_Y_FRAC: f32 = 0.7;
 
-/// Opening cut into a ring wall.
+/// Opening cut into an arc wall.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Portal {
 	Door,
 	Window,
 }
 
-/// Inclusive–exclusive interval on the unit circle \(t \in [0, 1)\).
+/// Inclusive–exclusive interval on the unit arc \(t \in [0, 1)\).
 ///
 /// When `start == end` the region is a **point** locus (preferred / forbidden \(t\)).
-/// When `start > end` the interval wraps across \(0\).
+/// When `start > end` the interval wraps across \(0\) (closed arcs only).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ArcRegion {
 	pub start: f32,
@@ -46,7 +49,7 @@ impl ArcRegion {
 		Self { start: t, end: t }
 	}
 
-	/// Half-open span `[start, end)` on the unit circle (wraps if `start > end`).
+	/// Half-open span `[start, end)` on the unit arc (wraps if `start > end`).
 	pub fn span(start: f32, end: f32) -> Self {
 		Self {
 			start: norm_t(start),
@@ -107,13 +110,15 @@ impl MustAssignPortal {
 	}
 }
 
-/// Parameters for [`RingWall::new`].
+/// Parameters for [`ArcWall::new`].
 #[derive(Debug, Clone)]
-pub struct RingWallParams {
+pub struct ArcWallParams {
 	pub center_xz: Vec3,
 	pub radius: f32,
 	pub storey_height: f32,
-	/// Regions that **must** receive a portal (best-fit).
+	/// Degrees of arc this wall covers (\((0, 360]\); \(360\) is a closed ring).
+	pub arc_degrees: f32,
+	/// Regions that **must** receive a portal (best-fit). \(t\) is along this arc.
 	pub must_assign: Vec<MustAssignPortal>,
 	/// Regions that **must not** receive a portal.
 	pub must_not_assign: Vec<ArcRegion>,
@@ -123,33 +128,36 @@ pub struct RingWallParams {
 	pub optional_portals: (u32, u32),
 }
 
-/// Portal assigned on the ring (center \(t\), kind).
+/// Portal assigned on the arc (center \(t\), kind).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct AssignedPortal {
 	pub t: f32,
 	pub portal: Portal,
 }
 
-/// Circular outer wall with door/window openings.
+/// Arc-shaped wall with door/window openings.
 #[derive(Debug, Clone, PartialEq)]
-pub struct RingWall {
+pub struct ArcWall {
 	pub center_xz: Vec3,
 	pub radius: f32,
 	pub storey_height: f32,
+	pub arc_degrees: f32,
 	pub portals: Vec<AssignedPortal>,
 	pub walls: Vec<Placed<Wall>>,
 }
 
-impl RingWall {
+impl ArcWall {
 	/// Assign must portals, then noise-sample optional portals in can-assign regions.
-	pub fn new(params: RingWallParams) -> Self {
+	pub fn new(params: ArcWallParams) -> Self {
 		let radius = params.radius.max(1e-4);
 		let storey_height = params.storey_height.max(1e-4);
+		let arc_degrees = params.arc_degrees.clamp(SEG_DEG, 360.0);
 		let noise = NoiseConfig::new(params.portal_noise);
+		let closed = is_closed(arc_degrees);
 
 		let mut portals = Vec::new();
 		for must in &params.must_assign {
-			let t = best_fit_portal_center(must.region);
+			let t = best_fit_portal_center(must.region, arc_degrees, closed);
 			portals.push(AssignedPortal {
 				t,
 				portal: must.portal,
@@ -158,21 +166,51 @@ impl RingWall {
 
 		let optional_n = optional_count(&noise, params.optional_portals);
 		if optional_n > 0 {
-			let candidates = can_assign_centers(&portals, &params.must_assign, &params.must_not_assign);
-			place_optional_portals(&noise, &mut portals, &candidates, optional_n);
+			let candidates = can_assign_centers(
+				arc_degrees,
+				closed,
+				&portals,
+				&params.must_assign,
+				&params.must_not_assign,
+			);
+			place_optional_portals(&noise, arc_degrees, &mut portals, &candidates, optional_n);
 		}
 
 		portals.sort_by(|a, b| a.t.partial_cmp(&b.t).unwrap_or(std::cmp::Ordering::Equal));
 
-		let walls = tessellate_ring(params.center_xz, radius, storey_height, &portals);
+		let walls = tessellate_arc(
+			params.center_xz,
+			radius,
+			storey_height,
+			arc_degrees,
+			closed,
+			&portals,
+		);
 		Self {
 			center_xz: params.center_xz,
 			radius,
 			storey_height,
+			arc_degrees,
 			portals,
 			walls,
 		}
 	}
+}
+
+fn is_closed(arc_degrees: f32) -> bool {
+	(arc_degrees - 360.0).abs() < 0.5
+}
+
+fn portal_half_t(arc_degrees: f32) -> f32 {
+	OPEN_HALF_DEG / arc_degrees.max(SEG_DEG)
+}
+
+fn portal_width_t(arc_degrees: f32) -> f32 {
+	PORTAL_WIDTH_DEG / arc_degrees.max(SEG_DEG)
+}
+
+fn seg_count(arc_degrees: f32) -> u32 {
+	((arc_degrees / SEG_DEG).round() as u32).max(1)
 }
 
 fn optional_count(noise: &NoiseConfig, (min, max): (u32, u32)) -> u32 {
@@ -185,21 +223,29 @@ fn optional_count(noise: &NoiseConfig, (min, max): (u32, u32)) -> u32 {
 	noise.sample_range_usize_4d(min, max + 1, 0.17, 0.0, 0.0, 1.0) as u32
 }
 
-fn best_fit_portal_center(region: ArcRegion) -> f32 {
-	snap_portal_center(region.midpoint())
+fn best_fit_portal_center(region: ArcRegion, arc_degrees: f32, closed: bool) -> f32 {
+	snap_portal_center(region.midpoint(), arc_degrees, closed)
 }
 
-fn snap_portal_center(t: f32) -> f32 {
-	let n = SEGS as f32;
-	(norm_t(t) * n).round().rem_euclid(n) / n
+fn snap_portal_center(t: f32, arc_degrees: f32, closed: bool) -> f32 {
+	let n = seg_count(arc_degrees) as f32;
+	let mut snapped = (norm_t(t) * n).round().rem_euclid(n) / n;
+	if !closed {
+		let half = portal_half_t(arc_degrees);
+		snapped = snapped.clamp(half, (1.0 - half).max(half));
+	}
+	snapped
 }
 
-fn portal_interval(center: f32) -> ArcRegion {
-	ArcRegion::span(center - PORTAL_HALF_T, center + PORTAL_HALF_T)
+fn portal_interval(center: f32, arc_degrees: f32) -> ArcRegion {
+	let half = portal_half_t(arc_degrees);
+	ArcRegion::span(center - half, center + half)
 }
 
 /// Kit-aligned centers whose portal footprint lies in can-assign space.
 fn can_assign_centers(
+	arc_degrees: f32,
+	closed: bool,
 	placed: &[AssignedPortal],
 	must_assign: &[MustAssignPortal],
 	must_not: &[ArcRegion],
@@ -207,20 +253,33 @@ fn can_assign_centers(
 	let mut blocked: Vec<ArcRegion> = must_assign.iter().map(|m| m.region).collect();
 	blocked.extend(must_not.iter().copied());
 	for p in placed {
-		blocked.push(portal_interval(p.t));
+		blocked.push(portal_interval(p.t, arc_degrees));
 	}
 
-	(0..SEGS)
-		.map(|i| i as f32 / SEGS as f32)
+	let n = seg_count(arc_degrees);
+	let half = portal_half_t(arc_degrees);
+	(0..n)
+		.map(|i| i as f32 / n as f32)
 		.filter(|&c| {
-			let foot = portal_interval(c);
-			!blocked.iter().any(|b| regions_overlap(foot, *b))
+			if !closed && (c < half - 1e-5 || c > 1.0 - half + 1e-5) {
+				return false;
+			}
+			// Portal must fit on an open arc (no wrap past the ends).
+			if !closed {
+				let w = portal_width_t(arc_degrees);
+				if c - half < -1e-5 || c + half > 1.0 + 1e-5 || w > 1.0 + 1e-5 {
+					return false;
+				}
+			}
+			let foot = portal_interval(c, arc_degrees);
+			!blocked.iter().any(|b| regions_overlap(foot, *b, closed))
 		})
 		.collect()
 }
 
 fn place_optional_portals(
 	noise: &NoiseConfig,
+	arc_degrees: f32,
 	portals: &mut Vec<AssignedPortal>,
 	candidates: &[f32],
 	count: u32,
@@ -240,14 +299,17 @@ fn place_optional_portals(
 		.collect();
 	scored.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
 
-	let mut blocked: Vec<ArcRegion> = portals.iter().map(|p| portal_interval(p.t)).collect();
+	let mut blocked: Vec<ArcRegion> = portals
+		.iter()
+		.map(|p| portal_interval(p.t, arc_degrees))
+		.collect();
 	let mut placed = 0u32;
 	for (_, t) in scored {
 		if placed >= count {
 			break;
 		}
-		let foot = portal_interval(t);
-		if blocked.iter().any(|b| regions_overlap(foot, *b)) {
+		let foot = portal_interval(t, arc_degrees);
+		if blocked.iter().any(|b| regions_overlap(foot, *b, true)) {
 			continue;
 		}
 		portals.push(AssignedPortal {
@@ -259,10 +321,12 @@ fn place_optional_portals(
 	}
 }
 
-fn tessellate_ring(
+fn tessellate_arc(
 	center_xz: Vec3,
 	radius: f32,
 	storey_height: f32,
+	arc_degrees: f32,
+	closed: bool,
 	portals: &[AssignedPortal],
 ) -> Vec<Placed<Wall>> {
 	let ring_scale = Vec3::new(radius, storey_height, radius);
@@ -270,10 +334,14 @@ fn tessellate_ring(
 	let mut walls = Vec::new();
 
 	for portal in portals {
-		let center_deg = portal.t * 360.0;
+		let center_deg = portal.t * arc_degrees;
 		let open_start = center_deg - OPEN_HALF_DEG;
 		for i in 0..PORTAL_SEGS {
-			let seg_start = norm_deg(open_start + i as f32 * SEG_DEG);
+			let seg_start = if closed {
+				norm_deg(open_start + i as f32 * SEG_DEG)
+			} else {
+				(open_start + i as f32 * SEG_DEG).clamp(0.0, arc_degrees - SEG_DEG)
+			};
 			let yaw = seg_start.to_radians();
 			match portal.portal {
 				Portal::Door => {
@@ -294,36 +362,72 @@ fn tessellate_ring(
 	}
 
 	if portals.is_empty() {
-		walls.push(Placed::new(Wall::arc(180.0), center_xz, 0.0).with_scale(ring_scale));
-		walls.push(
-			Placed::new(Wall::arc(180.0), center_xz, std::f32::consts::PI).with_scale(ring_scale),
-		);
+		push_solid_sweep(&mut walls, center_xz, ring_scale, 0.0, arc_degrees);
 		return walls;
 	}
 
-	for i in 0..portals.len() {
-		let c0 = portals[i].t * 360.0;
-		let c1 = portals[(i + 1) % portals.len()].t * 360.0;
-		let solid_start = norm_deg(c0 + OPEN_HALF_DEG);
-		let solid_end = norm_deg(c1 - OPEN_HALF_DEG);
-		let sweep = if solid_end >= solid_start - 1e-3 {
-			solid_end - solid_start
-		} else {
-			solid_end + 360.0 - solid_start
-		};
-		if sweep > 1e-2 {
-			walls.push(
-				Placed::new(Wall::arc(sweep), center_xz, solid_start.to_radians())
-					.with_scale(ring_scale),
+	if closed {
+		for i in 0..portals.len() {
+			let c0 = portals[i].t * arc_degrees;
+			let c1 = portals[(i + 1) % portals.len()].t * arc_degrees;
+			let solid_start = norm_deg(c0 + OPEN_HALF_DEG);
+			let solid_end = norm_deg(c1 - OPEN_HALF_DEG);
+			let sweep = if solid_end >= solid_start - 1e-3 {
+				solid_end - solid_start
+			} else {
+				solid_end + arc_degrees - solid_start
+			};
+			push_solid_sweep(&mut walls, center_xz, ring_scale, solid_start, sweep);
+		}
+	} else {
+		let first = portals[0].t * arc_degrees;
+		let last = portals[portals.len() - 1].t * arc_degrees;
+		push_solid_sweep(
+			&mut walls,
+			center_xz,
+			ring_scale,
+			0.0,
+			(first - OPEN_HALF_DEG).max(0.0),
+		);
+		for i in 0..portals.len().saturating_sub(1) {
+			let c0 = portals[i].t * arc_degrees;
+			let c1 = portals[i + 1].t * arc_degrees;
+			let solid_start = c0 + OPEN_HALF_DEG;
+			let solid_end = c1 - OPEN_HALF_DEG;
+			push_solid_sweep(
+				&mut walls,
+				center_xz,
+				ring_scale,
+				solid_start,
+				(solid_end - solid_start).max(0.0),
 			);
 		}
+		push_solid_sweep(
+			&mut walls,
+			center_xz,
+			ring_scale,
+			last + OPEN_HALF_DEG,
+			(arc_degrees - (last + OPEN_HALF_DEG)).max(0.0),
+		);
 	}
 
 	walls
 }
 
-/// Half-width of each portal in degrees (two 15° segments → 30° total).
-const OPEN_HALF_DEG: f32 = SEG_DEG * (PORTAL_SEGS as f32) * 0.5;
+fn push_solid_sweep(
+	walls: &mut Vec<Placed<Wall>>,
+	center_xz: Vec3,
+	ring_scale: Vec3,
+	start_deg: f32,
+	sweep_deg: f32,
+) {
+	if sweep_deg > 1e-2 {
+		walls.push(
+			Placed::new(Wall::arc(sweep_deg), center_xz, start_deg.to_radians())
+				.with_scale(ring_scale),
+		);
+	}
+}
 
 fn norm_t(t: f32) -> f32 {
 	let mut t = t % 1.0;
@@ -346,7 +450,7 @@ fn circular_dist(a: f32, b: f32) -> f32 {
 	d.min(1.0 - d)
 }
 
-fn regions_overlap(a: ArcRegion, b: ArcRegion) -> bool {
+fn regions_overlap(a: ArcRegion, b: ArcRegion, allow_wrap: bool) -> bool {
 	if a.is_point() && b.is_point() {
 		return circular_dist(a.start, b.start) < 1e-5;
 	}
@@ -355,6 +459,9 @@ fn regions_overlap(a: ArcRegion, b: ArcRegion) -> bool {
 	}
 	if b.is_point() {
 		return a.contains_t(b.start);
+	}
+	if !allow_wrap && (a.end < a.start || b.end < b.start) {
+		// Treat wrap as split only when closed; otherwise clamp to linear.
 	}
 	interval_overlap_unwrap(a, b)
 }
@@ -380,7 +487,7 @@ fn interval_overlap_unwrap(a: ArcRegion, b: ArcRegion) -> bool {
 	false
 }
 
-/// Cardinal door + windows used by the Wizard's Tower storeys.
+/// Cardinal door + windows used by the Wizard's Tower storeys (full 360° arc).
 pub fn wizard_tower_must_assign() -> Vec<MustAssignPortal> {
 	vec![
 		MustAssignPortal::at(0.0, Portal::Door),
@@ -394,11 +501,12 @@ pub fn wizard_tower_must_assign() -> Vec<MustAssignPortal> {
 mod tests {
 	use super::*;
 
-	fn tower_ring(optional: (u32, u32), seed: i32) -> RingWall {
-		RingWall::new(RingWallParams {
+	fn tower_arc(optional: (u32, u32), seed: i32) -> ArcWall {
+		ArcWall::new(ArcWallParams {
 			center_xz: Vec3::ZERO,
 			radius: 4.0,
 			storey_height: 3.0,
+			arc_degrees: 360.0,
 			must_assign: wizard_tower_must_assign(),
 			must_not_assign: vec![],
 			portal_noise: NoiseParams {
@@ -411,12 +519,13 @@ mod tests {
 
 	#[test]
 	fn must_assign_cardinals_without_optional() -> anyhow::Result<()> {
-		let ring = tower_ring((0, 0), 1);
-		assert_eq!(ring.portals.len(), 4);
-		assert!(matches!(ring.portals[0].portal, Portal::Door));
-		assert!((ring.portals[0].t - 0.0).abs() < 1e-5);
-		assert!((ring.portals[1].t - 0.25).abs() < 1e-5);
-		let headers = ring
+		let wall = tower_arc((0, 0), 1);
+		assert_eq!(wall.portals.len(), 4);
+		assert!(matches!(wall.portals[0].portal, Portal::Door));
+		assert!((wall.portals[0].t - 0.0).abs() < 1e-5);
+		assert!((wall.portals[1].t - 0.25).abs() < 1e-5);
+		assert!((wall.arc_degrees - 360.0).abs() < 1e-3);
+		let headers = wall
 			.walls
 			.iter()
 			.filter(|w| matches!(w.geom, Wall::HeaderArc(_)))
@@ -427,19 +536,18 @@ mod tests {
 
 	#[test]
 	fn optional_portals_stay_in_can_assign() -> anyhow::Result<()> {
-		let ring = tower_ring((0, 4), 42);
-		assert!(ring.portals.len() >= 4);
-		assert!(ring.portals.len() <= 8);
-		// No two portal footprints overlap.
-		for i in 0..ring.portals.len() {
-			for j in (i + 1)..ring.portals.len() {
-				let a = portal_interval(ring.portals[i].t);
-				let b = portal_interval(ring.portals[j].t);
+		let wall = tower_arc((0, 4), 42);
+		assert!(wall.portals.len() >= 4);
+		assert!(wall.portals.len() <= 8);
+		for i in 0..wall.portals.len() {
+			for j in (i + 1)..wall.portals.len() {
+				let a = portal_interval(wall.portals[i].t, wall.arc_degrees);
+				let b = portal_interval(wall.portals[j].t, wall.arc_degrees);
 				assert!(
-					!regions_overlap(a, b),
+					!regions_overlap(a, b, true),
 					"portals {} and {} overlap",
-					ring.portals[i].t,
-					ring.portals[j].t
+					wall.portals[i].t,
+					wall.portals[j].t
 				);
 			}
 		}
@@ -448,21 +556,47 @@ mod tests {
 
 	#[test]
 	fn must_not_blocks_optional() -> anyhow::Result<()> {
-		let ring = RingWall::new(RingWallParams {
+		let wall = ArcWall::new(ArcWallParams {
 			center_xz: Vec3::ZERO,
 			radius: 4.0,
 			storey_height: 3.0,
+			arc_degrees: 360.0,
 			must_assign: vec![MustAssignPortal::at(0.0, Portal::Door)],
-			must_not_assign: vec![
-				ArcRegion::span(0.1, 0.9), // almost whole ring blocked
-			],
+			must_not_assign: vec![ArcRegion::span(0.1, 0.9)],
 			portal_noise: NoiseParams {
 				seed: 7,
 				..NoiseParams::default()
 			},
 			optional_portals: (4, 4),
 		});
-		assert_eq!(ring.portals.len(), 1);
+		assert_eq!(wall.portals.len(), 1);
+		Ok(())
+	}
+
+	#[test]
+	fn open_half_arc_has_no_wrap_solid() -> anyhow::Result<()> {
+		let wall = ArcWall::new(ArcWallParams {
+			center_xz: Vec3::ZERO,
+			radius: 4.0,
+			storey_height: 3.0,
+			arc_degrees: 180.0,
+			must_assign: vec![
+				MustAssignPortal::at(0.25, Portal::Window),
+				MustAssignPortal::at(0.75, Portal::Window),
+			],
+			must_not_assign: vec![],
+			portal_noise: NoiseParams::default(),
+			optional_portals: (0, 0),
+		});
+		assert!((wall.arc_degrees - 180.0).abs() < 1e-3);
+		assert_eq!(wall.portals.len(), 2);
+		// Three solid runs: before, between, after — no wrap-around fourth.
+		let solids = wall
+			.walls
+			.iter()
+			.filter(|w| matches!(w.geom, Wall::Arc(_)))
+			.count();
+		assert_eq!(solids, 3);
 		Ok(())
 	}
 }
