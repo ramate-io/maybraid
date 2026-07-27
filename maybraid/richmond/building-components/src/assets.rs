@@ -41,9 +41,15 @@ pub mod partitions {
 		/// 90° arc rough stonework.
 		pub const ARC_90: AssetPath =
 			AssetPath::new("urban/partitions/rough_stonework/rough_stonework_90_001.glb");
+		/// 15° arc rough stonework.
+		pub const ARC_15: AssetPath =
+			AssetPath::new("urban/partitions/rough_stonework/rough_stonework_15_001.glb");
 		/// 90° header rough stonework.
 		pub const HEADER_90: AssetPath =
 			AssetPath::new("urban/partitions/rough_stonework/rough_stonework_90_header_001.glb");
+		/// 15° header rough stonework.
+		pub const HEADER_15: AssetPath =
+			AssetPath::new("urban/partitions/rough_stonework/rough_stonework_15_header_001.glb");
 	}
 }
 

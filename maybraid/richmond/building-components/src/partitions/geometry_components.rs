@@ -74,6 +74,14 @@ impl From<ArcKit> for WallComponent {
 	}
 }
 
+fn header_component(kit: ArcKit) -> WallComponent {
+	match kit {
+		ArcKit::D180 => WallComponent::HeaderArc180,
+		ArcKit::D90 => WallComponent::HeaderArc90,
+		ArcKit::D15 => WallComponent::HeaderArc15,
+	}
+}
+
 impl IntoGeometryComponents for Wall {
 	type Component = WallComponent;
 
@@ -82,6 +90,10 @@ impl IntoGeometryComponents for Wall {
 			Self::Linear(g) => g.into_geometry_components(),
 			Self::Polyline(g) => g.into_geometry_components(),
 			Self::Arc(g) => g.into_geometry_components(),
+			Self::HeaderArc(g) => decompose_arc_sweep(g.sweep_degrees)
+				.into_iter()
+				.map(|(kit, yaw)| Placed::new(header_component(kit), Vec3::ZERO, yaw))
+				.collect(),
 		}
 	}
 }

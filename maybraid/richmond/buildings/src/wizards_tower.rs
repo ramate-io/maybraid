@@ -5,12 +5,13 @@
 //!
 //! # Layering (current sketch)
 //!
-//! Each storey draws circular **outer rings** and a squared-off **floor** (circle
-//!−inscribed-square caps + rectangular slabs around a spire hole). Internal
-//! partitions, rooms, and spire geometry are deferred.
+//! Each storey draws circular **outer rings** with door/window openings and a
+//! squared-off **floor** (circle−inscribed-square caps + rectangular slabs around
+//! a spire hole). Internal partitions, rooms, and spire geometry are deferred.
 
 pub mod floor;
 pub mod floor_fill;
+pub mod outer_ring;
 pub mod perch;
 pub mod room;
 pub mod spire;

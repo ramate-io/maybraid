@@ -8,6 +8,8 @@ pub enum Wall {
 	Linear(LinearWall),
 	Polyline(PolylineWall),
 	Arc(ArcWall),
+	/// Header-height arc (\(Y \in [0, 0.3]\) in kit space) for door/window frames.
+	HeaderArc(ArcWall),
 }
 
 impl Wall {
@@ -23,6 +25,10 @@ impl Wall {
 
 	pub fn arc(sweep_degrees: f32) -> Self {
 		Self::Arc(ArcWall { sweep_degrees })
+	}
+
+	pub fn header_arc(sweep_degrees: f32) -> Self {
+		Self::HeaderArc(ArcWall { sweep_degrees })
 	}
 }
 

@@ -1,5 +1,6 @@
 //! 15° angular rough stonework partition for curved door/window framing.
 
+use crate::assets::partitions::rough_stonework::ARC_15;
 use crate::partitions::geometry_components::WallComponent;
 
 /// Narrow arc sweep used to compose circular openings.
@@ -12,4 +13,4 @@ impl From<WallComponent> for RoughStonework15 {
 	}
 }
 
-crate::impl_empty_lod_scene!(RoughStonework15);
+crate::impl_glb_lod_scene!(RoughStonework15, ARC_15);

@@ -7,7 +7,9 @@ use bevy_math::{Quat, Vec3};
 use lod::gen::LodScene;
 use lod::lod_ref::LodRef;
 
-use crate::assets::partitions::rough_stonework::{ARC_180, ARC_90, HEADER_90, LINEAR};
+use crate::assets::partitions::rough_stonework::{
+	ARC_15, ARC_180, ARC_90, HEADER_15, HEADER_90, LINEAR,
+};
 use crate::assets::AssetPath;
 use crate::partitions::geometry::Wall;
 use crate::partitions::geometry_components::WallComponent;
@@ -71,7 +73,9 @@ fn posed_wall_component(comp: WallComponent, transform: Transform, lod_ref: &Lod
 		WallComponent::Linear => Box::new(posed_glb(LINEAR, transform)),
 		WallComponent::Arc180 => Box::new(posed_glb(ARC_180, transform)),
 		WallComponent::Arc90 => Box::new(posed_glb(ARC_90, transform)),
+		WallComponent::Arc15 => Box::new(posed_glb(ARC_15, transform)),
 		WallComponent::HeaderArc90 => Box::new(posed_glb(HEADER_90, transform)),
+		WallComponent::HeaderArc15 => Box::new(posed_glb(HEADER_15, transform)),
 		other => Box::new(with_pose(transform, wall_component_scene(other, lod_ref))),
 	}
 }

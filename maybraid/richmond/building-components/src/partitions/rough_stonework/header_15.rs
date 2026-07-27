@@ -1,5 +1,6 @@
 //! Header-height 15° rough stonework arc for curved door frames.
 
+use crate::assets::partitions::rough_stonework::HEADER_15;
 use crate::partitions::geometry_components::WallComponent;
 
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
@@ -11,4 +12,4 @@ impl From<WallComponent> for RoughStoneworkHeader15 {
 	}
 }
 
-crate::impl_empty_lod_scene!(RoughStoneworkHeader15);
+crate::impl_glb_lod_scene!(RoughStoneworkHeader15, HEADER_15);

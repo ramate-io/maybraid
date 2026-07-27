@@ -1,6 +1,6 @@
 //! Larger top-floor perch capping the Wizard's Tower.
 //!
-//! Same treatment as a regular storey for now: outer rings + squared floor only.
+//! Same treatment as a regular storey for now: outer rings with openings + squared floor.
 
 use bevy::scene::prelude::Scene;
 use bevy_math::Vec3;
@@ -11,6 +11,7 @@ use richmond_building_components::partitions::{rough_stone_wall, Wall};
 use richmond_building_components::{scene_children, Placed};
 
 use crate::wizards_tower::floor_fill::{squared_floor_with_spire_hole, SPIRE_HALF_FRAC};
+use crate::wizards_tower::outer_ring::outer_ring_with_openings;
 use crate::CellConstraints;
 
 /// Top perch: wider circular platform over the column.
@@ -19,7 +20,7 @@ pub struct WizardsTowerPerch {
 	pub constraints: CellConstraints,
 	/// Storey height in meters (outer ring wall \(Y\) scale).
 	pub storey_height: f32,
-	pub outer_walls: [Placed<Wall>; 2],
+	pub outer_walls: Vec<Placed<Wall>>,
 	pub floor_caps: [Placed<Floor>; 4],
 	pub floor_rects: [Placed<Floor>; 4],
 }
@@ -37,17 +38,13 @@ impl WizardsTowerPerch {
 		let center_xz = Vec3::new(center.x, constraints.aabb.min.y, center.z);
 		let extent = constraints.aabb.max - constraints.aabb.min;
 		let radius = 0.5 * extent.x.min(extent.z);
-		let ring_scale = Vec3::new(radius, storey_height, radius);
 		let spire_half = SPIRE_HALF_FRAC * radius;
 		let (floor_caps, floor_rects) =
 			squared_floor_with_spire_hole(center_xz, radius, spire_half);
 
 		Self {
 			storey_height,
-			outer_walls: [
-				Placed::new(Wall::arc(180.0), center_xz, 0.0).with_scale(ring_scale),
-				Placed::new(Wall::arc(180.0), center_xz, std::f32::consts::PI).with_scale(ring_scale),
-			],
+			outer_walls: outer_ring_with_openings(center_xz, radius, storey_height),
 			floor_caps,
 			floor_rects,
 			constraints,
