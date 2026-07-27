@@ -5522,6 +5522,7 @@ name = "richmond-building-components"
 version = "0.0.1"
 dependencies = [
  "anyhow",
+ "bevy",
  "bevy_math",
  "lod",
  "procedural-common",
@@ -5532,6 +5533,7 @@ name = "richmond-buildings"
 version = "0.0.1"
 dependencies = [
  "anyhow",
+ "bevy",
  "bevy_math",
  "lod",
  "procedural-common",
