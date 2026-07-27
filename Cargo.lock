@@ -4225,6 +4225,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "mesh-ref"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "bevy",
+]
+
+[[package]]
 name = "miniz_oxide"
 version = "0.8.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5525,6 +5533,7 @@ dependencies = [
  "bevy",
  "bevy_math",
  "lod",
+ "mesh-ref",
  "procedural-common",
 ]
 
@@ -5550,6 +5559,7 @@ dependencies = [
  "game-commands",
  "lod",
  "log",
+ "mesh-ref",
  "richmond-building-components",
  "richmond-buildings",
 ]

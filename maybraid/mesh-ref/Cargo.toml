@@ -1,5 +1,5 @@
 [package]
-name = "richmond-building-components"
+name = "mesh-ref"
 version = { workspace = true }
 edition  = { workspace = true }
 license  = { workspace = true }
@@ -11,10 +11,6 @@ rust-version = { workspace = true }
 
 [dependencies]
 bevy = { workspace = true }
-bevy_math = { workspace = true }
-procedural-common = { workspace = true }
-lod = { workspace = true }
-mesh-ref = { workspace = true }
 
 [dev-dependencies]
 anyhow = { workspace = true }

@@ -14,6 +14,7 @@ pub use preview::{PreviewConfig, PreviewSubject};
 use bevy::prelude::*;
 use game_commands::command::{capture_command_line_input, GameCommandPlugin};
 use ground::setup_ground;
+use mesh_ref::MeshRefPlugin;
 use preview::sync_preview;
 
 pub struct RichmondBuildingsPlaygroundPlugin;
@@ -21,7 +22,10 @@ pub struct RichmondBuildingsPlaygroundPlugin;
 impl Plugin for RichmondBuildingsPlaygroundPlugin {
 	fn build(&self, app: &mut App) {
 		app.init_resource::<PreviewConfig>()
-			.add_plugins(GameCommandPlugin::<PlaygroundCommand>::with_config(ui::ui_config()))
+			.add_plugins((
+				MeshRefPlugin,
+				GameCommandPlugin::<PlaygroundCommand>::with_config(ui::ui_config()),
+			))
 			.add_systems(Startup, (camera::setup_camera, setup_lighting, setup_ground))
 			.add_systems(
 				Update,

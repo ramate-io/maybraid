@@ -37,7 +37,7 @@ macro_rules! impl_empty_lod_scene {
 
 pub(crate) use impl_empty_lod_scene;
 
-/// `LodScene` that loads a GLB scene root from an [`crate::assets::AssetPath`].
+/// `LodScene` that loads a GLB scene root via [`mesh_ref::MeshRef::Glb`].
 macro_rules! impl_glb_lod_scene {
 	($ty:ty, $asset:expr) => {
 		impl ::lod::gen::LodScene for $ty {
@@ -45,13 +45,7 @@ macro_rules! impl_glb_lod_scene {
 				&self,
 				_lod_ref: &::lod::lod_ref::LodRef,
 			) -> impl ::bevy::scene::Scene + 'static {
-				use ::bevy::scene::prelude::bsn;
-				use ::bevy::world_serialization::WorldAssetRoot;
-				let path = $asset.gltf_scene_0();
-				// Bare `WorldAssetRoot` — a leading `::` is parsed as BSN cache syntax.
-				bsn! {
-					WorldAssetRoot({path})
-				}
+				($asset).mesh_ref().scene()
 			}
 		}
 	};

@@ -17,6 +17,11 @@ impl AssetPath {
 	pub fn gltf_scene_0(self) -> String {
 		format!("{}#Scene0", self.0)
 	}
+
+	/// Shared [`mesh_ref::MeshRef`] for this GLB (scene 0).
+	pub fn mesh_ref(self) -> mesh_ref::MeshRef {
+		mesh_ref::MeshRef::glb(self.0)
+	}
 }
 
 impl std::fmt::Display for AssetPath {

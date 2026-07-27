@@ -9,6 +9,8 @@ members = [
   "maybraid/richmond/buildings",
   "maybraid/richmond/buildings-playground",
 
+  "maybraid/mesh-ref",
+
   "maybraid/durham/lib",
   "maybraid/durham/shaders",
   "maybraid/durham/models",
@@ -187,6 +189,8 @@ marazion-watersheds = { path = "maybraid/durham/marazion" }
 richmond-building-components = { path = "maybraid/richmond/building-components" }
 richmond-buildings = { path = "maybraid/richmond/buildings" }
 richmond-buildings-playground = { path = "maybraid/richmond/buildings-playground" }
+
+mesh-ref = { path = "maybraid/mesh-ref" }
 
 avian3d = "0.7"
 

@@ -2,7 +2,6 @@
 
 use bevy::prelude::Transform;
 use bevy::scene::prelude::{bsn, template_value, Scene};
-use bevy::world_serialization::WorldAssetRoot;
 use bevy_math::{Quat, Vec3};
 use lod::gen::LodScene;
 use lod::lod_ref::LodRef;
@@ -22,11 +21,12 @@ fn pose(translation: Vec3, yaw: f32, scale: Vec3) -> Transform {
 }
 
 fn posed_glb(asset: AssetPath, transform: Transform) -> impl Scene + 'static {
-	let path = asset.gltf_scene_0();
-	bsn! {
-		WorldAssetRoot({path})
-		template_value(transform)
-	}
+	(
+		asset.mesh_ref().scene(),
+		bsn! {
+			template_value(transform)
+		},
+	)
 }
 
 fn with_pose(transform: Transform, child: impl Scene + 'static) -> impl Scene + 'static {
