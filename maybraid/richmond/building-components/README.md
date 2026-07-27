@@ -75,8 +75,8 @@ These modules hold reusable floor/roof fillers, circulation geometry, and door k
 
 Floors components come in three categories:
 
-- **Rectangular:** the floor component is simply a unit square. 
-- **Triangular:** the floor component is a unit right triangle.
-- **Circle Inscribed Square:** the floor component is the southern- hemisphere difference between a circle and a square. The space removed by the inscribed square is roughly X = Z =[ -0.7, 0.7]. To completely fill in space, rotate four of these components around the center.
+- **Rectangular:** the floor component is simply a unit square with Z = [-0.2, 0.2]. Often, we square-off more complex forms and fill in the missing space with rectangular components.
+- **Triangular:** the floor component is a unit right triangle with Z = [-0.2, 0.2]. Often, we use triangular components to fill angled sections. 
+- **Circle Inscribed Square:** the floor component is the southern- hemisphere difference between a circle and a square. The space removed by the inscribed square is roughly X = Z =[ -0.7, 0.7]. To completely fill in circular space, rotate four of these components around the center.
 
-To fill irregular spaces, we commonly use rectangular or triangular tiling techniques--unless a more bespoke component such as the Circle Inscribed Square is provided. 
+To fill irregular spaces, we commonly use rectangular or triangular tiling techniques--unless a more bespoke component such as the Circle Inscribed Square is provided. Tiling techniques include quadtree voxelization or a simple sweep of a repeated unit shape. 
