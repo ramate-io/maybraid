@@ -81,3 +81,13 @@ Floors components come in three categories:
 - **Circle Inscribed Square:** the floor component is the southern- hemisphere difference between a circle and a square. The space removed by the inscribed square is roughly X = Z =[ -0.7, 0.7]. To completely fill in circular space, rotate four of these components around the center.
 
 To fill irregular spaces, we commonly use rectangular or triangular tiling techniques--unless a more bespoke component such as the Circle Inscribed Square is provided. Tiling techniques include quadtree voxelization or a simple sweep of a repeated unit shape. 
+
+## Stairs
+
+Stairs treads are typically authored as X = Y = Z [-1.0, 1.0] unit cubes s.t. the left face of the stairs is in the -Z direction. Often, the author will bleed the geometry will out to X = -2.0, to give support for the stair placed on top. 
+
+When authoring circular stairs, we typically use a fraction of the radius for the tread width and angle each of the treads along the arc.
+
+Tread depths can vary as is needed for connectivity and spacing. 
+
+Tread heights should typically be around 0.18 world units. 
