@@ -25,10 +25,11 @@ pub use room::WizardsTowerRoom;
 pub use spire::WizardsTowerSpire;
 pub use tower::WizardsTowerColumn;
 
-use bevy::prelude::Children;
-use bevy::scene::prelude::{bsn, Scene};
+use bevy::scene::prelude::Scene;
 use lod::gen::LodScene;
 use lod::lod_ref::LodRef;
+
+use richmond_building_components::scene_children;
 
 use crate::CellConstraints;
 
@@ -66,8 +67,6 @@ impl WizardsTower {
 impl LodScene for WizardsTower {
 	fn scene_with_lod(&self, lod_ref: &LodRef) -> impl Scene + 'static {
 		let column = self.column.scene_with_lod(lod_ref);
-		bsn! {
-			Children [ ({column}) ]
-		}
+		scene_children(vec![Box::new(column) as Box<dyn Scene>])
 	}
 }

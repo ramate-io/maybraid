@@ -1,13 +1,14 @@
 //! The stacked circular column of the Wizard's Tower.
 
-use bevy::prelude::Children;
-use bevy::scene::prelude::{bsn, Scene};
+use bevy::scene::prelude::Scene;
 use bevy_math::bounding::Aabb3d;
 use bevy_math::Vec3;
 use lod::gen::LodScene;
 use lod::lod_ref::LodRef;
 
 use crate::wizards_tower::{WizardsTowerFloor, WizardsTowerPerch};
+use richmond_building_components::scene_children;
+
 use crate::CellConstraints;
 
 /// Vertical stack of tower floors capped by a perch.
@@ -74,8 +75,6 @@ impl LodScene for WizardsTowerColumn {
 			.map(|floor| Box::new(floor.scene_with_lod(lod_ref)) as Box<dyn Scene>)
 			.collect();
 		children.push(Box::new(self.perch.scene_with_lod(lod_ref)));
-		bsn! {
-			Children [ {children} ]
-		}
+		scene_children(children)
 	}
 }

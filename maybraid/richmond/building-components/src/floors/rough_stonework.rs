@@ -1,8 +1,8 @@
 //! Rough stonework floor scene components.
 
-pub mod arc_fill;
-pub mod rectangle;
-pub mod struct_fill;
+mod arc_fill;
+mod rectangle;
+mod struct_fill;
 
 pub use arc_fill::RoughStoneFloorArcFill;
 pub use rectangle::RoughStoneFloorRectangle;

@@ -8,6 +8,7 @@ use lod::lod_ref::LodRef;
 use richmond_building_components::partitions::rough_stonework::{
 	RoughStonework180, RoughStonework90, RoughStoneworkHeader90, RoughStoneworkLinear,
 };
+use richmond_buildings::stacked_rings::StackedRings;
 use richmond_buildings::wizards_tower::WizardsTower;
 use richmond_buildings::CellConstraints;
 
@@ -22,6 +23,11 @@ pub enum PreviewSubject {
 	Arc180,
 	Header90,
 	WizardsTower { noise: f32 },
+	StackedRings {
+		floor_count: u32,
+		floor_height: f32,
+		radius: f32,
+	},
 }
 
 impl Default for PreviewSubject {
@@ -56,6 +62,13 @@ impl PreviewConfig {
 			PreviewSubject::WizardsTower { noise } => {
 				format!("preview: wizards-tower (noise={noise:.2})")
 			}
+			PreviewSubject::StackedRings {
+				floor_count,
+				floor_height,
+				radius,
+			} => format!(
+				"preview: stacked-rings (n={floor_count} h={floor_height:.2} r={radius:.2})"
+			),
 		}
 	}
 }
@@ -98,40 +111,32 @@ pub fn sync_preview(
 	match &config.subject {
 		PreviewSubject::None => {}
 		PreviewSubject::Linear => {
-			let scene = RoughStoneworkLinear.scene_with_lod(&lod_ref);
-			commands
-				.spawn_scene(bsn! {
-					template_value(transform)
-					Children [ ({scene}) ]
-				})
-				.insert(PreviewRoot);
+			spawn_preview(
+				&mut commands,
+				transform,
+				RoughStoneworkLinear.scene_with_lod(&lod_ref),
+			);
 		}
 		PreviewSubject::Arc90 => {
-			let scene = RoughStonework90.scene_with_lod(&lod_ref);
-			commands
-				.spawn_scene(bsn! {
-					template_value(transform)
-					Children [ ({scene}) ]
-				})
-				.insert(PreviewRoot);
+			spawn_preview(
+				&mut commands,
+				transform,
+				RoughStonework90.scene_with_lod(&lod_ref),
+			);
 		}
 		PreviewSubject::Arc180 => {
-			let scene = RoughStonework180.scene_with_lod(&lod_ref);
-			commands
-				.spawn_scene(bsn! {
-					template_value(transform)
-					Children [ ({scene}) ]
-				})
-				.insert(PreviewRoot);
+			spawn_preview(
+				&mut commands,
+				transform,
+				RoughStonework180.scene_with_lod(&lod_ref),
+			);
 		}
 		PreviewSubject::Header90 => {
-			let scene = RoughStoneworkHeader90.scene_with_lod(&lod_ref);
-			commands
-				.spawn_scene(bsn! {
-					template_value(transform)
-					Children [ ({scene}) ]
-				})
-				.insert(PreviewRoot);
+			spawn_preview(
+				&mut commands,
+				transform,
+				RoughStoneworkHeader90.scene_with_lod(&lod_ref),
+			);
 		}
 		PreviewSubject::WizardsTower { noise } => {
 			let footprint = CellConstraints::cell_owned(Aabb3d::from_min_max(
@@ -139,13 +144,27 @@ pub fn sync_preview(
 				Vec3::new(4.0, 24.0, 4.0),
 			));
 			let tower = WizardsTower::new(&footprint, *noise);
-			let scene = tower.scene_with_lod(&lod_ref);
-			commands
-				.spawn_scene(bsn! {
-					template_value(transform)
-					Children [ ({scene}) ]
-				})
-				.insert(PreviewRoot);
+			spawn_preview(&mut commands, transform, tower.scene_with_lod(&lod_ref));
+		}
+		PreviewSubject::StackedRings {
+			floor_count,
+			floor_height,
+			radius,
+		} => {
+			let rings = StackedRings::new(*floor_count, *floor_height, *radius);
+			spawn_preview(&mut commands, transform, rings.scene_with_lod(&lod_ref));
 		}
 	}
+}
+
+fn spawn_preview(commands: &mut Commands, transform: Transform, scene: impl bevy::scene::Scene) {
+	commands
+		.spawn_scene((
+			scene,
+			bsn! {
+				template_value(transform)
+				Visibility::default()
+			},
+		))
+		.insert(PreviewRoot);
 }

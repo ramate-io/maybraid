@@ -1,5 +1,5 @@
 //! Wood stair scene components.
 
-pub mod straight;
+mod straight;
 
 pub use straight::WoodStraightStair;

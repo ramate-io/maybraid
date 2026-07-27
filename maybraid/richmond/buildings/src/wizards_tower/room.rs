@@ -3,8 +3,7 @@
 //! Geometry: one linear partition on the spire-facing edge, wood rectangle +
 //! struct floor fill, a stone door frame with wood leaf, and a wood straight stair.
 
-use bevy::prelude::Children;
-use bevy::scene::prelude::{bsn, Scene};
+use bevy::scene::prelude::Scene;
 use bevy_math::Vec3;
 use lod::gen::LodScene;
 use lod::lod_ref::LodRef;
@@ -12,7 +11,7 @@ use richmond_building_components::doors::{door_scene, Door};
 use richmond_building_components::floors::{wood_floor, Floor};
 use richmond_building_components::partitions::{rough_stone_wall, Wall};
 use richmond_building_components::stairs::{wood_stair, Stair};
-use richmond_building_components::Placed;
+use richmond_building_components::{scene_children, Placed};
 
 use crate::CellConstraints;
 
@@ -61,15 +60,14 @@ impl LodScene for WizardsTowerRoom {
 		let door_frame = door_scene(&self.door_frame, lod_ref);
 		let door_leaf = door_scene(&self.door_leaf, lod_ref);
 		let stair = wood_stair(&self.stair, lod_ref);
-		bsn! {
-			Children [
-				({partition}),
-				({floor}),
-				({floor_struct}),
-				({door_frame}),
-				({door_leaf}),
-				({stair})
-			]
-		}
+		let children: Vec<Box<dyn Scene>> = vec![
+			Box::new(partition),
+			Box::new(floor),
+			Box::new(floor_struct),
+			Box::new(door_frame),
+			Box::new(door_leaf),
+			Box::new(stair),
+		];
+		scene_children(children)
 	}
 }

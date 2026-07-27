@@ -3,6 +3,10 @@
 use bevy_math::Vec3;
 
 /// Geometry plus a local pose used when placing a feature in a cell.
+///
+/// Partition / floor / door kit pieces are authored in a **normalized** local
+/// space (angular arcs: radius \(1\), full height \(Y \in [0, 1]\)). Buildings
+/// map that kit into cell space via [`Self::scale`].
 #[derive(Debug, Clone, PartialEq)]
 pub struct Placed<G> {
 	pub geom: G,
@@ -10,6 +14,11 @@ pub struct Placed<G> {
 	pub translation: Vec3,
 	/// Yaw about +Y (radians).
 	pub yaw: f32,
+	/// Non-uniform scale applied to the normalized kit before yaw.
+	///
+	/// For a circular wall of radius \(R\) and storey height \(H\), use
+	/// `Vec3::new(R, H, R)`.
+	pub scale: Vec3,
 }
 
 impl<G> Placed<G> {
@@ -18,6 +27,7 @@ impl<G> Placed<G> {
 			geom,
 			translation,
 			yaw,
+			scale: Vec3::ONE,
 		}
 	}
 
@@ -25,11 +35,17 @@ impl<G> Placed<G> {
 		Self::new(geom, Vec3::ZERO, 0.0)
 	}
 
+	pub fn with_scale(mut self, scale: Vec3) -> Self {
+		self.scale = scale;
+		self
+	}
+
 	pub fn map_geom<H>(self, f: impl FnOnce(G) -> H) -> Placed<H> {
 		Placed {
 			geom: f(self.geom),
 			translation: self.translation,
 			yaw: self.yaw,
+			scale: self.scale,
 		}
 	}
 
@@ -43,8 +59,10 @@ impl<G> Placed<G> {
 			.into_iter()
 			.map(|child| Placed {
 				geom: child.geom,
-				translation: self.translation + rotate_yaw(child.translation, self.yaw),
+				translation: self.translation
+					+ rotate_yaw(child.translation * self.scale, self.yaw),
 				yaw: self.yaw + child.yaw,
+				scale: self.scale * child.scale,
 			})
 			.collect()
 	}

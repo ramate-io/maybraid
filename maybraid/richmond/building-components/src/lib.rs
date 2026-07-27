@@ -8,10 +8,12 @@ pub mod floors;
 pub mod partitions;
 pub mod placed;
 pub mod roofs;
+pub mod scene_children;
 pub mod stairs;
 
 pub use assets::AssetPath;
 pub use placed::{IntoGeometryComponents, Placed};
+pub use scene_children::scene_children;
 
 use bevy::scene::{ResolveContext, ResolvedScene};
 

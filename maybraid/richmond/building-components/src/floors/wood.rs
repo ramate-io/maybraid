@@ -1,8 +1,8 @@
 //! Wood floor scene components.
 
-pub mod arc_fill;
-pub mod rectangle;
-pub mod struct_fill;
+mod arc_fill;
+mod rectangle;
+mod struct_fill;
 
 pub use arc_fill::WoodFloorArcFill;
 pub use rectangle::WoodFloorRectangle;

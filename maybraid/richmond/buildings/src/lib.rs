@@ -11,6 +11,7 @@
 //! The authored types do not need, however, to author strictly rectangular geometry.
 
 pub mod constraints;
+pub mod stacked_rings;
 pub mod wizards_tower;
 
 pub use constraints::{
@@ -18,3 +19,4 @@ pub use constraints::{
 	CellBoundaryTable, CellConstraints, CirculationEntry, CirculationRequestStatus, FaceKind,
 	JointCoordinate, JointEntry, PreJointSweep, SubsetError,
 };
+pub use stacked_rings::{StackedRing, StackedRings};

@@ -4,8 +4,7 @@
 //! toward the spire, stone arc + struct floor fill, and one door frame on a bay.
 //! Children receive subsetted [`CellConstraints`] for the spire rect and voxel rooms.
 
-use bevy::prelude::Children;
-use bevy::scene::prelude::{bsn, Scene};
+use bevy::scene::prelude::Scene;
 use bevy_math::bounding::Aabb3d;
 use bevy_math::Vec3;
 use lod::gen::LodScene;
@@ -13,7 +12,7 @@ use lod::lod_ref::LodRef;
 use richmond_building_components::doors::{door_scene, Door};
 use richmond_building_components::floors::{rough_stone_floor, Floor};
 use richmond_building_components::partitions::{rough_stone_wall, Wall};
-use richmond_building_components::Placed;
+use richmond_building_components::{scene_children, Placed};
 
 use crate::wizards_tower::{WizardsTowerRoom, WizardsTowerSpire};
 use crate::CellConstraints;
@@ -57,29 +56,36 @@ impl WizardsTowerFloor {
 
 		let center = (constraints.aabb.min + constraints.aabb.max) * 0.5;
 		let center_xz = Vec3::new(center.x, constraints.aabb.min.y, center.z);
+		let extent = constraints.aabb.max - constraints.aabb.min;
+		let radius = 0.5 * extent.x.min(extent.z);
+		let floor_height = extent.y.max(1e-4);
+		let ring_scale = Vec3::new(radius, floor_height, radius);
 
 		Self {
 			outer_walls: [
-				Placed::new(Wall::arc(180.0), center_xz, 0.0),
-				Placed::new(Wall::arc(180.0), center_xz, std::f32::consts::PI),
+				Placed::new(Wall::arc(180.0), center_xz, 0.0).with_scale(ring_scale),
+				Placed::new(Wall::arc(180.0), center_xz, std::f32::consts::PI).with_scale(ring_scale),
 			],
 			radial_walls: [
-				Placed::new(Wall::linear(), center_xz, 0.0),
-				Placed::new(Wall::linear(), center_xz, std::f32::consts::FRAC_PI_2),
-				Placed::new(Wall::linear(), center_xz, std::f32::consts::PI),
+				Placed::new(Wall::linear(), center_xz, 0.0).with_scale(ring_scale),
+				Placed::new(Wall::linear(), center_xz, std::f32::consts::FRAC_PI_2)
+					.with_scale(ring_scale),
+				Placed::new(Wall::linear(), center_xz, std::f32::consts::PI).with_scale(ring_scale),
 				Placed::new(
 					Wall::linear(),
 					center_xz,
 					std::f32::consts::PI + std::f32::consts::FRAC_PI_2,
-				),
+				)
+				.with_scale(ring_scale),
 			],
-			floor_arc: Placed::new(Floor::arc_fill(360.0), center_xz, 0.0),
+			floor_arc: Placed::new(Floor::arc_fill(360.0), center_xz, 0.0).with_scale(ring_scale),
 			floor_struct: Placed::at_origin(Floor::struct_fill()),
 			door: Placed::new(
 				Door::frame_15(),
 				center_xz + Vec3::new(0.0, 0.0, constraints.aabb.min.z - center.z),
 				0.0,
-			),
+			)
+			.with_scale(ring_scale),
 			spire,
 			rooms,
 			constraints,
@@ -139,8 +145,6 @@ impl LodScene for WizardsTowerFloor {
 		for room in &self.rooms {
 			children.push(Box::new(room.scene_with_lod(lod_ref)));
 		}
-		bsn! {
-			Children [ {children} ]
-		}
+		scene_children(children)
 	}
 }

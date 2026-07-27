@@ -8,7 +8,8 @@ pub fn ui_config() -> GameCommandUiConfig {
 		title: "Richmond buildings playground - / cmd - WASD/Space/Shift - mouse look".into(),
 		empty_console_text: "Console: (errors & `help` output) - wheel or PgUp/PgDn".into(),
 		root_background: Color::srgba(0.12, 0.14, 0.18, 0.82),
-		controls_hint: "help - show linear|arc-90|arc-180|header-90|wizards-tower".into(),
+		controls_hint: "help - show linear|arc-90|arc-180|header-90|wizards-tower|stacked-rings"
+			.into(),
 	}
 }
 
