@@ -5541,6 +5541,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "richmond-buildings-playground"
+version = "0.0.1"
+dependencies = [
+ "bevy",
+ "bevy_math",
+ "clap",
+ "game-commands",
+ "lod",
+ "log",
+ "richmond-building-components",
+ "richmond-buildings",
+]
+
+[[package]]
 name = "robust"
 version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"

@@ -7,6 +7,7 @@ members = [
   # maybraid game crates, typically following rfcs  
   "maybraid/richmond/building-components",
   "maybraid/richmond/buildings",
+  "maybraid/richmond/buildings-playground",
 
   "maybraid/durham/lib",
   "maybraid/durham/shaders",
@@ -184,6 +185,8 @@ jersey-terrain-stamps = { path = "maybraid/durham/jersey" }
 marazion-watersheds = { path = "maybraid/durham/marazion" }
 
 richmond-building-components = { path = "maybraid/richmond/building-components" }
+richmond-buildings = { path = "maybraid/richmond/buildings" }
+richmond-buildings-playground = { path = "maybraid/richmond/buildings-playground" }
 
 avian3d = "0.7"
 

@@ -1,5 +1,6 @@
 //! 180° angular rough stonework partition for circular outer walls.
 
+use crate::assets::partitions::rough_stonework::ARC_180;
 use crate::partitions::geometry_components::WallComponent;
 
 /// Half-ring wall sweep through \(-Z\) from \(X = -1\) to \(X = 1\).
@@ -12,4 +13,4 @@ impl From<WallComponent> for RoughStonework180 {
 	}
 }
 
-crate::impl_empty_lod_scene!(RoughStonework180);
+crate::impl_glb_lod_scene!(RoughStonework180, ARC_180);

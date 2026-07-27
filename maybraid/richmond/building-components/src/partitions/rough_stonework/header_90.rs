@@ -1,5 +1,6 @@
 //! Header-height 90° rough stonework arc.
 
+use crate::assets::partitions::rough_stonework::HEADER_90;
 use crate::partitions::geometry_components::WallComponent;
 
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
@@ -11,4 +12,4 @@ impl From<WallComponent> for RoughStoneworkHeader90 {
 	}
 }
 
-crate::impl_empty_lod_scene!(RoughStoneworkHeader90);
+crate::impl_glb_lod_scene!(RoughStoneworkHeader90, HEADER_90);

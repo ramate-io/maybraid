@@ -1,5 +1,6 @@
 //! Full-height linear rough stonework partition (normalized \(X \in [-1, 1]\)).
 
+use crate::assets::partitions::rough_stonework::LINEAR;
 use crate::partitions::geometry_components::WallComponent;
 
 /// Linear wall segment for radial subdividers and straight partitions.
@@ -12,4 +13,4 @@ impl From<WallComponent> for RoughStoneworkLinear {
 	}
 }
 
-crate::impl_empty_lod_scene!(RoughStoneworkLinear);
+crate::impl_glb_lod_scene!(RoughStoneworkLinear, LINEAR);
