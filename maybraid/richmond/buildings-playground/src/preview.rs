@@ -139,9 +139,10 @@ pub fn sync_preview(
 			);
 		}
 		PreviewSubject::WizardsTower { noise } => {
+			// XZ footprint only; storey stacking uses WALL_HEIGHT_METERS (3 m).
 			let footprint = CellConstraints::cell_owned(Aabb3d::from_min_max(
 				Vec3::new(-4.0, 0.0, -4.0),
-				Vec3::new(4.0, 24.0, 4.0),
+				Vec3::new(4.0, 3.0, 4.0),
 			));
 			let tower = WizardsTower::new(&footprint, *noise);
 			spawn_preview(&mut commands, transform, tower.scene_with_lod(&lod_ref));

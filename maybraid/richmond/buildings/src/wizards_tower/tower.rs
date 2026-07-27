@@ -5,58 +5,89 @@ use bevy_math::bounding::Aabb3d;
 use bevy_math::Vec3;
 use lod::gen::LodScene;
 use lod::lod_ref::LodRef;
-
-use crate::wizards_tower::{WizardsTowerFloor, WizardsTowerPerch};
 use richmond_building_components::scene_children;
 
+use crate::wizards_tower::floor_fill::WALL_HEIGHT_METERS;
+use crate::wizards_tower::{WizardsTowerFloor, WizardsTowerPerch};
 use crate::CellConstraints;
 
 /// Vertical stack of tower floors capped by a perch.
 #[derive(Debug, Clone, PartialEq)]
 pub struct WizardsTowerColumn {
 	pub constraints: CellConstraints,
+	/// Storey height in meters (outer ring wall \(Y\) scale; floor spacing).
+	pub storey_height: f32,
 	pub floors: Vec<WizardsTowerFloor>,
 	pub perch: WizardsTowerPerch,
 }
 
 impl WizardsTowerColumn {
-	/// Build from the tower footprint constraints and a derived floor count.
-	pub fn new(tower_constraints: &CellConstraints, floor_count: u32) -> Self {
-		let constraints = tower_constraints
-			.subset(tower_constraints.aabb)
-			.unwrap_or_else(|_| tower_constraints.clone());
-
-		let min_y = constraints.aabb.min.y;
-		let max_y = constraints.aabb.max.y;
-		let height = (max_y - min_y).max(1e-4);
-		let perch_frac = 0.08;
-		let floors_top = min_y + height * (1.0 - perch_frac);
+	/// Build from the tower footprint constraints, floor count, and storey height.
+	///
+	/// Each regular storey occupies \([y_i, y_i + h)\) with \(h =\) `storey_height`.
+	/// The perch sits in the next slab of the same height. Footprint \(XZ\) and base
+	/// \(Y\) come from `tower_constraints`; the parent AABB's max \(Y\) is ignored.
+	pub fn new(
+		tower_constraints: &CellConstraints,
+		floor_count: u32,
+		storey_height: f32,
+	) -> Self {
+		let storey_height = storey_height.max(1e-4);
 		let floor_count = floor_count.max(1);
-		let floor_h = (floors_top - min_y) / floor_count as f32;
+
+		let min_y = tower_constraints.aabb.min.y;
+		let floors_top = min_y + floor_count as f32 * storey_height;
+		let perch_top = floors_top + storey_height;
+
+		// Rebuild write AABB to match the stacked height (XZ from the footprint).
+		let footprint = Aabb3d::from_min_max(
+			Vec3::new(
+				tower_constraints.aabb.min.x,
+				min_y,
+				tower_constraints.aabb.min.z,
+			),
+			Vec3::new(
+				tower_constraints.aabb.max.x,
+				perch_top,
+				tower_constraints.aabb.max.z,
+			),
+		);
+		let constraints = tower_constraints
+			.subset(footprint)
+			.unwrap_or_else(|_| CellConstraints::cell_owned(footprint));
 
 		let floors = (0..floor_count)
 			.map(|i| {
-				let y0 = min_y + i as f32 * floor_h;
-				let y1 = y0 + floor_h;
+				let y0 = min_y + i as f32 * storey_height;
+				let y1 = y0 + storey_height;
 				let floor_aabb = Self::vertical_slab(&constraints.aabb, y0, y1);
 				let floor_constraints = constraints
 					.subset(floor_aabb)
 					.unwrap_or_else(|_| CellConstraints::cell_owned(floor_aabb));
-				WizardsTowerFloor::new(&constraints, floor_constraints)
+				WizardsTowerFloor::new(&constraints, floor_constraints, storey_height)
 			})
 			.collect();
 
-		let perch_aabb = Self::vertical_slab(&constraints.aabb, floors_top, max_y);
+		let perch_aabb = Self::vertical_slab(&constraints.aabb, floors_top, perch_top);
 		let perch_constraints = constraints
 			.subset(perch_aabb)
 			.unwrap_or_else(|_| CellConstraints::cell_owned(perch_aabb));
-		let perch = WizardsTowerPerch::new(&constraints, perch_constraints);
+		let perch = WizardsTowerPerch::new(&constraints, perch_constraints, storey_height);
 
 		Self {
 			constraints,
+			storey_height,
 			floors,
 			perch,
 		}
+	}
+
+	/// Same as [`Self::new`] with [`WALL_HEIGHT_METERS`].
+	pub fn with_default_storey_height(
+		tower_constraints: &CellConstraints,
+		floor_count: u32,
+	) -> Self {
+		Self::new(tower_constraints, floor_count, WALL_HEIGHT_METERS)
 	}
 
 	fn vertical_slab(parent: &Aabb3d, y_min: f32, y_max: f32) -> Aabb3d {

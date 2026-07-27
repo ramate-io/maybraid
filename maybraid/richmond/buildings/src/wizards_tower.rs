@@ -28,6 +28,7 @@ use lod::lod_ref::LodRef;
 
 use richmond_building_components::scene_children;
 
+use crate::wizards_tower::floor_fill::WALL_HEIGHT_METERS;
 use crate::CellConstraints;
 
 /// Root authored building: a circular tower column stack with a central spire
@@ -38,18 +39,31 @@ pub struct WizardsTower {
 	pub constraints: CellConstraints,
 	/// Number of regular floors derived from noise (`10..=30`).
 	pub floor_count: u32,
+	/// Storey height in meters (wall scale and vertical spacing).
+	pub storey_height: f32,
 	/// The stacked circular column (floors + top perch).
 	pub column: WizardsTowerColumn,
 }
 
 impl WizardsTower {
-	/// Build from footprint constraints and a unit noise sample in \([0, 1]\).
+	/// Build from footprint constraints and a unit noise sample in \([0, 1]\),
+	/// using [`WALL_HEIGHT_METERS`] as the storey height.
 	pub fn new(constraints: &CellConstraints, noise: f32) -> Self {
+		Self::with_storey_height(constraints, noise, WALL_HEIGHT_METERS)
+	}
+
+	/// Build with an explicit storey / room height in meters.
+	pub fn with_storey_height(
+		constraints: &CellConstraints,
+		noise: f32,
+		storey_height: f32,
+	) -> Self {
 		let floor_count = Self::floor_count_from_noise(noise);
-		let column = WizardsTowerColumn::new(constraints, floor_count);
+		let column = WizardsTowerColumn::new(constraints, floor_count, storey_height);
 		Self {
-			constraints: constraints.clone(),
+			constraints: column.constraints.clone(),
 			floor_count,
+			storey_height: column.storey_height,
 			column,
 		}
 	}

@@ -12,15 +12,15 @@ use richmond_building_components::floors::{rough_stone_floor, Floor};
 use richmond_building_components::partitions::{rough_stone_wall, Wall};
 use richmond_building_components::{scene_children, Placed};
 
-use crate::wizards_tower::floor_fill::{
-	squared_floor_with_spire_hole, SPIRE_HALF_FRAC, WALL_HEIGHT_METERS,
-};
+use crate::wizards_tower::floor_fill::{squared_floor_with_spire_hole, SPIRE_HALF_FRAC};
 use crate::CellConstraints;
 
 /// One storey of the circular tower.
 #[derive(Debug, Clone, PartialEq)]
 pub struct WizardsTowerFloor {
 	pub constraints: CellConstraints,
+	/// Storey height in meters (outer ring wall \(Y\) scale).
+	pub storey_height: f32,
 	/// Circular outer wall halves (cell-local).
 	pub outer_walls: [Placed<Wall>; 2],
 	/// Four circle−inscribed-square caps that square off the circular footprint.
@@ -30,18 +30,25 @@ pub struct WizardsTowerFloor {
 }
 
 impl WizardsTowerFloor {
-	/// Build from column parent constraints and this floor's subsetted constraints.
-	pub fn new(_parent_constraints: &CellConstraints, constraints: CellConstraints) -> Self {
+	/// Build from column parent constraints, this floor's subsetted constraints,
+	/// and the shared storey height (wall scale / vertical spacing).
+	pub fn new(
+		_parent_constraints: &CellConstraints,
+		constraints: CellConstraints,
+		storey_height: f32,
+	) -> Self {
+		let storey_height = storey_height.max(1e-4);
 		let center = (constraints.aabb.min + constraints.aabb.max) * 0.5;
 		let center_xz = Vec3::new(center.x, constraints.aabb.min.y, center.z);
 		let extent = constraints.aabb.max - constraints.aabb.min;
 		let radius = 0.5 * extent.x.min(extent.z);
-		let ring_scale = Vec3::new(radius, WALL_HEIGHT_METERS, radius);
+		let ring_scale = Vec3::new(radius, storey_height, radius);
 		let spire_half = SPIRE_HALF_FRAC * radius;
 		let (floor_caps, floor_rects) =
 			squared_floor_with_spire_hole(center_xz, radius, spire_half);
 
 		Self {
+			storey_height,
 			outer_walls: [
 				Placed::new(Wall::arc(180.0), center_xz, 0.0).with_scale(ring_scale),
 				Placed::new(Wall::arc(180.0), center_xz, std::f32::consts::PI).with_scale(ring_scale),

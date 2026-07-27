@@ -36,20 +36,31 @@ impl Plugin for RichmondBuildingsPlaygroundPlugin {
 
 fn setup_lighting(mut commands: Commands) {
 	use std::f32::consts::PI;
+	// Key light (casts shadows).
 	commands.spawn((
 		DirectionalLight {
-			illuminance: 12000.0,
+			illuminance: 10000.0,
 			shadow_maps_enabled: true,
 			..default()
 		},
 		Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, -PI / 3.0, PI / 5.0, 0.0)),
 	));
+	// Fill from the opposite side (no shadows) to soften contrast.
 	commands.spawn((
 		DirectionalLight {
-			illuminance: 800.0,
+			illuminance: 3500.0,
 			shadow_maps_enabled: false,
 			..default()
 		},
 		Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, PI / 5.0, -PI / 4.0, 0.0)),
+	));
+	// Soft bounce / skylight fill.
+	commands.spawn((
+		DirectionalLight {
+			illuminance: 1800.0,
+			shadow_maps_enabled: false,
+			..default()
+		},
+		Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, -PI / 6.0, PI + PI / 3.0, 0.0)),
 	));
 }
