@@ -14,15 +14,19 @@ floors.rs
 floors/geometry.rs
 floors/geometry_components.rs
 floors/scene.rs
-floors/rough_stone_floor_arc_fill.rs
+floors/rough_stonework.rs
+floors/rough_stonework/arc_fill.rs
+floors/wood.rs
+floors/wood/rectangle.rs
 …
 ```
 
-Same pattern for `partitions`, `roofs`, `stairs`, and `doors`. Partition materials follow:
+Partition (and other) materials use shortened leaf names under the variant folder:
 
 ```
 partitions/rough_stonework.rs
-partitions/rough_stonework/rough_stonework_15.rs
+partitions/rough_stonework/arc_15.rs
+partitions/rough_stonework/linear.rs
 …
 ```
 
