@@ -7,8 +7,7 @@ use bevy_math::{Quat, Vec3};
 use lod::gen::LodScene;
 use lod::lod_ref::LodRef;
 
-use crate::assets::floors::rough_stonework::CIRCLE_INSCRIBED_SQUARE;
-use crate::assets::partitions::rough_stonework::LINEAR;
+use crate::assets::floors::rough_stonework::{CIRCLE_INSCRIBED_SQUARE, RECTANGLE};
 use crate::assets::AssetPath;
 use crate::floors::geometry::Floor;
 use crate::floors::geometry_components::FloorComponent;
@@ -42,19 +41,6 @@ fn with_pose(transform: Transform, child: impl Scene + 'static) -> impl Scene + 
 	)
 }
 
-/// Map the vertical linear partition kit onto a **centered** unit floor rectangle.
-///
-/// Linear kit: \(X \in [-1, 1]\), \(Y \in [0, 1]\), \(Z \in [-0.2, 0.2]\).
-/// Center \(Y\) onto the origin, pitch so wall height becomes \(+Z\), then scale to a
-/// unit square in \(XZ\) with thickness along \(Y\).
-fn rectangle_pose_from_linear_partition(placed: Transform) -> Transform {
-	let center_kit = Transform::from_translation(Vec3::new(0.0, -0.5, 0.0));
-	let wall_to_unit_floor =
-		Transform::from_rotation(Quat::from_rotation_x(std::f32::consts::FRAC_PI_2))
-			.with_scale(Vec3::new(0.5, 1.0 / 0.4, 1.0));
-	placed.mul_transform(wall_to_unit_floor.mul_transform(center_kit))
-}
-
 pub fn rough_stone_floor(placed: &Placed<Floor>, lod_ref: &LodRef) -> impl Scene + 'static {
 	let children: Vec<Box<dyn Scene>> = placed
 		.into_geometry_components()
@@ -63,8 +49,7 @@ pub fn rough_stone_floor(placed: &Placed<Floor>, lod_ref: &LodRef) -> impl Scene
 			let transform = pose(piece.translation, piece.yaw, piece.scale);
 			match piece.geom {
 				FloorComponent::Rectangle => {
-					Box::new(posed_glb(LINEAR, rectangle_pose_from_linear_partition(transform)))
-						as Box<dyn Scene>
+					Box::new(posed_glb(RECTANGLE, transform)) as Box<dyn Scene>
 				}
 				FloorComponent::CircleInscribedSquare => {
 					Box::new(posed_glb(CIRCLE_INSCRIBED_SQUARE, transform)) as Box<dyn Scene>

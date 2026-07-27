@@ -54,6 +54,9 @@ pub mod floors {
 	pub mod rough_stonework {
 		use super::AssetPath;
 
+		/// Unit rectangular floor slab.
+		pub const RECTANGLE: AssetPath =
+			AssetPath::new("urban/floors/rough_stonework/rough_stonework_001.glb");
 		/// Circle−inscribed-square floor cap (four yaws fill a circular ring).
 		pub const CIRCLE_INSCRIBED_SQUARE: AssetPath =
 			AssetPath::new("urban/floors/rough_stonework/rough_stonework_inscribed_square_001.glb");

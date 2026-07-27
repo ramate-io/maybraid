@@ -11,7 +11,7 @@ use richmond_building_components::partitions::{rough_stone_wall, Wall};
 use richmond_building_components::{scene_children, Placed};
 
 use crate::wizards_tower::floor_fill::{
-	squared_floor_with_spire_hole, SPIRE_HALF_FRAC, WALL_HEIGHT_MULT,
+	squared_floor_with_spire_hole, SPIRE_HALF_FRAC, WALL_HEIGHT_METERS,
 };
 use crate::CellConstraints;
 
@@ -31,8 +31,7 @@ impl WizardsTowerPerch {
 		let center_xz = Vec3::new(center.x, constraints.aabb.min.y, center.z);
 		let extent = constraints.aabb.max - constraints.aabb.min;
 		let radius = 0.5 * extent.x.min(extent.z);
-		let floor_height = extent.y.max(1e-4);
-		let ring_scale = Vec3::new(radius, floor_height * WALL_HEIGHT_MULT, radius);
+		let ring_scale = Vec3::new(radius, WALL_HEIGHT_METERS, radius);
 		let spire_half = SPIRE_HALF_FRAC * radius;
 		let (floor_caps, floor_rects) =
 			squared_floor_with_spire_hole(center_xz, radius, spire_half);

@@ -1,10 +1,7 @@
-use crate::assets::partitions::rough_stonework::LINEAR;
+use crate::assets::floors::rough_stonework::RECTANGLE;
 use crate::floors::geometry_components::FloorComponent;
 
-/// Rectangular rough stone floor fill.
-///
-/// No dedicated floor-rectangle GLB yet — reuses the rough-stonework linear
-/// partition mesh, remapped onto the floor plane in [`crate::floors::scene`].
+/// Rectangular rough stone floor fill (`rough_stonework_001.glb`).
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct RoughStoneFloorRectangle;
 
@@ -14,4 +11,4 @@ impl From<FloorComponent> for RoughStoneFloorRectangle {
 	}
 }
 
-crate::impl_glb_lod_scene!(RoughStoneFloorRectangle, LINEAR);
+crate::impl_glb_lod_scene!(RoughStoneFloorRectangle, RECTANGLE);

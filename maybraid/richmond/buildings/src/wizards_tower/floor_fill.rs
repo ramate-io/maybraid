@@ -16,8 +16,8 @@ pub const SPIRE_HALF_FRAC: f32 = 0.28;
 /// Floor slab Y scale — thin relative to the authored kit thickness (\(Y \in [-0.2, 0.2]\)).
 pub const FLOOR_SLAB_Y_SCALE: f32 = 0.2;
 
-/// Multiplier on storey height for outer ring walls (kit \(Y \in [0, 1]\)).
-pub const WALL_HEIGHT_MULT: f32 = 1.25;
+/// Outer ring wall height in meters (kit \(Y \in [0, 1]\)).
+pub const WALL_HEIGHT_METERS: f32 = 3.0;
 
 /// Four inscribed-square caps + four rectangular frame slabs around a centered spire hole.
 pub fn squared_floor_with_spire_hole(
