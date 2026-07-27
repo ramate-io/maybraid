@@ -3,17 +3,14 @@
 //!
 //! Floor count is derived from noise at construction time.
 //!
-//! # Layering
+//! # Layering (current sketch)
 //!
-//! Each floor is an external rectangular cell that:
-//! 1. Draws the circular outer walls.
-//! 2. Draws up to four internally subdividing walls ending around a center
-//!    radius reserved for the spire.
-//! 3. Passes [`CellConstraints`](crate::CellConstraints) subsets to children:
-//!    - **Spire rectangle** — circumscribes the spire radius; exclusive draw rights.
-//!    - **Voxel halfspaces** — room-like regions around the spire for lower layers.
+//! Each storey draws circular **outer rings** and a squared-off **floor** (circle
+//!−inscribed-square caps + rectangular slabs around a spire hole). Internal
+//! partitions, rooms, and spire geometry are deferred.
 
 pub mod floor;
+pub mod floor_fill;
 pub mod perch;
 pub mod room;
 pub mod spire;

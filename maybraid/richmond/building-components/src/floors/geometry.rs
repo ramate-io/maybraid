@@ -5,6 +5,8 @@ pub enum Floor {
 	Rectangle(RectangleFloor),
 	ArcFill(ArcFloorFill),
 	StructFill(StructFloorFill),
+	/// Southern circle−square cap; four yaws fill a circular floor ring.
+	CircleInscribedSquare(CircleInscribedSquareFloor),
 }
 
 impl Floor {
@@ -18,6 +20,10 @@ impl Floor {
 
 	pub fn struct_fill() -> Self {
 		Self::StructFill(StructFloorFill)
+	}
+
+	pub fn circle_inscribed_square() -> Self {
+		Self::CircleInscribedSquare(CircleInscribedSquareFloor)
 	}
 }
 
@@ -39,3 +45,6 @@ impl Default for ArcFloorFill {
 
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct StructFloorFill;
+
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct CircleInscribedSquareFloor;

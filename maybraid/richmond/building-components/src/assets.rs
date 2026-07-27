@@ -46,3 +46,17 @@ pub mod partitions {
 			AssetPath::new("urban/partitions/rough_stonework/rough_stonework_90_header_001.glb");
 	}
 }
+
+/// Urban floor GLBs under `urban/floors/`.
+pub mod floors {
+	use super::AssetPath;
+
+	pub mod rough_stonework {
+		use super::AssetPath;
+
+		/// Circle−inscribed-square floor cap (four yaws fill a circular ring).
+		pub const CIRCLE_INSCRIBED_SQUARE: AssetPath =
+			AssetPath::new("urban/floors/rough_stonework/rough_stonework_inscribed_square_001.glb");
+	}
+}
+

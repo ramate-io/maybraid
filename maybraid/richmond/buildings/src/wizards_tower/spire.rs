@@ -1,16 +1,13 @@
 //! Central circular spire region of a Wizard's Tower floor.
 //!
-//! Geometry: four 90° core wall arcs, structural floor fill, spiral stair, and
-//! a spire roof. Exclusive boundary rights inside the subsetted write AABB.
+//! Geometry: four 90° core wall arcs only for now. Stairs / roofs / floor fill
+//! inside the spire hole are omitted (empty scenes).
 
 use bevy::scene::prelude::Scene;
 use bevy_math::Vec3;
 use lod::gen::LodScene;
 use lod::lod_ref::LodRef;
-use richmond_building_components::floors::{rough_stone_floor, Floor};
 use richmond_building_components::partitions::{rough_stone_wall, Wall};
-use richmond_building_components::roofs::{roof_scene, Roof};
-use richmond_building_components::stairs::{rough_stone_stair, Stair};
 use richmond_building_components::{scene_children, Placed};
 
 use crate::CellConstraints;
@@ -20,9 +17,6 @@ use crate::CellConstraints;
 pub struct WizardsTowerSpire {
 	pub constraints: CellConstraints,
 	pub core_walls: [Placed<Wall>; 4],
-	pub struct_fill: Placed<Floor>,
-	pub spiral: Placed<Stair>,
-	pub roof: Placed<Roof>,
 }
 
 impl WizardsTowerSpire {
@@ -46,14 +40,6 @@ impl WizardsTowerSpire {
 				)
 				.with_scale(scale),
 			],
-			struct_fill: Placed::at_origin(Floor::struct_fill()),
-			spiral: Placed::new(Stair::spiral(), center_xz, 0.0).with_scale(scale),
-			roof: Placed::new(
-				Roof::spire(),
-				Vec3::new(center.x, constraints.aabb.max.y, center.z),
-				0.0,
-			)
-			.with_scale(scale),
 			constraints,
 		}
 	}
@@ -61,14 +47,11 @@ impl WizardsTowerSpire {
 
 impl LodScene for WizardsTowerSpire {
 	fn scene_with_lod(&self, lod_ref: &LodRef) -> impl Scene + 'static {
-		let mut children: Vec<Box<dyn Scene>> = self
+		let children: Vec<Box<dyn Scene>> = self
 			.core_walls
 			.iter()
 			.map(|wall| Box::new(rough_stone_wall(wall, lod_ref)) as Box<dyn Scene>)
 			.collect();
-		children.push(Box::new(rough_stone_floor(&self.struct_fill, lod_ref)));
-		children.push(Box::new(rough_stone_stair(&self.spiral, lod_ref)));
-		children.push(Box::new(roof_scene(&self.roof, lod_ref)));
 		scene_children(children)
 	}
 }

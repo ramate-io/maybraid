@@ -1,20 +1,20 @@
 //! A floor of the Wizard's Tower.
 //!
-//! Geometry: circular outer walls (two 180° arcs), four radial linear subdividers
-//! toward the spire, stone arc + struct floor fill, and one door frame on a bay.
-//! Children receive subsetted [`CellConstraints`] for the spire rect and voxel rooms.
+//! Geometry for now: circular outer walls and a squared-off floor (four
+//! circle−inscribed-square caps + rectangular slabs) with a centered rectangular
+//! spire hole. Internal partitions / rooms / spire geometry are omitted.
 
 use bevy::scene::prelude::Scene;
-use bevy_math::bounding::Aabb3d;
 use bevy_math::Vec3;
 use lod::gen::LodScene;
 use lod::lod_ref::LodRef;
-use richmond_building_components::doors::{door_scene, Door};
 use richmond_building_components::floors::{rough_stone_floor, Floor};
 use richmond_building_components::partitions::{rough_stone_wall, Wall};
 use richmond_building_components::{scene_children, Placed};
 
-use crate::wizards_tower::{WizardsTowerRoom, WizardsTowerSpire};
+use crate::wizards_tower::floor_fill::{
+	squared_floor_with_spire_hole, SPIRE_HALF_FRAC, WALL_HEIGHT_MULT,
+};
 use crate::CellConstraints;
 
 /// One storey of the circular tower.
@@ -23,109 +23,34 @@ pub struct WizardsTowerFloor {
 	pub constraints: CellConstraints,
 	/// Circular outer wall halves (cell-local).
 	pub outer_walls: [Placed<Wall>; 2],
-	/// Radial subdividers toward the spire (yaw spaced by π/2).
-	pub radial_walls: [Placed<Wall>; 4],
-	pub floor_arc: Placed<Floor>,
-	pub floor_struct: Placed<Floor>,
-	pub door: Placed<Door>,
-	pub spire: WizardsTowerSpire,
-	pub rooms: Vec<WizardsTowerRoom>,
+	/// Four circle−inscribed-square caps that square off the circular footprint.
+	pub floor_caps: [Placed<Floor>; 4],
+	/// Rectangular slabs filling the inscribed square around the spire hole.
+	pub floor_rects: [Placed<Floor>; 4],
 }
 
 impl WizardsTowerFloor {
 	/// Build from column parent constraints and this floor's subsetted constraints.
 	pub fn new(_parent_constraints: &CellConstraints, constraints: CellConstraints) -> Self {
-		let spire_aabb = Self::spire_rect(&constraints.aabb, 0.28);
-		let spire_constraints = constraints
-			.subset(spire_aabb)
-			.unwrap_or_else(|_| CellConstraints::cell_owned(spire_aabb));
-		let spire = WizardsTowerSpire::new(&constraints, spire_constraints);
-
-		let rooms = Self::voxel_halfspaces(&constraints.aabb, &spire_aabb)
-			.into_iter()
-			.filter_map(|room_aabb| {
-				if Self::is_degenerate(&room_aabb) {
-					return None;
-				}
-				let room_constraints = constraints
-					.subset(room_aabb)
-					.unwrap_or_else(|_| CellConstraints::cell_owned(room_aabb));
-				Some(WizardsTowerRoom::new(&constraints, room_constraints))
-			})
-			.collect();
-
 		let center = (constraints.aabb.min + constraints.aabb.max) * 0.5;
 		let center_xz = Vec3::new(center.x, constraints.aabb.min.y, center.z);
 		let extent = constraints.aabb.max - constraints.aabb.min;
 		let radius = 0.5 * extent.x.min(extent.z);
 		let floor_height = extent.y.max(1e-4);
-		let ring_scale = Vec3::new(radius, floor_height, radius);
+		let ring_scale = Vec3::new(radius, floor_height * WALL_HEIGHT_MULT, radius);
+		let spire_half = SPIRE_HALF_FRAC * radius;
+		let (floor_caps, floor_rects) =
+			squared_floor_with_spire_hole(center_xz, radius, spire_half);
 
 		Self {
 			outer_walls: [
 				Placed::new(Wall::arc(180.0), center_xz, 0.0).with_scale(ring_scale),
 				Placed::new(Wall::arc(180.0), center_xz, std::f32::consts::PI).with_scale(ring_scale),
 			],
-			radial_walls: [
-				Placed::new(Wall::linear(), center_xz, 0.0).with_scale(ring_scale),
-				Placed::new(Wall::linear(), center_xz, std::f32::consts::FRAC_PI_2)
-					.with_scale(ring_scale),
-				Placed::new(Wall::linear(), center_xz, std::f32::consts::PI).with_scale(ring_scale),
-				Placed::new(
-					Wall::linear(),
-					center_xz,
-					std::f32::consts::PI + std::f32::consts::FRAC_PI_2,
-				)
-				.with_scale(ring_scale),
-			],
-			floor_arc: Placed::new(Floor::arc_fill(360.0), center_xz, 0.0).with_scale(ring_scale),
-			floor_struct: Placed::at_origin(Floor::struct_fill()),
-			door: Placed::new(
-				Door::frame_15(),
-				center_xz + Vec3::new(0.0, 0.0, constraints.aabb.min.z - center.z),
-				0.0,
-			)
-			.with_scale(ring_scale),
-			spire,
-			rooms,
+			floor_caps,
+			floor_rects,
 			constraints,
 		}
-	}
-
-	fn spire_rect(floor: &Aabb3d, half_extent_frac: f32) -> Aabb3d {
-		let center = (floor.min + floor.max) * 0.5;
-		let half = (floor.max - floor.min) * 0.5 * half_extent_frac;
-		Aabb3d::from_min_max(
-			Vec3::new(center.x - half.x, floor.min.y, center.z - half.z),
-			Vec3::new(center.x + half.x, floor.max.y, center.z + half.z),
-		)
-	}
-
-	fn voxel_halfspaces(floor: &Aabb3d, spire: &Aabb3d) -> [Aabb3d; 4] {
-		[
-			Aabb3d::from_min_max(
-				Vec3::new(spire.min.x, floor.min.y, floor.min.z),
-				Vec3::new(spire.max.x, floor.max.y, spire.min.z),
-			),
-			Aabb3d::from_min_max(
-				Vec3::new(spire.max.x, floor.min.y, spire.min.z),
-				Vec3::new(floor.max.x, floor.max.y, spire.max.z),
-			),
-			Aabb3d::from_min_max(
-				Vec3::new(spire.min.x, floor.min.y, spire.max.z),
-				Vec3::new(spire.max.x, floor.max.y, floor.max.z),
-			),
-			Aabb3d::from_min_max(
-				Vec3::new(floor.min.x, floor.min.y, spire.min.z),
-				Vec3::new(spire.min.x, floor.max.y, spire.max.z),
-			),
-		]
-	}
-
-	fn is_degenerate(aabb: &Aabb3d) -> bool {
-		aabb.min.x >= aabb.max.x - 1e-5
-			|| aabb.min.y >= aabb.max.y - 1e-5
-			|| aabb.min.z >= aabb.max.z - 1e-5
 	}
 }
 
@@ -135,15 +60,11 @@ impl LodScene for WizardsTowerFloor {
 		for wall in &self.outer_walls {
 			children.push(Box::new(rough_stone_wall(wall, lod_ref)));
 		}
-		for wall in &self.radial_walls {
-			children.push(Box::new(rough_stone_wall(wall, lod_ref)));
+		for cap in &self.floor_caps {
+			children.push(Box::new(rough_stone_floor(cap, lod_ref)));
 		}
-		children.push(Box::new(rough_stone_floor(&self.floor_arc, lod_ref)));
-		children.push(Box::new(rough_stone_floor(&self.floor_struct, lod_ref)));
-		children.push(Box::new(door_scene(&self.door, lod_ref)));
-		children.push(Box::new(self.spire.scene_with_lod(lod_ref)));
-		for room in &self.rooms {
-			children.push(Box::new(room.scene_with_lod(lod_ref)));
+		for rect in &self.floor_rects {
+			children.push(Box::new(rough_stone_floor(rect, lod_ref)));
 		}
 		scene_children(children)
 	}
