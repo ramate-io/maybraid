@@ -63,3 +63,16 @@ pub mod floors {
 	}
 }
 
+/// Urban stair GLBs under `urban/stairs/`.
+pub mod stairs {
+	use super::AssetPath;
+
+	pub mod rough_stonework {
+		use super::AssetPath;
+
+		/// Unit tread cube (\(X = Y = Z \in [-1, 1]\), left face −Z).
+		pub const TREAD: AssetPath =
+			AssetPath::new("urban/stairs/rough_stonework/rough_stonework_tread_001.glb");
+	}
+}
+

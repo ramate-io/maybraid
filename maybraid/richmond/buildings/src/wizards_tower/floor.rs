@@ -1,8 +1,7 @@
 //! A floor of the Wizard's Tower.
 //!
-//! Geometry for now: circular outer walls and a squared-off floor (four
-//! circle−inscribed-square caps + rectangular slabs) with a centered rectangular
-//! spire hole. Internal partitions / rooms / spire geometry are omitted.
+//! Geometry: circular outer walls, squared-off floor with a centered spire hole,
+//! and a circular rough-stone tread run inside the spire square that rises one storey.
 
 use bevy::scene::prelude::Scene;
 use bevy_math::Vec3;
@@ -10,6 +9,7 @@ use lod::gen::LodScene;
 use lod::lod_ref::LodRef;
 use richmond_building_components::floors::{rough_stone_floor, Floor};
 use richmond_building_components::partitions::{rough_stone_wall, Wall};
+use richmond_building_components::stairs::{rough_stone_stair, Stair};
 use richmond_building_components::{scene_children, Placed};
 
 use crate::wizards_tower::floor_fill::{squared_floor_with_spire_hole, SPIRE_HALF_FRAC};
@@ -27,6 +27,8 @@ pub struct WizardsTowerFloor {
 	pub floor_caps: [Placed<Floor>; 4],
 	/// Rectangular slabs filling the inscribed square around the spire hole.
 	pub floor_rects: [Placed<Floor>; 4],
+	/// Circular tread run inside the spire square, from this floor up to the next storey.
+	pub stairs: Placed<Stair>,
 }
 
 impl WizardsTowerFloor {
@@ -47,6 +49,11 @@ impl WizardsTowerFloor {
 		let (floor_caps, floor_rects) =
 			squared_floor_with_spire_hole(center_xz, radius, spire_half);
 
+		// Spiral stays inside the centered spire square (outer tread edge ≤ spire_half).
+		let tread_width = spire_half * 0.45;
+		let stair_radius = (spire_half - 0.5 * tread_width).max(1e-4);
+		let tread_depth = tread_width * 0.55;
+
 		Self {
 			storey_height,
 			outer_walls: [
@@ -55,6 +62,11 @@ impl WizardsTowerFloor {
 			],
 			floor_caps,
 			floor_rects,
+			stairs: Placed::new(
+				Stair::spiral_run(storey_height, stair_radius, tread_width, tread_depth),
+				center_xz,
+				0.0,
+			),
 			constraints,
 		}
 	}
@@ -72,6 +84,7 @@ impl LodScene for WizardsTowerFloor {
 		for rect in &self.floor_rects {
 			children.push(Box::new(rough_stone_floor(rect, lod_ref)));
 		}
+		children.push(Box::new(rough_stone_stair(&self.stairs, lod_ref)));
 		scene_children(children)
 	}
 }
