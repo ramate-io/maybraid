@@ -6,9 +6,10 @@
 //! # Layering (current sketch)
 //!
 //! Each storey draws a parameterized crate-level [`crate::ArcWall`] (must / must-not /
-//! noise portals, configurable arc degrees) and a squared-off **floor**
-//! (circle−inscribed-square caps + rectangular slabs around a spire hole). Internal
-//! partitions, rooms, and spire geometry are deferred.
+//! noise portals, configurable arc degrees), a crate-level [`crate::ArcSpire`] tread
+//! run fitted to \(Y\) bindings, and a squared-off **floor** (circle−inscribed-square
+//! caps + rectangular slabs around a spire hole). Internal partitions, rooms, and
+//! spire geometry are deferred.
 
 pub mod floor;
 pub mod floor_fill;

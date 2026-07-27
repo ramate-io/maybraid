@@ -33,18 +33,25 @@ impl IntoGeometryComponents for SpiralStair {
 	type Component = StairComponent;
 
 	fn into_geometry_components(&self) -> Vec<Placed<StairComponent>> {
-		let n = self.tread_count();
-		let rise = self.rise_per_tread();
-		let yaw_step = self.turns * TAU / n as f32;
+		let tops = self.effective_tread_tops();
+		if tops.is_empty() {
+			return Vec::new();
+		}
+		let n = tops.len() as f32;
+		let yaw_step = self.turns * TAU / n;
 		let half = 2.0 * TREAD_HALF_EXTENT;
+		let mut prev_top = 0.0_f32;
 
-		(0..n)
-			.map(|i| {
+		tops.into_iter()
+			.enumerate()
+			.map(|(i, top)| {
+				let rise = (top - prev_top).max(1e-4);
+				prev_top = top;
 				let yaw = i as f32 * yaw_step;
 				let (s, c) = yaw.sin_cos();
 				// Centerline on the circle; yaw so local +X is tangential (ascent).
 				// Kit: left face = −Z; bleed support extends toward −X.
-				let translation = Vec3::new(c * self.radius, (i as f32 + 0.5) * rise, -s * self.radius);
+				let translation = Vec3::new(c * self.radius, top - 0.5 * rise, -s * self.radius);
 				let scale = Vec3::new(
 					self.tread_depth / half,
 					rise / half,

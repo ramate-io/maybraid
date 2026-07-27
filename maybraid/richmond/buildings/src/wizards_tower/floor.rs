@@ -1,8 +1,8 @@
 //! A floor of the Wizard's Tower.
 //!
 //! Geometry: outer crate-level [`crate::ArcWall`] with door/window portals, squared-off floor
-//! with a centered spire hole, and a circular rough-stone tread run inside the spire
-//! square that rises one storey. Each storey also carries a lantern-like point light
+//! with a centered spire hole, and a crate-level [`crate::ArcSpire`] tread run inside the
+//! spire square that rises one storey. Each storey also carries a lantern-like point light
 //! (mesh TBD).
 
 use bevy::prelude::{Color, PointLight, Transform, Visibility};
@@ -13,9 +13,10 @@ use lod::lod_ref::LodRef;
 use procedural_common::NoiseParams;
 use richmond_building_components::floors::{rough_stone_floor, Floor};
 use richmond_building_components::partitions::rough_stone_wall;
-use richmond_building_components::stairs::{rough_stone_stair, Stair};
+use richmond_building_components::stairs::{rough_stone_stair, SpiralStair};
 use richmond_building_components::{scene_children, Placed};
 
+use crate::arc_spire::{uniform_storey_bindings, ArcSpire, ArcSpireParams, FitTolerance};
 use crate::arc_wall::{ArcWall, ArcWallParams};
 use crate::wizards_tower::floor_fill::{squared_floor_with_spire_hole, SPIRE_HALF_FRAC};
 use crate::wizards_tower::must_assign_cardinal_portals;
@@ -33,8 +34,8 @@ pub struct WizardsTowerFloor {
 	pub floor_caps: [Placed<Floor>; 4],
 	/// Rectangular slabs filling the inscribed square around the spire hole.
 	pub floor_rects: [Placed<Floor>; 4],
-	/// Circular tread run inside the spire square, from this floor up to the next storey.
-	pub stairs: Placed<Stair>,
+	/// Circular tread spire inside the spire square, fitted to storey \(Y\) bindings.
+	pub arc_spire: ArcSpire,
 	/// Warm lantern point light hanging over the usable floor (no mesh yet).
 	pub lantern: Vec3,
 }
@@ -61,6 +62,7 @@ impl WizardsTowerFloor {
 		let tread_width = spire_half * 0.45;
 		let stair_radius = (spire_half - 0.5 * tread_width).max(1e-4);
 		let tread_depth = tread_width * 0.55;
+		let target_tread_height = SpiralStair::DEFAULT_TREAD_HEIGHT;
 
 		// Hang over the floor ring, clear of the spire stairs (~chest / lantern height).
 		let lantern = Vec3::new(
@@ -80,16 +82,23 @@ impl WizardsTowerFloor {
 			optional_portals: (0, 2),
 		});
 
+		let arc_spire = ArcSpire::new(ArcSpireParams {
+			center_xz,
+			radius: stair_radius,
+			tread_width,
+			tread_depth,
+			target_tread_height,
+			y_bindings: uniform_storey_bindings(center_xz.y, storey_height, target_tread_height),
+			fit_tolerance: FitTolerance::default(),
+			turns: 1.0,
+		});
+
 		Self {
 			storey_height,
 			arc_wall,
 			floor_caps,
 			floor_rects,
-			stairs: Placed::new(
-				Stair::spiral_run(storey_height, stair_radius, tread_width, tread_depth),
-				center_xz,
-				0.0,
-			),
+			arc_spire,
 			lantern,
 			constraints,
 		}
@@ -123,7 +132,7 @@ impl LodScene for WizardsTowerFloor {
 		for rect in &self.floor_rects {
 			children.push(Box::new(rough_stone_floor(rect, lod_ref)));
 		}
-		children.push(Box::new(rough_stone_stair(&self.stairs, lod_ref)));
+		children.push(Box::new(rough_stone_stair(&self.arc_spire.stairs, lod_ref)));
 		children.push(Box::new(floor_lantern(self.lantern, self.storey_height)));
 		scene_children(children)
 	}
