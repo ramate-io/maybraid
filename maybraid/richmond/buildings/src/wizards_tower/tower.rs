@@ -1,17 +1,13 @@
 //! The stacked circular column of the Wizard's Tower.
-//!
-//! Owns the vertical sequence of floors and the top perch. The column does not
-//! author wall geometry itself; each [`super::WizardsTowerFloor`] draws its ring
-//! and subdividers, then hands subsetted [`CellConstraints`](crate::CellConstraints)
-//! to spire / room children.
 
-use bevy::scene::prelude::Scene;
+use bevy::prelude::Children;
+use bevy::scene::prelude::{bsn, Scene};
+use bevy_math::bounding::Aabb3d;
+use bevy_math::Vec3;
 use lod::gen::LodScene;
 use lod::lod_ref::LodRef;
 
-use crate::wizards_tower::{
-	compose_scene, vertical_slab, WizardsTowerFloor, WizardsTowerPerch,
-};
+use crate::wizards_tower::{WizardsTowerFloor, WizardsTowerPerch};
 use crate::CellConstraints;
 
 /// Vertical stack of tower floors capped by a perch.
@@ -32,7 +28,6 @@ impl WizardsTowerColumn {
 		let min_y = constraints.aabb.min.y;
 		let max_y = constraints.aabb.max.y;
 		let height = (max_y - min_y).max(1e-4);
-		// Reserve the top ~8% of the column for the perch.
 		let perch_frac = 0.08;
 		let floors_top = min_y + height * (1.0 - perch_frac);
 		let floor_count = floor_count.max(1);
@@ -42,7 +37,7 @@ impl WizardsTowerColumn {
 			.map(|i| {
 				let y0 = min_y + i as f32 * floor_h;
 				let y1 = y0 + floor_h;
-				let floor_aabb = vertical_slab(&constraints.aabb, y0, y1);
+				let floor_aabb = Self::vertical_slab(&constraints.aabb, y0, y1);
 				let floor_constraints = constraints
 					.subset(floor_aabb)
 					.unwrap_or_else(|_| CellConstraints::cell_owned(floor_aabb));
@@ -50,7 +45,7 @@ impl WizardsTowerColumn {
 			})
 			.collect();
 
-		let perch_aabb = vertical_slab(&constraints.aabb, floors_top, max_y);
+		let perch_aabb = Self::vertical_slab(&constraints.aabb, floors_top, max_y);
 		let perch_constraints = constraints
 			.subset(perch_aabb)
 			.unwrap_or_else(|_| CellConstraints::cell_owned(perch_aabb));
@@ -62,6 +57,13 @@ impl WizardsTowerColumn {
 			perch,
 		}
 	}
+
+	fn vertical_slab(parent: &Aabb3d, y_min: f32, y_max: f32) -> Aabb3d {
+		Aabb3d::from_min_max(
+			Vec3::new(parent.min.x, y_min, parent.min.z),
+			Vec3::new(parent.max.x, y_max, parent.max.z),
+		)
+	}
 }
 
 impl LodScene for WizardsTowerColumn {
@@ -72,6 +74,8 @@ impl LodScene for WizardsTowerColumn {
 			.map(|floor| Box::new(floor.scene_with_lod(lod_ref)) as Box<dyn Scene>)
 			.collect();
 		children.push(Box::new(self.perch.scene_with_lod(lod_ref)));
-		compose_scene(children)
+		bsn! {
+			Children [ {children} ]
+		}
 	}
 }

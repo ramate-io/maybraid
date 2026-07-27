@@ -1,13 +1,15 @@
 //! Reusable Richmond building scene components.
 //!
-//! Placeholders implement empty [`lod::gen::LodScene`] scenes until geometry
-//! authoring lands.
+//! Per domain: `geometry` → `geometry_components` → named scene component modules.
 
 pub mod doors;
 pub mod floors;
 pub mod partitions;
+pub mod placed;
 pub mod roofs;
 pub mod stairs;
+
+pub use placed::{IntoGeometryComponents, Placed};
 
 use bevy::scene::{ResolveContext, ResolvedScene};
 

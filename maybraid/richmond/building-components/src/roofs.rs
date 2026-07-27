@@ -1,18 +1,17 @@
 //! Roof / cap scene components.
 //!
-//! Caps follow the same arc + struct filler idea as floors: stone for the spire
-//! and perch shell, with occasional wood decking on the perch.
+//! Pipeline: [`geometry`] → [`geometry_components`] → named roof scene types.
 
-/// Conical (or faceted) spire roof above the central column.
-#[derive(Debug, Clone, Copy, PartialEq, Default)]
-pub struct RoughStoneSpireRoof;
+pub mod geometry;
+pub mod geometry_components;
+pub mod rough_stone_perch_roof;
+pub mod rough_stone_spire_roof;
+pub mod scene;
+pub mod wood_perch_deck;
 
-/// Wider perch roof / parapet cap for the top floor.
-#[derive(Debug, Clone, Copy, PartialEq, Default)]
-pub struct RoughStonePerchRoof;
-
-/// Occasional wood decking on the perch platform.
-#[derive(Debug, Clone, Copy, PartialEq, Default)]
-pub struct WoodPerchDeck;
-
-crate::impl_empty_lod_scene!(RoughStoneSpireRoof, RoughStonePerchRoof, WoodPerchDeck);
+pub use geometry::*;
+pub use geometry_components::RoofComponent;
+pub use rough_stone_perch_roof::RoughStonePerchRoof;
+pub use rough_stone_spire_roof::RoughStoneSpireRoof;
+pub use scene::roof_scene;
+pub use wood_perch_deck::WoodPerchDeck;

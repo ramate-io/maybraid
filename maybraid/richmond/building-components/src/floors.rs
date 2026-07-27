@@ -1,28 +1,23 @@
 //! Floor slab scene components.
 //!
-//! Floors are typically an **arc filler** (curved disc segments) plus a
-//! **struct filler** (radial/rect bracing). Prefer rough stonework; wood is
-//! occasional for interior halfspaces.
+//! Pipeline: [`geometry`] → [`geometry_components`] → named floor scene types.
 
-/// Arc-segment floor fill in rough stone (for circular tower discs).
-#[derive(Debug, Clone, Copy, PartialEq, Default)]
-pub struct RoughStoneFloorArcFill;
+pub mod geometry;
+pub mod geometry_components;
+pub mod rough_stone_floor_arc_fill;
+pub mod rough_stone_floor_rectangle;
+pub mod rough_stone_floor_struct_fill;
+pub mod scene;
+pub mod wood_floor_arc_fill;
+pub mod wood_floor_rectangle;
+pub mod wood_floor_struct_fill;
 
-/// Structural / radial floor bracing in rough stone.
-#[derive(Debug, Clone, Copy, PartialEq, Default)]
-pub struct RoughStoneFloorStructFill;
-
-/// Occasional wood arc floor fill for interior rooms.
-#[derive(Debug, Clone, Copy, PartialEq, Default)]
-pub struct WoodFloorArcFill;
-
-/// Occasional wood structural floor bracing.
-#[derive(Debug, Clone, Copy, PartialEq, Default)]
-pub struct WoodFloorStructFill;
-
-crate::impl_empty_lod_scene!(
-	RoughStoneFloorArcFill,
-	RoughStoneFloorStructFill,
-	WoodFloorArcFill,
-	WoodFloorStructFill,
-);
+pub use geometry::*;
+pub use geometry_components::FloorComponent;
+pub use rough_stone_floor_arc_fill::RoughStoneFloorArcFill;
+pub use rough_stone_floor_rectangle::RoughStoneFloorRectangle;
+pub use rough_stone_floor_struct_fill::RoughStoneFloorStructFill;
+pub use scene::{rough_stone_floor, wood_floor};
+pub use wood_floor_arc_fill::WoodFloorArcFill;
+pub use wood_floor_rectangle::WoodFloorRectangle;
+pub use wood_floor_struct_fill::WoodFloorStructFill;

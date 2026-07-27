@@ -5,6 +5,39 @@ This crate contains various scene components for Richmond buildings.
 > [!NOTE]
 > All components implement [`lod::gen::LodScene`](../../lod/lib/src/gen/presentation.rs) so they can be used in the scene graph and with generation-presentation flows.
 
+## Layout
+
+Each domain module owns its pipeline and named scene types:
+
+```
+floors.rs
+floors/geometry.rs
+floors/geometry_components.rs
+floors/scene.rs
+floors/rough_stone_floor_arc_fill.rs
+…
+```
+
+Same pattern for `partitions`, `roofs`, `stairs`, and `doors`. Partition materials follow:
+
+```
+partitions/rough_stonework.rs
+partitions/rough_stonework/rough_stonework_15.rs
+…
+```
+
+Shared [`Placed`](src/placed.rs) / [`IntoGeometryComponents`](src/placed.rs) live at the crate root.
+
+## Pipeline
+
+**Geometry → Geometry components → Scene components**
+
+1. **`*/geometry.rs`** — continuous forms with size and orientation (`Wall::arc(45.0)`, `Floor::rectangle()`, …).
+2. **`*/geometry_components.rs`** — tessellates into the normalized kit (e.g. a 45° arc → three 15° pieces). Scene components implement [`From`] for these types.
+3. **Named scene modules** — material-specific `LodScene` placeholders.
+
+Scaling vs repeating continuous forms is deferred; arc decomposition prefers 180° / 90° / 15°.
+
 ## Swept Components
 
 We have not yet defined a sweeping tool. The plan is to make it take linear segments in \(X \in [-1.0, 1.0]\) and extrude/fill them along a path (line or arc).
@@ -32,6 +65,4 @@ A common approach to building door frames is to use a header component with vari
 
 ## Floors, Roofs, Stairs, and Doors
 
-These modules hold reusable floor/roof fillers, circulation geometry, and door kits. Like partitions, they implement `LodScene` and are meant to be placed by building authors inside cell write bounds.
-
-Floors and roofs are typically an **arc filler** plus a **struct filler**. Prefer rough stonework; wood appears occasionally (interior halfspaces, perch decking, door leaves).
+These modules hold reusable floor/roof fillers, circulation geometry, and door kits. Floors and roofs are typically an **arc filler** plus a **struct filler**. Prefer rough stonework; wood appears occasionally (interior halfspaces, perch decking, door leaves).

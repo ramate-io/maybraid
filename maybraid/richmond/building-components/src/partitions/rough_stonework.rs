@@ -1,4 +1,6 @@
 //! Rough stonework partition variants used by circular towers and door frames.
+//!
+//! Each type maps from a [`crate::partitions::geometry_components::WallComponent`] kit piece.
 
 pub mod rough_stonework_15;
 pub mod rough_stonework_180;
