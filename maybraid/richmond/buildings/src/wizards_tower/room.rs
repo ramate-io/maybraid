@@ -11,7 +11,7 @@ use richmond_building_components::floors::{rough_stone_floor, Floor};
 use richmond_building_components::partitions::{rough_stone_wall, Wall};
 use richmond_building_components::{scene_children, Placed};
 
-use crate::wizards_tower::floor_fill::FLOOR_SLAB_Y_SCALE;
+use crate::wizards_tower::floor_fill::{FLOOR_SLAB_Y_SCALE, RECT_HALF_EXTENT};
 use crate::CellConstraints;
 
 /// A bounded room / voxel-halfspace child of a tower floor.
@@ -34,7 +34,11 @@ impl WizardsTowerRoom {
 			0.0
 		};
 		let wall_scale = Vec3::new(size.x.max(size.z) * 0.5, size.y.max(1e-4), size.x.max(size.z) * 0.5);
-		let floor_scale = Vec3::new(size.x.max(1e-4), FLOOR_SLAB_Y_SCALE, size.z.max(1e-4));
+		let floor_scale = Vec3::new(
+			size.x.max(1e-4) / (2.0 * RECT_HALF_EXTENT),
+			FLOOR_SLAB_Y_SCALE,
+			size.z.max(1e-4) / (2.0 * RECT_HALF_EXTENT),
+		);
 
 		Self {
 			partition: Placed::new(Wall::linear(), center_xz, yaw).with_scale(wall_scale),
