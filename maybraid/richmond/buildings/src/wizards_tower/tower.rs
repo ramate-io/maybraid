@@ -5,6 +5,7 @@ use bevy_math::bounding::Aabb3d;
 use bevy_math::Vec3;
 use lod::gen::LodScene;
 use lod::lod_ref::LodRef;
+use procedural_common::NoiseParams;
 use richmond_building_components::scene_children;
 
 use crate::wizards_tower::floor_fill::WALL_HEIGHT_METERS;
@@ -22,7 +23,8 @@ pub struct WizardsTowerColumn {
 }
 
 impl WizardsTowerColumn {
-	/// Build from the tower footprint constraints, floor count, and storey height.
+	/// Build from the tower footprint constraints, floor count, storey height, and
+	/// a base portal [`NoiseParams`] (per-storey seeds are derived from this).
 	///
 	/// Each regular storey occupies \([y_i, y_i + h)\) with \(h =\) `storey_height`.
 	/// The perch sits in the next slab of the same height. Footprint \(XZ\) and base
@@ -31,6 +33,7 @@ impl WizardsTowerColumn {
 		tower_constraints: &CellConstraints,
 		floor_count: u32,
 		storey_height: f32,
+		portal_noise: NoiseParams,
 	) -> Self {
 		let storey_height = storey_height.max(1e-4);
 		let floor_count = floor_count.max(1);
@@ -64,7 +67,9 @@ impl WizardsTowerColumn {
 				let floor_constraints = constraints
 					.subset(floor_aabb)
 					.unwrap_or_else(|_| CellConstraints::cell_owned(floor_aabb));
-				WizardsTowerFloor::new(&constraints, floor_constraints, storey_height)
+				let mut floor_noise = portal_noise;
+				floor_noise.seed = portal_noise.seed.wrapping_add(i as i32 * 97);
+				WizardsTowerFloor::new(&constraints, floor_constraints, storey_height, floor_noise)
 			})
 			.collect();
 
@@ -72,7 +77,10 @@ impl WizardsTowerColumn {
 		let perch_constraints = constraints
 			.subset(perch_aabb)
 			.unwrap_or_else(|_| CellConstraints::cell_owned(perch_aabb));
-		let perch = WizardsTowerPerch::new(&constraints, perch_constraints, storey_height);
+		let mut perch_noise = portal_noise;
+		perch_noise.seed = portal_noise.seed.wrapping_add(floor_count as i32 * 97 + 13);
+		let perch =
+			WizardsTowerPerch::new(&constraints, perch_constraints, storey_height, perch_noise);
 
 		Self {
 			constraints,
@@ -86,8 +94,14 @@ impl WizardsTowerColumn {
 	pub fn with_default_storey_height(
 		tower_constraints: &CellConstraints,
 		floor_count: u32,
+		portal_noise: NoiseParams,
 	) -> Self {
-		Self::new(tower_constraints, floor_count, WALL_HEIGHT_METERS)
+		Self::new(
+			tower_constraints,
+			floor_count,
+			WALL_HEIGHT_METERS,
+			portal_noise,
+		)
 	}
 
 	fn vertical_slab(parent: &Aabb3d, y_min: f32, y_max: f32) -> Aabb3d {

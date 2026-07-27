@@ -5,20 +5,23 @@
 //!
 //! # Layering (current sketch)
 //!
-//! Each storey draws circular **outer rings** with door/window openings and a
-//! squared-off **floor** (circle−inscribed-square caps + rectangular slabs around
-//! a spire hole). Internal partitions, rooms, and spire geometry are deferred.
+//! Each storey draws a parameterized circular [`RingWall`] (must / must-not / noise
+//! portals) and a squared-off **floor** (circle−inscribed-square caps + rectangular
+//! slabs around a spire hole). Internal partitions, rooms, and spire geometry are deferred.
 
 pub mod floor;
 pub mod floor_fill;
-pub mod outer_ring;
 pub mod perch;
+pub mod ring_wall;
 pub mod room;
 pub mod spire;
 pub mod tower;
 
 pub use floor::WizardsTowerFloor;
 pub use perch::WizardsTowerPerch;
+pub use ring_wall::{
+	ArcRegion, AssignedPortal, MustAssignPortal, Portal, RingWall, RingWallParams,
+};
 pub use room::WizardsTowerRoom;
 pub use spire::WizardsTowerSpire;
 pub use tower::WizardsTowerColumn;
@@ -26,6 +29,7 @@ pub use tower::WizardsTowerColumn;
 use bevy::scene::prelude::Scene;
 use lod::gen::LodScene;
 use lod::lod_ref::LodRef;
+use procedural_common::NoiseParams;
 
 use richmond_building_components::scene_children;
 
@@ -60,7 +64,12 @@ impl WizardsTower {
 		storey_height: f32,
 	) -> Self {
 		let floor_count = Self::floor_count_from_noise(noise);
-		let column = WizardsTowerColumn::new(constraints, floor_count, storey_height);
+		let portal_noise = NoiseParams {
+			seed: (noise.clamp(0.0, 1.0) * 1_000_000.0) as i32,
+			..NoiseParams::default()
+		};
+		let column =
+			WizardsTowerColumn::new(constraints, floor_count, storey_height, portal_noise);
 		Self {
 			constraints: column.constraints.clone(),
 			floor_count,

@@ -1,17 +1,20 @@
 //! Larger top-floor perch capping the Wizard's Tower.
 //!
-//! Same treatment as a regular storey for now: outer rings with openings + squared floor.
+//! Same treatment as a regular storey for now: [`RingWall`] + squared floor.
 
 use bevy::scene::prelude::Scene;
 use bevy_math::Vec3;
 use lod::gen::LodScene;
 use lod::lod_ref::LodRef;
+use procedural_common::NoiseParams;
 use richmond_building_components::floors::{rough_stone_floor, Floor};
-use richmond_building_components::partitions::{rough_stone_wall, Wall};
+use richmond_building_components::partitions::rough_stone_wall;
 use richmond_building_components::{scene_children, Placed};
 
 use crate::wizards_tower::floor_fill::{squared_floor_with_spire_hole, SPIRE_HALF_FRAC};
-use crate::wizards_tower::outer_ring::outer_ring_with_openings;
+use crate::wizards_tower::ring_wall::{
+	wizard_tower_must_assign, RingWall, RingWallParams,
+};
 use crate::CellConstraints;
 
 /// Top perch: wider circular platform over the column.
@@ -20,18 +23,19 @@ pub struct WizardsTowerPerch {
 	pub constraints: CellConstraints,
 	/// Storey height in meters (outer ring wall \(Y\) scale).
 	pub storey_height: f32,
-	pub outer_walls: Vec<Placed<Wall>>,
+	pub ring: RingWall,
 	pub floor_caps: [Placed<Floor>; 4],
 	pub floor_rects: [Placed<Floor>; 4],
 }
 
 impl WizardsTowerPerch {
 	/// Build from column parent constraints, this perch's subsetted constraints,
-	/// and the shared storey height.
+	/// storey height, and portal noise.
 	pub fn new(
 		_parent_constraints: &CellConstraints,
 		constraints: CellConstraints,
 		storey_height: f32,
+		portal_noise: NoiseParams,
 	) -> Self {
 		let storey_height = storey_height.max(1e-4);
 		let center = (constraints.aabb.min + constraints.aabb.max) * 0.5;
@@ -42,9 +46,19 @@ impl WizardsTowerPerch {
 		let (floor_caps, floor_rects) =
 			squared_floor_with_spire_hole(center_xz, radius, spire_half);
 
+		let ring = RingWall::new(RingWallParams {
+			center_xz,
+			radius,
+			storey_height,
+			must_assign: wizard_tower_must_assign(),
+			must_not_assign: vec![],
+			portal_noise,
+			optional_portals: (0, 2),
+		});
+
 		Self {
 			storey_height,
-			outer_walls: outer_ring_with_openings(center_xz, radius, storey_height),
+			ring,
 			floor_caps,
 			floor_rects,
 			constraints,
@@ -55,7 +69,7 @@ impl WizardsTowerPerch {
 impl LodScene for WizardsTowerPerch {
 	fn scene_with_lod(&self, lod_ref: &LodRef) -> impl Scene + 'static {
 		let mut children: Vec<Box<dyn Scene>> = Vec::new();
-		for wall in &self.outer_walls {
+		for wall in &self.ring.walls {
 			children.push(Box::new(rough_stone_wall(wall, lod_ref)));
 		}
 		for cap in &self.floor_caps {
