@@ -2,8 +2,10 @@
 //!
 //! Geometry: circular outer walls, squared-off floor with a centered spire hole,
 //! and a circular rough-stone tread run inside the spire square that rises one storey.
+//! Each storey also carries a lantern-like point light (mesh TBD).
 
-use bevy::scene::prelude::Scene;
+use bevy::prelude::{Color, PointLight, Transform, Visibility};
+use bevy::scene::prelude::{bsn, template_value, Scene};
 use bevy_math::Vec3;
 use lod::gen::LodScene;
 use lod::lod_ref::LodRef;
@@ -29,6 +31,8 @@ pub struct WizardsTowerFloor {
 	pub floor_rects: [Placed<Floor>; 4],
 	/// Circular tread run inside the spire square, from this floor up to the next storey.
 	pub stairs: Placed<Stair>,
+	/// Warm lantern point light hanging over the usable floor (no mesh yet).
+	pub lantern: Vec3,
 }
 
 impl WizardsTowerFloor {
@@ -54,6 +58,13 @@ impl WizardsTowerFloor {
 		let stair_radius = (spire_half - 0.5 * tread_width).max(1e-4);
 		let tread_depth = tread_width * 0.55;
 
+		// Hang over the floor ring, clear of the spire stairs (~chest / lantern height).
+		let lantern = Vec3::new(
+			center.x + 0.55 * radius,
+			constraints.aabb.min.y + storey_height * 0.65,
+			center.z,
+		);
+
 		Self {
 			storey_height,
 			outer_walls: [
@@ -67,8 +78,24 @@ impl WizardsTowerFloor {
 				center_xz,
 				0.0,
 			),
+			lantern,
 			constraints,
 		}
+	}
+}
+
+fn floor_lantern(at: Vec3, storey_height: f32) -> impl Scene + 'static {
+	let range = (storey_height * 2.5).max(4.0);
+	let transform = Transform::from_translation(at);
+	bsn! {
+		PointLight {
+			color: Color::srgb(1.0, 0.72, 0.42),
+			intensity: 2800.0,
+			range: {range},
+			shadow_maps_enabled: false,
+		}
+		template_value(transform)
+		Visibility::default()
 	}
 }
 
@@ -85,6 +112,7 @@ impl LodScene for WizardsTowerFloor {
 			children.push(Box::new(rough_stone_floor(rect, lod_ref)));
 		}
 		children.push(Box::new(rough_stone_stair(&self.stairs, lod_ref)));
+		children.push(Box::new(floor_lantern(self.lantern, self.storey_height)));
 		scene_children(children)
 	}
 }
