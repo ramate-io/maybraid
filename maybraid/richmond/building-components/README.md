@@ -70,3 +70,13 @@ A common approach to building door frames is to use a header component with vari
 ## Floors, Roofs, Stairs, and Doors
 
 These modules hold reusable floor/roof fillers, circulation geometry, and door kits. Floors and roofs are typically an **arc filler** plus a **struct filler**. Prefer rough stonework; wood appears occasionally (interior halfspaces, perch decking, door leaves).
+
+## Floors
+
+Floors components come in three categories:
+
+- **Rectangular:** the floor component is simply a unit square. 
+- **Triangular:** the floor component is a unit right triangle.
+- **Circle Inscribed Square:** the floor component is the southern- hemisphere difference between a circle and a square. The space removed by the inscribed square is roughly X = Z =[ -0.7, 0.7]. To completely fill in space, rotate four of these components around the center.
+
+To fill irregular spaces, we commonly use rectangular or triangular tiling techniques--unless a more bespoke component such as the Circle Inscribed Square is provided. 
