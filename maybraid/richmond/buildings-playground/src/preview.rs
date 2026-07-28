@@ -29,7 +29,10 @@ pub enum PreviewSubject {
 		floor_height: f32,
 		radius: f32,
 	},
-	Bedroom,
+	Bedroom {
+		/// Cell size along X / Y / Z (AABB from origin to `extent`).
+		extent: Vec3,
+	},
 }
 
 impl Default for PreviewSubject {
@@ -71,7 +74,12 @@ impl PreviewConfig {
 			} => format!(
 				"preview: stacked-rings (n={floor_count} h={floor_height:.2} r={radius:.2})"
 			),
-			PreviewSubject::Bedroom => "preview: bedroom".into(),
+			PreviewSubject::Bedroom { extent } => {
+				format!(
+					"preview: bedroom (extent={:.2},{:.2},{:.2})",
+					extent.x, extent.y, extent.z
+				)
+			}
 		}
 	}
 
@@ -85,8 +93,8 @@ impl PreviewConfig {
 			PreviewSubject::WizardsTower { .. } => {
 				Aabb3d::from_min_max(Vec3::new(-4.0, 0.0, -4.0), Vec3::new(4.0, 3.0, 4.0))
 			}
-			PreviewSubject::Bedroom => {
-				Aabb3d::from_min_max(Vec3::new(0.0, 0.0, 0.0), Vec3::new(4.0, 3.0, 3.5))
+			PreviewSubject::Bedroom { extent } => {
+				Aabb3d::from_min_max(Vec3::ZERO, *extent)
 			}
 			_ => Aabb3d::from_min_max(Vec3::ZERO, Vec3::ONE),
 		}
@@ -148,10 +156,10 @@ impl CachedPreview {
 			} => {
 				self.stacked_rings = Some(StackedRings::new(*floor_count, *floor_height, *radius));
 			}
-			PreviewSubject::Bedroom => {
+			PreviewSubject::Bedroom { extent } => {
 				let room = CellConstraints::cell_owned(Aabb3d::from_min_max(
-					Vec3::new(0.0, 0.0, 0.0),
-					Vec3::new(4.0, 3.0, 3.5),
+					Vec3::ZERO,
+					*extent,
 				));
 				self.bedroom = Some(Bedroom::new(room));
 			}
@@ -229,7 +237,7 @@ pub fn present_preview_lod(
 				.as_ref()
 				.map(|r| r.scene_lod_status(&lod_ref) == LodSceneStatus::Changed)
 				.unwrap_or(false),
-			PreviewSubject::Bedroom => cache
+			PreviewSubject::Bedroom { .. } => cache
 				.bedroom
 				.as_ref()
 				.map(|b| b.scene_lod_status(&lod_ref) == LodSceneStatus::Changed)
@@ -290,7 +298,7 @@ pub fn present_preview_lod(
 				spawn_preview(&mut commands, transform, rings.scene_with_lod(&lod_ref));
 			}
 		}
-		PreviewSubject::Bedroom => {
+		PreviewSubject::Bedroom { .. } => {
 			if let Some(bedroom) = cache.bedroom.as_ref() {
 				spawn_preview(&mut commands, transform, bedroom.scene_with_lod(&lod_ref));
 			}

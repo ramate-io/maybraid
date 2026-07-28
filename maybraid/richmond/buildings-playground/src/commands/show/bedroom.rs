@@ -3,18 +3,28 @@
 use bevy::prelude::*;
 use clap::Args;
 
+use super::transform::parse_vec3_csv;
 use super::ShowTransform;
 use crate::preview::PreviewSubject;
 
 #[derive(Clone, Args)]
 #[command(rename_all = "kebab-case")]
 pub struct Bedroom {
+	/// Cell AABB size `x,y,z` in world units (origin at min corner).
+	#[arg(long, default_value = "4,3,3.5", value_parser = parse_vec3_csv)]
+	#[arg(value_name = "X,Y,Z")]
+	pub extent: Vec3,
 	#[command(flatten)]
 	pub transform: ShowTransform,
 }
 
 impl Bedroom {
 	pub fn into_preview(self) -> (PreviewSubject, Transform) {
-		(PreviewSubject::Bedroom, self.transform.transform())
+		(
+			PreviewSubject::Bedroom {
+				extent: self.extent.max(Vec3::splat(1e-4)),
+			},
+			self.transform.transform(),
+		)
 	}
 }
