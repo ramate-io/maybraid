@@ -2,6 +2,7 @@
 
 pub mod arc_180;
 pub mod arc_90;
+pub mod bedroom;
 pub mod header_90;
 pub mod linear;
 pub mod stacked_rings;
@@ -30,6 +31,8 @@ pub enum Show {
 	WizardsTower(wizards_tower::WizardsTower),
 	/// Stacked circular wall rings (validates kit radius/height scaling).
 	StackedRings(stacked_rings::StackedRings),
+	/// Hierarchical bedroom (closet / bed / nightstand / ensuite placeholders).
+	Bedroom(bedroom::Bedroom),
 }
 
 impl Show {
@@ -41,6 +44,7 @@ impl Show {
 			Self::Header90(cmd) => cmd.into_preview(),
 			Self::WizardsTower(cmd) => cmd.into_preview(),
 			Self::StackedRings(cmd) => cmd.into_preview(),
+			Self::Bedroom(cmd) => cmd.into_preview(),
 		};
 		commands.insert_resource(PreviewConfig { subject, transform });
 	}

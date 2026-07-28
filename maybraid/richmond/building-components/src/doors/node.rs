@@ -35,6 +35,10 @@ impl DoorNode {
 }
 
 impl LodScene for DoorNode {
+	fn scene_lod_status(&self, _lod_ref: &LodRef) -> lod::gen::LodSceneStatus {
+		lod::gen::LodSceneStatus::Unchanged
+	}
+
 	fn scene_with_lod(&self, lod_ref: &LodRef) -> impl Scene + 'static {
 		let children: Vec<Box<dyn Scene>> = self
 			.geometry

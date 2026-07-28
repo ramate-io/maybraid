@@ -168,6 +168,10 @@ impl Terrain {
 }
 
 impl LodScene for Terrain {
+	fn scene_lod_status(&self, _lod_ref: &LodRef) -> lod::gen::LodSceneStatus {
+		lod::gen::LodSceneStatus::Unchanged
+	}
+
 	fn scene_with_lod(&self, _lod_ref: &LodRef) -> impl Scene + 'static {
 		self.scene()
 	}

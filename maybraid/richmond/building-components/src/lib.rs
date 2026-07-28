@@ -6,6 +6,7 @@ pub mod arc_kit;
 pub mod assets;
 pub mod doors;
 pub mod floors;
+pub mod furniture;
 pub mod partitions;
 pub mod placed;
 pub mod roofs;
@@ -14,8 +15,11 @@ pub mod stairs;
 
 pub use arc_kit::{decompose_arc_sweep, ArcKit};
 pub use assets::AssetPath;
+pub use furniture::{
+	FurnitureGeometry, FurnitureNode, FurnitureStyle, FurnitureWireframePlugin,
+};
 pub use placed::{Placed, Placement};
-pub use scene_children::{pose, posed_glb, scene_children, with_pose};
+pub use scene_children::{pose, posed_glb, scene_children, with_pose, wireframe_box_with_handles};
 
 use bevy::scene::{ResolveContext, ResolvedScene};
 
@@ -26,6 +30,13 @@ macro_rules! impl_empty_lod_scene {
 	($($ty:ty),+ $(,)?) => {
 		$(
 			impl ::lod::gen::LodScene for $ty {
+				fn scene_lod_status(
+					&self,
+					_lod_ref: &::lod::lod_ref::LodRef,
+				) -> ::lod::gen::LodSceneStatus {
+					::lod::gen::LodSceneStatus::Unchanged
+				}
+
 				fn scene_with_lod(
 					&self,
 					_lod_ref: &::lod::lod_ref::LodRef,
@@ -43,6 +54,13 @@ pub(crate) use impl_empty_lod_scene;
 macro_rules! impl_glb_lod_scene {
 	($ty:ty, $asset:expr) => {
 		impl ::lod::gen::LodScene for $ty {
+			fn scene_lod_status(
+				&self,
+				_lod_ref: &::lod::lod_ref::LodRef,
+			) -> ::lod::gen::LodSceneStatus {
+				::lod::gen::LodSceneStatus::Unchanged
+			}
+
 			fn scene_with_lod(
 				&self,
 				_lod_ref: &::lod::lod_ref::LodRef,

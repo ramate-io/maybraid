@@ -39,6 +39,10 @@ impl StairNode {
 }
 
 impl LodScene for StairNode {
+	fn scene_lod_status(&self, _lod_ref: &LodRef) -> lod::gen::LodSceneStatus {
+		lod::gen::LodSceneStatus::Unchanged
+	}
+
 	fn scene_with_lod(&self, lod_ref: &LodRef) -> impl Scene + 'static {
 		let children: Vec<Box<dyn Scene>> = self
 			.geometry
