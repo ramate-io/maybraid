@@ -8,6 +8,7 @@ use lod::lod_ref::LodRef;
 use richmond_building_components::partitions::rough_stonework::{
 	RoughStonework180, RoughStonework90, RoughStoneworkHeader90, RoughStoneworkLinear,
 };
+use richmond_buildings::bedroom::Bedroom;
 use richmond_buildings::stacked_rings::StackedRings;
 use richmond_buildings::wizards_tower::WizardsTower;
 use richmond_buildings::CellConstraints;
@@ -28,6 +29,7 @@ pub enum PreviewSubject {
 		floor_height: f32,
 		radius: f32,
 	},
+	Bedroom,
 }
 
 impl Default for PreviewSubject {
@@ -69,6 +71,7 @@ impl PreviewConfig {
 			} => format!(
 				"preview: stacked-rings (n={floor_count} h={floor_height:.2} r={radius:.2})"
 			),
+			PreviewSubject::Bedroom => "preview: bedroom".into(),
 		}
 	}
 
@@ -81,6 +84,9 @@ impl PreviewConfig {
 			}
 			PreviewSubject::WizardsTower { .. } => {
 				Aabb3d::from_min_max(Vec3::new(-4.0, 0.0, -4.0), Vec3::new(4.0, 3.0, 4.0))
+			}
+			PreviewSubject::Bedroom => {
+				Aabb3d::from_min_max(Vec3::new(0.0, 0.0, 0.0), Vec3::new(4.0, 3.0, 3.5))
 			}
 			_ => Aabb3d::from_min_max(Vec3::ZERO, Vec3::ONE),
 		}
@@ -114,6 +120,7 @@ pub struct CachedPreview {
 	key: Option<(PreviewSubject, Transform)>,
 	wizards_tower: Option<WizardsTower>,
 	stacked_rings: Option<StackedRings>,
+	bedroom: Option<Bedroom>,
 }
 
 impl CachedPreview {
@@ -125,6 +132,7 @@ impl CachedPreview {
 		self.key = Some(key);
 		self.wizards_tower = None;
 		self.stacked_rings = None;
+		self.bedroom = None;
 		match &config.subject {
 			PreviewSubject::WizardsTower { noise } => {
 				let footprint = CellConstraints::cell_owned(Aabb3d::from_min_max(
@@ -139,6 +147,13 @@ impl CachedPreview {
 				radius,
 			} => {
 				self.stacked_rings = Some(StackedRings::new(*floor_count, *floor_height, *radius));
+			}
+			PreviewSubject::Bedroom => {
+				let room = CellConstraints::cell_owned(Aabb3d::from_min_max(
+					Vec3::new(0.0, 0.0, 0.0),
+					Vec3::new(4.0, 3.0, 3.5),
+				));
+				self.bedroom = Some(Bedroom::new(room));
 			}
 			_ => {}
 		}
@@ -183,6 +198,7 @@ pub fn present_preview_lod(
 			cache.key = None;
 			cache.wizards_tower = None;
 			cache.stacked_rings = None;
+			cache.bedroom = None;
 		}
 		return;
 	}
@@ -212,6 +228,11 @@ pub fn present_preview_lod(
 				.stacked_rings
 				.as_ref()
 				.map(|r| r.scene_lod_status(&lod_ref) == LodSceneStatus::Changed)
+				.unwrap_or(false),
+			PreviewSubject::Bedroom => cache
+				.bedroom
+				.as_ref()
+				.map(|b| b.scene_lod_status(&lod_ref) == LodSceneStatus::Changed)
 				.unwrap_or(false),
 			_ => false,
 		}
@@ -267,6 +288,11 @@ pub fn present_preview_lod(
 		PreviewSubject::StackedRings { .. } => {
 			if let Some(rings) = cache.stacked_rings.as_ref() {
 				spawn_preview(&mut commands, transform, rings.scene_with_lod(&lod_ref));
+			}
+		}
+		PreviewSubject::Bedroom => {
+			if let Some(bedroom) = cache.bedroom.as_ref() {
+				spawn_preview(&mut commands, transform, bedroom.scene_with_lod(&lod_ref));
 			}
 		}
 	}

@@ -24,8 +24,8 @@ pub struct WizardsTowerRoom {
 }
 
 impl WizardsTowerRoom {
-	/// Build from floor/perch parent constraints and this room's subsetted constraints.
-	pub fn new(_parent_constraints: &CellConstraints, constraints: CellConstraints) -> Self {
+	/// Build from this room's subsetted constraints.
+	pub fn new(constraints: CellConstraints) -> Self {
 		let center = (constraints.aabb.min + constraints.aabb.max) * 0.5;
 		let center_xz = Vec3::new(center.x, constraints.aabb.min.y, center.z);
 		let size = constraints.aabb.max - constraints.aabb.min;

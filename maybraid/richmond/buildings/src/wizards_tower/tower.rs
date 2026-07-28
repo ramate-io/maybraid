@@ -70,7 +70,7 @@ impl WizardsTowerColumn {
 					.unwrap_or_else(|_| CellConstraints::cell_owned(floor_aabb));
 				let mut floor_noise = portal_noise;
 				floor_noise.seed = portal_noise.seed.wrapping_add(i as i32 * 97);
-				WizardsTowerFloor::new(&constraints, floor_constraints, storey_height, floor_noise)
+				WizardsTowerFloor::new(floor_constraints, storey_height, floor_noise)
 			})
 			.collect();
 
@@ -81,7 +81,7 @@ impl WizardsTowerColumn {
 		let mut perch_noise = portal_noise;
 		perch_noise.seed = portal_noise.seed.wrapping_add(floor_count as i32 * 97 + 13);
 		let perch =
-			WizardsTowerPerch::new(&constraints, perch_constraints, storey_height, perch_noise);
+			WizardsTowerPerch::new(perch_constraints, storey_height, perch_noise);
 
 		Self {
 			constraints,

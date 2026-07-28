@@ -16,6 +16,7 @@ use game_commands::command::{capture_command_line_input, GameCommandPlugin};
 use ground::setup_ground;
 use mesh_ref::MeshRefPlugin;
 use preview::{present_preview_lod, track_camera_lod, CameraLodState, CachedPreview};
+use richmond_building_components::FurnitureWireframePlugin;
 
 pub struct RichmondBuildingsPlaygroundPlugin;
 
@@ -26,6 +27,7 @@ impl Plugin for RichmondBuildingsPlaygroundPlugin {
 			.init_resource::<CachedPreview>()
 			.add_plugins((
 				MeshRefPlugin,
+				FurnitureWireframePlugin,
 				GameCommandPlugin::<PlaygroundCommand>::with_config(ui::ui_config()),
 			))
 			.add_systems(Startup, (camera::setup_camera, setup_lighting, setup_ground))

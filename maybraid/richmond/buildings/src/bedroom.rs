@@ -1,0 +1,205 @@
+//! Hierarchical bedroom: allocate cells, children fill them.
+
+pub mod bed;
+pub mod closet;
+pub mod ensuite;
+pub mod layout;
+pub mod nightstand;
+
+pub use bed::Bed;
+pub use closet::Closet;
+pub use ensuite::EnsuiteBathroom;
+pub use nightstand::Nightstand;
+
+use bevy::scene::prelude::Scene;
+use bevy_math::bounding::Aabb3d;
+use bevy_math::Vec3;
+use lod::gen::LodScene;
+use lod::lod_ref::LodRef;
+use richmond_building_components::floors::{Floor, FloorNode};
+use richmond_building_components::partitions::{Wall, WallNode};
+use richmond_building_components::scene_children;
+use richmond_building_components::Placement;
+
+use crate::bedroom::layout::BedroomLayout;
+use crate::constraints::{
+	BoundaryOwnershipEntry, BoundaryOwnershipStatus, FaceKind,
+};
+use crate::wizards_tower::floor_fill::{FLOOR_SLAB_Y_SCALE, RECT_HALF_EXTENT};
+use crate::CellConstraints;
+
+/// Bedroom cell: outer shell + allocated closet / bed / nightstand / ensuite.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Bedroom {
+	pub constraints: CellConstraints,
+	pub floor: FloorNode,
+	pub walls: Vec<WallNode>,
+	pub closet: Closet,
+	pub bed: Bed,
+	pub nightstand: Nightstand,
+	pub ensuite: EnsuiteBathroom,
+}
+
+impl Bedroom {
+	/// Allocate child cells inside `constraints` and construct fill types.
+	pub fn new(constraints: CellConstraints) -> Self {
+		let layout = BedroomLayout::from_room_aabb(&constraints.aabb);
+		let closet = Closet::new(subset_or_owned(&constraints, layout.closet));
+		let bed = Bed::new(subset_or_owned(&constraints, layout.bed));
+		let nightstand = Nightstand::new(subset_or_owned(&constraints, layout.nightstand));
+		let ensuite = EnsuiteBathroom::new(subset_or_owned(&constraints, layout.ensuite));
+
+		let floor = room_floor(&constraints);
+		let walls = room_outer_walls(&constraints);
+
+		Self {
+			constraints,
+			floor,
+			walls,
+			closet,
+			bed,
+			nightstand,
+			ensuite,
+		}
+	}
+}
+
+impl LodScene for Bedroom {
+	fn scene_lod_status(&self, _lod_ref: &LodRef) -> lod::gen::LodSceneStatus {
+		lod::gen::LodSceneStatus::Unchanged
+	}
+
+	fn scene_with_lod(&self, lod_ref: &LodRef) -> impl Scene + 'static {
+		let mut children: Vec<Box<dyn Scene>> = Vec::new();
+		children.push(Box::new(self.floor.scene_with_lod(lod_ref)));
+		for wall in &self.walls {
+			children.push(Box::new(wall.scene_with_lod(lod_ref)));
+		}
+		children.push(Box::new(self.closet.scene_with_lod(lod_ref)));
+		children.push(Box::new(self.bed.scene_with_lod(lod_ref)));
+		children.push(Box::new(self.nightstand.scene_with_lod(lod_ref)));
+		children.push(Box::new(self.ensuite.scene_with_lod(lod_ref)));
+		scene_children(children)
+	}
+}
+
+fn subset_or_owned(parent: &CellConstraints, aabb: Aabb3d) -> CellConstraints {
+	parent
+		.subset(aabb)
+		.unwrap_or_else(|_| CellConstraints::cell_owned(aabb))
+}
+
+fn room_floor(constraints: &CellConstraints) -> FloorNode {
+	let aabb = &constraints.aabb;
+	let center = (aabb.min + aabb.max) * 0.5;
+	let center_xz = Vec3::new(center.x, aabb.min.y, center.z);
+	let size = aabb.max - aabb.min;
+	let floor_scale = Vec3::new(
+		size.x.max(1e-4) / (2.0 * RECT_HALF_EXTENT),
+		FLOOR_SLAB_Y_SCALE,
+		size.z.max(1e-4) / (2.0 * RECT_HALF_EXTENT),
+	);
+	FloorNode::rough_stone(
+		Floor::rectangle(),
+		Placement::new(center_xz, 0.0).with_scale(floor_scale),
+	)
+}
+
+/// True when this face is wholly cell-owned (or absent, which implies Cell).
+pub(crate) fn owns_face_as_cell(constraints: &CellConstraints, face: FaceKind) -> bool {
+	match constraints.boundary_ownership.get(face) {
+		None => true,
+		Some(BoundaryOwnershipEntry::Whole(BoundaryOwnershipStatus::Cell)) => true,
+		Some(_) => false,
+	}
+}
+
+fn room_outer_walls(constraints: &CellConstraints) -> Vec<WallNode> {
+	let aabb = &constraints.aabb;
+	let size = aabb.max - aabb.min;
+	let y0 = aabb.min.y;
+	let h = size.y.max(1e-4);
+	let cx = (aabb.min.x + aabb.max.x) * 0.5;
+	let cz = (aabb.min.z + aabb.max.z) * 0.5;
+	let half_x = size.x * 0.5;
+	let half_z = size.z * 0.5;
+	// Kit linear: X ∈ [-1,1], Y ∈ [0,1], Z thickness ∈ [-0.2,0.2].
+	let thick = 0.15_f32 / 0.2;
+
+	let mut walls = Vec::new();
+	// −Z / Front
+	if owns_face_as_cell(constraints, FaceKind::Front) {
+		walls.push(WallNode::rough_stone(
+			Wall::linear(),
+			Placement::new(Vec3::new(cx, y0, aabb.min.z), 0.0)
+				.with_scale(Vec3::new(half_x, h, thick)),
+		));
+	}
+	// +Z / Back
+	if owns_face_as_cell(constraints, FaceKind::Back) {
+		walls.push(WallNode::rough_stone(
+			Wall::linear(),
+			Placement::new(Vec3::new(cx, y0, aabb.max.z), 0.0)
+				.with_scale(Vec3::new(half_x, h, thick)),
+		));
+	}
+	// −X / Left
+	if owns_face_as_cell(constraints, FaceKind::Left) {
+		walls.push(WallNode::rough_stone(
+			Wall::linear(),
+			Placement::new(Vec3::new(aabb.min.x, y0, cz), std::f32::consts::FRAC_PI_2)
+				.with_scale(Vec3::new(half_z, h, thick)),
+		));
+	}
+	// +X / Right
+	if owns_face_as_cell(constraints, FaceKind::Right) {
+		walls.push(WallNode::rough_stone(
+			Wall::linear(),
+			Placement::new(Vec3::new(aabb.max.x, y0, cz), std::f32::consts::FRAC_PI_2)
+				.with_scale(Vec3::new(half_z, h, thick)),
+		));
+	}
+	walls
+}
+
+/// Placement that fills `aabb` with a unit cube centered in the volume.
+pub(crate) fn placement_filling_aabb(aabb: &Aabb3d) -> Placement {
+	let center = Vec3::from((aabb.min + aabb.max) * 0.5);
+	let extent = Vec3::from(aabb.max - aabb.min).max(Vec3::splat(1e-4));
+	Placement::new(center, 0.0).with_scale(extent)
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use crate::constraints::{
+		BoundaryOwnershipEntry, BoundaryOwnershipStatus, CellConstraints,
+	};
+
+	#[test]
+	fn room_outer_walls_skip_parent_owned_faces() -> anyhow::Result<()> {
+		let mut constraints = CellConstraints::cell_owned(Aabb3d::from_min_max(
+			Vec3::ZERO,
+			Vec3::new(4.0, 3.0, 3.5),
+		));
+		constraints.boundary_ownership.front =
+			Some(BoundaryOwnershipEntry::Whole(BoundaryOwnershipStatus::Parent));
+		constraints.boundary_ownership.left =
+			Some(BoundaryOwnershipEntry::Whole(BoundaryOwnershipStatus::Sibling));
+
+		let walls = room_outer_walls(&constraints);
+		// Cell-owned: Back (+Z) and Right (+X) only.
+		assert_eq!(walls.len(), 2);
+		Ok(())
+	}
+
+	#[test]
+	fn cell_owned_room_emits_all_four_walls() -> anyhow::Result<()> {
+		let constraints = CellConstraints::cell_owned(Aabb3d::from_min_max(
+			Vec3::ZERO,
+			Vec3::new(4.0, 3.0, 3.5),
+		));
+		assert_eq!(room_outer_walls(&constraints).len(), 4);
+		Ok(())
+	}
+}

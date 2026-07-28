@@ -12,6 +12,7 @@
 
 pub mod arc_spire;
 pub mod arc_wall;
+pub mod bedroom;
 pub mod constraints;
 pub mod stacked_rings;
 pub mod wizards_tower;
@@ -22,6 +23,7 @@ pub use arc_spire::{
 pub use arc_wall::{
 	ArcRegion, ArcWall, ArcWallParams, AssignedPortal, MustAssignPortal, Portal,
 };
+pub use bedroom::{Bed, Bedroom, Closet, EnsuiteBathroom, Nightstand};
 pub use constraints::{
 	BoundaryOwnershipEntry, BoundaryOwnershipStatus, BoundaryRegionList, BoundaryThicknessEntry,
 	CellBoundaryTable, CellConstraints, CirculationEntry, CirculationRequestStatus, FaceKind,
