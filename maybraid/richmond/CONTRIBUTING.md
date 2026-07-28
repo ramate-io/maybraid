@@ -10,7 +10,7 @@ and present geometry on top of [`building-components`](building-components/).
 |-------|------|
 | [`building-components`](building-components/) | Domain IR + kit assets. Authoring types are `*Node` values (`FloorNode`, `WallNode`, `StairNode`, `DoorNode`, `RoofNode`): **style + geometry + placement**. Each node implements [`LodScene`](../lod/lib/src/gen/presentation.rs). Tessellation into kit pieces is private to the domain. |
 | [`buildings`](buildings/) | Building procedures. Compose constraints, layouts, and helpers (`ArcWall`, `ArcSpire`, …) into **owned collections of nodes** (and rare non-mesh features such as lights). Implement `LodScene` by emitting those nodes (and helpers) under the requested LOD. |
-| [`buildings-playground`](buildings-playground/) | Preview / CLI. Prefer constructing a one-off node or a leaf kit type when showing a single piece. |
+| [`buildings-playground`](buildings-playground/) | Preview / CLI. Prefer constructing a one-off node or a leaf kit type when showing a single piece. Tracks the camera into an [`LodRef`](../lod/lib/src/lod_ref.rs) and re-presents when `scene_lod_status` is `Changed` (whole-scene despawn/spawn for now). |
 
 Shared pose helpers (`pose`, `posed_glb`, `with_pose`, `scene_children`) live in building-components and should not be reimplemented per building.
 
@@ -25,7 +25,8 @@ constraints / layout helpers
   Vec<FloorNode>, Vec<WallNode>, …
         │
         ▼
-  LodScene::scene_with_lod  ──►  node.scene_with_lod(lod_ref)
+  scene_lod_status(lod_ref)  ──►  short-circuit if Unchanged
+  scene_with_lod(lod_ref)    ──►  node.scene_with_lod(lod_ref)
 ```
 
 Preferred shape for a storey or room:
@@ -44,27 +45,53 @@ impl ExampleFloor {
         // Prefer FloorNode::rough_stone(geom, placement), WallNode::rough_stone(…), etc.
         Self { /* … */ }
     }
+
+    fn band_for(&self, viewer: &Transform) -> ExampleLodBand { /* … */ }
+
+    fn is_near(&self, viewer: &Transform) -> bool {
+        matches!(self.band_for(viewer), ExampleLodBand::Near)
+    }
 }
 ```
 
 Helpers such as `ArcWall` / `ArcSpire` are fine when they **produce** `Vec<WallNode>` / `StairNode`. They should not become a second scene API that bypasses nodes.
 
+Prefer **methods on the building type** (`self.band_for`, `self.emit_external_features`, …) over free module helpers.
+
 ## `LodScene` on buildings
 
-Every presentable building type still implements `LodScene`. The implementation’s job is to **select and compose** already-authored nodes (plus incidental non-node scenes), not to invent kit tessellation.
+Every presentable building type still implements `LodScene`:
+
+- `scene_lod_status` — cheap; compare LOD **banding** (or other selection) for `previous_transform` vs `current_transform`. Return `Changed` only when those outcomes differ. Do not build a scene here.
+- `scene_with_lod` — scene for the **current** selection only.
 
 ```rust
 impl LodScene for ExampleFloor {
+    fn scene_lod_status(&self, lod_ref: &LodRef) -> LodSceneStatus {
+        let prev = self.band_for(lod_ref.previous_transform);
+        let curr = self.band_for(lod_ref.current_transform);
+        if prev == curr {
+            LodSceneStatus::Unchanged
+        } else {
+            LodSceneStatus::Changed
+        }
+    }
+
     fn scene_with_lod(&self, lod_ref: &LodRef) -> impl Scene + 'static {
         let mut children = Vec::new();
         self.emit_external_features(&mut children, lod_ref);
-        self.emit_internal_features(&mut children, lod_ref);
+        if self.is_near(lod_ref.current_transform) {
+            self.emit_internal_features(&mut children, lod_ref);
+        }
         scene_children(children)
     }
 }
 ```
 
-Keep `scene_with_lod` thin: branch on LOD, call emission helpers, group with `scene_children`.
+Presenters call `scene_lod_status` first and only build/`handle` when status is `Changed` (or on first present / version repair). Leaves and domain nodes that ignore LOD return `Unchanged`.
+
+> [!NOTE]
+> The Wizard’s Tower (and similar composites here) decide `scene_lod_status` from **their own** banding only — they do **not** query or OR child `scene_lod_status` results. That is a valid simplification when one policy owns the whole subtree and children always emit for the current band. Typically, though, a composite `LodScene` will compose child status decisions (e.g. `Changed` if any child is `Changed`), or else a more intricate presenter will present layers independently. Prefer composition or layered presentation once children have independent LOD policies.
 
 ## Internal vs external emission
 
@@ -111,6 +138,7 @@ Exact LOD thresholds are building- or model-specific; the important contract is 
 - Do not implement style→asset mapping in buildings; that belongs on `*Node` in building-components.
 - Do not treat `Placed<G>` as the public authoring type for new code—prefer `*Node` (use `Placement` when you only need pose).
 - Do not leave `LodScene` as a dump of every child with no LOD structure once a building grows past a single LOD band.
+- Do not treat “camera moved” as `Changed` by itself — only a change in banding (or other LOD selection) relative to the previous ref.
 
 ## Related reading
 

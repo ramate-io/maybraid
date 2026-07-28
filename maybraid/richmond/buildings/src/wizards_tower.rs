@@ -17,15 +17,17 @@ pub mod perch;
 pub mod room;
 pub mod spire;
 pub mod tower;
+pub mod tower_lod;
 
 pub use floor::WizardsTowerFloor;
 pub use perch::WizardsTowerPerch;
 pub use room::WizardsTowerRoom;
 pub use spire::WizardsTowerSpire;
 pub use tower::WizardsTowerColumn;
+pub use tower_lod::{TowerLodBand, NEAR_RADIUS_MULTIPLIER};
 
 use bevy::scene::prelude::Scene;
-use lod::gen::LodScene;
+use lod::gen::{LodScene, LodSceneStatus};
 use lod::lod_ref::LodRef;
 use procedural_common::NoiseParams;
 
@@ -33,6 +35,7 @@ use richmond_building_components::scene_children;
 
 use crate::arc_wall::{MustAssignPortal, Portal};
 use crate::wizards_tower::floor_fill::WALL_HEIGHT_METERS;
+use crate::wizards_tower::tower_lod::TowerLodFootprint;
 use crate::CellConstraints;
 
 /// Cardinal door + windows on a full 360° storey arc.
@@ -94,7 +97,23 @@ impl WizardsTower {
 	}
 }
 
+impl TowerLodFootprint for WizardsTower {
+	fn lod_aabb(&self) -> &bevy_math::bounding::Aabb3d {
+		&self.constraints.aabb
+	}
+}
+
 impl LodScene for WizardsTower {
+	fn scene_lod_status(&self, lod_ref: &LodRef) -> LodSceneStatus {
+		let prev = self.band_for(lod_ref.previous_transform);
+		let curr = self.band_for(lod_ref.current_transform);
+		if prev == curr {
+			LodSceneStatus::Unchanged
+		} else {
+			LodSceneStatus::Changed
+		}
+	}
+
 	fn scene_with_lod(&self, lod_ref: &LodRef) -> impl Scene + 'static {
 		let column = self.column.scene_with_lod(lod_ref);
 		scene_children(vec![Box::new(column) as Box<dyn Scene>])

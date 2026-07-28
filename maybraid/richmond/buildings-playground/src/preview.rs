@@ -1,9 +1,9 @@
-//! Preview subject sync: despawn previous root and spawn the requested scene.
+//! Preview subject sync + camera-driven LOD re-present.
 
 use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, template_value};
 use bevy_math::bounding::Aabb3d;
-use lod::gen::LodScene;
+use lod::gen::{LodScene, LodSceneStatus};
 use lod::lod_ref::LodRef;
 use richmond_building_components::partitions::rough_stonework::{
 	RoughStonework180, RoughStonework90, RoughStoneworkHeader90, RoughStoneworkLinear,
@@ -71,41 +71,162 @@ impl PreviewConfig {
 			),
 		}
 	}
+
+	fn subject_bounds(&self) -> Aabb3d {
+		match &self.subject {
+			PreviewSubject::StackedRings { radius, floor_count, floor_height } => {
+				let r = (*radius).max(1e-4);
+				let h = (*floor_count as f32) * (*floor_height).max(1e-4);
+				Aabb3d::from_min_max(Vec3::new(-r, 0.0, -r), Vec3::new(r, h, r))
+			}
+			PreviewSubject::WizardsTower { .. } => {
+				Aabb3d::from_min_max(Vec3::new(-4.0, 0.0, -4.0), Vec3::new(4.0, 3.0, 4.0))
+			}
+			_ => Aabb3d::from_min_max(Vec3::ZERO, Vec3::ONE),
+		}
+	}
 }
 
+/// Previous / current camera transforms for [`LodRef`] construction.
+#[derive(Resource, Debug)]
+pub struct CameraLodState {
+	pub previous: Transform,
+	pub current: Transform,
+	pub camera_entity: Option<Entity>,
+	/// True when `current.translation` differs from `previous` this frame.
+	pub translated: bool,
+}
+
+impl Default for CameraLodState {
+	fn default() -> Self {
+		Self {
+			previous: Transform::IDENTITY,
+			current: Transform::IDENTITY,
+			camera_entity: None,
+			translated: false,
+		}
+	}
+}
+
+/// Authored preview payload kept across LOD flips (stable noise / geometry).
 #[derive(Resource, Default)]
-pub(crate) struct PreviewSyncState {
-	last: Option<(PreviewSubject, Transform)>,
+pub struct CachedPreview {
+	key: Option<(PreviewSubject, Transform)>,
+	wizards_tower: Option<WizardsTower>,
+	stacked_rings: Option<StackedRings>,
 }
 
-pub fn sync_preview(
+impl CachedPreview {
+	fn rebuild_if_needed(&mut self, config: &PreviewConfig) {
+		let key = (config.subject.clone(), config.transform);
+		if self.key.as_ref() == Some(&key) {
+			return;
+		}
+		self.key = Some(key);
+		self.wizards_tower = None;
+		self.stacked_rings = None;
+		match &config.subject {
+			PreviewSubject::WizardsTower { noise } => {
+				let footprint = CellConstraints::cell_owned(Aabb3d::from_min_max(
+					Vec3::new(-4.0, 0.0, -4.0),
+					Vec3::new(4.0, 3.0, 4.0),
+				));
+				self.wizards_tower = Some(WizardsTower::new(&footprint, *noise));
+			}
+			PreviewSubject::StackedRings {
+				floor_count,
+				floor_height,
+				radius,
+			} => {
+				self.stacked_rings = Some(StackedRings::new(*floor_count, *floor_height, *radius));
+			}
+			_ => {}
+		}
+	}
+}
+
+/// Copy camera transform into [`CameraLodState`] after the fly-cam controller.
+pub fn track_camera_lod(
+	camera: Query<(Entity, &Transform), With<Camera3d>>,
+	mut lod_state: ResMut<CameraLodState>,
+) {
+	lod_state.translated = false;
+	let Ok((entity, transform)) = camera.single() else {
+		return;
+	};
+	lod_state.previous = lod_state.current;
+	lod_state.current = *transform;
+	lod_state.camera_entity = Some(entity);
+	lod_state.translated =
+		(lod_state.previous.translation - lod_state.current.translation).length_squared() > 1e-8;
+}
+
+/// Despawn / spawn preview when the subject changes or LOD status is [`LodSceneStatus::Changed`].
+pub fn present_preview_lod(
 	mut commands: Commands,
 	config: Res<PreviewConfig>,
-	mut state: Local<PreviewSyncState>,
+	lod_state: Res<CameraLodState>,
+	mut cache: ResMut<CachedPreview>,
 	roots: Query<Entity, With<PreviewRoot>>,
+	mut last_subject: Local<Option<(PreviewSubject, Transform)>>,
 ) {
-	let key = (config.subject.clone(), config.transform);
-	if state.last.as_ref() == Some(&key) {
+	let subject_key = (config.subject.clone(), config.transform);
+	let subject_changed = last_subject.as_ref() != Some(&subject_key);
+	let has_root = roots.iter().next().is_some();
+
+	if matches!(config.subject, PreviewSubject::None) {
+		if subject_changed || has_root {
+			for entity in &roots {
+				commands.entity(entity).despawn();
+			}
+			*last_subject = Some(subject_key);
+			cache.key = None;
+			cache.wizards_tower = None;
+			cache.stacked_rings = None;
+		}
 		return;
 	}
-	state.last = Some(key);
+
+	cache.rebuild_if_needed(&config);
+
+	let bounds = config.subject_bounds();
+	let entity = lod_state.camera_entity.unwrap_or(Entity::PLACEHOLDER);
+	let lod_ref = LodRef {
+		entity,
+		previous_transform: &lod_state.previous,
+		current_transform: &lod_state.current,
+		bounds: &bounds,
+	};
+
+	let force_spawn = subject_changed || !has_root;
+	let lod_changed = if force_spawn {
+		true
+	} else if lod_state.translated {
+		match &config.subject {
+			PreviewSubject::WizardsTower { .. } => cache
+				.wizards_tower
+				.as_ref()
+				.map(|t| t.scene_lod_status(&lod_ref) == LodSceneStatus::Changed)
+				.unwrap_or(true),
+			PreviewSubject::StackedRings { .. } => cache
+				.stacked_rings
+				.as_ref()
+				.map(|r| r.scene_lod_status(&lod_ref) == LodSceneStatus::Changed)
+				.unwrap_or(false),
+			_ => false,
+		}
+	} else {
+		false
+	};
+
+	if !lod_changed {
+		return;
+	}
 
 	for entity in &roots {
 		commands.entity(entity).despawn();
 	}
-
-	if matches!(config.subject, PreviewSubject::None) {
-		return;
-	}
-
-	let identity = Transform::IDENTITY;
-	let bounds = Aabb3d::from_min_max(Vec3::ZERO, Vec3::ONE);
-	let lod_ref = LodRef {
-		entity: Entity::PLACEHOLDER,
-		previous_transform: &identity,
-		current_transform: &identity,
-		bounds: &bounds,
-	};
+	*last_subject = Some(subject_key);
 
 	let transform = config.transform;
 	match &config.subject {
@@ -138,22 +259,15 @@ pub fn sync_preview(
 				RoughStoneworkHeader90.scene_with_lod(&lod_ref),
 			);
 		}
-		PreviewSubject::WizardsTower { noise } => {
-			// XZ footprint only; storey stacking uses WALL_HEIGHT_METERS (3 m).
-			let footprint = CellConstraints::cell_owned(Aabb3d::from_min_max(
-				Vec3::new(-4.0, 0.0, -4.0),
-				Vec3::new(4.0, 3.0, 4.0),
-			));
-			let tower = WizardsTower::new(&footprint, *noise);
-			spawn_preview(&mut commands, transform, tower.scene_with_lod(&lod_ref));
+		PreviewSubject::WizardsTower { .. } => {
+			if let Some(tower) = cache.wizards_tower.as_ref() {
+				spawn_preview(&mut commands, transform, tower.scene_with_lod(&lod_ref));
+			}
 		}
-		PreviewSubject::StackedRings {
-			floor_count,
-			floor_height,
-			radius,
-		} => {
-			let rings = StackedRings::new(*floor_count, *floor_height, *radius);
-			spawn_preview(&mut commands, transform, rings.scene_with_lod(&lod_ref));
+		PreviewSubject::StackedRings { .. } => {
+			if let Some(rings) = cache.stacked_rings.as_ref() {
+				spawn_preview(&mut commands, transform, rings.scene_with_lod(&lod_ref));
+			}
 		}
 	}
 }

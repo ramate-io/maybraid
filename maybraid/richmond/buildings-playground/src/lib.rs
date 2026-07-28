@@ -15,13 +15,15 @@ use bevy::prelude::*;
 use game_commands::command::{capture_command_line_input, GameCommandPlugin};
 use ground::setup_ground;
 use mesh_ref::MeshRefPlugin;
-use preview::sync_preview;
+use preview::{present_preview_lod, track_camera_lod, CameraLodState, CachedPreview};
 
 pub struct RichmondBuildingsPlaygroundPlugin;
 
 impl Plugin for RichmondBuildingsPlaygroundPlugin {
 	fn build(&self, app: &mut App) {
 		app.init_resource::<PreviewConfig>()
+			.init_resource::<CameraLodState>()
+			.init_resource::<CachedPreview>()
 			.add_plugins((
 				MeshRefPlugin,
 				GameCommandPlugin::<PlaygroundCommand>::with_config(ui::ui_config()),
@@ -31,7 +33,10 @@ impl Plugin for RichmondBuildingsPlaygroundPlugin {
 				Update,
 				(
 					camera::camera_controller,
-					sync_preview.after(capture_command_line_input::<PlaygroundCommand>),
+					track_camera_lod.after(camera::camera_controller),
+					present_preview_lod
+						.after(track_camera_lod)
+						.after(capture_command_line_input::<PlaygroundCommand>),
 					ui::sync_command_status_text.before(game_commands::ui::update_debug_ui),
 				),
 			);

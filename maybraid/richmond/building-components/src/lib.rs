@@ -26,6 +26,13 @@ macro_rules! impl_empty_lod_scene {
 	($($ty:ty),+ $(,)?) => {
 		$(
 			impl ::lod::gen::LodScene for $ty {
+				fn scene_lod_status(
+					&self,
+					_lod_ref: &::lod::lod_ref::LodRef,
+				) -> ::lod::gen::LodSceneStatus {
+					::lod::gen::LodSceneStatus::Unchanged
+				}
+
 				fn scene_with_lod(
 					&self,
 					_lod_ref: &::lod::lod_ref::LodRef,
@@ -43,6 +50,13 @@ pub(crate) use impl_empty_lod_scene;
 macro_rules! impl_glb_lod_scene {
 	($ty:ty, $asset:expr) => {
 		impl ::lod::gen::LodScene for $ty {
+			fn scene_lod_status(
+				&self,
+				_lod_ref: &::lod::lod_ref::LodRef,
+			) -> ::lod::gen::LodSceneStatus {
+				::lod::gen::LodSceneStatus::Unchanged
+			}
+
 			fn scene_with_lod(
 				&self,
 				_lod_ref: &::lod::lod_ref::LodRef,
