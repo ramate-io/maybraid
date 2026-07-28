@@ -12,7 +12,6 @@ use bevy_math::bounding::Aabb3d;
 use bevy_math::Vec3;
 use lod::gen::LodScene;
 use lod::lod_ref::LodRef;
-use richmond_building_components::partitions::rough_stone_wall;
 use richmond_building_components::scene_children;
 
 use crate::CellConstraints;
@@ -66,7 +65,7 @@ impl LodScene for StackedRings {
 			.rings
 			.iter()
 			.flat_map(|ring| ring.outer_walls.iter())
-			.map(|wall| Box::new(rough_stone_wall(wall, lod_ref)) as Box<dyn Scene>)
+			.map(|wall| Box::new(wall.scene_with_lod(lod_ref)) as Box<dyn Scene>)
 			.collect();
 		scene_children(children)
 	}

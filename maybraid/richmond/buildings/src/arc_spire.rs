@@ -9,8 +9,8 @@
 //! 3. Tessellate a spiral of rough-stone treads around [`ArcSpireParams::radius`].
 
 use bevy_math::Vec3;
-use richmond_building_components::stairs::{Stair, SpiralStair};
-use richmond_building_components::Placed;
+use richmond_building_components::stairs::{Stair, StairNode};
+use richmond_building_components::Placement;
 
 /// Inclusive scale range vs the target tread height used when fitting \(Y\) gaps.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -66,8 +66,8 @@ pub struct ArcSpire {
 	pub fitted_tops: Vec<f32>,
 	/// Missed (skipped) bindings from the input list.
 	pub missed_bindings: Vec<f32>,
-	/// Placed spiral stair (local tops relative to `center_xz.y`).
-	pub stairs: Placed<Stair>,
+	/// Spiral stair node (local tops relative to `center_xz.y`).
+	pub stairs: StairNode,
 }
 
 impl ArcSpire {
@@ -85,10 +85,9 @@ impl ArcSpire {
 
 		let local_tops: Vec<f32> = fitted_tops.iter().map(|y| y - base_y).filter(|y| *y > 1e-5).collect();
 
-		let stairs = Placed::new(
+		let stairs = StairNode::rough_stone(
 			Stair::spiral_fitted(radius, tread_width, tread_depth, local_tops, turns),
-			params.center_xz,
-			0.0,
+			Placement::new(params.center_xz, 0.0),
 		);
 
 		Self {
@@ -209,6 +208,7 @@ pub fn uniform_storey_bindings(base_y: f32, height: f32, target_tread_height: f3
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use richmond_building_components::stairs::SpiralStair;
 
 	#[test]
 	fn uniform_bindings_fit_exactly() -> anyhow::Result<()> {
@@ -265,7 +265,7 @@ mod tests {
 			turns: 1.0,
 		});
 		assert!(!spire.fitted_tops.is_empty());
-		assert!(matches!(spire.stairs.geom, Stair::Spiral(_)));
+		assert!(matches!(spire.stairs.geometry, Stair::Spiral(_)));
 		Ok(())
 	}
 }

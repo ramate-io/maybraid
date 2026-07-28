@@ -4,8 +4,9 @@ use bevy::scene::prelude::Scene;
 use bevy_math::Vec3;
 use lod::gen::LodScene;
 use lod::lod_ref::LodRef;
-use richmond_building_components::partitions::{rough_stone_wall, Wall};
-use richmond_building_components::{scene_children, Placed};
+use richmond_building_components::partitions::{Wall, WallNode};
+use richmond_building_components::scene_children;
+use richmond_building_components::Placement;
 
 /// A single ring of outer circular walls.
 #[derive(Debug, Clone, PartialEq)]
@@ -13,7 +14,7 @@ pub struct StackedRing {
 	pub base_y: f32,
 	pub floor_height: f32,
 	pub radius: f32,
-	pub outer_walls: [Placed<Wall>; 2],
+	pub outer_walls: [WallNode; 2],
 }
 
 impl StackedRing {
@@ -26,8 +27,14 @@ impl StackedRing {
 			floor_height,
 			radius,
 			outer_walls: [
-				Placed::new(Wall::arc(180.0), translation, 0.0).with_scale(scale),
-				Placed::new(Wall::arc(180.0), translation, std::f32::consts::PI).with_scale(scale),
+				WallNode::rough_stone(
+					Wall::arc(180.0),
+					Placement::new(translation, 0.0).with_scale(scale),
+				),
+				WallNode::rough_stone(
+					Wall::arc(180.0),
+					Placement::new(translation, std::f32::consts::PI).with_scale(scale),
+				),
 			],
 		}
 	}
@@ -38,7 +45,7 @@ impl LodScene for StackedRing {
 		let children: Vec<Box<dyn Scene>> = self
 			.outer_walls
 			.iter()
-			.map(|wall| Box::new(rough_stone_wall(wall, lod_ref)) as Box<dyn Scene>)
+			.map(|wall| Box::new(wall.scene_with_lod(lod_ref)) as Box<dyn Scene>)
 			.collect();
 		scene_children(children)
 	}

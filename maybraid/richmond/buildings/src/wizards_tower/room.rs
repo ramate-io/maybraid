@@ -7,9 +7,10 @@ use bevy::scene::prelude::Scene;
 use bevy_math::Vec3;
 use lod::gen::LodScene;
 use lod::lod_ref::LodRef;
-use richmond_building_components::floors::{rough_stone_floor, Floor};
-use richmond_building_components::partitions::{rough_stone_wall, Wall};
-use richmond_building_components::{scene_children, Placed};
+use richmond_building_components::floors::{Floor, FloorNode};
+use richmond_building_components::partitions::{Wall, WallNode};
+use richmond_building_components::scene_children;
+use richmond_building_components::Placement;
 
 use crate::wizards_tower::floor_fill::{FLOOR_SLAB_Y_SCALE, RECT_HALF_EXTENT};
 use crate::CellConstraints;
@@ -18,8 +19,8 @@ use crate::CellConstraints;
 #[derive(Debug, Clone, PartialEq)]
 pub struct WizardsTowerRoom {
 	pub constraints: CellConstraints,
-	pub partition: Placed<Wall>,
-	pub floor: Placed<Floor>,
+	pub partition: WallNode,
+	pub floor: FloorNode,
 }
 
 impl WizardsTowerRoom {
@@ -41,8 +42,14 @@ impl WizardsTowerRoom {
 		);
 
 		Self {
-			partition: Placed::new(Wall::linear(), center_xz, yaw).with_scale(wall_scale),
-			floor: Placed::new(Floor::rectangle(), center_xz, 0.0).with_scale(floor_scale),
+			partition: WallNode::rough_stone(
+				Wall::linear(),
+				Placement::new(center_xz, yaw).with_scale(wall_scale),
+			),
+			floor: FloorNode::rough_stone(
+				Floor::rectangle(),
+				Placement::new(center_xz, 0.0).with_scale(floor_scale),
+			),
 			constraints,
 		}
 	}
@@ -51,8 +58,8 @@ impl WizardsTowerRoom {
 impl LodScene for WizardsTowerRoom {
 	fn scene_with_lod(&self, lod_ref: &LodRef) -> impl Scene + 'static {
 		let children: Vec<Box<dyn Scene>> = vec![
-			Box::new(rough_stone_wall(&self.partition, lod_ref)),
-			Box::new(rough_stone_floor(&self.floor, lod_ref)),
+			Box::new(self.partition.scene_with_lod(lod_ref)),
+			Box::new(self.floor.scene_with_lod(lod_ref)),
 		];
 		scene_children(children)
 	}

@@ -1,13 +1,13 @@
 //! Continuous roof / cap geometry.
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub enum Roof {
+pub enum RoofGeometry {
 	Spire(SpireRoof),
 	Perch(PerchRoof),
 	Deck(PerchDeck),
 }
 
-impl Roof {
+impl RoofGeometry {
 	pub fn spire() -> Self {
 		Self::Spire(SpireRoof)
 	}
@@ -20,6 +20,9 @@ impl Roof {
 		Self::Deck(PerchDeck)
 	}
 }
+
+/// Alias kept for migration; prefer [`RoofGeometry`].
+pub type Roof = RoofGeometry;
 
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct SpireRoof;

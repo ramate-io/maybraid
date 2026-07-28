@@ -7,8 +7,9 @@ use bevy::scene::prelude::Scene;
 use bevy_math::Vec3;
 use lod::gen::LodScene;
 use lod::lod_ref::LodRef;
-use richmond_building_components::partitions::{rough_stone_wall, Wall};
-use richmond_building_components::{scene_children, Placed};
+use richmond_building_components::partitions::{Wall, WallNode};
+use richmond_building_components::scene_children;
+use richmond_building_components::Placement;
 
 use crate::CellConstraints;
 
@@ -16,7 +17,7 @@ use crate::CellConstraints;
 #[derive(Debug, Clone, PartialEq)]
 pub struct WizardsTowerSpire {
 	pub constraints: CellConstraints,
-	pub core_walls: [Placed<Wall>; 4],
+	pub core_walls: [WallNode; 4],
 }
 
 impl WizardsTowerSpire {
@@ -30,15 +31,23 @@ impl WizardsTowerSpire {
 		let scale = Vec3::new(radius, height, radius);
 		Self {
 			core_walls: [
-				Placed::new(Wall::arc(90.0), center_xz, 0.0).with_scale(scale),
-				Placed::new(Wall::arc(90.0), center_xz, std::f32::consts::FRAC_PI_2).with_scale(scale),
-				Placed::new(Wall::arc(90.0), center_xz, std::f32::consts::PI).with_scale(scale),
-				Placed::new(
+				WallNode::rough_stone(
 					Wall::arc(90.0),
-					center_xz,
-					std::f32::consts::PI + std::f32::consts::FRAC_PI_2,
-				)
-				.with_scale(scale),
+					Placement::new(center_xz, 0.0).with_scale(scale),
+				),
+				WallNode::rough_stone(
+					Wall::arc(90.0),
+					Placement::new(center_xz, std::f32::consts::FRAC_PI_2).with_scale(scale),
+				),
+				WallNode::rough_stone(
+					Wall::arc(90.0),
+					Placement::new(center_xz, std::f32::consts::PI).with_scale(scale),
+				),
+				WallNode::rough_stone(
+					Wall::arc(90.0),
+					Placement::new(center_xz, std::f32::consts::PI + std::f32::consts::FRAC_PI_2)
+						.with_scale(scale),
+				),
 			],
 			constraints,
 		}
@@ -50,7 +59,7 @@ impl LodScene for WizardsTowerSpire {
 		let children: Vec<Box<dyn Scene>> = self
 			.core_walls
 			.iter()
-			.map(|wall| Box::new(rough_stone_wall(wall, lod_ref)) as Box<dyn Scene>)
+			.map(|wall| Box::new(wall.scene_with_lod(lod_ref)) as Box<dyn Scene>)
 			.collect();
 		scene_children(children)
 	}

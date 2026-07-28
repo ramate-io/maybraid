@@ -12,8 +12,8 @@
 
 use bevy_math::Vec3;
 use procedural_common::{NoiseConfig, NoiseParams};
-use richmond_building_components::partitions::Wall;
-use richmond_building_components::Placed;
+use richmond_building_components::partitions::{Wall, WallNode};
+use richmond_building_components::Placement;
 
 /// Kit segment size (degrees) and portal width (two segments → 30°).
 const SEG_DEG: f32 = 15.0;
@@ -143,7 +143,7 @@ pub struct ArcWall {
 	pub storey_height: f32,
 	pub arc_degrees: f32,
 	pub portals: Vec<AssignedPortal>,
-	pub walls: Vec<Placed<Wall>>,
+	pub walls: Vec<WallNode>,
 }
 
 impl ArcWall {
@@ -328,7 +328,7 @@ fn tessellate_arc(
 	arc_degrees: f32,
 	closed: bool,
 	portals: &[AssignedPortal],
-) -> Vec<Placed<Wall>> {
+) -> Vec<WallNode> {
 	let ring_scale = Vec3::new(radius, storey_height, radius);
 	let lintel = center_xz + Vec3::Y * (HEADER_Y_FRAC * storey_height);
 	let mut walls = Vec::new();
@@ -345,17 +345,20 @@ fn tessellate_arc(
 			let yaw = seg_start.to_radians();
 			match portal.portal {
 				Portal::Door => {
-					walls.push(
-						Placed::new(Wall::header_arc(SEG_DEG), lintel, yaw).with_scale(ring_scale),
-					);
+					walls.push(WallNode::rough_stone(
+						Wall::header_arc(SEG_DEG),
+						Placement::new(lintel, yaw).with_scale(ring_scale),
+					));
 				}
 				Portal::Window => {
-					walls.push(
-						Placed::new(Wall::header_arc(SEG_DEG), center_xz, yaw).with_scale(ring_scale),
-					);
-					walls.push(
-						Placed::new(Wall::header_arc(SEG_DEG), lintel, yaw).with_scale(ring_scale),
-					);
+					walls.push(WallNode::rough_stone(
+						Wall::header_arc(SEG_DEG),
+						Placement::new(center_xz, yaw).with_scale(ring_scale),
+					));
+					walls.push(WallNode::rough_stone(
+						Wall::header_arc(SEG_DEG),
+						Placement::new(lintel, yaw).with_scale(ring_scale),
+					));
 				}
 			}
 		}
@@ -415,17 +418,17 @@ fn tessellate_arc(
 }
 
 fn push_solid_sweep(
-	walls: &mut Vec<Placed<Wall>>,
+	walls: &mut Vec<WallNode>,
 	center_xz: Vec3,
 	ring_scale: Vec3,
 	start_deg: f32,
 	sweep_deg: f32,
 ) {
 	if sweep_deg > 1e-2 {
-		walls.push(
-			Placed::new(Wall::arc(sweep_deg), center_xz, start_deg.to_radians())
-				.with_scale(ring_scale),
-		);
+		walls.push(WallNode::rough_stone(
+			Wall::arc(sweep_deg),
+			Placement::new(center_xz, start_deg.to_radians()).with_scale(ring_scale),
+		));
 	}
 }
 
@@ -527,7 +530,7 @@ mod tests {
 		let headers = wall
 			.walls
 			.iter()
-			.filter(|w| matches!(w.geom, Wall::HeaderArc(_)))
+			.filter(|w| matches!(w.geometry, Wall::HeaderArc(_)))
 			.count();
 		assert_eq!(headers, 14);
 		Ok(())
@@ -592,7 +595,7 @@ mod tests {
 		let solids = wall
 			.walls
 			.iter()
-			.filter(|w| matches!(w.geom, Wall::Arc(_)))
+			.filter(|w| matches!(w.geometry, Wall::Arc(_)))
 			.count();
 		assert_eq!(solids, 3);
 		Ok(())

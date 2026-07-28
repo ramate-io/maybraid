@@ -1,7 +1,7 @@
 //! Continuous floor fill geometry.
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub enum Floor {
+pub enum FloorGeometry {
 	Rectangle(RectangleFloor),
 	ArcFill(ArcFloorFill),
 	StructFill(StructFloorFill),
@@ -9,7 +9,7 @@ pub enum Floor {
 	CircleInscribedSquare(CircleInscribedSquareFloor),
 }
 
-impl Floor {
+impl FloorGeometry {
 	pub fn rectangle() -> Self {
 		Self::Rectangle(RectangleFloor)
 	}
@@ -26,6 +26,9 @@ impl Floor {
 		Self::CircleInscribedSquare(CircleInscribedSquareFloor)
 	}
 }
+
+/// Alias kept for migration; prefer [`FloorGeometry`].
+pub type Floor = FloorGeometry;
 
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct RectangleFloor;
