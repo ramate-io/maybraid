@@ -1,5 +1,6 @@
 //! Runtime ECS hosts that switch LOD level roots without despawning the host.
 
+use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, template_value, Scene};
 
@@ -26,6 +27,7 @@ pub struct LodLevelSpawnRequest {
 /// Build an initial host scene with a single active level root (lazy further levels).
 pub fn lod_host_scene(
 	level: LodSceneLevel,
+	bounds: Aabb3d,
 	content: impl Scene + 'static,
 ) -> impl Scene + 'static {
 	let content_children: Vec<Box<dyn Scene>> = vec![Box::new(content)];
@@ -43,9 +45,11 @@ pub fn lod_host_scene(
 		Children [ {level_roots_children} ]
 	});
 	let host_children: Vec<Box<dyn Scene>> = vec![roots];
+	let host_bounds = crate::fine_pass::LodHostBounds(bounds);
 	bsn! {
 		LodSceneHost
 		template_value(level)
+		template_value(host_bounds)
 		Transform::default()
 		Visibility::Inherited
 		Children [ {host_children} ]
@@ -128,11 +132,10 @@ pub fn sync_lod_level_roots(
 	}
 }
 
-/// Plugin: level-root show/hide / spawn requests.
+/// Plugin: marker types only. Prefer [`crate::LodFinePassPlugin`] for runtime systems
+/// (track / sync / fulfill ordering).
 pub struct LodSceneHostPlugin;
 
 impl Plugin for LodSceneHostPlugin {
-	fn build(&self, app: &mut App) {
-		app.add_systems(Update, sync_lod_level_roots);
-	}
+	fn build(&self, _app: &mut App) {}
 }

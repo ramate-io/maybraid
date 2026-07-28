@@ -17,48 +17,38 @@ use commands::RequestMeshStats;
 use game_commands::command::{capture_command_line_input, GameCommandPlugin};
 use game_commands::ui::GameCommandStatusText;
 use ground::setup_ground;
-use lod::LodSceneHostPlugin;
+use lod::{add_fine_pass_for, LodFinePassPlugin, LodFinePassSystems};
 use mesh_ref::MeshRefPlugin;
-use preview::{present_preview_lod, track_camera_lod, CameraLodState, CachedPreview};
+use preview::{present_preview_lod, CachedPreview};
 use richmond_building_components::{
 	apply_parent_confines, update_partition_host_levels, FurnitureWireframePlugin,
 };
-use richmond_buildings::wizards_tower::{
-	fulfill_tower_lod_spawn, update_tower_host_levels, TowerSilhouettePlugin,
-};
+use richmond_buildings::wizards_tower::{TowerSilhouettePlugin, WizardsTower};
 
 pub struct RichmondBuildingsPlaygroundPlugin;
 
 impl Plugin for RichmondBuildingsPlaygroundPlugin {
 	fn build(&self, app: &mut App) {
 		app.init_resource::<PreviewConfig>()
-			.init_resource::<CameraLodState>()
 			.init_resource::<CachedPreview>()
 			.add_plugins((
 				MeshRefPlugin,
 				FurnitureWireframePlugin,
 				TowerSilhouettePlugin,
-				LodSceneHostPlugin,
+				LodFinePassPlugin,
 				GameCommandPlugin::<PlaygroundCommand>::with_config(ui::ui_config()),
-			))
-			.add_systems(Startup, (camera::setup_camera, setup_lighting, setup_ground))
+			));
+		add_fine_pass_for::<WizardsTower>(app);
+		app.add_systems(Startup, (camera::setup_camera, setup_lighting, setup_ground))
 			.add_systems(
 				Update,
 				(
-					camera::camera_controller,
-					track_camera_lod.after(camera::camera_controller),
+					camera::camera_controller.before(LodFinePassSystems::Track),
 					present_preview_lod
-						.after(track_camera_lod)
+						.after(LodFinePassSystems::Track)
 						.after(capture_command_line_input::<PlaygroundCommand>),
-					(
-						update_tower_host_levels,
-						update_partition_host_levels,
-						fulfill_tower_lod_spawn,
-					)
-						.chain()
-						.after(track_camera_lod)
-						.before(lod::sync_lod_level_roots),
-					apply_parent_confines.after(lod::sync_lod_level_roots),
+					update_partition_host_levels.in_set(LodFinePassSystems::UpdateLevels),
+					apply_parent_confines.after(LodFinePassSystems::Fulfill),
 					ui::sync_command_status_text.before(game_commands::ui::update_debug_ui),
 				),
 			)

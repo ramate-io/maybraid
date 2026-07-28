@@ -1,11 +1,11 @@
-//! Preview subject sync + camera-driven LOD (host level updates, not full rebuild).
+//! Preview subject sync. Viewer tracking lives in [`lod::LodFinePassPlugin`].
 
 use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, template_value};
 use bevy_math::bounding::{Aabb2d, Aabb3d};
 use bevy_math::Vec2;
 use lod::gen::LodScene;
-use lod::lod_ref::LodRef;
+use lod::LodViewerState;
 use richmond_building_components::partitions::rough_stonework::{
 	RoughStonework180, RoughStonework90, RoughStoneworkHeader90, RoughStoneworkLinear,
 };
@@ -118,27 +118,6 @@ impl PreviewConfig {
 	}
 }
 
-/// Previous / current camera transforms for [`LodRef`] construction.
-#[derive(Resource, Debug)]
-pub struct CameraLodState {
-	pub previous: Transform,
-	pub current: Transform,
-	pub camera_entity: Option<Entity>,
-	/// True when `current.translation` differs from `previous` this frame.
-	pub translated: bool,
-}
-
-impl Default for CameraLodState {
-	fn default() -> Self {
-		Self {
-			previous: Transform::IDENTITY,
-			current: Transform::IDENTITY,
-			camera_entity: None,
-			translated: false,
-		}
-	}
-}
-
 /// Authored preview payload kept across LOD flips (stable noise / geometry).
 #[derive(Resource, Default)]
 pub struct CachedPreview {
@@ -205,28 +184,12 @@ impl CachedPreview {
 	}
 }
 
-/// Copy camera transform into [`CameraLodState`] after the fly-cam controller.
-pub fn track_camera_lod(
-	camera: Query<(Entity, &Transform), With<Camera3d>>,
-	mut lod_state: ResMut<CameraLodState>,
-) {
-	lod_state.translated = false;
-	let Ok((entity, transform)) = camera.single() else {
-		return;
-	};
-	lod_state.previous = lod_state.current;
-	lod_state.current = *transform;
-	lod_state.camera_entity = Some(entity);
-	lod_state.translated =
-		(lod_state.previous.translation - lod_state.current.translation).length_squared() > 1e-8;
-}
-
 /// Spawn preview when the subject changes. LOD flips update host levels in-place
-/// ([`lod::LodSceneHostPlugin`] + tower / partition fine-phase systems).
+/// ([`lod::LodFinePassPlugin`] + domain fine-phase systems).
 pub fn present_preview_lod(
 	mut commands: Commands,
 	config: Res<PreviewConfig>,
-	lod_state: Res<CameraLodState>,
+	lod_state: Res<LodViewerState>,
 	mut cache: ResMut<CachedPreview>,
 	roots: Query<Entity, With<PreviewRoot>>,
 	mut last_subject: Local<Option<(PreviewSubject, Transform)>>,
@@ -261,13 +224,7 @@ pub fn present_preview_lod(
 	*last_subject = Some(subject_key);
 
 	let bounds = config.subject_bounds();
-	let entity = lod_state.camera_entity.unwrap_or(Entity::PLACEHOLDER);
-	let lod_ref = LodRef {
-		entity,
-		previous_transform: &lod_state.current,
-		current_transform: &lod_state.current,
-		bounds: &bounds,
-	};
+	let lod_ref = lod_state.lod_ref(&bounds);
 
 	let transform = config.transform;
 	match &config.subject {

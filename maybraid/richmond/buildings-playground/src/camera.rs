@@ -24,6 +24,7 @@ pub fn setup_camera(mut commands: Commands) {
 
 	commands.spawn((
 		Camera3d::default(),
+		lod::LodViewer,
 		transform,
 		Projection::Perspective(PerspectiveProjection {
 			near: 0.1,

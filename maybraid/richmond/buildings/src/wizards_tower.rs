@@ -10,7 +10,6 @@
 
 pub mod floor;
 pub mod floor_fill;
-pub mod lod_systems;
 pub mod perch;
 pub mod room;
 pub mod silhouette;
@@ -19,7 +18,6 @@ pub mod tower;
 pub mod tower_lod;
 
 pub use floor::WizardsTowerFloor;
-pub use lod_systems::{fulfill_tower_lod_spawn, update_tower_host_levels};
 pub use perch::WizardsTowerPerch;
 pub use room::WizardsTowerRoom;
 pub use silhouette::{TowerSilhouetteAssets, TowerSilhouettePlugin};
@@ -185,6 +183,10 @@ impl LodScene for WizardsTower {
 
 	fn scene_with_lod(&self, lod_ref: &LodRef) -> impl Scene + 'static {
 		let level = self.scene_lod_level(lod_ref);
-		lod_host_scene(level, self.scene_with_level(lod_ref, level))
+		lod_host_scene(
+			level,
+			self.constraints.aabb,
+			self.scene_with_level(lod_ref, level),
+		)
 	}
 }

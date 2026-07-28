@@ -1,6 +1,6 @@
 //! Partition mesh resolution LOD (distance / extent banding).
 
-use bevy::prelude::{Children, Component, Transform, Visibility};
+use bevy::prelude::{Children, Component, Query, Res, Transform, Visibility, With};
 use bevy::scene::prelude::{bsn, template_value, Scene};
 use bevy_math::bounding::Aabb3d;
 use bevy_math::Vec3;
@@ -268,19 +268,19 @@ pub fn leaf_partition_lod_level(lod_ref: &LodRef) -> LodSceneLevel {
 	band_for_aabb(lod_ref.bounds, lod_ref.current_transform).to_lod_scene_level()
 }
 
-/// Fine-phase: update partition host levels from camera pose.
+/// Fine-phase: update partition host levels from [`lod::LodViewerState`].
 pub fn update_partition_host_levels(
-	viewer: bevy::prelude::Query<&Transform, bevy::prelude::With<bevy::prelude::Camera3d>>,
-	mut hosts: bevy::prelude::Query<
+	viewer: Res<lod::LodViewerState>,
+	mut hosts: Query<
 		(&PartitionLodProbe, &mut LodSceneLevel),
-		bevy::prelude::With<LodSceneHost>,
+		With<LodSceneHost>,
 	>,
 ) {
-	let Ok(viewer_tf) = viewer.single() else {
+	if viewer.entity == bevy::prelude::Entity::PLACEHOLDER {
 		return;
-	};
+	}
 	for (probe, mut level) in &mut hosts {
-		let desired = probe.level_for(viewer_tf);
+		let desired = probe.level_for(&viewer.current);
 		if *level != desired {
 			*level = desired;
 		}

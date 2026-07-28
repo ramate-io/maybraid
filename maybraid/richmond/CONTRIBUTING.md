@@ -65,7 +65,7 @@ Room layout is **noise-fitted**: [`BedroomLayout::fit`](buildings/src/bedroom/la
 
 Hosts flip level-root visibility / lazily spawn missing roots. Nested hosts are independent.
 
-**Fine vs broad phase:** per-host checks are the fine phase. See [structural LOD collectors](../lod/docs/structural-lod-collectors.md).
+**Fine pass:** [`LodFinePassPlugin`](../lod/lib/src/fine_pass.rs) tracks any [`LodViewer`](../lod/lib/src/fine_pass.rs) into [`LodViewerState`](../lod/lib/src/fine_pass.rs), then `add_fine_pass_for::<T>()` updates levels and fulfills [`LodLevelSpawnRequest`](../lod/lib/src/lod_scene_host.rs) via ephemeral [`LodRef`](../lod/lib/src/lod_ref.rs) + [`LodHostBounds`](../lod/lib/src/fine_pass.rs). Cameras are playground-only (`LodViewer` on the fly-cam). See also [structural LOD collectors](../lod/docs/structural-lod-collectors.md).
 
 ### `ParentConfines` (building-components only)
 
