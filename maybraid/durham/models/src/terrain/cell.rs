@@ -50,6 +50,19 @@ pub fn universal_bounds() -> Aabb3d {
 	Aabb3d::from_min_max(Vec3::splat(-1_000_000.0), Vec3::splat(1_000_000.0))
 }
 
+/// Optional coarser origin cells wrapping an inner footprint.
+///
+/// Each outer cell has edge length [`Self::cell_size`]. [`Self::rows`] Chebyshev
+/// rings are placed around the previously covered footprint; cells that overlap
+/// that footprint are omitted so grids abut without double-covering.
+#[derive(Debug, Clone, PartialEq)]
+pub struct OuterCellRing {
+	/// Edge length of each outer cell in world units.
+	pub cell_size: f32,
+	/// Number of Chebyshev rows outside the current covered footprint.
+	pub rows: i32,
+}
+
 /// Layout for tiling terrain origin cells in the XZ plane.
 ///
 /// Materialized once under [`Id::Universal`] via [`GenerationScheme`].
@@ -63,6 +76,8 @@ pub struct TerrainCellLayout {
 	pub origin: IVec2,
 	/// Number of cells along +X and +Z from [`Self::origin`].
 	pub extents: UVec2,
+	/// Optional nested macro rings (increasing cell size), outside the fine grid.
+	pub outer_rings: Vec<OuterCellRing>,
 }
 
 impl Default for TerrainCellLayout {
@@ -72,12 +87,14 @@ impl Default for TerrainCellLayout {
 			vertical_half_extent: TERRAIN_CELL_VERTICAL_HALF_EXTENT,
 			origin: TERRAIN_CELL_ORIGIN,
 			extents: UVec2::new(TERRAIN_CELL_EXTENTS_XZ, TERRAIN_CELL_EXTENTS_XZ),
+			outer_rings: Vec::new(),
 		}
 	}
 }
 
 impl TerrainCellLayout {
-	pub fn request_region(&self) -> Aabb3d {
+	/// Fine-grid request AABB only (ignores [`Self::outer_rings`]).
+	pub fn fine_request_region(&self) -> Aabb3d {
 		let size = self.cell_size.max(1e-3);
 		let vy = self.vertical_half_extent.max(size);
 		let min = Vec3::new(
@@ -91,6 +108,18 @@ impl TerrainCellLayout {
 			(self.origin.y + self.extents.y as i32) as f32 * size,
 		);
 		Aabb3d::from_min_max(min, max)
+	}
+
+	/// Full request AABB including nested [`Self::outer_rings`] padding.
+	pub fn request_region(&self) -> Aabb3d {
+		let mut region = self.fine_request_region();
+		for outer in &self.outer_rings {
+			if outer.rows > 0 {
+				let pad = outer.rows as f32 * outer.cell_size.max(1e-3);
+				region = expand_aabb_xz(region, pad);
+			}
+		}
+		region
 	}
 
 	/// World-space center of the request region on XZ (Y = 0).
@@ -224,6 +253,10 @@ pub fn expand_aabb_xz_y(region: Aabb3d, pad_xz: f32, pad_y: f32) -> Aabb3d {
 }
 
 /// Origin-cell [`OriginalId`]s covering `region`, using Universal [`TerrainCellLayout`].
+///
+/// Emits fine-grid cells plus nested [`TerrainCellLayout::outer_rings`] macro
+/// cells that intersect `region` and do not overlap the previously covered
+/// footprint.
 pub fn original_ids_for_origin_cells<S>(
 	spatial_index: &mut S,
 	region: Aabb3d,
@@ -253,7 +286,7 @@ where
 		return Vec::new();
 	};
 	let layout = layout.clone();
-	cell_coords_for_region(region, layout.cell_size)
+	let mut ids: Vec<OriginalId> = cell_coords_for_region(region, layout.cell_size)
 		.map(|(ix, iz)| {
 			let bounds = cell_bounds(ix, iz, layout.cell_size, layout.vertical_half_extent);
 			OriginalId(Id::from_cell(bounds))
@@ -261,5 +294,30 @@ where
 		.filter(|OriginalId(id)| {
 			id.origin_cell_bounds().is_some_and(|b| region.intersects(&b))
 		})
-		.collect()
+		.collect();
+
+	let mut covered = layout.fine_request_region();
+	for outer in &layout.outer_rings {
+		if outer.rows <= 0 {
+			continue;
+		}
+		let g = outer.cell_size.max(1e-3);
+		let hole: std::collections::HashSet<(i32, i32)> =
+			cell_coords_for_region(covered, g).collect();
+		let expanded = expand_aabb_xz(covered, outer.rows as f32 * g);
+		let outer_ids = cell_coords_for_region(region, g).filter_map(|(ix, iz)| {
+			if hole.contains(&(ix, iz)) {
+				return None;
+			}
+			let bounds = cell_bounds(ix, iz, g, layout.vertical_half_extent);
+			if !region.intersects(&bounds) {
+				return None;
+			}
+			Some(OriginalId(Id::from_cell(bounds)))
+		});
+		ids.extend(outer_ids);
+		covered = expanded;
+	}
+
+	ids
 }

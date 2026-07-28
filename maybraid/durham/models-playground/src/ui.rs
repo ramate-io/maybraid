@@ -8,9 +8,11 @@ pub fn ui_config() -> GameCommandUiConfig {
 	GameCommandUiConfig {
 		title: "Durham terrain — / for commands — Y or F1 drawer".into(),
 		empty_console_text:
-			"Console: `mode character`, `cells set --extent-x 3 --extent-z 3`, `help`".into(),
+			"Console: `mode character`, `stats mesh`, `cells set --extent-x 3 --extent-z 3`, `help`"
+				.into(),
 		root_background: Color::srgba(0.08, 0.16, 0.22, 0.82),
-		controls_hint: "help — mode free|character — cells show|set — Enter — history".into(),
+		controls_hint:
+			"help — mode free|character — cells show|set — stats mesh — Enter — history".into(),
 	}
 }
 

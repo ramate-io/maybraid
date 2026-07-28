@@ -1,6 +1,6 @@
 pub mod marching_cubes;
 
-use crate::mesh::MeshBuilder;
+use crate::mesh::{IdentifiedMesh, MeshBuilder, MeshId};
 use crate::NormalizeChunk;
 use bevy::prelude::*;
 use chunk::cascade::CascadeChunk;
@@ -8,8 +8,269 @@ use marching_cubes::{get_cube_index, interpolate_vertex_cell, TRIANGULATIONS};
 use rayon::prelude::*;
 use sdf::{Sdf, Sign};
 use std::sync::Arc;
+
+/// Which chunk XZ faces get height skirts.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub struct WallFaces {
+	pub neg_x: bool,
+	pub pos_x: bool,
+	pub neg_z: bool,
+	pub pos_z: bool,
+}
+
+impl WallFaces {
+	pub const NONE: Self = Self { neg_x: false, pos_x: false, neg_z: false, pos_z: false };
+	pub const ALL: Self = Self { neg_x: true, pos_x: true, neg_z: true, pos_z: true };
+
+	pub fn any(self) -> bool {
+		self.neg_x || self.pos_x || self.neg_z || self.pos_z
+	}
+
+	fn mask(self) -> u8 {
+		(self.neg_x as u8)
+			| ((self.pos_x as u8) << 1)
+			| ((self.neg_z as u8) << 2)
+			| ((self.pos_z as u8) << 3)
+	}
+}
+
+/// Options for [`CpuShotSdf::cpu_chunk_mesh`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub struct CpuShotOptions {
+	/// Per-face vertical skirts from sampled surface height down to the chunk floor.
+	pub wall_faces: WallFaces,
+}
+
+/// SDF mesh builder with explicit [`CpuShotOptions`] (wall skirts, etc.).
+///
+/// Prefer this over the blanket [`MeshBuilder`] impl on the SDF when a cell
+/// needs non-default CpuShot options — options are part of the mesh id.
+#[derive(Clone, Debug)]
+pub struct CpuShotBuilder<T> {
+	pub sdf: T,
+	pub options: CpuShotOptions,
+}
+
+impl<T> CpuShotBuilder<T> {
+	pub fn new(sdf: T) -> Self {
+		Self { sdf, options: CpuShotOptions::default() }
+	}
+
+	pub fn with_wall_faces(mut self, wall_faces: WallFaces) -> Self {
+		self.options.wall_faces = wall_faces;
+		self
+	}
+
+	pub fn with_add_walls(mut self, add_walls: bool) -> Self {
+		self.options.wall_faces = if add_walls { WallFaces::ALL } else { WallFaces::NONE };
+		self
+	}
+}
+
+impl<T: NormalizeChunk> NormalizeChunk for CpuShotBuilder<T> {
+	fn normalize_chunk(&self, cascade_chunk: &CascadeChunk) -> CascadeChunk {
+		self.sdf.normalize_chunk(cascade_chunk)
+	}
+}
+
+impl<T: IdentifiedMesh> IdentifiedMesh for CpuShotBuilder<T> {
+	fn id(&self) -> MeshId {
+		self.sdf
+			.id()
+			.with_suffix(&format!(":walls={:x}", self.options.wall_faces.mask()))
+	}
+}
+
+impl<T: CpuShotSdf + NormalizeChunk + IdentifiedMesh> MeshBuilder for CpuShotBuilder<T> {
+	fn build_mesh_impl(&self, cascade_chunk: &CascadeChunk) -> Option<Mesh> {
+		log::debug!(
+			"Building CpuShot mesh for chunk {:?} options={:?}",
+			cascade_chunk,
+			self.options
+		);
+		self.sdf.cpu_chunk_mesh(cascade_chunk, &self.options)
+	}
+}
+
+/// Highest solid→air crossing along a column (terrain top for heightfield SDFs).
+fn column_surface_y_local(
+	grid: &[f32],
+	idx: impl Fn(usize, usize, usize) -> usize,
+	x: usize,
+	z: usize,
+	ny: usize,
+	cube_cell_y: f32,
+) -> Option<f32> {
+	let mut surface = None;
+	for y in 0..ny.saturating_sub(1) {
+		let a = grid[idx(x, y, z)];
+		let b = grid[idx(x, y + 1, z)];
+		if a <= 0.0 && b > 0.0 {
+			let denom = b - a;
+			let t = if denom.abs() > 1e-20 { (-a) / denom } else { 0.0 };
+			surface = Some((y as f32 + t.clamp(0.0, 1.0)) * cube_cell_y);
+		}
+	}
+	surface
+}
+
+/// Append vertical quads along selected XZ edges from surface height to y = 0.
+fn append_edge_height_walls(
+	grid: &[f32],
+	idx: impl Fn(usize, usize, usize) -> usize + Copy,
+	nx: usize,
+	ny: usize,
+	nz: usize,
+	cube_cell: Vec3,
+	extent: Vec3,
+	faces: WallFaces,
+	vertices: &mut Vec<[f32; 3]>,
+	indices: &mut Vec<u32>,
+	normals: &mut Vec<[f32; 3]>,
+	uvs: &mut Vec<[f32; 2]>,
+) {
+	let u_scale = extent.x.max(1e-20);
+	let v_scale = extent.z.max(1e-20);
+	let floor_y = 0.0;
+
+	// `flip_winding`: with verts [a_top, b_top, b_bot, a_bot], the default
+	// a_top→a_bot→b_bot winding yields -X (along +z) or +Z (along +x).
+	let push_quad = |vertices: &mut Vec<[f32; 3]>,
+	                 indices: &mut Vec<u32>,
+	                 normals: &mut Vec<[f32; 3]>,
+	                 uvs: &mut Vec<[f32; 2]>,
+	                 a_top: Vec3,
+	                 b_top: Vec3,
+	                 outward: Vec3,
+	                 flip_winding: bool| {
+		if (a_top.y - floor_y).abs() < 1e-4 && (b_top.y - floor_y).abs() < 1e-4 {
+			return;
+		}
+		let a_bot = Vec3::new(a_top.x, floor_y, a_top.z);
+		let b_bot = Vec3::new(b_top.x, floor_y, b_top.z);
+		let base = vertices.len() as u32;
+		let n: [f32; 3] = outward.into();
+		for p in [a_top, b_top, b_bot, a_bot] {
+			vertices.push(p.into());
+			normals.push(n);
+			uvs.push([p.x / u_scale, p.z / v_scale]);
+		}
+		if flip_winding {
+			indices.extend_from_slice(&[base, base + 1, base + 2, base, base + 2, base + 3]);
+		} else {
+			indices.extend_from_slice(&[base, base + 3, base + 2, base, base + 2, base + 1]);
+		}
+	};
+
+	// -X face (outward -X), z along the edge.
+	if faces.neg_x && nx > 0 && nz > 1 {
+		let x = 0usize;
+		let mut prev: Option<(usize, f32)> = None;
+		for z in 0..nz {
+			let Some(y) = column_surface_y_local(grid, idx, x, z, ny, cube_cell.y) else {
+				prev = None;
+				continue;
+			};
+			if let Some((z0, y0)) = prev {
+				push_quad(
+					vertices,
+					indices,
+					normals,
+					uvs,
+					Vec3::new(0.0, y0, z0 as f32 * cube_cell.z),
+					Vec3::new(0.0, y, z as f32 * cube_cell.z),
+					Vec3::NEG_X,
+					false,
+				);
+			}
+			prev = Some((z, y));
+		}
+	}
+
+	// +X face (outward +X).
+	if faces.pos_x && nx > 1 && nz > 1 {
+		let x = nx - 1;
+		let xl = x as f32 * cube_cell.x;
+		let mut prev: Option<(usize, f32)> = None;
+		for z in 0..nz {
+			let Some(y) = column_surface_y_local(grid, idx, x, z, ny, cube_cell.y) else {
+				prev = None;
+				continue;
+			};
+			if let Some((z0, y0)) = prev {
+				push_quad(
+					vertices,
+					indices,
+					normals,
+					uvs,
+					Vec3::new(xl, y0, z0 as f32 * cube_cell.z),
+					Vec3::new(xl, y, z as f32 * cube_cell.z),
+					Vec3::X,
+					true,
+				);
+			}
+			prev = Some((z, y));
+		}
+	}
+
+	// -Z face (outward -Z), x along the edge.
+	if faces.neg_z && nz > 0 && nx > 1 {
+		let z = 0usize;
+		let mut prev: Option<(usize, f32)> = None;
+		for x in 0..nx {
+			let Some(y) = column_surface_y_local(grid, idx, x, z, ny, cube_cell.y) else {
+				prev = None;
+				continue;
+			};
+			if let Some((x0, y0)) = prev {
+				push_quad(
+					vertices,
+					indices,
+					normals,
+					uvs,
+					Vec3::new(x0 as f32 * cube_cell.x, y0, 0.0),
+					Vec3::new(x as f32 * cube_cell.x, y, 0.0),
+					Vec3::NEG_Z,
+					true,
+				);
+			}
+			prev = Some((x, y));
+		}
+	}
+
+	// +Z face (outward +Z).
+	if faces.pos_z && nz > 1 && nx > 1 {
+		let z = nz - 1;
+		let zl = z as f32 * cube_cell.z;
+		let mut prev: Option<(usize, f32)> = None;
+		for x in 0..nx {
+			let Some(y) = column_surface_y_local(grid, idx, x, z, ny, cube_cell.y) else {
+				prev = None;
+				continue;
+			};
+			if let Some((x0, y0)) = prev {
+				push_quad(
+					vertices,
+					indices,
+					normals,
+					uvs,
+					Vec3::new(x0 as f32 * cube_cell.x, y0, zl),
+					Vec3::new(x as f32 * cube_cell.x, y, zl),
+					Vec3::Z,
+					false,
+				);
+			}
+			prev = Some((x, y));
+		}
+	}
+}
+
 pub trait CpuShotSdf: Sdf + Clone {
-	fn cpu_chunk_mesh(&self, cascade_chunk: &CascadeChunk) -> Option<Mesh> {
+	fn cpu_chunk_mesh(
+		&self,
+		cascade_chunk: &CascadeChunk,
+		options: &CpuShotOptions,
+	) -> Option<Mesh> {
 		// ---------- grid setup ---------------------------------------------------
 		let extent = cascade_chunk.extent_vec();
 		let res = cascade_chunk.resolution();
@@ -309,7 +570,7 @@ pub trait CpuShotSdf: Sdf + Clone {
 		let hx = cube_cell.x.max(1e-20);
 		let hy = cube_cell.y.max(1e-20);
 		let hz = cube_cell.z.max(1e-20);
-		let normals: Vec<[f32; 3]> = vertices
+		let mut normals: Vec<[f32; 3]> = vertices
 			.par_iter()
 			.map(|v| {
 				// Convert vertex local position to grid coordinates
@@ -383,11 +644,31 @@ pub trait CpuShotSdf: Sdf + Clone {
 		let start_time = std::time::Instant::now();
 		let u_scale = extent.x.max(1e-20);
 		let v_scale = extent.z.max(1e-20);
-		let uvs: Vec<[f32; 2]> =
+		let mut uvs: Vec<[f32; 2]> =
 			vertices.par_iter().map(|v| [v[0] / u_scale, v[2] / v_scale]).collect();
 		let end_time = std::time::Instant::now();
 		let duration = end_time.duration_since(start_time);
 		log::debug!("UVs time: {:?}", duration);
+
+		if options.wall_faces.any() {
+			let start_time = std::time::Instant::now();
+			append_edge_height_walls(
+				grid_slice,
+				idx,
+				nx,
+				ny,
+				nz,
+				cube_cell,
+				extent,
+				options.wall_faces,
+				&mut vertices,
+				&mut indices,
+				&mut normals,
+				&mut uvs,
+			);
+			let end_time = std::time::Instant::now();
+			log::debug!("Edge walls time: {:?}", end_time.duration_since(start_time));
+		}
 
 		// ---------- Mesh ---------------------------------------------------------
 		// Empty meshes trip Bevy's mesh slab allocator
@@ -414,6 +695,6 @@ impl<T: Sdf + Clone> CpuShotSdf for T {}
 impl<T: CpuShotSdf + NormalizeChunk> MeshBuilder for T {
 	fn build_mesh_impl(&self, cascade_chunk: &CascadeChunk) -> Option<Mesh> {
 		log::debug!("Building mesh for chunk: {:?}", cascade_chunk);
-		self.cpu_chunk_mesh(cascade_chunk)
+		self.cpu_chunk_mesh(cascade_chunk, &CpuShotOptions::default())
 	}
 }
