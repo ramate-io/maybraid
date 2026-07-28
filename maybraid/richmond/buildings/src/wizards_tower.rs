@@ -25,10 +25,7 @@ pub use room::WizardsTowerRoom;
 pub use silhouette::{TowerSilhouetteAssets, TowerSilhouettePlugin};
 pub use spire::WizardsTowerSpire;
 pub use tower::WizardsTowerColumn;
-pub use tower_lod::{
-	HIGH_EXTENT_MULTIPLIER, HIGH_RADIUS_MULTIPLIER, LOW_RADIUS_MULTIPLIER,
-	MEDIUM_EXTENT_MULTIPLIER, MEDIUM_RADIUS_MULTIPLIER,
-};
+pub use tower_lod::{HIGH_FOOTPRINT_MULTIPLIER, LOW_RES_CUTOFF_METERS};
 
 use bevy::prelude::{Component, Transform};
 use bevy::scene::prelude::Scene;

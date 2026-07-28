@@ -68,7 +68,8 @@ impl ParentConfines {
 	}
 }
 
-fn distance_to_segment(p: Vec3, a: Vec3, b: Vec3) -> f32 {
+/// Closest distance from `p` to the line segment `a`→`b`.
+pub fn distance_to_segment(p: Vec3, a: Vec3, b: Vec3) -> f32 {
 	let ab = b - a;
 	let len_sq = ab.length_squared();
 	if len_sq < 1e-12 {

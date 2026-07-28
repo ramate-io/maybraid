@@ -79,13 +79,15 @@ Do **not** hang one Internal ball on an entire multi-storey building. Pass the c
 
 ### Wizard’s Tower levels
 
-Distance factors use **max AABB extent**:
+LOD uses **capsule surface distance** (meters outside a vertical footprint capsule through the full tower AABB). Tall height no longer inflates the Low cutoff:
 
 | Level | Content | Distance |
 |-------|---------|----------|
-| High | Exterior + per-storey internals (floor balls) + continuous spire (`ParentConfines::Capsule`) | ≤ 5 × max extent |
-| Medium | Exterior walls only | ≤ 500 × max extent |
+| High | Exterior + per-storey internals + spire capsule | ≤ 5 × footprint radius |
+| Medium | Exterior walls only | ≤ [`LOW_RES_CUTOFF_METERS`](buildings/src/wizards_tower/tower_lod.rs) (raw world meters) |
 | Low | Cylinder silhouette | beyond |
+
+Scale-dependent [`ParentConfines`](building-components/src/parent_confines.rs) may still reveal internals inside High even when that radius reaches farther than a short capsule-based feel — that clash is acceptable.
 
 ### Partition mesh resolution
 

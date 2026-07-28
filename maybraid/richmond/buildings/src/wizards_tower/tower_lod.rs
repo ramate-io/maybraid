@@ -1,31 +1,26 @@
-//! Shared Wizard's Tower LOD banding from max AABB extent → [`LodSceneLevel`].
+//! Shared Wizard's Tower LOD banding via footprint capsule → [`LodSceneLevel`].
+//!
+//! Verticality must not inflate the Low (cylinder) cutoff: use **capsule surface
+//! distance in world meters** for that boundary. High stays a multiple of
+//! footprint radius so wide towers open detail farther out. That can clash with
+//! scale-dependent [`ParentConfines`] reveal — if internals would still be
+//! eligible at that range, showing them is fine.
 
 use bevy::prelude::Transform;
 use bevy_math::bounding::Aabb3d;
 use bevy_math::Vec3;
 use lod::gen::LodSceneLevel;
 use lod::lod_ref::LodRef;
+use richmond_building_components::distance_to_segment;
 
-/// High (exterior + internals) when distance ≤ this × max AABB extent.
-pub const HIGH_EXTENT_MULTIPLIER: f32 = 5.0;
-/// Medium (exterior walls only) out to this × max extent; beyond → Low cylinder.
-pub const MEDIUM_EXTENT_MULTIPLIER: f32 = 500.0;
-
-/// Deprecated aliases (same values as the extent multipliers).
-pub const HIGH_RADIUS_MULTIPLIER: f32 = HIGH_EXTENT_MULTIPLIER;
-pub const MEDIUM_RADIUS_MULTIPLIER: f32 = MEDIUM_EXTENT_MULTIPLIER;
-/// Historical name; cylinder swap is gated by [`MEDIUM_EXTENT_MULTIPLIER`].
-pub const LOW_RADIUS_MULTIPLIER: f32 = MEDIUM_EXTENT_MULTIPLIER;
+/// High (exterior + internals) when capsule surface distance ≤ this × footprint radius.
+pub const HIGH_FOOTPRINT_MULTIPLIER: f32 = 5.0;
+/// Medium (exterior) while capsule surface distance ≤ this many world meters; beyond → Low cylinder.
+pub const LOW_RES_CUTOFF_METERS: f32 = 400.0;
 
 /// Footprint-derived LOD helpers for the tower host.
 pub(crate) trait TowerLodFootprint {
 	fn lod_aabb(&self) -> &Aabb3d;
-
-	fn footprint_center_xz(&self) -> Vec3 {
-		let aabb = self.lod_aabb();
-		let c = (aabb.min + aabb.max) * 0.5;
-		Vec3::new(c.x, aabb.min.y, c.z)
-	}
 
 	fn footprint_radius(&self) -> f32 {
 		let aabb = self.lod_aabb();
@@ -33,27 +28,31 @@ pub(crate) trait TowerLodFootprint {
 		0.5 * extent.x.min(extent.z)
 	}
 
-	/// Characteristic size for LOD factors: max AABB axis.
-	fn max_extent(&self) -> f32 {
-		let aabb = self.lod_aabb();
-		let extent = aabb.max - aabb.min;
-		extent.x.max(extent.y).max(extent.z).max(1e-4)
-	}
-
 	fn tower_height(&self) -> f32 {
 		let aabb = self.lod_aabb();
 		(aabb.max.y - aabb.min.y).max(1e-4)
 	}
 
+	/// Vertical capsule through the full tower AABB (medial axis + footprint radius).
+	fn lod_capsule(&self) -> (Vec3, Vec3, f32) {
+		let aabb = self.lod_aabb();
+		let c = (aabb.min + aabb.max) * 0.5;
+		let radius = self.footprint_radius().max(1e-4);
+		(Vec3::new(c.x, aabb.min.y, c.z), Vec3::new(c.x, aabb.max.y, c.z), radius)
+	}
+
+	/// Meters outside the tower capsule (0 when inside / on the hull).
+	fn capsule_surface_distance(&self, viewer: &Transform) -> f32 {
+		let (a, b, radius) = self.lod_capsule();
+		(distance_to_segment(viewer.translation, a, b) - radius).max(0.0)
+	}
+
 	fn level_for(&self, viewer: &Transform) -> LodSceneLevel {
-		let center = self.footprint_center_xz();
-		let extent = self.max_extent();
-		let p = viewer.translation;
-		let dist = p.distance(center);
-		let factor = dist / extent;
-		if factor <= HIGH_EXTENT_MULTIPLIER {
+		let dist = self.capsule_surface_distance(viewer);
+		let high_cut = self.footprint_radius() * HIGH_FOOTPRINT_MULTIPLIER;
+		if dist <= high_cut {
 			LodSceneLevel::High
-		} else if factor <= MEDIUM_EXTENT_MULTIPLIER {
+		} else if dist <= LOW_RES_CUTOFF_METERS {
 			LodSceneLevel::Medium
 		} else {
 			// Low + UltraLow both use the cylinder silhouette.
