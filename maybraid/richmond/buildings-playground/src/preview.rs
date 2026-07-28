@@ -13,7 +13,7 @@ use richmond_buildings::bedroom::Bedroom;
 use richmond_buildings::stacked_rings::StackedRings;
 use richmond_buildings::wizards_tower::WizardsTower;
 use richmond_buildings::{
-	CellConstraints, CirculationEntry, CirculationRequestStatus,
+	BedroomFillParams, CellConstraints, CirculationEntry, CirculationRequestStatus,
 };
 
 #[derive(Component)]
@@ -37,6 +37,8 @@ pub enum PreviewSubject {
 		extent: Vec3,
 		/// Unit noise for layout fitting.
 		noise: f32,
+		spaciousness: f32,
+		occupancy: f32,
 		/// When true, add a required −Z door circulation region.
 		door: bool,
 	},
@@ -81,9 +83,15 @@ impl PreviewConfig {
 			} => format!(
 				"preview: stacked-rings (n={floor_count} h={floor_height:.2} r={radius:.2})"
 			),
-			PreviewSubject::Bedroom { extent, noise, door } => {
+			PreviewSubject::Bedroom {
+				extent,
+				noise,
+				spaciousness,
+				occupancy,
+				door,
+			} => {
 				format!(
-					"preview: bedroom (extent={:.2},{:.2},{:.2} noise={noise:.2} door={door})",
+					"preview: bedroom (extent={:.2},{:.2},{:.2} noise={noise:.2} space={spaciousness:.2} occ={occupancy:.2} door={door})",
 					extent.x, extent.y, extent.z
 				)
 			}
@@ -163,7 +171,13 @@ impl CachedPreview {
 			} => {
 				self.stacked_rings = Some(StackedRings::new(*floor_count, *floor_height, *radius));
 			}
-			PreviewSubject::Bedroom { extent, noise, door } => {
+			PreviewSubject::Bedroom {
+				extent,
+				noise,
+				spaciousness,
+				occupancy,
+				door,
+			} => {
 				let mut room = CellConstraints::cell_owned(Aabb3d::from_min_max(
 					Vec3::ZERO,
 					*extent,
@@ -178,7 +192,14 @@ impl CachedPreview {
 						vec![CirculationRequestStatus::Required],
 					)]));
 				}
-				self.bedroom = Some(Bedroom::new(room, *noise));
+				self.bedroom = Some(Bedroom::with_fill(
+					room,
+					*noise,
+					BedroomFillParams {
+						spaciousness: *spaciousness,
+						occupancy: *occupancy,
+					},
+				));
 			}
 			_ => {}
 		}

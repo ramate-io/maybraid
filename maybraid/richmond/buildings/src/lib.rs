@@ -23,7 +23,7 @@ pub use arc_spire::{
 pub use arc_wall::{
 	ArcRegion, ArcWall, ArcWallParams, AssignedPortal, MustAssignPortal, Portal,
 };
-pub use bedroom::{Bed, Bedroom, Closet, EnsuiteBathroom, Nightstand};
+pub use bedroom::{Bed, Bedroom, BedroomFillParams, Closet, EnsuiteBathroom, Nightstand};
 pub use constraints::{
 	BoundaryOwnershipEntry, BoundaryOwnershipStatus, BoundaryRegionList, BoundaryThicknessEntry,
 	CellBoundaryTable, CellConstraints, CirculationEntry, CirculationRequestStatus, FaceKind,

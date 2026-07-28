@@ -9,6 +9,7 @@ pub mod nightstand;
 pub use bed::Bed;
 pub use closet::Closet;
 pub use ensuite::EnsuiteBathroom;
+pub use layout::{BedroomFillParams, BedroomLayout};
 pub use nightstand::Nightstand;
 
 use bevy::scene::prelude::Scene;
@@ -21,7 +22,6 @@ use richmond_building_components::partitions::{Wall, WallNode};
 use richmond_building_components::scene_children;
 use richmond_building_components::Placement;
 
-use crate::bedroom::layout::BedroomLayout;
 use crate::constraints::{
 	BoundaryOwnershipEntry, BoundaryOwnershipStatus, FaceKind,
 };
@@ -29,30 +29,55 @@ use crate::wizards_tower::floor_fill::{FLOOR_SLAB_Y_SCALE, RECT_HALF_EXTENT};
 use crate::CellConstraints;
 use procedural_common::NoiseParams;
 
-/// Bedroom cell: outer shell + allocated closet / bed / nightstand / ensuite.
+/// Bedroom cell: outer shell + allocated closet / bed / nightstand / ensuite fills.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Bedroom {
 	pub constraints: CellConstraints,
 	pub floor: FloorNode,
 	pub walls: Vec<WallNode>,
-	pub closet: Closet,
-	pub bed: Bed,
-	pub nightstand: Nightstand,
-	pub ensuite: EnsuiteBathroom,
+	pub closets: Vec<Closet>,
+	pub beds: Vec<Bed>,
+	pub nightstands: Vec<Nightstand>,
+	pub ensuites: Vec<EnsuiteBathroom>,
 }
 
 impl Bedroom {
 	/// Allocate child cells inside `constraints` via noise-fitted layout.
 	pub fn new(constraints: CellConstraints, noise: f32) -> Self {
+		Self::with_fill(constraints, noise, BedroomFillParams::default())
+	}
+
+	/// Same as [`Self::new`] with explicit spaciousness / occupancy budgets.
+	pub fn with_fill(
+		constraints: CellConstraints,
+		noise: f32,
+		fill: BedroomFillParams,
+	) -> Self {
 		let noise = NoiseParams {
 			seed: (noise.clamp(0.0, 1.0) * 1_000_000.0) as i32,
 			..NoiseParams::default()
 		};
-		let layout = BedroomLayout::fit(&constraints, noise);
-		let closet = Closet::new(subset_or_owned(&constraints, layout.closet));
-		let bed = Bed::new(subset_or_owned(&constraints, layout.bed));
-		let nightstand = Nightstand::new(subset_or_owned(&constraints, layout.nightstand));
-		let ensuite = EnsuiteBathroom::new(subset_or_owned(&constraints, layout.ensuite));
+		let layout = BedroomLayout::fit(&constraints, noise, fill);
+		let closets = layout
+			.closets
+			.into_iter()
+			.map(|aabb| Closet::new(subset_or_owned(&constraints, aabb)))
+			.collect();
+		let beds = layout
+			.beds
+			.into_iter()
+			.map(|aabb| Bed::new(subset_or_owned(&constraints, aabb)))
+			.collect();
+		let nightstands = layout
+			.nightstands
+			.into_iter()
+			.map(|aabb| Nightstand::new(subset_or_owned(&constraints, aabb)))
+			.collect();
+		let ensuites = layout
+			.ensuites
+			.into_iter()
+			.map(|aabb| EnsuiteBathroom::new(subset_or_owned(&constraints, aabb)))
+			.collect();
 
 		let floor = room_floor(&constraints);
 		let walls = room_outer_walls(&constraints);
@@ -61,10 +86,10 @@ impl Bedroom {
 			constraints,
 			floor,
 			walls,
-			closet,
-			bed,
-			nightstand,
-			ensuite,
+			closets,
+			beds,
+			nightstands,
+			ensuites,
 		}
 	}
 }
@@ -80,10 +105,18 @@ impl LodScene for Bedroom {
 		for wall in &self.walls {
 			children.push(Box::new(wall.scene_with_lod(lod_ref)));
 		}
-		children.push(Box::new(self.closet.scene_with_lod(lod_ref)));
-		children.push(Box::new(self.bed.scene_with_lod(lod_ref)));
-		children.push(Box::new(self.nightstand.scene_with_lod(lod_ref)));
-		children.push(Box::new(self.ensuite.scene_with_lod(lod_ref)));
+		for closet in &self.closets {
+			children.push(Box::new(closet.scene_with_lod(lod_ref)));
+		}
+		for bed in &self.beds {
+			children.push(Box::new(bed.scene_with_lod(lod_ref)));
+		}
+		for nightstand in &self.nightstands {
+			children.push(Box::new(nightstand.scene_with_lod(lod_ref)));
+		}
+		for ensuite in &self.ensuites {
+			children.push(Box::new(ensuite.scene_with_lod(lod_ref)));
+		}
 		scene_children(children)
 	}
 }

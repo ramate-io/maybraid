@@ -17,6 +17,12 @@ pub struct Bedroom {
 	/// Unit noise sample in \[0, 1\] for layout fitting.
 	#[arg(long, default_value_t = 0.5)]
 	pub noise: f32,
+	/// Scale on each concept's base footprint (`1.0` = nominal).
+	#[arg(long, default_value_t = 1.0)]
+	pub spaciousness: f32,
+	/// Max floor-area fraction to allocate (leave about `1 - occupancy` empty).
+	#[arg(long, default_value_t = 0.55)]
+	pub occupancy: f32,
 	/// Place a required door circulation region on the −Z face (exclusion demo).
 	#[arg(long, default_value_t = false)]
 	pub door: bool,
@@ -30,6 +36,8 @@ impl Bedroom {
 			PreviewSubject::Bedroom {
 				extent: self.extent.max(Vec3::splat(1e-4)),
 				noise: self.noise.clamp(0.0, 1.0),
+				spaciousness: self.spaciousness.max(1e-3),
+				occupancy: self.occupancy.clamp(0.05, 1.0),
 				door: self.door,
 			},
 			self.transform.transform(),

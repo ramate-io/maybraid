@@ -71,7 +71,12 @@ Do not tessellate furniture or closet walls inside `Bedroom` itself — only all
 
 Constructors take the child's [`CellConstraints`](buildings/src/constraints.rs). Do not pass a parent `&CellConstraints` “for context”; subsetting already baked ownership into the child. Occasional types may also take `&ParentType` when they need authoring detail that constraints cannot express — none of the current bedroom (or tower) children do.
 
-Room layout is **noise-fitted**: [`BedroomLayout::fit`](buildings/src/bedroom/layout.rs) samples topology (closet / ensuite wall, depths, bed offset) and rejects packs that intersect [`CellConstraints::circulation_exclusion_zones`](buildings/src/constraints/circulation.rs). Those zones project each outstanding circulation region inward by its along-face **width**. Wall write authority stays on ownership; allocation additionally clears door approach space.
+Room layout is **noise-fitted**: [`BedroomLayout::fit`](buildings/src/bedroom/layout.rs) always places **at least one bed**, then greedily adds nightstands / closets / ensuites / further beds. [`BedroomFillParams`](buildings/src/bedroom/layout.rs) controls packing:
+
+- **`spaciousness`** — scales each concept’s base footprint (higher → more floor claimed per item).
+- **`occupancy`** — maximum fraction of room floor area to allocate; stop so about `1 - occupancy` stays empty.
+
+Candidates that intersect [`CellConstraints::circulation_exclusion_zones`](buildings/src/constraints/circulation.rs) are rejected (zones project outstanding circulation inward by opening width). Wall write authority stays on ownership.
 
 ## `LodScene` on buildings
 
