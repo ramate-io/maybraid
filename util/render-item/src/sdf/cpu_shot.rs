@@ -9,12 +9,36 @@ use rayon::prelude::*;
 use sdf::{Sdf, Sign};
 use std::sync::Arc;
 
+/// Which chunk XZ faces get height skirts.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub struct WallFaces {
+	pub neg_x: bool,
+	pub pos_x: bool,
+	pub neg_z: bool,
+	pub pos_z: bool,
+}
+
+impl WallFaces {
+	pub const NONE: Self = Self { neg_x: false, pos_x: false, neg_z: false, pos_z: false };
+	pub const ALL: Self = Self { neg_x: true, pos_x: true, neg_z: true, pos_z: true };
+
+	pub fn any(self) -> bool {
+		self.neg_x || self.pos_x || self.neg_z || self.pos_z
+	}
+
+	fn mask(self) -> u8 {
+		(self.neg_x as u8)
+			| ((self.pos_x as u8) << 1)
+			| ((self.neg_z as u8) << 2)
+			| ((self.pos_z as u8) << 3)
+	}
+}
+
 /// Options for [`CpuShotSdf::cpu_chunk_mesh`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub struct CpuShotOptions {
-	/// Drop vertical skirts on the chunk's XZ boundary from the sampled surface
-	/// height down to the chunk floor. Cheap LOD-seam cover (reads as a cliff).
-	pub add_walls: bool,
+	/// Per-face vertical skirts from sampled surface height down to the chunk floor.
+	pub wall_faces: WallFaces,
 }
 
 /// SDF mesh builder with explicit [`CpuShotOptions`] (wall skirts, etc.).
@@ -32,8 +56,13 @@ impl<T> CpuShotBuilder<T> {
 		Self { sdf, options: CpuShotOptions::default() }
 	}
 
+	pub fn with_wall_faces(mut self, wall_faces: WallFaces) -> Self {
+		self.options.wall_faces = wall_faces;
+		self
+	}
+
 	pub fn with_add_walls(mut self, add_walls: bool) -> Self {
-		self.options.add_walls = add_walls;
+		self.options.wall_faces = if add_walls { WallFaces::ALL } else { WallFaces::NONE };
 		self
 	}
 }
@@ -46,7 +75,9 @@ impl<T: NormalizeChunk> NormalizeChunk for CpuShotBuilder<T> {
 
 impl<T: IdentifiedMesh> IdentifiedMesh for CpuShotBuilder<T> {
 	fn id(&self) -> MeshId {
-		self.sdf.id().with_suffix(&format!(":walls={}", self.options.add_walls as u8))
+		self.sdf
+			.id()
+			.with_suffix(&format!(":walls={:x}", self.options.wall_faces.mask()))
 	}
 }
 
@@ -83,7 +114,7 @@ fn column_surface_y_local(
 	surface
 }
 
-/// Append vertical quads along the four XZ edges from surface height to y = 0.
+/// Append vertical quads along selected XZ edges from surface height to y = 0.
 fn append_edge_height_walls(
 	grid: &[f32],
 	idx: impl Fn(usize, usize, usize) -> usize + Copy,
@@ -92,6 +123,7 @@ fn append_edge_height_walls(
 	nz: usize,
 	cube_cell: Vec3,
 	extent: Vec3,
+	faces: WallFaces,
 	vertices: &mut Vec<[f32; 3]>,
 	indices: &mut Vec<u32>,
 	normals: &mut Vec<[f32; 3]>,
@@ -131,7 +163,7 @@ fn append_edge_height_walls(
 	};
 
 	// -X face (outward -X), z along the edge.
-	if nx > 0 && nz > 1 {
+	if faces.neg_x && nx > 0 && nz > 1 {
 		let x = 0usize;
 		let mut prev: Option<(usize, f32)> = None;
 		for z in 0..nz {
@@ -156,7 +188,7 @@ fn append_edge_height_walls(
 	}
 
 	// +X face (outward +X).
-	if nx > 1 && nz > 1 {
+	if faces.pos_x && nx > 1 && nz > 1 {
 		let x = nx - 1;
 		let xl = x as f32 * cube_cell.x;
 		let mut prev: Option<(usize, f32)> = None;
@@ -182,7 +214,7 @@ fn append_edge_height_walls(
 	}
 
 	// -Z face (outward -Z), x along the edge.
-	if nz > 0 && nx > 1 {
+	if faces.neg_z && nz > 0 && nx > 1 {
 		let z = 0usize;
 		let mut prev: Option<(usize, f32)> = None;
 		for x in 0..nx {
@@ -207,7 +239,7 @@ fn append_edge_height_walls(
 	}
 
 	// +Z face (outward +Z).
-	if nz > 1 && nx > 1 {
+	if faces.pos_z && nz > 1 && nx > 1 {
 		let z = nz - 1;
 		let zl = z as f32 * cube_cell.z;
 		let mut prev: Option<(usize, f32)> = None;
@@ -618,7 +650,7 @@ pub trait CpuShotSdf: Sdf + Clone {
 		let duration = end_time.duration_since(start_time);
 		log::debug!("UVs time: {:?}", duration);
 
-		if options.add_walls {
+		if options.wall_faces.any() {
 			let start_time = std::time::Instant::now();
 			append_edge_height_walls(
 				grid_slice,
@@ -628,6 +660,7 @@ pub trait CpuShotSdf: Sdf + Clone {
 				nz,
 				cube_cell,
 				extent,
+				options.wall_faces,
 				&mut vertices,
 				&mut indices,
 				&mut normals,

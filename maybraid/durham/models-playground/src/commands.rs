@@ -24,6 +24,9 @@ pub enum PlaygroundCommand {
 	/// Switch between free-look fly camera and third-person character control.
 	#[command(subcommand)]
 	Mode(Mode),
+	/// LOD / mesh CPU proxies (triangle counts, etc.).
+	#[command(subcommand)]
+	Stats(Stats),
 }
 
 #[derive(Clone, Subcommand)]
@@ -60,6 +63,13 @@ pub enum Mode {
 	Character,
 }
 
+#[derive(Clone, Subcommand)]
+#[command(rename_all = "kebab-case")]
+pub enum Stats {
+	/// Sum vertex / index / triangle counts from spawned `Mesh3d` assets (excludes player).
+	Mesh,
+}
+
 #[derive(Component, Debug, Clone, Copy)]
 pub struct RequestCellShow;
 
@@ -68,6 +78,9 @@ pub struct RequestModeFree;
 
 #[derive(Component, Debug, Clone, Copy)]
 pub struct RequestModeCharacter;
+
+#[derive(Component, Debug, Clone, Copy)]
+pub struct RequestMeshStats;
 
 impl PlaygroundCommand {
 	pub fn long_help_string() -> String {
@@ -84,6 +97,7 @@ impl PlaygroundCommand {
 			PlaygroundCommand::Script(s) => s.run(commands, console),
 			PlaygroundCommand::Cells(cells) => cells.react(commands, console),
 			PlaygroundCommand::Mode(mode) => mode.react(commands, console),
+			PlaygroundCommand::Stats(stats) => stats.react(commands, console),
 		}
 	}
 
@@ -123,6 +137,17 @@ impl Mode {
 			Mode::Character => {
 				commands.spawn(RequestModeCharacter);
 				*console = "mode character: pending".into();
+			}
+		}
+	}
+}
+
+impl Stats {
+	fn react(self, commands: &mut Commands, console: &mut String) {
+		match self {
+			Stats::Mesh => {
+				commands.spawn(RequestMeshStats);
+				*console = "stats mesh: pending".into();
 			}
 		}
 	}

@@ -39,10 +39,12 @@ use lod::gen::{GeneratingSpatialIndex, GenerationScheme, Id, LodScene, OriginalI
 use lod::lod_ref::LodRef;
 use marazion_watersheds::WaterFill;
 use render_item::mesh::handle::Cached;
-use render_item::sdf::cpu_shot::CpuShotBuilder;
+use render_item::sdf::cpu_shot::{CpuShotBuilder, WallFaces};
 
 pub use base_noise::BaseTerrainNoise;
-pub use cell::{MacroCellLayout, TerrainCellLayout, MACRO_CELL_SIZE, TERRAIN_CELL_SIZE};
+pub use cell::{
+	MacroCellLayout, OuterCellRing, TerrainCellLayout, MACRO_CELL_SIZE, TERRAIN_CELL_SIZE,
+};
 pub use collider::TerrainTrimeshCollider;
 pub use config::TerrainConfig;
 pub use index::{AvianTerrainIndex, TerrainCellId, TerrainEntryStore};
@@ -81,7 +83,8 @@ pub use marazion::{
 };
 pub use plugin::{register_terrain_plugin, TerrainPlugin};
 pub use presentation::{
-	TerrainPresentationAssets, TerrainPresenterState, TerrainRegionPresenter, TerrainStoreView,
+	TerrainMeshLodBand, TerrainPresentationAssets, TerrainPresenterState, TerrainRegionPresenter,
+	TerrainStoreView,
 };
 pub use render::TerrainRenderItem;
 pub use sdf::{ComposedTerrain, ElevationModulation, TerrainSdf};
@@ -131,8 +134,8 @@ pub struct Terrain {
 	pub sdf: ComposedTerrain,
 	pub material: Handle<DurhamTerrainShader>,
 	pub res_2: u8,
-	/// CpuShot edge height walls (LOD seam skirts).
-	pub add_walls: bool,
+	/// Per-face CpuShot edge height walls (LOD seam skirts).
+	pub wall_faces: WallFaces,
 }
 
 impl Terrain {
@@ -151,7 +154,7 @@ impl Terrain {
 		// Shared origin-cell lattice with [`crate::water::Water::scene`].
 		let chunk = cascade_chunk_for_cell(self.cell, self.res_2);
 		let transform = Transform::from_translation(chunk.origin);
-		let builder = CpuShotBuilder::new(self.sdf.clone()).with_add_walls(self.add_walls);
+		let builder = CpuShotBuilder::new(self.sdf.clone()).with_wall_faces(self.wall_faces);
 		let material = self.material.clone();
 		bsn! {
 			template_value(transform)
@@ -486,7 +489,7 @@ where
 			lod_ref,
 		)?;
 		let material = assets.material.clone();
-		let (res_2, add_walls) = assets.mesh_params_for_cell(bounds);
+		let (res_2, wall_faces) = assets.mesh_params_for_cell(bounds);
 
 		Some((
 			Self {
@@ -499,7 +502,7 @@ where
 				sdf,
 				material,
 				res_2,
-				add_walls,
+				wall_faces,
 			},
 			bounds,
 		))

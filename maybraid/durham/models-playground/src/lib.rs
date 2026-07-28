@@ -15,7 +15,8 @@ use avian3d::prelude::LinearVelocity;
 use bevy::prelude::*;
 use camera::{camera_controller, refocus_camera_on_layout, setup_camera};
 use commands::{
-	PendingCellLayoutPatch, RequestCellShow, RequestModeCharacter, RequestModeFree,
+	PendingCellLayoutPatch, RequestCellShow, RequestMeshStats, RequestModeCharacter,
+	RequestModeFree,
 };
 use durham_terrain::shaders::{DurhamTerrainShader, DurhamTerrainShaderPlugin};
 use debug_bounds::{
@@ -25,9 +26,9 @@ use debug_bounds::{
 use bevy::math::{IVec2, UVec2};
 use durham_terrain_models::{
 	AvianTerrainIndex, BaseTerrainNoise, ComposedTerrain, ComposedWater, DurhamTerrainModelsPlugin,
-	Terrain, TerrainCellLayout, TerrainConfig, TerrainEntryStore, TerrainPresentationAssets,
-	TerrainRegionPresenter, TerrainStoreView, Water, WaterPresentationAssets, WaterRegionPresenter,
-	WaterStoreView,
+	Terrain, TerrainCellLayout, TerrainConfig, TerrainEntryStore, TerrainMeshLodBand,
+	TerrainPresentationAssets, TerrainRegionPresenter, TerrainStoreView, Water,
+	WaterPresentationAssets, WaterRegionPresenter, WaterStoreView,
 };
 use game_commands::command::{capture_command_line_input, GameCommandPlugin};
 use game_commands::ui::{GameCommandDrawerConfig, GameCommandStatusText};
@@ -38,18 +39,27 @@ use render_item::mesh::handle::EnforceCachingPlugin;
 use render_item::sdf::cpu_shot::CpuShotBuilder;
 use std::f32::consts::PI;
 
-/// Grid radius for the playground request region (`[-r, r]` → `2r + 1` cells).
+/// Full playground grid radius (`[-r, r]` → `2r + 1` cells).
 ///
-/// About 2× the durham default naturescapes radius (12), so the visible patch
-/// is roughly doubled in each horizontal extent.
-const PLAYGROUND_GRID_RADIUS_XZ: i32 = 24;
+/// Cumulative bands: 4 + 2 + 4 + 16 + 8 = 34.
+const PLAYGROUND_GRID_RADIUS_XZ: i32 = 34;
 
-/// Chebyshev rings for mesh LOD (inclusive):
-/// - `r ≤ 4` → `res_2 = 5`
-/// - `4 < r ≤ 8` → `res_2 = 4` (concentric band of width 4)
-/// - `r > 8` → `res_2 = 3` with CpuShot edge walls on both coarse rings
-const PLAYGROUND_FINE_RADIUS_CELLS: i32 = 4;
-const PLAYGROUND_MID_RADIUS_CELLS: i32 = 8;
+/// Chebyshev LOD bands (inclusive max radius → `res_2`), base-sized cells only:
+/// - `r ≤ 4` → 5
+/// - `r ≤ 6` (+2) → 4
+/// - `r ≤ 10` (+4) → 3
+/// - `r ≤ 26` (+16) → 2
+/// - `r ≤ 34` (+8) → 1
+/// Walls only on faces that sit on a band boundary.
+fn playground_lod_bands() -> Vec<TerrainMeshLodBand> {
+	vec![
+		TerrainMeshLodBand { max_radius_cells: 4, res_2: 5 },
+		TerrainMeshLodBand { max_radius_cells: 6, res_2: 4 },
+		TerrainMeshLodBand { max_radius_cells: 10, res_2: 3 },
+		TerrainMeshLodBand { max_radius_cells: 26, res_2: 2 },
+		TerrainMeshLodBand { max_radius_cells: 34, res_2: 1 },
+	]
+}
 
 /// Base noise used for camera / player height before (and alongside) generation.
 #[derive(Resource)]
@@ -60,6 +70,7 @@ fn playground_cell_layout() -> TerrainCellLayout {
 	layout.origin = IVec2::new(-PLAYGROUND_GRID_RADIUS_XZ, -PLAYGROUND_GRID_RADIUS_XZ);
 	let n = (2 * PLAYGROUND_GRID_RADIUS_XZ + 1) as u32;
 	layout.extents = UVec2::new(n, n);
+	layout.outer_ring = None;
 	layout
 }
 
@@ -115,7 +126,8 @@ impl Plugin for TerrainModelsPlaygroundPlugin {
 					camera_controller,
 					apply_cell_commands.after(capture_command_line_input::<PlaygroundCommand>),
 					apply_mode_commands.after(apply_cell_commands),
-					generate_cells.after(apply_mode_commands),
+					apply_mesh_stats.after(apply_mode_commands),
+					generate_cells.after(apply_mesh_stats),
 					present_cells.after(generate_cells),
 					toggle_bounds_overlay,
 					update_bounds_legend_visibility.after(toggle_bounds_overlay),
@@ -156,12 +168,10 @@ pub(crate) fn setup_presentation_assets(
 	commands.insert_resource(TerrainPresentationAssets {
 		config: config.clone(),
 		material,
-		res_2: 5,
-		fine_radius_cells: PLAYGROUND_FINE_RADIUS_CELLS,
-		mid_radius_cells: PLAYGROUND_MID_RADIUS_CELLS,
-		mid_res_2: Some(4),
-		outer_res_2: Some(3),
+		lod_bands: playground_lod_bands(),
 		outer_add_walls: true,
+		macro_cell_min_size: None,
+		macro_res_2: None,
 	});
 	let water_material = standard_materials.add(StandardMaterial {
 		base_color: Color::srgba(0.15, 0.45, 0.75, 0.72),
@@ -249,6 +259,44 @@ fn apply_mode_commands(
 				.unwrap_or_else(|| base.0.height_at(center.x, center.z));
 			respawn_player_on_layout(&layout, elevation, &mut transform, &mut velocity);
 		}
+		commands.entity(entity).despawn();
+	}
+}
+
+fn apply_mesh_stats(
+	mut commands: Commands,
+	mut status: ResMut<GameCommandStatusText>,
+	mesh_assets: Res<Assets<Mesh>>,
+	requests: Query<Entity, With<RequestMeshStats>>,
+	mesh_entities: Query<&Mesh3d, Without<Player>>,
+) {
+	for entity in &requests {
+		let mut mesh_count = 0usize;
+		let mut missing = 0usize;
+		let mut vertices = 0usize;
+		let mut indices = 0usize;
+		let mut triangles = 0usize;
+		let mut unique_handles = std::collections::HashSet::new();
+
+		for mesh3d in &mesh_entities {
+			mesh_count += 1;
+			unique_handles.insert(mesh3d.0.id());
+			let Some(mesh) = mesh_assets.get(&mesh3d.0) else {
+				missing += 1;
+				continue;
+			};
+			let verts = mesh.count_vertices();
+			let index_count = mesh.indices().map(|i| i.len()).unwrap_or(verts);
+			vertices += verts;
+			indices += index_count;
+			triangles += index_count / 3;
+		}
+
+		status.0 = format!(
+			"stats mesh: entities={mesh_count} unique_handles={} missing={missing} verts={vertices} indices={indices} tris={triangles}",
+			unique_handles.len()
+		);
+		info!("{}", status.0);
 		commands.entity(entity).despawn();
 	}
 }
