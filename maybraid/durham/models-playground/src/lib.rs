@@ -26,9 +26,9 @@ use debug_bounds::{
 use bevy::math::{IVec2, UVec2};
 use durham_terrain_models::{
 	AvianTerrainIndex, BaseTerrainNoise, ComposedTerrain, ComposedWater, DurhamTerrainModelsPlugin,
-	Terrain, TerrainCellLayout, TerrainConfig, TerrainEntryStore, TerrainMeshLodBand,
+	OuterCellRing, Terrain, TerrainCellLayout, TerrainConfig, TerrainEntryStore, TerrainMeshLodBand,
 	TerrainPresentationAssets, TerrainRegionPresenter, TerrainStoreView, Water,
-	WaterPresentationAssets, WaterRegionPresenter, WaterStoreView,
+	WaterPresentationAssets, WaterRegionPresenter, WaterStoreView, TERRAIN_CELL_SIZE,
 };
 use game_commands::command::{capture_command_line_input, GameCommandPlugin};
 use game_commands::ui::{GameCommandDrawerConfig, GameCommandStatusText};
@@ -39,25 +39,28 @@ use render_item::mesh::handle::EnforceCachingPlugin;
 use render_item::sdf::cpu_shot::CpuShotBuilder;
 use std::f32::consts::PI;
 
-/// Full playground grid radius (`[-r, r]` → `2r + 1` cells).
+/// Fine-grid half-extent in base cells (covers rings through base-sized `res_2 = 2`).
+/// World footprint `[-R·s, R·s)` so it abuts the 2× outer-ring tiles.
 ///
-/// Cumulative bands: 4 + 2 + 4 + 16 + 8 = 34.
-const PLAYGROUND_GRID_RADIUS_XZ: i32 = 34;
+/// Cumulative fine bands: 4 + 2 + 2 + 8 = 16.
+const PLAYGROUND_FINE_HALF_EXTENT_CELLS: i32 = 16;
 
-/// Chebyshev LOD bands (inclusive max radius → `res_2`), base-sized cells only:
+/// Nested macro rings beyond the fine footprint (world half-extent → 24s, then 32s).
+const PLAYGROUND_OUTER_2X_ROWS: i32 = 4; // 4 × 2s = 8s
+const PLAYGROUND_OUTER_4X_ROWS: i32 = 2; // 2 × 4s = 8s
+
+/// Chebyshev LOD bands on the **fine** (base-sized) grid:
 /// - `r ≤ 4` → 5
 /// - `r ≤ 6` (+2) → 4
-/// - `r ≤ 10` (+4) → 3
-/// - `r ≤ 26` (+16) → 2
-/// - `r ≤ 34` (+8) → 1
-/// Walls only on faces that sit on a band boundary.
+/// - `r ≤ 8` (+2) → 3
+/// - `r ≤ 16` (+8) → 2
+/// Then 2× cells to world radius 24s, then 4× cells to 32s (both `res_2 = 2`).
 fn playground_lod_bands() -> Vec<TerrainMeshLodBand> {
 	vec![
 		TerrainMeshLodBand { max_radius_cells: 4, res_2: 5 },
 		TerrainMeshLodBand { max_radius_cells: 6, res_2: 4 },
-		TerrainMeshLodBand { max_radius_cells: 10, res_2: 3 },
-		TerrainMeshLodBand { max_radius_cells: 26, res_2: 2 },
-		TerrainMeshLodBand { max_radius_cells: 34, res_2: 1 },
+		TerrainMeshLodBand { max_radius_cells: 8, res_2: 3 },
+		TerrainMeshLodBand { max_radius_cells: 16, res_2: 2 },
 	]
 }
 
@@ -67,10 +70,19 @@ pub struct WorldBaseTerrain(pub BaseTerrainNoise);
 
 fn playground_cell_layout() -> TerrainCellLayout {
 	let mut layout = TerrainCellLayout::default();
-	layout.origin = IVec2::new(-PLAYGROUND_GRID_RADIUS_XZ, -PLAYGROUND_GRID_RADIUS_XZ);
-	let n = (2 * PLAYGROUND_GRID_RADIUS_XZ + 1) as u32;
+	layout.origin = IVec2::new(-PLAYGROUND_FINE_HALF_EXTENT_CELLS, -PLAYGROUND_FINE_HALF_EXTENT_CELLS);
+	let n = (2 * PLAYGROUND_FINE_HALF_EXTENT_CELLS) as u32;
 	layout.extents = UVec2::new(n, n);
-	layout.outer_ring = None;
+	layout.outer_rings = vec![
+		OuterCellRing {
+			cell_size: 2.0 * TERRAIN_CELL_SIZE,
+			rows: PLAYGROUND_OUTER_2X_ROWS,
+		},
+		OuterCellRing {
+			cell_size: 4.0 * TERRAIN_CELL_SIZE,
+			rows: PLAYGROUND_OUTER_4X_ROWS,
+		},
+	];
 	layout
 }
 
@@ -165,13 +177,18 @@ pub(crate) fn setup_presentation_assets(
 	config: Res<TerrainConfig>,
 ) {
 	let material = terrain_materials.add(DurhamTerrainShader::default());
+	let s = TERRAIN_CELL_SIZE;
+	let fine_half = PLAYGROUND_FINE_HALF_EXTENT_CELLS as f32 * s;
+	let mid_half = fine_half + PLAYGROUND_OUTER_2X_ROWS as f32 * 2.0 * s; // 24s
 	commands.insert_resource(TerrainPresentationAssets {
 		config: config.clone(),
 		material,
 		lod_bands: playground_lod_bands(),
 		outer_add_walls: true,
-		macro_cell_min_size: None,
-		macro_res_2: None,
+		fine_grid_max_radius: Some(PLAYGROUND_FINE_HALF_EXTENT_CELLS),
+		macro_seam_half_extents: vec![fine_half, mid_half],
+		macro_cell_min_size: Some(2.0 * s),
+		macro_res_2: Some(2),
 	});
 	let water_material = standard_materials.add(StandardMaterial {
 		base_color: Color::srgba(0.15, 0.45, 0.75, 0.72),

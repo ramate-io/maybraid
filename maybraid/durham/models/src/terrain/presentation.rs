@@ -34,8 +34,9 @@ pub struct TerrainMeshLodBand {
 /// wins ([`Self::lod_bands`] must be sorted ascending by radius). Radii past the
 /// last band reuse that band's `res_2`.
 ///
-/// When [`Self::outer_add_walls`] is set, CpuShot skirts are emitted only on
-/// faces shared with a neighbor whose LOD `res_2` differs (band boundaries).
+/// When [`Self::outer_add_walls`] is set, CpuShot skirts are emitted on faces
+/// shared with a neighbor whose LOD `res_2` differs, and on nested macro
+/// seams listed in [`Self::macro_seam_half_extents`].
 ///
 /// Cells whose XZ edge is at least [`Self::macro_cell_min_size`] skip the fine
 /// bands and use [`Self::macro_res_2`] (macro outer-ring tiles).
@@ -45,8 +46,13 @@ pub struct TerrainPresentationAssets {
 	pub material: Handle<DurhamTerrainShader>,
 	/// Concentric fine-grid LOD bands (ascending `max_radius_cells`).
 	pub lod_bands: Vec<TerrainMeshLodBand>,
-	/// When true, enable per-face CpuShot walls on fine-grid LOD band boundaries.
+	/// When true, enable per-face CpuShot walls on LOD / fine–macro boundaries.
 	pub outer_add_walls: bool,
+	/// Inclusive Chebyshev radius of the fine grid (for fine→macro wall faces).
+	pub fine_grid_max_radius: Option<i32>,
+	/// World half-extents of nested footprints that macro faces may abut
+	/// (fine edge, 2×→4× edge, …), for macro→inner wall faces.
+	pub macro_seam_half_extents: Vec<f32>,
 	/// XZ edge length at/above which a cell is treated as a macro outer tile.
 	pub macro_cell_min_size: Option<f32>,
 	/// Mesh resolution for macro outer tiles. Defaults to 3 when unset.
@@ -63,17 +69,52 @@ impl TerrainPresentationAssets {
 		self.lod_bands.last().map(|b| b.res_2).unwrap_or(0)
 	}
 
-	fn wall_faces_for_cell(&self, ix: i32, iz: i32) -> WallFaces {
+	fn wall_toward_neighbor(&self, my_r: i32, my_res: u8, n_r: i32) -> bool {
+		if self.res_2_for_radius(n_r) != my_res {
+			return true;
+		}
+		if let Some(fine_max) = self.fine_grid_max_radius {
+			let my_in = my_r <= fine_max;
+			let n_in = n_r <= fine_max;
+			if my_in != n_in {
+				return true;
+			}
+		}
+		false
+	}
+
+	fn wall_faces_for_fine_cell(&self, ix: i32, iz: i32) -> WallFaces {
 		if !self.outer_add_walls || self.lod_bands.is_empty() {
 			return WallFaces::NONE;
 		}
-		let mine = self.res_2_for_radius(ix.abs().max(iz.abs()));
+		let my_r = ix.abs().max(iz.abs());
+		let mine = self.res_2_for_radius(my_r);
 		WallFaces {
-			neg_x: self.res_2_for_radius((ix - 1).abs().max(iz.abs())) != mine,
-			pos_x: self.res_2_for_radius((ix + 1).abs().max(iz.abs())) != mine,
-			neg_z: self.res_2_for_radius(ix.abs().max((iz - 1).abs())) != mine,
-			pos_z: self.res_2_for_radius(ix.abs().max((iz + 1).abs())) != mine,
+			neg_x: self.wall_toward_neighbor(my_r, mine, (ix - 1).abs().max(iz.abs())),
+			pos_x: self.wall_toward_neighbor(my_r, mine, (ix + 1).abs().max(iz.abs())),
+			neg_z: self.wall_toward_neighbor(my_r, mine, ix.abs().max((iz - 1).abs())),
+			pos_z: self.wall_toward_neighbor(my_r, mine, ix.abs().max((iz + 1).abs())),
 		}
+	}
+
+	fn wall_faces_for_macro_cell(&self, bounds: Aabb3d) -> WallFaces {
+		if !self.outer_add_walls {
+			return WallFaces::NONE;
+		}
+		if self.macro_seam_half_extents.is_empty() {
+			return WallFaces::ALL;
+		}
+		let min = Vec3::from(bounds.min);
+		let max = Vec3::from(bounds.max);
+		let eps = 1.0;
+		let mut faces = WallFaces::NONE;
+		for &half in &self.macro_seam_half_extents {
+			faces.neg_x |= (min.x - half).abs() < eps;
+			faces.pos_x |= (max.x - (-half)).abs() < eps;
+			faces.neg_z |= (min.z - half).abs() < eps;
+			faces.pos_z |= (max.z - (-half)).abs() < eps;
+		}
+		faces
 	}
 
 	/// `(res_2, wall_faces)` for a terrain origin cell AABB.
@@ -83,12 +124,10 @@ impl TerrainPresentationAssets {
 		let cell_size = (max.x - min.x).max(1e-3);
 		if let Some(macro_min) = self.macro_cell_min_size {
 			if cell_size + 1e-3 >= macro_min {
-				let faces = if self.outer_add_walls {
-					WallFaces::ALL
-				} else {
-					WallFaces::NONE
-				};
-				return (self.macro_res_2.unwrap_or(3), faces);
+				return (
+					self.macro_res_2.unwrap_or(3),
+					self.wall_faces_for_macro_cell(bounds),
+				);
 			}
 		}
 		let ix = (min.x / cell_size).floor() as i32;
@@ -96,7 +135,7 @@ impl TerrainPresentationAssets {
 		let radius = ix.abs().max(iz.abs());
 		(
 			self.res_2_for_radius(radius),
-			self.wall_faces_for_cell(ix, iz),
+			self.wall_faces_for_fine_cell(ix, iz),
 		)
 	}
 }
