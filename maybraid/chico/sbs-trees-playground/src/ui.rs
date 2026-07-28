@@ -6,9 +6,10 @@ use crate::render::RenderConfig;
 pub fn ui_config() -> GameCommandUiConfig {
 	GameCommandUiConfig {
 		title: "SBS trees playground - / cmd - WASD - up/down history - PgUp/PgDn scroll".into(),
-		empty_console_text: "Console: (errors & `help` output) - wheel or PgUp/PgDn".into(),
+		empty_console_text:
+			"Console: `render …`, `stats mesh`, `help` — wheel or PgUp/PgDn".into(),
 		root_background: Color::srgba(0.1, 0.2, 0.24, 0.82),
-		controls_hint: "help - Enter - up/down history - PgUp/PgDn - Shift+up/down scroll".into(),
+		controls_hint: "help — render … — stats mesh — Enter — history — PgUp/PgDn".into(),
 	}
 }
 
