@@ -145,13 +145,7 @@ impl TowerLodFootprint for WizardsTowerFloor {
 
 impl LodScene for WizardsTowerFloor {
 	fn scene_lod_status(&self, lod_ref: &LodRef) -> lod::gen::LodSceneStatus {
-		let prev = self.band_for(lod_ref.previous_transform);
-		let curr = self.band_for(lod_ref.current_transform);
-		if prev == curr {
-			lod::gen::LodSceneStatus::Unchanged
-		} else {
-			lod::gen::LodSceneStatus::Changed
-		}
+		self.storey_scene_lod_status(self.storey_height, lod_ref)
 	}
 
 	fn scene_with_lod(&self, lod_ref: &LodRef) -> impl Scene + 'static {

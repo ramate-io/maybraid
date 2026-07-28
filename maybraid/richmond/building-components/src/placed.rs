@@ -5,8 +5,8 @@ use bevy_math::Vec3;
 /// Translation / yaw / scale for a kit piece or continuous form in cell space.
 ///
 /// Partition / floor / door kits are authored in a **normalized** local space
-/// (angular arcs: radius \(1\), full height \(Y \in [0, 1]\)). Buildings map that
-/// kit into cell space via [`Self::scale`].
+/// (angular arcs: radius \(1\), full height \(Y \in [0, 1]\); headers
+/// \(Y \in [0, 0.2]\)). Buildings map that kit into cell space via [`Self::scale`].
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Placement {
 	/// Translation in cell-local space.

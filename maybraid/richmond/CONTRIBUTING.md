@@ -110,8 +110,20 @@ impl LodScene for ExampleFloor {
 
 Presenters call `scene_lod_status` first and only build/`handle` when status is `Changed` (or on first present / version repair). Leaves and domain nodes that ignore LOD return `Unchanged`.
 
+### Partition mesh resolution
+
+[`WallNode`](building-components/src/partitions/node.rs) selects rough-stonework **high / mid / low** GLBs from distance ÷ characteristic placement extent ([`PartitionLodBand`](building-components/src/partitions/lod.rs)). UltraLow and Low share the low-res mesh until a shared ultra-low asset exists. `scene_with_lod` always spawns all three [`MeshRef`](../mesh-ref/) children and **hides** inactive tiers so assets stay warm.
+
+Parents should not OR every wall child. Use [`WallNode::representative_lod_status`](building-components/src/partitions/node.rs) at a footprint center with a characteristic extent instead.
+
+### Wizard’s Tower status composition
+
+- Each **floor / perch**: Near/Far flip → `Changed`; otherwise `representative_lod_status` for **that storey** only (ignores internal floors/stairs/walls for status).
+- **Column / root**: `Changed` if **any** floor or the perch reports `Changed` (OR of storey statuses). Do not use one tower-wide representative.
+- Internals still emit only when Near; their mesh LOD is not composed upward until the storey chooses to emit them.
+
 > [!NOTE]
-> The Wizard’s Tower (and similar composites here) decide `scene_lod_status` from **their own** banding only — they do **not** query or OR child `scene_lod_status` results. That is a valid simplification when one policy owns the whole subtree and children always emit for the current band. Typically, though, a composite `LodScene` will compose child status decisions (e.g. `Changed` if any child is `Changed`), or else a more intricate presenter will present layers independently. Prefer composition or layered presentation once children have independent LOD policies.
+> Prefer composing storey (or layer) statuses, or a representative partition sample, over walking every leaf. Composites may ignore lower-order scene changes until they are close enough to render those features.
 
 ## Internal vs external emission
 

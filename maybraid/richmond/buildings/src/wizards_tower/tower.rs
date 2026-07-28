@@ -121,13 +121,12 @@ impl TowerLodFootprint for WizardsTowerColumn {
 
 impl LodScene for WizardsTowerColumn {
 	fn scene_lod_status(&self, lod_ref: &LodRef) -> lod::gen::LodSceneStatus {
-		let prev = self.band_for(lod_ref.previous_transform);
-		let curr = self.band_for(lod_ref.current_transform);
-		if prev == curr {
-			lod::gen::LodSceneStatus::Unchanged
-		} else {
-			lod::gen::LodSceneStatus::Changed
+		for floor in &self.floors {
+			if floor.scene_lod_status(lod_ref) == lod::gen::LodSceneStatus::Changed {
+				return lod::gen::LodSceneStatus::Changed;
+			}
 		}
+		self.perch.scene_lod_status(lod_ref)
 	}
 
 	fn scene_with_lod(&self, lod_ref: &LodRef) -> impl Scene + 'static {

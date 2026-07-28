@@ -40,21 +40,62 @@ pub mod partitions {
 		/// Straight / linear rough stonework segment.
 		pub const LINEAR: AssetPath =
 			AssetPath::new("urban/partitions/rough_stonework/rough_stonework_001.glb");
+		pub const LINEAR_HIGH: AssetPath =
+			AssetPath::new("urban/partitions/rough_stonework/rough_stonework_001_high_res.glb");
+		pub const LINEAR_MID: AssetPath =
+			AssetPath::new("urban/partitions/rough_stonework/rough_stonework_001_mid_res.glb");
+		pub const LINEAR_LOW: AssetPath =
+			AssetPath::new("urban/partitions/rough_stonework/rough_stonework_001_low_res.glb");
+
 		/// 180° arc rough stonework.
 		pub const ARC_180: AssetPath =
 			AssetPath::new("urban/partitions/rough_stonework/rough_stonework_180_001.glb");
+		pub const ARC_180_HIGH: AssetPath =
+			AssetPath::new("urban/partitions/rough_stonework/rough_stonework_180_001_high_res.glb");
+		pub const ARC_180_MID: AssetPath =
+			AssetPath::new("urban/partitions/rough_stonework/rough_stonework_180_001_mid_res.glb");
+		pub const ARC_180_LOW: AssetPath =
+			AssetPath::new("urban/partitions/rough_stonework/rough_stonework_180_001_low_res.glb");
+
 		/// 90° arc rough stonework.
 		pub const ARC_90: AssetPath =
 			AssetPath::new("urban/partitions/rough_stonework/rough_stonework_90_001.glb");
-		/// 15° arc rough stonework.
+		pub const ARC_90_HIGH: AssetPath =
+			AssetPath::new("urban/partitions/rough_stonework/rough_stonework_90_001_high_res.glb");
+		pub const ARC_90_MID: AssetPath =
+			AssetPath::new("urban/partitions/rough_stonework/rough_stonework_90_001_mid_res.glb");
+		pub const ARC_90_LOW: AssetPath =
+			AssetPath::new("urban/partitions/rough_stonework/rough_stonework_90_001_low_res.glb");
+
+		/// 15° arc rough stonework (no res variants yet — all tiers use base).
 		pub const ARC_15: AssetPath =
 			AssetPath::new("urban/partitions/rough_stonework/rough_stonework_15_001.glb");
+
 		/// 90° header rough stonework.
 		pub const HEADER_90: AssetPath =
 			AssetPath::new("urban/partitions/rough_stonework/rough_stonework_90_header_001.glb");
+		pub const HEADER_90_HIGH: AssetPath = AssetPath::new(
+			"urban/partitions/rough_stonework/rough_stonework_90_header_001_high_res.glb",
+		);
+		pub const HEADER_90_MID: AssetPath = AssetPath::new(
+			"urban/partitions/rough_stonework/rough_stonework_90_header_001_mid_res.glb",
+		);
+		pub const HEADER_90_LOW: AssetPath = AssetPath::new(
+			"urban/partitions/rough_stonework/rough_stonework_90_header_001_low_res.glb",
+		);
+
 		/// 15° header rough stonework.
 		pub const HEADER_15: AssetPath =
 			AssetPath::new("urban/partitions/rough_stonework/rough_stonework_15_header_001.glb");
+		pub const HEADER_15_HIGH: AssetPath = AssetPath::new(
+			"urban/partitions/rough_stonework/rough_stonework_15_header_001_high_res.glb",
+		);
+		pub const HEADER_15_MID: AssetPath = AssetPath::new(
+			"urban/partitions/rough_stonework/rough_stonework_15_header_001_mid_res.glb",
+		);
+		pub const HEADER_15_LOW: AssetPath = AssetPath::new(
+			"urban/partitions/rough_stonework/rough_stonework_15_header_001_low_res.glb",
+		);
 	}
 }
 

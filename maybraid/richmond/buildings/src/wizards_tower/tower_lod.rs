@@ -3,6 +3,9 @@
 use bevy::prelude::Transform;
 use bevy_math::bounding::Aabb3d;
 use bevy_math::Vec3;
+use lod::gen::LodSceneStatus;
+use lod::lod_ref::LodRef;
+use richmond_building_components::partitions::WallNode;
 
 /// Viewer distance band relative to the tower footprint.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -48,5 +51,21 @@ pub(crate) trait TowerLodFootprint {
 
 	fn is_near(&self, viewer: &Transform) -> bool {
 		matches!(self.band_for(viewer), TowerLodBand::Near)
+	}
+
+	/// Near/Far flip, else per-storey representative external wall mesh LOD.
+	///
+	/// Does not walk wall children or internal floors/stairs.
+	fn storey_scene_lod_status(&self, storey_height: f32, lod_ref: &LodRef) -> LodSceneStatus {
+		let prev = self.band_for(lod_ref.previous_transform);
+		let curr = self.band_for(lod_ref.current_transform);
+		if prev != curr {
+			return LodSceneStatus::Changed;
+		}
+		let aabb = self.lod_aabb();
+		let center = Vec3::from((aabb.min + aabb.max) * 0.5);
+		let radius = self.footprint_radius().max(1e-4);
+		let extent = Vec3::new(radius, storey_height.max(1e-4), radius);
+		WallNode::representative_lod_status(center, extent, lod_ref)
 	}
 }

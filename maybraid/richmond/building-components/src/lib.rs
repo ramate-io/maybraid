@@ -18,6 +18,10 @@ pub use assets::AssetPath;
 pub use furniture::{
 	FurnitureGeometry, FurnitureNode, FurnitureStyle, FurnitureWireframePlugin,
 };
+pub use partitions::{
+	PartitionLodBand, PartitionMeshSet, PartitionMeshTier, Wall, WallGeometry, WallNode, WallStyle,
+	HEADER_KIT_HEIGHT, PARTITION_HIGH_FACTOR, PARTITION_LOW_FACTOR, PARTITION_MEDIUM_FACTOR,
+};
 pub use placed::{Placed, Placement};
 pub use scene_children::{pose, posed_glb, scene_children, with_pose, wireframe_box_with_handles};
 

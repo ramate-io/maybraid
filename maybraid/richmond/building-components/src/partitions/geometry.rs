@@ -2,13 +2,20 @@
 
 use bevy_math::Vec2;
 
+/// Kit-local \(Y\) span of header meshes (\([0, \texttt{HEADER_KIT_HEIGHT}]\)).
+///
+/// Full-height walls use \(Y \in [0, 1]\). With the same \(Y\) scale \(H\), a header
+/// occupies \(0.2\,H\) world height; place its baseline at \(0.8\,H\) to meet the
+/// storey top.
+pub const HEADER_KIT_HEIGHT: f32 = 0.2;
+
 /// Wall path geometry in world/cell space (continuous size and orientation).
 #[derive(Debug, Clone, PartialEq)]
 pub enum WallGeometry {
 	Linear(LinearWall),
 	Polyline(PolylineWall),
 	Arc(ArcSweep),
-	/// Header-height arc (\(Y \in [0, 0.3]\) in kit space) for door/window frames.
+	/// Header-height arc (\(Y \in [0, [`HEADER_KIT_HEIGHT`]]\) in kit space) for door/window frames.
 	HeaderArc(ArcSweep),
 }
 
