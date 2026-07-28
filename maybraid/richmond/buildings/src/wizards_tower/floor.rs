@@ -116,12 +116,14 @@ impl WizardsTowerFloor {
 		&self,
 		children: &mut Vec<Box<dyn Scene>>,
 		lod_ref: &LodRef,
-		ball_center: Vec3,
-		ball_radius: f32,
 	) {
 		use richmond_building_components::{confined_scene, ParentConfines};
 
-		let confines = ParentConfines::internal(ball_center, ball_radius);
+		// Floor-compartment ball (storey AABB), not the whole tower.
+		let confines = ParentConfines::internal(
+			self.storey_confine_center(),
+			self.storey_confine_radius(),
+		);
 		for cap in &self.floor_caps {
 			children.push(Box::new(
 				cap.clone()
@@ -136,6 +138,8 @@ impl WizardsTowerFloor {
 					.scene_with_lod(lod_ref),
 			));
 		}
+		// Per-storey spire run: same floor ball. A continuous multi-storey spire
+		// would use ParentConfines::Capsule instead.
 		children.push(Box::new(
 			self.arc_spire
 				.stairs
@@ -144,6 +148,17 @@ impl WizardsTowerFloor {
 				.scene_with_lod(lod_ref),
 		));
 		children.push(Box::new(confined_scene(confines, self.lantern_scene())));
+	}
+
+	fn storey_confine_center(&self) -> Vec3 {
+		let aabb = &self.constraints.aabb;
+		Vec3::from((aabb.min + aabb.max) * 0.5)
+	}
+
+	fn storey_confine_radius(&self) -> f32 {
+		let aabb = &self.constraints.aabb;
+		let extent = aabb.max - aabb.min;
+		(0.5 * extent.x.min(extent.z)).max(1e-4)
 	}
 
 	fn lantern_scene(&self) -> impl Scene + 'static {
@@ -177,10 +192,7 @@ impl LodScene for WizardsTowerFloor {
 	) -> impl Scene + 'static {
 		let mut children: Vec<Box<dyn Scene>> = Vec::new();
 		self.emit_external_features(&mut children, lod_ref);
-		let aabb = &self.constraints.aabb;
-		let c = (aabb.min + aabb.max) * 0.5;
-		let r = 0.5 * (aabb.max - aabb.min).x.min((aabb.max - aabb.min).z);
-		self.emit_internal_features(&mut children, lod_ref, Vec3::from(c), r.max(1e-4) * 3.0);
+		self.emit_internal_features(&mut children, lod_ref);
 		scene_children(children)
 	}
 }

@@ -71,36 +71,47 @@ Hosts flip level-root visibility / lazily spawn missing roots. Nested hosts are 
 
 [`ParentConfines`](building-components/src/parent_confines.rs) is an **IR field** on nodes — not part of general `lod`:
 
-- `External` — façade / silhouette candidates.
-- `Internal { center, radius }` — ball enveloping a large open interior; [`apply_parent_confines`](building-components/src/parent_confines.rs) hides until the viewer is inside.
+- `External` — façade / silhouette candidates; normal distance/extent mesh banding.
+- `Internal { center, radius }` — **floor- or room-compartment** ball. Prefer authoring at this grain so a simple ball works. [`apply_parent_confines`](building-components/src/parent_confines.rs) hides until within [`INTERNAL_REVEAL_FACTOR`](building-components/src/parent_confines.rs) (`5`) × radius.
+- `Capsule { a, b, radius }` — for long non-compartmentalized volumes (e.g. one continuous vertical spire). Distance is to the medial segment.
 
-Use `.with_confines(...)` when emitting internals.
+Do **not** hang one Internal ball on an entire multi-storey building. Pass the compartment footprint — do not pre-multiply by the reveal factor.
 
 ### Wizard’s Tower levels
 
-| Level | Content |
-|-------|---------|
-| Low | Cylinder silhouette |
-| Medium | Exterior walls only |
-| High | Exterior + internals (`ParentConfines::Internal` on floor/stair/lantern nodes) |
+Distance factors use **max AABB extent**:
+
+| Level | Content | Distance |
+|-------|---------|----------|
+| High | Exterior + per-storey internals (`ParentConfines::Internal` per floor) | ≤ 5 × max extent |
+| Medium | Exterior walls only | ≤ 500 × max extent |
+| Low | Cylinder silhouette | beyond |
 
 ### Partition mesh resolution
 
-Warm high/mid/low MeshRef roots under partition hosts; [`PartitionLodProbe`](building-components/src/partitions/lod.rs) drives tier flips.
+Warm high/mid/low MeshRef roots under partition hosts; [`PartitionLodProbe`](building-components/src/partitions/lod.rs) drives tier flips (`distance / max_extent`):
+
+| Band | Factor |
+|------|--------|
+| High | ≤ 5 |
+| Medium | ≤ 20 |
+| Low | ≤ 500 |
+| UltraLow | elsewhere (shares low mesh for now) |
 
 ## Internal vs external emission
 
-At **High**, set `ParentConfines::Internal` on internal nodes. **Medium** omits internals from the scene.
+At **High**, each floor/room emits its own Internal ball. **Medium** omits internals from the scene.
 
 ```rust
 fn emit_internal_features(
     &self,
     children: &mut Vec<Box<dyn Scene>>,
     lod_ref: &LodRef,
-    ball_center: Vec3,
-    ball_radius: f32,
 ) {
-    let confines = ParentConfines::internal(ball_center, ball_radius);
+    let confines = ParentConfines::internal(
+        self.storey_confine_center(),
+        self.storey_confine_radius(),
+    );
     for floor in &self.floors {
         children.push(Box::new(
             floor.clone().with_confines(confines).scene_with_lod(lod_ref),

@@ -20,7 +20,7 @@ pub use furniture::{
 	FurnitureGeometry, FurnitureNode, FurnitureStyle, FurnitureWireframePlugin,
 };
 pub use parent_confines::{
-	apply_parent_confines, confined_scene, ParentConfines,
+	apply_parent_confines, confined_scene, ParentConfines, INTERNAL_REVEAL_FACTOR,
 };
 pub use partitions::{
 	update_partition_host_levels, PartitionLodBand, PartitionLodProbe, PartitionMeshSet,

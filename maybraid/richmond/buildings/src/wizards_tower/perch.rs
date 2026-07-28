@@ -76,12 +76,13 @@ impl WizardsTowerPerch {
 		&self,
 		children: &mut Vec<Box<dyn Scene>>,
 		lod_ref: &LodRef,
-		ball_center: Vec3,
-		ball_radius: f32,
 	) {
 		use richmond_building_components::ParentConfines;
 
-		let confines = ParentConfines::internal(ball_center, ball_radius);
+		let confines = ParentConfines::internal(
+			self.storey_confine_center(),
+			self.storey_confine_radius(),
+		);
 		for cap in &self.floor_caps {
 			children.push(Box::new(
 				cap.clone()
@@ -96,6 +97,17 @@ impl WizardsTowerPerch {
 					.scene_with_lod(lod_ref),
 			));
 		}
+	}
+
+	fn storey_confine_center(&self) -> Vec3 {
+		let aabb = &self.constraints.aabb;
+		Vec3::from((aabb.min + aabb.max) * 0.5)
+	}
+
+	fn storey_confine_radius(&self) -> f32 {
+		let aabb = &self.constraints.aabb;
+		let extent = aabb.max - aabb.min;
+		(0.5 * extent.x.min(extent.z)).max(1e-4)
 	}
 }
 
@@ -114,10 +126,7 @@ impl LodScene for WizardsTowerPerch {
 	) -> impl Scene + 'static {
 		let mut children: Vec<Box<dyn Scene>> = Vec::new();
 		self.emit_external_features(&mut children, lod_ref);
-		let aabb = &self.constraints.aabb;
-		let c = (aabb.min + aabb.max) * 0.5;
-		let r = 0.5 * (aabb.max - aabb.min).x.min((aabb.max - aabb.min).z);
-		self.emit_internal_features(&mut children, lod_ref, Vec3::from(c), r.max(1e-4) * 3.0);
+		self.emit_internal_features(&mut children, lod_ref);
 		scene_children(children)
 	}
 }

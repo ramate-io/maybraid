@@ -26,7 +26,8 @@ pub use silhouette::{TowerSilhouetteAssets, TowerSilhouettePlugin};
 pub use spire::WizardsTowerSpire;
 pub use tower::WizardsTowerColumn;
 pub use tower_lod::{
-	HIGH_RADIUS_MULTIPLIER, LOW_RADIUS_MULTIPLIER, MEDIUM_RADIUS_MULTIPLIER,
+	HIGH_EXTENT_MULTIPLIER, HIGH_RADIUS_MULTIPLIER, LOW_RADIUS_MULTIPLIER,
+	MEDIUM_EXTENT_MULTIPLIER, MEDIUM_RADIUS_MULTIPLIER,
 };
 
 use bevy::prelude::{Component, Transform};
@@ -124,18 +125,18 @@ impl WizardsTower {
 	}
 
 	fn high_primitives(&self, lod_ref: &LodRef) -> impl Scene + 'static {
-		let (ball_c, ball_r) = self.internal_confine_ball();
 		let mut children: Vec<Box<dyn Scene>> = Vec::new();
 		for floor in &self.column.floors {
 			floor.emit_external_features(&mut children, lod_ref);
-			floor.emit_internal_features(&mut children, lod_ref, ball_c, ball_r);
+			// Per-storey Internal balls — not one tower-wide volume.
+			floor.emit_internal_features(&mut children, lod_ref);
 		}
 		self.column
 			.perch
 			.emit_external_features(&mut children, lod_ref);
 		self.column
 			.perch
-			.emit_internal_features(&mut children, lod_ref, ball_c, ball_r);
+			.emit_internal_features(&mut children, lod_ref);
 		scene_children(children)
 	}
 }
