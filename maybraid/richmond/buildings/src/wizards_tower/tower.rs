@@ -9,6 +9,7 @@ use procedural_common::NoiseParams;
 use richmond_building_components::scene_children;
 
 use crate::wizards_tower::floor_fill::WALL_HEIGHT_METERS;
+use crate::wizards_tower::tower_lod::TowerLodFootprint;
 use crate::wizards_tower::{WizardsTowerFloor, WizardsTowerPerch};
 use crate::CellConstraints;
 
@@ -112,7 +113,23 @@ impl WizardsTowerColumn {
 	}
 }
 
+impl TowerLodFootprint for WizardsTowerColumn {
+	fn lod_aabb(&self) -> &Aabb3d {
+		&self.constraints.aabb
+	}
+}
+
 impl LodScene for WizardsTowerColumn {
+	fn scene_lod_status(&self, lod_ref: &LodRef) -> lod::gen::LodSceneStatus {
+		let prev = self.band_for(lod_ref.previous_transform);
+		let curr = self.band_for(lod_ref.current_transform);
+		if prev == curr {
+			lod::gen::LodSceneStatus::Unchanged
+		} else {
+			lod::gen::LodSceneStatus::Changed
+		}
+	}
+
 	fn scene_with_lod(&self, lod_ref: &LodRef) -> impl Scene + 'static {
 		let mut children: Vec<Box<dyn Scene>> = self
 			.floors

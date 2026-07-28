@@ -15,7 +15,20 @@ use crate::lod_ref::LodRef;
 use bevy::{math::bounding::Aabb3d, scene::Scene};
 use std::collections::HashSet;
 
+/// Whether [`LodScene::scene_with_lod`] for the current viewer pose would differ
+/// from the scene for the previous pose on the same [`LodRef`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum LodSceneStatus {
+	Changed,
+	Unchanged,
+}
+
 pub trait LodScene {
+	/// Whether the presented scene for `lod_ref.current_*` would differ from
+	/// the scene for `lod_ref.previous_*`. Must be cheap — no scene build.
+	fn scene_lod_status(&self, lod_ref: &LodRef) -> LodSceneStatus;
+
+	/// Scene for the **current** LOD selection only.
 	fn scene_with_lod(&self, lod_ref: &LodRef) -> impl Scene + 'static;
 }
 
@@ -82,10 +95,12 @@ where
 				.presented_version(id)
 				.is_none_or(|presented| presented < version);
 
-			if needs_present || self.needs_repair(region, id, version) {
-				if let Some(instance) = spatial_index.get(id) {
-					self.handle(id, version, instance.scene_with_lod(lod_ref), lod_ref);
-				}
+			let Some(instance) = spatial_index.get(id) else {
+				continue;
+			};
+			let lod_changed = instance.scene_lod_status(lod_ref) == LodSceneStatus::Changed;
+			if needs_present || self.needs_repair(region, id, version) || lod_changed {
+				self.handle(id, version, instance.scene_with_lod(lod_ref), lod_ref);
 			}
 		}
 

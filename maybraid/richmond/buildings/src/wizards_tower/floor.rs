@@ -7,6 +7,7 @@
 
 use bevy::prelude::{Color, PointLight, Transform, Visibility};
 use bevy::scene::prelude::{bsn, template_value, Scene};
+use bevy_math::bounding::Aabb3d;
 use bevy_math::Vec3;
 use lod::gen::LodScene;
 use lod::lod_ref::LodRef;
@@ -18,6 +19,7 @@ use richmond_building_components::stairs::SpiralStair;
 use crate::arc_spire::{uniform_storey_bindings, ArcSpire, ArcSpireParams, FitTolerance};
 use crate::arc_wall::{ArcWall, ArcWallParams};
 use crate::wizards_tower::floor_fill::{squared_floor_with_spire_hole, SPIRE_HALF_FRAC};
+use crate::wizards_tower::tower_lod::TowerLodFootprint;
 use crate::wizards_tower::must_assign_cardinal_portals;
 use crate::CellConstraints;
 
@@ -102,29 +104,14 @@ impl WizardsTowerFloor {
 			constraints,
 		}
 	}
-}
 
-fn floor_lantern(at: Vec3, storey_height: f32) -> impl Scene + 'static {
-	let range = (storey_height * 2.5).max(4.0);
-	let transform = Transform::from_translation(at);
-	bsn! {
-		PointLight {
-			color: Color::srgb(1.0, 0.72, 0.42),
-			intensity: 2800.0,
-			range: {range},
-			shadow_maps_enabled: false,
-		}
-		template_value(transform)
-		Visibility::default()
-	}
-}
-
-impl LodScene for WizardsTowerFloor {
-	fn scene_with_lod(&self, lod_ref: &LodRef) -> impl Scene + 'static {
-		let mut children: Vec<Box<dyn Scene>> = Vec::new();
+	fn emit_external_features(&self, children: &mut Vec<Box<dyn Scene>>, lod_ref: &LodRef) {
 		for wall in &self.arc_wall.walls {
 			children.push(Box::new(wall.scene_with_lod(lod_ref)));
 		}
+	}
+
+	fn emit_internal_features(&self, children: &mut Vec<Box<dyn Scene>>, lod_ref: &LodRef) {
 		for cap in &self.floor_caps {
 			children.push(Box::new(cap.scene_with_lod(lod_ref)));
 		}
@@ -132,7 +119,48 @@ impl LodScene for WizardsTowerFloor {
 			children.push(Box::new(rect.scene_with_lod(lod_ref)));
 		}
 		children.push(Box::new(self.arc_spire.stairs.scene_with_lod(lod_ref)));
-		children.push(Box::new(floor_lantern(self.lantern, self.storey_height)));
+		children.push(Box::new(self.lantern_scene()));
+	}
+
+	fn lantern_scene(&self) -> impl Scene + 'static {
+		let range = (self.storey_height * 2.5).max(4.0);
+		let transform = Transform::from_translation(self.lantern);
+		bsn! {
+			PointLight {
+				color: Color::srgb(1.0, 0.72, 0.42),
+				intensity: 2800.0,
+				range: {range},
+				shadow_maps_enabled: false,
+			}
+			template_value(transform)
+			Visibility::default()
+		}
+	}
+}
+
+impl TowerLodFootprint for WizardsTowerFloor {
+	fn lod_aabb(&self) -> &Aabb3d {
+		&self.constraints.aabb
+	}
+}
+
+impl LodScene for WizardsTowerFloor {
+	fn scene_lod_status(&self, lod_ref: &LodRef) -> lod::gen::LodSceneStatus {
+		let prev = self.band_for(lod_ref.previous_transform);
+		let curr = self.band_for(lod_ref.current_transform);
+		if prev == curr {
+			lod::gen::LodSceneStatus::Unchanged
+		} else {
+			lod::gen::LodSceneStatus::Changed
+		}
+	}
+
+	fn scene_with_lod(&self, lod_ref: &LodRef) -> impl Scene + 'static {
+		let mut children: Vec<Box<dyn Scene>> = Vec::new();
+		self.emit_external_features(&mut children, lod_ref);
+		if self.is_near(lod_ref.current_transform) {
+			self.emit_internal_features(&mut children, lod_ref);
+		}
 		scene_children(children)
 	}
 }

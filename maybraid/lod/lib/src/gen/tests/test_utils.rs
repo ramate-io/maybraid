@@ -117,6 +117,10 @@ pub struct Moss {
 macro_rules! impl_lod_scene {
 	($ty:ty) => {
 		impl LodScene for $ty {
+			fn scene_lod_status(&self, _lod_ref: &LodRef) -> crate::gen::LodSceneStatus {
+				crate::gen::LodSceneStatus::Unchanged
+			}
+
 			fn scene_with_lod(&self, _lod_ref: &LodRef) -> impl Scene + 'static {
 				stub_scene()
 			}
