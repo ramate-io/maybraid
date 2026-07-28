@@ -35,6 +35,7 @@ use lod::gen::{GeneratingSpatialIndex, RegionPresenter, SpatialIndex};
 use lod::lod_ref::LodRef;
 use player::{respawn_player_on_layout, Player, PlayerPlugin};
 use render_item::mesh::handle::EnforceCachingPlugin;
+use render_item::sdf::cpu_shot::CpuShotBuilder;
 use std::f32::consts::PI;
 
 /// Grid radius for the playground request region (`[-r, r]` → `2r + 1` cells).
@@ -42,6 +43,13 @@ use std::f32::consts::PI;
 /// About 2× the durham default naturescapes radius (12), so the visible patch
 /// is roughly doubled in each horizontal extent.
 const PLAYGROUND_GRID_RADIUS_XZ: i32 = 24;
+
+/// Chebyshev rings for mesh LOD (inclusive):
+/// - `r ≤ 4` → `res_2 = 5`
+/// - `4 < r ≤ 8` → `res_2 = 4` (concentric band of width 4)
+/// - `r > 8` → `res_2 = 3` with CpuShot edge walls on both coarse rings
+const PLAYGROUND_FINE_RADIUS_CELLS: i32 = 4;
+const PLAYGROUND_MID_RADIUS_CELLS: i32 = 8;
 
 /// Base noise used for camera / player height before (and alongside) generation.
 #[derive(Resource)]
@@ -70,7 +78,10 @@ impl Plugin for TerrainModelsPlaygroundPlugin {
 
 		app.add_plugins(DurhamTerrainModelsPlugin)
 			.add_plugins(DurhamTerrainShaderPlugin)
-			.add_plugins(EnforceCachingPlugin::<ComposedTerrain, DurhamTerrainShader>::default())
+			.add_plugins(EnforceCachingPlugin::<
+				CpuShotBuilder<ComposedTerrain>,
+				DurhamTerrainShader,
+			>::default())
 			.add_plugins(EnforceCachingPlugin::<ComposedWater, StandardMaterial>::default())
 			.add_plugins(
 				GameCommandPlugin::<PlaygroundCommand>::with_config(ui::ui_config())
@@ -146,6 +157,11 @@ pub(crate) fn setup_presentation_assets(
 		config: config.clone(),
 		material,
 		res_2: 5,
+		fine_radius_cells: PLAYGROUND_FINE_RADIUS_CELLS,
+		mid_radius_cells: PLAYGROUND_MID_RADIUS_CELLS,
+		mid_res_2: Some(4),
+		outer_res_2: Some(3),
+		outer_add_walls: true,
 	});
 	let water_material = standard_materials.add(StandardMaterial {
 		base_color: Color::srgba(0.15, 0.45, 0.75, 0.72),

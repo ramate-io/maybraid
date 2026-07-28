@@ -39,6 +39,7 @@ use lod::gen::{GeneratingSpatialIndex, GenerationScheme, Id, LodScene, OriginalI
 use lod::lod_ref::LodRef;
 use marazion_watersheds::WaterFill;
 use render_item::mesh::handle::Cached;
+use render_item::sdf::cpu_shot::CpuShotBuilder;
 
 pub use base_noise::BaseTerrainNoise;
 pub use cell::{MacroCellLayout, TerrainCellLayout, MACRO_CELL_SIZE, TERRAIN_CELL_SIZE};
@@ -130,6 +131,8 @@ pub struct Terrain {
 	pub sdf: ComposedTerrain,
 	pub material: Handle<DurhamTerrainShader>,
 	pub res_2: u8,
+	/// CpuShot edge height walls (LOD seam skirts).
+	pub add_walls: bool,
 }
 
 impl Terrain {
@@ -148,12 +151,12 @@ impl Terrain {
 		// Shared origin-cell lattice with [`crate::water::Water::scene`].
 		let chunk = cascade_chunk_for_cell(self.cell, self.res_2);
 		let transform = Transform::from_translation(chunk.origin);
-		let sdf = self.sdf.clone();
+		let builder = CpuShotBuilder::new(self.sdf.clone()).with_add_walls(self.add_walls);
 		let material = self.material.clone();
 		bsn! {
 			template_value(transform)
 			template_value(chunk)
-			template(move |_ctx| Ok(Cached::new(sdf.clone())))
+			template(move |_ctx| Ok(Cached::new(builder.clone())))
 			MeshMaterial3d::<DurhamTerrainShader>({material.clone()})
 			template(move |_ctx| Ok(RigidBody::Static))
 			TerrainTrimeshCollider
@@ -483,7 +486,7 @@ where
 			lod_ref,
 		)?;
 		let material = assets.material.clone();
-		let res_2 = assets.res_2;
+		let (res_2, add_walls) = assets.mesh_params_for_cell(bounds);
 
 		Some((
 			Self {
@@ -496,6 +499,7 @@ where
 				sdf,
 				material,
 				res_2,
+				add_walls,
 			},
 			bounds,
 		))

@@ -19,11 +19,52 @@ use std::collections::{HashMap, HashSet};
 /// Config / material / mesh resolution used when building terrain instances.
 ///
 /// Materialized once under [`Id::Universal`] via [`GenerationScheme`].
+///
+/// Optional concentric rings (Chebyshev cell index from world origin):
+/// - `radius ≤ fine_radius_cells` → [`Self::res_2`]
+/// - `fine < radius ≤ mid_radius_cells` → [`Self::mid_res_2`] (when set)
+/// - beyond that → [`Self::outer_res_2`] (when set)
 #[derive(Resource, Clone)]
 pub struct TerrainPresentationAssets {
 	pub config: TerrainConfig,
 	pub material: Handle<DurhamTerrainShader>,
+	/// Mesh resolution (`2^res_2` samples) for cells inside [`Self::fine_radius_cells`].
 	pub res_2: u8,
+	/// Inclusive Chebyshev radius for the fine [`Self::res_2`] ring.
+	pub fine_radius_cells: i32,
+	/// Inclusive Chebyshev radius for the mid ring (must be ≥ fine when mid is used).
+	pub mid_radius_cells: i32,
+	/// Resolution for `fine_radius_cells < radius ≤ mid_radius_cells`. `None` skips the mid ring.
+	pub mid_res_2: Option<u8>,
+	/// Resolution beyond [`Self::mid_radius_cells`] (or beyond fine if mid is unset).
+	/// `None` keeps the previous ring's resolution for the remainder.
+	pub outer_res_2: Option<u8>,
+	/// When true, mid and outer cells enable CpuShot edge height walls.
+	pub outer_add_walls: bool,
+}
+
+impl TerrainPresentationAssets {
+	/// `(res_2, add_walls)` for a terrain origin cell AABB.
+	pub fn mesh_params_for_cell(&self, bounds: Aabb3d) -> (u8, bool) {
+		let min = Vec3::from(bounds.min);
+		let max = Vec3::from(bounds.max);
+		let cell_size = (max.x - min.x).max(1e-3);
+		let ix = (min.x / cell_size).floor() as i32;
+		let iz = (min.z / cell_size).floor() as i32;
+		let radius = ix.abs().max(iz.abs());
+		if radius <= self.fine_radius_cells {
+			return (self.res_2, false);
+		}
+		if let Some(mid) = self.mid_res_2 {
+			if radius <= self.mid_radius_cells {
+				return (mid, self.outer_add_walls);
+			}
+		}
+		match self.outer_res_2 {
+			Some(outer) => (outer, self.outer_add_walls),
+			None => (self.mid_res_2.unwrap_or(self.res_2), self.outer_add_walls),
+		}
+	}
 }
 
 /// Bootstrap source used only when first materializing [`TerrainPresentationAssets`]
