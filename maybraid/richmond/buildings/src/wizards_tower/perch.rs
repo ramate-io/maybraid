@@ -29,10 +29,8 @@ pub struct WizardsTowerPerch {
 }
 
 impl WizardsTowerPerch {
-	/// Build from column parent constraints, this perch's subsetted constraints,
-	/// storey height, and portal noise.
+	/// Build from this perch's subsetted constraints, storey height, and portal noise.
 	pub fn new(
-		_parent_constraints: &CellConstraints,
 		constraints: CellConstraints,
 		storey_height: f32,
 		portal_noise: NoiseParams,

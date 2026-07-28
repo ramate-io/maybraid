@@ -42,10 +42,9 @@ pub struct WizardsTowerFloor {
 }
 
 impl WizardsTowerFloor {
-	/// Build from column parent constraints, this floor's subsetted constraints,
-	/// storey height, and portal noise (seeded per storey).
+	/// Build from this floor's subsetted constraints, storey height, and portal noise
+	/// (seeded per storey).
 	pub fn new(
-		_parent_constraints: &CellConstraints,
 		constraints: CellConstraints,
 		storey_height: f32,
 		portal_noise: NoiseParams,

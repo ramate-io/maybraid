@@ -21,8 +21,8 @@ pub struct WizardsTowerSpire {
 }
 
 impl WizardsTowerSpire {
-	/// Build from floor/perch parent constraints and this spire's subsetted constraints.
-	pub fn new(_parent_constraints: &CellConstraints, constraints: CellConstraints) -> Self {
+	/// Build from this spire's subsetted constraints.
+	pub fn new(constraints: CellConstraints) -> Self {
 		let center = (constraints.aabb.min + constraints.aabb.max) * 0.5;
 		let center_xz = Vec3::new(center.x, constraints.aabb.min.y, center.z);
 		let extent = constraints.aabb.max - constraints.aabb.min;

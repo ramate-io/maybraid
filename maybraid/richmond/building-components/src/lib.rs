@@ -6,6 +6,7 @@ pub mod arc_kit;
 pub mod assets;
 pub mod doors;
 pub mod floors;
+pub mod furniture;
 pub mod partitions;
 pub mod placed;
 pub mod roofs;
@@ -14,8 +15,11 @@ pub mod stairs;
 
 pub use arc_kit::{decompose_arc_sweep, ArcKit};
 pub use assets::AssetPath;
+pub use furniture::{
+	FurnitureGeometry, FurnitureNode, FurnitureStyle, FurnitureWireframePlugin,
+};
 pub use placed::{Placed, Placement};
-pub use scene_children::{pose, posed_glb, scene_children, with_pose};
+pub use scene_children::{pose, posed_glb, scene_children, with_pose, wireframe_box_with_handles};
 
 use bevy::scene::{ResolveContext, ResolvedScene};
 

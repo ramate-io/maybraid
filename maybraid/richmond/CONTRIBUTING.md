@@ -58,6 +58,26 @@ Helpers such as `ArcWall` / `ArcSpire` are fine when they **produce** `Vec<WallN
 
 Prefer **methods on the building type** (`self.band_for`, `self.emit_external_features`, …) over free module helpers.
 
+## Allocate cells, fill in children
+
+Higher-order room types (e.g. [`Bedroom`](buildings/src/bedroom.rs)) own **layout**: they `subset` child AABBs from [`CellConstraints`](buildings/src/constraints.rs) and construct lower-order types. Lower-order types own **fill**:
+
+| Child | Responsibility |
+|-------|----------------|
+| `Bed` / `Nightstand` | Place a [`FurnitureNode`](building-components/src/furniture/) scaled to the allocated AABB |
+| `Closet` / `EnsuiteBathroom` | Draw partition walls on the shell **and** place furniture/fixture nodes inside |
+
+Do not tessellate furniture or closet walls inside `Bedroom` itself — only allocate and hand constraints down (`Child::new(child_constraints)`).
+
+Constructors take the child's [`CellConstraints`](buildings/src/constraints.rs). Do not pass a parent `&CellConstraints` “for context”; subsetting already baked ownership into the child. Occasional types may also take `&ParentType` when they need authoring detail that constraints cannot express — none of the current bedroom (or tower) children do.
+
+Room layout is **noise-fitted**: [`BedroomLayout::fit`](buildings/src/bedroom/layout.rs) always places **at least one bed**, then greedily adds nightstands / closets / ensuites / further beds. [`BedroomFillParams`](buildings/src/bedroom/layout.rs) controls packing:
+
+- **`spaciousness`** — scales each concept’s base footprint (higher → more floor claimed per item).
+- **`occupancy`** — maximum fraction of room floor area to allocate; stop so about `1 - occupancy` stays empty.
+
+Candidates that intersect [`CellConstraints::circulation_exclusion_zones`](buildings/src/constraints/circulation.rs) are rejected (external openings project inward by their along-face width). For **internal** partitions (closet / ensuite), layout reserves a door-swing volume first, check-fits it against beds and other fills, then places the wall body behind that swing so the opening does not project into occupied space.
+
 ## `LodScene` on buildings
 
 Every presentable building type still implements `LodScene`:

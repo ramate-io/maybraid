@@ -1,6 +1,8 @@
 //! Shared BSN helpers for composing child scenes and poses.
 
-use bevy::prelude::{Children, Transform, Visibility};
+use bevy::prelude::{
+	Children, Handle, Mesh, Mesh3d, MeshMaterial3d, StandardMaterial, Transform, Visibility,
+};
 use bevy::scene::prelude::{bsn, template_value, Scene};
 use bevy_math::Quat;
 
@@ -45,4 +47,20 @@ pub fn with_pose(transform: Transform, child: impl Scene + 'static) -> impl Scen
 			template_value(transform)
 		},
 	)
+}
+
+/// Posed line-list cube using pre-registered mesh/material handles.
+///
+/// Unit mesh spans \([-0.5, 0.5]^3\); use transform scale as full edge lengths.
+pub fn wireframe_box_with_handles(
+	mesh: Handle<Mesh>,
+	material: Handle<StandardMaterial>,
+	transform: Transform,
+) -> impl Scene + 'static {
+	bsn! {
+		Mesh3d({mesh})
+		MeshMaterial3d::<StandardMaterial>({material})
+		template_value(transform)
+		Visibility::default()
+	}
 }

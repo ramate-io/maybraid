@@ -2,15 +2,19 @@
 
 use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, template_value};
-use bevy_math::bounding::Aabb3d;
+use bevy_math::bounding::{Aabb2d, Aabb3d};
+use bevy_math::Vec2;
 use lod::gen::{LodScene, LodSceneStatus};
 use lod::lod_ref::LodRef;
 use richmond_building_components::partitions::rough_stonework::{
 	RoughStonework180, RoughStonework90, RoughStoneworkHeader90, RoughStoneworkLinear,
 };
+use richmond_buildings::bedroom::Bedroom;
 use richmond_buildings::stacked_rings::StackedRings;
 use richmond_buildings::wizards_tower::WizardsTower;
-use richmond_buildings::CellConstraints;
+use richmond_buildings::{
+	BedroomFillParams, CellConstraints, CirculationEntry, CirculationRequestStatus,
+};
 
 #[derive(Component)]
 pub struct PreviewRoot;
@@ -27,6 +31,16 @@ pub enum PreviewSubject {
 		floor_count: u32,
 		floor_height: f32,
 		radius: f32,
+	},
+	Bedroom {
+		/// Cell size along X / Y / Z (AABB from origin to `extent`).
+		extent: Vec3,
+		/// Unit noise for layout fitting.
+		noise: f32,
+		spaciousness: f32,
+		occupancy: f32,
+		/// When true, add a required −Z door circulation region.
+		door: bool,
 	},
 }
 
@@ -69,6 +83,18 @@ impl PreviewConfig {
 			} => format!(
 				"preview: stacked-rings (n={floor_count} h={floor_height:.2} r={radius:.2})"
 			),
+			PreviewSubject::Bedroom {
+				extent,
+				noise,
+				spaciousness,
+				occupancy,
+				door,
+			} => {
+				format!(
+					"preview: bedroom (extent={:.2},{:.2},{:.2} noise={noise:.2} space={spaciousness:.2} occ={occupancy:.2} door={door})",
+					extent.x, extent.y, extent.z
+				)
+			}
 		}
 	}
 
@@ -81,6 +107,9 @@ impl PreviewConfig {
 			}
 			PreviewSubject::WizardsTower { .. } => {
 				Aabb3d::from_min_max(Vec3::new(-4.0, 0.0, -4.0), Vec3::new(4.0, 3.0, 4.0))
+			}
+			PreviewSubject::Bedroom { extent, .. } => {
+				Aabb3d::from_min_max(Vec3::ZERO, *extent)
 			}
 			_ => Aabb3d::from_min_max(Vec3::ZERO, Vec3::ONE),
 		}
@@ -114,6 +143,7 @@ pub struct CachedPreview {
 	key: Option<(PreviewSubject, Transform)>,
 	wizards_tower: Option<WizardsTower>,
 	stacked_rings: Option<StackedRings>,
+	bedroom: Option<Bedroom>,
 }
 
 impl CachedPreview {
@@ -125,6 +155,7 @@ impl CachedPreview {
 		self.key = Some(key);
 		self.wizards_tower = None;
 		self.stacked_rings = None;
+		self.bedroom = None;
 		match &config.subject {
 			PreviewSubject::WizardsTower { noise } => {
 				let footprint = CellConstraints::cell_owned(Aabb3d::from_min_max(
@@ -139,6 +170,36 @@ impl CachedPreview {
 				radius,
 			} => {
 				self.stacked_rings = Some(StackedRings::new(*floor_count, *floor_height, *radius));
+			}
+			PreviewSubject::Bedroom {
+				extent,
+				noise,
+				spaciousness,
+				occupancy,
+				door,
+			} => {
+				let mut room = CellConstraints::cell_owned(Aabb3d::from_min_max(
+					Vec3::ZERO,
+					*extent,
+				));
+				if *door {
+					// Centered door on −Z; exclusion projects inward by opening width.
+					room.circulation.front = Some(CirculationEntry(vec![(
+						Aabb2d {
+							min: Vec2::new(0.35, 0.0),
+							max: Vec2::new(0.65, 0.9),
+						},
+						vec![CirculationRequestStatus::Required],
+					)]));
+				}
+				self.bedroom = Some(Bedroom::with_fill(
+					room,
+					*noise,
+					BedroomFillParams {
+						spaciousness: *spaciousness,
+						occupancy: *occupancy,
+					},
+				));
 			}
 			_ => {}
 		}
@@ -183,6 +244,7 @@ pub fn present_preview_lod(
 			cache.key = None;
 			cache.wizards_tower = None;
 			cache.stacked_rings = None;
+			cache.bedroom = None;
 		}
 		return;
 	}
@@ -212,6 +274,11 @@ pub fn present_preview_lod(
 				.stacked_rings
 				.as_ref()
 				.map(|r| r.scene_lod_status(&lod_ref) == LodSceneStatus::Changed)
+				.unwrap_or(false),
+			PreviewSubject::Bedroom { .. } => cache
+				.bedroom
+				.as_ref()
+				.map(|b| b.scene_lod_status(&lod_ref) == LodSceneStatus::Changed)
 				.unwrap_or(false),
 			_ => false,
 		}
@@ -267,6 +334,11 @@ pub fn present_preview_lod(
 		PreviewSubject::StackedRings { .. } => {
 			if let Some(rings) = cache.stacked_rings.as_ref() {
 				spawn_preview(&mut commands, transform, rings.scene_with_lod(&lod_ref));
+			}
+		}
+		PreviewSubject::Bedroom { .. } => {
+			if let Some(bedroom) = cache.bedroom.as_ref() {
+				spawn_preview(&mut commands, transform, bedroom.scene_with_lod(&lod_ref));
 			}
 		}
 	}
