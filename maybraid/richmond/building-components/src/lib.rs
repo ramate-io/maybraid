@@ -1,7 +1,8 @@
 //! Reusable Richmond building scene components.
 //!
-//! Per domain: `geometry` → `geometry_components` → named scene component modules.
+//! Per domain: [`style`](floors::FloorStyle) + geometry + [`Placement`] → node (`LodScene`).
 
+pub mod arc_kit;
 pub mod assets;
 pub mod doors;
 pub mod floors;
@@ -11,9 +12,10 @@ pub mod roofs;
 pub mod scene_children;
 pub mod stairs;
 
+pub use arc_kit::{decompose_arc_sweep, ArcKit};
 pub use assets::AssetPath;
-pub use placed::{IntoGeometryComponents, Placed};
-pub use scene_children::scene_children;
+pub use placed::{Placed, Placement};
+pub use scene_children::{pose, posed_glb, scene_children, with_pose};
 
 use bevy::scene::{ResolveContext, ResolvedScene};
 

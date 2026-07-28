@@ -7,8 +7,8 @@
 //! (\(X, Z \in [-1, 1]\)). World edge length \(L\) therefore needs scale \(L / 2\).
 
 use bevy_math::Vec3;
-use richmond_building_components::floors::Floor;
-use richmond_building_components::Placed;
+use richmond_building_components::floors::{Floor, FloorNode};
+use richmond_building_components::Placement;
 
 /// Inscribed-square half-extent as a fraction of outer radius (kit README).
 pub const INSCRIBED_HALF_FRAC: f32 = 0.7;
@@ -33,7 +33,7 @@ pub fn squared_floor_with_spire_hole(
 	center_xz: Vec3,
 	radius: f32,
 	spire_half: f32,
-) -> ([Placed<Floor>; 4], [Placed<Floor>; 4]) {
+) -> ([FloorNode; 4], [FloorNode; 4]) {
 	let radius = radius.max(1e-4);
 	let inscribed_half = INSCRIBED_HALF_FRAC * radius;
 	let spire_half = spire_half.clamp(1e-4, inscribed_half * 0.95);
@@ -41,21 +41,23 @@ pub fn squared_floor_with_spire_hole(
 	let inscribed_side = 2.0 * inscribed_half;
 
 	let caps = [
-		Placed::new(Floor::circle_inscribed_square(), center_xz, 0.0).with_scale(ring_scale),
-		Placed::new(
+		FloorNode::rough_stone(
 			Floor::circle_inscribed_square(),
-			center_xz,
-			std::f32::consts::FRAC_PI_2,
-		)
-		.with_scale(ring_scale),
-		Placed::new(Floor::circle_inscribed_square(), center_xz, std::f32::consts::PI)
-			.with_scale(ring_scale),
-		Placed::new(
+			Placement::new(center_xz, 0.0).with_scale(ring_scale),
+		),
+		FloorNode::rough_stone(
 			Floor::circle_inscribed_square(),
-			center_xz,
-			std::f32::consts::PI + std::f32::consts::FRAC_PI_2,
-		)
-		.with_scale(ring_scale),
+			Placement::new(center_xz, std::f32::consts::FRAC_PI_2).with_scale(ring_scale),
+		),
+		FloorNode::rough_stone(
+			Floor::circle_inscribed_square(),
+			Placement::new(center_xz, std::f32::consts::PI).with_scale(ring_scale),
+		),
+		FloorNode::rough_stone(
+			Floor::circle_inscribed_square(),
+			Placement::new(center_xz, std::f32::consts::PI + std::f32::consts::FRAC_PI_2)
+				.with_scale(ring_scale),
+		),
 	];
 
 	let cx = center_xz.x;
@@ -101,12 +103,15 @@ pub fn squared_floor_with_spire_hole(
 }
 
 /// Place a rectangle covering world extents `width_x` × `depth_z` (full edge lengths).
-fn rect_slab(center: Vec3, width_x: f32, depth_z: f32) -> Placed<Floor> {
+fn rect_slab(center: Vec3, width_x: f32, depth_z: f32) -> FloorNode {
 	let width_x = width_x.max(1e-4);
 	let depth_z = depth_z.max(1e-4);
-	Placed::new(Floor::rectangle(), center, 0.0).with_scale(Vec3::new(
-		width_x / (2.0 * RECT_HALF_EXTENT),
-		FLOOR_SLAB_Y_SCALE,
-		depth_z / (2.0 * RECT_HALF_EXTENT),
-	))
+	FloorNode::rough_stone(
+		Floor::rectangle(),
+		Placement::new(center, 0.0).with_scale(Vec3::new(
+			width_x / (2.0 * RECT_HALF_EXTENT),
+			FLOOR_SLAB_Y_SCALE,
+			depth_z / (2.0 * RECT_HALF_EXTENT),
+		)),
+	)
 }

@@ -4,15 +4,15 @@ use bevy_math::Vec2;
 
 /// Wall path geometry in world/cell space (continuous size and orientation).
 #[derive(Debug, Clone, PartialEq)]
-pub enum Wall {
+pub enum WallGeometry {
 	Linear(LinearWall),
 	Polyline(PolylineWall),
-	Arc(ArcWall),
+	Arc(ArcSweep),
 	/// Header-height arc (\(Y \in [0, 0.3]\) in kit space) for door/window frames.
-	HeaderArc(ArcWall),
+	HeaderArc(ArcSweep),
 }
 
-impl Wall {
+impl WallGeometry {
 	pub fn linear() -> Self {
 		Self::Linear(LinearWall::default())
 	}
@@ -24,13 +24,16 @@ impl Wall {
 	}
 
 	pub fn arc(sweep_degrees: f32) -> Self {
-		Self::Arc(ArcWall { sweep_degrees })
+		Self::Arc(ArcSweep { sweep_degrees })
 	}
 
 	pub fn header_arc(sweep_degrees: f32) -> Self {
-		Self::HeaderArc(ArcWall { sweep_degrees })
+		Self::HeaderArc(ArcSweep { sweep_degrees })
 	}
 }
+
+/// Alias kept for migration; prefer [`WallGeometry`].
+pub type Wall = WallGeometry;
 
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct LinearWall;
@@ -41,14 +44,17 @@ pub struct PolylineWall {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct ArcWall {
+pub struct ArcSweep {
 	pub sweep_degrees: f32,
 }
 
-impl Default for ArcWall {
+impl Default for ArcSweep {
 	fn default() -> Self {
 		Self {
 			sweep_degrees: 90.0,
 		}
 	}
 }
+
+/// Alias for continuous arc params (was `ArcWall`).
+pub type ArcWall = ArcSweep;

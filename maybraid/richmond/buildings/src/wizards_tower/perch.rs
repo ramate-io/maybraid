@@ -7,9 +7,8 @@ use bevy_math::Vec3;
 use lod::gen::LodScene;
 use lod::lod_ref::LodRef;
 use procedural_common::NoiseParams;
-use richmond_building_components::floors::{rough_stone_floor, Floor};
-use richmond_building_components::partitions::rough_stone_wall;
-use richmond_building_components::{scene_children, Placed};
+use richmond_building_components::floors::FloorNode;
+use richmond_building_components::scene_children;
 
 use crate::arc_wall::{ArcWall, ArcWallParams};
 use crate::wizards_tower::floor_fill::{squared_floor_with_spire_hole, SPIRE_HALF_FRAC};
@@ -23,8 +22,8 @@ pub struct WizardsTowerPerch {
 	/// Storey height in meters (outer ring wall \(Y\) scale).
 	pub storey_height: f32,
 	pub arc_wall: ArcWall,
-	pub floor_caps: [Placed<Floor>; 4],
-	pub floor_rects: [Placed<Floor>; 4],
+	pub floor_caps: [FloorNode; 4],
+	pub floor_rects: [FloorNode; 4],
 }
 
 impl WizardsTowerPerch {
@@ -70,13 +69,13 @@ impl LodScene for WizardsTowerPerch {
 	fn scene_with_lod(&self, lod_ref: &LodRef) -> impl Scene + 'static {
 		let mut children: Vec<Box<dyn Scene>> = Vec::new();
 		for wall in &self.arc_wall.walls {
-			children.push(Box::new(rough_stone_wall(wall, lod_ref)));
+			children.push(Box::new(wall.scene_with_lod(lod_ref)));
 		}
 		for cap in &self.floor_caps {
-			children.push(Box::new(rough_stone_floor(cap, lod_ref)));
+			children.push(Box::new(cap.scene_with_lod(lod_ref)));
 		}
 		for rect in &self.floor_rects {
-			children.push(Box::new(rough_stone_floor(rect, lod_ref)));
+			children.push(Box::new(rect.scene_with_lod(lod_ref)));
 		}
 		scene_children(children)
 	}

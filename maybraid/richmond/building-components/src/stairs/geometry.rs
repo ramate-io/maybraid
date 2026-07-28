@@ -1,12 +1,12 @@
 //! Continuous stair geometry.
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum Stair {
+pub enum StairGeometry {
 	Spiral(SpiralStair),
 	Straight(StraightStair),
 }
 
-impl Stair {
+impl StairGeometry {
 	pub fn spiral() -> Self {
 		Self::Spiral(SpiralStair::default())
 	}
@@ -33,7 +33,10 @@ impl Stair {
 		turns: f32,
 	) -> Self {
 		let tops = normalize_tops(tread_tops);
-		let height = tops.last().copied().unwrap_or(SpiralStair::DEFAULT_TREAD_HEIGHT);
+		let height = tops
+			.last()
+			.copied()
+			.unwrap_or(SpiralStair::DEFAULT_TREAD_HEIGHT);
 		Self::Spiral(SpiralStair {
 			height: height.max(1e-4),
 			radius: radius.max(1e-4),
@@ -49,6 +52,9 @@ impl Stair {
 		Self::Straight(StraightStair)
 	}
 }
+
+/// Alias kept for migration; prefer [`StairGeometry`].
+pub type Stair = StairGeometry;
 
 /// Spiral / circular stair parameterized for tread tessellation.
 #[derive(Debug, Clone, PartialEq)]

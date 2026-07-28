@@ -1,15 +1,16 @@
-//! Circulation stair scene components.
+//! Stair scene components (spiral and straight runs).
 //!
-//! Pipeline: [`geometry`] → [`geometry_components`] → material variant modules.
+//! IR: [`StairStyle`] + [`StairGeometry`] + [`Placement`] → [`StairNode`] (`LodScene`).
 
 pub mod geometry;
-pub mod geometry_components;
+pub mod node;
 pub mod rough_stonework;
-pub mod scene;
+pub mod style;
+pub(crate) mod tessellate;
 pub mod wood;
 
 pub use geometry::*;
-pub use geometry_components::StairComponent;
+pub use node::StairNode;
 pub use rough_stonework::*;
-pub use scene::{rough_stone_stair, wood_stair};
+pub use style::StairStyle;
 pub use wood::*;

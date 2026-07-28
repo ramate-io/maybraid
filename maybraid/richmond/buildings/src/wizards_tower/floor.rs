@@ -11,10 +11,9 @@ use bevy_math::Vec3;
 use lod::gen::LodScene;
 use lod::lod_ref::LodRef;
 use procedural_common::NoiseParams;
-use richmond_building_components::floors::{rough_stone_floor, Floor};
-use richmond_building_components::partitions::rough_stone_wall;
-use richmond_building_components::stairs::{rough_stone_stair, SpiralStair};
-use richmond_building_components::{scene_children, Placed};
+use richmond_building_components::floors::FloorNode;
+use richmond_building_components::scene_children;
+use richmond_building_components::stairs::SpiralStair;
 
 use crate::arc_spire::{uniform_storey_bindings, ArcSpire, ArcSpireParams, FitTolerance};
 use crate::arc_wall::{ArcWall, ArcWallParams};
@@ -31,9 +30,9 @@ pub struct WizardsTowerFloor {
 	/// Outer arc wall with portals.
 	pub arc_wall: ArcWall,
 	/// Four circle−inscribed-square caps that square off the circular footprint.
-	pub floor_caps: [Placed<Floor>; 4],
+	pub floor_caps: [FloorNode; 4],
 	/// Rectangular slabs filling the inscribed square around the spire hole.
-	pub floor_rects: [Placed<Floor>; 4],
+	pub floor_rects: [FloorNode; 4],
 	/// Circular tread spire inside the spire square, fitted to storey \(Y\) bindings.
 	pub arc_spire: ArcSpire,
 	/// Warm lantern point light hanging over the usable floor (no mesh yet).
@@ -124,15 +123,15 @@ impl LodScene for WizardsTowerFloor {
 	fn scene_with_lod(&self, lod_ref: &LodRef) -> impl Scene + 'static {
 		let mut children: Vec<Box<dyn Scene>> = Vec::new();
 		for wall in &self.arc_wall.walls {
-			children.push(Box::new(rough_stone_wall(wall, lod_ref)));
+			children.push(Box::new(wall.scene_with_lod(lod_ref)));
 		}
 		for cap in &self.floor_caps {
-			children.push(Box::new(rough_stone_floor(cap, lod_ref)));
+			children.push(Box::new(cap.scene_with_lod(lod_ref)));
 		}
 		for rect in &self.floor_rects {
-			children.push(Box::new(rough_stone_floor(rect, lod_ref)));
+			children.push(Box::new(rect.scene_with_lod(lod_ref)));
 		}
-		children.push(Box::new(rough_stone_stair(&self.arc_spire.stairs, lod_ref)));
+		children.push(Box::new(self.arc_spire.stairs.scene_with_lod(lod_ref)));
 		children.push(Box::new(floor_lantern(self.lantern, self.storey_height)));
 		scene_children(children)
 	}

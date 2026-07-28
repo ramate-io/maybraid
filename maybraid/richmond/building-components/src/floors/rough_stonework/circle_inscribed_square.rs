@@ -1,16 +1,9 @@
 //! Circle−inscribed-square floor cap (southern hemisphere of circle minus square).
 
 use crate::assets::floors::rough_stonework::CIRCLE_INSCRIBED_SQUARE;
-use crate::floors::geometry_components::FloorComponent;
-
 /// One 90° sector of the circle−square floor ring.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct RoughStoneFloorCircleInscribedSquare;
 
-impl From<FloorComponent> for RoughStoneFloorCircleInscribedSquare {
-	fn from(_: FloorComponent) -> Self {
-		Self
-	}
-}
 
 crate::impl_glb_lod_scene!(RoughStoneFloorCircleInscribedSquare, CIRCLE_INSCRIBED_SQUARE);

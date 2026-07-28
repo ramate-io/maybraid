@@ -1,13 +1,14 @@
 //! Wall / partition scene components (linear, angular, and header variants).
 //!
-//! Pipeline: [`geometry`] → [`geometry_components`] → [`rough_stonework`] scene types.
+//! IR: [`WallStyle`] + [`WallGeometry`] + [`Placement`] → [`WallNode`] (`LodScene`).
 
 pub mod geometry;
-pub mod geometry_components;
+pub mod node;
 pub mod rough_stonework;
-pub mod scene;
+pub mod style;
+pub(crate) mod tessellate;
 
 pub use geometry::*;
-pub use geometry_components::{decompose_arc_sweep, ArcKit, WallComponent};
+pub use node::WallNode;
 pub use rough_stonework::*;
-pub use scene::{rough_stone_wall, wall_component_scene};
+pub use style::WallStyle;

@@ -1,14 +1,14 @@
-//! Door frame and leaf scene components.
+//! Door scene components (frames composed from partition kits + leaves).
 //!
-//! Pipeline: [`geometry`] → [`geometry_components`] → material variant modules.
-//! Frames expand into partition wall kit pieces.
+//! IR: [`DoorStyle`] + [`DoorGeometry`] + [`Placement`] → [`DoorNode`] (`LodScene`).
 
 pub mod geometry;
-pub mod geometry_components;
-pub mod scene;
+pub mod node;
+pub mod style;
+pub(crate) mod tessellate;
 pub mod wood;
 
 pub use geometry::*;
-pub use geometry_components::DoorComponent;
-pub use scene::door_scene;
+pub use node::DoorNode;
+pub use style::DoorStyle;
 pub use wood::*;

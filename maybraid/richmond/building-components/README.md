@@ -7,17 +7,16 @@ This crate contains various scene components for Richmond buildings.
 
 ## Layout
 
-Each domain module owns its pipeline and named scene types:
+Each domain module owns style, geometry, a node IR, and named leaf scene types:
 
 ```
 floors.rs
-floors/geometry.rs
-floors/geometry_components.rs
-floors/scene.rs
-floors/rough_stonework.rs
-floors/rough_stonework/arc_fill.rs
-floors/wood.rs
-floors/wood/rectangle.rs
+floors/geometry.rs      # FloorGeometry
+floors/style.rs         # FloorStyle
+floors/node.rs          # FloorNode + LodScene
+floors/tessellate.rs    # private kit expansion
+floors/rough_stonework/
+floors/wood/
 …
 ```
 
@@ -30,15 +29,15 @@ partitions/rough_stonework/linear.rs
 …
 ```
 
-Shared [`Placed`](src/placed.rs) / [`IntoGeometryComponents`](src/placed.rs) live at the crate root.
+Shared [`Placement`](src/placed.rs) / [`Placed`](src/placed.rs) and [`ArcKit`](src/arc_kit.rs) live at the crate root.
 
 ## Pipeline
 
-**Geometry → Geometry components → Scene components**
+**Style + Geometry + Placement → LodScene**
 
 1. **`*/geometry.rs`** — continuous forms with size and orientation (`Wall::arc(45.0)`, `Floor::rectangle()`, …).
-2. **`*/geometry_components.rs`** — tessellates into the normalized kit (e.g. a 45° arc → three 15° pieces). Scene components implement [`From`] for these types.
-3. **Named scene modules** — material-specific `LodScene` placeholders.
+2. **`*/style.rs`** — material / look (`RoughStonework`, `Wood`, …).
+3. **`*/node.rs`** — authoring IR (`FloorNode`, `WallNode`, …) that implements `LodScene`: tessellates geometry privately, composes placement, and maps kit pieces to GLBs or leaf placeholders.
 
 Scaling vs repeating continuous forms is deferred; arc decomposition prefers 180° / 90° / 15°.
 

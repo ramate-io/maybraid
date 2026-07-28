@@ -1,12 +1,12 @@
 //! Continuous door kit geometry.
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub enum Door {
+pub enum DoorGeometry {
 	Frame15(DoorFrame15),
 	Leaf(DoorLeaf),
 }
 
-impl Door {
+impl DoorGeometry {
 	pub fn frame_15() -> Self {
 		Self::Frame15(DoorFrame15)
 	}
@@ -15,6 +15,9 @@ impl Door {
 		Self::Leaf(DoorLeaf)
 	}
 }
+
+/// Alias kept for migration; prefer [`DoorGeometry`].
+pub type Door = DoorGeometry;
 
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct DoorFrame15;

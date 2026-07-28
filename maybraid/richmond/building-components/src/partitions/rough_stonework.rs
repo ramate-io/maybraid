@@ -1,6 +1,6 @@
 //! Rough stonework partition variants used by circular towers and door frames.
 //!
-//! Each type maps from a [`crate::partitions::geometry_components::WallComponent`] kit piece.
+//! Leaf LodScene types for rough-stone partition kit pieces.
 
 pub mod arc_15;
 pub mod arc_180;

@@ -1,15 +1,16 @@
 //! Floor slab scene components.
 //!
-//! Pipeline: [`geometry`] → [`geometry_components`] → material variant modules.
+//! IR: [`FloorStyle`] + [`FloorGeometry`] + [`Placement`] → [`FloorNode`] (`LodScene`).
 
 pub mod geometry;
-pub mod geometry_components;
+pub mod node;
 pub mod rough_stonework;
-pub mod scene;
+pub mod style;
+pub(crate) mod tessellate;
 pub mod wood;
 
 pub use geometry::*;
-pub use geometry_components::FloorComponent;
+pub use node::FloorNode;
 pub use rough_stonework::*;
-pub use scene::{rough_stone_floor, wood_floor};
+pub use style::FloorStyle;
 pub use wood::*;
