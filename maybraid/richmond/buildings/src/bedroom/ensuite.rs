@@ -17,14 +17,16 @@ use crate::CellConstraints;
 #[derive(Debug, Clone, PartialEq)]
 pub struct EnsuiteBathroom {
 	pub constraints: CellConstraints,
+	/// Face of [`Self::constraints`] that opens into the bedroom.
+	pub open_face: FaceKind,
 	pub walls: Vec<WallNode>,
 	pub vanity: FurnitureNode,
 	pub toilet: FurnitureNode,
 }
 
 impl EnsuiteBathroom {
-	pub fn new(constraints: CellConstraints) -> Self {
-		let walls = Self::shell_walls(&constraints);
+	pub fn new(constraints: CellConstraints, open_face: FaceKind) -> Self {
+		let walls = Self::shell_walls(&constraints, open_face);
 		let aabb = &constraints.aabb;
 		let size = aabb.max - aabb.min;
 		let vanity_aabb = bevy_math::bounding::Aabb3d::from_min_max(
@@ -41,29 +43,63 @@ impl EnsuiteBathroom {
 		);
 		Self {
 			constraints,
+			open_face,
 			walls,
 			vanity: FurnitureNode::vanity(placement_filling_aabb(&vanity_aabb)),
 			toilet: FurnitureNode::toilet(placement_filling_aabb(&toilet_aabb)),
 		}
 	}
 
-	fn shell_walls(constraints: &CellConstraints) -> Vec<WallNode> {
+	fn shell_walls(constraints: &CellConstraints, open_face: FaceKind) -> Vec<WallNode> {
 		let aabb = &constraints.aabb;
 		let size = aabb.max - aabb.min;
 		let y0 = aabb.min.y;
 		let h = size.y.max(1e-4);
-		let cz = (aabb.min.z + aabb.max.z) * 0.5;
 		let half_z = size.z * 0.5;
 		let thick = 0.12_f32 / 0.2;
 
 		let mut walls = Vec::new();
-		// Room-facing wall (−X / Left). Door gap deferred — full separator for v1.
-		if owns_face_as_cell(constraints, FaceKind::Left) {
-			walls.push(WallNode::rough_stone(
-				Wall::linear(),
-				Placement::new(Vec3::new(aabb.min.x, y0, cz), std::f32::consts::FRAC_PI_2)
-					.with_scale(Vec3::new(half_z, h, thick)),
-			));
+		// Room-facing separator on `open_face`, with a door leave (swing already reserved).
+		if owns_face_as_cell(constraints, open_face) {
+			match open_face {
+				FaceKind::Left => {
+					walls.push(WallNode::rough_stone(
+						Wall::linear(),
+						Placement::new(
+							Vec3::new(aabb.min.x, y0, aabb.min.z + half_z * 0.35),
+							std::f32::consts::FRAC_PI_2,
+						)
+						.with_scale(Vec3::new(half_z * 0.35, h, thick)),
+					));
+				}
+				FaceKind::Right => {
+					walls.push(WallNode::rough_stone(
+						Wall::linear(),
+						Placement::new(
+							Vec3::new(aabb.max.x, y0, aabb.min.z + half_z * 0.35),
+							std::f32::consts::FRAC_PI_2,
+						)
+						.with_scale(Vec3::new(half_z * 0.35, h, thick)),
+					));
+				}
+				FaceKind::Front => {
+					let half_x = size.x * 0.5;
+					walls.push(WallNode::rough_stone(
+						Wall::linear(),
+						Placement::new(Vec3::new(aabb.min.x + half_x * 0.35, y0, aabb.min.z), 0.0)
+							.with_scale(Vec3::new(half_x * 0.35, h, thick)),
+					));
+				}
+				FaceKind::Back => {
+					let half_x = size.x * 0.5;
+					walls.push(WallNode::rough_stone(
+						Wall::linear(),
+						Placement::new(Vec3::new(aabb.min.x + half_x * 0.35, y0, aabb.max.z), 0.0)
+							.with_scale(Vec3::new(half_x * 0.35, h, thick)),
+					));
+				}
+				FaceKind::Top | FaceKind::Bottom => {}
+			}
 		}
 		walls
 	}

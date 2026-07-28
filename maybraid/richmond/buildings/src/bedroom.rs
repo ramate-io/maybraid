@@ -9,7 +9,7 @@ pub mod nightstand;
 pub use bed::Bed;
 pub use closet::Closet;
 pub use ensuite::EnsuiteBathroom;
-pub use layout::{BedroomFillParams, BedroomLayout};
+pub use layout::{BedroomFillParams, BedroomLayout, PartitionSlot};
 pub use nightstand::Nightstand;
 
 use bevy::scene::prelude::Scene;
@@ -61,7 +61,7 @@ impl Bedroom {
 		let closets = layout
 			.closets
 			.into_iter()
-			.map(|aabb| Closet::new(subset_or_owned(&constraints, aabb)))
+			.map(|slot| Closet::new(subset_or_owned(&constraints, slot.aabb), slot.open_face))
 			.collect();
 		let beds = layout
 			.beds
@@ -76,7 +76,9 @@ impl Bedroom {
 		let ensuites = layout
 			.ensuites
 			.into_iter()
-			.map(|aabb| EnsuiteBathroom::new(subset_or_owned(&constraints, aabb)))
+			.map(|slot| {
+				EnsuiteBathroom::new(subset_or_owned(&constraints, slot.aabb), slot.open_face)
+			})
 			.collect();
 
 		let floor = room_floor(&constraints);

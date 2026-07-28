@@ -17,24 +17,26 @@ use crate::CellConstraints;
 #[derive(Debug, Clone, PartialEq)]
 pub struct Closet {
 	pub constraints: CellConstraints,
+	/// Face of [`Self::constraints`] that opens into the bedroom (door swing outward).
+	pub open_face: FaceKind,
 	pub walls: Vec<WallNode>,
 	pub wardrobe: FurnitureNode,
 }
 
 impl Closet {
-	pub fn new(constraints: CellConstraints) -> Self {
-		let walls = Self::shell_walls(&constraints);
+	pub fn new(constraints: CellConstraints, open_face: FaceKind) -> Self {
+		let walls = Self::shell_walls(&constraints, open_face);
 		let wardrobe = FurnitureNode::wardrobe(placement_filling_aabb(&constraints.aabb));
 		Self {
 			constraints,
+			open_face,
 			walls,
 			wardrobe,
 		}
 	}
 
-	/// Walls on the closet shell (open toward +Z into the bedroom living area).
-	/// Only faces wholly owned by this cell are emitted.
-	fn shell_walls(constraints: &CellConstraints) -> Vec<WallNode> {
+	/// Shell walls with a doorway leave on `open_face` (already swing-budgeted by layout).
+	fn shell_walls(constraints: &CellConstraints, open_face: FaceKind) -> Vec<WallNode> {
 		let aabb = &constraints.aabb;
 		let size = aabb.max - aabb.min;
 		let y0 = aabb.min.y;
@@ -46,39 +48,104 @@ impl Closet {
 		let thick = 0.12_f32 / 0.2;
 
 		let mut walls = Vec::new();
-		// Back (−Z / Front face)
-		if owns_face_as_cell(constraints, FaceKind::Front) {
-			walls.push(WallNode::rough_stone(
-				Wall::linear(),
-				Placement::new(Vec3::new(cx, y0, aabb.min.z), 0.0)
-					.with_scale(Vec3::new(half_x, h, thick)),
-			));
+		for face in [
+			FaceKind::Front,
+			FaceKind::Back,
+			FaceKind::Left,
+			FaceKind::Right,
+		] {
+			if !owns_face_as_cell(constraints, face) {
+				continue;
+			}
+			if face == open_face {
+				// Partial return wall beside the opening (door leave).
+				push_opening_return(&mut walls, aabb, face, y0, h, thick);
+			} else {
+				push_full_face_wall(&mut walls, aabb, face, cx, cz, half_x, half_z, y0, h, thick);
+			}
 		}
-		// −X
-		if owns_face_as_cell(constraints, FaceKind::Left) {
+		walls
+	}
+}
+
+fn push_full_face_wall(
+	walls: &mut Vec<WallNode>,
+	aabb: &bevy_math::bounding::Aabb3d,
+	face: FaceKind,
+	cx: f32,
+	cz: f32,
+	half_x: f32,
+	half_z: f32,
+	y0: f32,
+	h: f32,
+	thick: f32,
+) {
+	match face {
+		FaceKind::Front => walls.push(WallNode::rough_stone(
+			Wall::linear(),
+			Placement::new(Vec3::new(cx, y0, aabb.min.z), 0.0)
+				.with_scale(Vec3::new(half_x, h, thick)),
+		)),
+		FaceKind::Back => walls.push(WallNode::rough_stone(
+			Wall::linear(),
+			Placement::new(Vec3::new(cx, y0, aabb.max.z), 0.0)
+				.with_scale(Vec3::new(half_x, h, thick)),
+		)),
+		FaceKind::Left => walls.push(WallNode::rough_stone(
+			Wall::linear(),
+			Placement::new(Vec3::new(aabb.min.x, y0, cz), std::f32::consts::FRAC_PI_2)
+				.with_scale(Vec3::new(half_z, h, thick)),
+		)),
+		FaceKind::Right => walls.push(WallNode::rough_stone(
+			Wall::linear(),
+			Placement::new(Vec3::new(aabb.max.x, y0, cz), std::f32::consts::FRAC_PI_2)
+				.with_scale(Vec3::new(half_z, h, thick)),
+		)),
+		FaceKind::Top | FaceKind::Bottom => {}
+	}
+}
+
+fn push_opening_return(
+	walls: &mut Vec<WallNode>,
+	aabb: &bevy_math::bounding::Aabb3d,
+	face: FaceKind,
+	y0: f32,
+	h: f32,
+	thick: f32,
+) {
+	let size = aabb.max - aabb.min;
+	match face {
+		FaceKind::Front | FaceKind::Back => {
+			let half_x = size.x * 0.5;
+			let z = if face == FaceKind::Front {
+				aabb.min.z
+			} else {
+				aabb.max.z
+			};
+			// Short return on the −X side of the opening.
 			walls.push(WallNode::rough_stone(
 				Wall::linear(),
-				Placement::new(Vec3::new(aabb.min.x, y0, cz), std::f32::consts::FRAC_PI_2)
-					.with_scale(Vec3::new(half_z, h, thick)),
-			));
-		}
-		// +X
-		if owns_face_as_cell(constraints, FaceKind::Right) {
-			walls.push(WallNode::rough_stone(
-				Wall::linear(),
-				Placement::new(Vec3::new(aabb.max.x, y0, cz), std::f32::consts::FRAC_PI_2)
-					.with_scale(Vec3::new(half_z, h, thick)),
-			));
-		}
-		// Front header-ish low wall toward room (+Z / Back) — short return for opening
-		if owns_face_as_cell(constraints, FaceKind::Back) {
-			walls.push(WallNode::rough_stone(
-				Wall::linear(),
-				Placement::new(Vec3::new(aabb.min.x + half_x * 0.35, y0, aabb.max.z), 0.0)
+				Placement::new(Vec3::new(aabb.min.x + half_x * 0.35, y0, z), 0.0)
 					.with_scale(Vec3::new(half_x * 0.35, h, thick)),
 			));
 		}
-		walls
+		FaceKind::Left | FaceKind::Right => {
+			let half_z = size.z * 0.5;
+			let x = if face == FaceKind::Left {
+				aabb.min.x
+			} else {
+				aabb.max.x
+			};
+			walls.push(WallNode::rough_stone(
+				Wall::linear(),
+				Placement::new(
+					Vec3::new(x, y0, aabb.min.z + half_z * 0.35),
+					std::f32::consts::FRAC_PI_2,
+				)
+				.with_scale(Vec3::new(half_z * 0.35, h, thick)),
+			));
+		}
+		FaceKind::Top | FaceKind::Bottom => {}
 	}
 }
 

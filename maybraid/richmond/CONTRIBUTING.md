@@ -76,7 +76,7 @@ Room layout is **noise-fitted**: [`BedroomLayout::fit`](buildings/src/bedroom/la
 - **`spaciousness`** — scales each concept’s base footprint (higher → more floor claimed per item).
 - **`occupancy`** — maximum fraction of room floor area to allocate; stop so about `1 - occupancy` stays empty.
 
-Candidates that intersect [`CellConstraints::circulation_exclusion_zones`](buildings/src/constraints/circulation.rs) are rejected (zones project outstanding circulation inward by opening width). Wall write authority stays on ownership.
+Candidates that intersect [`CellConstraints::circulation_exclusion_zones`](buildings/src/constraints/circulation.rs) are rejected (external openings project inward by their along-face width). For **internal** partitions (closet / ensuite), layout reserves a door-swing volume first, check-fits it against beds and other fills, then places the wall body behind that swing so the opening does not project into occupied space.
 
 ## `LodScene` on buildings
 

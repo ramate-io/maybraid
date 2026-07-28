@@ -183,7 +183,7 @@ impl CachedPreview {
 					*extent,
 				));
 				if *door {
-					// Centered door on −Z; width ≈ 0.3 of face → inward exclusion of same depth.
+					// Centered door on −Z; exclusion projects inward by opening width.
 					room.circulation.front = Some(CirculationEntry(vec![(
 						Aabb2d {
 							min: Vec2::new(0.35, 0.0),
