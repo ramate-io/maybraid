@@ -2,7 +2,8 @@
 
 use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, template_value};
-use bevy_math::bounding::Aabb3d;
+use bevy_math::bounding::{Aabb2d, Aabb3d};
+use bevy_math::Vec2;
 use lod::gen::{LodScene, LodSceneStatus};
 use lod::lod_ref::LodRef;
 use richmond_building_components::partitions::rough_stonework::{
@@ -11,7 +12,9 @@ use richmond_building_components::partitions::rough_stonework::{
 use richmond_buildings::bedroom::Bedroom;
 use richmond_buildings::stacked_rings::StackedRings;
 use richmond_buildings::wizards_tower::WizardsTower;
-use richmond_buildings::CellConstraints;
+use richmond_buildings::{
+	CellConstraints, CirculationEntry, CirculationRequestStatus,
+};
 
 #[derive(Component)]
 pub struct PreviewRoot;
@@ -32,6 +35,10 @@ pub enum PreviewSubject {
 	Bedroom {
 		/// Cell size along X / Y / Z (AABB from origin to `extent`).
 		extent: Vec3,
+		/// Unit noise for layout fitting.
+		noise: f32,
+		/// When true, add a required −Z door circulation region.
+		door: bool,
 	},
 }
 
@@ -74,9 +81,9 @@ impl PreviewConfig {
 			} => format!(
 				"preview: stacked-rings (n={floor_count} h={floor_height:.2} r={radius:.2})"
 			),
-			PreviewSubject::Bedroom { extent } => {
+			PreviewSubject::Bedroom { extent, noise, door } => {
 				format!(
-					"preview: bedroom (extent={:.2},{:.2},{:.2})",
+					"preview: bedroom (extent={:.2},{:.2},{:.2} noise={noise:.2} door={door})",
 					extent.x, extent.y, extent.z
 				)
 			}
@@ -93,7 +100,7 @@ impl PreviewConfig {
 			PreviewSubject::WizardsTower { .. } => {
 				Aabb3d::from_min_max(Vec3::new(-4.0, 0.0, -4.0), Vec3::new(4.0, 3.0, 4.0))
 			}
-			PreviewSubject::Bedroom { extent } => {
+			PreviewSubject::Bedroom { extent, .. } => {
 				Aabb3d::from_min_max(Vec3::ZERO, *extent)
 			}
 			_ => Aabb3d::from_min_max(Vec3::ZERO, Vec3::ONE),
@@ -156,12 +163,22 @@ impl CachedPreview {
 			} => {
 				self.stacked_rings = Some(StackedRings::new(*floor_count, *floor_height, *radius));
 			}
-			PreviewSubject::Bedroom { extent } => {
-				let room = CellConstraints::cell_owned(Aabb3d::from_min_max(
+			PreviewSubject::Bedroom { extent, noise, door } => {
+				let mut room = CellConstraints::cell_owned(Aabb3d::from_min_max(
 					Vec3::ZERO,
 					*extent,
 				));
-				self.bedroom = Some(Bedroom::new(room));
+				if *door {
+					// Centered door on −Z; width ≈ 0.3 of face → inward exclusion of same depth.
+					room.circulation.front = Some(CirculationEntry(vec![(
+						Aabb2d {
+							min: Vec2::new(0.35, 0.0),
+							max: Vec2::new(0.65, 0.9),
+						},
+						vec![CirculationRequestStatus::Required],
+					)]));
+				}
+				self.bedroom = Some(Bedroom::new(room, *noise));
 			}
 			_ => {}
 		}

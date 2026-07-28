@@ -27,6 +27,7 @@ use crate::constraints::{
 };
 use crate::wizards_tower::floor_fill::{FLOOR_SLAB_Y_SCALE, RECT_HALF_EXTENT};
 use crate::CellConstraints;
+use procedural_common::NoiseParams;
 
 /// Bedroom cell: outer shell + allocated closet / bed / nightstand / ensuite.
 #[derive(Debug, Clone, PartialEq)]
@@ -41,9 +42,13 @@ pub struct Bedroom {
 }
 
 impl Bedroom {
-	/// Allocate child cells inside `constraints` and construct fill types.
-	pub fn new(constraints: CellConstraints) -> Self {
-		let layout = BedroomLayout::from_room_aabb(&constraints.aabb);
+	/// Allocate child cells inside `constraints` via noise-fitted layout.
+	pub fn new(constraints: CellConstraints, noise: f32) -> Self {
+		let noise = NoiseParams {
+			seed: (noise.clamp(0.0, 1.0) * 1_000_000.0) as i32,
+			..NoiseParams::default()
+		};
+		let layout = BedroomLayout::fit(&constraints, noise);
 		let closet = Closet::new(subset_or_owned(&constraints, layout.closet));
 		let bed = Bed::new(subset_or_owned(&constraints, layout.bed));
 		let nightstand = Nightstand::new(subset_or_owned(&constraints, layout.nightstand));
