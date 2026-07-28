@@ -120,16 +120,18 @@ impl TowerLodFootprint for WizardsTowerColumn {
 }
 
 impl LodScene for WizardsTowerColumn {
-	fn scene_lod_status(&self, lod_ref: &LodRef) -> lod::gen::LodSceneStatus {
-		for floor in &self.floors {
-			if floor.scene_lod_status(lod_ref) == lod::gen::LodSceneStatus::Changed {
-				return lod::gen::LodSceneStatus::Changed;
-			}
-		}
-		self.perch.scene_lod_status(lod_ref)
+	fn scene_lod_status(
+		&self,
+		_lod_ref: &LodRef,
+	) -> lod::gen::LodSceneStatus {
+		lod::gen::LodSceneStatus::Unchanged
 	}
 
-	fn scene_with_lod(&self, lod_ref: &LodRef) -> impl Scene + 'static {
+		fn scene_with_level(
+		&self,
+		lod_ref: &LodRef,
+		_level: lod::gen::LodSceneLevel,
+	) -> impl Scene + 'static {
 		let mut children: Vec<Box<dyn Scene>> = self
 			.floors
 			.iter()

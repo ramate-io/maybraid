@@ -14,9 +14,15 @@ pub use preview::{PreviewConfig, PreviewSubject};
 use bevy::prelude::*;
 use game_commands::command::{capture_command_line_input, GameCommandPlugin};
 use ground::setup_ground;
+use lod::LodSceneHostPlugin;
 use mesh_ref::MeshRefPlugin;
 use preview::{present_preview_lod, track_camera_lod, CameraLodState, CachedPreview};
-use richmond_building_components::FurnitureWireframePlugin;
+use richmond_building_components::{
+	apply_parent_confines, update_partition_host_levels, FurnitureWireframePlugin,
+};
+use richmond_buildings::wizards_tower::{
+	fulfill_tower_lod_spawn, update_tower_host_levels, TowerSilhouettePlugin,
+};
 
 pub struct RichmondBuildingsPlaygroundPlugin;
 
@@ -28,6 +34,8 @@ impl Plugin for RichmondBuildingsPlaygroundPlugin {
 			.add_plugins((
 				MeshRefPlugin,
 				FurnitureWireframePlugin,
+				TowerSilhouettePlugin,
+				LodSceneHostPlugin,
 				GameCommandPlugin::<PlaygroundCommand>::with_config(ui::ui_config()),
 			))
 			.add_systems(Startup, (camera::setup_camera, setup_lighting, setup_ground))
@@ -39,6 +47,15 @@ impl Plugin for RichmondBuildingsPlaygroundPlugin {
 					present_preview_lod
 						.after(track_camera_lod)
 						.after(capture_command_line_input::<PlaygroundCommand>),
+					(
+						update_tower_host_levels,
+						update_partition_host_levels,
+						fulfill_tower_lod_spawn,
+					)
+						.chain()
+						.after(track_camera_lod)
+						.before(lod::sync_lod_level_roots),
+					apply_parent_confines.after(lod::sync_lod_level_roots),
 					ui::sync_command_status_text.before(game_commands::ui::update_debug_ui),
 				),
 			);

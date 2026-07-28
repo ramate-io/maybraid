@@ -67,9 +67,15 @@ pub mod partitions {
 		pub const ARC_90_LOW: AssetPath =
 			AssetPath::new("urban/partitions/rough_stonework/rough_stonework_90_001_low_res.glb");
 
-		/// 15° arc rough stonework (no res variants yet — all tiers use base).
+		/// 15° arc rough stonework.
 		pub const ARC_15: AssetPath =
 			AssetPath::new("urban/partitions/rough_stonework/rough_stonework_15_001.glb");
+		pub const ARC_15_HIGH: AssetPath =
+			AssetPath::new("urban/partitions/rough_stonework/rough_stonework_15_001_high_res.glb");
+		pub const ARC_15_MID: AssetPath =
+			AssetPath::new("urban/partitions/rough_stonework/rough_stonework_15_001_mid_res.glb");
+		pub const ARC_15_LOW: AssetPath =
+			AssetPath::new("urban/partitions/rough_stonework/rough_stonework_15_001_low_res.glb");
 
 		/// 90° header rough stonework.
 		pub const HEADER_90: AssetPath =

@@ -3,38 +3,45 @@
 //!
 //! Floor count is derived from noise at construction time.
 //!
-//! # Layering (current sketch)
-//!
-//! Each storey draws a parameterized crate-level [`crate::ArcWall`] (must / must-not /
-//! noise portals, configurable arc degrees), a crate-level [`crate::ArcSpire`] tread
-//! run fitted to \(Y\) bindings, and a squared-off **floor** (circle−inscribed-square
-//! caps + rectangular slabs around a spire hole). Internal partitions, rooms, and
-//! spire geometry are deferred.
+//! LOD (root [`LodSceneHost`](lod::LodSceneHost)):
+//! - **Low** — cylinder silhouette
+//! - **Medium** — exterior walls
+//! - **High** — exterior + internals (`ParentConfines::Internal` on nodes)
 
 pub mod floor;
 pub mod floor_fill;
+pub mod lod_systems;
 pub mod perch;
 pub mod room;
+pub mod silhouette;
 pub mod spire;
 pub mod tower;
 pub mod tower_lod;
 
 pub use floor::WizardsTowerFloor;
+pub use lod_systems::{fulfill_tower_lod_spawn, update_tower_host_levels};
 pub use perch::WizardsTowerPerch;
 pub use room::WizardsTowerRoom;
+pub use silhouette::{TowerSilhouetteAssets, TowerSilhouettePlugin};
 pub use spire::WizardsTowerSpire;
 pub use tower::WizardsTowerColumn;
-pub use tower_lod::{TowerLodBand, NEAR_RADIUS_MULTIPLIER};
+pub use tower_lod::{
+	HIGH_RADIUS_MULTIPLIER, LOW_RADIUS_MULTIPLIER, MEDIUM_RADIUS_MULTIPLIER,
+};
 
+use bevy::prelude::{Component, Transform};
 use bevy::scene::prelude::Scene;
-use lod::gen::{LodScene, LodSceneStatus};
+use bevy_math::Vec3;
+use lod::gen::{LodScene, LodSceneLevel, LodSceneStatus};
 use lod::lod_ref::LodRef;
+use lod::lod_scene_host::lod_host_scene;
 use procedural_common::NoiseParams;
 
 use richmond_building_components::scene_children;
 
 use crate::arc_wall::{MustAssignPortal, Portal};
 use crate::wizards_tower::floor_fill::WALL_HEIGHT_METERS;
+use crate::wizards_tower::silhouette::silhouette_scene;
 use crate::wizards_tower::tower_lod::TowerLodFootprint;
 use crate::CellConstraints;
 
@@ -50,7 +57,7 @@ pub fn must_assign_cardinal_portals() -> Vec<MustAssignPortal> {
 
 /// Root authored building: a circular tower column stack with a central spire
 /// and a larger perch on the top floor.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Component)]
 pub struct WizardsTower {
 	/// Generation / write constraints for the whole footprint.
 	pub constraints: CellConstraints,
@@ -95,6 +102,42 @@ impl WizardsTower {
 		let t = noise.clamp(0.0, 1.0);
 		10 + (t * 20.0).round() as u32
 	}
+
+	fn silhouette_transform(&self) -> Transform {
+		let aabb = &self.constraints.aabb;
+		let center = (aabb.min + aabb.max) * 0.5;
+		let radius = self.footprint_radius().max(1e-4);
+		let height = self.tower_height();
+		Transform::from_translation(Vec3::new(center.x, aabb.min.y + height * 0.5, center.z))
+			.with_scale(Vec3::new(radius * 2.0, height, radius * 2.0))
+	}
+
+	fn exterior_primitives(&self, lod_ref: &LodRef) -> impl Scene + 'static {
+		let mut children: Vec<Box<dyn Scene>> = Vec::new();
+		for floor in &self.column.floors {
+			floor.emit_external_features(&mut children, lod_ref);
+		}
+		self.column
+			.perch
+			.emit_external_features(&mut children, lod_ref);
+		scene_children(children)
+	}
+
+	fn high_primitives(&self, lod_ref: &LodRef) -> impl Scene + 'static {
+		let (ball_c, ball_r) = self.internal_confine_ball();
+		let mut children: Vec<Box<dyn Scene>> = Vec::new();
+		for floor in &self.column.floors {
+			floor.emit_external_features(&mut children, lod_ref);
+			floor.emit_internal_features(&mut children, lod_ref, ball_c, ball_r);
+		}
+		self.column
+			.perch
+			.emit_external_features(&mut children, lod_ref);
+		self.column
+			.perch
+			.emit_internal_features(&mut children, lod_ref, ball_c, ball_r);
+		scene_children(children)
+	}
 }
 
 impl TowerLodFootprint for WizardsTower {
@@ -104,12 +147,44 @@ impl TowerLodFootprint for WizardsTower {
 }
 
 impl LodScene for WizardsTower {
+	fn scene_lod_level(&self, lod_ref: &LodRef) -> LodSceneLevel {
+		self.level_for_lod_ref(lod_ref)
+	}
+
 	fn scene_lod_status(&self, lod_ref: &LodRef) -> LodSceneStatus {
-		self.column.scene_lod_status(lod_ref)
+		let prev = self.level_for(lod_ref.previous_transform);
+		let curr = self.level_for(lod_ref.current_transform);
+		if prev == curr {
+			LodSceneStatus::Unchanged
+		} else {
+			LodSceneStatus::Changed(curr)
+		}
+	}
+
+	fn scene_with_level(
+		&self,
+		lod_ref: &LodRef,
+		level: LodSceneLevel,
+	) -> impl Scene + 'static {
+		match level {
+			LodSceneLevel::High => Box::new(self.high_primitives(lod_ref)) as Box<dyn Scene>,
+			LodSceneLevel::Medium => Box::new(self.exterior_primitives(lod_ref)) as Box<dyn Scene>,
+			LodSceneLevel::Low
+			| LodSceneLevel::UltraLow
+			| LodSceneLevel::Distance(_)
+			| LodSceneLevel::Resolution(_) => {
+				let tf = self.silhouette_transform();
+				Box::new(silhouette_scene(
+					TowerSilhouetteAssets::cylinder(),
+					TowerSilhouetteAssets::material(),
+					tf,
+				)) as Box<dyn Scene>
+			}
+		}
 	}
 
 	fn scene_with_lod(&self, lod_ref: &LodRef) -> impl Scene + 'static {
-		let column = self.column.scene_with_lod(lod_ref);
-		scene_children(vec![Box::new(column) as Box<dyn Scene>])
+		let level = self.scene_lod_level(lod_ref);
+		lod_host_scene(level, self.scene_with_level(lod_ref, level))
 	}
 }

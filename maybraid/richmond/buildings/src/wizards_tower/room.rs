@@ -56,11 +56,18 @@ impl WizardsTowerRoom {
 }
 
 impl LodScene for WizardsTowerRoom {
-	fn scene_lod_status(&self, _lod_ref: &LodRef) -> lod::gen::LodSceneStatus {
+	fn scene_lod_status(
+		&self,
+		_lod_ref: &LodRef,
+	) -> lod::gen::LodSceneStatus {
 		lod::gen::LodSceneStatus::Unchanged
 	}
 
-	fn scene_with_lod(&self, lod_ref: &LodRef) -> impl Scene + 'static {
+		fn scene_with_level(
+		&self,
+		lod_ref: &LodRef,
+		_level: lod::gen::LodSceneLevel,
+	) -> impl Scene + 'static {
 		let children: Vec<Box<dyn Scene>> = vec![
 			Box::new(self.partition.scene_with_lod(lod_ref)),
 			Box::new(self.floor.scene_with_lod(lod_ref)),

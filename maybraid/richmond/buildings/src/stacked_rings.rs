@@ -59,11 +59,18 @@ impl StackedRings {
 }
 
 impl LodScene for StackedRings {
-	fn scene_lod_status(&self, _lod_ref: &LodRef) -> lod::gen::LodSceneStatus {
+	fn scene_lod_status(
+		&self,
+		_lod_ref: &LodRef,
+	) -> lod::gen::LodSceneStatus {
 		lod::gen::LodSceneStatus::Unchanged
 	}
 
-	fn scene_with_lod(&self, lod_ref: &LodRef) -> impl Scene + 'static {
+		fn scene_with_level(
+		&self,
+		lod_ref: &LodRef,
+		_level: lod::gen::LodSceneLevel,
+	) -> impl Scene + 'static {
 		// Flatten ring wrappers so every GLB sits under one Transform/Visibility root.
 		let children: Vec<Box<dyn Scene>> = self
 			.rings

@@ -121,7 +121,11 @@ macro_rules! impl_lod_scene {
 				crate::gen::LodSceneStatus::Unchanged
 			}
 
-			fn scene_with_lod(&self, _lod_ref: &LodRef) -> impl Scene + 'static {
+			fn scene_with_level(
+				&self,
+				_lod_ref: &LodRef,
+				_level: crate::gen::LodSceneLevel,
+			) -> impl Scene + 'static {
 				stub_scene()
 			}
 		}

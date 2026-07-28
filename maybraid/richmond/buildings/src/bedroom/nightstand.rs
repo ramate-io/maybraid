@@ -26,11 +26,18 @@ impl Nightstand {
 }
 
 impl LodScene for Nightstand {
-	fn scene_lod_status(&self, _lod_ref: &LodRef) -> lod::gen::LodSceneStatus {
+	fn scene_lod_status(
+		&self,
+		_lod_ref: &LodRef,
+	) -> lod::gen::LodSceneStatus {
 		lod::gen::LodSceneStatus::Unchanged
 	}
 
-	fn scene_with_lod(&self, lod_ref: &LodRef) -> impl Scene + 'static {
+		fn scene_with_level(
+		&self,
+		lod_ref: &LodRef,
+		_level: lod::gen::LodSceneLevel,
+	) -> impl Scene + 'static {
 		self.furniture.scene_with_lod(lod_ref)
 	}
 }

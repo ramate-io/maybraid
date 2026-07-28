@@ -5,6 +5,7 @@ use lod::gen::LodScene;
 use lod::lod_ref::LodRef;
 
 use crate::assets::stairs::rough_stonework::TREAD;
+use crate::parent_confines::{confined_scene, ParentConfines};
 use crate::placed::Placement;
 use crate::scene_children::{pose, posed_glb, scene_children, with_pose};
 use crate::stairs::geometry::StairGeometry;
@@ -18,6 +19,8 @@ pub struct StairNode {
 	pub style: StairStyle,
 	pub geometry: StairGeometry,
 	pub placement: Placement,
+	/// External silhouette vs internal detail gating.
+	pub confines: ParentConfines,
 }
 
 impl StairNode {
@@ -26,6 +29,7 @@ impl StairNode {
 			style,
 			geometry,
 			placement,
+			confines: ParentConfines::External,
 		}
 	}
 
@@ -36,14 +40,26 @@ impl StairNode {
 	pub fn wood(geometry: StairGeometry, placement: Placement) -> Self {
 		Self::new(StairStyle::Wood, geometry, placement)
 	}
+
+	pub fn with_confines(mut self, confines: ParentConfines) -> Self {
+		self.confines = confines;
+		self
+	}
 }
 
 impl LodScene for StairNode {
-	fn scene_lod_status(&self, _lod_ref: &LodRef) -> lod::gen::LodSceneStatus {
+	fn scene_lod_status(
+		&self,
+		_lod_ref: &LodRef,
+	) -> lod::gen::LodSceneStatus {
 		lod::gen::LodSceneStatus::Unchanged
 	}
 
-	fn scene_with_lod(&self, lod_ref: &LodRef) -> impl Scene + 'static {
+		fn scene_with_level(
+		&self,
+		lod_ref: &LodRef,
+		_level: lod::gen::LodSceneLevel,
+	) -> impl Scene + 'static {
 		let children: Vec<Box<dyn Scene>> = self
 			.geometry
 			.placed_kits(self.placement)
@@ -78,6 +94,6 @@ impl LodScene for StairNode {
 				}
 			})
 			.collect();
-		scene_children(children)
+		confined_scene(self.confines, scene_children(children))
 	}
 }

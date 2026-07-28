@@ -11,8 +11,8 @@ pub(crate) mod tessellate;
 
 pub use geometry::*;
 pub use lod::{
-	PartitionLodBand, PartitionMeshSet, PartitionMeshTier, PARTITION_HIGH_FACTOR,
-	PARTITION_LOW_FACTOR, PARTITION_MEDIUM_FACTOR,
+	update_partition_host_levels, PartitionLodBand, PartitionLodProbe, PartitionMeshSet,
+	PartitionMeshTier, PARTITION_HIGH_FACTOR, PARTITION_LOW_FACTOR, PARTITION_MEDIUM_FACTOR,
 };
 pub use node::WallNode;
 pub use rough_stonework::*;

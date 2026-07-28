@@ -1,10 +1,10 @@
-//! Preview subject sync + camera-driven LOD re-present.
+//! Preview subject sync + camera-driven LOD (host level updates, not full rebuild).
 
 use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, template_value};
 use bevy_math::bounding::{Aabb2d, Aabb3d};
 use bevy_math::Vec2;
-use lod::gen::{LodScene, LodSceneStatus};
+use lod::gen::LodScene;
 use lod::lod_ref::LodRef;
 use richmond_building_components::partitions::rough_stonework::{
 	RoughStonework180, RoughStonework90, RoughStoneworkHeader90, RoughStoneworkLinear,
@@ -100,7 +100,11 @@ impl PreviewConfig {
 
 	fn subject_bounds(&self) -> Aabb3d {
 		match &self.subject {
-			PreviewSubject::StackedRings { radius, floor_count, floor_height } => {
+			PreviewSubject::StackedRings {
+				radius,
+				floor_count,
+				floor_height,
+			} => {
 				let r = (*radius).max(1e-4);
 				let h = (*floor_count as f32) * (*floor_height).max(1e-4);
 				Aabb3d::from_min_max(Vec3::new(-r, 0.0, -r), Vec3::new(r, h, r))
@@ -108,9 +112,7 @@ impl PreviewConfig {
 			PreviewSubject::WizardsTower { .. } => {
 				Aabb3d::from_min_max(Vec3::new(-4.0, 0.0, -4.0), Vec3::new(4.0, 3.0, 4.0))
 			}
-			PreviewSubject::Bedroom { extent, .. } => {
-				Aabb3d::from_min_max(Vec3::ZERO, *extent)
-			}
+			PreviewSubject::Bedroom { extent, .. } => Aabb3d::from_min_max(Vec3::ZERO, *extent),
 			_ => Aabb3d::from_min_max(Vec3::ZERO, Vec3::ONE),
 		}
 	}
@@ -178,12 +180,9 @@ impl CachedPreview {
 				occupancy,
 				door,
 			} => {
-				let mut room = CellConstraints::cell_owned(Aabb3d::from_min_max(
-					Vec3::ZERO,
-					*extent,
-				));
+				let mut room =
+					CellConstraints::cell_owned(Aabb3d::from_min_max(Vec3::ZERO, *extent));
 				if *door {
-					// Centered door on −Z; exclusion projects inward by opening width.
 					room.circulation.front = Some(CirculationEntry(vec![(
 						Aabb2d {
 							min: Vec2::new(0.35, 0.0),
@@ -222,7 +221,8 @@ pub fn track_camera_lod(
 		(lod_state.previous.translation - lod_state.current.translation).length_squared() > 1e-8;
 }
 
-/// Despawn / spawn preview when the subject changes or LOD status is [`LodSceneStatus::Changed`].
+/// Spawn preview when the subject changes. LOD flips update host levels in-place
+/// ([`lod::LodSceneHostPlugin`] + tower / partition fine-phase systems).
 pub fn present_preview_lod(
 	mut commands: Commands,
 	config: Res<PreviewConfig>,
@@ -251,42 +251,7 @@ pub fn present_preview_lod(
 
 	cache.rebuild_if_needed(&config);
 
-	let bounds = config.subject_bounds();
-	let entity = lod_state.camera_entity.unwrap_or(Entity::PLACEHOLDER);
-	let lod_ref = LodRef {
-		entity,
-		previous_transform: &lod_state.previous,
-		current_transform: &lod_state.current,
-		bounds: &bounds,
-	};
-
-	let force_spawn = subject_changed || !has_root;
-	let lod_changed = if force_spawn {
-		true
-	} else if lod_state.translated {
-		match &config.subject {
-			PreviewSubject::WizardsTower { .. } => cache
-				.wizards_tower
-				.as_ref()
-				.map(|t| t.scene_lod_status(&lod_ref) == LodSceneStatus::Changed)
-				.unwrap_or(true),
-			PreviewSubject::StackedRings { .. } => cache
-				.stacked_rings
-				.as_ref()
-				.map(|r| r.scene_lod_status(&lod_ref) == LodSceneStatus::Changed)
-				.unwrap_or(false),
-			PreviewSubject::Bedroom { .. } => cache
-				.bedroom
-				.as_ref()
-				.map(|b| b.scene_lod_status(&lod_ref) == LodSceneStatus::Changed)
-				.unwrap_or(false),
-			_ => false,
-		}
-	} else {
-		false
-	};
-
-	if !lod_changed {
+	if !subject_changed && has_root {
 		return;
 	}
 
@@ -294,6 +259,15 @@ pub fn present_preview_lod(
 		commands.entity(entity).despawn();
 	}
 	*last_subject = Some(subject_key);
+
+	let bounds = config.subject_bounds();
+	let entity = lod_state.camera_entity.unwrap_or(Entity::PLACEHOLDER);
+	let lod_ref = LodRef {
+		entity,
+		previous_transform: &lod_state.current,
+		current_transform: &lod_state.current,
+		bounds: &bounds,
+	};
 
 	let transform = config.transform;
 	match &config.subject {
@@ -327,8 +301,17 @@ pub fn present_preview_lod(
 			);
 		}
 		PreviewSubject::WizardsTower { .. } => {
-			if let Some(tower) = cache.wizards_tower.as_ref() {
-				spawn_preview(&mut commands, transform, tower.scene_with_lod(&lod_ref));
+			if let Some(tower) = cache.wizards_tower.clone() {
+				commands
+					.spawn_scene((
+						tower.scene_with_lod(&lod_ref),
+						bsn! {
+							template_value(transform)
+							Visibility::default()
+						},
+					))
+					.insert(PreviewRoot)
+					.insert(tower);
 			}
 		}
 		PreviewSubject::StackedRings { .. } => {

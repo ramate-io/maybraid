@@ -12,6 +12,7 @@ use crate::floors::{
 	RoughStoneFloorArcFill, RoughStoneFloorStructFill, WoodFloorArcFill, WoodFloorRectangle,
 	WoodFloorStructFill,
 };
+use crate::parent_confines::{confined_scene, ParentConfines};
 use crate::placed::Placement;
 use crate::scene_children::{pose, posed_glb, scene_children, with_pose};
 
@@ -21,6 +22,8 @@ pub struct FloorNode {
 	pub style: FloorStyle,
 	pub geometry: FloorGeometry,
 	pub placement: Placement,
+	/// External silhouette vs internal detail gating.
+	pub confines: ParentConfines,
 }
 
 impl FloorNode {
@@ -29,6 +32,7 @@ impl FloorNode {
 			style,
 			geometry,
 			placement,
+			confines: ParentConfines::External,
 		}
 	}
 
@@ -39,14 +43,26 @@ impl FloorNode {
 	pub fn wood(geometry: FloorGeometry, placement: Placement) -> Self {
 		Self::new(FloorStyle::Wood, geometry, placement)
 	}
+
+	pub fn with_confines(mut self, confines: ParentConfines) -> Self {
+		self.confines = confines;
+		self
+	}
 }
 
 impl LodScene for FloorNode {
-	fn scene_lod_status(&self, _lod_ref: &LodRef) -> lod::gen::LodSceneStatus {
+	fn scene_lod_status(
+		&self,
+		_lod_ref: &LodRef,
+	) -> lod::gen::LodSceneStatus {
 		lod::gen::LodSceneStatus::Unchanged
 	}
 
-	fn scene_with_lod(&self, lod_ref: &LodRef) -> impl Scene + 'static {
+		fn scene_with_level(
+		&self,
+		lod_ref: &LodRef,
+		_level: lod::gen::LodSceneLevel,
+	) -> impl Scene + 'static {
 		let children: Vec<Box<dyn Scene>> = self
 			.geometry
 			.placed_kits(self.placement)
@@ -87,6 +103,6 @@ impl LodScene for FloorNode {
 				}
 			})
 			.collect();
-		scene_children(children)
+		confined_scene(self.confines, scene_children(children))
 	}
 }

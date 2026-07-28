@@ -7,6 +7,7 @@ pub mod assets;
 pub mod doors;
 pub mod floors;
 pub mod furniture;
+pub mod parent_confines;
 pub mod partitions;
 pub mod placed;
 pub mod roofs;
@@ -18,9 +19,13 @@ pub use assets::AssetPath;
 pub use furniture::{
 	FurnitureGeometry, FurnitureNode, FurnitureStyle, FurnitureWireframePlugin,
 };
+pub use parent_confines::{
+	apply_parent_confines, confined_scene, ParentConfines,
+};
 pub use partitions::{
-	PartitionLodBand, PartitionMeshSet, PartitionMeshTier, Wall, WallGeometry, WallNode, WallStyle,
-	HEADER_KIT_HEIGHT, PARTITION_HIGH_FACTOR, PARTITION_LOW_FACTOR, PARTITION_MEDIUM_FACTOR,
+	update_partition_host_levels, PartitionLodBand, PartitionLodProbe, PartitionMeshSet,
+	PartitionMeshTier, Wall, WallGeometry, WallNode, WallStyle, HEADER_KIT_HEIGHT,
+	PARTITION_HIGH_FACTOR, PARTITION_LOW_FACTOR, PARTITION_MEDIUM_FACTOR,
 };
 pub use placed::{Placed, Placement};
 pub use scene_children::{pose, posed_glb, scene_children, with_pose, wireframe_box_with_handles};
@@ -41,9 +46,10 @@ macro_rules! impl_empty_lod_scene {
 					::lod::gen::LodSceneStatus::Unchanged
 				}
 
-				fn scene_with_lod(
+				fn scene_with_level(
 					&self,
 					_lod_ref: &::lod::lod_ref::LodRef,
+					_level: ::lod::gen::LodSceneLevel,
 				) -> impl ::bevy::scene::Scene + 'static {
 					::bevy::scene::SceneFunction($crate::empty_scene)
 				}
@@ -65,9 +71,10 @@ macro_rules! impl_glb_lod_scene {
 				::lod::gen::LodSceneStatus::Unchanged
 			}
 
-			fn scene_with_lod(
+			fn scene_with_level(
 				&self,
 				_lod_ref: &::lod::lod_ref::LodRef,
+				_level: ::lod::gen::LodSceneLevel,
 			) -> impl ::bevy::scene::Scene + 'static {
 				($asset).mesh_ref().scene()
 			}
