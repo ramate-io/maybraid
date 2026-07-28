@@ -152,9 +152,20 @@ impl TerrainEntryStore {
 		let iz = (z / size).floor() as i32;
 		let cell = cell_bounds(ix, iz, size, layout.vertical_half_extent);
 		let id = Id::from_cell(cell);
-		self.terrain
-			.get(&id)
-			.map(|e| e.value.sdf.terrain.height_at_with_all_modulations(x, z))
+		if let Some(entry) = self.terrain.get(&id) {
+			return Some(entry.value.sdf.terrain.height_at_with_all_modulations(x, z));
+		}
+		for outer in &layout.outer_rings {
+			let g = outer.cell_size.max(1e-3);
+			let oix = (x / g).floor() as i32;
+			let oiz = (z / g).floor() as i32;
+			let ocell = cell_bounds(oix, oiz, g, layout.vertical_half_extent);
+			let oid = Id::from_cell(ocell);
+			if let Some(entry) = self.terrain.get(&oid) {
+				return Some(entry.value.sdf.terrain.height_at_with_all_modulations(x, z));
+			}
+		}
+		None
 	}
 }
 
