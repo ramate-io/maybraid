@@ -3,7 +3,7 @@
 pub mod show;
 
 use bevy::prelude::*;
-use clap::Parser;
+use clap::{Parser, Subcommand};
 use game_commands::command::{CommandScript, GameCommand};
 pub use show::Show;
 
@@ -23,7 +23,20 @@ pub enum PlaygroundCommand {
 	Script(Script),
 	#[command(subcommand)]
 	Show(Show),
+	/// LOD / mesh CPU proxies (triangle counts, etc.).
+	#[command(subcommand)]
+	Stats(Stats),
 }
+
+#[derive(Clone, Subcommand)]
+#[command(rename_all = "kebab-case")]
+pub enum Stats {
+	/// Sum vertex / index / triangle counts from spawned `Mesh3d` assets.
+	Mesh,
+}
+
+#[derive(Component, Debug, Clone, Copy)]
+pub struct RequestMeshStats;
 
 impl PlaygroundCommand {
 	pub fn long_help_string() -> String {
@@ -39,6 +52,18 @@ impl PlaygroundCommand {
 			PlaygroundCommand::Help => *console = Self::long_help_string(),
 			PlaygroundCommand::Script(s) => s.run(commands, console),
 			PlaygroundCommand::Show(s) => s.react(commands),
+			PlaygroundCommand::Stats(stats) => stats.react(commands, console),
+		}
+	}
+}
+
+impl Stats {
+	fn react(self, commands: &mut Commands, console: &mut String) {
+		match self {
+			Stats::Mesh => {
+				commands.spawn(RequestMeshStats);
+				*console = "stats mesh: pending".into();
+			}
 		}
 	}
 }

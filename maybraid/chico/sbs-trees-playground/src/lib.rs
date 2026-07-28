@@ -13,9 +13,11 @@ pub use commands::{PlaygroundCommand, PLAYGROUND_CLI_NAME};
 pub use game_commands::command::PendingStartupCommand;
 pub use render::{RenderConfig, RenderSubject};
 
+use bevy::camera::visibility::VisibilitySystems;
 use bevy::prelude::*;
 use chico_ball_components::frond::FrondRenderItemPlugin;
 use chico_ball_components::tuft::render_item_plugin::TuftRenderItemPlugin;
+use commands::RequestMeshStats;
 use chico_sbs_trees::braid_oak_tree::render_item_plugin::ensure_registered as ensure_braid_oak_tree_render_plugins;
 use chico_sbs_trees::date_palm::render_item_plugin::ensure_registered as ensure_date_palm_render_plugins;
 use chico_sbs_trees::friends_conifer::render_item_plugin::ensure_registered as ensure_friends_conifer_render_plugins;
@@ -38,6 +40,7 @@ use chico_vegetation_shaders::{
 	ChicoLeafMaterial, ChicoStickMaterial, ChicoVegetationShadersPlugin,
 };
 use game_commands::command::{capture_command_line_input, GameCommandPlugin};
+use game_commands::ui::GameCommandStatusText;
 use ground::setup_ground;
 use render::sync_render;
 use render_item::mesh::handle::EnforceCachingPlugin;
@@ -99,7 +102,56 @@ impl Plugin for SbsTreesPlaygroundPlugin {
 						.after(sync_render_material_handles),
 					ui::sync_command_status_text.before(game_commands::ui::update_debug_ui),
 				),
+			)
+			.add_systems(
+				PostUpdate,
+				apply_mesh_stats.after(VisibilitySystems::CheckVisibility),
 			);
+	}
+}
+
+/// Count total vs view-visible mesh triangles (`ViewVisibility`).
+fn apply_mesh_stats(
+	mut commands: Commands,
+	mut status: ResMut<GameCommandStatusText>,
+	mesh_assets: Res<Assets<Mesh>>,
+	requests: Query<Entity, With<RequestMeshStats>>,
+	mesh_entities: Query<(&Mesh3d, &ViewVisibility)>,
+) {
+	for entity in &requests {
+		let mut total_entities = 0usize;
+		let mut visible_entities = 0usize;
+		let mut missing = 0usize;
+		let mut total_tris = 0usize;
+		let mut visible_tris = 0usize;
+		let mut unique_handles = std::collections::HashSet::new();
+		let mut visible_unique_handles = std::collections::HashSet::new();
+
+		for (mesh3d, view_visibility) in &mesh_entities {
+			total_entities += 1;
+			unique_handles.insert(mesh3d.0.id());
+			let Some(mesh) = mesh_assets.get(&mesh3d.0) else {
+				missing += 1;
+				continue;
+			};
+			let verts = mesh.count_vertices();
+			let index_count = mesh.indices().map(|i| i.len()).unwrap_or(verts);
+			let tris = index_count / 3;
+			total_tris += tris;
+			if view_visibility.get() {
+				visible_entities += 1;
+				visible_unique_handles.insert(mesh3d.0.id());
+				visible_tris += tris;
+			}
+		}
+
+		status.0 = format!(
+			"stats mesh:\n  total_tris={total_tris}\n  visible_tris={visible_tris}\n  entities={total_entities} visible_entities={visible_entities} unique_handles={} visible_unique={} missing={missing}",
+			unique_handles.len(),
+			visible_unique_handles.len(),
+		);
+		info!("{}", status.0);
+		commands.entity(entity).despawn();
 	}
 }
 
