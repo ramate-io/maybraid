@@ -1,0 +1,28 @@
+[package]
+name = "richmond-buildings-playground"
+version = { workspace = true }
+edition  = { workspace = true }
+license  = { workspace = true }
+authors = { workspace = true }
+repository = { workspace = true }
+homepage = { workspace = true }
+publish = { workspace = true }
+rust-version = { workspace = true }
+
+[[bin]]
+name = "richmond-buildings-playground"
+path = "src/main.rs"
+
+[dependencies]
+bevy = { workspace = true }
+bevy_math = { workspace = true }
+clap = { workspace = true }
+game-commands = { workspace = true }
+log = { workspace = true }
+lod = { workspace = true }
+mesh-ref = { workspace = true }
+richmond-building-components = { workspace = true }
+richmond-buildings = { workspace = true }
+
+[lints]
+workspace = true

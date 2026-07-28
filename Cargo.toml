@@ -4,7 +4,13 @@ resolver = "2"
 
 members = [
 
-  # maybraid game crates, typically following rfcs
+  # maybraid game crates, typically following rfcs  
+  "maybraid/richmond/building-components",
+  "maybraid/richmond/buildings",
+  "maybraid/richmond/buildings-playground",
+
+  "maybraid/mesh-ref",
+
   "maybraid/durham/lib",
   "maybraid/durham/shaders",
   "maybraid/durham/models",
@@ -54,7 +60,7 @@ members = [
   "playgrounds/skill-map",
   "playgrounds/pathfinding",
 
-  # legacy still being refactored out: proceudres
+  # legacy still being refactored out: procedures
   "procedures/terrain",
   "procedures/vegetation",
   "procedures/buildings",
@@ -179,6 +185,12 @@ durham-terrain-models = { path = "maybraid/durham/models" }
 durham-terrain-models-playground = { path = "maybraid/durham/models-playground" }
 jersey-terrain-stamps = { path = "maybraid/durham/jersey" }
 marazion-watersheds = { path = "maybraid/durham/marazion" }
+
+richmond-building-components = { path = "maybraid/richmond/building-components" }
+richmond-buildings = { path = "maybraid/richmond/buildings" }
+richmond-buildings-playground = { path = "maybraid/richmond/buildings-playground" }
+
+mesh-ref = { path = "maybraid/mesh-ref" }
 
 avian3d = "0.7"
 
