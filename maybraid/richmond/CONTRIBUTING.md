@@ -83,7 +83,7 @@ Distance factors use **max AABB extent**:
 
 | Level | Content | Distance |
 |-------|---------|----------|
-| High | Exterior + per-storey internals (`ParentConfines::Internal` per floor) | ≤ 5 × max extent |
+| High | Exterior + per-storey internals (floor balls) + continuous spire (`ParentConfines::Capsule`) | ≤ 5 × max extent |
 | Medium | Exterior walls only | ≤ 500 × max extent |
 | Low | Cylinder silhouette | beyond |
 
@@ -100,7 +100,7 @@ Warm high/mid/low MeshRef roots under partition hosts; [`PartitionLodProbe`](bui
 
 ## Internal vs external emission
 
-At **High**, each floor/room emits its own Internal ball. **Medium** omits internals from the scene.
+At **High**, each floor/room emits its own Internal ball for compartment geometry. Continuous vertical features (the tower spire) share one [`ParentConfines::Capsule`](building-components/src/parent_confines.rs) so higher storeys do not pop in awkwardly while you are inside the shaft. **Medium** omits internals from the scene.
 
 ```rust
 fn emit_internal_features(

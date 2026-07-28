@@ -125,11 +125,13 @@ impl WizardsTower {
 	}
 
 	fn high_primitives(&self, lod_ref: &LodRef) -> impl Scene + 'static {
+		let spire_confines = self.column.spire_confine_capsule();
 		let mut children: Vec<Box<dyn Scene>> = Vec::new();
 		for floor in &self.column.floors {
 			floor.emit_external_features(&mut children, lod_ref);
-			// Per-storey Internal balls — not one tower-wide volume.
+			// Per-storey balls for slabs / lantern; one shaft capsule for all spire stairs.
 			floor.emit_internal_features(&mut children, lod_ref);
+			floor.emit_spire_features(&mut children, lod_ref, spire_confines);
 		}
 		self.column
 			.perch

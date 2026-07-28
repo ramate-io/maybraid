@@ -119,7 +119,7 @@ impl WizardsTowerFloor {
 	) {
 		use richmond_building_components::{confined_scene, ParentConfines};
 
-		// Floor-compartment ball (storey AABB), not the whole tower.
+		// Floor-compartment ball for slabs / lantern.
 		let confines = ParentConfines::internal(
 			self.storey_confine_center(),
 			self.storey_confine_radius(),
@@ -138,16 +138,23 @@ impl WizardsTowerFloor {
 					.scene_with_lod(lod_ref),
 			));
 		}
-		// Per-storey spire run: same floor ball. A continuous multi-storey spire
-		// would use ParentConfines::Capsule instead.
+		children.push(Box::new(confined_scene(confines, self.lantern_scene())));
+	}
+
+	/// Spire stair run gated by a shared vertical capsule (whole column shaft).
+	pub(crate) fn emit_spire_features(
+		&self,
+		children: &mut Vec<Box<dyn Scene>>,
+		lod_ref: &LodRef,
+		spire_confines: richmond_building_components::ParentConfines,
+	) {
 		children.push(Box::new(
 			self.arc_spire
 				.stairs
 				.clone()
-				.with_confines(confines)
+				.with_confines(spire_confines)
 				.scene_with_lod(lod_ref),
 		));
-		children.push(Box::new(confined_scene(confines, self.lantern_scene())));
 	}
 
 	fn storey_confine_center(&self) -> Vec3 {
@@ -159,6 +166,19 @@ impl WizardsTowerFloor {
 		let aabb = &self.constraints.aabb;
 		let extent = aabb.max - aabb.min;
 		(0.5 * extent.x.min(extent.z)).max(1e-4)
+	}
+
+	/// Capsule for this storey alone (standalone floor present).
+	fn storey_spire_capsule(&self) -> richmond_building_components::ParentConfines {
+		use richmond_building_components::ParentConfines;
+		let aabb = &self.constraints.aabb;
+		let c = (aabb.min + aabb.max) * 0.5;
+		let r = (SPIRE_HALF_FRAC * self.storey_confine_radius()).max(1e-4);
+		ParentConfines::capsule(
+			Vec3::new(c.x, aabb.min.y, c.z),
+			Vec3::new(c.x, aabb.max.y, c.z),
+			r,
+		)
 	}
 
 	fn lantern_scene(&self) -> impl Scene + 'static {
@@ -193,6 +213,7 @@ impl LodScene for WizardsTowerFloor {
 		let mut children: Vec<Box<dyn Scene>> = Vec::new();
 		self.emit_external_features(&mut children, lod_ref);
 		self.emit_internal_features(&mut children, lod_ref);
+		self.emit_spire_features(&mut children, lod_ref, self.storey_spire_capsule());
 		scene_children(children)
 	}
 }
