@@ -1,15 +1,12 @@
 //! Stair IR node: style + geometry + placement.
 
-use bevy::prelude::Transform;
-use bevy::scene::prelude::{bsn, template_value, Scene};
-use bevy_math::Quat;
+use bevy::scene::prelude::Scene;
 use lod::gen::LodScene;
 use lod::lod_ref::LodRef;
 
 use crate::assets::stairs::rough_stonework::TREAD;
-use crate::assets::AssetPath;
 use crate::placed::Placement;
-use crate::scene_children;
+use crate::scene_children::{pose, posed_glb, scene_children, with_pose};
 use crate::stairs::geometry::StairGeometry;
 use crate::stairs::style::StairStyle;
 use crate::stairs::tessellate::StairKit;
@@ -39,30 +36,6 @@ impl StairNode {
 	pub fn wood(geometry: StairGeometry, placement: Placement) -> Self {
 		Self::new(StairStyle::Wood, geometry, placement)
 	}
-}
-
-fn pose(placement: Placement) -> Transform {
-	Transform::from_translation(placement.translation)
-		.with_rotation(Quat::from_rotation_y(placement.yaw))
-		.with_scale(placement.scale)
-}
-
-fn posed_glb(asset: AssetPath, transform: Transform) -> impl Scene + 'static {
-	(
-		asset.mesh_ref().scene(),
-		bsn! {
-			template_value(transform)
-		},
-	)
-}
-
-fn with_pose(transform: Transform, child: impl Scene + 'static) -> impl Scene + 'static {
-	(
-		child,
-		bsn! {
-			template_value(transform)
-		},
-	)
 }
 
 impl LodScene for StairNode {

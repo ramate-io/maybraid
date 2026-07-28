@@ -1,8 +1,6 @@
 //! Door IR node: style + geometry + placement.
 
-use bevy::prelude::Transform;
-use bevy::scene::prelude::{bsn, template_value, Scene};
-use bevy_math::Quat;
+use bevy::scene::prelude::Scene;
 use lod::gen::LodScene;
 use lod::lod_ref::LodRef;
 
@@ -12,7 +10,7 @@ use crate::doors::tessellate::DoorKit;
 use crate::doors::WoodDoorLeaf;
 use crate::partitions::node::wall_kit_scene;
 use crate::placed::Placement;
-use crate::scene_children;
+use crate::scene_children::{pose, scene_children, with_pose};
 
 /// Authoring IR for a door feature.
 #[derive(Debug, Clone, PartialEq)]
@@ -34,21 +32,6 @@ impl DoorNode {
 	pub fn wood(geometry: DoorGeometry, placement: Placement) -> Self {
 		Self::new(DoorStyle::Wood, geometry, placement)
 	}
-}
-
-fn pose(placement: Placement) -> Transform {
-	Transform::from_translation(placement.translation)
-		.with_rotation(Quat::from_rotation_y(placement.yaw))
-		.with_scale(placement.scale)
-}
-
-fn with_pose(transform: Transform, child: impl Scene + 'static) -> impl Scene + 'static {
-	(
-		child,
-		bsn! {
-			template_value(transform)
-		},
-	)
 }
 
 impl LodScene for DoorNode {

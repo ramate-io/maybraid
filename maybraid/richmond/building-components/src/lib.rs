@@ -15,7 +15,7 @@ pub mod stairs;
 pub use arc_kit::{decompose_arc_sweep, ArcKit};
 pub use assets::AssetPath;
 pub use placed::{Placed, Placement};
-pub use scene_children::scene_children;
+pub use scene_children::{pose, posed_glb, scene_children, with_pose};
 
 use bevy::scene::{ResolveContext, ResolvedScene};
 

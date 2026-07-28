@@ -1,15 +1,13 @@
 //! Wall IR node: style + geometry + placement.
 
 use bevy::prelude::Transform;
-use bevy::scene::prelude::{bsn, template_value, Scene};
-use bevy_math::Quat;
+use bevy::scene::prelude::Scene;
 use lod::gen::LodScene;
 use lod::lod_ref::LodRef;
 
 use crate::assets::partitions::rough_stonework::{
 	ARC_15, ARC_180, ARC_90, HEADER_15, HEADER_90, LINEAR,
 };
-use crate::assets::AssetPath;
 use crate::partitions::geometry::WallGeometry;
 use crate::partitions::rough_stonework::{
 	RoughStonework15, RoughStonework180, RoughStonework90, RoughStoneworkHeader15,
@@ -19,7 +17,7 @@ use crate::partitions::rough_stonework::{
 use crate::partitions::style::WallStyle;
 use crate::partitions::tessellate::WallKit;
 use crate::placed::Placement;
-use crate::scene_children;
+use crate::scene_children::{pose, posed_glb, scene_children, with_pose};
 
 /// Authoring IR for a wall / partition feature.
 #[derive(Debug, Clone, PartialEq)]
@@ -41,30 +39,6 @@ impl WallNode {
 	pub fn rough_stone(geometry: WallGeometry, placement: Placement) -> Self {
 		Self::new(WallStyle::RoughStonework, geometry, placement)
 	}
-}
-
-fn pose(placement: Placement) -> Transform {
-	Transform::from_translation(placement.translation)
-		.with_rotation(Quat::from_rotation_y(placement.yaw))
-		.with_scale(placement.scale)
-}
-
-fn posed_glb(asset: AssetPath, transform: Transform) -> impl Scene + 'static {
-	(
-		asset.mesh_ref().scene(),
-		bsn! {
-			template_value(transform)
-		},
-	)
-}
-
-fn with_pose(transform: Transform, child: impl Scene + 'static) -> impl Scene + 'static {
-	(
-		child,
-		bsn! {
-			template_value(transform)
-		},
-	)
 }
 
 /// Scene for a single private wall kit piece (used by door frames).

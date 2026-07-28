@@ -1,13 +1,10 @@
 //! Floor IR node: style + geometry + placement.
 
-use bevy::prelude::Transform;
-use bevy::scene::prelude::{bsn, template_value, Scene};
-use bevy_math::Quat;
+use bevy::scene::prelude::Scene;
 use lod::gen::LodScene;
 use lod::lod_ref::LodRef;
 
 use crate::assets::floors::rough_stonework::{CIRCLE_INSCRIBED_SQUARE, RECTANGLE};
-use crate::assets::AssetPath;
 use crate::floors::geometry::FloorGeometry;
 use crate::floors::style::FloorStyle;
 use crate::floors::tessellate::FloorKit;
@@ -16,7 +13,7 @@ use crate::floors::{
 	WoodFloorStructFill,
 };
 use crate::placed::Placement;
-use crate::scene_children;
+use crate::scene_children::{pose, posed_glb, scene_children, with_pose};
 
 /// Authoring IR for a floor slab feature.
 #[derive(Debug, Clone, PartialEq)]
@@ -42,30 +39,6 @@ impl FloorNode {
 	pub fn wood(geometry: FloorGeometry, placement: Placement) -> Self {
 		Self::new(FloorStyle::Wood, geometry, placement)
 	}
-}
-
-fn pose(placement: Placement) -> Transform {
-	Transform::from_translation(placement.translation)
-		.with_rotation(Quat::from_rotation_y(placement.yaw))
-		.with_scale(placement.scale)
-}
-
-fn posed_glb(asset: AssetPath, transform: Transform) -> impl Scene + 'static {
-	(
-		asset.mesh_ref().scene(),
-		bsn! {
-			template_value(transform)
-		},
-	)
-}
-
-fn with_pose(transform: Transform, child: impl Scene + 'static) -> impl Scene + 'static {
-	(
-		child,
-		bsn! {
-			template_value(transform)
-		},
-	)
 }
 
 impl LodScene for FloorNode {

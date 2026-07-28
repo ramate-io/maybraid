@@ -1,8 +1,6 @@
 //! Roof IR node: style + geometry + placement.
 
-use bevy::prelude::Transform;
-use bevy::scene::prelude::{bsn, template_value, Scene};
-use bevy_math::Quat;
+use bevy::scene::prelude::Scene;
 use lod::gen::LodScene;
 use lod::lod_ref::LodRef;
 
@@ -11,7 +9,7 @@ use crate::roofs::geometry::RoofGeometry;
 use crate::roofs::style::RoofStyle;
 use crate::roofs::tessellate::RoofKit;
 use crate::roofs::{RoughStonePerchRoof, RoughStoneSpireRoof, WoodPerchDeck};
-use crate::scene_children;
+use crate::scene_children::{pose, scene_children, with_pose};
 
 /// Authoring IR for a roof / cap feature.
 #[derive(Debug, Clone, PartialEq)]
@@ -37,21 +35,6 @@ impl RoofNode {
 	pub fn wood(geometry: RoofGeometry, placement: Placement) -> Self {
 		Self::new(RoofStyle::Wood, geometry, placement)
 	}
-}
-
-fn pose(placement: Placement) -> Transform {
-	Transform::from_translation(placement.translation)
-		.with_rotation(Quat::from_rotation_y(placement.yaw))
-		.with_scale(placement.scale)
-}
-
-fn with_pose(transform: Transform, child: impl Scene + 'static) -> impl Scene + 'static {
-	(
-		child,
-		bsn! {
-			template_value(transform)
-		},
-	)
 }
 
 impl LodScene for RoofNode {
