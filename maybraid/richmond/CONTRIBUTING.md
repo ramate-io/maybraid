@@ -90,6 +90,9 @@ impl LodScene for ExampleFloor {
 
 Presenters call `scene_lod_status` first and only build/`handle` when status is `Changed` (or on first present / version repair). Leaves and domain nodes that ignore LOD return `Unchanged`.
 
+> [!NOTE]
+> The Wizard’s Tower (and similar composites here) decide `scene_lod_status` from **their own** banding only — they do **not** query or OR child `scene_lod_status` results. That is a valid simplification when one policy owns the whole subtree and children always emit for the current band. Typically, though, a composite `LodScene` will compose child status decisions (e.g. `Changed` if any child is `Changed`), or else a more intricate presenter will present layers independently. Prefer composition or layered presentation once children have independent LOD policies.
+
 ## Internal vs external emission
 
 For LOD, split feature emission into separate methods—commonly **external** (silhouette / shell visible from far away) and **internal** (rooms, stairs, furniture, lanterns that only matter up close).
