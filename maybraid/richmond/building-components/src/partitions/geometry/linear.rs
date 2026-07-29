@@ -12,6 +12,8 @@ use crate::partitions::mesh_set::PartitionMeshSet;
 use crate::partitions::probe::{PartitionLodBand, PartitionLodProbe};
 use crate::placed::{Placed, Placement};
 
+pub use crate::panels::{fitted_tile_count, DEFAULT_TILE_WIDTH};
+
 /// `distance / max_extent` out to this → High.
 pub const LINEAR_HIGH_FACTOR: f32 = 5.0;
 /// Out to this → Medium.
@@ -21,18 +23,6 @@ pub const LINEAR_LOW_FACTOR: f32 = 500.0;
 
 /// Default linear thickness scale (\(0.15\) world / \(0.2\) kit half-extent).
 pub const DEFAULT_THICK: f32 = 0.15 / 0.2;
-
-/// Suggested full tile width along local \(X\) (matches unscaled kit \(X \in [-1, 1]\)).
-pub const DEFAULT_TILE_WIDTH: f32 = 2.0;
-
-/// How many tiles fit a length given a suggested width (roofs-style).
-///
-/// \(n = \mathrm{round}(\texttt{length}/\texttt{tile\_width})\), at least 1. Callers use
-/// \(\texttt{length}/n\) as the actual tile width so tiles span the length exactly.
-pub fn fitted_tile_count(length: f32, tile_width: f32) -> u32 {
-	let tw = tile_width.max(1e-4);
-	((length / tw).round() as i32).max(1) as u32
-}
 
 /// Unit linear partition (\(X \in [-1, 1]\), \(Y \in [0, 1]\), \(Z \in [-0.2, 0.2]\)).
 ///

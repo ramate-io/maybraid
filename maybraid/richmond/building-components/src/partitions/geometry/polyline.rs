@@ -2,6 +2,7 @@
 
 use bevy_math::{Vec2, Vec3};
 
+use crate::panels::{yaw_along_xz};
 use crate::partitions::geometry::joint::JointPartition;
 use crate::partitions::geometry::linear::{
 	fitted_tile_count, DEFAULT_THICK, DEFAULT_TILE_WIDTH,
@@ -9,8 +10,7 @@ use crate::partitions::geometry::linear::{
 use crate::partitions::geometry::PartitionTile;
 use crate::placed::{Placed, Placement};
 
-/// Default polyline joint omission threshold (radians).
-pub const DEFAULT_MIN_JOINT_ANGLE: f32 = 0.1;
+pub use crate::panels::{roll_along_slope, DEFAULT_MIN_JOINT_ANGLE};
 
 /// Short-run polyline. Prefer splitting long paths in higher-order walling/buildings.
 ///
@@ -149,24 +149,8 @@ pub fn polyline_from_xz(points: impl IntoIterator<Item = Vec2>) -> PolylineParti
 	)
 }
 
-pub(crate) fn yaw_along_xz(dx: f32, dz: f32) -> f32 {
-	(-dz).atan2(dx)
-}
-
-/// Slope roll about local \(+Z\) for an edge \(\Delta = (\mathrm{d}x,\mathrm{d}y,\mathrm{d}z)\).
-pub fn roll_along_slope(dx: f32, dy: f32, dz: f32) -> f32 {
-	let horiz = (dx * dx + dz * dz).sqrt();
-	dy.atan2(horiz.max(1e-8))
-}
-
-pub(crate) fn wrap_pi(mut a: f32) -> f32 {
-	while a > std::f32::consts::PI {
-		a -= std::f32::consts::TAU;
-	}
-	while a < -std::f32::consts::PI {
-		a += std::f32::consts::TAU;
-	}
-	a
+pub(crate) fn wrap_pi(a: f32) -> f32 {
+	crate::panels::wrap_pi(a)
 }
 
 #[cfg(test)]

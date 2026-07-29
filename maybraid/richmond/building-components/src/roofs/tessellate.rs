@@ -4,17 +4,18 @@
 //! \(Z \in [-1, 0]\), \(Y \in [-0.2, 0.2]\) (`panels/unit_right_triangle.glb`).
 //! [`crate::roofs::node::RoofNode`] applies pitch about local +X after kit poses.
 //!
-//! [`Pitch`](crate::roofs::geometry::Pitch) layouts are lower-left anchored: optional
-//! left end triangle, then the rectangular body, then optional right end triangle.
-//! Eave sits at \(Z = 0\); run scales toward \(Z = -\texttt{run}\).
+//! [`Pitch`](crate::roofs::geometry::Pitch) layouts are lower-left anchored via shared
+//! [`crate::panels::Quad`] tessellation.
 
 use bevy_math::Vec3;
 use scene_ref::MirrorAxis;
-use std::f32::consts::PI;
 
 use crate::arc_kit::{decompose_arc_sweep, ArcKit};
-use crate::placed::{Placement, Placed};
-use crate::roofs::geometry::{Pitch, RoofGeometry};
+use crate::panels::{
+	PanelGeom, QuadPolyline, Rectangle, RightTriangle, TessellatePolicy,
+};
+use crate::placed::Placed;
+use crate::roofs::geometry::RoofGeometry;
 
 /// Atomic roof kit pieces.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -26,6 +27,8 @@ pub(crate) enum RoofKit {
 	RightTriangle {
 		mirror: Option<MirrorAxis>,
 	},
+	/// Rectangular panel tile (styles without a rectangle kit should prefer dual triangles).
+	Rectangle,
 	/// Dome arc kit (empty leaf scenes until bespoke GLBs exist).
 	DomeArc(ArcKit),
 }
@@ -34,7 +37,9 @@ impl RoofGeometry {
 	/// Expand continuous geometry into placed kit pieces (flat roof-plane space).
 	pub(crate) fn kit_pieces(&self) -> Vec<Placed<RoofKit>> {
 		match self {
-			Self::Pitch(p) => pitch_pieces(*p),
+			Self::Pitch(p) => map_panel_atoms(p.to_quad().decompose(TessellatePolicy::DUAL_TRIANGLES)),
+			Self::Quad(q) => map_panel_atoms(q.decompose(self.tessellate_policy())),
+			Self::QuadPolyline(pl) => expand_quad_polyline(pl, self.tessellate_policy()),
 			Self::Dome(g) => decompose_arc_sweep(g.sweep_degrees)
 				.into_iter()
 				.map(|(kit, yaw)| Placed::new(RoofKit::DomeArc(kit), Vec3::ZERO, yaw))
@@ -43,107 +48,57 @@ impl RoofGeometry {
 	}
 }
 
-fn tile_scale(width: f32, run: f32) -> Vec3 {
-	Vec3::new(width.max(1e-4), 1.0, run.max(1e-4))
-}
-
-fn fitted_tile_count(length: f32, tile_width: f32) -> u32 {
-	let tw = tile_width.max(1e-4);
-	((length / tw).round() as i32).max(1) as u32
-}
-
-/// Two complementary right triangles fill one tile square along +X.
-fn unit_square_pair(x: f32, width: f32, run: f32) -> [Placed<RoofKit>; 2] {
-	let scale = tile_scale(width, run);
-	[
-		Placed::with_placement(
-			RoofKit::RightTriangle { mirror: None },
-			Placement::new(Vec3::new(x, 0.0, 0.0), 0.0).with_scale(scale),
-		),
-		Placed::with_placement(
-			RoofKit::RightTriangle { mirror: None },
-			Placement::new(Vec3::new(x + width, 0.0, -run), PI).with_scale(scale),
-		),
-	]
-}
-
-/// Which end of the pitch rectangle an end-cap attaches to.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum EndSide {
-	Left,
-	Right,
-}
-
-/// End triangle. Positive base → eave-long (upright); negative → ridge-long (flipped).
-///
-/// Left upright and right ridge-long use [`MirrorAxis::X`] with positive scale so
-/// materials stay single-sided.
-fn end_triangle(side: EndSide, x_min: f32, base: f32, run: f32) -> Placed<RoofKit> {
-	let width = base.abs().max(1e-4);
-	let run = run.max(1e-4);
-	let scale = Vec3::new(width, 1.0, run);
-	match (side, base >= 0.0) {
-		// Left eave-long: right angle on the rectangle edge, mirrored on X.
-		(EndSide::Left, true) => Placed::with_placement(
-			RoofKit::RightTriangle {
-				mirror: Some(MirrorAxis::X),
-			},
-			Placement::new(Vec3::new(x_min + width, 0.0, 0.0), 0.0).with_scale(scale),
-		),
-		// Left ridge-long: complement at the rectangle's ridge corner.
-		(EndSide::Left, false) => Placed::with_placement(
-			RoofKit::RightTriangle { mirror: None },
-			Placement::new(Vec3::new(x_min + width, 0.0, -run), PI).with_scale(scale),
-		),
-		// Right eave-long: primary at the rectangle edge.
-		(EndSide::Right, true) => Placed::with_placement(
-			RoofKit::RightTriangle { mirror: None },
-			Placement::new(Vec3::new(x_min, 0.0, 0.0), 0.0).with_scale(scale),
-		),
-		// Right ridge-long: mirrored complement at the rectangle's ridge corner.
-		(EndSide::Right, false) => Placed::with_placement(
-			RoofKit::RightTriangle {
-				mirror: Some(MirrorAxis::X),
-			},
-			Placement::new(Vec3::new(x_min, 0.0, -run), PI).with_scale(scale),
-		),
-	}
-}
-
-fn pitch_pieces(pitch: Pitch) -> Vec<Placed<RoofKit>> {
-	let run = pitch.run.max(0.0);
+fn expand_quad_polyline(pl: &QuadPolyline, policy: TessellatePolicy) -> Vec<Placed<RoofKit>> {
 	let mut out = Vec::new();
-
-	let left_w = pitch.left.map(|b| b.abs()).unwrap_or(0.0);
-	if let Some(base) = pitch.left {
-		if base.abs() > 1e-6 {
-			out.push(end_triangle(EndSide::Left, 0.0, base, run));
-		}
-	}
-
-	let rect_x0 = left_w;
-	if let Some(length) = pitch.length {
-		if length > 1e-6 {
-			let n = fitted_tile_count(length, pitch.tile_width);
-			let width = length / n as f32;
-			for i in 0..n {
-				out.extend(unit_square_pair(
-					rect_x0 + i as f32 * width,
-					width,
-					run,
-				));
+	for piece in pl.decompose() {
+		match piece.geom {
+			PanelGeom::Quad(q) => {
+				for child in q.decompose(policy) {
+					out.push(Placed {
+						geom: panel_atom_to_roof(child.geom),
+						placement: piece.placement.compose_child(child.placement),
+					});
+				}
+			}
+			PanelGeom::Joint(_) => {
+				// Joint kits are partition-oriented; roofs omit them in v1.
+			}
+			other => {
+				out.push(Placed {
+					geom: panel_atom_to_roof(other),
+					placement: piece.placement,
+				});
 			}
 		}
 	}
-
-	if let Some(base) = pitch.right {
-		if base.abs() > 1e-6 {
-			let x_min = rect_x0 + pitch.length.unwrap_or(0.0);
-			out.push(end_triangle(EndSide::Right, x_min, base, run));
-		}
-	}
-
 	out
+}
+
+fn map_panel_atoms(pieces: Vec<Placed<PanelGeom>>) -> Vec<Placed<RoofKit>> {
+	pieces
+		.into_iter()
+		.filter_map(|p| {
+			let kit = match p.geom {
+				PanelGeom::RightTriangle(RightTriangle { mirror }) => {
+					RoofKit::RightTriangle { mirror }
+				}
+				PanelGeom::Rectangle(Rectangle) => RoofKit::Rectangle,
+				_ => return None,
+			};
+			Some(Placed {
+				geom: kit,
+				placement: p.placement,
+			})
+		})
+		.collect()
+}
+
+fn panel_atom_to_roof(geom: PanelGeom) -> RoofKit {
+	match geom {
+		PanelGeom::RightTriangle(RightTriangle { mirror }) => RoofKit::RightTriangle { mirror },
+		PanelGeom::Rectangle(_) => RoofKit::Rectangle,
+		_ => RoofKit::Rectangle,
+	}
 }
 
 #[cfg(test)]
@@ -151,6 +106,7 @@ mod tests {
 	use super::*;
 	use crate::arc_kit::ArcKit;
 	use crate::roofs::geometry::Pitch;
+	use std::f32::consts::PI;
 
 	#[test]
 	fn rectangle_only_fits_tiles_to_length() -> anyhow::Result<()> {
@@ -266,6 +222,15 @@ mod tests {
 	fn pitch_radians_from_rise_run() -> anyhow::Result<()> {
 		let p = Pitch::new(1.0, 1.0, 1.0).with_length(1.0);
 		assert!((p.pitch_radians() - std::f32::consts::FRAC_PI_4).abs() < 1e-4);
+		Ok(())
+	}
+
+	#[test]
+	fn quad_geometry_matches_pitch() -> anyhow::Result<()> {
+		let pitch = Pitch::new(1.0, 2.0, 1.0).with_length(2.0).with_left(0.5);
+		let via_pitch = RoofGeometry::pitch(pitch).kit_pieces();
+		let via_quad = RoofGeometry::quad(pitch.to_quad()).kit_pieces();
+		assert_eq!(via_pitch.len(), via_quad.len());
 		Ok(())
 	}
 }

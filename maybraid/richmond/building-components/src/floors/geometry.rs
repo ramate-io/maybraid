@@ -1,12 +1,18 @@
 //! Continuous floor fill geometry.
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+use crate::panels::{Quad, QuadPolyline};
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum FloorGeometry {
 	Rectangle(RectangleFloor),
 	ArcFill(ArcFloorFill),
 	StructFill(StructFloorFill),
 	/// Southern circle−square cap; four yaws fill a circular floor ring.
 	CircleInscribedSquare(CircleInscribedSquareFloor),
+	/// Shared quadrilateral panel (body + up to four edge triangles).
+	Quad(Quad),
+	/// Short-run polyline of quads + joints.
+	QuadPolyline(QuadPolyline),
 }
 
 impl FloorGeometry {
@@ -24,6 +30,14 @@ impl FloorGeometry {
 
 	pub fn circle_inscribed_square() -> Self {
 		Self::CircleInscribedSquare(CircleInscribedSquareFloor)
+	}
+
+	pub fn quad(quad: Quad) -> Self {
+		Self::Quad(quad)
+	}
+
+	pub fn quad_polyline(polyline: QuadPolyline) -> Self {
+		Self::QuadPolyline(polyline)
 	}
 }
 

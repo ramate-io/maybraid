@@ -68,6 +68,12 @@ impl LodScene for RoofNode {
 							lod_ref, mirror,
 						))
 					}
+					(RoofStyle::ShepherdsThatch, RoofKit::Rectangle) => {
+						// No thatch rectangle kit; author with dual-triangle policy.
+						Box::new(::bevy::scene::SceneFunction(
+							crate::empty_scene,
+						))
+					}
 					(RoofStyle::ShepherdsThatch, RoofKit::DomeArc(ArcKit::D15)) => {
 						Box::new(ShepherdsThatchDome15.scene_with_lod(lod_ref))
 					}

@@ -19,12 +19,16 @@ pub use polyline::{
 };
 
 use bevy_math::Vec3;
+use scene_ref::MirrorAxis;
 
 use crate::arc_kit::ArcKit;
 use crate::assets::partitions::rough_stonework::{
 	ARC_15_HIGH, ARC_15_LOW, ARC_15_MID, ARC_180_HIGH, ARC_180_LOW, ARC_180_MID, ARC_90_HIGH,
 	ARC_90_LOW, ARC_90_MID, SLICE_15_HIGH, SLICE_15_LOW, SLICE_15_MID, SLICE_90_HIGH,
 	SLICE_90_LOW, SLICE_90_MID, LINEAR_HIGH, LINEAR_LOW, LINEAR_MID,
+};
+use crate::panels::{
+	PanelGeom, Quad, QuadPolyline, Rectangle, RightTriangle, TessellatePolicy,
 };
 use crate::partitions::mesh_set::PartitionMeshSet;
 use crate::placed::{Placed, Placement};
@@ -40,6 +44,10 @@ pub enum PartitionGeometry {
 	Joint(JointPartition),
 	/// Short-run polyline (single LOD parent). Prefer splitting long paths upstream.
 	Polyline(PolylinePartition),
+	/// Shared quadrilateral panel (body + up to four edge triangles).
+	Quad(Quad),
+	/// Short-run polyline of quads + joints.
+	QuadPolyline(QuadPolyline),
 	Arc(ArcSweep),
 	/// Slice-height arc (\(Y \in [0, [`SLICE_KIT_HEIGHT`]]\) in kit space).
 	SliceArc(ArcSweep),
@@ -61,6 +69,14 @@ impl PartitionGeometry {
 		Self::Polyline(PolylinePartition::new(points))
 	}
 
+	pub fn quad(quad: Quad) -> Self {
+		Self::Quad(quad)
+	}
+
+	pub fn quad_polyline(polyline: QuadPolyline) -> Self {
+		Self::QuadPolyline(polyline)
+	}
+
 	pub fn arc(sweep_degrees: f32) -> Self {
 		Self::Arc(ArcSweep { sweep_degrees })
 	}
@@ -69,12 +85,19 @@ impl PartitionGeometry {
 		Self::SliceArc(ArcSweep { sweep_degrees })
 	}
 
+	/// Rough stonework prefers rectangle body tiles.
+	pub fn tessellate_policy(&self) -> TessellatePolicy {
+		TessellatePolicy::RECTANGLE
+	}
+
 	/// Expand into posed leaf tiles under this geometry (identity parent).
 	pub fn tiles(&self) -> Vec<Placed<PartitionTile>> {
 		match self {
 			Self::Linear(g) => g.tiles(),
 			Self::Joint(_) => vec![Placed::at_origin(PartitionTile::Joint)],
 			Self::Polyline(g) => g.tiles(),
+			Self::Quad(q) => map_panel_atoms(q.decompose(self.tessellate_policy())),
+			Self::QuadPolyline(pl) => expand_quad_polyline(pl, self.tessellate_policy()),
 			Self::Arc(g) => g.tiles(false),
 			Self::SliceArc(g) => g.tiles(true),
 		}
@@ -92,6 +115,89 @@ impl PartitionGeometry {
 	}
 }
 
+fn expand_quad_polyline(pl: &QuadPolyline, policy: TessellatePolicy) -> Vec<Placed<PartitionTile>> {
+	let mut out = Vec::new();
+	for piece in pl.decompose() {
+		match piece.geom {
+			PanelGeom::Quad(q) => {
+				for child in q.decompose(policy) {
+					if let Some(tile) = panel_to_tile(child.geom) {
+						out.push(Placed {
+							geom: tile,
+							placement: adjust_panel_placement(
+								tile,
+								piece.placement.compose_child(child.placement),
+							),
+						});
+					}
+				}
+			}
+			PanelGeom::Joint(_) => {
+				out.push(Placed {
+					geom: PartitionTile::Joint,
+					placement: piece.placement,
+				});
+			}
+			other => {
+				if let Some(tile) = panel_to_tile(other) {
+					out.push(Placed {
+						geom: tile,
+						placement: adjust_panel_placement(tile, piece.placement),
+					});
+				}
+			}
+		}
+	}
+	out
+}
+
+fn map_panel_atoms(pieces: Vec<Placed<PanelGeom>>) -> Vec<Placed<PartitionTile>> {
+	pieces
+		.into_iter()
+		.filter_map(|p| {
+			let tile = panel_to_tile(p.geom)?;
+			Some(Placed {
+				geom: tile,
+				placement: adjust_panel_placement(tile, p.placement),
+			})
+		})
+		.collect()
+}
+
+fn panel_to_tile(geom: PanelGeom) -> Option<PartitionTile> {
+	match geom {
+		PanelGeom::Rectangle(Rectangle) => Some(PartitionTile::Linear),
+		PanelGeom::RightTriangle(RightTriangle { mirror }) => {
+			Some(PartitionTile::RightTriangle { mirror })
+		}
+		_ => None,
+	}
+}
+
+/// Panel rectangles are lower-left \(X \in [0,1]\), \(Z \in [-1,0]\); linear kits are
+/// centered \(X \in [-1,1]\). Right triangles keep panel placement.
+fn adjust_panel_placement(tile: PartitionTile, p: Placement) -> Placement {
+	match tile {
+		PartitionTile::Linear => {
+			let s = p.scale;
+			let local_mid = Vec3::new(s.x * 0.5, 0.0, -s.z * 0.5);
+			Placement {
+				translation: p.translation + p.rotation() * local_mid,
+				yaw: p.yaw,
+				pitch: p.pitch,
+				roll: p.roll,
+				// Linear kit \(X \in [-1,1]\) → half-width; \(Z \in [-0.2,0.2]\) → depth/0.4
+				scale: Vec3::new(
+					(s.x * 0.5).max(1e-4),
+					s.y,
+					(s.z / 0.4).max(1e-4),
+				),
+			}
+		}
+		_ => p,
+	}
+}
+
 /// Discrete kit piece after tessellation (not a continuous authoring form).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum PartitionTile {
@@ -105,6 +211,10 @@ pub enum PartitionTile {
 	SliceArc90,
 	SliceArc15,
 	Joint,
+	/// Unit right-triangle panel (edge caps / dual-triangle fill).
+	RightTriangle {
+		mirror: Option<MirrorAxis>,
+	},
 }
 
 impl PartitionTile {
@@ -124,7 +234,8 @@ impl PartitionTile {
 			Self::Joint
 			| Self::LinearSubsegment
 			| Self::LinearSliceSubsegment
-			| Self::SliceArc180 => return None,
+			| Self::SliceArc180
+			| Self::RightTriangle { .. } => return None,
 		})
 	}
 }

@@ -9,6 +9,7 @@ pub mod floors;
 pub mod furniture;
 pub mod lod_band;
 pub mod lod_host;
+pub mod panels;
 pub mod parent_confines;
 pub mod partitions;
 pub mod placed;
@@ -22,6 +23,11 @@ pub use furniture::{
 	FurnitureGeometry, FurnitureNode, FurnitureStyle, FurnitureWireframePlugin,
 };
 pub use lod_host::{posed_asset_tier, warm_content_host, warm_content_host_hsl, warm_mesh_level_host};
+pub use panels::{
+	fitted_tile_count, Joint as PanelJoint, PanelGeom, Quad, QuadPolyline, Rectangle as PanelRectangle,
+	RightTriangle as PanelRightTriangle, TessellatePolicy, DEFAULT_MIN_EDGE_TRIANGLE_ANGLE,
+	DEFAULT_MIN_JOINT_ANGLE, DEFAULT_TILE_WIDTH,
+};
 pub use parent_confines::{
 	apply_parent_confines, confined_scene, distance_to_segment, InternalShape, ParentConfines,
 	INTERNAL_REVEAL_FACTOR,
@@ -29,8 +35,7 @@ pub use parent_confines::{
 pub use partitions::{
 	update_partition_host_levels, Partition, PartitionGeometry, PartitionLodBand,
 	PartitionLodProbe, PartitionMeshSet, PartitionMeshTier, PartitionNode, PartitionStyle,
-	DEFAULT_TILE_WIDTH, LINEAR_HIGH_FACTOR, LINEAR_LOW_FACTOR, LINEAR_MEDIUM_FACTOR,
-	SLICE_KIT_HEIGHT,
+	LINEAR_HIGH_FACTOR, LINEAR_LOW_FACTOR, LINEAR_MEDIUM_FACTOR, SLICE_KIT_HEIGHT,
 };
 pub use placed::{Placed, Placement};
 pub use roofs::{
