@@ -74,6 +74,8 @@ Partition components are authored in a normalized local space, then transformed 
 
 A common approach to building door frames is to use a header component with various 15° arc sweeps to create the frame.
 
+Joints are used to connect irregular partition geometry. They are roughly circular components defined X = Z = [-0.5, 0.5] and Y = [0.0, 1.0].
+
 ## Floors, Roofs, Stairs, and Doors
 
 These modules hold reusable floor/roof fillers, circulation geometry, and door kits. Floors and roofs are typically an **arc filler** plus a **struct filler**. Prefer rough stonework; wood appears occasionally (interior halfspaces, perch decking, door leaves).
