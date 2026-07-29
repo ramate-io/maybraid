@@ -9,8 +9,15 @@ use lod::LodViewerState;
 use richmond_building_components::partitions::rough_stonework::{
 	RoughStonework180, RoughStonework90, RoughStoneworkHeader90, RoughStoneworkLinear,
 };
+use richmond_building_components::partitions::{Partition, PartitionNode};
+use richmond_building_components::scene_children;
+use richmond_building_components::Placement;
 use richmond_buildings::bedroom::Bedroom;
 use richmond_buildings::stacked_rings::StackedRings;
+use richmond_buildings::walling::{
+	LinearWall, LinearWallParams, MustAssignPortal, Portal, PolylineWall, PolylineWallParams,
+	Walling,
+};
 use richmond_buildings::wizards_tower::WizardsTower;
 use richmond_buildings::{
 	BedroomFillParams, CellConstraints, CirculationEntry, CirculationRequestStatus,
@@ -26,6 +33,9 @@ pub enum PreviewSubject {
 	Arc90,
 	Arc180,
 	Header90,
+	Polyline,
+	LinearWall,
+	PolylineWall,
 	WizardsTower { noise: f32 },
 	StackedRings {
 		floor_count: u32,
@@ -73,6 +83,9 @@ impl PreviewConfig {
 			PreviewSubject::Arc90 => "preview: rough-stonework arc-90".into(),
 			PreviewSubject::Arc180 => "preview: rough-stonework arc-180".into(),
 			PreviewSubject::Header90 => "preview: rough-stonework header-90".into(),
+			PreviewSubject::Polyline => "preview: partition polyline (L)".into(),
+			PreviewSubject::LinearWall => "preview: walling linear-wall (door)".into(),
+			PreviewSubject::PolylineWall => "preview: walling polyline-wall (door)".into(),
 			PreviewSubject::WizardsTower { noise } => {
 				format!("preview: wizards-tower (noise={noise:.2})")
 			}
@@ -113,6 +126,12 @@ impl PreviewConfig {
 				Aabb3d::from_min_max(Vec3::new(-4.0, 0.0, -4.0), Vec3::new(4.0, 3.0, 4.0))
 			}
 			PreviewSubject::Bedroom { extent, .. } => Aabb3d::from_min_max(Vec3::ZERO, *extent),
+			PreviewSubject::Polyline | PreviewSubject::PolylineWall => {
+				Aabb3d::from_min_max(Vec3::new(0.0, 0.0, 0.0), Vec3::new(4.0, 3.0, 4.0))
+			}
+			PreviewSubject::LinearWall => {
+				Aabb3d::from_min_max(Vec3::new(-4.0, 0.0, -0.5), Vec3::new(4.0, 3.0, 0.5))
+			}
 			_ => Aabb3d::from_min_max(Vec3::ZERO, Vec3::ONE),
 		}
 	}
@@ -125,6 +144,7 @@ pub struct CachedPreview {
 	wizards_tower: Option<WizardsTower>,
 	stacked_rings: Option<StackedRings>,
 	bedroom: Option<Bedroom>,
+	walling: Option<Walling>,
 }
 
 impl CachedPreview {
@@ -137,6 +157,7 @@ impl CachedPreview {
 		self.wizards_tower = None;
 		self.stacked_rings = None;
 		self.bedroom = None;
+		self.walling = None;
 		match &config.subject {
 			PreviewSubject::WizardsTower { noise } => {
 				let footprint = CellConstraints::cell_owned(Aabb3d::from_min_max(
@@ -179,6 +200,29 @@ impl CachedPreview {
 					},
 				));
 			}
+			PreviewSubject::LinearWall => {
+				self.walling = Some(Walling::Linear(LinearWall::new(LinearWallParams {
+					start: Vec3::new(-4.0, 0.0, 0.0),
+					end: Vec3::new(4.0, 0.0, 0.0),
+					height: 3.0,
+					must_assign: vec![MustAssignPortal::at(0.5, Portal::Door)],
+					optional_portals: (0, 0),
+					..LinearWallParams::default()
+				})));
+			}
+			PreviewSubject::PolylineWall => {
+				self.walling = Some(Walling::Polyline(PolylineWall::new(PolylineWallParams {
+					points: vec![
+						Vec3::new(0.0, 0.0, 0.0),
+						Vec3::new(4.0, 0.0, 0.0),
+						Vec3::new(4.0, 0.0, 4.0),
+					],
+					height: 3.0,
+					must_assign: vec![MustAssignPortal::at(0.25, Portal::Door)],
+					optional_portals: (0, 0),
+					..PolylineWallParams::default()
+				})));
+			}
 			_ => {}
 		}
 	}
@@ -208,6 +252,7 @@ pub fn present_preview_lod(
 			cache.wizards_tower = None;
 			cache.stacked_rings = None;
 			cache.bedroom = None;
+			cache.walling = None;
 		}
 		return;
 	}
@@ -256,6 +301,27 @@ pub fn present_preview_lod(
 				transform,
 				RoughStoneworkHeader90.scene_with_lod(&lod_ref),
 			);
+		}
+		PreviewSubject::Polyline => {
+			let node = PartitionNode::rough_stone(
+				Partition::polyline([
+					Vec3::new(0.0, 0.0, 0.0),
+					Vec3::new(4.0, 0.0, 0.0),
+					Vec3::new(4.0, 0.0, 4.0),
+				]),
+				Placement::at_origin().with_scale(Vec3::new(1.0, 3.0, 1.0)),
+			);
+			spawn_preview(&mut commands, transform, node.scene_with_lod(&lod_ref));
+		}
+		PreviewSubject::LinearWall | PreviewSubject::PolylineWall => {
+			if let Some(walling) = cache.walling.as_ref() {
+				let children: Vec<Box<dyn bevy::scene::Scene>> = walling
+					.partitions()
+					.iter()
+					.map(|p| Box::new(p.scene_with_lod(&lod_ref)) as Box<dyn bevy::scene::Scene>)
+					.collect();
+				spawn_preview(&mut commands, transform, scene_children(children));
+			}
 		}
 		PreviewSubject::WizardsTower { .. } => {
 			if let Some(tower) = cache.wizards_tower.clone() {

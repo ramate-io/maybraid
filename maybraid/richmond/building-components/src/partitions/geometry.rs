@@ -1,31 +1,31 @@
-//! Continuous wall / partition geometry.
+//! Continuous partition geometry (primitive kit IR — no portals).
 
-use bevy_math::Vec2;
+use bevy_math::{Vec2, Vec3};
 
 /// Kit-local \(Y\) span of header meshes (\([0, \texttt{HEADER_KIT_HEIGHT}]\)).
 ///
-/// Full-height walls use \(Y \in [0, 1]\). With the same \(Y\) scale \(H\), a header
+/// Full-height partitions use \(Y \in [0, 1]\). With the same \(Y\) scale \(H\), a header
 /// occupies \(0.2\,H\) world height; place its baseline at \(0.8\,H\) to meet the
 /// storey top.
 pub const HEADER_KIT_HEIGHT: f32 = 0.2;
 
-/// Wall path geometry in world/cell space (continuous size and orientation).
+/// Partition path geometry in world/cell space (continuous size and orientation).
 #[derive(Debug, Clone, PartialEq)]
-pub enum WallGeometry {
-	Linear(LinearWall),
-	Polyline(PolylineWall),
+pub enum PartitionGeometry {
+	Linear(LinearPartition),
+	Polyline(PolylinePartition),
 	Arc(ArcSweep),
 	/// Header-height arc (\(Y \in [0, [`HEADER_KIT_HEIGHT`]]\) in kit space) for door/window frames.
 	HeaderArc(ArcSweep),
 }
 
-impl WallGeometry {
+impl PartitionGeometry {
 	pub fn linear() -> Self {
-		Self::Linear(LinearWall::default())
+		Self::Linear(LinearPartition::default())
 	}
 
-	pub fn polyline(points: impl Into<Vec<Vec2>>) -> Self {
-		Self::Polyline(PolylineWall {
+	pub fn polyline(points: impl Into<Vec<Vec3>>) -> Self {
+		Self::Polyline(PolylinePartition {
 			points: points.into(),
 		})
 	}
@@ -39,15 +39,15 @@ impl WallGeometry {
 	}
 }
 
-/// Alias kept for migration; prefer [`WallGeometry`].
-pub type Wall = WallGeometry;
+/// Alias for continuous partition geometry.
+pub type Partition = PartitionGeometry;
 
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
-pub struct LinearWall;
+pub struct LinearPartition;
 
 #[derive(Debug, Clone, PartialEq, Default)]
-pub struct PolylineWall {
-	pub points: Vec<Vec2>,
+pub struct PolylinePartition {
+	pub points: Vec<Vec3>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -63,5 +63,12 @@ impl Default for ArcSweep {
 	}
 }
 
-/// Alias for continuous arc params (was `ArcWall`).
-pub type ArcWall = ArcSweep;
+/// Convert legacy 2D polyline points (XZ) into 3D with \(Y = 0\).
+pub fn polyline_from_xz(points: impl IntoIterator<Item = Vec2>) -> PolylinePartition {
+	PolylinePartition {
+		points: points
+			.into_iter()
+			.map(|p| Vec3::new(p.x, 0.0, p.y))
+			.collect(),
+	}
+}

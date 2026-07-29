@@ -1,0 +1,231 @@
+//! Portal-sensitive straight wall.
+//!
+//! \(t \in [0, 1]\) runs from [`LinearWallParams::start`] to [`LinearWallParams::end`].
+
+use bevy_math::Vec3;
+use procedural_common::{NoiseConfig, NoiseParams};
+use richmond_building_components::partitions::{Partition, PartitionNode, HEADER_KIT_HEIGHT};
+use richmond_building_components::Placement;
+
+use crate::walling::portal::{
+	assign_portals, AssignedPortal, MustAssignPortal, Portal, PortalFootprint, WallRegion,
+	HEADER_Y_FRAC,
+};
+
+/// Default portal opening width in world units.
+pub const DEFAULT_PORTAL_WIDTH: f32 = 1.2;
+/// Default kit thickness scale (\(0.15\) world / \(0.2\) kit half-extent).
+const DEFAULT_THICK: f32 = 0.15 / 0.2;
+/// Discrete candidate slots along an open linear wall.
+const LINEAR_SLOTS: u32 = 24;
+
+/// Parameters for [`LinearWall::new`].
+#[derive(Debug, Clone)]
+pub struct LinearWallParams {
+	pub start: Vec3,
+	pub end: Vec3,
+	/// Full wall height (partition \(Y\) scale).
+	pub height: f32,
+	/// Kit thickness scale (default matches bedroom shells).
+	pub thickness: f32,
+	/// World-space portal opening width.
+	pub portal_width: f32,
+	pub must_assign: Vec<MustAssignPortal>,
+	pub must_not_assign: Vec<WallRegion>,
+	pub portal_noise: NoiseParams,
+	pub optional_portals: (u32, u32),
+}
+
+impl Default for LinearWallParams {
+	fn default() -> Self {
+		Self {
+			start: Vec3::new(-2.0, 0.0, 0.0),
+			end: Vec3::new(2.0, 0.0, 0.0),
+			height: 3.0,
+			thickness: DEFAULT_THICK,
+			portal_width: DEFAULT_PORTAL_WIDTH,
+			must_assign: vec![],
+			must_not_assign: vec![],
+			portal_noise: NoiseParams::default(),
+			optional_portals: (0, 0),
+		}
+	}
+}
+
+/// Straight wall with door/window openings.
+#[derive(Debug, Clone, PartialEq)]
+pub struct LinearWall {
+	pub start: Vec3,
+	pub end: Vec3,
+	pub height: f32,
+	pub thickness: f32,
+	pub portal_width: f32,
+	pub portals: Vec<AssignedPortal>,
+	pub partitions: Vec<PartitionNode>,
+}
+
+impl LinearWall {
+	pub fn new(params: LinearWallParams) -> Self {
+		let height = params.height.max(1e-4);
+		let thickness = params.thickness.max(1e-4);
+		let portal_width = params.portal_width.max(1e-4);
+		let length = horiz_len(params.start, params.end).max(portal_width + 1e-3);
+		let half_t = (portal_width * 0.5) / length;
+		let noise = NoiseConfig::new(params.portal_noise);
+		let foot = PortalFootprint {
+			half_t,
+			closed: false,
+		};
+
+		let portals = assign_portals(
+			&noise,
+			&params.must_assign,
+			&params.must_not_assign,
+			params.optional_portals,
+			foot,
+			LINEAR_SLOTS,
+		);
+
+		let partitions = tessellate_linear(
+			params.start,
+			params.end,
+			height,
+			thickness,
+			portal_width,
+			&portals,
+		);
+
+		Self {
+			start: params.start,
+			end: params.end,
+			height,
+			thickness,
+			portal_width,
+			portals,
+			partitions,
+		}
+	}
+}
+
+fn horiz_len(a: Vec3, b: Vec3) -> f32 {
+	let dx = b.x - a.x;
+	let dz = b.z - a.z;
+	(dx * dx + dz * dz).sqrt()
+}
+
+fn yaw_along(a: Vec3, b: Vec3) -> f32 {
+	let dx = b.x - a.x;
+	let dz = b.z - a.z;
+	(-dz).atan2(dx)
+}
+
+fn point_at(start: Vec3, end: Vec3, t: f32) -> Vec3 {
+	start + (end - start) * t
+}
+
+fn tessellate_linear(
+	start: Vec3,
+	end: Vec3,
+	height: f32,
+	thickness: f32,
+	portal_width: f32,
+	portals: &[AssignedPortal],
+) -> Vec<PartitionNode> {
+	let yaw = yaw_along(start, end);
+	let length = horiz_len(start, end).max(1e-4);
+	let half_t = (portal_width * 0.5) / length;
+	let y0 = start.y.min(end.y);
+	let mut partitions = Vec::new();
+
+	for portal in portals {
+		let center = point_at(start, end, portal.t);
+		let base = Vec3::new(center.x, y0, center.z);
+		let lintel = base + Vec3::Y * (HEADER_Y_FRAC * height);
+		let header_scale = Vec3::new(portal_width * 0.5, HEADER_KIT_HEIGHT * height, thickness);
+		match portal.portal {
+			Portal::Door => {
+				partitions.push(PartitionNode::rough_stone(
+					Partition::linear(),
+					Placement::new(lintel, yaw).with_scale(header_scale),
+				));
+			}
+			Portal::Window => {
+				partitions.push(PartitionNode::rough_stone(
+					Partition::linear(),
+					Placement::new(base, yaw).with_scale(header_scale),
+				));
+				partitions.push(PartitionNode::rough_stone(
+					Partition::linear(),
+					Placement::new(lintel, yaw).with_scale(header_scale),
+				));
+			}
+		}
+	}
+
+	let mut cuts: Vec<(f32, f32)> = Vec::new();
+	if portals.is_empty() {
+		cuts.push((0.0, 1.0));
+	} else {
+		cuts.push((0.0, (portals[0].t - half_t).max(0.0)));
+		for i in 0..portals.len().saturating_sub(1) {
+			let a = portals[i].t + half_t;
+			let b = portals[i + 1].t - half_t;
+			cuts.push((a, b));
+		}
+		cuts.push(((portals[portals.len() - 1].t + half_t).min(1.0), 1.0));
+	}
+
+	for (t0, t1) in cuts {
+		let span = t1 - t0;
+		if span * length < 1e-2 {
+			continue;
+		}
+		let a = point_at(start, end, t0);
+		let b = point_at(start, end, t1);
+		let mid = Vec3::new((a.x + b.x) * 0.5, y0, (a.z + b.z) * 0.5);
+		let half_len = span * length * 0.5;
+		partitions.push(PartitionNode::rough_stone(
+			Partition::linear(),
+			Placement::new(mid, yaw).with_scale(Vec3::new(half_len, height, thickness)),
+		));
+	}
+
+	partitions
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn door_splits_into_two_solids_and_header() -> anyhow::Result<()> {
+		let wall = LinearWall::new(LinearWallParams {
+			start: Vec3::new(-4.0, 0.0, 0.0),
+			end: Vec3::new(4.0, 0.0, 0.0),
+			height: 3.0,
+			must_assign: vec![MustAssignPortal::at(0.5, Portal::Door)],
+			optional_portals: (0, 0),
+			..LinearWallParams::default()
+		});
+		assert_eq!(wall.portals.len(), 1);
+		let solids = wall
+			.partitions
+			.iter()
+			.filter(|p| {
+				matches!(p.geometry, Partition::Linear(_))
+					&& (p.placement.scale.y - wall.height).abs() < 1e-3
+			})
+			.count();
+		assert_eq!(solids, 2);
+		let headers = wall
+			.partitions
+			.iter()
+			.filter(|p| {
+				matches!(p.geometry, Partition::Linear(_))
+					&& (p.placement.scale.y - HEADER_KIT_HEIGHT * wall.height).abs() < 1e-3
+			})
+			.count();
+		assert_eq!(headers, 1);
+		Ok(())
+	}
+}

@@ -24,9 +24,9 @@ pub use parent_confines::{
 	INTERNAL_REVEAL_FACTOR,
 };
 pub use partitions::{
-	update_partition_host_levels, PartitionLodBand, PartitionLodProbe, PartitionMeshSet,
-	PartitionMeshTier, Wall, WallGeometry, WallNode, WallStyle, HEADER_KIT_HEIGHT,
-	PARTITION_HIGH_FACTOR, PARTITION_LOW_FACTOR, PARTITION_MEDIUM_FACTOR,
+	update_partition_host_levels, Partition, PartitionGeometry, PartitionLodBand,
+	PartitionLodProbe, PartitionMeshSet, PartitionMeshTier, PartitionNode, PartitionStyle,
+	HEADER_KIT_HEIGHT, PARTITION_HIGH_FACTOR, PARTITION_LOW_FACTOR, PARTITION_MEDIUM_FACTOR,
 };
 pub use placed::{Placed, Placement};
 pub use scene_children::{pose, posed_glb, scene_children, with_pose, wireframe_box_with_handles};

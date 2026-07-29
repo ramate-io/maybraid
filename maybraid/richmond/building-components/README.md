@@ -39,15 +39,19 @@ Shared [`Placement`](src/placed.rs) / [`Placed`](src/placed.rs) and [`ArcKit`](s
 
 **Style + Geometry + Placement → LodScene**
 
-1. **`*/geometry.rs`** — continuous forms with size and orientation (`Wall::arc(45.0)`, `Floor::rectangle()`, …).
+1. **`*/geometry.rs`** — continuous forms with size and orientation (`Partition::arc(45.0)`, `Floor::rectangle()`, …).
 2. **`*/style.rs`** — material / look (`RoughStonework`, `Wood`, …).
-3. **`*/node.rs`** — authoring IR (`FloorNode`, `WallNode`, …) that implements `LodScene`: tessellates geometry privately, composes placement, and maps kit pieces to GLBs or leaf placeholders.
+3. **`*/node.rs`** — authoring IR (`FloorNode`, `PartitionNode`, …) that implements `LodScene`: tessellates geometry privately, composes placement, and maps kit pieces to GLBs or leaf placeholders.
 
 Scaling vs repeating continuous forms is deferred; arc decomposition prefers 180° / 90° / 15°.
 
 ## Swept Components
 
 We have not yet defined a sweeping tool. The plan is to make it take linear segments in \(X \in [-1.0, 1.0]\) and extrude/fill them along a path (line or arc).
+
+## Polyline partitions
+
+[`Partition::polyline`](src/partitions/geometry.rs) takes 3D points and expands (privately) into upright linear kits plus **joint** and **wedge** placeholders at plan-angle and elevation kinks. Joint/wedge leaf scenes are empty until assets exist. Portal-sensitive path walls live in `richmond_buildings::walling` (`PolylineWall` / `Walling`), not in this crate.
 
 ## Partitions
 

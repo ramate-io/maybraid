@@ -11,17 +11,14 @@
 //! The authored types do not need, however, to author strictly rectangular geometry.
 
 pub mod arc_spire;
-pub mod arc_wall;
 pub mod bedroom;
 pub mod constraints;
 pub mod stacked_rings;
+pub mod walling;
 pub mod wizards_tower;
 
 pub use arc_spire::{
 	best_fit_y_bindings, uniform_storey_bindings, ArcSpire, ArcSpireParams, FitTolerance,
-};
-pub use arc_wall::{
-	ArcRegion, ArcWall, ArcWallParams, AssignedPortal, MustAssignPortal, Portal,
 };
 pub use bedroom::{Bed, Bedroom, BedroomFillParams, Closet, EnsuiteBathroom, Nightstand};
 pub use constraints::{
@@ -30,3 +27,7 @@ pub use constraints::{
 	JointCoordinate, JointEntry, PreJointSweep, SubsetError,
 };
 pub use stacked_rings::{StackedRing, StackedRings};
+pub use walling::{
+	ArcRegion, ArcWall, ArcWallParams, AssignedPortal, LinearWall, LinearWallParams, MustAssignPortal,
+	Portal, PolylineWall, PolylineWallParams, WallRegion, Walling,
+};

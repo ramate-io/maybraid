@@ -1,6 +1,6 @@
 //! External vs internal geometry gating relative to a parent volume.
 //!
-//! Used as an IR field on building-component nodes (`FloorNode`, `WallNode`, …).
+//! Used as an IR field on building-component nodes (`FloorNode`, `PartitionNode`, …).
 //! Prefer **floor-wise / room-wise** compartments so a simple ball works. Use
 //! [`ParentConfines::Capsule`] only for long non-compartmentalized regions
 //! (e.g. a continuous vertical spire).

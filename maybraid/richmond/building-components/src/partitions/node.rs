@@ -1,4 +1,4 @@
-//! Wall IR node: style + geometry + placement.
+//! Partition IR node: style + geometry + placement.
 
 use bevy::scene::prelude::Scene;
 use bevy_math::Vec3;
@@ -11,33 +11,33 @@ use crate::assets::partitions::rough_stonework::{
 	HEADER_90_LOW, HEADER_90_MID, LINEAR, LINEAR_HIGH, LINEAR_LOW, LINEAR_MID,
 };
 use crate::parent_confines::{confined_scene, ParentConfines};
-use crate::partitions::geometry::WallGeometry;
+use crate::partitions::geometry::PartitionGeometry;
 use crate::partitions::lod::{
 	lod_level_for_placement, lod_status_for_placement, posed_partition_mesh_lod,
 	posed_partition_mesh_tier, PartitionLodProbe, PartitionMeshSet,
 };
 use crate::partitions::rough_stonework::{
 	RoughStonework15, RoughStonework180, RoughStonework90, RoughStoneworkHeader15,
-	RoughStoneworkHeader180, RoughStoneworkHeader90, RoughStoneworkLinear,
-	RoughStoneworkLinearHeaderSubsegment, RoughStoneworkLinearSubsegment,
+	RoughStoneworkHeader180, RoughStoneworkHeader90, RoughStoneworkJoint, RoughStoneworkLinear,
+	RoughStoneworkLinearHeaderSubsegment, RoughStoneworkLinearSubsegment, RoughStoneworkWedge,
 };
-use crate::partitions::style::WallStyle;
-use crate::partitions::tessellate::WallKit;
+use crate::partitions::style::PartitionStyle;
+use crate::partitions::tessellate::PartitionKit;
 use crate::placed::Placement;
 use crate::scene_children::{pose, scene_children, with_pose};
 
-/// Authoring IR for a wall / partition feature.
+/// Authoring IR for a partition feature (primitive — no portals).
 #[derive(Debug, Clone, PartialEq)]
-pub struct WallNode {
-	pub style: WallStyle,
-	pub geometry: WallGeometry,
+pub struct PartitionNode {
+	pub style: PartitionStyle,
+	pub geometry: PartitionGeometry,
 	pub placement: Placement,
 	/// External silhouette vs internal detail gating.
 	pub confines: ParentConfines,
 }
 
-impl WallNode {
-	pub fn new(style: WallStyle, geometry: WallGeometry, placement: Placement) -> Self {
+impl PartitionNode {
+	pub fn new(style: PartitionStyle, geometry: PartitionGeometry, placement: Placement) -> Self {
 		Self {
 			style,
 			geometry,
@@ -46,8 +46,8 @@ impl WallNode {
 		}
 	}
 
-	pub fn rough_stone(geometry: WallGeometry, placement: Placement) -> Self {
-		Self::new(WallStyle::RoughStonework, geometry, placement)
+	pub fn rough_stone(geometry: PartitionGeometry, placement: Placement) -> Self {
+		Self::new(PartitionStyle::RoughStonework, geometry, placement)
 	}
 
 	pub fn with_confines(mut self, confines: ParentConfines) -> Self {
@@ -62,7 +62,7 @@ impl WallNode {
 		lod_ref: &LodRef,
 	) -> LodSceneStatus {
 		let node = Self::rough_stone(
-			WallGeometry::linear(),
+			PartitionGeometry::linear(),
 			Placement::new(center, 0.0).with_scale(extent.max(Vec3::splat(1e-4))),
 		);
 		node.scene_lod_status(lod_ref)
@@ -79,18 +79,18 @@ impl WallNode {
 			.map(|piece| {
 				let transform = pose(piece.placement);
 				match self.style {
-					WallStyle::RoughStonework => match piece.geom {
-						WallKit::Linear
-						| WallKit::Arc180
-						| WallKit::Arc90
-						| WallKit::Arc15
-						| WallKit::HeaderArc90
-						| WallKit::HeaderArc15 => Box::new(posed_partition_mesh_tier(
+					PartitionStyle::RoughStonework => match piece.geom {
+						PartitionKit::Linear
+						| PartitionKit::Arc180
+						| PartitionKit::Arc90
+						| PartitionKit::Arc15
+						| PartitionKit::HeaderArc90
+						| PartitionKit::HeaderArc15 => Box::new(posed_partition_mesh_tier(
 							kit_mesh_set(piece.geom),
 							transform,
 							level,
 						)) as Box<dyn Scene>,
-						other => Box::new(with_pose(transform, wall_kit_scene(other, lod_ref)))
+						other => Box::new(with_pose(transform, partition_kit_scene(other, lod_ref)))
 							as Box<dyn Scene>,
 					},
 				}
@@ -99,39 +99,47 @@ impl WallNode {
 	}
 }
 
-pub(crate) fn kit_mesh_set(kit: WallKit) -> PartitionMeshSet {
+pub(crate) fn kit_mesh_set(kit: PartitionKit) -> PartitionMeshSet {
 	match kit {
-		WallKit::Linear => PartitionMeshSet::new(LINEAR_HIGH, LINEAR_MID, LINEAR_LOW),
-		WallKit::Arc180 => PartitionMeshSet::new(ARC_180_HIGH, ARC_180_MID, ARC_180_LOW),
-		WallKit::Arc90 => PartitionMeshSet::new(ARC_90_HIGH, ARC_90_MID, ARC_90_LOW),
-		WallKit::Arc15 => PartitionMeshSet::new(ARC_15_HIGH, ARC_15_MID, ARC_15_LOW),
-		WallKit::HeaderArc90 => PartitionMeshSet::new(HEADER_90_HIGH, HEADER_90_MID, HEADER_90_LOW),
-		WallKit::HeaderArc15 => PartitionMeshSet::new(HEADER_15_HIGH, HEADER_15_MID, HEADER_15_LOW),
-		WallKit::LinearSubsegment
-		| WallKit::LinearHeaderSubsegment
-		| WallKit::HeaderArc180 => PartitionMeshSet::uniform(LINEAR),
+		PartitionKit::Linear => PartitionMeshSet::new(LINEAR_HIGH, LINEAR_MID, LINEAR_LOW),
+		PartitionKit::Arc180 => PartitionMeshSet::new(ARC_180_HIGH, ARC_180_MID, ARC_180_LOW),
+		PartitionKit::Arc90 => PartitionMeshSet::new(ARC_90_HIGH, ARC_90_MID, ARC_90_LOW),
+		PartitionKit::Arc15 => PartitionMeshSet::new(ARC_15_HIGH, ARC_15_MID, ARC_15_LOW),
+		PartitionKit::HeaderArc90 => {
+			PartitionMeshSet::new(HEADER_90_HIGH, HEADER_90_MID, HEADER_90_LOW)
+		}
+		PartitionKit::HeaderArc15 => {
+			PartitionMeshSet::new(HEADER_15_HIGH, HEADER_15_MID, HEADER_15_LOW)
+		}
+		PartitionKit::LinearSubsegment
+		| PartitionKit::LinearHeaderSubsegment
+		| PartitionKit::HeaderArc180
+		| PartitionKit::Joint
+		| PartitionKit::Wedge => PartitionMeshSet::uniform(LINEAR),
 	}
 }
 
-pub(crate) fn wall_kit_scene(kit: WallKit, lod_ref: &LodRef) -> Box<dyn Scene> {
+pub(crate) fn partition_kit_scene(kit: PartitionKit, lod_ref: &LodRef) -> Box<dyn Scene> {
 	match kit {
-		WallKit::Linear => Box::new(RoughStoneworkLinear.scene_with_lod(lod_ref)),
-		WallKit::LinearSubsegment => {
+		PartitionKit::Linear => Box::new(RoughStoneworkLinear.scene_with_lod(lod_ref)),
+		PartitionKit::LinearSubsegment => {
 			Box::new(RoughStoneworkLinearSubsegment.scene_with_lod(lod_ref))
 		}
-		WallKit::LinearHeaderSubsegment => {
+		PartitionKit::LinearHeaderSubsegment => {
 			Box::new(RoughStoneworkLinearHeaderSubsegment.scene_with_lod(lod_ref))
 		}
-		WallKit::Arc180 => Box::new(RoughStonework180.scene_with_lod(lod_ref)),
-		WallKit::Arc90 => Box::new(RoughStonework90.scene_with_lod(lod_ref)),
-		WallKit::Arc15 => Box::new(RoughStonework15.scene_with_lod(lod_ref)),
-		WallKit::HeaderArc180 => Box::new(RoughStoneworkHeader180.scene_with_lod(lod_ref)),
-		WallKit::HeaderArc90 => Box::new(RoughStoneworkHeader90.scene_with_lod(lod_ref)),
-		WallKit::HeaderArc15 => Box::new(RoughStoneworkHeader15.scene_with_lod(lod_ref)),
+		PartitionKit::Arc180 => Box::new(RoughStonework180.scene_with_lod(lod_ref)),
+		PartitionKit::Arc90 => Box::new(RoughStonework90.scene_with_lod(lod_ref)),
+		PartitionKit::Arc15 => Box::new(RoughStonework15.scene_with_lod(lod_ref)),
+		PartitionKit::HeaderArc180 => Box::new(RoughStoneworkHeader180.scene_with_lod(lod_ref)),
+		PartitionKit::HeaderArc90 => Box::new(RoughStoneworkHeader90.scene_with_lod(lod_ref)),
+		PartitionKit::HeaderArc15 => Box::new(RoughStoneworkHeader15.scene_with_lod(lod_ref)),
+		PartitionKit::Joint => Box::new(RoughStoneworkJoint.scene_with_lod(lod_ref)),
+		PartitionKit::Wedge => Box::new(RoughStoneworkWedge.scene_with_lod(lod_ref)),
 	}
 }
 
-impl LodScene for WallNode {
+impl LodScene for PartitionNode {
 	fn scene_lod_level(&self, lod_ref: &LodRef) -> LodSceneLevel {
 		lod_level_for_placement(&self.placement, lod_ref)
 	}
@@ -160,19 +168,19 @@ impl LodScene for WallNode {
 			.map(|piece| {
 				let transform = pose(piece.placement);
 				match self.style {
-					WallStyle::RoughStonework => match piece.geom {
-						WallKit::Linear
-						| WallKit::Arc180
-						| WallKit::Arc90
-						| WallKit::Arc15
-						| WallKit::HeaderArc90
-						| WallKit::HeaderArc15 => Box::new(posed_partition_mesh_lod(
+					PartitionStyle::RoughStonework => match piece.geom {
+						PartitionKit::Linear
+						| PartitionKit::Arc180
+						| PartitionKit::Arc90
+						| PartitionKit::Arc15
+						| PartitionKit::HeaderArc90
+						| PartitionKit::HeaderArc15 => Box::new(posed_partition_mesh_lod(
 							kit_mesh_set(piece.geom),
 							transform,
 							level,
 							PartitionLodProbe::from_placement(&piece.placement),
 						)) as Box<dyn Scene>,
-						other => Box::new(with_pose(transform, wall_kit_scene(other, lod_ref)))
+						other => Box::new(with_pose(transform, partition_kit_scene(other, lod_ref)))
 							as Box<dyn Scene>,
 					},
 				}

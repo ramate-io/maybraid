@@ -8,7 +8,7 @@ use crate::doors::geometry::DoorGeometry;
 use crate::doors::style::DoorStyle;
 use crate::doors::tessellate::DoorKit;
 use crate::doors::WoodDoorLeaf;
-use crate::partitions::node::wall_kit_scene;
+use crate::partitions::node::partition_kit_scene;
 use crate::placed::Placement;
 use crate::scene_children::{pose, scene_children, with_pose};
 
@@ -55,7 +55,7 @@ impl LodScene for DoorNode {
 				let transform = pose(piece.placement);
 				let child: Box<dyn Scene> = match piece.geom {
 					DoorKit::Leaf => Box::new(WoodDoorLeaf.scene_with_lod(lod_ref)),
-					DoorKit::FramePiece(wall) => wall_kit_scene(wall, lod_ref),
+					DoorKit::FramePiece(kit) => partition_kit_scene(kit, lod_ref),
 				};
 				Box::new(with_pose(transform, child)) as Box<dyn Scene>
 			})
