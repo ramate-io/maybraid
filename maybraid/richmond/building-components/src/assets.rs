@@ -18,9 +18,9 @@ impl AssetPath {
 		format!("{}#Scene0", self.0)
 	}
 
-	/// Shared [`mesh_ref::MeshRef`] for this GLB (scene 0).
-	pub fn mesh_ref(self) -> mesh_ref::MeshRef {
-		mesh_ref::MeshRef::glb(self.0)
+	/// Shared [`scene_ref::SceneRef`] for this GLB (scene 0).
+	pub fn scene_ref(self) -> scene_ref::SceneRef {
+		scene_ref::SceneRef::glb(self.0)
 	}
 }
 

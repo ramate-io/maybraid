@@ -91,7 +91,7 @@ Scale-dependent [`ParentConfines`](building-components/src/parent_confines.rs) m
 
 ### Partition mesh resolution
 
-Warm high/mid/low MeshRef roots under partition hosts; [`PartitionLodProbe`](building-components/src/partitions/lod.rs) drives tier flips (`distance / max_extent`):
+Warm high/mid/low SceneRef roots under partition hosts; [`PartitionLodProbe`](building-components/src/partitions/lod.rs) drives tier flips (`distance / max_extent`):
 
 | Band | Factor |
 |------|--------|

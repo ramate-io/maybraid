@@ -1,10 +1,10 @@
-//! Mesh loading via references to avoid loading the same mesh multiple times.
+//! Scene loading via references to avoid loading the same scene multiple times.
 //!
-//! [`MeshRef`] names a GLB (optionally with a `#SceneN` label) and an optional
-//! [`MirrorAxis`]. [`MeshRefPlugin`] installs [`MeshRefHandles`], which memoizes
+//! [`SceneRef`] names a GLB (optionally with a `#SceneN` label) and an optional
+//! [`MirrorAxis`]. [`SceneRefPlugin`] installs [`SceneRefHandles`], which memoizes
 //! [`Handle<WorldAsset>`]s so repeated scene spawns share one load. Mirrored refs
 //! rebuild meshes (axis flip + winding reverse) into a distinct cached asset.
-//! Use [`MeshRef::scene`] / [`MeshRefRoot`]; the fulfill system inserts
+//! Use [`SceneRef::scene`] / [`SceneRefRoot`]; the fulfill system inserts
 //! [`WorldAssetRoot`] when the handle is ready.
 
 use std::path::Path;
@@ -21,7 +21,7 @@ use bevy::scene::prelude::{bsn, template_value};
 use bevy::scene::Scene;
 use bevy::world_serialization::{WorldAsset, WorldAssetRoot};
 
-/// Axis along which a [`MeshRef`] rebuilds mirrored mesh geometry.
+/// Axis along which a [`SceneRef`] rebuilds mirrored mesh geometry.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum MirrorAxis {
 	X,
@@ -39,9 +39,9 @@ impl MirrorAxis {
 	}
 }
 
-/// Reference to a mesh / scene asset that can be resolved to a shared handle.
+/// Reference to a scene asset that can be resolved to a shared handle.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Default)]
-pub struct MeshRef {
+pub struct SceneRef {
 	/// Path to a `.glb` (or other glTF) asset. If the path has no `#` label,
 	/// scene `0` is used (`path#Scene0`).
 	pub path: String,
@@ -49,11 +49,11 @@ pub struct MeshRef {
 	pub mirror: Option<MirrorAxis>,
 }
 
-/// BSN / ECS root that resolves to [`WorldAssetRoot`] via [`MeshRefHandles`].
+/// BSN / ECS root that resolves to [`WorldAssetRoot`] via [`SceneRefHandles`].
 #[derive(Component, Debug, Clone, PartialEq, Eq, Hash, Default)]
-pub struct MeshRefRoot(pub MeshRef);
+pub struct SceneRefRoot(pub SceneRef);
 
-impl MeshRef {
+impl SceneRef {
 	/// GLB / glTF at `path` (scene 0 unless `path` already includes a label).
 	pub fn glb(path: impl Into<String>) -> Self {
 		Self {
@@ -96,49 +96,49 @@ impl MeshRef {
 		asset_server.load(self.labeled_path())
 	}
 
-	/// BSN scene root for this mesh (`MeshRefRoot`; fulfilled to [`WorldAssetRoot`]).
+	/// BSN scene root for this ref (`SceneRefRoot`; fulfilled to [`WorldAssetRoot`]).
 	pub fn scene(self) -> impl Scene + 'static {
 		bsn! {
-			template_value(MeshRefRoot(self))
+			template_value(SceneRefRoot(self))
 		}
 	}
 }
 
-impl From<&str> for MeshRef {
+impl From<&str> for SceneRef {
 	fn from(path: &str) -> Self {
 		Self::glb(path)
 	}
 }
 
-impl From<String> for MeshRef {
+impl From<String> for SceneRef {
 	fn from(path: String) -> Self {
 		Self::glb(path)
 	}
 }
 
-impl From<&Path> for MeshRef {
+impl From<&Path> for SceneRef {
 	fn from(path: &Path) -> Self {
 		Self::glb(path.to_string_lossy())
 	}
 }
 
-impl From<MeshRef> for HandleTemplate<WorldAsset> {
-	fn from(mesh_ref: MeshRef) -> Self {
+impl From<SceneRef> for HandleTemplate<WorldAsset> {
+	fn from(scene_ref: SceneRef) -> Self {
 		assert!(
-			mesh_ref.mirror.is_none(),
-			"mirrored MeshRef cannot convert to HandleTemplate::Path; use MeshRef::scene()"
+			scene_ref.mirror.is_none(),
+			"mirrored SceneRef cannot convert to HandleTemplate::Path; use SceneRef::scene()"
 		);
-		HandleTemplate::Path(AssetPath::from(mesh_ref.labeled_path()))
+		HandleTemplate::Path(AssetPath::from(scene_ref.labeled_path()))
 	}
 }
 
-impl From<&MeshRef> for HandleTemplate<WorldAsset> {
-	fn from(mesh_ref: &MeshRef) -> Self {
+impl From<&SceneRef> for HandleTemplate<WorldAsset> {
+	fn from(scene_ref: &SceneRef) -> Self {
 		assert!(
-			mesh_ref.mirror.is_none(),
-			"mirrored MeshRef cannot convert to HandleTemplate::Path; use MeshRef::scene()"
+			scene_ref.mirror.is_none(),
+			"mirrored SceneRef cannot convert to HandleTemplate::Path; use SceneRef::scene()"
 		);
-		HandleTemplate::Path(AssetPath::from(mesh_ref.labeled_path()))
+		HandleTemplate::Path(AssetPath::from(scene_ref.labeled_path()))
 	}
 }
 
@@ -188,67 +188,71 @@ fn mirror_world_asset(
 	Some(cloned)
 }
 
-/// Memoized [`Handle<WorldAsset>`]s keyed by [`MeshRef`] (path + mirror).
+/// Memoized [`Handle<WorldAsset>`]s keyed by [`SceneRef`] (path + mirror).
 #[derive(Resource, Default)]
-pub struct MeshRefHandles {
-	cache: HashMap<MeshRef, Handle<WorldAsset>>,
+pub struct SceneRefHandles {
+	cache: HashMap<SceneRef, Handle<WorldAsset>>,
 }
 
-impl MeshRefHandles {
+impl SceneRefHandles {
 	fn ensure_unmirrored(
 		&mut self,
-		mesh_ref: &MeshRef,
+		scene_ref: &SceneRef,
 		asset_server: &AssetServer,
 	) -> Handle<WorldAsset> {
-		debug_assert!(mesh_ref.mirror.is_none());
-		if let Some(handle) = self.cache.get(mesh_ref) {
+		debug_assert!(scene_ref.mirror.is_none());
+		if let Some(handle) = self.cache.get(scene_ref) {
 			return handle.clone();
 		}
-		let handle = mesh_ref.load_source(asset_server);
-		self.cache.insert(mesh_ref.clone(), handle.clone());
+		let handle = scene_ref.load_source(asset_server);
+		self.cache.insert(scene_ref.clone(), handle.clone());
 		handle
 	}
 
-	/// Return a strong handle for an **unmirrored** `mesh_ref`, loading once per path.
+	/// Return a strong handle for an **unmirrored** `scene_ref`, loading once per path.
 	///
-	/// Mirrored refs must go through [`Self::try_resolve`] (or [`MeshRefRoot`] fulfill).
-	pub fn handle(&mut self, mesh_ref: &MeshRef, asset_server: &AssetServer) -> Handle<WorldAsset> {
+	/// Mirrored refs must go through [`Self::try_resolve`] (or [`SceneRefRoot`] fulfill).
+	pub fn handle(
+		&mut self,
+		scene_ref: &SceneRef,
+		asset_server: &AssetServer,
+	) -> Handle<WorldAsset> {
 		assert!(
-			mesh_ref.mirror.is_none(),
-			"MeshRefHandles::handle is for unmirrored refs; use try_resolve for mirrors"
+			scene_ref.mirror.is_none(),
+			"SceneRefHandles::handle is for unmirrored refs; use try_resolve for mirrors"
 		);
-		self.ensure_unmirrored(mesh_ref, asset_server)
+		self.ensure_unmirrored(scene_ref, asset_server)
 	}
 
-	/// Resolve `mesh_ref` to a cached handle when ready.
+	/// Resolve `scene_ref` to a cached handle when ready.
 	///
 	/// Unmirrored refs always return a (possibly still-loading) handle.
 	/// Mirrored refs return [`None`] until the source is
 	/// [`AssetServer::is_loaded_with_dependencies`] and the rebuilt world is cached.
 	pub fn try_resolve(
 		&mut self,
-		mesh_ref: &MeshRef,
+		scene_ref: &SceneRef,
 		asset_server: &AssetServer,
 		world_assets: &mut Assets<WorldAsset>,
 		meshes: &mut Assets<Mesh>,
 		type_registry: &AppTypeRegistry,
 	) -> Option<Handle<WorldAsset>> {
-		if let Some(handle) = self.cache.get(mesh_ref) {
+		if let Some(handle) = self.cache.get(scene_ref) {
 			return Some(handle.clone());
 		}
 
-		match mesh_ref.mirror {
-			None => Some(self.ensure_unmirrored(mesh_ref, asset_server)),
+		match scene_ref.mirror {
+			None => Some(self.ensure_unmirrored(scene_ref, asset_server)),
 			Some(axis) => {
 				let source_handle =
-					self.ensure_unmirrored(&mesh_ref.without_mirror(), asset_server);
+					self.ensure_unmirrored(&scene_ref.without_mirror(), asset_server);
 				if !asset_server.is_loaded_with_dependencies(&source_handle) {
 					return None;
 				}
 				let source = world_assets.get(&source_handle)?;
 				let mirrored = mirror_world_asset(source, axis, meshes, type_registry)?;
 				let handle = world_assets.add(mirrored);
-				self.cache.insert(mesh_ref.clone(), handle.clone());
+				self.cache.insert(scene_ref.clone(), handle.clone());
 				Some(handle)
 			}
 		}
@@ -260,11 +264,11 @@ impl MeshRefHandles {
 	/// needs [`Self::try_resolve`] once dependencies are ready.
 	pub fn preload<'a>(
 		&mut self,
-		mesh_refs: impl IntoIterator<Item = &'a MeshRef>,
+		scene_refs: impl IntoIterator<Item = &'a SceneRef>,
 		asset_server: &AssetServer,
 	) {
-		for mesh_ref in mesh_refs {
-			let _ = self.ensure_unmirrored(&mesh_ref.without_mirror(), asset_server);
+		for scene_ref in scene_refs {
+			let _ = self.ensure_unmirrored(&scene_ref.without_mirror(), asset_server);
 		}
 	}
 
@@ -278,10 +282,10 @@ impl MeshRefHandles {
 	}
 }
 
-fn fulfill_mesh_ref_roots(
+fn fulfill_scene_ref_roots(
 	mut commands: Commands,
-	query: Query<(Entity, &MeshRefRoot), Without<WorldAssetRoot>>,
-	mut handles: ResMut<MeshRefHandles>,
+	query: Query<(Entity, &SceneRefRoot), Without<WorldAssetRoot>>,
+	mut handles: ResMut<SceneRefHandles>,
 	asset_server: Res<AssetServer>,
 	mut world_assets: ResMut<Assets<WorldAsset>>,
 	mut meshes: ResMut<Assets<Mesh>>,
@@ -300,13 +304,13 @@ fn fulfill_mesh_ref_roots(
 	}
 }
 
-/// Installs [`MeshRefHandles`] and fulfills [`MeshRefRoot`] → [`WorldAssetRoot`].
-pub struct MeshRefPlugin;
+/// Installs [`SceneRefHandles`] and fulfills [`SceneRefRoot`] → [`WorldAssetRoot`].
+pub struct SceneRefPlugin;
 
-impl Plugin for MeshRefPlugin {
+impl Plugin for SceneRefPlugin {
 	fn build(&self, app: &mut App) {
-		app.init_resource::<MeshRefHandles>()
-			.add_systems(Update, fulfill_mesh_ref_roots);
+		app.init_resource::<SceneRefHandles>()
+			.add_systems(Update, fulfill_scene_ref_roots);
 	}
 }
 
@@ -318,21 +322,21 @@ mod tests {
 
 	#[test]
 	fn unlabeled_glb_gets_scene0() -> anyhow::Result<()> {
-		let m = MeshRef::glb("urban/foo.glb");
+		let m = SceneRef::glb("urban/foo.glb");
 		assert_eq!(m.labeled_path(), "urban/foo.glb#Scene0");
 		Ok(())
 	}
 
 	#[test]
 	fn labeled_path_preserved() -> anyhow::Result<()> {
-		let m = MeshRef::glb("urban/foo.glb#Scene1");
+		let m = SceneRef::glb("urban/foo.glb#Scene1");
 		assert_eq!(m.labeled_path(), "urban/foo.glb#Scene1");
 		Ok(())
 	}
 
 	#[test]
 	fn mirror_changes_cache_key() -> anyhow::Result<()> {
-		let base = MeshRef::glb("urban/foo.glb");
+		let base = SceneRef::glb("urban/foo.glb");
 		let mirrored = base.clone().mirrored(MirrorAxis::X);
 		assert_ne!(base, mirrored);
 		assert_eq!(base.labeled_path(), mirrored.labeled_path());

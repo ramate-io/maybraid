@@ -18,7 +18,7 @@ use game_commands::command::{capture_command_line_input, GameCommandPlugin};
 use game_commands::ui::GameCommandStatusText;
 use ground::setup_ground;
 use lod::{add_fine_pass_for, LodFinePassPlugin, LodFinePassSystems};
-use mesh_ref::MeshRefPlugin;
+use scene_ref::SceneRefPlugin;
 use preview::{present_preview_lod, CachedPreview};
 use richmond_building_components::{
 	apply_parent_confines, update_partition_host_levels, FurnitureWireframePlugin,
@@ -32,7 +32,7 @@ impl Plugin for RichmondBuildingsPlaygroundPlugin {
 		app.init_resource::<PreviewConfig>()
 			.init_resource::<CachedPreview>()
 			.add_plugins((
-				MeshRefPlugin,
+				SceneRefPlugin,
 				FurnitureWireframePlugin,
 				TowerSilhouettePlugin,
 				LodFinePassPlugin,

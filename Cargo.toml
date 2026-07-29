@@ -9,7 +9,7 @@ members = [
   "maybraid/richmond/buildings",
   "maybraid/richmond/buildings-playground",
 
-  "maybraid/mesh-ref",
+  "maybraid/scene-ref",
 
   "maybraid/durham/lib",
   "maybraid/durham/shaders",
@@ -190,7 +190,7 @@ richmond-building-components = { path = "maybraid/richmond/building-components" 
 richmond-buildings = { path = "maybraid/richmond/buildings" }
 richmond-buildings-playground = { path = "maybraid/richmond/buildings-playground" }
 
-mesh-ref = { path = "maybraid/mesh-ref" }
+scene-ref = { path = "maybraid/scene-ref" }
 
 avian3d = "0.7"
 

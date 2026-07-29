@@ -9,7 +9,7 @@
 //! Eave sits at \(Z = 0\); run scales toward \(Z = -\texttt{run}\).
 
 use bevy_math::Vec3;
-use mesh_ref::MirrorAxis;
+use scene_ref::MirrorAxis;
 use std::f32::consts::PI;
 
 use crate::arc_kit::{decompose_arc_sweep, ArcKit};
@@ -21,7 +21,7 @@ use crate::roofs::geometry::{Pitch, RoofGeometry};
 pub(crate) enum RoofKit {
 	/// Unit right triangle \(X \in [0, 1]\), \(Z \in [-1, 0]\), \(Y \in [-0.2, 0.2]\).
 	///
-	/// When `mirror` is set, the GLB is rebuilt via [`mesh_ref::MeshRef`] mirroring (positive
+	/// When `mirror` is set, the GLB is rebuilt via [`scene_ref::SceneRef`] mirroring (positive
 	/// Transform scale) instead of a negative `scale.x`.
 	RightTriangle {
 		mirror: Option<MirrorAxis>,

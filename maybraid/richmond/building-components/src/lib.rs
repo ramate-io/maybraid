@@ -61,7 +61,7 @@ macro_rules! impl_empty_lod_scene {
 
 pub(crate) use impl_empty_lod_scene;
 
-/// `LodScene` that loads a GLB scene root via [`mesh_ref::MeshRef`].
+/// `LodScene` that loads a GLB scene root via [`scene_ref::SceneRef`].
 macro_rules! impl_glb_lod_scene {
 	($ty:ty, $asset:expr) => {
 		impl ::lod::gen::LodScene for $ty {
@@ -77,7 +77,7 @@ macro_rules! impl_glb_lod_scene {
 				_lod_ref: &::lod::lod_ref::LodRef,
 				_level: ::lod::gen::LodSceneLevel,
 			) -> impl ::bevy::scene::Scene + 'static {
-				($asset).mesh_ref().scene()
+				($asset).scene_ref().scene()
 			}
 		}
 	};

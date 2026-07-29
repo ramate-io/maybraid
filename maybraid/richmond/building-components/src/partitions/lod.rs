@@ -7,7 +7,7 @@ use bevy_math::Vec3;
 use lod::gen::{LodSceneLevel, LodSceneStatus};
 use lod::lod_ref::LodRef;
 use lod::lod_scene_host::{LodLevelRoot, LodLevelRoots, LodSceneHost};
-use mesh_ref::MeshRef;
+use scene_ref::SceneRef;
 
 use crate::assets::AssetPath;
 use crate::placed::Placement;
@@ -22,7 +22,7 @@ pub enum PartitionLodBand {
 	High,
 }
 
-/// Which of the three warm MeshRef children is visible.
+/// Which of the three warm SceneRef children is visible.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum PartitionMeshTier {
 	Low,
@@ -172,12 +172,12 @@ pub fn lod_level_for_placement(placement: &Placement, lod_ref: &LodRef) -> LodSc
 	band_for_placement(placement, lod_ref.current_transform).to_lod_scene_level()
 }
 
-fn mesh_ref_child(mesh_ref: MeshRef) -> Box<dyn Scene> {
-	Box::new(mesh_ref.scene())
+fn scene_ref_child(scene_ref: SceneRef) -> Box<dyn Scene> {
+	Box::new(scene_ref.scene())
 }
 
-fn tier_level_root_ref(level: LodSceneLevel, mesh_ref: MeshRef, visible: bool) -> Box<dyn Scene> {
-	let children = vec![mesh_ref_child(mesh_ref)];
+fn tier_level_root_ref(level: LodSceneLevel, scene_ref: SceneRef, visible: bool) -> Box<dyn Scene> {
+	let children = vec![scene_ref_child(scene_ref)];
 	let visibility = if visible {
 		Visibility::Inherited
 	} else {
@@ -191,13 +191,13 @@ fn tier_level_root_ref(level: LodSceneLevel, mesh_ref: MeshRef, visible: bool) -
 	})
 }
 
-/// Host with warm high/mid/low [`MeshRef`] level roots; active tier from `level`.
+/// Host with warm high/mid/low [`SceneRef`] level roots; active tier from `level`.
 ///
-/// Supports mirrored refs (distinct cached [`WorldAsset`]s via [`mesh_ref::MeshRefPlugin`]).
-pub fn posed_mesh_ref_lod(
-	high: MeshRef,
-	mid: MeshRef,
-	low: MeshRef,
+/// Supports mirrored refs (distinct cached [`WorldAsset`]s via [`scene_ref::SceneRefPlugin`]).
+pub fn posed_scene_ref_lod(
+	high: SceneRef,
+	mid: SceneRef,
+	low: SceneRef,
 	transform: Transform,
 	level: LodSceneLevel,
 	probe: PartitionLodProbe,
@@ -224,17 +224,17 @@ pub fn posed_mesh_ref_lod(
 	}
 }
 
-/// Host with warm high/mid/low MeshRef level roots; active tier from `level`.
+/// Host with warm high/mid/low SceneRef level roots; active tier from `level`.
 pub fn posed_partition_mesh_lod(
 	meshes: PartitionMeshSet,
 	transform: Transform,
 	level: LodSceneLevel,
 	probe: PartitionLodProbe,
 ) -> impl Scene + 'static {
-	posed_mesh_ref_lod(
-		meshes.high.mesh_ref(),
-		meshes.mid.mesh_ref(),
-		meshes.low.mesh_ref(),
+	posed_scene_ref_lod(
+		meshes.high.scene_ref(),
+		meshes.mid.scene_ref(),
+		meshes.low.scene_ref(),
 		transform,
 		level,
 		probe,
@@ -253,7 +253,7 @@ pub fn posed_partition_mesh_tier(
 		LodSceneLevel::Low | LodSceneLevel::UltraLow => PartitionMeshTier::Low,
 		LodSceneLevel::Distance(_) | LodSceneLevel::Resolution(_) => PartitionMeshTier::Mid,
 	};
-	let children = vec![mesh_ref_child(meshes.for_tier(tier).mesh_ref())];
+	let children = vec![scene_ref_child(meshes.for_tier(tier).scene_ref())];
 	bsn! {
 		template_value(transform)
 		Visibility::Inherited
@@ -266,19 +266,19 @@ pub fn leaf_partition_mesh_lod(
 	meshes: PartitionMeshSet,
 	lod_ref: &LodRef,
 ) -> impl Scene + 'static {
-	leaf_mesh_ref_lod(
-		meshes.high.mesh_ref(),
-		meshes.mid.mesh_ref(),
-		meshes.low.mesh_ref(),
+	leaf_scene_ref_lod(
+		meshes.high.scene_ref(),
+		meshes.mid.scene_ref(),
+		meshes.low.scene_ref(),
 		lod_ref,
 	)
 }
 
-/// Identity-placement LOD host from explicit high/mid/low [`MeshRef`]s (optional mirror).
-pub fn leaf_mesh_ref_lod(
-	high: MeshRef,
-	mid: MeshRef,
-	low: MeshRef,
+/// Identity-placement LOD host from explicit high/mid/low [`SceneRef`]s (optional mirror).
+pub fn leaf_scene_ref_lod(
+	high: SceneRef,
+	mid: SceneRef,
+	low: SceneRef,
 	lod_ref: &LodRef,
 ) -> impl Scene + 'static {
 	let band = band_for_aabb(lod_ref.bounds, lod_ref.current_transform);
@@ -289,7 +289,7 @@ pub fn leaf_mesh_ref_lod(
 		center,
 		extent: size.x.max(size.y).max(size.z).max(1e-4),
 	};
-	posed_mesh_ref_lod(high, mid, low, Transform::IDENTITY, level, probe)
+	posed_scene_ref_lod(high, mid, low, Transform::IDENTITY, level, probe)
 }
 
 pub fn leaf_partition_lod_status(lod_ref: &LodRef) -> LodSceneStatus {

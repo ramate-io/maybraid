@@ -32,7 +32,7 @@ pub fn pose(placement: Placement) -> Transform {
 /// GLB asset with an applied pose transform.
 pub fn posed_glb(asset: AssetPath, transform: Transform) -> impl Scene + 'static {
 	(
-		asset.mesh_ref().scene(),
+		asset.scene_ref().scene(),
 		bsn! {
 			template_value(transform)
 		},
