@@ -95,8 +95,8 @@ Warm high/mid/low MeshRef roots under partition hosts; [`PartitionLodProbe`](bui
 
 | Band | Factor |
 |------|--------|
-| High | ≤ 5 |
-| Medium | ≤ 20 |
+| High | ≤ 2.5 |
+| Medium | ≤ 10 |
 | Low | ≤ 500 |
 | UltraLow | elsewhere (shares low mesh for now) |
 

@@ -30,9 +30,9 @@ pub enum PartitionMeshTier {
 }
 
 /// `distance / max_extent` out to this → [`PartitionLodBand::High`].
-pub const PARTITION_HIGH_FACTOR: f32 = 5.0;
+pub const PARTITION_HIGH_FACTOR: f32 = 2.5;
 /// Out to this → [`PartitionLodBand::Medium`].
-pub const PARTITION_MEDIUM_FACTOR: f32 = 20.0;
+pub const PARTITION_MEDIUM_FACTOR: f32 = 10.0;
 /// Out to this → [`PartitionLodBand::Low`]; else [`PartitionLodBand::UltraLow`].
 pub const PARTITION_LOW_FACTOR: f32 = 500.0;
 
@@ -293,8 +293,8 @@ mod tests {
 
 	#[test]
 	fn distance_factor_maps_to_bands() -> anyhow::Result<()> {
-		assert_eq!(PartitionLodBand::from_distance_factor(5.0), PartitionLodBand::High);
-		assert_eq!(PartitionLodBand::from_distance_factor(20.0), PartitionLodBand::Medium);
+		assert_eq!(PartitionLodBand::from_distance_factor(2.5), PartitionLodBand::High);
+		assert_eq!(PartitionLodBand::from_distance_factor(10.0), PartitionLodBand::Medium);
 		assert_eq!(PartitionLodBand::from_distance_factor(500.0), PartitionLodBand::Low);
 		assert_eq!(
 			PartitionLodBand::from_distance_factor(501.0),
