@@ -6,10 +6,12 @@ use bevy_math::bounding::{Aabb2d, Aabb3d};
 use bevy_math::Vec2;
 use lod::gen::LodScene;
 use lod::LodViewerState;
+use procedural_common::{AllowedAngles, NoiseParams, StepLenRange};
 use richmond_building_components::partitions::rough_stonework::{
 	RoughStonework180, RoughStonework90, RoughStoneworkHeader90, RoughStoneworkLinear,
 };
 use richmond_building_components::partitions::{Partition, PartitionNode};
+use richmond_building_components::roofs::{Pitch, RoofGeometry, RoofNode};
 use richmond_building_components::scene_children;
 use richmond_building_components::Placement;
 use richmond_buildings::bedroom::Bedroom;
@@ -22,7 +24,6 @@ use richmond_buildings::wizards_tower::WizardsTower;
 use richmond_buildings::{
 	BedroomFillParams, CellConstraints, CirculationEntry, CirculationRequestStatus,
 };
-use procedural_common::{AllowedAngles, NoiseParams, StepLenRange};
 
 #[derive(Component)]
 pub struct PreviewRoot;
@@ -34,6 +35,14 @@ pub enum PreviewSubject {
 	Arc90,
 	Arc180,
 	Header90,
+	Pitch {
+		rise: f32,
+		run: f32,
+		length: Option<f32>,
+		tile_width: f32,
+		left: Option<f32>,
+		right: Option<f32>,
+	},
 	Polyline,
 	LinearWall,
 	PolylineWall,
@@ -90,6 +99,18 @@ impl PreviewConfig {
 			PreviewSubject::Arc90 => "preview: rough-stonework arc-90".into(),
 			PreviewSubject::Arc180 => "preview: rough-stonework arc-180".into(),
 			PreviewSubject::Header90 => "preview: rough-stonework header-90".into(),
+			PreviewSubject::Pitch {
+				rise,
+				run,
+				length,
+				tile_width,
+				left,
+				right,
+			} => {
+				format!(
+					"preview: pitch (rise={rise:.2} run={run:.2} len={length:?} tile={tile_width:.2} left={left:?} right={right:?})"
+				)
+			}
 			PreviewSubject::Polyline => "preview: partition polyline (L)".into(),
 			PreviewSubject::LinearWall => "preview: walling linear-wall (door)".into(),
 			PreviewSubject::PolylineWall => "preview: walling polyline-wall (door)".into(),
@@ -143,6 +164,25 @@ impl PreviewConfig {
 				Aabb3d::from_min_max(Vec3::new(-4.0, 0.0, -4.0), Vec3::new(4.0, 3.0, 4.0))
 			}
 			PreviewSubject::Bedroom { extent, .. } => Aabb3d::from_min_max(Vec3::ZERO, *extent),
+			PreviewSubject::Pitch {
+				rise,
+				run,
+				length,
+				left,
+				right,
+				..
+			} => {
+				let left_w = left.map(|b| b.abs()).unwrap_or(0.0);
+				let right_w = right.map(|b| b.abs()).unwrap_or(0.0);
+				let len = length.unwrap_or(0.0);
+				let x_max = (left_w + len + right_w).max(1e-4);
+				let run = (*run).max(1e-4);
+				let rise = (*rise).max(0.0);
+				Aabb3d::from_min_max(
+					Vec3::new(0.0, -0.2, -run),
+					Vec3::new(x_max, rise + 0.2, 0.0),
+				)
+			}
 			PreviewSubject::Polyline | PreviewSubject::PolylineWall => {
 				Aabb3d::from_min_max(Vec3::new(0.0, 0.0, 0.0), Vec3::new(4.0, 3.0, 4.0))
 			}
@@ -339,6 +379,27 @@ pub fn present_preview_lod(
 				transform,
 				RoughStoneworkHeader90.scene_with_lod(&lod_ref),
 			);
+		}
+		PreviewSubject::Pitch {
+			rise,
+			run,
+			length,
+			tile_width,
+			left,
+			right,
+		} => {
+			let mut pitch = Pitch::new(*rise, *run, *tile_width);
+			if let Some(len) = length {
+				pitch = pitch.with_length(*len);
+			}
+			if let Some(base) = left {
+				pitch = pitch.with_left(*base);
+			}
+			if let Some(base) = right {
+				pitch = pitch.with_right(*base);
+			}
+			let roof = RoofNode::shepherds_thatch(RoofGeometry::pitch(pitch), Placement::IDENTITY);
+			spawn_preview(&mut commands, transform, roof.scene_with_lod(&lod_ref));
 		}
 		PreviewSubject::Polyline => {
 			let node = PartitionNode::rough_stone(

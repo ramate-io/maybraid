@@ -7,6 +7,7 @@ pub mod assets;
 pub mod doors;
 pub mod floors;
 pub mod furniture;
+pub mod lod_band;
 pub mod lod_host;
 pub mod parent_confines;
 pub mod partitions;
@@ -31,6 +32,10 @@ pub use partitions::{
 	HEADER_KIT_HEIGHT, LINEAR_HIGH_FACTOR, LINEAR_LOW_FACTOR, LINEAR_MEDIUM_FACTOR,
 };
 pub use placed::{Placed, Placement};
+pub use roofs::{
+	update_roof_host_levels, Pitch, RoofGeometry, RoofLodBand, RoofLodProbe, RoofNode, RoofStyle,
+	ROOF_HIGH_FACTOR, ROOF_LOW_FACTOR, ROOF_MEDIUM_FACTOR,
+};
 pub use scene_children::{pose, posed_glb, scene_children, with_pose, wireframe_box_with_handles};
 
 use bevy::scene::{ResolveContext, ResolvedScene};
@@ -63,7 +68,7 @@ macro_rules! impl_empty_lod_scene {
 
 pub(crate) use impl_empty_lod_scene;
 
-/// `LodScene` that loads a GLB scene root via [`mesh_ref::MeshRef::Glb`].
+/// `LodScene` that loads a GLB scene root via [`scene_ref::SceneRef`].
 macro_rules! impl_glb_lod_scene {
 	($ty:ty, $asset:expr) => {
 		impl ::lod::gen::LodScene for $ty {
@@ -79,7 +84,7 @@ macro_rules! impl_glb_lod_scene {
 				_lod_ref: &::lod::lod_ref::LodRef,
 				_level: ::lod::gen::LodSceneLevel,
 			) -> impl ::bevy::scene::Scene + 'static {
-				($asset).mesh_ref().scene()
+				($asset).scene_ref().scene()
 			}
 		}
 	};

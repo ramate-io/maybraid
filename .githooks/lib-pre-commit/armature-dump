@@ -36,9 +36,45 @@ else
     INCREMENTAL=1
 fi
 
+blend_to_armature_dump() {
+    local blend_file="$1"
+    echo "${blend_file#$ART_PREFIX}" | sed 's/\.blend$/.armature_dump/'
+}
+
+# Remove the mirrored armature dump for a deleted .blend and stage the deletion.
+remove_dump_for_blend() {
+    local blend_file="$1"
+    local dump_file="${ASSETS_PREFIX}$(blend_to_armature_dump "$blend_file")"
+
+    if [ ! -e "$dump_file" ] && ! git ls-files --error-unmatch -- "$dump_file" &>/dev/null; then
+        return 0
+    fi
+
+    echo "🗑️  Removing ${dump_file} (source ${blend_file} deleted)"
+    if git ls-files --error-unmatch -- "$dump_file" &>/dev/null; then
+        git rm -f --quiet -- "$dump_file"
+    else
+        rm -f -- "$dump_file"
+    fi
+    REMOVED=$((REMOVED + 1))
+}
+
+REMOVED=0
+
+# Staged blend deletions (removed from the index) leave orphan dumps unless cleaned here.
+STAGED_DELETED_BLENDS=$(git diff --cached --diff-filter=D --name-only -- 'maybraid/art/' | grep -E '\.blend$' || true)
+while IFS= read -r blend_file || [ -n "$blend_file" ]; do
+    [ -z "$blend_file" ] && continue
+    remove_dump_for_blend "$blend_file"
+done <<< "$STAGED_DELETED_BLENDS"
+
 BLEND_FILES=$(git ls-files --cached --exclude-standard 'maybraid/art/**/*.blend' | grep -E '\.blend$' || true)
 
 if [ -z "$BLEND_FILES" ]; then
+    if [ "$REMOVED" -gt 0 ]; then
+        echo "✨ Removed ${REMOVED} orphaned armature dump(s) for deleted .blend file(s)."
+        exit 0
+    fi
     echo "📭 No tracked .blend files found under maybraid/art/."
     exit 0
 fi
@@ -55,11 +91,6 @@ DUMPED=0
 SKIPPED=0
 NO_ARMATURE=0
 STAGED_FILES=()
-
-blend_to_armature_dump() {
-    local blend_file="$1"
-    echo "${blend_file#$ART_PREFIX}" | sed 's/\.blend$/.armature_dump/'
-}
 
 needs_dump() {
     local blend_file="$1"
@@ -86,6 +117,13 @@ while IFS= read -r blend_file || [ -n "$blend_file" ]; do
     CURRENT=$((CURRENT + 1))
     relative_path="$(blend_to_armature_dump "$blend_file")"
     dump_file="${ASSETS_PREFIX}${relative_path}"
+
+    # Indexed but missing on disk (e.g. AD / worktree deletion) — clean dump, skip Blender.
+    if [ ! -f "$blend_file" ]; then
+        remove_dump_for_blend "$blend_file"
+        echo "⏭️  Skipping deleted ${blend_file} (${CURRENT}/${TOTAL_FILES})"
+        continue
+    fi
 
     if ! needs_dump "$blend_file" "$dump_file"; then
         SKIPPED=$((SKIPPED + 1))
@@ -118,10 +156,15 @@ if [ "${#STAGED_FILES[@]}" -gt 0 ]; then
     git add -- "${STAGED_FILES[@]}"
 fi
 
-if [ "$DUMPED" -eq 0 ] && [ "$SKIPPED" -gt 0 ]; then
+if [ "$DUMPED" -eq 0 ] && [ "$SKIPPED" -gt 0 ] && [ "$REMOVED" -eq 0 ]; then
     echo "✨ All armature dumps are up to date (${SKIPPED} skipped)."
-elif [ "$DUMPED" -gt 0 ]; then
-    echo "✨ Dumped ${DUMPED} armature file(s)."
+elif [ "$DUMPED" -gt 0 ] || [ "$REMOVED" -gt 0 ]; then
+    if [ "$DUMPED" -gt 0 ]; then
+        echo "✨ Dumped ${DUMPED} armature file(s)."
+    fi
+    if [ "$REMOVED" -gt 0 ]; then
+        echo "✨ Removed ${REMOVED} orphaned armature dump(s) for deleted .blend file(s)."
+    fi
     if [ "$SKIPPED" -gt 0 ]; then
         echo "   Skipped ${SKIPPED} up-to-date file(s)."
     fi

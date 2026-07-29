@@ -7,7 +7,10 @@ use lod::gen::{LodSceneLevel, LodSceneStatus};
 use lod::lod_ref::LodRef;
 use lod::lod_scene_host::LodSceneHost;
 
-use crate::partitions::geometry::LinearLod;
+use crate::lod_band::{
+	center_extent_from_aabb, characteristic_extent_abs, placement_center, DistanceLodBand,
+};
+use crate::partitions::geometry::{LINEAR_HIGH_FACTOR, LINEAR_LOW_FACTOR, LINEAR_MEDIUM_FACTOR};
 use crate::placed::Placement;
 
 /// Viewer distance band for partition mesh resolution (linear / polyline parent).
@@ -21,7 +24,17 @@ pub enum PartitionLodBand {
 
 impl PartitionLodBand {
 	pub fn from_distance_factor(factor: f32) -> Self {
-		LinearLod::band_from_distance_factor(factor)
+		match DistanceLodBand::from_factors(
+			factor,
+			LINEAR_HIGH_FACTOR,
+			LINEAR_MEDIUM_FACTOR,
+			LINEAR_LOW_FACTOR,
+		) {
+			DistanceLodBand::High => Self::High,
+			DistanceLodBand::Medium => Self::Medium,
+			DistanceLodBand::Low => Self::Low,
+			DistanceLodBand::UltraLow => Self::UltraLow,
+		}
 	}
 
 	pub fn mesh_tier(self) -> crate::partitions::mesh_set::PartitionMeshTier {
@@ -62,31 +75,22 @@ pub struct PartitionLodProbe {
 impl PartitionLodProbe {
 	pub fn from_placement(placement: &Placement) -> Self {
 		Self {
-			center: Self::placement_center(placement),
-			extent: Self::characteristic_extent(placement),
+			center: placement_center(placement),
+			extent: characteristic_extent_abs(placement),
 		}
 	}
 
 	pub fn from_aabb(aabb: &Aabb3d) -> Self {
-		let center = Vec3::from((aabb.min + aabb.max) * 0.5);
-		let size = aabb.max - aabb.min;
-		Self {
-			center,
-			extent: size.x.max(size.y).max(size.z).max(1e-4),
-		}
+		let (center, extent) = center_extent_from_aabb(aabb);
+		Self { center, extent }
 	}
 
 	pub fn characteristic_extent(placement: &Placement) -> f32 {
-		placement
-			.scale
-			.x
-			.max(placement.scale.y)
-			.max(placement.scale.z)
-			.max(1e-4)
+		characteristic_extent_abs(placement)
 	}
 
 	pub fn placement_center(placement: &Placement) -> Vec3 {
-		placement.translation + Vec3::new(0.0, placement.scale.y * 0.5, 0.0)
+		placement_center(placement)
 	}
 
 	pub fn band_for(&self, viewer: &Transform) -> PartitionLodBand {
@@ -133,7 +137,6 @@ pub fn update_partition_host_levels(
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use crate::partitions::geometry::{LINEAR_HIGH_FACTOR, LINEAR_LOW_FACTOR, LINEAR_MEDIUM_FACTOR};
 
 	#[test]
 	fn distance_factor_maps_to_bands() -> anyhow::Result<()> {

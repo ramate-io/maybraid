@@ -80,7 +80,7 @@ Joints are used to connect irregular partition geometry. They are roughly circul
 
 ## Floors, Roofs, Stairs, and Doors
 
-These modules hold reusable floor/roof fillers, circulation geometry, and door kits. Floors and roofs are typically an **arc filler** plus a **struct filler**. Prefer rough stonework; wood appears occasionally (interior halfspaces, perch decking, door leaves).
+These modules hold reusable floor/roof fillers, circulation geometry, and door kits. Floors are typically an **arc filler** plus a **struct filler**. Roofs use a unified **Pitch** (rectangle + optional end triangles) or **Dome**. Prefer rough stonework for partitions/floors; shepherd's thatch for roofs; wood appears occasionally (interior halfspaces, perch decking, door leaves).
 
 ## Floors
 
@@ -102,3 +102,30 @@ When authoring circular stairs, we typically use a fraction of the radius for th
 Tread depths can vary as is needed for connectivity and spacing. 
 
 Tread heights should typically be around 0.18 world units. 
+
+## Roofs
+
+Roof IR is [`Pitch`](src/roofs/geometry.rs) or [`Dome`](src/roofs/geometry.rs).
+
+### Pitch
+
+A pitched face is a **rectangle** (optional) plus optional **end triangles**, with parallel eave and ridge on the rectangular body. Trapezoid asymmetry comes only from the ends.
+
+Pitch-space axes: **X** along eave/ridge, **Z** run (eave at \(Z = 0\), ridge at \(Z = -\texttt{run}\)), **Y** rise via rotation about +X by \(\operatorname{atan2}(\texttt{rise}, \texttt{run})\). Anchor is the **lower-left** of the full extent (left end triangle if present, else the rectangle). `rise` / `run` are non-negative; flip the face with placement rotation instead of negative rise/run.
+
+| Field | Role |
+|-------|------|
+| `rise` / `run` | Slope; kit Z scaled by `run` |
+| `length` | `Option` — rectangular span along X; omit for ends-only |
+| `tile_width` | Suggested tile width; \(n = \mathrm{round}(\texttt{length}/\texttt{tile\_width})\) tiles stretch to fit `length` |
+| `left` / `right` | `Option` absolute end-triangle base lengths; **positive** = upright (eave-long), **negative** = flipped (ridge-long) |
+
+Helpers: `with_left` / `with_right`, `with_left_angle` / `with_right_angle` (\(\texttt{base} = \texttt{run}\tan\theta\)), and `from_eave_ridge(rise, run, eave, ridge, tile_width)` which sets `length = min(eave, ridge)` and equal end bases \(\pm|\texttt{ridge}-\texttt{eave}|/2\) (flipped when ridge is longer).
+
+The atomic kit is still the origin-anchored unit right triangle \(X \in [0, 1]\), \(Z \in [-1, 0]\), \(Y \in [-0.2, 0.2]\) (shepherd's thatch LOD triad).
+
+### Dome
+
+Continuous sweep decomposed with the same 180° / 90° / 15° [`ArcKit`](src/arc_kit.rs) standard as partitions and floor arc fills. Dome leaves are empty until bespoke GLBs exist.
+
+Roof geometry does not fill the entire roof volume. Even domes carve out the inner space. This is intentional, allowing features to sit under the roof surface. Cleverly authored types can delegate these inner spaces to be filled by other components.

@@ -22,7 +22,7 @@ pub fn posed_asset_tier(
 	transform: Transform,
 ) -> impl Scene + 'static {
 	let children: Vec<Box<dyn Scene>> = match asset {
-		Some(a) => vec![Box::new(a.mesh_ref().scene())],
+		Some(a) => vec![Box::new(a.scene_ref().scene())],
 		None => vec![],
 	};
 	bsn! {
@@ -122,7 +122,7 @@ fn mesh_level_root(
 	visible: bool,
 ) -> Box<dyn Scene> {
 	let children: Vec<Box<dyn Scene>> = match asset {
-		Some(a) => vec![Box::new(a.mesh_ref().scene())],
+		Some(a) => vec![Box::new(a.scene_ref().scene())],
 		None => vec![],
 	};
 	let visibility = if visible {

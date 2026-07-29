@@ -7,6 +7,7 @@ pub mod header_90;
 pub mod linear;
 pub mod linear_wall;
 pub mod noisy_polyline_wall;
+pub mod pitch;
 pub mod polyline;
 pub mod polyline_wall;
 pub mod stacked_rings;
@@ -31,6 +32,8 @@ pub enum Show {
 	Arc180(arc_180::Arc180),
 	/// 90° header rough-stonework (`rough_stonework_90_header_001.glb`).
 	Header90(header_90::Header90),
+	/// Shepherd's-thatch pitched face (`rise`/`run`/`length`/`left`/`right`).
+	Pitch(pitch::Pitch),
 	/// L-shaped `Partition::polyline` (posed linears + joints).
 	Polyline(polyline::Polyline),
 	/// Portal-sensitive straight [`richmond_buildings::LinearWall`].
@@ -54,6 +57,7 @@ impl Show {
 			Self::Arc90(cmd) => cmd.into_preview(),
 			Self::Arc180(cmd) => cmd.into_preview(),
 			Self::Header90(cmd) => cmd.into_preview(),
+			Self::Pitch(cmd) => cmd.into_preview(),
 			Self::Polyline(cmd) => cmd.into_preview(),
 			Self::LinearWall(cmd) => cmd.into_preview(),
 			Self::PolylineWall(cmd) => cmd.into_preview(),

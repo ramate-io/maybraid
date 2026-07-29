@@ -20,7 +20,7 @@ use crate::partitions::probe::PartitionLodProbe;
 
 pub use crate::lod_host::posed_asset_tier;
 
-/// One MeshRef under a transform (for `scene_with_level`).
+/// One SceneRef under a transform (for `scene_with_level`).
 ///
 /// UltraLow uses the low GLB until a fourth ultra-low path is authored.
 pub fn posed_mesh_tier(

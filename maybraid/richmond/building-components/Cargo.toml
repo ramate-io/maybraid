@@ -14,7 +14,7 @@ bevy = { workspace = true }
 bevy_math = { workspace = true }
 procedural-common = { workspace = true }
 lod = { workspace = true }
-mesh-ref = { workspace = true }
+scene-ref = { workspace = true }
 
 [dev-dependencies]
 anyhow = { workspace = true }

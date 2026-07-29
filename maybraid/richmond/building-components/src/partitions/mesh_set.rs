@@ -7,7 +7,7 @@ use bevy::scene::prelude::Scene;
 
 use crate::assets::AssetPath;
 
-/// Which resolution MeshRef is selected for a [`LodSceneLevel`](lod::gen::LodSceneLevel).
+/// Which resolution [`SceneRef`](scene_ref::SceneRef) is selected for a [`LodSceneLevel`](lod::gen::LodSceneLevel).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum PartitionMeshTier {
 	/// Shared by Low and UltraLow until a dedicated ultra-low GLB exists.
@@ -49,5 +49,5 @@ impl PartitionMeshSet {
 }
 
 pub fn mesh_child(asset: AssetPath) -> Box<dyn Scene> {
-	Box::new(asset.mesh_ref().scene())
+	Box::new(asset.scene_ref().scene())
 }

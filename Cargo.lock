@@ -4225,14 +4225,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "mesh-ref"
-version = "0.0.1"
-dependencies = [
- "anyhow",
- "bevy",
-]
-
-[[package]]
 name = "miniz_oxide"
 version = "0.8.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5533,8 +5525,8 @@ dependencies = [
  "bevy",
  "bevy_math",
  "lod",
- "mesh-ref",
  "procedural-common",
+ "scene-ref",
 ]
 
 [[package]]
@@ -5559,10 +5551,10 @@ dependencies = [
  "game-commands",
  "lod",
  "log",
- "mesh-ref",
  "procedural-common",
  "richmond-building-components",
  "richmond-buildings",
+ "scene-ref",
 ]
 
 [[package]]
@@ -5679,6 +5671,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "93fc1dc3aaa9bfed95e02e6eadabb4baf7e3078b0bd1b4d7b6b0b68378900502"
 dependencies = [
  "winapi-util",
+]
+
+[[package]]
+name = "scene-ref"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "bevy",
 ]
 
 [[package]]

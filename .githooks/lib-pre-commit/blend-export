@@ -39,9 +39,45 @@ else
     INCREMENTAL=1
 fi
 
+blend_to_glb() {
+    local blend_file="$1"
+    echo "${blend_file#$ART_PREFIX}" | sed 's/\.blend$/.glb/'
+}
+
+# Remove the mirrored .glb for a deleted .blend and stage the deletion.
+remove_glb_for_blend() {
+    local blend_file="$1"
+    local glb_file="${ASSETS_PREFIX}$(blend_to_glb "$blend_file")"
+
+    if [ ! -e "$glb_file" ] && ! git ls-files --error-unmatch -- "$glb_file" &>/dev/null; then
+        return 0
+    fi
+
+    echo "🗑️  Removing ${glb_file} (source ${blend_file} deleted)"
+    if git ls-files --error-unmatch -- "$glb_file" &>/dev/null; then
+        git rm -f --quiet -- "$glb_file"
+    else
+        rm -f -- "$glb_file"
+    fi
+    REMOVED=$((REMOVED + 1))
+}
+
+REMOVED=0
+
+# Staged blend deletions (removed from the index) leave orphan GLBs unless cleaned here.
+STAGED_DELETED_BLENDS=$(git diff --cached --diff-filter=D --name-only -- 'maybraid/art/' | grep -E '\.blend$' || true)
+while IFS= read -r blend_file || [ -n "$blend_file" ]; do
+    [ -z "$blend_file" ] && continue
+    remove_glb_for_blend "$blend_file"
+done <<< "$STAGED_DELETED_BLENDS"
+
 BLEND_FILES=$(git ls-files --cached --exclude-standard 'maybraid/art/**/*.blend' | grep -E '\.blend$' || true)
 
 if [ -z "$BLEND_FILES" ]; then
+    if [ "$REMOVED" -gt 0 ]; then
+        echo "✨ Removed ${REMOVED} orphaned .glb file(s) for deleted .blend file(s)."
+        exit 0
+    fi
     echo "📭 No tracked .blend files found under maybraid/art/."
     exit 0
 fi
@@ -57,11 +93,6 @@ CURRENT=0
 EXPORTED=0
 SKIPPED=0
 STAGED_FILES=()
-
-blend_to_glb() {
-    local blend_file="$1"
-    echo "${blend_file#$ART_PREFIX}" | sed 's/\.blend$/.glb/'
-}
 
 needs_export() {
     local blend_file="$1"
@@ -89,6 +120,13 @@ while IFS= read -r blend_file || [ -n "$blend_file" ]; do
     relative_path="$(blend_to_glb "$blend_file")"
     glb_file="${ASSETS_PREFIX}${relative_path}"
 
+    # Indexed but missing on disk (e.g. AD / worktree deletion) — clean GLB, skip Blender.
+    if [ ! -f "$blend_file" ]; then
+        remove_glb_for_blend "$blend_file"
+        echo "⏭️  Skipping deleted ${blend_file} (${CURRENT}/${TOTAL_FILES})"
+        continue
+    fi
+
     if ! needs_export "$blend_file" "$glb_file"; then
         SKIPPED=$((SKIPPED + 1))
         echo "⏭️  Skipping up-to-date ${blend_file} (${CURRENT}/${TOTAL_FILES})"
@@ -113,10 +151,15 @@ if [ "${#STAGED_FILES[@]}" -gt 0 ]; then
     git add -- "${STAGED_FILES[@]}"
 fi
 
-if [ "$EXPORTED" -eq 0 ] && [ "$SKIPPED" -gt 0 ]; then
+if [ "$EXPORTED" -eq 0 ] && [ "$SKIPPED" -gt 0 ] && [ "$REMOVED" -eq 0 ]; then
     echo "✨ All GLB exports are up to date (${SKIPPED} skipped)."
-elif [ "$EXPORTED" -gt 0 ]; then
-    echo "✨ Exported ${EXPORTED} .glb file(s)."
+elif [ "$EXPORTED" -gt 0 ] || [ "$REMOVED" -gt 0 ]; then
+    if [ "$EXPORTED" -gt 0 ]; then
+        echo "✨ Exported ${EXPORTED} .glb file(s)."
+    fi
+    if [ "$REMOVED" -gt 0 ]; then
+        echo "✨ Removed ${REMOVED} orphaned .glb file(s) for deleted .blend file(s)."
+    fi
     if [ "$SKIPPED" -gt 0 ]; then
         echo "   Skipped ${SKIPPED} up-to-date file(s)."
     fi
