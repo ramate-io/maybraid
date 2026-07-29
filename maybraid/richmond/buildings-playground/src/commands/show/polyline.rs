@@ -1,4 +1,4 @@
-//! `/show polyline` — `Partition::polyline` kit posing (linears + empty joints).
+//! `/show polyline` — `Partition::polyline` kit posing (linears + joints).
 
 use bevy::prelude::*;
 use clap::Args;

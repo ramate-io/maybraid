@@ -3,7 +3,7 @@
 use bevy_math::Vec3;
 
 use crate::arc_kit::{decompose_arc_sweep, ArcKit};
-use crate::partitions::geometry::PartitionGeometry;
+use crate::partitions::geometry::{PolylinePartition, PartitionGeometry};
 use crate::placed::{Placement, Placed};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -18,10 +18,8 @@ pub(crate) enum PartitionKit {
 	HeaderArc180,
 	HeaderArc90,
 	HeaderArc15,
-	/// Horizontal joint at a plan-angle vertex (empty scene placeholder).
+	/// Circular joint at a plan / slope kink (high + mid LOD only).
 	Joint,
-	/// Vertical wedge at an elevation kink (empty scene placeholder).
-	Wedge,
 }
 
 impl From<ArcKit> for PartitionKit {
@@ -42,19 +40,20 @@ fn header_kit(kit: ArcKit) -> PartitionKit {
 	}
 }
 
-/// Minimum horizontal turn (radians) to emit a joint kit.
-const JOINT_YAW_EPS: f32 = 1e-3;
-/// Minimum elevation difference / slope roll (radians) to emit a wedge kit.
-const WEDGE_Y_EPS: f32 = 1e-3;
-const WEDGE_ROLL_EPS: f32 = 1e-3;
-/// Default kit thickness scale (\(0.15\) world / \(0.2\) kit half-extent).
+/// Joint kit half-extent in \(X/Z\) (\([-0.5, 0.5]\)).
+const JOINT_KIT_HALF: f32 = 0.5;
+/// Base world radius when the kink is purely planar.
+const JOINT_BASE_RADIUS: f32 = 0.15;
+/// Extra world radius per radian of vertical (slope) kink.
+const JOINT_RADIUS_PER_SLOPE_RAD: f32 = 0.55;
+/// Default linear thickness scale (\(0.15\) world / \(0.2\) kit half-extent).
 const DEFAULT_THICK: f32 = 0.15 / 0.2;
 
 impl PartitionGeometry {
 	pub(crate) fn kit_pieces(&self) -> Vec<Placed<PartitionKit>> {
 		match self {
 			Self::Linear(_) => vec![Placed::at_origin(PartitionKit::Linear)],
-			Self::Polyline(g) => polyline_kit_pieces(&g.points),
+			Self::Polyline(g) => polyline_kit_pieces(g),
 			Self::Arc(g) => decompose_arc_sweep(g.sweep_degrees)
 				.into_iter()
 				.map(|(kit, yaw)| Placed::new(PartitionKit::from(kit), Vec3::ZERO, yaw))
@@ -88,11 +87,23 @@ fn roll_along_slope(dx: f32, dy: f32, dz: f32) -> f32 {
 	dy.atan2(horiz.max(1e-8))
 }
 
-fn polyline_kit_pieces(points: &[Vec3]) -> Vec<Placed<PartitionKit>> {
+fn wrap_pi(mut a: f32) -> f32 {
+	while a > std::f32::consts::PI {
+		a -= std::f32::consts::TAU;
+	}
+	while a < -std::f32::consts::PI {
+		a += std::f32::consts::TAU;
+	}
+	a
+}
+
+fn polyline_kit_pieces(poly: &PolylinePartition) -> Vec<Placed<PartitionKit>> {
+	let points = &poly.points;
 	if points.len() < 2 {
 		return vec![Placed::at_origin(PartitionKit::Linear)];
 	}
 
+	let min_joint = poly.min_joint_angle.max(0.0);
 	let mut out = Vec::new();
 	let n_edges = points.len() - 1;
 
@@ -104,8 +115,6 @@ fn polyline_kit_pieces(points: &[Vec3]) -> Vec<Placed<PartitionKit>> {
 		let yaw = yaw_along_xz(delta.x, delta.z);
 		let roll = roll_along_slope(delta.x, delta.y, delta.z);
 		let mid = (a + b) * 0.5;
-		// Unit kit height: parent `Placement.scale.y` supplies storey height.
-		// Slope uses roll about local Z (not pitch — pitch would lean the face out).
 		out.push(Placed {
 			geom: PartitionKit::Linear,
 			placement: Placement::new(mid, yaw)
@@ -114,7 +123,6 @@ fn polyline_kit_pieces(points: &[Vec3]) -> Vec<Placed<PartitionKit>> {
 		});
 	}
 
-	// Interior vertices: joints (plan turn) and wedges (elevation kink).
 	for i in 1..points.len() - 1 {
 		let prev = points[i - 1];
 		let cur = points[i];
@@ -125,34 +133,26 @@ fn polyline_kit_pieces(points: &[Vec3]) -> Vec<Placed<PartitionKit>> {
 		let yaw_out = yaw_along_xz(dout.x, dout.z);
 		let roll_in = roll_along_slope(din.x, din.y, din.z);
 		let roll_out = roll_along_slope(dout.x, dout.y, dout.z);
-		let mut dyaw = yaw_out - yaw_in;
-		while dyaw > std::f32::consts::PI {
-			dyaw -= std::f32::consts::TAU;
-		}
-		while dyaw < -std::f32::consts::PI {
-			dyaw += std::f32::consts::TAU;
-		}
-
-		if dyaw.abs() > JOINT_YAW_EPS {
-			out.push(Placed {
-				geom: PartitionKit::Joint,
-				placement: Placement::new(cur, yaw_out)
-					.with_roll(roll_out)
-					.with_scale(Vec3::new(DEFAULT_THICK, 1.0, DEFAULT_THICK)),
-			});
+		let dyaw = wrap_pi(yaw_out - yaw_in).abs();
+		let droll = (roll_out - roll_in).abs();
+		let kink = dyaw.max(droll);
+		if kink < min_joint {
+			continue;
 		}
 
-		let elev_kink = (cur.y - prev.y).abs() > WEDGE_Y_EPS
-			|| (next.y - cur.y).abs() > WEDGE_Y_EPS
-			|| (roll_out - roll_in).abs() > WEDGE_ROLL_EPS;
-		if elev_kink {
-			out.push(Placed {
-				geom: PartitionKit::Wedge,
-				placement: Placement::new(cur, yaw_out)
-					.with_roll(0.5 * (roll_in + roll_out))
-					.with_scale(Vec3::new(DEFAULT_THICK, 1.0, DEFAULT_THICK)),
-			});
-		}
+		// Kit \(X,Z \in [-0.5, 0.5]\) → world radius = scale * 0.5.
+		// Grow horizontal size with vertical (slope) kink; plan-only turns use the base radius.
+		let radius = JOINT_BASE_RADIUS + JOINT_RADIUS_PER_SLOPE_RAD * droll;
+		let xz = (radius / JOINT_KIT_HALF).max(1e-4);
+		// Tip along the average slope; yaw bisects the plan turn so roll stays in-plane.
+		let yaw = yaw_in + 0.5 * wrap_pi(yaw_out - yaw_in);
+		let roll = 0.5 * (roll_in + roll_out);
+		out.push(Placed {
+			geom: PartitionKit::Joint,
+			placement: Placement::new(cur, yaw)
+				.with_roll(roll)
+				.with_scale(Vec3::new(xz, 1.0, xz)),
+		});
 	}
 
 	out
@@ -161,6 +161,7 @@ fn polyline_kit_pieces(points: &[Vec3]) -> Vec<Placed<PartitionKit>> {
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use crate::partitions::geometry::DEFAULT_MIN_JOINT_ANGLE;
 
 	#[test]
 	fn straight_polyline_has_no_joint() -> anyhow::Result<()> {
@@ -178,7 +179,6 @@ mod tests {
 			2
 		);
 		assert!(!pieces.iter().any(|p| p.geom == PartitionKit::Joint));
-		assert!(!pieces.iter().any(|p| p.geom == PartitionKit::Wedge));
 		Ok(())
 	}
 
@@ -201,14 +201,53 @@ mod tests {
 	}
 
 	#[test]
-	fn stepped_height_emits_wedge() -> anyhow::Result<()> {
-		let g = PartitionGeometry::polyline([
+	fn small_plan_kink_omits_joint() -> anyhow::Result<()> {
+		// ~0.05 rad turn — below default 0.1 threshold.
+		let g = PartitionGeometry::Polyline(
+			PolylinePartition::new([
+				Vec3::new(0.0, 0.0, 0.0),
+				Vec3::new(2.0, 0.0, 0.0),
+				Vec3::new(4.0, 0.0, 0.1),
+			])
+			.with_min_joint_angle(DEFAULT_MIN_JOINT_ANGLE),
+		);
+		assert!(!g.kit_pieces().iter().any(|p| p.geom == PartitionKit::Joint));
+		Ok(())
+	}
+
+	#[test]
+	fn slope_kink_emits_joint_and_grows_radius() -> anyhow::Result<()> {
+		let flat = PartitionGeometry::polyline([
 			Vec3::new(0.0, 0.0, 0.0),
 			Vec3::new(2.0, 0.0, 0.0),
-			Vec3::new(4.0, 1.0, 0.0),
+			Vec3::new(2.0, 0.0, 2.0),
 		]);
-		let pieces = g.kit_pieces();
-		assert!(pieces.iter().any(|p| p.geom == PartitionKit::Wedge));
+		let sloped = PartitionGeometry::polyline([
+			Vec3::new(0.0, 0.0, 0.0),
+			Vec3::new(2.0, 0.0, 0.0),
+			Vec3::new(4.0, 2.0, 0.0),
+		]);
+		let flat_j = flat
+			.kit_pieces()
+			.into_iter()
+			.find(|p| p.geom == PartitionKit::Joint)
+			.ok_or_else(|| anyhow::anyhow!("flat joint"))?;
+		let slope_j = sloped
+			.kit_pieces()
+			.into_iter()
+			.find(|p| p.geom == PartitionKit::Joint)
+			.ok_or_else(|| anyhow::anyhow!("slope joint"))?;
+		assert!(
+			slope_j.placement.scale.x > flat_j.placement.scale.x + 1e-3,
+			"slope kink should grow joint radius"
+		);
+		// Flat in → slope out: roll ≈ 0.5 * atan2(2, 2) = π/8.
+		let expected_roll = 0.5 * (2.0f32).atan2(2.0);
+		assert!(
+			(slope_j.placement.roll - expected_roll).abs() < 1e-3,
+			"joint roll should average abutting slopes, got {}",
+			slope_j.placement.roll
+		);
 		Ok(())
 	}
 

@@ -9,6 +9,11 @@ use bevy_math::{Vec2, Vec3};
 /// storey top.
 pub const HEADER_KIT_HEIGHT: f32 = 0.2;
 
+/// Default polyline joint omission threshold (radians).
+///
+/// Plan or slope kinks below this are left to abutting linear kits alone.
+pub const DEFAULT_MIN_JOINT_ANGLE: f32 = 0.1;
+
 /// Partition path geometry in world/cell space (continuous size and orientation).
 #[derive(Debug, Clone, PartialEq)]
 pub enum PartitionGeometry {
@@ -25,9 +30,7 @@ impl PartitionGeometry {
 	}
 
 	pub fn polyline(points: impl Into<Vec<Vec3>>) -> Self {
-		Self::Polyline(PolylinePartition {
-			points: points.into(),
-		})
+		Self::Polyline(PolylinePartition::new(points))
 	}
 
 	pub fn arc(sweep_degrees: f32) -> Self {
@@ -45,9 +48,34 @@ pub type Partition = PartitionGeometry;
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct LinearPartition;
 
-#[derive(Debug, Clone, PartialEq, Default)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct PolylinePartition {
 	pub points: Vec<Vec3>,
+	/// Omit joint kits when both plan and slope kink angles are below this (radians).
+	pub min_joint_angle: f32,
+}
+
+impl Default for PolylinePartition {
+	fn default() -> Self {
+		Self {
+			points: Vec::new(),
+			min_joint_angle: DEFAULT_MIN_JOINT_ANGLE,
+		}
+	}
+}
+
+impl PolylinePartition {
+	pub fn new(points: impl Into<Vec<Vec3>>) -> Self {
+		Self {
+			points: points.into(),
+			min_joint_angle: DEFAULT_MIN_JOINT_ANGLE,
+		}
+	}
+
+	pub fn with_min_joint_angle(mut self, min_joint_angle: f32) -> Self {
+		self.min_joint_angle = min_joint_angle.max(0.0);
+		self
+	}
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -65,10 +93,10 @@ impl Default for ArcSweep {
 
 /// Convert legacy 2D polyline points (XZ) into 3D with \(Y = 0\).
 pub fn polyline_from_xz(points: impl IntoIterator<Item = Vec2>) -> PolylinePartition {
-	PolylinePartition {
-		points: points
+	PolylinePartition::new(
+		points
 			.into_iter()
 			.map(|p| Vec3::new(p.x, 0.0, p.y))
-			.collect(),
-	}
+			.collect::<Vec<_>>(),
+	)
 }

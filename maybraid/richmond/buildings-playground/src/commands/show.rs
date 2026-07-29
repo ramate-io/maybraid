@@ -31,7 +31,7 @@ pub enum Show {
 	Arc180(arc_180::Arc180),
 	/// 90° header rough-stonework (`rough_stonework_90_header_001.glb`).
 	Header90(header_90::Header90),
-	/// L-shaped `Partition::polyline` (posed linears + empty joint kit).
+	/// L-shaped `Partition::polyline` (posed linears + joints).
 	Polyline(polyline::Polyline),
 	/// Portal-sensitive straight [`richmond_buildings::LinearWall`].
 	LinearWall(linear_wall::LinearWall),

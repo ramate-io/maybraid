@@ -5,7 +5,9 @@
 
 use bevy_math::Vec3;
 use procedural_common::{NoiseConfig, NoiseParams};
-use richmond_building_components::partitions::{Partition, PartitionNode, HEADER_KIT_HEIGHT};
+use richmond_building_components::partitions::{
+	Partition, PartitionNode, PolylinePartition, DEFAULT_MIN_JOINT_ANGLE, HEADER_KIT_HEIGHT,
+};
 use richmond_building_components::Placement;
 
 use crate::walling::portal::{
@@ -25,6 +27,8 @@ pub struct PolylineWallParams {
 	pub height: f32,
 	pub thickness: f32,
 	pub portal_width: f32,
+	/// Omit joints when plan/slope kinks are below this (radians).
+	pub min_joint_angle: f32,
 	pub must_assign: Vec<MustAssignPortal>,
 	pub must_not_assign: Vec<WallRegion>,
 	pub portal_noise: NoiseParams,
@@ -42,6 +46,7 @@ impl Default for PolylineWallParams {
 			height: 3.0,
 			thickness: DEFAULT_THICK,
 			portal_width: DEFAULT_PORTAL_WIDTH,
+			min_joint_angle: DEFAULT_MIN_JOINT_ANGLE,
 			must_assign: vec![],
 			must_not_assign: vec![],
 			portal_noise: NoiseParams::default(),
@@ -57,6 +62,7 @@ pub struct PolylineWall {
 	pub height: f32,
 	pub thickness: f32,
 	pub portal_width: f32,
+	pub min_joint_angle: f32,
 	pub portals: Vec<AssignedPortal>,
 	pub partitions: Vec<PartitionNode>,
 }
@@ -66,6 +72,7 @@ impl PolylineWall {
 		let height = params.height.max(1e-4);
 		let thickness = params.thickness.max(1e-4);
 		let portal_width = params.portal_width.max(1e-4);
+		let min_joint_angle = params.min_joint_angle.max(0.0);
 		let points = params.points;
 		let total = path_length(&points).max(portal_width + 1e-3);
 		let half_t = (portal_width * 0.5) / total;
@@ -84,13 +91,21 @@ impl PolylineWall {
 			POLYLINE_SLOTS,
 		);
 
-		let partitions = tessellate_polyline(&points, height, thickness, portal_width, &portals);
+		let partitions = tessellate_polyline(
+			&points,
+			height,
+			thickness,
+			portal_width,
+			min_joint_angle,
+			&portals,
+		);
 
 		Self {
 			points,
 			height,
 			thickness,
 			portal_width,
+			min_joint_angle,
 			portals,
 			partitions,
 		}
@@ -162,6 +177,7 @@ fn tessellate_polyline(
 	height: f32,
 	thickness: f32,
 	portal_width: f32,
+	min_joint_angle: f32,
 	portals: &[AssignedPortal],
 ) -> Vec<PartitionNode> {
 	if points.len() < 2 {
@@ -217,9 +233,10 @@ fn tessellate_polyline(
 		if sub.len() < 2 {
 			continue;
 		}
-		// Preserve authored 3D points so kit tessellation can pitch along the path.
 		partitions.push(PartitionNode::rough_stone(
-			Partition::polyline(sub),
+			Partition::Polyline(
+				PolylinePartition::new(sub).with_min_joint_angle(min_joint_angle),
+			),
 			Placement::at_origin().with_scale(Vec3::new(1.0, height, thick_scale)),
 		));
 	}

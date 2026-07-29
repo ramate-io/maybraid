@@ -189,6 +189,94 @@ fn tier_level_root(level: LodSceneLevel, asset: AssetPath, visible: bool) -> Box
 	})
 }
 
+/// Level root with no mesh (used when a kit omits far LOD tiers).
+fn empty_level_root(level: LodSceneLevel, visible: bool) -> Box<dyn Scene> {
+	let children: Vec<Box<dyn Scene>> = vec![];
+	let visibility = if visible {
+		Visibility::Inherited
+	} else {
+		Visibility::Hidden
+	};
+	Box::new(bsn! {
+		template_value(LodLevelRoot(level))
+		Transform::default()
+		template_value(visibility)
+		Children [ {children} ]
+	})
+}
+
+/// Joint filler: high + mid GLBs only; low / ultra-low show nothing.
+pub fn posed_joint_mesh_lod(
+	high: AssetPath,
+	mid: AssetPath,
+	transform: Transform,
+	level: LodSceneLevel,
+	probe: PartitionLodProbe,
+) -> impl Scene + 'static {
+	let roots = vec![
+		tier_level_root(LodSceneLevel::High, high, level == LodSceneLevel::High),
+		tier_level_root(
+			LodSceneLevel::Medium,
+			mid,
+			level == LodSceneLevel::Medium,
+		),
+		empty_level_root(LodSceneLevel::Low, level == LodSceneLevel::Low),
+	];
+	let level_roots: Box<dyn Scene> = Box::new(bsn! {
+		LodLevelRoots
+		Transform::default()
+		Visibility::Inherited
+		Children [ {roots} ]
+	});
+	let host_children = vec![level_roots];
+	bsn! {
+		LodSceneHost
+		template_value(level)
+		template_value(probe)
+		template_value(transform)
+		Visibility::Inherited
+		Children [ {host_children} ]
+	}
+}
+
+/// Single-tier joint content; empty at low / ultra-low.
+pub fn posed_joint_mesh_tier(
+	high: AssetPath,
+	mid: AssetPath,
+	transform: Transform,
+	level: LodSceneLevel,
+) -> impl Scene + 'static {
+	let children: Vec<Box<dyn Scene>> = match level {
+		LodSceneLevel::High => vec![mesh_child(high)],
+		LodSceneLevel::Medium => vec![mesh_child(mid)],
+		LodSceneLevel::Low
+		| LodSceneLevel::UltraLow
+		| LodSceneLevel::Distance(_)
+		| LodSceneLevel::Resolution(_) => vec![],
+	};
+	bsn! {
+		template_value(transform)
+		Visibility::Inherited
+		Children [ {children} ]
+	}
+}
+
+pub fn leaf_joint_mesh_lod(
+	high: AssetPath,
+	mid: AssetPath,
+	lod_ref: &LodRef,
+) -> impl Scene + 'static {
+	let band = band_for_aabb(lod_ref.bounds, lod_ref.current_transform);
+	let level = band.to_lod_scene_level();
+	let center = Vec3::from((lod_ref.bounds.min + lod_ref.bounds.max) * 0.5);
+	let size = lod_ref.bounds.max - lod_ref.bounds.min;
+	let probe = PartitionLodProbe {
+		center,
+		extent: size.x.max(size.y).max(size.z).max(1e-4),
+	};
+	posed_joint_mesh_lod(high, mid, Transform::IDENTITY, level, probe)
+}
+
 /// Host with warm high/mid/low MeshRef level roots; active tier from `level`.
 pub fn posed_partition_mesh_lod(
 	meshes: PartitionMeshSet,

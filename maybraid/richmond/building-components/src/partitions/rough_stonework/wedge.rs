@@ -1,6 +1,6 @@
-//! Vertical wedge placeholder (elevation kink). Empty until a kit GLB exists.
+//! Horizontal elevation wedge placeholder. Unused — polyline joinery uses joints only.
 
-/// Fills the gap between upright linear partitions at a height change.
+/// Elevation kink filler (not allocated by polyline tessellation).
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct RoughStoneworkWedge;
 

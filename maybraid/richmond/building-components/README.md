@@ -51,7 +51,7 @@ We have not yet defined a sweeping tool. The plan is to make it take linear segm
 
 ## Polyline partitions
 
-[`Partition::polyline`](src/partitions/geometry.rs) takes 3D points and expands (privately) into upright linear kits plus **joint** and **wedge** placeholders at plan-angle and elevation kinks. Joint/wedge leaf scenes are empty until assets exist. Portal-sensitive path walls live in `richmond_buildings::walling` (`PolylineWall` / `Walling`), not in this crate.
+[`Partition::polyline`](src/partitions/geometry.rs) takes 3D points and expands (privately) into upright linear kits plus **joints** at plan-angle and elevation kinks. Joints are omitted when both kink angles are below [`DEFAULT_MIN_JOINT_ANGLE`](src/partitions/geometry.rs) (override via [`PolylinePartition::with_min_joint_angle`](src/partitions/geometry.rs)). Horizontal joint scale grows with the vertical (slope) kink; roll is the average of the abutting segment slopes (yaw bisects the plan turn). \(Y\) scale follows the parent storey height. Rough-stone joints ship high + mid GLBs only — low / ultra-low LOD hide them. Portal-sensitive path walls live in `richmond_buildings::walling` (`PolylineWall` / `Walling`), not in this crate.
 
 ## Partitions
 
@@ -74,7 +74,7 @@ Partition components are authored in a normalized local space, then transformed 
 
 A common approach to building door frames is to use a header component with various 15° arc sweeps to create the frame.
 
-Joints are used to connect irregular partition geometry. They are roughly circular components defined X = Z = [-0.5, 0.5] and Y = [0.0, 1.0].
+Joints are used to connect irregular partition geometry. They are roughly circular components defined \(X = Z = [-0.5, 0.5]\) and \(Y = [0.0, 1.0]\). Scale \(Y\) so the joint spans the storey; grow \(X/Z\) with the vertical angle kink between abutting segments. Align roll to the average of those segments' slopes (yaw bisects the plan turn). Omit joints when kinks are below the construction `min_joint_angle` (default \(0.1\) rad).
 
 ## Floors, Roofs, Stairs, and Doors
 

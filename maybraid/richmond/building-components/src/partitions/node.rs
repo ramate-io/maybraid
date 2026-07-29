@@ -8,18 +8,19 @@ use lod::lod_ref::LodRef;
 use crate::assets::partitions::rough_stonework::{
 	ARC_15_HIGH, ARC_180_HIGH, ARC_180_LOW, ARC_180_MID, ARC_90_HIGH, ARC_90_LOW, ARC_90_MID,
 	ARC_15_LOW, ARC_15_MID, HEADER_15_HIGH, HEADER_15_LOW, HEADER_15_MID, HEADER_90_HIGH,
-	HEADER_90_LOW, HEADER_90_MID, LINEAR, LINEAR_HIGH, LINEAR_LOW, LINEAR_MID,
+	HEADER_90_LOW, HEADER_90_MID, JOINT_HIGH, JOINT_MID, LINEAR, LINEAR_HIGH, LINEAR_LOW,
+	LINEAR_MID,
 };
 use crate::parent_confines::{confined_scene, ParentConfines};
 use crate::partitions::geometry::PartitionGeometry;
 use crate::partitions::lod::{
-	lod_level_for_placement, lod_status_for_placement, posed_partition_mesh_lod,
-	posed_partition_mesh_tier, PartitionLodProbe, PartitionMeshSet,
+	lod_level_for_placement, lod_status_for_placement, posed_joint_mesh_lod, posed_joint_mesh_tier,
+	posed_partition_mesh_lod, posed_partition_mesh_tier, PartitionLodProbe, PartitionMeshSet,
 };
 use crate::partitions::rough_stonework::{
 	RoughStonework15, RoughStonework180, RoughStonework90, RoughStoneworkHeader15,
 	RoughStoneworkHeader180, RoughStoneworkHeader90, RoughStoneworkJoint, RoughStoneworkLinear,
-	RoughStoneworkLinearHeaderSubsegment, RoughStoneworkLinearSubsegment, RoughStoneworkWedge,
+	RoughStoneworkLinearHeaderSubsegment, RoughStoneworkLinearSubsegment,
 };
 use crate::partitions::style::PartitionStyle;
 use crate::partitions::tessellate::PartitionKit;
@@ -90,6 +91,12 @@ impl PartitionNode {
 							transform,
 							level,
 						)) as Box<dyn Scene>,
+						PartitionKit::Joint => Box::new(posed_joint_mesh_tier(
+							JOINT_HIGH,
+							JOINT_MID,
+							transform,
+							level,
+						)) as Box<dyn Scene>,
 						other => Box::new(with_pose(transform, partition_kit_scene(other, lod_ref)))
 							as Box<dyn Scene>,
 					},
@@ -114,8 +121,7 @@ pub(crate) fn kit_mesh_set(kit: PartitionKit) -> PartitionMeshSet {
 		PartitionKit::LinearSubsegment
 		| PartitionKit::LinearHeaderSubsegment
 		| PartitionKit::HeaderArc180
-		| PartitionKit::Joint
-		| PartitionKit::Wedge => PartitionMeshSet::uniform(LINEAR),
+		| PartitionKit::Joint => PartitionMeshSet::uniform(LINEAR),
 	}
 }
 
@@ -135,7 +141,6 @@ pub(crate) fn partition_kit_scene(kit: PartitionKit, lod_ref: &LodRef) -> Box<dy
 		PartitionKit::HeaderArc90 => Box::new(RoughStoneworkHeader90.scene_with_lod(lod_ref)),
 		PartitionKit::HeaderArc15 => Box::new(RoughStoneworkHeader15.scene_with_lod(lod_ref)),
 		PartitionKit::Joint => Box::new(RoughStoneworkJoint.scene_with_lod(lod_ref)),
-		PartitionKit::Wedge => Box::new(RoughStoneworkWedge.scene_with_lod(lod_ref)),
 	}
 }
 
@@ -176,6 +181,13 @@ impl LodScene for PartitionNode {
 						| PartitionKit::HeaderArc90
 						| PartitionKit::HeaderArc15 => Box::new(posed_partition_mesh_lod(
 							kit_mesh_set(piece.geom),
+							transform,
+							level,
+							PartitionLodProbe::from_placement(&piece.placement),
+						)) as Box<dyn Scene>,
+						PartitionKit::Joint => Box::new(posed_joint_mesh_lod(
+							JOINT_HIGH,
+							JOINT_MID,
 							transform,
 							level,
 							PartitionLodProbe::from_placement(&piece.placement),
