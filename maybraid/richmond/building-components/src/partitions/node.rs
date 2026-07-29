@@ -9,23 +9,13 @@ use bevy_math::Vec3;
 use lod::gen::{LodScene, LodSceneLevel, LodSceneStatus};
 use lod::lod_ref::LodRef;
 
-use crate::assets::partitions::rough_stonework::{
-	ARC_15_HIGH, ARC_15_LOW, ARC_15_MID, ARC_180_HIGH, ARC_180_LOW, ARC_180_MID, ARC_90_HIGH,
-	ARC_90_LOW, ARC_90_MID, HEADER_15_HIGH, HEADER_15_LOW, HEADER_15_MID, HEADER_90_HIGH,
-	HEADER_90_LOW, HEADER_90_MID, LINEAR, LINEAR_HIGH, LINEAR_LOW, LINEAR_MID,
-};
 use crate::parent_confines::{confined_scene, ParentConfines};
-use crate::partitions::geometry::{
-	JointLod, LinearLod, PartitionGeometry, PartitionTile,
-};
-use crate::partitions::lod::{
-	lod_level_for_placement, lod_status_for_placement, posed_partition_parent_lod,
-	PartitionLodProbe, PartitionMeshSet,
-};
+use crate::partitions::geometry::{JointLod, LinearLod, PartitionGeometry, PartitionTile};
+use crate::partitions::host::warm_content_host;
+use crate::partitions::probe::PartitionLodProbe;
 use crate::partitions::rough_stonework::{
-	RoughStonework15, RoughStonework180, RoughStonework90, RoughStoneworkHeader15,
-	RoughStoneworkHeader180, RoughStoneworkHeader90, RoughStoneworkJoint, RoughStoneworkLinear,
-	RoughStoneworkLinearHeaderSubsegment, RoughStoneworkLinearSubsegment,
+	RoughStoneworkHeader180, RoughStoneworkJoint, RoughStoneworkLinearHeaderSubsegment,
+	RoughStoneworkLinearSubsegment,
 };
 use crate::partitions::style::PartitionStyle;
 use crate::placed::Placement;
@@ -87,21 +77,17 @@ impl PartitionNode {
 							}
 							Some(Box::new(JointLod::posed_tier(transform, level)) as Box<dyn Scene>)
 						}
-						PartitionTile::Linear
-						| PartitionTile::Arc180
-						| PartitionTile::Arc90
-						| PartitionTile::Arc15
-						| PartitionTile::HeaderArc90
-						| PartitionTile::HeaderArc15 => Some(Box::new(LinearLod::posed_tier(
-							tile_mesh_set(piece.geom),
-							transform,
-							level,
-						))
-							as Box<dyn Scene>),
-						other => Some(Box::new(with_pose(
-							transform,
-							partition_tile_scene(other, lod_ref),
-						)) as Box<dyn Scene>),
+						tile => {
+							if let Some(meshes) = tile.mesh_set() {
+								Some(Box::new(LinearLod::posed_tier(meshes, transform, level))
+									as Box<dyn Scene>)
+							} else {
+								Some(Box::new(with_pose(
+									transform,
+									placeholder_tile_scene(tile, lod_ref),
+								)) as Box<dyn Scene>)
+							}
+						}
 					},
 				}
 			})
@@ -109,51 +95,45 @@ impl PartitionNode {
 	}
 }
 
-pub(crate) fn tile_mesh_set(tile: PartitionTile) -> PartitionMeshSet {
+fn placeholder_tile_scene(tile: PartitionTile, lod_ref: &LodRef) -> Box<dyn Scene> {
 	match tile {
-		PartitionTile::Linear => PartitionMeshSet::new(LINEAR_HIGH, LINEAR_MID, LINEAR_LOW),
-		PartitionTile::Arc180 => PartitionMeshSet::new(ARC_180_HIGH, ARC_180_MID, ARC_180_LOW),
-		PartitionTile::Arc90 => PartitionMeshSet::new(ARC_90_HIGH, ARC_90_MID, ARC_90_LOW),
-		PartitionTile::Arc15 => PartitionMeshSet::new(ARC_15_HIGH, ARC_15_MID, ARC_15_LOW),
-		PartitionTile::HeaderArc90 => {
-			PartitionMeshSet::new(HEADER_90_HIGH, HEADER_90_MID, HEADER_90_LOW)
-		}
-		PartitionTile::HeaderArc15 => {
-			PartitionMeshSet::new(HEADER_15_HIGH, HEADER_15_MID, HEADER_15_LOW)
-		}
-		PartitionTile::LinearSubsegment
-		| PartitionTile::LinearHeaderSubsegment
-		| PartitionTile::HeaderArc180
-		| PartitionTile::Joint => PartitionMeshSet::uniform(LINEAR),
-	}
-}
-
-pub(crate) fn partition_tile_scene(tile: PartitionTile, lod_ref: &LodRef) -> Box<dyn Scene> {
-	match tile {
-		PartitionTile::Linear => Box::new(RoughStoneworkLinear.scene_with_lod(lod_ref)),
 		PartitionTile::LinearSubsegment => {
 			Box::new(RoughStoneworkLinearSubsegment.scene_with_lod(lod_ref))
 		}
 		PartitionTile::LinearHeaderSubsegment => {
 			Box::new(RoughStoneworkLinearHeaderSubsegment.scene_with_lod(lod_ref))
 		}
-		PartitionTile::Arc180 => Box::new(RoughStonework180.scene_with_lod(lod_ref)),
-		PartitionTile::Arc90 => Box::new(RoughStonework90.scene_with_lod(lod_ref)),
-		PartitionTile::Arc15 => Box::new(RoughStonework15.scene_with_lod(lod_ref)),
 		PartitionTile::HeaderArc180 => Box::new(RoughStoneworkHeader180.scene_with_lod(lod_ref)),
-		PartitionTile::HeaderArc90 => Box::new(RoughStoneworkHeader90.scene_with_lod(lod_ref)),
-		PartitionTile::HeaderArc15 => Box::new(RoughStoneworkHeader15.scene_with_lod(lod_ref)),
 		PartitionTile::Joint => Box::new(RoughStoneworkJoint.scene_with_lod(lod_ref)),
+		_ => Box::new(RoughStoneworkLinearSubsegment.scene_with_lod(lod_ref)),
+	}
+}
+
+/// Door-frame / empty leaf tiles that lack a mesh set.
+pub(crate) fn partition_tile_scene(tile: PartitionTile, lod_ref: &LodRef) -> Box<dyn Scene> {
+	match tile {
+		PartitionTile::LinearSubsegment
+		| PartitionTile::LinearHeaderSubsegment
+		| PartitionTile::HeaderArc180
+		| PartitionTile::Joint => placeholder_tile_scene(tile, lod_ref),
+		other => {
+			// Asset tiles: leaf style types for doors that still route here.
+			if let Some(meshes) = other.mesh_set() {
+				Box::new(LinearLod::leaf_host(meshes, lod_ref))
+			} else {
+				placeholder_tile_scene(PartitionTile::LinearSubsegment, lod_ref)
+			}
+		}
 	}
 }
 
 impl LodScene for PartitionNode {
 	fn scene_lod_level(&self, lod_ref: &LodRef) -> LodSceneLevel {
-		lod_level_for_placement(&self.placement, lod_ref)
+		self.placement.partition_lod_level(lod_ref)
 	}
 
 	fn scene_lod_status(&self, lod_ref: &LodRef) -> LodSceneStatus {
-		lod_status_for_placement(&self.placement, lod_ref)
+		self.placement.partition_lod_status(lod_ref)
 	}
 
 	fn scene_with_level(
@@ -168,13 +148,15 @@ impl LodScene for PartitionNode {
 	}
 
 	fn scene_with_lod(&self, lod_ref: &LodRef) -> impl Scene + 'static {
-		// One host for the whole node (polyline / arc / linear) — kits are content, not nested hosts.
 		let level = self.scene_lod_level(lod_ref);
 		let probe = PartitionLodProbe::from_placement(&self.placement);
-		let high = self.scene_with_level(lod_ref, LodSceneLevel::High);
-		let mid = self.scene_with_level(lod_ref, LodSceneLevel::Medium);
-		let low = self.scene_with_level(lod_ref, LodSceneLevel::Low);
-		posed_partition_parent_lod(level, probe, high, mid, low)
+		warm_content_host(
+			level,
+			probe,
+			self.scene_with_level(lod_ref, LodSceneLevel::High),
+			self.scene_with_level(lod_ref, LodSceneLevel::Medium),
+			self.scene_with_level(lod_ref, LodSceneLevel::Low),
+		)
 	}
 }
 
@@ -185,14 +167,16 @@ macro_rules! impl_partition_mesh_lod_scene {
 				&self,
 				lod_ref: &::lod::lod_ref::LodRef,
 			) -> ::lod::gen::LodSceneLevel {
-				$crate::partitions::probe::leaf_partition_lod_level(lod_ref)
+				$crate::partitions::probe::PartitionLodProbe::from_aabb(lod_ref.bounds)
+					.level_for(lod_ref.current_transform)
 			}
 
 			fn scene_lod_status(
 				&self,
 				lod_ref: &::lod::lod_ref::LodRef,
 			) -> ::lod::gen::LodSceneStatus {
-				$crate::partitions::probe::leaf_partition_lod_status(lod_ref)
+				$crate::partitions::probe::PartitionLodProbe::from_aabb(lod_ref.bounds)
+					.status_for_lod_ref(lod_ref)
 			}
 
 			fn scene_with_level(

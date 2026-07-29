@@ -40,6 +40,16 @@ impl PartitionLodBand {
 			crate::partitions::mesh_set::PartitionMeshTier::Low => LodSceneLevel::Low,
 		}
 	}
+
+	pub fn status_vs(self, prev: Self) -> LodSceneStatus {
+		let prev_l = prev.to_lod_scene_level();
+		let curr_l = self.to_lod_scene_level();
+		if prev_l == curr_l {
+			LodSceneStatus::Unchanged
+		} else {
+			LodSceneStatus::Changed(curr_l)
+		}
+	}
 }
 
 /// Fine-phase probe for partition mesh hosts (center + characteristic extent).
@@ -52,73 +62,56 @@ pub struct PartitionLodProbe {
 impl PartitionLodProbe {
 	pub fn from_placement(placement: &Placement) -> Self {
 		Self {
-			center: placement_center(placement),
-			extent: characteristic_extent(placement),
+			center: Self::placement_center(placement),
+			extent: Self::characteristic_extent(placement),
 		}
 	}
 
-	pub fn level_for(&self, viewer: &Transform) -> LodSceneLevel {
+	pub fn from_aabb(aabb: &Aabb3d) -> Self {
+		let center = Vec3::from((aabb.min + aabb.max) * 0.5);
+		let size = aabb.max - aabb.min;
+		Self {
+			center,
+			extent: size.x.max(size.y).max(size.z).max(1e-4),
+		}
+	}
+
+	pub fn characteristic_extent(placement: &Placement) -> f32 {
+		placement
+			.scale
+			.x
+			.max(placement.scale.y)
+			.max(placement.scale.z)
+			.max(1e-4)
+	}
+
+	pub fn placement_center(placement: &Placement) -> Vec3 {
+		placement.translation + Vec3::new(0.0, placement.scale.y * 0.5, 0.0)
+	}
+
+	pub fn band_for(&self, viewer: &Transform) -> PartitionLodBand {
 		let factor = viewer.translation.distance(self.center) / self.extent.max(1e-4);
-		PartitionLodBand::from_distance_factor(factor).to_lod_scene_level()
+		PartitionLodBand::from_distance_factor(factor)
+	}
+
+	pub fn level_for(&self, viewer: &Transform) -> LodSceneLevel {
+		self.band_for(viewer).to_lod_scene_level()
+	}
+
+	pub fn status_for_lod_ref(&self, lod_ref: &LodRef) -> LodSceneStatus {
+		self.band_for(lod_ref.current_transform)
+			.status_vs(self.band_for(lod_ref.previous_transform))
 	}
 }
 
-pub fn characteristic_extent(placement: &Placement) -> f32 {
-	placement
-		.scale
-		.x
-		.max(placement.scale.y)
-		.max(placement.scale.z)
-		.max(1e-4)
-}
-
-pub fn placement_center(placement: &Placement) -> Vec3 {
-	placement.translation + Vec3::new(0.0, placement.scale.y * 0.5, 0.0)
-}
-
-pub fn band_for_placement(placement: &Placement, viewer: &Transform) -> PartitionLodBand {
-	let center = placement_center(placement);
-	let extent = characteristic_extent(placement);
-	let factor = viewer.translation.distance(center) / extent;
-	PartitionLodBand::from_distance_factor(factor)
-}
-
-pub fn band_for_aabb(aabb: &Aabb3d, viewer: &Transform) -> PartitionLodBand {
-	let center = Vec3::from((aabb.min + aabb.max) * 0.5);
-	let size = aabb.max - aabb.min;
-	let extent = size.x.max(size.y).max(size.z).max(1e-4);
-	let factor = viewer.translation.distance(center) / extent;
-	PartitionLodBand::from_distance_factor(factor)
-}
-
-pub fn lod_status_for_bands(prev: PartitionLodBand, curr: PartitionLodBand) -> LodSceneStatus {
-	let prev_l = prev.to_lod_scene_level();
-	let curr_l = curr.to_lod_scene_level();
-	if prev_l == curr_l {
-		LodSceneStatus::Unchanged
-	} else {
-		LodSceneStatus::Changed(curr_l)
+impl Placement {
+	pub fn partition_lod_level(&self, lod_ref: &LodRef) -> LodSceneLevel {
+		PartitionLodProbe::from_placement(self).level_for(lod_ref.current_transform)
 	}
-}
 
-pub fn lod_status_for_placement(placement: &Placement, lod_ref: &LodRef) -> LodSceneStatus {
-	let prev = band_for_placement(placement, lod_ref.previous_transform);
-	let curr = band_for_placement(placement, lod_ref.current_transform);
-	lod_status_for_bands(prev, curr)
-}
-
-pub fn lod_level_for_placement(placement: &Placement, lod_ref: &LodRef) -> LodSceneLevel {
-	LinearLod::level_for_placement(placement, lod_ref.current_transform)
-}
-
-pub fn leaf_partition_lod_status(lod_ref: &LodRef) -> LodSceneStatus {
-	let prev = band_for_aabb(lod_ref.bounds, lod_ref.previous_transform);
-	let curr = band_for_aabb(lod_ref.bounds, lod_ref.current_transform);
-	lod_status_for_bands(prev, curr)
-}
-
-pub fn leaf_partition_lod_level(lod_ref: &LodRef) -> LodSceneLevel {
-	band_for_aabb(lod_ref.bounds, lod_ref.current_transform).to_lod_scene_level()
+	pub fn partition_lod_status(&self, lod_ref: &LodRef) -> LodSceneStatus {
+		PartitionLodProbe::from_placement(self).status_for_lod_ref(lod_ref)
+	}
 }
 
 /// Fine-phase: update partition host levels from [`lod::LodViewerState`].

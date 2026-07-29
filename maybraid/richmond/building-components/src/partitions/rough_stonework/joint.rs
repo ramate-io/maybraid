@@ -3,7 +3,7 @@
 //! High + mid GLBs only; low / ultra-low LOD omit this filler.
 
 use crate::partitions::geometry::JointLod;
-use crate::partitions::probe::{leaf_partition_lod_level, leaf_partition_lod_status};
+use crate::partitions::probe::PartitionLodProbe;
 
 /// Circular / post joint between upright linear partition segments.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
@@ -11,11 +11,11 @@ pub struct RoughStoneworkJoint;
 
 impl lod::gen::LodScene for RoughStoneworkJoint {
 	fn scene_lod_level(&self, lod_ref: &lod::lod_ref::LodRef) -> lod::gen::LodSceneLevel {
-		leaf_partition_lod_level(lod_ref)
+		PartitionLodProbe::from_aabb(lod_ref.bounds).level_for(lod_ref.current_transform)
 	}
 
 	fn scene_lod_status(&self, lod_ref: &lod::lod_ref::LodRef) -> lod::gen::LodSceneStatus {
-		leaf_partition_lod_status(lod_ref)
+		PartitionLodProbe::from_aabb(lod_ref.bounds).status_for_lod_ref(lod_ref)
 	}
 
 	fn scene_with_level(

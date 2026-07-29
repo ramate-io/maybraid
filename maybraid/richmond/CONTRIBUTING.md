@@ -96,9 +96,9 @@ Warm high/mid/low MeshRef roots under a **single** partition-node host. Parent b
 
 | Band | Factor (linear / polyline parent) |
 |------|--------|
-| High | ≤ 5 |
-| Medium | ≤ 20 |
-| Low | ≤ 500 |
+| High | ≤ [`LINEAR_HIGH_FACTOR`](building-components/src/partitions/geometry/linear.rs) (5) |
+| Medium | ≤ [`LINEAR_MEDIUM_FACTOR`](building-components/src/partitions/geometry/linear.rs) (20) |
+| Low | ≤ [`LINEAR_LOW_FACTOR`](building-components/src/partitions/geometry/linear.rs) (500) |
 | UltraLow | elsewhere (shares low mesh for now) |
 
 **Polyline** is a short-run primitive: one LOD parent for the whole run (kits are content, not nested hosts). Prefer splitting long paths in walling/buildings. Joint kits under a polyline follow the parent level (high/mid GLBs only; omitted at Low). Lone joint leaf banding uses tighter factors (High ≤ 3, Medium ≤ 12).

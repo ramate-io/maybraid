@@ -132,7 +132,8 @@ pub(crate) fn yaw_along_xz(dx: f32, dz: f32) -> f32 {
 	(-dz).atan2(dx)
 }
 
-pub(crate) fn roll_along_slope(dx: f32, dy: f32, dz: f32) -> f32 {
+/// Slope roll about local \(+Z\) for an edge \(\Delta = (\mathrm{d}x,\mathrm{d}y,\mathrm{d}z)\).
+pub fn roll_along_slope(dx: f32, dy: f32, dz: f32) -> f32 {
 	let horiz = (dx * dx + dz * dz).sqrt();
 	dy.atan2(horiz.max(1e-8))
 }

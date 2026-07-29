@@ -1,7 +1,6 @@
 //! Continuous and tile partition geometry (primitive kit IR — no portals).
 
 mod arc;
-mod header_arc;
 mod joint;
 mod linear;
 mod polyline;
@@ -15,11 +14,19 @@ pub use linear::{
 	LinearLod, LinearPartition, DEFAULT_THICK, LINEAR_HIGH_FACTOR, LINEAR_LOW_FACTOR,
 	LINEAR_MEDIUM_FACTOR,
 };
-pub use polyline::{polyline_from_xz, PolylinePartition, DEFAULT_MIN_JOINT_ANGLE};
+pub use polyline::{
+	polyline_from_xz, roll_along_slope, PolylinePartition, DEFAULT_MIN_JOINT_ANGLE,
+};
 
 use bevy_math::Vec3;
 
 use crate::arc_kit::ArcKit;
+use crate::assets::partitions::rough_stonework::{
+	ARC_15_HIGH, ARC_15_LOW, ARC_15_MID, ARC_180_HIGH, ARC_180_LOW, ARC_180_MID, ARC_90_HIGH,
+	ARC_90_LOW, ARC_90_MID, HEADER_15_HIGH, HEADER_15_LOW, HEADER_15_MID, HEADER_90_HIGH,
+	HEADER_90_LOW, HEADER_90_MID, LINEAR_HIGH, LINEAR_LOW, LINEAR_MID,
+};
+use crate::partitions::mesh_set::PartitionMeshSet;
 use crate::placed::{Placed, Placement};
 
 /// Kit-local \(Y\) span of header meshes (\([0, \texttt{HEADER_KIT_HEIGHT}]\)).
@@ -100,6 +107,28 @@ pub enum PartitionTile {
 	Joint,
 }
 
+impl PartitionTile {
+	/// High/mid/low mesh set when this tile has resolution variants.
+	pub fn mesh_set(self) -> Option<PartitionMeshSet> {
+		Some(match self {
+			Self::Linear => PartitionMeshSet::new(LINEAR_HIGH, LINEAR_MID, LINEAR_LOW),
+			Self::Arc180 => PartitionMeshSet::new(ARC_180_HIGH, ARC_180_MID, ARC_180_LOW),
+			Self::Arc90 => PartitionMeshSet::new(ARC_90_HIGH, ARC_90_MID, ARC_90_LOW),
+			Self::Arc15 => PartitionMeshSet::new(ARC_15_HIGH, ARC_15_MID, ARC_15_LOW),
+			Self::HeaderArc90 => {
+				PartitionMeshSet::new(HEADER_90_HIGH, HEADER_90_MID, HEADER_90_LOW)
+			}
+			Self::HeaderArc15 => {
+				PartitionMeshSet::new(HEADER_15_HIGH, HEADER_15_MID, HEADER_15_LOW)
+			}
+			Self::Joint
+			| Self::LinearSubsegment
+			| Self::LinearHeaderSubsegment
+			| Self::HeaderArc180 => return None,
+		})
+	}
+}
+
 impl From<ArcKit> for PartitionTile {
 	fn from(kit: ArcKit) -> Self {
 		match kit {
@@ -117,6 +146,3 @@ pub(crate) fn header_tile(kit: ArcKit) -> PartitionTile {
 		ArcKit::D15 => PartitionTile::HeaderArc15,
 	}
 }
-
-/// Backward-compatible name used by door frame tessellation.
-pub(crate) type PartitionKit = PartitionTile;

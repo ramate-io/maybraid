@@ -238,9 +238,9 @@ fn tessellate_polyline(
 			let (p_prev, _) = sample_path(points, (t0 - 1e-3).max(0.0));
 			let (p_at, _) = sample_path(points, t0);
 			let d = p_at - p_prev;
-			let horiz = (d.x * d.x + d.z * d.z).sqrt();
-			let roll_in = d.y.atan2(horiz.max(1e-8));
-			poly = poly.with_incoming_slope(roll_in);
+			poly = poly.with_incoming_slope(richmond_building_components::partitions::roll_along_slope(
+				d.x, d.y, d.z,
+			));
 		}
 		partitions.push(PartitionNode::rough_stone(
 			Partition::Polyline(poly),
