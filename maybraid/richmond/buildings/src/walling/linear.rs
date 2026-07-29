@@ -4,7 +4,9 @@
 
 use bevy_math::Vec3;
 use procedural_common::{NoiseConfig, NoiseParams};
-use richmond_building_components::partitions::{Partition, PartitionNode, HEADER_KIT_HEIGHT};
+use richmond_building_components::partitions::{
+	LinearPartition, Partition, PartitionNode, DEFAULT_TILE_WIDTH, HEADER_KIT_HEIGHT,
+};
 use richmond_building_components::Placement;
 
 use crate::walling::portal::{
@@ -30,6 +32,8 @@ pub struct LinearWallParams {
 	pub thickness: f32,
 	/// World-space portal opening width.
 	pub portal_width: f32,
+	/// Suggested solid-span tile width; fitted so \(n\) tiles span each cut exactly.
+	pub tile_width: f32,
 	pub must_assign: Vec<MustAssignPortal>,
 	pub must_not_assign: Vec<WallRegion>,
 	pub portal_noise: NoiseParams,
@@ -44,6 +48,7 @@ impl Default for LinearWallParams {
 			height: 3.0,
 			thickness: DEFAULT_THICK,
 			portal_width: DEFAULT_PORTAL_WIDTH,
+			tile_width: DEFAULT_TILE_WIDTH,
 			must_assign: vec![],
 			must_not_assign: vec![],
 			portal_noise: NoiseParams::default(),
@@ -60,6 +65,7 @@ pub struct LinearWall {
 	pub height: f32,
 	pub thickness: f32,
 	pub portal_width: f32,
+	pub tile_width: f32,
 	pub portals: Vec<AssignedPortal>,
 	pub partitions: Vec<PartitionNode>,
 }
@@ -69,6 +75,7 @@ impl LinearWall {
 		let height = params.height.max(1e-4);
 		let thickness = params.thickness.max(1e-4);
 		let portal_width = params.portal_width.max(1e-4);
+		let tile_width = params.tile_width.max(1e-4);
 		let length = horiz_len(params.start, params.end).max(portal_width + 1e-3);
 		let half_t = (portal_width * 0.5) / length;
 		let noise = NoiseConfig::new(params.portal_noise);
@@ -92,6 +99,7 @@ impl LinearWall {
 			height,
 			thickness,
 			portal_width,
+			tile_width,
 			&portals,
 		);
 
@@ -101,6 +109,7 @@ impl LinearWall {
 			height,
 			thickness,
 			portal_width,
+			tile_width,
 			portals,
 			partitions,
 		}
@@ -129,6 +138,7 @@ fn tessellate_linear(
 	height: f32,
 	thickness: f32,
 	portal_width: f32,
+	tile_width: f32,
 	portals: &[AssignedPortal],
 ) -> Vec<PartitionNode> {
 	let yaw = yaw_along(start, end);
@@ -177,16 +187,16 @@ fn tessellate_linear(
 
 	for (t0, t1) in cuts {
 		let span = t1 - t0;
-		if span * length < 1e-2 {
+		let span_len = span * length;
+		if span_len < 1e-2 {
 			continue;
 		}
 		let a = point_at(start, end, t0);
 		let b = point_at(start, end, t1);
 		let mid = Vec3::new((a.x + b.x) * 0.5, y0, (a.z + b.z) * 0.5);
-		let half_len = span * length * 0.5;
 		partitions.push(PartitionNode::rough_stone(
-			Partition::linear(),
-			Placement::new(mid, yaw).with_scale(Vec3::new(half_len, height, thickness)),
+			Partition::Linear(LinearPartition::spanning(span_len, tile_width)),
+			Placement::new(mid, yaw).with_scale(Vec3::new(1.0, height, thickness)),
 		));
 	}
 

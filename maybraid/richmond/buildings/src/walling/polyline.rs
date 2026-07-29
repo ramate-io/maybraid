@@ -6,7 +6,8 @@
 use bevy_math::Vec3;
 use procedural_common::{NoiseConfig, NoiseParams};
 use richmond_building_components::partitions::{
-	Partition, PartitionNode, PolylinePartition, DEFAULT_MIN_JOINT_ANGLE, HEADER_KIT_HEIGHT,
+	Partition, PartitionNode, PolylinePartition, DEFAULT_MIN_JOINT_ANGLE, DEFAULT_TILE_WIDTH,
+	HEADER_KIT_HEIGHT,
 };
 use richmond_building_components::Placement;
 
@@ -27,6 +28,8 @@ pub struct PolylineWallParams {
 	pub height: f32,
 	pub thickness: f32,
 	pub portal_width: f32,
+	/// Suggested tile width along each solid edge; fitted so \(n\) tiles span exactly.
+	pub tile_width: f32,
 	/// Omit joints when plan/slope kinks are below this (radians).
 	pub min_joint_angle: f32,
 	pub must_assign: Vec<MustAssignPortal>,
@@ -46,6 +49,7 @@ impl Default for PolylineWallParams {
 			height: 3.0,
 			thickness: DEFAULT_THICK,
 			portal_width: DEFAULT_PORTAL_WIDTH,
+			tile_width: DEFAULT_TILE_WIDTH,
 			min_joint_angle: DEFAULT_MIN_JOINT_ANGLE,
 			must_assign: vec![],
 			must_not_assign: vec![],
@@ -62,6 +66,7 @@ pub struct PolylineWall {
 	pub height: f32,
 	pub thickness: f32,
 	pub portal_width: f32,
+	pub tile_width: f32,
 	pub min_joint_angle: f32,
 	pub portals: Vec<AssignedPortal>,
 	pub partitions: Vec<PartitionNode>,
@@ -72,6 +77,7 @@ impl PolylineWall {
 		let height = params.height.max(1e-4);
 		let thickness = params.thickness.max(1e-4);
 		let portal_width = params.portal_width.max(1e-4);
+		let tile_width = params.tile_width.max(1e-4);
 		let min_joint_angle = params.min_joint_angle.max(0.0);
 		let points = params.points;
 		let total = path_length(&points).max(portal_width + 1e-3);
@@ -96,6 +102,7 @@ impl PolylineWall {
 			height,
 			thickness,
 			portal_width,
+			tile_width,
 			min_joint_angle,
 			&portals,
 		);
@@ -105,6 +112,7 @@ impl PolylineWall {
 			height,
 			thickness,
 			portal_width,
+			tile_width,
 			min_joint_angle,
 			portals,
 			partitions,
@@ -177,6 +185,7 @@ fn tessellate_polyline(
 	height: f32,
 	thickness: f32,
 	portal_width: f32,
+	tile_width: f32,
 	min_joint_angle: f32,
 	portals: &[AssignedPortal],
 ) -> Vec<PartitionNode> {
@@ -233,7 +242,9 @@ fn tessellate_polyline(
 		if sub.len() < 2 {
 			continue;
 		}
-		let mut poly = PolylinePartition::new(sub).with_min_joint_angle(min_joint_angle);
+		let mut poly = PolylinePartition::new(sub)
+			.with_tile_width(tile_width)
+			.with_min_joint_angle(min_joint_angle);
 		if t0 > 1e-4 {
 			let (p_prev, _) = sample_path(points, (t0 - 1e-3).max(0.0));
 			let (p_at, _) = sample_path(points, t0);

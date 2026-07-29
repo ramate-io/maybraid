@@ -3,7 +3,9 @@
 use bevy_math::{Vec2, Vec3};
 
 use crate::partitions::geometry::joint::JointPartition;
-use crate::partitions::geometry::linear::DEFAULT_THICK;
+use crate::partitions::geometry::linear::{
+	fitted_tile_count, DEFAULT_THICK, DEFAULT_TILE_WIDTH,
+};
 use crate::partitions::geometry::PartitionTile;
 use crate::placed::{Placed, Placement};
 
@@ -13,9 +15,14 @@ pub const DEFAULT_MIN_JOINT_ANGLE: f32 = 0.1;
 /// Short-run polyline. Prefer splitting long paths in higher-order walling/buildings.
 ///
 /// One [`crate::partitions::PartitionNode`] is a single LOD parent for all kits.
+///
+/// Each edge of length \(L\) is subdivided with [`Self::tile_width`]:  
+/// \(n = \mathrm{round}(L/\texttt{tile\_width})\) tiles stretch to width \(L/n\).
 #[derive(Debug, Clone, PartialEq)]
 pub struct PolylinePartition {
 	pub points: Vec<Vec3>,
+	/// Suggested full tile width along each edge; fitted so \(n\) tiles span exactly.
+	pub tile_width: f32,
 	/// Omit joint kits when both plan and slope kink angles are below this (radians).
 	pub min_joint_angle: f32,
 	/// Roll of the segment that ends at `points[0]` but is not part of this polyline.
@@ -27,6 +34,7 @@ impl Default for PolylinePartition {
 	fn default() -> Self {
 		Self {
 			points: Vec::new(),
+			tile_width: DEFAULT_TILE_WIDTH,
 			min_joint_angle: DEFAULT_MIN_JOINT_ANGLE,
 			incoming_slope: None,
 		}
@@ -37,9 +45,15 @@ impl PolylinePartition {
 	pub fn new(points: impl Into<Vec<Vec3>>) -> Self {
 		Self {
 			points: points.into(),
+			tile_width: DEFAULT_TILE_WIDTH,
 			min_joint_angle: DEFAULT_MIN_JOINT_ANGLE,
 			incoming_slope: None,
 		}
+	}
+
+	pub fn with_tile_width(mut self, tile_width: f32) -> Self {
+		self.tile_width = tile_width.max(1e-4);
+		self
 	}
 
 	pub fn with_min_joint_angle(mut self, min_joint_angle: f32) -> Self {
@@ -60,6 +74,7 @@ impl PolylinePartition {
 		}
 
 		let min_joint = self.min_joint_angle.max(0.0);
+		let tile_width = self.tile_width.max(1e-4);
 		let mut out = Vec::new();
 		let n_edges = points.len() - 1;
 
@@ -70,13 +85,19 @@ impl PolylinePartition {
 			let len = delta.length().max(1e-4);
 			let yaw = yaw_along_xz(delta.x, delta.z);
 			let roll = roll_along_slope(delta.x, delta.y, delta.z);
-			let mid = (a + b) * 0.5;
-			out.push(Placed {
-				geom: PartitionTile::Linear,
-				placement: Placement::new(mid, yaw)
-					.with_roll(roll)
-					.with_scale(Vec3::new(len * 0.5, 1.0, DEFAULT_THICK)),
-			});
+			let n = fitted_tile_count(len, tile_width);
+			let width = len / n as f32;
+			let half = width * 0.5;
+			let dir = delta / len;
+			for j in 0..n {
+				let mid = a + dir * (half + j as f32 * width);
+				out.push(Placed {
+					geom: PartitionTile::Linear,
+					placement: Placement::new(mid, yaw)
+						.with_roll(roll)
+						.with_scale(Vec3::new(half, 1.0, DEFAULT_THICK)),
+				});
+			}
 		}
 
 		if let Some(roll_in) = self.incoming_slope {
@@ -169,6 +190,25 @@ mod tests {
 			2
 		);
 		assert!(!pieces.iter().any(|p| p.geom == PartitionTile::Joint));
+		Ok(())
+	}
+
+	#[test]
+	fn edge_tile_width_subdivides_and_fits() -> anyhow::Result<()> {
+		let g = PartitionGeometry::Polyline(
+			PolylinePartition::new([Vec3::new(0.0, 0.0, 0.0), Vec3::new(2.4, 0.0, 0.0)])
+				.with_tile_width(1.0),
+		);
+		let linears: Vec<_> = g
+			.tiles()
+			.into_iter()
+			.filter(|p| p.geom == PartitionTile::Linear)
+			.collect();
+		// round(2.4/1)=2 tiles of width 1.2 → half-scale 0.6
+		assert_eq!(linears.len(), 2);
+		assert!((linears[0].scale().x - 0.6).abs() < 1e-4);
+		assert!((linears[0].translation().x - 0.6).abs() < 1e-4);
+		assert!((linears[1].translation().x - 1.8).abs() < 1e-4);
 		Ok(())
 	}
 
