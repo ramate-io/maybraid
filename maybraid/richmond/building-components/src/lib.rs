@@ -29,7 +29,8 @@ pub use parent_confines::{
 pub use partitions::{
 	update_partition_host_levels, Partition, PartitionGeometry, PartitionLodBand,
 	PartitionLodProbe, PartitionMeshSet, PartitionMeshTier, PartitionNode, PartitionStyle,
-	SLICE_KIT_HEIGHT, LINEAR_HIGH_FACTOR, LINEAR_LOW_FACTOR, LINEAR_MEDIUM_FACTOR,
+	DEFAULT_TILE_WIDTH, LINEAR_HIGH_FACTOR, LINEAR_LOW_FACTOR, LINEAR_MEDIUM_FACTOR,
+	SLICE_KIT_HEIGHT,
 };
 pub use placed::{Placed, Placement};
 pub use roofs::{

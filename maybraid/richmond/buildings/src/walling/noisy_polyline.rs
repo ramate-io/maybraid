@@ -5,7 +5,7 @@
 
 use bevy_math::Vec3;
 use procedural_common::{AllowedAngles, NoiseParams, NoisyPathParams, StepLenRange};
-use richmond_building_components::partitions::DEFAULT_MIN_JOINT_ANGLE;
+use richmond_building_components::partitions::{DEFAULT_MIN_JOINT_ANGLE, DEFAULT_TILE_WIDTH};
 
 use crate::walling::polyline::{PolylineWall, PolylineWallParams, DEFAULT_PORTAL_WIDTH};
 use crate::walling::portal::{AssignedPortal, MustAssignPortal, WallRegion};
@@ -27,6 +27,8 @@ pub struct NoisyPolylineWallParams {
 	pub height: f32,
 	pub thickness: f32,
 	pub portal_width: f32,
+	/// Suggested tile width along each solid edge; fitted so \(n\) tiles span exactly.
+	pub tile_width: f32,
 	/// Omit joints when plan/slope kinks are below this (radians).
 	pub min_joint_angle: f32,
 	pub must_assign: Vec<MustAssignPortal>,
@@ -54,6 +56,7 @@ impl Default for NoisyPolylineWallParams {
 			height: 3.0,
 			thickness: DEFAULT_THICK,
 			portal_width: DEFAULT_PORTAL_WIDTH,
+			tile_width: DEFAULT_TILE_WIDTH,
 			min_joint_angle: DEFAULT_MIN_JOINT_ANGLE,
 			must_assign: vec![],
 			must_not_assign: vec![],
@@ -92,6 +95,7 @@ impl NoisyPolylineWall {
 			height: params.height,
 			thickness: params.thickness,
 			portal_width: params.portal_width,
+			tile_width: params.tile_width,
 			min_joint_angle: params.min_joint_angle,
 			must_assign: params.must_assign,
 			must_not_assign: params.must_not_assign,
