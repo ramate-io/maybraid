@@ -2,6 +2,10 @@
 //!
 //! Kits are placed in **flat** roof-plane space (`X = Z = [0, 1]` unit triangle).
 //! [`crate::roofs::node::RoofNode`] applies pitch about local +X after kit poses.
+//!
+//! Rectangular half gables tile **along +X** (horizontal length). Pitch about +X
+//! then lifts **Z** into the slope so the rectangle stays a pitched wall along X,
+//! not a line diving through the ground.
 
 use bevy_math::Vec3;
 use std::f32::consts::PI;
@@ -37,11 +41,11 @@ impl RoofGeometry {
 	}
 }
 
-/// Two mirrored right triangles fill the unit square \([0,1] \times [z, z+1]\).
-fn unit_square_pair(z: f32) -> [Placed<RoofKit>; 2] {
+/// Two mirrored right triangles fill the unit square \(X \in [x, x+1]\), \(Z \in [0, 1]\).
+fn unit_square_pair_along_x(x: f32) -> [Placed<RoofKit>; 2] {
 	[
-		Placed::new(RoofKit::RightTriangle, Vec3::new(0.0, 0.0, z), 0.0),
-		Placed::new(RoofKit::RightTriangle, Vec3::new(1.0, 0.0, z + 1.0), PI),
+		Placed::new(RoofKit::RightTriangle, Vec3::new(x, 0.0, 0.0), 0.0),
+		Placed::new(RoofKit::RightTriangle, Vec3::new(x + 1.0, 0.0, 1.0), PI),
 	]
 }
 
@@ -49,7 +53,7 @@ fn rectangular_half_gable_pieces(length_units: u32) -> Vec<Placed<RoofKit>> {
 	let n = length_units.max(1);
 	let mut out = Vec::with_capacity((n * 2) as usize);
 	for i in 0..n {
-		out.extend(unit_square_pair(i as f32));
+		out.extend(unit_square_pair_along_x(i as f32));
 	}
 	out
 }
@@ -62,15 +66,15 @@ fn rectangular_intersecting_half_gable_pieces(
 	let n = length_units.max(1);
 	let mut out = Vec::with_capacity((n * 2) as usize);
 	for i in 0..n {
-		let z = i as f32;
+		let x = i as f32;
 		out.push(Placed::new(
 			RoofKit::RightTriangle,
-			Vec3::new(0.0, 0.0, z),
+			Vec3::new(x, 0.0, 0.0),
 			0.0,
 		));
 		let bottom = Placed::new(
 			RoofKit::RightTriangle,
-			Vec3::new(1.0, 0.0, z + 1.0),
+			Vec3::new(x + 1.0, 0.0, 1.0),
 			PI,
 		);
 		if i + 1 == n {
@@ -92,17 +96,17 @@ fn half_trapezoidal_hip_pieces(edge_units: u32) -> Vec<Placed<RoofKit>> {
 	let mut out = Vec::with_capacity((1 + edge) as usize);
 	out.push(Placed::at_origin(RoofKit::RightTriangle));
 	for i in 0..edge {
-		let z = i as f32;
+		let x = i as f32;
 		if i % 2 == 0 {
 			out.push(Placed::new(
 				RoofKit::RightTriangle,
-				Vec3::new(1.0, 0.0, z + 1.0),
+				Vec3::new(x + 1.0, 0.0, 1.0),
 				PI,
 			));
 		} else {
 			out.push(Placed::new(
 				RoofKit::RightTriangle,
-				Vec3::new(0.0, 0.0, z + 1.0),
+				Vec3::new(x + 1.0, 0.0, 0.0),
 				0.0,
 			));
 		}
@@ -124,6 +128,17 @@ mod tests {
 	}
 
 	#[test]
+	fn rectangular_half_gable_tiles_along_x() -> anyhow::Result<()> {
+		let pieces = RoofGeometry::rectangular_half_gable(3, 30.0).kit_pieces();
+		// Length advances on +X; slope run stays in Z ∈ [0, 1] per square.
+		assert_eq!(pieces[0].translation(), Vec3::new(0.0, 0.0, 0.0));
+		assert_eq!(pieces[1].translation(), Vec3::new(1.0, 0.0, 1.0));
+		assert_eq!(pieces[2].translation(), Vec3::new(1.0, 0.0, 0.0));
+		assert_eq!(pieces[4].translation(), Vec3::new(2.0, 0.0, 0.0));
+		Ok(())
+	}
+
+	#[test]
 	fn rectangular_half_gable_clamps_zero_length() -> anyhow::Result<()> {
 		let pieces = RoofGeometry::rectangular_half_gable(0, 15.0).kit_pieces();
 		assert_eq!(pieces.len(), 2);
@@ -138,6 +153,7 @@ mod tests {
 		let end = pieces.last().expect("end triangle");
 		assert_eq!(end.scale(), Vec3::new(0.5, 1.0, 0.5));
 		assert!(pieces[..3].iter().all(|p| p.scale() == Vec3::ONE));
+		assert_eq!(end.translation(), Vec3::new(2.0, 0.0, 1.0));
 		Ok(())
 	}
 

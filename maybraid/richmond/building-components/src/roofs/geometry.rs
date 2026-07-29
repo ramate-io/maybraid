@@ -66,21 +66,21 @@ impl RoofGeometry {
 /// Alias kept for migration; prefer [`RoofGeometry`].
 pub type Roof = RoofGeometry;
 
-/// Rectangular half-gable: `length_units` unit squares along Z, then pitched.
+/// Rectangular half-gable: `length_units` unit squares along +X, then pitched.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct RectangularHalfGable {
-	/// Number of unit squares along the ridge (Z). Clamped to at least 1.
+	/// Number of unit squares along the horizontal length (+X). Clamped to at least 1.
 	pub length_units: u32,
-	/// Pitch about local +X (degrees).
+	/// Pitch about local +X (degrees); slope run is along Z.
 	pub pitch_degrees: f32,
 }
 
 /// Intersecting rectangular half-gable with a scalable end triangle.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct RectangularIntersectingHalfGable {
-	/// Number of unit squares along the ridge (Z). Clamped to at least 1.
+	/// Number of unit squares along the horizontal length (+X). Clamped to at least 1.
 	pub length_units: u32,
-	/// Pitch about local +X (degrees).
+	/// Pitch about local +X (degrees); slope run is along Z.
 	pub pitch_degrees: f32,
 	/// Non-uniform scale applied to the closing bottom triangle at the far end.
 	pub end_triangle_scale: f32,
