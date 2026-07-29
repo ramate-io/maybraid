@@ -9,6 +9,8 @@ use lod::LodViewerState;
 use richmond_building_components::partitions::rough_stonework::{
 	RoughStonework180, RoughStonework90, RoughStoneworkHeader90, RoughStoneworkLinear,
 };
+use richmond_building_components::placed::Placement;
+use richmond_building_components::roofs::{RoofGeometry, RoofNode};
 use richmond_buildings::bedroom::Bedroom;
 use richmond_buildings::stacked_rings::StackedRings;
 use richmond_buildings::wizards_tower::WizardsTower;
@@ -26,6 +28,13 @@ pub enum PreviewSubject {
 	Arc90,
 	Arc180,
 	Header90,
+	HalfTriangularHip {
+		pitch_degrees: f32,
+	},
+	RectangularHalfGable {
+		length_units: u32,
+		pitch_degrees: f32,
+	},
 	WizardsTower { noise: f32 },
 	StackedRings {
 		floor_count: u32,
@@ -73,6 +82,15 @@ impl PreviewConfig {
 			PreviewSubject::Arc90 => "preview: rough-stonework arc-90".into(),
 			PreviewSubject::Arc180 => "preview: rough-stonework arc-180".into(),
 			PreviewSubject::Header90 => "preview: rough-stonework header-90".into(),
+			PreviewSubject::HalfTriangularHip { pitch_degrees } => {
+				format!("preview: half-triangular-hip (pitch={pitch_degrees:.1}°)")
+			}
+			PreviewSubject::RectangularHalfGable {
+				length_units,
+				pitch_degrees,
+			} => format!(
+				"preview: rectangular-half-gable (len={length_units} pitch={pitch_degrees:.1}°)"
+			),
 			PreviewSubject::WizardsTower { noise } => {
 				format!("preview: wizards-tower (noise={noise:.2})")
 			}
@@ -113,6 +131,13 @@ impl PreviewConfig {
 				Aabb3d::from_min_max(Vec3::new(-4.0, 0.0, -4.0), Vec3::new(4.0, 3.0, 4.0))
 			}
 			PreviewSubject::Bedroom { extent, .. } => Aabb3d::from_min_max(Vec3::ZERO, *extent),
+			PreviewSubject::HalfTriangularHip { .. } => {
+				Aabb3d::from_min_max(Vec3::ZERO, Vec3::new(1.0, 1.0, 1.0))
+			}
+			PreviewSubject::RectangularHalfGable { length_units, .. } => {
+				let len = (*length_units).max(1) as f32;
+				Aabb3d::from_min_max(Vec3::ZERO, Vec3::new(1.0, 1.0, len))
+			}
 			_ => Aabb3d::from_min_max(Vec3::ZERO, Vec3::ONE),
 		}
 	}
@@ -256,6 +281,23 @@ pub fn present_preview_lod(
 				transform,
 				RoughStoneworkHeader90.scene_with_lod(&lod_ref),
 			);
+		}
+		PreviewSubject::HalfTriangularHip { pitch_degrees } => {
+			let roof = RoofNode::shepherds_thatch(
+				RoofGeometry::half_triangular_hip(*pitch_degrees),
+				Placement::IDENTITY,
+			);
+			spawn_preview(&mut commands, transform, roof.scene_with_lod(&lod_ref));
+		}
+		PreviewSubject::RectangularHalfGable {
+			length_units,
+			pitch_degrees,
+		} => {
+			let roof = RoofNode::shepherds_thatch(
+				RoofGeometry::rectangular_half_gable(*length_units, *pitch_degrees),
+				Placement::IDENTITY,
+			);
+			spawn_preview(&mut commands, transform, roof.scene_with_lod(&lod_ref));
 		}
 		PreviewSubject::WizardsTower { .. } => {
 			if let Some(tower) = cache.wizards_tower.clone() {
