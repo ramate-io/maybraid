@@ -94,3 +94,15 @@ When authoring circular stairs, we typically use a fraction of the radius for th
 Tread depths can vary as is needed for connectivity and spacing. 
 
 Tread heights should typically be around 0.18 world units. 
+
+## Roofs
+
+Most roof primitives are simply a right triangle X = Z = [0, 1] with Y = [-0.2, 0.2]. The triangular plane is then rotated about the Y axis to achieve the desired pitch. Ridges, fascias, and other joinery is used to cover the seams. 
+
+To achieve a rectangular pitch, we can tile right triangles together. 
+
+To achieve a hip--whether triangular or trapezoidal--we can use a combination of right triangles. For example, a triangular hip is simply an isosceles triangle, or two right triangles. Similarly, a trapezoidal can be built from five or more right triangles. 
+
+Domes we author as bespoke components in 15 degree, 90 degree, and 180 degree sweeps. 
+
+Roof geometry does not fill the entire roof volume. Even domes carve out the inner space. This is intentional, allowing features to sit under the roof surface. Cleverly authored types can delegate these inner spaces to be filled by other components.
