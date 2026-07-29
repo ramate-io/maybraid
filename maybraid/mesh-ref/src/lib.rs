@@ -151,26 +151,16 @@ pub fn mirror_mesh(mesh: &Mesh, axis: MirrorAxis) -> Mesh {
 	out
 }
 
-fn meshes_ready(world: &bevy::prelude::World, meshes: &Assets<Mesh>) -> bool {
-	for entity in world.iter_entities() {
-		if let Some(mesh3d) = entity.get::<Mesh3d>() {
-			if meshes.get(&mesh3d.0).is_none() {
-				return false;
-			}
-		}
-	}
-	true
-}
-
+/// Clone `source` and rewrite every `Mesh3d` to a newly registered mirrored mesh.
+///
+/// Caller must ensure the source handle is
+/// [`AssetServer::is_loaded_with_dependencies`] so mesh bytes are in `Assets<Mesh>`.
 fn mirror_world_asset(
 	source: &WorldAsset,
 	axis: MirrorAxis,
 	meshes: &mut Assets<Mesh>,
 	type_registry: &AppTypeRegistry,
 ) -> Option<WorldAsset> {
-	if !meshes_ready(&source.world, meshes) {
-		return None;
-	}
 	let mut cloned = source.clone_with(type_registry).ok()?;
 
 	let mut entities = Vec::new();
@@ -185,8 +175,7 @@ fn mirror_world_asset(
 		let new_handle = if let Some(h) = remap.get(&old_handle.id()) {
 			h.clone()
 		} else {
-			let mesh = meshes.get(&old_handle)?;
-			let mirrored = mirror_mesh(mesh, axis);
+			let mirrored = mirror_mesh(meshes.get(&old_handle)?, axis);
 			let h = meshes.add(mirrored);
 			remap.insert(old_handle.id(), h.clone());
 			h
@@ -203,8 +192,6 @@ fn mirror_world_asset(
 #[derive(Resource, Default)]
 pub struct MeshRefHandles {
 	cache: HashMap<MeshRef, Handle<WorldAsset>>,
-	/// Mirrored refs waiting on source readiness; value is the source handle.
-	pending_mirror: HashMap<MeshRef, Handle<WorldAsset>>,
 }
 
 impl MeshRefHandles {
@@ -236,8 +223,8 @@ impl MeshRefHandles {
 	/// Resolve `mesh_ref` to a cached handle when ready.
 	///
 	/// Unmirrored refs always return a (possibly still-loading) handle.
-	/// Mirrored refs return [`None`] until the source [`WorldAsset`] and its meshes
-	/// are ready and the rebuilt world has been cached.
+	/// Mirrored refs return [`None`] until the source is
+	/// [`AssetServer::is_loaded_with_dependencies`] and the rebuilt world is cached.
 	pub fn try_resolve(
 		&mut self,
 		mesh_ref: &MeshRef,
@@ -253,19 +240,14 @@ impl MeshRefHandles {
 		match mesh_ref.mirror {
 			None => Some(self.ensure_unmirrored(mesh_ref, asset_server)),
 			Some(axis) => {
-				let source_ref = mesh_ref.without_mirror();
-				let source_handle = if let Some(h) = self.pending_mirror.get(mesh_ref) {
-					h.clone()
-				} else {
-					let h = self.ensure_unmirrored(&source_ref, asset_server);
-					self.pending_mirror.insert(mesh_ref.clone(), h.clone());
-					h
-				};
-
+				let source_handle =
+					self.ensure_unmirrored(&mesh_ref.without_mirror(), asset_server);
+				if !asset_server.is_loaded_with_dependencies(&source_handle) {
+					return None;
+				}
 				let source = world_assets.get(&source_handle)?;
 				let mirrored = mirror_world_asset(source, axis, meshes, type_registry)?;
 				let handle = world_assets.add(mirrored);
-				self.pending_mirror.remove(mesh_ref);
 				self.cache.insert(mesh_ref.clone(), handle.clone());
 				Some(handle)
 			}
@@ -275,29 +257,18 @@ impl MeshRefHandles {
 	/// Preload many refs (e.g. at startup) so later scene spawns hit the cache.
 	///
 	/// Mirrored refs only kick off their source load; the mirrored rebuild still
-	/// needs [`Self::try_resolve`] once assets are ready.
+	/// needs [`Self::try_resolve`] once dependencies are ready.
 	pub fn preload<'a>(
 		&mut self,
 		mesh_refs: impl IntoIterator<Item = &'a MeshRef>,
 		asset_server: &AssetServer,
 	) {
 		for mesh_ref in mesh_refs {
-			match mesh_ref.mirror {
-				None => {
-					let _ = self.ensure_unmirrored(mesh_ref, asset_server);
-				}
-				Some(_) => {
-					let source = mesh_ref.without_mirror();
-					let source_handle = self.ensure_unmirrored(&source, asset_server);
-					self.pending_mirror
-						.entry(mesh_ref.clone())
-						.or_insert(source_handle);
-				}
-			}
+			let _ = self.ensure_unmirrored(&mesh_ref.without_mirror(), asset_server);
 		}
 	}
 
-	/// Number of cached (ready) handles.
+	/// Number of cached handles (source and mirrored).
 	pub fn len(&self) -> usize {
 		self.cache.len()
 	}
