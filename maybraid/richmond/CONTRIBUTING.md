@@ -103,6 +103,19 @@ Warm high/mid/low SceneRef roots under a **single** partition-node host. Parent 
 
 **Polyline** is a short-run primitive: one LOD parent for the whole run (kits are content, not nested hosts). Prefer splitting long paths in walling/buildings. Joint kits under a polyline follow the parent level (high/mid GLBs only; omitted at Low). Lone joint leaf banding uses tighter factors (High ≤ 3, Medium ≤ 12).
 
+### Roof mesh resolution
+
+Roof kits use the same distance / extent probe shape ([`RoofLodProbe`](building-components/src/roofs/lod.rs)) but **tighter** High / Medium thresholds than walls:
+
+| Band | Factor |
+|------|--------|
+| High | ≤ [`ROOF_HIGH_FACTOR`](building-components/src/roofs/lod.rs) (2.5) |
+| Medium | ≤ [`ROOF_MEDIUM_FACTOR`](building-components/src/roofs/lod.rs) (10) |
+| Low | ≤ [`ROOF_LOW_FACTOR`](building-components/src/roofs/lod.rs) (500) |
+| UltraLow | elsewhere (shares low mesh for now) |
+
+Shared mapping lives in [`lod_band`](building-components/src/lod_band.rs); fine-phase updates run `update_partition_host_levels` and `update_roof_host_levels` separately.
+
 ## Internal vs external emission
 
 At **High**, each floor/room emits its own Internal ball for compartment geometry. Continuous vertical features (the tower spire) share one [`ParentConfines::capsule`](building-components/src/parent_confines.rs) (`Internal(Capsule)`) so higher storeys do not pop in awkwardly while you are inside the shaft. **Medium** omits internals from the scene.

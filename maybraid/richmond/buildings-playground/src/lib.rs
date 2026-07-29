@@ -21,7 +21,8 @@ use lod::{add_fine_pass_for, LodFinePassPlugin, LodFinePassSystems};
 use scene_ref::SceneRefPlugin;
 use preview::{present_preview_lod, CachedPreview};
 use richmond_building_components::{
-	apply_parent_confines, update_partition_host_levels, FurnitureWireframePlugin,
+	apply_parent_confines, update_partition_host_levels, update_roof_host_levels,
+	FurnitureWireframePlugin,
 };
 use richmond_buildings::wizards_tower::{TowerSilhouettePlugin, WizardsTower};
 
@@ -48,6 +49,7 @@ impl Plugin for RichmondBuildingsPlaygroundPlugin {
 						.after(LodFinePassSystems::Track)
 						.after(capture_command_line_input::<PlaygroundCommand>),
 					update_partition_host_levels.in_set(LodFinePassSystems::UpdateLevels),
+					update_roof_host_levels.in_set(LodFinePassSystems::UpdateLevels),
 					apply_parent_confines.after(LodFinePassSystems::Fulfill),
 					ui::sync_command_status_text.before(game_commands::ui::update_debug_ui),
 				),

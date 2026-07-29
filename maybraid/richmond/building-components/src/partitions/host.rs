@@ -12,11 +12,9 @@
 use bevy::prelude::Transform;
 use bevy::scene::prelude::Scene;
 use lod::gen::LodSceneLevel;
-use lod::lod_ref::LodRef;
-use scene_ref::SceneRef;
 
 use crate::assets::AssetPath;
-use crate::lod_host::{warm_content_host_hsl, warm_mesh_level_host};
+use crate::lod_host::warm_mesh_level_host;
 use crate::partitions::mesh_set::{PartitionMeshSet, PartitionMeshTier};
 use crate::partitions::probe::PartitionLodProbe;
 
@@ -69,16 +67,4 @@ pub fn warm_host(
 	roots: [(LodSceneLevel, Option<AssetPath>); 3],
 ) -> impl Scene + 'static {
 	warm_mesh_level_host(level, probe, transform, roots)
-}
-
-/// Identity-placement LOD host from explicit high/mid/low [`SceneRef`]s (optional mirror).
-pub fn leaf_scene_ref_lod(
-	high: SceneRef,
-	mid: SceneRef,
-	low: SceneRef,
-	lod_ref: &LodRef,
-) -> impl Scene + 'static {
-	let probe = PartitionLodProbe::from_aabb(lod_ref.bounds);
-	let level = probe.level_for(lod_ref.current_transform);
-	warm_content_host_hsl(level, probe, high.scene(), mid.scene(), low.scene())
 }

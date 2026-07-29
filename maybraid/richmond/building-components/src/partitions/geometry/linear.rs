@@ -29,15 +29,7 @@ pub struct LinearLod;
 
 impl LinearLod {
 	pub fn band_from_distance_factor(factor: f32) -> PartitionLodBand {
-		if factor <= LINEAR_HIGH_FACTOR {
-			PartitionLodBand::High
-		} else if factor <= LINEAR_MEDIUM_FACTOR {
-			PartitionLodBand::Medium
-		} else if factor <= LINEAR_LOW_FACTOR {
-			PartitionLodBand::Low
-		} else {
-			PartitionLodBand::UltraLow
-		}
+		PartitionLodBand::from_distance_factor(factor)
 	}
 
 	pub fn level_for_placement(placement: &Placement, viewer: &Transform) -> LodSceneLevel {

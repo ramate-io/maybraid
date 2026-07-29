@@ -5,7 +5,6 @@
 pub use crate::partitions::geometry::{
 	LINEAR_HIGH_FACTOR, LINEAR_LOW_FACTOR, LINEAR_MEDIUM_FACTOR,
 };
-pub use crate::partitions::host::leaf_scene_ref_lod;
 pub use crate::partitions::mesh_set::{PartitionMeshSet, PartitionMeshTier};
 pub use crate::partitions::probe::{
 	update_partition_host_levels, PartitionLodBand, PartitionLodProbe,
