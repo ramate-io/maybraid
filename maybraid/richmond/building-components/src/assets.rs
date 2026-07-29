@@ -134,3 +134,23 @@ pub mod stairs {
 	}
 }
 
+/// Urban roof GLBs under `urban/roofs/`.
+pub mod roofs {
+	use super::AssetPath;
+
+	/// Canonical unit right-triangle primitive (no style / LOD variants).
+	pub const UNIT_RIGHT_TRIANGLE: AssetPath =
+		AssetPath::new("urban/roofs/unit_right_triangle.glb");
+
+	pub mod shepherds_thatch {
+		use super::AssetPath;
+
+		pub const RIGHT_TRIANGLE_HIGH: AssetPath =
+			AssetPath::new("urban/roofs/shepherds_thatch/right_triangle_001_high_res.glb");
+		pub const RIGHT_TRIANGLE_MID: AssetPath =
+			AssetPath::new("urban/roofs/shepherds_thatch/right_triangle_001_mid_res.glb");
+		pub const RIGHT_TRIANGLE_LOW: AssetPath =
+			AssetPath::new("urban/roofs/shepherds_thatch/right_triangle_001_low_res.glb");
+	}
+}
+

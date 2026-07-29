@@ -3,6 +3,5 @@
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum RoofStyle {
 	#[default]
-	RoughStonework,
-	Wood,
+	ShepherdsThatch,
 }

@@ -72,7 +72,7 @@ A common approach to building door frames is to use a header component with vari
 
 ## Floors, Roofs, Stairs, and Doors
 
-These modules hold reusable floor/roof fillers, circulation geometry, and door kits. Floors and roofs are typically an **arc filler** plus a **struct filler**. Prefer rough stonework; wood appears occasionally (interior halfspaces, perch decking, door leaves).
+These modules hold reusable floor/roof fillers, circulation geometry, and door kits. Floors are typically an **arc filler** plus a **struct filler**. Roofs tessellate from a unit right-triangle kit (and empty dome arc kits). Prefer rough stonework for partitions/floors; shepherd's thatch for roofs; wood appears occasionally (interior halfspaces, perch decking, door leaves).
 
 ## Floors
 
@@ -97,12 +97,16 @@ Tread heights should typically be around 0.18 world units.
 
 ## Roofs
 
-Most roof primitives are simply a right triangle X = Z = [0, 1] with Y = [-0.2, 0.2]. The triangular plane is then rotated about the Y axis to achieve the desired pitch. Ridges, fascias, and other joinery is used to cover the seams. 
+The atomic roof kit is a unit right triangle \(X = Z = [0, 1]\), \(Y = [-0.2, 0.2]\). Continuous forms tessellate into those kits in flat roof-plane space; pitch is then applied as a rotation about **local +X** (run along Z, rise in Y). Parent [`Placement`](src/placed.rs) (scale / yaw / translate) wraps that pitched assembly. Ridges, fascias, and other joinery cover seams.
 
-To achieve a rectangular pitch, we can tile right triangles together. 
+Public primitives on [`RoofGeometry`](src/roofs/geometry.rs):
 
-To achieve a hip--whether triangular or trapezoidal--we can use a combination of right triangles. For example, a triangular hip is simply an isosceles triangle, or two right triangles. Similarly, a trapezoidal can be built from five or more right triangles. 
+- **Rectangular half gable** — tile mirrored right-triangle pairs into unit squares along Z (`length_units`), then pitch.
+- **Rectangular intersecting half gable** — same tiling, but the far-end bottom triangle is scaled (`end_triangle_scale`) so a crossing pitch can meet it.
+- **Half triangular hip** — a single pitched right triangle.
+- **Half trapezoidal hip** — base triangle plus further triangles (`edge_units`) so the roofline is an edge rather than a point.
+- **Dome** — continuous sweep decomposed with the same 180° / 90° / 15° [`ArcKit`](src/arc_kit.rs) standard as partitions and floor arc fills. Dome leaves are empty until bespoke GLBs exist.
 
-Domes we author as bespoke components in 15 degree, 90 degree, and 180 degree sweeps. 
+Buildings-crate roof complexes compose these primitives; kit → GLB mapping stays in this crate (shepherd's thatch right-triangle LOD triad today).
 
 Roof geometry does not fill the entire roof volume. Even domes carve out the inner space. This is intentional, allowing features to sit under the roof surface. Cleverly authored types can delegate these inner spaces to be filled by other components.
