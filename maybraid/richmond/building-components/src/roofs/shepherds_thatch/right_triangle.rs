@@ -6,7 +6,7 @@ use crate::assets::roofs::shepherds_thatch::{
 use crate::partitions::lod::PartitionMeshSet;
 use crate::partitions::node::impl_partition_mesh_lod_scene;
 
-/// Unit right triangle \(X = Z = [0, 1]\), \(Y = [-0.2, 0.2]\).
+/// Unit right triangle \(X \in [0, 1]\), \(Z \in [-1, 0]\), \(Y \in [-0.2, 0.2]\).
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct ShepherdsThatchRightTriangle;
 

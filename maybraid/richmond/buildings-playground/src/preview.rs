@@ -132,11 +132,11 @@ impl PreviewConfig {
 			}
 			PreviewSubject::Bedroom { extent, .. } => Aabb3d::from_min_max(Vec3::ZERO, *extent),
 			PreviewSubject::HalfTriangularHip { .. } => {
-				Aabb3d::from_min_max(Vec3::ZERO, Vec3::new(1.0, 1.0, 1.0))
+				Aabb3d::from_min_max(Vec3::new(0.0, -0.2, -1.0), Vec3::new(1.0, 1.0, 0.0))
 			}
 			PreviewSubject::RectangularHalfGable { length_units, .. } => {
 				let len = (*length_units).max(1) as f32;
-				Aabb3d::from_min_max(Vec3::ZERO, Vec3::new(len, 1.0, 1.0))
+				Aabb3d::from_min_max(Vec3::new(0.0, -0.2, -1.0), Vec3::new(len, 1.0, 0.0))
 			}
 			_ => Aabb3d::from_min_max(Vec3::ZERO, Vec3::ONE),
 		}

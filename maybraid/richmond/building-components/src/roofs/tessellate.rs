@@ -1,11 +1,14 @@
 //! Private roof kit tessellation (not part of the public IR).
 //!
-//! Kits are placed in **flat** roof-plane space (`X = Z = [0, 1]` unit triangle).
-//! [`crate::roofs::node::RoofNode`] applies pitch about local +X after kit poses.
+//! Kits are placed in **flat** roof-plane space. The unit right-triangle kit is
+//! origin-anchored with \(X \in [0, 1]\), \(Z \in [-1, 0]\), \(Y \in [-0.2, 0.2]\)
+//! (see `unit_right_triangle.glb`). [`crate::roofs::node::RoofNode`] applies
+//! pitch about local +X after kit poses.
 //!
 //! Rectangular half gables tile **along +X** (horizontal length). Pitch about +X
-//! then lifts **Z** into the slope so the rectangle stays a pitched wall along X,
-//! not a line diving through the ground.
+//! then lifts **Z** into the slope so the rectangle stays a pitched wall along X.
+//! The complementary triangle of each unit square is yaw-π with its origin at the
+//! far corner \((x+1, 0, -1)\), matching the origin-anchored footprint.
 
 use bevy_math::Vec3;
 use std::f32::consts::PI;
@@ -17,7 +20,7 @@ use crate::roofs::geometry::RoofGeometry;
 /// Atomic roof kit pieces.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) enum RoofKit {
-	/// Unit right triangle \(X = Z = [0, 1]\), \(Y = [-0.2, 0.2]\).
+	/// Unit right triangle \(X \in [0, 1]\), \(Z \in [-1, 0]\), \(Y \in [-0.2, 0.2]\).
 	RightTriangle,
 	/// Dome arc kit (empty leaf scenes until bespoke GLBs exist).
 	DomeArc(ArcKit),
@@ -41,11 +44,15 @@ impl RoofGeometry {
 	}
 }
 
-/// Two mirrored right triangles fill the unit square \(X \in [x, x+1]\), \(Z \in [0, 1]\).
+/// Two mirrored right triangles fill the unit square \(X \in [x, x+1]\), \(Z \in [-1, 0]\).
+///
+/// The kit is origin-anchored into \(+X/-Z\). After yaw \(\pi\), the same footprint
+/// lands in \(-X/+Z\) relative to its transform origin, so that origin must sit at
+/// the far corner \((x+1, 0, -1)\) to cover the complementary half.
 fn unit_square_pair_along_x(x: f32) -> [Placed<RoofKit>; 2] {
 	[
 		Placed::new(RoofKit::RightTriangle, Vec3::new(x, 0.0, 0.0), 0.0),
-		Placed::new(RoofKit::RightTriangle, Vec3::new(x + 1.0, 0.0, 1.0), PI),
+		Placed::new(RoofKit::RightTriangle, Vec3::new(x + 1.0, 0.0, -1.0), PI),
 	]
 }
 
@@ -74,7 +81,7 @@ fn rectangular_intersecting_half_gable_pieces(
 		));
 		let bottom = Placed::new(
 			RoofKit::RightTriangle,
-			Vec3::new(x + 1.0, 0.0, 1.0),
+			Vec3::new(x + 1.0, 0.0, -1.0),
 			PI,
 		);
 		if i + 1 == n {
@@ -100,7 +107,7 @@ fn half_trapezoidal_hip_pieces(edge_units: u32) -> Vec<Placed<RoofKit>> {
 		if i % 2 == 0 {
 			out.push(Placed::new(
 				RoofKit::RightTriangle,
-				Vec3::new(x + 1.0, 0.0, 1.0),
+				Vec3::new(x + 1.0, 0.0, -1.0),
 				PI,
 			));
 		} else {
@@ -128,11 +135,12 @@ mod tests {
 	}
 
 	#[test]
-	fn rectangular_half_gable_tiles_along_x() -> anyhow::Result<()> {
+	fn rectangular_half_gable_tiles_along_x_with_origin_anchored_mirror() -> anyhow::Result<()> {
 		let pieces = RoofGeometry::rectangular_half_gable(3, 30.0).kit_pieces();
-		// Length advances on +X; slope run stays in Z ∈ [0, 1] per square.
+		// Kit footprint is +X/−Z from the origin; complementary half sits at (x+1, 0, −1).
 		assert_eq!(pieces[0].translation(), Vec3::new(0.0, 0.0, 0.0));
-		assert_eq!(pieces[1].translation(), Vec3::new(1.0, 0.0, 1.0));
+		assert_eq!(pieces[1].translation(), Vec3::new(1.0, 0.0, -1.0));
+		assert_eq!(pieces[1].yaw(), PI);
 		assert_eq!(pieces[2].translation(), Vec3::new(1.0, 0.0, 0.0));
 		assert_eq!(pieces[4].translation(), Vec3::new(2.0, 0.0, 0.0));
 		Ok(())
@@ -153,7 +161,7 @@ mod tests {
 		let end = pieces.last().expect("end triangle");
 		assert_eq!(end.scale(), Vec3::new(0.5, 1.0, 0.5));
 		assert!(pieces[..3].iter().all(|p| p.scale() == Vec3::ONE));
-		assert_eq!(end.translation(), Vec3::new(2.0, 0.0, 1.0));
+		assert_eq!(end.translation(), Vec3::new(2.0, 0.0, -1.0));
 		Ok(())
 	}
 

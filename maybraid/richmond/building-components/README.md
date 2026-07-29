@@ -97,11 +97,11 @@ Tread heights should typically be around 0.18 world units.
 
 ## Roofs
 
-The atomic roof kit is a unit right triangle \(X = Z = [0, 1]\), \(Y = [-0.2, 0.2]\). Continuous forms tessellate into those kits in flat roof-plane space; pitch is then applied as a rotation about **local +X** (horizontal length along X stays put; slope run along Z rises into Y). Parent [`Placement`](src/placed.rs) (scale / yaw / translate) wraps that pitched assembly. Ridges, fascias, and other joinery cover seams.
+The atomic roof kit is a unit right triangle origin-anchored with \(X \in [0, 1]\), \(Z \in [-1, 0]\), \(Y \in [-0.2, 0.2]\) (matching `unit_right_triangle.glb`). Continuous forms tessellate into those kits in flat roof-plane space; pitch is then applied as a rotation about **local +X** (horizontal length along X stays put; slope run along Z rises into Y). Parent [`Placement`](src/placed.rs) (scale / yaw / translate) wraps that pitched assembly. Ridges, fascias, and other joinery cover seams.
 
 Public primitives on [`RoofGeometry`](src/roofs/geometry.rs):
 
-- **Rectangular half gable** — tile mirrored right-triangle pairs into unit squares along **+X** (`length_units`), then pitch so the face is a rectangular pitched wall (not a line through the ground).
+- **Rectangular half gable** — tile mirrored right-triangle pairs into unit squares along **+X** (`length_units`). The complementary triangle is yaw-\(\pi\) with its origin at the far \(+X/-Z\) corner so both halves share the same \(Z \in [-1, 0]\) square; then pitch.
 - **Rectangular intersecting half gable** — same tiling, but the far-end bottom triangle is scaled (`end_triangle_scale`) so a crossing pitch can meet it.
 - **Half triangular hip** — a single pitched right triangle.
 - **Half trapezoidal hip** — base triangle plus further triangles (`edge_units`) so the roofline is an edge rather than a point.
