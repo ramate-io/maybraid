@@ -4,7 +4,7 @@ use bevy::scene::prelude::Scene;
 use bevy_math::Vec3;
 use lod::gen::LodScene;
 use lod::lod_ref::LodRef;
-use richmond_building_components::partitions::{Wall, WallNode};
+use richmond_building_components::partitions::{Partition, PartitionNode};
 use richmond_building_components::scene_children;
 use richmond_building_components::Placement;
 
@@ -14,7 +14,7 @@ pub struct StackedRing {
 	pub base_y: f32,
 	pub floor_height: f32,
 	pub radius: f32,
-	pub outer_walls: [WallNode; 2],
+	pub outer_walls: [PartitionNode; 2],
 }
 
 impl StackedRing {
@@ -27,12 +27,12 @@ impl StackedRing {
 			floor_height,
 			radius,
 			outer_walls: [
-				WallNode::rough_stone(
-					Wall::arc(180.0),
+				PartitionNode::rough_stone(
+					Partition::arc(180.0),
 					Placement::new(translation, 0.0).with_scale(scale),
 				),
-				WallNode::rough_stone(
-					Wall::arc(180.0),
+				PartitionNode::rough_stone(
+					Partition::arc(180.0),
 					Placement::new(translation, std::f32::consts::PI).with_scale(scale),
 				),
 			],

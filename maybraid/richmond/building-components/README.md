@@ -39,15 +39,21 @@ Shared [`Placement`](src/placed.rs) / [`Placed`](src/placed.rs) and [`ArcKit`](s
 
 **Style + Geometry + Placement → LodScene**
 
-1. **`*/geometry.rs`** — continuous forms with size and orientation (`Wall::arc(45.0)`, `Floor::rectangle()`, …).
+1. **`*/geometry.rs`** — continuous forms with size and orientation (`Partition::arc(45.0)`, `Floor::rectangle()`, …).
 2. **`*/style.rs`** — material / look (`RoughStonework`, `Wood`, …).
-3. **`*/node.rs`** — authoring IR (`FloorNode`, `WallNode`, …) that implements `LodScene`: tessellates geometry privately, composes placement, and maps kit pieces to GLBs or leaf placeholders.
+3. **`*/node.rs`** — authoring IR (`FloorNode`, `PartitionNode`, …) that implements `LodScene`: tessellates geometry privately, composes placement, and maps kit pieces to GLBs or leaf placeholders.
 
 Scaling vs repeating continuous forms is deferred; arc decomposition prefers 180° / 90° / 15°.
 
 ## Swept Components
 
 We have not yet defined a sweeping tool. The plan is to make it take linear segments in \(X \in [-1.0, 1.0]\) and extrude/fill them along a path (line or arc).
+
+## Polyline partitions
+
+[`Partition::polyline`](src/partitions/geometry/polyline.rs) is a **short-run** primitive: one [`PartitionNode`](src/partitions/node.rs) is a single LOD parent whose `scene_with_level` expands into posed linear + joint kits. Prefer splitting longer paths in higher-order constructs (`richmond_buildings::walling`).
+
+Joints omit when both plan and slope kinks are below [`DEFAULT_MIN_JOINT_ANGLE`](src/partitions/geometry/polyline.rs) (override via `with_min_joint_angle`). Use `with_incoming_slope` when a split span continues a preceding segment that is not in `points`. Horizontal joint scale grows with the vertical kink; roll averages abutting slopes. Joint meshes follow the **parent** level (high/mid only). LOD policy lives beside each geometry variant under [`geometry/`](src/partitions/geometry/).
 
 ## Partitions
 
@@ -69,6 +75,8 @@ Partition components are authored in a normalized local space, then transformed 
   - \(X = [-1.0, 1.0]\)
 
 A common approach to building door frames is to use a header component with various 15° arc sweeps to create the frame.
+
+Joints are used to connect irregular partition geometry. They are roughly circular components defined \(X = Z = [-0.5, 0.5]\) and \(Y = [0.0, 1.0]\). Scale \(Y\) so the joint spans the storey; grow \(X/Z\) with the vertical angle kink between abutting segments. Align roll to the average of those segments' slopes (yaw bisects the plan turn). Omit joints when kinks are below the construction `min_joint_angle` (default \(0.1\) rad). When a polyline is split, pass `incoming_slope` so the start vertex can still joint against the preceding segment.
 
 ## Floors, Roofs, Stairs, and Doors
 

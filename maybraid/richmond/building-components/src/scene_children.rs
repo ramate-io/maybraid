@@ -4,7 +4,6 @@ use bevy::prelude::{
 	Children, Handle, Mesh, Mesh3d, MeshMaterial3d, StandardMaterial, Transform, Visibility,
 };
 use bevy::scene::prelude::{bsn, template_value, Scene};
-use bevy_math::Quat;
 
 use crate::assets::AssetPath;
 use crate::placed::Placement;
@@ -25,7 +24,7 @@ pub fn scene_children(children: Vec<Box<dyn Scene>>) -> impl Scene + 'static {
 /// Build a [`Transform`] from a cell-space [`Placement`].
 pub fn pose(placement: Placement) -> Transform {
 	Transform::from_translation(placement.translation)
-		.with_rotation(Quat::from_rotation_y(placement.yaw))
+		.with_rotation(placement.rotation())
 		.with_scale(placement.scale)
 }
 

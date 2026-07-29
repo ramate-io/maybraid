@@ -16,7 +16,7 @@ use richmond_building_components::scene_children;
 use richmond_building_components::stairs::SpiralStair;
 
 use crate::arc_spire::{uniform_storey_bindings, ArcSpire, ArcSpireParams, FitTolerance};
-use crate::arc_wall::{ArcWall, ArcWallParams};
+use crate::walling::{ArcWall, ArcWallParams};
 use crate::wizards_tower::floor_fill::{squared_floor_with_spire_hole, SPIRE_HALF_FRAC};
 use crate::wizards_tower::must_assign_cardinal_portals;
 use crate::CellConstraints;
@@ -107,7 +107,7 @@ impl WizardsTowerFloor {
 		children: &mut Vec<Box<dyn Scene>>,
 		lod_ref: &LodRef,
 	) {
-		for wall in &self.arc_wall.walls {
+		for wall in &self.arc_wall.partitions {
 			children.push(Box::new(wall.scene_with_lod(lod_ref)));
 		}
 	}

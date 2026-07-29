@@ -7,7 +7,7 @@ use bevy::scene::prelude::Scene;
 use bevy_math::Vec3;
 use lod::gen::LodScene;
 use lod::lod_ref::LodRef;
-use richmond_building_components::partitions::{Wall, WallNode};
+use richmond_building_components::partitions::{Partition, PartitionNode};
 use richmond_building_components::scene_children;
 use richmond_building_components::Placement;
 
@@ -17,7 +17,7 @@ use crate::CellConstraints;
 #[derive(Debug, Clone, PartialEq)]
 pub struct WizardsTowerSpire {
 	pub constraints: CellConstraints,
-	pub core_walls: [WallNode; 4],
+	pub core_walls: [PartitionNode; 4],
 }
 
 impl WizardsTowerSpire {
@@ -31,20 +31,20 @@ impl WizardsTowerSpire {
 		let scale = Vec3::new(radius, height, radius);
 		Self {
 			core_walls: [
-				WallNode::rough_stone(
-					Wall::arc(90.0),
+				PartitionNode::rough_stone(
+					Partition::arc(90.0),
 					Placement::new(center_xz, 0.0).with_scale(scale),
 				),
-				WallNode::rough_stone(
-					Wall::arc(90.0),
+				PartitionNode::rough_stone(
+					Partition::arc(90.0),
 					Placement::new(center_xz, std::f32::consts::FRAC_PI_2).with_scale(scale),
 				),
-				WallNode::rough_stone(
-					Wall::arc(90.0),
+				PartitionNode::rough_stone(
+					Partition::arc(90.0),
 					Placement::new(center_xz, std::f32::consts::PI).with_scale(scale),
 				),
-				WallNode::rough_stone(
-					Wall::arc(90.0),
+				PartitionNode::rough_stone(
+					Partition::arc(90.0),
 					Placement::new(center_xz, std::f32::consts::PI + std::f32::consts::FRAC_PI_2)
 						.with_scale(scale),
 				),

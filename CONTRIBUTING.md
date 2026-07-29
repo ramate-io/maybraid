@@ -153,6 +153,10 @@ Prefer **methods on types** over free-floating functions. If logic is about cons
 
 Reserve generation **"cell"** terminology for LOD / cellular generation (`OriginCell`, `GenerationScheme`, cell layouts). Bounded rectangles used by shared procedural walks should use names like `Bounds2`, not `*Cell`.
 
+Do not use `mod.rs`; use the modern Rust module system (`foo.rs` + `foo/` for submodules).
+
+Prefer **`use crate::…`** / concrete paths instead of stitching **`super::`** chains unless there is a compelling reason (e.g., deliberate coupling to an immediate parent in a macro-heavy submodule).
+
 ## Rust Tests
 
 Do **not** use [`.unwrap()`](https://doc.rust-lang.org/std/option/enum.Option.html#method.unwrap), [`.expect(...)`](https://doc.rust-lang.org/std/option/enum.Option.html#method.expect), or [`panic!(...)`](https://doc.rust-lang.org/std/macro.panic.html) in test bodies—those snippets are often copied into production code and keep failing habits.

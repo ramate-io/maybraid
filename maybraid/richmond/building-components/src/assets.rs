@@ -102,6 +102,13 @@ pub mod partitions {
 		pub const HEADER_15_LOW: AssetPath = AssetPath::new(
 			"urban/partitions/rough_stonework/rough_stonework_15_header_001_low_res.glb",
 		);
+
+		/// Circular joint between partition segments (\(X,Z \in [-0.5, 0.5]\), \(Y \in [0, 1]\)).
+		/// Low / ultra-low LOD omit this filler (no low-res asset).
+		pub const JOINT_HIGH: AssetPath =
+			AssetPath::new("urban/partitions/rough_stonework/joint_001_high_res.glb");
+		pub const JOINT_MID: AssetPath =
+			AssetPath::new("urban/partitions/rough_stonework/joint_001_mid_res.glb");
 	}
 }
 
