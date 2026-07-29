@@ -5,12 +5,13 @@ use bevy_math::{EulerRot, Quat, Vec3};
 /// Translation / yaw / pitch / roll / scale for a kit piece or continuous form in cell space.
 ///
 /// Partition / floor / door kits are authored in a **normalized** local space
-/// (angular arcs: radius \(1\), full height \(Y \in [0, 1]\); slices
-/// \(Y \in [0, 0.2]\)). Buildings map that kit into cell space via [`Self::scale`].
+/// (rectangle panels: ground \(X,Z \in [0, 1]\), \(Y \in [-0.2, 0.2]\); angular arcs:
+/// radius \(1\), full height \(Y \in [0, 1]\); slices \(Y \in [0, 0.2]\)). Buildings
+/// map that kit into cell space via [`Self::scale`] (and pitch for standing panels).
 ///
 /// Rotation order (intrinsic [`EulerRot::YXZ`]):
 /// - **yaw** about world \(+Y\) — plan facing
-/// - **pitch** about local \(+X\) — lean the wall face in/out (reserved; polyline leaves this 0)
+/// - **pitch** about local \(+X\) — stand a ground panel as a wall (\(\pi/2\)), or lean the face
 /// - **roll** about local \(+Z\) — tip kit \(+X\) in the wall plane so a segment follows a slope
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Placement {

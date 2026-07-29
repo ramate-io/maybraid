@@ -5,7 +5,8 @@
 use bevy_math::Vec3;
 use procedural_common::{NoiseConfig, NoiseParams};
 use richmond_building_components::partitions::{
-	LinearPartition, Partition, PartitionNode, DEFAULT_TILE_WIDTH, SLICE_KIT_HEIGHT,
+	wall_placement_from_centered, LinearPartition, Partition, PartitionNode, DEFAULT_TILE_WIDTH,
+	SLICE_KIT_HEIGHT,
 };
 use richmond_building_components::Placement;
 
@@ -26,9 +27,9 @@ const LINEAR_SLOTS: u32 = 24;
 pub struct LinearWallParams {
 	pub start: Vec3,
 	pub end: Vec3,
-	/// Full wall height (partition \(Y\) scale).
+	/// Full wall height (maps to panel kit \(Z\) after wall pitch).
 	pub height: f32,
-	/// Kit thickness scale (default matches bedroom shells).
+	/// Kit thickness scale along panel \(Y\) (default matches bedroom shells).
 	pub thickness: f32,
 	/// World-space portal opening width.
 	pub portal_width: f32,
@@ -151,22 +152,23 @@ fn tessellate_linear(
 		let center = point_at(start, end, portal.t);
 		let base = Vec3::new(center.x, y0, center.z);
 		let lintel = base + Vec3::Y * (SLICE_Y_FRAC * height);
-		let slice_scale = Vec3::new(portal_width * 0.5, SLICE_KIT_HEIGHT * height, thickness);
+		let slice_half = portal_width * 0.5;
+		let slice_height = SLICE_KIT_HEIGHT * height;
 		match portal.portal {
 			Portal::Door => {
 				partitions.push(PartitionNode::rough_stone(
 					Partition::linear(),
-					Placement::new(lintel, yaw).with_scale(slice_scale),
+					wall_placement_from_centered(lintel, yaw, slice_half, slice_height, thickness),
 				));
 			}
 			Portal::Window => {
 				partitions.push(PartitionNode::rough_stone(
 					Partition::linear(),
-					Placement::new(base, yaw).with_scale(slice_scale),
+					wall_placement_from_centered(base, yaw, slice_half, slice_height, thickness),
 				));
 				partitions.push(PartitionNode::rough_stone(
 					Partition::linear(),
-					Placement::new(lintel, yaw).with_scale(slice_scale),
+					wall_placement_from_centered(lintel, yaw, slice_half, slice_height, thickness),
 				));
 			}
 		}
@@ -196,7 +198,8 @@ fn tessellate_linear(
 		let mid = Vec3::new((a.x + b.x) * 0.5, y0, (a.z + b.z) * 0.5);
 		partitions.push(PartitionNode::rough_stone(
 			Partition::Linear(LinearPartition::spanning(span_len, tile_width)),
-			Placement::new(mid, yaw).with_scale(Vec3::new(1.0, height, thickness)),
+			// Child tiles own length; parent supplies thick (Y) and height (Z).
+			Placement::new(mid, yaw).with_scale(Vec3::new(1.0, thickness, height)),
 		));
 	}
 
@@ -223,7 +226,7 @@ mod tests {
 			.iter()
 			.filter(|p| {
 				matches!(p.geometry, Partition::Linear(_))
-					&& (p.placement.scale.y - wall.height).abs() < 1e-3
+					&& (p.placement.scale.z - wall.height).abs() < 1e-3
 			})
 			.count();
 		assert_eq!(solids, 2);
@@ -232,7 +235,7 @@ mod tests {
 			.iter()
 			.filter(|p| {
 				matches!(p.geometry, Partition::Linear(_))
-					&& (p.placement.scale.y - SLICE_KIT_HEIGHT * wall.height).abs() < 1e-3
+					&& (p.placement.scale.z - SLICE_KIT_HEIGHT * wall.height).abs() < 1e-3
 			})
 			.count();
 		assert_eq!(slices, 1);

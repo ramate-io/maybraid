@@ -408,7 +408,7 @@ pub fn present_preview_lod(
 					Vec3::new(4.0, 0.0, 0.0),
 					Vec3::new(4.0, 0.0, 4.0),
 				]),
-				Placement::at_origin().with_scale(Vec3::new(1.0, 3.0, 1.0)),
+				Placement::at_origin().with_scale(Vec3::new(1.0, 1.0, 3.0)),
 			);
 			spawn_preview(&mut commands, transform, node.scene_with_lod(&lod_ref));
 		}

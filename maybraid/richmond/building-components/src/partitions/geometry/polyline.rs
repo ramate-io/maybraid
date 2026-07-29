@@ -4,7 +4,7 @@ use bevy_math::{Vec2, Vec3};
 
 use crate::partitions::geometry::joint::JointPartition;
 use crate::partitions::geometry::linear::{
-	fitted_tile_count, DEFAULT_THICK, DEFAULT_TILE_WIDTH,
+	fitted_tile_count, DEFAULT_TILE_WIDTH, PANEL_TO_WALL_PITCH,
 };
 use crate::partitions::geometry::PartitionTile;
 use crate::placed::{Placed, Placement};
@@ -87,15 +87,15 @@ impl PolylinePartition {
 			let roll = roll_along_slope(delta.x, delta.y, delta.z);
 			let n = fitted_tile_count(len, tile_width);
 			let width = len / n as f32;
-			let half = width * 0.5;
 			let dir = delta / len;
 			for j in 0..n {
-				let mid = a + dir * (half + j as f32 * width);
+				let start = a + dir * (j as f32 * width);
 				out.push(Placed {
 					geom: PartitionTile::Linear,
-					placement: Placement::new(mid, yaw)
+					placement: Placement::new(start, yaw)
+						.with_pitch(PANEL_TO_WALL_PITCH)
 						.with_roll(roll)
-						.with_scale(Vec3::new(half, 1.0, DEFAULT_THICK)),
+						.with_scale(Vec3::new(width, 1.0, 1.0)),
 				});
 			}
 		}
@@ -187,7 +187,7 @@ mod tests {
 				.iter()
 				.filter(|p| p.geom == PartitionTile::Linear)
 				.count(),
-			2
+			4 // two edges × round(2/1) tiles
 		);
 		assert!(!pieces.iter().any(|p| p.geom == PartitionTile::Joint));
 		Ok(())
@@ -204,11 +204,11 @@ mod tests {
 			.into_iter()
 			.filter(|p| p.geom == PartitionTile::Linear)
 			.collect();
-		// round(2.4/1)=2 tiles of width 1.2 → half-scale 0.6
+		// round(2.4/1)=2 tiles of width 1.2, origin-anchored at tile starts
 		assert_eq!(linears.len(), 2);
-		assert!((linears[0].scale().x - 0.6).abs() < 1e-4);
-		assert!((linears[0].translation().x - 0.6).abs() < 1e-4);
-		assert!((linears[1].translation().x - 1.8).abs() < 1e-4);
+		assert!((linears[0].scale().x - 1.2).abs() < 1e-4);
+		assert!((linears[0].translation().x).abs() < 1e-4);
+		assert!((linears[1].translation().x - 1.2).abs() < 1e-4);
 		Ok(())
 	}
 
@@ -290,8 +290,9 @@ mod tests {
 			.find(|p| p.geom == PartitionTile::Linear)
 			.ok_or_else(|| anyhow::anyhow!("missing linear"))?;
 		assert!(linear.placement.roll.abs() > 0.2);
-		assert!(linear.placement.pitch.abs() < 1e-5);
-		assert!((linear.placement.translation.y - 0.5).abs() < 1e-3);
+		assert!((linear.placement.pitch - PANEL_TO_WALL_PITCH).abs() < 1e-4);
+		// Origin-anchored at the edge start.
+		assert!(linear.placement.translation.abs().max_element() < 1e-3);
 		Ok(())
 	}
 

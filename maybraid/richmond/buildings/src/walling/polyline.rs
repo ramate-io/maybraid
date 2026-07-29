@@ -6,8 +6,8 @@
 use bevy_math::Vec3;
 use procedural_common::{NoiseConfig, NoiseParams};
 use richmond_building_components::partitions::{
-	Partition, PartitionNode, PolylinePartition, DEFAULT_MIN_JOINT_ANGLE, DEFAULT_TILE_WIDTH,
-	SLICE_KIT_HEIGHT,
+	wall_placement_from_centered, Partition, PartitionNode, PolylinePartition,
+	DEFAULT_MIN_JOINT_ANGLE, DEFAULT_TILE_WIDTH, SLICE_KIT_HEIGHT,
 };
 use richmond_building_components::Placement;
 
@@ -202,22 +202,23 @@ fn tessellate_polyline(
 		let (center, yaw) = sample_path(points, portal.t);
 		let base = center;
 		let lintel = base + Vec3::Y * (SLICE_Y_FRAC * height);
-		let slice_scale = Vec3::new(portal_width * 0.5, SLICE_KIT_HEIGHT * height, thickness);
+		let slice_half = portal_width * 0.5;
+		let slice_height = SLICE_KIT_HEIGHT * height;
 		match portal.portal {
 			Portal::Door => {
 				partitions.push(PartitionNode::rough_stone(
 					Partition::linear(),
-					Placement::new(lintel, yaw).with_scale(slice_scale),
+					wall_placement_from_centered(lintel, yaw, slice_half, slice_height, thickness),
 				));
 			}
 			Portal::Window => {
 				partitions.push(PartitionNode::rough_stone(
 					Partition::linear(),
-					Placement::new(base, yaw).with_scale(slice_scale),
+					wall_placement_from_centered(base, yaw, slice_half, slice_height, thickness),
 				));
 				partitions.push(PartitionNode::rough_stone(
 					Partition::linear(),
-					Placement::new(lintel, yaw).with_scale(slice_scale),
+					wall_placement_from_centered(lintel, yaw, slice_half, slice_height, thickness),
 				));
 			}
 		}
@@ -255,7 +256,8 @@ fn tessellate_polyline(
 		}
 		partitions.push(PartitionNode::rough_stone(
 			Partition::Polyline(poly),
-			Placement::at_origin().with_scale(Vec3::new(1.0, height, thick_scale)),
+			// Child tiles own length + pitch; parent supplies thick (Y) and height (Z).
+			Placement::at_origin().with_scale(Vec3::new(1.0, thick_scale, height)),
 		));
 	}
 
@@ -286,7 +288,7 @@ mod tests {
 			.any(|p| matches!(p.geometry, Partition::Polyline(_))));
 		assert!(wall.partitions.iter().any(|p| {
 			matches!(p.geometry, Partition::Linear(_))
-				&& (p.placement.scale.y - SLICE_KIT_HEIGHT * wall.height).abs() < 1e-3
+				&& (p.placement.scale.z - SLICE_KIT_HEIGHT * wall.height).abs() < 1e-3
 		}));
 		Ok(())
 	}

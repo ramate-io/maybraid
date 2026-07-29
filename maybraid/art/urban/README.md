@@ -12,11 +12,18 @@ These folders hold **widely reusable geometry** for a given material / look (e.g
 
 | Folder | Role |
 |--------|------|
-| [`panels/`](panels/) | Linear rectangles, right triangles, and related planar fillers |
+| [`panels/`](panels/) | Rectangles and right triangles on the ground (\(X,Z\) unit edges, thin \(Y\)); wall/pitch consumers rotate as needed |
 | [`arcs/`](arcs/) | Angular bodies (`arc_15` / `arc_90` / `arc_180`), height **slices**, frames |
 | [`joints/`](joints/) | Segment joints / corner fillers between abutting runs |
 
 Organize by **style subfolder**, and do **not** repeat the style name in the filename (`rough_stonework/arc_90_001`, not `rough_stonework/rough_stonework_90_001`).
+
+### Panel normalization
+
+- **Rectangle** (`rectangle_001`): \(X, Z \in [0, 1]\), \(Y \in [-0.2, 0.2]\)
+- **Right triangle**: \(X \in [0, 1]\), \(Z \in [-1, 0]\), \(Y \in [-0.2, 0.2]\)
+
+Partition walls stand the rectangle with pitch \(\pi/2\) (see building-components `wall_placement*`).
 
 ### Micro-parts — `parts/`
 

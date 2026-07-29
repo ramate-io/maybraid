@@ -96,7 +96,7 @@ We have not yet defined a sweeping tool. The plan is to make it take linear segm
 
 [`Partition::polyline`](src/partitions/geometry/polyline.rs) is a **short-run** primitive: one [`PartitionNode`](src/partitions/node.rs) is a single LOD parent whose `scene_with_level` expands into posed linear + joint kits. Prefer splitting longer paths in higher-order constructs (`richmond_buildings::walling`).
 
-Each edge of length \(L\) uses a suggested [`tile_width`](src/partitions/geometry/linear.rs) (default \(2\), the unscaled kit full width): \(n = \mathrm{round}(L/\texttt{tile\_width})\) tiles stretch to width \(L/n\). Override with `with_tile_width`. Continuous [`LinearPartition::spanning`](src/partitions/geometry/linear.rs) uses the same fit.
+Each edge of length \(L\) uses a suggested [`tile_width`](src/partitions/geometry/linear.rs) (default \(1\), the unscaled kit edge): \(n = \mathrm{round}(L/\texttt{tile\_width})\) tiles stretch to width \(L/n\). Override with `with_tile_width`. Continuous [`LinearPartition::spanning`](src/partitions/geometry/linear.rs) uses the same fit.
 
 Joints omit when both plan and slope kinks are below [`DEFAULT_MIN_JOINT_ANGLE`](src/partitions/geometry/polyline.rs) (override via `with_min_joint_angle`). Use `with_incoming_slope` when a split span continues a preceding segment that is not in `points`. Horizontal joint scale grows with the vertical kink; roll averages abutting slopes. Joint meshes follow the **parent** level (high/mid only). LOD policy lives beside each geometry variant under [`geometry/`](src/partitions/geometry/).
 
@@ -104,11 +104,10 @@ Joints omit when both plan and slope kinks are below [`DEFAULT_MIN_JOINT_ANGLE`]
 
 Partition components are authored in a normalized local space, then transformed into world/cell space by the parent building.
 
-- **Linear Normalization:** linear components (panel `rectangle_001`) are normalized to the following spaces:
-  - \(Z = [-0.2, 0.2]\)
-  - \(Y = [0.0, 1.0]\)
-  - \(X = [-1.0, 1.0]\)
-  - Subsegments normalized to \(X = [-1.0, 0.8]\)
+- **Linear / rectangle panel:** authored on the ground like the triangle panel:
+  - \(X, Z \in [0, 1]\)
+  - \(Y \in [-0.2, 0.2]\) (thickness)
+  - Wall use applies pitch \(\pi/2\) so kit \(+Z\) becomes storey height and kit \(Y\) becomes wall thickness; see [`wall_placement`](src/partitions/geometry/linear.rs) / [`wall_placement_from_centered`](src/partitions/geometry/linear.rs). Default tile width is \(1\) (unit edge).
 - **Angular Normalization:** angular components (`arc_180` / `arc_90` / `arc_15`) follow a similar normalization along the arc, but attach to different start and end points at different angles.
   - Thickness is the same swept \(Z = [-0.2, 0.2]\)
   - A 180° arc sweep goes through \(-Z\) from \(X = -1.0\) to \(X = 1.0\)

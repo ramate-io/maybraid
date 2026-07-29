@@ -41,7 +41,7 @@ pub mod panels {
 	pub mod rough_stonework {
 		use super::AssetPath;
 
-		/// Wall-oriented linear rectangle panel (partition linear kit).
+		/// Wall-oriented use of the ground rectangle panel (partition linear kit).
 		pub const RECTANGLE: AssetPath =
 			AssetPath::new("urban/panels/rough_stonework/rectangle_001.glb");
 		pub const RECTANGLE_HIGH: AssetPath =
