@@ -11,8 +11,9 @@ pub use joint::{
 	JOINT_MEDIUM_FACTOR, JOINT_RADIUS_PER_SLOPE_RAD,
 };
 pub use linear::{
-	fitted_tile_count, LinearLod, LinearPartition, DEFAULT_THICK, DEFAULT_TILE_WIDTH,
-	LINEAR_HIGH_FACTOR, LINEAR_LOW_FACTOR, LINEAR_MEDIUM_FACTOR,
+	fitted_tile_count, wall_placement, wall_placement_from_centered, LinearLod, LinearPartition,
+	DEFAULT_THICK, DEFAULT_TILE_WIDTH, LINEAR_HIGH_FACTOR, LINEAR_LOW_FACTOR,
+	LINEAR_MEDIUM_FACTOR, PANEL_TO_WALL_PITCH, PANEL_Y_HALF,
 };
 pub use polyline::{
 	polyline_from_xz, roll_along_slope, PolylinePartition, DEFAULT_MIN_JOINT_ANGLE,

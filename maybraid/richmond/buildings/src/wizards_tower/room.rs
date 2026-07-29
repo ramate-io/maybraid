@@ -8,7 +8,9 @@ use bevy_math::Vec3;
 use lod::gen::LodScene;
 use lod::lod_ref::LodRef;
 use richmond_building_components::floors::{Floor, FloorNode};
-use richmond_building_components::partitions::{Partition, PartitionNode};
+use richmond_building_components::partitions::{
+	wall_placement_from_centered, Partition, PartitionNode, DEFAULT_THICK,
+};
 use richmond_building_components::scene_children;
 use richmond_building_components::Placement;
 
@@ -34,7 +36,8 @@ impl WizardsTowerRoom {
 		} else {
 			0.0
 		};
-		let wall_scale = Vec3::new(size.x.max(size.z) * 0.5, size.y.max(1e-4), size.x.max(size.z) * 0.5);
+		let half_len = size.x.max(size.z) * 0.5;
+		let height = size.y.max(1e-4);
 		let floor_scale = Vec3::new(
 			size.x.max(1e-4) / (2.0 * RECT_HALF_EXTENT),
 			FLOOR_SLAB_Y_SCALE,
@@ -44,7 +47,7 @@ impl WizardsTowerRoom {
 		Self {
 			partition: PartitionNode::rough_stone(
 				Partition::linear(),
-				Placement::new(center_xz, yaw).with_scale(wall_scale),
+				wall_placement_from_centered(center_xz, yaw, half_len, height, DEFAULT_THICK),
 			),
 			floor: FloorNode::rough_stone(
 				Floor::rectangle(),

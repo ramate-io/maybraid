@@ -5,9 +5,10 @@ use bevy_math::Vec3;
 use lod::gen::LodScene;
 use lod::lod_ref::LodRef;
 use richmond_building_components::furniture::FurnitureNode;
-use richmond_building_components::partitions::{Partition, PartitionNode};
+use richmond_building_components::partitions::{
+	wall_placement_from_centered, Partition, PartitionNode,
+};
 use richmond_building_components::scene_children;
-use richmond_building_components::Placement;
 
 use crate::bedroom::{owns_face_as_cell, placement_filling_aabb};
 use crate::constraints::FaceKind;
@@ -65,37 +66,51 @@ impl EnsuiteBathroom {
 				FaceKind::Left => {
 					walls.push(PartitionNode::rough_stone(
 						Partition::linear(),
-						Placement::new(
+						wall_placement_from_centered(
 							Vec3::new(aabb.min.x, y0, aabb.min.z + half_z * 0.35),
 							std::f32::consts::FRAC_PI_2,
-						)
-						.with_scale(Vec3::new(half_z * 0.35, h, thick)),
+							half_z * 0.35,
+							h,
+							thick,
+						),
 					));
 				}
 				FaceKind::Right => {
 					walls.push(PartitionNode::rough_stone(
 						Partition::linear(),
-						Placement::new(
+						wall_placement_from_centered(
 							Vec3::new(aabb.max.x, y0, aabb.min.z + half_z * 0.35),
 							std::f32::consts::FRAC_PI_2,
-						)
-						.with_scale(Vec3::new(half_z * 0.35, h, thick)),
+							half_z * 0.35,
+							h,
+							thick,
+						),
 					));
 				}
 				FaceKind::Front => {
 					let half_x = size.x * 0.5;
 					walls.push(PartitionNode::rough_stone(
 						Partition::linear(),
-						Placement::new(Vec3::new(aabb.min.x + half_x * 0.35, y0, aabb.min.z), 0.0)
-							.with_scale(Vec3::new(half_x * 0.35, h, thick)),
+						wall_placement_from_centered(
+							Vec3::new(aabb.min.x + half_x * 0.35, y0, aabb.min.z),
+							0.0,
+							half_x * 0.35,
+							h,
+							thick,
+						),
 					));
 				}
 				FaceKind::Back => {
 					let half_x = size.x * 0.5;
 					walls.push(PartitionNode::rough_stone(
 						Partition::linear(),
-						Placement::new(Vec3::new(aabb.min.x + half_x * 0.35, y0, aabb.max.z), 0.0)
-							.with_scale(Vec3::new(half_x * 0.35, h, thick)),
+						wall_placement_from_centered(
+							Vec3::new(aabb.min.x + half_x * 0.35, y0, aabb.max.z),
+							0.0,
+							half_x * 0.35,
+							h,
+							thick,
+						),
 					));
 				}
 				FaceKind::Top | FaceKind::Bottom => {}

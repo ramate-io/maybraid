@@ -4,7 +4,7 @@ use bevy_math::{Vec2, Vec3};
 
 use crate::partitions::geometry::joint::JointPartition;
 use crate::partitions::geometry::linear::{
-	fitted_tile_count, DEFAULT_THICK, DEFAULT_TILE_WIDTH,
+	fitted_tile_count, DEFAULT_TILE_WIDTH, PANEL_TO_WALL_PITCH,
 };
 use crate::partitions::geometry::PartitionTile;
 use crate::placed::{Placed, Placement};
@@ -15,9 +15,11 @@ pub const DEFAULT_MIN_JOINT_ANGLE: f32 = 0.1;
 /// Short-run polyline. Prefer splitting long paths in higher-order walling/buildings.
 ///
 /// One [`crate::partitions::PartitionNode`] is a single LOD parent for all kits.
+/// Tile translations follow the **3D path** (slope is in the points). Panels stay
+/// **plumb**: yaw in plan + stand-up pitch only — no slope tip roll.
 ///
-/// Each edge of length \(L\) is subdivided with [`Self::tile_width`]:  
-/// \(n = \mathrm{round}(L/\texttt{tile\_width})\) tiles stretch to width \(L/n\).
+/// Each edge is subdivided by **horizontal** length \(L_{xz}\) with [`Self::tile_width`]:
+/// \(n = \mathrm{round}(L_{xz}/\texttt{tile\_width})\) tiles stretch to width \(L_{xz}/n\).
 #[derive(Debug, Clone, PartialEq)]
 pub struct PolylinePartition {
 	pub points: Vec<Vec3>,
@@ -28,6 +30,10 @@ pub struct PolylinePartition {
 	/// Roll of the segment that ends at `points[0]` but is not part of this polyline.
 	/// When set, evaluate a start joint at `points[0]` against the first edge.
 	pub incoming_slope: Option<f32>,
+	/// Storey height scale on kit \(Z\) (after stand-up pitch).
+	pub wall_height: f32,
+	/// Thickness scale on kit \(Y\) (after stand-up pitch).
+	pub thick_scale: f32,
 }
 
 impl Default for PolylinePartition {
@@ -37,6 +43,8 @@ impl Default for PolylinePartition {
 			tile_width: DEFAULT_TILE_WIDTH,
 			min_joint_angle: DEFAULT_MIN_JOINT_ANGLE,
 			incoming_slope: None,
+			wall_height: 1.0,
+			thick_scale: 1.0,
 		}
 	}
 }
@@ -48,6 +56,8 @@ impl PolylinePartition {
 			tile_width: DEFAULT_TILE_WIDTH,
 			min_joint_angle: DEFAULT_MIN_JOINT_ANGLE,
 			incoming_slope: None,
+			wall_height: 1.0,
+			thick_scale: 1.0,
 		}
 	}
 
@@ -66,15 +76,29 @@ impl PolylinePartition {
 		self
 	}
 
+	/// Kit \(Z\) height and \(Y\) thickness scales for ground-authored rectangle panels.
+	pub fn with_wall_scale(mut self, wall_height: f32, thick_scale: f32) -> Self {
+		self.wall_height = wall_height.max(1e-4);
+		self.thick_scale = thick_scale.max(1e-4);
+		self
+	}
+
 	/// Expand into posed linear + joint tiles (identity parent).
 	pub fn tiles(&self) -> Vec<Placed<PartitionTile>> {
 		let points = &self.points;
 		if points.len() < 2 {
-			return vec![Placed::at_origin(PartitionTile::Linear)];
+			return vec![Placed::with_placement(
+				PartitionTile::Linear,
+				Placement::at_origin()
+					.with_pitch(PANEL_TO_WALL_PITCH)
+					.with_scale(Vec3::new(1.0, self.thick_scale, self.wall_height)),
+			)];
 		}
 
 		let min_joint = self.min_joint_angle.max(0.0);
 		let tile_width = self.tile_width.max(1e-4);
+		let height = self.wall_height.max(1e-4);
+		let thick = self.thick_scale.max(1e-4);
 		let mut out = Vec::new();
 		let n_edges = points.len() - 1;
 
@@ -82,20 +106,18 @@ impl PolylinePartition {
 			let a = points[i];
 			let b = points[i + 1];
 			let delta = b - a;
-			let len = delta.length().max(1e-4);
+			let horiz_len = (delta.x * delta.x + delta.z * delta.z).sqrt().max(1e-4);
 			let yaw = yaw_along_xz(delta.x, delta.z);
-			let roll = roll_along_slope(delta.x, delta.y, delta.z);
-			let n = fitted_tile_count(len, tile_width);
-			let width = len / n as f32;
-			let half = width * 0.5;
-			let dir = delta / len;
+			let n = fitted_tile_count(horiz_len, tile_width);
+			let width = horiz_len / n as f32;
 			for j in 0..n {
-				let mid = a + dir * (half + j as f32 * width);
+				// Path \(Y\) carries slope; panel stays plumb (yaw + stand-up only).
+				let start = a + delta * (j as f32 / n as f32);
 				out.push(Placed {
 					geom: PartitionTile::Linear,
-					placement: Placement::new(mid, yaw)
-						.with_roll(roll)
-						.with_scale(Vec3::new(half, 1.0, DEFAULT_THICK)),
+					placement: Placement::new(start, yaw)
+						.with_pitch(PANEL_TO_WALL_PITCH)
+						.with_scale(Vec3::new(width, thick, height)),
 				});
 			}
 		}
@@ -109,7 +131,7 @@ impl PolylinePartition {
 			let droll = (roll_out - roll_in).abs();
 			if droll >= min_joint {
 				out.push(JointPartition::placed_at(
-					a, yaw_out, yaw_out, roll_in, roll_out,
+					a, yaw_out, yaw_out, roll_in, roll_out, height,
 				));
 			}
 		}
@@ -131,7 +153,7 @@ impl PolylinePartition {
 				continue;
 			}
 			out.push(JointPartition::placed_at(
-				cur, yaw_in, yaw_out, roll_in, roll_out,
+				cur, yaw_in, yaw_out, roll_in, roll_out, height,
 			));
 		}
 
@@ -153,7 +175,9 @@ pub(crate) fn yaw_along_xz(dx: f32, dz: f32) -> f32 {
 	(-dz).atan2(dx)
 }
 
-/// Slope roll about local \(+Z\) for an edge \(\Delta = (\mathrm{d}x,\mathrm{d}y,\mathrm{d}z)\).
+/// Slope angle of an edge \(\Delta = (\mathrm{d}x,\mathrm{d}y,\mathrm{d}z)\) vs horizontal.
+///
+/// Used for joint kink tests and radius growth — not applied as panel/joint tip yet.
 pub fn roll_along_slope(dx: f32, dy: f32, dz: f32) -> f32 {
 	let horiz = (dx * dx + dz * dz).sqrt();
 	dy.atan2(horiz.max(1e-8))
@@ -187,7 +211,7 @@ mod tests {
 				.iter()
 				.filter(|p| p.geom == PartitionTile::Linear)
 				.count(),
-			2
+			4 // two edges × round(2/1) tiles
 		);
 		assert!(!pieces.iter().any(|p| p.geom == PartitionTile::Joint));
 		Ok(())
@@ -204,11 +228,11 @@ mod tests {
 			.into_iter()
 			.filter(|p| p.geom == PartitionTile::Linear)
 			.collect();
-		// round(2.4/1)=2 tiles of width 1.2 → half-scale 0.6
+		// round(2.4/1)=2 tiles of width 1.2, origin-anchored at tile starts
 		assert_eq!(linears.len(), 2);
-		assert!((linears[0].scale().x - 0.6).abs() < 1e-4);
-		assert!((linears[0].translation().x - 0.6).abs() < 1e-4);
-		assert!((linears[1].translation().x - 1.8).abs() < 1e-4);
+		assert!((linears[0].scale().x - 1.2).abs() < 1e-4);
+		assert!((linears[0].translation().x).abs() < 1e-4);
+		assert!((linears[1].translation().x - 1.2).abs() < 1e-4);
 		Ok(())
 	}
 
@@ -269,29 +293,65 @@ mod tests {
 			slope_j.placement.scale.x > flat_j.placement.scale.x + 1e-3,
 			"slope kink should grow joint radius"
 		);
-		let expected_roll = 0.5 * (2.0f32).atan2(2.0);
-		assert!(
-			(slope_j.placement.roll - expected_roll).abs() < 1e-3,
-			"joint roll should average abutting slopes, got {}",
-			slope_j.placement.roll
-		);
+		// Plumb: slope sizes the joint only; no tip roll yet.
+		assert!(slope_j.placement.roll.abs() < 1e-6);
+		assert!(flat_j.placement.pitch.abs() < 1e-6);
+		assert!((flat_j.placement.scale.y - 1.0).abs() < 1e-4);
 		Ok(())
 	}
 
 	#[test]
-	fn sloping_edge_sets_roll() -> anyhow::Result<()> {
-		let g = PartitionGeometry::polyline([
-			Vec3::new(0.0, 0.0, 0.0),
-			Vec3::new(2.0, 1.0, 0.0),
-		]);
+	fn joint_uses_wall_height_without_panel_pitch() -> anyhow::Result<()> {
+		let g = PartitionGeometry::Polyline(
+			PolylinePartition::new([
+				Vec3::new(0.0, 0.0, 0.0),
+				Vec3::new(2.0, 0.0, 0.0),
+				Vec3::new(2.0, 0.0, 2.0),
+			])
+			.with_wall_scale(3.0, 0.75),
+		);
+		let joint = g
+			.tiles()
+			.into_iter()
+			.find(|p| p.geom == PartitionTile::Joint)
+			.ok_or_else(|| anyhow::anyhow!("missing joint"))?;
+		assert!(joint.placement.pitch.abs() < 1e-6);
+		assert!((joint.placement.scale.y - 3.0).abs() < 1e-4);
 		let linear = g
 			.tiles()
 			.into_iter()
 			.find(|p| p.geom == PartitionTile::Linear)
 			.ok_or_else(|| anyhow::anyhow!("missing linear"))?;
-		assert!(linear.placement.roll.abs() > 0.2);
-		assert!(linear.placement.pitch.abs() < 1e-5);
-		assert!((linear.placement.translation.y - 0.5).abs() < 1e-3);
+		assert!((linear.placement.pitch - PANEL_TO_WALL_PITCH).abs() < 1e-4);
+		assert!((linear.placement.scale.z - 3.0).abs() < 1e-4);
+		Ok(())
+	}
+
+	#[test]
+	fn sloping_edge_stays_plumb_and_follows_path_y() -> anyhow::Result<()> {
+		let g = PartitionGeometry::polyline([
+			Vec3::new(0.0, 0.0, 0.0),
+			Vec3::new(2.0, 1.0, 0.0),
+		]);
+		let linears: Vec<_> = g
+			.tiles()
+			.into_iter()
+			.filter(|p| p.geom == PartitionTile::Linear)
+			.collect();
+		assert_eq!(linears.len(), 2); // horiz 2 / tile_width 1
+		for linear in &linears {
+			assert!(linear.placement.roll.abs() < 1e-6);
+			assert!((linear.placement.pitch - PANEL_TO_WALL_PITCH).abs() < 1e-4);
+			assert!((linear.placement.scale.x - 1.0).abs() < 1e-4);
+			let kit_x = linear.placement.rotation() * Vec3::X;
+			assert!(
+				kit_x.y.abs() < 1e-4,
+				"plumb panel kit +X must stay horizontal, got {kit_x:?}"
+			);
+		}
+		assert!(linears[0].placement.translation.abs().max_element() < 1e-3);
+		// Second tile start is halfway along the 3D edge (path Y carries slope).
+		assert!((linears[1].placement.translation.y - 0.5).abs() < 1e-4);
 		Ok(())
 	}
 
