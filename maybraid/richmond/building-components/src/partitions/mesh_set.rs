@@ -1,18 +1,24 @@
-//! Shared partition mesh path sets (no banding policy).
+//! Partition mesh path sets (resolution policy — no host BSN).
+//!
+//! Three GLB paths today (high / mid / low). A fourth **ultra-low** path is planned;
+//! until then UltraLow banding shares [`PartitionMeshTier::Low`].
 
 use bevy::scene::prelude::Scene;
 
 use crate::assets::AssetPath;
 
-/// Which of the three warm MeshRef children is visible.
+/// Which resolution MeshRef is selected for a [`LodSceneLevel`](lod::gen::LodSceneLevel).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum PartitionMeshTier {
+	/// Shared by Low and UltraLow until a dedicated ultra-low GLB exists.
 	Low,
 	Mid,
 	High,
 }
 
 /// High / mid / low GLB set for one kit piece (may repeat the same path).
+///
+/// Add `ultra_low` when those assets are authored.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct PartitionMeshSet {
 	pub high: AssetPath,

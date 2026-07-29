@@ -7,6 +7,7 @@ pub mod assets;
 pub mod doors;
 pub mod floors;
 pub mod furniture;
+pub mod lod_host;
 pub mod parent_confines;
 pub mod partitions;
 pub mod placed;
@@ -19,6 +20,7 @@ pub use assets::AssetPath;
 pub use furniture::{
 	FurnitureGeometry, FurnitureNode, FurnitureStyle, FurnitureWireframePlugin,
 };
+pub use lod_host::{posed_asset_tier, warm_content_host, warm_content_host_hsl, warm_mesh_level_host};
 pub use parent_confines::{
 	apply_parent_confines, confined_scene, distance_to_segment, InternalShape, ParentConfines,
 	INTERNAL_REVEAL_FACTOR,

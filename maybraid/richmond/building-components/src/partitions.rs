@@ -1,7 +1,10 @@
 //! Partition scene components (linear, angular, and header variants).
 //!
 //! IR: [`PartitionStyle`] + [`PartitionGeometry`] + [`Placement`] → [`PartitionNode`] (`LodScene`).
+//! [`PartitionNode`] covers both **direct** kit mappings and **tessellated** forms (polyline / arc).
 //! Primitive kit geometry — portal-sensitive walls live in `richmond_buildings::walling`.
+//!
+//! Host split: crate [`crate::lod_host`] (structure) vs [`host`] (partition GLB resolution policy).
 
 pub mod geometry;
 pub mod host;

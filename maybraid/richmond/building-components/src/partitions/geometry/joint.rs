@@ -8,9 +8,10 @@ use lod::lod_ref::LodRef;
 
 use crate::assets::AssetPath;
 use crate::assets::partitions::rough_stonework::{JOINT_HIGH, JOINT_MID};
+use crate::lod_host::posed_asset_tier;
 use crate::partitions::geometry::polyline::wrap_pi;
 use crate::partitions::geometry::PartitionTile;
-use crate::partitions::host::{posed_asset_tier, warm_host};
+use crate::partitions::host::warm_host;
 use crate::partitions::probe::{PartitionLodBand, PartitionLodProbe};
 use crate::placed::{Placement, Placed};
 

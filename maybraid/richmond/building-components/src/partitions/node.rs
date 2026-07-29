@@ -1,17 +1,17 @@
 //! Partition IR node: style + geometry + placement.
 //!
-//! Composite geometries (polyline / arc) expand to kits under **one** LOD host so a short
-//! polyline flips as a single parent. Leaf style types still expose per-mesh hosts for
-//! playground previews.
+//! Covers both **direct** component mappings (e.g. a single linear / arc kit) and
+//! **tessellated** concepts (polyline / continuous arc → many tiles under **one** LOD
+//! parent host). Leaf style types still expose per-mesh hosts for playground previews.
 
 use bevy::scene::prelude::Scene;
 use bevy_math::Vec3;
 use lod::gen::{LodScene, LodSceneLevel, LodSceneStatus};
 use lod::lod_ref::LodRef;
 
+use crate::lod_host::warm_content_host_hsl;
 use crate::parent_confines::{confined_scene, ParentConfines};
 use crate::partitions::geometry::{JointLod, LinearLod, PartitionGeometry, PartitionTile};
-use crate::partitions::host::warm_content_host;
 use crate::partitions::probe::PartitionLodProbe;
 use crate::partitions::rough_stonework::{
 	RoughStoneworkHeader180, RoughStoneworkJoint, RoughStoneworkLinearHeaderSubsegment,
@@ -150,7 +150,7 @@ impl LodScene for PartitionNode {
 	fn scene_with_lod(&self, lod_ref: &LodRef) -> impl Scene + 'static {
 		let level = self.scene_lod_level(lod_ref);
 		let probe = PartitionLodProbe::from_placement(&self.placement);
-		warm_content_host(
+		warm_content_host_hsl(
 			level,
 			probe,
 			self.scene_with_level(lod_ref, LodSceneLevel::High),

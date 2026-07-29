@@ -1,15 +1,28 @@
-//! Shared warm LOD host / single-tier mesh scene builders for partition kits.
+//! Partition mesh-resolution hosts: GLB sets → crate [`lod_host`](crate::lod_host) scaffolding.
+//!
+//! **Split of concerns**
+//! - [`crate::lod_host`] — structural warm `LodSceneHost` / level roots (any domain).
+//! - **This module** — partition **resolution policy**: which high / mid / low GLBs
+//!   sit in those roots (and eventually a dedicated **ultra-low** asset). Until ultra-low
+//!   GLBs exist, [`LodSceneLevel::UltraLow`] shares the low mesh via banding.
+//!
+//! [`PartitionNode`](crate::partitions::PartitionNode) covers both **direct** kit mappings
+//! (e.g. a lone linear) and **tessellated** forms (polyline / arc → many tiles under one parent host).
 
-use bevy::prelude::{Children, Transform, Visibility};
-use bevy::scene::prelude::{bsn, template_value, Scene};
+use bevy::prelude::Transform;
+use bevy::scene::prelude::Scene;
 use lod::gen::LodSceneLevel;
-use lod::lod_scene_host::{LodLevelRoot, LodLevelRoots, LodSceneHost};
 
 use crate::assets::AssetPath;
-use crate::partitions::mesh_set::{mesh_child, PartitionMeshSet, PartitionMeshTier};
+use crate::lod_host::warm_mesh_level_host;
+use crate::partitions::mesh_set::{PartitionMeshSet, PartitionMeshTier};
 use crate::partitions::probe::PartitionLodProbe;
 
+pub use crate::lod_host::posed_asset_tier;
+
 /// One MeshRef under a transform (for `scene_with_level`).
+///
+/// UltraLow uses the low GLB until a fourth ultra-low path is authored.
 pub fn posed_mesh_tier(
 	meshes: PartitionMeshSet,
 	transform: Transform,
@@ -24,30 +37,17 @@ pub fn posed_mesh_tier(
 	posed_asset_tier(Some(meshes.for_tier(tier)), transform)
 }
 
-/// Optional asset under a transform (joints omit content at Low).
-pub fn posed_asset_tier(
-	asset: Option<AssetPath>,
-	transform: Transform,
-) -> impl Scene + 'static {
-	let children: Vec<Box<dyn Scene>> = match asset {
-		Some(a) => vec![mesh_child(a)],
-		None => vec![],
-	};
-	bsn! {
-		template_value(transform)
-		Visibility::Inherited
-		Children [ {children} ]
-	}
-}
-
-/// Warm high/mid/low mesh roots under one [`LodSceneHost`].
+/// Warm high / mid / low mesh roots under one host.
+///
+/// When ultra-low GLBs ship, extend [`PartitionMeshSet`] and pass a fourth
+/// `(LodSceneLevel::UltraLow, Some(meshes.ultra_low))` into [`warm_mesh_level_host`].
 pub fn warm_mesh_host(
 	meshes: PartitionMeshSet,
 	transform: Transform,
 	level: LodSceneLevel,
 	probe: PartitionLodProbe,
 ) -> impl Scene + 'static {
-	warm_host(
+	warm_mesh_level_host(
 		level,
 		probe,
 		transform,
@@ -66,91 +66,5 @@ pub fn warm_host(
 	transform: Transform,
 	roots: [(LodSceneLevel, Option<AssetPath>); 3],
 ) -> impl Scene + 'static {
-	let root_scenes: Vec<Box<dyn Scene>> = roots
-		.into_iter()
-		.map(|(root_level, asset)| {
-			mesh_level_root(root_level, asset, level == root_level)
-		})
-		.collect();
-	host_with_roots(level, probe, transform, root_scenes)
-}
-
-/// Warm host whose level roots are arbitrary scene content (partition parent).
-pub fn warm_content_host(
-	level: LodSceneLevel,
-	probe: PartitionLodProbe,
-	high: impl Scene + 'static,
-	mid: impl Scene + 'static,
-	low: impl Scene + 'static,
-) -> impl Scene + 'static {
-	let roots = vec![
-		content_level_root(LodSceneLevel::High, high, level == LodSceneLevel::High),
-		content_level_root(LodSceneLevel::Medium, mid, level == LodSceneLevel::Medium),
-		content_level_root(LodSceneLevel::Low, low, level == LodSceneLevel::Low),
-	];
-	host_with_roots(level, probe, Transform::IDENTITY, roots)
-}
-
-fn host_with_roots(
-	level: LodSceneLevel,
-	probe: PartitionLodProbe,
-	transform: Transform,
-	roots: Vec<Box<dyn Scene>>,
-) -> impl Scene + 'static {
-	let level_roots: Box<dyn Scene> = Box::new(bsn! {
-		LodLevelRoots
-		Transform::default()
-		Visibility::Inherited
-		Children [ {roots} ]
-	});
-	let host_children = vec![level_roots];
-	bsn! {
-		LodSceneHost
-		template_value(level)
-		template_value(probe)
-		template_value(transform)
-		Visibility::Inherited
-		Children [ {host_children} ]
-	}
-}
-
-fn mesh_level_root(
-	level: LodSceneLevel,
-	asset: Option<AssetPath>,
-	visible: bool,
-) -> Box<dyn Scene> {
-	let children: Vec<Box<dyn Scene>> = match asset {
-		Some(a) => vec![mesh_child(a)],
-		None => vec![],
-	};
-	let visibility = if visible {
-		Visibility::Inherited
-	} else {
-		Visibility::Hidden
-	};
-	Box::new(bsn! {
-		template_value(LodLevelRoot(level))
-		Transform::default()
-		template_value(visibility)
-		Children [ {children} ]
-	})
-}
-
-fn content_level_root(
-	level: LodSceneLevel,
-	content: impl Scene + 'static,
-	visible: bool,
-) -> Box<dyn Scene> {
-	let children: Vec<Box<dyn Scene>> = vec![Box::new(content)];
-	let visibility = if visible {
-		Visibility::Inherited
-	} else {
-		Visibility::Hidden
-	};
-	Box::new(bsn! {
-		template_value(LodLevelRoot(level))
-		Transform::default()
-		template_value(visibility)
-		Children [ {children} ]
-	})
+	warm_mesh_level_host(level, probe, transform, roots)
 }
