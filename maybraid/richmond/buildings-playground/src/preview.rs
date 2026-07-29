@@ -403,12 +403,15 @@ pub fn present_preview_lod(
 		}
 		PreviewSubject::Polyline => {
 			let node = PartitionNode::rough_stone(
-				Partition::polyline([
-					Vec3::new(0.0, 0.0, 0.0),
-					Vec3::new(4.0, 0.0, 0.0),
-					Vec3::new(4.0, 0.0, 4.0),
-				]),
-				Placement::at_origin().with_scale(Vec3::new(1.0, 3.0, 1.0)),
+				Partition::Polyline(
+					richmond_building_components::partitions::PolylinePartition::new([
+						Vec3::new(0.0, 0.0, 0.0),
+						Vec3::new(4.0, 0.0, 0.0),
+						Vec3::new(4.0, 0.0, 4.0),
+					])
+					.with_wall_scale(3.0, 1.0),
+				),
+				Placement::IDENTITY,
 			);
 			spawn_preview(&mut commands, transform, node.scene_with_lod(&lod_ref));
 		}

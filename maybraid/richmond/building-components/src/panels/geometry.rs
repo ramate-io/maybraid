@@ -4,8 +4,8 @@ use scene_ref::MirrorAxis;
 
 use crate::placed::{Placed, Placement};
 
-/// Suggested full tile width along local \(X\) (matches unscaled kit spans used by panels).
-pub const DEFAULT_TILE_WIDTH: f32 = 2.0;
+/// Suggested full tile width along local \(X\) (matches unscaled ground kit \(X \in [0, 1]\)).
+pub const DEFAULT_TILE_WIDTH: f32 = 1.0;
 
 /// How many tiles fit a length given a suggested width.
 ///

@@ -18,7 +18,9 @@ use bevy_math::Vec3;
 use lod::gen::LodScene;
 use lod::lod_ref::LodRef;
 use richmond_building_components::floors::{Floor, FloorNode};
-use richmond_building_components::partitions::{Partition, PartitionNode};
+use richmond_building_components::partitions::{
+	wall_placement_from_centered, Partition, PartitionNode,
+};
 use richmond_building_components::scene_children;
 use richmond_building_components::Placement;
 
@@ -170,7 +172,7 @@ fn room_outer_walls(constraints: &CellConstraints) -> Vec<PartitionNode> {
 	let cz = (aabb.min.z + aabb.max.z) * 0.5;
 	let half_x = size.x * 0.5;
 	let half_z = size.z * 0.5;
-	// Kit linear: X ∈ [-1,1], Y ∈ [0,1], Z thickness ∈ [-0.2,0.2].
+	// Panel rectangle: X,Z ∈ [0,1], Y ∈ [-0.2,0.2]; wall_placement stands it up.
 	let thick = 0.15_f32 / 0.2;
 
 	let mut walls = Vec::new();
@@ -178,32 +180,52 @@ fn room_outer_walls(constraints: &CellConstraints) -> Vec<PartitionNode> {
 	if owns_face_as_cell(constraints, FaceKind::Front) {
 		walls.push(PartitionNode::rough_stone(
 			Partition::linear(),
-			Placement::new(Vec3::new(cx, y0, aabb.min.z), 0.0)
-				.with_scale(Vec3::new(half_x, h, thick)),
+			wall_placement_from_centered(
+				Vec3::new(cx, y0, aabb.min.z),
+				0.0,
+				half_x,
+				h,
+				thick,
+			),
 		));
 	}
 	// +Z / Back
 	if owns_face_as_cell(constraints, FaceKind::Back) {
 		walls.push(PartitionNode::rough_stone(
 			Partition::linear(),
-			Placement::new(Vec3::new(cx, y0, aabb.max.z), 0.0)
-				.with_scale(Vec3::new(half_x, h, thick)),
+			wall_placement_from_centered(
+				Vec3::new(cx, y0, aabb.max.z),
+				0.0,
+				half_x,
+				h,
+				thick,
+			),
 		));
 	}
 	// −X / Left
 	if owns_face_as_cell(constraints, FaceKind::Left) {
 		walls.push(PartitionNode::rough_stone(
 			Partition::linear(),
-			Placement::new(Vec3::new(aabb.min.x, y0, cz), std::f32::consts::FRAC_PI_2)
-				.with_scale(Vec3::new(half_z, h, thick)),
+			wall_placement_from_centered(
+				Vec3::new(aabb.min.x, y0, cz),
+				std::f32::consts::FRAC_PI_2,
+				half_z,
+				h,
+				thick,
+			),
 		));
 	}
 	// +X / Right
 	if owns_face_as_cell(constraints, FaceKind::Right) {
 		walls.push(PartitionNode::rough_stone(
 			Partition::linear(),
-			Placement::new(Vec3::new(aabb.max.x, y0, cz), std::f32::consts::FRAC_PI_2)
-				.with_scale(Vec3::new(half_z, h, thick)),
+			wall_placement_from_centered(
+				Vec3::new(aabb.max.x, y0, cz),
+				std::f32::consts::FRAC_PI_2,
+				half_z,
+				h,
+				thick,
+			),
 		));
 	}
 	walls

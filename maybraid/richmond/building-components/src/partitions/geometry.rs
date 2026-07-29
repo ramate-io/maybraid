@@ -11,8 +11,9 @@ pub use joint::{
 	JOINT_MEDIUM_FACTOR, JOINT_RADIUS_PER_SLOPE_RAD,
 };
 pub use linear::{
-	fitted_tile_count, LinearLod, LinearPartition, DEFAULT_THICK, DEFAULT_TILE_WIDTH,
-	LINEAR_HIGH_FACTOR, LINEAR_LOW_FACTOR, LINEAR_MEDIUM_FACTOR,
+	fitted_tile_count, wall_placement, wall_placement_from_centered, LinearLod, LinearPartition,
+	DEFAULT_THICK, DEFAULT_TILE_WIDTH, LINEAR_HIGH_FACTOR, LINEAR_LOW_FACTOR,
+	LINEAR_MEDIUM_FACTOR, PANEL_TO_WALL_PITCH, PANEL_Y_HALF,
 };
 pub use polyline::{
 	polyline_from_xz, roll_along_slope, PolylinePartition, DEFAULT_MIN_JOINT_ANGLE,
@@ -174,26 +175,17 @@ fn panel_to_tile(geom: PanelGeom) -> Option<PartitionTile> {
 	}
 }
 
-/// Panel rectangles are lower-left \(X \in [0,1]\), \(Z \in [-1,0]\); linear kits are
-/// centered \(X \in [-1,1]\). Right triangles keep panel placement.
+/// Shared panel rectangles already use ground lower-left \(X,Z \in [0, 1]\).
+/// Apply wall stand-up pitch; keep scale as \((\texttt{length}, \texttt{thick}, \texttt{height})\).
 fn adjust_panel_placement(tile: PartitionTile, p: Placement) -> Placement {
 	match tile {
-		PartitionTile::Linear => {
-			let s = p.scale;
-			let local_mid = Vec3::new(s.x * 0.5, 0.0, -s.z * 0.5);
-			Placement {
-				translation: p.translation + p.rotation() * local_mid,
-				yaw: p.yaw,
-				pitch: p.pitch,
-				roll: p.roll,
-				// Linear kit \(X \in [-1,1]\) → half-width; \(Z \in [-0.2,0.2]\) → depth/0.4
-				scale: Vec3::new(
-					(s.x * 0.5).max(1e-4),
-					s.y,
-					(s.z / 0.4).max(1e-4),
-				),
-			}
-		}
+		PartitionTile::Linear => Placement {
+			translation: p.translation,
+			yaw: p.yaw,
+			pitch: p.pitch + PANEL_TO_WALL_PITCH,
+			roll: p.roll,
+			scale: p.scale,
+		},
 		_ => p,
 	}
 }
