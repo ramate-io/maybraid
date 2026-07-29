@@ -14,7 +14,7 @@ app.add_plugins(SceneRefPlugin);
 let scene = SceneRef::glb("urban/floors/foo.glb").scene();
 
 // Axis-mirrored rebuild (distinct cache key; positive Transform scale at the caller):
-let mirrored = SceneRef::glb("urban/roofs/unit_right_triangle.glb")
+let mirrored = SceneRef::glb("urban/panels/unit_right_triangle.glb")
     .mirrored(MirrorAxis::X)
     .scene();
 

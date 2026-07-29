@@ -1,7 +1,7 @@
 //! Private roof kit tessellation (not part of the public IR).
 //!
 //! The unit right-triangle kit is origin-anchored with \(X \in [0, 1]\),
-//! \(Z \in [-1, 0]\), \(Y \in [-0.2, 0.2]\) (`unit_right_triangle.glb`).
+//! \(Z \in [-1, 0]\), \(Y \in [-0.2, 0.2]\) (`panels/unit_right_triangle.glb`).
 //! [`crate::roofs::node::RoofNode`] applies pitch about local +X after kit poses.
 //!
 //! [`Pitch`](crate::roofs::geometry::Pitch) layouts are lower-left anchored: optional

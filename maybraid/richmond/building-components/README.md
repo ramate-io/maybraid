@@ -31,6 +31,49 @@ partitions/rough_stonework/linear.rs
 
 Shared [`Placement`](src/placed.rs) / [`Placed`](src/placed.rs) and [`ArcKit`](src/arc_kit.rs) live at the crate root.
 
+## Urban art / assets
+
+Blender sources live under [`maybraid/art/urban/`](../../art/urban/README.md); runtime GLBs under `maybraid/assets/urban/` (same relative layout). Paths are registered in [`assets.rs`](src/assets.rs).
+
+Urban kits split into **shared style geometry**, **parts**, and **domain-specific** folders:
+
+- **`panels/`**, **`arcs/`**, **`joints/`** — widely reusable geometry within a style (rectangles/triangles, arc bodies/slices/frames, joints), consumed across partitions, roofs, floors, doors, …
+- **`parts/`** — reusable micro-pieces for a style (stones, thatch tufts, …); authoring libraries more often than direct runtime leaves
+- **`floors/`**, **`partitions/`**, **`stairs/`**, … — function-specific kits and **fast authorship paths** when a component stays tied to one domain
+
+```
+urban/
+  panels/                 # shared rectangles, triangles, fillers
+    unit_right_triangle
+    rough_stonework/
+      rectangle_001[+ LOD]
+      inscribed_square_001
+    shepherds_thatch/
+      right_triangle_001_{high,mid,low}_res
+  arcs/                   # shared arc bodies, slices, frames
+    rough_stonework/
+      arc_{15,90,180}_001[+ LOD]
+      arc_{15,90}_slice_001[+ LOD]
+      arc_90_frame_001
+  joints/                 # shared segment joints
+    rough_stonework/
+      joint_001_{high,mid}_res
+  parts/                  # style piece libraries (stones, …)
+    rough_stonework/
+      parts
+    shepherds_thatch/
+      parts
+  floors/
+    rough_stonework/
+      rough_stonework_001   # floor-slab rectangle (domain-owned for now)
+  stairs/
+    …
+```
+
+**Naming under a style folder:** do not repeat the style name in the filename (`rough_stonework/arc_90_001`, not `rough_stonework/rough_stonework_90_001`). Angle kits use the `arc_` prefix (`arc_15`, `arc_90`, `arc_180`, plus `arc_*_slice` / `arc_*_frame`).
+
+Partition linear leaves consume `panels/.../rectangle_001` via `LINEAR_*` aliases; roof pitch leaves consume `panels/.../right_triangle_001_*`. Arc / slice / joint leaves alias through `ARC_*` / `SLICE_*` / `JOINT_*` into `arcs/` and `joints/`. The floor-slab rectangle remains under `floors/` until promoted; the circle−inscribed-square filler lives under `panels/`.
+
 ## Furniture (placeholders)
 
 [`furniture/`](src/furniture.rs) follows the same Style + Geometry + Placement → `LodScene` IR (`FurnitureNode`). Until kit GLBs exist, [`FurnitureStyle::Placeholder`](src/furniture/style.rs) renders color-coded **wireframe** unit cubes (line-list mesh). Apps must add [`FurnitureWireframePlugin`](src/furniture/wireframe.rs) before spawning furniture scenes. Geometry kinds include bed, wardrobe, nightstand, vanity, and toilet.
@@ -59,22 +102,22 @@ Joints omit when both plan and slope kinks are below [`DEFAULT_MIN_JOINT_ANGLE`]
 
 Partition components are authored in a normalized local space, then transformed into world/cell space by the parent building.
 
-- **Linear Normalization:** linear components are normalized to the following spaces:
+- **Linear Normalization:** linear components (panel `rectangle_001`) are normalized to the following spaces:
   - \(Z = [-0.2, 0.2]\)
   - \(Y = [0.0, 1.0]\)
   - \(X = [-1.0, 1.0]\)
   - Subsegments normalized to \(X = [-1.0, 0.8]\)
-- **Angular Normalization:** angular components follow a similar normalization along the arc, but attach to different start and end points at different angles.
+- **Angular Normalization:** angular components (`arc_180` / `arc_90` / `arc_15`) follow a similar normalization along the arc, but attach to different start and end points at different angles.
   - Thickness is the same swept \(Z = [-0.2, 0.2]\)
   - A 180° arc sweep goes through \(-Z\) from \(X = -1.0\) to \(X = 1.0\)
   - A 90° arc sweep goes through \(-Z\) from \(X = -1.0\) to \(X = 0.0\)
   - A 15° arc sweep goes through \(-Z\) from \(X = -1.0\) to \(X = \cos(15^\circ) - 1.0\), \(Z = -\sin(15^\circ)\)
-- **Header Components:** header components are used for smaller vertical spaces. They are normalized to:
+- **Slice Components:** slice components (`arc_90_slice` / `arc_15_slice`) are used for smaller vertical spaces. They are normalized to:
   - \(Z = [-0.2, 0.2]\)
   - \(Y = [0.0, 0.2]\)
   - \(X = [-1.0, 1.0]\)
 
-A common approach to building door frames is to use a header component with various 15° arc sweeps to create the frame.
+A common approach to building door frames is to use a slice component with various 15° arc sweeps to create the frame.
 
 Joints are used to connect irregular partition geometry. They are roughly circular components defined \(X = Z = [-0.5, 0.5]\) and \(Y = [0.0, 1.0]\). Scale \(Y\) so the joint spans the storey; grow \(X/Z\) with the vertical angle kink between abutting segments. Align roll to the average of those segments' slopes (yaw bisects the plan turn). Omit joints when kinks are below the construction `min_joint_angle` (default \(0.1\) rad). When a polyline is split, pass `incoming_slope` so the start vertex can still joint against the preceding segment.
 
@@ -86,10 +129,10 @@ These modules hold reusable floor/roof fillers, circulation geometry, and door k
 
 Floors components come in three categories:
 
-- **Rectangular:** the floor component is a square centered at the origin with half-length \(1\) (\(X, Z \in [-1, 1]\)) and \(Y = [-0.2, 0.2]\). Often, we square-off more complex forms and fill in the missing space with rectangular components. World edge length \(L\) maps with scale \(L / 2\).
+- **Rectangular:** the floor component is a square centered at the origin with half-length \(1\) (\(X, Z \in [-1, 1]\)) and \(Y = [-0.2, 0.2]\). Often, we square-off more complex forms and fill in the missing space with rectangular components. World edge length \(L\) maps with scale \(L / 2\). Kit: `floors/rough_stonework/rough_stonework_001`.
 - **Triangular:** the floor component is a unit right triangle with Y = [-0.2, 0.2]. Often, we use triangular components to fill angled sections. 
 - **Plank:** the floor component is a rectangle with Z = [-0.2, 0.2], Y = [-1.0, 1.0], and X = [-0.2, 0.2]. Often, we use plank components to fill under complicated polylines, hiding their ends in a partition wall or close to it. They are also quite useful in combination with other rectangular components to fill gaps without aggressive scaling differences per component. 
-- **Circle Inscribed Square:** the floor component is the southern- hemisphere difference between a circle and a square. The space removed by the inscribed square is roughly X = Z =[ -0.7, 0.7]. To completely fill in circular space, rotate four of these components around the center.
+- **Circle Inscribed Square:** the floor component is the southern- hemisphere difference between a circle and a square. The space removed by the inscribed square is roughly X = Z =[ -0.7, 0.7]. To completely fill in circular space, rotate four of these components around the center. Kit: `panels/rough_stonework/inscribed_square_001`.
 
 To fill irregular spaces, we commonly use rectangular or triangular tiling techniques--unless a more bespoke component such as the Circle Inscribed Square is provided. Tiling techniques include quadtree voxelization or a simple sweep of a repeated unit shape. 
 
@@ -122,7 +165,7 @@ Pitch-space axes: **X** along eave/ridge, **Z** run (eave at \(Z = 0\), ridge at
 
 Helpers: `with_left` / `with_right`, `with_left_angle` / `with_right_angle` (\(\texttt{base} = \texttt{run}\tan\theta\)), and `from_eave_ridge(rise, run, eave, ridge, tile_width)` which sets `length = min(eave, ridge)` and equal end bases \(\pm|\texttt{ridge}-\texttt{eave}|/2\) (flipped when ridge is longer).
 
-The atomic kit is still the origin-anchored unit right triangle \(X \in [0, 1]\), \(Z \in [-1, 0]\), \(Y \in [-0.2, 0.2]\) (shepherd's thatch LOD triad).
+The atomic kit is the origin-anchored unit right triangle \(X \in [0, 1]\), \(Z \in [-1, 0]\), \(Y \in [-0.2, 0.2]\) — shepherd's thatch LOD triad under `panels/shepherds_thatch/right_triangle_001_*` (plus style-agnostic `panels/unit_right_triangle`).
 
 ### Dome
 

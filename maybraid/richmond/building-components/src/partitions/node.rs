@@ -14,7 +14,7 @@ use crate::parent_confines::{confined_scene, ParentConfines};
 use crate::partitions::geometry::{JointLod, LinearLod, PartitionGeometry, PartitionTile};
 use crate::partitions::probe::PartitionLodProbe;
 use crate::partitions::rough_stonework::{
-	RoughStoneworkHeader180, RoughStoneworkJoint, RoughStoneworkLinearHeaderSubsegment,
+	RoughStoneworkSlice180, RoughStoneworkJoint, RoughStoneworkLinearSliceSubsegment,
 	RoughStoneworkLinearSubsegment,
 };
 use crate::partitions::style::PartitionStyle;
@@ -100,10 +100,10 @@ fn placeholder_tile_scene(tile: PartitionTile, lod_ref: &LodRef) -> Box<dyn Scen
 		PartitionTile::LinearSubsegment => {
 			Box::new(RoughStoneworkLinearSubsegment.scene_with_lod(lod_ref))
 		}
-		PartitionTile::LinearHeaderSubsegment => {
-			Box::new(RoughStoneworkLinearHeaderSubsegment.scene_with_lod(lod_ref))
+		PartitionTile::LinearSliceSubsegment => {
+			Box::new(RoughStoneworkLinearSliceSubsegment.scene_with_lod(lod_ref))
 		}
-		PartitionTile::HeaderArc180 => Box::new(RoughStoneworkHeader180.scene_with_lod(lod_ref)),
+		PartitionTile::SliceArc180 => Box::new(RoughStoneworkSlice180.scene_with_lod(lod_ref)),
 		PartitionTile::Joint => Box::new(RoughStoneworkJoint.scene_with_lod(lod_ref)),
 		_ => Box::new(RoughStoneworkLinearSubsegment.scene_with_lod(lod_ref)),
 	}
@@ -113,8 +113,8 @@ fn placeholder_tile_scene(tile: PartitionTile, lod_ref: &LodRef) -> Box<dyn Scen
 pub(crate) fn partition_tile_scene(tile: PartitionTile, lod_ref: &LodRef) -> Box<dyn Scene> {
 	match tile {
 		PartitionTile::LinearSubsegment
-		| PartitionTile::LinearHeaderSubsegment
-		| PartitionTile::HeaderArc180
+		| PartitionTile::LinearSliceSubsegment
+		| PartitionTile::SliceArc180
 		| PartitionTile::Joint => placeholder_tile_scene(tile, lod_ref),
 		other => {
 			// Asset tiles: leaf style types for doors that still route here.

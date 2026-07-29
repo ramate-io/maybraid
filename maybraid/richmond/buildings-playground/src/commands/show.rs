@@ -3,7 +3,7 @@
 pub mod arc_180;
 pub mod arc_90;
 pub mod bedroom;
-pub mod header_90;
+pub mod slice_90;
 pub mod linear;
 pub mod linear_wall;
 pub mod noisy_polyline_wall;
@@ -24,14 +24,14 @@ use crate::preview::PreviewConfig;
 #[derive(Clone, Subcommand)]
 #[command(rename_all = "kebab-case")]
 pub enum Show {
-	/// Straight rough-stonework linear segment (`rough_stonework_001.glb`).
+	/// Straight rough-stonework linear segment (`panels/.../rectangle_001.glb`).
 	Linear(linear::Linear),
-	/// 90° rough-stonework arc (`rough_stonework_90_001.glb`).
+	/// 90° rough-stonework arc (`arcs/.../arc_90_001.glb`).
 	Arc90(arc_90::Arc90),
-	/// 180° rough-stonework arc (`rough_stonework_180_001.glb`).
+	/// 180° rough-stonework arc (`arcs/.../arc_180_001.glb`).
 	Arc180(arc_180::Arc180),
-	/// 90° header rough-stonework (`rough_stonework_90_header_001.glb`).
-	Header90(header_90::Header90),
+	/// 90° slice rough-stonework (`arcs/.../arc_90_slice_001.glb`).
+	Slice90(slice_90::Slice90),
 	/// Shepherd's-thatch pitched face (`rise`/`run`/`length`/`left`/`right`).
 	Pitch(pitch::Pitch),
 	/// L-shaped `Partition::polyline` (posed linears + joints).
@@ -56,7 +56,7 @@ impl Show {
 			Self::Linear(cmd) => cmd.into_preview(),
 			Self::Arc90(cmd) => cmd.into_preview(),
 			Self::Arc180(cmd) => cmd.into_preview(),
-			Self::Header90(cmd) => cmd.into_preview(),
+			Self::Slice90(cmd) => cmd.into_preview(),
 			Self::Pitch(cmd) => cmd.into_preview(),
 			Self::Polyline(cmd) => cmd.into_preview(),
 			Self::LinearWall(cmd) => cmd.into_preview(),

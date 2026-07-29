@@ -10,7 +10,7 @@ use richmond_building_components::Placement;
 
 use crate::walling::portal::{
 	assign_portals, AssignedPortal, MustAssignPortal, Portal, PortalFootprint, WallRegion,
-	HEADER_Y_FRAC,
+	SLICE_Y_FRAC,
 };
 
 /// Kit segment size (degrees) and portal width (two segments → 30°).
@@ -105,7 +105,7 @@ fn tessellate_arc(
 	portals: &[AssignedPortal],
 ) -> Vec<PartitionNode> {
 	let ring_scale = Vec3::new(radius, storey_height, radius);
-	let lintel = center_xz + Vec3::Y * (HEADER_Y_FRAC * storey_height);
+	let lintel = center_xz + Vec3::Y * (SLICE_Y_FRAC * storey_height);
 	let mut partitions = Vec::new();
 
 	for portal in portals {
@@ -121,17 +121,17 @@ fn tessellate_arc(
 			match portal.portal {
 				Portal::Door => {
 					partitions.push(PartitionNode::rough_stone(
-						Partition::header_arc(SEG_DEG),
+						Partition::slice_arc(SEG_DEG),
 						Placement::new(lintel, yaw).with_scale(ring_scale),
 					));
 				}
 				Portal::Window => {
 					partitions.push(PartitionNode::rough_stone(
-						Partition::header_arc(SEG_DEG),
+						Partition::slice_arc(SEG_DEG),
 						Placement::new(center_xz, yaw).with_scale(ring_scale),
 					));
 					partitions.push(PartitionNode::rough_stone(
-						Partition::header_arc(SEG_DEG),
+						Partition::slice_arc(SEG_DEG),
 						Placement::new(lintel, yaw).with_scale(ring_scale),
 					));
 				}
@@ -261,12 +261,12 @@ mod tests {
 		assert!((wall.portals[0].t - 0.0).abs() < 1e-5);
 		assert!((wall.portals[1].t - 0.25).abs() < 1e-5);
 		assert!((wall.arc_degrees - 360.0).abs() < 1e-3);
-		let headers = wall
+		let slices = wall
 			.partitions
 			.iter()
-			.filter(|w| matches!(w.geometry, Partition::HeaderArc(_)))
+			.filter(|w| matches!(w.geometry, Partition::SliceArc(_)))
 			.count();
-		assert_eq!(headers, 14);
+		assert_eq!(slices, 14);
 		Ok(())
 	}
 

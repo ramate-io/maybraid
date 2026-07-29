@@ -3,7 +3,7 @@
 use bevy_math::Vec3;
 
 use crate::arc_kit::decompose_arc_sweep;
-use crate::partitions::geometry::{header_tile, PartitionTile};
+use crate::partitions::geometry::{slice_tile, PartitionTile};
 use crate::placed::Placed;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -20,12 +20,12 @@ impl Default for ArcSweep {
 }
 
 impl ArcSweep {
-	pub fn tiles(self, header: bool) -> Vec<Placed<PartitionTile>> {
+	pub fn tiles(self, slice: bool) -> Vec<Placed<PartitionTile>> {
 		decompose_arc_sweep(self.sweep_degrees)
 			.into_iter()
 			.map(|(kit, yaw)| {
-				let tile = if header {
-					header_tile(kit)
+				let tile = if slice {
+					slice_tile(kit)
 				} else {
 					PartitionTile::from(kit)
 				};

@@ -4,7 +4,8 @@ use bevy::scene::prelude::Scene;
 use lod::gen::LodScene;
 use lod::lod_ref::LodRef;
 
-use crate::assets::floors::rough_stonework::{CIRCLE_INSCRIBED_SQUARE, RECTANGLE};
+use crate::assets::floors::rough_stonework::RECTANGLE;
+use crate::assets::panels::rough_stonework::INSCRIBED_SQUARE;
 use crate::floors::geometry::FloorGeometry;
 use crate::floors::style::FloorStyle;
 use crate::floors::tessellate::FloorKit;
@@ -75,7 +76,7 @@ impl LodScene for FloorNode {
 							Box::new(posed_glb(RECTANGLE, transform)) as Box<dyn Scene>
 						}
 						FloorKit::CircleInscribedSquare => {
-							Box::new(posed_glb(CIRCLE_INSCRIBED_SQUARE, transform)) as Box<dyn Scene>
+							Box::new(posed_glb(INSCRIBED_SQUARE, transform)) as Box<dyn Scene>
 						}
 						FloorKit::ArcFill(_) => Box::new(with_pose(
 							transform,

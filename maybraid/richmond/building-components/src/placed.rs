@@ -5,7 +5,7 @@ use bevy_math::{EulerRot, Quat, Vec3};
 /// Translation / yaw / pitch / roll / scale for a kit piece or continuous form in cell space.
 ///
 /// Partition / floor / door kits are authored in a **normalized** local space
-/// (angular arcs: radius \(1\), full height \(Y \in [0, 1]\); headers
+/// (angular arcs: radius \(1\), full height \(Y \in [0, 1]\); slices
 /// \(Y \in [0, 0.2]\)). Buildings map that kit into cell space via [`Self::scale`].
 ///
 /// Rotation order (intrinsic [`EulerRot::YXZ`]):

@@ -3,13 +3,13 @@
 //! \(t \in [0, 1)\) runs along the wall path (arc sweep, linear segment, or polyline length).
 
 use procedural_common::NoiseConfig;
-use richmond_building_components::partitions::HEADER_KIT_HEIGHT;
+use richmond_building_components::partitions::SLICE_KIT_HEIGHT;
 
-/// Lintel / top-header baseline as a fraction of storey height.
+/// Lintel / top-slice baseline as a fraction of storey height.
 ///
-/// Header kits span [`HEADER_KIT_HEIGHT`] in \(Y\); with wall \(Y\)-scale \(H\) they
+/// Slice kits span [`SLICE_KIT_HEIGHT`] in \(Y\); with wall \(Y\)-scale \(H\) they
 /// occupy \(0.2\,H\), so the lintel sits at \(0.8\,H\) to meet the storey top.
-pub const HEADER_Y_FRAC: f32 = 1.0 - HEADER_KIT_HEIGHT;
+pub const SLICE_Y_FRAC: f32 = 1.0 - SLICE_KIT_HEIGHT;
 
 /// Opening cut into a wall.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
