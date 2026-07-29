@@ -97,14 +97,8 @@ impl PolylineWall {
 	}
 }
 
-fn horiz_dist(a: Vec3, b: Vec3) -> f32 {
-	let dx = b.x - a.x;
-	let dz = b.z - a.z;
-	(dx * dx + dz * dz).sqrt()
-}
-
 fn path_length(points: &[Vec3]) -> f32 {
-	points.windows(2).map(|w| horiz_dist(w[0], w[1])).sum()
+	points.windows(2).map(|w| w[0].distance(w[1])).sum()
 }
 
 fn yaw_along(a: Vec3, b: Vec3) -> f32 {
@@ -118,7 +112,7 @@ fn sample_path(points: &[Vec3], t: f32) -> (Vec3, f32) {
 	let total = path_length(points).max(1e-4);
 	let mut target = t.clamp(0.0, 1.0) * total;
 	for w in points.windows(2) {
-		let len = horiz_dist(w[0], w[1]).max(1e-6);
+		let len = w[0].distance(w[1]).max(1e-6);
 		if target <= len + 1e-5 {
 			let local = (target / len).clamp(0.0, 1.0);
 			let p = w[0] + (w[1] - w[0]) * local;
@@ -143,7 +137,7 @@ fn subpath_points(points: &[Vec3], t0: f32, t1: f32) -> Vec<Vec3> {
 
 	let mut acc = 0.0;
 	for w in points.windows(2) {
-		let len = horiz_dist(w[0], w[1]).max(1e-6);
+		let len = w[0].distance(w[1]).max(1e-6);
 		let seg_end = acc + len;
 		if seg_end < s1 - 1e-4 && seg_end > s0 + 1e-4 {
 			out.push(w[1]);
@@ -154,7 +148,7 @@ fn subpath_points(points: &[Vec3], t0: f32, t1: f32) -> Vec<Vec3> {
 	let (p1, _) = sample_path(points, t1);
 	if out
 		.last()
-		.map(|p| horiz_dist(*p, p1) > 1e-4)
+		.map(|p| p.distance(p1) > 1e-4)
 		.unwrap_or(true)
 	{
 		out.push(p1);
@@ -181,8 +175,7 @@ fn tessellate_polyline(
 
 	for portal in portals {
 		let (center, yaw) = sample_path(points, portal.t);
-		let y0 = center.y;
-		let base = Vec3::new(center.x, y0, center.z);
+		let base = center;
 		let lintel = base + Vec3::Y * (HEADER_Y_FRAC * height);
 		let header_scale = Vec3::new(portal_width * 0.5, HEADER_KIT_HEIGHT * height, thickness);
 		match portal.portal {
@@ -220,15 +213,11 @@ fn tessellate_polyline(
 		if (t1 - t0) * total < 1e-2 {
 			continue;
 		}
-		let mut sub = subpath_points(points, t0, t1);
+		let sub = subpath_points(points, t0, t1);
 		if sub.len() < 2 {
 			continue;
 		}
-		let y0 = sub.iter().map(|p| p.y).fold(f32::INFINITY, f32::min);
-		for p in &mut sub {
-			p.y = y0;
-		}
-		// Unit kit height × parent Y scale; thickness via parent Z scale.
+		// Preserve authored 3D points so kit tessellation can pitch along the path.
 		partitions.push(PartitionNode::rough_stone(
 			Partition::polyline(sub),
 			Placement::at_origin().with_scale(Vec3::new(1.0, height, thick_scale)),

@@ -6,6 +6,7 @@ pub mod bedroom;
 pub mod header_90;
 pub mod linear;
 pub mod linear_wall;
+pub mod noisy_polyline_wall;
 pub mod polyline;
 pub mod polyline_wall;
 pub mod stacked_rings;
@@ -36,6 +37,8 @@ pub enum Show {
 	LinearWall(linear_wall::LinearWall),
 	/// Portal-sensitive [`richmond_buildings::PolylineWall`] (L-path + door).
 	PolylineWall(polyline_wall::PolylineWall),
+	/// Noisy distance-budget path with allowed X/Y/Z turn angles.
+	NoisyPolylineWall(noisy_polyline_wall::NoisyPolylineWall),
 	/// Full Wizard's Tower (noise-derived floor count).
 	WizardsTower(wizards_tower::WizardsTower),
 	/// Stacked circular wall rings (validates kit radius/height scaling).
@@ -54,6 +57,7 @@ impl Show {
 			Self::Polyline(cmd) => cmd.into_preview(),
 			Self::LinearWall(cmd) => cmd.into_preview(),
 			Self::PolylineWall(cmd) => cmd.into_preview(),
+			Self::NoisyPolylineWall(cmd) => cmd.into_preview(),
 			Self::WizardsTower(cmd) => cmd.into_preview(),
 			Self::StackedRings(cmd) => cmd.into_preview(),
 			Self::Bedroom(cmd) => cmd.into_preview(),

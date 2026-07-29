@@ -5560,6 +5560,7 @@ dependencies = [
  "lod",
  "log",
  "mesh-ref",
+ "procedural-common",
  "richmond-building-components",
  "richmond-buildings",
 ]

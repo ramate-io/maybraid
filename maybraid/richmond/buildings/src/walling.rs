@@ -5,11 +5,13 @@
 
 pub mod arc;
 pub mod linear;
+pub mod noisy_polyline;
 pub mod polyline;
 pub mod portal;
 
 pub use arc::{ArcWall, ArcWallParams};
 pub use linear::{LinearWall, LinearWallParams, DEFAULT_PORTAL_WIDTH as LINEAR_DEFAULT_PORTAL_WIDTH};
+pub use noisy_polyline::{NoisyPolylineWall, NoisyPolylineWallParams};
 pub use polyline::{
 	PolylineWall, PolylineWallParams, DEFAULT_PORTAL_WIDTH as POLYLINE_DEFAULT_PORTAL_WIDTH,
 };
@@ -25,6 +27,7 @@ pub enum Walling {
 	Arc(ArcWall),
 	Linear(LinearWall),
 	Polyline(PolylineWall),
+	NoisyPolyline(NoisyPolylineWall),
 }
 
 impl Walling {
@@ -33,6 +36,7 @@ impl Walling {
 			Self::Arc(w) => &w.partitions,
 			Self::Linear(w) => &w.partitions,
 			Self::Polyline(w) => &w.partitions,
+			Self::NoisyPolyline(w) => w.partitions(),
 		}
 	}
 
@@ -41,6 +45,7 @@ impl Walling {
 			Self::Arc(w) => &w.portals,
 			Self::Linear(w) => &w.portals,
 			Self::Polyline(w) => &w.portals,
+			Self::NoisyPolyline(w) => w.portals(),
 		}
 	}
 }
@@ -60,5 +65,11 @@ impl From<LinearWall> for Walling {
 impl From<PolylineWall> for Walling {
 	fn from(w: PolylineWall) -> Self {
 		Self::Polyline(w)
+	}
+}
+
+impl From<NoisyPolylineWall> for Walling {
+	fn from(w: NoisyPolylineWall) -> Self {
+		Self::NoisyPolyline(w)
 	}
 }

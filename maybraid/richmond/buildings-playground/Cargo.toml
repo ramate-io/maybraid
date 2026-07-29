@@ -23,6 +23,7 @@ lod = { workspace = true }
 mesh-ref = { workspace = true }
 richmond-building-components = { workspace = true }
 richmond-buildings = { workspace = true }
+procedural-common = { workspace = true }
 
 [lints]
 workspace = true

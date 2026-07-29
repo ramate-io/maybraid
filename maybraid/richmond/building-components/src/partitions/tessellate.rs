@@ -44,8 +44,9 @@ fn header_kit(kit: ArcKit) -> PartitionKit {
 
 /// Minimum horizontal turn (radians) to emit a joint kit.
 const JOINT_YAW_EPS: f32 = 1e-3;
-/// Minimum elevation difference (local Y) to emit a wedge kit.
+/// Minimum elevation difference / slope roll (radians) to emit a wedge kit.
 const WEDGE_Y_EPS: f32 = 1e-3;
+const WEDGE_ROLL_EPS: f32 = 1e-3;
 /// Default kit thickness scale (\(0.15\) world / \(0.2\) kit half-extent).
 const DEFAULT_THICK: f32 = 0.15 / 0.2;
 
@@ -81,6 +82,12 @@ fn yaw_along_xz(dx: f32, dz: f32) -> f32 {
 	(-dz).atan2(dx)
 }
 
+/// Roll about local \(+Z\) so kit \(+X\) follows the path slope (in the wall plane).
+fn roll_along_slope(dx: f32, dy: f32, dz: f32) -> f32 {
+	let horiz = (dx * dx + dz * dz).sqrt();
+	dy.atan2(horiz.max(1e-8))
+}
+
 fn polyline_kit_pieces(points: &[Vec3]) -> Vec<Placed<PartitionKit>> {
 	if points.len() < 2 {
 		return vec![Placed::at_origin(PartitionKit::Linear)];
@@ -92,22 +99,18 @@ fn polyline_kit_pieces(points: &[Vec3]) -> Vec<Placed<PartitionKit>> {
 	for i in 0..n_edges {
 		let a = points[i];
 		let b = points[i + 1];
-		let dx = b.x - a.x;
-		let dz = b.z - a.z;
-		let horiz = (dx * dx + dz * dz).sqrt().max(1e-4);
-		let y0 = a.y.min(b.y);
-		// Coplanar points → unit kit height so parent `Placement.scale.y` supplies storey height.
-		let dy = a.y.max(b.y) - y0;
-		let height = if dy < WEDGE_Y_EPS { 1.0 } else { dy.max(1e-4) };
-		let yaw = yaw_along_xz(dx, dz);
-		let mid = Vec3::new((a.x + b.x) * 0.5, y0, (a.z + b.z) * 0.5);
+		let delta = b - a;
+		let len = delta.length().max(1e-4);
+		let yaw = yaw_along_xz(delta.x, delta.z);
+		let roll = roll_along_slope(delta.x, delta.y, delta.z);
+		let mid = (a + b) * 0.5;
+		// Unit kit height: parent `Placement.scale.y` supplies storey height.
+		// Slope uses roll about local Z (not pitch — pitch would lean the face out).
 		out.push(Placed {
 			geom: PartitionKit::Linear,
-			placement: Placement::new(mid, yaw).with_scale(Vec3::new(
-				horiz * 0.5,
-				height,
-				DEFAULT_THICK,
-			)),
+			placement: Placement::new(mid, yaw)
+				.with_roll(roll)
+				.with_scale(Vec3::new(len * 0.5, 1.0, DEFAULT_THICK)),
 		});
 	}
 
@@ -116,8 +119,12 @@ fn polyline_kit_pieces(points: &[Vec3]) -> Vec<Placed<PartitionKit>> {
 		let prev = points[i - 1];
 		let cur = points[i];
 		let next = points[i + 1];
-		let yaw_in = yaw_along_xz(cur.x - prev.x, cur.z - prev.z);
-		let yaw_out = yaw_along_xz(next.x - cur.x, next.z - cur.z);
+		let din = cur - prev;
+		let dout = next - cur;
+		let yaw_in = yaw_along_xz(din.x, din.z);
+		let yaw_out = yaw_along_xz(dout.x, dout.z);
+		let roll_in = roll_along_slope(din.x, din.y, din.z);
+		let roll_out = roll_along_slope(dout.x, dout.y, dout.z);
 		let mut dyaw = yaw_out - yaw_in;
 		while dyaw > std::f32::consts::PI {
 			dyaw -= std::f32::consts::TAU;
@@ -126,28 +133,24 @@ fn polyline_kit_pieces(points: &[Vec3]) -> Vec<Placed<PartitionKit>> {
 			dyaw += std::f32::consts::TAU;
 		}
 
-		let y0 = prev.y.min(cur.y).min(next.y);
-		let y_hi = prev.y.max(cur.y).max(next.y);
-		let dy = y_hi - y0;
-		let height = if dy < WEDGE_Y_EPS { 1.0 } else { dy.max(1e-4) };
-
 		if dyaw.abs() > JOINT_YAW_EPS {
 			out.push(Placed {
 				geom: PartitionKit::Joint,
-				placement: Placement::new(Vec3::new(cur.x, y0, cur.z), yaw_out).with_scale(
-					Vec3::new(DEFAULT_THICK, height, DEFAULT_THICK),
-				),
+				placement: Placement::new(cur, yaw_out)
+					.with_roll(roll_out)
+					.with_scale(Vec3::new(DEFAULT_THICK, 1.0, DEFAULT_THICK)),
 			});
 		}
 
 		let elev_kink = (cur.y - prev.y).abs() > WEDGE_Y_EPS
-			|| (next.y - cur.y).abs() > WEDGE_Y_EPS;
+			|| (next.y - cur.y).abs() > WEDGE_Y_EPS
+			|| (roll_out - roll_in).abs() > WEDGE_ROLL_EPS;
 		if elev_kink {
 			out.push(Placed {
 				geom: PartitionKit::Wedge,
-				placement: Placement::new(Vec3::new(cur.x, y0, cur.z), yaw_out).with_scale(
-					Vec3::new(DEFAULT_THICK, height, DEFAULT_THICK),
-				),
+				placement: Placement::new(cur, yaw_out)
+					.with_roll(0.5 * (roll_in + roll_out))
+					.with_scale(Vec3::new(DEFAULT_THICK, 1.0, DEFAULT_THICK)),
 			});
 		}
 	}
@@ -206,6 +209,30 @@ mod tests {
 		]);
 		let pieces = g.kit_pieces();
 		assert!(pieces.iter().any(|p| p.geom == PartitionKit::Wedge));
+		Ok(())
+	}
+
+	#[test]
+	fn sloping_edge_sets_roll() -> anyhow::Result<()> {
+		let g = PartitionGeometry::polyline([
+			Vec3::new(0.0, 0.0, 0.0),
+			Vec3::new(2.0, 1.0, 0.0),
+		]);
+		let pieces = g.kit_pieces();
+		let linear = pieces
+			.iter()
+			.find(|p| p.geom == PartitionKit::Linear)
+			.ok_or_else(|| anyhow::anyhow!("missing linear"))?;
+		assert!(
+			linear.placement.roll.abs() > 0.2,
+			"expected rolled segment along slope, roll={}",
+			linear.placement.roll
+		);
+		assert!(
+			linear.placement.pitch.abs() < 1e-5,
+			"polyline slope must not lean the face (pitch)"
+		);
+		assert!((linear.placement.translation.y - 0.5).abs() < 1e-3);
 		Ok(())
 	}
 }
