@@ -5,10 +5,11 @@
 
 pub mod geometry;
 pub mod lod;
+pub mod mesh_set;
 pub mod node;
+pub mod probe;
 pub mod rough_stonework;
 pub mod style;
-pub(crate) mod tessellate;
 
 pub use geometry::*;
 pub use lod::{

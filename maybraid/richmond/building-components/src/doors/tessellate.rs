@@ -3,7 +3,7 @@
 use bevy_math::Vec3;
 
 use crate::doors::geometry::DoorGeometry;
-use crate::partitions::tessellate::PartitionKit;
+use crate::partitions::geometry::PartitionKit;
 use crate::placed::{Placement, Placed};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

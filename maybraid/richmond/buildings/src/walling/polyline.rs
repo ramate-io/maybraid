@@ -233,10 +233,17 @@ fn tessellate_polyline(
 		if sub.len() < 2 {
 			continue;
 		}
+		let mut poly = PolylinePartition::new(sub).with_min_joint_angle(min_joint_angle);
+		if t0 > 1e-4 {
+			let (p_prev, _) = sample_path(points, (t0 - 1e-3).max(0.0));
+			let (p_at, _) = sample_path(points, t0);
+			let d = p_at - p_prev;
+			let horiz = (d.x * d.x + d.z * d.z).sqrt();
+			let roll_in = d.y.atan2(horiz.max(1e-8));
+			poly = poly.with_incoming_slope(roll_in);
+		}
 		partitions.push(PartitionNode::rough_stone(
-			Partition::Polyline(
-				PolylinePartition::new(sub).with_min_joint_angle(min_joint_angle),
-			),
+			Partition::Polyline(poly),
 			Placement::at_origin().with_scale(Vec3::new(1.0, height, thick_scale)),
 		));
 	}

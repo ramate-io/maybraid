@@ -1,5 +1,7 @@
 # Project Instructions
 
+Please read the [CONTRIBUTING.md](CONTRIBUTING.md) file for more information on how to contribute to this project.
+
 ## Commits
 
 Use [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/) for commit messages.
@@ -25,14 +27,6 @@ Use those fresh values for all subsequent commit-file reads and writes. Do not r
 ## Understanding Changes
 
 Because commit files are expected to preserve useful dialogue context, `git blame` can be especially helpful when trying to understand why code is shaped the way it is. Use it when history would clarify intent before changing nearby code.
-
-## Rust tests
-
-Avoid `.unwrap()`, `.expect(...)`, and `panic!(...)` in Rust test code (copied snippets tend to land in production). Prefer `Result`, `?`, and **`#[test] fn … -> anyhow::Result<()>`** as described in [CONTRIBUTING.md § Rust tests](CONTRIBUTING.md#rust-tests). **`assert!` / `assert_eq!`** are still encouraged.
-
-## Rust modules
-
-Prefer **`use crate::…`** / concrete paths instead of stitching **`super::`** chains unless there is a compelling reason (e.g., deliberate coupling to an immediate parent in a macro-heavy submodule).
 
 ## Prompting GitHub Actions
 

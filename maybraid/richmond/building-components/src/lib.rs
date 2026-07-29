@@ -20,7 +20,7 @@ pub use furniture::{
 	FurnitureGeometry, FurnitureNode, FurnitureStyle, FurnitureWireframePlugin,
 };
 pub use parent_confines::{
-	apply_parent_confines, confined_scene, distance_to_segment, ParentConfines,
+	apply_parent_confines, confined_scene, distance_to_segment, InternalShape, ParentConfines,
 	INTERNAL_REVEAL_FACTOR,
 };
 pub use partitions::{

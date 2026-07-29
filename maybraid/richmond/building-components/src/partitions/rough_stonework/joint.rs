@@ -2,10 +2,8 @@
 //!
 //! High + mid GLBs only; low / ultra-low LOD omit this filler.
 
-use crate::assets::partitions::rough_stonework::{JOINT_HIGH, JOINT_MID};
-use crate::partitions::lod::{
-	leaf_joint_mesh_lod, leaf_partition_lod_level, leaf_partition_lod_status, posed_joint_mesh_tier,
-};
+use crate::partitions::geometry::JointLod;
+use crate::partitions::probe::{leaf_partition_lod_level, leaf_partition_lod_status};
 
 /// Circular / post joint between upright linear partition segments.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
@@ -25,10 +23,10 @@ impl lod::gen::LodScene for RoughStoneworkJoint {
 		_lod_ref: &lod::lod_ref::LodRef,
 		level: lod::gen::LodSceneLevel,
 	) -> impl bevy::scene::Scene + 'static {
-		posed_joint_mesh_tier(JOINT_HIGH, JOINT_MID, bevy::prelude::Transform::IDENTITY, level)
+		JointLod::posed_tier(bevy::prelude::Transform::IDENTITY, level)
 	}
 
 	fn scene_with_lod(&self, lod_ref: &lod::lod_ref::LodRef) -> impl bevy::scene::Scene + 'static {
-		leaf_joint_mesh_lod(JOINT_HIGH, JOINT_MID, lod_ref)
+		JointLod::leaf_host(lod_ref)
 	}
 }
