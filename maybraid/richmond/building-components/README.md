@@ -96,9 +96,9 @@ We have not yet defined a sweeping tool. The plan is to make it take linear segm
 
 [`Partition::polyline`](src/partitions/geometry/polyline.rs) is a **short-run** primitive: one [`PartitionNode`](src/partitions/node.rs) is a single LOD parent whose `scene_with_level` expands into posed linear + joint kits. Prefer splitting longer paths in higher-order constructs (`richmond_buildings::walling`).
 
-Each edge of length \(L\) uses a suggested [`tile_width`](src/partitions/geometry/linear.rs) (default \(1\), the unscaled kit edge): \(n = \mathrm{round}(L/\texttt{tile\_width})\) tiles stretch to width \(L/n\). Override with `with_tile_width`. Continuous [`LinearPartition::spanning`](src/partitions/geometry/linear.rs) uses the same fit.
+Each edge uses **horizontal** length \(L_{xz}\) with a suggested [`tile_width`](src/partitions/geometry/linear.rs) (default \(1\)): \(n = \mathrm{round}(L_{xz}/\texttt{tile\_width})\) tiles stretch to width \(L_{xz}/n\). Starts lerp along the 3D path so path \(Y\) carries slope. Override with `with_tile_width`. Continuous [`LinearPartition::spanning`](src/partitions/geometry/linear.rs) uses the same fit on its span. Polyline tiles carry world path anchors plus stand-up pitch and wall scale themselves (`with_wall_scale`); the parent stays identity. Panels stay **plumb** (yaw + stand-up only).
 
-Joints omit when both plan and slope kinks are below [`DEFAULT_MIN_JOINT_ANGLE`](src/partitions/geometry/polyline.rs) (override via `with_min_joint_angle`). Use `with_incoming_slope` when a split span continues a preceding segment that is not in `points`. Horizontal joint scale grows with the vertical kink; roll averages abutting slopes. Joint meshes follow the **parent** level (high/mid only). LOD policy lives beside each geometry variant under [`geometry/`](src/partitions/geometry/).
+Joints omit when both plan and slope kinks are below [`DEFAULT_MIN_JOINT_ANGLE`](src/partitions/geometry/polyline.rs) (override via `with_min_joint_angle`). Use `with_incoming_slope` when a split span continues a preceding segment that is not in `points`. Horizontal joint scale grows with the vertical kink; joints and panels stay plumb. Joint meshes follow the **parent** level (high/mid only). LOD policy lives beside each geometry variant under [`geometry/`](src/partitions/geometry/).
 
 ## Partitions
 
@@ -107,7 +107,7 @@ Partition components are authored in a normalized local space, then transformed 
 - **Linear / rectangle panel:** authored on the ground like the triangle panel:
   - \(X, Z \in [0, 1]\)
   - \(Y \in [-0.2, 0.2]\) (thickness)
-  - Wall use applies pitch \(\pi/2\) so kit \(+Z\) becomes storey height and kit \(Y\) becomes wall thickness; see [`wall_placement`](src/partitions/geometry/linear.rs) / [`wall_placement_from_centered`](src/partitions/geometry/linear.rs). Default tile width is \(1\) (unit edge).
+  - Wall use scales \((\texttt{length}, \texttt{thick}, \texttt{height})\) on \((X, Y, Z)\), then pitches \(\pi/2\) about \(+X\) so kit \(+Z\) stands up as height (kit \(Y\) becomes thickness). Panels stay **plumb** (yaw + stand-up only); polyline slope lives in path \(Y\), not tip roll. Segments anchor at the lower-left (kit origin). Kit \(X \in [0, 1]\) means length scale is the **full** span (half of the old \(X \in [-1, 1]\) half-extent convention). See [`wall_placement`](src/partitions/geometry/linear.rs).
 - **Angular Normalization:** angular components (`arc_180` / `arc_90` / `arc_15`) follow a similar normalization along the arc, but attach to different start and end points at different angles.
   - Thickness is the same swept \(Z = [-0.2, 0.2]\)
   - A 180° arc sweep goes through \(-Z\) from \(X = -1.0\) to \(X = 1.0\)
@@ -120,7 +120,7 @@ Partition components are authored in a normalized local space, then transformed 
 
 A common approach to building door frames is to use a slice component with various 15° arc sweeps to create the frame.
 
-Joints are used to connect irregular partition geometry. They are roughly circular components defined \(X = Z = [-0.5, 0.5]\) and \(Y = [0.0, 1.0]\). Scale \(Y\) so the joint spans the storey; grow \(X/Z\) with the vertical angle kink between abutting segments. Align roll to the average of those segments' slopes (yaw bisects the plan turn). Omit joints when kinks are below the construction `min_joint_angle` (default \(0.1\) rad). When a polyline is split, pass `incoming_slope` so the start vertex can still joint against the preceding segment.
+Joints are used to connect irregular partition geometry. They remain **vertically authored** (\(X = Z = [-0.5, 0.5]\), \(Y = [0.0, 1.0]\)) — do **not** apply rectangle-panel stand-up pitch, and do **not** tip them with slope roll yet (stay plumb). Scale \(Y\) so the joint spans the storey; grow \(X/Z\) with the vertical angle kink between abutting segments. Yaw bisects the plan turn. Omit joints when kinks are below the construction `min_joint_angle` (default \(0.1\) rad). When a polyline is split, pass `incoming_slope` so the start vertex can still joint against the preceding segment.
 
 ## Floors, Roofs, Stairs, and Doors
 

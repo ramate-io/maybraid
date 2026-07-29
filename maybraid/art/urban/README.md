@@ -23,7 +23,7 @@ Organize by **style subfolder**, and do **not** repeat the style name in the fil
 - **Rectangle** (`rectangle_001`): \(X, Z \in [0, 1]\), \(Y \in [-0.2, 0.2]\)
 - **Right triangle**: \(X \in [0, 1]\), \(Z \in [-1, 0]\), \(Y \in [-0.2, 0.2]\)
 
-Partition walls stand the rectangle with pitch \(\pi/2\) (see building-components `wall_placement*`).
+Partition walls scale \((\texttt{length}, \texttt{thick}, \texttt{height})\) on \((X,Y,Z)\) then pitch \(\pi/2\) about \(+X\) so \(+Z\) stands up (see building-components `wall_placement*`). Length scale is the full span — the kit edge is \(1\), not \(2\).
 
 ### Micro-parts — `parts/`
 

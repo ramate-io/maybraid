@@ -1,9 +1,11 @@
 //! Full-height linear partition geometry and LOD policy.
 //!
-//! Rectangle panels are authored on the ground (\(X,Z \in [0, 1]\), \(Y \in [-0.2, 0.2]\)),
-//! matching the triangle panel convention. Wall use applies
-//! [`PANEL_TO_WALL_PITCH`] so kit \(+Z\) becomes storey height and kit \(Y\) becomes
-//! wall thickness.
+//! Rectangle panels are authored on the ground (\(X,Z \in [0, 1]\), \(Y \in [-0.2, 0.2]\)).
+//! Wall use scales \((\texttt{length}, \texttt{thick}, \texttt{height})\) on \((X, Y, Z)\),
+//! then pitches \(\pi/2\) about \(+X\) so kit \(+Z\) stands up as world height (kit \(Y\)
+//! becomes wall thickness). Segment anchors are the **lower-left** (kit origin).
+//!
+//! Stand-up pitch only — polyline path \(Y\) carries slope; panels stay plumb.
 
 use bevy::prelude::Transform;
 use bevy::scene::prelude::Scene;
@@ -31,9 +33,14 @@ pub const PANEL_Y_HALF: f32 = 0.2;
 pub const DEFAULT_THICK: f32 = 0.15 / PANEL_Y_HALF;
 
 /// Suggested full tile width along local \(X\) (matches unscaled kit \(X \in [0, 1]\)).
+///
+/// Formerly \(2\) when the kit was \(X \in [-1, 1]\).
 pub const DEFAULT_TILE_WIDTH: f32 = 1.0;
 
-/// Pitch that stands a ground panel as a wall (\(Z \to +Y\), \(Y \to +Z\)).
+/// Pitch that tips kit \(+Z\) (authored height edge) to world \(+Y\).
+///
+/// With scale \((\texttt{length}, \texttt{thick}, \texttt{height})\) on \((X,Y,Z)\):
+/// \(X\) stays along the wall, \(Y\) becomes thickness, \(Z\) becomes storey height.
 pub const PANEL_TO_WALL_PITCH: f32 = std::f32::consts::FRAC_PI_2;
 
 /// How many tiles fit a length given a suggested width (roofs-style).
@@ -45,12 +52,22 @@ pub fn fitted_tile_count(length: f32, tile_width: f32) -> u32 {
 	((length / tw).round() as i32).max(1) as u32
 }
 
-/// Wall placement for a ground-authored rectangle panel from the old centered convention.
+fn panel_wall_pose(origin: Vec3, yaw: f32, length: f32, height: f32, thick_scale: f32) -> Placement {
+	Placement::new(origin, yaw)
+		.with_pitch(PANEL_TO_WALL_PITCH)
+		.with_scale(Vec3::new(
+			length.max(1e-4),
+			thick_scale.max(1e-4),
+			height.max(1e-4),
+		))
+}
+
+/// Wall placement from the old centered half-extent convention.
 ///
-/// `mid_base` is the midpoint of the wall base. `half_length` is half the span along
-/// local \(+X\) after `yaw` (former `scale.x` when the kit was \(X \in [-1, 1]\)).
-/// `height` is storey height (maps to kit \(Z\)). `thick_scale` multiplies kit \(Y\)
-/// half-extent (former `scale.z`).
+/// `half_length` is what callers used as `scale.x` when the kit was \(X \in [-1, 1]\)
+/// (world span \(2 \times \texttt{half\_length}\)). The ground panel is \(X \in [0, 1]\), so
+/// this converts to full span on \(X\), anchors at the lower-left, and applies
+/// [`PANEL_TO_WALL_PITCH`].
 pub fn wall_placement_from_centered(
 	mid_base: Vec3,
 	yaw: f32,
@@ -61,16 +78,12 @@ pub fn wall_placement_from_centered(
 	let half = half_length.max(0.0);
 	let length = (half * 2.0).max(1e-4);
 	let origin = mid_base + Quat::from_rotation_y(yaw) * Vec3::new(-half, 0.0, 0.0);
-	Placement::new(origin, yaw)
-		.with_pitch(PANEL_TO_WALL_PITCH)
-		.with_scale(Vec3::new(
-			length,
-			thick_scale.max(1e-4),
-			height.max(1e-4),
-		))
+	panel_wall_pose(origin, yaw, length, height, thick_scale)
 }
 
 /// Wall placement anchored at the lower-left / span-start corner.
+///
+/// `length` is the full world span along local \(+X\) (kit \(X \in [0, 1]\)).
 pub fn wall_placement(
 	origin: Vec3,
 	yaw: f32,
@@ -78,23 +91,18 @@ pub fn wall_placement(
 	height: f32,
 	thick_scale: f32,
 ) -> Placement {
-	Placement::new(origin, yaw)
-		.with_pitch(PANEL_TO_WALL_PITCH)
-		.with_scale(Vec3::new(
-			length.max(1e-4),
-			thick_scale.max(1e-4),
-			height.max(1e-4),
-		))
+	panel_wall_pose(origin, yaw, length, height, thick_scale)
 }
 
 /// Unit linear partition from the ground rectangle panel
 /// (\(X,Z \in [0, 1]\), \(Y \in [-0.2, 0.2]\)).
 ///
-/// Tessellation applies [`PANEL_TO_WALL_PITCH`]. Parent scale should be
-/// \((\texttt{length\_factor}, \texttt{thick\_scale}, \texttt{height})\) — for a single
-/// unit kit use [`wall_placement`] / [`wall_placement_from_centered`]. When
-/// [`Self::length`] is `Some`, child tiles set \(X\) scale to the fitted width and
-/// parent should leave \(X\) at \(1\) with \(Y\)=thick and \(Z\)=height.
+/// Tessellation emits **unpitched** tiles: the stand-up pitch lives on the parent
+/// [`wall_placement`] / spanning parent so it is applied once. Parent scale is
+/// \((\texttt{length\_or\_1}, \texttt{thick\_scale}, \texttt{height})\). When
+/// [`Self::length`] is `Some`, child tiles set \(X\) to the fitted **full** tile
+/// width (not half — kit \(X\) is \([0, 1]\), not \([-1, 1]\)) and parent leaves
+/// \(X\) at \(1\).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct LinearPartition {
 	/// World-space span along local \(X\). `None` → single unit kit.
@@ -136,23 +144,22 @@ impl LinearPartition {
 	}
 
 	/// Expand into posed linear tiles (identity parent).
+	///
+	/// Stand-up pitch is **not** applied here — the parent placement must include
+	/// [`PANEL_TO_WALL_PITCH`] (via [`wall_placement`] or an equivalent spanning parent).
 	pub fn tiles(self) -> Vec<Placed<PartitionTile>> {
 		let Some(length) = self.length.filter(|l| *l > 1e-6) else {
-			return vec![Placed::with_placement(
-				PartitionTile::Linear,
-				Placement::at_origin().with_pitch(PANEL_TO_WALL_PITCH),
-			)];
+			return vec![Placed::at_origin(PartitionTile::Linear)];
 		};
 		let n = fitted_tile_count(length, self.tile_width);
 		let width = length / n as f32;
 		let mut out = Vec::with_capacity(n as usize);
 		for i in 0..n {
-			// Origin-anchored tile start along local X (kit \(X \in [0, 1]\)).
+			// Lower-left of each tile along local X (kit origin).
 			let x = -length * 0.5 + i as f32 * width;
 			out.push(Placed {
 				geom: PartitionTile::Linear,
 				placement: Placement::new(Vec3::new(x, 0.0, 0.0), 0.0)
-					.with_pitch(PANEL_TO_WALL_PITCH)
 					.with_scale(Vec3::new(width, 1.0, 1.0)),
 			});
 		}
@@ -203,7 +210,7 @@ mod tests {
 	#[test]
 	fn unit_linear_is_single_tile() -> anyhow::Result<()> {
 		assert_eq!(LinearPartition::default().tiles().len(), 1);
-		assert!((LinearPartition::default().tiles()[0].pitch() - PANEL_TO_WALL_PITCH).abs() < 1e-4);
+		assert!(LinearPartition::default().tiles()[0].pitch().abs() < 1e-6);
 		Ok(())
 	}
 
@@ -211,6 +218,7 @@ mod tests {
 	fn spanning_fits_tiles_to_length() -> anyhow::Result<()> {
 		let tiles = LinearPartition::spanning(3.0, 1.0).tiles();
 		assert_eq!(tiles.len(), 3);
+		// Full width on X (kit [0,1]), lower-left starts.
 		assert!((tiles[0].scale().x - 1.0).abs() < 1e-4);
 		assert!((tiles[0].translation().x - (-1.5)).abs() < 1e-4);
 		assert!((tiles[1].translation().x - (-0.5)).abs() < 1e-4);
@@ -220,14 +228,13 @@ mod tests {
 	#[test]
 	fn tile_width_suggestion_rounds_and_stretches() -> anyhow::Result<()> {
 		let tiles = LinearPartition::spanning(2.4, 1.0).tiles();
-		// round(2.4/1)=2 → width 1.2
 		assert_eq!(tiles.len(), 2);
 		assert!((tiles[0].scale().x - 1.2).abs() < 1e-4);
 		Ok(())
 	}
 
 	#[test]
-	fn wall_placement_from_centered_shifts_to_corner() -> anyhow::Result<()> {
+	fn wall_placement_from_centered_doubles_old_half_extent() -> anyhow::Result<()> {
 		let p = wall_placement_from_centered(Vec3::new(2.0, 0.0, 0.0), 0.0, 2.0, 3.0, DEFAULT_THICK);
 		assert!((p.translation.x - 0.0).abs() < 1e-4);
 		assert!((p.scale.x - 4.0).abs() < 1e-4);

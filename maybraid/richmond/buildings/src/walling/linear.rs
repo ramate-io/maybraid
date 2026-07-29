@@ -198,8 +198,11 @@ fn tessellate_linear(
 		let mid = Vec3::new((a.x + b.x) * 0.5, y0, (a.z + b.z) * 0.5);
 		partitions.push(PartitionNode::rough_stone(
 			Partition::Linear(LinearPartition::spanning(span_len, tile_width)),
-			// Child tiles own length; parent supplies thick (Y) and height (Z).
-			Placement::new(mid, yaw).with_scale(Vec3::new(1.0, thickness, height)),
+			// Child tiles own length (full [0,1] kit X); parent supplies thick (Y),
+			// height (Z), and the stand-up pitch.
+			Placement::new(mid, yaw)
+				.with_pitch(richmond_building_components::partitions::PANEL_TO_WALL_PITCH)
+				.with_scale(Vec3::new(1.0, thickness, height)),
 		));
 	}
 

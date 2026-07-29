@@ -195,7 +195,6 @@ fn tessellate_polyline(
 
 	let total = path_length(points).max(1e-4);
 	let half_t = (portal_width * 0.5) / total;
-	let thick_scale = thickness / DEFAULT_THICK;
 	let mut partitions = Vec::new();
 
 	for portal in portals {
@@ -245,7 +244,8 @@ fn tessellate_polyline(
 		}
 		let mut poly = PolylinePartition::new(sub)
 			.with_tile_width(tile_width)
-			.with_min_joint_angle(min_joint_angle);
+			.with_min_joint_angle(min_joint_angle)
+			.with_wall_scale(height, thickness);
 		if t0 > 1e-4 {
 			let (p_prev, _) = sample_path(points, (t0 - 1e-3).max(0.0));
 			let (p_at, _) = sample_path(points, t0);
@@ -254,10 +254,10 @@ fn tessellate_polyline(
 				d.x, d.y, d.z,
 			));
 		}
+		// Identity parent: tiles carry world anchors, stand-up pitch, and wall scale.
 		partitions.push(PartitionNode::rough_stone(
 			Partition::Polyline(poly),
-			// Child tiles own length + pitch; parent supplies thick (Y) and height (Z).
-			Placement::at_origin().with_scale(Vec3::new(1.0, thick_scale, height)),
+			Placement::IDENTITY,
 		));
 	}
 

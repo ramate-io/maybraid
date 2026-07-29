@@ -11,17 +11,17 @@ use bevy_math::{EulerRot, Quat, Vec3};
 ///
 /// Rotation order (intrinsic [`EulerRot::YXZ`]):
 /// - **yaw** about world \(+Y\) — plan facing
-/// - **pitch** about local \(+X\) — stand a ground panel as a wall (\(\pi/2\)), or lean the face
-/// - **roll** about local \(+Z\) — tip kit \(+X\) in the wall plane so a segment follows a slope
+/// - **pitch** about local \(+X\) — stand a ground panel as a wall (\(\pi/2\))
+/// - **roll** about local \(+Z\) — reserved; polyline walls stay plumb (path \(Y\) carries slope)
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Placement {
 	/// Translation in cell-local space.
 	pub translation: Vec3,
 	/// Yaw about +Y (radians).
 	pub yaw: f32,
-	/// Pitch about local +X after yaw (radians). Leans the wall face; unused by polyline slope.
+	/// Pitch about local +X after yaw (radians). \(\pi/2\) stands a ground panel.
 	pub pitch: f32,
-	/// Roll about local +Z after yaw/pitch (radians). Positive tips kit \(+X\) toward \(+Y\).
+	/// Roll about local +Z after yaw/pitch (radians). Unused by plumb partition walls.
 	pub roll: f32,
 	/// Non-uniform scale applied to the normalized kit before rotation.
 	///
