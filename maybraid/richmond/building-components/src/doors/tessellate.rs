@@ -18,17 +18,17 @@ impl DoorGeometry {
 			Self::Leaf(_) => vec![Placed::at_origin(DoorKit::Leaf)],
 			Self::Frame15(_) => vec![
 				Placed::new(
-					DoorKit::FramePiece(PartitionTile::LinearHeaderSubsegment),
+					DoorKit::FramePiece(PartitionTile::LinearSliceSubsegment),
 					Vec3::new(0.0, 0.85, 0.0),
 					0.0,
 				),
 				Placed::new(
-					DoorKit::FramePiece(PartitionTile::HeaderArc15),
+					DoorKit::FramePiece(PartitionTile::SliceArc15),
 					Vec3::new(-0.9, 0.85, 0.0),
 					0.0,
 				),
 				Placed::new(
-					DoorKit::FramePiece(PartitionTile::HeaderArc15),
+					DoorKit::FramePiece(PartitionTile::SliceArc15),
 					Vec3::new(0.9, 0.85, 0.0),
 					std::f32::consts::PI,
 				),

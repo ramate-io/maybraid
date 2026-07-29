@@ -1,4 +1,4 @@
-//! Partition scene components (linear, angular, and header variants).
+//! Partition scene components (linear, angular, and slice variants).
 //!
 //! IR: [`PartitionStyle`] + [`PartitionGeometry`] + [`Placement`] → [`PartitionNode`] (`LodScene`).
 //! [`PartitionNode`] covers both **direct** kit mappings and **tessellated** forms (polyline / arc).

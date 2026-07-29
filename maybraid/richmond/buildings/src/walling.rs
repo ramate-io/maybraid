@@ -16,7 +16,7 @@ pub use polyline::{
 	PolylineWall, PolylineWallParams, DEFAULT_PORTAL_WIDTH as POLYLINE_DEFAULT_PORTAL_WIDTH,
 };
 pub use portal::{
-	AssignedPortal, MustAssignPortal, Portal, WallRegion, ArcRegion, HEADER_Y_FRAC,
+	AssignedPortal, MustAssignPortal, Portal, WallRegion, ArcRegion, SLICE_Y_FRAC,
 };
 
 use richmond_building_components::partitions::PartitionNode;

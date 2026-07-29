@@ -23,14 +23,14 @@ use bevy_math::Vec3;
 use crate::arc_kit::ArcKit;
 use crate::assets::partitions::rough_stonework::{
 	ARC_15_HIGH, ARC_15_LOW, ARC_15_MID, ARC_180_HIGH, ARC_180_LOW, ARC_180_MID, ARC_90_HIGH,
-	ARC_90_LOW, ARC_90_MID, HEADER_15_HIGH, HEADER_15_LOW, HEADER_15_MID, HEADER_90_HIGH,
-	HEADER_90_LOW, HEADER_90_MID, LINEAR_HIGH, LINEAR_LOW, LINEAR_MID,
+	ARC_90_LOW, ARC_90_MID, SLICE_15_HIGH, SLICE_15_LOW, SLICE_15_MID, SLICE_90_HIGH,
+	SLICE_90_LOW, SLICE_90_MID, LINEAR_HIGH, LINEAR_LOW, LINEAR_MID,
 };
 use crate::partitions::mesh_set::PartitionMeshSet;
 use crate::placed::{Placed, Placement};
 
-/// Kit-local \(Y\) span of header meshes (\([0, \texttt{HEADER_KIT_HEIGHT}]\)).
-pub const HEADER_KIT_HEIGHT: f32 = 0.2;
+/// Kit-local \(Y\) span of slice meshes (\([0, \texttt{SLICE_KIT_HEIGHT}]\)).
+pub const SLICE_KIT_HEIGHT: f32 = 0.2;
 
 /// Partition path geometry in world/cell space (continuous size and orientation).
 #[derive(Debug, Clone, PartialEq)]
@@ -41,8 +41,8 @@ pub enum PartitionGeometry {
 	/// Short-run polyline (single LOD parent). Prefer splitting long paths upstream.
 	Polyline(PolylinePartition),
 	Arc(ArcSweep),
-	/// Header-height arc (\(Y \in [0, [`HEADER_KIT_HEIGHT`]]\) in kit space).
-	HeaderArc(ArcSweep),
+	/// Slice-height arc (\(Y \in [0, [`SLICE_KIT_HEIGHT`]]\) in kit space).
+	SliceArc(ArcSweep),
 }
 
 /// Alias for continuous partition geometry.
@@ -65,8 +65,8 @@ impl PartitionGeometry {
 		Self::Arc(ArcSweep { sweep_degrees })
 	}
 
-	pub fn header_arc(sweep_degrees: f32) -> Self {
-		Self::HeaderArc(ArcSweep { sweep_degrees })
+	pub fn slice_arc(sweep_degrees: f32) -> Self {
+		Self::SliceArc(ArcSweep { sweep_degrees })
 	}
 
 	/// Expand into posed leaf tiles under this geometry (identity parent).
@@ -76,7 +76,7 @@ impl PartitionGeometry {
 			Self::Joint(_) => vec![Placed::at_origin(PartitionTile::Joint)],
 			Self::Polyline(g) => g.tiles(),
 			Self::Arc(g) => g.tiles(false),
-			Self::HeaderArc(g) => g.tiles(true),
+			Self::SliceArc(g) => g.tiles(true),
 		}
 	}
 
@@ -97,13 +97,13 @@ impl PartitionGeometry {
 pub enum PartitionTile {
 	Linear,
 	LinearSubsegment,
-	LinearHeaderSubsegment,
+	LinearSliceSubsegment,
 	Arc180,
 	Arc90,
 	Arc15,
-	HeaderArc180,
-	HeaderArc90,
-	HeaderArc15,
+	SliceArc180,
+	SliceArc90,
+	SliceArc15,
 	Joint,
 }
 
@@ -115,16 +115,16 @@ impl PartitionTile {
 			Self::Arc180 => PartitionMeshSet::new(ARC_180_HIGH, ARC_180_MID, ARC_180_LOW),
 			Self::Arc90 => PartitionMeshSet::new(ARC_90_HIGH, ARC_90_MID, ARC_90_LOW),
 			Self::Arc15 => PartitionMeshSet::new(ARC_15_HIGH, ARC_15_MID, ARC_15_LOW),
-			Self::HeaderArc90 => {
-				PartitionMeshSet::new(HEADER_90_HIGH, HEADER_90_MID, HEADER_90_LOW)
+			Self::SliceArc90 => {
+				PartitionMeshSet::new(SLICE_90_HIGH, SLICE_90_MID, SLICE_90_LOW)
 			}
-			Self::HeaderArc15 => {
-				PartitionMeshSet::new(HEADER_15_HIGH, HEADER_15_MID, HEADER_15_LOW)
+			Self::SliceArc15 => {
+				PartitionMeshSet::new(SLICE_15_HIGH, SLICE_15_MID, SLICE_15_LOW)
 			}
 			Self::Joint
 			| Self::LinearSubsegment
-			| Self::LinearHeaderSubsegment
-			| Self::HeaderArc180 => return None,
+			| Self::LinearSliceSubsegment
+			| Self::SliceArc180 => return None,
 		})
 	}
 }
@@ -139,10 +139,10 @@ impl From<ArcKit> for PartitionTile {
 	}
 }
 
-pub(crate) fn header_tile(kit: ArcKit) -> PartitionTile {
+pub(crate) fn slice_tile(kit: ArcKit) -> PartitionTile {
 	match kit {
-		ArcKit::D180 => PartitionTile::HeaderArc180,
-		ArcKit::D90 => PartitionTile::HeaderArc90,
-		ArcKit::D15 => PartitionTile::HeaderArc15,
+		ArcKit::D180 => PartitionTile::SliceArc180,
+		ArcKit::D90 => PartitionTile::SliceArc90,
+		ArcKit::D15 => PartitionTile::SliceArc15,
 	}
 }

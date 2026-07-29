@@ -8,7 +8,7 @@ use lod::gen::LodScene;
 use lod::LodViewerState;
 use procedural_common::{AllowedAngles, NoiseParams, StepLenRange};
 use richmond_building_components::partitions::rough_stonework::{
-	RoughStonework180, RoughStonework90, RoughStoneworkHeader90, RoughStoneworkLinear,
+	RoughStonework180, RoughStonework90, RoughStoneworkSlice90, RoughStoneworkLinear,
 };
 use richmond_building_components::partitions::{Partition, PartitionNode};
 use richmond_building_components::roofs::{Pitch, RoofGeometry, RoofNode};
@@ -34,7 +34,7 @@ pub enum PreviewSubject {
 	Linear,
 	Arc90,
 	Arc180,
-	Header90,
+	Slice90,
 	Pitch {
 		rise: f32,
 		run: f32,
@@ -98,7 +98,7 @@ impl PreviewConfig {
 			PreviewSubject::Linear => "preview: rough-stonework linear".into(),
 			PreviewSubject::Arc90 => "preview: rough-stonework arc-90".into(),
 			PreviewSubject::Arc180 => "preview: rough-stonework arc-180".into(),
-			PreviewSubject::Header90 => "preview: rough-stonework header-90".into(),
+			PreviewSubject::Slice90 => "preview: rough-stonework slice-90".into(),
 			PreviewSubject::Pitch {
 				rise,
 				run,
@@ -373,11 +373,11 @@ pub fn present_preview_lod(
 				RoughStonework180.scene_with_lod(&lod_ref),
 			);
 		}
-		PreviewSubject::Header90 => {
+		PreviewSubject::Slice90 => {
 			spawn_preview(
 				&mut commands,
 				transform,
-				RoughStoneworkHeader90.scene_with_lod(&lod_ref),
+				RoughStoneworkSlice90.scene_with_lod(&lod_ref),
 			);
 		}
 		PreviewSubject::Pitch {

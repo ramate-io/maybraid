@@ -7,13 +7,13 @@ use bevy_math::Vec3;
 use procedural_common::{NoiseConfig, NoiseParams};
 use richmond_building_components::partitions::{
 	Partition, PartitionNode, PolylinePartition, DEFAULT_MIN_JOINT_ANGLE, DEFAULT_TILE_WIDTH,
-	HEADER_KIT_HEIGHT,
+	SLICE_KIT_HEIGHT,
 };
 use richmond_building_components::Placement;
 
 use crate::walling::portal::{
 	assign_portals, AssignedPortal, MustAssignPortal, Portal, PortalFootprint, WallRegion,
-	HEADER_Y_FRAC,
+	SLICE_Y_FRAC,
 };
 
 /// Default portal opening width in world units.
@@ -201,23 +201,23 @@ fn tessellate_polyline(
 	for portal in portals {
 		let (center, yaw) = sample_path(points, portal.t);
 		let base = center;
-		let lintel = base + Vec3::Y * (HEADER_Y_FRAC * height);
-		let header_scale = Vec3::new(portal_width * 0.5, HEADER_KIT_HEIGHT * height, thickness);
+		let lintel = base + Vec3::Y * (SLICE_Y_FRAC * height);
+		let slice_scale = Vec3::new(portal_width * 0.5, SLICE_KIT_HEIGHT * height, thickness);
 		match portal.portal {
 			Portal::Door => {
 				partitions.push(PartitionNode::rough_stone(
 					Partition::linear(),
-					Placement::new(lintel, yaw).with_scale(header_scale),
+					Placement::new(lintel, yaw).with_scale(slice_scale),
 				));
 			}
 			Portal::Window => {
 				partitions.push(PartitionNode::rough_stone(
 					Partition::linear(),
-					Placement::new(base, yaw).with_scale(header_scale),
+					Placement::new(base, yaw).with_scale(slice_scale),
 				));
 				partitions.push(PartitionNode::rough_stone(
 					Partition::linear(),
-					Placement::new(lintel, yaw).with_scale(header_scale),
+					Placement::new(lintel, yaw).with_scale(slice_scale),
 				));
 			}
 		}
@@ -286,7 +286,7 @@ mod tests {
 			.any(|p| matches!(p.geometry, Partition::Polyline(_))));
 		assert!(wall.partitions.iter().any(|p| {
 			matches!(p.geometry, Partition::Linear(_))
-				&& (p.placement.scale.y - HEADER_KIT_HEIGHT * wall.height).abs() < 1e-3
+				&& (p.placement.scale.y - SLICE_KIT_HEIGHT * wall.height).abs() < 1e-3
 		}));
 		Ok(())
 	}

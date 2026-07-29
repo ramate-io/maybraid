@@ -147,6 +147,8 @@ fn emit_internal_features(
 ## Related reading
 
 - [building-components README](building-components/README.md)
+- [buildings README](buildings/README.md) (urban kit taxonomy for higher-order authorship)
+- [Urban art README](../art/urban/README.md)
 - [`LodScene`](../lod/lib/src/gen/presentation.rs)
 - [Structural LOD collectors](../lod/docs/structural-lod-collectors.md)
 - [Maybraid contributing: `-models` crates](../CONTRIBUTING.md#-models-crates)

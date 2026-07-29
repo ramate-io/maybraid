@@ -30,85 +30,162 @@ impl std::fmt::Display for AssetPath {
 	}
 }
 
+/// Shared urban panel GLBs under `urban/panels/` (rectangles, triangles, fillers).
+pub mod panels {
+	use super::AssetPath;
+
+	/// Canonical unit right-triangle primitive (no style / LOD variants).
+	pub const UNIT_RIGHT_TRIANGLE: AssetPath =
+		AssetPath::new("urban/panels/unit_right_triangle.glb");
+
+	pub mod rough_stonework {
+		use super::AssetPath;
+
+		/// Wall-oriented linear rectangle panel (partition linear kit).
+		pub const RECTANGLE: AssetPath =
+			AssetPath::new("urban/panels/rough_stonework/rectangle_001.glb");
+		pub const RECTANGLE_HIGH: AssetPath =
+			AssetPath::new("urban/panels/rough_stonework/rectangle_001_high_res.glb");
+		pub const RECTANGLE_MID: AssetPath =
+			AssetPath::new("urban/panels/rough_stonework/rectangle_001_mid_res.glb");
+		pub const RECTANGLE_LOW: AssetPath =
+			AssetPath::new("urban/panels/rough_stonework/rectangle_001_low_res.glb");
+
+		/// Circle−inscribed-square filler (four yaws fill a circular ring).
+		pub const INSCRIBED_SQUARE: AssetPath =
+			AssetPath::new("urban/panels/rough_stonework/inscribed_square_001.glb");
+	}
+
+	pub mod shepherds_thatch {
+		use super::AssetPath;
+
+		pub const RIGHT_TRIANGLE_HIGH: AssetPath =
+			AssetPath::new("urban/panels/shepherds_thatch/right_triangle_001_high_res.glb");
+		pub const RIGHT_TRIANGLE_MID: AssetPath =
+			AssetPath::new("urban/panels/shepherds_thatch/right_triangle_001_mid_res.glb");
+		pub const RIGHT_TRIANGLE_LOW: AssetPath =
+			AssetPath::new("urban/panels/shepherds_thatch/right_triangle_001_low_res.glb");
+	}
+}
+
+/// Urban joint GLBs under `urban/joints/`.
+pub mod joints {
+	use super::AssetPath;
+
+	pub mod rough_stonework {
+		use super::AssetPath;
+
+		/// Circular joint between partition segments (\(X,Z \in [-0.5, 0.5]\), \(Y \in [0, 1]\)).
+		/// Low / ultra-low LOD omit this filler (no low-res asset).
+		pub const JOINT_HIGH: AssetPath =
+			AssetPath::new("urban/joints/rough_stonework/joint_001_high_res.glb");
+		pub const JOINT_MID: AssetPath =
+			AssetPath::new("urban/joints/rough_stonework/joint_001_mid_res.glb");
+	}
+}
+
+/// Urban arc GLBs under `urban/arcs/` (bodies, slices, frames).
+pub mod arcs {
+	use super::AssetPath;
+
+	pub mod rough_stonework {
+		use super::AssetPath;
+
+		/// 180° arc rough stonework.
+		pub const ARC_180: AssetPath =
+			AssetPath::new("urban/arcs/rough_stonework/arc_180_001.glb");
+		pub const ARC_180_HIGH: AssetPath =
+			AssetPath::new("urban/arcs/rough_stonework/arc_180_001_high_res.glb");
+		pub const ARC_180_MID: AssetPath =
+			AssetPath::new("urban/arcs/rough_stonework/arc_180_001_mid_res.glb");
+		pub const ARC_180_LOW: AssetPath =
+			AssetPath::new("urban/arcs/rough_stonework/arc_180_001_low_res.glb");
+
+		/// 90° arc rough stonework.
+		pub const ARC_90: AssetPath =
+			AssetPath::new("urban/arcs/rough_stonework/arc_90_001.glb");
+		pub const ARC_90_HIGH: AssetPath =
+			AssetPath::new("urban/arcs/rough_stonework/arc_90_001_high_res.glb");
+		pub const ARC_90_MID: AssetPath =
+			AssetPath::new("urban/arcs/rough_stonework/arc_90_001_mid_res.glb");
+		pub const ARC_90_LOW: AssetPath =
+			AssetPath::new("urban/arcs/rough_stonework/arc_90_001_low_res.glb");
+
+		/// 15° arc rough stonework.
+		pub const ARC_15: AssetPath =
+			AssetPath::new("urban/arcs/rough_stonework/arc_15_001.glb");
+		pub const ARC_15_HIGH: AssetPath =
+			AssetPath::new("urban/arcs/rough_stonework/arc_15_001_high_res.glb");
+		pub const ARC_15_MID: AssetPath =
+			AssetPath::new("urban/arcs/rough_stonework/arc_15_001_mid_res.glb");
+		pub const ARC_15_LOW: AssetPath =
+			AssetPath::new("urban/arcs/rough_stonework/arc_15_001_low_res.glb");
+
+		/// 90° slice rough stonework.
+		pub const SLICE_90: AssetPath =
+			AssetPath::new("urban/arcs/rough_stonework/arc_90_slice_001.glb");
+		pub const SLICE_90_HIGH: AssetPath =
+			AssetPath::new("urban/arcs/rough_stonework/arc_90_slice_001_high_res.glb");
+		pub const SLICE_90_MID: AssetPath =
+			AssetPath::new("urban/arcs/rough_stonework/arc_90_slice_001_mid_res.glb");
+		pub const SLICE_90_LOW: AssetPath =
+			AssetPath::new("urban/arcs/rough_stonework/arc_90_slice_001_low_res.glb");
+
+		/// 15° slice rough stonework.
+		pub const SLICE_15: AssetPath =
+			AssetPath::new("urban/arcs/rough_stonework/arc_15_slice_001.glb");
+		pub const SLICE_15_HIGH: AssetPath =
+			AssetPath::new("urban/arcs/rough_stonework/arc_15_slice_001_high_res.glb");
+		pub const SLICE_15_MID: AssetPath =
+			AssetPath::new("urban/arcs/rough_stonework/arc_15_slice_001_mid_res.glb");
+		pub const SLICE_15_LOW: AssetPath =
+			AssetPath::new("urban/arcs/rough_stonework/arc_15_slice_001_low_res.glb");
+	}
+}
+
 /// Urban partition GLBs under `urban/partitions/`.
 pub mod partitions {
 	use super::AssetPath;
 
 	pub mod rough_stonework {
 		use super::AssetPath;
+		use crate::assets::{arcs, panels};
 
-		/// Straight / linear rough stonework segment.
-		pub const LINEAR: AssetPath =
-			AssetPath::new("urban/partitions/rough_stonework/rough_stonework_001.glb");
-		pub const LINEAR_HIGH: AssetPath =
-			AssetPath::new("urban/partitions/rough_stonework/rough_stonework_001_high_res.glb");
-		pub const LINEAR_MID: AssetPath =
-			AssetPath::new("urban/partitions/rough_stonework/rough_stonework_001_mid_res.glb");
-		pub const LINEAR_LOW: AssetPath =
-			AssetPath::new("urban/partitions/rough_stonework/rough_stonework_001_low_res.glb");
+		/// Straight / linear rough stonework segment (shared panel rectangle).
+		pub const LINEAR: AssetPath = panels::rough_stonework::RECTANGLE;
+		pub const LINEAR_HIGH: AssetPath = panels::rough_stonework::RECTANGLE_HIGH;
+		pub const LINEAR_MID: AssetPath = panels::rough_stonework::RECTANGLE_MID;
+		pub const LINEAR_LOW: AssetPath = panels::rough_stonework::RECTANGLE_LOW;
 
-		/// 180° arc rough stonework.
-		pub const ARC_180: AssetPath =
-			AssetPath::new("urban/partitions/rough_stonework/rough_stonework_180_001.glb");
-		pub const ARC_180_HIGH: AssetPath =
-			AssetPath::new("urban/partitions/rough_stonework/rough_stonework_180_001_high_res.glb");
-		pub const ARC_180_MID: AssetPath =
-			AssetPath::new("urban/partitions/rough_stonework/rough_stonework_180_001_mid_res.glb");
-		pub const ARC_180_LOW: AssetPath =
-			AssetPath::new("urban/partitions/rough_stonework/rough_stonework_180_001_low_res.glb");
+		/// Arc bodies / slices (shared kits under `urban/arcs/`).
+		pub const ARC_180: AssetPath = arcs::rough_stonework::ARC_180;
+		pub const ARC_180_HIGH: AssetPath = arcs::rough_stonework::ARC_180_HIGH;
+		pub const ARC_180_MID: AssetPath = arcs::rough_stonework::ARC_180_MID;
+		pub const ARC_180_LOW: AssetPath = arcs::rough_stonework::ARC_180_LOW;
 
-		/// 90° arc rough stonework.
-		pub const ARC_90: AssetPath =
-			AssetPath::new("urban/partitions/rough_stonework/rough_stonework_90_001.glb");
-		pub const ARC_90_HIGH: AssetPath =
-			AssetPath::new("urban/partitions/rough_stonework/rough_stonework_90_001_high_res.glb");
-		pub const ARC_90_MID: AssetPath =
-			AssetPath::new("urban/partitions/rough_stonework/rough_stonework_90_001_mid_res.glb");
-		pub const ARC_90_LOW: AssetPath =
-			AssetPath::new("urban/partitions/rough_stonework/rough_stonework_90_001_low_res.glb");
+		pub const ARC_90: AssetPath = arcs::rough_stonework::ARC_90;
+		pub const ARC_90_HIGH: AssetPath = arcs::rough_stonework::ARC_90_HIGH;
+		pub const ARC_90_MID: AssetPath = arcs::rough_stonework::ARC_90_MID;
+		pub const ARC_90_LOW: AssetPath = arcs::rough_stonework::ARC_90_LOW;
 
-		/// 15° arc rough stonework.
-		pub const ARC_15: AssetPath =
-			AssetPath::new("urban/partitions/rough_stonework/rough_stonework_15_001.glb");
-		pub const ARC_15_HIGH: AssetPath =
-			AssetPath::new("urban/partitions/rough_stonework/rough_stonework_15_001_high_res.glb");
-		pub const ARC_15_MID: AssetPath =
-			AssetPath::new("urban/partitions/rough_stonework/rough_stonework_15_001_mid_res.glb");
-		pub const ARC_15_LOW: AssetPath =
-			AssetPath::new("urban/partitions/rough_stonework/rough_stonework_15_001_low_res.glb");
+		pub const ARC_15: AssetPath = arcs::rough_stonework::ARC_15;
+		pub const ARC_15_HIGH: AssetPath = arcs::rough_stonework::ARC_15_HIGH;
+		pub const ARC_15_MID: AssetPath = arcs::rough_stonework::ARC_15_MID;
+		pub const ARC_15_LOW: AssetPath = arcs::rough_stonework::ARC_15_LOW;
 
-		/// 90° header rough stonework.
-		pub const HEADER_90: AssetPath =
-			AssetPath::new("urban/partitions/rough_stonework/rough_stonework_90_header_001.glb");
-		pub const HEADER_90_HIGH: AssetPath = AssetPath::new(
-			"urban/partitions/rough_stonework/rough_stonework_90_header_001_high_res.glb",
-		);
-		pub const HEADER_90_MID: AssetPath = AssetPath::new(
-			"urban/partitions/rough_stonework/rough_stonework_90_header_001_mid_res.glb",
-		);
-		pub const HEADER_90_LOW: AssetPath = AssetPath::new(
-			"urban/partitions/rough_stonework/rough_stonework_90_header_001_low_res.glb",
-		);
+		pub const SLICE_90: AssetPath = arcs::rough_stonework::SLICE_90;
+		pub const SLICE_90_HIGH: AssetPath = arcs::rough_stonework::SLICE_90_HIGH;
+		pub const SLICE_90_MID: AssetPath = arcs::rough_stonework::SLICE_90_MID;
+		pub const SLICE_90_LOW: AssetPath = arcs::rough_stonework::SLICE_90_LOW;
 
-		/// 15° header rough stonework.
-		pub const HEADER_15: AssetPath =
-			AssetPath::new("urban/partitions/rough_stonework/rough_stonework_15_header_001.glb");
-		pub const HEADER_15_HIGH: AssetPath = AssetPath::new(
-			"urban/partitions/rough_stonework/rough_stonework_15_header_001_high_res.glb",
-		);
-		pub const HEADER_15_MID: AssetPath = AssetPath::new(
-			"urban/partitions/rough_stonework/rough_stonework_15_header_001_mid_res.glb",
-		);
-		pub const HEADER_15_LOW: AssetPath = AssetPath::new(
-			"urban/partitions/rough_stonework/rough_stonework_15_header_001_low_res.glb",
-		);
+		pub const SLICE_15: AssetPath = arcs::rough_stonework::SLICE_15;
+		pub const SLICE_15_HIGH: AssetPath = arcs::rough_stonework::SLICE_15_HIGH;
+		pub const SLICE_15_MID: AssetPath = arcs::rough_stonework::SLICE_15_MID;
+		pub const SLICE_15_LOW: AssetPath = arcs::rough_stonework::SLICE_15_LOW;
 
-		/// Circular joint between partition segments (\(X,Z \in [-0.5, 0.5]\), \(Y \in [0, 1]\)).
-		/// Low / ultra-low LOD omit this filler (no low-res asset).
-		pub const JOINT_HIGH: AssetPath =
-			AssetPath::new("urban/partitions/rough_stonework/joint_001_high_res.glb");
-		pub const JOINT_MID: AssetPath =
-			AssetPath::new("urban/partitions/rough_stonework/joint_001_mid_res.glb");
+		/// Circular joint (shared kit under `urban/joints/`).
+		pub const JOINT_HIGH: AssetPath = crate::assets::joints::rough_stonework::JOINT_HIGH;
+		pub const JOINT_MID: AssetPath = crate::assets::joints::rough_stonework::JOINT_MID;
 	}
 }
 
@@ -118,13 +195,13 @@ pub mod floors {
 
 	pub mod rough_stonework {
 		use super::AssetPath;
+		use crate::assets::panels;
 
 		/// Unit rectangular floor slab.
 		pub const RECTANGLE: AssetPath =
 			AssetPath::new("urban/floors/rough_stonework/rough_stonework_001.glb");
-		/// Circle−inscribed-square floor cap (four yaws fill a circular ring).
-		pub const CIRCLE_INSCRIBED_SQUARE: AssetPath =
-			AssetPath::new("urban/floors/rough_stonework/rough_stonework_inscribed_square_001.glb");
+		/// Circle−inscribed-square floor cap (shared panel kit).
+		pub const CIRCLE_INSCRIBED_SQUARE: AssetPath = panels::rough_stonework::INSCRIBED_SQUARE;
 	}
 }
 
@@ -141,23 +218,20 @@ pub mod stairs {
 	}
 }
 
-/// Urban roof GLBs under `urban/roofs/`.
+/// Urban roof GLBs — triangle kits live under `urban/panels/`.
 pub mod roofs {
 	use super::AssetPath;
+	use crate::assets::panels;
 
 	/// Canonical unit right-triangle primitive (no style / LOD variants).
-	pub const UNIT_RIGHT_TRIANGLE: AssetPath =
-		AssetPath::new("urban/roofs/unit_right_triangle.glb");
+	pub const UNIT_RIGHT_TRIANGLE: AssetPath = panels::UNIT_RIGHT_TRIANGLE;
 
 	pub mod shepherds_thatch {
 		use super::AssetPath;
+		use crate::assets::panels;
 
-		pub const RIGHT_TRIANGLE_HIGH: AssetPath =
-			AssetPath::new("urban/roofs/shepherds_thatch/right_triangle_001_high_res.glb");
-		pub const RIGHT_TRIANGLE_MID: AssetPath =
-			AssetPath::new("urban/roofs/shepherds_thatch/right_triangle_001_mid_res.glb");
-		pub const RIGHT_TRIANGLE_LOW: AssetPath =
-			AssetPath::new("urban/roofs/shepherds_thatch/right_triangle_001_low_res.glb");
+		pub const RIGHT_TRIANGLE_HIGH: AssetPath = panels::shepherds_thatch::RIGHT_TRIANGLE_HIGH;
+		pub const RIGHT_TRIANGLE_MID: AssetPath = panels::shepherds_thatch::RIGHT_TRIANGLE_MID;
+		pub const RIGHT_TRIANGLE_LOW: AssetPath = panels::shepherds_thatch::RIGHT_TRIANGLE_LOW;
 	}
 }
-

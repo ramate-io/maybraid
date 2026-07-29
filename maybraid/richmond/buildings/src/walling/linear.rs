@@ -5,13 +5,13 @@
 use bevy_math::Vec3;
 use procedural_common::{NoiseConfig, NoiseParams};
 use richmond_building_components::partitions::{
-	LinearPartition, Partition, PartitionNode, DEFAULT_TILE_WIDTH, HEADER_KIT_HEIGHT,
+	LinearPartition, Partition, PartitionNode, DEFAULT_TILE_WIDTH, SLICE_KIT_HEIGHT,
 };
 use richmond_building_components::Placement;
 
 use crate::walling::portal::{
 	assign_portals, AssignedPortal, MustAssignPortal, Portal, PortalFootprint, WallRegion,
-	HEADER_Y_FRAC,
+	SLICE_Y_FRAC,
 };
 
 /// Default portal opening width in world units.
@@ -150,23 +150,23 @@ fn tessellate_linear(
 	for portal in portals {
 		let center = point_at(start, end, portal.t);
 		let base = Vec3::new(center.x, y0, center.z);
-		let lintel = base + Vec3::Y * (HEADER_Y_FRAC * height);
-		let header_scale = Vec3::new(portal_width * 0.5, HEADER_KIT_HEIGHT * height, thickness);
+		let lintel = base + Vec3::Y * (SLICE_Y_FRAC * height);
+		let slice_scale = Vec3::new(portal_width * 0.5, SLICE_KIT_HEIGHT * height, thickness);
 		match portal.portal {
 			Portal::Door => {
 				partitions.push(PartitionNode::rough_stone(
 					Partition::linear(),
-					Placement::new(lintel, yaw).with_scale(header_scale),
+					Placement::new(lintel, yaw).with_scale(slice_scale),
 				));
 			}
 			Portal::Window => {
 				partitions.push(PartitionNode::rough_stone(
 					Partition::linear(),
-					Placement::new(base, yaw).with_scale(header_scale),
+					Placement::new(base, yaw).with_scale(slice_scale),
 				));
 				partitions.push(PartitionNode::rough_stone(
 					Partition::linear(),
-					Placement::new(lintel, yaw).with_scale(header_scale),
+					Placement::new(lintel, yaw).with_scale(slice_scale),
 				));
 			}
 		}
@@ -208,7 +208,7 @@ mod tests {
 	use super::*;
 
 	#[test]
-	fn door_splits_into_two_solids_and_header() -> anyhow::Result<()> {
+	fn door_splits_into_two_solids_and_slice() -> anyhow::Result<()> {
 		let wall = LinearWall::new(LinearWallParams {
 			start: Vec3::new(-4.0, 0.0, 0.0),
 			end: Vec3::new(4.0, 0.0, 0.0),
@@ -227,15 +227,15 @@ mod tests {
 			})
 			.count();
 		assert_eq!(solids, 2);
-		let headers = wall
+		let slices = wall
 			.partitions
 			.iter()
 			.filter(|p| {
 				matches!(p.geometry, Partition::Linear(_))
-					&& (p.placement.scale.y - HEADER_KIT_HEIGHT * wall.height).abs() < 1e-3
+					&& (p.placement.scale.y - SLICE_KIT_HEIGHT * wall.height).abs() < 1e-3
 			})
 			.count();
-		assert_eq!(headers, 1);
+		assert_eq!(slices, 1);
 		Ok(())
 	}
 }
