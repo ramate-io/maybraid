@@ -53,6 +53,8 @@ We have not yet defined a sweeping tool. The plan is to make it take linear segm
 
 [`Partition::polyline`](src/partitions/geometry/polyline.rs) is a **short-run** primitive: one [`PartitionNode`](src/partitions/node.rs) is a single LOD parent whose `scene_with_level` expands into posed linear + joint kits. Prefer splitting longer paths in higher-order constructs (`richmond_buildings::walling`).
 
+Each edge of length \(L\) uses a suggested [`tile_width`](src/partitions/geometry/linear.rs) (default \(2\), the unscaled kit full width): \(n = \mathrm{round}(L/\texttt{tile\_width})\) tiles stretch to width \(L/n\). Override with `with_tile_width`. Continuous [`LinearPartition::spanning`](src/partitions/geometry/linear.rs) uses the same fit.
+
 Joints omit when both plan and slope kinks are below [`DEFAULT_MIN_JOINT_ANGLE`](src/partitions/geometry/polyline.rs) (override via `with_min_joint_angle`). Use `with_incoming_slope` when a split span continues a preceding segment that is not in `points`. Horizontal joint scale grows with the vertical kink; roll averages abutting slopes. Joint meshes follow the **parent** level (high/mid only). LOD policy lives beside each geometry variant under [`geometry/`](src/partitions/geometry/).
 
 ## Partitions

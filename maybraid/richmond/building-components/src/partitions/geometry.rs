@@ -11,8 +11,8 @@ pub use joint::{
 	JOINT_MEDIUM_FACTOR, JOINT_RADIUS_PER_SLOPE_RAD,
 };
 pub use linear::{
-	LinearLod, LinearPartition, DEFAULT_THICK, LINEAR_HIGH_FACTOR, LINEAR_LOW_FACTOR,
-	LINEAR_MEDIUM_FACTOR,
+	fitted_tile_count, LinearLod, LinearPartition, DEFAULT_THICK, DEFAULT_TILE_WIDTH,
+	LINEAR_HIGH_FACTOR, LINEAR_LOW_FACTOR, LINEAR_MEDIUM_FACTOR,
 };
 pub use polyline::{
 	polyline_from_xz, roll_along_slope, PolylinePartition, DEFAULT_MIN_JOINT_ANGLE,
@@ -72,7 +72,7 @@ impl PartitionGeometry {
 	/// Expand into posed leaf tiles under this geometry (identity parent).
 	pub fn tiles(&self) -> Vec<Placed<PartitionTile>> {
 		match self {
-			Self::Linear(_) => vec![Placed::at_origin(PartitionTile::Linear)],
+			Self::Linear(g) => g.tiles(),
 			Self::Joint(_) => vec![Placed::at_origin(PartitionTile::Joint)],
 			Self::Polyline(g) => g.tiles(),
 			Self::Arc(g) => g.tiles(false),
