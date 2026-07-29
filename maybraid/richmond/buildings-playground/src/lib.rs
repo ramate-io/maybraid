@@ -49,6 +49,7 @@ impl Plugin for RichmondBuildingsPlaygroundPlugin {
 						.after(capture_command_line_input::<PlaygroundCommand>),
 					update_partition_host_levels.in_set(LodFinePassSystems::UpdateLevels),
 					apply_parent_confines.after(LodFinePassSystems::Fulfill),
+					disable_standard_material_culling,
 					ui::sync_command_status_text.before(game_commands::ui::update_debug_ui),
 				),
 			)
@@ -133,4 +134,13 @@ fn setup_lighting(mut commands: Commands) {
 		},
 		Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, -PI / 6.0, PI + PI / 3.0, 0.0)),
 	));
+}
+
+/// Temporary: show both faces of GLB kits (end-cap mirrors flip winding).
+fn disable_standard_material_culling(mut materials: ResMut<Assets<StandardMaterial>>) {
+	for (_, material) in materials.iter_mut() {
+		if material.cull_mode.is_some() {
+			material.cull_mode = None;
+		}
+	}
 }

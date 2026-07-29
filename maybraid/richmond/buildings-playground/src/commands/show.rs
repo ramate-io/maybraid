@@ -3,10 +3,9 @@
 pub mod arc_180;
 pub mod arc_90;
 pub mod bedroom;
-pub mod half_triangular_hip;
 pub mod header_90;
 pub mod linear;
-pub mod rectangular_half_gable;
+pub mod pitch;
 pub mod stacked_rings;
 pub mod transform;
 pub mod wizards_tower;
@@ -29,10 +28,8 @@ pub enum Show {
 	Arc180(arc_180::Arc180),
 	/// 90° header rough-stonework (`rough_stonework_90_header_001.glb`).
 	Header90(header_90::Header90),
-	/// Shepherd's-thatch half triangular hip (single pitched right triangle).
-	HalfTriangularHip(half_triangular_hip::HalfTriangularHip),
-	/// Shepherd's-thatch rectangular half gable (tiled right triangles, pitched).
-	RectangularHalfGable(rectangular_half_gable::RectangularHalfGable),
+	/// Shepherd's-thatch pitched face (`rise`/`run`/`length`/`left`/`right`).
+	Pitch(pitch::Pitch),
 	/// Full Wizard's Tower (noise-derived floor count).
 	WizardsTower(wizards_tower::WizardsTower),
 	/// Stacked circular wall rings (validates kit radius/height scaling).
@@ -48,8 +45,7 @@ impl Show {
 			Self::Arc90(cmd) => cmd.into_preview(),
 			Self::Arc180(cmd) => cmd.into_preview(),
 			Self::Header90(cmd) => cmd.into_preview(),
-			Self::HalfTriangularHip(cmd) => cmd.into_preview(),
-			Self::RectangularHalfGable(cmd) => cmd.into_preview(),
+			Self::Pitch(cmd) => cmd.into_preview(),
 			Self::WizardsTower(cmd) => cmd.into_preview(),
 			Self::StackedRings(cmd) => cmd.into_preview(),
 			Self::Bedroom(cmd) => cmd.into_preview(),

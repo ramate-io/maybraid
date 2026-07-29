@@ -10,7 +10,7 @@ use richmond_building_components::partitions::rough_stonework::{
 	RoughStonework180, RoughStonework90, RoughStoneworkHeader90, RoughStoneworkLinear,
 };
 use richmond_building_components::placed::Placement;
-use richmond_building_components::roofs::{RoofGeometry, RoofNode};
+use richmond_building_components::roofs::{Pitch, RoofGeometry, RoofNode};
 use richmond_buildings::bedroom::Bedroom;
 use richmond_buildings::stacked_rings::StackedRings;
 use richmond_buildings::wizards_tower::WizardsTower;
@@ -28,12 +28,13 @@ pub enum PreviewSubject {
 	Arc90,
 	Arc180,
 	Header90,
-	HalfTriangularHip {
-		pitch_degrees: f32,
-	},
-	RectangularHalfGable {
-		length_units: u32,
-		pitch_degrees: f32,
+	Pitch {
+		rise: f32,
+		run: f32,
+		length: Option<f32>,
+		tile_width: f32,
+		left: Option<f32>,
+		right: Option<f32>,
 	},
 	WizardsTower { noise: f32 },
 	StackedRings {
@@ -82,15 +83,18 @@ impl PreviewConfig {
 			PreviewSubject::Arc90 => "preview: rough-stonework arc-90".into(),
 			PreviewSubject::Arc180 => "preview: rough-stonework arc-180".into(),
 			PreviewSubject::Header90 => "preview: rough-stonework header-90".into(),
-			PreviewSubject::HalfTriangularHip { pitch_degrees } => {
-				format!("preview: half-triangular-hip (pitch={pitch_degrees:.1}°)")
+			PreviewSubject::Pitch {
+				rise,
+				run,
+				length,
+				tile_width,
+				left,
+				right,
+			} => {
+				format!(
+					"preview: pitch (rise={rise:.2} run={run:.2} len={length:?} tile={tile_width:.2} left={left:?} right={right:?})"
+				)
 			}
-			PreviewSubject::RectangularHalfGable {
-				length_units,
-				pitch_degrees,
-			} => format!(
-				"preview: rectangular-half-gable (len={length_units} pitch={pitch_degrees:.1}°)"
-			),
 			PreviewSubject::WizardsTower { noise } => {
 				format!("preview: wizards-tower (noise={noise:.2})")
 			}
@@ -131,12 +135,24 @@ impl PreviewConfig {
 				Aabb3d::from_min_max(Vec3::new(-4.0, 0.0, -4.0), Vec3::new(4.0, 3.0, 4.0))
 			}
 			PreviewSubject::Bedroom { extent, .. } => Aabb3d::from_min_max(Vec3::ZERO, *extent),
-			PreviewSubject::HalfTriangularHip { .. } => {
-				Aabb3d::from_min_max(Vec3::new(0.0, -0.2, -1.0), Vec3::new(1.0, 1.0, 0.0))
-			}
-			PreviewSubject::RectangularHalfGable { length_units, .. } => {
-				let len = (*length_units).max(1) as f32;
-				Aabb3d::from_min_max(Vec3::new(0.0, -0.2, -1.0), Vec3::new(len, 1.0, 0.0))
+			PreviewSubject::Pitch {
+				rise,
+				run,
+				length,
+				left,
+				right,
+				..
+			} => {
+				let left_w = left.map(|b| b.abs()).unwrap_or(0.0);
+				let right_w = right.map(|b| b.abs()).unwrap_or(0.0);
+				let len = length.unwrap_or(0.0);
+				let x_max = (left_w + len + right_w).max(1e-4);
+				let run = (*run).max(1e-4);
+				let rise = (*rise).max(0.0);
+				Aabb3d::from_min_max(
+					Vec3::new(0.0, -0.2, -run),
+					Vec3::new(x_max, rise + 0.2, 0.0),
+				)
 			}
 			_ => Aabb3d::from_min_max(Vec3::ZERO, Vec3::ONE),
 		}
@@ -282,21 +298,25 @@ pub fn present_preview_lod(
 				RoughStoneworkHeader90.scene_with_lod(&lod_ref),
 			);
 		}
-		PreviewSubject::HalfTriangularHip { pitch_degrees } => {
-			let roof = RoofNode::shepherds_thatch(
-				RoofGeometry::half_triangular_hip(*pitch_degrees),
-				Placement::IDENTITY,
-			);
-			spawn_preview(&mut commands, transform, roof.scene_with_lod(&lod_ref));
-		}
-		PreviewSubject::RectangularHalfGable {
-			length_units,
-			pitch_degrees,
+		PreviewSubject::Pitch {
+			rise,
+			run,
+			length,
+			tile_width,
+			left,
+			right,
 		} => {
-			let roof = RoofNode::shepherds_thatch(
-				RoofGeometry::rectangular_half_gable(*length_units, *pitch_degrees),
-				Placement::IDENTITY,
-			);
+			let mut pitch = Pitch::new(*rise, *run, *tile_width);
+			if let Some(len) = length {
+				pitch = pitch.with_length(*len);
+			}
+			if let Some(base) = left {
+				pitch = pitch.with_left(*base);
+			}
+			if let Some(base) = right {
+				pitch = pitch.with_right(*base);
+			}
+			let roof = RoofNode::shepherds_thatch(RoofGeometry::pitch(pitch), Placement::IDENTITY);
 			spawn_preview(&mut commands, transform, roof.scene_with_lod(&lod_ref));
 		}
 		PreviewSubject::WizardsTower { .. } => {

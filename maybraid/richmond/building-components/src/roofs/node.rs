@@ -52,9 +52,9 @@ impl LodScene for RoofNode {
 		_level: lod::gen::LodSceneLevel,
 	) -> impl Scene + 'static {
 		let parent = pose(self.placement);
-		let pitch = Transform::from_rotation(Quat::from_rotation_x(f32::to_radians(
-			self.geometry.pitch_degrees(),
-		)));
+		let pitch = Transform::from_rotation(Quat::from_rotation_x(
+			self.geometry.pitch_radians(),
+		));
 		let children: Vec<Box<dyn Scene>> = self
 			.geometry
 			.kit_pieces()
