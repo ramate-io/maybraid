@@ -25,16 +25,15 @@ impl Joint {
 		roll_in: f32,
 		roll_out: f32,
 	) -> Placed<Joint> {
+		let dyaw = wrap_pi(yaw_out - yaw_in).abs();
 		let droll = (roll_out - roll_in).abs();
-		let radius = JOINT_BASE_RADIUS + JOINT_RADIUS_PER_SLOPE_RAD * droll;
+		let kink = dyaw.max(droll);
+		let radius = JOINT_BASE_RADIUS + JOINT_RADIUS_PER_SLOPE_RAD * kink;
 		let xz = (radius / JOINT_KIT_HALF).max(1e-4);
 		let yaw = yaw_in + 0.5 * wrap_pi(yaw_out - yaw_in);
-		let roll = 0.5 * (roll_in + roll_out);
 		Placed {
 			geom: Joint,
-			placement: Placement::new(cur, yaw)
-				.with_roll(roll)
-				.with_scale(Vec3::new(xz, 1.0, xz)),
+			placement: Placement::new(cur, yaw).with_scale(Vec3::new(xz, 1.0, xz)),
 		}
 	}
 }

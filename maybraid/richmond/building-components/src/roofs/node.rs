@@ -57,7 +57,7 @@ impl LodScene for RoofNode {
 		));
 		let children: Vec<Box<dyn Scene>> = self
 			.geometry
-			.kit_pieces()
+			.kit_pieces_for_style(self.style)
 			.into_iter()
 			.map(|piece| {
 				// parent_pose * pitch_x * kit_pose

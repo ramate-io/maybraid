@@ -29,9 +29,11 @@ use crate::assets::partitions::rough_stonework::{
 	SLICE_90_LOW, SLICE_90_MID, LINEAR_HIGH, LINEAR_LOW, LINEAR_MID,
 };
 use crate::panels::{
-	PanelGeom, Quad, QuadPolyline, Rectangle, RightTriangle, TessellatePolicy,
+	with_wall_standup_pitch, PanelGeometry, PanelStyle, Quad, QuadPolyline, Rectangle,
+	RightTriangle,
 };
 use crate::partitions::mesh_set::PartitionMeshSet;
+use crate::partitions::style::PartitionStyle;
 use crate::placed::{Placed, Placement};
 
 /// Kit-local \(Y\) span of slice meshes (\([0, \texttt{SLICE_KIT_HEIGHT}]\)).
@@ -86,19 +88,22 @@ impl PartitionGeometry {
 		Self::SliceArc(ArcSweep { sweep_degrees })
 	}
 
-	/// Rough stonework prefers rectangle body tiles.
-	pub fn tessellate_policy(&self) -> TessellatePolicy {
-		TessellatePolicy::RECTANGLE
+	/// Expand into posed leaf tiles (rough stonework style).
+	pub fn tiles(&self) -> Vec<Placed<PartitionTile>> {
+		self.tiles_for_style(PartitionStyle::RoughStonework)
 	}
 
 	/// Expand into posed leaf tiles under this geometry (identity parent).
-	pub fn tiles(&self) -> Vec<Placed<PartitionTile>> {
+	pub fn tiles_for_style(&self, style: PartitionStyle) -> Vec<Placed<PartitionTile>> {
+		let panel_style = PanelStyle::from(style);
 		match self {
 			Self::Linear(g) => g.tiles(),
 			Self::Joint(_) => vec![Placed::at_origin(PartitionTile::Joint)],
 			Self::Polyline(g) => g.tiles(),
-			Self::Quad(q) => map_panel_atoms(q.decompose(self.tessellate_policy())),
-			Self::QuadPolyline(pl) => expand_quad_polyline(pl, self.tessellate_policy()),
+			Self::Quad(q) => map_panel_leaves(PanelGeometry::Quad(*q).flatten(panel_style)),
+			Self::QuadPolyline(pl) => {
+				map_panel_leaves(PanelGeometry::QuadPolyline(pl.clone()).flatten(panel_style))
+			}
 			Self::Arc(g) => g.tiles(false),
 			Self::SliceArc(g) => g.tiles(true),
 		}
@@ -106,7 +111,15 @@ impl PartitionGeometry {
 
 	/// Expand tiles then compose under `parent` placement.
 	pub fn placed_tiles(&self, parent: Placement) -> Vec<Placed<PartitionTile>> {
-		self.tiles()
+		self.placed_tiles_for_style(PartitionStyle::RoughStonework, parent)
+	}
+
+	pub fn placed_tiles_for_style(
+		&self,
+		style: PartitionStyle,
+		parent: Placement,
+	) -> Vec<Placed<PartitionTile>> {
+		self.tiles_for_style(style)
 			.into_iter()
 			.map(|child| Placed {
 				geom: child.geom,
@@ -116,43 +129,7 @@ impl PartitionGeometry {
 	}
 }
 
-fn expand_quad_polyline(pl: &QuadPolyline, policy: TessellatePolicy) -> Vec<Placed<PartitionTile>> {
-	let mut out = Vec::new();
-	for piece in pl.decompose() {
-		match piece.geom {
-			PanelGeom::Quad(q) => {
-				for child in q.decompose(policy) {
-					if let Some(tile) = panel_to_tile(child.geom) {
-						out.push(Placed {
-							geom: tile,
-							placement: adjust_panel_placement(
-								tile,
-								piece.placement.compose_child(child.placement),
-							),
-						});
-					}
-				}
-			}
-			PanelGeom::Joint(_) => {
-				out.push(Placed {
-					geom: PartitionTile::Joint,
-					placement: piece.placement,
-				});
-			}
-			other => {
-				if let Some(tile) = panel_to_tile(other) {
-					out.push(Placed {
-						geom: tile,
-						placement: adjust_panel_placement(tile, piece.placement),
-					});
-				}
-			}
-		}
-	}
-	out
-}
-
-fn map_panel_atoms(pieces: Vec<Placed<PanelGeom>>) -> Vec<Placed<PartitionTile>> {
+fn map_panel_leaves(pieces: Vec<Placed<PanelGeometry>>) -> Vec<Placed<PartitionTile>> {
 	pieces
 		.into_iter()
 		.filter_map(|p| {
@@ -165,27 +142,23 @@ fn map_panel_atoms(pieces: Vec<Placed<PanelGeom>>) -> Vec<Placed<PartitionTile>>
 		.collect()
 }
 
-fn panel_to_tile(geom: PanelGeom) -> Option<PartitionTile> {
+fn panel_to_tile(geom: PanelGeometry) -> Option<PartitionTile> {
 	match geom {
-		PanelGeom::Rectangle(Rectangle) => Some(PartitionTile::Linear),
-		PanelGeom::RightTriangle(RightTriangle { mirror }) => {
+		PanelGeometry::Rectangle(Rectangle) => Some(PartitionTile::Linear),
+		PanelGeometry::RightTriangle(RightTriangle { mirror }) => {
 			Some(PartitionTile::RightTriangle { mirror })
 		}
+		PanelGeometry::Joint(_) => Some(PartitionTile::Joint),
 		_ => None,
 	}
 }
 
-/// Shared panel rectangles already use ground lower-left \(X,Z \in [0, 1]\).
-/// Apply wall stand-up pitch; keep scale as \((\texttt{length}, \texttt{thick}, \texttt{height})\).
+/// Ground-authored panel kits tip upright for wall use.
 fn adjust_panel_placement(tile: PartitionTile, p: Placement) -> Placement {
 	match tile {
-		PartitionTile::Linear => Placement {
-			translation: p.translation,
-			yaw: p.yaw,
-			pitch: p.pitch + PANEL_TO_WALL_PITCH,
-			roll: p.roll,
-			scale: p.scale,
-		},
+		PartitionTile::Linear | PartitionTile::RightTriangle { .. } => {
+			with_wall_standup_pitch(p)
+		}
 		_ => p,
 	}
 }

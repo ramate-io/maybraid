@@ -24,9 +24,10 @@ pub use furniture::{
 };
 pub use lod_host::{posed_asset_tier, warm_content_host, warm_content_host_hsl, warm_mesh_level_host};
 pub use panels::{
-	fitted_tile_count, Joint as PanelJoint, PanelGeom, Quad, QuadPolyline, Rectangle as PanelRectangle,
-	RightTriangle as PanelRightTriangle, TessellatePolicy, DEFAULT_MIN_EDGE_TRIANGLE_ANGLE,
-	DEFAULT_MIN_JOINT_ANGLE, DEFAULT_TILE_WIDTH,
+	fitted_tile_count, to_centered_rect_placement, with_wall_standup_pitch, Joint as PanelJoint,
+	PanelGeometry, PanelStyle, Quad, QuadPolyline, Rectangle as PanelRectangle,
+	RightTriangle as PanelRightTriangle, DEFAULT_MIN_EDGE_TRIANGLE_ANGLE, DEFAULT_MIN_JOINT_ANGLE,
+	DEFAULT_TILE_WIDTH,
 };
 pub use parent_confines::{
 	apply_parent_confines, confined_scene, distance_to_segment, InternalShape, ParentConfines,

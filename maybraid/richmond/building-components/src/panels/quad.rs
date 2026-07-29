@@ -6,8 +6,8 @@ use bevy_math::Vec3;
 use scene_ref::MirrorAxis;
 
 use crate::panels::geometry::{
-	fitted_tile_count, placed_atom, PanelAtom, PanelGeom, Rectangle, RightTriangle,
-	TessellatePolicy, DEFAULT_TILE_WIDTH,
+	fitted_tile_count, placed_geom, PanelGeometry, PanelStyle, Rectangle, RightTriangle,
+	DEFAULT_TILE_WIDTH,
 };
 use crate::placed::{Placed, Placement};
 
@@ -16,20 +16,20 @@ use crate::placed::{Placed, Placement};
 enum EndSide {
 	Left,
 	Right,
-	Front,
-	Back,
+	Top,
+	Bottom,
 }
 
 /// Quadrilateral panel in lower-left panel space.
 ///
 /// Rectangular body plus optional signed triangular extensions on each of the four edges.
 /// Sign convention (same as roof [`crate::roofs::Pitch`] left/right): positive = upright
-/// (front/eave-long for left/right); negative = flipped (back/ridge-long).
+/// (eave-long / top-long for left/right); negative = flipped (ridge-long / bottom-long).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Quad {
 	/// Rectangular left-to-right span. `None` omits the rectangular body.
 	pub length: Option<f32>,
-	/// Depth / run (front at \(Z = 0\), back at \(Z = -\texttt{depth}\)).
+	/// Depth / run (top/eave at \(Z = 0\), bottom/ridge at \(Z = -\texttt{depth}\)).
 	pub depth: f32,
 	/// Suggested tile width along \(X\); fitted so \(n\) tiles span `length` exactly.
 	pub tile_width: f32,
@@ -37,8 +37,8 @@ pub struct Quad {
 	pub tile_height: Option<f32>,
 	pub left: Option<f32>,
 	pub right: Option<f32>,
-	pub front: Option<f32>,
-	pub back: Option<f32>,
+	pub top: Option<f32>,
+	pub bottom: Option<f32>,
 }
 
 impl Default for Quad {
@@ -50,8 +50,8 @@ impl Default for Quad {
 			tile_height: None,
 			left: None,
 			right: None,
-			front: None,
-			back: None,
+			top: None,
+			bottom: None,
 		}
 	}
 }
@@ -90,13 +90,13 @@ impl Quad {
 		self
 	}
 
-	pub fn with_front(mut self, base: f32) -> Self {
-		self.front = Some(base);
+	pub fn with_top(mut self, base: f32) -> Self {
+		self.top = Some(base);
 		self
 	}
 
-	pub fn with_back(mut self, base: f32) -> Self {
-		self.back = Some(base);
+	pub fn with_bottom(mut self, base: f32) -> Self {
+		self.bottom = Some(base);
 		self
 	}
 
@@ -124,24 +124,24 @@ impl Quad {
 		self.left.map(|b| b.abs()).unwrap_or(0.0)
 	}
 
-	/// Full \(Z\) extent magnitude including optional front/back extensions.
+	/// Full \(Z\) extent magnitude including optional top/bottom extensions.
 	pub fn extent_z(self) -> f32 {
-		self.front.map(|b| b.abs()).unwrap_or(0.0)
+		self.top.map(|b| b.abs()).unwrap_or(0.0)
 			+ self.depth
-			+ self.back.map(|b| b.abs()).unwrap_or(0.0)
+			+ self.bottom.map(|b| b.abs()).unwrap_or(0.0)
 	}
 
 	/// Expand into placed rectangle / right-triangle atoms (identity parent).
-	pub fn decompose(self, policy: TessellatePolicy) -> Vec<Placed<PanelGeom>> {
+	pub fn decompose(self, style: PanelStyle) -> Vec<Placed<PanelGeometry>> {
 		let depth = self.depth.max(0.0);
 		let tile_width = self.tile_width.max(1e-4);
 		let mut out = Vec::new();
 
 		let left_w = self.left.map(|b| b.abs()).unwrap_or(0.0);
-		let front_w = self.front.map(|b| b.abs()).unwrap_or(0.0);
-		// Front extensions shift the rectangle in +Z so the full extent still
-		// lower-left-anchors at the outermost front tip when present.
-		let rect_z0 = -front_w;
+		let top_w = self.top.map(|b| b.abs()).unwrap_or(0.0);
+		// Top extensions shift the rectangle in +Z so the full extent still
+		// lower-left-anchors at the outermost top tip when present.
+		let rect_z0 = -top_w;
 
 		if let Some(base) = self.left {
 			if base.abs() > 1e-6 && depth > 1e-6 {
@@ -167,7 +167,7 @@ impl Quad {
 					depth,
 					tile_width,
 					self.tile_height,
-					policy,
+					style,
 				));
 			}
 		}
@@ -187,12 +187,12 @@ impl Quad {
 			}
 		}
 
-		if let Some(base) = self.front {
+		if let Some(base) = self.top {
 			if base.abs() > 1e-6 {
 				let span = self.length.unwrap_or(0.0);
 				if span > 1e-6 {
 					out.extend(edge_triangles(
-						EndSide::Front,
+						EndSide::Top,
 						rect_x0,
 						0.0,
 						base,
@@ -204,13 +204,13 @@ impl Quad {
 			}
 		}
 
-		if let Some(base) = self.back {
+		if let Some(base) = self.bottom {
 			if base.abs() > 1e-6 {
 				let span = self.length.unwrap_or(0.0);
 				if span > 1e-6 {
 					let z_min = rect_z0 - depth;
 					out.extend(edge_triangles(
-						EndSide::Back,
+						EndSide::Bottom,
 						rect_x0,
 						z_min,
 						base,
@@ -231,15 +231,15 @@ fn tile_scale(width: f32, run: f32) -> Vec3 {
 }
 
 /// Two complementary right triangles fill one tile square along +X.
-fn unit_square_pair(x: f32, z: f32, width: f32, run: f32) -> [Placed<PanelGeom>; 2] {
+fn unit_square_pair(x: f32, z: f32, width: f32, run: f32) -> [Placed<PanelGeometry>; 2] {
 	let scale = tile_scale(width, run);
 	[
-		placed_atom(
-			PanelAtom::RightTriangle(RightTriangle { mirror: None }),
+		placed_geom(
+			PanelGeometry::RightTriangle(RightTriangle { mirror: None }),
 			Placement::new(Vec3::new(x, 0.0, z), 0.0).with_scale(scale),
 		),
-		placed_atom(
-			PanelAtom::RightTriangle(RightTriangle { mirror: None }),
+		placed_geom(
+			PanelGeometry::RightTriangle(RightTriangle { mirror: None }),
 			Placement::new(Vec3::new(x + width, 0.0, z - run), PI).with_scale(scale),
 		),
 	]
@@ -252,8 +252,8 @@ fn body_tiles(
 	depth: f32,
 	tile_width: f32,
 	tile_height: Option<f32>,
-	policy: TessellatePolicy,
-) -> Vec<Placed<PanelGeom>> {
+	style: PanelStyle,
+) -> Vec<Placed<PanelGeometry>> {
 	let nx = fitted_tile_count(length, tile_width);
 	let width = length / nx as f32;
 	let nz = tile_height
@@ -265,9 +265,9 @@ fn body_tiles(
 		let z = z0 - j as f32 * run;
 		for i in 0..nx {
 			let x = x0 + i as f32 * width;
-			if policy.prefer_rectangle {
-				out.push(placed_atom(
-					PanelAtom::Rectangle(Rectangle),
+			if style.has_rectangle {
+				out.push(placed_geom(
+					PanelGeometry::Rectangle(Rectangle),
 					Placement::new(Vec3::new(x, 0.0, z), 0.0).with_scale(tile_scale(width, run)),
 				));
 			} else {
@@ -281,7 +281,7 @@ fn body_tiles(
 /// End / edge triangle(s). Positive base → upright; negative → flipped.
 ///
 /// Left upright and right flipped use [`MirrorAxis::X`] with positive scale so
-/// materials stay single-sided. Front/back are the same poses rotated 90° about \(+Y\).
+/// materials stay single-sided. Top/bottom are the same poses rotated 90° about \(+Y\).
 fn edge_triangles(
 	side: EndSide,
 	x_min: f32,
@@ -290,7 +290,7 @@ fn edge_triangles(
 	altitude: f32,
 	tile_width: f32,
 	tile_height: Option<f32>,
-) -> Vec<Placed<PanelGeom>> {
+) -> Vec<Placed<PanelGeometry>> {
 	let width = base.abs().max(1e-4);
 	let altitude = altitude.max(1e-4);
 	let nx = fitted_tile_count(width, tile_width);
@@ -361,7 +361,7 @@ fn edge_triangles(
 }
 
 fn push_edge_cell(
-	out: &mut Vec<Placed<PanelGeom>>,
+	out: &mut Vec<Placed<PanelGeometry>>,
 	side: EndSide,
 	x_min: f32,
 	z_ref: f32,
@@ -379,15 +379,15 @@ fn push_edge_cell(
 		// Left eave-long: right angle on the rectangle edge, mirrored on X.
 		(EndSide::Left, true) => {
 			let origin = Vec3::new(x_min + _full_w - u, 0.0, z_ref - v);
-			out.push(placed_atom(
-				PanelAtom::RightTriangle(RightTriangle {
+			out.push(placed_geom(
+				PanelGeometry::RightTriangle(RightTriangle {
 					mirror: Some(MirrorAxis::X),
 				}),
 				Placement::new(origin, 0.0).with_scale(scale),
 			));
 			if fully_inside {
-				out.push(placed_atom(
-					PanelAtom::RightTriangle(RightTriangle {
+				out.push(placed_geom(
+					PanelGeometry::RightTriangle(RightTriangle {
 						mirror: Some(MirrorAxis::X),
 					}),
 					Placement::new(
@@ -401,13 +401,13 @@ fn push_edge_cell(
 		// Left ridge-long: complement at the rectangle's ridge corner.
 		(EndSide::Left, false) => {
 			let origin = Vec3::new(x_min + _full_w - u, 0.0, z_ref - _full_h + v);
-			out.push(placed_atom(
-				PanelAtom::RightTriangle(RightTriangle { mirror: None }),
+			out.push(placed_geom(
+				PanelGeometry::RightTriangle(RightTriangle { mirror: None }),
 				Placement::new(origin, PI).with_scale(scale),
 			));
 			if fully_inside {
-				out.push(placed_atom(
-					PanelAtom::RightTriangle(RightTriangle { mirror: None }),
+				out.push(placed_geom(
+					PanelGeometry::RightTriangle(RightTriangle { mirror: None }),
 					Placement::new(Vec3::new(origin.x - cell_w, 0.0, origin.z + cell_h), 0.0)
 						.with_scale(scale),
 				));
@@ -416,13 +416,13 @@ fn push_edge_cell(
 		// Right eave-long: primary at the rectangle edge.
 		(EndSide::Right, true) => {
 			let origin = Vec3::new(x_min + u, 0.0, z_ref - v);
-			out.push(placed_atom(
-				PanelAtom::RightTriangle(RightTriangle { mirror: None }),
+			out.push(placed_geom(
+				PanelGeometry::RightTriangle(RightTriangle { mirror: None }),
 				Placement::new(origin, 0.0).with_scale(scale),
 			));
 			if fully_inside {
-				out.push(placed_atom(
-					PanelAtom::RightTriangle(RightTriangle { mirror: None }),
+				out.push(placed_geom(
+					PanelGeometry::RightTriangle(RightTriangle { mirror: None }),
 					Placement::new(Vec3::new(origin.x + cell_w, 0.0, origin.z - cell_h), PI)
 						.with_scale(scale),
 				));
@@ -431,15 +431,15 @@ fn push_edge_cell(
 		// Right ridge-long: mirrored complement at the rectangle's ridge corner.
 		(EndSide::Right, false) => {
 			let origin = Vec3::new(x_min + u, 0.0, z_ref - _full_h + v);
-			out.push(placed_atom(
-				PanelAtom::RightTriangle(RightTriangle {
+			out.push(placed_geom(
+				PanelGeometry::RightTriangle(RightTriangle {
 					mirror: Some(MirrorAxis::X),
 				}),
 				Placement::new(origin, PI).with_scale(scale),
 			));
 			if fully_inside {
-				out.push(placed_atom(
-					PanelAtom::RightTriangle(RightTriangle {
+				out.push(placed_geom(
+					PanelGeometry::RightTriangle(RightTriangle {
 						mirror: Some(MirrorAxis::X),
 					}),
 					Placement::new(Vec3::new(origin.x + cell_w, 0.0, origin.z + cell_h), 0.0)
@@ -447,18 +447,18 @@ fn push_edge_cell(
 				));
 			}
 		}
-		// Front upright: rotate left-upright 90° about +Y (depth along +X of local kit → -Z world after yaw).
-		(EndSide::Front, true) => {
+		// Top upright: rotate left-upright 90° about +Y (depth along +X of local kit → -Z world after yaw).
+		(EndSide::Top, true) => {
 			let origin = Vec3::new(x_min + v, 0.0, z_ref + _full_w - u);
-			out.push(placed_atom(
-				PanelAtom::RightTriangle(RightTriangle {
+			out.push(placed_geom(
+				PanelGeometry::RightTriangle(RightTriangle {
 					mirror: Some(MirrorAxis::X),
 				}),
 				Placement::new(origin, -PI * 0.5).with_scale(scale),
 			));
 			if fully_inside {
-				out.push(placed_atom(
-					PanelAtom::RightTriangle(RightTriangle {
+				out.push(placed_geom(
+					PanelGeometry::RightTriangle(RightTriangle {
 						mirror: Some(MirrorAxis::X),
 					}),
 					Placement::new(
@@ -469,15 +469,15 @@ fn push_edge_cell(
 				));
 			}
 		}
-		(EndSide::Front, false) => {
+		(EndSide::Top, false) => {
 			let origin = Vec3::new(x_min + _full_h - v, 0.0, z_ref + _full_w - u);
-			out.push(placed_atom(
-				PanelAtom::RightTriangle(RightTriangle { mirror: None }),
+			out.push(placed_geom(
+				PanelGeometry::RightTriangle(RightTriangle { mirror: None }),
 				Placement::new(origin, PI * 0.5).with_scale(scale),
 			));
 			if fully_inside {
-				out.push(placed_atom(
-					PanelAtom::RightTriangle(RightTriangle { mirror: None }),
+				out.push(placed_geom(
+					PanelGeometry::RightTriangle(RightTriangle { mirror: None }),
 					Placement::new(
 						Vec3::new(origin.x - cell_h, 0.0, origin.z - cell_w),
 						-PI * 0.5,
@@ -486,16 +486,16 @@ fn push_edge_cell(
 				));
 			}
 		}
-		// Back upright / flipped: mirror of front, past the ridge.
-		(EndSide::Back, true) => {
+		// Bottom upright / flipped: mirror of top, past the ridge.
+		(EndSide::Bottom, true) => {
 			let origin = Vec3::new(x_min + v, 0.0, z_ref - (_full_w - u));
-			out.push(placed_atom(
-				PanelAtom::RightTriangle(RightTriangle { mirror: None }),
+			out.push(placed_geom(
+				PanelGeometry::RightTriangle(RightTriangle { mirror: None }),
 				Placement::new(origin, PI * 0.5).with_scale(scale),
 			));
 			if fully_inside {
-				out.push(placed_atom(
-					PanelAtom::RightTriangle(RightTriangle { mirror: None }),
+				out.push(placed_geom(
+					PanelGeometry::RightTriangle(RightTriangle { mirror: None }),
 					Placement::new(
 						Vec3::new(origin.x + cell_h, 0.0, origin.z + cell_w),
 						-PI * 0.5,
@@ -504,17 +504,17 @@ fn push_edge_cell(
 				));
 			}
 		}
-		(EndSide::Back, false) => {
+		(EndSide::Bottom, false) => {
 			let origin = Vec3::new(x_min + _full_h - v, 0.0, z_ref - (_full_w - u));
-			out.push(placed_atom(
-				PanelAtom::RightTriangle(RightTriangle {
+			out.push(placed_geom(
+				PanelGeometry::RightTriangle(RightTriangle {
 					mirror: Some(MirrorAxis::X),
 				}),
 				Placement::new(origin, -PI * 0.5).with_scale(scale),
 			));
 			if fully_inside {
-				out.push(placed_atom(
-					PanelAtom::RightTriangle(RightTriangle {
+				out.push(placed_geom(
+					PanelGeometry::RightTriangle(RightTriangle {
 						mirror: Some(MirrorAxis::X),
 					}),
 					Placement::new(
@@ -531,13 +531,11 @@ fn push_edge_cell(
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use crate::panels::geometry::TessellatePolicy;
-
 	#[test]
 	fn rectangle_only_fits_tiles_to_length() -> anyhow::Result<()> {
 		let pieces = Quad::new(2.0, 1.0)
 			.with_length(3.0)
-			.decompose(TessellatePolicy::DUAL_TRIANGLES);
+			.decompose(PanelStyle::TRIANGLES_ONLY);
 		assert_eq!(pieces.len(), 6);
 		assert_eq!(pieces[0].translation().x, 0.0);
 		assert_eq!(pieces[0].scale(), Vec3::new(1.0, 1.0, 2.0));
@@ -546,12 +544,12 @@ mod tests {
 	}
 
 	#[test]
-	fn prefer_rectangle_emits_rect_tiles() -> anyhow::Result<()> {
+	fn with_rectangle_style_emits_rect_tiles() -> anyhow::Result<()> {
 		let pieces = Quad::new(2.0, 1.0)
 			.with_length(3.0)
-			.decompose(TessellatePolicy::RECTANGLE);
+			.decompose(PanelStyle::WITH_RECTANGLE);
 		assert_eq!(pieces.len(), 3);
-		assert!(pieces.iter().all(|p| matches!(p.geom, PanelGeom::Rectangle(_))));
+		assert!(pieces.iter().all(|p| matches!(p.geom, PanelGeometry::Rectangle(_))));
 		Ok(())
 	}
 
@@ -560,10 +558,10 @@ mod tests {
 		let pieces = Quad::new(1.0, 1.0)
 			.with_length(2.0)
 			.with_left(0.5)
-			.decompose(TessellatePolicy::DUAL_TRIANGLES);
+			.decompose(PanelStyle::TRIANGLES_ONLY);
 		assert!(matches!(
 			pieces[0].geom,
-			PanelGeom::RightTriangle(RightTriangle {
+			PanelGeometry::RightTriangle(RightTriangle {
 				mirror: Some(MirrorAxis::X),
 			})
 		));

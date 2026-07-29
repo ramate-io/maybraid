@@ -5,9 +5,7 @@ use scene_ref::MirrorAxis;
 use crate::arc_kit::{decompose_arc_sweep, ArcKit};
 use crate::floors::geometry::FloorGeometry;
 use crate::floors::style::FloorStyle;
-use crate::panels::{
-	PanelGeom, QuadPolyline, Rectangle, RightTriangle, TessellatePolicy,
-};
+use crate::panels::{PanelGeometry, PanelStyle, Rectangle, RightTriangle};
 use crate::placed::{Placement, Placed};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -19,18 +17,26 @@ pub(crate) enum FloorKit {
 	ArcFill(ArcKit),
 	StructFill,
 	CircleInscribedSquare,
-	/// Partition-style joint (omitted for styles without a joint leaf).
 	Joint,
 }
 
 impl FloorGeometry {
-	pub(crate) fn tessellate_policy(&self, style: FloorStyle) -> TessellatePolicy {
-		match style {
-			FloorStyle::RoughStonework | FloorStyle::Wood => TessellatePolicy::RECTANGLE,
-		}
+	pub(crate) fn placed_kits_for_style(
+		&self,
+		style: FloorStyle,
+		parent: Placement,
+	) -> Vec<Placed<FloorKit>> {
+		let panel_style = PanelStyle::from(style);
+		self.kit_pieces(panel_style)
+			.into_iter()
+			.map(|child| Placed {
+				geom: child.geom,
+				placement: parent.compose_child(child.placement),
+			})
+			.collect()
 	}
 
-	pub(crate) fn kit_pieces_with_policy(&self, policy: TessellatePolicy) -> Vec<Placed<FloorKit>> {
+	fn kit_pieces(&self, panel_style: PanelStyle) -> Vec<Placed<FloorKit>> {
 		match self {
 			Self::Rectangle(_) => vec![Placed::at_origin(FloorKit::Rectangle)],
 			Self::StructFill(_) => vec![Placed::at_origin(FloorKit::StructFill)],
@@ -41,77 +47,30 @@ impl FloorGeometry {
 				.into_iter()
 				.map(|(kit, yaw)| Placed::new(FloorKit::ArcFill(kit), bevy_math::Vec3::ZERO, yaw))
 				.collect(),
-			Self::Quad(q) => map_panel_atoms(q.decompose(policy)),
-			Self::QuadPolyline(pl) => expand_quad_polyline(pl, policy),
-		}
-	}
-
-	pub(crate) fn placed_kits_for_style(
-		&self,
-		style: FloorStyle,
-		parent: Placement,
-	) -> Vec<Placed<FloorKit>> {
-		self.kit_pieces_with_policy(self.tessellate_policy(style))
-			.into_iter()
-			.map(|child| Placed {
-				geom: child.geom,
-				placement: parent.compose_child(child.placement),
-			})
-			.collect()
-	}
-}
-
-fn expand_quad_polyline(pl: &QuadPolyline, policy: TessellatePolicy) -> Vec<Placed<FloorKit>> {
-	let mut out = Vec::new();
-	for piece in pl.decompose() {
-		match piece.geom {
-			PanelGeom::Quad(q) => {
-				for child in q.decompose(policy) {
-					if let Some(kit) = panel_to_floor(child.geom) {
-						out.push(Placed {
-							geom: kit,
-							placement: piece.placement.compose_child(child.placement),
-						});
-					}
-				}
-			}
-			PanelGeom::Joint(_) => {
-				out.push(Placed {
-					geom: FloorKit::Joint,
-					placement: piece.placement,
-				});
-			}
-			other => {
-				if let Some(kit) = panel_to_floor(other) {
-					out.push(Placed {
-						geom: kit,
-						placement: piece.placement,
-					});
-				}
+			Self::Quad(q) => map_leaves(PanelGeometry::Quad(*q).flatten(panel_style)),
+			Self::QuadPolyline(pl) => {
+				map_leaves(PanelGeometry::QuadPolyline(pl.clone()).flatten(panel_style))
 			}
 		}
 	}
-	out
 }
 
-fn map_panel_atoms(pieces: Vec<Placed<PanelGeom>>) -> Vec<Placed<FloorKit>> {
+fn map_leaves(pieces: Vec<Placed<PanelGeometry>>) -> Vec<Placed<FloorKit>> {
 	pieces
 		.into_iter()
 		.filter_map(|p| {
-			panel_to_floor(p.geom).map(|kit| Placed {
+			let kit = match p.geom {
+				PanelGeometry::Rectangle(Rectangle) => FloorKit::Rectangle,
+				PanelGeometry::RightTriangle(RightTriangle { mirror }) => {
+					FloorKit::RightTriangle { mirror }
+				}
+				PanelGeometry::Joint(_) => FloorKit::Joint,
+				_ => return None,
+			};
+			Some(Placed {
 				geom: kit,
 				placement: p.placement,
 			})
 		})
 		.collect()
-}
-
-fn panel_to_floor(geom: PanelGeom) -> Option<FloorKit> {
-	match geom {
-		PanelGeom::Rectangle(Rectangle) => Some(FloorKit::Rectangle),
-		PanelGeom::RightTriangle(RightTriangle { mirror }) => {
-			Some(FloorKit::RightTriangle { mirror })
-		}
-		_ => None,
-	}
 }

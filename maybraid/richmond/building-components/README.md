@@ -37,23 +37,25 @@ Reusable linear-panel geometry shared by floors, partitions, and roofs:
 
 | Type | Role |
 |------|------|
+| [`PanelGeometry`](src/panels/geometry.rs) | Single shared enum: triangle / rectangle / quad / joint / quad-polyline |
+| [`PanelStyle`](src/panels/geometry.rs) | Kit capabilities (`has_rectangle`); domain styles map into it |
 | [`Rectangle`](src/panels/geometry.rs) / [`RightTriangle`](src/panels/geometry.rs) | Atomic kit footprints (lower-left panel space) |
-| [`Quad`](src/panels/quad.rs) | Rectangle body + optional signed triangular extensions on **four** edges |
+| [`Quad`](src/panels/quad.rs) | Rectangle body + optional signed triangular extensions on **four** edges (`left`/`right`/`top`/`bottom`) |
 | [`Joint`](src/panels/joint.rs) | Corner filler on the average inbound/outbound angle |
-| [`QuadPolyline`](src/panels/polyline.rs) | Short-run path of quads + joints |
+| [`QuadPolyline`](src/panels/polyline.rs) | Short-run path of quads + joints with uniform `roll` |
 
-**Panel space:** lower-left anchored — **X** along length, **Z** depth/run (front/eave at \(Z = 0\), back/ridge at \(Z = -\texttt{depth}\)). Domain nodes own extra orientation (roof pitch about \(+X\), wall upright framing, floor flat).
+**Panel space:** lower-left anchored — **X** along length, **Z** depth/run (top/eave at \(Z = 0\), bottom/ridge at \(Z = -\texttt{depth}\)). Left/right join along length; top/bottom along depth. The large faces remain the panel \(\pm Y\) (or wall \(\pm Z\) after domain pose)—not “front/back” extensions. Domain nodes own extra orientation (roof pitch about \(+X\), wall upright framing, floor flat).
 
-Decomposition is style-agnostic (no `LodScene` required):
+Decomposition is style-agnostic geometry (no `LodScene` required); style only chooses rectangle vs dual-triangle body fill:
 
 ```text
-QuadPolyline.decompose() → Placed<Quad | Joint>
-Quad.decompose(policy)   → Placed<Rectangle | RightTriangle>
+QuadPolyline.rectangles() / edge_polygons() / joints() / decompose()
+PanelGeometry::flatten(style) → Placed<Rectangle | RightTriangle | Joint>
 ```
 
-[`TessellatePolicy`](src/panels/geometry.rs) chooses rectangle body tiles vs dual right-triangle pairs. Optional `tile_height` fits the body on both axes; edge triangles subdivide to the suggested tile sizes.
+[`PanelStyle::has_rectangle`](src/panels/geometry.rs) is a kit capability (e.g. shepherd's thatch → triangles only; rough stonework → rectangles). Domains map `DomainStyle → PanelStyle`, flatten geometry, then map atoms to kits/GLBs. Optional `tile_height` fits the body on both axes; edge triangles subdivide to the suggested tile sizes. Shared placement remaps live in [`kit_space`](src/panels/kit_space.rs).
 
-[`QuadPolyline`](src/panels/polyline.rs) has independent angle thresholds: `min_joint_angle` (emit joint) and `min_edge_triangle_angle` (grow corner-facing edge triangles toward the average angle). Cross-segment **pitch** edge-triangle fill is deferred. Prefer small/moderate sections composed upstream rather than one huge polyline over an entire sweep.
+[`QuadPolyline`](src/panels/polyline.rs) authors a single uniform `roll` (radians) for every segment — not per-edge slope-derived roll. Plan kinks drive left/right edge triangles + joints; with non-zero roll, top/bottom edge triangles use the same half-turn × depth bases. Independent thresholds: `min_joint_angle` and `min_edge_triangle_angle`. Prefer small/moderate sections composed upstream rather than one huge polyline over an entire sweep.
 
 Each of [`FloorGeometry`](src/floors/geometry.rs), [`PartitionGeometry`](src/partitions/geometry.rs), and [`RoofGeometry`](src/roofs/geometry.rs) exposes `Quad` / `QuadPolyline` variants. Roof [`Pitch`](src/roofs/geometry.rs) remains succinct authoring sugar (`rise`/`run`/`left`/`right`) that builds a [`Quad`](src/panels/quad.rs) via [`Pitch::to_quad`](src/roofs/geometry.rs).
 
@@ -179,7 +181,7 @@ Roof IR is [`Pitch`](src/roofs/geometry.rs), [`Quad`](src/panels/quad.rs) / [`Qu
 
 ### Pitch
 
-A pitched face is a **rectangle** (optional) plus optional **end triangles**, with parallel eave and ridge on the rectangular body. Trapezoid asymmetry comes only from the ends. Internally this builds a shared [`Quad`](src/panels/quad.rs) (`Pitch::to_quad`); tessellation uses dual right triangles (`TessellatePolicy::DUAL_TRIANGLES`).
+A pitched face is a **rectangle** (optional) plus optional **end triangles**, with parallel eave and ridge on the rectangular body. Trapezoid asymmetry comes only from the ends. Internally this builds a shared [`Quad`](src/panels/quad.rs) (`Pitch::to_quad`); shepherd's thatch maps to [`PanelStyle::TRIANGLES_ONLY`](src/panels/geometry.rs) so the body fills with dual right triangles.
 
 Pitch-space axes: **X** along eave/ridge, **Z** run (eave at \(Z = 0\), ridge at \(Z = -\texttt{run}\)), **Y** rise via rotation about +X by \(\operatorname{atan2}(\texttt{rise}, \texttt{run})\). Anchor is the **lower-left** of the full extent (left end triangle if present, else the rectangle). `rise` / `run` are non-negative; flip the face with placement rotation instead of negative rise/run.
 

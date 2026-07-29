@@ -66,7 +66,7 @@ impl PartitionNode {
 
 	fn kit_scenes_for_level(&self, lod_ref: &LodRef, level: LodSceneLevel) -> Vec<Box<dyn Scene>> {
 		self.geometry
-			.placed_tiles(self.placement)
+			.placed_tiles_for_style(self.style, self.placement)
 			.into_iter()
 			.filter_map(|piece| {
 				let transform = pose(piece.placement);

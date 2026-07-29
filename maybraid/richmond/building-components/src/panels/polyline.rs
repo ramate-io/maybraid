@@ -2,7 +2,7 @@
 
 use bevy_math::Vec3;
 
-use crate::panels::geometry::{PanelComposite, PanelGeom, DEFAULT_TILE_WIDTH};
+use crate::panels::geometry::{PanelGeometry, DEFAULT_TILE_WIDTH};
 use crate::panels::joint::Joint;
 use crate::panels::quad::Quad;
 use crate::placed::{Placed, Placement};
@@ -12,27 +12,49 @@ pub const DEFAULT_MIN_JOINT_ANGLE: f32 = 0.1;
 /// Default edge-triangle omission threshold (radians).
 pub const DEFAULT_MIN_EDGE_TRIANGLE_ANGLE: f32 = 0.1;
 
+/// Per-edge triangular extensions produced by [`QuadPolyline::edge_polygons`].
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct EdgePolygons {
+	pub edge_index: usize,
+	pub left: Option<f32>,
+	pub right: Option<f32>,
+	pub top: Option<f32>,
+	pub bottom: Option<f32>,
+}
+
+#[derive(Debug, Clone)]
+struct VertexPolicy {
+	joint: bool,
+	edge_tri: bool,
+	half_turn: f32,
+	yaw_in: f32,
+	yaw_out: f32,
+}
+
 /// Short-run polyline of panel quads. Prefer splitting long paths upstream.
 ///
-/// [`Self::decompose`] emits posed [`Quad`]s and [`Joint`]s (no scene / LOD).
+/// All segments share a single authoring [`Self::roll`] (uniform). Plan kinks drive
+/// left/right edge triangles and joints; when `|roll|` is non-zero, top/bottom edge
+/// triangles use the same half-turn × depth bases. Callers that need varying slope
+/// should split into multiple polylines or a higher-order construction.
 ///
-/// Corner policy (independent thresholds):
-/// - kink ≥ [`Self::min_joint_angle`] → joint on the **average** inbound/outbound angle
-/// - kink ≥ [`Self::min_edge_triangle_angle`] → grow abutting quads' corner-facing edge
-///   triangles to fill toward that average angle
-///
-/// Cross-segment **pitch** edge-triangle fill (rotation about the segment axis changing
-/// segment-to-segment) is deferred; plan-dominant and slope-roll joints are handled.
+/// Region APIs (no scene / LOD):
+/// - [`Self::rectangles`] — rectangular body spans along each edge
+/// - [`Self::edge_polygons`] — left/right/top/bottom bases per edge
+/// - [`Self::joints`] — average-yaw joints at qualifying vertices
+/// - [`Self::decompose`] — merged [`PanelGeometry::Quad`] + [`PanelGeometry::Joint`]
 #[derive(Debug, Clone, PartialEq)]
 pub struct QuadPolyline {
 	pub points: Vec<Vec3>,
-	/// Quad depth / thickness in panel space (mapped to world via placement).
+	/// Quad depth in panel space (mapped to world via placement).
 	pub depth: f32,
 	pub tile_width: f32,
 	pub tile_height: Option<f32>,
 	pub min_joint_angle: f32,
 	pub min_edge_triangle_angle: f32,
-	/// Roll of the segment that ends at `points[0]` but is not part of this polyline.
+	/// Uniform roll applied to every segment (radians). Default `0`.
+	pub roll: f32,
+	/// Incoming plan/slope cue at `points[0]` for a split span (compared to [`Self::roll`]).
 	pub incoming_slope: Option<f32>,
 }
 
@@ -45,6 +67,7 @@ impl Default for QuadPolyline {
 			tile_height: None,
 			min_joint_angle: DEFAULT_MIN_JOINT_ANGLE,
 			min_edge_triangle_angle: DEFAULT_MIN_EDGE_TRIANGLE_ANGLE,
+			roll: 0.0,
 			incoming_slope: None,
 		}
 	}
@@ -79,162 +102,222 @@ impl QuadPolyline {
 		self
 	}
 
+	/// Uniform roll for every segment (radians).
+	pub fn with_roll(mut self, roll: f32) -> Self {
+		self.roll = roll;
+		self
+	}
+
 	pub fn with_incoming_slope(mut self, incoming_slope: f32) -> Self {
 		self.incoming_slope = Some(incoming_slope);
 		self
 	}
 
-	/// Expand into posed quads + joints (identity parent). Style-agnostic.
-	pub fn decompose(&self) -> Vec<Placed<PanelGeom>> {
-		self.decompose_composites()
-			.into_iter()
-			.map(|p| Placed {
-				geom: PanelGeom::from(p.geom),
-				placement: p.placement,
-			})
-			.collect()
+	fn vertex_policies(&self) -> Vec<VertexPolicy> {
+		let points = &self.points;
+		let n = points.len();
+		let mut out = vec![
+			VertexPolicy {
+				joint: false,
+				edge_tri: false,
+				half_turn: 0.0,
+				yaw_in: 0.0,
+				yaw_out: 0.0,
+			};
+			n
+		];
+		if n < 2 {
+			return out;
+		}
+		let min_joint = self.min_joint_angle.max(0.0);
+		let min_edge = self.min_edge_triangle_angle.max(0.0);
+		let uniform_roll = self.roll;
+
+		if let Some(roll_in) = self.incoming_slope {
+			let dout = points[1] - points[0];
+			let yaw_out = yaw_along_xz(dout.x, dout.z);
+			let droll = (uniform_roll - roll_in).abs();
+			out[0].yaw_in = yaw_out;
+			out[0].yaw_out = yaw_out;
+			out[0].half_turn = 0.5 * droll;
+			if droll >= min_edge {
+				out[0].edge_tri = true;
+			}
+			if droll >= min_joint {
+				out[0].joint = true;
+			}
+		}
+
+		for i in 1..n - 1 {
+			let din = points[i] - points[i - 1];
+			let dout = points[i + 1] - points[i];
+			let yaw_in = yaw_along_xz(din.x, din.z);
+			let yaw_out = yaw_along_xz(dout.x, dout.z);
+			let dyaw = wrap_pi(yaw_out - yaw_in).abs();
+			out[i].yaw_in = yaw_in;
+			out[i].yaw_out = yaw_out;
+			out[i].half_turn = 0.5 * dyaw;
+			if dyaw >= min_edge {
+				out[i].edge_tri = true;
+			}
+			if dyaw >= min_joint {
+				out[i].joint = true;
+			}
+		}
+		out
 	}
 
-	/// Same as [`Self::decompose`] but typed as composites only.
-	pub fn decompose_composites(&self) -> Vec<Placed<PanelComposite>> {
+	/// Rectangular body spans along each edge (no edge triangles).
+	pub fn rectangles(&self) -> Vec<Placed<Quad>> {
 		let points = &self.points;
 		if points.len() < 2 {
 			return Vec::new();
 		}
-
-		let min_joint = self.min_joint_angle.max(0.0);
-		let min_edge = self.min_edge_triangle_angle.max(0.0);
 		let depth = self.depth.max(1e-4);
 		let tile_width = self.tile_width.max(1e-4);
-		let n_edges = points.len() - 1;
-
-		// Per-vertex plan kink (and whether edge triangles / joints apply).
-		let mut edge_tri_at = vec![false; points.len()];
-		let mut joint_at = vec![false; points.len()];
-		let mut half_turn = vec![0.0f32; points.len()];
-
-		if let Some(roll_in) = self.incoming_slope {
-			let a = points[0];
-			let b = points[1];
-			let dout = b - a;
-			let roll_out = roll_along_slope(dout.x, dout.y, dout.z);
-			let droll = (roll_out - roll_in).abs();
-			if droll >= min_edge {
-				edge_tri_at[0] = true;
-				half_turn[0] = 0.5 * droll;
-			}
-			if droll >= min_joint {
-				joint_at[0] = true;
-			}
-		}
-
-		for i in 1..points.len() - 1 {
-			let prev = points[i - 1];
-			let cur = points[i];
-			let next = points[i + 1];
-			let din = cur - prev;
-			let dout = next - cur;
-			let yaw_in = yaw_along_xz(din.x, din.z);
-			let yaw_out = yaw_along_xz(dout.x, dout.z);
-			let roll_in = roll_along_slope(din.x, din.y, din.z);
-			let roll_out = roll_along_slope(dout.x, dout.y, dout.z);
-			let dyaw = wrap_pi(yaw_out - yaw_in).abs();
-			let droll = (roll_out - roll_in).abs();
-			let kink = dyaw.max(droll);
-			half_turn[i] = 0.5 * wrap_pi(yaw_out - yaw_in).abs().max(droll);
-			if kink >= min_edge {
-				edge_tri_at[i] = true;
-			}
-			if kink >= min_joint {
-				joint_at[i] = true;
-			}
-		}
-
+		let roll = self.roll;
 		let mut out = Vec::new();
-
-		for i in 0..n_edges {
+		for i in 0..points.len() - 1 {
 			let a = points[i];
 			let b = points[i + 1];
 			let delta = b - a;
 			let len = delta.length().max(1e-4);
 			let yaw = yaw_along_xz(delta.x, delta.z);
-			let roll = roll_along_slope(delta.x, delta.y, delta.z);
-			let dir = delta / len;
-
-			// Edge triangles fill toward the average angle: use tan(half_turn)*depth as base.
-			let left_base = if edge_tri_at[i] {
-				Some(half_turn[i].tan() * depth)
-			} else {
-				None
-			};
-			let right_base = if edge_tri_at[i + 1] {
-				Some(half_turn[i + 1].tan() * depth)
-			} else {
-				None
-			};
-
 			let mut quad = Quad::new(depth, tile_width).with_length(len);
 			if let Some(th) = self.tile_height {
 				quad = quad.with_tile_height(th);
 			}
-			if let Some(b) = left_base {
-				if b > 1e-6 {
-					quad = quad.with_left(b);
-				}
-			}
-			if let Some(b) = right_base {
-				if b > 1e-6 {
-					quad = quad.with_right(b);
-				}
-			}
-
-			// Place quad so its rectangle centerline follows the edge: lower-left of the
-			// full extent sits such that the rectangle runs along +X local = edge dir.
-			// Anchor at `a`, yaw along edge; local +X = edge, local -Z = depth (toward
-			// the left of travel for a vertical wall this is inward — callers rotate).
-			let left_w = quad.left.map(|b| b.abs()).unwrap_or(0.0);
-			let origin = a - dir * left_w;
 			out.push(Placed {
-				geom: PanelComposite::Quad(quad),
-				placement: Placement::new(origin, yaw).with_roll(roll),
+				geom: quad,
+				placement: Placement::new(a, yaw).with_roll(roll),
 			});
 		}
+		out
+	}
 
-		if joint_at[0] {
+	/// Left/right/top/bottom edge-triangle bases per edge (toward average plan angle).
+	pub fn edge_polygons(&self) -> Vec<EdgePolygons> {
+		let points = &self.points;
+		if points.len() < 2 {
+			return Vec::new();
+		}
+		let depth = self.depth.max(1e-4);
+		let policies = self.vertex_policies();
+		let use_top_bottom = self.roll.abs() > 1e-6;
+		let n_edges = points.len() - 1;
+		let mut out = Vec::with_capacity(n_edges);
+		for i in 0..n_edges {
+			let mut e = EdgePolygons {
+				edge_index: i,
+				..Default::default()
+			};
+			if policies[i].edge_tri {
+				let b = policies[i].half_turn.tan() * depth;
+				if b > 1e-6 {
+					e.left = Some(b);
+					if use_top_bottom {
+						e.top = Some(b);
+					}
+				}
+			}
+			if policies[i + 1].edge_tri {
+				let b = policies[i + 1].half_turn.tan() * depth;
+				if b > 1e-6 {
+					e.right = Some(b);
+					if use_top_bottom {
+						e.bottom = Some(b);
+					}
+				}
+			}
+			out.push(e);
+		}
+		out
+	}
+
+	/// Joints at vertices whose plan kink meets [`Self::min_joint_angle`].
+	pub fn joints(&self) -> Vec<Placed<Joint>> {
+		let points = &self.points;
+		if points.len() < 2 {
+			return Vec::new();
+		}
+		let policies = self.vertex_policies();
+		let roll = self.roll;
+		let mut out = Vec::new();
+
+		if policies[0].joint {
 			if let Some(roll_in) = self.incoming_slope {
 				let a = points[0];
-				let b = points[1];
-				let dout = b - a;
-				let yaw_out = yaw_along_xz(dout.x, dout.z);
-				let roll_out = roll_along_slope(dout.x, dout.y, dout.z);
-				let j = Joint::placed_at(a, yaw_out, yaw_out, roll_in, roll_out);
+				let yaw = policies[0].yaw_out;
+				let j = Joint::placed_at(a, yaw, yaw, roll_in, roll);
 				out.push(Placed {
-					geom: PanelComposite::Joint(j.geom),
-					placement: j.placement,
+					geom: j.geom,
+					placement: j.placement.with_roll(roll),
 				});
 			}
 		}
 
 		for i in 1..points.len() - 1 {
-			if !joint_at[i] {
+			if !policies[i].joint {
 				continue;
 			}
-			let prev = points[i - 1];
-			let cur = points[i];
-			let next = points[i + 1];
-			let din = cur - prev;
-			let dout = next - cur;
-			let yaw_in = yaw_along_xz(din.x, din.z);
-			let yaw_out = yaw_along_xz(dout.x, dout.z);
-			let roll_in = roll_along_slope(din.x, din.y, din.z);
-			let roll_out = roll_along_slope(dout.x, dout.y, dout.z);
-			let j = Joint::placed_at(cur, yaw_in, yaw_out, roll_in, roll_out);
+			let j = Joint::placed_at(
+				points[i],
+				policies[i].yaw_in,
+				policies[i].yaw_out,
+				roll,
+				roll,
+			);
 			out.push(Placed {
-				geom: PanelComposite::Joint(j.geom),
-				placement: j.placement,
+				geom: j.geom,
+				placement: Placement {
+					roll,
+					..j.placement
+				},
+			});
+		}
+		out
+	}
+
+	/// Merge [`Self::rectangles`] + [`Self::edge_polygons`] into quads, then append [`Self::joints`].
+	pub fn decompose(&self) -> Vec<Placed<PanelGeometry>> {
+		let rects = self.rectangles();
+		let edges = self.edge_polygons();
+		let mut out = Vec::with_capacity(rects.len() + 4);
+
+		for (i, mut placed) in rects.into_iter().enumerate() {
+			if let Some(e) = edges.get(i) {
+				if let Some(b) = e.left {
+					placed.geom = placed.geom.with_left(b);
+				}
+				if let Some(b) = e.right {
+					placed.geom = placed.geom.with_right(b);
+				}
+				if let Some(b) = e.top {
+					placed.geom = placed.geom.with_top(b);
+				}
+				if let Some(b) = e.bottom {
+					placed.geom = placed.geom.with_bottom(b);
+				}
+			}
+			// Shift origin when a left edge triangle is present (lower-left of full extent).
+			let left_w = placed.geom.left.map(|b| b.abs()).unwrap_or(0.0);
+			if left_w > 1e-6 {
+				let yaw = placed.placement.yaw;
+				let dir = bevy_math::Quat::from_rotation_y(yaw) * Vec3::X;
+				placed.placement.translation -= dir * left_w;
+			}
+			out.push(Placed {
+				geom: PanelGeometry::Quad(placed.geom),
+				placement: placed.placement,
 			});
 		}
 
+		for j in self.joints() {
+			out.push(Placed {
+				geom: PanelGeometry::Joint(j.geom),
+				placement: j.placement,
+			});
+		}
 		out
 	}
 }
@@ -244,7 +327,7 @@ pub fn yaw_along_xz(dx: f32, dz: f32) -> f32 {
 	(-dz).atan2(dx)
 }
 
-/// Slope roll about local \(+Z\) for an edge \(\Delta = (\mathrm{d}x,\mathrm{d}y,\mathrm{d}z)\).
+/// Slope angle of an edge vs horizontal (joint kink sizing / incoming cues).
 pub fn roll_along_slope(dx: f32, dy: f32, dz: f32) -> f32 {
 	let horiz = (dx * dx + dz * dz).sqrt();
 	dy.atan2(horiz.max(1e-8))
@@ -274,24 +357,26 @@ mod tests {
 			],
 			1.0,
 		);
-		let pieces = pl.decompose_composites();
-		assert_eq!(pieces.iter().filter(|p| matches!(p.geom, PanelComposite::Quad(_))).count(), 2);
+		assert_eq!(pl.rectangles().len(), 2);
+		assert_eq!(pl.joints().len(), 1);
+		let edges = pl.edge_polygons();
+		assert!(edges[0].right.is_some());
+		assert!(edges[1].left.is_some());
+		let pieces = pl.decompose();
 		assert_eq!(
 			pieces
 				.iter()
-				.filter(|p| matches!(p.geom, PanelComposite::Joint(_)))
+				.filter(|p| matches!(p.geom, PanelGeometry::Quad(_)))
+				.count(),
+			2
+		);
+		assert_eq!(
+			pieces
+				.iter()
+				.filter(|p| matches!(p.geom, PanelGeometry::Joint(_)))
 				.count(),
 			1
 		);
-		let quads: Vec<_> = pieces
-			.iter()
-			.filter_map(|p| match &p.geom {
-				PanelComposite::Quad(q) => Some(*q),
-				_ => None,
-			})
-			.collect();
-		assert!(quads[0].right.is_some());
-		assert!(quads[1].left.is_some());
 		Ok(())
 	}
 
@@ -307,13 +392,44 @@ mod tests {
 		)
 		.with_min_joint_angle(DEFAULT_MIN_JOINT_ANGLE)
 		.with_min_edge_triangle_angle(DEFAULT_MIN_EDGE_TRIANGLE_ANGLE);
-		let pieces = pl.decompose_composites();
-		assert!(!pieces.iter().any(|p| matches!(p.geom, PanelComposite::Joint(_))));
-		for p in &pieces {
-			if let PanelComposite::Quad(q) = &p.geom {
-				assert!(q.left.is_none() && q.right.is_none());
-			}
+		assert!(pl.joints().is_empty());
+		for e in pl.edge_polygons() {
+			assert!(e.left.is_none() && e.right.is_none());
 		}
+		Ok(())
+	}
+
+	#[test]
+	fn uniform_roll_applies_to_rectangles() -> anyhow::Result<()> {
+		let pl = QuadPolyline::new(
+			[Vec3::new(0.0, 0.0, 0.0), Vec3::new(2.0, 0.0, 0.0)],
+			0.5,
+		)
+		.with_roll(0.3);
+		let r = pl.rectangles();
+		assert_eq!(r.len(), 1);
+		assert!((r[0].roll() - 0.3).abs() < 1e-4);
+		Ok(())
+	}
+
+	#[test]
+	fn roll_enables_top_bottom_edge_polys() -> anyhow::Result<()> {
+		let flat = QuadPolyline::new(
+			[
+				Vec3::new(0.0, 0.0, 0.0),
+				Vec3::new(2.0, 0.0, 0.0),
+				Vec3::new(2.0, 0.0, 2.0),
+			],
+			1.0,
+		);
+		assert!(flat.edge_polygons()[0].top.is_none());
+		let rolled = flat.clone().with_roll(0.25);
+		assert!(rolled.edge_polygons()[0].top.is_some() || rolled.edge_polygons()[0].bottom.is_some()
+			|| rolled.edge_polygons()[1].top.is_some() || rolled.edge_polygons()[1].bottom.is_some());
+		let e0 = &rolled.edge_polygons()[0];
+		let e1 = &rolled.edge_polygons()[1];
+		assert_eq!(e0.right.is_some(), e0.bottom.is_some());
+		assert_eq!(e1.left.is_some(), e1.top.is_some());
 		Ok(())
 	}
 }

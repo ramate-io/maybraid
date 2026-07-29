@@ -7,6 +7,7 @@ pub mod slice_90;
 pub mod linear;
 pub mod linear_wall;
 pub mod noisy_polyline_wall;
+pub mod noisy_quad_polyline;
 pub mod pitch;
 pub mod polyline;
 pub mod polyline_wall;
@@ -42,6 +43,8 @@ pub enum Show {
 	PolylineWall(polyline_wall::PolylineWall),
 	/// Noisy distance-budget path with allowed X/Y/Z turn angles.
 	NoisyPolylineWall(noisy_polyline_wall::NoisyPolylineWall),
+	/// Noisy path as `PartitionGeometry::QuadPolyline` with uniform `--roll`.
+	NoisyQuadPolyline(noisy_quad_polyline::NoisyQuadPolyline),
 	/// Full Wizard's Tower (noise-derived floor count).
 	WizardsTower(wizards_tower::WizardsTower),
 	/// Stacked circular wall rings (validates kit radius/height scaling).
@@ -62,6 +65,7 @@ impl Show {
 			Self::LinearWall(cmd) => cmd.into_preview(),
 			Self::PolylineWall(cmd) => cmd.into_preview(),
 			Self::NoisyPolylineWall(cmd) => cmd.into_preview(),
+			Self::NoisyQuadPolyline(cmd) => cmd.into_preview(),
 			Self::WizardsTower(cmd) => cmd.into_preview(),
 			Self::StackedRings(cmd) => cmd.into_preview(),
 			Self::Bedroom(cmd) => cmd.into_preview(),

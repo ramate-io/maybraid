@@ -1,6 +1,6 @@
 //! Continuous roof geometry primitives.
 
-use crate::panels::{Quad, QuadPolyline, TessellatePolicy};
+use crate::panels::{Quad, QuadPolyline};
 
 /// Continuous roof / cap forms. Tessellation into kit pieces is private.
 #[derive(Debug, Clone, PartialEq)]
@@ -46,10 +46,6 @@ impl RoofGeometry {
 		f32::to_degrees(self.pitch_radians())
 	}
 
-	/// Tessellation policy for panel-backed variants (thatch prefers dual triangles).
-	pub fn tessellate_policy(&self) -> TessellatePolicy {
-		TessellatePolicy::DUAL_TRIANGLES
-	}
 }
 
 /// Alias kept for migration; prefer [`RoofGeometry`].
@@ -173,7 +169,7 @@ impl Pitch {
 		self.to_quad().rect_origin_x()
 	}
 
-	/// Lower-left panel [`Quad`] (left/right only; front/back unused).
+	/// Lower-left panel [`Quad`] (left/right only; top/bottom unused).
 	pub fn to_quad(self) -> Quad {
 		let mut q = Quad::new(self.run, self.tile_width);
 		if let Some(length) = self.length {
