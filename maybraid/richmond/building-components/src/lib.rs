@@ -61,7 +61,7 @@ macro_rules! impl_empty_lod_scene {
 
 pub(crate) use impl_empty_lod_scene;
 
-/// `LodScene` that loads a GLB scene root via [`mesh_ref::MeshRef::Glb`].
+/// `LodScene` that loads a GLB scene root via [`mesh_ref::MeshRef`].
 macro_rules! impl_glb_lod_scene {
 	($ty:ty, $asset:expr) => {
 		impl ::lod::gen::LodScene for $ty {

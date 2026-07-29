@@ -9,6 +9,7 @@
 //! Eave sits at \(Z = 0\); run scales toward \(Z = -\texttt{run}\).
 
 use bevy_math::Vec3;
+use mesh_ref::MirrorAxis;
 use std::f32::consts::PI;
 
 use crate::arc_kit::{decompose_arc_sweep, ArcKit};
@@ -19,7 +20,12 @@ use crate::roofs::geometry::{Pitch, RoofGeometry};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) enum RoofKit {
 	/// Unit right triangle \(X \in [0, 1]\), \(Z \in [-1, 0]\), \(Y \in [-0.2, 0.2]\).
-	RightTriangle,
+	///
+	/// When `mirror` is set, the GLB is rebuilt via [`mesh_ref::MeshRef`] mirroring (positive
+	/// Transform scale) instead of a negative `scale.x`.
+	RightTriangle {
+		mirror: Option<MirrorAxis>,
+	},
 	/// Dome arc kit (empty leaf scenes until bespoke GLBs exist).
 	DomeArc(ArcKit),
 }
@@ -46,16 +52,16 @@ fn fitted_tile_count(length: f32, tile_width: f32) -> u32 {
 	((length / tw).round() as i32).max(1) as u32
 }
 
-/// Two mirrored right triangles fill one tile square along +X.
+/// Two complementary right triangles fill one tile square along +X.
 fn unit_square_pair(x: f32, width: f32, run: f32) -> [Placed<RoofKit>; 2] {
 	let scale = tile_scale(width, run);
 	[
 		Placed::with_placement(
-			RoofKit::RightTriangle,
+			RoofKit::RightTriangle { mirror: None },
 			Placement::new(Vec3::new(x, 0.0, 0.0), 0.0).with_scale(scale),
 		),
 		Placed::with_placement(
-			RoofKit::RightTriangle,
+			RoofKit::RightTriangle { mirror: None },
 			Placement::new(Vec3::new(x + width, 0.0, -run), PI).with_scale(scale),
 		),
 	]
@@ -70,35 +76,36 @@ enum EndSide {
 
 /// End triangle. Positive base → eave-long (upright); negative → ridge-long (flipped).
 ///
-/// Left upright and right flipped use a reflected kit (`scale.x < 0`) so the
-/// outward-facing winding matches the rectangular body.
+/// Left upright and right ridge-long use [`MirrorAxis::X`] with positive scale so
+/// materials stay single-sided.
 fn end_triangle(side: EndSide, x_min: f32, base: f32, run: f32) -> Placed<RoofKit> {
 	let width = base.abs().max(1e-4);
 	let run = run.max(1e-4);
+	let scale = Vec3::new(width, 1.0, run);
 	match (side, base >= 0.0) {
-		// Left eave-long: right angle on the rectangle edge, mirrored.
+		// Left eave-long: right angle on the rectangle edge, mirrored on X.
 		(EndSide::Left, true) => Placed::with_placement(
-			RoofKit::RightTriangle,
-			Placement::new(Vec3::new(x_min + width, 0.0, 0.0), 0.0)
-				.with_scale(Vec3::new(-width, 1.0, run)),
+			RoofKit::RightTriangle {
+				mirror: Some(MirrorAxis::X),
+			},
+			Placement::new(Vec3::new(x_min + width, 0.0, 0.0), 0.0).with_scale(scale),
 		),
 		// Left ridge-long: complement at the rectangle's ridge corner.
 		(EndSide::Left, false) => Placed::with_placement(
-			RoofKit::RightTriangle,
-			Placement::new(Vec3::new(x_min + width, 0.0, -run), PI)
-				.with_scale(Vec3::new(width, 1.0, run)),
+			RoofKit::RightTriangle { mirror: None },
+			Placement::new(Vec3::new(x_min + width, 0.0, -run), PI).with_scale(scale),
 		),
 		// Right eave-long: primary at the rectangle edge.
 		(EndSide::Right, true) => Placed::with_placement(
-			RoofKit::RightTriangle,
-			Placement::new(Vec3::new(x_min, 0.0, 0.0), 0.0)
-				.with_scale(Vec3::new(width, 1.0, run)),
+			RoofKit::RightTriangle { mirror: None },
+			Placement::new(Vec3::new(x_min, 0.0, 0.0), 0.0).with_scale(scale),
 		),
-		// Right ridge-long: reflected complement at the rectangle's ridge corner.
+		// Right ridge-long: mirrored complement at the rectangle's ridge corner.
 		(EndSide::Right, false) => Placed::with_placement(
-			RoofKit::RightTriangle,
-			Placement::new(Vec3::new(x_min, 0.0, -run), PI)
-				.with_scale(Vec3::new(-width, 1.0, run)),
+			RoofKit::RightTriangle {
+				mirror: Some(MirrorAxis::X),
+			},
+			Placement::new(Vec3::new(x_min, 0.0, -run), PI).with_scale(scale),
 		),
 	}
 }
@@ -173,9 +180,15 @@ mod tests {
 			.with_length(2.0)
 			.with_left(0.5);
 		let pieces = RoofGeometry::pitch(pitch).kit_pieces();
-		// Left upright is mirrored: origin on the rectangle edge with −X scale.
+		// Left upright: origin on the rectangle edge, positive scale + X mirror.
 		assert_eq!(pieces[0].translation().x, 0.5);
-		assert_eq!(pieces[0].scale().x, -0.5);
+		assert_eq!(pieces[0].scale().x, 0.5);
+		assert_eq!(
+			pieces[0].geom,
+			RoofKit::RightTriangle {
+				mirror: Some(MirrorAxis::X),
+			}
+		);
 		// Rectangle starts after left base.
 		assert_eq!(pieces[1].translation().x, 0.5);
 		Ok(())
@@ -189,10 +202,16 @@ mod tests {
 		let pieces = RoofGeometry::pitch(pitch).kit_pieces();
 		let end = pieces.last().expect("right end");
 		assert_eq!(end.yaw(), PI);
-		// Mirrored ridge-long: origin at rect ridge corner with −X scale.
+		// Mirrored ridge-long: origin at rect ridge corner, positive scale + X mirror.
 		assert!((end.translation().x - 1.0).abs() < 1e-4);
 		assert!((end.translation().z - (-2.0)).abs() < 1e-4);
-		assert!((end.scale().x - (-0.75)).abs() < 1e-4);
+		assert!((end.scale().x - 0.75).abs() < 1e-4);
+		assert_eq!(
+			end.geom,
+			RoofKit::RightTriangle {
+				mirror: Some(MirrorAxis::X),
+			}
+		);
 		Ok(())
 	}
 

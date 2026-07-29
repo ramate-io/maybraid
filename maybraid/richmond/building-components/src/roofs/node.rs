@@ -63,8 +63,10 @@ impl LodScene for RoofNode {
 				// parent_pose * pitch_x * kit_pose
 				let transform = parent * pitch * pose(piece.placement);
 				let child: Box<dyn Scene> = match (self.style, piece.geom) {
-					(RoofStyle::ShepherdsThatch, RoofKit::RightTriangle) => {
-						Box::new(ShepherdsThatchRightTriangle.scene_with_lod(lod_ref))
+					(RoofStyle::ShepherdsThatch, RoofKit::RightTriangle { mirror }) => {
+						Box::new(ShepherdsThatchRightTriangle::scene_with_lod_mirrored(
+							lod_ref, mirror,
+						))
 					}
 					(RoofStyle::ShepherdsThatch, RoofKit::DomeArc(ArcKit::D15)) => {
 						Box::new(ShepherdsThatchDome15.scene_with_lod(lod_ref))
