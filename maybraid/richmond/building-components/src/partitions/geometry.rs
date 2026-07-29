@@ -1,33 +1,64 @@
-//! Continuous wall / partition geometry.
+//! Continuous and tile partition geometry (primitive kit IR — no portals).
 
-use bevy_math::Vec2;
+mod arc;
+mod joint;
+mod linear;
+mod polyline;
+
+pub use arc::ArcSweep;
+pub use joint::{
+	JointLod, JointPartition, JOINT_BASE_RADIUS, JOINT_HIGH_FACTOR, JOINT_KIT_HALF,
+	JOINT_MEDIUM_FACTOR, JOINT_RADIUS_PER_SLOPE_RAD,
+};
+pub use linear::{
+	LinearLod, LinearPartition, DEFAULT_THICK, LINEAR_HIGH_FACTOR, LINEAR_LOW_FACTOR,
+	LINEAR_MEDIUM_FACTOR,
+};
+pub use polyline::{
+	polyline_from_xz, roll_along_slope, PolylinePartition, DEFAULT_MIN_JOINT_ANGLE,
+};
+
+use bevy_math::Vec3;
+
+use crate::arc_kit::ArcKit;
+use crate::assets::partitions::rough_stonework::{
+	ARC_15_HIGH, ARC_15_LOW, ARC_15_MID, ARC_180_HIGH, ARC_180_LOW, ARC_180_MID, ARC_90_HIGH,
+	ARC_90_LOW, ARC_90_MID, HEADER_15_HIGH, HEADER_15_LOW, HEADER_15_MID, HEADER_90_HIGH,
+	HEADER_90_LOW, HEADER_90_MID, LINEAR_HIGH, LINEAR_LOW, LINEAR_MID,
+};
+use crate::partitions::mesh_set::PartitionMeshSet;
+use crate::placed::{Placed, Placement};
 
 /// Kit-local \(Y\) span of header meshes (\([0, \texttt{HEADER_KIT_HEIGHT}]\)).
-///
-/// Full-height walls use \(Y \in [0, 1]\). With the same \(Y\) scale \(H\), a header
-/// occupies \(0.2\,H\) world height; place its baseline at \(0.8\,H\) to meet the
-/// storey top.
 pub const HEADER_KIT_HEIGHT: f32 = 0.2;
 
-/// Wall path geometry in world/cell space (continuous size and orientation).
+/// Partition path geometry in world/cell space (continuous size and orientation).
 #[derive(Debug, Clone, PartialEq)]
-pub enum WallGeometry {
-	Linear(LinearWall),
-	Polyline(PolylineWall),
+pub enum PartitionGeometry {
+	Linear(LinearPartition),
+	/// Circular joint tile (\(X,Z \in [-0.5, 0.5]\), \(Y \in [0, 1]\)).
+	Joint(JointPartition),
+	/// Short-run polyline (single LOD parent). Prefer splitting long paths upstream.
+	Polyline(PolylinePartition),
 	Arc(ArcSweep),
-	/// Header-height arc (\(Y \in [0, [`HEADER_KIT_HEIGHT`]]\) in kit space) for door/window frames.
+	/// Header-height arc (\(Y \in [0, [`HEADER_KIT_HEIGHT`]]\) in kit space).
 	HeaderArc(ArcSweep),
 }
 
-impl WallGeometry {
+/// Alias for continuous partition geometry.
+pub type Partition = PartitionGeometry;
+
+impl PartitionGeometry {
 	pub fn linear() -> Self {
-		Self::Linear(LinearWall::default())
+		Self::Linear(LinearPartition::default())
 	}
 
-	pub fn polyline(points: impl Into<Vec<Vec2>>) -> Self {
-		Self::Polyline(PolylineWall {
-			points: points.into(),
-		})
+	pub fn joint() -> Self {
+		Self::Joint(JointPartition::default())
+	}
+
+	pub fn polyline(points: impl Into<Vec<Vec3>>) -> Self {
+		Self::Polyline(PolylinePartition::new(points))
 	}
 
 	pub fn arc(sweep_degrees: f32) -> Self {
@@ -37,31 +68,81 @@ impl WallGeometry {
 	pub fn header_arc(sweep_degrees: f32) -> Self {
 		Self::HeaderArc(ArcSweep { sweep_degrees })
 	}
+
+	/// Expand into posed leaf tiles under this geometry (identity parent).
+	pub fn tiles(&self) -> Vec<Placed<PartitionTile>> {
+		match self {
+			Self::Linear(_) => vec![Placed::at_origin(PartitionTile::Linear)],
+			Self::Joint(_) => vec![Placed::at_origin(PartitionTile::Joint)],
+			Self::Polyline(g) => g.tiles(),
+			Self::Arc(g) => g.tiles(false),
+			Self::HeaderArc(g) => g.tiles(true),
+		}
+	}
+
+	/// Expand tiles then compose under `parent` placement.
+	pub fn placed_tiles(&self, parent: Placement) -> Vec<Placed<PartitionTile>> {
+		self.tiles()
+			.into_iter()
+			.map(|child| Placed {
+				geom: child.geom,
+				placement: parent.compose_child(child.placement),
+			})
+			.collect()
+	}
 }
 
-/// Alias kept for migration; prefer [`WallGeometry`].
-pub type Wall = WallGeometry;
-
-#[derive(Debug, Clone, Copy, PartialEq, Default)]
-pub struct LinearWall;
-
-#[derive(Debug, Clone, PartialEq, Default)]
-pub struct PolylineWall {
-	pub points: Vec<Vec2>,
+/// Discrete kit piece after tessellation (not a continuous authoring form).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum PartitionTile {
+	Linear,
+	LinearSubsegment,
+	LinearHeaderSubsegment,
+	Arc180,
+	Arc90,
+	Arc15,
+	HeaderArc180,
+	HeaderArc90,
+	HeaderArc15,
+	Joint,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct ArcSweep {
-	pub sweep_degrees: f32,
+impl PartitionTile {
+	/// High/mid/low mesh set when this tile has resolution variants.
+	pub fn mesh_set(self) -> Option<PartitionMeshSet> {
+		Some(match self {
+			Self::Linear => PartitionMeshSet::new(LINEAR_HIGH, LINEAR_MID, LINEAR_LOW),
+			Self::Arc180 => PartitionMeshSet::new(ARC_180_HIGH, ARC_180_MID, ARC_180_LOW),
+			Self::Arc90 => PartitionMeshSet::new(ARC_90_HIGH, ARC_90_MID, ARC_90_LOW),
+			Self::Arc15 => PartitionMeshSet::new(ARC_15_HIGH, ARC_15_MID, ARC_15_LOW),
+			Self::HeaderArc90 => {
+				PartitionMeshSet::new(HEADER_90_HIGH, HEADER_90_MID, HEADER_90_LOW)
+			}
+			Self::HeaderArc15 => {
+				PartitionMeshSet::new(HEADER_15_HIGH, HEADER_15_MID, HEADER_15_LOW)
+			}
+			Self::Joint
+			| Self::LinearSubsegment
+			| Self::LinearHeaderSubsegment
+			| Self::HeaderArc180 => return None,
+		})
+	}
 }
 
-impl Default for ArcSweep {
-	fn default() -> Self {
-		Self {
-			sweep_degrees: 90.0,
+impl From<ArcKit> for PartitionTile {
+	fn from(kit: ArcKit) -> Self {
+		match kit {
+			ArcKit::D180 => Self::Arc180,
+			ArcKit::D90 => Self::Arc90,
+			ArcKit::D15 => Self::Arc15,
 		}
 	}
 }
 
-/// Alias for continuous arc params (was `ArcWall`).
-pub type ArcWall = ArcSweep;
+pub(crate) fn header_tile(kit: ArcKit) -> PartitionTile {
+	match kit {
+		ArcKit::D180 => PartitionTile::HeaderArc180,
+		ArcKit::D90 => PartitionTile::HeaderArc90,
+		ArcKit::D15 => PartitionTile::HeaderArc15,
+	}
+}

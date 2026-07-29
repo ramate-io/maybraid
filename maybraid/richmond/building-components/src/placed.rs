@@ -1,19 +1,28 @@
 //! Geom-free placement and optional geometry+pose pairing.
 
-use bevy_math::Vec3;
+use bevy_math::{EulerRot, Quat, Vec3};
 
-/// Translation / yaw / scale for a kit piece or continuous form in cell space.
+/// Translation / yaw / pitch / roll / scale for a kit piece or continuous form in cell space.
 ///
 /// Partition / floor / door kits are authored in a **normalized** local space
 /// (angular arcs: radius \(1\), full height \(Y \in [0, 1]\); headers
 /// \(Y \in [0, 0.2]\)). Buildings map that kit into cell space via [`Self::scale`].
+///
+/// Rotation order (intrinsic [`EulerRot::YXZ`]):
+/// - **yaw** about world \(+Y\) — plan facing
+/// - **pitch** about local \(+X\) — lean the wall face in/out (reserved; polyline leaves this 0)
+/// - **roll** about local \(+Z\) — tip kit \(+X\) in the wall plane so a segment follows a slope
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Placement {
 	/// Translation in cell-local space.
 	pub translation: Vec3,
 	/// Yaw about +Y (radians).
 	pub yaw: f32,
-	/// Non-uniform scale applied to the normalized kit before yaw.
+	/// Pitch about local +X after yaw (radians). Leans the wall face; unused by polyline slope.
+	pub pitch: f32,
+	/// Roll about local +Z after yaw/pitch (radians). Positive tips kit \(+X\) toward \(+Y\).
+	pub roll: f32,
+	/// Non-uniform scale applied to the normalized kit before rotation.
 	///
 	/// For a circular wall of radius \(R\) and storey height \(H\), use
 	/// `Vec3::new(R, H, R)`.
@@ -24,6 +33,8 @@ impl Placement {
 	pub const IDENTITY: Self = Self {
 		translation: Vec3::ZERO,
 		yaw: 0.0,
+		pitch: 0.0,
+		roll: 0.0,
 		scale: Vec3::ONE,
 	};
 
@@ -31,6 +42,8 @@ impl Placement {
 		Self {
 			translation,
 			yaw,
+			pitch: 0.0,
+			roll: 0.0,
 			scale: Vec3::ONE,
 		}
 	}
@@ -39,16 +52,32 @@ impl Placement {
 		Self::IDENTITY
 	}
 
+	pub fn with_pitch(mut self, pitch: f32) -> Self {
+		self.pitch = pitch;
+		self
+	}
+
+	pub fn with_roll(mut self, roll: f32) -> Self {
+		self.roll = roll;
+		self
+	}
+
 	pub fn with_scale(mut self, scale: Vec3) -> Self {
 		self.scale = scale;
 		self
 	}
 
-	/// Compose a child placement under this parent (scale → yaw → translate).
+	pub fn rotation(self) -> Quat {
+		Quat::from_euler(EulerRot::YXZ, self.yaw, self.pitch, self.roll)
+	}
+
+	/// Compose a child placement under this parent (scale → rotate → translate).
 	pub fn compose_child(self, child: Placement) -> Placement {
 		Placement {
-			translation: self.translation + rotate_yaw(child.translation * self.scale, self.yaw),
+			translation: self.translation + self.rotation() * (child.translation * self.scale),
 			yaw: self.yaw + child.yaw,
+			pitch: self.pitch + child.pitch,
+			roll: self.roll + child.roll,
 			scale: self.scale * child.scale,
 		}
 	}
@@ -106,12 +135,15 @@ impl<G> Placed<G> {
 		self.placement.yaw
 	}
 
+	pub fn pitch(&self) -> f32 {
+		self.placement.pitch
+	}
+
+	pub fn roll(&self) -> f32 {
+		self.placement.roll
+	}
+
 	pub fn scale(&self) -> Vec3 {
 		self.placement.scale
 	}
-}
-
-pub(crate) fn rotate_yaw(v: Vec3, yaw: f32) -> Vec3 {
-	let (s, c) = yaw.sin_cos();
-	Vec3::new(c * v.x + s * v.z, v.y, -s * v.x + c * v.z)
 }

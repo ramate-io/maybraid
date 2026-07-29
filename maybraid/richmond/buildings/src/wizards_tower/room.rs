@@ -8,7 +8,7 @@ use bevy_math::Vec3;
 use lod::gen::LodScene;
 use lod::lod_ref::LodRef;
 use richmond_building_components::floors::{Floor, FloorNode};
-use richmond_building_components::partitions::{Wall, WallNode};
+use richmond_building_components::partitions::{Partition, PartitionNode};
 use richmond_building_components::scene_children;
 use richmond_building_components::Placement;
 
@@ -19,7 +19,7 @@ use crate::CellConstraints;
 #[derive(Debug, Clone, PartialEq)]
 pub struct WizardsTowerRoom {
 	pub constraints: CellConstraints,
-	pub partition: WallNode,
+	pub partition: PartitionNode,
 	pub floor: FloorNode,
 }
 
@@ -42,8 +42,8 @@ impl WizardsTowerRoom {
 		);
 
 		Self {
-			partition: WallNode::rough_stone(
-				Wall::linear(),
+			partition: PartitionNode::rough_stone(
+				Partition::linear(),
 				Placement::new(center_xz, yaw).with_scale(wall_scale),
 			),
 			floor: FloorNode::rough_stone(

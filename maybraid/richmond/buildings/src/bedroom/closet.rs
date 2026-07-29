@@ -5,7 +5,7 @@ use bevy_math::Vec3;
 use lod::gen::LodScene;
 use lod::lod_ref::LodRef;
 use richmond_building_components::furniture::FurnitureNode;
-use richmond_building_components::partitions::{Wall, WallNode};
+use richmond_building_components::partitions::{Partition, PartitionNode};
 use richmond_building_components::scene_children;
 use richmond_building_components::Placement;
 
@@ -19,7 +19,7 @@ pub struct Closet {
 	pub constraints: CellConstraints,
 	/// Face of [`Self::constraints`] that opens into the bedroom (door swing outward).
 	pub open_face: FaceKind,
-	pub walls: Vec<WallNode>,
+	pub walls: Vec<PartitionNode>,
 	pub wardrobe: FurnitureNode,
 }
 
@@ -36,7 +36,7 @@ impl Closet {
 	}
 
 	/// Shell walls with a doorway leave on `open_face` (already swing-budgeted by layout).
-	fn shell_walls(constraints: &CellConstraints, open_face: FaceKind) -> Vec<WallNode> {
+	fn shell_walls(constraints: &CellConstraints, open_face: FaceKind) -> Vec<PartitionNode> {
 		let aabb = &constraints.aabb;
 		let size = aabb.max - aabb.min;
 		let y0 = aabb.min.y;
@@ -69,7 +69,7 @@ impl Closet {
 }
 
 fn push_full_face_wall(
-	walls: &mut Vec<WallNode>,
+	walls: &mut Vec<PartitionNode>,
 	aabb: &bevy_math::bounding::Aabb3d,
 	face: FaceKind,
 	cx: f32,
@@ -81,23 +81,23 @@ fn push_full_face_wall(
 	thick: f32,
 ) {
 	match face {
-		FaceKind::Front => walls.push(WallNode::rough_stone(
-			Wall::linear(),
+		FaceKind::Front => walls.push(PartitionNode::rough_stone(
+			Partition::linear(),
 			Placement::new(Vec3::new(cx, y0, aabb.min.z), 0.0)
 				.with_scale(Vec3::new(half_x, h, thick)),
 		)),
-		FaceKind::Back => walls.push(WallNode::rough_stone(
-			Wall::linear(),
+		FaceKind::Back => walls.push(PartitionNode::rough_stone(
+			Partition::linear(),
 			Placement::new(Vec3::new(cx, y0, aabb.max.z), 0.0)
 				.with_scale(Vec3::new(half_x, h, thick)),
 		)),
-		FaceKind::Left => walls.push(WallNode::rough_stone(
-			Wall::linear(),
+		FaceKind::Left => walls.push(PartitionNode::rough_stone(
+			Partition::linear(),
 			Placement::new(Vec3::new(aabb.min.x, y0, cz), std::f32::consts::FRAC_PI_2)
 				.with_scale(Vec3::new(half_z, h, thick)),
 		)),
-		FaceKind::Right => walls.push(WallNode::rough_stone(
-			Wall::linear(),
+		FaceKind::Right => walls.push(PartitionNode::rough_stone(
+			Partition::linear(),
 			Placement::new(Vec3::new(aabb.max.x, y0, cz), std::f32::consts::FRAC_PI_2)
 				.with_scale(Vec3::new(half_z, h, thick)),
 		)),
@@ -106,7 +106,7 @@ fn push_full_face_wall(
 }
 
 fn push_opening_return(
-	walls: &mut Vec<WallNode>,
+	walls: &mut Vec<PartitionNode>,
 	aabb: &bevy_math::bounding::Aabb3d,
 	face: FaceKind,
 	y0: f32,
@@ -123,8 +123,8 @@ fn push_opening_return(
 				aabb.max.z
 			};
 			// Short return on the −X side of the opening.
-			walls.push(WallNode::rough_stone(
-				Wall::linear(),
+			walls.push(PartitionNode::rough_stone(
+				Partition::linear(),
 				Placement::new(Vec3::new(aabb.min.x + half_x * 0.35, y0, z), 0.0)
 					.with_scale(Vec3::new(half_x * 0.35, h, thick)),
 			));
@@ -136,8 +136,8 @@ fn push_opening_return(
 			} else {
 				aabb.max.x
 			};
-			walls.push(WallNode::rough_stone(
-				Wall::linear(),
+			walls.push(PartitionNode::rough_stone(
+				Partition::linear(),
 				Placement::new(
 					Vec3::new(x, y0, aabb.min.z + half_z * 0.35),
 					std::f32::consts::FRAC_PI_2,

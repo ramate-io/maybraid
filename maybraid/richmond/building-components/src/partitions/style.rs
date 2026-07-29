@@ -1,7 +1,7 @@
-//! Wall / partition material style.
+//! Partition material style.
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
-pub enum WallStyle {
+pub enum PartitionStyle {
 	#[default]
 	RoughStonework,
 }

@@ -5551,6 +5551,7 @@ dependencies = [
  "game-commands",
  "lod",
  "log",
+ "procedural-common",
  "richmond-building-components",
  "richmond-buildings",
  "scene-ref",

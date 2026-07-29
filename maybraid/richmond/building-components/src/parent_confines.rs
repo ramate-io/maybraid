@@ -1,8 +1,8 @@
 //! External vs internal geometry gating relative to a parent volume.
 //!
-//! Used as an IR field on building-component nodes (`FloorNode`, `WallNode`, …).
+//! Used as an IR field on building-component nodes (`FloorNode`, `PartitionNode`, …).
 //! Prefer **floor-wise / room-wise** compartments so a simple ball works. Use
-//! [`ParentConfines::Capsule`] only for long non-compartmentalized regions
+//! [`InternalShape::Capsule`] only for long non-compartmentalized regions
 //! (e.g. a continuous vertical spire).
 //!
 //! Internal volumes stay hidden until the viewer is within
@@ -16,54 +16,60 @@ use bevy::scene::prelude::{bsn, template_value, Scene};
 /// Reveal internal confines when viewer distance ≤ this × confine radius.
 pub const INTERNAL_REVEAL_FACTOR: f32 = 5.0;
 
+/// Geometry of an [`ParentConfines::Internal`] volume.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum InternalShape {
+	/// Floor- or room-compartment ball. Prefer authoring at this grain.
+	Ball { center: Vec3, radius: f32 },
+	/// Segment + radius for tall / long open volumes that should not be split
+	/// into floor balls. Distance is to the medial segment `a`→`b`.
+	Capsule { a: Vec3, b: Vec3, radius: f32 },
+}
+
+impl InternalShape {
+	pub fn viewer_allowed(self, viewer: &Transform) -> bool {
+		let p = viewer.translation;
+		match self {
+			Self::Ball { center, radius } => p.distance(center) <= radius * INTERNAL_REVEAL_FACTOR,
+			Self::Capsule { a, b, radius } => {
+				distance_to_segment(p, a, b) <= radius * INTERNAL_REVEAL_FACTOR
+			}
+		}
+	}
+}
+
 /// Whether a node is part of the external silhouette or internal detail.
 #[derive(Debug, Clone, Copy, PartialEq, Component, Default)]
 pub enum ParentConfines {
 	/// Liberal footprint / extent banding — typically always a LOD candidate.
 	#[default]
 	External,
-	/// Hidden until within [`INTERNAL_REVEAL_FACTOR`] × `radius` of `center`.
+	/// Hidden until within [`INTERNAL_REVEAL_FACTOR`] × the shape radius.
 	/// Author per floor / room compartment — not the whole building.
-	Internal {
-		center: Vec3,
-		radius: f32,
-	},
-	/// Capsule (segment + radius) for tall / long open volumes that should not
-	/// be split into floor balls. Distance is to the medial segment `a`→`b`.
-	Capsule {
-		a: Vec3,
-		b: Vec3,
-		radius: f32,
-	},
+	Internal(InternalShape),
 }
 
 impl ParentConfines {
 	pub fn internal(center: Vec3, radius: f32) -> Self {
-		Self::Internal {
+		Self::Internal(InternalShape::Ball {
 			center,
 			radius: radius.max(1e-4),
-		}
+		})
 	}
 
 	pub fn capsule(a: Vec3, b: Vec3, radius: f32) -> Self {
-		Self::Capsule {
+		Self::Internal(InternalShape::Capsule {
 			a,
 			b,
 			radius: radius.max(1e-4),
-		}
+		})
 	}
 
 	/// Whether the viewer may activate this node's detail for this confine.
 	pub fn viewer_allowed(&self, viewer: &Transform) -> bool {
-		let p = viewer.translation;
 		match self {
 			Self::External => true,
-			Self::Internal { center, radius } => {
-				p.distance(*center) <= *radius * INTERNAL_REVEAL_FACTOR
-			}
-			Self::Capsule { a, b, radius } => {
-				distance_to_segment(p, *a, *b) <= *radius * INTERNAL_REVEAL_FACTOR
-			}
+			Self::Internal(shape) => shape.viewer_allowed(viewer),
 		}
 	}
 }

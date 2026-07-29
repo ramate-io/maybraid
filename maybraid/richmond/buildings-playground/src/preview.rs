@@ -6,13 +6,20 @@ use bevy_math::bounding::{Aabb2d, Aabb3d};
 use bevy_math::Vec2;
 use lod::gen::LodScene;
 use lod::LodViewerState;
+use procedural_common::{AllowedAngles, NoiseParams, StepLenRange};
 use richmond_building_components::partitions::rough_stonework::{
 	RoughStonework180, RoughStonework90, RoughStoneworkHeader90, RoughStoneworkLinear,
 };
-use richmond_building_components::placed::Placement;
+use richmond_building_components::partitions::{Partition, PartitionNode};
 use richmond_building_components::roofs::{Pitch, RoofGeometry, RoofNode};
+use richmond_building_components::scene_children;
+use richmond_building_components::Placement;
 use richmond_buildings::bedroom::Bedroom;
 use richmond_buildings::stacked_rings::StackedRings;
+use richmond_buildings::walling::{
+	LinearWall, LinearWallParams, MustAssignPortal, NoisyPolylineWall, NoisyPolylineWallParams,
+	Portal, PolylineWall, PolylineWallParams, Walling,
+};
 use richmond_buildings::wizards_tower::WizardsTower;
 use richmond_buildings::{
 	BedroomFillParams, CellConstraints, CirculationEntry, CirculationRequestStatus,
@@ -35,6 +42,15 @@ pub enum PreviewSubject {
 		tile_width: f32,
 		left: Option<f32>,
 		right: Option<f32>,
+	},
+	Polyline,
+	LinearWall,
+	PolylineWall,
+	NoisyPolylineWall {
+		distance: f32,
+		step_len: StepLenRange,
+		allowed_angles: AllowedAngles,
+		path_noise: NoiseParams,
 	},
 	WizardsTower { noise: f32 },
 	StackedRings {
@@ -95,6 +111,19 @@ impl PreviewConfig {
 					"preview: pitch (rise={rise:.2} run={run:.2} len={length:?} tile={tile_width:.2} left={left:?} right={right:?})"
 				)
 			}
+			PreviewSubject::Polyline => "preview: partition polyline (L)".into(),
+			PreviewSubject::LinearWall => "preview: walling linear-wall (door)".into(),
+			PreviewSubject::PolylineWall => "preview: walling polyline-wall (door)".into(),
+			PreviewSubject::NoisyPolylineWall {
+				distance,
+				step_len,
+				allowed_angles,
+				path_noise,
+			} => format!(
+				"preview: noisy-polyline-wall (d={distance:.1} step=[{:.2},{:.2}] ang=({:.2},{:.2},{:.2}) seed={})",
+				step_len.min, step_len.max,
+				allowed_angles.x, allowed_angles.y, allowed_angles.z, path_noise.seed
+			),
 			PreviewSubject::WizardsTower { noise } => {
 				format!("preview: wizards-tower (noise={noise:.2})")
 			}
@@ -154,6 +183,16 @@ impl PreviewConfig {
 					Vec3::new(x_max, rise + 0.2, 0.0),
 				)
 			}
+			PreviewSubject::Polyline | PreviewSubject::PolylineWall => {
+				Aabb3d::from_min_max(Vec3::new(0.0, 0.0, 0.0), Vec3::new(4.0, 3.0, 4.0))
+			}
+			PreviewSubject::LinearWall => {
+				Aabb3d::from_min_max(Vec3::new(-4.0, 0.0, -0.5), Vec3::new(4.0, 3.0, 0.5))
+			}
+			PreviewSubject::NoisyPolylineWall { distance, .. } => {
+				let r = (*distance).max(4.0);
+				Aabb3d::from_min_max(Vec3::new(-r, -r * 0.5, -r), Vec3::new(r, r * 0.5 + 3.0, r))
+			}
 			_ => Aabb3d::from_min_max(Vec3::ZERO, Vec3::ONE),
 		}
 	}
@@ -166,6 +205,7 @@ pub struct CachedPreview {
 	wizards_tower: Option<WizardsTower>,
 	stacked_rings: Option<StackedRings>,
 	bedroom: Option<Bedroom>,
+	walling: Option<Walling>,
 }
 
 impl CachedPreview {
@@ -178,6 +218,7 @@ impl CachedPreview {
 		self.wizards_tower = None;
 		self.stacked_rings = None;
 		self.bedroom = None;
+		self.walling = None;
 		match &config.subject {
 			PreviewSubject::WizardsTower { noise } => {
 				let footprint = CellConstraints::cell_owned(Aabb3d::from_min_max(
@@ -220,6 +261,46 @@ impl CachedPreview {
 					},
 				));
 			}
+			PreviewSubject::LinearWall => {
+				self.walling = Some(Walling::Linear(LinearWall::new(LinearWallParams {
+					start: Vec3::new(-4.0, 0.0, 0.0),
+					end: Vec3::new(4.0, 0.0, 0.0),
+					height: 3.0,
+					must_assign: vec![MustAssignPortal::at(0.5, Portal::Door)],
+					optional_portals: (0, 0),
+					..LinearWallParams::default()
+				})));
+			}
+			PreviewSubject::PolylineWall => {
+				self.walling = Some(Walling::Polyline(PolylineWall::new(PolylineWallParams {
+					points: vec![
+						Vec3::new(0.0, 0.0, 0.0),
+						Vec3::new(4.0, 0.0, 0.0),
+						Vec3::new(4.0, 0.0, 4.0),
+					],
+					height: 3.0,
+					must_assign: vec![MustAssignPortal::at(0.25, Portal::Door)],
+					optional_portals: (0, 0),
+					..PolylineWallParams::default()
+				})));
+			}
+			PreviewSubject::NoisyPolylineWall {
+				distance,
+				step_len,
+				allowed_angles,
+				path_noise,
+			} => {
+				self.walling = Some(Walling::NoisyPolyline(NoisyPolylineWall::new(
+					NoisyPolylineWallParams {
+						distance: *distance,
+						step_len: *step_len,
+						allowed_angles: *allowed_angles,
+						path_noise: *path_noise,
+						optional_portals: (0, 0),
+						..NoisyPolylineWallParams::default()
+					},
+				)));
+			}
 			_ => {}
 		}
 	}
@@ -249,6 +330,7 @@ pub fn present_preview_lod(
 			cache.wizards_tower = None;
 			cache.stacked_rings = None;
 			cache.bedroom = None;
+			cache.walling = None;
 		}
 		return;
 	}
@@ -318,6 +400,29 @@ pub fn present_preview_lod(
 			}
 			let roof = RoofNode::shepherds_thatch(RoofGeometry::pitch(pitch), Placement::IDENTITY);
 			spawn_preview(&mut commands, transform, roof.scene_with_lod(&lod_ref));
+		}
+		PreviewSubject::Polyline => {
+			let node = PartitionNode::rough_stone(
+				Partition::polyline([
+					Vec3::new(0.0, 0.0, 0.0),
+					Vec3::new(4.0, 0.0, 0.0),
+					Vec3::new(4.0, 0.0, 4.0),
+				]),
+				Placement::at_origin().with_scale(Vec3::new(1.0, 3.0, 1.0)),
+			);
+			spawn_preview(&mut commands, transform, node.scene_with_lod(&lod_ref));
+		}
+		PreviewSubject::LinearWall
+		| PreviewSubject::PolylineWall
+		| PreviewSubject::NoisyPolylineWall { .. } => {
+			if let Some(walling) = cache.walling.as_ref() {
+				let children: Vec<Box<dyn bevy::scene::Scene>> = walling
+					.partitions()
+					.iter()
+					.map(|p| Box::new(p.scene_with_lod(&lod_ref)) as Box<dyn bevy::scene::Scene>)
+					.collect();
+				spawn_preview(&mut commands, transform, scene_children(children));
+			}
 		}
 		PreviewSubject::WizardsTower { .. } => {
 			if let Some(tower) = cache.wizards_tower.clone() {

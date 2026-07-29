@@ -3,13 +3,13 @@
 use bevy_math::Vec3;
 
 use crate::doors::geometry::DoorGeometry;
-use crate::partitions::tessellate::WallKit;
+use crate::partitions::geometry::PartitionTile;
 use crate::placed::{Placement, Placed};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) enum DoorKit {
 	Leaf,
-	FramePiece(WallKit),
+	FramePiece(PartitionTile),
 }
 
 impl DoorGeometry {
@@ -18,27 +18,27 @@ impl DoorGeometry {
 			Self::Leaf(_) => vec![Placed::at_origin(DoorKit::Leaf)],
 			Self::Frame15(_) => vec![
 				Placed::new(
-					DoorKit::FramePiece(WallKit::LinearHeaderSubsegment),
+					DoorKit::FramePiece(PartitionTile::LinearHeaderSubsegment),
 					Vec3::new(0.0, 0.85, 0.0),
 					0.0,
 				),
 				Placed::new(
-					DoorKit::FramePiece(WallKit::HeaderArc15),
+					DoorKit::FramePiece(PartitionTile::HeaderArc15),
 					Vec3::new(-0.9, 0.85, 0.0),
 					0.0,
 				),
 				Placed::new(
-					DoorKit::FramePiece(WallKit::HeaderArc15),
+					DoorKit::FramePiece(PartitionTile::HeaderArc15),
 					Vec3::new(0.9, 0.85, 0.0),
 					std::f32::consts::PI,
 				),
 				Placed::new(
-					DoorKit::FramePiece(WallKit::Arc15),
+					DoorKit::FramePiece(PartitionTile::Arc15),
 					Vec3::new(-1.0, 0.0, 0.0),
 					0.0,
 				),
 				Placed::new(
-					DoorKit::FramePiece(WallKit::Arc15),
+					DoorKit::FramePiece(PartitionTile::Arc15),
 					Vec3::new(1.0, 0.0, 0.0),
 					std::f32::consts::PI,
 				),
