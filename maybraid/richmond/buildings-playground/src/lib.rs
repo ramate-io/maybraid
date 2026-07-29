@@ -11,60 +11,73 @@ pub use commands::{PlaygroundCommand, PLAYGROUND_CLI_NAME};
 pub use game_commands::command::PendingStartupCommand;
 pub use preview::{PreviewConfig, PreviewSubject};
 
+use bevy::camera::visibility::VisibilitySystems;
 use bevy::prelude::*;
 use commands::RequestMeshStats;
 use game_commands::command::{capture_command_line_input, GameCommandPlugin};
 use game_commands::ui::GameCommandStatusText;
 use ground::setup_ground;
+use lod::{add_fine_pass_for, LodFinePassPlugin, LodFinePassSystems};
 use mesh_ref::MeshRefPlugin;
-use preview::{present_preview_lod, track_camera_lod, CameraLodState, CachedPreview};
-use richmond_building_components::FurnitureWireframePlugin;
+use preview::{present_preview_lod, CachedPreview};
+use richmond_building_components::{
+	apply_parent_confines, update_partition_host_levels, FurnitureWireframePlugin,
+};
+use richmond_buildings::wizards_tower::{TowerSilhouettePlugin, WizardsTower};
 
 pub struct RichmondBuildingsPlaygroundPlugin;
 
 impl Plugin for RichmondBuildingsPlaygroundPlugin {
 	fn build(&self, app: &mut App) {
 		app.init_resource::<PreviewConfig>()
-			.init_resource::<CameraLodState>()
 			.init_resource::<CachedPreview>()
 			.add_plugins((
 				MeshRefPlugin,
 				FurnitureWireframePlugin,
+				TowerSilhouettePlugin,
+				LodFinePassPlugin,
 				GameCommandPlugin::<PlaygroundCommand>::with_config(ui::ui_config()),
-			))
-			.add_systems(Startup, (camera::setup_camera, setup_lighting, setup_ground))
+			));
+		add_fine_pass_for::<WizardsTower>(app);
+		app.add_systems(Startup, (camera::setup_camera, setup_lighting, setup_ground))
 			.add_systems(
 				Update,
 				(
-					camera::camera_controller,
-					track_camera_lod.after(camera::camera_controller),
+					camera::camera_controller.before(LodFinePassSystems::Track),
 					present_preview_lod
-						.after(track_camera_lod)
+						.after(LodFinePassSystems::Track)
 						.after(capture_command_line_input::<PlaygroundCommand>),
-					apply_mesh_stats.after(present_preview_lod),
+					update_partition_host_levels.in_set(LodFinePassSystems::UpdateLevels),
+					apply_parent_confines.after(LodFinePassSystems::Fulfill),
 					ui::sync_command_status_text.before(game_commands::ui::update_debug_ui),
 				),
+			)
+			.add_systems(
+				PostUpdate,
+				apply_mesh_stats.after(VisibilitySystems::CheckVisibility),
 			);
 	}
 }
 
+/// Count total vs view-visible mesh triangles (`ViewVisibility`).
 fn apply_mesh_stats(
 	mut commands: Commands,
 	mut status: ResMut<GameCommandStatusText>,
 	mesh_assets: Res<Assets<Mesh>>,
 	requests: Query<Entity, With<RequestMeshStats>>,
-	mesh_entities: Query<&Mesh3d>,
+	mesh_entities: Query<(&Mesh3d, &ViewVisibility)>,
 ) {
 	for entity in &requests {
-		let mut mesh_count = 0usize;
+		let mut total_entities = 0usize;
+		let mut visible_entities = 0usize;
 		let mut missing = 0usize;
-		let mut vertices = 0usize;
-		let mut indices = 0usize;
-		let mut triangles = 0usize;
+		let mut total_tris = 0usize;
+		let mut visible_tris = 0usize;
 		let mut unique_handles = std::collections::HashSet::new();
+		let mut visible_unique_handles = std::collections::HashSet::new();
 
-		for mesh3d in &mesh_entities {
-			mesh_count += 1;
+		for (mesh3d, view_visibility) in &mesh_entities {
+			total_entities += 1;
 			unique_handles.insert(mesh3d.0.id());
 			let Some(mesh) = mesh_assets.get(&mesh3d.0) else {
 				missing += 1;
@@ -72,14 +85,19 @@ fn apply_mesh_stats(
 			};
 			let verts = mesh.count_vertices();
 			let index_count = mesh.indices().map(|i| i.len()).unwrap_or(verts);
-			vertices += verts;
-			indices += index_count;
-			triangles += index_count / 3;
+			let tris = index_count / 3;
+			total_tris += tris;
+			if view_visibility.get() {
+				visible_entities += 1;
+				visible_unique_handles.insert(mesh3d.0.id());
+				visible_tris += tris;
+			}
 		}
 
 		status.0 = format!(
-			"stats mesh: entities={mesh_count} unique_handles={} missing={missing} verts={vertices} indices={indices} tris={triangles}",
-			unique_handles.len()
+			"stats mesh:\n  total_tris={total_tris}\n  visible_tris={visible_tris}\n  entities={total_entities} visible_entities={visible_entities} unique_handles={} visible_unique={} missing={missing}",
+			unique_handles.len(),
+			visible_unique_handles.len(),
 		);
 		info!("{}", status.0);
 		commands.entity(entity).despawn();

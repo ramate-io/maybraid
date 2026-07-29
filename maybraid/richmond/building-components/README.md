@@ -65,7 +65,7 @@ Partition components are authored in a normalized local space, then transformed 
   - A 15° arc sweep goes through \(-Z\) from \(X = -1.0\) to \(X = \cos(15^\circ) - 1.0\), \(Z = -\sin(15^\circ)\)
 - **Header Components:** header components are used for smaller vertical spaces. They are normalized to:
   - \(Z = [-0.2, 0.2]\)
-  - \(Y = [0.0, 0.3]\)
+  - \(Y = [0.0, 0.2]\)
   - \(X = [-1.0, 1.0]\)
 
 A common approach to building door frames is to use a header component with various 15° arc sweeps to create the frame.

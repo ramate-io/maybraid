@@ -59,7 +59,11 @@ impl LodScene for WizardsTowerSpire {
 		lod::gen::LodSceneStatus::Unchanged
 	}
 
-	fn scene_with_lod(&self, lod_ref: &LodRef) -> impl Scene + 'static {
+	fn scene_with_level(
+		&self,
+		lod_ref: &LodRef,
+		_level: lod::gen::LodSceneLevel,
+	) -> impl Scene + 'static {
 		let children: Vec<Box<dyn Scene>> = self
 			.core_walls
 			.iter()

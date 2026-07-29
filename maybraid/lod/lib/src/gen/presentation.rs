@@ -11,25 +11,47 @@ pub mod tests;
 
 use crate::gen::id::Id;
 use crate::gen::spatial_index::{SpatialIndex, Version};
+use crate::lod_level::LodSceneLevel;
 use crate::lod_ref::LodRef;
 use bevy::{math::bounding::Aabb3d, scene::Scene};
 use std::collections::HashSet;
 
-/// Whether [`LodScene::scene_with_lod`] for the current viewer pose would differ
-/// from the scene for the previous pose on the same [`LodRef`].
+/// Whether the presented LOD selection should be updated for this [`LodRef`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum LodSceneStatus {
-	Changed,
+	/// Desired level changed; payload is the new level.
+	Changed(LodSceneLevel),
 	Unchanged,
 }
 
 pub trait LodScene {
-	/// Whether the presented scene for `lod_ref.current_*` would differ from
-	/// the scene for `lod_ref.previous_*`. Must be cheap — no scene build.
-	fn scene_lod_status(&self, lod_ref: &LodRef) -> LodSceneStatus;
+	/// Desired presentation level for `lod_ref.current_*`. Must be cheap — no scene build.
+	fn scene_lod_level(&self, lod_ref: &LodRef) -> LodSceneLevel {
+		let _ = lod_ref;
+		LodSceneLevel::High
+	}
 
-	/// Scene for the **current** LOD selection only.
-	fn scene_with_lod(&self, lod_ref: &LodRef) -> impl Scene + 'static;
+	/// Whether the presented LOD selection should change for this [`LodRef`].
+	///
+	/// Must be cheap — no scene build. Implementors that care about camera motion
+	/// should compare their own previous/current banding here. Default always
+	/// reports a change to [`LodSceneLevel::High`].
+	fn scene_lod_status(&self, lod_ref: &LodRef) -> LodSceneStatus {
+		let _ = lod_ref;
+		LodSceneStatus::Changed(LodSceneLevel::High)
+	}
+
+	/// Scene for one LOD level root (primary implementation target).
+	fn scene_with_level(
+		&self,
+		lod_ref: &LodRef,
+		level: LodSceneLevel,
+	) -> impl Scene + 'static;
+
+	/// Scene for the **current** LOD selection only (first present / non-host path).
+	fn scene_with_lod(&self, lod_ref: &LodRef) -> impl Scene + 'static {
+		self.scene_with_level(lod_ref, self.scene_lod_level(lod_ref))
+	}
 }
 
 /// Presents one layer (`T`) of a spatial index over a region.
@@ -66,6 +88,25 @@ where
 	/// `version` so [`RegionPresenter::presented_version`] reflects it.
 	fn handle(&mut self, id: Id, version: Version, scene: impl Scene, lod_ref: &LodRef);
 
+	/// LOD-only update: set the presented host's [`LodSceneLevel`] without rebuilding.
+	///
+	/// Default falls back to [`RegionPresenter::handle`] with `scene_with_lod` for
+	/// presenters that do not track host entities yet.
+	fn set_lod_level(
+		&mut self,
+		id: Id,
+		level: LodSceneLevel,
+		spatial_index: &S,
+		lod_ref: &LodRef,
+	) {
+		let _ = level;
+		if let Some(version) = spatial_index.version(id) {
+			if let Some(instance) = spatial_index.get(id) {
+				self.handle(id, version, instance.scene_with_lod(lod_ref), lod_ref);
+			}
+		}
+	}
+
 	/// Removes presented ids within the region that are not in `wanted`.
 	///
 	/// Contract: strictly removal. [`RegionPresenter::present`] invokes this
@@ -76,9 +117,9 @@ where
 	///
 	/// Contract:
 	///
-	/// - wanted ids are spawned or patched first
+	/// - wanted ids are spawned or patched first (version / repair)
+	/// - LOD-only changes call [`RegionPresenter::set_lod_level`] (not a full rebuild)
 	/// - stale ids are removed after
-	/// - callers should use this method for all normal presentation
 	fn present(&mut self, spatial_index: &S, region: Aabb3d, lod_ref: &LodRef) {
 		let wanted: HashSet<Id> = spatial_index
 			.tracked_ids_for(region)
@@ -98,9 +139,14 @@ where
 			let Some(instance) = spatial_index.get(id) else {
 				continue;
 			};
-			let lod_changed = instance.scene_lod_status(lod_ref) == LodSceneStatus::Changed;
-			if needs_present || self.needs_repair(region, id, version) || lod_changed {
+
+			if needs_present || self.needs_repair(region, id, version) {
 				self.handle(id, version, instance.scene_with_lod(lod_ref), lod_ref);
+				continue;
+			}
+
+			if let LodSceneStatus::Changed(level) = instance.scene_lod_status(lod_ref) {
+				self.set_lod_level(id, level, spatial_index, lod_ref);
 			}
 		}
 

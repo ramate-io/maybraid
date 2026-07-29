@@ -12,7 +12,7 @@
 
 use bevy_math::Vec3;
 use procedural_common::{NoiseConfig, NoiseParams};
-use richmond_building_components::partitions::{Wall, WallNode};
+use richmond_building_components::partitions::{Wall, WallNode, HEADER_KIT_HEIGHT};
 use richmond_building_components::Placement;
 
 /// Kit segment size (degrees) and portal width (two segments → 30°).
@@ -23,7 +23,10 @@ const OPEN_HALF_DEG: f32 = SEG_DEG * (PORTAL_SEGS as f32) * 0.5;
 /// Portal width in degrees.
 const PORTAL_WIDTH_DEG: f32 = OPEN_HALF_DEG * 2.0;
 /// Lintel / top-header baseline as a fraction of storey height.
-const HEADER_Y_FRAC: f32 = 0.7;
+///
+/// Header kits span [`HEADER_KIT_HEIGHT`] in \(Y\); with wall \(Y\)-scale \(H\) they
+/// occupy \(0.2\,H\), so the lintel sits at \(0.8\,H\) to meet the storey top.
+const HEADER_Y_FRAC: f32 = 1.0 - HEADER_KIT_HEIGHT;
 
 /// Opening cut into an arc wall.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

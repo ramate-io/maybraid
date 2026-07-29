@@ -1,30 +1,26 @@
-//! Shared Wizard's Tower LOD banding (near / far) from footprint radius.
+//! Shared Wizard's Tower LOD banding via footprint capsule → [`LodSceneLevel`].
+//!
+//! Verticality must not inflate the Low (cylinder) cutoff: use **capsule surface
+//! distance in world meters** for that boundary. High stays a multiple of
+//! footprint radius so wide towers open detail farther out. That can clash with
+//! scale-dependent [`ParentConfines`] reveal — if internals would still be
+//! eligible at that range, showing them is fine.
 
 use bevy::prelude::Transform;
 use bevy_math::bounding::Aabb3d;
 use bevy_math::Vec3;
+use lod::gen::LodSceneLevel;
+use lod::lod_ref::LodRef;
+use richmond_building_components::distance_to_segment;
 
-/// Viewer distance band relative to the tower footprint.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum TowerLodBand {
-	/// Within [`NEAR_RADIUS_MULTIPLIER`] × footprint radius (XZ).
-	Near,
-	/// Outside the near band — external silhouette only.
-	Far,
-}
+/// High (exterior + internals) when capsule surface distance ≤ this × footprint radius.
+pub const HIGH_FOOTPRINT_MULTIPLIER: f32 = 5.0;
+/// Medium (exterior) while capsule surface distance ≤ this many world meters; beyond → Low cylinder.
+pub const LOW_RES_CUTOFF_METERS: f32 = 400.0;
 
-/// Near LOD when XZ distance ≤ this × footprint radius.
-pub const NEAR_RADIUS_MULTIPLIER: f32 = 3.0;
-
-/// Footprint-derived LOD helpers for tower storeys / column / root.
+/// Footprint-derived LOD helpers for the tower host.
 pub(crate) trait TowerLodFootprint {
 	fn lod_aabb(&self) -> &Aabb3d;
-
-	fn footprint_center_xz(&self) -> Vec3 {
-		let aabb = self.lod_aabb();
-		let c = (aabb.min + aabb.max) * 0.5;
-		Vec3::new(c.x, aabb.min.y, c.z)
-	}
 
 	fn footprint_radius(&self) -> f32 {
 		let aabb = self.lod_aabb();
@@ -32,21 +28,39 @@ pub(crate) trait TowerLodFootprint {
 		0.5 * extent.x.min(extent.z)
 	}
 
-	fn band_for(&self, viewer: &Transform) -> TowerLodBand {
-		let center = self.footprint_center_xz();
+	fn tower_height(&self) -> f32 {
+		let aabb = self.lod_aabb();
+		(aabb.max.y - aabb.min.y).max(1e-4)
+	}
+
+	/// Vertical capsule through the full tower AABB (medial axis + footprint radius).
+	fn lod_capsule(&self) -> (Vec3, Vec3, f32) {
+		let aabb = self.lod_aabb();
+		let c = (aabb.min + aabb.max) * 0.5;
 		let radius = self.footprint_radius().max(1e-4);
-		let p = viewer.translation;
-		let dx = p.x - center.x;
-		let dz = p.z - center.z;
-		let dist_xz = (dx * dx + dz * dz).sqrt();
-		if dist_xz <= NEAR_RADIUS_MULTIPLIER * radius {
-			TowerLodBand::Near
+		(Vec3::new(c.x, aabb.min.y, c.z), Vec3::new(c.x, aabb.max.y, c.z), radius)
+	}
+
+	/// Meters outside the tower capsule (0 when inside / on the hull).
+	fn capsule_surface_distance(&self, viewer: &Transform) -> f32 {
+		let (a, b, radius) = self.lod_capsule();
+		(distance_to_segment(viewer.translation, a, b) - radius).max(0.0)
+	}
+
+	fn level_for(&self, viewer: &Transform) -> LodSceneLevel {
+		let dist = self.capsule_surface_distance(viewer);
+		let high_cut = self.footprint_radius() * HIGH_FOOTPRINT_MULTIPLIER;
+		if dist <= high_cut {
+			LodSceneLevel::High
+		} else if dist <= LOW_RES_CUTOFF_METERS {
+			LodSceneLevel::Medium
 		} else {
-			TowerLodBand::Far
+			// Low + UltraLow both use the cylinder silhouette.
+			LodSceneLevel::Low
 		}
 	}
 
-	fn is_near(&self, viewer: &Transform) -> bool {
-		matches!(self.band_for(viewer), TowerLodBand::Near)
+	fn level_for_lod_ref(&self, lod_ref: &LodRef) -> LodSceneLevel {
+		self.level_for(lod_ref.current_transform)
 	}
 }

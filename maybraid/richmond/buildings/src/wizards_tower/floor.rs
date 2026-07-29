@@ -7,7 +7,6 @@
 
 use bevy::prelude::{Color, PointLight, Transform, Visibility};
 use bevy::scene::prelude::{bsn, template_value, Scene};
-use bevy_math::bounding::Aabb3d;
 use bevy_math::Vec3;
 use lod::gen::LodScene;
 use lod::lod_ref::LodRef;
@@ -19,7 +18,6 @@ use richmond_building_components::stairs::SpiralStair;
 use crate::arc_spire::{uniform_storey_bindings, ArcSpire, ArcSpireParams, FitTolerance};
 use crate::arc_wall::{ArcWall, ArcWallParams};
 use crate::wizards_tower::floor_fill::{squared_floor_with_spire_hole, SPIRE_HALF_FRAC};
-use crate::wizards_tower::tower_lod::TowerLodFootprint;
 use crate::wizards_tower::must_assign_cardinal_portals;
 use crate::CellConstraints;
 
@@ -104,21 +102,83 @@ impl WizardsTowerFloor {
 		}
 	}
 
-	fn emit_external_features(&self, children: &mut Vec<Box<dyn Scene>>, lod_ref: &LodRef) {
+	pub(crate) fn emit_external_features(
+		&self,
+		children: &mut Vec<Box<dyn Scene>>,
+		lod_ref: &LodRef,
+	) {
 		for wall in &self.arc_wall.walls {
 			children.push(Box::new(wall.scene_with_lod(lod_ref)));
 		}
 	}
 
-	fn emit_internal_features(&self, children: &mut Vec<Box<dyn Scene>>, lod_ref: &LodRef) {
+	pub(crate) fn emit_internal_features(
+		&self,
+		children: &mut Vec<Box<dyn Scene>>,
+		lod_ref: &LodRef,
+	) {
+		use richmond_building_components::{confined_scene, ParentConfines};
+
+		// Floor-compartment ball for slabs / lantern.
+		let confines = ParentConfines::internal(
+			self.storey_confine_center(),
+			self.storey_confine_radius(),
+		);
 		for cap in &self.floor_caps {
-			children.push(Box::new(cap.scene_with_lod(lod_ref)));
+			children.push(Box::new(
+				cap.clone()
+					.with_confines(confines)
+					.scene_with_lod(lod_ref),
+			));
 		}
 		for rect in &self.floor_rects {
-			children.push(Box::new(rect.scene_with_lod(lod_ref)));
+			children.push(Box::new(
+				rect.clone()
+					.with_confines(confines)
+					.scene_with_lod(lod_ref),
+			));
 		}
-		children.push(Box::new(self.arc_spire.stairs.scene_with_lod(lod_ref)));
-		children.push(Box::new(self.lantern_scene()));
+		children.push(Box::new(confined_scene(confines, self.lantern_scene())));
+	}
+
+	/// Spire stair run gated by a shared vertical capsule (whole column shaft).
+	pub(crate) fn emit_spire_features(
+		&self,
+		children: &mut Vec<Box<dyn Scene>>,
+		lod_ref: &LodRef,
+		spire_confines: richmond_building_components::ParentConfines,
+	) {
+		children.push(Box::new(
+			self.arc_spire
+				.stairs
+				.clone()
+				.with_confines(spire_confines)
+				.scene_with_lod(lod_ref),
+		));
+	}
+
+	fn storey_confine_center(&self) -> Vec3 {
+		let aabb = &self.constraints.aabb;
+		Vec3::from((aabb.min + aabb.max) * 0.5)
+	}
+
+	fn storey_confine_radius(&self) -> f32 {
+		let aabb = &self.constraints.aabb;
+		let extent = aabb.max - aabb.min;
+		(0.5 * extent.x.min(extent.z)).max(1e-4)
+	}
+
+	/// Capsule for this storey alone (standalone floor present).
+	fn storey_spire_capsule(&self) -> richmond_building_components::ParentConfines {
+		use richmond_building_components::ParentConfines;
+		let aabb = &self.constraints.aabb;
+		let c = (aabb.min + aabb.max) * 0.5;
+		let r = (SPIRE_HALF_FRAC * self.storey_confine_radius()).max(1e-4);
+		ParentConfines::capsule(
+			Vec3::new(c.x, aabb.min.y, c.z),
+			Vec3::new(c.x, aabb.max.y, c.z),
+			r,
+		)
 	}
 
 	fn lantern_scene(&self) -> impl Scene + 'static {
@@ -137,29 +197,23 @@ impl WizardsTowerFloor {
 	}
 }
 
-impl TowerLodFootprint for WizardsTowerFloor {
-	fn lod_aabb(&self) -> &Aabb3d {
-		&self.constraints.aabb
-	}
-}
-
 impl LodScene for WizardsTowerFloor {
-	fn scene_lod_status(&self, lod_ref: &LodRef) -> lod::gen::LodSceneStatus {
-		let prev = self.band_for(lod_ref.previous_transform);
-		let curr = self.band_for(lod_ref.current_transform);
-		if prev == curr {
-			lod::gen::LodSceneStatus::Unchanged
-		} else {
-			lod::gen::LodSceneStatus::Changed
-		}
+	fn scene_lod_status(
+		&self,
+		_lod_ref: &LodRef,
+	) -> lod::gen::LodSceneStatus {
+		lod::gen::LodSceneStatus::Unchanged
 	}
 
-	fn scene_with_lod(&self, lod_ref: &LodRef) -> impl Scene + 'static {
+		fn scene_with_level(
+		&self,
+		lod_ref: &LodRef,
+		_level: lod::gen::LodSceneLevel,
+	) -> impl Scene + 'static {
 		let mut children: Vec<Box<dyn Scene>> = Vec::new();
 		self.emit_external_features(&mut children, lod_ref);
-		if self.is_near(lod_ref.current_transform) {
-			self.emit_internal_features(&mut children, lod_ref);
-		}
+		self.emit_internal_features(&mut children, lod_ref);
+		self.emit_spire_features(&mut children, lod_ref, self.storey_spire_capsule());
 		scene_children(children)
 	}
 }

@@ -111,6 +111,30 @@ impl WizardsTowerColumn {
 			Vec3::new(parent.max.x, y_max, parent.max.z),
 		)
 	}
+
+	/// One vertical capsule for the continuous spire shaft (all regular floors).
+	///
+	/// Radius matches the centered spire hole; reveal uses [`INTERNAL_REVEAL_FACTOR`].
+	pub fn spire_confine_capsule(&self) -> richmond_building_components::ParentConfines {
+		use crate::wizards_tower::floor_fill::SPIRE_HALF_FRAC;
+		use richmond_building_components::ParentConfines;
+
+		let aabb = &self.constraints.aabb;
+		let c = (aabb.min + aabb.max) * 0.5;
+		// Spire runs through regular floors only (perch has no stair run).
+		let floors_top = if self.floors.is_empty() {
+			aabb.min.y
+		} else {
+			aabb.min.y + self.floors.len() as f32 * self.storey_height
+		};
+		let footprint_r = 0.5 * (aabb.max.x - aabb.min.x).min(aabb.max.z - aabb.min.z);
+		let radius = (SPIRE_HALF_FRAC * footprint_r).max(1e-4);
+		ParentConfines::capsule(
+			Vec3::new(c.x, aabb.min.y, c.z),
+			Vec3::new(c.x, floors_top, c.z),
+			radius,
+		)
+	}
 }
 
 impl TowerLodFootprint for WizardsTowerColumn {
@@ -120,17 +144,18 @@ impl TowerLodFootprint for WizardsTowerColumn {
 }
 
 impl LodScene for WizardsTowerColumn {
-	fn scene_lod_status(&self, lod_ref: &LodRef) -> lod::gen::LodSceneStatus {
-		let prev = self.band_for(lod_ref.previous_transform);
-		let curr = self.band_for(lod_ref.current_transform);
-		if prev == curr {
-			lod::gen::LodSceneStatus::Unchanged
-		} else {
-			lod::gen::LodSceneStatus::Changed
-		}
+	fn scene_lod_status(
+		&self,
+		_lod_ref: &LodRef,
+	) -> lod::gen::LodSceneStatus {
+		lod::gen::LodSceneStatus::Unchanged
 	}
 
-	fn scene_with_lod(&self, lod_ref: &LodRef) -> impl Scene + 'static {
+		fn scene_with_level(
+		&self,
+		lod_ref: &LodRef,
+		_level: lod::gen::LodSceneLevel,
+	) -> impl Scene + 'static {
 		let mut children: Vec<Box<dyn Scene>> = self
 			.floors
 			.iter()
