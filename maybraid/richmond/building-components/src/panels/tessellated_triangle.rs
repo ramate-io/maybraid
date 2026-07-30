@@ -156,15 +156,18 @@ mod tests {
 	}
 
 	fn assert_same_triangle(got: [Vec2; 3], want: [Vec2; 3]) {
-		let mut g = got;
-		let mut w = want;
-		let key = |p: Vec2| (p.x.to_bits(), p.y.to_bits());
-		g.sort_by_key(|p| key(*p));
-		w.sort_by_key(|p| key(*p));
-		for (a, b) in g.iter().zip(w.iter()) {
+		// Match by nearest corner — bit-sort is unstable when TRS leaves ~1e-7 noise
+		// (e.g. 1.9999998 sorts before 2.0 and pairwise compare fails).
+		for w in want {
 			assert!(
-				(*a - *b).length() < 1e-4,
-				"triangle corners mismatch: got {got:?} want {want:?}"
+				got.iter().any(|g| (*g - w).length() < 1e-4),
+				"missing corner {w:?} in got {got:?} (want {want:?})"
+			);
+		}
+		for g in got {
+			assert!(
+				want.iter().any(|w| (*w - g).length() < 1e-4),
+				"unexpected corner {g:?} in got {got:?} (want {want:?})"
 			);
 		}
 	}
