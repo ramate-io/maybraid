@@ -37,11 +37,11 @@ Reusable linear-panel geometry shared by floors and partitions (roofs use roof-n
 
 | Type | Role |
 |------|------|
-| [`PanelGeometry`](src/panels/geometry.rs) | Shared enum: rectangle / right-triangle / tessellated-triangle / joint |
+| [`PanelGeometry`](src/panels/geometry.rs) | Shared enum: rectangle / right-triangle / tessellated-triangle |
 | [`PanelStyle`](src/panels/geometry.rs) | Kit capabilities (`has_rectangle`); domain styles map into it |
 | [`Rectangle`](src/panels/geometry.rs) / [`RightTriangle`](src/panels/geometry.rs) | Atomic kit footprints (lower-left panel space) |
 | [`TessellatedTriangle`](src/panels/tessellated_triangle.rs) | Three world points filled with posed right-triangle kits |
-| [`Joint`](src/panels/joint.rs) | Corner filler on the average inbound/outbound angle |
+| [`Joint`](src/panels/joint.rs) | Separate functional kind (not part of [`PanelGeometry`]) |
 
 **Panel space:** lower-left anchored — **X** along length, **Z** depth/run (top/eave at \(Z = 0\), bottom/ridge at \(Z = -\texttt{depth}\)). Domain nodes own extra orientation (roof pitch about \(+X\), wall upright framing, floor flat).
 
@@ -49,12 +49,12 @@ Decomposition is style-agnostic geometry (no `LodScene` required); style only ch
 
 ```text
 TessellatedTriangle.decompose() → Placed<RightTriangle>
-PanelGeometry::flatten(style)   → Placed<Rectangle | RightTriangle | Joint>
+PanelGeometry::flatten(style)   → Placed<Rectangle | RightTriangle>
 ```
 
 [`PanelStyle::has_rectangle`](src/panels/geometry.rs) is a kit capability (e.g. shepherd's thatch → triangles only; rough stonework → rectangles). Domains map `DomainStyle → PanelStyle`, flatten geometry, then map atoms to kits/GLBs. Shared placement remaps live in [`kit_space`](src/panels/kit_space.rs). Plan/slope helpers (`yaw_along_xz`, `roll_along_slope`) live in [`placement`](src/panels/placement.rs).
 
-[`FloorGeometry`](src/floors/geometry.rs) and [`PartitionGeometry`](src/partitions/geometry.rs) expose `TessellatedTriangle`. Higher-order polyline-of-lines paneling lives in [`richmond_buildings::DividedPaneling`](../buildings/src/divided_paneling.rs).
+[`FloorGeometry`](src/floors/geometry.rs) and [`PartitionGeometry`](src/partitions/geometry.rs) expose `TessellatedTriangle`.
 
 ## Urban art / assets
 
@@ -119,7 +119,7 @@ We have not yet defined a sweeping tool. The plan is to make it take linear segm
 
 ## Polyline partitions
 
-[`Partition::polyline`](src/partitions/geometry/polyline.rs) is a **short-run** thin-wall primitive: one [`PartitionNode`](src/partitions/node.rs) is a single LOD parent whose `scene_with_level` expands into posed linear + joint kits. Prefer splitting longer paths in higher-order constructs (`richmond_buildings::walling`). For panel fills over a polyline of dividing lines, use [`richmond_buildings::DividedPaneling`](../buildings/src/divided_paneling.rs).
+[`Partition::polyline`](src/partitions/geometry/polyline.rs) is a **short-run** thin-wall primitive: one [`PartitionNode`](src/partitions/node.rs) is a single LOD parent whose `scene_with_level` expands into posed linear + joint kits. Prefer splitting longer paths in higher-order constructs (`richmond_buildings::walling`).
 
 Each edge uses **horizontal** length \(L_{xz}\) with a suggested [`tile_width`](src/partitions/geometry/linear.rs) (default \(1\), unscaled ground kit \(X \in [0, 1]\)): \(n = \mathrm{round}(L_{xz}/\texttt{tile\_width})\) tiles stretch to width \(L_{xz}/n\). Starts lerp along the 3D path so path \(Y\) carries slope. Override with `with_tile_width`. Continuous [`LinearPartition::spanning`](src/partitions/geometry/linear.rs) uses the same fit on its span. Polyline tiles carry world path anchors plus stand-up pitch and wall scale themselves (`with_wall_scale`); the parent stays identity. Panels stay **plumb** (yaw + stand-up only).
 
@@ -160,7 +160,7 @@ Floors components come in three categories:
 - **Plank:** the floor component is a rectangle with Z = [-0.2, 0.2], Y = [-1.0, 1.0], and X = [-0.2, 0.2]. Often, we use plank components to fill under complicated polylines, hiding their ends in a partition wall or close to it. They are also quite useful in combination with other rectangular components to fill gaps without aggressive scaling differences per component. 
 - **Circle Inscribed Square:** the floor component is the southern- hemisphere difference between a circle and a square. The space removed by the inscribed square is roughly X = Z =[ -0.7, 0.7]. To completely fill in circular space, rotate four of these components around the center. Kit: `panels/rough_stonework/inscribed_square_001`.
 
-To fill irregular spaces, we commonly use rectangular or triangular tiling techniques--unless a more bespoke component such as the Circle Inscribed Square is provided. [`TessellatedTriangle`](src/panels/tessellated_triangle.rs) and higher-order [`DividedPaneling`](../buildings/src/divided_paneling.rs) are the preferred authoring path for moderate tiled regions; tiling techniques also include quadtree voxelization or a simple sweep of a repeated unit shape.
+To fill irregular spaces, we commonly use rectangular or triangular tiling techniques--unless a more bespoke component such as the Circle Inscribed Square is provided. [`TessellatedTriangle`](src/panels/tessellated_triangle.rs) is the preferred authoring path for moderate tiled triangular regions; tiling techniques also include quadtree voxelization or a simple sweep of a repeated unit shape.
 
 ## Stairs
 

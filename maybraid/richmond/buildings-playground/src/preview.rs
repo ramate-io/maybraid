@@ -17,7 +17,6 @@ use richmond_building_components::roofs::{Pitch, RoofGeometry, RoofNode};
 use richmond_building_components::scene_children;
 use richmond_building_components::Placement;
 use richmond_buildings::bedroom::Bedroom;
-use richmond_buildings::divided_paneling::{DividedNode, DividedPaneling};
 use richmond_buildings::stacked_rings::StackedRings;
 use richmond_buildings::walling::{
 	LinearWall, LinearWallParams, MustAssignPortal, NoisyPolylineWall, NoisyPolylineWallParams,
@@ -51,10 +50,6 @@ pub enum PreviewSubject {
 		b: Vec3,
 		c: Vec3,
 		tile_width: f32,
-	},
-	DividedPaneling {
-		tile_width: f32,
-		three_nodes: bool,
 	},
 	Polyline,
 	LinearWall,
@@ -128,11 +123,6 @@ impl PreviewConfig {
 					"preview: tessellated-triangle (a={a:?} b={b:?} c={c:?} tile={tile_width:.2})"
 				)
 			}
-			PreviewSubject::DividedPaneling { tile_width, three_nodes } => {
-				format!(
-					"preview: divided-paneling (tile={tile_width:.2} three_nodes={three_nodes})"
-				)
-			}
 			PreviewSubject::Polyline => "preview: partition polyline (L)".into(),
 			PreviewSubject::LinearWall => "preview: walling linear-wall (door)".into(),
 			PreviewSubject::PolylineWall => "preview: walling polyline-wall (door)".into(),
@@ -195,10 +185,6 @@ impl PreviewConfig {
 				let min = a.min(*b).min(*c) - Vec3::splat(0.2);
 				let max = a.max(*b).max(*c) + Vec3::splat(0.2);
 				Aabb3d::from_min_max(min, max)
-			}
-			PreviewSubject::DividedPaneling { three_nodes, .. } => {
-				let x_max = if *three_nodes { 4.0 } else { 2.0 };
-				Aabb3d::from_min_max(Vec3::new(0.0, -0.2, -1.2), Vec3::new(x_max, 0.2, 0.2))
 			}
 			PreviewSubject::Polyline | PreviewSubject::PolylineWall => {
 				Aabb3d::from_min_max(Vec3::new(0.0, 0.0, 0.0), Vec3::new(4.0, 3.0, 4.0))
@@ -389,32 +375,6 @@ pub fn present_preview_lod(
 				Placement::IDENTITY,
 			);
 			spawn_preview(&mut commands, transform, floor.scene_with_lod(&lod_ref));
-		}
-		PreviewSubject::DividedPaneling { tile_width, three_nodes } => {
-			let nodes = if *three_nodes {
-				vec![
-					DividedNode::new(Vec3::ZERO, Vec3::new(0.0, 0.0, -1.0)),
-					DividedNode::new(Vec3::new(2.0, 0.0, 0.0), Vec3::new(2.0, 0.0, -1.0)),
-					DividedNode::new(Vec3::new(4.0, 0.0, 0.0), Vec3::new(4.0, 0.0, -1.0)),
-				]
-			} else {
-				vec![
-					DividedNode::new(Vec3::ZERO, Vec3::new(0.0, 0.0, -1.0)),
-					DividedNode::new(Vec3::new(2.0, 0.0, 0.0), Vec3::new(2.0, 0.0, -1.0)),
-				]
-			};
-			let children: Vec<Box<dyn bevy::scene::Scene>> = DividedPaneling::new(nodes, *tile_width)
-				.tessellated_triangles()
-				.into_iter()
-				.map(|t| {
-					let floor = FloorNode::rough_stone(
-						FloorGeometry::tessellated_triangle(t),
-						Placement::IDENTITY,
-					);
-					Box::new(floor.scene_with_lod(&lod_ref)) as Box<dyn bevy::scene::Scene>
-				})
-				.collect();
-			spawn_preview(&mut commands, transform, scene_children(children));
 		}
 		PreviewSubject::Polyline => {
 			let node = PartitionNode::rough_stone(

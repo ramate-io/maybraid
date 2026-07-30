@@ -97,7 +97,6 @@ pub enum PanelGeometry {
 	RightTriangle(RightTriangle),
 	Rectangle(Rectangle),
 	TessellatedTriangle(crate::panels::TessellatedTriangle),
-	Joint(crate::panels::Joint),
 }
 
 impl PanelGeometry {
@@ -139,17 +138,16 @@ impl PanelGeometry {
 				}
 			}
 			Self::TessellatedTriangle(t) => t.decompose(),
-			Self::Joint(j) => vec![Placed::at_origin(Self::Joint(*j))],
 		}
 	}
 
-	/// Flatten composites to leaf atoms ([`Rectangle`], [`RightTriangle`], [`Joint`]).
+	/// Flatten composites to leaf atoms ([`Rectangle`], [`RightTriangle`]).
 	pub fn flatten(&self, style: PanelStyle) -> Vec<Placed<PanelGeometry>> {
 		flatten_placed(Placed::at_origin(self.clone()), style)
 	}
 
 	pub fn is_leaf_atom(&self) -> bool {
-		matches!(self, Self::Rectangle(_) | Self::RightTriangle(_) | Self::Joint(_))
+		matches!(self, Self::Rectangle(_) | Self::RightTriangle(_))
 	}
 }
 

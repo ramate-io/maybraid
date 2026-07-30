@@ -3,7 +3,6 @@
 pub mod arc_180;
 pub mod arc_90;
 pub mod bedroom;
-pub mod divided_paneling;
 pub mod linear;
 pub mod linear_wall;
 pub mod noisy_polyline_wall;
@@ -38,8 +37,6 @@ pub enum Show {
 	Pitch(pitch::Pitch),
 	/// Arbitrary 3D triangle filled with right-triangle kits.
 	TessellatedTriangle(tessellated_triangle::TessellatedTriangle),
-	/// Polyline of dividing lines → two tessellated triangles per segment.
-	DividedPaneling(divided_paneling::DividedPaneling),
 	/// L-shaped `Partition::polyline` (posed linears + joints).
 	Polyline(polyline::Polyline),
 	/// Portal-sensitive straight [`richmond_buildings::LinearWall`].
@@ -65,7 +62,6 @@ impl Show {
 			Self::Slice90(cmd) => cmd.into_preview(),
 			Self::Pitch(cmd) => cmd.into_preview(),
 			Self::TessellatedTriangle(cmd) => cmd.into_preview(),
-			Self::DividedPaneling(cmd) => cmd.into_preview(),
 			Self::Polyline(cmd) => cmd.into_preview(),
 			Self::LinearWall(cmd) => cmd.into_preview(),
 			Self::PolylineWall(cmd) => cmd.into_preview(),

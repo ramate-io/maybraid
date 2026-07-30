@@ -138,7 +138,6 @@ fn panel_to_tile(geom: PanelGeometry) -> Option<PartitionTile> {
 		PanelGeometry::RightTriangle(RightTriangle { mirror }) => {
 			Some(PartitionTile::RightTriangle { mirror })
 		}
-		PanelGeometry::Joint(_) => Some(PartitionTile::Joint),
 		_ => None,
 	}
 }

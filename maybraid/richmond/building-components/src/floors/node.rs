@@ -3,16 +3,15 @@
 use bevy::scene::prelude::Scene;
 use lod::gen::LodScene;
 use lod::lod_ref::LodRef;
-use scene_ref::MirrorAxis;
 
 use crate::assets::floors::rough_stonework::RECTANGLE;
-use crate::assets::panels::{rough_stonework::INSCRIBED_SQUARE, UNIT_RIGHT_TRIANGLE};
+use crate::assets::panels::rough_stonework::INSCRIBED_SQUARE;
 use crate::floors::geometry::FloorGeometry;
 use crate::floors::style::FloorStyle;
 use crate::floors::tessellate::FloorKit;
 use crate::floors::{
-	RoughStoneFloorArcFill, RoughStoneFloorStructFill, WoodFloorArcFill, WoodFloorRectangle,
-	WoodFloorStructFill,
+	RoughStoneFloorArcFill, RoughStoneFloorRightTriangle, RoughStoneFloorStructFill,
+	WoodFloorArcFill, WoodFloorRectangle, WoodFloorStructFill,
 };
 use crate::panels::to_centered_rect_placement;
 use crate::parent_confines::{confined_scene, ParentConfines};
@@ -48,13 +47,6 @@ impl FloorNode {
 	}
 }
 
-fn mirrored_triangle(
-	asset: crate::assets::AssetPath,
-	mirror: Option<MirrorAxis>,
-) -> scene_ref::SceneRef {
-	asset.scene_ref().with_mirror(mirror)
-}
-
 impl LodScene for FloorNode {
 	fn scene_lod_status(&self, _lod_ref: &LodRef) -> lod::gen::LodSceneStatus {
 		lod::gen::LodSceneStatus::Unchanged
@@ -81,7 +73,7 @@ impl LodScene for FloorNode {
 						}
 						FloorKit::RightTriangle { mirror } => Some(Box::new(with_pose(
 							transform,
-							mirrored_triangle(UNIT_RIGHT_TRIANGLE, mirror).scene(),
+							RoughStoneFloorRightTriangle::scene_with_lod_mirrored(lod_ref, mirror),
 						)) as Box<dyn Scene>),
 						FloorKit::CircleInscribedSquare => {
 							Some(Box::new(posed_glb(INSCRIBED_SQUARE, transform)) as Box<dyn Scene>)
@@ -94,20 +86,20 @@ impl LodScene for FloorNode {
 							transform,
 							RoughStoneFloorStructFill.scene_with_lod(lod_ref),
 						)) as Box<dyn Scene>),
-						FloorKit::Joint => None,
 					},
 					FloorStyle::Wood => {
 						let child: Box<dyn Scene> = match piece.geom {
 							FloorKit::Rectangle
 							| FloorKit::CircleInscribedSquare
-							| FloorKit::RightTriangle { .. } => Box::new(WoodFloorRectangle.scene_with_lod(lod_ref)),
+							| FloorKit::RightTriangle { .. } => {
+								Box::new(WoodFloorRectangle.scene_with_lod(lod_ref))
+							}
 							FloorKit::ArcFill(_) => {
 								Box::new(WoodFloorArcFill.scene_with_lod(lod_ref))
 							}
 							FloorKit::StructFill => {
 								Box::new(WoodFloorStructFill.scene_with_lod(lod_ref))
 							}
-							FloorKit::Joint => return None,
 						};
 						Some(Box::new(with_pose(transform, child)) as Box<dyn Scene>)
 					}

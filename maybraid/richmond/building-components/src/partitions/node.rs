@@ -9,7 +9,7 @@ use bevy_math::Vec3;
 use lod::gen::{LodScene, LodSceneLevel, LodSceneStatus};
 use lod::lod_ref::LodRef;
 
-use crate::assets::panels::UNIT_RIGHT_TRIANGLE;
+use crate::floors::RoughStoneFloorRightTriangle;
 use crate::lod_host::warm_content_host_hsl;
 use crate::parent_confines::{confined_scene, ParentConfines};
 use crate::partitions::geometry::{JointLod, LinearLod, PartitionGeometry, PartitionTile};
@@ -75,7 +75,7 @@ impl PartitionNode {
 						}
 						PartitionTile::RightTriangle { mirror } => Some(Box::new(with_pose(
 							transform,
-							UNIT_RIGHT_TRIANGLE.scene_ref().with_mirror(mirror).scene(),
+							RoughStoneFloorRightTriangle::scene_with_lod_mirrored(lod_ref, mirror),
 						)) as Box<dyn Scene>),
 						tile => {
 							if let Some(meshes) = tile.mesh_set() {

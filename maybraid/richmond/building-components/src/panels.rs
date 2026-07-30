@@ -1,4 +1,4 @@
-//! Shared panel geometry and tessellation (rectangles, right triangles, joints).
+//! Shared panel geometry and tessellation (rectangles, right triangles).
 //!
 //! Panel space is **lower-left** anchored like roof pitch layouts:
 //! - **X** along the long edge (length)
@@ -9,9 +9,10 @@
 //!
 //! ```text
 //! TessellatedTriangle.decompose() → Placed<RightTriangle>
-//! PanelGeometry::flatten(style)   → Placed<Rectangle | RightTriangle | Joint>
+//! PanelGeometry::flatten(style)   → Placed<Rectangle | RightTriangle>
 //! ```
-
+//!
+//! Circular joints are a separate functional kind ([`Joint`]), not panel geometry.
 mod geometry;
 mod joint;
 mod kit_space;

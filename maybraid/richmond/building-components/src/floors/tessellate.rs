@@ -15,7 +15,6 @@ pub(crate) enum FloorKit {
 	ArcFill(ArcKit),
 	StructFill,
 	CircleInscribedSquare,
-	Joint,
 }
 
 impl FloorGeometry {
@@ -61,7 +60,6 @@ fn map_leaves(pieces: Vec<Placed<PanelGeometry>>) -> Vec<Placed<FloorKit>> {
 				PanelGeometry::RightTriangle(RightTriangle { mirror }) => {
 					FloorKit::RightTriangle { mirror }
 				}
-				PanelGeometry::Joint(_) => FloorKit::Joint,
 				_ => return None,
 			};
 			Some(Placed { geom: kit, placement: p.placement })
