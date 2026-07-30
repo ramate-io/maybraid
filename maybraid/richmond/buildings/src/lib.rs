@@ -28,7 +28,9 @@ pub use constraints::{
 	JointCoordinate, JointEntry, PreJointSweep, SubsetError,
 };
 pub use stacked_rings::{StackedRing, StackedRings};
-pub use tessellated_triangle_panel::{project_triangle_to_panel_plane, TessellatedTrianglePanel};
+pub use tessellated_triangle_panel::{
+	project_triangle_to_panel_plane, TessellatedTrianglePanel, TessellatedTrianglePanelDebugPlugin,
+};
 pub use walling::{
 	ArcRegion, ArcWall, ArcWallParams, AssignedPortal, LinearWall, LinearWallParams,
 	MustAssignPortal, NoisyPolylineWall, NoisyPolylineWallParams, PolylineWall, PolylineWallParams,

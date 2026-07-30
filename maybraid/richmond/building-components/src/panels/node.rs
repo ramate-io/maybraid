@@ -49,7 +49,9 @@ impl LodScene for PanelNode {
 			.flatten(self.style.kit_caps())
 			.into_iter()
 			.filter_map(|piece| {
-				let transform = pose(self.placement.compose_child(piece.placement));
+				// Transform multiply (not euler-add compose_child) so parent pitch/roll
+				// compose correctly with in-plane kit yaw.
+				let transform = pose(self.placement) * pose(piece.placement);
 				match self.style {
 					PanelStyle::RoughStonework => match piece.geom {
 						PanelGeometry::Rectangle(Rectangle) => {
