@@ -39,6 +39,10 @@ pub fn posed_glb(asset: AssetPath, transform: Transform) -> impl Scene + 'static
 }
 
 /// Wrap a child scene with an applied pose transform.
+///
+/// Merges [`Transform`] onto the child's root entity. Prefer [`posed_scene`] when
+/// the child already inserts its own [`Transform`] (e.g. [`scene_children`]), so
+/// the pose becomes a parent rather than fighting the child's identity transform.
 pub fn with_pose(transform: Transform, child: impl Scene + 'static) -> impl Scene + 'static {
 	(
 		child,
@@ -46,6 +50,19 @@ pub fn with_pose(transform: Transform, child: impl Scene + 'static) -> impl Scen
 			template_value(transform)
 		},
 	)
+}
+
+/// Parent `child` under a new root carrying `transform` (and [`Visibility`]).
+///
+/// Use this to apply a world/cell pose to a group whose root already has
+/// [`Transform`] (see [`scene_children`]).
+pub fn posed_scene(transform: Transform, child: impl Scene + 'static) -> impl Scene + 'static {
+	let children: Vec<Box<dyn Scene>> = vec![Box::new(child)];
+	bsn! {
+		template_value(transform)
+		Visibility::default()
+		Children [ {children} ]
+	}
 }
 
 /// Posed line-list cube using pre-registered mesh/material handles.

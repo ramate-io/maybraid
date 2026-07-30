@@ -17,6 +17,7 @@ use richmond_building_components::scene_children;
 use richmond_building_components::Placement;
 use richmond_buildings::bedroom::Bedroom;
 use richmond_buildings::stacked_rings::StackedRings;
+use richmond_buildings::tessellated_triangle_panel::TessellatedTrianglePanel;
 use richmond_buildings::walling::{
 	LinearWall, LinearWallParams, MustAssignPortal, NoisyPolylineWall, NoisyPolylineWallParams,
 	PolylineWall, PolylineWallParams, Portal, Walling,
@@ -48,6 +49,11 @@ pub enum PreviewSubject {
 		a: Vec2,
 		b: Vec2,
 		c: Vec2,
+	},
+	TessellatedTriangle3d {
+		a: Vec3,
+		b: Vec3,
+		c: Vec3,
 	},
 	Polyline,
 	LinearWall,
@@ -119,6 +125,9 @@ impl PreviewConfig {
 			PreviewSubject::TessellatedTriangle { a, b, c } => {
 				format!("preview: tessellated-triangle (a={a:?} b={b:?} c={c:?})")
 			}
+			PreviewSubject::TessellatedTriangle3d { a, b, c } => {
+				format!("preview: tessellated-triangle-3d (a={a:?} b={b:?} c={c:?})")
+			}
 			PreviewSubject::Polyline => "preview: partition polyline (L)".into(),
 			PreviewSubject::LinearWall => "preview: walling linear-wall (door)".into(),
 			PreviewSubject::PolylineWall => "preview: walling polyline-wall (door)".into(),
@@ -183,6 +192,11 @@ impl PreviewConfig {
 				let min_z = a.y.min(b.y).min(c.y) - 0.2;
 				let max_z = a.y.max(b.y).max(c.y) + 0.2;
 				Aabb3d::from_min_max(Vec3::new(min_x, -0.2, min_z), Vec3::new(max_x, 0.2, max_z))
+			}
+			PreviewSubject::TessellatedTriangle3d { a, b, c } => {
+				let min = a.min(*b).min(*c) - Vec3::splat(0.2);
+				let max = a.max(*b).max(*c) + Vec3::splat(0.2);
+				Aabb3d::from_min_max(min, max)
 			}
 			PreviewSubject::Polyline | PreviewSubject::PolylineWall => {
 				Aabb3d::from_min_max(Vec3::new(0.0, 0.0, 0.0), Vec3::new(4.0, 3.0, 4.0))
@@ -367,6 +381,10 @@ pub fn present_preview_lod(
 				PanelGeometry::tessellated_triangle(TessellatedTriangle::new(*a, *b, *c)),
 				Placement::IDENTITY,
 			);
+			spawn_preview(&mut commands, transform, panel.scene_with_lod(&lod_ref));
+		}
+		PreviewSubject::TessellatedTriangle3d { a, b, c } => {
+			let panel = TessellatedTrianglePanel::rough_stone(*a, *b, *c);
 			spawn_preview(&mut commands, transform, panel.scene_with_lod(&lod_ref));
 		}
 		PreviewSubject::Polyline => {

@@ -12,6 +12,7 @@ pub mod polyline_wall;
 pub mod slice_90;
 pub mod stacked_rings;
 pub mod tessellated_triangle;
+pub mod tessellated_triangle_3d;
 pub mod transform;
 pub mod wizards_tower;
 
@@ -35,8 +36,10 @@ pub enum Show {
 	Slice90(slice_90::Slice90),
 	/// Shepherd's-thatch pitched face (`rise`/`run`/`length`/`left`/`right`).
 	Pitch(pitch::Pitch),
-	/// Arbitrary 3D triangle filled with right-triangle kits.
+	/// Arbitrary panel-space triangle filled with right-triangle kits.
 	TessellatedTriangle(tessellated_triangle::TessellatedTriangle),
+	/// World-space triangle → 2D panel tessellation → posed onto the plane.
+	TessellatedTriangle3d(tessellated_triangle_3d::TessellatedTriangle3d),
 	/// L-shaped `Partition::polyline` (posed linears + joints).
 	Polyline(polyline::Polyline),
 	/// Portal-sensitive straight [`richmond_buildings::LinearWall`].
@@ -62,6 +65,7 @@ impl Show {
 			Self::Slice90(cmd) => cmd.into_preview(),
 			Self::Pitch(cmd) => cmd.into_preview(),
 			Self::TessellatedTriangle(cmd) => cmd.into_preview(),
+			Self::TessellatedTriangle3d(cmd) => cmd.into_preview(),
 			Self::Polyline(cmd) => cmd.into_preview(),
 			Self::LinearWall(cmd) => cmd.into_preview(),
 			Self::PolylineWall(cmd) => cmd.into_preview(),

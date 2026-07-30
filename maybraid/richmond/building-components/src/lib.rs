@@ -43,7 +43,7 @@ pub use roofs::{
 	update_roof_host_levels, Pitch, RoofGeometry, RoofLodBand, RoofLodProbe, RoofNode, RoofStyle,
 	ROOF_HIGH_FACTOR, ROOF_LOW_FACTOR, ROOF_MEDIUM_FACTOR,
 };
-pub use scene_children::{pose, posed_glb, scene_children, wireframe_box_with_handles, with_pose};
+pub use scene_children::{pose, posed_glb, posed_scene, scene_children, wireframe_box_with_handles, with_pose};
 
 use bevy::scene::{ResolveContext, ResolvedScene};
 
