@@ -5,9 +5,7 @@ use clap::{Args, Subcommand};
 use crozon_character_items::ClothingMesh;
 use crozon_characters::species::{
 	common::{EyeMesh, HairMesh},
-	tapp::{
-		TappBeakColor, TappBeakMesh, TappConfig, TappEyeColor, TappPlumageColor,
-	},
+	tapp::{TappBeakColor, TappBeakMesh, TappConfig, TappEyeColor, TappPlumageColor},
 };
 
 use crate::{animation::ConceptAnimation, preview::ConceptPreviewConfig};

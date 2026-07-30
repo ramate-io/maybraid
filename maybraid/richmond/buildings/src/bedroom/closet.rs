@@ -28,12 +28,7 @@ impl Closet {
 	pub fn new(constraints: CellConstraints, open_face: FaceKind) -> Self {
 		let walls = Self::shell_walls(&constraints, open_face);
 		let wardrobe = FurnitureNode::wardrobe(placement_filling_aabb(&constraints.aabb));
-		Self {
-			constraints,
-			open_face,
-			walls,
-			wardrobe,
-		}
+		Self { constraints, open_face, walls, wardrobe }
 	}
 
 	/// Shell walls with a doorway leave on `open_face` (already swing-budgeted by layout).
@@ -49,12 +44,7 @@ impl Closet {
 		let thick = 0.12_f32 / 0.2;
 
 		let mut walls = Vec::new();
-		for face in [
-			FaceKind::Front,
-			FaceKind::Back,
-			FaceKind::Left,
-			FaceKind::Right,
-		] {
+		for face in [FaceKind::Front, FaceKind::Back, FaceKind::Left, FaceKind::Right] {
 			if !owns_face_as_cell(constraints, face) {
 				continue;
 			}
@@ -84,23 +74,11 @@ fn push_full_face_wall(
 	match face {
 		FaceKind::Front => walls.push(PartitionNode::rough_stone(
 			Partition::linear(),
-			wall_placement_from_centered(
-				Vec3::new(cx, y0, aabb.min.z),
-				0.0,
-				half_x,
-				h,
-				thick,
-			),
+			wall_placement_from_centered(Vec3::new(cx, y0, aabb.min.z), 0.0, half_x, h, thick),
 		)),
 		FaceKind::Back => walls.push(PartitionNode::rough_stone(
 			Partition::linear(),
-			wall_placement_from_centered(
-				Vec3::new(cx, y0, aabb.max.z),
-				0.0,
-				half_x,
-				h,
-				thick,
-			),
+			wall_placement_from_centered(Vec3::new(cx, y0, aabb.max.z), 0.0, half_x, h, thick),
 		)),
 		FaceKind::Left => walls.push(PartitionNode::rough_stone(
 			Partition::linear(),
@@ -138,11 +116,7 @@ fn push_opening_return(
 	match face {
 		FaceKind::Front | FaceKind::Back => {
 			let half_x = size.x * 0.5;
-			let z = if face == FaceKind::Front {
-				aabb.min.z
-			} else {
-				aabb.max.z
-			};
+			let z = if face == FaceKind::Front { aabb.min.z } else { aabb.max.z };
 			// Short return on the −X side of the opening.
 			walls.push(PartitionNode::rough_stone(
 				Partition::linear(),
@@ -157,11 +131,7 @@ fn push_opening_return(
 		}
 		FaceKind::Left | FaceKind::Right => {
 			let half_z = size.z * 0.5;
-			let x = if face == FaceKind::Left {
-				aabb.min.x
-			} else {
-				aabb.max.x
-			};
+			let x = if face == FaceKind::Left { aabb.min.x } else { aabb.max.x };
 			walls.push(PartitionNode::rough_stone(
 				Partition::linear(),
 				wall_placement_from_centered(
@@ -178,14 +148,11 @@ fn push_opening_return(
 }
 
 impl LodScene for Closet {
-	fn scene_lod_status(
-		&self,
-		_lod_ref: &LodRef,
-	) -> lod::gen::LodSceneStatus {
+	fn scene_lod_status(&self, _lod_ref: &LodRef) -> lod::gen::LodSceneStatus {
 		lod::gen::LodSceneStatus::Unchanged
 	}
 
-		fn scene_with_level(
+	fn scene_with_level(
 		&self,
 		lod_ref: &LodRef,
 		_level: lod::gen::LodSceneLevel,

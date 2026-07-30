@@ -56,11 +56,7 @@ impl SonyakAssets {
 	fn head_rig() -> ResolvedCharacterPart {
 		ResolvedCharacterPart::new(
 			CharacterPartSlot::HeadRig,
-			CharacterAsset::new(
-				"OrthogradeHeadRig",
-				HEAD_RIG,
-				AssetNormalization::base_y(0.6),
-			),
+			CharacterAsset::new("OrthogradeHeadRig", HEAD_RIG, AssetNormalization::base_y(0.6)),
 			SkinTarget::OwnRig,
 			Some(SocketAttachment {
 				rig: SocketRig::Body,
@@ -124,7 +120,11 @@ impl SonyakAssets {
 	fn mane() -> ResolvedCharacterPart {
 		ResolvedCharacterPart::new(
 			CharacterPartSlot::Hair,
-			CharacterAsset::new("thick-braids", HAIR_THICK_BRAIDS, AssetNormalization::centroid(1.0)),
+			CharacterAsset::new(
+				"thick-braids",
+				HAIR_THICK_BRAIDS,
+				AssetNormalization::centroid(1.0),
+			),
 			SkinTarget::HeadRig,
 			Some(Self::head_socket(
 				"crown_socket",

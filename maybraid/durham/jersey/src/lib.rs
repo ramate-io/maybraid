@@ -33,9 +33,9 @@ pub use stamp::{
 pub use stamps::{
 	BasinWater, BasinWaterParams, Canyon, CanyonParams, CanyonVariant, CaveNetwork,
 	CaveNetworkParams, CaveSegment, CaveSegmentKind, HydrologyComplex, HydrologyComplexKind,
-	HydrologyComplexParams, KarstNavClass, KarstPocket, KarstPocketParams, MassifStyle,
-	PlateauCap, PlateauCapParams, PlateauFootprint, PlateauSurfaceClass, PocketTermination,
-	PocketWater, PocketWaterParams, RollingGround, RollingGroundParams, RuggedMassif,
-	RuggedMassifParams, ValleyBasin, ValleyBasinParams, ValleyCrossSection, ValleyFloorKind,
-	ValleyTrain, ValleyTrainParams, ValleyTrainSegment, ValleyTrainSegmentRole,
+	HydrologyComplexParams, KarstNavClass, KarstPocket, KarstPocketParams, MassifStyle, PlateauCap,
+	PlateauCapParams, PlateauFootprint, PlateauSurfaceClass, PocketTermination, PocketWater,
+	PocketWaterParams, RollingGround, RollingGroundParams, RuggedMassif, RuggedMassifParams,
+	ValleyBasin, ValleyBasinParams, ValleyCrossSection, ValleyFloorKind, ValleyTrain,
+	ValleyTrainParams, ValleyTrainSegment, ValleyTrainSegmentRole,
 };

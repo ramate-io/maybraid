@@ -27,12 +27,7 @@ pub struct CanyonParams {
 
 impl Default for CanyonParams {
 	fn default() -> Self {
-		Self {
-			variant: CanyonVariant::Unchained,
-			width_frac: 0.12,
-			depth: 28.0,
-			confinement: 0.8,
-		}
+		Self { variant: CanyonVariant::Unchained, width_frac: 0.12, depth: 28.0, confinement: 0.8 }
 	}
 }
 
@@ -95,11 +90,7 @@ impl Canyon {
 				let s2 = (2 * n) / 3;
 				let segments = [
 					(&path[s0..=s1.min(n - 1)], base_w * 0.7, depth * 1.2),
-					(
-						&path[s1.min(n - 1)..=s2.min(n - 1)],
-						base_w * 1.15,
-						depth,
-					),
+					(&path[s1.min(n - 1)..=s2.min(n - 1)], base_w * 1.15, depth),
 					(&path[s2.min(n - 1)..], base_w * 1.35, depth * 0.65),
 				];
 				for (seg, w, d) in segments {
@@ -145,11 +136,7 @@ impl Canyon {
 			seed,
 			params,
 			path: path.clone(),
-			stamp: StampSet {
-				modulations,
-				spine: path,
-				semantics,
-			},
+			stamp: StampSet { modulations, spine: path, semantics },
 		}
 	}
 

@@ -15,19 +15,13 @@ pub mod valley_train;
 pub use basin_water::{BasinWater, BasinWaterParams};
 pub use canyon::{Canyon, CanyonParams, CanyonVariant};
 pub use cave_network::{CaveNetwork, CaveNetworkParams, CaveSegment, CaveSegmentKind};
-pub use hydrology_complex::{
-	HydrologyComplex, HydrologyComplexKind, HydrologyComplexParams,
-};
+pub use hydrology_complex::{HydrologyComplex, HydrologyComplexKind, HydrologyComplexParams};
 pub use karst_pocket::{KarstNavClass, KarstPocket, KarstPocketParams};
-pub use plateau_cap::{
-	PlateauCap, PlateauCapParams, PlateauFootprint, PlateauSurfaceClass,
-};
+pub use plateau_cap::{PlateauCap, PlateauCapParams, PlateauFootprint, PlateauSurfaceClass};
 pub use pocket_water::{PocketTermination, PocketWater, PocketWaterParams};
 pub use rolling_ground::{RollingGround, RollingGroundParams};
 pub use rugged_massif::{MassifStyle, RuggedMassif, RuggedMassifParams};
-pub use valley_basin::{
-	ValleyBasin, ValleyBasinParams, ValleyCrossSection, ValleyFloorKind,
-};
+pub use valley_basin::{ValleyBasin, ValleyBasinParams, ValleyCrossSection, ValleyFloorKind};
 pub use valley_train::{
 	ValleyTrain, ValleyTrainParams, ValleyTrainSegment, ValleyTrainSegmentRole,
 };

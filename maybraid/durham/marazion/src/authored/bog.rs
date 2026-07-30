@@ -8,8 +8,6 @@
 //! Basin noise itself is depth-incentive ([`BasinBackfillParams::depth_frac`]);
 //! [`BogBasinFill`] chooses how aggressively that freeboard is filled / crested.
 
-use crate::primitive::backfill::BasinBackfillParams;
-use crate::primitive::complex::HydroComplex;
 use crate::authored::lake::build::{build_bowl, LakeBowl, LakeLayout};
 use crate::authored::lake::shelf::{
 	aspect_u01, planned_center as planned_center_impl, rim_width_u01, rotation_u11, shelf_levels,
@@ -17,6 +15,8 @@ use crate::authored::lake::shelf::{
 };
 use crate::authored::lake::{LakeBandBudget, LakeParams};
 use crate::authored::noise::scale_noise_freq;
+use crate::primitive::backfill::BasinBackfillParams;
+use crate::primitive::complex::HydroComplex;
 use bevy_math::Vec2;
 use procedural_common::Bounds2;
 
@@ -129,8 +129,7 @@ impl Bog {
 		let rim_u = rim_width_u01(seed, min, lake_p);
 		let asp = aspect_u01(seed, min);
 		let rot = rotation_u11(seed, min);
-		let budget =
-			LakeBandBudget::try_inscribed(bounds, center, lake_p, u, rim_u, asp, rot)?;
+		let budget = LakeBandBudget::try_inscribed(bounds, center, lake_p, u, rim_u, asp, rot)?;
 
 		let levels = shelf_levels(seed, min, center, &budget, lake_p, height_at);
 		let layout = LakeLayout { center, budget, levels };
@@ -142,12 +141,9 @@ impl Bog {
 			scale_noise_freq(params.basin.freq, short_water, lake_p.apron.noise_freq_power);
 		// Cover jittered_depth high end (~1.35× authored).
 		let freeboard = lake_p.depth.max(0.0) * 1.35;
-		let basin = BasinBackfillParams {
-			freq: basin_freq,
-			..params.basin
-		}
-		.near_surface(freeboard, params.fill.peak_above_w, params.fill.crest_unit)
-		.sample_over_freeboard(freeboard, seed, BASIN_BACKFILL_SALT);
+		let basin = BasinBackfillParams { freq: basin_freq, ..params.basin }
+			.near_surface(freeboard, params.fill.peak_above_w, params.fill.crest_unit)
+			.sample_over_freeboard(freeboard, seed, BASIN_BACKFILL_SALT);
 
 		// Basin replaces the lake's abundant rim backfill for bog peaking.
 		bowl.node.backfill = Some(basin);
@@ -205,14 +201,12 @@ mod tests {
 	#[test]
 	fn from_bounds_hydro_plus_basin_backfill() -> anyhow::Result<()> {
 		let bounds = Bounds2::from_xz(0.0, 0.0, 320.0, 320.0);
-		let bog = Bog::from_bounds(bounds, 11, BogParams::default(), Some(&|_, _| 40.0)).expect("bog");
+		let bog =
+			Bog::from_bounds(bounds, 11, BogParams::default(), Some(&|_, _| 40.0)).expect("bog");
 		let compiled = bog.clone().into_complex().compile();
 		assert!(compiled.has_hydro());
 		assert!(!compiled.fills.is_empty());
-		assert!(matches!(
-			compiled.fills[0].surface,
-			WaterSurface::Hydro { .. }
-		));
+		assert!(matches!(compiled.fills[0].surface, WaterSurface::Hydro { .. }));
 		let node = &compiled.complex.hydrology[0];
 		anyhow::ensure!(
 			matches!(node.backfill, Some(HydroBackfill::Basin(_))),
@@ -230,10 +224,7 @@ mod tests {
 			"basin backfill should raise interior: bare={h_bare} full={h_full}"
 		);
 		let h_out = compiled.modify_elevation(base, outside.x, outside.y);
-		anyhow::ensure!(
-			(h_out - base).abs() < 1e-3,
-			"far field identity: {h_out}"
-		);
+		anyhow::ensure!((h_out - base).abs() < 1e-3, "far field identity: {h_out}");
 		Ok(())
 	}
 

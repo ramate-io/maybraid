@@ -4,9 +4,7 @@ use bevy::prelude::*;
 use clap::{Args, Subcommand};
 use crozon_character_items::ClothingMesh;
 use crozon_characters::species::{
-	chupri::{
-		ChupriBeakColor, ChupriBeakMesh, ChupriConfig, ChupriEyeColor, ChupriPlumageColor,
-	},
+	chupri::{ChupriBeakColor, ChupriBeakMesh, ChupriConfig, ChupriEyeColor, ChupriPlumageColor},
 	common::{EyeMesh, HairMesh},
 };
 

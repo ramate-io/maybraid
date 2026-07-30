@@ -25,11 +25,7 @@ pub struct Brokker {
 
 impl Brokker {
 	pub fn from_config(config: &BrokkerConfig) -> Self {
-		Self {
-			eye: config.eye,
-			hair: config.hair,
-			colors: config.colors.clone(),
-		}
+		Self { eye: config.eye, hair: config.hair, colors: config.colors.clone() }
 	}
 }
 

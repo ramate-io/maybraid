@@ -24,9 +24,7 @@ use richmond_building_components::partitions::{
 use richmond_building_components::scene_children;
 use richmond_building_components::Placement;
 
-use crate::constraints::{
-	BoundaryOwnershipEntry, BoundaryOwnershipStatus, FaceKind,
-};
+use crate::constraints::{BoundaryOwnershipEntry, BoundaryOwnershipStatus, FaceKind};
 use crate::wizards_tower::floor_fill::{FLOOR_SLAB_Y_SCALE, RECT_HALF_EXTENT};
 use crate::CellConstraints;
 use procedural_common::NoiseParams;
@@ -50,11 +48,7 @@ impl Bedroom {
 	}
 
 	/// Same as [`Self::new`] with explicit spaciousness / occupancy budgets.
-	pub fn with_fill(
-		constraints: CellConstraints,
-		noise: f32,
-		fill: BedroomFillParams,
-	) -> Self {
+	pub fn with_fill(constraints: CellConstraints, noise: f32, fill: BedroomFillParams) -> Self {
 		let noise = NoiseParams {
 			seed: (noise.clamp(0.0, 1.0) * 1_000_000.0) as i32,
 			..NoiseParams::default()
@@ -86,27 +80,16 @@ impl Bedroom {
 		let floor = room_floor(&constraints);
 		let walls = room_outer_walls(&constraints);
 
-		Self {
-			constraints,
-			floor,
-			walls,
-			closets,
-			beds,
-			nightstands,
-			ensuites,
-		}
+		Self { constraints, floor, walls, closets, beds, nightstands, ensuites }
 	}
 }
 
 impl LodScene for Bedroom {
-	fn scene_lod_status(
-		&self,
-		_lod_ref: &LodRef,
-	) -> lod::gen::LodSceneStatus {
+	fn scene_lod_status(&self, _lod_ref: &LodRef) -> lod::gen::LodSceneStatus {
 		lod::gen::LodSceneStatus::Unchanged
 	}
 
-		fn scene_with_level(
+	fn scene_with_level(
 		&self,
 		lod_ref: &LodRef,
 		_level: lod::gen::LodSceneLevel,
@@ -133,9 +116,7 @@ impl LodScene for Bedroom {
 }
 
 fn subset_or_owned(parent: &CellConstraints, aabb: Aabb3d) -> CellConstraints {
-	parent
-		.subset(aabb)
-		.unwrap_or_else(|_| CellConstraints::cell_owned(aabb))
+	parent.subset(aabb).unwrap_or_else(|_| CellConstraints::cell_owned(aabb))
 }
 
 fn room_floor(constraints: &CellConstraints) -> FloorNode {
@@ -180,26 +161,14 @@ fn room_outer_walls(constraints: &CellConstraints) -> Vec<PartitionNode> {
 	if owns_face_as_cell(constraints, FaceKind::Front) {
 		walls.push(PartitionNode::rough_stone(
 			Partition::linear(),
-			wall_placement_from_centered(
-				Vec3::new(cx, y0, aabb.min.z),
-				0.0,
-				half_x,
-				h,
-				thick,
-			),
+			wall_placement_from_centered(Vec3::new(cx, y0, aabb.min.z), 0.0, half_x, h, thick),
 		));
 	}
 	// +Z / Back
 	if owns_face_as_cell(constraints, FaceKind::Back) {
 		walls.push(PartitionNode::rough_stone(
 			Partition::linear(),
-			wall_placement_from_centered(
-				Vec3::new(cx, y0, aabb.max.z),
-				0.0,
-				half_x,
-				h,
-				thick,
-			),
+			wall_placement_from_centered(Vec3::new(cx, y0, aabb.max.z), 0.0, half_x, h, thick),
 		));
 	}
 	// −X / Left
@@ -241,16 +210,12 @@ pub(crate) fn placement_filling_aabb(aabb: &Aabb3d) -> Placement {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use crate::constraints::{
-		BoundaryOwnershipEntry, BoundaryOwnershipStatus, CellConstraints,
-	};
+	use crate::constraints::{BoundaryOwnershipEntry, BoundaryOwnershipStatus, CellConstraints};
 
 	#[test]
 	fn room_outer_walls_skip_parent_owned_faces() -> anyhow::Result<()> {
-		let mut constraints = CellConstraints::cell_owned(Aabb3d::from_min_max(
-			Vec3::ZERO,
-			Vec3::new(4.0, 3.0, 3.5),
-		));
+		let mut constraints =
+			CellConstraints::cell_owned(Aabb3d::from_min_max(Vec3::ZERO, Vec3::new(4.0, 3.0, 3.5)));
 		constraints.boundary_ownership.front =
 			Some(BoundaryOwnershipEntry::Whole(BoundaryOwnershipStatus::Parent));
 		constraints.boundary_ownership.left =
@@ -264,10 +229,8 @@ mod tests {
 
 	#[test]
 	fn cell_owned_room_emits_all_four_walls() -> anyhow::Result<()> {
-		let constraints = CellConstraints::cell_owned(Aabb3d::from_min_max(
-			Vec3::ZERO,
-			Vec3::new(4.0, 3.0, 3.5),
-		));
+		let constraints =
+			CellConstraints::cell_owned(Aabb3d::from_min_max(Vec3::ZERO, Vec3::new(4.0, 3.0, 3.5)));
 		assert_eq!(room_outer_walls(&constraints).len(), 4);
 		Ok(())
 	}

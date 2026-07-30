@@ -25,11 +25,6 @@ impl FurnitureGeometry {
 	}
 
 	/// All kinds (for wireframe material registration).
-	pub const ALL: [Self; 5] = [
-		Self::Bed,
-		Self::Wardrobe,
-		Self::Nightstand,
-		Self::Vanity,
-		Self::Toilet,
-	];
+	pub const ALL: [Self; 5] =
+		[Self::Bed, Self::Wardrobe, Self::Nightstand, Self::Vanity, Self::Toilet];
 }

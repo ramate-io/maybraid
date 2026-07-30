@@ -52,8 +52,7 @@ impl<R: QuadrupedRig> Animation<R> for QuadrupedGallop<R> {
 			);
 		}
 
-		let spine_flex =
-			bound_spine_flex(bound_u, self.hind_bound_pitch, self.front_bound_pitch);
+		let spine_flex = bound_spine_flex(bound_u, self.hind_bound_pitch, self.front_bound_pitch);
 		apply_spine(rig, spine_flex * 0.35, spine_flex);
 		apply_neck(rig, -spine_flex * self.neck_follow);
 
@@ -135,8 +134,7 @@ mod tests {
 				let Some(gallop_pose) = from_gallop.pose().get(&bone) else {
 					continue;
 				};
-				let template_pose =
-					from_template.pose().get(&bone).context("template pose")?;
+				let template_pose = from_template.pose().get(&bone).context("template pose")?;
 				assert!(
 					(gallop_pose.swing - template_pose.swing).abs() < 1e-5,
 					"swing mismatch on {bone} at {phase}"
@@ -207,14 +205,10 @@ mod tests {
 		let mut rig = QuadrupedV0Rig::imported();
 		QuadrupedGallop::<QuadrupedV0Rig>::default().apply(&mut rig, 0.03);
 
-		let hind_left = rig
-			.pose()
-			.get(&rig.hind_leg(Side::Left).thigh.name)
-			.context("hind left")?;
-		let hind_right = rig
-			.pose()
-			.get(&rig.hind_leg(Side::Right).thigh.name)
-			.context("hind right")?;
+		let hind_left =
+			rig.pose().get(&rig.hind_leg(Side::Left).thigh.name).context("hind left")?;
+		let hind_right =
+			rig.pose().get(&rig.hind_leg(Side::Right).thigh.name).context("hind right")?;
 		assert!(
 			(hind_left.swing - hind_right.swing).abs() < 0.35,
 			"hind pair should stay near phase during the hind bound"
@@ -251,10 +245,7 @@ mod tests {
 			let swings = sample(phase)?;
 			for (bone, (swing, prev_swing)) in bones.iter().zip(swings.iter().zip(&prev)) {
 				let delta = (swing - prev_swing).abs();
-				assert!(
-					delta < 0.08,
-					"leg jerk on {bone} at phase {phase}: delta={delta}"
-				);
+				assert!(delta < 0.08, "leg jerk on {bone} at phase {phase}: delta={delta}");
 			}
 			prev = swings;
 		}
@@ -266,18 +257,13 @@ mod tests {
 		let gallop = QuadrupedGallop::<QuadrupedV0Rig>::default();
 		let mut rig_prev = QuadrupedV0Rig::imported();
 		gallop.apply(&mut rig_prev, 0.0);
-		let mut prev = rig_prev
-			.pose()
-			.get(&rig_prev.spine().lumbar.name)
-			.context("lumbar")?
-			.flex;
+		let mut prev = rig_prev.pose().get(&rig_prev.spine().lumbar.name).context("lumbar")?.flex;
 
 		for step in 1..=200 {
 			let phase = step as f32 / 200.0;
 			let mut rig = QuadrupedV0Rig::imported();
 			gallop.apply(&mut rig, phase);
-			let flex =
-				rig.pose().get(&rig.spine().lumbar.name).context("lumbar")?.flex;
+			let flex = rig.pose().get(&rig.spine().lumbar.name).context("lumbar")?.flex;
 			let delta = (flex - prev).abs();
 			assert!(
 				delta < 0.08,
@@ -291,8 +277,11 @@ mod tests {
 	#[test]
 	fn gallop_spine_gathers_at_hind_strike_and_extends_at_front_strike() {
 		let gallop = QuadrupedGallop::<QuadrupedV0Rig>::default();
-		let gathered =
-			bound_spine_flex(SPINE_GATHER_CENTER, gallop.hind_bound_pitch, gallop.front_bound_pitch);
+		let gathered = bound_spine_flex(
+			SPINE_GATHER_CENTER,
+			gallop.hind_bound_pitch,
+			gallop.front_bound_pitch,
+		);
 		let extended = bound_spine_flex(
 			SPINE_GATHER_CENTER + 0.5,
 			gallop.hind_bound_pitch,

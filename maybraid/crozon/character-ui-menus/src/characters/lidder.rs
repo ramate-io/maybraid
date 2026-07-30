@@ -1,5 +1,6 @@
 use character_ui_menu::{
-	AssetSingleSelect, CameraFocus, MenuComponent, MenuNode, PreviewColor, Section, SwatchSingleSelect,
+	AssetSingleSelect, CameraFocus, MenuComponent, MenuNode, PreviewColor, Section,
+	SwatchSingleSelect,
 };
 use crozon_character_items::{ClothingMesh, ItemColor};
 use crozon_characters::{
@@ -107,10 +108,15 @@ impl MenuComponent<MenuEvent> for LidderHeadMenu {
 				"Head",
 				&self.head,
 				PreviewColor::of(self.plumage.value),
-				|value| MenuEvent::SetAsset(CharacterField::LidderHead, AssetValue::LidderHead(value)),
+				|value| {
+					MenuEvent::SetAsset(CharacterField::LidderHead, AssetValue::LidderHead(value))
+				},
 			),
 			MenuNode::swatch("Plumage", &self.plumage, |color| {
-				MenuEvent::SetSwatch(CharacterField::LidderPlumageColor, SwatchValue::LidderPlumage(color))
+				MenuEvent::SetSwatch(
+					CharacterField::LidderPlumageColor,
+					SwatchValue::LidderPlumage(color),
+				)
 			}),
 		])
 	}
@@ -132,10 +138,15 @@ impl MenuComponent<MenuEvent> for LidderHeadFeaturesMenu {
 				"Beak",
 				&self.beak,
 				PreviewColor::of(self.beak_color.value),
-				|value| MenuEvent::SetAsset(CharacterField::LidderBeak, AssetValue::LidderBeak(value)),
+				|value| {
+					MenuEvent::SetAsset(CharacterField::LidderBeak, AssetValue::LidderBeak(value))
+				},
 			),
 			MenuNode::swatch("Beak Color", &self.beak_color, |color| {
-				MenuEvent::SetSwatch(CharacterField::LidderBeakColor, SwatchValue::LidderBeak(color))
+				MenuEvent::SetSwatch(
+					CharacterField::LidderBeakColor,
+					SwatchValue::LidderBeak(color),
+				)
 			}),
 		])
 	}

@@ -15,8 +15,8 @@ use crate::parent_confines::{confined_scene, ParentConfines};
 use crate::partitions::geometry::{JointLod, LinearLod, PartitionGeometry, PartitionTile};
 use crate::partitions::probe::PartitionLodProbe;
 use crate::partitions::rough_stonework::{
-	RoughStoneworkSlice180, RoughStoneworkJoint, RoughStoneworkLinearSliceSubsegment,
-	RoughStoneworkLinearSubsegment,
+	RoughStoneworkJoint, RoughStoneworkLinearSliceSubsegment, RoughStoneworkLinearSubsegment,
+	RoughStoneworkSlice180,
 };
 use crate::partitions::style::PartitionStyle;
 use crate::placed::Placement;
@@ -34,12 +34,7 @@ pub struct PartitionNode {
 
 impl PartitionNode {
 	pub fn new(style: PartitionStyle, geometry: PartitionGeometry, placement: Placement) -> Self {
-		Self {
-			style,
-			geometry,
-			placement,
-			confines: ParentConfines::External,
-		}
+		Self { style, geometry, placement, confines: ParentConfines::External }
 	}
 
 	pub fn rough_stone(geometry: PartitionGeometry, placement: Placement) -> Self {
@@ -141,15 +136,8 @@ impl LodScene for PartitionNode {
 		self.placement.partition_lod_status(lod_ref)
 	}
 
-	fn scene_with_level(
-		&self,
-		lod_ref: &LodRef,
-		level: LodSceneLevel,
-	) -> impl Scene + 'static {
-		confined_scene(
-			self.confines,
-			scene_children(self.kit_scenes_for_level(lod_ref, level)),
-		)
+	fn scene_with_level(&self, lod_ref: &LodRef, level: LodSceneLevel) -> impl Scene + 'static {
+		confined_scene(self.confines, scene_children(self.kit_scenes_for_level(lod_ref, level)))
 	}
 
 	fn scene_with_lod(&self, lod_ref: &LodRef) -> impl Scene + 'static {

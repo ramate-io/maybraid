@@ -38,20 +38,20 @@ use character_ui_menu::{CameraFocus, FocusRig};
 use crozon_character_playground::CameraController;
 use crozon_character_ui_menus::characters::brenal::BODY_FOCUS as BRENAL_BODY_FOCUS;
 use crozon_character_ui_menus::characters::caole::BODY_FOCUS as CAOLE_BODY_FOCUS;
-use crozon_character_ui_menus::characters::epiphant::BODY_FOCUS as EPIPHANT_BODY_FOCUS;
-use crozon_character_ui_menus::characters::hars::BODY_FOCUS as HARS_BODY_FOCUS;
-use crozon_character_ui_menus::characters::ylter::BODY_FOCUS as YILTER_BODY_FOCUS;
-use crozon_character_ui_menus::characters::sonyak::BODY_FOCUS as SONYAK_BODY_FOCUS;
 use crozon_character_ui_menus::characters::claber::BODY_FOCUS as CLABER_BODY_FOCUS;
 use crozon_character_ui_menus::characters::croconot::BODY_FOCUS as CROCONOT_BODY_FOCUS;
+use crozon_character_ui_menus::characters::epiphant::BODY_FOCUS as EPIPHANT_BODY_FOCUS;
+use crozon_character_ui_menus::characters::hars::BODY_FOCUS as HARS_BODY_FOCUS;
+use crozon_character_ui_menus::characters::sonyak::BODY_FOCUS as SONYAK_BODY_FOCUS;
 use crozon_character_ui_menus::characters::tuberwaber::BODY_FOCUS as TUBERWABER_BODY_FOCUS;
-use crozon_character_ui_menus::focus::SPIBMOM_BODY_FOCUS;
+use crozon_character_ui_menus::characters::ylter::BODY_FOCUS as YILTER_BODY_FOCUS;
 use crozon_character_ui_menus::focus::CHUPRI_BODY_FOCUS;
-use crozon_character_ui_menus::focus::TIPPLE_BODY_FOCUS;
-use crozon_character_ui_menus::focus::SMALL_BIRD_BODY_FOCUS;
 use crozon_character_ui_menus::focus::GRENER_BODY_FOCUS;
-use crozon_character_ui_menus::focus::THUMPLUS_BODY_FOCUS;
 use crozon_character_ui_menus::focus::MISTLER_BODY_FOCUS;
+use crozon_character_ui_menus::focus::SMALL_BIRD_BODY_FOCUS;
+use crozon_character_ui_menus::focus::SPIBMOM_BODY_FOCUS;
+use crozon_character_ui_menus::focus::THUMPLUS_BODY_FOCUS;
+use crozon_character_ui_menus::focus::TIPPLE_BODY_FOCUS;
 use crozon_character_ui_menus::BODY_FOCUS;
 
 use crate::{
@@ -123,9 +123,7 @@ pub fn default_focus_target(config: &ConceptPreviewConfig) -> CameraFocus {
 		| crate::preview::ConceptSpecies::Kispar
 		| crate::preview::ConceptSpecies::Tapp
 		| crate::preview::ConceptSpecies::Kaller
-		| crate::preview::ConceptSpecies::Kappler => {
-			SMALL_BIRD_BODY_FOCUS
-		}
+		| crate::preview::ConceptSpecies::Kappler => SMALL_BIRD_BODY_FOCUS,
 		crate::preview::ConceptSpecies::Grener => GRENER_BODY_FOCUS,
 		crate::preview::ConceptSpecies::Thumplus => THUMPLUS_BODY_FOCUS,
 		crate::preview::ConceptSpecies::Mistler => MISTLER_BODY_FOCUS,
@@ -233,9 +231,9 @@ fn resolve_focus_transform(
 		return None;
 	}
 
-	let neck_awaiting = shadow_rigs
-		.iter()
-		.any(|(_, rig, _, _, awaiting_socket)| rig.role == CharacterRigRole::Neck && awaiting_socket);
+	let neck_awaiting = shadow_rigs.iter().any(|(_, rig, _, _, awaiting_socket)| {
+		rig.role == CharacterRigRole::Neck && awaiting_socket
+	});
 
 	for (bone_map, rig, rig_global, _, awaiting_socket) in shadow_rigs.iter() {
 		if !rig_role_matches(focus.rig, rig.role) {
@@ -307,10 +305,7 @@ fn log_focus_waiting(
 		.collect::<Vec<_>>()
 		.join("; ");
 	let status = if status.is_empty() { "shadow rig missing".to_string() } else { status };
-	warn!(
-		"[camera-focus] waiting trigger={trigger:?} {} {status}",
-		focus_summary(focus),
-	);
+	warn!("[camera-focus] waiting trigger={trigger:?} {} {status}", focus_summary(focus),);
 	**last_wait_log = trigger;
 }
 

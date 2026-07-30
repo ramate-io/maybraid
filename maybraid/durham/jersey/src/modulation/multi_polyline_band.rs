@@ -6,7 +6,9 @@
 //! \(\gamma\) blends apron targets before a single raise-only apply.
 
 use crate::modulation::polyline_grading::PolylineGradeMode;
-use crate::region::{closest_on_polyline, grade_along_polyline, PolylineRegion, Region2D, RegionNoise};
+use crate::region::{
+	closest_on_polyline, grade_along_polyline, PolylineRegion, Region2D, RegionNoise,
+};
 use bevy_math::Vec2;
 
 /// One corridor contributing to a multi-path band modulation.
@@ -49,8 +51,7 @@ impl MultiPolylineBandPart {
 	}
 
 	fn softmask_at(&self, p: Vec2) -> f32 {
-		self.region()
-			.softmask_weight(p, 0.0, self.fade, self.boundary_noise.as_ref())
+		self.region().softmask_weight(p, 0.0, self.fade, self.boundary_noise.as_ref())
 	}
 
 	fn grade_at(&self, p: Vec2) -> f32 {
@@ -225,8 +226,12 @@ impl MultiPolylineOffsetPart {
 	}
 
 	fn softmask_at(&self, p: Vec2) -> f32 {
-		Region2D::Polyline(PolylineRegion::new(self.path.clone(), self.half_width))
-			.softmask_weight(p, 0.0, self.fade, self.boundary_noise.as_ref())
+		Region2D::Polyline(PolylineRegion::new(self.path.clone(), self.half_width)).softmask_weight(
+			p,
+			0.0,
+			self.fade,
+			self.boundary_noise.as_ref(),
+		)
 	}
 
 	fn path_distance(&self, p: Vec2) -> f32 {
@@ -279,16 +284,14 @@ impl MultiPolylineOffsetModulation {
 		let mut noise = 0.0;
 		if let Some(hn) = &self.height_noise {
 			let s = hn.sample_height(p);
-			noise = if self.height_noise_add_only {
-				s.abs()
-			} else {
-				s
-			};
+			noise = if self.height_noise_add_only { s.abs() } else { s };
 		}
 		if self.winner_take_all {
-			let Some((owner, _)) = weights.iter().enumerate().max_by(|(_, a), (_, b)| {
-				a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal)
-			}) else {
+			let Some((owner, _)) = weights
+				.iter()
+				.enumerate()
+				.max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
+			else {
 				return elevation;
 			};
 			let part = &self.parts[owner];
@@ -401,10 +404,7 @@ mod tests {
 		);
 		let m = MultiPolylineBandModulation::new(vec![a, b], 0.15).raise_only();
 		let h = m.modify_elevation(0.0, 20.0, 5.0);
-		assert!(
-			h > 20.0 && h < 40.0,
-			"midline between parallel aprons should blend: {h}"
-		);
+		assert!(h > 20.0 && h < 40.0, "midline between parallel aprons should blend: {h}");
 		Ok(())
 	}
 

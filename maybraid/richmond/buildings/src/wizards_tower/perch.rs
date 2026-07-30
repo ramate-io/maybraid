@@ -53,13 +53,7 @@ impl WizardsTowerPerch {
 			optional_portals: (0, 2),
 		});
 
-		Self {
-			storey_height,
-			arc_wall,
-			floor_caps,
-			floor_rects,
-			constraints,
-		}
+		Self { storey_height, arc_wall, floor_caps, floor_rects, constraints }
 	}
 
 	pub(crate) fn emit_external_features(
@@ -79,23 +73,13 @@ impl WizardsTowerPerch {
 	) {
 		use richmond_building_components::ParentConfines;
 
-		let confines = ParentConfines::internal(
-			self.storey_confine_center(),
-			self.storey_confine_radius(),
-		);
+		let confines =
+			ParentConfines::internal(self.storey_confine_center(), self.storey_confine_radius());
 		for cap in &self.floor_caps {
-			children.push(Box::new(
-				cap.clone()
-					.with_confines(confines)
-					.scene_with_lod(lod_ref),
-			));
+			children.push(Box::new(cap.clone().with_confines(confines).scene_with_lod(lod_ref)));
 		}
 		for rect in &self.floor_rects {
-			children.push(Box::new(
-				rect.clone()
-					.with_confines(confines)
-					.scene_with_lod(lod_ref),
-			));
+			children.push(Box::new(rect.clone().with_confines(confines).scene_with_lod(lod_ref)));
 		}
 	}
 
@@ -112,14 +96,11 @@ impl WizardsTowerPerch {
 }
 
 impl LodScene for WizardsTowerPerch {
-	fn scene_lod_status(
-		&self,
-		_lod_ref: &LodRef,
-	) -> lod::gen::LodSceneStatus {
+	fn scene_lod_status(&self, _lod_ref: &LodRef) -> lod::gen::LodSceneStatus {
 		lod::gen::LodSceneStatus::Unchanged
 	}
 
-		fn scene_with_level(
+	fn scene_with_level(
 		&self,
 		lod_ref: &LodRef,
 		_level: lod::gen::LodSceneLevel,

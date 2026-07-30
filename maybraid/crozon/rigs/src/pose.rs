@@ -103,12 +103,7 @@ pub struct RigPoseLayer {
 
 impl RigPoseLayer {
 	pub fn new(label: &'static str) -> Self {
-		Self {
-			label,
-			scales: Vec::new(),
-			translations: Vec::new(),
-			rotations: Vec::new(),
-		}
+		Self { label, scales: Vec::new(), translations: Vec::new(), rotations: Vec::new() }
 	}
 
 	pub fn with_scale(mut self, scale: BoneScale) -> Self {

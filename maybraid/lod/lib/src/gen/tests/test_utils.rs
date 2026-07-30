@@ -405,7 +405,12 @@ impl_presenter!(Moss, moss);
 impl RegionPresenter<Vegetation, WorldIndex> for RecordingPresenter {
 	presenter_methods!(vegetation);
 
-	fn present_with_descendants(&mut self, spatial_index: &WorldIndex, region: Aabb3d, lod_ref: &LodRef) {
+	fn present_with_descendants(
+		&mut self,
+		spatial_index: &WorldIndex,
+		region: Aabb3d,
+		lod_ref: &LodRef,
+	) {
 		RegionPresenter::<Terrain, WorldIndex>::present(self, spatial_index, region, lod_ref);
 		RegionPresenter::<Vegetation, WorldIndex>::present(self, spatial_index, region, lod_ref);
 		RegionPresenter::<Tree, WorldIndex>::present(self, spatial_index, region, lod_ref);

@@ -12,9 +12,7 @@ use crate::roofs::style::RoofStyle;
 /// Atomic roof kit pieces.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) enum RoofKit {
-	RightTriangle {
-		mirror: Option<MirrorAxis>,
-	},
+	RightTriangle { mirror: Option<MirrorAxis> },
 	Rectangle,
 	DomeArc(ArcKit),
 }
@@ -23,13 +21,11 @@ impl RoofGeometry {
 	pub(crate) fn kit_pieces_for_style(&self, style: RoofStyle) -> Vec<Placed<RoofKit>> {
 		let panel_style = PanelStyle::from(style);
 		match self {
-			Self::Pitch(p) => map_leaves(
-				PanelGeometry::Quad(p.to_quad()).flatten(panel_style),
-			),
+			Self::Pitch(p) => map_leaves(PanelGeometry::Quad(p.to_quad()).flatten(panel_style)),
 			Self::Quad(q) => map_leaves(PanelGeometry::Quad(*q).flatten(panel_style)),
-			Self::QuadPolyline(pl) => map_leaves(
-				PanelGeometry::QuadPolyline(pl.clone()).flatten(panel_style),
-			),
+			Self::QuadPolyline(pl) => {
+				map_leaves(PanelGeometry::QuadPolyline(pl.clone()).flatten(panel_style))
+			}
 			Self::Dome(g) => decompose_arc_sweep(g.sweep_degrees)
 				.into_iter()
 				.map(|(kit, yaw)| Placed::new(RoofKit::DomeArc(kit), Vec3::ZERO, yaw))
@@ -50,10 +46,7 @@ fn map_leaves(pieces: Vec<Placed<PanelGeometry>>) -> Vec<Placed<RoofKit>> {
 				PanelGeometry::Joint(_) => return None,
 				_ => return None,
 			};
-			Some(Placed {
-				geom: kit,
-				placement: p.placement,
-			})
+			Some(Placed { geom: kit, placement: p.placement })
 		})
 		.collect()
 }
@@ -92,39 +85,25 @@ mod tests {
 
 	#[test]
 	fn left_end_shifts_rectangle_and_anchors_at_zero() -> anyhow::Result<()> {
-		let pitch = Pitch::new(1.0, 1.0, 1.0)
-			.with_length(2.0)
-			.with_left(0.5);
+		let pitch = Pitch::new(1.0, 1.0, 1.0).with_length(2.0).with_left(0.5);
 		let pieces = kit_pieces(&RoofGeometry::pitch(pitch));
 		assert_eq!(pieces[0].translation().x, 0.5);
 		assert_eq!(pieces[0].scale().x, 0.5);
-		assert_eq!(
-			pieces[0].geom,
-			RoofKit::RightTriangle {
-				mirror: Some(MirrorAxis::X),
-			}
-		);
+		assert_eq!(pieces[0].geom, RoofKit::RightTriangle { mirror: Some(MirrorAxis::X) });
 		assert_eq!(pieces[1].translation().x, 0.5);
 		Ok(())
 	}
 
 	#[test]
 	fn negative_right_uses_flipped_complement() -> anyhow::Result<()> {
-		let pitch = Pitch::new(1.0, 2.0, 1.0)
-			.with_length(1.0)
-			.with_right(-0.75);
+		let pitch = Pitch::new(1.0, 2.0, 1.0).with_length(1.0).with_right(-0.75);
 		let pieces = kit_pieces(&RoofGeometry::pitch(pitch));
 		let end = pieces.last().expect("right end");
 		assert_eq!(end.yaw(), PI);
 		assert!((end.translation().x - 1.0).abs() < 1e-4);
 		assert!((end.translation().z - (-2.0)).abs() < 1e-4);
 		assert!((end.scale().x - 0.75).abs() < 1e-4);
-		assert_eq!(
-			end.geom,
-			RoofKit::RightTriangle {
-				mirror: Some(MirrorAxis::X),
-			}
-		);
+		assert_eq!(end.geom, RoofKit::RightTriangle { mirror: Some(MirrorAxis::X) });
 		Ok(())
 	}
 
@@ -162,9 +141,7 @@ mod tests {
 	fn dome_forty_five_is_three_fifteens() -> anyhow::Result<()> {
 		let pieces = kit_pieces(&RoofGeometry::dome(45.0));
 		assert_eq!(pieces.len(), 3);
-		assert!(pieces
-			.iter()
-			.all(|p| p.geom == RoofKit::DomeArc(ArcKit::D15)));
+		assert!(pieces.iter().all(|p| p.geom == RoofKit::DomeArc(ArcKit::D15)));
 		Ok(())
 	}
 

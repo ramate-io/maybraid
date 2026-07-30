@@ -62,7 +62,7 @@ impl CpuMeshGenerator {
 					// to avoid terraced artifacts. Use voxel-based transition zone.
 					// Only sample at START, not END (end of one interval = start of next, so redundant)
 					const TRANSITION_VOXELS: usize = 3; // Sample 3 voxels at start of each interval
-					
+
 					let mut y_current = 0;
 					for interval in intervals.into_iter() {
 						let start_time = std::time::Instant::now();
@@ -105,7 +105,7 @@ impl CpuMeshGenerator {
 									// where sign changes occur (surface transitions)
 									// Then fill the middle with constants for performance
 									let interval_size = y_finish - y_begin;
-									
+
 									// If interval is small, just sample everything
 									if interval_size <= TRANSITION_VOXELS * 2 {
 										for yi in y_begin..y_finish {
@@ -121,7 +121,7 @@ impl CpuMeshGenerator {
 											let distance = sdf_clone.distance(Vec3::new(wx, wy, wz));
 											slice[yi * nx + x] = distance;
 										}
-										
+
 										// Fill the middle with constant value (fast sparse skip)
 										let fill_start = start_sample_end;
 										let fill_end = y_finish.saturating_sub(TRANSITION_VOXELS);
@@ -135,7 +135,7 @@ impl CpuMeshGenerator {
 												slice[yi * nx + x] = fill_value;
 											}
 										}
-										
+
 										// Sample at END boundary (where next interval starts = surface transition)
 										for yi in fill_end.max(fill_start)..y_finish {
 											let wy = chunk_origin.y + yi as f32 * cube_size;

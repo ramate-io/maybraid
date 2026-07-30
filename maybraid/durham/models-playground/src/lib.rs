@@ -12,22 +12,22 @@ pub use game_commands::command::PendingStartupCommand;
 pub use player::PlaygroundMode;
 
 use avian3d::prelude::LinearVelocity;
+use bevy::math::{IVec2, UVec2};
 use bevy::prelude::*;
 use camera::{camera_controller, refocus_camera_on_layout, setup_camera};
 use commands::{
 	PendingCellLayoutPatch, RequestCellShow, RequestMeshStats, RequestModeCharacter,
 	RequestModeFree,
 };
-use durham_terrain::shaders::{DurhamTerrainShader, DurhamTerrainShaderPlugin};
 use debug_bounds::{
 	draw_chunk_boundary_boxes, setup_cell_location_hud, toggle_bounds_overlay,
 	update_bounds_legend_visibility, update_cell_location_hud, PlaygroundDebugOverlay,
 };
-use bevy::math::{IVec2, UVec2};
+use durham_terrain::shaders::{DurhamTerrainShader, DurhamTerrainShaderPlugin};
 use durham_terrain_models::{
 	AvianTerrainIndex, BaseTerrainNoise, ComposedTerrain, ComposedWater, DurhamTerrainModelsPlugin,
-	OuterCellRing, Terrain, TerrainCellLayout, TerrainConfig, TerrainEntryStore, TerrainMeshLodBand,
-	TerrainPresentationAssets, TerrainRegionPresenter, TerrainStoreView, Water,
+	OuterCellRing, Terrain, TerrainCellLayout, TerrainConfig, TerrainEntryStore,
+	TerrainMeshLodBand, TerrainPresentationAssets, TerrainRegionPresenter, TerrainStoreView, Water,
 	WaterPresentationAssets, WaterRegionPresenter, WaterStoreView, TERRAIN_CELL_SIZE,
 };
 use game_commands::command::{capture_command_line_input, GameCommandPlugin};
@@ -70,18 +70,13 @@ pub struct WorldBaseTerrain(pub BaseTerrainNoise);
 
 fn playground_cell_layout() -> TerrainCellLayout {
 	let mut layout = TerrainCellLayout::default();
-	layout.origin = IVec2::new(-PLAYGROUND_FINE_HALF_EXTENT_CELLS, -PLAYGROUND_FINE_HALF_EXTENT_CELLS);
+	layout.origin =
+		IVec2::new(-PLAYGROUND_FINE_HALF_EXTENT_CELLS, -PLAYGROUND_FINE_HALF_EXTENT_CELLS);
 	let n = (2 * PLAYGROUND_FINE_HALF_EXTENT_CELLS) as u32;
 	layout.extents = UVec2::new(n, n);
 	layout.outer_rings = vec![
-		OuterCellRing {
-			cell_size: 2.0 * TERRAIN_CELL_SIZE,
-			rows: PLAYGROUND_OUTER_2X_ROWS,
-		},
-		OuterCellRing {
-			cell_size: 4.0 * TERRAIN_CELL_SIZE,
-			rows: PLAYGROUND_OUTER_4X_ROWS,
-		},
+		OuterCellRing { cell_size: 2.0 * TERRAIN_CELL_SIZE, rows: PLAYGROUND_OUTER_2X_ROWS },
+		OuterCellRing { cell_size: 4.0 * TERRAIN_CELL_SIZE, rows: PLAYGROUND_OUTER_4X_ROWS },
 	];
 	layout
 }
@@ -153,19 +148,11 @@ impl Plugin for TerrainModelsPlaygroundPlugin {
 
 fn setup_lighting(mut commands: Commands) {
 	commands.spawn((
-		DirectionalLight {
-			illuminance: 12_000.0,
-			shadow_maps_enabled: true,
-			..default()
-		},
+		DirectionalLight { illuminance: 12_000.0, shadow_maps_enabled: true, ..default() },
 		Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, -PI / 4.0, PI / 4.0, 0.0)),
 	));
 	commands.spawn((
-		DirectionalLight {
-			illuminance: 2_500.0,
-			shadow_maps_enabled: false,
-			..default()
-		},
+		DirectionalLight { illuminance: 2_500.0, shadow_maps_enabled: false, ..default() },
 		Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, PI / 4.0, -PI / 4.0, 0.0)),
 	));
 }
@@ -197,9 +184,7 @@ pub(crate) fn setup_presentation_assets(
 		reflectance: 0.6,
 		..default()
 	});
-	commands.insert_resource(WaterPresentationAssets {
-		material: water_material,
-	});
+	commands.insert_resource(WaterPresentationAssets { material: water_material });
 }
 
 fn apply_cell_commands(

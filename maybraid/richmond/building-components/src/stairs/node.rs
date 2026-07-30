@@ -25,12 +25,7 @@ pub struct StairNode {
 
 impl StairNode {
 	pub fn new(style: StairStyle, geometry: StairGeometry, placement: Placement) -> Self {
-		Self {
-			style,
-			geometry,
-			placement,
-			confines: ParentConfines::External,
-		}
+		Self { style, geometry, placement, confines: ParentConfines::External }
 	}
 
 	pub fn rough_stone(geometry: StairGeometry, placement: Placement) -> Self {
@@ -48,14 +43,11 @@ impl StairNode {
 }
 
 impl LodScene for StairNode {
-	fn scene_lod_status(
-		&self,
-		_lod_ref: &LodRef,
-	) -> lod::gen::LodSceneStatus {
+	fn scene_lod_status(&self, _lod_ref: &LodRef) -> lod::gen::LodSceneStatus {
 		lod::gen::LodSceneStatus::Unchanged
 	}
 
-		fn scene_with_level(
+	fn scene_with_level(
 		&self,
 		lod_ref: &LodRef,
 		_level: lod::gen::LodSceneLevel,
@@ -68,9 +60,7 @@ impl LodScene for StairNode {
 				let transform = pose(piece.placement);
 				match self.style {
 					StairStyle::RoughStonework => match piece.geom {
-						StairKit::Tread => {
-							Box::new(posed_glb(TREAD, transform)) as Box<dyn Scene>
-						}
+						StairKit::Tread => Box::new(posed_glb(TREAD, transform)) as Box<dyn Scene>,
 						StairKit::Spiral => Box::new(with_pose(
 							transform,
 							RoughStoneSpiralStair.scene_with_lod(lod_ref),

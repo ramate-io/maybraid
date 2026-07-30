@@ -122,10 +122,8 @@ impl CellConstraints {
 
 		for face in FaceKind::ALL {
 			if !face.is_coincident(&self.aabb, &child_aabb) {
-				ownership.set(
-					face,
-					Some(BoundaryOwnershipEntry::Whole(BoundaryOwnershipStatus::Cell)),
-				);
+				ownership
+					.set(face, Some(BoundaryOwnershipEntry::Whole(BoundaryOwnershipStatus::Cell)));
 				thickness.set(face, Some(BoundaryThicknessEntry::default()));
 				circulation.set(face, None);
 				joints.set(face, None);
@@ -193,9 +191,7 @@ mod tests {
 			Vec3::new(10.0, 10.0, 10.0),
 		));
 		let child = Aabb3d::from_min_max(Vec3::new(2.0, 2.0, 2.0), Vec3::new(4.0, 4.0, 4.0));
-		let sub = parent
-			.subset(child)
-			.map_err(|e| anyhow::anyhow!("subset failed: {e:?}"))?;
+		let sub = parent.subset(child).map_err(|e| anyhow::anyhow!("subset failed: {e:?}"))?;
 		assert_eq!(
 			sub.boundary_ownership.left,
 			Some(BoundaryOwnershipEntry::Whole(BoundaryOwnershipStatus::Cell))
@@ -213,17 +209,12 @@ mod tests {
 		parent.boundary_ownership.bottom =
 			Some(BoundaryOwnershipEntry::Whole(BoundaryOwnershipStatus::Parent));
 		parent.circulation.bottom = Some(CirculationEntry(vec![(
-			Aabb2d {
-				min: Vec2::new(0.0, 0.0),
-				max: Vec2::new(1.0, 1.0),
-			},
+			Aabb2d { min: Vec2::new(0.0, 0.0), max: Vec2::new(1.0, 1.0) },
 			vec![CirculationRequestStatus::Required],
 		)]));
 
 		let child = Aabb3d::from_min_max(Vec3::new(0.0, 0.0, 0.0), Vec3::new(5.0, 5.0, 5.0));
-		let sub = parent
-			.subset(child)
-			.map_err(|e| anyhow::anyhow!("subset failed: {e:?}"))?;
+		let sub = parent.subset(child).map_err(|e| anyhow::anyhow!("subset failed: {e:?}"))?;
 		assert_eq!(
 			sub.boundary_ownership.bottom,
 			Some(BoundaryOwnershipEntry::Whole(BoundaryOwnershipStatus::Parent))

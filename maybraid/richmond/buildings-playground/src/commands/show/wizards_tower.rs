@@ -18,9 +18,6 @@ pub struct WizardsTower {
 
 impl WizardsTower {
 	pub fn into_preview(self) -> (PreviewSubject, Transform) {
-		(
-			PreviewSubject::WizardsTower { noise: self.noise },
-			self.transform.transform(),
-		)
+		(PreviewSubject::WizardsTower { noise: self.noise }, self.transform.transform())
 	}
 }

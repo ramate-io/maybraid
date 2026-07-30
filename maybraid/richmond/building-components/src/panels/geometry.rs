@@ -29,12 +29,8 @@ pub struct PanelStyle {
 }
 
 impl PanelStyle {
-	pub const WITH_RECTANGLE: Self = Self {
-		has_rectangle: true,
-	};
-	pub const TRIANGLES_ONLY: Self = Self {
-		has_rectangle: false,
-	};
+	pub const WITH_RECTANGLE: Self = Self { has_rectangle: true };
+	pub const TRIANGLES_ONLY: Self = Self { has_rectangle: false };
 }
 
 impl From<RoofStyle> for PanelStyle {
@@ -87,9 +83,7 @@ impl RightTriangle {
 	}
 
 	pub fn mirrored(mirror: MirrorAxis) -> Self {
-		Self {
-			mirror: Some(mirror),
-		}
+		Self { mirror: Some(mirror) }
 	}
 }
 
@@ -129,8 +123,8 @@ impl PanelGeometry {
 					vec![Placed::at_origin(Self::Rectangle(*r))]
 				} else {
 					// Unit square as dual triangles (identity placement; caller scale applies).
-					use std::f32::consts::PI;
 					use bevy_math::Vec3;
+					use std::f32::consts::PI;
 					vec![
 						Placed::with_placement(
 							Self::RightTriangle(RightTriangle { mirror: None }),
@@ -155,17 +149,11 @@ impl PanelGeometry {
 	}
 
 	pub fn is_leaf_atom(&self) -> bool {
-		matches!(
-			self,
-			Self::Rectangle(_) | Self::RightTriangle(_) | Self::Joint(_)
-		)
+		matches!(self, Self::Rectangle(_) | Self::RightTriangle(_) | Self::Joint(_))
 	}
 }
 
-fn flatten_placed(
-	placed: Placed<PanelGeometry>,
-	style: PanelStyle,
-) -> Vec<Placed<PanelGeometry>> {
+fn flatten_placed(placed: Placed<PanelGeometry>, style: PanelStyle) -> Vec<Placed<PanelGeometry>> {
 	if placed.geom.is_leaf_atom() {
 		// Rectangle may still expand to dual triangles under style.
 		if matches!(placed.geom, PanelGeometry::Rectangle(_)) && !style.has_rectangle {

@@ -24,8 +24,8 @@ use crate::terrain::jersey::{
 };
 use crate::terrain::marazion::{
 	original_ids_for_marazion_pocket_waters_high_pass_leaves,
-	original_ids_for_marazion_pocket_waters_low_pass_leaves, WatershedAproningCell,
-	WatershedCarvingCell, HydroComplexCell, WatershedRimmingCell,
+	original_ids_for_marazion_pocket_waters_low_pass_leaves, HydroComplexCell,
+	WatershedAproningCell, WatershedCarvingCell, WatershedRimmingCell,
 };
 use crate::terrain::render::cascade_chunk_for_cell;
 use avian3d::prelude::RigidBody;
@@ -70,6 +70,7 @@ pub use jersey::{
 	PocketWaterLowPassStampCell as PocketWaterStampCell,
 	RollingLowPassStampCell as RollingStampCell, ValleyLowPassStampCell as ValleyStampCell,
 };
+pub use jersey_modulation::ComposedElevationOp;
 pub use marazion::{
 	MarazionBandPass, MarazionLeafBounds, MarazionLeafKind, MarazionPocketWater,
 	MarazionPocketWatersHighPass, MarazionPocketWatersLowPass, MarazionWatershedConfigs,
@@ -88,7 +89,6 @@ pub use presentation::{
 };
 pub use render::TerrainRenderItem;
 pub use sdf::{ComposedTerrain, ElevationModulation, TerrainSdf};
-pub use jersey_modulation::ComposedElevationOp;
 
 /// Jersey-composed terrain **before** Marazion watershed stamps.
 #[derive(Debug, Clone, Component)]
@@ -168,14 +168,11 @@ impl Terrain {
 }
 
 impl LodScene for Terrain {
-	fn scene_lod_status(
-		&self,
-		_lod_ref: &LodRef,
-	) -> lod::gen::LodSceneStatus {
+	fn scene_lod_status(&self, _lod_ref: &LodRef) -> lod::gen::LodSceneStatus {
 		lod::gen::LodSceneStatus::Unchanged
 	}
 
-		fn scene_with_level(
+	fn scene_with_level(
 		&self,
 		_lod_ref: &LodRef,
 		_level: lod::gen::LodSceneLevel,
@@ -434,12 +431,8 @@ where
 		)?
 		.clone();
 
-		let mut modulations: Vec<ComposedElevationOp> = pre
-			.modulations
-			.iter()
-			.cloned()
-			.map(ComposedElevationOp::Jersey)
-			.collect();
+		let mut modulations: Vec<ComposedElevationOp> =
+			pre.modulations.iter().cloned().map(ComposedElevationOp::Jersey).collect();
 		let jersey_leaves = pre.jersey_leaves.clone();
 		let mut marazion_leaves = Vec::new();
 
@@ -461,13 +454,12 @@ where
 			marazion_leaves
 		);
 
-		let complex_cell =
-			GeneratingSpatialIndex::<HydroComplexCell>::get_one_or_generate(
-				spatial_index,
-				id,
-				lod_ref,
-			)?
-			.clone();
+		let complex_cell = GeneratingSpatialIndex::<HydroComplexCell>::get_one_or_generate(
+			spatial_index,
+			id,
+			lod_ref,
+		)?
+		.clone();
 		let compiled = complex_cell.complex.compile();
 		let marazion_fills = compiled.fills;
 

@@ -10,33 +10,33 @@ use crozon_characters::{
 	species::{
 		braidman::BraidmanConfig,
 		brenal::BrenalConfig,
-		caole::CaoleConfig,
-		epiphant::EpiphantConfig,
-		hars::HarsConfig,
-		ylter::YilterConfig,
-		sonyak::SonyakConfig,
-		claber::{ClaberColor, ClaberConfig},
-		croconot::CroconotConfig,
 		brodler::{BrodlerConfig, BrodlerHeadMesh, HornMesh},
-		common::{BodyMesh, EarMesh, EyeMesh, HairMesh, HeadMesh, MouthMesh, NoseMesh},
-		dui::{DuiConfig, DuiNoseMesh},
-		lidder::{LidderBeakMesh, LidderConfig},
-		chupri::{ChupriBeakMesh, ChupriConfig},
 		brokker::{BrokkerConfig, BrokkerSnoutMesh},
-		tipple::{TippleBeakMesh, TippleConfig},
-		topple::{ToppleBeakMesh, ToppleConfig},
-		kispar::{KisparBeakMesh, KisparConfig},
-		tapp::{TappBeakMesh, TappConfig},
+		caole::CaoleConfig,
+		chupri::{ChupriBeakMesh, ChupriConfig},
+		claber::{ClaberColor, ClaberConfig},
+		common::{BodyMesh, EarMesh, EyeMesh, HairMesh, HeadMesh, MouthMesh, NoseMesh},
+		croconot::CroconotConfig,
+		dui::{DuiConfig, DuiNoseMesh},
+		epiphant::EpiphantConfig,
+		grener::GrenerConfig,
+		hars::HarsConfig,
 		kaller::{KallerConfig, KallerSnoutMesh},
 		kappler::{KapplerBeakMesh, KapplerConfig},
+		kispar::{KisparBeakMesh, KisparConfig},
 		lero::{LeroConfig, LeroMouthMesh},
-		mygr::MygrConfig,
-		spibmom::SpibmomConfig,
-		grener::GrenerConfig,
-		thumplus::ThumplusConfig,
+		lidder::{LidderBeakMesh, LidderConfig},
 		mistler::MistlerConfig,
+		mygr::MygrConfig,
+		sonyak::SonyakConfig,
+		spibmom::SpibmomConfig,
+		tapp::{TappBeakMesh, TappConfig},
+		thumplus::ThumplusConfig,
+		tipple::{TippleBeakMesh, TippleConfig},
+		topple::{ToppleBeakMesh, ToppleConfig},
 		tuberwaber::{TuberwaberBodyMesh, TuberwaberConfig, TuberwaberHeadMesh},
 		wumbus::{WumbusConfig, WumbusHornMesh},
+		ylter::YilterConfig,
 		SpeciesConfig,
 	},
 	ResolvedCharacterPart, SkinTarget, SocketRig,
@@ -46,9 +46,9 @@ use crate::animation::{AnimatedBodyRig, BodyRigBindTransform, ConceptAnimation};
 use crate::preview_color::PreviewColor;
 use crate::skinning::{
 	bind_scales_ready, bone_map_ready, missing_landmark_bones, preview_debug_enabled,
-	ActiveRigPose, BoneMap, CharacterPart, CharacterRig, CharacterRigRole, NeedsDuplicateScenePrune,
-	NeedsSkinRemap, NeedsSocketPlacement, NoMatchingArmature, PartRigRef, RigBindScales,
-	RigSkeletonKind,
+	ActiveRigPose, BoneMap, CharacterPart, CharacterRig, CharacterRigRole,
+	NeedsDuplicateScenePrune, NeedsSkinRemap, NeedsSocketPlacement, NoMatchingArmature, PartRigRef,
+	RigBindScales, RigSkeletonKind,
 };
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
@@ -285,7 +285,6 @@ impl ConceptPreviewConfig {
 		Self::Dui { config, animation }
 	}
 
-
 	pub fn lidder(config: LidderConfig) -> Self {
 		Self::Lidder { config, animation: ConceptAnimation::default() }
 	}
@@ -410,7 +409,10 @@ impl ConceptPreviewConfig {
 		Self::Tuberwaber { config, animation: ConceptAnimation::default() }
 	}
 
-	pub fn tuberwaber_with_animation(config: TuberwaberConfig, animation: ConceptAnimation) -> Self {
+	pub fn tuberwaber_with_animation(
+		config: TuberwaberConfig,
+		animation: ConceptAnimation,
+	) -> Self {
 		Self::Tuberwaber { config, animation }
 	}
 
@@ -1509,7 +1511,8 @@ pub fn reveal_ready_preview(
 		}
 		return;
 	};
-	if !bone_map_ready(bone_map, rig.skeleton) || !bind_scales_ready(bind_scales, bone_map, rig.skeleton)
+	if !bone_map_ready(bone_map, rig.skeleton)
+		|| !bind_scales_ready(bind_scales, bone_map, rig.skeleton)
 	{
 		if bone_map.by_name.is_empty() {
 			// GLTF scene bones are not wired yet; wait without treating it as an error.
@@ -1975,7 +1978,6 @@ fn preview_color_tuberwaber(config: &TuberwaberConfig, target: PreviewTarget) ->
 	}
 }
 
-
 struct SocketRigMap {
 	body: Entity,
 	neck: Option<Entity>,
@@ -2270,7 +2272,9 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 			ConceptPreviewConfig::Braidman { config, .. } => {
 				let target = match part.slot {
 					CharacterPartSlot::BodyMesh => PreviewTarget::BraidmanBody(config.body),
-					CharacterPartSlot::NeckRig | CharacterPartSlot::NeckMesh => PreviewTarget::BraidmanBody(config.body),
+					CharacterPartSlot::NeckRig | CharacterPartSlot::NeckMesh => {
+						PreviewTarget::BraidmanBody(config.body)
+					}
 					CharacterPartSlot::HeadRig | CharacterPartSlot::HeadMesh => {
 						PreviewTarget::BraidmanHead(config.head)
 					}
@@ -2299,7 +2303,9 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 			ConceptPreviewConfig::Brenal { config, .. } => {
 				let target = match part.slot {
 					CharacterPartSlot::BodyMesh => PreviewTarget::BrenalBody,
-					CharacterPartSlot::NeckRig | CharacterPartSlot::NeckMesh => PreviewTarget::BrenalBody,
+					CharacterPartSlot::NeckRig | CharacterPartSlot::NeckMesh => {
+						PreviewTarget::BrenalBody
+					}
 					CharacterPartSlot::HeadRig | CharacterPartSlot::HeadMesh => {
 						PreviewTarget::BrenalHead
 					}
@@ -2322,7 +2328,9 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 			ConceptPreviewConfig::Caole { config, .. } => {
 				let target = match part.slot {
 					CharacterPartSlot::BodyMesh => PreviewTarget::CaoleBody,
-					CharacterPartSlot::NeckRig | CharacterPartSlot::NeckMesh => PreviewTarget::CaoleBody,
+					CharacterPartSlot::NeckRig | CharacterPartSlot::NeckMesh => {
+						PreviewTarget::CaoleBody
+					}
 					CharacterPartSlot::HeadRig | CharacterPartSlot::HeadMesh => {
 						PreviewTarget::CaoleHead
 					}
@@ -2370,7 +2378,9 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 			ConceptPreviewConfig::Hars { config, .. } => {
 				let target = match part.slot {
 					CharacterPartSlot::BodyMesh => PreviewTarget::HarsBody,
-					CharacterPartSlot::NeckRig | CharacterPartSlot::NeckMesh => PreviewTarget::HarsBody,
+					CharacterPartSlot::NeckRig | CharacterPartSlot::NeckMesh => {
+						PreviewTarget::HarsBody
+					}
 					CharacterPartSlot::HeadRig | CharacterPartSlot::HeadMesh => {
 						PreviewTarget::HarsHead
 					}
@@ -2417,7 +2427,9 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 			ConceptPreviewConfig::Sonyak { config, .. } => {
 				let target = match part.slot {
 					CharacterPartSlot::BodyMesh => PreviewTarget::SonyakBody,
-					CharacterPartSlot::NeckRig | CharacterPartSlot::NeckMesh => PreviewTarget::SonyakBody,
+					CharacterPartSlot::NeckRig | CharacterPartSlot::NeckMesh => {
+						PreviewTarget::SonyakBody
+					}
 					CharacterPartSlot::HeadRig | CharacterPartSlot::HeadMesh => {
 						PreviewTarget::SonyakHead
 					}
@@ -2439,7 +2451,9 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 			ConceptPreviewConfig::Claber { config, .. } => {
 				let target = match part.slot {
 					CharacterPartSlot::BodyMesh => PreviewTarget::ClaberBody,
-					CharacterPartSlot::NeckRig | CharacterPartSlot::NeckMesh => PreviewTarget::ClaberBody,
+					CharacterPartSlot::NeckRig | CharacterPartSlot::NeckMesh => {
+						PreviewTarget::ClaberBody
+					}
 					CharacterPartSlot::HeadRig | CharacterPartSlot::HeadMesh => {
 						PreviewTarget::ClaberHead
 					}
@@ -2462,7 +2476,9 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 			ConceptPreviewConfig::Croconot { config, .. } => {
 				let target = match part.slot {
 					CharacterPartSlot::BodyMesh => PreviewTarget::CroconotBody,
-					CharacterPartSlot::NeckRig | CharacterPartSlot::NeckMesh => PreviewTarget::CroconotBody,
+					CharacterPartSlot::NeckRig | CharacterPartSlot::NeckMesh => {
+						PreviewTarget::CroconotBody
+					}
 					CharacterPartSlot::HeadRig | CharacterPartSlot::HeadMesh => {
 						PreviewTarget::CroconotHead
 					}
@@ -2485,7 +2501,9 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 			ConceptPreviewConfig::Brodler { config, .. } => {
 				let target = match part.slot {
 					CharacterPartSlot::BodyMesh => PreviewTarget::BrodlerBody,
-					CharacterPartSlot::NeckRig | CharacterPartSlot::NeckMesh => PreviewTarget::BrodlerBody,
+					CharacterPartSlot::NeckRig | CharacterPartSlot::NeckMesh => {
+						PreviewTarget::BrodlerBody
+					}
 					CharacterPartSlot::HeadRig | CharacterPartSlot::HeadMesh => {
 						PreviewTarget::BrodlerHead(config.head)
 					}
@@ -2514,7 +2532,9 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 			ConceptPreviewConfig::Mygr { config, .. } => {
 				let target = match part.slot {
 					CharacterPartSlot::BodyMesh => PreviewTarget::MygrBody,
-					CharacterPartSlot::NeckRig | CharacterPartSlot::NeckMesh => PreviewTarget::MygrBody,
+					CharacterPartSlot::NeckRig | CharacterPartSlot::NeckMesh => {
+						PreviewTarget::MygrBody
+					}
 					CharacterPartSlot::HeadRig | CharacterPartSlot::HeadMesh => {
 						PreviewTarget::MygrHead
 					}
@@ -2542,7 +2562,9 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 			ConceptPreviewConfig::Dui { config, .. } => {
 				let target = match part.slot {
 					CharacterPartSlot::BodyMesh => PreviewTarget::DuiBody,
-					CharacterPartSlot::NeckRig | CharacterPartSlot::NeckMesh => PreviewTarget::DuiBody,
+					CharacterPartSlot::NeckRig | CharacterPartSlot::NeckMesh => {
+						PreviewTarget::DuiBody
+					}
 					CharacterPartSlot::HeadRig | CharacterPartSlot::HeadMesh => {
 						PreviewTarget::DuiHead
 					}
@@ -2570,7 +2592,9 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 			ConceptPreviewConfig::Lidder { config, .. } => {
 				let target = match part.slot {
 					CharacterPartSlot::BodyMesh => PreviewTarget::LidderBody,
-					CharacterPartSlot::NeckRig | CharacterPartSlot::NeckMesh => PreviewTarget::LidderBody,
+					CharacterPartSlot::NeckRig | CharacterPartSlot::NeckMesh => {
+						PreviewTarget::LidderBody
+					}
 					CharacterPartSlot::HeadRig | CharacterPartSlot::HeadMesh => {
 						PreviewTarget::LidderHead
 					}
@@ -2598,7 +2622,9 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 			ConceptPreviewConfig::Chupri { config, .. } => {
 				let target = match part.slot {
 					CharacterPartSlot::BodyMesh => PreviewTarget::ChupriBody,
-					CharacterPartSlot::NeckRig | CharacterPartSlot::NeckMesh => PreviewTarget::ChupriBody,
+					CharacterPartSlot::NeckRig | CharacterPartSlot::NeckMesh => {
+						PreviewTarget::ChupriBody
+					}
 					CharacterPartSlot::HeadRig | CharacterPartSlot::HeadMesh => {
 						PreviewTarget::ChupriHead
 					}
@@ -2626,7 +2652,9 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 			ConceptPreviewConfig::Brokker { config, .. } => {
 				let target = match part.slot {
 					CharacterPartSlot::BodyMesh => PreviewTarget::BrokkerBody,
-					CharacterPartSlot::NeckRig | CharacterPartSlot::NeckMesh => PreviewTarget::BrokkerBody,
+					CharacterPartSlot::NeckRig | CharacterPartSlot::NeckMesh => {
+						PreviewTarget::BrokkerBody
+					}
 					CharacterPartSlot::HeadRig | CharacterPartSlot::HeadMesh => {
 						PreviewTarget::BrokkerHead
 					}
@@ -2655,7 +2683,9 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 			ConceptPreviewConfig::Tipple { config, .. } => {
 				let target = match part.slot {
 					CharacterPartSlot::BodyMesh => PreviewTarget::TippleBody,
-					CharacterPartSlot::NeckRig | CharacterPartSlot::NeckMesh => PreviewTarget::TippleBody,
+					CharacterPartSlot::NeckRig | CharacterPartSlot::NeckMesh => {
+						PreviewTarget::TippleBody
+					}
 					CharacterPartSlot::HeadRig | CharacterPartSlot::HeadMesh => {
 						PreviewTarget::TippleHead
 					}
@@ -2684,7 +2714,9 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 			ConceptPreviewConfig::Topple { config, .. } => {
 				let target = match part.slot {
 					CharacterPartSlot::BodyMesh => PreviewTarget::ToppleBody,
-					CharacterPartSlot::NeckRig | CharacterPartSlot::NeckMesh => PreviewTarget::ToppleBody,
+					CharacterPartSlot::NeckRig | CharacterPartSlot::NeckMesh => {
+						PreviewTarget::ToppleBody
+					}
 					CharacterPartSlot::HeadRig | CharacterPartSlot::HeadMesh => {
 						PreviewTarget::ToppleHead
 					}
@@ -2713,7 +2745,9 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 			ConceptPreviewConfig::Kispar { config, .. } => {
 				let target = match part.slot {
 					CharacterPartSlot::BodyMesh => PreviewTarget::KisparBody,
-					CharacterPartSlot::NeckRig | CharacterPartSlot::NeckMesh => PreviewTarget::KisparBody,
+					CharacterPartSlot::NeckRig | CharacterPartSlot::NeckMesh => {
+						PreviewTarget::KisparBody
+					}
 					CharacterPartSlot::HeadRig | CharacterPartSlot::HeadMesh => {
 						PreviewTarget::KisparHead
 					}
@@ -2741,7 +2775,9 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 			ConceptPreviewConfig::Tapp { config, .. } => {
 				let target = match part.slot {
 					CharacterPartSlot::BodyMesh => PreviewTarget::TappBody,
-					CharacterPartSlot::NeckRig | CharacterPartSlot::NeckMesh => PreviewTarget::TappBody,
+					CharacterPartSlot::NeckRig | CharacterPartSlot::NeckMesh => {
+						PreviewTarget::TappBody
+					}
 					CharacterPartSlot::HeadRig | CharacterPartSlot::HeadMesh => {
 						PreviewTarget::TappHead
 					}
@@ -2769,7 +2805,9 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 			ConceptPreviewConfig::Kaller { config, .. } => {
 				let target = match part.slot {
 					CharacterPartSlot::BodyMesh => PreviewTarget::KallerBody,
-					CharacterPartSlot::NeckRig | CharacterPartSlot::NeckMesh => PreviewTarget::KallerBody,
+					CharacterPartSlot::NeckRig | CharacterPartSlot::NeckMesh => {
+						PreviewTarget::KallerBody
+					}
 					CharacterPartSlot::HeadRig | CharacterPartSlot::HeadMesh => {
 						PreviewTarget::KallerHead
 					}
@@ -2797,7 +2835,9 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 			ConceptPreviewConfig::Kappler { config, .. } => {
 				let target = match part.slot {
 					CharacterPartSlot::BodyMesh => PreviewTarget::KapplerBody,
-					CharacterPartSlot::NeckRig | CharacterPartSlot::NeckMesh => PreviewTarget::KapplerBody,
+					CharacterPartSlot::NeckRig | CharacterPartSlot::NeckMesh => {
+						PreviewTarget::KapplerBody
+					}
 					CharacterPartSlot::HeadRig | CharacterPartSlot::HeadMesh => {
 						PreviewTarget::KapplerHead
 					}
@@ -2825,7 +2865,9 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 			ConceptPreviewConfig::Wumbus { config, .. } => {
 				let target = match part.slot {
 					CharacterPartSlot::BodyMesh => PreviewTarget::WumbusBody,
-					CharacterPartSlot::NeckRig | CharacterPartSlot::NeckMesh => PreviewTarget::WumbusBody,
+					CharacterPartSlot::NeckRig | CharacterPartSlot::NeckMesh => {
+						PreviewTarget::WumbusBody
+					}
 					CharacterPartSlot::HeadRig | CharacterPartSlot::HeadMesh => {
 						PreviewTarget::WumbusHead
 					}
@@ -2853,7 +2895,9 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 			ConceptPreviewConfig::Lero { config, .. } => {
 				let target = match part.slot {
 					CharacterPartSlot::BodyMesh => PreviewTarget::LeroBody,
-					CharacterPartSlot::NeckRig | CharacterPartSlot::NeckMesh => PreviewTarget::LeroBody,
+					CharacterPartSlot::NeckRig | CharacterPartSlot::NeckMesh => {
+						PreviewTarget::LeroBody
+					}
 					CharacterPartSlot::HeadRig | CharacterPartSlot::HeadMesh => {
 						PreviewTarget::LeroHead
 					}
@@ -2881,7 +2925,9 @@ impl<'w, 's, 'a> PreviewSpawner<'w, 's, 'a> {
 			ConceptPreviewConfig::Spibmom { config, .. } => {
 				let target = match part.slot {
 					CharacterPartSlot::BodyMesh => PreviewTarget::SpibmomBody,
-					CharacterPartSlot::NeckRig | CharacterPartSlot::NeckMesh => PreviewTarget::SpibmomBody,
+					CharacterPartSlot::NeckRig | CharacterPartSlot::NeckMesh => {
+						PreviewTarget::SpibmomBody
+					}
 					CharacterPartSlot::HeadRig | CharacterPartSlot::HeadMesh => {
 						PreviewTarget::SpibmomHead
 					}

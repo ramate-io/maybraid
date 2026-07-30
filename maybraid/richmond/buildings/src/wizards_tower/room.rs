@@ -31,11 +31,7 @@ impl WizardsTowerRoom {
 		let center = (constraints.aabb.min + constraints.aabb.max) * 0.5;
 		let center_xz = Vec3::new(center.x, constraints.aabb.min.y, center.z);
 		let size = constraints.aabb.max - constraints.aabb.min;
-		let yaw = if size.x >= size.z {
-			std::f32::consts::FRAC_PI_2
-		} else {
-			0.0
-		};
+		let yaw = if size.x >= size.z { std::f32::consts::FRAC_PI_2 } else { 0.0 };
 		let half_len = size.x.max(size.z) * 0.5;
 		let height = size.y.max(1e-4);
 		let floor_scale = Vec3::new(
@@ -59,14 +55,11 @@ impl WizardsTowerRoom {
 }
 
 impl LodScene for WizardsTowerRoom {
-	fn scene_lod_status(
-		&self,
-		_lod_ref: &LodRef,
-	) -> lod::gen::LodSceneStatus {
+	fn scene_lod_status(&self, _lod_ref: &LodRef) -> lod::gen::LodSceneStatus {
 		lod::gen::LodSceneStatus::Unchanged
 	}
 
-		fn scene_with_level(
+	fn scene_with_level(
 		&self,
 		lod_ref: &LodRef,
 		_level: lod::gen::LodSceneLevel,

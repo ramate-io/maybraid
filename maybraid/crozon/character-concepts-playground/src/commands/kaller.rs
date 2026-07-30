@@ -68,12 +68,7 @@ impl PreviewArgs {
 		colors.snout = self.snout_color;
 		colors.crown = self.crown_color;
 		ConceptPreviewConfig::kaller_with_animation(
-			KallerConfig {
-				eye: self.eye,
-				hair: self.hair,
-				clothing: self.clothing,
-				colors,
-			},
+			KallerConfig { eye: self.eye, hair: self.hair, clothing: self.clothing, colors },
 			self.animation,
 		)
 	}

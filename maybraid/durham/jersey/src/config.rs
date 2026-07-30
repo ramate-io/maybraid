@@ -61,10 +61,7 @@ pub struct JitteredCenter {
 
 impl Default for JitteredCenter {
 	fn default() -> Self {
-		Self {
-			min_frac: Vec2::splat(0.25),
-			span_frac: Vec2::splat(0.5),
-		}
+		Self { min_frac: Vec2::splat(0.25), span_frac: Vec2::splat(0.5) }
 	}
 }
 
@@ -183,8 +180,7 @@ impl SoftmaskAlongSpine {
 	pub fn even_for_extent(mut self, short_edge: f32) -> Self {
 		let t = (short_edge / crate::stamp::SOFTMASK_REFERENCE_SHORT).clamp(0.25, 8.0);
 		let soften = t.sqrt();
-		self.longitudinal_falloff =
-			(self.longitudinal_falloff / soften).clamp(0.04, 0.5);
+		self.longitudinal_falloff = (self.longitudinal_falloff / soften).clamp(0.04, 0.5);
 		let samples = (self.max_samples as f32 * soften).round() as usize;
 		self.max_samples = samples.clamp(8, 96);
 		self
@@ -212,11 +208,7 @@ impl SoftmaskAlongSpine {
 			None => {
 				let stride = ((path.len() / self.stride_divisor.max(1)).max(self.stride_min))
 					.min(self.stride_max);
-				path.iter()
-					.step_by(stride)
-					.copied()
-					.take(self.max_samples.max(1))
-					.collect()
+				path.iter().step_by(stride).copied().take(self.max_samples.max(1)).collect()
 			}
 		};
 		let n = samples.len().saturating_sub(1).max(1) as f32;
@@ -225,10 +217,7 @@ impl SoftmaskAlongSpine {
 		for (i, p) in samples.iter().enumerate() {
 			let t = i as f32 / n;
 			let local = offset * (1.0 - self.longitudinal_falloff * t);
-			let region = Region2D::Circle(CircleRegion {
-				center: *p + lateral,
-				radius,
-			});
+			let region = Region2D::Circle(CircleRegion { center: *p + lateral, radius });
 			out.push(JerseyModulation::Affine(
 				RegionAffineModulation::new(region, scale, local, inner_r, outer_r)
 					.with_noise(noise.clone()),
@@ -248,16 +237,7 @@ impl SoftmaskAlongSpine {
 		noise: &RegionNoise,
 		lateral: Vec2,
 	) -> Vec<JerseyModulation> {
-		self.build(
-			path,
-			half_width,
-			1.0,
-			-depth.abs(),
-			inner_frac,
-			outer_frac,
-			noise,
-			lateral,
-		)
+		self.build(path, half_width, 1.0, -depth.abs(), inner_frac, outer_frac, noise, lateral)
 	}
 }
 
@@ -354,11 +334,7 @@ pub struct MidpointGrading {
 
 impl Default for MidpointGrading {
 	fn default() -> Self {
-		Self {
-			radius_half_width_mul: 1.5,
-			inner_half_width_frac: 0.4,
-			outer_half_width_frac: 1.05,
-		}
+		Self { radius_half_width_mul: 1.5, inner_half_width_frac: 0.4, outer_half_width_frac: 1.05 }
 	}
 }
 

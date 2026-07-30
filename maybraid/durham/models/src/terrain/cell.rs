@@ -97,11 +97,7 @@ impl TerrainCellLayout {
 	pub fn fine_request_region(&self) -> Aabb3d {
 		let size = self.cell_size.max(1e-3);
 		let vy = self.vertical_half_extent.max(size);
-		let min = Vec3::new(
-			self.origin.x as f32 * size,
-			-vy,
-			self.origin.y as f32 * size,
-		);
+		let min = Vec3::new(self.origin.x as f32 * size, -vy, self.origin.y as f32 * size);
 		let max = Vec3::new(
 			(self.origin.x + self.extents.x as i32) as f32 * size,
 			vy,
@@ -180,10 +176,7 @@ pub struct MacroCellLayout {
 
 impl Default for MacroCellLayout {
 	fn default() -> Self {
-		Self {
-			cell_size: MACRO_CELL_SIZE,
-			vertical_half_extent: TERRAIN_CELL_VERTICAL_HALF_EXTENT,
-		}
+		Self { cell_size: MACRO_CELL_SIZE, vertical_half_extent: TERRAIN_CELL_VERTICAL_HALF_EXTENT }
 	}
 }
 
@@ -200,10 +193,7 @@ pub fn cell_bounds(ix: i32, iz: i32, cell_size: f32, vertical_half_extent: f32) 
 ///
 /// Uses half-open style on the max edge (`ceil(max/size) - 1`), so a query whose
 /// max lies exactly on a cell boundary does not include the next cell.
-pub fn cell_coords_for_region(
-	region: Aabb3d,
-	cell_size: f32,
-) -> impl Iterator<Item = (i32, i32)> {
+pub fn cell_coords_for_region(region: Aabb3d, cell_size: f32) -> impl Iterator<Item = (i32, i32)> {
 	let size = cell_size.max(1e-3);
 	let min_x = (region.min.x / size).floor() as i32;
 	let max_x = (region.max.x / size).ceil() as i32 - 1;
@@ -257,10 +247,7 @@ pub fn expand_aabb_xz_y(region: Aabb3d, pad_xz: f32, pad_y: f32) -> Aabb3d {
 /// Emits fine-grid cells plus nested [`TerrainCellLayout::outer_rings`] macro
 /// cells that intersect `region` and do not overlap the previously covered
 /// footprint.
-pub fn original_ids_for_origin_cells<S>(
-	spatial_index: &mut S,
-	region: Aabb3d,
-) -> Vec<OriginalId>
+pub fn original_ids_for_origin_cells<S>(spatial_index: &mut S, region: Aabb3d) -> Vec<OriginalId>
 where
 	S: GeneratingSpatialIndex<TerrainCellLayout>,
 {
@@ -280,8 +267,7 @@ where
 	{
 		return Vec::new();
 	}
-	let Some(layout) =
-		<S as SpatialIndex<TerrainCellLayout>>::get(spatial_index, Id::Universal)
+	let Some(layout) = <S as SpatialIndex<TerrainCellLayout>>::get(spatial_index, Id::Universal)
 	else {
 		return Vec::new();
 	};
@@ -291,9 +277,7 @@ where
 			let bounds = cell_bounds(ix, iz, layout.cell_size, layout.vertical_half_extent);
 			OriginalId(Id::from_cell(bounds))
 		})
-		.filter(|OriginalId(id)| {
-			id.origin_cell_bounds().is_some_and(|b| region.intersects(&b))
-		})
+		.filter(|OriginalId(id)| id.origin_cell_bounds().is_some_and(|b| region.intersects(&b)))
 		.collect();
 
 	let mut covered = layout.fine_request_region();

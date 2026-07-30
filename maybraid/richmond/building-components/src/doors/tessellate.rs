@@ -4,7 +4,7 @@ use bevy_math::Vec3;
 
 use crate::doors::geometry::DoorGeometry;
 use crate::partitions::geometry::PartitionTile;
-use crate::placed::{Placement, Placed};
+use crate::placed::{Placed, Placement};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) enum DoorKit {

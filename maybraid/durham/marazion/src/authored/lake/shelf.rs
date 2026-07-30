@@ -79,11 +79,8 @@ pub fn planned_center(bounds: Bounds2, seed: u32, params: LakeParams) -> Vec2 {
 		return cell_c;
 	};
 	let shore_amp = probe.water_radius() * params.shore_indent_frac.clamp(0.0, 0.45);
-	let apron_indent = params
-		.apron
-		.indent_frac_min
-		.max(params.apron.indent_frac_max)
-		.clamp(0.0, 0.5);
+	let apron_indent =
+		params.apron.indent_frac_min.max(params.apron.indent_frac_max).clamp(0.0, 0.5);
 	let apron_amp = probe.apron_width * apron_indent;
 	let outer = probe.plateau_radius() + probe.apron_width + shore_amp.max(apron_amp);
 	let lo = min + Vec2::splat(outer.max(probe.mu));
@@ -118,8 +115,5 @@ pub(crate) fn shelf_levels(
 		height_at,
 	);
 	let shelf_anchor = base_h + n11_at(seed, SHELF_AMP_SALT, anchor) * params.shelf_amp;
-	ShelfLevels {
-		shelf_anchor,
-		water_level: shelf_anchor - params.water_sink.max(0.0),
-	}
+	ShelfLevels { shelf_anchor, water_level: shelf_anchor - params.water_sink.max(0.0) }
 }

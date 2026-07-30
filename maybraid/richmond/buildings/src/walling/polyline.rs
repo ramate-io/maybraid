@@ -83,10 +83,7 @@ impl PolylineWall {
 		let total = path_length(&points).max(portal_width + 1e-3);
 		let half_t = (portal_width * 0.5) / total;
 		let noise = NoiseConfig::new(params.portal_noise);
-		let foot = PortalFootprint {
-			half_t,
-			closed: false,
-		};
+		let foot = PortalFootprint { half_t, closed: false };
 
 		let portals = assign_portals(
 			&noise,
@@ -169,11 +166,7 @@ fn subpath_points(points: &[Vec3], t0: f32, t1: f32) -> Vec<Vec3> {
 	}
 
 	let (p1, _) = sample_path(points, t1);
-	if out
-		.last()
-		.map(|p| p.distance(p1) > 1e-4)
-		.unwrap_or(true)
-	{
+	if out.last().map(|p| p.distance(p1) > 1e-4).unwrap_or(true) {
 		out.push(p1);
 	}
 	let _ = (s0, s1);
@@ -250,15 +243,12 @@ fn tessellate_polyline(
 			let (p_prev, _) = sample_path(points, (t0 - 1e-3).max(0.0));
 			let (p_at, _) = sample_path(points, t0);
 			let d = p_at - p_prev;
-			poly = poly.with_incoming_slope(richmond_building_components::partitions::roll_along_slope(
-				d.x, d.y, d.z,
-			));
+			poly = poly.with_incoming_slope(
+				richmond_building_components::partitions::roll_along_slope(d.x, d.y, d.z),
+			);
 		}
 		// Identity parent: tiles carry world anchors, stand-up pitch, and wall scale.
-		partitions.push(PartitionNode::rough_stone(
-			Partition::Polyline(poly),
-			Placement::IDENTITY,
-		));
+		partitions.push(PartitionNode::rough_stone(Partition::Polyline(poly), Placement::IDENTITY));
 	}
 
 	partitions
@@ -282,10 +272,7 @@ mod tests {
 			..PolylineWallParams::default()
 		});
 		assert_eq!(wall.portals.len(), 1);
-		assert!(wall
-			.partitions
-			.iter()
-			.any(|p| matches!(p.geometry, Partition::Polyline(_))));
+		assert!(wall.partitions.iter().any(|p| matches!(p.geometry, Partition::Polyline(_))));
 		assert!(wall.partitions.iter().any(|p| {
 			matches!(p.geometry, Partition::Linear(_))
 				&& (p.placement.scale.z - SLICE_KIT_HEIGHT * wall.height).abs() < 1e-3

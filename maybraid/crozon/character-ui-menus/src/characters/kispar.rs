@@ -1,5 +1,6 @@
 use character_ui_menu::{
-	AssetSingleSelect, CameraFocus, MenuComponent, MenuNode, PreviewColor, Section, SwatchSingleSelect,
+	AssetSingleSelect, CameraFocus, MenuComponent, MenuNode, PreviewColor, Section,
+	SwatchSingleSelect,
 };
 use crozon_character_items::{ClothingMesh, ItemColor};
 use crozon_characters::{
@@ -106,7 +107,9 @@ impl MenuComponent<MenuEvent> for KisparHeadMenu {
 				"Head",
 				&self.head,
 				PreviewColor::of(self.plumage.value),
-				|value| MenuEvent::SetAsset(CharacterField::KisparHead, AssetValue::KisparHead(value)),
+				|value| {
+					MenuEvent::SetAsset(CharacterField::KisparHead, AssetValue::KisparHead(value))
+				},
 			),
 			MenuNode::swatch("Plumage", &self.plumage, |color| {
 				MenuEvent::SetSwatch(
@@ -139,7 +142,10 @@ impl MenuComponent<MenuEvent> for KisparHeadFeaturesMenu {
 				},
 			),
 			MenuNode::swatch("Beak Color", &self.beak_color, |color| {
-				MenuEvent::SetSwatch(CharacterField::KisparBeakColor, SwatchValue::KisparBeak(color))
+				MenuEvent::SetSwatch(
+					CharacterField::KisparBeakColor,
+					SwatchValue::KisparBeak(color),
+				)
 			}),
 		])
 	}

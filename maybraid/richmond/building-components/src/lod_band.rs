@@ -81,18 +81,9 @@ mod tests {
 
 	#[test]
 	fn from_factors_thresholds() -> anyhow::Result<()> {
-		assert_eq!(
-			DistanceLodBand::from_factors(2.5, 2.5, 10.0, 500.0),
-			DistanceLodBand::High
-		);
-		assert_eq!(
-			DistanceLodBand::from_factors(10.0, 2.5, 10.0, 500.0),
-			DistanceLodBand::Medium
-		);
-		assert_eq!(
-			DistanceLodBand::from_factors(500.0, 2.5, 10.0, 500.0),
-			DistanceLodBand::Low
-		);
+		assert_eq!(DistanceLodBand::from_factors(2.5, 2.5, 10.0, 500.0), DistanceLodBand::High);
+		assert_eq!(DistanceLodBand::from_factors(10.0, 2.5, 10.0, 500.0), DistanceLodBand::Medium);
+		assert_eq!(DistanceLodBand::from_factors(500.0, 2.5, 10.0, 500.0), DistanceLodBand::Low);
 		assert_eq!(
 			DistanceLodBand::from_factors(501.0, 2.5, 10.0, 500.0),
 			DistanceLodBand::UltraLow

@@ -24,9 +24,7 @@ pub fn queue_terrain_trimesh_colliders(
 	for root in &roots {
 		for descendant in children.iter_descendants(root) {
 			if mesh_entities.get(descendant).is_ok() {
-				commands
-					.entity(descendant)
-					.insert(ColliderConstructor::TrimeshFromMesh);
+				commands.entity(descendant).insert(ColliderConstructor::TrimeshFromMesh);
 			}
 		}
 	}

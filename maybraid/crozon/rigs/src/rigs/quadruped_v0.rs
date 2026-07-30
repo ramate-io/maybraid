@@ -2,8 +2,8 @@ use bevy::prelude::*;
 
 use crate::{
 	quadruped::{
-		QuadrupedFrontLeg, QuadrupedHindLeg, QuadrupedNeck, QuadrupedRig, QuadrupedSpine,
-		LegSegmentLengths,
+		LegSegmentLengths, QuadrupedFrontLeg, QuadrupedHindLeg, QuadrupedNeck, QuadrupedRig,
+		QuadrupedSpine,
 	},
 	BoneDefinition, BonePose, BoneTable, Name, RigPose, RiggedAxis, Side,
 };

@@ -132,10 +132,7 @@ fn focus_spawn_key(assembly: &ResolvedCharacterAssembly) -> String {
 		.find(|part| part.slot == CharacterPartSlot::HeadRig)
 		.map(|part| part.asset.path.as_str())
 		.unwrap_or("");
-	format!(
-		"body={} neck={neck_rig_path} head={head_rig_path}",
-		assembly.body_rig.path.as_str()
-	)
+	format!("body={} neck={neck_rig_path} head={head_rig_path}", assembly.body_rig.path.as_str())
 }
 
 pub fn sync_focus_reference(

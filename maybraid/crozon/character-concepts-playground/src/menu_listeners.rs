@@ -101,9 +101,10 @@ pub fn menu_to_preview_config(menu: &CharacterMenu) -> ConceptPreviewConfig {
 		ConceptSpecies::Mistler => {
 			ConceptPreviewConfig::mistler_with_animation(menu.mistler_config(), menu.animation())
 		}
-		ConceptSpecies::Tuberwaber => {
-			ConceptPreviewConfig::tuberwaber_with_animation(menu.tuberwaber_config(), menu.animation())
-		}
+		ConceptSpecies::Tuberwaber => ConceptPreviewConfig::tuberwaber_with_animation(
+			menu.tuberwaber_config(),
+			menu.animation(),
+		),
 	}
 }
 

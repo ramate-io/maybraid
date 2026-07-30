@@ -13,9 +13,6 @@ pub struct BoundaryThicknessEntry {
 
 impl BoundaryThicknessEntry {
 	pub fn clip_to_coverage(&self, coverage: Aabb2d) -> Self {
-		Self {
-			fallback: self.fallback,
-			sub_regions: self.sub_regions.clip_to_coverage(coverage),
-		}
+		Self { fallback: self.fallback, sub_regions: self.sub_regions.clip_to_coverage(coverage) }
 	}
 }

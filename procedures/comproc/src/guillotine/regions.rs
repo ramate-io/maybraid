@@ -54,13 +54,7 @@ impl<'a, const D: usize> Regions<'a, D> {
 			counts[i] = cuts[i].len() + 1;
 		}
 		let finished = counts.iter().any(|&c| c == 0);
-		Self {
-			root,
-			cuts,
-			counts,
-			cursor: [0; D],
-			finished,
-		}
+		Self { root, cuts, counts, cursor: [0; D], finished }
 	}
 
 	fn bounds_at_cursor(&self) -> Bounds<D> {
@@ -68,16 +62,9 @@ impl<'a, const D: usize> Regions<'a, D> {
 		let mut max = [0.0; D];
 		for axis in 0..D {
 			let i = self.cursor[axis];
-			min[axis] = if i == 0 {
-				self.root.min[axis]
-			} else {
-				self.cuts[axis][i - 1]
-			};
-			max[axis] = if i + 1 >= self.counts[axis] {
-				self.root.max[axis]
-			} else {
-				self.cuts[axis][i]
-			};
+			min[axis] = if i == 0 { self.root.min[axis] } else { self.cuts[axis][i - 1] };
+			max[axis] =
+				if i + 1 >= self.counts[axis] { self.root.max[axis] } else { self.cuts[axis][i] };
 		}
 		Bounds::new(min, max)
 	}

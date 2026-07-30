@@ -30,10 +30,7 @@ pub struct CellDomainMask {
 
 impl CellDomainMask {
 	pub fn new(bounds: Bounds2, ease_width: f32) -> Self {
-		Self {
-			bounds,
-			ease_width: ease_width.max(0.0),
-		}
+		Self { bounds, ease_width: ease_width.max(0.0) }
 	}
 
 	/// Ease width clamped to a fraction of the short cell edge.

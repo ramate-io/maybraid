@@ -56,10 +56,7 @@ pub struct SceneRefRoot(pub SceneRef);
 impl SceneRef {
 	/// GLB / glTF at `path` (scene 0 unless `path` already includes a label).
 	pub fn glb(path: impl Into<String>) -> Self {
-		Self {
-			path: path.into(),
-			mirror: None,
-		}
+		Self { path: path.into(), mirror: None }
 	}
 
 	/// Same path with axis mirroring enabled.
@@ -76,10 +73,7 @@ impl SceneRef {
 
 	/// Source (unmirrored) ref sharing this path.
 	pub fn without_mirror(&self) -> Self {
-		Self {
-			path: self.path.clone(),
-			mirror: None,
-		}
+		Self { path: self.path.clone(), mirror: None }
 	}
 
 	/// Asset path string used for loading the **source** glTF (includes `#Scene0` when unlabeled).

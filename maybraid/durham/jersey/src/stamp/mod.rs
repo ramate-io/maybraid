@@ -48,11 +48,7 @@ pub struct StampSet {
 
 impl StampSet {
 	pub fn empty() -> Self {
-		Self {
-			modulations: Vec::new(),
-			spine: Vec::new(),
-			semantics: StampSemantics::default(),
-		}
+		Self { modulations: Vec::new(), spine: Vec::new(), semantics: StampSemantics::default() }
 	}
 
 	pub fn apply_elevation(&self, mut elevation: f32, x: f32, z: f32) -> f32 {

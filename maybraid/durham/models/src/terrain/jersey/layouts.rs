@@ -1,7 +1,11 @@
 //! Bundled dual-band controller layouts (one Bevy resource for SystemParam limits).
 
-use crate::terrain::jersey::canyon::{CanyonHighPassControllerLayout, CanyonLowPassControllerLayout};
-use crate::terrain::jersey::massif::{MassifHighPassControllerLayout, MassifLowPassControllerLayout};
+use crate::terrain::jersey::canyon::{
+	CanyonHighPassControllerLayout, CanyonLowPassControllerLayout,
+};
+use crate::terrain::jersey::massif::{
+	MassifHighPassControllerLayout, MassifLowPassControllerLayout,
+};
 use crate::terrain::jersey::plateau::{
 	PlateauHighPassControllerLayout, PlateauLowPassControllerLayout,
 };
@@ -11,7 +15,9 @@ use crate::terrain::jersey::pocket_water::{
 use crate::terrain::jersey::rolling::{
 	RollingHighPassControllerLayout, RollingLowPassControllerLayout,
 };
-use crate::terrain::jersey::valley::{ValleyHighPassControllerLayout, ValleyLowPassControllerLayout};
+use crate::terrain::jersey::valley::{
+	ValleyHighPassControllerLayout, ValleyLowPassControllerLayout,
+};
 use bevy::prelude::*;
 
 /// All jersey controller-grid layouts, kept as one resource so

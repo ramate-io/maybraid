@@ -1,5 +1,6 @@
 use character_ui_menu::{
-	AssetSingleSelect, CameraFocus, MenuComponent, MenuNode, PreviewColor, Section, SwatchSingleSelect,
+	AssetSingleSelect, CameraFocus, MenuComponent, MenuNode, PreviewColor, Section,
+	SwatchSingleSelect,
 };
 use crozon_character_items::{ClothingMesh, ItemColor};
 use crozon_characters::{
@@ -107,7 +108,9 @@ impl MenuComponent<MenuEvent> for ChupriHeadMenu {
 				"Head",
 				&self.head,
 				PreviewColor::of(self.plumage.value),
-				|value| MenuEvent::SetAsset(CharacterField::ChupriHead, AssetValue::ChupriHead(value)),
+				|value| {
+					MenuEvent::SetAsset(CharacterField::ChupriHead, AssetValue::ChupriHead(value))
+				},
 			),
 			MenuNode::swatch("Plumage", &self.plumage, |color| {
 				MenuEvent::SetSwatch(
@@ -140,7 +143,10 @@ impl MenuComponent<MenuEvent> for ChupriHeadFeaturesMenu {
 				},
 			),
 			MenuNode::swatch("Beak Color", &self.beak_color, |color| {
-				MenuEvent::SetSwatch(CharacterField::ChupriBeakColor, SwatchValue::ChupriBeak(color))
+				MenuEvent::SetSwatch(
+					CharacterField::ChupriBeakColor,
+					SwatchValue::ChupriBeak(color),
+				)
 			}),
 		])
 	}

@@ -49,12 +49,8 @@ pub fn apply_arm_twisted<R: HumanoidRig>(
 ) {
 	let mut arm = rig.arm_pose(side);
 
-	arm.shoulder = rig.articulate_on_rig_twisted(
-		arm.shoulder,
-		shoulder_swing,
-		shoulder_flex,
-		shoulder_twist,
-	);
+	arm.shoulder =
+		rig.articulate_on_rig_twisted(arm.shoulder, shoulder_swing, shoulder_flex, shoulder_twist);
 	arm.humerus = rig.articulate_on_rig(arm.humerus, humerus_swing, humerus_flex);
 	arm.forearm = rig.articulate_on_rig(arm.forearm, 0.0, forearm_flex);
 	rig.pose_arm(arm);

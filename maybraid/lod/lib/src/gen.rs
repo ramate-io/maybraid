@@ -29,8 +29,8 @@ mod spatial_index;
 #[cfg(test)]
 mod tests;
 
+pub use crate::lod_level::{LodSceneLevel, QuantizedDistance};
 pub use generation::{GeneratingSpatialIndex, GenerationScheme, MaterializeStatus};
 pub use id::{Bytes, Cell, Id, OriginCell, OriginalId, StorageStatus, TrackedId};
 pub use presentation::{LodScene, LodSceneStatus, RegionPresenter};
-pub use crate::lod_level::{LodSceneLevel, QuantizedDistance};
 pub use spatial_index::{SpatialIndex, Version};

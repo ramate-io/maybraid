@@ -7,10 +7,8 @@ use crozon_character_items::ItemColor;
 use crozon_characters::{
 	presets::{BuildPreset, GenderPreset},
 	species::{
-		hars::{
-			sliders::HarsSliders, HarsBodyMesh, HarsColors, HarsConfig, HarsMouthMesh,
-		},
 		common::EyeMesh,
+		hars::{sliders::HarsSliders, HarsBodyMesh, HarsColors, HarsConfig, HarsMouthMesh},
 	},
 	ConceptAnimation,
 };
@@ -293,7 +291,8 @@ impl From<&HarsConfig> for HarsMenu {
 			body: Section::new(
 				"Body",
 				HarsBodyMenu {
-					body: AssetSingleSelect::new(HarsBodyMesh::Rumbler).with_camera_focus(BODY_FOCUS),
+					body: AssetSingleSelect::new(HarsBodyMesh::Rumbler)
+						.with_camera_focus(BODY_FOCUS),
 					sliders: HarsBodyProportionSliders::from_config(config.sliders),
 					color: SwatchSingleSelect::new(config.colors.body),
 					tail_color: SwatchSingleSelect::new(config.colors.tail),
@@ -362,9 +361,7 @@ impl MenuComponent<MenuEvent> for HarsBodyMenu {
 				"Body Mesh",
 				&self.body,
 				PreviewColor::of(self.color.value),
-				|value| {
-					MenuEvent::SetAsset(CharacterField::HarsBody, AssetValue::HarsBody(value))
-				},
+				|value| MenuEvent::SetAsset(CharacterField::HarsBody, AssetValue::HarsBody(value)),
 			),
 			self.sliders.menu_node(),
 			MenuNode::swatch("Body Color", &self.color, |color| {

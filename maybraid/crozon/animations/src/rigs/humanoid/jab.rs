@@ -19,7 +19,12 @@ impl<R: HumanoidRig> Animation<R> for Jab<R> {
 		let guard_side = self.opposite_side();
 
 		apply_leg(rig, jab_side, self.lead_femur_swing(progress), self.stance_shin_flex(progress));
-		apply_leg(rig, guard_side, self.rear_femur_swing(progress), self.stance_shin_flex(progress));
+		apply_leg(
+			rig,
+			guard_side,
+			self.rear_femur_swing(progress),
+			self.stance_shin_flex(progress),
+		);
 		apply_trunk(
 			rig,
 			jab_side,
@@ -82,30 +87,11 @@ fn apply_trunk<R: HumanoidRig>(
 	// DEFAULT spine: swing Y ≈ yaw, flex Z ≈ coronal, twist X ≈ sagittal pitch.
 	// Pitch is mostly root + lumbar; mid/upper keep a lighter share so the fold
 	// still reads through the thoracic stack without living only up high.
-	spine.root = rig.articulate_on_rig_twisted(
-		spine.root,
-		root_lean,
-		0.0,
-		waist_bend * 0.40,
-	);
-	spine.lumbar = rig.articulate_on_rig_twisted(
-		spine.lumbar,
-		yaw * 0.35,
-		0.0,
-		waist_bend * 0.35,
-	);
-	spine.midback = rig.articulate_on_rig_twisted(
-		spine.midback,
-		yaw * 0.4,
-		0.0,
-		waist_bend * 0.15,
-	);
-	spine.upper_back = rig.articulate_on_rig_twisted(
-		spine.upper_back,
-		yaw * 0.25,
-		0.0,
-		waist_bend * 0.10,
-	);
+	spine.root = rig.articulate_on_rig_twisted(spine.root, root_lean, 0.0, waist_bend * 0.40);
+	spine.lumbar = rig.articulate_on_rig_twisted(spine.lumbar, yaw * 0.35, 0.0, waist_bend * 0.35);
+	spine.midback = rig.articulate_on_rig_twisted(spine.midback, yaw * 0.4, 0.0, waist_bend * 0.15);
+	spine.upper_back =
+		rig.articulate_on_rig_twisted(spine.upper_back, yaw * 0.25, 0.0, waist_bend * 0.10);
 	rig.pose_spine(spine);
 }
 
@@ -203,10 +189,7 @@ mod tests {
 		let humerus = rig.humerus_along_with_roll(Side::Right, along, FRAC_PI_2);
 		let parent = rig.parent_world_rotation(&humerus.name);
 		let aimed_world = (parent * humerus.transform.rotation * BONE_LENGTH_AXIS).normalize();
-		assert!(
-			aimed_world.dot(along) > 0.99,
-			"expected world aim {along:?}, got {aimed_world:?}"
-		);
+		assert!(aimed_world.dot(along) > 0.99, "expected world aim {along:?}, got {aimed_world:?}");
 		Ok(())
 	}
 

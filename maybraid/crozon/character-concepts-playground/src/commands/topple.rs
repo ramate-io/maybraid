@@ -5,9 +5,7 @@ use clap::{Args, Subcommand};
 use crozon_character_items::ClothingMesh;
 use crozon_characters::species::{
 	common::{EyeMesh, HairMesh},
-	topple::{
-		ToppleBeakColor, ToppleBeakMesh, ToppleConfig, ToppleEyeColor, TopplePlumageColor,
-	},
+	topple::{ToppleBeakColor, ToppleBeakMesh, ToppleConfig, ToppleEyeColor, TopplePlumageColor},
 };
 
 use crate::{animation::ConceptAnimation, preview::ConceptPreviewConfig};

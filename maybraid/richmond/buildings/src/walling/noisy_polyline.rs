@@ -48,11 +48,7 @@ impl Default for NoisyPolylineWallParams {
 				std::f32::consts::FRAC_PI_6,
 				std::f32::consts::FRAC_PI_8,
 			),
-			path_noise: NoiseParams {
-				seed: 1337,
-				frequency: 0.35,
-				..NoiseParams::default()
-			},
+			path_noise: NoiseParams { seed: 1337, frequency: 0.35, ..NoiseParams::default() },
 			height: 3.0,
 			thickness: DEFAULT_THICK,
 			portal_width: DEFAULT_PORTAL_WIDTH,
@@ -134,10 +130,7 @@ mod tests {
 			distance: 10.0,
 			step_len: StepLenRange::new(0.75, 1.25),
 			allowed_angles: AllowedAngles::yaw_pitch(0.4, 0.2),
-			path_noise: NoiseParams {
-				seed: 9,
-				..NoiseParams::default()
-			},
+			path_noise: NoiseParams { seed: 9, ..NoiseParams::default() },
 			must_assign: vec![MustAssignPortal::at(0.5, Portal::Window)],
 			optional_portals: (0, 0),
 			..NoisyPolylineWallParams::default()

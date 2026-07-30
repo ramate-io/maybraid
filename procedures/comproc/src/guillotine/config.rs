@@ -19,21 +19,13 @@ pub struct GuillotineConfig {
 
 impl Default for GuillotineConfig {
 	fn default() -> Self {
-		Self {
-			step_min: 1.0,
-			step_max: 8.0,
-			snap_quantum: None,
-		}
+		Self { step_min: 1.0, step_max: 8.0, snap_quantum: None }
 	}
 }
 
 impl GuillotineConfig {
 	pub const fn new(step_min: f32, step_max: f32) -> Self {
-		Self {
-			step_min,
-			step_max,
-			snap_quantum: None,
-		}
+		Self { step_min, step_max, snap_quantum: None }
 	}
 
 	pub const fn with_snap_quantum(mut self, quantum: f32) -> Self {

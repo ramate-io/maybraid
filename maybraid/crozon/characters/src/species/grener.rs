@@ -8,10 +8,7 @@ pub mod bsn;
 pub mod palette;
 pub mod pose;
 
-use crate::{
-	species::{SpeciesConfig},
-	ResolvedCharacterAssembly,
-};
+use crate::{species::SpeciesConfig, ResolvedCharacterAssembly};
 
 use assets::GrenerAssets;
 

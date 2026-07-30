@@ -24,10 +24,7 @@ pub struct ValleyTrainParams {
 
 impl Default for ValleyTrainParams {
 	fn default() -> Self {
-		Self {
-			segment_count: 3,
-			strength: 1.0,
-		}
+		Self { segment_count: 3, strength: 1.0 }
 	}
 }
 
@@ -79,15 +76,9 @@ impl ValleyTrain {
 				_ => ValleyTrainSegmentRole::MiddleGlide,
 			};
 			let (cross, depth, width_frac, active_channel) = match role {
-				ValleyTrainSegmentRole::UpperGorge => {
-					(ValleyCrossSection::V, 16.0, 0.16, true)
-				}
-				ValleyTrainSegmentRole::MiddleGlide => {
-					(ValleyCrossSection::U, 12.0, 0.22, true)
-				}
-				ValleyTrainSegmentRole::LowerFloor => {
-					(ValleyCrossSection::U, 8.0, 0.28, false)
-				}
+				ValleyTrainSegmentRole::UpperGorge => (ValleyCrossSection::V, 16.0, 0.16, true),
+				ValleyTrainSegmentRole::MiddleGlide => (ValleyCrossSection::U, 12.0, 0.22, true),
+				ValleyTrainSegmentRole::LowerFloor => (ValleyCrossSection::U, 8.0, 0.28, false),
 			};
 			let depth = scale_additive(depth, params.strength);
 			let t0 = i as f32 / n as f32;
@@ -125,12 +116,7 @@ impl ValleyTrain {
 	}
 
 	pub fn from_bounds_default(bounds: Bounds2, seed: u32) -> Self {
-		Self::from_bounds(
-			bounds,
-			seed,
-			ValleyTrainParams::default(),
-			None,
-		)
+		Self::from_bounds(bounds, seed, ValleyTrainParams::default(), None)
 	}
 }
 
@@ -148,10 +134,7 @@ fn sub_bounds_along_spine(parent: Bounds2, spine: &[Vec2], t0: f32, t1: f32) -> 
 		max = max.max(*p);
 	}
 	let pad = parent.extent().min_element() * 0.08;
-	Bounds2::new(
-		parent.project(min - Vec2::splat(pad)),
-		parent.project(max + Vec2::splat(pad)),
-	)
+	Bounds2::new(parent.project(min - Vec2::splat(pad)), parent.project(max + Vec2::splat(pad)))
 }
 
 #[cfg(test)]

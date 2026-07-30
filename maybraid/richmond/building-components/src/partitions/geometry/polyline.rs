@@ -89,9 +89,11 @@ impl PolylinePartition {
 		if points.len() < 2 {
 			return vec![Placed::with_placement(
 				PartitionTile::Linear,
-				Placement::at_origin()
-					.with_pitch(PANEL_TO_WALL_PITCH)
-					.with_scale(Vec3::new(1.0, self.thick_scale, self.wall_height)),
+				Placement::at_origin().with_pitch(PANEL_TO_WALL_PITCH).with_scale(Vec3::new(
+					1.0,
+					self.thick_scale,
+					self.wall_height,
+				)),
 			)];
 		}
 
@@ -130,9 +132,7 @@ impl PolylinePartition {
 			let roll_out = roll_along_slope(dout.x, dout.y, dout.z);
 			let droll = (roll_out - roll_in).abs();
 			if droll >= min_joint {
-				out.push(JointPartition::placed_at(
-					a, yaw_out, yaw_out, roll_in, roll_out, height,
-				));
+				out.push(JointPartition::placed_at(a, yaw_out, yaw_out, roll_in, roll_out, height));
 			}
 		}
 
@@ -152,9 +152,7 @@ impl PolylinePartition {
 			if kink < min_joint {
 				continue;
 			}
-			out.push(JointPartition::placed_at(
-				cur, yaw_in, yaw_out, roll_in, roll_out, height,
-			));
+			out.push(JointPartition::placed_at(cur, yaw_in, yaw_out, roll_in, roll_out, height));
 		}
 
 		out
@@ -163,12 +161,7 @@ impl PolylinePartition {
 
 /// Convert legacy 2D polyline points (XZ) into 3D with \(Y = 0\).
 pub fn polyline_from_xz(points: impl IntoIterator<Item = Vec2>) -> PolylinePartition {
-	PolylinePartition::new(
-		points
-			.into_iter()
-			.map(|p| Vec3::new(p.x, 0.0, p.y))
-			.collect::<Vec<_>>(),
-	)
+	PolylinePartition::new(points.into_iter().map(|p| Vec3::new(p.x, 0.0, p.y)).collect::<Vec<_>>())
 }
 
 pub(crate) fn wrap_pi(a: f32) -> f32 {
@@ -189,10 +182,7 @@ mod tests {
 		]);
 		let pieces = g.tiles();
 		assert_eq!(
-			pieces
-				.iter()
-				.filter(|p| p.geom == PartitionTile::Linear)
-				.count(),
+			pieces.iter().filter(|p| p.geom == PartitionTile::Linear).count(),
 			4 // two edges × round(2/1) tiles
 		);
 		assert!(!pieces.iter().any(|p| p.geom == PartitionTile::Joint));
@@ -205,11 +195,8 @@ mod tests {
 			PolylinePartition::new([Vec3::new(0.0, 0.0, 0.0), Vec3::new(2.4, 0.0, 0.0)])
 				.with_tile_width(1.0),
 		);
-		let linears: Vec<_> = g
-			.tiles()
-			.into_iter()
-			.filter(|p| p.geom == PartitionTile::Linear)
-			.collect();
+		let linears: Vec<_> =
+			g.tiles().into_iter().filter(|p| p.geom == PartitionTile::Linear).collect();
 		// round(2.4/1)=2 tiles of width 1.2, origin-anchored at tile starts
 		assert_eq!(linears.len(), 2);
 		assert!((linears[0].scale().x - 1.2).abs() < 1e-4);
@@ -225,13 +212,7 @@ mod tests {
 			Vec3::new(2.0, 0.0, 0.0),
 			Vec3::new(2.0, 0.0, 2.0),
 		]);
-		assert_eq!(
-			g.tiles()
-				.iter()
-				.filter(|p| p.geom == PartitionTile::Joint)
-				.count(),
-			1
-		);
+		assert_eq!(g.tiles().iter().filter(|p| p.geom == PartitionTile::Joint).count(), 1);
 		Ok(())
 	}
 
@@ -311,25 +292,16 @@ mod tests {
 
 	#[test]
 	fn sloping_edge_stays_plumb_and_follows_path_y() -> anyhow::Result<()> {
-		let g = PartitionGeometry::polyline([
-			Vec3::new(0.0, 0.0, 0.0),
-			Vec3::new(2.0, 1.0, 0.0),
-		]);
-		let linears: Vec<_> = g
-			.tiles()
-			.into_iter()
-			.filter(|p| p.geom == PartitionTile::Linear)
-			.collect();
+		let g = PartitionGeometry::polyline([Vec3::new(0.0, 0.0, 0.0), Vec3::new(2.0, 1.0, 0.0)]);
+		let linears: Vec<_> =
+			g.tiles().into_iter().filter(|p| p.geom == PartitionTile::Linear).collect();
 		assert_eq!(linears.len(), 2); // horiz 2 / tile_width 1
 		for linear in &linears {
 			assert!(linear.placement.roll.abs() < 1e-6);
 			assert!((linear.placement.pitch - PANEL_TO_WALL_PITCH).abs() < 1e-4);
 			assert!((linear.placement.scale.x - 1.0).abs() < 1e-4);
 			let kit_x = linear.placement.rotation() * Vec3::X;
-			assert!(
-				kit_x.y.abs() < 1e-4,
-				"plumb panel kit +X must stay horizontal, got {kit_x:?}"
-			);
+			assert!(kit_x.y.abs() < 1e-4, "plumb panel kit +X must stay horizontal, got {kit_x:?}");
 		}
 		assert!(linears[0].placement.translation.abs().max_element() < 1e-3);
 		// Second tile start is halfway along the 3D edge (path Y carries slope).
@@ -343,22 +315,12 @@ mod tests {
 			PolylinePartition::new([Vec3::new(0.0, 0.0, 0.0), Vec3::new(2.0, 1.0, 0.0)])
 				.with_incoming_slope(0.0),
 		);
-		assert_eq!(
-			flat_in
-				.tiles()
-				.iter()
-				.filter(|p| p.geom == PartitionTile::Joint)
-				.count(),
-			1
-		);
+		assert_eq!(flat_in.tiles().iter().filter(|p| p.geom == PartitionTile::Joint).count(), 1);
 		let matched = PartitionGeometry::Polyline(
 			PolylinePartition::new([Vec3::new(0.0, 0.0, 0.0), Vec3::new(2.0, 1.0, 0.0)])
 				.with_incoming_slope(roll_along_slope(2.0, 1.0, 0.0)),
 		);
-		assert!(!matched
-			.tiles()
-			.iter()
-			.any(|p| p.geom == PartitionTile::Joint));
+		assert!(!matched.tiles().iter().any(|p| p.geom == PartitionTile::Joint));
 		Ok(())
 	}
 }

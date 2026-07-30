@@ -17,10 +17,7 @@ use lod::lod_scene_host::{LodLevelRoot, LodLevelRoots, LodSceneHost};
 use crate::assets::AssetPath;
 
 /// Optional GLB under a transform (e.g. omit content at a far band).
-pub fn posed_asset_tier(
-	asset: Option<AssetPath>,
-	transform: Transform,
-) -> impl Scene + 'static {
+pub fn posed_asset_tier(asset: Option<AssetPath>, transform: Transform) -> impl Scene + 'static {
 	let children: Vec<Box<dyn Scene>> = match asset {
 		Some(a) => vec![Box::new(a.scene_ref().scene())],
 		None => vec![],
@@ -80,14 +77,8 @@ pub fn warm_content_host_hsl<P: Component + Clone + Default + Unpin>(
 		level,
 		probe,
 		[
-			(
-				LodSceneLevel::High,
-				Box::new(high) as Box<dyn Scene>,
-			),
-			(
-				LodSceneLevel::Medium,
-				Box::new(mid) as Box<dyn Scene>,
-			),
+			(LodSceneLevel::High, Box::new(high) as Box<dyn Scene>),
+			(LodSceneLevel::Medium, Box::new(mid) as Box<dyn Scene>),
 			(LodSceneLevel::Low, Box::new(low) as Box<dyn Scene>),
 		],
 	)
@@ -125,11 +116,7 @@ fn mesh_level_root(
 		Some(a) => vec![Box::new(a.scene_ref().scene())],
 		None => vec![],
 	};
-	let visibility = if visible {
-		Visibility::Inherited
-	} else {
-		Visibility::Hidden
-	};
+	let visibility = if visible { Visibility::Inherited } else { Visibility::Hidden };
 	Box::new(bsn! {
 		template_value(LodLevelRoot(level))
 		Transform::default()
@@ -144,11 +131,7 @@ fn content_level_root(
 	visible: bool,
 ) -> Box<dyn Scene> {
 	let children: Vec<Box<dyn Scene>> = vec![content];
-	let visibility = if visible {
-		Visibility::Inherited
-	} else {
-		Visibility::Hidden
-	};
+	let visibility = if visible { Visibility::Inherited } else { Visibility::Hidden };
 	Box::new(bsn! {
 		template_value(LodLevelRoot(level))
 		Transform::default()

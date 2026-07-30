@@ -120,11 +120,7 @@ fn pitch_into_node(path: &[Vec2], levels: &[f32], node: usize) -> f32 {
 
 fn pitch_out_of_node(path: &[Vec2], levels: &[f32], node: usize) -> f32 {
 	if node + 1 >= levels.len() || node + 1 >= path.len() {
-		return if node > 0 {
-			pitch_into_node(path, levels, node)
-		} else {
-			0.0
-		};
+		return if node > 0 { pitch_into_node(path, levels, node) } else { 0.0 };
 	}
 	let len = segment_len(path, node).max(1e-6);
 	(levels[node + 1] - levels[node]) / len
@@ -162,12 +158,7 @@ fn elevation_from_node_pitches(
 /// blended so kinks do not produce a hard slope discontinuity for nearby samples.
 ///
 /// `levels.len()` should match `path.len()`; mismatched tails are clamped.
-pub fn grade_along_polyline(
-	path: &[Vec2],
-	levels: &[f32],
-	p: Vec2,
-	node_blend: f32,
-) -> f32 {
+pub fn grade_along_polyline(path: &[Vec2], levels: &[f32], p: Vec2, node_blend: f32) -> f32 {
 	if path.is_empty() || levels.is_empty() {
 		return 0.0;
 	}
@@ -228,10 +219,7 @@ pub struct PolylineRegion {
 
 impl PolylineRegion {
 	pub fn new(points: Vec<Vec2>, half_width: f32) -> Self {
-		Self {
-			points,
-			half_width: half_width.max(1e-3),
-		}
+		Self { points, half_width: half_width.max(1e-3) }
 	}
 
 	/// Representative sample point (mid-path) for wet-volume probes.
@@ -282,11 +270,7 @@ mod tests {
 	#[test]
 	fn piecewise_grade_uses_local_segment_pitch() -> anyhow::Result<()> {
 		// Steep first half, flat second half — global head→toe would be wrong at mid.
-		let path = vec![
-			Vec2::new(0.0, 0.0),
-			Vec2::new(50.0, 0.0),
-			Vec2::new(100.0, 0.0),
-		];
+		let path = vec![Vec2::new(0.0, 0.0), Vec2::new(50.0, 0.0), Vec2::new(100.0, 0.0)];
 		let levels = vec![50.0, 40.0, 40.0];
 		let mid0 = grade_along_polyline(&path, &levels, Vec2::new(25.0, 0.0), 0.0);
 		assert!((mid0 - 45.0).abs() < 1e-3, "first segment mid={mid0}");
@@ -297,11 +281,7 @@ mod tests {
 
 	#[test]
 	fn node_pitch_blend_is_continuous_at_vertex() -> anyhow::Result<()> {
-		let path = vec![
-			Vec2::new(0.0, 0.0),
-			Vec2::new(50.0, 0.0),
-			Vec2::new(100.0, 0.0),
-		];
+		let path = vec![Vec2::new(0.0, 0.0), Vec2::new(50.0, 0.0), Vec2::new(100.0, 0.0)];
 		let levels = vec![50.0, 30.0, 20.0];
 		let at_node = grade_along_polyline(&path, &levels, Vec2::new(50.0, 0.0), 10.0);
 		assert!((at_node - 30.0).abs() < 1e-2, "W at node={at_node}");

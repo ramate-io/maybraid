@@ -2,8 +2,8 @@ pub mod articulation;
 pub mod debug;
 pub mod forelimbed;
 pub mod humanoid;
-pub mod quadruped;
 pub mod pose;
+pub mod quadruped;
 pub mod rigs;
 pub mod sliders;
 

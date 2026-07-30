@@ -51,18 +51,11 @@ pub enum ParentConfines {
 
 impl ParentConfines {
 	pub fn internal(center: Vec3, radius: f32) -> Self {
-		Self::Internal(InternalShape::Ball {
-			center,
-			radius: radius.max(1e-4),
-		})
+		Self::Internal(InternalShape::Ball { center, radius: radius.max(1e-4) })
 	}
 
 	pub fn capsule(a: Vec3, b: Vec3, radius: f32) -> Self {
-		Self::Internal(InternalShape::Capsule {
-			a,
-			b,
-			radius: radius.max(1e-4),
-		})
+		Self::Internal(InternalShape::Capsule { a, b, radius: radius.max(1e-4) })
 	}
 
 	/// Whether the viewer may activate this node's detail for this confine.

@@ -96,37 +96,34 @@ fn spawn_player(
 	let mut caster_shape = collider.clone();
 	caster_shape.set_scale(Vec3::splat(0.99), 10);
 
-	commands.spawn((
-		Name::new("Player"),
-		Player,
-		CharacterController,
-		Mesh3d(meshes.add(Capsule3d::new(CAPSULE_RADIUS, CAPSULE_LENGTH))),
-		MeshMaterial3d(materials.add(Color::srgb(0.85, 0.55, 0.35))),
-		Transform::from_translation(spawn),
-		RigidBody::Dynamic,
-		collider,
-		ShapeCaster::new(caster_shape, Vec3::ZERO, Quat::IDENTITY, Dir3::NEG_Y)
-			.with_max_distance(0.2),
-		LockedAxes::ROTATION_LOCKED,
-	))
-	.insert((
-		MovementAcceleration(MOVE_ACCEL),
-		MovementDampingFactor(MOVE_DAMPING),
-		JumpImpulse(JUMP_IMPULSE),
-		MaxSlopeAngle(MAX_SLOPE_ANGLE),
-		Friction::ZERO.with_combine_rule(CoefficientCombine::Min),
-		Restitution::ZERO.with_combine_rule(CoefficientCombine::Min),
-		GravityScale(2.0),
-	));
+	commands
+		.spawn((
+			Name::new("Player"),
+			Player,
+			CharacterController,
+			Mesh3d(meshes.add(Capsule3d::new(CAPSULE_RADIUS, CAPSULE_LENGTH))),
+			MeshMaterial3d(materials.add(Color::srgb(0.85, 0.55, 0.35))),
+			Transform::from_translation(spawn),
+			RigidBody::Dynamic,
+			collider,
+			ShapeCaster::new(caster_shape, Vec3::ZERO, Quat::IDENTITY, Dir3::NEG_Y)
+				.with_max_distance(0.2),
+			LockedAxes::ROTATION_LOCKED,
+		))
+		.insert((
+			MovementAcceleration(MOVE_ACCEL),
+			MovementDampingFactor(MOVE_DAMPING),
+			JumpImpulse(JUMP_IMPULSE),
+			MaxSlopeAngle(MAX_SLOPE_ANGLE),
+			Friction::ZERO.with_combine_rule(CoefficientCombine::Min),
+			Restitution::ZERO.with_combine_rule(CoefficientCombine::Min),
+			GravityScale(2.0),
+		));
 }
 
 pub fn player_spawn_point(layout: &TerrainCellLayout, elevation: f32) -> Vec3 {
 	let center = layout.region_center_xz();
-	Vec3::new(
-		center.x,
-		elevation + CAPSULE_RADIUS + CAPSULE_LENGTH * 0.5 + 0.5,
-		center.z,
-	)
+	Vec3::new(center.x, elevation + CAPSULE_RADIUS + CAPSULE_LENGTH * 0.5 + 0.5, center.z)
 }
 
 /// Reposition the player after terrain layout regeneration.
@@ -155,11 +152,9 @@ fn keyboard_movement_input(
 	let left = keyboard.any_pressed([KeyCode::KeyA, KeyCode::ArrowLeft]);
 	let right = keyboard.any_pressed([KeyCode::KeyD, KeyCode::ArrowRight]);
 
-	let direction = Vec2::new(
-		right as i8 as f32 - left as i8 as f32,
-		up as i8 as f32 - down as i8 as f32,
-	)
-	.clamp_length_max(1.0);
+	let direction =
+		Vec2::new(right as i8 as f32 - left as i8 as f32, up as i8 as f32 - down as i8 as f32)
+			.clamp_length_max(1.0);
 
 	if direction != Vec2::ZERO {
 		writer.write(MovementAction::Move(direction));

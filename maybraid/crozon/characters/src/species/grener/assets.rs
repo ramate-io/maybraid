@@ -8,7 +8,10 @@ use crate::{
 	assets::AssetNormalization,
 	species::{
 		common::{BODY_SHARK, FORELIMBED_RIG},
-		grener::{pose::{GrenerPose, GRENER_OVERALL_SCALE}, GrenerConfig},
+		grener::{
+			pose::{GrenerPose, GRENER_OVERALL_SCALE},
+			GrenerConfig,
+		},
 	},
 };
 

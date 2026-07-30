@@ -95,10 +95,7 @@ macro_rules! define_marazion_band {
 				if id != lod::gen::Id::Universal {
 					return None;
 				}
-				Some((
-					spatial_index.$bootstrap_fn(),
-					$crate::terrain::cell::universal_bounds(),
-				))
+				Some((spatial_index.$bootstrap_fn(), $crate::terrain::cell::universal_bounds()))
 			}
 
 			fn descendants_with_lod(
@@ -288,9 +285,7 @@ macro_rules! define_marazion_band {
 					.into_iter()
 					.map(|b| {
 						$crate::terrain::marazion::pre_pocket::aabb_from_bounds2(
-							b,
-							cell.min.y,
-							cell.max.y,
+							b, cell.min.y, cell.max.y,
 						)
 					})
 					.collect();
@@ -406,8 +401,7 @@ macro_rules! define_marazion_band {
 				let type_u =
 					procedural_common::SeededHash::new(seed.wrapping_add(0x57EA_71FE)).unit(0);
 				let stream_cut = band.stream_frac.clamp(0.0, 1.0);
-				let graph_cut =
-					(stream_cut + band.streams_graph_frac.clamp(0.0, 1.0)).min(1.0);
+				let graph_cut = (stream_cut + band.streams_graph_frac.clamp(0.0, 1.0)).min(1.0);
 				let bog_cut = (graph_cut + band.bog_frac.clamp(0.0, 1.0)).min(1.0);
 				let prefer = if type_u < stream_cut {
 					0u8 // stream
@@ -421,13 +415,8 @@ macro_rules! define_marazion_band {
 
 				use $crate::terrain::marazion::pocket_water::MarazionPocketWater;
 				let try_stream = || -> Option<MarazionPocketWater> {
-					marazion_watersheds::Stream::from_bounds(
-						bounds,
-						seed,
-						band.stream,
-						height_at,
-					)
-					.map(MarazionPocketWater::Stream)
+					marazion_watersheds::Stream::from_bounds(bounds, seed, band.stream, height_at)
+						.map(MarazionPocketWater::Stream)
 				};
 				let try_streams_graph = || -> Option<MarazionPocketWater> {
 					marazion_watersheds::StreamsGraph::from_bounds(
@@ -439,22 +428,12 @@ macro_rules! define_marazion_band {
 					.map(MarazionPocketWater::StreamsGraph)
 				};
 				let try_bog = || -> Option<MarazionPocketWater> {
-					marazion_watersheds::Bog::from_bounds(
-						bounds,
-						seed,
-						band.bog,
-						height_at,
-					)
-					.map(MarazionPocketWater::Bog)
+					marazion_watersheds::Bog::from_bounds(bounds, seed, band.bog, height_at)
+						.map(MarazionPocketWater::Bog)
 				};
 				let try_lake = || -> Option<MarazionPocketWater> {
-					marazion_watersheds::Lake::from_bounds(
-						bounds,
-						seed,
-						band.lake,
-						height_at,
-					)
-					.map(MarazionPocketWater::Lake)
+					marazion_watersheds::Lake::from_bounds(bounds, seed, band.lake, height_at)
+						.map(MarazionPocketWater::Lake)
 				};
 
 				let authored = match prefer {

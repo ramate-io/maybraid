@@ -62,12 +62,7 @@ impl PreviewArgs {
 		colors.eyes = self.eyes;
 		colors.snout = self.snout_color;
 		ConceptPreviewConfig::brokker_with_animation(
-			BrokkerConfig {
-				eye: self.eye,
-				hair: self.hair,
-				clothing: self.clothing,
-				colors,
-			},
+			BrokkerConfig { eye: self.eye, hair: self.hair, clothing: self.clothing, colors },
 			self.animation,
 		)
 	}

@@ -5,33 +5,33 @@
 
 pub mod braidman;
 pub mod brenal;
-pub mod caole;
-pub mod claber;
-pub mod epiphant;
-pub mod croconot;
-pub mod hars;
 pub mod brodler;
 pub mod brokker;
+pub mod caole;
 pub mod chupri;
+pub mod claber;
 pub mod common;
-pub mod kispar;
+pub mod croconot;
 pub mod dui;
+pub mod epiphant;
 pub mod grener;
+pub mod hars;
+pub mod kaller;
+pub mod kappler;
+pub mod kispar;
 pub mod lero;
 pub mod lidder;
 pub mod mistler;
 pub mod mygr;
+pub mod sonyak;
 pub mod spibmom;
-pub mod tipple;
-pub mod thumplus;
-pub mod topple;
 pub mod tapp;
-pub mod kaller;
-pub mod kappler;
+pub mod thumplus;
+pub mod tipple;
+pub mod topple;
 pub mod tuberwaber;
 pub mod wumbus;
 pub mod ylter;
-pub mod sonyak;
 
 use crate::ResolvedCharacterAssembly;
 

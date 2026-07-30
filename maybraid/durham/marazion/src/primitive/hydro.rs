@@ -84,11 +84,7 @@ pub fn primitives_from_polyline(
 			continue;
 		}
 		out.push(HydroPrimitive {
-			footprint: HydroFootprint::Reach(ReachSegment {
-				a,
-				b,
-				half_width: hw,
-			}),
+			footprint: HydroFootprint::Reach(ReachSegment { a, b, half_width: hw }),
 			elevation: HydroElevation::Reach(ReachProfile {
 				surface_a: levels[i],
 				surface_b: levels[i + 1],
@@ -144,8 +140,8 @@ fn smoothmin2(a: f32, b: f32, k: f32) -> f32 {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use crate::primitive::parameters::ComplexParams;
 	use crate::primitive::complex::HydroComplex;
+	use crate::primitive::parameters::ComplexParams;
 	use jersey_terrain_stamps::RegionNoise;
 	use procedural_common::Bounds2;
 
@@ -169,10 +165,7 @@ mod tests {
 		assert!((bed_mid - (45.0 - 4.0)).abs() < 1e-3);
 		let (w_bank, bed_bank) = prim.surface_and_bed(Vec2::new(20.0, 8.0));
 		assert!((w_bank - 45.0).abs() < 1e-3, "W independent of X");
-		assert!(
-			bed_bank > bed_mid + 2.0,
-			"bed rises toward bank: mid={bed_mid} bank={bed_bank}"
-		);
+		assert!(bed_bank > bed_mid + 2.0, "bed rises toward bank: mid={bed_mid} bank={bed_bank}");
 		Ok(())
 	}
 
@@ -211,10 +204,7 @@ mod tests {
 			ComplexParams::default(),
 		);
 		let h = prep.modify_elevation(50.0, 20.0, 1.0);
-		assert!(
-			h <= 50.0 - 7.0,
-			"carve soft-min should prefer deeper channel: {h}"
-		);
+		assert!(h <= 50.0 - 7.0, "carve soft-min should prefer deeper channel: {h}");
 		Ok(())
 	}
 
@@ -260,10 +250,7 @@ mod tests {
 		// Junction interior should be below surface (carved), not raised.
 		let h0 = 28.0;
 		let h1 = prep.modify_elevation(h0, 20.0, 0.0);
-		assert!(
-			h1 <= h0 + 0.05,
-			"confluence interior must not raise: {h0} -> {h1}"
-		);
+		assert!(h1 <= h0 + 0.05, "confluence interior must not raise: {h0} -> {h1}");
 		assert!(h1 < 30.0 - 1.0, "should sit in the carved bowl: {h1}");
 		Ok(())
 	}

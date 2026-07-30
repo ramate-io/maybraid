@@ -10,14 +10,14 @@ pub mod polyline;
 pub mod portal;
 
 pub use arc::{ArcWall, ArcWallParams};
-pub use linear::{LinearWall, LinearWallParams, DEFAULT_PORTAL_WIDTH as LINEAR_DEFAULT_PORTAL_WIDTH};
+pub use linear::{
+	LinearWall, LinearWallParams, DEFAULT_PORTAL_WIDTH as LINEAR_DEFAULT_PORTAL_WIDTH,
+};
 pub use noisy_polyline::{NoisyPolylineWall, NoisyPolylineWallParams};
 pub use polyline::{
 	PolylineWall, PolylineWallParams, DEFAULT_PORTAL_WIDTH as POLYLINE_DEFAULT_PORTAL_WIDTH,
 };
-pub use portal::{
-	AssignedPortal, MustAssignPortal, Portal, WallRegion, ArcRegion, SLICE_Y_FRAC,
-};
+pub use portal::{ArcRegion, AssignedPortal, MustAssignPortal, Portal, WallRegion, SLICE_Y_FRAC};
 
 use richmond_building_components::partitions::PartitionNode;
 

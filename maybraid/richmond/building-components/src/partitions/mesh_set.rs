@@ -32,11 +32,7 @@ impl PartitionMeshSet {
 	}
 
 	pub const fn uniform(asset: AssetPath) -> Self {
-		Self {
-			high: asset,
-			mid: asset,
-			low: asset,
-		}
+		Self { high: asset, mid: asset, low: asset }
 	}
 
 	pub fn for_tier(self, tier: PartitionMeshTier) -> AssetPath {

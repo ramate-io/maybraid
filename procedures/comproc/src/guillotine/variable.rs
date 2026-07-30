@@ -48,11 +48,7 @@ impl<const D: usize, N: NoiseFn<f64, D> + Seedable> VariableGuillotine<D, N> {
 		config: GuillotineConfig,
 		depth_range: DepthRange,
 	) -> Self {
-		Self {
-			noise,
-			config,
-			depth_range,
-		}
+		Self { noise, config, depth_range }
 	}
 
 	pub fn with_noise(noise: NoiseConfig<D, N>) -> Self {
@@ -148,8 +144,7 @@ impl<const D: usize, N: NoiseFn<f64, D> + Seedable> VariableGuillotine<D, N> {
 		let lo = self.depth_range.min as usize;
 		let hi = self.depth_range.sample_hi_exclusive();
 		self.noise
-			.sample_range_usize(lo, hi, sample_point(root.lower_left(), 0, SALT_DEPTH))
-			as u8
+			.sample_range_usize(lo, hi, sample_point(root.lower_left(), 0, SALT_DEPTH)) as u8
 	}
 }
 

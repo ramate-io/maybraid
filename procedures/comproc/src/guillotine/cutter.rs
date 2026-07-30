@@ -41,12 +41,7 @@ struct AxisFront {
 
 impl AxisFront {
 	fn new(mid: f32) -> Self {
-		Self {
-			lo: mid,
-			hi: mid,
-			lo_saturated: false,
-			hi_saturated: false,
-		}
+		Self { lo: mid, hi: mid, lo_saturated: false, hi_saturated: false }
 	}
 
 	fn saturated(&self) -> bool {
@@ -56,11 +51,7 @@ impl AxisFront {
 
 impl<const D: usize, N: NoiseFn<f64, D> + Seedable> Guillotine<D, N> {
 	pub fn new(noise: NoiseConfig<D, N>, config: GuillotineConfig, depth: u8) -> Self {
-		Self {
-			noise,
-			config,
-			depth,
-		}
+		Self { noise, config, depth }
 	}
 
 	pub fn with_noise(noise: NoiseConfig<D, N>) -> Self {
@@ -137,19 +128,12 @@ impl<const D: usize, N: NoiseFn<f64, D> + Seedable> Guillotine<D, N> {
 			let step = self.noise.sample_range_f32(
 				self.config.step_min,
 				self.config.step_max,
-				noise_sample_point(
-					anchor,
-					attempt,
-					SALT_STEP + axis as f32 * SALT_AXIS_STRIDE,
-				),
+				noise_sample_point(anchor, attempt, SALT_STEP + axis as f32 * SALT_AXIS_STRIDE),
 			);
 
 			let front = &mut fronts[axis];
-			let (candidate, from) = if toward_low {
-				(front.lo - step, front.lo)
-			} else {
-				(front.hi + step, front.hi)
-			};
+			let (candidate, from) =
+				if toward_low { (front.lo - step, front.lo) } else { (front.hi + step, front.hi) };
 
 			let mut next = candidate;
 			if let Some(q) = self.config.snap_quantum {
@@ -164,11 +148,7 @@ impl<const D: usize, N: NoiseFn<f64, D> + Seedable> Guillotine<D, N> {
 			let valid = next.is_finite()
 				&& next > root.min[axis]
 				&& next < root.max[axis]
-				&& if toward_low {
-					next < from
-				} else {
-					next > from
-				};
+				&& if toward_low { next < from } else { next > from };
 
 			if !valid {
 				if toward_low {
@@ -197,9 +177,7 @@ impl<const D: usize, N: NoiseFn<f64, D> + Seedable> Guillotine<D, N> {
 
 	/// Cut `root` and iterate the resulting leaf regions.
 	pub fn regions(&self, root: Bounds<D>) -> RegionsOwned<D> {
-		RegionsOwned {
-			cuts: self.cut(root),
-		}
+		RegionsOwned { cuts: self.cut(root) }
 	}
 
 	/// Cut `root` and collect leaf regions.
@@ -207,12 +185,7 @@ impl<const D: usize, N: NoiseFn<f64, D> + Seedable> Guillotine<D, N> {
 		self.cut(root).regions_vec()
 	}
 
-	fn choose_axis(
-		&self,
-		fronts: &[AxisFront; D],
-		anchor: [f32; D],
-		attempt: u8,
-	) -> Option<usize> {
+	fn choose_axis(&self, fronts: &[AxisFront; D], anchor: [f32; D], attempt: u8) -> Option<usize> {
 		let mut candidates = [0usize; D];
 		let mut n = 0usize;
 		for axis in 0..D {
@@ -224,32 +197,20 @@ impl<const D: usize, N: NoiseFn<f64, D> + Seedable> Guillotine<D, N> {
 		if n == 0 {
 			return None;
 		}
-		let idx = self.noise.sample_range_usize(
-			0,
-			n,
-			noise_sample_point(anchor, attempt, SALT_AXIS),
-		);
+		let idx =
+			self.noise
+				.sample_range_usize(0, n, noise_sample_point(anchor, attempt, SALT_AXIS));
 		Some(candidates[idx])
 	}
 
 	/// Pick low vs high front among unsaturated sides (`true` = toward `min`).
-	fn choose_side(
-		&self,
-		front: &AxisFront,
-		anchor: [f32; D],
-		attempt: u8,
-		axis: usize,
-	) -> bool {
+	fn choose_side(&self, front: &AxisFront, anchor: [f32; D], attempt: u8, axis: usize) -> bool {
 		match (front.lo_saturated, front.hi_saturated) {
 			(false, false) => {
 				self.noise.sample_range_usize(
 					0,
 					2,
-					noise_sample_point(
-						anchor,
-						attempt,
-						SALT_SIDE + axis as f32 * SALT_AXIS_STRIDE,
-					),
+					noise_sample_point(anchor, attempt, SALT_SIDE + axis as f32 * SALT_AXIS_STRIDE),
 				) == 0
 			}
 			(false, true) => true,
@@ -278,12 +239,7 @@ impl<const D: usize> IntoIterator for RegionsOwned<D> {
 	fn into_iter(self) -> Self::IntoIter {
 		let counts = std::array::from_fn(|i| self.cuts.cuts[i].len() + 1);
 		let finished = counts.iter().any(|&c| c == 0);
-		RegionsIntoIter {
-			cuts: self.cuts,
-			counts,
-			cursor: [0; D],
-			finished,
-		}
+		RegionsIntoIter { cuts: self.cuts, counts, cursor: [0; D], finished }
 	}
 }
 
@@ -307,11 +263,7 @@ impl<const D: usize> Iterator for RegionsIntoIter<D> {
 		let mut max = [0.0; D];
 		for axis in 0..D {
 			let i = self.cursor[axis];
-			min[axis] = if i == 0 {
-				self.cuts.root.min[axis]
-			} else {
-				self.cuts.cuts[axis][i - 1]
-			};
+			min[axis] = if i == 0 { self.cuts.root.min[axis] } else { self.cuts.cuts[axis][i - 1] };
 			max[axis] = if i + 1 >= self.counts[axis] {
 				self.cuts.root.max[axis]
 			} else {

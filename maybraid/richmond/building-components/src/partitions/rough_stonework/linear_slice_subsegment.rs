@@ -4,5 +4,4 @@
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct RoughStoneworkLinearSliceSubsegment;
 
-
 crate::impl_empty_lod_scene!(RoughStoneworkLinearSliceSubsegment);

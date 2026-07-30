@@ -17,8 +17,8 @@
 use bevy_math::Vec2;
 use jersey_terrain_stamps::RegionNoise;
 use marazion_watersheds::{
-	Ellipse, HydroComplex, HydroElevation, HydroFootprint, HydroNode, HydroParams, HydroPrimitive,
-	RadialBowl, ReachProfile, ReachSegment, CorrectionStage,
+	CorrectionStage, Ellipse, HydroComplex, HydroElevation, HydroFootprint, HydroNode, HydroParams,
+	HydroPrimitive, RadialBowl, ReachProfile, ReachSegment,
 };
 use procedural_common::Bounds2;
 use std::f32::consts::TAU;
@@ -50,10 +50,7 @@ fn lake_node() -> HydroNode {
 				radii: Vec2::new(60.0, 40.0),
 				rotation: 0.35,
 			}),
-			elevation: HydroElevation::Radial(RadialBowl {
-				surface: 40.0,
-				center_depth: 8.0,
-			}),
+			elevation: HydroElevation::Radial(RadialBowl { surface: 40.0, center_depth: 8.0 }),
 			influence_pad: 80.0,
 		},
 		params,
@@ -112,7 +109,12 @@ fn iso_phi_on_ray(node: &HydroNode, center: Vec2, dir: Vec2, target: f32) -> any
 	Ok(center + dir * (0.5 * (lo + hi)))
 }
 
-fn sample_iso_phi_ring(node: &HydroNode, center: Vec2, target: f32, n: usize) -> anyhow::Result<Vec<Vec2>> {
+fn sample_iso_phi_ring(
+	node: &HydroNode,
+	center: Vec2,
+	target: f32,
+	n: usize,
+) -> anyhow::Result<Vec<Vec2>> {
 	let mut out = Vec::with_capacity(n);
 	for i in 0..n {
 		let ang = TAU * (i as f32) / (n as f32);
@@ -225,10 +227,7 @@ fn write_debug_plot(
 		"<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"920\" height=\"640\" viewBox=\"0 0 920 640\">"
 			.into(),
 	);
-	push(
-		&mut out,
-		format!("<rect width=\"100%\" height=\"100%\" fill=\"{BG}\"/>"),
-	);
+	push(&mut out, format!("<rect width=\"100%\" height=\"100%\" fill=\"{BG}\"/>"));
 	push(
 		&mut out,
 		format!(
@@ -251,10 +250,7 @@ fn write_debug_plot(
 	let to_svg = |p: Vec2| -> (f32, f32) {
 		let u = (p.x - center.x) / world_r;
 		let v = (p.y - center.y) / world_r;
-		(
-			plan.0 + plan.2 * 0.5 + u * (plan.2 * 0.45),
-			plan.1 + plan.3 * 0.5 + v * (plan.3 * 0.45),
-		)
+		(plan.0 + plan.2 * 0.5 + u * (plan.2 * 0.45), plan.1 + plan.3 * 0.5 + v * (plan.3 * 0.45))
 	};
 	push(
 		&mut out,
@@ -265,11 +261,7 @@ fn write_debug_plot(
 	);
 
 	let h_min = h_shore.iter().chain(h_rim.iter()).cloned().fold(f32::INFINITY, f32::min);
-	let h_max = h_shore
-		.iter()
-		.chain(h_rim.iter())
-		.cloned()
-		.fold(f32::NEG_INFINITY, f32::max);
+	let h_max = h_shore.iter().chain(h_rim.iter()).cloned().fold(f32::NEG_INFINITY, f32::max);
 	let color = |hh: f32| -> String {
 		let t = ((hh - h_min) / (h_max - h_min).max(1e-3)).clamp(0.0, 1.0);
 		let r = (40.0 + 180.0 * t) as u8;
@@ -296,9 +288,8 @@ fn write_debug_plot(
 	}
 
 	let mut poly = |pts: &[Vec2], stroke: &str| {
-		let mut line = format!(
-			"<polyline fill=\"none\" stroke=\"{stroke}\" stroke-width=\"1.5\" points=\""
-		);
+		let mut line =
+			format!("<polyline fill=\"none\" stroke=\"{stroke}\" stroke-width=\"1.5\" points=\"");
 		for p in pts {
 			let (sx, sy) = to_svg(*p);
 			line.push_str(&format!("{sx:.2},{sy:.2} "));
@@ -351,9 +342,8 @@ fn write_debug_plot(
 		}
 		let vmin = vals.iter().cloned().fold(f32::INFINITY, f32::min);
 		let vmax = vals.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
-		let mut line = format!(
-			"<polyline fill=\"none\" stroke=\"{stroke}\" stroke-width=\"1.5\" points=\""
-		);
+		let mut line =
+			format!("<polyline fill=\"none\" stroke=\"{stroke}\" stroke-width=\"1.5\" points=\"");
 		for (i, hh) in vals.iter().enumerate() {
 			let x = chart.0 + chart.2 * (i as f32) / (vals.len().saturating_sub(1).max(1) as f32);
 			let t = (*hh - vmin) / (vmax - vmin).max(1e-3);
@@ -394,20 +384,15 @@ fn write_debug_plot(
 			tip.1 + 16.0
 		),
 	);
-	let series = [
-		(tip_phi, PHI, "phi"),
-		(tip_bed, BED, "geo bed"),
-		(tip_h, BLEND, "blend h"),
-	];
+	let series = [(tip_phi, PHI, "phi"), (tip_bed, BED, "geo bed"), (tip_h, BLEND, "blend h")];
 	for (si, (vals, stroke, label)) in series.iter().enumerate() {
 		if vals.is_empty() {
 			continue;
 		}
 		let vmin = vals.iter().cloned().fold(f32::INFINITY, f32::min);
 		let vmax = vals.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
-		let mut line = format!(
-			"<polyline fill=\"none\" stroke=\"{stroke}\" stroke-width=\"1.5\" points=\""
-		);
+		let mut line =
+			format!("<polyline fill=\"none\" stroke=\"{stroke}\" stroke-width=\"1.5\" points=\"");
 		for (i, v) in vals.iter().enumerate() {
 			let x = tip.0 + tip.2 * (i as f32) / (vals.len().saturating_sub(1).max(1) as f32);
 			let t = (*v - vmin) / (vmax - vmin).max(1e-3);
@@ -480,9 +465,7 @@ fn lake_iso_phi_rings_have_smooth_height() -> anyhow::Result<()> {
 		tip_bed.push(tip_node.bed_level(p));
 		tip_h.push(HydroNode::blend_terrain_elevation(&[&tip_node], 40.0, p));
 	}
-	write_debug_plot(
-		&lake, &shore, &rim, &h_shore, &h_rim, &tip_xs, &tip_phi, &tip_bed, &tip_h,
-	)?;
+	write_debug_plot(&lake, &shore, &rim, &h_shore, &h_rim, &tip_xs, &tip_phi, &tip_bed, &tip_h)?;
 
 	// With flat bank (no rim height / boundary noise), consecutive samples on φ=0
 	// should be nearly constant. Large Δ ⇒ jaggedness is in the heightfield.
@@ -490,14 +473,8 @@ fn lake_iso_phi_rings_have_smooth_height() -> anyhow::Result<()> {
 		d1_shore < 0.05,
 		"shore ring h chatters in XZ (max |Δh|={d1_shore}); jags are in the authored field"
 	);
-	anyhow::ensure!(
-		d2_shore < 0.08,
-		"shore ring h has high curvature (max |Δ²h|={d2_shore})"
-	);
-	anyhow::ensure!(
-		d1_rim < 0.08,
-		"rim ring h chatters in XZ (max |Δh|={d1_rim})"
-	);
+	anyhow::ensure!(d2_shore < 0.08, "shore ring h has high curvature (max |Δ²h|={d2_shore})");
+	anyhow::ensure!(d1_rim < 0.08, "rim ring h chatters in XZ (max |Δh|={d1_rim})");
 	Ok(())
 }
 
@@ -528,10 +505,7 @@ fn reach_end_cap_bed_should_meet_shore() -> anyhow::Result<()> {
 	anyhow::ensure!(phi_s.abs() < 0.05, "expected φ≈0 at end-cap shore, got {phi_s}");
 	let depth_s = node.surface_level(p_shore) - node.bed_level(p_shore);
 	eprintln!("end-cap shore: φ={phi_s:.4} depth={depth_s:.4}");
-	anyhow::ensure!(
-		depth_s < 0.25,
-		"bed depth should vanish on φ=0 end-cap shore, got {depth_s}"
-	);
+	anyhow::ensure!(depth_s < 0.25, "bed depth should vanish on φ=0 end-cap shore, got {depth_s}");
 	Ok(())
 }
 
@@ -564,11 +538,7 @@ fn overlapping_reaches_per_node_band_vs_union_phi() -> anyhow::Result<()> {
 			// Also compare hard point_classification of the nearest node vs union.
 			let nearest = nodes
 				.iter()
-				.min_by(|x, y| {
-					x.phi(p)
-						.partial_cmp(&y.phi(p))
-						.unwrap_or(std::cmp::Ordering::Equal)
-				})
+				.min_by(|x, y| x.phi(p).partial_cmp(&y.phi(p)).unwrap_or(std::cmp::Ordering::Equal))
 				.copied();
 			if let Some(n) = nearest {
 				let per = per_node_band(n, p);

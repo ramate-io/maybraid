@@ -122,9 +122,7 @@ impl LakeBandBudget {
 			((fit_radii.x * c).abs().powi(2) + (fit_radii.y * s).abs().powi(2)).sqrt(),
 			((fit_radii.x * s).abs().powi(2) + (fit_radii.y * c).abs().powi(2)).sqrt(),
 		);
-		let scale = (available / aabb.max(Vec2::splat(1e-3)))
-			.min_element()
-			.clamp(0.0, 1.0);
+		let scale = (available / aabb.max(Vec2::splat(1e-3))).min_element().clamp(0.0, 1.0);
 		water *= scale;
 		if water.min_element() < MIN_WATER_RADIUS {
 			return None;

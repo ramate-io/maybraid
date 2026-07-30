@@ -3,7 +3,6 @@
 pub mod arc_180;
 pub mod arc_90;
 pub mod bedroom;
-pub mod slice_90;
 pub mod linear;
 pub mod linear_wall;
 pub mod noisy_polyline_wall;
@@ -11,6 +10,7 @@ pub mod noisy_quad_polyline;
 pub mod pitch;
 pub mod polyline;
 pub mod polyline_wall;
+pub mod slice_90;
 pub mod stacked_rings;
 pub mod transform;
 pub mod wizards_tower;

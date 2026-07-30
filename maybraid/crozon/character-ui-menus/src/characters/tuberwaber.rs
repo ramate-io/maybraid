@@ -323,7 +323,10 @@ impl MenuComponent<MenuEvent> for TuberwaberHeadFeaturesMenu {
 		let base = PreviewColor::of(self.body_color);
 		MenuNode::fragment([
 			MenuNode::asset_grid("Head", &self.head, base, |value| {
-				MenuEvent::SetAsset(CharacterField::TuberwaberHead, AssetValue::TuberwaberHead(value))
+				MenuEvent::SetAsset(
+					CharacterField::TuberwaberHead,
+					AssetValue::TuberwaberHead(value),
+				)
 			}),
 			MenuNode::asset_grid(
 				"Eyes",

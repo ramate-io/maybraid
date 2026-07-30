@@ -27,11 +27,7 @@ pub fn setup_camera(
 	commands.spawn((
 		Camera3d::default(),
 		transform,
-		Projection::Perspective(PerspectiveProjection {
-			near: 0.1,
-			far: 40_000.0,
-			..default()
-		}),
+		Projection::Perspective(PerspectiveProjection { near: 0.1, far: 40_000.0, ..default() }),
 		CameraController { speed: 80.0, sensitivity: 0.005, yaw, pitch },
 		Msaa::Off,
 		DepthPrepass,

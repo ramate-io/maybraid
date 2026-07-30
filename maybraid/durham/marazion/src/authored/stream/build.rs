@@ -60,16 +60,9 @@ pub(crate) fn build_corridor(
 	let rim_w = TARGET_RIM_WIDTH;
 	let apron_width = (apron_w - skirt_w).max(apron_band);
 	let shore_amp = (half_w.max(1.0) * params.shore_indent_frac.clamp(0.0, 0.45)).max(0.01);
-	let shore_freq = scale_noise_freq(
-		params.shore_freq.max(0.0),
-		half_w,
-		params.apron.noise_freq_power,
-	);
-	let boundary_noise = Some(RegionNoise::from_seed(
-		seed.wrapping_add(5),
-		shore_freq,
-		shore_amp,
-	));
+	let shore_freq =
+		scale_noise_freq(params.shore_freq.max(0.0), half_w, params.apron.noise_freq_power);
+	let boundary_noise = Some(RegionNoise::from_seed(seed.wrapping_add(5), shore_freq, shore_amp));
 	let rim_boundary_noise = Some(apron_noise.apron.clone());
 	let rim_boundary_amp = apron_noise.apron_amp;
 	let rim_backfill_params = {
@@ -93,10 +86,7 @@ pub(crate) fn build_corridor(
 		boundary_noise,
 		rim_boundary_noise,
 		shore_blend: HydroParams::recommend_shore_blend(rim_w, shore_amp),
-		rim_apron_blend: HydroParams::recommend_shore_blend(
-			rim_w,
-			shore_amp.max(rim_boundary_amp),
-		),
+		rim_apron_blend: HydroParams::recommend_shore_blend(rim_w, shore_amp.max(rim_boundary_amp)),
 	};
 	let rim_backfill = rim_backfill_params.sample(seed, RIM_BACKFILL_SALT);
 

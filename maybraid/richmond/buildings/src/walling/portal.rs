@@ -40,10 +40,7 @@ impl WallRegion {
 
 	/// Half-open span `[start, end)` on the unit path (wraps if `start > end`).
 	pub fn span(start: f32, end: f32) -> Self {
-		Self {
-			start: norm_t(start),
-			end: norm_t(end),
-		}
+		Self { start: norm_t(start), end: norm_t(end) }
 	}
 
 	pub fn is_point(self) -> bool {
@@ -92,10 +89,7 @@ pub struct MustAssignPortal {
 
 impl MustAssignPortal {
 	pub fn at(t: f32, portal: Portal) -> Self {
-		Self {
-			region: WallRegion::point(t),
-			portal,
-		}
+		Self { region: WallRegion::point(t), portal }
 	}
 }
 
@@ -175,9 +169,7 @@ pub fn can_assign_centers(
 				}
 			}
 			let interval = foot.interval(c);
-			!blocked
-				.iter()
-				.any(|b| regions_overlap(interval, *b, foot.closed))
+			!blocked.iter().any(|b| regions_overlap(interval, *b, foot.closed))
 		})
 		.collect()
 }
@@ -211,16 +203,10 @@ pub fn place_optional_portals(
 			break;
 		}
 		let interval = foot.interval(t);
-		if blocked
-			.iter()
-			.any(|b| regions_overlap(interval, *b, true))
-		{
+		if blocked.iter().any(|b| regions_overlap(interval, *b, true)) {
 			continue;
 		}
-		portals.push(AssignedPortal {
-			t,
-			portal: Portal::Window,
-		});
+		portals.push(AssignedPortal { t, portal: Portal::Window });
 		blocked.push(interval);
 		placed += 1;
 	}
@@ -238,16 +224,12 @@ pub fn assign_portals(
 	let mut portals = Vec::new();
 	for must in must_assign {
 		let t = foot.snap_center(must.region.midpoint(), Some(slots));
-		portals.push(AssignedPortal {
-			t,
-			portal: must.portal,
-		});
+		portals.push(AssignedPortal { t, portal: must.portal });
 	}
 
 	let optional_n = optional_count(noise, optional_portals);
 	if optional_n > 0 {
-		let candidates =
-			can_assign_centers(foot, slots, &portals, must_assign, must_not_assign);
+		let candidates = can_assign_centers(foot, slots, &portals, must_assign, must_not_assign);
 		place_optional_portals(noise, foot, &mut portals, &candidates, optional_n);
 	}
 

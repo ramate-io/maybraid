@@ -2,13 +2,13 @@
 
 use bevy::prelude::*;
 use crozon_characters::species::{
-	braidman::BraidmanConfig, brenal::BrenalConfig, caole::CaoleConfig, epiphant::EpiphantConfig,
-	hars::HarsConfig, sonyak::SonyakConfig, ylter::YilterConfig, claber::ClaberConfig,
-	croconot::CroconotConfig, brodler::BrodlerConfig, dui::DuiConfig, brokker::BrokkerConfig,
-	chupri::ChupriConfig, kispar::KisparConfig, kaller::KallerConfig, kappler::KapplerConfig,
-	lidder::LidderConfig, lero::LeroConfig, mygr::MygrConfig, spibmom::SpibmomConfig,
-	tipple::TippleConfig, topple::ToppleConfig, tapp::TappConfig, wumbus::WumbusConfig,
-	grener::GrenerConfig, thumplus::ThumplusConfig, mistler::MistlerConfig, tuberwaber::TuberwaberConfig,
+	braidman::BraidmanConfig, brenal::BrenalConfig, brodler::BrodlerConfig, brokker::BrokkerConfig,
+	caole::CaoleConfig, chupri::ChupriConfig, claber::ClaberConfig, croconot::CroconotConfig,
+	dui::DuiConfig, epiphant::EpiphantConfig, grener::GrenerConfig, hars::HarsConfig,
+	kaller::KallerConfig, kappler::KapplerConfig, kispar::KisparConfig, lero::LeroConfig,
+	lidder::LidderConfig, mistler::MistlerConfig, mygr::MygrConfig, sonyak::SonyakConfig,
+	spibmom::SpibmomConfig, tapp::TappConfig, thumplus::ThumplusConfig, tipple::TippleConfig,
+	topple::ToppleConfig, tuberwaber::TuberwaberConfig, wumbus::WumbusConfig, ylter::YilterConfig,
 };
 
 use crate::{
@@ -272,22 +272,19 @@ impl SpeciesSessionState {
 				self.brenal.clone(),
 				self.brenal_animation,
 			),
-			ConceptSpecies::Caole => ConceptPreviewConfig::caole_with_animation(
-				self.caole.clone(),
-				self.caole_animation,
-			),
+			ConceptSpecies::Caole => {
+				ConceptPreviewConfig::caole_with_animation(self.caole.clone(), self.caole_animation)
+			}
 			ConceptSpecies::Epiphant => ConceptPreviewConfig::epiphant_with_animation(
 				self.epiphant.clone(),
 				self.epiphant_animation,
 			),
-			ConceptSpecies::Hars => ConceptPreviewConfig::hars_with_animation(
-				self.hars.clone(),
-				self.hars_animation,
-			),
-			ConceptSpecies::Yilter => ConceptPreviewConfig::ylter_with_animation(
-				self.ylter.clone(),
-				self.ylter_animation,
-			),
+			ConceptSpecies::Hars => {
+				ConceptPreviewConfig::hars_with_animation(self.hars.clone(), self.hars_animation)
+			}
+			ConceptSpecies::Yilter => {
+				ConceptPreviewConfig::ylter_with_animation(self.ylter.clone(), self.ylter_animation)
+			}
 			ConceptSpecies::Sonyak => ConceptPreviewConfig::sonyak_with_animation(
 				self.sonyak.clone(),
 				self.sonyak_animation,
@@ -310,33 +307,41 @@ impl SpeciesSessionState {
 			ConceptSpecies::Dui => {
 				ConceptPreviewConfig::dui_with_animation(self.dui.clone(), self.dui_animation)
 			}
-			ConceptSpecies::Lidder => {
-				ConceptPreviewConfig::lidder_with_animation(self.lidder.clone(), self.lidder_animation)
-			}
-			ConceptSpecies::Chupri => {
-				ConceptPreviewConfig::chupri_with_animation(self.chupri.clone(), self.chupri_animation)
-			}
-			ConceptSpecies::Brokker => {
-				ConceptPreviewConfig::brokker_with_animation(self.brokker.clone(), self.brokker_animation)
-			}
-			ConceptSpecies::Tipple => {
-				ConceptPreviewConfig::tipple_with_animation(self.tipple.clone(), self.tipple_animation)
-			}
-			ConceptSpecies::Topple => {
-				ConceptPreviewConfig::topple_with_animation(self.topple.clone(), self.topple_animation)
-			}
-			ConceptSpecies::Kispar => {
-				ConceptPreviewConfig::kispar_with_animation(self.kispar.clone(), self.kispar_animation)
-			}
+			ConceptSpecies::Lidder => ConceptPreviewConfig::lidder_with_animation(
+				self.lidder.clone(),
+				self.lidder_animation,
+			),
+			ConceptSpecies::Chupri => ConceptPreviewConfig::chupri_with_animation(
+				self.chupri.clone(),
+				self.chupri_animation,
+			),
+			ConceptSpecies::Brokker => ConceptPreviewConfig::brokker_with_animation(
+				self.brokker.clone(),
+				self.brokker_animation,
+			),
+			ConceptSpecies::Tipple => ConceptPreviewConfig::tipple_with_animation(
+				self.tipple.clone(),
+				self.tipple_animation,
+			),
+			ConceptSpecies::Topple => ConceptPreviewConfig::topple_with_animation(
+				self.topple.clone(),
+				self.topple_animation,
+			),
+			ConceptSpecies::Kispar => ConceptPreviewConfig::kispar_with_animation(
+				self.kispar.clone(),
+				self.kispar_animation,
+			),
 			ConceptSpecies::Tapp => {
 				ConceptPreviewConfig::tapp_with_animation(self.tapp.clone(), self.tapp_animation)
 			}
-			ConceptSpecies::Kaller => {
-				ConceptPreviewConfig::kaller_with_animation(self.kaller.clone(), self.kaller_animation)
-			}
-			ConceptSpecies::Kappler => {
-				ConceptPreviewConfig::kappler_with_animation(self.kappler.clone(), self.kappler_animation)
-			}
+			ConceptSpecies::Kaller => ConceptPreviewConfig::kaller_with_animation(
+				self.kaller.clone(),
+				self.kaller_animation,
+			),
+			ConceptSpecies::Kappler => ConceptPreviewConfig::kappler_with_animation(
+				self.kappler.clone(),
+				self.kappler_animation,
+			),
 			ConceptSpecies::Wumbus => ConceptPreviewConfig::wumbus_with_animation(
 				self.wumbus.clone(),
 				self.wumbus_animation,

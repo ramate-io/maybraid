@@ -8,8 +8,8 @@ use crozon_characters::{
 	species::{
 		common::EyeMesh,
 		epiphant::{
-			sliders::EpiphantSliders, EpiphantBodyMesh, EpiphantColor, EpiphantColors, EpiphantConfig,
-			EpiphantEarMesh, EpiphantHeadMesh, EpiphantNoseMesh,
+			sliders::EpiphantSliders, EpiphantBodyMesh, EpiphantColor, EpiphantColors,
+			EpiphantConfig, EpiphantEarMesh, EpiphantHeadMesh, EpiphantNoseMesh,
 		},
 	},
 	ConceptAnimation,
@@ -90,7 +90,8 @@ pub struct EpiphantAnimationMenu {
 impl EpiphantAnimationMenu {
 	pub fn new() -> Self {
 		Self {
-			clip: AssetSingleSelect::new(EpiphantAnimationClip::Still).with_camera_focus(BODY_FOCUS),
+			clip: AssetSingleSelect::new(EpiphantAnimationClip::Still)
+				.with_camera_focus(BODY_FOCUS),
 		}
 	}
 }
@@ -368,7 +369,10 @@ impl MenuComponent<MenuEvent> for EpiphantBodyMenu {
 				&self.body,
 				PreviewColor::of(self.color.value),
 				|value| {
-					MenuEvent::SetAsset(CharacterField::EpiphantBody, AssetValue::EpiphantBody(value))
+					MenuEvent::SetAsset(
+						CharacterField::EpiphantBody,
+						AssetValue::EpiphantBody(value),
+					)
 				},
 			),
 			self.sliders.menu_node(),
@@ -399,7 +403,10 @@ impl MenuComponent<MenuEvent> for EpiphantHeadFeaturesMenu {
 				&self.nose,
 				PreviewColor::of(self.nose_color.value),
 				|value| {
-					MenuEvent::SetAsset(CharacterField::EpiphantNose, AssetValue::EpiphantNose(value))
+					MenuEvent::SetAsset(
+						CharacterField::EpiphantNose,
+						AssetValue::EpiphantNose(value),
+					)
 				},
 			),
 			MenuNode::swatch("Trunk Color", &self.nose_color, |color| {

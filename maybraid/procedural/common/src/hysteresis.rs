@@ -80,10 +80,8 @@ impl SeededHash {
 	}
 
 	pub fn unit(&self, salt: u32) -> f32 {
-		let mut x = self
-			.seed
-			.wrapping_mul(0x9E37_79B9)
-			.wrapping_add(salt.wrapping_mul(0x85EB_CA6B));
+		let mut x =
+			self.seed.wrapping_mul(0x9E37_79B9).wrapping_add(salt.wrapping_mul(0x85EB_CA6B));
 		x ^= x >> 16;
 		x = x.wrapping_mul(0x7FEB_352D);
 		x ^= x >> 15;
@@ -188,15 +186,10 @@ impl HysteresisGraph {
 			let angle = (i as f32 + 0.37) * TAU / count.max(1) as f32;
 			let radius = 0.25 + 0.35 * hash.unit(i as u32 + 11);
 			let end = bounds.project(
-				center + Vec2::new(angle.cos(), angle.sin()) * radius * bounds.extent().min_element(),
+				center
+					+ Vec2::new(angle.cos(), angle.sin()) * radius * bounds.extent().min_element(),
 			);
-			let path = Self::degree1(
-				bounds,
-				seed.wrapping_add(i as u32 * 17),
-				center,
-				end,
-				config,
-			);
+			let path = Self::degree1(bounds, seed.wrapping_add(i as u32 * 17), center, end, config);
 			if let Some(p) = path.nodes.last().copied() {
 				tips.push(p);
 			}
@@ -263,14 +256,20 @@ impl HysteresisGraph {
 				let angle = hash.unit(spur_salt) * TAU;
 				let reach = 0.2 + 0.35 * hash.unit(spur_salt.wrapping_add(9));
 				let tip = bounds.project(
-					origin + Vec2::new(angle.cos(), angle.sin()) * reach * bounds.extent().min_element(),
+					origin
+						+ Vec2::new(angle.cos(), angle.sin())
+							* reach * bounds.extent().min_element(),
 				);
 				let spur = Self::walk_path(
 					bounds,
 					seed.wrapping_add(spur_salt),
 					origin,
 					tip,
-					&HysteresisConfig { max_segments: 8, step_len: config.step_len * 0.6, ..*config },
+					&HysteresisConfig {
+						max_segments: 8,
+						step_len: config.step_len * 0.6,
+						..*config
+					},
 				);
 				if spur.len() < 2 {
 					continue;

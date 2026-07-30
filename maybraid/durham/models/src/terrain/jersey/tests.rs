@@ -1,7 +1,9 @@
 //! Unit tests for per-family jersey guillotine grids.
 
 use crate::terrain::jersey::configs::JerseyStampConfigs;
-use crate::terrain::jersey::plateau::{PlateauLowPassControllerCell, PlateauLowPassControllerLayout};
+use crate::terrain::jersey::plateau::{
+	PlateauLowPassControllerCell, PlateauLowPassControllerLayout,
+};
 use crate::terrain::jersey::shared::{leaf_selected, LeafAabbs};
 use crate::terrain::jersey::valley::{ValleyLowPassControllerCell, ValleyLowPassControllerLayout};
 use anyhow::{bail, Result};
@@ -14,10 +16,7 @@ fn assert_tiles_parent(parent: Aabb3d, leaves: &[Aabb3d]) -> Result<()> {
 		bail!("expected at least one leaf");
 	}
 	let parent_area = (parent.max.x - parent.min.x) * (parent.max.z - parent.min.z);
-	let leaf_area: f32 = leaves
-		.iter()
-		.map(|l| (l.max.x - l.min.x) * (l.max.z - l.min.z))
-		.sum();
+	let leaf_area: f32 = leaves.iter().map(|l| (l.max.x - l.min.x) * (l.max.z - l.min.z)).sum();
 	if (leaf_area - parent_area).abs() > 1e-2 * parent_area.max(1.0) {
 		bail!("area mismatch: parent={parent_area} leaves={leaf_area}");
 	}
@@ -61,17 +60,15 @@ fn family_controller_grids_are_offset_apart() -> Result<()> {
 fn valley_leaf_ids_stable() -> Result<()> {
 	let configs = JerseyStampConfigs::default();
 	let cell = ValleyLowPassControllerLayout::default().cell_bounds(0, 0);
-	let controller = ValleyLowPassControllerCell::from_family_config(cell, &configs.valley.low_pass);
+	let controller =
+		ValleyLowPassControllerCell::from_family_config(cell, &configs.valley.low_pass);
 	let leaves = controller.leaf_aabbs();
 	let ids: Vec<Id> = leaves.iter().copied().map(Id::from_cell).collect();
 	let mut unique = ids.clone();
 	unique.sort();
 	unique.dedup();
 	assert_eq!(unique.len(), ids.len(), "leaf Ids must be unique");
-	let first = leaves
-		.first()
-		.copied()
-		.ok_or_else(|| anyhow::anyhow!("no leaves"))?;
+	let first = leaves.first().copied().ok_or_else(|| anyhow::anyhow!("no leaves"))?;
 	let probe = Aabb3d::from_min_max(
 		Vec3::new(
 			(first.min.x + first.max.x) * 0.5 - 1.0,
@@ -115,10 +112,7 @@ fn layout_defaults_feed_configs() -> Result<()> {
 	use crate::terrain::jersey::configs::JerseyStampConfigs;
 	use crate::terrain::jersey::massif::MassifLowPassControllerLayout;
 	let configs = JerseyStampConfigs::default();
-	assert_eq!(
-		configs.massif.low_pass.likelihood,
-		MassifLowPassControllerLayout::LIKELIHOOD
-	);
+	assert_eq!(configs.massif.low_pass.likelihood, MassifLowPassControllerLayout::LIKELIHOOD);
 	assert_eq!(
 		configs.massif.low_pass.spatial_correlation,
 		MassifLowPassControllerLayout::SPATIAL_CORRELATION
@@ -131,14 +125,8 @@ fn layout_defaults_feed_configs() -> Result<()> {
 		configs.massif.low_pass.guillotine.step_max,
 		MassifLowPassControllerLayout::CELL_SIZE_MAX
 	);
-	assert_eq!(
-		configs.massif.low_pass.strength_min,
-		MassifLowPassControllerLayout::STRENGTH_MIN
-	);
-	assert_eq!(
-		configs.massif.low_pass.strength_max,
-		MassifLowPassControllerLayout::STRENGTH_MAX
-	);
+	assert_eq!(configs.massif.low_pass.strength_min, MassifLowPassControllerLayout::STRENGTH_MIN);
+	assert_eq!(configs.massif.low_pass.strength_max, MassifLowPassControllerLayout::STRENGTH_MAX);
 	Ok(())
 }
 

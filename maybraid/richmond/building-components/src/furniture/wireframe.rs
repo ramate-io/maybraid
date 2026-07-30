@@ -108,10 +108,7 @@ fn unit_cube_line_mesh() -> Mesh {
 		indices.push(i0 + 1);
 	}
 	let mut mesh = Mesh::new(PrimitiveTopology::LineList, RenderAssetUsages::default());
-	mesh.insert_attribute(
-		Mesh::ATTRIBUTE_POSITION,
-		VertexAttributeValues::Float32x3(positions),
-	);
+	mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, VertexAttributeValues::Float32x3(positions));
 	mesh.insert_indices(Indices::U32(indices));
 	mesh
 }
