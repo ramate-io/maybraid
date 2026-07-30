@@ -6,17 +6,17 @@ use bevy::prelude::*;
 #[command(rename_all = "kebab-case")]
 pub struct ShowTransform {
 	/// Translation `x,y,z` in world units.
-	#[arg(long, default_value = "0,0,0", value_parser = parse_vec3_csv)]
+	#[arg(long, default_value = "0,0,0", value_parser = parse_vec3_csv, allow_hyphen_values = true)]
 	#[arg(value_name = "X,Y,Z")]
 	pub translate: Vec3,
 
 	/// Euler rotation in degrees around X, then Y, then Z.
-	#[arg(long, default_value = "0,0,0", value_parser = parse_vec3_csv)]
+	#[arg(long, default_value = "0,0,0", value_parser = parse_vec3_csv, allow_hyphen_values = true)]
 	#[arg(value_name = "X,Y,Z")]
 	pub rotate_euler: Vec3,
 
 	/// Scale factors `x,y,z`.
-	#[arg(long, default_value = "1,1,1", value_parser = parse_vec3_csv)]
+	#[arg(long, default_value = "1,1,1", value_parser = parse_vec3_csv, allow_hyphen_values = true)]
 	#[arg(value_name = "X,Y,Z")]
 	pub scale: Vec3,
 }
@@ -44,4 +44,32 @@ pub fn parse_vec3_csv(s: &str) -> Result<Vec3, String> {
 	let y: f32 = parts[1].trim().parse().map_err(|e| format!("y: {e}"))?;
 	let z: f32 = parts[2].trim().parse().map_err(|e| format!("z: {e}"))?;
 	Ok(Vec3::new(x, y, z))
+}
+
+/// Parse panel-space `x,z` (allows negatives, e.g. `-1,1`).
+pub fn parse_vec2_csv(s: &str) -> Result<Vec2, String> {
+	let parts: Vec<_> = s.split(',').collect();
+	if parts.len() != 2 {
+		return Err(format!("expected x,z got {s:?}"));
+	}
+	let x: f32 = parts[0].trim().parse().map_err(|e| format!("x: {e}"))?;
+	let z: f32 = parts[1].trim().parse().map_err(|e| format!("z: {e}"))?;
+	Ok(Vec2::new(x, z))
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn parse_vec2_csv_accepts_negatives() {
+		assert_eq!(parse_vec2_csv("-1,1").unwrap(), Vec2::new(-1.0, 1.0));
+		assert_eq!(parse_vec2_csv(" -0.5 , 2 ").unwrap(), Vec2::new(-0.5, 2.0));
+	}
+
+	#[test]
+	fn parse_vec2_csv_rejects_wrong_arity() {
+		assert!(parse_vec2_csv("1").is_err());
+		assert!(parse_vec2_csv("1,2,3").is_err());
+	}
 }

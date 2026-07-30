@@ -29,8 +29,8 @@ use crate::assets::partitions::rough_stonework::{
 	SLICE_15_MID, SLICE_90_HIGH, SLICE_90_LOW, SLICE_90_MID,
 };
 use crate::panels::{
-	with_wall_standup_pitch, PanelGeometry, PanelStyle, Quad, QuadPolyline, Rectangle,
-	RightTriangle,
+	with_wall_standup_pitch, PanelGeometry, PanelKitCaps, Rectangle, RightTriangle,
+	TessellatedTriangle,
 };
 use crate::partitions::mesh_set::PartitionMeshSet;
 use crate::partitions::style::PartitionStyle;
@@ -47,10 +47,8 @@ pub enum PartitionGeometry {
 	Joint(JointPartition),
 	/// Short-run polyline (single LOD parent). Prefer splitting long paths upstream.
 	Polyline(PolylinePartition),
-	/// Shared quadrilateral panel (body + up to four edge triangles).
-	Quad(Quad),
-	/// Short-run polyline of quads + joints.
-	QuadPolyline(QuadPolyline),
+	/// Arbitrary 3D triangle filled with right-triangle kits.
+	TessellatedTriangle(TessellatedTriangle),
 	Arc(ArcSweep),
 	/// Slice-height arc (\(Y \in [0, [`SLICE_KIT_HEIGHT`]]\) in kit space).
 	SliceArc(ArcSweep),
@@ -72,12 +70,8 @@ impl PartitionGeometry {
 		Self::Polyline(PolylinePartition::new(points))
 	}
 
-	pub fn quad(quad: Quad) -> Self {
-		Self::Quad(quad)
-	}
-
-	pub fn quad_polyline(polyline: QuadPolyline) -> Self {
-		Self::QuadPolyline(polyline)
+	pub fn tessellated_triangle(t: TessellatedTriangle) -> Self {
+		Self::TessellatedTriangle(t)
 	}
 
 	pub fn arc(sweep_degrees: f32) -> Self {
@@ -95,14 +89,13 @@ impl PartitionGeometry {
 
 	/// Expand into posed leaf tiles under this geometry (identity parent).
 	pub fn tiles_for_style(&self, style: PartitionStyle) -> Vec<Placed<PartitionTile>> {
-		let panel_style = PanelStyle::from(style);
+		let panel_caps = PanelKitCaps::from(style);
 		match self {
 			Self::Linear(g) => g.tiles(),
 			Self::Joint(_) => vec![Placed::at_origin(PartitionTile::Joint)],
 			Self::Polyline(g) => g.tiles(),
-			Self::Quad(q) => map_panel_leaves(PanelGeometry::Quad(*q).flatten(panel_style)),
-			Self::QuadPolyline(pl) => {
-				map_panel_leaves(PanelGeometry::QuadPolyline(pl.clone()).flatten(panel_style))
+			Self::TessellatedTriangle(t) => {
+				map_panel_leaves(PanelGeometry::TessellatedTriangle(*t).flatten(panel_caps))
 			}
 			Self::Arc(g) => g.tiles(false),
 			Self::SliceArc(g) => g.tiles(true),
@@ -145,7 +138,6 @@ fn panel_to_tile(geom: PanelGeometry) -> Option<PartitionTile> {
 		PanelGeometry::RightTriangle(RightTriangle { mirror }) => {
 			Some(PartitionTile::RightTriangle { mirror })
 		}
-		PanelGeometry::Joint(_) => Some(PartitionTile::Joint),
 		_ => None,
 	}
 }

@@ -14,6 +14,7 @@ pub mod arc_spire;
 pub mod bedroom;
 pub mod constraints;
 pub mod stacked_rings;
+pub mod tessellated_triangle_panel;
 pub mod walling;
 pub mod wizards_tower;
 
@@ -27,6 +28,7 @@ pub use constraints::{
 	JointCoordinate, JointEntry, PreJointSweep, SubsetError,
 };
 pub use stacked_rings::{StackedRing, StackedRings};
+pub use tessellated_triangle_panel::TessellatedTrianglePanel;
 pub use walling::{
 	ArcRegion, ArcWall, ArcWallParams, AssignedPortal, LinearWall, LinearWallParams,
 	MustAssignPortal, NoisyPolylineWall, NoisyPolylineWallParams, PolylineWall, PolylineWallParams,

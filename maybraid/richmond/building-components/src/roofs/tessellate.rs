@@ -1,12 +1,14 @@
 //! Private roof kit tessellation (not part of the public IR).
 
+use std::f32::consts::PI;
+
 use bevy_math::Vec3;
 use scene_ref::MirrorAxis;
 
 use crate::arc_kit::{decompose_arc_sweep, ArcKit};
-use crate::panels::{PanelGeometry, PanelStyle, Rectangle, RightTriangle};
-use crate::placed::Placed;
-use crate::roofs::geometry::RoofGeometry;
+use crate::panels::{fitted_tile_count, PanelKitCaps};
+use crate::placed::{Placed, Placement};
+use crate::roofs::geometry::{Pitch, RoofGeometry};
 use crate::roofs::style::RoofStyle;
 
 /// Atomic roof kit pieces.
@@ -19,13 +21,9 @@ pub(crate) enum RoofKit {
 
 impl RoofGeometry {
 	pub(crate) fn kit_pieces_for_style(&self, style: RoofStyle) -> Vec<Placed<RoofKit>> {
-		let panel_style = PanelStyle::from(style);
+		let panel_caps = PanelKitCaps::from(style);
 		match self {
-			Self::Pitch(p) => map_leaves(PanelGeometry::Quad(p.to_quad()).flatten(panel_style)),
-			Self::Quad(q) => map_leaves(PanelGeometry::Quad(*q).flatten(panel_style)),
-			Self::QuadPolyline(pl) => {
-				map_leaves(PanelGeometry::QuadPolyline(pl.clone()).flatten(panel_style))
-			}
+			Self::Pitch(p) => pitch_kits(*p, panel_caps),
 			Self::Dome(g) => decompose_arc_sweep(g.sweep_degrees)
 				.into_iter()
 				.map(|(kit, yaw)| Placed::new(RoofKit::DomeArc(kit), Vec3::ZERO, yaw))
@@ -34,21 +32,108 @@ impl RoofGeometry {
 	}
 }
 
-fn map_leaves(pieces: Vec<Placed<PanelGeometry>>) -> Vec<Placed<RoofKit>> {
-	pieces
-		.into_iter()
-		.filter_map(|p| {
-			let kit = match p.geom {
-				PanelGeometry::RightTriangle(RightTriangle { mirror }) => {
-					RoofKit::RightTriangle { mirror }
-				}
-				PanelGeometry::Rectangle(Rectangle) => RoofKit::Rectangle,
-				PanelGeometry::Joint(_) => return None,
-				_ => return None,
-			};
-			Some(Placed { geom: kit, placement: p.placement })
-		})
-		.collect()
+fn pitch_kits(pitch: Pitch, caps: PanelKitCaps) -> Vec<Placed<RoofKit>> {
+	let run = pitch.run.max(0.0);
+	let tile_width = pitch.tile_width.max(1e-4);
+	let mut out = Vec::new();
+	let left_w = pitch.left.map(|b| b.abs()).unwrap_or(0.0);
+	let rect_x0 = left_w;
+
+	if let Some(base) = pitch.left {
+		if base.abs() > 1e-6 && run > 1e-6 {
+			out.extend(end_triangles(EndSide::Left, 0.0, base, run));
+		}
+	}
+
+	if let Some(length) = pitch.length {
+		if length > 1e-6 && run > 1e-6 {
+			out.extend(body_tiles(rect_x0, length, run, tile_width, caps));
+		}
+	}
+
+	if let Some(base) = pitch.right {
+		if base.abs() > 1e-6 && run > 1e-6 {
+			let x_min = rect_x0 + pitch.length.unwrap_or(0.0);
+			out.extend(end_triangles(EndSide::Right, x_min, base, run));
+		}
+	}
+
+	out
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum EndSide {
+	Left,
+	Right,
+}
+
+fn tile_scale(width: f32, run: f32) -> Vec3 {
+	Vec3::new(width.max(1e-4), 1.0, run.max(1e-4))
+}
+
+fn unit_square_pair(x: f32, width: f32, run: f32) -> [Placed<RoofKit>; 2] {
+	let scale = tile_scale(width, run);
+	[
+		Placed::with_placement(
+			RoofKit::RightTriangle { mirror: None },
+			Placement::new(Vec3::new(x, 0.0, 0.0), 0.0).with_scale(scale),
+		),
+		Placed::with_placement(
+			RoofKit::RightTriangle { mirror: None },
+			Placement::new(Vec3::new(x + width, 0.0, -run), PI).with_scale(scale),
+		),
+	]
+}
+
+fn body_tiles(
+	x0: f32,
+	length: f32,
+	run: f32,
+	tile_width: f32,
+	caps: PanelKitCaps,
+) -> Vec<Placed<RoofKit>> {
+	let nx = fitted_tile_count(length, tile_width);
+	let width = length / nx as f32;
+	let mut out = Vec::with_capacity((nx * 2) as usize);
+	for i in 0..nx {
+		let x = x0 + i as f32 * width;
+		if caps.has_rectangle {
+			out.push(Placed::with_placement(
+				RoofKit::Rectangle,
+				Placement::new(Vec3::new(x, 0.0, 0.0), 0.0).with_scale(tile_scale(width, run)),
+			));
+		} else {
+			out.extend(unit_square_pair(x, width, run));
+		}
+	}
+	out
+}
+
+/// One end triangle. Positive base → upright; negative → flipped.
+fn end_triangles(side: EndSide, x_min: f32, base: f32, altitude: f32) -> Vec<Placed<RoofKit>> {
+	let width = base.abs().max(1e-4);
+	let altitude = altitude.max(1e-4);
+	let upright = base >= 0.0;
+	let scale = tile_scale(width, altitude);
+	let kit = match (side, upright) {
+		(EndSide::Left, true) => Placed::with_placement(
+			RoofKit::RightTriangle { mirror: Some(MirrorAxis::X) },
+			Placement::new(Vec3::new(x_min + width, 0.0, 0.0), 0.0).with_scale(scale),
+		),
+		(EndSide::Left, false) => Placed::with_placement(
+			RoofKit::RightTriangle { mirror: None },
+			Placement::new(Vec3::new(x_min + width, 0.0, -altitude), PI).with_scale(scale),
+		),
+		(EndSide::Right, true) => Placed::with_placement(
+			RoofKit::RightTriangle { mirror: None },
+			Placement::new(Vec3::new(x_min, 0.0, 0.0), 0.0).with_scale(scale),
+		),
+		(EndSide::Right, false) => Placed::with_placement(
+			RoofKit::RightTriangle { mirror: Some(MirrorAxis::X) },
+			Placement::new(Vec3::new(x_min, 0.0, -altitude), PI).with_scale(scale),
+		),
+	};
+	vec![kit]
 }
 
 #[cfg(test)]
@@ -155,15 +240,6 @@ mod tests {
 	fn pitch_radians_from_rise_run() -> anyhow::Result<()> {
 		let p = Pitch::new(1.0, 1.0, 1.0).with_length(1.0);
 		assert!((p.pitch_radians() - std::f32::consts::FRAC_PI_4).abs() < 1e-4);
-		Ok(())
-	}
-
-	#[test]
-	fn quad_geometry_matches_pitch() -> anyhow::Result<()> {
-		let pitch = Pitch::new(1.0, 2.0, 1.0).with_length(2.0).with_left(0.5);
-		let via_pitch = kit_pieces(&RoofGeometry::pitch(pitch));
-		let via_quad = kit_pieces(&RoofGeometry::quad(pitch.to_quad()));
-		assert_eq!(via_pitch.len(), via_quad.len());
 		Ok(())
 	}
 }

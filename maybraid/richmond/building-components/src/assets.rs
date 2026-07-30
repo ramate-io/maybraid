@@ -54,6 +54,14 @@ pub mod panels {
 		/// Circle−inscribed-square filler (four yaws fill a circular ring).
 		pub const INSCRIBED_SQUARE: AssetPath =
 			AssetPath::new("urban/panels/rough_stonework/inscribed_square_001.glb");
+
+		/// Unit right triangle \(X \in [0, 1]\), \(Z \in [-1, 0]\), \(Y \in [-0.2, 0.2]\).
+		pub const RIGHT_TRIANGLE_HIGH: AssetPath =
+			AssetPath::new("urban/panels/rough_stonework/right_triangle_001_high_res.glb");
+		pub const RIGHT_TRIANGLE_MID: AssetPath =
+			AssetPath::new("urban/panels/rough_stonework/right_triangle_001_mid_res.glb");
+		pub const RIGHT_TRIANGLE_LOW: AssetPath =
+			AssetPath::new("urban/panels/rough_stonework/right_triangle_001_low_res.glb");
 	}
 
 	pub mod shepherds_thatch {

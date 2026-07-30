@@ -2,7 +2,7 @@
 
 use bevy_math::Vec3;
 
-use crate::panels::polyline::wrap_pi;
+use crate::panels::placement::wrap_pi;
 use crate::placed::{Placed, Placement};
 
 /// Joint kit half-extent in \(X/Z\) (\([-0.5, 0.5]\)).

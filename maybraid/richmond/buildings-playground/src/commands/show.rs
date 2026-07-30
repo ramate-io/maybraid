@@ -6,12 +6,13 @@ pub mod bedroom;
 pub mod linear;
 pub mod linear_wall;
 pub mod noisy_polyline_wall;
-pub mod noisy_quad_polyline;
 pub mod pitch;
 pub mod polyline;
 pub mod polyline_wall;
 pub mod slice_90;
 pub mod stacked_rings;
+pub mod tessellated_triangle;
+pub mod tessellated_triangle_3d;
 pub mod transform;
 pub mod wizards_tower;
 
@@ -35,6 +36,10 @@ pub enum Show {
 	Slice90(slice_90::Slice90),
 	/// Shepherd's-thatch pitched face (`rise`/`run`/`length`/`left`/`right`).
 	Pitch(pitch::Pitch),
+	/// Arbitrary panel-space triangle filled with right-triangle kits.
+	TessellatedTriangle(tessellated_triangle::TessellatedTriangle),
+	/// World-space triangle → 2D panel tessellation → posed onto the plane.
+	TessellatedTriangle3d(tessellated_triangle_3d::TessellatedTriangle3d),
 	/// L-shaped `Partition::polyline` (posed linears + joints).
 	Polyline(polyline::Polyline),
 	/// Portal-sensitive straight [`richmond_buildings::LinearWall`].
@@ -43,8 +48,6 @@ pub enum Show {
 	PolylineWall(polyline_wall::PolylineWall),
 	/// Noisy distance-budget path with allowed X/Y/Z turn angles.
 	NoisyPolylineWall(noisy_polyline_wall::NoisyPolylineWall),
-	/// Noisy path as `PartitionGeometry::QuadPolyline` with uniform `--roll`.
-	NoisyQuadPolyline(noisy_quad_polyline::NoisyQuadPolyline),
 	/// Full Wizard's Tower (noise-derived floor count).
 	WizardsTower(wizards_tower::WizardsTower),
 	/// Stacked circular wall rings (validates kit radius/height scaling).
@@ -61,11 +64,12 @@ impl Show {
 			Self::Arc180(cmd) => cmd.into_preview(),
 			Self::Slice90(cmd) => cmd.into_preview(),
 			Self::Pitch(cmd) => cmd.into_preview(),
+			Self::TessellatedTriangle(cmd) => cmd.into_preview(),
+			Self::TessellatedTriangle3d(cmd) => cmd.into_preview(),
 			Self::Polyline(cmd) => cmd.into_preview(),
 			Self::LinearWall(cmd) => cmd.into_preview(),
 			Self::PolylineWall(cmd) => cmd.into_preview(),
 			Self::NoisyPolylineWall(cmd) => cmd.into_preview(),
-			Self::NoisyQuadPolyline(cmd) => cmd.into_preview(),
 			Self::WizardsTower(cmd) => cmd.into_preview(),
 			Self::StackedRings(cmd) => cmd.into_preview(),
 			Self::Bedroom(cmd) => cmd.into_preview(),

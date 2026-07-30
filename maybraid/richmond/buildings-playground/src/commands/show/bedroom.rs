@@ -11,7 +11,7 @@ use crate::preview::PreviewSubject;
 #[command(rename_all = "kebab-case")]
 pub struct Bedroom {
 	/// Cell AABB size `x,y,z` in world units (origin at min corner).
-	#[arg(long, default_value = "4,3,3.5", value_parser = parse_vec3_csv)]
+	#[arg(long, default_value = "4,3,3.5", value_parser = parse_vec3_csv, allow_hyphen_values = true)]
 	#[arg(value_name = "X,Y,Z")]
 	pub extent: Vec3,
 	/// Unit noise sample in \[0, 1\] for layout fitting.

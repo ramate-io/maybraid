@@ -20,6 +20,8 @@ cargo run -p richmond-buildings-playground -- show pitch --rise 1 --run 2 --leng
 cargo run -p richmond-buildings-playground -- show pitch --rise 1 --run 2 --eave 4 --ridge 6 --tile-width 1
 # Explicit ends (positive = upright / eave-long, negative = flipped / ridge-long):
 cargo run -p richmond-buildings-playground -- show pitch --rise 1 --run 2 --length 4 --left 1 --right -0.5
+cargo run -p richmond-buildings-playground -- show tessellated-triangle
+cargo run -p richmond-buildings-playground -- show tessellated-triangle --a 0,0 --b 3,0 --c 0,2
 ```
 
 In-game: press `/` for the command console (same clap commands as argv).
@@ -29,6 +31,7 @@ In-game: press `/` for the command console (same clap commands as argv).
 - `help`
 - `show linear|arc-90|arc-180|slice-90` — partition leaves (`panels/.../rectangle_001`, `arcs/.../arc_*`)
 - `show pitch [--rise R] [--run R] [--length L] [--tile-width W] [--left B] [--right B] | [--eave E --ridge R]` — shepherd's-thatch pitched face; omit `--length`/`--left`/`--right` for optional regions; `--eave`+`--ridge` uses equal end triangles
+- `show tessellated-triangle [--a X,Z] [--b X,Z] [--c X,Z]` — rough-stone floor fill of a panel-space triangle
 - `show wizards-tower [--noise 0.5]` — authored tower hierarchy (`LodScene` composition)
 - `show stacked-rings [--floor-count N] [--floor-height H] [--radius R]` — circular wall stack (kit scale check)
 - `show bedroom [--extent X,Y,Z] [--noise 0.5] [--spaciousness 1.0] [--occupancy 0.55] [--door]` — hierarchical bedroom; bed-first multi-fill under spaciousness/occupancy; `--door` adds a −Z circulation exclusion
