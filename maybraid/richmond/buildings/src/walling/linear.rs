@@ -3,12 +3,13 @@
 //! \(t \in [0, 1]\) runs from [`LinearWallParams::start`] to [`LinearWallParams::end`].
 
 use bevy_math::Vec3;
+use lod::gen::LodSceneLevel;
 use procedural_common::{NoiseConfig, NoiseParams};
 use richmond_building_components::partitions::{
 	wall_placement_from_centered, LinearPartition, Partition, PartitionNode, DEFAULT_TILE_WIDTH,
 	SLICE_KIT_HEIGHT,
 };
-use richmond_building_components::Placement;
+use richmond_building_components::{BuildingComponents, Placement};
 
 use crate::walling::portal::{
 	assign_portals, AssignedPortal, MustAssignPortal, Portal, PortalFootprint, WallRegion,
@@ -113,6 +114,13 @@ impl LinearWall {
 		}
 	}
 }
+
+impl BuildingComponents for LinearWall {
+	fn partition_nodes_for_level(&self, _level: LodSceneLevel) -> Vec<PartitionNode> {
+		self.partitions.clone()
+	}
+}
+
 
 fn horiz_len(a: Vec3, b: Vec3) -> f32 {
 	let dx = b.x - a.x;

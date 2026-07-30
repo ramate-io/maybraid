@@ -3,13 +3,10 @@
 //! Geometry: four 90° core wall arcs only for now. Stairs / roofs / floor fill
 //! inside the spire hole are omitted (empty scenes).
 
-use bevy::scene::prelude::Scene;
 use bevy_math::Vec3;
-use lod::gen::LodScene;
-use lod::lod_ref::LodRef;
+use lod::gen::LodSceneLevel;
 use richmond_building_components::partitions::{Partition, PartitionNode};
-use richmond_building_components::scene_children;
-use richmond_building_components::Placement;
+use richmond_building_components::{BuildingComponents, Placement};
 
 use crate::CellConstraints;
 
@@ -54,21 +51,9 @@ impl WizardsTowerSpire {
 	}
 }
 
-impl LodScene for WizardsTowerSpire {
-	fn scene_lod_status(&self, _lod_ref: &LodRef) -> lod::gen::LodSceneStatus {
-		lod::gen::LodSceneStatus::Unchanged
-	}
-
-	fn scene_with_level(
-		&self,
-		lod_ref: &LodRef,
-		_level: lod::gen::LodSceneLevel,
-	) -> impl Scene + 'static {
-		let children: Vec<Box<dyn Scene>> = self
-			.core_walls
-			.iter()
-			.map(|wall| Box::new(wall.scene_with_lod(lod_ref)) as Box<dyn Scene>)
-			.collect();
-		scene_children(children)
+impl BuildingComponents for WizardsTowerSpire {
+	fn partition_nodes_for_level(&self, _level: LodSceneLevel) -> Vec<PartitionNode> {
+		self.core_walls.to_vec()
 	}
 }
+

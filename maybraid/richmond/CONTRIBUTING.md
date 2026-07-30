@@ -8,11 +8,11 @@ and present geometry on top of [`building-components`](building-components/).
 
 | Crate | Role |
 |-------|------|
-| [`building-components`](building-components/) | Domain IR + kit assets. Authoring types are `*Node` values (`FloorNode`, `PartitionNode`, `StairNode`, `DoorNode`, `RoofNode`): **style + geometry + placement** (+ optional [`ParentConfines`](building-components/src/parent_confines.rs)). Each node implements [`LodScene`](../lod/lib/src/gen/presentation.rs). Tessellation into kit pieces is private to the domain. Partition IR is primitive (no portals). |
-| [`buildings`](buildings/) | Building procedures. Compose constraints, layouts, and helpers (`Walling` / `ArcWall` / `LinearWall` / `PolylineWall`, `ArcSpire`, …) into **owned collections of nodes** (and rare non-mesh features such as lights). Implement `LodScene` by emitting those nodes (and helpers) under the requested LOD. |
+| [`building-components`](building-components/) | Domain IR + kit assets. Authoring types are `*Node` values (`FloorNode`, `PartitionNode`, `StairNode`, `DoorNode`, `RoofNode`, `PanelNode`, `FurnitureNode`): **style + geometry + placement** (+ optional [`ParentConfines`](building-components/src/parent_confines.rs)). Each node implements [`LodScene`](../lod/lib/src/gen/presentation.rs). Tessellation into kit pieces is private to the domain. Partition IR is primitive (no portals). |
+| [`buildings`](buildings/) | Building procedures. Compose constraints, layouts, and helpers (`Walling` / `ArcWall` / `LinearWall` / `PolylineWall`, `ArcSpire`, …) into domain nodes via [`BuildingComponents`](building-components/src/lib.rs). Present component-only buildings as [`ComponentsOnly`](building-components/src/lib.rs)`<T>` for `LodScene`; keep a custom `LodScene` when hosts, silhouettes, or non-node extras are required. |
 | [`buildings-playground`](buildings-playground/) | Preview / CLI. Spawns hosts once; LOD flips update [`LodSceneLevel`](../lod/lib/src/lod_level.rs) in place (no whole-tree despawn). |
 
-Shared pose helpers (`pose`, `posed_glb`, `with_pose`, `scene_children`) live in building-components and should not be reimplemented per building.
+Shared pose helpers (`pose`, `posed_glb`, `with_pose`, `scene_children`, `append_component_scenes`, `ComponentsOnly`) live in building-components and should not be reimplemented per building.
 
 ## Authoring model
 
@@ -22,11 +22,11 @@ Buildings **emit authored domain types**; they do not tessellate kit pieces or c
 constraints / layout helpers
         │
         ▼
-  Vec<FloorNode>, Vec<PartitionNode>, …
+  BuildingComponents (*_nodes_for_level)
         │
-        ▼
-  scene_lod_level / scene_lod_status
-  scene_with_level / lod_host_scene
+        ├── ComponentsOnly<T> → LodScene (component-only)
+        └── custom LodScene (host / silhouette / lights)
+              optionally via append_component_scenes
 ```
 
 Preferred shape for a storey or room:
@@ -38,15 +38,24 @@ pub struct ExampleFloor {
     pub stairs: Vec<StairNode>,
 }
 
-impl ExampleFloor {
-    pub fn new(/* constraints, noise, … */) -> Self {
-        // Layout → construct nodes with Style + Geometry + Placement.
-        Self { /* … */ }
+impl BuildingComponents for ExampleFloor {
+    fn floor_nodes_for_level(&self, _level: LodSceneLevel) -> Vec<FloorNode> {
+        self.floors.clone()
+    }
+    fn partition_nodes_for_level(&self, _level: LodSceneLevel) -> Vec<PartitionNode> {
+        self.partitions.clone()
+    }
+    fn stair_nodes_for_level(&self, _level: LodSceneLevel) -> Vec<StairNode> {
+        self.stairs.clone()
     }
 }
+
+// Present: ComponentsOnly(&example).scene_with_lod(lod_ref)
 ```
 
-Helpers such as [`Walling`](buildings/src/walling.rs) (`ArcWall` / `LinearWall` / `PolylineWall`) / `ArcSpire` are fine when they **produce** `Vec<PartitionNode>` / `StairNode`. Use **partition** for primitive kit IR and **wall** for portal-sensitive path helpers.
+Parents **extend** children’s node lists (flatten), they do not nest child `LodScene`s when both sides are component-only.
+
+Helpers such as [`Walling`](buildings/src/walling.rs) (`ArcWall` / `LinearWall` / `PolylineWall`) / `ArcSpire` are fine when they **produce** `PartitionNode` / `StairNode` via `BuildingComponents`. Use **partition** for primitive kit IR and **wall** for portal-sensitive path helpers. Door leaves stay empty until portal → `DoorNode` authorship exists.
 
 ## Allocate cells, fill in children
 
@@ -57,6 +66,12 @@ Constructors take the child's [`CellConstraints`](buildings/src/constraints.rs).
 Room layout is **noise-fitted**: [`BedroomLayout::fit`](buildings/src/bedroom/layout.rs) with [`BedroomFillParams`](buildings/src/bedroom/layout.rs) (`spaciousness`, `occupancy`). Circulation exclusions and internal door-swing rules apply as before.
 
 ## `LodScene` on buildings
+
+Most buildings should implement [`BuildingComponents`](building-components/src/lib.rs) and present via [`ComponentsOnly`](building-components/src/lib.rs)`<T>` (`scene_lod_status` = `Unchanged`; `scene_with_level` = [`component_only_scene`](building-components/src/lib.rs)).
+
+Types with host banding, silhouettes, lights, or late-bound [`ParentConfines`](building-components/src/parent_confines.rs) (e.g. Wizard’s Tower) implement `BuildingComponents` and keep a custom `LodScene`. Prefer [`append_component_scenes`](building-components/src/lib.rs) for the node portion.
+
+`LodScene` methods:
 
 - `scene_lod_level` — desired [`LodSceneLevel`](../lod/lib/src/lod_level.rs) (cheap).
 - `scene_lod_status` — `Unchanged` or `Changed(level)`.

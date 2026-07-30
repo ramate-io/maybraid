@@ -33,7 +33,12 @@ use lod::lod_ref::LodRef;
 use lod::lod_scene_host::lod_host_scene;
 use procedural_common::NoiseParams;
 
+use richmond_building_components::floors::FloorNode;
 use richmond_building_components::scene_children;
+use richmond_building_components::stairs::StairNode;
+use richmond_building_components::{
+	append_component_scenes, BuildingComponents, PartitionNode,
+};
 
 use crate::walling::{MustAssignPortal, Portal};
 use crate::wizards_tower::floor_fill::WALL_HEIGHT_METERS;
@@ -109,10 +114,7 @@ impl WizardsTower {
 
 	fn exterior_primitives(&self, lod_ref: &LodRef) -> impl Scene + 'static {
 		let mut children: Vec<Box<dyn Scene>> = Vec::new();
-		for floor in &self.column.floors {
-			floor.emit_external_features(&mut children, lod_ref);
-		}
-		self.column.perch.emit_external_features(&mut children, lod_ref);
+		append_component_scenes(self, lod_ref, LodSceneLevel::Medium, &mut children);
 		scene_children(children)
 	}
 
@@ -128,6 +130,20 @@ impl WizardsTower {
 		self.column.perch.emit_external_features(&mut children, lod_ref);
 		self.column.perch.emit_internal_features(&mut children, lod_ref);
 		scene_children(children)
+	}
+}
+
+impl BuildingComponents for WizardsTower {
+	fn partition_nodes_for_level(&self, level: LodSceneLevel) -> Vec<PartitionNode> {
+		self.column.partition_nodes_for_level(level)
+	}
+
+	fn floor_nodes_for_level(&self, level: LodSceneLevel) -> Vec<FloorNode> {
+		self.column.floor_nodes_for_level(level)
+	}
+
+	fn stair_nodes_for_level(&self, level: LodSceneLevel) -> Vec<StairNode> {
+		self.column.stair_nodes_for_level(level)
 	}
 }
 

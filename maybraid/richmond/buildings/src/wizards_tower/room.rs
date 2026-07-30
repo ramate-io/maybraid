@@ -3,16 +3,13 @@
 //! Geometry: one linear partition on the spire-facing edge and a rectangular
 //! floor slab. Doors / stairs are omitted for now (empty scenes).
 
-use bevy::scene::prelude::Scene;
 use bevy_math::Vec3;
-use lod::gen::LodScene;
-use lod::lod_ref::LodRef;
+use lod::gen::LodSceneLevel;
 use richmond_building_components::floors::{Floor, FloorNode};
 use richmond_building_components::partitions::{
 	wall_placement_from_centered, Partition, PartitionNode, DEFAULT_THICK,
 };
-use richmond_building_components::scene_children;
-use richmond_building_components::Placement;
+use richmond_building_components::{BuildingComponents, Placement};
 
 use crate::wizards_tower::floor_fill::{FLOOR_SLAB_Y_SCALE, RECT_HALF_EXTENT};
 use crate::CellConstraints;
@@ -54,20 +51,13 @@ impl WizardsTowerRoom {
 	}
 }
 
-impl LodScene for WizardsTowerRoom {
-	fn scene_lod_status(&self, _lod_ref: &LodRef) -> lod::gen::LodSceneStatus {
-		lod::gen::LodSceneStatus::Unchanged
+impl BuildingComponents for WizardsTowerRoom {
+	fn partition_nodes_for_level(&self, _level: LodSceneLevel) -> Vec<PartitionNode> {
+		vec![self.partition.clone()]
 	}
 
-	fn scene_with_level(
-		&self,
-		lod_ref: &LodRef,
-		_level: lod::gen::LodSceneLevel,
-	) -> impl Scene + 'static {
-		let children: Vec<Box<dyn Scene>> = vec![
-			Box::new(self.partition.scene_with_lod(lod_ref)),
-			Box::new(self.floor.scene_with_lod(lod_ref)),
-		];
-		scene_children(children)
+	fn floor_nodes_for_level(&self, _level: LodSceneLevel) -> Vec<FloorNode> {
+		vec![self.floor.clone()]
 	}
 }
+

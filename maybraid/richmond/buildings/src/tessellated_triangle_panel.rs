@@ -6,14 +6,12 @@
 //! 3. Encode plane as parent [`Placement`] (yaw / **pitch** / roll via YXZ)
 //! 4. [`PanelNode`] fills in panel space; kit yaw is composed under that parent
 
-use bevy::scene::prelude::Scene;
 use bevy_math::{EulerRot, Mat3, Quat, Vec2, Vec3};
-use lod::gen::LodScene;
-use lod::lod_ref::LodRef;
+use lod::gen::LodSceneLevel;
 use richmond_building_components::panels::{
 	PanelGeometry, PanelNode, PanelStyle, TessellatedTriangle,
 };
-use richmond_building_components::Placement;
+use richmond_building_components::{BuildingComponents, Placement};
 
 /// Three world-space corners filled with posed panel right-triangle kits.
 #[derive(Debug, Clone, PartialEq)]
@@ -89,24 +87,12 @@ impl TessellatedTrianglePanel {
 	}
 }
 
-impl LodScene for TessellatedTrianglePanel {
-	fn scene_lod_status(&self, _lod_ref: &LodRef) -> lod::gen::LodSceneStatus {
-		lod::gen::LodSceneStatus::Unchanged
-	}
-
-	fn scene_with_level(
-		&self,
-		lod_ref: &LodRef,
-		level: lod::gen::LodSceneLevel,
-	) -> impl Scene + 'static {
-		match self.panel_node() {
-			Some(node) => Box::new(node.scene_with_level(lod_ref, level)) as Box<dyn Scene>,
-			None => Box::new(::bevy::scene::SceneFunction(empty_scene)) as Box<dyn Scene>,
-		}
+impl BuildingComponents for TessellatedTrianglePanel {
+	fn panel_nodes_for_level(&self, _level: LodSceneLevel) -> Vec<PanelNode> {
+		self.panel_node().into_iter().collect()
 	}
 }
 
-fn empty_scene(_: &mut bevy::scene::ResolveContext, _: &mut bevy::scene::ResolvedScene) {}
 
 #[cfg(test)]
 mod tests {

@@ -19,6 +19,8 @@ pub mod stairs;
 
 pub use arc_kit::{decompose_arc_sweep, ArcKit};
 pub use assets::AssetPath;
+pub use doors::DoorNode;
+pub use floors::FloorNode;
 pub use furniture::{FurnitureGeometry, FurnitureNode, FurnitureStyle, FurnitureWireframePlugin};
 pub use lod_host::{
 	posed_asset_tier, warm_content_host, warm_content_host_hsl, warm_mesh_level_host,
@@ -43,9 +45,198 @@ pub use roofs::{
 	update_roof_host_levels, Pitch, RoofGeometry, RoofLodBand, RoofLodProbe, RoofNode, RoofStyle,
 	ROOF_HIGH_FACTOR, ROOF_LOW_FACTOR, ROOF_MEDIUM_FACTOR,
 };
-pub use scene_children::{pose, posed_glb, posed_scene, scene_children, wireframe_box_with_handles, with_pose};
+pub use scene_children::{
+	pose, posed_glb, posed_scene, scene_children, wireframe_box_with_handles, with_pose,
+};
+pub use stairs::StairNode;
 
-use bevy::scene::{ResolveContext, ResolvedScene};
+use bevy::scene::{ResolveContext, ResolvedScene, Scene};
+use lod::gen::{LodScene, LodSceneLevel};
+use lod::lod_ref::LodRef;
+
+/// Domain IR exposed by a building (or building part) for structural composition.
+///
+/// Buildings compose by extending each other's node lists. Default methods return empty
+/// vectors; override only the domains the type authors.
+pub trait BuildingComponents {
+	fn panel_nodes_for_level(&self, _level: LodSceneLevel) -> Vec<PanelNode> {
+		vec![]
+	}
+
+	fn partition_nodes_for_level(&self, _level: LodSceneLevel) -> Vec<PartitionNode> {
+		vec![]
+	}
+
+	fn floor_nodes_for_level(&self, _level: LodSceneLevel) -> Vec<FloorNode> {
+		vec![]
+	}
+
+	fn roof_nodes_for_level(&self, _level: LodSceneLevel) -> Vec<RoofNode> {
+		vec![]
+	}
+
+	fn stair_nodes_for_level(&self, _level: LodSceneLevel) -> Vec<StairNode> {
+		vec![]
+	}
+
+	fn door_nodes_for_level(&self, _level: LodSceneLevel) -> Vec<DoorNode> {
+		vec![]
+	}
+
+	fn furniture_nodes_for_level(&self, _level: LodSceneLevel) -> Vec<FurnitureNode> {
+		vec![]
+	}
+}
+
+impl<T: BuildingComponents + ?Sized> BuildingComponents for &T {
+	fn panel_nodes_for_level(&self, level: LodSceneLevel) -> Vec<PanelNode> {
+		(**self).panel_nodes_for_level(level)
+	}
+
+	fn partition_nodes_for_level(&self, level: LodSceneLevel) -> Vec<PartitionNode> {
+		(**self).partition_nodes_for_level(level)
+	}
+
+	fn floor_nodes_for_level(&self, level: LodSceneLevel) -> Vec<FloorNode> {
+		(**self).floor_nodes_for_level(level)
+	}
+
+	fn roof_nodes_for_level(&self, level: LodSceneLevel) -> Vec<RoofNode> {
+		(**self).roof_nodes_for_level(level)
+	}
+
+	fn stair_nodes_for_level(&self, level: LodSceneLevel) -> Vec<StairNode> {
+		(**self).stair_nodes_for_level(level)
+	}
+
+	fn door_nodes_for_level(&self, level: LodSceneLevel) -> Vec<DoorNode> {
+		(**self).door_nodes_for_level(level)
+	}
+
+	fn furniture_nodes_for_level(&self, level: LodSceneLevel) -> Vec<FurnitureNode> {
+		(**self).furniture_nodes_for_level(level)
+	}
+}
+
+/// Newtype: present a [`BuildingComponents`] value as an [`LodScene`] whose children are
+/// exactly that building's domain nodes.
+///
+/// Prefer this over a custom `LodScene` when the building has no host banding, silhouette,
+/// lights, or other non-node extras. Orphan rules prevent a blanket `LodScene` for all
+/// `BuildingComponents` implementors; wrapping in this local type is the coherent path.
+///
+/// ```ignore
+/// ComponentsOnly(&bedroom).scene_with_lod(lod_ref)
+/// ```
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ComponentsOnly<T>(pub T);
+
+impl<T> ComponentsOnly<T> {
+	pub fn into_inner(self) -> T {
+		self.0
+	}
+}
+
+impl<T> From<T> for ComponentsOnly<T> {
+	fn from(value: T) -> Self {
+		Self(value)
+	}
+}
+
+impl<T> std::ops::Deref for ComponentsOnly<T> {
+	type Target = T;
+
+	fn deref(&self) -> &T {
+		&self.0
+	}
+}
+
+impl<T> std::ops::DerefMut for ComponentsOnly<T> {
+	fn deref_mut(&mut self) -> &mut T {
+		&mut self.0
+	}
+}
+
+impl<T: BuildingComponents> BuildingComponents for ComponentsOnly<T> {
+	fn panel_nodes_for_level(&self, level: LodSceneLevel) -> Vec<PanelNode> {
+		self.0.panel_nodes_for_level(level)
+	}
+
+	fn partition_nodes_for_level(&self, level: LodSceneLevel) -> Vec<PartitionNode> {
+		self.0.partition_nodes_for_level(level)
+	}
+
+	fn floor_nodes_for_level(&self, level: LodSceneLevel) -> Vec<FloorNode> {
+		self.0.floor_nodes_for_level(level)
+	}
+
+	fn roof_nodes_for_level(&self, level: LodSceneLevel) -> Vec<RoofNode> {
+		self.0.roof_nodes_for_level(level)
+	}
+
+	fn stair_nodes_for_level(&self, level: LodSceneLevel) -> Vec<StairNode> {
+		self.0.stair_nodes_for_level(level)
+	}
+
+	fn door_nodes_for_level(&self, level: LodSceneLevel) -> Vec<DoorNode> {
+		self.0.door_nodes_for_level(level)
+	}
+
+	fn furniture_nodes_for_level(&self, level: LodSceneLevel) -> Vec<FurnitureNode> {
+		self.0.furniture_nodes_for_level(level)
+	}
+}
+
+impl<T: BuildingComponents> LodScene for ComponentsOnly<T> {
+	fn scene_lod_status(&self, _lod_ref: &LodRef) -> lod::gen::LodSceneStatus {
+		lod::gen::LodSceneStatus::Unchanged
+	}
+
+	fn scene_with_level(&self, lod_ref: &LodRef, level: LodSceneLevel) -> impl Scene + 'static {
+		component_only_scene(&self.0, lod_ref, level)
+	}
+}
+
+/// Append every domain node from `building` at `level` as nested [`LodScene`] children.
+pub fn append_component_scenes(
+	building: &impl BuildingComponents,
+	lod_ref: &LodRef,
+	level: LodSceneLevel,
+	children: &mut Vec<Box<dyn Scene>>,
+) {
+	for node in building.panel_nodes_for_level(level) {
+		children.push(Box::new(node.scene_with_lod(lod_ref)));
+	}
+	for node in building.partition_nodes_for_level(level) {
+		children.push(Box::new(node.scene_with_lod(lod_ref)));
+	}
+	for node in building.floor_nodes_for_level(level) {
+		children.push(Box::new(node.scene_with_lod(lod_ref)));
+	}
+	for node in building.roof_nodes_for_level(level) {
+		children.push(Box::new(node.scene_with_lod(lod_ref)));
+	}
+	for node in building.stair_nodes_for_level(level) {
+		children.push(Box::new(node.scene_with_lod(lod_ref)));
+	}
+	for node in building.door_nodes_for_level(level) {
+		children.push(Box::new(node.scene_with_lod(lod_ref)));
+	}
+	for node in building.furniture_nodes_for_level(level) {
+		children.push(Box::new(node.scene_with_lod(lod_ref)));
+	}
+}
+
+/// Scene whose children are exactly the [`BuildingComponents`] nodes at `level`.
+pub fn component_only_scene(
+	building: &impl BuildingComponents,
+	lod_ref: &LodRef,
+	level: LodSceneLevel,
+) -> impl Scene + 'static {
+	let mut children: Vec<Box<dyn Scene>> = Vec::new();
+	append_component_scenes(building, lod_ref, level, &mut children);
+	scene_children(children)
+}
 
 pub(crate) fn empty_scene(_: &mut ResolveContext, _: &mut ResolvedScene) {}
 

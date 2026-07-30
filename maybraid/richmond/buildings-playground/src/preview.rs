@@ -13,8 +13,8 @@ use richmond_building_components::partitions::rough_stonework::{
 };
 use richmond_building_components::partitions::{Partition, PartitionNode};
 use richmond_building_components::roofs::{Pitch, RoofGeometry, RoofNode};
-use richmond_building_components::scene_children;
 use richmond_building_components::Placement;
+use richmond_building_components::ComponentsOnly;
 use richmond_buildings::bedroom::Bedroom;
 use richmond_buildings::stacked_rings::StackedRings;
 use richmond_buildings::tessellated_triangle_panel::TessellatedTrianglePanel;
@@ -385,7 +385,11 @@ pub fn present_preview_lod(
 		}
 		PreviewSubject::TessellatedTriangle3d { a, b, c } => {
 			let panel = TessellatedTrianglePanel::rough_stone(*a, *b, *c);
-			spawn_preview(&mut commands, transform, panel.scene_with_lod(&lod_ref));
+			spawn_preview(
+				&mut commands,
+				transform,
+				ComponentsOnly(panel).scene_with_lod(&lod_ref),
+			);
 		}
 		PreviewSubject::Polyline => {
 			let node = PartitionNode::rough_stone(
@@ -405,12 +409,11 @@ pub fn present_preview_lod(
 		| PreviewSubject::PolylineWall
 		| PreviewSubject::NoisyPolylineWall { .. } => {
 			if let Some(walling) = cache.walling.as_ref() {
-				let children: Vec<Box<dyn bevy::scene::Scene>> = walling
-					.partitions()
-					.iter()
-					.map(|p| Box::new(p.scene_with_lod(&lod_ref)) as Box<dyn bevy::scene::Scene>)
-					.collect();
-				spawn_preview(&mut commands, transform, scene_children(children));
+				spawn_preview(
+					&mut commands,
+					transform,
+					ComponentsOnly(walling).scene_with_lod(&lod_ref),
+				);
 			}
 		}
 		PreviewSubject::WizardsTower { .. } => {
@@ -429,12 +432,20 @@ pub fn present_preview_lod(
 		}
 		PreviewSubject::StackedRings { .. } => {
 			if let Some(rings) = cache.stacked_rings.as_ref() {
-				spawn_preview(&mut commands, transform, rings.scene_with_lod(&lod_ref));
+				spawn_preview(
+					&mut commands,
+					transform,
+					ComponentsOnly(rings).scene_with_lod(&lod_ref),
+				);
 			}
 		}
 		PreviewSubject::Bedroom { .. } => {
 			if let Some(bedroom) = cache.bedroom.as_ref() {
-				spawn_preview(&mut commands, transform, bedroom.scene_with_lod(&lod_ref));
+				spawn_preview(
+					&mut commands,
+					transform,
+					ComponentsOnly(bedroom).scene_with_lod(&lod_ref),
+				);
 			}
 		}
 	}

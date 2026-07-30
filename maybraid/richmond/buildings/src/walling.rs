@@ -20,6 +20,8 @@ pub use polyline::{
 pub use portal::{ArcRegion, AssignedPortal, MustAssignPortal, Portal, WallRegion, SLICE_Y_FRAC};
 
 use richmond_building_components::partitions::PartitionNode;
+use richmond_building_components::{BuildingComponents};
+use lod::gen::LodSceneLevel;
 
 /// Umbrella for portal-sensitive arc / linear / polyline walls.
 #[derive(Debug, Clone, PartialEq)]
@@ -49,6 +51,18 @@ impl Walling {
 		}
 	}
 }
+
+impl BuildingComponents for Walling {
+	fn partition_nodes_for_level(&self, level: LodSceneLevel) -> Vec<PartitionNode> {
+		match self {
+			Self::Arc(w) => w.partition_nodes_for_level(level),
+			Self::Linear(w) => w.partition_nodes_for_level(level),
+			Self::Polyline(w) => w.partition_nodes_for_level(level),
+			Self::NoisyPolyline(w) => w.partition_nodes_for_level(level),
+		}
+	}
+}
+
 
 impl From<ArcWall> for Walling {
 	fn from(w: ArcWall) -> Self {
