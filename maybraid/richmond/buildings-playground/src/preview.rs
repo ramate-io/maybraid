@@ -46,10 +46,9 @@ pub enum PreviewSubject {
 		right: Option<f32>,
 	},
 	TessellatedTriangle {
-		a: Vec3,
-		b: Vec3,
-		c: Vec3,
-		tile_width: f32,
+		a: Vec2,
+		b: Vec2,
+		c: Vec2,
 	},
 	Polyline,
 	LinearWall,
@@ -118,10 +117,8 @@ impl PreviewConfig {
 					"preview: pitch (rise={rise:.2} run={run:.2} len={length:?} tile={tile_width:.2} left={left:?} right={right:?})"
 				)
 			}
-			PreviewSubject::TessellatedTriangle { a, b, c, tile_width } => {
-				format!(
-					"preview: tessellated-triangle (a={a:?} b={b:?} c={c:?} tile={tile_width:.2})"
-				)
+			PreviewSubject::TessellatedTriangle { a, b, c } => {
+				format!("preview: tessellated-triangle (a={a:?} b={b:?} c={c:?})")
 			}
 			PreviewSubject::Polyline => "preview: partition polyline (L)".into(),
 			PreviewSubject::LinearWall => "preview: walling linear-wall (door)".into(),
@@ -182,9 +179,11 @@ impl PreviewConfig {
 				Aabb3d::from_min_max(Vec3::new(0.0, -0.2, -run), Vec3::new(x_max, rise + 0.2, 0.0))
 			}
 			PreviewSubject::TessellatedTriangle { a, b, c, .. } => {
-				let min = a.min(*b).min(*c) - Vec3::splat(0.2);
-				let max = a.max(*b).max(*c) + Vec3::splat(0.2);
-				Aabb3d::from_min_max(min, max)
+				let min_x = a.x.min(b.x).min(c.x) - 0.2;
+				let max_x = a.x.max(b.x).max(c.x) + 0.2;
+				let min_z = a.y.min(b.y).min(c.y) - 0.2;
+				let max_z = a.y.max(b.y).max(c.y) + 0.2;
+				Aabb3d::from_min_max(Vec3::new(min_x, -0.2, min_z), Vec3::new(max_x, 0.2, max_z))
 			}
 			PreviewSubject::Polyline | PreviewSubject::PolylineWall => {
 				Aabb3d::from_min_max(Vec3::new(0.0, 0.0, 0.0), Vec3::new(4.0, 3.0, 4.0))
@@ -364,14 +363,9 @@ pub fn present_preview_lod(
 			let roof = RoofNode::shepherds_thatch(RoofGeometry::pitch(pitch), Placement::IDENTITY);
 			spawn_preview(&mut commands, transform, roof.scene_with_lod(&lod_ref));
 		}
-		PreviewSubject::TessellatedTriangle { a, b, c, tile_width } => {
+		PreviewSubject::TessellatedTriangle { a, b, c } => {
 			let floor = FloorNode::rough_stone(
-				FloorGeometry::tessellated_triangle(TessellatedTriangle::new(
-					*a,
-					*b,
-					*c,
-					*tile_width,
-				)),
+				FloorGeometry::tessellated_triangle(TessellatedTriangle::new(*a, *b, *c)),
 				Placement::IDENTITY,
 			);
 			spawn_preview(&mut commands, transform, floor.scene_with_lod(&lod_ref));

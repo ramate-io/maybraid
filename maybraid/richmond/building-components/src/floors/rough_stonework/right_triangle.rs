@@ -11,7 +11,7 @@ use crate::partitions::lod::PartitionMeshSet;
 use crate::partitions::node::impl_partition_mesh_lod_scene;
 use crate::roofs::lod::leaf_scene_ref_lod;
 
-/// Unit right triangle \(X \in [0, 1]\), \(Z \in [-1, 0]\), \(Y \in [-0.2, 0.2]\).
+/// Unit right triangle \(X \in [0, 1]\), \(Z \in [0, 1]\), \(Y \in [-0.2, 0.2]\).
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct RoughStoneFloorRightTriangle;
 

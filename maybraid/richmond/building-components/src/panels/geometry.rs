@@ -65,7 +65,7 @@ pub struct Rectangle;
 
 /// Unit right-triangle panel atom.
 ///
-/// Kit footprint: \(X \in [0, 1]\), \(Z \in [-1, 0]\), \(Y \in [-0.2, 0.2]\).
+/// Kit footprint: \(X \in [0, 1]\), \(Z \in [0, 1]\), \(Y \in [-0.2, 0.2]\).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct RightTriangle {
 	pub mirror: Option<MirrorAxis>,
@@ -132,7 +132,7 @@ impl PanelGeometry {
 						),
 						Placed::with_placement(
 							Self::RightTriangle(RightTriangle { mirror: None }),
-							Placement::new(Vec3::new(1.0, 0.0, -1.0), PI),
+							Placement::new(Vec3::new(1.0, 0.0, 1.0), PI),
 						),
 					]
 				}

@@ -40,7 +40,7 @@ Reusable linear-panel geometry shared by floors and partitions (roofs use roof-n
 | [`PanelGeometry`](src/panels/geometry.rs) | Shared enum: rectangle / right-triangle / tessellated-triangle |
 | [`PanelStyle`](src/panels/geometry.rs) | Kit capabilities (`has_rectangle`); domain styles map into it |
 | [`Rectangle`](src/panels/geometry.rs) / [`RightTriangle`](src/panels/geometry.rs) | Atomic kit footprints (lower-left panel space) |
-| [`TessellatedTriangle`](src/panels/tessellated_triangle.rs) | Three world points filled with posed right-triangle kits |
+| [`TessellatedTriangle`](src/panels/tessellated_triangle.rs) | Three panel-space \((X,Z)\) points filled with posed right-triangle kits |
 | [`Joint`](src/panels/joint.rs) | Separate functional kind (not part of [`PanelGeometry`]) |
 
 **Panel space:** lower-left anchored — **X** along length, **Z** depth/run (top/eave at \(Z = 0\), bottom/ridge at \(Z = -\texttt{depth}\)). Domain nodes own extra orientation (roof pitch about \(+X\), wall upright framing, floor flat).
@@ -156,7 +156,7 @@ These modules hold reusable floor/roof fillers, circulation geometry, and door k
 Floors components come in three categories:
 
 - **Rectangular:** the floor component is a square centered at the origin with half-length \(1\) (\(X, Z \in [-1, 1]\)) and \(Y = [-0.2, 0.2]\). Often, we square-off more complex forms and fill in the missing space with rectangular components. World edge length \(L\) maps with scale \(L / 2\). Kit: `floors/rough_stonework/rough_stonework_001`.
-- **Triangular:** the floor component is a unit right triangle with Y = [-0.2, 0.2]. Often, we use triangular components to fill angled sections. [`TessellatedTriangle`](src/panels/tessellated_triangle.rs) fills an arbitrary 3D triangle with these kits.
+- **Triangular:** the floor component is a unit right triangle with Y = [-0.2, 0.2]. Often, we use triangular components to fill angled sections. [`TessellatedTriangle`](src/panels/tessellated_triangle.rs) fills an arbitrary panel-space \((X,Z)\) triangle with these kits (3D pose is applied by parent placement).
 - **Plank:** the floor component is a rectangle with Z = [-0.2, 0.2], Y = [-1.0, 1.0], and X = [-0.2, 0.2]. Often, we use plank components to fill under complicated polylines, hiding their ends in a partition wall or close to it. They are also quite useful in combination with other rectangular components to fill gaps without aggressive scaling differences per component. 
 - **Circle Inscribed Square:** the floor component is the southern- hemisphere difference between a circle and a square. The space removed by the inscribed square is roughly X = Z =[ -0.7, 0.7]. To completely fill in circular space, rotate four of these components around the center. Kit: `panels/rough_stonework/inscribed_square_001`.
 
