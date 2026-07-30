@@ -3,10 +3,13 @@
 use bevy::scene::prelude::Scene;
 use bevy_math::bounding::Aabb3d;
 use bevy_math::Vec3;
-use lod::gen::LodScene;
+use lod::gen::{LodScene, LodSceneLevel};
 use lod::lod_ref::LodRef;
 use procedural_common::NoiseParams;
+use richmond_building_components::floors::FloorNode;
 use richmond_building_components::scene_children;
+use richmond_building_components::stairs::StairNode;
+use richmond_building_components::{BuildingComponents, PartitionNode};
 
 use crate::wizards_tower::floor_fill::WALL_HEIGHT_METERS;
 use crate::wizards_tower::tower_lod::TowerLodFootprint;
@@ -118,6 +121,39 @@ impl WizardsTowerColumn {
 	}
 }
 
+impl BuildingComponents for WizardsTowerColumn {
+	fn partition_nodes_for_level(&self, level: LodSceneLevel) -> Vec<PartitionNode> {
+		let mut out: Vec<PartitionNode> = self
+			.floors
+			.iter()
+			.flat_map(|f| f.partition_nodes_for_level(level))
+			.collect();
+		out.extend(self.perch.partition_nodes_for_level(level));
+		out
+	}
+
+	fn floor_nodes_for_level(&self, level: LodSceneLevel) -> Vec<FloorNode> {
+		let mut out: Vec<FloorNode> = self
+			.floors
+			.iter()
+			.flat_map(|f| f.floor_nodes_for_level(level))
+			.collect();
+		out.extend(self.perch.floor_nodes_for_level(level));
+		out
+	}
+
+	fn stair_nodes_for_level(&self, level: LodSceneLevel) -> Vec<StairNode> {
+		if !matches!(level, LodSceneLevel::High) {
+			return vec![];
+		}
+		let spire_confines = self.spire_confine_capsule();
+		self.floors
+			.iter()
+			.map(|f| f.arc_spire.stairs.clone().with_confines(spire_confines))
+			.collect()
+	}
+}
+
 impl TowerLodFootprint for WizardsTowerColumn {
 	fn lod_aabb(&self) -> &Aabb3d {
 		&self.constraints.aabb
@@ -132,7 +168,7 @@ impl LodScene for WizardsTowerColumn {
 	fn scene_with_level(
 		&self,
 		lod_ref: &LodRef,
-		_level: lod::gen::LodSceneLevel,
+		_level: LodSceneLevel,
 	) -> impl Scene + 'static {
 		let mut children: Vec<Box<dyn Scene>> = self
 			.floors

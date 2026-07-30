@@ -1,12 +1,9 @@
 //! One circular wall storey: two 180° arcs scaled to radius and floor height.
 
-use bevy::scene::prelude::Scene;
 use bevy_math::Vec3;
-use lod::gen::LodScene;
-use lod::lod_ref::LodRef;
+use lod::gen::LodSceneLevel;
 use richmond_building_components::partitions::{Partition, PartitionNode};
-use richmond_building_components::scene_children;
-use richmond_building_components::Placement;
+use richmond_building_components::{BuildingComponents, Placement};
 
 /// A single ring of outer circular walls.
 #[derive(Debug, Clone, PartialEq)]
@@ -40,21 +37,9 @@ impl StackedRing {
 	}
 }
 
-impl LodScene for StackedRing {
-	fn scene_lod_status(&self, _lod_ref: &LodRef) -> lod::gen::LodSceneStatus {
-		lod::gen::LodSceneStatus::Unchanged
-	}
-
-	fn scene_with_level(
-		&self,
-		lod_ref: &LodRef,
-		_level: lod::gen::LodSceneLevel,
-	) -> impl Scene + 'static {
-		let children: Vec<Box<dyn Scene>> = self
-			.outer_walls
-			.iter()
-			.map(|wall| Box::new(wall.scene_with_lod(lod_ref)) as Box<dyn Scene>)
-			.collect();
-		scene_children(children)
+impl BuildingComponents for StackedRing {
+	fn partition_nodes_for_level(&self, _level: LodSceneLevel) -> Vec<PartitionNode> {
+		self.outer_walls.to_vec()
 	}
 }
+

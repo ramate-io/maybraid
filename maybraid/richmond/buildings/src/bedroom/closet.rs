@@ -1,14 +1,12 @@
 //! Closet cell: partition shell + wardrobe fill.
 
-use bevy::scene::prelude::Scene;
 use bevy_math::Vec3;
-use lod::gen::LodScene;
-use lod::lod_ref::LodRef;
+use lod::gen::LodSceneLevel;
 use richmond_building_components::furniture::FurnitureNode;
 use richmond_building_components::partitions::{
 	wall_placement_from_centered, Partition, PartitionNode,
 };
-use richmond_building_components::scene_children;
+use richmond_building_components::{BuildingComponents};
 
 use crate::bedroom::{owns_face_as_cell, placement_filling_aabb};
 use crate::constraints::FaceKind;
@@ -147,22 +145,13 @@ fn push_opening_return(
 	}
 }
 
-impl LodScene for Closet {
-	fn scene_lod_status(&self, _lod_ref: &LodRef) -> lod::gen::LodSceneStatus {
-		lod::gen::LodSceneStatus::Unchanged
+impl BuildingComponents for Closet {
+	fn partition_nodes_for_level(&self, _level: LodSceneLevel) -> Vec<PartitionNode> {
+		self.walls.clone()
 	}
 
-	fn scene_with_level(
-		&self,
-		lod_ref: &LodRef,
-		_level: lod::gen::LodSceneLevel,
-	) -> impl Scene + 'static {
-		let mut children: Vec<Box<dyn Scene>> = self
-			.walls
-			.iter()
-			.map(|w| Box::new(w.scene_with_lod(lod_ref)) as Box<dyn Scene>)
-			.collect();
-		children.push(Box::new(self.wardrobe.scene_with_lod(lod_ref)));
-		scene_children(children)
+	fn furniture_nodes_for_level(&self, _level: LodSceneLevel) -> Vec<FurnitureNode> {
+		vec![self.wardrobe.clone()]
 	}
 }
+

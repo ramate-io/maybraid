@@ -4,12 +4,13 @@
 //! [`PolylineWallParams::points`].
 
 use bevy_math::Vec3;
+use lod::gen::LodSceneLevel;
 use procedural_common::{NoiseConfig, NoiseParams};
 use richmond_building_components::partitions::{
 	wall_placement_from_centered, Partition, PartitionNode, PolylinePartition,
 	DEFAULT_MIN_JOINT_ANGLE, DEFAULT_TILE_WIDTH, SLICE_KIT_HEIGHT,
 };
-use richmond_building_components::Placement;
+use richmond_building_components::{BuildingComponents, Placement};
 
 use crate::walling::portal::{
 	assign_portals, AssignedPortal, MustAssignPortal, Portal, PortalFootprint, WallRegion,
@@ -116,6 +117,13 @@ impl PolylineWall {
 		}
 	}
 }
+
+impl BuildingComponents for PolylineWall {
+	fn partition_nodes_for_level(&self, _level: LodSceneLevel) -> Vec<PartitionNode> {
+		self.partitions.clone()
+	}
+}
+
 
 fn path_length(points: &[Vec3]) -> f32 {
 	points.windows(2).map(|w| w[0].distance(w[1])).sum()

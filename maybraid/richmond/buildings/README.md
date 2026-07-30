@@ -1,6 +1,6 @@
 # Richmond Buildings
 
-Higher-order building authorship on top of [`richmond-building-components`](../building-components/). This crate emits domain IR (`PartitionNode`, `FloorNode`, `StairNode`, …); it does **not** tessellate kits or own GLB path strings.
+Higher-order building authorship on top of [`richmond-building-components`](../building-components/). This crate emits domain IR (`PartitionNode`, `FloorNode`, `StairNode`, …) via [`BuildingComponents`](../building-components/src/lib.rs); it does **not** tessellate kits or own GLB path strings. Present component-only buildings as [`ComponentsOnly`](../building-components/src/lib.rs)`<T>` unless the type needs a custom `LodScene` (hosts, silhouettes, lights).
 
 ## Urban kit model
 

@@ -7,12 +7,11 @@ pub mod ring;
 
 pub use ring::StackedRing;
 
-use bevy::scene::prelude::Scene;
 use bevy_math::bounding::Aabb3d;
 use bevy_math::Vec3;
-use lod::gen::LodScene;
-use lod::lod_ref::LodRef;
-use richmond_building_components::scene_children;
+use lod::gen::LodSceneLevel;
+use richmond_building_components::partitions::PartitionNode;
+use richmond_building_components::{BuildingComponents};
 
 use crate::CellConstraints;
 
@@ -52,23 +51,12 @@ impl StackedRings {
 	}
 }
 
-impl LodScene for StackedRings {
-	fn scene_lod_status(&self, _lod_ref: &LodRef) -> lod::gen::LodSceneStatus {
-		lod::gen::LodSceneStatus::Unchanged
-	}
-
-	fn scene_with_level(
-		&self,
-		lod_ref: &LodRef,
-		_level: lod::gen::LodSceneLevel,
-	) -> impl Scene + 'static {
-		// Flatten ring wrappers so every GLB sits under one Transform/Visibility root.
-		let children: Vec<Box<dyn Scene>> = self
-			.rings
+impl BuildingComponents for StackedRings {
+	fn partition_nodes_for_level(&self, level: LodSceneLevel) -> Vec<PartitionNode> {
+		self.rings
 			.iter()
-			.flat_map(|ring| ring.outer_walls.iter())
-			.map(|wall| Box::new(wall.scene_with_lod(lod_ref)) as Box<dyn Scene>)
-			.collect();
-		scene_children(children)
+			.flat_map(|ring| ring.partition_nodes_for_level(level))
+			.collect()
 	}
 }
+

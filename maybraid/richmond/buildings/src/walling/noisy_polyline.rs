@@ -4,8 +4,12 @@
 //! turn limits, then builds a [`super::PolylineWall`] from the resulting points.
 
 use bevy_math::Vec3;
+use lod::gen::LodSceneLevel;
 use procedural_common::{AllowedAngles, NoiseParams, NoisyPathParams, StepLenRange};
-use richmond_building_components::partitions::{DEFAULT_MIN_JOINT_ANGLE, DEFAULT_TILE_WIDTH};
+use richmond_building_components::partitions::{
+	DEFAULT_MIN_JOINT_ANGLE, DEFAULT_TILE_WIDTH, PartitionNode,
+};
+use richmond_building_components::{BuildingComponents};
 
 use crate::walling::polyline::{PolylineWall, PolylineWallParams, DEFAULT_PORTAL_WIDTH};
 use crate::walling::portal::{AssignedPortal, MustAssignPortal, WallRegion};
@@ -117,6 +121,13 @@ impl NoisyPolylineWall {
 		&self.wall.partitions
 	}
 }
+
+impl BuildingComponents for NoisyPolylineWall {
+	fn partition_nodes_for_level(&self, _level: LodSceneLevel) -> Vec<PartitionNode> {
+		self.wall.partitions.clone()
+	}
+}
+
 
 #[cfg(test)]
 mod tests {

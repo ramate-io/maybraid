@@ -12,17 +12,16 @@ pub use ensuite::EnsuiteBathroom;
 pub use layout::{BedroomFillParams, BedroomLayout, PartitionSlot};
 pub use nightstand::Nightstand;
 
-use bevy::scene::prelude::Scene;
 use bevy_math::bounding::Aabb3d;
 use bevy_math::Vec3;
-use lod::gen::LodScene;
-use lod::lod_ref::LodRef;
+use lod::gen::LodSceneLevel;
 use richmond_building_components::floors::{Floor, FloorNode};
 use richmond_building_components::partitions::{
 	wall_placement_from_centered, Partition, PartitionNode,
 };
-use richmond_building_components::scene_children;
-use richmond_building_components::Placement;
+use richmond_building_components::{
+	BuildingComponents, FurnitureNode, Placement,
+};
 
 use crate::constraints::{BoundaryOwnershipEntry, BoundaryOwnershipStatus, FaceKind};
 use crate::wizards_tower::floor_fill::{FLOOR_SLAB_Y_SCALE, RECT_HALF_EXTENT};
@@ -84,36 +83,28 @@ impl Bedroom {
 	}
 }
 
-impl LodScene for Bedroom {
-	fn scene_lod_status(&self, _lod_ref: &LodRef) -> lod::gen::LodSceneStatus {
-		lod::gen::LodSceneStatus::Unchanged
+impl BuildingComponents for Bedroom {
+	fn floor_nodes_for_level(&self, _level: LodSceneLevel) -> Vec<FloorNode> {
+		vec![self.floor.clone()]
 	}
 
-	fn scene_with_level(
-		&self,
-		lod_ref: &LodRef,
-		_level: lod::gen::LodSceneLevel,
-	) -> impl Scene + 'static {
-		let mut children: Vec<Box<dyn Scene>> = Vec::new();
-		children.push(Box::new(self.floor.scene_with_lod(lod_ref)));
-		for wall in &self.walls {
-			children.push(Box::new(wall.scene_with_lod(lod_ref)));
-		}
-		for closet in &self.closets {
-			children.push(Box::new(closet.scene_with_lod(lod_ref)));
-		}
-		for bed in &self.beds {
-			children.push(Box::new(bed.scene_with_lod(lod_ref)));
-		}
-		for nightstand in &self.nightstands {
-			children.push(Box::new(nightstand.scene_with_lod(lod_ref)));
-		}
-		for ensuite in &self.ensuites {
-			children.push(Box::new(ensuite.scene_with_lod(lod_ref)));
-		}
-		scene_children(children)
+	fn partition_nodes_for_level(&self, level: LodSceneLevel) -> Vec<PartitionNode> {
+		let mut out = self.walls.clone();
+		out.extend(self.closets.iter().flat_map(|c| c.partition_nodes_for_level(level)));
+		out.extend(self.ensuites.iter().flat_map(|e| e.partition_nodes_for_level(level)));
+		out
+	}
+
+	fn furniture_nodes_for_level(&self, level: LodSceneLevel) -> Vec<FurnitureNode> {
+		let mut out = Vec::new();
+		out.extend(self.closets.iter().flat_map(|c| c.furniture_nodes_for_level(level)));
+		out.extend(self.beds.iter().flat_map(|b| b.furniture_nodes_for_level(level)));
+		out.extend(self.nightstands.iter().flat_map(|n| n.furniture_nodes_for_level(level)));
+		out.extend(self.ensuites.iter().flat_map(|e| e.furniture_nodes_for_level(level)));
+		out
 	}
 }
+
 
 fn subset_or_owned(parent: &CellConstraints, aabb: Aabb3d) -> CellConstraints {
 	parent.subset(aabb).unwrap_or_else(|_| CellConstraints::cell_owned(aabb))

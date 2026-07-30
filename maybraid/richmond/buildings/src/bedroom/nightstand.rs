@@ -1,9 +1,8 @@
 //! Nightstand cell: furniture fill beside the bed.
 
-use bevy::scene::prelude::Scene;
-use lod::gen::LodScene;
-use lod::lod_ref::LodRef;
+use lod::gen::LodSceneLevel;
 use richmond_building_components::furniture::FurnitureNode;
+use richmond_building_components::{BuildingComponents};
 
 use crate::bedroom::placement_filling_aabb;
 use crate::CellConstraints;
@@ -22,16 +21,9 @@ impl Nightstand {
 	}
 }
 
-impl LodScene for Nightstand {
-	fn scene_lod_status(&self, _lod_ref: &LodRef) -> lod::gen::LodSceneStatus {
-		lod::gen::LodSceneStatus::Unchanged
-	}
-
-	fn scene_with_level(
-		&self,
-		lod_ref: &LodRef,
-		_level: lod::gen::LodSceneLevel,
-	) -> impl Scene + 'static {
-		self.furniture.scene_with_lod(lod_ref)
+impl BuildingComponents for Nightstand {
+	fn furniture_nodes_for_level(&self, _level: LodSceneLevel) -> Vec<FurnitureNode> {
+		vec![self.furniture.clone()]
 	}
 }
+

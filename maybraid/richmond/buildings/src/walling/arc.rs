@@ -4,9 +4,10 @@
 //! not necessarily a full circle.
 
 use bevy_math::Vec3;
+use lod::gen::LodSceneLevel;
 use procedural_common::{NoiseConfig, NoiseParams};
 use richmond_building_components::partitions::{Partition, PartitionNode};
-use richmond_building_components::Placement;
+use richmond_building_components::{BuildingComponents, Placement};
 
 use crate::walling::portal::{
 	assign_portals, AssignedPortal, MustAssignPortal, Portal, PortalFootprint, WallRegion,
@@ -81,6 +82,13 @@ impl ArcWall {
 		}
 	}
 }
+
+impl BuildingComponents for ArcWall {
+	fn partition_nodes_for_level(&self, _level: LodSceneLevel) -> Vec<PartitionNode> {
+		self.partitions.clone()
+	}
+}
+
 
 fn is_closed(arc_degrees: f32) -> bool {
 	(arc_degrees - 360.0).abs() < 0.5

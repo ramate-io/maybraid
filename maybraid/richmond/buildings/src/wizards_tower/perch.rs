@@ -4,11 +4,14 @@
 
 use bevy::scene::prelude::Scene;
 use bevy_math::Vec3;
-use lod::gen::LodScene;
+use lod::gen::{LodScene, LodSceneLevel};
 use lod::lod_ref::LodRef;
 use procedural_common::NoiseParams;
 use richmond_building_components::floors::FloorNode;
 use richmond_building_components::scene_children;
+use richmond_building_components::{
+	append_component_scenes, BuildingComponents, ParentConfines, PartitionNode,
+};
 
 use crate::walling::{ArcWall, ArcWallParams};
 use crate::wizards_tower::floor_fill::{squared_floor_with_spire_hole, SPIRE_HALF_FRAC};
@@ -61,9 +64,7 @@ impl WizardsTowerPerch {
 		children: &mut Vec<Box<dyn Scene>>,
 		lod_ref: &LodRef,
 	) {
-		for wall in &self.arc_wall.partitions {
-			children.push(Box::new(wall.scene_with_lod(lod_ref)));
-		}
+		append_component_scenes(self, lod_ref, LodSceneLevel::Medium, children);
 	}
 
 	pub(crate) fn emit_internal_features(
@@ -71,15 +72,8 @@ impl WizardsTowerPerch {
 		children: &mut Vec<Box<dyn Scene>>,
 		lod_ref: &LodRef,
 	) {
-		use richmond_building_components::ParentConfines;
-
-		let confines =
-			ParentConfines::internal(self.storey_confine_center(), self.storey_confine_radius());
-		for cap in &self.floor_caps {
-			children.push(Box::new(cap.clone().with_confines(confines).scene_with_lod(lod_ref)));
-		}
-		for rect in &self.floor_rects {
-			children.push(Box::new(rect.clone().with_confines(confines).scene_with_lod(lod_ref)));
+		for node in self.floor_nodes_for_level(LodSceneLevel::High) {
+			children.push(Box::new(node.scene_with_lod(lod_ref)));
 		}
 	}
 
@@ -93,6 +87,37 @@ impl WizardsTowerPerch {
 		let extent = aabb.max - aabb.min;
 		(0.5 * extent.x.min(extent.z)).max(1e-4)
 	}
+
+	fn is_detail_level(level: LodSceneLevel) -> bool {
+		matches!(level, LodSceneLevel::High)
+	}
+
+	fn is_structure_level(level: LodSceneLevel) -> bool {
+		matches!(level, LodSceneLevel::High | LodSceneLevel::Medium)
+	}
+}
+
+impl BuildingComponents for WizardsTowerPerch {
+	fn partition_nodes_for_level(&self, level: LodSceneLevel) -> Vec<PartitionNode> {
+		if Self::is_structure_level(level) {
+			self.arc_wall.partitions.clone()
+		} else {
+			vec![]
+		}
+	}
+
+	fn floor_nodes_for_level(&self, level: LodSceneLevel) -> Vec<FloorNode> {
+		if !Self::is_detail_level(level) {
+			return vec![];
+		}
+		let confines =
+			ParentConfines::internal(self.storey_confine_center(), self.storey_confine_radius());
+		self.floor_caps
+			.iter()
+			.chain(self.floor_rects.iter())
+			.map(|n| n.clone().with_confines(confines))
+			.collect()
+	}
 }
 
 impl LodScene for WizardsTowerPerch {
@@ -103,7 +128,7 @@ impl LodScene for WizardsTowerPerch {
 	fn scene_with_level(
 		&self,
 		lod_ref: &LodRef,
-		_level: lod::gen::LodSceneLevel,
+		_level: LodSceneLevel,
 	) -> impl Scene + 'static {
 		let mut children: Vec<Box<dyn Scene>> = Vec::new();
 		self.emit_external_features(&mut children, lod_ref);
