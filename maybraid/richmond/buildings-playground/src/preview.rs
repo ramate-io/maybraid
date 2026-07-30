@@ -7,7 +7,7 @@ use bevy_math::Vec2;
 use lod::gen::LodScene;
 use lod::LodViewerState;
 use procedural_common::{AllowedAngles, NoiseParams, NoisyPathParams, StepLenRange};
-use richmond_building_components::panels::QuadPolyline;
+use richmond_building_components::panels::{Quad, QuadPolyline};
 use richmond_building_components::partitions::rough_stonework::{
 	RoughStonework180, RoughStonework90, RoughStoneworkLinear, RoughStoneworkSlice90,
 };
@@ -43,6 +43,16 @@ pub enum PreviewSubject {
 		tile_width: f32,
 		left: Option<f32>,
 		right: Option<f32>,
+	},
+	Quad {
+		depth: f32,
+		length: Option<f32>,
+		tile_width: f32,
+		tile_height: Option<f32>,
+		left: Option<f32>,
+		right: Option<f32>,
+		top: Option<f32>,
+		bottom: Option<f32>,
 	},
 	Polyline,
 	LinearWall,
@@ -122,6 +132,20 @@ impl PreviewConfig {
 					"preview: pitch (rise={rise:.2} run={run:.2} len={length:?} tile={tile_width:.2} left={left:?} right={right:?})"
 				)
 			}
+			PreviewSubject::Quad {
+				depth,
+				length,
+				tile_width,
+				tile_height,
+				left,
+				right,
+				top,
+				bottom,
+			} => {
+				format!(
+					"preview: quad (depth={depth:.2} len={length:?} tile={tile_width:.2}/{tile_height:?} left={left:?} right={right:?} top={top:?} bottom={bottom:?})"
+				)
+			}
 			PreviewSubject::Polyline => "preview: partition polyline (L)".into(),
 			PreviewSubject::LinearWall => "preview: walling linear-wall (door)".into(),
 			PreviewSubject::PolylineWall => "preview: walling polyline-wall (door)".into(),
@@ -189,6 +213,24 @@ impl PreviewConfig {
 				let run = (*run).max(1e-4);
 				let rise = (*rise).max(0.0);
 				Aabb3d::from_min_max(Vec3::new(0.0, -0.2, -run), Vec3::new(x_max, rise + 0.2, 0.0))
+			}
+			PreviewSubject::Quad {
+				depth,
+				length,
+				left,
+				right,
+				top,
+				bottom,
+				..
+			} => {
+				let left_w = left.map(|b| b.abs()).unwrap_or(0.0);
+				let right_w = right.map(|b| b.abs()).unwrap_or(0.0);
+				let top_w = top.map(|b| b.abs()).unwrap_or(0.0);
+				let bottom_w = bottom.map(|b| b.abs()).unwrap_or(0.0);
+				let len = length.unwrap_or(0.0);
+				let x_max = (left_w + len + right_w).max(1e-4);
+				let z_extent = (top_w + depth.max(0.0) + bottom_w).max(1e-4);
+				Aabb3d::from_min_max(Vec3::new(0.0, -0.2, -z_extent), Vec3::new(x_max, 0.2, 0.0))
 			}
 			PreviewSubject::Polyline | PreviewSubject::PolylineWall => {
 				Aabb3d::from_min_max(Vec3::new(0.0, 0.0, 0.0), Vec3::new(4.0, 3.0, 4.0))
@@ -367,6 +409,38 @@ pub fn present_preview_lod(
 				pitch = pitch.with_right(*base);
 			}
 			let roof = RoofNode::shepherds_thatch(RoofGeometry::pitch(pitch), Placement::IDENTITY);
+			spawn_preview(&mut commands, transform, roof.scene_with_lod(&lod_ref));
+		}
+		PreviewSubject::Quad {
+			depth,
+			length,
+			tile_width,
+			tile_height,
+			left,
+			right,
+			top,
+			bottom,
+		} => {
+			let mut quad = Quad::new(*depth, *tile_width);
+			if let Some(len) = length {
+				quad = quad.with_length(*len);
+			}
+			if let Some(h) = tile_height {
+				quad = quad.with_tile_height(*h);
+			}
+			if let Some(base) = left {
+				quad = quad.with_left(*base);
+			}
+			if let Some(base) = right {
+				quad = quad.with_right(*base);
+			}
+			if let Some(base) = top {
+				quad = quad.with_top(*base);
+			}
+			if let Some(base) = bottom {
+				quad = quad.with_bottom(*base);
+			}
+			let roof = RoofNode::shepherds_thatch(RoofGeometry::quad(quad), Placement::IDENTITY);
 			spawn_preview(&mut commands, transform, roof.scene_with_lod(&lod_ref));
 		}
 		PreviewSubject::Polyline => {

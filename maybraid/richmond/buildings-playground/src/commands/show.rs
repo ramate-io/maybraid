@@ -10,6 +10,7 @@ pub mod noisy_quad_polyline;
 pub mod pitch;
 pub mod polyline;
 pub mod polyline_wall;
+pub mod quad;
 pub mod slice_90;
 pub mod stacked_rings;
 pub mod transform;
@@ -35,6 +36,8 @@ pub enum Show {
 	Slice90(slice_90::Slice90),
 	/// Shepherd's-thatch pitched face (`rise`/`run`/`length`/`left`/`right`).
 	Pitch(pitch::Pitch),
+	/// Shepherd's-thatch flat quad (`depth`/`length`/`left`/`right`/`top`/`bottom`).
+	Quad(quad::Quad),
 	/// L-shaped `Partition::polyline` (posed linears + joints).
 	Polyline(polyline::Polyline),
 	/// Portal-sensitive straight [`richmond_buildings::LinearWall`].
@@ -61,6 +64,7 @@ impl Show {
 			Self::Arc180(cmd) => cmd.into_preview(),
 			Self::Slice90(cmd) => cmd.into_preview(),
 			Self::Pitch(cmd) => cmd.into_preview(),
+			Self::Quad(cmd) => cmd.into_preview(),
 			Self::Polyline(cmd) => cmd.into_preview(),
 			Self::LinearWall(cmd) => cmd.into_preview(),
 			Self::PolylineWall(cmd) => cmd.into_preview(),
