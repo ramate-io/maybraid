@@ -43,9 +43,33 @@ pub use roofs::{
 	update_roof_host_levels, Pitch, RoofGeometry, RoofLodBand, RoofLodProbe, RoofNode, RoofStyle,
 	ROOF_HIGH_FACTOR, ROOF_LOW_FACTOR, ROOF_MEDIUM_FACTOR,
 };
-pub use scene_children::{pose, posed_glb, posed_scene, scene_children, wireframe_box_with_handles, with_pose};
+pub use scene_children::{
+	pose, posed_glb, posed_scene, scene_children, wireframe_box_with_handles, with_pose,
+};
 
 use bevy::scene::{ResolveContext, ResolvedScene};
+
+pub trait BuildingComponents {
+	fn panel_nodes_for_level(&self, _level: ::lod::gen::LodSceneLevel) -> Vec<PanelNode> {
+		vec![]
+	}
+
+	fn partition_nodes_for_level(&self, _level: ::lod::gen::LodSceneLevel) -> Vec<PartitionNode> {
+		vec![]
+	}
+
+	fn roof_nodes_for_level(&self, _level: ::lod::gen::LodSceneLevel) -> Vec<RoofNode> {
+		vec![]
+	}
+
+	fn stair_nodes_for_level(&self, _level: ::lod::gen::LodSceneLevel) -> Vec<StairNode> {
+		vec![]
+	}
+
+	fn door_nodes_for_level(&self, _level: ::lod::gen::LodSceneLevel) -> Vec<DoorNode> {
+		vec![]
+	}
+}
 
 pub(crate) fn empty_scene(_: &mut ResolveContext, _: &mut ResolvedScene) {}
 
