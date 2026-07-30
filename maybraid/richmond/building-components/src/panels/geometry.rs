@@ -90,17 +90,14 @@ impl RightTriangle {
 /// Shared panel geometry IR. All variants can [`PanelGeometry::decompose`].
 ///
 /// Composition:
-/// - tessellated triangles ← [`RightTriangle`]
+/// - tessellated triangles ← [`RightTriangle`] / [`crate::panels::TessellatedTriangle`]
 /// - tessellated rectangles ← [`Rectangle`] (+ triangles when `!has_rectangle`)
-/// - quads ← rectangles + edge triangles
-/// - polylines ← quads + joints
 #[derive(Debug, Clone, PartialEq)]
 pub enum PanelGeometry {
 	RightTriangle(RightTriangle),
 	Rectangle(Rectangle),
-	Quad(crate::panels::Quad),
+	TessellatedTriangle(crate::panels::TessellatedTriangle),
 	Joint(crate::panels::Joint),
-	QuadPolyline(crate::panels::QuadPolyline),
 }
 
 impl PanelGeometry {
@@ -110,6 +107,10 @@ impl PanelGeometry {
 
 	pub fn right_triangle(mirror: Option<MirrorAxis>) -> Self {
 		Self::RightTriangle(RightTriangle { mirror })
+	}
+
+	pub fn tessellated_triangle(t: crate::panels::TessellatedTriangle) -> Self {
+		Self::TessellatedTriangle(t)
 	}
 
 	/// One-level decompose toward simpler variants.
@@ -137,13 +138,12 @@ impl PanelGeometry {
 					]
 				}
 			}
-			Self::Quad(q) => q.decompose(style),
+			Self::TessellatedTriangle(t) => t.decompose(),
 			Self::Joint(j) => vec![Placed::at_origin(Self::Joint(*j))],
-			Self::QuadPolyline(pl) => pl.decompose(),
 		}
 	}
 
-	/// Flatten through quads/polylines to leaf atoms ([`Rectangle`], [`RightTriangle`], [`Joint`]).
+	/// Flatten composites to leaf atoms ([`Rectangle`], [`RightTriangle`], [`Joint`]).
 	pub fn flatten(&self, style: PanelStyle) -> Vec<Placed<PanelGeometry>> {
 		flatten_placed(Placed::at_origin(self.clone()), style)
 	}
@@ -183,8 +183,4 @@ fn flatten_placed(placed: Placed<PanelGeometry>, style: PanelStyle) -> Vec<Place
 			)
 		})
 		.collect()
-}
-
-pub(crate) fn placed_geom(geom: PanelGeometry, placement: Placement) -> Placed<PanelGeometry> {
-	Placed::with_placement(geom, placement)
 }

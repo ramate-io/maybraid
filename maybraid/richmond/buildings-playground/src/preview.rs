@@ -6,16 +6,18 @@ use bevy_math::bounding::{Aabb2d, Aabb3d};
 use bevy_math::Vec2;
 use lod::gen::LodScene;
 use lod::LodViewerState;
-use procedural_common::{AllowedAngles, NoiseParams, NoisyPathParams, StepLenRange};
-use richmond_building_components::panels::{Quad, QuadPolyline};
+use procedural_common::{AllowedAngles, NoiseParams, StepLenRange};
+use richmond_building_components::floors::{FloorGeometry, FloorNode};
+use richmond_building_components::panels::TessellatedTriangle;
 use richmond_building_components::partitions::rough_stonework::{
 	RoughStonework180, RoughStonework90, RoughStoneworkLinear, RoughStoneworkSlice90,
 };
-use richmond_building_components::partitions::{Partition, PartitionGeometry, PartitionNode};
+use richmond_building_components::partitions::{Partition, PartitionNode};
 use richmond_building_components::roofs::{Pitch, RoofGeometry, RoofNode};
 use richmond_building_components::scene_children;
 use richmond_building_components::Placement;
 use richmond_buildings::bedroom::Bedroom;
+use richmond_buildings::divided_paneling::{DividedNode, DividedPaneling};
 use richmond_buildings::stacked_rings::StackedRings;
 use richmond_buildings::walling::{
 	LinearWall, LinearWallParams, MustAssignPortal, NoisyPolylineWall, NoisyPolylineWallParams,
@@ -44,31 +46,20 @@ pub enum PreviewSubject {
 		left: Option<f32>,
 		right: Option<f32>,
 	},
-	Quad {
-		depth: f32,
-		length: Option<f32>,
+	TessellatedTriangle {
+		a: Vec3,
+		b: Vec3,
+		c: Vec3,
 		tile_width: f32,
-		tile_height: Option<f32>,
-		left: Option<f32>,
-		right: Option<f32>,
-		top: Option<f32>,
-		bottom: Option<f32>,
+	},
+	DividedPaneling {
+		tile_width: f32,
+		three_nodes: bool,
 	},
 	Polyline,
 	LinearWall,
 	PolylineWall,
 	NoisyPolylineWall {
-		distance: f32,
-		step_len: StepLenRange,
-		allowed_angles: AllowedAngles,
-		path_noise: NoiseParams,
-	},
-	NoisyQuadPolyline {
-		roll: f32,
-		depth: f32,
-		tile_width: f32,
-		min_joint_angle: f32,
-		min_edge_triangle_angle: f32,
 		distance: f32,
 		step_len: StepLenRange,
 		allowed_angles: AllowedAngles,
@@ -132,18 +123,14 @@ impl PreviewConfig {
 					"preview: pitch (rise={rise:.2} run={run:.2} len={length:?} tile={tile_width:.2} left={left:?} right={right:?})"
 				)
 			}
-			PreviewSubject::Quad {
-				depth,
-				length,
-				tile_width,
-				tile_height,
-				left,
-				right,
-				top,
-				bottom,
-			} => {
+			PreviewSubject::TessellatedTriangle { a, b, c, tile_width } => {
 				format!(
-					"preview: quad (depth={depth:.2} len={length:?} tile={tile_width:.2}/{tile_height:?} left={left:?} right={right:?} top={top:?} bottom={bottom:?})"
+					"preview: tessellated-triangle (a={a:?} b={b:?} c={c:?} tile={tile_width:.2})"
+				)
+			}
+			PreviewSubject::DividedPaneling { tile_width, three_nodes } => {
+				format!(
+					"preview: divided-paneling (tile={tile_width:.2} three_nodes={three_nodes})"
 				)
 			}
 			PreviewSubject::Polyline => "preview: partition polyline (L)".into(),
@@ -158,16 +145,6 @@ impl PreviewConfig {
 				"preview: noisy-polyline-wall (d={distance:.1} step=[{:.2},{:.2}] ang=({:.2},{:.2},{:.2}) seed={})",
 				step_len.min, step_len.max,
 				allowed_angles.x, allowed_angles.y, allowed_angles.z, path_noise.seed
-			),
-			PreviewSubject::NoisyQuadPolyline {
-				roll,
-				depth,
-				distance,
-				path_noise,
-				..
-			} => format!(
-				"preview: noisy-quad-polyline (roll={roll:.3} depth={depth:.2} d={distance:.1} seed={})",
-				path_noise.seed
 			),
 			PreviewSubject::WizardsTower { noise } => {
 				format!("preview: wizards-tower (noise={noise:.2})")
@@ -214,23 +191,14 @@ impl PreviewConfig {
 				let rise = (*rise).max(0.0);
 				Aabb3d::from_min_max(Vec3::new(0.0, -0.2, -run), Vec3::new(x_max, rise + 0.2, 0.0))
 			}
-			PreviewSubject::Quad {
-				depth,
-				length,
-				left,
-				right,
-				top,
-				bottom,
-				..
-			} => {
-				let left_w = left.map(|b| b.abs()).unwrap_or(0.0);
-				let right_w = right.map(|b| b.abs()).unwrap_or(0.0);
-				let top_w = top.map(|b| b.abs()).unwrap_or(0.0);
-				let bottom_w = bottom.map(|b| b.abs()).unwrap_or(0.0);
-				let len = length.unwrap_or(0.0);
-				let x_max = (left_w + len + right_w).max(1e-4);
-				let z_extent = (top_w + depth.max(0.0) + bottom_w).max(1e-4);
-				Aabb3d::from_min_max(Vec3::new(0.0, -0.2, -z_extent), Vec3::new(x_max, 0.2, 0.0))
+			PreviewSubject::TessellatedTriangle { a, b, c, .. } => {
+				let min = a.min(*b).min(*c) - Vec3::splat(0.2);
+				let max = a.max(*b).max(*c) + Vec3::splat(0.2);
+				Aabb3d::from_min_max(min, max)
+			}
+			PreviewSubject::DividedPaneling { three_nodes, .. } => {
+				let x_max = if *three_nodes { 4.0 } else { 2.0 };
+				Aabb3d::from_min_max(Vec3::new(0.0, -0.2, -1.2), Vec3::new(x_max, 0.2, 0.2))
 			}
 			PreviewSubject::Polyline | PreviewSubject::PolylineWall => {
 				Aabb3d::from_min_max(Vec3::new(0.0, 0.0, 0.0), Vec3::new(4.0, 3.0, 4.0))
@@ -238,8 +206,7 @@ impl PreviewConfig {
 			PreviewSubject::LinearWall => {
 				Aabb3d::from_min_max(Vec3::new(-4.0, 0.0, -0.5), Vec3::new(4.0, 3.0, 0.5))
 			}
-			PreviewSubject::NoisyPolylineWall { distance, .. }
-			| PreviewSubject::NoisyQuadPolyline { distance, .. } => {
+			PreviewSubject::NoisyPolylineWall { distance, .. } => {
 				let r = (*distance).max(4.0);
 				Aabb3d::from_min_max(Vec3::new(-r, -r * 0.5, -r), Vec3::new(r, r * 0.5 + 3.0, r))
 			}
@@ -411,37 +378,43 @@ pub fn present_preview_lod(
 			let roof = RoofNode::shepherds_thatch(RoofGeometry::pitch(pitch), Placement::IDENTITY);
 			spawn_preview(&mut commands, transform, roof.scene_with_lod(&lod_ref));
 		}
-		PreviewSubject::Quad {
-			depth,
-			length,
-			tile_width,
-			tile_height,
-			left,
-			right,
-			top,
-			bottom,
-		} => {
-			let mut quad = Quad::new(*depth, *tile_width);
-			if let Some(len) = length {
-				quad = quad.with_length(*len);
-			}
-			if let Some(h) = tile_height {
-				quad = quad.with_tile_height(*h);
-			}
-			if let Some(base) = left {
-				quad = quad.with_left(*base);
-			}
-			if let Some(base) = right {
-				quad = quad.with_right(*base);
-			}
-			if let Some(base) = top {
-				quad = quad.with_top(*base);
-			}
-			if let Some(base) = bottom {
-				quad = quad.with_bottom(*base);
-			}
-			let roof = RoofNode::shepherds_thatch(RoofGeometry::quad(quad), Placement::IDENTITY);
-			spawn_preview(&mut commands, transform, roof.scene_with_lod(&lod_ref));
+		PreviewSubject::TessellatedTriangle { a, b, c, tile_width } => {
+			let floor = FloorNode::rough_stone(
+				FloorGeometry::tessellated_triangle(TessellatedTriangle::new(
+					*a,
+					*b,
+					*c,
+					*tile_width,
+				)),
+				Placement::IDENTITY,
+			);
+			spawn_preview(&mut commands, transform, floor.scene_with_lod(&lod_ref));
+		}
+		PreviewSubject::DividedPaneling { tile_width, three_nodes } => {
+			let nodes = if *three_nodes {
+				vec![
+					DividedNode::new(Vec3::ZERO, Vec3::new(0.0, 0.0, -1.0)),
+					DividedNode::new(Vec3::new(2.0, 0.0, 0.0), Vec3::new(2.0, 0.0, -1.0)),
+					DividedNode::new(Vec3::new(4.0, 0.0, 0.0), Vec3::new(4.0, 0.0, -1.0)),
+				]
+			} else {
+				vec![
+					DividedNode::new(Vec3::ZERO, Vec3::new(0.0, 0.0, -1.0)),
+					DividedNode::new(Vec3::new(2.0, 0.0, 0.0), Vec3::new(2.0, 0.0, -1.0)),
+				]
+			};
+			let children: Vec<Box<dyn bevy::scene::Scene>> = DividedPaneling::new(nodes, *tile_width)
+				.tessellated_triangles()
+				.into_iter()
+				.map(|t| {
+					let floor = FloorNode::rough_stone(
+						FloorGeometry::tessellated_triangle(t),
+						Placement::IDENTITY,
+					);
+					Box::new(floor.scene_with_lod(&lod_ref)) as Box<dyn bevy::scene::Scene>
+				})
+				.collect();
+			spawn_preview(&mut commands, transform, scene_children(children));
 		}
 		PreviewSubject::Polyline => {
 			let node = PartitionNode::rough_stone(
@@ -468,37 +441,6 @@ pub fn present_preview_lod(
 					.collect();
 				spawn_preview(&mut commands, transform, scene_children(children));
 			}
-		}
-		PreviewSubject::NoisyQuadPolyline {
-			roll,
-			depth,
-			tile_width,
-			min_joint_angle,
-			min_edge_triangle_angle,
-			distance,
-			step_len,
-			allowed_angles,
-			path_noise,
-		} => {
-			let points = NoisyPathParams {
-				start: Vec3::ZERO,
-				initial_dir: Vec3::Z,
-				distance: *distance,
-				step_len: *step_len,
-				allowed_angles: *allowed_angles,
-				noise: *path_noise,
-			}
-			.generate();
-			let polyline = QuadPolyline::new(points, *depth)
-				.with_tile_width(*tile_width)
-				.with_min_joint_angle(*min_joint_angle)
-				.with_min_edge_triangle_angle(*min_edge_triangle_angle)
-				.with_roll(*roll);
-			let node = PartitionNode::rough_stone(
-				PartitionGeometry::quad_polyline(polyline),
-				Placement::IDENTITY,
-			);
-			spawn_preview(&mut commands, transform, node.scene_with_lod(&lod_ref));
 		}
 		PreviewSubject::WizardsTower { .. } => {
 			if let Some(tower) = cache.wizards_tower.clone() {

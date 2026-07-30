@@ -45,9 +45,8 @@ impl FloorGeometry {
 				.into_iter()
 				.map(|(kit, yaw)| Placed::new(FloorKit::ArcFill(kit), bevy_math::Vec3::ZERO, yaw))
 				.collect(),
-			Self::Quad(q) => map_leaves(PanelGeometry::Quad(*q).flatten(panel_style)),
-			Self::QuadPolyline(pl) => {
-				map_leaves(PanelGeometry::QuadPolyline(pl.clone()).flatten(panel_style))
+			Self::TessellatedTriangle(t) => {
+				map_leaves(PanelGeometry::TessellatedTriangle(*t).flatten(panel_style))
 			}
 		}
 	}

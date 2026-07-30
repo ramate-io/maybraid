@@ -13,6 +13,7 @@
 pub mod arc_spire;
 pub mod bedroom;
 pub mod constraints;
+pub mod divided_paneling;
 pub mod stacked_rings;
 pub mod walling;
 pub mod wizards_tower;
@@ -26,6 +27,7 @@ pub use constraints::{
 	CellBoundaryTable, CellConstraints, CirculationEntry, CirculationRequestStatus, FaceKind,
 	JointCoordinate, JointEntry, PreJointSweep, SubsetError,
 };
+pub use divided_paneling::{DividedNode, DividedPaneling};
 pub use stacked_rings::{StackedRing, StackedRings};
 pub use walling::{
 	ArcRegion, ArcWall, ArcWallParams, AssignedPortal, LinearWall, LinearWallParams,

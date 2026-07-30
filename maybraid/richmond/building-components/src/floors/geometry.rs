@@ -1,6 +1,6 @@
 //! Continuous floor fill geometry.
 
-use crate::panels::{Quad, QuadPolyline};
+use crate::panels::TessellatedTriangle;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum FloorGeometry {
@@ -9,10 +9,8 @@ pub enum FloorGeometry {
 	StructFill(StructFloorFill),
 	/// Southern circle−square cap; four yaws fill a circular floor ring.
 	CircleInscribedSquare(CircleInscribedSquareFloor),
-	/// Shared quadrilateral panel (body + up to four edge triangles).
-	Quad(Quad),
-	/// Short-run polyline of quads + joints.
-	QuadPolyline(QuadPolyline),
+	/// Arbitrary 3D triangle filled with right-triangle kits.
+	TessellatedTriangle(TessellatedTriangle),
 }
 
 impl FloorGeometry {
@@ -32,12 +30,8 @@ impl FloorGeometry {
 		Self::CircleInscribedSquare(CircleInscribedSquareFloor)
 	}
 
-	pub fn quad(quad: Quad) -> Self {
-		Self::Quad(quad)
-	}
-
-	pub fn quad_polyline(polyline: QuadPolyline) -> Self {
-		Self::QuadPolyline(polyline)
+	pub fn tessellated_triangle(t: TessellatedTriangle) -> Self {
+		Self::TessellatedTriangle(t)
 	}
 }
 

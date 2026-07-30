@@ -1,16 +1,10 @@
 //! Continuous roof geometry primitives.
 
-use crate::panels::{Quad, QuadPolyline};
-
 /// Continuous roof / cap forms. Tessellation into kit pieces is private.
 #[derive(Debug, Clone, PartialEq)]
 pub enum RoofGeometry {
 	/// Pitched trapezoid: rectangular body plus optional end triangles.
 	Pitch(Pitch),
-	/// Shared quadrilateral panel (body + up to four edge triangles).
-	Quad(Quad),
-	/// Short-run polyline of quads + joints.
-	QuadPolyline(QuadPolyline),
 	/// Dome sweep filled with 180° / 90° / 15° arc kits (empty leaves for now).
 	Dome(DomeRoof),
 }
@@ -20,24 +14,16 @@ impl RoofGeometry {
 		Self::Pitch(pitch)
 	}
 
-	pub fn quad(quad: Quad) -> Self {
-		Self::Quad(quad)
-	}
-
-	pub fn quad_polyline(polyline: QuadPolyline) -> Self {
-		Self::QuadPolyline(polyline)
-	}
-
 	pub fn dome(sweep_degrees: f32) -> Self {
 		Self::Dome(DomeRoof { sweep_degrees })
 	}
 
-	/// Pitch about local +X in radians (`atan2(rise, run)`). Domes / polylines are unpitched at
-	/// the geometry root (per-segment pitch is owned by placement).
+	/// Pitch about local +X in radians (`atan2(rise, run)`). Domes are unpitched at
+	/// the geometry root.
 	pub fn pitch_radians(&self) -> f32 {
 		match self {
 			Self::Pitch(p) => p.pitch_radians(),
-			Self::Quad(_) | Self::QuadPolyline(_) | Self::Dome(_) => 0.0,
+			Self::Dome(_) => 0.0,
 		}
 	}
 
@@ -59,7 +45,7 @@ pub type Roof = RoofGeometry;
 /// otherwise the rectangle's left edge; eave at \(Y = 0\)). `rise` / `run` must be
 /// non-negative; invert orientation via placement rotation instead.
 ///
-/// Authoring sugar over [`Quad`]: use [`Self::to_quad`] / [`From`].
+/// Roof-native authoring — tessellates directly to rectangle / right-triangle kits.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Pitch {
 	/// How much the pitch rises from eave to roofline (pitch-space Y).
@@ -154,33 +140,14 @@ impl Pitch {
 
 	/// Full X extent including optional end triangles (lower-left anchored at 0).
 	pub fn extent_x(self) -> f32 {
-		self.to_quad().extent_x()
+		self.left.map(|b| b.abs()).unwrap_or(0.0)
+			+ self.length.unwrap_or(0.0)
+			+ self.right.map(|b| b.abs()).unwrap_or(0.0)
 	}
 
 	/// X offset where the rectangular body starts (after left end triangle).
 	pub fn rect_origin_x(self) -> f32 {
-		self.to_quad().rect_origin_x()
-	}
-
-	/// Lower-left panel [`Quad`] (left/right only; top/bottom unused).
-	pub fn to_quad(self) -> Quad {
-		let mut q = Quad::new(self.run, self.tile_width);
-		if let Some(length) = self.length {
-			q = q.with_length(length);
-		}
-		if let Some(left) = self.left {
-			q = q.with_left(left);
-		}
-		if let Some(right) = self.right {
-			q = q.with_right(right);
-		}
-		q
-	}
-}
-
-impl From<Pitch> for Quad {
-	fn from(pitch: Pitch) -> Self {
-		pitch.to_quad()
+		self.left.map(|b| b.abs()).unwrap_or(0.0)
 	}
 }
 
