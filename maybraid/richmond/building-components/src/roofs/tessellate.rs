@@ -6,7 +6,7 @@ use bevy_math::Vec3;
 use scene_ref::MirrorAxis;
 
 use crate::arc_kit::{decompose_arc_sweep, ArcKit};
-use crate::panels::{fitted_tile_count, PanelStyle};
+use crate::panels::{fitted_tile_count, PanelKitCaps};
 use crate::placed::{Placed, Placement};
 use crate::roofs::geometry::{Pitch, RoofGeometry};
 use crate::roofs::style::RoofStyle;
@@ -21,9 +21,9 @@ pub(crate) enum RoofKit {
 
 impl RoofGeometry {
 	pub(crate) fn kit_pieces_for_style(&self, style: RoofStyle) -> Vec<Placed<RoofKit>> {
-		let panel_style = PanelStyle::from(style);
+		let panel_caps = PanelKitCaps::from(style);
 		match self {
-			Self::Pitch(p) => pitch_kits(*p, panel_style),
+			Self::Pitch(p) => pitch_kits(*p, panel_caps),
 			Self::Dome(g) => decompose_arc_sweep(g.sweep_degrees)
 				.into_iter()
 				.map(|(kit, yaw)| Placed::new(RoofKit::DomeArc(kit), Vec3::ZERO, yaw))
@@ -32,7 +32,7 @@ impl RoofGeometry {
 	}
 }
 
-fn pitch_kits(pitch: Pitch, style: PanelStyle) -> Vec<Placed<RoofKit>> {
+fn pitch_kits(pitch: Pitch, caps: PanelKitCaps) -> Vec<Placed<RoofKit>> {
 	let run = pitch.run.max(0.0);
 	let tile_width = pitch.tile_width.max(1e-4);
 	let mut out = Vec::new();
@@ -47,7 +47,7 @@ fn pitch_kits(pitch: Pitch, style: PanelStyle) -> Vec<Placed<RoofKit>> {
 
 	if let Some(length) = pitch.length {
 		if length > 1e-6 && run > 1e-6 {
-			out.extend(body_tiles(rect_x0, length, run, tile_width, style));
+			out.extend(body_tiles(rect_x0, length, run, tile_width, caps));
 		}
 	}
 
@@ -90,14 +90,14 @@ fn body_tiles(
 	length: f32,
 	run: f32,
 	tile_width: f32,
-	style: PanelStyle,
+	caps: PanelKitCaps,
 ) -> Vec<Placed<RoofKit>> {
 	let nx = fitted_tile_count(length, tile_width);
 	let width = length / nx as f32;
 	let mut out = Vec::with_capacity((nx * 2) as usize);
 	for i in 0..nx {
 		let x = x0 + i as f32 * width;
-		if style.has_rectangle {
+		if caps.has_rectangle {
 			out.push(Placed::with_placement(
 				RoofKit::Rectangle,
 				Placement::new(Vec3::new(x, 0.0, 0.0), 0.0).with_scale(tile_scale(width, run)),

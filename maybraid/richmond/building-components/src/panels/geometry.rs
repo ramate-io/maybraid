@@ -1,4 +1,4 @@
-//! Shared panel geometry IR and style kit capabilities.
+//! Shared panel geometry IR and kit capabilities.
 
 use scene_ref::MirrorAxis;
 
@@ -22,18 +22,19 @@ pub fn fitted_tile_count(length: f32, tile_width: f32) -> u32 {
 /// Kit capabilities for a panel look (not a user tessellation preference).
 ///
 /// When [`Self::has_rectangle`] is false, rectangular body regions are filled with
-/// complementary right-triangle pairs.
+/// complementary right-triangle pairs. Domain / panel material styles map into this
+/// via [`From`]; see [`crate::panels::PanelStyle`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct PanelStyle {
+pub struct PanelKitCaps {
 	pub has_rectangle: bool,
 }
 
-impl PanelStyle {
+impl PanelKitCaps {
 	pub const WITH_RECTANGLE: Self = Self { has_rectangle: true };
 	pub const TRIANGLES_ONLY: Self = Self { has_rectangle: false };
 }
 
-impl From<RoofStyle> for PanelStyle {
+impl From<RoofStyle> for PanelKitCaps {
 	fn from(style: RoofStyle) -> Self {
 		match style {
 			RoofStyle::ShepherdsThatch => Self::TRIANGLES_ONLY,
@@ -41,7 +42,7 @@ impl From<RoofStyle> for PanelStyle {
 	}
 }
 
-impl From<PartitionStyle> for PanelStyle {
+impl From<PartitionStyle> for PanelKitCaps {
 	fn from(style: PartitionStyle) -> Self {
 		match style {
 			PartitionStyle::RoughStonework => Self::WITH_RECTANGLE,
@@ -49,7 +50,7 @@ impl From<PartitionStyle> for PanelStyle {
 	}
 }
 
-impl From<FloorStyle> for PanelStyle {
+impl From<FloorStyle> for PanelKitCaps {
 	fn from(style: FloorStyle) -> Self {
 		match style {
 			FloorStyle::RoughStonework | FloorStyle::Wood => Self::WITH_RECTANGLE,
@@ -113,13 +114,13 @@ impl PanelGeometry {
 	}
 
 	/// One-level decompose toward simpler variants.
-	pub fn decompose(&self, style: PanelStyle) -> Vec<Placed<PanelGeometry>> {
+	pub fn decompose(&self, caps: PanelKitCaps) -> Vec<Placed<PanelGeometry>> {
 		match self {
 			Self::RightTriangle(t) => {
 				vec![Placed::at_origin(Self::RightTriangle(*t))]
 			}
 			Self::Rectangle(r) => {
-				if style.has_rectangle {
+				if caps.has_rectangle {
 					vec![Placed::at_origin(Self::Rectangle(*r))]
 				} else {
 					// Unit square as dual triangles (identity placement; caller scale applies).
@@ -142,8 +143,8 @@ impl PanelGeometry {
 	}
 
 	/// Flatten composites to leaf atoms ([`Rectangle`], [`RightTriangle`]).
-	pub fn flatten(&self, style: PanelStyle) -> Vec<Placed<PanelGeometry>> {
-		flatten_placed(Placed::at_origin(self.clone()), style)
+	pub fn flatten(&self, caps: PanelKitCaps) -> Vec<Placed<PanelGeometry>> {
+		flatten_placed(Placed::at_origin(self.clone()), caps)
 	}
 
 	pub fn is_leaf_atom(&self) -> bool {
@@ -151,13 +152,13 @@ impl PanelGeometry {
 	}
 }
 
-fn flatten_placed(placed: Placed<PanelGeometry>, style: PanelStyle) -> Vec<Placed<PanelGeometry>> {
+fn flatten_placed(placed: Placed<PanelGeometry>, caps: PanelKitCaps) -> Vec<Placed<PanelGeometry>> {
 	if placed.geom.is_leaf_atom() {
-		// Rectangle may still expand to dual triangles under style.
-		if matches!(placed.geom, PanelGeometry::Rectangle(_)) && !style.has_rectangle {
+		// Rectangle may still expand to dual triangles under kit caps.
+		if matches!(placed.geom, PanelGeometry::Rectangle(_)) && !caps.has_rectangle {
 			return placed
 				.geom
-				.decompose(style)
+				.decompose(caps)
 				.into_iter()
 				.map(|child| Placed {
 					geom: child.geom,
@@ -169,7 +170,7 @@ fn flatten_placed(placed: Placed<PanelGeometry>, style: PanelStyle) -> Vec<Place
 	}
 	placed
 		.geom
-		.decompose(style)
+		.decompose(caps)
 		.into_iter()
 		.flat_map(|child| {
 			flatten_placed(
@@ -177,7 +178,7 @@ fn flatten_placed(placed: Placed<PanelGeometry>, style: PanelStyle) -> Vec<Place
 					geom: child.geom,
 					placement: placed.placement.compose_child(child.placement),
 				},
-				style,
+				caps,
 			)
 		})
 		.collect()

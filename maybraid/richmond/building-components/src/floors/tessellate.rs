@@ -1,12 +1,11 @@
 //! Private floor kit tessellation (not part of the public IR).
 
-use scene_ref::MirrorAxis;
-
-use crate::arc_kit::{decompose_arc_sweep, ArcKit};
+use crate::panels::{PanelGeometry, PanelKitCaps, Rectangle, RightTriangle};
+use crate::placed::{Placed, Placement};
 use crate::floors::geometry::FloorGeometry;
 use crate::floors::style::FloorStyle;
-use crate::panels::{PanelGeometry, PanelStyle, Rectangle, RightTriangle};
-use crate::placed::{Placed, Placement};
+use crate::arc_kit::{decompose_arc_sweep, ArcKit};
+use scene_ref::MirrorAxis;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) enum FloorKit {
@@ -23,8 +22,8 @@ impl FloorGeometry {
 		style: FloorStyle,
 		parent: Placement,
 	) -> Vec<Placed<FloorKit>> {
-		let panel_style = PanelStyle::from(style);
-		self.kit_pieces(panel_style)
+		let panel_caps = PanelKitCaps::from(style);
+		self.kit_pieces(panel_caps)
 			.into_iter()
 			.map(|child| Placed {
 				geom: child.geom,
@@ -33,7 +32,7 @@ impl FloorGeometry {
 			.collect()
 	}
 
-	fn kit_pieces(&self, panel_style: PanelStyle) -> Vec<Placed<FloorKit>> {
+	fn kit_pieces(&self, panel_caps: PanelKitCaps) -> Vec<Placed<FloorKit>> {
 		match self {
 			Self::Rectangle(_) => vec![Placed::at_origin(FloorKit::Rectangle)],
 			Self::StructFill(_) => vec![Placed::at_origin(FloorKit::StructFill)],
@@ -45,7 +44,7 @@ impl FloorGeometry {
 				.map(|(kit, yaw)| Placed::new(FloorKit::ArcFill(kit), bevy_math::Vec3::ZERO, yaw))
 				.collect(),
 			Self::TessellatedTriangle(t) => {
-				map_leaves(PanelGeometry::TessellatedTriangle(*t).flatten(panel_style))
+				map_leaves(PanelGeometry::TessellatedTriangle(*t).flatten(panel_caps))
 			}
 		}
 	}

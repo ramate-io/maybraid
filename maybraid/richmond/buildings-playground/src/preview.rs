@@ -7,8 +7,7 @@ use bevy_math::Vec2;
 use lod::gen::LodScene;
 use lod::LodViewerState;
 use procedural_common::{AllowedAngles, NoiseParams, StepLenRange};
-use richmond_building_components::floors::{FloorGeometry, FloorNode};
-use richmond_building_components::panels::TessellatedTriangle;
+use richmond_building_components::panels::{PanelGeometry, PanelNode, TessellatedTriangle};
 use richmond_building_components::partitions::rough_stonework::{
 	RoughStonework180, RoughStonework90, RoughStoneworkLinear, RoughStoneworkSlice90,
 };
@@ -364,11 +363,11 @@ pub fn present_preview_lod(
 			spawn_preview(&mut commands, transform, roof.scene_with_lod(&lod_ref));
 		}
 		PreviewSubject::TessellatedTriangle { a, b, c } => {
-			let floor = FloorNode::rough_stone(
-				FloorGeometry::tessellated_triangle(TessellatedTriangle::new(*a, *b, *c)),
+			let panel = PanelNode::rough_stone(
+				PanelGeometry::tessellated_triangle(TessellatedTriangle::new(*a, *b, *c)),
 				Placement::IDENTITY,
 			);
-			spawn_preview(&mut commands, transform, floor.scene_with_lod(&lod_ref));
+			spawn_preview(&mut commands, transform, panel.scene_with_lod(&lod_ref));
 		}
 		PreviewSubject::Polyline => {
 			let node = PartitionNode::rough_stone(

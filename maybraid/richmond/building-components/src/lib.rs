@@ -25,8 +25,9 @@ pub use lod_host::{
 };
 pub use panels::{
 	fitted_tile_count, to_centered_rect_placement, with_wall_standup_pitch, Joint as PanelJoint,
-	PanelGeometry, PanelStyle, Rectangle as PanelRectangle, RightTriangle as PanelRightTriangle,
-	TessellatedTriangle, DEFAULT_MIN_JOINT_ANGLE, DEFAULT_TILE_WIDTH,
+	PanelGeometry, PanelKitCaps, PanelNode, PanelStyle, Rectangle as PanelRectangle,
+	RightTriangle as PanelRightTriangle, TessellatedTriangle, DEFAULT_MIN_JOINT_ANGLE,
+	DEFAULT_TILE_WIDTH,
 };
 pub use parent_confines::{
 	apply_parent_confines, confined_scene, distance_to_segment, InternalShape, ParentConfines,

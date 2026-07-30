@@ -29,7 +29,7 @@ use crate::assets::partitions::rough_stonework::{
 	SLICE_15_MID, SLICE_90_HIGH, SLICE_90_LOW, SLICE_90_MID,
 };
 use crate::panels::{
-	with_wall_standup_pitch, PanelGeometry, PanelStyle, Rectangle, RightTriangle,
+	with_wall_standup_pitch, PanelGeometry, PanelKitCaps, Rectangle, RightTriangle,
 	TessellatedTriangle,
 };
 use crate::partitions::mesh_set::PartitionMeshSet;
@@ -89,13 +89,13 @@ impl PartitionGeometry {
 
 	/// Expand into posed leaf tiles under this geometry (identity parent).
 	pub fn tiles_for_style(&self, style: PartitionStyle) -> Vec<Placed<PartitionTile>> {
-		let panel_style = PanelStyle::from(style);
+		let panel_caps = PanelKitCaps::from(style);
 		match self {
 			Self::Linear(g) => g.tiles(),
 			Self::Joint(_) => vec![Placed::at_origin(PartitionTile::Joint)],
 			Self::Polyline(g) => g.tiles(),
 			Self::TessellatedTriangle(t) => {
-				map_panel_leaves(PanelGeometry::TessellatedTriangle(*t).flatten(panel_style))
+				map_panel_leaves(PanelGeometry::TessellatedTriangle(*t).flatten(panel_caps))
 			}
 			Self::Arc(g) => g.tiles(false),
 			Self::SliceArc(g) => g.tiles(true),
