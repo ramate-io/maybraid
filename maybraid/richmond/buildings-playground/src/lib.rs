@@ -24,7 +24,6 @@ use richmond_building_components::{
 	FurnitureWireframePlugin,
 };
 use richmond_buildings::wizards_tower::{TowerSilhouettePlugin, WizardsTower};
-use richmond_buildings::TessellatedTrianglePanelDebugPlugin;
 use scene_ref::SceneRefPlugin;
 
 pub struct RichmondBuildingsPlaygroundPlugin;
@@ -37,7 +36,6 @@ impl Plugin for RichmondBuildingsPlaygroundPlugin {
 				SceneRefPlugin,
 				FurnitureWireframePlugin,
 				TowerSilhouettePlugin,
-				TessellatedTrianglePanelDebugPlugin,
 				LodFinePassPlugin,
 				GameCommandPlugin::<PlaygroundCommand>::with_config(ui::ui_config()),
 			));
