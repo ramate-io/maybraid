@@ -28,7 +28,9 @@ pub use constraints::{
 	CellBoundaryTable, CellConstraints, CirculationEntry, CirculationRequestStatus, FaceKind,
 	JointCoordinate, JointEntry, PreJointSweep, SubsetError,
 };
-pub use quad_panel::{QuadPanel, QuadPanelJointPolicy};
+pub use quad_panel::{
+	QuadCorner, QuadPanel, QuadPanelJointPolicy, DEFAULT_PANEL_THICKNESS,
+};
 pub use stacked_rings::{StackedRing, StackedRings};
 pub use tessellated_triangle_panel::TessellatedTrianglePanel;
 pub use walling::{
