@@ -9,6 +9,7 @@ use bevy_math::Vec3;
 use lod::gen::{LodScene, LodSceneLevel, LodSceneStatus};
 use lod::lod_ref::LodRef;
 
+use crate::assets::panels::UNIT_RIGHT_TRIANGLE;
 use crate::lod_host::warm_content_host_hsl;
 use crate::parent_confines::{confined_scene, ParentConfines};
 use crate::partitions::geometry::{JointLod, LinearLod, PartitionGeometry, PartitionTile};
@@ -65,7 +66,7 @@ impl PartitionNode {
 
 	fn kit_scenes_for_level(&self, lod_ref: &LodRef, level: LodSceneLevel) -> Vec<Box<dyn Scene>> {
 		self.geometry
-			.placed_tiles(self.placement)
+			.placed_tiles_for_style(self.style, self.placement)
 			.into_iter()
 			.filter_map(|piece| {
 				let transform = pose(piece.placement);
@@ -77,6 +78,10 @@ impl PartitionNode {
 							}
 							Some(Box::new(JointLod::posed_tier(transform, level)) as Box<dyn Scene>)
 						}
+						PartitionTile::RightTriangle { mirror } => Some(Box::new(with_pose(
+							transform,
+							UNIT_RIGHT_TRIANGLE.scene_ref().with_mirror(mirror).scene(),
+						)) as Box<dyn Scene>),
 						tile => {
 							if let Some(meshes) = tile.mesh_set() {
 								Some(Box::new(LinearLod::posed_tier(meshes, transform, level))

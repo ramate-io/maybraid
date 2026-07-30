@@ -20,6 +20,7 @@ pub use polyline::{
 };
 
 use bevy_math::Vec3;
+use scene_ref::MirrorAxis;
 
 use crate::arc_kit::ArcKit;
 use crate::assets::partitions::rough_stonework::{
@@ -27,7 +28,12 @@ use crate::assets::partitions::rough_stonework::{
 	ARC_90_LOW, ARC_90_MID, SLICE_15_HIGH, SLICE_15_LOW, SLICE_15_MID, SLICE_90_HIGH,
 	SLICE_90_LOW, SLICE_90_MID, LINEAR_HIGH, LINEAR_LOW, LINEAR_MID,
 };
+use crate::panels::{
+	with_wall_standup_pitch, PanelGeometry, PanelStyle, Quad, QuadPolyline, Rectangle,
+	RightTriangle,
+};
 use crate::partitions::mesh_set::PartitionMeshSet;
+use crate::partitions::style::PartitionStyle;
 use crate::placed::{Placed, Placement};
 
 /// Kit-local \(Y\) span of slice meshes (\([0, \texttt{SLICE_KIT_HEIGHT}]\)).
@@ -41,6 +47,10 @@ pub enum PartitionGeometry {
 	Joint(JointPartition),
 	/// Short-run polyline (single LOD parent). Prefer splitting long paths upstream.
 	Polyline(PolylinePartition),
+	/// Shared quadrilateral panel (body + up to four edge triangles).
+	Quad(Quad),
+	/// Short-run polyline of quads + joints.
+	QuadPolyline(QuadPolyline),
 	Arc(ArcSweep),
 	/// Slice-height arc (\(Y \in [0, [`SLICE_KIT_HEIGHT`]]\) in kit space).
 	SliceArc(ArcSweep),
@@ -62,6 +72,14 @@ impl PartitionGeometry {
 		Self::Polyline(PolylinePartition::new(points))
 	}
 
+	pub fn quad(quad: Quad) -> Self {
+		Self::Quad(quad)
+	}
+
+	pub fn quad_polyline(polyline: QuadPolyline) -> Self {
+		Self::QuadPolyline(polyline)
+	}
+
 	pub fn arc(sweep_degrees: f32) -> Self {
 		Self::Arc(ArcSweep { sweep_degrees })
 	}
@@ -70,12 +88,22 @@ impl PartitionGeometry {
 		Self::SliceArc(ArcSweep { sweep_degrees })
 	}
 
-	/// Expand into posed leaf tiles under this geometry (identity parent).
+	/// Expand into posed leaf tiles (rough stonework style).
 	pub fn tiles(&self) -> Vec<Placed<PartitionTile>> {
+		self.tiles_for_style(PartitionStyle::RoughStonework)
+	}
+
+	/// Expand into posed leaf tiles under this geometry (identity parent).
+	pub fn tiles_for_style(&self, style: PartitionStyle) -> Vec<Placed<PartitionTile>> {
+		let panel_style = PanelStyle::from(style);
 		match self {
 			Self::Linear(g) => g.tiles(),
 			Self::Joint(_) => vec![Placed::at_origin(PartitionTile::Joint)],
 			Self::Polyline(g) => g.tiles(),
+			Self::Quad(q) => map_panel_leaves(PanelGeometry::Quad(*q).flatten(panel_style)),
+			Self::QuadPolyline(pl) => {
+				map_panel_leaves(PanelGeometry::QuadPolyline(pl.clone()).flatten(panel_style))
+			}
 			Self::Arc(g) => g.tiles(false),
 			Self::SliceArc(g) => g.tiles(true),
 		}
@@ -83,13 +111,55 @@ impl PartitionGeometry {
 
 	/// Expand tiles then compose under `parent` placement.
 	pub fn placed_tiles(&self, parent: Placement) -> Vec<Placed<PartitionTile>> {
-		self.tiles()
+		self.placed_tiles_for_style(PartitionStyle::RoughStonework, parent)
+	}
+
+	pub fn placed_tiles_for_style(
+		&self,
+		style: PartitionStyle,
+		parent: Placement,
+	) -> Vec<Placed<PartitionTile>> {
+		self.tiles_for_style(style)
 			.into_iter()
 			.map(|child| Placed {
 				geom: child.geom,
 				placement: parent.compose_child(child.placement),
 			})
 			.collect()
+	}
+}
+
+fn map_panel_leaves(pieces: Vec<Placed<PanelGeometry>>) -> Vec<Placed<PartitionTile>> {
+	pieces
+		.into_iter()
+		.filter_map(|p| {
+			let tile = panel_to_tile(p.geom)?;
+			Some(Placed {
+				geom: tile,
+				placement: adjust_panel_placement(tile, p.placement),
+			})
+		})
+		.collect()
+}
+
+fn panel_to_tile(geom: PanelGeometry) -> Option<PartitionTile> {
+	match geom {
+		PanelGeometry::Rectangle(Rectangle) => Some(PartitionTile::Linear),
+		PanelGeometry::RightTriangle(RightTriangle { mirror }) => {
+			Some(PartitionTile::RightTriangle { mirror })
+		}
+		PanelGeometry::Joint(_) => Some(PartitionTile::Joint),
+		_ => None,
+	}
+}
+
+/// Ground-authored panel kits tip upright for wall use.
+fn adjust_panel_placement(tile: PartitionTile, p: Placement) -> Placement {
+	match tile {
+		PartitionTile::Linear | PartitionTile::RightTriangle { .. } => {
+			with_wall_standup_pitch(p)
+		}
+		_ => p,
 	}
 }
 
@@ -106,6 +176,10 @@ pub enum PartitionTile {
 	SliceArc90,
 	SliceArc15,
 	Joint,
+	/// Unit right-triangle panel (edge caps / dual-triangle fill).
+	RightTriangle {
+		mirror: Option<MirrorAxis>,
+	},
 }
 
 impl PartitionTile {
@@ -125,7 +199,8 @@ impl PartitionTile {
 			Self::Joint
 			| Self::LinearSubsegment
 			| Self::LinearSliceSubsegment
-			| Self::SliceArc180 => return None,
+			| Self::SliceArc180
+			| Self::RightTriangle { .. } => return None,
 		})
 	}
 }

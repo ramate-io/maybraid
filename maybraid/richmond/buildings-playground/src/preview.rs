@@ -6,11 +6,12 @@ use bevy_math::bounding::{Aabb2d, Aabb3d};
 use bevy_math::Vec2;
 use lod::gen::LodScene;
 use lod::LodViewerState;
-use procedural_common::{AllowedAngles, NoiseParams, StepLenRange};
+use procedural_common::{AllowedAngles, NoiseParams, NoisyPathParams, StepLenRange};
+use richmond_building_components::panels::QuadPolyline;
 use richmond_building_components::partitions::rough_stonework::{
 	RoughStonework180, RoughStonework90, RoughStoneworkSlice90, RoughStoneworkLinear,
 };
-use richmond_building_components::partitions::{Partition, PartitionNode};
+use richmond_building_components::partitions::{Partition, PartitionGeometry, PartitionNode};
 use richmond_building_components::roofs::{Pitch, RoofGeometry, RoofNode};
 use richmond_building_components::scene_children;
 use richmond_building_components::Placement;
@@ -47,6 +48,17 @@ pub enum PreviewSubject {
 	LinearWall,
 	PolylineWall,
 	NoisyPolylineWall {
+		distance: f32,
+		step_len: StepLenRange,
+		allowed_angles: AllowedAngles,
+		path_noise: NoiseParams,
+	},
+	NoisyQuadPolyline {
+		roll: f32,
+		depth: f32,
+		tile_width: f32,
+		min_joint_angle: f32,
+		min_edge_triangle_angle: f32,
 		distance: f32,
 		step_len: StepLenRange,
 		allowed_angles: AllowedAngles,
@@ -124,6 +136,16 @@ impl PreviewConfig {
 				step_len.min, step_len.max,
 				allowed_angles.x, allowed_angles.y, allowed_angles.z, path_noise.seed
 			),
+			PreviewSubject::NoisyQuadPolyline {
+				roll,
+				depth,
+				distance,
+				path_noise,
+				..
+			} => format!(
+				"preview: noisy-quad-polyline (roll={roll:.3} depth={depth:.2} d={distance:.1} seed={})",
+				path_noise.seed
+			),
 			PreviewSubject::WizardsTower { noise } => {
 				format!("preview: wizards-tower (noise={noise:.2})")
 			}
@@ -189,7 +211,8 @@ impl PreviewConfig {
 			PreviewSubject::LinearWall => {
 				Aabb3d::from_min_max(Vec3::new(-4.0, 0.0, -0.5), Vec3::new(4.0, 3.0, 0.5))
 			}
-			PreviewSubject::NoisyPolylineWall { distance, .. } => {
+			PreviewSubject::NoisyPolylineWall { distance, .. }
+			| PreviewSubject::NoisyQuadPolyline { distance, .. } => {
 				let r = (*distance).max(4.0);
 				Aabb3d::from_min_max(Vec3::new(-r, -r * 0.5, -r), Vec3::new(r, r * 0.5 + 3.0, r))
 			}
@@ -426,6 +449,37 @@ pub fn present_preview_lod(
 					.collect();
 				spawn_preview(&mut commands, transform, scene_children(children));
 			}
+		}
+		PreviewSubject::NoisyQuadPolyline {
+			roll,
+			depth,
+			tile_width,
+			min_joint_angle,
+			min_edge_triangle_angle,
+			distance,
+			step_len,
+			allowed_angles,
+			path_noise,
+		} => {
+			let points = NoisyPathParams {
+				start: Vec3::ZERO,
+				initial_dir: Vec3::Z,
+				distance: *distance,
+				step_len: *step_len,
+				allowed_angles: *allowed_angles,
+				noise: *path_noise,
+			}
+			.generate();
+			let polyline = QuadPolyline::new(points, *depth)
+				.with_tile_width(*tile_width)
+				.with_min_joint_angle(*min_joint_angle)
+				.with_min_edge_triangle_angle(*min_edge_triangle_angle)
+				.with_roll(*roll);
+			let node = PartitionNode::rough_stone(
+				PartitionGeometry::quad_polyline(polyline),
+				Placement::IDENTITY,
+			);
+			spawn_preview(&mut commands, transform, node.scene_with_lod(&lod_ref));
 		}
 		PreviewSubject::WizardsTower { .. } => {
 			if let Some(tower) = cache.wizards_tower.clone() {

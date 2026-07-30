@@ -57,7 +57,7 @@ impl LodScene for RoofNode {
 		));
 		let children: Vec<Box<dyn Scene>> = self
 			.geometry
-			.kit_pieces()
+			.kit_pieces_for_style(self.style)
 			.into_iter()
 			.map(|piece| {
 				// parent_pose * pitch_x * kit_pose
@@ -66,6 +66,12 @@ impl LodScene for RoofNode {
 					(RoofStyle::ShepherdsThatch, RoofKit::RightTriangle { mirror }) => {
 						Box::new(ShepherdsThatchRightTriangle::scene_with_lod_mirrored(
 							lod_ref, mirror,
+						))
+					}
+					(RoofStyle::ShepherdsThatch, RoofKit::Rectangle) => {
+						// No thatch rectangle kit; author with dual-triangle policy.
+						Box::new(::bevy::scene::SceneFunction(
+							crate::empty_scene,
 						))
 					}
 					(RoofStyle::ShepherdsThatch, RoofKit::DomeArc(ArcKit::D15)) => {

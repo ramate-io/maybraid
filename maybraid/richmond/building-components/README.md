@@ -29,7 +29,35 @@ partitions/rough_stonework/linear.rs
 …
 ```
 
-Shared [`Placement`](src/placed.rs) / [`Placed`](src/placed.rs) and [`ArcKit`](src/arc_kit.rs) live at the crate root.
+Shared [`Placement`](src/placed.rs) / [`Placed`](src/placed.rs), [`ArcKit`](src/arc_kit.rs), and panel tessellation ([`panels`](src/panels/)) live at the crate root.
+
+## Shared panels (`panels/`)
+
+Reusable linear-panel geometry shared by floors, partitions, and roofs:
+
+| Type | Role |
+|------|------|
+| [`PanelGeometry`](src/panels/geometry.rs) | Single shared enum: triangle / rectangle / quad / joint / quad-polyline |
+| [`PanelStyle`](src/panels/geometry.rs) | Kit capabilities (`has_rectangle`); domain styles map into it |
+| [`Rectangle`](src/panels/geometry.rs) / [`RightTriangle`](src/panels/geometry.rs) | Atomic kit footprints (lower-left panel space) |
+| [`Quad`](src/panels/quad.rs) | Rectangle body + optional signed triangular extensions on **four** edges (`left`/`right`/`top`/`bottom`) |
+| [`Joint`](src/panels/joint.rs) | Corner filler on the average inbound/outbound angle |
+| [`QuadPolyline`](src/panels/polyline.rs) | Short-run path of quads + joints with uniform `roll` |
+
+**Panel space:** lower-left anchored — **X** along length, **Z** depth/run (top/eave at \(Z = 0\), bottom/ridge at \(Z = -\texttt{depth}\)). Left/right join along length; top/bottom along depth. The large faces remain the panel \(\pm Y\) (or wall \(\pm Z\) after domain pose)—not “front/back” extensions. Domain nodes own extra orientation (roof pitch about \(+X\), wall upright framing, floor flat).
+
+Decomposition is style-agnostic geometry (no `LodScene` required); style only chooses rectangle vs dual-triangle body fill:
+
+```text
+QuadPolyline.rectangles() / edge_polygons() / joints() / decompose()
+PanelGeometry::flatten(style) → Placed<Rectangle | RightTriangle | Joint>
+```
+
+[`PanelStyle::has_rectangle`](src/panels/geometry.rs) is a kit capability (e.g. shepherd's thatch → triangles only; rough stonework → rectangles). Domains map `DomainStyle → PanelStyle`, flatten geometry, then map atoms to kits/GLBs. Optional `tile_height` fits the body on both axes; edge triangles subdivide to the suggested tile sizes. Shared placement remaps live in [`kit_space`](src/panels/kit_space.rs).
+
+[`QuadPolyline`](src/panels/polyline.rs) authors a single uniform `roll` (radians) for every segment — not per-edge slope-derived roll. Plan kinks drive left/right edge triangles + joints; with non-zero roll, top/bottom edge triangles use the same half-turn × depth bases. Independent thresholds: `min_joint_angle` and `min_edge_triangle_angle`. Prefer small/moderate sections composed upstream rather than one huge polyline over an entire sweep.
+
+Each of [`FloorGeometry`](src/floors/geometry.rs), [`PartitionGeometry`](src/partitions/geometry.rs), and [`RoofGeometry`](src/roofs/geometry.rs) exposes `Quad` / `QuadPolyline` variants. Roof [`Pitch`](src/roofs/geometry.rs) remains succinct authoring sugar (`rise`/`run`/`left`/`right`) that builds a [`Quad`](src/panels/quad.rs) via [`Pitch::to_quad`](src/roofs/geometry.rs).
 
 ## Urban art / assets
 
@@ -94,11 +122,11 @@ We have not yet defined a sweeping tool. The plan is to make it take linear segm
 
 ## Polyline partitions
 
-[`Partition::polyline`](src/partitions/geometry/polyline.rs) is a **short-run** primitive: one [`PartitionNode`](src/partitions/node.rs) is a single LOD parent whose `scene_with_level` expands into posed linear + joint kits. Prefer splitting longer paths in higher-order constructs (`richmond_buildings::walling`).
+[`Partition::polyline`](src/partitions/geometry/polyline.rs) is a **short-run** thin-wall primitive: one [`PartitionNode`](src/partitions/node.rs) is a single LOD parent whose `scene_with_level` expands into posed linear + joint kits. Prefer splitting longer paths in higher-order constructs (`richmond_buildings::walling`). For panel-oriented paths (edge triangles + quads), use [`PartitionGeometry::quad_polyline`](src/partitions/geometry.rs) backed by shared [`QuadPolyline`](src/panels/polyline.rs).
 
-Each edge uses **horizontal** length \(L_{xz}\) with a suggested [`tile_width`](src/partitions/geometry/linear.rs) (default \(1\)): \(n = \mathrm{round}(L_{xz}/\texttt{tile\_width})\) tiles stretch to width \(L_{xz}/n\). Starts lerp along the 3D path so path \(Y\) carries slope. Override with `with_tile_width`. Continuous [`LinearPartition::spanning`](src/partitions/geometry/linear.rs) uses the same fit on its span. Polyline tiles carry world path anchors plus stand-up pitch and wall scale themselves (`with_wall_scale`); the parent stays identity. Panels stay **plumb** (yaw + stand-up only).
+Each edge uses **horizontal** length \(L_{xz}\) with a suggested [`tile_width`](src/partitions/geometry/linear.rs) (default \(1\), unscaled ground kit \(X \in [0, 1]\)): \(n = \mathrm{round}(L_{xz}/\texttt{tile\_width})\) tiles stretch to width \(L_{xz}/n\). Starts lerp along the 3D path so path \(Y\) carries slope. Override with `with_tile_width`. Continuous [`LinearPartition::spanning`](src/partitions/geometry/linear.rs) uses the same fit on its span. Polyline tiles carry world path anchors plus stand-up pitch and wall scale themselves (`with_wall_scale`); the parent stays identity. Panels stay **plumb** (yaw + stand-up only).
 
-Joints omit when both plan and slope kinks are below [`DEFAULT_MIN_JOINT_ANGLE`](src/partitions/geometry/polyline.rs) (override via `with_min_joint_angle`). Use `with_incoming_slope` when a split span continues a preceding segment that is not in `points`. Horizontal joint scale grows with the vertical kink; joints and panels stay plumb. Joint meshes follow the **parent** level (high/mid only). LOD policy lives beside each geometry variant under [`geometry/`](src/partitions/geometry/).
+Joints omit when both plan and slope kinks are below [`DEFAULT_MIN_JOINT_ANGLE`](src/panels/polyline.rs) (override via `with_min_joint_angle`). Use `with_incoming_slope` when a split span continues a preceding segment that is not in `points`. Horizontal joint scale grows with the vertical kink; joints and panels stay plumb. Joint meshes follow the **parent** level (high/mid only). LOD policy lives beside each geometry variant under [`geometry/`](src/partitions/geometry/).
 
 ## Partitions
 
@@ -124,18 +152,18 @@ Joints are used to connect irregular partition geometry. They remain **verticall
 
 ## Floors, Roofs, Stairs, and Doors
 
-These modules hold reusable floor/roof fillers, circulation geometry, and door kits. Floors are typically an **arc filler** plus a **struct filler**. Roofs use a unified **Pitch** (rectangle + optional end triangles) or **Dome**. Prefer rough stonework for partitions/floors; shepherd's thatch for roofs; wood appears occasionally (interior halfspaces, perch decking, door leaves).
+These modules hold reusable floor/roof fillers, circulation geometry, and door kits. Floors are typically an **arc filler** plus a **struct filler**. Roofs use a unified **Pitch** (authoring sugar over [`Quad`](src/panels/quad.rs): rectangle + optional end triangles) or **Dome**, plus shared `Quad` / `QuadPolyline` variants. Prefer rough stonework for partitions/floors; shepherd's thatch for roofs; wood appears occasionally (interior halfspaces, perch decking, door leaves).
 
 ## Floors
 
 Floors components come in three categories:
 
 - **Rectangular:** the floor component is a square centered at the origin with half-length \(1\) (\(X, Z \in [-1, 1]\)) and \(Y = [-0.2, 0.2]\). Often, we square-off more complex forms and fill in the missing space with rectangular components. World edge length \(L\) maps with scale \(L / 2\). Kit: `floors/rough_stonework/rough_stonework_001`.
-- **Triangular:** the floor component is a unit right triangle with Y = [-0.2, 0.2]. Often, we use triangular components to fill angled sections. 
+- **Triangular:** the floor component is a unit right triangle with Y = [-0.2, 0.2]. Often, we use triangular components to fill angled sections. Shared [`Quad`](src/panels/quad.rs) edge triangles map here via panel tessellation. 
 - **Plank:** the floor component is a rectangle with Z = [-0.2, 0.2], Y = [-1.0, 1.0], and X = [-0.2, 0.2]. Often, we use plank components to fill under complicated polylines, hiding their ends in a partition wall or close to it. They are also quite useful in combination with other rectangular components to fill gaps without aggressive scaling differences per component. 
 - **Circle Inscribed Square:** the floor component is the southern- hemisphere difference between a circle and a square. The space removed by the inscribed square is roughly X = Z =[ -0.7, 0.7]. To completely fill in circular space, rotate four of these components around the center. Kit: `panels/rough_stonework/inscribed_square_001`.
 
-To fill irregular spaces, we commonly use rectangular or triangular tiling techniques--unless a more bespoke component such as the Circle Inscribed Square is provided. Tiling techniques include quadtree voxelization or a simple sweep of a repeated unit shape. 
+To fill irregular spaces, we commonly use rectangular or triangular tiling techniques--unless a more bespoke component such as the Circle Inscribed Square is provided. Shared [`Quad`](src/panels/quad.rs) / [`QuadPolyline`](src/panels/polyline.rs) are the preferred authoring path for moderate tiled regions; tiling techniques also include quadtree voxelization or a simple sweep of a repeated unit shape. 
 
 ## Stairs
 
@@ -149,11 +177,11 @@ Tread heights should typically be around 0.18 world units.
 
 ## Roofs
 
-Roof IR is [`Pitch`](src/roofs/geometry.rs) or [`Dome`](src/roofs/geometry.rs).
+Roof IR is [`Pitch`](src/roofs/geometry.rs), [`Quad`](src/panels/quad.rs) / [`QuadPolyline`](src/panels/polyline.rs), or [`Dome`](src/roofs/geometry.rs).
 
 ### Pitch
 
-A pitched face is a **rectangle** (optional) plus optional **end triangles**, with parallel eave and ridge on the rectangular body. Trapezoid asymmetry comes only from the ends.
+A pitched face is a **rectangle** (optional) plus optional **end triangles**, with parallel eave and ridge on the rectangular body. Trapezoid asymmetry comes only from the ends. Internally this builds a shared [`Quad`](src/panels/quad.rs) (`Pitch::to_quad`); shepherd's thatch maps to [`PanelStyle::TRIANGLES_ONLY`](src/panels/geometry.rs) so the body fills with dual right triangles.
 
 Pitch-space axes: **X** along eave/ridge, **Z** run (eave at \(Z = 0\), ridge at \(Z = -\texttt{run}\)), **Y** rise via rotation about +X by \(\operatorname{atan2}(\texttt{rise}, \texttt{run})\). Anchor is the **lower-left** of the full extent (left end triangle if present, else the rectangle). `rise` / `run` are non-negative; flip the face with placement rotation instead of negative rise/run.
 

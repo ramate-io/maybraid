@@ -19,6 +19,8 @@ use crate::partitions::mesh_set::PartitionMeshSet;
 use crate::partitions::probe::{PartitionLodBand, PartitionLodProbe};
 use crate::placed::{Placed, Placement};
 
+pub use crate::panels::fitted_tile_count;
+
 /// `distance / max_extent` out to this → High.
 pub const LINEAR_HIGH_FACTOR: f32 = 5.0;
 /// Out to this → Medium.
@@ -42,15 +44,6 @@ pub const DEFAULT_TILE_WIDTH: f32 = 1.0;
 /// With scale \((\texttt{length}, \texttt{thick}, \texttt{height})\) on \((X,Y,Z)\):
 /// \(X\) stays along the wall, \(Y\) becomes thickness, \(Z\) becomes storey height.
 pub const PANEL_TO_WALL_PITCH: f32 = std::f32::consts::FRAC_PI_2;
-
-/// How many tiles fit a length given a suggested width (roofs-style).
-///
-/// \(n = \mathrm{round}(\texttt{length}/\texttt{tile\_width})\), at least 1. Callers use
-/// \(\texttt{length}/n\) as the actual tile width so tiles span the length exactly.
-pub fn fitted_tile_count(length: f32, tile_width: f32) -> u32 {
-	let tw = tile_width.max(1e-4);
-	((length / tw).round() as i32).max(1) as u32
-}
 
 fn panel_wall_pose(origin: Vec3, yaw: f32, length: f32, height: f32, thick_scale: f32) -> Placement {
 	Placement::new(origin, yaw)
