@@ -9,10 +9,10 @@
 //! rim → soft rim↔apron → apron.
 
 use crate::primitive::backfill::HydroBackfill;
-use crate::primitive::parameters::{CorrectionStage, TerrainBlendStage};
 use crate::primitive::hydro::{
 	smoothmax_fold, smoothmin_fold, HydroFootprint, HydroPrimitive, SURFACE_SMOOTHMIN_K,
 };
+use crate::primitive::parameters::{CorrectionStage, TerrainBlendStage};
 use bevy_math::Vec2;
 use procedural_common::Bounds2;
 
@@ -37,11 +37,7 @@ pub struct HydroNode {
 }
 
 impl HydroNode {
-	pub fn new(
-		primitive: HydroPrimitive,
-		params: HydroParams,
-		max_correction_extent: f32,
-	) -> Self {
+	pub fn new(primitive: HydroPrimitive, params: HydroParams, max_correction_extent: f32) -> Self {
 		Self {
 			primitive,
 			params,
@@ -279,17 +275,13 @@ impl HydroNode {
 		}
 
 		if !carves.is_empty() {
-			let vals: Vec<f32> = carves
-				.iter()
-				.map(|n| n.shore_terrain_candidate(elevation, p))
-				.collect();
+			let vals: Vec<f32> =
+				carves.iter().map(|n| n.shore_terrain_candidate(elevation, p)).collect();
 			return smoothmin_fold(&vals, SURFACE_SMOOTHMIN_K);
 		}
 		if !soft_shores.is_empty() {
-			let vals: Vec<f32> = soft_shores
-				.iter()
-				.map(|n| n.shore_terrain_candidate(elevation, p))
-				.collect();
+			let vals: Vec<f32> =
+				soft_shores.iter().map(|n| n.shore_terrain_candidate(elevation, p)).collect();
 			return smoothmin_fold(&vals, SURFACE_SMOOTHMIN_K);
 		}
 		if !rims.is_empty() {
@@ -351,10 +343,7 @@ impl HydroNode {
 	pub fn blend_surface_elevation(nodes: &[&Self], p: Vec2) -> Option<f32> {
 		let mut surfaces = Vec::new();
 		for node in nodes {
-			if matches!(
-				node.point_classification(p),
-				Some(CorrectionStage::Carve)
-			) {
+			if matches!(node.point_classification(p), Some(CorrectionStage::Carve)) {
 				surfaces.push(node.surface_level(p));
 			}
 		}
@@ -378,9 +367,7 @@ pub fn nodes_from_polyline(
 	max_correction_extent: f32,
 	backfill: Option<&HydroBackfill>,
 ) -> Vec<HydroNode> {
-	use crate::primitive::hydro::{
-		HydroElevation, HydroFootprint, ReachProfile, ReachSegment,
-	};
+	use crate::primitive::hydro::{HydroElevation, HydroFootprint, ReachProfile, ReachSegment};
 	let n = path.len().min(levels.len());
 	if n < 2 {
 		return Vec::new();
@@ -397,11 +384,7 @@ pub fn nodes_from_polyline(
 		}
 		let mut node = HydroNode::new(
 			HydroPrimitive {
-				footprint: HydroFootprint::Reach(ReachSegment {
-					a,
-					b,
-					half_width: hw,
-				}),
+				footprint: HydroFootprint::Reach(ReachSegment { a, b, half_width: hw }),
 				elevation: HydroElevation::Reach(ReachProfile {
 					surface_a: levels[i],
 					surface_b: levels[i + 1],
@@ -423,9 +406,7 @@ pub fn nodes_from_polyline(
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use crate::primitive::hydro::{
-		HydroElevation, HydroFootprint, ReachProfile, ReachSegment,
-	};
+	use crate::primitive::hydro::{HydroElevation, HydroFootprint, ReachProfile, ReachSegment};
 
 	fn reach_node(half_width: f32) -> HydroNode {
 		let mut params = HydroParams::default();
@@ -520,10 +501,7 @@ mod tests {
 		let far = Vec2::new(20.0, 40.0);
 		let bare_f = HydroNode::elevation_blend_without_backfill(&[&node], 40.0, far);
 		let full_f = HydroNode::elevation_blend(&[&node], 40.0, far);
-		anyhow::ensure!(
-			(bare_f - full_f).abs() < 1e-3,
-			"far field should match bare and full"
-		);
+		anyhow::ensure!((bare_f - full_f).abs() < 1e-3, "far field should match bare and full");
 		Ok(())
 	}
 

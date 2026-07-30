@@ -43,20 +43,14 @@ pub struct MarazionBandConfig {
 
 impl MarazionBandConfig {
 	/// Build runtime knobs from a band layout's authored consts.
-	pub fn from_layout<L>(
-		seed: u32,
-		lake: LakeParams,
-		stream: StreamParams,
-		bog: BogParams,
-	) -> Self
+	pub fn from_layout<L>(seed: u32, lake: LakeParams, stream: StreamParams, bog: BogParams) -> Self
 	where
 		L: MarazionBandLayoutConsts,
 	{
 		let mut streams_graph = StreamsGraphParams::default();
 		streams_graph.stream = stream;
 		streams_graph.stream.rim.height_amp_min = 0.0;
-		streams_graph.stream.rim.height_amp_max =
-			streams_graph.stream.rim.height_amp_max.min(1.25);
+		streams_graph.stream.rim.height_amp_max = streams_graph.stream.rim.height_amp_max.min(1.25);
 		streams_graph.rim_uplift_cap = streams_graph.rim_uplift_cap.min(1.5);
 		Self {
 			pre_pocket: PrePocketParams {
@@ -149,7 +143,10 @@ impl Default for MarazionWatershedConfigs {
 				seed, low_lake, low_stream, low_bog,
 			),
 			high_pass: MarazionBandConfig::from_layout::<PrePocketHighPassLayout>(
-				seed, high_lake, high_stream, high_bog,
+				seed,
+				high_lake,
+				high_stream,
+				high_bog,
 			),
 		}
 	}

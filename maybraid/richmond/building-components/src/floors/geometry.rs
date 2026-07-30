@@ -54,9 +54,7 @@ pub struct ArcFloorFill {
 
 impl Default for ArcFloorFill {
 	fn default() -> Self {
-		Self {
-			sweep_degrees: 360.0,
-		}
+		Self { sweep_degrees: 360.0 }
 	}
 }
 

@@ -31,12 +31,7 @@ pub struct FloorNode {
 
 impl FloorNode {
 	pub fn new(style: FloorStyle, geometry: FloorGeometry, placement: Placement) -> Self {
-		Self {
-			style,
-			geometry,
-			placement,
-			confines: ParentConfines::External,
-		}
+		Self { style, geometry, placement, confines: ParentConfines::External }
 	}
 
 	pub fn rough_stone(geometry: FloorGeometry, placement: Placement) -> Self {
@@ -53,15 +48,15 @@ impl FloorNode {
 	}
 }
 
-fn mirrored_triangle(asset: crate::assets::AssetPath, mirror: Option<MirrorAxis>) -> scene_ref::SceneRef {
+fn mirrored_triangle(
+	asset: crate::assets::AssetPath,
+	mirror: Option<MirrorAxis>,
+) -> scene_ref::SceneRef {
 	asset.scene_ref().with_mirror(mirror)
 }
 
 impl LodScene for FloorNode {
-	fn scene_lod_status(
-		&self,
-		_lod_ref: &LodRef,
-	) -> lod::gen::LodSceneStatus {
+	fn scene_lod_status(&self, _lod_ref: &LodRef) -> lod::gen::LodSceneStatus {
 		lod::gen::LodSceneStatus::Unchanged
 	}
 
@@ -105,9 +100,7 @@ impl LodScene for FloorNode {
 						let child: Box<dyn Scene> = match piece.geom {
 							FloorKit::Rectangle
 							| FloorKit::CircleInscribedSquare
-							| FloorKit::RightTriangle { .. } => {
-								Box::new(WoodFloorRectangle.scene_with_lod(lod_ref))
-							}
+							| FloorKit::RightTriangle { .. } => Box::new(WoodFloorRectangle.scene_with_lod(lod_ref)),
 							FloorKit::ArcFill(_) => {
 								Box::new(WoodFloorArcFill.scene_with_lod(lod_ref))
 							}

@@ -83,8 +83,7 @@ impl WizardsTower {
 			seed: (noise.clamp(0.0, 1.0) * 1_000_000.0) as i32,
 			..NoiseParams::default()
 		};
-		let column =
-			WizardsTowerColumn::new(constraints, floor_count, storey_height, portal_noise);
+		let column = WizardsTowerColumn::new(constraints, floor_count, storey_height, portal_noise);
 		Self {
 			constraints: column.constraints.clone(),
 			floor_count,
@@ -113,9 +112,7 @@ impl WizardsTower {
 		for floor in &self.column.floors {
 			floor.emit_external_features(&mut children, lod_ref);
 		}
-		self.column
-			.perch
-			.emit_external_features(&mut children, lod_ref);
+		self.column.perch.emit_external_features(&mut children, lod_ref);
 		scene_children(children)
 	}
 
@@ -128,12 +125,8 @@ impl WizardsTower {
 			floor.emit_internal_features(&mut children, lod_ref);
 			floor.emit_spire_features(&mut children, lod_ref, spire_confines);
 		}
-		self.column
-			.perch
-			.emit_external_features(&mut children, lod_ref);
-		self.column
-			.perch
-			.emit_internal_features(&mut children, lod_ref);
+		self.column.perch.emit_external_features(&mut children, lod_ref);
+		self.column.perch.emit_internal_features(&mut children, lod_ref);
 		scene_children(children)
 	}
 }
@@ -159,11 +152,7 @@ impl LodScene for WizardsTower {
 		}
 	}
 
-	fn scene_with_level(
-		&self,
-		lod_ref: &LodRef,
-		level: LodSceneLevel,
-	) -> impl Scene + 'static {
+	fn scene_with_level(&self, lod_ref: &LodRef, level: LodSceneLevel) -> impl Scene + 'static {
 		match level {
 			LodSceneLevel::High => Box::new(self.high_primitives(lod_ref)) as Box<dyn Scene>,
 			LodSceneLevel::Medium => Box::new(self.exterior_primitives(lod_ref)) as Box<dyn Scene>,
@@ -183,10 +172,6 @@ impl LodScene for WizardsTower {
 
 	fn scene_with_lod(&self, lod_ref: &LodRef) -> impl Scene + 'static {
 		let level = self.scene_lod_level(lod_ref);
-		lod_host_scene(
-			level,
-			self.constraints.aabb,
-			self.scene_with_level(lod_ref, level),
-		)
+		lod_host_scene(level, self.constraints.aabb, self.scene_with_level(lod_ref, level))
 	}
 }

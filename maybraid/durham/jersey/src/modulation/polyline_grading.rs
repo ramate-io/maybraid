@@ -115,19 +115,11 @@ impl RegionPolylineGradingModulation {
 
 	/// Graded surface elevation at `(x, z)`.
 	pub fn grade_at(&self, x: f32, z: f32) -> f32 {
-		let mut graded = grade_along_polyline(
-			&self.path,
-			&self.levels,
-			Vec2::new(x, z),
-			self.node_blend,
-		);
+		let mut graded =
+			grade_along_polyline(&self.path, &self.levels, Vec2::new(x, z), self.node_blend);
 		if let Some(hn) = &self.height_noise {
 			let s = hn.sample_height(Vec2::new(x, z));
-			graded += if self.height_noise_add_only {
-				s.abs()
-			} else {
-				s
-			};
+			graded += if self.height_noise_add_only { s.abs() } else { s };
 		}
 		graded
 	}
@@ -157,11 +149,7 @@ mod tests {
 
 	#[test]
 	fn grade_follows_piecewise_nodes() -> anyhow::Result<()> {
-		let path = vec![
-			Vec2::new(0.0, 0.0),
-			Vec2::new(50.0, 0.0),
-			Vec2::new(100.0, 0.0),
-		];
+		let path = vec![Vec2::new(0.0, 0.0), Vec2::new(50.0, 0.0), Vec2::new(100.0, 0.0)];
 		let levels = vec![50.0, 40.0, 40.0];
 		let region = Region2D::Polyline(PolylineRegion::new(path.clone(), 8.0));
 		let g = RegionPolylineGradingModulation::new(region, path, levels, 0.0, 2.0);
@@ -175,8 +163,8 @@ mod tests {
 		let path = vec![Vec2::new(0.0, 0.0), Vec2::new(20.0, 0.0)];
 		let levels = vec![50.0, 40.0];
 		let region = Region2D::Polyline(PolylineRegion::new(path.clone(), 6.0));
-		let g = RegionPolylineGradingModulation::new(region, path, levels, 0.0, 2.0)
-			.depression_only();
+		let g =
+			RegionPolylineGradingModulation::new(region, path, levels, 0.0, 2.0).depression_only();
 		assert_eq!(g.modify_elevation(30.0, 10.0, 0.0), 30.0);
 		assert!(g.modify_elevation(80.0, 10.0, 0.0) < 80.0);
 		Ok(())

@@ -1,6 +1,6 @@
 //! Jersey Rolling Ground (unchained) — [RFC-105 §3.8.11](https://github.com/ramate-io/maybraid/tree/main/rfc/rfc-000-000-105-procedural-terrain#3811-jersey-rolling-ground-unchained).
 
-use crate::config::{JitteredCenter};
+use crate::config::JitteredCenter;
 use crate::modulation::{JerseyModulation, RegionAffineModulation};
 use crate::region::{CircleRegion, Region2D, RegionNoise};
 use crate::stamp::{scale_additive, StampSemantics, StampSet, StampStrength};
@@ -17,11 +17,7 @@ pub struct RollingGroundParams {
 
 impl Default for RollingGroundParams {
 	fn default() -> Self {
-		Self {
-			count: 4,
-			size_frac: 0.12,
-			amplitude: 3.5,
-		}
+		Self { count: 4, size_frac: 0.12, amplitude: 3.5 }
 	}
 }
 
@@ -41,11 +37,7 @@ pub struct RollingGround {
 }
 
 impl RollingGround {
-	pub fn from_bounds(
-		bounds: Bounds2,
-		seed: u32,
-		params: RollingGroundParams,
-	) -> Self {
+	pub fn from_bounds(bounds: Bounds2, seed: u32, params: RollingGroundParams) -> Self {
 		let hash = SeededHash::new(seed);
 		let short = bounds.extent().min_element().max(1.0);
 		let amp0 = params.amplitude;
@@ -61,14 +53,8 @@ impl RollingGround {
 			let amp = amp0 * (0.6 + 0.4 * hash.unit(i as u32 + 9)) * sign;
 			let region = Region2D::Circle(CircleRegion { center, radius });
 			modulations.push(JerseyModulation::Affine(
-				RegionAffineModulation::new(
-					region,
-					1.0,
-					amp,
-					radius * 0.4,
-					radius * 0.95,
-				)
-				.with_noise(noise.clone()),
+				RegionAffineModulation::new(region, 1.0, amp, radius * 0.4, radius * 0.95)
+					.with_noise(noise.clone()),
 			));
 		}
 
@@ -88,11 +74,7 @@ impl RollingGround {
 	}
 
 	pub fn from_bounds_default(bounds: Bounds2, seed: u32) -> Self {
-		Self::from_bounds(
-			bounds,
-			seed,
-			RollingGroundParams::default(),
-		)
+		Self::from_bounds(bounds, seed, RollingGroundParams::default())
 	}
 }
 

@@ -97,10 +97,8 @@ impl HydrologyComplex {
 				stamp.extend_with(swell.stamp);
 			}
 			HydrologyComplexKind::SteppedFlats => {
-				stamp.semantics = stamp
-					.semantics
-					.with_tag("stepped_flats")
-					.with_tag("overflow_sill");
+				stamp.semantics =
+					stamp.semantics.with_tag("stepped_flats").with_tag("overflow_sill");
 				let basin = ValleyBasin::from_bounds(
 					bounds,
 					seed.wrapping_add(4),
@@ -166,12 +164,7 @@ impl HydrologyComplex {
 	}
 
 	pub fn from_bounds_default(bounds: Bounds2, seed: u32) -> Self {
-		Self::from_bounds(
-			bounds,
-			seed,
-			HydrologyComplexParams::default(),
-			None,
-		)
+		Self::from_bounds(bounds, seed, HydrologyComplexParams::default(), None)
 	}
 }
 

@@ -5,15 +5,15 @@
 //! into one [`HydroComplex`] (sample-time union blend).
 
 use crate::authored::apron::{sample_apron_rim_noise, ApronNoiseSalts};
-use crate::primitive::backfill::HydroBackfill;
-use crate::primitive::parameters::{HydroParams, TARGET_RIM_WIDTH};
-use crate::primitive::complex::HydroComplex;
-use crate::primitive::node::nodes_from_polyline;
 use crate::authored::noise::{n01_freq, scale_noise_freq};
 use crate::authored::stream::{
 	collapse_degenerate_vertices, node_water_levels, sample_endpoint, StreamBandBudget,
 	StreamParams, DEGENERATE_VERTEX_EPS, ENDPOINT_A_SALT, ENDPOINT_B_SALT,
 };
+use crate::primitive::backfill::HydroBackfill;
+use crate::primitive::complex::HydroComplex;
+use crate::primitive::node::nodes_from_polyline;
+use crate::primitive::parameters::{HydroParams, TARGET_RIM_WIDTH};
 use bevy_math::Vec2;
 use jersey_terrain_stamps::{DownhillPair, RegionNoise};
 use procedural_common::{Bounds2, HysteresisGraph, SeededHash};
@@ -48,12 +48,7 @@ impl Default for StreamsGraphParams {
 	fn default() -> Self {
 		let stream = StreamParams::default();
 		let rim_uplift_cap = stream.rim.recipe_uplift_cap();
-		Self {
-			stream,
-			degree_min: 2,
-			degree_max: 3,
-			rim_uplift_cap,
-		}
+		Self { stream, degree_min: 2, degree_max: 3, rim_uplift_cap }
 	}
 }
 
@@ -93,9 +88,7 @@ fn pin_junction_water_levels(
 		}
 		c.levels[n - 1] = toe;
 		for i in (1..n - 1).rev() {
-			c.levels[i] = c.levels[i]
-				.min(c.levels[i - 1])
-				.max(c.levels[n - 1]);
+			c.levels[i] = c.levels[i].min(c.levels[i - 1]).max(c.levels[n - 1]);
 		}
 	}
 }
@@ -219,9 +212,8 @@ impl StreamsGraph {
 			return None;
 		}
 
-		let sample_w = |p: Vec2| {
-			height_at.map(|f| f(p.x, p.y)).unwrap_or(0.0) - stream_p.water_sink.max(0.0)
-		};
+		let sample_w =
+			|p: Vec2| height_at.map(|f| f(p.x, p.y)).unwrap_or(0.0) - stream_p.water_sink.max(0.0);
 
 		let mut corridors = Vec::new();
 		for &from in &key_graph_idx {
@@ -280,18 +272,10 @@ impl StreamsGraph {
 			return None;
 		}
 
-		let key_points = key_graph_idx
-			.iter()
-			.map(|&i| graph.nodes[i])
-			.collect::<Vec<_>>();
+		let key_points = key_graph_idx.iter().map(|&i| graph.nodes[i]).collect::<Vec<_>>();
 
 		// Shared junction \(W\) from local keypoint samples (not min-of-corridors).
-		pin_junction_water_levels(
-			&mut corridors,
-			&key_points,
-			height_at,
-			stream_p.water_sink,
-		);
+		pin_junction_water_levels(&mut corridors, &key_points, height_at, stream_p.water_sink);
 
 		let rim_w = TARGET_RIM_WIDTH;
 		let apron_w = (budget.apron_half - budget.skirt_half).max(apron_band);
@@ -302,21 +286,14 @@ impl StreamsGraph {
 			budget.half_width,
 			stream_p.apron.noise_freq_power,
 		);
-		let boundary_noise = Some(RegionNoise::from_seed(
-			seed.wrapping_add(5),
-			shore_freq,
-			shore_amp,
-		));
+		let boundary_noise =
+			Some(RegionNoise::from_seed(seed.wrapping_add(5), shore_freq, shore_amp));
 		let rim_boundary_noise = Some(apron_noise.apron.clone());
 		let rim_boundary_amp = apron_noise.apron_amp;
 		const RIM_BACKFILL_SALT: u32 = 0x57EA_BF11;
 		let rim_backfill_params = {
 			let mut p = StreamParams::rim_backfill_params(budget.half_width);
-			p.freq = scale_noise_freq(
-				p.freq,
-				budget.half_width,
-				stream_p.apron.noise_freq_power,
-			);
+			p.freq = scale_noise_freq(p.freq, budget.half_width, stream_p.apron.noise_freq_power);
 			p
 		};
 		// Rim backfill + shore/rim noise sit inside rim/apron — pad is band widths.
@@ -418,10 +395,7 @@ mod tests {
 		let compiled = g.into_complex().compile();
 		assert!(compiled.has_hydro());
 		assert_eq!(compiled.fills.len(), 1);
-		assert!(matches!(
-			compiled.fills[0].surface,
-			WaterSurface::Hydro { .. }
-		));
+		assert!(matches!(compiled.fills[0].surface, WaterSurface::Hydro { .. }));
 		Ok(())
 	}
 
@@ -488,8 +462,7 @@ mod tests {
 	fn overlap_does_not_pillar_above_rim_cap() -> anyhow::Result<()> {
 		let bounds = Bounds2::from_xz(0.0, 0.0, 500.0, 500.0);
 		let params = StreamsGraphParams::default();
-		let rise_budget =
-			params.stream.rim.lift.max(0.0) + params.rim_uplift_cap.max(0.0) + 4.0;
+		let rise_budget = params.stream.rim.lift.max(0.0) + params.rim_uplift_cap.max(0.0) + 4.0;
 		let g = StreamsGraph::from_bounds(bounds, 3, params, Some(&slope_height)).expect("graph");
 		let compiled = g.into_complex().compile();
 		let mut max_rise = 0.0f32;
@@ -519,8 +492,7 @@ mod tests {
 		let params = StreamsGraphParams::default();
 		let sink = params.stream.water_sink;
 		let freeboard = params.stream.channel_freeboard;
-		let thalweg = (params.stream.depth * GRAPH_THALWEG_DEPTH_FRAC)
-			.min(GRAPH_THALWEG_DEPTH_MAX);
+		let thalweg = (params.stream.depth * GRAPH_THALWEG_DEPTH_FRAC).min(GRAPH_THALWEG_DEPTH_MAX);
 		let g = StreamsGraph::from_bounds(bounds, 11, params, Some(&height)).expect("graph");
 		let compiled = g.clone().into_complex().compile();
 		let fill = compiled.fills.first().expect("fill");

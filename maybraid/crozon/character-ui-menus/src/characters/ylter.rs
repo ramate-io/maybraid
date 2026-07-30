@@ -289,7 +289,8 @@ impl From<&YilterConfig> for YilterMenu {
 			body: Section::new(
 				"Body",
 				YilterBodyMenu {
-					body: AssetSingleSelect::new(YilterBodyMesh::Rumbler).with_camera_focus(BODY_FOCUS),
+					body: AssetSingleSelect::new(YilterBodyMesh::Rumbler)
+						.with_camera_focus(BODY_FOCUS),
 					sliders: YilterBodyProportionSliders::from_config(config.sliders),
 					color: SwatchSingleSelect::new(config.colors.body),
 					tail_color: SwatchSingleSelect::new(config.colors.tail),

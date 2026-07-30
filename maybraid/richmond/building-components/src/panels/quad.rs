@@ -58,11 +58,7 @@ impl Default for Quad {
 
 impl Quad {
 	pub fn new(depth: f32, tile_width: f32) -> Self {
-		Self {
-			depth: depth.max(0.0),
-			tile_width: tile_width.max(1e-4),
-			..Self::default()
-		}
+		Self { depth: depth.max(0.0), tile_width: tile_width.max(1e-4), ..Self::default() }
 	}
 
 	pub fn with_length(mut self, length: f32) -> Self {
@@ -256,9 +252,7 @@ fn body_tiles(
 ) -> Vec<Placed<PanelGeometry>> {
 	let nx = fitted_tile_count(length, tile_width);
 	let width = length / nx as f32;
-	let nz = tile_height
-		.map(|th| fitted_tile_count(depth, th))
-		.unwrap_or(1);
+	let nz = tile_height.map(|th| fitted_tile_count(depth, th)).unwrap_or(1);
 	let run = depth / nz as f32;
 	let mut out = Vec::with_capacity((nx * nz * 2) as usize);
 	for j in 0..nz {
@@ -294,9 +288,7 @@ fn edge_triangles(
 	let width = base.abs().max(1e-4);
 	let altitude = altitude.max(1e-4);
 	let nx = fitted_tile_count(width, tile_width);
-	let nz = tile_height
-		.map(|th| fitted_tile_count(altitude, th))
-		.unwrap_or(1);
+	let nz = tile_height.map(|th| fitted_tile_count(altitude, th)).unwrap_or(1);
 	let dw = width / nx as f32;
 	let dh = altitude / nz as f32;
 
@@ -380,21 +372,14 @@ fn push_edge_cell(
 		(EndSide::Left, true) => {
 			let origin = Vec3::new(x_min + _full_w - u, 0.0, z_ref - v);
 			out.push(placed_geom(
-				PanelGeometry::RightTriangle(RightTriangle {
-					mirror: Some(MirrorAxis::X),
-				}),
+				PanelGeometry::RightTriangle(RightTriangle { mirror: Some(MirrorAxis::X) }),
 				Placement::new(origin, 0.0).with_scale(scale),
 			));
 			if fully_inside {
 				out.push(placed_geom(
-					PanelGeometry::RightTriangle(RightTriangle {
-						mirror: Some(MirrorAxis::X),
-					}),
-					Placement::new(
-						Vec3::new(origin.x - cell_w, 0.0, origin.z - cell_h),
-						PI,
-					)
-					.with_scale(scale),
+					PanelGeometry::RightTriangle(RightTriangle { mirror: Some(MirrorAxis::X) }),
+					Placement::new(Vec3::new(origin.x - cell_w, 0.0, origin.z - cell_h), PI)
+						.with_scale(scale),
 				));
 			}
 		}
@@ -432,16 +417,12 @@ fn push_edge_cell(
 		(EndSide::Right, false) => {
 			let origin = Vec3::new(x_min + u, 0.0, z_ref - _full_h + v);
 			out.push(placed_geom(
-				PanelGeometry::RightTriangle(RightTriangle {
-					mirror: Some(MirrorAxis::X),
-				}),
+				PanelGeometry::RightTriangle(RightTriangle { mirror: Some(MirrorAxis::X) }),
 				Placement::new(origin, PI).with_scale(scale),
 			));
 			if fully_inside {
 				out.push(placed_geom(
-					PanelGeometry::RightTriangle(RightTriangle {
-						mirror: Some(MirrorAxis::X),
-					}),
+					PanelGeometry::RightTriangle(RightTriangle { mirror: Some(MirrorAxis::X) }),
 					Placement::new(Vec3::new(origin.x + cell_w, 0.0, origin.z + cell_h), 0.0)
 						.with_scale(scale),
 				));
@@ -451,21 +432,14 @@ fn push_edge_cell(
 		(EndSide::Top, true) => {
 			let origin = Vec3::new(x_min + v, 0.0, z_ref + _full_w - u);
 			out.push(placed_geom(
-				PanelGeometry::RightTriangle(RightTriangle {
-					mirror: Some(MirrorAxis::X),
-				}),
+				PanelGeometry::RightTriangle(RightTriangle { mirror: Some(MirrorAxis::X) }),
 				Placement::new(origin, -PI * 0.5).with_scale(scale),
 			));
 			if fully_inside {
 				out.push(placed_geom(
-					PanelGeometry::RightTriangle(RightTriangle {
-						mirror: Some(MirrorAxis::X),
-					}),
-					Placement::new(
-						Vec3::new(origin.x + cell_h, 0.0, origin.z - cell_w),
-						PI * 0.5,
-					)
-					.with_scale(scale),
+					PanelGeometry::RightTriangle(RightTriangle { mirror: Some(MirrorAxis::X) }),
+					Placement::new(Vec3::new(origin.x + cell_h, 0.0, origin.z - cell_w), PI * 0.5)
+						.with_scale(scale),
 				));
 			}
 		}
@@ -478,11 +452,8 @@ fn push_edge_cell(
 			if fully_inside {
 				out.push(placed_geom(
 					PanelGeometry::RightTriangle(RightTriangle { mirror: None }),
-					Placement::new(
-						Vec3::new(origin.x - cell_h, 0.0, origin.z - cell_w),
-						-PI * 0.5,
-					)
-					.with_scale(scale),
+					Placement::new(Vec3::new(origin.x - cell_h, 0.0, origin.z - cell_w), -PI * 0.5)
+						.with_scale(scale),
 				));
 			}
 		}
@@ -496,32 +467,22 @@ fn push_edge_cell(
 			if fully_inside {
 				out.push(placed_geom(
 					PanelGeometry::RightTriangle(RightTriangle { mirror: None }),
-					Placement::new(
-						Vec3::new(origin.x + cell_h, 0.0, origin.z + cell_w),
-						-PI * 0.5,
-					)
-					.with_scale(scale),
+					Placement::new(Vec3::new(origin.x + cell_h, 0.0, origin.z + cell_w), -PI * 0.5)
+						.with_scale(scale),
 				));
 			}
 		}
 		(EndSide::Bottom, false) => {
 			let origin = Vec3::new(x_min + _full_h - v, 0.0, z_ref - (_full_w - u));
 			out.push(placed_geom(
-				PanelGeometry::RightTriangle(RightTriangle {
-					mirror: Some(MirrorAxis::X),
-				}),
+				PanelGeometry::RightTriangle(RightTriangle { mirror: Some(MirrorAxis::X) }),
 				Placement::new(origin, -PI * 0.5).with_scale(scale),
 			));
 			if fully_inside {
 				out.push(placed_geom(
-					PanelGeometry::RightTriangle(RightTriangle {
-						mirror: Some(MirrorAxis::X),
-					}),
-					Placement::new(
-						Vec3::new(origin.x - cell_h, 0.0, origin.z + cell_w),
-						PI * 0.5,
-					)
-					.with_scale(scale),
+					PanelGeometry::RightTriangle(RightTriangle { mirror: Some(MirrorAxis::X) }),
+					Placement::new(Vec3::new(origin.x - cell_h, 0.0, origin.z + cell_w), PI * 0.5)
+						.with_scale(scale),
 				));
 			}
 		}
@@ -533,9 +494,7 @@ mod tests {
 	use super::*;
 	#[test]
 	fn rectangle_only_fits_tiles_to_length() -> anyhow::Result<()> {
-		let pieces = Quad::new(2.0, 1.0)
-			.with_length(3.0)
-			.decompose(PanelStyle::TRIANGLES_ONLY);
+		let pieces = Quad::new(2.0, 1.0).with_length(3.0).decompose(PanelStyle::TRIANGLES_ONLY);
 		assert_eq!(pieces.len(), 6);
 		assert_eq!(pieces[0].translation().x, 0.0);
 		assert_eq!(pieces[0].scale(), Vec3::new(1.0, 1.0, 2.0));
@@ -545,9 +504,7 @@ mod tests {
 
 	#[test]
 	fn with_rectangle_style_emits_rect_tiles() -> anyhow::Result<()> {
-		let pieces = Quad::new(2.0, 1.0)
-			.with_length(3.0)
-			.decompose(PanelStyle::WITH_RECTANGLE);
+		let pieces = Quad::new(2.0, 1.0).with_length(3.0).decompose(PanelStyle::WITH_RECTANGLE);
 		assert_eq!(pieces.len(), 3);
 		assert!(pieces.iter().all(|p| matches!(p.geom, PanelGeometry::Rectangle(_))));
 		Ok(())
@@ -561,9 +518,7 @@ mod tests {
 			.decompose(PanelStyle::TRIANGLES_ONLY);
 		assert!(matches!(
 			pieces[0].geom,
-			PanelGeometry::RightTriangle(RightTriangle {
-				mirror: Some(MirrorAxis::X),
-			})
+			PanelGeometry::RightTriangle(RightTriangle { mirror: Some(MirrorAxis::X) })
 		));
 		assert!((pieces[0].translation().x - 0.5).abs() < 1e-4);
 		Ok(())

@@ -5,9 +5,9 @@
 //! [`HydroComplex`] is a bag of nodes to blend — no graph / connectivity.
 
 use crate::primitive::fill::{WaterFill, WaterSurface};
-use crate::primitive::parameters::ComplexParams;
 use crate::primitive::hydro::{FootprintIndex, HydroPrimitive};
 use crate::primitive::node::HydroNode;
+use crate::primitive::parameters::ComplexParams;
 use bevy_math::{Vec2, Vec3};
 use procedural_common::Bounds2;
 
@@ -49,12 +49,8 @@ pub struct HydroComplex {
 
 impl HydroComplex {
 	pub fn new(bounds: Bounds2, seed: u32) -> Self {
-		let mut complex = Self {
-			bounds,
-			seed,
-			hydrology: Vec::new(),
-			index: FootprintIndex::empty(),
-		};
+		let mut complex =
+			Self { bounds, seed, hydrology: Vec::new(), index: FootprintIndex::empty() };
 		complex.reindex();
 		complex
 	}
@@ -184,25 +180,12 @@ impl HydroComplex {
 
 	/// Build a [`WaterFill`] that delegates SDF / \(W\) to this complex.
 	pub fn water_fill(&self) -> WaterFill {
-		WaterFill {
-			surface: WaterSurface::Hydro {
-				complex: self.clone(),
-			},
-		}
+		WaterFill { surface: WaterSurface::Hydro { complex: self.clone() } }
 	}
 
 	pub fn compile(&self) -> CompiledWatershed {
-		let fills = if self.is_empty() {
-			Vec::new()
-		} else {
-			vec![self.water_fill()]
-		};
-		CompiledWatershed {
-			bounds: self.bounds,
-			seed: self.seed,
-			complex: self.clone(),
-			fills,
-		}
+		let fills = if self.is_empty() { Vec::new() } else { vec![self.water_fill()] };
+		CompiledWatershed { bounds: self.bounds, seed: self.seed, complex: self.clone(), fills }
 	}
 }
 
@@ -214,8 +197,8 @@ mod tests {
 		Ellipse, HydroElevation, HydroFootprint, HydroPrimitive, RadialBowl, ReachProfile,
 		ReachSegment,
 	};
-	use crate::primitive::parameters::HydroParams;
 	use crate::primitive::node::HydroNode;
+	use crate::primitive::parameters::HydroParams;
 	use jersey_terrain_stamps::RegionNoise;
 
 	#[test]
@@ -236,10 +219,7 @@ mod tests {
 					radii: Vec2::splat(8.0),
 					rotation: 0.0,
 				}),
-				elevation: HydroElevation::Radial(RadialBowl {
-					surface: 40.0,
-					center_depth: 3.0,
-				}),
+				elevation: HydroElevation::Radial(RadialBowl { surface: 40.0, center_depth: 3.0 }),
 				influence_pad: 4.0,
 			},
 			HydroParams::default(),
@@ -250,17 +230,11 @@ mod tests {
 			fade: 2.0,
 			add_only: true,
 		}));
-		let complex = HydroComplex::new(Bounds2::from_xz(-40.0, -40.0, 40.0, 40.0), 3)
-			.with_hydro(vec![node]);
+		let complex =
+			HydroComplex::new(Bounds2::from_xz(-40.0, -40.0, 40.0, 40.0), 3).with_hydro(vec![node]);
 		let base = 40.0;
 		let mut max_raise = 0.0_f32;
-		for &(x, z) in &[
-			(0.0, 0.0),
-			(2.0, 1.0),
-			(-3.0, 2.0),
-			(1.5, -2.5),
-			(-1.0, -1.0),
-		] {
+		for &(x, z) in &[(0.0, 0.0), (2.0, 1.0), (-3.0, 2.0), (1.5, -2.5), (-1.0, -1.0)] {
 			let bare = {
 				let nodes = complex.nodes_intersecting(Vec2::new(x, z));
 				HydroNode::elevation_blend_without_backfill(&nodes, base, Vec2::new(x, z))
@@ -270,10 +244,7 @@ mod tests {
 		}
 		anyhow::ensure!(max_raise > 0.05, "interior should raise somewhere, max Δ={max_raise}");
 		let h_out = complex.modify_elevation(base, 35.0, 0.0);
-		anyhow::ensure!(
-			(h_out - base).abs() < 1e-3,
-			"far field identity, got {h_out}"
-		);
+		anyhow::ensure!((h_out - base).abs() < 1e-3, "far field identity, got {h_out}");
 		Ok(())
 	}
 
@@ -292,11 +263,7 @@ mod tests {
 		let c = Vec2::new(80.0, 0.0);
 		let upstream = HydroNode::new(
 			HydroPrimitive {
-				footprint: HydroFootprint::Reach(ReachSegment {
-					a,
-					b,
-					half_width: half_w,
-				}),
+				footprint: HydroFootprint::Reach(ReachSegment { a, b, half_width: half_w }),
 				elevation: HydroElevation::Reach(ReachProfile {
 					surface_a: 100.0,
 					surface_b: 80.0,
@@ -309,11 +276,7 @@ mod tests {
 		);
 		let downstream = HydroNode::new(
 			HydroPrimitive {
-				footprint: HydroFootprint::Reach(ReachSegment {
-					a: b,
-					b: c,
-					half_width: half_w,
-				}),
+				footprint: HydroFootprint::Reach(ReachSegment { a: b, b: c, half_width: half_w }),
 				elevation: HydroElevation::Reach(ReachProfile {
 					surface_a: 80.0,
 					surface_b: 60.0,
@@ -328,10 +291,7 @@ mod tests {
 			.with_hydro(vec![upstream, downstream]);
 		let mid = Vec2::new(20.0, 0.0);
 		let w = complex.surface_at(mid.x, mid.y).expect("surface");
-		assert!(
-			w > 85.0,
-			"fill W should track upstream carve grade, got {w}"
-		);
+		assert!(w > 85.0, "fill W should track upstream carve grade, got {w}");
 		let h = complex.modify_elevation(100.0, mid.x, mid.y);
 		let fill = complex.water_fill();
 		assert!(
@@ -352,27 +312,19 @@ mod tests {
 					radii: Vec2::splat(10.0),
 					rotation: 0.0,
 				}),
-				elevation: HydroElevation::Radial(RadialBowl {
-					surface: 40.0,
-					center_depth: 3.0,
-				}),
+				elevation: HydroElevation::Radial(RadialBowl { surface: 40.0, center_depth: 3.0 }),
 				influence_pad: 20.0,
 			},
 			HydroParams::default(),
 			20.0,
 		);
 		let complex =
-			HydroComplex::new(Bounds2::from_xz(-40.0, -40.0, 40.0, 40.0), 7).with_hydro(vec![
-				node,
-			]);
+			HydroComplex::new(Bounds2::from_xz(-40.0, -40.0, 40.0, 40.0), 7).with_hydro(vec![node]);
 		// Just outside the bowl: positive φ, finite, not a 1e6 cliff.
 		let d = complex.approximate_distance_to_carve(12.0, 0.0);
 		assert!(d > 0.0 && d < 20.0, "expected modest carve distance, got {d}");
 		let far = complex.water_distance(Vec3::new(12.0, 38.0, 0.0), 36.0);
-		assert!(
-			(far - d).abs() < 1e-3,
-			"outside carve water_distance should equal carve approx"
-		);
+		assert!((far - d).abs() < 1e-3, "outside carve water_distance should equal carve approx");
 		Ok(())
 	}
 
@@ -385,10 +337,7 @@ mod tests {
 					radii: Vec2::splat(8.0),
 					rotation: 0.0,
 				}),
-				elevation: HydroElevation::Radial(RadialBowl {
-					surface: 40.0,
-					center_depth: 3.0,
-				}),
+				elevation: HydroElevation::Radial(RadialBowl { surface: 40.0, center_depth: 3.0 }),
 				influence_pad: 12.0,
 			},
 			HydroParams::default(),
@@ -399,9 +348,7 @@ mod tests {
 			.water_fill();
 		let probes = fill.wet_volume_probe_points();
 		assert!(
-			probes
-				.iter()
-				.any(|p| (p.x - 30.0).abs() < 1e-3 && (p.y + 25.0).abs() < 1e-3),
+			probes.iter().any(|p| (p.x - 30.0).abs() < 1e-3 && (p.y + 25.0).abs() < 1e-3),
 			"expected lake-center probe, got {probes:?}"
 		);
 		Ok(())

@@ -51,10 +51,7 @@ impl CirculationEntry {
 impl CirculationRequestStatus {
 	/// Statuses that still need clear approach space into the cell.
 	pub fn needs_clearance(self) -> bool {
-		matches!(
-			self,
-			Self::Required | Self::Desired | Self::Optional
-		)
+		matches!(self, Self::Required | Self::Desired | Self::Optional)
 	}
 }
 
@@ -177,21 +174,16 @@ pub fn aabb3d_intersects(a: &Aabb3d, b: &Aabb3d) -> bool {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use bevy_math::Vec2;
 	use crate::constraints::CellConstraints;
+	use bevy_math::Vec2;
 
 	#[test]
 	fn front_door_projects_inward_by_opening_width() -> anyhow::Result<()> {
-		let mut cell = CellConstraints::cell_owned(Aabb3d::from_min_max(
-			Vec3::ZERO,
-			Vec3::new(4.0, 3.0, 5.0),
-		));
+		let mut cell =
+			CellConstraints::cell_owned(Aabb3d::from_min_max(Vec3::ZERO, Vec3::new(4.0, 3.0, 5.0)));
 		// Door spanning t ∈ [0.25, 0.5] → world width 1.0 on a 4m face.
 		cell.circulation.front = Some(CirculationEntry(vec![(
-			Aabb2d {
-				min: Vec2::new(0.25, 0.0),
-				max: Vec2::new(0.5, 0.9),
-			},
+			Aabb2d { min: Vec2::new(0.25, 0.0), max: Vec2::new(0.5, 0.9) },
 			vec![CirculationRequestStatus::Required],
 		)]));
 		let zones = cell.circulation_exclusion_zones();
@@ -206,15 +198,10 @@ mod tests {
 
 	#[test]
 	fn satisfied_only_regions_are_not_excluded() -> anyhow::Result<()> {
-		let mut cell = CellConstraints::cell_owned(Aabb3d::from_min_max(
-			Vec3::ZERO,
-			Vec3::new(4.0, 3.0, 5.0),
-		));
+		let mut cell =
+			CellConstraints::cell_owned(Aabb3d::from_min_max(Vec3::ZERO, Vec3::new(4.0, 3.0, 5.0)));
 		cell.circulation.front = Some(CirculationEntry(vec![(
-			Aabb2d {
-				min: Vec2::ZERO,
-				max: Vec2::ONE,
-			},
+			Aabb2d { min: Vec2::ZERO, max: Vec2::ONE },
 			vec![CirculationRequestStatus::Satisfied],
 		)]));
 		assert!(cell.circulation_exclusion_zones().is_empty());

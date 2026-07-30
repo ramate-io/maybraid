@@ -12,7 +12,10 @@ use bevy::math::bounding::{Aabb3d, IntersectsVolume};
 use bevy::prelude::*;
 use bevy::scene::Scene;
 use durham_terrain::shaders::DurhamTerrainShader;
-use lod::gen::{GenerationScheme, Id, OriginalId, RegionPresenter, SpatialIndex, StorageStatus, TrackedId, Version};
+use lod::gen::{
+	GenerationScheme, Id, OriginalId, RegionPresenter, SpatialIndex, StorageStatus, TrackedId,
+	Version,
+};
 use lod::lod_ref::LodRef;
 use render_item::sdf::cpu_shot::WallFaces;
 use std::collections::{HashMap, HashSet};
@@ -124,19 +127,13 @@ impl TerrainPresentationAssets {
 		let cell_size = (max.x - min.x).max(1e-3);
 		if let Some(macro_min) = self.macro_cell_min_size {
 			if cell_size + 1e-3 >= macro_min {
-				return (
-					self.macro_res_2.unwrap_or(3),
-					self.wall_faces_for_macro_cell(bounds),
-				);
+				return (self.macro_res_2.unwrap_or(3), self.wall_faces_for_macro_cell(bounds));
 			}
 		}
 		let ix = (min.x / cell_size).floor() as i32;
 		let iz = (min.z / cell_size).floor() as i32;
 		let radius = ix.abs().max(iz.abs());
-		(
-			self.res_2_for_radius(radius),
-			self.wall_faces_for_fine_cell(ix, iz),
-		)
+		(self.res_2_for_radius(radius), self.wall_faces_for_fine_cell(ix, iz))
 	}
 }
 
@@ -159,10 +156,7 @@ where
 		if id != Id::Universal {
 			return None;
 		}
-		Some((
-			spatial_index.bootstrap_terrain_presentation_assets(),
-			universal_bounds(),
-		))
+		Some((spatial_index.bootstrap_terrain_presentation_assets(), universal_bounds()))
 	}
 
 	fn descendants_with_lod(_id: Id, _spatial_index: &mut S, _lod_ref: &LodRef) {}
@@ -264,11 +258,7 @@ impl<'a, 'w, 's> RegionPresenter<Terrain, TerrainStoreView<'a>> for TerrainRegio
 		if let Some(previous) = self.state.presented.remove(&id) {
 			self.commands.entity(previous.entity).despawn();
 		}
-		let entity = self
-			.commands
-			.spawn_scene(scene)
-			.insert(PresentedTerrainScene(id))
-			.id();
+		let entity = self.commands.spawn_scene(scene).insert(PresentedTerrainScene(id)).id();
 		self.state.presented.insert(id, PresentedEntry { version, entity });
 	}
 

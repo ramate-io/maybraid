@@ -1,6 +1,6 @@
 //! Jersey Valley Basins (unchained) — [RFC-105 §3.8.1](https://github.com/ramate-io/maybraid/tree/main/rfc/rfc-000-000-105-procedural-terrain#381-jersey-valley-basins-unchained).
 
-use crate::config::{FractalAnchors, HysteresisSpine, DownhillPair};
+use crate::config::{DownhillPair, FractalAnchors, HysteresisSpine};
 use crate::modulation::{JerseyModulation, RegionAffineModulation, RegionGradingModulation};
 use crate::region::{CircleRegion, Region2D, RegionNoise};
 use crate::stamp::{scale_additive, scale_near_one, StampSemantics, StampSet, StampStrength};
@@ -126,9 +126,7 @@ impl ValleyBasin {
 		let short = bounds.extent().min_element().max(1.0);
 		let profile = CrossProfile::from_params(&params);
 		// Larger leaves: keep floor depth more even along the reach.
-		let extent_t = (short / crate::stamp::SOFTMASK_REFERENCE_SHORT)
-			.sqrt()
-			.clamp(1.0, 3.0);
+		let extent_t = (short / crate::stamp::SOFTMASK_REFERENCE_SHORT).sqrt().clamp(1.0, 3.0);
 		let depth_falloff = (0.3 / extent_t).clamp(0.05, 0.3);
 
 		let (start, end) = FractalAnchors::default().sample(bounds, seed, 0);
@@ -157,10 +155,7 @@ impl ValleyBasin {
 		let sample_stride = ((path.len() / 4).max(1)).min(2);
 		for (i, p) in path.iter().enumerate().step_by(sample_stride) {
 			let center = *p + lateral;
-			let region = Region2D::Circle(CircleRegion {
-				center,
-				radius: half_width,
-			});
+			let region = Region2D::Circle(CircleRegion { center, radius: half_width });
 			let depth_t = i as f32 / path.len().saturating_sub(1).max(1) as f32;
 			let local_depth = profile.depth * (1.0 - depth_falloff * depth_t);
 			modulations.push(JerseyModulation::Affine(
@@ -177,10 +172,8 @@ impl ValleyBasin {
 
 		// Downhill floor bias that never raises natural lows.
 		let grade_center = (start_pt + end_pt) * 0.5 + lateral;
-		let grade_region = Region2D::Circle(CircleRegion {
-			center: grade_center,
-			radius: half_width * 1.5,
-		});
+		let grade_region =
+			Region2D::Circle(CircleRegion { center: grade_center, radius: half_width * 1.5 });
 		modulations.push(JerseyModulation::Grading(
 			RegionGradingModulation::new(
 				grade_region,
@@ -208,22 +201,13 @@ impl ValleyBasin {
 			start: start_pt,
 			end: end_pt,
 			path: path.clone(),
-			stamp: StampSet {
-				modulations,
-				spine: path,
-				semantics,
-			},
+			stamp: StampSet { modulations, spine: path, semantics },
 		}
 	}
 
 	/// Convenience: default params, no height oracle.
 	pub fn from_bounds_default(bounds: Bounds2, seed: u32) -> Self {
-		Self::from_bounds(
-			bounds,
-			seed,
-			ValleyBasinParams::default(),
-			None,
-		)
+		Self::from_bounds(bounds, seed, ValleyBasinParams::default(), None)
 	}
 }
 
@@ -269,12 +253,8 @@ mod tests {
 	#[test]
 	fn valley_does_not_raise_natural_lows() -> anyhow::Result<()> {
 		let bounds = Bounds2::from_xz(0.0, 0.0, 400.0, 400.0);
-		let basin = ValleyBasin::from_bounds(
-			bounds,
-			7,
-			ValleyBasinParams::default(),
-			Some(&|_, _| 80.0),
-		);
+		let basin =
+			ValleyBasin::from_bounds(bounds, 7, ValleyBasinParams::default(), Some(&|_, _| 80.0));
 		let mid = (basin.start + basin.end) * 0.5;
 		assert!(basin.stamp.apply_elevation(15.0, mid.x, mid.y) <= 15.0);
 		Ok(())

@@ -42,10 +42,7 @@ where
 		if id != Id::Universal {
 			return None;
 		}
-		Some((
-			spatial_index.bootstrap_water_presentation_assets(),
-			universal_bounds(),
-		))
+		Some((spatial_index.bootstrap_water_presentation_assets(), universal_bounds()))
 	}
 
 	fn descendants_with_lod(_id: Id, _spatial_index: &mut S, _lod_ref: &LodRef) {}
@@ -84,10 +81,7 @@ pub struct WaterStoreView<'a> {
 
 impl<'a> WaterStoreView<'a> {
 	pub fn new(store: &'a TerrainEntryStore, layout: &'a TerrainCellLayout) -> Self {
-		Self {
-			store,
-			_layout: layout,
-		}
+		Self { store, _layout: layout }
 	}
 }
 
@@ -148,11 +142,7 @@ impl<'a, 'w, 's> RegionPresenter<Water, WaterStoreView<'a>> for WaterRegionPrese
 		if let Some(previous) = self.state.presented.remove(&id) {
 			self.commands.entity(previous.entity).despawn();
 		}
-		let entity = self
-			.commands
-			.spawn_scene(scene)
-			.insert(PresentedWaterScene(id))
-			.id();
+		let entity = self.commands.spawn_scene(scene).insert(PresentedWaterScene(id)).id();
 		self.state.presented.insert(id, PresentedEntry { version, entity });
 	}
 

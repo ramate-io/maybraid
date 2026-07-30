@@ -290,7 +290,8 @@ impl From<&SonyakConfig> for SonyakMenu {
 			body: Section::new(
 				"Body",
 				SonyakBodyMenu {
-					body: AssetSingleSelect::new(SonyakBodyMesh::Gumbus).with_camera_focus(BODY_FOCUS),
+					body: AssetSingleSelect::new(SonyakBodyMesh::Gumbus)
+						.with_camera_focus(BODY_FOCUS),
 					sliders: SonyakBodyProportionSliders::from_config(config.sliders),
 					color: SwatchSingleSelect::new(config.colors.body),
 					tail_color: SwatchSingleSelect::new(config.colors.tail),

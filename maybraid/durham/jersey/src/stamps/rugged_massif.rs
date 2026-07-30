@@ -129,11 +129,7 @@ impl RuggedMassif {
 			seed,
 			params,
 			path: path.clone(),
-			stamp: StampSet {
-				modulations,
-				spine: path,
-				semantics,
-			},
+			stamp: StampSet { modulations, spine: path, semantics },
 		}
 	}
 
@@ -160,16 +156,10 @@ mod tests {
 	#[test]
 	fn massif_strength_scales_lift() -> anyhow::Result<()> {
 		let bounds = Bounds2::from_xz(0.0, 0.0, 400.0, 400.0);
-		let weak = RuggedMassif::from_bounds(
-			bounds,
-			3,
-			RuggedMassifParams::default().with_strength(0.5),
-		);
-		let strong = RuggedMassif::from_bounds(
-			bounds,
-			3,
-			RuggedMassifParams::default().with_strength(2.0),
-		);
+		let weak =
+			RuggedMassif::from_bounds(bounds, 3, RuggedMassifParams::default().with_strength(0.5));
+		let strong =
+			RuggedMassif::from_bounds(bounds, 3, RuggedMassifParams::default().with_strength(2.0));
 		let p = weak.path[weak.path.len() / 2];
 		let dw = weak.stamp.apply_elevation(40.0, p.x, p.y) - 40.0;
 		let ds = strong.stamp.apply_elevation(40.0, p.x, p.y) - 40.0;
@@ -180,16 +170,10 @@ mod tests {
 	#[test]
 	fn stronger_massif_emits_fewer_softmask_lobes() -> anyhow::Result<()> {
 		let bounds = Bounds2::from_xz(0.0, 0.0, 1600.0, 1600.0);
-		let weak = RuggedMassif::from_bounds(
-			bounds,
-			3,
-			RuggedMassifParams::default().with_strength(0.5),
-		);
-		let strong = RuggedMassif::from_bounds(
-			bounds,
-			3,
-			RuggedMassifParams::default().with_strength(3.0),
-		);
+		let weak =
+			RuggedMassif::from_bounds(bounds, 3, RuggedMassifParams::default().with_strength(0.5));
+		let strong =
+			RuggedMassif::from_bounds(bounds, 3, RuggedMassifParams::default().with_strength(3.0));
 		assert!(
 			strong.stamp.modulations.len() < weak.stamp.modulations.len(),
 			"strong={} weak={}",

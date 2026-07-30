@@ -33,10 +33,7 @@ impl StairGeometry {
 		turns: f32,
 	) -> Self {
 		let tops = normalize_tops(tread_tops);
-		let height = tops
-			.last()
-			.copied()
-			.unwrap_or(SpiralStair::DEFAULT_TREAD_HEIGHT);
+		let height = tops.last().copied().unwrap_or(SpiralStair::DEFAULT_TREAD_HEIGHT);
 		Self::Spiral(SpiralStair {
 			height: height.max(1e-4),
 			radius: radius.max(1e-4),

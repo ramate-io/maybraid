@@ -7,9 +7,7 @@ use crozon_character_items::ItemColor;
 use crozon_characters::{
 	presets::{BuildPreset, GenderPreset},
 	species::{
-		caole::{
-			sliders::CaoleSliders, CaoleBodyMesh, CaoleColors, CaoleConfig, CaoleMouthMesh,
-		},
+		caole::{sliders::CaoleSliders, CaoleBodyMesh, CaoleColors, CaoleConfig, CaoleMouthMesh},
 		common::EyeMesh,
 	},
 	ConceptAnimation,

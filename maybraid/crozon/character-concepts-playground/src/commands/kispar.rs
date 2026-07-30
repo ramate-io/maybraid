@@ -5,9 +5,7 @@ use clap::{Args, Subcommand};
 use crozon_character_items::ClothingMesh;
 use crozon_characters::species::{
 	common::{EyeMesh, HairMesh},
-	kispar::{
-		KisparBeakColor, KisparBeakMesh, KisparConfig, KisparEyeColor, KisparPlumageColor,
-	},
+	kispar::{KisparBeakColor, KisparBeakMesh, KisparConfig, KisparEyeColor, KisparPlumageColor},
 };
 
 use crate::{animation::ConceptAnimation, preview::ConceptPreviewConfig};

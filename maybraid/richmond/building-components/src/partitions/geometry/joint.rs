@@ -6,14 +6,14 @@ use bevy_math::Vec3;
 use lod::gen::LodSceneLevel;
 use lod::lod_ref::LodRef;
 
-use crate::assets::AssetPath;
 use crate::assets::partitions::rough_stonework::{JOINT_HIGH, JOINT_MID};
+use crate::assets::AssetPath;
 use crate::lod_host::posed_asset_tier;
 use crate::partitions::geometry::polyline::wrap_pi;
 use crate::partitions::geometry::PartitionTile;
 use crate::partitions::host::warm_host;
 use crate::partitions::probe::{PartitionLodBand, PartitionLodProbe};
-use crate::placed::{Placement, Placed};
+use crate::placed::{Placed, Placement};
 
 /// Joint kit half-extent in \(X/Z\) (\([-0.5, 0.5]\)).
 pub const JOINT_KIT_HALF: f32 = 0.5;
@@ -54,8 +54,11 @@ impl JointPartition {
 		let yaw = yaw_in + 0.5 * wrap_pi(yaw_out - yaw_in);
 		Placed {
 			geom: PartitionTile::Joint,
-			placement: Placement::new(cur, yaw)
-				.with_scale(Vec3::new(xz, wall_height.max(1e-4), xz)),
+			placement: Placement::new(cur, yaw).with_scale(Vec3::new(
+				xz,
+				wall_height.max(1e-4),
+				xz,
+			)),
 		}
 	}
 }
@@ -92,11 +95,7 @@ impl JointLod {
 
 	pub fn leaf_host(lod_ref: &LodRef) -> impl Scene + 'static {
 		let probe = PartitionLodProbe::from_aabb(lod_ref.bounds);
-		let factor = lod_ref
-			.current_transform
-			.translation
-			.distance(probe.center)
-			/ probe.extent;
+		let factor = lod_ref.current_transform.translation.distance(probe.center) / probe.extent;
 		let level = match Self::band_from_distance_factor(factor) {
 			PartitionLodBand::High => LodSceneLevel::High,
 			PartitionLodBand::Medium => LodSceneLevel::Medium,

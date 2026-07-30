@@ -70,19 +70,12 @@ impl Sdf for ComposedWater {
 
 		let mut intervals = SignUniformIntervals::default();
 		if any_wet && wet_top.is_finite() {
-			intervals.insert_boundary(SignBoundary {
-				min: f32::NEG_INFINITY,
-				sign: Sign::Negative,
-			});
-			intervals.insert_boundary(SignBoundary {
-				min: wet_top,
-				sign: Sign::Positive,
-			});
+			intervals
+				.insert_boundary(SignBoundary { min: f32::NEG_INFINITY, sign: Sign::Negative });
+			intervals.insert_boundary(SignBoundary { min: wet_top, sign: Sign::Positive });
 		} else {
-			intervals.insert_boundary(SignBoundary {
-				min: f32::NEG_INFINITY,
-				sign: Sign::Positive,
-			});
+			intervals
+				.insert_boundary(SignBoundary { min: f32::NEG_INFINITY, sign: Sign::Positive });
 		}
 		intervals
 	}

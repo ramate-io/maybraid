@@ -87,10 +87,8 @@ mod tests {
 		let mut rig = QuadrupedV0Rig::imported();
 		QuadrupedRunPose::<QuadrupedV0Rig>::default().apply(&mut rig, 0.0);
 
-		let thigh = rig
-			.pose()
-			.get(&rig.front_leg(Side::Left).thigh.name)
-			.expect("front thigh pose");
+		let thigh =
+			rig.pose().get(&rig.front_leg(Side::Left).thigh.name).expect("front thigh pose");
 		assert!(thigh.swing.abs() > 0.0);
 	}
 
@@ -99,14 +97,10 @@ mod tests {
 		let mut rig = QuadrupedV0Rig::imported();
 		QuadrupedRunPose::<QuadrupedV0Rig>::default().apply(&mut rig, 0.0);
 
-		let front_left = rig
-			.pose()
-			.get(&rig.front_leg(Side::Left).thigh.name)
-			.expect("front left thigh");
-		let hind_right = rig
-			.pose()
-			.get(&rig.hind_leg(Side::Right).thigh.name)
-			.expect("hind right thigh");
+		let front_left =
+			rig.pose().get(&rig.front_leg(Side::Left).thigh.name).expect("front left thigh");
+		let hind_right =
+			rig.pose().get(&rig.hind_leg(Side::Right).thigh.name).expect("hind right thigh");
 		assert_ne!(front_left.swing, hind_right.swing);
 	}
 }

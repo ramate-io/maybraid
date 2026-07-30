@@ -40,17 +40,8 @@ pub fn parse_vec3_csv(s: &str) -> Result<Vec3, String> {
 	if parts.len() != 3 {
 		return Err(format!("expected x,y,z got {s:?}"));
 	}
-	let x: f32 = parts[0]
-		.trim()
-		.parse()
-		.map_err(|e| format!("x: {e}"))?;
-	let y: f32 = parts[1]
-		.trim()
-		.parse()
-		.map_err(|e| format!("y: {e}"))?;
-	let z: f32 = parts[2]
-		.trim()
-		.parse()
-		.map_err(|e| format!("z: {e}"))?;
+	let x: f32 = parts[0].trim().parse().map_err(|e| format!("x: {e}"))?;
+	let y: f32 = parts[1].trim().parse().map_err(|e| format!("y: {e}"))?;
+	let z: f32 = parts[2].trim().parse().map_err(|e| format!("z: {e}"))?;
 	Ok(Vec3::new(x, y, z))
 }

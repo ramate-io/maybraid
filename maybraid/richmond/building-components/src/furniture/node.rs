@@ -20,11 +20,7 @@ pub struct FurnitureNode {
 
 impl FurnitureNode {
 	pub fn new(style: FurnitureStyle, geometry: FurnitureGeometry, placement: Placement) -> Self {
-		Self {
-			style,
-			geometry,
-			placement,
-		}
+		Self { style, geometry, placement }
 	}
 
 	pub fn placeholder(geometry: FurnitureGeometry, placement: Placement) -> Self {
@@ -53,14 +49,11 @@ impl FurnitureNode {
 }
 
 impl LodScene for FurnitureNode {
-	fn scene_lod_status(
-		&self,
-		_lod_ref: &LodRef,
-	) -> lod::gen::LodSceneStatus {
+	fn scene_lod_status(&self, _lod_ref: &LodRef) -> lod::gen::LodSceneStatus {
 		lod::gen::LodSceneStatus::Unchanged
 	}
 
-		fn scene_with_level(
+	fn scene_with_level(
 		&self,
 		_lod_ref: &LodRef,
 		_level: lod::gen::LodSceneLevel,

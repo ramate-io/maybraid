@@ -38,9 +38,7 @@ impl Grener {
 impl PreviewArgs {
 	fn into_preview_config(self) -> ConceptPreviewConfig {
 		ConceptPreviewConfig::grener_with_animation(
-			GrenerConfig {
-				colors: GrenerColors { body: self.body },
-			},
+			GrenerConfig { colors: GrenerColors { body: self.body } },
 			self.animation,
 		)
 	}

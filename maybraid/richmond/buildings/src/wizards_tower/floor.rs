@@ -91,15 +91,7 @@ impl WizardsTowerFloor {
 			turns: 1.0,
 		});
 
-		Self {
-			storey_height,
-			arc_wall,
-			floor_caps,
-			floor_rects,
-			arc_spire,
-			lantern,
-			constraints,
-		}
+		Self { storey_height, arc_wall, floor_caps, floor_rects, arc_spire, lantern, constraints }
 	}
 
 	pub(crate) fn emit_external_features(
@@ -120,23 +112,13 @@ impl WizardsTowerFloor {
 		use richmond_building_components::{confined_scene, ParentConfines};
 
 		// Floor-compartment ball for slabs / lantern.
-		let confines = ParentConfines::internal(
-			self.storey_confine_center(),
-			self.storey_confine_radius(),
-		);
+		let confines =
+			ParentConfines::internal(self.storey_confine_center(), self.storey_confine_radius());
 		for cap in &self.floor_caps {
-			children.push(Box::new(
-				cap.clone()
-					.with_confines(confines)
-					.scene_with_lod(lod_ref),
-			));
+			children.push(Box::new(cap.clone().with_confines(confines).scene_with_lod(lod_ref)));
 		}
 		for rect in &self.floor_rects {
-			children.push(Box::new(
-				rect.clone()
-					.with_confines(confines)
-					.scene_with_lod(lod_ref),
-			));
+			children.push(Box::new(rect.clone().with_confines(confines).scene_with_lod(lod_ref)));
 		}
 		children.push(Box::new(confined_scene(confines, self.lantern_scene())));
 	}
@@ -174,11 +156,7 @@ impl WizardsTowerFloor {
 		let aabb = &self.constraints.aabb;
 		let c = (aabb.min + aabb.max) * 0.5;
 		let r = (SPIRE_HALF_FRAC * self.storey_confine_radius()).max(1e-4);
-		ParentConfines::capsule(
-			Vec3::new(c.x, aabb.min.y, c.z),
-			Vec3::new(c.x, aabb.max.y, c.z),
-			r,
-		)
+		ParentConfines::capsule(Vec3::new(c.x, aabb.min.y, c.z), Vec3::new(c.x, aabb.max.y, c.z), r)
 	}
 
 	fn lantern_scene(&self) -> impl Scene + 'static {
@@ -198,14 +176,11 @@ impl WizardsTowerFloor {
 }
 
 impl LodScene for WizardsTowerFloor {
-	fn scene_lod_status(
-		&self,
-		_lod_ref: &LodRef,
-	) -> lod::gen::LodSceneStatus {
+	fn scene_lod_status(&self, _lod_ref: &LodRef) -> lod::gen::LodSceneStatus {
 		lod::gen::LodSceneStatus::Unchanged
 	}
 
-		fn scene_with_level(
+	fn scene_with_level(
 		&self,
 		lod_ref: &LodRef,
 		_level: lod::gen::LodSceneLevel,

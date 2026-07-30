@@ -11,7 +11,7 @@ use crate::roofs::geometry::RoofGeometry;
 use crate::roofs::style::RoofStyle;
 use crate::roofs::tessellate::RoofKit;
 use crate::roofs::{
-	ShepherdsThatchDome15, ShepherdsThatchDome90, ShepherdsThatchDome180,
+	ShepherdsThatchDome15, ShepherdsThatchDome180, ShepherdsThatchDome90,
 	ShepherdsThatchRightTriangle,
 };
 use crate::scene_children::{pose, scene_children, with_pose};
@@ -26,11 +26,7 @@ pub struct RoofNode {
 
 impl RoofNode {
 	pub fn new(style: RoofStyle, geometry: RoofGeometry, placement: Placement) -> Self {
-		Self {
-			style,
-			geometry,
-			placement,
-		}
+		Self { style, geometry, placement }
 	}
 
 	pub fn shepherds_thatch(geometry: RoofGeometry, placement: Placement) -> Self {
@@ -39,10 +35,7 @@ impl RoofNode {
 }
 
 impl LodScene for RoofNode {
-	fn scene_lod_status(
-		&self,
-		_lod_ref: &LodRef,
-	) -> lod::gen::LodSceneStatus {
+	fn scene_lod_status(&self, _lod_ref: &LodRef) -> lod::gen::LodSceneStatus {
 		lod::gen::LodSceneStatus::Unchanged
 	}
 
@@ -52,9 +45,7 @@ impl LodScene for RoofNode {
 		_level: lod::gen::LodSceneLevel,
 	) -> impl Scene + 'static {
 		let parent = pose(self.placement);
-		let pitch = Transform::from_rotation(Quat::from_rotation_x(
-			self.geometry.pitch_radians(),
-		));
+		let pitch = Transform::from_rotation(Quat::from_rotation_x(self.geometry.pitch_radians()));
 		let children: Vec<Box<dyn Scene>> = self
 			.geometry
 			.kit_pieces_for_style(self.style)
@@ -63,16 +54,12 @@ impl LodScene for RoofNode {
 				// parent_pose * pitch_x * kit_pose
 				let transform = parent * pitch * pose(piece.placement);
 				let child: Box<dyn Scene> = match (self.style, piece.geom) {
-					(RoofStyle::ShepherdsThatch, RoofKit::RightTriangle { mirror }) => {
-						Box::new(ShepherdsThatchRightTriangle::scene_with_lod_mirrored(
-							lod_ref, mirror,
-						))
-					}
+					(RoofStyle::ShepherdsThatch, RoofKit::RightTriangle { mirror }) => Box::new(
+						ShepherdsThatchRightTriangle::scene_with_lod_mirrored(lod_ref, mirror),
+					),
 					(RoofStyle::ShepherdsThatch, RoofKit::Rectangle) => {
 						// No thatch rectangle kit; author with dual-triangle policy.
-						Box::new(::bevy::scene::SceneFunction(
-							crate::empty_scene,
-						))
+						Box::new(::bevy::scene::SceneFunction(crate::empty_scene))
 					}
 					(RoofStyle::ShepherdsThatch, RoofKit::DomeArc(ArcKit::D15)) => {
 						Box::new(ShepherdsThatchDome15.scene_with_lod(lod_ref))

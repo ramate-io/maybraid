@@ -9,7 +9,7 @@ use lod::LodViewerState;
 use procedural_common::{AllowedAngles, NoiseParams, NoisyPathParams, StepLenRange};
 use richmond_building_components::panels::QuadPolyline;
 use richmond_building_components::partitions::rough_stonework::{
-	RoughStonework180, RoughStonework90, RoughStoneworkSlice90, RoughStoneworkLinear,
+	RoughStonework180, RoughStonework90, RoughStoneworkLinear, RoughStoneworkSlice90,
 };
 use richmond_building_components::partitions::{Partition, PartitionGeometry, PartitionNode};
 use richmond_building_components::roofs::{Pitch, RoofGeometry, RoofNode};
@@ -19,7 +19,7 @@ use richmond_buildings::bedroom::Bedroom;
 use richmond_buildings::stacked_rings::StackedRings;
 use richmond_buildings::walling::{
 	LinearWall, LinearWallParams, MustAssignPortal, NoisyPolylineWall, NoisyPolylineWallParams,
-	Portal, PolylineWall, PolylineWallParams, Walling,
+	PolylineWall, PolylineWallParams, Portal, Walling,
 };
 use richmond_buildings::wizards_tower::WizardsTower;
 use richmond_buildings::{
@@ -64,7 +64,9 @@ pub enum PreviewSubject {
 		allowed_angles: AllowedAngles,
 		path_noise: NoiseParams,
 	},
-	WizardsTower { noise: f32 },
+	WizardsTower {
+		noise: f32,
+	},
 	StackedRings {
 		floor_count: u32,
 		floor_height: f32,
@@ -96,10 +98,7 @@ pub struct PreviewConfig {
 
 impl Default for PreviewConfig {
 	fn default() -> Self {
-		Self {
-			subject: PreviewSubject::None,
-			transform: Transform::IDENTITY,
-		}
+		Self { subject: PreviewSubject::None, transform: Transform::IDENTITY }
 	}
 }
 
@@ -173,11 +172,7 @@ impl PreviewConfig {
 
 	fn subject_bounds(&self) -> Aabb3d {
 		match &self.subject {
-			PreviewSubject::StackedRings {
-				radius,
-				floor_count,
-				floor_height,
-			} => {
+			PreviewSubject::StackedRings { radius, floor_count, floor_height } => {
 				let r = (*radius).max(1e-4);
 				let h = (*floor_count as f32) * (*floor_height).max(1e-4);
 				Aabb3d::from_min_max(Vec3::new(-r, 0.0, -r), Vec3::new(r, h, r))
@@ -186,24 +181,14 @@ impl PreviewConfig {
 				Aabb3d::from_min_max(Vec3::new(-4.0, 0.0, -4.0), Vec3::new(4.0, 3.0, 4.0))
 			}
 			PreviewSubject::Bedroom { extent, .. } => Aabb3d::from_min_max(Vec3::ZERO, *extent),
-			PreviewSubject::Pitch {
-				rise,
-				run,
-				length,
-				left,
-				right,
-				..
-			} => {
+			PreviewSubject::Pitch { rise, run, length, left, right, .. } => {
 				let left_w = left.map(|b| b.abs()).unwrap_or(0.0);
 				let right_w = right.map(|b| b.abs()).unwrap_or(0.0);
 				let len = length.unwrap_or(0.0);
 				let x_max = (left_w + len + right_w).max(1e-4);
 				let run = (*run).max(1e-4);
 				let rise = (*rise).max(0.0);
-				Aabb3d::from_min_max(
-					Vec3::new(0.0, -0.2, -run),
-					Vec3::new(x_max, rise + 0.2, 0.0),
-				)
+				Aabb3d::from_min_max(Vec3::new(0.0, -0.2, -run), Vec3::new(x_max, rise + 0.2, 0.0))
 			}
 			PreviewSubject::Polyline | PreviewSubject::PolylineWall => {
 				Aabb3d::from_min_max(Vec3::new(0.0, 0.0, 0.0), Vec3::new(4.0, 3.0, 4.0))
@@ -250,38 +235,22 @@ impl CachedPreview {
 				));
 				self.wizards_tower = Some(WizardsTower::new(&footprint, *noise));
 			}
-			PreviewSubject::StackedRings {
-				floor_count,
-				floor_height,
-				radius,
-			} => {
+			PreviewSubject::StackedRings { floor_count, floor_height, radius } => {
 				self.stacked_rings = Some(StackedRings::new(*floor_count, *floor_height, *radius));
 			}
-			PreviewSubject::Bedroom {
-				extent,
-				noise,
-				spaciousness,
-				occupancy,
-				door,
-			} => {
+			PreviewSubject::Bedroom { extent, noise, spaciousness, occupancy, door } => {
 				let mut room =
 					CellConstraints::cell_owned(Aabb3d::from_min_max(Vec3::ZERO, *extent));
 				if *door {
 					room.circulation.front = Some(CirculationEntry(vec![(
-						Aabb2d {
-							min: Vec2::new(0.35, 0.0),
-							max: Vec2::new(0.65, 0.9),
-						},
+						Aabb2d { min: Vec2::new(0.35, 0.0), max: Vec2::new(0.65, 0.9) },
 						vec![CirculationRequestStatus::Required],
 					)]));
 				}
 				self.bedroom = Some(Bedroom::with_fill(
 					room,
 					*noise,
-					BedroomFillParams {
-						spaciousness: *spaciousness,
-						occupancy: *occupancy,
-					},
+					BedroomFillParams { spaciousness: *spaciousness, occupancy: *occupancy },
 				));
 			}
 			PreviewSubject::LinearWall => {
@@ -313,16 +282,15 @@ impl CachedPreview {
 				allowed_angles,
 				path_noise,
 			} => {
-				self.walling = Some(Walling::NoisyPolyline(NoisyPolylineWall::new(
-					NoisyPolylineWallParams {
+				self.walling =
+					Some(Walling::NoisyPolyline(NoisyPolylineWall::new(NoisyPolylineWallParams {
 						distance: *distance,
 						step_len: *step_len,
 						allowed_angles: *allowed_angles,
 						path_noise: *path_noise,
 						optional_portals: (0, 0),
 						..NoisyPolylineWallParams::default()
-					},
-				)));
+					})));
 			}
 			_ => {}
 		}
@@ -376,41 +344,18 @@ pub fn present_preview_lod(
 	match &config.subject {
 		PreviewSubject::None => {}
 		PreviewSubject::Linear => {
-			spawn_preview(
-				&mut commands,
-				transform,
-				RoughStoneworkLinear.scene_with_lod(&lod_ref),
-			);
+			spawn_preview(&mut commands, transform, RoughStoneworkLinear.scene_with_lod(&lod_ref));
 		}
 		PreviewSubject::Arc90 => {
-			spawn_preview(
-				&mut commands,
-				transform,
-				RoughStonework90.scene_with_lod(&lod_ref),
-			);
+			spawn_preview(&mut commands, transform, RoughStonework90.scene_with_lod(&lod_ref));
 		}
 		PreviewSubject::Arc180 => {
-			spawn_preview(
-				&mut commands,
-				transform,
-				RoughStonework180.scene_with_lod(&lod_ref),
-			);
+			spawn_preview(&mut commands, transform, RoughStonework180.scene_with_lod(&lod_ref));
 		}
 		PreviewSubject::Slice90 => {
-			spawn_preview(
-				&mut commands,
-				transform,
-				RoughStoneworkSlice90.scene_with_lod(&lod_ref),
-			);
+			spawn_preview(&mut commands, transform, RoughStoneworkSlice90.scene_with_lod(&lod_ref));
 		}
-		PreviewSubject::Pitch {
-			rise,
-			run,
-			length,
-			tile_width,
-			left,
-			right,
-		} => {
+		PreviewSubject::Pitch { rise, run, length, tile_width, left, right } => {
 			let mut pitch = Pitch::new(*rise, *run, *tile_width);
 			if let Some(len) = length {
 				pitch = pitch.with_length(*len);

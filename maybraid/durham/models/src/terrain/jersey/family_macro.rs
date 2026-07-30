@@ -123,10 +123,7 @@ macro_rules! define_jersey_family {
 				cell: bevy::math::bounding::Aabb3d,
 				config: &$crate::terrain::jersey::configs::FamilyGuillotineConfig<P>,
 			) -> Self {
-				Self {
-					cell,
-					cuts: $crate::terrain::jersey::shared::guillotine_cuts(cell, config),
-				}
+				Self { cell, cuts: $crate::terrain::jersey::shared::guillotine_cuts(cell, config) }
 			}
 		}
 
@@ -138,8 +135,9 @@ macro_rules! define_jersey_family {
 
 		impl<S> lod::gen::GenerationScheme<S> for $Controller
 		where
-			S: lod::gen::GeneratingSpatialIndex<$crate::terrain::jersey::configs::JerseyStampConfigs>
-				+ lod::gen::GeneratingSpatialIndex<$Layout>,
+			S: lod::gen::GeneratingSpatialIndex<
+					$crate::terrain::jersey::configs::JerseyStampConfigs,
+				> + lod::gen::GeneratingSpatialIndex<$Layout>,
 		{
 			fn original_ids_for(
 				spatial_index: &mut S,
@@ -158,9 +156,10 @@ macro_rules! define_jersey_family {
 				lod_ref: &lod::lod_ref::LodRef,
 			) -> Option<(Self, bevy::math::bounding::Aabb3d)> {
 				let bounds = id.origin_cell_bounds()?;
-				let configs = lod::gen::GeneratingSpatialIndex::<
-					$crate::terrain::jersey::configs::JerseyStampConfigs,
-				>::get_one_or_generate(spatial_index, lod::gen::Id::Universal, lod_ref)?;
+				let configs =
+					lod::gen::GeneratingSpatialIndex::<
+						$crate::terrain::jersey::configs::JerseyStampConfigs,
+					>::get_one_or_generate(spatial_index, lod::gen::Id::Universal, lod_ref)?;
 				let family = &configs.$config_family.$config_band;
 				Some((Self::from_family_config(bounds, family), bounds))
 			}
@@ -196,8 +195,9 @@ macro_rules! define_jersey_family {
 
 		impl<S> lod::gen::GenerationScheme<S> for $Stamp
 		where
-			S: lod::gen::GeneratingSpatialIndex<$crate::terrain::jersey::configs::JerseyStampConfigs>
-				+ lod::gen::GeneratingSpatialIndex<$crate::terrain::base_noise::BaseTerrainNoise>
+			S: lod::gen::GeneratingSpatialIndex<
+					$crate::terrain::jersey::configs::JerseyStampConfigs,
+				> + lod::gen::GeneratingSpatialIndex<$crate::terrain::base_noise::BaseTerrainNoise>
 				+ lod::gen::GeneratingSpatialIndex<$Controller>,
 		{
 			fn original_ids_for(
@@ -213,19 +213,18 @@ macro_rules! define_jersey_family {
 				lod_ref: &lod::lod_ref::LodRef,
 			) -> Option<(Self, bevy::math::bounding::Aabb3d)> {
 				let cell = id.origin_cell_bounds()?;
-				let configs = lod::gen::GeneratingSpatialIndex::<
-					$crate::terrain::jersey::configs::JerseyStampConfigs,
-				>::get_one_or_generate(spatial_index, lod::gen::Id::Universal, lod_ref)?
-				.clone();
-				let base = lod::gen::GeneratingSpatialIndex::<
-					$crate::terrain::base_noise::BaseTerrainNoise,
-				>::get_one_or_generate(spatial_index, lod::gen::Id::Universal, lod_ref)?;
+				let configs =
+					lod::gen::GeneratingSpatialIndex::<
+						$crate::terrain::jersey::configs::JerseyStampConfigs,
+					>::get_one_or_generate(spatial_index, lod::gen::Id::Universal, lod_ref)?
+					.clone();
+				let base =
+					lod::gen::GeneratingSpatialIndex::<
+						$crate::terrain::base_noise::BaseTerrainNoise,
+					>::get_one_or_generate(spatial_index, lod::gen::Id::Universal, lod_ref)?;
 				let family = &configs.$config_family.$config_band;
-				let $seed = $crate::terrain::jersey::shared::family_seed(
-					base.seed,
-					cell,
-					$family_salt,
-				);
+				let $seed =
+					$crate::terrain::jersey::shared::family_seed(base.seed, cell, $family_salt);
 				// Occupancy gate: spatially correlated value noise at leaf center.
 				let occ_seed = $crate::terrain::jersey::shared::occupancy_seed(
 					base.seed,
@@ -238,13 +237,7 @@ macro_rules! define_jersey_family {
 					family.likelihood,
 					family.spatial_correlation,
 				) {
-					return Some((
-						Self {
-							cell,
-							modulations: Vec::new(),
-						},
-						cell,
-					));
+					return Some((Self { cell, modulations: Vec::new() }, cell));
 				}
 				let $bounds = $crate::terrain::jersey::shared::bounds2(cell);
 				let strength = $crate::terrain::jersey::shared::sample_strength(
@@ -260,10 +253,8 @@ macro_rules! define_jersey_family {
 				let $height_at: Option<&dyn Fn(f32, f32) -> f32> = Some(&height);
 				// Hard-clip + edge ease to the leaf AABB so support is identity
 				// outside the leaf (neighbors may omit this stamp).
-				let modulations = jersey_terrain_stamps::JerseyModulation::bind_all(
-					$build,
-					$bounds,
-				);
+				let modulations =
+					jersey_terrain_stamps::JerseyModulation::bind_all($build, $bounds);
 				Some((Self { cell, modulations }, cell))
 			}
 

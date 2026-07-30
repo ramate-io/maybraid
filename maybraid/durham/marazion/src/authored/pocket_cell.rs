@@ -21,13 +21,7 @@ pub struct PocketGuillotineParams {
 
 impl Default for PocketGuillotineParams {
 	fn default() -> Self {
-		Self {
-			max_depth: 3,
-			min_span: 400.0,
-			cut_lo: 0.25,
-			cut_hi: 0.75,
-			seed: 0,
-		}
+		Self { max_depth: 3, min_span: 400.0, cut_lo: 0.25, cut_hi: 0.75, seed: 0 }
 	}
 }
 
@@ -57,12 +51,7 @@ fn partition_rec(
 	let vertical = n01(params.seed, SPLIT_SALT.wrapping_add(depth as u32), ix, iz) < 0.5;
 	let t = params.cut_lo
 		+ (params.cut_hi - params.cut_lo)
-			* n01(
-				params.seed,
-				CUT_SALT.wrapping_add(depth as u32 * 17),
-				ix,
-				iz,
-			);
+			* n01(params.seed, CUT_SALT.wrapping_add(depth as u32 * 17), ix, iz);
 
 	let (a, b) = if vertical {
 		let x = rect.min.x + w * t;
@@ -101,10 +90,7 @@ mod tests {
 		let leaves = guillotine_partition(bounds, &params);
 		assert!(!leaves.is_empty());
 		let parent_area = 1500.0 * 1500.0;
-		let leaf_area: f32 = leaves
-			.iter()
-			.map(|b| (b.max.x - b.min.x) * (b.max.y - b.min.y))
-			.sum();
+		let leaf_area: f32 = leaves.iter().map(|b| (b.max.x - b.min.x) * (b.max.y - b.min.y)).sum();
 		assert!((leaf_area - parent_area).abs() < 1.0);
 		for leaf in &leaves {
 			let w = (leaf.max.x - leaf.min.x).abs();

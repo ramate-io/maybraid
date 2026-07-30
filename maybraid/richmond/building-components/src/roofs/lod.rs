@@ -77,10 +77,7 @@ pub struct RoofLodProbe {
 
 impl RoofLodProbe {
 	pub fn from_placement(placement: &Placement) -> Self {
-		Self {
-			center: placement_center(placement),
-			extent: characteristic_extent_abs(placement),
-		}
+		Self { center: placement_center(placement), extent: characteristic_extent_abs(placement) }
 	}
 
 	pub fn from_aabb(aabb: &Aabb3d) -> Self {
@@ -137,20 +134,11 @@ mod tests {
 
 	#[test]
 	fn roof_factors_are_tighter_than_partition_linear() -> anyhow::Result<()> {
-		assert_eq!(
-			RoofLodBand::from_distance_factor(ROOF_HIGH_FACTOR),
-			RoofLodBand::High
-		);
-		assert_eq!(
-			RoofLodBand::from_distance_factor(ROOF_MEDIUM_FACTOR),
-			RoofLodBand::Medium
-		);
+		assert_eq!(RoofLodBand::from_distance_factor(ROOF_HIGH_FACTOR), RoofLodBand::High);
+		assert_eq!(RoofLodBand::from_distance_factor(ROOF_MEDIUM_FACTOR), RoofLodBand::Medium);
 		// Same factor that is still High for walls (5) is already Medium for roofs.
 		assert_eq!(RoofLodBand::from_distance_factor(5.0), RoofLodBand::Medium);
-		assert_eq!(
-			RoofLodBand::from_distance_factor(ROOF_LOW_FACTOR + 1.0),
-			RoofLodBand::UltraLow
-		);
+		assert_eq!(RoofLodBand::from_distance_factor(ROOF_LOW_FACTOR + 1.0), RoofLodBand::UltraLow);
 		Ok(())
 	}
 }

@@ -4,8 +4,8 @@ use bevy::prelude::*;
 use clap::{Args, Subcommand};
 use crozon_characters::{
 	species::{
-		common::EyeMesh,
 		claber::{sliders::ClaberSliders, ClaberConfig, ClaberHornMesh},
+		common::EyeMesh,
 	},
 	BuildPreset, GenderPreset,
 };

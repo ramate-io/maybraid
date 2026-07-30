@@ -26,9 +26,7 @@ pub struct FitTolerance {
 
 impl Default for FitTolerance {
 	fn default() -> Self {
-		Self {
-			scale: (0.85, 1.15),
-		}
+		Self { scale: (0.85, 1.15) }
 	}
 }
 
@@ -83,7 +81,8 @@ impl ArcSpire {
 		let (fitted_tops, missed_bindings) =
 			best_fit_y_bindings(&params.y_bindings, target_h, params.fit_tolerance);
 
-		let local_tops: Vec<f32> = fitted_tops.iter().map(|y| y - base_y).filter(|y| *y > 1e-5).collect();
+		let local_tops: Vec<f32> =
+			fitted_tops.iter().map(|y| y - base_y).filter(|y| *y > 1e-5).collect();
 
 		let stairs = StairNode::rough_stone(
 			Stair::spiral_fitted(radius, tread_width, tread_depth, local_tops, turns),
@@ -116,11 +115,7 @@ pub fn best_fit_y_bindings(
 	let target_h = target_tread_height.max(1e-4);
 	let (min_s, max_s) = ordered_scale(tolerance.scale);
 
-	let mut targets: Vec<f32> = bindings
-		.iter()
-		.copied()
-		.filter(|y| y.is_finite())
-		.collect();
+	let mut targets: Vec<f32> = bindings.iter().copied().filter(|y| y.is_finite()).collect();
 	targets.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
 	targets.dedup_by(|a, b| (*a - *b).abs() < 1e-5);
 
@@ -213,8 +208,11 @@ mod tests {
 	#[test]
 	fn uniform_bindings_fit_exactly() -> anyhow::Result<()> {
 		let bindings = uniform_storey_bindings(0.0, 3.0, SpiralStair::DEFAULT_TREAD_HEIGHT);
-		let (fitted, missed) =
-			best_fit_y_bindings(&bindings, SpiralStair::DEFAULT_TREAD_HEIGHT, FitTolerance::default());
+		let (fitted, missed) = best_fit_y_bindings(
+			&bindings,
+			SpiralStair::DEFAULT_TREAD_HEIGHT,
+			FitTolerance::default(),
+		);
 		assert!(missed.is_empty());
 		assert_eq!(fitted.len(), bindings.len());
 		assert!((fitted.last().copied().unwrap_or(0.0) - 3.0).abs() < 1e-4);
@@ -223,13 +221,8 @@ mod tests {
 
 	#[test]
 	fn tight_binding_is_missed() -> anyhow::Result<()> {
-		let (fitted, missed) = best_fit_y_bindings(
-			&[0.18, 0.20, 0.36],
-			0.18,
-			FitTolerance {
-				scale: (0.85, 1.15),
-			},
-		);
+		let (fitted, missed) =
+			best_fit_y_bindings(&[0.18, 0.20, 0.36], 0.18, FitTolerance { scale: (0.85, 1.15) });
 		assert!(missed.iter().any(|y| (*y - 0.20).abs() < 1e-5));
 		assert!(fitted.iter().any(|y| (*y - 0.36).abs() < 1e-5));
 		Ok(())
@@ -237,13 +230,8 @@ mod tests {
 
 	#[test]
 	fn tall_gap_subdivides() -> anyhow::Result<()> {
-		let (fitted, missed) = best_fit_y_bindings(
-			&[0.18, 0.72],
-			0.18,
-			FitTolerance {
-				scale: (0.85, 1.15),
-			},
-		);
+		let (fitted, missed) =
+			best_fit_y_bindings(&[0.18, 0.72], 0.18, FitTolerance { scale: (0.85, 1.15) });
 		assert!(missed.is_empty());
 		// 0.72 - 0.18 = 0.54 → three rises of 0.18
 		assert_eq!(fitted.len(), 4);

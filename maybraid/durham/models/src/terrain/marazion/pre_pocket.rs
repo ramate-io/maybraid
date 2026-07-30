@@ -11,8 +11,5 @@ pub fn pocket_aabb(pre: &PrePocket, px: u32, pz: u32, vy_min: f32, vy_max: f32) 
 }
 
 pub fn aabb_from_bounds2(b: Bounds2, vy_min: f32, vy_max: f32) -> Aabb3d {
-	Aabb3d::from_min_max(
-		Vec3::new(b.min.x, vy_min, b.min.y),
-		Vec3::new(b.max.x, vy_max, b.max.y),
-	)
+	Aabb3d::from_min_max(Vec3::new(b.min.x, vy_min, b.min.y), Vec3::new(b.max.x, vy_max, b.max.y))
 }

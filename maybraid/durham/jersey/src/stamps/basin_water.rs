@@ -3,7 +3,7 @@
 //! Height shaping for a macro lake body plus branched outlet / tributary stubs.
 //! Wet rendering and full reach records are deferred to Marazion follow-on.
 
-use crate::config::{FractalAnchors, JitteredCenter, HysteresisSpine, SoftmaskAlongSpine};
+use crate::config::{FractalAnchors, HysteresisSpine, JitteredCenter, SoftmaskAlongSpine};
 use crate::modulation::{JerseyModulation, RegionAffineModulation};
 use crate::region::{CircleRegion, Region2D, RegionNoise};
 use crate::stamp::{StampSemantics, StampSet};
@@ -43,11 +43,7 @@ pub struct BasinWater {
 }
 
 impl BasinWater {
-	pub fn from_bounds(
-		bounds: Bounds2,
-		seed: u32,
-		params: BasinWaterParams,
-	) -> Self {
+	pub fn from_bounds(bounds: Bounds2, seed: u32, params: BasinWaterParams) -> Self {
 		let hash = SeededHash::new(seed);
 		let short = bounds.extent().min_element().max(1.0);
 		let drainage_id = seed.wrapping_mul(0x85EB_CA6B);
@@ -73,10 +69,16 @@ impl BasinWater {
 		let mut spine = vec![lake_center];
 
 		for i in 0..outlet_n {
-			let (start_hint, end) = FractalAnchors::default().sample(bounds, seed, 610 + i as u32 * 17);
+			let (start_hint, end) =
+				FractalAnchors::default().sample(bounds, seed, 610 + i as u32 * 17);
 			let start = lake_center.lerp(start_hint, 0.55);
 			let path = if i == 0 {
-				HysteresisSpine::default().build(bounds, seed.wrapping_add(40 + i as u32), start, end)
+				HysteresisSpine::default().build(
+					bounds,
+					seed.wrapping_add(40 + i as u32),
+					start,
+					end,
+				)
 			} else {
 				// Branched degree-2 spur from the lake toward a far tip.
 				let tip = bounds.project(
@@ -135,11 +137,7 @@ impl BasinWater {
 	}
 
 	pub fn from_bounds_default(bounds: Bounds2, seed: u32) -> Self {
-		Self::from_bounds(
-			bounds,
-			seed,
-			BasinWaterParams::default(),
-		)
+		Self::from_bounds(bounds, seed, BasinWaterParams::default())
 	}
 }
 

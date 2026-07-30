@@ -4,7 +4,7 @@ use std::f32::consts::TAU;
 
 use bevy_math::Vec3;
 
-use crate::placed::{Placement, Placed};
+use crate::placed::{Placed, Placement};
 use crate::stairs::geometry::{SpiralStair, StairGeometry};
 
 /// Stair kit half-extent (\(X = Y = Z \in [-1, 1]\)).
@@ -64,4 +64,3 @@ fn spiral_kits(g: &SpiralStair) -> Vec<Placed<StairKit>> {
 		})
 		.collect()
 }
-

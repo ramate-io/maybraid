@@ -20,14 +20,8 @@ pub enum FaceKind {
 }
 
 impl FaceKind {
-	pub const ALL: [Self; 6] = [
-		Self::Top,
-		Self::Bottom,
-		Self::Left,
-		Self::Right,
-		Self::Front,
-		Self::Back,
-	];
+	pub const ALL: [Self; 6] =
+		[Self::Top, Self::Bottom, Self::Left, Self::Right, Self::Front, Self::Back];
 
 	pub fn contains_aabb(parent: &Aabb3d, child: &Aabb3d) -> bool {
 		child.min.x >= parent.min.x - FACE_EPS

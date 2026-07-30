@@ -26,10 +26,7 @@ pub struct CaveNetworkParams {
 
 impl Default for CaveNetworkParams {
 	fn default() -> Self {
-		Self {
-			width_frac: 0.09,
-			depth: 12.0,
-		}
+		Self { width_frac: 0.09, depth: 12.0 }
 	}
 }
 
@@ -58,11 +55,7 @@ pub struct CaveNetwork {
 }
 
 impl CaveNetwork {
-	pub fn from_bounds(
-		bounds: Bounds2,
-		seed: u32,
-		params: CaveNetworkParams,
-	) -> Self {
+	pub fn from_bounds(bounds: Bounds2, seed: u32, params: CaveNetworkParams) -> Self {
 		let hash = SeededHash::new(seed);
 		let short = bounds.extent().min_element().max(1.0);
 		let tunnel_id = seed.wrapping_mul(0x27D4_EB2D);
@@ -70,18 +63,16 @@ impl CaveNetwork {
 		let path = HysteresisSpine::default().build(bounds, seed.wrapping_add(81), start, end);
 		let half_w = short * params.width_frac.clamp(0.04, 0.18);
 		let noise = RegionNoise::from_seed(seed.wrapping_add(3), 0.05, half_w * 0.12);
-		let modulations = SoftmaskAlongSpine::default()
-			.even_for_extent(short)
-			.build(
-				&path,
-				half_w,
-				0.4,
-				-params.depth,
-				0.2,
-				0.7,
-				&noise,
-				Vec2::ZERO,
-			);
+		let modulations = SoftmaskAlongSpine::default().even_for_extent(short).build(
+			&path,
+			half_w,
+			0.4,
+			-params.depth,
+			0.2,
+			0.7,
+			&noise,
+			Vec2::ZERO,
+		);
 
 		let kinds = [
 			CaveSegmentKind::Mouth,
@@ -116,20 +107,12 @@ impl CaveNetwork {
 			tunnel_id,
 			path: path.clone(),
 			segments,
-			stamp: StampSet {
-				modulations,
-				spine: path,
-				semantics,
-			},
+			stamp: StampSet { modulations, spine: path, semantics },
 		}
 	}
 
 	pub fn from_bounds_default(bounds: Bounds2, seed: u32) -> Self {
-		Self::from_bounds(
-			bounds,
-			seed,
-			CaveNetworkParams::default(),
-		)
+		Self::from_bounds(bounds, seed, CaveNetworkParams::default())
 	}
 }
 

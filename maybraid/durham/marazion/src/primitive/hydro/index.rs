@@ -15,11 +15,7 @@ pub struct FootprintIndex {
 
 impl FootprintIndex {
 	pub fn empty() -> Self {
-		Self {
-			origin: Vec2::ZERO,
-			cell: 1.0,
-			buckets: HashMap::new(),
-		}
+		Self { origin: Vec2::ZERO, cell: 1.0, buckets: HashMap::new() }
 	}
 
 	/// Broadphase over node hydraulic AABBs expanded by each node's index pad.
@@ -41,19 +37,12 @@ impl FootprintIndex {
 				}
 			}
 		}
-		Self {
-			origin,
-			cell,
-			buckets,
-		}
+		Self { origin, cell, buckets }
 	}
 
 	pub fn candidates(&self, p: Vec2) -> &[u16] {
 		let ix = ((p.x - self.origin.x) / self.cell).floor() as i32;
 		let iz = ((p.y - self.origin.y) / self.cell).floor() as i32;
-		self.buckets
-			.get(&(ix, iz))
-			.map(|v| v.as_slice())
-			.unwrap_or(&[])
+		self.buckets.get(&(ix, iz)).map(|v| v.as_slice()).unwrap_or(&[])
 	}
 }

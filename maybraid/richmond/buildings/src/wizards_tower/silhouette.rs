@@ -31,10 +31,7 @@ impl TowerSilhouetteAssets {
 	}
 
 	fn init(meshes: &mut Assets<Mesh>, materials: &mut Assets<StandardMaterial>) {
-		let _ = CYLINDER.set(meshes.add(Mesh::from(Cylinder {
-			radius: 0.5,
-			half_height: 0.5,
-		})));
+		let _ = CYLINDER.set(meshes.add(Mesh::from(Cylinder { radius: 0.5, half_height: 0.5 })));
 		let _ = MATERIAL.set(materials.add(StandardMaterial {
 			base_color: Color::srgb(0.45, 0.42, 0.38),
 			perceptual_roughness: 0.9,

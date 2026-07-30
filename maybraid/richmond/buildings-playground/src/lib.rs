@@ -18,13 +18,13 @@ use game_commands::command::{capture_command_line_input, GameCommandPlugin};
 use game_commands::ui::GameCommandStatusText;
 use ground::setup_ground;
 use lod::{add_fine_pass_for, LodFinePassPlugin, LodFinePassSystems};
-use scene_ref::SceneRefPlugin;
 use preview::{present_preview_lod, CachedPreview};
 use richmond_building_components::{
 	apply_parent_confines, update_partition_host_levels, update_roof_host_levels,
 	FurnitureWireframePlugin,
 };
 use richmond_buildings::wizards_tower::{TowerSilhouettePlugin, WizardsTower};
+use scene_ref::SceneRefPlugin;
 
 pub struct RichmondBuildingsPlaygroundPlugin;
 
@@ -54,10 +54,7 @@ impl Plugin for RichmondBuildingsPlaygroundPlugin {
 					ui::sync_command_status_text.before(game_commands::ui::update_debug_ui),
 				),
 			)
-			.add_systems(
-				PostUpdate,
-				apply_mesh_stats.after(VisibilitySystems::CheckVisibility),
-			);
+			.add_systems(PostUpdate, apply_mesh_stats.after(VisibilitySystems::CheckVisibility));
 	}
 }
 
@@ -110,29 +107,17 @@ fn setup_lighting(mut commands: Commands) {
 	use std::f32::consts::PI;
 	// Key light (casts shadows).
 	commands.spawn((
-		DirectionalLight {
-			illuminance: 10000.0,
-			shadow_maps_enabled: true,
-			..default()
-		},
+		DirectionalLight { illuminance: 10000.0, shadow_maps_enabled: true, ..default() },
 		Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, -PI / 3.0, PI / 5.0, 0.0)),
 	));
 	// Fill from the opposite side (no shadows) to soften contrast.
 	commands.spawn((
-		DirectionalLight {
-			illuminance: 3500.0,
-			shadow_maps_enabled: false,
-			..default()
-		},
+		DirectionalLight { illuminance: 3500.0, shadow_maps_enabled: false, ..default() },
 		Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, PI / 5.0, -PI / 4.0, 0.0)),
 	));
 	// Soft bounce / skylight fill.
 	commands.spawn((
-		DirectionalLight {
-			illuminance: 1800.0,
-			shadow_maps_enabled: false,
-			..default()
-		},
+		DirectionalLight { illuminance: 1800.0, shadow_maps_enabled: false, ..default() },
 		Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, -PI / 6.0, PI + PI / 3.0, 0.0)),
 	));
 }

@@ -1,6 +1,4 @@
-use character_ui_menu::{
-	CameraFocus, MenuComponent, MenuNode, Section, SwatchSingleSelect,
-};
+use character_ui_menu::{CameraFocus, MenuComponent, MenuNode, Section, SwatchSingleSelect};
 use crozon_characters::{
 	species::grener::{GrenerBodyColor, GrenerColors, GrenerConfig},
 	ConceptAnimation,
@@ -41,21 +39,14 @@ impl From<&GrenerConfig> for GrenerMenu {
 
 impl From<&GrenerMenu> for GrenerConfig {
 	fn from(menu: &GrenerMenu) -> Self {
-		Self {
-			colors: GrenerColors {
-				body: menu.body.value.body.value,
-			},
-		}
+		Self { colors: GrenerColors { body: menu.body.value.body.value } }
 	}
 }
 
 impl MenuComponent<MenuEvent> for GrenerBodyMenu {
 	fn menu_node(&self) -> MenuNode<MenuEvent> {
 		MenuNode::swatch("Body Color", &self.body, |color| {
-			MenuEvent::SetSwatch(
-				CharacterField::GrenerBodyColor,
-				SwatchValue::GrenerBody(color),
-			)
+			MenuEvent::SetSwatch(CharacterField::GrenerBodyColor, SwatchValue::GrenerBody(color))
 		})
 	}
 }

@@ -28,7 +28,7 @@ pub use constraints::{
 };
 pub use stacked_rings::{StackedRing, StackedRings};
 pub use walling::{
-	ArcRegion, ArcWall, ArcWallParams, AssignedPortal, LinearWall, LinearWallParams, MustAssignPortal,
-	NoisyPolylineWall, NoisyPolylineWallParams, Portal, PolylineWall, PolylineWallParams, WallRegion,
-	Walling,
+	ArcRegion, ArcWall, ArcWallParams, AssignedPortal, LinearWall, LinearWallParams,
+	MustAssignPortal, NoisyPolylineWall, NoisyPolylineWallParams, PolylineWall, PolylineWallParams,
+	Portal, WallRegion, Walling,
 };

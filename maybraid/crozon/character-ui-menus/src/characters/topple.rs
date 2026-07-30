@@ -1,5 +1,6 @@
 use character_ui_menu::{
-	AssetSingleSelect, CameraFocus, MenuComponent, MenuNode, PreviewColor, Section, SwatchSingleSelect,
+	AssetSingleSelect, CameraFocus, MenuComponent, MenuNode, PreviewColor, Section,
+	SwatchSingleSelect,
 };
 use crozon_character_items::{ClothingMesh, ItemColor};
 use crozon_characters::{
@@ -106,7 +107,9 @@ impl MenuComponent<MenuEvent> for ToppleHeadMenu {
 				"Head",
 				&self.head,
 				PreviewColor::of(self.plumage.value),
-				|value| MenuEvent::SetAsset(CharacterField::ToppleHead, AssetValue::ToppleHead(value)),
+				|value| {
+					MenuEvent::SetAsset(CharacterField::ToppleHead, AssetValue::ToppleHead(value))
+				},
 			),
 			MenuNode::swatch("Plumage", &self.plumage, |color| {
 				MenuEvent::SetSwatch(
@@ -139,7 +142,10 @@ impl MenuComponent<MenuEvent> for ToppleHeadFeaturesMenu {
 				},
 			),
 			MenuNode::swatch("Beak Color", &self.beak_color, |color| {
-				MenuEvent::SetSwatch(CharacterField::ToppleBeakColor, SwatchValue::ToppleBeak(color))
+				MenuEvent::SetSwatch(
+					CharacterField::ToppleBeakColor,
+					SwatchValue::ToppleBeak(color),
+				)
 			}),
 		])
 	}

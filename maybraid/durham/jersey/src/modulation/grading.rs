@@ -58,8 +58,7 @@ impl RegionGradingModulation {
 		let distance_to_end = (p - self.end).length();
 		let denom = (distance_to_start + distance_to_end).max(1e-3);
 		let progress = distance_to_start / denom;
-		let graded =
-			self.start_elevation + (self.end_elevation - self.start_elevation) * progress;
+		let graded = self.start_elevation + (self.end_elevation - self.start_elevation) * progress;
 		let weight = self.region.softmask_weight(
 			p,
 			self.inner_radius,
@@ -82,10 +81,7 @@ mod tests {
 
 	#[test]
 	fn depression_only_never_raises_natural_lows() -> anyhow::Result<()> {
-		let region = Region2D::Circle(CircleRegion {
-			center: Vec2::ZERO,
-			radius: 20.0,
-		});
+		let region = Region2D::Circle(CircleRegion { center: Vec2::ZERO, radius: 20.0 });
 		let g = RegionGradingModulation::new(
 			region,
 			Vec2::new(-10.0, 0.0),

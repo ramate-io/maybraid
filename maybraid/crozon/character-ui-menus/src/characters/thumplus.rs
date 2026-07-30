@@ -1,6 +1,4 @@
-use character_ui_menu::{
-	CameraFocus, MenuComponent, MenuNode, Section, SwatchSingleSelect,
-};
+use character_ui_menu::{CameraFocus, MenuComponent, MenuNode, Section, SwatchSingleSelect};
 use crozon_characters::{
 	species::thumplus::{ThumplusBodyColor, ThumplusColors, ThumplusConfig},
 	ConceptAnimation,
@@ -41,11 +39,7 @@ impl From<&ThumplusConfig> for ThumplusMenu {
 
 impl From<&ThumplusMenu> for ThumplusConfig {
 	fn from(menu: &ThumplusMenu) -> Self {
-		Self {
-			colors: ThumplusColors {
-				body: menu.body.value.body.value,
-			},
-		}
+		Self { colors: ThumplusColors { body: menu.body.value.body.value } }
 	}
 }
 

@@ -16,11 +16,7 @@ pub struct TuberwaberPose {
 
 impl TuberwaberPose {
 	pub fn from_config(config: &TuberwaberConfig) -> Self {
-		Self {
-			gender: config.gender,
-			build: config.build,
-			sliders: config.sliders.clamped(),
-		}
+		Self { gender: config.gender, build: config.build, sliders: config.sliders.clamped() }
 	}
 
 	pub fn resolve(self) -> ResolvedRigPose {

@@ -173,11 +173,7 @@ pub enum MenuNode<E> {
 	/// Tile picker whose selection decides the subtree below it
 	/// (e.g. the species picker). Choices may be split into labeled groups for
 	/// readability; only the selected subtree is lowered into `children`.
-	SectionSelect {
-		label: &'static str,
-		groups: Vec<SelectGroup<E>>,
-		children: Vec<MenuNode<E>>,
-	},
+	SectionSelect { label: &'static str, groups: Vec<SelectGroup<E>>, children: Vec<MenuNode<E>> },
 	/// `<` value `>` control with an inline label.
 	LabeledCycle { label: &'static str, value: &'static str, minus: E, plus: E },
 	/// `-` value `+` stepped scalar control with an inline label.

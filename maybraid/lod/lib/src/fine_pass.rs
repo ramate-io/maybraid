@@ -128,7 +128,10 @@ pub fn update_lod_host_levels<T: Component + LodScene>(
 pub fn fulfill_lod_level_spawn<T: Component + LodScene>(
 	mut commands: Commands,
 	viewer: Res<LodViewerState>,
-	hosts: Query<(Entity, &T, &LodHostBounds, &LodLevelSpawnRequest, &Children), With<LodSceneHost>>,
+	hosts: Query<
+		(Entity, &T, &LodHostBounds, &LodLevelSpawnRequest, &Children),
+		With<LodSceneHost>,
+	>,
 	level_roots_heads: Query<(Entity, Option<&Children>), With<LodLevelRoots>>,
 ) {
 	if viewer.entity == Entity::PLACEHOLDER {

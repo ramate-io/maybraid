@@ -24,8 +24,8 @@ pub use commands::{ConceptsCommand, CONCEPTS_CLI_NAME};
 pub use diagnostics::fps_debug_enabled;
 pub use game_commands::command::PendingStartupCommand;
 
-use bevy::prelude::*;
 use bevy::app::SceneSpawnerSystems;
+use bevy::prelude::*;
 use bevy_character_ui_menu_renderer::CharacterMenuRendererPlugin;
 use camera_controls::look::{CameraLookConfig, CameraLookPlugin};
 use crozon_character_playground::camera;
@@ -44,7 +44,7 @@ use menu_listeners::{
 };
 use preview::{
 	preview_pass_ready, reveal_ready_preview, sync_preview, tick_preview_respawn_cooldown,
-	ConceptPreviewConfig, ConceptPreviewSyncState, PreviewRevealDebugState, PreviewRespawnCooldown,
+	ConceptPreviewConfig, ConceptPreviewSyncState, PreviewRespawnCooldown, PreviewRevealDebugState,
 };
 use skinning::{
 	attach_focus_reference_to_sockets, attach_parts_to_sockets, build_rig_bone_map,

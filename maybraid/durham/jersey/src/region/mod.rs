@@ -2,9 +2,7 @@
 
 mod polyline;
 
-pub use polyline::{
-	closest_on_polyline, grade_along_polyline, ClosestOnPolyline, PolylineRegion,
-};
+pub use polyline::{closest_on_polyline, grade_along_polyline, ClosestOnPolyline, PolylineRegion};
 
 use bevy_math::Vec2;
 use procedural_common::{NoiseConfig, NoiseParams, NoiseType};
@@ -71,10 +69,7 @@ impl std::fmt::Debug for RegionNoise {
 
 impl RegionNoise {
 	pub fn new(noise: NoiseConfig) -> Self {
-		Self {
-			noise,
-			expand_only: false,
-		}
+		Self { noise, expand_only: false }
 	}
 
 	pub fn from_params(params: NoiseParams) -> Self {
@@ -93,10 +88,7 @@ impl RegionNoise {
 
 	/// Like [`Self::from_seed`], but boundary noise only expands the footprint.
 	pub fn from_seed_expand_only(seed: u32, frequency: f32, amplitude: f32) -> Self {
-		Self {
-			expand_only: true,
-			..Self::from_seed(seed, frequency, amplitude)
-		}
+		Self { expand_only: true, ..Self::from_seed(seed, frequency, amplitude) }
 	}
 
 	pub fn expand_only(mut self) -> Self {
@@ -158,10 +150,7 @@ impl Region2D {
 			Self::Circle(c) => c.center,
 			Self::Ellipse(e) => e.center,
 			Self::Polyline(p) => p.sample_point(),
-			Self::Union(children) => children
-				.first()
-				.map(|c| c.center())
-				.unwrap_or(Vec2::ZERO),
+			Self::Union(children) => children.first().map(|c| c.center()).unwrap_or(Vec2::ZERO),
 		}
 	}
 
@@ -177,11 +166,7 @@ impl Region2D {
 				(p - *center).length() / radius.max(1e-3)
 			}
 			Self::Ellipse(e) => e.unit_local(p).length(),
-			Self::Rect(RectRegion {
-				center,
-				half_extents,
-				..
-			}) => {
+			Self::Rect(RectRegion { center, half_extents, .. }) => {
 				let q = (p - *center).abs() / half_extents.max(Vec2::splat(1e-3));
 				q.max_element()
 			}
@@ -189,10 +174,9 @@ impl Region2D {
 				let half = poly.half_width.max(1e-3);
 				(poly.sdf(p) / half + 1.0).clamp(0.0, 2.0)
 			}
-			Self::Union(children) => children
-				.iter()
-				.map(|c| c.radial_norm(p))
-				.fold(f32::INFINITY, f32::min),
+			Self::Union(children) => {
+				children.iter().map(|c| c.radial_norm(p)).fold(f32::INFINITY, f32::min)
+			}
 		}
 	}
 
@@ -202,11 +186,7 @@ impl Region2D {
 
 	pub fn sdf_with_noise(&self, p: Vec2, noise: Option<&RegionNoise>) -> f32 {
 		let mut d = match self {
-			Region2D::Rect(RectRegion {
-				center,
-				half_extents,
-				round,
-			}) => {
+			Region2D::Rect(RectRegion { center, half_extents, round }) => {
 				let q = (p - *center).abs() - *half_extents + Vec2::splat(*round);
 				let outside = q.max(Vec2::ZERO).length() - *round;
 				let inside = q.x.max(q.y).min(0.0);
@@ -219,10 +199,7 @@ impl Region2D {
 				if children.is_empty() {
 					f32::INFINITY
 				} else {
-					children
-						.iter()
-						.map(|c| c.sdf(p))
-						.fold(f32::INFINITY, f32::min)
+					children.iter().map(|c| c.sdf(p)).fold(f32::INFINITY, f32::min)
 				}
 			}
 		};
@@ -264,31 +241,21 @@ mod tests {
 
 	#[test]
 	fn expand_only_never_shrinks_circle() -> anyhow::Result<()> {
-		let region = Region2D::Circle(CircleRegion {
-			center: Vec2::ZERO,
-			radius: 10.0,
-		});
+		let region = Region2D::Circle(CircleRegion { center: Vec2::ZERO, radius: 10.0 });
 		let noise = RegionNoise::from_seed_expand_only(7, 0.05, 2.0);
 		for i in 0..32 {
 			let ang = i as f32 * std::f32::consts::TAU / 32.0;
 			let p = Vec2::new(ang.cos(), ang.sin()) * 10.0;
 			let d0 = region.sdf(p);
 			let d1 = region.sdf_with_noise(p, Some(&noise));
-			assert!(
-				d1 <= d0 + 1e-4,
-				"expand-only must not increase SDF (shrink): d0={d0} d1={d1}"
-			);
+			assert!(d1 <= d0 + 1e-4, "expand-only must not increase SDF (shrink): d0={d0} d1={d1}");
 		}
 		Ok(())
 	}
 
 	#[test]
 	fn ellipse_sdf_negative_inside_positive_outside() -> anyhow::Result<()> {
-		let e = EllipseRegion {
-			center: Vec2::ZERO,
-			radii: Vec2::new(20.0, 10.0),
-			rotation: 0.0,
-		};
+		let e = EllipseRegion { center: Vec2::ZERO, radii: Vec2::new(20.0, 10.0), rotation: 0.0 };
 		assert!(e.sdf(Vec2::ZERO) < -1.0);
 		assert!(e.sdf(Vec2::new(19.0, 0.0)) < 0.0);
 		assert!(e.sdf(Vec2::new(21.0, 0.0)) > 0.0);
@@ -312,14 +279,8 @@ mod tests {
 
 	#[test]
 	fn union_sdf_is_min_of_children() -> anyhow::Result<()> {
-		let a = Region2D::Circle(CircleRegion {
-			center: Vec2::new(-20.0, 0.0),
-			radius: 8.0,
-		});
-		let b = Region2D::Circle(CircleRegion {
-			center: Vec2::new(20.0, 0.0),
-			radius: 8.0,
-		});
+		let a = Region2D::Circle(CircleRegion { center: Vec2::new(-20.0, 0.0), radius: 8.0 });
+		let b = Region2D::Circle(CircleRegion { center: Vec2::new(20.0, 0.0), radius: 8.0 });
 		let u = Region2D::union(vec![a.clone(), b.clone()]);
 		let p_a = Vec2::new(-20.0, 0.0);
 		let p_b = Vec2::new(20.0, 0.0);
@@ -335,14 +296,8 @@ mod tests {
 
 	#[test]
 	fn union_softmask_wet_inside_either_child() -> anyhow::Result<()> {
-		let a = Region2D::Circle(CircleRegion {
-			center: Vec2::new(-15.0, 0.0),
-			radius: 6.0,
-		});
-		let b = Region2D::Circle(CircleRegion {
-			center: Vec2::new(15.0, 0.0),
-			radius: 6.0,
-		});
+		let a = Region2D::Circle(CircleRegion { center: Vec2::new(-15.0, 0.0), radius: 6.0 });
+		let b = Region2D::Circle(CircleRegion { center: Vec2::new(15.0, 0.0), radius: 6.0 });
 		let u = Region2D::union(vec![a, b]);
 		assert!(u.softmask_weight(Vec2::new(-15.0, 0.0), 0.0, 2.0, None) < 0.05);
 		assert!(u.softmask_weight(Vec2::new(15.0, 0.0), 0.0, 2.0, None) < 0.05);

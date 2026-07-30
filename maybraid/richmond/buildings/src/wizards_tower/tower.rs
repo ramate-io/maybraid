@@ -45,16 +45,8 @@ impl WizardsTowerColumn {
 
 		// Rebuild write AABB to match the stacked height (XZ from the footprint).
 		let footprint = Aabb3d::from_min_max(
-			Vec3::new(
-				tower_constraints.aabb.min.x,
-				min_y,
-				tower_constraints.aabb.min.z,
-			),
-			Vec3::new(
-				tower_constraints.aabb.max.x,
-				perch_top,
-				tower_constraints.aabb.max.z,
-			),
+			Vec3::new(tower_constraints.aabb.min.x, min_y, tower_constraints.aabb.min.z),
+			Vec3::new(tower_constraints.aabb.max.x, perch_top, tower_constraints.aabb.max.z),
 		);
 		let constraints = tower_constraints
 			.subset(footprint)
@@ -80,15 +72,9 @@ impl WizardsTowerColumn {
 			.unwrap_or_else(|_| CellConstraints::cell_owned(perch_aabb));
 		let mut perch_noise = portal_noise;
 		perch_noise.seed = portal_noise.seed.wrapping_add(floor_count as i32 * 97 + 13);
-		let perch =
-			WizardsTowerPerch::new(perch_constraints, storey_height, perch_noise);
+		let perch = WizardsTowerPerch::new(perch_constraints, storey_height, perch_noise);
 
-		Self {
-			constraints,
-			storey_height,
-			floors,
-			perch,
-		}
+		Self { constraints, storey_height, floors, perch }
 	}
 
 	/// Same as [`Self::new`] with [`WALL_HEIGHT_METERS`].
@@ -97,12 +83,7 @@ impl WizardsTowerColumn {
 		floor_count: u32,
 		portal_noise: NoiseParams,
 	) -> Self {
-		Self::new(
-			tower_constraints,
-			floor_count,
-			WALL_HEIGHT_METERS,
-			portal_noise,
-		)
+		Self::new(tower_constraints, floor_count, WALL_HEIGHT_METERS, portal_noise)
 	}
 
 	fn vertical_slab(parent: &Aabb3d, y_min: f32, y_max: f32) -> Aabb3d {
@@ -144,14 +125,11 @@ impl TowerLodFootprint for WizardsTowerColumn {
 }
 
 impl LodScene for WizardsTowerColumn {
-	fn scene_lod_status(
-		&self,
-		_lod_ref: &LodRef,
-	) -> lod::gen::LodSceneStatus {
+	fn scene_lod_status(&self, _lod_ref: &LodRef) -> lod::gen::LodSceneStatus {
 		lod::gen::LodSceneStatus::Unchanged
 	}
 
-		fn scene_with_level(
+	fn scene_with_level(
 		&self,
 		lod_ref: &LodRef,
 		_level: lod::gen::LodSceneLevel,

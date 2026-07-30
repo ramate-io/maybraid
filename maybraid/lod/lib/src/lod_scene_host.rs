@@ -77,9 +77,7 @@ pub fn sync_lod_level_roots(
 
 		// No children yet → nothing to show/hide; ask for the first level root to be spawned.
 		let Some(host_children) = host_children else {
-			commands
-				.entity(host)
-				.insert(LodLevelSpawnRequest { level: desired });
+			commands.entity(host).insert(LodLevelSpawnRequest { level: desired });
 			continue;
 		};
 
@@ -94,9 +92,7 @@ pub fn sync_lod_level_roots(
 
 		// Host has children but no LodLevelRoots yet → same as cold start: request a spawn.
 		let Some(roots_entity) = roots_entity else {
-			commands
-				.entity(host)
-				.insert(LodLevelSpawnRequest { level: desired });
+			commands.entity(host).insert(LodLevelSpawnRequest { level: desired });
 			continue;
 		};
 
@@ -125,9 +121,7 @@ pub fn sync_lod_level_roots(
 		// Desired level root was never spawned (lazy levels) → request it; hide pass above
 		// already hid any previously active roots.
 		if !found {
-			commands
-				.entity(host)
-				.insert(LodLevelSpawnRequest { level: desired });
+			commands.entity(host).insert(LodLevelSpawnRequest { level: desired });
 		}
 	}
 }

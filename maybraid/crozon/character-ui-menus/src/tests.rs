@@ -1,6 +1,8 @@
 use character_ui_menu::{MenuComponent, MenuNode};
 use crozon_character_items::ClothingMesh;
-use crozon_characters::species::{braidman::BraidmanConfig, brodler::BrodlerConfig, tuberwaber::TuberwaberConfig};
+use crozon_characters::species::{
+	braidman::BraidmanConfig, brodler::BrodlerConfig, tuberwaber::TuberwaberConfig,
+};
 
 use crate::{
 	character::CharacterMenu,
@@ -219,7 +221,6 @@ fn kispar_config_round_trip() -> anyhow::Result<()> {
 	Ok(())
 }
 
-
 #[test]
 fn tapp_config_round_trip() -> anyhow::Result<()> {
 	let config = crozon_characters::species::tapp::TappConfig::default_preview();
@@ -331,7 +332,6 @@ fn tuberwaber_config_round_trip() -> anyhow::Result<()> {
 	assert_eq!(config.colors, restored.colors);
 	Ok(())
 }
-
 
 #[test]
 fn clothing_toggle_and_color() -> anyhow::Result<()> {

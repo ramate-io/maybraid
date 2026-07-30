@@ -67,11 +67,7 @@ impl RegionAffineModulation {
 		let mut offset = self.inner_offset;
 		if let Some(hn) = &self.height_noise {
 			let s = hn.sample_height(p);
-			offset += if self.height_noise_add_only {
-				s.abs()
-			} else {
-				s
-			};
+			offset += if self.height_noise_add_only { s.abs() } else { s };
 		}
 		let a = self.inner_scale + (1.0 - self.inner_scale) * w;
 		let b = offset * (1.0 - w);

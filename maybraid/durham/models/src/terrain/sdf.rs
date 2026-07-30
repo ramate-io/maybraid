@@ -51,12 +51,7 @@ impl TerrainSdf {
 			octaves: 4,
 			noise_type: NoiseType::Perlin,
 		});
-		Self {
-			noise,
-			height_scale,
-			elevation_modulations: Vec::new(),
-			bounds: None,
-		}
+		Self { noise, height_scale, elevation_modulations: Vec::new(), bounds: None }
 	}
 
 	pub fn with_bounds(mut self, bounds: [Vec2; 4]) -> Self {

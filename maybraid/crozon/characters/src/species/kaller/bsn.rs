@@ -25,11 +25,7 @@ pub struct Kaller {
 
 impl Kaller {
 	pub fn from_config(config: &KallerConfig) -> Self {
-		Self {
-			eye: config.eye,
-			hair: config.hair,
-			colors: config.colors.clone(),
-		}
+		Self { eye: config.eye, hair: config.hair, colors: config.colors.clone() }
 	}
 }
 

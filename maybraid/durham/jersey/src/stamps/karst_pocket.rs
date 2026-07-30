@@ -2,7 +2,7 @@
 //!
 //! Height-oracle dip + semantic cavity tags (full SDF carve is a later volume path).
 
-use crate::config::{JitteredCenter};
+use crate::config::JitteredCenter;
 use crate::modulation::{JerseyModulation, RegionAffineModulation};
 use crate::region::{CircleRegion, Region2D, RegionNoise};
 use crate::stamp::{scale_additive, StampSemantics, StampSet, StampStrength};
@@ -25,11 +25,7 @@ pub struct KarstPocketParams {
 
 impl Default for KarstPocketParams {
 	fn default() -> Self {
-		Self {
-			nav: KarstNavClass::CrawlOnly,
-			size_frac: 0.08,
-			depth: 14.0,
-		}
+		Self { nav: KarstNavClass::CrawlOnly, size_frac: 0.08, depth: 14.0 }
 	}
 }
 
@@ -50,11 +46,7 @@ pub struct KarstPocket {
 }
 
 impl KarstPocket {
-	pub fn from_bounds(
-		bounds: Bounds2,
-		seed: u32,
-		params: KarstPocketParams,
-	) -> Self {
+	pub fn from_bounds(bounds: Bounds2, seed: u32, params: KarstPocketParams) -> Self {
 		let hash = SeededHash::new(seed);
 		let short = bounds.extent().min_element().max(1.0);
 		let mouth = JitteredCenter::default().sample(bounds, seed, 400);
@@ -94,11 +86,7 @@ impl KarstPocket {
 	}
 
 	pub fn from_bounds_default(bounds: Bounds2, seed: u32) -> Self {
-		Self::from_bounds(
-			bounds,
-			seed,
-			KarstPocketParams::default(),
-		)
+		Self::from_bounds(bounds, seed, KarstPocketParams::default())
 	}
 }
 

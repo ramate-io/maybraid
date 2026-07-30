@@ -133,9 +133,7 @@ impl HydroParams {
 
 	/// Leaf default: a slice of rim width, at least half the boundary-indent amp.
 	pub fn recommend_shore_blend(rim_w: f32, shore_amp: f32) -> f32 {
-		(rim_w.max(0.0) * 0.2)
-			.clamp(2.0, 8.0)
-			.max(shore_amp.max(0.0) * 0.5)
+		(rim_w.max(0.0) * 0.2).clamp(2.0, 8.0).max(shore_amp.max(0.0) * 0.5)
 	}
 
 	/// Raise-only bank target at a sample given free-surface \(W\).
@@ -186,10 +184,7 @@ impl ComplexParams {
 				uplift_cap: self.rim_uplift_cap,
 				..RimParams::default()
 			},
-			apron: ApronParams {
-				width: self.apron_width,
-				..ApronParams::default()
-			},
+			apron: ApronParams { width: self.apron_width, ..ApronParams::default() },
 			rim_height: self.rim_height,
 			boundary_noise: None,
 			rim_boundary_noise: None,

@@ -19,10 +19,10 @@ pub mod stairs;
 
 pub use arc_kit::{decompose_arc_sweep, ArcKit};
 pub use assets::AssetPath;
-pub use furniture::{
-	FurnitureGeometry, FurnitureNode, FurnitureStyle, FurnitureWireframePlugin,
+pub use furniture::{FurnitureGeometry, FurnitureNode, FurnitureStyle, FurnitureWireframePlugin};
+pub use lod_host::{
+	posed_asset_tier, warm_content_host, warm_content_host_hsl, warm_mesh_level_host,
 };
-pub use lod_host::{posed_asset_tier, warm_content_host, warm_content_host_hsl, warm_mesh_level_host};
 pub use panels::{
 	fitted_tile_count, to_centered_rect_placement, with_wall_standup_pitch, Joint as PanelJoint,
 	PanelGeometry, PanelStyle, Quad, QuadPolyline, Rectangle as PanelRectangle,
@@ -43,7 +43,7 @@ pub use roofs::{
 	update_roof_host_levels, Pitch, RoofGeometry, RoofLodBand, RoofLodProbe, RoofNode, RoofStyle,
 	ROOF_HIGH_FACTOR, ROOF_LOW_FACTOR, ROOF_MEDIUM_FACTOR,
 };
-pub use scene_children::{pose, posed_glb, scene_children, with_pose, wireframe_box_with_handles};
+pub use scene_children::{pose, posed_glb, scene_children, wireframe_box_with_handles, with_pose};
 
 use bevy::scene::{ResolveContext, ResolvedScene};
 

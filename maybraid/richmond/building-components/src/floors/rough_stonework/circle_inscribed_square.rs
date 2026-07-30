@@ -5,5 +5,4 @@ use crate::assets::panels::rough_stonework::INSCRIBED_SQUARE;
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct RoughStoneFloorCircleInscribedSquare;
 
-
 crate::impl_glb_lod_scene!(RoughStoneFloorCircleInscribedSquare, INSCRIBED_SQUARE);

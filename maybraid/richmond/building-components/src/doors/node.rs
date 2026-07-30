@@ -22,11 +22,7 @@ pub struct DoorNode {
 
 impl DoorNode {
 	pub fn new(style: DoorStyle, geometry: DoorGeometry, placement: Placement) -> Self {
-		Self {
-			style,
-			geometry,
-			placement,
-		}
+		Self { style, geometry, placement }
 	}
 
 	pub fn wood(geometry: DoorGeometry, placement: Placement) -> Self {
@@ -35,14 +31,11 @@ impl DoorNode {
 }
 
 impl LodScene for DoorNode {
-	fn scene_lod_status(
-		&self,
-		_lod_ref: &LodRef,
-	) -> lod::gen::LodSceneStatus {
+	fn scene_lod_status(&self, _lod_ref: &LodRef) -> lod::gen::LodSceneStatus {
 		lod::gen::LodSceneStatus::Unchanged
 	}
 
-		fn scene_with_level(
+	fn scene_with_level(
 		&self,
 		lod_ref: &LodRef,
 		_level: lod::gen::LodSceneLevel,

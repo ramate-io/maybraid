@@ -32,11 +32,7 @@ impl EnsuiteBathroom {
 		let size = aabb.max - aabb.min;
 		let vanity_aabb = bevy_math::bounding::Aabb3d::from_min_max(
 			Vec3::new(aabb.min.x + 0.1, aabb.min.y, aabb.min.z + 0.15),
-			Vec3::new(
-				aabb.min.x + size.x * 0.55,
-				aabb.min.y + 0.85,
-				aabb.min.z + 0.55,
-			),
+			Vec3::new(aabb.min.x + size.x * 0.55, aabb.min.y + 0.85, aabb.min.z + 0.55),
 		);
 		let toilet_aabb = bevy_math::bounding::Aabb3d::from_min_max(
 			Vec3::new(aabb.max.x - 0.55, aabb.min.y, aabb.max.z - 0.7),
@@ -121,14 +117,11 @@ impl EnsuiteBathroom {
 }
 
 impl LodScene for EnsuiteBathroom {
-	fn scene_lod_status(
-		&self,
-		_lod_ref: &LodRef,
-	) -> lod::gen::LodSceneStatus {
+	fn scene_lod_status(&self, _lod_ref: &LodRef) -> lod::gen::LodSceneStatus {
 		lod::gen::LodSceneStatus::Unchanged
 	}
 
-		fn scene_with_level(
+	fn scene_with_level(
 		&self,
 		lod_ref: &LodRef,
 		_level: lod::gen::LodSceneLevel,

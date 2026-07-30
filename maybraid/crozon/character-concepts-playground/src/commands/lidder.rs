@@ -5,9 +5,7 @@ use clap::{Args, Subcommand};
 use crozon_character_items::ClothingMesh;
 use crozon_characters::species::{
 	common::{EyeMesh, HairMesh},
-	lidder::{
-		LidderBeakColor, LidderBeakMesh, LidderConfig, LidderEyeColor, LidderPlumageColor,
-	},
+	lidder::{LidderBeakColor, LidderBeakMesh, LidderConfig, LidderEyeColor, LidderPlumageColor},
 };
 
 use crate::{animation::ConceptAnimation, preview::ConceptPreviewConfig};

@@ -29,10 +29,7 @@ pub struct BedroomFillParams {
 
 impl Default for BedroomFillParams {
 	fn default() -> Self {
-		Self {
-			spaciousness: 1.0,
-			occupancy: 0.55,
-		}
+		Self { spaciousness: 1.0, occupancy: 0.55 }
 	}
 }
 
@@ -74,10 +71,7 @@ enum Concept {
 
 enum Placed {
 	Solid(Aabb3d),
-	Partition {
-		slot: PartitionSlot,
-		swing: Aabb3d,
-	},
+	Partition { slot: PartitionSlot, swing: Aabb3d },
 }
 
 impl BedroomLayout {
@@ -112,9 +106,15 @@ impl BedroomLayout {
 				break;
 			}
 			let concept = pick_concept(&cfg, step, layout.beds.len());
-			let Some(placed) =
-				place_concept(concept, &room, &exclusions, &layout, &cfg, step, params.spaciousness)
-			else {
+			let Some(placed) = place_concept(
+				concept,
+				&room,
+				&exclusions,
+				&layout,
+				&cfg,
+				step,
+				params.spaciousness,
+			) else {
 				continue;
 			};
 			let add = match &placed {
@@ -169,10 +169,7 @@ impl BedroomLayout {
 
 	fn collides_existing(&self, candidate: &Aabb3d) -> bool {
 		self.solid_aabbs().any(|a| aabb3d_intersects(a, candidate))
-			|| self
-				.door_swings
-				.iter()
-				.any(|s| aabb3d_intersects(s, candidate))
+			|| self.door_swings.iter().any(|s| aabb3d_intersects(s, candidate))
 	}
 }
 
@@ -206,8 +203,9 @@ fn place_concept(
 	spaciousness: f32,
 ) -> Option<Placed> {
 	match concept {
-		Concept::Bed => place_bed(room, exclusions, layout, noise, salt, spaciousness)
-			.map(Placed::Solid),
+		Concept::Bed => {
+			place_bed(room, exclusions, layout, noise, salt, spaciousness).map(Placed::Solid)
+		}
 		Concept::Nightstand => {
 			place_nightstand(room, exclusions, layout, noise, salt, spaciousness).map(Placed::Solid)
 		}
@@ -293,12 +291,7 @@ fn fits_in_room(candidate: &Aabb3d, room: &Aabb3d) -> bool {
 		&& candidate.max.z <= room.max.z + FACE_EPS
 }
 
-fn fits(
-	candidate: &Aabb3d,
-	room: &Aabb3d,
-	exclusions: &[Aabb3d],
-	layout: &BedroomLayout,
-) -> bool {
+fn fits(candidate: &Aabb3d, room: &Aabb3d, exclusions: &[Aabb3d], layout: &BedroomLayout) -> bool {
 	if !fits_in_room(candidate, room) {
 		return false;
 	}
@@ -337,11 +330,7 @@ fn place_bed(
 		let v = noise.sample_unit_4d(salt as f32, attempt as f32, 0.0, 21.0);
 		let max_u = (size.x - extent.x).max(0.0);
 		let max_v = (size.z - extent.z).max(0.0);
-		let min = Vec3::new(
-			room.min.x + u * max_u,
-			room.min.y,
-			room.min.z + v * max_v,
-		);
+		let min = Vec3::new(room.min.x + u * max_u, room.min.y, room.min.z + v * max_v);
 		let candidate = Aabb3d::from_min_max(min, min + extent);
 		if fits(&candidate, room, exclusions, layout) {
 			return Some(candidate);
@@ -362,11 +351,7 @@ fn place_nightstand(
 	let gap = 0.08_f32 * spaciousness;
 	for (bi, bed) in layout.beds.iter().enumerate() {
 		let side = noise.sample_unit_4d(salt as f32, bi as f32, 0.0, 30.0) >= 0.5;
-		let x = if side {
-			bed.max.x + gap
-		} else {
-			bed.min.x - gap - extent.x
-		};
+		let x = if side { bed.max.x + gap } else { bed.min.x - gap - extent.x };
 		let z = bed.min.z + (bed.max.z - bed.min.z) * 0.5 - extent.z * 0.5;
 		let min = Vec3::new(x, room.min.y, z);
 		let candidate = Aabb3d::from_min_max(min, min + extent);
@@ -397,11 +382,7 @@ fn place_closet(
 		// Prefer the wall that leaves swing clear of already-placed beds.
 		let on_front = noise.sample_unit_4d(salt as f32, attempt as f32, 0.0, 40.0) >= 0.5;
 		let on_front = on_front ^ (attempt % 2 == 1);
-		let open_face = if on_front {
-			FaceKind::Back
-		} else {
-			FaceKind::Front
-		};
+		let open_face = if on_front { FaceKind::Back } else { FaceKind::Front };
 		let u = noise.sample_unit_4d(salt as f32, attempt as f32, 0.0, 41.0);
 		let max_u = (size.x - length).max(0.0);
 		let x0 = room.min.x + u * max_u;
@@ -419,10 +400,7 @@ fn place_closet(
 		let swing = door_swing_outward(&body, open_face);
 		if fits_partition(&body, &swing, room, exclusions, layout) {
 			return Some(Placed::Partition {
-				slot: PartitionSlot {
-					aabb: body,
-					open_face,
-				},
+				slot: PartitionSlot { aabb: body, open_face },
 				swing,
 			});
 		}
@@ -449,11 +427,7 @@ fn place_ensuite(
 	for attempt in 0..12u32 {
 		let on_right = noise.sample_unit_4d(salt as f32, attempt as f32, 0.0, 50.0) >= 0.5;
 		let on_right = on_right ^ (attempt % 2 == 1);
-		let open_face = if on_right {
-			FaceKind::Left
-		} else {
-			FaceKind::Right
-		};
+		let open_face = if on_right { FaceKind::Left } else { FaceKind::Right };
 		let u = noise.sample_unit_4d(salt as f32, attempt as f32, 0.0, 51.0);
 		let max_u = (size.z - length).max(0.0);
 		let z0 = room.min.z + u * max_u;
@@ -471,10 +445,7 @@ fn place_ensuite(
 		let swing = door_swing_outward(&body, open_face);
 		if fits_partition(&body, &swing, room, exclusions, layout) {
 			return Some(Placed::Partition {
-				slot: PartitionSlot {
-					aabb: body,
-					open_face,
-				},
+				slot: PartitionSlot { aabb: body, open_face },
 				swing,
 			});
 		}
@@ -500,11 +471,7 @@ fn place_free_extent(
 		let v = noise.sample_unit_4d(salt as f32, attempt as f32, 0.0, channel + 1.0);
 		let max_u = (size.x - extent.x).max(0.0);
 		let max_v = (size.z - extent.z).max(0.0);
-		let min = Vec3::new(
-			room.min.x + u * max_u,
-			room.min.y,
-			room.min.z + v * max_v,
-		);
+		let min = Vec3::new(room.min.x + u * max_u, room.min.y, room.min.z + v * max_v);
 		let candidate = Aabb3d::from_min_max(min, min + extent);
 		if fits(&candidate, room, exclusions, layout) {
 			return Some(candidate);
@@ -516,21 +483,16 @@ fn place_free_extent(
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use bevy_math::{bounding::Aabb2d, Vec2};
 	use crate::constraints::{CirculationEntry, CirculationRequestStatus};
+	use bevy_math::{bounding::Aabb2d, Vec2};
 
 	#[test]
 	fn fit_always_places_at_least_one_bed() -> anyhow::Result<()> {
-		let cell = CellConstraints::cell_owned(Aabb3d::from_min_max(
-			Vec3::ZERO,
-			Vec3::new(5.0, 3.0, 5.0),
-		));
+		let cell =
+			CellConstraints::cell_owned(Aabb3d::from_min_max(Vec3::ZERO, Vec3::new(5.0, 3.0, 5.0)));
 		let layout = BedroomLayout::fit(
 			&cell,
-			NoiseParams {
-				seed: 7,
-				..NoiseParams::default()
-			},
+			NoiseParams { seed: 7, ..NoiseParams::default() },
 			BedroomFillParams::default(),
 		);
 		assert!(!layout.beds.is_empty());
@@ -539,40 +501,24 @@ mod tests {
 
 	#[test]
 	fn higher_occupancy_allows_more_items() -> anyhow::Result<()> {
-		let cell = CellConstraints::cell_owned(Aabb3d::from_min_max(
-			Vec3::ZERO,
-			Vec3::new(8.0, 3.0, 8.0),
-		));
+		let cell =
+			CellConstraints::cell_owned(Aabb3d::from_min_max(Vec3::ZERO, Vec3::new(8.0, 3.0, 8.0)));
 		let sparse = BedroomLayout::fit(
 			&cell,
-			NoiseParams {
-				seed: 3,
-				..NoiseParams::default()
-			},
-			BedroomFillParams {
-				spaciousness: 1.0,
-				occupancy: 0.2,
-			},
+			NoiseParams { seed: 3, ..NoiseParams::default() },
+			BedroomFillParams { spaciousness: 1.0, occupancy: 0.2 },
 		);
 		let dense = BedroomLayout::fit(
 			&cell,
-			NoiseParams {
-				seed: 3,
-				..NoiseParams::default()
-			},
-			BedroomFillParams {
-				spaciousness: 1.0,
-				occupancy: 0.85,
-			},
+			NoiseParams { seed: 3, ..NoiseParams::default() },
+			BedroomFillParams { spaciousness: 1.0, occupancy: 0.85 },
 		);
 		let sparse_n = sparse.beds.len()
 			+ sparse.nightstands.len()
 			+ sparse.closets.len()
 			+ sparse.ensuites.len();
-		let dense_n = dense.beds.len()
-			+ dense.nightstands.len()
-			+ dense.closets.len()
-			+ dense.ensuites.len();
+		let dense_n =
+			dense.beds.len() + dense.nightstands.len() + dense.closets.len() + dense.ensuites.len();
 		assert!(dense_n >= sparse_n);
 		Ok(())
 	}
@@ -585,25 +531,13 @@ mod tests {
 		));
 		let tight = BedroomLayout::fit(
 			&cell,
-			NoiseParams {
-				seed: 1,
-				..NoiseParams::default()
-			},
-			BedroomFillParams {
-				spaciousness: 1.0,
-				occupancy: 0.15,
-			},
+			NoiseParams { seed: 1, ..NoiseParams::default() },
+			BedroomFillParams { spaciousness: 1.0, occupancy: 0.15 },
 		);
 		let roomy = BedroomLayout::fit(
 			&cell,
-			NoiseParams {
-				seed: 1,
-				..NoiseParams::default()
-			},
-			BedroomFillParams {
-				spaciousness: 1.4,
-				occupancy: 0.15,
-			},
+			NoiseParams { seed: 1, ..NoiseParams::default() },
+			BedroomFillParams { spaciousness: 1.4, occupancy: 0.15 },
 		);
 		let t = tight.beds[0].max - tight.beds[0].min;
 		let r = roomy.beds[0].max - roomy.beds[0].min;
@@ -614,23 +548,15 @@ mod tests {
 
 	#[test]
 	fn fit_avoids_front_door_exclusion() -> anyhow::Result<()> {
-		let mut cell = CellConstraints::cell_owned(Aabb3d::from_min_max(
-			Vec3::ZERO,
-			Vec3::new(5.0, 3.0, 5.0),
-		));
+		let mut cell =
+			CellConstraints::cell_owned(Aabb3d::from_min_max(Vec3::ZERO, Vec3::new(5.0, 3.0, 5.0)));
 		cell.circulation.front = Some(CirculationEntry(vec![(
-			Aabb2d {
-				min: Vec2::new(0.4, 0.0),
-				max: Vec2::new(0.55, 0.9),
-			},
+			Aabb2d { min: Vec2::new(0.4, 0.0), max: Vec2::new(0.55, 0.9) },
 			vec![CirculationRequestStatus::Required],
 		)]));
 		let layout = BedroomLayout::fit(
 			&cell,
-			NoiseParams {
-				seed: 42,
-				..NoiseParams::default()
-			},
+			NoiseParams { seed: 42, ..NoiseParams::default() },
 			BedroomFillParams::default(),
 		);
 		let zones = cell.circulation_exclusion_zones();
@@ -642,20 +568,14 @@ mod tests {
 
 	#[test]
 	fn closet_door_swing_misses_existing_bed() -> anyhow::Result<()> {
-		let cell = CellConstraints::cell_owned(Aabb3d::from_min_max(
-			Vec3::ZERO,
-			Vec3::new(6.0, 3.0, 6.0),
-		));
+		let cell =
+			CellConstraints::cell_owned(Aabb3d::from_min_max(Vec3::ZERO, Vec3::new(6.0, 3.0, 6.0)));
 		// Bed filling most of the room center — any closet opening into it must fail swing fit.
 		let mut layout = BedroomLayout::default();
-		layout.beds.push(Aabb3d::from_min_max(
-			Vec3::new(1.0, 0.0, 1.5),
-			Vec3::new(5.0, 0.55, 4.5),
-		));
-		let noise = NoiseConfig::new(NoiseParams {
-			seed: 11,
-			..NoiseParams::default()
-		});
+		layout
+			.beds
+			.push(Aabb3d::from_min_max(Vec3::new(1.0, 0.0, 1.5), Vec3::new(5.0, 0.55, 4.5)));
+		let noise = NoiseConfig::new(NoiseParams { seed: 11, ..NoiseParams::default() });
 		let placed = place_closet(&cell.aabb, &[], &layout, &noise, 0, 1.0);
 		if let Some(Placed::Partition { slot, swing }) = placed {
 			assert!(!aabb3d_intersects(&swing, &layout.beds[0]));

@@ -78,26 +78,14 @@ pub fn squared_floor_with_spire_hole(
 	let gap_e = (inscribed_max_x - spire_max_x).max(0.0);
 
 	// Long edge = inscribed-square side; short edge = gap to centered spire.
-	let south = rect_slab(
-		Vec3::new(cx, y, 0.5 * (inscribed_min_z + spire_min_z)),
-		inscribed_side,
-		gap_s,
-	);
-	let north = rect_slab(
-		Vec3::new(cx, y, 0.5 * (spire_max_z + inscribed_max_z)),
-		inscribed_side,
-		gap_n,
-	);
-	let west = rect_slab(
-		Vec3::new(0.5 * (inscribed_min_x + spire_min_x), y, cz),
-		gap_w,
-		inscribed_side,
-	);
-	let east = rect_slab(
-		Vec3::new(0.5 * (spire_max_x + inscribed_max_x), y, cz),
-		gap_e,
-		inscribed_side,
-	);
+	let south =
+		rect_slab(Vec3::new(cx, y, 0.5 * (inscribed_min_z + spire_min_z)), inscribed_side, gap_s);
+	let north =
+		rect_slab(Vec3::new(cx, y, 0.5 * (spire_max_z + inscribed_max_z)), inscribed_side, gap_n);
+	let west =
+		rect_slab(Vec3::new(0.5 * (inscribed_min_x + spire_min_x), y, cz), gap_w, inscribed_side);
+	let east =
+		rect_slab(Vec3::new(0.5 * (spire_max_x + inscribed_max_x), y, cz), gap_e, inscribed_side);
 
 	(caps, [south, north, west, east])
 }

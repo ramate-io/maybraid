@@ -1,6 +1,4 @@
-use character_ui_menu::{
-	CameraFocus, MenuComponent, MenuNode, Section, SwatchSingleSelect,
-};
+use character_ui_menu::{CameraFocus, MenuComponent, MenuNode, Section, SwatchSingleSelect};
 use crozon_characters::{
 	species::mistler::{MistlerBodyColor, MistlerColors, MistlerConfig},
 	ConceptAnimation,
@@ -41,21 +39,14 @@ impl From<&MistlerConfig> for MistlerMenu {
 
 impl From<&MistlerMenu> for MistlerConfig {
 	fn from(menu: &MistlerMenu) -> Self {
-		Self {
-			colors: MistlerColors {
-				body: menu.body.value.body.value,
-			},
-		}
+		Self { colors: MistlerColors { body: menu.body.value.body.value } }
 	}
 }
 
 impl MenuComponent<MenuEvent> for MistlerBodyMenu {
 	fn menu_node(&self) -> MenuNode<MenuEvent> {
 		MenuNode::swatch("Body Color", &self.body, |color| {
-			MenuEvent::SetSwatch(
-				CharacterField::MistlerBodyColor,
-				SwatchValue::MistlerBody(color),
-			)
+			MenuEvent::SetSwatch(CharacterField::MistlerBodyColor, SwatchValue::MistlerBody(color))
 		})
 	}
 }

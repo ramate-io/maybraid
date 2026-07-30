@@ -74,10 +74,7 @@ pub struct PartitionLodProbe {
 
 impl PartitionLodProbe {
 	pub fn from_placement(placement: &Placement) -> Self {
-		Self {
-			center: placement_center(placement),
-			extent: characteristic_extent_abs(placement),
-		}
+		Self { center: placement_center(placement), extent: characteristic_extent_abs(placement) }
 	}
 
 	pub fn from_aabb(aabb: &Aabb3d) -> Self {

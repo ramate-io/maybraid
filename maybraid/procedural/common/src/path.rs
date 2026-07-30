@@ -32,14 +32,7 @@ impl StepLenRange {
 		if (self.max - self.min).abs() < 1e-8 {
 			return self.min;
 		}
-		noise.sample_range_f32_4d(
-			self.min,
-			self.max,
-			pos.x,
-			pos.y,
-			pos.z,
-			step_i as f32 + 71.0,
-		)
+		noise.sample_range_f32_4d(self.min, self.max, pos.x, pos.y, pos.z, step_i as f32 + 71.0)
 	}
 }
 
@@ -63,18 +56,10 @@ pub struct AllowedAngles {
 }
 
 impl AllowedAngles {
-	pub const ZERO: Self = Self {
-		x: 0.0,
-		y: 0.0,
-		z: 0.0,
-	};
+	pub const ZERO: Self = Self { x: 0.0, y: 0.0, z: 0.0 };
 
 	pub fn new(x: f32, y: f32, z: f32) -> Self {
-		Self {
-			x: x.max(0.0),
-			y: y.max(0.0),
-			z: z.max(0.0),
-		}
+		Self { x: x.max(0.0), y: y.max(0.0), z: z.max(0.0) }
 	}
 
 	/// Plan-turn only (yaw), useful for flat façades.
@@ -117,10 +102,7 @@ impl AllowedAngles {
 
 impl Default for AllowedAngles {
 	fn default() -> Self {
-		Self::yaw_pitch(
-			std::f32::consts::FRAC_PI_6,
-			std::f32::consts::FRAC_PI_8,
-		)
+		Self::yaw_pitch(std::f32::consts::FRAC_PI_6, std::f32::consts::FRAC_PI_8)
 	}
 }
 
@@ -172,11 +154,8 @@ impl NoisyPathParams {
 		};
 
 		let noise = NoiseConfig::new(self.noise);
-		let allowed = AllowedAngles::new(
-			self.allowed_angles.x,
-			self.allowed_angles.y,
-			self.allowed_angles.z,
-		);
+		let allowed =
+			AllowedAngles::new(self.allowed_angles.x, self.allowed_angles.y, self.allowed_angles.z);
 
 		let (mut yaw, mut pitch) = yaw_pitch_from_dir(initial);
 		pitch = pitch.clamp(-allowed.x, allowed.x);
@@ -242,18 +221,12 @@ mod tests {
 			distance: 10.0,
 			step_len: StepLenRange::exact(1.0),
 			allowed_angles: AllowedAngles::yaw_only(0.2),
-			noise: NoiseParams {
-				seed: 7,
-				..NoiseParams::default()
-			},
+			noise: NoiseParams { seed: 7, ..NoiseParams::default() },
 			..NoisyPathParams::default()
 		});
 		assert!(points.len() >= 2);
 		let len = path_length(&points);
-		assert!(
-			(len - 10.0).abs() < 1e-2,
-			"path length {len} should match budget"
-		);
+		assert!((len - 10.0).abs() < 1e-2, "path length {len} should match budget");
 		Ok(())
 	}
 
@@ -265,17 +238,11 @@ mod tests {
 			distance: 8.0,
 			step_len: StepLenRange::new(0.5, 1.5),
 			allowed_angles: AllowedAngles::yaw_only(0.5),
-			noise: NoiseParams {
-				seed: 99,
-				..NoiseParams::default()
-			},
+			noise: NoiseParams { seed: 99, ..NoiseParams::default() },
 		});
 		assert!(points.len() >= 2);
 		for p in &points {
-			assert!(
-				p.y.abs() < 1e-3,
-				"expected flat path when max pitch is 0, got {p:?}"
-			);
+			assert!(p.y.abs() < 1e-3, "expected flat path when max pitch is 0, got {p:?}");
 		}
 		Ok(())
 	}
@@ -286,11 +253,7 @@ mod tests {
 			distance: 8.0,
 			step_len: StepLenRange::new(0.5, 1.0),
 			allowed_angles: AllowedAngles::yaw_pitch(0.4, 0.25),
-			noise: NoiseParams {
-				seed: 1234,
-				frequency: 0.5,
-				..NoiseParams::default()
-			},
+			noise: NoiseParams { seed: 1234, frequency: 0.5, ..NoiseParams::default() },
 			..NoisyPathParams::default()
 		};
 		let a = noisy_path(params.clone());
@@ -309,10 +272,7 @@ mod tests {
 			distance: 16.0,
 			step_len: StepLenRange::exact(1.0),
 			allowed_angles: AllowedAngles::new(max_pitch, 0.0, 0.0),
-			noise: NoiseParams {
-				seed: 42,
-				..NoiseParams::default()
-			},
+			noise: NoiseParams { seed: 42, ..NoiseParams::default() },
 			..NoisyPathParams::default()
 		});
 		assert!(points.len() >= 2);
@@ -330,17 +290,8 @@ mod tests {
 			.map(|p| p.y)
 			.fold(f32::INFINITY, f32::min)
 			.abs()
-			.max(
-				points
-					.iter()
-					.map(|p| p.y)
-					.fold(f32::NEG_INFINITY, f32::max)
-					.abs(),
-			);
-		assert!(
-			y_span > 0.05,
-			"expected elevation change with pitch allowance, span={y_span}"
-		);
+			.max(points.iter().map(|p| p.y).fold(f32::NEG_INFINITY, f32::max).abs());
+		assert!(y_span > 0.05, "expected elevation change with pitch allowance, span={y_span}");
 		Ok(())
 	}
 }

@@ -31,22 +31,11 @@ pub struct Placement {
 }
 
 impl Placement {
-	pub const IDENTITY: Self = Self {
-		translation: Vec3::ZERO,
-		yaw: 0.0,
-		pitch: 0.0,
-		roll: 0.0,
-		scale: Vec3::ONE,
-	};
+	pub const IDENTITY: Self =
+		Self { translation: Vec3::ZERO, yaw: 0.0, pitch: 0.0, roll: 0.0, scale: Vec3::ONE };
 
 	pub fn new(translation: Vec3, yaw: f32) -> Self {
-		Self {
-			translation,
-			yaw,
-			pitch: 0.0,
-			roll: 0.0,
-			scale: Vec3::ONE,
-		}
+		Self { translation, yaw, pitch: 0.0, roll: 0.0, scale: Vec3::ONE }
 	}
 
 	pub fn at_origin() -> Self {
@@ -99,17 +88,11 @@ pub struct Placed<G> {
 
 impl<G> Placed<G> {
 	pub fn new(geom: G, translation: Vec3, yaw: f32) -> Self {
-		Self {
-			geom,
-			placement: Placement::new(translation, yaw),
-		}
+		Self { geom, placement: Placement::new(translation, yaw) }
 	}
 
 	pub fn at_origin(geom: G) -> Self {
-		Self {
-			geom,
-			placement: Placement::at_origin(),
-		}
+		Self { geom, placement: Placement::at_origin() }
 	}
 
 	pub fn with_placement(geom: G, placement: Placement) -> Self {
@@ -122,10 +105,7 @@ impl<G> Placed<G> {
 	}
 
 	pub fn map_geom<H>(self, f: impl FnOnce(G) -> H) -> Placed<H> {
-		Placed {
-			geom: f(self.geom),
-			placement: self.placement,
-		}
+		Placed { geom: f(self.geom), placement: self.placement }
 	}
 
 	pub fn translation(&self) -> Vec3 {

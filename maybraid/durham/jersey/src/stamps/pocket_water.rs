@@ -79,10 +79,7 @@ impl PocketWater {
 		// Relative pond bowl (scale=1). Soft outer apron is the bank/rim — no lift.
 		let mut modulations = vec![JerseyModulation::Affine(
 			RegionAffineModulation::new(
-				Region2D::Circle(CircleRegion {
-					center: pond_center,
-					radius: pond_r,
-				}),
+				Region2D::Circle(CircleRegion { center: pond_center, radius: pond_r }),
 				1.0,
 				-pond_depth,
 				pond_r * 0.45,
@@ -97,10 +94,7 @@ impl PocketWater {
 		let lip = pond_center.lerp(end_anchor, 0.35);
 		modulations.push(JerseyModulation::Affine(
 			RegionAffineModulation::new(
-				Region2D::Circle(CircleRegion {
-					center: lip,
-					radius: pond_r * 0.4,
-				}),
+				Region2D::Circle(CircleRegion { center: lip, radius: pond_r * 0.4 }),
 				1.0,
 				-pond_depth * 0.12,
 				pond_r * 0.15,
@@ -109,22 +103,21 @@ impl PocketWater {
 			.with_noise(pond_noise),
 		));
 
-		let run = HysteresisSpine::default().build(
-			bounds,
-			seed.wrapping_add(21),
-			lip,
-			end_anchor,
-		);
+		let run = HysteresisSpine::default().build(bounds, seed.wrapping_add(21), lip, end_anchor);
 		let a = *run.first().unwrap_or(&lip);
 		let b = *run.last().unwrap_or(&end_anchor);
 		let (s, sh, e, eh) = DownhillPair::order(a, b, height_at);
 		let run_w = short * params.run_width_frac.clamp(0.05, 0.22);
 		let run_noise = RegionNoise::from_seed(seed.wrapping_add(2), 0.018, run_w * 0.08);
-		modulations.extend(
-			SoftmaskAlongSpine::corridor()
-				.even_for_extent(short)
-				.build_incision(&run, run_w, run_depth, 0.4, 1.15, &run_noise, Vec2::ZERO),
-		);
+		modulations.extend(SoftmaskAlongSpine::corridor().even_for_extent(short).build_incision(
+			&run,
+			run_w,
+			run_depth,
+			0.4,
+			1.15,
+			&run_noise,
+			Vec2::ZERO,
+		));
 		modulations.push(MidpointGrading::default().build_depression(
 			s,
 			sh - run_depth * 0.3,
@@ -202,10 +195,7 @@ mod tests {
 			p.pond_center + Vec2::new(p.params.pond_frac * 160.0, 0.0),
 		];
 		for q in probes {
-			assert!(
-				p.stamp.apply_elevation(base, q.x, q.y) <= base + 1e-3,
-				"raised at {q:?}"
-			);
+			assert!(p.stamp.apply_elevation(base, q.x, q.y) <= base + 1e-3, "raised at {q:?}");
 		}
 		// Pond floor should still cut.
 		assert!(p.stamp.apply_elevation(base, p.pond_center.x, p.pond_center.y) < base);

@@ -61,7 +61,7 @@ fn setup_lighting(mut commands: Commands) {
 	// Fill light from opposite direction - reduces harsh shadows
 	commands.spawn((
 		DirectionalLight {
-			illuminance: 500.0,     // Increased fill light
+			illuminance: 500.0,         // Increased fill light
 			shadow_maps_enabled: false, // No shadows for fill light
 			..default()
 		},

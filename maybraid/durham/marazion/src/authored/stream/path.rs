@@ -11,10 +11,7 @@ pub(crate) const ENDPOINT_B_SALT: u32 = 0x57EA_E002;
 pub(crate) fn sample_endpoint(seed: u32, salt: u32, lo: Vec2, hi: Vec2) -> Vec2 {
 	let ux = n01_at(seed, salt, lo);
 	let uz = n01_at(seed, salt.wrapping_add(1), lo);
-	Vec2::new(
-		lo.x + (hi.x - lo.x) * ux,
-		lo.y + (hi.y - lo.y) * uz,
-	)
+	Vec2::new(lo.x + (hi.x - lo.x) * ux, lo.y + (hi.y - lo.y) * uz)
 }
 
 /// Sample per-node water elevations along a path (pre-watershed heights − sink).
@@ -43,9 +40,7 @@ pub(crate) fn node_water_levels(
 		if head - levels[last] < min_drop {
 			levels[last] = head - min_drop;
 			for i in (1..last).rev() {
-				levels[i] = levels[i]
-					.min(levels[i - 1])
-					.max(levels[last]);
+				levels[i] = levels[i].min(levels[i - 1]).max(levels[last]);
 			}
 		}
 	}
@@ -53,11 +48,7 @@ pub(crate) fn node_water_levels(
 }
 
 /// Drop zero-length hysteresis vertices so node-pitch blend cannot explode grades.
-pub(crate) fn collapse_degenerate_vertices(
-	path: &mut Vec<Vec2>,
-	levels: &mut Vec<f32>,
-	eps: f32,
-) {
+pub(crate) fn collapse_degenerate_vertices(path: &mut Vec<Vec2>, levels: &mut Vec<f32>, eps: f32) {
 	let n = path.len().min(levels.len());
 	if n < 2 {
 		path.truncate(n);

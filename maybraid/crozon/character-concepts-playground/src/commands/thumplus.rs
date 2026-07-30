@@ -38,9 +38,7 @@ impl Thumplus {
 impl PreviewArgs {
 	fn into_preview_config(self) -> ConceptPreviewConfig {
 		ConceptPreviewConfig::thumplus_with_animation(
-			ThumplusConfig {
-				colors: ThumplusColors { body: self.body },
-			},
+			ThumplusConfig { colors: ThumplusColors { body: self.body } },
 			self.animation,
 		)
 	}

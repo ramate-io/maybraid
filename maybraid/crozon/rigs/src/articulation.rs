@@ -132,10 +132,7 @@ mod tests {
 		let along = Vec3::new(0.2, -1.0, -0.4).normalize();
 		let rot = rotation_along_with_roll(rest, along, FRAC_PI_2, BONE_LENGTH_AXIS);
 		let aimed = (rot * BONE_LENGTH_AXIS).normalize();
-		assert!(
-			aimed.dot(along) > 0.999,
-			"roll must not disturb aim, got {aimed:?} vs {along:?}"
-		);
+		assert!(aimed.dot(along) > 0.999, "roll must not disturb aim, got {aimed:?} vs {along:?}");
 	}
 
 	#[test]

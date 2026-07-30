@@ -17,7 +17,6 @@ use bevy::camera::visibility::VisibilitySystems;
 use bevy::prelude::*;
 use chico_ball_components::frond::FrondRenderItemPlugin;
 use chico_ball_components::tuft::render_item_plugin::TuftRenderItemPlugin;
-use commands::RequestMeshStats;
 use chico_sbs_trees::braid_oak_tree::render_item_plugin::ensure_registered as ensure_braid_oak_tree_render_plugins;
 use chico_sbs_trees::date_palm::render_item_plugin::ensure_registered as ensure_date_palm_render_plugins;
 use chico_sbs_trees::friends_conifer::render_item_plugin::ensure_registered as ensure_friends_conifer_render_plugins;
@@ -39,6 +38,7 @@ use chico_sdf::{CrookCylinder, NoisyBall, NoisyCylinder};
 use chico_vegetation_shaders::{
 	ChicoLeafMaterial, ChicoStickMaterial, ChicoVegetationShadersPlugin,
 };
+use commands::RequestMeshStats;
 use game_commands::command::{capture_command_line_input, GameCommandPlugin};
 use game_commands::ui::GameCommandStatusText;
 use ground::setup_ground;
@@ -103,10 +103,7 @@ impl Plugin for SbsTreesPlaygroundPlugin {
 					ui::sync_command_status_text.before(game_commands::ui::update_debug_ui),
 				),
 			)
-			.add_systems(
-				PostUpdate,
-				apply_mesh_stats.after(VisibilitySystems::CheckVisibility),
-			);
+			.add_systems(PostUpdate, apply_mesh_stats.after(VisibilitySystems::CheckVisibility));
 	}
 }
 

@@ -6,14 +6,12 @@ use crate::arc_kit::{decompose_arc_sweep, ArcKit};
 use crate::floors::geometry::FloorGeometry;
 use crate::floors::style::FloorStyle;
 use crate::panels::{PanelGeometry, PanelStyle, Rectangle, RightTriangle};
-use crate::placed::{Placement, Placed};
+use crate::placed::{Placed, Placement};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) enum FloorKit {
 	Rectangle,
-	RightTriangle {
-		mirror: Option<MirrorAxis>,
-	},
+	RightTriangle { mirror: Option<MirrorAxis> },
 	ArcFill(ArcKit),
 	StructFill,
 	CircleInscribedSquare,
@@ -67,10 +65,7 @@ fn map_leaves(pieces: Vec<Placed<PanelGeometry>>) -> Vec<Placed<FloorKit>> {
 				PanelGeometry::Joint(_) => FloorKit::Joint,
 				_ => return None,
 			};
-			Some(Placed {
-				geom: kit,
-				placement: p.placement,
-			})
+			Some(Placed { geom: kit, placement: p.placement })
 		})
 		.collect()
 }

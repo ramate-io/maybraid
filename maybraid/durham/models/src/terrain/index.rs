@@ -16,25 +16,23 @@ use crate::terrain::jersey::{
 	MassifHighPassStampCell, MassifLowPassControllerCell, MassifLowPassControllerLayout,
 	MassifLowPassStampCell, PlateauHighPassControllerCell, PlateauHighPassControllerLayout,
 	PlateauHighPassStampCell, PlateauLowPassControllerCell, PlateauLowPassControllerLayout,
-	PlateauLowPassStampCell, PocketWaterHighPassControllerCell, PocketWaterHighPassControllerLayout,
-	PocketWaterHighPassStampCell, PocketWaterLowPassControllerCell,
-	PocketWaterLowPassControllerLayout, PocketWaterLowPassStampCell, RollingHighPassControllerCell,
-	RollingHighPassControllerLayout, RollingHighPassStampCell, RollingLowPassControllerCell,
-	RollingLowPassControllerLayout, RollingLowPassStampCell, ValleyHighPassControllerCell,
-	ValleyHighPassControllerLayout, ValleyHighPassStampCell, ValleyLowPassControllerCell,
-	ValleyLowPassControllerLayout, ValleyLowPassStampCell,
+	PlateauLowPassStampCell, PocketWaterHighPassControllerCell,
+	PocketWaterHighPassControllerLayout, PocketWaterHighPassStampCell,
+	PocketWaterLowPassControllerCell, PocketWaterLowPassControllerLayout,
+	PocketWaterLowPassStampCell, RollingHighPassControllerCell, RollingHighPassControllerLayout,
+	RollingHighPassStampCell, RollingLowPassControllerCell, RollingLowPassControllerLayout,
+	RollingLowPassStampCell, ValleyHighPassControllerCell, ValleyHighPassControllerLayout,
+	ValleyHighPassStampCell, ValleyLowPassControllerCell, ValleyLowPassControllerLayout,
+	ValleyLowPassStampCell,
 };
 use crate::terrain::marazion::{
 	BootstrapMarazionWatershedConfigs, BootstrapPrePocketHighPassLayout,
-	BootstrapPrePocketLowPassLayout, MarazionPocketWatersHighPass, MarazionPocketWatersLowPass,
-	MarazionWatershedConfigs, PocketHighPassCell, PocketLowPassCell, PrePocketHighPassCell,
-	PrePocketHighPassLayout, PrePocketLowPassCell, PrePocketLowPassLayout,
-	WatershedAproningCell, WatershedCarvingCell, HydroComplexCell,
-	WatershedRimmingCell,
+	BootstrapPrePocketLowPassLayout, HydroComplexCell, MarazionPocketWatersHighPass,
+	MarazionPocketWatersLowPass, MarazionWatershedConfigs, PocketHighPassCell, PocketLowPassCell,
+	PrePocketHighPassCell, PrePocketHighPassLayout, PrePocketLowPassCell, PrePocketLowPassLayout,
+	WatershedAproningCell, WatershedCarvingCell, WatershedRimmingCell,
 };
-use crate::terrain::presentation::{
-	BootstrapTerrainPresentationAssets, TerrainPresentationAssets,
-};
+use crate::terrain::presentation::{BootstrapTerrainPresentationAssets, TerrainPresentationAssets};
 use crate::terrain::{PreWatershedTerrain, Terrain};
 use crate::water::{BootstrapWaterPresentationAssets, Water, WaterPresentationAssets};
 use avian3d::prelude::*;
@@ -88,7 +86,8 @@ pub struct TerrainEntryStore {
 	pub(crate) plateau_low_pass_controller: HashMap<Id, StoredEntry<PlateauLowPassControllerCell>>,
 	pub(crate) plateau_low_pass_stamp: HashMap<Id, StoredEntry<PlateauLowPassStampCell>>,
 	pub(crate) plateau_high_pass_layout: HashMap<Id, StoredEntry<PlateauHighPassControllerLayout>>,
-	pub(crate) plateau_high_pass_controller: HashMap<Id, StoredEntry<PlateauHighPassControllerCell>>,
+	pub(crate) plateau_high_pass_controller:
+		HashMap<Id, StoredEntry<PlateauHighPassControllerCell>>,
 	pub(crate) plateau_high_pass_stamp: HashMap<Id, StoredEntry<PlateauHighPassStampCell>>,
 	pub(crate) massif_low_pass_layout: HashMap<Id, StoredEntry<MassifLowPassControllerLayout>>,
 	pub(crate) massif_low_pass_controller: HashMap<Id, StoredEntry<MassifLowPassControllerCell>>,
@@ -116,7 +115,8 @@ pub struct TerrainEntryStore {
 	pub(crate) rolling_low_pass_controller: HashMap<Id, StoredEntry<RollingLowPassControllerCell>>,
 	pub(crate) rolling_low_pass_stamp: HashMap<Id, StoredEntry<RollingLowPassStampCell>>,
 	pub(crate) rolling_high_pass_layout: HashMap<Id, StoredEntry<RollingHighPassControllerLayout>>,
-	pub(crate) rolling_high_pass_controller: HashMap<Id, StoredEntry<RollingHighPassControllerCell>>,
+	pub(crate) rolling_high_pass_controller:
+		HashMap<Id, StoredEntry<RollingHighPassControllerCell>>,
 	pub(crate) rolling_high_pass_stamp: HashMap<Id, StoredEntry<RollingHighPassStampCell>>,
 	pub(crate) valley_low_pass_layout: HashMap<Id, StoredEntry<ValleyLowPassControllerLayout>>,
 	pub(crate) valley_low_pass_controller: HashMap<Id, StoredEntry<ValleyLowPassControllerCell>>,
@@ -331,12 +331,7 @@ impl<'w, 's> AvianTerrainIndex<'w, 's> {
 	}
 
 	pub fn clear(&mut self) {
-		let entities: Vec<Entity> = self
-			.store
-			.terrain
-			.values()
-			.filter_map(|e| e.entity)
-			.collect();
+		let entities: Vec<Entity> = self.store.terrain.values().filter_map(|e| e.entity).collect();
 		for entity in entities {
 			self.commands.entity(entity).despawn();
 		}
@@ -401,15 +396,9 @@ macro_rules! impl_map_spatial_index {
 					}
 				}
 				let version = self.store.next_version();
-				self.store.$field.insert(
-					id,
-					StoredEntry {
-						value,
-						bounds,
-						version,
-						entity: None,
-					},
-				);
+				self.store
+					.$field
+					.insert(id, StoredEntry { value, bounds, version, entity: None });
 			}
 		}
 	};
@@ -485,9 +474,7 @@ impl<'w, 's> SpatialIndex<Terrain> for AvianTerrainIndex<'w, 's> {
 			.spatial
 			.aabb_intersections_with_aabb(aabb)
 			.into_iter()
-			.filter_map(|entity| {
-				self.store.entity_to_id.get(&entity).map(|id| TrackedId(*id))
-			})
+			.filter_map(|entity| self.store.entity_to_id.get(&entity).map(|id| TrackedId(*id)))
 			.collect();
 
 		for (id, entry) in &self.store.terrain {
@@ -533,14 +520,8 @@ impl<'w, 's> SpatialIndex<Terrain> for AvianTerrainIndex<'w, 's> {
 		let entity = self.spawn_cell_entity(id, &t, bounds);
 		let version = self.store.next_version();
 		self.store.entity_to_id.insert(entity, id);
-		self.store.terrain.insert(
-			id,
-			StoredEntry {
-				value: t,
-				bounds,
-				version,
-				entity: Some(entity),
-			},
-		);
+		self.store
+			.terrain
+			.insert(id, StoredEntry { value: t, bounds, version, entity: Some(entity) });
 	}
 }

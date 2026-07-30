@@ -1,6 +1,6 @@
 //! Jersey Plateau Caps (unchained) — [RFC-105 §3.8.2](https://github.com/ramate-io/maybraid/tree/main/rfc/rfc-000-000-105-procedural-terrain#382-jersey-plateau-caps-unchained).
 
-use crate::config::{JitteredCenter};
+use crate::config::JitteredCenter;
 use crate::modulation::{JerseyModulation, RegionAffineModulation, RegionGradingModulation};
 use crate::region::{CircleRegion, RectRegion, Region2D, RegionNoise};
 use crate::stamp::{scale_additive, scale_near_one, StampSemantics, StampSet, StampStrength};
@@ -107,8 +107,7 @@ impl PlateauCap {
 		// none is provided so we do not pull the cap toward elevation 0.
 		if let Some(height_at) = height_at {
 			let base_h = height_at(center.x, center.y);
-			let tilt_axis =
-				Vec2::new(1.0, 0.15 * (hash.unit(7) * 2.0 - 1.0)).normalize_or_zero();
+			let tilt_axis = Vec2::new(1.0, 0.15 * (hash.unit(7) * 2.0 - 1.0)).normalize_or_zero();
 			let start = center - tilt_axis * size * 0.7;
 			let end = center + tilt_axis * size * 0.7;
 			modulations.push(JerseyModulation::Grading(
@@ -136,21 +135,12 @@ impl PlateauCap {
 			seed,
 			params,
 			center,
-			stamp: StampSet {
-				modulations,
-				spine: vec![center],
-				semantics,
-			},
+			stamp: StampSet { modulations, spine: vec![center], semantics },
 		}
 	}
 
 	pub fn from_bounds_default(bounds: Bounds2, seed: u32) -> Self {
-		Self::from_bounds(
-			bounds,
-			seed,
-			PlateauCapParams::default(),
-			None,
-		)
+		Self::from_bounds(bounds, seed, PlateauCapParams::default(), None)
 	}
 }
 

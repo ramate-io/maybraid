@@ -42,11 +42,7 @@ pub trait LodScene {
 	}
 
 	/// Scene for one LOD level root (primary implementation target).
-	fn scene_with_level(
-		&self,
-		lod_ref: &LodRef,
-		level: LodSceneLevel,
-	) -> impl Scene + 'static;
+	fn scene_with_level(&self, lod_ref: &LodRef, level: LodSceneLevel) -> impl Scene + 'static;
 
 	/// Scene for the **current** LOD selection only (first present / non-host path).
 	fn scene_with_lod(&self, lod_ref: &LodRef) -> impl Scene + 'static {
@@ -92,13 +88,7 @@ where
 	///
 	/// Default falls back to [`RegionPresenter::handle`] with `scene_with_lod` for
 	/// presenters that do not track host entities yet.
-	fn set_lod_level(
-		&mut self,
-		id: Id,
-		level: LodSceneLevel,
-		spatial_index: &S,
-		lod_ref: &LodRef,
-	) {
+	fn set_lod_level(&mut self, id: Id, level: LodSceneLevel, spatial_index: &S, lod_ref: &LodRef) {
 		let _ = level;
 		if let Some(version) = spatial_index.version(id) {
 			if let Some(instance) = spatial_index.get(id) {
@@ -132,9 +122,8 @@ where
 				continue;
 			};
 
-			let needs_present = self
-				.presented_version(id)
-				.is_none_or(|presented| presented < version);
+			let needs_present =
+				self.presented_version(id).is_none_or(|presented| presented < version);
 
 			let Some(instance) = spatial_index.get(id) else {
 				continue;

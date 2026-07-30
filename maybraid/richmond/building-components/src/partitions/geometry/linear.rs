@@ -45,14 +45,16 @@ pub const DEFAULT_TILE_WIDTH: f32 = 1.0;
 /// \(X\) stays along the wall, \(Y\) becomes thickness, \(Z\) becomes storey height.
 pub const PANEL_TO_WALL_PITCH: f32 = std::f32::consts::FRAC_PI_2;
 
-fn panel_wall_pose(origin: Vec3, yaw: f32, length: f32, height: f32, thick_scale: f32) -> Placement {
+fn panel_wall_pose(
+	origin: Vec3,
+	yaw: f32,
+	length: f32,
+	height: f32,
+	thick_scale: f32,
+) -> Placement {
 	Placement::new(origin, yaw)
 		.with_pitch(PANEL_TO_WALL_PITCH)
-		.with_scale(Vec3::new(
-			length.max(1e-4),
-			thick_scale.max(1e-4),
-			height.max(1e-4),
-		))
+		.with_scale(Vec3::new(length.max(1e-4), thick_scale.max(1e-4), height.max(1e-4)))
 }
 
 /// Wall placement from the old centered half-extent convention.
@@ -106,10 +108,7 @@ pub struct LinearPartition {
 
 impl Default for LinearPartition {
 	fn default() -> Self {
-		Self {
-			length: None,
-			tile_width: DEFAULT_TILE_WIDTH,
-		}
+		Self { length: None, tile_width: DEFAULT_TILE_WIDTH }
 	}
 }
 
@@ -120,10 +119,7 @@ impl LinearPartition {
 
 	/// Continuous span tessellated with a suggested tile width.
 	pub fn spanning(length: f32, tile_width: f32) -> Self {
-		Self {
-			length: Some(length.max(0.0)),
-			tile_width: tile_width.max(1e-4),
-		}
+		Self { length: Some(length.max(0.0)), tile_width: tile_width.max(1e-4) }
 	}
 
 	pub fn with_length(mut self, length: f32) -> Self {
@@ -228,7 +224,8 @@ mod tests {
 
 	#[test]
 	fn wall_placement_from_centered_doubles_old_half_extent() -> anyhow::Result<()> {
-		let p = wall_placement_from_centered(Vec3::new(2.0, 0.0, 0.0), 0.0, 2.0, 3.0, DEFAULT_THICK);
+		let p =
+			wall_placement_from_centered(Vec3::new(2.0, 0.0, 0.0), 0.0, 2.0, 3.0, DEFAULT_THICK);
 		assert!((p.translation.x - 0.0).abs() < 1e-4);
 		assert!((p.scale.x - 4.0).abs() < 1e-4);
 		assert!((p.scale.y - DEFAULT_THICK).abs() < 1e-4);

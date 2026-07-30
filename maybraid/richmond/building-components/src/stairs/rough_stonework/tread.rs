@@ -5,5 +5,4 @@ use crate::assets::stairs::rough_stonework::TREAD;
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct RoughStoneTread;
 
-
 crate::impl_glb_lod_scene!(RoughStoneTread, TREAD);

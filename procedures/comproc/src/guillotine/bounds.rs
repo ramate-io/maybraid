@@ -94,9 +94,6 @@ impl Bounds<3> {
 
 impl Bounds<4> {
 	pub fn from_vec4(min: Vec4, max: Vec4) -> Self {
-		Self::new(
-			[min.x, min.y, min.z, min.w],
-			[max.x, max.y, max.z, max.w],
-		)
+		Self::new([min.x, min.y, min.z, min.w], [max.x, max.y, max.z, max.w])
 	}
 }

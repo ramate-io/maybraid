@@ -38,9 +38,7 @@ impl Mistler {
 impl PreviewArgs {
 	fn into_preview_config(self) -> ConceptPreviewConfig {
 		ConceptPreviewConfig::mistler_with_animation(
-			MistlerConfig {
-				colors: MistlerColors { body: self.body },
-			},
+			MistlerConfig { colors: MistlerColors { body: self.body } },
 			self.animation,
 		)
 	}

@@ -217,9 +217,7 @@ fn apply_quadruped_animation(
 	t: f32,
 ) -> Effects {
 	match animation {
-		ConceptAnimation::Run => {
-			QuadrupedRun::default().apply(rig, t * QUADRUPED_RUN_CYCLE_SPEED)
-		}
+		ConceptAnimation::Run => QuadrupedRun::default().apply(rig, t * QUADRUPED_RUN_CYCLE_SPEED),
 		ConceptAnimation::Gallop => Gallop::default().apply(rig, t * GALLOP_CYCLE_SPEED),
 		_ => Effects::default(),
 	}
@@ -232,9 +230,7 @@ fn apply_forelimbed_animation(
 ) -> Effects {
 	match animation {
 		ConceptAnimation::LateralUndulation => LateralUndulation::default().apply(rig, t),
-		ConceptAnimation::DorsoventralUndulation => {
-			DorsoventralUndulation::default().apply(rig, t)
-		}
+		ConceptAnimation::DorsoventralUndulation => DorsoventralUndulation::default().apply(rig, t),
 		_ => Effects::default(),
 	}
 }

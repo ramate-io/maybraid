@@ -3,13 +3,14 @@ use character_ui_menu::{
 };
 use crozon_characters::{
 	species::{
-		braidman::BraidmanConfig, brenal::BrenalConfig, caole::CaoleConfig, epiphant::EpiphantConfig,
-		hars::HarsConfig, claber::ClaberConfig, croconot::CroconotConfig, brodler::BrodlerConfig,
-		dui::DuiConfig, brokker::BrokkerConfig, chupri::ChupriConfig, kispar::KisparConfig,
-		kaller::KallerConfig, kappler::KapplerConfig, lidder::LidderConfig, lero::LeroConfig,
-		mygr::MygrConfig, spibmom::SpibmomConfig, sonyak::SonyakConfig, tipple::TippleConfig,
-		topple::ToppleConfig, tapp::TappConfig, wumbus::WumbusConfig, ylter::YilterConfig,
-		grener::GrenerConfig, thumplus::ThumplusConfig, mistler::MistlerConfig, tuberwaber::TuberwaberConfig,
+		braidman::BraidmanConfig, brenal::BrenalConfig, brodler::BrodlerConfig,
+		brokker::BrokkerConfig, caole::CaoleConfig, chupri::ChupriConfig, claber::ClaberConfig,
+		croconot::CroconotConfig, dui::DuiConfig, epiphant::EpiphantConfig, grener::GrenerConfig,
+		hars::HarsConfig, kaller::KallerConfig, kappler::KapplerConfig, kispar::KisparConfig,
+		lero::LeroConfig, lidder::LidderConfig, mistler::MistlerConfig, mygr::MygrConfig,
+		sonyak::SonyakConfig, spibmom::SpibmomConfig, tapp::TappConfig, thumplus::ThumplusConfig,
+		tipple::TippleConfig, topple::ToppleConfig, tuberwaber::TuberwaberConfig,
+		wumbus::WumbusConfig, ylter::YilterConfig,
 	},
 	ConceptAnimation,
 };
@@ -18,30 +19,30 @@ use crate::{
 	characters::{
 		braidman::BraidmanMenu,
 		brenal::{BrenalAnimationClip, BrenalMenu},
+		brodler::BrodlerMenu,
+		brokker::BrokkerMenu,
 		caole::{CaoleAnimationClip, CaoleMenu},
-		epiphant::{EpiphantAnimationClip, EpiphantMenu},
-		hars::{HarsAnimationClip, HarsMenu},
+		chupri::ChupriMenu,
 		claber::{ClaberAnimationClip, ClaberMenu},
 		croconot::{CroconotAnimationClip, CroconotMenu},
-		brodler::BrodlerMenu,
 		dui::DuiMenu,
-		brokker::BrokkerMenu,
-		chupri::ChupriMenu,
-		kispar::KisparMenu,
+		epiphant::{EpiphantAnimationClip, EpiphantMenu},
+		grener::GrenerMenu,
+		hars::{HarsAnimationClip, HarsMenu},
 		kaller::KallerMenu,
 		kappler::KapplerMenu,
+		kispar::KisparMenu,
+		lero::LeroMenu,
 		lidder::LidderMenu,
+		mistler::MistlerMenu,
+		mygr::MygrMenu,
+		sonyak::{SonyakAnimationClip, SonyakMenu},
+		spibmom::SpibmomMenu,
+		tapp::TappMenu,
+		thumplus::ThumplusMenu,
 		tipple::TippleMenu,
 		topple::ToppleMenu,
-		tapp::TappMenu,
-		lero::LeroMenu,
-		mygr::MygrMenu,
-		spibmom::SpibmomMenu,
-		grener::GrenerMenu,
-		thumplus::ThumplusMenu,
-		mistler::MistlerMenu,
 		tuberwaber::TuberwaberMenu,
-		sonyak::{SonyakAnimationClip, SonyakMenu},
 		wumbus::WumbusMenu,
 		ylter::{YilterAnimationClip, YilterMenu},
 	},
@@ -462,7 +463,6 @@ impl CharacterMenu {
 		}
 	}
 
-
 	pub fn from_croconot(config: &CroconotConfig, animation: ConceptAnimation) -> Self {
 		Self {
 			species: SingleSelect::new(ConceptSpecies::Croconot),
@@ -632,7 +632,6 @@ impl CharacterMenu {
 			tuberwaber: TuberwaberMenu::default(),
 		}
 	}
-
 
 	pub fn from_lidder(config: &LidderConfig, animation: ConceptAnimation) -> Self {
 		Self {
@@ -1888,7 +1887,6 @@ impl CharacterMenu {
 		}
 	}
 
-
 	fn apply_croconot(&mut self, event: MenuEvent) -> bool {
 		let menu = &mut self.croconot;
 		match event {
@@ -2226,7 +2224,6 @@ impl CharacterMenu {
 		}
 	}
 
-
 	fn apply_lidder(&mut self, event: MenuEvent) -> bool {
 		let menu = &mut self.lidder;
 		match event {
@@ -2343,7 +2340,6 @@ impl CharacterMenu {
 		}
 	}
 
-
 	fn apply_brokker(&mut self, event: MenuEvent) -> bool {
 		let menu = &mut self.brokker;
 		match event {
@@ -2380,10 +2376,10 @@ impl CharacterMenu {
 					menu.head_features.value.eye_color.value = color;
 					true
 				}
-				(CharacterField::BrokkerSnoutColor, SwatchValue::BrokkerSnout(color)) => {{
+				(CharacterField::BrokkerSnoutColor, SwatchValue::BrokkerSnout(color)) => {
 					menu.head_features.value.snout_color.value = color;
 					true
-				}}
+				}
 				(CharacterField::HairColor, SwatchValue::Item(color)) => {
 					menu.hair.value.color.value = color;
 					true
@@ -3155,11 +3151,7 @@ impl MenuComponent<MenuEvent> for CharacterMenu {
 				),
 				(
 					"Aquatic",
-					&[
-						ConceptSpecies::Grener,
-						ConceptSpecies::Thumplus,
-						ConceptSpecies::Mistler,
-					],
+					&[ConceptSpecies::Grener, ConceptSpecies::Thumplus, ConceptSpecies::Mistler],
 				),
 			],
 			self.species_node(),
@@ -3376,7 +3368,6 @@ fn apply_sonyak_slider(menu: &mut SonyakMenu, field: CharacterField, delta: f32)
 	}
 	true
 }
-
 
 fn apply_croconot_slider(menu: &mut CroconotMenu, field: CharacterField, delta: f32) -> bool {
 	let body = &mut menu.body.value.sliders;

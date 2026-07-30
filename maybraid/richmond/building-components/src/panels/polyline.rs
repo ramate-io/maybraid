@@ -75,11 +75,7 @@ impl Default for QuadPolyline {
 
 impl QuadPolyline {
 	pub fn new(points: impl Into<Vec<Vec3>>, depth: f32) -> Self {
-		Self {
-			points: points.into(),
-			depth: depth.max(1e-4),
-			..Self::default()
-		}
+		Self { points: points.into(), depth: depth.max(1e-4), ..Self::default() }
 	}
 
 	pub fn with_tile_width(mut self, tile_width: f32) -> Self {
@@ -187,10 +183,7 @@ impl QuadPolyline {
 			if let Some(th) = self.tile_height {
 				quad = quad.with_tile_height(th);
 			}
-			out.push(Placed {
-				geom: quad,
-				placement: Placement::new(a, yaw).with_roll(roll),
-			});
+			out.push(Placed { geom: quad, placement: Placement::new(a, yaw).with_roll(roll) });
 		}
 		out
 	}
@@ -207,10 +200,7 @@ impl QuadPolyline {
 		let n_edges = points.len() - 1;
 		let mut out = Vec::with_capacity(n_edges);
 		for i in 0..n_edges {
-			let mut e = EdgePolygons {
-				edge_index: i,
-				..Default::default()
-			};
+			let mut e = EdgePolygons { edge_index: i, ..Default::default() };
 			if policies[i].edge_tri {
 				let b = policies[i].half_turn.tan() * depth;
 				if b > 1e-6 {
@@ -249,10 +239,7 @@ impl QuadPolyline {
 				let a = points[0];
 				let yaw = policies[0].yaw_out;
 				let j = Joint::placed_at(a, yaw, yaw, roll_in, roll);
-				out.push(Placed {
-					geom: j.geom,
-					placement: j.placement.with_roll(roll),
-				});
+				out.push(Placed { geom: j.geom, placement: j.placement.with_roll(roll) });
 			}
 		}
 
@@ -260,20 +247,9 @@ impl QuadPolyline {
 			if !policies[i].joint {
 				continue;
 			}
-			let j = Joint::placed_at(
-				points[i],
-				policies[i].yaw_in,
-				policies[i].yaw_out,
-				roll,
-				roll,
-			);
-			out.push(Placed {
-				geom: j.geom,
-				placement: Placement {
-					roll,
-					..j.placement
-				},
-			});
+			let j =
+				Joint::placed_at(points[i], policies[i].yaw_in, policies[i].yaw_out, roll, roll);
+			out.push(Placed { geom: j.geom, placement: Placement { roll, ..j.placement } });
 		}
 		out
 	}
@@ -313,10 +289,7 @@ impl QuadPolyline {
 		}
 
 		for j in self.joints() {
-			out.push(Placed {
-				geom: PanelGeometry::Joint(j.geom),
-				placement: j.placement,
-			});
+			out.push(Placed { geom: PanelGeometry::Joint(j.geom), placement: j.placement });
 		}
 		out
 	}
@@ -350,11 +323,7 @@ mod tests {
 	#[test]
 	fn l_shape_emits_joint_and_edge_tris() -> anyhow::Result<()> {
 		let pl = QuadPolyline::new(
-			[
-				Vec3::new(0.0, 0.0, 0.0),
-				Vec3::new(2.0, 0.0, 0.0),
-				Vec3::new(2.0, 0.0, 2.0),
-			],
+			[Vec3::new(0.0, 0.0, 0.0), Vec3::new(2.0, 0.0, 0.0), Vec3::new(2.0, 0.0, 2.0)],
 			1.0,
 		);
 		assert_eq!(pl.rectangles().len(), 2);
@@ -363,31 +332,15 @@ mod tests {
 		assert!(edges[0].right.is_some());
 		assert!(edges[1].left.is_some());
 		let pieces = pl.decompose();
-		assert_eq!(
-			pieces
-				.iter()
-				.filter(|p| matches!(p.geom, PanelGeometry::Quad(_)))
-				.count(),
-			2
-		);
-		assert_eq!(
-			pieces
-				.iter()
-				.filter(|p| matches!(p.geom, PanelGeometry::Joint(_)))
-				.count(),
-			1
-		);
+		assert_eq!(pieces.iter().filter(|p| matches!(p.geom, PanelGeometry::Quad(_))).count(), 2);
+		assert_eq!(pieces.iter().filter(|p| matches!(p.geom, PanelGeometry::Joint(_))).count(), 1);
 		Ok(())
 	}
 
 	#[test]
 	fn small_kink_omits_joint_and_edge() -> anyhow::Result<()> {
 		let pl = QuadPolyline::new(
-			[
-				Vec3::new(0.0, 0.0, 0.0),
-				Vec3::new(2.0, 0.0, 0.0),
-				Vec3::new(4.0, 0.0, 0.1),
-			],
+			[Vec3::new(0.0, 0.0, 0.0), Vec3::new(2.0, 0.0, 0.0), Vec3::new(4.0, 0.0, 0.1)],
 			1.0,
 		)
 		.with_min_joint_angle(DEFAULT_MIN_JOINT_ANGLE)
@@ -401,11 +354,8 @@ mod tests {
 
 	#[test]
 	fn uniform_roll_applies_to_rectangles() -> anyhow::Result<()> {
-		let pl = QuadPolyline::new(
-			[Vec3::new(0.0, 0.0, 0.0), Vec3::new(2.0, 0.0, 0.0)],
-			0.5,
-		)
-		.with_roll(0.3);
+		let pl = QuadPolyline::new([Vec3::new(0.0, 0.0, 0.0), Vec3::new(2.0, 0.0, 0.0)], 0.5)
+			.with_roll(0.3);
 		let r = pl.rectangles();
 		assert_eq!(r.len(), 1);
 		assert!((r[0].roll() - 0.3).abs() < 1e-4);
@@ -415,17 +365,17 @@ mod tests {
 	#[test]
 	fn roll_enables_top_bottom_edge_polys() -> anyhow::Result<()> {
 		let flat = QuadPolyline::new(
-			[
-				Vec3::new(0.0, 0.0, 0.0),
-				Vec3::new(2.0, 0.0, 0.0),
-				Vec3::new(2.0, 0.0, 2.0),
-			],
+			[Vec3::new(0.0, 0.0, 0.0), Vec3::new(2.0, 0.0, 0.0), Vec3::new(2.0, 0.0, 2.0)],
 			1.0,
 		);
 		assert!(flat.edge_polygons()[0].top.is_none());
 		let rolled = flat.clone().with_roll(0.25);
-		assert!(rolled.edge_polygons()[0].top.is_some() || rolled.edge_polygons()[0].bottom.is_some()
-			|| rolled.edge_polygons()[1].top.is_some() || rolled.edge_polygons()[1].bottom.is_some());
+		assert!(
+			rolled.edge_polygons()[0].top.is_some()
+				|| rolled.edge_polygons()[0].bottom.is_some()
+				|| rolled.edge_polygons()[1].top.is_some()
+				|| rolled.edge_polygons()[1].bottom.is_some()
+		);
 		let e0 = &rolled.edge_polygons()[0];
 		let e1 = &rolled.edge_polygons()[1];
 		assert_eq!(e0.right.is_some(), e0.bottom.is_some());

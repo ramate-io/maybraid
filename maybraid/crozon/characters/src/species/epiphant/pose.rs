@@ -21,11 +21,7 @@ pub struct EpiphantPose {
 
 impl EpiphantPose {
 	pub fn from_config(config: &EpiphantConfig) -> Self {
-		Self {
-			gender: config.gender,
-			build: config.build,
-			sliders: config.sliders.clamped(),
-		}
+		Self { gender: config.gender, build: config.build, sliders: config.sliders.clamped() }
 	}
 
 	pub fn resolve(self) -> ResolvedRigPose {

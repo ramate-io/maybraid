@@ -16,10 +16,5 @@ pub fn setup_ground(
 		..default()
 	});
 
-	commands.spawn((
-		Mesh3d(mesh),
-		MeshMaterial3d(material),
-		Transform::IDENTITY,
-		GroundPlane,
-	));
+	commands.spawn((Mesh3d(mesh), MeshMaterial3d(material), Transform::IDENTITY, GroundPlane));
 }

@@ -69,14 +69,8 @@ impl ArcWall {
 			slots,
 		);
 
-		let partitions = tessellate_arc(
-			params.center_xz,
-			radius,
-			storey_height,
-			arc_degrees,
-			closed,
-			&portals,
-		);
+		let partitions =
+			tessellate_arc(params.center_xz, radius, storey_height, arc_degrees, closed, &portals);
 		Self {
 			center_xz: params.center_xz,
 			radius,
@@ -237,20 +231,14 @@ mod tests {
 			arc_degrees: 360.0,
 			must_assign: cardinal_must_assign(),
 			must_not_assign: vec![],
-			portal_noise: NoiseParams {
-				seed,
-				..NoiseParams::default()
-			},
+			portal_noise: NoiseParams { seed, ..NoiseParams::default() },
 			optional_portals: optional,
 		})
 	}
 
 	fn arc_foot(arc_degrees: f32) -> PortalFootprint {
 		let half_t = OPEN_HALF_DEG / arc_degrees.max(SEG_DEG);
-		PortalFootprint {
-			half_t,
-			closed: is_closed(arc_degrees),
-		}
+		PortalFootprint { half_t, closed: is_closed(arc_degrees) }
 	}
 
 	#[test]
@@ -300,10 +288,7 @@ mod tests {
 			arc_degrees: 360.0,
 			must_assign: vec![MustAssignPortal::at(0.0, Portal::Door)],
 			must_not_assign: vec![WallRegion::span(0.1, 0.9)],
-			portal_noise: NoiseParams {
-				seed: 7,
-				..NoiseParams::default()
-			},
+			portal_noise: NoiseParams { seed: 7, ..NoiseParams::default() },
 			optional_portals: (4, 4),
 		});
 		assert_eq!(wall.portals.len(), 1);

@@ -13,9 +13,7 @@ pub struct ArcSweep {
 
 impl Default for ArcSweep {
 	fn default() -> Self {
-		Self {
-			sweep_degrees: 90.0,
-		}
+		Self { sweep_degrees: 90.0 }
 	}
 }
 
@@ -24,11 +22,7 @@ impl ArcSweep {
 		decompose_arc_sweep(self.sweep_degrees)
 			.into_iter()
 			.map(|(kit, yaw)| {
-				let tile = if slice {
-					slice_tile(kit)
-				} else {
-					PartitionTile::from(kit)
-				};
+				let tile = if slice { slice_tile(kit) } else { PartitionTile::from(kit) };
 				Placed::new(tile, Vec3::ZERO, yaw)
 			})
 			.collect()

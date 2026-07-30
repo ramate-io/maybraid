@@ -80,10 +80,7 @@ impl LinearWall {
 		let length = horiz_len(params.start, params.end).max(portal_width + 1e-3);
 		let half_t = (portal_width * 0.5) / length;
 		let noise = NoiseConfig::new(params.portal_noise);
-		let foot = PortalFootprint {
-			half_t,
-			closed: false,
-		};
+		let foot = PortalFootprint { half_t, closed: false };
 
 		let portals = assign_portals(
 			&noise,

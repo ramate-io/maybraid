@@ -60,17 +60,11 @@ impl JerseyModulation {
 
 	/// Wrap this op in a cell-domain mask (hard exterior clip + interior ease).
 	pub fn bind_to_cell(self, bounds: Bounds2) -> Self {
-		Self::CellBound {
-			domain: CellDomainMask::for_bounds(bounds),
-			inner: Box::new(self),
-		}
+		Self::CellBound { domain: CellDomainMask::for_bounds(bounds), inner: Box::new(self) }
 	}
 
 	/// Bind every modulation to `bounds` so support is exactly identity outside.
 	pub fn bind_all(modulations: Vec<Self>, bounds: Bounds2) -> Vec<Self> {
-		modulations
-			.into_iter()
-			.map(|m| m.bind_to_cell(bounds))
-			.collect()
+		modulations.into_iter().map(|m| m.bind_to_cell(bounds)).collect()
 	}
 }

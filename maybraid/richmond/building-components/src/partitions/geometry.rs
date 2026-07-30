@@ -12,8 +12,8 @@ pub use joint::{
 };
 pub use linear::{
 	fitted_tile_count, wall_placement, wall_placement_from_centered, LinearLod, LinearPartition,
-	DEFAULT_THICK, DEFAULT_TILE_WIDTH, LINEAR_HIGH_FACTOR, LINEAR_LOW_FACTOR,
-	LINEAR_MEDIUM_FACTOR, PANEL_TO_WALL_PITCH, PANEL_Y_HALF,
+	DEFAULT_THICK, DEFAULT_TILE_WIDTH, LINEAR_HIGH_FACTOR, LINEAR_LOW_FACTOR, LINEAR_MEDIUM_FACTOR,
+	PANEL_TO_WALL_PITCH, PANEL_Y_HALF,
 };
 pub use polyline::{
 	polyline_from_xz, roll_along_slope, PolylinePartition, DEFAULT_MIN_JOINT_ANGLE,
@@ -25,8 +25,8 @@ use scene_ref::MirrorAxis;
 use crate::arc_kit::ArcKit;
 use crate::assets::partitions::rough_stonework::{
 	ARC_15_HIGH, ARC_15_LOW, ARC_15_MID, ARC_180_HIGH, ARC_180_LOW, ARC_180_MID, ARC_90_HIGH,
-	ARC_90_LOW, ARC_90_MID, SLICE_15_HIGH, SLICE_15_LOW, SLICE_15_MID, SLICE_90_HIGH,
-	SLICE_90_LOW, SLICE_90_MID, LINEAR_HIGH, LINEAR_LOW, LINEAR_MID,
+	ARC_90_LOW, ARC_90_MID, LINEAR_HIGH, LINEAR_LOW, LINEAR_MID, SLICE_15_HIGH, SLICE_15_LOW,
+	SLICE_15_MID, SLICE_90_HIGH, SLICE_90_LOW, SLICE_90_MID,
 };
 use crate::panels::{
 	with_wall_standup_pitch, PanelGeometry, PanelStyle, Quad, QuadPolyline, Rectangle,
@@ -134,10 +134,7 @@ fn map_panel_leaves(pieces: Vec<Placed<PanelGeometry>>) -> Vec<Placed<PartitionT
 		.into_iter()
 		.filter_map(|p| {
 			let tile = panel_to_tile(p.geom)?;
-			Some(Placed {
-				geom: tile,
-				placement: adjust_panel_placement(tile, p.placement),
-			})
+			Some(Placed { geom: tile, placement: adjust_panel_placement(tile, p.placement) })
 		})
 		.collect()
 }
@@ -156,9 +153,7 @@ fn panel_to_tile(geom: PanelGeometry) -> Option<PartitionTile> {
 /// Ground-authored panel kits tip upright for wall use.
 fn adjust_panel_placement(tile: PartitionTile, p: Placement) -> Placement {
 	match tile {
-		PartitionTile::Linear | PartitionTile::RightTriangle { .. } => {
-			with_wall_standup_pitch(p)
-		}
+		PartitionTile::Linear | PartitionTile::RightTriangle { .. } => with_wall_standup_pitch(p),
 		_ => p,
 	}
 }
@@ -190,12 +185,8 @@ impl PartitionTile {
 			Self::Arc180 => PartitionMeshSet::new(ARC_180_HIGH, ARC_180_MID, ARC_180_LOW),
 			Self::Arc90 => PartitionMeshSet::new(ARC_90_HIGH, ARC_90_MID, ARC_90_LOW),
 			Self::Arc15 => PartitionMeshSet::new(ARC_15_HIGH, ARC_15_MID, ARC_15_LOW),
-			Self::SliceArc90 => {
-				PartitionMeshSet::new(SLICE_90_HIGH, SLICE_90_MID, SLICE_90_LOW)
-			}
-			Self::SliceArc15 => {
-				PartitionMeshSet::new(SLICE_15_HIGH, SLICE_15_MID, SLICE_15_LOW)
-			}
+			Self::SliceArc90 => PartitionMeshSet::new(SLICE_90_HIGH, SLICE_90_MID, SLICE_90_LOW),
+			Self::SliceArc15 => PartitionMeshSet::new(SLICE_15_HIGH, SLICE_15_MID, SLICE_15_LOW),
 			Self::Joint
 			| Self::LinearSubsegment
 			| Self::LinearSliceSubsegment

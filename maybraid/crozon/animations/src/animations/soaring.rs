@@ -20,12 +20,7 @@ pub struct Soaring {
 
 impl Default for Soaring {
 	fn default() -> Self {
-		Self {
-			flap_speed: 2.0,
-			flap_range: 0.7,
-			pause: 2.75,
-			flaps_per_burst: 2.0,
-		}
+		Self { flap_speed: 2.0, flap_range: 0.7, pause: 2.75, flaps_per_burst: 2.0 }
 	}
 }
 
@@ -103,12 +98,7 @@ mod tests {
 
 	#[test]
 	fn soaring_is_quiet_during_pause() -> anyhow::Result<()> {
-		let soar = Soaring {
-			flap_speed: 2.0,
-			flap_range: 1.0,
-			pause: 3.0,
-			flaps_per_burst: 2.0,
-		};
+		let soar = Soaring { flap_speed: 2.0, flap_range: 1.0, pause: 3.0, flaps_per_burst: 2.0 };
 		let burst = soar.burst_duration();
 		assert!(soar.flap_amount(burst + 0.5).abs() < 1e-5);
 		Ok(())

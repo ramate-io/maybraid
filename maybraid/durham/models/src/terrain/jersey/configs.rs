@@ -1,8 +1,12 @@
 //! Universal per-family guillotine + stamp authoring knobs (dual band).
 
 use crate::terrain::cell::universal_bounds;
-use crate::terrain::jersey::canyon::{CanyonHighPassControllerLayout, CanyonLowPassControllerLayout};
-use crate::terrain::jersey::massif::{MassifHighPassControllerLayout, MassifLowPassControllerLayout};
+use crate::terrain::jersey::canyon::{
+	CanyonHighPassControllerLayout, CanyonLowPassControllerLayout,
+};
+use crate::terrain::jersey::massif::{
+	MassifHighPassControllerLayout, MassifLowPassControllerLayout,
+};
 use crate::terrain::jersey::plateau::{
 	PlateauHighPassControllerLayout, PlateauLowPassControllerLayout,
 };
@@ -12,7 +16,9 @@ use crate::terrain::jersey::pocket_water::{
 use crate::terrain::jersey::rolling::{
 	RollingHighPassControllerLayout, RollingLowPassControllerLayout,
 };
-use crate::terrain::jersey::valley::{ValleyHighPassControllerLayout, ValleyLowPassControllerLayout};
+use crate::terrain::jersey::valley::{
+	ValleyHighPassControllerLayout, ValleyLowPassControllerLayout,
+};
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
 use comproc::guillotine::GuillotineConfig;
@@ -182,10 +188,7 @@ where
 		if id != Id::Universal {
 			return None;
 		}
-		Some((
-			spatial_index.bootstrap_jersey_stamp_configs(),
-			universal_bounds(),
-		))
+		Some((spatial_index.bootstrap_jersey_stamp_configs(), universal_bounds()))
 	}
 
 	fn descendants_with_lod(_id: Id, _spatial_index: &mut S, _lod_ref: &LodRef) {}

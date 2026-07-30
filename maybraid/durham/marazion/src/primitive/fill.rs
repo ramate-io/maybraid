@@ -46,11 +46,8 @@ impl WaterFill {
 	pub fn wet_volume_probe_points(&self) -> Vec<Vec2> {
 		match &self.surface {
 			WaterSurface::Hydro { complex } => {
-				let mut pts: Vec<Vec2> = complex
-					.hydrology
-					.iter()
-					.map(|node| node.sample_point())
-					.collect();
+				let mut pts: Vec<Vec2> =
+					complex.hydrology.iter().map(|node| node.sample_point()).collect();
 				if pts.is_empty() {
 					pts.push(complex.bounds.center());
 				}
@@ -108,10 +105,7 @@ mod tests {
 		let fill = WaterFill {
 			surface: WaterSurface::Flat {
 				level: w,
-				region: Region2D::Circle(CircleRegion {
-					center: Vec2::ZERO,
-					radius: 50.0,
-				}),
+				region: Region2D::Circle(CircleRegion { center: Vec2::ZERO, radius: 50.0 }),
 			},
 		};
 		let h = 36.0;

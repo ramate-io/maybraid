@@ -23,11 +23,7 @@ pub struct OffsetControllerGrid {
 
 impl OffsetControllerGrid {
 	pub fn new(cell_size: f32, origin_offset: Vec2) -> Self {
-		Self {
-			cell_size,
-			vertical_half_extent: TERRAIN_CELL_VERTICAL_HALF_EXTENT,
-			origin_offset,
-		}
+		Self { cell_size, vertical_half_extent: TERRAIN_CELL_VERTICAL_HALF_EXTENT, origin_offset }
 	}
 
 	pub fn cell_bounds(&self, ix: i32, iz: i32) -> Aabb3d {
@@ -62,9 +58,7 @@ pub fn bounds2(cell: Aabb3d) -> ProcBounds2 {
 }
 
 pub fn family_seed(base_seed: u32, cell: Aabb3d, family_salt: u32) -> u32 {
-	base_seed
-		.wrapping_add(cell_salt(cell))
-		.wrapping_add(family_salt)
+	base_seed.wrapping_add(cell_salt(cell)).wrapping_add(family_salt)
 }
 
 /// Spatially correlated leaf occupancy via bilinear **value noise** at the leaf center.
@@ -86,10 +80,7 @@ pub fn leaf_selected(
 	if p <= 0.0 {
 		return false;
 	}
-	let center = Vec2::new(
-		(cell.min.x + cell.max.x) * 0.5,
-		(cell.min.z + cell.max.z) * 0.5,
-	);
+	let center = Vec2::new((cell.min.x + cell.max.x) * 0.5, (cell.min.z + cell.max.z) * 0.5);
 	occupancy_unit(center, occupancy_seed, spatial_correlation) < p
 }
 
@@ -143,17 +134,11 @@ pub fn sample_strength(seed: u32, min: f32, max: f32) -> f32 {
 }
 
 fn root_bounds2(cell: Aabb3d) -> Bounds2 {
-	Bounds2::from_vec2(
-		Vec2::new(cell.min.x, cell.min.z),
-		Vec2::new(cell.max.x, cell.max.z),
-	)
+	Bounds2::from_vec2(Vec2::new(cell.min.x, cell.min.z), Vec2::new(cell.max.x, cell.max.z))
 }
 
 /// Run guillotine cuts for a controller cell from family knobs.
-pub fn guillotine_cuts<P>(
-	cell: Aabb3d,
-	config: &FamilyGuillotineConfig<P>,
-) -> GuillotineCuts<2> {
+pub fn guillotine_cuts<P>(cell: Aabb3d, config: &FamilyGuillotineConfig<P>) -> GuillotineCuts<2> {
 	let seed = config.seed.wrapping_add(cell_salt(cell));
 	let noise = NoiseConfig::new(Perlin::default())
 		.with_seed(seed)
@@ -193,7 +178,8 @@ where
 		current_transform: &identity,
 		bounds: &region,
 	};
-	if GeneratingSpatialIndex::<L>::get_or_generate(spatial_index, Id::Universal, &lod_ref).is_none()
+	if GeneratingSpatialIndex::<L>::get_or_generate(spatial_index, Id::Universal, &lod_ref)
+		.is_none()
 	{
 		return Vec::new();
 	}
@@ -204,9 +190,7 @@ where
 	let grid_region = grid.region_in_grid_space(region);
 	cell_coords_for_region(grid_region, grid.cell_size)
 		.map(|(ix, iz)| OriginalId(Id::from_cell(grid.cell_bounds(ix, iz))))
-		.filter(|OriginalId(id)| {
-			id.origin_cell_bounds().is_some_and(|b| region.intersects(&b))
-		})
+		.filter(|OriginalId(id)| id.origin_cell_bounds().is_some_and(|b| region.intersects(&b)))
 		.collect()
 }
 

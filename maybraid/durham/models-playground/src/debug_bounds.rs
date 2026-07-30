@@ -23,11 +23,7 @@ pub struct PlaygroundDebugOverlay {
 
 impl Default for PlaygroundDebugOverlay {
 	fn default() -> Self {
-		Self {
-			show_bounds: false,
-			show_cell_hud: false,
-			log_cell_changes: false,
-		}
+		Self { show_bounds: false, show_cell_hud: false, log_cell_changes: false }
 	}
 }
 
@@ -73,10 +69,7 @@ pub fn setup_cell_location_hud(mut commands: Commands) {
 		.with_children(|parent| {
 			parent.spawn((
 				Text::new("cell HUD"),
-				TextFont {
-					font_size: bevy::text::FontSize::Px(12.0),
-					..default()
-				},
+				TextFont { font_size: bevy::text::FontSize::Px(12.0), ..default() },
 				TextColor(Color::srgb(0.92, 0.96, 1.0)),
 				CellLocationHudText,
 			));
@@ -100,10 +93,7 @@ pub fn setup_cell_location_hud(mut commands: Commands) {
 		.with_children(|parent| {
 			parent.spawn((
 				Text::new(bounds_legend_text()),
-				TextFont {
-					font_size: bevy::text::FontSize::Px(12.0),
-					..default()
-				},
+				TextFont { font_size: bevy::text::FontSize::Px(12.0), ..default() },
 				TextColor(Color::srgb(0.92, 0.96, 1.0)),
 				BoundsLegendHudText,
 			));
@@ -133,11 +123,7 @@ pub fn update_bounds_legend_visibility(
 	mut legend: Query<&mut Visibility, With<BoundsLegendHudRoot>>,
 ) {
 	if let Ok(mut visibility) = legend.single_mut() {
-		*visibility = if overlay.show_bounds {
-			Visibility::Visible
-		} else {
-			Visibility::Hidden
-		};
+		*visibility = if overlay.show_bounds { Visibility::Visible } else { Visibility::Hidden };
 	}
 }
 
@@ -214,11 +200,7 @@ pub fn update_cell_location_hud(
 ) {
 	let plateau_layout = &jersey_layouts.plateau_low_pass;
 	if let Ok(mut visibility) = hud_root.single_mut() {
-		*visibility = if overlay.show_cell_hud {
-			Visibility::Visible
-		} else {
-			Visibility::Hidden
-		};
+		*visibility = if overlay.show_cell_hud { Visibility::Visible } else { Visibility::Hidden };
 	}
 
 	if !overlay.show_cell_hud && !overlay.log_cell_changes {
@@ -238,18 +220,10 @@ pub fn update_cell_location_hud(
 	let c_cell = plateau_layout.cell_bounds(cix, ciz);
 
 	let terrain = terrains.iter().find(|t| cells_match_xz(&t.cell, &t_cell));
-	let leaf_under_cam = terrain.and_then(|t| {
-		t.jersey_leaves
-			.iter()
-			.find(|leaf| point_in_xz(p, leaf))
-			.copied()
-	});
-	let marazion_under_cam = terrain.and_then(|t| {
-		t.marazion_leaves
-			.iter()
-			.find(|leaf| point_in_xz(p, &leaf.cell))
-			.copied()
-	});
+	let leaf_under_cam =
+		terrain.and_then(|t| t.jersey_leaves.iter().find(|leaf| point_in_xz(p, leaf)).copied());
+	let marazion_under_cam = terrain
+		.and_then(|t| t.marazion_leaves.iter().find(|leaf| point_in_xz(p, &leaf.cell)).copied());
 
 	let report = CellLocationReport {
 		cam: p,
@@ -362,11 +336,7 @@ impl TerrainReport {
 impl Display for CellLocationReport {
 	fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
 		writeln!(f, "── camera cell report ──────────────────────────────")?;
-		writeln!(
-			f,
-			"cam          {:?}",
-			(self.cam.x, self.cam.y, self.cam.z)
-		)?;
+		writeln!(f, "cam          {:?}", (self.cam.x, self.cam.y, self.cam.z))?;
 		writeln!(f)?;
 		writeln!(
 			f,
@@ -403,10 +373,7 @@ impl Display for CellLocationReport {
 			self.controller_ix,
 			self.controller_iz,
 			self.controller_layout_size,
-			(
-				self.controller_origin_offset.x,
-				self.controller_origin_offset.y
-			)
+			(self.controller_origin_offset.x, self.controller_origin_offset.y)
 		)?;
 		writeln!(f, "  cell AABB  {}", fmt_aabb(&self.controller_cell))?;
 		match self.jersey_leaf {
@@ -471,10 +438,7 @@ fn point_in_xz(p: Vec3, cell: &Aabb3d) -> bool {
 	p.x >= cell.min.x && p.x < cell.max.x && p.z >= cell.min.z && p.z < cell.max.z
 }
 
-fn surface_footprint_box(
-	cell: &Aabb3d,
-	base: &durham_terrain_models::BaseTerrainNoise,
-) -> Aabb3d {
+fn surface_footprint_box(cell: &Aabb3d, base: &durham_terrain_models::BaseTerrainNoise) -> Aabb3d {
 	let min = Vec3::from(cell.min);
 	let max = Vec3::from(cell.max);
 	let cx = (min.x + max.x) * 0.5;

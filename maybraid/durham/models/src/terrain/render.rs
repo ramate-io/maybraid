@@ -1,8 +1,6 @@
 //! [`RenderItem`] that meshes terrain cells via SDF sampling.
 
-use crate::terrain::cell::{
-	expand_aabb_xz_y, TERRAIN_MESH_PAD_VOXELS, TERRAIN_MESH_PAD_Y_SLOPE,
-};
+use crate::terrain::cell::{expand_aabb_xz_y, TERRAIN_MESH_PAD_VOXELS, TERRAIN_MESH_PAD_Y_SLOPE};
 use crate::terrain::sdf::ComposedTerrain;
 use bevy::math::bounding::Aabb3d;
 use bevy::prelude::*;
@@ -23,12 +21,7 @@ pub struct TerrainRenderItem<M: Material> {
 
 impl<M: Material> TerrainRenderItem<M> {
 	pub fn new(sdf: ComposedTerrain, material: MeshMaterial3d<M>) -> Self {
-		Self {
-			sdf,
-			material,
-			handle_map: HandleMap::new(),
-			mesh_cache: None,
-		}
+		Self { sdf, material, handle_map: HandleMap::new(), mesh_cache: None }
 	}
 
 	pub fn with_handle_map(mut self, handle_map: HandleMap<ComposedTerrain>) -> Self {

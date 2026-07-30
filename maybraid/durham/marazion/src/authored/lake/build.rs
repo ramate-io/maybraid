@@ -17,11 +17,7 @@ const DEPTH_SALT: u32 = 0x1A7E_DE07;
 const RIM_BACKFILL_SALT: u32 = 0x1A7E_BF11;
 
 fn ellipse_region(center: Vec2, radii: Vec2, rotation: f32) -> Region2D {
-	Region2D::Ellipse(EllipseRegion {
-		center,
-		radii: radii.max(Vec2::splat(1e-3)),
-		rotation,
-	})
+	Region2D::Ellipse(EllipseRegion { center, radii: radii.max(Vec2::splat(1e-3)), rotation })
 }
 
 /// Laid-out lake footprint + vertical levels.
@@ -61,8 +57,8 @@ pub(crate) fn build_bowl(
 
 	// Deeper bowls for larger lakes: `params.depth` is the centroid depth at
 	// [`NOISE_FREQ_REF_RADIUS`].
-	let depth_scaled = params.depth.max(0.25)
-		* (short_water / NOISE_FREQ_REF_RADIUS).clamp(0.35, 4.0);
+	let depth_scaled =
+		params.depth.max(0.25) * (short_water / NOISE_FREQ_REF_RADIUS).clamp(0.35, 4.0);
 	let depth = jittered_depth(seed, DEPTH_SALT, anchor, depth_scaled, 0.65, 0.7);
 
 	let rim_bleed = rim_w * params.rim_bleed_frac.max(0.0);
@@ -82,16 +78,9 @@ pub(crate) fn build_bowl(
 		ApronNoiseSalts::LAKE,
 	);
 	let shore_amp = (short_water.max(1.0) * params.shore_indent_frac.clamp(0.0, 0.45)).max(0.01);
-	let shore_freq = scale_noise_freq(
-		params.shore_freq.max(0.0),
-		short_water,
-		params.apron.noise_freq_power,
-	);
-	let boundary_noise = Some(RegionNoise::from_seed(
-		seed.wrapping_add(5),
-		shore_freq,
-		shore_amp,
-	));
+	let shore_freq =
+		scale_noise_freq(params.shore_freq.max(0.0), short_water, params.apron.noise_freq_power);
+	let boundary_noise = Some(RegionNoise::from_seed(seed.wrapping_add(5), shore_freq, shore_amp));
 	// Spatial ring→apron warp (independent of shore φ noise). Nominal apron
 	// width stays `apron_w`; pad includes indent amp for the noisy rim outer.
 	let rim_boundary_noise = Some(apron_noise.apron.clone());
@@ -119,10 +108,7 @@ pub(crate) fn build_bowl(
 		boundary_noise,
 		rim_boundary_noise,
 		shore_blend: HydroParams::recommend_shore_blend(rim_w, shore_amp),
-		rim_apron_blend: HydroParams::recommend_shore_blend(
-			rim_w,
-			shore_amp.max(rim_boundary_amp),
-		),
+		rim_apron_blend: HydroParams::recommend_shore_blend(rim_w, shore_amp.max(rim_boundary_amp)),
 	};
 	let rim_backfill = rim_backfill_params.sample(seed, RIM_BACKFILL_SALT);
 	let node = HydroNode::new(
@@ -143,9 +129,5 @@ pub(crate) fn build_bowl(
 	)
 	.with_backfill(rim_backfill);
 
-	LakeBowl {
-		wet_core: water_region,
-		node,
-		fill_radius: fill_r.min_element(),
-	}
+	LakeBowl { wet_core: water_region, node, fill_radius: fill_r.min_element() }
 }

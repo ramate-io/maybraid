@@ -18,22 +18,16 @@ pub struct Nightstand {
 impl Nightstand {
 	pub fn new(constraints: CellConstraints) -> Self {
 		let furniture = FurnitureNode::nightstand(placement_filling_aabb(&constraints.aabb));
-		Self {
-			constraints,
-			furniture,
-		}
+		Self { constraints, furniture }
 	}
 }
 
 impl LodScene for Nightstand {
-	fn scene_lod_status(
-		&self,
-		_lod_ref: &LodRef,
-	) -> lod::gen::LodSceneStatus {
+	fn scene_lod_status(&self, _lod_ref: &LodRef) -> lod::gen::LodSceneStatus {
 		lod::gen::LodSceneStatus::Unchanged
 	}
 
-		fn scene_with_level(
+	fn scene_with_level(
 		&self,
 		lod_ref: &LodRef,
 		_level: lod::gen::LodSceneLevel,

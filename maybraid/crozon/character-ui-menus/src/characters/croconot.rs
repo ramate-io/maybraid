@@ -7,11 +7,11 @@ use crozon_character_items::ItemColor;
 use crozon_characters::{
 	presets::{BuildPreset, GenderPreset},
 	species::{
+		common::EyeMesh,
 		croconot::{
 			sliders::CroconotSliders, CroconotBodyMesh, CroconotColors, CroconotConfig,
 			CroconotHeadMesh, CroconotHornMesh, CroconotMouthMesh,
 		},
-		common::EyeMesh,
 	},
 	ConceptAnimation,
 };
@@ -91,7 +91,8 @@ pub struct CroconotAnimationMenu {
 impl CroconotAnimationMenu {
 	pub fn new() -> Self {
 		Self {
-			clip: AssetSingleSelect::new(CroconotAnimationClip::Still).with_camera_focus(BODY_FOCUS),
+			clip: AssetSingleSelect::new(CroconotAnimationClip::Still)
+				.with_camera_focus(BODY_FOCUS),
 		}
 	}
 }
@@ -380,7 +381,10 @@ impl MenuComponent<MenuEvent> for CroconotBodyMenu {
 				&self.body,
 				PreviewColor::of(self.color.value),
 				|value| {
-					MenuEvent::SetAsset(CharacterField::CroconotBody, AssetValue::CroconotBody(value))
+					MenuEvent::SetAsset(
+						CharacterField::CroconotBody,
+						AssetValue::CroconotBody(value),
+					)
 				},
 			),
 			self.sliders.menu_node(),
@@ -421,7 +425,10 @@ impl MenuComponent<MenuEvent> for CroconotHeadFeaturesMenu {
 				&self.snout,
 				PreviewColor::of(self.mouth_color.value),
 				|value| {
-					MenuEvent::SetAsset(CharacterField::CroconotMouth, AssetValue::CroconotMouth(value))
+					MenuEvent::SetAsset(
+						CharacterField::CroconotMouth,
+						AssetValue::CroconotMouth(value),
+					)
 				},
 			),
 			MenuNode::swatch("Mouth Color", &self.mouth_color, |color| {

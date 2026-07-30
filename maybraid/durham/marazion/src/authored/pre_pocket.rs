@@ -60,13 +60,7 @@ impl PrePocket {
 		let nx = (w / pocket_pitch).round() as u32;
 		let nz = nx;
 		let bounds = Bounds2::from_xz(anchor.x, anchor.y, anchor.x + w, anchor.y + w);
-		Self {
-			bounds,
-			anchor,
-			pocket_pitch,
-			nx: nx.max(1),
-			nz: nz.max(1),
-		}
+		Self { bounds, anchor, pocket_pitch, nx: nx.max(1), nz: nz.max(1) }
 	}
 
 	/// Axis-aligned pocket tile `(px, pz)` inside this pre-pocket (`0..nx`, `0..nz`).
@@ -158,14 +152,8 @@ mod tests {
 
 	#[test]
 	fn high_pass_pitches_span_800m_to_3km() -> anyhow::Result<()> {
-		let min_p = DEFAULT_POCKET_PITCHES_HIGH
-			.iter()
-			.copied()
-			.fold(f32::INFINITY, f32::min);
-		let max_p = DEFAULT_POCKET_PITCHES_HIGH
-			.iter()
-			.copied()
-			.fold(0.0_f32, f32::max);
+		let min_p = DEFAULT_POCKET_PITCHES_HIGH.iter().copied().fold(f32::INFINITY, f32::min);
+		let max_p = DEFAULT_POCKET_PITCHES_HIGH.iter().copied().fold(0.0_f32, f32::max);
 		assert!(min_p >= 800.0);
 		assert!(max_p >= 3000.0);
 		Ok(())
@@ -173,14 +161,8 @@ mod tests {
 
 	#[test]
 	fn low_pass_pitches_span_200m_to_600m() -> anyhow::Result<()> {
-		let min_p = DEFAULT_POCKET_PITCHES_LOW
-			.iter()
-			.copied()
-			.fold(f32::INFINITY, f32::min);
-		let max_p = DEFAULT_POCKET_PITCHES_LOW
-			.iter()
-			.copied()
-			.fold(0.0_f32, f32::max);
+		let min_p = DEFAULT_POCKET_PITCHES_LOW.iter().copied().fold(f32::INFINITY, f32::min);
+		let max_p = DEFAULT_POCKET_PITCHES_LOW.iter().copied().fold(0.0_f32, f32::max);
 		assert!(min_p >= 200.0);
 		assert!(max_p <= 600.0);
 		Ok(())

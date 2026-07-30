@@ -45,7 +45,6 @@ impl RoofGeometry {
 	pub fn pitch_degrees(&self) -> f32 {
 		f32::to_degrees(self.pitch_radians())
 	}
-
 }
 
 /// Alias kept for migration; prefer [`RoofGeometry`].
@@ -124,13 +123,7 @@ impl Pitch {
 	///
 	/// When the ridge is longer, both ends are flipped (negative base); when the eave
 	/// is longer, both ends are upright (positive base).
-	pub fn from_eave_ridge(
-		rise: f32,
-		run: f32,
-		eave: f32,
-		ridge: f32,
-		tile_width: f32,
-	) -> Self {
+	pub fn from_eave_ridge(rise: f32, run: f32, eave: f32, ridge: f32, tile_width: f32) -> Self {
 		let rise = rise.max(0.0);
 		let run = run.max(0.0);
 		let eave = eave.max(0.0);
@@ -199,8 +192,6 @@ pub struct DomeRoof {
 
 impl Default for DomeRoof {
 	fn default() -> Self {
-		Self {
-			sweep_degrees: 360.0,
-		}
+		Self { sweep_degrees: 360.0 }
 	}
 }

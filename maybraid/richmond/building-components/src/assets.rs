@@ -92,8 +92,7 @@ pub mod arcs {
 		use super::AssetPath;
 
 		/// 180° arc rough stonework.
-		pub const ARC_180: AssetPath =
-			AssetPath::new("urban/arcs/rough_stonework/arc_180_001.glb");
+		pub const ARC_180: AssetPath = AssetPath::new("urban/arcs/rough_stonework/arc_180_001.glb");
 		pub const ARC_180_HIGH: AssetPath =
 			AssetPath::new("urban/arcs/rough_stonework/arc_180_001_high_res.glb");
 		pub const ARC_180_MID: AssetPath =
@@ -102,8 +101,7 @@ pub mod arcs {
 			AssetPath::new("urban/arcs/rough_stonework/arc_180_001_low_res.glb");
 
 		/// 90° arc rough stonework.
-		pub const ARC_90: AssetPath =
-			AssetPath::new("urban/arcs/rough_stonework/arc_90_001.glb");
+		pub const ARC_90: AssetPath = AssetPath::new("urban/arcs/rough_stonework/arc_90_001.glb");
 		pub const ARC_90_HIGH: AssetPath =
 			AssetPath::new("urban/arcs/rough_stonework/arc_90_001_high_res.glb");
 		pub const ARC_90_MID: AssetPath =
@@ -112,8 +110,7 @@ pub mod arcs {
 			AssetPath::new("urban/arcs/rough_stonework/arc_90_001_low_res.glb");
 
 		/// 15° arc rough stonework.
-		pub const ARC_15: AssetPath =
-			AssetPath::new("urban/arcs/rough_stonework/arc_15_001.glb");
+		pub const ARC_15: AssetPath = AssetPath::new("urban/arcs/rough_stonework/arc_15_001.glb");
 		pub const ARC_15_HIGH: AssetPath =
 			AssetPath::new("urban/arcs/rough_stonework/arc_15_001_high_res.glb");
 		pub const ARC_15_MID: AssetPath =

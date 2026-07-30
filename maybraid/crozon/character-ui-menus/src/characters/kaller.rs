@@ -1,5 +1,6 @@
 use character_ui_menu::{
-	AssetSingleSelect, CameraFocus, MenuComponent, MenuNode, PreviewColor, Section, SwatchSingleSelect,
+	AssetSingleSelect, CameraFocus, MenuComponent, MenuNode, PreviewColor, Section,
+	SwatchSingleSelect,
 };
 use crozon_character_items::{ClothingMesh, ItemColor};
 use crozon_characters::{
@@ -130,10 +131,7 @@ impl MenuComponent<MenuEvent> for KallerHeadFeaturesMenu {
 				|value| MenuEvent::SetAsset(CharacterField::Eye, AssetValue::Eye(value)),
 			),
 			MenuNode::swatch("Eye Color", &self.eye_color, |color| {
-				MenuEvent::SetSwatch(
-					CharacterField::KallerEyeColor,
-					SwatchValue::KallerEye(color),
-				)
+				MenuEvent::SetSwatch(CharacterField::KallerEyeColor, SwatchValue::KallerEye(color))
 			}),
 			MenuNode::swatch("Snout Color", &self.snout_color, |color| {
 				MenuEvent::SetSwatch(

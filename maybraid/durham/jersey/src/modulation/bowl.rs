@@ -62,20 +62,14 @@ impl RegionBowlModulation {
 
 	pub fn modify_elevation(&self, elevation: f32, x: f32, z: f32) -> f32 {
 		let p = Vec2::new(x, z);
-		let w = self.region.softmask_weight(
-			p,
-			0.0,
-			self.outer_radius,
-			self.boundary_noise.as_ref(),
-		);
+		let w =
+			self.region
+				.softmask_weight(p, 0.0, self.outer_radius, self.boundary_noise.as_ref());
 		if w >= 1.0 {
 			return elevation;
 		}
 
-		let r = self
-			.region
-			.radial_norm(p)
-			.clamp(0.0, 1.5);
+		let r = self.region.radial_norm(p).clamp(0.0, 1.5);
 		let t = (1.0 - r).clamp(0.0, 1.0).powf(self.falloff_power);
 		let mut bed = self.shore_bed + (self.center_bed - self.shore_bed) * t;
 		if let Some(hn) = &self.bed_noise {
@@ -96,10 +90,7 @@ mod tests {
 
 	#[test]
 	fn bowl_deeper_at_center_than_mid() -> anyhow::Result<()> {
-		let region = Region2D::Circle(CircleRegion {
-			center: Vec2::ZERO,
-			radius: 40.0,
-		});
+		let region = Region2D::Circle(CircleRegion { center: Vec2::ZERO, radius: 40.0 });
 		let bowl = RegionBowlModulation::new(region, 20.0, 40.0, 45.0, 1.25, 2.0);
 		let h_c = bowl.modify_elevation(45.0, 0.0, 0.0);
 		let h_m = bowl.modify_elevation(45.0, 28.0, 0.0);
@@ -110,10 +101,7 @@ mod tests {
 
 	#[test]
 	fn bed_noise_can_raise_above_shore() -> anyhow::Result<()> {
-		let region = Region2D::Circle(CircleRegion {
-			center: Vec2::ZERO,
-			radius: 40.0,
-		});
+		let region = Region2D::Circle(CircleRegion { center: Vec2::ZERO, radius: 40.0 });
 		let noise = RegionNoise::from_seed(9, 0.05, 12.0);
 		let bowl =
 			RegionBowlModulation::new(region, 30.0, 40.0, 52.0, 1.0, 2.0).with_bed_noise(noise);

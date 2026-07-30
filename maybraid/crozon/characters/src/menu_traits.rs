@@ -13,58 +13,60 @@ use character_ui_menu::{
 use crate::{
 	presets::{BuildPreset, GenderPreset},
 	species::{
+		brenal::{BrenalBodyMesh, BrenalHeadMesh, BrenalHornMesh, BrenalMouthMesh},
 		brodler::{
 			assets::HornMesh, BrodlerEyeColor, BrodlerHeadMesh, BrodlerHornColor, BrodlerSkinColor,
 		},
-		brenal::{BrenalBodyMesh, BrenalHeadMesh, BrenalHornMesh, BrenalMouthMesh},
-		caole::{CaoleBodyMesh, CaoleMouthMesh},
 		brokker::{
 			BrokkerEyeColor, BrokkerHeadMesh, BrokkerPlumageColor, BrokkerSnoutColor,
 			BrokkerSnoutMesh,
 		},
+		caole::{CaoleBodyMesh, CaoleMouthMesh},
 		chupri::{
 			ChupriBeakColor, ChupriBeakMesh, ChupriEyeColor, ChupriHeadMesh, ChupriPlumageColor,
 		},
-		epiphant::{
-			EpiphantBodyMesh, EpiphantColor, EpiphantEarMesh, EpiphantHeadMesh, EpiphantNoseMesh,
-		},
-		hars::{HarsBodyMesh, HarsMouthMesh},
 		claber::{ClaberBodyMesh, ClaberColor, ClaberHeadMesh, ClaberHornMesh, ClaberMouthMesh},
-		croconot::{CroconotBodyMesh, CroconotHeadMesh, CroconotHornMesh, CroconotMouthMesh},
 		common::{BodyMesh, EarMesh, EyeMesh, HairMesh, HeadMesh, MouthMesh, NoseMesh},
+		croconot::{CroconotBodyMesh, CroconotHeadMesh, CroconotHornMesh, CroconotMouthMesh},
 		dui::{
 			DuiEyeColor, DuiEyeMesh, DuiHeadMesh, DuiMouthColor, DuiMouthMesh, DuiNoseColor,
 			DuiNoseMesh, DuiSkinColor,
 		},
-		kispar::{
-			KisparBeakColor, KisparBeakMesh, KisparEyeColor, KisparHeadMesh, KisparPlumageColor,
+		epiphant::{
+			EpiphantBodyMesh, EpiphantColor, EpiphantEarMesh, EpiphantHeadMesh, EpiphantNoseMesh,
 		},
-		tapp::{
-			TappBeakColor, TappBeakMesh, TappEyeColor, TappHeadMesh, TappPlumageColor,
-		},
+		grener::GrenerBodyColor,
+		hars::{HarsBodyMesh, HarsMouthMesh},
 		kaller::{
 			KallerCrownColor, KallerEyeColor, KallerHeadMesh, KallerHornMesh, KallerPlumageColor,
 			KallerSnoutColor, KallerSnoutMesh,
 		},
 		kappler::{
-			KapplerBeakColor, KapplerBeakMesh, KapplerEyeColor, KapplerHeadMesh, KapplerPlumageColor,
+			KapplerBeakColor, KapplerBeakMesh, KapplerEyeColor, KapplerHeadMesh,
+			KapplerPlumageColor,
+		},
+		kispar::{
+			KisparBeakColor, KisparBeakMesh, KisparEyeColor, KisparHeadMesh, KisparPlumageColor,
 		},
 		lero::{
 			LeroEyeColor, LeroHeadMesh, LeroMouthColor, LeroMouthMesh, LeroSkinColor,
 			LeroSpineColor, LeroTailColor,
 		},
-		lidder::{LidderBeakColor, LidderBeakMesh, LidderEyeColor, LidderHeadMesh, LidderPlumageColor},
+		lidder::{
+			LidderBeakColor, LidderBeakMesh, LidderEyeColor, LidderHeadMesh, LidderPlumageColor,
+		},
+		mistler::MistlerBodyColor,
 		mygr::{MygrEyeColor, MygrHeadMesh, MygrMouthMesh, MygrSkinColor},
+		sonyak::{SonyakBodyMesh, SonyakMouthMesh},
 		spibmom::{
 			SpibmomCrownColor, SpibmomEarColor, SpibmomEyeColor, SpibmomHeadMesh,
 			SpibmomMouthColor, SpibmomMouthMesh, SpibmomSkinColor, SpibmomSpineColor,
 		},
+		tapp::{TappBeakColor, TappBeakMesh, TappEyeColor, TappHeadMesh, TappPlumageColor},
+		thumplus::ThumplusBodyColor,
 		tipple::{
 			TippleBeakColor, TippleBeakMesh, TippleEyeColor, TippleHeadMesh, TipplePlumageColor,
 		},
-		grener::GrenerBodyColor,
-		mistler::MistlerBodyColor,
-		thumplus::ThumplusBodyColor,
 		topple::{
 			ToppleBeakColor, ToppleBeakMesh, ToppleEyeColor, ToppleHeadMesh, TopplePlumageColor,
 		},
@@ -74,7 +76,6 @@ use crate::{
 			WumbusMouthColor, WumbusMouthMesh, WumbusSkinColor, WumbusSpineColor,
 		},
 		ylter::{YilterBodyMesh, YilterMouthMesh},
-		sonyak::{SonyakBodyMesh, SonyakMouthMesh},
 	},
 	ConceptAnimation,
 };

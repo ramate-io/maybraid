@@ -86,14 +86,11 @@ impl Water {
 }
 
 impl LodScene for Water {
-	fn scene_lod_status(
-		&self,
-		_lod_ref: &LodRef,
-	) -> lod::gen::LodSceneStatus {
+	fn scene_lod_status(&self, _lod_ref: &LodRef) -> lod::gen::LodSceneStatus {
 		lod::gen::LodSceneStatus::Unchanged
 	}
 
-		fn scene_with_level(
+	fn scene_with_level(
 		&self,
 		_lod_ref: &LodRef,
 		_level: lod::gen::LodSceneLevel,
@@ -138,11 +135,8 @@ where
 	fn build_with_id(spatial_index: &mut S, id: Id, lod_ref: &LodRef) -> Option<(Self, Aabb3d)> {
 		let bounds = id.origin_cell_bounds()?;
 		// Terrain composes every Marazion band before returning; fills ride along.
-		let terrain = GeneratingSpatialIndex::<Terrain>::get_one_or_generate(
-			spatial_index,
-			id,
-			lod_ref,
-		)?;
+		let terrain =
+			GeneratingSpatialIndex::<Terrain>::get_one_or_generate(spatial_index, id, lod_ref)?;
 		// Lattice resolution comes from the terrain cell — not a water-only knob.
 		let res_2 = terrain.res_2;
 		let terrain_sdf = terrain.sdf.terrain.clone();
