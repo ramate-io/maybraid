@@ -13,6 +13,7 @@
 pub mod arc_spire;
 pub mod bedroom;
 pub mod constraints;
+pub mod quad_panel;
 pub mod stacked_rings;
 pub mod tessellated_triangle_panel;
 pub mod walling;
@@ -27,6 +28,7 @@ pub use constraints::{
 	CellBoundaryTable, CellConstraints, CirculationEntry, CirculationRequestStatus, FaceKind,
 	JointCoordinate, JointEntry, PreJointSweep, SubsetError,
 };
+pub use quad_panel::{QuadPanel, QuadPanelJointPolicy};
 pub use stacked_rings::{StackedRing, StackedRings};
 pub use tessellated_triangle_panel::TessellatedTrianglePanel;
 pub use walling::{
