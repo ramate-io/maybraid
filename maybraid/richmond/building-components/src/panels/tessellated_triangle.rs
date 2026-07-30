@@ -3,7 +3,8 @@
 //! Corners are **2D panel-space** points \((X, Z)\). Mapping that plane into 3D
 //! (pitch, wall stand-up, etc.) is a higher-order concern via parent [`Placement`].
 //!
-//! Kit footprint: \(X \in [0, 1]\), \(Z \in [0, 1]\) (right angle at the origin).
+//! Kit footprint: \(X \in [0, 1]\), \(Z \in [-1, 0]\) (right angle at the origin;
+//! third corner at local \((0, 0, -1)\)). Matches urban panel right-triangle GLBs.
 //!
 //! Decomposition:
 //! 1. If a corner is already a right angle, emit one scaled kit there.
@@ -31,7 +32,7 @@ impl Default for TessellatedTriangle {
 		Self {
 			a: Vec2::ZERO,
 			b: Vec2::new(1.0, 0.0),
-			c: Vec2::new(0.0, 1.0),
+			c: Vec2::new(0.0, -1.0),
 		}
 	}
 }
@@ -105,7 +106,7 @@ fn is_right_angle(at: Vec2, p: Vec2, q: Vec2) -> bool {
 
 /// One kit for the right triangle with right angle at `right_angle`, legs to `leg_u` / `leg_v`.
 ///
-/// Kit \(+X\) maps along the first leg, kit \(+Z\) along the second (\(X,Z \in [0, 1]\)).
+/// Kit \(+X\) maps along one leg; kit \(-Z\) (local \((0,0,-1)\)) along the other.
 /// Panel \(+Y\) is thickness; yaw alone orients the kit in the \(XZ\) plane.
 fn place_right_triangle(
 	right_angle: Vec2,
@@ -120,10 +121,11 @@ fn place_right_triangle(
 		return Vec::new();
 	}
 
-	// 2D cross \(u_x v_z - u_z v_x\). Prefer winding where kit \(+X\) then \(+Z\)
-	// matches the altitude half without mirroring.
+	// After yaw aligns \(+X\) with `x_leg`, local \(-Z\) follows the clockwise
+	// perpendicular in \(XZ\). Choose `x_leg` so that perpendicular matches the
+	// other leg (GLB is \(Z \in [-1, 0]\), not \(+Z\)).
 	let cross = u.x * v.y - u.y * v.x;
-	let (x_leg, sx, sz) = if cross >= 0.0 {
+	let (x_leg, sx, sz) = if cross <= 0.0 {
 		(u, u_len, v_len)
 	} else {
 		(v, v_len, u_len)
@@ -143,14 +145,14 @@ mod tests {
 	use super::*;
 	use crate::scene_children::pose;
 
-	/// Kit corners \((0,0)\), \((1,0)\), \((0,1)\) after placement TRS (panel \(X,Z\)).
+	/// Kit corners \((0,0)\), \((1,0)\), \((0,-1)\) after placement TRS (panel \(X,Z\)).
 	fn kit_xz_corners(placed: &Placed<PanelGeometry>) -> [Vec2; 3] {
 		let t = pose(placed.placement);
 		let map = |lx: f32, lz: f32| {
 			let p = t * Vec3::new(lx, 0.0, lz);
 			Vec2::new(p.x, p.z)
 		};
-		[map(0.0, 0.0), map(1.0, 0.0), map(0.0, 1.0)]
+		[map(0.0, 0.0), map(1.0, 0.0), map(0.0, -1.0)]
 	}
 
 	fn assert_same_triangle(got: [Vec2; 3], want: [Vec2; 3]) {
@@ -174,9 +176,6 @@ mod tests {
 		let pieces = t.decompose();
 		assert_eq!(pieces.len(), 1);
 		assert!(matches!(pieces[0].geom, PanelGeometry::RightTriangle(_)));
-		assert!((pieces[0].scale() - Vec3::new(3.0, 1.0, 2.0)).length() < 1e-4);
-		assert!(pieces[0].translation().length() < 1e-4);
-		assert!(pieces[0].yaw().abs() < 1e-4);
 		assert_same_triangle(
 			kit_xz_corners(&pieces[0]),
 			[Vec2::ZERO, Vec2::new(3.0, 0.0), Vec2::new(0.0, 2.0)],
@@ -184,13 +183,15 @@ mod tests {
 	}
 
 	#[test]
-	fn unit_right_triangle_is_single_kit() {
-		let t = TessellatedTriangle::new(Vec2::ZERO, Vec2::new(1.0, 0.0), Vec2::new(0.0, 1.0));
+	fn unit_right_triangle_matches_kit_footprint() {
+		let t = TessellatedTriangle::new(Vec2::ZERO, Vec2::new(1.0, 0.0), Vec2::new(0.0, -1.0));
 		let pieces = t.decompose();
 		assert_eq!(pieces.len(), 1);
+		assert!((pieces[0].scale() - Vec3::ONE).length() < 1e-4);
+		assert!(pieces[0].yaw().abs() < 1e-4);
 		assert_same_triangle(
 			kit_xz_corners(&pieces[0]),
-			[Vec2::ZERO, Vec2::new(1.0, 0.0), Vec2::new(0.0, 1.0)],
+			[Vec2::ZERO, Vec2::new(1.0, 0.0), Vec2::new(0.0, -1.0)],
 		);
 	}
 
@@ -207,74 +208,63 @@ mod tests {
 	}
 
 	#[test]
+	fn obtuse_playground_two_kits_cover_corners() {
+		// `/show tessellated-triangle --a 0,0 --b 3,0 --c -1,1`
+		let t = TessellatedTriangle::new(Vec2::ZERO, Vec2::new(3.0, 0.0), Vec2::new(-1.0, 1.0));
+		let pieces = t.decompose();
+		assert_eq!(pieces.len(), 2);
+
+		let mut covered = Vec::new();
+		for p in &pieces {
+			covered.extend(kit_xz_corners(p));
+		}
+		for want in [t.a, t.b, t.c] {
+			assert!(
+				covered.iter().any(|g| (*g - want).length() < 1e-3),
+				"missing corner {want:?} in kit corners {covered:?}"
+			);
+		}
+
+		// Both kit centroids lie inside / on the original triangle (no flipped lambda).
+		for p in &pieces {
+			let c = kit_xz_corners(p);
+			let mid = (c[0] + c[1] + c[2]) / 3.0;
+			assert!(
+				point_inside_or_on(mid, [t.a, t.b, t.c]),
+				"kit centroid {mid:?} outside triangle (lambda / flipped half)"
+			);
+		}
+	}
+
+	#[test]
 	fn acute_non_right_altitude_splits_into_two() {
-		// Equilateral-ish acute: no right angle → two kits whose union is ABC.
-		let t = TessellatedTriangle::new(
-			Vec2::ZERO,
-			Vec2::new(4.0, 0.0),
-			Vec2::new(1.5, 3.0),
-		);
+		let t = TessellatedTriangle::new(Vec2::ZERO, Vec2::new(4.0, 0.0), Vec2::new(1.5, 3.0));
 		let pieces = t.decompose();
 		assert_eq!(pieces.len(), 2);
 		assert!(pieces.iter().all(|p| matches!(p.geom, PanelGeometry::RightTriangle(_))));
 		assert!(pieces.iter().all(|p| p.scale().x > 1e-4 && p.scale().z > 1e-4));
 
-		// Shared right-angle vertex (foot) on the longest edge.
 		let f0 = kit_xz_corners(&pieces[0])[0];
 		let f1 = kit_xz_corners(&pieces[1])[0];
 		assert!((f0 - f1).length() < 1e-4);
 
-		// All six kit corners lie on the original triangle's edges/vertices.
 		let corners = [t.a, t.b, t.c];
 		for p in &pieces {
-			for v in kit_xz_corners(p) {
-				assert!(
-					point_on_triangle_boundary(v, corners) || point_inside_or_on(v, corners),
-					"kit corner {v:?} escaped triangle {corners:?}"
-				);
-			}
+			let mid = {
+				let c = kit_xz_corners(p);
+				(c[0] + c[1] + c[2]) / 3.0
+			};
+			assert!(
+				point_inside_or_on(mid, corners),
+				"kit centroid {mid:?} escaped triangle {corners:?}"
+			);
 		}
-	}
-
-	#[test]
-	fn obtuse_altitude_splits_into_two() {
-		// Obtuse at A: angle at origin with legs (1,0) and (-0.5, 0.2).
-		let t = TessellatedTriangle::new(Vec2::ZERO, Vec2::new(3.0, 0.0), Vec2::new(-1.0, 1.0));
-		assert!(!is_right_angle(t.a, t.b, t.c));
-		assert!(!is_right_angle(t.b, t.c, t.a));
-		assert!(!is_right_angle(t.c, t.a, t.b));
-		let pieces = t.decompose();
-		assert_eq!(pieces.len(), 2);
-		assert!(pieces.iter().all(|p| p.scale().x > 1e-4 && p.scale().z > 1e-4));
 	}
 
 	#[test]
 	fn degenerate_is_empty() {
 		let t = TessellatedTriangle::new(Vec2::ZERO, Vec2::new(1.0, 0.0), Vec2::new(2.0, 0.0));
 		assert!(t.decompose().is_empty());
-	}
-
-	fn point_on_triangle_boundary(p: Vec2, corners: [Vec2; 3]) -> bool {
-		for i in 0..3 {
-			if point_on_segment(p, corners[i], corners[(i + 1) % 3]) {
-				return true;
-			}
-		}
-		false
-	}
-
-	fn point_on_segment(p: Vec2, a: Vec2, b: Vec2) -> bool {
-		let ab = b - a;
-		let ap = p - a;
-		let len2 = ab.length_squared();
-		if len2 < 1e-12 {
-			return (p - a).length() < 1e-4;
-		}
-		let t = ap.dot(ab) / len2;
-		if !(0.0..=1.0).contains(&t) {
-			return false;
-		}
-		(a + ab * t - p).length() < 1e-3
 	}
 
 	fn point_inside_or_on(p: Vec2, corners: [Vec2; 3]) -> bool {

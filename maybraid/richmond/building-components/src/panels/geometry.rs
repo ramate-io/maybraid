@@ -66,7 +66,8 @@ pub struct Rectangle;
 
 /// Unit right-triangle panel atom.
 ///
-/// Kit footprint: \(X \in [0, 1]\), \(Z \in [0, 1]\), \(Y \in [-0.2, 0.2]\).
+/// Kit footprint: \(X \in [0, 1]\), \(Z \in [-1, 0]\), \(Y \in [-0.2, 0.2]\)
+/// (right angle at the origin; third corner at local \((0, 0, -1)\)).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct RightTriangle {
 	pub mirror: Option<MirrorAxis>,
@@ -123,7 +124,8 @@ impl PanelGeometry {
 				if caps.has_rectangle {
 					vec![Placed::at_origin(Self::Rectangle(*r))]
 				} else {
-					// Unit square as dual triangles (identity placement; caller scale applies).
+					// Unit square \(X \in [0,1]\), \(Z \in [-1,0]\) as dual kits
+					// (identity + complement at lower-right with yaw π).
 					use bevy_math::Vec3;
 					use std::f32::consts::PI;
 					vec![
@@ -133,7 +135,7 @@ impl PanelGeometry {
 						),
 						Placed::with_placement(
 							Self::RightTriangle(RightTriangle { mirror: None }),
-							Placement::new(Vec3::new(1.0, 0.0, 1.0), PI),
+							Placement::new(Vec3::new(1.0, 0.0, -1.0), PI),
 						),
 					]
 				}

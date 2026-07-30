@@ -55,7 +55,7 @@ pub mod panels {
 		pub const INSCRIBED_SQUARE: AssetPath =
 			AssetPath::new("urban/panels/rough_stonework/inscribed_square_001.glb");
 
-		/// Unit right triangle \(X \in [0, 1]\), \(Z \in [0, 1]\), \(Y \in [-0.2, 0.2]\).
+		/// Unit right triangle \(X \in [0, 1]\), \(Z \in [-1, 0]\), \(Y \in [-0.2, 0.2]\).
 		pub const RIGHT_TRIANGLE_HIGH: AssetPath =
 			AssetPath::new("urban/panels/rough_stonework/right_triangle_001_high_res.glb");
 		pub const RIGHT_TRIANGLE_MID: AssetPath =
