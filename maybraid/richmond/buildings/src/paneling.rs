@@ -11,6 +11,7 @@ pub mod panel_complex;
 pub mod panel_plane;
 pub mod quad_panel;
 pub mod quad_panel_complex;
+pub mod rect_crease;
 pub mod rect_fit;
 pub mod rectangle;
 pub mod rectangular_strip;

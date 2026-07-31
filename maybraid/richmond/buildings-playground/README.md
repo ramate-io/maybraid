@@ -57,7 +57,7 @@ In-game: press `/` for the command console (same clap commands as argv).
 - `show clipped-quad-panel [--a0|--a1|--b0|--b1 X,Y,Z] [--clip 'x,y,z;…'] [--min-dihedral R] [--no-joint]` — ruled quad − closed clip
 - `show clipped-ruled-strip [--min-dihedral R] [--no-joint]` — multi-bay strip with a clip on the middle bay
 - `show clipped-rectangle [--a0|--a1|--b0|--b1 X,Y,Z] [--left|--right|--bottom|--top M]` — best-fit `PanelGeometry::Rectangle` with inset framed by rectangle kits
-- `show clipped-rectangular-strip [--inset M]` — two-rail rectangle strip; middle bay uses a uniform inset frame
+- `show clipped-rectangular-strip [--inset M] [--min-dihedral R] [--no-joint]` — two-rail rectangle strip; middle bay inset frame; crease joints on bay folds
 - `show arc-sweep [--radius R] [--height H] [--sweep-degrees D] [--start-yaw-deg D]` — circular fitted `arcs::ArcSweep` (not IR `partitions::ArcSweep`)
 - `show clipped-arc-sweep [--radius R] [--height H] [--sweep-degrees D] [--start-yaw-deg D]` — same with hardcoded angular clip openings
 - `show quad-panel [--a0|--a1|--b0|--b1 X,Y,Z] [--t-a0|--t-a1|--t-b0|--t-b1 T] [--min-dihedral R] [--no-joint]` — two lines → two tessellated triangles + optional crease `JointNode` (default corners are a ~90° fold; thicknesses default to 0.4)

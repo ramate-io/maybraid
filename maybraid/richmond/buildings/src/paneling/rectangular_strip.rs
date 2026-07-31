@@ -1,16 +1,19 @@
-//! Two-rail strip of best-fit [`PanelGeometry::Rectangle`] kits.
+//! Two-rail strip of best-fit [`PanelGeometry::Rectangle`] kits + crease joints.
 
 use lod::gen::LodSceneLevel;
+use richmond_building_components::joints::JointNode;
 use richmond_building_components::panels::{PanelNode, PanelStyle};
 use richmond_building_components::{BuildingComponents, Layers};
 
-use crate::paneling::panel_complex::PanelPoint;
+use crate::paneling::panel_complex::{PanelComplexJointPolicy, PanelPoint};
+use crate::paneling::rect_crease::joint_along_bay_crease;
 use crate::paneling::rectangle::Rectangle;
 
 /// Equal-station strip; each bay is an independently fitted rectangle kit.
 #[derive(Debug, Clone, PartialEq)]
 pub struct RectangularStrip {
 	style: PanelStyle,
+	joint_policy: PanelComplexJointPolicy,
 	authored: Vec<(PanelPoint, PanelPoint)>,
 	bays: Vec<Rectangle>,
 }
@@ -19,6 +22,7 @@ impl RectangularStrip {
 	pub fn new(style: PanelStyle) -> Self {
 		Self {
 			style,
+			joint_policy: PanelComplexJointPolicy::default(),
 			authored: Vec::new(),
 			bays: Vec::new(),
 		}
@@ -30,6 +34,11 @@ impl RectangularStrip {
 
 	pub fn shepherds_thatch() -> Self {
 		Self::new(PanelStyle::ShepherdsThatch)
+	}
+
+	pub fn with_joint_policy(mut self, joint_policy: PanelComplexJointPolicy) -> Self {
+		self.joint_policy = joint_policy;
+		self
 	}
 
 	pub fn from_lines(
@@ -77,6 +86,21 @@ impl RectangularStrip {
 	pub fn authored_stations(&self) -> &[(PanelPoint, PanelPoint)] {
 		&self.authored
 	}
+
+	pub fn joint_nodes(&self) -> Vec<JointNode> {
+		let mut out = Vec::new();
+		for i in 0..self.bays.len().saturating_sub(1) {
+			let prev = &self.bays[i];
+			let next = &self.bays[i + 1];
+			let thickness = (prev.end_thickness() + next.start_thickness()) * 0.5;
+			if let Some(j) =
+				joint_along_bay_crease(&prev.fitted, &next.fitted, thickness, self.joint_policy)
+			{
+				out.push(j);
+			}
+		}
+		out
+	}
 }
 
 impl BuildingComponents for RectangularStrip {
@@ -86,6 +110,10 @@ impl BuildingComponents for RectangularStrip {
 			out.extend(bay.panel_nodes_for_level(level));
 		}
 		out
+	}
+
+	fn joint_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<JointNode> {
+		Layers::from_free(self.joint_nodes())
 	}
 }
 
@@ -114,5 +142,24 @@ mod tests {
 			.iter()
 			.all(|b| matches!(b.panel_node().geometry, PanelGeometry::Rectangle(_))));
 		assert_eq!(s.authored_stations().len(), 3);
+		assert!(s.joint_nodes().is_empty());
+	}
+
+	#[test]
+	fn folded_strip_emits_crease_joint() {
+		let a = [
+			Vec3::ZERO,
+			Vec3::new(0.0, 0.0, 2.0),
+			Vec3::new(0.0, 0.0, 4.0),
+		];
+		let b = [
+			Vec3::new(2.0, 0.0, 0.0),
+			Vec3::new(2.0, 0.0, 2.0),
+			Vec3::new(2.0, 1.5, 4.0),
+		];
+		let s = RectangularStrip::from_lines(PanelStyle::RoughStonework, a, b);
+		assert_eq!(s.joint_nodes().len(), 1);
+		let muted = s.clone().with_joint_policy(PanelComplexJointPolicy::never());
+		assert!(muted.joint_nodes().is_empty());
 	}
 }

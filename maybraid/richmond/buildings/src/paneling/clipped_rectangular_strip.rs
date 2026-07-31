@@ -1,11 +1,13 @@
-//! Two-rail strip of best-fit rectangles with optional per-bay inset openings.
+//! Two-rail strip of best-fit rectangles with optional per-bay inset openings + crease joints.
 
 use lod::gen::LodSceneLevel;
+use richmond_building_components::joints::JointNode;
 use richmond_building_components::panels::{PanelNode, PanelStyle};
 use richmond_building_components::{BuildingComponents, Layers};
 
-use crate::paneling::panel_complex::PanelPoint;
-use crate::paneling::rect_fit::RectInset;
+use crate::paneling::panel_complex::{PanelComplexJointPolicy, PanelPoint};
+use crate::paneling::rect_crease::joint_along_bay_crease;
+use crate::paneling::rect_fit::{FittedRect, RectInset};
 use crate::paneling::rectangle::{ClippedRectangle, Rectangle};
 
 /// One bay of a [`ClippedRectangularStrip`].
@@ -22,12 +24,34 @@ impl ClippedRectangularStripPiece {
 			Self::Clipped(r) => r.panels().iter().collect(),
 		}
 	}
+
+	pub fn fitted(&self) -> &FittedRect {
+		match self {
+			Self::Solid(r) => &r.fitted,
+			Self::Clipped(r) => &r.fitted,
+		}
+	}
+
+	pub fn start_thickness(&self) -> f32 {
+		match self {
+			Self::Solid(r) => r.start_thickness(),
+			Self::Clipped(r) => r.start_thickness(),
+		}
+	}
+
+	pub fn end_thickness(&self) -> f32 {
+		match self {
+			Self::Solid(r) => r.end_thickness(),
+			Self::Clipped(r) => r.end_thickness(),
+		}
+	}
 }
 
 /// Two-rail rectangular strip with optional per-bay [`RectInset`] openings.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ClippedRectangularStrip {
 	style: PanelStyle,
+	joint_policy: PanelComplexJointPolicy,
 	authored: Vec<(PanelPoint, PanelPoint)>,
 	pieces: Vec<ClippedRectangularStripPiece>,
 }
@@ -36,6 +60,7 @@ impl ClippedRectangularStrip {
 	pub fn new(style: PanelStyle) -> Self {
 		Self {
 			style,
+			joint_policy: PanelComplexJointPolicy::default(),
 			authored: Vec::new(),
 			pieces: Vec::new(),
 		}
@@ -47,6 +72,11 @@ impl ClippedRectangularStrip {
 
 	pub fn shepherds_thatch() -> Self {
 		Self::new(PanelStyle::ShepherdsThatch)
+	}
+
+	pub fn with_joint_policy(mut self, joint_policy: PanelComplexJointPolicy) -> Self {
+		self.joint_policy = joint_policy;
+		self
 	}
 
 	pub fn from_lines(
@@ -114,6 +144,21 @@ impl ClippedRectangularStrip {
 	pub fn authored_stations(&self) -> &[(PanelPoint, PanelPoint)] {
 		&self.authored
 	}
+
+	pub fn joint_nodes(&self) -> Vec<JointNode> {
+		let mut out = Vec::new();
+		for i in 0..self.pieces.len().saturating_sub(1) {
+			let prev = &self.pieces[i];
+			let next = &self.pieces[i + 1];
+			let thickness = (prev.end_thickness() + next.start_thickness()) * 0.5;
+			if let Some(j) =
+				joint_along_bay_crease(prev.fitted(), next.fitted(), thickness, self.joint_policy)
+			{
+				out.push(j);
+			}
+		}
+		out
+	}
 }
 
 impl BuildingComponents for ClippedRectangularStrip {
@@ -130,6 +175,10 @@ impl BuildingComponents for ClippedRectangularStrip {
 			}
 		}
 		out
+	}
+
+	fn joint_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<JointNode> {
+		Layers::from_free(self.joint_nodes())
 	}
 }
 
@@ -172,5 +221,29 @@ mod tests {
 			.panels()
 			.iter()
 			.all(|p| matches!(p.geometry, PanelGeometry::Rectangle(_))));
+	}
+
+	#[test]
+	fn folded_strip_emits_crease_joint() {
+		let a = [
+			Vec3::ZERO,
+			Vec3::new(0.0, 0.0, 2.0),
+			Vec3::new(0.0, 0.0, 4.0),
+			Vec3::new(0.0, 0.0, 6.0),
+		];
+		let b = [
+			Vec3::new(2.5, 0.0, 0.0),
+			Vec3::new(2.5, 0.0, 2.0),
+			Vec3::new(2.5, 1.2, 4.0),
+			Vec3::new(2.5, 1.2, 6.0),
+		];
+		let s = ClippedRectangularStrip::from_lines(
+			PanelStyle::RoughStonework,
+			a,
+			b,
+			[None, Some(RectInset::uniform(0.35)), None],
+		)
+		.with_joint_policy(PanelComplexJointPolicy::default());
+		assert!(!s.joint_nodes().is_empty());
 	}
 }

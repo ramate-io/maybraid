@@ -67,6 +67,21 @@ impl Rectangle {
 	pub fn panel_node(&self) -> &PanelNode {
 		&self.panel
 	}
+
+	/// Mean authored thickness (also `panel.placement.scale.y`).
+	pub fn thickness(&self) -> f32 {
+		self.panel.placement.scale.y
+	}
+
+	/// Thickness along the leading generator (`a0`–`b0`).
+	pub fn start_thickness(&self) -> f32 {
+		((self.a0.thickness + self.b0.thickness) * 0.5).max(1e-4)
+	}
+
+	/// Thickness along the trailing generator (`a1`–`b1`).
+	pub fn end_thickness(&self) -> f32 {
+		((self.a1.thickness + self.b1.thickness) * 0.5).max(1e-4)
+	}
 }
 
 impl BuildingComponents for Rectangle {
@@ -149,6 +164,18 @@ impl ClippedRectangle {
 
 	pub fn panels(&self) -> &[PanelNode] {
 		&self.panels
+	}
+
+	pub fn thickness(&self) -> f32 {
+		mean_thickness([self.a0, self.a1, self.b0, self.b1])
+	}
+
+	pub fn start_thickness(&self) -> f32 {
+		((self.a0.thickness + self.b0.thickness) * 0.5).max(1e-4)
+	}
+
+	pub fn end_thickness(&self) -> f32 {
+		((self.a1.thickness + self.b1.thickness) * 0.5).max(1e-4)
 	}
 }
 

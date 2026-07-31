@@ -95,6 +95,8 @@ pub enum PreviewSubject {
 	},
 	ClippedRectangularStrip {
 		inset: f32,
+		min_dihedral: f32,
+		no_joint: bool,
 	},
 	ArcSweep {
 		radius: f32,
@@ -246,9 +248,13 @@ impl PreviewConfig {
 			} => format!(
 				"preview: clipped-rectangle (a0={a0:?} a1={a1:?} b0={b0:?} b1={b1:?} inset=[{left:.2},{right:.2},{bottom:.2},{top:.2}])"
 			),
-			PreviewSubject::ClippedRectangularStrip { inset } => {
-				format!("preview: clipped-rectangular-strip (inset={inset:.2})")
-			}
+			PreviewSubject::ClippedRectangularStrip {
+				inset,
+				min_dihedral,
+				no_joint,
+			} => format!(
+				"preview: clipped-rectangular-strip (inset={inset:.2} min_dihedral={min_dihedral:.3} no_joint={no_joint})"
+			),
 			PreviewSubject::ArcSweep {
 				radius,
 				height,
@@ -675,7 +681,17 @@ pub fn present_preview_lod(
 				ComponentsOnly(rect).scene_with_lod(&lod_ref),
 			);
 		}
-		PreviewSubject::ClippedRectangularStrip { inset } => {
+		PreviewSubject::ClippedRectangularStrip {
+			inset,
+			min_dihedral,
+			no_joint,
+		} => {
+			let policy = if *no_joint {
+				PanelComplexJointPolicy::never()
+			} else {
+				PanelComplexJointPolicy::min_dihedral_rad(*min_dihedral)
+			};
+			// Folded rails so bay creases exceed the default dihedral threshold.
 			let rail_a = [
 				Vec3::new(0.0, 0.0, 0.0),
 				Vec3::new(0.0, 0.0, 2.0),
@@ -684,16 +700,17 @@ pub fn present_preview_lod(
 			];
 			let rail_b = [
 				Vec3::new(2.5, 0.0, 0.0),
-				Vec3::new(2.8, 0.3, 2.0),
-				Vec3::new(2.2, -0.2, 4.0),
-				Vec3::new(2.6, 0.1, 6.0),
+				Vec3::new(2.5, 0.0, 2.0),
+				Vec3::new(2.5, 1.4, 4.0),
+				Vec3::new(2.5, 1.4, 6.0),
 			];
 			let strip = ClippedRectangularStrip::from_lines(
 				richmond_building_components::panels::PanelStyle::RoughStonework,
 				rail_a,
 				rail_b,
 				[None, Some(RectInset::uniform(*inset)), None],
-			);
+			)
+			.with_joint_policy(policy);
 			spawn_preview(
 				&mut commands,
 				transform,
