@@ -64,11 +64,59 @@ pub struct TubeCorners {
 	pub top_right: Vec3,
 }
 
+/// Which of the four tube faces are presented via [`BuildingComponents`].
+///
+/// Geometry for every face is still authored; disabled faces are omitted from
+/// panel/joint emission only.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TubeFaces {
+	pub floor: bool,
+	pub ceiling: bool,
+	pub left: bool,
+	pub right: bool,
+}
+
+impl TubeFaces {
+	pub const ALL: Self = Self {
+		floor: true,
+		ceiling: true,
+		left: true,
+		right: true,
+	};
+
+	pub fn without_floor(mut self) -> Self {
+		self.floor = false;
+		self
+	}
+
+	pub fn without_ceiling(mut self) -> Self {
+		self.ceiling = false;
+		self
+	}
+
+	pub fn without_left(mut self) -> Self {
+		self.left = false;
+		self
+	}
+
+	pub fn without_right(mut self) -> Self {
+		self.right = false;
+		self
+	}
+}
+
+impl Default for TubeFaces {
+	fn default() -> Self {
+		Self::ALL
+	}
+}
+
 /// Polyline tube: four [`ClippedRuledStrip`] faces from trapezoid stations.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Tube {
 	style: PanelStyle,
 	joint_policy: PanelComplexJointPolicy,
+	faces: TubeFaces,
 	nodes: Vec<TubeCrossSectionNode>,
 	floor: ClippedRuledStrip,
 	ceiling: ClippedRuledStrip,
@@ -81,6 +129,7 @@ impl Tube {
 		Self {
 			style,
 			joint_policy: PanelComplexJointPolicy::default(),
+			faces: TubeFaces::ALL,
 			nodes: Vec::new(),
 			floor: ClippedRuledStrip::new(style),
 			ceiling: ClippedRuledStrip::new(style),
@@ -167,6 +216,7 @@ impl Tube {
 		Self {
 			style,
 			joint_policy: PanelComplexJointPolicy::default(),
+			faces: TubeFaces::ALL,
 			nodes,
 			floor,
 			ceiling,
@@ -186,6 +236,16 @@ impl Tube {
 		self.right = std::mem::replace(&mut self.right, ClippedRuledStrip::new(self.style))
 			.with_joint_policy(joint_policy);
 		self
+	}
+
+	/// Select which faces emit panels/joints. Defaults to [`TubeFaces::ALL`].
+	pub fn with_faces(mut self, faces: TubeFaces) -> Self {
+		self.faces = faces;
+		self
+	}
+
+	pub fn faces(&self) -> TubeFaces {
+		self.faces
 	}
 
 	pub fn nodes(&self) -> &[TubeCrossSectionNode] {
@@ -227,19 +287,35 @@ impl Tube {
 impl BuildingComponents for Tube {
 	fn panel_nodes_for_level(&self, level: LodSceneLevel) -> Layers<PanelNode> {
 		let mut out = Layers::new();
-		out.extend(self.floor.panel_nodes_for_level(level));
-		out.extend(self.ceiling.panel_nodes_for_level(level));
-		out.extend(self.left.panel_nodes_for_level(level));
-		out.extend(self.right.panel_nodes_for_level(level));
+		if self.faces.floor {
+			out.extend(self.floor.panel_nodes_for_level(level));
+		}
+		if self.faces.ceiling {
+			out.extend(self.ceiling.panel_nodes_for_level(level));
+		}
+		if self.faces.left {
+			out.extend(self.left.panel_nodes_for_level(level));
+		}
+		if self.faces.right {
+			out.extend(self.right.panel_nodes_for_level(level));
+		}
 		out
 	}
 
 	fn joint_nodes_for_level(&self, level: LodSceneLevel) -> Layers<JointNode> {
 		let mut out = Layers::new();
-		out.extend(self.floor.joint_nodes_for_level(level));
-		out.extend(self.ceiling.joint_nodes_for_level(level));
-		out.extend(self.left.joint_nodes_for_level(level));
-		out.extend(self.right.joint_nodes_for_level(level));
+		if self.faces.floor {
+			out.extend(self.floor.joint_nodes_for_level(level));
+		}
+		if self.faces.ceiling {
+			out.extend(self.ceiling.joint_nodes_for_level(level));
+		}
+		if self.faces.left {
+			out.extend(self.left.joint_nodes_for_level(level));
+		}
+		if self.faces.right {
+			out.extend(self.right.joint_nodes_for_level(level));
+		}
 		out
 	}
 }
@@ -379,6 +455,18 @@ mod tests {
 	}
 
 	#[test]
+	#[cfg(not(debug_assertions))]
+	fn short_input_yields_empty() {
+		let tube = Tube::from_nodes(
+			PanelStyle::RoughStonework,
+			[level_node(0.0, 1.0, 1.0)],
+		);
+		assert!(tube.nodes().is_empty());
+		assert!(tube.floor().pieces().is_empty());
+	}
+
+	#[test]
+	#[cfg(debug_assertions)]
 	#[should_panic(expected = "at least 2 stations")]
 	fn short_input_debug_asserts() {
 		let _ = Tube::from_nodes(
@@ -396,5 +484,27 @@ mod tests {
 		assert_eq!(tube.nodes().len(), 2);
 		assert_eq!(tube.floor().pieces().len(), 1);
 		assert_eq!(tube.floor().pieces()[0].as_complex().triangles().len(), 2);
+	}
+
+	#[test]
+	fn disabled_faces_omit_presentation() {
+		use lod::gen::LodSceneLevel;
+		use richmond_building_components::BuildingComponents;
+
+		let nodes = [level_node(0.0, 1.0, 1.0), level_node(2.0, 1.0, 1.0)];
+		let full = Tube::from_nodes(PanelStyle::RoughStonework, nodes);
+		let open = full
+			.clone()
+			.with_faces(TubeFaces::ALL.without_ceiling().without_floor());
+		assert!(open.faces().floor == false && open.faces().ceiling == false);
+		assert!(open.faces().left && open.faces().right);
+		// Strips still authored.
+		assert!(!open.floor().pieces().is_empty());
+		assert!(!open.ceiling().pieces().is_empty());
+
+		let full_n = full.panel_nodes_for_level(LodSceneLevel::High).len();
+		let open_n = open.panel_nodes_for_level(LodSceneLevel::High).len();
+		assert!(open_n < full_n);
+		assert!(open_n > 0);
 	}
 }

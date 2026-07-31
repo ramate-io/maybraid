@@ -56,7 +56,8 @@ pub use paneling::{
 	ParsePanelComplexError, QuadPanel, QuadPanelComplex, RectInset, Rectangle, RectangularNTube,
 	RectangularNTubeCorner, RectangularNTubeStation, RectangularStrip, RectangularStripNode,
 	RuledPitch, RuledStrip, SharedEdge, TessellatedTrianglePanel, Tube, TubeCorners,
-	TubeCrossSectionNode, TubeFrame, DEFAULT_PANEL_THICKNESS, DEFAULT_SEGMENTS, MIN_SEGMENTS,
+	TubeCrossSectionNode, TubeFaces, TubeFrame, DEFAULT_PANEL_THICKNESS, DEFAULT_SEGMENTS,
+	MIN_SEGMENTS,
 };
 pub use portals::{
 	ArcRegion, AssignedPortal, MustAssignPortal, Portal, PortalFootprint, WallRegion, SLICE_Y_FRAC,
