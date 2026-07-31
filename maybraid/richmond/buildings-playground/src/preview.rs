@@ -19,6 +19,7 @@ use richmond_buildings::bedroom::Bedroom;
 use richmond_buildings::panel_complex::{PanelComplex, PanelComplexJointPolicy, PanelPoint};
 use richmond_buildings::quad_panel::QuadPanel;
 use richmond_buildings::quad_panel_complex::QuadPanelComplex;
+use richmond_buildings::ruled_pitch::RuledPitch;
 use richmond_buildings::stacked_rings::StackedRings;
 use richmond_buildings::tessellated_triangle_panel::TessellatedTrianglePanel;
 use richmond_buildings::walling::{
@@ -77,6 +78,10 @@ pub enum PreviewSubject {
 	},
 	QuadPanelComplex {
 		mesh: String,
+		min_dihedral: f32,
+		no_joint: bool,
+	},
+	RuledPitch {
 		min_dihedral: f32,
 		no_joint: bool,
 	},
@@ -180,6 +185,12 @@ impl PreviewConfig {
 				no_joint,
 			} => format!(
 				"preview: quad-panel-complex (mesh={mesh:?} min_dihedral={min_dihedral:.3} no_joint={no_joint})"
+			),
+			PreviewSubject::RuledPitch {
+				min_dihedral,
+				no_joint,
+			} => format!(
+				"preview: ruled-pitch (min_dihedral={min_dihedral:.3} no_joint={no_joint})"
 			),
 			PreviewSubject::Polyline => "preview: partition polyline (L)".into(),
 			PreviewSubject::LinearWall => "preview: walling linear-wall (door)".into(),
@@ -527,6 +538,35 @@ pub fn present_preview_lod(
 					warn!("quad-panel-complex parse failed: {e}");
 				}
 			}
+		}
+		PreviewSubject::RuledPitch {
+			min_dihedral,
+			no_joint,
+		} => {
+			let policy = if *no_joint {
+				PanelComplexJointPolicy::never()
+			} else {
+				PanelComplexJointPolicy::min_dihedral_rad(*min_dihedral)
+			};
+			let eave = [
+				Vec3::new(0.0, 0.0, 0.0),
+				Vec3::new(0.0, 0.0, 2.0),
+				Vec3::new(0.0, 0.0, 4.0),
+			];
+			let ridge = [
+				Vec3::new(1.0, 1.0, 1.0),
+				Vec3::new(1.0, 1.0, 2.0),
+				Vec3::new(1.0, 1.0, 4.0),
+			];
+			let complex = RuledPitch::shepherds_thatch()
+				.with_lines(eave, ridge)
+				.with_joint_policy(policy)
+				.into_complex();
+			spawn_preview(
+				&mut commands,
+				transform,
+				ComponentsOnly(complex).scene_with_lod(&lod_ref),
+			);
 		}
 		PreviewSubject::Polyline => {
 			let node = PartitionNode::rough_stone(

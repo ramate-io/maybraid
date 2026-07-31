@@ -30,6 +30,7 @@ Runtime paths are registered in building-components [`assets.rs`](../building-co
 | [`tessellated_triangle_panel`](src/tessellated_triangle_panel.rs) | World-space triangle → `PanelNode` |
 | [`quad_panel`](src/quad_panel.rs) | Thin wrapper: one ruled quad → [`PanelComplex`](src/panel_complex/) via `into_complex` |
 | [`quad_panel_complex`](src/quad_panel_complex.rs) | Thin wrapper: quad-face mesh `FromStr` → `PanelComplex` via `into_complex` |
+| [`ruled_pitch`](src/ruled_pitch.rs) | Equal eave/ridge stations → ruled quad strip on [`PanelComplex`](src/panel_complex/); stations keep polylines queryable |
 | [`panel_complex`](src/panel_complex/) | Point-id triangle/quad mesh → panels + crease `JointNode`s on shared edges |
 | [`constraints`](src/constraints.rs) | Cell / boundary / circulation IR |
 
