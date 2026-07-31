@@ -22,6 +22,8 @@ cargo run -p richmond-buildings-playground -- show pitch --rise 1 --run 2 --eave
 cargo run -p richmond-buildings-playground -- show pitch --rise 1 --run 2 --length 4 --left 1 --right -0.5
 cargo run -p richmond-buildings-playground -- show tessellated-triangle
 cargo run -p richmond-buildings-playground -- show tessellated-triangle --a 0,0 --b 3,0 --c 0,2
+# Triangle with rectangular cutout:
+cargo run -p richmond-buildings-playground -- show tessellated-triangle-gap
 # Folded quad (default ~90° crease + joint):
 cargo run -p richmond-buildings-playground -- show quad-panel
 # Coplanar quad (no joint):
@@ -45,6 +47,7 @@ In-game: press `/` for the command console (same clap commands as argv).
 - `show linear|arc-90|arc-180|slice-90` — partition leaves (`panels/.../rectangle_001`, `arcs/.../arc_*`)
 - `show pitch [--rise R] [--run R] [--length L] [--tile-width W] [--left B] [--right B] | [--eave E --ridge R]` — shepherd's-thatch pitched face; omit `--length`/`--left`/`--right` for optional regions; `--eave`+`--ridge` uses equal end triangles
 - `show tessellated-triangle [--a X,Z] [--b X,Z] [--c X,Z]` — rough-stone floor fill of a panel-space triangle
+- `show tessellated-triangle-gap [--min-dihedral R] [--no-joint]` — world triangle with a rectangular cutout → annular `PanelComplex` (default ground △ + small hole)
 - `show quad-panel [--a0|--a1|--b0|--b1 X,Y,Z] [--t-a0|--t-a1|--t-b0|--t-b1 T] [--min-dihedral R] [--no-joint]` — two lines → two tessellated triangles + optional crease `JointNode` (default corners are a ~90° fold; thicknesses default to 0.4)
 - `show panel-complex [--mesh 'id=(x,y,z) … {a,b,c}'] [--min-dihedral R] [--no-joint]` — point-id triangle mesh + crease joints; optional thickness as 4th tuple component
 - `show quad-panel-complex [--mesh 'id=(x,y,z) … {a0,a1,b0,b1}'] [--min-dihedral R] [--no-joint]` — quad-face mesh (diagonal a0–b1) → same presentation path

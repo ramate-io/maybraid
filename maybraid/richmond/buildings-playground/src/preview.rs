@@ -19,7 +19,7 @@ use richmond_buildings::bedroom::Bedroom;
 use richmond_buildings::panel_complex::{PanelComplex, PanelComplexJointPolicy, PanelPoint};
 use richmond_buildings::quad_panel::QuadPanel;
 use richmond_buildings::quad_panel_complex::QuadPanelComplex;
-use richmond_buildings::RuledPitch;
+use richmond_buildings::{RuledPitch, TessellatedTriangleGap};
 use richmond_buildings::stacked_rings::StackedRings;
 use richmond_buildings::tessellated_triangle_panel::TessellatedTrianglePanel;
 use richmond_buildings::walling::{
@@ -58,6 +58,10 @@ pub enum PreviewSubject {
 		a: Vec3,
 		b: Vec3,
 		c: Vec3,
+	},
+	TessellatedTriangleGap {
+		min_dihedral: f32,
+		no_joint: bool,
 	},
 	QuadPanel {
 		a0: Vec3,
@@ -158,6 +162,12 @@ impl PreviewConfig {
 			PreviewSubject::TessellatedTriangle3d { a, b, c } => {
 				format!("preview: tessellated-triangle-3d (a={a:?} b={b:?} c={c:?})")
 			}
+			PreviewSubject::TessellatedTriangleGap {
+				min_dihedral,
+				no_joint,
+			} => format!(
+				"preview: tessellated-triangle-gap (min_dihedral={min_dihedral:.3} no_joint={no_joint})"
+			),
 			PreviewSubject::QuadPanel {
 				a0,
 				a1,
@@ -458,6 +468,33 @@ pub fn present_preview_lod(
 				&mut commands,
 				transform,
 				ComponentsOnly(panel).scene_with_lod(&lod_ref),
+			);
+		}
+		PreviewSubject::TessellatedTriangleGap {
+			min_dihedral,
+			no_joint,
+		} => {
+			let policy = if *no_joint {
+				PanelComplexJointPolicy::never()
+			} else {
+				PanelComplexJointPolicy::min_dihedral_rad(*min_dihedral)
+			};
+			let a = Vec3::ZERO;
+			let b = Vec3::new(3.0, 0.0, 0.0);
+			let c = Vec3::new(0.0, 0.0, 2.0);
+			let gap = [
+				Vec3::new(0.8, 0.0, 0.5),
+				Vec3::new(1.4, 0.0, 0.5),
+				Vec3::new(1.4, 0.0, 0.9),
+				Vec3::new(0.8, 0.0, 0.9),
+			];
+			let complex = TessellatedTriangleGap::rough_stone(a, b, c, gap)
+				.with_joint_policy(policy)
+				.into_complex();
+			spawn_preview(
+				&mut commands,
+				transform,
+				ComponentsOnly(complex).scene_with_lod(&lod_ref),
 			);
 		}
 		PreviewSubject::QuadPanel {

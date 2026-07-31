@@ -1,17 +1,19 @@
 //! World-space triangle filled via shared 2D panel tessellation.
 //!
 //! Higher-order (buildings) feature — not a kit primitive. Pipeline:
-//! 1. Orthonormal frame for the plane of \(A,B,C\)
+//! 1. Orthonormal frame for the plane of \(A,B,C\) ([`crate::panel_plane`])
 //! 2. Project corners into panel \(X,Z\)
 //! 3. Encode plane as parent [`Placement`] (yaw / **pitch** / roll via YXZ)
 //! 4. [`PanelNode`] fills in panel space; kit yaw is composed under that parent
 
-use bevy_math::{EulerRot, Mat3, Quat, Vec2, Vec3};
+use bevy_math::Vec3;
 use lod::gen::LodSceneLevel;
 use richmond_building_components::panels::{
 	PanelGeometry, PanelNode, PanelStyle, TessellatedTriangle,
 };
 use richmond_building_components::{BuildingComponents, Layers, Placement};
+
+use crate::panel_plane::panel_plane_frame;
 
 /// Three world-space corners filled with posed panel right-triangle kits.
 #[derive(Debug, Clone, PartialEq)]
@@ -43,37 +45,11 @@ impl TessellatedTrianglePanel {
 	///
 	/// Returns [`None`] when the triangle is degenerate.
 	pub fn panel_plane(&self) -> Option<(TessellatedTriangle, Placement)> {
-		let ab = self.b - self.a;
-		let ac = self.c - self.a;
-		let ab_len = ab.length();
-		if ab_len < 1e-8 {
-			return None;
-		}
-		let e0 = ab / ab_len;
-		let n = ab.cross(ac);
-		let n_len = n.length();
-		if n_len < 1e-12 {
-			return None;
-		}
-		let normal = n / n_len;
-		let e1 = e0.cross(normal);
-
-		let b2 = Vec2::new(ab_len, 0.0);
-		let c2 = Vec2::new(ac.dot(e0), ac.dot(e1));
-		if (b2.x * c2.y - b2.y * c2.x).abs() < 1e-12 {
-			return None;
-		}
-
-		let rotation = Quat::from_mat3(&Mat3::from_cols(e0, normal, e1));
-		let (yaw, pitch, roll) = rotation.to_euler(EulerRot::YXZ);
-		let placement = Placement {
-			translation: self.a,
-			yaw,
-			pitch,
-			roll,
-			scale: Vec3::ONE,
-		};
-		Some((TessellatedTriangle::new(Vec2::ZERO, b2, c2), placement))
+		let frame = panel_plane_frame(self.a, self.b, self.c)?;
+		Some((
+			TessellatedTriangle::new(bevy_math::Vec2::ZERO, frame.b2, frame.c2),
+			frame.placement(),
+		))
 	}
 
 	/// [`PanelNode`] with plane placement, or [`None`] if degenerate.
@@ -93,11 +69,11 @@ impl BuildingComponents for TessellatedTrianglePanel {
 	}
 }
 
-
 #[cfg(test)]
 mod tests {
 	use super::*;
 	use bevy::prelude::Transform;
+	use bevy_math::Vec2;
 	use richmond_building_components::scene_children::pose;
 
 	fn assert_vec3_close(got: Vec3, want: Vec3) {

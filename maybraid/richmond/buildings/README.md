@@ -28,6 +28,8 @@ Runtime paths are registered in building-components [`assets.rs`](../building-co
 | [`stacked_rings`](src/stacked_rings.rs) | Circular wall stack |
 | [`arc_spire`](src/arc_spire.rs) | Spire / storey binding helpers |
 | [`tessellated_triangle_panel`](src/tessellated_triangle_panel.rs) | World-space triangle → `PanelNode` |
+| [`tessellated_triangle_gap`](src/tessellated_triangle_gap.rs) | World-space triangle + one closed cutout → annular [`PanelComplex`](src/panel_complex/) via `into_complex` |
+| [`panel_plane`](src/panel_plane.rs) | Shared panel \(XZ\) frame for a world triangle |
 | [`quad_panel`](src/quad_panel.rs) | Thin wrapper: one ruled quad → [`PanelComplex`](src/panel_complex/) via `into_complex` |
 | [`quad_panel_complex`](src/quad_panel_complex.rs) | Thin wrapper: quad-face mesh `FromStr` → `PanelComplex` via `into_complex` |
 | [`ruled_strip`](src/ruled_strip.rs) | Equal-length rails → ruled quad strip on [`PanelComplex`](src/panel_complex/); stations keep both polylines queryable |
