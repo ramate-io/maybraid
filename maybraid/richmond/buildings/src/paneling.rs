@@ -19,6 +19,7 @@ pub mod rectangular_strip;
 pub mod ruled_pitch;
 pub mod ruled_strip;
 pub mod tessellated_triangle_panel;
+pub mod tube;
 
 pub use approximated_circle::{ApproximatedCircle, DEFAULT_SEGMENTS, MIN_SEGMENTS};
 pub use clipped_quad_panel::ClippedQuadPanel;
@@ -38,3 +39,4 @@ pub use rectangular_strip::RectangularStrip;
 pub use ruled_pitch::RuledPitch;
 pub use ruled_strip::RuledStrip;
 pub use tessellated_triangle_panel::TessellatedTrianglePanel;
+pub use tube::{Tube, TubeCorners, TubeCrossSectionNode, TubeFrame};

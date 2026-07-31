@@ -31,6 +31,7 @@ pub use paneling::quad_panel_complex;
 pub use paneling::ruled_pitch;
 pub use paneling::ruled_strip;
 pub use paneling::tessellated_triangle_panel;
+pub use paneling::tube;
 
 pub use arc_spire::{
 	best_fit_y_bindings, uniform_storey_bindings, ArcSpire, ArcSpireParams, FitTolerance,
@@ -51,7 +52,8 @@ pub use paneling::{
 	PanelComplexJointPolicy, PanelComplexValidation, PanelMesh, PanelPoint, PanelPointId,
 	PanelQuadMesh, PanelTriangle, ParsePanelComplexError, QuadPanel, QuadPanelComplex, RectInset,
 	Rectangle, RectangularStrip, RuledPitch, RuledStrip, SharedEdge, TessellatedTrianglePanel,
-	DEFAULT_PANEL_THICKNESS, DEFAULT_SEGMENTS, MIN_SEGMENTS,
+	Tube, TubeCorners, TubeCrossSectionNode, TubeFrame, DEFAULT_PANEL_THICKNESS, DEFAULT_SEGMENTS,
+	MIN_SEGMENTS,
 };
 pub use portals::{
 	ArcRegion, AssignedPortal, MustAssignPortal, Portal, PortalFootprint, WallRegion, SLICE_Y_FRAC,
