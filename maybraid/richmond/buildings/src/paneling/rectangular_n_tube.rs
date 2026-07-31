@@ -4,6 +4,11 @@
 //! face `i` is an oriented rectangle whose lowest edge is `A[i] → B[i]`, height
 //! is `|A[(i+1)%n] - A[i]|`, and roll aligns height with that cross-section edge.
 //! Face strips wrap around the cross-section.
+//!
+//! Cross-section edges may be omitted from presentation via
+//! [`RectangularNTube::without_face_edges`]: index `i` means the face on
+//! `a_i → a_{(i+1)%n}` (e.g. floor/ceiling on a square tube). Geometry for every
+//! face is still authored; disabled faces skip panel/joint emission only.
 
 use bevy_math::Vec3;
 use lod::gen::LodSceneLevel;
@@ -57,6 +62,9 @@ pub struct RectangularNTube {
 	joint_policy: PanelComplexJointPolicy,
 	stations: Vec<RectangularNTubeStation>,
 	faces: Vec<ClippedRectangularStrip>,
+	/// Per face index: whether [`BuildingComponents`] emits panels/joints.
+	/// Face `i` is the strip along cross-section edge `corners[i] → corners[(i+1)%n]`.
+	emit_face: Vec<bool>,
 }
 
 impl RectangularNTube {
@@ -66,6 +74,7 @@ impl RectangularNTube {
 			joint_policy: PanelComplexJointPolicy::default(),
 			stations: Vec::new(),
 			faces: Vec::new(),
+			emit_face: Vec::new(),
 		}
 	}
 
@@ -187,6 +196,7 @@ impl RectangularNTube {
 			joint_policy: PanelComplexJointPolicy::default(),
 			stations,
 			faces,
+			emit_face: vec![true; n],
 		}
 	}
 
@@ -198,6 +208,39 @@ impl RectangularNTube {
 			.map(|f| f.with_joint_policy(joint_policy))
 			.collect();
 		self
+	}
+
+	/// Omit faces on the listed cross-section edges from panel/joint emission.
+	///
+	/// Index `i` is the face along `corners[i] → corners[(i+1)%n]`. Geometry for
+	/// every face remains in [`Self::faces`]. Out-of-range indices are ignored
+	/// (`debug_assert` in debug builds).
+	pub fn without_face_edges(mut self, edges: impl IntoIterator<Item = usize>) -> Self {
+		let n = self.faces.len();
+		for i in edges {
+			if i < n {
+				self.emit_face[i] = false;
+			} else {
+				debug_assert!(
+					false,
+					"RectangularNTube::without_face_edges index {i} >= n={n}"
+				);
+			}
+		}
+		self
+	}
+
+	/// Whether face `i` (`corners[i] → corners[(i+1)%n]`) emits panels/joints.
+	pub fn emits_face(&self, i: usize) -> bool {
+		self.emit_face.get(i).copied().unwrap_or(false)
+	}
+
+	/// Cross-section edge indices currently omitted from presentation.
+	pub fn omitted_face_edges(&self) -> impl Iterator<Item = usize> + '_ {
+		self.emit_face
+			.iter()
+			.enumerate()
+			.filter_map(|(i, emit)| (!emit).then_some(i))
 	}
 
 	pub fn stations(&self) -> &[RectangularNTubeStation] {
@@ -216,16 +259,20 @@ impl RectangularNTube {
 impl BuildingComponents for RectangularNTube {
 	fn panel_nodes_for_level(&self, level: LodSceneLevel) -> Layers<PanelNode> {
 		let mut out = Layers::new();
-		for face in &self.faces {
-			out.extend(face.panel_nodes_for_level(level));
+		for (i, face) in self.faces.iter().enumerate() {
+			if self.emits_face(i) {
+				out.extend(face.panel_nodes_for_level(level));
+			}
 		}
 		out
 	}
 
 	fn joint_nodes_for_level(&self, level: LodSceneLevel) -> Layers<JointNode> {
 		let mut out = Layers::new();
-		for face in &self.faces {
-			out.extend(face.joint_nodes_for_level(level));
+		for (i, face) in self.faces.iter().enumerate() {
+			if self.emits_face(i) {
+				out.extend(face.joint_nodes_for_level(level));
+			}
 		}
 		out
 	}
@@ -348,5 +395,33 @@ mod tests {
 			PanelStyle::RoughStonework,
 			[square_station(0.0, 1.0, 2.0)],
 		);
+	}
+
+	#[test]
+	fn omitted_face_edges_skip_presentation() {
+		use lod::gen::LodSceneLevel;
+		use richmond_building_components::BuildingComponents;
+
+		let full = RectangularNTube::from_stations(
+			PanelStyle::RoughStonework,
+			[
+				square_station(0.0, 1.0, 2.0),
+				square_station(2.0, 1.0, 2.0),
+			],
+		);
+		// Square: 0 = floor (BL→BR), 2 = ceiling (TR→TL).
+		let open = full.clone().without_face_edges([0, 2]);
+		assert!(!open.emits_face(0) && !open.emits_face(2));
+		assert!(open.emits_face(1) && open.emits_face(3));
+		assert_eq!(open.omitted_face_edges().collect::<Vec<_>>(), vec![0, 2]);
+		// Strips still authored for every cross-section edge.
+		assert_eq!(open.faces().len(), 4);
+		assert!(!open.faces()[0].pieces().is_empty());
+		assert!(!open.faces()[2].pieces().is_empty());
+
+		let full_n = full.panel_nodes_for_level(LodSceneLevel::High).len();
+		let open_n = open.panel_nodes_for_level(LodSceneLevel::High).len();
+		assert!(open_n < full_n);
+		assert!(open_n > 0);
 	}
 }

@@ -43,7 +43,7 @@ Runtime paths are registered in building-components [`assets.rs`](../building-co
 | [`Rectangle`](src/paneling/rectangle.rs) / [`ClippedRectangle`](src/paneling/rectangle.rs) | Single-bay oriented rectangle (lowest-edge vector + height + roll); inset = frame of rectangle kits |
 | [`FittedRectangularStrip`](src/paneling/fitted_rectangular_strip.rs) / [`ClippedFittedRectangularStrip`](src/paneling/clipped_fitted_rectangular_strip.rs) | Two-rail best-fit ordinary rectangle kits (+ optional per-bay inset frames) |
 | [`FittedRectangle`](src/paneling/fitted_rectangle.rs) / [`ClippedFittedRectangle`](src/paneling/fitted_rectangle.rs) | Single-bay best-fit rectangle from four (possibly skew) corners |
-| [`RectangularNTube`](src/paneling/rectangular_n_tube.rs) | Closed n-gon cross-section polyline → n clipped rectangular strips |
+| [`RectangularNTube`](src/paneling/rectangular_n_tube.rs) | Closed n-gon cross-section polyline → n clipped rectangular strips; [`without_face_edges`](src/paneling/rectangular_n_tube.rs) omits presentation on listed `a_i→a_{i+1}` edges |
 | [`ClippedTessellatedTriangle`](src/paneling/clipped_tessellated_triangle.rs) / [`ClippedQuadPanel`](src/paneling/clipped_quad_panel.rs) / [`ClippedRuledStrip`](src/paneling/clipped_ruled_strip.rs) | Clipped triangle / quad / ruled strip |
 | [`TessellatedTrianglePanel`](src/paneling/tessellated_triangle_panel.rs) | World-space triangle → panels |
 | [`panel_plane`](src/paneling/panel_plane.rs) | Shared panel \(XZ\) frame for a world triangle |

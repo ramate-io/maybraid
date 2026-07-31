@@ -140,6 +140,7 @@ pub enum PreviewSubject {
 		inset: f32,
 		min_dihedral: f32,
 		no_joint: bool,
+		omit_faces: Vec<usize>,
 	},
 	ApproximatedCircle {
 		center: Vec3,
@@ -350,8 +351,9 @@ impl PreviewConfig {
 				inset,
 				min_dihedral,
 				no_joint,
+				ref omit_faces,
 			} => format!(
-				"preview: rectangular-n-tube (inset={inset:.2} min_dihedral={min_dihedral:.3} no_joint={no_joint})"
+				"preview: rectangular-n-tube (inset={inset:.2} min_dihedral={min_dihedral:.3} no_joint={no_joint} omit_faces={omit_faces:?})"
 			),
 			PreviewSubject::ApproximatedCircle {
 				center,
@@ -1023,6 +1025,7 @@ pub fn present_preview_lod(
 			inset,
 			min_dihedral,
 			no_joint,
+			omit_faces,
 		} => {
 			let policy = if *no_joint {
 				PanelComplexJointPolicy::never()
@@ -1049,6 +1052,7 @@ pub fn present_preview_lod(
 					vec![None, None, None],
 				],
 			)
+			.without_face_edges(omit_faces.iter().copied())
 			.with_joint_policy(policy);
 			spawn_preview(
 				&mut commands,

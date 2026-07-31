@@ -16,6 +16,9 @@ pub struct RectangularNTube {
 	pub min_dihedral: f32,
 	#[arg(long, default_value_t = false)]
 	pub no_joint: bool,
+	/// Omit face on cross-section edge `i` (`i` → `i+1`). Repeatable; square demo: `0` floor, `2` ceiling.
+	#[arg(long = "omit-face", value_name = "I")]
+	pub omit_faces: Vec<usize>,
 	#[command(flatten)]
 	pub transform: ShowTransform,
 }
@@ -27,6 +30,7 @@ impl RectangularNTube {
 				inset: self.inset,
 				min_dihedral: self.min_dihedral,
 				no_joint: self.no_joint,
+				omit_faces: self.omit_faces,
 			},
 			self.transform.transform(),
 		)
