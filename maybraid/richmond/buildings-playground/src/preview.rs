@@ -19,7 +19,7 @@ use richmond_buildings::bedroom::Bedroom;
 use richmond_buildings::panel_complex::{PanelComplex, PanelComplexJointPolicy, PanelPoint};
 use richmond_buildings::quad_panel::QuadPanel;
 use richmond_buildings::quad_panel_complex::QuadPanelComplex;
-use richmond_buildings::ruled_pitch::RuledPitch;
+use richmond_buildings::RuledPitch;
 use richmond_buildings::stacked_rings::StackedRings;
 use richmond_buildings::tessellated_triangle_panel::TessellatedTrianglePanel;
 use richmond_buildings::walling::{

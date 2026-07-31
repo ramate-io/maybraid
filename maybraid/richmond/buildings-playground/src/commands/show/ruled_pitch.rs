@@ -1,4 +1,5 @@
-//! `/show ruled-pitch` — equal eave/ridge stations → ruled quad strip + crease joints.
+//! `/show ruled-pitch` — [`RuledPitch`](richmond_buildings::RuledPitch) (eave/ridge
+//! over [`RuledStrip`](richmond_buildings::RuledStrip)) + crease joints.
 //!
 //! Default: funky 5+5 — snaking eave near the ground, lagging ridge above.
 
