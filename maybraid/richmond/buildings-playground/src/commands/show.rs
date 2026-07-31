@@ -9,6 +9,7 @@ pub mod noisy_polyline_wall;
 pub mod pitch;
 pub mod polyline;
 pub mod polyline_wall;
+pub mod quad_panel;
 pub mod slice_90;
 pub mod stacked_rings;
 pub mod tessellated_triangle;
@@ -40,6 +41,8 @@ pub enum Show {
 	TessellatedTriangle(tessellated_triangle::TessellatedTriangle),
 	/// World-space triangle → 2D panel tessellation → posed onto the plane.
 	TessellatedTriangle3d(tessellated_triangle_3d::TessellatedTriangle3d),
+	/// Two lines → two tessellated triangles + optional crease `JointNode`.
+	QuadPanel(quad_panel::QuadPanel),
 	/// L-shaped `Partition::polyline` (posed linears + joints).
 	Polyline(polyline::Polyline),
 	/// Portal-sensitive straight [`richmond_buildings::LinearWall`].
@@ -66,6 +69,7 @@ impl Show {
 			Self::Pitch(cmd) => cmd.into_preview(),
 			Self::TessellatedTriangle(cmd) => cmd.into_preview(),
 			Self::TessellatedTriangle3d(cmd) => cmd.into_preview(),
+			Self::QuadPanel(cmd) => cmd.into_preview(),
 			Self::Polyline(cmd) => cmd.into_preview(),
 			Self::LinearWall(cmd) => cmd.into_preview(),
 			Self::PolylineWall(cmd) => cmd.into_preview(),

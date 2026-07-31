@@ -7,6 +7,7 @@ pub mod assets;
 pub mod doors;
 pub mod floors;
 pub mod furniture;
+pub mod joints;
 pub mod lod_band;
 pub mod lod_host;
 pub mod panels;
@@ -22,12 +23,13 @@ pub use assets::AssetPath;
 pub use doors::DoorNode;
 pub use floors::FloorNode;
 pub use furniture::{FurnitureGeometry, FurnitureNode, FurnitureStyle, FurnitureWireframePlugin};
+pub use joints::{JointGeometry, JointNode, JointStyle};
 pub use lod_host::{
 	posed_asset_tier, warm_content_host, warm_content_host_hsl, warm_mesh_level_host,
 };
 pub use panels::{
-	fitted_tile_count, to_centered_rect_placement, with_wall_standup_pitch, Joint as PanelJoint,
-	PanelGeometry, PanelKitCaps, PanelNode, PanelStyle, Rectangle as PanelRectangle,
+	fitted_tile_count, to_centered_rect_placement, with_wall_standup_pitch, PanelGeometry,
+	PanelKitCaps, PanelNode, PanelStyle, Rectangle as PanelRectangle,
 	RightTriangle as PanelRightTriangle, TessellatedTriangle, DEFAULT_MIN_JOINT_ANGLE,
 	DEFAULT_TILE_WIDTH,
 };
@@ -83,6 +85,10 @@ pub trait BuildingComponents {
 		vec![]
 	}
 
+	fn joint_nodes_for_level(&self, _level: LodSceneLevel) -> Vec<JointNode> {
+		vec![]
+	}
+
 	fn furniture_nodes_for_level(&self, _level: LodSceneLevel) -> Vec<FurnitureNode> {
 		vec![]
 	}
@@ -111,6 +117,10 @@ impl<T: BuildingComponents + ?Sized> BuildingComponents for &T {
 
 	fn door_nodes_for_level(&self, level: LodSceneLevel) -> Vec<DoorNode> {
 		(**self).door_nodes_for_level(level)
+	}
+
+	fn joint_nodes_for_level(&self, level: LodSceneLevel) -> Vec<JointNode> {
+		(**self).joint_nodes_for_level(level)
 	}
 
 	fn furniture_nodes_for_level(&self, level: LodSceneLevel) -> Vec<FurnitureNode> {
@@ -182,6 +192,10 @@ impl<T: BuildingComponents> BuildingComponents for ComponentsOnly<T> {
 		self.0.door_nodes_for_level(level)
 	}
 
+	fn joint_nodes_for_level(&self, level: LodSceneLevel) -> Vec<JointNode> {
+		self.0.joint_nodes_for_level(level)
+	}
+
 	fn furniture_nodes_for_level(&self, level: LodSceneLevel) -> Vec<FurnitureNode> {
 		self.0.furniture_nodes_for_level(level)
 	}
@@ -220,6 +234,9 @@ pub fn append_component_scenes(
 		children.push(Box::new(node.scene_with_lod(lod_ref)));
 	}
 	for node in building.door_nodes_for_level(level) {
+		children.push(Box::new(node.scene_with_lod(lod_ref)));
+	}
+	for node in building.joint_nodes_for_level(level) {
 		children.push(Box::new(node.scene_with_lod(lod_ref)));
 	}
 	for node in building.furniture_nodes_for_level(level) {

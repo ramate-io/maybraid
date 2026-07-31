@@ -16,6 +16,7 @@ use richmond_building_components::roofs::{Pitch, RoofGeometry, RoofNode};
 use richmond_building_components::Placement;
 use richmond_building_components::ComponentsOnly;
 use richmond_buildings::bedroom::Bedroom;
+use richmond_buildings::quad_panel::{QuadCorner, QuadPanel, QuadPanelJointPolicy};
 use richmond_buildings::stacked_rings::StackedRings;
 use richmond_buildings::tessellated_triangle_panel::TessellatedTrianglePanel;
 use richmond_buildings::walling::{
@@ -54,6 +55,18 @@ pub enum PreviewSubject {
 		a: Vec3,
 		b: Vec3,
 		c: Vec3,
+	},
+	QuadPanel {
+		a0: Vec3,
+		a1: Vec3,
+		b0: Vec3,
+		b1: Vec3,
+		t_a0: f32,
+		t_a1: f32,
+		t_b0: f32,
+		t_b1: f32,
+		min_dihedral: f32,
+		no_joint: bool,
 	},
 	Polyline,
 	LinearWall,
@@ -128,6 +141,20 @@ impl PreviewConfig {
 			PreviewSubject::TessellatedTriangle3d { a, b, c } => {
 				format!("preview: tessellated-triangle-3d (a={a:?} b={b:?} c={c:?})")
 			}
+			PreviewSubject::QuadPanel {
+				a0,
+				a1,
+				b0,
+				b1,
+				t_a0,
+				t_a1,
+				t_b0,
+				t_b1,
+				min_dihedral,
+				no_joint,
+			} => format!(
+				"preview: quad-panel (a0={a0:?} a1={a1:?} b0={b0:?} b1={b1:?} t=[{t_a0:.2},{t_a1:.2},{t_b0:.2},{t_b1:.2}] min_dihedral={min_dihedral:.3} no_joint={no_joint})"
+			),
 			PreviewSubject::Polyline => "preview: partition polyline (L)".into(),
 			PreviewSubject::LinearWall => "preview: walling linear-wall (door)".into(),
 			PreviewSubject::PolylineWall => "preview: walling polyline-wall (door)".into(),
@@ -196,6 +223,11 @@ impl PreviewConfig {
 			PreviewSubject::TessellatedTriangle3d { a, b, c } => {
 				let min = a.min(*b).min(*c) - Vec3::splat(0.2);
 				let max = a.max(*b).max(*c) + Vec3::splat(0.2);
+				Aabb3d::from_min_max(min, max)
+			}
+			PreviewSubject::QuadPanel { a0, a1, b0, b1, .. } => {
+				let min = a0.min(*a1).min(*b0).min(*b1) - Vec3::splat(0.2);
+				let max = a0.max(*a1).max(*b0).max(*b1) + Vec3::splat(0.2);
 				Aabb3d::from_min_max(min, max)
 			}
 			PreviewSubject::Polyline | PreviewSubject::PolylineWall => {
@@ -385,6 +417,36 @@ pub fn present_preview_lod(
 		}
 		PreviewSubject::TessellatedTriangle3d { a, b, c } => {
 			let panel = TessellatedTrianglePanel::rough_stone(*a, *b, *c);
+			spawn_preview(
+				&mut commands,
+				transform,
+				ComponentsOnly(panel).scene_with_lod(&lod_ref),
+			);
+		}
+		PreviewSubject::QuadPanel {
+			a0,
+			a1,
+			b0,
+			b1,
+			t_a0,
+			t_a1,
+			t_b0,
+			t_b1,
+			min_dihedral,
+			no_joint,
+		} => {
+			let policy = if *no_joint {
+				QuadPanelJointPolicy::never()
+			} else {
+				QuadPanelJointPolicy::min_dihedral_rad(*min_dihedral)
+			};
+			let panel = QuadPanel::rough_stone(
+				QuadCorner::new(*a0, *t_a0),
+				QuadCorner::new(*a1, *t_a1),
+				QuadCorner::new(*b0, *t_b0),
+				QuadCorner::new(*b1, *t_b1),
+			)
+			.with_joint_policy(policy);
 			spawn_preview(
 				&mut commands,
 				transform,
