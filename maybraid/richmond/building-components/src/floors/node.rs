@@ -91,9 +91,7 @@ impl LodScene for FloorNode {
 						let child: Box<dyn Scene> = match piece.geom {
 							FloorKit::Rectangle
 							| FloorKit::CircleInscribedSquare
-							| FloorKit::RightTriangle { .. } => {
-								Box::new(WoodFloorRectangle.scene_with_lod(lod_ref))
-							}
+							| FloorKit::RightTriangle { .. } => Box::new(WoodFloorRectangle.scene_with_lod(lod_ref)),
 							FloorKit::ArcFill(_) => {
 								Box::new(WoodFloorArcFill.scene_with_lod(lod_ref))
 							}

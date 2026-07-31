@@ -1,10 +1,10 @@
 //! Private floor kit tessellation (not part of the public IR).
 
-use crate::panels::{PanelGeometry, PanelKitCaps, Rectangle, RightTriangle};
-use crate::placed::{Placed, Placement};
+use crate::arc_kit::{decompose_arc_sweep, ArcKit};
 use crate::floors::geometry::FloorGeometry;
 use crate::floors::style::FloorStyle;
-use crate::arc_kit::{decompose_arc_sweep, ArcKit};
+use crate::panels::{PanelGeometry, PanelKitCaps, Rectangle, RightTriangle};
+use crate::placed::{Placed, Placement};
 use scene_ref::MirrorAxis;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

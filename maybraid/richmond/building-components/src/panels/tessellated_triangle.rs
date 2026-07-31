@@ -29,11 +29,7 @@ pub struct TessellatedTriangle {
 
 impl Default for TessellatedTriangle {
 	fn default() -> Self {
-		Self {
-			a: Vec2::ZERO,
-			b: Vec2::new(1.0, 0.0),
-			c: Vec2::new(0.0, -1.0),
-		}
+		Self { a: Vec2::ZERO, b: Vec2::new(1.0, 0.0), c: Vec2::new(0.0, -1.0) }
 	}
 }
 
@@ -62,11 +58,7 @@ impl TessellatedTriangle {
 		}
 
 		// General case: altitude to the longest edge → two right-triangle kits.
-		let edges = [
-			(self.a, self.b, self.c),
-			(self.b, self.c, self.a),
-			(self.c, self.a, self.b),
-		];
+		let edges = [(self.a, self.b, self.c), (self.b, self.c, self.a), (self.c, self.a, self.b)];
 		let (ei, _) = edges
 			.iter()
 			.enumerate()
@@ -108,11 +100,7 @@ fn is_right_angle(at: Vec2, p: Vec2, q: Vec2) -> bool {
 ///
 /// Kit \(+X\) maps along one leg; kit \(-Z\) (local \((0,0,-1)\)) along the other.
 /// Panel \(+Y\) is thickness; yaw alone orients the kit in the \(XZ\) plane.
-fn place_right_triangle(
-	right_angle: Vec2,
-	leg_u: Vec2,
-	leg_v: Vec2,
-) -> Vec<Placed<PanelGeometry>> {
+fn place_right_triangle(right_angle: Vec2, leg_u: Vec2, leg_v: Vec2) -> Vec<Placed<PanelGeometry>> {
 	let u = leg_u - right_angle;
 	let v = leg_v - right_angle;
 	let u_len = u.length();
@@ -125,11 +113,7 @@ fn place_right_triangle(
 	// perpendicular in \(XZ\). Choose `x_leg` so that perpendicular matches the
 	// other leg (GLB is \(Z \in [-1, 0]\), not \(+Z\)).
 	let cross = u.x * v.y - u.y * v.x;
-	let (x_leg, sx, sz) = if cross <= 0.0 {
-		(u, u_len, v_len)
-	} else {
-		(v, v_len, u_len)
-	};
+	let (x_leg, sx, sz) = if cross <= 0.0 { (u, u_len, v_len) } else { (v, v_len, u_len) };
 	let x_dir = x_leg / sx;
 
 	let yaw = yaw_along_xz(x_dir.x, x_dir.y);

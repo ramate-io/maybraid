@@ -20,7 +20,7 @@ impl PanelKitCaps {
 impl From<RoofStyle> for PanelKitCaps {
 	fn from(style: RoofStyle) -> Self {
 		match style {
-			RoofStyle::ShepherdsThatch => Self::TRIANGLES_ONLY,
+			RoofStyle::ShepherdsThatch => Self::WITH_RECTANGLE,
 		}
 	}
 }
