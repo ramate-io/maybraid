@@ -2,8 +2,9 @@
 //!
 //! Good for modern and sci-fi buildings, outposts, and the like.
 //!
-//! Lower band: four walls (no floor / no ceiling). Upper band: four walls + ridge
-//! ceiling. Optional centered door clips on lower sides. High LOD adds vertical
+//! Lower band: four walls. Upper band: four walls. Optional footprint floor and
+//! ridge ceiling ([`TrazaloidSlab`]: absent, solid, or centered square hole).
+//! Optional centered door clips on lower sides. High LOD adds vertical
 //! [`JointNode`] posts at corners and densified face generators.
 
 use bevy_math::{Vec2, Vec3};
@@ -50,6 +51,23 @@ impl Default for TrazaloidDoors {
 	}
 }
 
+/// Horizontal footprint / ridge slab presentation.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum TrazaloidSlab {
+	/// Omit the slab entirely.
+	None,
+	/// Solid rectangular strip.
+	Solid,
+	/// Centered axis-aligned square hole; `size` is full side length in meters.
+	SquareHole { size: f32 },
+}
+
+impl Default for TrazaloidSlab {
+	fn default() -> Self {
+		Self::None
+	}
+}
+
 /// Authored parameters for a [`Trazaloid`] shell.
 #[derive(Debug, Clone, PartialEq)]
 pub struct TrazaloidParams {
@@ -72,6 +90,10 @@ pub struct TrazaloidParams {
 	pub door_thickness: f32,
 	/// Door opening height as a fraction of the lower face height (from the ground up).
 	pub door_height_frac: f32,
+	/// Footprint floor at `y = 0` (default: absent).
+	pub floor: TrazaloidSlab,
+	/// Ridge ceiling (default: solid).
+	pub ceiling: TrazaloidSlab,
 	pub style: PanelStyle,
 	pub joint_thickness: f32,
 	/// Extra vertical posts per face (between corners) at [`LodSceneLevel::High`].
@@ -94,6 +116,8 @@ impl Default for TrazaloidParams {
 			door_width_frac: 0.28,
 			door_thickness: 1.2,
 			door_height_frac: 0.7,
+			floor: TrazaloidSlab::None,
+			ceiling: TrazaloidSlab::Solid,
 			style: PanelStyle::RoughStonework,
 			joint_thickness: DEFAULT_PANEL_THICKNESS,
 			face_post_count: 2,
@@ -171,7 +195,8 @@ pub struct Trazaloid {
 	joint_policy: PanelComplexJointPolicy,
 	lower_walls: [ClippedRuledStrip; 4],
 	upper_walls: [ClippedRuledStrip; 4],
-	ridge_ceiling: ClippedRuledStrip,
+	floor: Option<ClippedRuledStrip>,
+	ceiling: Option<ClippedRuledStrip>,
 	high_posts: Vec<PostSegment>,
 	/// Resolved plan rectangles (foot, waist/lower-top, upper-bottom, ridge).
 	rects: [PlanRect; 4],
@@ -209,15 +234,8 @@ impl Trazaloid {
 			ClippedRuledStrip::from_lines(style, [a0, a1], [b0, b1], [None]).with_joint_policy(policy)
 		});
 
-		// Ridge ceiling: rail_a = south edge (SW→SE), rail_b = north (NW→NE), one bay along X.
-		// Stations along X so the strip covers the ridge rectangle.
-		let ridge_ceiling = ClippedRuledStrip::from_lines(
-			style,
-			[ridge.sw(), ridge.se()],
-			[ridge.nw(), ridge.ne()],
-			[None],
-		)
-		.with_joint_policy(policy);
+		let floor = horizontal_slab(style, policy, foot, params.floor);
+		let ceiling = horizontal_slab(style, policy, ridge, params.ceiling);
 
 		let high_posts = build_high_posts(&params, &rects);
 
@@ -226,7 +244,8 @@ impl Trazaloid {
 			joint_policy: policy,
 			lower_walls,
 			upper_walls,
-			ridge_ceiling,
+			floor,
+			ceiling,
 			high_posts,
 			rects,
 		}
@@ -236,11 +255,12 @@ impl Trazaloid {
 		self.joint_policy = joint_policy;
 		self.lower_walls = self.lower_walls.map(|w| w.with_joint_policy(joint_policy));
 		self.upper_walls = self.upper_walls.map(|w| w.with_joint_policy(joint_policy));
-		self.ridge_ceiling = std::mem::replace(
-			&mut self.ridge_ceiling,
-			ClippedRuledStrip::new(self.params.style),
-		)
-		.with_joint_policy(joint_policy);
+		if let Some(floor) = self.floor.take() {
+			self.floor = Some(floor.with_joint_policy(joint_policy));
+		}
+		if let Some(ceiling) = self.ceiling.take() {
+			self.ceiling = Some(ceiling.with_joint_policy(joint_policy));
+		}
 		self
 	}
 
@@ -256,11 +276,15 @@ impl Trazaloid {
 		&self.upper_walls
 	}
 
-	pub fn ridge_ceiling(&self) -> &ClippedRuledStrip {
-		&self.ridge_ceiling
+	pub fn floor(&self) -> Option<&ClippedRuledStrip> {
+		self.floor.as_ref()
 	}
 
-	/// Foot, waist, upper-bottom, ridge half-extents and heights.
+	pub fn ceiling(&self) -> Option<&ClippedRuledStrip> {
+		self.ceiling.as_ref()
+	}
+
+	/// Foot, waist, upper-bottom, ridge full extents and heights.
 	pub fn plan_levels(&self) -> [(f32, Vec2); 4] {
 		self.rects.map(|r| (r.y, Vec2::new(r.half_x * 2.0, r.half_z * 2.0)))
 	}
@@ -275,7 +299,12 @@ impl BuildingComponents for Trazaloid {
 		for w in &self.upper_walls {
 			out.extend(w.panel_nodes_for_level(level));
 		}
-		out.extend(self.ridge_ceiling.panel_nodes_for_level(level));
+		if let Some(floor) = &self.floor {
+			out.extend(floor.panel_nodes_for_level(level));
+		}
+		if let Some(ceiling) = &self.ceiling {
+			out.extend(ceiling.panel_nodes_for_level(level));
+		}
 		out
 	}
 
@@ -287,7 +316,12 @@ impl BuildingComponents for Trazaloid {
 		for w in &self.upper_walls {
 			out.extend(w.joint_nodes_for_level(level));
 		}
-		out.extend(self.ridge_ceiling.joint_nodes_for_level(level));
+		if let Some(floor) = &self.floor {
+			out.extend(floor.joint_nodes_for_level(level));
+		}
+		if let Some(ceiling) = &self.ceiling {
+			out.extend(ceiling.joint_nodes_for_level(level));
+		}
 
 		if matches!(level, LodSceneLevel::High) {
 			let thickness = self.params.joint_thickness.max(1e-4);
@@ -341,6 +375,41 @@ fn resolve_rects(params: &TrazaloidParams) -> [PlanRect; 4] {
 			half_x: ridge_x,
 			half_z: ridge_z,
 		},
+	]
+}
+
+/// Horizontal strip over a plan rectangle (south→north rails along +X).
+fn horizontal_slab(
+	style: PanelStyle,
+	policy: PanelComplexJointPolicy,
+	rect: PlanRect,
+	slab: TrazaloidSlab,
+) -> Option<ClippedRuledStrip> {
+	let clip = match slab {
+		TrazaloidSlab::None => return None,
+		TrazaloidSlab::Solid => None,
+		TrazaloidSlab::SquareHole { size } => Some(centered_square_clip(rect, size)),
+	};
+	Some(
+		ClippedRuledStrip::from_lines(
+			style,
+			[rect.sw(), rect.se()],
+			[rect.nw(), rect.ne()],
+			[clip],
+		)
+		.with_joint_policy(policy),
+	)
+}
+
+/// Centered axis-aligned square in the plan of `rect` (CCW from +Y).
+fn centered_square_clip(rect: PlanRect, size: f32) -> Vec<Vec3> {
+	let max_half = (rect.half_x.min(rect.half_z) - EXTENT_EPS).max(EXTENT_EPS);
+	let half = (size * 0.5).clamp(EXTENT_EPS, max_half);
+	vec![
+		Vec3::new(-half, rect.y, -half),
+		Vec3::new(half, rect.y, -half),
+		Vec3::new(half, rect.y, half),
+		Vec3::new(-half, rect.y, half),
 	]
 }
 
@@ -489,7 +558,7 @@ mod tests {
 	}
 
 	#[test]
-	fn lower_has_walls_upper_has_ceiling() {
+	fn default_has_ceiling_no_floor() {
 		let t = Trazaloid::new(demo_params());
 		for w in t.lower_walls() {
 			assert!(!w.pieces().is_empty());
@@ -497,10 +566,11 @@ mod tests {
 		for w in t.upper_walls() {
 			assert!(!w.pieces().is_empty());
 		}
-		assert!(!t.ridge_ceiling().pieces().is_empty());
-		// Four lower walls + four upper + ceiling = panels; no separate lower ceiling strip.
+		assert!(t.floor().is_none());
+		let ceiling = t.ceiling().expect("default solid ceiling");
+		assert!(!ceiling.pieces().is_empty());
 		let high = t.panel_nodes_for_level(LodSceneLevel::High).len();
-		let without_ceiling = {
+		let walls_only = {
 			let mut n = 0;
 			for w in t.lower_walls() {
 				n += w.panel_nodes_for_level(LodSceneLevel::High).len();
@@ -510,11 +580,24 @@ mod tests {
 			}
 			n
 		};
-		assert!(high > without_ceiling);
 		assert_eq!(
 			high,
-			without_ceiling + t.ridge_ceiling().panel_nodes_for_level(LodSceneLevel::High).len()
+			walls_only + ceiling.panel_nodes_for_level(LodSceneLevel::High).len()
 		);
+	}
+
+	#[test]
+	fn can_omit_ceiling_and_add_floor_with_hole() {
+		let mut params = demo_params();
+		params.ceiling = TrazaloidSlab::None;
+		params.floor = TrazaloidSlab::SquareHole { size: 2.0 };
+		let t = Trazaloid::new(params);
+		assert!(t.ceiling().is_none());
+		let floor = t.floor().expect("floor present");
+		assert!(matches!(
+			floor.pieces()[0],
+			ClippedStripPiece::Clipped(_)
+		));
 	}
 
 	#[test]

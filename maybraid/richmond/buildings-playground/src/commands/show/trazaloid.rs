@@ -40,6 +40,18 @@ pub struct Trazaloid {
 	pub door_thickness: f32,
 	#[arg(long, default_value_t = 0.7)]
 	pub door_height_frac: f32,
+	/// Emit a footprint floor slab.
+	#[arg(long, default_value_t = false)]
+	pub floor: bool,
+	/// Omit the ridge ceiling.
+	#[arg(long, default_value_t = false)]
+	pub no_ceiling: bool,
+	/// Centered square hole side length on the floor (`0` = solid when `--floor`).
+	#[arg(long, default_value_t = 0.0)]
+	pub floor_hole: f32,
+	/// Centered square hole side length on the ceiling (`0` = solid when ceiling present).
+	#[arg(long, default_value_t = 0.0)]
+	pub ceiling_hole: f32,
 	#[arg(long, default_value_t = 2)]
 	pub face_post_count: u32,
 	#[command(flatten)]
@@ -65,6 +77,10 @@ impl Trazaloid {
 				door_width_frac: self.door_width_frac,
 				door_thickness: self.door_thickness,
 				door_height_frac: self.door_height_frac,
+				floor: self.floor,
+				no_ceiling: self.no_ceiling,
+				floor_hole: self.floor_hole,
+				ceiling_hole: self.ceiling_hole,
 				face_post_count: self.face_post_count,
 			},
 			self.transform.transform(),

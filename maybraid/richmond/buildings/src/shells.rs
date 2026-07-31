@@ -2,4 +2,4 @@
 
 pub mod trazaloid;
 
-pub use trazaloid::{Trazaloid, TrazaloidDoors, TrazaloidParams};
+pub use trazaloid::{Trazaloid, TrazaloidDoors, TrazaloidParams, TrazaloidSlab};
