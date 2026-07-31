@@ -16,6 +16,7 @@ pub mod bedroom;
 pub mod constraints;
 pub mod paneling;
 pub mod portals;
+pub mod shells;
 pub mod stacked_rings;
 pub mod wall_demo;
 pub mod wizards_tower;
@@ -58,5 +59,6 @@ pub use paneling::{
 pub use portals::{
 	ArcRegion, AssignedPortal, MustAssignPortal, Portal, PortalFootprint, WallRegion, SLICE_Y_FRAC,
 };
+pub use shells::{Trazaloid, TrazaloidDoors, TrazaloidParams};
 pub use stacked_rings::{StackedRing, StackedRings};
 pub use wall_demo::{NoisyRectangularWall, NoisyRectangularWallParams};

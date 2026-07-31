@@ -27,6 +27,7 @@ cargo run -p richmond-buildings-playground -- show clipped-tessellated-triangle
 cargo run -p richmond-buildings-playground -- show clipped-quad-panel
 cargo run -p richmond-buildings-playground -- show clipped-ruled-strip
 cargo run -p richmond-buildings-playground -- show tube
+cargo run -p richmond-buildings-playground -- show trazaloid
 cargo run -p richmond-buildings-playground -- show clipped-rectangle
 cargo run -p richmond-buildings-playground -- show clipped-rectangular-strip
 cargo run -p richmond-buildings-playground -- show arc-sweep
@@ -59,6 +60,7 @@ In-game: press `/` for the command console (same clap commands as argv).
 - `show clipped-quad-panel [--a0|--a1|--b0|--b1 X,Y,Z] [--clip 'x,y,z;…'] [--min-dihedral R] [--no-joint]` — ruled quad − closed clip
 - `show clipped-ruled-strip [--min-dihedral R] [--no-joint]` — multi-bay strip with a clip on the middle bay
 - `show tube [--min-dihedral R] [--no-joint] [--no-floor] [--no-ceiling] [--no-left] [--no-right]` — trapezoid cross-section polyline → four clipped ruled strips (bend + pitch + slight roll; left-wall opening); `--no-*` omits faces
+- `show trazaloid [--footprint-x/--footprint-z] [--ridge-x/--ridge-z] [--lower-height] [--upper-height] [--band-vertical-offset] [--waist-horizontal-offset] [--door-north|--door-east|--door-south|--door-west] [--face-post-count N]` — two-band trapezoidal-pyramid shell (waist reveal, centered lower doors, high-LOD vertical posts)
 - `show clipped-rectangle [--a0|--a1|--b0|--b1 X,Y,Z] [--left|--right|--bottom|--top M]` — best-fit `PanelGeometry::Rectangle` with inset framed by rectangle kits
 - `show clipped-rectangular-strip [--inset M] [--min-dihedral R] [--no-joint]` — two-rail rectangle strip; middle bay inset frame; crease joints on bay folds
 - `show arc-sweep [--radius R] [--height H] [--sweep-degrees D] [--start-yaw-deg D]` — circular fitted `arcs::ArcSweep` (not IR `partitions::ArcSweep`)
