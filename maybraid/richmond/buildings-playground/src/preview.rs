@@ -22,7 +22,7 @@ use richmond_buildings::quad_panel_complex::QuadPanelComplex;
 use richmond_buildings::{
 	ApproximatedCircle, ArcSweep, ClippedArcSweep, ClippedQuadPanel, ClippedRectangle,
 	ClippedRectangularStrip, ClippedRuledStrip, ClippedTessellatedTriangle, RectInset, RuledPitch,
-	Tube, TubeCrossSectionNode,
+	Tube, TubeCrossSectionNode, TubeFaces,
 };
 use richmond_buildings::stacked_rings::StackedRings;
 use richmond_buildings::tessellated_triangle_panel::TessellatedTrianglePanel;
@@ -85,6 +85,10 @@ pub enum PreviewSubject {
 	Tube {
 		min_dihedral: f32,
 		no_joint: bool,
+		no_floor: bool,
+		no_ceiling: bool,
+		no_left: bool,
+		no_right: bool,
 	},
 	ClippedRectangle {
 		a0: Vec3,
@@ -246,8 +250,12 @@ impl PreviewConfig {
 			PreviewSubject::Tube {
 				min_dihedral,
 				no_joint,
+				no_floor,
+				no_ceiling,
+				no_left,
+				no_right,
 			} => format!(
-				"preview: tube (min_dihedral={min_dihedral:.3} no_joint={no_joint})"
+				"preview: tube (min_dihedral={min_dihedral:.3} no_joint={no_joint} no_floor={no_floor} no_ceiling={no_ceiling} no_left={no_left} no_right={no_right})"
 			),
 			PreviewSubject::ClippedRectangle {
 				a0,
@@ -661,12 +669,29 @@ pub fn present_preview_lod(
 		PreviewSubject::Tube {
 			min_dihedral,
 			no_joint,
+			no_floor,
+			no_ceiling,
+			no_left,
+			no_right,
 		} => {
 			let policy = if *no_joint {
 				PanelComplexJointPolicy::never()
 			} else {
 				PanelComplexJointPolicy::min_dihedral_rad(*min_dihedral)
 			};
+			let mut faces = TubeFaces::ALL;
+			if *no_floor {
+				faces = faces.without_floor();
+			}
+			if *no_ceiling {
+				faces = faces.without_ceiling();
+			}
+			if *no_left {
+				faces = faces.without_left();
+			}
+			if *no_right {
+				faces = faces.without_right();
+			}
 			// Level start, then plan bend + pitch; slight roll on the kink station.
 			let nodes = [
 				TubeCrossSectionNode::new(
@@ -718,7 +743,8 @@ pub fn present_preview_lod(
 				[None, Some(left_clip), None],
 				std::iter::empty(),
 			)
-			.with_joint_policy(policy);
+			.with_joint_policy(policy)
+			.with_faces(faces);
 			spawn_preview(
 				&mut commands,
 				transform,
