@@ -3,14 +3,14 @@
 use bevy::scene::prelude::Scene;
 use lod::gen::LodScene;
 use lod::lod_ref::LodRef;
+use scene_ref::MirrorAxis;
 
-use crate::assets::panels::rough_stonework::RECTANGLE;
-use crate::floors::RoughStoneFloorRightTriangle;
+use crate::assets::AssetPath;
 use crate::panels::geometry::{PanelGeometry, Rectangle, RightTriangle};
 use crate::panels::style::PanelStyle;
 use crate::placed::Placement;
-use crate::roofs::ShepherdsThatchRightTriangle;
-use crate::scene_children::{pose, posed_glb, scene_children, with_pose};
+use crate::roofs::lod::leaf_scene_ref_lod;
+use crate::scene_children::{pose, scene_children, with_pose};
 
 /// Authoring IR for a shared panel feature (rectangle / triangle tessellation).
 #[derive(Debug, Clone, PartialEq)]
@@ -34,6 +34,21 @@ impl PanelNode {
 	}
 }
 
+fn lod_triad_scene(
+	high: AssetPath,
+	mid: AssetPath,
+	low: AssetPath,
+	lod_ref: &LodRef,
+	mirror: Option<MirrorAxis>,
+) -> impl Scene + 'static {
+	leaf_scene_ref_lod(
+		high.scene_ref().with_mirror(mirror),
+		mid.scene_ref().with_mirror(mirror),
+		low.scene_ref().with_mirror(mirror),
+		lod_ref,
+	)
+}
+
 impl LodScene for PanelNode {
 	fn scene_lod_status(&self, _lod_ref: &LodRef) -> lod::gen::LodSceneStatus {
 		lod::gen::LodSceneStatus::Unchanged
@@ -52,37 +67,22 @@ impl LodScene for PanelNode {
 				// Transform multiply (not euler-add compose_child) so parent pitch/roll
 				// compose correctly with in-plane kit yaw.
 				let transform = pose(self.placement) * pose(piece.placement);
-				match self.style {
-					PanelStyle::RoughStonework => match piece.geom {
-						PanelGeometry::Rectangle(Rectangle) => {
-							Some(Box::new(posed_glb(RECTANGLE, transform)) as Box<dyn Scene>)
-						}
-						PanelGeometry::RightTriangle(RightTriangle { mirror }) => {
-							Some(Box::new(with_pose(
-								transform,
-								RoughStoneFloorRightTriangle::scene_with_lod_mirrored(
-									lod_ref, mirror,
-								),
-							)) as Box<dyn Scene>)
-						}
-						_ => None,
-					},
-					PanelStyle::ShepherdsThatch => match piece.geom {
-						PanelGeometry::Rectangle(Rectangle) => {
-							// No thatch rectangle kit; flatten uses dual-triangle policy.
-							Some(Box::new(::bevy::scene::SceneFunction(crate::empty_scene))
-								as Box<dyn Scene>)
-						}
-						PanelGeometry::RightTriangle(RightTriangle { mirror }) => {
-							Some(Box::new(with_pose(
-								transform,
-								ShepherdsThatchRightTriangle::scene_with_lod_mirrored(
-									lod_ref, mirror,
-								),
-							)) as Box<dyn Scene>)
-						}
-						_ => None,
-					},
+				match piece.geom {
+					PanelGeometry::Rectangle(Rectangle) => {
+						let (high, mid, low) = self.style.rectangle_lod()?;
+						Some(Box::new(with_pose(
+							transform,
+							lod_triad_scene(high, mid, low, lod_ref, None),
+						)) as Box<dyn Scene>)
+					}
+					PanelGeometry::RightTriangle(RightTriangle { mirror }) => {
+						let (high, mid, low) = self.style.right_triangle_lod()?;
+						Some(Box::new(with_pose(
+							transform,
+							lod_triad_scene(high, mid, low, lod_ref, mirror),
+						)) as Box<dyn Scene>)
+					}
+					_ => None,
 				}
 			})
 			.collect();
