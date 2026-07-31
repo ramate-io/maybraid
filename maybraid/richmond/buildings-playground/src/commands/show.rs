@@ -21,6 +21,7 @@ pub mod clipped_rectangle;
 pub mod clipped_rectangular_strip;
 pub mod clipped_ruled_strip;
 pub mod clipped_tessellated_triangle;
+pub mod connecting_hall;
 pub mod tessellated_triangle;
 pub mod tessellated_triangle_3d;
 pub mod transform;
@@ -60,6 +61,8 @@ pub enum Show {
 	ClippedRuledStrip(clipped_ruled_strip::ClippedRuledStrip),
 	/// Trapezoid cross-section polyline → four clipped ruled strip faces.
 	Tube(tube::Tube),
+	/// One-kink tube between two oriented openings.
+	ConnectingHall(connecting_hall::ConnectingHall),
 	/// Two-band trapezoidal-pyramid shell with waist reveal and optional doors.
 	Trazaloid(trazaloid::Trazaloid),
 	/// Best-fit rectangle kit with an inset framed by rectangle kits.
@@ -106,6 +109,7 @@ impl Show {
 			Self::ClippedQuadPanel(cmd) => cmd.into_preview(),
 			Self::ClippedRuledStrip(cmd) => cmd.into_preview(),
 			Self::Tube(cmd) => cmd.into_preview(),
+			Self::ConnectingHall(cmd) => cmd.into_preview(),
 			Self::Trazaloid(cmd) => cmd.into_preview(),
 			Self::ClippedRectangle(cmd) => cmd.into_preview(),
 			Self::ClippedRectangularStrip(cmd) => cmd.into_preview(),

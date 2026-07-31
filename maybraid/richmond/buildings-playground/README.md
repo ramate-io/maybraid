@@ -27,6 +27,7 @@ cargo run -p richmond-buildings-playground -- show clipped-tessellated-triangle
 cargo run -p richmond-buildings-playground -- show clipped-quad-panel
 cargo run -p richmond-buildings-playground -- show clipped-ruled-strip
 cargo run -p richmond-buildings-playground -- show tube
+cargo run -p richmond-buildings-playground -- show connecting-hall
 cargo run -p richmond-buildings-playground -- show trazaloid
 cargo run -p richmond-buildings-playground -- show clipped-rectangle
 cargo run -p richmond-buildings-playground -- show clipped-rectangular-strip
@@ -60,6 +61,7 @@ In-game: press `/` for the command console (same clap commands as argv).
 - `show clipped-quad-panel [--a0|--a1|--b0|--b1 X,Y,Z] [--clip 'x,y,z;…'] [--min-dihedral R] [--no-joint]` — ruled quad − closed clip
 - `show clipped-ruled-strip [--min-dihedral R] [--no-joint]` — multi-bay strip with a clip on the middle bay
 - `show tube [--min-dihedral R] [--no-joint] [--no-floor] [--no-ceiling] [--no-left] [--no-right]` — trapezoid cross-section polyline → four clipped ruled strips (bend + pitch + slight roll; left-wall opening); `--no-*` omits faces
+- `show connecting-hall` — one-kink `ConnectingHall` tube between two oriented openings
 - `show trazaloid […] [--floor] [--no-ceiling] [--floor-hole M] [--ceiling-hole M] [--door-thickness M] [--face-post-count N]` — two-band trapezoidal-pyramid shell; floor/ceiling optional with centered square holes
 - `show clipped-rectangle [--a0|--a1|--b0|--b1 X,Y,Z] [--left|--right|--bottom|--top M]` — best-fit `PanelGeometry::Rectangle` with inset framed by rectangle kits
 - `show clipped-rectangular-strip [--inset M] [--min-dihedral R] [--no-joint]` — two-rail rectangle strip; middle bay inset frame; crease joints on bay folds

@@ -59,6 +59,9 @@ pub use paneling::{
 pub use portals::{
 	ArcRegion, AssignedPortal, MustAssignPortal, Portal, PortalFootprint, WallRegion, SLICE_Y_FRAC,
 };
-pub use shells::{Trazaloid, TrazaloidDoors, TrazaloidParams, TrazaloidSlab};
+pub use shells::{
+	ConnectingHall, ConnectingHallEndpoint, Trazaloid, TrazaloidDoors, TrazaloidParams,
+	TrazaloidSlab,
+};
 pub use stacked_rings::{StackedRing, StackedRings};
 pub use wall_demo::{NoisyRectangularWall, NoisyRectangularWallParams};

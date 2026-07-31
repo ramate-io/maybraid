@@ -22,8 +22,8 @@ use richmond_buildings::quad_panel_complex::QuadPanelComplex;
 use richmond_buildings::{
 	ApproximatedCircle, ArcSweep, ClippedArcSweep, ClippedQuadPanel, ClippedRectangle,
 	ClippedRectangularStrip, ClippedRuledStrip, ClippedTessellatedTriangle, RectInset, RuledPitch,
-	Tube, TubeCrossSectionNode, TubeFaces, Trazaloid, TrazaloidDoors, TrazaloidParams,
-	TrazaloidSlab,
+	ConnectingHall, ConnectingHallEndpoint, Tube, TubeCrossSectionNode, TubeFaces, Trazaloid,
+	TrazaloidDoors, TrazaloidParams, TrazaloidSlab,
 };
 use richmond_buildings::stacked_rings::StackedRings;
 use richmond_buildings::tessellated_triangle_panel::TessellatedTrianglePanel;
@@ -91,6 +91,7 @@ pub enum PreviewSubject {
 		no_left: bool,
 		no_right: bool,
 	},
+	ConnectingHall,
 	Trazaloid {
 		footprint_x: f32,
 		footprint_z: f32,
@@ -280,6 +281,7 @@ impl PreviewConfig {
 			} => format!(
 				"preview: tube (min_dihedral={min_dihedral:.3} no_joint={no_joint} no_floor={no_floor} no_ceiling={no_ceiling} no_left={no_left} no_right={no_right})"
 			),
+			PreviewSubject::ConnectingHall => "preview: connecting-hall (one kink)".into(),
 			PreviewSubject::Trazaloid {
 				footprint_x,
 				footprint_z,
@@ -462,6 +464,9 @@ impl PreviewConfig {
 					Vec3::new(-2.0, -0.5, -0.5),
 					Vec3::new(7.0, 4.0, 9.0),
 				)
+			}
+			PreviewSubject::ConnectingHall => {
+				Aabb3d::from_min_max(Vec3::new(-5.0, -0.5, -5.0), Vec3::new(5.0, 4.0, 5.0))
 			}
 			PreviewSubject::Trazaloid {
 				footprint_x,
@@ -804,6 +809,30 @@ pub fn present_preview_lod(
 				&mut commands,
 				transform,
 				ComponentsOnly(tube).scene_with_lod(&lod_ref),
+			);
+		}
+		PreviewSubject::ConnectingHall => {
+			// South opening facing +Z; east opening facing −X — mild kink at origin.
+			let end_a = ConnectingHallEndpoint::new(
+				Vec3::new(-1.2, 0.0, -4.0),
+				Vec3::new(1.2, 0.0, -4.0),
+				Vec3::new(-1.0, 2.4, -4.0),
+				Vec3::new(1.0, 2.4, -4.0),
+				Vec2::Y,
+			);
+			// Looking along −X: left = −Z, right = +Z.
+			let end_b = ConnectingHallEndpoint::new(
+				Vec3::new(4.0, 0.5, -1.2),
+				Vec3::new(4.0, 0.5, 1.2),
+				Vec3::new(4.0, 2.6, -1.0),
+				Vec3::new(4.0, 2.6, 1.0),
+				-Vec2::X,
+			);
+			let hall = ConnectingHall::rough_stone(end_a, end_b);
+			spawn_preview(
+				&mut commands,
+				transform,
+				ComponentsOnly(hall).scene_with_lod(&lod_ref),
 			);
 		}
 		PreviewSubject::Trazaloid {
