@@ -13,6 +13,7 @@
 pub mod arc_spire;
 pub mod bedroom;
 pub mod constraints;
+pub mod panel_complex;
 pub mod quad_panel;
 pub mod stacked_rings;
 pub mod tessellated_triangle_panel;
@@ -27,6 +28,10 @@ pub use constraints::{
 	BoundaryOwnershipEntry, BoundaryOwnershipStatus, BoundaryRegionList, BoundaryThicknessEntry,
 	CellBoundaryTable, CellConstraints, CirculationEntry, CirculationRequestStatus, FaceKind,
 	JointCoordinate, JointEntry, PreJointSweep, SubsetError,
+};
+pub use panel_complex::{
+	shared_edges, PanelComplex, PanelComplexJointPolicy, PanelComplexValidation, PanelPoint,
+	PanelPointId, PanelTriangle, ParsePanelComplexError, SharedEdge,
 };
 pub use quad_panel::{
 	QuadCorner, QuadPanel, QuadPanelJointPolicy, DEFAULT_PANEL_THICKNESS,

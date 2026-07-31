@@ -29,6 +29,7 @@ Runtime paths are registered in building-components [`assets.rs`](../building-co
 | [`arc_spire`](src/arc_spire.rs) | Spire / storey binding helpers |
 | [`tessellated_triangle_panel`](src/tessellated_triangle_panel.rs) | World-space triangle → `PanelNode` |
 | [`quad_panel`](src/quad_panel.rs) | Two lines → two tessellated triangles + optional `JointNode` by dihedral policy |
+| [`panel_complex`](src/panel_complex.rs) | Point-id triangle mesh → panels + crease `JointNode`s on shared edges |
 | [`constraints`](src/constraints.rs) | Cell / boundary / circulation IR |
 
 Authoring guidance for Richmond (LOD, `ParentConfines`, wall vs partition) lives in [`../CONTRIBUTING.md`](../CONTRIBUTING.md). Kit normalization and leaf styles live in the [building-components README](../building-components/README.md).

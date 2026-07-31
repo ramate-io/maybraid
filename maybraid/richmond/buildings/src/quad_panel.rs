@@ -13,7 +13,9 @@
 use bevy_math::Vec3;
 use lod::gen::LodSceneLevel;
 use richmond_building_components::joints::{JointNode, JointPost};
-use richmond_building_components::panels::{PanelNode, PanelStyle, DEFAULT_MIN_JOINT_ANGLE};
+use richmond_building_components::panels::{
+	dihedral_kink, triangle_normal, PanelNode, PanelStyle, DEFAULT_MIN_JOINT_ANGLE,
+};
 use richmond_building_components::BuildingComponents;
 
 use crate::tessellated_triangle_panel::TessellatedTrianglePanel;
@@ -186,7 +188,7 @@ impl QuadPanel {
 	/// \(0\) when coplanar with matching orientation; grows toward \(\pi\) as the fold opens.
 	pub fn dihedral_kink(&self) -> Option<f32> {
 		let (n0, n1) = self.triangle_normals()?;
-		Some(n0.dot(n1).clamp(-1.0, 1.0).acos())
+		Some(dihedral_kink(n0, n1))
 	}
 
 	/// Crease [`JointNode`] when the policy threshold is met, else [`None`].
@@ -207,16 +209,6 @@ impl QuadPanel {
 			radial_hint,
 		)?;
 		Some(JointNode::rough_stone_post(placement))
-	}
-}
-
-fn triangle_normal(a: Vec3, b: Vec3, c: Vec3) -> Option<Vec3> {
-	let n = (b - a).cross(c - a);
-	let len = n.length();
-	if len < 1e-12 {
-		None
-	} else {
-		Some(n / len)
 	}
 }
 

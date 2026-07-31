@@ -19,6 +19,7 @@ mod node;
 mod placement;
 mod style;
 mod tessellated_triangle;
+mod triangle;
 
 pub use geometry::{
 	fitted_tile_count, PanelGeometry, PanelKitCaps, Rectangle, RightTriangle, DEFAULT_TILE_WIDTH,
@@ -28,5 +29,6 @@ pub use node::PanelNode;
 pub use placement::{roll_along_slope, yaw_along_xz, DEFAULT_MIN_JOINT_ANGLE};
 pub use style::PanelStyle;
 pub use tessellated_triangle::TessellatedTriangle;
+pub use triangle::{dihedral_kink, triangle_normal};
 
 pub(crate) use placement::wrap_pi;

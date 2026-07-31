@@ -6,6 +6,7 @@ pub mod bedroom;
 pub mod linear;
 pub mod linear_wall;
 pub mod noisy_polyline_wall;
+pub mod panel_complex;
 pub mod pitch;
 pub mod polyline;
 pub mod polyline_wall;
@@ -43,6 +44,8 @@ pub enum Show {
 	TessellatedTriangle3d(tessellated_triangle_3d::TessellatedTriangle3d),
 	/// Two lines → two tessellated triangles + optional crease `JointNode`.
 	QuadPanel(quad_panel::QuadPanel),
+	/// Point-id triangle mesh → panels + crease joints (`id=(x,y,z) ... {a,b,c}`).
+	PanelComplex(panel_complex::PanelComplex),
 	/// L-shaped `Partition::polyline` (posed linears + joints).
 	Polyline(polyline::Polyline),
 	/// Portal-sensitive straight [`richmond_buildings::LinearWall`].
@@ -70,6 +73,7 @@ impl Show {
 			Self::TessellatedTriangle(cmd) => cmd.into_preview(),
 			Self::TessellatedTriangle3d(cmd) => cmd.into_preview(),
 			Self::QuadPanel(cmd) => cmd.into_preview(),
+			Self::PanelComplex(cmd) => cmd.into_preview(),
 			Self::Polyline(cmd) => cmd.into_preview(),
 			Self::LinearWall(cmd) => cmd.into_preview(),
 			Self::PolylineWall(cmd) => cmd.into_preview(),
