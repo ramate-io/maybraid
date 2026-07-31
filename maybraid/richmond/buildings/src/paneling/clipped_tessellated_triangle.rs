@@ -168,23 +168,30 @@ fn clip_and_triangulate(outer: &[Vec2], clip: &[Vec2]) -> FillTris {
 		return FillTris::Empty;
 	}
 
-	let fill_poly = if hole_touches_boundary(&hole_ccw, outer) {
-		match bite_polygon(outer, &hole_ccw) {
-			Some(p) => p,
+	let fill_polys = if hole_touches_boundary(&hole_ccw, outer) {
+		match bite_polygons(outer, &hole_ccw) {
+			Some(ps) => ps,
 			None => return FillTris::Failed,
 		}
 	} else {
 		let hole_cw = orient_cw(hole_ccw.clone());
 		match bridge_outer_hole(outer, &hole_cw) {
-			Some(p) => p,
+			Some(p) => vec![p],
 			None => return FillTris::Failed,
 		}
 	};
 
-	match ear_clip(&fill_poly) {
-		Some(tris) if !tris.is_empty() => FillTris::Tris(tris),
-		Some(_) => FillTris::Empty,
-		None => FillTris::Failed,
+	let mut all_tris = Vec::new();
+	for fill_poly in &fill_polys {
+		match ear_clip(fill_poly) {
+			Some(tris) => all_tris.extend(tris),
+			None => return FillTris::Failed,
+		}
+	}
+	if all_tris.is_empty() {
+		FillTris::Empty
+	} else {
+		FillTris::Tris(all_tris)
 	}
 }
 
@@ -252,10 +259,13 @@ fn on_boundary(p: Vec2, outer: &[Vec2]) -> bool {
 	false
 }
 
-/// Fill polygon for outer \ hole when hole ⊆ outer and touches ∂outer.
+/// Fill polygon(s) for outer \ hole when hole ⊆ outer and touches ∂outer.
 ///
-/// Outer edges (CCW) + hole edges (CW); split at shared verts; cancel reverse pairs; trace.
-fn bite_polygon(outer: &[Vec2], hole_ccw: &[Vec2]) -> Option<Vec<Vec2>> {
+/// Outer edges (CCW) + hole edges (CW); split at shared verts; cancel reverse pairs;
+/// trace **every** remaining loop. A boundary-touching hole that spans two outer
+/// edges (e.g. a ground door that also crosses a triangle edge) can leave two
+/// disconnected fill components — keeping only the first drops one side.
+fn bite_polygons(outer: &[Vec2], hole_ccw: &[Vec2]) -> Option<Vec<Vec<Vec2>>> {
 	let mut verts: Vec<Vec2> = Vec::new();
 	for &p in outer.iter().chain(hole_ccw.iter()) {
 		push_unique(&mut verts, p);
@@ -282,12 +292,16 @@ fn bite_polygon(outer: &[Vec2], hole_ccw: &[Vec2]) -> Option<Vec<Vec2>> {
 		return None;
 	}
 
-	let mut loop_poly = trace_loop(&mut edges)?;
-	loop_poly = dedup_poly(loop_poly);
-	if loop_poly.len() < 3 {
-		return None;
+	let mut loops = Vec::new();
+	while !edges.is_empty() {
+		let mut loop_poly = trace_loop(&mut edges)?;
+		loop_poly = dedup_poly(loop_poly);
+		if loop_poly.len() < 3 {
+			return None;
+		}
+		loops.push(orient_ccw(loop_poly));
 	}
-	Some(orient_ccw(loop_poly))
+	Some(loops)
 }
 
 fn push_unique(verts: &mut Vec<Vec2>, p: Vec2) {
@@ -766,5 +780,41 @@ mod tests {
 				.len()
 				>= 3
 		);
+	}
+
+	/// Boundary hole that splits outer \ hole into two components (ground notch
+	/// spanning two edges of a right triangle).
+	#[test]
+	fn bite_keeps_both_fill_components() {
+		// Right triangle CCW: (0,0)-(4,0)-(4,3). Door on the ground edge that
+		// also crosses the hypotenuse → two fill loops.
+		let outer = orient_ccw(vec![
+			Vec2::new(0.0, 0.0),
+			Vec2::new(4.0, 0.0),
+			Vec2::new(4.0, 3.0),
+		]);
+		let clip = [
+			Vec2::new(1.5, 0.0),
+			Vec2::new(2.5, 0.0),
+			Vec2::new(2.5, 2.1),
+			Vec2::new(1.5, 2.1),
+		];
+		let hole = orient_ccw(dedup_poly(sutherland_hodgman(&clip, &outer)));
+		assert!(hole_touches_boundary(&hole, &outer));
+		let loops = bite_polygons(&outer, &hole).expect("bite");
+		assert_eq!(loops.len(), 2, "expected left and right fill components");
+		match clip_and_triangulate(&outer, &clip) {
+			FillTris::Tris(tris) => {
+				assert!(tris.len() >= 2);
+				let covered = |p: Vec2| {
+					tris.iter()
+						.any(|t| point_in_triangle_strict(p, t[0], t[1], t[2]))
+				};
+				assert!(covered(Vec2::new(0.5, 0.1)), "left remnant");
+				assert!(covered(Vec2::new(3.7, 0.1)), "right remnant");
+				assert!(!covered(Vec2::new(2.0, 0.5)), "door interior");
+			}
+			_ => panic!("expected Tris, got non-tris fill"),
+		}
 	}
 }

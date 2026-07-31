@@ -238,4 +238,55 @@ mod tests {
 		assert!(n >= 2, "expected bitten fill, got {n}");
 		assert_ne!(n, 2, "oversized clip should not leave a solid two-tri quad");
 	}
+
+	/// Ground-flush door that crosses the a0–b1 diagonal used to drop one side of
+	/// the lower triangle when `bite_polygon` kept only a single fill loop.
+	#[test]
+	fn ground_door_keeps_both_sides_of_opening() {
+		let a0 = Vec3::new(0.0, 0.0, 0.0);
+		let a1 = Vec3::new(0.0, 3.0, 0.0);
+		let b0 = Vec3::new(4.0, 0.0, 0.0);
+		let b1 = Vec3::new(4.0, 3.0, 0.0);
+		// Centered door: width 1, height 2.1 (0.7 of face) — crosses diagonal y=(3/4)x.
+		let clip = [
+			Vec3::new(1.5, 0.0, 0.0),
+			Vec3::new(2.5, 0.0, 0.0),
+			Vec3::new(2.5, 2.1, 0.0),
+			Vec3::new(1.5, 2.1, 0.0),
+		];
+		let q = ClippedQuadPanel::rough_stone(a0, a1, b0, b1, clip);
+		let complex = q.as_complex();
+		assert!(complex.triangles().len() >= 4, "expected multi-component fill");
+
+		let covered = |p: Vec3| -> bool {
+			for tri in complex.triangles() {
+				let pa = complex.point(tri.a).unwrap().position;
+				let pb = complex.point(tri.b).unwrap().position;
+				let pc = complex.point(tri.c).unwrap().position;
+				// In XY plane (z=0): use X/Y as 2D.
+				let to2 = |v: Vec3| bevy_math::Vec2::new(v.x, v.y);
+				if point_in_tri_strict(to2(p), to2(pa), to2(pb), to2(pc)) {
+					return true;
+				}
+			}
+			false
+		};
+
+		assert!(
+			covered(Vec3::new(0.5, 0.15, 0.0)),
+			"left of door near ground should remain"
+		);
+		assert!(
+			covered(Vec3::new(3.5, 0.15, 0.0)),
+			"right of door near ground should remain"
+		);
+		assert!(
+			!covered(Vec3::new(2.0, 0.5, 0.0)),
+			"door interior should be open"
+		);
+		assert!(
+			covered(Vec3::new(2.0, 2.6, 0.0)),
+			"above door should remain"
+		);
+	}
 }
