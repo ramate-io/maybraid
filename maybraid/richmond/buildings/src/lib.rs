@@ -31,7 +31,7 @@ pub use constraints::{
 };
 pub use panel_complex::{
 	shared_edges, PanelComplex, PanelComplexJointPolicy, PanelComplexValidation, PanelPoint,
-	PanelPointId, PanelTriangle, SharedEdge,
+	PanelPointId, PanelTriangle, ParsePanelComplexError, SharedEdge,
 };
 pub use quad_panel::{
 	QuadCorner, QuadPanel, QuadPanelJointPolicy, DEFAULT_PANEL_THICKNESS,

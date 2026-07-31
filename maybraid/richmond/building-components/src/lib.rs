@@ -28,10 +28,10 @@ pub use lod_host::{
 	posed_asset_tier, warm_content_host, warm_content_host_hsl, warm_mesh_level_host,
 };
 pub use panels::{
-	fitted_tile_count, to_centered_rect_placement, with_wall_standup_pitch, PanelGeometry,
-	PanelKitCaps, PanelNode, PanelStyle, Rectangle as PanelRectangle,
-	RightTriangle as PanelRightTriangle, TessellatedTriangle, DEFAULT_MIN_JOINT_ANGLE,
-	DEFAULT_TILE_WIDTH,
+	dihedral_kink, fitted_tile_count, to_centered_rect_placement, triangle_normal,
+	with_wall_standup_pitch, PanelGeometry, PanelKitCaps, PanelNode, PanelStyle,
+	Rectangle as PanelRectangle, RightTriangle as PanelRightTriangle, TessellatedTriangle,
+	DEFAULT_MIN_JOINT_ANGLE, DEFAULT_TILE_WIDTH,
 };
 pub use parent_confines::{
 	apply_parent_confines, confined_scene, distance_to_segment, InternalShape, ParentConfines,
