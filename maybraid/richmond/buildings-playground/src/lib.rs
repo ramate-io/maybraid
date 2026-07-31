@@ -18,7 +18,7 @@ use game_commands::command::{capture_command_line_input, GameCommandPlugin};
 use game_commands::ui::GameCommandStatusText;
 use ground::setup_ground;
 use lod::{add_fine_pass_for, LodFinePassPlugin, LodFinePassSystems};
-use preview::{present_preview_lod, CachedPreview};
+use preview::{draw_connecting_hall_gizmos, present_preview_lod, CachedPreview};
 use richmond_building_components::{
 	apply_parent_confines, update_partition_host_levels, update_roof_host_levels,
 	FurnitureWireframePlugin,
@@ -48,6 +48,7 @@ impl Plugin for RichmondBuildingsPlaygroundPlugin {
 					present_preview_lod
 						.after(LodFinePassSystems::Track)
 						.after(capture_command_line_input::<PlaygroundCommand>),
+					draw_connecting_hall_gizmos.after(present_preview_lod),
 					update_partition_host_levels.in_set(LodFinePassSystems::UpdateLevels),
 					update_roof_host_levels.in_set(LodFinePassSystems::UpdateLevels),
 					apply_parent_confines.after(LodFinePassSystems::Fulfill),

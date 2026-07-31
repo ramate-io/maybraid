@@ -3,7 +3,7 @@
 use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, template_value};
 use bevy_math::bounding::{Aabb2d, Aabb3d};
-use bevy_math::Vec2;
+use bevy_math::{Isometry3d, Vec2};
 use lod::gen::LodScene;
 use lod::LodViewerState;
 use procedural_common::{AllowedAngles, NoiseParams, StepLenRange};
@@ -812,22 +812,7 @@ pub fn present_preview_lod(
 			);
 		}
 		PreviewSubject::ConnectingHall => {
-			// South opening facing +Z; east opening facing −X — mild kink at origin.
-			let end_a = ConnectingHallEndpoint::new(
-				Vec3::new(-1.2, 0.0, -4.0),
-				Vec3::new(1.2, 0.0, -4.0),
-				Vec3::new(-1.0, 2.4, -4.0),
-				Vec3::new(1.0, 2.4, -4.0),
-				Vec2::Y,
-			);
-			// Looking along −X: left = −Z, right = +Z.
-			let end_b = ConnectingHallEndpoint::new(
-				Vec3::new(4.0, 0.5, -1.2),
-				Vec3::new(4.0, 0.5, 1.2),
-				Vec3::new(4.0, 2.6, -1.0),
-				Vec3::new(4.0, 2.6, 1.0),
-				-Vec2::X,
-			);
+			let (end_a, end_b) = connecting_hall_demo_endpoints();
 			let hall = ConnectingHall::rough_stone(end_a, end_b);
 			spawn_preview(
 				&mut commands,
@@ -1191,4 +1176,90 @@ fn spawn_preview(commands: &mut Commands, transform: Transform, scene: impl bevy
 			},
 		))
 		.insert(PreviewRoot);
+}
+
+/// Demo openings: south facing +Z, east facing −X (mild kink near the origin).
+pub fn connecting_hall_demo_endpoints() -> (ConnectingHallEndpoint, ConnectingHallEndpoint) {
+	let end_a = ConnectingHallEndpoint::new(
+		Vec3::new(-1.2, 0.0, -4.0),
+		Vec3::new(1.2, 0.0, -4.0),
+		Vec3::new(-1.0, 2.4, -4.0),
+		Vec3::new(1.0, 2.4, -4.0),
+		Vec2::Y,
+	);
+	// Looking along −X: left = −Z, right = +Z.
+	let end_b = ConnectingHallEndpoint::new(
+		Vec3::new(4.0, 0.5, -1.2),
+		Vec3::new(4.0, 0.5, 1.2),
+		Vec3::new(4.0, 2.6, -1.0),
+		Vec3::new(4.0, 2.6, 1.0),
+		-Vec2::X,
+	);
+	(end_a, end_b)
+}
+
+/// Debug overlay for [`PreviewSubject::ConnectingHall`]: opening corners, orientation
+/// arrows, path A→mid→B, and station dots.
+pub fn draw_connecting_hall_gizmos(mut gizmos: Gizmos, config: Res<PreviewConfig>) {
+	if !matches!(config.subject, PreviewSubject::ConnectingHall) {
+		return;
+	}
+	let tf = config.transform;
+	let map = |p: Vec3| tf.transform_point(p);
+
+	let (end_a, end_b) = connecting_hall_demo_endpoints();
+	let hall = ConnectingHall::rough_stone(end_a, end_b);
+	let stations = hall.stations();
+	let mid = hall.midpoint();
+
+	let cyan = Color::srgb(0.2, 0.9, 0.95);
+	let magenta = Color::srgb(0.95, 0.25, 0.85);
+	let lime = Color::srgb(0.35, 0.95, 0.35);
+	let orange = Color::srgb(1.0, 0.55, 0.15);
+	let yellow = Color::srgb(1.0, 0.9, 0.2);
+	let white = Color::srgb(0.95, 0.95, 0.95);
+
+	draw_opening_gizmos(&mut gizmos, map, end_a, cyan);
+	draw_opening_gizmos(&mut gizmos, map, end_b, magenta);
+
+	// Path A → mid → B
+	let a_c = stations[0].bottom_middle;
+	let b_c = stations[2].bottom_middle;
+	gizmos.line(map(a_c), map(mid), white);
+	gizmos.line(map(mid), map(b_c), white);
+
+	// Station / junction dots
+	let r = 0.12;
+	gizmos.sphere(Isometry3d::from_translation(map(a_c)), r, lime);
+	gizmos.sphere(Isometry3d::from_translation(map(mid)), r * 1.25, yellow);
+	gizmos.sphere(Isometry3d::from_translation(map(b_c)), r, orange);
+
+	// Orientation arrows from opening centers (plan facing).
+	let arrow_len = 1.5;
+	let a_dir = Vec3::new(end_a.orientation.x, 0.0, end_a.orientation.y).normalize_or_zero();
+	let b_dir = Vec3::new(end_b.orientation.x, 0.0, end_b.orientation.y).normalize_or_zero();
+	gizmos
+		.arrow(map(a_c), map(a_c + a_dir * arrow_len), lime)
+		.with_tip_length(0.25);
+	gizmos
+		.arrow(map(b_c), map(b_c + b_dir * arrow_len), orange)
+		.with_tip_length(0.25);
+}
+
+fn draw_opening_gizmos(
+	gizmos: &mut Gizmos,
+	map: impl Fn(Vec3) -> Vec3,
+	end: ConnectingHallEndpoint,
+	color: Color,
+) {
+	let (bl, br, tl, tr) = end.targets;
+	let r = 0.08;
+	for p in [bl, br, tl, tr] {
+		gizmos.sphere(Isometry3d::from_translation(map(p)), r, color);
+	}
+	// Opening quad wireframe
+	gizmos.line(map(bl), map(br), color);
+	gizmos.line(map(br), map(tr), color);
+	gizmos.line(map(tr), map(tl), color);
+	gizmos.line(map(tl), map(bl), color);
 }
