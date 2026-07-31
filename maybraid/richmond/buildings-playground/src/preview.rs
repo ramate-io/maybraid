@@ -20,8 +20,9 @@ use richmond_buildings::panel_complex::{PanelComplex, PanelComplexJointPolicy, P
 use richmond_buildings::quad_panel::QuadPanel;
 use richmond_buildings::quad_panel_complex::QuadPanelComplex;
 use richmond_buildings::{
-	ApproximatedCircle, ArcSweep, ClippedArcSweep, ClippedQuadPanel, ClippedRectangle,
-	ClippedRectangularStrip, ClippedRuledStrip, ClippedTessellatedTriangle, RectInset, Rectangle,
+	ApproximatedCircle, ArcSweep, ClippedArcSweep, ClippedFittedRectangle,
+	ClippedFittedRectangularStrip, ClippedQuadPanel, ClippedRectangle, ClippedRectangularStrip,
+	ClippedRuledStrip, ClippedTessellatedTriangle, FittedRectangle, RectInset, Rectangle,
 	RectangularNTube, RectangularNTubeCorner, RectangularNTubeStation, RectangularStripNode,
 	RuledPitch, Tube, TubeCrossSectionNode, DEFAULT_PANEL_THICKNESS,
 };
@@ -106,6 +107,27 @@ pub enum PreviewSubject {
 		top: f32,
 	},
 	ClippedRectangularStrip {
+		inset: f32,
+		min_dihedral: f32,
+		no_joint: bool,
+	},
+	FittedRectangle {
+		a0: Vec3,
+		a1: Vec3,
+		b0: Vec3,
+		b1: Vec3,
+	},
+	ClippedFittedRectangle {
+		a0: Vec3,
+		a1: Vec3,
+		b0: Vec3,
+		b1: Vec3,
+		left: f32,
+		right: f32,
+		bottom: f32,
+		top: f32,
+	},
+	ClippedFittedRectangularStrip {
 		inset: f32,
 		min_dihedral: f32,
 		no_joint: bool,
@@ -294,6 +316,28 @@ impl PreviewConfig {
 			} => format!(
 				"preview: clipped-rectangular-strip (inset={inset:.2} min_dihedral={min_dihedral:.3} no_joint={no_joint})"
 			),
+			PreviewSubject::FittedRectangle { a0, a1, b0, b1 } => {
+				format!("preview: fitted-rectangle (a0={a0:?} a1={a1:?} b0={b0:?} b1={b1:?})")
+			}
+			PreviewSubject::ClippedFittedRectangle {
+				a0,
+				a1,
+				b0,
+				b1,
+				left,
+				right,
+				bottom,
+				top,
+			} => format!(
+				"preview: clipped-fitted-rectangle (a0={a0:?} a1={a1:?} b0={b0:?} b1={b1:?} inset=[{left:.2},{right:.2},{bottom:.2},{top:.2}])"
+			),
+			PreviewSubject::ClippedFittedRectangularStrip {
+				inset,
+				min_dihedral,
+				no_joint,
+			} => format!(
+				"preview: clipped-fitted-rectangular-strip (inset={inset:.2} min_dihedral={min_dihedral:.3} no_joint={no_joint})"
+			),
 			PreviewSubject::RectangularNTube {
 				inset,
 				min_dihedral,
@@ -427,7 +471,9 @@ impl PreviewConfig {
 				let max = a.max(*b).max(*c) + Vec3::splat(0.2);
 				Aabb3d::from_min_max(min, max)
 			}
-			PreviewSubject::QuadPanel { a0, a1, b0, b1, .. } => {
+			PreviewSubject::QuadPanel { a0, a1, b0, b1, .. }
+			| PreviewSubject::FittedRectangle { a0, a1, b0, b1, .. }
+			| PreviewSubject::ClippedFittedRectangle { a0, a1, b0, b1, .. } => {
 				let min = a0.min(*a1).min(*b0).min(*b1) - Vec3::splat(0.2);
 				let max = a0.max(*a1).max(*b0).max(*b1) + Vec3::splat(0.2);
 				Aabb3d::from_min_max(min, max)
@@ -450,6 +496,10 @@ impl PreviewConfig {
 				let max = origin.max(end).max(*origin + up).max(end + up) + Vec3::splat(0.2);
 				Aabb3d::from_min_max(min, max)
 			}
+			PreviewSubject::ClippedFittedRectangularStrip { .. } => Aabb3d::from_min_max(
+				Vec3::new(-0.5, -0.5, -0.5),
+				Vec3::new(3.5, 3.0, 7.0),
+			),
 			PreviewSubject::RectangularNTube { .. } => Aabb3d::from_min_max(
 				Vec3::new(-2.0, -0.5, -0.5),
 				Vec3::new(2.0, 2.5, 7.0),
@@ -854,6 +904,86 @@ pub fn present_preview_lod(
 			let strip = ClippedRectangularStrip::from_nodes(
 				richmond_building_components::panels::PanelStyle::RoughStonework,
 				nodes,
+				[None, Some(RectInset::uniform(*inset)), None],
+			)
+			.with_joint_policy(policy);
+			spawn_preview(
+				&mut commands,
+				transform,
+				ComponentsOnly(strip).scene_with_lod(&lod_ref),
+			);
+		}
+		PreviewSubject::FittedRectangle { a0, a1, b0, b1 } => {
+			let rect = FittedRectangle::rough_stone(*a0, *a1, *b0, *b1);
+			let corners = [
+				rect.fitted.a0,
+				rect.fitted.a1,
+				rect.fitted.b0,
+				rect.fitted.b1,
+			];
+			spawn_preview(
+				&mut commands,
+				transform,
+				ComponentsOnly(rect).scene_with_lod(&lod_ref),
+			);
+			spawn_rectangle_debug_balls(
+				&mut commands,
+				&mut meshes,
+				&mut materials,
+				transform,
+				corners,
+			);
+		}
+		PreviewSubject::ClippedFittedRectangle {
+			a0,
+			a1,
+			b0,
+			b1,
+			left,
+			right,
+			bottom,
+			top,
+		} => {
+			let rect = ClippedFittedRectangle::rough_stone(
+				*a0,
+				*a1,
+				*b0,
+				*b1,
+				RectInset::new(*left, *right, *bottom, *top),
+			);
+			spawn_preview(
+				&mut commands,
+				transform,
+				ComponentsOnly(rect).scene_with_lod(&lod_ref),
+			);
+		}
+		PreviewSubject::ClippedFittedRectangularStrip {
+			inset,
+			min_dihedral,
+			no_joint,
+		} => {
+			let policy = if *no_joint {
+				PanelComplexJointPolicy::never()
+			} else {
+				PanelComplexJointPolicy::min_dihedral_rad(*min_dihedral)
+			};
+			// Folded two-rail strip (a along path, b offset; mid bay tips up).
+			let rail_a = [
+				Vec3::new(0.0, 0.0, 0.0),
+				Vec3::new(0.0, 0.0, 2.0),
+				Vec3::new(0.0, 0.0, 4.0),
+				Vec3::new(0.0, 0.0, 6.0),
+			];
+			let rail_b = [
+				Vec3::new(2.5, 0.0, 0.0),
+				Vec3::new(2.5, 0.0, 2.0),
+				Vec3::new(2.5, 1.2, 4.0),
+				Vec3::new(2.5, 1.2, 6.0),
+			];
+			let strip = ClippedFittedRectangularStrip::from_lines(
+				richmond_building_components::panels::PanelStyle::RoughStonework,
+				rail_a,
+				rail_b,
 				[None, Some(RectInset::uniform(*inset)), None],
 			)
 			.with_joint_policy(policy);

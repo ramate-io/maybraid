@@ -31,6 +31,9 @@ cargo run -p richmond-buildings-playground -- show rectangle
 cargo run -p richmond-buildings-playground -- show rectangle --preset wall
 cargo run -p richmond-buildings-playground -- show clipped-rectangle
 cargo run -p richmond-buildings-playground -- show clipped-rectangular-strip
+cargo run -p richmond-buildings-playground -- show fitted-rectangle --preset wall
+cargo run -p richmond-buildings-playground -- show clipped-fitted-rectangle
+cargo run -p richmond-buildings-playground -- show clipped-fitted-rectangular-strip
 cargo run -p richmond-buildings-playground -- show rectangular-n-tube
 cargo run -p richmond-buildings-playground -- show arc-sweep
 cargo run -p richmond-buildings-playground -- show clipped-arc-sweep
@@ -65,6 +68,9 @@ In-game: press `/` for the command console (same clap commands as argv).
 - `show rectangle [--preset floor|wall|ceiling] [--origin X,Y,Z] [--edge X,Y,Z] [--height H] [--thickness T] [--roll R]` — oriented `richmond_buildings::Rectangle` (lowest-edge vector + height + roll; `0` roll ⇒ top toward `+Y`)
 - `show clipped-rectangle [--origin|--edge X,Y,Z] [--height H] [--thickness T] [--roll R] [--left|--right|--bottom|--top M]` — oriented rectangle with inset framed by rectangle kits
 - `show clipped-rectangular-strip [--inset M] [--min-dihedral R] [--no-joint]` — node-chain oriented rectangle strip; middle bay inset frame; crease joints on bay folds
+- `show fitted-rectangle [--preset floor|wall|ceiling|skew] [--a0|--a1|--b0|--b1 X,Y,Z]` — best-fit `FittedRectangle` from four (possibly skew) corners
+- `show clipped-fitted-rectangle [--a0|--a1|--b0|--b1 X,Y,Z] [--left|--right|--bottom|--top M]` — best-fit rectangle with inset frame
+- `show clipped-fitted-rectangular-strip [--inset M] [--min-dihedral R] [--no-joint]` — two-rail best-fit strip; middle bay inset; crease joints on folds
 - `show rectangular-n-tube [--inset M] [--min-dihedral R] [--no-joint]` — closed square cross-section polyline → four clipped rectangle strips (face-1 middle bay inset)
 - `show arc-sweep [--radius R] [--height H] [--sweep-degrees D] [--start-yaw-deg D]` — circular fitted `arcs::ArcSweep` (not IR `partitions::ArcSweep`)
 - `show clipped-arc-sweep [--radius R] [--height H] [--sweep-degrees D] [--start-yaw-deg D]` — same with hardcoded angular clip openings

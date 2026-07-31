@@ -46,15 +46,17 @@ pub use constraints::{
 	JointCoordinate, JointEntry, PreJointSweep, SubsetError,
 };
 pub use paneling::{
-	fallback_oriented, orient_rectangle, roll_to_align_height, shared_edges, zero_roll_height_axis,
-	ApproximatedCircle, ClippedQuadPanel, ClippedRectangle, ClippedRectangularStrip,
-	ClippedRectangularStripPiece, ClippedRuledStrip, ClippedStripPiece, ClippedTessellatedTriangle,
-	OrientedRect, PanelComplex, PanelComplexJointPolicy, PanelComplexValidation, PanelMesh,
-	PanelPoint, PanelPointId, PanelQuadMesh, PanelTriangle, ParsePanelComplexError, QuadPanel,
-	QuadPanelComplex, RectInset, Rectangle, RectangularNTube, RectangularNTubeCorner,
-	RectangularNTubeStation, RectangularStrip, RectangularStripNode, RuledPitch, RuledStrip,
-	SharedEdge, TessellatedTrianglePanel, Tube, TubeCorners, TubeCrossSectionNode, TubeFrame,
-	DEFAULT_PANEL_THICKNESS, DEFAULT_SEGMENTS, MIN_SEGMENTS,
+	fallback_oriented, fit_rectangle, fit_rectangle_corners, orient_rectangle, roll_to_align_height,
+	shared_edges, zero_roll_height_axis, ApproximatedCircle, ClippedFittedRectangle,
+	ClippedFittedRectangularStrip, ClippedFittedRectangularStripPiece, ClippedQuadPanel,
+	ClippedRectangle, ClippedRectangularStrip, ClippedRectangularStripPiece, ClippedRuledStrip,
+	ClippedStripPiece, ClippedTessellatedTriangle, FittedRect, FittedRectangle,
+	FittedRectangularStrip, OrientedRect, PanelComplex, PanelComplexJointPolicy,
+	PanelComplexValidation, PanelMesh, PanelPoint, PanelPointId, PanelQuadMesh, PanelTriangle,
+	ParsePanelComplexError, QuadPanel, QuadPanelComplex, RectInset, Rectangle, RectangularNTube,
+	RectangularNTubeCorner, RectangularNTubeStation, RectangularStrip, RectangularStripNode,
+	RuledPitch, RuledStrip, SharedEdge, TessellatedTrianglePanel, Tube, TubeCorners,
+	TubeCrossSectionNode, TubeFrame, DEFAULT_PANEL_THICKNESS, DEFAULT_SEGMENTS, MIN_SEGMENTS,
 };
 pub use portals::{
 	ArcRegion, AssignedPortal, MustAssignPortal, Portal, PortalFootprint, WallRegion, SLICE_Y_FRAC,

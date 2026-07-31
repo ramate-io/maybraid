@@ -1,12 +1,124 @@
-//! Oriented ordinary rectangle from lowest-edge vector + height + roll.
+//! Ordinary-rectangle placement helpers.
 //!
-//! - **Length / slope** (`e1`): direction of the authored lowest-edge vector.
-//! - **Height** (`e0`): world `+Y` projected into the plane ⊥ `e1` at roll `0`,
-//!   then rotated about `e1` by `roll`.
-//! - Anchored at `origin`, extending `+e0 * height` and `+edge`.
+//! - [`FittedRect`] / [`fit_rectangle`]: best-fit a (possibly skew) four-corner bay.
+//! - [`OrientedRect`] / [`orient_rectangle`]: author lowest-edge vector + height + roll.
 
 use bevy_math::{EulerRot, Mat3, Quat, Vec3};
+use richmond_building_components::partitions::wall_placement;
 use richmond_building_components::Placement;
+
+/// Fitted ordinary rectangle in world space (edge-aligned to \(a_0{\to}a_1\)).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct FittedRect {
+	pub a0: Vec3,
+	pub a1: Vec3,
+	pub b0: Vec3,
+	pub b1: Vec3,
+	/// Unit \(+X\) (along \(a_0{\to}a_1\) in plane).
+	pub e0: Vec3,
+	/// Unit toward the \(b\)-rail in plane.
+	pub e1: Vec3,
+	pub normal: Vec3,
+	pub width: f32,
+	pub depth: f32,
+}
+
+impl FittedRect {
+	/// Panel-kit placement for the sub-rectangle covering panel
+	/// \(u\in[u_0,u_0+w]\), \(v\in[v_0,v_0+d]\) (origin at \(a_0\), \(+v\) along [`Self::e1`]).
+	///
+	/// Rectangle GLBs occupy \(X\in[0,1]\), \(Z\in[-1,0]\). Scale `(w, thick, d)`.
+	/// Standing bays (`e1` ≈ world \(+Y\)) use [`wall_placement`] (yaw + stand-up pitch).
+	pub fn panel_placement(&self, u0: f32, v0: f32, w: f32, d: f32, thick_scale: f32) -> Placement {
+		let origin = self.a0 + self.e0 * u0 + self.e1 * v0;
+		let w = w.max(1e-4);
+		let d = d.max(1e-4);
+		let thick_scale = thick_scale.max(1e-4);
+		if self.is_standing() {
+			// Local +X after yaw: `(cos yaw, 0, -sin yaw)` → match `e0` in XZ.
+			let yaw = (-self.e0.z).atan2(self.e0.x);
+			return wall_placement(origin, yaw, w, d, thick_scale);
+		}
+		// Kit +X → e0, kit −Z → e1 (mesh on Z∈[-1,0]), kit +Y → normal.
+		let ey = self.normal;
+		let rotation = Quat::from_mat3(&Mat3::from_cols(self.e0, ey, -self.e1));
+		let (yaw, pitch, roll) = rotation.to_euler(EulerRot::YXZ);
+		Placement {
+			translation: origin,
+			yaw,
+			pitch,
+			roll,
+			scale: Vec3::new(w, thick_scale, d),
+		}
+	}
+
+	pub fn solid_placement(&self, thick_scale: f32) -> Placement {
+		self.panel_placement(0.0, 0.0, self.width, self.depth, thick_scale)
+	}
+
+	/// True when the b-rail is upright (bedroom / shell walls).
+	pub fn is_standing(&self) -> bool {
+		self.e1.y.abs() > 0.9 && self.e0.y.abs() < 0.15
+	}
+}
+
+/// Fitted world corners `(a0, a1, b0, b1)` of an ordinary rectangle, or [`None`] if degenerate.
+pub fn fit_rectangle_corners(a0: Vec3, a1: Vec3, b0: Vec3, b1: Vec3) -> Option<[Vec3; 4]> {
+	fit_rectangle(a0, a1, b0, b1).map(|f| [f.a0, f.a1, f.b0, f.b1])
+}
+
+/// Fit an ordinary rectangle for bay corners, or [`None`] if degenerate.
+///
+/// Plane: average of normals for tris `(a0,a1,b1)` and `(a0,b1,b0)`. Frame: origin at
+/// \(a_0\), \(+X\) along in-plane \(a_1-a_0\), depth = mean in-plane distance of
+/// \(b_0,b_1\) from the \(a_0{\to}a_1\) edge.
+pub fn fit_rectangle(a0: Vec3, a1: Vec3, b0: Vec3, b1: Vec3) -> Option<FittedRect> {
+	let n0 = (a1 - a0).cross(b1 - a0);
+	let n1 = (b1 - a0).cross(b0 - a0);
+	let n = n0 + n1;
+	let n_len = n.length();
+	if n_len < 1e-10 {
+		return None;
+	}
+	let normal = n / n_len;
+
+	let edge = a1 - a0;
+	let edge_on = edge - normal * edge.dot(normal);
+	let width = edge_on.length();
+	if width < 1e-8 {
+		return None;
+	}
+	let e0 = edge_on / width;
+	let e1_raw = e0.cross(normal);
+
+	let project_v = |p: Vec3| (p - a0).dot(e1_raw);
+	let zb0 = project_v(b0);
+	let zb1 = project_v(b1);
+	let sign = if zb0.abs() >= zb1.abs() {
+		zb0.signum()
+	} else {
+		zb1.signum()
+	};
+	let sign = if sign.abs() < 0.5 { 1.0 } else { sign };
+	let depth = ((zb0.abs() + zb1.abs()) * 0.5).max(1e-4);
+	let e1 = e1_raw * sign;
+
+	let fa0 = a0;
+	let fa1 = a0 + e0 * width;
+	let fb0 = a0 + e1 * depth;
+	let fb1 = a0 + e0 * width + e1 * depth;
+	Some(FittedRect {
+		a0: fa0,
+		a1: fa1,
+		b0: fb0,
+		b1: fb1,
+		e0,
+		e1,
+		normal: e0.cross(e1).normalize(),
+		width,
+		depth,
+	})
+}
 
 /// Oriented ordinary rectangle in world space.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -230,6 +342,70 @@ impl RectInset {
 #[cfg(test)]
 mod tests {
 	use super::*;
+
+	#[test]
+	fn planar_rectangle_is_unchanged() {
+		let a0 = Vec3::ZERO;
+		let a1 = Vec3::new(2.0, 0.0, 0.0);
+		let b0 = Vec3::new(0.0, 0.0, 1.0);
+		let b1 = Vec3::new(2.0, 0.0, 1.0);
+		let [fa0, fa1, fb0, fb1] = fit_rectangle_corners(a0, a1, b0, b1).unwrap();
+		assert!((fa0 - a0).length() < 1e-4);
+		assert!((fa1 - a1).length() < 1e-4);
+		assert!((fb0 - b0).length() < 1e-4);
+		assert!((fb1 - b1).length() < 1e-4);
+	}
+
+	#[test]
+	fn skew_bay_becomes_planar_rectangle() {
+		let a0 = Vec3::ZERO;
+		let a1 = Vec3::new(2.0, 0.0, 0.0);
+		let b0 = Vec3::new(0.1, 0.2, 1.0);
+		let b1 = Vec3::new(2.2, -0.1, 1.1);
+		let [fa0, fa1, fb0, fb1] = fit_rectangle_corners(a0, a1, b0, b1).unwrap();
+		let n0 = (fa1 - fa0).cross(fb1 - fa0).normalize();
+		let n1 = (fb1 - fa0).cross(fb0 - fa0).normalize();
+		assert!(n0.dot(n1) > 0.999, "fitted corners should be coplanar");
+		let e0 = (fa1 - fa0).normalize();
+		let e1 = (fb0 - fa0).normalize();
+		assert!(e0.dot(e1).abs() < 1e-3, "edges should be orthogonal");
+		assert!(((fa1 - fa0) - (fb1 - fb0)).length() < 1e-3);
+		assert!(((fb0 - fa0) - (fb1 - fa1)).length() < 1e-3);
+		assert!((fa1 - fa0).length() > 1.0);
+		assert!((fb0 - fa0).length() > 0.5);
+	}
+
+	#[test]
+	fn fitted_unit_square_kit_maps_far_corner_to_b1() {
+		let fitted = fit_rectangle(
+			Vec3::ZERO,
+			Vec3::new(2.0, 0.0, 0.0),
+			Vec3::new(0.0, 0.0, 1.0),
+			Vec3::new(2.0, 0.0, 1.0),
+		)
+		.unwrap();
+		let p = fitted.solid_placement(0.75);
+		assert!((p.scale - Vec3::new(2.0, 0.75, 1.0)).length() < 1e-4);
+		let far = p.rotation() * Vec3::new(p.scale.x, 0.0, -p.scale.z) + p.translation;
+		assert!((far - Vec3::new(2.0, 0.0, 1.0)).length() < 1e-3);
+	}
+
+	#[test]
+	fn standing_bay_uses_wall_standup_pitch() {
+		let fitted = fit_rectangle(
+			Vec3::ZERO,
+			Vec3::new(4.0, 0.0, 0.0),
+			Vec3::new(0.0, 3.0, 0.0),
+			Vec3::new(4.0, 3.0, 0.0),
+		)
+		.unwrap();
+		assert!(fitted.is_standing());
+		let p = fitted.solid_placement(0.75);
+		assert!((p.pitch - std::f32::consts::FRAC_PI_2).abs() < 1e-3);
+		assert!((p.scale.x - 4.0).abs() < 1e-3);
+		assert!((p.scale.z - 3.0).abs() < 1e-3);
+		assert!((p.scale.y - 0.75).abs() < 1e-3);
+	}
 
 	#[test]
 	fn horizontal_edge_zero_roll_height_is_plus_y() {
