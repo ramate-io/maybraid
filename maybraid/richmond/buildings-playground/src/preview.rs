@@ -20,7 +20,8 @@ use richmond_buildings::panel_complex::{PanelComplex, PanelComplexJointPolicy, P
 use richmond_buildings::quad_panel::QuadPanel;
 use richmond_buildings::quad_panel_complex::QuadPanelComplex;
 use richmond_buildings::{
-	ClippedQuadPanel, ClippedRuledStrip, ClippedTessellatedTriangle, RuledPitch,
+	ArcSweep, ClippedArcSweep, ClippedQuadPanel, ClippedRectangle, ClippedRectangularStrip,
+	ClippedRuledStrip, ClippedTessellatedTriangle, RuledPitch,
 };
 use richmond_buildings::stacked_rings::StackedRings;
 use richmond_buildings::tessellated_triangle_panel::TessellatedTrianglePanel;
@@ -81,6 +82,31 @@ pub enum PreviewSubject {
 	ClippedRuledStrip {
 		min_dihedral: f32,
 		no_joint: bool,
+	},
+	ClippedRectangle {
+		a0: Vec3,
+		a1: Vec3,
+		b0: Vec3,
+		b1: Vec3,
+		clip: Vec<Vec3>,
+		min_dihedral: f32,
+		no_joint: bool,
+	},
+	ClippedRectangularStrip {
+		min_dihedral: f32,
+		no_joint: bool,
+	},
+	ArcSweep {
+		radius: f32,
+		height: f32,
+		sweep_degrees: f32,
+		start_yaw_deg: f32,
+	},
+	ClippedArcSweep {
+		radius: f32,
+		height: f32,
+		sweep_degrees: f32,
+		start_yaw_deg: f32,
 	},
 	QuadPanel {
 		a0: Vec3,
@@ -207,6 +233,39 @@ impl PreviewConfig {
 				no_joint,
 			} => format!(
 				"preview: clipped-ruled-strip (min_dihedral={min_dihedral:.3} no_joint={no_joint})"
+			),
+			PreviewSubject::ClippedRectangle {
+				a0,
+				a1,
+				b0,
+				b1,
+				ref clip,
+				min_dihedral,
+				no_joint,
+			} => format!(
+				"preview: clipped-rectangle (a0={a0:?} a1={a1:?} b0={b0:?} b1={b1:?} clip={clip:?} min_dihedral={min_dihedral:.3} no_joint={no_joint})"
+			),
+			PreviewSubject::ClippedRectangularStrip {
+				min_dihedral,
+				no_joint,
+			} => format!(
+				"preview: clipped-rectangular-strip (min_dihedral={min_dihedral:.3} no_joint={no_joint})"
+			),
+			PreviewSubject::ArcSweep {
+				radius,
+				height,
+				sweep_degrees,
+				start_yaw_deg,
+			} => format!(
+				"preview: arc-sweep (r={radius:.2} h={height:.2} sweep={sweep_degrees:.1} yaw0={start_yaw_deg:.1})"
+			),
+			PreviewSubject::ClippedArcSweep {
+				radius,
+				height,
+				sweep_degrees,
+				start_yaw_deg,
+			} => format!(
+				"preview: clipped-arc-sweep (r={radius:.2} h={height:.2} sweep={sweep_degrees:.1} yaw0={start_yaw_deg:.1})"
 			),
 			PreviewSubject::QuadPanel {
 				a0,
@@ -593,6 +652,108 @@ pub fn present_preview_lod(
 				&mut commands,
 				transform,
 				ComponentsOnly(strip).scene_with_lod(&lod_ref),
+			);
+		}
+		PreviewSubject::ClippedRectangle {
+			a0,
+			a1,
+			b0,
+			b1,
+			clip,
+			min_dihedral,
+			no_joint,
+		} => {
+			let policy = if *no_joint {
+				PanelComplexJointPolicy::never()
+			} else {
+				PanelComplexJointPolicy::min_dihedral_rad(*min_dihedral)
+			};
+			let complex = ClippedRectangle::rough_stone(*a0, *a1, *b0, *b1, clip.clone())
+				.with_joint_policy(policy)
+				.into_complex();
+			spawn_preview(
+				&mut commands,
+				transform,
+				ComponentsOnly(complex).scene_with_lod(&lod_ref),
+			);
+		}
+		PreviewSubject::ClippedRectangularStrip {
+			min_dihedral,
+			no_joint,
+		} => {
+			let policy = if *no_joint {
+				PanelComplexJointPolicy::never()
+			} else {
+				PanelComplexJointPolicy::min_dihedral_rad(*min_dihedral)
+			};
+			let rail_a = [
+				Vec3::new(0.0, 0.0, 0.0),
+				Vec3::new(0.0, 0.0, 2.0),
+				Vec3::new(0.0, 0.0, 4.0),
+				Vec3::new(0.0, 0.0, 6.0),
+			];
+			let rail_b = [
+				Vec3::new(2.5, 0.0, 0.0),
+				Vec3::new(2.8, 0.3, 2.0),
+				Vec3::new(2.2, -0.2, 4.0),
+				Vec3::new(2.6, 0.1, 6.0),
+			];
+			let mid_clip = vec![
+				Vec3::new(0.6, 0.0, 2.4),
+				Vec3::new(1.8, 0.0, 2.4),
+				Vec3::new(1.8, 0.0, 3.4),
+				Vec3::new(0.6, 0.0, 3.4),
+			];
+			let strip = ClippedRectangularStrip::from_lines(
+				richmond_building_components::panels::PanelStyle::RoughStonework,
+				rail_a,
+				rail_b,
+				[None, Some(mid_clip), None],
+			)
+			.with_joint_policy(policy);
+			spawn_preview(
+				&mut commands,
+				transform,
+				ComponentsOnly(strip).scene_with_lod(&lod_ref),
+			);
+		}
+		PreviewSubject::ArcSweep {
+			radius,
+			height,
+			sweep_degrees,
+			start_yaw_deg,
+		} => {
+			let sweep = ArcSweep::rough_stone(
+				Vec3::ZERO,
+				*radius,
+				*height,
+				*sweep_degrees,
+				start_yaw_deg.to_radians(),
+			);
+			spawn_preview(
+				&mut commands,
+				transform,
+				ComponentsOnly(sweep).scene_with_lod(&lod_ref),
+			);
+		}
+		PreviewSubject::ClippedArcSweep {
+			radius,
+			height,
+			sweep_degrees,
+			start_yaw_deg,
+		} => {
+			let sweep = ClippedArcSweep::rough_stone(
+				Vec3::ZERO,
+				*radius,
+				*height,
+				*sweep_degrees,
+				start_yaw_deg.to_radians(),
+				[(0.2, 0.35), (0.6, 0.72)],
+			);
+			spawn_preview(
+				&mut commands,
+				transform,
+				ComponentsOnly(sweep).scene_with_lod(&lod_ref),
 			);
 		}
 		PreviewSubject::QuadPanel {

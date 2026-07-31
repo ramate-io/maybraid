@@ -5,10 +5,10 @@
 
 use richmond_building_components::panels::PanelStyle;
 
-use crate::panel_complex::{
+use crate::paneling::panel_complex::{
 	PanelComplex, PanelComplexJointPolicy, PanelPoint, PanelPointId,
 };
-use crate::ruled_strip::RuledStrip;
+use crate::paneling::ruled_strip::RuledStrip;
 
 /// Equal-station eave / ridge pitch: thin roof vocabulary over [`RuledStrip`].
 ///

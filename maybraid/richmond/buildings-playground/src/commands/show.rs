@@ -2,6 +2,7 @@
 
 pub mod arc_180;
 pub mod arc_90;
+pub mod arc_sweep;
 pub mod bedroom;
 pub mod linear;
 pub mod linear_wall;
@@ -15,7 +16,10 @@ pub mod quad_panel_complex;
 pub mod ruled_pitch;
 pub mod slice_90;
 pub mod stacked_rings;
+pub mod clipped_arc_sweep;
 pub mod clipped_quad_panel;
+pub mod clipped_rectangle;
+pub mod clipped_rectangular_strip;
 pub mod clipped_ruled_strip;
 pub mod clipped_tessellated_triangle;
 pub mod tessellated_triangle;
@@ -53,6 +57,14 @@ pub enum Show {
 	ClippedQuadPanel(clipped_quad_panel::ClippedQuadPanel),
 	/// Multi-bay ruled strip with optional per-bay clips.
 	ClippedRuledStrip(clipped_ruled_strip::ClippedRuledStrip),
+	/// Best-fit ordinary rectangle minus a closed clip.
+	ClippedRectangle(clipped_rectangle::ClippedRectangle),
+	/// Two-rail best-fit rectangle strip with a mid-bay clip.
+	ClippedRectangularStrip(clipped_rectangular_strip::ClippedRectangularStrip),
+	/// Circular fitted [`richmond_buildings::arcs::ArcSweep`] (not IR `partitions::ArcSweep`).
+	ArcSweep(arc_sweep::ArcSweep),
+	/// Circular arc with angular clip openings → solid + slice bands.
+	ClippedArcSweep(clipped_arc_sweep::ClippedArcSweep),
 	/// Two lines → two tessellated triangles + optional crease `JointNode`.
 	QuadPanel(quad_panel::QuadPanel),
 	/// Point-id triangle mesh → panels + crease joints (`id=(x,y,z) ... {a,b,c}`).
@@ -90,6 +102,10 @@ impl Show {
 			Self::ClippedTessellatedTriangle(cmd) => cmd.into_preview(),
 			Self::ClippedQuadPanel(cmd) => cmd.into_preview(),
 			Self::ClippedRuledStrip(cmd) => cmd.into_preview(),
+			Self::ClippedRectangle(cmd) => cmd.into_preview(),
+			Self::ClippedRectangularStrip(cmd) => cmd.into_preview(),
+			Self::ArcSweep(cmd) => cmd.into_preview(),
+			Self::ClippedArcSweep(cmd) => cmd.into_preview(),
 			Self::QuadPanel(cmd) => cmd.into_preview(),
 			Self::PanelComplex(cmd) => cmd.into_preview(),
 			Self::QuadPanelComplex(cmd) => cmd.into_preview(),

@@ -1,6 +1,6 @@
 //! Quad faces on [`PanelComplex`]: diagonal \(a_0\)–\(b_1\) for `{a0, a1, b0, b1}`.
 //!
-//! Compact string (via [`PanelQuadMesh`] / [`crate::quad_panel_complex::QuadPanelComplex`]):
+//! Compact string (via [`PanelQuadMesh`] / [`crate::paneling::quad_panel_complex::QuadPanelComplex`]):
 //! ```text
 //! 1=(0,0,0),2=(1,0,0),3=(0,1,0),4=(0,0,1) ... {1,2,3,4}
 //! ```

@@ -10,8 +10,8 @@ use richmond_building_components::joints::JointNode;
 use richmond_building_components::panels::{PanelNode, PanelStyle};
 use richmond_building_components::{BuildingComponents, Layers};
 
-use crate::clipped_quad_panel::ClippedQuadPanel;
-use crate::panel_complex::{PanelComplex, PanelComplexJointPolicy, PanelPoint, PanelPointId};
+use crate::paneling::clipped_quad_panel::ClippedQuadPanel;
+use crate::paneling::panel_complex::{PanelComplex, PanelComplexJointPolicy, PanelPoint, PanelPointId};
 
 /// One flushed region of a [`ClippedRuledStrip`].
 #[derive(Debug, Clone, PartialEq)]

@@ -5,14 +5,14 @@
 //! ```
 //!
 //! Quads are `{a0, a1, b0, b1}` with diagonal \(a_0\)–\(b_1\). Helpers live on
-//! [`PanelComplex`](crate::panel_complex::PanelComplex); this type only owns a
-//! complex built from a [`PanelQuadMesh`](crate::panel_complex::PanelQuadMesh).
+//! [`PanelComplex`](crate::paneling::panel_complex::PanelComplex); this type only owns a
+//! complex built from a [`PanelQuadMesh`](crate::paneling::panel_complex::PanelQuadMesh).
 
 use std::str::FromStr;
 
 use richmond_building_components::panels::PanelStyle;
 
-use crate::panel_complex::{
+use crate::paneling::panel_complex::{
 	PanelComplex, PanelComplexJointPolicy, PanelQuadMesh, ParsePanelComplexError,
 };
 
