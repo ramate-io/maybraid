@@ -19,7 +19,9 @@ use richmond_buildings::bedroom::Bedroom;
 use richmond_buildings::panel_complex::{PanelComplex, PanelComplexJointPolicy, PanelPoint};
 use richmond_buildings::quad_panel::QuadPanel;
 use richmond_buildings::quad_panel_complex::QuadPanelComplex;
-use richmond_buildings::{ClippedTessellatedTriangle, RuledPitch};
+use richmond_buildings::{
+	ClippedQuadPanel, ClippedRuledStrip, ClippedTessellatedTriangle, RuledPitch,
+};
 use richmond_buildings::stacked_rings::StackedRings;
 use richmond_buildings::tessellated_triangle_panel::TessellatedTrianglePanel;
 use richmond_buildings::walling::{
@@ -64,6 +66,19 @@ pub enum PreviewSubject {
 		b: Vec3,
 		c: Vec3,
 		clip: Vec<Vec3>,
+		min_dihedral: f32,
+		no_joint: bool,
+	},
+	ClippedQuadPanel {
+		a0: Vec3,
+		a1: Vec3,
+		b0: Vec3,
+		b1: Vec3,
+		clip: Vec<Vec3>,
+		min_dihedral: f32,
+		no_joint: bool,
+	},
+	ClippedRuledStrip {
 		min_dihedral: f32,
 		no_joint: bool,
 	},
@@ -175,6 +190,23 @@ impl PreviewConfig {
 				no_joint,
 			} => format!(
 				"preview: clipped-tessellated-triangle (a={a:?} b={b:?} c={c:?} clip={clip:?} min_dihedral={min_dihedral:.3} no_joint={no_joint})"
+			),
+			PreviewSubject::ClippedQuadPanel {
+				a0,
+				a1,
+				b0,
+				b1,
+				ref clip,
+				min_dihedral,
+				no_joint,
+			} => format!(
+				"preview: clipped-quad-panel (a0={a0:?} a1={a1:?} b0={b0:?} b1={b1:?} clip={clip:?} min_dihedral={min_dihedral:.3} no_joint={no_joint})"
+			),
+			PreviewSubject::ClippedRuledStrip {
+				min_dihedral,
+				no_joint,
+			} => format!(
+				"preview: clipped-ruled-strip (min_dihedral={min_dihedral:.3} no_joint={no_joint})"
 			),
 			PreviewSubject::QuadPanel {
 				a0,
@@ -498,6 +530,69 @@ pub fn present_preview_lod(
 				&mut commands,
 				transform,
 				ComponentsOnly(complex).scene_with_lod(&lod_ref),
+			);
+		}
+		PreviewSubject::ClippedQuadPanel {
+			a0,
+			a1,
+			b0,
+			b1,
+			clip,
+			min_dihedral,
+			no_joint,
+		} => {
+			let policy = if *no_joint {
+				PanelComplexJointPolicy::never()
+			} else {
+				PanelComplexJointPolicy::min_dihedral_rad(*min_dihedral)
+			};
+			let complex = ClippedQuadPanel::rough_stone(*a0, *a1, *b0, *b1, clip.clone())
+				.with_joint_policy(policy)
+				.into_complex();
+			spawn_preview(
+				&mut commands,
+				transform,
+				ComponentsOnly(complex).scene_with_lod(&lod_ref),
+			);
+		}
+		PreviewSubject::ClippedRuledStrip {
+			min_dihedral,
+			no_joint,
+		} => {
+			let policy = if *no_joint {
+				PanelComplexJointPolicy::never()
+			} else {
+				PanelComplexJointPolicy::min_dihedral_rad(*min_dihedral)
+			};
+			let rail_a = [
+				Vec3::new(0.0, 0.0, 0.0),
+				Vec3::new(0.0, 0.0, 2.0),
+				Vec3::new(0.0, 0.0, 4.0),
+				Vec3::new(0.0, 0.0, 6.0),
+			];
+			let rail_b = [
+				Vec3::new(2.5, 0.8, 0.0),
+				Vec3::new(2.2, 1.0, 2.0),
+				Vec3::new(2.8, 0.7, 4.0),
+				Vec3::new(2.4, 1.1, 6.0),
+			];
+			let mid_clip = vec![
+				Vec3::new(0.5, 0.2, 2.4),
+				Vec3::new(1.8, 0.5, 2.4),
+				Vec3::new(1.8, 0.5, 3.4),
+				Vec3::new(0.5, 0.2, 3.4),
+			];
+			let strip = ClippedRuledStrip::from_lines(
+				richmond_building_components::panels::PanelStyle::ShepherdsThatch,
+				rail_a,
+				rail_b,
+				[None, Some(mid_clip), None],
+			)
+			.with_joint_policy(policy);
+			spawn_preview(
+				&mut commands,
+				transform,
+				ComponentsOnly(strip).scene_with_lod(&lod_ref),
 			);
 		}
 		PreviewSubject::QuadPanel {

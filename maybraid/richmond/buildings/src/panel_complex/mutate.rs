@@ -181,4 +181,21 @@ impl PanelComplex {
 		}
 		self
 	}
+
+	/// Append another complex's points and triangles, remapping ids by table offset.
+	///
+	/// Assumes `other`'s live point ids are dense indices into `other.points` (holes
+	/// are preserved as empty slots so id arithmetic stays valid).
+	pub fn append_complex(&mut self, other: PanelComplex) -> &mut Self {
+		let offset = self.points.len() as u32;
+		self.points.extend(other.points);
+		for t in other.triangles {
+			self.triangles.push(PanelTriangle::new(
+				PanelPointId(t.a.0 + offset),
+				PanelPointId(t.b.0 + offset),
+				PanelPointId(t.c.0 + offset),
+			));
+		}
+		self
+	}
 }
