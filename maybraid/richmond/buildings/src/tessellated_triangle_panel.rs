@@ -11,7 +11,7 @@ use lod::gen::LodSceneLevel;
 use richmond_building_components::panels::{
 	PanelGeometry, PanelNode, PanelStyle, TessellatedTriangle,
 };
-use richmond_building_components::{BuildingComponents, Placement};
+use richmond_building_components::{BuildingComponents, Layers, Placement};
 
 /// Three world-space corners filled with posed panel right-triangle kits.
 #[derive(Debug, Clone, PartialEq)]
@@ -88,8 +88,8 @@ impl TessellatedTrianglePanel {
 }
 
 impl BuildingComponents for TessellatedTrianglePanel {
-	fn panel_nodes_for_level(&self, _level: LodSceneLevel) -> Vec<PanelNode> {
-		self.panel_node().into_iter().collect()
+	fn panel_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<PanelNode> {
+		Layers::from_free(self.panel_node().into_iter().collect())
 	}
 }
 

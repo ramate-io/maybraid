@@ -1,5 +1,6 @@
-//! Compact `FromStr` authoring for [`PanelComplex`].
+//! Compact string parsing for panel meshes.
 //!
+//! Triangle form:
 //! ```text
 //! 1=(0.5,0,0),2=(2.5,0,0),3=(0,0.3,3),4=(3,0,3) ... {1,2,4},{1,4,3}
 //! ```
@@ -9,7 +10,9 @@
 use std::str::FromStr;
 
 use bevy_math::Vec3;
+use richmond_building_components::panels::PanelStyle;
 
+use super::mesh::PanelMesh;
 use super::types::{PanelComplex, PanelPoint, PanelPointId};
 
 /// Parse failure for the compact panel-complex syntax.
@@ -28,45 +31,37 @@ impl FromStr for PanelComplex {
 	type Err = ParsePanelComplexError;
 
 	fn from_str(s: &str) -> Result<Self, Self::Err> {
-		parse_panel_complex(s)
+		let mesh: PanelMesh = s.parse()?;
+		Ok(PanelComplex::from_mesh(PanelStyle::RoughStonework, mesh))
 	}
 }
 
-fn err(msg: impl Into<String>) -> ParsePanelComplexError {
+pub(super) fn err(msg: impl Into<String>) -> ParsePanelComplexError {
 	ParsePanelComplexError(msg.into())
 }
 
-fn parse_panel_complex(s: &str) -> Result<PanelComplex, ParsePanelComplexError> {
+pub(super) fn split_mesh_src(s: &str) -> Result<(&str, &str), ParsePanelComplexError> {
 	let s = s.trim();
 	if s.is_empty() {
 		return Err(err("empty panel-complex string"));
 	}
-	let (points_src, tris_src) = match s.split_once("...") {
-		Some((a, b)) => (a.trim(), b.trim()),
-		None => {
-			return Err(err(
-				"expected `points ... triangles` with a `...` separator",
-			));
-		}
-	};
+	let (points_src, faces_src) = s
+		.split_once("...")
+		.ok_or_else(|| err("expected `points ... faces` with a `...` separator"))?;
+	let points_src = points_src.trim();
+	let faces_src = faces_src.trim();
 	if points_src.is_empty() {
 		return Err(err("missing point list before `...`"));
 	}
-	if tris_src.is_empty() {
-		return Err(err("missing triangle list after `...`"));
+	if faces_src.is_empty() {
+		return Err(err("missing face list after `...`"));
 	}
-
-	let mut complex = PanelComplex::rough_stone();
-	for (id, point) in parse_points(points_src)? {
-		complex.put_point(id, point);
-	}
-	for (a, b, c) in parse_triangles(tris_src)? {
-		complex.add_triangle(a, b, c);
-	}
-	Ok(complex)
+	Ok((points_src, faces_src))
 }
 
-fn parse_points(src: &str) -> Result<Vec<(PanelPointId, PanelPoint)>, ParsePanelComplexError> {
+pub(super) fn parse_points(
+	src: &str,
+) -> Result<Vec<(PanelPointId, PanelPoint)>, ParsePanelComplexError> {
 	let mut out = Vec::new();
 	let mut rest = src.trim();
 	while !rest.is_empty() {
@@ -122,46 +117,47 @@ fn parse_f32(s: &str, id: u32) -> Result<f32, ParsePanelComplexError> {
 		.map_err(|_| err(format!("point {id}: invalid number `{s}`")))
 }
 
-fn parse_triangles(
+/// Parse `{id,…}` faces requiring exactly `arity` ids each.
+pub(super) fn parse_faces(
 	src: &str,
-) -> Result<Vec<(PanelPointId, PanelPointId, PanelPointId)>, ParsePanelComplexError> {
+	arity: usize,
+) -> Result<Vec<Vec<PanelPointId>>, ParsePanelComplexError> {
 	let mut out = Vec::new();
 	let mut rest = src.trim();
 	while !rest.is_empty() {
 		rest = rest.trim_start();
 		if !rest.starts_with('{') {
-			return Err(err(format!("expected `{{a,b,c}}` near `{rest}`")));
+			return Err(err(format!("expected `{{…}}` face near `{rest}`")));
 		}
 		let close = rest
 			.find('}')
 			.ok_or_else(|| err(format!("unclosed `{{` near `{rest}`")))?;
 		let inner = &rest[1..close];
 		let parts: Vec<_> = inner.split(',').map(str::trim).filter(|p| !p.is_empty()).collect();
-		if parts.len() != 3 {
+		if parts.len() != arity {
 			return Err(err(format!(
-				"triangle expects three ids, got {{{inner}}}"
+				"face expects {arity} ids, got {{{inner}}}"
 			)));
 		}
-		let a = parse_tri_id(parts[0])?;
-		let b = parse_tri_id(parts[1])?;
-		let c = parse_tri_id(parts[2])?;
-		out.push((a, b, c));
+		let mut ids = Vec::with_capacity(arity);
+		for p in parts {
+			ids.push(parse_face_id(p)?);
+		}
+		out.push(ids);
 		rest = rest[close + 1..].trim_start();
 		if rest.starts_with(',') {
 			rest = rest[1..].trim_start();
 		} else if !rest.is_empty() {
-			return Err(err(format!(
-				"expected `,` between triangles near `{rest}`"
-			)));
+			return Err(err(format!("expected `,` between faces near `{rest}`")));
 		}
 	}
 	Ok(out)
 }
 
-fn parse_tri_id(s: &str) -> Result<PanelPointId, ParsePanelComplexError> {
+fn parse_face_id(s: &str) -> Result<PanelPointId, ParsePanelComplexError> {
 	let id: u32 = s
 		.parse()
-		.map_err(|_| err(format!("invalid triangle point id `{s}`")))?;
+		.map_err(|_| err(format!("invalid face point id `{s}`")))?;
 	Ok(PanelPointId(id))
 }
 

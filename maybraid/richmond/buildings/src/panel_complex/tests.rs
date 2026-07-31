@@ -23,7 +23,7 @@ fn builder_quad_emits_two_panels_and_one_shared_edge() {
 	let c = folded_quad();
 	assert_eq!(c.points().count(), 4);
 	assert_eq!(c.triangles().len(), 2);
-	assert_eq!(c.panel_nodes_for_level(LodSceneLevel::High).len(), 2);
+	assert_eq!(c.panel_nodes_for_level(LodSceneLevel::High).flatten().len(), 2);
 	let shared = c.shared_edges();
 	assert_eq!(shared.len(), 1);
 	let (u, v) = shared[0].endpoints();
@@ -140,5 +140,5 @@ fn owned_with_point_builder() {
 	let (mut c, d) = c.with_point(Vec3::new(0.0, 0.0, 1.0));
 	c.triangle(a, b, d);
 	assert_eq!(c.triangles().len(), 1);
-	assert_eq!(c.panel_nodes_for_level(LodSceneLevel::High).len(), 1);
+	assert_eq!(c.panel_nodes_for_level(LodSceneLevel::High).flatten().len(), 1);
 }

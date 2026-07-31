@@ -9,7 +9,7 @@ use richmond_building_components::floors::{Floor, FloorNode};
 use richmond_building_components::partitions::{
 	wall_placement_from_centered, Partition, PartitionNode, DEFAULT_THICK,
 };
-use richmond_building_components::{BuildingComponents, Placement};
+use richmond_building_components::{BuildingComponents, Layers, Placement};
 
 use crate::wizards_tower::floor_fill::{FLOOR_SLAB_Y_SCALE, RECT_HALF_EXTENT};
 use crate::CellConstraints;
@@ -52,12 +52,12 @@ impl WizardsTowerRoom {
 }
 
 impl BuildingComponents for WizardsTowerRoom {
-	fn partition_nodes_for_level(&self, _level: LodSceneLevel) -> Vec<PartitionNode> {
-		vec![self.partition.clone()]
+	fn partition_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<PartitionNode> {
+		Layers::from_free(vec![self.partition.clone()])
 	}
 
-	fn floor_nodes_for_level(&self, _level: LodSceneLevel) -> Vec<FloorNode> {
-		vec![self.floor.clone()]
+	fn floor_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<FloorNode> {
+		Layers::from_free(vec![self.floor.clone()])
 	}
 }
 

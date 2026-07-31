@@ -20,7 +20,7 @@ use richmond_building_components::partitions::{
 	wall_placement_from_centered, Partition, PartitionNode,
 };
 use richmond_building_components::{
-	BuildingComponents, FurnitureNode, Placement,
+	BuildingComponents, FurnitureNode, Layers, Placement,
 };
 
 use crate::constraints::{BoundaryOwnershipEntry, BoundaryOwnershipStatus, FaceKind};
@@ -84,23 +84,35 @@ impl Bedroom {
 }
 
 impl BuildingComponents for Bedroom {
-	fn floor_nodes_for_level(&self, _level: LodSceneLevel) -> Vec<FloorNode> {
-		vec![self.floor.clone()]
+	fn floor_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<FloorNode> {
+		Layers::from_free(vec![self.floor.clone()])
 	}
 
-	fn partition_nodes_for_level(&self, level: LodSceneLevel) -> Vec<PartitionNode> {
-		let mut out = self.walls.clone();
-		out.extend(self.closets.iter().flat_map(|c| c.partition_nodes_for_level(level)));
-		out.extend(self.ensuites.iter().flat_map(|e| e.partition_nodes_for_level(level)));
+	fn partition_nodes_for_level(&self, level: LodSceneLevel) -> Layers<PartitionNode> {
+		let mut out = Layers::from_free(self.walls.clone());
+		for c in &self.closets {
+			out.extend(c.partition_nodes_for_level(level));
+		}
+		for e in &self.ensuites {
+			out.extend(e.partition_nodes_for_level(level));
+		}
 		out
 	}
 
-	fn furniture_nodes_for_level(&self, level: LodSceneLevel) -> Vec<FurnitureNode> {
-		let mut out = Vec::new();
-		out.extend(self.closets.iter().flat_map(|c| c.furniture_nodes_for_level(level)));
-		out.extend(self.beds.iter().flat_map(|b| b.furniture_nodes_for_level(level)));
-		out.extend(self.nightstands.iter().flat_map(|n| n.furniture_nodes_for_level(level)));
-		out.extend(self.ensuites.iter().flat_map(|e| e.furniture_nodes_for_level(level)));
+	fn furniture_nodes_for_level(&self, level: LodSceneLevel) -> Layers<FurnitureNode> {
+		let mut out = Layers::new();
+		for c in &self.closets {
+			out.extend(c.furniture_nodes_for_level(level));
+		}
+		for b in &self.beds {
+			out.extend(b.furniture_nodes_for_level(level));
+		}
+		for n in &self.nightstands {
+			out.extend(n.furniture_nodes_for_level(level));
+		}
+		for e in &self.ensuites {
+			out.extend(e.furniture_nodes_for_level(level));
+		}
 		out
 	}
 }

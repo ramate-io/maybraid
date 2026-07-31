@@ -9,7 +9,7 @@ use procedural_common::NoiseParams;
 use richmond_building_components::floors::FloorNode;
 use richmond_building_components::scene_children;
 use richmond_building_components::stairs::StairNode;
-use richmond_building_components::{BuildingComponents, PartitionNode};
+use richmond_building_components::{BuildingComponents, Layers, PartitionNode};
 
 use crate::wizards_tower::floor_fill::WALL_HEIGHT_METERS;
 use crate::wizards_tower::tower_lod::TowerLodFootprint;
@@ -122,35 +122,35 @@ impl WizardsTowerColumn {
 }
 
 impl BuildingComponents for WizardsTowerColumn {
-	fn partition_nodes_for_level(&self, level: LodSceneLevel) -> Vec<PartitionNode> {
-		let mut out: Vec<PartitionNode> = self
-			.floors
-			.iter()
-			.flat_map(|f| f.partition_nodes_for_level(level))
-			.collect();
+	fn partition_nodes_for_level(&self, level: LodSceneLevel) -> Layers<PartitionNode> {
+		let mut out = Layers::new();
+		for f in &self.floors {
+			out.extend(f.partition_nodes_for_level(level));
+		}
 		out.extend(self.perch.partition_nodes_for_level(level));
 		out
 	}
 
-	fn floor_nodes_for_level(&self, level: LodSceneLevel) -> Vec<FloorNode> {
-		let mut out: Vec<FloorNode> = self
-			.floors
-			.iter()
-			.flat_map(|f| f.floor_nodes_for_level(level))
-			.collect();
+	fn floor_nodes_for_level(&self, level: LodSceneLevel) -> Layers<FloorNode> {
+		let mut out = Layers::new();
+		for f in &self.floors {
+			out.extend(f.floor_nodes_for_level(level));
+		}
 		out.extend(self.perch.floor_nodes_for_level(level));
 		out
 	}
 
-	fn stair_nodes_for_level(&self, level: LodSceneLevel) -> Vec<StairNode> {
+	fn stair_nodes_for_level(&self, level: LodSceneLevel) -> Layers<StairNode> {
 		if !matches!(level, LodSceneLevel::High) {
-			return vec![];
+			return Layers::new();
 		}
 		let spire_confines = self.spire_confine_capsule();
-		self.floors
-			.iter()
-			.map(|f| f.arc_spire.stairs.clone().with_confines(spire_confines))
-			.collect()
+		Layers::from_free(
+			self.floors
+				.iter()
+				.map(|f| f.arc_spire.stairs.clone().with_confines(spire_confines))
+				.collect(),
+		)
 	}
 }
 

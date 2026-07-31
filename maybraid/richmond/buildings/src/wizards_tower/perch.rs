@@ -10,7 +10,8 @@ use procedural_common::NoiseParams;
 use richmond_building_components::floors::FloorNode;
 use richmond_building_components::scene_children;
 use richmond_building_components::{
-	append_component_scenes, BuildingComponents, ParentConfines, PartitionNode,
+	append_component_scenes, BuildingComponents, Layers,
+	ParentConfines, PartitionNode,
 };
 
 use crate::walling::{ArcWall, ArcWallParams};
@@ -72,7 +73,7 @@ impl WizardsTowerPerch {
 		children: &mut Vec<Box<dyn Scene>>,
 		lod_ref: &LodRef,
 	) {
-		for node in self.floor_nodes_for_level(LodSceneLevel::High) {
+		for node in self.floor_nodes_for_level(LodSceneLevel::High).flatten() {
 			children.push(Box::new(node.scene_with_lod(lod_ref)));
 		}
 	}
@@ -98,25 +99,27 @@ impl WizardsTowerPerch {
 }
 
 impl BuildingComponents for WizardsTowerPerch {
-	fn partition_nodes_for_level(&self, level: LodSceneLevel) -> Vec<PartitionNode> {
+	fn partition_nodes_for_level(&self, level: LodSceneLevel) -> Layers<PartitionNode> {
 		if Self::is_structure_level(level) {
-			self.arc_wall.partitions.clone()
+			Layers::from_free(self.arc_wall.partitions.clone())
 		} else {
-			vec![]
+			Layers::new()
 		}
 	}
 
-	fn floor_nodes_for_level(&self, level: LodSceneLevel) -> Vec<FloorNode> {
+	fn floor_nodes_for_level(&self, level: LodSceneLevel) -> Layers<FloorNode> {
 		if !Self::is_detail_level(level) {
-			return vec![];
+			return Layers::new();
 		}
 		let confines =
 			ParentConfines::internal(self.storey_confine_center(), self.storey_confine_radius());
-		self.floor_caps
-			.iter()
-			.chain(self.floor_rects.iter())
-			.map(|n| n.clone().with_confines(confines))
-			.collect()
+		Layers::from_free(
+			self.floor_caps
+				.iter()
+				.chain(self.floor_rects.iter())
+				.map(|n| n.clone().with_confines(confines))
+				.collect(),
+		)
 	}
 }
 

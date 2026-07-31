@@ -7,7 +7,7 @@ use bevy_math::Vec3;
 use lod::gen::LodSceneLevel;
 use procedural_common::{NoiseConfig, NoiseParams};
 use richmond_building_components::partitions::{Partition, PartitionNode};
-use richmond_building_components::{BuildingComponents, Placement};
+use richmond_building_components::{BuildingComponents, Layers, Placement};
 
 use crate::walling::portal::{
 	assign_portals, AssignedPortal, MustAssignPortal, Portal, PortalFootprint, WallRegion,
@@ -84,8 +84,8 @@ impl ArcWall {
 }
 
 impl BuildingComponents for ArcWall {
-	fn partition_nodes_for_level(&self, _level: LodSceneLevel) -> Vec<PartitionNode> {
-		self.partitions.clone()
+	fn partition_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<PartitionNode> {
+		Layers::from_free(self.partitions.clone())
 	}
 }
 

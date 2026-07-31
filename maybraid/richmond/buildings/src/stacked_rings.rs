@@ -11,7 +11,7 @@ use bevy_math::bounding::Aabb3d;
 use bevy_math::Vec3;
 use lod::gen::LodSceneLevel;
 use richmond_building_components::partitions::PartitionNode;
-use richmond_building_components::{BuildingComponents};
+use richmond_building_components::{BuildingComponents, Layers};
 
 use crate::CellConstraints;
 
@@ -52,11 +52,12 @@ impl StackedRings {
 }
 
 impl BuildingComponents for StackedRings {
-	fn partition_nodes_for_level(&self, level: LodSceneLevel) -> Vec<PartitionNode> {
-		self.rings
-			.iter()
-			.flat_map(|ring| ring.partition_nodes_for_level(level))
-			.collect()
+	fn partition_nodes_for_level(&self, level: LodSceneLevel) -> Layers<PartitionNode> {
+		let mut out = Layers::new();
+		for ring in &self.rings {
+			out.extend(ring.partition_nodes_for_level(level));
+		}
+		out
 	}
 }
 

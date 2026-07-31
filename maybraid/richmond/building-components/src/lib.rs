@@ -8,6 +8,7 @@ pub mod doors;
 pub mod floors;
 pub mod furniture;
 pub mod joints;
+pub mod layer;
 pub mod lod_band;
 pub mod lod_host;
 pub mod panels;
@@ -24,6 +25,7 @@ pub use doors::DoorNode;
 pub use floors::FloorNode;
 pub use furniture::{FurnitureGeometry, FurnitureNode, FurnitureStyle, FurnitureWireframePlugin};
 pub use joints::{JointGeometry, JointNode, JointStyle};
+pub use layer::{Layer, Layers};
 pub use lod_host::{
 	posed_asset_tier, warm_content_host, warm_content_host_hsl, warm_mesh_level_host,
 };
@@ -58,72 +60,74 @@ use lod::lod_ref::LodRef;
 
 /// Domain IR exposed by a building (or building part) for structural composition.
 ///
-/// Buildings compose by extending each other's node lists. Default methods return empty
-/// vectors; override only the domains the type authors.
+/// Each method returns nodes of one domain type, grouped by provenance [`Layer`]
+/// (see [`Layers`]). Layer identity is **not** node-type identity—it records where
+/// geometry came from so parents can apply policy. Prefer [`Layers::free`] until a
+/// provenance name is meaningful. Buildings compose by [`Layers::extend`].
 pub trait BuildingComponents {
-	fn panel_nodes_for_level(&self, _level: LodSceneLevel) -> Vec<PanelNode> {
-		vec![]
+	fn panel_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<PanelNode> {
+		Layers::new()
 	}
 
-	fn partition_nodes_for_level(&self, _level: LodSceneLevel) -> Vec<PartitionNode> {
-		vec![]
+	fn partition_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<PartitionNode> {
+		Layers::new()
 	}
 
-	fn floor_nodes_for_level(&self, _level: LodSceneLevel) -> Vec<FloorNode> {
-		vec![]
+	fn floor_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<FloorNode> {
+		Layers::new()
 	}
 
-	fn roof_nodes_for_level(&self, _level: LodSceneLevel) -> Vec<RoofNode> {
-		vec![]
+	fn roof_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<RoofNode> {
+		Layers::new()
 	}
 
-	fn stair_nodes_for_level(&self, _level: LodSceneLevel) -> Vec<StairNode> {
-		vec![]
+	fn stair_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<StairNode> {
+		Layers::new()
 	}
 
-	fn door_nodes_for_level(&self, _level: LodSceneLevel) -> Vec<DoorNode> {
-		vec![]
+	fn door_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<DoorNode> {
+		Layers::new()
 	}
 
-	fn joint_nodes_for_level(&self, _level: LodSceneLevel) -> Vec<JointNode> {
-		vec![]
+	fn joint_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<JointNode> {
+		Layers::new()
 	}
 
-	fn furniture_nodes_for_level(&self, _level: LodSceneLevel) -> Vec<FurnitureNode> {
-		vec![]
+	fn furniture_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<FurnitureNode> {
+		Layers::new()
 	}
 }
 
 impl<T: BuildingComponents + ?Sized> BuildingComponents for &T {
-	fn panel_nodes_for_level(&self, level: LodSceneLevel) -> Vec<PanelNode> {
+	fn panel_nodes_for_level(&self, level: LodSceneLevel) -> Layers<PanelNode> {
 		(**self).panel_nodes_for_level(level)
 	}
 
-	fn partition_nodes_for_level(&self, level: LodSceneLevel) -> Vec<PartitionNode> {
+	fn partition_nodes_for_level(&self, level: LodSceneLevel) -> Layers<PartitionNode> {
 		(**self).partition_nodes_for_level(level)
 	}
 
-	fn floor_nodes_for_level(&self, level: LodSceneLevel) -> Vec<FloorNode> {
+	fn floor_nodes_for_level(&self, level: LodSceneLevel) -> Layers<FloorNode> {
 		(**self).floor_nodes_for_level(level)
 	}
 
-	fn roof_nodes_for_level(&self, level: LodSceneLevel) -> Vec<RoofNode> {
+	fn roof_nodes_for_level(&self, level: LodSceneLevel) -> Layers<RoofNode> {
 		(**self).roof_nodes_for_level(level)
 	}
 
-	fn stair_nodes_for_level(&self, level: LodSceneLevel) -> Vec<StairNode> {
+	fn stair_nodes_for_level(&self, level: LodSceneLevel) -> Layers<StairNode> {
 		(**self).stair_nodes_for_level(level)
 	}
 
-	fn door_nodes_for_level(&self, level: LodSceneLevel) -> Vec<DoorNode> {
+	fn door_nodes_for_level(&self, level: LodSceneLevel) -> Layers<DoorNode> {
 		(**self).door_nodes_for_level(level)
 	}
 
-	fn joint_nodes_for_level(&self, level: LodSceneLevel) -> Vec<JointNode> {
+	fn joint_nodes_for_level(&self, level: LodSceneLevel) -> Layers<JointNode> {
 		(**self).joint_nodes_for_level(level)
 	}
 
-	fn furniture_nodes_for_level(&self, level: LodSceneLevel) -> Vec<FurnitureNode> {
+	fn furniture_nodes_for_level(&self, level: LodSceneLevel) -> Layers<FurnitureNode> {
 		(**self).furniture_nodes_for_level(level)
 	}
 }
@@ -168,35 +172,35 @@ impl<T> std::ops::DerefMut for ComponentsOnly<T> {
 }
 
 impl<T: BuildingComponents> BuildingComponents for ComponentsOnly<T> {
-	fn panel_nodes_for_level(&self, level: LodSceneLevel) -> Vec<PanelNode> {
+	fn panel_nodes_for_level(&self, level: LodSceneLevel) -> Layers<PanelNode> {
 		self.0.panel_nodes_for_level(level)
 	}
 
-	fn partition_nodes_for_level(&self, level: LodSceneLevel) -> Vec<PartitionNode> {
+	fn partition_nodes_for_level(&self, level: LodSceneLevel) -> Layers<PartitionNode> {
 		self.0.partition_nodes_for_level(level)
 	}
 
-	fn floor_nodes_for_level(&self, level: LodSceneLevel) -> Vec<FloorNode> {
+	fn floor_nodes_for_level(&self, level: LodSceneLevel) -> Layers<FloorNode> {
 		self.0.floor_nodes_for_level(level)
 	}
 
-	fn roof_nodes_for_level(&self, level: LodSceneLevel) -> Vec<RoofNode> {
+	fn roof_nodes_for_level(&self, level: LodSceneLevel) -> Layers<RoofNode> {
 		self.0.roof_nodes_for_level(level)
 	}
 
-	fn stair_nodes_for_level(&self, level: LodSceneLevel) -> Vec<StairNode> {
+	fn stair_nodes_for_level(&self, level: LodSceneLevel) -> Layers<StairNode> {
 		self.0.stair_nodes_for_level(level)
 	}
 
-	fn door_nodes_for_level(&self, level: LodSceneLevel) -> Vec<DoorNode> {
+	fn door_nodes_for_level(&self, level: LodSceneLevel) -> Layers<DoorNode> {
 		self.0.door_nodes_for_level(level)
 	}
 
-	fn joint_nodes_for_level(&self, level: LodSceneLevel) -> Vec<JointNode> {
+	fn joint_nodes_for_level(&self, level: LodSceneLevel) -> Layers<JointNode> {
 		self.0.joint_nodes_for_level(level)
 	}
 
-	fn furniture_nodes_for_level(&self, level: LodSceneLevel) -> Vec<FurnitureNode> {
+	fn furniture_nodes_for_level(&self, level: LodSceneLevel) -> Layers<FurnitureNode> {
 		self.0.furniture_nodes_for_level(level)
 	}
 }
@@ -212,34 +216,37 @@ impl<T: BuildingComponents> LodScene for ComponentsOnly<T> {
 }
 
 /// Append every domain node from `building` at `level` as nested [`LodScene`] children.
+///
+/// Provenance is flattened away ([`Layers::flatten`]) for presentation today; parents
+/// that need layer policy should read [`BuildingComponents`] maps before this step.
 pub fn append_component_scenes(
 	building: &impl BuildingComponents,
 	lod_ref: &LodRef,
 	level: LodSceneLevel,
 	children: &mut Vec<Box<dyn Scene>>,
 ) {
-	for node in building.panel_nodes_for_level(level) {
+	for node in building.panel_nodes_for_level(level).flatten() {
 		children.push(Box::new(node.scene_with_lod(lod_ref)));
 	}
-	for node in building.partition_nodes_for_level(level) {
+	for node in building.partition_nodes_for_level(level).flatten() {
 		children.push(Box::new(node.scene_with_lod(lod_ref)));
 	}
-	for node in building.floor_nodes_for_level(level) {
+	for node in building.floor_nodes_for_level(level).flatten() {
 		children.push(Box::new(node.scene_with_lod(lod_ref)));
 	}
-	for node in building.roof_nodes_for_level(level) {
+	for node in building.roof_nodes_for_level(level).flatten() {
 		children.push(Box::new(node.scene_with_lod(lod_ref)));
 	}
-	for node in building.stair_nodes_for_level(level) {
+	for node in building.stair_nodes_for_level(level).flatten() {
 		children.push(Box::new(node.scene_with_lod(lod_ref)));
 	}
-	for node in building.door_nodes_for_level(level) {
+	for node in building.door_nodes_for_level(level).flatten() {
 		children.push(Box::new(node.scene_with_lod(lod_ref)));
 	}
-	for node in building.joint_nodes_for_level(level) {
+	for node in building.joint_nodes_for_level(level).flatten() {
 		children.push(Box::new(node.scene_with_lod(lod_ref)));
 	}
-	for node in building.furniture_nodes_for_level(level) {
+	for node in building.furniture_nodes_for_level(level).flatten() {
 		children.push(Box::new(node.scene_with_lod(lod_ref)));
 	}
 }

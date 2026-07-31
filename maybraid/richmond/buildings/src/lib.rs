@@ -15,6 +15,7 @@ pub mod bedroom;
 pub mod constraints;
 pub mod panel_complex;
 pub mod quad_panel;
+pub mod quad_panel_complex;
 pub mod stacked_rings;
 pub mod tessellated_triangle_panel;
 pub mod walling;
@@ -30,12 +31,12 @@ pub use constraints::{
 	JointCoordinate, JointEntry, PreJointSweep, SubsetError,
 };
 pub use panel_complex::{
-	shared_edges, PanelComplex, PanelComplexJointPolicy, PanelComplexValidation, PanelPoint,
-	PanelPointId, PanelTriangle, ParsePanelComplexError, SharedEdge,
+	shared_edges, PanelComplex, PanelComplexJointPolicy, PanelComplexValidation, PanelMesh,
+	PanelPoint, PanelPointId, PanelQuadMesh, PanelTriangle, ParsePanelComplexError, SharedEdge,
+	DEFAULT_PANEL_THICKNESS,
 };
-pub use quad_panel::{
-	QuadCorner, QuadPanel, QuadPanelJointPolicy, DEFAULT_PANEL_THICKNESS,
-};
+pub use quad_panel::QuadPanel;
+pub use quad_panel_complex::QuadPanelComplex;
 pub use stacked_rings::{StackedRing, StackedRings};
 pub use tessellated_triangle_panel::TessellatedTrianglePanel;
 pub use walling::{

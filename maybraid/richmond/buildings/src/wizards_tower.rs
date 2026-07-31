@@ -37,7 +37,7 @@ use richmond_building_components::floors::FloorNode;
 use richmond_building_components::scene_children;
 use richmond_building_components::stairs::StairNode;
 use richmond_building_components::{
-	append_component_scenes, BuildingComponents, PartitionNode,
+	append_component_scenes, BuildingComponents, Layers, PartitionNode,
 };
 
 use crate::walling::{MustAssignPortal, Portal};
@@ -134,15 +134,15 @@ impl WizardsTower {
 }
 
 impl BuildingComponents for WizardsTower {
-	fn partition_nodes_for_level(&self, level: LodSceneLevel) -> Vec<PartitionNode> {
+	fn partition_nodes_for_level(&self, level: LodSceneLevel) -> Layers<PartitionNode> {
 		self.column.partition_nodes_for_level(level)
 	}
 
-	fn floor_nodes_for_level(&self, level: LodSceneLevel) -> Vec<FloorNode> {
+	fn floor_nodes_for_level(&self, level: LodSceneLevel) -> Layers<FloorNode> {
 		self.column.floor_nodes_for_level(level)
 	}
 
-	fn stair_nodes_for_level(&self, level: LodSceneLevel) -> Vec<StairNode> {
+	fn stair_nodes_for_level(&self, level: LodSceneLevel) -> Layers<StairNode> {
 		self.column.stair_nodes_for_level(level)
 	}
 }

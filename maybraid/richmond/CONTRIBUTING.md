@@ -32,6 +32,8 @@ constraints / layout helpers
 Preferred shape for a storey or room:
 
 ```rust
+use richmond_building_components::{BuildingComponents, Layers};
+
 pub struct ExampleFloor {
     pub floors: Vec<FloorNode>,
     pub partitions: Vec<PartitionNode>,
@@ -39,21 +41,23 @@ pub struct ExampleFloor {
 }
 
 impl BuildingComponents for ExampleFloor {
-    fn floor_nodes_for_level(&self, _level: LodSceneLevel) -> Vec<FloorNode> {
-        self.floors.clone()
+    fn floor_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<FloorNode> {
+        Layers::from_free(self.floors.clone())
     }
-    fn partition_nodes_for_level(&self, _level: LodSceneLevel) -> Vec<PartitionNode> {
-        self.partitions.clone()
+    fn partition_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<PartitionNode> {
+        Layers::from_free(self.partitions.clone())
     }
-    fn stair_nodes_for_level(&self, _level: LodSceneLevel) -> Vec<StairNode> {
-        self.stairs.clone()
+    fn stair_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<StairNode> {
+        Layers::from_free(self.stairs.clone())
     }
 }
 
 // Present: ComponentsOnly(&example).scene_with_lod(lod_ref)
 ```
 
-Parents **extend** children’s node lists (flatten), they do not nest child `LodScene`s when both sides are component-only.
+Parents **merge** children’s layered node maps via [`Layers::extend`](building-components/src/layer.rs), they do not nest child `LodScene`s when both sides are component-only.
+
+[`Layer`](building-components/src/layer.rs) is a **provenance** record (e.g. `"closet"`, `"envelope"`), not a stand-in for node type. Domain type stays on the trait method (`panel_nodes_for_level` vs `partition_nodes_for_level`). Higher-order types use layer names to decide what to do with that geometry; use [`Layers::free`](building-components/src/layer.rs) until a provenance label is useful.
 
 Helpers such as [`Walling`](buildings/src/walling.rs) (`ArcWall` / `LinearWall` / `PolylineWall`) / `ArcSpire` are fine when they **produce** `PartitionNode` / `StairNode` via `BuildingComponents`. Use **partition** for primitive kit IR and **wall** for portal-sensitive path helpers. Door leaves stay empty until portal → `DoorNode` authorship exists.
 
