@@ -1,7 +1,6 @@
 //! `/show ruled-pitch` — equal eave/ridge stations → ruled quad strip + crease joints.
 //!
-//! Default: 3 eave stations at \(Z=0,2,4\) on the origin line; ridge at \(X=Y=1\),
-//! \(Z=1,2,4\).
+//! Default: funky 5+5 — snaking eave near the ground, lagging ridge above.
 
 use bevy::prelude::*;
 use clap::Args;

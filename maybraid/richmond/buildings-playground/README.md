@@ -33,7 +33,7 @@ cargo run -p richmond-buildings-playground -- show panel-complex \
 # Same geometry as one quad face:
 cargo run -p richmond-buildings-playground -- show quad-panel-complex \
   --mesh '1=(0,0,0),2=(1,0,0),3=(0,1,0),4=(0,0,1) ... {1,2,3,4}'
-# Ruled pitch strip (default 3+3 eave/ridge stations):
+# Ruled pitch strip (default funky 5+5 eave/ridge):
 cargo run -p richmond-buildings-playground -- show ruled-pitch
 ```
 
@@ -48,7 +48,7 @@ In-game: press `/` for the command console (same clap commands as argv).
 - `show quad-panel [--a0|--a1|--b0|--b1 X,Y,Z] [--t-a0|--t-a1|--t-b0|--t-b1 T] [--min-dihedral R] [--no-joint]` — two lines → two tessellated triangles + optional crease `JointNode` (default corners are a ~90° fold; thicknesses default to 0.4)
 - `show panel-complex [--mesh 'id=(x,y,z) … {a,b,c}'] [--min-dihedral R] [--no-joint]` — point-id triangle mesh + crease joints; optional thickness as 4th tuple component
 - `show quad-panel-complex [--mesh 'id=(x,y,z) … {a0,a1,b0,b1}'] [--min-dihedral R] [--no-joint]` — quad-face mesh (diagonal a0–b1) → same presentation path
-- `show ruled-pitch [--min-dihedral R] [--no-joint]` — equal eave/ridge stations (default 3+3) → ruled quad strip + crease joints
+- `show ruled-pitch [--min-dihedral R] [--no-joint]` — equal eave/ridge stations (default funky 5+5) → ruled quad strip + crease joints
 - `show wizards-tower [--noise 0.5]` — authored tower hierarchy (`LodScene` composition)
 - `show stacked-rings [--floor-count N] [--floor-height H] [--radius R]` — circular wall stack (kit scale check)
 - `show bedroom [--extent X,Y,Z] [--noise 0.5] [--spaciousness 1.0] [--occupancy 0.55] [--door]` — hierarchical bedroom; bed-first multi-fill under spaciousness/occupancy; `--door` adds a −Z circulation exclusion

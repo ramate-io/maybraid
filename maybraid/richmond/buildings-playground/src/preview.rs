@@ -548,15 +548,21 @@ pub fn present_preview_lod(
 			} else {
 				PanelComplexJointPolicy::min_dihedral_rad(*min_dihedral)
 			};
+			// Funky 5+5: eave snakes on the ground; ridge wanders higher with a lag,
+			// so rafters twist and bays pick up visible crease dihedrals.
 			let eave = [
 				Vec3::new(0.0, 0.0, 0.0),
-				Vec3::new(0.0, 0.0, 2.0),
-				Vec3::new(0.0, 0.0, 4.0),
+				Vec3::new(0.6, 0.15, 1.4),
+				Vec3::new(-0.3, 0.0, 2.8),
+				Vec3::new(0.9, 0.25, 4.1),
+				Vec3::new(0.2, 0.0, 5.6),
 			];
 			let ridge = [
-				Vec3::new(1.0, 1.0, 1.0),
-				Vec3::new(1.0, 1.0, 2.0),
-				Vec3::new(1.0, 1.0, 4.0),
+				Vec3::new(1.8, 1.6, 0.4),
+				Vec3::new(2.6, 2.1, 1.1),
+				Vec3::new(1.4, 1.4, 2.5),
+				Vec3::new(2.9, 2.4, 3.6),
+				Vec3::new(2.1, 1.7, 5.2),
 			];
 			let complex = RuledPitch::shepherds_thatch()
 				.with_lines(eave, ridge)
