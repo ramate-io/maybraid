@@ -22,6 +22,7 @@ use richmond_buildings::quad_panel_complex::QuadPanelComplex;
 use richmond_buildings::{
 	ApproximatedCircle, ArcSweep, ClippedArcSweep, ClippedQuadPanel, ClippedRectangle,
 	ClippedRectangularStrip, ClippedRuledStrip, ClippedTessellatedTriangle, RectInset, RuledPitch,
+	Tube, TubeCrossSectionNode,
 };
 use richmond_buildings::stacked_rings::StackedRings;
 use richmond_buildings::tessellated_triangle_panel::TessellatedTrianglePanel;
@@ -78,6 +79,10 @@ pub enum PreviewSubject {
 		no_joint: bool,
 	},
 	ClippedRuledStrip {
+		min_dihedral: f32,
+		no_joint: bool,
+	},
+	Tube {
 		min_dihedral: f32,
 		no_joint: bool,
 	},
@@ -238,6 +243,12 @@ impl PreviewConfig {
 			} => format!(
 				"preview: clipped-ruled-strip (min_dihedral={min_dihedral:.3} no_joint={no_joint})"
 			),
+			PreviewSubject::Tube {
+				min_dihedral,
+				no_joint,
+			} => format!(
+				"preview: tube (min_dihedral={min_dihedral:.3} no_joint={no_joint})"
+			),
 			PreviewSubject::ClippedRectangle {
 				a0,
 				a1,
@@ -394,6 +405,13 @@ impl PreviewConfig {
 			PreviewSubject::NoisyRectangularWall { distance, .. } => {
 				let r = (*distance).max(4.0);
 				Aabb3d::from_min_max(Vec3::new(-r, -r * 0.5, -r), Vec3::new(r, r * 0.5 + 3.0, r))
+			}
+			PreviewSubject::Tube { .. } => {
+				// Demo polyline bends +X/+Y along +Z with ~1.3 half-widths / ~2.4 height.
+				Aabb3d::from_min_max(
+					Vec3::new(-2.0, -0.5, -0.5),
+					Vec3::new(7.0, 4.0, 9.0),
+				)
 			}
 			_ => Aabb3d::from_min_max(Vec3::ZERO, Vec3::ONE),
 		}
@@ -638,6 +656,73 @@ pub fn present_preview_lod(
 				&mut commands,
 				transform,
 				ComponentsOnly(strip).scene_with_lod(&lod_ref),
+			);
+		}
+		PreviewSubject::Tube {
+			min_dihedral,
+			no_joint,
+		} => {
+			let policy = if *no_joint {
+				PanelComplexJointPolicy::never()
+			} else {
+				PanelComplexJointPolicy::min_dihedral_rad(*min_dihedral)
+			};
+			// Level start, then plan bend + pitch; slight roll on the kink station.
+			let nodes = [
+				TubeCrossSectionNode::new(
+					Vec3::new(0.0, 0.0, 0.0),
+					1.2,
+					1.2,
+					2.2,
+					1.0,
+					1.0,
+				),
+				TubeCrossSectionNode::new(
+					Vec3::new(0.0, 0.0, 3.0),
+					1.2,
+					1.2,
+					2.2,
+					1.0,
+					1.0,
+				),
+				TubeCrossSectionNode::new(
+					Vec3::new(2.0, 0.5, 6.0),
+					1.3,
+					1.1,
+					2.4,
+					1.1,
+					0.9,
+				)
+				.with_roll(0.15),
+				TubeCrossSectionNode::new(
+					Vec3::new(5.0, 1.0, 8.0),
+					1.2,
+					1.2,
+					2.2,
+					1.0,
+					1.0,
+				),
+			];
+			// Opening on the left wall of the middle bay (between stations 1–2).
+			let left_clip = vec![
+				Vec3::new(-1.0, 0.4, 3.6),
+				Vec3::new(-1.0, 1.6, 3.6),
+				Vec3::new(-0.2, 1.6, 5.0),
+				Vec3::new(-0.2, 0.4, 5.0),
+			];
+			let tube = Tube::from_nodes_with_clips(
+				richmond_building_components::panels::PanelStyle::RoughStonework,
+				nodes,
+				std::iter::empty(),
+				std::iter::empty(),
+				[None, Some(left_clip), None],
+				std::iter::empty(),
+			)
+			.with_joint_policy(policy);
+			spawn_preview(
+				&mut commands,
+				transform,
+				ComponentsOnly(tube).scene_with_lod(&lod_ref),
 			);
 		}
 		PreviewSubject::ClippedRectangle {
