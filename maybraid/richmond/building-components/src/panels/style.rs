@@ -34,45 +34,47 @@ impl PanelStyle {
 
 	/// High / mid / low rectangle kit paths, when this style has a rectangle body.
 	pub fn rectangle_lod(self) -> Option<(AssetPath, AssetPath, AssetPath)> {
-		match self {
-			Self::ShepherdsThatch => None,
-			Self::RoughStonework => Some((
+		Some(match self {
+			Self::RoughStonework => (
 				rough_stonework::RECTANGLE_HIGH,
 				rough_stonework::RECTANGLE_MID,
 				rough_stonework::RECTANGLE_LOW,
-			)),
-			Self::Default => Some((
+			),
+			Self::ShepherdsThatch => (
+				shepherds_thatch::RECTANGLE_HIGH,
+				shepherds_thatch::RECTANGLE_MID,
+				shepherds_thatch::RECTANGLE_LOW,
+			),
+			Self::Default => (
 				panel_default::RECTANGLE_HIGH,
 				panel_default::RECTANGLE_MID,
 				panel_default::RECTANGLE_LOW,
-			)),
-			Self::DesertWeb => Some((
-				desert_web::RECTANGLE_HIGH,
-				desert_web::RECTANGLE_MID,
-				desert_web::RECTANGLE_LOW,
-			)),
-			Self::Flat => Some((flat::RECTANGLE_HIGH, flat::RECTANGLE_MID, flat::RECTANGLE_LOW)),
-			Self::MyrsOrnate => Some((
+			),
+			Self::DesertWeb => {
+				(desert_web::RECTANGLE_HIGH, desert_web::RECTANGLE_MID, desert_web::RECTANGLE_LOW)
+			}
+			Self::Flat => (flat::RECTANGLE_HIGH, flat::RECTANGLE_MID, flat::RECTANGLE_LOW),
+			Self::MyrsOrnate => (
 				myrs_ornate::RECTANGLE_HIGH,
 				myrs_ornate::RECTANGLE_MID,
 				myrs_ornate::RECTANGLE_LOW,
-			)),
-			Self::RibAndPlank => Some((
+			),
+			Self::RibAndPlank => (
 				rib_and_plank::RECTANGLE_HIGH,
 				rib_and_plank::RECTANGLE_MID,
 				rib_and_plank::RECTANGLE_LOW,
-			)),
-			Self::TentAngles => Some((
+			),
+			Self::TentAngles => (
 				tent_angles::RECTANGLE_HIGH,
 				tent_angles::RECTANGLE_MID,
 				tent_angles::RECTANGLE_LOW,
-			)),
-			Self::TerracottaTubes => Some((
+			),
+			Self::TerracottaTubes => (
 				terracotta_tubes::RECTANGLE_HIGH,
 				terracotta_tubes::RECTANGLE_MID,
 				terracotta_tubes::RECTANGLE_LOW,
-			)),
-		}
+			),
+		})
 	}
 
 	/// High / mid / low right-triangle kit paths.
@@ -126,19 +128,8 @@ impl PanelStyle {
 }
 
 impl From<PanelStyle> for PanelKitCaps {
-	fn from(style: PanelStyle) -> Self {
-		match style {
-			// Shepherd's thatch keeps dual-triangle body fill even though rectangle
-			// GLBs exist under `urban/panels/shepherds_thatch/`.
-			PanelStyle::ShepherdsThatch => Self::TRIANGLES_ONLY,
-			PanelStyle::RoughStonework
-			| PanelStyle::Default
-			| PanelStyle::DesertWeb
-			| PanelStyle::Flat
-			| PanelStyle::MyrsOrnate
-			| PanelStyle::RibAndPlank
-			| PanelStyle::TentAngles
-			| PanelStyle::TerracottaTubes => Self::WITH_RECTANGLE,
-		}
+	fn from(_style: PanelStyle) -> Self {
+		// All current panel kits ship rectangle + right-triangle LOD triads.
+		Self::WITH_RECTANGLE
 	}
 }
