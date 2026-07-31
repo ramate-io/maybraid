@@ -21,8 +21,9 @@ use richmond_buildings::quad_panel::QuadPanel;
 use richmond_buildings::quad_panel_complex::QuadPanelComplex;
 use richmond_buildings::{
 	ApproximatedCircle, ArcSweep, ClippedArcSweep, ClippedQuadPanel, ClippedRectangle,
-	ClippedRectangularStrip, ClippedRuledStrip, ClippedTessellatedTriangle, RectInset, RuledPitch,
-	Tube, TubeCrossSectionNode,
+	ClippedRectangularStrip, ClippedRuledStrip, ClippedTessellatedTriangle, RectInset, Rectangle,
+	RectangularNTube, RectangularNTubeCorner, RectangularNTubeStation, RectangularStripNode,
+	RuledPitch, Tube, TubeCrossSectionNode, DEFAULT_PANEL_THICKNESS,
 };
 use richmond_buildings::stacked_rings::StackedRings;
 use richmond_buildings::tessellated_triangle_panel::TessellatedTrianglePanel;
@@ -86,17 +87,30 @@ pub enum PreviewSubject {
 		min_dihedral: f32,
 		no_joint: bool,
 	},
+	Rectangle {
+		origin: Vec3,
+		edge: Vec3,
+		height: f32,
+		thickness: f32,
+		roll: f32,
+	},
 	ClippedRectangle {
-		a0: Vec3,
-		a1: Vec3,
-		b0: Vec3,
-		b1: Vec3,
+		origin: Vec3,
+		edge: Vec3,
+		height: f32,
+		thickness: f32,
+		roll: f32,
 		left: f32,
 		right: f32,
 		bottom: f32,
 		top: f32,
 	},
 	ClippedRectangularStrip {
+		inset: f32,
+		min_dihedral: f32,
+		no_joint: bool,
+	},
+	RectangularNTube {
 		inset: f32,
 		min_dihedral: f32,
 		no_joint: bool,
@@ -249,17 +263,29 @@ impl PreviewConfig {
 			} => format!(
 				"preview: tube (min_dihedral={min_dihedral:.3} no_joint={no_joint})"
 			),
+			PreviewSubject::Rectangle {
+				origin,
+				edge,
+				height,
+				thickness,
+				roll,
+			} => {
+				format!(
+					"preview: rectangle (origin={origin:?} edge={edge:?} height={height:.3} thickness={thickness:.3} roll={roll:.3})"
+				)
+			}
 			PreviewSubject::ClippedRectangle {
-				a0,
-				a1,
-				b0,
-				b1,
+				origin,
+				edge,
+				height,
+				thickness,
+				roll,
 				left,
 				right,
 				bottom,
 				top,
 			} => format!(
-				"preview: clipped-rectangle (a0={a0:?} a1={a1:?} b0={b0:?} b1={b1:?} inset=[{left:.2},{right:.2},{bottom:.2},{top:.2}])"
+				"preview: clipped-rectangle (origin={origin:?} edge={edge:?} height={height:.3} thickness={thickness:.3} roll={roll:.3} inset=[{left:.2},{right:.2},{bottom:.2},{top:.2}])"
 			),
 			PreviewSubject::ClippedRectangularStrip {
 				inset,
@@ -267,6 +293,13 @@ impl PreviewConfig {
 				no_joint,
 			} => format!(
 				"preview: clipped-rectangular-strip (inset={inset:.2} min_dihedral={min_dihedral:.3} no_joint={no_joint})"
+			),
+			PreviewSubject::RectangularNTube {
+				inset,
+				min_dihedral,
+				no_joint,
+			} => format!(
+				"preview: rectangular-n-tube (inset={inset:.2} min_dihedral={min_dihedral:.3} no_joint={no_joint})"
 			),
 			PreviewSubject::ApproximatedCircle {
 				center,
@@ -399,6 +432,28 @@ impl PreviewConfig {
 				let max = a0.max(*a1).max(*b0).max(*b1) + Vec3::splat(0.2);
 				Aabb3d::from_min_max(min, max)
 			}
+			PreviewSubject::Rectangle {
+				origin,
+				edge,
+				height,
+				..
+			}
+			| PreviewSubject::ClippedRectangle {
+				origin,
+				edge,
+				height,
+				..
+			} => {
+				let end = *origin + *edge;
+				let up = Vec3::Y * (*height);
+				let min = origin.min(end).min(*origin + up).min(end + up) - Vec3::splat(0.2);
+				let max = origin.max(end).max(*origin + up).max(end + up) + Vec3::splat(0.2);
+				Aabb3d::from_min_max(min, max)
+			}
+			PreviewSubject::RectangularNTube { .. } => Aabb3d::from_min_max(
+				Vec3::new(-2.0, -2.0, -0.5),
+				Vec3::new(2.0, 2.0, 7.0),
+			),
 			PreviewSubject::Polyline => {
 				Aabb3d::from_min_max(Vec3::new(0.0, 0.0, 0.0), Vec3::new(4.0, 3.0, 4.0))
 			}
@@ -494,6 +549,8 @@ pub fn present_preview_lod(
 	lod_state: Res<LodViewerState>,
 	mut cache: ResMut<CachedPreview>,
 	roots: Query<Entity, With<PreviewRoot>>,
+	mut meshes: ResMut<Assets<Mesh>>,
+	mut materials: ResMut<Assets<StandardMaterial>>,
 	mut last_subject: Local<Option<(PreviewSubject, Transform)>>,
 ) {
 	let subject_key = (config.subject.clone(), config.transform);
@@ -725,21 +782,50 @@ pub fn present_preview_lod(
 				ComponentsOnly(tube).scene_with_lod(&lod_ref),
 			);
 		}
+		PreviewSubject::Rectangle {
+			origin,
+			edge,
+			height,
+			thickness,
+			roll,
+		} => {
+			let rect = Rectangle::rough_stone(*origin, *edge, *height, *thickness, *roll);
+			let corners = [
+				rect.oriented.a0,
+				rect.oriented.a1,
+				rect.oriented.b0,
+				rect.oriented.b1,
+			];
+			spawn_preview(
+				&mut commands,
+				transform,
+				ComponentsOnly(rect).scene_with_lod(&lod_ref),
+			);
+			spawn_rectangle_debug_balls(
+				&mut commands,
+				&mut meshes,
+				&mut materials,
+				transform,
+				corners,
+			);
+		}
 		PreviewSubject::ClippedRectangle {
-			a0,
-			a1,
-			b0,
-			b1,
+			origin,
+			edge,
+			height,
+			thickness,
+			roll,
 			left,
 			right,
 			bottom,
 			top,
 		} => {
 			let rect = ClippedRectangle::rough_stone(
-				*a0,
-				*a1,
-				*b0,
-				*b1,
+				*origin,
+				*edge,
+				*height,
+				*thickness,
+				*roll,
 				RectInset::new(*left, *right, *bottom, *top),
 			);
 			spawn_preview(
@@ -758,23 +844,16 @@ pub fn present_preview_lod(
 			} else {
 				PanelComplexJointPolicy::min_dihedral_rad(*min_dihedral)
 			};
-			// Folded rails so bay creases exceed the default dihedral threshold.
-			let rail_a = [
-				Vec3::new(0.0, 0.0, 0.0),
-				Vec3::new(0.0, 0.0, 2.0),
-				Vec3::new(0.0, 0.0, 4.0),
-				Vec3::new(0.0, 0.0, 6.0),
+			// Plan-turn fold so bay creases exceed the default dihedral threshold.
+			let nodes = [
+				RectangularStripNode::new(Vec3::new(0.0, 0.0, 0.0), 2.5, 0.75, 0.0),
+				RectangularStripNode::new(Vec3::new(0.0, 0.0, 2.0), 2.5, 0.75, 0.0),
+				RectangularStripNode::new(Vec3::new(2.0, 0.0, 2.0), 2.5, 0.75, 0.0),
+				RectangularStripNode::new(Vec3::new(2.0, 0.0, 4.0), 2.5, 0.75, 0.0),
 			];
-			let rail_b = [
-				Vec3::new(2.5, 0.0, 0.0),
-				Vec3::new(2.5, 0.0, 2.0),
-				Vec3::new(2.5, 1.4, 4.0),
-				Vec3::new(2.5, 1.4, 6.0),
-			];
-			let strip = ClippedRectangularStrip::from_lines(
+			let strip = ClippedRectangularStrip::from_nodes(
 				richmond_building_components::panels::PanelStyle::RoughStonework,
-				rail_a,
-				rail_b,
+				nodes,
 				[None, Some(RectInset::uniform(*inset)), None],
 			)
 			.with_joint_policy(policy);
@@ -782,6 +861,42 @@ pub fn present_preview_lod(
 				&mut commands,
 				transform,
 				ComponentsOnly(strip).scene_with_lod(&lod_ref),
+			);
+		}
+		PreviewSubject::RectangularNTube {
+			inset,
+			min_dihedral,
+			no_joint,
+		} => {
+			let policy = if *no_joint {
+				PanelComplexJointPolicy::never()
+			} else {
+				PanelComplexJointPolicy::min_dihedral_rad(*min_dihedral)
+			};
+			let t = DEFAULT_PANEL_THICKNESS;
+			let station = |z: f32| {
+				RectangularNTubeStation::new([
+					RectangularNTubeCorner::new(Vec3::new(-1.0, -1.0, z), t),
+					RectangularNTubeCorner::new(Vec3::new(1.0, -1.0, z), t),
+					RectangularNTubeCorner::new(Vec3::new(1.0, 1.0, z), t),
+					RectangularNTubeCorner::new(Vec3::new(-1.0, 1.0, z), t),
+				])
+			};
+			let tube = RectangularNTube::from_stations_with_insets(
+				richmond_building_components::panels::PanelStyle::RoughStonework,
+				[station(0.0), station(2.0), station(4.0), station(6.0)],
+				[
+					vec![None, None, None],
+					vec![None, Some(RectInset::uniform(*inset)), None],
+					vec![None, None, None],
+					vec![None, None, None],
+				],
+			)
+			.with_joint_policy(policy);
+			spawn_preview(
+				&mut commands,
+				transform,
+				ComponentsOnly(tube).scene_with_lod(&lod_ref),
 			);
 		}
 		PreviewSubject::ApproximatedCircle {
@@ -1018,4 +1133,35 @@ fn spawn_preview(commands: &mut Commands, transform: Transform, scene: impl bevy
 			},
 		))
 		.insert(PreviewRoot);
+}
+
+/// Authored bay corners as colored spheres (a0 red, a1 orange, b0 green, b1 cyan).
+fn spawn_rectangle_debug_balls(
+	commands: &mut Commands,
+	meshes: &mut Assets<Mesh>,
+	materials: &mut Assets<StandardMaterial>,
+	parent: Transform,
+	corners: [Vec3; 4],
+) {
+	let mesh = meshes.add(Sphere::new(0.12));
+	let colors = [
+		Color::srgb(0.95, 0.2, 0.15),
+		Color::srgb(0.95, 0.55, 0.1),
+		Color::srgb(0.2, 0.85, 0.25),
+		Color::srgb(0.15, 0.75, 0.95),
+	];
+	for (p, color) in corners.into_iter().zip(colors) {
+		let material = materials.add(StandardMaterial {
+			base_color: color,
+			unlit: true,
+			..default()
+		});
+		commands.spawn((
+			Mesh3d(mesh.clone()),
+			MeshMaterial3d(material),
+			parent * Transform::from_translation(p),
+			Visibility::default(),
+			PreviewRoot,
+		));
+	}
 }

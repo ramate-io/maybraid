@@ -1,7 +1,7 @@
 //! Irregular and ruled panel constructions over [`PanelComplex`](panel_complex::PanelComplex).
 //!
-//! Rectangle strips force each bay to a best-fit ordinary rectangle in the bay’s
-//! average plane. Free skew quads live in the ruled / clipped-quad types.
+//! Rectangle strips author each bay via lowest-edge orientation (edge vector +
+//! height + roll). Free skew quads live in the ruled / clipped-quad types.
 
 pub mod approximated_circle;
 pub mod clipped_quad_panel;
@@ -16,7 +16,7 @@ pub mod quad_panel_complex;
 pub mod rect_crease;
 pub mod rect_fit;
 pub mod rectangle;
-pub mod rectangular_orthonormal_tube;
+pub mod rectangular_n_tube;
 pub mod rectangular_strip;
 pub mod ruled_pitch;
 pub mod ruled_strip;
@@ -35,11 +35,16 @@ pub use panel_complex::{
 };
 pub use quad_panel::QuadPanel;
 pub use quad_panel_complex::QuadPanelComplex;
-pub use rect_fit::{fit_rectangle, fit_rectangle_corners, FittedRect, RectInset};
+pub use rect_fit::{
+	fallback_oriented, orient_rectangle, roll_to_align_height, zero_roll_height_axis, OrientedRect,
+	RectInset,
+};
 pub use rectangle::{ClippedRectangle, Rectangle};
 pub use path_frame::TubeFrame;
-pub use rectangular_orthonormal_tube::{RectangularOrthonormalTube, RectangularOrthonormalTubeNode};
-pub use rectangular_strip::RectangularStrip;
+pub use rectangular_n_tube::{
+	RectangularNTube, RectangularNTubeCorner, RectangularNTubeStation,
+};
+pub use rectangular_strip::{RectangularStrip, RectangularStripNode};
 pub use ruled_pitch::RuledPitch;
 pub use ruled_strip::RuledStrip;
 pub use tessellated_triangle_panel::TessellatedTrianglePanel;

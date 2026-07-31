@@ -1,19 +1,19 @@
-//! Crease [`JointNode`]s between adjacent best-fit rectangle bays.
+//! Crease [`JointNode`]s between adjacent oriented rectangle bays.
 
 use richmond_building_components::joints::{JointNode, JointPost};
 use richmond_building_components::panels::dihedral_kink;
 
 use crate::paneling::panel_complex::PanelComplexJointPolicy;
-use crate::paneling::rect_fit::FittedRect;
+use crate::paneling::rect_fit::OrientedRect;
 
-/// Joint along the shared generator between two fitted bays, if the dihedral kink
+/// Joint along the shared generator between two oriented bays, if the dihedral kink
 /// meets `policy`.
 ///
 /// Crease runs from the averaged \(a\)-rail ends to the averaged \(b\)-rail ends
-/// (independent bay fits need not share exact vertices).
+/// (adjacent bays need not share exact vertices).
 pub fn joint_along_bay_crease(
-	prev: &FittedRect,
-	next: &FittedRect,
+	prev: &OrientedRect,
+	next: &OrientedRect,
 	thickness: f32,
 	policy: PanelComplexJointPolicy,
 ) -> Option<JointNode> {
@@ -32,42 +32,25 @@ pub fn joint_along_bay_crease(
 mod tests {
 	use super::*;
 	use bevy_math::Vec3;
-	use crate::paneling::rect_fit::fit_rectangle;
+	use crate::paneling::rect_fit::orient_rectangle;
 
 	#[test]
 	fn coplanar_bays_skip_default_policy() {
-		let a = fit_rectangle(
-			Vec3::ZERO,
-			Vec3::new(0.0, 0.0, 2.0),
-			Vec3::new(2.0, 0.0, 0.0),
-			Vec3::new(2.0, 0.0, 2.0),
-		)
-		.unwrap();
-		let b = fit_rectangle(
-			Vec3::new(0.0, 0.0, 2.0),
-			Vec3::new(0.0, 0.0, 4.0),
-			Vec3::new(2.0, 0.0, 2.0),
-			Vec3::new(2.0, 0.0, 4.0),
-		)
-		.unwrap();
+		let a = orient_rectangle(Vec3::ZERO, Vec3::new(0.0, 0.0, 2.0), 2.0, 0.0).unwrap();
+		let b = orient_rectangle(Vec3::new(0.0, 0.0, 2.0), Vec3::new(0.0, 0.0, 2.0), 2.0, 0.0)
+			.unwrap();
 		assert!(joint_along_bay_crease(&a, &b, 0.4, PanelComplexJointPolicy::default()).is_none());
 	}
 
 	#[test]
 	fn folded_bays_emit_joint() {
-		let a = fit_rectangle(
-			Vec3::ZERO,
+		let a = orient_rectangle(Vec3::ZERO, Vec3::new(0.0, 0.0, 2.0), 2.0, 0.0).unwrap();
+		// Turn 90° in plan so normals (+X vs −Z) form a crease.
+		let b = orient_rectangle(
 			Vec3::new(0.0, 0.0, 2.0),
 			Vec3::new(2.0, 0.0, 0.0),
-			Vec3::new(2.0, 0.0, 2.0),
-		)
-		.unwrap();
-		// Next bay tips up about the shared generator (in Y).
-		let b = fit_rectangle(
-			Vec3::new(0.0, 0.0, 2.0),
-			Vec3::new(0.0, 0.0, 4.0),
-			Vec3::new(2.0, 1.5, 2.0),
-			Vec3::new(2.0, 1.5, 4.0),
+			2.0,
+			0.0,
 		)
 		.unwrap();
 		assert!(joint_along_bay_crease(&a, &b, 0.4, PanelComplexJointPolicy::default()).is_some());

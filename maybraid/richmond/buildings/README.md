@@ -39,8 +39,9 @@ Runtime paths are registered in building-components [`assets.rs`](../building-co
 | [`PanelComplex`](src/paneling/panel_complex.rs) | Point-id triangle/quad mesh → panels + crease `JointNode`s |
 | [`QuadPanel`](src/paneling/quad_panel.rs) / [`QuadPanelComplex`](src/paneling/quad_panel_complex.rs) | Ruled quad / quad-face mesh wrappers |
 | [`RuledStrip`](src/paneling/ruled_strip.rs) / [`RuledPitch`](src/paneling/ruled_pitch.rs) | Two-rail skew quads; roof eave/ridge wrapper |
-| [`RectangularStrip`](src/paneling/rectangular_strip.rs) / [`ClippedRectangularStrip`](src/paneling/clipped_rectangular_strip.rs) | Two-rail best-fit `PanelGeometry::Rectangle` kits (+ optional per-bay inset frames) + crease joints on bay folds |
-| [`Rectangle`](src/paneling/rectangle.rs) / [`ClippedRectangle`](src/paneling/rectangle.rs) | Single-bay best-fit rectangle kit; inset = frame of rectangle kits (not polygonal clip) |
+| [`RectangularStrip`](src/paneling/rectangular_strip.rs) / [`ClippedRectangularStrip`](src/paneling/clipped_rectangular_strip.rs) | Node-chain oriented `PanelGeometry::Rectangle` kits (+ optional per-bay inset frames) + crease joints on bay folds |
+| [`Rectangle`](src/paneling/rectangle.rs) / [`ClippedRectangle`](src/paneling/rectangle.rs) | Single-bay oriented rectangle (lowest-edge vector + height + roll); inset = frame of rectangle kits |
+| [`RectangularNTube`](src/paneling/rectangular_n_tube.rs) | Closed n-gon cross-section polyline → n clipped rectangular strips |
 | [`ClippedTessellatedTriangle`](src/paneling/clipped_tessellated_triangle.rs) / [`ClippedQuadPanel`](src/paneling/clipped_quad_panel.rs) / [`ClippedRuledStrip`](src/paneling/clipped_ruled_strip.rs) | Clipped triangle / quad / ruled strip |
 | [`TessellatedTrianglePanel`](src/paneling/tessellated_triangle_panel.rs) | World-space triangle → panels |
 | [`panel_plane`](src/paneling/panel_plane.rs) | Shared panel \(XZ\) frame for a world triangle |

@@ -12,6 +12,8 @@ pub mod pitch;
 pub mod polyline;
 pub mod quad_panel;
 pub mod quad_panel_complex;
+pub mod rectangle;
+pub mod rectangular_n_tube;
 pub mod ruled_pitch;
 pub mod slice_90;
 pub mod stacked_rings;
@@ -59,10 +61,14 @@ pub enum Show {
 	ClippedRuledStrip(clipped_ruled_strip::ClippedRuledStrip),
 	/// Trapezoid cross-section polyline → four clipped ruled strip faces.
 	Tube(tube::Tube),
-	/// Best-fit rectangle kit with an inset framed by rectangle kits.
+	/// Single oriented [`richmond_buildings::Rectangle`] kit (floor / wall / ceiling presets).
+	Rectangle(rectangle::Rectangle),
+	/// Oriented rectangle kit with an inset framed by rectangle kits.
 	ClippedRectangle(clipped_rectangle::ClippedRectangle),
-	/// Two-rail best-fit rectangle strip with a mid-bay inset frame.
+	/// Node-chain oriented rectangle strip with a mid-bay inset frame.
 	ClippedRectangularStrip(clipped_rectangular_strip::ClippedRectangularStrip),
+	/// Closed n-gon cross-section polyline → n clipped rectangle strips.
+	RectangularNTube(rectangular_n_tube::RectangularNTube),
 	/// N-gon disk / annulus filled with right-triangle panel kits.
 	ApproximatedCircle(approximated_circle::ApproximatedCircle),
 	/// Circular fitted [`richmond_buildings::arcs::ArcSweep`] (not IR `partitions::ArcSweep`).
@@ -103,8 +109,10 @@ impl Show {
 			Self::ClippedQuadPanel(cmd) => cmd.into_preview(),
 			Self::ClippedRuledStrip(cmd) => cmd.into_preview(),
 			Self::Tube(cmd) => cmd.into_preview(),
+			Self::Rectangle(cmd) => cmd.into_preview(),
 			Self::ClippedRectangle(cmd) => cmd.into_preview(),
 			Self::ClippedRectangularStrip(cmd) => cmd.into_preview(),
+			Self::RectangularNTube(cmd) => cmd.into_preview(),
 			Self::ApproximatedCircle(cmd) => cmd.into_preview(),
 			Self::ArcSweep(cmd) => cmd.into_preview(),
 			Self::ClippedArcSweep(cmd) => cmd.into_preview(),
