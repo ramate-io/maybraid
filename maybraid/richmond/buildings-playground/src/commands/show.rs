@@ -5,12 +5,10 @@ pub mod arc_90;
 pub mod arc_sweep;
 pub mod bedroom;
 pub mod linear;
-pub mod linear_wall;
-pub mod noisy_polyline_wall;
+pub mod noisy_rectangular_wall;
 pub mod panel_complex;
 pub mod pitch;
 pub mod polyline;
-pub mod polyline_wall;
 pub mod quad_panel;
 pub mod quad_panel_complex;
 pub mod ruled_pitch;
@@ -75,12 +73,8 @@ pub enum Show {
 	RuledPitch(ruled_pitch::RuledPitch),
 	/// L-shaped `Partition::polyline` (posed linears + joints).
 	Polyline(polyline::Polyline),
-	/// Portal-sensitive straight [`richmond_buildings::LinearWall`].
-	LinearWall(linear_wall::LinearWall),
-	/// Portal-sensitive [`richmond_buildings::PolylineWall`] (L-path + door).
-	PolylineWall(polyline_wall::PolylineWall),
-	/// Noisy distance-budget path with allowed X/Y/Z turn angles.
-	NoisyPolylineWall(noisy_polyline_wall::NoisyPolylineWall),
+	/// Noisy path → [`richmond_buildings::NoisyRectangularWall`] rectangle strip demo.
+	NoisyRectangularWall(noisy_rectangular_wall::NoisyRectangularWall),
 	/// Full Wizard's Tower (noise-derived floor count).
 	WizardsTower(wizards_tower::WizardsTower),
 	/// Stacked circular wall rings (validates kit radius/height scaling).
@@ -111,9 +105,7 @@ impl Show {
 			Self::QuadPanelComplex(cmd) => cmd.into_preview(),
 			Self::RuledPitch(cmd) => cmd.into_preview(),
 			Self::Polyline(cmd) => cmd.into_preview(),
-			Self::LinearWall(cmd) => cmd.into_preview(),
-			Self::PolylineWall(cmd) => cmd.into_preview(),
-			Self::NoisyPolylineWall(cmd) => cmd.into_preview(),
+			Self::NoisyRectangularWall(cmd) => cmd.into_preview(),
 			Self::WizardsTower(cmd) => cmd.into_preview(),
 			Self::StackedRings(cmd) => cmd.into_preview(),
 			Self::Bedroom(cmd) => cmd.into_preview(),

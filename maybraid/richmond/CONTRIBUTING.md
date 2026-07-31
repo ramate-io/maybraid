@@ -9,7 +9,7 @@ and present geometry on top of [`building-components`](building-components/).
 | Crate | Role |
 |-------|------|
 | [`building-components`](building-components/) | Domain IR + kit assets. Authoring types are `*Node` values (`FloorNode`, `PartitionNode`, `StairNode`, `DoorNode`, `RoofNode`, `PanelNode`, `FurnitureNode`): **style + geometry + placement** (+ optional [`ParentConfines`](building-components/src/parent_confines.rs)). Each node implements [`LodScene`](../lod/lib/src/gen/presentation.rs). Tessellation into kit pieces is private to the domain. Partition IR is primitive (no portals). |
-| [`buildings`](buildings/) | Building procedures. Compose constraints, layouts, and helpers (`Walling` / `ArcWall` / `LinearWall` / `PolylineWall`, `ArcSpire`, …) into domain nodes via [`BuildingComponents`](building-components/src/lib.rs). Present component-only buildings as [`ComponentsOnly`](building-components/src/lib.rs)`<T>` for `LodScene`; keep a custom `LodScene` when hosts, silhouettes, or non-node extras are required. |
+| [`buildings`](buildings/) | Building procedures. Compose constraints, layouts, and helpers (`paneling` / `arcs` / `portals`, `ArcSpire`, …) into domain nodes via [`BuildingComponents`](building-components/src/lib.rs). Present component-only buildings as [`ComponentsOnly`](building-components/src/lib.rs)`<T>` for `LodScene`; keep a custom `LodScene` when hosts, silhouettes, or non-node extras are required. Playground joinery demos live under `wall_demo`. |
 | [`buildings-playground`](buildings-playground/) | Preview / CLI. Spawns hosts once; LOD flips update [`LodSceneLevel`](../lod/lib/src/lod_level.rs) in place (no whole-tree despawn). |
 
 Shared pose helpers (`pose`, `posed_glb`, `with_pose`, `scene_children`, `append_component_scenes`, `ComponentsOnly`) live in building-components and should not be reimplemented per building.
@@ -59,7 +59,7 @@ Parents **merge** children’s layered node maps via [`Layers::extend`](building
 
 [`Layer`](building-components/src/layer.rs) is a **provenance** record (e.g. `"closet"`, `"envelope"`), not a stand-in for node type. Domain type stays on the trait method (`panel_nodes_for_level` vs `partition_nodes_for_level`). Higher-order types use layer names to decide what to do with that geometry; use [`Layers::free`](building-components/src/layer.rs) until a provenance label is useful.
 
-Helpers such as [`Walling`](buildings/src/walling.rs) (`ArcWall` / `LinearWall` / `PolylineWall`) / `ArcSpire` are fine when they **produce** `PartitionNode` / `StairNode` via `BuildingComponents`. Use **partition** for primitive kit IR and **wall** for portal-sensitive path helpers. Door leaves stay empty until portal → `DoorNode` authorship exists.
+Helpers such as [`portal_ring_wall`](buildings/src/arcs/portal_ring.rs) / paneling strips / `ArcSpire` are fine when they **produce** `PartitionNode` / `PanelNode` / `StairNode` via `BuildingComponents`. Use **partition** for arc/linear kit IR, **panel** for rectangle/triangle kits, and **portals** for opening assignment along a path. Door leaves stay empty until portal → `DoorNode` authorship exists.
 
 ## Allocate cells, fill in children
 
@@ -120,7 +120,7 @@ Warm high/mid/low SceneRef roots under a **single** partition-node host. Parent 
 | Low | ≤ [`LINEAR_LOW_FACTOR`](building-components/src/partitions/geometry/linear.rs) (500) |
 | UltraLow | elsewhere (shares low mesh for now) |
 
-**Polyline** is a short-run primitive: one LOD parent for the whole run (kits are content, not nested hosts). Prefer splitting long paths in walling/buildings. Joint kits under a polyline follow the parent level (high/mid GLBs only; omitted at Low). Lone joint leaf banding uses tighter factors (High ≤ 3, Medium ≤ 12).
+**Polyline** is a short-run primitive: one LOD parent for the whole run (kits are content, not nested hosts). Prefer splitting long paths in buildings/paneling. Joint kits under a polyline follow the parent level (high/mid GLBs only; omitted at Low). Lone joint leaf banding uses tighter factors (High ≤ 3, Medium ≤ 12).
 
 ### Roof mesh resolution
 

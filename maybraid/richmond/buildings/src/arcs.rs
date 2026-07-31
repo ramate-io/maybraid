@@ -14,7 +14,9 @@
 //! different sampling / assets.
 
 pub mod clipped_sweep;
+pub mod portal_ring;
 pub mod sweep;
 
 pub use clipped_sweep::ClippedArcSweep;
+pub use portal_ring::{portal_ring_wall, PortalRingParams, PortalRingWall};
 pub use sweep::ArcSweep;

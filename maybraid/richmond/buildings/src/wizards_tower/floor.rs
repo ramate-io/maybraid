@@ -1,9 +1,9 @@
 //! A floor of the Wizard's Tower.
 //!
-//! Geometry: outer crate-level [`crate::ArcWall`] with door/window portals, squared-off floor
-//! with a centered spire hole, and a crate-level [`crate::ArcSpire`] tread run inside the
-//! spire square that rises one storey. Each storey also carries a lantern-like point light
-//! (mesh TBD).
+//! Geometry: outer [`crate::arcs::PortalRingWall`] (clipped circular sweep with door/window
+//! portals), squared-off floor with a centered spire hole, and a crate-level
+//! [`crate::ArcSpire`] tread run inside the spire square that rises one storey. Each storey
+//! also carries a lantern-like point light (mesh TBD).
 
 use bevy::prelude::{Color, PointLight, Transform, Visibility};
 use bevy::scene::prelude::{bsn, template_value, Scene};
@@ -12,6 +12,7 @@ use lod::gen::{LodScene, LodSceneLevel};
 use lod::lod_ref::LodRef;
 use procedural_common::NoiseParams;
 use richmond_building_components::floors::FloorNode;
+use richmond_building_components::partitions::PartitionStyle;
 use richmond_building_components::scene_children;
 use richmond_building_components::stairs::{SpiralStair, StairNode};
 use richmond_building_components::{
@@ -20,7 +21,7 @@ use richmond_building_components::{
 };
 
 use crate::arc_spire::{uniform_storey_bindings, ArcSpire, ArcSpireParams, FitTolerance};
-use crate::walling::{ArcWall, ArcWallParams};
+use crate::arcs::{portal_ring_wall, PortalRingParams, PortalRingWall};
 use crate::wizards_tower::floor_fill::{squared_floor_with_spire_hole, SPIRE_HALF_FRAC};
 use crate::wizards_tower::must_assign_cardinal_portals;
 use crate::CellConstraints;
@@ -32,7 +33,7 @@ pub struct WizardsTowerFloor {
 	/// Storey height in meters (outer wall \(Y\) scale).
 	pub storey_height: f32,
 	/// Outer arc wall with portals.
-	pub arc_wall: ArcWall,
+	pub ring_wall: PortalRingWall,
 	/// Four circle−inscribed-square caps that square off the circular footprint.
 	pub floor_caps: [FloorNode; 4],
 	/// Rectangular slabs filling the inscribed square around the spire hole.
@@ -73,7 +74,7 @@ impl WizardsTowerFloor {
 			center.z,
 		);
 
-		let arc_wall = ArcWall::new(ArcWallParams {
+		let ring_wall = portal_ring_wall(PortalRingParams {
 			center_xz,
 			radius,
 			storey_height,
@@ -82,6 +83,7 @@ impl WizardsTowerFloor {
 			must_not_assign: vec![],
 			portal_noise,
 			optional_portals: (0, 2),
+			style: PartitionStyle::RoughStonework,
 		});
 
 		let arc_spire = ArcSpire::new(ArcSpireParams {
@@ -95,7 +97,7 @@ impl WizardsTowerFloor {
 			turns: 1.0,
 		});
 
-		Self { storey_height, arc_wall, floor_caps, floor_rects, arc_spire, lantern, constraints }
+		Self { storey_height, ring_wall, floor_caps, floor_rects, arc_spire, lantern, constraints }
 	}
 
 	pub(crate) fn emit_external_features(
@@ -181,7 +183,7 @@ impl WizardsTowerFloor {
 impl BuildingComponents for WizardsTowerFloor {
 	fn partition_nodes_for_level(&self, level: LodSceneLevel) -> Layers<PartitionNode> {
 		if Self::is_structure_level(level) {
-			Layers::from_free(self.arc_wall.partitions.clone())
+			self.ring_wall.sweep.partition_nodes_for_level(level)
 		} else {
 			Layers::new()
 		}

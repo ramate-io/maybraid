@@ -30,6 +30,7 @@ cargo run -p richmond-buildings-playground -- show clipped-rectangle
 cargo run -p richmond-buildings-playground -- show clipped-rectangular-strip
 cargo run -p richmond-buildings-playground -- show arc-sweep
 cargo run -p richmond-buildings-playground -- show clipped-arc-sweep
+cargo run -p richmond-buildings-playground -- show noisy-rectangular-wall
 # Folded quad (default ~90° crease + joint):
 cargo run -p richmond-buildings-playground -- show quad-panel
 # Coplanar quad (no joint):
@@ -60,6 +61,7 @@ In-game: press `/` for the command console (same clap commands as argv).
 - `show clipped-rectangular-strip [--inset M] [--min-dihedral R] [--no-joint]` — two-rail rectangle strip; middle bay inset frame; crease joints on bay folds
 - `show arc-sweep [--radius R] [--height H] [--sweep-degrees D] [--start-yaw-deg D]` — circular fitted `arcs::ArcSweep` (not IR `partitions::ArcSweep`)
 - `show clipped-arc-sweep [--radius R] [--height H] [--sweep-degrees D] [--start-yaw-deg D]` — same with hardcoded angular clip openings
+- `show noisy-rectangular-wall [--distance D] [--seed N] …` — `wall_demo` noisy path → rectangle strip (+ mid portal inset)
 - `show quad-panel [--a0|--a1|--b0|--b1 X,Y,Z] [--t-a0|--t-a1|--t-b0|--t-b1 T] [--min-dihedral R] [--no-joint]` — two lines → two tessellated triangles + optional crease `JointNode` (default corners are a ~90° fold; thicknesses default to 0.4)
 - `show panel-complex [--mesh 'id=(x,y,z) … {a,b,c}'] [--min-dihedral R] [--no-joint]` — point-id triangle mesh + crease joints; optional thickness as 4th tuple component
 - `show quad-panel-complex [--mesh 'id=(x,y,z) … {a0,a1,b0,b1}'] [--min-dihedral R] [--no-joint]` — quad-face mesh (diagonal a0–b1) → same presentation path

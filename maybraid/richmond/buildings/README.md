@@ -4,7 +4,7 @@ Higher-order building authorship on top of [`richmond-building-components`](../b
 
 ## Urban kit model
 
-Art sources live under [`maybraid/art/urban/`](../../art/urban/README.md). Buildings and walling helpers should treat that layout as the kit taxonomy:
+Art sources live under [`maybraid/art/urban/`](../../art/urban/README.md). Buildings helpers should treat that layout as the kit taxonomy:
 
 **Shared within a style** — geometry reused across many primitive types:
 
@@ -22,9 +22,10 @@ Runtime paths are registered in building-components [`assets.rs`](../building-co
 
 | Module | Role |
 |--------|------|
-| [`walling`](src/walling.rs) | Portal-sensitive walls (`LinearWall`, `PolylineWall`, `ArcWall`, …) → `PartitionNode`s |
-| [`arcs`](src/arcs.rs) | Fitted circular [`ArcSweep`](src/arcs/sweep.rs) / [`ClippedArcSweep`](src/arcs/clipped_sweep.rs) (not IR `partitions::ArcSweep`); ellipses deferred as a sibling |
-| [`paneling`](src/paneling.rs) | Irregular panel primitives → [`PanelComplex`](src/paneling/panel_complex.rs) / panels + crease joints |
+| [`arcs`](src/arcs.rs) | Fitted circular [`ArcSweep`](src/arcs/sweep.rs) / [`ClippedArcSweep`](src/arcs/clipped_sweep.rs) / [`portal_ring`](src/arcs/portal_ring.rs) (not IR `partitions::ArcSweep`); ellipses deferred as a sibling |
+| [`paneling`](src/paneling.rs) | Irregular panel primitives → [`PanelComplex`](src/paneling/panel_complex.rs) / rectangle kits + crease joints |
+| [`portals`](src/portals.rs) | Portal vocabulary + assignment along unit path \(t\) |
+| [`wall_demo`](src/wall_demo.rs) | Playground joinery demos (e.g. noisy path → rectangle strip) |
 | [`wizards_tower`](src/wizards_tower.rs) | Authored tower hierarchy |
 | [`bedroom`](src/bedroom.rs) | Hierarchical room fill |
 | [`stacked_rings`](src/stacked_rings.rs) | Circular wall stack |

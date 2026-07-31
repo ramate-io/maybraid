@@ -40,7 +40,7 @@ use richmond_building_components::{
 	append_component_scenes, BuildingComponents, Layers, PartitionNode,
 };
 
-use crate::walling::{MustAssignPortal, Portal};
+use crate::portals::{MustAssignPortal, Portal};
 use crate::wizards_tower::floor_fill::WALL_HEIGHT_METERS;
 use crate::wizards_tower::silhouette::silhouette_scene;
 use crate::wizards_tower::tower_lod::TowerLodFootprint;

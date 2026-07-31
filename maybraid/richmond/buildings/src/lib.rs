@@ -15,8 +15,9 @@ pub mod arcs;
 pub mod bedroom;
 pub mod constraints;
 pub mod paneling;
+pub mod portals;
 pub mod stacked_rings;
-pub mod walling;
+pub mod wall_demo;
 pub mod wizards_tower;
 
 // Compatibility module paths (pre-paneling layout).
@@ -34,8 +35,10 @@ pub use paneling::tessellated_triangle_panel;
 pub use arc_spire::{
 	best_fit_y_bindings, uniform_storey_bindings, ArcSpire, ArcSpireParams, FitTolerance,
 };
-pub use arcs::{ArcSweep, ClippedArcSweep};
-pub use bedroom::{Bed, Bedroom, BedroomFillParams, Closet, EnsuiteBathroom, Nightstand};
+pub use arcs::{
+	portal_ring_wall, ArcSweep, ClippedArcSweep, PortalRingParams, PortalRingWall,
+};
+pub use bedroom::{Bed, Bedroom, BedroomFillParams, Closet, EnsuiteBathroom, Nightstand, ShellWall};
 pub use constraints::{
 	BoundaryOwnershipEntry, BoundaryOwnershipStatus, BoundaryRegionList, BoundaryThicknessEntry,
 	CellBoundaryTable, CellConstraints, CirculationEntry, CirculationRequestStatus, FaceKind,
@@ -49,9 +52,8 @@ pub use paneling::{
 	ParsePanelComplexError, QuadPanel, QuadPanelComplex, RectInset, Rectangle, RectangularStrip,
 	RuledPitch, RuledStrip, SharedEdge, TessellatedTrianglePanel, DEFAULT_PANEL_THICKNESS,
 };
-pub use stacked_rings::{StackedRing, StackedRings};
-pub use walling::{
-	ArcRegion, ArcWall, ArcWallParams, AssignedPortal, LinearWall, LinearWallParams,
-	MustAssignPortal, NoisyPolylineWall, NoisyPolylineWallParams, PolylineWall, PolylineWallParams,
-	Portal, WallRegion, Walling,
+pub use portals::{
+	ArcRegion, AssignedPortal, MustAssignPortal, Portal, PortalFootprint, WallRegion, SLICE_Y_FRAC,
 };
+pub use stacked_rings::{StackedRing, StackedRings};
+pub use wall_demo::{NoisyRectangularWall, NoisyRectangularWallParams};

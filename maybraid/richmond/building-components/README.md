@@ -120,7 +120,7 @@ We have not yet defined a sweeping tool. The plan is to make it take linear segm
 
 ## Polyline partitions
 
-[`Partition::polyline`](src/partitions/geometry/polyline.rs) is a **short-run** thin-wall primitive: one [`PartitionNode`](src/partitions/node.rs) is a single LOD parent whose `scene_with_level` expands into posed linear + joint kits. Prefer splitting longer paths in higher-order constructs (`richmond_buildings::walling`).
+[`Partition::polyline`](src/partitions/geometry/polyline.rs) is a **short-run** thin-wall primitive: one [`PartitionNode`](src/partitions/node.rs) is a single LOD parent whose `scene_with_level` expands into posed linear + joint kits. Prefer splitting longer paths in higher-order constructs (`richmond_buildings::{paneling,wall_demo}`).
 
 Each edge uses **horizontal** length \(L_{xz}\) with a suggested [`tile_width`](src/partitions/geometry/linear.rs) (default \(1\), unscaled ground kit \(X \in [0, 1]\)): \(n = \mathrm{round}(L_{xz}/\texttt{tile\_width})\) tiles stretch to width \(L_{xz}/n\). Starts lerp along the 3D path so path \(Y\) carries slope. Override with `with_tile_width`. Continuous [`LinearPartition::spanning`](src/partitions/geometry/linear.rs) uses the same fit on its span. Polyline tiles carry world path anchors plus stand-up pitch and wall scale themselves (`with_wall_scale`); the parent stays identity. Panels stay **plumb** (yaw + stand-up only).
 

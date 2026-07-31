@@ -5,13 +5,13 @@ use lod::gen::LodSceneLevel;
 use richmond_building_components::partitions::{Partition, PartitionNode, PartitionStyle};
 use richmond_building_components::{BuildingComponents, Layers, Placement};
 
-use crate::walling::portal::SLICE_Y_FRAC;
+use crate::portals::SLICE_Y_FRAC;
 
 /// Fitted circular arc with sorted non-overlapping clip intervals in \(t \in [0, 1]\).
 ///
 /// Clips punch openings: solid [`Partition::arc`] on the complement, lintel
-/// [`Partition::slice_arc`] bands over each clip (geometry half of [`crate::ArcWall`]
-/// without portal assignment / noise).
+/// [`Partition::slice_arc`] bands over each clip. Portal assignment lives in
+/// [`crate::arcs::portal_ring`].
 ///
 /// Ellipses are out of scope — see [`crate::arcs`] module docs.
 #[derive(Debug, Clone, PartialEq)]

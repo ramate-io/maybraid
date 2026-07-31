@@ -1,4 +1,4 @@
-//! `/show noisy-polyline-wall` — distance-budget path with allowed X/Y/Z turns.
+//! `/show noisy-rectangular-wall` — noisy path → [`NoisyRectangularWall`] panel strip.
 
 use bevy::prelude::*;
 use clap::Args;
@@ -9,7 +9,7 @@ use crate::preview::PreviewSubject;
 
 #[derive(Clone, Args)]
 #[command(rename_all = "kebab-case")]
-pub struct NoisyPolylineWall {
+pub struct NoisyRectangularWall {
 	/// Total path length budget.
 	#[arg(long, default_value_t = 12.0)]
 	pub distance: f32,
@@ -35,10 +35,10 @@ pub struct NoisyPolylineWall {
 	pub transform: ShowTransform,
 }
 
-impl NoisyPolylineWall {
+impl NoisyRectangularWall {
 	pub fn into_preview(self) -> (PreviewSubject, Transform) {
 		(
-			PreviewSubject::NoisyPolylineWall {
+			PreviewSubject::NoisyRectangularWall {
 				distance: self.distance.max(1e-3),
 				step_len: StepLenRange::new(self.step_len_min, self.step_len_max),
 				allowed_angles: AllowedAngles::new(
