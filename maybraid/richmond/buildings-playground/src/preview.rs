@@ -21,7 +21,7 @@ use richmond_buildings::quad_panel::QuadPanel;
 use richmond_buildings::quad_panel_complex::QuadPanelComplex;
 use richmond_buildings::{
 	ArcSweep, ClippedArcSweep, ClippedQuadPanel, ClippedRectangle, ClippedRectangularStrip,
-	ClippedRuledStrip, ClippedTessellatedTriangle, RuledPitch,
+	ClippedRuledStrip, ClippedTessellatedTriangle, RectInset, RuledPitch,
 };
 use richmond_buildings::stacked_rings::StackedRings;
 use richmond_buildings::tessellated_triangle_panel::TessellatedTrianglePanel;
@@ -88,13 +88,13 @@ pub enum PreviewSubject {
 		a1: Vec3,
 		b0: Vec3,
 		b1: Vec3,
-		clip: Vec<Vec3>,
-		min_dihedral: f32,
-		no_joint: bool,
+		left: f32,
+		right: f32,
+		bottom: f32,
+		top: f32,
 	},
 	ClippedRectangularStrip {
-		min_dihedral: f32,
-		no_joint: bool,
+		inset: f32,
 	},
 	ArcSweep {
 		radius: f32,
@@ -239,18 +239,16 @@ impl PreviewConfig {
 				a1,
 				b0,
 				b1,
-				ref clip,
-				min_dihedral,
-				no_joint,
+				left,
+				right,
+				bottom,
+				top,
 			} => format!(
-				"preview: clipped-rectangle (a0={a0:?} a1={a1:?} b0={b0:?} b1={b1:?} clip={clip:?} min_dihedral={min_dihedral:.3} no_joint={no_joint})"
+				"preview: clipped-rectangle (a0={a0:?} a1={a1:?} b0={b0:?} b1={b1:?} inset=[{left:.2},{right:.2},{bottom:.2},{top:.2}])"
 			),
-			PreviewSubject::ClippedRectangularStrip {
-				min_dihedral,
-				no_joint,
-			} => format!(
-				"preview: clipped-rectangular-strip (min_dihedral={min_dihedral:.3} no_joint={no_joint})"
-			),
+			PreviewSubject::ClippedRectangularStrip { inset } => {
+				format!("preview: clipped-rectangular-strip (inset={inset:.2})")
+			}
 			PreviewSubject::ArcSweep {
 				radius,
 				height,
@@ -659,33 +657,25 @@ pub fn present_preview_lod(
 			a1,
 			b0,
 			b1,
-			clip,
-			min_dihedral,
-			no_joint,
+			left,
+			right,
+			bottom,
+			top,
 		} => {
-			let policy = if *no_joint {
-				PanelComplexJointPolicy::never()
-			} else {
-				PanelComplexJointPolicy::min_dihedral_rad(*min_dihedral)
-			};
-			let complex = ClippedRectangle::rough_stone(*a0, *a1, *b0, *b1, clip.clone())
-				.with_joint_policy(policy)
-				.into_complex();
+			let rect = ClippedRectangle::rough_stone(
+				*a0,
+				*a1,
+				*b0,
+				*b1,
+				RectInset::new(*left, *right, *bottom, *top),
+			);
 			spawn_preview(
 				&mut commands,
 				transform,
-				ComponentsOnly(complex).scene_with_lod(&lod_ref),
+				ComponentsOnly(rect).scene_with_lod(&lod_ref),
 			);
 		}
-		PreviewSubject::ClippedRectangularStrip {
-			min_dihedral,
-			no_joint,
-		} => {
-			let policy = if *no_joint {
-				PanelComplexJointPolicy::never()
-			} else {
-				PanelComplexJointPolicy::min_dihedral_rad(*min_dihedral)
-			};
+		PreviewSubject::ClippedRectangularStrip { inset } => {
 			let rail_a = [
 				Vec3::new(0.0, 0.0, 0.0),
 				Vec3::new(0.0, 0.0, 2.0),
@@ -698,19 +688,12 @@ pub fn present_preview_lod(
 				Vec3::new(2.2, -0.2, 4.0),
 				Vec3::new(2.6, 0.1, 6.0),
 			];
-			let mid_clip = vec![
-				Vec3::new(0.6, 0.0, 2.4),
-				Vec3::new(1.8, 0.0, 2.4),
-				Vec3::new(1.8, 0.0, 3.4),
-				Vec3::new(0.6, 0.0, 3.4),
-			];
 			let strip = ClippedRectangularStrip::from_lines(
 				richmond_building_components::panels::PanelStyle::RoughStonework,
 				rail_a,
 				rail_b,
-				[None, Some(mid_clip), None],
-			)
-			.with_joint_policy(policy);
+				[None, Some(RectInset::uniform(*inset)), None],
+			);
 			spawn_preview(
 				&mut commands,
 				transform,

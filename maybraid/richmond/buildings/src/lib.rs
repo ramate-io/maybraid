@@ -42,12 +42,12 @@ pub use constraints::{
 	JointCoordinate, JointEntry, PreJointSweep, SubsetError,
 };
 pub use paneling::{
-	shared_edges, ClippedQuadPanel, ClippedRectangle, ClippedRectangularStrip,
-	ClippedRectangularStripPiece, ClippedRuledStrip, ClippedStripPiece, ClippedTessellatedTriangle,
-	PanelComplex, PanelComplexJointPolicy, PanelComplexValidation, PanelMesh, PanelPoint,
-	PanelPointId, PanelQuadMesh, PanelTriangle, ParsePanelComplexError, QuadPanel, QuadPanelComplex,
-	Rectangle, RectangularStrip, RuledPitch, RuledStrip, SharedEdge, TessellatedTrianglePanel,
-	DEFAULT_PANEL_THICKNESS,
+	fit_rectangle, fit_rectangle_corners, shared_edges, ClippedQuadPanel, ClippedRectangle,
+	ClippedRectangularStrip, ClippedRectangularStripPiece, ClippedRuledStrip, ClippedStripPiece,
+	ClippedTessellatedTriangle, FittedRect, PanelComplex, PanelComplexJointPolicy,
+	PanelComplexValidation, PanelMesh, PanelPoint, PanelPointId, PanelQuadMesh, PanelTriangle,
+	ParsePanelComplexError, QuadPanel, QuadPanelComplex, RectInset, Rectangle, RectangularStrip,
+	RuledPitch, RuledStrip, SharedEdge, TessellatedTrianglePanel, DEFAULT_PANEL_THICKNESS,
 };
 pub use stacked_rings::{StackedRing, StackedRings};
 pub use walling::{

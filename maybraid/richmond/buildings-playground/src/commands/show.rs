@@ -37,7 +37,7 @@ use crate::preview::PreviewConfig;
 #[derive(Clone, Subcommand)]
 #[command(rename_all = "kebab-case")]
 pub enum Show {
-	/// Straight rough-stonework linear segment (`panels/.../rectangle_001.glb`).
+	/// Straight rough-stonework linear segment (`panels/.../rectangle_001_{high,mid,low}_res.glb`).
 	Linear(linear::Linear),
 	/// 90° rough-stonework arc (`arcs/.../arc_90_001.glb`).
 	Arc90(arc_90::Arc90),
@@ -57,9 +57,9 @@ pub enum Show {
 	ClippedQuadPanel(clipped_quad_panel::ClippedQuadPanel),
 	/// Multi-bay ruled strip with optional per-bay clips.
 	ClippedRuledStrip(clipped_ruled_strip::ClippedRuledStrip),
-	/// Best-fit ordinary rectangle minus a closed clip.
+	/// Best-fit rectangle kit with an inset framed by rectangle kits.
 	ClippedRectangle(clipped_rectangle::ClippedRectangle),
-	/// Two-rail best-fit rectangle strip with a mid-bay clip.
+	/// Two-rail best-fit rectangle strip with a mid-bay inset frame.
 	ClippedRectangularStrip(clipped_rectangular_strip::ClippedRectangularStrip),
 	/// Circular fitted [`richmond_buildings::arcs::ArcSweep`] (not IR `partitions::ArcSweep`).
 	ArcSweep(arc_sweep::ArcSweep),

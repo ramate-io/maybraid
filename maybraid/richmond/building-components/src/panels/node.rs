@@ -4,13 +4,13 @@ use bevy::scene::prelude::Scene;
 use lod::gen::LodScene;
 use lod::lod_ref::LodRef;
 
-use crate::assets::panels::rough_stonework::RECTANGLE;
 use crate::floors::RoughStoneFloorRightTriangle;
 use crate::panels::geometry::{PanelGeometry, Rectangle, RightTriangle};
+use crate::panels::rough_stonework::RoughStonePanelRectangle;
 use crate::panels::style::PanelStyle;
 use crate::placed::Placement;
 use crate::roofs::ShepherdsThatchRightTriangle;
-use crate::scene_children::{pose, posed_glb, scene_children, with_pose};
+use crate::scene_children::{pose, scene_children, with_pose};
 
 /// Authoring IR for a shared panel feature (rectangle / triangle tessellation).
 #[derive(Debug, Clone, PartialEq)]
@@ -55,7 +55,10 @@ impl LodScene for PanelNode {
 				match self.style {
 					PanelStyle::RoughStonework => match piece.geom {
 						PanelGeometry::Rectangle(Rectangle) => {
-							Some(Box::new(posed_glb(RECTANGLE, transform)) as Box<dyn Scene>)
+							Some(Box::new(with_pose(
+								transform,
+								RoughStonePanelRectangle::scene_with_lod(lod_ref),
+							)) as Box<dyn Scene>)
 						}
 						PanelGeometry::RightTriangle(RightTriangle { mirror }) => {
 							Some(Box::new(with_pose(

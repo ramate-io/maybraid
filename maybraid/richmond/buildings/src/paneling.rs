@@ -29,6 +29,7 @@ pub use panel_complex::{
 };
 pub use quad_panel::QuadPanel;
 pub use quad_panel_complex::QuadPanelComplex;
+pub use rect_fit::{fit_rectangle, fit_rectangle_corners, FittedRect, RectInset};
 pub use rectangle::{ClippedRectangle, Rectangle};
 pub use rectangular_strip::RectangularStrip;
 pub use ruled_pitch::RuledPitch;

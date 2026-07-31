@@ -41,9 +41,7 @@ pub mod panels {
 	pub mod rough_stonework {
 		use super::AssetPath;
 
-		/// Wall-oriented use of the ground rectangle panel (partition linear kit).
-		pub const RECTANGLE: AssetPath =
-			AssetPath::new("urban/panels/rough_stonework/rectangle_001.glb");
+		/// Resolution triad for the unit rectangle panel (\(X \in [0, 1]\), \(Z \in [-1, 0]\)).
 		pub const RECTANGLE_HIGH: AssetPath =
 			AssetPath::new("urban/panels/rough_stonework/rectangle_001_high_res.glb");
 		pub const RECTANGLE_MID: AssetPath =
@@ -157,7 +155,6 @@ pub mod partitions {
 		use crate::assets::{arcs, panels};
 
 		/// Straight / linear rough stonework segment (shared panel rectangle).
-		pub const LINEAR: AssetPath = panels::rough_stonework::RECTANGLE;
 		pub const LINEAR_HIGH: AssetPath = panels::rough_stonework::RECTANGLE_HIGH;
 		pub const LINEAR_MID: AssetPath = panels::rough_stonework::RECTANGLE_MID;
 		pub const LINEAR_LOW: AssetPath = panels::rough_stonework::RECTANGLE_LOW;
