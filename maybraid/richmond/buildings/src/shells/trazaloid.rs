@@ -64,9 +64,13 @@ pub struct TrazaloidParams {
 	/// Inward meters from the linear footprint→ridge silhouette at lower-top height.
 	pub waist_horizontal_offset: f32,
 	pub doors: TrazaloidDoors,
-	/// Door width as a fraction of the lower face width (centered).
+	/// Door opening width as a fraction of the lower face width (used when
+	/// [`Self::door_thickness`] is `≤ 0`).
 	pub door_width_frac: f32,
-	/// Door height as a fraction of the lower face height (centered).
+	/// Absolute door opening width in meters (centered). When `> 0`, overrides
+	/// [`Self::door_width_frac`].
+	pub door_thickness: f32,
+	/// Door opening height as a fraction of the lower face height (from the ground up).
 	pub door_height_frac: f32,
 	pub style: PanelStyle,
 	pub joint_thickness: f32,
@@ -88,7 +92,8 @@ impl Default for TrazaloidParams {
 				..TrazaloidDoors::NONE
 			},
 			door_width_frac: 0.28,
-			door_height_frac: 0.55,
+			door_thickness: 1.2,
+			door_height_frac: 0.7,
 			style: PanelStyle::RoughStonework,
 			joint_thickness: DEFAULT_PANEL_THICKNESS,
 			face_post_count: 2,
@@ -183,7 +188,15 @@ impl Trazaloid {
 			let (a0, b0) = face_bottom_pair(side, foot);
 			let (a1, b1) = face_bottom_pair(side, waist);
 			let clip = if side.door_enabled(&params.doors) {
-				Some(centered_door_clip(a0, b0, a1, b1, params.door_width_frac, params.door_height_frac))
+				Some(ground_door_clip(
+					a0,
+					b0,
+					a1,
+					b1,
+					params.door_width_frac,
+					params.door_thickness,
+					params.door_height_frac,
+				))
 			} else {
 				None
 			};
@@ -345,20 +358,27 @@ fn face_bottom_pair(side: Side, rect: PlanRect) -> (Vec3, Vec3) {
 	}
 }
 
-fn centered_door_clip(
+/// Centered door opening on the face, flush with the ground (`v = 0` → height).
+fn ground_door_clip(
 	a0: Vec3,
 	b0: Vec3,
 	a1: Vec3,
 	b1: Vec3,
 	width_frac: f32,
+	thickness: f32,
 	height_frac: f32,
 ) -> Vec<Vec3> {
-	let w = width_frac.clamp(0.05, 0.95);
+	let face_width = a0.distance(b0).max(1e-4);
+	let width_frac = if thickness > 0.0 {
+		(thickness / face_width).clamp(0.05, 0.95)
+	} else {
+		width_frac.clamp(0.05, 0.95)
+	};
 	let h = height_frac.clamp(0.05, 0.95);
-	let u0 = (1.0 - w) * 0.5;
-	let u1 = u0 + w;
-	let v0 = (1.0 - h) * 0.5;
-	let v1 = v0 + h;
+	let u0 = (1.0 - width_frac) * 0.5;
+	let u1 = u0 + width_frac;
+	let v0 = 0.0;
+	let v1 = h;
 	// Bilinear on the face quad {a0,a1,b0,b1} with u along bottom a0→b0, v up a0→a1.
 	let p = |u: f32, v: f32| {
 		let bottom = a0.lerp(b0, u);
@@ -514,6 +534,21 @@ mod tests {
 			t.lower_walls()[0].pieces()[0],
 			ClippedStripPiece::Solid(_)
 		));
+	}
+
+	#[test]
+	fn door_clip_reaches_ground_and_honors_thickness() {
+		let a0 = Vec3::new(1.0, 0.0, -3.0);
+		let b0 = Vec3::new(-1.0, 0.0, -3.0);
+		let a1 = Vec3::new(0.8, 3.0, -2.5);
+		let b1 = Vec3::new(-0.8, 3.0, -2.5);
+		let clip = ground_door_clip(a0, b0, a1, b1, 0.5, 1.0, 0.6);
+		assert_eq!(clip.len(), 4);
+		// Bottom edge on the ground rail (y=0 face bottom).
+		assert!((clip[0].y - 0.0).abs() < 1e-4);
+		assert!((clip[1].y - 0.0).abs() < 1e-4);
+		// Absolute thickness 1.0 on a face of width 2.0 → half of face width.
+		assert!((clip[0].distance(clip[1]) - 1.0).abs() < 1e-3);
 	}
 
 	#[test]

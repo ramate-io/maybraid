@@ -35,7 +35,10 @@ pub struct Trazaloid {
 	pub door_west: bool,
 	#[arg(long, default_value_t = 0.28)]
 	pub door_width_frac: f32,
-	#[arg(long, default_value_t = 0.55)]
+	/// Absolute door opening width in meters (`> 0` overrides `--door-width-frac`).
+	#[arg(long, default_value_t = 1.2)]
+	pub door_thickness: f32,
+	#[arg(long, default_value_t = 0.7)]
 	pub door_height_frac: f32,
 	#[arg(long, default_value_t = 2)]
 	pub face_post_count: u32,
@@ -60,6 +63,7 @@ impl Trazaloid {
 				door_south: self.door_south,
 				door_west: self.door_west,
 				door_width_frac: self.door_width_frac,
+				door_thickness: self.door_thickness,
 				door_height_frac: self.door_height_frac,
 				face_post_count: self.face_post_count,
 			},

@@ -104,6 +104,7 @@ pub enum PreviewSubject {
 		door_south: bool,
 		door_west: bool,
 		door_width_frac: f32,
+		door_thickness: f32,
 		door_height_frac: f32,
 		face_post_count: u32,
 	},
@@ -810,6 +811,7 @@ pub fn present_preview_lod(
 			door_south,
 			door_west,
 			door_width_frac,
+			door_thickness,
 			door_height_frac,
 			face_post_count,
 		} => {
@@ -827,6 +829,7 @@ pub fn present_preview_lod(
 					west: *door_west,
 				},
 				door_width_frac: *door_width_frac,
+				door_thickness: *door_thickness,
 				door_height_frac: *door_height_frac,
 				face_post_count: *face_post_count,
 				..TrazaloidParams::default()
