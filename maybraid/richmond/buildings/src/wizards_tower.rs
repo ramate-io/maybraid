@@ -33,7 +33,7 @@ use lod::lod_ref::LodRef;
 use lod::lod_scene_host::lod_host_scene;
 use procedural_common::NoiseParams;
 
-use richmond_building_components::panels::PanelNode;
+use richmond_building_components::floors::FloorNode;
 use richmond_building_components::scene_children;
 use richmond_building_components::stairs::StairNode;
 use richmond_building_components::{
@@ -138,8 +138,8 @@ impl BuildingComponents for WizardsTower {
 		self.column.partition_nodes_for_level(level)
 	}
 
-	fn panel_nodes_for_level(&self, level: LodSceneLevel) -> Layers<PanelNode> {
-		self.column.panel_nodes_for_level(level)
+	fn floor_nodes_for_level(&self, level: LodSceneLevel) -> Layers<FloorNode> {
+		self.column.floor_nodes_for_level(level)
 	}
 
 	fn stair_nodes_for_level(&self, level: LodSceneLevel) -> Layers<StairNode> {

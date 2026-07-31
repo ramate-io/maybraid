@@ -25,7 +25,7 @@ use richmond_building_components::{
 
 use crate::bedroom::shell::face_rectangle;
 use crate::constraints::{BoundaryOwnershipEntry, BoundaryOwnershipStatus, FaceKind};
-use crate::wizards_tower::floor_fill::{FLOOR_SLAB_Y_SCALE, RECT_HALF_EXTENT};
+use crate::wizards_tower::floor_fill::FLOOR_SLAB_Y_SCALE;
 use crate::CellConstraints;
 use procedural_common::NoiseParams;
 
@@ -130,17 +130,14 @@ fn subset_or_owned(parent: &CellConstraints, aabb: Aabb3d) -> CellConstraints {
 
 fn room_floor(constraints: &CellConstraints) -> FloorNode {
 	let aabb = &constraints.aabb;
-	let center = (aabb.min + aabb.max) * 0.5;
-	let center_xz = Vec3::new(center.x, aabb.min.y, center.z);
 	let size = aabb.max - aabb.min;
-	let floor_scale = Vec3::new(
-		size.x.max(1e-4) / (2.0 * RECT_HALF_EXTENT),
-		FLOOR_SLAB_Y_SCALE,
-		size.z.max(1e-4) / (2.0 * RECT_HALF_EXTENT),
-	);
+	let width = size.x.max(1e-4);
+	let depth = size.z.max(1e-4);
+	// Panel-space lower-left; FloorNode remaps to the centered floor kit.
+	let origin = Vec3::new(aabb.min.x, aabb.min.y, aabb.min.z);
 	FloorNode::rough_stone(
 		Floor::rectangle(),
-		Placement::new(center_xz, 0.0).with_scale(floor_scale),
+		Placement::new(origin, 0.0).with_scale(Vec3::new(width, FLOOR_SLAB_Y_SCALE, depth)),
 	)
 }
 

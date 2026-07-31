@@ -11,7 +11,7 @@ use richmond_building_components::partitions::{
 };
 use richmond_building_components::{BuildingComponents, Layers, Placement};
 
-use crate::wizards_tower::floor_fill::{FLOOR_SLAB_Y_SCALE, RECT_HALF_EXTENT};
+use crate::wizards_tower::floor_fill::FLOOR_SLAB_Y_SCALE;
 use crate::CellConstraints;
 
 /// A bounded room / voxel-halfspace child of a tower floor.
@@ -31,11 +31,10 @@ impl WizardsTowerRoom {
 		let yaw = if size.x >= size.z { std::f32::consts::FRAC_PI_2 } else { 0.0 };
 		let half_len = size.x.max(size.z) * 0.5;
 		let height = size.y.max(1e-4);
-		let floor_scale = Vec3::new(
-			size.x.max(1e-4) / (2.0 * RECT_HALF_EXTENT),
-			FLOOR_SLAB_Y_SCALE,
-			size.z.max(1e-4) / (2.0 * RECT_HALF_EXTENT),
-		);
+		let width = size.x.max(1e-4);
+		let depth = size.z.max(1e-4);
+		// Panel-space lower-left; FloorNode remaps to the centered floor kit.
+		let floor_origin = Vec3::new(constraints.aabb.min.x, constraints.aabb.min.y, constraints.aabb.min.z);
 
 		Self {
 			partition: PartitionNode::rough_stone(
@@ -44,7 +43,11 @@ impl WizardsTowerRoom {
 			),
 			floor: FloorNode::rough_stone(
 				Floor::rectangle(),
-				Placement::new(center_xz, 0.0).with_scale(floor_scale),
+				Placement::new(floor_origin, 0.0).with_scale(Vec3::new(
+					width,
+					FLOOR_SLAB_Y_SCALE,
+					depth,
+				)),
 			),
 			constraints,
 		}
