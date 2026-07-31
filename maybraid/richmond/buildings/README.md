@@ -28,13 +28,15 @@ Runtime paths are registered in building-components [`assets.rs`](../building-co
 | [`stacked_rings`](src/stacked_rings.rs) | Circular wall stack |
 | [`arc_spire`](src/arc_spire.rs) | Spire / storey binding helpers |
 | [`tessellated_triangle_panel`](src/tessellated_triangle_panel.rs) | World-space triangle → `PanelNode` |
-| [`clipped_tessellated_triangle`](src/clipped_tessellated_triangle.rs) | World-space triangle − closed clip (clipped to bounds) → [`PanelComplex`](src/panel_complex/) via `into_complex` |
+| [`clipped_tessellated_triangle`](src/clipped_tessellated_triangle.rs) | World-space triangle − closed clip (clipped to bounds) → [`PanelComplex`](src/panel_complex.rs) via `into_complex` |
+| [`clipped_quad_panel`](src/clipped_quad_panel.rs) | Ruled quad − closed clip (two clipped tris on diagonal) → `PanelComplex` |
+| [`clipped_ruled_strip`](src/clipped_ruled_strip.rs) | Rails + per-bay `Option` clip → solid `PanelComplex` runs and `ClippedQuadPanel` pieces |
 | [`panel_plane`](src/panel_plane.rs) | Shared panel \(XZ\) frame for a world triangle |
-| [`quad_panel`](src/quad_panel.rs) | Thin wrapper: one ruled quad → [`PanelComplex`](src/panel_complex/) via `into_complex` |
+| [`quad_panel`](src/quad_panel.rs) | Thin wrapper: one ruled quad → [`PanelComplex`](src/panel_complex.rs) via `into_complex` |
 | [`quad_panel_complex`](src/quad_panel_complex.rs) | Thin wrapper: quad-face mesh `FromStr` → `PanelComplex` via `into_complex` |
 | [`ruled_strip`](src/ruled_strip.rs) | Equal-length rails → ruled quad strip on [`PanelComplex`](src/panel_complex/); stations keep both polylines queryable |
 | [`ruled_pitch`](src/ruled_pitch.rs) | Thin roof wrapper: eave = `rail_a`, ridge = `rail_b` |
-| [`panel_complex`](src/panel_complex/) | Point-id triangle/quad mesh → panels + crease `JointNode`s on shared edges |
+| [`panel_complex`](src/panel_complex.rs) | Point-id triangle/quad mesh → panels + crease `JointNode`s on shared edges |
 | [`constraints`](src/constraints.rs) | Cell / boundary / circulation IR |
 
 Authoring guidance for Richmond (LOD, `ParentConfines`, wall vs partition) lives in [`../CONTRIBUTING.md`](../CONTRIBUTING.md). Kit normalization and leaf styles live in the [building-components README](../building-components/README.md).
