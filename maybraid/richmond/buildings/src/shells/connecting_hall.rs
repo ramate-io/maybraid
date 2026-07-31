@@ -38,6 +38,31 @@ impl ConnectingHallEndpoint {
 			orientation,
 		}
 	}
+
+	/// Expand the opening horizontally past the door jambs by `side_overrun` meters each side.
+	///
+	/// Overrunning reads better than stopping short or going too narrow when connecting
+	/// shells backwards from openings.
+	pub fn widened(self, side_overrun: f32) -> Self {
+		let overrun = side_overrun.max(0.0);
+		if overrun < EPS {
+			return self;
+		}
+		let Some(orient) = normalize_xz(self.orientation) else {
+			return self;
+		};
+		let right = Vec3::new(-orient.y, 0.0, orient.x);
+		let (bl, br, tl, tr) = self.targets;
+		Self {
+			targets: (
+				bl - right * overrun,
+				br + right * overrun,
+				tl - right * overrun,
+				tr + right * overrun,
+			),
+			orientation: self.orientation,
+		}
+	}
 }
 
 /// Small connector: two openings → one-kink plan path → [`Tube`].
@@ -165,21 +190,25 @@ fn endpoint_to_node(end: ConnectingHallEndpoint) -> Option<TubeCrossSectionNode>
 
 	let bottom_middle = (bl + br) * 0.5;
 	let top_middle = (tl + tr) * 0.5;
-	let height = (top_middle - bottom_middle).length().max(EPS);
+	// Vertical span for mid-station lerp; pitched offset is carried by `top_middle`.
+	let height = (top_middle.y - bottom_middle.y).abs().max(EPS);
 
 	let bottom_left_width = signed_width(bl, bottom_middle, right);
 	let bottom_right_width = signed_width(br, bottom_middle, right);
 	let top_left_width = signed_width(tl, top_middle, right);
 	let top_right_width = signed_width(tr, top_middle, right);
 
-	Some(TubeCrossSectionNode::new(
-		bottom_middle,
-		bottom_left_width,
-		bottom_right_width,
-		height,
-		top_left_width,
-		top_right_width,
-	))
+	Some(
+		TubeCrossSectionNode::new(
+			bottom_middle,
+			bottom_left_width,
+			bottom_right_width,
+			height,
+			top_left_width,
+			top_right_width,
+		)
+		.with_top_middle(top_middle),
+	)
 }
 
 fn signed_width(corner: Vec3, middle: Vec3, right: Vec3) -> f32 {
@@ -196,14 +225,29 @@ fn lerp_nodes(
 	w_b: f32,
 	bottom_middle: Vec3,
 ) -> TubeCrossSectionNode {
-	TubeCrossSectionNode::new(
+	let mut mid = TubeCrossSectionNode::new(
 		bottom_middle,
 		w_a * a.bottom_left_width + w_b * b.bottom_left_width,
 		w_a * a.bottom_right_width + w_b * b.bottom_right_width,
 		w_a * a.height + w_b * b.height,
 		w_a * a.top_left_width + w_b * b.top_left_width,
 		w_a * a.top_right_width + w_b * b.top_right_width,
-	)
+	);
+	match (a.top_middle, b.top_middle) {
+		(Some(ta), Some(tb)) => {
+			mid = mid.with_top_middle(ta * w_a + tb * w_b);
+		}
+		(Some(ta), None) => {
+			let tb = b.bottom_middle + Vec3::Y * b.height;
+			mid = mid.with_top_middle(ta * w_a + tb * w_b);
+		}
+		(None, Some(tb)) => {
+			let ta = a.bottom_middle + Vec3::Y * a.height;
+			mid = mid.with_top_middle(ta * w_a + tb * w_b);
+		}
+		(None, None) => {}
+	}
+	mid
 }
 
 fn normalize_xz(v: Vec2) -> Option<Vec2> {

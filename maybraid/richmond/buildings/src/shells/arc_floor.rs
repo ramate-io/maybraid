@@ -150,24 +150,30 @@ impl ArcFloor {
 	}
 
 	/// Opening quad at normalized \(t\) without requiring an assigned portal.
+	///
+	/// Built in the **tangent plane** at the ring surface on the portal midline so the
+	/// flat hall opening is centered on the door (not a chord inset/skewed by the arc).
 	pub fn endpoint_at(&self, t: f32) -> ConnectingHallEndpoint {
 		let t = norm_t(t);
-		let sweep_rad = std::f32::consts::TAU;
-		let half_angle = self.half_t * sweep_rad;
-		let mid_yaw = self.params.start_yaw + t * sweep_rad;
-		// Looking outward: left is +t (see spiral / ring yaw convention).
-		let left_yaw = mid_yaw + half_angle;
-		let right_yaw = mid_yaw - half_angle;
-		let y0 = self.params.center_xz.y;
-		let y1 = y0 + SLICE_Y_FRAC * self.params.storey_height;
+		let half_angle = self.half_t * std::f32::consts::TAU;
+		let mid_yaw = self.params.start_yaw + t * std::f32::consts::TAU;
+		let (s, cos) = mid_yaw.sin_cos();
+		// Same yaw map as arc kits / spiral stairs: \(θ=0 → (+R,0)\), \(+θ → −Z\).
+		let orientation = Vec2::new(cos, -s);
+		// Looking outward: right = \(+\)plan-perp (at \(θ=0\), \(+Z\)).
+		let right = Vec3::new(s, 0.0, cos);
 		let r = self.params.radius;
 		let c = self.params.center_xz;
-		let bl = point_on_ring(c, r, left_yaw, y0);
-		let br = point_on_ring(c, r, right_yaw, y0);
-		let tl = point_on_ring(c, r, left_yaw, y1);
-		let tr = point_on_ring(c, r, right_yaw, y1);
-		let (s, cos) = mid_yaw.sin_cos();
-		let orientation = Vec2::new(cos, -s);
+		let y0 = c.y;
+		let y1 = y0 + SLICE_Y_FRAC * self.params.storey_height;
+		// Half-width of the tangent-plane door matching the angular clip rays.
+		let half_w = r * half_angle.tan();
+		let mid0 = Vec3::new(c.x + cos * r, y0, c.z - s * r);
+		let mid1 = Vec3::new(c.x + cos * r, y1, c.z - s * r);
+		let bl = mid0 - right * half_w;
+		let br = mid0 + right * half_w;
+		let tl = mid1 - right * half_w;
+		let tr = mid1 + right * half_w;
 		ConnectingHallEndpoint::new(bl, br, tl, tr, orientation)
 	}
 }
@@ -287,13 +293,6 @@ fn rect_slab(center: Vec3, width_x: f32, depth_z: f32) -> FloorNode {
 	)
 }
 
-/// Ring point using the same yaw convention as spiral stairs / arc kits:
-/// \(θ = 0 → (+R, 0)\), increasing \(θ\) toward \(−Z\).
-fn point_on_ring(center: Vec3, radius: f32, yaw: f32, y: f32) -> Vec3 {
-	let (s, c) = yaw.sin_cos();
-	Vec3::new(center.x + c * radius, y, center.z - s * radius)
-}
-
 fn norm_t(t: f32) -> f32 {
 	let mut t = t % 1.0;
 	if t < 0.0 {
@@ -363,11 +362,18 @@ mod tests {
 			openings: vec![MustAssignPortal::at(0.0, Portal::Door)],
 			radius: 4.0,
 			start_yaw: 0.0,
+			center_xz: Vec3::ZERO,
 			..ArcFloorParams::default()
 		});
 		let end = floor.portal_endpoint(0.0).expect("door");
 		let o = end.orientation.normalize();
 		assert!(o.x > 0.9, "orientation={o:?}");
 		assert!(o.y.abs() < 0.1);
+		let mid = (end.targets.0 + end.targets.1) * 0.5;
+		assert!(
+			(mid.z).abs() < 1e-3,
+			"door midline should sit on +X (z≈0), got {mid:?}"
+		);
+		assert!((mid.x - 4.0).abs() < 1e-3, "tangent plane at radius, got {mid:?}");
 	}
 }

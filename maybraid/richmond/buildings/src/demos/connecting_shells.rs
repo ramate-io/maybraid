@@ -1,4 +1,10 @@
 //! Demo: [`ArcTower`] joined to a [`Trazaloid`] by a [`ConnectingHall`].
+//!
+//! # Joinery note
+//!
+//! Start from the two openings and connect **backwards**. Prefer endpoints that
+//! **overrun** the door a little on either side — a hall that reads slightly wide
+//! of the jambs looks better than one that stops short or goes too narrow.
 
 use bevy_math::Vec3;
 use lod::gen::LodSceneLevel;
@@ -18,6 +24,11 @@ use crate::shells::trazaloid::{
 
 /// Door at \(t = 0\) faces \(+X\) with default `start_yaw = 0`.
 const DOOR_T: f32 = 0.0;
+
+/// Extra meters past each jamb on the arc-tower hall end.
+const TOWER_OVERRUN_M: f32 = 0.6;
+/// Extra meters past each jamb on the trazaloid hall end (reads wider than the door).
+const TRAZALOID_OVERRUN_M: f32 = 1.1;
 
 /// Fixed composition: circular tower west of a trazaloid, linked by a one-kink hall.
 #[derive(Debug, Clone, PartialEq)]
@@ -69,12 +80,16 @@ impl ConnectingShells {
 			face_post_count: 2,
 		});
 
+		// Hall tops on the trazaloid end follow the footprint→waist pitch (door clip
+		// points lie on that face; Tube stations keep authored `top_middle`).
 		let end_tower = tower
 			.portal_endpoint(0, DOOR_T)
-			.expect("arc tower ground door");
+			.expect("arc tower ground door")
+			.widened(TOWER_OVERRUN_M);
 		let end_traz = trazaloid
 			.door_endpoint(TrazaloidSide::West)
-			.expect("trazaloid west door");
+			.expect("trazaloid west door")
+			.widened(TRAZALOID_OVERRUN_M);
 		let hall = ConnectingHall::rough_stone(end_tower, end_traz);
 
 		Self {
@@ -141,5 +156,30 @@ mod tests {
 			.flatten()
 			.is_empty());
 		assert_eq!(demo.tower().storeys().len(), 3);
+	}
+
+	#[test]
+	fn trazaloid_hall_end_carries_face_pitch() {
+		let demo = ConnectingShells::new();
+		let (_a, end_b) = demo.hall().endpoints();
+		// West door: top should be inset (larger x) relative to bottom.
+		let bottom_x = 0.5 * (end_b.targets.0.x + end_b.targets.1.x);
+		let top_x = 0.5 * (end_b.targets.2.x + end_b.targets.3.x);
+		assert!(top_x > bottom_x + 1e-3);
+		let stations = demo.hall().stations();
+		let traz_station = stations[2];
+		let top = traz_station.top_middle.expect("pitched top_middle");
+		assert!(
+			(top.x - traz_station.bottom_middle.x).abs() > 1e-3,
+			"tube station should keep non-vertical top lift"
+		);
+	}
+
+	#[test]
+	fn tower_hall_end_centered_on_plus_x() {
+		let demo = ConnectingShells::new();
+		let (end_a, _) = demo.hall().endpoints();
+		let mid = (end_a.targets.0 + end_a.targets.1) * 0.5;
+		assert!(mid.z.abs() < 0.05, "midline z={:?}", mid.z);
 	}
 }

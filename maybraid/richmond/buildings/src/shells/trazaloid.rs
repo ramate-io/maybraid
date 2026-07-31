@@ -297,8 +297,51 @@ impl Trazaloid {
 		self.rects.map(|r| (r.y, Vec2::new(r.half_x * 2.0, r.half_z * 2.0)))
 	}
 
+	/// Lower-band door clip polygon `[BL, BR, TR, TL]` on the pitched face, if enabled.
+	///
+	/// Tops already lie on the footprint→waist slope (bilinear on the face quad).
+	pub fn door_clip(&self, side: TrazaloidSide) -> Option<Vec<Vec3>> {
+		if !side.door_enabled(&self.params.doors) {
+			return None;
+		}
+		let [foot, waist, ..] = self.rects;
+		let (a0, b0) = face_bottom_pair(side, foot);
+		let (a1, b1) = face_bottom_pair(side, waist);
+		Some(ground_door_clip(
+			a0,
+			b0,
+			a1,
+			b1,
+			self.params.door_width_frac,
+			self.params.door_thickness,
+			self.params.door_height_frac,
+		))
+	}
+
 	/// Lower-band door opening as a [`ConnectingHallEndpoint`], if that side has a door.
+	///
+	/// Top corners sit on the pitched lower face (inset footprint→waist), so a
+	/// [`ConnectingHall`] can carry that slope into its ceiling via authored
+	/// `top_middle` on the tube stations.
 	pub fn door_endpoint(&self, side: TrazaloidSide) -> Option<ConnectingHallEndpoint> {
+		let clip = self.door_clip(side)?;
+		// clip = [BL, BR, TR, TL] looking outward along the face.
+		Some(ConnectingHallEndpoint::new(
+			clip[0],
+			clip[1],
+			clip[3],
+			clip[2],
+			side.orientation(),
+		))
+	}
+
+	/// Same as [`Self::door_endpoint`] but with an explicit door height fraction along
+	/// the lower-band face (for hall joinery that climbs further up the pitch).
+	pub fn door_endpoint_with_height(
+		&self,
+		side: TrazaloidSide,
+		height_frac: f32,
+	) -> Option<ConnectingHallEndpoint> {
 		if !side.door_enabled(&self.params.doors) {
 			return None;
 		}
@@ -312,9 +355,8 @@ impl Trazaloid {
 			b1,
 			self.params.door_width_frac,
 			self.params.door_thickness,
-			self.params.door_height_frac,
+			height_frac,
 		);
-		// clip = [BL, BR, TR, TL] looking outward along the face.
 		Some(ConnectingHallEndpoint::new(
 			clip[0],
 			clip[1],
@@ -691,5 +733,14 @@ mod tests {
 		let o = west.orientation.normalize();
 		assert!(o.x < -0.9, "orientation={o:?}");
 		assert!((west.targets.0.y).abs() < 1e-3);
+		// Tops sit inward of bottoms on the pitched west face (less-negative x).
+		let bottom_x = 0.5 * (west.targets.0.x + west.targets.1.x);
+		let top_x = 0.5 * (west.targets.2.x + west.targets.3.x);
+		assert!(
+			top_x > bottom_x + 1e-3,
+			"pitched top should inset toward center: bottom_x={bottom_x} top_x={top_x}"
+		);
+		let clip = t.door_clip(TrazaloidSide::West).expect("clip");
+		assert_eq!(clip.len(), 4);
 	}
 }
