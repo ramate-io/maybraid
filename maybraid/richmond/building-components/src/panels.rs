@@ -12,9 +12,8 @@
 //! PanelGeometry::flatten(caps)    → Placed<Rectangle | RightTriangle>
 //! ```
 //!
-//! Circular joints are a separate functional kind ([`Joint`]), not panel geometry.
+//! Crease / kink fillers are the separate [`crate::joints`] domain (`JointNode`), not panel geometry.
 mod geometry;
-mod joint;
 mod kit_space;
 mod node;
 mod placement;
@@ -24,7 +23,6 @@ mod tessellated_triangle;
 pub use geometry::{
 	fitted_tile_count, PanelGeometry, PanelKitCaps, Rectangle, RightTriangle, DEFAULT_TILE_WIDTH,
 };
-pub use joint::{Joint, JOINT_BASE_RADIUS, JOINT_KIT_HALF, JOINT_RADIUS_PER_SLOPE_RAD};
 pub use kit_space::{to_centered_rect_placement, with_wall_standup_pitch};
 pub use node::PanelNode;
 pub use placement::{roll_along_slope, yaw_along_xz, DEFAULT_MIN_JOINT_ANGLE};

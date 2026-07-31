@@ -38,10 +38,11 @@ Reusable linear-panel geometry shared by floors and partitions (roofs use roof-n
 | Type | Role |
 |------|------|
 | [`PanelGeometry`](src/panels/geometry.rs) | Shared enum: rectangle / right-triangle / tessellated-triangle |
-| [`PanelStyle`](src/panels/geometry.rs) | Kit capabilities (`has_rectangle`); domain styles map into it |
-| [`Rectangle`](src/panels/geometry.rs) / [`RightTriangle`](src/panels/geometry.rs) | Atomic kit footprints (lower-left panel space) |
+| [`PanelKitCaps`](src/panels/geometry/kit_caps.rs) | Kit capabilities (`has_rectangle`); domain styles map into it |
+| [`Rectangle`](src/panels/geometry/rectangle.rs) / [`RightTriangle`](src/panels/geometry/right_triangle.rs) | Atomic kit footprints (lower-left panel space) |
 | [`TessellatedTriangle`](src/panels/tessellated_triangle.rs) | Three panel-space \((X,Z)\) points filled with posed right-triangle kits |
-| [`Joint`](src/panels/joint.rs) | Separate functional kind (not part of [`PanelGeometry`]) |
+
+Crease / kink fillers are the separate [`joints`](src/joints.rs) domain (`JointNode`), not panel geometry. Polyline walls still expand `PartitionTile::Joint` kit tiles internally.
 
 **Panel space:** lower-left anchored — **X** along length, **Z** depth/run (top/eave at \(Z = 0\), bottom/ridge at \(Z = -\texttt{depth}\)). Domain nodes own extra orientation (roof pitch about \(+X\), wall upright framing, floor flat).
 
