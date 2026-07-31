@@ -529,6 +529,18 @@ mod tests {
 	}
 
 	#[test]
+	#[cfg(not(debug_assertions))]
+	fn short_input_yields_empty() {
+		let tube = Tube::from_nodes(
+			PanelStyle::RoughStonework,
+			[level_node(0.0, 1.0, 1.0)],
+		);
+		assert!(tube.nodes().is_empty());
+		assert!(tube.floor().pieces().is_empty());
+	}
+
+	#[test]
+	#[cfg(debug_assertions)]
 	#[should_panic(expected = "at least 2 stations")]
 	fn short_input_debug_asserts() {
 		let _ = Tube::from_nodes(
