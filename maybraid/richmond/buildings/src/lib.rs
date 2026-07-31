@@ -16,6 +16,8 @@ pub mod constraints;
 pub mod panel_complex;
 pub mod quad_panel;
 pub mod quad_panel_complex;
+pub mod ruled_pitch;
+pub mod ruled_strip;
 pub mod stacked_rings;
 pub mod tessellated_triangle_panel;
 pub mod walling;
@@ -37,6 +39,8 @@ pub use panel_complex::{
 };
 pub use quad_panel::QuadPanel;
 pub use quad_panel_complex::QuadPanelComplex;
+pub use ruled_pitch::RuledPitch;
+pub use ruled_strip::RuledStrip;
 pub use stacked_rings::{StackedRing, StackedRings};
 pub use tessellated_triangle_panel::TessellatedTrianglePanel;
 pub use walling::{

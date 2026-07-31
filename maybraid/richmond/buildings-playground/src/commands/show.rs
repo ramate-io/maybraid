@@ -12,6 +12,7 @@ pub mod polyline;
 pub mod polyline_wall;
 pub mod quad_panel;
 pub mod quad_panel_complex;
+pub mod ruled_pitch;
 pub mod slice_90;
 pub mod stacked_rings;
 pub mod tessellated_triangle;
@@ -49,6 +50,8 @@ pub enum Show {
 	PanelComplex(panel_complex::PanelComplex),
 	/// Point-id quad mesh → panels + crease joints (`id=(x,y,z) ... {a0,a1,b0,b1}`).
 	QuadPanelComplex(quad_panel_complex::QuadPanelComplex),
+	/// Equal eave/ridge polylines → ruled quad strip + crease joints.
+	RuledPitch(ruled_pitch::RuledPitch),
 	/// L-shaped `Partition::polyline` (posed linears + joints).
 	Polyline(polyline::Polyline),
 	/// Portal-sensitive straight [`richmond_buildings::LinearWall`].
@@ -78,6 +81,7 @@ impl Show {
 			Self::QuadPanel(cmd) => cmd.into_preview(),
 			Self::PanelComplex(cmd) => cmd.into_preview(),
 			Self::QuadPanelComplex(cmd) => cmd.into_preview(),
+			Self::RuledPitch(cmd) => cmd.into_preview(),
 			Self::Polyline(cmd) => cmd.into_preview(),
 			Self::LinearWall(cmd) => cmd.into_preview(),
 			Self::PolylineWall(cmd) => cmd.into_preview(),
