@@ -242,14 +242,14 @@ mod tests {
 		(a - b).length() < 1e-3
 	}
 
-	fn square_station(z: f32, half_w: f32, half_h: f32) -> RectangularNTubeStation {
+	fn square_station(z: f32, half_w: f32, height: f32) -> RectangularNTubeStation {
 		let t = DEFAULT_PANEL_THICKNESS;
-		// CCW when looking along +Z: bottom-left, bottom-right, top-right, top-left
+		// CCW when looking along +Z: floor at y=0, ceiling at y=height.
 		RectangularNTubeStation::new([
-			RectangularNTubeCorner::new(Vec3::new(-half_w, -half_h, z), t),
-			RectangularNTubeCorner::new(Vec3::new(half_w, -half_h, z), t),
-			RectangularNTubeCorner::new(Vec3::new(half_w, half_h, z), t),
-			RectangularNTubeCorner::new(Vec3::new(-half_w, half_h, z), t),
+			RectangularNTubeCorner::new(Vec3::new(-half_w, 0.0, z), t),
+			RectangularNTubeCorner::new(Vec3::new(half_w, 0.0, z), t),
+			RectangularNTubeCorner::new(Vec3::new(half_w, height, z), t),
+			RectangularNTubeCorner::new(Vec3::new(-half_w, height, z), t),
 		])
 	}
 
@@ -258,9 +258,9 @@ mod tests {
 		let tube = RectangularNTube::from_stations(
 			PanelStyle::RoughStonework,
 			[
-				square_station(0.0, 1.0, 1.0),
-				square_station(2.0, 1.0, 1.0),
-				square_station(4.0, 1.0, 1.0),
+				square_station(0.0, 1.0, 2.0),
+				square_station(2.0, 1.0, 2.0),
+				square_station(4.0, 1.0, 2.0),
 			],
 		);
 		assert_eq!(tube.n(), 4);
@@ -279,7 +279,7 @@ mod tests {
 			_ => unreachable!(),
 		};
 		assert!((bay0.height - 2.0).abs() < 1e-3);
-		assert!(approx_eq(bay0.origin, Vec3::new(-1.0, -1.0, 0.0)));
+		assert!(approx_eq(bay0.origin, Vec3::new(-1.0, 0.0, 0.0)));
 		assert!(approx_eq(bay0.edge, Vec3::new(0.0, 0.0, 2.0)));
 		assert!(
 			bay0.oriented.e0.dot(Vec3::X) > 0.99,
@@ -318,10 +318,10 @@ mod tests {
 		let tube = RectangularNTube::from_stations_with_insets(
 			PanelStyle::RoughStonework,
 			[
-				square_station(0.0, 1.0, 1.0),
-				square_station(2.0, 1.0, 1.0),
-				square_station(4.0, 1.0, 1.0),
-				square_station(6.0, 1.0, 1.0),
+				square_station(0.0, 1.0, 2.0),
+				square_station(2.0, 1.0, 2.0),
+				square_station(4.0, 1.0, 2.0),
+				square_station(6.0, 1.0, 2.0),
 			],
 			[
 				vec![None, None, None],
@@ -346,7 +346,7 @@ mod tests {
 	fn short_input_debug_asserts() {
 		let _ = RectangularNTube::from_stations(
 			PanelStyle::RoughStonework,
-			[square_station(0.0, 1.0, 1.0)],
+			[square_station(0.0, 1.0, 2.0)],
 		);
 	}
 }

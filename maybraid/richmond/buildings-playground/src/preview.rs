@@ -451,8 +451,8 @@ impl PreviewConfig {
 				Aabb3d::from_min_max(min, max)
 			}
 			PreviewSubject::RectangularNTube { .. } => Aabb3d::from_min_max(
-				Vec3::new(-2.0, -2.0, -0.5),
-				Vec3::new(2.0, 2.0, 7.0),
+				Vec3::new(-2.0, -0.5, -0.5),
+				Vec3::new(2.0, 2.5, 7.0),
 			),
 			PreviewSubject::Polyline => {
 				Aabb3d::from_min_max(Vec3::new(0.0, 0.0, 0.0), Vec3::new(4.0, 3.0, 4.0))
@@ -874,12 +874,13 @@ pub fn present_preview_lod(
 				PanelComplexJointPolicy::min_dihedral_rad(*min_dihedral)
 			};
 			let t = DEFAULT_PANEL_THICKNESS;
+			// Floor at y=0, ceiling at y=2 (not centered on the ground plane).
 			let station = |z: f32| {
 				RectangularNTubeStation::new([
-					RectangularNTubeCorner::new(Vec3::new(-1.0, -1.0, z), t),
-					RectangularNTubeCorner::new(Vec3::new(1.0, -1.0, z), t),
-					RectangularNTubeCorner::new(Vec3::new(1.0, 1.0, z), t),
-					RectangularNTubeCorner::new(Vec3::new(-1.0, 1.0, z), t),
+					RectangularNTubeCorner::new(Vec3::new(-1.0, 0.0, z), t),
+					RectangularNTubeCorner::new(Vec3::new(1.0, 0.0, z), t),
+					RectangularNTubeCorner::new(Vec3::new(1.0, 2.0, z), t),
+					RectangularNTubeCorner::new(Vec3::new(-1.0, 2.0, z), t),
 				])
 			};
 			let tube = RectangularNTube::from_stations_with_insets(
