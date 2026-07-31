@@ -3,7 +3,7 @@
 use bevy_math::Vec3;
 use lod::gen::LodSceneLevel;
 use richmond_building_components::partitions::{Partition, PartitionNode};
-use richmond_building_components::{BuildingComponents, Placement};
+use richmond_building_components::{BuildingComponents, Layers, Placement};
 
 /// A single ring of outer circular walls.
 #[derive(Debug, Clone, PartialEq)]
@@ -38,8 +38,8 @@ impl StackedRing {
 }
 
 impl BuildingComponents for StackedRing {
-	fn partition_nodes_for_level(&self, _level: LodSceneLevel) -> Vec<PartitionNode> {
-		self.outer_walls.to_vec()
+	fn partition_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<PartitionNode> {
+		Layers::from_free(self.outer_walls.to_vec())
 	}
 }
 

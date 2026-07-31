@@ -11,7 +11,7 @@
 use bevy_math::Vec3;
 use lod::gen::LodSceneLevel;
 use richmond_building_components::stairs::{Stair, StairNode};
-use richmond_building_components::{BuildingComponents, Placement};
+use richmond_building_components::{BuildingComponents, Layers, Placement};
 
 /// Inclusive scale range vs the target tread height used when fitting \(Y\) gaps.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -106,8 +106,8 @@ impl ArcSpire {
 }
 
 impl BuildingComponents for ArcSpire {
-	fn stair_nodes_for_level(&self, _level: LodSceneLevel) -> Vec<StairNode> {
-		vec![self.stairs.clone()]
+	fn stair_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<StairNode> {
+		Layers::from_free(vec![self.stairs.clone()])
 	}
 }
 

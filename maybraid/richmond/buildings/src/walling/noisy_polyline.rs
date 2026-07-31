@@ -9,7 +9,7 @@ use procedural_common::{AllowedAngles, NoiseParams, NoisyPathParams, StepLenRang
 use richmond_building_components::partitions::{
 	DEFAULT_MIN_JOINT_ANGLE, DEFAULT_TILE_WIDTH, PartitionNode,
 };
-use richmond_building_components::{BuildingComponents};
+use richmond_building_components::{BuildingComponents, Layers};
 
 use crate::walling::polyline::{PolylineWall, PolylineWallParams, DEFAULT_PORTAL_WIDTH};
 use crate::walling::portal::{AssignedPortal, MustAssignPortal, WallRegion};
@@ -123,8 +123,8 @@ impl NoisyPolylineWall {
 }
 
 impl BuildingComponents for NoisyPolylineWall {
-	fn partition_nodes_for_level(&self, _level: LodSceneLevel) -> Vec<PartitionNode> {
-		self.wall.partitions.clone()
+	fn partition_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<PartitionNode> {
+		Layers::from_free(self.wall.partitions.clone())
 	}
 }
 

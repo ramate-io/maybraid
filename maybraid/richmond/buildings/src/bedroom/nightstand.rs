@@ -2,7 +2,7 @@
 
 use lod::gen::LodSceneLevel;
 use richmond_building_components::furniture::FurnitureNode;
-use richmond_building_components::{BuildingComponents};
+use richmond_building_components::{BuildingComponents, Layers};
 
 use crate::bedroom::placement_filling_aabb;
 use crate::CellConstraints;
@@ -22,8 +22,8 @@ impl Nightstand {
 }
 
 impl BuildingComponents for Nightstand {
-	fn furniture_nodes_for_level(&self, _level: LodSceneLevel) -> Vec<FurnitureNode> {
-		vec![self.furniture.clone()]
+	fn furniture_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<FurnitureNode> {
+		Layers::from_free(vec![self.furniture.clone()])
 	}
 }
 

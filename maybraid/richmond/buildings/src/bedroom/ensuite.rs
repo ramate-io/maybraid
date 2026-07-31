@@ -6,7 +6,7 @@ use richmond_building_components::furniture::FurnitureNode;
 use richmond_building_components::partitions::{
 	wall_placement_from_centered, Partition, PartitionNode,
 };
-use richmond_building_components::{BuildingComponents};
+use richmond_building_components::{BuildingComponents, Layers};
 
 use crate::bedroom::{owns_face_as_cell, placement_filling_aabb};
 use crate::constraints::FaceKind;
@@ -115,12 +115,12 @@ impl EnsuiteBathroom {
 }
 
 impl BuildingComponents for EnsuiteBathroom {
-	fn partition_nodes_for_level(&self, _level: LodSceneLevel) -> Vec<PartitionNode> {
-		self.walls.clone()
+	fn partition_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<PartitionNode> {
+		Layers::from_free(self.walls.clone())
 	}
 
-	fn furniture_nodes_for_level(&self, _level: LodSceneLevel) -> Vec<FurnitureNode> {
-		vec![self.vanity.clone(), self.toilet.clone()]
+	fn furniture_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<FurnitureNode> {
+		Layers::from_free(vec![self.vanity.clone(), self.toilet.clone()])
 	}
 }
 

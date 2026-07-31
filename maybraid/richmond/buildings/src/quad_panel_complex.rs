@@ -87,6 +87,6 @@ mod tests {
 		let b = c.insert_point(bevy_math::Vec3::new(2.0, 1.0, 0.0));
 		let d = c.insert_point(bevy_math::Vec3::new(2.0, 0.0, 1.0));
 		c.add_triangle(a, b, d);
-		assert_eq!(c.panel_nodes_for_level(LodSceneLevel::High).len(), 3);
+		assert_eq!(c.panel_nodes_for_level(LodSceneLevel::High).flatten().len(), 3);
 	}
 }

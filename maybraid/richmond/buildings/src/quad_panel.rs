@@ -96,7 +96,7 @@ mod tests {
 			Vec3::new(2.0, 0.0, 2.0),
 		)
 		.into_complex();
-		assert_eq!(c.panel_nodes_for_level(LodSceneLevel::High).len(), 2);
+		assert_eq!(c.panel_nodes_for_level(LodSceneLevel::High).flatten().len(), 2);
 		let kink = c.dihedral_kink(c.shared_edges()[0]).expect("kink");
 		assert!(kink < 1e-3, "expected near-coplanar, got {kink}");
 		assert!(c.joint_nodes().is_empty());

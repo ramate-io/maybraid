@@ -9,7 +9,7 @@ use richmond_building_components::partitions::{
 	wall_placement_from_centered, LinearPartition, Partition, PartitionNode, DEFAULT_TILE_WIDTH,
 	SLICE_KIT_HEIGHT,
 };
-use richmond_building_components::{BuildingComponents, Placement};
+use richmond_building_components::{BuildingComponents, Layers, Placement};
 
 use crate::walling::portal::{
 	assign_portals, AssignedPortal, MustAssignPortal, Portal, PortalFootprint, WallRegion,
@@ -116,8 +116,8 @@ impl LinearWall {
 }
 
 impl BuildingComponents for LinearWall {
-	fn partition_nodes_for_level(&self, _level: LodSceneLevel) -> Vec<PartitionNode> {
-		self.partitions.clone()
+	fn partition_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<PartitionNode> {
+		Layers::from_free(self.partitions.clone())
 	}
 }
 
