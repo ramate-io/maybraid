@@ -1,268 +1,123 @@
-//! Ruled quad between two lines: two [`TessellatedTrianglePanel`]s + optional crease joint.
+//! Single-quad construction wrapper over [`PanelComplex`].
 //!
-//! Line A \((a_0 \to a_1)\) and line B \((b_0 \to b_1)\) form triangles
-//! \((a_0, a_1, b_1)\) and \((a_0, b_1, b_0)\) sharing diagonal \(a_0\)–\(b_1\).
-//! A [`JointNode`] is emitted when the dihedral kink between the triangles meets
-//! [`QuadPanelJointPolicy`].
-//!
-//! Each corner carries a panel thickness. Line A/B thicknesses are averages of their
-//! endpoints; both triangles share that pair-average as their thickness. The crease
-//! joint uses that shared thickness for kit \(X/Z\) scale and aligns kit \(+Y\) with
-//! the diagonal.
+//! Corners \((a_0, a_1, b_0, b_1)\) triangulate with diagonal \(a_0\)–\(b_1\).
+//! Use [`Self::into_complex`] to continue editing (e.g. add more triangles).
 
-use bevy_math::Vec3;
-use lod::gen::LodSceneLevel;
-use richmond_building_components::joints::{JointNode, JointPost};
-use richmond_building_components::panels::{
-	dihedral_kink, triangle_normal, PanelNode, PanelStyle, DEFAULT_MIN_JOINT_ANGLE,
-};
-use richmond_building_components::BuildingComponents;
+use richmond_building_components::panels::PanelStyle;
 
-use crate::tessellated_triangle_panel::TessellatedTrianglePanel;
+use crate::panel_complex::{PanelComplex, PanelComplexJointPolicy, PanelPoint};
 
-/// Default world thickness matching unscaled panel kits (\(Y \in [-0.2, 0.2]\)).
-pub const DEFAULT_PANEL_THICKNESS: f32 = 0.4;
+/// Re-export for call sites that imported thickness from this module.
+pub use crate::panel_complex::DEFAULT_PANEL_THICKNESS;
 
-/// World position + panel thickness at a quad corner.
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct QuadCorner {
-	pub position: Vec3,
-	pub thickness: f32,
-}
-
-impl QuadCorner {
-	pub fn new(position: Vec3, thickness: f32) -> Self {
-		Self { position, thickness: thickness.max(1e-4) }
-	}
-
-	/// Corner with [`DEFAULT_PANEL_THICKNESS`].
-	pub fn at(position: Vec3) -> Self {
-		Self::new(position, DEFAULT_PANEL_THICKNESS)
-	}
-}
-
-impl From<Vec3> for QuadCorner {
-	fn from(position: Vec3) -> Self {
-		Self::at(position)
-	}
-}
-
-/// When to spawn a crease joint from the dihedral kink between the two triangles.
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct QuadPanelJointPolicy {
-	/// Spawn a joint when the dihedral kink (radians) is ≥ this threshold.
-	pub min_dihedral_rad: f32,
-}
-
-impl Default for QuadPanelJointPolicy {
-	fn default() -> Self {
-		Self { min_dihedral_rad: DEFAULT_MIN_JOINT_ANGLE }
-	}
-}
-
-impl QuadPanelJointPolicy {
-	pub fn always() -> Self {
-		Self { min_dihedral_rad: 0.0 }
-	}
-
-	pub fn never() -> Self {
-		Self { min_dihedral_rad: f32::INFINITY }
-	}
-
-	pub fn min_dihedral_rad(min_dihedral_rad: f32) -> Self {
-		Self { min_dihedral_rad: min_dihedral_rad.max(0.0) }
-	}
-}
-
-/// Two lines filled with tessellated panel triangles and an optional crease joint.
+/// Thin wrapper: one ruled quad as a [`PanelComplex`].
 #[derive(Debug, Clone, PartialEq)]
-pub struct QuadPanel {
-	pub style: PanelStyle,
-	pub a0: QuadCorner,
-	pub a1: QuadCorner,
-	pub b0: QuadCorner,
-	pub b1: QuadCorner,
-	pub joint_policy: QuadPanelJointPolicy,
-}
+pub struct QuadPanel(PanelComplex);
 
 impl QuadPanel {
 	pub fn new(
 		style: PanelStyle,
-		a0: impl Into<QuadCorner>,
-		a1: impl Into<QuadCorner>,
-		b0: impl Into<QuadCorner>,
-		b1: impl Into<QuadCorner>,
-		joint_policy: QuadPanelJointPolicy,
+		a0: impl Into<PanelPoint>,
+		a1: impl Into<PanelPoint>,
+		b0: impl Into<PanelPoint>,
+		b1: impl Into<PanelPoint>,
 	) -> Self {
-		Self {
-			style,
-			a0: a0.into(),
-			a1: a1.into(),
-			b0: b0.into(),
-			b1: b1.into(),
-			joint_policy,
-		}
+		let a0 = a0.into();
+		let a1 = a1.into();
+		let b0 = b0.into();
+		let b1 = b1.into();
+		let mut c = PanelComplex::new(style);
+		let id0 = c.insert_point_thick(a0.position, a0.thickness);
+		let id1 = c.insert_point_thick(a1.position, a1.thickness);
+		let id2 = c.insert_point_thick(b0.position, b0.thickness);
+		let id3 = c.insert_point_thick(b1.position, b1.thickness);
+		c.add_quad(id0, id1, id2, id3);
+		Self(c)
 	}
 
 	pub fn rough_stone(
-		a0: impl Into<QuadCorner>,
-		a1: impl Into<QuadCorner>,
-		b0: impl Into<QuadCorner>,
-		b1: impl Into<QuadCorner>,
+		a0: impl Into<PanelPoint>,
+		a1: impl Into<PanelPoint>,
+		b0: impl Into<PanelPoint>,
+		b1: impl Into<PanelPoint>,
 	) -> Self {
-		Self::new(
-			PanelStyle::RoughStonework,
-			a0,
-			a1,
-			b0,
-			b1,
-			QuadPanelJointPolicy::default(),
-		)
+		Self::new(PanelStyle::RoughStonework, a0, a1, b0, b1)
 	}
 
 	pub fn shepherds_thatch(
-		a0: impl Into<QuadCorner>,
-		a1: impl Into<QuadCorner>,
-		b0: impl Into<QuadCorner>,
-		b1: impl Into<QuadCorner>,
+		a0: impl Into<PanelPoint>,
+		a1: impl Into<PanelPoint>,
+		b0: impl Into<PanelPoint>,
+		b1: impl Into<PanelPoint>,
 	) -> Self {
-		Self::new(
-			PanelStyle::ShepherdsThatch,
-			a0,
-			a1,
-			b0,
-			b1,
-			QuadPanelJointPolicy::default(),
-		)
+		Self::new(PanelStyle::ShepherdsThatch, a0, a1, b0, b1)
 	}
 
-	pub fn with_joint_policy(mut self, joint_policy: QuadPanelJointPolicy) -> Self {
-		self.joint_policy = joint_policy;
+	pub fn with_joint_policy(mut self, joint_policy: PanelComplexJointPolicy) -> Self {
+		self.0 = self.0.with_joint_policy(joint_policy);
 		self
 	}
 
-	/// Average thickness along line A (\((t_{a0}+t_{a1})/2\)).
-	pub fn thickness_a(&self) -> f32 {
-		0.5 * (self.a0.thickness + self.a1.thickness)
+	pub fn into_complex(self) -> PanelComplex {
+		self.0
 	}
 
-	/// Average thickness along line B (\((t_{b0}+t_{b1})/2\)).
-	pub fn thickness_b(&self) -> f32 {
-		0.5 * (self.b0.thickness + self.b1.thickness)
-	}
-
-	/// Shared triangle / crease thickness: average of line A and line B.
-	pub fn triangle_thickness(&self) -> f32 {
-		0.5 * (self.thickness_a() + self.thickness_b())
-	}
-
-	/// Triangle on line A toward \(b_1\): \((a_0, a_1, b_1)\).
-	pub fn triangle_a(&self) -> TessellatedTrianglePanel {
-		TessellatedTrianglePanel::new(
-			self.style,
-			self.a0.position,
-			self.a1.position,
-			self.b1.position,
-		)
-	}
-
-	/// Triangle on line B toward \(a_0\): \((a_0, b_1, b_0)\).
-	pub fn triangle_b(&self) -> TessellatedTrianglePanel {
-		TessellatedTrianglePanel::new(
-			self.style,
-			self.a0.position,
-			self.b1.position,
-			self.b0.position,
-		)
-	}
-
-	/// Unit normals of the two triangles, or [`None`] if either is degenerate.
-	pub fn triangle_normals(&self) -> Option<(Vec3, Vec3)> {
-		let n0 = triangle_normal(self.a0.position, self.a1.position, self.b1.position)?;
-		let n1 = triangle_normal(self.a0.position, self.b1.position, self.b0.position)?;
-		Some((n0, n1))
-	}
-
-	/// Dihedral kink (radians) between the two triangle normals.
-	///
-	/// \(0\) when coplanar with matching orientation; grows toward \(\pi\) as the fold opens.
-	pub fn dihedral_kink(&self) -> Option<f32> {
-		let (n0, n1) = self.triangle_normals()?;
-		Some(dihedral_kink(n0, n1))
-	}
-
-	/// Crease [`JointNode`] when the policy threshold is met, else [`None`].
-	///
-	/// Kit \(+Y\) runs \(a_0 \to b_1\); \(X/Z\) diameter equals [`Self::triangle_thickness`].
-	pub fn joint_node(&self) -> Option<JointNode> {
-		let kink = self.dihedral_kink()?;
-		if kink < self.joint_policy.min_dihedral_rad {
-			return None;
-		}
-		let (n0, n1) = self.triangle_normals()?;
-		// Bisector in the crease plane gives a stable radial (+X) hint.
-		let radial_hint = n0 + n1;
-		let placement = JointPost::placed_along_crease(
-			self.a0.position,
-			self.b1.position,
-			self.triangle_thickness(),
-			radial_hint,
-		)?;
-		Some(JointNode::rough_stone_post(placement))
+	pub fn as_complex(&self) -> &PanelComplex {
+		&self.0
 	}
 }
 
-impl BuildingComponents for QuadPanel {
-	fn panel_nodes_for_level(&self, level: LodSceneLevel) -> Vec<PanelNode> {
-		let mut out = self.triangle_a().panel_nodes_for_level(level);
-		out.extend(self.triangle_b().panel_nodes_for_level(level));
-		out
+impl AsRef<PanelComplex> for QuadPanel {
+	fn as_ref(&self) -> &PanelComplex {
+		&self.0
 	}
+}
 
-	fn joint_nodes_for_level(&self, _level: LodSceneLevel) -> Vec<JointNode> {
-		self.joint_node().into_iter().collect()
+impl From<QuadPanel> for PanelComplex {
+	fn from(value: QuadPanel) -> Self {
+		value.into_complex()
 	}
 }
 
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use bevy_math::{EulerRot, Quat};
-	use richmond_building_components::BuildingComponents;
+	use bevy_math::{EulerRot, Quat, Vec3};
+	use lod::gen::LodSceneLevel;
 	use richmond_building_components::joints::JOINT_KIT_XZ;
+	use richmond_building_components::BuildingComponents;
 
 	#[test]
 	fn coplanar_emits_two_panels_and_no_joint() {
-		// Both triangles in the XZ plane (y = 0).
-		let quad = QuadPanel::rough_stone(
+		let c = QuadPanel::rough_stone(
 			Vec3::ZERO,
 			Vec3::new(2.0, 0.0, 0.0),
 			Vec3::new(0.0, 0.0, 2.0),
 			Vec3::new(2.0, 0.0, 2.0),
-		);
-		assert_eq!(quad.panel_nodes_for_level(LodSceneLevel::High).len(), 2);
-		let kink = quad.dihedral_kink().expect("kink");
+		)
+		.into_complex();
+		assert_eq!(c.panel_nodes_for_level(LodSceneLevel::High).len(), 2);
+		let kink = c.dihedral_kink(c.shared_edges()[0]).expect("kink");
 		assert!(kink < 1e-3, "expected near-coplanar, got {kink}");
-		assert!(quad.joint_node().is_none());
+		assert!(c.joint_nodes().is_empty());
 	}
 
 	#[test]
 	fn folded_joint_aligns_y_with_diagonal_and_xz_with_thickness() {
-		// XZ triangle + YZ triangle share a0–b1; normals ⊥ → 90° dihedral.
 		let thick = 0.25;
-		let a0 = QuadCorner::new(Vec3::ZERO, thick);
-		let a1 = QuadCorner::new(Vec3::new(1.0, 0.0, 0.0), thick);
-		let b0 = QuadCorner::new(Vec3::new(0.0, 1.0, 0.0), thick);
-		let b1 = QuadCorner::new(Vec3::new(0.0, 0.0, 1.0), thick);
-		let quad = QuadPanel::rough_stone(a0, a1, b0, b1)
-			.with_joint_policy(QuadPanelJointPolicy::default());
-		let kink = quad.dihedral_kink().expect("kink");
+		let a0 = PanelPoint::new(Vec3::ZERO, thick);
+		let a1 = PanelPoint::new(Vec3::new(1.0, 0.0, 0.0), thick);
+		let b0 = PanelPoint::new(Vec3::new(0.0, 1.0, 0.0), thick);
+		let b1 = PanelPoint::new(Vec3::new(0.0, 0.0, 1.0), thick);
+		let c = QuadPanel::rough_stone(a0, a1, b0, b1).into_complex();
+		let kink = c.dihedral_kink(c.shared_edges()[0]).expect("kink");
 		assert!(
 			(kink - std::f32::consts::FRAC_PI_2).abs() < 1e-3,
 			"expected ~90° fold, got {kink}"
 		);
-		let joint = quad.joint_node().expect("joint");
-		let p = &joint.placement;
+		let joints = c.joint_nodes();
+		assert_eq!(joints.len(), 1);
+		let p = &joints[0].placement;
 		assert!((p.translation - a0.position).length() < 1e-4);
 		let diag = (b1.position - a0.position).normalize();
 		let rot = Quat::from_euler(EulerRot::YXZ, p.yaw, p.pitch, p.roll);
@@ -278,27 +133,39 @@ mod tests {
 	}
 
 	#[test]
-	fn line_thickness_averages_corners() {
-		let quad = QuadPanel::rough_stone(
-			QuadCorner::new(Vec3::ZERO, 0.2),
-			QuadCorner::new(Vec3::new(1.0, 0.0, 0.0), 0.4),
-			QuadCorner::new(Vec3::new(0.0, 1.0, 0.0), 0.6),
-			QuadCorner::new(Vec3::new(0.0, 0.0, 1.0), 0.8),
-		);
-		assert!((quad.thickness_a() - 0.3).abs() < 1e-5);
-		assert!((quad.thickness_b() - 0.7).abs() < 1e-5);
-		assert!((quad.triangle_thickness() - 0.5).abs() < 1e-5);
+	fn edge_thickness_averages_diagonal_endpoints() {
+		let c = QuadPanel::rough_stone(
+			PanelPoint::new(Vec3::ZERO, 0.2),
+			PanelPoint::new(Vec3::new(1.0, 0.0, 0.0), 0.4),
+			PanelPoint::new(Vec3::new(0.0, 1.0, 0.0), 0.6),
+			PanelPoint::new(Vec3::new(0.0, 0.0, 1.0), 0.8),
+		)
+		.into_complex();
+		// Shared diagonal a0–b1: avg(0.2, 0.8) = 0.5
+		let e = c.shared_edges()[0];
+		assert!((c.edge_thickness(e.a, e.b).unwrap() - 0.5).abs() < 1e-5);
 	}
 
 	#[test]
 	fn never_policy_suppresses_joint() {
-		let quad = QuadPanel::rough_stone(
+		let c = QuadPanel::rough_stone(
 			Vec3::ZERO,
 			Vec3::new(1.0, 0.0, 0.0),
 			Vec3::new(0.0, 1.0, 0.0),
 			Vec3::new(0.0, 0.0, 1.0),
 		)
-		.with_joint_policy(QuadPanelJointPolicy::never());
-		assert!(quad.joint_node().is_none());
+		.with_joint_policy(PanelComplexJointPolicy::never())
+		.into_complex();
+		assert!(c.joint_nodes().is_empty());
+	}
+
+	#[test]
+	fn into_complex_allows_extra_triangle() {
+		let mut c = QuadPanel::rough_stone(Vec3::ZERO, Vec3::X, Vec3::Y, Vec3::Z).into_complex();
+		let p = c.insert_point(Vec3::new(2.0, 0.0, 0.0));
+		let q = c.insert_point(Vec3::new(2.0, 1.0, 0.0));
+		let r = c.insert_point(Vec3::new(2.0, 0.0, 1.0));
+		c.add_triangle(p, q, r);
+		assert_eq!(c.triangles().len(), 3);
 	}
 }

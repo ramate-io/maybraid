@@ -16,8 +16,9 @@ use richmond_building_components::roofs::{Pitch, RoofGeometry, RoofNode};
 use richmond_building_components::Placement;
 use richmond_building_components::ComponentsOnly;
 use richmond_buildings::bedroom::Bedroom;
-use richmond_buildings::panel_complex::{PanelComplex, PanelComplexJointPolicy};
-use richmond_buildings::quad_panel::{QuadCorner, QuadPanel, QuadPanelJointPolicy};
+use richmond_buildings::panel_complex::{PanelComplex, PanelComplexJointPolicy, PanelPoint};
+use richmond_buildings::quad_panel::QuadPanel;
+use richmond_buildings::quad_panel_complex::QuadPanelComplex;
 use richmond_buildings::stacked_rings::StackedRings;
 use richmond_buildings::tessellated_triangle_panel::TessellatedTrianglePanel;
 use richmond_buildings::walling::{
@@ -70,6 +71,11 @@ pub enum PreviewSubject {
 		no_joint: bool,
 	},
 	PanelComplex {
+		mesh: String,
+		min_dihedral: f32,
+		no_joint: bool,
+	},
+	QuadPanelComplex {
 		mesh: String,
 		min_dihedral: f32,
 		no_joint: bool,
@@ -167,6 +173,13 @@ impl PreviewConfig {
 				no_joint,
 			} => format!(
 				"preview: panel-complex (mesh={mesh:?} min_dihedral={min_dihedral:.3} no_joint={no_joint})"
+			),
+			PreviewSubject::QuadPanelComplex {
+				ref mesh,
+				min_dihedral,
+				no_joint,
+			} => format!(
+				"preview: quad-panel-complex (mesh={mesh:?} min_dihedral={min_dihedral:.3} no_joint={no_joint})"
 			),
 			PreviewSubject::Polyline => "preview: partition polyline (L)".into(),
 			PreviewSubject::LinearWall => "preview: walling linear-wall (door)".into(),
@@ -449,21 +462,22 @@ pub fn present_preview_lod(
 			no_joint,
 		} => {
 			let policy = if *no_joint {
-				QuadPanelJointPolicy::never()
+				PanelComplexJointPolicy::never()
 			} else {
-				QuadPanelJointPolicy::min_dihedral_rad(*min_dihedral)
+				PanelComplexJointPolicy::min_dihedral_rad(*min_dihedral)
 			};
-			let panel = QuadPanel::rough_stone(
-				QuadCorner::new(*a0, *t_a0),
-				QuadCorner::new(*a1, *t_a1),
-				QuadCorner::new(*b0, *t_b0),
-				QuadCorner::new(*b1, *t_b1),
+			let complex = QuadPanel::rough_stone(
+				PanelPoint::new(*a0, *t_a0),
+				PanelPoint::new(*a1, *t_a1),
+				PanelPoint::new(*b0, *t_b0),
+				PanelPoint::new(*b1, *t_b1),
 			)
-			.with_joint_policy(policy);
+			.with_joint_policy(policy)
+			.into_complex();
 			spawn_preview(
 				&mut commands,
 				transform,
-				ComponentsOnly(panel).scene_with_lod(&lod_ref),
+				ComponentsOnly(complex).scene_with_lod(&lod_ref),
 			);
 		}
 		PreviewSubject::PanelComplex {
@@ -487,6 +501,30 @@ pub fn present_preview_lod(
 				}
 				Err(e) => {
 					warn!("panel-complex parse failed: {e}");
+				}
+			}
+		}
+		PreviewSubject::QuadPanelComplex {
+			mesh,
+			min_dihedral,
+			no_joint,
+		} => {
+			let policy = if *no_joint {
+				PanelComplexJointPolicy::never()
+			} else {
+				PanelComplexJointPolicy::min_dihedral_rad(*min_dihedral)
+			};
+			match mesh.parse::<QuadPanelComplex>() {
+				Ok(quads) => {
+					let complex = quads.with_joint_policy(policy).into_complex();
+					spawn_preview(
+						&mut commands,
+						transform,
+						ComponentsOnly(complex).scene_with_lod(&lod_ref),
+					);
+				}
+				Err(e) => {
+					warn!("quad-panel-complex parse failed: {e}");
 				}
 			}
 		}
