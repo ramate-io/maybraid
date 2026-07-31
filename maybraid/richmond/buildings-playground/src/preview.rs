@@ -60,6 +60,10 @@ pub enum PreviewSubject {
 		c: Vec3,
 	},
 	TessellatedTriangleGap {
+		a: Vec3,
+		b: Vec3,
+		c: Vec3,
+		gap: Vec<Vec3>,
 		min_dihedral: f32,
 		no_joint: bool,
 	},
@@ -163,10 +167,14 @@ impl PreviewConfig {
 				format!("preview: tessellated-triangle-3d (a={a:?} b={b:?} c={c:?})")
 			}
 			PreviewSubject::TessellatedTriangleGap {
+				a,
+				b,
+				c,
+				ref gap,
 				min_dihedral,
 				no_joint,
 			} => format!(
-				"preview: tessellated-triangle-gap (min_dihedral={min_dihedral:.3} no_joint={no_joint})"
+				"preview: tessellated-triangle-gap (a={a:?} b={b:?} c={c:?} gap={gap:?} min_dihedral={min_dihedral:.3} no_joint={no_joint})"
 			),
 			PreviewSubject::QuadPanel {
 				a0,
@@ -471,6 +479,10 @@ pub fn present_preview_lod(
 			);
 		}
 		PreviewSubject::TessellatedTriangleGap {
+			a,
+			b,
+			c,
+			gap,
 			min_dihedral,
 			no_joint,
 		} => {
@@ -479,16 +491,7 @@ pub fn present_preview_lod(
 			} else {
 				PanelComplexJointPolicy::min_dihedral_rad(*min_dihedral)
 			};
-			let a = Vec3::ZERO;
-			let b = Vec3::new(3.0, 0.0, 0.0);
-			let c = Vec3::new(0.0, 0.0, 2.0);
-			let gap = [
-				Vec3::new(0.8, 0.0, 0.5),
-				Vec3::new(1.4, 0.0, 0.5),
-				Vec3::new(1.4, 0.0, 0.9),
-				Vec3::new(0.8, 0.0, 0.9),
-			];
-			let complex = TessellatedTriangleGap::rough_stone(a, b, c, gap)
+			let complex = TessellatedTriangleGap::rough_stone(*a, *b, *c, gap.clone())
 				.with_joint_policy(policy)
 				.into_complex();
 			spawn_preview(
