@@ -4,7 +4,7 @@ use bevy_math::Vec3;
 use richmond_building_components::joints::{JointNode, JointPost};
 use richmond_building_components::panels::{dihedral_kink, triangle_normal};
 
-use crate::tessellated_triangle_panel::TessellatedTrianglePanel;
+use crate::paneling::tessellated_triangle_panel::TessellatedTrianglePanel;
 
 use super::adjacency::shared_edges;
 use super::types::{

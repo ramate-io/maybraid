@@ -7,9 +7,9 @@
 use bevy_math::Vec3;
 use richmond_building_components::panels::PanelStyle;
 
-use crate::clipped_tessellated_triangle::ClippedTessellatedTriangle;
-use crate::panel_complex::{PanelComplex, PanelComplexJointPolicy, PanelPoint};
-use crate::quad_panel::QuadPanel;
+use crate::paneling::clipped_tessellated_triangle::ClippedTessellatedTriangle;
+use crate::paneling::panel_complex::{PanelComplex, PanelComplexJointPolicy, PanelPoint};
+use crate::paneling::quad_panel::QuadPanel;
 
 /// Thin wrapper: clipped (or solid) ruled quad as a [`PanelComplex`].
 #[derive(Debug, Clone, PartialEq)]
@@ -160,7 +160,7 @@ fn build_complex(
 mod tests {
 	use super::*;
 	use bevy_math::Vec3;
-	use crate::panel_plane::panel_plane_frame;
+	use crate::paneling::panel_plane::panel_plane_frame;
 
 	fn ground_quad() -> (Vec3, Vec3, Vec3, Vec3) {
 		(

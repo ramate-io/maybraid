@@ -86,6 +86,7 @@ pub mod panels {
 		/// Default-resolution rectangle when a single path is needed (high-res LOD).
 		pub const RECTANGLE: AssetPath =
 			AssetPath::new("urban/panels/rough_stonework/rectangle_001_high_res.glb");
+		/// Resolution triad for the unit rectangle panel (\(X, Z \in [0, 1]\)).
 		pub const RECTANGLE_HIGH: AssetPath =
 			AssetPath::new("urban/panels/rough_stonework/rectangle_001_high_res.glb");
 		pub const RECTANGLE_MID: AssetPath =
@@ -188,7 +189,6 @@ pub mod partitions {
 		use crate::assets::{arcs, panels};
 
 		/// Straight / linear rough stonework segment (shared panel rectangle).
-		pub const LINEAR: AssetPath = panels::rough_stonework::RECTANGLE;
 		pub const LINEAR_HIGH: AssetPath = panels::rough_stonework::RECTANGLE_HIGH;
 		pub const LINEAR_MID: AssetPath = panels::rough_stonework::RECTANGLE_MID;
 		pub const LINEAR_LOW: AssetPath = panels::rough_stonework::RECTANGLE_LOW;

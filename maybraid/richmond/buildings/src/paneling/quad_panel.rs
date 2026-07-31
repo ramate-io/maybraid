@@ -5,10 +5,10 @@
 
 use richmond_building_components::panels::PanelStyle;
 
-use crate::panel_complex::{PanelComplex, PanelComplexJointPolicy, PanelPoint};
+use crate::paneling::panel_complex::{PanelComplex, PanelComplexJointPolicy, PanelPoint};
 
 /// Re-export for call sites that imported thickness from this module.
-pub use crate::panel_complex::DEFAULT_PANEL_THICKNESS;
+pub use crate::paneling::panel_complex::DEFAULT_PANEL_THICKNESS;
 
 /// Thin wrapper: one ruled quad as a [`PanelComplex`].
 #[derive(Debug, Clone, PartialEq)]

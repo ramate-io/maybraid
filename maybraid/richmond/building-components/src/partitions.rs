@@ -2,7 +2,7 @@
 //!
 //! IR: [`PartitionStyle`] + [`PartitionGeometry`] + [`Placement`] → [`PartitionNode`] (`LodScene`).
 //! [`PartitionNode`] covers both **direct** kit mappings and **tessellated** forms (polyline / arc).
-//! Primitive kit geometry — portal-sensitive walls live in `richmond_buildings::walling`.
+//! Primitive kit geometry — higher-order walls/portals live in `richmond_buildings::{paneling,arcs,portals}`.
 //!
 //! Host split: crate [`crate::lod_host`] (structure) vs [`host`] (partition GLB resolution policy).
 

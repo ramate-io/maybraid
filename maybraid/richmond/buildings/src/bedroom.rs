@@ -5,35 +5,39 @@ pub mod closet;
 pub mod ensuite;
 pub mod layout;
 pub mod nightstand;
+pub mod shell;
 
 pub use bed::Bed;
 pub use closet::Closet;
 pub use ensuite::EnsuiteBathroom;
 pub use layout::{BedroomFillParams, BedroomLayout, PartitionSlot};
 pub use nightstand::Nightstand;
+pub use shell::ShellWall;
 
 use bevy_math::bounding::Aabb3d;
 use bevy_math::Vec3;
 use lod::gen::LodSceneLevel;
 use richmond_building_components::floors::{Floor, FloorNode};
-use richmond_building_components::partitions::{
-	wall_placement_from_centered, Partition, PartitionNode,
-};
+use richmond_building_components::panels::PanelNode;
 use richmond_building_components::{
 	BuildingComponents, FurnitureNode, Layers, Placement,
 };
 
+use crate::bedroom::shell::face_rectangle;
 use crate::constraints::{BoundaryOwnershipEntry, BoundaryOwnershipStatus, FaceKind};
-use crate::wizards_tower::floor_fill::{FLOOR_SLAB_Y_SCALE, RECT_HALF_EXTENT};
+use crate::wizards_tower::floor_fill::FLOOR_SLAB_Y_SCALE;
 use crate::CellConstraints;
 use procedural_common::NoiseParams;
+
+/// Wall thickness scale (world \(0.15\) / kit \(Y\) half-extent \(0.2\)).
+const OUTER_WALL_THICK: f32 = 0.15 / 0.2;
 
 /// Bedroom cell: outer shell + allocated closet / bed / nightstand / ensuite fills.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Bedroom {
 	pub constraints: CellConstraints,
 	pub floor: FloorNode,
-	pub walls: Vec<PartitionNode>,
+	pub walls: Vec<ShellWall>,
 	pub closets: Vec<Closet>,
 	pub beds: Vec<Bed>,
 	pub nightstands: Vec<Nightstand>,
@@ -88,13 +92,16 @@ impl BuildingComponents for Bedroom {
 		Layers::from_free(vec![self.floor.clone()])
 	}
 
-	fn partition_nodes_for_level(&self, level: LodSceneLevel) -> Layers<PartitionNode> {
-		let mut out = Layers::from_free(self.walls.clone());
+	fn panel_nodes_for_level(&self, level: LodSceneLevel) -> Layers<PanelNode> {
+		let mut out = Layers::new();
+		for w in &self.walls {
+			out.extend(w.panel_nodes_for_level(level));
+		}
 		for c in &self.closets {
-			out.extend(c.partition_nodes_for_level(level));
+			out.extend(c.panel_nodes_for_level(level));
 		}
 		for e in &self.ensuites {
-			out.extend(e.partition_nodes_for_level(level));
+			out.extend(e.panel_nodes_for_level(level));
 		}
 		out
 	}
@@ -117,24 +124,20 @@ impl BuildingComponents for Bedroom {
 	}
 }
 
-
 fn subset_or_owned(parent: &CellConstraints, aabb: Aabb3d) -> CellConstraints {
 	parent.subset(aabb).unwrap_or_else(|_| CellConstraints::cell_owned(aabb))
 }
 
 fn room_floor(constraints: &CellConstraints) -> FloorNode {
 	let aabb = &constraints.aabb;
-	let center = (aabb.min + aabb.max) * 0.5;
-	let center_xz = Vec3::new(center.x, aabb.min.y, center.z);
 	let size = aabb.max - aabb.min;
-	let floor_scale = Vec3::new(
-		size.x.max(1e-4) / (2.0 * RECT_HALF_EXTENT),
-		FLOOR_SLAB_Y_SCALE,
-		size.z.max(1e-4) / (2.0 * RECT_HALF_EXTENT),
-	);
+	let width = size.x.max(1e-4);
+	let depth = size.z.max(1e-4);
+	// Panel-space lower-left; FloorNode remaps to the centered floor kit.
+	let origin = Vec3::new(aabb.min.x, aabb.min.y, aabb.min.z);
 	FloorNode::rough_stone(
 		Floor::rectangle(),
-		Placement::new(center_xz, 0.0).with_scale(floor_scale),
+		Placement::new(origin, 0.0).with_scale(Vec3::new(width, FLOOR_SLAB_Y_SCALE, depth)),
 	)
 }
 
@@ -147,58 +150,16 @@ pub(crate) fn owns_face_as_cell(constraints: &CellConstraints, face: FaceKind) -
 	}
 }
 
-fn room_outer_walls(constraints: &CellConstraints) -> Vec<PartitionNode> {
+fn room_outer_walls(constraints: &CellConstraints) -> Vec<ShellWall> {
 	let aabb = &constraints.aabb;
-	let size = aabb.max - aabb.min;
-	let y0 = aabb.min.y;
-	let h = size.y.max(1e-4);
-	let cx = (aabb.min.x + aabb.max.x) * 0.5;
-	let cz = (aabb.min.z + aabb.max.z) * 0.5;
-	let half_x = size.x * 0.5;
-	let half_z = size.z * 0.5;
-	// Panel rectangle: X,Z ∈ [0,1], Y ∈ [-0.2,0.2]; wall_placement stands it up.
-	let thick = 0.15_f32 / 0.2;
-
 	let mut walls = Vec::new();
-	// −Z / Front
-	if owns_face_as_cell(constraints, FaceKind::Front) {
-		walls.push(PartitionNode::rough_stone(
-			Partition::linear(),
-			wall_placement_from_centered(Vec3::new(cx, y0, aabb.min.z), 0.0, half_x, h, thick),
-		));
-	}
-	// +Z / Back
-	if owns_face_as_cell(constraints, FaceKind::Back) {
-		walls.push(PartitionNode::rough_stone(
-			Partition::linear(),
-			wall_placement_from_centered(Vec3::new(cx, y0, aabb.max.z), 0.0, half_x, h, thick),
-		));
-	}
-	// −X / Left
-	if owns_face_as_cell(constraints, FaceKind::Left) {
-		walls.push(PartitionNode::rough_stone(
-			Partition::linear(),
-			wall_placement_from_centered(
-				Vec3::new(aabb.min.x, y0, cz),
-				std::f32::consts::FRAC_PI_2,
-				half_z,
-				h,
-				thick,
-			),
-		));
-	}
-	// +X / Right
-	if owns_face_as_cell(constraints, FaceKind::Right) {
-		walls.push(PartitionNode::rough_stone(
-			Partition::linear(),
-			wall_placement_from_centered(
-				Vec3::new(aabb.max.x, y0, cz),
-				std::f32::consts::FRAC_PI_2,
-				half_z,
-				h,
-				thick,
-			),
-		));
+	for face in [FaceKind::Front, FaceKind::Back, FaceKind::Left, FaceKind::Right] {
+		if !owns_face_as_cell(constraints, face) {
+			continue;
+		}
+		if let Some(r) = face_rectangle(aabb, face, OUTER_WALL_THICK) {
+			walls.push(ShellWall(r));
+		}
 	}
 	walls
 }
@@ -225,7 +186,6 @@ mod tests {
 			Some(BoundaryOwnershipEntry::Whole(BoundaryOwnershipStatus::Sibling));
 
 		let walls = room_outer_walls(&constraints);
-		// Cell-owned: Back (+Z) and Right (+X) only.
 		assert_eq!(walls.len(), 2);
 		Ok(())
 	}

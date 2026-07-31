@@ -10,7 +10,7 @@
 
 use richmond_building_components::panels::PanelStyle;
 
-use crate::panel_complex::{
+use crate::paneling::panel_complex::{
 	PanelComplex, PanelComplexJointPolicy, PanelPoint, PanelPointId,
 };
 

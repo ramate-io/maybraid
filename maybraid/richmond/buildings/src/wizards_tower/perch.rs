@@ -1,6 +1,6 @@
 //! Larger top-floor perch capping the Wizard's Tower.
 //!
-//! Same treatment as a regular storey for now: crate-level [`crate::ArcWall`] + squared floor.
+//! Same treatment as a regular storey for now: [`crate::arcs::PortalRingWall`] + squared floor.
 
 use bevy::scene::prelude::Scene;
 use bevy_math::Vec3;
@@ -8,13 +8,13 @@ use lod::gen::{LodScene, LodSceneLevel};
 use lod::lod_ref::LodRef;
 use procedural_common::NoiseParams;
 use richmond_building_components::floors::FloorNode;
+use richmond_building_components::partitions::PartitionStyle;
 use richmond_building_components::scene_children;
 use richmond_building_components::{
-	append_component_scenes, BuildingComponents, Layers,
-	ParentConfines, PartitionNode,
+	append_component_scenes, BuildingComponents, Layers, ParentConfines, PartitionNode,
 };
 
-use crate::walling::{ArcWall, ArcWallParams};
+use crate::arcs::{portal_ring_wall, PortalRingParams, PortalRingWall};
 use crate::wizards_tower::floor_fill::{squared_floor_with_spire_hole, SPIRE_HALF_FRAC};
 use crate::wizards_tower::must_assign_cardinal_portals;
 use crate::CellConstraints;
@@ -25,7 +25,7 @@ pub struct WizardsTowerPerch {
 	pub constraints: CellConstraints,
 	/// Storey height in meters (outer ring wall \(Y\) scale).
 	pub storey_height: f32,
-	pub arc_wall: ArcWall,
+	pub ring_wall: PortalRingWall,
 	pub floor_caps: [FloorNode; 4],
 	pub floor_rects: [FloorNode; 4],
 }
@@ -46,7 +46,7 @@ impl WizardsTowerPerch {
 		let (floor_caps, floor_rects) =
 			squared_floor_with_spire_hole(center_xz, radius, spire_half);
 
-		let arc_wall = ArcWall::new(ArcWallParams {
+		let ring_wall = portal_ring_wall(PortalRingParams {
 			center_xz,
 			radius,
 			storey_height,
@@ -55,9 +55,10 @@ impl WizardsTowerPerch {
 			must_not_assign: vec![],
 			portal_noise,
 			optional_portals: (0, 2),
+			style: PartitionStyle::RoughStonework,
 		});
 
-		Self { storey_height, arc_wall, floor_caps, floor_rects, constraints }
+		Self { storey_height, ring_wall, floor_caps, floor_rects, constraints }
 	}
 
 	pub(crate) fn emit_external_features(
@@ -101,7 +102,7 @@ impl WizardsTowerPerch {
 impl BuildingComponents for WizardsTowerPerch {
 	fn partition_nodes_for_level(&self, level: LodSceneLevel) -> Layers<PartitionNode> {
 		if Self::is_structure_level(level) {
-			Layers::from_free(self.arc_wall.partitions.clone())
+			self.ring_wall.sweep.partition_nodes_for_level(level)
 		} else {
 			Layers::new()
 		}

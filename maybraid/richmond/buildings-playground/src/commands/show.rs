@@ -1,21 +1,24 @@
 //! `/show` subcommand: preview a partition leaf or authored building.
 
+pub mod approximated_circle;
 pub mod arc_180;
 pub mod arc_90;
+pub mod arc_sweep;
 pub mod bedroom;
 pub mod linear;
-pub mod linear_wall;
-pub mod noisy_polyline_wall;
+pub mod noisy_rectangular_wall;
 pub mod panel_complex;
 pub mod pitch;
 pub mod polyline;
-pub mod polyline_wall;
 pub mod quad_panel;
 pub mod quad_panel_complex;
 pub mod ruled_pitch;
 pub mod slice_90;
 pub mod stacked_rings;
+pub mod clipped_arc_sweep;
 pub mod clipped_quad_panel;
+pub mod clipped_rectangle;
+pub mod clipped_rectangular_strip;
 pub mod clipped_ruled_strip;
 pub mod clipped_tessellated_triangle;
 pub mod tessellated_triangle;
@@ -33,7 +36,7 @@ use crate::preview::PreviewConfig;
 #[derive(Clone, Subcommand)]
 #[command(rename_all = "kebab-case")]
 pub enum Show {
-	/// Straight rough-stonework linear segment (`panels/.../rectangle_001.glb`).
+	/// Straight rough-stonework linear segment (`panels/.../rectangle_001_{high,mid,low}_res.glb`).
 	Linear(linear::Linear),
 	/// 90° rough-stonework arc (`arcs/.../arc_90_001.glb`).
 	Arc90(arc_90::Arc90),
@@ -53,6 +56,16 @@ pub enum Show {
 	ClippedQuadPanel(clipped_quad_panel::ClippedQuadPanel),
 	/// Multi-bay ruled strip with optional per-bay clips.
 	ClippedRuledStrip(clipped_ruled_strip::ClippedRuledStrip),
+	/// Best-fit rectangle kit with an inset framed by rectangle kits.
+	ClippedRectangle(clipped_rectangle::ClippedRectangle),
+	/// Two-rail best-fit rectangle strip with a mid-bay inset frame.
+	ClippedRectangularStrip(clipped_rectangular_strip::ClippedRectangularStrip),
+	/// N-gon disk / annulus filled with right-triangle panel kits.
+	ApproximatedCircle(approximated_circle::ApproximatedCircle),
+	/// Circular fitted [`richmond_buildings::arcs::ArcSweep`] (not IR `partitions::ArcSweep`).
+	ArcSweep(arc_sweep::ArcSweep),
+	/// Circular arc with angular clip openings → solid + slice bands.
+	ClippedArcSweep(clipped_arc_sweep::ClippedArcSweep),
 	/// Two lines → two tessellated triangles + optional crease `JointNode`.
 	QuadPanel(quad_panel::QuadPanel),
 	/// Point-id triangle mesh → panels + crease joints (`id=(x,y,z) ... {a,b,c}`).
@@ -63,12 +76,8 @@ pub enum Show {
 	RuledPitch(ruled_pitch::RuledPitch),
 	/// L-shaped `Partition::polyline` (posed linears + joints).
 	Polyline(polyline::Polyline),
-	/// Portal-sensitive straight [`richmond_buildings::LinearWall`].
-	LinearWall(linear_wall::LinearWall),
-	/// Portal-sensitive [`richmond_buildings::PolylineWall`] (L-path + door).
-	PolylineWall(polyline_wall::PolylineWall),
-	/// Noisy distance-budget path with allowed X/Y/Z turn angles.
-	NoisyPolylineWall(noisy_polyline_wall::NoisyPolylineWall),
+	/// Noisy path → [`richmond_buildings::NoisyRectangularWall`] rectangle strip demo.
+	NoisyRectangularWall(noisy_rectangular_wall::NoisyRectangularWall),
 	/// Full Wizard's Tower (noise-derived floor count).
 	WizardsTower(wizards_tower::WizardsTower),
 	/// Stacked circular wall rings (validates kit radius/height scaling).
@@ -90,14 +99,17 @@ impl Show {
 			Self::ClippedTessellatedTriangle(cmd) => cmd.into_preview(),
 			Self::ClippedQuadPanel(cmd) => cmd.into_preview(),
 			Self::ClippedRuledStrip(cmd) => cmd.into_preview(),
+			Self::ClippedRectangle(cmd) => cmd.into_preview(),
+			Self::ClippedRectangularStrip(cmd) => cmd.into_preview(),
+			Self::ApproximatedCircle(cmd) => cmd.into_preview(),
+			Self::ArcSweep(cmd) => cmd.into_preview(),
+			Self::ClippedArcSweep(cmd) => cmd.into_preview(),
 			Self::QuadPanel(cmd) => cmd.into_preview(),
 			Self::PanelComplex(cmd) => cmd.into_preview(),
 			Self::QuadPanelComplex(cmd) => cmd.into_preview(),
 			Self::RuledPitch(cmd) => cmd.into_preview(),
 			Self::Polyline(cmd) => cmd.into_preview(),
-			Self::LinearWall(cmd) => cmd.into_preview(),
-			Self::PolylineWall(cmd) => cmd.into_preview(),
-			Self::NoisyPolylineWall(cmd) => cmd.into_preview(),
+			Self::NoisyRectangularWall(cmd) => cmd.into_preview(),
 			Self::WizardsTower(cmd) => cmd.into_preview(),
 			Self::StackedRings(cmd) => cmd.into_preview(),
 			Self::Bedroom(cmd) => cmd.into_preview(),

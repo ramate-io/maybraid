@@ -1,6 +1,6 @@
 //! World-space triangle with one closed clip polyline → solid fill as [`PanelComplex`].
 //!
-//! The clip is projected onto the triangle plane ([`crate::panel_plane`]), intersected
+//! The clip is projected onto the triangle plane ([`crate::paneling::panel_plane`]), intersected
 //! with the outer triangle (Sutherland–Hodgman), then subtracted:
 //! - **Interior hole** (strictly inside): bridge + ear-clip annulus.
 //! - **Boundary-touching hole**: cancel shared edges and ear-clip the bite polygon.
@@ -10,10 +10,10 @@
 use bevy_math::{Vec2, Vec3};
 use richmond_building_components::panels::PanelStyle;
 
-use crate::panel_complex::{
+use crate::paneling::panel_complex::{
 	PanelComplex, PanelComplexJointPolicy, PanelPointId, DEFAULT_PANEL_THICKNESS,
 };
-use crate::panel_plane::{panel_plane_frame, PanelPlaneFrame};
+use crate::paneling::panel_plane::{panel_plane_frame, PanelPlaneFrame};
 
 /// Outer world triangle + one closed clip polyline → [`PanelComplex`] fill.
 #[derive(Debug, Clone, PartialEq)]

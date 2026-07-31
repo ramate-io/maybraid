@@ -12,6 +12,6 @@ pub fn fitted_tile_count(length: f32, tile_width: f32) -> u32 {
 	((length / tw).round() as i32).max(1) as u32
 }
 
-/// Kit footprint: \(X \in [0, 1]\), \(Z \in [-1, 0]\) (lower-left at origin, depth toward \(-Z\)).
+/// Kit footprint: unit square \(X, Z \in [0, 1]\), \(Y \in [-0.2, 0.2]\) (lower-left at origin).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub struct Rectangle;

@@ -26,6 +26,11 @@ cargo run -p richmond-buildings-playground -- show tessellated-triangle --a 0,0 
 cargo run -p richmond-buildings-playground -- show clipped-tessellated-triangle
 cargo run -p richmond-buildings-playground -- show clipped-quad-panel
 cargo run -p richmond-buildings-playground -- show clipped-ruled-strip
+cargo run -p richmond-buildings-playground -- show clipped-rectangle
+cargo run -p richmond-buildings-playground -- show clipped-rectangular-strip
+cargo run -p richmond-buildings-playground -- show arc-sweep
+cargo run -p richmond-buildings-playground -- show clipped-arc-sweep
+cargo run -p richmond-buildings-playground -- show noisy-rectangular-wall
 # Folded quad (default ~90° crease + joint):
 cargo run -p richmond-buildings-playground -- show quad-panel
 # Coplanar quad (no joint):
@@ -52,6 +57,11 @@ In-game: press `/` for the command console (same clap commands as argv).
 - `show clipped-tessellated-triangle [--a|--b|--c X,Y,Z] [--clip 'x,y,z;…'] [--min-dihedral R] [--no-joint]` — world triangle − closed clip (clipped to bounds) → `PanelComplex`
 - `show clipped-quad-panel [--a0|--a1|--b0|--b1 X,Y,Z] [--clip 'x,y,z;…'] [--min-dihedral R] [--no-joint]` — ruled quad − closed clip
 - `show clipped-ruled-strip [--min-dihedral R] [--no-joint]` — multi-bay strip with a clip on the middle bay
+- `show clipped-rectangle [--a0|--a1|--b0|--b1 X,Y,Z] [--left|--right|--bottom|--top M]` — best-fit `PanelGeometry::Rectangle` with inset framed by rectangle kits
+- `show clipped-rectangular-strip [--inset M] [--min-dihedral R] [--no-joint]` — two-rail rectangle strip; middle bay inset frame; crease joints on bay folds
+- `show arc-sweep [--radius R] [--height H] [--sweep-degrees D] [--start-yaw-deg D]` — circular fitted `arcs::ArcSweep` (not IR `partitions::ArcSweep`)
+- `show clipped-arc-sweep [--radius R] [--height H] [--sweep-degrees D] [--start-yaw-deg D]` — same with hardcoded angular clip openings
+- `show noisy-rectangular-wall [--distance D] [--seed N] …` — `wall_demo` noisy path → rectangle strip (+ mid portal inset)
 - `show quad-panel [--a0|--a1|--b0|--b1 X,Y,Z] [--t-a0|--t-a1|--t-b0|--t-b1 T] [--min-dihedral R] [--no-joint]` — two lines → two tessellated triangles + optional crease `JointNode` (default corners are a ~90° fold; thicknesses default to 0.4)
 - `show panel-complex [--mesh 'id=(x,y,z) … {a,b,c}'] [--min-dihedral R] [--no-joint]` — point-id triangle mesh + crease joints; optional thickness as 4th tuple component
 - `show quad-panel-complex [--mesh 'id=(x,y,z) … {a0,a1,b0,b1}'] [--min-dihedral R] [--no-joint]` — quad-face mesh (diagonal a0–b1) → same presentation path

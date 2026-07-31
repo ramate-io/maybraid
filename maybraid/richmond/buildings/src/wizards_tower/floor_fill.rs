@@ -3,8 +3,9 @@
 //! Squares off a circular footprint with four circle−inscribed-square caps, then
 //! fills the inscribed square with rectangular slabs around a **centered** spire hole.
 //!
-//! Rectangular floor kits are centered at the origin with **half-length 1**
-//! (\(X, Z \in [-1, 1]\)). World edge length \(L\) therefore needs scale \(L / 2\).
+//! [`Floor::rectangle`] placements are authored in **panel space**: lower-left origin,
+//! scale = full edge lengths (unit square \(X,Z\in[0,1]\)). [`FloorNode`] remaps to the
+//! centered floor kit (\(X,Z\in[-1,1]\), half-extent scale) at present time.
 
 use bevy_math::Vec3;
 use richmond_building_components::floors::{Floor, FloorNode};
@@ -22,7 +23,7 @@ pub const FLOOR_SLAB_Y_SCALE: f32 = 0.2;
 /// Outer ring wall height in meters (kit \(Y \in [0, 1]\)).
 pub const WALL_HEIGHT_METERS: f32 = 3.0;
 
-/// Rectangular floor kit half-extent along \(X\) and \(Z\).
+/// Centered floor-kit half-extent along \(X\) and \(Z\) after [`FloorNode`] remap.
 pub const RECT_HALF_EXTENT: f32 = 1.0;
 
 /// Four inscribed-square caps + four rectangular frame slabs around a centered spire hole.
@@ -91,15 +92,45 @@ pub fn squared_floor_with_spire_hole(
 }
 
 /// Place a rectangle covering world extents `width_x` × `depth_z` (full edge lengths).
+///
+/// Authored in panel space (lower-left + full span); [`FloorNode`] centers for the kit.
 fn rect_slab(center: Vec3, width_x: f32, depth_z: f32) -> FloorNode {
 	let width_x = width_x.max(1e-4);
 	let depth_z = depth_z.max(1e-4);
+	let origin = Vec3::new(center.x - 0.5 * width_x, center.y, center.z - 0.5 * depth_z);
 	FloorNode::rough_stone(
 		Floor::rectangle(),
-		Placement::new(center, 0.0).with_scale(Vec3::new(
-			width_x / (2.0 * RECT_HALF_EXTENT),
+		Placement::new(origin, 0.0).with_scale(Vec3::new(
+			width_x,
 			FLOOR_SLAB_Y_SCALE,
-			depth_z / (2.0 * RECT_HALF_EXTENT),
+			depth_z,
 		)),
 	)
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn rect_slab_authors_panel_space_full_span() {
+		let node = rect_slab(Vec3::new(10.0, 1.0, 20.0), 4.0, 2.0);
+		assert!((node.placement.scale.x - 4.0).abs() < 1e-4);
+		assert!((node.placement.scale.z - 2.0).abs() < 1e-4);
+		assert!((node.placement.translation - Vec3::new(8.0, 1.0, 19.0)).length() < 1e-4);
+	}
+
+	#[test]
+	fn frame_rects_match_inscribed_minus_spire_gaps() {
+		let (_, rects) = squared_floor_with_spire_hole(Vec3::ZERO, 10.0, 2.8);
+		// inscribed_half = 7, side = 14; gap = 7 - 2.8 = 4.2
+		for r in &rects {
+			let sx = r.placement.scale.x;
+			let sz = r.placement.scale.z;
+			let long = sx.max(sz);
+			let short = sx.min(sz);
+			assert!((long - 14.0).abs() < 1e-3, "long={long}");
+			assert!((short - 4.2).abs() < 1e-3, "short={short}");
+		}
+	}
 }

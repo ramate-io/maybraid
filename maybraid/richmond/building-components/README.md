@@ -72,7 +72,7 @@ urban/
   panels/                 # shared rectangles, triangles, fillers
     unit_right_triangle
     rough_stonework/
-      rectangle_001[+ LOD]
+      rectangle_001_{high,mid,low}_res
       inscribed_square_001
     shepherds_thatch/
       right_triangle_001_{high,mid,low}_res
@@ -98,7 +98,7 @@ urban/
 
 **Naming under a style folder:** do not repeat the style name in the filename (`rough_stonework/arc_90_001`, not `rough_stonework/rough_stonework_90_001`). Angle kits use the `arc_` prefix (`arc_15`, `arc_90`, `arc_180`, plus `arc_*_slice` / `arc_*_frame`).
 
-Partition linear leaves consume `panels/.../rectangle_001` via `LINEAR_*` aliases; roof pitch leaves consume `panels/.../right_triangle_001_*`. Arc / slice / joint leaves alias through `ARC_*` / `SLICE_*` / `JOINT_*` into `arcs/` and `joints/`. The floor-slab rectangle remains under `floors/` until promoted; the circle−inscribed-square filler lives under `panels/`.
+Partition linear leaves consume `panels/.../rectangle_001_{high,mid,low}_res` via `LINEAR_*` aliases; panel rectangles use the same triad (`RoughStonePanelRectangle`). Roof pitch leaves consume `panels/.../right_triangle_001_*`. Arc / slice / joint leaves alias through `ARC_*` / `SLICE_*` / `JOINT_*` into `arcs/` and `joints/`. The floor-slab rectangle remains under `floors/` until promoted; the circle−inscribed-square filler lives under `panels/`.
 
 ## Furniture (placeholders)
 
@@ -120,7 +120,7 @@ We have not yet defined a sweeping tool. The plan is to make it take linear segm
 
 ## Polyline partitions
 
-[`Partition::polyline`](src/partitions/geometry/polyline.rs) is a **short-run** thin-wall primitive: one [`PartitionNode`](src/partitions/node.rs) is a single LOD parent whose `scene_with_level` expands into posed linear + joint kits. Prefer splitting longer paths in higher-order constructs (`richmond_buildings::walling`).
+[`Partition::polyline`](src/partitions/geometry/polyline.rs) is a **short-run** thin-wall primitive: one [`PartitionNode`](src/partitions/node.rs) is a single LOD parent whose `scene_with_level` expands into posed linear + joint kits. Prefer splitting longer paths in higher-order constructs (`richmond_buildings::{paneling,wall_demo}`).
 
 Each edge uses **horizontal** length \(L_{xz}\) with a suggested [`tile_width`](src/partitions/geometry/linear.rs) (default \(1\), unscaled ground kit \(X \in [0, 1]\)): \(n = \mathrm{round}(L_{xz}/\texttt{tile\_width})\) tiles stretch to width \(L_{xz}/n\). Starts lerp along the 3D path so path \(Y\) carries slope. Override with `with_tile_width`. Continuous [`LinearPartition::spanning`](src/partitions/geometry/linear.rs) uses the same fit on its span. Polyline tiles carry world path anchors plus stand-up pitch and wall scale themselves (`with_wall_scale`); the parent stays identity. Panels stay **plumb** (yaw + stand-up only).
 

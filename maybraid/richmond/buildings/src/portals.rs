@@ -1,6 +1,6 @@
-//! Shared portal vocabulary for portal-sensitive [`super::Walling`] helpers.
+//! Portal vocabulary and assignment along a unit path \(t \in [0, 1)\).
 //!
-//! \(t \in [0, 1)\) runs along the wall path (arc sweep, linear segment, or polyline length).
+//! Used by [`crate::arcs`] ring walls and [`crate::wall_demo`] noisy strip demos.
 
 use procedural_common::NoiseConfig;
 use richmond_building_components::partitions::SLICE_KIT_HEIGHT;

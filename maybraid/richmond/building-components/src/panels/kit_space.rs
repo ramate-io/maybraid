@@ -9,11 +9,14 @@ use crate::placed::Placement;
 /// Matches [`crate::partitions::PANEL_TO_WALL_PITCH`].
 pub const WALL_STANDUP_PITCH: f32 = std::f32::consts::FRAC_PI_2;
 
-/// Convert panel-space lower-left rectangle placement to a centered kit
-/// (\(X,Z \in [-1, 1]\)), used by floor slab rectangles.
+/// Convert panel-space lower-left rectangle placement (\(X,Z \in [0, 1]\)) to a
+/// centered floor kit (\(X,Z \in [-1, 1]\)).
+///
+/// Panel scale is full edge length; floor scale is half-extent (\(L/2\)).
 pub fn to_centered_rect_placement(p: Placement) -> Placement {
 	let s = p.scale;
-	let local_mid = Vec3::new(s.x * 0.5, 0.0, -s.z * 0.5);
+	// Unit-square panel: center at local \((0.5, 0, 0.5)\) before scale.
+	let local_mid = Vec3::new(s.x * 0.5, 0.0, s.z * 0.5);
 	Placement {
 		translation: p.translation + p.rotation() * local_mid,
 		yaw: p.yaw,

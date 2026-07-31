@@ -1,7 +1,7 @@
 //! World-space triangle filled via shared 2D panel tessellation.
 //!
 //! Higher-order (buildings) feature — not a kit primitive. Pipeline:
-//! 1. Orthonormal frame for the plane of \(A,B,C\) ([`crate::panel_plane`])
+//! 1. Orthonormal frame for the plane of \(A,B,C\) ([`crate::paneling::panel_plane`])
 //! 2. Project corners into panel \(X,Z\)
 //! 3. Encode plane as parent [`Placement`] (yaw / **pitch** / roll via YXZ)
 //! 4. [`PanelNode`] fills in panel space; kit yaw is composed under that parent
@@ -13,7 +13,7 @@ use richmond_building_components::panels::{
 };
 use richmond_building_components::{BuildingComponents, Layers, Placement};
 
-use crate::panel_plane::panel_plane_frame;
+use crate::paneling::panel_plane::panel_plane_frame;
 
 /// Three world-space corners filled with posed panel right-triangle kits.
 #[derive(Debug, Clone, PartialEq)]

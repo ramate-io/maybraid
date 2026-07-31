@@ -11,47 +11,50 @@
 //! The authored types do not need, however, to author strictly rectangular geometry.
 
 pub mod arc_spire;
+pub mod arcs;
 pub mod bedroom;
-pub mod clipped_quad_panel;
-pub mod clipped_ruled_strip;
-pub mod clipped_tessellated_triangle;
 pub mod constraints;
-pub mod panel_complex;
-pub mod panel_plane;
-pub mod quad_panel;
-pub mod quad_panel_complex;
-pub mod ruled_pitch;
-pub mod ruled_strip;
+pub mod paneling;
+pub mod portals;
 pub mod stacked_rings;
-pub mod tessellated_triangle_panel;
-pub mod walling;
+pub mod wall_demo;
 pub mod wizards_tower;
+
+// Compatibility module paths (pre-paneling layout).
+pub use paneling::clipped_quad_panel;
+pub use paneling::clipped_ruled_strip;
+pub use paneling::clipped_tessellated_triangle;
+pub use paneling::panel_complex;
+pub use paneling::panel_plane;
+pub use paneling::quad_panel;
+pub use paneling::quad_panel_complex;
+pub use paneling::ruled_pitch;
+pub use paneling::ruled_strip;
+pub use paneling::tessellated_triangle_panel;
 
 pub use arc_spire::{
 	best_fit_y_bindings, uniform_storey_bindings, ArcSpire, ArcSpireParams, FitTolerance,
 };
-pub use bedroom::{Bed, Bedroom, BedroomFillParams, Closet, EnsuiteBathroom, Nightstand};
+pub use arcs::{
+	portal_ring_wall, ArcSweep, ClippedArcSweep, PortalRingParams, PortalRingWall,
+};
+pub use bedroom::{Bed, Bedroom, BedroomFillParams, Closet, EnsuiteBathroom, Nightstand, ShellWall};
 pub use constraints::{
 	BoundaryOwnershipEntry, BoundaryOwnershipStatus, BoundaryRegionList, BoundaryThicknessEntry,
 	CellBoundaryTable, CellConstraints, CirculationEntry, CirculationRequestStatus, FaceKind,
 	JointCoordinate, JointEntry, PreJointSweep, SubsetError,
 };
-pub use panel_complex::{
-	shared_edges, PanelComplex, PanelComplexJointPolicy, PanelComplexValidation, PanelMesh,
-	PanelPoint, PanelPointId, PanelQuadMesh, PanelTriangle, ParsePanelComplexError, SharedEdge,
-	DEFAULT_PANEL_THICKNESS,
+pub use paneling::{
+	fit_rectangle, fit_rectangle_corners, shared_edges, ApproximatedCircle, ClippedQuadPanel,
+	ClippedRectangle, ClippedRectangularStrip, ClippedRectangularStripPiece, ClippedRuledStrip,
+	ClippedStripPiece, ClippedTessellatedTriangle, FittedRect, PanelComplex,
+	PanelComplexJointPolicy, PanelComplexValidation, PanelMesh, PanelPoint, PanelPointId,
+	PanelQuadMesh, PanelTriangle, ParsePanelComplexError, QuadPanel, QuadPanelComplex, RectInset,
+	Rectangle, RectangularStrip, RuledPitch, RuledStrip, SharedEdge, TessellatedTrianglePanel,
+	DEFAULT_PANEL_THICKNESS, DEFAULT_SEGMENTS, MIN_SEGMENTS,
 };
-pub use quad_panel::QuadPanel;
-pub use quad_panel_complex::QuadPanelComplex;
-pub use ruled_pitch::RuledPitch;
-pub use ruled_strip::RuledStrip;
+pub use portals::{
+	ArcRegion, AssignedPortal, MustAssignPortal, Portal, PortalFootprint, WallRegion, SLICE_Y_FRAC,
+};
 pub use stacked_rings::{StackedRing, StackedRings};
-pub use clipped_quad_panel::ClippedQuadPanel;
-pub use clipped_ruled_strip::{ClippedRuledStrip, ClippedStripPiece};
-pub use clipped_tessellated_triangle::ClippedTessellatedTriangle;
-pub use tessellated_triangle_panel::TessellatedTrianglePanel;
-pub use walling::{
-	ArcRegion, ArcWall, ArcWallParams, AssignedPortal, LinearWall, LinearWallParams,
-	MustAssignPortal, NoisyPolylineWall, NoisyPolylineWallParams, PolylineWall, PolylineWallParams,
-	Portal, WallRegion, Walling,
-};
+pub use wall_demo::{NoisyRectangularWall, NoisyRectangularWallParams};

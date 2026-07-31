@@ -17,6 +17,7 @@ mod geometry;
 mod kit_space;
 mod node;
 mod placement;
+mod rough_stonework;
 mod style;
 mod tessellated_triangle;
 mod triangle;
@@ -27,6 +28,7 @@ pub use geometry::{
 pub use kit_space::{to_centered_rect_placement, with_wall_standup_pitch};
 pub use node::PanelNode;
 pub use placement::{roll_along_slope, yaw_along_xz, DEFAULT_MIN_JOINT_ANGLE};
+pub use rough_stonework::RoughStonePanelRectangle;
 pub use style::PanelStyle;
 pub use tessellated_triangle::TessellatedTriangle;
 pub use triangle::{dihedral_kink, triangle_normal};
