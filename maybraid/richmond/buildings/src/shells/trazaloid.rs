@@ -16,6 +16,7 @@ use richmond_building_components::{BuildingComponents, Layers};
 
 use crate::paneling::clipped_ruled_strip::ClippedRuledStrip;
 use crate::paneling::panel_complex::{PanelComplexJointPolicy, DEFAULT_PANEL_THICKNESS};
+use crate::shells::connecting_hall::ConnectingHallEndpoint;
 
 const EXTENT_EPS: f32 = 1e-3;
 const GAP_EPS: f32 = 1e-4;
@@ -147,15 +148,16 @@ impl PlanRect {
 	}
 }
 
+/// Cardinal face of a [`Trazaloid`] (lower / upper band).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Side {
+pub enum TrazaloidSide {
 	North,
 	East,
 	South,
 	West,
 }
 
-impl Side {
+impl TrazaloidSide {
 	fn all() -> [Self; 4] {
 		[Self::North, Self::East, Self::South, Self::West]
 	}
@@ -177,6 +179,12 @@ impl Side {
 			Self::South => -Vec3::Z,
 			Self::West => -Vec3::X,
 		}
+	}
+
+	/// Outward facing in plan (\(x, z\)).
+	pub fn orientation(self) -> Vec2 {
+		let o = self.outward();
+		Vec2::new(o.x, o.z)
 	}
 }
 
@@ -209,7 +217,7 @@ impl Trazaloid {
 		let style = params.style;
 		let policy = PanelComplexJointPolicy::default();
 
-		let lower_walls = Side::all().map(|side| {
+		let lower_walls = TrazaloidSide::all().map(|side| {
 			let (a0, b0) = face_bottom_pair(side, foot);
 			let (a1, b1) = face_bottom_pair(side, waist);
 			let clip = if side.door_enabled(&params.doors) {
@@ -228,7 +236,7 @@ impl Trazaloid {
 			ClippedRuledStrip::from_lines(style, [a0, a1], [b0, b1], [clip]).with_joint_policy(policy)
 		});
 
-		let upper_walls = Side::all().map(|side| {
+		let upper_walls = TrazaloidSide::all().map(|side| {
 			let (a0, b0) = face_bottom_pair(side, upper_bot);
 			let (a1, b1) = face_bottom_pair(side, ridge);
 			ClippedRuledStrip::from_lines(style, [a0, a1], [b0, b1], [None]).with_joint_policy(policy)
@@ -287,6 +295,33 @@ impl Trazaloid {
 	/// Foot, waist, upper-bottom, ridge full extents and heights.
 	pub fn plan_levels(&self) -> [(f32, Vec2); 4] {
 		self.rects.map(|r| (r.y, Vec2::new(r.half_x * 2.0, r.half_z * 2.0)))
+	}
+
+	/// Lower-band door opening as a [`ConnectingHallEndpoint`], if that side has a door.
+	pub fn door_endpoint(&self, side: TrazaloidSide) -> Option<ConnectingHallEndpoint> {
+		if !side.door_enabled(&self.params.doors) {
+			return None;
+		}
+		let [foot, waist, ..] = self.rects;
+		let (a0, b0) = face_bottom_pair(side, foot);
+		let (a1, b1) = face_bottom_pair(side, waist);
+		let clip = ground_door_clip(
+			a0,
+			b0,
+			a1,
+			b1,
+			self.params.door_width_frac,
+			self.params.door_thickness,
+			self.params.door_height_frac,
+		);
+		// clip = [BL, BR, TR, TL] looking outward along the face.
+		Some(ConnectingHallEndpoint::new(
+			clip[0],
+			clip[1],
+			clip[3],
+			clip[2],
+			side.orientation(),
+		))
 	}
 }
 
@@ -414,16 +449,16 @@ fn centered_square_clip(rect: PlanRect, size: f32) -> Vec<Vec3> {
 }
 
 /// Bottom-left / bottom-right of a face when viewed from outside (left = rail_a).
-fn face_bottom_pair(side: Side, rect: PlanRect) -> (Vec3, Vec3) {
+fn face_bottom_pair(side: TrazaloidSide, rect: PlanRect) -> (Vec3, Vec3) {
 	match side {
 		// Outside looking −Z: left = West (NW), right = East (NE).
-		Side::North => (rect.nw(), rect.ne()),
+		TrazaloidSide::North => (rect.nw(), rect.ne()),
 		// Outside looking −X: left = North (NE), right = South (SE).
-		Side::East => (rect.ne(), rect.se()),
+		TrazaloidSide::East => (rect.ne(), rect.se()),
 		// Outside looking +Z: left = East (SE), right = West (SW).
-		Side::South => (rect.se(), rect.sw()),
+		TrazaloidSide::South => (rect.se(), rect.sw()),
 		// Outside looking +X: left = South (SW), right = North (NW).
-		Side::West => (rect.sw(), rect.nw()),
+		TrazaloidSide::West => (rect.sw(), rect.nw()),
 	}
 }
 
@@ -496,7 +531,7 @@ fn build_high_posts(params: &TrazaloidParams, rects: &[PlanRect; 4]) -> Vec<Post
 
 	let n = params.face_post_count;
 	if n > 0 {
-		for side in Side::all() {
+		for side in TrazaloidSide::all() {
 			let outward = side.outward();
 			// Lower band face posts.
 			let (la0, lb0) = face_bottom_pair(side, foot);
@@ -641,5 +676,20 @@ mod tests {
 		let mid = t.joint_nodes_for_level(LodSceneLevel::Medium).len();
 		assert!(high > mid);
 		assert!(high >= t.high_posts.len());
+	}
+
+	#[test]
+	fn door_endpoint_matches_door_flags() {
+		let mut params = demo_params();
+		params.doors = TrazaloidDoors {
+			west: true,
+			..TrazaloidDoors::NONE
+		};
+		let t = Trazaloid::new(params);
+		assert!(t.door_endpoint(TrazaloidSide::East).is_none());
+		let west = t.door_endpoint(TrazaloidSide::West).expect("west door");
+		let o = west.orientation.normalize();
+		assert!(o.x < -0.9, "orientation={o:?}");
+		assert!((west.targets.0.y).abs() < 1e-3);
 	}
 }

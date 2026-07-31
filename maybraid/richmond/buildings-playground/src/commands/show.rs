@@ -4,7 +4,9 @@ pub mod approximated_circle;
 pub mod arc_180;
 pub mod arc_90;
 pub mod arc_sweep;
+pub mod arc_tower;
 pub mod bedroom;
+pub mod connecting_shells;
 pub mod linear;
 pub mod noisy_rectangular_wall;
 pub mod panel_complex;
@@ -63,6 +65,10 @@ pub enum Show {
 	Tube(tube::Tube),
 	/// One-kink tube between two oriented openings.
 	ConnectingHall(connecting_hall::ConnectingHall),
+	/// Stacked circular storey shell (explicit openings; no noise).
+	ArcTower(arc_tower::ArcTower),
+	/// ArcTower joined to a Trazaloid via a ConnectingHall.
+	ConnectingShells(connecting_shells::ConnectingShells),
 	/// Two-band trapezoidal-pyramid shell with waist reveal and optional doors.
 	Trazaloid(trazaloid::Trazaloid),
 	/// Best-fit rectangle kit with an inset framed by rectangle kits.
@@ -110,6 +116,8 @@ impl Show {
 			Self::ClippedRuledStrip(cmd) => cmd.into_preview(),
 			Self::Tube(cmd) => cmd.into_preview(),
 			Self::ConnectingHall(cmd) => cmd.into_preview(),
+			Self::ArcTower(cmd) => cmd.into_preview(),
+			Self::ConnectingShells(cmd) => cmd.into_preview(),
 			Self::Trazaloid(cmd) => cmd.into_preview(),
 			Self::ClippedRectangle(cmd) => cmd.into_preview(),
 			Self::ClippedRectangularStrip(cmd) => cmd.into_preview(),

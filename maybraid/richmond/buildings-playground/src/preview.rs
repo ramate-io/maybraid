@@ -20,10 +20,11 @@ use richmond_buildings::panel_complex::{PanelComplex, PanelComplexJointPolicy, P
 use richmond_buildings::quad_panel::QuadPanel;
 use richmond_buildings::quad_panel_complex::QuadPanelComplex;
 use richmond_buildings::{
-	ApproximatedCircle, ArcSweep, ClippedArcSweep, ClippedQuadPanel, ClippedRectangle,
-	ClippedRectangularStrip, ClippedRuledStrip, ClippedTessellatedTriangle, RectInset, RuledPitch,
-	ConnectingHall, ConnectingHallEndpoint, Tube, TubeCrossSectionNode, TubeFaces, Trazaloid,
-	TrazaloidDoors, TrazaloidParams, TrazaloidSlab,
+	ApproximatedCircle, ArcFloorSlab, ArcSweep, ArcTower, ArcTowerParams, ClippedArcSweep,
+	ClippedQuadPanel, ClippedRectangle, ClippedRectangularStrip, ClippedRuledStrip,
+	ClippedTessellatedTriangle, ConnectingHall, ConnectingHallEndpoint, ConnectingShells, RectInset,
+	RuledPitch, Tube, TubeCrossSectionNode, TubeFaces, Trazaloid, TrazaloidDoors, TrazaloidParams,
+	TrazaloidSlab,
 };
 use richmond_buildings::stacked_rings::StackedRings;
 use richmond_buildings::tessellated_triangle_panel::TessellatedTrianglePanel;
@@ -92,6 +93,15 @@ pub enum PreviewSubject {
 		no_right: bool,
 	},
 	ConnectingHall,
+	ArcTower {
+		radius: f32,
+		floor_count: u32,
+		storey_height: f32,
+		floor_hole: f32,
+		no_base_floor: bool,
+		no_ceiling: bool,
+	},
+	ConnectingShells,
 	Trazaloid {
 		footprint_x: f32,
 		footprint_z: f32,
@@ -282,6 +292,19 @@ impl PreviewConfig {
 				"preview: tube (min_dihedral={min_dihedral:.3} no_joint={no_joint} no_floor={no_floor} no_ceiling={no_ceiling} no_left={no_left} no_right={no_right})"
 			),
 			PreviewSubject::ConnectingHall => "preview: connecting-hall (one kink)".into(),
+			PreviewSubject::ArcTower {
+				radius,
+				floor_count,
+				storey_height,
+				floor_hole,
+				no_base_floor,
+				no_ceiling,
+			} => format!(
+				"preview: arc-tower (r={radius:.1} floors={floor_count} h={storey_height:.1} hole={floor_hole:.2} no_base={no_base_floor} no_ceil={no_ceiling})"
+			),
+			PreviewSubject::ConnectingShells => {
+				"preview: connecting-shells (arc-tower + hall + trazaloid)".into()
+			}
 			PreviewSubject::Trazaloid {
 				footprint_x,
 				footprint_z,
@@ -468,6 +491,20 @@ impl PreviewConfig {
 			PreviewSubject::ConnectingHall => {
 				Aabb3d::from_min_max(Vec3::new(-5.0, -0.5, -5.0), Vec3::new(5.0, 4.0, 5.0))
 			}
+			PreviewSubject::ArcTower {
+				radius,
+				floor_count,
+				storey_height,
+				..
+			} => {
+				let r = radius.max(1e-4) + 0.5;
+				let h = (*floor_count as f32) * storey_height.max(1e-4) + 0.5;
+				Aabb3d::from_min_max(Vec3::new(-r, -0.2, -r), Vec3::new(r, h, r))
+			}
+			PreviewSubject::ConnectingShells => Aabb3d::from_min_max(
+				Vec3::new(-19.0, -0.2, -5.0),
+				Vec3::new(5.0, 10.0, 5.0),
+			),
 			PreviewSubject::Trazaloid {
 				footprint_x,
 				footprint_z,
@@ -818,6 +855,58 @@ pub fn present_preview_lod(
 				&mut commands,
 				transform,
 				ComponentsOnly(hall).scene_with_lod(&lod_ref),
+			);
+		}
+		PreviewSubject::ArcTower {
+			radius,
+			floor_count,
+			storey_height,
+			floor_hole,
+			no_base_floor,
+			no_ceiling,
+		} => {
+			let intermediate = if *floor_hole > 0.0 {
+				ArcFloorSlab::SquareHole { size: *floor_hole }
+			} else {
+				ArcFloorSlab::Solid
+			};
+			let tower = ArcTower::new(ArcTowerParams {
+				center_xz: Vec3::ZERO,
+				radius: *radius,
+				floor_count: *floor_count,
+				storey_height: *storey_height,
+				start_yaw: 0.0,
+				openings: vec![
+					MustAssignPortal::at(0.0, Portal::Door),
+					MustAssignPortal::at(0.25, Portal::Window),
+					MustAssignPortal::at(0.5, Portal::Window),
+					MustAssignPortal::at(0.75, Portal::Window),
+				],
+				base_floor: if *no_base_floor {
+					ArcFloorSlab::None
+				} else {
+					ArcFloorSlab::Solid
+				},
+				intermediate_floors: intermediate,
+				top_ceiling: if *no_ceiling {
+					ArcFloorSlab::None
+				} else {
+					ArcFloorSlab::Solid
+				},
+				..ArcTowerParams::default()
+			});
+			spawn_preview(
+				&mut commands,
+				transform,
+				ComponentsOnly(tower).scene_with_lod(&lod_ref),
+			);
+		}
+		PreviewSubject::ConnectingShells => {
+			let demo = ConnectingShells::new();
+			spawn_preview(
+				&mut commands,
+				transform,
+				ComponentsOnly(demo).scene_with_lod(&lod_ref),
 			);
 		}
 		PreviewSubject::Trazaloid {

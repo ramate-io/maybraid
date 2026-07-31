@@ -14,6 +14,7 @@ pub mod arc_spire;
 pub mod arcs;
 pub mod bedroom;
 pub mod constraints;
+pub mod demos;
 pub mod paneling;
 pub mod portals;
 pub mod shells;
@@ -59,9 +60,10 @@ pub use paneling::{
 pub use portals::{
 	ArcRegion, AssignedPortal, MustAssignPortal, Portal, PortalFootprint, WallRegion, SLICE_Y_FRAC,
 };
+pub use demos::ConnectingShells;
 pub use shells::{
-	ConnectingHall, ConnectingHallEndpoint, Trazaloid, TrazaloidDoors, TrazaloidParams,
-	TrazaloidSlab,
+	ArcFloor, ArcFloorParams, ArcFloorSlab, ArcTower, ArcTowerParams, ConnectingHall,
+	ConnectingHallEndpoint, Trazaloid, TrazaloidDoors, TrazaloidParams, TrazaloidSide, TrazaloidSlab,
 };
 pub use stacked_rings::{StackedRing, StackedRings};
 pub use wall_demo::{NoisyRectangularWall, NoisyRectangularWallParams};
