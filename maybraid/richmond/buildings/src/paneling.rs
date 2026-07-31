@@ -39,4 +39,4 @@ pub use rectangular_strip::RectangularStrip;
 pub use ruled_pitch::RuledPitch;
 pub use ruled_strip::RuledStrip;
 pub use tessellated_triangle_panel::TessellatedTrianglePanel;
-pub use tube::{Tube, TubeCorners, TubeCrossSectionNode, TubeFrame};
+pub use tube::{Tube, TubeCorners, TubeCrossSectionNode, TubeFaces, TubeFrame};
