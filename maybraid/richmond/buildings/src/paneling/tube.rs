@@ -5,7 +5,7 @@
 //! The four corner polylines become floor, ceiling, left, and right
 //! [`ClippedRuledStrip`] faces.
 
-use bevy_math::{Quat, Vec3};
+use bevy_math::Vec3;
 use lod::gen::LodSceneLevel;
 use richmond_building_components::joints::JointNode;
 use richmond_building_components::panels::{PanelNode, PanelStyle};
@@ -13,6 +13,8 @@ use richmond_building_components::{BuildingComponents, Layers};
 
 use crate::paneling::clipped_ruled_strip::ClippedRuledStrip;
 use crate::paneling::panel_complex::PanelComplexJointPolicy;
+use crate::paneling::path_frame;
+pub use path_frame::TubeFrame;
 
 /// One authored station along a [`Tube`] centerline.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -60,15 +62,6 @@ pub struct TubeCorners {
 	pub bottom_right: Vec3,
 	pub top_left: Vec3,
 	pub top_right: Vec3,
-}
-
-/// Local orthonormal axes in the average perpendicular plane after roll.
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct TubeFrame {
-	/// Average tangent (normal to the cross-section plane).
-	pub tangent: Vec3,
-	pub right: Vec3,
-	pub up: Vec3,
 }
 
 /// Polyline tube: four [`ClippedRuledStrip`] faces from trapezoid stations.
@@ -139,12 +132,13 @@ impl Tube {
 			return Self::new(style);
 		}
 
+		let positions: Vec<Vec3> = nodes.iter().map(|n| n.bottom_middle).collect();
 		let mut bottom_left = Vec::with_capacity(nodes.len());
 		let mut bottom_right = Vec::with_capacity(nodes.len());
 		let mut top_left = Vec::with_capacity(nodes.len());
 		let mut top_right = Vec::with_capacity(nodes.len());
 		for i in 0..nodes.len() {
-			let c = corners_at(&nodes, i);
+			let c = corners_at_framed(&nodes, &positions, i);
 			bottom_left.push(c.bottom_left);
 			bottom_right.push(c.bottom_right);
 			top_left.push(c.top_left);
@@ -216,8 +210,9 @@ impl Tube {
 
 	/// Corner rails for every station (same order as [`Self::nodes`]).
 	pub fn corners(&self) -> Vec<TubeCorners> {
+		let positions: Vec<Vec3> = self.nodes.iter().map(|n| n.bottom_middle).collect();
 		(0..self.nodes.len())
-			.map(|i| corners_at(&self.nodes, i))
+			.map(|i| corners_at_framed(&self.nodes, &positions, i))
 			.collect()
 	}
 
@@ -273,27 +268,22 @@ fn normalize_clips(
 
 /// Average tangent and zero-roll basis, then apply node roll about the tangent.
 pub fn frame_at(nodes: &[TubeCrossSectionNode], index: usize) -> TubeFrame {
-	let t = average_tangent(nodes, index);
-	let (right0, up0) = zero_roll_basis(t);
-	let roll = nodes[index].roll;
-	if roll.abs() < 1e-8 {
-		return TubeFrame {
-			tangent: t,
-			right: right0,
-			up: up0,
-		};
-	}
-	let q = Quat::from_axis_angle(t, roll);
-	TubeFrame {
-		tangent: t,
-		right: q * right0,
-		up: q * up0,
-	}
+	let positions: Vec<Vec3> = nodes.iter().map(|n| n.bottom_middle).collect();
+	path_frame::path_frame(&positions, index, nodes[index].roll)
 }
 
 pub fn corners_at(nodes: &[TubeCrossSectionNode], index: usize) -> TubeCorners {
+	let positions: Vec<Vec3> = nodes.iter().map(|n| n.bottom_middle).collect();
+	corners_at_framed(nodes, &positions, index)
+}
+
+fn corners_at_framed(
+	nodes: &[TubeCrossSectionNode],
+	positions: &[Vec3],
+	index: usize,
+) -> TubeCorners {
 	let node = &nodes[index];
-	let frame = frame_at(nodes, index);
+	let frame = path_frame::path_frame(positions, index, node.roll);
 	let top_middle = node.bottom_middle + frame.up * node.height;
 	TubeCorners {
 		bottom_left: node.bottom_middle - frame.right * node.bottom_left_width,
@@ -301,70 +291,6 @@ pub fn corners_at(nodes: &[TubeCrossSectionNode], index: usize) -> TubeCorners {
 		top_left: top_middle - frame.right * node.top_left_width,
 		top_right: top_middle + frame.right * node.top_right_width,
 	}
-}
-
-fn average_tangent(nodes: &[TubeCrossSectionNode], index: usize) -> Vec3 {
-	let p = nodes[index].bottom_middle;
-	let inbound = if index > 0 {
-		Some((p - nodes[index - 1].bottom_middle).normalize_or_zero())
-	} else {
-		None
-	};
-	let outbound = if index + 1 < nodes.len() {
-		Some((nodes[index + 1].bottom_middle - p).normalize_or_zero())
-	} else {
-		None
-	};
-	match (inbound, outbound) {
-		(Some(a), Some(b)) => {
-			let sum = a + b;
-			let n = sum.normalize_or_zero();
-			if n.length_squared() > 0.0 {
-				n
-			} else if a.length_squared() > 0.0 {
-				a
-			} else {
-				b
-			}
-		}
-		(Some(a), None) => {
-			if a.length_squared() > 0.0 {
-				a
-			} else {
-				Vec3::Z
-			}
-		}
-		(None, Some(b)) => {
-			if b.length_squared() > 0.0 {
-				b
-			} else {
-				Vec3::Z
-			}
-		}
-		(None, None) => Vec3::Z,
-	}
-}
-
-/// Unbanked basis in the plane ⊥ `tangent`: `up` increases world Y in that plane.
-fn zero_roll_basis(tangent: Vec3) -> (Vec3, Vec3) {
-	let t = tangent.normalize_or_zero();
-	let t = if t.length_squared() > 0.0 {
-		t
-	} else {
-		Vec3::Z
-	};
-	let mut up = Vec3::Y - t * t.dot(Vec3::Y);
-	if up.length_squared() < 1e-10 {
-		up = Vec3::X - t * t.dot(Vec3::X);
-	}
-	if up.length_squared() < 1e-10 {
-		up = Vec3::Z - t * t.dot(Vec3::Z);
-	}
-	let up = up.normalize_or_zero();
-	let right = up.cross(t).normalize_or_zero();
-	// Re-orthogonalize up in case of numerical drift.
-	let up = t.cross(right).normalize_or_zero();
-	(right, up)
 }
 
 #[cfg(test)]
