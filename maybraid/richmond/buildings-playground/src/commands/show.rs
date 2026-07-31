@@ -15,9 +15,9 @@ pub mod quad_panel_complex;
 pub mod ruled_pitch;
 pub mod slice_90;
 pub mod stacked_rings;
+pub mod clipped_tessellated_triangle;
 pub mod tessellated_triangle;
 pub mod tessellated_triangle_3d;
-pub mod tessellated_triangle_gap;
 pub mod transform;
 pub mod wizards_tower;
 
@@ -45,8 +45,8 @@ pub enum Show {
 	TessellatedTriangle(tessellated_triangle::TessellatedTriangle),
 	/// World-space triangle → 2D panel tessellation → posed onto the plane.
 	TessellatedTriangle3d(tessellated_triangle_3d::TessellatedTriangle3d),
-	/// World-space triangle with one closed cutout → annular [`PanelComplex`].
-	TessellatedTriangleGap(tessellated_triangle_gap::TessellatedTriangleGap),
+	/// World-space triangle minus a closed clip (may extend outside) → [`PanelComplex`].
+	ClippedTessellatedTriangle(clipped_tessellated_triangle::ClippedTessellatedTriangle),
 	/// Two lines → two tessellated triangles + optional crease `JointNode`.
 	QuadPanel(quad_panel::QuadPanel),
 	/// Point-id triangle mesh → panels + crease joints (`id=(x,y,z) ... {a,b,c}`).
@@ -81,7 +81,7 @@ impl Show {
 			Self::Pitch(cmd) => cmd.into_preview(),
 			Self::TessellatedTriangle(cmd) => cmd.into_preview(),
 			Self::TessellatedTriangle3d(cmd) => cmd.into_preview(),
-			Self::TessellatedTriangleGap(cmd) => cmd.into_preview(),
+			Self::ClippedTessellatedTriangle(cmd) => cmd.into_preview(),
 			Self::QuadPanel(cmd) => cmd.into_preview(),
 			Self::PanelComplex(cmd) => cmd.into_preview(),
 			Self::QuadPanelComplex(cmd) => cmd.into_preview(),

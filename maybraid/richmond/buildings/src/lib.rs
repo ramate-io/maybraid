@@ -20,7 +20,7 @@ pub mod quad_panel_complex;
 pub mod ruled_pitch;
 pub mod ruled_strip;
 pub mod stacked_rings;
-pub mod tessellated_triangle_gap;
+pub mod clipped_tessellated_triangle;
 pub mod tessellated_triangle_panel;
 pub mod walling;
 pub mod wizards_tower;
@@ -44,7 +44,7 @@ pub use quad_panel_complex::QuadPanelComplex;
 pub use ruled_pitch::RuledPitch;
 pub use ruled_strip::RuledStrip;
 pub use stacked_rings::{StackedRing, StackedRings};
-pub use tessellated_triangle_gap::TessellatedTriangleGap;
+pub use clipped_tessellated_triangle::ClippedTessellatedTriangle;
 pub use tessellated_triangle_panel::TessellatedTrianglePanel;
 pub use walling::{
 	ArcRegion, ArcWall, ArcWallParams, AssignedPortal, LinearWall, LinearWallParams,

@@ -19,7 +19,7 @@ use richmond_buildings::bedroom::Bedroom;
 use richmond_buildings::panel_complex::{PanelComplex, PanelComplexJointPolicy, PanelPoint};
 use richmond_buildings::quad_panel::QuadPanel;
 use richmond_buildings::quad_panel_complex::QuadPanelComplex;
-use richmond_buildings::{RuledPitch, TessellatedTriangleGap};
+use richmond_buildings::{ClippedTessellatedTriangle, RuledPitch};
 use richmond_buildings::stacked_rings::StackedRings;
 use richmond_buildings::tessellated_triangle_panel::TessellatedTrianglePanel;
 use richmond_buildings::walling::{
@@ -59,11 +59,11 @@ pub enum PreviewSubject {
 		b: Vec3,
 		c: Vec3,
 	},
-	TessellatedTriangleGap {
+	ClippedTessellatedTriangle {
 		a: Vec3,
 		b: Vec3,
 		c: Vec3,
-		gap: Vec<Vec3>,
+		clip: Vec<Vec3>,
 		min_dihedral: f32,
 		no_joint: bool,
 	},
@@ -166,15 +166,15 @@ impl PreviewConfig {
 			PreviewSubject::TessellatedTriangle3d { a, b, c } => {
 				format!("preview: tessellated-triangle-3d (a={a:?} b={b:?} c={c:?})")
 			}
-			PreviewSubject::TessellatedTriangleGap {
+			PreviewSubject::ClippedTessellatedTriangle {
 				a,
 				b,
 				c,
-				ref gap,
+				ref clip,
 				min_dihedral,
 				no_joint,
 			} => format!(
-				"preview: tessellated-triangle-gap (a={a:?} b={b:?} c={c:?} gap={gap:?} min_dihedral={min_dihedral:.3} no_joint={no_joint})"
+				"preview: clipped-tessellated-triangle (a={a:?} b={b:?} c={c:?} clip={clip:?} min_dihedral={min_dihedral:.3} no_joint={no_joint})"
 			),
 			PreviewSubject::QuadPanel {
 				a0,
@@ -478,11 +478,11 @@ pub fn present_preview_lod(
 				ComponentsOnly(panel).scene_with_lod(&lod_ref),
 			);
 		}
-		PreviewSubject::TessellatedTriangleGap {
+		PreviewSubject::ClippedTessellatedTriangle {
 			a,
 			b,
 			c,
-			gap,
+			clip,
 			min_dihedral,
 			no_joint,
 		} => {
@@ -491,7 +491,7 @@ pub fn present_preview_lod(
 			} else {
 				PanelComplexJointPolicy::min_dihedral_rad(*min_dihedral)
 			};
-			let complex = TessellatedTriangleGap::rough_stone(*a, *b, *c, gap.clone())
+			let complex = ClippedTessellatedTriangle::rough_stone(*a, *b, *c, clip.clone())
 				.with_joint_policy(policy)
 				.into_complex();
 			spawn_preview(

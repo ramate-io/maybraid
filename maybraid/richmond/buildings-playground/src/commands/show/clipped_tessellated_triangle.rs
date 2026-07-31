@@ -1,4 +1,4 @@
-//! `/show tessellated-triangle-gap` — outer triangle with one closed cutout.
+//! `/show clipped-tessellated-triangle` — outer triangle minus a closed clip polyline.
 
 use bevy::prelude::*;
 use clap::Args;
@@ -8,11 +8,11 @@ use super::ShowTransform;
 use crate::preview::PreviewSubject;
 
 /// Default: ground △ + small rectangle near the centroid.
-const DEFAULT_GAP: &str = "0.8,0,0.5;1.4,0,0.5;1.4,0,0.9;0.8,0,0.9";
+const DEFAULT_CLIP: &str = "0.8,0,0.5;1.4,0,0.5;1.4,0,0.9;0.8,0,0.9";
 
 #[derive(Clone, Args)]
 #[command(rename_all = "kebab-case")]
-pub struct TessellatedTriangleGap {
+pub struct ClippedTessellatedTriangle {
 	/// Outer corner A in world `x,y,z`.
 	#[arg(long, default_value = "0,0,0", value_parser = parse_vec3_csv, allow_hyphen_values = true)]
 	#[arg(value_name = "X,Y,Z")]
@@ -25,10 +25,10 @@ pub struct TessellatedTriangleGap {
 	#[arg(long, default_value = "0,0,2", value_parser = parse_vec3_csv, allow_hyphen_values = true)]
 	#[arg(value_name = "X,Y,Z")]
 	pub c: Vec3,
-	/// Closed gap polyline: `x,y,z;x,y,z;…` (first connects to last).
-	#[arg(long, default_value = DEFAULT_GAP, value_parser = parse_vec3_polyline, allow_hyphen_values = true)]
+	/// Closed clip polyline: `x,y,z;x,y,z;…` (first connects to last; may extend outside).
+	#[arg(long, default_value = DEFAULT_CLIP, value_parser = parse_vec3_polyline, allow_hyphen_values = true)]
 	#[arg(value_name = "X,Y,Z;…")]
-	pub gap: Vec3Polyline,
+	pub clip: Vec3Polyline,
 	/// Spawn crease joint when dihedral kink (radians) is ≥ this threshold.
 	#[arg(long, default_value_t = 0.1)]
 	pub min_dihedral: f32,
@@ -39,14 +39,14 @@ pub struct TessellatedTriangleGap {
 	pub transform: ShowTransform,
 }
 
-impl TessellatedTriangleGap {
+impl ClippedTessellatedTriangle {
 	pub fn into_preview(self) -> (PreviewSubject, Transform) {
 		(
-			PreviewSubject::TessellatedTriangleGap {
+			PreviewSubject::ClippedTessellatedTriangle {
 				a: self.a,
 				b: self.b,
 				c: self.c,
-				gap: self.gap.0,
+				clip: self.clip.0,
 				min_dihedral: self.min_dihedral,
 				no_joint: self.no_joint,
 			},
