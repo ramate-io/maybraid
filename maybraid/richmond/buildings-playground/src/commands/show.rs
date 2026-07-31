@@ -24,6 +24,7 @@ pub mod clipped_tessellated_triangle;
 pub mod tessellated_triangle;
 pub mod tessellated_triangle_3d;
 pub mod transform;
+pub mod tube;
 pub mod wizards_tower;
 
 use bevy::prelude::*;
@@ -56,6 +57,8 @@ pub enum Show {
 	ClippedQuadPanel(clipped_quad_panel::ClippedQuadPanel),
 	/// Multi-bay ruled strip with optional per-bay clips.
 	ClippedRuledStrip(clipped_ruled_strip::ClippedRuledStrip),
+	/// Trapezoid cross-section polyline → four clipped ruled strip faces.
+	Tube(tube::Tube),
 	/// Best-fit rectangle kit with an inset framed by rectangle kits.
 	ClippedRectangle(clipped_rectangle::ClippedRectangle),
 	/// Two-rail best-fit rectangle strip with a mid-bay inset frame.
@@ -99,6 +102,7 @@ impl Show {
 			Self::ClippedTessellatedTriangle(cmd) => cmd.into_preview(),
 			Self::ClippedQuadPanel(cmd) => cmd.into_preview(),
 			Self::ClippedRuledStrip(cmd) => cmd.into_preview(),
+			Self::Tube(cmd) => cmd.into_preview(),
 			Self::ClippedRectangle(cmd) => cmd.into_preview(),
 			Self::ClippedRectangularStrip(cmd) => cmd.into_preview(),
 			Self::ApproximatedCircle(cmd) => cmd.into_preview(),
