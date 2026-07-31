@@ -29,7 +29,8 @@ use crate::wizards_tower::floor_fill::{FLOOR_SLAB_Y_SCALE, RECT_HALF_EXTENT};
 use crate::CellConstraints;
 use procedural_common::NoiseParams;
 
-const OUTER_WALL_THICK: f32 = 0.15;
+/// Wall thickness scale (world \(0.15\) / kit \(Y\) half-extent \(0.2\)).
+const OUTER_WALL_THICK: f32 = 0.15 / 0.2;
 
 /// Bedroom cell: outer shell + allocated closet / bed / nightstand / ensuite fills.
 #[derive(Debug, Clone, PartialEq)]

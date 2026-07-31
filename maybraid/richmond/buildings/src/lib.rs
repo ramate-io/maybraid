@@ -45,12 +45,13 @@ pub use constraints::{
 	JointCoordinate, JointEntry, PreJointSweep, SubsetError,
 };
 pub use paneling::{
-	fit_rectangle, fit_rectangle_corners, shared_edges, ClippedQuadPanel, ClippedRectangle,
-	ClippedRectangularStrip, ClippedRectangularStripPiece, ClippedRuledStrip, ClippedStripPiece,
-	ClippedTessellatedTriangle, FittedRect, PanelComplex, PanelComplexJointPolicy,
-	PanelComplexValidation, PanelMesh, PanelPoint, PanelPointId, PanelQuadMesh, PanelTriangle,
-	ParsePanelComplexError, QuadPanel, QuadPanelComplex, RectInset, Rectangle, RectangularStrip,
-	RuledPitch, RuledStrip, SharedEdge, TessellatedTrianglePanel, DEFAULT_PANEL_THICKNESS,
+	fit_rectangle, fit_rectangle_corners, shared_edges, ApproximatedCircle, ClippedQuadPanel,
+	ClippedRectangle, ClippedRectangularStrip, ClippedRectangularStripPiece, ClippedRuledStrip,
+	ClippedStripPiece, ClippedTessellatedTriangle, FittedRect, PanelComplex,
+	PanelComplexJointPolicy, PanelComplexValidation, PanelMesh, PanelPoint, PanelPointId,
+	PanelQuadMesh, PanelTriangle, ParsePanelComplexError, QuadPanel, QuadPanelComplex, RectInset,
+	Rectangle, RectangularStrip, RuledPitch, RuledStrip, SharedEdge, TessellatedTrianglePanel,
+	DEFAULT_PANEL_THICKNESS, DEFAULT_SEGMENTS, MIN_SEGMENTS,
 };
 pub use portals::{
 	ArcRegion, AssignedPortal, MustAssignPortal, Portal, PortalFootprint, WallRegion, SLICE_Y_FRAC,

@@ -1,6 +1,7 @@
 //! Best-fit ordinary rectangle for a ruled bay `{a0,a1,b0,b1}` in its average plane.
 
 use bevy_math::{EulerRot, Mat3, Quat, Vec3};
+use richmond_building_components::partitions::wall_placement;
 use richmond_building_components::Placement;
 
 /// Fitted ordinary rectangle in world space (edge-aligned to \(a_0{\to}a_1\)).
@@ -23,23 +24,40 @@ impl FittedRect {
 	/// Panel-kit placement for the sub-rectangle covering panel
 	/// \(u\in[u_0,u_0+w]\), \(v\in[v_0,v_0+d]\) (origin at \(a_0\), \(+v\) along [`Self::e1`]).
 	///
-	/// Kit footprint is \(X\in[0,1]\), \(Z\in[-1,0]\); scale is `(w, thickness, d)`.
-	pub fn panel_placement(&self, u0: f32, v0: f32, w: f32, d: f32, thickness: f32) -> Placement {
+	/// Kit footprint is the unit square \(X,Z\in[0,1]\) (art `panels/` README).
+	/// Scale is full span `(w, thick_scale, d)`. Standing bays (`e1` ≈ world \(+Y\))
+	/// use [`wall_placement`] (yaw + stand-up pitch) so YXZ euler gimbal lock does
+	/// not collapse the wall.
+	pub fn panel_placement(&self, u0: f32, v0: f32, w: f32, d: f32, thick_scale: f32) -> Placement {
 		let origin = self.a0 + self.e0 * u0 + self.e1 * v0;
-		// Kit +Z → −e1 so kit −Z (depth) lands along +e1 toward the b-rail.
-		let rotation = Quat::from_mat3(&Mat3::from_cols(self.e0, self.normal, -self.e1));
+		let w = w.max(1e-4);
+		let d = d.max(1e-4);
+		let thick_scale = thick_scale.max(1e-4);
+		if self.is_standing() {
+			// Local +X after yaw: `(cos yaw, 0, -sin yaw)` → match `e0` in XZ.
+			let yaw = (-self.e0.z).atan2(self.e0.x);
+			return wall_placement(origin, yaw, w, d, thick_scale);
+		}
+		// Unit square: kit +X → e0, kit +Z → e1; kit +Y = e1×e0 = −(e0×e1).
+		let ey = -self.normal;
+		let rotation = Quat::from_mat3(&Mat3::from_cols(self.e0, ey, self.e1));
 		let (yaw, pitch, roll) = rotation.to_euler(EulerRot::YXZ);
 		Placement {
 			translation: origin,
 			yaw,
 			pitch,
 			roll,
-			scale: Vec3::new(w.max(1e-4), thickness.max(1e-4), d.max(1e-4)),
+			scale: Vec3::new(w, thick_scale, d),
 		}
 	}
 
-	pub fn solid_placement(&self, thickness: f32) -> Placement {
-		self.panel_placement(0.0, 0.0, self.width, self.depth, thickness)
+	pub fn solid_placement(&self, thick_scale: f32) -> Placement {
+		self.panel_placement(0.0, 0.0, self.width, self.depth, thick_scale)
+	}
+
+	/// True when the b-rail is upright (bedroom / shell walls).
+	pub fn is_standing(&self) -> bool {
+		self.e1.y.abs() > 0.9 && self.e0.y.abs() < 0.15
 	}
 }
 
@@ -223,5 +241,37 @@ mod tests {
 	#[test]
 	fn zero_inset_is_solid() {
 		assert_eq!(RectInset::ZERO.frame_pieces(2.0, 1.0).len(), 1);
+	}
+
+	#[test]
+	fn unit_square_kit_maps_far_corner_to_b1() {
+		let fitted = fit_rectangle(
+			Vec3::ZERO,
+			Vec3::new(2.0, 0.0, 0.0),
+			Vec3::new(0.0, 0.0, 1.0),
+			Vec3::new(2.0, 0.0, 1.0),
+		)
+		.unwrap();
+		let p = fitted.solid_placement(0.75);
+		assert!((p.scale - Vec3::new(2.0, 0.75, 1.0)).length() < 1e-4);
+		let far = p.rotation() * Vec3::new(p.scale.x, 0.0, p.scale.z) + p.translation;
+		assert!((far - Vec3::new(2.0, 0.0, 1.0)).length() < 1e-3);
+	}
+
+	#[test]
+	fn standing_bay_uses_wall_standup_pitch() {
+		let fitted = fit_rectangle(
+			Vec3::ZERO,
+			Vec3::new(4.0, 0.0, 0.0),
+			Vec3::new(0.0, 3.0, 0.0),
+			Vec3::new(4.0, 3.0, 0.0),
+		)
+		.unwrap();
+		assert!(fitted.is_standing());
+		let p = fitted.solid_placement(0.75);
+		assert!((p.pitch - std::f32::consts::FRAC_PI_2).abs() < 1e-3);
+		assert!((p.scale.x - 4.0).abs() < 1e-3);
+		assert!((p.scale.z - 3.0).abs() < 1e-3);
+		assert!((p.scale.y - 0.75).abs() < 1e-3);
 	}
 }

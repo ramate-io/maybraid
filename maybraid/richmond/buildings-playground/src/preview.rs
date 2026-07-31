@@ -20,8 +20,8 @@ use richmond_buildings::panel_complex::{PanelComplex, PanelComplexJointPolicy, P
 use richmond_buildings::quad_panel::QuadPanel;
 use richmond_buildings::quad_panel_complex::QuadPanelComplex;
 use richmond_buildings::{
-	ArcSweep, ClippedArcSweep, ClippedQuadPanel, ClippedRectangle, ClippedRectangularStrip,
-	ClippedRuledStrip, ClippedTessellatedTriangle, RectInset, RuledPitch,
+	ApproximatedCircle, ArcSweep, ClippedArcSweep, ClippedQuadPanel, ClippedRectangle,
+	ClippedRectangularStrip, ClippedRuledStrip, ClippedTessellatedTriangle, RectInset, RuledPitch,
 };
 use richmond_buildings::stacked_rings::StackedRings;
 use richmond_buildings::tessellated_triangle_panel::TessellatedTrianglePanel;
@@ -95,6 +95,12 @@ pub enum PreviewSubject {
 		inset: f32,
 		min_dihedral: f32,
 		no_joint: bool,
+	},
+	ApproximatedCircle {
+		center: Vec3,
+		radius: f32,
+		segments: u32,
+		clip: Option<f32>,
 	},
 	ArcSweep {
 		radius: f32,
@@ -250,6 +256,14 @@ impl PreviewConfig {
 				no_joint,
 			} => format!(
 				"preview: clipped-rectangular-strip (inset={inset:.2} min_dihedral={min_dihedral:.3} no_joint={no_joint})"
+			),
+			PreviewSubject::ApproximatedCircle {
+				center,
+				radius,
+				segments,
+				clip,
+			} => format!(
+				"preview: approximated-circle (c={center:?} r={radius:.2} n={segments} clip={clip:?})"
 			),
 			PreviewSubject::ArcSweep {
 				radius,
@@ -683,6 +697,19 @@ pub fn present_preview_lod(
 				&mut commands,
 				transform,
 				ComponentsOnly(strip).scene_with_lod(&lod_ref),
+			);
+		}
+		PreviewSubject::ApproximatedCircle {
+			center,
+			radius,
+			segments,
+			clip,
+		} => {
+			let disk = ApproximatedCircle::rough_stone(*center, *radius, *segments, *clip);
+			spawn_preview(
+				&mut commands,
+				transform,
+				ComponentsOnly(disk).scene_with_lod(&lod_ref),
 			);
 		}
 		PreviewSubject::ArcSweep {

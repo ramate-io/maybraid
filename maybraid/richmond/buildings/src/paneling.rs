@@ -3,6 +3,7 @@
 //! Rectangle strips force each bay to a best-fit ordinary rectangle in the bay’s
 //! average plane. Free skew quads live in the ruled / clipped-quad types.
 
+pub mod approximated_circle;
 pub mod clipped_quad_panel;
 pub mod clipped_rectangular_strip;
 pub mod clipped_ruled_strip;
@@ -19,6 +20,7 @@ pub mod ruled_pitch;
 pub mod ruled_strip;
 pub mod tessellated_triangle_panel;
 
+pub use approximated_circle::{ApproximatedCircle, DEFAULT_SEGMENTS, MIN_SEGMENTS};
 pub use clipped_quad_panel::ClippedQuadPanel;
 pub use clipped_rectangular_strip::{ClippedRectangularStrip, ClippedRectangularStripPiece};
 pub use clipped_ruled_strip::{ClippedRuledStrip, ClippedStripPiece};

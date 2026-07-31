@@ -6,7 +6,7 @@ use bevy_math::Vec3;
 use lod::gen::{LodScene, LodSceneLevel};
 use lod::lod_ref::LodRef;
 use procedural_common::NoiseParams;
-use richmond_building_components::floors::FloorNode;
+use richmond_building_components::panels::PanelNode;
 use richmond_building_components::scene_children;
 use richmond_building_components::stairs::StairNode;
 use richmond_building_components::{BuildingComponents, Layers, PartitionNode};
@@ -131,12 +131,12 @@ impl BuildingComponents for WizardsTowerColumn {
 		out
 	}
 
-	fn floor_nodes_for_level(&self, level: LodSceneLevel) -> Layers<FloorNode> {
+	fn panel_nodes_for_level(&self, level: LodSceneLevel) -> Layers<PanelNode> {
 		let mut out = Layers::new();
 		for f in &self.floors {
-			out.extend(f.floor_nodes_for_level(level));
+			out.extend(f.panel_nodes_for_level(level));
 		}
-		out.extend(self.perch.floor_nodes_for_level(level));
+		out.extend(self.perch.panel_nodes_for_level(level));
 		out
 	}
 

@@ -1,5 +1,6 @@
 //! `/show` subcommand: preview a partition leaf or authored building.
 
+pub mod approximated_circle;
 pub mod arc_180;
 pub mod arc_90;
 pub mod arc_sweep;
@@ -59,6 +60,8 @@ pub enum Show {
 	ClippedRectangle(clipped_rectangle::ClippedRectangle),
 	/// Two-rail best-fit rectangle strip with a mid-bay inset frame.
 	ClippedRectangularStrip(clipped_rectangular_strip::ClippedRectangularStrip),
+	/// N-gon disk / annulus filled with right-triangle panel kits.
+	ApproximatedCircle(approximated_circle::ApproximatedCircle),
 	/// Circular fitted [`richmond_buildings::arcs::ArcSweep`] (not IR `partitions::ArcSweep`).
 	ArcSweep(arc_sweep::ArcSweep),
 	/// Circular arc with angular clip openings → solid + slice bands.
@@ -98,6 +101,7 @@ impl Show {
 			Self::ClippedRuledStrip(cmd) => cmd.into_preview(),
 			Self::ClippedRectangle(cmd) => cmd.into_preview(),
 			Self::ClippedRectangularStrip(cmd) => cmd.into_preview(),
+			Self::ApproximatedCircle(cmd) => cmd.into_preview(),
 			Self::ArcSweep(cmd) => cmd.into_preview(),
 			Self::ClippedArcSweep(cmd) => cmd.into_preview(),
 			Self::QuadPanel(cmd) => cmd.into_preview(),

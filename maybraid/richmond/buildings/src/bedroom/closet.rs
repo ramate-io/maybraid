@@ -10,7 +10,8 @@ use crate::bedroom::{owns_face_as_cell, placement_filling_aabb};
 use crate::constraints::FaceKind;
 use crate::CellConstraints;
 
-const WALL_THICK: f32 = 0.12;
+/// Wall thickness scale (world \(0.12\) / kit \(Y\) half-extent \(0.2\)).
+const WALL_THICK: f32 = 0.12 / 0.2;
 
 /// Closet volume: walls facing the room + wardrobe furniture.
 #[derive(Debug, Clone, PartialEq)]

@@ -41,7 +41,7 @@ pub mod panels {
 	pub mod rough_stonework {
 		use super::AssetPath;
 
-		/// Resolution triad for the unit rectangle panel (\(X \in [0, 1]\), \(Z \in [-1, 0]\)).
+		/// Resolution triad for the unit rectangle panel (\(X, Z \in [0, 1]\)).
 		pub const RECTANGLE_HIGH: AssetPath =
 			AssetPath::new("urban/panels/rough_stonework/rectangle_001_high_res.glb");
 		pub const RECTANGLE_MID: AssetPath =
