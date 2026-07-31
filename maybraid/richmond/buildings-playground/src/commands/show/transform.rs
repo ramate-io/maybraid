@@ -46,6 +46,23 @@ pub fn parse_vec3_csv(s: &str) -> Result<Vec3, String> {
 	Ok(Vec3::new(x, y, z))
 }
 
+/// Closed world polyline `x,y,z;x,y,z;…` — newtype so clap does not treat it as multi-arg `Vec`.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Vec3Polyline(pub Vec<Vec3>);
+
+/// Parse a closed polyline of world points: `x,y,z;x,y,z;…` (semicolon-separated).
+pub fn parse_vec3_polyline(s: &str) -> Result<Vec3Polyline, String> {
+	let s = s.trim();
+	if s.is_empty() {
+		return Err("expected at least one x,y,z point".into());
+	}
+	let pts = s
+		.split(';')
+		.map(|part| parse_vec3_csv(part.trim()))
+		.collect::<Result<Vec<_>, _>>()?;
+	Ok(Vec3Polyline(pts))
+}
+
 /// Parse panel-space `x,z` (allows negatives, e.g. `-1,1`).
 pub fn parse_vec2_csv(s: &str) -> Result<Vec2, String> {
 	let parts: Vec<_> = s.split(',').collect();
