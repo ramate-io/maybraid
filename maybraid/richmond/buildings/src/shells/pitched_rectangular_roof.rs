@@ -3,7 +3,8 @@
 //! Each half authors a ridge / eave / wall plate. The main pitch is a
 //! [`RuledPitch`]; optional wall strip, half-gable walling, and half-hip
 //! facets fill the ends. Guiding case: a rectangular hip where both halves
-//! share one ridge and eaves run parallel at equal offset.
+//! share one ridge and eaves run parallel at equal offset. Half-hips bank from
+//! the eave end along the eave-perpendicular (local Z) to the ridge plane.
 
 use bevy_math::{Vec2, Vec3};
 use lod::gen::LodSceneLevel;
@@ -71,9 +72,20 @@ impl RoofHalf {
 		}
 	}
 
-	/// Drop ridge end straight down in cardinal Y to the eave height.
-	fn hip_drop(ridge_end: Vec3, eave_end: Vec3) -> Vec3 {
-		Vec3::new(ridge_end.x, eave_end.y, ridge_end.z)
+	/// Local frame from the eave: **X** along eave, **Y** = world up, **Z** = Y×X.
+	fn eave_frame(eave_line: (Vec3, Vec3)) -> (Vec3, Vec3) {
+		let x = (eave_line.1 - eave_line.0).normalize_or_zero();
+		let z = Vec3::Y.cross(x).normalize_or_zero();
+		(x, z)
+	}
+
+	/// Third hip corner: from the eave endpoint along **Z** (perpendicular to the
+	/// eave in plan) to the vertical plane of the ridge — the classic banked end.
+	///
+	/// For an axis-aligned rectangular hip this is `(eave_end.x, eave_end.y, ridge_end.z)`.
+	fn hip_drop(ridge_end: Vec3, eave_end: Vec3, eave_z: Vec3) -> Vec3 {
+		let along_z = (ridge_end - eave_end).dot(eave_z);
+		eave_end + eave_z * along_z
 	}
 
 	fn ridge_at_wall_height(ridge_end: Vec3, wall_end: Vec3) -> Vec3 {
@@ -84,6 +96,7 @@ impl RoofHalf {
 		let (e0, e1) = self.eave_line;
 		let (r0, r1) = self.ridge_line;
 		let (w0, w1) = self.wall_line;
+		let (_eave_x, eave_z) = Self::eave_frame(self.eave_line);
 
 		let pitch = RuledPitch::from_lines(style, [e0, e1], [r0, r1])
 			.with_joint_policy(joint_policy)
@@ -106,7 +119,7 @@ impl RoofHalf {
 			}
 			let e = Self::line_end(self.eave_line, end);
 			let r = Self::line_end(self.ridge_line, end);
-			let p = Self::hip_drop(r, e);
+			let p = Self::hip_drop(r, e, eave_z);
 			hips.push(TessellatedTrianglePanel::new(style, e, r, p));
 		}
 
@@ -357,11 +370,15 @@ mod tests {
 		assert!((mid_z).abs() < 1e-5);
 
 		for hip in roof.hip_panels() {
-			// Third corner is the vertical drop of the ridge end to eave height.
+			// Third corner sits on the eave-perpendicular through the eave end
+			// (banked end), at the ridge's plan Z — not under the ridge end.
+			let e = hip.a;
+			let r = hip.b;
 			let p = hip.c;
 			assert!((p.y - 2.5).abs() < 1e-4);
 			assert!((p.z - mid_z).abs() < 1e-4);
-			assert_vec3_close(p, Vec3::new(hip.b.x, 2.5, mid_z));
+			assert_vec3_close(p, Vec3::new(e.x, e.y, r.z));
+			assert!((p.x - r.x).abs() > 0.5, "hip base should reach past the ridge inset");
 		}
 
 		let panels = roof

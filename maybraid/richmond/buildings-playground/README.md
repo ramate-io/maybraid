@@ -31,6 +31,9 @@ cargo run -p richmond-buildings-playground -- show connecting-hall
 cargo run -p richmond-buildings-playground -- show arc-tower
 cargo run -p richmond-buildings-playground -- show connecting-shells
 cargo run -p richmond-buildings-playground -- show trazaloid
+cargo run -p richmond-buildings-playground -- show pitched-rectangular-roof
+cargo run -p richmond-buildings-playground -- show pitched-rectangular-roof --gables
+cargo run -p richmond-buildings-playground -- show pitched-rectangular-roof --no-hips --gables
 cargo run -p richmond-buildings-playground -- show rectangle
 cargo run -p richmond-buildings-playground -- show rectangle --preset wall
 cargo run -p richmond-buildings-playground -- show clipped-rectangle

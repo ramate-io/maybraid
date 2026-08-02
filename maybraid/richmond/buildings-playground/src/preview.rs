@@ -25,10 +25,10 @@ use richmond_buildings::{
 	ClippedArcSweep, ClippedFittedRectangle, ClippedFittedRectangularStrip, ClippedQuadPanel,
 	ClippedRectangle, ClippedRectangularStrip, ClippedRuledStrip, ClippedTessellatedTriangle,
 	ConnectingHall, ConnectingShells, FittedRectangle, MappedOpening, MappedOpeningQuad,
-	MapsOpenings, OpeningId, OpeningLabel, Openings, RectInset, Rectangle, RectangularNTube,
-	RectangularNTubeCorner, RectangularNTubeStation, RectangularStripNode, RuledPitch, Tube,
-	TubeCrossSectionNode, TubeFaces, Trazaloid, TrazaloidParams, TrazaloidSlab,
-	DEFAULT_PANEL_THICKNESS,
+	MapsOpenings, OpeningId, OpeningLabel, Openings, PitchedRoof, PitchedRoofParams, RectInset,
+	Rectangle, RectangularNTube, RectangularNTubeCorner, RectangularNTubeStation,
+	RectangularStripNode, RuledPitch, Tube, TubeCrossSectionNode, TubeFaces, Trazaloid,
+	TrazaloidParams, TrazaloidSlab, DEFAULT_PANEL_THICKNESS,
 };
 use richmond_buildings::stacked_rings::StackedRings;
 use richmond_buildings::tessellated_triangle_panel::TessellatedTrianglePanel;
@@ -126,6 +126,16 @@ pub enum PreviewSubject {
 		floor: bool,
 		no_ceiling: bool,
 		face_post_count: u32,
+	},
+	PitchedRectangularRoof {
+		footprint_x: f32,
+		footprint_z: f32,
+		ridge_height: f32,
+		eave_height: f32,
+		ridge_inset: f32,
+		gables: bool,
+		no_walls: bool,
+		no_hips: bool,
 	},
 	Rectangle {
 		origin: Vec3,
@@ -369,6 +379,20 @@ impl PreviewConfig {
 			} => format!(
 				"preview: trazaloid (foot={footprint_x:.1}x{footprint_z:.1} ridge={ridge_x:.1}x{ridge_z:.1} h={lower_height:.1}+{upper_height:.1} gap={band_vertical_offset:.2} inset={waist_horizontal_offset:.2} openings={} floor={floor} ceil=!{no_ceiling} posts={face_post_count})",
 				openings.len()
+			),
+			PreviewSubject::PitchedRectangularRoof {
+				footprint_x,
+				footprint_z,
+				ridge_height,
+				eave_height,
+				ridge_inset,
+				gables,
+				no_walls,
+				no_hips,
+			} => format!(
+				"preview: pitched-rectangular-roof (foot={footprint_x:.1}x{footprint_z:.1} ridge_h={ridge_height:.1} eave_h={eave_height:.1} inset={ridge_inset:.1} gables={gables} walls={} hips={})",
+				!no_walls,
+				!no_hips
 			),
 			PreviewSubject::Rectangle {
 				origin,
@@ -641,6 +665,17 @@ impl PreviewConfig {
 				let hx = footprint_x.max(1e-4) * 0.5 + 0.5;
 				let hz = footprint_z.max(1e-4) * 0.5 + 0.5;
 				let h = lower_height + band_vertical_offset + upper_height + 0.5;
+				Aabb3d::from_min_max(Vec3::new(-hx, -0.2, -hz), Vec3::new(hx, h, hz))
+			}
+			PreviewSubject::PitchedRectangularRoof {
+				footprint_x,
+				footprint_z,
+				ridge_height,
+				..
+			} => {
+				let hx = footprint_x.max(1e-4) * 0.5 + 0.5;
+				let hz = footprint_z.max(1e-4) * 0.5 + 0.5;
+				let h = ridge_height.max(1e-4) + 0.5;
 				Aabb3d::from_min_max(Vec3::new(-hx, -0.2, -hz), Vec3::new(hx, h, hz))
 			}
 			_ => Aabb3d::from_min_max(Vec3::ZERO, Vec3::ONE),
@@ -1108,6 +1143,42 @@ pub fn present_preview_lod(
 				face_post_count: *face_post_count,
 				..TrazaloidParams::default()
 			});
+			spawn_preview(
+				&mut commands,
+				transform,
+				ComponentsOnly(shell).scene_with_lod(&lod_ref),
+			);
+		}
+		PreviewSubject::PitchedRectangularRoof {
+			footprint_x,
+			footprint_z,
+			ridge_height,
+			eave_height,
+			ridge_inset,
+			gables,
+			no_walls,
+			no_hips,
+		} => {
+			let mut params = PitchedRoofParams::rectangular_hip(
+				Vec2::new(*footprint_x, *footprint_z),
+				*ridge_height,
+				*eave_height,
+				*ridge_inset,
+			);
+			for half in &mut params.halves {
+				half.draw_in_wall_line = !*no_walls;
+				half.draw_in_half_hip = if *no_hips {
+					(false, false)
+				} else {
+					(true, true)
+				};
+				half.draw_in_half_gable_end = if *gables {
+					(true, true)
+				} else {
+					(false, false)
+				};
+			}
+			let shell = PitchedRoof::new(params);
 			spawn_preview(
 				&mut commands,
 				transform,
