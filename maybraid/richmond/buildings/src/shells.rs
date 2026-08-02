@@ -5,6 +5,7 @@ pub mod arc_tower;
 pub mod connecting_hall;
 pub mod i_floor;
 pub mod ortho;
+pub mod pitched_rectangular_roof;
 pub mod rect_floor;
 pub mod rounded_rect_floor;
 pub mod trazaloid;
@@ -13,6 +14,7 @@ pub use arc_floor::{ArcFloor, ArcFloorParams, ArcFloorSlab};
 pub use arc_tower::{ArcTower, ArcTowerParams};
 pub use connecting_hall::ConnectingHall;
 pub use i_floor::{IFloor, IFloorParams, IFloorSlab};
+pub use pitched_rectangular_roof::{PitchedRoof, PitchedRoofParams, RoofHalf};
 pub use rect_floor::{RectFloor, RectFloorParams, RectFloorSide, RectFloorSlab};
 pub use rounded_rect_floor::{
 	RoundedRectCorner, RoundedRectFloor, RoundedRectFloorParams, RoundedRectFloorSide,

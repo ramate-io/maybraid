@@ -13,6 +13,7 @@ pub mod linear;
 pub mod noisy_rectangular_wall;
 pub mod panel_complex;
 pub mod pitch;
+pub mod pitched_rectangular_roof;
 pub mod polyline;
 pub mod quad_panel;
 pub mod quad_panel_complex;
@@ -84,6 +85,8 @@ pub enum Show {
 	ConnectingShells(connecting_shells::ConnectingShells),
 	/// Two-band trapezoidal-pyramid shell with waist reveal and optional `--opening`s.
 	Trazaloid(trazaloid::Trazaloid),
+	/// Two-half pitched roof (default: rectangular hip over shepherd's thatch).
+	PitchedRectangularRoof(pitched_rectangular_roof::PitchedRectangularRoof),
 	/// Orthonormal rectangular storey shell with optional `--opening` / `--door-*`.
 	RectFloor(rect_floor::RectFloor),
 	/// Rounded-rectangle storey shell (straight rectangle kits + ruled corners).
@@ -149,6 +152,7 @@ impl Show {
 			Self::ArcTower(cmd) => Ok(cmd.into_preview()),
 			Self::ConnectingShells(cmd) => Ok(cmd.into_preview()),
 			Self::Trazaloid(cmd) => cmd.into_preview(),
+			Self::PitchedRectangularRoof(cmd) => cmd.into_preview(),
 			Self::RectFloor(cmd) => cmd.into_preview(),
 			Self::RoundedRectFloor(cmd) => cmd.into_preview(),
 			Self::IFloor(cmd) => cmd.into_preview(),
