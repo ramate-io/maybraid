@@ -7,7 +7,7 @@ use richmond_building_components::{BuildingComponents, Layers};
 use lod::gen::LodSceneLevel;
 
 use crate::constraints::FaceKind;
-use crate::paneling::{PanelPoint, Rectangle};
+use crate::paneling::Rectangle;
 
 /// One solid rectangular wall face (or short return).
 #[derive(Debug, Clone, PartialEq)]
@@ -21,12 +21,13 @@ impl BuildingComponents for ShellWall {
 
 /// Full-face wall on `face` when the AABB has positive extent, else [`None`].
 pub fn face_rectangle(aabb: &Aabb3d, face: FaceKind, thickness: f32) -> Option<Rectangle> {
-	let (a0, a1, b0, b1) = face_quad(aabb, face, 0.0, 1.0)?;
+	let (a0, a1, b0, _b1) = face_quad(aabb, face, 0.0, 1.0)?;
 	Some(Rectangle::rough_stone(
-		PanelPoint::new(a0, thickness),
-		PanelPoint::new(a1, thickness),
-		PanelPoint::new(b0, thickness),
-		PanelPoint::new(b1, thickness),
+		a0,
+		a1 - a0,
+		(b0 - a0).length(),
+		thickness,
+		0.0,
 	))
 }
 
@@ -44,12 +45,13 @@ pub fn face_span_rectangle(
 	u1: f32,
 	thickness: f32,
 ) -> Option<Rectangle> {
-	let (a0, a1, b0, b1) = face_quad(aabb, face, u0, u1)?;
+	let (a0, a1, b0, _b1) = face_quad(aabb, face, u0, u1)?;
 	Some(Rectangle::rough_stone(
-		PanelPoint::new(a0, thickness),
-		PanelPoint::new(a1, thickness),
-		PanelPoint::new(b0, thickness),
-		PanelPoint::new(b1, thickness),
+		a0,
+		a1 - a0,
+		(b0 - a0).length(),
+		thickness,
+		0.0,
 	))
 }
 

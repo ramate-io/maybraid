@@ -1,7 +1,8 @@
-//! Noisy 3D path → [`ClippedRectangularStrip`] of best-fit rectangle kits.
+//! Noisy 3D path → [`ClippedRectangularStrip`] of oriented rectangle kits.
 //!
-//! Bottom rail = sampled path; top rail = path + storey height. Optional portal
-//! at \(t\) becomes a [`RectInset`] on the bay that contains that arc-length fraction.
+//! Strip nodes follow the sampled path with authored height and roll `0`
+//! (top toward `+Y`). Optional portal at \(t\) becomes a [`RectInset`] on the
+//! bay that contains that arc-length fraction.
 
 use bevy_math::Vec3;
 use lod::gen::LodSceneLevel;
@@ -11,7 +12,8 @@ use richmond_building_components::panels::{PanelNode, PanelStyle};
 use richmond_building_components::{BuildingComponents, Layers};
 
 use crate::paneling::{
-	ClippedRectangularStrip, PanelComplexJointPolicy, PanelPoint, RectInset, DEFAULT_PANEL_THICKNESS,
+	ClippedRectangularStrip, PanelComplexJointPolicy, RectInset, RectangularStripNode,
+	DEFAULT_PANEL_THICKNESS,
 };
 use crate::portals::{assign_portals, AssignedPortal, MustAssignPortal, PortalFootprint, WallRegion};
 
@@ -112,16 +114,12 @@ impl NoisyRectangularWall {
 
 		let height = params.height.max(1e-4);
 		let thick = params.thickness.max(1e-4);
-		let rail_a: Vec<PanelPoint> = points
+		let nodes: Vec<RectangularStripNode> = points
 			.iter()
-			.map(|p| PanelPoint::new(*p, thick))
-			.collect();
-		let rail_b: Vec<PanelPoint> = points
-			.iter()
-			.map(|p| PanelPoint::new(*p + Vec3::Y * height, thick))
+			.map(|p| RectangularStripNode::new(*p, height, thick, 0.0))
 			.collect();
 
-		let strip = ClippedRectangularStrip::from_lines(params.style, rail_a, rail_b, insets)
+		let strip = ClippedRectangularStrip::from_nodes(params.style, nodes, insets)
 			.with_joint_policy(params.joint_policy);
 
 		Self {

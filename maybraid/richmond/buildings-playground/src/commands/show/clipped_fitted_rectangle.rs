@@ -1,4 +1,4 @@
-//! `/show clipped-rectangle` — oriented rectangle with an inset framed by rectangle kits.
+//! `/show clipped-fitted-rectangle` — best-fit rectangle with an inset framed by rectangle kits.
 
 use bevy::prelude::*;
 use clap::Args;
@@ -9,19 +9,19 @@ use crate::preview::PreviewSubject;
 
 #[derive(Clone, Args)]
 #[command(rename_all = "kebab-case")]
-pub struct ClippedRectangle {
+pub struct ClippedFittedRectangle {
 	#[arg(long, default_value = "0,0,0", value_parser = parse_vec3_csv, allow_hyphen_values = true)]
 	#[arg(value_name = "X,Y,Z")]
-	pub origin: Vec3,
-	#[arg(long, default_value = "0,0,2", value_parser = parse_vec3_csv, allow_hyphen_values = true)]
+	pub a0: Vec3,
+	#[arg(long, default_value = "2,0,0", value_parser = parse_vec3_csv, allow_hyphen_values = true)]
 	#[arg(value_name = "X,Y,Z")]
-	pub edge: Vec3,
-	#[arg(long, default_value_t = 3.0)]
-	pub height: f32,
-	#[arg(long, default_value_t = 0.75)]
-	pub thickness: f32,
-	#[arg(long, default_value_t = 0.0)]
-	pub roll: f32,
+	pub a1: Vec3,
+	#[arg(long, default_value = "0.1,0.2,1", value_parser = parse_vec3_csv, allow_hyphen_values = true)]
+	#[arg(value_name = "X,Y,Z")]
+	pub b0: Vec3,
+	#[arg(long, default_value = "2.2,-0.1,1.1", value_parser = parse_vec3_csv, allow_hyphen_values = true)]
+	#[arg(value_name = "X,Y,Z")]
+	pub b1: Vec3,
 	#[arg(long, default_value_t = 0.3)]
 	pub left: f32,
 	#[arg(long, default_value_t = 0.3)]
@@ -34,15 +34,14 @@ pub struct ClippedRectangle {
 	pub transform: ShowTransform,
 }
 
-impl ClippedRectangle {
+impl ClippedFittedRectangle {
 	pub fn into_preview(self) -> (PreviewSubject, Transform) {
 		(
-			PreviewSubject::ClippedRectangle {
-				origin: self.origin,
-				edge: self.edge,
-				height: self.height,
-				thickness: self.thickness,
-				roll: self.roll,
+			PreviewSubject::ClippedFittedRectangle {
+				a0: self.a0,
+				a1: self.a1,
+				b0: self.b0,
+				b1: self.b1,
 				left: self.left,
 				right: self.right,
 				bottom: self.bottom,

@@ -1,20 +1,44 @@
-//! Two-rail strip of best-fit [`PanelGeometry::Rectangle`] kits + crease joints.
+//! Node-chain strip of oriented [`PanelGeometry::Rectangle`] kits + crease joints.
+//!
+//! Each node owns `(height, thickness, roll)` for its outbound bay. The edge is
+//! the vector from this node’s position to the next.
 
+use bevy_math::Vec3;
 use lod::gen::LodSceneLevel;
 use richmond_building_components::joints::JointNode;
 use richmond_building_components::panels::{PanelNode, PanelStyle};
 use richmond_building_components::{BuildingComponents, Layers};
 
-use crate::paneling::panel_complex::{PanelComplexJointPolicy, PanelPoint};
+use crate::paneling::panel_complex::PanelComplexJointPolicy;
 use crate::paneling::rect_crease::joint_along_bay_crease;
 use crate::paneling::rectangle::Rectangle;
 
-/// Equal-station strip; each bay is an independently fitted rectangle kit.
+/// One station along a rectangular strip.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct RectangularStripNode {
+	pub position: Vec3,
+	pub height: f32,
+	pub thickness: f32,
+	pub roll: f32,
+}
+
+impl RectangularStripNode {
+	pub fn new(position: Vec3, height: f32, thickness: f32, roll: f32) -> Self {
+		Self {
+			position,
+			height,
+			thickness,
+			roll,
+		}
+	}
+}
+
+/// Open strip; bay `i` uses node `i`’s height / thickness / roll.
 #[derive(Debug, Clone, PartialEq)]
 pub struct RectangularStrip {
 	style: PanelStyle,
 	joint_policy: PanelComplexJointPolicy,
-	authored: Vec<(PanelPoint, PanelPoint)>,
+	nodes: Vec<RectangularStripNode>,
 	bays: Vec<Rectangle>,
 }
 
@@ -23,7 +47,7 @@ impl RectangularStrip {
 		Self {
 			style,
 			joint_policy: PanelComplexJointPolicy::default(),
-			authored: Vec::new(),
+			nodes: Vec::new(),
 			bays: Vec::new(),
 		}
 	}
@@ -41,41 +65,30 @@ impl RectangularStrip {
 		self
 	}
 
-	pub fn from_lines(
+	pub fn from_nodes(
 		style: PanelStyle,
-		rail_a: impl IntoIterator<Item = impl Into<PanelPoint>>,
-		rail_b: impl IntoIterator<Item = impl Into<PanelPoint>>,
+		nodes: impl IntoIterator<Item = RectangularStripNode>,
 	) -> Self {
-		let rail_a: Vec<PanelPoint> = rail_a.into_iter().map(Into::into).collect();
-		let rail_b: Vec<PanelPoint> = rail_b.into_iter().map(Into::into).collect();
-		if rail_a.len() != rail_b.len() || rail_a.len() < 2 {
+		let nodes: Vec<RectangularStripNode> = nodes.into_iter().collect();
+		if nodes.len() < 2 {
 			debug_assert!(
 				false,
-				"RectangularStrip::from_lines requires equal lengths >= 2"
+				"RectangularStrip::from_nodes requires at least 2 nodes"
 			);
 			return Self::new(style);
 		}
 		let mut strip = Self::new(style);
-		for (a, b) in rail_a.into_iter().zip(rail_b) {
-			strip.add_pair(a, b);
-		}
+		strip.nodes = nodes;
+		strip.rebuild_bays();
 		strip
 	}
 
-	pub fn add_pair(
-		&mut self,
-		rail_a: impl Into<PanelPoint>,
-		rail_b: impl Into<PanelPoint>,
-	) -> &mut Self {
-		let rail_a = rail_a.into();
-		let rail_b = rail_b.into();
-		self.authored.push((rail_a, rail_b));
-		if self.authored.len() == 1 {
-			return self;
+	pub fn add_node(&mut self, node: RectangularStripNode) -> &mut Self {
+		self.nodes.push(node);
+		if self.nodes.len() >= 2 {
+			let i = self.nodes.len() - 2;
+			self.bays.push(bay_from_nodes(self.style, &self.nodes[i], &self.nodes[i + 1]));
 		}
-		let (prev_a, prev_b) = self.authored[self.authored.len() - 2];
-		self.bays
-			.push(Rectangle::new(self.style, prev_a, rail_a, prev_b, rail_b));
 		self
 	}
 
@@ -83,8 +96,8 @@ impl RectangularStrip {
 		&self.bays
 	}
 
-	pub fn authored_stations(&self) -> &[(PanelPoint, PanelPoint)] {
-		&self.authored
+	pub fn nodes(&self) -> &[RectangularStripNode] {
+		&self.nodes
 	}
 
 	pub fn joint_nodes(&self) -> Vec<JointNode> {
@@ -92,15 +105,36 @@ impl RectangularStrip {
 		for i in 0..self.bays.len().saturating_sub(1) {
 			let prev = &self.bays[i];
 			let next = &self.bays[i + 1];
-			let thickness = (prev.end_thickness() + next.start_thickness()) * 0.5;
-			if let Some(j) =
-				joint_along_bay_crease(&prev.fitted, &next.fitted, thickness, self.joint_policy)
-			{
+			let thickness = (prev.thickness + next.thickness) * 0.5;
+			if let Some(j) = joint_along_bay_crease(
+				&prev.oriented,
+				&next.oriented,
+				thickness,
+				self.joint_policy,
+			) {
 				out.push(j);
 			}
 		}
 		out
 	}
+
+	fn rebuild_bays(&mut self) {
+		self.bays.clear();
+		for w in self.nodes.windows(2) {
+			self.bays.push(bay_from_nodes(self.style, &w[0], &w[1]));
+		}
+	}
+}
+
+fn bay_from_nodes(style: PanelStyle, a: &RectangularStripNode, b: &RectangularStripNode) -> Rectangle {
+	Rectangle::new(
+		style,
+		a.position,
+		b.position - a.position,
+		a.height,
+		a.thickness,
+		a.roll,
+	)
 }
 
 impl BuildingComponents for RectangularStrip {
@@ -120,44 +154,50 @@ impl BuildingComponents for RectangularStrip {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use bevy_math::Vec3;
 	use richmond_building_components::panels::PanelGeometry;
 
 	#[test]
-	fn three_stations_two_rectangle_kits() {
-		let a = [
-			Vec3::ZERO,
-			Vec3::new(0.0, 0.0, 2.0),
-			Vec3::new(0.0, 0.0, 4.0),
-		];
-		let b = [
-			Vec3::new(2.0, 0.0, 0.0),
-			Vec3::new(2.0, 0.0, 2.0),
-			Vec3::new(2.0, 0.0, 4.0),
-		];
-		let s = RectangularStrip::from_lines(PanelStyle::RoughStonework, a, b);
+	fn three_nodes_two_rectangle_kits() {
+		let s = RectangularStrip::from_nodes(
+			PanelStyle::RoughStonework,
+			[
+				RectangularStripNode::new(Vec3::ZERO, 2.0, 0.75, 0.0),
+				RectangularStripNode::new(Vec3::new(0.0, 0.0, 2.0), 2.0, 0.75, 0.0),
+				RectangularStripNode::new(Vec3::new(0.0, 0.0, 4.0), 2.0, 0.75, 0.0),
+			],
+		);
 		assert_eq!(s.bays().len(), 2);
 		assert!(s
 			.bays()
 			.iter()
 			.all(|b| matches!(b.panel_node().geometry, PanelGeometry::Rectangle(_))));
-		assert_eq!(s.authored_stations().len(), 3);
+		assert_eq!(s.nodes().len(), 3);
 		assert!(s.joint_nodes().is_empty());
 	}
 
 	#[test]
+	fn bay_uses_start_node_height() {
+		let s = RectangularStrip::from_nodes(
+			PanelStyle::RoughStonework,
+			[
+				RectangularStripNode::new(Vec3::ZERO, 3.0, 0.5, 0.0),
+				RectangularStripNode::new(Vec3::new(0.0, 0.0, 2.0), 1.0, 0.9, 0.0),
+			],
+		);
+		assert!((s.bays()[0].height - 3.0).abs() < 1e-4);
+		assert!((s.bays()[0].thickness - 0.5).abs() < 1e-4);
+	}
+
+	#[test]
 	fn folded_strip_emits_crease_joint() {
-		let a = [
-			Vec3::ZERO,
-			Vec3::new(0.0, 0.0, 2.0),
-			Vec3::new(0.0, 0.0, 4.0),
-		];
-		let b = [
-			Vec3::new(2.0, 0.0, 0.0),
-			Vec3::new(2.0, 0.0, 2.0),
-			Vec3::new(2.0, 1.5, 4.0),
-		];
-		let s = RectangularStrip::from_lines(PanelStyle::RoughStonework, a, b);
+		let s = RectangularStrip::from_nodes(
+			PanelStyle::RoughStonework,
+			[
+				RectangularStripNode::new(Vec3::ZERO, 2.0, 0.75, 0.0),
+				RectangularStripNode::new(Vec3::new(0.0, 0.0, 2.0), 2.0, 0.75, 0.0),
+				RectangularStripNode::new(Vec3::new(2.0, 0.0, 2.0), 2.0, 0.75, 0.0),
+			],
+		);
 		assert_eq!(s.joint_nodes().len(), 1);
 		let muted = s.clone().with_joint_policy(PanelComplexJointPolicy::never());
 		assert!(muted.joint_nodes().is_empty());

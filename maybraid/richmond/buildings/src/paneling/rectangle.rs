@@ -1,86 +1,100 @@
-//! Best-fit ordinary rectangle kits ([`PanelGeometry::Rectangle`]) for a ruled bay.
+//! Oriented ordinary rectangle kits ([`PanelGeometry::Rectangle`]).
 //!
-//! [`ClippedRectangle`] punches an opening via [`RectInset`] margins — a frame of
-//! other rectangle kits — not a polygonal world clip / earcut path.
+//! Authored by lowest-edge vector (length / slope / yaw), height, thickness, and
+//! roll (`0` ⇒ top toward world `+Y`). [`ClippedRectangle`] punches an opening via
+//! [`RectInset`] margins — a frame of other rectangle kits.
 
 use bevy_math::Vec3;
 use lod::gen::LodSceneLevel;
 use richmond_building_components::panels::{PanelGeometry, PanelNode, PanelStyle};
 use richmond_building_components::{BuildingComponents, Layers};
 
-use crate::paneling::panel_complex::{PanelPoint, DEFAULT_PANEL_THICKNESS};
-use crate::paneling::rect_fit::{fit_rectangle, FittedRect, RectInset};
+use crate::paneling::panel_complex::DEFAULT_PANEL_THICKNESS;
+use crate::paneling::rect_fit::{
+	fallback_oriented, orient_rectangle, OrientedRect, RectInset,
+};
 
-/// Solid best-fit rectangle → one [`PanelGeometry::Rectangle`] kit.
+/// Solid oriented rectangle → one [`PanelGeometry::Rectangle`] kit.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Rectangle {
 	pub style: PanelStyle,
-	/// Authored (possibly skew) corners.
-	pub a0: PanelPoint,
-	pub a1: PanelPoint,
-	pub b0: PanelPoint,
-	pub b1: PanelPoint,
-	pub fitted: FittedRect,
+	pub origin: Vec3,
+	/// Path of the lowest edge (length = `|edge|`).
+	pub edge: Vec3,
+	pub height: f32,
+	pub thickness: f32,
+	/// `0` ⇒ top toward world `+Y`.
+	pub roll: f32,
+	pub oriented: OrientedRect,
 	pub panel: PanelNode,
 }
 
 impl Rectangle {
 	pub fn new(
 		style: PanelStyle,
-		a0: impl Into<PanelPoint>,
-		a1: impl Into<PanelPoint>,
-		b0: impl Into<PanelPoint>,
-		b1: impl Into<PanelPoint>,
+		origin: Vec3,
+		edge: Vec3,
+		height: f32,
+		thickness: f32,
+		roll: f32,
 	) -> Self {
-		let a0 = a0.into();
-		let a1 = a1.into();
-		let b0 = b0.into();
-		let b1 = b1.into();
-		let fitted = fit_rectangle(a0.position, a1.position, b0.position, b1.position)
-			.unwrap_or_else(|| fallback_fitted(a0.position, a1.position, b0.position, b1.position));
-		let thickness = mean_thickness([a0, a1, b0, b1]);
+		let height = height.max(1e-4);
+		let thickness = if thickness > 1e-6 {
+			thickness
+		} else {
+			DEFAULT_PANEL_THICKNESS
+		};
+		let oriented =
+			orient_rectangle(origin, edge, height, roll).unwrap_or_else(|| {
+				fallback_oriented(origin, edge, height)
+			});
 		let panel = PanelNode::new(
 			style,
 			PanelGeometry::rectangle(),
-			fitted.solid_placement(thickness),
+			oriented.solid_placement(thickness),
 		);
 		Self {
 			style,
-			a0,
-			a1,
-			b0,
-			b1,
-			fitted,
+			origin,
+			edge,
+			height,
+			thickness,
+			roll,
+			oriented,
 			panel,
 		}
 	}
 
-	pub fn rough_stone(
-		a0: impl Into<PanelPoint>,
-		a1: impl Into<PanelPoint>,
-		b0: impl Into<PanelPoint>,
-		b1: impl Into<PanelPoint>,
+	pub fn rough_stone(origin: Vec3, edge: Vec3, height: f32, thickness: f32, roll: f32) -> Self {
+		Self::new(
+			PanelStyle::RoughStonework,
+			origin,
+			edge,
+			height,
+			thickness,
+			roll,
+		)
+	}
+
+	pub fn shepherds_thatch(
+		origin: Vec3,
+		edge: Vec3,
+		height: f32,
+		thickness: f32,
+		roll: f32,
 	) -> Self {
-		Self::new(PanelStyle::RoughStonework, a0, a1, b0, b1)
+		Self::new(
+			PanelStyle::ShepherdsThatch,
+			origin,
+			edge,
+			height,
+			thickness,
+			roll,
+		)
 	}
 
 	pub fn panel_node(&self) -> &PanelNode {
 		&self.panel
-	}
-
-	/// Mean authored thickness (also `panel.placement.scale.y`).
-	pub fn thickness(&self) -> f32 {
-		self.panel.placement.scale.y
-	}
-
-	/// Thickness along the leading generator (`a0`–`b0`).
-	pub fn start_thickness(&self) -> f32 {
-		((self.a0.thickness + self.b0.thickness) * 0.5).max(1e-4)
-	}
-
-	/// Thickness along the trailing generator (`a1`–`b1`).
-	pub fn end_thickness(&self) -> f32 {
-		((self.a1.thickness + self.b1.thickness) * 0.5).max(1e-4)
 	}
 }
 
@@ -90,15 +104,16 @@ impl BuildingComponents for Rectangle {
 	}
 }
 
-/// Best-fit rectangle with an inset opening framed by rectangle kits.
+/// Oriented rectangle with an inset opening framed by rectangle kits.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ClippedRectangle {
 	pub style: PanelStyle,
-	pub a0: PanelPoint,
-	pub a1: PanelPoint,
-	pub b0: PanelPoint,
-	pub b1: PanelPoint,
-	pub fitted: FittedRect,
+	pub origin: Vec3,
+	pub edge: Vec3,
+	pub height: f32,
+	pub thickness: f32,
+	pub roll: f32,
+	pub oriented: OrientedRect,
 	pub inset: RectInset,
 	pub panels: Vec<PanelNode>,
 }
@@ -106,76 +121,87 @@ pub struct ClippedRectangle {
 impl ClippedRectangle {
 	pub fn new(
 		style: PanelStyle,
-		a0: impl Into<PanelPoint>,
-		a1: impl Into<PanelPoint>,
-		b0: impl Into<PanelPoint>,
-		b1: impl Into<PanelPoint>,
+		origin: Vec3,
+		edge: Vec3,
+		height: f32,
+		thickness: f32,
+		roll: f32,
 		inset: RectInset,
 	) -> Self {
-		let a0 = a0.into();
-		let a1 = a1.into();
-		let b0 = b0.into();
-		let b1 = b1.into();
-		let fitted = fit_rectangle(a0.position, a1.position, b0.position, b1.position)
-			.unwrap_or_else(|| fallback_fitted(a0.position, a1.position, b0.position, b1.position));
-		let thickness = mean_thickness([a0, a1, b0, b1]);
+		let height = height.max(1e-4);
+		let thickness = if thickness > 1e-6 {
+			thickness
+		} else {
+			DEFAULT_PANEL_THICKNESS
+		};
+		let oriented =
+			orient_rectangle(origin, edge, height, roll).unwrap_or_else(|| {
+				fallback_oriented(origin, edge, height)
+			});
 		let panels = inset
-			.frame_pieces(fitted.width, fitted.depth)
+			.frame_pieces(oriented.width, oriented.depth)
 			.into_iter()
 			.map(|(u0, v0, w, d)| {
 				PanelNode::new(
 					style,
 					PanelGeometry::rectangle(),
-					fitted.panel_placement(u0, v0, w, d, thickness),
+					oriented.panel_placement(u0, v0, w, d, thickness),
 				)
 			})
 			.collect();
 		Self {
 			style,
-			a0,
-			a1,
-			b0,
-			b1,
-			fitted,
+			origin,
+			edge,
+			height,
+			thickness,
+			roll,
+			oriented,
 			inset,
 			panels,
 		}
 	}
 
 	pub fn rough_stone(
-		a0: impl Into<PanelPoint>,
-		a1: impl Into<PanelPoint>,
-		b0: impl Into<PanelPoint>,
-		b1: impl Into<PanelPoint>,
+		origin: Vec3,
+		edge: Vec3,
+		height: f32,
+		thickness: f32,
+		roll: f32,
 		inset: RectInset,
 	) -> Self {
-		Self::new(PanelStyle::RoughStonework, a0, a1, b0, b1, inset)
+		Self::new(
+			PanelStyle::RoughStonework,
+			origin,
+			edge,
+			height,
+			thickness,
+			roll,
+			inset,
+		)
 	}
 
 	pub fn shepherds_thatch(
-		a0: impl Into<PanelPoint>,
-		a1: impl Into<PanelPoint>,
-		b0: impl Into<PanelPoint>,
-		b1: impl Into<PanelPoint>,
+		origin: Vec3,
+		edge: Vec3,
+		height: f32,
+		thickness: f32,
+		roll: f32,
 		inset: RectInset,
 	) -> Self {
-		Self::new(PanelStyle::ShepherdsThatch, a0, a1, b0, b1, inset)
+		Self::new(
+			PanelStyle::ShepherdsThatch,
+			origin,
+			edge,
+			height,
+			thickness,
+			roll,
+			inset,
+		)
 	}
 
 	pub fn panels(&self) -> &[PanelNode] {
 		&self.panels
-	}
-
-	pub fn thickness(&self) -> f32 {
-		mean_thickness([self.a0, self.a1, self.b0, self.b1])
-	}
-
-	pub fn start_thickness(&self) -> f32 {
-		((self.a0.thickness + self.b0.thickness) * 0.5).max(1e-4)
-	}
-
-	pub fn end_thickness(&self) -> f32 {
-		((self.a1.thickness + self.b1.thickness) * 0.5).max(1e-4)
 	}
 }
 
@@ -185,44 +211,13 @@ impl BuildingComponents for ClippedRectangle {
 	}
 }
 
-fn mean_thickness(pts: [PanelPoint; 4]) -> f32 {
-	let t = pts.iter().map(|p| p.thickness).sum::<f32>() * 0.25;
-	if t > 1e-6 {
-		t
-	} else {
-		DEFAULT_PANEL_THICKNESS
-	}
-}
-
-fn fallback_fitted(a0: Vec3, a1: Vec3, b0: Vec3, b1: Vec3) -> FittedRect {
-	let e0 = (a1 - a0).normalize_or_zero();
-	let e1 = (b0 - a0).normalize_or_zero();
-	let normal = e0.cross(e1).normalize_or_zero();
-	FittedRect {
-		a0,
-		a1,
-		b0,
-		b1,
-		e0,
-		e1,
-		normal,
-		width: (a1 - a0).length().max(1e-4),
-		depth: (b0 - a0).length().max(1e-4),
-	}
-}
-
 #[cfg(test)]
 mod tests {
 	use super::*;
 
 	#[test]
 	fn solid_is_one_rectangle_kit() {
-		let r = Rectangle::rough_stone(
-			Vec3::ZERO,
-			Vec3::new(2.0, 0.0, 0.0),
-			Vec3::new(0.0, 0.0, 1.0),
-			Vec3::new(2.0, 0.0, 1.0),
-		);
+		let r = Rectangle::rough_stone(Vec3::ZERO, Vec3::new(0.0, 0.0, 1.0), 2.0, 0.75, 0.0);
 		assert!(matches!(r.panel.geometry, PanelGeometry::Rectangle(_)));
 		assert!((r.panel.placement.scale.x - 2.0).abs() < 1e-3);
 		assert!((r.panel.placement.scale.z - 1.0).abs() < 1e-3);
@@ -232,9 +227,10 @@ mod tests {
 	fn inset_emits_four_rectangle_kits() {
 		let r = ClippedRectangle::rough_stone(
 			Vec3::ZERO,
-			Vec3::new(2.0, 0.0, 0.0),
 			Vec3::new(0.0, 0.0, 1.0),
-			Vec3::new(2.0, 0.0, 1.0),
+			2.0,
+			0.75,
+			0.0,
 			RectInset::uniform(0.25),
 		);
 		assert_eq!(r.panels().len(), 4);
