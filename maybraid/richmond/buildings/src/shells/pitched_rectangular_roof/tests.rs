@@ -184,3 +184,34 @@ fn pitch_clip_is_centered_quad_on_face() {
 	let face_mid = half.pitch_point(0.5, 0.5);
 	assert!((mid - face_mid).length() < 0.2);
 }
+
+#[test]
+fn skylight_reduces_or_changes_pitch_panels() {
+	use richmond_building_components::BuildingComponents;
+	use lod::gen::LodSceneLevel;
+	let base = PitchedRoofParams::rectangular_hip(Vec2::new(10.0, 6.0), 4.0, 2.5, 1.5);
+	let solid = PitchedRoof::new(base.clone());
+	let opening = PitchedRoof::pitch_opening(
+		&base.halves[0],
+		0.5,
+		0.45,
+		1.5,
+		1.0,
+		OpeningLabel::Aperture,
+	);
+	let clipped = base
+		.openings(Openings::new().with("sky", opening))
+		.build();
+	let solid_n = solid.pitches()[0]
+		.panel_nodes_for_level(LodSceneLevel::High)
+		.flatten()
+		.len();
+	let clip_n = clipped.pitches()[0]
+		.panel_nodes_for_level(LodSceneLevel::High)
+		.flatten()
+		.len();
+	assert!(
+		clip_n > solid_n,
+		"expected clip to subdivide pitch (solid={solid_n} clipped={clip_n})"
+	);
+}

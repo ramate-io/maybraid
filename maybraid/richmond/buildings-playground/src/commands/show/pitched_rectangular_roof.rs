@@ -55,19 +55,20 @@ impl PitchedRectangularRoof {
 			.cloned()
 			.map(|a| a.resolve_aabb(None))
 			.collect::<Result<Vec<_>, _>>()?;
-		if self.skylight && openings.is_empty() {
+		if self.skylight {
 			let params = PitchedRoofParams::rectangular_hip(
 				Vec2::new(self.footprint_x, self.footprint_z),
 				self.ridge_height,
 				self.eave_height,
 				self.ridge_inset,
 			);
+			// Large enough that the thatch hole reads clearly in the playground.
 			let opening = PitchedRoof::pitch_opening(
 				&params.halves[0],
 				0.5,
-				0.45,
-				1.5,
-				1.0,
+				0.4,
+				2.8,
+				1.6,
 				OpeningLabel::Aperture,
 			);
 			openings.push(PreviewOpening {
