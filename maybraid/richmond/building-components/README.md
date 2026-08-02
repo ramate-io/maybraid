@@ -130,10 +130,10 @@ Joints omit when both plan and slope kinks are below [`DEFAULT_MIN_JOINT_ANGLE`]
 
 Partition components are authored in a normalized local space, then transformed into world/cell space by the parent building.
 
-- **Linear / rectangle panel:** authored on the ground like the triangle panel:
-  - \(X, Z \in [0, 1]\)
+- **Linear / rectangle panel:** same footprint sense as the right-triangle kit:
+  - \(X \in [0, 1]\), \(Z \in [-1, 0]\) (origin at the \(Z{=}0\) corner; mesh extends along \(-Z\))
   - \(Y \in [-0.2, 0.2]\) (thickness)
-  - Wall use scales \((\texttt{length}, \texttt{thick}, \texttt{height})\) on \((X, Y, Z)\), then pitches \(\pi/2\) about \(+X\) so kit \(+Z\) stands up as height (kit \(Y\) becomes thickness). Panels stay **plumb** (yaw + stand-up only); polyline slope lives in path \(Y\), not tip roll. Segments anchor at the lower-left (kit origin). Kit \(X \in [0, 1]\) means length scale is the **full** span (half of the old \(X \in [-1, 1]\) half-extent convention). See [`wall_placement`](src/partitions/geometry/linear.rs).
+  - Blender often shows the depth leg as \(+Y \in [0, 1]\) before glTF export; Blender→glTF (Z-up → Y-up) maps that into glTF \(-Z\). Wall use scales \((\texttt{length}, \texttt{thick}, \texttt{height})\) on \((X, Y, Z)\), then pitches \(\pi/2\) about \(+X\) so kit \(-Z\) stands up as world \(+Y\) (kit \(Y\) becomes thickness). Panels stay **plumb** (yaw + stand-up only); polyline slope lives in path \(Y\), not tip roll. Segments anchor at the kit origin. Kit \(X \in [0, 1]\) means length scale is the **full** span. See [`wall_placement`](src/partitions/geometry/linear.rs).
 - **Angular Normalization:** angular components (`arc_180` / `arc_90` / `arc_15`) are unit-radius rings centered at the origin. Assets sit on local \(+X\) and sweep toward \(+Z\) (see [`arc_ring_dir`](src/arc_kit.rs)).
   - Thickness is the same swept radial band (kit \(Z \approx [-0.2, 0.2]\) about the ring)
   - After Bevy YXZ yaw \(\phi\), the outward locus is \((\cos\phi,\,-\sin\phi)\) — so yaw \(0\) places the kit on world \(+X\)

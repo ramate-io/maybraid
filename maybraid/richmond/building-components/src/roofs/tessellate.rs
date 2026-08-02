@@ -152,10 +152,11 @@ mod tests {
 	fn rectangle_only_fits_tiles_to_length() -> anyhow::Result<()> {
 		let pitch = Pitch::new(1.0, 2.0, 1.0).with_length(3.0);
 		let pieces = kit_pieces(&RoofGeometry::pitch(pitch));
-		assert_eq!(pieces.len(), 6);
+		assert_eq!(pieces.len(), 3);
+		assert_eq!(pieces[0].geom, RoofKit::Rectangle);
 		assert_eq!(pieces[0].translation().x, 0.0);
 		assert_eq!(pieces[0].scale(), Vec3::new(1.0, 1.0, 2.0));
-		assert_eq!(pieces[2].translation().x, 1.0);
+		assert_eq!(pieces[2].translation().x, 2.0);
 		Ok(())
 	}
 
@@ -163,7 +164,8 @@ mod tests {
 	fn tile_width_suggestion_rounds_and_stretches() -> anyhow::Result<()> {
 		let pitch = Pitch::new(1.0, 1.0, 1.0).with_length(2.4);
 		let pieces = kit_pieces(&RoofGeometry::pitch(pitch));
-		assert_eq!(pieces.len(), 4);
+		assert_eq!(pieces.len(), 2);
+		assert_eq!(pieces[0].geom, RoofKit::Rectangle);
 		assert!((pieces[0].scale().x - 1.2).abs() < 1e-4);
 		Ok(())
 	}
@@ -199,7 +201,7 @@ mod tests {
 		assert_eq!(pitch.left, Some(-1.0));
 		assert_eq!(pitch.right, Some(-1.0));
 		let pieces = kit_pieces(&RoofGeometry::pitch(pitch));
-		assert_eq!(pieces.len(), 1 + 8 + 1);
+		assert_eq!(pieces.len(), 1 + 4 + 1);
 		assert_eq!(pieces[0].yaw(), PI);
 		assert_eq!(pieces.last().expect("right").yaw(), PI);
 		Ok(())

@@ -38,9 +38,54 @@ pub mod panels {
 	pub const UNIT_RIGHT_TRIANGLE: AssetPath =
 		AssetPath::new("urban/panels/unit_right_triangle.glb");
 
+	/// Rectangle + right-triangle LOD triad under `urban/panels/<dir>/`.
+	macro_rules! panel_style_kit {
+		($mod:ident, $dir:literal) => {
+			pub mod $mod {
+				use super::AssetPath;
+
+				pub const RECTANGLE_HIGH: AssetPath =
+					AssetPath::new(concat!("urban/panels/", $dir, "/rectangle_001_high_res.glb"));
+				pub const RECTANGLE_MID: AssetPath =
+					AssetPath::new(concat!("urban/panels/", $dir, "/rectangle_001_mid_res.glb"));
+				pub const RECTANGLE_LOW: AssetPath =
+					AssetPath::new(concat!("urban/panels/", $dir, "/rectangle_001_low_res.glb"));
+
+				/// Unit right triangle \(X \in [0, 1]\), \(Z \in [-1, 0]\), \(Y \in [-0.2, 0.2]\).
+				pub const RIGHT_TRIANGLE_HIGH: AssetPath = AssetPath::new(concat!(
+					"urban/panels/",
+					$dir,
+					"/right_triangle_001_high_res.glb"
+				));
+				pub const RIGHT_TRIANGLE_MID: AssetPath = AssetPath::new(concat!(
+					"urban/panels/",
+					$dir,
+					"/right_triangle_001_mid_res.glb"
+				));
+				pub const RIGHT_TRIANGLE_LOW: AssetPath = AssetPath::new(concat!(
+					"urban/panels/",
+					$dir,
+					"/right_triangle_001_low_res.glb"
+				));
+			}
+		};
+	}
+
+	panel_style_kit!(default, "default");
+	panel_style_kit!(desert_web, "desert_web");
+	panel_style_kit!(flat, "flat");
+	panel_style_kit!(myrs_ornate, "myrs_ornate");
+	panel_style_kit!(rib_and_plank, "rib_and_plank");
+	panel_style_kit!(shepherds_thatch, "shepherds_thatch");
+	panel_style_kit!(tent_angles, "tent_angles");
+	panel_style_kit!(terracotta_tubes, "terracotta_tubes");
+
 	pub mod rough_stonework {
 		use super::AssetPath;
 
+		/// Default-resolution rectangle when a single path is needed (high-res LOD).
+		pub const RECTANGLE: AssetPath =
+			AssetPath::new("urban/panels/rough_stonework/rectangle_001_high_res.glb");
 		/// Resolution triad for the unit rectangle panel (\(X, Z \in [0, 1]\)).
 		pub const RECTANGLE_HIGH: AssetPath =
 			AssetPath::new("urban/panels/rough_stonework/rectangle_001_high_res.glb");
@@ -60,17 +105,6 @@ pub mod panels {
 			AssetPath::new("urban/panels/rough_stonework/right_triangle_001_mid_res.glb");
 		pub const RIGHT_TRIANGLE_LOW: AssetPath =
 			AssetPath::new("urban/panels/rough_stonework/right_triangle_001_low_res.glb");
-	}
-
-	pub mod shepherds_thatch {
-		use super::AssetPath;
-
-		pub const RIGHT_TRIANGLE_HIGH: AssetPath =
-			AssetPath::new("urban/panels/shepherds_thatch/right_triangle_001_high_res.glb");
-		pub const RIGHT_TRIANGLE_MID: AssetPath =
-			AssetPath::new("urban/panels/shepherds_thatch/right_triangle_001_mid_res.glb");
-		pub const RIGHT_TRIANGLE_LOW: AssetPath =
-			AssetPath::new("urban/panels/shepherds_thatch/right_triangle_001_low_res.glb");
 	}
 }
 

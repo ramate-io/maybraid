@@ -16,16 +16,21 @@ pub mod pitch;
 pub mod polyline;
 pub mod quad_panel;
 pub mod quad_panel_complex;
+pub mod rectangle;
+pub mod rectangular_n_tube;
 pub mod ruled_pitch;
 pub mod slice_90;
 pub mod stacked_rings;
 pub mod clipped_arc_sweep;
+pub mod clipped_fitted_rectangle;
+pub mod clipped_fitted_rectangular_strip;
 pub mod clipped_quad_panel;
 pub mod clipped_rectangle;
 pub mod clipped_rectangular_strip;
 pub mod clipped_ruled_strip;
 pub mod clipped_tessellated_triangle;
 pub mod connecting_hall;
+pub mod fitted_rectangle;
 pub mod tessellated_triangle;
 pub mod tessellated_triangle_3d;
 pub mod transform;
@@ -76,10 +81,20 @@ pub enum Show {
 	ConnectingShells(connecting_shells::ConnectingShells),
 	/// Two-band trapezoidal-pyramid shell with waist reveal and optional `--opening`s.
 	Trazaloid(trazaloid::Trazaloid),
-	/// Best-fit rectangle kit with an inset framed by rectangle kits.
+	/// Single oriented [`richmond_buildings::Rectangle`] kit (floor / wall / ceiling presets).
+	Rectangle(rectangle::Rectangle),
+	/// Oriented rectangle kit with an inset framed by rectangle kits.
 	ClippedRectangle(clipped_rectangle::ClippedRectangle),
-	/// Two-rail best-fit rectangle strip with a mid-bay inset frame.
+	/// Node-chain oriented rectangle strip with a mid-bay inset frame.
 	ClippedRectangularStrip(clipped_rectangular_strip::ClippedRectangularStrip),
+	/// Single best-fit [`richmond_buildings::FittedRectangle`] (four corners / presets).
+	FittedRectangle(fitted_rectangle::FittedRectangle),
+	/// Best-fit rectangle with an inset framed by rectangle kits.
+	ClippedFittedRectangle(clipped_fitted_rectangle::ClippedFittedRectangle),
+	/// Two-rail best-fit rectangle strip with a mid-bay inset frame.
+	ClippedFittedRectangularStrip(clipped_fitted_rectangular_strip::ClippedFittedRectangularStrip),
+	/// Closed n-gon cross-section polyline → n clipped rectangle strips.
+	RectangularNTube(rectangular_n_tube::RectangularNTube),
 	/// N-gon disk / annulus filled with right-triangle panel kits.
 	ApproximatedCircle(approximated_circle::ApproximatedCircle),
 	/// Circular fitted [`richmond_buildings::arcs::ArcSweep`] (not IR `partitions::ArcSweep`).
@@ -125,8 +140,13 @@ impl Show {
 			Self::ArcTower(cmd) => Ok(cmd.into_preview()),
 			Self::ConnectingShells(cmd) => Ok(cmd.into_preview()),
 			Self::Trazaloid(cmd) => cmd.into_preview(),
+			Self::Rectangle(cmd) => Ok(cmd.into_preview()),
 			Self::ClippedRectangle(cmd) => Ok(cmd.into_preview()),
 			Self::ClippedRectangularStrip(cmd) => Ok(cmd.into_preview()),
+			Self::FittedRectangle(cmd) => Ok(cmd.into_preview()),
+			Self::ClippedFittedRectangle(cmd) => Ok(cmd.into_preview()),
+			Self::ClippedFittedRectangularStrip(cmd) => Ok(cmd.into_preview()),
+			Self::RectangularNTube(cmd) => Ok(cmd.into_preview()),
 			Self::ApproximatedCircle(cmd) => Ok(cmd.into_preview()),
 			Self::ArcSweep(cmd) => Ok(cmd.into_preview()),
 			Self::ClippedArcSweep(cmd) => Ok(cmd.into_preview()),

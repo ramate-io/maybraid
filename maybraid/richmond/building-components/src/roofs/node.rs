@@ -6,8 +6,10 @@ use lod::gen::LodScene;
 use lod::lod_ref::LodRef;
 
 use crate::arc_kit::ArcKit;
+use crate::assets::panels::shepherds_thatch::{RECTANGLE_HIGH, RECTANGLE_LOW, RECTANGLE_MID};
 use crate::placed::Placement;
 use crate::roofs::geometry::RoofGeometry;
+use crate::roofs::lod::leaf_scene_ref_lod;
 use crate::roofs::style::RoofStyle;
 use crate::roofs::tessellate::RoofKit;
 use crate::roofs::{
@@ -58,8 +60,12 @@ impl LodScene for RoofNode {
 						ShepherdsThatchRightTriangle::scene_with_lod_mirrored(lod_ref, mirror),
 					),
 					(RoofStyle::ShepherdsThatch, RoofKit::Rectangle) => {
-						// No thatch rectangle kit; author with dual-triangle policy.
-						Box::new(::bevy::scene::SceneFunction(crate::empty_scene))
+						Box::new(leaf_scene_ref_lod(
+							RECTANGLE_HIGH.scene_ref(),
+							RECTANGLE_MID.scene_ref(),
+							RECTANGLE_LOW.scene_ref(),
+							lod_ref,
+						))
 					}
 					(RoofStyle::ShepherdsThatch, RoofKit::DomeArc(ArcKit::D15)) => {
 						Box::new(ShepherdsThatchDome15.scene_with_lod(lod_ref))
