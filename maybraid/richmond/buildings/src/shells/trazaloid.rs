@@ -634,7 +634,7 @@ mod tests {
 	}
 
 	#[test]
-	fn resolves_waist_inset_and_gap() {
+	fn resolves_waist_inset_and_gap() -> anyhow::Result<()> {
 		let t = Trazaloid::new(demo_params());
 		let levels = t.plan_levels();
 		assert!((levels[0].0 - 0.0).abs() < 1e-5);
@@ -645,10 +645,11 @@ mod tests {
 		assert!(levels[1].1.x < levels[0].1.x);
 		assert!(levels[1].1.x > levels[3].1.x - 1.0);
 		assert_eq!(levels[1].1, levels[2].1);
+		Ok(())
 	}
 
 	#[test]
-	fn default_has_ceiling_no_floor() {
+	fn default_has_ceiling_no_floor() -> anyhow::Result<()> {
 		let t = Trazaloid::new(demo_params());
 		for w in t.lower_walls() {
 			assert!(!w.pieces().is_empty());
@@ -657,7 +658,9 @@ mod tests {
 			assert!(!w.pieces().is_empty());
 		}
 		assert!(t.floor().is_none());
-		let ceiling = t.ceiling().expect("default solid ceiling");
+		let ceiling = t
+			.ceiling()
+			.ok_or_else(|| anyhow::anyhow!("default solid ceiling missing"))?;
 		assert!(!ceiling.pieces().is_empty());
 		let high = t.panel_nodes_for_level(LodSceneLevel::High).len();
 		let walls_only = {
@@ -674,24 +677,28 @@ mod tests {
 			high,
 			walls_only + ceiling.panel_nodes_for_level(LodSceneLevel::High).len()
 		);
+		Ok(())
 	}
 
 	#[test]
-	fn can_omit_ceiling_and_add_floor_with_hole() {
+	fn can_omit_ceiling_and_add_floor_with_hole() -> anyhow::Result<()> {
 		let mut params = demo_params();
 		params.ceiling = TrazaloidSlab::None;
 		params.floor = TrazaloidSlab::SquareHole { size: 2.0 };
 		let t = Trazaloid::new(params);
 		assert!(t.ceiling().is_none());
-		let floor = t.floor().expect("floor present");
+		let floor = t
+			.floor()
+			.ok_or_else(|| anyhow::anyhow!("floor present expected"))?;
 		assert!(matches!(
 			floor.pieces()[0],
 			ClippedStripPiece::Clipped(_)
 		));
+		Ok(())
 	}
 
 	#[test]
-	fn south_door_makes_clipped_lower_piece() {
+	fn south_door_makes_clipped_lower_piece() -> anyhow::Result<()> {
 		let mut params = demo_params();
 		params.openings = Openings::new().with(
 			"south",
@@ -707,10 +714,11 @@ mod tests {
 			t.lower_walls()[0].pieces()[0],
 			ClippedStripPiece::Solid(_)
 		));
+		Ok(())
 	}
 
 	#[test]
-	fn door_clip_reaches_ground_and_honors_thickness() {
+	fn door_clip_reaches_ground_and_honors_thickness() -> anyhow::Result<()> {
 		let a0 = Vec3::new(1.0, 0.0, -3.0);
 		let b0 = Vec3::new(-1.0, 0.0, -3.0);
 		let a1 = Vec3::new(0.8, 3.0, -2.5);
@@ -722,19 +730,21 @@ mod tests {
 		assert!((clip[1].y - 0.0).abs() < 1e-4);
 		// Absolute thickness 1.0 on a face of width 2.0 → half of face width.
 		assert!((clip[0].distance(clip[1]) - 1.0).abs() < 1e-3);
+		Ok(())
 	}
 
 	#[test]
-	fn high_emits_more_joints_than_medium() {
+	fn high_emits_more_joints_than_medium() -> anyhow::Result<()> {
 		let t = Trazaloid::new(demo_params());
 		let high = t.joint_nodes_for_level(LodSceneLevel::High).len();
 		let mid = t.joint_nodes_for_level(LodSceneLevel::Medium).len();
 		assert!(high > mid);
 		assert!(high >= t.high_posts.len());
+		Ok(())
 	}
 
 	#[test]
-	fn mapped_opening_matches_passage_plan() {
+	fn mapped_opening_matches_passage_plan() -> anyhow::Result<()> {
 		let mut params = demo_params();
 		let connect = OpeningId::new("connect");
 		params.openings = Openings::new().with(
@@ -743,7 +753,9 @@ mod tests {
 		);
 		let t = Trazaloid::new(params);
 		assert!(t.mapped_opening(&OpeningId::new("missing")).is_none());
-		let west = t.mapped_opening(&connect).expect("west door");
+		let west = t
+			.mapped_opening(&connect)
+			.ok_or_else(|| anyhow::anyhow!("missing west mapped opening"))?;
 		let o = west.orientation.normalize();
 		assert!(o.x < -0.9, "orientation={o:?}");
 		let (bl, br, tl, tr) = west.endpoint_corners();
@@ -762,5 +774,6 @@ mod tests {
 		let half_wide = 0.5 * wbl.distance(wbr);
 		assert!(half_wide > half + 0.9, "half={half} half_wide={half_wide}");
 		assert!(wbl.z > wbr.z); // BL (+Z) left of BR (−Z) when looking −X
+		Ok(())
 	}
 }

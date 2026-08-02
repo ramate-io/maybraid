@@ -169,7 +169,7 @@ mod tests {
 	use super::*;
 
 	#[test]
-	fn hall_stations_built_between_shells() {
+	fn hall_stations_built_between_shells() -> anyhow::Result<()> {
 		let demo = ConnectingShells::new();
 		let stations = demo.hall().stations();
 		assert!(stations[0].bottom_middle.x < stations[2].bottom_middle.x);
@@ -180,10 +180,11 @@ mod tests {
 			.flatten()
 			.is_empty());
 		assert_eq!(demo.tower().storeys().len(), 3);
+		Ok(())
 	}
 
 	#[test]
-	fn trazaloid_hall_end_carries_face_pitch() {
+	fn trazaloid_hall_end_carries_face_pitch() -> anyhow::Result<()> {
 		let demo = ConnectingShells::new();
 		let (_a, end_b) = demo.hall().endpoints();
 		// West door: top should be inset (larger x) relative to bottom.
@@ -193,15 +194,18 @@ mod tests {
 		assert!(top_x > bottom_x + 1e-3);
 		let stations = demo.hall().stations();
 		let traz_station = stations[2];
-		let top = traz_station.top_middle.expect("pitched top_middle");
+		let top = traz_station
+			.top_middle
+			.ok_or_else(|| anyhow::anyhow!("pitched top_middle missing"))?;
 		assert!(
 			(top.x - traz_station.bottom_middle.x).abs() > 1e-3,
 			"tube station should keep non-vertical top lift"
 		);
+		Ok(())
 	}
 
 	#[test]
-	fn tower_hall_end_on_next_clockwise_segment() {
+	fn tower_hall_end_on_next_clockwise_segment() -> anyhow::Result<()> {
 		let demo = ConnectingShells::new();
 		let (end_a, _) = demo.hall().endpoints();
 		let (bl, br, ..) = end_a.endpoint_corners();
@@ -209,10 +213,11 @@ mod tests {
 		// Clockwise of t=0.5 is decreasing t → mid toward +Z of +X.
 		assert!(mid.z > 0.5, "mid={mid:?}");
 		assert!(end_a.orientation.normalize().x > 0.7, "orient={:?}", end_a.orientation);
+		Ok(())
 	}
 
 	#[test]
-	fn both_ends_widen_past_door_jambs() {
+	fn both_ends_widen_past_door_jambs() -> anyhow::Result<()> {
 		let demo = ConnectingShells::new();
 		let stations = demo.hall().stations();
 		// Tower: ~R sin(7.5°) + overrun ≈ 0.52 + 0.35
@@ -229,5 +234,6 @@ mod tests {
 		assert!(
 			(stations[2].bottom_left_width - stations[2].bottom_right_width).abs() < 1e-3
 		);
+		Ok(())
 	}
 }

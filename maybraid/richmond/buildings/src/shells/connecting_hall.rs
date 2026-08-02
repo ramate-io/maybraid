@@ -246,22 +246,28 @@ fn ray_intersect_xz(p_a: Vec2, d_a: Vec2, p_b: Vec2, d_b: Vec2) -> Option<(f32, 
 mod tests {
 	use super::*;
 
-	fn opening_facing(center: Vec3, half_w: f32, half_h: f32, orient: Vec2) -> MappedOpening {
-		let d = normalize_xz(orient).unwrap();
+	fn opening_facing(
+		center: Vec3,
+		half_w: f32,
+		half_h: f32,
+		orient: Vec2,
+	) -> anyhow::Result<MappedOpening> {
+		let d = normalize_xz(orient)
+			.ok_or_else(|| anyhow::anyhow!("orientation too short: {orient:?}"))?;
 		let right = Vec3::new(-d.y, 0.0, d.x);
 		let up = Vec3::Y;
 		let bl = center - right * half_w;
 		let br = center + right * half_w;
 		let tl = bl + up * (half_h * 2.0);
 		let tr = br + up * (half_h * 2.0);
-		MappedOpening::from_corners(bl, br, tl, tr, orient)
+		Ok(MappedOpening::from_corners(bl, br, tl, tr, orient))
 	}
 
 	#[test]
-	fn opposite_openings_meet_on_bisector() {
+	fn opposite_openings_meet_on_bisector() -> anyhow::Result<()> {
 		// A at x=-4 facing +X; B at x=+4 facing -X → mid at origin.
-		let a = opening_facing(Vec3::new(-4.0, 0.0, 0.0), 1.0, 1.0, Vec2::X);
-		let b = opening_facing(Vec3::new(4.0, 0.0, 0.0), 1.0, 1.0, -Vec2::X);
+		let a = opening_facing(Vec3::new(-4.0, 0.0, 0.0), 1.0, 1.0, Vec2::X)?;
+		let b = opening_facing(Vec3::new(4.0, 0.0, 0.0), 1.0, 1.0, -Vec2::X)?;
 		let hall = ConnectingHall::rough_stone(a, b);
 		let mid = hall.midpoint();
 		assert!(mid.x.abs() < 1e-3, "mid.x={:?}", mid.x);
@@ -269,40 +275,44 @@ mod tests {
 		assert!(mid.y.abs() < 1e-3);
 		assert_eq!(hall.tube().nodes().len(), 3);
 		assert!(!hall.tube().floor().pieces().is_empty());
+		Ok(())
 	}
 
 	#[test]
-	fn height_is_length_weighted() {
+	fn height_is_length_weighted() -> anyhow::Result<()> {
 		// Kinked: A at z=-1 facing +Z, B at x=4 facing -X → mid at origin.
 		// L_a=1, L_b=4 → h = (4*0 + 1*4)/(1+4) = 0.8
-		let a = opening_facing(Vec3::new(0.0, 0.0, -1.0), 1.0, 1.0, Vec2::Y);
-		let b = opening_facing(Vec3::new(4.0, 4.0, 0.0), 1.0, 1.0, -Vec2::X);
+		let a = opening_facing(Vec3::new(0.0, 0.0, -1.0), 1.0, 1.0, Vec2::Y)?;
+		let b = opening_facing(Vec3::new(4.0, 4.0, 0.0), 1.0, 1.0, -Vec2::X)?;
 		let hall = ConnectingHall::rough_stone(a, b);
 		let mid = hall.midpoint();
 		assert!(mid.x.abs() < 1e-3 && mid.z.abs() < 1e-3, "mid={mid:?}");
 		assert!((mid.y - 0.8).abs() < 1e-3, "mid.y={}", mid.y);
+		Ok(())
 	}
 
 	#[test]
-	fn kinked_orientations_intersect() {
-		let a = opening_facing(Vec3::new(0.0, 0.0, -3.0), 1.0, 1.0, Vec2::Y);
-		let b = opening_facing(Vec3::new(3.0, 0.0, 0.0), 1.0, 1.0, -Vec2::X);
+	fn kinked_orientations_intersect() -> anyhow::Result<()> {
+		let a = opening_facing(Vec3::new(0.0, 0.0, -3.0), 1.0, 1.0, Vec2::Y)?;
+		let b = opening_facing(Vec3::new(3.0, 0.0, 0.0), 1.0, 1.0, -Vec2::X)?;
 		let hall = ConnectingHall::rough_stone(a, b);
 		let mid = hall.midpoint();
 		assert!((mid.x - 0.0).abs() < 1e-3);
 		assert!((mid.z - 0.0).abs() < 1e-3);
 		assert_eq!(hall.stations()[1].bottom_middle, mid);
+		Ok(())
 	}
 
 	#[test]
-	fn parallel_orientations_fall_back_to_midpoint() {
+	fn parallel_orientations_fall_back_to_midpoint() -> anyhow::Result<()> {
 		// Same-direction parallel rays miss; connector falls back to the plan midpoint.
-		let a = opening_facing(Vec3::new(0.0, 0.0, 0.0), 1.0, 1.0, Vec2::X);
-		let b = opening_facing(Vec3::new(0.0, 0.0, 2.0), 1.0, 1.0, Vec2::X);
+		let a = opening_facing(Vec3::new(0.0, 0.0, 0.0), 1.0, 1.0, Vec2::X)?;
+		let b = opening_facing(Vec3::new(0.0, 0.0, 2.0), 1.0, 1.0, Vec2::X)?;
 		let hall = ConnectingHall::rough_stone(a, b);
 		let mid = hall.midpoint();
 		assert!((mid.x - 0.0).abs() < 1e-3);
 		assert!((mid.z - 1.0).abs() < 1e-3);
 		assert_eq!(hall.tube().nodes().len(), 3);
+		Ok(())
 	}
 }

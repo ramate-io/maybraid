@@ -448,7 +448,7 @@ mod tests {
 	}
 
 	#[test]
-	fn openings_assign_without_optional_noise() {
+	fn openings_assign_without_optional_noise() -> anyhow::Result<()> {
 		let floor = ArcFloor::new(ArcFloorParams {
 			openings: openings_at(&[
 				("door", 0.0, OpeningLabel::Passage),
@@ -459,10 +459,11 @@ mod tests {
 		assert_eq!(floor.ring_wall().portals.len(), 2);
 		assert!(!floor.ring_wall().sweep.clip_intervals.is_empty());
 		assert_eq!(floor.openings().len(), 2);
+		Ok(())
 	}
 
 	#[test]
-	fn slab_none_omits_nodes() {
+	fn slab_none_omits_nodes() -> anyhow::Result<()> {
 		let floor = ArcFloor::new(ArcFloorParams {
 			floor: ArcFloorSlab::None,
 			ceiling: ArcFloorSlab::None,
@@ -470,10 +471,11 @@ mod tests {
 		});
 		assert!(floor.floor_nodes().is_empty());
 		assert!(floor.ceiling_nodes().is_empty());
+		Ok(())
 	}
 
 	#[test]
-	fn solid_and_hole_slabs() {
+	fn solid_and_hole_slabs() -> anyhow::Result<()> {
 		let solid = ArcFloor::new(ArcFloorParams {
 			floor: ArcFloorSlab::Solid,
 			..ArcFloorParams::default()
@@ -491,10 +493,11 @@ mod tests {
 		assert_eq!(holed.floor_nodes().len(), 8);
 		assert_eq!(holed.ceiling_nodes().len(), 5);
 		assert!((holed.ceiling_nodes()[0].placement.translation.y - 3.0).abs() < 1e-3);
+		Ok(())
 	}
 
 	#[test]
-	fn mapped_opening_kit_angle_map() {
+	fn mapped_opening_kit_angle_map() -> anyhow::Result<()> {
 		let connect = OpeningId::new("connect");
 		let floor = ArcFloor::new(ArcFloorParams {
 			openings: openings_at(&[
@@ -513,7 +516,9 @@ mod tests {
 		assert!(at_door.y < -0.05, "clockwise of +X → −Z, got {at_door:?}");
 
 		// Door: one segment clockwise of t → `[t−30°, t−15°]` (decreasing t).
-		let east = floor.mapped_opening(&connect).expect("connect");
+		let east = floor
+			.mapped_opening(&connect)
+			.ok_or_else(|| anyhow::anyhow!("missing mapped opening {connect:?}"))?;
 		let (bl, br, tl, tr) = east.endpoint_corners();
 		let seg = floor.segment_t();
 		let expect_bl = floor.ring_point_at(0.5 - 2.0 * seg);
@@ -537,5 +542,6 @@ mod tests {
 		// Mid toward +Z of +X (clockwise from +X in plan).
 		let mid = (bl + br) * 0.5;
 		assert!(mid.z > 0.5, "mid={mid:?}");
+		Ok(())
 	}
 }

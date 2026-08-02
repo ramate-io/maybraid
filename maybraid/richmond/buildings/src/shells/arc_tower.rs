@@ -159,7 +159,7 @@ mod tests {
 	use crate::shells::arc_floor::ArcFloor;
 
 	#[test]
-	fn stacks_requested_floor_count() {
+	fn stacks_requested_floor_count() -> anyhow::Result<()> {
 		let (id, opening) = ArcFloor::plan_opening_at_t(
 			"door",
 			OpeningLabel::Passage,
@@ -175,10 +175,11 @@ mod tests {
 			..ArcTowerParams::default()
 		});
 		assert_eq!(tower.storeys().len(), 4);
+		Ok(())
 	}
 
 	#[test]
-	fn only_top_storey_has_ceiling() {
+	fn only_top_storey_has_ceiling() -> anyhow::Result<()> {
 		let tower = ArcTower::new(ArcTowerParams {
 			floor_count: 3,
 			base_floor: ArcFloorSlab::Solid,
@@ -186,8 +187,18 @@ mod tests {
 			top_ceiling: ArcFloorSlab::Solid,
 			..ArcTowerParams::default()
 		});
-		assert!(tower.storey(0).unwrap().ceiling_nodes().is_empty());
-		assert!(tower.storey(1).unwrap().ceiling_nodes().is_empty());
-		assert!(!tower.storey(2).unwrap().ceiling_nodes().is_empty());
+		let s0 = tower
+			.storey(0)
+			.ok_or_else(|| anyhow::anyhow!("missing storey 0"))?;
+		let s1 = tower
+			.storey(1)
+			.ok_or_else(|| anyhow::anyhow!("missing storey 1"))?;
+		let s2 = tower
+			.storey(2)
+			.ok_or_else(|| anyhow::anyhow!("missing storey 2"))?;
+		assert!(s0.ceiling_nodes().is_empty());
+		assert!(s1.ceiling_nodes().is_empty());
+		assert!(!s2.ceiling_nodes().is_empty());
+		Ok(())
 	}
 }

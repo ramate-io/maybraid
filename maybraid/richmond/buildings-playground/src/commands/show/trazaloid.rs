@@ -3,6 +3,7 @@
 use bevy::prelude::*;
 use clap::Args;
 
+use super::opening::{parse_opening_arg, trazaloid_openings, OpeningArg};
 use super::ShowTransform;
 use crate::preview::PreviewSubject;
 
@@ -25,6 +26,11 @@ pub struct Trazaloid {
 	pub band_vertical_offset: f32,
 	#[arg(long, default_value_t = 0.25)]
 	pub waist_horizontal_offset: f32,
+	/// Opening plan entries. Repeatable. When set, overrides `--door-*` flags.
+	///
+	/// Format: `id:label:minx,miny,minz:maxx,maxy,maxz`
+	#[arg(long = "opening", value_name = "SPEC", value_parser = parse_opening_arg, action = clap::ArgAction::Append)]
+	pub openings: Vec<OpeningArg>,
 	#[arg(long, default_value_t = false)]
 	pub door_north: bool,
 	#[arg(long, default_value_t = false)]
@@ -59,8 +65,21 @@ pub struct Trazaloid {
 }
 
 impl Trazaloid {
-	pub fn into_preview(self) -> (PreviewSubject, Transform) {
-		(
+	pub fn into_preview(self) -> Result<(PreviewSubject, Transform), String> {
+		let footprint = Vec2::new(self.footprint_x, self.footprint_z);
+		let openings = trazaloid_openings(
+			&self.openings,
+			footprint,
+			self.lower_height,
+			self.door_thickness,
+			self.door_width_frac,
+			self.door_height_frac,
+			self.door_north,
+			self.door_east,
+			self.door_south,
+			self.door_west,
+		)?;
+		Ok((
 			PreviewSubject::Trazaloid {
 				footprint_x: self.footprint_x,
 				footprint_z: self.footprint_z,
@@ -70,10 +89,7 @@ impl Trazaloid {
 				upper_height: self.upper_height,
 				band_vertical_offset: self.band_vertical_offset,
 				waist_horizontal_offset: self.waist_horizontal_offset,
-				door_north: self.door_north,
-				door_east: self.door_east,
-				door_south: self.door_south,
-				door_west: self.door_west,
+				openings,
 				door_width_frac: self.door_width_frac,
 				door_thickness: self.door_thickness,
 				door_height_frac: self.door_height_frac,
@@ -84,6 +100,6 @@ impl Trazaloid {
 				face_post_count: self.face_post_count,
 			},
 			self.transform.transform(),
-		)
+		))
 	}
 }
