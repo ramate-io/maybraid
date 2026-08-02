@@ -11,10 +11,14 @@ use crate::arcs::{portal_ring_wall, PortalRingParams, PortalRingWall};
 use crate::portals::{MustAssignPortal, SLICE_Y_FRAC};
 use crate::shells::connecting_hall::ConnectingHallEndpoint;
 
-/// Kit segment size (degrees); portal width is two segments → 30°.
+/// Kit segment size (degrees). Portal clips span two segments (30°); the visible
+/// omitted opening is **one** segment (15°).
 const SEG_DEG: f32 = 15.0;
 const PORTAL_SEGS: u32 = 2;
 const OPEN_HALF_DEG: f32 = SEG_DEG * (PORTAL_SEGS as f32) * 0.5;
+/// Ring samples are 7.5° clockwise of raw `start_yaw + t·2π` so \(t\) hits a
+/// segment edge (jamb), not the opening center.
+const RING_CLOCKWISE_OFFSET_DEG: f32 = SEG_DEG * 0.5;
 
 /// Inscribed-square half-extent as a fraction of outer radius.
 const INSCRIBED_HALF_FRAC: f32 = 0.7;
@@ -149,23 +153,32 @@ impl ArcFloor {
 		Some(self.endpoint_at(assigned.t))
 	}
 
-	/// Portal half-width in unit \(t\).
+	/// Portal clip half-width in unit \(t\) (two segments → 15° each side of center).
 	pub fn half_t(&self) -> f32 {
 		self.half_t
 	}
 
+	/// One kit segment in unit \(t\) (15° / 360°).
+	pub fn segment_t(&self) -> f32 {
+		SEG_DEG / 360.0
+	}
+
 	/// Outward unit direction in XZ at normalized sweep parameter \(t\).
 	///
-	/// Kit local \(−X\) after Bevy `YXZ` yaw `start_yaw + t·2π`:
-	/// `(-cos φ, sin φ)` in XZ. With `start_yaw = 0`:
-	/// \(t=0→−X\), \(t=0.25→+Z\), \(t=0.5→+X\).
+	/// `start_yaw + t·2π` plus a **+7.5° clockwise** bias so grid samples sit on
+	/// segment edges (jambs), not opening centers. Dir is kit local \(−X\) after
+	/// Bevy `YXZ` yaw: `(-cos φ, sin φ)`.
 	pub fn ring_dir_at(&self, t: f32) -> Vec2 {
-		let phi = self.params.start_yaw + norm_t(t) * std::f32::consts::TAU;
+		let phi = self.params.start_yaw
+			+ norm_t(t) * std::f32::consts::TAU
+			+ RING_CLOCKWISE_OFFSET_DEG.to_radians();
 		let (s, c) = phi.sin_cos();
 		Vec2::new(-c, s)
 	}
 
 	/// World point on the ring exterior at \(t\) (floor elevation).
+	///
+	/// Exact: \(\texttt{center} + R · \mathrm{dir}(t)\) — no chord/tangent estimate.
 	pub fn ring_point_at(&self, t: f32) -> Vec3 {
 		let dir = self.ring_dir_at(t);
 		let c = self.params.center_xz;
@@ -175,25 +188,24 @@ impl ArcFloor {
 
 	/// Opening quad at normalized \(t\) without requiring an assigned portal.
 	///
-	/// Built in the **tangent plane** at [`Self::ring_point_at`] so the flat hall
-	/// opening is centered on the door (not a chord inset/skewed by the arc).
+	/// Visible door = **one 15° segment**. Plan-view “clockwise” along the ring
+	/// (toward \(+Z\) from \(+X\) with our yaw map) is **decreasing** \(t\), so the
+	/// segment one node clockwise of portal \(t\) is `t−30°` → `t−15°`.
+	/// Tops = bottoms + slice height.
 	pub fn endpoint_at(&self, t: f32) -> ConnectingHallEndpoint {
 		let t = norm_t(t);
-		let half_angle = self.half_t * std::f32::consts::TAU;
-		let orientation = self.ring_dir_at(t);
-		// Looking outward: same right as [`ConnectingHallEndpoint`] (`(−o_z, o_x)` in XZ).
-		let right = Vec3::new(-orientation.y, 0.0, orientation.x);
-		let c = self.params.center_xz;
-		let y0 = c.y;
-		let y1 = y0 + SLICE_Y_FRAC * self.params.storey_height;
-		// Half-width of the tangent-plane door matching the angular clip rays.
-		let half_w = self.params.radius * half_angle.tan();
-		let mid0 = self.ring_point_at(t);
-		let mid1 = Vec3::new(mid0.x, y1, mid0.z);
-		let bl = mid0 - right * half_w;
-		let br = mid0 + right * half_w;
-		let tl = mid1 - right * half_w;
-		let tr = mid1 + right * half_w;
+		let seg = self.segment_t();
+		// One segment clockwise of `[t−15°, t]` → `[t−30°, t−15°]`.
+		let t_lo = norm_t(t - 2.0 * seg);
+		let t_hi = norm_t(t - seg);
+		let t_mid = norm_t(t - 1.5 * seg);
+		// Looking outward: left is further clockwise (lower t / toward +Z at +X).
+		let bl = self.ring_point_at(t_lo);
+		let br = self.ring_point_at(t_hi);
+		let h = SLICE_Y_FRAC * self.params.storey_height;
+		let tl = bl + Vec3::Y * h;
+		let tr = br + Vec3::Y * h;
+		let orientation = self.ring_dir_at(t_mid);
 		ConnectingHallEndpoint::new(bl, br, tl, tr, orientation)
 	}
 }
@@ -389,20 +401,35 @@ mod tests {
 			center_xz: Vec3::ZERO,
 			..ArcFloorParams::default()
 		});
-		// t=0 → −X (kit local −X at yaw 0).
-		let west = floor.portal_endpoint(0.0).expect("t=0");
-		assert!(west.orientation.normalize().x < -0.9, "t=0 → −X, got {:?}", west.orientation);
-		let mid_w = (west.targets.0 + west.targets.1) * 0.5;
-		assert!((mid_w.x + 4.0).abs() < 1e-3 && mid_w.z.abs() < 1e-3, "{mid_w:?}");
+		// +7.5° clockwise bias: t=0.5 near +X/−Z (a jamb node, not opening mid).
+		let at_door = floor.ring_dir_at(0.5);
+		assert!(at_door.x > 0.9, "t=0.5 ~+X, got {at_door:?}");
+		assert!(at_door.y < -0.05, "clockwise of +X → −Z, got {at_door:?}");
 
-		// t=0.25 → +Z.
-		let north = floor.portal_endpoint(0.25).expect("t=0.25");
-		assert!(north.orientation.normalize().y > 0.9, "t=0.25 → +Z, got {:?}", north.orientation);
-
-		// t=0.5 → +X.
+		// Door: one segment clockwise of t → `[t−30°, t−15°]` (decreasing t).
 		let east = floor.portal_endpoint(0.5).expect("t=0.5");
-		assert!(east.orientation.normalize().x > 0.9, "t=0.5 → +X, got {:?}", east.orientation);
-		let mid_e = (east.targets.0 + east.targets.1) * 0.5;
-		assert!((mid_e.x - 4.0).abs() < 1e-3 && mid_e.z.abs() < 1e-3, "{mid_e:?}");
+		let (bl, br, tl, tr) = east.targets;
+		let seg = floor.segment_t();
+		let expect_bl = floor.ring_point_at(0.5 - 2.0 * seg);
+		let expect_br = floor.ring_point_at(0.5 - seg);
+		assert!(bl.distance(expect_bl) < 1e-4, "bl={bl:?} expect={expect_bl:?}");
+		assert!(br.distance(expect_br) < 1e-4, "br={br:?} expect={expect_br:?}");
+		let r_bl = (bl.x * bl.x + bl.z * bl.z).sqrt();
+		let r_br = (br.x * br.x + br.z * br.z).sqrt();
+		assert!((r_bl - 4.0).abs() < 1e-3, "bl not on ring r={r_bl}");
+		assert!((r_br - 4.0).abs() < 1e-3, "br not on ring r={r_br}");
+		let h = crate::portals::SLICE_Y_FRAC * 3.0;
+		assert!((tl.y - bl.y - h).abs() < 1e-3, "top is slice-height lift, dy={}", tl.y - bl.y);
+		assert!((tr.y - br.y - h).abs() < 1e-3);
+		let chord = bl.distance(br);
+		let expect_chord = 2.0 * 4.0 * (7.5_f32).to_radians().sin();
+		assert!(
+			(chord - expect_chord).abs() < 1e-3,
+			"chord={chord} expect 15° span {expect_chord}"
+		);
+		assert!(east.orientation.normalize().x > 0.7, "orient={:?}", east.orientation);
+		// Mid toward +Z of +X (clockwise from +X in plan).
+		let mid = (bl + br) * 0.5;
+		assert!(mid.z > 0.5, "mid={mid:?}");
 	}
 }

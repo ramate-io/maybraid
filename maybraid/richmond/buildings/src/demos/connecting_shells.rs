@@ -25,8 +25,8 @@ use crate::shells::trazaloid::{
 /// Door facing the trazaloid: kit sweep \(t = 0.5 → +X\) (`start_yaw = 0`).
 const DOOR_T: f32 = 0.5;
 
-/// Extra meters past each jamb on the arc-tower hall end.
-const TOWER_OVERRUN_M: f32 = 0.6;
+/// Extra meters past each jamb on the arc-tower hall end (15° door is narrow).
+const TOWER_OVERRUN_M: f32 = 0.35;
 /// Extra meters past each jamb on the trazaloid hall end (reads wider than the door).
 const TRAZALOID_OVERRUN_M: f32 = 1.1;
 
@@ -176,19 +176,21 @@ mod tests {
 	}
 
 	#[test]
-	fn tower_hall_end_centered_on_plus_x() {
+	fn tower_hall_end_on_next_clockwise_segment() {
 		let demo = ConnectingShells::new();
 		let (end_a, _) = demo.hall().endpoints();
 		let mid = (end_a.targets.0 + end_a.targets.1) * 0.5;
-		assert!(mid.z.abs() < 0.05, "midline z={:?}", mid.z);
+		// Clockwise of t=0.5 is decreasing t → mid toward +Z of +X.
+		assert!(mid.z > 0.5, "mid={mid:?}");
+		assert!(end_a.orientation.normalize().x > 0.7, "orient={:?}", end_a.orientation);
 	}
 
 	#[test]
 	fn both_ends_widen_past_door_jambs() {
 		let demo = ConnectingShells::new();
 		let stations = demo.hall().stations();
-		// Tower: ~R tan(15°) + overrun ≈ 1.07 + 0.6
-		assert!(stations[0].bottom_left_width > 1.5, "{}", stations[0].bottom_left_width);
+		// Tower: ~R sin(7.5°) + overrun ≈ 0.52 + 0.35
+		assert!(stations[0].bottom_left_width > 0.8, "{}", stations[0].bottom_left_width);
 		assert!(
 			(stations[0].bottom_left_width - stations[0].bottom_right_width).abs() < 1e-3
 		);

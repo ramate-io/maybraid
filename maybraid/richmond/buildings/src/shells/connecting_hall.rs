@@ -170,10 +170,13 @@ fn build_stations(
 	let d_a = normalize_xz(end_a.orientation)?;
 	let d_b = normalize_xz(end_b.orientation)?;
 
-	let (t, s, m_xz) = ray_intersect_xz(p_a, d_a, p_b, d_b)?;
-	if t < -EPS || s < -EPS {
-		return None;
-	}
+	// Prefer the plan kink where the opening rays meet. When openings are skewed
+	// (e.g. an arc-door chord offset from the facing axis) the forward rays may
+	// miss — fall back to the midpoint between the openings.
+	let m_xz = match ray_intersect_xz(p_a, d_a, p_b, d_b) {
+		Some((t, s, m)) if t >= -EPS && s >= -EPS => m,
+		_ => (p_a + p_b) * 0.5,
+	};
 
 	let l_a = (m_xz - p_a).length().max(EPS);
 	let l_b = (m_xz - p_b).length().max(EPS);
