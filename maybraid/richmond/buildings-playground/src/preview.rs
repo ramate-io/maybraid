@@ -1325,7 +1325,7 @@ pub fn connecting_hall_demo_endpoints() -> (MappedOpening, MappedOpening) {
 
 /// Debug overlay for [`PreviewSubject::ConnectingHall`]: opening corners, orientation
 /// arrows, path A→mid→B, and station dots.
-/// Wireframe plan AABBs (+ mapped contact quads on arc-floor) for `--opening` previews.
+/// Wireframe plan AABBs (+ mapped contact quads on arc-floor / trazaloid) for `--opening` previews.
 ///
 /// Color key:
 /// - cyan / amber: authored plan [`Aabb3d`] voids
@@ -1386,13 +1386,61 @@ pub fn draw_opening_plan_gizmos(mut gizmos: Gizmos, config: Res<PreviewConfig>) 
 					.with_tip_length(0.2);
 			}
 		}
-		PreviewSubject::Trazaloid { openings, .. } => {
+		PreviewSubject::Trazaloid {
+			footprint_x,
+			footprint_z,
+			ridge_x,
+			ridge_z,
+			lower_height,
+			upper_height,
+			band_vertical_offset,
+			waist_horizontal_offset,
+			openings,
+			floor,
+			no_ceiling,
+			face_post_count,
+		} => {
 			if openings.is_empty() {
 				return;
 			}
 			for (i, opening) in openings.iter().enumerate() {
 				let color = if i % 2 == 0 { cyan } else { amber };
 				gizmos.aabb_3d(opening.bounds(), tf, color);
+			}
+			let shell = Trazaloid::new(TrazaloidParams {
+				footprint: Vec2::new(*footprint_x, *footprint_z),
+				ridge: Vec2::new(*ridge_x, *ridge_z),
+				lower_height: *lower_height,
+				upper_height: *upper_height,
+				band_vertical_offset: *band_vertical_offset,
+				waist_horizontal_offset: *waist_horizontal_offset,
+				openings: openings_from_preview(openings),
+				floor: if *floor {
+					TrazaloidSlab::Solid
+				} else {
+					TrazaloidSlab::None
+				},
+				ceiling: if *no_ceiling {
+					TrazaloidSlab::None
+				} else {
+					TrazaloidSlab::Solid
+				},
+				face_post_count: *face_post_count,
+				..TrazaloidParams::default()
+			});
+			for opening in openings {
+				let id = OpeningId::new(opening.id.clone());
+				let Some(mapped) = shell.mapped_opening(&id) else {
+					continue;
+				};
+				draw_opening_gizmos(&mut gizmos, map, *mapped, lime);
+				let (bl, br, ..) = mapped.endpoint_corners();
+				let mid = (bl + br) * 0.5;
+				let dir = Vec3::new(mapped.orientation.x, 0.0, mapped.orientation.y)
+					.normalize_or_zero();
+				gizmos
+					.arrow(map(mid), map(mid + dir * 1.25), orange)
+					.with_tip_length(0.2);
 			}
 		}
 		_ => {}

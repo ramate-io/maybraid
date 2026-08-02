@@ -27,15 +27,17 @@ fn resolves_waist_inset_and_gap() -> anyhow::Result<()> {
 }
 
 #[test]
-fn default_has_ceiling_no_floor() -> anyhow::Result<()> {
+fn default_has_ceiling_no_floor_no_openings() -> anyhow::Result<()> {
 	let t = Trazaloid::new(demo_params());
 	for w in t.lower_walls() {
 		assert!(!w.pieces().is_empty());
+		assert!(matches!(w.pieces()[0], ClippedStripPiece::Solid(_)));
 	}
 	for w in t.upper_walls() {
 		assert!(!w.pieces().is_empty());
 	}
 	assert!(t.floor().is_none());
+	assert!(t.openings().is_empty());
 	let ceiling = t
 		.ceiling()
 		.ok_or_else(|| anyhow::anyhow!("default solid ceiling missing"))?;

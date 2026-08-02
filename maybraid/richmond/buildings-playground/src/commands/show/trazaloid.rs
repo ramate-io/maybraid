@@ -1,4 +1,6 @@
 //! `/show trazaloid` — two-band trapezoidal-pyramid shell.
+//!
+//! With no `--opening` / `--door-*` flags the shell is solid (waist gap still present).
 
 use bevy::prelude::*;
 use clap::Args;
@@ -39,7 +41,7 @@ pub struct Trazaloid {
 	pub door_north: bool,
 	#[arg(long, default_value_t = false)]
 	pub door_east: bool,
-	#[arg(long, default_value_t = true)]
+	#[arg(long, default_value_t = false)]
 	pub door_south: bool,
 	#[arg(long, default_value_t = false)]
 	pub door_west: bool,

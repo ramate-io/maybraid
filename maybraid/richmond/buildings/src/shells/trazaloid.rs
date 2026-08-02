@@ -92,10 +92,7 @@ impl Default for TrazaloidParams {
 			upper_height: 2.5,
 			band_vertical_offset: 0.35,
 			waist_horizontal_offset: 0.25,
-			openings: Openings::new().with(
-				"south",
-				side_passage_opening(TrazaloidSide::South, footprint, 1.2, 3.0 * 0.7),
-			),
+			openings: Openings::new(),
 			floor: TrazaloidSlab::None,
 			ceiling: TrazaloidSlab::Solid,
 			style: PanelStyle::RoughStonework,
