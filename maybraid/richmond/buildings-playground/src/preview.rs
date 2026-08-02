@@ -27,9 +27,10 @@ use richmond_buildings::{
 	ConnectingHall, ConnectingShells, FittedRectangle, MappedOpening, MappedOpeningQuad,
 	MapsOpenings, OpeningId, OpeningLabel, Openings, PitchedRoof, PitchedRoofParams, RectInset,
 	Rectangle, RectangularNTube, RectangularNTubeCorner, RectangularNTubeStation,
-	RectangularStripNode, RuledPitch, Tube, TubeCrossSectionNode, TubeFaces, Trazaloid,
-	TrazaloidParams, TrazaloidSlab, DEFAULT_PANEL_THICKNESS,
+	RectangularPitchedRoofComplex, RectangularStripNode, RuledPitch, Tube, TubeCrossSectionNode,
+	TubeFaces, Trazaloid, TrazaloidParams, TrazaloidSlab, DEFAULT_PANEL_THICKNESS,
 };
+use crate::commands::show::rectangular_pitched_roof_complex::build_params as build_roof_complex_params;
 use richmond_buildings::stacked_rings::StackedRings;
 use richmond_buildings::tessellated_triangle_panel::TessellatedTrianglePanel;
 use richmond_buildings::portals::{MustAssignPortal, Portal};
@@ -137,6 +138,14 @@ pub enum PreviewSubject {
 		no_walls: bool,
 		no_hips: bool,
 		openings: Vec<PreviewOpening>,
+	},
+	RectangularPitchedRoofComplex {
+		preset: String,
+		overhang_fixed: f32,
+		overhang_ratio: Option<f32>,
+		end_cap_gable: bool,
+		gable_ridge: f32,
+		gable_eave: f32,
 	},
 	Rectangle {
 		origin: Vec3,
@@ -396,6 +405,19 @@ impl PreviewConfig {
 				!no_walls,
 				!no_hips,
 				openings.len()
+			),
+			PreviewSubject::RectangularPitchedRoofComplex {
+				ref preset,
+				overhang_fixed,
+				overhang_ratio,
+				end_cap_gable,
+				..
+			} => format!(
+				"preview: rectangular-pitched-roof-complex (preset={preset} overhang={} end={})",
+				overhang_ratio
+					.map(|r| format!("ratio={r:.2}"))
+					.unwrap_or_else(|| format!("fixed={overhang_fixed:.2}")),
+				if end_cap_gable { "gable" } else { "hip" }
 			),
 			PreviewSubject::Rectangle {
 				origin,
@@ -680,6 +702,9 @@ impl PreviewConfig {
 				let hz = footprint_z.max(1e-4) * 0.5 + 0.5;
 				let h = ridge_height.max(1e-4) + 0.5;
 				Aabb3d::from_min_max(Vec3::new(-hx, -0.2, -hz), Vec3::new(hx, h, hz))
+			}
+			PreviewSubject::RectangularPitchedRoofComplex { .. } => {
+				Aabb3d::from_min_max(Vec3::new(-10.0, -0.2, -10.0), Vec3::new(10.0, 6.0, 10.0))
 			}
 			_ => Aabb3d::from_min_max(Vec3::ZERO, Vec3::ONE),
 		}
@@ -1184,6 +1209,29 @@ pub fn present_preview_lod(
 			}
 			params.openings = openings_from_preview(openings);
 			let shell = PitchedRoof::new(params);
+			spawn_preview(
+				&mut commands,
+				transform,
+				ComponentsOnly(shell).scene_with_lod(&lod_ref),
+			);
+		}
+		PreviewSubject::RectangularPitchedRoofComplex {
+			preset,
+			overhang_fixed,
+			overhang_ratio,
+			end_cap_gable,
+			gable_ridge,
+			gable_eave,
+		} => {
+			let params = build_roof_complex_params(
+				preset,
+				*overhang_fixed,
+				*overhang_ratio,
+				*end_cap_gable,
+				*gable_ridge,
+				*gable_eave,
+			);
+			let shell = RectangularPitchedRoofComplex::new(params);
 			spawn_preview(
 				&mut commands,
 				transform,
@@ -1826,6 +1874,44 @@ pub fn draw_opening_plan_gizmos(mut gizmos: Gizmos, config: Res<PreviewConfig>) 
 			}
 		}
 		_ => {}
+	}
+}
+
+/// Massing AABBs (cyan) + valley segments (magenta) for roof-complex previews.
+pub fn draw_roof_complex_gizmos(mut gizmos: Gizmos, config: Res<PreviewConfig>) {
+	let PreviewSubject::RectangularPitchedRoofComplex {
+		preset,
+		overhang_fixed,
+		overhang_ratio,
+		end_cap_gable,
+		gable_ridge,
+		gable_eave,
+	} = &config.subject
+	else {
+		return;
+	};
+	let tf = config.transform;
+	let map = |p: Vec3| tf.transform_point(p);
+	let cyan = Color::srgb(0.25, 0.95, 1.0);
+	let magenta = Color::srgb(0.95, 0.25, 0.85);
+
+	let params = build_roof_complex_params(
+		preset,
+		*overhang_fixed,
+		*overhang_ratio,
+		*end_cap_gable,
+		*gable_ridge,
+		*gable_eave,
+	);
+	for (i, vol) in params.volumes.iter().enumerate() {
+		let color = if i % 2 == 0 { cyan } else { Color::srgb(1.0, 0.75, 0.2) };
+		gizmos.aabb_3d(*vol, tf, color);
+	}
+	let shell = RectangularPitchedRoofComplex::new(params);
+	for valley in shell.valleys() {
+		gizmos.line(map(valley.eave_point), map(valley.ridge_point), magenta);
+		gizmos.sphere(Isometry3d::from_translation(map(valley.eave_point)), 0.1, magenta);
+		gizmos.sphere(Isometry3d::from_translation(map(valley.ridge_point)), 0.1, magenta);
 	}
 }
 

@@ -15,6 +15,7 @@ pub mod panel_complex;
 pub mod pitch;
 pub mod pitched_rectangular_roof;
 pub mod polyline;
+pub mod rectangular_pitched_roof_complex;
 pub mod quad_panel;
 pub mod quad_panel_complex;
 pub mod rectangle;
@@ -84,6 +85,8 @@ pub enum Show {
 	Trazaloid(trazaloid::Trazaloid),
 	/// Two-half pitched roof (default: rectangular hip over shepherd's thatch).
 	PitchedRectangularRoof(pitched_rectangular_roof::PitchedRectangularRoof),
+	/// Orthogonal AABB pitched-roof complex with L/T valleys.
+	RectangularPitchedRoofComplex(rectangular_pitched_roof_complex::RectangularPitchedRoofComplex),
 	/// Single oriented [`richmond_buildings::Rectangle`] kit (floor / wall / ceiling presets).
 	Rectangle(rectangle::Rectangle),
 	/// Oriented rectangle kit with an inset framed by rectangle kits.
@@ -144,6 +147,7 @@ impl Show {
 			Self::ConnectingShells(cmd) => Ok(cmd.into_preview()),
 			Self::Trazaloid(cmd) => cmd.into_preview(),
 			Self::PitchedRectangularRoof(cmd) => cmd.into_preview(),
+			Self::RectangularPitchedRoofComplex(cmd) => Ok(cmd.into_preview()),
 			Self::Rectangle(cmd) => Ok(cmd.into_preview()),
 			Self::ClippedRectangle(cmd) => Ok(cmd.into_preview()),
 			Self::ClippedRectangularStrip(cmd) => Ok(cmd.into_preview()),
