@@ -25,8 +25,8 @@ use crate::shells::trazaloid::{
 /// Shared contract id for the hall join on both shells.
 const CONNECT: &str = "connect";
 
-/// Door facing the trazaloid: kit sweep \(t = 0.5 → +X\).
-const DOOR_T: f32 = 0.5;
+/// Door facing the trazaloid: \(t = 0 → +X\) (arc assets on local +X).
+const DOOR_T: f32 = 0.0;
 
 /// Extra meters past each jamb on the arc-tower hall end (15° door is narrow).
 const TOWER_OVERRUN_M: f32 = 0.35;
@@ -49,10 +49,10 @@ impl ConnectingShells {
 
 		let mut tower_openings = Openings::new();
 		for (id, t, label) in [
-			("window_n", 0.0, OpeningLabel::Aperture),
-			("window_e", 0.25, OpeningLabel::Aperture),
-			(CONNECT, DOOR_T, OpeningLabel::Passage),
-			("window_w", 0.75, OpeningLabel::Aperture),
+			("window_w", 0.25, OpeningLabel::Aperture), // −Z
+			(CONNECT, DOOR_T, OpeningLabel::Passage),   // +X
+			("window_e", 0.5, OpeningLabel::Aperture),  // −X
+			("window_n", 0.75, OpeningLabel::Aperture), // +Z
 		] {
 			let (id, opening) = ArcFloor::plan_opening_at_t(
 				id,
@@ -208,7 +208,7 @@ mod tests {
 		let (end_a, _) = demo.hall().endpoints();
 		let (bl, br, ..) = end_a.endpoint_corners();
 		let mid = (bl + br) * 0.5;
-		// Layer 1 maps the connect opening onto hit 15° sectors around t=0.5 (+X).
+		// Layer 1 maps the connect opening onto hit 15° sectors around t=0 (+X).
 		assert!(mid.x > -11.0, "mid={mid:?}");
 		assert!(mid.z.abs() < 1.5, "mid={mid:?}");
 		assert!(end_a.orientation.normalize().x > 0.7, "orient={:?}", end_a.orientation);

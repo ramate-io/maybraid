@@ -218,14 +218,14 @@ mod tests {
 
 	#[test]
 	fn parse_arc_t_opening() -> Result<(), String> {
-		let arg = parse_opening_arg("door:passage:t=0.5")?;
+		let arg = parse_opening_arg("door:passage:t=0.0")?;
 		let preview = arg.resolve_aabb(Some(ArcOpeningContext {
 			center_xz: Vec3::ZERO,
 			radius: 4.0,
 			storey_height: 3.0,
 		}))?;
 		assert_eq!(preview.id, "door");
-		assert!(preview.max.x > 3.0);
+		assert!(preview.max.x > 3.0, "t=0 should resolve to +X");
 		Ok(())
 	}
 }

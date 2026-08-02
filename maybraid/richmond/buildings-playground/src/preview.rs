@@ -922,10 +922,10 @@ pub fn present_preview_lod(
 		} => {
 			let mut openings = Openings::new();
 			for (id, t, label) in [
-				("window_n", 0.0, OpeningLabel::Aperture),
-				("window_e", 0.25, OpeningLabel::Aperture),
-				("door", 0.5, OpeningLabel::Passage),
-				("window_w", 0.75, OpeningLabel::Aperture),
+				("door", 0.0, OpeningLabel::Passage),       // +X
+				("window_w", 0.25, OpeningLabel::Aperture), // −Z
+				("window_e", 0.5, OpeningLabel::Aperture),  // −X
+				("window_n", 0.75, OpeningLabel::Aperture), // +Z
 			] {
 				let (id, opening) = ArcFloor::plan_opening_at_t(
 					id,
