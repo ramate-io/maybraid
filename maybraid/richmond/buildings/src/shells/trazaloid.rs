@@ -323,16 +323,12 @@ impl Trazaloid {
 	/// Top corners sit on the pitched lower face (inset footprint→waist), so a
 	/// [`ConnectingHall`] can carry that slope into its ceiling via authored
 	/// `top_middle` on the tube stations.
+	///
+	/// Corner order is **looking along the outward normal** (hall joinery). Face clips
+	/// are authored looking in from outside, so left/right are swapped here.
 	pub fn door_endpoint(&self, side: TrazaloidSide) -> Option<ConnectingHallEndpoint> {
 		let clip = self.door_clip(side)?;
-		// clip = [BL, BR, TR, TL] looking outward along the face.
-		Some(ConnectingHallEndpoint::new(
-			clip[0],
-			clip[1],
-			clip[3],
-			clip[2],
-			side.orientation(),
-		))
+		Some(endpoint_from_outside_clip(&clip, side.orientation()))
 	}
 
 	/// Same as [`Self::door_endpoint`] but with an explicit door height fraction along
@@ -357,14 +353,14 @@ impl Trazaloid {
 			self.params.door_thickness,
 			height_frac,
 		);
-		Some(ConnectingHallEndpoint::new(
-			clip[0],
-			clip[1],
-			clip[3],
-			clip[2],
-			side.orientation(),
-		))
+		Some(endpoint_from_outside_clip(&clip, side.orientation()))
 	}
+}
+
+/// `clip` is `[BL, BR, TR, TL]` looking **in** from outside; hall wants looking **out**.
+fn endpoint_from_outside_clip(clip: &[Vec3], orientation: Vec2) -> ConnectingHallEndpoint {
+	debug_assert!(clip.len() >= 4);
+	ConnectingHallEndpoint::new(clip[1], clip[0], clip[2], clip[3], orientation)
 }
 
 impl BuildingComponents for Trazaloid {
@@ -742,5 +738,11 @@ mod tests {
 		);
 		let clip = t.door_clip(TrazaloidSide::West).expect("clip");
 		assert_eq!(clip.len(), 4);
+		// Looking along outward (−X): left = +Z. Widening must expand, not shrink.
+		let half = 0.5 * west.targets.0.distance(west.targets.1);
+		let wide = west.widened(1.0);
+		let half_wide = 0.5 * wide.targets.0.distance(wide.targets.1);
+		assert!(half_wide > half + 0.9, "half={half} half_wide={half_wide}");
+		assert!(wide.targets.0.z > wide.targets.1.z); // BL (+Z) left of BR (−Z) when looking −X
 	}
 }

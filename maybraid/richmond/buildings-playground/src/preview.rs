@@ -877,9 +877,9 @@ pub fn present_preview_lod(
 				storey_height: *storey_height,
 				start_yaw: 0.0,
 				openings: vec![
-					MustAssignPortal::at(0.0, Portal::Door),
+					MustAssignPortal::at(0.0, Portal::Window),
 					MustAssignPortal::at(0.25, Portal::Window),
-					MustAssignPortal::at(0.5, Portal::Window),
+					MustAssignPortal::at(0.5, Portal::Door),
 					MustAssignPortal::at(0.75, Portal::Window),
 				],
 				base_floor: if *no_base_floor {
@@ -1351,4 +1351,105 @@ fn draw_opening_gizmos(
 	gizmos.line(map(br), map(tr), color);
 	gizmos.line(map(tr), map(tl), color);
 	gizmos.line(map(tl), map(bl), color);
+}
+
+/// Debug overlay for [`PreviewSubject::ConnectingShells`]: arc-ring sweep samples,
+/// door clip rays, authored hall openings, and an alternate angle-map candidate.
+///
+/// Color key (tower side):
+/// - white: ring samples via current kit map `t → (-cos, sin)`
+/// - yellow: same `t` via alternate map `t → (+cos, -sin)`
+/// - lime: door midline + clip jambs (current map)
+/// - cyan: authored / widened tower hall opening
+/// - magenta: trazaloid hall opening
+pub fn draw_connecting_shells_gizmos(mut gizmos: Gizmos, config: Res<PreviewConfig>) {
+	if !matches!(config.subject, PreviewSubject::ConnectingShells) {
+		return;
+	}
+	let tf = config.transform;
+	let map = |p: Vec3| tf.transform_point(p);
+
+	let demo = ConnectingShells::new();
+	let floor = demo.tower().storey(0).expect("ground storey");
+	let (end_tower, end_traz) = demo.hall().endpoints();
+	let door_t = 0.5;
+	let half = floor.half_t();
+	let c = floor.params().center_xz;
+	let r = floor.params().radius;
+	let y = c.y + 0.15;
+
+	let white = Color::srgb(0.95, 0.95, 0.95);
+	let yellow = Color::srgb(1.0, 0.9, 0.15);
+	let lime = Color::srgb(0.35, 0.95, 0.35);
+	let cyan = Color::srgb(0.2, 0.9, 0.95);
+	let magenta = Color::srgb(0.95, 0.25, 0.85);
+	let orange = Color::srgb(1.0, 0.55, 0.15);
+
+	// Dense ring samples — current map vs alternate (old spiral) map.
+	for i in 0..32 {
+		let t = i as f32 / 32.0;
+		let cur = floor.ring_point_at(t);
+		let alt = {
+			let phi = floor.params().start_yaw + t * std::f32::consts::TAU;
+			let (s, cos) = phi.sin_cos();
+			Vec3::new(c.x + cos * r, c.y, c.z - s * r)
+		};
+		gizmos.sphere(
+			Isometry3d::from_translation(map(Vec3::new(cur.x, y, cur.z))),
+			0.06,
+			white,
+		);
+		gizmos.sphere(
+			Isometry3d::from_translation(map(Vec3::new(alt.x, y, alt.z))),
+			0.045,
+			yellow,
+		);
+	}
+
+	// Door midline + angular clip jambs (current map).
+	for (t, rad) in [
+		(door_t - half, 0.12),
+		(door_t, 0.16),
+		(door_t + half, 0.12),
+	] {
+		let p = floor.ring_point_at(t);
+		gizmos.sphere(
+			Isometry3d::from_translation(map(Vec3::new(p.x, y, p.z))),
+			rad,
+			lime,
+		);
+	}
+	// Chord between clip jambs (true angular opening on the circle).
+	let j0 = floor.ring_point_at(door_t - half);
+	let j1 = floor.ring_point_at(door_t + half);
+	gizmos.line(
+		map(Vec3::new(j0.x, y, j0.z)),
+		map(Vec3::new(j1.x, y, j1.z)),
+		lime,
+	);
+
+	// Cardinal markers on current map.
+	for (t, color) in [
+		(0.0, orange),
+		(0.25, orange),
+		(0.5, lime),
+		(0.75, orange),
+	] {
+		let p = floor.ring_point_at(t);
+		gizmos.sphere(
+			Isometry3d::from_translation(map(Vec3::new(p.x, y + 0.35, p.z))),
+			0.1,
+			color,
+		);
+	}
+
+	draw_opening_gizmos(&mut gizmos, map, end_tower, cyan);
+	draw_opening_gizmos(&mut gizmos, map, end_traz, magenta);
+
+	// Outward arrow from authored tower midline.
+	let mid = (end_tower.targets.0 + end_tower.targets.1) * 0.5;
+	let dir = Vec3::new(end_tower.orientation.x, 0.0, end_tower.orientation.y).normalize_or_zero();
+	gizmos
+		.arrow(map(mid), map(mid + dir * 2.0), cyan)
+		.with_tip_length(0.3);
 }

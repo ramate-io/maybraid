@@ -22,8 +22,8 @@ use crate::shells::trazaloid::{
 	Trazaloid, TrazaloidDoors, TrazaloidParams, TrazaloidSide, TrazaloidSlab,
 };
 
-/// Door at \(t = 0\) faces \(+X\) with default `start_yaw = 0`.
-const DOOR_T: f32 = 0.0;
+/// Door facing the trazaloid: kit sweep \(t = 0.5 → +X\) (`start_yaw = 0`).
+const DOOR_T: f32 = 0.5;
 
 /// Extra meters past each jamb on the arc-tower hall end.
 const TOWER_OVERRUN_M: f32 = 0.6;
@@ -48,9 +48,9 @@ impl ConnectingShells {
 			storey_height: 3.0,
 			start_yaw: 0.0,
 			openings: vec![
-				MustAssignPortal::at(DOOR_T, Portal::Door),
+				MustAssignPortal::at(0.0, Portal::Window),
 				MustAssignPortal::at(0.25, Portal::Window),
-				MustAssignPortal::at(0.5, Portal::Window),
+				MustAssignPortal::at(DOOR_T, Portal::Door),
 				MustAssignPortal::at(0.75, Portal::Window),
 			],
 			base_floor: ArcFloorSlab::Solid,
@@ -181,5 +181,25 @@ mod tests {
 		let (end_a, _) = demo.hall().endpoints();
 		let mid = (end_a.targets.0 + end_a.targets.1) * 0.5;
 		assert!(mid.z.abs() < 0.05, "midline z={:?}", mid.z);
+	}
+
+	#[test]
+	fn both_ends_widen_past_door_jambs() {
+		let demo = ConnectingShells::new();
+		let stations = demo.hall().stations();
+		// Tower: ~R tan(15°) + overrun ≈ 1.07 + 0.6
+		assert!(stations[0].bottom_left_width > 1.5, "{}", stations[0].bottom_left_width);
+		assert!(
+			(stations[0].bottom_left_width - stations[0].bottom_right_width).abs() < 1e-3
+		);
+		// Trazaloid: door half 0.6 + overrun 1.1 = 1.7 (must not shrink from L/R swap)
+		assert!(
+			stations[2].bottom_left_width > 1.5,
+			"traz width {} — outward corner order / widen bug?",
+			stations[2].bottom_left_width
+		);
+		assert!(
+			(stations[2].bottom_left_width - stations[2].bottom_right_width).abs() < 1e-3
+		);
 	}
 }

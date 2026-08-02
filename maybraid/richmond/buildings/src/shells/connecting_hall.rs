@@ -43,22 +43,27 @@ impl ConnectingHallEndpoint {
 	///
 	/// Overrunning reads better than stopping short or going too narrow when connecting
 	/// shells backwards from openings.
+	///
+	/// Expansion is from the opening midline along ±[`Self::orientation`]'s right, so it
+	/// stays centered even if the authored corners were left/right swapped (e.g. a
+	/// face authored looking inward at the wall).
 	pub fn widened(self, side_overrun: f32) -> Self {
 		let overrun = side_overrun.max(0.0);
-		if overrun < EPS {
-			return self;
-		}
 		let Some(orient) = normalize_xz(self.orientation) else {
 			return self;
 		};
 		let right = Vec3::new(-orient.y, 0.0, orient.x);
 		let (bl, br, tl, tr) = self.targets;
+		let bottom_mid = (bl + br) * 0.5;
+		let top_mid = (tl + tr) * 0.5;
+		let half_b = 0.5 * bl.distance(br) + overrun;
+		let half_t = 0.5 * tl.distance(tr) + overrun;
 		Self {
 			targets: (
-				bl - right * overrun,
-				br + right * overrun,
-				tl - right * overrun,
-				tr + right * overrun,
+				bottom_mid - right * half_b,
+				bottom_mid + right * half_b,
+				top_mid - right * half_t,
+				top_mid + right * half_t,
 			),
 			orientation: self.orientation,
 		}

@@ -149,27 +149,47 @@ impl ArcFloor {
 		Some(self.endpoint_at(assigned.t))
 	}
 
+	/// Portal half-width in unit \(t\).
+	pub fn half_t(&self) -> f32 {
+		self.half_t
+	}
+
+	/// Outward unit direction in XZ at normalized sweep parameter \(t\).
+	///
+	/// Kit local \(−X\) after Bevy `YXZ` yaw `start_yaw + t·2π`:
+	/// `(-cos φ, sin φ)` in XZ. With `start_yaw = 0`:
+	/// \(t=0→−X\), \(t=0.25→+Z\), \(t=0.5→+X\).
+	pub fn ring_dir_at(&self, t: f32) -> Vec2 {
+		let phi = self.params.start_yaw + norm_t(t) * std::f32::consts::TAU;
+		let (s, c) = phi.sin_cos();
+		Vec2::new(-c, s)
+	}
+
+	/// World point on the ring exterior at \(t\) (floor elevation).
+	pub fn ring_point_at(&self, t: f32) -> Vec3 {
+		let dir = self.ring_dir_at(t);
+		let c = self.params.center_xz;
+		let r = self.params.radius;
+		Vec3::new(c.x + dir.x * r, c.y, c.z + dir.y * r)
+	}
+
 	/// Opening quad at normalized \(t\) without requiring an assigned portal.
 	///
-	/// Built in the **tangent plane** at the ring surface on the portal midline so the
-	/// flat hall opening is centered on the door (not a chord inset/skewed by the arc).
+	/// Built in the **tangent plane** at [`Self::ring_point_at`] so the flat hall
+	/// opening is centered on the door (not a chord inset/skewed by the arc).
 	pub fn endpoint_at(&self, t: f32) -> ConnectingHallEndpoint {
 		let t = norm_t(t);
 		let half_angle = self.half_t * std::f32::consts::TAU;
-		let mid_yaw = self.params.start_yaw + t * std::f32::consts::TAU;
-		let (s, cos) = mid_yaw.sin_cos();
-		// Same yaw map as arc kits / spiral stairs: \(θ=0 → (+R,0)\), \(+θ → −Z\).
-		let orientation = Vec2::new(cos, -s);
-		// Looking outward: right = \(+\)plan-perp (at \(θ=0\), \(+Z\)).
-		let right = Vec3::new(s, 0.0, cos);
-		let r = self.params.radius;
+		let orientation = self.ring_dir_at(t);
+		// Looking outward: same right as [`ConnectingHallEndpoint`] (`(−o_z, o_x)` in XZ).
+		let right = Vec3::new(-orientation.y, 0.0, orientation.x);
 		let c = self.params.center_xz;
 		let y0 = c.y;
 		let y1 = y0 + SLICE_Y_FRAC * self.params.storey_height;
 		// Half-width of the tangent-plane door matching the angular clip rays.
-		let half_w = r * half_angle.tan();
-		let mid0 = Vec3::new(c.x + cos * r, y0, c.z - s * r);
-		let mid1 = Vec3::new(c.x + cos * r, y1, c.z - s * r);
+		let half_w = self.params.radius * half_angle.tan();
+		let mid0 = self.ring_point_at(t);
+		let mid1 = Vec3::new(mid0.x, y1, mid0.z);
 		let bl = mid0 - right * half_w;
 		let br = mid0 + right * half_w;
 		let tl = mid1 - right * half_w;
@@ -357,23 +377,32 @@ mod tests {
 	}
 
 	#[test]
-	fn portal_endpoint_faces_plus_x_at_t0() {
+	fn portal_endpoint_kit_angle_map() {
 		let floor = ArcFloor::new(ArcFloorParams {
-			openings: vec![MustAssignPortal::at(0.0, Portal::Door)],
+			openings: vec![
+				MustAssignPortal::at(0.0, Portal::Door),
+				MustAssignPortal::at(0.25, Portal::Window),
+				MustAssignPortal::at(0.5, Portal::Door),
+			],
 			radius: 4.0,
 			start_yaw: 0.0,
 			center_xz: Vec3::ZERO,
 			..ArcFloorParams::default()
 		});
-		let end = floor.portal_endpoint(0.0).expect("door");
-		let o = end.orientation.normalize();
-		assert!(o.x > 0.9, "orientation={o:?}");
-		assert!(o.y.abs() < 0.1);
-		let mid = (end.targets.0 + end.targets.1) * 0.5;
-		assert!(
-			(mid.z).abs() < 1e-3,
-			"door midline should sit on +X (z≈0), got {mid:?}"
-		);
-		assert!((mid.x - 4.0).abs() < 1e-3, "tangent plane at radius, got {mid:?}");
+		// t=0 → −X (kit local −X at yaw 0).
+		let west = floor.portal_endpoint(0.0).expect("t=0");
+		assert!(west.orientation.normalize().x < -0.9, "t=0 → −X, got {:?}", west.orientation);
+		let mid_w = (west.targets.0 + west.targets.1) * 0.5;
+		assert!((mid_w.x + 4.0).abs() < 1e-3 && mid_w.z.abs() < 1e-3, "{mid_w:?}");
+
+		// t=0.25 → +Z.
+		let north = floor.portal_endpoint(0.25).expect("t=0.25");
+		assert!(north.orientation.normalize().y > 0.9, "t=0.25 → +Z, got {:?}", north.orientation);
+
+		// t=0.5 → +X.
+		let east = floor.portal_endpoint(0.5).expect("t=0.5");
+		assert!(east.orientation.normalize().x > 0.9, "t=0.5 → +X, got {:?}", east.orientation);
+		let mid_e = (east.targets.0 + east.targets.1) * 0.5;
+		assert!((mid_e.x - 4.0).abs() < 1e-3 && mid_e.z.abs() < 1e-3, "{mid_e:?}");
 	}
 }
