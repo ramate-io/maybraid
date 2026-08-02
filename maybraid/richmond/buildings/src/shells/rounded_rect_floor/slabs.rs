@@ -1,4 +1,4 @@
-//! Floor / ceiling: inset rectangular core + quarter-disk fans; positioned cuts.
+//! Floor / ceiling: inset core + outer edge strips + quarter-disk fans.
 
 use bevy_math::Vec3;
 use richmond_building_components::panels::PanelStyle;
@@ -13,36 +13,49 @@ use crate::shells::ortho::{merge_slab_insets, PlanRect, EPS};
 use super::geometry::{core_plan, RoundedRectCorner};
 use super::{RoundedRectFloorParams, RoundedRectFloorSlab, RoundedSlabPiece};
 
+/// Core + four edge strips (against the outer straights) + quarter fans.
+pub(super) struct SlabParts {
+	pub core: Option<RoundedSlabPiece>,
+	pub edges: Vec<RoundedSlabPiece>,
+	pub quarters: Vec<PanelComplex>,
+}
+
 impl RoundedRectFloorParams {
 	pub(super) fn resolve_slab_parts(
 		&self,
 		slab: RoundedRectFloorSlab,
 		plan: PlanRect,
 		radius: f32,
-	) -> (Option<RoundedSlabPiece>, Vec<PanelComplex>) {
+	) -> SlabParts {
 		match slab {
-			RoundedRectFloorSlab::None => (None, Vec::new()),
+			RoundedRectFloorSlab::None => SlabParts {
+				core: None,
+				edges: Vec::new(),
+				quarters: Vec::new(),
+			},
 			RoundedRectFloorSlab::Solid => {
-				let core = core_plan(plan, radius);
 				let cutting: Vec<_> = self
 					.openings
 					.iter()
 					.filter_map(|(_id, o)| o.label.cuts_slab().then_some(o.bounds))
 					.collect();
-				let core_piece = match merge_slab_insets(core, cutting.iter().copied()) {
-					None => Some(RoundedSlabPiece::Solid(solid_rect(
-						self.style,
-						core,
-						self.joint_thickness,
-					))),
-					Some(None) => None,
-					Some(Some(inset)) => Some(RoundedSlabPiece::Clipped(clipped_rect(
-						self.style,
-						core,
-						self.joint_thickness,
-						inset,
-					))),
-				};
+				let core = resolve_piece(
+					self.style,
+					core_plan(plan, radius),
+					&cutting,
+					self.joint_thickness,
+				);
+
+				let mut edges = Vec::new();
+				if radius > EPS {
+					for edge_plan in edge_strip_plans(plan, radius) {
+						if let Some(piece) =
+							resolve_piece(self.style, edge_plan, &cutting, self.joint_thickness)
+						{
+							edges.push(piece);
+						}
+					}
+				}
 
 				let mut quarters = Vec::new();
 				if radius > EPS {
@@ -60,9 +73,53 @@ impl RoundedRectFloorParams {
 						}
 					}
 				}
-				(core_piece, quarters)
+				SlabParts {
+					core,
+					edges,
+					quarters,
+				}
 			}
 		}
+	}
+}
+
+/// Four axis-aligned strips between the inset core and the outer straight edges.
+///
+/// Each strip butts the quarter-disk corners at its ends and runs flush with the
+/// outer footprint on the straight side.
+fn edge_strip_plans(plan: PlanRect, radius: f32) -> [PlanRect; 4] {
+	let r = radius.max(0.0);
+	let cx = plan.center.x;
+	let cz = plan.center.z;
+	let hx = plan.half_x;
+	let hz = plan.half_z;
+	let y = plan.y;
+	let mid_w = (plan.full_x() - 2.0 * r).max(EPS);
+	let mid_d = (plan.full_z() - 2.0 * r).max(EPS);
+	[
+		// South: outer −Z edge, between SW/SE quarter disks.
+		PlanRect::new(Vec3::new(cx, y, cz - hz + r * 0.5), mid_w, r),
+		// East: outer +X edge, between SE/NE quarter disks.
+		PlanRect::new(Vec3::new(cx + hx - r * 0.5, y, cz), r, mid_d),
+		// North: outer +Z edge.
+		PlanRect::new(Vec3::new(cx, y, cz + hz - r * 0.5), mid_w, r),
+		// West: outer −X edge.
+		PlanRect::new(Vec3::new(cx - hx + r * 0.5, y, cz), r, mid_d),
+	]
+}
+
+fn resolve_piece(
+	style: PanelStyle,
+	plan: PlanRect,
+	cutting: &[bevy_math::bounding::Aabb3d],
+	thickness: f32,
+) -> Option<RoundedSlabPiece> {
+	match merge_slab_insets(plan, cutting.iter().copied()) {
+		None => Some(RoundedSlabPiece::Solid(solid_rect(style, plan, thickness))),
+		Some(None) => None,
+		Some(Some(inset)) => Some(RoundedSlabPiece::Clipped(clipped_rect(
+			style, plan, thickness, inset,
+		))),
 	}
 }
 
@@ -104,7 +161,6 @@ fn quarter_disk(
 	let c = corner.center(plan, radius);
 	let start = corner.start_angle();
 	let n = segments.max(1);
-	// Rough AABB of the quarter for coverage tests.
 	let mut amin = c;
 	let mut amax = c;
 	for i in 0..=n {

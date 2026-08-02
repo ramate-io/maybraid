@@ -1,17 +1,17 @@
-//! Wall opening resolution for rounded-rect straights (and optional corner clips).
+//! Wall opening resolution: rectangle straights + clipped quarter-arc corners.
 
 use bevy_math::bounding::Aabb3d;
 use bevy_math::{Vec2, Vec3};
+use richmond_building_components::partitions::PartitionStyle;
+use std::f32::consts::FRAC_PI_2;
 
+use crate::arcs::ClippedArcSweep;
 use crate::openings::{
 	MappedOpening, MappedOpeningQuad, MappedOpenings, MapsOpenings, Opening, OpeningId, Openings,
 };
 use crate::paneling::clipped_rectangular_strip::ClippedRectangularStrip;
-use crate::paneling::clipped_ruled_strip::ClippedRuledStrip;
 use crate::paneling::rectangular_strip::RectangularStripNode;
-use crate::shells::ortho::{
-	edge_score_for_bounds, standing_face_opening, OrthoSide, WallEdge, EPS,
-};
+use crate::shells::ortho::{edge_score_for_bounds, standing_face_opening, OrthoSide, EPS};
 
 use super::geometry::{RoundedRectCorner, RoundedRectGeom};
 use super::{RoundedRectFloor, RoundedRectFloorParams};
@@ -52,7 +52,7 @@ impl RoundedRectFloorParams {
 		geom: &RoundedRectGeom,
 	) -> (
 		[ClippedRectangularStrip; 4],
-		[ClippedRuledStrip; 4],
+		[Option<ClippedArcSweep>; 4],
 		Openings,
 		MappedOpenings,
 	) {
@@ -80,32 +80,23 @@ impl RoundedRectFloorParams {
 					best_kind = Some((false, i, dist, score));
 				}
 			}
-			for corner in RoundedRectCorner::all() {
-				let i = corner.index();
-				if geom.corner_bottom[i].len() < 2 {
-					continue;
-				}
-				let mid = geom.corner_bottom[i][geom.corner_bottom[i].len() / 2];
-				let mid_top = mid + Vec3::Y * geom.height;
-				let edge = WallEdge::new(
-					geom.corner_bottom[i][0],
-					*geom.corner_bottom[i].last().unwrap(),
-					geom.height,
-					corner_outward(corner),
-				);
-				let mid3 = (mid + mid_top) * 0.5;
-				let opening_mid = Vec3::from((opening.bounds.min + opening.bounds.max) * 0.5);
-				let dist = opening_mid.distance_squared(mid3);
-				let score = edge.length() * 0.1; // corners lose ties to straights of similar dist
-				let replace = match best_kind {
-					None => true,
-					Some((_, _, prev_d, prev_s)) => {
-						dist + 0.25 < prev_d || (dist <= prev_d + 1e-4 && score > prev_s)
+			if geom.radius > EPS {
+				for corner in RoundedRectCorner::all() {
+					let i = corner.index();
+					let c = corner.center(geom.plan, geom.radius);
+					let mid = c + Vec3::Y * (geom.height * 0.5);
+					let opening_mid = Vec3::from((opening.bounds.min + opening.bounds.max) * 0.5);
+					let dist = opening_mid.distance_squared(mid);
+					let score = geom.radius * geom.height * 0.1;
+					let replace = match best_kind {
+						None => true,
+						Some((_, _, prev_d, prev_s)) => {
+							dist + 0.25 < prev_d || (dist <= prev_d + 1e-4 && score > prev_s)
+						}
+					};
+					if replace {
+						best_kind = Some((true, i, dist, score));
 					}
-				};
-				if replace {
-					let _ = edge;
-					best_kind = Some((true, i, dist, score));
 				}
 			}
 
@@ -151,24 +142,20 @@ impl RoundedRectFloorParams {
 			openings.insert(id, opening);
 		}
 
-		let mut corner_clips: [Option<Vec<Vec3>>; 4] = [None, None, None, None];
+		let mut corner_clips: [Option<(f32, f32)>; 4] = [None, None, None, None];
 		for corner in RoundedRectCorner::all() {
 			let idx = corner.index();
 			let Some((_, id, opening)) = best_corner[idx].take() else {
 				continue;
 			};
-			let bot = &geom.corner_bottom[idx];
-			let top = &geom.corner_top[idx];
-			if bot.len() < 2 {
+			let Some((t0, t1, mapped_o)) =
+				corner_clip_t(geom, corner, &opening.bounds)
+			else {
 				continue;
-			}
-			if let Some((clip, mapped_o)) =
-				corner_clip_from_bounds(bot, top, &opening.bounds, corner_outward(corner))
-			{
-				corner_clips[idx] = Some(clip);
-				mapped.insert(id.clone(), mapped_o);
-				openings.insert(id, opening);
-			}
+			};
+			corner_clips[idx] = Some((t0, t1));
+			mapped.insert(id.clone(), mapped_o);
+			openings.insert(id, opening);
 		}
 
 		let straights = OrthoSide::all().map(|side| {
@@ -189,82 +176,103 @@ impl RoundedRectFloorParams {
 
 		let corners = RoundedRectCorner::all().map(|corner| {
 			let idx = corner.index();
-			let bot = &geom.corner_bottom[idx];
-			let top = &geom.corner_top[idx];
-			if bot.len() < 2 {
-				return ClippedRuledStrip::new(self.style);
+			if geom.radius < EPS {
+				return None;
 			}
-			let bay_count = bot.len() - 1;
-			let mut clips = vec![None; bay_count];
-			if let Some(clip) = corner_clips[idx].clone() {
-				// Apply on the middle bay for a single positioned void.
-				let mid = bay_count / 2;
-				clips[mid] = Some(clip);
-			}
-			ClippedRuledStrip::from_lines(self.style, bot.clone(), top.clone(), clips)
+			let c = corner.center(geom.plan, geom.radius);
+			let clips = corner_clips[idx].into_iter();
+			Some(ClippedArcSweep::new(
+				c,
+				geom.radius,
+				geom.height,
+				90.0,
+				corner.start_yaw(),
+				PartitionStyle::RoughStonework,
+				clips,
+			))
 		});
 
 		(straights, corners, openings, mapped)
 	}
 }
 
-fn corner_outward(corner: RoundedRectCorner) -> Vec2 {
-	match corner {
-		RoundedRectCorner::SouthEast => Vec2::new(1.0, -1.0).normalize(),
-		RoundedRectCorner::NorthEast => Vec2::new(1.0, 1.0).normalize(),
-		RoundedRectCorner::NorthWest => Vec2::new(-1.0, 1.0).normalize(),
-		RoundedRectCorner::SouthWest => Vec2::new(-1.0, -1.0).normalize(),
-	}
-}
-
-fn corner_clip_from_bounds(
-	bot: &[Vec3],
-	top: &[Vec3],
+/// Map an opening AABB onto the quarter-arc as a normalized \(t\) clip + contact quad.
+fn corner_clip_t(
+	geom: &RoundedRectGeom,
+	corner: RoundedRectCorner,
 	bounds: &Aabb3d,
-	outward: Vec2,
-) -> Option<(Vec<Vec3>, MappedOpening)> {
-	let n = bot.len();
-	if n < 2 || top.len() != n {
-		return None;
-	}
-	let y0 = bot[0].y;
-	let y1 = top[0].y;
+) -> Option<(f32, f32, MappedOpening)> {
+	let c = corner.center(geom.plan, geom.radius);
+	let start = corner.start_angle();
 	let imin = Vec3::from(bounds.min);
 	let imax = Vec3::from(bounds.max);
+	let y0 = geom.plan.y;
+	let y1 = y0 + geom.height;
 	let hy0 = imin.y.clamp(y0, y1);
 	let hy1 = imax.y.clamp(y0, y1);
 	if hy1 - hy0 < EPS {
 		return None;
 	}
 
-	// Pick the chord stations whose midpoints are closest to the opening center in XZ.
-	let mid_xz = Vec2::new(
-		0.5 * (imin.x + imax.x),
-		0.5 * (imin.z + imax.z),
-	);
-	let mut best_i = 0usize;
-	let mut best_d = f32::MAX;
-	for i in 0..n - 1 {
-		let m = (bot[i] + bot[i + 1]) * 0.5;
-		let d = (Vec2::new(m.x, m.z) - mid_xz).length_squared();
-		if d < best_d {
-			best_d = d;
-			best_i = i;
+	let corners_xz = [
+		Vec2::new(imin.x, imin.z),
+		Vec2::new(imax.x, imin.z),
+		Vec2::new(imin.x, imax.z),
+		Vec2::new(imax.x, imax.z),
+	];
+	let c_xz = Vec2::new(c.x, c.z);
+	let mut t_lo = 1.0f32;
+	let mut t_hi = 0.0f32;
+	for p in corners_xz {
+		let d = p - c_xz;
+		if d.length_squared() < 1e-8 {
+			continue;
 		}
+		let ang = d.y.atan2(d.x);
+		let mut delta = ang - start;
+		while delta < 0.0 {
+			delta += std::f32::consts::TAU;
+		}
+		while delta > std::f32::consts::TAU {
+			delta -= std::f32::consts::TAU;
+		}
+		if delta > FRAC_PI_2 + 0.35 {
+			// Far outside this quarter — skip.
+			continue;
+		}
+		let t = (delta / FRAC_PI_2).clamp(0.0, 1.0);
+		t_lo = t_lo.min(t);
+		t_hi = t_hi.max(t);
 	}
-	let a0 = bot[best_i];
-	let b0 = bot[best_i + 1];
-	let a1 = top[best_i];
-	let b1 = top[best_i + 1];
-	let v0 = ((hy0 - y0) / (y1 - y0).max(EPS)).clamp(0.0, 1.0);
-	let v1 = ((hy1 - y0) / (y1 - y0).max(EPS)).clamp(0.0, 1.0);
-	let bl = a0.lerp(a1, v0);
-	let br = b0.lerp(b1, v0);
-	let tl = a0.lerp(a1, v1);
-	let tr = b0.lerp(b1, v1);
-	let clip = vec![bl, br, tr, tl];
-	let mapped = MappedOpening::new(MappedOpeningQuad::new(br, bl, tr, tl), outward);
-	Some((clip, mapped))
+	if t_hi - t_lo < 0.05 {
+		// Degenerate: expand around midpoint of AABB.
+		let mid = Vec2::new(0.5 * (imin.x + imax.x), 0.5 * (imin.z + imax.z));
+		let d = mid - c_xz;
+		let ang = d.y.atan2(d.x);
+		let mut delta = ang - start;
+		while delta < 0.0 {
+			delta += std::f32::consts::TAU;
+		}
+		let t = (delta / FRAC_PI_2).clamp(0.05, 0.95);
+		t_lo = (t - 0.08).clamp(0.0, 1.0);
+		t_hi = (t + 0.08).clamp(0.0, 1.0);
+	}
+	if t_hi - t_lo < EPS {
+		return None;
+	}
+
+	let ang0 = start + t_lo * FRAC_PI_2;
+	let ang1 = start + t_hi * FRAC_PI_2;
+	let r = geom.radius;
+	let p0 = Vec3::new(c.x + ang0.cos() * r, hy0, c.z + ang0.sin() * r);
+	let p1 = Vec3::new(c.x + ang1.cos() * r, hy0, c.z + ang1.sin() * r);
+	let p2 = Vec3::new(c.x + ang0.cos() * r, hy1, c.z + ang0.sin() * r);
+	let p3 = Vec3::new(c.x + ang1.cos() * r, hy1, c.z + ang1.sin() * r);
+	let mapped = MappedOpening::new(
+		MappedOpeningQuad::new(p1, p0, p3, p2),
+		corner.outward(),
+	);
+	Some((t_lo, t_hi, mapped))
 }
 
 impl MapsOpenings for RoundedRectFloor {

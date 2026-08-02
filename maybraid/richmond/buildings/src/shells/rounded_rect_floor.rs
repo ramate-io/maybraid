@@ -1,8 +1,8 @@
-//! Orthonormal rounded-rectangle storey: straight rectangle walls + ruled corners.
+//! Orthonormal rounded-rectangle storey: straight rectangle walls + arc corners.
 //!
 //! Straight runs use [`ClippedRectangularStrip`] (ordinary rectangle kits). Corner
-//! quarter-cylinders use [`ClippedRuledStrip`]. Openings fit to authored AABB
-//! positions on the hit span / slab piece.
+//! quarters use [`ClippedArcSweep`] (kit arc partitions; empty clips ⇒ solid).
+//! Openings fit to authored AABB positions on the hit span / slab piece.
 
 mod geometry;
 mod openings;
@@ -14,12 +14,14 @@ mod tests;
 use bevy_math::{Vec2, Vec3};
 use lod::gen::LodSceneLevel;
 use richmond_building_components::joints::JointNode;
-use richmond_building_components::panels::{PanelNode, PanelStyle};
+use richmond_building_components::panels::PanelNode;
+use richmond_building_components::panels::PanelStyle;
+use richmond_building_components::partitions::PartitionNode;
 use richmond_building_components::{BuildingComponents, Layers};
 
+use crate::arcs::ClippedArcSweep;
 use crate::openings::{MappedOpenings, Openings};
 use crate::paneling::clipped_rectangular_strip::ClippedRectangularStrip;
-use crate::paneling::clipped_ruled_strip::ClippedRuledStrip;
 use crate::paneling::fitted_rectangle::{ClippedFittedRectangle, FittedRectangle};
 use crate::paneling::panel_complex::{PanelComplex, DEFAULT_PANEL_THICKNESS};
 
@@ -49,7 +51,7 @@ pub struct RoundedRectFloorParams {
 	pub storey_height: f32,
 	/// Corner radius; clamped so each straight run stays ≥ ε.
 	pub corner_radius: f32,
-	/// Samples along each quarter-cylinder (excluding endpoints already on straights).
+	/// Samples for horizontal quarter-disk floor / ceiling fans.
 	pub corner_segments: u32,
 	pub openings: Openings,
 	pub floor: RoundedRectFloorSlab,
@@ -136,10 +138,12 @@ impl RoundedRectFloorParams {
 pub struct RoundedRectFloor {
 	params: RoundedRectFloorParams,
 	straights: [ClippedRectangularStrip; 4],
-	corners: [ClippedRuledStrip; 4],
+	corners: [Option<ClippedArcSweep>; 4],
 	floor_core: Option<RoundedSlabPiece>,
+	floor_edges: Vec<RoundedSlabPiece>,
 	floor_quarters: Vec<PanelComplex>,
 	ceiling_core: Option<RoundedSlabPiece>,
+	ceiling_edges: Vec<RoundedSlabPiece>,
 	ceiling_quarters: Vec<PanelComplex>,
 	openings: Openings,
 	mapped: MappedOpenings,
@@ -185,23 +189,24 @@ impl RoundedRectFloor {
 		let (straights, corners, openings, mapped) = params.resolve_walls(&geom);
 
 		let y1 = plan.y + storey_height;
-		let (floor_core, floor_quarters) = params.resolve_slab_parts(params.floor, plan, radius);
+		let floor_parts = params.resolve_slab_parts(params.floor, plan, radius);
 		let ceil_plan = PlanRect::new(
 			Vec3::new(plan.center.x, y1, plan.center.z),
 			plan.full_x(),
 			plan.full_z(),
 		);
-		let (ceiling_core, ceiling_quarters) =
-			params.resolve_slab_parts(params.ceiling, ceil_plan, radius);
+		let ceiling_parts = params.resolve_slab_parts(params.ceiling, ceil_plan, radius);
 
 		Self {
 			params,
 			straights,
 			corners,
-			floor_core,
-			floor_quarters,
-			ceiling_core,
-			ceiling_quarters,
+			floor_core: floor_parts.core,
+			floor_edges: floor_parts.edges,
+			floor_quarters: floor_parts.quarters,
+			ceiling_core: ceiling_parts.core,
+			ceiling_edges: ceiling_parts.edges,
+			ceiling_quarters: ceiling_parts.quarters,
 			openings,
 			mapped,
 			radius,
@@ -220,16 +225,20 @@ impl RoundedRectFloor {
 		&self.straights
 	}
 
-	pub fn corners(&self) -> &[ClippedRuledStrip; 4] {
+	pub fn corners(&self) -> &[Option<ClippedArcSweep>; 4] {
 		&self.corners
 	}
 
 	pub fn has_floor(&self) -> bool {
-		self.floor_core.is_some() || !self.floor_quarters.is_empty()
+		self.floor_core.is_some()
+			|| !self.floor_edges.is_empty()
+			|| !self.floor_quarters.is_empty()
 	}
 
 	pub fn has_ceiling(&self) -> bool {
-		self.ceiling_core.is_some() || !self.ceiling_quarters.is_empty()
+		self.ceiling_core.is_some()
+			|| !self.ceiling_edges.is_empty()
+			|| !self.ceiling_quarters.is_empty()
 	}
 }
 
@@ -239,11 +248,11 @@ impl BuildingComponents for RoundedRectFloor {
 		for s in &self.straights {
 			out.extend(s.panel_nodes_for_level(level));
 		}
-		for c in &self.corners {
-			out.extend(c.panel_nodes_for_level(level));
-		}
 		if let Some(core) = &self.floor_core {
 			out.extend(core.panel_nodes_for_level(level));
+		}
+		for e in &self.floor_edges {
+			out.extend(e.panel_nodes_for_level(level));
 		}
 		for q in &self.floor_quarters {
 			out.extend(q.panel_nodes_for_level(level));
@@ -251,8 +260,21 @@ impl BuildingComponents for RoundedRectFloor {
 		if let Some(core) = &self.ceiling_core {
 			out.extend(core.panel_nodes_for_level(level));
 		}
+		for e in &self.ceiling_edges {
+			out.extend(e.panel_nodes_for_level(level));
+		}
 		for q in &self.ceiling_quarters {
 			out.extend(q.panel_nodes_for_level(level));
+		}
+		out
+	}
+
+	fn partition_nodes_for_level(&self, level: LodSceneLevel) -> Layers<PartitionNode> {
+		let mut out = Layers::new();
+		for c in &self.corners {
+			if let Some(corner) = c {
+				out.extend(corner.partition_nodes_for_level(level));
+			}
 		}
 		out
 	}
@@ -261,9 +283,6 @@ impl BuildingComponents for RoundedRectFloor {
 		let mut out = Layers::new();
 		for s in &self.straights {
 			out.extend(s.joint_nodes_for_level(level));
-		}
-		for c in &self.corners {
-			out.extend(c.joint_nodes_for_level(level));
 		}
 		out
 	}

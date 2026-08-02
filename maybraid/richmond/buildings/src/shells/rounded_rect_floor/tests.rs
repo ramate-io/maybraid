@@ -1,7 +1,8 @@
 use bevy_math::{Vec2, Vec3};
-use richmond_building_components::panels::PanelGeometry;
-use richmond_building_components::BuildingComponents;
 use lod::gen::LodSceneLevel;
+use richmond_building_components::panels::PanelGeometry;
+use richmond_building_components::partitions::Partition;
+use richmond_building_components::BuildingComponents;
 
 use crate::openings::{MapsOpenings, OpeningId, Openings};
 use crate::paneling::ClippedRectangularStripPiece;
@@ -11,7 +12,7 @@ use super::{
 };
 
 #[test]
-fn default_has_straights_and_corners() {
+fn default_has_straights_and_arc_corners() {
 	let r = RoundedRectFloor::new(RoundedRectFloorParams::default());
 	assert!((r.corner_radius() - 1.0).abs() < 1e-4);
 	for s in r.straights() {
@@ -23,9 +24,13 @@ fn default_has_straights_and_corners() {
 			.all(|p| matches!(p.geometry, PanelGeometry::Rectangle(_))));
 	}
 	for c in r.corners() {
-		assert!(!c.pieces().is_empty());
+		let corner = c.as_ref().expect("corner arc present");
+		assert!(!corner.partitions.is_empty());
+		assert!(corner
+			.partitions
+			.iter()
+			.any(|p| matches!(p.geometry, Partition::Arc(_))));
 	}
-	// Straight south run shorter than full footprint width by 2R.
 	let south = &r.straights()[RoundedRectFloorSide::South.face_index()];
 	let len = match &south.pieces()[0] {
 		ClippedRectangularStripPiece::Solid(p) => p.edge.length(),
@@ -46,7 +51,7 @@ fn zero_radius_full_side_straights() {
 		ClippedRectangularStripPiece::Clipped(p) => p.edge.length(),
 	};
 	assert!((len - 8.0).abs() < 1e-3);
-	assert!(r.corners().iter().all(|c| c.pieces().is_empty()));
+	assert!(r.corners().iter().all(|c| c.is_none()));
 }
 
 #[test]
@@ -71,11 +76,18 @@ fn south_passage_clips_straight() {
 }
 
 #[test]
-fn solid_floor_emits_core_and_quarters() {
+fn solid_floor_emits_core_edges_and_quarters() {
 	let r = RoundedRectFloorParams::default()
 		.floor(RoundedRectFloorSlab::Solid)
 		.build();
 	assert!(r.has_floor());
+	// 4 wall straights + core + 4 edge strips + quarter fans → well above walls alone.
 	let panels = r.panel_nodes_for_level(LodSceneLevel::High);
-	assert!(panels.len() > 8);
+	assert!(
+		panels.len() > 8,
+		"expected core + edge strips + quarters, got {}",
+		panels.len()
+	);
+	let parts = r.partition_nodes_for_level(LodSceneLevel::High);
+	assert!(!parts.is_empty(), "arc corners should emit partitions");
 }

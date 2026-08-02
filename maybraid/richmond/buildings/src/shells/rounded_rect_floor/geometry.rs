@@ -1,4 +1,4 @@
-//! Straight runs and quarter-cylinder corner loci for a rounded rectangle.
+//! Straight runs and quarter-arc corner loci for a rounded rectangle.
 
 use bevy_math::{Vec2, Vec3};
 use std::f32::consts::FRAC_PI_2;
@@ -56,13 +56,31 @@ impl RoundedRectCorner {
 		}
 	}
 
-	/// Start angle (from +X toward +Z) of the exterior quarter arc, walking CCW.
+	/// Plan angle (from +X toward +Z) of the exterior quarter start, walking CCW.
 	pub fn start_angle(self) -> f32 {
 		match self {
-			Self::SouthEast => -FRAC_PI_2, // −Y plan / −Z: from south run end toward east
+			Self::SouthEast => -FRAC_PI_2,
 			Self::NorthEast => 0.0,
 			Self::NorthWest => FRAC_PI_2,
 			Self::SouthWest => std::f32::consts::PI,
+		}
+	}
+
+	/// [`crate::arcs::ArcSweep`] / [`ClippedArcSweep`] placement yaw for this quarter.
+	///
+	/// Kit start is local +X; [`richmond_building_components::arc_ring_dir`] maps yaw
+	/// \(\phi\) to \((\cos\phi,\,-\sin\phi)\). That equals our plan start when
+	/// \(\phi = -\texttt{start_angle}\).
+	pub fn start_yaw(self) -> f32 {
+		-self.start_angle()
+	}
+
+	pub fn outward(self) -> Vec2 {
+		match self {
+			Self::SouthEast => Vec2::new(1.0, -1.0).normalize(),
+			Self::NorthEast => Vec2::new(1.0, 1.0).normalize(),
+			Self::NorthWest => Vec2::new(-1.0, 1.0).normalize(),
+			Self::SouthWest => Vec2::new(-1.0, -1.0).normalize(),
 		}
 	}
 }
@@ -73,22 +91,16 @@ pub(super) struct RoundedRectGeom {
 	pub plan: PlanRect,
 	pub radius: f32,
 	pub height: f32,
-	pub segments: u32,
 	/// Straight edges in OrthoSide order (South, East, North, West).
 	pub straights: [WallEdge; 4],
-	/// Bottom-rail samples for each corner (including both tangent endpoints).
-	pub corner_bottom: [Vec<Vec3>; 4],
-	pub corner_top: [Vec<Vec3>; 4],
 }
 
 impl RoundedRectFloorParams {
 	pub(super) fn resolve_geometry(&self, plan: PlanRect, radius: f32) -> RoundedRectGeom {
 		let height = self.storey_height.max(1e-4);
-		let segments = self.corner_segments.max(1);
 		let r = radius.max(0.0);
 
 		let straights = if r < 1e-4 {
-			// Degenerate to full-side edges.
 			[
 				WallEdge::new(plan.sw(), plan.se(), height, OrthoSide::South.orientation()),
 				WallEdge::new(plan.se(), plan.ne(), height, OrthoSide::East.orientation()),
@@ -124,51 +136,13 @@ impl RoundedRectFloorParams {
 			]
 		};
 
-		let mut corner_bottom = [Vec::new(), Vec::new(), Vec::new(), Vec::new()];
-		let mut corner_top = [Vec::new(), Vec::new(), Vec::new(), Vec::new()];
-		for corner in RoundedRectCorner::all() {
-			let i = corner.index();
-			let (bot, top) = sample_corner_rails(plan, r, height, segments, corner);
-			corner_bottom[i] = bot;
-			corner_top[i] = top;
-		}
-
 		RoundedRectGeom {
 			plan,
 			radius: r,
 			height,
-			segments,
 			straights,
-			corner_bottom,
-			corner_top,
 		}
 	}
-}
-
-fn sample_corner_rails(
-	plan: PlanRect,
-	radius: f32,
-	height: f32,
-	segments: u32,
-	corner: RoundedRectCorner,
-) -> (Vec<Vec3>, Vec<Vec3>) {
-	if radius < 1e-4 {
-		return (Vec::new(), Vec::new());
-	}
-	let c = corner.center(plan, radius);
-	let start = corner.start_angle();
-	let n = segments.max(1);
-	let mut bot = Vec::with_capacity(n as usize + 1);
-	let mut top = Vec::with_capacity(n as usize + 1);
-	for i in 0..=n {
-		let t = i as f32 / n as f32;
-		let ang = start + t * FRAC_PI_2;
-		let dir = Vec2::new(ang.cos(), ang.sin());
-		let p = Vec3::new(c.x + dir.x * radius, plan.y, c.z + dir.y * radius);
-		bot.push(p);
-		top.push(p + Vec3::Y * height);
-	}
-	(bot, top)
 }
 
 /// Core plan rectangle inset by the corner radius (straight fill between corners).

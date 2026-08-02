@@ -24,11 +24,12 @@ use richmond_buildings::{
 	ApproximatedCircle, ArcFloor, ArcFloorParams, ArcFloorSlab, ArcSweep, ArcTower, ArcTowerParams,
 	ClippedArcSweep, ClippedFittedRectangle, ClippedFittedRectangularStrip, ClippedQuadPanel,
 	ClippedRectangle, ClippedRectangularStrip, ClippedRuledStrip, ClippedTessellatedTriangle,
-	ConnectingHall, ConnectingShells, FittedRectangle, MappedOpening, MappedOpeningQuad,
-	MapsOpenings, OpeningId, OpeningLabel, Openings, RectInset, Rectangle, RectangularNTube,
-	RectangularNTubeCorner, RectangularNTubeStation, RectangularStripNode, RuledPitch, Tube,
-	TubeCrossSectionNode, TubeFaces, Trazaloid, TrazaloidParams, TrazaloidSlab,
-	DEFAULT_PANEL_THICKNESS,
+	ConnectingHall, ConnectingShells, FittedRectangle, IFloor, IFloorParams, IFloorSlab,
+	MappedOpening, MappedOpeningQuad, MapsOpenings, OpeningId, OpeningLabel, Openings, RectFloor,
+	RectFloorParams, RectFloorSlab, RectInset, Rectangle, RectangularNTube, RectangularNTubeCorner,
+	RectangularNTubeStation, RectangularStripNode, RoundedRectFloor, RoundedRectFloorParams,
+	RoundedRectFloorSlab, RuledPitch, Tube, TubeCrossSectionNode, TubeFaces, Trazaloid,
+	TrazaloidParams, TrazaloidSlab, DEFAULT_PANEL_THICKNESS,
 };
 use richmond_buildings::stacked_rings::StackedRings;
 use richmond_buildings::tessellated_triangle_panel::TessellatedTrianglePanel;
@@ -126,6 +127,36 @@ pub enum PreviewSubject {
 		floor: bool,
 		no_ceiling: bool,
 		face_post_count: u32,
+	},
+	RectFloor {
+		footprint_x: f32,
+		footprint_z: f32,
+		storey_height: f32,
+		openings: Vec<PreviewOpening>,
+		floor: bool,
+		ceiling: bool,
+	},
+	RoundedRectFloor {
+		footprint_x: f32,
+		footprint_z: f32,
+		storey_height: f32,
+		corner_radius: f32,
+		corner_segments: u32,
+		openings: Vec<PreviewOpening>,
+		floor: bool,
+		ceiling: bool,
+	},
+	IFloor {
+		central_x: f32,
+		central_z: f32,
+		storey_height: f32,
+		top_left: Option<f32>,
+		top_right: Option<f32>,
+		bottom_left: Option<f32>,
+		bottom_right: Option<f32>,
+		openings: Vec<PreviewOpening>,
+		floor: bool,
+		ceiling: bool,
 	},
 	Rectangle {
 		origin: Vec3,
@@ -368,6 +399,42 @@ impl PreviewConfig {
 				face_post_count,
 			} => format!(
 				"preview: trazaloid (foot={footprint_x:.1}x{footprint_z:.1} ridge={ridge_x:.1}x{ridge_z:.1} h={lower_height:.1}+{upper_height:.1} gap={band_vertical_offset:.2} inset={waist_horizontal_offset:.2} openings={} floor={floor} ceil=!{no_ceiling} posts={face_post_count})",
+				openings.len()
+			),
+			PreviewSubject::RectFloor {
+				footprint_x,
+				footprint_z,
+				storey_height,
+				ref openings,
+				floor,
+				ceiling,
+			} => format!(
+				"preview: rect-floor (foot={footprint_x:.1}x{footprint_z:.1} h={storey_height:.1} openings={} floor={floor} ceil={ceiling})",
+				openings.len()
+			),
+			PreviewSubject::RoundedRectFloor {
+				footprint_x,
+				footprint_z,
+				storey_height,
+				corner_radius,
+				corner_segments,
+				ref openings,
+				floor,
+				ceiling,
+			} => format!(
+				"preview: rounded-rect-floor (foot={footprint_x:.1}x{footprint_z:.1} h={storey_height:.1} r={corner_radius:.2} segs={corner_segments} openings={} floor={floor} ceil={ceiling})",
+				openings.len()
+			),
+			PreviewSubject::IFloor {
+				central_x,
+				central_z,
+				storey_height,
+				ref openings,
+				floor,
+				ceiling,
+				..
+			} => format!(
+				"preview: i-floor (central={central_x:.1}x{central_z:.1} h={storey_height:.1} openings={} floor={floor} ceil={ceiling})",
 				openings.len()
 			),
 			PreviewSubject::Rectangle {
@@ -641,6 +708,54 @@ impl PreviewConfig {
 				let hx = footprint_x.max(1e-4) * 0.5 + 0.5;
 				let hz = footprint_z.max(1e-4) * 0.5 + 0.5;
 				let h = lower_height + band_vertical_offset + upper_height + 0.5;
+				Aabb3d::from_min_max(Vec3::new(-hx, -0.2, -hz), Vec3::new(hx, h, hz))
+			}
+			PreviewSubject::RectFloor {
+				footprint_x,
+				footprint_z,
+				storey_height,
+				..
+			}
+			| PreviewSubject::RoundedRectFloor {
+				footprint_x,
+				footprint_z,
+				storey_height,
+				..
+			} => {
+				let hx = footprint_x.max(1e-4) * 0.5 + 0.5;
+				let hz = footprint_z.max(1e-4) * 0.5 + 0.5;
+				let h = storey_height.max(1e-4) + 0.5;
+				Aabb3d::from_min_max(Vec3::new(-hx, -0.2, -hz), Vec3::new(hx, h, hz))
+			}
+			PreviewSubject::IFloor {
+				central_x,
+				central_z,
+				storey_height,
+				top_left,
+				top_right,
+				bottom_left,
+				bottom_right,
+				..
+			} => {
+				let half_w = central_x.max(1e-4) * 0.5;
+				let half_d = central_z.max(1e-4) * 0.5;
+				let left = top_left.unwrap_or(0.0).max(bottom_left.unwrap_or(0.0));
+				let right = top_right.unwrap_or(0.0).max(bottom_right.unwrap_or(0.0));
+				let flange_t = central_x.max(1e-4);
+				let hx = half_w + left.max(right) + 0.5;
+				let hz = half_d
+					+ if top_left.is_some() || top_right.is_some() {
+						flange_t
+					} else {
+						0.0
+					}
+					+ if bottom_left.is_some() || bottom_right.is_some() {
+						flange_t
+					} else {
+						0.0
+					}
+					+ 0.5;
+				let h = storey_height.max(1e-4) + 0.5;
 				Aabb3d::from_min_max(Vec3::new(-hx, -0.2, -hz), Vec3::new(hx, h, hz))
 			}
 			_ => Aabb3d::from_min_max(Vec3::ZERO, Vec3::ONE),
@@ -1107,6 +1222,111 @@ pub fn present_preview_lod(
 				},
 				face_post_count: *face_post_count,
 				..TrazaloidParams::default()
+			});
+			spawn_preview(
+				&mut commands,
+				transform,
+				ComponentsOnly(shell).scene_with_lod(&lod_ref),
+			);
+		}
+		PreviewSubject::RectFloor {
+			footprint_x,
+			footprint_z,
+			storey_height,
+			openings,
+			floor,
+			ceiling,
+		} => {
+			let shell = RectFloor::new(RectFloorParams {
+				center_xz: Vec3::ZERO,
+				footprint: Vec2::new(*footprint_x, *footprint_z),
+				storey_height: *storey_height,
+				openings: openings_from_preview(openings),
+				floor: if *floor {
+					RectFloorSlab::Solid
+				} else {
+					RectFloorSlab::None
+				},
+				ceiling: if *ceiling {
+					RectFloorSlab::Solid
+				} else {
+					RectFloorSlab::None
+				},
+				..RectFloorParams::default()
+			});
+			spawn_preview(
+				&mut commands,
+				transform,
+				ComponentsOnly(shell).scene_with_lod(&lod_ref),
+			);
+		}
+		PreviewSubject::RoundedRectFloor {
+			footprint_x,
+			footprint_z,
+			storey_height,
+			corner_radius,
+			corner_segments,
+			openings,
+			floor,
+			ceiling,
+		} => {
+			let shell = RoundedRectFloor::new(RoundedRectFloorParams {
+				center_xz: Vec3::ZERO,
+				footprint: Vec2::new(*footprint_x, *footprint_z),
+				storey_height: *storey_height,
+				corner_radius: *corner_radius,
+				corner_segments: *corner_segments,
+				openings: openings_from_preview(openings),
+				floor: if *floor {
+					RoundedRectFloorSlab::Solid
+				} else {
+					RoundedRectFloorSlab::None
+				},
+				ceiling: if *ceiling {
+					RoundedRectFloorSlab::Solid
+				} else {
+					RoundedRectFloorSlab::None
+				},
+				..RoundedRectFloorParams::default()
+			});
+			spawn_preview(
+				&mut commands,
+				transform,
+				ComponentsOnly(shell).scene_with_lod(&lod_ref),
+			);
+		}
+		PreviewSubject::IFloor {
+			central_x,
+			central_z,
+			storey_height,
+			top_left,
+			top_right,
+			bottom_left,
+			bottom_right,
+			openings,
+			floor,
+			ceiling,
+		} => {
+			let shell = IFloor::new(IFloorParams {
+				center_xz: Vec3::ZERO,
+				top_left_length: *top_left,
+				top_right_length: *top_right,
+				central_rectangle: Vec2::new(*central_x, *central_z),
+				bottom_left_length: *bottom_left,
+				bottom_right_length: *bottom_right,
+				storey_height: *storey_height,
+				openings: openings_from_preview(openings),
+				floor: if *floor {
+					IFloorSlab::Solid
+				} else {
+					IFloorSlab::None
+				},
+				ceiling: if *ceiling {
+					IFloorSlab::Solid
+				} else {
+					IFloorSlab::None
+				},
+				..IFloorParams::default()
 			});
 			spawn_preview(
 				&mut commands,
@@ -1679,22 +1899,146 @@ pub fn draw_opening_plan_gizmos(mut gizmos: Gizmos, config: Res<PreviewConfig>) 
 				face_post_count: *face_post_count,
 				..TrazaloidParams::default()
 			});
-			for opening in openings {
-				let id = OpeningId::new(opening.id.clone());
-				let Some(mapped) = shell.mapped_opening(&id) else {
-					continue;
-				};
-				draw_opening_gizmos(&mut gizmos, map, *mapped, lime);
-				let (bl, br, ..) = mapped.endpoint_corners();
-				let mid = (bl + br) * 0.5;
-				let dir = Vec3::new(mapped.orientation.x, 0.0, mapped.orientation.y)
-					.normalize_or_zero();
-				gizmos
-					.arrow(map(mid), map(mid + dir * 1.25), orange)
-					.with_tip_length(0.2);
+			draw_mapped_opening_overlays(&mut gizmos, map, openings, &shell, lime, orange);
+		}
+		PreviewSubject::RectFloor {
+			footprint_x,
+			footprint_z,
+			storey_height,
+			openings,
+			floor,
+			ceiling,
+		} => {
+			if openings.is_empty() {
+				return;
 			}
+			for (i, opening) in openings.iter().enumerate() {
+				let color = if i % 2 == 0 { cyan } else { amber };
+				gizmos.aabb_3d(opening.bounds(), tf, color);
+			}
+			let shell = RectFloor::new(RectFloorParams {
+				center_xz: Vec3::ZERO,
+				footprint: Vec2::new(*footprint_x, *footprint_z),
+				storey_height: *storey_height,
+				openings: openings_from_preview(openings),
+				floor: if *floor {
+					RectFloorSlab::Solid
+				} else {
+					RectFloorSlab::None
+				},
+				ceiling: if *ceiling {
+					RectFloorSlab::Solid
+				} else {
+					RectFloorSlab::None
+				},
+				..RectFloorParams::default()
+			});
+			draw_mapped_opening_overlays(&mut gizmos, map, openings, &shell, lime, orange);
+		}
+		PreviewSubject::RoundedRectFloor {
+			footprint_x,
+			footprint_z,
+			storey_height,
+			corner_radius,
+			corner_segments,
+			openings,
+			floor,
+			ceiling,
+		} => {
+			if openings.is_empty() {
+				return;
+			}
+			for (i, opening) in openings.iter().enumerate() {
+				let color = if i % 2 == 0 { cyan } else { amber };
+				gizmos.aabb_3d(opening.bounds(), tf, color);
+			}
+			let shell = RoundedRectFloor::new(RoundedRectFloorParams {
+				center_xz: Vec3::ZERO,
+				footprint: Vec2::new(*footprint_x, *footprint_z),
+				storey_height: *storey_height,
+				corner_radius: *corner_radius,
+				corner_segments: *corner_segments,
+				openings: openings_from_preview(openings),
+				floor: if *floor {
+					RoundedRectFloorSlab::Solid
+				} else {
+					RoundedRectFloorSlab::None
+				},
+				ceiling: if *ceiling {
+					RoundedRectFloorSlab::Solid
+				} else {
+					RoundedRectFloorSlab::None
+				},
+				..RoundedRectFloorParams::default()
+			});
+			draw_mapped_opening_overlays(&mut gizmos, map, openings, &shell, lime, orange);
+		}
+		PreviewSubject::IFloor {
+			central_x,
+			central_z,
+			storey_height,
+			top_left,
+			top_right,
+			bottom_left,
+			bottom_right,
+			openings,
+			floor,
+			ceiling,
+		} => {
+			if openings.is_empty() {
+				return;
+			}
+			for (i, opening) in openings.iter().enumerate() {
+				let color = if i % 2 == 0 { cyan } else { amber };
+				gizmos.aabb_3d(opening.bounds(), tf, color);
+			}
+			let shell = IFloor::new(IFloorParams {
+				center_xz: Vec3::ZERO,
+				top_left_length: *top_left,
+				top_right_length: *top_right,
+				central_rectangle: Vec2::new(*central_x, *central_z),
+				bottom_left_length: *bottom_left,
+				bottom_right_length: *bottom_right,
+				storey_height: *storey_height,
+				openings: openings_from_preview(openings),
+				floor: if *floor {
+					IFloorSlab::Solid
+				} else {
+					IFloorSlab::None
+				},
+				ceiling: if *ceiling {
+					IFloorSlab::Solid
+				} else {
+					IFloorSlab::None
+				},
+				..IFloorParams::default()
+			});
+			draw_mapped_opening_overlays(&mut gizmos, map, openings, &shell, lime, orange);
 		}
 		_ => {}
+	}
+}
+
+fn draw_mapped_opening_overlays<M: MapsOpenings>(
+	gizmos: &mut Gizmos,
+	map: impl Fn(Vec3) -> Vec3 + Copy,
+	openings: &[PreviewOpening],
+	shell: &M,
+	lime: Color,
+	orange: Color,
+) {
+	for opening in openings {
+		let id = OpeningId::new(opening.id.clone());
+		let Some(mapped) = shell.mapped_opening(&id) else {
+			continue;
+		};
+		draw_opening_gizmos(gizmos, map, *mapped, lime);
+		let (bl, br, ..) = mapped.endpoint_corners();
+		let mid = (bl + br) * 0.5;
+		let dir = Vec3::new(mapped.orientation.x, 0.0, mapped.orientation.y).normalize_or_zero();
+		gizmos
+			.arrow(map(mid), map(mid + dir * 1.25), orange)
+			.with_tip_length(0.2);
 	}
 }
 
