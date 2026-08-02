@@ -26,11 +26,11 @@ use richmond_buildings::{
 	ClippedFittedRectangularStrip, ClippedQuadPanel, ClippedRectangle, ClippedRectangularStrip,
 	ClippedRuledStrip, ClippedTessellatedTriangle, ConnectingHall, ConnectingShells, FittedRectangle,
 	IFloor, IFloorParams, IFloorSlab, MappedOpening, MappedOpeningQuad, MapsOpenings, OpeningId,
-	OpeningLabel, Openings, RectFloor, RectFloorParams, RectFloorSlab, RectInset, RectRingFloor,
-	RectRingFloorParams, RectRingFloorSlab, Rectangle, RectangularNTube, RectangularNTubeCorner,
-	RectangularNTubeStation, RectangularStripNode, RoundedRectFloor, RoundedRectFloorParams,
-	RoundedRectFloorSlab, RuledPitch, Tube, TubeCrossSectionNode, TubeFaces, Trazaloid,
-	TrazaloidParams, TrazaloidSlab, DEFAULT_PANEL_THICKNESS,
+	OpeningLabel, Openings, PitchedRoof, PitchedRoofParams, RectFloor, RectFloorParams, RectFloorSlab,
+	RectInset, RectRingFloor, RectRingFloorParams, RectRingFloorSlab, Rectangle, RectangularNTube,
+	RectangularNTubeCorner, RectangularNTubeStation, RectangularStripNode, RoundedRectFloor,
+	RoundedRectFloorParams, RoundedRectFloorSlab, RuledPitch, Tube, TubeCrossSectionNode, TubeFaces,
+	Trazaloid, TrazaloidParams, TrazaloidSlab, DEFAULT_PANEL_THICKNESS,
 };
 use richmond_buildings::stacked_rings::StackedRings;
 use richmond_buildings::tessellated_triangle_panel::TessellatedTrianglePanel;
@@ -128,6 +128,17 @@ pub enum PreviewSubject {
 		floor: bool,
 		no_ceiling: bool,
 		face_post_count: u32,
+	},
+	PitchedRectangularRoof {
+		footprint_x: f32,
+		footprint_z: f32,
+		ridge_height: f32,
+		eave_height: f32,
+		ridge_inset: f32,
+		gables: bool,
+		no_walls: bool,
+		no_hips: bool,
+		openings: Vec<PreviewOpening>,
 	},
 	RectFloor {
 		footprint_x: f32,
@@ -419,6 +430,22 @@ impl PreviewConfig {
 				face_post_count,
 			} => format!(
 				"preview: trazaloid (foot={footprint_x:.1}x{footprint_z:.1} ridge={ridge_x:.1}x{ridge_z:.1} h={lower_height:.1}+{upper_height:.1} gap={band_vertical_offset:.2} inset={waist_horizontal_offset:.2} openings={} floor={floor} ceil=!{no_ceiling} posts={face_post_count})",
+				openings.len()
+			),
+			PreviewSubject::PitchedRectangularRoof {
+				footprint_x,
+				footprint_z,
+				ridge_height,
+				eave_height,
+				ridge_inset,
+				gables,
+				no_walls,
+				no_hips,
+				ref openings,
+			} => format!(
+				"preview: pitched-rectangular-roof (foot={footprint_x:.1}x{footprint_z:.1} ridge_h={ridge_height:.1} eave_h={eave_height:.1} inset={ridge_inset:.1} gables={gables} walls={} hips={} openings={})",
+				!no_walls,
+				!no_hips,
 				openings.len()
 			),
 			PreviewSubject::RectFloor {
@@ -753,6 +780,17 @@ impl PreviewConfig {
 				let hx = footprint_x.max(1e-4) * 0.5 + 0.5;
 				let hz = footprint_z.max(1e-4) * 0.5 + 0.5;
 				let h = lower_height + band_vertical_offset + upper_height + 0.5;
+				Aabb3d::from_min_max(Vec3::new(-hx, -0.2, -hz), Vec3::new(hx, h, hz))
+			}
+			PreviewSubject::PitchedRectangularRoof {
+				footprint_x,
+				footprint_z,
+				ridge_height,
+				..
+			} => {
+				let hx = footprint_x.max(1e-4) * 0.5 + 0.5;
+				let hz = footprint_z.max(1e-4) * 0.5 + 0.5;
+				let h = ridge_height.max(1e-4) + 0.5;
 				Aabb3d::from_min_max(Vec3::new(-hx, -0.2, -hz), Vec3::new(hx, h, hz))
 			}
 			PreviewSubject::RectFloor {
@@ -1288,6 +1326,34 @@ pub fn present_preview_lod(
 				face_post_count: *face_post_count,
 				..TrazaloidParams::default()
 			});
+			spawn_preview(
+				&mut commands,
+				transform,
+				ComponentsOnly(shell).scene_with_lod(&lod_ref),
+			);
+		}
+		PreviewSubject::PitchedRectangularRoof {
+			footprint_x,
+			footprint_z,
+			ridge_height,
+			eave_height,
+			ridge_inset,
+			gables,
+			no_walls,
+			no_hips,
+			openings,
+		} => {
+			let shell = pitched_roof_from_preview(
+				*footprint_x,
+				*footprint_z,
+				*ridge_height,
+				*eave_height,
+				*ridge_inset,
+				*gables,
+				*no_walls,
+				*no_hips,
+				openings,
+			);
 			spawn_preview(
 				&mut commands,
 				transform,
@@ -1927,9 +1993,7 @@ pub fn connecting_hall_demo_endpoints() -> (MappedOpening, MappedOpening) {
 	(end_a, end_b)
 }
 
-/// Debug overlay for [`PreviewSubject::ConnectingHall`]: opening corners, orientation
-/// arrows, path A→mid→B, and station dots.
-/// Wireframe plan AABBs (+ mapped contact quads on arc-floor / trazaloid) for `--opening` previews.
+/// Wireframe plan AABBs (+ mapped contact quads) for `--opening` previews.
 ///
 /// Color key:
 /// - cyan / amber: authored plan [`Aabb3d`] voids
@@ -1975,20 +2039,7 @@ pub fn draw_opening_plan_gizmos(mut gizmos: Gizmos, config: Res<PreviewConfig>) 
 				},
 				..ArcFloorParams::default()
 			});
-			for opening in openings {
-				let id = OpeningId::new(opening.id.clone());
-				let Some(mapped) = floor_shell.mapped_opening(&id) else {
-					continue;
-				};
-				draw_opening_gizmos(&mut gizmos, map, *mapped, lime);
-				let (bl, br, ..) = mapped.endpoint_corners();
-				let mid = (bl + br) * 0.5;
-				let dir = Vec3::new(mapped.orientation.x, 0.0, mapped.orientation.y)
-					.normalize_or_zero();
-				gizmos
-					.arrow(map(mid), map(mid + dir * 1.25), orange)
-					.with_tip_length(0.2);
-			}
+			draw_mapped_opening_overlays(&mut gizmos, map, openings, &floor_shell, lime, orange);
 		}
 		PreviewSubject::Trazaloid {
 			footprint_x,
@@ -2148,6 +2199,37 @@ pub fn draw_opening_plan_gizmos(mut gizmos: Gizmos, config: Res<PreviewConfig>) 
 			});
 			draw_mapped_opening_overlays(&mut gizmos, map, openings, &shell, lime, orange);
 		}
+		PreviewSubject::PitchedRectangularRoof {
+			footprint_x,
+			footprint_z,
+			ridge_height,
+			eave_height,
+			ridge_inset,
+			gables,
+			no_walls,
+			no_hips,
+			openings,
+		} => {
+			if openings.is_empty() {
+				return;
+			}
+			for (i, opening) in openings.iter().enumerate() {
+				let color = if i % 2 == 0 { cyan } else { amber };
+				gizmos.aabb_3d(opening.bounds(), tf, color);
+			}
+			let shell = pitched_roof_from_preview(
+				*footprint_x,
+				*footprint_z,
+				*ridge_height,
+				*eave_height,
+				*ridge_inset,
+				*gables,
+				*no_walls,
+				*no_hips,
+				openings,
+			);
+			draw_mapped_opening_overlays(&mut gizmos, map, openings, &shell, lime, orange);
+		}
 		PreviewSubject::RectRingFloor {
 			outer_x,
 			outer_z,
@@ -2226,6 +2308,41 @@ pub fn draw_opening_plan_gizmos(mut gizmos: Gizmos, config: Res<PreviewConfig>) 
 	}
 }
 
+/// Rebuild a pitched roof from preview knobs (matches `/show pitched-rectangular-roof`).
+fn pitched_roof_from_preview(
+	footprint_x: f32,
+	footprint_z: f32,
+	ridge_height: f32,
+	eave_height: f32,
+	ridge_inset: f32,
+	gables: bool,
+	no_walls: bool,
+	no_hips: bool,
+	openings: &[PreviewOpening],
+) -> PitchedRoof {
+	let footprint = Vec2::new(footprint_x, footprint_z);
+	let mut params = if no_hips && gables && ridge_inset <= 1e-4 {
+		PitchedRoofParams::rectangular_gable(footprint, ridge_height, eave_height)
+	} else {
+		PitchedRoofParams::rectangular_hip(footprint, ridge_height, eave_height, ridge_inset)
+	};
+	for half in &mut params.halves {
+		half.draw_in_wall_line = !no_walls;
+		half.draw_in_half_hip = if no_hips {
+			(false, false)
+		} else {
+			(true, true)
+		};
+		half.draw_in_half_gable_end = if gables {
+			(true, true)
+		} else {
+			(false, false)
+		};
+	}
+	params.openings = openings_from_preview(openings);
+	PitchedRoof::new(params)
+}
+
 fn draw_mapped_opening_overlays<M: MapsOpenings>(
 	gizmos: &mut Gizmos,
 	map: impl Fn(Vec3) -> Vec3 + Copy,
@@ -2249,6 +2366,8 @@ fn draw_mapped_opening_overlays<M: MapsOpenings>(
 	}
 }
 
+/// Debug overlay for [`PreviewSubject::ConnectingHall`]: opening corners, orientation
+/// arrows, path A→mid→B, and station dots.
 pub fn draw_connecting_hall_gizmos(mut gizmos: Gizmos, config: Res<PreviewConfig>) {
 	if !matches!(config.subject, PreviewSubject::ConnectingHall) {
 		return;
