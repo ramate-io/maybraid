@@ -67,7 +67,8 @@ pub use openings::{
 	OpeningLabel, Openings,
 };
 pub use shells::{
-	side_passage_opening, ArcFloor, ArcFloorParams, ArcFloorSlab, ArcTower, ArcTowerParams,
+	side_passage_opening, ArcFloor, ArcFloorBuilder, ArcFloorParams, ArcFloorSlab, ArcTower,
+	ArcTowerParams,
 	ConnectingHall, Trazaloid, TrazaloidParams, TrazaloidSide, TrazaloidSlab,
 };
 pub use stacked_rings::{StackedRing, StackedRings};

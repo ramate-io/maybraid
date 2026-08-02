@@ -120,7 +120,6 @@ impl OpeningArg {
 					ctx.center_xz,
 					ctx.radius,
 					ctx.storey_height,
-					ctx.start_yaw,
 					t,
 				);
 				let min = Vec3::from(opening.bounds.min);
@@ -136,7 +135,6 @@ pub struct ArcOpeningContext {
 	pub center_xz: Vec3,
 	pub radius: f32,
 	pub storey_height: f32,
-	pub start_yaw: f32,
 }
 
 pub fn parse_opening_label(s: &str) -> Result<OpeningLabel, String> {
@@ -225,7 +223,6 @@ mod tests {
 			center_xz: Vec3::ZERO,
 			radius: 4.0,
 			storey_height: 3.0,
-			start_yaw: 0.0,
 		}))?;
 		assert_eq!(preview.id, "door");
 		assert!(preview.max.x > 3.0);

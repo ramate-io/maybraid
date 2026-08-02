@@ -25,7 +25,7 @@ use crate::shells::trazaloid::{
 /// Shared contract id for the hall join on both shells.
 const CONNECT: &str = "connect";
 
-/// Door facing the trazaloid: kit sweep \(t = 0.5 → +X\) (`start_yaw = 0`).
+/// Door facing the trazaloid: kit sweep \(t = 0.5 → +X\).
 const DOOR_T: f32 = 0.5;
 
 /// Extra meters past each jamb on the arc-tower hall end (15° door is narrow).
@@ -46,7 +46,6 @@ impl ConnectingShells {
 		let tower_center = Vec3::new(-14.0, 0.0, 0.0);
 		let radius = 4.0;
 		let storey_height = 3.0;
-		let start_yaw = 0.0;
 
 		let mut tower_openings = Openings::new();
 		for (id, t, label) in [
@@ -61,7 +60,6 @@ impl ConnectingShells {
 				tower_center,
 				radius,
 				storey_height,
-				start_yaw,
 				t,
 			);
 			tower_openings.insert(id, opening);
@@ -73,11 +71,11 @@ impl ConnectingShells {
 			radius,
 			floor_count: 3,
 			storey_height,
-			start_yaw,
 			openings: tower_openings,
 			base_floor: ArcFloorSlab::Solid,
-			intermediate_floors: ArcFloorSlab::SquareHole { size: 2.24 },
+			intermediate_floors: ArcFloorSlab::Solid,
 			top_ceiling: ArcFloorSlab::Solid,
+			intermediate_floor_hole: 2.24,
 			style: PartitionStyle::RoughStonework,
 		});
 
@@ -205,14 +203,16 @@ mod tests {
 	}
 
 	#[test]
-	fn tower_hall_end_on_next_clockwise_segment() -> anyhow::Result<()> {
+	fn tower_hall_end_faces_east_door() -> anyhow::Result<()> {
 		let demo = ConnectingShells::new();
 		let (end_a, _) = demo.hall().endpoints();
 		let (bl, br, ..) = end_a.endpoint_corners();
 		let mid = (bl + br) * 0.5;
-		// Clockwise of t=0.5 is decreasing t → mid toward +Z of +X.
-		assert!(mid.z > 0.5, "mid={mid:?}");
+		// Layer 1 maps the connect opening onto hit 15° sectors around t=0.5 (+X).
+		assert!(mid.x > -11.0, "mid={mid:?}");
+		assert!(mid.z.abs() < 1.5, "mid={mid:?}");
 		assert!(end_a.orientation.normalize().x > 0.7, "orient={:?}", end_a.orientation);
+		assert!(bl.distance(br) > 0.4, "door span too narrow");
 		Ok(())
 	}
 

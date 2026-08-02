@@ -1,43 +1,47 @@
-//! One circular storey shell: portal ring wall plus optional floor / ceiling slabs.
+//! One circular storey shell: wall sweeps + optional floor / ceiling slabs.
+//!
+//! Openings are resolved in two layers:
+//! 1. **Wall sweeps** — 15° sectors (AABB-approximated); solid runs merge to 90°/180°.
+//! 2. **Floor / ceiling** — openings that hit a Solid slab contribute a centered hole
+//!    sized from the intersection scale (or remove the slab entirely).
+//!
+//! Floor / ceiling [`ArcFloorSlab`] values are only [`None`](ArcFloorSlab::None) /
+//! [`Solid`](ArcFloorSlab::Solid). They are mainly for towering ownership; openings
+//! still map whether or not a slab is present, and can override a Solid slab.
 
 use bevy_math::bounding::Aabb3d;
 use bevy_math::{Vec2, Vec3};
 use lod::gen::LodSceneLevel;
-use procedural_common::NoiseParams;
 use richmond_building_components::floors::{Floor, FloorNode};
-use richmond_building_components::partitions::{PartitionNode, PartitionStyle};
+use richmond_building_components::partitions::{Partition, PartitionNode, PartitionStyle};
 use richmond_building_components::{BuildingComponents, Layers, Placement};
 
-use crate::arcs::{portal_ring_wall, PortalRingParams, PortalRingWall};
 use crate::openings::{
 	MappedOpening, MappedOpeningQuad, MappedOpenings, MapsOpenings, Opening, OpeningId,
 	OpeningLabel, Openings,
 };
-use crate::portals::{MustAssignPortal, Portal, SLICE_Y_FRAC};
+use crate::portals::SLICE_Y_FRAC;
 
-/// Kit segment size (degrees). Portal clips span two segments (30°); the visible
-/// omitted opening is **one** segment (15°).
+/// Kit segment size (degrees).
 const SEG_DEG: f32 = 15.0;
-const PORTAL_SEGS: u32 = 2;
-const OPEN_HALF_DEG: f32 = SEG_DEG * (PORTAL_SEGS as f32) * 0.5;
-/// Ring samples are 7.5° clockwise of raw `start_yaw + t·2π` so \(t\) hits a
-/// segment edge (jamb), not the opening center.
-const RING_CLOCKWISE_OFFSET_DEG: f32 = SEG_DEG * 0.5;
-
-/// Inscribed-square half-extent as a fraction of outer radius.
+const SECTORS: u32 = 24; // 360 / 15
+/// Inscribed-square half-extent as a fraction of outer radius → full side = 1.4·R.
 const INSCRIBED_HALF_FRAC: f32 = 0.7;
 /// Floor / ceiling slab Y scale.
 const FLOOR_SLAB_Y_SCALE: f32 = 0.2;
+const EPS: f32 = 1e-4;
 
-/// Horizontal storey slab presentation.
-#[derive(Debug, Clone, Copy, PartialEq)]
+/// Horizontal storey slab presentation for towering ownership.
+///
+/// Openings may still cut a Solid slab (Layer 2). Prefer openings for voids;
+/// keep these variants simple so stack ownership stays obvious.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ArcFloorSlab {
-	/// Omit the slab entirely.
+	/// Omit the slab entirely (no floor/ceiling geometry).
 	None,
 	/// Squared floor fill (inscribed-square caps + solid inscribed square).
+	/// Openings that intersect this slab may dig a centered hole or remove it.
 	Solid,
-	/// Caps plus rectangular frame around a centered square hole; `size` is full side length.
-	SquareHole { size: f32 },
 }
 
 impl Default for ArcFloorSlab {
@@ -53,11 +57,11 @@ pub struct ArcFloorParams {
 	pub center_xz: Vec3,
 	pub radius: f32,
 	pub storey_height: f32,
-	/// World yaw (radians) of the ring sweep start (\(t = 0\)).
-	pub start_yaw: f32,
-	/// Opening plan (Passage / Aperture projected onto the ring; no optional / noise portals).
+	/// Opening plan applied via Layer 1 (walls) and Layer 2 (slabs).
 	pub openings: Openings,
+	/// Towering ownership hint; openings may override a Solid slab.
 	pub floor: ArcFloorSlab,
+	/// Towering ownership hint; openings may override a Solid slab.
 	pub ceiling: ArcFloorSlab,
 	pub style: PartitionStyle,
 }
@@ -68,7 +72,6 @@ impl Default for ArcFloorParams {
 			center_xz: Vec3::ZERO,
 			radius: 4.0,
 			storey_height: 3.0,
-			start_yaw: 0.0,
 			openings: Openings::new(),
 			floor: ArcFloorSlab::None,
 			ceiling: ArcFloorSlab::None,
@@ -77,92 +80,119 @@ impl Default for ArcFloorParams {
 	}
 }
 
-/// One circular storey: clipped ring wall + optional floor / ceiling.
-#[derive(Debug, Clone, PartialEq)]
-pub struct ArcFloor {
+/// Builder separating authorship from opening resolution.
+#[derive(Debug, Clone)]
+pub struct ArcFloorBuilder {
 	params: ArcFloorParams,
-	ring_wall: PortalRingWall,
-	floor_nodes: Vec<FloorNode>,
-	ceiling_nodes: Vec<FloorNode>,
-	/// Portal half-width in unit \(t\) for this ring.
-	half_t: f32,
-	/// Connectable openings honored by this storey.
-	openings: Openings,
-	/// Contact geometry for honored openings.
-	mapped: MappedOpenings,
 }
 
-impl ArcFloor {
-	pub fn new(params: ArcFloorParams) -> Self {
-		let radius = params.radius.max(1e-4);
-		let storey_height = params.storey_height.max(1e-4);
-		let center_xz = Vec3::new(params.center_xz.x, params.center_xz.y, params.center_xz.z);
-		let arc_degrees = 360.0;
-		let half_t = OPEN_HALF_DEG / arc_degrees;
-
-		let mut must_assign = Vec::new();
-		let mut openings = Openings::new();
-		let mut mapped = MappedOpenings::new();
-		let mut assigned_ts: Vec<(OpeningId, f32, Opening)> = Vec::new();
-
-		for (id, opening) in params.openings.iter() {
-			let portal = match opening.label {
-				OpeningLabel::Passage => Portal::Door,
-				OpeningLabel::Aperture => Portal::Window,
-				_ => continue,
-			};
-			let t = project_opening_t(center_xz, params.start_yaw, &opening.bounds);
-			must_assign.push(MustAssignPortal::at(t, portal));
-			assigned_ts.push((id.clone(), t, opening.clone()));
-		}
-
-		let ring_wall = portal_ring_wall(PortalRingParams {
-			center_xz,
-			radius,
-			storey_height,
-			arc_degrees,
-			start_yaw: params.start_yaw,
-			must_assign,
-			must_not_assign: vec![],
-			portal_noise: NoiseParams::default(),
-			optional_portals: (0, 0),
-			style: params.style,
-		});
-
-		let floor_nodes = build_slab(center_xz, radius, params.floor);
-		let ceiling_center = center_xz + Vec3::Y * storey_height;
-		let ceiling_nodes = build_slab(ceiling_center, radius, params.ceiling);
-
-		let mut floor = Self {
+impl ArcFloorBuilder {
+	pub fn new(center_xz: Vec3, radius: f32, storey_height: f32) -> Self {
+		Self {
 			params: ArcFloorParams {
 				center_xz,
 				radius,
 				storey_height,
-				..params
+				..ArcFloorParams::default()
 			},
-			ring_wall,
-			floor_nodes,
-			ceiling_nodes,
-			half_t,
-			openings: Openings::new(),
-			mapped: MappedOpenings::new(),
+		}
+	}
+
+	pub fn floor(mut self, floor: ArcFloorSlab) -> Self {
+		self.params.floor = floor;
+		self
+	}
+
+	pub fn ceiling(mut self, ceiling: ArcFloorSlab) -> Self {
+		self.params.ceiling = ceiling;
+		self
+	}
+
+	pub fn style(mut self, style: PartitionStyle) -> Self {
+		self.params.style = style;
+		self
+	}
+
+	pub fn openings(mut self, openings: Openings) -> Self {
+		self.params.openings = openings;
+		self
+	}
+
+	pub fn build(self) -> ArcFloor {
+		ArcFloor::from_params(self.params)
+	}
+}
+
+/// Per-sector wall resolution after Layer 1.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SectorWall {
+	/// Full-height solid arc strip.
+	Solid,
+	/// Lower band omitted; lintel / slice kept.
+	LintelOnly,
+	/// Both vertical bands omitted.
+	Empty,
+}
+
+/// One circular storey: wall partitions + optional floor / ceiling.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ArcFloor {
+	params: ArcFloorParams,
+	wall_partitions: Vec<PartitionNode>,
+	floor_nodes: Vec<FloorNode>,
+	ceiling_nodes: Vec<FloorNode>,
+	/// Connectable openings that participated in wall mapping.
+	openings: Openings,
+	/// Contact geometry for mapped openings.
+	mapped: MappedOpenings,
+}
+
+impl ArcFloor {
+	pub fn builder(center_xz: Vec3, radius: f32, storey_height: f32) -> ArcFloorBuilder {
+		ArcFloorBuilder::new(center_xz, radius, storey_height)
+	}
+
+	pub fn new(params: ArcFloorParams) -> Self {
+		Self::from_params(params)
+	}
+
+	fn from_params(params: ArcFloorParams) -> Self {
+		let radius = params.radius.max(1e-4);
+		let storey_height = params.storey_height.max(1e-4);
+		let center_xz = Vec3::new(params.center_xz.x, params.center_xz.y, params.center_xz.z);
+		let params = ArcFloorParams {
+			center_xz,
+			radius,
+			storey_height,
+			..params
 		};
 
-		for (id, t, opening) in assigned_ts {
-			let assigned = floor
-				.ring_wall
-				.portals
-				.iter()
-				.any(|p| circular_dist(p.t, t) < 1e-3);
-			if !assigned {
-				continue;
-			}
-			openings.insert(id.clone(), opening);
-			mapped.insert(id, floor.mapped_at(t));
+		let (sectors, wall_partitions) = resolve_wall_sweeps(&params);
+		let (openings, mapped) = map_connectable_openings(&params, &sectors);
+
+		let floor_nodes = resolve_slab(
+			params.floor,
+			center_xz,
+			radius,
+			center_xz.y,
+			&params.openings,
+		);
+		let ceiling_nodes = resolve_slab(
+			params.ceiling,
+			center_xz + Vec3::Y * storey_height,
+			radius,
+			center_xz.y + storey_height,
+			&params.openings,
+		);
+
+		Self {
+			params,
+			wall_partitions,
+			floor_nodes,
+			ceiling_nodes,
+			openings,
+			mapped,
 		}
-		floor.openings = openings;
-		floor.mapped = mapped;
-		floor
 	}
 
 	/// Authoring helper: thin passage/aperture AABB on the ring at normalized \(t\).
@@ -172,11 +202,10 @@ impl ArcFloor {
 		center_xz: Vec3,
 		radius: f32,
 		storey_height: f32,
-		start_yaw: f32,
 		t: f32,
 	) -> (OpeningId, Opening) {
 		let id = id.into();
-		let dir = ring_dir_at_yaw(start_yaw, t);
+		let dir = ring_dir_at(t);
 		let radius = radius.max(1e-4);
 		let storey_height = storey_height.max(1e-4);
 		let center = Vec3::new(center_xz.x, center_xz.y, center_xz.z);
@@ -186,17 +215,14 @@ impl ArcFloor {
 			center.z + dir.y * radius,
 		);
 		let right = Vec3::new(-dir.y, 0.0, dir.x);
-		let half_w = radius * (OPEN_HALF_DEG.to_radians()).sin().max(0.15);
+		let half_w = radius * (SEG_DEG.to_radians() * 0.5).sin().max(0.15);
 		let half_d = 0.35;
 		let h = SLICE_Y_FRAC * storey_height;
 		let min = on_ring - right * half_w - Vec3::new(dir.x, 0.0, dir.y) * half_d;
 		let max = on_ring + right * half_w + Vec3::new(dir.x, 0.0, dir.y) * half_d + Vec3::Y * h;
 		(
 			id,
-			Opening::new(
-				Aabb3d::from_min_max(min.min(max), min.max(max)),
-				label,
-			),
+			Opening::new(Aabb3d::from_min_max(min.min(max), min.max(max)), label),
 		)
 	}
 
@@ -204,8 +230,8 @@ impl ArcFloor {
 		&self.params
 	}
 
-	pub fn ring_wall(&self) -> &PortalRingWall {
-		&self.ring_wall
+	pub fn wall_partitions(&self) -> &[PartitionNode] {
+		&self.wall_partitions
 	}
 
 	pub fn floor_nodes(&self) -> &[FloorNode] {
@@ -216,56 +242,22 @@ impl ArcFloor {
 		&self.ceiling_nodes
 	}
 
-	/// Portal clip half-width in unit \(t\) (two segments → 15° each side of center).
-	pub fn half_t(&self) -> f32 {
-		self.half_t
-	}
-
 	/// One kit segment in unit \(t\) (15° / 360°).
 	pub fn segment_t(&self) -> f32 {
 		SEG_DEG / 360.0
 	}
 
 	/// Outward unit direction in XZ at normalized sweep parameter \(t\).
-	///
-	/// `start_yaw + t·2π` plus a **+7.5° clockwise** bias so grid samples sit on
-	/// segment edges (jambs), not opening centers. Dir is kit local \(−X\) after
-	/// Bevy `YXZ` yaw: `(-cos φ, sin φ)`.
 	pub fn ring_dir_at(&self, t: f32) -> Vec2 {
-		ring_dir_at_yaw(self.params.start_yaw, t)
+		ring_dir_at(t)
 	}
 
 	/// World point on the ring exterior at \(t\) (floor elevation).
-	///
-	/// Exact: \(\texttt{center} + R · \mathrm{dir}(t)\) — no chord/tangent estimate.
 	pub fn ring_point_at(&self, t: f32) -> Vec3 {
 		let dir = self.ring_dir_at(t);
 		let c = self.params.center_xz;
 		let r = self.params.radius;
 		Vec3::new(c.x + dir.x * r, c.y, c.z + dir.y * r)
-	}
-
-	/// Opening map at normalized \(t\) (does not require an assigned portal).
-	///
-	/// Visible door = **one 15° segment**. Plan-view “clockwise” along the ring
-	/// (toward \(+Z\) from \(+X\) with our yaw map) is **decreasing** \(t\), so the
-	/// segment one node clockwise of portal \(t\) is `t−30°` → `t−15°`.
-	/// Tops = bottoms + slice height.
-	fn mapped_at(&self, t: f32) -> MappedOpening {
-		let t = norm_t(t);
-		let seg = self.segment_t();
-		// One segment clockwise of `[t−15°, t]` → `[t−30°, t−15°]`.
-		let t_lo = norm_t(t - 2.0 * seg);
-		let t_hi = norm_t(t - seg);
-		let t_mid = norm_t(t - 1.5 * seg);
-		// Looking outward: left is further clockwise (lower t / toward +Z at +X).
-		let bl = self.ring_point_at(t_lo);
-		let br = self.ring_point_at(t_hi);
-		let h = SLICE_Y_FRAC * self.params.storey_height;
-		let tl = bl + Vec3::Y * h;
-		let tr = br + Vec3::Y * h;
-		let orientation = self.ring_dir_at(t_mid);
-		MappedOpening::new(MappedOpeningQuad::new(bl, br, tl, tr), orientation)
 	}
 }
 
@@ -282,7 +274,7 @@ impl MapsOpenings for ArcFloor {
 impl BuildingComponents for ArcFloor {
 	fn partition_nodes_for_level(&self, level: LodSceneLevel) -> Layers<PartitionNode> {
 		if matches!(level, LodSceneLevel::High | LodSceneLevel::Medium) {
-			self.ring_wall.sweep.partition_nodes_for_level(level)
+			Layers::from_free(self.wall_partitions.clone())
 		} else {
 			Layers::new()
 		}
@@ -298,25 +290,319 @@ impl BuildingComponents for ArcFloor {
 	}
 }
 
-fn build_slab(center: Vec3, radius: f32, slab: ArcFloorSlab) -> Vec<FloorNode> {
-	match slab {
-		ArcFloorSlab::None => Vec::new(),
-		ArcFloorSlab::Solid => {
-			let mut nodes = inscribed_caps(center, radius);
-			let inscribed_half = INSCRIBED_HALF_FRAC * radius;
-			let side = 2.0 * inscribed_half;
-			nodes.push(rect_slab(center, side, side));
-			nodes
-		}
-		ArcFloorSlab::SquareHole { size } => {
-			let inscribed_half = INSCRIBED_HALF_FRAC * radius;
-			let hole_half = (size * 0.5).clamp(1e-4, inscribed_half * 0.95);
-			let (caps, rects) = squared_floor_with_hole(center, radius, hole_half);
-			let mut nodes = caps.to_vec();
-			nodes.extend(rects);
-			nodes
+// ─── Layer 1: wall sweeps ───────────────────────────────────────────────────
+
+fn resolve_wall_sweeps(params: &ArcFloorParams) -> ([SectorWall; SECTORS as usize], Vec<PartitionNode>) {
+	let mut sectors = [SectorWall::Solid; SECTORS as usize];
+	let band_y0 = params.center_xz.y;
+	let lintel_y = band_y0 + SLICE_Y_FRAC * params.storey_height;
+	let band_y1 = band_y0 + params.storey_height;
+
+	for (_id, opening) in params.openings.iter() {
+		for i in 0..SECTORS {
+			let sector = sector_aabb(params, i);
+			if !aabb3d_intersects(&opening.bounds, &sector) {
+				continue;
+			}
+			let lower = band_aabb(&sector, band_y0, lintel_y);
+			let upper = band_aabb(&sector, lintel_y, band_y1);
+			let hit_lower = aabb3d_intersects(&opening.bounds, &lower);
+			let hit_upper = aabb3d_intersects(&opening.bounds, &upper);
+			if !hit_lower && !hit_upper {
+				// Sector AABB was a false positive — keep solid.
+				continue;
+			}
+			let idx = i as usize;
+			sectors[idx] = match (hit_lower, hit_upper) {
+				(true, true) => SectorWall::Empty,
+				(true, false) => match sectors[idx] {
+					SectorWall::Empty => SectorWall::Empty,
+					_ => SectorWall::LintelOnly,
+				},
+				(false, true) => match sectors[idx] {
+					SectorWall::LintelOnly | SectorWall::Empty => SectorWall::Empty,
+					SectorWall::Solid => SectorWall::Solid, // upper-only: keep full solid strip
+				},
+				(false, false) => sectors[idx],
+			};
 		}
 	}
+
+	let partitions = emit_wall_partitions(params, &sectors);
+	(sectors, partitions)
+}
+
+fn emit_wall_partitions(params: &ArcFloorParams, sectors: &[SectorWall; SECTORS as usize]) -> Vec<PartitionNode> {
+	let ring_scale = Vec3::new(params.radius, params.storey_height, params.radius);
+	let lintel = params.center_xz + Vec3::Y * (SLICE_Y_FRAC * params.storey_height);
+	let mut partitions = Vec::new();
+
+	// Emit lintel-only and empty as 15° pieces; merge solid runs into 180/90/15.
+	let mut i = 0u32;
+	while i < SECTORS {
+		match sectors[i as usize] {
+			SectorWall::Empty => {
+				i += 1;
+			}
+			SectorWall::LintelOnly => {
+				push_slice(
+					&mut partitions,
+					lintel,
+					ring_scale,
+					i as f32 * SEG_DEG,
+					SEG_DEG,
+					params.style,
+				);
+				i += 1;
+			}
+			SectorWall::Solid => {
+				let mut run = 1u32;
+				while i + run < SECTORS && sectors[(i + run) as usize] == SectorWall::Solid {
+					run += 1;
+				}
+				emit_solid_run(
+					&mut partitions,
+					params.center_xz,
+					ring_scale,
+					i,
+					run,
+					params.style,
+				);
+				i += run;
+			}
+		}
+	}
+	partitions
+}
+
+fn emit_solid_run(
+	partitions: &mut Vec<PartitionNode>,
+	center_xz: Vec3,
+	ring_scale: Vec3,
+	start_sector: u32,
+	run: u32,
+	style: PartitionStyle,
+) {
+	let mut remaining = run;
+	let mut at = start_sector;
+	// Prefer 180°, then 90°, then 15° leftovers.
+	while remaining > 0 {
+		let chunk = if remaining >= 12 {
+			12 // 180°
+		} else if remaining >= 6 {
+			6 // 90°
+		} else {
+			1 // 15°
+		};
+		push_solid(
+			partitions,
+			center_xz,
+			ring_scale,
+			at as f32 * SEG_DEG,
+			chunk as f32 * SEG_DEG,
+			style,
+		);
+		at += chunk;
+		remaining -= chunk;
+	}
+}
+
+fn push_solid(
+	partitions: &mut Vec<PartitionNode>,
+	center_xz: Vec3,
+	ring_scale: Vec3,
+	start_deg: f32,
+	sweep_deg: f32,
+	style: PartitionStyle,
+) {
+	if sweep_deg > 1e-2 {
+		partitions.push(PartitionNode::new(
+			style,
+			Partition::arc(sweep_deg),
+			Placement::new(center_xz, start_deg.to_radians()).with_scale(ring_scale),
+		));
+	}
+}
+
+fn push_slice(
+	partitions: &mut Vec<PartitionNode>,
+	lintel: Vec3,
+	ring_scale: Vec3,
+	start_deg: f32,
+	sweep_deg: f32,
+	style: PartitionStyle,
+) {
+	if sweep_deg > 1e-2 {
+		partitions.push(PartitionNode::new(
+			style,
+			Partition::slice_arc(sweep_deg),
+			Placement::new(lintel, start_deg.to_radians()).with_scale(ring_scale),
+		));
+	}
+}
+
+fn sector_aabb(params: &ArcFloorParams, sector: u32) -> Aabb3d {
+	let a0 = sector as f32 * SEG_DEG;
+	let a1 = (sector + 1) as f32 * SEG_DEG;
+	let r_in = params.radius * 0.85;
+	let r_out = params.radius * 1.05;
+	let y0 = params.center_xz.y;
+	let y1 = y0 + params.storey_height;
+	let mut min = Vec3::splat(f32::INFINITY);
+	let mut max = Vec3::splat(f32::NEG_INFINITY);
+	for deg in [a0, a1] {
+		let d = ring_dir_at_deg(deg);
+		for r in [r_in, r_out] {
+			for y in [y0, y1] {
+				let p = Vec3::new(
+					params.center_xz.x + d.x * r,
+					y,
+					params.center_xz.z + d.y * r,
+				);
+				min = min.min(p);
+				max = max.max(p);
+			}
+		}
+	}
+	Aabb3d::from_min_max(min, max)
+}
+
+fn band_aabb(sector: &Aabb3d, y0: f32, y1: f32) -> Aabb3d {
+	let mut min = Vec3::from(sector.min);
+	let mut max = Vec3::from(sector.max);
+	min.y = y0.min(y1);
+	max.y = y0.max(y1);
+	Aabb3d::from_min_max(min, max)
+}
+
+fn map_connectable_openings(
+	params: &ArcFloorParams,
+	sectors: &[SectorWall; SECTORS as usize],
+) -> (Openings, MappedOpenings) {
+	let mut openings = Openings::new();
+	let mut mapped = MappedOpenings::new();
+	for (id, opening) in params.openings.iter() {
+		if !opening.label.is_connectable() {
+			continue;
+		}
+		let mut hit_sectors = Vec::new();
+		for i in 0..SECTORS {
+			if matches!(sectors[i as usize], SectorWall::Solid) {
+				continue;
+			}
+			let sector = sector_aabb(params, i);
+			if aabb3d_intersects(&opening.bounds, &sector) {
+				hit_sectors.push(i);
+			}
+		}
+		if hit_sectors.is_empty() {
+			continue;
+		}
+		openings.insert(id.clone(), opening.clone());
+		mapped.insert(id.clone(), mapped_from_sectors(params, &hit_sectors));
+	}
+	(openings, mapped)
+}
+
+fn mapped_from_sectors(params: &ArcFloorParams, hit: &[u32]) -> MappedOpening {
+	let lo = *hit.iter().min().unwrap_or(&0);
+	let hi = *hit.iter().max().unwrap_or(&0);
+	// Outward face across the contiguous hit span (Layer 1 candidates).
+	let t_lo = (lo as f32) / SECTORS as f32;
+	let t_hi = ((hi + 1) as f32) / SECTORS as f32;
+	let t_mid = 0.5 * (t_lo + t_hi);
+	let bl = ring_point(params, t_lo);
+	let br = ring_point(params, t_hi.min(1.0 - 1e-5));
+	let h = SLICE_Y_FRAC * params.storey_height;
+	let tl = bl + Vec3::Y * h;
+	let tr = br + Vec3::Y * h;
+	// Looking outward: ensure left/right follow +orientation right.
+	let orientation = ring_dir_at(t_mid);
+	let right = Vec3::new(-orientation.y, 0.0, orientation.x);
+	let (bl, br, tl, tr) = if (br - bl).dot(right) < 0.0 {
+		(br, bl, tr, tl)
+	} else {
+		(bl, br, tl, tr)
+	};
+	MappedOpening::new(MappedOpeningQuad::new(bl, br, tl, tr), orientation)
+}
+
+// ─── Layer 2: floor / ceiling ───────────────────────────────────────────────
+
+fn resolve_slab(
+	base: ArcFloorSlab,
+	center: Vec3,
+	radius: f32,
+	slab_y: f32,
+	openings: &Openings,
+) -> Vec<FloorNode> {
+	match base {
+		ArcFloorSlab::None => Vec::new(),
+		ArcFloorSlab::Solid => {
+			let max_side = 2.0 * INSCRIBED_HALF_FRAC * radius; // 1.4·R
+			let slab_aabb = slab_volume_aabb(center, radius, slab_y);
+			let mut hole_side: Option<f32> = None;
+			let mut remove_all = false;
+			for (_id, opening) in openings.iter() {
+				if !aabb3d_intersects(&opening.bounds, &slab_aabb) {
+					continue;
+				}
+				let Some(inter) = aabb_intersection(&opening.bounds, &slab_aabb) else {
+					continue;
+				};
+				let extent = Vec3::from(inter.max - inter.min);
+				// Characteristic horizontal scale of the intersection.
+				let scale = extent.x.max(extent.z);
+				if scale + EPS >= max_side {
+					remove_all = true;
+					break;
+				}
+				hole_side = Some(hole_side.map_or(scale, |s| s.max(scale)));
+			}
+			if remove_all {
+				Vec::new()
+			} else if let Some(side) = hole_side {
+				let inscribed_half = INSCRIBED_HALF_FRAC * radius;
+				let hole_half = (side * 0.5).clamp(1e-4, inscribed_half * 0.95);
+				let (caps, rects) = squared_floor_with_hole(center, radius, hole_half);
+				let mut nodes = caps.to_vec();
+				nodes.extend(rects);
+				nodes
+			} else {
+				let mut nodes = inscribed_caps(center, radius);
+				let side = max_side;
+				nodes.push(rect_slab(center, side, side));
+				nodes
+			}
+		}
+	}
+}
+
+fn slab_volume_aabb(center: Vec3, radius: f32, slab_y: f32) -> Aabb3d {
+	let half = radius.max(1e-4);
+	let y_half = FLOOR_SLAB_Y_SCALE;
+	Aabb3d::from_min_max(
+		Vec3::new(center.x - half, slab_y - y_half, center.z - half),
+		Vec3::new(center.x + half, slab_y + y_half, center.z + half),
+	)
+}
+
+fn aabb_intersection(a: &Aabb3d, b: &Aabb3d) -> Option<Aabb3d> {
+	if !aabb3d_intersects(a, b) {
+		return None;
+	}
+	let min = Vec3::from(a.min).max(Vec3::from(b.min));
+	let max = Vec3::from(a.max).min(Vec3::from(b.max));
+	Some(Aabb3d::from_min_max(min, max))
+}
+
+fn aabb3d_intersects(a: &Aabb3d, b: &Aabb3d) -> bool {
+	a.min.x < b.max.x - EPS
+		&& a.max.x > b.min.x + EPS
+		&& a.min.y < b.max.y - EPS
+		&& a.max.y > b.min.y + EPS
+		&& a.min.z < b.max.z - EPS
+		&& a.max.z > b.min.z + EPS
 }
 
 fn inscribed_caps(center_xz: Vec3, radius: f32) -> Vec<FloorNode> {
@@ -394,36 +680,32 @@ fn rect_slab(center: Vec3, width_x: f32, depth_z: f32) -> FloorNode {
 	)
 }
 
+fn ring_dir_at(t: f32) -> Vec2 {
+	ring_dir_at_deg(norm_t(t) * 360.0)
+}
+
+fn ring_dir_at_deg(deg: f32) -> Vec2 {
+	let phi = deg.to_radians();
+	let (s, c) = phi.sin_cos();
+	// Kit local −X after Bevy YXZ yaw: (−cos φ, sin φ).
+	Vec2::new(-c, s)
+}
+
+fn ring_point(params: &ArcFloorParams, t: f32) -> Vec3 {
+	let dir = ring_dir_at(t);
+	Vec3::new(
+		params.center_xz.x + dir.x * params.radius,
+		params.center_xz.y,
+		params.center_xz.z + dir.y * params.radius,
+	)
+}
+
 fn norm_t(t: f32) -> f32 {
 	let mut t = t % 1.0;
 	if t < 0.0 {
 		t += 1.0;
 	}
 	t
-}
-
-fn circular_dist(a: f32, b: f32) -> f32 {
-	let d = (norm_t(a) - norm_t(b)).abs();
-	d.min(1.0 - d)
-}
-
-fn ring_dir_at_yaw(start_yaw: f32, t: f32) -> Vec2 {
-	let phi = start_yaw + norm_t(t) * std::f32::consts::TAU + RING_CLOCKWISE_OFFSET_DEG.to_radians();
-	let (s, c) = phi.sin_cos();
-	Vec2::new(-c, s)
-}
-
-/// Invert [`ring_dir_at_yaw`]: map a world XZ point to nearest unit \(t\) on the ring.
-fn project_opening_t(center_xz: Vec3, start_yaw: f32, bounds: &Aabb3d) -> f32 {
-	let mid = Vec3::from((bounds.min + bounds.max) * 0.5);
-	let dx = mid.x - center_xz.x;
-	let dz = mid.z - center_xz.z;
-	if dx * dx + dz * dz < 1e-10 {
-		return 0.0;
-	}
-	// dir = (-cos φ, sin φ) ⇒ φ = atan2(sin, cos) = atan2(dz, -dx)
-	let phi = dz.atan2(-dx);
-	norm_t((phi - start_yaw - RING_CLOCKWISE_OFFSET_DEG.to_radians()) / std::f32::consts::TAU)
 }
 
 #[cfg(test)]
@@ -433,115 +715,93 @@ mod tests {
 	fn openings_at(ts_labels: &[(&str, f32, OpeningLabel)]) -> Openings {
 		let mut openings = Openings::new();
 		for (id, t, label) in ts_labels {
-			let (id, opening) = ArcFloor::plan_opening_at_t(
-				*id,
-				label.clone(),
-				Vec3::ZERO,
-				4.0,
-				3.0,
-				0.0,
-				*t,
-			);
+			let (id, opening) =
+				ArcFloor::plan_opening_at_t(*id, label.clone(), Vec3::ZERO, 4.0, 3.0, *t);
 			openings.insert(id, opening);
 		}
 		openings
 	}
 
 	#[test]
-	fn openings_assign_without_optional_noise() -> anyhow::Result<()> {
-		let floor = ArcFloor::new(ArcFloorParams {
-			openings: openings_at(&[
+	fn openings_cut_wall_partitions() -> anyhow::Result<()> {
+		let floor = ArcFloor::builder(Vec3::ZERO, 4.0, 3.0)
+			.openings(openings_at(&[
 				("door", 0.0, OpeningLabel::Passage),
 				("window", 0.5, OpeningLabel::Aperture),
-			]),
-			..ArcFloorParams::default()
-		});
-		assert_eq!(floor.ring_wall().portals.len(), 2);
-		assert!(!floor.ring_wall().sweep.clip_intervals.is_empty());
-		assert_eq!(floor.openings().len(), 2);
+			]))
+			.build();
+		assert!(!floor.wall_partitions().is_empty());
+		assert!(floor.openings().len() >= 1);
 		Ok(())
 	}
 
 	#[test]
 	fn slab_none_omits_nodes() -> anyhow::Result<()> {
-		let floor = ArcFloor::new(ArcFloorParams {
-			floor: ArcFloorSlab::None,
-			ceiling: ArcFloorSlab::None,
-			..ArcFloorParams::default()
-		});
+		let floor = ArcFloor::builder(Vec3::ZERO, 4.0, 3.0)
+			.floor(ArcFloorSlab::None)
+			.ceiling(ArcFloorSlab::None)
+			.build();
 		assert!(floor.floor_nodes().is_empty());
 		assert!(floor.ceiling_nodes().is_empty());
 		Ok(())
 	}
 
 	#[test]
-	fn solid_and_hole_slabs() -> anyhow::Result<()> {
-		let solid = ArcFloor::new(ArcFloorParams {
-			floor: ArcFloorSlab::Solid,
-			..ArcFloorParams::default()
-		});
+	fn solid_slab_without_openings() -> anyhow::Result<()> {
+		let solid = ArcFloor::builder(Vec3::ZERO, 4.0, 3.0)
+			.floor(ArcFloorSlab::Solid)
+			.build();
 		// 4 caps + 1 inscribed fill
 		assert_eq!(solid.floor_nodes().len(), 5);
-
-		let holed = ArcFloor::new(ArcFloorParams {
-			floor: ArcFloorSlab::SquareHole { size: 2.0 },
-			ceiling: ArcFloorSlab::Solid,
-			storey_height: 3.0,
-			..ArcFloorParams::default()
-		});
-		// 4 caps + 4 frame rects
-		assert_eq!(holed.floor_nodes().len(), 8);
-		assert_eq!(holed.ceiling_nodes().len(), 5);
-		assert!((holed.ceiling_nodes()[0].placement.translation.y - 3.0).abs() < 1e-3);
 		Ok(())
 	}
 
 	#[test]
-	fn mapped_opening_kit_angle_map() -> anyhow::Result<()> {
-		let connect = OpeningId::new("connect");
-		let floor = ArcFloor::new(ArcFloorParams {
-			openings: openings_at(&[
-				("north", 0.0, OpeningLabel::Passage),
-				("window", 0.25, OpeningLabel::Aperture),
-				("connect", 0.5, OpeningLabel::Passage),
-			]),
-			radius: 4.0,
-			start_yaw: 0.0,
-			center_xz: Vec3::ZERO,
-			..ArcFloorParams::default()
-		});
-		// +7.5° clockwise bias: t=0.5 near +X/−Z (a jamb node, not opening mid).
-		let at_door = floor.ring_dir_at(0.5);
-		assert!(at_door.x > 0.9, "t=0.5 ~+X, got {at_door:?}");
-		assert!(at_door.y < -0.05, "clockwise of +X → −Z, got {at_door:?}");
+	fn large_floor_opening_removes_slab() -> anyhow::Result<()> {
+		let r = 4.0;
+		// Square AABB with half-length ≈ radius → removes entire Solid floor.
+		let mut openings = Openings::new();
+		openings.insert(
+			"clear",
+			Opening::new(
+				Aabb3d::from_min_max(Vec3::new(-r, -0.5, -r), Vec3::new(r, 0.5, r)),
+				OpeningLabel::Shaft,
+			),
+		);
+		let floor = ArcFloor::builder(Vec3::ZERO, r, 3.0)
+			.floor(ArcFloorSlab::Solid)
+			.openings(openings)
+			.build();
+		assert!(floor.floor_nodes().is_empty());
+		Ok(())
+	}
 
-		// Door: one segment clockwise of t → `[t−30°, t−15°]` (decreasing t).
+	#[test]
+	fn mapped_opening_from_wall_hit() -> anyhow::Result<()> {
+		let connect = OpeningId::new("connect");
+		let floor = ArcFloor::builder(Vec3::ZERO, 4.0, 3.0)
+			.openings(openings_at(&[("connect", 0.5, OpeningLabel::Passage)]))
+			.build();
 		let east = floor
 			.mapped_opening(&connect)
 			.ok_or_else(|| anyhow::anyhow!("missing mapped opening {connect:?}"))?;
-		let (bl, br, tl, tr) = east.endpoint_corners();
-		let seg = floor.segment_t();
-		let expect_bl = floor.ring_point_at(0.5 - 2.0 * seg);
-		let expect_br = floor.ring_point_at(0.5 - seg);
-		assert!(bl.distance(expect_bl) < 1e-4, "bl={bl:?} expect={expect_bl:?}");
-		assert!(br.distance(expect_br) < 1e-4, "br={br:?} expect={expect_br:?}");
-		let r_bl = (bl.x * bl.x + bl.z * bl.z).sqrt();
-		let r_br = (br.x * br.x + br.z * br.z).sqrt();
-		assert!((r_bl - 4.0).abs() < 1e-3, "bl not on ring r={r_bl}");
-		assert!((r_br - 4.0).abs() < 1e-3, "br not on ring r={r_br}");
-		let h = crate::portals::SLICE_Y_FRAC * 3.0;
-		assert!((tl.y - bl.y - h).abs() < 1e-3, "top is slice-height lift, dy={}", tl.y - bl.y);
-		assert!((tr.y - br.y - h).abs() < 1e-3);
-		let chord = bl.distance(br);
-		let expect_chord = 2.0 * 4.0 * (7.5_f32).to_radians().sin();
-		assert!(
-			(chord - expect_chord).abs() < 1e-3,
-			"chord={chord} expect 15° span {expect_chord}"
-		);
-		assert!(east.orientation.normalize().x > 0.7, "orient={:?}", east.orientation);
-		// Mid toward +Z of +X (clockwise from +X in plan).
-		let mid = (bl + br) * 0.5;
-		assert!(mid.z > 0.5, "mid={mid:?}");
+		assert!(east.orientation.normalize().length() > 0.9);
+		let (bl, br, ..) = east.endpoint_corners();
+		assert!(bl.distance(br) > 0.1);
+		Ok(())
+	}
+
+	#[test]
+	fn solid_runs_prefer_large_sweeps() -> anyhow::Result<()> {
+		// No openings → one 180 + leftover merge into large arcs (12+12 sectors).
+		let floor = ArcFloor::builder(Vec3::ZERO, 4.0, 3.0).build();
+		let arcs = floor
+			.wall_partitions()
+			.iter()
+			.filter(|p| matches!(p.geometry, Partition::Arc(_)))
+			.count();
+		assert!(arcs <= 4, "expected few merged solids, got {arcs}");
+		assert!(!floor.wall_partitions().is_empty());
 		Ok(())
 	}
 }

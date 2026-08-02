@@ -1,12 +1,13 @@
 //! Stacked circular storey shells ([`ArcFloor`]) with developer-chosen openings and slabs.
 
+use bevy_math::bounding::Aabb3d;
 use bevy_math::Vec3;
 use lod::gen::LodSceneLevel;
 use richmond_building_components::floors::FloorNode;
 use richmond_building_components::partitions::{PartitionNode, PartitionStyle};
 use richmond_building_components::{BuildingComponents, Layers};
 
-use crate::openings::{MappedOpening, OpeningId, Openings};
+use crate::openings::{MappedOpening, Opening, OpeningId, OpeningLabel, Openings};
 use crate::shells::arc_floor::{ArcFloor, ArcFloorParams, ArcFloorSlab};
 
 /// Authored parameters for an [`ArcTower`] shell.
@@ -18,9 +19,7 @@ pub struct ArcTowerParams {
 	/// Number of stacked storeys (developer-chosen; no noise mapping).
 	pub floor_count: u32,
 	pub storey_height: f32,
-	/// World yaw (radians) of each ring sweep start (\(t = 0\)).
-	pub start_yaw: f32,
-	/// Same openings plan on every storey.
+	/// Same openings plan on every storey (wall + slab Layer 1/2).
 	pub openings: Openings,
 	/// Floor slab on storey 0.
 	pub base_floor: ArcFloorSlab,
@@ -28,6 +27,9 @@ pub struct ArcTowerParams {
 	pub intermediate_floors: ArcFloorSlab,
 	/// Ceiling slab on the top storey only.
 	pub top_ceiling: ArcFloorSlab,
+	/// When `> 0`, each intermediate Solid floor also receives a centered shaft
+	/// opening of this full side length (Layer 2 hole).
+	pub intermediate_floor_hole: f32,
 	pub style: PartitionStyle,
 }
 
@@ -38,11 +40,11 @@ impl Default for ArcTowerParams {
 			radius: 4.0,
 			floor_count: 3,
 			storey_height: 3.0,
-			start_yaw: 0.0,
 			openings: Openings::new(),
 			base_floor: ArcFloorSlab::Solid,
-			intermediate_floors: ArcFloorSlab::SquareHole { size: 2.24 },
+			intermediate_floors: ArcFloorSlab::Solid,
 			top_ceiling: ArcFloorSlab::Solid,
+			intermediate_floor_hole: 2.24,
 			style: PartitionStyle::RoughStonework,
 		}
 	}
@@ -76,7 +78,6 @@ impl ArcTower {
 				} else {
 					ArcFloorSlab::None
 				};
-				// Per-storey plan: same ids/labels, AABBs lifted to the storey elevation.
 				let mut storey_openings = Openings::new();
 				for (id, opening) in params.openings.iter() {
 					let dy = y - base_y;
@@ -84,9 +85,19 @@ impl ArcTower {
 					let max = Vec3::from(opening.bounds.max) + Vec3::Y * dy;
 					storey_openings.insert(
 						id.clone(),
-						crate::openings::Opening::new(
-							bevy_math::bounding::Aabb3d::from_min_max(min, max),
-							opening.label.clone(),
+						Opening::new(Aabb3d::from_min_max(min, max), opening.label.clone()),
+					);
+				}
+				if i > 0 && params.intermediate_floor_hole > 0.0 && floor == ArcFloorSlab::Solid {
+					let half = params.intermediate_floor_hole * 0.5;
+					storey_openings.insert(
+						OpeningId::new(format!("floor_shaft_{i}")),
+						Opening::new(
+							Aabb3d::from_min_max(
+								Vec3::new(center_xz.x - half, y - 0.25, center_xz.z - half),
+								Vec3::new(center_xz.x + half, y + 0.25, center_xz.z + half),
+							),
+							OpeningLabel::Shaft,
 						),
 					);
 				}
@@ -94,7 +105,6 @@ impl ArcTower {
 					center_xz: Vec3::new(center_xz.x, y, center_xz.z),
 					radius,
 					storey_height,
-					start_yaw: params.start_yaw,
 					openings: storey_openings,
 					floor,
 					ceiling,
@@ -155,20 +165,12 @@ impl BuildingComponents for ArcTower {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use crate::openings::OpeningLabel;
 	use crate::shells::arc_floor::ArcFloor;
 
 	#[test]
 	fn stacks_requested_floor_count() -> anyhow::Result<()> {
-		let (id, opening) = ArcFloor::plan_opening_at_t(
-			"door",
-			OpeningLabel::Passage,
-			Vec3::ZERO,
-			4.0,
-			3.0,
-			0.0,
-			0.0,
-		);
+		let (id, opening) =
+			ArcFloor::plan_opening_at_t("door", OpeningLabel::Passage, Vec3::ZERO, 4.0, 3.0, 0.0);
 		let tower = ArcTower::new(ArcTowerParams {
 			floor_count: 4,
 			openings: Openings::new().with(id, opening),
@@ -185,6 +187,7 @@ mod tests {
 			base_floor: ArcFloorSlab::Solid,
 			intermediate_floors: ArcFloorSlab::Solid,
 			top_ceiling: ArcFloorSlab::Solid,
+			intermediate_floor_hole: 0.0,
 			..ArcTowerParams::default()
 		});
 		let s0 = tower

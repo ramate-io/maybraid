@@ -97,7 +97,6 @@ pub enum PreviewSubject {
 	ArcFloor {
 		radius: f32,
 		storey_height: f32,
-		start_yaw_deg: f32,
 		floor: bool,
 		ceiling: bool,
 		openings: Vec<PreviewOpening>,
@@ -301,12 +300,11 @@ impl PreviewConfig {
 			PreviewSubject::ArcFloor {
 				radius,
 				storey_height,
-				start_yaw_deg,
 				floor,
 				ceiling,
 				ref openings,
 			} => format!(
-				"preview: arc-floor (r={radius:.1} h={storey_height:.1} yaw={start_yaw_deg:.1} floor={floor} ceil={ceiling} openings={})",
+				"preview: arc-floor (r={radius:.1} h={storey_height:.1} floor={floor} ceil={ceiling} openings={})",
 				openings.len()
 			),
 			PreviewSubject::ArcTower {
@@ -887,7 +885,6 @@ pub fn present_preview_lod(
 		PreviewSubject::ArcFloor {
 			radius,
 			storey_height,
-			start_yaw_deg,
 			floor,
 			ceiling,
 			openings,
@@ -896,7 +893,6 @@ pub fn present_preview_lod(
 				center_xz: Vec3::ZERO,
 				radius: *radius,
 				storey_height: *storey_height,
-				start_yaw: start_yaw_deg.to_radians(),
 				openings: openings_from_preview(openings),
 				floor: if *floor {
 					ArcFloorSlab::Solid
@@ -924,11 +920,6 @@ pub fn present_preview_lod(
 			no_base_floor,
 			no_ceiling,
 		} => {
-			let intermediate = if *floor_hole > 0.0 {
-				ArcFloorSlab::SquareHole { size: *floor_hole }
-			} else {
-				ArcFloorSlab::Solid
-			};
 			let mut openings = Openings::new();
 			for (id, t, label) in [
 				("window_n", 0.0, OpeningLabel::Aperture),
@@ -942,7 +933,6 @@ pub fn present_preview_lod(
 					Vec3::ZERO,
 					*radius,
 					*storey_height,
-					0.0,
 					t,
 				);
 				openings.insert(id, opening);
@@ -952,19 +942,19 @@ pub fn present_preview_lod(
 				radius: *radius,
 				floor_count: *floor_count,
 				storey_height: *storey_height,
-				start_yaw: 0.0,
 				openings,
 				base_floor: if *no_base_floor {
 					ArcFloorSlab::None
 				} else {
 					ArcFloorSlab::Solid
 				},
-				intermediate_floors: intermediate,
+				intermediate_floors: ArcFloorSlab::Solid,
 				top_ceiling: if *no_ceiling {
 					ArcFloorSlab::None
 				} else {
 					ArcFloorSlab::Solid
 				},
+				intermediate_floor_hole: *floor_hole,
 				..ArcTowerParams::default()
 			});
 			spawn_preview(
@@ -1375,7 +1365,6 @@ pub fn draw_opening_plan_gizmos(mut gizmos: Gizmos, config: Res<PreviewConfig>) 
 		PreviewSubject::ArcFloor {
 			radius,
 			storey_height,
-			start_yaw_deg,
 			floor,
 			ceiling,
 			openings,
@@ -1391,7 +1380,6 @@ pub fn draw_opening_plan_gizmos(mut gizmos: Gizmos, config: Res<PreviewConfig>) 
 				center_xz: Vec3::ZERO,
 				radius: *radius,
 				storey_height: *storey_height,
-				start_yaw: start_yaw_deg.to_radians(),
 				openings: openings_from_preview(openings),
 				floor: if *floor {
 					ArcFloorSlab::Solid
