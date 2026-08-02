@@ -134,15 +134,13 @@ Partition components are authored in a normalized local space, then transformed 
   - \(X \in [0, 1]\), \(Z \in [-1, 0]\) (origin at the \(Z{=}0\) corner; mesh extends along \(-Z\))
   - \(Y \in [-0.2, 0.2]\) (thickness)
   - Blender often shows the depth leg as \(+Y \in [0, 1]\) before glTF export; Blender→glTF (Z-up → Y-up) maps that into glTF \(-Z\). Wall use scales \((\texttt{length}, \texttt{thick}, \texttt{height})\) on \((X, Y, Z)\), then pitches \(\pi/2\) about \(+X\) so kit \(-Z\) stands up as world \(+Y\) (kit \(Y\) becomes thickness). Panels stay **plumb** (yaw + stand-up only); polyline slope lives in path \(Y\), not tip roll. Segments anchor at the kit origin. Kit \(X \in [0, 1]\) means length scale is the **full** span. See [`wall_placement`](src/partitions/geometry/linear.rs).
-- **Angular Normalization:** angular components (`arc_180` / `arc_90` / `arc_15`) follow a similar normalization along the arc, but attach to different start and end points at different angles.
-  - Thickness is the same swept \(Z = [-0.2, 0.2]\)
-  - A 180° arc sweep goes through \(-Z\) from \(X = -1.0\) to \(X = 1.0\)
-  - A 90° arc sweep goes through \(-Z\) from \(X = -1.0\) to \(X = 0.0\)
-  - A 15° arc sweep goes through \(-Z\) from \(X = -1.0\) to \(X = \cos(15^\circ) - 1.0\), \(Z = -\sin(15^\circ)\)
+- **Angular Normalization:** angular components (`arc_180` / `arc_90` / `arc_15`) are unit-radius rings centered at the origin. Assets sit on local \(+X\) and sweep toward \(+Z\) (see [`arc_ring_dir`](src/arc_kit.rs)).
+  - Thickness is the same swept radial band (kit \(Z \approx [-0.2, 0.2]\) about the ring)
+  - After Bevy YXZ yaw \(\phi\), the outward locus is \((\cos\phi,\,-\sin\phi)\) — so yaw \(0\) places the kit on world \(+X\)
+  - A 180° / 90° / 15° piece covers that many degrees of the ring from its placement yaw along the authored sweep; [`decompose_arc_sweep`](src/arc_kit.rs) tiles longer spans with positive yaw offsets
 - **Slice Components:** slice components (`arc_90_slice` / `arc_15_slice`) are used for smaller vertical spaces. They are normalized to:
-  - \(Z = [-0.2, 0.2]\)
-  - \(Y = [0.0, 0.2]\)
-  - \(X = [-1.0, 1.0]\)
+  - Same plan locus as the matching full arc
+  - \(Y = [0.0, 0.2]\) ([`SLICE_KIT_HEIGHT`](src/partitions/geometry.rs))
 
 A common approach to building door frames is to use a slice component with various 15° arc sweeps to create the frame.
 

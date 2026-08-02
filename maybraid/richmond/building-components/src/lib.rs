@@ -19,7 +19,7 @@ pub mod roofs;
 pub mod scene_children;
 pub mod stairs;
 
-pub use arc_kit::{decompose_arc_sweep, ArcKit};
+pub use arc_kit::{arc_ring_dir, arc_ring_dir_deg, decompose_arc_sweep, ArcKit};
 pub use assets::AssetPath;
 pub use doors::DoorNode;
 pub use floors::FloorNode;

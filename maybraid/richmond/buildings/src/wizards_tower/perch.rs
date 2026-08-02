@@ -51,6 +51,7 @@ impl WizardsTowerPerch {
 			radius,
 			storey_height,
 			arc_degrees: 360.0,
+			start_yaw: 0.0,
 			must_assign: must_assign_cardinal_portals(),
 			must_not_assign: vec![],
 			portal_noise,

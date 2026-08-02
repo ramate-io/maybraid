@@ -22,6 +22,8 @@ pub struct PortalRingParams {
 	pub storey_height: f32,
 	/// Degrees of arc (\((0, 360]\); \(360\) is a closed ring).
 	pub arc_degrees: f32,
+	/// World yaw (radians) of the sweep start (\(t = 0\)).
+	pub start_yaw: f32,
 	pub must_assign: Vec<MustAssignPortal>,
 	pub must_not_assign: Vec<WallRegion>,
 	pub portal_noise: NoiseParams,
@@ -63,7 +65,7 @@ pub fn portal_ring_wall(params: PortalRingParams) -> PortalRingWall {
 		radius,
 		storey_height,
 		arc_degrees,
-		0.0,
+		params.start_yaw,
 		params.style,
 		clips,
 	);
@@ -121,6 +123,7 @@ mod tests {
 			radius: 4.0,
 			storey_height: 3.0,
 			arc_degrees: 360.0,
+			start_yaw: 0.0,
 			must_assign: cardinal(),
 			must_not_assign: vec![],
 			portal_noise: NoiseParams { seed: 1, ..NoiseParams::default() },

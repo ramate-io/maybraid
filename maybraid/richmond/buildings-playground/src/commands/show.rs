@@ -3,8 +3,12 @@
 pub mod approximated_circle;
 pub mod arc_180;
 pub mod arc_90;
+pub mod arc_floor;
 pub mod arc_sweep;
+pub mod arc_tower;
+pub mod opening;
 pub mod bedroom;
+pub mod connecting_shells;
 pub mod linear;
 pub mod noisy_rectangular_wall;
 pub mod panel_complex;
@@ -25,6 +29,7 @@ pub mod clipped_rectangle;
 pub mod clipped_rectangular_strip;
 pub mod clipped_ruled_strip;
 pub mod clipped_tessellated_triangle;
+pub mod connecting_hall;
 pub mod fitted_rectangle;
 pub mod tessellated_triangle;
 pub mod tessellated_triangle_3d;
@@ -35,6 +40,7 @@ pub mod wizards_tower;
 
 use bevy::prelude::*;
 use clap::Subcommand;
+use game_commands::ui::GameCommandStatusText;
 
 pub use transform::ShowTransform;
 
@@ -65,7 +71,15 @@ pub enum Show {
 	ClippedRuledStrip(clipped_ruled_strip::ClippedRuledStrip),
 	/// Trapezoid cross-section polyline → four clipped ruled strip faces.
 	Tube(tube::Tube),
-	/// Two-band trapezoidal-pyramid shell with waist reveal and optional doors.
+	/// One-kink tube between two oriented openings.
+	ConnectingHall(connecting_hall::ConnectingHall),
+	/// One circular storey shell with optional `--opening` plan entries.
+	ArcFloor(arc_floor::ArcFloor),
+	/// Stacked circular storey shell (explicit openings; no noise).
+	ArcTower(arc_tower::ArcTower),
+	/// ArcTower joined to a Trazaloid via a ConnectingHall.
+	ConnectingShells(connecting_shells::ConnectingShells),
+	/// Two-band trapezoidal-pyramid shell with waist reveal and optional `--opening`s.
 	Trazaloid(trazaloid::Trazaloid),
 	/// Single oriented [`richmond_buildings::Rectangle`] kit (floor / wall / ceiling presets).
 	Rectangle(rectangle::Rectangle),
@@ -109,39 +123,51 @@ pub enum Show {
 
 impl Show {
 	pub fn react(self, commands: &mut Commands) {
-		let (subject, transform) = match self {
-			Self::Linear(cmd) => cmd.into_preview(),
-			Self::Arc90(cmd) => cmd.into_preview(),
-			Self::Arc180(cmd) => cmd.into_preview(),
-			Self::Slice90(cmd) => cmd.into_preview(),
-			Self::Pitch(cmd) => cmd.into_preview(),
-			Self::TessellatedTriangle(cmd) => cmd.into_preview(),
-			Self::TessellatedTriangle3d(cmd) => cmd.into_preview(),
-			Self::ClippedTessellatedTriangle(cmd) => cmd.into_preview(),
-			Self::ClippedQuadPanel(cmd) => cmd.into_preview(),
-			Self::ClippedRuledStrip(cmd) => cmd.into_preview(),
-			Self::Tube(cmd) => cmd.into_preview(),
+		let preview = match self {
+			Self::Linear(cmd) => Ok(cmd.into_preview()),
+			Self::Arc90(cmd) => Ok(cmd.into_preview()),
+			Self::Arc180(cmd) => Ok(cmd.into_preview()),
+			Self::Slice90(cmd) => Ok(cmd.into_preview()),
+			Self::Pitch(cmd) => Ok(cmd.into_preview()),
+			Self::TessellatedTriangle(cmd) => Ok(cmd.into_preview()),
+			Self::TessellatedTriangle3d(cmd) => Ok(cmd.into_preview()),
+			Self::ClippedTessellatedTriangle(cmd) => Ok(cmd.into_preview()),
+			Self::ClippedQuadPanel(cmd) => Ok(cmd.into_preview()),
+			Self::ClippedRuledStrip(cmd) => Ok(cmd.into_preview()),
+			Self::Tube(cmd) => Ok(cmd.into_preview()),
+			Self::ConnectingHall(cmd) => Ok(cmd.into_preview()),
+			Self::ArcFloor(cmd) => cmd.into_preview(),
+			Self::ArcTower(cmd) => Ok(cmd.into_preview()),
+			Self::ConnectingShells(cmd) => Ok(cmd.into_preview()),
 			Self::Trazaloid(cmd) => cmd.into_preview(),
-			Self::Rectangle(cmd) => cmd.into_preview(),
-			Self::ClippedRectangle(cmd) => cmd.into_preview(),
-			Self::ClippedRectangularStrip(cmd) => cmd.into_preview(),
-			Self::FittedRectangle(cmd) => cmd.into_preview(),
-			Self::ClippedFittedRectangle(cmd) => cmd.into_preview(),
-			Self::ClippedFittedRectangularStrip(cmd) => cmd.into_preview(),
-			Self::RectangularNTube(cmd) => cmd.into_preview(),
-			Self::ApproximatedCircle(cmd) => cmd.into_preview(),
-			Self::ArcSweep(cmd) => cmd.into_preview(),
-			Self::ClippedArcSweep(cmd) => cmd.into_preview(),
-			Self::QuadPanel(cmd) => cmd.into_preview(),
-			Self::PanelComplex(cmd) => cmd.into_preview(),
-			Self::QuadPanelComplex(cmd) => cmd.into_preview(),
-			Self::RuledPitch(cmd) => cmd.into_preview(),
-			Self::Polyline(cmd) => cmd.into_preview(),
-			Self::NoisyRectangularWall(cmd) => cmd.into_preview(),
-			Self::WizardsTower(cmd) => cmd.into_preview(),
-			Self::StackedRings(cmd) => cmd.into_preview(),
-			Self::Bedroom(cmd) => cmd.into_preview(),
+			Self::Rectangle(cmd) => Ok(cmd.into_preview()),
+			Self::ClippedRectangle(cmd) => Ok(cmd.into_preview()),
+			Self::ClippedRectangularStrip(cmd) => Ok(cmd.into_preview()),
+			Self::FittedRectangle(cmd) => Ok(cmd.into_preview()),
+			Self::ClippedFittedRectangle(cmd) => Ok(cmd.into_preview()),
+			Self::ClippedFittedRectangularStrip(cmd) => Ok(cmd.into_preview()),
+			Self::RectangularNTube(cmd) => Ok(cmd.into_preview()),
+			Self::ApproximatedCircle(cmd) => Ok(cmd.into_preview()),
+			Self::ArcSweep(cmd) => Ok(cmd.into_preview()),
+			Self::ClippedArcSweep(cmd) => Ok(cmd.into_preview()),
+			Self::QuadPanel(cmd) => Ok(cmd.into_preview()),
+			Self::PanelComplex(cmd) => Ok(cmd.into_preview()),
+			Self::QuadPanelComplex(cmd) => Ok(cmd.into_preview()),
+			Self::RuledPitch(cmd) => Ok(cmd.into_preview()),
+			Self::Polyline(cmd) => Ok(cmd.into_preview()),
+			Self::NoisyRectangularWall(cmd) => Ok(cmd.into_preview()),
+			Self::WizardsTower(cmd) => Ok(cmd.into_preview()),
+			Self::StackedRings(cmd) => Ok(cmd.into_preview()),
+			Self::Bedroom(cmd) => Ok(cmd.into_preview()),
 		};
-		commands.insert_resource(PreviewConfig { subject, transform });
+		match preview {
+			Ok((subject, transform)) => {
+				commands.insert_resource(PreviewConfig { subject, transform });
+			}
+			Err(err) => {
+				error!("show failed: {err}");
+				commands.insert_resource(GameCommandStatusText(format!("show failed: {err}")));
+			}
+		}
 	}
 }

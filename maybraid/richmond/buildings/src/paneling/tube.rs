@@ -27,6 +27,11 @@ pub struct TubeCrossSectionNode {
 	pub top_right_width: f32,
 	/// Bank about the average tangent (radians). `0` = unbanked floor in the ⊥ plane.
 	pub roll: f32,
+	/// When set, top center uses this point instead of `bottom_middle + frame.up * height`.
+	///
+	/// Lets connector openings carry wall pitch (e.g. a trazaloid face) into the tube
+	/// ceiling without forcing the path itself to climb.
+	pub top_middle: Option<Vec3>,
 }
 
 impl TubeCrossSectionNode {
@@ -46,11 +51,18 @@ impl TubeCrossSectionNode {
 			top_left_width,
 			top_right_width,
 			roll: 0.0,
+			top_middle: None,
 		}
 	}
 
 	pub fn with_roll(mut self, roll: f32) -> Self {
 		self.roll = roll;
+		self
+	}
+
+	/// Pin the top center in world space (preserves opening pitch under [`corners_at`]).
+	pub fn with_top_middle(mut self, top_middle: Vec3) -> Self {
+		self.top_middle = Some(top_middle);
 		self
 	}
 }
@@ -360,7 +372,9 @@ fn corners_at_framed(
 ) -> TubeCorners {
 	let node = &nodes[index];
 	let frame = path_frame::path_frame(positions, index, node.roll);
-	let top_middle = node.bottom_middle + frame.up * node.height;
+	let top_middle = node
+		.top_middle
+		.unwrap_or_else(|| node.bottom_middle + frame.up * node.height);
 	TubeCorners {
 		bottom_left: node.bottom_middle - frame.right * node.bottom_left_width,
 		bottom_right: node.bottom_middle + frame.right * node.bottom_right_width,
@@ -435,6 +449,19 @@ mod tests {
 		assert!(approx_eq(frame.right, Vec3::X) || approx_eq(frame.right, Vec3::new(1.0, 0.0, 0.0)));
 		// right stays horizontal for a pure YZ pitch
 		assert!(frame.right.y.abs() < 1e-4);
+	}
+
+	#[test]
+	fn authored_top_middle_preserves_pitch_offset() {
+		let nodes = vec![
+			TubeCrossSectionNode::new(Vec3::new(0.0, 0.0, 0.0), 1.0, 1.0, 2.0, 1.0, 1.0)
+				.with_top_middle(Vec3::new(0.5, 2.0, 0.0)),
+			TubeCrossSectionNode::new(Vec3::new(0.0, 0.0, 2.0), 1.0, 1.0, 2.0, 1.0, 1.0)
+				.with_top_middle(Vec3::new(0.5, 2.0, 2.0)),
+		];
+		let c0 = corners_at(&nodes, 0);
+		assert!(approx_eq(c0.top_left, Vec3::new(-0.5, 2.0, 0.0)));
+		assert!(approx_eq(c0.top_right, Vec3::new(1.5, 2.0, 0.0)));
 	}
 
 	#[test]

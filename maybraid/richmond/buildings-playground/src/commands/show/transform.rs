@@ -79,14 +79,16 @@ mod tests {
 	use super::*;
 
 	#[test]
-	fn parse_vec2_csv_accepts_negatives() {
-		assert_eq!(parse_vec2_csv("-1,1").unwrap(), Vec2::new(-1.0, 1.0));
-		assert_eq!(parse_vec2_csv(" -0.5 , 2 ").unwrap(), Vec2::new(-0.5, 2.0));
+	fn parse_vec2_csv_accepts_negatives() -> Result<(), String> {
+		assert_eq!(parse_vec2_csv("-1,1")?, Vec2::new(-1.0, 1.0));
+		assert_eq!(parse_vec2_csv(" -0.5 , 2 ")?, Vec2::new(-0.5, 2.0));
+		Ok(())
 	}
 
 	#[test]
-	fn parse_vec2_csv_rejects_wrong_arity() {
+	fn parse_vec2_csv_rejects_wrong_arity() -> Result<(), String> {
 		assert!(parse_vec2_csv("1").is_err());
 		assert!(parse_vec2_csv("1,2,3").is_err());
+		Ok(())
 	}
 }

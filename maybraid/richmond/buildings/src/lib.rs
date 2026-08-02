@@ -14,6 +14,8 @@ pub mod arc_spire;
 pub mod arcs;
 pub mod bedroom;
 pub mod constraints;
+pub mod demos;
+pub mod openings;
 pub mod paneling;
 pub mod portals;
 pub mod shells;
@@ -37,15 +39,16 @@ pub use paneling::tube;
 pub use arc_spire::{
 	best_fit_y_bindings, uniform_storey_bindings, ArcSpire, ArcSpireParams, FitTolerance,
 };
-pub use arcs::{
-	portal_ring_wall, ArcSweep, ClippedArcSweep, PortalRingParams, PortalRingWall,
+pub use arcs::{portal_ring_wall, ArcSweep, ClippedArcSweep, PortalRingParams, PortalRingWall};
+pub use bedroom::{
+	Bed, Bedroom, BedroomFillParams, Closet, EnsuiteBathroom, Nightstand, ShellWall,
 };
-pub use bedroom::{Bed, Bedroom, BedroomFillParams, Closet, EnsuiteBathroom, Nightstand, ShellWall};
 pub use constraints::{
 	BoundaryOwnershipEntry, BoundaryOwnershipStatus, BoundaryRegionList, BoundaryThicknessEntry,
 	CellBoundaryTable, CellConstraints, CirculationEntry, CirculationRequestStatus, FaceKind,
 	JointCoordinate, JointEntry, PreJointSweep, SubsetError,
 };
+pub use demos::ConnectingShells;
 pub use paneling::{
 	fallback_oriented, fit_rectangle, fit_rectangle_corners, orient_rectangle, roll_to_align_height,
 	shared_edges, zero_roll_height_axis, ApproximatedCircle, ClippedFittedRectangle,
@@ -63,6 +66,13 @@ pub use paneling::{
 pub use portals::{
 	ArcRegion, AssignedPortal, MustAssignPortal, Portal, PortalFootprint, WallRegion, SLICE_Y_FRAC,
 };
-pub use shells::{Trazaloid, TrazaloidDoors, TrazaloidParams, TrazaloidSlab};
+pub use openings::{
+	MappedOpening, MappedOpeningQuad, MappedOpenings, MapsOpenings, Opening, OpeningId,
+	OpeningLabel, Openings,
+};
+pub use shells::{
+	ArcFloor, ArcFloorParams, ArcFloorSlab, ArcTower, ArcTowerParams, ConnectingHall, Trazaloid,
+	TrazaloidParams, TrazaloidSide, TrazaloidSlab,
+};
 pub use stacked_rings::{StackedRing, StackedRings};
 pub use wall_demo::{NoisyRectangularWall, NoisyRectangularWallParams};

@@ -4,7 +4,7 @@ use crate::assets::partitions::rough_stonework::{ARC_15_HIGH, ARC_15_LOW, ARC_15
 use crate::partitions::lod::PartitionMeshSet;
 use crate::partitions::node::impl_partition_mesh_lod_scene;
 
-/// Narrow arc sweep used to compose circular openings.
+/// Narrow arc sweep on local \(+X\) toward \(+Z\) (see [`crate::arc_ring_dir`]).
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct RoughStonework15;
 

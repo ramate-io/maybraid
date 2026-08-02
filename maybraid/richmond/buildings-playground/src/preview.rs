@@ -3,7 +3,7 @@
 use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, template_value};
 use bevy_math::bounding::{Aabb2d, Aabb3d};
-use bevy_math::Vec2;
+use bevy_math::{Isometry3d, Vec2};
 use lod::gen::LodScene;
 use lod::LodViewerState;
 use procedural_common::{AllowedAngles, NoiseParams, StepLenRange};
@@ -19,13 +19,16 @@ use richmond_buildings::bedroom::Bedroom;
 use richmond_buildings::panel_complex::{PanelComplex, PanelComplexJointPolicy, PanelPoint};
 use richmond_buildings::quad_panel::QuadPanel;
 use richmond_buildings::quad_panel_complex::QuadPanelComplex;
+use crate::commands::show::opening::{openings_from_preview, PreviewOpening};
 use richmond_buildings::{
-	ApproximatedCircle, ArcSweep, ClippedArcSweep, ClippedFittedRectangle,
-	ClippedFittedRectangularStrip, ClippedQuadPanel, ClippedRectangle, ClippedRectangularStrip,
-	ClippedRuledStrip, ClippedTessellatedTriangle, FittedRectangle, RectInset, Rectangle,
-	RectangularNTube, RectangularNTubeCorner, RectangularNTubeStation, RectangularStripNode,
-	RuledPitch, Tube, TubeCrossSectionNode, TubeFaces, Trazaloid, TrazaloidDoors, TrazaloidParams,
-	TrazaloidSlab, DEFAULT_PANEL_THICKNESS,
+	ApproximatedCircle, ArcFloor, ArcFloorParams, ArcFloorSlab, ArcSweep, ArcTower, ArcTowerParams,
+	ClippedArcSweep, ClippedFittedRectangle, ClippedFittedRectangularStrip, ClippedQuadPanel,
+	ClippedRectangle, ClippedRectangularStrip, ClippedRuledStrip, ClippedTessellatedTriangle,
+	ConnectingHall, ConnectingShells, FittedRectangle, MappedOpening, MappedOpeningQuad,
+	MapsOpenings, OpeningId, OpeningLabel, Openings, RectInset, Rectangle, RectangularNTube,
+	RectangularNTubeCorner, RectangularNTubeStation, RectangularStripNode, RuledPitch, Tube,
+	TubeCrossSectionNode, TubeFaces, Trazaloid, TrazaloidParams, TrazaloidSlab,
+	DEFAULT_PANEL_THICKNESS,
 };
 use richmond_buildings::stacked_rings::StackedRings;
 use richmond_buildings::tessellated_triangle_panel::TessellatedTrianglePanel;
@@ -93,6 +96,23 @@ pub enum PreviewSubject {
 		no_left: bool,
 		no_right: bool,
 	},
+	ConnectingHall,
+	ArcFloor {
+		radius: f32,
+		storey_height: f32,
+		floor: bool,
+		ceiling: bool,
+		openings: Vec<PreviewOpening>,
+	},
+	ArcTower {
+		radius: f32,
+		floor_count: u32,
+		storey_height: f32,
+		floor_hole: f32,
+		no_base_floor: bool,
+		no_ceiling: bool,
+	},
+	ConnectingShells,
 	Trazaloid {
 		footprint_x: f32,
 		footprint_z: f32,
@@ -102,17 +122,9 @@ pub enum PreviewSubject {
 		upper_height: f32,
 		band_vertical_offset: f32,
 		waist_horizontal_offset: f32,
-		door_north: bool,
-		door_east: bool,
-		door_south: bool,
-		door_west: bool,
-		door_width_frac: f32,
-		door_thickness: f32,
-		door_height_frac: f32,
+		openings: Vec<PreviewOpening>,
 		floor: bool,
 		no_ceiling: bool,
-		floor_hole: f32,
-		ceiling_hole: f32,
 		face_post_count: u32,
 	},
 	Rectangle {
@@ -317,6 +329,30 @@ impl PreviewConfig {
 			} => format!(
 				"preview: tube (min_dihedral={min_dihedral:.3} no_joint={no_joint} no_floor={no_floor} no_ceiling={no_ceiling} no_left={no_left} no_right={no_right})"
 			),
+			PreviewSubject::ConnectingHall => "preview: connecting-hall (one kink)".into(),
+			PreviewSubject::ArcFloor {
+				radius,
+				storey_height,
+				floor,
+				ceiling,
+				ref openings,
+			} => format!(
+				"preview: arc-floor (r={radius:.1} h={storey_height:.1} floor={floor} ceil={ceiling} openings={})",
+				openings.len()
+			),
+			PreviewSubject::ArcTower {
+				radius,
+				floor_count,
+				storey_height,
+				floor_hole,
+				no_base_floor,
+				no_ceiling,
+			} => format!(
+				"preview: arc-tower (r={radius:.1} floors={floor_count} h={storey_height:.1} hole={floor_hole:.2} no_base={no_base_floor} no_ceil={no_ceiling})"
+			),
+			PreviewSubject::ConnectingShells => {
+				"preview: connecting-shells (arc-tower + hall + trazaloid)".into()
+			}
 			PreviewSubject::Trazaloid {
 				footprint_x,
 				footprint_z,
@@ -326,15 +362,13 @@ impl PreviewConfig {
 				upper_height,
 				band_vertical_offset,
 				waist_horizontal_offset,
-				door_south,
+				ref openings,
 				floor,
 				no_ceiling,
-				floor_hole,
-				ceiling_hole,
 				face_post_count,
-				..
 			} => format!(
-				"preview: trazaloid (foot={footprint_x:.1}x{footprint_z:.1} ridge={ridge_x:.1}x{ridge_z:.1} h={lower_height:.1}+{upper_height:.1} gap={band_vertical_offset:.2} inset={waist_horizontal_offset:.2} door_s={door_south} floor={floor}/{floor_hole:.1} ceil=!{no_ceiling}/{ceiling_hole:.1} posts={face_post_count})"
+				"preview: trazaloid (foot={footprint_x:.1}x{footprint_z:.1} ridge={ridge_x:.1}x{ridge_z:.1} h={lower_height:.1}+{upper_height:.1} gap={band_vertical_offset:.2} inset={waist_horizontal_offset:.2} openings={} floor={floor} ceil=!{no_ceiling} posts={face_post_count})",
+				openings.len()
 			),
 			PreviewSubject::Rectangle {
 				origin,
@@ -570,6 +604,32 @@ impl PreviewConfig {
 					Vec3::new(7.0, 4.0, 9.0),
 				)
 			}
+			PreviewSubject::ConnectingHall => {
+				Aabb3d::from_min_max(Vec3::new(-5.0, -0.5, -5.0), Vec3::new(5.0, 4.0, 5.0))
+			}
+			PreviewSubject::ArcFloor {
+				radius,
+				storey_height,
+				..
+			} => {
+				let r = radius.max(1e-4) + 0.5;
+				let h = storey_height.max(1e-4) + 0.5;
+				Aabb3d::from_min_max(Vec3::new(-r, -0.2, -r), Vec3::new(r, h, r))
+			}
+			PreviewSubject::ArcTower {
+				radius,
+				floor_count,
+				storey_height,
+				..
+			} => {
+				let r = radius.max(1e-4) + 0.5;
+				let h = (*floor_count as f32) * storey_height.max(1e-4) + 0.5;
+				Aabb3d::from_min_max(Vec3::new(-r, -0.2, -r), Vec3::new(r, h, r))
+			}
+			PreviewSubject::ConnectingShells => Aabb3d::from_min_max(
+				Vec3::new(-19.0, -0.2, -5.0),
+				Vec3::new(5.0, 10.0, 5.0),
+			),
 			PreviewSubject::Trazaloid {
 				footprint_x,
 				footprint_z,
@@ -915,6 +975,104 @@ pub fn present_preview_lod(
 				ComponentsOnly(tube).scene_with_lod(&lod_ref),
 			);
 		}
+		PreviewSubject::ConnectingHall => {
+			let (end_a, end_b) = connecting_hall_demo_endpoints();
+			let hall = ConnectingHall::rough_stone(end_a, end_b);
+			spawn_preview(
+				&mut commands,
+				transform,
+				ComponentsOnly(hall).scene_with_lod(&lod_ref),
+			);
+		}
+		PreviewSubject::ArcFloor {
+			radius,
+			storey_height,
+			floor,
+			ceiling,
+			openings,
+		} => {
+			let floor_shell = ArcFloor::new(ArcFloorParams {
+				center_xz: Vec3::ZERO,
+				radius: *radius,
+				storey_height: *storey_height,
+				openings: openings_from_preview(openings),
+				floor: if *floor {
+					ArcFloorSlab::Solid
+				} else {
+					ArcFloorSlab::None
+				},
+				ceiling: if *ceiling {
+					ArcFloorSlab::Solid
+				} else {
+					ArcFloorSlab::None
+				},
+				..ArcFloorParams::default()
+			});
+			spawn_preview(
+				&mut commands,
+				transform,
+				ComponentsOnly(floor_shell).scene_with_lod(&lod_ref),
+			);
+		}
+		PreviewSubject::ArcTower {
+			radius,
+			floor_count,
+			storey_height,
+			floor_hole,
+			no_base_floor,
+			no_ceiling,
+		} => {
+			let mut openings = Openings::new();
+			for (id, t, label) in [
+				("door", 0.0, OpeningLabel::Passage),       // +X
+				("window_w", 0.25, OpeningLabel::Aperture), // −Z
+				("window_e", 0.5, OpeningLabel::Aperture),  // −X
+				("window_n", 0.75, OpeningLabel::Aperture), // +Z
+			] {
+				let (id, opening) = ArcFloor::plan_opening_at_t(
+					id,
+					label,
+					Vec3::ZERO,
+					*radius,
+					*storey_height,
+					t,
+				);
+				openings.insert(id, opening);
+			}
+			let tower = ArcTower::new(ArcTowerParams {
+				center_xz: Vec3::ZERO,
+				radius: *radius,
+				floor_count: *floor_count,
+				storey_height: *storey_height,
+				openings,
+				base_floor: if *no_base_floor {
+					ArcFloorSlab::None
+				} else {
+					ArcFloorSlab::Solid
+				},
+				intermediate_floors: ArcFloorSlab::Solid,
+				top_ceiling: if *no_ceiling {
+					ArcFloorSlab::None
+				} else {
+					ArcFloorSlab::Solid
+				},
+				intermediate_floor_hole: *floor_hole,
+				..ArcTowerParams::default()
+			});
+			spawn_preview(
+				&mut commands,
+				transform,
+				ComponentsOnly(tower).scene_with_lod(&lod_ref),
+			);
+		}
+		PreviewSubject::ConnectingShells => {
+			let demo = ConnectingShells::new();
+			spawn_preview(
+				&mut commands,
+				transform,
+				ComponentsOnly(demo).scene_with_lod(&lod_ref),
+			);
+		}
 		PreviewSubject::Trazaloid {
 			footprint_x,
 			footprint_z,
@@ -924,33 +1082,11 @@ pub fn present_preview_lod(
 			upper_height,
 			band_vertical_offset,
 			waist_horizontal_offset,
-			door_north,
-			door_east,
-			door_south,
-			door_west,
-			door_width_frac,
-			door_thickness,
-			door_height_frac,
+			openings,
 			floor,
 			no_ceiling,
-			floor_hole,
-			ceiling_hole,
 			face_post_count,
 		} => {
-			let floor_slab = if !*floor {
-				TrazaloidSlab::None
-			} else if *floor_hole > 0.0 {
-				TrazaloidSlab::SquareHole { size: *floor_hole }
-			} else {
-				TrazaloidSlab::Solid
-			};
-			let ceiling_slab = if *no_ceiling {
-				TrazaloidSlab::None
-			} else if *ceiling_hole > 0.0 {
-				TrazaloidSlab::SquareHole { size: *ceiling_hole }
-			} else {
-				TrazaloidSlab::Solid
-			};
 			let shell = Trazaloid::new(TrazaloidParams {
 				footprint: Vec2::new(*footprint_x, *footprint_z),
 				ridge: Vec2::new(*ridge_x, *ridge_z),
@@ -958,17 +1094,17 @@ pub fn present_preview_lod(
 				upper_height: *upper_height,
 				band_vertical_offset: *band_vertical_offset,
 				waist_horizontal_offset: *waist_horizontal_offset,
-				doors: TrazaloidDoors {
-					north: *door_north,
-					east: *door_east,
-					south: *door_south,
-					west: *door_west,
+				openings: openings_from_preview(openings),
+				floor: if *floor {
+					TrazaloidSlab::Solid
+				} else {
+					TrazaloidSlab::None
 				},
-				door_width_frac: *door_width_frac,
-				door_thickness: *door_thickness,
-				door_height_frac: *door_height_frac,
-				floor: floor_slab,
-				ceiling: ceiling_slab,
+				ceiling: if *no_ceiling {
+					TrazaloidSlab::None
+				} else {
+					TrazaloidSlab::Solid
+				},
 				face_post_count: *face_post_count,
 				..TrazaloidParams::default()
 			});
@@ -1412,6 +1548,297 @@ fn spawn_preview(commands: &mut Commands, transform: Transform, scene: impl bevy
 			},
 		))
 		.insert(PreviewRoot);
+}
+
+/// Demo openings: south facing +Z, east facing −X (mild kink near the origin).
+pub fn connecting_hall_demo_endpoints() -> (MappedOpening, MappedOpening) {
+	let end_a = MappedOpening::new(
+		MappedOpeningQuad::new(
+			Vec3::new(-1.2, 0.0, -4.0),
+			Vec3::new(1.2, 0.0, -4.0),
+			Vec3::new(-1.0, 2.4, -4.0),
+			Vec3::new(1.0, 2.4, -4.0),
+		),
+		Vec2::Y,
+	);
+	// Looking along −X: left = −Z, right = +Z.
+	let end_b = MappedOpening::new(
+		MappedOpeningQuad::new(
+			Vec3::new(4.0, 0.5, -1.2),
+			Vec3::new(4.0, 0.5, 1.2),
+			Vec3::new(4.0, 2.6, -1.0),
+			Vec3::new(4.0, 2.6, 1.0),
+		),
+		-Vec2::X,
+	);
+	(end_a, end_b)
+}
+
+/// Debug overlay for [`PreviewSubject::ConnectingHall`]: opening corners, orientation
+/// arrows, path A→mid→B, and station dots.
+/// Wireframe plan AABBs (+ mapped contact quads on arc-floor / trazaloid) for `--opening` previews.
+///
+/// Color key:
+/// - cyan / amber: authored plan [`Aabb3d`] voids
+/// - lime: mapped outward opening quads (what connectors consume)
+/// - orange arrows: mapped XZ orientation
+pub fn draw_opening_plan_gizmos(mut gizmos: Gizmos, config: Res<PreviewConfig>) {
+	let tf = config.transform;
+	let map = |p: Vec3| tf.transform_point(p);
+	let cyan = Color::srgb(0.25, 0.95, 1.0);
+	let amber = Color::srgb(1.0, 0.75, 0.2);
+	let lime = Color::srgb(0.35, 0.95, 0.35);
+	let orange = Color::srgb(1.0, 0.55, 0.15);
+
+	match &config.subject {
+		PreviewSubject::ArcFloor {
+			radius,
+			storey_height,
+			floor,
+			ceiling,
+			openings,
+		} => {
+			if openings.is_empty() {
+				return;
+			}
+			for (i, opening) in openings.iter().enumerate() {
+				let color = if i % 2 == 0 { cyan } else { amber };
+				gizmos.aabb_3d(opening.bounds(), tf, color);
+			}
+			let floor_shell = ArcFloor::new(ArcFloorParams {
+				center_xz: Vec3::ZERO,
+				radius: *radius,
+				storey_height: *storey_height,
+				openings: openings_from_preview(openings),
+				floor: if *floor {
+					ArcFloorSlab::Solid
+				} else {
+					ArcFloorSlab::None
+				},
+				ceiling: if *ceiling {
+					ArcFloorSlab::Solid
+				} else {
+					ArcFloorSlab::None
+				},
+				..ArcFloorParams::default()
+			});
+			for opening in openings {
+				let id = OpeningId::new(opening.id.clone());
+				let Some(mapped) = floor_shell.mapped_opening(&id) else {
+					continue;
+				};
+				draw_opening_gizmos(&mut gizmos, map, *mapped, lime);
+				let (bl, br, ..) = mapped.endpoint_corners();
+				let mid = (bl + br) * 0.5;
+				let dir = Vec3::new(mapped.orientation.x, 0.0, mapped.orientation.y)
+					.normalize_or_zero();
+				gizmos
+					.arrow(map(mid), map(mid + dir * 1.25), orange)
+					.with_tip_length(0.2);
+			}
+		}
+		PreviewSubject::Trazaloid {
+			footprint_x,
+			footprint_z,
+			ridge_x,
+			ridge_z,
+			lower_height,
+			upper_height,
+			band_vertical_offset,
+			waist_horizontal_offset,
+			openings,
+			floor,
+			no_ceiling,
+			face_post_count,
+		} => {
+			if openings.is_empty() {
+				return;
+			}
+			for (i, opening) in openings.iter().enumerate() {
+				let color = if i % 2 == 0 { cyan } else { amber };
+				gizmos.aabb_3d(opening.bounds(), tf, color);
+			}
+			let shell = Trazaloid::new(TrazaloidParams {
+				footprint: Vec2::new(*footprint_x, *footprint_z),
+				ridge: Vec2::new(*ridge_x, *ridge_z),
+				lower_height: *lower_height,
+				upper_height: *upper_height,
+				band_vertical_offset: *band_vertical_offset,
+				waist_horizontal_offset: *waist_horizontal_offset,
+				openings: openings_from_preview(openings),
+				floor: if *floor {
+					TrazaloidSlab::Solid
+				} else {
+					TrazaloidSlab::None
+				},
+				ceiling: if *no_ceiling {
+					TrazaloidSlab::None
+				} else {
+					TrazaloidSlab::Solid
+				},
+				face_post_count: *face_post_count,
+				..TrazaloidParams::default()
+			});
+			for opening in openings {
+				let id = OpeningId::new(opening.id.clone());
+				let Some(mapped) = shell.mapped_opening(&id) else {
+					continue;
+				};
+				draw_opening_gizmos(&mut gizmos, map, *mapped, lime);
+				let (bl, br, ..) = mapped.endpoint_corners();
+				let mid = (bl + br) * 0.5;
+				let dir = Vec3::new(mapped.orientation.x, 0.0, mapped.orientation.y)
+					.normalize_or_zero();
+				gizmos
+					.arrow(map(mid), map(mid + dir * 1.25), orange)
+					.with_tip_length(0.2);
+			}
+		}
+		_ => {}
+	}
+}
+
+pub fn draw_connecting_hall_gizmos(mut gizmos: Gizmos, config: Res<PreviewConfig>) {
+	if !matches!(config.subject, PreviewSubject::ConnectingHall) {
+		return;
+	}
+	let tf = config.transform;
+	let map = |p: Vec3| tf.transform_point(p);
+
+	let (end_a, end_b) = connecting_hall_demo_endpoints();
+	let hall = ConnectingHall::rough_stone(end_a, end_b);
+	let stations = hall.stations();
+	let mid = hall.midpoint();
+
+	let cyan = Color::srgb(0.2, 0.9, 0.95);
+	let magenta = Color::srgb(0.95, 0.25, 0.85);
+	let lime = Color::srgb(0.35, 0.95, 0.35);
+	let orange = Color::srgb(1.0, 0.55, 0.15);
+	let yellow = Color::srgb(1.0, 0.9, 0.2);
+	let white = Color::srgb(0.95, 0.95, 0.95);
+
+	draw_opening_gizmos(&mut gizmos, map, end_a, cyan);
+	draw_opening_gizmos(&mut gizmos, map, end_b, magenta);
+
+	// Path A → mid → B
+	let a_c = stations[0].bottom_middle;
+	let b_c = stations[2].bottom_middle;
+	gizmos.line(map(a_c), map(mid), white);
+	gizmos.line(map(mid), map(b_c), white);
+
+	// Station / junction dots
+	let r = 0.12;
+	gizmos.sphere(Isometry3d::from_translation(map(a_c)), r, lime);
+	gizmos.sphere(Isometry3d::from_translation(map(mid)), r * 1.25, yellow);
+	gizmos.sphere(Isometry3d::from_translation(map(b_c)), r, orange);
+
+	// Orientation arrows from opening centers (plan facing).
+	let arrow_len = 1.5;
+	let a_dir = Vec3::new(end_a.orientation.x, 0.0, end_a.orientation.y).normalize_or_zero();
+	let b_dir = Vec3::new(end_b.orientation.x, 0.0, end_b.orientation.y).normalize_or_zero();
+	gizmos
+		.arrow(map(a_c), map(a_c + a_dir * arrow_len), lime)
+		.with_tip_length(0.25);
+	gizmos
+		.arrow(map(b_c), map(b_c + b_dir * arrow_len), orange)
+		.with_tip_length(0.25);
+}
+
+fn draw_opening_gizmos(
+	gizmos: &mut Gizmos,
+	map: impl Fn(Vec3) -> Vec3,
+	end: MappedOpening,
+	color: Color,
+) {
+	let (bl, br, tl, tr) = end.endpoint_corners();
+	let r = 0.08;
+	for p in [bl, br, tl, tr] {
+		gizmos.sphere(Isometry3d::from_translation(map(p)), r, color);
+	}
+	// Opening quad wireframe
+	gizmos.line(map(bl), map(br), color);
+	gizmos.line(map(br), map(tr), color);
+	gizmos.line(map(tr), map(tl), color);
+	gizmos.line(map(tl), map(bl), color);
+}
+
+/// Debug overlay for [`PreviewSubject::ConnectingShells`].
+///
+/// Color key (tower side):
+/// - white: 15° grid after +7.5° clockwise bias (should sit on jambs / edges)
+/// - lime: visible door = one segment (`t−30°` → `t−15°`), on-arc pre-widen
+/// - orange: opening mid (`t−22.5°`)
+/// - cyan: widened tower hall opening
+/// - magenta: trazaloid hall opening
+pub fn draw_connecting_shells_gizmos(mut gizmos: Gizmos, config: Res<PreviewConfig>) {
+	if !matches!(config.subject, PreviewSubject::ConnectingShells) {
+		return;
+	}
+	let tf = config.transform;
+	let map = |p: Vec3| tf.transform_point(p);
+
+	let demo = ConnectingShells::new();
+	let floor = demo.tower().storey(0).expect("ground storey");
+	let connect = OpeningId::new("connect");
+	let end_tower_raw = floor
+		.mapped_opening(&connect)
+		.expect("ground door")
+		.clone();
+	let (end_tower_wide, end_traz) = demo.hall().endpoints();
+	let door_t = 0.5;
+	let seg = floor.segment_t();
+	let c = floor.params().center_xz;
+	let y = c.y + 0.15;
+
+	let white = Color::srgb(0.95, 0.95, 0.95);
+	let lime = Color::srgb(0.35, 0.95, 0.35);
+	let cyan = Color::srgb(0.2, 0.9, 0.95);
+	let magenta = Color::srgb(0.95, 0.25, 0.85);
+	let orange = Color::srgb(1.0, 0.55, 0.15);
+
+	for i in 0..24 {
+		let t = i as f32 / 24.0;
+		let p = floor.ring_point_at(t);
+		gizmos.sphere(
+			Isometry3d::from_translation(map(Vec3::new(p.x, y, p.z))),
+			0.06,
+			white,
+		);
+	}
+
+	// One 15° segment clockwise of portal t (decreasing t).
+	let j_lo = floor.ring_point_at(door_t - 2.0 * seg);
+	let j_hi = floor.ring_point_at(door_t - seg);
+	let j_mid = floor.ring_point_at(door_t - 1.5 * seg);
+	for p in [j_lo, j_hi] {
+		gizmos.sphere(
+			Isometry3d::from_translation(map(Vec3::new(p.x, y, p.z))),
+			0.14,
+			lime,
+		);
+	}
+	gizmos.line(
+		map(Vec3::new(j_lo.x, y, j_lo.z)),
+		map(Vec3::new(j_hi.x, y, j_hi.z)),
+		lime,
+	);
+	gizmos.sphere(
+		Isometry3d::from_translation(map(Vec3::new(j_mid.x, y, j_mid.z))),
+		0.1,
+		orange,
+	);
+
+	draw_opening_gizmos(&mut gizmos, map, end_tower_raw, lime);
+	draw_opening_gizmos(&mut gizmos, map, end_tower_wide, cyan);
+	draw_opening_gizmos(&mut gizmos, map, end_traz, magenta);
+
+	let (bl, br, ..) = end_tower_wide.endpoint_corners();
+	let mid = (bl + br) * 0.5;
+	let dir =
+		Vec3::new(end_tower_wide.orientation.x, 0.0, end_tower_wide.orientation.y).normalize_or_zero();
+	gizmos
+		.arrow(map(mid), map(mid + dir * 2.0), cyan)
+		.with_tip_length(0.3);
 }
 
 /// Authored bay corners as colored spheres (a0 red, a1 orange, b0 green, b1 cyan).
