@@ -5,6 +5,9 @@ use std::collections::HashMap;
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Label(String);
 
+/// An opening is a 3D bounding box with a label.
+///
+/// It is consider a unique identifier. Two openings with the same bounds and label are considered the same opening.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Opening {
 	pub bounds: Aabb3d,
@@ -129,12 +132,16 @@ pub struct MappedOpening {
 
 /// A table storing the mapped openings for each opening.
 ///
-/// Most types implementing `MapsOpenings` should
-/// choose to determine and store the mapped openings at construction time.
+/// Some types implementing `MapsOpenings` may choose
+/// to store mapped openings at construction time, particularly for certain labels, e.g.,
+/// Entryway.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct MappedOpenings(HashMap<Opening, MappedOpening>);
 
 pub trait MapsOpenings {
 	/// Maps an Aabb3d opening onto the actual geometry of the object.
+	///
+	/// If the construction did not map the opening, it should typically return `None`
+	/// instead of virtualizing where the opening would be.
 	fn map_opening(&self, opening: &Opening) -> Option<MappedOpening>;
 }
