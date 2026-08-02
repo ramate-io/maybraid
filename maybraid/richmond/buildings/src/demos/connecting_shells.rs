@@ -3,8 +3,10 @@
 //! # Joinery note
 //!
 //! Start from the two openings and connect **backwards**. Prefer endpoints that
-//! **overrun** the door a little on either side — a hall that reads slightly wide
-//! of the jambs looks better than one that stops short or goes too narrow.
+//! **overrun** the door a little on either side
+//! ([`crate::openings::MappedOpening::widened`]) and give the hall a little
+//! [`ConnectingHall::with_header`] so the tube clears the lintel — a connector
+//! that reads slightly proud of the door reads better than one that stops short.
 
 use bevy_math::Vec3;
 use lod::gen::LodSceneLevel;
@@ -18,9 +20,7 @@ use crate::openings::{MapsOpenings, OpeningId, OpeningLabel, Openings};
 use crate::shells::arc_floor::{ArcFloor, ArcFloorSlab};
 use crate::shells::arc_tower::{ArcTower, ArcTowerParams};
 use crate::shells::connecting_hall::ConnectingHall;
-use crate::shells::trazaloid::{
-	side_passage_opening, Trazaloid, TrazaloidParams, TrazaloidSide, TrazaloidSlab,
-};
+use crate::shells::trazaloid::{Trazaloid, TrazaloidParams, TrazaloidSide, TrazaloidSlab};
 
 /// Shared contract id for the hall join on both shells.
 const CONNECT: &str = "connect";
@@ -32,6 +32,8 @@ const DOOR_T: f32 = 0.0;
 const TOWER_OVERRUN_M: f32 = 0.35;
 /// Extra meters past each jamb on the trazaloid hall end (reads wider than the door).
 const TRAZALOID_OVERRUN_M: f32 = 1.1;
+/// Extra meters of tube height above each mapped lintel.
+const HALL_HEADER_M: f32 = 0.25;
 
 /// Fixed composition: circular tower west of a trazaloid, linked by a one-kink hall.
 #[derive(Debug, Clone, PartialEq)]
@@ -90,7 +92,7 @@ impl ConnectingShells {
 			waist_horizontal_offset: 0.25,
 			openings: Openings::new().with(
 				connect_id.clone(),
-				side_passage_opening(TrazaloidSide::West, footprint, 1.2, 2.1),
+				Trazaloid::side_passage_opening(TrazaloidSide::West, footprint, 1.2, 2.1),
 			),
 			floor: TrazaloidSlab::None,
 			ceiling: TrazaloidSlab::Solid,
@@ -109,7 +111,7 @@ impl ConnectingShells {
 			.mapped_opening(&connect_id)
 			.expect("trazaloid west door")
 			.widened(TRAZALOID_OVERRUN_M);
-		let hall = ConnectingHall::rough_stone(end_tower, end_traz);
+		let hall = ConnectingHall::rough_stone(end_tower, end_traz).with_header(HALL_HEADER_M);
 
 		Self {
 			tower,

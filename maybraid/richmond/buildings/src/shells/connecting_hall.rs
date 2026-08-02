@@ -3,6 +3,11 @@
 //! Each end is a [`MappedOpening`] (outward quad + XZ facing). Rays along those
 //! orientations meet in plan; the junction height and cross-section are
 //! length-weighted lerps of the two ends.
+//!
+//! Horizontal jamb clearance is typically applied on the openings themselves
+//! ([`MappedOpening::widened`]). Vertical header clearance is a hall parameter:
+//! [`ConnectingHall::with_header`] lifts each end's top a little above the
+//! mapped lintel so the tube can clear the door head.
 
 use bevy_math::{Vec2, Vec3};
 use lod::gen::LodSceneLevel;
@@ -22,6 +27,8 @@ pub struct ConnectingHall {
 	style: PanelStyle,
 	end_a: MappedOpening,
 	end_b: MappedOpening,
+	/// Extra meters of tube height above each mapped lintel.
+	header: f32,
 	midpoint: Vec3,
 	stations: [TubeCrossSectionNode; 3],
 	tube: Tube,
@@ -29,37 +36,23 @@ pub struct ConnectingHall {
 
 impl ConnectingHall {
 	pub fn new(style: PanelStyle, end_a: MappedOpening, end_b: MappedOpening) -> Self {
-		match build_stations(end_a, end_b) {
-			Some((midpoint, stations)) => {
-				let tube = Tube::from_nodes(style, stations);
-				Self {
-					style,
-					end_a,
-					end_b,
-					midpoint,
-					stations,
-					tube,
-				}
-			}
-			None => {
-				debug_assert!(
-					false,
-					"ConnectingHall: orientation rays do not meet in plan"
-				);
-				Self {
-					style,
-					end_a,
-					end_b,
-					midpoint: Vec3::ZERO,
-					stations: [TubeCrossSectionNode::new(Vec3::ZERO, 0.0, 0.0, 0.0, 0.0, 0.0); 3],
-					tube: Tube::new(style),
-				}
-			}
-		}
+		Self::build(style, end_a, end_b, 0.0)
 	}
 
 	pub fn rough_stone(end_a: MappedOpening, end_b: MappedOpening) -> Self {
 		Self::new(PanelStyle::RoughStonework, end_a, end_b)
+	}
+
+	/// Extra meters of vertical clearance above each mapped lintel (header band).
+	///
+	/// Applied along each end's face up-direction (bottom mid → top mid), so pitched
+	/// openings keep their wall plane while the tube sits a little proud of the door.
+	pub fn with_header(self, header: f32) -> Self {
+		Self::build(self.style, self.end_a, self.end_b, header.max(0.0))
+	}
+
+	pub fn header(&self) -> f32 {
+		self.header
 	}
 
 	pub fn with_faces(mut self, faces: TubeFaces) -> Self {
@@ -88,6 +81,39 @@ impl ConnectingHall {
 	pub fn stations(&self) -> &[TubeCrossSectionNode; 3] {
 		&self.stations
 	}
+
+	fn build(style: PanelStyle, end_a: MappedOpening, end_b: MappedOpening, header: f32) -> Self {
+		let header = header.max(0.0);
+		match build_stations(end_a, end_b, header) {
+			Some((midpoint, stations)) => {
+				let tube = Tube::from_nodes(style, stations);
+				Self {
+					style,
+					end_a,
+					end_b,
+					header,
+					midpoint,
+					stations,
+					tube,
+				}
+			}
+			None => {
+				debug_assert!(
+					false,
+					"ConnectingHall: orientation rays do not meet in plan"
+				);
+				Self {
+					style,
+					end_a,
+					end_b,
+					header,
+					midpoint: Vec3::ZERO,
+					stations: [TubeCrossSectionNode::new(Vec3::ZERO, 0.0, 0.0, 0.0, 0.0, 0.0); 3],
+					tube: Tube::new(style),
+				}
+			}
+		}
+	}
 }
 
 impl BuildingComponents for ConnectingHall {
@@ -103,9 +129,10 @@ impl BuildingComponents for ConnectingHall {
 fn build_stations(
 	end_a: MappedOpening,
 	end_b: MappedOpening,
+	header: f32,
 ) -> Option<(Vec3, [TubeCrossSectionNode; 3])> {
-	let node_a = endpoint_to_node(end_a)?;
-	let node_b = endpoint_to_node(end_b)?;
+	let node_a = endpoint_to_node(end_a, header)?;
+	let node_b = endpoint_to_node(end_b, header)?;
 
 	let p_a = Vec2::new(node_a.bottom_middle.x, node_a.bottom_middle.z);
 	let p_b = Vec2::new(node_b.bottom_middle.x, node_b.bottom_middle.z);
@@ -133,20 +160,27 @@ fn build_stations(
 	Some((mid, [node_a, node_mid, node_b]))
 }
 
-fn endpoint_to_node(end: MappedOpening) -> Option<TubeCrossSectionNode> {
+fn endpoint_to_node(end: MappedOpening, header: f32) -> Option<TubeCrossSectionNode> {
 	let (bl, br, tl, tr) = end.endpoint_corners();
 	let orient = normalize_xz(end.orientation)?;
 	let right = Vec3::new(-orient.y, 0.0, orient.x);
 
 	let bottom_middle = (bl + br) * 0.5;
 	let top_middle = (tl + tr) * 0.5;
+	let face_up = (top_middle - bottom_middle).normalize_or_zero();
+	let lift = if face_up.length_squared() > 0.0 {
+		face_up * header
+	} else {
+		Vec3::Y * header
+	};
+	let top_middle = top_middle + lift;
 	// Vertical span for mid-station lerp; pitched offset is carried by `top_middle`.
 	let height = (top_middle.y - bottom_middle.y).abs().max(EPS);
 
 	let bottom_left_width = signed_width(bl, bottom_middle, right);
 	let bottom_right_width = signed_width(br, bottom_middle, right);
-	let top_left_width = signed_width(tl, top_middle, right);
-	let top_right_width = signed_width(tr, top_middle, right);
+	let top_left_width = signed_width(tl + lift, top_middle, right);
+	let top_right_width = signed_width(tr + lift, top_middle, right);
 
 	Some(
 		TubeCrossSectionNode::new(
@@ -313,6 +347,27 @@ mod tests {
 		assert!((mid.x - 0.0).abs() < 1e-3);
 		assert!((mid.z - 1.0).abs() < 1e-3);
 		assert_eq!(hall.tube().nodes().len(), 3);
+		Ok(())
+	}
+
+	#[test]
+	fn header_raises_end_tops_above_mapped_lintel() -> anyhow::Result<()> {
+		let a = opening_facing(Vec3::new(-4.0, 0.0, 0.0), 1.0, 1.0, Vec2::X)?;
+		let b = opening_facing(Vec3::new(4.0, 0.0, 0.0), 1.0, 1.0, -Vec2::X)?;
+		let (.., tl, _) = a.endpoint_corners();
+		let lintel_y = tl.y;
+		let hall = ConnectingHall::rough_stone(a, b).with_header(0.3);
+		assert!((hall.header() - 0.3).abs() < 1e-5);
+		let top = hall.stations()[0]
+			.top_middle
+			.ok_or_else(|| anyhow::anyhow!("top_middle missing"))?;
+		assert!(
+			(top.y - (lintel_y + 0.3)).abs() < 1e-3,
+			"top.y={} lintel={}",
+			top.y,
+			lintel_y
+		);
+		assert!((hall.stations()[0].height - 2.3).abs() < 1e-3);
 		Ok(())
 	}
 }

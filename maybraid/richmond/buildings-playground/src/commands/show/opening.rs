@@ -6,7 +6,7 @@
 
 use bevy::prelude::*;
 use richmond_buildings::{
-	side_passage_opening, ArcFloor, Opening, OpeningId, OpeningLabel, Openings, TrazaloidSide,
+	ArcFloor, Opening, OpeningId, OpeningLabel, Openings, Trazaloid, TrazaloidSide,
 };
 
 use super::transform::parse_vec3_csv;
@@ -185,7 +185,7 @@ pub fn trazaloid_openings(
 		if !enabled {
 			continue;
 		}
-		let opening = side_passage_opening(side, footprint, door_width, door_height);
+		let opening = Trazaloid::side_passage_opening(side, footprint, door_width, door_height);
 		out.push(PreviewOpening {
 			id: id.to_string(),
 			label: OpeningLabel::Passage,

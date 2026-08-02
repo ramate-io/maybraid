@@ -5,7 +5,7 @@ use richmond_building_components::BuildingComponents;
 use crate::openings::{MapsOpenings, Opening, OpeningId, OpeningLabel, Openings};
 use crate::paneling::clipped_ruled_strip::ClippedStripPiece;
 
-use super::openings::{ground_door_clip, side_passage_opening};
+use super::openings::ground_door_clip;
 use super::{Trazaloid, TrazaloidParams, TrazaloidSide, TrazaloidSlab};
 
 fn demo_params() -> TrazaloidParams {
@@ -80,7 +80,7 @@ fn passage_does_not_cut_floor_slab() -> anyhow::Result<()> {
 		.floor(TrazaloidSlab::Solid)
 		.openings(Openings::new().with(
 			"south",
-			side_passage_opening(TrazaloidSide::South, Vec2::new(8.0, 6.0), 1.2, 2.1),
+			Trazaloid::side_passage_opening(TrazaloidSide::South, Vec2::new(8.0, 6.0), 1.2, 2.1),
 		))
 		.build();
 	let floor = t
@@ -94,7 +94,7 @@ fn passage_does_not_cut_floor_slab() -> anyhow::Result<()> {
 fn south_door_makes_clipped_lower_piece() -> anyhow::Result<()> {
 	let params = TrazaloidParams::default().openings(Openings::new().with(
 		"south",
-		side_passage_opening(TrazaloidSide::South, Vec2::new(8.0, 6.0), 1.2, 2.1),
+		Trazaloid::side_passage_opening(TrazaloidSide::South, Vec2::new(8.0, 6.0), 1.2, 2.1),
 	));
 	let t = Trazaloid::new(params);
 	assert!(matches!(
@@ -114,11 +114,11 @@ fn largest_passage_wins_per_side() -> anyhow::Result<()> {
 	let mut openings = Openings::new();
 	openings.insert(
 		"small",
-		side_passage_opening(TrazaloidSide::South, footprint, 0.6, 1.5),
+		Trazaloid::side_passage_opening(TrazaloidSide::South, footprint, 0.6, 1.5),
 	);
 	openings.insert(
 		"large",
-		side_passage_opening(TrazaloidSide::South, footprint, 2.0, 2.4),
+		Trazaloid::side_passage_opening(TrazaloidSide::South, footprint, 2.0, 2.4),
 	);
 	let t = TrazaloidParams::default().openings(openings).build();
 	assert!(t.mapped_opening(&OpeningId::new("large")).is_some());
@@ -133,7 +133,7 @@ fn largest_passage_wins_per_side() -> anyhow::Result<()> {
 fn aperture_does_not_map_or_clip() -> anyhow::Result<()> {
 	let footprint = Vec2::new(8.0, 6.0);
 	let mut openings = Openings::new();
-	let mut aperture = side_passage_opening(TrazaloidSide::North, footprint, 1.5, 1.2);
+	let mut aperture = Trazaloid::side_passage_opening(TrazaloidSide::North, footprint, 1.5, 1.2);
 	aperture.label = OpeningLabel::Aperture;
 	openings.insert("win", aperture);
 	let t = TrazaloidParams::default()
@@ -176,7 +176,7 @@ fn mapped_opening_matches_passage_plan() -> anyhow::Result<()> {
 	let t = TrazaloidParams::default()
 		.openings(Openings::new().with(
 			connect.clone(),
-			side_passage_opening(TrazaloidSide::West, Vec2::new(8.0, 6.0), 1.2, 2.1),
+			Trazaloid::side_passage_opening(TrazaloidSide::West, Vec2::new(8.0, 6.0), 1.2, 2.1),
 		))
 		.build();
 	assert!(t.mapped_opening(&OpeningId::new("missing")).is_none());

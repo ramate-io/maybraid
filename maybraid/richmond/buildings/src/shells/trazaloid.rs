@@ -28,7 +28,6 @@ use crate::paneling::panel_complex::{PanelComplexJointPolicy, DEFAULT_PANEL_THIC
 
 use geometry::{face_bottom_pair, PlanRect, PostSegment};
 pub use geometry::TrazaloidSide;
-pub use openings::side_passage_opening;
 
 /// Horizontal footprint / ridge slab presentation for towering ownership.
 ///

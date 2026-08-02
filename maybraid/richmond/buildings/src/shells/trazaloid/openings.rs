@@ -10,37 +10,39 @@ use crate::openings::{
 use super::geometry::{face_bottom_pair, PlanRect, TrazaloidSide};
 use super::{Trazaloid, TrazaloidParams};
 
-/// Thin centered passage AABB on a footprint face (authoring helper).
-pub fn side_passage_opening(
-	side: TrazaloidSide,
-	footprint: Vec2,
-	width: f32,
-	height: f32,
-) -> Opening {
-	let half_x = footprint.x * 0.5;
-	let half_z = footprint.y * 0.5;
-	let width = width.max(1e-3);
-	let height = height.max(1e-3);
-	let depth = 0.4;
-	let (min, max) = match side {
-		TrazaloidSide::North => (
-			Vec3::new(-width * 0.5, 0.0, half_z - depth),
-			Vec3::new(width * 0.5, height, half_z + depth * 0.25),
-		),
-		TrazaloidSide::South => (
-			Vec3::new(-width * 0.5, 0.0, -half_z - depth * 0.25),
-			Vec3::new(width * 0.5, height, -half_z + depth),
-		),
-		TrazaloidSide::East => (
-			Vec3::new(half_x - depth, 0.0, -width * 0.5),
-			Vec3::new(half_x + depth * 0.25, height, width * 0.5),
-		),
-		TrazaloidSide::West => (
-			Vec3::new(-half_x - depth * 0.25, 0.0, -width * 0.5),
-			Vec3::new(-half_x + depth, height, width * 0.5),
-		),
-	};
-	Opening::passage(Aabb3d::from_min_max(min.min(max), min.max(max)))
+impl Trazaloid {
+	/// Authoring helper: thin centered passage AABB on a footprint face.
+	pub fn side_passage_opening(
+		side: TrazaloidSide,
+		footprint: Vec2,
+		width: f32,
+		height: f32,
+	) -> Opening {
+		let half_x = footprint.x * 0.5;
+		let half_z = footprint.y * 0.5;
+		let width = width.max(1e-3);
+		let height = height.max(1e-3);
+		let depth = 0.4;
+		let (min, max) = match side {
+			TrazaloidSide::North => (
+				Vec3::new(-width * 0.5, 0.0, half_z - depth),
+				Vec3::new(width * 0.5, height, half_z + depth * 0.25),
+			),
+			TrazaloidSide::South => (
+				Vec3::new(-width * 0.5, 0.0, -half_z - depth * 0.25),
+				Vec3::new(width * 0.5, height, -half_z + depth),
+			),
+			TrazaloidSide::East => (
+				Vec3::new(half_x - depth, 0.0, -width * 0.5),
+				Vec3::new(half_x + depth * 0.25, height, width * 0.5),
+			),
+			TrazaloidSide::West => (
+				Vec3::new(-half_x - depth * 0.25, 0.0, -width * 0.5),
+				Vec3::new(-half_x + depth, height, width * 0.5),
+			),
+		};
+		Opening::passage(Aabb3d::from_min_max(min.min(max), min.max(max)))
+	}
 }
 
 /// Per-side door clip + mapped opening after passage resolution.
