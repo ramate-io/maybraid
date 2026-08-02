@@ -120,13 +120,8 @@ pub enum PreviewSubject {
 		band_vertical_offset: f32,
 		waist_horizontal_offset: f32,
 		openings: Vec<PreviewOpening>,
-		door_width_frac: f32,
-		door_thickness: f32,
-		door_height_frac: f32,
 		floor: bool,
 		no_ceiling: bool,
-		floor_hole: f32,
-		ceiling_hole: f32,
 		face_post_count: u32,
 	},
 	ClippedRectangle {
@@ -332,12 +327,9 @@ impl PreviewConfig {
 				ref openings,
 				floor,
 				no_ceiling,
-				floor_hole,
-				ceiling_hole,
 				face_post_count,
-				..
 			} => format!(
-				"preview: trazaloid (foot={footprint_x:.1}x{footprint_z:.1} ridge={ridge_x:.1}x{ridge_z:.1} h={lower_height:.1}+{upper_height:.1} gap={band_vertical_offset:.2} inset={waist_horizontal_offset:.2} openings={} floor={floor}/{floor_hole:.1} ceil=!{no_ceiling}/{ceiling_hole:.1} posts={face_post_count})",
+				"preview: trazaloid (foot={footprint_x:.1}x{footprint_z:.1} ridge={ridge_x:.1}x{ridge_z:.1} h={lower_height:.1}+{upper_height:.1} gap={band_vertical_offset:.2} inset={waist_horizontal_offset:.2} openings={} floor={floor} ceil=!{no_ceiling} posts={face_post_count})",
 				openings.len()
 			),
 			PreviewSubject::ClippedRectangle {
@@ -981,29 +973,10 @@ pub fn present_preview_lod(
 			band_vertical_offset,
 			waist_horizontal_offset,
 			openings,
-			door_width_frac,
-			door_thickness,
-			door_height_frac,
 			floor,
 			no_ceiling,
-			floor_hole,
-			ceiling_hole,
 			face_post_count,
 		} => {
-			let floor_slab = if !*floor {
-				TrazaloidSlab::None
-			} else if *floor_hole > 0.0 {
-				TrazaloidSlab::SquareHole { size: *floor_hole }
-			} else {
-				TrazaloidSlab::Solid
-			};
-			let ceiling_slab = if *no_ceiling {
-				TrazaloidSlab::None
-			} else if *ceiling_hole > 0.0 {
-				TrazaloidSlab::SquareHole { size: *ceiling_hole }
-			} else {
-				TrazaloidSlab::Solid
-			};
 			let shell = Trazaloid::new(TrazaloidParams {
 				footprint: Vec2::new(*footprint_x, *footprint_z),
 				ridge: Vec2::new(*ridge_x, *ridge_z),
@@ -1012,11 +985,16 @@ pub fn present_preview_lod(
 				band_vertical_offset: *band_vertical_offset,
 				waist_horizontal_offset: *waist_horizontal_offset,
 				openings: openings_from_preview(openings),
-				door_width_frac: *door_width_frac,
-				door_thickness: *door_thickness,
-				door_height_frac: *door_height_frac,
-				floor: floor_slab,
-				ceiling: ceiling_slab,
+				floor: if *floor {
+					TrazaloidSlab::Solid
+				} else {
+					TrazaloidSlab::None
+				},
+				ceiling: if *no_ceiling {
+					TrazaloidSlab::None
+				} else {
+					TrazaloidSlab::Solid
+				},
 				face_post_count: *face_post_count,
 				..TrazaloidParams::default()
 			});

@@ -155,13 +155,14 @@ pub fn parse_opening_label(s: &str) -> Result<OpeningLabel, String> {
 }
 
 /// Build trazaloid plan openings from CLI args, falling back to cardinal door flags.
+///
+/// Door width / height are absolute meters used only for the convenience `--door-*`
+/// flags; the shell itself sizes doors from each winning passage AABB.
 pub fn trazaloid_openings(
 	args: &[OpeningArg],
 	footprint: Vec2,
-	lower_height: f32,
-	door_thickness: f32,
-	door_width_frac: f32,
-	door_height_frac: f32,
+	door_width: f32,
+	door_height: f32,
 	door_north: bool,
 	door_east: bool,
 	door_south: bool,
@@ -174,12 +175,6 @@ pub fn trazaloid_openings(
 			.map(|a| a.resolve_aabb(None))
 			.collect();
 	}
-	let door_w = if door_thickness > 0.0 {
-		door_thickness
-	} else {
-		footprint.x.min(footprint.y) * door_width_frac
-	};
-	let door_h = lower_height * door_height_frac;
 	let mut out = Vec::new();
 	for (enabled, side, id) in [
 		(door_north, TrazaloidSide::North, "north"),
@@ -190,7 +185,7 @@ pub fn trazaloid_openings(
 		if !enabled {
 			continue;
 		}
-		let opening = side_passage_opening(side, footprint, door_w, door_h);
+		let opening = side_passage_opening(side, footprint, door_width, door_height);
 		out.push(PreviewOpening {
 			id: id.to_string(),
 			label: OpeningLabel::Passage,

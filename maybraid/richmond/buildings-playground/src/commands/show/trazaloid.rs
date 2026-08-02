@@ -29,6 +29,10 @@ pub struct Trazaloid {
 	/// Opening plan entries. Repeatable. When set, overrides `--door-*` flags.
 	///
 	/// Format: `id:label:minx,miny,minz:maxx,maxy,maxz`
+	///
+	/// Passages map to centered lower-band doors (largest per side wins).
+	/// Apertures are ignored for wall mapping (the waist gap is the window).
+	/// Shaft / boundary / exclusion / custom can cut Solid floor / ceiling.
 	#[arg(long = "opening", value_name = "SPEC", value_parser = parse_opening_arg, action = clap::ArgAction::Append)]
 	pub openings: Vec<OpeningArg>,
 	#[arg(long, default_value_t = false)]
@@ -39,25 +43,18 @@ pub struct Trazaloid {
 	pub door_south: bool,
 	#[arg(long, default_value_t = false)]
 	pub door_west: bool,
-	#[arg(long, default_value_t = 0.28)]
-	pub door_width_frac: f32,
-	/// Absolute door opening width in meters (`> 0` overrides `--door-width-frac`).
+	/// Convenience door width in meters when using `--door-*` flags.
 	#[arg(long, default_value_t = 1.2)]
-	pub door_thickness: f32,
-	#[arg(long, default_value_t = 0.7)]
-	pub door_height_frac: f32,
-	/// Emit a footprint floor slab.
+	pub door_width: f32,
+	/// Convenience door height in meters when using `--door-*` flags.
+	#[arg(long, default_value_t = 2.1)]
+	pub door_height: f32,
+	/// Emit a solid footprint floor (openings may still cut / remove it).
 	#[arg(long, default_value_t = false)]
 	pub floor: bool,
 	/// Omit the ridge ceiling.
 	#[arg(long, default_value_t = false)]
 	pub no_ceiling: bool,
-	/// Centered square hole side length on the floor (`0` = solid when `--floor`).
-	#[arg(long, default_value_t = 0.0)]
-	pub floor_hole: f32,
-	/// Centered square hole side length on the ceiling (`0` = solid when ceiling present).
-	#[arg(long, default_value_t = 0.0)]
-	pub ceiling_hole: f32,
 	#[arg(long, default_value_t = 2)]
 	pub face_post_count: u32,
 	#[command(flatten)]
@@ -70,10 +67,8 @@ impl Trazaloid {
 		let openings = trazaloid_openings(
 			&self.openings,
 			footprint,
-			self.lower_height,
-			self.door_thickness,
-			self.door_width_frac,
-			self.door_height_frac,
+			self.door_width,
+			self.door_height,
 			self.door_north,
 			self.door_east,
 			self.door_south,
@@ -90,13 +85,8 @@ impl Trazaloid {
 				band_vertical_offset: self.band_vertical_offset,
 				waist_horizontal_offset: self.waist_horizontal_offset,
 				openings,
-				door_width_frac: self.door_width_frac,
-				door_thickness: self.door_thickness,
-				door_height_frac: self.door_height_frac,
 				floor: self.floor,
 				no_ceiling: self.no_ceiling,
-				floor_hole: self.floor_hole,
-				ceiling_hole: self.ceiling_hole,
 				face_post_count: self.face_post_count,
 			},
 			self.transform.transform(),
