@@ -56,6 +56,14 @@ impl OpeningLabel {
 	pub fn is_connectable(&self) -> bool {
 		matches!(self, Self::Passage | Self::Aperture | Self::Shaft)
 	}
+
+	/// Labels that may cut floor / ceiling slabs (not wall passages / apertures).
+	pub fn cuts_slab(&self) -> bool {
+		matches!(
+			self,
+			Self::Boundary | Self::Exclusion | Self::Shaft | Self::Custom(_)
+		)
+	}
 }
 
 /// A void volume with a label.

@@ -2,12 +2,18 @@
 //!
 //! Openings are resolved in two layers:
 //! 1. **Wall sweeps** — 15° sectors (AABB-approximated); solid runs merge to 90°/180°.
-//! 2. **Floor / ceiling** — openings that hit a Solid slab contribute a centered hole
-//!    sized from the intersection scale (or remove the slab entirely).
+//! 2. **Floor / ceiling** — slab-cutting openings that hit a Solid slab contribute a
+//!    centered hole sized from the intersection scale (or remove the slab entirely).
 //!
 //! Floor / ceiling [`ArcFloorSlab`] values are only [`None`](ArcFloorSlab::None) /
 //! [`Solid`](ArcFloorSlab::Solid). They are mainly for towering ownership; openings
 //! still map whether or not a slab is present, and can override a Solid slab.
+//!
+//! # Kit sweep convention
+//!
+//! Rough-stone arc kits start at local \(−X\) and sweep through \(−Z\) (clockwise in
+//! plan). Sector \(i\) is the kit placed at yaw \(i \cdot 15°\), covering that CW
+//! 15° wedge — not the CCW wedge.
 
 use bevy_math::bounding::Aabb3d;
 use bevy_math::{Vec2, Vec3};
@@ -386,6 +392,8 @@ fn emit_solid_run(
 	let mut remaining = run;
 	let mut at = start_sector;
 	// Prefer 180°, then 90°, then 15° leftovers.
+	// Kits sweep CW from their placement yaw, so a run of sectors
+	// `at .. at+chunk` is covered by a kit whose yaw is the *last* sector's yaw.
 	while remaining > 0 {
 		let chunk = if remaining >= 12 {
 			12 // 180°
@@ -394,11 +402,12 @@ fn emit_solid_run(
 		} else {
 			1 // 15°
 		};
+		let yaw_sector = at + chunk - 1;
 		push_solid(
 			partitions,
 			center_xz,
 			ring_scale,
-			at as f32 * SEG_DEG,
+			yaw_sector as f32 * SEG_DEG,
 			chunk as f32 * SEG_DEG,
 			style,
 		);
@@ -441,16 +450,19 @@ fn push_slice(
 	}
 }
 
+/// AABB approximating the kit sector: yaw `sector·15°`, sweep CW through −Z.
 fn sector_aabb(params: &ArcFloorParams, sector: u32) -> Aabb3d {
-	let a0 = sector as f32 * SEG_DEG;
-	let a1 = (sector + 1) as f32 * SEG_DEG;
+	let start = sector as f32 * SEG_DEG;
+	// CW end is start − 15° (kit convention).
 	let r_in = params.radius * 0.85;
 	let r_out = params.radius * 1.05;
 	let y0 = params.center_xz.y;
 	let y1 = y0 + params.storey_height;
 	let mut min = Vec3::splat(f32::INFINITY);
 	let mut max = Vec3::splat(f32::NEG_INFINITY);
-	for deg in [a0, a1] {
+	// Sample the CW wedge (including mid) so the AABB tracks the real arc.
+	for step in 0..=2 {
+		let deg = start - SEG_DEG * (step as f32 / 2.0);
 		let d = ring_dir_at_deg(deg);
 		for r in [r_in, r_out] {
 			for y in [y0, y1] {
@@ -507,17 +519,16 @@ fn map_connectable_openings(
 fn mapped_from_sectors(params: &ArcFloorParams, hit: &[u32]) -> MappedOpening {
 	let lo = *hit.iter().min().unwrap_or(&0);
 	let hi = *hit.iter().max().unwrap_or(&0);
-	// Outward face across the contiguous hit span (Layer 1 candidates).
-	let t_lo = (lo as f32) / SECTORS as f32;
-	let t_hi = ((hi + 1) as f32) / SECTORS as f32;
-	let t_mid = 0.5 * (t_lo + t_hi);
-	let bl = ring_point(params, t_lo);
-	let br = ring_point(params, t_hi.min(1.0 - 1e-5));
+	// Sector i covers CW from i·15° to i·15°−15°. Contiguous hits: hi·15° CW to lo·15°−15°.
+	let deg_start = hi as f32 * SEG_DEG;
+	let deg_end = lo as f32 * SEG_DEG - SEG_DEG;
+	let deg_mid = 0.5 * (deg_start + deg_end);
+	let bl = ring_point_deg(params, deg_end);
+	let br = ring_point_deg(params, deg_start);
 	let h = SLICE_Y_FRAC * params.storey_height;
 	let tl = bl + Vec3::Y * h;
 	let tr = br + Vec3::Y * h;
-	// Looking outward: ensure left/right follow +orientation right.
-	let orientation = ring_dir_at(t_mid);
+	let orientation = ring_dir_at_deg(deg_mid);
 	let right = Vec3::new(-orientation.y, 0.0, orientation.x);
 	let (bl, br, tl, tr) = if (br - bl).dot(right) < 0.0 {
 		(br, bl, tr, tl)
@@ -544,6 +555,9 @@ fn resolve_slab(
 			let mut hole_side: Option<f32> = None;
 			let mut remove_all = false;
 			for (_id, opening) in openings.iter() {
+				if !opening.label.cuts_slab() {
+					continue;
+				}
 				if !aabb3d_intersects(&opening.bounds, &slab_aabb) {
 					continue;
 				}
@@ -691,8 +705,8 @@ fn ring_dir_at_deg(deg: f32) -> Vec2 {
 	Vec2::new(-c, s)
 }
 
-fn ring_point(params: &ArcFloorParams, t: f32) -> Vec3 {
-	let dir = ring_dir_at(t);
+fn ring_point_deg(params: &ArcFloorParams, deg: f32) -> Vec3 {
+	let dir = ring_dir_at_deg(deg);
 	Vec3::new(
 		params.center_xz.x + dir.x * params.radius,
 		params.center_xz.y,
@@ -785,9 +799,45 @@ mod tests {
 		let east = floor
 			.mapped_opening(&connect)
 			.ok_or_else(|| anyhow::anyhow!("missing mapped opening {connect:?}"))?;
-		assert!(east.orientation.normalize().length() > 0.9);
+		let orient = east.orientation.normalize();
+		assert!(orient.x > 0.7, "east door should face +X, orient={orient:?}");
 		let (bl, br, ..) = east.endpoint_corners();
+		let mid = (bl + br) * 0.5;
+		assert!(mid.x > 3.0, "mapped mid should sit on +X ring, mid={mid:?}");
 		assert!(bl.distance(br) > 0.1);
+		Ok(())
+	}
+
+	#[test]
+	fn passage_does_not_cut_floor_slab() -> anyhow::Result<()> {
+		let floor = ArcFloor::builder(Vec3::ZERO, 4.0, 3.0)
+			.floor(ArcFloorSlab::Solid)
+			.openings(openings_at(&[("door", 0.5, OpeningLabel::Passage)]))
+			.build();
+		// Solid fill with no slab-cutting openings: 4 caps + 1 inscribed rect.
+		assert_eq!(floor.floor_nodes().len(), 5);
+		Ok(())
+	}
+
+	#[test]
+	fn east_door_does_not_drop_quarter_ring() -> anyhow::Result<()> {
+		let floor = ArcFloor::builder(Vec3::ZERO, 4.0, 3.0)
+			.openings(openings_at(&[("door", 0.5, OpeningLabel::Passage)]))
+			.build();
+		let solid_deg: f32 = floor
+			.wall_partitions()
+			.iter()
+			.filter_map(|p| match &p.geometry {
+				Partition::Arc(a) => Some(a.sweep_degrees),
+				Partition::SliceArc(a) => Some(a.sweep_degrees),
+				_ => None,
+			})
+			.sum();
+		// Full ring is 360°; one door should remove well under a quarter of solid.
+		assert!(
+			solid_deg > 300.0,
+			"unexpected missing wall mass: solid_deg={solid_deg}"
+		);
 		Ok(())
 	}
 
