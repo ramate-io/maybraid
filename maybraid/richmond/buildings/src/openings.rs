@@ -216,6 +216,30 @@ impl MappedOpening {
 			orientation: self.orientation,
 		}
 	}
+
+	/// Raise the lintel by `header_overrun` meters along the face up-direction.
+	///
+	/// Bottom corners stay put; tops move along bottom-mid → top-mid so pitched
+	/// openings keep their wall plane while connectors clear the door head.
+	pub fn raised(self, header_overrun: f32) -> Self {
+		let overrun = header_overrun.max(0.0);
+		if overrun <= 0.0 {
+			return self;
+		}
+		let (bl, br, tl, tr) = self.endpoint_corners();
+		let bottom_mid = (bl + br) * 0.5;
+		let top_mid = (tl + tr) * 0.5;
+		let face_up = (top_mid - bottom_mid).normalize_or_zero();
+		let lift = if face_up.length_squared() > 0.0 {
+			face_up * overrun
+		} else {
+			Vec3::Y * overrun
+		};
+		Self {
+			face: MappedOpeningQuad::new(bl, br, tl + lift, tr + lift),
+			orientation: self.orientation,
+		}
+	}
 }
 
 /// Construct-time maps from opening id to contact geometry.

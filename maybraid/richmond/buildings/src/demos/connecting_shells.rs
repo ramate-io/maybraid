@@ -3,10 +3,9 @@
 //! # Joinery note
 //!
 //! Start from the two openings and connect **backwards**. Prefer endpoints that
-//! **overrun** the door a little on either side
-//! ([`crate::openings::MappedOpening::widened`]) and give the hall a little
-//! [`ConnectingHall::with_header`] so the tube clears the lintel — a connector
-//! that reads slightly proud of the door reads better than one that stops short.
+//! [`crate::openings::MappedOpening::widened`] past the jambs and
+//! [`crate::openings::MappedOpening::raised`] above the lintel — a connector
+//! that reads slightly proud of the door looks better than one that stops short.
 
 use bevy_math::Vec3;
 use lod::gen::LodSceneLevel;
@@ -33,7 +32,7 @@ const TOWER_OVERRUN_M: f32 = 0.35;
 /// Extra meters past each jamb on the trazaloid hall end (reads wider than the door).
 const TRAZALOID_OVERRUN_M: f32 = 1.1;
 /// Extra meters of tube height above each mapped lintel.
-const HALL_HEADER_M: f32 = 0.25;
+const HALL_HEADER_M: f32 = 0.75;
 
 /// Fixed composition: circular tower west of a trazaloid, linked by a one-kink hall.
 #[derive(Debug, Clone, PartialEq)]
@@ -56,14 +55,8 @@ impl ConnectingShells {
 			("window_e", 0.5, OpeningLabel::Aperture),  // −X
 			("window_n", 0.75, OpeningLabel::Aperture), // +Z
 		] {
-			let (id, opening) = ArcFloor::plan_opening_at_t(
-				id,
-				label,
-				tower_center,
-				radius,
-				storey_height,
-				t,
-			);
+			let (id, opening) =
+				ArcFloor::plan_opening_at_t(id, label, tower_center, radius, storey_height, t);
 			tower_openings.insert(id, opening);
 		}
 
@@ -106,18 +99,16 @@ impl ConnectingShells {
 		let end_tower = tower
 			.mapped_opening(0, &connect_id)
 			.expect("arc tower ground door")
-			.widened(TOWER_OVERRUN_M);
+			.widened(TOWER_OVERRUN_M)
+			.raised(HALL_HEADER_M);
 		let end_traz = trazaloid
 			.mapped_opening(&connect_id)
 			.expect("trazaloid west door")
-			.widened(TRAZALOID_OVERRUN_M);
-		let hall = ConnectingHall::rough_stone(end_tower, end_traz).with_header(HALL_HEADER_M);
+			.widened(TRAZALOID_OVERRUN_M)
+			.raised(HALL_HEADER_M);
+		let hall = ConnectingHall::rough_stone(end_tower, end_traz);
 
-		Self {
-			tower,
-			hall,
-			trazaloid,
-		}
+		Self { tower, hall, trazaloid }
 	}
 
 	pub fn tower(&self) -> &ArcTower {
@@ -171,11 +162,7 @@ mod tests {
 		let stations = demo.hall().stations();
 		assert!(stations[0].bottom_middle.x < stations[2].bottom_middle.x);
 		assert!(demo.hall().midpoint().x.is_finite());
-		assert!(!demo
-			.hall()
-			.panel_nodes_for_level(LodSceneLevel::High)
-			.flatten()
-			.is_empty());
+		assert!(!demo.hall().panel_nodes_for_level(LodSceneLevel::High).flatten().is_empty());
 		assert_eq!(demo.tower().storeys().len(), 3);
 		Ok(())
 	}
@@ -221,18 +208,14 @@ mod tests {
 		let stations = demo.hall().stations();
 		// Tower: ~R sin(7.5°) + overrun ≈ 0.52 + 0.35
 		assert!(stations[0].bottom_left_width > 0.8, "{}", stations[0].bottom_left_width);
-		assert!(
-			(stations[0].bottom_left_width - stations[0].bottom_right_width).abs() < 1e-3
-		);
+		assert!((stations[0].bottom_left_width - stations[0].bottom_right_width).abs() < 1e-3);
 		// Trazaloid: door half 0.6 + overrun 1.1 = 1.7 (must not shrink from L/R swap)
 		assert!(
 			stations[2].bottom_left_width > 1.5,
 			"traz width {} — outward corner order / widen bug?",
 			stations[2].bottom_left_width
 		);
-		assert!(
-			(stations[2].bottom_left_width - stations[2].bottom_right_width).abs() < 1e-3
-		);
+		assert!((stations[2].bottom_left_width - stations[2].bottom_right_width).abs() < 1e-3);
 		Ok(())
 	}
 }
