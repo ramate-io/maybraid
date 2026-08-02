@@ -33,25 +33,27 @@ pub use paneling::ruled_pitch;
 pub use paneling::ruled_strip;
 pub use paneling::tessellated_triangle_panel;
 pub use paneling::tube;
+pub mod gridding;
+pub mod stacking;
 
 pub use arc_spire::{
 	best_fit_y_bindings, uniform_storey_bindings, ArcSpire, ArcSpireParams, FitTolerance,
 };
-pub use arcs::{
-	portal_ring_wall, ArcSweep, ClippedArcSweep, PortalRingParams, PortalRingWall,
+pub use arcs::{portal_ring_wall, ArcSweep, ClippedArcSweep, PortalRingParams, PortalRingWall};
+pub use bedroom::{
+	Bed, Bedroom, BedroomFillParams, Closet, EnsuiteBathroom, Nightstand, ShellWall,
 };
-pub use bedroom::{Bed, Bedroom, BedroomFillParams, Closet, EnsuiteBathroom, Nightstand, ShellWall};
 pub use constraints::{
 	BoundaryOwnershipEntry, BoundaryOwnershipStatus, BoundaryRegionList, BoundaryThicknessEntry,
 	CellBoundaryTable, CellConstraints, CirculationEntry, CirculationRequestStatus, FaceKind,
 	JointCoordinate, JointEntry, PreJointSweep, SubsetError,
 };
 pub use paneling::{
-	fallback_oriented, fit_rectangle, fit_rectangle_corners, orient_rectangle, roll_to_align_height,
-	shared_edges, zero_roll_height_axis, ApproximatedCircle, ClippedFittedRectangle,
-	ClippedFittedRectangularStrip, ClippedFittedRectangularStripPiece, ClippedQuadPanel,
-	ClippedRectangle, ClippedRectangularStrip, ClippedRectangularStripPiece, ClippedRuledStrip,
-	ClippedStripPiece, ClippedTessellatedTriangle, FittedRect, FittedRectangle,
+	fallback_oriented, fit_rectangle, fit_rectangle_corners, orient_rectangle,
+	roll_to_align_height, shared_edges, zero_roll_height_axis, ApproximatedCircle,
+	ClippedFittedRectangle, ClippedFittedRectangularStrip, ClippedFittedRectangularStripPiece,
+	ClippedQuadPanel, ClippedRectangle, ClippedRectangularStrip, ClippedRectangularStripPiece,
+	ClippedRuledStrip, ClippedStripPiece, ClippedTessellatedTriangle, FittedRect, FittedRectangle,
 	FittedRectangularStrip, OrientedRect, PanelComplex, PanelComplexJointPolicy,
 	PanelComplexValidation, PanelMesh, PanelPoint, PanelPointId, PanelQuadMesh, PanelTriangle,
 	ParsePanelComplexError, QuadPanel, QuadPanelComplex, RectInset, Rectangle, RectangularNTube,
