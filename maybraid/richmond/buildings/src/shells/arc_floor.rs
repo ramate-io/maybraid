@@ -2,9 +2,10 @@
 //!
 //! Openings are resolved in two layers:
 //! 1. **Wall sweeps** — 15° sectors (AABB-approximated). Hit sectors omit the
-//!    opening's \(Y\) span; remaining footer / header bands are emitted as
-//!    vertically scaled arc strips (dropped below [`MIN_STRIP_HEIGHT_FRAC`]).
-//!    Untouched sectors merge to 90°/180° solids.
+//!    opening's \(Y\) span; remaining footer / header bands use
+//!    [`Partition::slice_arc`] scaled in \(Y\) to the band height (dropped below
+//!    [`MIN_STRIP_HEIGHT_FRAC`]). Untouched sectors merge to full-height 90°/180°
+//!    solids.
 //! 2. **Floor / ceiling** — slab-cutting openings that hit a Solid slab contribute a
 //!    centered hole sized from the intersection scale (or remove the slab entirely).
 //!
@@ -19,7 +20,9 @@ use bevy_math::{Vec2, Vec3};
 use lod::gen::LodSceneLevel;
 use richmond_building_components::arc_kit::arc_ring_dir_deg;
 use richmond_building_components::floors::{Floor, FloorNode};
-use richmond_building_components::partitions::{Partition, PartitionNode, PartitionStyle};
+use richmond_building_components::partitions::{
+	Partition, PartitionNode, PartitionStyle, SLICE_KIT_HEIGHT,
+};
 use richmond_building_components::{BuildingComponents, Layers, Placement};
 
 use crate::openings::{
@@ -389,11 +392,13 @@ fn emit_cut_sector(
 		if h < min_h {
 			continue;
 		}
+		// Slice kits span SLICE_KIT_HEIGHT in unit Y; scale so world height = h.
+		let y_scale = h / SLICE_KIT_HEIGHT;
 		let origin = Vec3::new(params.center_xz.x, band_lo, params.center_xz.z);
-		push_solid(
+		push_slice(
 			partitions,
 			origin,
-			Vec3::new(params.radius, h, params.radius),
+			Vec3::new(params.radius, y_scale, params.radius),
 			yaw_deg,
 			SEG_DEG,
 			params.style,
@@ -485,6 +490,23 @@ fn push_solid(
 		partitions.push(PartitionNode::new(
 			style,
 			Partition::arc(sweep_deg),
+			Placement::new(origin, start_deg.to_radians()).with_scale(ring_scale),
+		));
+	}
+}
+
+fn push_slice(
+	partitions: &mut Vec<PartitionNode>,
+	origin: Vec3,
+	ring_scale: Vec3,
+	start_deg: f32,
+	sweep_deg: f32,
+	style: PartitionStyle,
+) {
+	if sweep_deg > 1e-2 && ring_scale.y > EPS {
+		partitions.push(PartitionNode::new(
+			style,
+			Partition::slice_arc(sweep_deg),
 			Placement::new(origin, start_deg.to_radians()).with_scale(ring_scale),
 		));
 	}
@@ -914,18 +936,19 @@ mod tests {
 			.filter(|&i| !sectors[i as usize].is_solid())
 			.collect();
 		assert!(!cut.is_empty(), "window should cut sectors");
-		// Footer band [0, 1) must be present as a short-Y arc on a cut sector.
+		// Footer band [0, 1): slice kit with Y-scale = h / SLICE_KIT_HEIGHT (= 5 for h=1).
+		let expect_y_scale = 1.0 / SLICE_KIT_HEIGHT;
 		let footers = parts
 			.iter()
 			.filter(|p| {
-				matches!(p.geometry, Partition::Arc(_))
+				matches!(p.geometry, Partition::SliceArc(_))
 					&& (p.placement.translation.y - 0.0).abs() < 1e-3
-					&& (p.placement.scale.y - 1.0).abs() < 1e-2
+					&& (p.placement.scale.y - expect_y_scale).abs() < 1e-2
 			})
 			.count();
 		assert!(
 			footers >= 1,
-			"expected vertically scaled footer under window, cut={cut:?}"
+			"expected scaled slice footer under window, cut={cut:?}"
 		);
 		Ok(())
 	}
