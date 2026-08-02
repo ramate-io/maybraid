@@ -136,6 +136,7 @@ pub enum PreviewSubject {
 		gables: bool,
 		no_walls: bool,
 		no_hips: bool,
+		openings: Vec<PreviewOpening>,
 	},
 	Rectangle {
 		origin: Vec3,
@@ -389,10 +390,12 @@ impl PreviewConfig {
 				gables,
 				no_walls,
 				no_hips,
+				ref openings,
 			} => format!(
-				"preview: pitched-rectangular-roof (foot={footprint_x:.1}x{footprint_z:.1} ridge_h={ridge_height:.1} eave_h={eave_height:.1} inset={ridge_inset:.1} gables={gables} walls={} hips={})",
+				"preview: pitched-rectangular-roof (foot={footprint_x:.1}x{footprint_z:.1} ridge_h={ridge_height:.1} eave_h={eave_height:.1} inset={ridge_inset:.1} gables={gables} walls={} hips={} openings={})",
 				!no_walls,
-				!no_hips
+				!no_hips,
+				openings.len()
 			),
 			PreviewSubject::Rectangle {
 				origin,
@@ -1158,6 +1161,7 @@ pub fn present_preview_lod(
 			gables,
 			no_walls,
 			no_hips,
+			openings,
 		} => {
 			let mut params = PitchedRoofParams::rectangular_hip(
 				Vec2::new(*footprint_x, *footprint_z),
@@ -1178,6 +1182,7 @@ pub fn present_preview_lod(
 					(false, false)
 				};
 			}
+			params.openings = openings_from_preview(openings);
 			let shell = PitchedRoof::new(params);
 			spawn_preview(
 				&mut commands,

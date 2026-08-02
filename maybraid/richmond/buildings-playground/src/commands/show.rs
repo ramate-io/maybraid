@@ -143,7 +143,7 @@ impl Show {
 			Self::ArcTower(cmd) => Ok(cmd.into_preview()),
 			Self::ConnectingShells(cmd) => Ok(cmd.into_preview()),
 			Self::Trazaloid(cmd) => cmd.into_preview(),
-			Self::PitchedRectangularRoof(cmd) => Ok(cmd.into_preview()),
+			Self::PitchedRectangularRoof(cmd) => cmd.into_preview(),
 			Self::Rectangle(cmd) => Ok(cmd.into_preview()),
 			Self::ClippedRectangle(cmd) => Ok(cmd.into_preview()),
 			Self::ClippedRectangularStrip(cmd) => Ok(cmd.into_preview()),

@@ -2,7 +2,9 @@
 
 use bevy::prelude::*;
 use clap::Args;
+use richmond_buildings::{OpeningLabel, PitchedRoof, PitchedRoofParams};
 
+use super::opening::{parse_opening_arg, OpeningArg, PreviewOpening};
 use super::ShowTransform;
 use crate::preview::PreviewSubject;
 
@@ -31,13 +33,51 @@ pub struct PitchedRectangularRoof {
 	/// Omit half-hip facets (open gable-style ends if `--gables`).
 	#[arg(long, default_value_t = false)]
 	pub no_hips: bool,
+	/// Opening plan entries. Repeatable.
+	///
+	/// Format: `id:label:minx,miny,minz:maxx,maxy,maxz`
+	///
+	/// Passages / apertures map to the nearest pitch half (largest per half wins).
+	#[arg(long = "opening", value_name = "SPEC", value_parser = parse_opening_arg, action = clap::ArgAction::Append)]
+	pub openings: Vec<OpeningArg>,
+	/// Convenience: centered aperture on the +Z pitch half.
+	#[arg(long, default_value_t = false)]
+	pub skylight: bool,
 	#[command(flatten)]
 	pub transform: ShowTransform,
 }
 
 impl PitchedRectangularRoof {
-	pub fn into_preview(self) -> (PreviewSubject, Transform) {
-		(
+	pub fn into_preview(self) -> Result<(PreviewSubject, Transform), String> {
+		let mut openings = self
+			.openings
+			.iter()
+			.cloned()
+			.map(|a| a.resolve_aabb(None))
+			.collect::<Result<Vec<_>, _>>()?;
+		if self.skylight && openings.is_empty() {
+			let params = PitchedRoofParams::rectangular_hip(
+				Vec2::new(self.footprint_x, self.footprint_z),
+				self.ridge_height,
+				self.eave_height,
+				self.ridge_inset,
+			);
+			let opening = PitchedRoof::pitch_opening(
+				&params.halves[0],
+				0.5,
+				0.45,
+				1.5,
+				1.0,
+				OpeningLabel::Aperture,
+			);
+			openings.push(PreviewOpening {
+				id: "skylight".into(),
+				label: OpeningLabel::Aperture,
+				min: Vec3::from(opening.bounds.min),
+				max: Vec3::from(opening.bounds.max),
+			});
+		}
+		Ok((
 			PreviewSubject::PitchedRectangularRoof {
 				footprint_x: self.footprint_x,
 				footprint_z: self.footprint_z,
@@ -47,8 +87,9 @@ impl PitchedRectangularRoof {
 				gables: self.gables,
 				no_walls: self.no_walls,
 				no_hips: self.no_hips,
+				openings,
 			},
 			self.transform.transform(),
-		)
+		))
 	}
 }
