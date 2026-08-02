@@ -33,8 +33,7 @@ pub use paneling::ruled_pitch;
 pub use paneling::ruled_strip;
 pub use paneling::tessellated_triangle_panel;
 pub use paneling::tube;
-pub mod gridding;
-pub mod stacking;
+pub mod combinators;
 
 pub use arc_spire::{
 	best_fit_y_bindings, uniform_storey_bindings, ArcSpire, ArcSpireParams, FitTolerance,
