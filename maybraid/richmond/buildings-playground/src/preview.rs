@@ -22,7 +22,8 @@ use richmond_buildings::quad_panel_complex::QuadPanelComplex;
 use richmond_buildings::{
 	ApproximatedCircle, ArcSweep, ClippedArcSweep, ClippedQuadPanel, ClippedRectangle,
 	ClippedRectangularStrip, ClippedRuledStrip, ClippedTessellatedTriangle, RectInset, RuledPitch,
-	Tube, TubeCrossSectionNode, TubeFaces,
+	Tube, TubeCrossSectionNode, TubeFaces, Trazaloid, TrazaloidDoors, TrazaloidParams,
+	TrazaloidSlab,
 };
 use richmond_buildings::stacked_rings::StackedRings;
 use richmond_buildings::tessellated_triangle_panel::TessellatedTrianglePanel;
@@ -89,6 +90,28 @@ pub enum PreviewSubject {
 		no_ceiling: bool,
 		no_left: bool,
 		no_right: bool,
+	},
+	Trazaloid {
+		footprint_x: f32,
+		footprint_z: f32,
+		ridge_x: f32,
+		ridge_z: f32,
+		lower_height: f32,
+		upper_height: f32,
+		band_vertical_offset: f32,
+		waist_horizontal_offset: f32,
+		door_north: bool,
+		door_east: bool,
+		door_south: bool,
+		door_west: bool,
+		door_width_frac: f32,
+		door_thickness: f32,
+		door_height_frac: f32,
+		floor: bool,
+		no_ceiling: bool,
+		floor_hole: f32,
+		ceiling_hole: f32,
+		face_post_count: u32,
 	},
 	ClippedRectangle {
 		a0: Vec3,
@@ -257,6 +280,25 @@ impl PreviewConfig {
 			} => format!(
 				"preview: tube (min_dihedral={min_dihedral:.3} no_joint={no_joint} no_floor={no_floor} no_ceiling={no_ceiling} no_left={no_left} no_right={no_right})"
 			),
+			PreviewSubject::Trazaloid {
+				footprint_x,
+				footprint_z,
+				ridge_x,
+				ridge_z,
+				lower_height,
+				upper_height,
+				band_vertical_offset,
+				waist_horizontal_offset,
+				door_south,
+				floor,
+				no_ceiling,
+				floor_hole,
+				ceiling_hole,
+				face_post_count,
+				..
+			} => format!(
+				"preview: trazaloid (foot={footprint_x:.1}x{footprint_z:.1} ridge={ridge_x:.1}x{ridge_z:.1} h={lower_height:.1}+{upper_height:.1} gap={band_vertical_offset:.2} inset={waist_horizontal_offset:.2} door_s={door_south} floor={floor}/{floor_hole:.1} ceil=!{no_ceiling}/{ceiling_hole:.1} posts={face_post_count})"
+			),
 			PreviewSubject::ClippedRectangle {
 				a0,
 				a1,
@@ -420,6 +462,19 @@ impl PreviewConfig {
 					Vec3::new(-2.0, -0.5, -0.5),
 					Vec3::new(7.0, 4.0, 9.0),
 				)
+			}
+			PreviewSubject::Trazaloid {
+				footprint_x,
+				footprint_z,
+				lower_height,
+				upper_height,
+				band_vertical_offset,
+				..
+			} => {
+				let hx = footprint_x.max(1e-4) * 0.5 + 0.5;
+				let hz = footprint_z.max(1e-4) * 0.5 + 0.5;
+				let h = lower_height + band_vertical_offset + upper_height + 0.5;
+				Aabb3d::from_min_max(Vec3::new(-hx, -0.2, -hz), Vec3::new(hx, h, hz))
 			}
 			_ => Aabb3d::from_min_max(Vec3::ZERO, Vec3::ONE),
 		}
@@ -749,6 +804,69 @@ pub fn present_preview_lod(
 				&mut commands,
 				transform,
 				ComponentsOnly(tube).scene_with_lod(&lod_ref),
+			);
+		}
+		PreviewSubject::Trazaloid {
+			footprint_x,
+			footprint_z,
+			ridge_x,
+			ridge_z,
+			lower_height,
+			upper_height,
+			band_vertical_offset,
+			waist_horizontal_offset,
+			door_north,
+			door_east,
+			door_south,
+			door_west,
+			door_width_frac,
+			door_thickness,
+			door_height_frac,
+			floor,
+			no_ceiling,
+			floor_hole,
+			ceiling_hole,
+			face_post_count,
+		} => {
+			let floor_slab = if !*floor {
+				TrazaloidSlab::None
+			} else if *floor_hole > 0.0 {
+				TrazaloidSlab::SquareHole { size: *floor_hole }
+			} else {
+				TrazaloidSlab::Solid
+			};
+			let ceiling_slab = if *no_ceiling {
+				TrazaloidSlab::None
+			} else if *ceiling_hole > 0.0 {
+				TrazaloidSlab::SquareHole { size: *ceiling_hole }
+			} else {
+				TrazaloidSlab::Solid
+			};
+			let shell = Trazaloid::new(TrazaloidParams {
+				footprint: Vec2::new(*footprint_x, *footprint_z),
+				ridge: Vec2::new(*ridge_x, *ridge_z),
+				lower_height: *lower_height,
+				upper_height: *upper_height,
+				band_vertical_offset: *band_vertical_offset,
+				waist_horizontal_offset: *waist_horizontal_offset,
+				doors: TrazaloidDoors {
+					north: *door_north,
+					east: *door_east,
+					south: *door_south,
+					west: *door_west,
+				},
+				door_width_frac: *door_width_frac,
+				door_thickness: *door_thickness,
+				door_height_frac: *door_height_frac,
+				floor: floor_slab,
+				ceiling: ceiling_slab,
+				face_post_count: *face_post_count,
+				..TrazaloidParams::default()
+			});
+			spawn_preview(
+				&mut commands,
+				transform,
+				ComponentsOnly(shell).scene_with_lod(&lod_ref),
 			);
 		}
 		PreviewSubject::ClippedRectangle {
