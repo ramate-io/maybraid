@@ -192,10 +192,12 @@ impl VolumeCandidate {
 					self.inset_ridge_end(end, inset);
 				}
 				EndCap::Gable { ridge, eave } => {
+					// Wall plate stays at the massing end; ridge / eave project past it
+					// so half-gable walling reads as a barge overhang.
 					let ridge_oh = ridge.resolve(self.short_span);
 					let eave_oh = eave.resolve(self.short_span);
 					self.extend_ridge_end(end, ridge_oh);
-					self.extend_eave_wall_end(end, eave_oh);
+					self.extend_eave_end(end, eave_oh);
 				}
 			}
 		}
@@ -222,13 +224,12 @@ impl VolumeCandidate {
 		self.ridge.set_end(end, p);
 	}
 
-	fn extend_eave_wall_end(&mut self, end: usize, oh: f32) {
+	fn extend_eave_end(&mut self, end: usize, oh: f32) {
 		let dir = self.long_dir();
 		let sign = if end == 0 { -1.0 } else { 1.0 };
 		let delta = dir * (sign * oh);
 		for i in 0..2 {
 			self.eave[i].set_end(end, self.eave[i].end(end) + delta);
-			self.wall[i].set_end(end, self.wall[i].end(end) + delta);
 		}
 	}
 

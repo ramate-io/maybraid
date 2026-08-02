@@ -29,6 +29,61 @@ fn single_gable_extends_free_ends() {
 	let half = &complex.roofs()[0].params().halves[0];
 	assert_eq!(half.draw_in_half_gable_end, (true, true));
 	assert_eq!(half.draw_in_half_hip, (false, false));
+	// Wall stays at the massing end; ridge/eave project past it (barge overhang).
+	let wall0 = half.wall_line.0.x;
+	let wall1 = half.wall_line.1.x;
+	assert!((wall0 - (-5.0)).abs() < 1e-3, "wall min {wall0}");
+	assert!((wall1 - 5.0).abs() < 1e-3, "wall max {wall1}");
+	assert!((half.eave_line.0.x - (-5.4)).abs() < 1e-3);
+	assert!((half.eave_line.1.x - 5.4).abs() < 1e-3);
+	assert!((half.ridge_line.0.x - (-5.5)).abs() < 1e-3);
+	assert!((half.ridge_line.1.x - 5.5).abs() < 1e-3);
+}
+
+#[test]
+fn stepped_presets_vary_ridge_and_eave_heights() {
+	let ridge_step = RectangularPitchedRoofComplexParams::l_shape_stepped_ridge().build();
+	// Free ends keep authored ridge heights; junction ends may lerp onto the valley.
+	let ridge_ys: Vec<f32> = ridge_step
+		.roofs()
+		.iter()
+		.flat_map(|r| {
+			let (a, b) = r.params().halves[0].ridge_line;
+			[a.y, b.y]
+		})
+		.collect();
+	assert!(
+		ridge_ys.iter().any(|y| (y - 4.2).abs() < 1e-3),
+		"missing bar ridge 4.2 in {ridge_ys:?}"
+	);
+	assert!(
+		ridge_ys.iter().any(|y| (y - 5.5).abs() < 1e-3),
+		"missing stem ridge 5.5 in {ridge_ys:?}"
+	);
+	assert!(!ridge_step.valleys().is_empty());
+
+	let eave_step = RectangularPitchedRoofComplexParams::l_shape_stepped_eave().build();
+	let eave_ys: Vec<f32> = eave_step
+		.roofs()
+		.iter()
+		.flat_map(|r| {
+			let (a, b) = r.params().halves[0].eave_line;
+			[a.y, b.y]
+		})
+		.collect();
+	assert!(
+		eave_ys.iter().any(|y| (y - 2.0).abs() < 1e-3),
+		"missing bar eave 2.0 in {eave_ys:?}"
+	);
+	assert!(
+		eave_ys.iter().any(|y| (y - 3.2).abs() < 1e-3),
+		"missing stem eave 3.2 in {eave_ys:?}"
+	);
+	assert!(!eave_step.valleys().is_empty());
+
+	let t = RectangularPitchedRoofComplexParams::t_shape_stepped().build();
+	assert_eq!(t.roofs().len(), 2);
+	assert!(!t.valleys().is_empty());
 }
 
 #[test]

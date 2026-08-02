@@ -107,11 +107,35 @@ impl RectangularPitchedRoofComplexParams {
 		])
 	}
 
+	/// L with a taller stem ridge (same eave plate, different ridge heights).
+	pub fn l_shape_stepped_ridge() -> Self {
+		Self::new(vec![
+			Aabb3d::from_min_max(Vec3::new(-2.0, 2.5, -2.0), Vec3::new(8.0, 4.2, 2.0)),
+			Aabb3d::from_min_max(Vec3::new(-2.0, 2.5, -2.0), Vec3::new(2.0, 5.5, 8.0)),
+		])
+	}
+
+	/// L with a raised stem volume (higher eave plate and ridge).
+	pub fn l_shape_stepped_eave() -> Self {
+		Self::new(vec![
+			Aabb3d::from_min_max(Vec3::new(-2.0, 2.0, -2.0), Vec3::new(8.0, 4.0, 2.0)),
+			Aabb3d::from_min_max(Vec3::new(-2.0, 3.2, -2.0), Vec3::new(2.0, 5.8, 8.0)),
+		])
+	}
+
 	/// T: long-X bar + long-Z stem centered on the bar.
 	pub fn t_shape() -> Self {
 		Self::new(vec![
 			Aabb3d::from_min_max(Vec3::new(-8.0, 2.5, -2.0), Vec3::new(8.0, 4.5, 2.0)),
 			Aabb3d::from_min_max(Vec3::new(-2.0, 2.5, -2.0), Vec3::new(2.0, 4.5, 8.0)),
+		])
+	}
+
+	/// T with a taller / higher stem than the cross-bar.
+	pub fn t_shape_stepped() -> Self {
+		Self::new(vec![
+			Aabb3d::from_min_max(Vec3::new(-8.0, 2.0, -2.0), Vec3::new(8.0, 3.8, 2.0)),
+			Aabb3d::from_min_max(Vec3::new(-2.0, 2.8, -2.0), Vec3::new(2.0, 5.5, 8.0)),
 		])
 	}
 

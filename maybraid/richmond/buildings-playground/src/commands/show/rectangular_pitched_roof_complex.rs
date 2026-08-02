@@ -12,7 +12,13 @@ pub enum RoofComplexPreset {
 	Single,
 	#[default]
 	L,
+	/// L with same eave plate, taller stem ridge.
+	LSteppedRidge,
+	/// L with raised stem eave plate and ridge.
+	LSteppedEave,
 	T,
+	/// T with taller / higher stem than the cross-bar.
+	TStepped,
 }
 
 #[derive(Clone, Copy, Debug, Default, ValueEnum)]
@@ -35,11 +41,11 @@ pub struct RectangularPitchedRoofComplex {
 	pub overhang_ratio: Option<f32>,
 	#[arg(long, value_enum, default_value_t = EndCapKind::Hip)]
 	pub end_cap: EndCapKind,
-	/// Gable ridge projection (meters) when `--end-cap gable`.
-	#[arg(long, default_value_t = 0.4)]
+	/// Gable ridge projection past the wall plate (meters) when `--end-cap gable`.
+	#[arg(long, default_value_t = 0.8)]
 	pub gable_ridge: f32,
-	/// Gable eave projection (meters) when `--end-cap gable`.
-	#[arg(long, default_value_t = 0.35)]
+	/// Gable eave projection past the wall plate (meters) when `--end-cap gable`.
+	#[arg(long, default_value_t = 0.7)]
 	pub gable_eave: f32,
 	#[command(flatten)]
 	pub transform: ShowTransform,
@@ -52,7 +58,10 @@ impl RectangularPitchedRoofComplex {
 				preset: match self.preset {
 					RoofComplexPreset::Single => "single".into(),
 					RoofComplexPreset::L => "l".into(),
+					RoofComplexPreset::LSteppedRidge => "l-stepped-ridge".into(),
+					RoofComplexPreset::LSteppedEave => "l-stepped-eave".into(),
 					RoofComplexPreset::T => "t".into(),
+					RoofComplexPreset::TStepped => "t-stepped".into(),
 				},
 				overhang_fixed: self.overhang_fixed,
 				overhang_ratio: self.overhang_ratio,
@@ -75,7 +84,10 @@ pub fn build_params(
 ) -> RectangularPitchedRoofComplexParams {
 	let mut params = match preset {
 		"single" => RectangularPitchedRoofComplexParams::single(10.0, 6.0, 2.5, 4.5),
+		"l-stepped-ridge" => RectangularPitchedRoofComplexParams::l_shape_stepped_ridge(),
+		"l-stepped-eave" => RectangularPitchedRoofComplexParams::l_shape_stepped_eave(),
 		"t" => RectangularPitchedRoofComplexParams::t_shape(),
+		"t-stepped" => RectangularPitchedRoofComplexParams::t_shape_stepped(),
 		_ => RectangularPitchedRoofComplexParams::l_shape(),
 	};
 	params.overhang = if let Some(r) = overhang_ratio {
