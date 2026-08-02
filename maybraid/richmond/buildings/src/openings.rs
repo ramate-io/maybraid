@@ -1,119 +1,124 @@
+//! Opening plans, shell records, and construct-time geometry maps.
+//!
+//! An [`Opening`] is a void the receiving type should avoid filling with geometry.
+//! Shells that honor connectable openings (`Passage`, `Aperture`, `Shaft`) record
+//! them and optionally map each id onto contact geometry ([`MappedOpening`]).
+
 use bevy_math::bounding::Aabb3d;
+use bevy_math::{Vec2, Vec3};
 use std::collections::HashMap;
 
-/// A label for an opening.
+/// Stable identity for an opening within a plan or shell record.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct Label(String);
+pub struct OpeningId(pub String);
 
-/// An opening is a 3D bounding box with a label.
-///
-/// It is consider a unique identifier. Two openings with the same bounds and label are considered the same opening.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct Opening {
-	pub bounds: Aabb3d,
-	/// The label of the opening.
-	///
-	/// This carries a bit of dynamic information that can help downstream systems figure out
-	/// how to use the the opening.
-	///
-	/// Currently, this sits on the opening object itself for simplicity, i.e.,
-	/// avoiding IDing openings and mapping them to labels.
-	pub label: Option<Label>,
+impl OpeningId {
+	pub fn new(id: impl Into<String>) -> Self {
+		Self(id.into())
+	}
+
+	pub fn as_str(&self) -> &str {
+		&self.0
+	}
 }
 
-/// A spatial index of labeled openings.
-///
-/// This is used with many types to to determine where they should and should not write geometry.
-///
-/// It is supposed to be a spatial index. The HashMap is a placeholder.
-///
-/// Typically, this functions both as a plan and as a record.
-/// However, exact geometry matches, still need a reference to the type.
+impl From<&str> for OpeningId {
+	fn from(value: &str) -> Self {
+		Self::new(value)
+	}
+}
+
+impl From<String> for OpeningId {
+	fn from(value: String) -> Self {
+		Self(value)
+	}
+}
+
+/// Semantic role of an opening in a plan.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum OpeningLabel {
+	/// Perimeter void / do not build wall here.
+	Boundary,
+	/// General keep-out (typically not retained on shell records).
+	Exclusion,
+	/// Walkable / connectable cut.
+	Passage,
+	/// Non-circulating cut (window-like).
+	Aperture,
+	/// Vertical circulation void (stairs, lifts, …).
+	Shaft,
+	/// Experiments only; not a stacking contract.
+	Custom(String),
+}
+
+impl OpeningLabel {
+	/// Labels shells typically retain and may map to contact geometry.
+	pub fn is_connectable(&self) -> bool {
+		matches!(self, Self::Passage | Self::Aperture | Self::Shaft)
+	}
+}
+
+/// A void volume with a label.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Opening {
+	pub bounds: Aabb3d,
+	pub label: OpeningLabel,
+}
+
+impl Opening {
+	pub fn new(bounds: Aabb3d, label: OpeningLabel) -> Self {
+		Self { bounds, label }
+	}
+
+	pub fn passage(bounds: Aabb3d) -> Self {
+		Self::new(bounds, OpeningLabel::Passage)
+	}
+
+	pub fn aperture(bounds: Aabb3d) -> Self {
+		Self::new(bounds, OpeningLabel::Aperture)
+	}
+}
+
+/// Plan or realized record of openings keyed by id.
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct Openings {
-	pub openings: HashMap<String, Opening>,
+	pub openings: HashMap<OpeningId, Opening>,
 }
 
 impl Openings {
 	pub fn new() -> Self {
-		Self { openings: HashMap::new() }
+		Self::default()
 	}
 
-	/// Finds all openings that intersect with the given bounds.
-	///
-	/// Note, we don't filter by labels here. This is a broad-phase.
-	/// For most queries, it should be cheaper to check all openings, then filter by desired labels as opposed to filtering by labels first.
-	pub fn intersecting_openings(&self, bounds: Aabb3d) -> Vec<&Opening> {
-		todo!()
+	pub fn insert(&mut self, id: impl Into<OpeningId>, opening: Opening) -> &mut Self {
+		self.openings.insert(id.into(), opening);
+		self
 	}
 
-	/// Finds an opening that is closest and most similar in size to the given bounds.
-	///
-	/// This is useful for finding potential connecting points.
-	pub fn best_fit_opening(&self, fit_requirements: &OpeningFit) -> Option<&Opening> {
-		todo!()
+	pub fn with(mut self, id: impl Into<OpeningId>, opening: Opening) -> Self {
+		self.insert(id, opening);
+		self
 	}
 
-	/// Finds a mapped opening that is closest and most similar in size to the given bounds.
-	pub fn best_fit_mapped_opening(
-		&self,
-		maps_openings: &impl MapsOpenings,
-		fit_requirements: &OpeningFit,
-	) -> Option<MappedOpening> {
-		self.best_fit_opening(fit_requirements)
-			.and_then(|opening| maps_openings.map_opening(opening))
+	pub fn get(&self, id: &OpeningId) -> Option<&Opening> {
+		self.openings.get(id)
+	}
+
+	pub fn iter(&self) -> impl Iterator<Item = (&OpeningId, &Opening)> {
+		self.openings.iter()
+	}
+
+	pub fn is_empty(&self) -> bool {
+		self.openings.is_empty()
+	}
+
+	pub fn len(&self) -> usize {
+		self.openings.len()
 	}
 }
 
-/// Cost matrix for the distance between two Aabb3d bounds.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct DistanceCost {
-	pub front_lower_left: f32,
-	pub front_lower_right: f32,
-	pub front_upper_left: f32,
-	pub front_upper_right: f32,
-	pub back_lower_left: f32,
-	pub back_lower_right: f32,
-	pub back_upper_left: f32,
-	pub back_upper_right: f32,
-}
-
-/// Cost matrix for the scale of two Aabb3d bounds.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct ScaleCost(Vec3);
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum LabelCost {
-	Filter,
-	Cost(f32),
-}
-
-/// The cost matrix for labels.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct LabelCosts(HashMap<Label, LabelCost>);
-
-/// An ideal fit cost descriptor
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct IdealFit {
-	/// The ideal opening bounds.
-	pub bounds: Aabb3d,
-	/// The cost per pair-wise distance to each point on the ideal bounds.
-	pub distance_cost: DistanceCost,
-	/// The cost of the scale of the opening.
-	pub scale_cost: ScaleCost,
-}
-
-/// The cost descriptor for an opening fit.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct OpeningFit {
-	/// The opening intersects these bounds.
-	pub bounds: Aabb3d,
-	/// The cost of different labels for the opening, also functions as a filter.
-	pub label_costs: LabelCosts,
-	/// The ideal opening bounds.
-	pub ideal_fit: Option<IdealFit>,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+/// Outward-facing opening quad (looking along the mapped orientation).
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct MappedOpeningQuad {
 	pub lower_left: Vec3,
 	pub lower_right: Vec3,
@@ -121,27 +126,124 @@ pub struct MappedOpeningQuad {
 	pub upper_right: Vec3,
 }
 
-/// An opening mapped onto the geometry of the object.
-///
-/// Note that here we are
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct MappedOpening {
-	front_face: MappedOpeningQuad,
-	back_face: MappedOpeningQuad,
+impl MappedOpeningQuad {
+	pub fn new(
+		lower_left: Vec3,
+		lower_right: Vec3,
+		upper_left: Vec3,
+		upper_right: Vec3,
+	) -> Self {
+		Self {
+			lower_left,
+			lower_right,
+			upper_left,
+			upper_right,
+		}
+	}
+
+	pub fn corners(self) -> (Vec3, Vec3, Vec3, Vec3) {
+		(
+			self.lower_left,
+			self.lower_right,
+			self.upper_left,
+			self.upper_right,
+		)
+	}
 }
 
-/// A table storing the mapped openings for each opening.
+/// An opening mapped onto shell contact geometry.
 ///
-/// Some types implementing `MapsOpenings` may choose
-/// to store mapped openings at construction time, particularly for certain labels, e.g.,
-/// Entryway.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct MappedOpenings(HashMap<Opening, MappedOpening>);
+/// `orientation` is the outward facing in plan (\(x, z\)), matching the former
+/// `ConnectingHallEndpoint::orientation` contract.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct MappedOpening {
+	pub face: MappedOpeningQuad,
+	pub orientation: Vec2,
+}
 
-pub trait MapsOpenings {
-	/// Maps an Aabb3d opening onto the actual geometry of the object.
+impl MappedOpening {
+	pub fn new(face: MappedOpeningQuad, orientation: Vec2) -> Self {
+		Self { face, orientation }
+	}
+
+	pub fn from_corners(
+		lower_left: Vec3,
+		lower_right: Vec3,
+		upper_left: Vec3,
+		upper_right: Vec3,
+		orientation: Vec2,
+	) -> Self {
+		Self::new(
+			MappedOpeningQuad::new(lower_left, lower_right, upper_left, upper_right),
+			orientation,
+		)
+	}
+
+	pub fn endpoint_corners(&self) -> (Vec3, Vec3, Vec3, Vec3) {
+		self.face.corners()
+	}
+
+	/// Expand the opening horizontally past the jambs by `side_overrun` meters each side.
 	///
-	/// If the construction did not map the opening, it should typically return `None`
-	/// instead of virtualizing where the opening would be.
-	fn map_opening(&self, opening: &Opening) -> Option<MappedOpening>;
+	/// Expansion is from the opening midline along ±[`Self::orientation`]'s right, so it
+	/// stays centered even if the authored corners were left/right swapped.
+	pub fn widened(self, side_overrun: f32) -> Self {
+		let overrun = side_overrun.max(0.0);
+		let Some(orient) = normalize_xz(self.orientation) else {
+			return self;
+		};
+		let right = Vec3::new(-orient.y, 0.0, orient.x);
+		let (bl, br, tl, tr) = self.endpoint_corners();
+		let bottom_mid = (bl + br) * 0.5;
+		let top_mid = (tl + tr) * 0.5;
+		let half_b = 0.5 * bl.distance(br) + overrun;
+		let half_t = 0.5 * tl.distance(tr) + overrun;
+		Self {
+			face: MappedOpeningQuad::new(
+				bottom_mid - right * half_b,
+				bottom_mid + right * half_b,
+				top_mid - right * half_t,
+				top_mid + right * half_t,
+			),
+			orientation: self.orientation,
+		}
+	}
+}
+
+/// Construct-time maps from opening id to contact geometry.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct MappedOpenings(pub HashMap<OpeningId, MappedOpening>);
+
+impl MappedOpenings {
+	pub fn new() -> Self {
+		Self::default()
+	}
+
+	pub fn insert(&mut self, id: impl Into<OpeningId>, mapped: MappedOpening) -> &mut Self {
+		self.0.insert(id.into(), mapped);
+		self
+	}
+
+	pub fn get(&self, id: &OpeningId) -> Option<&MappedOpening> {
+		self.0.get(id)
+	}
+}
+
+/// Types that record openings and may expose mapped contact geometry.
+///
+/// Construction consumes an openings plan; [`mapped_opening`](Self::mapped_opening)
+/// returns only openings this construction actually mapped — never a virtualized guess.
+pub trait MapsOpenings {
+	fn openings(&self) -> &Openings;
+
+	fn mapped_opening(&self, id: &OpeningId) -> Option<&MappedOpening>;
+}
+
+fn normalize_xz(v: Vec2) -> Option<Vec2> {
+	let len = v.length();
+	if len < 1e-5 {
+		None
+	} else {
+		Some(v / len)
+	}
 }

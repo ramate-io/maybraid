@@ -7,6 +7,7 @@
 //! Optional centered door clips on lower sides. High LOD adds vertical
 //! [`JointNode`] posts at corners and densified face generators.
 
+use bevy_math::bounding::Aabb3d;
 use bevy_math::{Vec2, Vec3};
 use lod::gen::LodSceneLevel;
 use richmond_building_components::joints::geometry::JointPost;
@@ -14,43 +15,15 @@ use richmond_building_components::joints::JointNode;
 use richmond_building_components::panels::{PanelNode, PanelStyle};
 use richmond_building_components::{BuildingComponents, Layers};
 
+use crate::openings::{
+	MappedOpening, MappedOpeningQuad, MappedOpenings, MapsOpenings, Opening, OpeningId,
+	OpeningLabel, Openings,
+};
 use crate::paneling::clipped_ruled_strip::ClippedRuledStrip;
 use crate::paneling::panel_complex::{PanelComplexJointPolicy, DEFAULT_PANEL_THICKNESS};
-use crate::shells::connecting_hall::ConnectingHallEndpoint;
 
 const EXTENT_EPS: f32 = 1e-3;
 const GAP_EPS: f32 = 1e-4;
-
-/// Which lower-band sides get a centered inset door clip.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct TrazaloidDoors {
-	pub north: bool,
-	pub east: bool,
-	pub south: bool,
-	pub west: bool,
-}
-
-impl TrazaloidDoors {
-	pub const NONE: Self = Self {
-		north: false,
-		east: false,
-		south: false,
-		west: false,
-	};
-
-	pub const ALL: Self = Self {
-		north: true,
-		east: true,
-		south: true,
-		west: true,
-	};
-}
-
-impl Default for TrazaloidDoors {
-	fn default() -> Self {
-		Self::NONE
-	}
-}
 
 /// Horizontal footprint / ridge slab presentation.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -82,12 +55,13 @@ pub struct TrazaloidParams {
 	pub band_vertical_offset: f32,
 	/// Inward meters from the linear footprint→ridge silhouette at lower-top height.
 	pub waist_horizontal_offset: f32,
-	pub doors: TrazaloidDoors,
+	/// Opening plan. `Passage` entries are matched to lower-band sides and clipped.
+	pub openings: Openings,
 	/// Door opening width as a fraction of the lower face width (used when
-	/// [`Self::door_thickness`] is `≤ 0`).
+	/// plan AABB width is unusable and [`Self::door_thickness`] is `≤ 0`).
 	pub door_width_frac: f32,
 	/// Absolute door opening width in meters (centered). When `> 0`, overrides
-	/// [`Self::door_width_frac`].
+	/// [`Self::door_width_frac`] unless the plan AABB supplies a usable width.
 	pub door_thickness: f32,
 	/// Door opening height as a fraction of the lower face height (from the ground up).
 	pub door_height_frac: f32,
@@ -110,10 +84,15 @@ impl Default for TrazaloidParams {
 			upper_height: 2.5,
 			band_vertical_offset: 0.35,
 			waist_horizontal_offset: 0.25,
-			doors: TrazaloidDoors {
-				south: true,
-				..TrazaloidDoors::NONE
-			},
+			openings: Openings::new().with(
+				"south",
+				side_passage_opening(
+					TrazaloidSide::South,
+					Vec2::new(8.0, 6.0),
+					1.2,
+					3.0 * 0.7,
+				),
+			),
 			door_width_frac: 0.28,
 			door_thickness: 1.2,
 			door_height_frac: 0.7,
@@ -162,15 +141,6 @@ impl TrazaloidSide {
 		[Self::North, Self::East, Self::South, Self::West]
 	}
 
-	fn door_enabled(self, doors: &TrazaloidDoors) -> bool {
-		match self {
-			Self::North => doors.north,
-			Self::East => doors.east,
-			Self::South => doors.south,
-			Self::West => doors.west,
-		}
-	}
-
 	/// Outward horizontal unit normal in XZ.
 	fn outward(self) -> Vec3 {
 		match self {
@@ -186,6 +156,39 @@ impl TrazaloidSide {
 		let o = self.outward();
 		Vec2::new(o.x, o.z)
 	}
+}
+
+/// Thin centered passage AABB on a footprint face (authoring helper).
+pub fn side_passage_opening(
+	side: TrazaloidSide,
+	footprint: Vec2,
+	width: f32,
+	height: f32,
+) -> Opening {
+	let half_x = footprint.x * 0.5;
+	let half_z = footprint.y * 0.5;
+	let width = width.max(1e-3);
+	let height = height.max(1e-3);
+	let depth = 0.4;
+	let (min, max) = match side {
+		TrazaloidSide::North => (
+			Vec3::new(-width * 0.5, 0.0, half_z - depth),
+			Vec3::new(width * 0.5, height, half_z + depth * 0.25),
+		),
+		TrazaloidSide::South => (
+			Vec3::new(-width * 0.5, 0.0, -half_z - depth * 0.25),
+			Vec3::new(width * 0.5, height, -half_z + depth),
+		),
+		TrazaloidSide::East => (
+			Vec3::new(half_x - depth, 0.0, -width * 0.5),
+			Vec3::new(half_x + depth * 0.25, height, width * 0.5),
+		),
+		TrazaloidSide::West => (
+			Vec3::new(-half_x - depth * 0.25, 0.0, -width * 0.5),
+			Vec3::new(-half_x + depth, height, width * 0.5),
+		),
+	};
+	Opening::passage(Aabb3d::from_min_max(min.min(max), min.max(max)))
 }
 
 /// One vertical post segment for high-LOD joint emission.
@@ -208,6 +211,10 @@ pub struct Trazaloid {
 	high_posts: Vec<PostSegment>,
 	/// Resolved plan rectangles (foot, waist/lower-top, upper-bottom, ridge).
 	rects: [PlanRect; 4],
+	/// Connectable openings honored by this shell.
+	openings: Openings,
+	/// Contact geometry for honored passages.
+	mapped: MappedOpenings,
 }
 
 impl Trazaloid {
@@ -217,22 +224,32 @@ impl Trazaloid {
 		let style = params.style;
 		let policy = PanelComplexJointPolicy::default();
 
+		let mut openings = Openings::new();
+		let mut mapped = MappedOpenings::new();
+		let mut side_clip: [Option<Vec<Vec3>>; 4] = [None, None, None, None];
+
+		for (id, opening) in params.openings.iter() {
+			if !matches!(opening.label, OpeningLabel::Passage) {
+				continue;
+			}
+			let Some(side) = best_side_for_bounds(&opening.bounds, foot) else {
+				continue;
+			};
+			let (a0, b0) = face_bottom_pair(side, foot);
+			let (a1, b1) = face_bottom_pair(side, waist);
+			let (width_frac, thickness, height_frac) =
+				door_satisfaction(&params, &opening.bounds, a0.distance(b0), waist.y - foot.y);
+			let clip = ground_door_clip(a0, b0, a1, b1, width_frac, thickness, height_frac);
+			let side_idx = side as usize;
+			side_clip[side_idx] = Some(clip.clone());
+			openings.insert(id.clone(), opening.clone());
+			mapped.insert(id.clone(), mapped_from_outside_clip(&clip, side.orientation()));
+		}
+
 		let lower_walls = TrazaloidSide::all().map(|side| {
 			let (a0, b0) = face_bottom_pair(side, foot);
 			let (a1, b1) = face_bottom_pair(side, waist);
-			let clip = if side.door_enabled(&params.doors) {
-				Some(ground_door_clip(
-					a0,
-					b0,
-					a1,
-					b1,
-					params.door_width_frac,
-					params.door_thickness,
-					params.door_height_frac,
-				))
-			} else {
-				None
-			};
+			let clip = side_clip[side as usize].clone();
 			ClippedRuledStrip::from_lines(style, [a0, a1], [b0, b1], [clip]).with_joint_policy(policy)
 		});
 
@@ -256,6 +273,8 @@ impl Trazaloid {
 			ceiling,
 			high_posts,
 			rects,
+			openings,
+			mapped,
 		}
 	}
 
@@ -297,70 +316,68 @@ impl Trazaloid {
 		self.rects.map(|r| (r.y, Vec2::new(r.half_x * 2.0, r.half_z * 2.0)))
 	}
 
-	/// Lower-band door clip polygon `[BL, BR, TR, TL]` on the pitched face, if enabled.
-	///
-	/// Tops already lie on the footprint→waist slope (bilinear on the face quad).
-	pub fn door_clip(&self, side: TrazaloidSide) -> Option<Vec<Vec3>> {
-		if !side.door_enabled(&self.params.doors) {
-			return None;
-		}
-		let [foot, waist, ..] = self.rects;
-		let (a0, b0) = face_bottom_pair(side, foot);
-		let (a1, b1) = face_bottom_pair(side, waist);
-		Some(ground_door_clip(
-			a0,
-			b0,
-			a1,
-			b1,
-			self.params.door_width_frac,
-			self.params.door_thickness,
-			self.params.door_height_frac,
-		))
+}
+
+impl MapsOpenings for Trazaloid {
+	fn openings(&self) -> &Openings {
+		&self.openings
 	}
 
-	/// Lower-band door opening as a [`ConnectingHallEndpoint`], if that side has a door.
-	///
-	/// Top corners sit on the pitched lower face (inset footprint→waist), so a
-	/// [`ConnectingHall`] can carry that slope into its ceiling via authored
-	/// `top_middle` on the tube stations.
-	///
-	/// Corner order is **looking along the outward normal** (hall joinery). Face clips
-	/// are authored looking in from outside, so left/right are swapped here.
-	pub fn door_endpoint(&self, side: TrazaloidSide) -> Option<ConnectingHallEndpoint> {
-		let clip = self.door_clip(side)?;
-		Some(endpoint_from_outside_clip(&clip, side.orientation()))
-	}
-
-	/// Same as [`Self::door_endpoint`] but with an explicit door height fraction along
-	/// the lower-band face (for hall joinery that climbs further up the pitch).
-	pub fn door_endpoint_with_height(
-		&self,
-		side: TrazaloidSide,
-		height_frac: f32,
-	) -> Option<ConnectingHallEndpoint> {
-		if !side.door_enabled(&self.params.doors) {
-			return None;
-		}
-		let [foot, waist, ..] = self.rects;
-		let (a0, b0) = face_bottom_pair(side, foot);
-		let (a1, b1) = face_bottom_pair(side, waist);
-		let clip = ground_door_clip(
-			a0,
-			b0,
-			a1,
-			b1,
-			self.params.door_width_frac,
-			self.params.door_thickness,
-			height_frac,
-		);
-		Some(endpoint_from_outside_clip(&clip, side.orientation()))
+	fn mapped_opening(&self, id: &OpeningId) -> Option<&MappedOpening> {
+		self.mapped.get(id)
 	}
 }
 
-/// `clip` is `[BL, BR, TR, TL]` looking **in** from outside; hall wants looking **out**.
-fn endpoint_from_outside_clip(clip: &[Vec3], orientation: Vec2) -> ConnectingHallEndpoint {
+/// `clip` is `[BL, BR, TR, TL]` looking **in** from outside; map wants looking **out**.
+fn mapped_from_outside_clip(clip: &[Vec3], orientation: Vec2) -> MappedOpening {
 	debug_assert!(clip.len() >= 4);
-	ConnectingHallEndpoint::new(clip[1], clip[0], clip[2], clip[3], orientation)
+	MappedOpening::new(
+		MappedOpeningQuad::new(clip[1], clip[0], clip[2], clip[3]),
+		orientation,
+	)
+}
+
+fn best_side_for_bounds(bounds: &Aabb3d, foot: PlanRect) -> Option<TrazaloidSide> {
+	let mid = Vec3::from((bounds.min + bounds.max) * 0.5);
+	let candidates = [
+		(TrazaloidSide::North, Vec3::new(0.0, mid.y, foot.half_z)),
+		(TrazaloidSide::South, Vec3::new(0.0, mid.y, -foot.half_z)),
+		(TrazaloidSide::East, Vec3::new(foot.half_x, mid.y, 0.0)),
+		(TrazaloidSide::West, Vec3::new(-foot.half_x, mid.y, 0.0)),
+	];
+	candidates
+		.into_iter()
+		.min_by(|(_, a), (_, b)| {
+			mid.distance_squared(*a)
+				.partial_cmp(&mid.distance_squared(*b))
+				.unwrap_or(std::cmp::Ordering::Equal)
+		})
+		.map(|(side, _)| side)
+}
+
+fn door_satisfaction(
+	params: &TrazaloidParams,
+	bounds: &Aabb3d,
+	face_width: f32,
+	face_height: f32,
+) -> (f32, f32, f32) {
+	let extent = Vec3::from(bounds.max - bounds.min);
+	// Prefer plan AABB size when clearly door-like; else fall back to params.
+	let aabb_width = extent.x.max(extent.z);
+	let aabb_height = extent.y;
+	let thickness = if aabb_width > 0.2 && aabb_width < face_width * 0.98 {
+		aabb_width
+	} else if params.door_thickness > 0.0 {
+		params.door_thickness
+	} else {
+		0.0
+	};
+	let height_frac = if aabb_height > 0.2 && face_height > 1e-4 {
+		(aabb_height / face_height).clamp(0.05, 0.95)
+	} else {
+		params.door_height_frac
+	};
+	(params.door_width_frac, thickness, height_frac)
 }
 
 impl BuildingComponents for Trazaloid {
@@ -676,10 +693,10 @@ mod tests {
 	#[test]
 	fn south_door_makes_clipped_lower_piece() {
 		let mut params = demo_params();
-		params.doors = TrazaloidDoors {
-			south: true,
-			..TrazaloidDoors::NONE
-		};
+		params.openings = Openings::new().with(
+			"south",
+			side_passage_opening(TrazaloidSide::South, params.footprint, 1.2, 2.1),
+		);
 		let t = Trazaloid::new(params);
 		// Side order: N, E, S, W → index 2 is south.
 		assert!(matches!(
@@ -717,32 +734,33 @@ mod tests {
 	}
 
 	#[test]
-	fn door_endpoint_matches_door_flags() {
+	fn mapped_opening_matches_passage_plan() {
 		let mut params = demo_params();
-		params.doors = TrazaloidDoors {
-			west: true,
-			..TrazaloidDoors::NONE
-		};
+		let connect = OpeningId::new("connect");
+		params.openings = Openings::new().with(
+			connect.clone(),
+			side_passage_opening(TrazaloidSide::West, params.footprint, 1.2, 2.1),
+		);
 		let t = Trazaloid::new(params);
-		assert!(t.door_endpoint(TrazaloidSide::East).is_none());
-		let west = t.door_endpoint(TrazaloidSide::West).expect("west door");
+		assert!(t.mapped_opening(&OpeningId::new("missing")).is_none());
+		let west = t.mapped_opening(&connect).expect("west door");
 		let o = west.orientation.normalize();
 		assert!(o.x < -0.9, "orientation={o:?}");
-		assert!((west.targets.0.y).abs() < 1e-3);
+		let (bl, br, tl, tr) = west.endpoint_corners();
+		assert!(bl.y.abs() < 1e-3);
 		// Tops sit inward of bottoms on the pitched west face (less-negative x).
-		let bottom_x = 0.5 * (west.targets.0.x + west.targets.1.x);
-		let top_x = 0.5 * (west.targets.2.x + west.targets.3.x);
+		let bottom_x = 0.5 * (bl.x + br.x);
+		let top_x = 0.5 * (tl.x + tr.x);
 		assert!(
 			top_x > bottom_x + 1e-3,
 			"pitched top should inset toward center: bottom_x={bottom_x} top_x={top_x}"
 		);
-		let clip = t.door_clip(TrazaloidSide::West).expect("clip");
-		assert_eq!(clip.len(), 4);
 		// Looking along outward (−X): left = +Z. Widening must expand, not shrink.
-		let half = 0.5 * west.targets.0.distance(west.targets.1);
+		let half = 0.5 * bl.distance(br);
 		let wide = west.widened(1.0);
-		let half_wide = 0.5 * wide.targets.0.distance(wide.targets.1);
+		let (wbl, wbr, ..) = wide.endpoint_corners();
+		let half_wide = 0.5 * wbl.distance(wbr);
 		assert!(half_wide > half + 0.9, "half={half} half_wide={half_wide}");
-		assert!(wide.targets.0.z > wide.targets.1.z); // BL (+Z) left of BR (−Z) when looking −X
+		assert!(wbl.z > wbr.z); // BL (+Z) left of BR (−Z) when looking −X
 	}
 }

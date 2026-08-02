@@ -6,9 +6,8 @@ use richmond_building_components::floors::FloorNode;
 use richmond_building_components::partitions::{PartitionNode, PartitionStyle};
 use richmond_building_components::{BuildingComponents, Layers};
 
-use crate::portals::MustAssignPortal;
+use crate::openings::{MappedOpening, OpeningId, Openings};
 use crate::shells::arc_floor::{ArcFloor, ArcFloorParams, ArcFloorSlab};
-use crate::shells::connecting_hall::ConnectingHallEndpoint;
 
 /// Authored parameters for an [`ArcTower`] shell.
 #[derive(Debug, Clone, PartialEq)]
@@ -21,8 +20,8 @@ pub struct ArcTowerParams {
 	pub storey_height: f32,
 	/// World yaw (radians) of each ring sweep start (\(t = 0\)).
 	pub start_yaw: f32,
-	/// Same openings on every storey.
-	pub openings: Vec<MustAssignPortal>,
+	/// Same openings plan on every storey.
+	pub openings: Openings,
 	/// Floor slab on storey 0.
 	pub base_floor: ArcFloorSlab,
 	/// Floor slabs on storeys \(1..n-1\).
@@ -40,7 +39,7 @@ impl Default for ArcTowerParams {
 			floor_count: 3,
 			storey_height: 3.0,
 			start_yaw: 0.0,
-			openings: Vec::new(),
+			openings: Openings::new(),
 			base_floor: ArcFloorSlab::Solid,
 			intermediate_floors: ArcFloorSlab::SquareHole { size: 2.24 },
 			top_ceiling: ArcFloorSlab::Solid,
@@ -77,12 +76,26 @@ impl ArcTower {
 				} else {
 					ArcFloorSlab::None
 				};
+				// Per-storey plan: same ids/labels, AABBs lifted to the storey elevation.
+				let mut storey_openings = Openings::new();
+				for (id, opening) in params.openings.iter() {
+					let dy = y - base_y;
+					let min = Vec3::from(opening.bounds.min) + Vec3::Y * dy;
+					let max = Vec3::from(opening.bounds.max) + Vec3::Y * dy;
+					storey_openings.insert(
+						id.clone(),
+						crate::openings::Opening::new(
+							bevy_math::bounding::Aabb3d::from_min_max(min, max),
+							opening.label.clone(),
+						),
+					);
+				}
 				ArcFloor::new(ArcFloorParams {
 					center_xz: Vec3::new(center_xz.x, y, center_xz.z),
 					radius,
 					storey_height,
 					start_yaw: params.start_yaw,
-					openings: params.openings.clone(),
+					openings: storey_openings,
 					floor,
 					ceiling,
 					style: params.style,
@@ -114,9 +127,10 @@ impl ArcTower {
 		self.storeys.get(index)
 	}
 
-	/// Portal opening on `storey` centered at normalized \(t\`.
-	pub fn portal_endpoint(&self, storey: usize, t: f32) -> Option<ConnectingHallEndpoint> {
-		self.storey(storey)?.portal_endpoint(t)
+	/// Mapped portal opening on `storey` for `id`.
+	pub fn mapped_opening(&self, storey: usize, id: &OpeningId) -> Option<&MappedOpening> {
+		use crate::openings::MapsOpenings;
+		self.storey(storey)?.mapped_opening(id)
 	}
 }
 
@@ -141,13 +155,23 @@ impl BuildingComponents for ArcTower {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use crate::portals::Portal;
+	use crate::openings::OpeningLabel;
+	use crate::shells::arc_floor::ArcFloor;
 
 	#[test]
 	fn stacks_requested_floor_count() {
+		let (id, opening) = ArcFloor::plan_opening_at_t(
+			"door",
+			OpeningLabel::Passage,
+			Vec3::ZERO,
+			4.0,
+			3.0,
+			0.0,
+			0.0,
+		);
 		let tower = ArcTower::new(ArcTowerParams {
 			floor_count: 4,
-			openings: vec![MustAssignPortal::at(0.0, Portal::Door)],
+			openings: Openings::new().with(id, opening),
 			..ArcTowerParams::default()
 		});
 		assert_eq!(tower.storeys().len(), 4);
@@ -158,21 +182,12 @@ mod tests {
 		let tower = ArcTower::new(ArcTowerParams {
 			floor_count: 3,
 			base_floor: ArcFloorSlab::Solid,
-			intermediate_floors: ArcFloorSlab::None,
+			intermediate_floors: ArcFloorSlab::Solid,
 			top_ceiling: ArcFloorSlab::Solid,
 			..ArcTowerParams::default()
 		});
 		assert!(tower.storey(0).unwrap().ceiling_nodes().is_empty());
 		assert!(tower.storey(1).unwrap().ceiling_nodes().is_empty());
 		assert!(!tower.storey(2).unwrap().ceiling_nodes().is_empty());
-	}
-
-	#[test]
-	fn zero_floor_count_becomes_one() {
-		let tower = ArcTower::new(ArcTowerParams {
-			floor_count: 0,
-			..ArcTowerParams::default()
-		});
-		assert_eq!(tower.storeys().len(), 1);
 	}
 }

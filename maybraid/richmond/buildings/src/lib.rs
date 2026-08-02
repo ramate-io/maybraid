@@ -62,10 +62,13 @@ pub use paneling::{
 pub use portals::{
 	ArcRegion, AssignedPortal, MustAssignPortal, Portal, PortalFootprint, WallRegion, SLICE_Y_FRAC,
 };
+pub use openings::{
+	MappedOpening, MappedOpeningQuad, MappedOpenings, MapsOpenings, Opening, OpeningId,
+	OpeningLabel, Openings,
+};
 pub use shells::{
-	ArcFloor, ArcFloorParams, ArcFloorSlab, ArcTower, ArcTowerParams, ConnectingHall,
-	ConnectingHallEndpoint, Trazaloid, TrazaloidDoors, TrazaloidParams, TrazaloidSide,
-	TrazaloidSlab,
+	side_passage_opening, ArcFloor, ArcFloorParams, ArcFloorSlab, ArcTower, ArcTowerParams,
+	ConnectingHall, Trazaloid, TrazaloidParams, TrazaloidSide, TrazaloidSlab,
 };
 pub use stacked_rings::{StackedRing, StackedRings};
 pub use wall_demo::{NoisyRectangularWall, NoisyRectangularWallParams};

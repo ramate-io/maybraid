@@ -20,11 +20,11 @@ use richmond_buildings::panel_complex::{PanelComplex, PanelComplexJointPolicy, P
 use richmond_buildings::quad_panel::QuadPanel;
 use richmond_buildings::quad_panel_complex::QuadPanelComplex;
 use richmond_buildings::{
-	ApproximatedCircle, ArcFloorSlab, ArcSweep, ArcTower, ArcTowerParams, ClippedArcSweep,
-	ClippedQuadPanel, ClippedRectangle, ClippedRectangularStrip, ClippedRuledStrip,
-	ClippedTessellatedTriangle, ConnectingHall, ConnectingHallEndpoint, ConnectingShells, RectInset,
-	RuledPitch, Tube, TubeCrossSectionNode, TubeFaces, Trazaloid, TrazaloidDoors, TrazaloidParams,
-	TrazaloidSlab,
+	side_passage_opening, ApproximatedCircle, ArcFloor, ArcFloorSlab, ArcSweep, ArcTower,
+	ArcTowerParams, ClippedArcSweep, ClippedQuadPanel, ClippedRectangle, ClippedRectangularStrip,
+	ClippedRuledStrip, ClippedTessellatedTriangle, ConnectingHall, ConnectingShells, MappedOpening,
+	MappedOpeningQuad, MapsOpenings, OpeningId, OpeningLabel, Openings, RectInset, RuledPitch,
+	Tube, TubeCrossSectionNode, TubeFaces, Trazaloid, TrazaloidParams, TrazaloidSide, TrazaloidSlab,
 };
 use richmond_buildings::stacked_rings::StackedRings;
 use richmond_buildings::tessellated_triangle_panel::TessellatedTrianglePanel;
@@ -870,18 +870,31 @@ pub fn present_preview_lod(
 			} else {
 				ArcFloorSlab::Solid
 			};
+			let mut openings = Openings::new();
+			for (id, t, label) in [
+				("window_n", 0.0, OpeningLabel::Aperture),
+				("window_e", 0.25, OpeningLabel::Aperture),
+				("door", 0.5, OpeningLabel::Passage),
+				("window_w", 0.75, OpeningLabel::Aperture),
+			] {
+				let (id, opening) = ArcFloor::plan_opening_at_t(
+					id,
+					label,
+					Vec3::ZERO,
+					*radius,
+					*storey_height,
+					0.0,
+					t,
+				);
+				openings.insert(id, opening);
+			}
 			let tower = ArcTower::new(ArcTowerParams {
 				center_xz: Vec3::ZERO,
 				radius: *radius,
 				floor_count: *floor_count,
 				storey_height: *storey_height,
 				start_yaw: 0.0,
-				openings: vec![
-					MustAssignPortal::at(0.0, Portal::Window),
-					MustAssignPortal::at(0.25, Portal::Window),
-					MustAssignPortal::at(0.5, Portal::Door),
-					MustAssignPortal::at(0.75, Portal::Window),
-				],
+				openings,
 				base_floor: if *no_base_floor {
 					ArcFloorSlab::None
 				} else {
@@ -945,19 +958,35 @@ pub fn present_preview_lod(
 			} else {
 				TrazaloidSlab::Solid
 			};
+			let footprint = Vec2::new(*footprint_x, *footprint_z);
+			let door_w = if *door_thickness > 0.0 {
+				*door_thickness
+			} else {
+				footprint.x.min(footprint.y) * *door_width_frac
+			};
+			let door_h = *lower_height * *door_height_frac;
+			let mut openings = Openings::new();
+			for (enabled, side, id) in [
+				(*door_north, TrazaloidSide::North, "north"),
+				(*door_east, TrazaloidSide::East, "east"),
+				(*door_south, TrazaloidSide::South, "south"),
+				(*door_west, TrazaloidSide::West, "west"),
+			] {
+				if enabled {
+					openings.insert(
+						id,
+						side_passage_opening(side, footprint, door_w, door_h),
+					);
+				}
+			}
 			let shell = Trazaloid::new(TrazaloidParams {
-				footprint: Vec2::new(*footprint_x, *footprint_z),
+				footprint,
 				ridge: Vec2::new(*ridge_x, *ridge_z),
 				lower_height: *lower_height,
 				upper_height: *upper_height,
 				band_vertical_offset: *band_vertical_offset,
 				waist_horizontal_offset: *waist_horizontal_offset,
-				doors: TrazaloidDoors {
-					north: *door_north,
-					east: *door_east,
-					south: *door_south,
-					west: *door_west,
-				},
+				openings,
 				door_width_frac: *door_width_frac,
 				door_thickness: *door_thickness,
 				door_height_frac: *door_height_frac,
@@ -1268,20 +1297,24 @@ fn spawn_preview(commands: &mut Commands, transform: Transform, scene: impl bevy
 }
 
 /// Demo openings: south facing +Z, east facing −X (mild kink near the origin).
-pub fn connecting_hall_demo_endpoints() -> (ConnectingHallEndpoint, ConnectingHallEndpoint) {
-	let end_a = ConnectingHallEndpoint::new(
-		Vec3::new(-1.2, 0.0, -4.0),
-		Vec3::new(1.2, 0.0, -4.0),
-		Vec3::new(-1.0, 2.4, -4.0),
-		Vec3::new(1.0, 2.4, -4.0),
+pub fn connecting_hall_demo_endpoints() -> (MappedOpening, MappedOpening) {
+	let end_a = MappedOpening::new(
+		MappedOpeningQuad::new(
+			Vec3::new(-1.2, 0.0, -4.0),
+			Vec3::new(1.2, 0.0, -4.0),
+			Vec3::new(-1.0, 2.4, -4.0),
+			Vec3::new(1.0, 2.4, -4.0),
+		),
 		Vec2::Y,
 	);
 	// Looking along −X: left = −Z, right = +Z.
-	let end_b = ConnectingHallEndpoint::new(
-		Vec3::new(4.0, 0.5, -1.2),
-		Vec3::new(4.0, 0.5, 1.2),
-		Vec3::new(4.0, 2.6, -1.0),
-		Vec3::new(4.0, 2.6, 1.0),
+	let end_b = MappedOpening::new(
+		MappedOpeningQuad::new(
+			Vec3::new(4.0, 0.5, -1.2),
+			Vec3::new(4.0, 0.5, 1.2),
+			Vec3::new(4.0, 2.6, -1.0),
+			Vec3::new(4.0, 2.6, 1.0),
+		),
 		-Vec2::X,
 	);
 	(end_a, end_b)
@@ -1338,10 +1371,10 @@ pub fn draw_connecting_hall_gizmos(mut gizmos: Gizmos, config: Res<PreviewConfig
 fn draw_opening_gizmos(
 	gizmos: &mut Gizmos,
 	map: impl Fn(Vec3) -> Vec3,
-	end: ConnectingHallEndpoint,
+	end: MappedOpening,
 	color: Color,
 ) {
-	let (bl, br, tl, tr) = end.targets;
+	let (bl, br, tl, tr) = end.endpoint_corners();
 	let r = 0.08;
 	for p in [bl, br, tl, tr] {
 		gizmos.sphere(Isometry3d::from_translation(map(p)), r, color);
@@ -1370,7 +1403,11 @@ pub fn draw_connecting_shells_gizmos(mut gizmos: Gizmos, config: Res<PreviewConf
 
 	let demo = ConnectingShells::new();
 	let floor = demo.tower().storey(0).expect("ground storey");
-	let end_tower_raw = floor.portal_endpoint(0.5).expect("ground door");
+	let connect = OpeningId::new("connect");
+	let end_tower_raw = floor
+		.mapped_opening(&connect)
+		.expect("ground door")
+		.clone();
 	let (end_tower_wide, end_traz) = demo.hall().endpoints();
 	let door_t = 0.5;
 	let seg = floor.segment_t();
@@ -1419,7 +1456,8 @@ pub fn draw_connecting_shells_gizmos(mut gizmos: Gizmos, config: Res<PreviewConf
 	draw_opening_gizmos(&mut gizmos, map, end_tower_wide, cyan);
 	draw_opening_gizmos(&mut gizmos, map, end_traz, magenta);
 
-	let mid = (end_tower_wide.targets.0 + end_tower_wide.targets.1) * 0.5;
+	let (bl, br, ..) = end_tower_wide.endpoint_corners();
+	let mid = (bl + br) * 0.5;
 	let dir =
 		Vec3::new(end_tower_wide.orientation.x, 0.0, end_tower_wide.orientation.y).normalize_or_zero();
 	gizmos

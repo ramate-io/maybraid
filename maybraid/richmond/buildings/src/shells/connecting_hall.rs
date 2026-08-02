@@ -1,7 +1,6 @@
 //! One-kink hall connecting two oriented openings via a [`Tube`].
 //!
-//! Each endpoint supplies an opening quad and an XZ facing direction (usually the
-//! opening normal — not necessarily aimed at the other end). Rays along those
+//! Each end is a [`MappedOpening`] (outward quad + XZ facing). Rays along those
 //! orientations meet in plan; the junction height and cross-section are
 //! length-weighted lerps of the two ends.
 
@@ -11,82 +10,25 @@ use richmond_building_components::joints::JointNode;
 use richmond_building_components::panels::{PanelNode, PanelStyle};
 use richmond_building_components::{BuildingComponents, Layers};
 
+use crate::openings::MappedOpening;
 use crate::paneling::panel_complex::PanelComplexJointPolicy;
 use crate::paneling::tube::{Tube, TubeCrossSectionNode, TubeFaces};
 
 const EPS: f32 = 1e-5;
 
-/// One end of a [`ConnectingHall`].
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct ConnectingHallEndpoint {
-	/// `(bottom_left, bottom_right, top_left, top_right)` looking along [`Self::orientation`].
-	pub targets: (Vec3, Vec3, Vec3, Vec3),
-	/// Opening facing direction in XZ (need not point at the other end).
-	pub orientation: Vec2,
-}
-
-impl ConnectingHallEndpoint {
-	pub fn new(
-		bottom_left: Vec3,
-		bottom_right: Vec3,
-		top_left: Vec3,
-		top_right: Vec3,
-		orientation: Vec2,
-	) -> Self {
-		Self {
-			targets: (bottom_left, bottom_right, top_left, top_right),
-			orientation,
-		}
-	}
-
-	/// Expand the opening horizontally past the door jambs by `side_overrun` meters each side.
-	///
-	/// Overrunning reads better than stopping short or going too narrow when connecting
-	/// shells backwards from openings.
-	///
-	/// Expansion is from the opening midline along ±[`Self::orientation`]'s right, so it
-	/// stays centered even if the authored corners were left/right swapped (e.g. a
-	/// face authored looking inward at the wall).
-	pub fn widened(self, side_overrun: f32) -> Self {
-		let overrun = side_overrun.max(0.0);
-		let Some(orient) = normalize_xz(self.orientation) else {
-			return self;
-		};
-		let right = Vec3::new(-orient.y, 0.0, orient.x);
-		let (bl, br, tl, tr) = self.targets;
-		let bottom_mid = (bl + br) * 0.5;
-		let top_mid = (tl + tr) * 0.5;
-		let half_b = 0.5 * bl.distance(br) + overrun;
-		let half_t = 0.5 * tl.distance(tr) + overrun;
-		Self {
-			targets: (
-				bottom_mid - right * half_b,
-				bottom_mid + right * half_b,
-				top_mid - right * half_t,
-				top_mid + right * half_t,
-			),
-			orientation: self.orientation,
-		}
-	}
-}
-
 /// Small connector: two openings → one-kink plan path → [`Tube`].
 #[derive(Debug, Clone, PartialEq)]
 pub struct ConnectingHall {
 	style: PanelStyle,
-	end_a: ConnectingHallEndpoint,
-	end_b: ConnectingHallEndpoint,
+	end_a: MappedOpening,
+	end_b: MappedOpening,
 	midpoint: Vec3,
 	stations: [TubeCrossSectionNode; 3],
 	tube: Tube,
 }
 
 impl ConnectingHall {
-	pub fn new(
-		style: PanelStyle,
-		end_a: ConnectingHallEndpoint,
-		end_b: ConnectingHallEndpoint,
-	) -> Self {
+	pub fn new(style: PanelStyle, end_a: MappedOpening, end_b: MappedOpening) -> Self {
 		match build_stations(end_a, end_b) {
 			Some((midpoint, stations)) => {
 				let tube = Tube::from_nodes(style, stations);
@@ -116,7 +58,7 @@ impl ConnectingHall {
 		}
 	}
 
-	pub fn rough_stone(end_a: ConnectingHallEndpoint, end_b: ConnectingHallEndpoint) -> Self {
+	pub fn rough_stone(end_a: MappedOpening, end_b: MappedOpening) -> Self {
 		Self::new(PanelStyle::RoughStonework, end_a, end_b)
 	}
 
@@ -139,7 +81,7 @@ impl ConnectingHall {
 		self.midpoint
 	}
 
-	pub fn endpoints(&self) -> (ConnectingHallEndpoint, ConnectingHallEndpoint) {
+	pub fn endpoints(&self) -> (MappedOpening, MappedOpening) {
 		(self.end_a, self.end_b)
 	}
 
@@ -159,8 +101,8 @@ impl BuildingComponents for ConnectingHall {
 }
 
 fn build_stations(
-	end_a: ConnectingHallEndpoint,
-	end_b: ConnectingHallEndpoint,
+	end_a: MappedOpening,
+	end_b: MappedOpening,
 ) -> Option<(Vec3, [TubeCrossSectionNode; 3])> {
 	let node_a = endpoint_to_node(end_a)?;
 	let node_b = endpoint_to_node(end_b)?;
@@ -191,8 +133,8 @@ fn build_stations(
 	Some((mid, [node_a, node_mid, node_b]))
 }
 
-fn endpoint_to_node(end: ConnectingHallEndpoint) -> Option<TubeCrossSectionNode> {
-	let (bl, br, tl, tr) = end.targets;
+fn endpoint_to_node(end: MappedOpening) -> Option<TubeCrossSectionNode> {
+	let (bl, br, tl, tr) = end.endpoint_corners();
 	let orient = normalize_xz(end.orientation)?;
 	let right = Vec3::new(-orient.y, 0.0, orient.x);
 
@@ -304,12 +246,7 @@ fn ray_intersect_xz(p_a: Vec2, d_a: Vec2, p_b: Vec2, d_b: Vec2) -> Option<(f32, 
 mod tests {
 	use super::*;
 
-	fn opening_facing(
-		center: Vec3,
-		half_w: f32,
-		half_h: f32,
-		orient: Vec2,
-	) -> ConnectingHallEndpoint {
+	fn opening_facing(center: Vec3, half_w: f32, half_h: f32, orient: Vec2) -> MappedOpening {
 		let d = normalize_xz(orient).unwrap();
 		let right = Vec3::new(-d.y, 0.0, d.x);
 		let up = Vec3::Y;
@@ -317,7 +254,7 @@ mod tests {
 		let br = center + right * half_w;
 		let tl = bl + up * (half_h * 2.0);
 		let tr = br + up * (half_h * 2.0);
-		ConnectingHallEndpoint::new(bl, br, tl, tr, orient)
+		MappedOpening::from_corners(bl, br, tl, tr, orient)
 	}
 
 	#[test]
@@ -358,20 +295,14 @@ mod tests {
 	}
 
 	#[test]
-	#[cfg(debug_assertions)]
-	#[should_panic(expected = "orientation rays do not meet")]
-	fn parallel_orientations_debug_assert() {
-		let a = opening_facing(Vec3::new(0.0, 0.0, 0.0), 1.0, 1.0, Vec2::X);
-		let b = opening_facing(Vec3::new(0.0, 0.0, 2.0), 1.0, 1.0, Vec2::X);
-		let _ = ConnectingHall::rough_stone(a, b);
-	}
-
-	#[test]
-	#[cfg(not(debug_assertions))]
-	fn parallel_orientations_yield_empty_tube() {
+	fn parallel_orientations_fall_back_to_midpoint() {
+		// Same-direction parallel rays miss; connector falls back to the plan midpoint.
 		let a = opening_facing(Vec3::new(0.0, 0.0, 0.0), 1.0, 1.0, Vec2::X);
 		let b = opening_facing(Vec3::new(0.0, 0.0, 2.0), 1.0, 1.0, Vec2::X);
 		let hall = ConnectingHall::rough_stone(a, b);
-		assert!(hall.tube().nodes().is_empty() || hall.tube().floor().pieces().is_empty());
+		let mid = hall.midpoint();
+		assert!((mid.x - 0.0).abs() < 1e-3);
+		assert!((mid.z - 1.0).abs() < 1e-3);
+		assert_eq!(hall.tube().nodes().len(), 3);
 	}
 }

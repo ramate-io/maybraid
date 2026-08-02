@@ -14,13 +14,16 @@ use richmond_building_components::panels::PanelNode;
 use richmond_building_components::partitions::{PartitionNode, PartitionStyle};
 use richmond_building_components::{BuildingComponents, Layers};
 
-use crate::portals::{MustAssignPortal, Portal};
-use crate::shells::arc_floor::ArcFloorSlab;
+use crate::openings::{MapsOpenings, OpeningId, OpeningLabel, Openings};
+use crate::shells::arc_floor::{ArcFloor, ArcFloorSlab};
 use crate::shells::arc_tower::{ArcTower, ArcTowerParams};
 use crate::shells::connecting_hall::ConnectingHall;
 use crate::shells::trazaloid::{
-	Trazaloid, TrazaloidDoors, TrazaloidParams, TrazaloidSide, TrazaloidSlab,
+	side_passage_opening, Trazaloid, TrazaloidParams, TrazaloidSide, TrazaloidSlab,
 };
+
+/// Shared contract id for the hall join on both shells.
+const CONNECT: &str = "connect";
 
 /// Door facing the trazaloid: kit sweep \(t = 0.5 → +X\) (`start_yaw = 0`).
 const DOOR_T: f32 = 0.5;
@@ -40,36 +43,57 @@ pub struct ConnectingShells {
 
 impl ConnectingShells {
 	pub fn new() -> Self {
+		let tower_center = Vec3::new(-14.0, 0.0, 0.0);
+		let radius = 4.0;
+		let storey_height = 3.0;
+		let start_yaw = 0.0;
+
+		let mut tower_openings = Openings::new();
+		for (id, t, label) in [
+			("window_n", 0.0, OpeningLabel::Aperture),
+			("window_e", 0.25, OpeningLabel::Aperture),
+			(CONNECT, DOOR_T, OpeningLabel::Passage),
+			("window_w", 0.75, OpeningLabel::Aperture),
+		] {
+			let (id, opening) = ArcFloor::plan_opening_at_t(
+				id,
+				label,
+				tower_center,
+				radius,
+				storey_height,
+				start_yaw,
+				t,
+			);
+			tower_openings.insert(id, opening);
+		}
+
 		let tower = ArcTower::new(ArcTowerParams {
 			// Door on +X sits near x ≈ -10; trazaloid west face at x = -4.
-			center_xz: Vec3::new(-14.0, 0.0, 0.0),
-			radius: 4.0,
+			center_xz: tower_center,
+			radius,
 			floor_count: 3,
-			storey_height: 3.0,
-			start_yaw: 0.0,
-			openings: vec![
-				MustAssignPortal::at(0.0, Portal::Window),
-				MustAssignPortal::at(0.25, Portal::Window),
-				MustAssignPortal::at(DOOR_T, Portal::Door),
-				MustAssignPortal::at(0.75, Portal::Window),
-			],
+			storey_height,
+			start_yaw,
+			openings: tower_openings,
 			base_floor: ArcFloorSlab::Solid,
 			intermediate_floors: ArcFloorSlab::SquareHole { size: 2.24 },
 			top_ceiling: ArcFloorSlab::Solid,
 			style: PartitionStyle::RoughStonework,
 		});
 
+		let footprint = bevy_math::Vec2::new(8.0, 6.0);
+		let connect_id = OpeningId::new(CONNECT);
 		let trazaloid = Trazaloid::new(TrazaloidParams {
-			footprint: bevy_math::Vec2::new(8.0, 6.0),
+			footprint,
 			ridge: bevy_math::Vec2::new(4.0, 3.0),
 			lower_height: 3.0,
 			upper_height: 2.5,
 			band_vertical_offset: 0.35,
 			waist_horizontal_offset: 0.25,
-			doors: TrazaloidDoors {
-				west: true,
-				..TrazaloidDoors::NONE
-			},
+			openings: Openings::new().with(
+				connect_id.clone(),
+				side_passage_opening(TrazaloidSide::West, footprint, 1.2, 2.1),
+			),
 			door_width_frac: 0.28,
 			door_thickness: 1.2,
 			door_height_frac: 0.7,
@@ -83,11 +107,11 @@ impl ConnectingShells {
 		// Hall tops on the trazaloid end follow the footprint→waist pitch (door clip
 		// points lie on that face; Tube stations keep authored `top_middle`).
 		let end_tower = tower
-			.portal_endpoint(0, DOOR_T)
+			.mapped_opening(0, &connect_id)
 			.expect("arc tower ground door")
 			.widened(TOWER_OVERRUN_M);
 		let end_traz = trazaloid
-			.door_endpoint(TrazaloidSide::West)
+			.mapped_opening(&connect_id)
 			.expect("trazaloid west door")
 			.widened(TRAZALOID_OVERRUN_M);
 		let hall = ConnectingHall::rough_stone(end_tower, end_traz);
@@ -163,8 +187,9 @@ mod tests {
 		let demo = ConnectingShells::new();
 		let (_a, end_b) = demo.hall().endpoints();
 		// West door: top should be inset (larger x) relative to bottom.
-		let bottom_x = 0.5 * (end_b.targets.0.x + end_b.targets.1.x);
-		let top_x = 0.5 * (end_b.targets.2.x + end_b.targets.3.x);
+		let (bl, br, tl, tr) = end_b.endpoint_corners();
+		let bottom_x = 0.5 * (bl.x + br.x);
+		let top_x = 0.5 * (tl.x + tr.x);
 		assert!(top_x > bottom_x + 1e-3);
 		let stations = demo.hall().stations();
 		let traz_station = stations[2];
@@ -179,7 +204,8 @@ mod tests {
 	fn tower_hall_end_on_next_clockwise_segment() {
 		let demo = ConnectingShells::new();
 		let (end_a, _) = demo.hall().endpoints();
-		let mid = (end_a.targets.0 + end_a.targets.1) * 0.5;
+		let (bl, br, ..) = end_a.endpoint_corners();
+		let mid = (bl + br) * 0.5;
 		// Clockwise of t=0.5 is decreasing t → mid toward +Z of +X.
 		assert!(mid.z > 0.5, "mid={mid:?}");
 		assert!(end_a.orientation.normalize().x > 0.7, "orient={:?}", end_a.orientation);

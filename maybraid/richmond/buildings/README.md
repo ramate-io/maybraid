@@ -31,6 +31,8 @@ Runtime paths are registered in building-components [`assets.rs`](../building-co
 | [`stacked_rings`](src/stacked_rings.rs) | Circular wall stack |
 | [`arc_spire`](src/arc_spire.rs) | Spire / storey binding helpers |
 | [`constraints`](src/constraints.rs) | Cell / boundary / circulation IR |
+| [`openings`](src/openings.rs) | Opening plans / shell records / mapped contact geometry |
+| [`shells`](src/shells.rs) | Envelope shells (`ArcFloor`, `Trazaloid`, `ConnectingHall`, …) |
 
 ### `paneling` contents
 

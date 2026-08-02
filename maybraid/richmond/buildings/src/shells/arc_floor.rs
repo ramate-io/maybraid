@@ -1,5 +1,6 @@
 //! One circular storey shell: portal ring wall plus optional floor / ceiling slabs.
 
+use bevy_math::bounding::Aabb3d;
 use bevy_math::{Vec2, Vec3};
 use lod::gen::LodSceneLevel;
 use procedural_common::NoiseParams;
@@ -8,8 +9,11 @@ use richmond_building_components::partitions::{PartitionNode, PartitionStyle};
 use richmond_building_components::{BuildingComponents, Layers, Placement};
 
 use crate::arcs::{portal_ring_wall, PortalRingParams, PortalRingWall};
-use crate::portals::{MustAssignPortal, SLICE_Y_FRAC};
-use crate::shells::connecting_hall::ConnectingHallEndpoint;
+use crate::openings::{
+	MappedOpening, MappedOpeningQuad, MappedOpenings, MapsOpenings, Opening, OpeningId,
+	OpeningLabel, Openings,
+};
+use crate::portals::{MustAssignPortal, Portal, SLICE_Y_FRAC};
 
 /// Kit segment size (degrees). Portal clips span two segments (30°); the visible
 /// omitted opening is **one** segment (15°).
@@ -51,8 +55,8 @@ pub struct ArcFloorParams {
 	pub storey_height: f32,
 	/// World yaw (radians) of the ring sweep start (\(t = 0\)).
 	pub start_yaw: f32,
-	/// Explicit openings (no optional / noise portals).
-	pub openings: Vec<MustAssignPortal>,
+	/// Opening plan (Passage / Aperture projected onto the ring; no optional / noise portals).
+	pub openings: Openings,
 	pub floor: ArcFloorSlab,
 	pub ceiling: ArcFloorSlab,
 	pub style: PartitionStyle,
@@ -65,7 +69,7 @@ impl Default for ArcFloorParams {
 			radius: 4.0,
 			storey_height: 3.0,
 			start_yaw: 0.0,
-			openings: Vec::new(),
+			openings: Openings::new(),
 			floor: ArcFloorSlab::None,
 			ceiling: ArcFloorSlab::None,
 			style: PartitionStyle::RoughStonework,
@@ -82,6 +86,10 @@ pub struct ArcFloor {
 	ceiling_nodes: Vec<FloorNode>,
 	/// Portal half-width in unit \(t\) for this ring.
 	half_t: f32,
+	/// Connectable openings honored by this storey.
+	openings: Openings,
+	/// Contact geometry for honored openings.
+	mapped: MappedOpenings,
 }
 
 impl ArcFloor {
@@ -92,13 +100,29 @@ impl ArcFloor {
 		let arc_degrees = 360.0;
 		let half_t = OPEN_HALF_DEG / arc_degrees;
 
+		let mut must_assign = Vec::new();
+		let mut openings = Openings::new();
+		let mut mapped = MappedOpenings::new();
+		let mut assigned_ts: Vec<(OpeningId, f32, Opening)> = Vec::new();
+
+		for (id, opening) in params.openings.iter() {
+			let portal = match opening.label {
+				OpeningLabel::Passage => Portal::Door,
+				OpeningLabel::Aperture => Portal::Window,
+				_ => continue,
+			};
+			let t = project_opening_t(center_xz, params.start_yaw, &opening.bounds);
+			must_assign.push(MustAssignPortal::at(t, portal));
+			assigned_ts.push((id.clone(), t, opening.clone()));
+		}
+
 		let ring_wall = portal_ring_wall(PortalRingParams {
 			center_xz,
 			radius,
 			storey_height,
 			arc_degrees,
 			start_yaw: params.start_yaw,
-			must_assign: params.openings.clone(),
+			must_assign,
 			must_not_assign: vec![],
 			portal_noise: NoiseParams::default(),
 			optional_portals: (0, 0),
@@ -109,7 +133,7 @@ impl ArcFloor {
 		let ceiling_center = center_xz + Vec3::Y * storey_height;
 		let ceiling_nodes = build_slab(ceiling_center, radius, params.ceiling);
 
-		Self {
+		let mut floor = Self {
 			params: ArcFloorParams {
 				center_xz,
 				radius,
@@ -120,7 +144,60 @@ impl ArcFloor {
 			floor_nodes,
 			ceiling_nodes,
 			half_t,
+			openings: Openings::new(),
+			mapped: MappedOpenings::new(),
+		};
+
+		for (id, t, opening) in assigned_ts {
+			let assigned = floor
+				.ring_wall
+				.portals
+				.iter()
+				.any(|p| circular_dist(p.t, t) < 1e-3);
+			if !assigned {
+				continue;
+			}
+			openings.insert(id.clone(), opening);
+			mapped.insert(id, floor.mapped_at(t));
 		}
+		floor.openings = openings;
+		floor.mapped = mapped;
+		floor
+	}
+
+	/// Authoring helper: thin passage/aperture AABB on the ring at normalized \(t\).
+	pub fn plan_opening_at_t(
+		id: impl Into<OpeningId>,
+		label: OpeningLabel,
+		center_xz: Vec3,
+		radius: f32,
+		storey_height: f32,
+		start_yaw: f32,
+		t: f32,
+	) -> (OpeningId, Opening) {
+		let id = id.into();
+		let dir = ring_dir_at_yaw(start_yaw, t);
+		let radius = radius.max(1e-4);
+		let storey_height = storey_height.max(1e-4);
+		let center = Vec3::new(center_xz.x, center_xz.y, center_xz.z);
+		let on_ring = Vec3::new(
+			center.x + dir.x * radius,
+			center.y,
+			center.z + dir.y * radius,
+		);
+		let right = Vec3::new(-dir.y, 0.0, dir.x);
+		let half_w = radius * (OPEN_HALF_DEG.to_radians()).sin().max(0.15);
+		let half_d = 0.35;
+		let h = SLICE_Y_FRAC * storey_height;
+		let min = on_ring - right * half_w - Vec3::new(dir.x, 0.0, dir.y) * half_d;
+		let max = on_ring + right * half_w + Vec3::new(dir.x, 0.0, dir.y) * half_d + Vec3::Y * h;
+		(
+			id,
+			Opening::new(
+				Aabb3d::from_min_max(min.min(max), min.max(max)),
+				label,
+			),
+		)
 	}
 
 	pub fn params(&self) -> &ArcFloorParams {
@@ -139,20 +216,6 @@ impl ArcFloor {
 		&self.ceiling_nodes
 	}
 
-	/// Opening quad for a portal centered at normalized \(t\), looking outward.
-	///
-	/// Height spans the clipped opening (ground to lintel baseline). Returns `None` when
-	/// no assigned portal lies near `t`.
-	pub fn portal_endpoint(&self, t: f32) -> Option<ConnectingHallEndpoint> {
-		let t = norm_t(t);
-		let assigned = self
-			.ring_wall
-			.portals
-			.iter()
-			.find(|p| circular_dist(p.t, t) < 1e-3)?;
-		Some(self.endpoint_at(assigned.t))
-	}
-
 	/// Portal clip half-width in unit \(t\) (two segments → 15° each side of center).
 	pub fn half_t(&self) -> f32 {
 		self.half_t
@@ -169,11 +232,7 @@ impl ArcFloor {
 	/// segment edges (jambs), not opening centers. Dir is kit local \(−X\) after
 	/// Bevy `YXZ` yaw: `(-cos φ, sin φ)`.
 	pub fn ring_dir_at(&self, t: f32) -> Vec2 {
-		let phi = self.params.start_yaw
-			+ norm_t(t) * std::f32::consts::TAU
-			+ RING_CLOCKWISE_OFFSET_DEG.to_radians();
-		let (s, c) = phi.sin_cos();
-		Vec2::new(-c, s)
+		ring_dir_at_yaw(self.params.start_yaw, t)
 	}
 
 	/// World point on the ring exterior at \(t\) (floor elevation).
@@ -186,13 +245,13 @@ impl ArcFloor {
 		Vec3::new(c.x + dir.x * r, c.y, c.z + dir.y * r)
 	}
 
-	/// Opening quad at normalized \(t\) without requiring an assigned portal.
+	/// Opening map at normalized \(t\) (does not require an assigned portal).
 	///
 	/// Visible door = **one 15° segment**. Plan-view “clockwise” along the ring
 	/// (toward \(+Z\) from \(+X\) with our yaw map) is **decreasing** \(t\), so the
 	/// segment one node clockwise of portal \(t\) is `t−30°` → `t−15°`.
 	/// Tops = bottoms + slice height.
-	pub fn endpoint_at(&self, t: f32) -> ConnectingHallEndpoint {
+	fn mapped_at(&self, t: f32) -> MappedOpening {
 		let t = norm_t(t);
 		let seg = self.segment_t();
 		// One segment clockwise of `[t−15°, t]` → `[t−30°, t−15°]`.
@@ -206,7 +265,17 @@ impl ArcFloor {
 		let tl = bl + Vec3::Y * h;
 		let tr = br + Vec3::Y * h;
 		let orientation = self.ring_dir_at(t_mid);
-		ConnectingHallEndpoint::new(bl, br, tl, tr, orientation)
+		MappedOpening::new(MappedOpeningQuad::new(bl, br, tl, tr), orientation)
+	}
+}
+
+impl MapsOpenings for ArcFloor {
+	fn openings(&self) -> &Openings {
+		&self.openings
+	}
+
+	fn mapped_opening(&self, id: &OpeningId) -> Option<&MappedOpening> {
+		self.mapped.get(id)
 	}
 }
 
@@ -338,22 +407,58 @@ fn circular_dist(a: f32, b: f32) -> f32 {
 	d.min(1.0 - d)
 }
 
+fn ring_dir_at_yaw(start_yaw: f32, t: f32) -> Vec2 {
+	let phi = start_yaw + norm_t(t) * std::f32::consts::TAU + RING_CLOCKWISE_OFFSET_DEG.to_radians();
+	let (s, c) = phi.sin_cos();
+	Vec2::new(-c, s)
+}
+
+/// Invert [`ring_dir_at_yaw`]: map a world XZ point to nearest unit \(t\) on the ring.
+fn project_opening_t(center_xz: Vec3, start_yaw: f32, bounds: &Aabb3d) -> f32 {
+	let mid = Vec3::from((bounds.min + bounds.max) * 0.5);
+	let dx = mid.x - center_xz.x;
+	let dz = mid.z - center_xz.z;
+	if dx * dx + dz * dz < 1e-10 {
+		return 0.0;
+	}
+	// dir = (-cos φ, sin φ) ⇒ φ = atan2(sin, cos) = atan2(dz, -dx)
+	let phi = dz.atan2(-dx);
+	norm_t((phi - start_yaw - RING_CLOCKWISE_OFFSET_DEG.to_radians()) / std::f32::consts::TAU)
+}
+
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use crate::portals::Portal;
+
+	fn openings_at(ts_labels: &[(&str, f32, OpeningLabel)]) -> Openings {
+		let mut openings = Openings::new();
+		for (id, t, label) in ts_labels {
+			let (id, opening) = ArcFloor::plan_opening_at_t(
+				*id,
+				label.clone(),
+				Vec3::ZERO,
+				4.0,
+				3.0,
+				0.0,
+				*t,
+			);
+			openings.insert(id, opening);
+		}
+		openings
+	}
 
 	#[test]
 	fn openings_assign_without_optional_noise() {
 		let floor = ArcFloor::new(ArcFloorParams {
-			openings: vec![
-				MustAssignPortal::at(0.0, Portal::Door),
-				MustAssignPortal::at(0.5, Portal::Window),
-			],
+			openings: openings_at(&[
+				("door", 0.0, OpeningLabel::Passage),
+				("window", 0.5, OpeningLabel::Aperture),
+			]),
 			..ArcFloorParams::default()
 		});
 		assert_eq!(floor.ring_wall().portals.len(), 2);
 		assert!(!floor.ring_wall().sweep.clip_intervals.is_empty());
+		assert_eq!(floor.openings().len(), 2);
 	}
 
 	#[test]
@@ -389,13 +494,14 @@ mod tests {
 	}
 
 	#[test]
-	fn portal_endpoint_kit_angle_map() {
+	fn mapped_opening_kit_angle_map() {
+		let connect = OpeningId::new("connect");
 		let floor = ArcFloor::new(ArcFloorParams {
-			openings: vec![
-				MustAssignPortal::at(0.0, Portal::Door),
-				MustAssignPortal::at(0.25, Portal::Window),
-				MustAssignPortal::at(0.5, Portal::Door),
-			],
+			openings: openings_at(&[
+				("north", 0.0, OpeningLabel::Passage),
+				("window", 0.25, OpeningLabel::Aperture),
+				("connect", 0.5, OpeningLabel::Passage),
+			]),
 			radius: 4.0,
 			start_yaw: 0.0,
 			center_xz: Vec3::ZERO,
@@ -407,8 +513,8 @@ mod tests {
 		assert!(at_door.y < -0.05, "clockwise of +X → −Z, got {at_door:?}");
 
 		// Door: one segment clockwise of t → `[t−30°, t−15°]` (decreasing t).
-		let east = floor.portal_endpoint(0.5).expect("t=0.5");
-		let (bl, br, tl, tr) = east.targets;
+		let east = floor.mapped_opening(&connect).expect("connect");
+		let (bl, br, tl, tr) = east.endpoint_corners();
 		let seg = floor.segment_t();
 		let expect_bl = floor.ring_point_at(0.5 - 2.0 * seg);
 		let expect_br = floor.ring_point_at(0.5 - seg);
