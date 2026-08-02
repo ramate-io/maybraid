@@ -51,14 +51,31 @@ impl Default for ArcFloorSlab {
 	}
 }
 
-/// Authored parameters for an [`ArcFloor`] shell.
+/// Authored parameters / builder for an [`ArcFloor`] shell.
+///
+/// Prefer fluent construction (`ArcFloorParams::new(…).floor(…).build()`), or
+/// pass a filled struct to [`ArcFloor::new`].
 #[derive(Debug, Clone, PartialEq)]
 pub struct ArcFloorParams {
 	/// Storey plan center; `y` is the floor elevation.
 	pub center_xz: Vec3,
 	pub radius: f32,
 	pub storey_height: f32,
-	/// Opening plan applied via Layer 1 (walls) and Layer 2 (slabs).
+	/// World-space void plan applied at construct time.
+	///
+	/// **Walls (Layer 1):** each opening’s AABB is tested against the 15° sector
+	/// AABBs around the ring ([`arc_ring_dir`](richmond_building_components::arc_ring_dir)).
+	/// Intersecting sectors omit that opening’s \(Y\) span; remaining footer /
+	/// header bands become vertically scaled slice-arc strips.
+	/// Connectable labels (`Passage` / `Aperture` / `Shaft`) that cut at least
+	/// one sector are retained and mapped to an outward contact quad on the
+	/// hit span.
+	///
+	/// **Slabs (Layer 2):** only [`OpeningLabel::cuts_slab`](crate::openings::OpeningLabel::cuts_slab)
+	/// labels (`Boundary` / `Exclusion` / `Shaft` / `Custom`) affect Solid floor
+	/// or ceiling — by intersection **scale** (centered inscribed hole, or full
+	/// slab removal when scale ≥ \(1.4\cdot R\)). Passage / aperture do not cut
+	/// slabs.
 	pub openings: Openings,
 	/// Towering ownership hint; openings may override a Solid slab.
 	pub floor: ArcFloorSlab,
@@ -81,46 +98,38 @@ impl Default for ArcFloorParams {
 	}
 }
 
-/// Builder separating authorship from opening resolution.
-#[derive(Debug, Clone)]
-pub struct ArcFloorBuilder {
-	params: ArcFloorParams,
-}
-
-impl ArcFloorBuilder {
+impl ArcFloorParams {
 	pub fn new(center_xz: Vec3, radius: f32, storey_height: f32) -> Self {
 		Self {
-			params: ArcFloorParams {
-				center_xz,
-				radius,
-				storey_height,
-				..ArcFloorParams::default()
-			},
+			center_xz,
+			radius,
+			storey_height,
+			..Self::default()
 		}
 	}
 
 	pub fn floor(mut self, floor: ArcFloorSlab) -> Self {
-		self.params.floor = floor;
+		self.floor = floor;
 		self
 	}
 
 	pub fn ceiling(mut self, ceiling: ArcFloorSlab) -> Self {
-		self.params.ceiling = ceiling;
+		self.ceiling = ceiling;
 		self
 	}
 
 	pub fn style(mut self, style: PartitionStyle) -> Self {
-		self.params.style = style;
+		self.style = style;
 		self
 	}
 
 	pub fn openings(mut self, openings: Openings) -> Self {
-		self.params.openings = openings;
+		self.openings = openings;
 		self
 	}
 
 	pub fn build(self) -> ArcFloor {
-		ArcFloor::from_params(self.params)
+		ArcFloor::from_params(self)
 	}
 }
 
@@ -138,10 +147,6 @@ pub struct ArcFloor {
 }
 
 impl ArcFloor {
-	pub fn builder(center_xz: Vec3, radius: f32, storey_height: f32) -> ArcFloorBuilder {
-		ArcFloorBuilder::new(center_xz, radius, storey_height)
-	}
-
 	pub fn new(params: ArcFloorParams) -> Self {
 		Self::from_params(params)
 	}

@@ -5,7 +5,7 @@ pub mod arc_tower;
 pub mod connecting_hall;
 pub mod trazaloid;
 
-pub use arc_floor::{ArcFloor, ArcFloorBuilder, ArcFloorParams, ArcFloorSlab};
+pub use arc_floor::{ArcFloor, ArcFloorParams, ArcFloorSlab};
 pub use arc_tower::{ArcTower, ArcTowerParams};
 pub use connecting_hall::ConnectingHall;
 pub use trazaloid::{

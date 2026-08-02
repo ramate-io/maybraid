@@ -5,7 +5,7 @@ use richmond_building_components::partitions::{Partition, SLICE_KIT_HEIGHT};
 use crate::openings::{MapsOpenings, Opening, OpeningId, OpeningLabel, Openings};
 
 use super::ring::SECTORS;
-use super::{ArcFloor, ArcFloorSlab};
+use super::{ArcFloor, ArcFloorParams, ArcFloorSlab};
 
 fn openings_at(ts_labels: &[(&str, f32, OpeningLabel)]) -> Openings {
 	let mut openings = Openings::new();
@@ -19,7 +19,7 @@ fn openings_at(ts_labels: &[(&str, f32, OpeningLabel)]) -> Openings {
 
 #[test]
 fn openings_cut_wall_partitions() -> anyhow::Result<()> {
-	let floor = ArcFloor::builder(Vec3::ZERO, 4.0, 3.0)
+	let floor = ArcFloorParams::new(Vec3::ZERO, 4.0, 3.0)
 		.openings(openings_at(&[
 			("door", 0.0, OpeningLabel::Passage),
 			("window", 0.5, OpeningLabel::Aperture), // −X
@@ -32,7 +32,7 @@ fn openings_cut_wall_partitions() -> anyhow::Result<()> {
 
 #[test]
 fn slab_none_omits_nodes() -> anyhow::Result<()> {
-	let floor = ArcFloor::builder(Vec3::ZERO, 4.0, 3.0)
+	let floor = ArcFloorParams::new(Vec3::ZERO, 4.0, 3.0)
 		.floor(ArcFloorSlab::None)
 		.ceiling(ArcFloorSlab::None)
 		.build();
@@ -43,7 +43,7 @@ fn slab_none_omits_nodes() -> anyhow::Result<()> {
 
 #[test]
 fn solid_slab_without_openings() -> anyhow::Result<()> {
-	let solid = ArcFloor::builder(Vec3::ZERO, 4.0, 3.0)
+	let solid = ArcFloorParams::new(Vec3::ZERO, 4.0, 3.0)
 		.floor(ArcFloorSlab::Solid)
 		.build();
 	// 4 caps + 1 inscribed fill
@@ -63,7 +63,7 @@ fn large_floor_opening_removes_slab() -> anyhow::Result<()> {
 			OpeningLabel::Shaft,
 		),
 	);
-	let floor = ArcFloor::builder(Vec3::ZERO, r, 3.0)
+	let floor = ArcFloorParams::new(Vec3::ZERO, r, 3.0)
 		.floor(ArcFloorSlab::Solid)
 		.openings(openings)
 		.build();
@@ -75,7 +75,7 @@ fn large_floor_opening_removes_slab() -> anyhow::Result<()> {
 fn mapped_opening_from_wall_hit() -> anyhow::Result<()> {
 	let connect = OpeningId::new("connect");
 	// t = 0 → +X (arc assets sit on local +X at yaw 0).
-	let floor = ArcFloor::builder(Vec3::ZERO, 4.0, 3.0)
+	let floor = ArcFloorParams::new(Vec3::ZERO, 4.0, 3.0)
 		.openings(openings_at(&[("connect", 0.0, OpeningLabel::Passage)]))
 		.build();
 	let east = floor
@@ -92,7 +92,7 @@ fn mapped_opening_from_wall_hit() -> anyhow::Result<()> {
 
 #[test]
 fn passage_does_not_cut_floor_slab() -> anyhow::Result<()> {
-	let floor = ArcFloor::builder(Vec3::ZERO, 4.0, 3.0)
+	let floor = ArcFloorParams::new(Vec3::ZERO, 4.0, 3.0)
 		.floor(ArcFloorSlab::Solid)
 		.openings(openings_at(&[("door", 0.0, OpeningLabel::Passage)]))
 		.build();
@@ -103,7 +103,7 @@ fn passage_does_not_cut_floor_slab() -> anyhow::Result<()> {
 
 #[test]
 fn east_door_does_not_drop_quarter_ring() -> anyhow::Result<()> {
-	let floor = ArcFloor::builder(Vec3::ZERO, 4.0, 3.0)
+	let floor = ArcFloorParams::new(Vec3::ZERO, 4.0, 3.0)
 		.openings(openings_at(&[("door", 0.0, OpeningLabel::Passage)]))
 		.build();
 	let solid_deg: f32 = floor
@@ -130,7 +130,7 @@ fn opening_aabb_and_wall_cut_share_the_same_side() -> anyhow::Result<()> {
 	let opening_x = 0.5 * (opening.bounds.min.x + opening.bounds.max.x);
 	assert!(opening_x > 3.0, "plan opening should be on +X, x={opening_x}");
 
-	let floor = ArcFloor::builder(Vec3::ZERO, 4.0, 3.0)
+	let floor = ArcFloorParams::new(Vec3::ZERO, 4.0, 3.0)
 		.openings(Openings::new().with("door", opening))
 		.build();
 	// Non-solid sectors for this door must be low indices (yaw near 0 → +X), not ~12 (−X).
@@ -159,7 +159,7 @@ fn raised_aperture_keeps_footer_strip() -> anyhow::Result<()> {
 			OpeningLabel::Aperture,
 		),
 	);
-	let floor = ArcFloor::builder(Vec3::ZERO, 4.0, 3.0)
+	let floor = ArcFloorParams::new(Vec3::ZERO, 4.0, 3.0)
 		.openings(openings)
 		.build();
 	let (sectors, parts) = floor.params().resolve_wall_sweeps();
@@ -187,7 +187,7 @@ fn raised_aperture_keeps_footer_strip() -> anyhow::Result<()> {
 #[test]
 fn solid_runs_prefer_large_sweeps() -> anyhow::Result<()> {
 	// No openings → one 180 + leftover merge into large arcs (12+12 sectors).
-	let floor = ArcFloor::builder(Vec3::ZERO, 4.0, 3.0).build();
+	let floor = ArcFloorParams::new(Vec3::ZERO, 4.0, 3.0).build();
 	let arcs = floor
 		.wall_partitions()
 		.iter()
