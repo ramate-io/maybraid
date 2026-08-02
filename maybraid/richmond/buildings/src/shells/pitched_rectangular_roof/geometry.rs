@@ -4,6 +4,7 @@ use bevy_math::Vec3;
 use richmond_building_components::panels::PanelStyle;
 
 use crate::paneling::clipped_ruled_strip::ClippedRuledStrip;
+use crate::paneling::clipped_tessellated_triangle::ClippedTessellatedTriangle;
 use crate::paneling::panel_complex::{PanelComplex, PanelComplexJointPolicy};
 use crate::paneling::ruled_strip::RuledStrip;
 use crate::paneling::tessellated_triangle_panel::TessellatedTrianglePanel;
@@ -71,7 +72,6 @@ impl RoofHalf {
 	/// Outward plan orientation for this half (away from the ridge along −Z).
 	pub(super) fn outward_orientation(eave_line: (Vec3, Vec3)) -> bevy_math::Vec2 {
 		let (_x, z) = Self::eave_frame(eave_line);
-		// Z points toward the ridge for a typical eave; outward is −Z in XZ.
 		bevy_math::Vec2::new(-z.x, -z.z)
 	}
 
@@ -106,19 +106,15 @@ impl RoofHalf {
 		style: PanelStyle,
 		joint_policy: PanelComplexJointPolicy,
 		pitch_clip: Option<Vec<Vec3>>,
+		gable_end_clips: [Option<Vec<Vec3>>; 2],
 	) -> ResolvedRoofHalf {
 		let (e0, e1) = self.eave_line;
 		let (r0, r1) = self.ridge_line;
 		let (w0, w1) = self.wall_line;
 		let (_eave_x, eave_z) = Self::eave_frame(self.eave_line);
 
-		let pitch = ClippedRuledStrip::from_lines(
-			style,
-			[e0, e1],
-			[r0, r1],
-			[pitch_clip],
-		)
-		.with_joint_policy(joint_policy);
+		let pitch = ClippedRuledStrip::from_lines(style, [e0, e1], [r0, r1], [pitch_clip])
+			.with_joint_policy(joint_policy);
 
 		let wall = if self.draw_in_wall_line {
 			Some(
@@ -153,8 +149,15 @@ impl RoofHalf {
 			let e = Self::line_end(self.eave_line, end);
 			let r = Self::line_end(self.ridge_line, end);
 			let r_wall = Self::ridge_at_wall_height(r, w);
-			gables.push(TessellatedTrianglePanel::new(style, w, e, r));
-			gables.push(TessellatedTrianglePanel::new(style, w, r, r_wall));
+			let clip = gable_end_clips[end].clone().unwrap_or_default();
+			gables.push(
+				ClippedTessellatedTriangle::new(style, w, e, r, clip.clone())
+					.with_joint_policy(joint_policy),
+			);
+			gables.push(
+				ClippedTessellatedTriangle::new(style, w, r, r_wall, clip)
+					.with_joint_policy(joint_policy),
+			);
 		}
 
 		ResolvedRoofHalf {
@@ -171,5 +174,5 @@ pub(super) struct ResolvedRoofHalf {
 	pub pitch: ClippedRuledStrip,
 	pub wall: Option<PanelComplex>,
 	pub hips: Vec<TessellatedTrianglePanel>,
-	pub gables: Vec<TessellatedTrianglePanel>,
+	pub gables: Vec<ClippedTessellatedTriangle>,
 }

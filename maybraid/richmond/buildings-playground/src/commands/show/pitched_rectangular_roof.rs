@@ -37,32 +37,58 @@ pub struct PitchedRectangularRoof {
 	///
 	/// Format: `id:label:minx,miny,minz:maxx,maxy,maxz`
 	///
-	/// Passages / apertures map to the nearest pitch half (largest per half wins).
+	/// Passages / apertures map to the nearest pitch half or drawn gable end.
 	#[arg(long = "opening", value_name = "SPEC", value_parser = parse_opening_arg, action = clap::ArgAction::Append)]
 	pub openings: Vec<OpeningArg>,
 	/// Convenience: centered aperture on the +Z pitch half.
 	#[arg(long, default_value_t = false)]
 	pub skylight: bool,
+	/// Convenience: aperture on the +X gable end wall (implies `--gables`).
+	#[arg(long, default_value_t = false)]
+	pub gable_window: bool,
 	#[command(flatten)]
 	pub transform: ShowTransform,
 }
 
 impl PitchedRectangularRoof {
 	pub fn into_preview(self) -> Result<(PreviewSubject, Transform), String> {
+		let gables = self.gables || self.gable_window;
 		let mut openings = self
 			.openings
 			.iter()
 			.cloned()
 			.map(|a| a.resolve_aabb(None))
 			.collect::<Result<Vec<_>, _>>()?;
-		if self.skylight {
-			let params = PitchedRoofParams::rectangular_hip(
+
+		let mut params = if self.no_hips && gables && self.ridge_inset <= 1e-4 {
+			PitchedRoofParams::rectangular_gable(
+				Vec2::new(self.footprint_x, self.footprint_z),
+				self.ridge_height,
+				self.eave_height,
+			)
+		} else {
+			PitchedRoofParams::rectangular_hip(
 				Vec2::new(self.footprint_x, self.footprint_z),
 				self.ridge_height,
 				self.eave_height,
 				self.ridge_inset,
-			);
-			// Large enough that the thatch hole reads clearly in the playground.
+			)
+		};
+		for half in &mut params.halves {
+			half.draw_in_wall_line = !self.no_walls;
+			half.draw_in_half_hip = if self.no_hips {
+				(false, false)
+			} else {
+				(true, true)
+			};
+			half.draw_in_half_gable_end = if gables {
+				(true, true)
+			} else {
+				(false, false)
+			};
+		}
+
+		if self.skylight {
 			let opening = PitchedRoof::pitch_opening(
 				&params.halves[0],
 				0.5,
@@ -78,6 +104,22 @@ impl PitchedRectangularRoof {
 				max: Vec3::from(opening.bounds.max),
 			});
 		}
+		if self.gable_window {
+			let opening = PitchedRoof::gable_end_opening(
+				&params.halves,
+				1,
+				2.8,
+				2.2,
+				OpeningLabel::Aperture,
+			);
+			openings.push(PreviewOpening {
+				id: "gable_win".into(),
+				label: OpeningLabel::Aperture,
+				min: Vec3::from(opening.bounds.min),
+				max: Vec3::from(opening.bounds.max),
+			});
+		}
+
 		Ok((
 			PreviewSubject::PitchedRectangularRoof {
 				footprint_x: self.footprint_x,
@@ -85,7 +127,7 @@ impl PitchedRectangularRoof {
 				ridge_height: self.ridge_height,
 				eave_height: self.eave_height,
 				ridge_inset: self.ridge_inset,
-				gables: self.gables,
+				gables,
 				no_walls: self.no_walls,
 				no_hips: self.no_hips,
 				openings,

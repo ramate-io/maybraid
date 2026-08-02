@@ -215,3 +215,25 @@ fn skylight_reduces_or_changes_pitch_panels() {
 		"expected clip to subdivide pitch (solid={solid_n} clipped={clip_n})"
 	);
 }
+
+#[test]
+fn gable_end_window_maps_and_clips_end_wall() -> anyhow::Result<()> {
+	let params = PitchedRoofParams::rectangular_gable(Vec2::new(16.0, 10.0), 7.0, 2.5);
+	assert_eq!(params.halves[0].draw_in_half_gable_end, (true, true));
+	assert_eq!(params.halves[0].draw_in_half_hip, (false, false));
+	let opening =
+		PitchedRoof::gable_end_opening(&params.halves, 1, 2.4, 2.0, OpeningLabel::Aperture);
+	let roof = params
+		.openings(Openings::new().with("gable_win", opening))
+		.build();
+	assert!(roof.mapped_opening(&OpeningId::new("gable_win")).is_some());
+	// Pitches stay solid; gable end walling is clipped.
+	assert!(matches!(
+		roof.pitches()[0].pieces()[0],
+		ClippedStripPiece::Solid(_)
+	));
+	assert!(roof
+		.gable_panels()
+		.any(|g| !g.clip.is_empty()));
+	Ok(())
+}

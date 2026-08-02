@@ -35,6 +35,16 @@ cargo run -p richmond-buildings-playground -- show pitched-rectangular-roof
 cargo run -p richmond-buildings-playground -- show pitched-rectangular-roof --gables
 cargo run -p richmond-buildings-playground -- show pitched-rectangular-roof --no-hips --gables
 cargo run -p richmond-buildings-playground -- show pitched-rectangular-roof --skylight
+# Big open gable with a window in the +X end wall:
+cargo run -p richmond-buildings-playground -- show pitched-rectangular-roof \
+  --no-hips --gables --ridge-inset 0 \
+  --footprint-x 16 --footprint-z 10 --ridge-height 7 --eave-height 2.5 \
+  --gable-window
+# Same idea with an explicit AABB on the +X gable wall:
+cargo run -p richmond-buildings-playground -- show pitched-rectangular-roof \
+  --no-hips --gables --ridge-inset 0 \
+  --footprint-x 16 --footprint-z 10 --ridge-height 7 --eave-height 2.5 \
+  --opening 'gable_win:window:7.6,2.6,-1.4:8.4,5.2,1.4'
 cargo run -p richmond-buildings-playground -- show rectangle
 cargo run -p richmond-buildings-playground -- show rectangle --preset wall
 cargo run -p richmond-buildings-playground -- show clipped-rectangle

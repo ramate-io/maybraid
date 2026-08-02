@@ -7,8 +7,8 @@
 //! run parallel at equal offset. Half-hips bank from the eave end along the
 //! eave-perpendicular (local Z) to the ridge plane.
 //!
-//! **Openings:** `Passage` / `Aperture` assign to the nearest pitch half; the
-//! largest per half wins, clips that pitch bay, and maps contact geometry.
+//! **Openings:** `Passage` / `Aperture` assign to the nearest pitch half or drawn
+//! gable end; the largest per face wins, clips that face, and maps contact.
 
 mod geometry;
 mod openings;
@@ -24,6 +24,7 @@ use richmond_building_components::{BuildingComponents, Layers};
 
 use crate::openings::{MappedOpenings, Openings};
 use crate::paneling::clipped_ruled_strip::ClippedRuledStrip;
+use crate::paneling::clipped_tessellated_triangle::ClippedTessellatedTriangle;
 use crate::paneling::panel_complex::{
 	PanelComplex, PanelComplexJointPolicy, DEFAULT_PANEL_THICKNESS,
 };
@@ -38,9 +39,9 @@ pub struct PitchedRoofParams {
 	pub halves: [RoofHalf; 2],
 	/// World-space void plan applied at construct time.
 	///
-	/// **Pitches:** `Passage` and `Aperture` openings are assigned to the nearest
-	/// half; the largest face-aligned extent on each half wins and becomes a
-	/// centered clip on that pitch bay.
+	/// **Pitches / gables:** `Passage` and `Aperture` openings are assigned to the
+	/// nearest pitch half or drawn gable end; the largest extent on each face
+	/// wins and becomes a centered clip.
 	pub openings: Openings,
 	pub style: PanelStyle,
 	pub joint_thickness: f32,
@@ -74,6 +75,22 @@ impl PitchedRoofParams {
 		eave_height: f32,
 		ridge_inset: f32,
 	) -> Self {
+		Self::axis_aligned(footprint, ridge_height, eave_height, ridge_inset, true, false)
+	}
+
+	/// Axis-aligned open gable: full-length ridge, gable end walling, no hips.
+	pub fn rectangular_gable(footprint: Vec2, ridge_height: f32, eave_height: f32) -> Self {
+		Self::axis_aligned(footprint, ridge_height, eave_height, 0.0, false, true)
+	}
+
+	fn axis_aligned(
+		footprint: Vec2,
+		ridge_height: f32,
+		eave_height: f32,
+		ridge_inset: f32,
+		hips: bool,
+		gables: bool,
+	) -> Self {
 		const OVERHANG: f32 = 0.3;
 		let half_x = footprint.x * 0.5;
 		let half_z = footprint.y * 0.5;
@@ -101,12 +118,15 @@ impl PitchedRoofParams {
 			Vec3::new(half_x, eave_height, -wall_z),
 		);
 
+		let ends = (true, true);
 		let pos = RoofHalf::new(ridge, eave_pos, wall_pos)
 			.draw_in_wall_line(true)
-			.draw_in_half_hip((true, true));
+			.draw_in_half_hip(if hips { ends } else { (false, false) })
+			.draw_in_half_gable_end(if gables { ends } else { (false, false) });
 		let neg = RoofHalf::new(ridge, eave_neg, wall_neg)
 			.draw_in_wall_line(true)
-			.draw_in_half_hip((true, true));
+			.draw_in_half_hip(if hips { ends } else { (false, false) })
+			.draw_in_half_gable_end(if gables { ends } else { (false, false) });
 
 		Self::new([pos, neg])
 	}
@@ -137,7 +157,7 @@ pub struct PitchedRoof {
 	params: PitchedRoofParams,
 	joint_policy: PanelComplexJointPolicy,
 	halves: [ResolvedRoofHalf; 2],
-	/// Winning pitch openings (at most one per half).
+	/// Winning openings (at most one per pitch half / gable end).
 	openings: Openings,
 	/// Contact geometry for those openings.
 	mapped: MappedOpenings,
@@ -148,19 +168,35 @@ impl PitchedRoof {
 		let joint_policy = PanelComplexJointPolicy::default();
 		let style = params.style;
 
-		let pitch_openings = params.resolve_pitch_openings();
+		let resolved = params.resolve_roof_openings();
 		let mut openings = Openings::new();
 		let mut mapped = MappedOpenings::new();
 		let mut pitch_clips: [Option<Vec<Vec3>>; 2] = [None, None];
-		for entry in pitch_openings.into_iter().flatten() {
+		let mut gable_clips: [Option<Vec<Vec3>>; 2] = [None, None];
+		for entry in resolved.pitch.into_iter().flatten() {
 			pitch_clips[entry.half] = Some(entry.clip);
+			mapped.insert(entry.id.clone(), entry.mapped);
+			openings.insert(entry.id, entry.opening);
+		}
+		for entry in resolved.gable.into_iter().flatten() {
+			gable_clips[entry.end] = Some(entry.clip);
 			mapped.insert(entry.id.clone(), entry.mapped);
 			openings.insert(entry.id, entry.opening);
 		}
 
 		let halves = [
-			params.halves[0].resolve(style, joint_policy, pitch_clips[0].clone()),
-			params.halves[1].resolve(style, joint_policy, pitch_clips[1].clone()),
+			params.halves[0].resolve(
+				style,
+				joint_policy,
+				pitch_clips[0].clone(),
+				gable_clips.clone(),
+			),
+			params.halves[1].resolve(
+				style,
+				joint_policy,
+				pitch_clips[1].clone(),
+				gable_clips,
+			),
 		];
 		Self {
 			params,
@@ -173,20 +209,27 @@ impl PitchedRoof {
 
 	pub fn with_joint_policy(mut self, joint_policy: PanelComplexJointPolicy) -> Self {
 		self.joint_policy = joint_policy;
+		let resolved = self.params.resolve_roof_openings();
 		let mut pitch_clips: [Option<Vec<Vec3>>; 2] = [None, None];
-		for entry in self.params.resolve_pitch_openings().into_iter().flatten() {
+		let mut gable_clips: [Option<Vec<Vec3>>; 2] = [None, None];
+		for entry in resolved.pitch.into_iter().flatten() {
 			pitch_clips[entry.half] = Some(entry.clip);
+		}
+		for entry in resolved.gable.into_iter().flatten() {
+			gable_clips[entry.end] = Some(entry.clip);
 		}
 		self.halves = [
 			self.params.halves[0].resolve(
 				self.params.style,
 				joint_policy,
 				pitch_clips[0].clone(),
+				gable_clips.clone(),
 			),
 			self.params.halves[1].resolve(
 				self.params.style,
 				joint_policy,
 				pitch_clips[1].clone(),
+				gable_clips,
 			),
 		];
 		self
@@ -208,7 +251,7 @@ impl PitchedRoof {
 		self.halves.iter().flat_map(|h| h.hips.iter())
 	}
 
-	pub fn gable_panels(&self) -> impl Iterator<Item = &TessellatedTrianglePanel> {
+	pub fn gable_panels(&self) -> impl Iterator<Item = &ClippedTessellatedTriangle> {
 		self.halves.iter().flat_map(|h| h.gables.iter())
 	}
 
@@ -233,7 +276,7 @@ impl BuildingComponents for PitchedRoof {
 				out.extend(hip.panel_nodes_for_level(level));
 			}
 			for gable in &half.gables {
-				out.extend(gable.panel_nodes_for_level(level));
+				out.extend(gable.as_complex().panel_nodes_for_level(level));
 			}
 		}
 		out
@@ -245,6 +288,9 @@ impl BuildingComponents for PitchedRoof {
 			out.extend(half.pitch.joint_nodes_for_level(level));
 			if let Some(wall) = &half.wall {
 				out.extend(wall.joint_nodes_for_level(level));
+			}
+			for gable in &half.gables {
+				out.extend(gable.as_complex().joint_nodes_for_level(level));
 			}
 		}
 		out

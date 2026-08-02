@@ -1,7 +1,7 @@
-//! Pitch-face openings: passages / apertures clip the nearest half and map contact.
+//! Pitch and gable-end openings: passages / apertures clip faces and map contact.
 
 use bevy_math::bounding::Aabb3d;
-use bevy_math::Vec3;
+use bevy_math::{Vec2, Vec3};
 
 use crate::openings::{
 	MappedOpening, MappedOpeningQuad, MapsOpenings, Opening, OpeningId, OpeningLabel, Openings,
@@ -28,11 +28,9 @@ impl PitchedRoof {
 		let depth = 0.35;
 		let center = half.pitch_point(u.clamp(0.05, 0.95), v.clamp(0.05, 0.95));
 		let (eave_x, eave_z) = RoofHalf::eave_frame(half.eave_line);
-		// Outward (away from ridge) for a shallow AABB through the pitch.
 		let outward = -eave_z;
 		let half_w = width * 0.5;
 		let half_h = height * 0.5;
-		// Approximate face-up along the generator at `u`.
 		let eave_u = half.eave_line.0.lerp(half.eave_line.1, u.clamp(0.0, 1.0));
 		let ridge_u = half.ridge_line.0.lerp(half.ridge_line.1, u.clamp(0.0, 1.0));
 		let up = (ridge_u - eave_u).normalize_or_zero();
@@ -40,9 +38,44 @@ impl PitchedRoof {
 		let max = center + eave_x * half_w + up * half_h + outward * depth * 0.25;
 		Opening::new(Aabb3d::from_min_max(min.min(max), min.max(max)), label)
 	}
+
+	/// Authoring helper: window / door AABB on the full gable end wall (both halves).
+	///
+	/// `end` is line endpoint `.0` / `.1`. `width` spans the gable base; `height` rises
+	/// toward the ridge from the wall-plate line.
+	pub fn gable_end_opening(
+		halves: &[RoofHalf; 2],
+		end: usize,
+		width: f32,
+		height: f32,
+		label: OpeningLabel,
+	) -> Opening {
+		let (e_pos, e_neg, ridge) = gable_end_corners(halves, end);
+		let width = width.max(1e-3);
+		let height = height.max(1e-3);
+		let depth = 0.4;
+		let base_mid = (e_pos + e_neg) * 0.5;
+		let across = (e_pos - e_neg).normalize_or_zero();
+		let up = (ridge - base_mid).normalize_or_zero();
+		let (eave_x, _) = RoofHalf::eave_frame(halves[0].eave_line);
+		let outward = if end == 0 { -eave_x } else { eave_x };
+		// Sit the opening above the wall plate, not flush with the peak.
+		let center = base_mid + up * (0.35 + height * 0.5);
+		let half_w = width * 0.5;
+		let half_h = height * 0.5;
+		let min = center - across * half_w - up * half_h - outward * depth;
+		let max = center + across * half_w + up * half_h + outward * depth * 0.25;
+		Opening::new(Aabb3d::from_min_max(min.min(max), min.max(max)), label)
+	}
 }
 
-/// Per-half pitch clip + mapped opening after resolution.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum OpeningFace {
+	Pitch(usize),
+	GableEnd(usize),
+}
+
+/// Resolved pitch clip (at most one per half).
 pub(super) struct PitchOpeningMap {
 	pub half: usize,
 	pub clip: Vec<Vec3>,
@@ -51,10 +84,27 @@ pub(super) struct PitchOpeningMap {
 	pub mapped: MappedOpening,
 }
 
+/// Resolved gable-end clip (at most one per line end; applied to both halves).
+pub(super) struct GableOpeningMap {
+	pub end: usize,
+	pub clip: Vec<Vec3>,
+	pub id: OpeningId,
+	pub opening: Opening,
+	pub mapped: MappedOpening,
+}
+
+pub(super) struct ResolvedRoofOpenings {
+	pub pitch: [Option<PitchOpeningMap>; 2],
+	pub gable: [Option<GableOpeningMap>; 2],
+}
+
 impl PitchedRoofParams {
-	/// Map passages / apertures onto pitch halves: largest area wins per half.
-	pub(super) fn resolve_pitch_openings(&self) -> [Option<PitchOpeningMap>; 2] {
-		let mut best: [Option<(f32, OpeningId, Opening)>; 2] = [None, None];
+	/// Map passages / apertures onto pitch halves and drawn gable ends.
+	///
+	/// Each opening goes to the nearest face; largest extent wins per face slot.
+	pub(super) fn resolve_roof_openings(&self) -> ResolvedRoofOpenings {
+		let faces = available_faces(&self.halves);
+		let mut best: Vec<(OpeningFace, f32, OpeningId, Opening)> = Vec::new();
 
 		for (id, opening) in self.openings.iter() {
 			if !matches!(
@@ -63,41 +113,60 @@ impl PitchedRoofParams {
 			) {
 				continue;
 			}
-			let Some(half) = best_half_for_bounds(&opening.bounds, &self.halves) else {
+			let Some(face) = best_face_for_bounds(&opening.bounds, &self.halves, &faces) else {
 				continue;
 			};
-			let score = pitch_extent_score(&opening.bounds, &self.halves[half]);
-			let replace = match &best[half] {
-				None => true,
-				Some((prev, ..)) => score > *prev,
-			};
-			if replace {
-				best[half] = Some((score, id.clone(), opening.clone()));
+			let score = face_extent_score(&opening.bounds, &self.halves, face);
+			if let Some(slot) = best.iter_mut().find(|(f, ..)| *f == face) {
+				if score > slot.1 {
+					*slot = (face, score, id.clone(), opening.clone());
+				}
+			} else {
+				best.push((face, score, id.clone(), opening.clone()));
 			}
 		}
 
-		let mut out: [Option<PitchOpeningMap>; 2] = [None, None];
-		for half in 0..2 {
-			let Some((_, id, opening)) = best[half].take() else {
-				continue;
-			};
-			let roof_half = &self.halves[half];
-			let (face_width, face_height) = pitch_face_extents(roof_half);
-			let (width, height) =
-				opening_dims_on_pitch(&opening.bounds, roof_half, face_width, face_height);
-			let (u, v) = opening_uv_on_pitch(&opening.bounds, roof_half);
-			let clip = centered_pitch_clip(roof_half, u, v, width, height);
-			let orientation = RoofHalf::outward_orientation(roof_half.eave_line);
-			let mapped = mapped_from_outside_clip(&clip, orientation);
-			out[half] = Some(PitchOpeningMap {
-				half,
-				clip,
-				id,
-				opening,
-				mapped,
-			});
+		let mut pitch: [Option<PitchOpeningMap>; 2] = [None, None];
+		let mut gable: [Option<GableOpeningMap>; 2] = [None, None];
+		for (face, _, id, opening) in best {
+			match face {
+				OpeningFace::Pitch(half) => {
+					let roof_half = &self.halves[half];
+					let (face_width, face_height) = pitch_face_extents(roof_half);
+					let (width, height) =
+						opening_dims_on_pitch(&opening.bounds, roof_half, face_width, face_height);
+					let (u, v) = opening_uv_on_pitch(&opening.bounds, roof_half);
+					let clip = centered_pitch_clip(roof_half, u, v, width, height);
+					let orientation = RoofHalf::outward_orientation(roof_half.eave_line);
+					let mapped = mapped_from_outside_clip(&clip, orientation);
+					pitch[half] = Some(PitchOpeningMap {
+						half,
+						clip,
+						id,
+						opening,
+						mapped,
+					});
+				}
+				OpeningFace::GableEnd(end) => {
+					let (e_pos, e_neg, ridge) = gable_end_corners(&self.halves, end);
+					let (width, height) = opening_dims_on_gable(&opening.bounds, e_pos, e_neg, ridge);
+					let clip = centered_gable_clip(e_pos, e_neg, ridge, width, height);
+					let (eave_x, _) = RoofHalf::eave_frame(self.halves[0].eave_line);
+					let outward = if end == 0 { -eave_x } else { eave_x };
+					let orientation = Vec2::new(outward.x, outward.z);
+					let mapped = mapped_from_outside_clip(&clip, orientation);
+					gable[end] = Some(GableOpeningMap {
+						end,
+						clip,
+						id,
+						opening,
+						mapped,
+					});
+				}
+			}
 		}
-		out
+
+		ResolvedRoofOpenings { pitch, gable }
 	}
 }
 
@@ -111,20 +180,65 @@ impl MapsOpenings for PitchedRoof {
 	}
 }
 
-fn best_half_for_bounds(bounds: &Aabb3d, halves: &[RoofHalf; 2]) -> Option<usize> {
+fn available_faces(halves: &[RoofHalf; 2]) -> Vec<OpeningFace> {
+	let mut faces = vec![OpeningFace::Pitch(0), OpeningFace::Pitch(1)];
+	for end in 0..2 {
+		let drawn = halves.iter().any(|h| {
+			if end == 0 {
+				h.draw_in_half_gable_end.0
+			} else {
+				h.draw_in_half_gable_end.1
+			}
+		});
+		if drawn {
+			faces.push(OpeningFace::GableEnd(end));
+		}
+	}
+	faces
+}
+
+fn gable_end_corners(halves: &[RoofHalf; 2], end: usize) -> (Vec3, Vec3, Vec3) {
+	let e_pos = RoofHalf::line_end(halves[0].eave_line, end);
+	let e_neg = RoofHalf::line_end(halves[1].eave_line, end);
+	let ridge = RoofHalf::line_end(halves[0].ridge_line, end);
+	(e_pos, e_neg, ridge)
+}
+
+fn gable_end_centroid(halves: &[RoofHalf; 2], end: usize) -> Vec3 {
+	let (e_pos, e_neg, ridge) = gable_end_corners(halves, end);
+	(e_pos + e_neg + ridge) / 3.0
+}
+
+fn best_face_for_bounds(
+	bounds: &Aabb3d,
+	halves: &[RoofHalf; 2],
+	faces: &[OpeningFace],
+) -> Option<OpeningFace> {
 	let mid = Vec3::from((bounds.min + bounds.max) * 0.5);
-	let mut best: Option<(usize, f32)> = None;
-	for (i, half) in halves.iter().enumerate() {
-		let d = mid.distance_squared(half.pitch_centroid());
+	let mut best: Option<(OpeningFace, f32)> = None;
+	for &face in faces {
+		let c = match face {
+			OpeningFace::Pitch(h) => halves[h].pitch_centroid(),
+			OpeningFace::GableEnd(end) => gable_end_centroid(halves, end),
+		};
+		let d = mid.distance_squared(c);
 		let replace = match best {
 			None => true,
 			Some((_, prev)) => d < prev,
 		};
 		if replace {
-			best = Some((i, d));
+			best = Some((face, d));
 		}
 	}
-	best.map(|(i, _)| i)
+	best.map(|(f, _)| f)
+}
+
+fn face_extent_score(bounds: &Aabb3d, halves: &[RoofHalf; 2], face: OpeningFace) -> f32 {
+	let e = Vec3::from(bounds.max - bounds.min);
+	match face {
+		OpeningFace::Pitch(h) => pitch_extent_score(bounds, &halves[h]),
+		OpeningFace::GableEnd(_) => e.x.max(e.z).max(0.0) * e.y.max(0.0),
+	}
 }
 
 fn pitch_extent_score(bounds: &Aabb3d, half: &RoofHalf) -> f32 {
@@ -172,6 +286,15 @@ fn opening_dims_on_pitch(
 	(width, height)
 }
 
+fn opening_dims_on_gable(bounds: &Aabb3d, e_pos: Vec3, e_neg: Vec3, ridge: Vec3) -> (f32, f32) {
+	let e = Vec3::from(bounds.max - bounds.min);
+	let base = e_pos.distance(e_neg).max(1e-4);
+	let rise = ((e_pos + e_neg) * 0.5).distance(ridge).max(1e-4);
+	let width = e.x.max(e.z).clamp(base * 0.05, base * 0.95);
+	let height = e.y.clamp(rise * 0.05, rise * 0.95);
+	(width, height)
+}
+
 /// Centered rectangular clip on the pitch face (`[BL, BR, TR, TL]` looking in).
 pub(crate) fn centered_pitch_clip(
 	half: &RoofHalf,
@@ -195,8 +318,32 @@ pub(crate) fn centered_pitch_clip(
 	]
 }
 
+/// Centered clip on the full gable triangle (`[BL, BR, TR, TL]` looking in).
+pub(crate) fn centered_gable_clip(
+	e_pos: Vec3,
+	e_neg: Vec3,
+	ridge: Vec3,
+	width: f32,
+	height: f32,
+) -> Vec<Vec3> {
+	let base_mid = (e_pos + e_neg) * 0.5;
+	let across = (e_pos - e_neg).normalize_or_zero();
+	let up = (ridge - base_mid).normalize_or_zero();
+	let base_span = e_pos.distance(e_neg).max(1e-4);
+	let rise = base_mid.distance(ridge).max(1e-4);
+	let half_w = (width * 0.5).min(base_span * 0.45);
+	let half_h = (height * 0.5).min(rise * 0.4);
+	let center = base_mid + up * (0.35 + half_h);
+	vec![
+		center - across * half_w - up * half_h,
+		center + across * half_w - up * half_h,
+		center + across * half_w + up * half_h,
+		center - across * half_w + up * half_h,
+	]
+}
+
 /// `clip` is `[BL, BR, TR, TL]` looking **in** from outside; map wants looking **out**.
-fn mapped_from_outside_clip(clip: &[Vec3], orientation: bevy_math::Vec2) -> MappedOpening {
+fn mapped_from_outside_clip(clip: &[Vec3], orientation: Vec2) -> MappedOpening {
 	debug_assert!(clip.len() >= 4);
 	MappedOpening::new(
 		MappedOpeningQuad::new(clip[1], clip[0], clip[2], clip[3]),
