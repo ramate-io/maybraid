@@ -389,6 +389,18 @@ mod tests {
 	}
 
 	#[test]
+	#[cfg(not(debug_assertions))]
+	fn short_input_yields_empty() {
+		let tube = RectangularNTube::from_stations(
+			PanelStyle::RoughStonework,
+			[square_station(0.0, 1.0, 2.0)],
+		);
+		assert!(tube.stations().is_empty());
+		assert!(tube.faces().is_empty());
+	}
+
+	#[test]
+	#[cfg(debug_assertions)]
 	#[should_panic(expected = "at least 2 stations")]
 	fn short_input_debug_asserts() {
 		let _ = RectangularNTube::from_stations(

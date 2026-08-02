@@ -29,6 +29,7 @@ pub mod fitted_rectangle;
 pub mod tessellated_triangle;
 pub mod tessellated_triangle_3d;
 pub mod transform;
+pub mod trazaloid;
 pub mod tube;
 pub mod wizards_tower;
 
@@ -64,6 +65,8 @@ pub enum Show {
 	ClippedRuledStrip(clipped_ruled_strip::ClippedRuledStrip),
 	/// Trapezoid cross-section polyline → four clipped ruled strip faces.
 	Tube(tube::Tube),
+	/// Two-band trapezoidal-pyramid shell with waist reveal and optional doors.
+	Trazaloid(trazaloid::Trazaloid),
 	/// Single oriented [`richmond_buildings::Rectangle`] kit (floor / wall / ceiling presets).
 	Rectangle(rectangle::Rectangle),
 	/// Oriented rectangle kit with an inset framed by rectangle kits.
@@ -118,6 +121,7 @@ impl Show {
 			Self::ClippedQuadPanel(cmd) => cmd.into_preview(),
 			Self::ClippedRuledStrip(cmd) => cmd.into_preview(),
 			Self::Tube(cmd) => cmd.into_preview(),
+			Self::Trazaloid(cmd) => cmd.into_preview(),
 			Self::Rectangle(cmd) => cmd.into_preview(),
 			Self::ClippedRectangle(cmd) => cmd.into_preview(),
 			Self::ClippedRectangularStrip(cmd) => cmd.into_preview(),
