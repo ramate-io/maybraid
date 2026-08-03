@@ -6,9 +6,11 @@
 //! the hit outer or inner side). Openings fit to authored AABB positions on the
 //! hit side / frame band — not centered approximations.
 //!
-//! **Walls:** `Passage` / `Aperture` map to a positioned [`RectInset`] on the
-//! nearest outer/inner side; largest face-aligned extent wins per side. A wide
-//! passage spanning most of a side is the intended way to open a gallery run.
+//! **Walls:** each connectable opening maps to **exactly one** outer or inner
+//! side (nearest edge; largest face-aligned extent wins on that side). A single
+//! AABB that spans half the ring does **not** clear every wall on that half —
+//! open a U / half-ring by authoring one opening per side you want removed. A
+//! wide passage spanning most of one side is the intended way to open that run.
 //! **Slabs:** only [`OpeningLabel::cuts_slab`] labels cut Solid floor / ceiling.
 
 mod geometry;
@@ -59,6 +61,9 @@ pub struct RectRingFloorParams {
 	pub storey_height: f32,
 	/// Wall / slab voids. Prefer wide connectable openings to author broad
 	/// omissions along outer or inner sides of the ring.
+	///
+	/// One opening → one wall side. To remove several sides (e.g. a U / half
+	/// ring), supply one opening per side.
 	pub openings: Openings,
 	pub floor: RectRingFloorSlab,
 	pub ceiling: RectRingFloorSlab,

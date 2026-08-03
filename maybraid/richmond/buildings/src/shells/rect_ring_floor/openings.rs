@@ -1,7 +1,9 @@
 //! Per-side wall openings for [`RectRingFloor`].
 //!
-//! Wide connectable openings are the way to author broad omissions along a ring
-//! side (there is no separate omit-interval API).
+//! Wide connectable openings author broad omissions along a ring side (no
+//! separate omit-interval API). Assignment is **one opening → one side**: the
+//! nearest outer/inner edge wins. An AABB that overlaps half the ring still
+//! only clips that single winner; clear multiple sides with multiple openings.
 
 use bevy_math::{Vec2, Vec3};
 
@@ -19,7 +21,7 @@ impl RectRingFloor {
 	/// Passage AABB centered on an outer cardinal side.
 	///
 	/// Pass a large `width` (near the side length) to author a broad omission
-	/// along that ring side — preferred over a dedicated omit-interval API.
+	/// along **that** side only. This helper does not fan out to adjacent sides.
 	pub fn side_passage_opening(
 		side: RectRingFloorSide,
 		center_xz: Vec3,
@@ -48,6 +50,10 @@ impl RectRingFloor {
 }
 
 impl RectRingFloorParams {
+	/// Map each connectable opening onto at most one edge among outer+inner sides.
+	///
+	/// Overlap with several walls does not multi-assign: only the nearest edge
+	/// (tie-break: largest face score) receives the inset.
 	pub(super) fn resolve_walls(
 		&self,
 		edges: &[WallEdge],

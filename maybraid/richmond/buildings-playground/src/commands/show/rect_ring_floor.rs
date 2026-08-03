@@ -1,7 +1,9 @@
 //! `/show rect-ring-floor` — rectangular ring storey shell.
 //!
-//! Broad wall omissions along the ring are authored with openings (wide
-//! `Passage` / `Aperture` AABBs or `side=`), not a separate omit-interval API.
+//! Broad wall omissions are authored with openings (wide `Passage` / `Aperture`
+//! AABBs or `side=`), not omit intervals. Each opening maps to one outer/inner
+//! side only — a half-ring AABB will not clear every wall on that half; use one
+//! `--opening` per side for a U / half-ring.
 
 use bevy::prelude::*;
 use clap::Args;
@@ -26,7 +28,8 @@ pub struct RectRingFloor {
 	/// Opening plan entries. Repeatable. When set, overrides `--door-*` flags.
 	///
 	/// Formats: `id:label:minx,miny,minz:maxx,maxy,maxz` or `id:label:side=south`.
-	/// Use a wide passage/aperture to author a broad omission along a ring side.
+	/// One opening → one ring side (nearest). Wide passage/aperture opens that
+	/// side; clear several sides with several openings.
 	#[arg(long = "opening", value_name = "SPEC", value_parser = parse_opening_arg, action = clap::ArgAction::Append)]
 	pub openings: Vec<OpeningArg>,
 	#[arg(long, default_value_t = false)]
