@@ -60,8 +60,8 @@ mod tests {
 	#[test]
 	fn full_storey_fit_emits_shell_panels() {
 		let confines = Confines::from_bounds(Aabb3d::from_min_max(
-			Vec3::new(-10.0, 0.0, -8.0),
-			Vec3::new(10.0, 3.5, 8.0),
+			Vec3::new(-24.0, 0.0, -18.0),
+			Vec3::new(24.0, 4.0, 18.0),
 		));
 		let (storey, regions) =
 			LesHallesFullStorey::fit_to_confines(&confines, NoiseParams::default()).unwrap();

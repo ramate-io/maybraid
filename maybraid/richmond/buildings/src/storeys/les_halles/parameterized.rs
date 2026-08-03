@@ -13,10 +13,10 @@ pub enum LesHallesShaftPlacement {
 	MidSides,
 }
 
-/// One stall-door size to try when packing along an inner-wall run.
+/// One bay size to try when packing along a wall run (stall doors or windows).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct LesHallesStallDoor {
-	/// Preferred clear door leaf width (meters).
+	/// Preferred clear leaf / aperture width (meters).
 	pub door_width: f32,
 	/// Minimum jamb / reveal on each side of the leaf.
 	pub jamb_min: f32,
@@ -24,7 +24,7 @@ pub struct LesHallesStallDoor {
 	pub allowed_error: f32,
 }
 
-/// A door placed on a straight inner-wall run (coordinates along the run).
+/// A bay placed on a straight wall run (coordinates along the run).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct LesHallesPlacedDoor {
 	/// Distance from the run start to the leaf’s start edge.
@@ -36,25 +36,27 @@ pub struct LesHallesPlacedDoor {
 /// Resolved Les Halles plan knobs.
 #[derive(Debug, Clone, PartialEq)]
 pub struct LesHallesParameterized {
-	/// Outer commercial gallery band width (meters, full band depth on each side).
+	/// Outer commercial gallery / stall band depth (meters).
 	pub gallery_width: f32,
-	/// Inner balcony / walking band width (meters).
+	/// Inner balcony / walking band depth (meters).
 	pub balcony_width: f32,
 	pub shaft_placement: LesHallesShaftPlacement,
-	/// How densely to sprinkle outer-facade apertures (`0…1`).
+	/// How densely to pack outer-facade apertures (`0…1`).
 	pub opening_density: f32,
 	/// Stall door sizes to pack along each inner-wall straight section (catalog order).
 	pub doors: Vec<LesHallesStallDoor>,
+	/// Exterior aperture sizes to pack along outer free runs (catalog order).
+	pub windows: Vec<LesHallesStallDoor>,
 }
 
-/// Minimum gallery band depth.
-pub const MIN_GALLERY_WIDTH: f32 = 2.0;
-/// Maximum gallery band depth sampled from noise.
-pub const MAX_GALLERY_WIDTH: f32 = 4.5;
+/// Minimum gallery / stall band depth.
+pub const MIN_GALLERY_WIDTH: f32 = 5.0;
+/// Maximum gallery / stall band depth sampled from noise.
+pub const MAX_GALLERY_WIDTH: f32 = 25.0;
 /// Minimum balcony band depth.
-pub const MIN_BALCONY_WIDTH: f32 = 1.2;
+pub const MIN_BALCONY_WIDTH: f32 = 3.0;
 /// Maximum balcony band depth sampled from noise.
-pub const MAX_BALCONY_WIDTH: f32 = 2.5;
+pub const MAX_BALCONY_WIDTH: f32 = 8.0;
 /// Minimum clear courtyard on each plan axis.
 pub const MIN_COURTYARD: f32 = 2.0;
 /// Minimum storey height.
@@ -72,8 +74,8 @@ impl LesHallesParameterized {
 	/// Sample knobs at the confines center. Rejects footprints that cannot host
 	/// minimum gallery + balcony + courtyard on either axis.
 	///
-	/// Stall-door catalogs are produced by
-	/// [`crate::storeys::les_halles::LesHallesFloorPlan::generate_stall_doors`].
+	/// Stall-door / window catalogs are produced by
+	/// [`crate::storeys::les_halles::LesHallesFloorPlan`].
 	pub fn sample(confines: &Confines, noise: NoiseParams) -> Result<Self, FitError> {
 		let (extent_x, extent_z, height) = footprint_extents(confines)?;
 		let min_ring = MIN_GALLERY_WIDTH + MIN_BALCONY_WIDTH;
@@ -116,6 +118,7 @@ impl LesHallesParameterized {
 
 		let opening_density = cfg.sample_unit_4d(c.x, c.y, c.z, SALT_OPENINGS);
 		let doors = crate::storeys::les_halles::LesHallesFloorPlan::generate_stall_doors(&cfg, c);
+		let windows = crate::storeys::les_halles::LesHallesFloorPlan::generate_windows(&cfg, c);
 
 		Ok(Self {
 			gallery_width,
@@ -123,6 +126,7 @@ impl LesHallesParameterized {
 			shaft_placement,
 			opening_density,
 			doors,
+			windows,
 		})
 	}
 
@@ -138,25 +142,56 @@ impl LesHallesParameterized {
 		}
 	}
 
-	/// Pack catalog doors along a run of `run_length` meters.
+	/// Corner stall-strip / shaft-clear length along each abutting inner wall.
 	///
-	/// Walks [`Self::doors`] in order; each size is placed if the remaining run
-	/// can host `door_width + 2·jamb_min` within `allowed_error`, otherwise that
-	/// size is skipped. Guarantees at least one door when any catalog entry can
-	/// fit (forced retry with the smallest feasible size).
+	/// Half the corner gallery square (which itself is `gallery_width` on a side).
+	pub fn corner_clear_len(&self) -> f32 {
+		(self.gallery_width * 0.5).max(2.0)
+	}
+
+	/// Pack [`Self::doors`] along a run; always tries to place at least one.
 	pub fn fit_doors_on_run(&self, run_length: f32) -> Vec<LesHallesPlacedDoor> {
+		Self::fit_bays_on_run(&self.doors, run_length, true)
+	}
+
+	/// Pack exterior windows along a run.
+	///
+	/// Uses a density-scaled prefix of [`Self::windows`]; does not force a window
+	/// when nothing fits (sparse facades are allowed).
+	pub fn fit_windows_on_run(&self, run_length: f32) -> Vec<LesHallesPlacedDoor> {
+		if self.windows.is_empty() || self.opening_density < 0.08 {
+			return Vec::new();
+		}
+		let n = self.windows.len();
+		let take = ((n as f32) * self.opening_density.clamp(0.15, 1.0))
+			.ceil()
+			.max(1.0) as usize;
+		let take = take.min(n);
+		Self::fit_bays_on_run(&self.windows[..take], run_length, false)
+	}
+
+	/// Pack catalog bays along a run of `run_length` meters.
+	///
+	/// Walks `bays` in order; each size is placed if the remaining run can host
+	/// `door_width + 2·jamb_min` within `allowed_error`, otherwise that size is
+	/// skipped. When `force_one`, retries with the smallest feasible size.
+	pub fn fit_bays_on_run(
+		bays: &[LesHallesStallDoor],
+		run_length: f32,
+		force_one: bool,
+	) -> Vec<LesHallesPlacedDoor> {
 		let run_length = run_length.max(0.0);
-		let mut placed = Self::pack_doors(&self.doors, run_length);
-		if placed.is_empty() {
-			placed = Self::force_one_door(&self.doors, run_length);
+		let mut placed = Self::pack_bays(bays, run_length);
+		if placed.is_empty() && force_one {
+			placed = Self::force_one_bay(bays, run_length);
 		}
 		placed
 	}
 
-	fn pack_doors(doors: &[LesHallesStallDoor], run_length: f32) -> Vec<LesHallesPlacedDoor> {
+	fn pack_bays(bays: &[LesHallesStallDoor], run_length: f32) -> Vec<LesHallesPlacedDoor> {
 		let mut cursor = 0.0_f32;
 		let mut placed = Vec::new();
-		for spec in doors {
+		for spec in bays {
 			let rem = run_length - cursor;
 			let Some((pack, door_w, jamb)) = pack_span(*spec, rem) else {
 				continue;
@@ -170,9 +205,9 @@ impl LesHallesParameterized {
 		placed
 	}
 
-	fn force_one_door(doors: &[LesHallesStallDoor], run_length: f32) -> Vec<LesHallesPlacedDoor> {
+	fn force_one_bay(bays: &[LesHallesStallDoor], run_length: f32) -> Vec<LesHallesPlacedDoor> {
 		let mut best: Option<LesHallesStallDoor> = None;
-		for spec in doors {
+		for spec in bays {
 			let min_pack =
 				(spec.door_width - spec.allowed_error).max(0.4) + 2.0 * spec.jamb_min.min(0.05);
 			if run_length + 1e-4 < min_pack {
@@ -190,7 +225,6 @@ impl LesHallesParameterized {
 			});
 		}
 		let Some(spec) = best else {
-			// Absolute fallback: whatever fits as a minimal leaf.
 			let w = (run_length * 0.5).clamp(0.8, 2.0).min(run_length.max(0.8));
 			if run_length < 0.8 {
 				return Vec::new();
@@ -224,7 +258,6 @@ fn pack_span(spec: LesHallesStallDoor, remaining: f32) -> Option<(f32, f32, f32)
 	} else {
 		remaining
 	};
-	// Prefer nominal leaf; shrink within allowed_error if the pack is tight.
 	let door_w = (pack - 2.0 * jamb)
 		.clamp(door_lo, door_hi)
 		.min(pack - 0.05)
@@ -256,35 +289,40 @@ pub(crate) fn footprint_extents(confines: &Confines) -> Result<(f32, f32, f32), 
 mod tests {
 	use super::*;
 
+	fn doors_catalog() -> Vec<LesHallesStallDoor> {
+		vec![
+			LesHallesStallDoor {
+				door_width: 3.5,
+				jamb_min: 0.25,
+				allowed_error: 0.35,
+			},
+			LesHallesStallDoor {
+				door_width: 3.0,
+				jamb_min: 0.25,
+				allowed_error: 0.3,
+			},
+			LesHallesStallDoor {
+				door_width: 2.4,
+				jamb_min: 0.2,
+				allowed_error: 0.25,
+			},
+			LesHallesStallDoor {
+				door_width: 1.8,
+				jamb_min: 0.2,
+				allowed_error: 0.2,
+			},
+		]
+	}
+
 	#[test]
 	fn fit_doors_places_multiple_on_long_run() {
 		let params = LesHallesParameterized {
-			gallery_width: 3.0,
-			balcony_width: 1.5,
+			gallery_width: 6.0,
+			balcony_width: 4.0,
 			shaft_placement: LesHallesShaftPlacement::Corners,
 			opening_density: 0.5,
-			doors: vec![
-				LesHallesStallDoor {
-					door_width: 3.5,
-					jamb_min: 0.25,
-					allowed_error: 0.35,
-				},
-				LesHallesStallDoor {
-					door_width: 3.0,
-					jamb_min: 0.25,
-					allowed_error: 0.3,
-				},
-				LesHallesStallDoor {
-					door_width: 2.4,
-					jamb_min: 0.2,
-					allowed_error: 0.25,
-				},
-				LesHallesStallDoor {
-					door_width: 1.8,
-					jamb_min: 0.2,
-					allowed_error: 0.2,
-				},
-			],
+			doors: doors_catalog(),
+			windows: Vec::new(),
 		};
 		let placed = params.fit_doors_on_run(14.0);
 		assert!(placed.len() >= 2, "expected multiple doors, got {}", placed.len());
@@ -294,8 +332,8 @@ mod tests {
 	#[test]
 	fn fit_doors_skips_too_large_then_places_smaller() {
 		let params = LesHallesParameterized {
-			gallery_width: 3.0,
-			balcony_width: 1.5,
+			gallery_width: 6.0,
+			balcony_width: 4.0,
 			shaft_placement: LesHallesShaftPlacement::Corners,
 			opening_density: 0.5,
 			doors: vec![
@@ -310,9 +348,23 @@ mod tests {
 					allowed_error: 0.2,
 				},
 			],
+			windows: Vec::new(),
 		};
 		let placed = params.fit_doors_on_run(4.0);
 		assert_eq!(placed.len(), 1);
 		assert!((placed[0].width - 2.0).abs() < 0.25);
+	}
+
+	#[test]
+	fn fit_windows_respects_low_density() {
+		let params = LesHallesParameterized {
+			gallery_width: 6.0,
+			balcony_width: 4.0,
+			shaft_placement: LesHallesShaftPlacement::Corners,
+			opening_density: 0.05,
+			doors: Vec::new(),
+			windows: doors_catalog(),
+		};
+		assert!(params.fit_windows_on_run(20.0).is_empty());
 	}
 }

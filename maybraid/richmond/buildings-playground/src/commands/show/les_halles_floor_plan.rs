@@ -11,7 +11,7 @@ use crate::preview::PreviewSubject;
 #[command(rename_all = "kebab-case")]
 pub struct LesHallesFloorPlan {
 	/// Confines size `x,y,z` (centered on XZ at the origin; Y from 0).
-	#[arg(long, default_value = "20,3.5,16", value_parser = parse_vec3_csv, allow_hyphen_values = true)]
+	#[arg(long, default_value = "48,4,36", value_parser = parse_vec3_csv, allow_hyphen_values = true)]
 	#[arg(value_name = "X,Y,Z")]
 	pub extent: Vec3,
 	/// FastNoise seed lane for spatial sampling.
