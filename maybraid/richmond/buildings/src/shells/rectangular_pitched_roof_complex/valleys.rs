@@ -57,15 +57,10 @@ fn build_valley(volumes: &[VolumeCandidate], corner: &ConcaveCorner) -> Option<V
 	let eave_point = Vec3::new(eave_x, y_eave, eave_z);
 	let eave_on_valley = closest_point_on_line(origin, dir, eave_point);
 
-	// Each ridge keeps its box-top height; it ends where it hits the other pitch.
-	let ridge_end_a = ridge_meet_on_plane(a.ridge.as_tuple(), plane_b)?;
-	let ridge_end_b = ridge_meet_on_plane(b.ridge.as_tuple(), plane_a)?;
-	// Gizmo high point: the lower of the two ridge meets along the valley.
-	let ridge_point = if ridge_end_a.y <= ridge_end_b.y {
-		closest_point_on_line(origin, dir, ridge_end_a)
-	} else {
-		closest_point_on_line(origin, dir, ridge_end_b)
-	};
+	// Unequal ridges meet by snapping both junction ends to the lower ridge
+	// height at the plan crossing (taller ridge banks down). Keeps a closed
+	// valley without a vertical gap between ridge ends.
+	let ridge_point = lowest_ridge_junction(a, b);
 
 	Some(ValleySegment {
 		eave_point: eave_on_valley,
@@ -75,9 +70,10 @@ fn build_valley(volumes: &[VolumeCandidate], corner: &ConcaveCorner) -> Option<V
 	})
 }
 
-fn ridge_meet_on_plane(ridge: (Vec3, Vec3), plane: Plane) -> Option<Vec3> {
-	let dir = ridge.1 - ridge.0;
-	plane.intersect_line(ridge.0, dir)
+/// Plan crossing of the two ridges, at the lower ridge height.
+fn lowest_ridge_junction(a: &VolumeCandidate, b: &VolumeCandidate) -> Vec3 {
+	let y_join = a.ridge.a.y.min(b.ridge.a.y);
+	Vec3::new(b.ridge.a.x, y_join, a.ridge.a.z)
 }
 
 fn closest_point_on_line(origin: Vec3, dir: Vec3, p: Vec3) -> Vec3 {
@@ -105,31 +101,21 @@ fn truncate_for_valley(
 	corner: &ConcaveCorner,
 	valley: &ValleySegment,
 ) {
-	let plane_a = volumes[corner.vol_a]
-		.pitch_plane(corner.side_a)
-		.expect("valley built from these planes");
-	let plane_b = volumes[corner.vol_b]
-		.pitch_plane(corner.side_b)
-		.expect("valley built from these planes");
-
-	let ridge_end_a = ridge_meet_on_plane(volumes[corner.vol_a].ridge.as_tuple(), plane_b)
-		.expect("ridge meet");
-	let ridge_end_b = ridge_meet_on_plane(volumes[corner.vol_b].ridge.as_tuple(), plane_a)
-		.expect("ridge meet");
+	let ridge_join = valley.ridge_point;
 
 	truncate_long_x(
 		&mut volumes[corner.vol_a],
 		corner.side_a,
 		corner.end_a,
 		valley,
-		ridge_end_a,
+		ridge_join,
 	);
 	truncate_long_z(
 		&mut volumes[corner.vol_b],
 		corner.side_b,
 		corner.end_b,
 		valley,
-		ridge_end_b,
+		ridge_join,
 	);
 
 	// Close the outside hip: meet outer eaves at the convex corner.
@@ -180,7 +166,7 @@ fn truncate_long_x(
 	ridge_end: Vec3,
 ) {
 	if let Some(end) = end {
-		// Ridge stops on the other pitch, still at this box's ridge height.
+		// Junction ridge end (may bank down to the lower of the two ridges).
 		vol.ridge.set_end(end, ridge_end);
 
 		// Facing eave / wall land on the valley. Outer rails are handled separately

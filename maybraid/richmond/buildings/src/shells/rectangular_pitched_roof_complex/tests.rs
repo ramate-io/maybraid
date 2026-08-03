@@ -43,28 +43,28 @@ fn single_gable_extends_free_ends() {
 #[test]
 fn stepped_presets_vary_ridge_and_eave_heights() {
 	let ridge_step = RectangularPitchedRoofComplexParams::l_shape_stepped_ridge().build();
-	// Each volume keeps a level ridge at its box top (no angling down to a shared Y).
+	// Junction snaps to the lower ridge; the taller free end keeps its box top.
+	let mut saw_low_junction = false;
+	let mut saw_tall_free = false;
 	for roof in ridge_step.roofs() {
 		let (a, b) = roof.params().halves[0].ridge_line;
-		assert!(
-			(a.y - b.y).abs() < 1e-3,
-			"ridge should stay level, got {a:?} → {b:?}"
-		);
+		for p in [a, b] {
+			if (p.y - 4.2).abs() < 1e-3 {
+				saw_low_junction = true;
+			}
+			if (p.y - 5.5).abs() < 1e-3 {
+				saw_tall_free = true;
+			}
+		}
 	}
-	let ridge_ys: Vec<f32> = ridge_step
-		.roofs()
-		.iter()
-		.map(|r| r.params().halves[0].ridge_line.0.y)
-		.collect();
+	assert!(saw_low_junction, "expected junction at lower ridge 4.2");
+	assert!(saw_tall_free, "expected taller free end at 5.5");
+	let v = &ridge_step.valleys()[0];
 	assert!(
-		ridge_ys.iter().any(|y| (y - 4.2).abs() < 1e-3),
-		"missing bar ridge 4.2 in {ridge_ys:?}"
+		(v.ridge_point.y - 4.2).abs() < 1e-3,
+		"valley should meet at lowest ridge, got {}",
+		v.ridge_point.y
 	);
-	assert!(
-		ridge_ys.iter().any(|y| (y - 5.5).abs() < 1e-3),
-		"missing stem ridge 5.5 in {ridge_ys:?}"
-	);
-	assert!(!ridge_step.valleys().is_empty());
 
 	let eave_step = RectangularPitchedRoofComplexParams::l_shape_stepped_eave().build();
 	let eave_ys: Vec<f32> = eave_step
