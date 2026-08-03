@@ -40,7 +40,8 @@ use richmond_buildings::portals::{MustAssignPortal, Portal};
 use richmond_buildings::wall_demo::{NoisyRectangularWall, NoisyRectangularWallParams};
 use richmond_buildings::wizards_tower::WizardsTower;
 use richmond_buildings::{
-	BedroomFillParams, CellConstraints, CirculationEntry, CirculationRequestStatus,
+	BedroomFillParams, CellConstraints, CirculationEntry, CirculationRequestStatus, Confines, Fit,
+	LesHallesFloorPlan, LesHallesFullStorey,
 };
 
 #[derive(Component)]
@@ -319,6 +320,16 @@ pub enum PreviewSubject {
 		occupancy: f32,
 		/// When true, add a required −Z door circulation region.
 		door: bool,
+	},
+	LesHallesFloorPlan {
+		/// Confines size (XZ centered at origin; Y from 0).
+		extent: Vec3,
+		seed: i32,
+	},
+	LesHallesFullStorey {
+		/// Confines size (XZ centered at origin; Y from 0).
+		extent: Vec3,
+		seed: i32,
 	},
 }
 
@@ -688,6 +699,18 @@ impl PreviewConfig {
 					extent.x, extent.y, extent.z
 				)
 			}
+			PreviewSubject::LesHallesFloorPlan { extent, seed } => {
+				format!(
+					"preview: les-halles-floor-plan (extent={:.1},{:.1},{:.1} seed={seed})",
+					extent.x, extent.y, extent.z
+				)
+			}
+			PreviewSubject::LesHallesFullStorey { extent, seed } => {
+				format!(
+					"preview: les-halles-full-storey (extent={:.1},{:.1},{:.1} seed={seed})",
+					extent.x, extent.y, extent.z
+				)
+			}
 		}
 	}
 
@@ -702,6 +725,10 @@ impl PreviewConfig {
 				Aabb3d::from_min_max(Vec3::new(-4.0, 0.0, -4.0), Vec3::new(4.0, 3.0, 4.0))
 			}
 			PreviewSubject::Bedroom { extent, .. } => Aabb3d::from_min_max(Vec3::ZERO, *extent),
+			PreviewSubject::LesHallesFloorPlan { extent, .. }
+			| PreviewSubject::LesHallesFullStorey { extent, .. } => {
+				les_halles_confines_bounds(*extent)
+			}
 			PreviewSubject::Pitch { rise, run, length, left, right, .. } => {
 				let left_w = left.map(|b| b.abs()).unwrap_or(0.0);
 				let right_w = right.map(|b| b.abs()).unwrap_or(0.0);
@@ -904,6 +931,8 @@ pub struct CachedPreview {
 	stacked_rings: Option<StackedRings>,
 	bedroom: Option<Bedroom>,
 	noisy_wall: Option<NoisyRectangularWall>,
+	les_halles_floor_plan: Option<LesHallesFloorPlan>,
+	les_halles_full_storey: Option<LesHallesFullStorey>,
 }
 
 impl CachedPreview {
@@ -917,6 +946,8 @@ impl CachedPreview {
 		self.stacked_rings = None;
 		self.bedroom = None;
 		self.noisy_wall = None;
+		self.les_halles_floor_plan = None;
+		self.les_halles_full_storey = None;
 		match &config.subject {
 			PreviewSubject::WizardsTower { noise } => {
 				let footprint = CellConstraints::cell_owned(Aabb3d::from_min_max(
@@ -959,9 +990,42 @@ impl CachedPreview {
 					..NoisyRectangularWallParams::default()
 				}));
 			}
+			PreviewSubject::LesHallesFloorPlan { extent, seed } => {
+				let confines = Confines::from_bounds(les_halles_confines_bounds(*extent));
+				let noise = NoiseParams {
+					seed: *seed,
+					..NoiseParams::default()
+				};
+				match LesHallesFloorPlan::fit_to_confines(&confines, noise) {
+					Ok((plan, _)) => self.les_halles_floor_plan = Some(plan),
+					Err(err) => {
+						bevy::log::error!("les-halles-floor-plan fit failed: {err}");
+					}
+				}
+			}
+			PreviewSubject::LesHallesFullStorey { extent, seed } => {
+				let confines = Confines::from_bounds(les_halles_confines_bounds(*extent));
+				let noise = NoiseParams {
+					seed: *seed,
+					..NoiseParams::default()
+				};
+				match LesHallesFullStorey::fit_to_confines(&confines, noise) {
+					Ok((storey, _)) => self.les_halles_full_storey = Some(storey),
+					Err(err) => {
+						bevy::log::error!("les-halles-full-storey fit failed: {err}");
+					}
+				}
+			}
 			_ => {}
 		}
 	}
+}
+
+fn les_halles_confines_bounds(extent: Vec3) -> Aabb3d {
+	let hx = extent.x.max(1e-4) * 0.5;
+	let hz = extent.z.max(1e-4) * 0.5;
+	let h = extent.y.max(1e-4);
+	Aabb3d::from_min_max(Vec3::new(-hx, 0.0, -hz), Vec3::new(hx, h, hz))
 }
 
 /// Spawn preview when the subject changes. LOD flips update host levels in-place
@@ -2006,6 +2070,24 @@ pub fn present_preview_lod(
 					&mut commands,
 					transform,
 					ComponentsOnly(bedroom).scene_with_lod(&lod_ref),
+				);
+			}
+		}
+		PreviewSubject::LesHallesFloorPlan { .. } => {
+			if let Some(plan) = cache.les_halles_floor_plan.as_ref() {
+				spawn_preview(
+					&mut commands,
+					transform,
+					ComponentsOnly(plan).scene_with_lod(&lod_ref),
+				);
+			}
+		}
+		PreviewSubject::LesHallesFullStorey { .. } => {
+			if let Some(storey) = cache.les_halles_full_storey.as_ref() {
+				spawn_preview(
+					&mut commands,
+					transform,
+					ComponentsOnly(storey).scene_with_lod(&lod_ref),
 				);
 			}
 		}

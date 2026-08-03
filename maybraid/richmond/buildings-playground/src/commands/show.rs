@@ -35,6 +35,8 @@ pub mod connecting_hall;
 pub mod fitted_rectangle;
 pub mod circ_ring_floor;
 pub mod i_floor;
+pub mod les_halles_floor_plan;
+pub mod les_halles_full_storey;
 pub mod rect_floor;
 pub mod rect_ring_floor;
 pub mod rounded_rect_floor;
@@ -140,6 +142,10 @@ pub enum Show {
 	StackedRings(stacked_rings::StackedRings),
 	/// Hierarchical bedroom (closet / bed / nightstand / ensuite placeholders).
 	Bedroom(bedroom::Bedroom),
+	/// Les Halles floor plan (ring shell + residual within cells).
+	LesHallesFloorPlan(les_halles_floor_plan::LesHallesFloorPlan),
+	/// Les Halles full storey (floor plan shell; child fills deferred).
+	LesHallesFullStorey(les_halles_full_storey::LesHallesFullStorey),
 }
 
 impl Show {
@@ -187,6 +193,8 @@ impl Show {
 			Self::WizardsTower(cmd) => Ok(cmd.into_preview()),
 			Self::StackedRings(cmd) => Ok(cmd.into_preview()),
 			Self::Bedroom(cmd) => Ok(cmd.into_preview()),
+			Self::LesHallesFloorPlan(cmd) => Ok(cmd.into_preview()),
+			Self::LesHallesFullStorey(cmd) => Ok(cmd.into_preview()),
 		};
 		match preview {
 			Ok((subject, transform)) => {

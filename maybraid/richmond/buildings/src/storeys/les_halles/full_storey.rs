@@ -1,4 +1,7 @@
-//! Les Halles full storey: floor plan + rectangular ring shell.
+//! Les Halles full storey: floor plan plus (future) child typology fills.
+//!
+//! The ring shell lives on [`LesHallesFloorPlan`]. This type fits that plan and
+//! leaves residual [`FillableRegions::within`] for shops / stairs / furniture.
 
 use lod::gen::LodSceneLevel;
 use procedural_common::NoiseParams;
@@ -7,24 +10,21 @@ use richmond_building_components::panels::PanelNode;
 use richmond_building_components::{BuildingComponents, Layers};
 
 use crate::fit::{Confines, FillableRegions, Fit, FitError};
-use crate::shells::rect_ring_floor::{RectRingFloor, RectRingFloorParams, RectRingFloorSlab};
 
 use super::floor_plan::LesHallesFloorPlan;
 
-/// Shell-backed Les Halles storey. Child typology fills remain in residual
-/// [`FillableRegions::within`] for a later pass.
+/// Full Les Halles storey. Shell geometry is on [`Self::floor_plan`]; child fills
+/// are not authored in this slice and remain in residual `within` regions.
 #[derive(Debug, Clone, PartialEq)]
 pub struct LesHallesFullStorey {
 	pub floor_plan: LesHallesFloorPlan,
-	pub shell: RectRingFloor,
 }
 
 impl LesHallesFullStorey {
-	/// Build a shell-backed storey from an already-fitted floor plan.
+	/// Wrap an already-fitted floor plan (towering / reuse path).
 	pub fn from_floor_plan(floor_plan: LesHallesFloorPlan) -> (Self, FillableRegions) {
 		let regions = floor_plan.fillable_regions();
-		let shell = build_shell(&floor_plan);
-		(Self { floor_plan, shell }, regions)
+		(Self { floor_plan }, regions)
 	}
 }
 
@@ -34,33 +34,18 @@ impl Fit for LesHallesFullStorey {
 		noise: NoiseParams,
 	) -> Result<(Self, FillableRegions), FitError> {
 		let (floor_plan, regions) = LesHallesFloorPlan::fit_to_confines(confines, noise)?;
-		let shell = build_shell(&floor_plan);
-		Ok((Self { floor_plan, shell }, regions))
+		Ok((Self { floor_plan }, regions))
 	}
 }
 
 impl BuildingComponents for LesHallesFullStorey {
 	fn panel_nodes_for_level(&self, level: LodSceneLevel) -> Layers<PanelNode> {
-		self.shell.panel_nodes_for_level(level)
+		self.floor_plan.panel_nodes_for_level(level)
 	}
 
 	fn joint_nodes_for_level(&self, level: LodSceneLevel) -> Layers<JointNode> {
-		self.shell.joint_nodes_for_level(level)
+		self.floor_plan.joint_nodes_for_level(level)
 	}
-}
-
-fn build_shell(floor_plan: &LesHallesFloorPlan) -> RectRingFloor {
-	RectRingFloor::new(
-		RectRingFloorParams::new(
-			floor_plan.center_xz,
-			floor_plan.outer,
-			floor_plan.inner,
-			floor_plan.storey_height,
-		)
-		.floor(RectRingFloorSlab::Solid)
-		.ceiling(RectRingFloorSlab::Solid)
-		.openings(floor_plan.openings.clone()),
-	)
 }
 
 #[cfg(test)]
@@ -82,10 +67,9 @@ mod tests {
 			LesHallesFullStorey::fit_to_confines(&confines, NoiseParams::default()).unwrap();
 		assert!(!regions.within.is_empty());
 		assert_eq!(regions.atop.len(), 1);
-		assert!(storey.shell.wall_count() > 0);
-		assert!(storey.shell.has_floor());
+		assert!(storey.floor_plan.shell.wall_count() >= 4);
+		assert!(storey.floor_plan.shell.has_floor());
 		let panels = storey.panel_nodes_for_level(LodSceneLevel::High);
 		assert!(!panels.is_empty());
-		assert!(storey.shell.wall_count() >= 4);
 	}
 }

@@ -1,18 +1,23 @@
-//! Les Halles floor plan: ring structure, shafts, and residual fill regions.
+//! Les Halles floor plan: ring shell, shafts, and residual fill regions.
 
 use bevy_math::bounding::{Aabb2d, Aabb3d};
 use bevy_math::{Vec2, Vec3};
+use lod::gen::LodSceneLevel;
 use procedural_common::NoiseParams;
+use richmond_building_components::joints::JointNode;
+use richmond_building_components::panels::PanelNode;
+use richmond_building_components::{BuildingComponents, Layers};
 
 use crate::fit::{Confines, FillableRegions, Fit, FitError, StackRegion};
 use crate::openings::{Opening, OpeningId, OpeningLabel, Openings};
+use crate::shells::rect_ring_floor::{RectRingFloor, RectRingFloorParams, RectRingFloorSlab};
 
 use super::parameterized::{
 	footprint_extents, LesHallesParameterized, LesHallesShaftPlacement, SHAFT_SIDE,
 };
 use super::SCOPE;
 
-/// Structural Les Halles plan (no shell mesh yet).
+/// Structural Les Halles plan: rectangular-ring shell plus residual fill cells.
 #[derive(Debug, Clone, PartialEq)]
 pub struct LesHallesFloorPlan {
 	pub parameterized: LesHallesParameterized,
@@ -28,6 +33,8 @@ pub struct LesHallesFloorPlan {
 	pub openings: Openings,
 	/// Shaft volumes (same bounds as shaft openings / within cells).
 	pub shaft_bounds: Vec<Aabb3d>,
+	/// Outer/inner gallery walls + frame slabs for this plan.
+	pub shell: RectRingFloor,
 }
 
 impl LesHallesFloorPlan {
@@ -52,19 +59,19 @@ impl LesHallesFloorPlan {
 		let outer = Vec2::new(extent_x, extent_z);
 		let inner = Vec2::new(min_courtyard_x, min_courtyard_z);
 
-		let shaft_bounds = shaft_aabbs(
-			center_xz,
-			outer,
-			params.gallery_width,
-			params.balcony_width,
-			height,
-			params.shaft_placement,
-		);
+		let shaft_bounds =
+			Self::shaft_aabbs(center_xz, outer, params.gallery_width, height, params.shaft_placement);
 
 		let mut openings = confines.openings.clone();
-		let generated =
-			generated_openings(center_xz, outer, height, params.opening_density, &shaft_bounds);
-		openings.extend(&generated);
+		openings.extend(&Self::generated_openings(
+			center_xz,
+			outer,
+			height,
+			params.opening_density,
+			&shaft_bounds,
+		));
+
+		let shell = Self::build_shell(center_xz, outer, inner, height, &openings);
 
 		let plan = Self {
 			parameterized: params,
@@ -74,7 +81,8 @@ impl LesHallesFloorPlan {
 			storey_height: height,
 			roll: confines.roll,
 			openings,
-			shaft_bounds: shaft_bounds.clone(),
+			shaft_bounds,
+			shell,
 		};
 
 		let regions = plan.fillable_regions();
@@ -99,16 +107,16 @@ impl LesHallesFloorPlan {
 		let mut within = Vec::new();
 
 		// Gallery bands (outer commercial ring), four sides.
-		within.push(band_confine(ox0, ox1, oz0, oz0 + gx, y0, y1, self.roll));
-		within.push(band_confine(ox0, ox1, oz1 - gx, oz1, y0, y1, self.roll));
-		within.push(band_confine(ox1 - gx, ox1, oz0 + gx, oz1 - gx, y0, y1, self.roll));
-		within.push(band_confine(ox0, ox0 + gx, oz0 + gx, oz1 - gx, y0, y1, self.roll));
+		within.push(Self::band_confine(ox0, ox1, oz0, oz0 + gx, y0, y1, self.roll));
+		within.push(Self::band_confine(ox0, ox1, oz1 - gx, oz1, y0, y1, self.roll));
+		within.push(Self::band_confine(ox1 - gx, ox1, oz0 + gx, oz1 - gx, y0, y1, self.roll));
+		within.push(Self::band_confine(ox0, ox0 + gx, oz0 + gx, oz1 - gx, y0, y1, self.roll));
 
 		// Balcony bands (inner walking ring), four sides.
-		within.push(band_confine(ix0 - bx, ix1 + bx, iz0 - bx, iz0, y0, y1, self.roll));
-		within.push(band_confine(ix0 - bx, ix1 + bx, iz1, iz1 + bx, y0, y1, self.roll));
-		within.push(band_confine(ix1, ix1 + bx, iz0, iz1, y0, y1, self.roll));
-		within.push(band_confine(ix0 - bx, ix0, iz0, iz1, y0, y1, self.roll));
+		within.push(Self::band_confine(ix0 - bx, ix1 + bx, iz0 - bx, iz0, y0, y1, self.roll));
+		within.push(Self::band_confine(ix0 - bx, ix1 + bx, iz1, iz1 + bx, y0, y1, self.roll));
+		within.push(Self::band_confine(ix1, ix1 + bx, iz0, iz1, y0, y1, self.roll));
+		within.push(Self::band_confine(ix0 - bx, ix0, iz0, iz1, y0, y1, self.roll));
 
 		for (i, shaft) in self.shaft_bounds.iter().enumerate() {
 			let mut openings = Openings::new();
@@ -131,6 +139,154 @@ impl LesHallesFloorPlan {
 
 		FillableRegions { within, atop }
 	}
+
+	/// Build a residual [`Confines`] cell for one axis-aligned band of the ring.
+	///
+	/// The gallery and balcony are each split into four side bands (S/N/E/W).
+	/// Those bands are not mesh geometry — they are the `within` fill slots that a
+	/// later Full\* pass (shops, furniture, stairs) consumes. Empty `openings` here
+	/// means “no extra voids inside this cell yet”; shaft cells carry their own
+	/// shaft opening instead.
+	fn band_confine(
+		min_x: f32,
+		max_x: f32,
+		min_z: f32,
+		max_z: f32,
+		y0: f32,
+		y1: f32,
+		roll: f32,
+	) -> Confines {
+		Confines::new(
+			Aabb3d::from_min_max(Vec3::new(min_x, y0, min_z), Vec3::new(max_x, y1, max_z)),
+			roll,
+			Openings::new(),
+		)
+	}
+
+	/// Shaft AABBs in the gallery band (corners or mid-sides).
+	fn shaft_aabbs(
+		center_xz: Vec3,
+		outer: Vec2,
+		gallery_width: f32,
+		height: f32,
+		placement: LesHallesShaftPlacement,
+	) -> Vec<Aabb3d> {
+		let y0 = center_xz.y;
+		let y1 = y0 + height;
+		let half = SHAFT_SIDE * 0.5;
+		let ox0 = center_xz.x - outer.x * 0.5;
+		let ox1 = center_xz.x + outer.x * 0.5;
+		let oz0 = center_xz.z - outer.y * 0.5;
+		let oz1 = center_xz.z + outer.y * 0.5;
+		// Place shafts in the gallery band, inset from the outer wall.
+		let inset = gallery_width * 0.5;
+
+		let centers: Vec<Vec2> = match placement {
+			LesHallesShaftPlacement::Corners => vec![
+				Vec2::new(ox0 + inset, oz0 + inset),
+				Vec2::new(ox1 - inset, oz0 + inset),
+				Vec2::new(ox1 - inset, oz1 - inset),
+				Vec2::new(ox0 + inset, oz1 - inset),
+			],
+			LesHallesShaftPlacement::MidSides => vec![
+				Vec2::new(center_xz.x, oz0 + inset),
+				Vec2::new(ox1 - inset, center_xz.z),
+				Vec2::new(center_xz.x, oz1 - inset),
+				Vec2::new(ox0 + inset, center_xz.z),
+			],
+		};
+
+		centers
+			.into_iter()
+			.map(|c| {
+				Aabb3d::from_min_max(
+					Vec3::new(c.x - half, y0, c.y - half),
+					Vec3::new(c.x + half, y1, c.y + half),
+				)
+			})
+			.collect()
+	}
+
+	/// Plan-authored gallery passages / apertures plus shaft voids.
+	fn generated_openings(
+		center_xz: Vec3,
+		outer: Vec2,
+		height: f32,
+		opening_density: f32,
+		shaft_bounds: &[Aabb3d],
+	) -> Openings {
+		let mut openings = Openings::new();
+		let y0 = center_xz.y;
+		let door_h = (height * 0.72).clamp(2.0, height.max(2.0));
+		let win_h0 = y0 + height * 0.35;
+		let win_h1 = y0 + height * 0.75;
+		let ox0 = center_xz.x - outer.x * 0.5;
+		let ox1 = center_xz.x + outer.x * 0.5;
+		let oz0 = center_xz.z - outer.y * 0.5;
+		let oz1 = center_xz.z + outer.y * 0.5;
+		let wall_t = 0.35;
+
+		// Always: one passage mid-south on the outer gallery wall.
+		openings.insert(
+			OpeningId::scoped(SCOPE, "gallery_passage", "s"),
+			Opening::passage(Aabb3d::from_min_max(
+				Vec3::new(center_xz.x - 0.7, y0, oz0 - wall_t * 0.5),
+				Vec3::new(center_xz.x + 0.7, y0 + door_h, oz0 + wall_t * 0.5),
+			)),
+		);
+
+		// Density-driven extra apertures on outer N/E/W.
+		let extra = ((opening_density * 3.0).floor() as usize).min(3);
+		let sides: [(&str, Vec3, Vec3); 3] = [
+			(
+				"n",
+				Vec3::new(center_xz.x - 0.6, win_h0, oz1 - wall_t * 0.5),
+				Vec3::new(center_xz.x + 0.6, win_h1, oz1 + wall_t * 0.5),
+			),
+			(
+				"e",
+				Vec3::new(ox1 - wall_t * 0.5, win_h0, center_xz.z - 0.6),
+				Vec3::new(ox1 + wall_t * 0.5, win_h1, center_xz.z + 0.6),
+			),
+			(
+				"w",
+				Vec3::new(ox0 - wall_t * 0.5, win_h0, center_xz.z - 0.6),
+				Vec3::new(ox0 + wall_t * 0.5, win_h1, center_xz.z + 0.6),
+			),
+		];
+		for (i, (slot, min, max)) in sides.iter().enumerate() {
+			if i < extra {
+				openings.insert(
+					OpeningId::scoped(SCOPE, "gallery_aperture", slot),
+					Opening::aperture(Aabb3d::from_min_max(*min, *max)),
+				);
+			}
+		}
+
+		for (i, shaft) in shaft_bounds.iter().enumerate() {
+			openings.insert(
+				OpeningId::scoped(SCOPE, "shaft", format!("{i}")),
+				Opening::new(*shaft, OpeningLabel::Shaft),
+			);
+		}
+
+		openings
+	}
+
+	fn build_shell(
+		center_xz: Vec3,
+		outer: Vec2,
+		inner: Vec2,
+		storey_height: f32,
+		openings: &Openings,
+	) -> RectRingFloor {
+		RectRingFloor::new(
+			RectRingFloorParams::new(center_xz, outer, inner, storey_height)
+				.floor(RectRingFloorSlab::Solid)
+				.ceiling(RectRingFloorSlab::Solid)
+				.openings(openings.clone()),
+		)
+	}
 }
 
 impl Fit for LesHallesFloorPlan {
@@ -143,129 +299,14 @@ impl Fit for LesHallesFloorPlan {
 	}
 }
 
-fn band_confine(
-	min_x: f32,
-	max_x: f32,
-	min_z: f32,
-	max_z: f32,
-	y0: f32,
-	y1: f32,
-	roll: f32,
-) -> Confines {
-	Confines::new(
-		Aabb3d::from_min_max(Vec3::new(min_x, y0, min_z), Vec3::new(max_x, y1, max_z)),
-		roll,
-		Openings::new(),
-	)
-}
-
-fn shaft_aabbs(
-	center_xz: Vec3,
-	outer: Vec2,
-	gallery_width: f32,
-	_balcony_width: f32,
-	height: f32,
-	placement: LesHallesShaftPlacement,
-) -> Vec<Aabb3d> {
-	let y0 = center_xz.y;
-	let y1 = y0 + height;
-	let half = SHAFT_SIDE * 0.5;
-	let ox0 = center_xz.x - outer.x * 0.5;
-	let ox1 = center_xz.x + outer.x * 0.5;
-	let oz0 = center_xz.z - outer.y * 0.5;
-	let oz1 = center_xz.z + outer.y * 0.5;
-	// Place shafts in the gallery band, inset from the outer wall.
-	let inset = gallery_width * 0.5;
-
-	let centers: Vec<Vec2> = match placement {
-		LesHallesShaftPlacement::Corners => vec![
-			Vec2::new(ox0 + inset, oz0 + inset),
-			Vec2::new(ox1 - inset, oz0 + inset),
-			Vec2::new(ox1 - inset, oz1 - inset),
-			Vec2::new(ox0 + inset, oz1 - inset),
-		],
-		LesHallesShaftPlacement::MidSides => vec![
-			Vec2::new(center_xz.x, oz0 + inset),
-			Vec2::new(ox1 - inset, center_xz.z),
-			Vec2::new(center_xz.x, oz1 - inset),
-			Vec2::new(ox0 + inset, center_xz.z),
-		],
-	};
-
-	centers
-		.into_iter()
-		.map(|c| {
-			Aabb3d::from_min_max(
-				Vec3::new(c.x - half, y0, c.y - half),
-				Vec3::new(c.x + half, y1, c.y + half),
-			)
-		})
-		.collect()
-}
-
-fn generated_openings(
-	center_xz: Vec3,
-	outer: Vec2,
-	height: f32,
-	opening_density: f32,
-	shaft_bounds: &[Aabb3d],
-) -> Openings {
-	let mut openings = Openings::new();
-	let y0 = center_xz.y;
-	let door_h = (height * 0.72).clamp(2.0, height.max(2.0));
-	let win_h0 = y0 + height * 0.35;
-	let win_h1 = y0 + height * 0.75;
-	let ox0 = center_xz.x - outer.x * 0.5;
-	let ox1 = center_xz.x + outer.x * 0.5;
-	let oz0 = center_xz.z - outer.y * 0.5;
-	let oz1 = center_xz.z + outer.y * 0.5;
-	let wall_t = 0.35;
-
-	// Always: one passage mid-south on the outer gallery wall.
-	openings.insert(
-		OpeningId::scoped(SCOPE, "gallery_passage", "s"),
-		Opening::passage(Aabb3d::from_min_max(
-			Vec3::new(center_xz.x - 0.7, y0, oz0 - wall_t * 0.5),
-			Vec3::new(center_xz.x + 0.7, y0 + door_h, oz0 + wall_t * 0.5),
-		)),
-	);
-
-	// Density-driven extra apertures on outer N/E/W.
-	let extra = ((opening_density * 3.0).floor() as usize).min(3);
-	let sides: [(&str, Vec3, Vec3); 3] = [
-		(
-			"n",
-			Vec3::new(center_xz.x - 0.6, win_h0, oz1 - wall_t * 0.5),
-			Vec3::new(center_xz.x + 0.6, win_h1, oz1 + wall_t * 0.5),
-		),
-		(
-			"e",
-			Vec3::new(ox1 - wall_t * 0.5, win_h0, center_xz.z - 0.6),
-			Vec3::new(ox1 + wall_t * 0.5, win_h1, center_xz.z + 0.6),
-		),
-		(
-			"w",
-			Vec3::new(ox0 - wall_t * 0.5, win_h0, center_xz.z - 0.6),
-			Vec3::new(ox0 + wall_t * 0.5, win_h1, center_xz.z + 0.6),
-		),
-	];
-	for (i, (slot, min, max)) in sides.iter().enumerate() {
-		if i < extra {
-			openings.insert(
-				OpeningId::scoped(SCOPE, "gallery_aperture", slot),
-				Opening::aperture(Aabb3d::from_min_max(*min, *max)),
-			);
-		}
+impl BuildingComponents for LesHallesFloorPlan {
+	fn panel_nodes_for_level(&self, level: LodSceneLevel) -> Layers<PanelNode> {
+		self.shell.panel_nodes_for_level(level)
 	}
 
-	for (i, shaft) in shaft_bounds.iter().enumerate() {
-		openings.insert(
-			OpeningId::scoped(SCOPE, "shaft", format!("{i}")),
-			Opening::new(*shaft, OpeningLabel::Shaft),
-		);
+	fn joint_nodes_for_level(&self, level: LodSceneLevel) -> Layers<JointNode> {
+		self.shell.joint_nodes_for_level(level)
 	}
-
-	openings
 }
 
 #[cfg(test)]
@@ -341,6 +382,7 @@ mod tests {
 				.label,
 			OpeningLabel::Shaft
 		));
+		assert!(plan.shell.wall_count() >= 4);
 		assert!(regions.within.len() >= 8 + 4); // galleries + balconies + shafts
 		assert_eq!(regions.atop.len(), 1);
 	}
@@ -357,7 +399,10 @@ mod tests {
 		let (via_params, _) = LesHallesFloorPlan::from_parameterized(params, &c).unwrap();
 		assert_eq!(via_fit.outer, via_params.outer);
 		assert_eq!(via_fit.inner, via_params.inner);
-		assert_eq!(via_fit.parameterized.shaft_placement, via_params.parameterized.shaft_placement);
+		assert_eq!(
+			via_fit.parameterized.shaft_placement,
+			via_params.parameterized.shaft_placement
+		);
 		assert_eq!(via_fit.shaft_bounds.len(), 4);
 	}
 }
