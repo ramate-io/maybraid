@@ -1,15 +1,16 @@
-//! Strip of commercial stalls along a gallery band (Label placeholders).
+//! Strip of commercial stalls along a gallery band.
 
-use bevy_math::bounding::Aabb3d;
+use bevy_math::bounding::{Aabb2d, Aabb3d};
+use bevy_math::Vec2;
 use bevy_math::Vec3;
 use lod::gen::LodSceneLevel;
 use procedural_common::{NoiseConfig, NoiseParams};
+use richmond_building_components::panels::PanelNode;
 use richmond_building_components::{BuildingComponents, LabelNode, Layers};
 
-use crate::fit::{aabb_xz_extent, Confines, FillableRegions, Fit, FitError};
-use crate::usage_areas::commercial_stall::{
-	CommercialStall, CommercialStallPlan, CommercialStallParameterized,
-};
+use crate::fit::{aabb_xz_extent, aabb_xz_overlap_area, Confines, FillableRegions, Fit, FitError};
+use crate::openings::{OpeningLabel, Openings};
+use crate::usage_areas::commercial_stall::CommercialStall;
 
 const MIN_STALL_ALONG: f32 = 1.6;
 const MAX_STALL_ALONG: f32 = 5.5;
@@ -90,18 +91,19 @@ impl CommercialStallStripPlan {
 					Vec3::new(max.x, max.y, min.z + cursor + w),
 				)
 			};
+			let bay_bounds = Aabb3d::from_min_max(smin, smax);
 			let cell = Confines::new(
-				Aabb3d::from_min_max(smin, smax),
+				bay_bounds,
 				confines.roll,
-				// Openings stay on the strip for later; per-stall subset deferred.
-				crate::openings::Openings::new(),
+				subset_openings(&confines.openings, &bay_bounds),
 			);
-			// Distinct salt per bay via seed offset.
 			let mut bay_noise = noise;
 			bay_noise.seed = noise.seed.wrapping_add(i as i32 * 17);
-			let stall_params = CommercialStallParameterized::sample(&cell, bay_noise);
-			let plan = CommercialStallPlan::from_parameterized(stall_params, &cell)?;
-			stalls.push(CommercialStall::from_plan(plan));
+			match CommercialStall::fit_to_confines(&cell, bay_noise) {
+				Ok((stall, _)) => stalls.push(stall),
+				Err(FitError::TooSmall { .. }) => break,
+				Err(err) => return Err(err),
+			}
 			cursor += w;
 			i += 1;
 		}
@@ -115,7 +117,32 @@ impl CommercialStallStripPlan {
 	}
 }
 
-/// Full commercial stall strip (Label placeholders).
+fn subset_openings(openings: &Openings, bounds: &Aabb3d) -> Openings {
+	let region = Aabb2d {
+		min: Vec2::new(Vec3::from(bounds.min).x, Vec3::from(bounds.min).z),
+		max: Vec2::new(Vec3::from(bounds.max).x, Vec3::from(bounds.max).z),
+	};
+	let y0 = Vec3::from(bounds.min).y;
+	let y1 = Vec3::from(bounds.max).y;
+	let mut out = Openings::new();
+	for (id, opening) in openings.iter() {
+		if matches!(opening.label, OpeningLabel::Shaft) {
+			continue;
+		}
+		if aabb_xz_overlap_area(&opening.bounds, &region) <= 1e-4 {
+			continue;
+		}
+		let omin = Vec3::from(opening.bounds.min);
+		let omax = Vec3::from(opening.bounds.max);
+		if omax.y < y0 - 1e-3 || omin.y > y1 + 1e-3 {
+			continue;
+		}
+		out.insert(id.clone(), opening.clone());
+	}
+	out
+}
+
+/// Full commercial stall strip.
 #[derive(Debug, Clone, PartialEq)]
 pub struct CommercialStallStrip {
 	pub plan: CommercialStallStripPlan,
@@ -143,6 +170,14 @@ impl Fit for CommercialStallStrip {
 }
 
 impl BuildingComponents for CommercialStallStrip {
+	fn panel_nodes_for_level(&self, level: LodSceneLevel) -> Layers<PanelNode> {
+		let mut out = Layers::new();
+		for stall in &self.plan.stalls {
+			out.extend(stall.panel_nodes_for_level(level));
+		}
+		out
+	}
+
 	fn label_nodes_for_level(&self, level: LodSceneLevel) -> Layers<LabelNode> {
 		let mut out = Layers::new();
 		for stall in &self.plan.stalls {
@@ -157,17 +192,33 @@ mod tests {
 	use super::*;
 	use bevy_math::bounding::Aabb3d;
 	use bevy_math::Vec3;
+	use crate::openings::{Opening, OpeningId};
 
 	#[test]
-	fn strip_packs_multiple_stalls() {
-		let confines = Confines::from_bounds(Aabb3d::from_min_max(
-			Vec3::ZERO,
-			Vec3::new(12.0, 3.5, 5.0),
-		));
+	fn strip_packs_multiple_stalls_with_labels() {
+		let mut openings = Openings::new();
+		openings.insert(
+			OpeningId::new("door"),
+			Opening::passage(Aabb3d::from_min_max(
+				Vec3::new(2.0, 0.0, -0.2),
+				Vec3::new(4.0, 2.2, 0.2),
+			)),
+		);
+		let confines = Confines::new(
+			Aabb3d::from_min_max(Vec3::ZERO, Vec3::new(12.0, 3.5, 5.0)),
+			0.0,
+			openings,
+		);
 		let (strip, _) =
 			CommercialStallStrip::fit_to_confines(&confines, NoiseParams::default()).unwrap();
 		assert!(strip.stalls().len() >= 2);
-		let labels = strip.label_nodes_for_level(LodSceneLevel::High).flatten();
-		assert_eq!(labels.len(), strip.stalls().len());
+		assert!(!strip
+			.label_nodes_for_level(LodSceneLevel::High)
+			.flatten()
+			.is_empty());
+		assert!(!strip
+			.panel_nodes_for_level(LodSceneLevel::High)
+			.flatten()
+			.is_empty());
 	}
 }

@@ -81,7 +81,11 @@ impl Fit for LesHallesFullStorey {
 
 impl BuildingComponents for LesHallesFullStorey {
 	fn panel_nodes_for_level(&self, level: LodSceneLevel) -> Layers<PanelNode> {
-		self.floor_plan.panel_nodes_for_level(level)
+		let mut out = self.floor_plan.panel_nodes_for_level(level);
+		for strip in &self.stall_strips {
+			out.extend(strip.panel_nodes_for_level(level));
+		}
+		out
 	}
 
 	fn joint_nodes_for_level(&self, level: LodSceneLevel) -> Layers<JointNode> {

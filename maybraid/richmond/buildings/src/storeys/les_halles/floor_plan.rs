@@ -271,13 +271,16 @@ impl LesHallesFloorPlan {
 
 		let mut within = Vec::new();
 
-		let sections = Self::inner_straight_sections(
+		// Commercial strips: N/S run to outer corners (unless an active corner
+		// shaft owns that square); E/W stay between gallery_inner ends.
+		let sections = Self::commercial_fill_sections(
 			self.center_xz,
+			self.outer,
 			self.gallery_inner,
+			gx,
 			&self.shaft_bounds,
 			&self.shaft_slots,
 			self.parameterized.shaft_placement,
-			self.parameterized.corner_clear_len(),
 		);
 		for section in &sections {
 			let bounds = Self::gallery_strip_bounds(
@@ -824,6 +827,57 @@ impl LesHallesFloorPlan {
 		sections
 	}
 
+	/// ExternalSpace gallery strips for commercial fill.
+	///
+	/// - **N/S:** along = outer free runs (corners included); active corner shafts
+	///   trim that end by `gallery_width`.
+	/// - **E/W:** along clamped to `gallery_inner` so corners are not double-covered.
+	fn commercial_fill_sections(
+		center_xz: Vec3,
+		outer: Vec2,
+		gallery_inner: Vec2,
+		gallery_width: f32,
+		shaft_bounds: &[Aabb3d],
+		shaft_slots: &[usize],
+		placement: LesHallesShaftPlacement,
+	) -> Vec<InnerSection> {
+		let mut sections = Vec::new();
+		for side in RectRingFloorSide::all() {
+			let (half, occupied) = match side {
+				OrthoSide::North | OrthoSide::South => {
+					let half = outer.x * 0.5;
+					let mut occupied = match placement {
+						LesHallesShaftPlacement::Corners => Vec::new(),
+						LesHallesShaftPlacement::MidSides => {
+							Self::shaft_along_spans(center_xz, outer, side, shaft_bounds)
+						}
+					};
+					if matches!(placement, LesHallesShaftPlacement::Corners) {
+						occupied.extend(corner_gallery_trims(
+							side,
+							half,
+							gallery_width,
+							shaft_slots,
+						));
+					}
+					(half, occupied)
+				}
+				OrthoSide::East | OrthoSide::West => {
+					let half = gallery_inner.y * 0.5;
+					let occupied = match placement {
+						LesHallesShaftPlacement::Corners => Vec::new(),
+						LesHallesShaftPlacement::MidSides => {
+							Self::shaft_along_spans(center_xz, gallery_inner, side, shaft_bounds)
+						}
+					};
+					(half, occupied)
+				}
+			};
+			sections.extend(free_sections_from_occupied(side, half, &occupied));
+		}
+		sections
+	}
+
 	/// Free inner-wall runs between shaft clears (one section per run).
 	fn inner_straight_sections(
 		center_xz: Vec3,
@@ -1131,6 +1185,36 @@ fn corner_clear_ends(slot: usize) -> Option<(OrthoSide, usize, OrthoSide, usize)
 		3 => Some((OrthoSide::North, 0, OrthoSide::West, 1)), // NW
 		_ => None,
 	}
+}
+
+/// Trim N/S commercial strips so active corner shafts own the corner gallery square.
+fn corner_gallery_trims(
+	side: OrthoSide,
+	half: f32,
+	gallery_width: f32,
+	shaft_slots: &[usize],
+) -> Vec<(f32, f32)> {
+	if !matches!(side, OrthoSide::North | OrthoSide::South) {
+		return Vec::new();
+	}
+	let trim = gallery_width.min(half * 0.45).max(1.0);
+	let mut occupied = Vec::new();
+	for &slot in shaft_slots {
+		let Some((side_a, end_a, side_b, end_b)) = corner_clear_ends(slot) else {
+			continue;
+		};
+		for (s, end_i) in [(side_a, end_a), (side_b, end_b)] {
+			if s != side {
+				continue;
+			}
+			if end_i == 0 {
+				occupied.push((-half, -half + trim));
+			} else {
+				occupied.push((half - trim, half));
+			}
+		}
+	}
+	occupied
 }
 
 fn corner_occupied_spans(
@@ -1599,6 +1683,33 @@ mod tests {
 			r.kind == SpaceKind::InternalSpace
 				&& r.confines.openings.get(&OpeningId::new("req_se")).is_some()
 		}));
+	}
+
+	#[test]
+	fn external_strips_reach_outer_corners_without_mid_shafts() {
+		let (plan, regions) =
+			LesHallesFloorPlan::fit_to_confines(&nominal_confines(), NoiseParams::default())
+				.unwrap();
+		assert!(plan.shaft_bounds.is_empty());
+		let ox1 = plan.center_xz.x + plan.outer.x * 0.5;
+		let oz0 = plan.center_xz.z - plan.outer.y * 0.5;
+		// SE outer corner sample point inside the gallery band.
+		let se = Vec3::new(ox1 - 0.5, plan.center_xz.y + 0.5, oz0 + 0.5);
+		let covered = regions.within.iter().any(|r| {
+			r.kind == SpaceKind::ExternalSpace && aabb_contains_xz_y(&r.confines.bounds, se)
+		});
+		assert!(covered, "SE gallery corner must be inside an ExternalSpace strip");
+	}
+
+	fn aabb_contains_xz_y(bounds: &Aabb3d, p: Vec3) -> bool {
+		let min = Vec3::from(bounds.min);
+		let max = Vec3::from(bounds.max);
+		p.x >= min.x - 1e-3
+			&& p.x <= max.x + 1e-3
+			&& p.y >= min.y - 1e-3
+			&& p.y <= max.y + 1e-3
+			&& p.z >= min.z - 1e-3
+			&& p.z <= max.z + 1e-3
 	}
 
 	#[test]

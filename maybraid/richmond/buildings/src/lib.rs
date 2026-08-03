@@ -94,7 +94,9 @@ pub use storeys::les_halles::{
 	LesHallesShaftPlacement, LesHallesStallDoor, SCOPE as LES_HALLES_SCOPE,
 };
 pub use usage_areas::{
-	CommercialStall, CommercialStallParameterized, CommercialStallPlan, CommercialStallStrip,
-	CommercialStallStripParameterized, CommercialStallStripPlan,
+	BitesSitdownStall, BitesStall, CommercialStall, CommercialStallInterior,
+	CommercialStallParameterized, CommercialStallPlan, CommercialStallStrip,
+	CommercialStallStripParameterized, CommercialStallStripPlan, KnickKnackStall, PartsStall,
+	PublicRestroom, SupermarketStall,
 };
 pub use wall_demo::{NoisyRectangularWall, NoisyRectangularWallParams};
