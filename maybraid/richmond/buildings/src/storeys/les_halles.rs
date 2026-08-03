@@ -13,3 +13,10 @@
 pub mod floor_plan;
 pub mod full_storey;
 pub mod parameterized;
+
+pub use floor_plan::LesHallesFloorPlan;
+pub use full_storey::LesHallesFullStorey;
+pub use parameterized::{LesHallesParameterized, LesHallesShaftPlacement};
+
+/// Scope prefix for [`crate::OpeningId::scoped`] openings authored by this typology.
+pub const SCOPE: &str = "les_halles";

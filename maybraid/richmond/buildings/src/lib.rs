@@ -51,9 +51,14 @@ pub use constraints::{
 	JointCoordinate, JointEntry, PreJointSweep, SubsetError,
 };
 pub use demos::ConnectingShells;
+pub use fit::{Confines, FillableRegions, Fit, FitError, StackRegion};
 pub use openings::{
 	MappedOpening, MappedOpeningQuad, MappedOpenings, MapsOpenings, Opening, OpeningId,
 	OpeningLabel, Openings,
+};
+pub use storeys::les_halles::{
+	LesHallesFloorPlan, LesHallesFullStorey, LesHallesParameterized, LesHallesShaftPlacement,
+	SCOPE as LES_HALLES_SCOPE,
 };
 pub use paneling::{
 	fallback_oriented, fit_rectangle, fit_rectangle_corners, orient_rectangle,
