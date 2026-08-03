@@ -2,7 +2,8 @@
 //!
 //! Formats:
 //! - AABB: `id:label:minx,miny,minz:maxx,maxy,maxz`
-//! - Arc ring locus: `id:label:t=0.5` (resolved with shell radius / height)
+//! - Arc ring locus: `id:label:t=0.5` (resolved with shell radius / height;
+//!   optional `,ring=inner|outer` for circ-ring-floor)
 //! - Ortho side: `id:label:side=south` (resolved with footprint / height)
 
 use bevy::prelude::*;
@@ -64,14 +65,13 @@ pub fn parse_opening_arg(s: &str) -> Result<OpeningArg, String> {
 	let rest = parts[2..].join(":");
 	let rest = rest.trim();
 	if let Some(t_str) = rest.strip_prefix("t=") {
-		let t: f32 = t_str
-			.trim()
-			.parse()
-			.map_err(|e| format!("t=: {e}"))?;
+		let (t_part, ring) = split_t_and_ring(t_str.trim())?;
+		let t: f32 = t_part.parse().map_err(|e| format!("t=: {e}"))?;
 		return Ok(OpeningArg::ArcT {
 			id: id.to_string(),
 			label,
 			t,
+			ring,
 		});
 	}
 	if let Some(side_str) = rest.strip_prefix("side=") {
@@ -99,6 +99,13 @@ pub fn parse_opening_arg(s: &str) -> Result<OpeningArg, String> {
 	})
 }
 
+/// Preferred ring when resolving `t=` openings on a circular ring shell.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CircRingPreference {
+	Outer,
+	Inner,
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum OpeningArg {
 	Aabb {
@@ -111,6 +118,7 @@ pub enum OpeningArg {
 		id: String,
 		label: OpeningLabel,
 		t: f32,
+		ring: Option<CircRingPreference>,
 	},
 	OrthoSide {
 		id: String,
@@ -119,7 +127,39 @@ pub enum OpeningArg {
 	},
 }
 
+fn split_t_and_ring(s: &str) -> Result<(&str, Option<CircRingPreference>), String> {
+	if let Some((t_part, ring_part)) = s.split_once(',') {
+		let ring_part = ring_part.trim();
+		let ring = if let Some(r) = ring_part.strip_prefix("ring=") {
+			match r.trim().to_ascii_lowercase().as_str() {
+				"outer" | "o" => CircRingPreference::Outer,
+				"inner" | "i" => CircRingPreference::Inner,
+				other => {
+					return Err(format!(
+						"unknown ring {other:?}; expected outer|inner"
+					));
+				}
+			}
+		} else {
+			return Err(format!(
+				"expected t=…,ring=outer|inner after t=, got {s:?}"
+			));
+		};
+		Ok((t_part.trim(), Some(ring)))
+	} else {
+		Ok((s, None))
+	}
+}
+
 impl OpeningArg {
+	/// Ring preference for `t=` openings (`None` ⇒ outer / single-radius shells).
+	pub fn arc_ring_preference(&self) -> Option<CircRingPreference> {
+		match self {
+			Self::ArcT { ring, .. } => *ring,
+			_ => None,
+		}
+	}
+
 	pub fn resolve_aabb(
 		self,
 		arc: Option<ArcOpeningContext>,
@@ -134,9 +174,10 @@ impl OpeningArg {
 	) -> Result<PreviewOpening, String> {
 		match self {
 			Self::Aabb { id, label, min, max } => Ok(PreviewOpening { id, label, min, max }),
-			Self::ArcT { id, label, t } => {
+			Self::ArcT { id, label, t, ring: _ } => {
 				let ctx = arc.ok_or_else(|| {
-					"opening t=… is only valid for arc-floor / arc-tower previews".to_string()
+					"opening t=… is only valid for arc-floor / arc-tower / circ-ring-floor previews"
+						.to_string()
 				})?;
 				let (_id, opening) = ArcFloor::plan_opening_at_t(
 					id.clone(),
@@ -152,7 +193,7 @@ impl OpeningArg {
 			}
 			Self::OrthoSide { id, label, side } => {
 				let ctx = ortho.ok_or_else(|| {
-					"opening side=… is only valid for rect-floor / rounded-rect-floor / i-floor previews"
+					"opening side=… is only valid for rect-floor / rounded-rect-floor / i-floor / rect-ring-floor previews"
 						.to_string()
 				})?;
 				let opening = match label {

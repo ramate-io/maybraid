@@ -22,15 +22,15 @@ use richmond_buildings::quad_panel_complex::QuadPanelComplex;
 use crate::commands::show::opening::{openings_from_preview, PreviewOpening};
 use richmond_buildings::{
 	ApproximatedCircle, ArcFloor, ArcFloorParams, ArcFloorSlab, ArcSweep, ArcTower, ArcTowerParams,
-	ClippedArcSweep, ClippedFittedRectangle, ClippedFittedRectangularStrip, ClippedQuadPanel,
-	ClippedRectangle, ClippedRectangularStrip, ClippedRuledStrip, ClippedTessellatedTriangle,
-	ConnectingHall, ConnectingShells, FittedRectangle, IFloor, IFloorParams, IFloorSlab,
-	MappedOpening, MappedOpeningQuad, MapsOpenings, OpeningId, OpeningLabel, Openings, PitchedRoof,
-	PitchedRoofParams, RectFloor, RectFloorParams, RectFloorSlab, RectInset, Rectangle,
-	RectangularNTube, RectangularNTubeCorner, RectangularNTubeStation, RectangularStripNode,
-	RoundedRectFloor, RoundedRectFloorParams, RoundedRectFloorSlab, RuledPitch, Tube,
-	TubeCrossSectionNode, TubeFaces, Trazaloid, TrazaloidParams, TrazaloidSlab,
-	DEFAULT_PANEL_THICKNESS,
+	CircRingFloor, CircRingFloorParams, CircRingFloorSlab, ClippedArcSweep, ClippedFittedRectangle,
+	ClippedFittedRectangularStrip, ClippedQuadPanel, ClippedRectangle, ClippedRectangularStrip,
+	ClippedRuledStrip, ClippedTessellatedTriangle, ConnectingHall, ConnectingShells, FittedRectangle,
+	IFloor, IFloorParams, IFloorSlab, MappedOpening, MappedOpeningQuad, MapsOpenings, OpeningId,
+	OpeningLabel, Openings, PitchedRoof, PitchedRoofParams, RectFloor, RectFloorParams, RectFloorSlab,
+	RectInset, RectRingFloor, RectRingFloorParams, RectRingFloorSlab, Rectangle, RectangularNTube,
+	RectangularNTubeCorner, RectangularNTubeStation, RectangularStripNode, RoundedRectFloor,
+	RoundedRectFloorParams, RoundedRectFloorSlab, RuledPitch, Tube, TubeCrossSectionNode, TubeFaces,
+	Trazaloid, TrazaloidParams, TrazaloidSlab, DEFAULT_PANEL_THICKNESS,
 };
 use richmond_buildings::stacked_rings::StackedRings;
 use richmond_buildings::tessellated_triangle_panel::TessellatedTrianglePanel;
@@ -166,6 +166,24 @@ pub enum PreviewSubject {
 		top_right: Option<f32>,
 		bottom_left: Option<f32>,
 		bottom_right: Option<f32>,
+		openings: Vec<PreviewOpening>,
+		floor: bool,
+		ceiling: bool,
+	},
+	RectRingFloor {
+		outer_x: f32,
+		outer_z: f32,
+		inner_x: f32,
+		inner_z: f32,
+		storey_height: f32,
+		openings: Vec<PreviewOpening>,
+		floor: bool,
+		ceiling: bool,
+	},
+	CircRingFloor {
+		outer_radius: f32,
+		inner_radius: f32,
+		storey_height: f32,
 		openings: Vec<PreviewOpening>,
 		floor: bool,
 		ceiling: bool,
@@ -463,6 +481,31 @@ impl PreviewConfig {
 				..
 			} => format!(
 				"preview: i-floor (central={central_x:.1}x{central_z:.1} h={storey_height:.1} openings={} floor={floor} ceil={ceiling})",
+				openings.len()
+			),
+			PreviewSubject::RectRingFloor {
+				outer_x,
+				outer_z,
+				inner_x,
+				inner_z,
+				storey_height,
+				ref openings,
+				floor,
+				ceiling,
+				..
+			} => format!(
+				"preview: rect-ring-floor (outer={outer_x:.1}x{outer_z:.1} inner={inner_x:.1}x{inner_z:.1} h={storey_height:.1} openings={} floor={floor} ceil={ceiling})",
+				openings.len()
+			),
+			PreviewSubject::CircRingFloor {
+				outer_radius,
+				inner_radius,
+				storey_height,
+				ref openings,
+				floor,
+				ceiling,
+			} => format!(
+				"preview: circ-ring-floor (R={outer_radius:.1} r={inner_radius:.1} h={storey_height:.1} openings={} floor={floor} ceil={ceiling})",
 				openings.len()
 			),
 			PreviewSubject::Rectangle {
@@ -796,6 +839,26 @@ impl PreviewConfig {
 					+ 0.5;
 				let h = storey_height.max(1e-4) + 0.5;
 				Aabb3d::from_min_max(Vec3::new(-hx, -0.2, -hz), Vec3::new(hx, h, hz))
+			}
+			PreviewSubject::RectRingFloor {
+				outer_x,
+				outer_z,
+				storey_height,
+				..
+			} => {
+				let hx = outer_x.max(1e-4) * 0.5 + 0.5;
+				let hz = outer_z.max(1e-4) * 0.5 + 0.5;
+				let h = storey_height.max(1e-4) + 0.5;
+				Aabb3d::from_min_max(Vec3::new(-hx, -0.2, -hz), Vec3::new(hx, h, hz))
+			}
+			PreviewSubject::CircRingFloor {
+				outer_radius,
+				storey_height,
+				..
+			} => {
+				let r = outer_radius.max(1e-4) + 0.5;
+				let h = storey_height.max(1e-4) + 0.5;
+				Aabb3d::from_min_max(Vec3::new(-r, -0.2, -r), Vec3::new(r, h, r))
 			}
 			_ => Aabb3d::from_min_max(Vec3::ZERO, Vec3::ONE),
 		}
@@ -1394,6 +1457,72 @@ pub fn present_preview_lod(
 					IFloorSlab::None
 				},
 				..IFloorParams::default()
+			});
+			spawn_preview(
+				&mut commands,
+				transform,
+				ComponentsOnly(shell).scene_with_lod(&lod_ref),
+			);
+		}
+		PreviewSubject::RectRingFloor {
+			outer_x,
+			outer_z,
+			inner_x,
+			inner_z,
+			storey_height,
+			openings,
+			floor,
+			ceiling,
+		} => {
+			let shell = RectRingFloor::new(RectRingFloorParams {
+				center_xz: Vec3::ZERO,
+				outer: Vec2::new(*outer_x, *outer_z),
+				inner: Vec2::new(*inner_x, *inner_z),
+				storey_height: *storey_height,
+				openings: openings_from_preview(openings),
+				floor: if *floor {
+					RectRingFloorSlab::Solid
+				} else {
+					RectRingFloorSlab::None
+				},
+				ceiling: if *ceiling {
+					RectRingFloorSlab::Solid
+				} else {
+					RectRingFloorSlab::None
+				},
+				..RectRingFloorParams::default()
+			});
+			spawn_preview(
+				&mut commands,
+				transform,
+				ComponentsOnly(shell).scene_with_lod(&lod_ref),
+			);
+		}
+		PreviewSubject::CircRingFloor {
+			outer_radius,
+			inner_radius,
+			storey_height,
+			openings,
+			floor,
+			ceiling,
+		} => {
+			let shell = CircRingFloor::new(CircRingFloorParams {
+				center_xz: Vec3::ZERO,
+				outer_radius: *outer_radius,
+				inner_radius: *inner_radius,
+				storey_height: *storey_height,
+				openings: openings_from_preview(openings),
+				floor: if *floor {
+					CircRingFloorSlab::Solid
+				} else {
+					CircRingFloorSlab::None
+				},
+				ceiling: if *ceiling {
+					CircRingFloorSlab::Solid
+				} else {
+					CircRingFloorSlab::None
+				},
+				..CircRingFloorParams::default()
 			});
 			spawn_preview(
 				&mut commands,
@@ -2096,6 +2225,78 @@ pub fn draw_opening_plan_gizmos(mut gizmos: Gizmos, config: Res<PreviewConfig>) 
 				*no_hips,
 				openings,
 			);
+			draw_mapped_opening_overlays(&mut gizmos, map, openings, &shell, lime, orange);
+		}
+		PreviewSubject::RectRingFloor {
+			outer_x,
+			outer_z,
+			inner_x,
+			inner_z,
+			storey_height,
+			openings,
+			floor,
+			ceiling,
+		} => {
+			if openings.is_empty() {
+				return;
+			}
+			for (i, opening) in openings.iter().enumerate() {
+				let color = if i % 2 == 0 { cyan } else { amber };
+				gizmos.aabb_3d(opening.bounds(), tf, color);
+			}
+			let shell = RectRingFloor::new(RectRingFloorParams {
+				center_xz: Vec3::ZERO,
+				outer: Vec2::new(*outer_x, *outer_z),
+				inner: Vec2::new(*inner_x, *inner_z),
+				storey_height: *storey_height,
+				openings: openings_from_preview(openings),
+				floor: if *floor {
+					RectRingFloorSlab::Solid
+				} else {
+					RectRingFloorSlab::None
+				},
+				ceiling: if *ceiling {
+					RectRingFloorSlab::Solid
+				} else {
+					RectRingFloorSlab::None
+				},
+				..RectRingFloorParams::default()
+			});
+			draw_mapped_opening_overlays(&mut gizmos, map, openings, &shell, lime, orange);
+		}
+		PreviewSubject::CircRingFloor {
+			outer_radius,
+			inner_radius,
+			storey_height,
+			openings,
+			floor,
+			ceiling,
+		} => {
+			if openings.is_empty() {
+				return;
+			}
+			for (i, opening) in openings.iter().enumerate() {
+				let color = if i % 2 == 0 { cyan } else { amber };
+				gizmos.aabb_3d(opening.bounds(), tf, color);
+			}
+			let shell = CircRingFloor::new(CircRingFloorParams {
+				center_xz: Vec3::ZERO,
+				outer_radius: *outer_radius,
+				inner_radius: *inner_radius,
+				storey_height: *storey_height,
+				openings: openings_from_preview(openings),
+				floor: if *floor {
+					CircRingFloorSlab::Solid
+				} else {
+					CircRingFloorSlab::None
+				},
+				ceiling: if *ceiling {
+					CircRingFloorSlab::Solid
+				} else {
+					CircRingFloorSlab::None
+				},
+				..CircRingFloorParams::default()
+			});
 			draw_mapped_opening_overlays(&mut gizmos, map, openings, &shell, lime, orange);
 		}
 		_ => {}

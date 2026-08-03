@@ -1,0 +1,114 @@
+use bevy_math::{Vec2, Vec3};
+use lod::gen::LodSceneLevel;
+use richmond_building_components::panels::PanelGeometry;
+use richmond_building_components::BuildingComponents;
+
+use crate::openings::{MapsOpenings, Opening, OpeningId, OpeningLabel, Openings};
+use crate::paneling::ClippedRectangularStripPiece;
+use crate::shells::ortho::OrthoSide;
+
+use super::{RectRingFloor, RectRingFloorParams, RectRingFloorSlab};
+
+#[test]
+fn default_constructs_outer_and_inner_walls() {
+	let r = RectRingFloorParams::default().build();
+	// 4 outer + 4 inner sides.
+	assert_eq!(r.wall_count(), 8);
+	assert!(!r.has_floor());
+}
+
+#[test]
+fn inner_courtyard_smaller_than_outer() {
+	let r = RectRingFloorParams::default().build();
+	assert!(r.params().inner.x < r.params().outer.x);
+	assert!(r.params().inner.y < r.params().outer.y);
+}
+
+#[test]
+fn walls_are_rectangle_kits() {
+	let r = RectRingFloorParams::default().build();
+	for w in r.walls() {
+		assert!(!w.pieces().is_empty());
+		assert!(w
+			.pieces()
+			.iter()
+			.flat_map(|p| p.panels())
+			.all(|p| matches!(p.geometry, PanelGeometry::Rectangle(_))));
+	}
+}
+
+#[test]
+fn passage_on_outer_south_maps() {
+	let r = RectRingFloorParams::default()
+		.openings(Openings::new().with(
+			"door",
+			RectRingFloor::side_passage_opening(
+				OrthoSide::South,
+				Vec3::ZERO,
+				Vec2::new(8.0, 6.0),
+				1.2,
+				2.1,
+			),
+		))
+		.build();
+	assert!(r.mapped_opening(&OpeningId::new("door")).is_some());
+	assert!(r.walls().iter().any(|w| matches!(
+		w.pieces()[0],
+		ClippedRectangularStripPiece::Clipped(_)
+	)));
+}
+
+#[test]
+fn wide_passage_authors_broad_side_omission() {
+	// Nearly full-width south passage is the supported way to open a gallery run.
+	let r = RectRingFloorParams::default()
+		.openings(Openings::new().with(
+			"gap",
+			RectRingFloor::side_passage_opening(
+				OrthoSide::South,
+				Vec3::ZERO,
+				Vec2::new(8.0, 6.0),
+				7.5,
+				2.8,
+			),
+		))
+		.build();
+	assert!(r.mapped_opening(&OpeningId::new("gap")).is_some());
+	assert_eq!(r.wall_count(), 8);
+}
+
+#[test]
+fn solid_floor_has_frame_pieces() {
+	let r = RectRingFloorParams::default()
+		.floor(RectRingFloorSlab::Solid)
+		.build();
+	assert!(r.has_floor());
+	let panels = r.panel_nodes_for_level(LodSceneLevel::High);
+	assert!(panels.len() > r.wall_count());
+}
+
+#[test]
+fn cuts_slab_can_remove_a_frame_band() {
+	let mut openings = Openings::new();
+	// Cover the entire south frame band (outer −Z strip).
+	openings.insert(
+		"shaft",
+		Opening::new(
+			bevy_math::bounding::Aabb3d::from_min_max(
+				Vec3::new(-5.0, -0.5, -3.5),
+				Vec3::new(5.0, 0.5, -1.0),
+			),
+			OpeningLabel::Shaft,
+		),
+	);
+	let solid = RectRingFloorParams::default()
+		.floor(RectRingFloorSlab::Solid)
+		.build();
+	let cut = RectRingFloorParams::default()
+		.floor(RectRingFloorSlab::Solid)
+		.openings(openings)
+		.build();
+	let solid_n = solid.panel_nodes_for_level(LodSceneLevel::High).len();
+	let cut_n = cut.panel_nodes_for_level(LodSceneLevel::High).len();
+	assert!(cut_n < solid_n, "solid={solid_n} cut={cut_n}");
+}
