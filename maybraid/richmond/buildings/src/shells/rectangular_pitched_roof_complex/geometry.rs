@@ -54,9 +54,6 @@ impl LineSeg {
 		}
 	}
 
-	pub fn mid(self) -> Vec3 {
-		(self.a + self.b) * 0.5
-	}
 }
 
 /// Unconstrained roof rails for one massing box (before junction truncation).
@@ -256,6 +253,16 @@ impl Plane {
 		}
 		let n = n.normalize();
 		Some(Self { n, d: n.dot(a) })
+	}
+
+	/// Intersect an infinite line `origin + t * dir` with this plane.
+	pub fn intersect_line(self, origin: Vec3, dir: Vec3) -> Option<Vec3> {
+		let denom = self.n.dot(dir);
+		if denom.abs() < 1e-10 {
+			return None;
+		}
+		let t = (self.d - self.n.dot(origin)) / denom;
+		Some(origin + dir * t)
 	}
 
 	pub fn intersect(self, other: Self) -> Option<(Vec3, Vec3)> {

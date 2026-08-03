@@ -5,10 +5,11 @@ use bevy_math::Vec3;
 use super::geometry::{LongAxis, Plane, VolumeCandidate, EPS};
 use super::topology::ConcaveCorner;
 
-/// Valley segment from eave meeting point up to the ridge junction.
+/// Valley segment from eave meeting point up toward the ridge junction.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ValleySegment {
 	pub eave_point: Vec3,
+	/// Representative high point on the valley (lower ridge meet when heights differ).
 	pub ridge_point: Vec3,
 	pub vol_a: usize,
 	pub vol_b: usize,
@@ -42,7 +43,7 @@ fn build_valley(volumes: &[VolumeCandidate], corner: &ConcaveCorner) -> Option<V
 
 	// Eave meeting point: expand wall corner by each volume's side overhang.
 	let (cx, cz) = corner.corner_xz;
-	let y_eave = a.eave[corner.side_a].a.y;
+	let y_eave = a.eave[corner.side_a].a.y.min(b.eave[corner.side_b].a.y);
 	let eave_x = if corner.side_b == 1 {
 		cx + b.side_overhang
 	} else {
@@ -54,19 +55,17 @@ fn build_valley(volumes: &[VolumeCandidate], corner: &ConcaveCorner) -> Option<V
 		cz - a.side_overhang
 	};
 	let eave_point = Vec3::new(eave_x, y_eave, eave_z);
-
-	// Ridge junction: A's ridge z × B's ridge x at shared ridge height (lerp if needed).
-	let ridge_x = b.ridge.mid().x;
-	let ridge_z = a.ridge.mid().z;
-	let y_a = a.ridge.a.y;
-	let y_b = b.ridge.a.y;
-	let y_ridge = 0.5 * (y_a + y_b);
-	let mut ridge_point = Vec3::new(ridge_x, y_ridge, ridge_z);
-
-	// Snap ridge_point onto the valley line (closest point on the infinite line).
-	ridge_point = closest_point_on_line(origin, dir, ridge_point);
-	// Prefer the eave_point projection onto the valley for the low end.
 	let eave_on_valley = closest_point_on_line(origin, dir, eave_point);
+
+	// Each ridge keeps its box-top height; it ends where it hits the other pitch.
+	let ridge_end_a = ridge_meet_on_plane(a.ridge.as_tuple(), plane_b)?;
+	let ridge_end_b = ridge_meet_on_plane(b.ridge.as_tuple(), plane_a)?;
+	// Gizmo high point: the lower of the two ridge meets along the valley.
+	let ridge_point = if ridge_end_a.y <= ridge_end_b.y {
+		closest_point_on_line(origin, dir, ridge_end_a)
+	} else {
+		closest_point_on_line(origin, dir, ridge_end_b)
+	};
 
 	Some(ValleySegment {
 		eave_point: eave_on_valley,
@@ -76,9 +75,29 @@ fn build_valley(volumes: &[VolumeCandidate], corner: &ConcaveCorner) -> Option<V
 	})
 }
 
+fn ridge_meet_on_plane(ridge: (Vec3, Vec3), plane: Plane) -> Option<Vec3> {
+	let dir = ridge.1 - ridge.0;
+	plane.intersect_line(ridge.0, dir)
+}
+
 fn closest_point_on_line(origin: Vec3, dir: Vec3, p: Vec3) -> Vec3 {
 	let dir = dir.normalize_or_zero();
 	origin + dir * (p - origin).dot(dir)
+}
+
+/// Outside (convex) plan corner opposite a concave L corner, expanded by overhangs.
+fn outside_eave_corner(volumes: &[VolumeCandidate], corner: &ConcaveCorner) -> Option<Vec3> {
+	let a = &volumes[corner.vol_a];
+	let b = &volumes[corner.vol_b];
+	let (end_a, end_b) = (corner.end_a?, corner.end_b?);
+	let outer_a = 1 - corner.side_a;
+	let outer_b = 1 - corner.side_b;
+
+	// Start from each volume's outer eave at the junction end, then share XZ.
+	let ea = a.eave[outer_a].end(end_a);
+	let eb = b.eave[outer_b].end(end_b);
+	let y = ea.y.min(eb.y);
+	Some(Vec3::new(eb.x, y, ea.z))
 }
 
 fn truncate_for_valley(
@@ -86,19 +105,71 @@ fn truncate_for_valley(
 	corner: &ConcaveCorner,
 	valley: &ValleySegment,
 ) {
-	// Truncate long-X volume A toward the junction end (or side attachment for T-bar).
+	let plane_a = volumes[corner.vol_a]
+		.pitch_plane(corner.side_a)
+		.expect("valley built from these planes");
+	let plane_b = volumes[corner.vol_b]
+		.pitch_plane(corner.side_b)
+		.expect("valley built from these planes");
+
+	let ridge_end_a = ridge_meet_on_plane(volumes[corner.vol_a].ridge.as_tuple(), plane_b)
+		.expect("ridge meet");
+	let ridge_end_b = ridge_meet_on_plane(volumes[corner.vol_b].ridge.as_tuple(), plane_a)
+		.expect("ridge meet");
+
 	truncate_long_x(
 		&mut volumes[corner.vol_a],
 		corner.side_a,
 		corner.end_a,
 		valley,
+		ridge_end_a,
 	);
 	truncate_long_z(
 		&mut volumes[corner.vol_b],
 		corner.side_b,
 		corner.end_b,
 		valley,
+		ridge_end_b,
 	);
+
+	// Close the outside hip: meet outer eaves at the convex corner.
+	if let Some(outer) = outside_eave_corner(volumes, corner) {
+		if let (Some(end_a), Some(end_b)) = (corner.end_a, corner.end_b) {
+			let outer_a = 1 - corner.side_a;
+			let outer_b = 1 - corner.side_b;
+			let ya = volumes[corner.vol_a].eave[outer_a].end(end_a).y;
+			let yb = volumes[corner.vol_b].eave[outer_b].end(end_b).y;
+			volumes[corner.vol_a].eave[outer_a].set_end(end_a, Vec3::new(outer.x, ya, outer.z));
+			volumes[corner.vol_b].eave[outer_b].set_end(end_b, Vec3::new(outer.x, yb, outer.z));
+			let wa = volumes[corner.vol_a].wall[outer_a].end(end_a);
+			let wb = volumes[corner.vol_b].wall[outer_b].end(end_b);
+			// Walls stay on the massing corner (no side overhang).
+			let (cx, cz) = corner_massing_outside(volumes, corner);
+			volumes[corner.vol_a].wall[outer_a].set_end(end_a, Vec3::new(cx, wa.y, cz));
+			volumes[corner.vol_b].wall[outer_b].set_end(end_b, Vec3::new(cx, wb.y, cz));
+		}
+	}
+}
+
+fn corner_massing_outside(volumes: &[VolumeCandidate], corner: &ConcaveCorner) -> (f32, f32) {
+	let a = &volumes[corner.vol_a];
+	let b = &volumes[corner.vol_b];
+	let (amin_x, amin_z) = a.plan_min();
+	let (amax_x, _) = a.plan_max();
+	let (bmin_x, bmin_z) = b.plan_min();
+	let (_, bmax_z) = b.plan_max();
+	// Outside corner shares the non-facing extremes of each arm.
+	let x = if corner.side_b == 1 {
+		amin_x.min(bmin_x)
+	} else {
+		amax_x.max(b.plan_max().0)
+	};
+	let z = if corner.side_a == 1 {
+		amin_z.min(bmin_z)
+	} else {
+		a.plan_max().1.max(bmax_z)
+	};
+	(x, z)
 }
 
 fn truncate_long_x(
@@ -106,11 +177,14 @@ fn truncate_long_x(
 	side: usize,
 	end: Option<usize>,
 	valley: &ValleySegment,
+	ridge_end: Vec3,
 ) {
-	let jx = valley.ridge_point.x;
 	if let Some(end) = end {
-		set_long_param_x(vol, end, jx, valley.ridge_point.y);
-		// Facing eave junction end lands on the valley eave point.
+		// Ridge stops on the other pitch, still at this box's ridge height.
+		vol.ridge.set_end(end, ridge_end);
+
+		// Facing eave / wall land on the valley. Outer rails are handled separately
+		// so the convex corner can form a hip.
 		let ey = vol.eave[side].end(end).y;
 		vol.eave[side].set_end(
 			end,
@@ -118,7 +192,7 @@ fn truncate_long_x(
 		);
 		let wy = vol.wall[side].end(end).y;
 		let wz = vol.wall[side].end(end).z;
-		vol.wall[side].set_end(end, Vec3::new(jx, wy, wz));
+		vol.wall[side].set_end(end, Vec3::new(ridge_end.x, wy, wz));
 	} else {
 		// T-bar: snap facing-eave endpoints near the stem onto the valley eave.
 		let tol = 0.75 * vol.short_span + vol.side_overhang + EPS;
@@ -139,17 +213,18 @@ fn truncate_long_z(
 	side: usize,
 	end: Option<usize>,
 	valley: &ValleySegment,
+	ridge_end: Vec3,
 ) {
-	let jz = valley.ridge_point.z;
 	if let Some(end) = end {
-		set_long_param_z(vol, end, jz, valley.ridge_point.y);
+		vol.ridge.set_end(end, ridge_end);
+
 		let eave_end = vol.eave[side].end(end);
 		vol.eave[side].set_end(
 			end,
-			Vec3::new(eave_end.x, eave_end.y, valley.eave_point.z),
+			Vec3::new(valley.eave_point.x, eave_end.y, valley.eave_point.z),
 		);
 		let wall_end = vol.wall[side].end(end);
-		vol.wall[side].set_end(end, Vec3::new(wall_end.x, wall_end.y, jz));
+		vol.wall[side].set_end(end, Vec3::new(wall_end.x, wall_end.y, ridge_end.z));
 	} else {
 		for end_i in 0..2 {
 			let e = vol.eave[side].end(end_i);
@@ -162,35 +237,5 @@ fn truncate_long_z(
 				);
 			}
 		}
-	}
-}
-
-fn set_long_param_x(vol: &mut VolumeCandidate, end: usize, x: f32, y_ridge: f32) {
-	let mut r = vol.ridge.end(end);
-	r.x = x;
-	r.y = y_ridge;
-	vol.ridge.set_end(end, r);
-	for i in 0..2 {
-		let mut e = vol.eave[i].end(end);
-		e.x = x;
-		vol.eave[i].set_end(end, e);
-		let mut w = vol.wall[i].end(end);
-		w.x = x;
-		vol.wall[i].set_end(end, w);
-	}
-}
-
-fn set_long_param_z(vol: &mut VolumeCandidate, end: usize, z: f32, y_ridge: f32) {
-	let mut r = vol.ridge.end(end);
-	r.z = z;
-	r.y = y_ridge;
-	vol.ridge.set_end(end, r);
-	for i in 0..2 {
-		let mut e = vol.eave[i].end(end);
-		e.z = z;
-		vol.eave[i].set_end(end, e);
-		let mut w = vol.wall[i].end(end);
-		w.z = z;
-		vol.wall[i].set_end(end, w);
 	}
 }

@@ -43,14 +43,18 @@ fn single_gable_extends_free_ends() {
 #[test]
 fn stepped_presets_vary_ridge_and_eave_heights() {
 	let ridge_step = RectangularPitchedRoofComplexParams::l_shape_stepped_ridge().build();
-	// Free ends keep authored ridge heights; junction ends may lerp onto the valley.
+	// Each volume keeps a level ridge at its box top (no angling down to a shared Y).
+	for roof in ridge_step.roofs() {
+		let (a, b) = roof.params().halves[0].ridge_line;
+		assert!(
+			(a.y - b.y).abs() < 1e-3,
+			"ridge should stay level, got {a:?} → {b:?}"
+		);
+	}
 	let ridge_ys: Vec<f32> = ridge_step
 		.roofs()
 		.iter()
-		.flat_map(|r| {
-			let (a, b) = r.params().halves[0].ridge_line;
-			[a.y, b.y]
-		})
+		.map(|r| r.params().halves[0].ridge_line.0.y)
 		.collect();
 	assert!(
 		ridge_ys.iter().any(|y| (y - 4.2).abs() < 1e-3),
@@ -98,6 +102,27 @@ fn l_shape_marks_junction_and_builds_valley() {
 	assert!(v.ridge_point.y > v.eave_point.y);
 	// Inner corner of default L is near (+2, +2) in XZ before overhang.
 	assert!(v.eave_point.x > 1.5 && v.eave_point.z > 1.5);
+
+	// Outside hip corner: outer eaves meet near (−2−oh, −2−oh).
+	let oh = 0.3;
+	let mut found_outer = false;
+	for roof in complex.roofs() {
+		for half in &roof.params().halves {
+			for end in [half.eave_line.0, half.eave_line.1] {
+				if (end.x - (-2.0 - oh)).abs() < 1e-2 && (end.z - (-2.0 - oh)).abs() < 1e-2 {
+					found_outer = true;
+				}
+			}
+		}
+	}
+	assert!(found_outer, "expected outer eaves to meet at the convex L corner");
+
+	// Ridges stay level at box top.
+	for roof in complex.roofs() {
+		let (a, b) = roof.params().halves[0].ridge_line;
+		assert!((a.y - b.y).abs() < 1e-3);
+		assert!((a.y - 4.5).abs() < 1e-3);
+	}
 }
 
 #[test]
