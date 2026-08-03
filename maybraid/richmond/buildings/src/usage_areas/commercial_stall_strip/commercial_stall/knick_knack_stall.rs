@@ -10,6 +10,7 @@ use super::stall_layout::{facade_band, inset_band, primary_facade};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct KnickKnackStall {
+	pub stall_type: LabelNode,
 	pub knick_knack_racks: LabelNode,
 	pub front_display: LabelNode,
 }
@@ -25,6 +26,12 @@ impl Fit for KnickKnackStall {
 		let racks = inset_xz(&racks, 0.15);
 		Ok((
 			Self {
+				stall_type: label_filling_aabb(
+					LabelStyle::Magenta,
+					"KnickKnackStall",
+					&confines.bounds,
+					confines.roll,
+				),
 				knick_knack_racks: label_filling_aabb(
 					LabelStyle::Magenta,
 					"KnickKnackRacks",
@@ -46,6 +53,7 @@ impl Fit for KnickKnackStall {
 impl BuildingComponents for KnickKnackStall {
 	fn label_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<LabelNode> {
 		Layers::from_free(vec![
+			self.stall_type.clone(),
 			self.knick_knack_racks.clone(),
 			self.front_display.clone(),
 		])

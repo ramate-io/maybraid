@@ -12,6 +12,7 @@ use super::stall_layout::{facade_band, primary_facade, StallSide};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct PublicRestroom {
+	pub stall_type: LabelNode,
 	pub toilet_stalls: LabelNode,
 	pub public_restroom_sinks: LabelNode,
 }
@@ -26,6 +27,12 @@ impl Fit for PublicRestroom {
 		let toilets = toilet_band(&confines.bounds, side);
 		Ok((
 			Self {
+				stall_type: label_filling_aabb(
+					LabelStyle::Gray,
+					"PublicRestroom",
+					&confines.bounds,
+					confines.roll,
+				),
 				toilet_stalls: label_filling_aabb(
 					LabelStyle::Gray,
 					"ToiletStalls",
@@ -63,6 +70,7 @@ fn toilet_band(bounds: &Aabb3d, entry: StallSide) -> Aabb3d {
 impl BuildingComponents for PublicRestroom {
 	fn label_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<LabelNode> {
 		Layers::from_free(vec![
+			self.stall_type.clone(),
 			self.toilet_stalls.clone(),
 			self.public_restroom_sinks.clone(),
 		])

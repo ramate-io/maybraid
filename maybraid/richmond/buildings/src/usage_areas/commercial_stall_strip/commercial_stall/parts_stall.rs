@@ -14,6 +14,7 @@ use super::stall_layout::{
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct PartsStall {
+	pub stall_type: LabelNode,
 	pub office_wall: Option<Rectangle>,
 	pub parts_office: LabelNode,
 	pub parts_racks: LabelNode,
@@ -30,6 +31,12 @@ impl Fit for PartsStall {
 		let racks = inset_band(&sales, side, 0.8, 2.0);
 		Ok((
 			Self {
+				stall_type: label_filling_aabb(
+					LabelStyle::Blue,
+					"PartsStall",
+					&confines.bounds,
+					confines.roll,
+				),
 				office_wall: office_divider_wall(&confines.bounds, &office, side),
 				parts_office: label_filling_aabb(
 					LabelStyle::Blue,
@@ -59,6 +66,10 @@ impl BuildingComponents for PartsStall {
 	}
 
 	fn label_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<LabelNode> {
-		Layers::from_free(vec![self.parts_office.clone(), self.parts_racks.clone()])
+		Layers::from_free(vec![
+			self.stall_type.clone(),
+			self.parts_office.clone(),
+			self.parts_racks.clone(),
+		])
 	}
 }

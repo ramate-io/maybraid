@@ -14,6 +14,7 @@ use super::stall_layout::{
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct SupermarketStall {
+	pub stall_type: LabelNode,
 	pub office_wall: Option<Rectangle>,
 	pub supermarket_stall_office: LabelNode,
 	pub stall_aisles: LabelNode,
@@ -36,6 +37,12 @@ impl Fit for SupermarketStall {
 		let aisles = inset_band(&sales, side, 2.5, aisle_depth);
 		Ok((
 			Self {
+				stall_type: label_filling_aabb(
+					LabelStyle::Blue,
+					"SupermarketStall",
+					&confines.bounds,
+					confines.roll,
+				),
 				office_wall,
 				supermarket_stall_office: label_filling_aabb(
 					LabelStyle::Blue,
@@ -73,6 +80,7 @@ impl BuildingComponents for SupermarketStall {
 
 	fn label_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<LabelNode> {
 		Layers::from_free(vec![
+			self.stall_type.clone(),
 			self.supermarket_stall_office.clone(),
 			self.stall_aisles.clone(),
 			self.register.clone(),

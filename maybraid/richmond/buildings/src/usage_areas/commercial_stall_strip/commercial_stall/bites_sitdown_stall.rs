@@ -10,6 +10,7 @@ use super::stall_layout::{facade_band, inset_band, primary_facade};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct BitesSitdownStall {
+	pub stall_type: LabelNode,
 	pub food_counter: LabelNode,
 	pub stall_kitchen: LabelNode,
 	pub bites_seating_area: LabelNode,
@@ -30,6 +31,12 @@ impl Fit for BitesSitdownStall {
 		let seating = inset_band(&confines.bounds, side, counter_depth + 1.5, 1.6);
 		Ok((
 			Self {
+				stall_type: label_filling_aabb(
+					LabelStyle::Yellow,
+					"BitesSitdownStall",
+					&confines.bounds,
+					confines.roll,
+				),
 				food_counter: label_filling_aabb(
 					LabelStyle::Yellow,
 					"FoodCounter",
@@ -57,6 +64,7 @@ impl Fit for BitesSitdownStall {
 impl BuildingComponents for BitesSitdownStall {
 	fn label_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<LabelNode> {
 		Layers::from_free(vec![
+			self.stall_type.clone(),
 			self.food_counter.clone(),
 			self.stall_kitchen.clone(),
 			self.bites_seating_area.clone(),

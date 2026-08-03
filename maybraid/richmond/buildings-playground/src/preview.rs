@@ -41,8 +41,8 @@ use richmond_buildings::portals::{MustAssignPortal, Portal};
 use richmond_buildings::wall_demo::{NoisyRectangularWall, NoisyRectangularWallParams};
 use richmond_buildings::wizards_tower::WizardsTower;
 use richmond_buildings::{
-	BedroomFillParams, CellConstraints, CirculationEntry, CirculationRequestStatus, CommercialStall,
-	CommercialStallStrip, Confines, Fit, LesHallesFloorPlan, LesHallesFullStorey,
+	BedroomFillParams, BitesStall, CellConstraints, CirculationEntry, CirculationRequestStatus,
+	CommercialStall, CommercialStallStrip, Confines, Fit, LesHallesFloorPlan, LesHallesFullStorey,
 	LesHallesParameterized,
 };
 #[derive(Component)]
@@ -327,6 +327,10 @@ pub enum PreviewSubject {
 		seed: i32,
 	},
 	CommercialStallStrip {
+		extent: Vec3,
+		seed: i32,
+	},
+	BitesStall {
 		extent: Vec3,
 		seed: i32,
 	},
@@ -732,6 +736,12 @@ impl PreviewConfig {
 					extent.x, extent.y, extent.z
 				)
 			}
+			PreviewSubject::BitesStall { extent, seed } => {
+				format!(
+					"preview: bites-stall (extent={:.2},{:.2},{:.2} seed={seed})",
+					extent.x, extent.y, extent.z
+				)
+			}
 			PreviewSubject::LesHallesFloorPlan {
 				extent,
 				seed,
@@ -775,7 +785,8 @@ impl PreviewConfig {
 			}
 			PreviewSubject::Bedroom { extent, .. } => Aabb3d::from_min_max(Vec3::ZERO, *extent),
 			PreviewSubject::CommercialStall { extent, .. }
-			| PreviewSubject::CommercialStallStrip { extent, .. } => {
+			| PreviewSubject::CommercialStallStrip { extent, .. }
+			| PreviewSubject::BitesStall { extent, .. } => {
 				Aabb3d::from_min_max(Vec3::ZERO, *extent)
 			}
 			PreviewSubject::LesHallesFloorPlan { extent, .. }
@@ -988,6 +999,7 @@ pub struct CachedPreview {
 	les_halles_full_storey: Option<LesHallesFullStorey>,
 	commercial_stall: Option<CommercialStall>,
 	commercial_stall_strip: Option<CommercialStallStrip>,
+	bites_stall: Option<BitesStall>,
 }
 
 impl CachedPreview {
@@ -1005,6 +1017,7 @@ impl CachedPreview {
 		self.les_halles_full_storey = None;
 		self.commercial_stall = None;
 		self.commercial_stall_strip = None;
+		self.bites_stall = None;
 		match &config.subject {
 			PreviewSubject::WizardsTower { noise } => {
 				let footprint = CellConstraints::cell_owned(Aabb3d::from_min_max(
@@ -1069,6 +1082,17 @@ impl CachedPreview {
 					Err(err) => bevy::log::error!("commercial-stall-strip fit failed: {err}"),
 				}
 			}
+			PreviewSubject::BitesStall { extent, seed } => {
+				let confines = demo_bites_stall_confines(*extent);
+				let noise = NoiseParams {
+					seed: *seed,
+					..NoiseParams::default()
+				};
+				match BitesStall::fit_to_confines(&confines, noise) {
+					Ok((stall, _)) => self.bites_stall = Some(stall),
+					Err(err) => bevy::log::error!("bites-stall fit failed: {err}"),
+				}
+			}
 			PreviewSubject::LesHallesFloorPlan {
 				extent,
 				seed,
@@ -1118,6 +1142,9 @@ impl CachedPreview {
 		if let Some(strip) = self.commercial_stall_strip.as_ref() {
 			return strip.label_nodes_for_level(LodSceneLevel::High).flatten();
 		}
+		if let Some(stall) = self.bites_stall.as_ref() {
+			return stall.label_nodes_for_level(LodSceneLevel::High).flatten();
+		}
 		if let Some(storey) = self.les_halles_full_storey.as_ref() {
 			return storey.label_nodes_for_level(LodSceneLevel::High).flatten();
 		}
@@ -1130,6 +1157,40 @@ fn les_halles_confines_bounds(extent: Vec3) -> Aabb3d {
 	let hz = extent.z.max(1e-4) * 0.5;
 	let h = extent.y.max(1e-4);
 	Aabb3d::from_min_max(Vec3::new(-hx, 0.0, -hz), Vec3::new(hx, h, hz))
+}
+
+/// Demo bites stall with two long −Z passages so multiple counters appear.
+fn demo_bites_stall_confines(extent: Vec3) -> Confines {
+	let extent = extent.max(Vec3::splat(1e-4));
+	let door_h = (extent.y * 0.72).clamp(2.0, extent.y.max(2.0));
+	let mut openings = Openings::new();
+	let w = extent.x;
+	// Two long façade doors (≥ LONG_PASSAGE_MIN) along −Z.
+	if w >= 6.0 {
+		openings.insert(
+			OpeningId::new("demo_bites_door_a"),
+			Opening::passage(Aabb3d::from_min_max(
+				Vec3::new(0.4, 0.0, -0.25),
+				Vec3::new((w * 0.42).max(2.5), door_h, 0.25),
+			)),
+		);
+		openings.insert(
+			OpeningId::new("demo_bites_door_b"),
+			Opening::passage(Aabb3d::from_min_max(
+				Vec3::new(w * 0.58, 0.0, -0.25),
+				Vec3::new((w - 0.4).max(w * 0.58 + 2.5), door_h, 0.25),
+			)),
+		);
+	} else {
+		openings.insert(
+			OpeningId::new("demo_bites_door"),
+			Opening::passage(Aabb3d::from_min_max(
+				Vec3::new(0.3, 0.0, -0.25),
+				Vec3::new((w - 0.3).max(2.2), door_h, 0.25),
+			)),
+		);
+	}
+	Confines::new(Aabb3d::from_min_max(Vec3::ZERO, extent), 0.0, openings)
 }
 
 /// Demo strip confines with one Passage per ~preferred bay on the −Z façade.
@@ -2253,6 +2314,15 @@ pub fn present_preview_lod(
 					&mut commands,
 					transform,
 					ComponentsOnly(strip).scene_with_lod(&lod_ref),
+				);
+			}
+		}
+		PreviewSubject::BitesStall { .. } => {
+			if let Some(stall) = cache.bites_stall.as_ref() {
+				spawn_preview(
+					&mut commands,
+					transform,
+					ComponentsOnly(stall).scene_with_lod(&lod_ref),
 				);
 			}
 		}
