@@ -204,6 +204,42 @@ fn disjoint_boxes_have_no_valleys() {
 }
 
 #[test]
+fn demo_presets_valley_expectations() {
+	let disjoint = RectangularPitchedRoofComplexParams::disjoint().build();
+	assert_eq!(disjoint.roofs().len(), 4);
+	assert!(disjoint.valleys().is_empty());
+
+	let mixed = RectangularPitchedRoofComplexParams::mixed().build();
+	assert_eq!(mixed.roofs().len(), 5);
+	assert!(
+		!mixed.valleys().is_empty(),
+		"mixed cluster should still form valleys"
+	);
+
+	let ring = RectangularPitchedRoofComplexParams::ring().build();
+	assert_eq!(ring.roofs().len(), 4);
+	assert!(
+		ring.valleys().len() >= 4,
+		"ring should have an inner L valley per corner, got {}",
+		ring.valleys().len()
+	);
+
+	let coaxial = RectangularPitchedRoofComplexParams::coaxial_parallel().build();
+	assert_eq!(coaxial.roofs().len(), 2);
+	assert!(
+		coaxial.valleys().is_empty(),
+		"same-axis parallel pitches are not joined"
+	);
+
+	let cross = RectangularPitchedRoofComplexParams::pathological_cross().build();
+	assert_eq!(cross.roofs().len(), 2);
+	assert!(
+		cross.valleys().is_empty(),
+		"full + cross has no L/T classification today"
+	);
+}
+
+#[test]
 fn junction_detection_l() {
 	let mut vols = vec![
 		VolumeCandidate::from_aabb(

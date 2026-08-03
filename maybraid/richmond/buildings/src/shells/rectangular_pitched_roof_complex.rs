@@ -187,6 +187,61 @@ impl RectangularPitchedRoofComplexParams {
 		})
 	}
 
+	/// Several pitch masses with no plan overlap (no valleys).
+	pub fn disjoint() -> Self {
+		Self::new(vec![
+			Aabb3d::from_min_max(Vec3::new(-14.0, 2.5, -2.0), Vec3::new(-6.0, 4.5, 2.0)),
+			Aabb3d::from_min_max(Vec3::new(-2.0, 2.0, -8.0), Vec3::new(2.0, 4.0, 0.0)),
+			Aabb3d::from_min_max(Vec3::new(6.0, 2.8, -1.5), Vec3::new(14.0, 5.0, 1.5)),
+			Aabb3d::from_min_max(Vec3::new(0.0, 2.2, 4.0), Vec3::new(4.0, 3.8, 12.0)),
+		])
+	}
+
+	/// An L/T cluster plus a couple of non-intersecting satellites.
+	pub fn mixed() -> Self {
+		Self::new(vec![
+			// Intersecting L
+			Aabb3d::from_min_max(Vec3::new(-2.0, 2.5, -2.0), Vec3::new(8.0, 4.5, 2.0)),
+			Aabb3d::from_min_max(Vec3::new(-2.0, 2.5, -2.0), Vec3::new(2.0, 4.5, 8.0)),
+			// T stem on the bar
+			Aabb3d::from_min_max(Vec3::new(3.0, 2.5, -6.0), Vec3::new(7.0, 4.5, -1.0)),
+			// Disjoint satellites
+			Aabb3d::from_min_max(Vec3::new(-14.0, 2.0, 6.0), Vec3::new(-8.0, 4.0, 10.0)),
+			Aabb3d::from_min_max(Vec3::new(12.0, 2.2, -2.0), Vec3::new(16.0, 3.8, 6.0)),
+		])
+	}
+
+	/// Closed rectangular courtyard ring (four L corners on the inner court).
+	pub fn ring() -> Self {
+		// Outer ~[-8,8]², inner court ~[-4,4]².
+		Self::new(vec![
+			// North / South — long X
+			Aabb3d::from_min_max(Vec3::new(-8.0, 2.5, 4.0), Vec3::new(8.0, 4.5, 8.0)),
+			Aabb3d::from_min_max(Vec3::new(-8.0, 2.5, -8.0), Vec3::new(8.0, 4.5, -4.0)),
+			// West / East — long Z
+			Aabb3d::from_min_max(Vec3::new(-8.0, 2.5, -8.0), Vec3::new(-4.0, 4.5, 8.0)),
+			Aabb3d::from_min_max(Vec3::new(4.0, 2.5, -8.0), Vec3::new(8.0, 4.5, 8.0)),
+		])
+	}
+
+	/// Two parallel long-X pitches on the same midline: different ridge heights
+	/// and eave spans. Same-axis pairs are ignored by topology (no valley).
+	pub fn coaxial_parallel() -> Self {
+		Self::new(vec![
+			Aabb3d::from_min_max(Vec3::new(-10.0, 2.0, -2.0), Vec3::new(10.0, 4.0, 2.0)),
+			Aabb3d::from_min_max(Vec3::new(-6.0, 2.8, -3.5), Vec3::new(6.0, 5.5, 3.5)),
+		])
+	}
+
+	/// Full orthogonal cross (+): both arms extend past the overlap both ways.
+	/// Topology currently emits no L/T corners for this configuration.
+	pub fn pathological_cross() -> Self {
+		Self::new(vec![
+			Aabb3d::from_min_max(Vec3::new(-10.0, 2.5, -2.0), Vec3::new(10.0, 4.5, 2.0)),
+			Aabb3d::from_min_max(Vec3::new(-2.0, 2.5, -10.0), Vec3::new(2.0, 4.5, 10.0)),
+		])
+	}
+
 	pub fn overhang(mut self, overhang: Overhang) -> Self {
 		self.overhang = overhang;
 		self

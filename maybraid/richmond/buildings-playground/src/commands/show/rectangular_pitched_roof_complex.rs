@@ -23,6 +23,16 @@ pub enum RoofComplexPreset {
 	TStepped,
 	/// Large hall gable with three smaller perpendicular bay gables.
 	HallAndBays,
+	/// Several non-overlapping pitch masses.
+	Disjoint,
+	/// Intersecting L/T cluster plus disjoint satellites.
+	Mixed,
+	/// Closed rectangular courtyard ring.
+	Ring,
+	/// Parallel same-midline pitches (different height / eave span).
+	CoaxialParallel,
+	/// Full + cross — no L/T corners under current topology.
+	PathologicalCross,
 }
 
 #[derive(Clone, Copy, Debug, Default, ValueEnum)]
@@ -68,6 +78,11 @@ impl RectangularPitchedRoofComplex {
 			RoofComplexPreset::T => "t",
 			RoofComplexPreset::TStepped => "t-stepped",
 			RoofComplexPreset::HallAndBays => "hall-and-bays",
+			RoofComplexPreset::Disjoint => "disjoint",
+			RoofComplexPreset::Mixed => "mixed",
+			RoofComplexPreset::Ring => "ring",
+			RoofComplexPreset::CoaxialParallel => "coaxial-parallel",
+			RoofComplexPreset::PathologicalCross => "pathological-cross",
 		};
 		// Hall-and-bays defaults to gables even when the global end-cap default is hip.
 		let end_cap_gable = matches!(self.end_cap, EndCapKind::Gable)
@@ -103,6 +118,11 @@ pub fn build_params(
 		"t" => RectangularPitchedRoofComplexParams::t_shape(),
 		"t-stepped" => RectangularPitchedRoofComplexParams::t_shape_stepped(),
 		"hall-and-bays" => RectangularPitchedRoofComplexParams::hall_and_bays(),
+		"disjoint" => RectangularPitchedRoofComplexParams::disjoint(),
+		"mixed" => RectangularPitchedRoofComplexParams::mixed(),
+		"ring" => RectangularPitchedRoofComplexParams::ring(),
+		"coaxial-parallel" => RectangularPitchedRoofComplexParams::coaxial_parallel(),
+		"pathological-cross" => RectangularPitchedRoofComplexParams::pathological_cross(),
 		_ => RectangularPitchedRoofComplexParams::l_shape(),
 	};
 	params.overhang = if let Some(r) = overhang_ratio {
