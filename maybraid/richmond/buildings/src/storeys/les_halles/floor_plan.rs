@@ -206,7 +206,11 @@ impl LesHallesFloorPlan {
 		)
 	}
 
-	/// Shaft AABBs spanning the full gallery depth (outer wall → inner wall).
+	/// Shaft AABBs spanning gallery depth toward the inner wall.
+	///
+	/// Inset from the outer facade so the outer wall stays solid behind each
+	/// shaft ([`OpeningLabel::Shaft`] is connectable and would otherwise punch
+	/// that face).
 	fn shaft_aabbs(
 		center_xz: Vec3,
 		outer: Vec2,
@@ -222,43 +226,45 @@ impl LesHallesFloorPlan {
 		let oz0 = center_xz.z - outer.y * 0.5;
 		let oz1 = center_xz.z + outer.y * 0.5;
 		let gw = gallery_width.max(EPS);
+		// Keep outer facade solid behind the shaft.
+		let outer_inset = (DEFAULT_PANEL_THICKNESS + 0.15).min(gw * 0.35);
 
 		match placement {
-			// Full corner gallery cells (outer → both abutting inner walls).
+			// Corner gallery cells: reach both abutting inner walls, leave outer faces.
 			LesHallesShaftPlacement::Corners => vec![
 				Aabb3d::from_min_max(
-					Vec3::new(ox0, y0, oz0),
+					Vec3::new(ox0 + outer_inset, y0, oz0 + outer_inset),
 					Vec3::new(ox0 + gw, y1, oz0 + gw),
 				),
 				Aabb3d::from_min_max(
-					Vec3::new(ox1 - gw, y0, oz0),
-					Vec3::new(ox1, y1, oz0 + gw),
+					Vec3::new(ox1 - gw, y0, oz0 + outer_inset),
+					Vec3::new(ox1 - outer_inset, y1, oz0 + gw),
 				),
 				Aabb3d::from_min_max(
 					Vec3::new(ox1 - gw, y0, oz1 - gw),
-					Vec3::new(ox1, y1, oz1),
+					Vec3::new(ox1 - outer_inset, y1, oz1 - outer_inset),
 				),
 				Aabb3d::from_min_max(
-					Vec3::new(ox0, y0, oz1 - gw),
-					Vec3::new(ox0 + gw, y1, oz1),
+					Vec3::new(ox0 + outer_inset, y0, oz1 - gw),
+					Vec3::new(ox0 + gw, y1, oz1 - outer_inset),
 				),
 			],
-			// Mid-side shafts span full gallery depth, `SHAFT_SIDE` along the wall.
+			// Mid-side: full gallery depth minus outer inset, `SHAFT_SIDE` along wall.
 			LesHallesShaftPlacement::MidSides => vec![
 				Aabb3d::from_min_max(
-					Vec3::new(center_xz.x - half, y0, oz0),
+					Vec3::new(center_xz.x - half, y0, oz0 + outer_inset),
 					Vec3::new(center_xz.x + half, y1, oz0 + gw),
 				),
 				Aabb3d::from_min_max(
 					Vec3::new(ox1 - gw, y0, center_xz.z - half),
-					Vec3::new(ox1, y1, center_xz.z + half),
+					Vec3::new(ox1 - outer_inset, y1, center_xz.z + half),
 				),
 				Aabb3d::from_min_max(
 					Vec3::new(center_xz.x - half, y0, oz1 - gw),
-					Vec3::new(center_xz.x + half, y1, oz1),
+					Vec3::new(center_xz.x + half, y1, oz1 - outer_inset),
 				),
 				Aabb3d::from_min_max(
-					Vec3::new(ox0, y0, center_xz.z - half),
+					Vec3::new(ox0 + outer_inset, y0, center_xz.z - half),
 					Vec3::new(ox0 + gw, y1, center_xz.z + half),
 				),
 			],
@@ -267,9 +273,8 @@ impl LesHallesFloorPlan {
 
 	/// Gallery facade + balcony-facing openings, plus shaft voids / clears.
 	///
-	/// Outer walls get a door and at least one window (offset along the run so
-	/// both survive multi-opening wall subdivision). Inner walls get shop doors
-	/// plus floor-to-ceiling clears where shafts meet the balcony face.
+	/// - **Outer walls:** apertures only (no doors); skipped behind shafts.
+	/// - **Inner walls:** passages and/or apertures, plus floor-to-ceiling shaft clears.
 	fn generated_openings(
 		center_xz: Vec3,
 		outer: Vec2,
@@ -289,20 +294,20 @@ impl LesHallesFloorPlan {
 
 		for side in RectRingFloorSide::all() {
 			let slot = side_slot(side);
-			// Outer door slightly − along side; window(s) toward +.
-			let mut outer_door =
-				RectRingFloor::side_passage_opening(side, center_xz, outer, door_w, door_h);
-			outer_door.bounds = offset_opening_along_side(outer_door.bounds, side, -2.0);
-			openings.insert(OpeningId::scoped(SCOPE, "outer_passage", slot), outer_door);
+			let shaft_spans = Self::shaft_along_spans(center_xz, outer, side, shaft_bounds);
 
-			let mut outer_win =
-				RectRingFloor::side_aperture_opening(side, center_xz, outer, win_w, win_h, sill);
-			outer_win.bounds = offset_opening_along_side(outer_win.bounds, side, 2.0);
-			openings.insert(
-				OpeningId::scoped(SCOPE, "outer_aperture", format!("{slot}_0")),
-				outer_win,
-			);
+			// Outer facade: apertures only; leave solid wall behind shafts.
+			// Prefer offsets away from mid-side shaft centers (±SHAFT_SIDE).
+			let mut outer_offsets = vec![-2.8_f32, 2.8];
 			for k in 0..extra_wins {
+				outer_offsets.push(2.8 + (k + 1) as f32 * 2.4);
+				outer_offsets.push(-2.8 - (k + 1) as f32 * 2.4);
+			}
+			let mut placed = 0_usize;
+			for along in outer_offsets {
+				if along_overlaps_spans(along, win_w, &shaft_spans) {
+					continue;
+				}
 				let mut opening = RectRingFloor::side_aperture_opening(
 					side,
 					center_xz,
@@ -311,15 +316,15 @@ impl LesHallesFloorPlan {
 					win_h,
 					sill,
 				);
-				opening.bounds =
-					offset_opening_along_side(opening.bounds, side, 2.0 + (k + 1) as f32 * 2.4);
+				opening.bounds = offset_opening_along_side(opening.bounds, side, along);
 				openings.insert(
-					OpeningId::scoped(SCOPE, "outer_aperture", format!("{slot}_{}", k + 1)),
+					OpeningId::scoped(SCOPE, "outer_aperture", format!("{slot}_{placed}")),
 					opening,
 				);
+				placed += 1;
 			}
 
-			// Balcony → shop door on the gallery’s inner wall (offset from mid).
+			// Inner wall: door and/or window (offset so both can land on the strip).
 			let mut inner_door = RectRingFloor::side_passage_opening(
 				side,
 				center_xz,
@@ -343,6 +348,8 @@ impl LesHallesFloorPlan {
 		}
 
 		for (i, shaft) in shaft_bounds.iter().enumerate() {
+			// Slab cut only — AABB is inset from the outer wall so it does not
+			// clear the facade behind the shaft.
 			openings.insert(
 				OpeningId::scoped(SCOPE, "shaft", format!("{i}")),
 				Opening::new(*shaft, OpeningLabel::Shaft),
@@ -371,6 +378,44 @@ impl LesHallesFloorPlan {
 		}
 
 		openings
+	}
+
+	/// Along-wall spans (relative to side midpoint) occupied by shafts on an outer side.
+	fn shaft_along_spans(
+		center_xz: Vec3,
+		outer: Vec2,
+		side: OrthoSide,
+		shaft_bounds: &[Aabb3d],
+	) -> Vec<(f32, f32)> {
+		let ox0 = center_xz.x - outer.x * 0.5;
+		let ox1 = center_xz.x + outer.x * 0.5;
+		let oz0 = center_xz.z - outer.y * 0.5;
+		let oz1 = center_xz.z + outer.y * 0.5;
+		let band = 1.0_f32;
+		let mut spans = Vec::new();
+		for shaft in shaft_bounds {
+			let smin = Vec3::from(shaft.min);
+			let smax = Vec3::from(shaft.max);
+			let near = match side {
+				OrthoSide::South => smin.z <= oz0 + band,
+				OrthoSide::North => smax.z >= oz1 - band,
+				OrthoSide::East => smax.x >= ox1 - band,
+				OrthoSide::West => smin.x <= ox0 + band,
+			};
+			if !near {
+				continue;
+			}
+			let (lo, hi) = match side {
+				OrthoSide::North | OrthoSide::South => {
+					(smin.x - center_xz.x, smax.x - center_xz.x)
+				}
+				OrthoSide::East | OrthoSide::West => {
+					(smin.z - center_xz.z, smax.z - center_xz.z)
+				}
+			};
+			spans.push((lo.min(hi), lo.max(hi)));
+		}
+		spans
 	}
 
 	/// Which gallery-inner sides a shaft abuts, with along-side offset from mid.
@@ -601,6 +646,13 @@ fn aabb_near_plane(lo: f32, hi: f32, plane: f32, tol: f32) -> bool {
 	lo <= plane + tol && hi >= plane - tol
 }
 
+fn along_overlaps_spans(along: f32, width: f32, spans: &[(f32, f32)]) -> bool {
+	let half = width * 0.5;
+	let a0 = along - half;
+	let a1 = along + half;
+	spans.iter().any(|&(lo, hi)| a0 <= hi && a1 >= lo)
+}
+
 fn offset_opening_along_side(bounds: Aabb3d, side: OrthoSide, delta: f32) -> Aabb3d {
 	let (dx, dz) = match side {
 		OrthoSide::North | OrthoSide::South => (delta, 0.0),
@@ -695,31 +747,36 @@ mod tests {
 	}
 
 	#[test]
-	fn emits_outer_and_inner_gallery_openings() {
+	fn emits_outer_apertures_and_inner_doors_or_windows() {
 		let (plan, _) =
 			LesHallesFloorPlan::fit_to_confines(&nominal_confines(), NoiseParams::default()).unwrap();
+		// Outer: apertures only (no facade doors).
 		assert!(plan
 			.openings
-			.get(&OpeningId::scoped(SCOPE, "outer_passage", "s"))
-			.is_some());
+			.iter()
+			.all(|(id, o)| !id.as_str().contains("outer_passage")
+				&& !(id.as_str().contains("outer_") && matches!(o.label, OpeningLabel::Passage))));
+		assert!(plan
+			.openings
+			.iter()
+			.any(|(id, o)| id.as_str().contains("outer_aperture")
+				&& matches!(o.label, OpeningLabel::Aperture)));
 		assert!(plan
 			.openings
 			.get(&OpeningId::scoped(SCOPE, "inner_passage", "n"))
 			.is_some());
 		assert!(plan
 			.openings
-			.get(&OpeningId::scoped(SCOPE, "outer_aperture", "e_0"))
-			.is_some());
-		assert!(plan
-			.openings
 			.get(&OpeningId::scoped(SCOPE, "inner_aperture", "w"))
 			.is_some());
-		// Outer apertures must actually map onto gallery walls (not lose to passages).
 		use crate::openings::MapsOpenings;
-		assert!(plan
-			.gallery
-			.mapped_opening(&OpeningId::scoped(SCOPE, "outer_aperture", "s_0"))
-			.is_some());
+		let outer_id = plan
+			.openings
+			.iter()
+			.find(|(id, _)| id.as_str().contains("outer_aperture_s_"))
+			.map(|(id, _)| id.clone())
+			.expect("south outer aperture");
+		assert!(plan.gallery.mapped_opening(&outer_id).is_some());
 		assert!(!plan.shaft_walls.is_empty());
 		assert!(plan
 			.openings
