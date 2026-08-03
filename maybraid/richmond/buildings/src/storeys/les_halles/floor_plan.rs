@@ -8,7 +8,10 @@ use richmond_building_components::joints::JointNode;
 use richmond_building_components::panels::{PanelNode, PanelStyle};
 use richmond_building_components::{BuildingComponents, Layers};
 
-use crate::fit::{Confines, FillableRegions, Fit, FitError, StackRegion};
+use crate::fit::{
+	aabb_near_plane, aabb_xz_center, aabb_xz_near_eq, aabb_xz_overlap_area, Confines,
+	FillableRegions, Fit, FitError, StackRegion,
+};
 use crate::openings::{Opening, OpeningId, OpeningLabel, Openings};
 use crate::paneling::fitted_rectangle::FittedRectangle;
 use crate::paneling::panel_complex::{PanelPoint, DEFAULT_PANEL_THICKNESS};
@@ -871,10 +874,6 @@ fn side_slot(side: OrthoSide) -> &'static str {
 	}
 }
 
-fn aabb_near_plane(lo: f32, hi: f32, plane: f32, tol: f32) -> bool {
-	lo <= plane + tol && hi >= plane - tol
-}
-
 fn along_overlaps_spans(along: f32, width: f32, spans: &[(f32, f32)]) -> bool {
 	let half = width * 0.5;
 	let a0 = along - half;
@@ -887,19 +886,16 @@ fn best_shaft_slot(request: &Aabb3d, regions: &[Aabb2d]) -> Option<usize> {
 	if regions.is_empty() {
 		return None;
 	}
-	let rmin = Vec3::from(request.min);
-	let rmax = Vec3::from(request.max);
-	let rcx = (rmin.x + rmax.x) * 0.5;
-	let rcz = (rmin.z + rmax.z) * 0.5;
+	let rc = aabb_xz_center(request);
 
 	let mut best_i = 0usize;
 	let mut best_area = -1.0_f32;
 	let mut best_dist = f32::INFINITY;
 	for (i, region) in regions.iter().enumerate() {
-		let area = xz_overlap_area(rmin.x, rmax.x, rmin.z, rmax.z, region);
+		let area = aabb_xz_overlap_area(request, region);
 		let cx = (region.min.x + region.max.x) * 0.5;
 		let cz = (region.min.y + region.max.y) * 0.5;
-		let dist = (rcx - cx).hypot(rcz - cz);
+		let dist = (rc.x - cx).hypot(rc.y - cz);
 		let better = area > best_area + 1e-6
 			|| ((area - best_area).abs() <= 1e-6 && dist < best_dist - 1e-6);
 		if better {
@@ -909,14 +905,6 @@ fn best_shaft_slot(request: &Aabb3d, regions: &[Aabb2d]) -> Option<usize> {
 		}
 	}
 	Some(best_i)
-}
-
-fn xz_overlap_area(ax0: f32, ax1: f32, az0: f32, az1: f32, region: &Aabb2d) -> f32 {
-	let x0 = ax0.max(region.min.x);
-	let x1 = ax1.min(region.max.x);
-	let z0 = az0.max(region.min.y);
-	let z1 = az1.min(region.max.y);
-	(x1 - x0).max(0.0) * (z1 - z0).max(0.0)
 }
 
 fn offset_opening_along_side(bounds: Aabb3d, side: OrthoSide, delta: f32) -> Aabb3d {
@@ -991,17 +979,6 @@ mod tests {
 				Vec3::ZERO,
 			),
 		}
-	}
-
-	fn aabb_xz_near(a: &Aabb3d, b: &Aabb3d) -> bool {
-		let amin = Vec3::from(a.min);
-		let amax = Vec3::from(a.max);
-		let bmin = Vec3::from(b.min);
-		let bmax = Vec3::from(b.max);
-		(amin.x - bmin.x).abs() < 1e-4
-			&& (amin.z - bmin.z).abs() < 1e-4
-			&& (amax.x - bmax.x).abs() < 1e-4
-			&& (amax.z - bmax.z).abs() < 1e-4
 	}
 
 	#[test]
@@ -1163,12 +1140,12 @@ mod tests {
 		.unwrap();
 
 		let se_open = plan.openings.get(&OpeningId::new("req_se")).unwrap();
-		assert!(aabb_xz_near(&se_open.bounds, &plan.shaft_bounds[1]));
+		assert!(aabb_xz_near_eq(&se_open.bounds, &plan.shaft_bounds[1], 1e-4));
 		assert!(plan.shaft_inbound[1].contains(&OpeningId::new("req_se")));
 
 		let straddle = plan.openings.get(&OpeningId::new("req_straddle")).unwrap();
 		// SE∩request area 4, NE∩request area 12 → NE wins.
-		assert!(aabb_xz_near(&straddle.bounds, &plan.shaft_bounds[2]));
+		assert!(aabb_xz_near_eq(&straddle.bounds, &plan.shaft_bounds[2], 1e-4));
 		assert!(plan.shaft_inbound[2].contains(&OpeningId::new("req_straddle")));
 		assert!(regions.within.iter().any(|c| {
 			c.openings.get(&OpeningId::new("req_se")).is_some()
@@ -1205,13 +1182,15 @@ mod tests {
 		)
 		.unwrap();
 
-		assert!(aabb_xz_near(
+		assert!(aabb_xz_near_eq(
 			&plan.openings.get(&OpeningId::new("req_s")).unwrap().bounds,
-			&plan.shaft_bounds[0]
+			&plan.shaft_bounds[0],
+			1e-4
 		));
-		assert!(aabb_xz_near(
+		assert!(aabb_xz_near_eq(
 			&plan.openings.get(&OpeningId::new("req_e")).unwrap().bounds,
-			&plan.shaft_bounds[1]
+			&plan.shaft_bounds[1],
+			1e-4
 		));
 		assert!(plan.shaft_inbound[0].contains(&OpeningId::new("req_s")));
 		assert!(plan.shaft_inbound[1].contains(&OpeningId::new("req_e")));

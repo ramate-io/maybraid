@@ -51,7 +51,10 @@ pub use constraints::{
 	JointCoordinate, JointEntry, PreJointSweep, SubsetError,
 };
 pub use demos::ConnectingShells;
-pub use fit::{Confines, FillableRegions, Fit, FitError, StackRegion};
+pub use fit::{
+	aabb_near_plane, aabb_xz_area, aabb_xz_center, aabb_xz_extent, aabb_xz_near_eq,
+	aabb_xz_overlap_area, Confines, FillableRegions, Fit, FitError, StackRegion,
+};
 pub use openings::{
 	MappedOpening, MappedOpeningQuad, MappedOpenings, MapsOpenings, Opening, OpeningId,
 	OpeningLabel, Openings,

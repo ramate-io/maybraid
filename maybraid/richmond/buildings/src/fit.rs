@@ -8,8 +8,12 @@
 //! `from_parameterized` + Y-lifted confines so the plan stays identical. When
 //! stacking the *same* storey type, prefer that path and ignore [`FillableRegions::atop`]
 //! so irregular footprints are not re-derived per level.
+//!
+//! Axis-aligned bound helpers used while fitting live here alongside [`Confines`]
+//! ([`aabb_near_plane`], [`aabb_xz_near_eq`], [`aabb_xz_overlap_area`], …).
 
 use bevy_math::bounding::{Aabb2d, Aabb3d, BoundingVolume};
+use bevy_math::{Vec2, Vec3};
 use procedural_common::NoiseParams;
 
 use crate::openings::Openings;
@@ -41,9 +45,74 @@ impl Confines {
 	}
 
 	/// World-space center of [`Self::bounds`] (spatial noise sample point).
-	pub fn center(&self) -> bevy_math::Vec3 {
+	pub fn center(&self) -> Vec3 {
 		self.bounds.center().into()
 	}
+
+	/// Plan-space center \((x, z)\) of [`Self::bounds`].
+	pub fn center_xz(&self) -> Vec2 {
+		aabb_xz_center(&self.bounds)
+	}
+
+	/// Footprint extents \((x, z)\) of [`Self::bounds`].
+	pub fn footprint(&self) -> Vec2 {
+		aabb_xz_extent(&self.bounds)
+	}
+}
+
+/// True when the closed interval `[lo, hi]` reaches within `tol` of `plane`.
+#[inline]
+pub fn aabb_near_plane(lo: f32, hi: f32, plane: f32, tol: f32) -> bool {
+	lo <= plane + tol && hi >= plane - tol
+}
+
+/// Plan-space center \((x, z)\) of an AABB.
+#[inline]
+pub fn aabb_xz_center(a: &Aabb3d) -> Vec2 {
+	let min = Vec3::from(a.min);
+	let max = Vec3::from(a.max);
+	Vec2::new((min.x + max.x) * 0.5, (min.z + max.z) * 0.5)
+}
+
+/// Plan footprint size \((x, z)\) of an AABB.
+#[inline]
+pub fn aabb_xz_extent(a: &Aabb3d) -> Vec2 {
+	let min = Vec3::from(a.min);
+	let max = Vec3::from(a.max);
+	Vec2::new((max.x - min.x).max(0.0), (max.z - min.z).max(0.0))
+}
+
+/// Plan footprint area \(x \cdot z\) of an AABB.
+#[inline]
+pub fn aabb_xz_area(a: &Aabb3d) -> f32 {
+	let e = aabb_xz_extent(a);
+	e.x * e.y
+}
+
+/// True when two AABBs share nearly the same XZ footprint (Y ignored).
+#[inline]
+pub fn aabb_xz_near_eq(a: &Aabb3d, b: &Aabb3d, eps: f32) -> bool {
+	let amin = Vec3::from(a.min);
+	let amax = Vec3::from(a.max);
+	let bmin = Vec3::from(b.min);
+	let bmax = Vec3::from(b.max);
+	(amin.x - bmin.x).abs() < eps
+		&& (amin.z - bmin.z).abs() < eps
+		&& (amax.x - bmax.x).abs() < eps
+		&& (amax.z - bmax.z).abs() < eps
+}
+
+/// Overlap area between an AABB’s XZ footprint and a plan [`Aabb2d`]
+/// (\(x → X\), \(y → Z\)).
+#[inline]
+pub fn aabb_xz_overlap_area(a: &Aabb3d, region: &Aabb2d) -> f32 {
+	let amin = Vec3::from(a.min);
+	let amax = Vec3::from(a.max);
+	let x0 = amin.x.max(region.min.x);
+	let x1 = amax.x.min(region.max.x);
+	let z0 = amin.z.max(region.min.y);
+	let z1 = amax.z.min(region.max.y);
+	(x1 - x0).max(0.0) * (z1 - z0).max(0.0)
 }
 
 /// Vertical box atop the confines on which other types can stack.
