@@ -2,7 +2,9 @@
 
 use bevy::prelude::*;
 use clap::{Args, ValueEnum};
-use richmond_buildings::{EndCap, Overhang, RectangularPitchedRoofComplexParams};
+use richmond_buildings::{
+	EndCap, Overhang, RectangularPitchedRoofComplexParams, RidgeJunction,
+};
 
 use super::ShowTransform;
 use crate::preview::PreviewSubject;
@@ -19,6 +21,8 @@ pub enum RoofComplexPreset {
 	T,
 	/// T with taller / higher stem than the cross-bar.
 	TStepped,
+	/// Large hall gable with three smaller perpendicular bay gables.
+	HallAndBays,
 }
 
 #[derive(Clone, Copy, Debug, Default, ValueEnum)]
@@ -47,27 +51,36 @@ pub struct RectangularPitchedRoofComplex {
 	/// Gable eave projection past the wall plate (meters) when `--end-cap gable`.
 	#[arg(long, default_value_t = 0.7)]
 	pub gable_eave: f32,
+	/// Ridge-junction blend: `0` = lower ridge, `1` = higher (`RidgeJunction::RunUp`).
+	#[arg(long, default_value_t = 0.0)]
+	pub run_up: f32,
 	#[command(flatten)]
 	pub transform: ShowTransform,
 }
 
 impl RectangularPitchedRoofComplex {
 	pub fn into_preview(self) -> (PreviewSubject, Transform) {
+		let preset = match self.preset {
+			RoofComplexPreset::Single => "single",
+			RoofComplexPreset::L => "l",
+			RoofComplexPreset::LSteppedRidge => "l-stepped-ridge",
+			RoofComplexPreset::LSteppedEave => "l-stepped-eave",
+			RoofComplexPreset::T => "t",
+			RoofComplexPreset::TStepped => "t-stepped",
+			RoofComplexPreset::HallAndBays => "hall-and-bays",
+		};
+		// Hall-and-bays defaults to gables even when the global end-cap default is hip.
+		let end_cap_gable = matches!(self.end_cap, EndCapKind::Gable)
+			|| matches!(self.preset, RoofComplexPreset::HallAndBays);
 		(
 			PreviewSubject::RectangularPitchedRoofComplex {
-				preset: match self.preset {
-					RoofComplexPreset::Single => "single".into(),
-					RoofComplexPreset::L => "l".into(),
-					RoofComplexPreset::LSteppedRidge => "l-stepped-ridge".into(),
-					RoofComplexPreset::LSteppedEave => "l-stepped-eave".into(),
-					RoofComplexPreset::T => "t".into(),
-					RoofComplexPreset::TStepped => "t-stepped".into(),
-				},
+				preset: preset.into(),
 				overhang_fixed: self.overhang_fixed,
 				overhang_ratio: self.overhang_ratio,
-				end_cap_gable: matches!(self.end_cap, EndCapKind::Gable),
+				end_cap_gable,
 				gable_ridge: self.gable_ridge,
 				gable_eave: self.gable_eave,
+				run_up: self.run_up,
 			},
 			self.transform.transform(),
 		)
@@ -81,6 +94,7 @@ pub fn build_params(
 	end_cap_gable: bool,
 	gable_ridge: f32,
 	gable_eave: f32,
+	run_up: f32,
 ) -> RectangularPitchedRoofComplexParams {
 	let mut params = match preset {
 		"single" => RectangularPitchedRoofComplexParams::single(10.0, 6.0, 2.5, 4.5),
@@ -88,6 +102,7 @@ pub fn build_params(
 		"l-stepped-eave" => RectangularPitchedRoofComplexParams::l_shape_stepped_eave(),
 		"t" => RectangularPitchedRoofComplexParams::t_shape(),
 		"t-stepped" => RectangularPitchedRoofComplexParams::t_shape_stepped(),
+		"hall-and-bays" => RectangularPitchedRoofComplexParams::hall_and_bays(),
 		_ => RectangularPitchedRoofComplexParams::l_shape(),
 	};
 	params.overhang = if let Some(r) = overhang_ratio {
@@ -103,5 +118,6 @@ pub fn build_params(
 	} else {
 		EndCap::Hip
 	};
+	params.ridge_junction = RidgeJunction::RunUp(run_up);
 	params
 }

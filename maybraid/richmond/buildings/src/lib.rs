@@ -73,7 +73,8 @@ pub use openings::{
 pub use shells::{
 	ArcFloor, ArcFloorParams, ArcFloorSlab, ArcTower, ArcTowerParams, ConnectingHall, EndCap,
 	Overhang, PitchedRoof, PitchedRoofParams, RectangularPitchedRoofComplex,
-	RectangularPitchedRoofComplexParams, RoofHalf, Trazaloid, TrazaloidParams, TrazaloidSide,
+	RectangularPitchedRoofComplexParams, RidgeJunction, RoofHalf, Trazaloid, TrazaloidParams,
+	TrazaloidSide,
 	TrazaloidSlab, ValleySegment,
 };
 pub use stacked_rings::{StackedRing, StackedRings};

@@ -255,16 +255,6 @@ impl Plane {
 		Some(Self { n, d: n.dot(a) })
 	}
 
-	/// Intersect an infinite line `origin + t * dir` with this plane.
-	pub fn intersect_line(self, origin: Vec3, dir: Vec3) -> Option<Vec3> {
-		let denom = self.n.dot(dir);
-		if denom.abs() < 1e-10 {
-			return None;
-		}
-		let t = (self.d - self.n.dot(origin)) / denom;
-		Some(origin + dir * t)
-	}
-
 	pub fn intersect(self, other: Self) -> Option<(Vec3, Vec3)> {
 		let dir = self.n.cross(other.n);
 		if dir.length_squared() < 1e-10 {

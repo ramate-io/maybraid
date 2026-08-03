@@ -4,6 +4,7 @@ use bevy_math::Vec3;
 
 use super::geometry::{LongAxis, Plane, VolumeCandidate, EPS};
 use super::topology::ConcaveCorner;
+use super::RidgeJunction;
 
 /// Valley segment from eave meeting point up toward the ridge junction.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -19,10 +20,11 @@ pub struct ValleySegment {
 pub(super) fn apply_valleys(
 	volumes: &mut [VolumeCandidate],
 	corners: &[ConcaveCorner],
+	junction: RidgeJunction,
 ) -> Vec<ValleySegment> {
 	let mut valleys = Vec::new();
 	for corner in corners {
-		let Some(valley) = build_valley(volumes, corner) else {
+		let Some(valley) = build_valley(volumes, corner, junction) else {
 			continue;
 		};
 		truncate_for_valley(volumes, corner, &valley);
@@ -31,7 +33,11 @@ pub(super) fn apply_valleys(
 	valleys
 }
 
-fn build_valley(volumes: &[VolumeCandidate], corner: &ConcaveCorner) -> Option<ValleySegment> {
+fn build_valley(
+	volumes: &[VolumeCandidate],
+	corner: &ConcaveCorner,
+	junction: RidgeJunction,
+) -> Option<ValleySegment> {
 	let a = &volumes[corner.vol_a];
 	let b = &volumes[corner.vol_b];
 	debug_assert_eq!(a.long_axis, LongAxis::X);
@@ -57,10 +63,8 @@ fn build_valley(volumes: &[VolumeCandidate], corner: &ConcaveCorner) -> Option<V
 	let eave_point = Vec3::new(eave_x, y_eave, eave_z);
 	let eave_on_valley = closest_point_on_line(origin, dir, eave_point);
 
-	// Unequal ridges meet by snapping both junction ends to the lower ridge
-	// height at the plan crossing (taller ridge banks down). Keeps a closed
-	// valley without a vertical gap between ridge ends.
-	let ridge_point = lowest_ridge_junction(a, b);
+	// Unequal ridges meet at a blended height on the plan crossing.
+	let ridge_point = ridge_junction_point(a, b, junction);
 
 	Some(ValleySegment {
 		eave_point: eave_on_valley,
@@ -70,9 +74,9 @@ fn build_valley(volumes: &[VolumeCandidate], corner: &ConcaveCorner) -> Option<V
 	})
 }
 
-/// Plan crossing of the two ridges, at the lower ridge height.
-fn lowest_ridge_junction(a: &VolumeCandidate, b: &VolumeCandidate) -> Vec3 {
-	let y_join = a.ridge.a.y.min(b.ridge.a.y);
+/// Plan crossing of the two ridges, at the [`RidgeJunction`] blend height.
+fn ridge_junction_point(a: &VolumeCandidate, b: &VolumeCandidate, junction: RidgeJunction) -> Vec3 {
+	let y_join = junction.resolve(a.ridge.a.y, b.ridge.a.y);
 	Vec3::new(b.ridge.a.x, y_join, a.ridge.a.z)
 }
 

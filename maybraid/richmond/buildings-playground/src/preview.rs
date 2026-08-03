@@ -146,6 +146,7 @@ pub enum PreviewSubject {
 		end_cap_gable: bool,
 		gable_ridge: f32,
 		gable_eave: f32,
+		run_up: f32,
 	},
 	Rectangle {
 		origin: Vec3,
@@ -411,9 +412,10 @@ impl PreviewConfig {
 				overhang_fixed,
 				overhang_ratio,
 				end_cap_gable,
+				run_up,
 				..
 			} => format!(
-				"preview: rectangular-pitched-roof-complex (preset={preset} overhang={} end={})",
+				"preview: rectangular-pitched-roof-complex (preset={preset} overhang={} end={} run_up={run_up:.2})",
 				overhang_ratio
 					.map(|r| format!("ratio={r:.2}"))
 					.unwrap_or_else(|| format!("fixed={overhang_fixed:.2}")),
@@ -1222,6 +1224,7 @@ pub fn present_preview_lod(
 			end_cap_gable,
 			gable_ridge,
 			gable_eave,
+			run_up,
 		} => {
 			let params = build_roof_complex_params(
 				preset,
@@ -1230,6 +1233,7 @@ pub fn present_preview_lod(
 				*end_cap_gable,
 				*gable_ridge,
 				*gable_eave,
+				*run_up,
 			);
 			let shell = RectangularPitchedRoofComplex::new(params);
 			spawn_preview(
@@ -1886,6 +1890,7 @@ pub fn draw_roof_complex_gizmos(mut gizmos: Gizmos, config: Res<PreviewConfig>) 
 		end_cap_gable,
 		gable_ridge,
 		gable_eave,
+		run_up,
 	} = &config.subject
 	else {
 		return;
@@ -1902,6 +1907,7 @@ pub fn draw_roof_complex_gizmos(mut gizmos: Gizmos, config: Res<PreviewConfig>) 
 		*end_cap_gable,
 		*gable_ridge,
 		*gable_eave,
+		*run_up,
 	);
 	for (i, vol) in params.volumes.iter().enumerate() {
 		let color = if i % 2 == 0 { cyan } else { Color::srgb(1.0, 0.75, 0.2) };

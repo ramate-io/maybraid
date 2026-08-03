@@ -3,7 +3,7 @@ use bevy_math::Vec3;
 
 use super::geometry::{LongAxis, VolumeCandidate};
 use super::topology::resolve_junctions;
-use super::{EndCap, Overhang, RectangularPitchedRoofComplexParams};
+use super::{EndCap, Overhang, RectangularPitchedRoofComplexParams, RidgeJunction};
 
 #[test]
 fn single_box_long_axis_and_no_valleys() {
@@ -88,6 +88,36 @@ fn stepped_presets_vary_ridge_and_eave_heights() {
 	let t = RectangularPitchedRoofComplexParams::t_shape_stepped().build();
 	assert_eq!(t.roofs().len(), 2);
 	assert!(!t.valleys().is_empty());
+}
+
+#[test]
+fn run_up_blends_junction_ridge_height() {
+	let low = RectangularPitchedRoofComplexParams::l_shape_stepped_ridge()
+		.ridge_junction(RidgeJunction::RunUp(0.0))
+		.build();
+	assert!((low.valleys()[0].ridge_point.y - 4.2).abs() < 1e-3);
+
+	let mid = RectangularPitchedRoofComplexParams::l_shape_stepped_ridge()
+		.ridge_junction(RidgeJunction::RunUp(0.5))
+		.build();
+	assert!((mid.valleys()[0].ridge_point.y - 4.85).abs() < 1e-3);
+
+	let high = RectangularPitchedRoofComplexParams::l_shape_stepped_ridge()
+		.ridge_junction(RidgeJunction::RunUp(1.0))
+		.build();
+	assert!((high.valleys()[0].ridge_point.y - 5.5).abs() < 1e-3);
+}
+
+#[test]
+fn hall_and_bays_has_three_t_junctions() {
+	let complex = RectangularPitchedRoofComplexParams::hall_and_bays().build();
+	assert_eq!(complex.roofs().len(), 4);
+	// Each bay forms a T → two concave corners; three bays → six valleys.
+	assert!(
+		complex.valleys().len() >= 6,
+		"expected ≥6 valleys, got {}",
+		complex.valleys().len()
+	);
 }
 
 #[test]

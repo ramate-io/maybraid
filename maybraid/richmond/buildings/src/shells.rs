@@ -13,6 +13,6 @@ pub use connecting_hall::ConnectingHall;
 pub use pitched_rectangular_roof::{PitchedRoof, PitchedRoofParams, RoofHalf};
 pub use rectangular_pitched_roof_complex::{
 	EndCap, Overhang, RectangularPitchedRoofComplex, RectangularPitchedRoofComplexParams,
-	ValleySegment,
+	RidgeJunction, ValleySegment,
 };
 pub use trazaloid::{Trazaloid, TrazaloidParams, TrazaloidSide, TrazaloidSlab};

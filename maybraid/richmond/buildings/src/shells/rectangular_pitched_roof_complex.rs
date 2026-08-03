@@ -60,12 +60,41 @@ impl Default for EndCap {
 	}
 }
 
+/// How unequal ridges meet at a valley junction.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum RidgeJunction {
+	/// Blend junction height from the lower ridge (`0`) toward the higher (`1`).
+	RunUp(f32),
+}
+
+impl Default for RidgeJunction {
+	fn default() -> Self {
+		Self::RunUp(0.0)
+	}
+}
+
+impl RidgeJunction {
+	/// Junction ridge height for two authored ridge elevations.
+	pub fn resolve(self, y_a: f32, y_b: f32) -> f32 {
+		match self {
+			Self::RunUp(t) => {
+				let t = t.clamp(0.0, 1.0);
+				let lo = y_a.min(y_b);
+				let hi = y_a.max(y_b);
+				lo + (hi - lo) * t
+			}
+		}
+	}
+}
+
 /// Authored parameters for a [`RectangularPitchedRoofComplex`].
 #[derive(Debug, Clone, PartialEq)]
 pub struct RectangularPitchedRoofComplexParams {
 	pub volumes: Vec<Aabb3d>,
 	pub overhang: Overhang,
 	pub end_cap: EndCap,
+	/// Unequal-ridge meet policy at valleys.
+	pub ridge_junction: RidgeJunction,
 	pub style: PanelStyle,
 	pub joint_thickness: f32,
 }
@@ -82,6 +111,7 @@ impl RectangularPitchedRoofComplexParams {
 			volumes,
 			overhang: Overhang::default(),
 			end_cap: EndCap::default(),
+			ridge_junction: RidgeJunction::default(),
 			style: PanelStyle::ShepherdsThatch,
 			joint_thickness: DEFAULT_PANEL_THICKNESS,
 		}
@@ -139,6 +169,24 @@ impl RectangularPitchedRoofComplexParams {
 		])
 	}
 
+	/// One large hall gable (long X) with three smaller perpendicular bay gables.
+	///
+	/// Hall: lower eaves, higher ridge. Bays: higher eaves, lower ridges.
+	pub fn hall_and_bays() -> Self {
+		let hall = Aabb3d::from_min_max(
+			Vec3::new(-14.0, 2.0, -3.0),
+			Vec3::new(14.0, 5.8, 3.0),
+		);
+		// Bays sit on +Z, overlapping the hall so each forms a T junction.
+		let bay = |cx: f32| {
+			Aabb3d::from_min_max(Vec3::new(cx - 2.0, 3.2, 1.0), Vec3::new(cx + 2.0, 4.6, 10.0))
+		};
+		Self::new(vec![hall, bay(-8.0), bay(0.0), bay(8.0)]).end_cap(EndCap::Gable {
+			ridge: Overhang::Fixed(0.8),
+			eave: Overhang::Fixed(0.7),
+		})
+	}
+
 	pub fn overhang(mut self, overhang: Overhang) -> Self {
 		self.overhang = overhang;
 		self
@@ -146,6 +194,11 @@ impl RectangularPitchedRoofComplexParams {
 
 	pub fn end_cap(mut self, end_cap: EndCap) -> Self {
 		self.end_cap = end_cap;
+		self
+	}
+
+	pub fn ridge_junction(mut self, ridge_junction: RidgeJunction) -> Self {
+		self.ridge_junction = ridge_junction;
 		self
 	}
 
@@ -221,7 +274,7 @@ fn resolve(params: &RectangularPitchedRoofComplexParams) -> (Vec<PitchedRoof>, V
 		.collect();
 
 	let corners = resolve_junctions(&mut volumes);
-	let valleys = apply_valleys(&mut volumes, &corners);
+	let valleys = apply_valleys(&mut volumes, &corners, params.ridge_junction);
 
 	for vol in &mut volumes {
 		vol.apply_end_caps(params.end_cap);
