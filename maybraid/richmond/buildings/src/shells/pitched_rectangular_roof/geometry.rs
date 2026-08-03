@@ -101,6 +101,11 @@ impl RoofHalf {
 		Vec3::new(ridge_end.x, wall_end.y, ridge_end.z)
 	}
 
+	/// Drop `p` onto the vertical plane through `wall_end` with normal `wall_long`.
+	fn project_onto_wall_end_plane(p: Vec3, wall_end: Vec3, wall_long: Vec3) -> Vec3 {
+		p - wall_long * (p - wall_end).dot(wall_long)
+	}
+
 	pub(super) fn resolve(
 		&self,
 		style: PanelStyle,
@@ -138,6 +143,9 @@ impl RoofHalf {
 		}
 
 		let mut gables = Vec::new();
+		// Gable walling stays in the vertical plane of the wall end. Ridge/eave may
+		// project past that plane for barge overhang; only the pitch uses those ends.
+		let wall_long = (w1 - w0).normalize_or_zero();
 		for (end, draw) in [
 			(0usize, self.draw_in_half_gable_end.0),
 			(1, self.draw_in_half_gable_end.1),
@@ -148,14 +156,16 @@ impl RoofHalf {
 			let w = Self::line_end(self.wall_line, end);
 			let e = Self::line_end(self.eave_line, end);
 			let r = Self::line_end(self.ridge_line, end);
-			let r_wall = Self::ridge_at_wall_height(r, w);
+			let e_g = Self::project_onto_wall_end_plane(e, w, wall_long);
+			let r_g = Self::project_onto_wall_end_plane(r, w, wall_long);
+			let r_wall = Self::ridge_at_wall_height(r_g, w);
 			let clip = gable_end_clips[end].clone().unwrap_or_default();
 			gables.push(
-				ClippedTessellatedTriangle::new(style, w, e, r, clip.clone())
+				ClippedTessellatedTriangle::new(style, w, e_g, r_g, clip.clone())
 					.with_joint_policy(joint_policy),
 			);
 			gables.push(
-				ClippedTessellatedTriangle::new(style, w, r, r_wall, clip)
+				ClippedTessellatedTriangle::new(style, w, r_g, r_wall, clip)
 					.with_joint_policy(joint_policy),
 			);
 		}

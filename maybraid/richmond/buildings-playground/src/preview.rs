@@ -28,10 +28,12 @@ use richmond_buildings::{
 	IFloor, IFloorParams, IFloorSlab, MappedOpening, MappedOpeningQuad, MapsOpenings, OpeningId,
 	OpeningLabel, Openings, PitchedRoof, PitchedRoofParams, RectFloor, RectFloorParams, RectFloorSlab,
 	RectInset, RectRingFloor, RectRingFloorParams, RectRingFloorSlab, Rectangle, RectangularNTube,
-	RectangularNTubeCorner, RectangularNTubeStation, RectangularStripNode, RoundedRectFloor,
-	RoundedRectFloorParams, RoundedRectFloorSlab, RuledPitch, Tube, TubeCrossSectionNode, TubeFaces,
-	Trazaloid, TrazaloidParams, TrazaloidSlab, DEFAULT_PANEL_THICKNESS,
+	RectangularNTubeCorner, RectangularNTubeStation, RectangularPitchedRoofComplex,
+	RectangularStripNode, RoundedRectFloor, RoundedRectFloorParams, RoundedRectFloorSlab, RuledPitch,
+	Tube, TubeCrossSectionNode, TubeFaces, Trazaloid, TrazaloidParams, TrazaloidSlab,
+	DEFAULT_PANEL_THICKNESS,
 };
+use crate::commands::show::rectangular_pitched_roof_complex::build_params as build_roof_complex_params;
 use richmond_buildings::stacked_rings::StackedRings;
 use richmond_buildings::tessellated_triangle_panel::TessellatedTrianglePanel;
 use richmond_buildings::portals::{MustAssignPortal, Portal};
@@ -139,6 +141,17 @@ pub enum PreviewSubject {
 		no_walls: bool,
 		no_hips: bool,
 		openings: Vec<PreviewOpening>,
+	},
+	RectangularPitchedRoofComplex {
+		preset: String,
+		overhang_fixed: f32,
+		overhang_ratio: Option<f32>,
+		end_cap_gable: bool,
+		gable_ridge: f32,
+		gable_eave: f32,
+		run_up: f32,
+		/// Demo aperture on roof 0 / half 0 after geometry solve.
+		skylight: bool,
 	},
 	RectFloor {
 		footprint_x: f32,
@@ -446,6 +459,21 @@ impl PreviewConfig {
 				!no_walls,
 				!no_hips,
 				openings.len()
+			),
+			PreviewSubject::RectangularPitchedRoofComplex {
+				ref preset,
+				overhang_fixed,
+				overhang_ratio,
+				end_cap_gable,
+				run_up,
+				skylight,
+				..
+			} => format!(
+				"preview: rectangular-pitched-roof-complex (preset={preset} overhang={} end={} run_up={run_up:.2} skylight={skylight})",
+				overhang_ratio
+					.map(|r| format!("ratio={r:.2}"))
+					.unwrap_or_else(|| format!("fixed={overhang_fixed:.2}")),
+				if end_cap_gable { "gable" } else { "hip" }
 			),
 			PreviewSubject::RectFloor {
 				footprint_x,
@@ -791,6 +819,9 @@ impl PreviewConfig {
 				let hz = footprint_z.max(1e-4) * 0.5 + 0.5;
 				let h = ridge_height.max(1e-4) + 0.5;
 				Aabb3d::from_min_max(Vec3::new(-hx, -0.2, -hz), Vec3::new(hx, h, hz))
+			}
+			PreviewSubject::RectangularPitchedRoofComplex { .. } => {
+				Aabb3d::from_min_max(Vec3::new(-10.0, -0.2, -10.0), Vec3::new(10.0, 6.0, 10.0))
 			}
 			PreviewSubject::RectFloor {
 				footprint_x,
@@ -1524,6 +1555,33 @@ pub fn present_preview_lod(
 				},
 				..CircRingFloorParams::default()
 			});
+			spawn_preview(
+				&mut commands,
+				transform,
+				ComponentsOnly(shell).scene_with_lod(&lod_ref),
+			);
+		}
+		PreviewSubject::RectangularPitchedRoofComplex {
+			preset,
+			overhang_fixed,
+			overhang_ratio,
+			end_cap_gable,
+			gable_ridge,
+			gable_eave,
+			run_up,
+			skylight,
+		} => {
+			let params = build_roof_complex_params(
+				preset,
+				*overhang_fixed,
+				*overhang_ratio,
+				*end_cap_gable,
+				*gable_ridge,
+				*gable_eave,
+				*run_up,
+				*skylight,
+			);
+			let shell = RectangularPitchedRoofComplex::new(params);
 			spawn_preview(
 				&mut commands,
 				transform,
@@ -2300,6 +2358,48 @@ pub fn draw_opening_plan_gizmos(mut gizmos: Gizmos, config: Res<PreviewConfig>) 
 			draw_mapped_opening_overlays(&mut gizmos, map, openings, &shell, lime, orange);
 		}
 		_ => {}
+	}
+}
+
+/// Massing AABBs (cyan) + valley segments (magenta) for roof-complex previews.
+pub fn draw_roof_complex_gizmos(mut gizmos: Gizmos, config: Res<PreviewConfig>) {
+	let PreviewSubject::RectangularPitchedRoofComplex {
+		preset,
+		overhang_fixed,
+		overhang_ratio,
+		end_cap_gable,
+		gable_ridge,
+		gable_eave,
+		run_up,
+		skylight,
+	} = &config.subject
+	else {
+		return;
+	};
+	let tf = config.transform;
+	let map = |p: Vec3| tf.transform_point(p);
+	let cyan = Color::srgb(0.25, 0.95, 1.0);
+	let magenta = Color::srgb(0.95, 0.25, 0.85);
+
+	let params = build_roof_complex_params(
+		preset,
+		*overhang_fixed,
+		*overhang_ratio,
+		*end_cap_gable,
+		*gable_ridge,
+		*gable_eave,
+		*run_up,
+		*skylight,
+	);
+	for (i, vol) in params.volumes.iter().enumerate() {
+		let color = if i % 2 == 0 { cyan } else { Color::srgb(1.0, 0.75, 0.2) };
+		gizmos.aabb_3d(*vol, tf, color);
+	}
+	let shell = RectangularPitchedRoofComplex::new(params);
+	for valley in shell.valleys() {
+		gizmos.line(map(valley.eave_point), map(valley.ridge_point), magenta);
+		gizmos.sphere(Isometry3d::from_translation(map(valley.eave_point)), 0.1, magenta);
+		gizmos.sphere(Isometry3d::from_translation(map(valley.ridge_point)), 0.1, magenta);
 	}
 }
 

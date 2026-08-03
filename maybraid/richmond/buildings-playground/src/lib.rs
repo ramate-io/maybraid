@@ -20,7 +20,7 @@ use ground::setup_ground;
 use lod::{add_fine_pass_for, LodFinePassPlugin, LodFinePassSystems};
 use preview::{
 	draw_connecting_hall_gizmos, draw_connecting_shells_gizmos, draw_opening_plan_gizmos,
-	present_preview_lod, CachedPreview,
+	draw_roof_complex_gizmos, present_preview_lod, CachedPreview,
 };
 use richmond_building_components::{
 	apply_parent_confines, update_partition_host_levels, update_roof_host_levels,
@@ -54,6 +54,7 @@ impl Plugin for RichmondBuildingsPlaygroundPlugin {
 					draw_connecting_hall_gizmos.after(present_preview_lod),
 					draw_connecting_shells_gizmos.after(present_preview_lod),
 					draw_opening_plan_gizmos.after(present_preview_lod),
+					draw_roof_complex_gizmos.after(present_preview_lod),
 					update_partition_host_levels.in_set(LodFinePassSystems::UpdateLevels),
 					update_roof_host_levels.in_set(LodFinePassSystems::UpdateLevels),
 					apply_parent_confines.after(LodFinePassSystems::Fulfill),

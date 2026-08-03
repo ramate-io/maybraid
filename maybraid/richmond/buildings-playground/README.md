@@ -45,6 +45,11 @@ cargo run -p richmond-buildings-playground -- show pitched-rectangular-roof \
   --no-hips --gables --ridge-inset 0 \
   --footprint-x 16 --footprint-z 10 --ridge-height 7 --eave-height 2.5 \
   --opening 'gable_win:window:7.6,2.6,-1.4:8.4,5.2,1.4'
+# Orthogonal AABB roof complex (L / T / single) with valley gizmos:
+cargo run -p richmond-buildings-playground -- show rectangular-pitched-roof-complex
+cargo run -p richmond-buildings-playground -- show rectangular-pitched-roof-complex --preset t
+cargo run -p richmond-buildings-playground -- show rectangular-pitched-roof-complex --preset l --end-cap gable
+cargo run -p richmond-buildings-playground -- show rectangular-pitched-roof-complex --preset single --overhang-ratio 0.15
 cargo run -p richmond-buildings-playground -- show rectangle
 cargo run -p richmond-buildings-playground -- show rectangle --preset wall
 cargo run -p richmond-buildings-playground -- show clipped-rectangle

@@ -9,6 +9,7 @@ pub mod ortho;
 pub mod pitched_rectangular_roof;
 pub mod rect_floor;
 pub mod rect_ring_floor;
+pub mod rectangular_pitched_roof_complex;
 pub mod rounded_rect_floor;
 pub mod trazaloid;
 
@@ -20,6 +21,10 @@ pub use i_floor::{IFloor, IFloorParams, IFloorSlab};
 pub use pitched_rectangular_roof::{PitchedRoof, PitchedRoofParams, RoofHalf};
 pub use rect_floor::{RectFloor, RectFloorParams, RectFloorSide, RectFloorSlab};
 pub use rect_ring_floor::{RectRingFloor, RectRingFloorParams, RectRingFloorSide, RectRingFloorSlab};
+pub use rectangular_pitched_roof_complex::{
+	EndCap, Overhang, RectangularPitchedRoofComplex, RectangularPitchedRoofComplexParams,
+	RidgeJunction, ValleySegment,
+};
 pub use rounded_rect_floor::{
 	RoundedRectCorner, RoundedRectFloor, RoundedRectFloorParams, RoundedRectFloorSide,
 	RoundedRectFloorSlab,
