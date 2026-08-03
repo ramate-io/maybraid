@@ -25,8 +25,9 @@ use richmond_buildings::{
 	CircRingFloor, CircRingFloorParams, CircRingFloorSlab, ClippedArcSweep, ClippedFittedRectangle,
 	ClippedFittedRectangularStrip, ClippedQuadPanel, ClippedRectangle, ClippedRectangularStrip,
 	ClippedRuledStrip, ClippedTessellatedTriangle, ConnectingHall, ConnectingShells, FittedRectangle,
-	IFloor, IFloorParams, IFloorSlab, MappedOpening, MappedOpeningQuad, MapsOpenings, OpeningId,
-	OpeningLabel, Openings, PitchedRoof, PitchedRoofParams, RectFloor, RectFloorParams, RectFloorSlab,
+	IFloor, IFloorParams, IFloorSlab, MappedOpening, MappedOpeningQuad, MapsOpenings, Opening,
+	OpeningId, OpeningLabel, Openings, PitchedRoof, PitchedRoofParams, RectFloor, RectFloorParams,
+	RectFloorSlab,
 	RectInset, RectRingFloor, RectRingFloorParams, RectRingFloorSlab, Rectangle, RectangularNTube,
 	RectangularNTubeCorner, RectangularNTubeStation, RectangularPitchedRoofComplex,
 	RectangularStripNode, RoundedRectFloor, RoundedRectFloorParams, RoundedRectFloorSlab, RuledPitch,
@@ -1058,7 +1059,7 @@ impl CachedPreview {
 				}
 			}
 			PreviewSubject::CommercialStallStrip { extent, seed } => {
-				let confines = Confines::from_bounds(Aabb3d::from_min_max(Vec3::ZERO, *extent));
+				let confines = demo_commercial_stall_strip_confines(*extent, *seed);
 				let noise = NoiseParams {
 					seed: *seed,
 					..NoiseParams::default()
@@ -1129,6 +1130,38 @@ fn les_halles_confines_bounds(extent: Vec3) -> Aabb3d {
 	let hz = extent.z.max(1e-4) * 0.5;
 	let h = extent.y.max(1e-4);
 	Aabb3d::from_min_max(Vec3::new(-hx, 0.0, -hz), Vec3::new(hx, h, hz))
+}
+
+/// Demo strip confines with one Passage per ~preferred bay on the −Z façade.
+fn demo_commercial_stall_strip_confines(extent: Vec3, seed: i32) -> Confines {
+	let extent = extent.max(Vec3::splat(1e-4));
+	let along_x = extent.x >= extent.z;
+	let along = if along_x { extent.x } else { extent.z };
+	let bay = (4.5 + ((seed.rem_euclid(17) as f32) * 0.12)).clamp(3.5, 8.0);
+	let n = ((along / bay).floor() as usize).max(1);
+	let cell = along / n as f32;
+	let mut openings = Openings::new();
+	for i in 0..n {
+		let mid = (i as f32 + 0.5) * cell;
+		let half_w = (1.1_f32).min(cell * 0.35);
+		let door_h = (extent.y * 0.72).clamp(2.0, extent.y.max(2.0));
+		let bounds = if along_x {
+			Aabb3d::from_min_max(
+				Vec3::new(mid - half_w, 0.0, -0.25),
+				Vec3::new(mid + half_w, door_h, 0.25),
+			)
+		} else {
+			Aabb3d::from_min_max(
+				Vec3::new(-0.25, 0.0, mid - half_w),
+				Vec3::new(0.25, door_h, mid + half_w),
+			)
+		};
+		openings.insert(
+			OpeningId::new(format!("demo_door_{i}")),
+			Opening::passage(bounds),
+		);
+	}
+	Confines::new(Aabb3d::from_min_max(Vec3::ZERO, extent), 0.0, openings)
 }
 
 fn fit_les_halles_floor_plan(
