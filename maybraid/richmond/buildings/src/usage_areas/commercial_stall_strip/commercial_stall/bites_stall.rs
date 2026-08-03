@@ -144,4 +144,36 @@ mod tests {
 		assert_eq!(stall.stall_type.text, "BitesStall");
 		assert_eq!(stall.bites_kitchen.text, "BitesKitchen");
 	}
+
+	#[test]
+	fn kitchen_spans_full_width_behind_both_counters() {
+		let mut openings = Openings::new();
+		openings.insert(
+			OpeningId::new("door_a"),
+			Opening::passage(Aabb3d::from_min_max(
+				Vec3::new(0.5, 0.0, -0.2),
+				Vec3::new(3.0, 2.2, 0.2),
+			)),
+		);
+		openings.insert(
+			OpeningId::new("door_b"),
+			Opening::passage(Aabb3d::from_min_max(
+				Vec3::new(5.0, 0.0, -0.2),
+				Vec3::new(7.5, 2.2, 0.2),
+			)),
+		);
+		let confines = Confines::new(
+			Aabb3d::from_min_max(Vec3::ZERO, Vec3::new(10.0, 3.0, 6.0)),
+			0.0,
+			openings,
+		);
+		let (stall, _) = BitesStall::fit_to_confines(&confines, NoiseParams::default()).unwrap();
+		let place = &stall.bites_kitchen.placement;
+		// Placement scale is full extents; translation is center.
+		assert!(
+			place.scale.x >= 9.0,
+			"kitchen width {} should span nearly full stall",
+			place.scale.x
+		);
+	}
 }

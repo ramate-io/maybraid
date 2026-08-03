@@ -101,30 +101,25 @@ pub fn inflate_xz(aabb: &Aabb3d, pad: f32) -> Aabb3d {
 	)
 }
 
-/// Largest axis-aligned XZ remainder of `bounds` after subtracting each obstacle
-/// inflated by `clearance` (Y kept from `bounds`).
+/// Largest single AABB remainder of `bounds` after keeping ≥`clearance` from each
+/// obstacle (XZ). Each obstacle is cut with a full-span cardinal slab so two
+/// façade counters leave one kitchen behind *both*, not a narrow bay behind one.
 pub fn largest_remainder_away_from(
 	bounds: &Aabb3d,
 	obstacles: &[Aabb3d],
 	clearance: f32,
 ) -> Option<Aabb3d> {
-	let mut regions = vec![*bounds];
+	let mut region = *bounds;
 	for obs in obstacles {
 		let cut = inflate_xz(obs, clearance);
-		let mut next = Vec::new();
-		for region in regions {
-			next.extend(subtract_aabb_xz(&region, &cut));
-		}
-		regions = next;
-		if regions.is_empty() {
-			return None;
-		}
+		let candidates = full_span_cut_slabs(&region, &cut);
+		region = candidates.into_iter().max_by(|a, b| {
+			aabb_xz_area(a)
+				.partial_cmp(&aabb_xz_area(b))
+				.unwrap_or(std::cmp::Ordering::Equal)
+		})?;
 	}
-	regions.into_iter().max_by(|a, b| {
-		aabb_xz_area(a)
-			.partial_cmp(&aabb_xz_area(b))
-			.unwrap_or(std::cmp::Ordering::Equal)
-	})
+	Some(region)
 }
 
 fn aabb_xz_area(aabb: &Aabb3d) -> f32 {
@@ -132,13 +127,14 @@ fn aabb_xz_area(aabb: &Aabb3d) -> f32 {
 	e.x * e.y
 }
 
-/// Up to four slabs of `region` west/east/south/north of `cut` (XZ), same Y as `region`.
-fn subtract_aabb_xz(region: &Aabb3d, cut: &Aabb3d) -> Vec<Aabb3d> {
+/// Cardinal slabs of `region` outside `cut`. West/east span the full Z of
+/// `region`; south/north span the full X — so a cut on one façade bay still
+/// yields a kitchen the full stall width behind it.
+fn full_span_cut_slabs(region: &Aabb3d, cut: &Aabb3d) -> Vec<Aabb3d> {
 	let rmin = Vec3::from(region.min);
 	let rmax = Vec3::from(region.max);
 	let cmin = Vec3::from(cut.min);
 	let cmax = Vec3::from(cut.max);
-	// No XZ overlap → keep region.
 	if cmax.x <= rmin.x || cmin.x >= rmax.x || cmax.z <= rmin.z || cmin.z >= rmax.z {
 		return vec![*region];
 	}
@@ -148,7 +144,7 @@ fn subtract_aabb_xz(region: &Aabb3d, cut: &Aabb3d) -> Vec<Aabb3d> {
 			out.push(Aabb3d::from_min_max(min, max));
 		}
 	};
-	// West
+	// West of cut — full Z
 	if cmin.x > rmin.x + 1e-3 {
 		push(
 			&mut out,
@@ -156,7 +152,7 @@ fn subtract_aabb_xz(region: &Aabb3d, cut: &Aabb3d) -> Vec<Aabb3d> {
 			Vec3::new(cmin.x.clamp(rmin.x, rmax.x), rmax.y, rmax.z),
 		);
 	}
-	// East
+	// East of cut — full Z
 	if cmax.x < rmax.x - 1e-3 {
 		push(
 			&mut out,
@@ -164,22 +160,20 @@ fn subtract_aabb_xz(region: &Aabb3d, cut: &Aabb3d) -> Vec<Aabb3d> {
 			rmax,
 		);
 	}
-	// South (between west/east clips in X so we don't double-count corners)
-	let x0 = cmin.x.clamp(rmin.x, rmax.x);
-	let x1 = cmax.x.clamp(rmin.x, rmax.x);
-	if cmin.z > rmin.z + 1e-3 && x1 > x0 + 1e-3 {
+	// South of cut — full X
+	if cmin.z > rmin.z + 1e-3 {
 		push(
 			&mut out,
-			Vec3::new(x0, rmin.y, rmin.z),
-			Vec3::new(x1, rmax.y, cmin.z.clamp(rmin.z, rmax.z)),
+			rmin,
+			Vec3::new(rmax.x, rmax.y, cmin.z.clamp(rmin.z, rmax.z)),
 		);
 	}
-	// North
-	if cmax.z < rmax.z - 1e-3 && x1 > x0 + 1e-3 {
+	// North of cut — full X
+	if cmax.z < rmax.z - 1e-3 {
 		push(
 			&mut out,
-			Vec3::new(x0, rmin.y, cmax.z.clamp(rmin.z, rmax.z)),
-			Vec3::new(x1, rmax.y, rmax.z),
+			Vec3::new(rmin.x, rmin.y, cmax.z.clamp(rmin.z, rmax.z)),
+			rmax,
 		);
 	}
 	out
