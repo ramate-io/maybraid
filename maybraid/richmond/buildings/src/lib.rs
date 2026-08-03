@@ -54,7 +54,8 @@ pub use constraints::{
 pub use demos::ConnectingShells;
 pub use fit::{
 	aabb_near_plane, aabb_xz_area, aabb_xz_center, aabb_xz_extent, aabb_xz_near_eq,
-	aabb_xz_overlap_area, Confines, FillableRegions, Fit, FitError, StackRegion,
+	aabb_xz_overlap_area, Confines, FillRegion, FillableRegions, Fit, FitError, SpaceKind,
+	StackRegion,
 };
 pub use openings::{
 	MappedOpening, MappedOpeningQuad, MappedOpenings, MapsOpenings, Opening, OpeningId,
@@ -91,5 +92,9 @@ pub use stacked_rings::{StackedRing, StackedRings};
 pub use storeys::les_halles::{
 	LesHallesFloorPlan, LesHallesFullStorey, LesHallesParameterized, LesHallesPlacedDoor,
 	LesHallesShaftPlacement, LesHallesStallDoor, SCOPE as LES_HALLES_SCOPE,
+};
+pub use usage_areas::{
+	CommercialStall, CommercialStallParameterized, CommercialStallPlan, CommercialStallStrip,
+	CommercialStallStripParameterized, CommercialStallStripPlan,
 };
 pub use wall_demo::{NoisyRectangularWall, NoisyRectangularWallParams};

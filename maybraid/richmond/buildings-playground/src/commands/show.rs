@@ -8,6 +8,8 @@ pub mod arc_sweep;
 pub mod arc_tower;
 pub mod opening;
 pub mod bedroom;
+pub mod commercial_stall;
+pub mod commercial_stall_strip;
 pub mod connecting_shells;
 pub mod linear;
 pub mod noisy_rectangular_wall;
@@ -142,9 +144,13 @@ pub enum Show {
 	StackedRings(stacked_rings::StackedRings),
 	/// Hierarchical bedroom (closet / bed / nightstand / ensuite placeholders).
 	Bedroom(bedroom::Bedroom),
+	/// Single commercial stall Label placeholder.
+	CommercialStall(commercial_stall::CommercialStall),
+	/// Commercial stall strip (packed Labels along a band).
+	CommercialStallStrip(commercial_stall_strip::CommercialStallStrip),
 	/// Les Halles floor plan (ring shell + residual within cells).
 	LesHallesFloorPlan(les_halles_floor_plan::LesHallesFloorPlan),
-	/// Les Halles full storey (floor plan shell; child fills deferred).
+	/// Les Halles full storey (shell + commercial stall strip fills).
 	LesHallesFullStorey(les_halles_full_storey::LesHallesFullStorey),
 }
 
@@ -193,12 +199,18 @@ impl Show {
 			Self::WizardsTower(cmd) => Ok(cmd.into_preview()),
 			Self::StackedRings(cmd) => Ok(cmd.into_preview()),
 			Self::Bedroom(cmd) => Ok(cmd.into_preview()),
+			Self::CommercialStall(cmd) => Ok(cmd.into_preview()),
+			Self::CommercialStallStrip(cmd) => Ok(cmd.into_preview()),
 			Self::LesHallesFloorPlan(cmd) => cmd.into_preview(),
 			Self::LesHallesFullStorey(cmd) => cmd.into_preview(),
 		};
 		match preview {
 			Ok((subject, transform)) => {
-				commands.insert_resource(PreviewConfig { subject, transform });
+				commands.insert_resource(PreviewConfig {
+					label_text: true,
+					subject,
+					transform,
+				});
 			}
 			Err(err) => {
 				error!("show failed: {err}");

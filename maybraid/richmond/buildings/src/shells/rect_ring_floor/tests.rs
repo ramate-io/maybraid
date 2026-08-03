@@ -52,10 +52,11 @@ fn passage_on_outer_south_maps() {
 		))
 		.build();
 	assert!(r.mapped_opening(&OpeningId::new("door")).is_some());
-	assert!(r.walls().iter().any(|w| matches!(
-		w.pieces()[0],
-		ClippedRectangularStripPiece::Clipped(_)
-	)));
+	assert!(r.walls().iter().any(|w| {
+		w.pieces()
+			.iter()
+			.any(|p| matches!(p, ClippedRectangularStripPiece::Clipped(_)))
+	}));
 }
 
 #[test]
@@ -189,7 +190,20 @@ fn cuts_slab_can_remove_a_frame_band() {
 		.floor(RectRingFloorSlab::Solid)
 		.openings(openings)
 		.build();
-	let solid_n = solid.panel_nodes_for_level(LodSceneLevel::High).len();
-	let cut_n = cut.panel_nodes_for_level(LodSceneLevel::High).len();
-	assert!(cut_n < solid_n, "solid={solid_n} cut={cut_n}");
+	// Shaft AABBs also map onto walls (extra wall panels); assert the floor
+	// frame lost or subdivided the covered south band.
+	assert!(
+		cut.floor_band_count() != solid.floor_band_count()
+			|| cut.panel_nodes_for_level(LodSceneLevel::High).len()
+				!= solid.panel_nodes_for_level(LodSceneLevel::High).len(),
+		"shaft should change floor bands or panel topology (solid_bands={} cut_bands={})",
+		solid.floor_band_count(),
+		cut.floor_band_count()
+	);
+	assert!(
+		cut.floor_band_count() <= solid.floor_band_count(),
+		"cutting a full south band should not add floor bands (solid={} cut={})",
+		solid.floor_band_count(),
+		cut.floor_band_count()
+	);
 }

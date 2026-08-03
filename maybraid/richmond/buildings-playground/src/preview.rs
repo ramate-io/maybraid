@@ -14,7 +14,7 @@ use richmond_building_components::partitions::rough_stonework::{
 use richmond_building_components::partitions::{Partition, PartitionNode};
 use richmond_building_components::roofs::{Pitch, RoofGeometry, RoofNode};
 use richmond_building_components::Placement;
-use richmond_building_components::ComponentsOnly;
+use richmond_building_components::{pose, BuildingComponents, ComponentsOnly, LabelNode};
 use richmond_buildings::bedroom::Bedroom;
 use richmond_buildings::panel_complex::{PanelComplex, PanelComplexJointPolicy, PanelPoint};
 use richmond_buildings::quad_panel::QuadPanel;
@@ -40,10 +40,10 @@ use richmond_buildings::portals::{MustAssignPortal, Portal};
 use richmond_buildings::wall_demo::{NoisyRectangularWall, NoisyRectangularWallParams};
 use richmond_buildings::wizards_tower::WizardsTower;
 use richmond_buildings::{
-	BedroomFillParams, CellConstraints, CirculationEntry, CirculationRequestStatus, Confines,
-	LesHallesFloorPlan, LesHallesFullStorey, LesHallesParameterized,
+	BedroomFillParams, CellConstraints, CirculationEntry, CirculationRequestStatus, CommercialStall,
+	CommercialStallStrip, Confines, Fit, LesHallesFloorPlan, LesHallesFullStorey,
+	LesHallesParameterized,
 };
-
 #[derive(Component)]
 pub struct PreviewRoot;
 
@@ -321,6 +321,14 @@ pub enum PreviewSubject {
 		/// When true, add a required −Z door circulation region.
 		door: bool,
 	},
+	CommercialStall {
+		extent: Vec3,
+		seed: i32,
+	},
+	CommercialStallStrip {
+		extent: Vec3,
+		seed: i32,
+	},
 	LesHallesFloorPlan {
 		/// Confines size (XZ centered at origin; Y from 0).
 		extent: Vec3,
@@ -347,13 +355,19 @@ impl Default for PreviewSubject {
 
 #[derive(Resource, Clone, Debug)]
 pub struct PreviewConfig {
+	/// When true, draw face Text3d stroke gizmos for [`LabelNode`]s.
+	pub label_text: bool,
 	pub subject: PreviewSubject,
 	pub transform: Transform,
 }
 
 impl Default for PreviewConfig {
 	fn default() -> Self {
-		Self { subject: PreviewSubject::None, transform: Transform::IDENTITY }
+		Self {
+			label_text: true,
+			subject: PreviewSubject::None,
+			transform: Transform::IDENTITY,
+		}
 	}
 }
 
@@ -705,6 +719,18 @@ impl PreviewConfig {
 					extent.x, extent.y, extent.z
 				)
 			}
+			PreviewSubject::CommercialStall { extent, seed } => {
+				format!(
+					"preview: commercial-stall (extent={:.2},{:.2},{:.2} seed={seed})",
+					extent.x, extent.y, extent.z
+				)
+			}
+			PreviewSubject::CommercialStallStrip { extent, seed } => {
+				format!(
+					"preview: commercial-stall-strip (extent={:.2},{:.2},{:.2} seed={seed})",
+					extent.x, extent.y, extent.z
+				)
+			}
 			PreviewSubject::LesHallesFloorPlan {
 				extent,
 				seed,
@@ -747,6 +773,10 @@ impl PreviewConfig {
 				Aabb3d::from_min_max(Vec3::new(-4.0, 0.0, -4.0), Vec3::new(4.0, 3.0, 4.0))
 			}
 			PreviewSubject::Bedroom { extent, .. } => Aabb3d::from_min_max(Vec3::ZERO, *extent),
+			PreviewSubject::CommercialStall { extent, .. }
+			| PreviewSubject::CommercialStallStrip { extent, .. } => {
+				Aabb3d::from_min_max(Vec3::ZERO, *extent)
+			}
 			PreviewSubject::LesHallesFloorPlan { extent, .. }
 			| PreviewSubject::LesHallesFullStorey { extent, .. } => {
 				les_halles_confines_bounds(*extent)
@@ -955,6 +985,8 @@ pub struct CachedPreview {
 	noisy_wall: Option<NoisyRectangularWall>,
 	les_halles_floor_plan: Option<LesHallesFloorPlan>,
 	les_halles_full_storey: Option<LesHallesFullStorey>,
+	commercial_stall: Option<CommercialStall>,
+	commercial_stall_strip: Option<CommercialStallStrip>,
 }
 
 impl CachedPreview {
@@ -970,6 +1002,8 @@ impl CachedPreview {
 		self.noisy_wall = None;
 		self.les_halles_floor_plan = None;
 		self.les_halles_full_storey = None;
+		self.commercial_stall = None;
+		self.commercial_stall_strip = None;
 		match &config.subject {
 			PreviewSubject::WizardsTower { noise } => {
 				let footprint = CellConstraints::cell_owned(Aabb3d::from_min_max(
@@ -1012,6 +1046,28 @@ impl CachedPreview {
 					..NoisyRectangularWallParams::default()
 				}));
 			}
+			PreviewSubject::CommercialStall { extent, seed } => {
+				let confines = Confines::from_bounds(Aabb3d::from_min_max(Vec3::ZERO, *extent));
+				let noise = NoiseParams {
+					seed: *seed,
+					..NoiseParams::default()
+				};
+				match CommercialStall::fit_to_confines(&confines, noise) {
+					Ok((stall, _)) => self.commercial_stall = Some(stall),
+					Err(err) => bevy::log::error!("commercial-stall fit failed: {err}"),
+				}
+			}
+			PreviewSubject::CommercialStallStrip { extent, seed } => {
+				let confines = Confines::from_bounds(Aabb3d::from_min_max(Vec3::ZERO, *extent));
+				let noise = NoiseParams {
+					seed: *seed,
+					..NoiseParams::default()
+				};
+				match CommercialStallStrip::fit_to_confines(&confines, noise) {
+					Ok((strip, _)) => self.commercial_stall_strip = Some(strip),
+					Err(err) => bevy::log::error!("commercial-stall-strip fit failed: {err}"),
+				}
+			}
 			PreviewSubject::LesHallesFloorPlan {
 				extent,
 				seed,
@@ -1033,8 +1089,16 @@ impl CachedPreview {
 			} => {
 				match fit_les_halles_floor_plan(*extent, *seed, *ceiling, openings) {
 					Ok(plan) => {
-						let (storey, _) = LesHallesFullStorey::from_floor_plan(plan);
-						self.les_halles_full_storey = Some(storey);
+						let noise = NoiseParams {
+							seed: *seed,
+							..NoiseParams::default()
+						};
+						match LesHallesFullStorey::from_floor_plan(plan, noise) {
+							Ok((storey, _)) => self.les_halles_full_storey = Some(storey),
+							Err(err) => {
+								bevy::log::error!("les-halles-full-storey fill failed: {err}");
+							}
+						}
 					}
 					Err(err) => {
 						bevy::log::error!("les-halles-full-storey fit failed: {err}");
@@ -1043,6 +1107,20 @@ impl CachedPreview {
 			}
 			_ => {}
 		}
+	}
+
+	fn label_nodes(&self) -> Vec<LabelNode> {
+		use lod::gen::LodSceneLevel;
+		if let Some(stall) = self.commercial_stall.as_ref() {
+			return stall.label_nodes_for_level(LodSceneLevel::High).flatten();
+		}
+		if let Some(strip) = self.commercial_stall_strip.as_ref() {
+			return strip.label_nodes_for_level(LodSceneLevel::High).flatten();
+		}
+		if let Some(storey) = self.les_halles_full_storey.as_ref() {
+			return storey.label_nodes_for_level(LodSceneLevel::High).flatten();
+		}
+		Vec::new()
 	}
 }
 
@@ -2127,6 +2205,24 @@ pub fn present_preview_lod(
 				);
 			}
 		}
+		PreviewSubject::CommercialStall { .. } => {
+			if let Some(stall) = cache.commercial_stall.as_ref() {
+				spawn_preview(
+					&mut commands,
+					transform,
+					ComponentsOnly(stall).scene_with_lod(&lod_ref),
+				);
+			}
+		}
+		PreviewSubject::CommercialStallStrip { .. } => {
+			if let Some(strip) = cache.commercial_stall_strip.as_ref() {
+				spawn_preview(
+					&mut commands,
+					transform,
+					ComponentsOnly(strip).scene_with_lod(&lod_ref),
+				);
+			}
+		}
 		PreviewSubject::LesHallesFloorPlan { .. } => {
 			if let Some(plan) = cache.les_halles_floor_plan.as_ref() {
 				spawn_preview(
@@ -2544,6 +2640,144 @@ fn les_halles_opening_accepted(plan: &LesHallesFloorPlan, opening: &PreviewOpeni
 		OpeningLabel::Shaft => plan.shaft_inbound.iter().any(|ids| ids.contains(&id)),
 		_ => plan.gallery.mapped_opening(&id).is_some(),
 	}
+}
+
+/// Stroke-font face labels for [`LabelNode`]s (toggle via [`PreviewConfig::label_text`]).
+///
+/// Text is word-wrapped and scaled so the block fits inside each face.
+pub fn draw_label_text_gizmos(
+	mut gizmos: Gizmos,
+	config: Res<PreviewConfig>,
+	cache: Res<CachedPreview>,
+) {
+	if !config.label_text {
+		return;
+	}
+	let labels = cache.label_nodes();
+	if labels.is_empty() {
+		return;
+	}
+	let root = config.transform;
+	for label in &labels {
+		// Placement scale is full extents; face offsets are in unit-cube local space.
+		let local = pose(label.placement);
+		let tf = root * local;
+		let extents = label.geometry.extents();
+		// (local face center, rotation, face width, face height) in world meters.
+		let faces = [
+			(
+				Vec3::new(0.5, 0.0, 0.0),
+				Quat::from_rotation_y(-std::f32::consts::FRAC_PI_2),
+				extents.z,
+				extents.y,
+			),
+			(
+				Vec3::new(-0.5, 0.0, 0.0),
+				Quat::from_rotation_y(std::f32::consts::FRAC_PI_2),
+				extents.z,
+				extents.y,
+			),
+			(
+				Vec3::new(0.0, 0.5, 0.0),
+				Quat::from_rotation_x(std::f32::consts::FRAC_PI_2),
+				extents.x,
+				extents.z,
+			),
+			(
+				Vec3::new(0.0, -0.5, 0.0),
+				Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2),
+				extents.x,
+				extents.z,
+			),
+			(
+				Vec3::new(0.0, 0.0, 0.5),
+				Quat::IDENTITY,
+				extents.x,
+				extents.y,
+			),
+			(
+				Vec3::new(0.0, 0.0, -0.5),
+				Quat::from_rotation_y(std::f32::consts::PI),
+				extents.x,
+				extents.y,
+			),
+		];
+		let color = label.style.color();
+		for (offset, rot, face_w, face_h) in faces {
+			let (wrapped, font_size) = fit_label_face_text(&label.text, face_w, face_h);
+			let world = tf.transform_point(offset * 1.01);
+			let iso = Isometry3d::new(world, tf.rotation * rot);
+			gizmos.text(iso, &wrapped, font_size, Vec2::ZERO, color);
+		}
+	}
+}
+
+/// Word-wrap + shrink stroke font so the block fits inside `face_w` × `face_h` (meters).
+fn fit_label_face_text(text: &str, face_w: f32, face_h: f32) -> (String, f32) {
+	let max_w = (face_w * 0.88).max(0.05);
+	let max_h = (face_h * 0.88).max(0.05);
+	// Stroke font size is in world units (cap height ≈ font_size).
+	let mut font = (face_w.min(face_h) * 0.18).clamp(0.05, 0.55);
+	let mut wrapped = wrap_label_text(text, max_w, font);
+	for _ in 0..16 {
+		wrapped = wrap_label_text(text, max_w, font);
+		let (w, h) = measure_wrapped_label(&wrapped, font);
+		if w <= max_w && h <= max_h {
+			break;
+		}
+		font = (font * 0.82).max(0.04);
+	}
+	(wrapped, font)
+}
+
+fn wrap_label_text(text: &str, max_w: f32, font_size: f32) -> String {
+	let char_w = (font_size * 0.55).max(1e-4);
+	let max_chars = ((max_w / char_w).floor() as usize).max(1);
+	let mut lines = Vec::new();
+	let mut line = String::new();
+	for word in text.split_whitespace() {
+		if word.len() > max_chars {
+			if !line.is_empty() {
+				lines.push(std::mem::take(&mut line));
+			}
+			let mut rest = word;
+			while rest.len() > max_chars {
+				lines.push(rest[..max_chars].to_string());
+				rest = &rest[max_chars..];
+			}
+			line = rest.to_string();
+			continue;
+		}
+		if line.is_empty() {
+			line.push_str(word);
+		} else if line.len() + 1 + word.len() <= max_chars {
+			line.push(' ');
+			line.push_str(word);
+		} else {
+			lines.push(std::mem::take(&mut line));
+			line.push_str(word);
+		}
+	}
+	if !line.is_empty() {
+		lines.push(line);
+	}
+	if lines.is_empty() {
+		text.to_string()
+	} else {
+		lines.join("\n")
+	}
+}
+
+fn measure_wrapped_label(wrapped: &str, font_size: f32) -> (f32, f32) {
+	let char_w = font_size * 0.55;
+	let line_h = font_size * 1.25;
+	let mut width = 0.0_f32;
+	let mut lines = 0usize;
+	for line in wrapped.lines() {
+		width = width.max(line.len() as f32 * char_w);
+		lines += 1;
+	}
+	(width, lines.max(1) as f32 * line_h)
 }
 
 /// Massing AABBs (cyan) + valley segments (magenta) for roof-complex previews.

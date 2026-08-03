@@ -209,6 +209,11 @@ impl RectRingFloor {
 		!self.floor_pieces.is_empty()
 	}
 
+	/// Number of frame floor band pieces (after shaft / cut subdivision).
+	pub fn floor_band_count(&self) -> usize {
+		self.floor_pieces.len()
+	}
+
 	pub fn has_ceiling(&self) -> bool {
 		!self.ceiling_pieces.is_empty()
 	}

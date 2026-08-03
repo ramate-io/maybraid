@@ -9,8 +9,8 @@ use richmond_building_components::panels::{PanelNode, PanelStyle};
 use richmond_building_components::{BuildingComponents, Layers};
 
 use crate::fit::{
-	aabb_near_plane, aabb_xz_center, aabb_xz_overlap_area, Confines, FillableRegions, Fit,
-	FitError, StackRegion,
+	aabb_near_plane, aabb_xz_center, aabb_xz_overlap_area, Confines, FillRegion, FillableRegions,
+	Fit, FitError, SpaceKind, StackRegion,
 };
 use crate::openings::{Opening, OpeningId, OpeningLabel, Openings};
 use crate::paneling::fitted_rectangle::FittedRectangle;
@@ -249,7 +249,12 @@ impl LesHallesFloorPlan {
 		Ok((plan, regions))
 	}
 
-	/// Residual gallery / balcony / shaft confines and stack region.
+	/// Residual gallery strips / balcony / shaft confines and stack region.
+	///
+	/// - [`SpaceKind::ExternalSpace`] — commercial gallery strips (straight
+	///   sections between shaft clears) with openings that intersect the strip.
+	/// - [`SpaceKind::Walkway`] — balcony walking bands.
+	/// - [`SpaceKind::InternalSpace`] — active shaft cells.
 	pub fn fillable_regions(&self) -> FillableRegions {
 		let y0 = self.center_xz.y;
 		let y1 = y0 + self.storey_height;
@@ -266,17 +271,47 @@ impl LesHallesFloorPlan {
 
 		let mut within = Vec::new();
 
-		// Gallery bands (outer commercial ring), four sides.
-		within.push(Self::band_confine(ox0, ox1, oz0, oz0 + gx, y0, y1, self.roll));
-		within.push(Self::band_confine(ox0, ox1, oz1 - gx, oz1, y0, y1, self.roll));
-		within.push(Self::band_confine(ox1 - gx, ox1, oz0 + gx, oz1 - gx, y0, y1, self.roll));
-		within.push(Self::band_confine(ox0, ox0 + gx, oz0 + gx, oz1 - gx, y0, y1, self.roll));
+		let sections = Self::inner_straight_sections(
+			self.center_xz,
+			self.gallery_inner,
+			&self.shaft_bounds,
+			&self.shaft_slots,
+			self.parameterized.shaft_placement,
+			self.parameterized.corner_clear_len(),
+		);
+		for section in &sections {
+			let bounds = Self::gallery_strip_bounds(
+				self.center_xz,
+				self.outer,
+				gx,
+				y0,
+				y1,
+				section,
+			);
+			let openings = subset_openings_intersecting(&self.openings, &bounds);
+			within.push(FillRegion::new(
+				SpaceKind::ExternalSpace,
+				Confines::new(bounds, self.roll, openings),
+			));
+		}
 
 		// Balcony bands (inner walking ring), four sides.
-		within.push(Self::band_confine(ix0 - bx, ix1 + bx, iz0 - bx, iz0, y0, y1, self.roll));
-		within.push(Self::band_confine(ix0 - bx, ix1 + bx, iz1, iz1 + bx, y0, y1, self.roll));
-		within.push(Self::band_confine(ix1, ix1 + bx, iz0, iz1, y0, y1, self.roll));
-		within.push(Self::band_confine(ix0 - bx, ix0, iz0, iz1, y0, y1, self.roll));
+		within.push(FillRegion::new(
+			SpaceKind::Walkway,
+			Self::band_confine(ix0 - bx, ix1 + bx, iz0 - bx, iz0, y0, y1, self.roll),
+		));
+		within.push(FillRegion::new(
+			SpaceKind::Walkway,
+			Self::band_confine(ix0 - bx, ix1 + bx, iz1, iz1 + bx, y0, y1, self.roll),
+		));
+		within.push(FillRegion::new(
+			SpaceKind::Walkway,
+			Self::band_confine(ix1, ix1 + bx, iz0, iz1, y0, y1, self.roll),
+		));
+		within.push(FillRegion::new(
+			SpaceKind::Walkway,
+			Self::band_confine(ix0 - bx, ix0, iz0, iz1, y0, y1, self.roll),
+		));
 
 		for (i, shaft) in self.shaft_bounds.iter().enumerate() {
 			let slot = self.shaft_slots.get(i).copied().unwrap_or(i);
@@ -290,7 +325,10 @@ impl LesHallesFloorPlan {
 					openings.insert(id.clone(), Opening::new(*shaft, OpeningLabel::Shaft));
 				}
 			}
-			within.push(Confines::new(*shaft, self.roll, openings));
+			within.push(FillRegion::new(
+				SpaceKind::InternalSpace,
+				Confines::new(*shaft, self.roll, openings),
+			));
 		}
 
 		let atop = vec![StackRegion {
@@ -306,13 +344,42 @@ impl LesHallesFloorPlan {
 		FillableRegions { within, atop }
 	}
 
+	/// Gallery-depth AABB for one straight commercial section.
+	fn gallery_strip_bounds(
+		center_xz: Vec3,
+		outer: Vec2,
+		gallery_width: f32,
+		y0: f32,
+		y1: f32,
+		section: &InnerSection,
+	) -> Aabb3d {
+		let ox0 = center_xz.x - outer.x * 0.5;
+		let ox1 = center_xz.x + outer.x * 0.5;
+		let oz0 = center_xz.z - outer.y * 0.5;
+		let oz1 = center_xz.z + outer.y * 0.5;
+		let a0 = section.along0.min(section.along1);
+		let a1 = section.along0.max(section.along1);
+		match section.side {
+			OrthoSide::South => Aabb3d::from_min_max(
+				Vec3::new(center_xz.x + a0, y0, oz0),
+				Vec3::new(center_xz.x + a1, y1, oz0 + gallery_width),
+			),
+			OrthoSide::North => Aabb3d::from_min_max(
+				Vec3::new(center_xz.x + a0, y0, oz1 - gallery_width),
+				Vec3::new(center_xz.x + a1, y1, oz1),
+			),
+			OrthoSide::East => Aabb3d::from_min_max(
+				Vec3::new(ox1 - gallery_width, y0, center_xz.z + a0),
+				Vec3::new(ox1, y1, center_xz.z + a1),
+			),
+			OrthoSide::West => Aabb3d::from_min_max(
+				Vec3::new(ox0, y0, center_xz.z + a0),
+				Vec3::new(ox0 + gallery_width, y1, center_xz.z + a1),
+			),
+		}
+	}
+
 	/// Build a residual [`Confines`] cell for one axis-aligned band of the ring.
-	///
-	/// The gallery and balcony are each split into four side bands (S/N/E/W).
-	/// Those bands are not mesh geometry — they are the `within` fill slots that a
-	/// later Full\* pass (shops, furniture, stairs) consumes. Empty `openings` here
-	/// means “no extra voids inside this cell yet”; shaft cells carry their own
-	/// shaft opening instead.
 	fn band_confine(
 		min_x: f32,
 		max_x: f32,
@@ -1092,6 +1159,33 @@ fn corner_occupied_spans(
 	occupied
 }
 
+/// Openings whose AABB intersects `bounds` (shaft volumes excluded — those stay
+/// on shaft [`SpaceKind::InternalSpace`] cells). Wall clears remain [`OpeningLabel::Passage`].
+fn subset_openings_intersecting(openings: &Openings, bounds: &Aabb3d) -> Openings {
+	let mut out = Openings::new();
+	let region = Aabb2d {
+		min: Vec2::new(Vec3::from(bounds.min).x, Vec3::from(bounds.min).z),
+		max: Vec2::new(Vec3::from(bounds.max).x, Vec3::from(bounds.max).z),
+	};
+	let y0 = Vec3::from(bounds.min).y;
+	let y1 = Vec3::from(bounds.max).y;
+	for (id, opening) in openings.iter() {
+		if matches!(opening.label, OpeningLabel::Shaft) {
+			continue;
+		}
+		if aabb_xz_overlap_area(&opening.bounds, &region) <= 1e-4 {
+			continue;
+		}
+		let omin = Vec3::from(opening.bounds.min);
+		let omax = Vec3::from(opening.bounds.max);
+		if omax.y < y0 - 1e-3 || omin.y > y1 + 1e-3 {
+			continue;
+		}
+		out.insert(id.clone(), opening.clone());
+	}
+	out
+}
+
 fn free_sections_from_occupied(
 	side: OrthoSide,
 	half: f32,
@@ -1324,7 +1418,19 @@ mod tests {
 			.openings
 			.iter()
 			.all(|(id, _)| !id.as_str().contains("shaft")));
-		assert_eq!(regions.within.len(), 8); // gallery + balcony bands only
+		let externals = regions
+			.within
+			.iter()
+			.filter(|r| r.kind == SpaceKind::ExternalSpace)
+			.count();
+		let walkways = regions
+			.within
+			.iter()
+			.filter(|r| r.kind == SpaceKind::Walkway)
+			.count();
+		assert_eq!(externals, 4);
+		assert_eq!(walkways, 4);
+		assert_eq!(regions.within.len(), 8); // strips + balcony; no shafts
 	}
 
 	#[test]
@@ -1388,7 +1494,22 @@ mod tests {
 			OpeningLabel::Shaft
 		));
 		assert!(plan.gallery.wall_count() >= 4);
-		assert!(regions.within.len() >= 8 + 4);
+		assert!(
+			regions
+				.within
+				.iter()
+				.filter(|r| r.kind == SpaceKind::ExternalSpace)
+				.count()
+				>= 4
+		);
+		assert_eq!(
+			regions
+				.within
+				.iter()
+				.filter(|r| r.kind == SpaceKind::InternalSpace)
+				.count(),
+			4
+		);
 		assert_eq!(regions.atop.len(), 1);
 	}
 
@@ -1474,9 +1595,33 @@ mod tests {
 		let straddle = plan.openings.get(&OpeningId::new("req_straddle")).unwrap();
 		assert!(aabb_xz_near_eq(&straddle.bounds, &plan.shaft_bounds[ne_idx], 1e-4));
 		assert!(plan.shaft_inbound[ne_idx].contains(&OpeningId::new("req_straddle")));
-		assert!(regions.within.iter().any(|c| {
-			c.openings.get(&OpeningId::new("req_se")).is_some()
+		assert!(regions.within.iter().any(|r| {
+			r.kind == SpaceKind::InternalSpace
+				&& r.confines.openings.get(&OpeningId::new("req_se")).is_some()
 		}));
+	}
+
+	#[test]
+	fn external_strips_carry_subsetted_facade_openings() {
+		let (plan, regions) = fit_with_all_shafts(NoiseParams::default());
+		let strips: Vec<_> = regions
+			.within
+			.iter()
+			.filter(|r| r.kind == SpaceKind::ExternalSpace)
+			.collect();
+		let expected = plan
+			.parameterized
+			.expected_inner_section_count(plan.shaft_bounds.len());
+		assert_eq!(strips.len(), expected);
+		assert!(
+			strips.iter().any(|r| {
+				r.confines
+					.openings
+					.iter()
+					.any(|(id, _)| id.as_str().contains("inner_door") || id.as_str().contains("outer_aperture"))
+			}),
+			"at least one strip should inherit facade openings"
+		);
 	}
 
 	#[test]

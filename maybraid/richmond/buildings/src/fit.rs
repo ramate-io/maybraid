@@ -130,6 +130,34 @@ pub struct StackRegion {
 	pub openings: Openings,
 }
 
+/// Semantic role of a residual [`FillRegion`] (helps Full\* composition).
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum SpaceKind {
+	/// Enclosed volume (rooms, shafts, cores).
+	InternalSpace,
+	/// Street- or courtyard-facing commercial / facade band.
+	ExternalSpace,
+	/// Open walking band (balconies, galleries without stalls).
+	Walkway,
+	/// Linear circulation between spaces.
+	Hallway,
+	/// Author-defined label when none of the above fit.
+	Custom(String),
+}
+
+/// One residual fill slot: typed [`Confines`].
+#[derive(Debug, Clone, PartialEq)]
+pub struct FillRegion {
+	pub kind: SpaceKind,
+	pub confines: Confines,
+}
+
+impl FillRegion {
+	pub fn new(kind: SpaceKind, confines: Confines) -> Self {
+		Self { kind, confines }
+	}
+}
+
 /// Residual regions after a successful fit.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct FillableRegions {
@@ -139,7 +167,7 @@ pub struct FillableRegions {
 	/// confines (e.g. FloorPlan → FullStorey). The FloorPlan emits structure and
 	/// `within`; Full\* fills those confines with specific types. The same
 	/// FloorPlan can back other Full\* variants.
-	pub within: Vec<Confines>,
+	pub within: Vec<FillRegion>,
 	/// Regions on which we can stack.
 	///
 	/// Typically used when transitioning between tower and storey types. When
