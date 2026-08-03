@@ -43,6 +43,8 @@ pub struct LesHallesParameterized {
 	/// Target courtyard share of the short footprint axis (`~0.5` → ¼ rim / ½ gap / ¼ rim).
 	pub courtyard_fraction: f32,
 	pub shaft_placement: LesHallesShaftPlacement,
+	/// Along-wall side length for mid-side shafts (scales with footprint).
+	pub mid_shaft_side: f32,
 	/// How densely to pack outer-facade apertures (`0…1`).
 	pub opening_density: f32,
 	/// Stall door sizes to pack along each inner-wall straight section (catalog order).
@@ -63,8 +65,12 @@ pub const MAX_BALCONY_WIDTH: f32 = 8.0;
 pub const MIN_COURTYARD: f32 = 2.0;
 /// Minimum storey height.
 pub const MIN_STOREY_HEIGHT: f32 = 2.5;
-/// Nominal shaft side length (XZ) for mid-side shafts.
-pub const SHAFT_SIDE: f32 = 1.8;
+/// Minimum along-wall side length for mid-side shafts.
+pub const MIN_MID_SHAFT_SIDE: f32 = 2.4;
+/// Maximum along-wall side length for mid-side shafts.
+pub const MAX_MID_SHAFT_SIDE: f32 = 8.0;
+/// Legacy alias for [`MIN_MID_SHAFT_SIDE`].
+pub const SHAFT_SIDE: f32 = MIN_MID_SHAFT_SIDE;
 
 /// Default plan split targets ~½ courtyard (¼ rim + ½ gap + ¼ rim).
 pub const MIN_COURTYARD_FRACTION: f32 = 0.40;
@@ -77,6 +83,7 @@ pub const MAX_STALL_RING_SHARE: f32 = 0.75;
 const SALT_COURTYARD: f32 = 1.0;
 const SALT_STALL_SHARE: f32 = 2.0;
 const SALT_SHAFT: f32 = 3.0;
+const SALT_MID_SHAFT: f32 = 3.5;
 const SALT_OPENINGS: f32 = 4.0;
 
 impl LesHallesParameterized {
@@ -141,6 +148,12 @@ impl LesHallesParameterized {
 			LesHallesShaftPlacement::MidSides
 		};
 
+		// Mid-side shafts grow with the short footprint axis (room for stairs).
+		let mid_hi = (extent_min * 0.15).clamp(3.5, MAX_MID_SHAFT_SIDE);
+		let mid_lo = MIN_MID_SHAFT_SIDE.min(mid_hi);
+		let mid_shaft_side =
+			cfg.sample_range_f32_4d(mid_lo, mid_hi, c.x, c.y, c.z, SALT_MID_SHAFT);
+
 		let opening_density = cfg.sample_unit_4d(c.x, c.y, c.z, SALT_OPENINGS);
 		let doors = crate::storeys::les_halles::LesHallesFloorPlan::generate_stall_doors(&cfg, c);
 		let windows = crate::storeys::les_halles::LesHallesFloorPlan::generate_windows(&cfg, c);
@@ -150,6 +163,7 @@ impl LesHallesParameterized {
 			balcony_width,
 			courtyard_fraction,
 			shaft_placement,
+			mid_shaft_side,
 			opening_density,
 			doors,
 			windows,
@@ -160,11 +174,14 @@ impl LesHallesParameterized {
 		self.gallery_width + self.balcony_width
 	}
 
-	/// Expected count of inner-wall straight sections for this shaft layout.
-	pub fn expected_inner_section_count(&self) -> usize {
+	/// Expected count of inner-wall straight sections for active shafts.
+	///
+	/// Corner clears never split a side into more than one free run. Each active
+	/// mid-side shaft splits its side into two.
+	pub fn expected_inner_section_count(&self, active_shaft_count: usize) -> usize {
 		match self.shaft_placement {
 			LesHallesShaftPlacement::Corners => 4,
-			LesHallesShaftPlacement::MidSides => 8,
+			LesHallesShaftPlacement::MidSides => 4 + active_shaft_count,
 		}
 	}
 
@@ -397,6 +414,7 @@ mod tests {
 			balcony_width: 4.0,
 			courtyard_fraction: 0.5,
 			shaft_placement: LesHallesShaftPlacement::Corners,
+			mid_shaft_side: 3.0,
 			opening_density: 0.5,
 			doors: doors_catalog(),
 			windows: Vec::new(),
@@ -413,6 +431,7 @@ mod tests {
 			balcony_width: 4.0,
 			courtyard_fraction: 0.5,
 			shaft_placement: LesHallesShaftPlacement::Corners,
+			mid_shaft_side: 3.0,
 			opening_density: 0.5,
 			doors: vec![
 				LesHallesStallDoor {
@@ -440,6 +459,7 @@ mod tests {
 			balcony_width: 4.0,
 			courtyard_fraction: 0.5,
 			shaft_placement: LesHallesShaftPlacement::Corners,
+			mid_shaft_side: 3.0,
 			opening_density: 0.05,
 			doors: Vec::new(),
 			windows: doors_catalog(),

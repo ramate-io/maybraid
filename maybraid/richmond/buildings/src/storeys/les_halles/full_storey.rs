@@ -59,18 +59,26 @@ mod tests {
 
 	#[test]
 	fn full_storey_fit_emits_shell_panels() {
-		let confines = Confines::from_bounds(Aabb3d::from_min_max(
+		use crate::storeys::les_halles::{LesHallesFloorPlan, LesHallesParameterized};
+
+		let bounds = Aabb3d::from_min_max(
 			Vec3::new(-24.0, 0.0, -18.0),
 			Vec3::new(24.0, 4.0, 18.0),
-		));
-		let (storey, regions) =
-			LesHallesFullStorey::fit_to_confines(&confines, NoiseParams::default()).unwrap();
+		);
+		let empty = Confines::from_bounds(bounds);
+		let noise = NoiseParams::default();
+		let params = LesHallesParameterized::sample(&empty, noise).unwrap();
+		let openings = LesHallesFloorPlan::shaft_requests_for_all_slots(&params, &empty);
+		let confines = Confines::new(bounds, 0.0, openings);
+		let (plan, _) = LesHallesFloorPlan::from_parameterized(params, &confines).unwrap();
+		let (storey, regions) = LesHallesFullStorey::from_floor_plan(plan);
 		assert!(!regions.within.is_empty());
 		assert_eq!(regions.atop.len(), 1);
 		assert!(storey.floor_plan.gallery.wall_count() >= 4);
 		assert!(storey.floor_plan.gallery.has_floor());
 		assert!(!storey.floor_plan.gallery.has_ceiling());
 		assert!(!storey.floor_plan.balcony_floors.is_empty());
+		assert_eq!(storey.floor_plan.shaft_bounds.len(), 4);
 		let panels = storey.panel_nodes_for_level(LodSceneLevel::High);
 		assert!(!panels.is_empty());
 	}

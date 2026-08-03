@@ -23,7 +23,6 @@ use crate::shells::rect_ring_floor::{
 
 use super::parameterized::{
 	footprint_extents, LesHallesParameterized, LesHallesShaftPlacement, LesHallesStallDoor,
-	SHAFT_SIDE,
 };
 use super::SCOPE;
 
@@ -52,11 +51,14 @@ pub struct LesHallesFloorPlan {
 	/// Merged inbound + generated openings for the gallery shell.
 	///
 	/// Inbound [`OpeningLabel::Shaft`] openings keep their ids; their bounds are
-	/// rewritten onto a fitted shaft via [`Self::map_inbound_shafts`].
+	/// rewritten onto a fitted shaft via [`Self::map_inbound_shafts`]. Shafts are
+	/// only authored when at least one inbound opening maps to that slot.
 	pub openings: Openings,
-	/// Shaft volumes (same bounds as shaft openings / within cells).
+	/// Active shaft volumes (only slots that received inbound shaft openings).
 	pub shaft_bounds: Vec<Aabb3d>,
-	/// Inbound shaft [`OpeningId`]s remapped onto each [`Self::shaft_bounds`] slot.
+	/// Stable placement slot index (`0…3`) for each entry in [`Self::shaft_bounds`].
+	pub shaft_slots: Vec<usize>,
+	/// Inbound shaft [`OpeningId`]s remapped onto each active shaft (parallel).
 	pub shaft_inbound: Vec<Vec<OpeningId>>,
 	/// Walled gallery ring (outer + inner walls, floor, optional ceiling).
 	pub gallery: RectRingFloor,
@@ -180,17 +182,36 @@ impl LesHallesFloorPlan {
 		);
 		let courtyard = Vec2::new(courtyard_x, courtyard_z);
 
-		let shaft_bounds =
-			Self::shaft_aabbs(center_xz, outer, params.gallery_width, height, params.shaft_placement);
+		// Candidate slots for mapping; only slots that receive inbound shafts are kept.
+		let candidates = Self::shaft_aabbs(
+			center_xz,
+			outer,
+			params.gallery_width,
+			height,
+			params.shaft_placement,
+			params.mid_shaft_side,
+		);
 
 		let mut openings = confines.openings.clone();
-		let shaft_inbound = Self::map_inbound_shafts(
+		let inbound_by_slot = Self::map_inbound_shafts(
 			&mut openings,
 			center_xz,
 			outer,
 			params.shaft_placement,
-			&shaft_bounds,
+			&candidates,
 		);
+		let mut shaft_bounds = Vec::new();
+		let mut shaft_slots = Vec::new();
+		let mut shaft_inbound = Vec::new();
+		for (slot, ids) in inbound_by_slot.into_iter().enumerate() {
+			if ids.is_empty() {
+				continue;
+			}
+			shaft_slots.push(slot);
+			shaft_bounds.push(candidates[slot]);
+			shaft_inbound.push(ids);
+		}
+
 		openings.extend(&Self::generated_openings(
 			&params,
 			center_xz,
@@ -198,6 +219,7 @@ impl LesHallesFloorPlan {
 			gallery_inner,
 			height,
 			&shaft_bounds,
+			&shaft_slots,
 		));
 
 		let gallery = Self::build_gallery(center_xz, outer, gallery_inner, height, ceiling, &openings);
@@ -216,6 +238,7 @@ impl LesHallesFloorPlan {
 			ceiling,
 			openings,
 			shaft_bounds,
+			shaft_slots,
 			shaft_inbound,
 			gallery,
 			balcony_floors,
@@ -256,9 +279,10 @@ impl LesHallesFloorPlan {
 		within.push(Self::band_confine(ix0 - bx, ix0, iz0, iz1, y0, y1, self.roll));
 
 		for (i, shaft) in self.shaft_bounds.iter().enumerate() {
+			let slot = self.shaft_slots.get(i).copied().unwrap_or(i);
 			let mut openings = Openings::new();
 			openings.insert(
-				OpeningId::scoped(SCOPE, "shaft", i.to_string()),
+				OpeningId::scoped(SCOPE, "shaft", slot.to_string()),
 				Opening::new(*shaft, OpeningLabel::Shaft),
 			);
 			if let Some(ids) = self.shaft_inbound.get(i) {
@@ -305,22 +329,25 @@ impl LesHallesFloorPlan {
 		)
 	}
 
-	/// Shaft AABBs spanning gallery depth toward the inner wall.
+	/// Candidate shaft AABBs for all four placement slots (may later be filtered
+	/// to only those that receive inbound shaft openings).
 	///
 	/// - **Corners:** the corner gallery square is `gallery_width` on a side; the
 	///   shaft is half that square (half-extents), seated on the inner corner so
 	///   the outer facade stays solid.
-	/// - **MidSides:** full gallery depth minus outer inset, `SHAFT_SIDE` along wall.
+	/// - **MidSides:** full gallery depth minus outer inset; along-wall size is
+	///   [`LesHallesParameterized::mid_shaft_side`].
 	fn shaft_aabbs(
 		center_xz: Vec3,
 		outer: Vec2,
 		gallery_width: f32,
 		height: f32,
 		placement: LesHallesShaftPlacement,
+		mid_shaft_side: f32,
 	) -> Vec<Aabb3d> {
 		let y0 = center_xz.y;
 		let y1 = y0 + height;
-		let half = SHAFT_SIDE * 0.5;
+		let half = mid_shaft_side.max(EPS) * 0.5;
 		let ox0 = center_xz.x - outer.x * 0.5;
 		let ox1 = center_xz.x + outer.x * 0.5;
 		let oz0 = center_xz.z - outer.y * 0.5;
@@ -370,6 +397,46 @@ impl LesHallesFloorPlan {
 				),
 			],
 		}
+	}
+
+	/// Small inbound [`OpeningLabel::Shaft`] requests centered on every candidate
+	/// slot — useful for playground demos and tests that want all shafts active.
+	pub fn shaft_requests_for_all_slots(
+		params: &LesHallesParameterized,
+		confines: &Confines,
+	) -> Openings {
+		let (extent_x, extent_z, height) = match footprint_extents(confines) {
+			Ok(v) => v,
+			Err(_) => return Openings::new(),
+		};
+		let y0 = confines.bounds.min.y;
+		let c = confines.center();
+		let center_xz = Vec3::new(c.x, y0, c.z);
+		let outer = Vec2::new(extent_x, extent_z);
+		let candidates = Self::shaft_aabbs(
+			center_xz,
+			outer,
+			params.gallery_width,
+			height,
+			params.shaft_placement,
+			params.mid_shaft_side,
+		);
+		let mut openings = Openings::new();
+		for (slot, shaft) in candidates.iter().enumerate() {
+			let mid = Vec3::from((shaft.min + shaft.max) * 0.5);
+			let half = 0.4_f32;
+			openings.insert(
+				OpeningId::scoped(SCOPE, "shaft_req", slot.to_string()),
+				Opening::new(
+					Aabb3d::from_min_max(
+						Vec3::new(mid.x - half, y0, mid.z - half),
+						Vec3::new(mid.x + half, y0 + height.min(3.0), mid.z + half),
+					),
+					OpeningLabel::Shaft,
+				),
+			);
+		}
+		openings
 	}
 
 	/// Plan-space (XZ) regions that claim inbound shafts for each fitted slot.
@@ -485,6 +552,7 @@ impl LesHallesFloorPlan {
 		gallery_inner: Vec2,
 		height: f32,
 		shaft_bounds: &[Aabb3d],
+		shaft_slots: &[usize],
 	) -> Openings {
 		let mut openings = Openings::new();
 		let door_h = (height * 0.72).clamp(2.0, height.max(2.0));
@@ -520,22 +588,25 @@ impl LesHallesFloorPlan {
 			center_xz,
 			gallery_inner,
 			shaft_bounds,
+			shaft_slots,
 			params.shaft_placement,
 			params.corner_clear_len(),
 		);
-		let expected = params.expected_inner_section_count();
+		let expected = params.expected_inner_section_count(shaft_bounds.len());
 		debug_assert_eq!(
 			sections.len(),
 			expected,
-			"inner straight sections: got {} expected {} ({:?})",
+			"inner straight sections: got {} expected {} ({:?}, {} shafts)",
 			sections.len(),
 			expected,
-			params.shaft_placement
+			params.shaft_placement,
+			shaft_bounds.len()
 		);
 		assert!(
 			sections.len() == expected,
-			"Les Halles inner wall: expected {expected} straight sections for {:?}, got {}",
+			"Les Halles inner wall: expected {expected} straight sections for {:?} with {} shafts, got {}",
 			params.shaft_placement,
+			shaft_bounds.len(),
 			sections.len()
 		);
 
@@ -565,13 +636,14 @@ impl LesHallesFloorPlan {
 		}
 
 		for (i, shaft) in shaft_bounds.iter().enumerate() {
+			let slot = shaft_slots.get(i).copied().unwrap_or(i);
 			openings.insert(
-				OpeningId::scoped(SCOPE, "shaft", format!("{i}")),
+				OpeningId::scoped(SCOPE, "shaft", slot.to_string()),
 				Opening::new(*shaft, OpeningLabel::Shaft),
 			);
 		}
 
-		// Floor-to-ceiling clears on the gallery inner wall.
+		// Floor-to-ceiling clears on the gallery inner wall (active shafts only).
 		match params.shaft_placement {
 			LesHallesShaftPlacement::Corners => {
 				Self::insert_corner_shaft_clears(
@@ -580,10 +652,12 @@ impl LesHallesFloorPlan {
 					gallery_inner,
 					height,
 					params.corner_clear_len(),
+					shaft_slots,
 				);
 			}
 			LesHallesShaftPlacement::MidSides => {
 				for (i, shaft) in shaft_bounds.iter().enumerate() {
+					let slot = shaft_slots.get(i).copied().unwrap_or(i);
 					let smin = Vec3::from(shaft.min);
 					let smax = Vec3::from(shaft.max);
 					for (side, along) in Self::shaft_inner_sides(center_xz, gallery_inner, *shaft) {
@@ -600,7 +674,11 @@ impl LesHallesFloorPlan {
 						);
 						clear.bounds = offset_opening_along_side(clear.bounds, side, along);
 						openings.insert(
-							OpeningId::scoped(SCOPE, "shaft_clear", format!("{i}_{}", side_slot(side))),
+							OpeningId::scoped(
+								SCOPE,
+								"shaft_clear",
+								format!("{slot}_{}", side_slot(side)),
+							),
 							clear,
 						);
 					}
@@ -611,21 +689,30 @@ impl LesHallesFloorPlan {
 		openings
 	}
 
-	/// Large F2C clears at each end of every inner wall (corner shaft layout).
+	/// Large F2C clears at the abutting ends of active corner shafts.
 	fn insert_corner_shaft_clears(
 		openings: &mut Openings,
 		center_xz: Vec3,
 		gallery_inner: Vec2,
 		height: f32,
 		clear_len: f32,
+		shaft_slots: &[usize],
 	) {
-		for side in RectRingFloorSide::all() {
-			let half = match side {
-				OrthoSide::North | OrthoSide::South => gallery_inner.x * 0.5,
-				OrthoSide::East | OrthoSide::West => gallery_inner.y * 0.5,
+		for &slot in shaft_slots {
+			let Some((side_a, end_a, side_b, end_b)) = corner_clear_ends(slot) else {
+				continue;
 			};
-			let clear = clear_len.min(half * 0.45).max(1.2);
-			for (end_i, along_mid) in [(0_usize, -half + clear * 0.5), (1, half - clear * 0.5)] {
+			for (side, end_i) in [(side_a, end_a), (side_b, end_b)] {
+				let half = match side {
+					OrthoSide::North | OrthoSide::South => gallery_inner.x * 0.5,
+					OrthoSide::East | OrthoSide::West => gallery_inner.y * 0.5,
+				};
+				let clear = clear_len.min(half * 0.45).max(1.2);
+				let along_mid = if end_i == 0 {
+					-half + clear * 0.5
+				} else {
+					half - clear * 0.5
+				};
 				let mut opening = RectRingFloor::side_passage_opening(
 					side,
 					center_xz,
@@ -635,7 +722,11 @@ impl LesHallesFloorPlan {
 				);
 				opening.bounds = offset_opening_along_side(opening.bounds, side, along_mid);
 				openings.insert(
-					OpeningId::scoped(SCOPE, "shaft_clear", format!("{}_{end_i}", side_slot(side))),
+					OpeningId::scoped(
+						SCOPE,
+						"shaft_clear",
+						format!("{}_{end_i}", side_slot(side)),
+					),
 					opening,
 				);
 			}
@@ -671,6 +762,7 @@ impl LesHallesFloorPlan {
 		center_xz: Vec3,
 		gallery_inner: Vec2,
 		shaft_bounds: &[Aabb3d],
+		shaft_slots: &[usize],
 		placement: LesHallesShaftPlacement,
 		corner_clear_len: f32,
 	) -> Vec<InnerSection> {
@@ -682,8 +774,7 @@ impl LesHallesFloorPlan {
 			};
 			let occupied = match placement {
 				LesHallesShaftPlacement::Corners => {
-					let clear = corner_clear_len.min(half * 0.45).max(1.2);
-					vec![(-half, -half + clear), (half - clear, half)]
+					corner_occupied_spans(side, half, corner_clear_len, shaft_slots)
 				}
 				LesHallesShaftPlacement::MidSides => {
 					Self::shaft_along_spans(center_xz, gallery_inner, side, shaft_bounds)
@@ -964,6 +1055,43 @@ fn side_slot(side: OrthoSide) -> &'static str {
 	}
 }
 
+/// Corner slot → (side_a, end_a, side_b, end_b) where end `0` is the negative-along end.
+fn corner_clear_ends(slot: usize) -> Option<(OrthoSide, usize, OrthoSide, usize)> {
+	match slot {
+		0 => Some((OrthoSide::South, 0, OrthoSide::West, 0)), // SW
+		1 => Some((OrthoSide::South, 1, OrthoSide::East, 0)), // SE
+		2 => Some((OrthoSide::North, 1, OrthoSide::East, 1)), // NE
+		3 => Some((OrthoSide::North, 0, OrthoSide::West, 1)), // NW
+		_ => None,
+	}
+}
+
+fn corner_occupied_spans(
+	side: OrthoSide,
+	half: f32,
+	clear_len: f32,
+	shaft_slots: &[usize],
+) -> Vec<(f32, f32)> {
+	let clear = clear_len.min(half * 0.45).max(1.2);
+	let mut occupied = Vec::new();
+	for &slot in shaft_slots {
+		let Some((side_a, end_a, side_b, end_b)) = corner_clear_ends(slot) else {
+			continue;
+		};
+		for (s, end_i) in [(side_a, end_a), (side_b, end_b)] {
+			if s != side {
+				continue;
+			}
+			if end_i == 0 {
+				occupied.push((-half, -half + clear));
+			} else {
+				occupied.push((half - clear, half));
+			}
+		}
+	}
+	occupied
+}
+
 fn free_sections_from_occupied(
 	side: OrthoSide,
 	half: f32,
@@ -1089,10 +1217,26 @@ mod tests {
 			balcony_width: 4.0,
 			courtyard_fraction: 0.5,
 			shaft_placement: placement,
+			mid_shaft_side: 4.0,
 			opening_density: 0.7,
 			doors: LesHallesFloorPlan::generate_stall_doors(&cfg, Vec3::ZERO),
 			windows: LesHallesFloorPlan::generate_windows(&cfg, Vec3::ZERO),
 		}
+	}
+
+	fn confines_with_all_shafts(params: &LesHallesParameterized) -> Confines {
+		let base = nominal_confines();
+		let openings = LesHallesFloorPlan::shaft_requests_for_all_slots(params, &base);
+		Confines::new(base.bounds, 0.0, openings)
+	}
+
+	fn fit_with_all_shafts(
+		noise: NoiseParams,
+	) -> (LesHallesFloorPlan, crate::fit::FillableRegions) {
+		let base = nominal_confines();
+		let params = LesHallesParameterized::sample(&base, noise).unwrap();
+		let confines = confines_with_all_shafts(&params);
+		LesHallesFloorPlan::from_parameterized(params, &confines).unwrap()
 	}
 
 	#[test]
@@ -1118,8 +1262,7 @@ mod tests {
 
 	#[test]
 	fn gallery_has_no_ceiling_by_default_and_balcony_has_floors() {
-		let (plan, _) =
-			LesHallesFloorPlan::fit_to_confines(&nominal_confines(), NoiseParams::default()).unwrap();
+		let (plan, _) = fit_with_all_shafts(NoiseParams::default());
 		assert!(!plan.gallery.has_ceiling());
 		assert!(plan.gallery.has_floor());
 		assert!(!plan.balcony_floors.is_empty());
@@ -1129,8 +1272,7 @@ mod tests {
 
 	#[test]
 	fn emits_outer_apertures_and_inner_doors_per_section() {
-		let (plan, _) =
-			LesHallesFloorPlan::fit_to_confines(&nominal_confines(), NoiseParams::default()).unwrap();
+		let (plan, _) = fit_with_all_shafts(NoiseParams::default());
 		// Outer: apertures only.
 		assert!(plan
 			.openings
@@ -1147,7 +1289,9 @@ mod tests {
 			.openings
 			.iter()
 			.all(|(id, _)| !id.as_str().contains("inner_aperture")));
-		let expected = plan.parameterized.expected_inner_section_count();
+		let expected = plan
+			.parameterized
+			.expected_inner_section_count(plan.shaft_bounds.len());
 		let section_doors: std::collections::HashSet<usize> = plan
 			.openings
 			.iter()
@@ -1171,8 +1315,23 @@ mod tests {
 	}
 
 	#[test]
+	fn no_shafts_without_inbound_requests() {
+		let (plan, regions) =
+			LesHallesFloorPlan::fit_to_confines(&nominal_confines(), NoiseParams::default()).unwrap();
+		assert!(plan.shaft_bounds.is_empty());
+		assert!(plan.shaft_walls.is_empty());
+		assert!(plan
+			.openings
+			.iter()
+			.all(|(id, _)| !id.as_str().contains("shaft")));
+		assert_eq!(regions.within.len(), 8); // gallery + balcony bands only
+	}
+
+	#[test]
 	fn preserves_inbound_opening_ids_and_emits_scoped_shafts() {
-		let mut openings = Openings::new();
+		let base = nominal_confines();
+		let params = LesHallesParameterized::sample(&base, NoiseParams::default()).unwrap();
+		let mut openings = LesHallesFloorPlan::shaft_requests_for_all_slots(&params, &base);
 		openings.insert(
 			OpeningId::new("inbound_door"),
 			Opening::passage(Aabb3d::from_min_max(
@@ -1180,14 +1339,11 @@ mod tests {
 				Vec3::new(0.5, 2.2, -17.8),
 			)),
 		);
-		let confines = Confines::new(
-			Aabb3d::from_min_max(Vec3::new(-24.0, 0.0, -18.0), Vec3::new(24.0, 4.0, 18.0)),
-			0.0,
-			openings,
-		);
+		let confines = Confines::new(base.bounds, 0.0, openings);
 		let (plan, regions) =
-			LesHallesFloorPlan::fit_to_confines(&confines, NoiseParams::default()).unwrap();
+			LesHallesFloorPlan::from_parameterized(params, &confines).unwrap();
 		assert!(plan.openings.get(&OpeningId::new("inbound_door")).is_some());
+		assert_eq!(plan.shaft_bounds.len(), 4);
 		assert!(plan
 			.openings
 			.get(&OpeningId::scoped(SCOPE, "shaft", "0"))
@@ -1206,29 +1362,33 @@ mod tests {
 
 	#[test]
 	fn from_parameterized_matches_fit_structure() {
-		let c = nominal_confines();
 		let noise = NoiseParams {
 			seed: 7,
 			..NoiseParams::default()
 		};
-		let params = LesHallesParameterized::sample(&c, noise).unwrap();
-		let (via_fit, _) = LesHallesFloorPlan::fit_to_confines(&c, noise).unwrap();
-		let (via_params, _) = LesHallesFloorPlan::from_parameterized(params, &c).unwrap();
-		assert_eq!(via_fit.outer, via_params.outer);
-		assert_eq!(via_fit.gallery_inner, via_params.gallery_inner);
-		assert_eq!(via_fit.courtyard, via_params.courtyard);
+		let base = nominal_confines();
+		let params = LesHallesParameterized::sample(&base, noise).unwrap();
+		let confines = confines_with_all_shafts(&params);
+		let (via_params, _) =
+			LesHallesFloorPlan::from_parameterized(params.clone(), &confines).unwrap();
+		let (via_again, _) =
+			LesHallesFloorPlan::from_parameterized(params, &confines).unwrap();
+		assert_eq!(via_params.outer, via_again.outer);
+		assert_eq!(via_params.gallery_inner, via_again.gallery_inner);
+		assert_eq!(via_params.courtyard, via_again.courtyard);
 		assert_eq!(
-			via_fit.parameterized.shaft_placement,
-			via_params.parameterized.shaft_placement
+			via_params.parameterized.shaft_placement,
+			via_again.parameterized.shaft_placement
 		);
-		assert_eq!(via_fit.shaft_bounds.len(), 4);
+		assert_eq!(via_params.shaft_bounds.len(), 4);
 	}
 
 	#[test]
 	fn corner_shaft_is_half_of_gallery_square_with_large_clears() {
+		let params = fixed_params(LesHallesShaftPlacement::Corners);
 		let (plan, _) = LesHallesFloorPlan::from_parameterized(
-			fixed_params(LesHallesShaftPlacement::Corners),
-			&nominal_confines(),
+			params.clone(),
+			&confines_with_all_shafts(&params),
 		)
 		.unwrap();
 		let gw = plan.parameterized.gallery_width;
@@ -1242,12 +1402,12 @@ mod tests {
 			.iter()
 			.filter(|(id, _)| id.as_str().contains("shaft_clear_"))
 			.count();
-		assert_eq!(clears, 8, "two clears per inner side");
+		assert_eq!(clears, 8, "two clears per active corner");
 	}
 
 	#[test]
 	fn corner_shaft_mapping_rewrites_inbound_by_quadrant() {
-		// Request in SE quadrant (and one straddling SE/NE — SE wins by overlap).
+		// Request in SE quadrant (and one straddling SE/NE — NE wins by overlap).
 		let mut openings = Openings::new();
 		openings.insert(
 			OpeningId::new("req_se"),
@@ -1270,14 +1430,18 @@ mod tests {
 		)
 		.unwrap();
 
+		assert_eq!(plan.shaft_bounds.len(), 2);
+		assert!(plan.shaft_slots.contains(&1));
+		assert!(plan.shaft_slots.contains(&2));
+		let se_idx = plan.shaft_slots.iter().position(|&s| s == 1).unwrap();
+		let ne_idx = plan.shaft_slots.iter().position(|&s| s == 2).unwrap();
 		let se_open = plan.openings.get(&OpeningId::new("req_se")).unwrap();
-		assert!(aabb_xz_near_eq(&se_open.bounds, &plan.shaft_bounds[1], 1e-4));
-		assert!(plan.shaft_inbound[1].contains(&OpeningId::new("req_se")));
+		assert!(aabb_xz_near_eq(&se_open.bounds, &plan.shaft_bounds[se_idx], 1e-4));
+		assert!(plan.shaft_inbound[se_idx].contains(&OpeningId::new("req_se")));
 
 		let straddle = plan.openings.get(&OpeningId::new("req_straddle")).unwrap();
-		// SE∩request area 4, NE∩request area 12 → NE wins.
-		assert!(aabb_xz_near_eq(&straddle.bounds, &plan.shaft_bounds[2], 1e-4));
-		assert!(plan.shaft_inbound[2].contains(&OpeningId::new("req_straddle")));
+		assert!(aabb_xz_near_eq(&straddle.bounds, &plan.shaft_bounds[ne_idx], 1e-4));
+		assert!(plan.shaft_inbound[ne_idx].contains(&OpeningId::new("req_straddle")));
 		assert!(regions.within.iter().any(|c| {
 			c.openings.get(&OpeningId::new("req_se")).is_some()
 		}));
@@ -1290,7 +1454,7 @@ mod tests {
 		openings.insert(
 			OpeningId::new("req_s"),
 			Opening::new(
-				Aabb3d::from_min_max(Vec3::new(-1.0, 0.0, -7.5), Vec3::new(1.0, 3.0, -6.0)),
+				Aabb3d::from_min_max(Vec3::new(-1.0, 0.0, -17.0), Vec3::new(1.0, 3.0, -14.0)),
 				OpeningLabel::Shaft,
 			),
 		);
@@ -1298,7 +1462,7 @@ mod tests {
 		openings.insert(
 			OpeningId::new("req_e"),
 			Opening::new(
-				Aabb3d::from_min_max(Vec3::new(6.0, 0.0, -1.0), Vec3::new(9.0, 3.0, 1.0)),
+				Aabb3d::from_min_max(Vec3::new(16.0, 0.0, -1.0), Vec3::new(22.0, 3.0, 1.0)),
 				OpeningLabel::Shaft,
 			),
 		);
@@ -1309,17 +1473,21 @@ mod tests {
 		)
 		.unwrap();
 
+		assert_eq!(plan.shaft_bounds.len(), 2);
+		let s_idx = plan.shaft_slots.iter().position(|&s| s == 0).unwrap();
+		let e_idx = plan.shaft_slots.iter().position(|&s| s == 1).unwrap();
 		assert!(aabb_xz_near_eq(
 			&plan.openings.get(&OpeningId::new("req_s")).unwrap().bounds,
-			&plan.shaft_bounds[0],
+			&plan.shaft_bounds[s_idx],
 			1e-4
 		));
 		assert!(aabb_xz_near_eq(
 			&plan.openings.get(&OpeningId::new("req_e")).unwrap().bounds,
-			&plan.shaft_bounds[1],
+			&plan.shaft_bounds[e_idx],
 			1e-4
 		));
-		assert!(plan.shaft_inbound[0].contains(&OpeningId::new("req_s")));
-		assert!(plan.shaft_inbound[1].contains(&OpeningId::new("req_e")));
+		assert!(plan.shaft_inbound[s_idx].contains(&OpeningId::new("req_s")));
+		assert!(plan.shaft_inbound[e_idx].contains(&OpeningId::new("req_e")));
+		assert!(plan.parameterized.mid_shaft_side >= 2.4);
 	}
 }

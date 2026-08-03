@@ -10,8 +10,9 @@
 //! - Decides reasonable widths for the gallery and balcony.
 //! - Adds apertures on the outer facade and stall doors on the gallery’s inner wall.
 //! - Chooses whether to allocate shafts (for stairs) in the four corners or in the middle of each side.
-//! - Remaps inbound shaft openings onto those fitted slots (quadrants for corners;
-//!   N/S end bands + E/W middle bands for mid-sides).
+//! - Remaps inbound shaft openings onto fitted slots (quadrants for corners;
+//!   N/S end bands + E/W middle bands for mid-sides). A shaft is only authored
+//!   when at least one inbound opening maps to that slot.
 
 pub mod floor_plan;
 pub mod full_storey;

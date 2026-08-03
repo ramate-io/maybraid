@@ -1028,12 +1028,16 @@ fn fit_les_halles_floor_plan(
 	seed: i32,
 	ceiling: bool,
 ) -> Result<LesHallesFloorPlan, richmond_buildings::FitError> {
-	let confines = Confines::from_bounds(les_halles_confines_bounds(extent));
+	let bounds = les_halles_confines_bounds(extent);
+	let empty = Confines::from_bounds(bounds);
 	let noise = NoiseParams {
 		seed,
 		..NoiseParams::default()
 	};
-	let params = LesHallesParameterized::sample(&confines, noise)?;
+	let params = LesHallesParameterized::sample(&empty, noise)?;
+	// Demo: request all placement slots so shafts remain visible in the playground.
+	let openings = LesHallesFloorPlan::shaft_requests_for_all_slots(&params, &empty);
+	let confines = Confines::new(bounds, 0.0, openings);
 	let ceiling = if ceiling {
 		RectRingFloorSlab::Solid
 	} else {
