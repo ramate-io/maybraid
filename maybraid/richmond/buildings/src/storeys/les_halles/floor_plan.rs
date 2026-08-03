@@ -47,9 +47,14 @@ pub struct LesHallesFloorPlan {
 	/// Ceiling slab on the gallery ring ([`RectRingFloorSlab::None`] by default).
 	pub ceiling: RectRingFloorSlab,
 	/// Merged inbound + generated openings for the gallery shell.
+	///
+	/// Inbound [`OpeningLabel::Shaft`] openings keep their ids; their bounds are
+	/// rewritten onto a fitted shaft via [`Self::map_inbound_shafts`].
 	pub openings: Openings,
 	/// Shaft volumes (same bounds as shaft openings / within cells).
 	pub shaft_bounds: Vec<Aabb3d>,
+	/// Inbound shaft [`OpeningId`]s remapped onto each [`Self::shaft_bounds`] slot.
+	pub shaft_inbound: Vec<Vec<OpeningId>>,
 	/// Walled gallery ring (outer + inner walls, floor, optional ceiling).
 	pub gallery: RectRingFloor,
 	/// Floor-only balcony annulus pieces (no walls).
@@ -145,6 +150,13 @@ impl LesHallesFloorPlan {
 			Self::shaft_aabbs(center_xz, outer, params.gallery_width, height, params.shaft_placement);
 
 		let mut openings = confines.openings.clone();
+		let shaft_inbound = Self::map_inbound_shafts(
+			&mut openings,
+			center_xz,
+			outer,
+			params.shaft_placement,
+			&shaft_bounds,
+		);
 		openings.extend(&Self::generated_openings(
 			&params,
 			center_xz,
@@ -170,6 +182,7 @@ impl LesHallesFloorPlan {
 			ceiling,
 			openings,
 			shaft_bounds,
+			shaft_inbound,
 			gallery,
 			balcony_floors,
 			shaft_walls,
@@ -214,6 +227,11 @@ impl LesHallesFloorPlan {
 				OpeningId::scoped(SCOPE, "shaft", i.to_string()),
 				Opening::new(*shaft, OpeningLabel::Shaft),
 			);
+			if let Some(ids) = self.shaft_inbound.get(i) {
+				for id in ids {
+					openings.insert(id.clone(), Opening::new(*shaft, OpeningLabel::Shaft));
+				}
+			}
 			within.push(Confines::new(*shaft, self.roll, openings));
 		}
 
@@ -316,6 +334,107 @@ impl LesHallesFloorPlan {
 				),
 			],
 		}
+	}
+
+	/// Plan-space (XZ) regions that claim inbound shafts for each fitted slot.
+	///
+	/// - **Corners:** four quadrants about the footprint center (SW, SE, NE, NW).
+	/// - **MidSides:** N/S end bands (full width) and E/W middle bands (half width),
+	///   an exclusive partition of the outer footprint.
+	///
+	/// Region order matches [`Self::shaft_aabbs`].
+	fn shaft_mapping_regions(
+		center_xz: Vec3,
+		outer: Vec2,
+		placement: LesHallesShaftPlacement,
+	) -> Vec<Aabb2d> {
+		let ox0 = center_xz.x - outer.x * 0.5;
+		let ox1 = center_xz.x + outer.x * 0.5;
+		let oz0 = center_xz.z - outer.y * 0.5;
+		let oz1 = center_xz.z + outer.y * 0.5;
+		let cx = center_xz.x;
+		let cz = center_xz.z;
+
+		match placement {
+			LesHallesShaftPlacement::Corners => vec![
+				// SW, SE, NE, NW
+				Aabb2d {
+					min: Vec2::new(ox0, oz0),
+					max: Vec2::new(cx, cz),
+				},
+				Aabb2d {
+					min: Vec2::new(cx, oz0),
+					max: Vec2::new(ox1, cz),
+				},
+				Aabb2d {
+					min: Vec2::new(cx, cz),
+					max: Vec2::new(ox1, oz1),
+				},
+				Aabb2d {
+					min: Vec2::new(ox0, cz),
+					max: Vec2::new(cx, oz1),
+				},
+			],
+			LesHallesShaftPlacement::MidSides => {
+				// End thirds (N/S, full X) + middle third split E/W.
+				let z_lo = oz0 + (oz1 - oz0) / 3.0;
+				let z_hi = oz1 - (oz1 - oz0) / 3.0;
+				vec![
+					// S, E, N, W
+					Aabb2d {
+						min: Vec2::new(ox0, oz0),
+						max: Vec2::new(ox1, z_lo),
+					},
+					Aabb2d {
+						min: Vec2::new(cx, z_lo),
+						max: Vec2::new(ox1, z_hi),
+					},
+					Aabb2d {
+						min: Vec2::new(ox0, z_hi),
+						max: Vec2::new(ox1, oz1),
+					},
+					Aabb2d {
+						min: Vec2::new(ox0, z_lo),
+						max: Vec2::new(cx, z_hi),
+					},
+				]
+			}
+		}
+	}
+
+	/// Rewrite inbound [`OpeningLabel::Shaft`] bounds onto fitted shaft slots.
+	///
+	/// Picks the mapping region with greatest XZ overlap; ties / no-overlap fall
+	/// back to the region whose center is closest to the request center. Returns
+	/// inbound ids per `shaft_bounds` index (empty slots stay empty).
+	pub fn map_inbound_shafts(
+		openings: &mut Openings,
+		center_xz: Vec3,
+		outer: Vec2,
+		placement: LesHallesShaftPlacement,
+		shaft_bounds: &[Aabb3d],
+	) -> Vec<Vec<OpeningId>> {
+		let regions = Self::shaft_mapping_regions(center_xz, outer, placement);
+		debug_assert_eq!(regions.len(), shaft_bounds.len());
+		let mut inbound: Vec<Vec<OpeningId>> = (0..shaft_bounds.len()).map(|_| Vec::new()).collect();
+
+		let shaft_ids: Vec<OpeningId> = openings
+			.iter()
+			.filter(|(_, o)| matches!(o.label, OpeningLabel::Shaft))
+			.map(|(id, _)| id.clone())
+			.collect();
+
+		for id in shaft_ids {
+			let Some(opening) = openings.openings.get_mut(&id) else {
+				continue;
+			};
+			let Some(slot) = best_shaft_slot(&opening.bounds, &regions) else {
+				continue;
+			};
+			opening.bounds = shaft_bounds[slot];
+			inbound[slot].push(id);
+		}
+		inbound
 	}
 
 	/// Gallery facade + balcony-facing openings, plus shaft voids / clears.
@@ -763,6 +882,43 @@ fn along_overlaps_spans(along: f32, width: f32, spans: &[(f32, f32)]) -> bool {
 	spans.iter().any(|&(lo, hi)| a0 <= hi && a1 >= lo)
 }
 
+/// Greatest XZ overlap with a mapping region; closest region center if no overlap.
+fn best_shaft_slot(request: &Aabb3d, regions: &[Aabb2d]) -> Option<usize> {
+	if regions.is_empty() {
+		return None;
+	}
+	let rmin = Vec3::from(request.min);
+	let rmax = Vec3::from(request.max);
+	let rcx = (rmin.x + rmax.x) * 0.5;
+	let rcz = (rmin.z + rmax.z) * 0.5;
+
+	let mut best_i = 0usize;
+	let mut best_area = -1.0_f32;
+	let mut best_dist = f32::INFINITY;
+	for (i, region) in regions.iter().enumerate() {
+		let area = xz_overlap_area(rmin.x, rmax.x, rmin.z, rmax.z, region);
+		let cx = (region.min.x + region.max.x) * 0.5;
+		let cz = (region.min.y + region.max.y) * 0.5;
+		let dist = (rcx - cx).hypot(rcz - cz);
+		let better = area > best_area + 1e-6
+			|| ((area - best_area).abs() <= 1e-6 && dist < best_dist - 1e-6);
+		if better {
+			best_i = i;
+			best_area = area;
+			best_dist = dist;
+		}
+	}
+	Some(best_i)
+}
+
+fn xz_overlap_area(ax0: f32, ax1: f32, az0: f32, az1: f32, region: &Aabb2d) -> f32 {
+	let x0 = ax0.max(region.min.x);
+	let x1 = ax1.min(region.max.x);
+	let z0 = az0.max(region.min.y);
+	let z1 = az1.min(region.max.y);
+	(x1 - x0).max(0.0) * (z1 - z0).max(0.0)
+}
+
 fn offset_opening_along_side(bounds: Aabb3d, side: OrthoSide, delta: f32) -> Aabb3d {
 	let (dx, dz) = match side {
 		OrthoSide::North | OrthoSide::South => (delta, 0.0),
@@ -808,7 +964,7 @@ mod tests {
 	use crate::openings::{Opening, OpeningId, OpeningLabel, Openings};
 	use bevy_math::bounding::Aabb3d;
 	use bevy_math::Vec3;
-	use procedural_common::NoiseParams;
+	use procedural_common::{NoiseConfig, NoiseParams};
 
 	fn nominal_confines() -> Confines {
 		Confines::from_bounds(Aabb3d::from_min_max(
@@ -822,6 +978,30 @@ mod tests {
 			Vec3::ZERO,
 			Vec3::new(3.0, 3.0, 3.0),
 		))
+	}
+
+	fn fixed_params(placement: LesHallesShaftPlacement) -> LesHallesParameterized {
+		LesHallesParameterized {
+			gallery_width: 3.0,
+			balcony_width: 1.5,
+			shaft_placement: placement,
+			opening_density: 0.5,
+			doors: LesHallesFloorPlan::generate_stall_doors(
+				&NoiseConfig::new(NoiseParams::default()),
+				Vec3::ZERO,
+			),
+		}
+	}
+
+	fn aabb_xz_near(a: &Aabb3d, b: &Aabb3d) -> bool {
+		let amin = Vec3::from(a.min);
+		let amax = Vec3::from(a.max);
+		let bmin = Vec3::from(b.min);
+		let bmax = Vec3::from(b.max);
+		(amin.x - bmin.x).abs() < 1e-4
+			&& (amin.z - bmin.z).abs() < 1e-4
+			&& (amax.x - bmax.x).abs() < 1e-4
+			&& (amax.z - bmax.z).abs() < 1e-4
 	}
 
 	#[test]
@@ -951,5 +1131,89 @@ mod tests {
 			via_params.parameterized.shaft_placement
 		);
 		assert_eq!(via_fit.shaft_bounds.len(), 4);
+	}
+
+	#[test]
+	fn corner_shaft_mapping_rewrites_inbound_by_quadrant() {
+		// Request in SE quadrant (and one straddling SE/NE — SE wins by overlap).
+		let mut openings = Openings::new();
+		openings.insert(
+			OpeningId::new("req_se"),
+			Opening::new(
+				Aabb3d::from_min_max(Vec3::new(2.0, 0.0, -6.0), Vec3::new(4.0, 3.0, -4.0)),
+				OpeningLabel::Shaft,
+			),
+		);
+		openings.insert(
+			OpeningId::new("req_straddle"),
+			Opening::new(
+				Aabb3d::from_min_max(Vec3::new(1.0, 0.0, -1.0), Vec3::new(5.0, 3.0, 3.0)),
+				OpeningLabel::Shaft,
+			),
+		);
+		let confines = Confines::new(
+			Aabb3d::from_min_max(Vec3::new(-10.0, 0.0, -8.0), Vec3::new(10.0, 3.5, 8.0)),
+			0.0,
+			openings,
+		);
+		let (plan, regions) = LesHallesFloorPlan::from_parameterized(
+			fixed_params(LesHallesShaftPlacement::Corners),
+			&confines,
+		)
+		.unwrap();
+
+		let se_open = plan.openings.get(&OpeningId::new("req_se")).unwrap();
+		assert!(aabb_xz_near(&se_open.bounds, &plan.shaft_bounds[1]));
+		assert!(plan.shaft_inbound[1].contains(&OpeningId::new("req_se")));
+
+		let straddle = plan.openings.get(&OpeningId::new("req_straddle")).unwrap();
+		// SE∩request area 4, NE∩request area 12 → NE wins.
+		assert!(aabb_xz_near(&straddle.bounds, &plan.shaft_bounds[2]));
+		assert!(plan.shaft_inbound[2].contains(&OpeningId::new("req_straddle")));
+		assert!(regions.within.iter().any(|c| {
+			c.openings.get(&OpeningId::new("req_se")).is_some()
+		}));
+	}
+
+	#[test]
+	fn midside_shaft_mapping_uses_end_and_middle_bands() {
+		let mut openings = Openings::new();
+		// South end band
+		openings.insert(
+			OpeningId::new("req_s"),
+			Opening::new(
+				Aabb3d::from_min_max(Vec3::new(-1.0, 0.0, -7.5), Vec3::new(1.0, 3.0, -6.0)),
+				OpeningLabel::Shaft,
+			),
+		);
+		// East middle band
+		openings.insert(
+			OpeningId::new("req_e"),
+			Opening::new(
+				Aabb3d::from_min_max(Vec3::new(6.0, 0.0, -1.0), Vec3::new(9.0, 3.0, 1.0)),
+				OpeningLabel::Shaft,
+			),
+		);
+		let confines = Confines::new(
+			Aabb3d::from_min_max(Vec3::new(-10.0, 0.0, -8.0), Vec3::new(10.0, 3.5, 8.0)),
+			0.0,
+			openings,
+		);
+		let (plan, _) = LesHallesFloorPlan::from_parameterized(
+			fixed_params(LesHallesShaftPlacement::MidSides),
+			&confines,
+		)
+		.unwrap();
+
+		assert!(aabb_xz_near(
+			&plan.openings.get(&OpeningId::new("req_s")).unwrap().bounds,
+			&plan.shaft_bounds[0]
+		));
+		assert!(aabb_xz_near(
+			&plan.openings.get(&OpeningId::new("req_e")).unwrap().bounds,
+			&plan.shaft_bounds[1]
+		));
+		assert!(plan.shaft_inbound[0].contains(&OpeningId::new("req_s")));
+		assert!(plan.shaft_inbound[1].contains(&OpeningId::new("req_e")));
 	}
 }
