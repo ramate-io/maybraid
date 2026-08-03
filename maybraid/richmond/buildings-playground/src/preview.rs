@@ -48,6 +48,15 @@ use richmond_buildings::{
 #[derive(Component)]
 pub struct PreviewRoot;
 
+/// Cardinal façade for demo bites-stall passages.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BitesDoorSide {
+	South,
+	North,
+	East,
+	West,
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum PreviewSubject {
 	None,
@@ -333,6 +342,7 @@ pub enum PreviewSubject {
 	BitesStall {
 		extent: Vec3,
 		seed: i32,
+		door_side: BitesDoorSide,
 	},
 	LesHallesFloorPlan {
 		/// Confines size (XZ centered at origin; Y from 0).
@@ -736,9 +746,13 @@ impl PreviewConfig {
 					extent.x, extent.y, extent.z
 				)
 			}
-			PreviewSubject::BitesStall { extent, seed } => {
+			PreviewSubject::BitesStall {
+				extent,
+				seed,
+				door_side,
+			} => {
 				format!(
-					"preview: bites-stall (extent={:.2},{:.2},{:.2} seed={seed})",
+					"preview: bites-stall (extent={:.2},{:.2},{:.2} seed={seed} door-side={door_side:?})",
 					extent.x, extent.y, extent.z
 				)
 			}
@@ -1082,8 +1096,12 @@ impl CachedPreview {
 					Err(err) => bevy::log::error!("commercial-stall-strip fit failed: {err}"),
 				}
 			}
-			PreviewSubject::BitesStall { extent, seed } => {
-				let confines = demo_bites_stall_confines(*extent);
+			PreviewSubject::BitesStall {
+				extent,
+				seed,
+				door_side,
+			} => {
+				let confines = demo_bites_stall_confines(*extent, *door_side);
 				let noise = NoiseParams {
 					seed: *seed,
 					..NoiseParams::default()
@@ -1159,35 +1177,52 @@ fn les_halles_confines_bounds(extent: Vec3) -> Aabb3d {
 	Aabb3d::from_min_max(Vec3::new(-hx, 0.0, -hz), Vec3::new(hx, h, hz))
 }
 
-/// Demo bites stall with two long −Z passages so multiple counters appear.
-fn demo_bites_stall_confines(extent: Vec3) -> Confines {
+/// Demo bites stall with long Passage(s) on the chosen façade.
+fn demo_bites_stall_confines(extent: Vec3, door_side: BitesDoorSide) -> Confines {
 	let extent = extent.max(Vec3::splat(1e-4));
 	let door_h = (extent.y * 0.72).clamp(2.0, extent.y.max(2.0));
 	let mut openings = Openings::new();
-	let w = extent.x;
-	// Two long façade doors (≥ LONG_PASSAGE_MIN) along −Z.
-	if w >= 6.0 {
+	let along = match door_side {
+		BitesDoorSide::South | BitesDoorSide::North => extent.x,
+		BitesDoorSide::East | BitesDoorSide::West => extent.z,
+	};
+	let band = 0.25_f32;
+	let mk = |a0: f32, a1: f32| -> Aabb3d {
+		match door_side {
+			BitesDoorSide::South => Aabb3d::from_min_max(
+				Vec3::new(a0, 0.0, -band),
+				Vec3::new(a1, door_h, band),
+			),
+			BitesDoorSide::North => Aabb3d::from_min_max(
+				Vec3::new(a0, 0.0, extent.z - band),
+				Vec3::new(a1, door_h, extent.z + band),
+			),
+			BitesDoorSide::East => Aabb3d::from_min_max(
+				Vec3::new(extent.x - band, 0.0, a0),
+				Vec3::new(extent.x + band, door_h, a1),
+			),
+			BitesDoorSide::West => Aabb3d::from_min_max(
+				Vec3::new(-band, 0.0, a0),
+				Vec3::new(band, door_h, a1),
+			),
+		}
+	};
+	if along >= 6.0 {
 		openings.insert(
 			OpeningId::new("demo_bites_door_a"),
-			Opening::passage(Aabb3d::from_min_max(
-				Vec3::new(0.4, 0.0, -0.25),
-				Vec3::new((w * 0.42).max(2.5), door_h, 0.25),
-			)),
+			Opening::passage(mk(0.4, (along * 0.42).max(2.5))),
 		);
 		openings.insert(
 			OpeningId::new("demo_bites_door_b"),
-			Opening::passage(Aabb3d::from_min_max(
-				Vec3::new(w * 0.58, 0.0, -0.25),
-				Vec3::new((w - 0.4).max(w * 0.58 + 2.5), door_h, 0.25),
+			Opening::passage(mk(
+				along * 0.58,
+				(along - 0.4).max(along * 0.58 + 2.5),
 			)),
 		);
 	} else {
 		openings.insert(
 			OpeningId::new("demo_bites_door"),
-			Opening::passage(Aabb3d::from_min_max(
-				Vec3::new(0.3, 0.0, -0.25),
-				Vec3::new((w - 0.3).max(2.2), door_h, 0.25),
-			)),
+			Opening::passage(mk(0.3, (along - 0.3).max(2.2))),
 		);
 	}
 	Confines::new(Aabb3d::from_min_max(Vec3::ZERO, extent), 0.0, openings)

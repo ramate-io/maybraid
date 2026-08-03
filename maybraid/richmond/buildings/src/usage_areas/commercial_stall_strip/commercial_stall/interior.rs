@@ -37,6 +37,15 @@ enum InteriorKind {
 	PublicRestroom,
 }
 
+const FIRST_FIT_ORDER: &[InteriorKind] = &[
+	InteriorKind::Bites,
+	InteriorKind::BitesSitdown,
+	InteriorKind::Supermarket,
+	InteriorKind::KnickKnack,
+	InteriorKind::Parts,
+	InteriorKind::PublicRestroom,
+];
+
 fn interior_catalog() -> TypedBucketThrow<InteriorKind> {
 	let mut d = TypedBucketThrow::new();
 	d.add(InteriorKind::Bites, 3.0);
@@ -56,42 +65,61 @@ fn subtype_noise(noise: NoiseParams) -> NoiseParams {
 	}
 }
 
+fn try_fit_kind(
+	kind: InteriorKind,
+	confines: &Confines,
+	noise: NoiseParams,
+) -> Result<(CommercialStallInterior, FillableRegions), FitError> {
+	match kind {
+		InteriorKind::Bites => BitesStall::fit_to_confines(confines, noise)
+			.map(|(s, r)| (CommercialStallInterior::Bites(s), r)),
+		InteriorKind::BitesSitdown => BitesSitdownStall::fit_to_confines(confines, noise)
+			.map(|(s, r)| (CommercialStallInterior::BitesSitdown(s), r)),
+		InteriorKind::Supermarket => SupermarketStall::fit_to_confines(confines, noise)
+			.map(|(s, r)| (CommercialStallInterior::Supermarket(s), r)),
+		InteriorKind::KnickKnack => KnickKnackStall::fit_to_confines(confines, noise)
+			.map(|(s, r)| (CommercialStallInterior::KnickKnack(s), r)),
+		InteriorKind::Parts => PartsStall::fit_to_confines(confines, noise)
+			.map(|(s, r)| (CommercialStallInterior::Parts(s), r)),
+		InteriorKind::PublicRestroom => PublicRestroom::fit_to_confines(confines, noise)
+			.map(|(s, r)| (CommercialStallInterior::PublicRestroom(s), r)),
+	}
+}
+
 impl Fit for CommercialStallInterior {
 	fn fit_to_confines(
 		confines: &Confines,
 		noise: NoiseParams,
 	) -> Result<(Self, FillableRegions), FitError> {
 		let catalog = interior_catalog();
-		let pick = catalog
+		let preferred = catalog
 			.select_from_noise_3d(subtype_noise(noise), confines.center())
 			.copied()
 			.unwrap_or(InteriorKind::Bites);
-		let fitted = match pick {
-			InteriorKind::Bites => BitesStall::fit_to_confines(confines, noise)
-				.map(|(s, r)| (Self::Bites(s), r)),
-			InteriorKind::BitesSitdown => BitesSitdownStall::fit_to_confines(confines, noise)
-				.map(|(s, r)| (Self::BitesSitdown(s), r)),
-			InteriorKind::Supermarket => SupermarketStall::fit_to_confines(confines, noise)
-				.map(|(s, r)| (Self::Supermarket(s), r)),
-			InteriorKind::KnickKnack => KnickKnackStall::fit_to_confines(confines, noise)
-				.map(|(s, r)| (Self::KnickKnack(s), r)),
-			InteriorKind::Parts => PartsStall::fit_to_confines(confines, noise)
-				.map(|(s, r)| (Self::Parts(s), r)),
-			InteriorKind::PublicRestroom => PublicRestroom::fit_to_confines(confines, noise)
-				.map(|(s, r)| (Self::PublicRestroom(s), r)),
-		};
-		match fitted {
-			Ok(v) => Ok(v),
-			Err(_) => Ok((
-				Self::Fallback(label_filling_aabb(
-					LabelStyle::Gray,
-					"commercial stall",
-					&confines.bounds,
-					confines.roll,
-				)),
-				FillableRegions::empty(),
-			)),
+
+		// Preferred first, then first-fit through the remaining catalog order.
+		let mut order = vec![preferred];
+		for kind in FIRST_FIT_ORDER {
+			if *kind != preferred {
+				order.push(*kind);
+			}
 		}
+
+		for kind in order {
+			if let Ok(fitted) = try_fit_kind(kind, confines, noise) {
+				return Ok(fitted);
+			}
+		}
+
+		Ok((
+			Self::Fallback(label_filling_aabb(
+				LabelStyle::Gray,
+				"commercial stall",
+				&confines.bounds,
+				confines.roll,
+			)),
+			FillableRegions::empty(),
+		))
 	}
 }
 
@@ -122,6 +150,7 @@ mod tests {
 	use super::*;
 	use bevy_math::bounding::Aabb3d;
 	use bevy_math::Vec3;
+	use crate::openings::{Opening, OpeningId, Openings};
 
 	#[test]
 	fn cellular_pick_varies_across_neighbors() {
@@ -141,12 +170,39 @@ mod tests {
 		};
 		let (ia, _) = CommercialStallInterior::fit_to_confines(&a, noise).unwrap();
 		let (ib, _) = CommercialStallInterior::fit_to_confines(&b, noise).unwrap();
-		let ta = ia.label_nodes_for_level(LodSceneLevel::High).flatten()[0].text.clone();
-		let tb = ib.label_nodes_for_level(LodSceneLevel::High).flatten()[0].text.clone();
-		let _ = (ta, tb);
 		assert!(!ia
 			.label_nodes_for_level(LodSceneLevel::High)
 			.flatten()
 			.is_empty());
+		assert!(!ib
+			.label_nodes_for_level(LodSceneLevel::High)
+			.flatten()
+			.is_empty());
+	}
+
+	#[test]
+	fn bites_failure_falls_through_to_another_type() {
+		// Shallow + short doors → Bites fails kitchen / passage; another type should win.
+		let mut openings = Openings::new();
+		openings.insert(
+			OpeningId::new("short"),
+			Opening::passage(Aabb3d::from_min_max(
+				Vec3::new(1.0, 0.0, -0.2),
+				Vec3::new(2.2, 2.0, 0.2),
+			)),
+		);
+		let confines = Confines::new(
+			Aabb3d::from_min_max(Vec3::ZERO, Vec3::new(5.0, 3.0, 2.5)),
+			0.0,
+			openings,
+		);
+		let noise = NoiseParams {
+			seed: 1,
+			noise_type: NoiseType::Cellular,
+			frequency: 0.35,
+			..NoiseParams::default()
+		};
+		let (interior, _) = CommercialStallInterior::fit_to_confines(&confines, noise).unwrap();
+		assert!(!matches!(interior, CommercialStallInterior::Bites(_)));
 	}
 }

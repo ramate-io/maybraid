@@ -65,20 +65,50 @@ pub fn side_for_opening(bounds: &Aabb3d, opening: &Opening) -> Option<StallSide>
 	let bmax = Vec3::from(bounds.max);
 	let omin = Vec3::from(opening.bounds.min);
 	let omax = Vec3::from(opening.bounds.max);
+	let oc = (omin + omax) * 0.5;
 	let tol = 0.45_f32;
-	if aabb_near_plane(omin.z, omax.z, bmin.z, tol) {
-		return Some(StallSide::South);
-	}
-	if aabb_near_plane(omin.z, omax.z, bmax.z, tol) {
-		return Some(StallSide::North);
-	}
-	if aabb_near_plane(omin.x, omax.x, bmax.x, tol) {
-		return Some(StallSide::East);
-	}
-	if aabb_near_plane(omin.x, omax.x, bmin.x, tol) {
-		return Some(StallSide::West);
-	}
-	None
+	let x_span = (omax.x - omin.x).abs();
+	let z_span = (omax.z - omin.z).abs();
+	// Prefer the face whose plane the opening hugs and whose *along* axis is the
+	// longer plan span (avoids east/west doors near z=0 being labeled south).
+	let mut best: Option<(StallSide, f32)> = None;
+	let mut consider = |side: StallSide, on_plane: bool, dist: f32, along: f32, through: f32| {
+		if !on_plane || along + 1e-3 < through {
+			return;
+		}
+		if best.map(|(_, d)| dist < d - 1e-4).unwrap_or(true) {
+			best = Some((side, dist));
+		}
+	};
+	consider(
+		StallSide::South,
+		aabb_near_plane(omin.z, omax.z, bmin.z, tol),
+		(oc.z - bmin.z).abs(),
+		x_span,
+		z_span,
+	);
+	consider(
+		StallSide::North,
+		aabb_near_plane(omin.z, omax.z, bmax.z, tol),
+		(oc.z - bmax.z).abs(),
+		x_span,
+		z_span,
+	);
+	consider(
+		StallSide::East,
+		aabb_near_plane(omin.x, omax.x, bmax.x, tol),
+		(oc.x - bmax.x).abs(),
+		z_span,
+		x_span,
+	);
+	consider(
+		StallSide::West,
+		aabb_near_plane(omin.x, omax.x, bmin.x, tol),
+		(oc.x - bmin.x).abs(),
+		z_span,
+		x_span,
+	);
+	best.map(|(side, _)| side)
 }
 
 pub fn opening_along_len(opening: &Opening, side: StallSide) -> f32 {
@@ -101,25 +131,17 @@ pub fn inflate_xz(aabb: &Aabb3d, pad: f32) -> Aabb3d {
 	)
 }
 
-/// Largest single AABB remainder of `bounds` after keeping ≥`clearance` from each
-/// obstacle (XZ). Each obstacle is cut with a full-span cardinal slab so two
-/// façade counters leave one kitchen behind *both*, not a narrow bay behind one.
+/// Largest AABB inside `bounds` that stays ≥`clearance` (XZ) from every obstacle.
+///
+/// Enumerates candidate rectangles from the obstacle/bounds edge grid so gaps
+/// between counters are claimed when they clear the buffers.
 pub fn largest_remainder_away_from(
 	bounds: &Aabb3d,
 	obstacles: &[Aabb3d],
 	clearance: f32,
 ) -> Option<Aabb3d> {
-	let mut region = *bounds;
-	for obs in obstacles {
-		let cut = inflate_xz(obs, clearance);
-		let candidates = full_span_cut_slabs(&region, &cut);
-		region = candidates.into_iter().max_by(|a, b| {
-			aabb_xz_area(a)
-				.partial_cmp(&aabb_xz_area(b))
-				.unwrap_or(std::cmp::Ordering::Equal)
-		})?;
-	}
-	Some(region)
+	let cuts: Vec<Aabb3d> = obstacles.iter().map(|o| inflate_xz(o, clearance)).collect();
+	largest_aabb_avoiding_xz(bounds, &cuts)
 }
 
 fn aabb_xz_area(aabb: &Aabb3d) -> f32 {
@@ -127,64 +149,69 @@ fn aabb_xz_area(aabb: &Aabb3d) -> f32 {
 	e.x * e.y
 }
 
-/// Cardinal slabs of `region` outside `cut`. West/east span the full Z of
-/// `region`; south/north span the full X — so a cut on one façade bay still
-/// yields a kitchen the full stall width behind it.
-fn full_span_cut_slabs(region: &Aabb3d, cut: &Aabb3d) -> Vec<Aabb3d> {
-	let rmin = Vec3::from(region.min);
-	let rmax = Vec3::from(region.max);
-	let cmin = Vec3::from(cut.min);
-	let cmax = Vec3::from(cut.max);
-	if cmax.x <= rmin.x || cmin.x >= rmax.x || cmax.z <= rmin.z || cmin.z >= rmax.z {
-		return vec![*region];
-	}
-	let mut out = Vec::new();
-	let push = |out: &mut Vec<Aabb3d>, min: Vec3, max: Vec3| {
-		if max.x - min.x > 1e-3 && max.z - min.z > 1e-3 && max.y - min.y > 1e-3 {
-			out.push(Aabb3d::from_min_max(min, max));
-		}
-	};
-	// West of cut — full Z
-	if cmin.x > rmin.x + 1e-3 {
-		push(
-			&mut out,
-			rmin,
-			Vec3::new(cmin.x.clamp(rmin.x, rmax.x), rmax.y, rmax.z),
-		);
-	}
-	// East of cut — full Z
-	if cmax.x < rmax.x - 1e-3 {
-		push(
-			&mut out,
-			Vec3::new(cmax.x.clamp(rmin.x, rmax.x), rmin.y, rmin.z),
-			rmax,
-		);
-	}
-	// South of cut — full X
-	if cmin.z > rmin.z + 1e-3 {
-		push(
-			&mut out,
-			rmin,
-			Vec3::new(rmax.x, rmax.y, cmin.z.clamp(rmin.z, rmax.z)),
-		);
-	}
-	// North of cut — full X
-	if cmax.z < rmax.z - 1e-3 {
-		push(
-			&mut out,
-			Vec3::new(rmin.x, rmin.y, cmax.z.clamp(rmin.z, rmax.z)),
-			rmax,
-		);
-	}
-	out
+fn aabb_xz_overlap(a: &Aabb3d, b: &Aabb3d) -> bool {
+	let amin = Vec3::from(a.min);
+	let amax = Vec3::from(a.max);
+	let bmin = Vec3::from(b.min);
+	let bmax = Vec3::from(b.max);
+	amin.x < bmax.x - 1e-4
+		&& bmin.x < amax.x - 1e-4
+		&& amin.z < bmax.z - 1e-4
+		&& bmin.z < amax.z - 1e-4
 }
 
-/// Counter band on `side` covering the opening's along-span (clamped to `bounds`), depth inward.
+fn largest_aabb_avoiding_xz(bounds: &Aabb3d, cuts: &[Aabb3d]) -> Option<Aabb3d> {
+	let bmin = Vec3::from(bounds.min);
+	let bmax = Vec3::from(bounds.max);
+	let mut xs = vec![bmin.x, bmax.x];
+	let mut zs = vec![bmin.z, bmax.z];
+	for cut in cuts {
+		let cmin = Vec3::from(cut.min);
+		let cmax = Vec3::from(cut.max);
+		xs.push(cmin.x.clamp(bmin.x, bmax.x));
+		xs.push(cmax.x.clamp(bmin.x, bmax.x));
+		zs.push(cmin.z.clamp(bmin.z, bmax.z));
+		zs.push(cmax.z.clamp(bmin.z, bmax.z));
+	}
+	xs.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+	zs.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+	xs.dedup_by(|a, b| (*a - *b).abs() < 1e-4);
+	zs.dedup_by(|a, b| (*a - *b).abs() < 1e-4);
+
+	let mut best: Option<(f32, Aabb3d)> = None;
+	for i in 0..xs.len() {
+		for j in (i + 1)..xs.len() {
+			for k in 0..zs.len() {
+				for l in (k + 1)..zs.len() {
+					let cand = Aabb3d::from_min_max(
+						Vec3::new(xs[i], bmin.y, zs[k]),
+						Vec3::new(xs[j], bmax.y, zs[l]),
+					);
+					if xs[j] - xs[i] < 1e-3 || zs[l] - zs[k] < 1e-3 {
+						continue;
+					}
+					if cuts.iter().any(|c| aabb_xz_overlap(&cand, c)) {
+						continue;
+					}
+					let area = aabb_xz_area(&cand);
+					if best.map(|(a, _)| area > a + 1e-6).unwrap_or(true) {
+						best = Some((area, cand));
+					}
+				}
+			}
+		}
+	}
+	best.map(|(_, aabb)| aabb)
+}
+
+/// Counter band on `side` of depth `depth`, covering `along_len` centered in the
+/// opening’s along-span (clamped to `bounds`).
 pub fn counter_on_opening(
 	bounds: &Aabb3d,
 	opening: &Opening,
 	side: StallSide,
 	depth: f32,
+	along_len: f32,
 ) -> Aabb3d {
 	let min = Vec3::from(bounds.min);
 	let max = Vec3::from(bounds.max);
@@ -196,38 +223,45 @@ pub fn counter_on_opening(
 			StallSide::East | StallSide::West => ((max.x - min.x) * 0.45).max(0.35),
 		})
 		.max(0.35);
+	let along_len = along_len.max(0.2);
 	match side {
-		StallSide::South => {
-			let x0 = omin.x.clamp(min.x, max.x);
-			let x1 = omax.x.clamp(min.x, max.x).max(x0 + 0.2);
-			Aabb3d::from_min_max(
-				Vec3::new(x0, min.y, min.z),
-				Vec3::new(x1, max.y, min.z + depth),
-			)
+		StallSide::South | StallSide::North => {
+			let span0 = omin.x.clamp(min.x, max.x);
+			let span1 = omax.x.clamp(min.x, max.x).max(span0 + 0.2);
+			let mid = (span0 + span1) * 0.5;
+			let half = (along_len * 0.5).min((span1 - span0) * 0.5);
+			let x0 = (mid - half).clamp(span0, span1);
+			let x1 = (mid + half).clamp(span0, span1).max(x0 + 0.2);
+			if matches!(side, StallSide::South) {
+				Aabb3d::from_min_max(
+					Vec3::new(x0, min.y, min.z),
+					Vec3::new(x1, max.y, min.z + depth),
+				)
+			} else {
+				Aabb3d::from_min_max(
+					Vec3::new(x0, min.y, max.z - depth),
+					Vec3::new(x1, max.y, max.z),
+				)
+			}
 		}
-		StallSide::North => {
-			let x0 = omin.x.clamp(min.x, max.x);
-			let x1 = omax.x.clamp(min.x, max.x).max(x0 + 0.2);
-			Aabb3d::from_min_max(
-				Vec3::new(x0, min.y, max.z - depth),
-				Vec3::new(x1, max.y, max.z),
-			)
-		}
-		StallSide::East => {
-			let z0 = omin.z.clamp(min.z, max.z);
-			let z1 = omax.z.clamp(min.z, max.z).max(z0 + 0.2);
-			Aabb3d::from_min_max(
-				Vec3::new(max.x - depth, min.y, z0),
-				Vec3::new(max.x, max.y, z1),
-			)
-		}
-		StallSide::West => {
-			let z0 = omin.z.clamp(min.z, max.z);
-			let z1 = omax.z.clamp(min.z, max.z).max(z0 + 0.2);
-			Aabb3d::from_min_max(
-				Vec3::new(min.x, min.y, z0),
-				Vec3::new(min.x + depth, max.y, z1),
-			)
+		StallSide::East | StallSide::West => {
+			let span0 = omin.z.clamp(min.z, max.z);
+			let span1 = omax.z.clamp(min.z, max.z).max(span0 + 0.2);
+			let mid = (span0 + span1) * 0.5;
+			let half = (along_len * 0.5).min((span1 - span0) * 0.5);
+			let z0 = (mid - half).clamp(span0, span1);
+			let z1 = (mid + half).clamp(span0, span1).max(z0 + 0.2);
+			if matches!(side, StallSide::East) {
+				Aabb3d::from_min_max(
+					Vec3::new(max.x - depth, min.y, z0),
+					Vec3::new(max.x, max.y, z1),
+				)
+			} else {
+				Aabb3d::from_min_max(
+					Vec3::new(min.x, min.y, z0),
+					Vec3::new(min.x + depth, max.y, z1),
+				)
+			}
 		}
 	}
 }
