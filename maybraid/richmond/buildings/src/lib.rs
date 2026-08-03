@@ -22,6 +22,7 @@ pub mod portals;
 pub mod shells;
 pub mod stacked_rings;
 pub mod storeys;
+pub mod usage_areas;
 pub mod wall_demo;
 pub mod wizards_tower;
 
@@ -59,10 +60,6 @@ pub use openings::{
 	MappedOpening, MappedOpeningQuad, MappedOpenings, MapsOpenings, Opening, OpeningId,
 	OpeningLabel, Openings,
 };
-pub use storeys::les_halles::{
-	LesHallesFloorPlan, LesHallesFullStorey, LesHallesParameterized, LesHallesPlacedDoor,
-	LesHallesShaftPlacement, LesHallesStallDoor, SCOPE as LES_HALLES_SCOPE,
-};
 pub use paneling::{
 	fallback_oriented, fit_rectangle, fit_rectangle_corners, orient_rectangle,
 	roll_to_align_height, shared_edges, zero_roll_height_axis, ApproximatedCircle,
@@ -91,4 +88,8 @@ pub use shells::{
 	TrazaloidSlab, ValleySegment,
 };
 pub use stacked_rings::{StackedRing, StackedRings};
+pub use storeys::les_halles::{
+	LesHallesFloorPlan, LesHallesFullStorey, LesHallesParameterized, LesHallesPlacedDoor,
+	LesHallesShaftPlacement, LesHallesStallDoor, SCOPE as LES_HALLES_SCOPE,
+};
 pub use wall_demo::{NoisyRectangularWall, NoisyRectangularWallParams};
