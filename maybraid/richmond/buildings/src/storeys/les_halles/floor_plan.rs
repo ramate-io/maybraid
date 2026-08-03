@@ -1087,6 +1087,7 @@ mod tests {
 		LesHallesParameterized {
 			gallery_width: 6.0,
 			balcony_width: 4.0,
+			courtyard_fraction: 0.5,
 			shaft_placement: placement,
 			opening_density: 0.7,
 			doors: LesHallesFloorPlan::generate_stall_doors(&cfg, Vec3::ZERO),

@@ -40,6 +40,8 @@ pub struct LesHallesParameterized {
 	pub gallery_width: f32,
 	/// Inner balcony / walking band depth (meters).
 	pub balcony_width: f32,
+	/// Target courtyard share of the short footprint axis (`~0.5` → ¼ rim / ½ gap / ¼ rim).
+	pub courtyard_fraction: f32,
 	pub shaft_placement: LesHallesShaftPlacement,
 	/// How densely to pack outer-facade apertures (`0…1`).
 	pub opening_density: f32,
@@ -57,22 +59,33 @@ pub const MAX_GALLERY_WIDTH: f32 = 25.0;
 pub const MIN_BALCONY_WIDTH: f32 = 3.0;
 /// Maximum balcony band depth sampled from noise.
 pub const MAX_BALCONY_WIDTH: f32 = 8.0;
-/// Minimum clear courtyard on each plan axis.
+/// Minimum clear courtyard on each plan axis (hard floor).
 pub const MIN_COURTYARD: f32 = 2.0;
 /// Minimum storey height.
 pub const MIN_STOREY_HEIGHT: f32 = 2.5;
 /// Nominal shaft side length (XZ) for mid-side shafts.
 pub const SHAFT_SIDE: f32 = 1.8;
 
+/// Default plan split targets ~½ courtyard (¼ rim + ½ gap + ¼ rim).
+pub const MIN_COURTYARD_FRACTION: f32 = 0.40;
+pub const MAX_COURTYARD_FRACTION: f32 = 0.60;
+/// Stall share of the rim budget (gallery / (gallery + balcony)).
+pub const MIN_STALL_RING_SHARE: f32 = 0.55;
+pub const MAX_STALL_RING_SHARE: f32 = 0.75;
+
 /// Salt lanes for spatial sampling at the confines center.
-const SALT_GALLERY: f32 = 1.0;
-const SALT_BALCONY: f32 = 2.0;
+const SALT_COURTYARD: f32 = 1.0;
+const SALT_STALL_SHARE: f32 = 2.0;
 const SALT_SHAFT: f32 = 3.0;
 const SALT_OPENINGS: f32 = 4.0;
 
 impl LesHallesParameterized {
 	/// Sample knobs at the confines center. Rejects footprints that cannot host
 	/// minimum gallery + balcony + courtyard on either axis.
+	///
+	/// Depths are driven by a courtyard-fraction target (default ~½ the short
+	/// axis), then the remaining rim is split into stall vs balcony within
+	/// absolute min/max clamps. Mins win over the ratio when the footprint is tight.
 	///
 	/// Stall-door / window catalogs are produced by
 	/// [`crate::storeys::les_halles::LesHallesFloorPlan`].
@@ -89,20 +102,32 @@ impl LesHallesParameterized {
 
 		let cfg = NoiseConfig::new(noise);
 		let c = confines.center();
+		let extent_min = extent_x.min(extent_z);
 
-		let max_ring_x = ((extent_x - MIN_COURTYARD) * 0.5).max(min_ring);
-		let max_ring_z = ((extent_z - MIN_COURTYARD) * 0.5).max(min_ring);
-		let max_ring = max_ring_x.min(max_ring_z);
+		let courtyard_fraction = cfg.sample_range_f32_4d(
+			MIN_COURTYARD_FRACTION,
+			MAX_COURTYARD_FRACTION,
+			c.x,
+			c.y,
+			c.z,
+			SALT_COURTYARD,
+		);
 
-		let max_gallery = MAX_GALLERY_WIDTH.min(max_ring - MIN_BALCONY_WIDTH);
-		let gallery_hi = max_gallery.max(MIN_GALLERY_WIDTH);
-		let gallery_width =
-			cfg.sample_range_f32_4d(MIN_GALLERY_WIDTH, gallery_hi, c.x, c.y, c.z, SALT_GALLERY);
+		// Rim budget from the ratio, then clamp so mins/maxes and MIN_COURTYARD hold.
+		let ideal_ring = extent_min * (1.0 - courtyard_fraction) * 0.5;
+		let hard_max_ring = ((extent_min - MIN_COURTYARD) * 0.5).max(min_ring);
+		let abs_max_ring = MAX_GALLERY_WIDTH + MAX_BALCONY_WIDTH;
+		let ring_budget = ideal_ring.clamp(min_ring, hard_max_ring.min(abs_max_ring));
 
-		let max_balcony = MAX_BALCONY_WIDTH.min(max_ring - gallery_width);
-		let balcony_hi = max_balcony.max(MIN_BALCONY_WIDTH);
-		let balcony_width =
-			cfg.sample_range_f32_4d(MIN_BALCONY_WIDTH, balcony_hi, c.x, c.y, c.z, SALT_BALCONY);
+		let stall_share = cfg.sample_range_f32_4d(
+			MIN_STALL_RING_SHARE,
+			MAX_STALL_RING_SHARE,
+			c.x,
+			c.y,
+			c.z,
+			SALT_STALL_SHARE,
+		);
+		let (gallery_width, balcony_width) = split_ring_budget(ring_budget, stall_share)?;
 
 		let ring = gallery_width + balcony_width;
 		if extent_x < 2.0 * ring + MIN_COURTYARD || extent_z < 2.0 * ring + MIN_COURTYARD {
@@ -123,6 +148,7 @@ impl LesHallesParameterized {
 		Ok(Self {
 			gallery_width,
 			balcony_width,
+			courtyard_fraction,
 			shaft_placement,
 			opening_density,
 			doors,
@@ -243,6 +269,32 @@ impl LesHallesParameterized {
 	}
 }
 
+/// Split a rim budget into gallery + balcony using `stall_share`, then clamp to
+/// absolute min/max depths while staying inside `ring_budget`.
+fn split_ring_budget(ring_budget: f32, stall_share: f32) -> Result<(f32, f32), FitError> {
+	if ring_budget + 1e-4 < MIN_GALLERY_WIDTH + MIN_BALCONY_WIDTH {
+		return Err(FitError::TooSmall { reason: "footprint" });
+	}
+	let max_gallery = MAX_GALLERY_WIDTH
+		.min(ring_budget - MIN_BALCONY_WIDTH)
+		.max(MIN_GALLERY_WIDTH);
+	let target_gallery = (ring_budget * stall_share.clamp(0.0, 1.0)).clamp(MIN_GALLERY_WIDTH, max_gallery);
+	let rem = (ring_budget - target_gallery).max(0.0);
+	let max_balcony = MAX_BALCONY_WIDTH.min(rem).max(MIN_BALCONY_WIDTH);
+	let balcony_width = rem.clamp(MIN_BALCONY_WIDTH, max_balcony);
+	let gallery_width = (ring_budget - balcony_width)
+		.clamp(MIN_GALLERY_WIDTH, max_gallery);
+	// Re-fit balcony after gallery clamp so the pair still sums to the budget when possible.
+	let balcony_width = (ring_budget - gallery_width)
+		.clamp(MIN_BALCONY_WIDTH, MAX_BALCONY_WIDTH.min(ring_budget - MIN_GALLERY_WIDTH));
+	let gallery_width = (ring_budget - balcony_width)
+		.clamp(MIN_GALLERY_WIDTH, MAX_GALLERY_WIDTH.min(ring_budget - MIN_BALCONY_WIDTH));
+	if gallery_width + balcony_width > ring_budget + 1e-3 {
+		return Err(FitError::TooSmall { reason: "footprint" });
+	}
+	Ok((gallery_width, balcony_width))
+}
+
 fn pack_span(spec: LesHallesStallDoor, remaining: f32) -> Option<(f32, f32, f32)> {
 	let door_lo = (spec.door_width - spec.allowed_error).max(0.4);
 	let door_hi = spec.door_width + spec.allowed_error;
@@ -315,10 +367,35 @@ mod tests {
 	}
 
 	#[test]
+	fn large_footprint_keeps_courtyard_near_half() {
+		let confines = Confines::from_bounds(bevy_math::bounding::Aabb3d::from_min_max(
+			bevy_math::Vec3::new(-24.0, 0.0, -18.0),
+			bevy_math::Vec3::new(24.0, 4.0, 18.0),
+		));
+		let params = LesHallesParameterized::sample(&confines, NoiseParams { seed: 42, ..NoiseParams::default() })
+			.unwrap();
+		let extent_min = 36.0_f32;
+		let ring = params.ring_width();
+		let courtyard = extent_min - 2.0 * ring;
+		let frac = courtyard / extent_min;
+		assert!(
+			frac > 0.35 && frac < 0.65,
+			"courtyard fraction {frac:.2} (courtyard={courtyard:.1}, ring={ring:.1})"
+		);
+		assert!(params.gallery_width >= MIN_GALLERY_WIDTH - 1e-3);
+		assert!(params.gallery_width <= MAX_GALLERY_WIDTH + 1e-3);
+		assert!(params.balcony_width >= MIN_BALCONY_WIDTH - 1e-3);
+		assert!(params.balcony_width <= MAX_BALCONY_WIDTH + 1e-3);
+		// Stall depth should not devour the short axis.
+		assert!(params.gallery_width < extent_min * 0.35);
+	}
+
+	#[test]
 	fn fit_doors_places_multiple_on_long_run() {
 		let params = LesHallesParameterized {
 			gallery_width: 6.0,
 			balcony_width: 4.0,
+			courtyard_fraction: 0.5,
 			shaft_placement: LesHallesShaftPlacement::Corners,
 			opening_density: 0.5,
 			doors: doors_catalog(),
@@ -334,6 +411,7 @@ mod tests {
 		let params = LesHallesParameterized {
 			gallery_width: 6.0,
 			balcony_width: 4.0,
+			courtyard_fraction: 0.5,
 			shaft_placement: LesHallesShaftPlacement::Corners,
 			opening_density: 0.5,
 			doors: vec![
@@ -360,6 +438,7 @@ mod tests {
 		let params = LesHallesParameterized {
 			gallery_width: 6.0,
 			balcony_width: 4.0,
+			courtyard_fraction: 0.5,
 			shaft_placement: LesHallesShaftPlacement::Corners,
 			opening_density: 0.05,
 			doors: Vec::new(),
