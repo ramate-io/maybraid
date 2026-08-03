@@ -15,11 +15,13 @@ pub mod arcs;
 pub mod bedroom;
 pub mod constraints;
 pub mod demos;
+pub mod fit;
 pub mod openings;
 pub mod paneling;
 pub mod portals;
 pub mod shells;
 pub mod stacked_rings;
+pub mod storeys;
 pub mod wall_demo;
 pub mod wizards_tower;
 
@@ -49,12 +51,16 @@ pub use constraints::{
 	JointCoordinate, JointEntry, PreJointSweep, SubsetError,
 };
 pub use demos::ConnectingShells;
+pub use openings::{
+	MappedOpening, MappedOpeningQuad, MappedOpenings, MapsOpenings, Opening, OpeningId,
+	OpeningLabel, Openings,
+};
 pub use paneling::{
-	fallback_oriented, fit_rectangle, fit_rectangle_corners, orient_rectangle, roll_to_align_height,
-	shared_edges, zero_roll_height_axis, ApproximatedCircle, ClippedFittedRectangle,
-	ClippedFittedRectangularStrip, ClippedFittedRectangularStripPiece, ClippedQuadPanel,
-	ClippedRectangle, ClippedRectangularStrip, ClippedRectangularStripPiece, ClippedRuledStrip,
-	ClippedStripPiece, ClippedTessellatedTriangle, FittedRect, FittedRectangle,
+	fallback_oriented, fit_rectangle, fit_rectangle_corners, orient_rectangle,
+	roll_to_align_height, shared_edges, zero_roll_height_axis, ApproximatedCircle,
+	ClippedFittedRectangle, ClippedFittedRectangularStrip, ClippedFittedRectangularStripPiece,
+	ClippedQuadPanel, ClippedRectangle, ClippedRectangularStrip, ClippedRectangularStripPiece,
+	ClippedRuledStrip, ClippedStripPiece, ClippedTessellatedTriangle, FittedRect, FittedRectangle,
 	FittedRectangularStrip, OrientedRect, PanelComplex, PanelComplexJointPolicy,
 	PanelComplexValidation, PanelMesh, PanelPoint, PanelPointId, PanelQuadMesh, PanelTriangle,
 	ParsePanelComplexError, QuadPanel, QuadPanelComplex, RectInset, Rectangle, RectangularNTube,
@@ -66,18 +72,15 @@ pub use paneling::{
 pub use portals::{
 	ArcRegion, AssignedPortal, MustAssignPortal, Portal, PortalFootprint, WallRegion, SLICE_Y_FRAC,
 };
-pub use openings::{
-	MappedOpening, MappedOpeningQuad, MappedOpenings, MapsOpenings, Opening, OpeningId,
-	OpeningLabel, Openings,
-};
 pub use shells::{
 	ArcFloor, ArcFloorParams, ArcFloorSlab, ArcTower, ArcTowerParams, CircRingFloor,
 	CircRingFloorParams, CircRingFloorSlab, ConnectingHall, EndCap, IFloor, IFloorParams,
-	IFloorSlab, Overhang, PitchedRoof, PitchedRoofParams, RectFloor, RectFloorParams, RectFloorSide,
-	RectFloorSlab, RectRingFloor, RectRingFloorParams, RectRingFloorSide, RectRingFloorSlab,
-	RectangularPitchedRoofComplex, RectangularPitchedRoofComplexParams, RidgeJunction, RoofHalf,
-	RoundedRectCorner, RoundedRectFloor, RoundedRectFloorParams, RoundedRectFloorSide,
-	RoundedRectFloorSlab, Trazaloid, TrazaloidParams, TrazaloidSide, TrazaloidSlab, ValleySegment,
+	IFloorSlab, Overhang, PitchedRoof, PitchedRoofParams, RectFloor, RectFloorParams,
+	RectFloorSide, RectFloorSlab, RectRingFloor, RectRingFloorParams, RectRingFloorSide,
+	RectRingFloorSlab, RectangularPitchedRoofComplex, RectangularPitchedRoofComplexParams,
+	RidgeJunction, RoofHalf, RoundedRectCorner, RoundedRectFloor, RoundedRectFloorParams,
+	RoundedRectFloorSide, RoundedRectFloorSlab, Trazaloid, TrazaloidParams, TrazaloidSide,
+	TrazaloidSlab, ValleySegment,
 };
 pub use stacked_rings::{StackedRing, StackedRings};
 pub use wall_demo::{NoisyRectangularWall, NoisyRectangularWallParams};
