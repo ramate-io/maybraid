@@ -71,11 +71,13 @@ pub use openings::{
 	OpeningLabel, Openings,
 };
 pub use shells::{
-	ArcFloor, ArcFloorParams, ArcFloorSlab, ArcTower, ArcTowerParams, ConnectingHall, EndCap,
-	Overhang, PitchedRoof, PitchedRoofParams, RectangularPitchedRoofComplex,
-	RectangularPitchedRoofComplexParams, RidgeJunction, RoofHalf, Trazaloid, TrazaloidParams,
-	TrazaloidSide,
-	TrazaloidSlab, ValleySegment,
+	ArcFloor, ArcFloorParams, ArcFloorSlab, ArcTower, ArcTowerParams, CircRingFloor,
+	CircRingFloorParams, CircRingFloorSlab, ConnectingHall, EndCap, IFloor, IFloorParams,
+	IFloorSlab, Overhang, PitchedRoof, PitchedRoofParams, RectFloor, RectFloorParams, RectFloorSide,
+	RectFloorSlab, RectRingFloor, RectRingFloorParams, RectRingFloorSide, RectRingFloorSlab,
+	RectangularPitchedRoofComplex, RectangularPitchedRoofComplexParams, RidgeJunction, RoofHalf,
+	RoundedRectCorner, RoundedRectFloor, RoundedRectFloorParams, RoundedRectFloorSide,
+	RoundedRectFloorSlab, Trazaloid, TrazaloidParams, TrazaloidSide, TrazaloidSlab, ValleySegment,
 };
 pub use stacked_rings::{StackedRing, StackedRings};
 pub use wall_demo::{NoisyRectangularWall, NoisyRectangularWallParams};

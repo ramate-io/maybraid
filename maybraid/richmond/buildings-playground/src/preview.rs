@@ -22,13 +22,16 @@ use richmond_buildings::quad_panel_complex::QuadPanelComplex;
 use crate::commands::show::opening::{openings_from_preview, PreviewOpening};
 use richmond_buildings::{
 	ApproximatedCircle, ArcFloor, ArcFloorParams, ArcFloorSlab, ArcSweep, ArcTower, ArcTowerParams,
-	ClippedArcSweep, ClippedFittedRectangle, ClippedFittedRectangularStrip, ClippedQuadPanel,
-	ClippedRectangle, ClippedRectangularStrip, ClippedRuledStrip, ClippedTessellatedTriangle,
-	ConnectingHall, ConnectingShells, FittedRectangle, MappedOpening, MappedOpeningQuad,
-	MapsOpenings, OpeningId, OpeningLabel, Openings, PitchedRoof, PitchedRoofParams, RectInset,
-	Rectangle, RectangularNTube, RectangularNTubeCorner, RectangularNTubeStation,
-	RectangularPitchedRoofComplex, RectangularStripNode, RuledPitch, Tube, TubeCrossSectionNode,
-	TubeFaces, Trazaloid, TrazaloidParams, TrazaloidSlab, DEFAULT_PANEL_THICKNESS,
+	CircRingFloor, CircRingFloorParams, CircRingFloorSlab, ClippedArcSweep, ClippedFittedRectangle,
+	ClippedFittedRectangularStrip, ClippedQuadPanel, ClippedRectangle, ClippedRectangularStrip,
+	ClippedRuledStrip, ClippedTessellatedTriangle, ConnectingHall, ConnectingShells, FittedRectangle,
+	IFloor, IFloorParams, IFloorSlab, MappedOpening, MappedOpeningQuad, MapsOpenings, OpeningId,
+	OpeningLabel, Openings, PitchedRoof, PitchedRoofParams, RectFloor, RectFloorParams, RectFloorSlab,
+	RectInset, RectRingFloor, RectRingFloorParams, RectRingFloorSlab, Rectangle, RectangularNTube,
+	RectangularNTubeCorner, RectangularNTubeStation, RectangularPitchedRoofComplex,
+	RectangularStripNode, RoundedRectFloor, RoundedRectFloorParams, RoundedRectFloorSlab, RuledPitch,
+	Tube, TubeCrossSectionNode, TubeFaces, Trazaloid, TrazaloidParams, TrazaloidSlab,
+	DEFAULT_PANEL_THICKNESS,
 };
 use crate::commands::show::rectangular_pitched_roof_complex::build_params as build_roof_complex_params;
 use richmond_buildings::stacked_rings::StackedRings;
@@ -149,6 +152,54 @@ pub enum PreviewSubject {
 		run_up: f32,
 		/// Demo aperture on roof 0 / half 0 after geometry solve.
 		skylight: bool,
+	},
+	RectFloor {
+		footprint_x: f32,
+		footprint_z: f32,
+		storey_height: f32,
+		openings: Vec<PreviewOpening>,
+		floor: bool,
+		ceiling: bool,
+	},
+	RoundedRectFloor {
+		footprint_x: f32,
+		footprint_z: f32,
+		storey_height: f32,
+		corner_radius: f32,
+		corner_segments: u32,
+		openings: Vec<PreviewOpening>,
+		floor: bool,
+		ceiling: bool,
+	},
+	IFloor {
+		central_x: f32,
+		central_z: f32,
+		storey_height: f32,
+		top_left: Option<f32>,
+		top_right: Option<f32>,
+		bottom_left: Option<f32>,
+		bottom_right: Option<f32>,
+		openings: Vec<PreviewOpening>,
+		floor: bool,
+		ceiling: bool,
+	},
+	RectRingFloor {
+		outer_x: f32,
+		outer_z: f32,
+		inner_x: f32,
+		inner_z: f32,
+		storey_height: f32,
+		openings: Vec<PreviewOpening>,
+		floor: bool,
+		ceiling: bool,
+	},
+	CircRingFloor {
+		outer_radius: f32,
+		inner_radius: f32,
+		storey_height: f32,
+		openings: Vec<PreviewOpening>,
+		floor: bool,
+		ceiling: bool,
 	},
 	Rectangle {
 		origin: Vec3,
@@ -423,6 +474,67 @@ impl PreviewConfig {
 					.map(|r| format!("ratio={r:.2}"))
 					.unwrap_or_else(|| format!("fixed={overhang_fixed:.2}")),
 				if end_cap_gable { "gable" } else { "hip" }
+			),
+			PreviewSubject::RectFloor {
+				footprint_x,
+				footprint_z,
+				storey_height,
+				ref openings,
+				floor,
+				ceiling,
+			} => format!(
+				"preview: rect-floor (foot={footprint_x:.1}x{footprint_z:.1} h={storey_height:.1} openings={} floor={floor} ceil={ceiling})",
+				openings.len()
+			),
+			PreviewSubject::RoundedRectFloor {
+				footprint_x,
+				footprint_z,
+				storey_height,
+				corner_radius,
+				corner_segments,
+				ref openings,
+				floor,
+				ceiling,
+			} => format!(
+				"preview: rounded-rect-floor (foot={footprint_x:.1}x{footprint_z:.1} h={storey_height:.1} r={corner_radius:.2} segs={corner_segments} openings={} floor={floor} ceil={ceiling})",
+				openings.len()
+			),
+			PreviewSubject::IFloor {
+				central_x,
+				central_z,
+				storey_height,
+				ref openings,
+				floor,
+				ceiling,
+				..
+			} => format!(
+				"preview: i-floor (central={central_x:.1}x{central_z:.1} h={storey_height:.1} openings={} floor={floor} ceil={ceiling})",
+				openings.len()
+			),
+			PreviewSubject::RectRingFloor {
+				outer_x,
+				outer_z,
+				inner_x,
+				inner_z,
+				storey_height,
+				ref openings,
+				floor,
+				ceiling,
+				..
+			} => format!(
+				"preview: rect-ring-floor (outer={outer_x:.1}x{outer_z:.1} inner={inner_x:.1}x{inner_z:.1} h={storey_height:.1} openings={} floor={floor} ceil={ceiling})",
+				openings.len()
+			),
+			PreviewSubject::CircRingFloor {
+				outer_radius,
+				inner_radius,
+				storey_height,
+				ref openings,
+				floor,
+				ceiling,
+			} => format!(
+				"preview: circ-ring-floor (R={outer_radius:.1} r={inner_radius:.1} h={storey_height:.1} openings={} floor={floor} ceil={ceiling})",
+				openings.len()
 			),
 			PreviewSubject::Rectangle {
 				origin,
@@ -710,6 +822,74 @@ impl PreviewConfig {
 			}
 			PreviewSubject::RectangularPitchedRoofComplex { .. } => {
 				Aabb3d::from_min_max(Vec3::new(-10.0, -0.2, -10.0), Vec3::new(10.0, 6.0, 10.0))
+			}
+			PreviewSubject::RectFloor {
+				footprint_x,
+				footprint_z,
+				storey_height,
+				..
+			}
+			| PreviewSubject::RoundedRectFloor {
+				footprint_x,
+				footprint_z,
+				storey_height,
+				..
+			} => {
+				let hx = footprint_x.max(1e-4) * 0.5 + 0.5;
+				let hz = footprint_z.max(1e-4) * 0.5 + 0.5;
+				let h = storey_height.max(1e-4) + 0.5;
+				Aabb3d::from_min_max(Vec3::new(-hx, -0.2, -hz), Vec3::new(hx, h, hz))
+			}
+			PreviewSubject::IFloor {
+				central_x,
+				central_z,
+				storey_height,
+				top_left,
+				top_right,
+				bottom_left,
+				bottom_right,
+				..
+			} => {
+				let half_w = central_x.max(1e-4) * 0.5;
+				let half_d = central_z.max(1e-4) * 0.5;
+				let left = top_left.unwrap_or(0.0).max(bottom_left.unwrap_or(0.0));
+				let right = top_right.unwrap_or(0.0).max(bottom_right.unwrap_or(0.0));
+				let flange_t = central_x.max(1e-4);
+				let hx = half_w + left.max(right) + 0.5;
+				let hz = half_d
+					+ if top_left.is_some() || top_right.is_some() {
+						flange_t
+					} else {
+						0.0
+					}
+					+ if bottom_left.is_some() || bottom_right.is_some() {
+						flange_t
+					} else {
+						0.0
+					}
+					+ 0.5;
+				let h = storey_height.max(1e-4) + 0.5;
+				Aabb3d::from_min_max(Vec3::new(-hx, -0.2, -hz), Vec3::new(hx, h, hz))
+			}
+			PreviewSubject::RectRingFloor {
+				outer_x,
+				outer_z,
+				storey_height,
+				..
+			} => {
+				let hx = outer_x.max(1e-4) * 0.5 + 0.5;
+				let hz = outer_z.max(1e-4) * 0.5 + 0.5;
+				let h = storey_height.max(1e-4) + 0.5;
+				Aabb3d::from_min_max(Vec3::new(-hx, -0.2, -hz), Vec3::new(hx, h, hz))
+			}
+			PreviewSubject::CircRingFloor {
+				outer_radius,
+				storey_height,
+				..
+			} => {
+				let r = outer_radius.max(1e-4) + 0.5;
+				let h = storey_height.max(1e-4) + 0.5;
+				Aabb3d::from_min_max(Vec3::new(-r, -0.2, -r), Vec3::new(r, h, r))
 			}
 			_ => Aabb3d::from_min_max(Vec3::ZERO, Vec3::ONE),
 		}
@@ -1193,27 +1373,188 @@ pub fn present_preview_lod(
 			no_hips,
 			openings,
 		} => {
-			let mut params = PitchedRoofParams::rectangular_hip(
-				Vec2::new(*footprint_x, *footprint_z),
+			let shell = pitched_roof_from_preview(
+				*footprint_x,
+				*footprint_z,
 				*ridge_height,
 				*eave_height,
 				*ridge_inset,
+				*gables,
+				*no_walls,
+				*no_hips,
+				openings,
 			);
-			for half in &mut params.halves {
-				half.draw_in_wall_line = !*no_walls;
-				half.draw_in_half_hip = if *no_hips {
-					(false, false)
+			spawn_preview(
+				&mut commands,
+				transform,
+				ComponentsOnly(shell).scene_with_lod(&lod_ref),
+			);
+		}
+		PreviewSubject::RectFloor {
+			footprint_x,
+			footprint_z,
+			storey_height,
+			openings,
+			floor,
+			ceiling,
+		} => {
+			let shell = RectFloor::new(RectFloorParams {
+				center_xz: Vec3::ZERO,
+				footprint: Vec2::new(*footprint_x, *footprint_z),
+				storey_height: *storey_height,
+				openings: openings_from_preview(openings),
+				floor: if *floor {
+					RectFloorSlab::Solid
 				} else {
-					(true, true)
-				};
-				half.draw_in_half_gable_end = if *gables {
-					(true, true)
+					RectFloorSlab::None
+				},
+				ceiling: if *ceiling {
+					RectFloorSlab::Solid
 				} else {
-					(false, false)
-				};
-			}
-			params.openings = openings_from_preview(openings);
-			let shell = PitchedRoof::new(params);
+					RectFloorSlab::None
+				},
+				..RectFloorParams::default()
+			});
+			spawn_preview(
+				&mut commands,
+				transform,
+				ComponentsOnly(shell).scene_with_lod(&lod_ref),
+			);
+		}
+		PreviewSubject::RoundedRectFloor {
+			footprint_x,
+			footprint_z,
+			storey_height,
+			corner_radius,
+			corner_segments,
+			openings,
+			floor,
+			ceiling,
+		} => {
+			let shell = RoundedRectFloor::new(RoundedRectFloorParams {
+				center_xz: Vec3::ZERO,
+				footprint: Vec2::new(*footprint_x, *footprint_z),
+				storey_height: *storey_height,
+				corner_radius: *corner_radius,
+				corner_segments: *corner_segments,
+				openings: openings_from_preview(openings),
+				floor: if *floor {
+					RoundedRectFloorSlab::Solid
+				} else {
+					RoundedRectFloorSlab::None
+				},
+				ceiling: if *ceiling {
+					RoundedRectFloorSlab::Solid
+				} else {
+					RoundedRectFloorSlab::None
+				},
+				..RoundedRectFloorParams::default()
+			});
+			spawn_preview(
+				&mut commands,
+				transform,
+				ComponentsOnly(shell).scene_with_lod(&lod_ref),
+			);
+		}
+		PreviewSubject::IFloor {
+			central_x,
+			central_z,
+			storey_height,
+			top_left,
+			top_right,
+			bottom_left,
+			bottom_right,
+			openings,
+			floor,
+			ceiling,
+		} => {
+			let shell = IFloor::new(IFloorParams {
+				center_xz: Vec3::ZERO,
+				top_left_length: *top_left,
+				top_right_length: *top_right,
+				central_rectangle: Vec2::new(*central_x, *central_z),
+				bottom_left_length: *bottom_left,
+				bottom_right_length: *bottom_right,
+				storey_height: *storey_height,
+				openings: openings_from_preview(openings),
+				floor: if *floor {
+					IFloorSlab::Solid
+				} else {
+					IFloorSlab::None
+				},
+				ceiling: if *ceiling {
+					IFloorSlab::Solid
+				} else {
+					IFloorSlab::None
+				},
+				..IFloorParams::default()
+			});
+			spawn_preview(
+				&mut commands,
+				transform,
+				ComponentsOnly(shell).scene_with_lod(&lod_ref),
+			);
+		}
+		PreviewSubject::RectRingFloor {
+			outer_x,
+			outer_z,
+			inner_x,
+			inner_z,
+			storey_height,
+			openings,
+			floor,
+			ceiling,
+		} => {
+			let shell = RectRingFloor::new(RectRingFloorParams {
+				center_xz: Vec3::ZERO,
+				outer: Vec2::new(*outer_x, *outer_z),
+				inner: Vec2::new(*inner_x, *inner_z),
+				storey_height: *storey_height,
+				openings: openings_from_preview(openings),
+				floor: if *floor {
+					RectRingFloorSlab::Solid
+				} else {
+					RectRingFloorSlab::None
+				},
+				ceiling: if *ceiling {
+					RectRingFloorSlab::Solid
+				} else {
+					RectRingFloorSlab::None
+				},
+				..RectRingFloorParams::default()
+			});
+			spawn_preview(
+				&mut commands,
+				transform,
+				ComponentsOnly(shell).scene_with_lod(&lod_ref),
+			);
+		}
+		PreviewSubject::CircRingFloor {
+			outer_radius,
+			inner_radius,
+			storey_height,
+			openings,
+			floor,
+			ceiling,
+		} => {
+			let shell = CircRingFloor::new(CircRingFloorParams {
+				center_xz: Vec3::ZERO,
+				outer_radius: *outer_radius,
+				inner_radius: *inner_radius,
+				storey_height: *storey_height,
+				openings: openings_from_preview(openings),
+				floor: if *floor {
+					CircRingFloorSlab::Solid
+				} else {
+					CircRingFloorSlab::None
+				},
+				ceiling: if *ceiling {
+					CircRingFloorSlab::Solid
+				} else {
+					CircRingFloorSlab::None
+				},
+				..CircRingFloorParams::default()
+			});
 			spawn_preview(
 				&mut commands,
 				transform,
@@ -1707,10 +2048,7 @@ pub fn connecting_hall_demo_endpoints() -> (MappedOpening, MappedOpening) {
 	(end_a, end_b)
 }
 
-/// Debug overlay for [`PreviewSubject::ConnectingHall`]: opening corners, orientation
-/// arrows, path A→mid→B, and station dots.
-/// Wireframe plan AABBs (+ mapped contact quads on arc-floor / trazaloid /
-/// pitched-rectangular-roof) for `--opening` previews.
+/// Wireframe plan AABBs (+ mapped contact quads) for `--opening` previews.
 ///
 /// Color key:
 /// - cyan / amber: authored plan [`Aabb3d`] voids
@@ -1756,20 +2094,7 @@ pub fn draw_opening_plan_gizmos(mut gizmos: Gizmos, config: Res<PreviewConfig>) 
 				},
 				..ArcFloorParams::default()
 			});
-			for opening in openings {
-				let id = OpeningId::new(opening.id.clone());
-				let Some(mapped) = floor_shell.mapped_opening(&id) else {
-					continue;
-				};
-				draw_opening_gizmos(&mut gizmos, map, *mapped, lime);
-				let (bl, br, ..) = mapped.endpoint_corners();
-				let mid = (bl + br) * 0.5;
-				let dir = Vec3::new(mapped.orientation.x, 0.0, mapped.orientation.y)
-					.normalize_or_zero();
-				gizmos
-					.arrow(map(mid), map(mid + dir * 1.25), orange)
-					.with_tip_length(0.2);
-			}
+			draw_mapped_opening_overlays(&mut gizmos, map, openings, &floor_shell, lime, orange);
 		}
 		PreviewSubject::Trazaloid {
 			footprint_x,
@@ -1813,20 +2138,121 @@ pub fn draw_opening_plan_gizmos(mut gizmos: Gizmos, config: Res<PreviewConfig>) 
 				face_post_count: *face_post_count,
 				..TrazaloidParams::default()
 			});
-			for opening in openings {
-				let id = OpeningId::new(opening.id.clone());
-				let Some(mapped) = shell.mapped_opening(&id) else {
-					continue;
-				};
-				draw_opening_gizmos(&mut gizmos, map, *mapped, lime);
-				let (bl, br, ..) = mapped.endpoint_corners();
-				let mid = (bl + br) * 0.5;
-				let dir = Vec3::new(mapped.orientation.x, 0.0, mapped.orientation.y)
-					.normalize_or_zero();
-				gizmos
-					.arrow(map(mid), map(mid + dir * 1.25), orange)
-					.with_tip_length(0.2);
+			draw_mapped_opening_overlays(&mut gizmos, map, openings, &shell, lime, orange);
+		}
+		PreviewSubject::RectFloor {
+			footprint_x,
+			footprint_z,
+			storey_height,
+			openings,
+			floor,
+			ceiling,
+		} => {
+			if openings.is_empty() {
+				return;
 			}
+			for (i, opening) in openings.iter().enumerate() {
+				let color = if i % 2 == 0 { cyan } else { amber };
+				gizmos.aabb_3d(opening.bounds(), tf, color);
+			}
+			let shell = RectFloor::new(RectFloorParams {
+				center_xz: Vec3::ZERO,
+				footprint: Vec2::new(*footprint_x, *footprint_z),
+				storey_height: *storey_height,
+				openings: openings_from_preview(openings),
+				floor: if *floor {
+					RectFloorSlab::Solid
+				} else {
+					RectFloorSlab::None
+				},
+				ceiling: if *ceiling {
+					RectFloorSlab::Solid
+				} else {
+					RectFloorSlab::None
+				},
+				..RectFloorParams::default()
+			});
+			draw_mapped_opening_overlays(&mut gizmos, map, openings, &shell, lime, orange);
+		}
+		PreviewSubject::RoundedRectFloor {
+			footprint_x,
+			footprint_z,
+			storey_height,
+			corner_radius,
+			corner_segments,
+			openings,
+			floor,
+			ceiling,
+		} => {
+			if openings.is_empty() {
+				return;
+			}
+			for (i, opening) in openings.iter().enumerate() {
+				let color = if i % 2 == 0 { cyan } else { amber };
+				gizmos.aabb_3d(opening.bounds(), tf, color);
+			}
+			let shell = RoundedRectFloor::new(RoundedRectFloorParams {
+				center_xz: Vec3::ZERO,
+				footprint: Vec2::new(*footprint_x, *footprint_z),
+				storey_height: *storey_height,
+				corner_radius: *corner_radius,
+				corner_segments: *corner_segments,
+				openings: openings_from_preview(openings),
+				floor: if *floor {
+					RoundedRectFloorSlab::Solid
+				} else {
+					RoundedRectFloorSlab::None
+				},
+				ceiling: if *ceiling {
+					RoundedRectFloorSlab::Solid
+				} else {
+					RoundedRectFloorSlab::None
+				},
+				..RoundedRectFloorParams::default()
+			});
+			draw_mapped_opening_overlays(&mut gizmos, map, openings, &shell, lime, orange);
+		}
+		PreviewSubject::IFloor {
+			central_x,
+			central_z,
+			storey_height,
+			top_left,
+			top_right,
+			bottom_left,
+			bottom_right,
+			openings,
+			floor,
+			ceiling,
+		} => {
+			if openings.is_empty() {
+				return;
+			}
+			for (i, opening) in openings.iter().enumerate() {
+				let color = if i % 2 == 0 { cyan } else { amber };
+				gizmos.aabb_3d(opening.bounds(), tf, color);
+			}
+			let shell = IFloor::new(IFloorParams {
+				center_xz: Vec3::ZERO,
+				top_left_length: *top_left,
+				top_right_length: *top_right,
+				central_rectangle: Vec2::new(*central_x, *central_z),
+				bottom_left_length: *bottom_left,
+				bottom_right_length: *bottom_right,
+				storey_height: *storey_height,
+				openings: openings_from_preview(openings),
+				floor: if *floor {
+					IFloorSlab::Solid
+				} else {
+					IFloorSlab::None
+				},
+				ceiling: if *ceiling {
+					IFloorSlab::Solid
+				} else {
+					IFloorSlab::None
+				},
+				..IFloorParams::default()
+			});
+			draw_mapped_opening_overlays(&mut gizmos, map, openings, &shell, lime, orange);
 		}
 		PreviewSubject::PitchedRectangularRoof {
 			footprint_x,
@@ -1846,41 +2272,90 @@ pub fn draw_opening_plan_gizmos(mut gizmos: Gizmos, config: Res<PreviewConfig>) 
 				let color = if i % 2 == 0 { cyan } else { amber };
 				gizmos.aabb_3d(opening.bounds(), tf, color);
 			}
-			let mut params = PitchedRoofParams::rectangular_hip(
-				Vec2::new(*footprint_x, *footprint_z),
+			let shell = pitched_roof_from_preview(
+				*footprint_x,
+				*footprint_z,
 				*ridge_height,
 				*eave_height,
 				*ridge_inset,
+				*gables,
+				*no_walls,
+				*no_hips,
+				openings,
 			);
-			for half in &mut params.halves {
-				half.draw_in_wall_line = !*no_walls;
-				half.draw_in_half_hip = if *no_hips {
-					(false, false)
-				} else {
-					(true, true)
-				};
-				half.draw_in_half_gable_end = if *gables {
-					(true, true)
-				} else {
-					(false, false)
-				};
+			draw_mapped_opening_overlays(&mut gizmos, map, openings, &shell, lime, orange);
+		}
+		PreviewSubject::RectRingFloor {
+			outer_x,
+			outer_z,
+			inner_x,
+			inner_z,
+			storey_height,
+			openings,
+			floor,
+			ceiling,
+		} => {
+			if openings.is_empty() {
+				return;
 			}
-			params.openings = openings_from_preview(openings);
-			let shell = PitchedRoof::new(params);
-			for opening in openings {
-				let id = OpeningId::new(opening.id.clone());
-				let Some(mapped) = shell.mapped_opening(&id) else {
-					continue;
-				};
-				draw_opening_gizmos(&mut gizmos, map, *mapped, lime);
-				let (bl, br, ..) = mapped.endpoint_corners();
-				let mid = (bl + br) * 0.5;
-				let dir = Vec3::new(mapped.orientation.x, 0.0, mapped.orientation.y)
-					.normalize_or_zero();
-				gizmos
-					.arrow(map(mid), map(mid + dir * 1.25), orange)
-					.with_tip_length(0.2);
+			for (i, opening) in openings.iter().enumerate() {
+				let color = if i % 2 == 0 { cyan } else { amber };
+				gizmos.aabb_3d(opening.bounds(), tf, color);
 			}
+			let shell = RectRingFloor::new(RectRingFloorParams {
+				center_xz: Vec3::ZERO,
+				outer: Vec2::new(*outer_x, *outer_z),
+				inner: Vec2::new(*inner_x, *inner_z),
+				storey_height: *storey_height,
+				openings: openings_from_preview(openings),
+				floor: if *floor {
+					RectRingFloorSlab::Solid
+				} else {
+					RectRingFloorSlab::None
+				},
+				ceiling: if *ceiling {
+					RectRingFloorSlab::Solid
+				} else {
+					RectRingFloorSlab::None
+				},
+				..RectRingFloorParams::default()
+			});
+			draw_mapped_opening_overlays(&mut gizmos, map, openings, &shell, lime, orange);
+		}
+		PreviewSubject::CircRingFloor {
+			outer_radius,
+			inner_radius,
+			storey_height,
+			openings,
+			floor,
+			ceiling,
+		} => {
+			if openings.is_empty() {
+				return;
+			}
+			for (i, opening) in openings.iter().enumerate() {
+				let color = if i % 2 == 0 { cyan } else { amber };
+				gizmos.aabb_3d(opening.bounds(), tf, color);
+			}
+			let shell = CircRingFloor::new(CircRingFloorParams {
+				center_xz: Vec3::ZERO,
+				outer_radius: *outer_radius,
+				inner_radius: *inner_radius,
+				storey_height: *storey_height,
+				openings: openings_from_preview(openings),
+				floor: if *floor {
+					CircRingFloorSlab::Solid
+				} else {
+					CircRingFloorSlab::None
+				},
+				ceiling: if *ceiling {
+					CircRingFloorSlab::Solid
+				} else {
+					CircRingFloorSlab::None
+				},
+				..CircRingFloorParams::default()
+			});
+			draw_mapped_opening_overlays(&mut gizmos, map, openings, &shell, lime, orange);
 		}
 		_ => {}
 	}
@@ -1928,6 +2403,66 @@ pub fn draw_roof_complex_gizmos(mut gizmos: Gizmos, config: Res<PreviewConfig>) 
 	}
 }
 
+/// Rebuild a pitched roof from preview knobs (matches `/show pitched-rectangular-roof`).
+fn pitched_roof_from_preview(
+	footprint_x: f32,
+	footprint_z: f32,
+	ridge_height: f32,
+	eave_height: f32,
+	ridge_inset: f32,
+	gables: bool,
+	no_walls: bool,
+	no_hips: bool,
+	openings: &[PreviewOpening],
+) -> PitchedRoof {
+	let footprint = Vec2::new(footprint_x, footprint_z);
+	let mut params = if no_hips && gables && ridge_inset <= 1e-4 {
+		PitchedRoofParams::rectangular_gable(footprint, ridge_height, eave_height)
+	} else {
+		PitchedRoofParams::rectangular_hip(footprint, ridge_height, eave_height, ridge_inset)
+	};
+	for half in &mut params.halves {
+		half.draw_in_wall_line = !no_walls;
+		half.draw_in_half_hip = if no_hips {
+			(false, false)
+		} else {
+			(true, true)
+		};
+		half.draw_in_half_gable_end = if gables {
+			(true, true)
+		} else {
+			(false, false)
+		};
+	}
+	params.openings = openings_from_preview(openings);
+	PitchedRoof::new(params)
+}
+
+fn draw_mapped_opening_overlays<M: MapsOpenings>(
+	gizmos: &mut Gizmos,
+	map: impl Fn(Vec3) -> Vec3 + Copy,
+	openings: &[PreviewOpening],
+	shell: &M,
+	lime: Color,
+	orange: Color,
+) {
+	for opening in openings {
+		let id = OpeningId::new(opening.id.clone());
+		let Some(mapped) = shell.mapped_opening(&id) else {
+			continue;
+		};
+		draw_opening_gizmos(gizmos, map, *mapped, lime);
+		let (bl, br, ..) = mapped.endpoint_corners();
+		let mid = (bl + br) * 0.5;
+		let dir = Vec3::new(mapped.orientation.x, 0.0, mapped.orientation.y).normalize_or_zero();
+		gizmos
+			.arrow(map(mid), map(mid + dir * 1.25), orange)
+			.with_tip_length(0.2);
+	}
+}
+
+/// Debug overlay for [`PreviewSubject::ConnectingHall`]: opening corners, orientation
+/// arrows, path A→mid→B, and station dots.
 pub fn draw_connecting_hall_gizmos(mut gizmos: Gizmos, config: Res<PreviewConfig>) {
 	if !matches!(config.subject, PreviewSubject::ConnectingHall) {
 		return;
