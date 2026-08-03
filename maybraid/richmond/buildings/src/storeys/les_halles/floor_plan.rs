@@ -12,6 +12,7 @@ use crate::fit::{Confines, FillableRegions, Fit, FitError, StackRegion};
 use crate::openings::{Opening, OpeningId, OpeningLabel, Openings};
 use crate::paneling::fitted_rectangle::FittedRectangle;
 use crate::paneling::panel_complex::{PanelPoint, DEFAULT_PANEL_THICKNESS};
+use crate::paneling::rectangle::Rectangle;
 use crate::shells::ortho::{OrthoSide, PlanRect, EPS};
 use crate::shells::rect_ring_floor::{
 	RectRingFloor, RectRingFloorParams, RectRingFloorSide, RectRingFloorSlab,
@@ -52,6 +53,8 @@ pub struct LesHallesFloorPlan {
 	pub gallery: RectRingFloor,
 	/// Floor-only balcony annulus pieces (no walls).
 	pub balcony_floors: Vec<FittedRectangle>,
+	/// Radial walls sealing each shaft from the gallery (inner wall → outer wall).
+	pub shaft_walls: Vec<Rectangle>,
 }
 
 impl LesHallesFloorPlan {
@@ -106,6 +109,8 @@ impl LesHallesFloorPlan {
 
 		let gallery = Self::build_gallery(center_xz, outer, gallery_inner, height, ceiling, &openings);
 		let balcony_floors = Self::build_balcony_floors(center_xz, gallery_inner, courtyard, y0);
+		let shaft_walls =
+			Self::build_shaft_walls(center_xz, outer, gallery_inner, height, &shaft_bounds);
 
 		let plan = Self {
 			parameterized: params,
@@ -120,6 +125,7 @@ impl LesHallesFloorPlan {
 			shaft_bounds,
 			gallery,
 			balcony_floors,
+			shaft_walls,
 		};
 
 		let regions = plan.fillable_regions();
@@ -200,7 +206,7 @@ impl LesHallesFloorPlan {
 		)
 	}
 
-	/// Shaft AABBs in the gallery band (corners or mid-sides).
+	/// Shaft AABBs spanning the full gallery depth (outer wall → inner wall).
 	fn shaft_aabbs(
 		center_xz: Vec3,
 		outer: Vec2,
@@ -215,38 +221,55 @@ impl LesHallesFloorPlan {
 		let ox1 = center_xz.x + outer.x * 0.5;
 		let oz0 = center_xz.z - outer.y * 0.5;
 		let oz1 = center_xz.z + outer.y * 0.5;
-		let inset = gallery_width * 0.5;
+		let gw = gallery_width.max(EPS);
 
-		let centers: Vec<Vec2> = match placement {
+		match placement {
+			// Full corner gallery cells (outer → both abutting inner walls).
 			LesHallesShaftPlacement::Corners => vec![
-				Vec2::new(ox0 + inset, oz0 + inset),
-				Vec2::new(ox1 - inset, oz0 + inset),
-				Vec2::new(ox1 - inset, oz1 - inset),
-				Vec2::new(ox0 + inset, oz1 - inset),
-			],
-			LesHallesShaftPlacement::MidSides => vec![
-				Vec2::new(center_xz.x, oz0 + inset),
-				Vec2::new(ox1 - inset, center_xz.z),
-				Vec2::new(center_xz.x, oz1 - inset),
-				Vec2::new(ox0 + inset, center_xz.z),
-			],
-		};
-
-		centers
-			.into_iter()
-			.map(|c| {
 				Aabb3d::from_min_max(
-					Vec3::new(c.x - half, y0, c.y - half),
-					Vec3::new(c.x + half, y1, c.y + half),
-				)
-			})
-			.collect()
+					Vec3::new(ox0, y0, oz0),
+					Vec3::new(ox0 + gw, y1, oz0 + gw),
+				),
+				Aabb3d::from_min_max(
+					Vec3::new(ox1 - gw, y0, oz0),
+					Vec3::new(ox1, y1, oz0 + gw),
+				),
+				Aabb3d::from_min_max(
+					Vec3::new(ox1 - gw, y0, oz1 - gw),
+					Vec3::new(ox1, y1, oz1),
+				),
+				Aabb3d::from_min_max(
+					Vec3::new(ox0, y0, oz1 - gw),
+					Vec3::new(ox0 + gw, y1, oz1),
+				),
+			],
+			// Mid-side shafts span full gallery depth, `SHAFT_SIDE` along the wall.
+			LesHallesShaftPlacement::MidSides => vec![
+				Aabb3d::from_min_max(
+					Vec3::new(center_xz.x - half, y0, oz0),
+					Vec3::new(center_xz.x + half, y1, oz0 + gw),
+				),
+				Aabb3d::from_min_max(
+					Vec3::new(ox1 - gw, y0, center_xz.z - half),
+					Vec3::new(ox1, y1, center_xz.z + half),
+				),
+				Aabb3d::from_min_max(
+					Vec3::new(center_xz.x - half, y0, oz1 - gw),
+					Vec3::new(center_xz.x + half, y1, oz1),
+				),
+				Aabb3d::from_min_max(
+					Vec3::new(ox0, y0, center_xz.z - half),
+					Vec3::new(ox0 + gw, y1, center_xz.z + half),
+				),
+			],
+		}
 	}
 
-	/// Gallery facade + balcony-facing openings, plus shaft voids.
+	/// Gallery facade + balcony-facing openings, plus shaft voids / clears.
 	///
-	/// Uses [`RectRingFloor`]'s side helpers so AABBs land on the correct outer
-	/// or inner wall edges. Density controls how many extra windows per outer side.
+	/// Outer walls get a door and at least one window (offset along the run so
+	/// both survive multi-opening wall subdivision). Inner walls get shop doors
+	/// plus floor-to-ceiling clears where shafts meet the balcony face.
 	fn generated_openings(
 		center_xz: Vec3,
 		outer: Vec2,
@@ -257,25 +280,29 @@ impl LesHallesFloorPlan {
 	) -> Openings {
 		let mut openings = Openings::new();
 		let door_h = (height * 0.72).clamp(2.0, height.max(2.0));
-		let win_h = (height * 0.35).clamp(0.9, height.max(0.9));
-		let sill = (height * 0.35).clamp(0.8, height * 0.5);
+		let win_h = (height * 0.4).clamp(1.0, height.max(1.0));
+		let sill = (height * 0.3).clamp(0.7, height * 0.45);
 		let door_w = 1.4;
-		let win_w = 1.2;
+		let win_w = 1.4;
 		// Extra outer windows beyond the first on each side (0..=2).
 		let extra_wins = ((opening_density * 3.0).floor() as usize).min(2);
 
 		for side in RectRingFloorSide::all() {
 			let slot = side_slot(side);
-			openings.insert(
-				OpeningId::scoped(SCOPE, "outer_passage", slot),
-				RectRingFloor::side_passage_opening(side, center_xz, outer, door_w, door_h),
-			);
+			// Outer door slightly − along side; window(s) toward +.
+			let mut outer_door =
+				RectRingFloor::side_passage_opening(side, center_xz, outer, door_w, door_h);
+			outer_door.bounds = offset_opening_along_side(outer_door.bounds, side, -2.0);
+			openings.insert(OpeningId::scoped(SCOPE, "outer_passage", slot), outer_door);
+
+			let mut outer_win =
+				RectRingFloor::side_aperture_opening(side, center_xz, outer, win_w, win_h, sill);
+			outer_win.bounds = offset_opening_along_side(outer_win.bounds, side, 2.0);
 			openings.insert(
 				OpeningId::scoped(SCOPE, "outer_aperture", format!("{slot}_0")),
-				RectRingFloor::side_aperture_opening(side, center_xz, outer, win_w, win_h, sill),
+				outer_win,
 			);
 			for k in 0..extra_wins {
-				// Offset extras along the side by shifting after helper construction.
 				let mut opening = RectRingFloor::side_aperture_opening(
 					side,
 					center_xz,
@@ -284,29 +311,35 @@ impl LesHallesFloorPlan {
 					win_h,
 					sill,
 				);
-				opening.bounds = offset_opening_along_side(opening.bounds, side, (k + 1) as f32 * 2.2);
+				opening.bounds =
+					offset_opening_along_side(opening.bounds, side, 2.0 + (k + 1) as f32 * 2.4);
 				openings.insert(
 					OpeningId::scoped(SCOPE, "outer_aperture", format!("{slot}_{}", k + 1)),
 					opening,
 				);
 			}
 
-			// Balcony → shop doors on the gallery’s inner wall.
-			openings.insert(
-				OpeningId::scoped(SCOPE, "inner_passage", slot),
-				RectRingFloor::side_passage_opening(side, center_xz, gallery_inner, door_w, door_h),
+			// Balcony → shop door on the gallery’s inner wall (offset from mid).
+			let mut inner_door = RectRingFloor::side_passage_opening(
+				side,
+				center_xz,
+				gallery_inner,
+				door_w,
+				door_h,
 			);
-			openings.insert(
-				OpeningId::scoped(SCOPE, "inner_aperture", slot),
-				RectRingFloor::side_aperture_opening(
-					side,
-					center_xz,
-					gallery_inner,
-					win_w,
-					win_h,
-					sill,
-				),
+			inner_door.bounds = offset_opening_along_side(inner_door.bounds, side, -1.5);
+			openings.insert(OpeningId::scoped(SCOPE, "inner_passage", slot), inner_door);
+
+			let mut inner_win = RectRingFloor::side_aperture_opening(
+				side,
+				center_xz,
+				gallery_inner,
+				win_w,
+				win_h,
+				sill,
 			);
+			inner_win.bounds = offset_opening_along_side(inner_win.bounds, side, 1.5);
+			openings.insert(OpeningId::scoped(SCOPE, "inner_aperture", slot), inner_win);
 		}
 
 		for (i, shaft) in shaft_bounds.iter().enumerate() {
@@ -314,9 +347,166 @@ impl LesHallesFloorPlan {
 				OpeningId::scoped(SCOPE, "shaft", format!("{i}")),
 				Opening::new(*shaft, OpeningLabel::Shaft),
 			);
+			// Floor-to-ceiling clear on the inner wall(s) the shaft abuts.
+			let smin = Vec3::from(shaft.min);
+			let smax = Vec3::from(shaft.max);
+			for (side, along) in Self::shaft_inner_sides(center_xz, gallery_inner, *shaft) {
+				let clear_w = match side {
+					OrthoSide::North | OrthoSide::South => (smax.x - smin.x).max(1.2),
+					OrthoSide::East | OrthoSide::West => (smax.z - smin.z).max(1.2),
+				};
+				let mut clear = RectRingFloor::side_passage_opening(
+					side,
+					center_xz,
+					gallery_inner,
+					clear_w,
+					height,
+				);
+				clear.bounds = offset_opening_along_side(clear.bounds, side, along);
+				openings.insert(
+					OpeningId::scoped(SCOPE, "shaft_clear", format!("{i}_{}", side_slot(side))),
+					clear,
+				);
+			}
 		}
 
 		openings
+	}
+
+	/// Which gallery-inner sides a shaft abuts, with along-side offset from mid.
+	fn shaft_inner_sides(
+		center_xz: Vec3,
+		gallery_inner: Vec2,
+		shaft: Aabb3d,
+	) -> Vec<(OrthoSide, f32)> {
+		let mid = Vec3::from((shaft.min + shaft.max) * 0.5);
+		let smin = Vec3::from(shaft.min);
+		let smax = Vec3::from(shaft.max);
+		let gx0 = center_xz.x - gallery_inner.x * 0.5;
+		let gx1 = center_xz.x + gallery_inner.x * 0.5;
+		let gz0 = center_xz.z - gallery_inner.y * 0.5;
+		let gz1 = center_xz.z + gallery_inner.y * 0.5;
+		// Shaft sits in the gallery band; treat as abutting if its AABB reaches the
+		// inner wall plane (within a small thickness tolerance).
+		let tol = 0.35_f32;
+
+		let mut out = Vec::new();
+		if aabb_near_plane(smin.z, smax.z, gz0, tol) {
+			out.push((OrthoSide::South, mid.x - center_xz.x));
+		}
+		if aabb_near_plane(smin.z, smax.z, gz1, tol) {
+			out.push((OrthoSide::North, mid.x - center_xz.x));
+		}
+		if aabb_near_plane(smin.x, smax.x, gx1, tol) {
+			out.push((OrthoSide::East, mid.z - center_xz.z));
+		}
+		if aabb_near_plane(smin.x, smax.x, gx0, tol) {
+			out.push((OrthoSide::West, mid.z - center_xz.z));
+		}
+		if out.is_empty() {
+			let dists = [
+				(OrthoSide::South, (mid.z - gz0).abs(), mid.x - center_xz.x),
+				(OrthoSide::North, (mid.z - gz1).abs(), mid.x - center_xz.x),
+				(OrthoSide::East, (mid.x - gx1).abs(), mid.z - center_xz.z),
+				(OrthoSide::West, (mid.x - gx0).abs(), mid.z - center_xz.z),
+			];
+			let best = dists
+				.into_iter()
+				.min_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal))
+				.unwrap();
+			out.push((best.0, best.2));
+		}
+		out
+	}
+
+	/// Radial partitions from gallery inner wall to outer wall at each shaft.
+	fn build_shaft_walls(
+		center_xz: Vec3,
+		outer: Vec2,
+		gallery_inner: Vec2,
+		height: f32,
+		shaft_bounds: &[Aabb3d],
+	) -> Vec<Rectangle> {
+		let y0 = center_xz.y;
+		let ox0 = center_xz.x - outer.x * 0.5;
+		let ox1 = center_xz.x + outer.x * 0.5;
+		let oz0 = center_xz.z - outer.y * 0.5;
+		let oz1 = center_xz.z + outer.y * 0.5;
+		let gx0 = center_xz.x - gallery_inner.x * 0.5;
+		let gx1 = center_xz.x + gallery_inner.x * 0.5;
+		let gz0 = center_xz.z - gallery_inner.y * 0.5;
+		let gz1 = center_xz.z + gallery_inner.y * 0.5;
+		let t = DEFAULT_PANEL_THICKNESS;
+		let mut walls = Vec::new();
+
+		for shaft in shaft_bounds {
+			let smin = Vec3::from(shaft.min);
+			let smax = Vec3::from(shaft.max);
+			let sides = Self::shaft_inner_sides(center_xz, gallery_inner, *shaft);
+			for (side, _) in sides {
+				match side {
+					OrthoSide::South => {
+						// Radials at shaft east/west faces, outer south → inner south.
+						walls.push(radial_wall(
+							Vec3::new(smin.x, y0, oz0),
+							Vec3::new(0.0, 0.0, gz0 - oz0),
+							height,
+							t,
+						));
+						walls.push(radial_wall(
+							Vec3::new(smax.x, y0, oz0),
+							Vec3::new(0.0, 0.0, gz0 - oz0),
+							height,
+							t,
+						));
+					}
+					OrthoSide::North => {
+						walls.push(radial_wall(
+							Vec3::new(smin.x, y0, oz1),
+							Vec3::new(0.0, 0.0, gz1 - oz1),
+							height,
+							t,
+						));
+						walls.push(radial_wall(
+							Vec3::new(smax.x, y0, oz1),
+							Vec3::new(0.0, 0.0, gz1 - oz1),
+							height,
+							t,
+						));
+					}
+					OrthoSide::East => {
+						walls.push(radial_wall(
+							Vec3::new(ox1, y0, smin.z),
+							Vec3::new(gx1 - ox1, 0.0, 0.0),
+							height,
+							t,
+						));
+						walls.push(radial_wall(
+							Vec3::new(ox1, y0, smax.z),
+							Vec3::new(gx1 - ox1, 0.0, 0.0),
+							height,
+							t,
+						));
+					}
+					OrthoSide::West => {
+						walls.push(radial_wall(
+							Vec3::new(ox0, y0, smin.z),
+							Vec3::new(gx0 - ox0, 0.0, 0.0),
+							height,
+							t,
+						));
+						walls.push(radial_wall(
+							Vec3::new(ox0, y0, smax.z),
+							Vec3::new(gx0 - ox0, 0.0, 0.0),
+							height,
+							t,
+						));
+					}
+				}
+			}
+		}
+		walls.retain(|w| w.edge.length() > EPS);
+		walls
 	}
 
 	fn build_gallery(
@@ -387,6 +577,9 @@ impl BuildingComponents for LesHallesFloorPlan {
 		for floor in &self.balcony_floors {
 			out.extend(floor.panel_nodes_for_level(level));
 		}
+		for wall in &self.shaft_walls {
+			out.extend(wall.panel_nodes_for_level(level));
+		}
 		out
 	}
 
@@ -404,6 +597,10 @@ fn side_slot(side: OrthoSide) -> &'static str {
 	}
 }
 
+fn aabb_near_plane(lo: f32, hi: f32, plane: f32, tol: f32) -> bool {
+	lo <= plane + tol && hi >= plane - tol
+}
+
 fn offset_opening_along_side(bounds: Aabb3d, side: OrthoSide, delta: f32) -> Aabb3d {
 	let (dx, dz) = match side {
 		OrthoSide::North | OrthoSide::South => (delta, 0.0),
@@ -412,6 +609,10 @@ fn offset_opening_along_side(bounds: Aabb3d, side: OrthoSide, delta: f32) -> Aab
 	let min = Vec3::from(bounds.min) + Vec3::new(dx, 0.0, dz);
 	let max = Vec3::from(bounds.max) + Vec3::new(dx, 0.0, dz);
 	Aabb3d::from_min_max(min, max)
+}
+
+fn radial_wall(origin: Vec3, edge: Vec3, height: f32, thickness: f32) -> Rectangle {
+	Rectangle::rough_stone(origin, edge, height, thickness, 0.0)
 }
 
 fn floor_rect(
@@ -513,6 +714,17 @@ mod tests {
 			.openings
 			.get(&OpeningId::scoped(SCOPE, "inner_aperture", "w"))
 			.is_some());
+		// Outer apertures must actually map onto gallery walls (not lose to passages).
+		use crate::openings::MapsOpenings;
+		assert!(plan
+			.gallery
+			.mapped_opening(&OpeningId::scoped(SCOPE, "outer_aperture", "s_0"))
+			.is_some());
+		assert!(!plan.shaft_walls.is_empty());
+		assert!(plan
+			.openings
+			.iter()
+			.any(|(id, _)| id.as_str().contains("shaft_clear")));
 	}
 
 	#[test]

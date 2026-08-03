@@ -59,6 +59,41 @@ fn passage_on_outer_south_maps() {
 }
 
 #[test]
+fn multiple_openings_on_same_outer_side_all_map() {
+	let mut openings = Openings::new();
+	let mut door = RectRingFloor::side_passage_opening(
+		OrthoSide::South,
+		Vec3::ZERO,
+		Vec2::new(8.0, 6.0),
+		1.2,
+		2.1,
+	);
+	door.bounds = {
+		let min = Vec3::from(door.bounds.min) + Vec3::new(-2.0, 0.0, 0.0);
+		let max = Vec3::from(door.bounds.max) + Vec3::new(-2.0, 0.0, 0.0);
+		bevy_math::bounding::Aabb3d::from_min_max(min, max)
+	};
+	let mut win = RectRingFloor::side_aperture_opening(
+		OrthoSide::South,
+		Vec3::ZERO,
+		Vec2::new(8.0, 6.0),
+		1.2,
+		1.2,
+		1.0,
+	);
+	win.bounds = {
+		let min = Vec3::from(win.bounds.min) + Vec3::new(2.0, 0.0, 0.0);
+		let max = Vec3::from(win.bounds.max) + Vec3::new(2.0, 0.0, 0.0);
+		bevy_math::bounding::Aabb3d::from_min_max(min, max)
+	};
+	openings.insert("door", door);
+	openings.insert("win", win);
+	let r = RectRingFloorParams::default().openings(openings).build();
+	assert!(r.mapped_opening(&OpeningId::new("door")).is_some());
+	assert!(r.mapped_opening(&OpeningId::new("win")).is_some());
+}
+
+#[test]
 fn wide_passage_authors_broad_side_omission() {
 	// Nearly full-width south passage is the supported way to open a gallery run.
 	let r = RectRingFloorParams::default()

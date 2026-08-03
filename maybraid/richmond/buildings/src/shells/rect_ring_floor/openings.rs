@@ -1,14 +1,17 @@
 //! Per-side wall openings for [`RectRingFloor`].
 //!
 //! Wide connectable openings author broad omissions along a ring side (no
-//! separate omit-interval API). Assignment is **one opening → one side**: the
-//! nearest outer/inner edge wins. An AABB that overlaps half the ring still
-//! only clips that single winner; clear multiple sides with multiple openings.
+//! separate omit-interval API). Assignment is **nearest edge wins** per opening;
+//! **multiple openings may land on the same side** — the wall strip is subdivided
+//! into solid and opening bays along the run. An AABB that overlaps half the ring
+//! still only assigns to that single nearest side; clear multiple sides with
+//! multiple openings.
 
 use bevy_math::{Vec2, Vec3};
 
 use crate::openings::{MappedOpenings, MapsOpenings, Opening, OpeningId, Openings};
 use crate::paneling::clipped_rectangular_strip::ClippedRectangularStrip;
+use crate::paneling::rect_fit::RectInset;
 use crate::paneling::rectangular_strip::RectangularStripNode;
 use crate::shells::ortho::{edge_score_for_bounds, standing_face_opening, OrthoSide, WallEdge, EPS};
 
@@ -49,18 +52,27 @@ impl RectRingFloor {
 	}
 }
 
+struct EdgeOpening {
+	id: OpeningId,
+	opening: Opening,
+	/// Along-wall start / end of the opening on this edge.
+	s_lo: f32,
+	s_hi: f32,
+	/// Vertical margins (standing-strip left/right).
+	sill: f32,
+	header: f32,
+	mapped: crate::openings::MappedOpening,
+}
+
 impl RectRingFloorParams {
-	/// Map each connectable opening onto at most one edge among outer+inner sides.
-	///
-	/// Overlap with several walls does not multi-assign: only the nearest edge
-	/// (tie-break: largest face score) receives the inset.
+	/// Map connectable openings onto outer+inner edges (multi-opening per edge).
 	pub(super) fn resolve_walls(
 		&self,
 		edges: &[WallEdge],
 	) -> (Vec<ClippedRectangularStrip>, Openings, MappedOpenings) {
 		let thickness = self.joint_thickness.max(1e-4);
 		let n = edges.len();
-		let mut best: Vec<Option<(f32, OpeningId, Opening)>> = vec![None; n];
+		let mut per_edge: Vec<Vec<EdgeOpening>> = (0..n).map(|_| Vec::new()).collect();
 
 		for (id, opening) in self.openings.iter() {
 			if !opening.label.is_connectable() {
@@ -82,48 +94,123 @@ impl RectRingFloorParams {
 					winner = Some((i, dist, score));
 				}
 			}
-			let Some((idx, _, score)) = winner else {
+			let Some((idx, _, _)) = winner else {
 				continue;
 			};
-			let replace = match &best[idx] {
-				None => true,
-				Some((prev, ..)) => score > *prev,
+			let edge = edges[idx];
+			let Some(face) = standing_face_opening(edge, &opening.bounds, thickness) else {
+				continue;
 			};
-			if replace {
-				best[idx] = Some((score, id.clone(), opening.clone()));
+			let len = edge.length();
+			let s_lo = face.inset.bottom.clamp(0.0, len);
+			let s_hi = (len - face.inset.top).clamp(0.0, len);
+			if s_hi - s_lo < EPS {
+				continue;
 			}
+			per_edge[idx].push(EdgeOpening {
+				id: id.clone(),
+				opening: opening.clone(),
+				s_lo,
+				s_hi,
+				sill: face.inset.left,
+				header: face.inset.right,
+				mapped: face.mapped,
+			});
 		}
 
 		let mut openings = Openings::new();
 		let mut mapped = MappedOpenings::new();
 		let mut walls = Vec::with_capacity(n);
 		for (i, edge) in edges.iter().enumerate() {
-			let inset = if let Some((_, id, opening)) = best[i].take() {
-				if let Some(face) = standing_face_opening(*edge, &opening.bounds, thickness) {
-					mapped.insert(id.clone(), face.mapped);
-					openings.insert(id, opening);
-					Some(face.inset)
-				} else {
-					None
-				}
-			} else {
-				None
-			};
 			if edge.length() < EPS {
 				continue;
 			}
-			walls.push(ClippedRectangularStrip::from_nodes(
-				self.style,
-				[
-					RectangularStripNode::new(edge.start, edge.height, thickness, 0.0),
-					RectangularStripNode::new(edge.end, edge.height, thickness, 0.0),
-				],
-				[inset],
-			));
+			let mut assigned = std::mem::take(&mut per_edge[i]);
+			assigned.sort_by(|a, b| {
+				a.s_lo
+					.partial_cmp(&b.s_lo)
+					.unwrap_or(std::cmp::Ordering::Equal)
+			});
+			// Drop overlaps (keep earlier along the wall).
+			let mut kept = Vec::new();
+			let mut cursor = 0.0_f32;
+			for op in assigned {
+				if op.s_hi <= cursor + EPS {
+					continue;
+				}
+				let s_lo = op.s_lo.max(cursor);
+				if op.s_hi - s_lo < EPS {
+					continue;
+				}
+				cursor = op.s_hi;
+				kept.push(EdgeOpening { s_lo, ..op });
+			}
+			for op in &kept {
+				mapped.insert(op.id.clone(), op.mapped.clone());
+				openings.insert(op.id.clone(), op.opening.clone());
+			}
+			walls.push(wall_strip_for_edge(*edge, &kept, self.style, thickness));
 		}
 
 		(walls, openings, mapped)
 	}
+}
+
+fn wall_strip_for_edge(
+	edge: WallEdge,
+	openings: &[EdgeOpening],
+	style: richmond_building_components::panels::PanelStyle,
+	thickness: f32,
+) -> ClippedRectangularStrip {
+	let len = edge.length();
+	let tang = edge.tangent();
+	let h = edge.height;
+	let t = thickness.max(1e-4);
+
+	if openings.is_empty() {
+		return ClippedRectangularStrip::from_nodes(
+			style,
+			[
+				RectangularStripNode::new(edge.start, h, t, 0.0),
+				RectangularStripNode::new(edge.end, h, t, 0.0),
+			],
+			[None],
+		);
+	}
+
+	let mut nodes = Vec::new();
+	let mut insets: Vec<Option<RectInset>> = Vec::new();
+	nodes.push(RectangularStripNode::new(edge.start, h, t, 0.0));
+	let mut cursor = 0.0_f32;
+
+	for op in openings {
+		if op.s_lo > cursor + EPS {
+			nodes.push(RectangularStripNode::new(
+				edge.start + tang * op.s_lo,
+				h,
+				t,
+				0.0,
+			));
+			insets.push(None);
+			cursor = op.s_lo;
+		}
+		let s_hi = op.s_hi.max(cursor + EPS);
+		nodes.push(RectangularStripNode::new(edge.start + tang * s_hi, h, t, 0.0));
+		// Bay spans the opening along-wall; vertical margins from the face projection.
+		// Tiny along-wall jambs avoid [`RectInset::is_solid`] (all-zero ⇒ solid fill).
+		let jamb = 0.02_f32.min((s_hi - cursor) * 0.1);
+		insets.push(Some(RectInset::new(op.sill, op.header, jamb, jamb)));
+		cursor = s_hi;
+	}
+
+	if cursor < len - EPS {
+		nodes.push(RectangularStripNode::new(edge.end, h, t, 0.0));
+		insets.push(None);
+	} else if let Some(last) = nodes.last_mut() {
+		last.position = edge.end;
+	}
+
+	ClippedRectangularStrip::from_nodes(style, nodes, insets)
 }
 
 impl MapsOpenings for RectRingFloor {
