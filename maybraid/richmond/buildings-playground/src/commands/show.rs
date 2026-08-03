@@ -193,8 +193,8 @@ impl Show {
 			Self::WizardsTower(cmd) => Ok(cmd.into_preview()),
 			Self::StackedRings(cmd) => Ok(cmd.into_preview()),
 			Self::Bedroom(cmd) => Ok(cmd.into_preview()),
-			Self::LesHallesFloorPlan(cmd) => Ok(cmd.into_preview()),
-			Self::LesHallesFullStorey(cmd) => Ok(cmd.into_preview()),
+			Self::LesHallesFloorPlan(cmd) => cmd.into_preview(),
+			Self::LesHallesFullStorey(cmd) => cmd.into_preview(),
 		};
 		match preview {
 			Ok((subject, transform)) => {

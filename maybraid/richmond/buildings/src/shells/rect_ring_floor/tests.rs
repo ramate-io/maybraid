@@ -59,6 +59,52 @@ fn passage_on_outer_south_maps() {
 }
 
 #[test]
+fn cornerish_passage_maps_to_intersecting_side_not_nearest_mid() {
+	// Midpoint is closer to East face, but the AABB only intersects the South
+	// wall volume — must still cut South (Les Halles awkward SE door case).
+	let opening = Opening::passage(bevy_math::bounding::Aabb3d::from_min_max(
+		Vec3::new(2.8, 0.2, -3.15),
+		Vec3::new(3.6, 2.8, -2.85),
+	));
+	let r = RectRingFloorParams::default()
+		.openings(Openings::new().with("awkward", opening))
+		.build();
+	assert!(
+		r.mapped_opening(&OpeningId::new("awkward")).is_some(),
+		"passage that intersects South must map even if East mid is closer"
+	);
+}
+
+#[test]
+fn passage_wins_overlap_against_aperture() {
+	let mut openings = Openings::new();
+	openings.insert(
+		"door",
+		RectRingFloor::side_passage_opening(
+			OrthoSide::South,
+			Vec3::ZERO,
+			Vec2::new(8.0, 6.0),
+			1.5,
+			2.1,
+		),
+	);
+	openings.insert(
+		"win",
+		RectRingFloor::side_aperture_opening(
+			OrthoSide::South,
+			Vec3::ZERO,
+			Vec2::new(8.0, 6.0),
+			1.5,
+			1.2,
+			1.0,
+		),
+	);
+	let r = RectRingFloorParams::default().openings(openings).build();
+	assert!(r.mapped_opening(&OpeningId::new("door")).is_some());
+	assert!(r.mapped_opening(&OpeningId::new("win")).is_none());
+}
+
+#[test]
 fn multiple_openings_on_same_outer_side_all_map() {
 	let mut openings = Openings::new();
 	let mut door = RectRingFloor::side_passage_opening(

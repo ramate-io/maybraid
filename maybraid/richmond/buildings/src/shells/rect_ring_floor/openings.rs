@@ -9,7 +9,9 @@
 
 use bevy_math::{Vec2, Vec3};
 
-use crate::openings::{MappedOpenings, MapsOpenings, Opening, OpeningId, Openings};
+use crate::openings::{
+	MappedOpenings, MapsOpenings, Opening, OpeningId, OpeningLabel, Openings,
+};
 use crate::paneling::clipped_rectangular_strip::ClippedRectangularStrip;
 use crate::paneling::rect_fit::RectInset;
 use crate::paneling::rectangular_strip::RectangularStripNode;
@@ -78,44 +80,51 @@ impl RectRingFloorParams {
 			if !opening.label.is_connectable() {
 				continue;
 			}
-			let mut winner: Option<(usize, f32, f32)> = None; // idx, dist, score
+			// Only edges that actually project the AABB into a face opening — nearest
+			// edge by midpoint alone can pick a side the void never intersects
+			// (e.g. a SE corner door closer to East mid than South mid).
+			let mut winner: Option<(usize, f32, f32, EdgeOpening)> = None;
 			for (i, edge) in edges.iter().enumerate() {
 				if edge.length() < EPS {
+					continue;
+				}
+				let Some(face) = standing_face_opening(*edge, &opening.bounds, thickness) else {
+					continue;
+				};
+				let len = edge.length();
+				let s_lo = face.inset.bottom.clamp(0.0, len);
+				let s_hi = (len - face.inset.top).clamp(0.0, len);
+				if s_hi - s_lo < EPS {
 					continue;
 				}
 				let (dist, score) = edge_score_for_bounds(&opening.bounds, *edge);
 				let replace = match winner {
 					None => true,
-					Some((_, prev_d, prev_s)) => {
+					Some((_, prev_d, prev_s, _)) => {
 						dist < prev_d - 1e-4 || (dist <= prev_d + 1e-4 && score > prev_s)
 					}
 				};
 				if replace {
-					winner = Some((i, dist, score));
+					winner = Some((
+						i,
+						dist,
+						score,
+						EdgeOpening {
+							id: id.clone(),
+							opening: opening.clone(),
+							s_lo,
+							s_hi,
+							sill: face.inset.left,
+							header: face.inset.right,
+							mapped: face.mapped,
+						},
+					));
 				}
 			}
-			let Some((idx, _, _)) = winner else {
+			let Some((idx, _, _, edge_op)) = winner else {
 				continue;
 			};
-			let edge = edges[idx];
-			let Some(face) = standing_face_opening(edge, &opening.bounds, thickness) else {
-				continue;
-			};
-			let len = edge.length();
-			let s_lo = face.inset.bottom.clamp(0.0, len);
-			let s_hi = (len - face.inset.top).clamp(0.0, len);
-			if s_hi - s_lo < EPS {
-				continue;
-			}
-			per_edge[idx].push(EdgeOpening {
-				id: id.clone(),
-				opening: opening.clone(),
-				s_lo,
-				s_hi,
-				sill: face.inset.left,
-				header: face.inset.right,
-				mapped: face.mapped,
-			});
+			per_edge[idx].push(edge_op);
 		}
 
 		let mut openings = Openings::new();
@@ -126,25 +135,30 @@ impl RectRingFloorParams {
 				continue;
 			}
 			let mut assigned = std::mem::take(&mut per_edge[i]);
+			// Place higher-priority labels first (passages beat apertures), then
+			// fill remaining spans so generated windows don't erase inbound doors.
 			assigned.sort_by(|a, b| {
+				connectable_priority(&b.opening.label)
+					.cmp(&connectable_priority(&a.opening.label))
+					.then_with(|| {
+						a.s_lo
+							.partial_cmp(&b.s_lo)
+							.unwrap_or(std::cmp::Ordering::Equal)
+					})
+			});
+			let mut kept = Vec::new();
+			for op in assigned {
+				if kept.iter().any(|k: &EdgeOpening| spans_overlap(k.s_lo, k.s_hi, op.s_lo, op.s_hi))
+				{
+					continue;
+				}
+				kept.push(op);
+			}
+			kept.sort_by(|a, b| {
 				a.s_lo
 					.partial_cmp(&b.s_lo)
 					.unwrap_or(std::cmp::Ordering::Equal)
 			});
-			// Drop overlaps (keep earlier along the wall).
-			let mut kept = Vec::new();
-			let mut cursor = 0.0_f32;
-			for op in assigned {
-				if op.s_hi <= cursor + EPS {
-					continue;
-				}
-				let s_lo = op.s_lo.max(cursor);
-				if op.s_hi - s_lo < EPS {
-					continue;
-				}
-				cursor = op.s_hi;
-				kept.push(EdgeOpening { s_lo, ..op });
-			}
 			for op in &kept {
 				mapped.insert(op.id.clone(), op.mapped.clone());
 				openings.insert(op.id.clone(), op.opening.clone());
@@ -154,6 +168,18 @@ impl RectRingFloorParams {
 
 		(walls, openings, mapped)
 	}
+}
+
+fn connectable_priority(label: &OpeningLabel) -> u8 {
+	match label {
+		OpeningLabel::Passage | OpeningLabel::Shaft => 2,
+		OpeningLabel::Aperture => 1,
+		_ => 0,
+	}
+}
+
+fn spans_overlap(a0: f32, a1: f32, b0: f32, b1: f32) -> bool {
+	a0 < b1 - EPS && b0 < a1 - EPS
 }
 
 fn wall_strip_for_edge(

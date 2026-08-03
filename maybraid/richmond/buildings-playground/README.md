@@ -18,6 +18,10 @@ cargo run -p richmond-buildings-playground -- show les-halles-floor-plan
 cargo run -p richmond-buildings-playground -- show les-halles-floor-plan --extent 48,4,36 --seed 42
 cargo run -p richmond-buildings-playground -- show les-halles-floor-plan --ceiling
 cargo run -p richmond-buildings-playground -- show les-halles-full-storey --seed 7
+# Request specific shaft openings (cyan/amber = request, magenta = fitted shaft):
+cargo run -p richmond-buildings-playground -- show les-halles-floor-plan --seed 42 \
+  --opening 'se:shaft:8,0,-14:12,3.5,-10' \
+  --opening 'nw:shaft:-12,0,8:-8,3.5,14'
 # Rectangular pitch (no end triangles):
 cargo run -p richmond-buildings-playground -- show pitch --rise 1 --run 2 --length 6 --tile-width 1
 # Ridge longer than eave (flipped ends via from_eave_ridge):

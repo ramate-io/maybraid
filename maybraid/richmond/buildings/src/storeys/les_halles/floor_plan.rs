@@ -1328,6 +1328,38 @@ mod tests {
 	}
 
 	#[test]
+	fn awkward_se_passage_maps_despite_nearer_east_mid() {
+		// Playground repro: SE corner door closer to East mid than South mid, but
+		// the AABB only intersects the South outer wall volume.
+		let base = nominal_confines();
+		let params = LesHallesParameterized::sample(
+			&base,
+			NoiseParams {
+				seed: 42,
+				..NoiseParams::default()
+			},
+		)
+		.unwrap();
+		let mut openings = Openings::new();
+		openings.insert(
+			OpeningId::new("awkward"),
+			Opening::passage(Aabb3d::from_min_max(
+				Vec3::new(20.5, 0.2, -19.0),
+				Vec3::new(23.5, 3.5, -17.9),
+			)),
+		);
+		let confines = Confines::new(base.bounds, 0.0, openings);
+		let (plan, _) = LesHallesFloorPlan::from_parameterized(params, &confines).unwrap();
+		use crate::openings::MapsOpenings;
+		assert!(
+			plan.gallery
+				.mapped_opening(&OpeningId::new("awkward"))
+				.is_some(),
+			"inbound SE passage must cut the South outer wall"
+		);
+	}
+
+	#[test]
 	fn preserves_inbound_opening_ids_and_emits_scoped_shafts() {
 		let base = nominal_confines();
 		let params = LesHallesParameterized::sample(&base, NoiseParams::default()).unwrap();

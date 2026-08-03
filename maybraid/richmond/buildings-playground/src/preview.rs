@@ -326,12 +326,16 @@ pub enum PreviewSubject {
 		extent: Vec3,
 		seed: i32,
 		ceiling: bool,
+		/// Inbound openings (`--opening`). Empty ⇒ demo requests all shaft slots.
+		openings: Vec<PreviewOpening>,
 	},
 	LesHallesFullStorey {
 		/// Confines size (XZ centered at origin; Y from 0).
 		extent: Vec3,
 		seed: i32,
 		ceiling: bool,
+		/// Inbound openings (`--opening`). Empty ⇒ demo requests all shaft slots.
+		openings: Vec<PreviewOpening>,
 	},
 }
 
@@ -701,16 +705,32 @@ impl PreviewConfig {
 					extent.x, extent.y, extent.z
 				)
 			}
-			PreviewSubject::LesHallesFloorPlan { extent, seed, ceiling } => {
+			PreviewSubject::LesHallesFloorPlan {
+				extent,
+				seed,
+				ceiling,
+				ref openings,
+			} => {
 				format!(
-					"preview: les-halles-floor-plan (extent={:.1},{:.1},{:.1} seed={seed} ceiling={ceiling})",
-					extent.x, extent.y, extent.z
+					"preview: les-halles-floor-plan (extent={:.1},{:.1},{:.1} seed={seed} ceiling={ceiling} openings={})",
+					extent.x,
+					extent.y,
+					extent.z,
+					openings.len()
 				)
 			}
-			PreviewSubject::LesHallesFullStorey { extent, seed, ceiling } => {
+			PreviewSubject::LesHallesFullStorey {
+				extent,
+				seed,
+				ceiling,
+				ref openings,
+			} => {
 				format!(
-					"preview: les-halles-full-storey (extent={:.1},{:.1},{:.1} seed={seed} ceiling={ceiling})",
-					extent.x, extent.y, extent.z
+					"preview: les-halles-full-storey (extent={:.1},{:.1},{:.1} seed={seed} ceiling={ceiling} openings={})",
+					extent.x,
+					extent.y,
+					extent.z,
+					openings.len()
 				)
 			}
 		}
@@ -992,16 +1012,26 @@ impl CachedPreview {
 					..NoisyRectangularWallParams::default()
 				}));
 			}
-			PreviewSubject::LesHallesFloorPlan { extent, seed, ceiling } => {
-				match fit_les_halles_floor_plan(*extent, *seed, *ceiling) {
+			PreviewSubject::LesHallesFloorPlan {
+				extent,
+				seed,
+				ceiling,
+				openings,
+			} => {
+				match fit_les_halles_floor_plan(*extent, *seed, *ceiling, openings) {
 					Ok(plan) => self.les_halles_floor_plan = Some(plan),
 					Err(err) => {
 						bevy::log::error!("les-halles-floor-plan fit failed: {err}");
 					}
 				}
 			}
-			PreviewSubject::LesHallesFullStorey { extent, seed, ceiling } => {
-				match fit_les_halles_floor_plan(*extent, *seed, *ceiling) {
+			PreviewSubject::LesHallesFullStorey {
+				extent,
+				seed,
+				ceiling,
+				openings,
+			} => {
+				match fit_les_halles_floor_plan(*extent, *seed, *ceiling, openings) {
 					Ok(plan) => {
 						let (storey, _) = LesHallesFullStorey::from_floor_plan(plan);
 						self.les_halles_full_storey = Some(storey);
@@ -1027,6 +1057,7 @@ fn fit_les_halles_floor_plan(
 	extent: Vec3,
 	seed: i32,
 	ceiling: bool,
+	openings: &[PreviewOpening],
 ) -> Result<LesHallesFloorPlan, richmond_buildings::FitError> {
 	let bounds = les_halles_confines_bounds(extent);
 	let empty = Confines::from_bounds(bounds);
@@ -1035,9 +1066,13 @@ fn fit_les_halles_floor_plan(
 		..NoiseParams::default()
 	};
 	let params = LesHallesParameterized::sample(&empty, noise)?;
-	// Demo: request all placement slots so shafts remain visible in the playground.
-	let openings = LesHallesFloorPlan::shaft_requests_for_all_slots(&params, &empty);
-	let confines = Confines::new(bounds, 0.0, openings);
+	let inbound = if openings.is_empty() {
+		// Demo default: request all placement slots so shafts remain visible.
+		LesHallesFloorPlan::shaft_requests_for_all_slots(&params, &empty)
+	} else {
+		openings_from_preview(openings)
+	};
+	let confines = Confines::new(bounds, 0.0, inbound);
 	let ceiling = if ceiling {
 		RectRingFloorSlab::Solid
 	} else {
@@ -2152,16 +2187,23 @@ pub fn connecting_hall_demo_endpoints() -> (MappedOpening, MappedOpening) {
 /// Wireframe plan AABBs (+ mapped contact quads) for `--opening` previews.
 ///
 /// Color key:
-/// - cyan / amber: authored plan [`Aabb3d`] voids
+/// - cyan / amber: authored plan [`Aabb3d`] voids (accepted)
+/// - red: authored voids the model intentionally dropped
 /// - lime: mapped outward opening quads (what connectors consume)
 /// - orange arrows: mapped XZ orientation
-pub fn draw_opening_plan_gizmos(mut gizmos: Gizmos, config: Res<PreviewConfig>) {
+/// - magenta: Les Halles fitted shaft volumes after inbound mapping
+pub fn draw_opening_plan_gizmos(
+	mut gizmos: Gizmos,
+	config: Res<PreviewConfig>,
+	cache: Res<CachedPreview>,
+) {
 	let tf = config.transform;
 	let map = |p: Vec3| tf.transform_point(p);
 	let cyan = Color::srgb(0.25, 0.95, 1.0);
 	let amber = Color::srgb(1.0, 0.75, 0.2);
 	let lime = Color::srgb(0.35, 0.95, 0.35);
 	let orange = Color::srgb(1.0, 0.55, 0.15);
+	let magenta = Color::srgb(0.95, 0.25, 0.85);
 
 	match &config.subject {
 		PreviewSubject::ArcFloor {
@@ -2458,7 +2500,49 @@ pub fn draw_opening_plan_gizmos(mut gizmos: Gizmos, config: Res<PreviewConfig>) 
 			});
 			draw_mapped_opening_overlays(&mut gizmos, map, openings, &shell, lime, orange);
 		}
+		PreviewSubject::LesHallesFloorPlan { openings, .. }
+		| PreviewSubject::LesHallesFullStorey { openings, .. } => {
+			let plan = cache.les_halles_floor_plan.as_ref().or_else(|| {
+				cache
+					.les_halles_full_storey
+					.as_ref()
+					.map(|s| &s.floor_plan)
+			});
+			let red = Color::srgb(0.95, 0.2, 0.2);
+			for (i, opening) in openings.iter().enumerate() {
+				let accepted = plan
+					.map(|p| les_halles_opening_accepted(p, opening))
+					.unwrap_or(false);
+				let color = if !accepted {
+					red
+				} else if i % 2 == 0 {
+					cyan
+				} else {
+					amber
+				};
+				gizmos.aabb_3d(opening.bounds(), tf, color);
+			}
+			if let Some(plan) = plan {
+				for (i, shaft) in plan.shaft_bounds.iter().enumerate() {
+					let color = if i % 2 == 0 {
+						magenta
+					} else {
+						Color::srgb(0.75, 0.35, 1.0)
+					};
+					gizmos.aabb_3d(*shaft, tf, color);
+				}
+			}
+		}
 		_ => {}
+	}
+}
+
+/// Whether an inbound Les Halles opening survived mapping onto the floor plan.
+fn les_halles_opening_accepted(plan: &LesHallesFloorPlan, opening: &PreviewOpening) -> bool {
+	let id = OpeningId::new(opening.id.clone());
+	match opening.label {
+		OpeningLabel::Shaft => plan.shaft_inbound.iter().any(|ids| ids.contains(&id)),
+		_ => plan.gallery.mapped_opening(&id).is_some(),
 	}
 }
 
