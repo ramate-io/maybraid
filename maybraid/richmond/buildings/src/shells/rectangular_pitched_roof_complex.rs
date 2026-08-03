@@ -358,8 +358,8 @@ fn resolve(params: &RectangularPitchedRoofComplexParams) -> (Vec<PitchedRoof>, V
 	for vol in &mut volumes {
 		vol.apply_end_caps(params.end_cap);
 	}
-	// Hip insets pull the cap ridge off the massing face — walk the lower run
-	// ridge to that apex so it meets the hip (eaves stay on the end wall).
+	// Hip: meet the lower run ridge on the hip centerline edge (not under the
+	// higher ridge tip). Eaves stay on the end wall.
 	finish_coaxial_ridge_meets(
 		&mut volumes,
 		&junctions.coaxial,

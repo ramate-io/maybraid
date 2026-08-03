@@ -289,7 +289,8 @@ fn truncate_long_z(
 	}
 }
 
-/// After end-caps: walk the run ridge to the cap's hip apex. Eaves stay on the
+/// After end-caps: meet the run ridge on the cap hip's centerline edge
+/// (apex → end-wall drop), not under the higher ridge tip. Eaves stay on the
 /// end-wall plane. Gable keeps the ridge at that wall (barge is cap-only).
 pub(super) fn finish_coaxial_ridge_meets(
 	volumes: &mut [VolumeCandidate],
@@ -303,30 +304,54 @@ pub(super) fn finish_coaxial_ridge_meets(
 	for meet in meets {
 		// Run max butts cap min (end 0); run min butts cap max (end 1).
 		let cap_end = 1 - meet.run_end;
-		let target = volumes[meet.vol_cap].ridge.end(cap_end);
-		let run = &mut volumes[meet.vol_run];
-		let mut r = run.ridge.end(meet.run_end);
-		match meet.long_axis {
-			LongAxis::X => r.x = target.x,
-			LongAxis::Z => r.z = target.z,
+		let run_y = volumes[meet.vol_run].ridge.a.y;
+		let apex = volumes[meet.vol_cap].ridge.end(cap_end);
+		let Some(meet_pt) =
+			hip_centerline_meet(&volumes[meet.vol_cap], cap_end, meet.long_axis, run_y)
+		else {
+			continue;
+		};
+		{
+			let run = &mut volumes[meet.vol_run];
+			let mut r = run.ridge.end(meet.run_end);
+			match meet.long_axis {
+				LongAxis::X => r.x = meet_pt.x,
+				LongAxis::Z => r.z = meet_pt.z,
+			}
+			run.ridge.set_end(meet.run_end, r);
 		}
-		run.ridge.set_end(meet.run_end, r);
 
 		for v in valleys.iter_mut() {
 			if v.vol_a == meet.vol_run && v.vol_b == meet.vol_cap {
-				match meet.long_axis {
-					LongAxis::X => {
-						v.eave_point.x = target.x;
-						v.ridge_point.x = target.x;
-					}
-					LongAxis::Z => {
-						v.eave_point.z = target.z;
-						v.ridge_point.z = target.z;
-					}
-				}
+				// Gizmo along the hip edge: run meet → cap apex.
+				v.eave_point = meet_pt;
+				v.ridge_point = apex;
 			}
 		}
 	}
+}
+
+/// Intersection of the run ridge height with the hip edge from ridge apex down
+/// to the end-wall point under the ridge (shared base of the two end hips).
+fn hip_centerline_meet(
+	cap: &VolumeCandidate,
+	cap_end: usize,
+	long_axis: LongAxis,
+	run_ridge_y: f32,
+) -> Option<Vec3> {
+	let apex = cap.ridge.end(cap_end);
+	let eave_end = cap.eave[0].end(cap_end);
+	// Same construction as pitched-roof `hip_drop`: end-wall point under the ridge.
+	let drop = match long_axis {
+		LongAxis::X => Vec3::new(eave_end.x, eave_end.y, apex.z),
+		LongAxis::Z => Vec3::new(apex.x, eave_end.y, eave_end.z),
+	};
+	let dy = drop.y - apex.y;
+	if dy.abs() < EPS {
+		return None;
+	}
+	let t = ((run_ridge_y - apex.y) / dy).clamp(0.0, 1.0);
+	Some(apex.lerp(drop, t))
 }
 
 /// Strip the run's long end to the cap's end-wall (massing) plane; leave cap eaves alone.
