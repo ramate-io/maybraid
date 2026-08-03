@@ -1,6 +1,9 @@
 use bevy_math::bounding::Aabb3d;
 use bevy_math::Vec3;
 
+use crate::openings::{MapsOpenings, OpeningId, OpeningLabel};
+use crate::ClippedStripPiece;
+
 use super::geometry::{LongAxis, VolumeCandidate};
 use super::topology::resolve_junctions;
 use super::{EndCap, Overhang, RectangularPitchedRoofComplexParams, RidgeJunction};
@@ -293,6 +296,24 @@ fn full_cross_decomposes_before_junctions() {
 	let junctions = resolve_junctions(&mut vols);
 	assert_eq!(junctions.perp.len(), 4);
 	assert!(junctions.perp.iter().all(|c| c.end_a.is_some() && c.end_b.is_some()));
+}
+
+#[test]
+fn pitch_opening_assigns_to_nearest_roof_and_clips() {
+	let complex = RectangularPitchedRoofComplexParams::l_shape()
+		.with_pitch_opening(0, 0, 0.55, 0.45, 1.4, 1.0, "sky", OpeningLabel::Aperture)
+		.build();
+	assert!(complex.mapped_opening(&OpeningId::new("sky")).is_some());
+	assert_eq!(complex.openings().len(), 1);
+	let clipped = complex
+		.roofs()
+		.iter()
+		.any(|r| {
+			r.pitches()
+				.iter()
+				.any(|p| matches!(p.pieces()[0], ClippedStripPiece::Clipped(_)))
+		});
+	assert!(clipped, "expected a clipped pitch on the nearest roof");
 }
 
 #[test]

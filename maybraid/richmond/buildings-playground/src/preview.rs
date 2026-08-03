@@ -147,6 +147,8 @@ pub enum PreviewSubject {
 		gable_ridge: f32,
 		gable_eave: f32,
 		run_up: f32,
+		/// Demo aperture on roof 0 / half 0 after geometry solve.
+		skylight: bool,
 	},
 	Rectangle {
 		origin: Vec3,
@@ -413,9 +415,10 @@ impl PreviewConfig {
 				overhang_ratio,
 				end_cap_gable,
 				run_up,
+				skylight,
 				..
 			} => format!(
-				"preview: rectangular-pitched-roof-complex (preset={preset} overhang={} end={} run_up={run_up:.2})",
+				"preview: rectangular-pitched-roof-complex (preset={preset} overhang={} end={} run_up={run_up:.2} skylight={skylight})",
 				overhang_ratio
 					.map(|r| format!("ratio={r:.2}"))
 					.unwrap_or_else(|| format!("fixed={overhang_fixed:.2}")),
@@ -1225,6 +1228,7 @@ pub fn present_preview_lod(
 			gable_ridge,
 			gable_eave,
 			run_up,
+			skylight,
 		} => {
 			let params = build_roof_complex_params(
 				preset,
@@ -1234,6 +1238,7 @@ pub fn present_preview_lod(
 				*gable_ridge,
 				*gable_eave,
 				*run_up,
+				*skylight,
 			);
 			let shell = RectangularPitchedRoofComplex::new(params);
 			spawn_preview(
@@ -1891,6 +1896,7 @@ pub fn draw_roof_complex_gizmos(mut gizmos: Gizmos, config: Res<PreviewConfig>) 
 		gable_ridge,
 		gable_eave,
 		run_up,
+		skylight,
 	} = &config.subject
 	else {
 		return;
@@ -1908,6 +1914,7 @@ pub fn draw_roof_complex_gizmos(mut gizmos: Gizmos, config: Res<PreviewConfig>) 
 		*gable_ridge,
 		*gable_eave,
 		*run_up,
+		*skylight,
 	);
 	for (i, vol) in params.volumes.iter().enumerate() {
 		let color = if i % 2 == 0 { cyan } else { Color::srgb(1.0, 0.75, 0.2) };

@@ -3,7 +3,7 @@
 use bevy::prelude::*;
 use clap::{Args, ValueEnum};
 use richmond_buildings::{
-	EndCap, Overhang, RectangularPitchedRoofComplexParams, RidgeJunction,
+	EndCap, OpeningLabel, Overhang, RectangularPitchedRoofComplexParams, RidgeJunction,
 };
 
 use super::ShowTransform;
@@ -68,6 +68,9 @@ pub struct RectangularPitchedRoofComplex {
 	/// Ridge-junction blend: `0` = lower ridge, `1` = higher (`RidgeJunction::RunUp`).
 	#[arg(long, default_value_t = 0.0)]
 	pub run_up: f32,
+	/// Place a demo skylight aperture on resolved roof 0 / half 0.
+	#[arg(long, default_value_t = false)]
+	pub skylight: bool,
 	#[command(flatten)]
 	pub transform: ShowTransform,
 }
@@ -102,6 +105,7 @@ impl RectangularPitchedRoofComplex {
 				gable_ridge: self.gable_ridge,
 				gable_eave: self.gable_eave,
 				run_up: self.run_up,
+				skylight: self.skylight,
 			},
 			self.transform.transform(),
 		)
@@ -116,6 +120,7 @@ pub fn build_params(
 	gable_ridge: f32,
 	gable_eave: f32,
 	run_up: f32,
+	skylight: bool,
 ) -> RectangularPitchedRoofComplexParams {
 	let mut params = match preset {
 		"single" => RectangularPitchedRoofComplexParams::single(10.0, 6.0, 2.5, 4.5),
@@ -147,5 +152,17 @@ pub fn build_params(
 		EndCap::Hip
 	};
 	params.ridge_junction = RidgeJunction::RunUp(run_up);
+	if skylight {
+		params = params.with_pitch_opening(
+			0,
+			0,
+			0.55,
+			0.45,
+			1.4,
+			1.0,
+			"skylight",
+			OpeningLabel::Aperture,
+		);
+	}
 	params
 }

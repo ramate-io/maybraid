@@ -7,6 +7,7 @@
 
 mod decompose;
 mod geometry;
+mod openings;
 mod topology;
 mod valleys;
 
@@ -20,11 +21,13 @@ use richmond_building_components::joints::JointNode;
 use richmond_building_components::panels::{PanelNode, PanelStyle};
 use richmond_building_components::{BuildingComponents, Layers};
 
+use crate::openings::{MappedOpenings, OpeningLabel, Openings};
 use crate::paneling::panel_complex::DEFAULT_PANEL_THICKNESS;
 use crate::shells::pitched_rectangular_roof::{PitchedRoof, PitchedRoofParams, RoofHalf};
 
 use decompose::decompose_volumes;
 use geometry::VolumeCandidate;
+use openings::apply_openings;
 use topology::resolve_junctions;
 pub use valleys::ValleySegment;
 use valleys::{apply_valleys, finish_coaxial_ridge_meets};
@@ -97,6 +100,8 @@ pub struct RectangularPitchedRoofComplexParams {
 	pub end_cap: EndCap,
 	/// Unequal-ridge meet policy at valleys.
 	pub ridge_junction: RidgeJunction,
+	/// World-space voids applied after geometry is solved (nearest roof wins).
+	pub openings: Openings,
 	pub style: PanelStyle,
 	pub joint_thickness: f32,
 }
@@ -114,6 +119,7 @@ impl RectangularPitchedRoofComplexParams {
 			overhang: Overhang::default(),
 			end_cap: EndCap::default(),
 			ridge_junction: RidgeJunction::default(),
+			openings: Openings::new(),
 			style: PanelStyle::ShepherdsThatch,
 			joint_thickness: DEFAULT_PANEL_THICKNESS,
 		}
@@ -288,6 +294,33 @@ impl RectangularPitchedRoofComplexParams {
 		self
 	}
 
+	pub fn openings(mut self, openings: Openings) -> Self {
+		self.openings = openings;
+		self
+	}
+
+	/// Solve geometry (ignoring current openings), author a pitch opening on a
+	/// resolved roof half, and attach it under `id`.
+	pub fn with_pitch_opening(
+		mut self,
+		roof: usize,
+		half: usize,
+		u: f32,
+		v: f32,
+		width: f32,
+		height: f32,
+		id: impl Into<crate::openings::OpeningId>,
+		label: OpeningLabel,
+	) -> Self {
+		let mut bare = self.clone();
+		bare.openings = Openings::new();
+		let geo = bare.build();
+		if let Some(opening) = geo.pitch_opening(roof, half, u, v, width, height, label) {
+			self.openings.insert(id, opening);
+		}
+		self
+	}
+
 	pub fn build(self) -> RectangularPitchedRoofComplex {
 		RectangularPitchedRoofComplex::new(self)
 	}
@@ -299,15 +332,20 @@ pub struct RectangularPitchedRoofComplex {
 	params: RectangularPitchedRoofComplexParams,
 	roofs: Vec<PitchedRoof>,
 	valleys: Vec<ValleySegment>,
+	/// Openings that survived nearest-roof assignment and face clipping.
+	openings: Openings,
+	mapped: MappedOpenings,
 }
 
 impl RectangularPitchedRoofComplex {
 	pub fn new(params: RectangularPitchedRoofComplexParams) -> Self {
-		let (roofs, valleys) = resolve(&params);
+		let (roofs, valleys, openings, mapped) = resolve(&params);
 		Self {
 			params,
 			roofs,
 			valleys,
+			openings,
+			mapped,
 		}
 	}
 
@@ -342,9 +380,21 @@ impl BuildingComponents for RectangularPitchedRoofComplex {
 	}
 }
 
-fn resolve(params: &RectangularPitchedRoofComplexParams) -> (Vec<PitchedRoof>, Vec<ValleySegment>) {
+fn resolve(
+	params: &RectangularPitchedRoofComplexParams,
+) -> (
+	Vec<PitchedRoof>,
+	Vec<ValleySegment>,
+	Openings,
+	MappedOpenings,
+) {
 	if params.volumes.is_empty() {
-		return (Vec::new(), Vec::new());
+		return (
+			Vec::new(),
+			Vec::new(),
+			Openings::new(),
+			MappedOpenings::new(),
+		);
 	}
 
 	let mut volumes: Vec<VolumeCandidate> = decompose_volumes(&params.volumes)
@@ -367,12 +417,13 @@ fn resolve(params: &RectangularPitchedRoofComplexParams) -> (Vec<PitchedRoof>, V
 		&mut valleys,
 	);
 
-	let roofs = volumes
+	let roofs: Vec<PitchedRoof> = volumes
 		.iter()
 		.map(|vol| emit_roof(vol, params))
 		.collect();
+	let (roofs, openings, mapped) = apply_openings(roofs, &params.openings);
 
-	(roofs, valleys)
+	(roofs, valleys, openings, mapped)
 }
 
 fn emit_roof(vol: &VolumeCandidate, params: &RectangularPitchedRoofComplexParams) -> PitchedRoof {
