@@ -224,6 +224,31 @@ impl RectangularPitchedRoofComplexParams {
 		])
 	}
 
+	/// Courtyard ring with per-side ridge / eave heights (RunUp matters at corners).
+	pub fn ring_stepped() -> Self {
+		Self::new(vec![
+			// North — tall ridge
+			Aabb3d::from_min_max(Vec3::new(-8.0, 2.5, 4.0), Vec3::new(8.0, 5.2, 8.0)),
+			// South — low
+			Aabb3d::from_min_max(Vec3::new(-8.0, 2.0, -8.0), Vec3::new(8.0, 3.8, -4.0)),
+			// West — mid, raised plate
+			Aabb3d::from_min_max(Vec3::new(-8.0, 2.8, -8.0), Vec3::new(-4.0, 4.6, 8.0)),
+			// East — high plate + ridge
+			Aabb3d::from_min_max(Vec3::new(4.0, 3.0, -8.0), Vec3::new(8.0, 5.5, 8.0)),
+		])
+	}
+
+	/// Ring with a long southern leg (P footprint).
+	pub fn p_shape() -> Self {
+		Self::new(vec![
+			Aabb3d::from_min_max(Vec3::new(-8.0, 2.5, 4.0), Vec3::new(8.0, 4.5, 8.0)),
+			// South extends past the east wall → the P's stem.
+			Aabb3d::from_min_max(Vec3::new(-8.0, 2.5, -8.0), Vec3::new(14.0, 4.5, -4.0)),
+			Aabb3d::from_min_max(Vec3::new(-8.0, 2.5, -8.0), Vec3::new(-4.0, 4.5, 8.0)),
+			Aabb3d::from_min_max(Vec3::new(4.0, 2.5, -8.0), Vec3::new(8.0, 4.5, 8.0)),
+		])
+	}
+
 	/// Two parallel long-X pitches on the same midline: different ridge heights
 	/// and eave spans. Same-axis pairs are ignored by topology (no valley).
 	pub fn coaxial_parallel() -> Self {

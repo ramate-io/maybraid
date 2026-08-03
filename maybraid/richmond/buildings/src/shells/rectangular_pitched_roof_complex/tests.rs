@@ -224,6 +224,14 @@ fn demo_presets_valley_expectations() {
 		ring.valleys().len()
 	);
 
+	let ring_stepped = RectangularPitchedRoofComplexParams::ring_stepped().build();
+	assert_eq!(ring_stepped.roofs().len(), 4);
+	assert!(ring_stepped.valleys().len() >= 4);
+
+	let p = RectangularPitchedRoofComplexParams::p_shape().build();
+	assert_eq!(p.roofs().len(), 4);
+	assert!(p.valleys().len() >= 4);
+
 	let coaxial = RectangularPitchedRoofComplexParams::coaxial_parallel().build();
 	assert_eq!(coaxial.roofs().len(), 2);
 	assert!(

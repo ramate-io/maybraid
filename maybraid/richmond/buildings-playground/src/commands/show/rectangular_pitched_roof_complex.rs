@@ -29,6 +29,10 @@ pub enum RoofComplexPreset {
 	Mixed,
 	/// Closed rectangular courtyard ring.
 	Ring,
+	/// Courtyard ring with per-side ridge / eave heights.
+	RingStepped,
+	/// Ring with a long southern leg (P footprint).
+	PShape,
 	/// Parallel same-midline pitches (different height / eave span).
 	CoaxialParallel,
 	/// Full + cross — no L/T corners under current topology.
@@ -81,6 +85,8 @@ impl RectangularPitchedRoofComplex {
 			RoofComplexPreset::Disjoint => "disjoint",
 			RoofComplexPreset::Mixed => "mixed",
 			RoofComplexPreset::Ring => "ring",
+			RoofComplexPreset::RingStepped => "ring-stepped",
+			RoofComplexPreset::PShape => "p-shape",
 			RoofComplexPreset::CoaxialParallel => "coaxial-parallel",
 			RoofComplexPreset::PathologicalCross => "pathological-cross",
 		};
@@ -121,6 +127,8 @@ pub fn build_params(
 		"disjoint" => RectangularPitchedRoofComplexParams::disjoint(),
 		"mixed" => RectangularPitchedRoofComplexParams::mixed(),
 		"ring" => RectangularPitchedRoofComplexParams::ring(),
+		"ring-stepped" => RectangularPitchedRoofComplexParams::ring_stepped(),
+		"p-shape" => RectangularPitchedRoofComplexParams::p_shape(),
 		"coaxial-parallel" => RectangularPitchedRoofComplexParams::coaxial_parallel(),
 		"pathological-cross" => RectangularPitchedRoofComplexParams::pathological_cross(),
 		_ => RectangularPitchedRoofComplexParams::l_shape(),
