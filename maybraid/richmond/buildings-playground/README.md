@@ -87,6 +87,9 @@ In-game: press `/` for the command console (same clap commands as argv).
 - `show arc-tower [--radius R] [--floor-count N] [--storey-height H] [--floor-hole M] [--no-base-floor] [--no-ceiling]` — stacked circular `ArcTower` shell (explicit cardinal openings; no noise)
 - `show connecting-shells` — demo joining `ArcTower` to `Trazaloid` via `ConnectingHall`
 - `show trazaloid […] [--floor] [--no-ceiling] [--floor-hole M] [--ceiling-hole M] [--door-thickness M] [--face-post-count N]` — two-band trapezoidal-pyramid shell; floor/ceiling optional with centered square holes
+- `show rect-floor [--footprint-x X] [--footprint-z Z] [--storey-height H] [--floor] [--ceiling] [--door-south]… [--opening SPEC]…` — orthonormal rectangular storey; openings fit authored AABBs (`side=south` or full min:max); gizmos show plan voids + mapped quads
+- `show rounded-rect-floor […] [--corner-radius R] [--corner-segments N] [--door-south]… [--opening SPEC]…` — rounded-rect storey (straight rectangle kits + ruled corners)
+- `show i-floor […] [--plan-l|--stem-only] [--no-top-left]… [--door-south]… [--opening SPEC]…` — I/T/U/L/Z storey from central bar + flanges; `side=` picks nearest outer edge
 - `show rectangle [--preset floor|wall|ceiling] [--origin X,Y,Z] [--edge X,Y,Z] [--height H] [--thickness T] [--roll R]` — oriented `richmond_buildings::Rectangle` (lowest-edge vector + height + roll; `0` roll ⇒ top toward `+Y`)
 - `show clipped-rectangle [--origin|--edge X,Y,Z] [--height H] [--thickness T] [--roll R] [--left|--right|--bottom|--top M]` — oriented rectangle with inset framed by rectangle kits
 - `show clipped-rectangular-strip [--inset M] [--min-dihedral R] [--no-joint]` — node-chain oriented rectangle strip; middle bay inset frame; crease joints on bay folds

@@ -32,6 +32,9 @@ pub mod clipped_ruled_strip;
 pub mod clipped_tessellated_triangle;
 pub mod connecting_hall;
 pub mod fitted_rectangle;
+pub mod i_floor;
+pub mod rect_floor;
+pub mod rounded_rect_floor;
 pub mod tessellated_triangle;
 pub mod tessellated_triangle_3d;
 pub mod transform;
@@ -84,6 +87,12 @@ pub enum Show {
 	Trazaloid(trazaloid::Trazaloid),
 	/// Two-half pitched roof (default: rectangular hip over shepherd's thatch).
 	PitchedRectangularRoof(pitched_rectangular_roof::PitchedRectangularRoof),
+	/// Orthonormal rectangular storey shell with optional `--opening` / `--door-*`.
+	RectFloor(rect_floor::RectFloor),
+	/// Rounded-rectangle storey shell (straight rectangle kits + ruled corners).
+	RoundedRectFloor(rounded_rect_floor::RoundedRectFloor),
+	/// I / T / U / L / Z storey shell from central bar + flanges.
+	IFloor(i_floor::IFloorCmd),
 	/// Single oriented [`richmond_buildings::Rectangle`] kit (floor / wall / ceiling presets).
 	Rectangle(rectangle::Rectangle),
 	/// Oriented rectangle kit with an inset framed by rectangle kits.
@@ -144,6 +153,9 @@ impl Show {
 			Self::ConnectingShells(cmd) => Ok(cmd.into_preview()),
 			Self::Trazaloid(cmd) => cmd.into_preview(),
 			Self::PitchedRectangularRoof(cmd) => cmd.into_preview(),
+			Self::RectFloor(cmd) => cmd.into_preview(),
+			Self::RoundedRectFloor(cmd) => cmd.into_preview(),
+			Self::IFloor(cmd) => cmd.into_preview(),
 			Self::Rectangle(cmd) => Ok(cmd.into_preview()),
 			Self::ClippedRectangle(cmd) => Ok(cmd.into_preview()),
 			Self::ClippedRectangularStrip(cmd) => Ok(cmd.into_preview()),
