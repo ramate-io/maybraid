@@ -95,7 +95,7 @@ pub enum Show {
 	RoundedRectFloor(rounded_rect_floor::RoundedRectFloor),
 	/// I / T / U / L / Z storey shell from central bar + flanges.
 	IFloor(i_floor::IFloorCmd),
-	/// Omitted rectangular ring storey (outer + inner walls, frame floor).
+	/// Rectangular ring storey (outer + inner walls, frame floor; openings for broad gaps).
 	RectRingFloor(rect_ring_floor::RectRingFloor),
 	/// Circular ring storey (outer + inner arcs, annulus floor).
 	CircRingFloor(circ_ring_floor::CircRingFloor),

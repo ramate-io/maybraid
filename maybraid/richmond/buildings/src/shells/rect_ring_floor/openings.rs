@@ -1,4 +1,7 @@
-//! Per-run wall openings for [`RectRingFloor`].
+//! Per-side wall openings for [`RectRingFloor`].
+//!
+//! Wide connectable openings are the way to author broad omissions along a ring
+//! side (there is no separate omit-interval API).
 
 use bevy_math::{Vec2, Vec3};
 
@@ -13,7 +16,10 @@ use super::{RectRingFloor, RectRingFloorParams};
 pub type RectRingFloorSide = OrthoSide;
 
 impl RectRingFloor {
-	/// Thin passage AABB centered on an outer cardinal side.
+	/// Passage AABB centered on an outer cardinal side.
+	///
+	/// Pass a large `width` (near the side length) to author a broad omission
+	/// along that ring side — preferred over a dedicated omit-interval API.
 	pub fn side_passage_opening(
 		side: RectRingFloorSide,
 		center_xz: Vec3,
@@ -26,7 +32,7 @@ impl RectRingFloor {
 		)
 	}
 
-	/// Thin aperture AABB on an outer cardinal side with sill height.
+	/// Aperture AABB on an outer cardinal side with sill height.
 	pub fn side_aperture_opening(
 		side: RectRingFloorSide,
 		center_xz: Vec3,

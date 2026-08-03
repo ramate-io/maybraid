@@ -176,7 +176,6 @@ pub enum PreviewSubject {
 		inner_x: f32,
 		inner_z: f32,
 		storey_height: f32,
-		outer_omits: [Vec<(f32, f32)>; 4],
 		openings: Vec<PreviewOpening>,
 		floor: bool,
 		ceiling: bool,
@@ -1471,7 +1470,6 @@ pub fn present_preview_lod(
 			inner_x,
 			inner_z,
 			storey_height,
-			outer_omits,
 			openings,
 			floor,
 			ceiling,
@@ -1481,7 +1479,6 @@ pub fn present_preview_lod(
 				outer: Vec2::new(*outer_x, *outer_z),
 				inner: Vec2::new(*inner_x, *inner_z),
 				storey_height: *storey_height,
-				outer_omits: outer_omits.clone(),
 				openings: openings_from_preview(openings),
 				floor: if *floor {
 					RectRingFloorSlab::Solid
@@ -2236,7 +2233,6 @@ pub fn draw_opening_plan_gizmos(mut gizmos: Gizmos, config: Res<PreviewConfig>) 
 			inner_x,
 			inner_z,
 			storey_height,
-			outer_omits,
 			openings,
 			floor,
 			ceiling,
@@ -2253,7 +2249,6 @@ pub fn draw_opening_plan_gizmos(mut gizmos: Gizmos, config: Res<PreviewConfig>) 
 				outer: Vec2::new(*outer_x, *outer_z),
 				inner: Vec2::new(*inner_x, *inner_z),
 				storey_height: *storey_height,
-				outer_omits: outer_omits.clone(),
 				openings: openings_from_preview(openings),
 				floor: if *floor {
 					RectRingFloorSlab::Solid

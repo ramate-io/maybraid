@@ -1,12 +1,14 @@
-//! Omitted rectangular ring storey shell: outer + inner wall loops + frame slabs.
+//! Rectangular ring storey shell: outer + inner wall loops + frame slabs.
 //!
 //! Outer walls walk CCW and inner walls walk CW so both face the gallery between
-//! them. Per-side omit intervals remove wall runs (courtyard breaks). Openings
-//! fit to authored AABB positions on the hit solid run / frame band — not
-//! centered approximations.
+//! them. There is no separate omit-interval API — author courtyard breaks and
+//! broad wall omissions with [`Openings`] (wide `Passage` / `Aperture` AABBs on
+//! the hit outer or inner side). Openings fit to authored AABB positions on the
+//! hit side / frame band — not centered approximations.
 //!
 //! **Walls:** `Passage` / `Aperture` map to a positioned [`RectInset`] on the
-//! nearest solid outer/inner run; largest face-aligned extent wins per run.
+//! nearest outer/inner side; largest face-aligned extent wins per side. A wide
+//! passage spanning most of a side is the intended way to open a gallery run.
 //! **Slabs:** only [`OpeningLabel::cuts_slab`] labels cut Solid floor / ceiling.
 
 mod geometry;
@@ -27,7 +29,7 @@ use crate::paneling::clipped_rectangular_strip::ClippedRectangularStrip;
 use crate::paneling::fitted_rectangle::{ClippedFittedRectangle, FittedRectangle};
 use crate::paneling::panel_complex::DEFAULT_PANEL_THICKNESS;
 
-use crate::shells::ortho::{OrthoSide, WallEdge};
+use crate::shells::ortho::WallEdge;
 
 pub use openings::RectRingFloorSide;
 
@@ -55,11 +57,8 @@ pub struct RectRingFloorParams {
 	/// [`Self::outer`] on both axes.
 	pub inner: Vec2,
 	pub storey_height: f32,
-	/// Per cardinal side (S→E→N→W): omit intervals along that side in meters
-	/// from the side’s CCW start, applied to the outer loop.
-	pub outer_omits: [Vec<(f32, f32)>; 4],
-	/// Same indexing for the inner courtyard loop.
-	pub inner_omits: [Vec<(f32, f32)>; 4],
+	/// Wall / slab voids. Prefer wide connectable openings to author broad
+	/// omissions along outer or inner sides of the ring.
 	pub openings: Openings,
 	pub floor: RectRingFloorSlab,
 	pub ceiling: RectRingFloorSlab,
@@ -74,8 +73,6 @@ impl Default for RectRingFloorParams {
 			outer: Vec2::new(8.0, 6.0),
 			inner: Vec2::new(4.0, 3.0),
 			storey_height: 3.0,
-			outer_omits: [Vec::new(), Vec::new(), Vec::new(), Vec::new()],
-			inner_omits: [Vec::new(), Vec::new(), Vec::new(), Vec::new()],
 			openings: Openings::new(),
 			floor: RectRingFloorSlab::None,
 			ceiling: RectRingFloorSlab::None,
@@ -118,36 +115,6 @@ impl RectRingFloorParams {
 
 	pub fn joint_thickness(mut self, thickness: f32) -> Self {
 		self.joint_thickness = thickness;
-		self
-	}
-
-	pub fn outer_omits(mut self, omits: [Vec<(f32, f32)>; 4]) -> Self {
-		self.outer_omits = omits;
-		self
-	}
-
-	pub fn inner_omits(mut self, omits: [Vec<(f32, f32)>; 4]) -> Self {
-		self.inner_omits = omits;
-		self
-	}
-
-	/// Omit a centered run of `width` meters on an outer cardinal side.
-	pub fn omit_outer_mid(mut self, side: OrthoSide, width: f32) -> Self {
-		let outer = sanitize_pair(self.outer, self.inner).0;
-		let len = side_length(side, outer);
-		let width = width.max(0.0).min(len);
-		let start = ((len - width) * 0.5).max(0.0);
-		self.outer_omits[side.face_index()].push((start, start + width));
-		self
-	}
-
-	/// Omit a centered run of `width` meters on an inner cardinal side.
-	pub fn omit_inner_mid(mut self, side: OrthoSide, width: f32) -> Self {
-		let inner = sanitize_pair(self.outer, self.inner).1;
-		let len = side_length(side, inner);
-		let width = width.max(0.0).min(len);
-		let start = ((len - width) * 0.5).max(0.0);
-		self.inner_omits[side.face_index()].push((start, start + width));
 		self
 	}
 
@@ -278,11 +245,4 @@ fn sanitize_pair(outer: Vec2, inner: Vec2) -> (Vec2, Vec2) {
 		inner.y = (outer.y - MIN_BAND).max(1e-3);
 	}
 	(outer, inner)
-}
-
-fn side_length(side: OrthoSide, footprint: Vec2) -> f32 {
-	match side {
-		OrthoSide::South | OrthoSide::North => footprint.x.max(1e-4),
-		OrthoSide::East | OrthoSide::West => footprint.y.max(1e-4),
-	}
 }

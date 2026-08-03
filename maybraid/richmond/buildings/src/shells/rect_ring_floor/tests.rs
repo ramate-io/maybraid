@@ -7,13 +7,12 @@ use crate::openings::{MapsOpenings, Opening, OpeningId, OpeningLabel, Openings};
 use crate::paneling::ClippedRectangularStripPiece;
 use crate::shells::ortho::OrthoSide;
 
-use super::geometry::solid_runs;
 use super::{RectRingFloor, RectRingFloorParams, RectRingFloorSlab};
 
 #[test]
 fn default_constructs_outer_and_inner_walls() {
 	let r = RectRingFloorParams::default().build();
-	// 4 outer + 4 inner sides, no omits ⇒ 8 wall runs.
+	// 4 outer + 4 inner sides.
 	assert_eq!(r.wall_count(), 8);
 	assert!(!r.has_floor());
 }
@@ -23,23 +22,6 @@ fn inner_courtyard_smaller_than_outer() {
 	let r = RectRingFloorParams::default().build();
 	assert!(r.params().inner.x < r.params().outer.x);
 	assert!(r.params().inner.y < r.params().outer.y);
-}
-
-#[test]
-fn omit_mid_south_removes_outer_run() {
-	let full = RectRingFloorParams::default().build();
-	let omitted = RectRingFloorParams::default()
-		.omit_outer_mid(OrthoSide::South, 8.0)
-		.build();
-	assert!(omitted.wall_count() < full.wall_count());
-	// Full south omit on outer: remaining outer sides (3) + inner (4) = 7.
-	assert_eq!(omitted.wall_count(), 7);
-}
-
-#[test]
-fn solid_runs_merge_and_split() {
-	let runs = solid_runs(10.0, &[(2.0, 4.0), (3.5, 5.0), (8.0, 9.0)]);
-	assert_eq!(runs, vec![(0.0, 2.0), (5.0, 8.0), (9.0, 10.0)]);
 }
 
 #[test]
@@ -74,6 +56,25 @@ fn passage_on_outer_south_maps() {
 		w.pieces()[0],
 		ClippedRectangularStripPiece::Clipped(_)
 	)));
+}
+
+#[test]
+fn wide_passage_authors_broad_side_omission() {
+	// Nearly full-width south passage is the supported way to open a gallery run.
+	let r = RectRingFloorParams::default()
+		.openings(Openings::new().with(
+			"gap",
+			RectRingFloor::side_passage_opening(
+				OrthoSide::South,
+				Vec3::ZERO,
+				Vec2::new(8.0, 6.0),
+				7.5,
+				2.8,
+			),
+		))
+		.build();
+	assert!(r.mapped_opening(&OpeningId::new("gap")).is_some());
+	assert_eq!(r.wall_count(), 8);
 }
 
 #[test]

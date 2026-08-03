@@ -1,4 +1,4 @@
-//! Outer / inner wall runs and frame slab bands for [`RectRingFloor`].
+//! Outer / inner wall sides and frame slab bands for [`RectRingFloor`].
 
 use bevy_math::{Vec2, Vec3};
 
@@ -64,9 +64,8 @@ impl RectRingFloorParams {
 
 		let mut edges = Vec::new();
 		// Outer loop: CCW S→E→N→W. Gallery-facing normals point into the ring.
-		push_cardinal_runs(
+		push_cardinal_sides(
 			&mut edges,
-			y0,
 			height,
 			[
 				// South: SW→SE, gallery +Z
@@ -78,15 +77,10 @@ impl RectRingFloorParams {
 				// West: NW→SW, gallery +X
 				(Vec3::new(ox0, y0, oz1), Vec3::new(ox0, y0, oz0), Vec2::new(1.0, 0.0)),
 			],
-			&self.outer_omits,
 		);
-		// Inner loop: same CCW side starts for omit measurement; gallery normals
-		// face out of the courtyard (into the ring corridor). Walk each side
-		// opposite the outer so the strip faces the gallery (CW relative to the
-		// courtyard polygon).
-		push_cardinal_runs(
+		// Inner loop: CW so gallery-facing normals point into the ring corridor.
+		push_cardinal_sides(
 			&mut edges,
-			y0,
 			height,
 			[
 				// South: SE→SW (CW), gallery −Z
@@ -98,7 +92,6 @@ impl RectRingFloorParams {
 				// West: SW→NW (CW), gallery −X
 				(Vec3::new(ix0, y0, iz0), Vec3::new(ix0, y0, iz1), Vec2::new(-1.0, 0.0)),
 			],
-			&map_omits_for_cw_sides(&self.inner_omits, [self.inner.x, self.inner.y, self.inner.x, self.inner.y]),
 		);
 
 		// Frame bands: N/S take full outer width; E/W take the inner depth only.
@@ -125,86 +118,11 @@ impl RectRingFloorParams {
 	}
 }
 
-/// Remap CCW-authored omit intervals onto CW side walks (same S/E/N/W indexing).
-fn map_omits_for_cw_sides(
-	omits: &[Vec<(f32, f32)>; 4],
-	lengths: [f32; 4],
-) -> [Vec<(f32, f32)>; 4] {
-	std::array::from_fn(|i| reverse_omits(lengths[i], &omits[i]))
-}
-
-fn reverse_omits(side_len: f32, omits: &[(f32, f32)]) -> Vec<(f32, f32)> {
-	let len = side_len.max(EPS);
-	omits
-		.iter()
-		.map(|&(a, b)| {
-			let lo = a.min(b).clamp(0.0, len);
-			let hi = a.max(b).clamp(0.0, len);
-			(len - hi, len - lo)
-		})
-		.collect()
-}
-
-fn push_cardinal_runs(
-	edges: &mut Vec<WallEdge>,
-	_y0: f32,
-	height: f32,
-	sides: [(Vec3, Vec3, Vec2); 4],
-	omits: &[Vec<(f32, f32)>; 4],
-) {
-	for (i, (start, end, outward)) in sides.into_iter().enumerate() {
-		let len = start.distance(end);
-		if len < EPS {
+fn push_cardinal_sides(edges: &mut Vec<WallEdge>, height: f32, sides: [(Vec3, Vec3, Vec2); 4]) {
+	for (start, end, outward) in sides {
+		if start.distance(end) < EPS {
 			continue;
 		}
-		let dir = (end - start) / len;
-		for (a, b) in solid_runs(len, &omits[i]) {
-			let s = start + dir * a;
-			let e = start + dir * b;
-			if s.distance(e) < EPS {
-				continue;
-			}
-			edges.push(WallEdge::new(s, e, height, outward));
-		}
+		edges.push(WallEdge::new(start, end, height, outward));
 	}
-}
-
-/// Solid intervals along `[0, length]` after subtracting merged omit intervals.
-pub(super) fn solid_runs(length: f32, omits: &[(f32, f32)]) -> Vec<(f32, f32)> {
-	let length = length.max(0.0);
-	if length < EPS {
-		return Vec::new();
-	}
-	let mut intervals: Vec<(f32, f32)> = omits
-		.iter()
-		.filter_map(|&(a, b)| {
-			let lo = a.min(b).clamp(0.0, length);
-			let hi = a.max(b).clamp(0.0, length);
-			(hi - lo > EPS).then_some((lo, hi))
-		})
-		.collect();
-	intervals.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
-	let mut merged = Vec::<(f32, f32)>::new();
-	for (lo, hi) in intervals {
-		if let Some(last) = merged.last_mut() {
-			if lo <= last.1 + EPS {
-				last.1 = last.1.max(hi);
-				continue;
-			}
-		}
-		merged.push((lo, hi));
-	}
-
-	let mut solids = Vec::new();
-	let mut cursor = 0.0f32;
-	for (lo, hi) in merged {
-		if lo - cursor > EPS {
-			solids.push((cursor, lo));
-		}
-		cursor = cursor.max(hi);
-	}
-	if length - cursor > EPS {
-		solids.push((cursor, length));
-	}
-	solids
 }
