@@ -1,8 +1,13 @@
 //! Pitch-plane valleys and rail truncation at concave corners.
+//!
+//! Strip-back policy: only pull rails short when that volume has a junction
+//! end (`end: Some`) — i.e. a stem / L-arm whose join is covered by the other
+//! pitch. A T-bar (`end: None`) keeps its full rectangular eaves; uncovered
+//! extents must still be drawn.
 
 use bevy_math::Vec3;
 
-use super::geometry::{LongAxis, Plane, VolumeCandidate, EPS};
+use super::geometry::{LongAxis, Plane, VolumeCandidate};
 use super::topology::ConcaveCorner;
 use super::RidgeJunction;
 
@@ -10,7 +15,7 @@ use super::RidgeJunction;
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ValleySegment {
 	pub eave_point: Vec3,
-	/// Representative high point on the valley (lower ridge meet when heights differ).
+	/// Representative high point on the valley (RunUp-blended ridge meet).
 	pub ridge_point: Vec3,
 	pub vol_a: usize,
 	pub vol_b: usize,
@@ -122,7 +127,7 @@ fn truncate_for_valley(
 		ridge_join,
 	);
 
-	// Close the outside hip: meet outer eaves at the convex corner.
+	// Close the outside hip: meet outer eaves at the convex corner (L only).
 	if let Some(outer) = outside_eave_corner(volumes, corner) {
 		if let (Some(end_a), Some(end_b)) = (corner.end_a, corner.end_b) {
 			let outer_a = 1 - corner.side_a;
@@ -133,7 +138,6 @@ fn truncate_for_valley(
 			volumes[corner.vol_b].eave[outer_b].set_end(end_b, Vec3::new(outer.x, yb, outer.z));
 			let wa = volumes[corner.vol_a].wall[outer_a].end(end_a);
 			let wb = volumes[corner.vol_b].wall[outer_b].end(end_b);
-			// Walls stay on the massing corner (no side overhang).
 			let (cx, cz) = corner_massing_outside(volumes, corner);
 			volumes[corner.vol_a].wall[outer_a].set_end(end_a, Vec3::new(cx, wa.y, cz));
 			volumes[corner.vol_b].wall[outer_b].set_end(end_b, Vec3::new(cx, wb.y, cz));
@@ -148,7 +152,6 @@ fn corner_massing_outside(volumes: &[VolumeCandidate], corner: &ConcaveCorner) -
 	let (amax_x, _) = a.plan_max();
 	let (bmin_x, bmin_z) = b.plan_min();
 	let (_, bmax_z) = b.plan_max();
-	// Outside corner shares the non-facing extremes of each arm.
 	let x = if corner.side_b == 1 {
 		amin_x.min(bmin_x)
 	} else {
@@ -169,33 +172,21 @@ fn truncate_long_x(
 	valley: &ValleySegment,
 	ridge_end: Vec3,
 ) {
-	if let Some(end) = end {
-		// Junction ridge end (may bank down to the lower of the two ridges).
-		vol.ridge.set_end(end, ridge_end);
+	let Some(end) = end else {
+		// T-bar: keep full rectangular eaves / walls; only stems strip back.
+		return;
+	};
 
-		// Facing eave / wall land on the valley. Outer rails are handled separately
-		// so the convex corner can form a hip.
-		let ey = vol.eave[side].end(end).y;
-		vol.eave[side].set_end(
-			end,
-			Vec3::new(valley.eave_point.x, ey, valley.eave_point.z),
-		);
-		let wy = vol.wall[side].end(end).y;
-		let wz = vol.wall[side].end(end).z;
-		vol.wall[side].set_end(end, Vec3::new(ridge_end.x, wy, wz));
-	} else {
-		// T-bar: snap facing-eave endpoints near the stem onto the valley eave.
-		let tol = 0.75 * vol.short_span + vol.side_overhang + EPS;
-		for end_i in 0..2 {
-			let e = vol.eave[side].end(end_i);
-			if (e.x - valley.eave_point.x).abs() < tol {
-				vol.eave[side].set_end(
-					end_i,
-					Vec3::new(valley.eave_point.x, e.y, valley.eave_point.z),
-				);
-			}
-		}
-	}
+	vol.ridge.set_end(end, ridge_end);
+
+	let ey = vol.eave[side].end(end).y;
+	vol.eave[side].set_end(
+		end,
+		Vec3::new(valley.eave_point.x, ey, valley.eave_point.z),
+	);
+	let wy = vol.wall[side].end(end).y;
+	let wz = vol.wall[side].end(end).z;
+	vol.wall[side].set_end(end, Vec3::new(ridge_end.x, wy, wz));
 }
 
 fn truncate_long_z(
@@ -205,27 +196,18 @@ fn truncate_long_z(
 	valley: &ValleySegment,
 	ridge_end: Vec3,
 ) {
-	if let Some(end) = end {
-		vol.ridge.set_end(end, ridge_end);
+	let Some(end) = end else {
+		// T-bar: keep full rectangular eaves / walls.
+		return;
+	};
 
-		let eave_end = vol.eave[side].end(end);
-		vol.eave[side].set_end(
-			end,
-			Vec3::new(valley.eave_point.x, eave_end.y, valley.eave_point.z),
-		);
-		let wall_end = vol.wall[side].end(end);
-		vol.wall[side].set_end(end, Vec3::new(wall_end.x, wall_end.y, ridge_end.z));
-	} else {
-		for end_i in 0..2 {
-			let e = vol.eave[side].end(end_i);
-			if (e.z - valley.eave_point.z).abs()
-				< 0.75 * vol.short_span + vol.side_overhang + EPS
-			{
-				vol.eave[side].set_end(
-					end_i,
-					Vec3::new(valley.eave_point.x, e.y, valley.eave_point.z),
-				);
-			}
-		}
-	}
+	vol.ridge.set_end(end, ridge_end);
+
+	let eave_end = vol.eave[side].end(end);
+	vol.eave[side].set_end(
+		end,
+		Vec3::new(valley.eave_point.x, eave_end.y, valley.eave_point.z),
+	);
+	let wall_end = vol.wall[side].end(end);
+	vol.wall[side].set_end(end, Vec3::new(wall_end.x, wall_end.y, ridge_end.z));
 }

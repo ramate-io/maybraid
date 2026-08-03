@@ -121,6 +121,32 @@ fn hall_and_bays_has_three_t_junctions() {
 }
 
 #[test]
+fn t_bar_keeps_full_eaves_stems_strip_to_valley() {
+	let complex = RectangularPitchedRoofComplexParams::hall_and_bays().build();
+	// Hall (T-bar): full ~28m eave span — uncovered extents stay drawn.
+	let hall = &complex.roofs()[0];
+	for half in &hall.params().halves {
+		let span_x = (half.eave_line.1.x - half.eave_line.0.x).abs();
+		assert!(
+			span_x > 27.5,
+			"hall eave should stay full, got {span_x}"
+		);
+	}
+	// Bays (stems): facing eaves strip back toward the hall valley.
+	for bay in &complex.roofs()[1..] {
+		let mut min_span = f32::MAX;
+		for half in &bay.params().halves {
+			let span = (half.eave_line.1 - half.eave_line.0).length();
+			min_span = min_span.min(span);
+		}
+		assert!(
+			min_span < 9.0,
+			"bay facing eave should strip back under hall, min span {min_span}"
+		);
+	}
+}
+
+#[test]
 fn l_shape_marks_junction_and_builds_valley() {
 	let complex = RectangularPitchedRoofComplexParams::l_shape().build();
 	assert_eq!(complex.roofs().len(), 2);
