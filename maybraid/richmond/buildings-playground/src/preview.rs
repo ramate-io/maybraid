@@ -40,8 +40,8 @@ use richmond_buildings::portals::{MustAssignPortal, Portal};
 use richmond_buildings::wall_demo::{NoisyRectangularWall, NoisyRectangularWallParams};
 use richmond_buildings::wizards_tower::WizardsTower;
 use richmond_buildings::{
-	BedroomFillParams, CellConstraints, CirculationEntry, CirculationRequestStatus, Confines, Fit,
-	LesHallesFloorPlan, LesHallesFullStorey,
+	BedroomFillParams, CellConstraints, CirculationEntry, CirculationRequestStatus, Confines,
+	LesHallesFloorPlan, LesHallesFullStorey, LesHallesParameterized,
 };
 
 #[derive(Component)]
@@ -325,11 +325,13 @@ pub enum PreviewSubject {
 		/// Confines size (XZ centered at origin; Y from 0).
 		extent: Vec3,
 		seed: i32,
+		ceiling: bool,
 	},
 	LesHallesFullStorey {
 		/// Confines size (XZ centered at origin; Y from 0).
 		extent: Vec3,
 		seed: i32,
+		ceiling: bool,
 	},
 }
 
@@ -699,15 +701,15 @@ impl PreviewConfig {
 					extent.x, extent.y, extent.z
 				)
 			}
-			PreviewSubject::LesHallesFloorPlan { extent, seed } => {
+			PreviewSubject::LesHallesFloorPlan { extent, seed, ceiling } => {
 				format!(
-					"preview: les-halles-floor-plan (extent={:.1},{:.1},{:.1} seed={seed})",
+					"preview: les-halles-floor-plan (extent={:.1},{:.1},{:.1} seed={seed} ceiling={ceiling})",
 					extent.x, extent.y, extent.z
 				)
 			}
-			PreviewSubject::LesHallesFullStorey { extent, seed } => {
+			PreviewSubject::LesHallesFullStorey { extent, seed, ceiling } => {
 				format!(
-					"preview: les-halles-full-storey (extent={:.1},{:.1},{:.1} seed={seed})",
+					"preview: les-halles-full-storey (extent={:.1},{:.1},{:.1} seed={seed} ceiling={ceiling})",
 					extent.x, extent.y, extent.z
 				)
 			}
@@ -990,27 +992,20 @@ impl CachedPreview {
 					..NoisyRectangularWallParams::default()
 				}));
 			}
-			PreviewSubject::LesHallesFloorPlan { extent, seed } => {
-				let confines = Confines::from_bounds(les_halles_confines_bounds(*extent));
-				let noise = NoiseParams {
-					seed: *seed,
-					..NoiseParams::default()
-				};
-				match LesHallesFloorPlan::fit_to_confines(&confines, noise) {
-					Ok((plan, _)) => self.les_halles_floor_plan = Some(plan),
+			PreviewSubject::LesHallesFloorPlan { extent, seed, ceiling } => {
+				match fit_les_halles_floor_plan(*extent, *seed, *ceiling) {
+					Ok(plan) => self.les_halles_floor_plan = Some(plan),
 					Err(err) => {
 						bevy::log::error!("les-halles-floor-plan fit failed: {err}");
 					}
 				}
 			}
-			PreviewSubject::LesHallesFullStorey { extent, seed } => {
-				let confines = Confines::from_bounds(les_halles_confines_bounds(*extent));
-				let noise = NoiseParams {
-					seed: *seed,
-					..NoiseParams::default()
-				};
-				match LesHallesFullStorey::fit_to_confines(&confines, noise) {
-					Ok((storey, _)) => self.les_halles_full_storey = Some(storey),
+			PreviewSubject::LesHallesFullStorey { extent, seed, ceiling } => {
+				match fit_les_halles_floor_plan(*extent, *seed, *ceiling) {
+					Ok(plan) => {
+						let (storey, _) = LesHallesFullStorey::from_floor_plan(plan);
+						self.les_halles_full_storey = Some(storey);
+					}
 					Err(err) => {
 						bevy::log::error!("les-halles-full-storey fit failed: {err}");
 					}
@@ -1026,6 +1021,26 @@ fn les_halles_confines_bounds(extent: Vec3) -> Aabb3d {
 	let hz = extent.z.max(1e-4) * 0.5;
 	let h = extent.y.max(1e-4);
 	Aabb3d::from_min_max(Vec3::new(-hx, 0.0, -hz), Vec3::new(hx, h, hz))
+}
+
+fn fit_les_halles_floor_plan(
+	extent: Vec3,
+	seed: i32,
+	ceiling: bool,
+) -> Result<LesHallesFloorPlan, richmond_buildings::FitError> {
+	let confines = Confines::from_bounds(les_halles_confines_bounds(extent));
+	let noise = NoiseParams {
+		seed,
+		..NoiseParams::default()
+	};
+	let params = LesHallesParameterized::sample(&confines, noise)?;
+	let ceiling = if ceiling {
+		RectRingFloorSlab::Solid
+	} else {
+		RectRingFloorSlab::None
+	};
+	LesHallesFloorPlan::from_parameterized_with_ceiling(params, &confines, ceiling)
+		.map(|(plan, _)| plan)
 }
 
 /// Spawn preview when the subject changes. LOD flips update host levels in-place

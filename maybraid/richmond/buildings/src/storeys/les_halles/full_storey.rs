@@ -67,8 +67,10 @@ mod tests {
 			LesHallesFullStorey::fit_to_confines(&confines, NoiseParams::default()).unwrap();
 		assert!(!regions.within.is_empty());
 		assert_eq!(regions.atop.len(), 1);
-		assert!(storey.floor_plan.shell.wall_count() >= 4);
-		assert!(storey.floor_plan.shell.has_floor());
+		assert!(storey.floor_plan.gallery.wall_count() >= 4);
+		assert!(storey.floor_plan.gallery.has_floor());
+		assert!(!storey.floor_plan.gallery.has_ceiling());
+		assert!(!storey.floor_plan.balcony_floors.is_empty());
 		let panels = storey.panel_nodes_for_level(LodSceneLevel::High);
 		assert!(!panels.is_empty());
 	}

@@ -1,13 +1,14 @@
 //! Les Halles storey.
 //!
 //! The basic Les Halles layout is an outer ring gallery with an inner ring balcony.
-//! The outer ring gallery is meant to reflect commercial space,
-//! while the inner ring balcony is the walking access to the commercial space.
+//! The outer ring gallery is commercial space: a rectangular ring with outer facade
+//! walls, inner walls facing the balcony, and a floor (ceiling optional / off by default).
+//! The inner balcony ring is walking access: floor only, no walls, open to the courtyard.
 //!
 //! The Les Halles floor plan...
 //! - Uses the full rectangular width and height of the confines.
 //! - Decides reasonable widths for the gallery and balcony.
-//! - Adds reasonable additional doors and windows in the open set along the gallery.
+//! - Adds doors and windows on both the outer facade and the gallery’s inner wall.
 //! - Chooses whether to allocate shafts (for stairs) in the four corners or in the middle of each side.
 
 pub mod floor_plan;

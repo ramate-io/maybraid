@@ -17,6 +17,9 @@ pub struct LesHallesFullStorey {
 	/// FastNoise seed lane for spatial sampling.
 	#[arg(long, default_value_t = 1337)]
 	pub seed: i32,
+	/// Solid gallery ceiling (off by default).
+	#[arg(long, default_value_t = false)]
+	pub ceiling: bool,
 	#[command(flatten)]
 	pub transform: ShowTransform,
 }
@@ -27,6 +30,7 @@ impl LesHallesFullStorey {
 			PreviewSubject::LesHallesFullStorey {
 				extent: self.extent.max(Vec3::splat(1e-4)),
 				seed: self.seed,
+				ceiling: self.ceiling,
 			},
 			self.transform.transform(),
 		)

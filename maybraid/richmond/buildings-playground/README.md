@@ -16,6 +16,7 @@ cargo run -p richmond-buildings-playground -- show bedroom --extent 6,2.8,4 --no
 cargo run -p richmond-buildings-playground -- show bedroom --extent 8,3,8 --occupancy 0.8 --spaciousness 1.2
 cargo run -p richmond-buildings-playground -- show les-halles-floor-plan
 cargo run -p richmond-buildings-playground -- show les-halles-floor-plan --extent 24,3.5,18 --seed 42
+cargo run -p richmond-buildings-playground -- show les-halles-floor-plan --ceiling
 cargo run -p richmond-buildings-playground -- show les-halles-full-storey --seed 7
 # Rectangular pitch (no end triangles):
 cargo run -p richmond-buildings-playground -- show pitch --rise 1 --run 2 --length 6 --tile-width 1
