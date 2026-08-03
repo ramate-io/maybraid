@@ -5,8 +5,8 @@ use procedural_common::{NoiseConfig, NoiseParams};
 use richmond_building_components::{BuildingComponents, LabelNode, LabelStyle, Layers};
 
 use crate::fit::{Confines, FillableRegions, Fit, FitError};
-use crate::usage_areas::label_util::label_filling_aabb;
-use crate::usage_areas::stall_layout::{facade_band, inset_band, primary_facade};
+use super::label_util::label_filling_aabb;
+use super::stall_layout::{facade_band, inset_band, primary_facade};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct BitesStall {

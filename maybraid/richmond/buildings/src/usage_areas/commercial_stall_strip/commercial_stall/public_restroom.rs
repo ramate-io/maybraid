@@ -7,8 +7,8 @@ use procedural_common::NoiseParams;
 use richmond_building_components::{BuildingComponents, LabelNode, LabelStyle, Layers};
 
 use crate::fit::{Confines, FillableRegions, Fit, FitError};
-use crate::usage_areas::label_util::label_filling_aabb;
-use crate::usage_areas::stall_layout::{facade_band, primary_facade, StallSide};
+use super::label_util::label_filling_aabb;
+use super::stall_layout::{facade_band, primary_facade, StallSide};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct PublicRestroom {

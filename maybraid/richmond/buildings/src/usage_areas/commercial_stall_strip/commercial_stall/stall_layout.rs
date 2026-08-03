@@ -20,6 +20,7 @@ pub enum StallSide {
 }
 
 impl StallSide {
+	#[allow(dead_code)]
 	pub fn inward(self) -> Vec3 {
 		match self {
 			Self::South => Vec3::Z,

@@ -2664,6 +2664,9 @@ pub fn draw_label_text_gizmos(
 		let tf = root * local;
 		let extents = label.geometry.extents();
 		// (local face center, rotation, face width, face height) in world meters.
+		// Local face offset, outward-facing rotation (text reads from outside), face size.
+		// Top/bottom previously used the inward ±X rotations, so top text faced into the volume
+		// (and looked mirrored from above). Flip those so both horizontals face outward.
 		let faces = [
 			(
 				Vec3::new(0.5, 0.0, 0.0),
@@ -2679,13 +2682,14 @@ pub fn draw_label_text_gizmos(
 			),
 			(
 				Vec3::new(0.0, 0.5, 0.0),
-				Quat::from_rotation_x(std::f32::consts::FRAC_PI_2),
+				Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2)
+					* Quat::from_rotation_z(std::f32::consts::PI),
 				extents.x,
 				extents.z,
 			),
 			(
 				Vec3::new(0.0, -0.5, 0.0),
-				Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2),
+				Quat::from_rotation_x(std::f32::consts::FRAC_PI_2),
 				extents.x,
 				extents.z,
 			),
@@ -2714,10 +2718,11 @@ pub fn draw_label_text_gizmos(
 
 /// Word-wrap + shrink stroke font so the block fits inside `face_w` × `face_h` (meters).
 fn fit_label_face_text(text: &str, face_w: f32, face_h: f32) -> (String, f32) {
-	let max_w = (face_w * 0.88).max(0.05);
-	let max_h = (face_h * 0.88).max(0.05);
+	let max_w = (face_w * 0.72).max(0.04);
+	let max_h = (face_h * 0.72).max(0.04);
 	// Stroke font size is in world units (cap height ≈ font_size).
-	let mut font = (face_w.min(face_h) * 0.18).clamp(0.05, 0.55);
+	// Keep labels compact so multi-word names stay readable inside thin AABBs.
+	let mut font = (face_w.min(face_h) * 0.09).clamp(0.03, 0.22);
 	let mut wrapped = wrap_label_text(text, max_w, font);
 	for _ in 0..16 {
 		wrapped = wrap_label_text(text, max_w, font);
@@ -2725,7 +2730,7 @@ fn fit_label_face_text(text: &str, face_w: f32, face_h: f32) -> (String, f32) {
 		if w <= max_w && h <= max_h {
 			break;
 		}
-		font = (font * 0.82).max(0.04);
+		font = (font * 0.82).max(0.025);
 	}
 	(wrapped, font)
 }

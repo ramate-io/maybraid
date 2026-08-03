@@ -3,17 +3,17 @@
 use lod::gen::LodSceneLevel;
 use procedural_common::{NoiseParams, NoiseType, TypedBucketThrow};
 use richmond_building_components::panels::PanelNode;
-use richmond_building_components::{BuildingComponents, LabelNode, Layers};
+use richmond_building_components::{BuildingComponents, LabelNode, LabelStyle, Layers};
 
 use crate::fit::{Confines, FillableRegions, Fit, FitError};
-use crate::usage_areas::bites_sitdown_stall::BitesSitdownStall;
-use crate::usage_areas::bites_stall::BitesStall;
-use crate::usage_areas::knick_knack_stall::KnickKnackStall;
-use crate::usage_areas::label_util::label_filling_aabb;
-use crate::usage_areas::parts_stall::PartsStall;
-use crate::usage_areas::public_restroom::PublicRestroom;
-use crate::usage_areas::supermarket_stall::SupermarketStall;
-use richmond_building_components::LabelStyle;
+
+use super::bites_sitdown_stall::BitesSitdownStall;
+use super::bites_stall::BitesStall;
+use super::knick_knack_stall::KnickKnackStall;
+use super::label_util::label_filling_aabb;
+use super::parts_stall::PartsStall;
+use super::public_restroom::PublicRestroom;
+use super::supermarket_stall::SupermarketStall;
 
 /// Selected commercial stall interior.
 #[derive(Debug, Clone, PartialEq)]
@@ -143,7 +143,6 @@ mod tests {
 		let (ib, _) = CommercialStallInterior::fit_to_confines(&b, noise).unwrap();
 		let ta = ia.label_nodes_for_level(LodSceneLevel::High).flatten()[0].text.clone();
 		let tb = ib.label_nodes_for_level(LodSceneLevel::High).flatten()[0].text.clone();
-		// Not a hard requirement they differ, but catalogs should often diverge.
 		let _ = (ta, tb);
 		assert!(!ia
 			.label_nodes_for_level(LodSceneLevel::High)

@@ -7,8 +7,8 @@ use richmond_building_components::{BuildingComponents, LabelNode, LabelStyle, La
 
 use crate::fit::{Confines, FillableRegions, Fit, FitError};
 use crate::paneling::Rectangle;
-use crate::usage_areas::label_util::label_filling_aabb;
-use crate::usage_areas::stall_layout::{
+use super::label_util::label_filling_aabb;
+use super::stall_layout::{
 	back_third, inset_band, office_divider_wall, primary_facade, sales_minus_office,
 };
 

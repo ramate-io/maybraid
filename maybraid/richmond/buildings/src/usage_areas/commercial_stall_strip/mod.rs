@@ -1,5 +1,7 @@
 //! Strip of commercial stalls along a gallery band.
 
+pub mod commercial_stall;
+
 use bevy_math::bounding::{Aabb2d, Aabb3d};
 use bevy_math::Vec2;
 use bevy_math::Vec3;
@@ -10,7 +12,12 @@ use richmond_building_components::{BuildingComponents, LabelNode, Layers};
 
 use crate::fit::{aabb_xz_extent, aabb_xz_overlap_area, Confines, FillableRegions, Fit, FitError};
 use crate::openings::{OpeningLabel, Openings};
-use crate::usage_areas::commercial_stall::CommercialStall;
+
+pub use commercial_stall::{
+	BitesSitdownStall, BitesStall, CommercialStall, CommercialStallInterior,
+	CommercialStallParameterized, CommercialStallPlan, KnickKnackStall, PartsStall, PublicRestroom,
+	SupermarketStall,
+};
 
 const MIN_STALL_ALONG: f32 = 1.6;
 const MAX_STALL_ALONG: f32 = 5.5;
