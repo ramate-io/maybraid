@@ -5,6 +5,7 @@
 //! Concave plan corners form valleys via facing pitch-plane intersection, and
 //! neighboring [`PitchedRoof`]s are truncated to meet on those valleys.
 
+mod decompose;
 mod geometry;
 mod topology;
 mod valleys;
@@ -22,6 +23,7 @@ use richmond_building_components::{BuildingComponents, Layers};
 use crate::paneling::panel_complex::DEFAULT_PANEL_THICKNESS;
 use crate::shells::pitched_rectangular_roof::{PitchedRoof, PitchedRoofParams, RoofHalf};
 
+use decompose::decompose_volumes;
 use geometry::VolumeCandidate;
 use topology::resolve_junctions;
 pub use valleys::ValleySegment;
@@ -250,7 +252,7 @@ impl RectangularPitchedRoofComplexParams {
 	}
 
 	/// Two parallel long-X pitches on the same midline: different ridge heights
-	/// and eave spans. Same-axis pairs are ignored by topology (no valley).
+	/// and eave spans. Forms coaxial step junctions on the short sides.
 	pub fn coaxial_parallel() -> Self {
 		Self::new(vec![
 			Aabb3d::from_min_max(Vec3::new(-10.0, 2.0, -2.0), Vec3::new(10.0, 4.0, 2.0)),
@@ -258,8 +260,7 @@ impl RectangularPitchedRoofComplexParams {
 		])
 	}
 
-	/// Full orthogonal cross (+): both arms extend past the overlap both ways.
-	/// Topology currently emits no L/T corners for this configuration.
+	/// Full orthogonal cross (+): decomposed into four L-meeting arms.
 	pub fn pathological_cross() -> Self {
 		Self::new(vec![
 			Aabb3d::from_min_max(Vec3::new(-10.0, 2.5, -2.0), Vec3::new(10.0, 4.5, 2.0)),
@@ -346,15 +347,13 @@ fn resolve(params: &RectangularPitchedRoofComplexParams) -> (Vec<PitchedRoof>, V
 		return (Vec::new(), Vec::new());
 	}
 
-	let mut volumes: Vec<VolumeCandidate> = params
-		.volumes
-		.iter()
-		.copied()
+	let mut volumes: Vec<VolumeCandidate> = decompose_volumes(&params.volumes)
+		.into_iter()
 		.map(|aabb| VolumeCandidate::from_aabb(aabb, params.overhang))
 		.collect();
 
-	let corners = resolve_junctions(&mut volumes);
-	let valleys = apply_valleys(&mut volumes, &corners, params.ridge_junction);
+	let junctions = resolve_junctions(&mut volumes);
+	let valleys = apply_valleys(&mut volumes, &junctions, params.ridge_junction);
 
 	for vol in &mut volumes {
 		vol.apply_end_caps(params.end_cap);

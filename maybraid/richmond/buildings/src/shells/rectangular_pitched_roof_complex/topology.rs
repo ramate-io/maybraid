@@ -1,4 +1,7 @@
-//! Plan adjacency and concave-corner (L/T) detection for orthogonal massing.
+//! Plan adjacency and junction detection for orthogonal massing.
+//!
+//! Perpendicular pairs → L / T / full-cross concave corners.
+//! Same-axis coaxial pairs → end-meets (lower run into higher end gable).
 
 use super::geometry::{LongAxis, VolumeCandidate, EPS};
 
@@ -58,15 +61,39 @@ pub(super) struct ConcaveCorner {
 	pub corner_xz: (f32, f32),
 }
 
-/// Find orthogonal L/T concave corners and mark junction ends on candidates.
-pub(super) fn resolve_junctions(volumes: &mut [VolumeCandidate]) -> Vec<ConcaveCorner> {
+/// Same-axis end meet: a lower run butts into a higher volume's end gable.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(super) struct CoaxialMeet {
+	/// Volume whose long end is stripped back to the gable plane.
+	pub vol_run: usize,
+	/// Higher / wider host; eaves stay full (end cap / gable drawn).
+	pub vol_cap: usize,
+	/// Long end on `vol_run` at the interface (`0` = min, `1` = max).
+	pub run_end: usize,
+	pub long_axis: LongAxis,
+}
+
+#[derive(Debug, Clone, Default, PartialEq)]
+pub(super) struct JunctionSet {
+	pub perp: Vec<ConcaveCorner>,
+	pub coaxial: Vec<CoaxialMeet>,
+}
+
+/// Find orthogonal junctions and mark strip-back ends on candidates.
+pub(super) fn resolve_junctions(volumes: &mut [VolumeCandidate]) -> JunctionSet {
 	let n = volumes.len();
 	let rects: Vec<PlanRect> = volumes.iter().map(PlanRect::from_candidate).collect();
-	let mut corners = Vec::new();
+	let mut out = JunctionSet::default();
 
 	for i in 0..n {
 		for j in (i + 1)..n {
 			if volumes[i].long_axis == volumes[j].long_axis {
+				if let Some(meets) = classify_coaxial(i, j, volumes, &rects) {
+					for m in &meets {
+						volumes[m.vol_run].end_free[m.run_end] = false;
+					}
+					out.coaxial.extend(meets);
+				}
 				continue;
 			}
 			let (ia, ib, ra, rb) = if volumes[i].long_axis == LongAxis::X {
@@ -84,11 +111,11 @@ pub(super) fn resolve_junctions(volumes: &mut [VolumeCandidate]) -> Vec<ConcaveC
 				if let Some(end) = c.end_b {
 					volumes[c.vol_b].end_free[end] = false;
 				}
-				corners.push(c);
+				out.perp.push(c);
 			}
 		}
 	}
-	corners
+	out
 }
 
 fn classify_xz_pair(
@@ -112,7 +139,6 @@ fn classify_xz_pair(
 		let side_a = if b_pos { 1 } else { 0 };
 		let side_b = if a_pos { 1 } else { 0 };
 		let end_a = if a_pos {
-			// Free +X → junction toward −X if A's min aligns with overlap.
 			if (ra.min_x - overlap.min_x).abs() <= EPS {
 				Some(0)
 			} else {
@@ -201,7 +227,120 @@ fn classify_xz_pair(
 				corner_xz: (corner_x, corner_z),
 			});
 		}
+		return out;
+	}
+
+	// Full cross (+): both arms extend past the overlap both ways → four concave
+	// corners. Neither volume strips (both are T-bars).
+	if a_pos && a_neg && b_pos && b_neg {
+		for &(corner_x, side_b) in &[(overlap.min_x, 0usize), (overlap.max_x, 1usize)] {
+			for &(corner_z, side_a) in &[(overlap.min_z, 0usize), (overlap.max_z, 1usize)] {
+				out.push(ConcaveCorner {
+					vol_a,
+					vol_b,
+					side_a,
+					side_b,
+					end_a: None,
+					end_b: None,
+					corner_xz: (corner_x, corner_z),
+				});
+			}
+		}
 	}
 
 	out
+}
+
+fn classify_coaxial(
+	i: usize,
+	j: usize,
+	volumes: &[VolumeCandidate],
+	rects: &[PlanRect],
+) -> Option<Vec<CoaxialMeet>> {
+	let a = &volumes[i];
+	let b = &volumes[j];
+	debug_assert_eq!(a.long_axis, b.long_axis);
+
+	const MIDLINE_EPS: f32 = 0.05;
+	let (mid_a, mid_b) = match a.long_axis {
+		LongAxis::X => (a.ridge.a.z, b.ridge.a.z),
+		LongAxis::Z => (a.ridge.a.x, b.ridge.a.x),
+	};
+	if (mid_a - mid_b).abs() > MIDLINE_EPS {
+		return None;
+	}
+
+	// Cap = wider short span (hosts the end gable); run = the other.
+	let (cap_i, run_i) = if a.short_span > b.short_span + EPS {
+		(i, j)
+	} else if b.short_span > a.short_span + EPS {
+		(j, i)
+	} else {
+		return None;
+	};
+	let rc = rects[cap_i];
+	let rr = rects[run_i];
+
+	// Short-axis ranges must overlap so the run actually hits the gable face.
+	let short_overlap = match a.long_axis {
+		LongAxis::X => {
+			let lo = rc.min_z.max(rr.min_z);
+			let hi = rc.max_z.min(rr.max_z);
+			hi - lo > EPS
+		}
+		LongAxis::Z => {
+			let lo = rc.min_x.max(rr.min_x);
+			let hi = rc.max_x.min(rr.max_x);
+			hi - lo > EPS
+		}
+	};
+	if !short_overlap {
+		return None;
+	}
+
+	let mut meets = Vec::new();
+	match a.long_axis {
+		LongAxis::X => {
+			if (rr.max_x - rc.min_x).abs() <= EPS {
+				meets.push(CoaxialMeet {
+					vol_run: run_i,
+					vol_cap: cap_i,
+					run_end: 1,
+					long_axis: LongAxis::X,
+				});
+			}
+			if (rr.min_x - rc.max_x).abs() <= EPS {
+				meets.push(CoaxialMeet {
+					vol_run: run_i,
+					vol_cap: cap_i,
+					run_end: 0,
+					long_axis: LongAxis::X,
+				});
+			}
+		}
+		LongAxis::Z => {
+			if (rr.max_z - rc.min_z).abs() <= EPS {
+				meets.push(CoaxialMeet {
+					vol_run: run_i,
+					vol_cap: cap_i,
+					run_end: 1,
+					long_axis: LongAxis::Z,
+				});
+			}
+			if (rr.min_z - rc.max_z).abs() <= EPS {
+				meets.push(CoaxialMeet {
+					vol_run: run_i,
+					vol_cap: cap_i,
+					run_end: 0,
+					long_axis: LongAxis::Z,
+				});
+			}
+		}
+	}
+
+	if meets.is_empty() {
+		None
+	} else {
+		Some(meets)
+	}
 }

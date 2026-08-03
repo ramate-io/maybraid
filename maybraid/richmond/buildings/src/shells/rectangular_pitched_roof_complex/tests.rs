@@ -233,17 +233,28 @@ fn demo_presets_valley_expectations() {
 	assert!(p.valleys().len() >= 4);
 
 	let coaxial = RectangularPitchedRoofComplexParams::coaxial_parallel().build();
-	assert_eq!(coaxial.roofs().len(), 2);
-	assert!(
-		coaxial.valleys().is_empty(),
-		"same-axis parallel pitches are not joined"
+	assert_eq!(
+		coaxial.roofs().len(),
+		3,
+		"coaxial nested should keep the higher cap and two lower wings"
+	);
+	assert_eq!(
+		coaxial.valleys().len(),
+		2,
+		"each wing should meet a cap end-gable, got {}",
+		coaxial.valleys().len()
 	);
 
 	let cross = RectangularPitchedRoofComplexParams::pathological_cross().build();
-	assert_eq!(cross.roofs().len(), 2);
-	assert!(
-		cross.valleys().is_empty(),
-		"full + cross has no L/T classification today"
+	assert_eq!(
+		cross.roofs().len(),
+		4,
+		"full + cross should decompose into four arm roofs"
+	);
+	assert_eq!(
+		cross.valleys().len(),
+		4,
+		"four L valleys at the ridge crossing"
 	);
 }
 
@@ -261,7 +272,46 @@ fn junction_detection_l() {
 	];
 	assert_eq!(vols[0].long_axis, LongAxis::X);
 	assert_eq!(vols[1].long_axis, LongAxis::Z);
-	let corners = resolve_junctions(&mut vols);
-	assert_eq!(corners.len(), 1);
+	let junctions = resolve_junctions(&mut vols);
+	assert_eq!(junctions.perp.len(), 1);
+	assert!(junctions.coaxial.is_empty());
 	assert!(!vols[0].end_free[0] || !vols[1].end_free[0]);
+}
+
+#[test]
+fn full_cross_decomposes_before_junctions() {
+	use super::decompose::decompose_volumes;
+	let arms = decompose_volumes(&[
+		Aabb3d::from_min_max(Vec3::new(-10.0, 2.5, -2.0), Vec3::new(10.0, 4.5, 2.0)),
+		Aabb3d::from_min_max(Vec3::new(-2.0, 2.5, -10.0), Vec3::new(2.0, 4.5, 10.0)),
+	]);
+	assert_eq!(arms.len(), 4);
+	let mut vols: Vec<_> = arms
+		.into_iter()
+		.map(|a| VolumeCandidate::from_aabb(a, Overhang::Fixed(0.3)))
+		.collect();
+	let junctions = resolve_junctions(&mut vols);
+	assert_eq!(junctions.perp.len(), 4);
+	assert!(junctions.perp.iter().all(|c| c.end_a.is_some() && c.end_b.is_some()));
+}
+
+#[test]
+fn coaxial_nested_decomposes_to_end_meets() {
+	use super::decompose::decompose_volumes;
+	let parts = decompose_volumes(&[
+		Aabb3d::from_min_max(Vec3::new(-10.0, 2.0, -2.0), Vec3::new(10.0, 4.0, 2.0)),
+		Aabb3d::from_min_max(Vec3::new(-6.0, 2.8, -3.5), Vec3::new(6.0, 5.5, 3.5)),
+	]);
+	assert_eq!(parts.len(), 3);
+	let mut vols: Vec<_> = parts
+		.into_iter()
+		.map(|a| VolumeCandidate::from_aabb(a, Overhang::Fixed(0.3)))
+		.collect();
+	let junctions = resolve_junctions(&mut vols);
+	assert!(junctions.perp.is_empty());
+	assert_eq!(junctions.coaxial.len(), 2);
+	for m in &junctions.coaxial {
+		assert!(!vols[m.vol_run].end_free[m.run_end]);
+		assert!(vols[m.vol_cap].end_free[0] && vols[m.vol_cap].end_free[1]);
+	}
 }
