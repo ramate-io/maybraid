@@ -39,6 +39,14 @@ pub fn intersects_aabb2(a: Aabb2d, b: Aabb2d) -> bool {
 		&& b.min.y < a.max.y - EPS
 }
 
+/// True when rectangles overlap or share an edge (closed contact).
+pub fn touches_aabb2(a: Aabb2d, b: Aabb2d) -> bool {
+	a.min.x <= b.max.x + EPS
+		&& b.min.x <= a.max.x + EPS
+		&& a.min.y <= b.max.y + EPS
+		&& b.min.y <= a.max.y + EPS
+}
+
 /// Area of an axis-aligned rect.
 pub fn aabb2_area(a: Aabb2d) -> f32 {
 	((a.max.x - a.min.x).max(0.0)) * ((a.max.y - a.min.y).max(0.0))

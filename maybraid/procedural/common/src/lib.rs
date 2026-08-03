@@ -15,7 +15,7 @@ pub use args::{
 pub use bounds::{
 	aabb2_area, aabb3_to_plan, clamp_min_size2, inflate_aabb2, inset_aabb2, intersects_aabb2,
 	max_empty_aabb3_plan, max_empty_rect2, max_empty_rect2_by, max_empty_rect2_with_clearance,
-	plan_to_aabb3, PlanAxes,
+	plan_to_aabb3, touches_aabb2, PlanAxes,
 };
 pub use distributions::bucket_throw::{Bucket, BucketThrow, TypedBucketThrow};
 pub use distributions::{perturb_weights, FirstFitIndices, MIN_BUCKET_WEIGHT};

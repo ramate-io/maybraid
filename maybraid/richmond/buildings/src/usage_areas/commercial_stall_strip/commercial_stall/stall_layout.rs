@@ -1,15 +1,36 @@
 //! Shared layout helpers for commercial stall interiors.
 
 use bevy_math::bounding::Aabb3d;
-use bevy_math::Vec3;
-use procedural_common::{max_empty_aabb3_plan, PlanAxes};
+use bevy_math::{Vec2, Vec3};
+use procedural_common::{
+	aabb2_area, aabb3_to_plan, clamp_min_size2, inflate_aabb2, max_empty_aabb3_plan,
+	max_empty_rect2, max_empty_rect2_by, plan_to_aabb3, touches_aabb2, PlanAxes,
+};
 
 use crate::bedroom::shell::face_rectangle;
 use crate::constraints::FaceKind;
-use crate::fit::{aabb_near_plane, aabb_xz_extent, Confines};
+use crate::fit::{aabb_near_plane, aabb_xz_extent, Confines, FitError};
 use crate::openings::{Opening, OpeningLabel};
 use crate::paneling::Rectangle;
 use crate::paneling::DEFAULT_PANEL_THICKNESS;
+
+/// Passages must be at least this long (along-wall) to host a BitesCounter.
+pub const BITES_LONG_PASSAGE_MIN: f32 = 2.0;
+/// Counter along-length floor; the rest of the passage (≥1m) stays clear.
+pub const BITES_COUNTER_ALONG_MIN: f32 = 1.0;
+/// Clear passage length left beside each counter.
+pub const BITES_PASSAGE_REMAIN_MIN: f32 = 1.0;
+/// Kitchen stays at least this far (XZ) from every counter.
+pub const BITES_KITCHEN_COUNTER_CLEARANCE: f32 = 1.0;
+/// Kitchen / seating plan minimum (width and depth).
+pub const BITES_REGION_MIN_PLAN: f32 = 1.0;
+
+/// Counters packed on long passages, plus the passages they used.
+#[derive(Debug, Clone)]
+pub struct PackedBitesCounters {
+	pub counters: Vec<Aabb3d>,
+	pub passages: Vec<Aabb3d>,
+}
 
 /// Plan cardinal used for façade / counter placement.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -130,6 +151,115 @@ pub fn largest_remainder_away_from(
 	clearance: f32,
 ) -> Option<Aabb3d> {
 	max_empty_aabb3_plan(bounds, obstacles, PlanAxes::XZ, clearance)
+}
+
+/// Place BitesCounters on every Passage ≥ [`BITES_LONG_PASSAGE_MIN`], each leaving
+/// ≥ [`BITES_PASSAGE_REMAIN_MIN`] of that passage clear.
+pub fn pack_bites_counters(
+	confines: &Confines,
+	counter_depth: f32,
+) -> Result<PackedBitesCounters, FitError> {
+	let mut counters = Vec::new();
+	let mut passages = Vec::new();
+	for (_id, opening) in confines.openings.iter() {
+		if !matches!(opening.label, OpeningLabel::Passage) {
+			continue;
+		}
+		let Some(side) = side_for_opening(&confines.bounds, opening) else {
+			continue;
+		};
+		let passage_len = opening_along_len(opening, side);
+		if passage_len + 1e-3 < BITES_LONG_PASSAGE_MIN {
+			continue;
+		}
+		let along = (passage_len - BITES_PASSAGE_REMAIN_MIN).max(BITES_COUNTER_ALONG_MIN);
+		if along + 1e-3 < BITES_COUNTER_ALONG_MIN
+			|| passage_len - along + 1e-3 < BITES_PASSAGE_REMAIN_MIN
+		{
+			continue;
+		}
+		counters.push(counter_on_opening(
+			&confines.bounds,
+			opening,
+			side,
+			counter_depth,
+			along,
+		));
+		passages.push(opening.bounds);
+	}
+	if counters.is_empty() {
+		return Err(FitError::TooSmall {
+			reason: "bites counter passage",
+		});
+	}
+	Ok(PackedBitesCounters {
+		counters,
+		passages,
+	})
+}
+
+/// Largest ≥`min_plan` region avoiding `excludes` (no clearance) that **touches**
+/// at least one of `passages` in plan (edge contact counts).
+pub fn pack_passage_connected_region(
+	bounds: &Aabb3d,
+	excludes: &[Aabb3d],
+	passages: &[Aabb3d],
+	min_plan: f32,
+) -> Option<Aabb3d> {
+	if passages.is_empty() {
+		return None;
+	}
+	let host = aabb3_to_plan(bounds, PlanAxes::XZ);
+	let cuts: Vec<_> = excludes
+		.iter()
+		.map(|e| aabb3_to_plan(e, PlanAxes::XZ))
+		.collect();
+	let passage_plans: Vec<_> = passages
+		.iter()
+		.map(|p| aabb3_to_plan(p, PlanAxes::XZ))
+		.collect();
+	let min_plan = min_plan.max(0.0);
+	let region2 = max_empty_rect2_by(host, &cuts, |cand| {
+		let size = cand.max - cand.min;
+		if size.x + 1e-3 < min_plan || size.y + 1e-3 < min_plan {
+			return f32::NEG_INFINITY;
+		}
+		if !passage_plans.iter().any(|p| touches_aabb2(cand, *p)) {
+			return f32::NEG_INFINITY;
+		}
+		aabb2_area(cand)
+	})?;
+	clamp_min_size2(region2, Vec2::splat(min_plan))?;
+	Some(plan_to_aabb3(bounds, region2, PlanAxes::XZ))
+}
+
+/// Kitchen remainder: ≥1m from counters, may abut `extra_excludes` (e.g. seating).
+pub fn pack_bites_kitchen(
+	bounds: &Aabb3d,
+	counters: &[Aabb3d],
+	extra_excludes: &[Aabb3d],
+	min_plan: f32,
+) -> Option<Aabb3d> {
+	if extra_excludes.is_empty() {
+		return largest_remainder_away_from(bounds, counters, BITES_KITCHEN_COUNTER_CLEARANCE)
+			.and_then(|k| {
+				let e = aabb_xz_extent(&k);
+				(e.x + 1e-3 >= min_plan && e.y + 1e-3 >= min_plan).then_some(k)
+			});
+	}
+	let host = aabb3_to_plan(bounds, PlanAxes::XZ);
+	let mut cuts: Vec<_> = counters
+		.iter()
+		.map(|c| inflate_aabb2(aabb3_to_plan(c, PlanAxes::XZ), BITES_KITCHEN_COUNTER_CLEARANCE))
+		.collect();
+	cuts.extend(
+		extra_excludes
+			.iter()
+			.map(|e| aabb3_to_plan(e, PlanAxes::XZ)),
+	);
+	let kitchen2 = max_empty_rect2(host, &cuts)?;
+	let kitchen2 = clamp_min_size2(kitchen2, Vec2::splat(min_plan))?;
+	Some(plan_to_aabb3(bounds, kitchen2, PlanAxes::XZ))
 }
 
 /// Counter band on `side` of depth `depth`, covering `along_len` centered in the

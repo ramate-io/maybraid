@@ -41,9 +41,9 @@ use richmond_buildings::portals::{MustAssignPortal, Portal};
 use richmond_buildings::wall_demo::{NoisyRectangularWall, NoisyRectangularWallParams};
 use richmond_buildings::wizards_tower::WizardsTower;
 use richmond_buildings::{
-	BedroomFillParams, BitesStall, CellConstraints, CirculationEntry, CirculationRequestStatus,
-	CommercialStall, CommercialStallStrip, Confines, Fit, LesHallesFloorPlan, LesHallesFullStorey,
-	LesHallesParameterized,
+	BedroomFillParams, BitesSitdownStall, BitesStall, CellConstraints, CirculationEntry,
+	CirculationRequestStatus, CommercialStall, CommercialStallStrip, Confines, Fit,
+	LesHallesFloorPlan, LesHallesFullStorey, LesHallesParameterized,
 };
 #[derive(Component)]
 pub struct PreviewRoot;
@@ -340,6 +340,11 @@ pub enum PreviewSubject {
 		seed: i32,
 	},
 	BitesStall {
+		extent: Vec3,
+		seed: i32,
+		door_side: BitesDoorSide,
+	},
+	BitesSitdownStall {
 		extent: Vec3,
 		seed: i32,
 		door_side: BitesDoorSide,
@@ -756,6 +761,16 @@ impl PreviewConfig {
 					extent.x, extent.y, extent.z
 				)
 			}
+			PreviewSubject::BitesSitdownStall {
+				extent,
+				seed,
+				door_side,
+			} => {
+				format!(
+					"preview: bites-sitdown-stall (extent={:.2},{:.2},{:.2} seed={seed} door-side={door_side:?})",
+					extent.x, extent.y, extent.z
+				)
+			}
 			PreviewSubject::LesHallesFloorPlan {
 				extent,
 				seed,
@@ -800,7 +815,8 @@ impl PreviewConfig {
 			PreviewSubject::Bedroom { extent, .. } => Aabb3d::from_min_max(Vec3::ZERO, *extent),
 			PreviewSubject::CommercialStall { extent, .. }
 			| PreviewSubject::CommercialStallStrip { extent, .. }
-			| PreviewSubject::BitesStall { extent, .. } => {
+			| PreviewSubject::BitesStall { extent, .. }
+			| PreviewSubject::BitesSitdownStall { extent, .. } => {
 				Aabb3d::from_min_max(Vec3::ZERO, *extent)
 			}
 			PreviewSubject::LesHallesFloorPlan { extent, .. }
@@ -1014,6 +1030,7 @@ pub struct CachedPreview {
 	commercial_stall: Option<CommercialStall>,
 	commercial_stall_strip: Option<CommercialStallStrip>,
 	bites_stall: Option<BitesStall>,
+	bites_sitdown_stall: Option<BitesSitdownStall>,
 }
 
 impl CachedPreview {
@@ -1032,6 +1049,7 @@ impl CachedPreview {
 		self.commercial_stall = None;
 		self.commercial_stall_strip = None;
 		self.bites_stall = None;
+		self.bites_sitdown_stall = None;
 		match &config.subject {
 			PreviewSubject::WizardsTower { noise } => {
 				let footprint = CellConstraints::cell_owned(Aabb3d::from_min_max(
@@ -1111,6 +1129,21 @@ impl CachedPreview {
 					Err(err) => bevy::log::error!("bites-stall fit failed: {err}"),
 				}
 			}
+			PreviewSubject::BitesSitdownStall {
+				extent,
+				seed,
+				door_side,
+			} => {
+				let confines = demo_bites_stall_confines(*extent, *door_side);
+				let noise = NoiseParams {
+					seed: *seed,
+					..NoiseParams::default()
+				};
+				match BitesSitdownStall::fit_to_confines(&confines, noise) {
+					Ok((stall, _)) => self.bites_sitdown_stall = Some(stall),
+					Err(err) => bevy::log::error!("bites-sitdown-stall fit failed: {err}"),
+				}
+			}
 			PreviewSubject::LesHallesFloorPlan {
 				extent,
 				seed,
@@ -1161,6 +1194,9 @@ impl CachedPreview {
 			return strip.label_nodes_for_level(LodSceneLevel::High).flatten();
 		}
 		if let Some(stall) = self.bites_stall.as_ref() {
+			return stall.label_nodes_for_level(LodSceneLevel::High).flatten();
+		}
+		if let Some(stall) = self.bites_sitdown_stall.as_ref() {
 			return stall.label_nodes_for_level(LodSceneLevel::High).flatten();
 		}
 		if let Some(storey) = self.les_halles_full_storey.as_ref() {
@@ -2354,6 +2390,15 @@ pub fn present_preview_lod(
 		}
 		PreviewSubject::BitesStall { .. } => {
 			if let Some(stall) = cache.bites_stall.as_ref() {
+				spawn_preview(
+					&mut commands,
+					transform,
+					ComponentsOnly(stall).scene_with_lod(&lod_ref),
+				);
+			}
+		}
+		PreviewSubject::BitesSitdownStall { .. } => {
+			if let Some(stall) = cache.bites_sitdown_stall.as_ref() {
 				spawn_preview(
 					&mut commands,
 					transform,
