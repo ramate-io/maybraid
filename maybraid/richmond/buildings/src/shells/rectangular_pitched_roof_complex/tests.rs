@@ -296,6 +296,38 @@ fn full_cross_decomposes_before_junctions() {
 }
 
 #[test]
+fn coaxial_hip_extends_wing_ridge_to_cap_apex() {
+	let complex = RectangularPitchedRoofComplexParams::coaxial_parallel()
+		.end_cap(EndCap::Hip)
+		.build();
+	assert_eq!(complex.roofs().len(), 3);
+
+	// Cap hip inset = short/2 + oh = 3.5 + 0.3; ridge ends at ±(6 − 3.8) = ±2.2.
+	let mut saw_neg_wing = false;
+	let mut saw_pos_wing = false;
+	for roof in complex.roofs() {
+		let half = &roof.params().halves[0];
+		let (r0, r1) = half.ridge_line;
+		let (e0, e1) = half.eave_line;
+		// Lower wings sit at y_ridge = 4.0; cap at 5.5.
+		if (r0.y - 4.0).abs() > 0.1 {
+			continue;
+		}
+		if r0.x < -6.0 {
+			// Neg wing: eaves stay on the massing face; ridge walks to the hip apex.
+			assert!((e1.x - (-6.0)).abs() < 1e-3, "eave at wall, got {}", e1.x);
+			assert!((r1.x - (-2.2)).abs() < 1e-3, "ridge to hip apex, got {}", r1.x);
+			saw_neg_wing = true;
+		} else if r1.x > 6.0 {
+			assert!((e0.x - 6.0).abs() < 1e-3, "eave at wall, got {}", e0.x);
+			assert!((r0.x - 2.2).abs() < 1e-3, "ridge to hip apex, got {}", r0.x);
+			saw_pos_wing = true;
+		}
+	}
+	assert!(saw_neg_wing && saw_pos_wing, "expected both lower wings");
+}
+
+#[test]
 fn coaxial_nested_decomposes_to_end_meets() {
 	use super::decompose::decompose_volumes;
 	let parts = decompose_volumes(&[

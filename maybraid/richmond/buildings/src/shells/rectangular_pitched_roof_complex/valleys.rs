@@ -1,14 +1,15 @@
 //! Pitch-plane valleys and rail truncation at junctions.
 //!
 //! Perp strip-back shortens long-axis extents on stems / L-arms; facing eaves
-//! land on the valley. Coaxial end-meets strip the lower run to the higher
-//! volume's gable plane — eave short-axis positions are never moved.
+//! land on the valley. Coaxial end-meets park eaves/walls on the higher
+//! volume's end wall plane; after end-caps, the run ridge is extended to the
+//! hip apex (or left at the gable wall).
 
 use bevy_math::Vec3;
 
 use super::geometry::{LongAxis, Plane, VolumeCandidate, EPS};
 use super::topology::{CoaxialMeet, ConcaveCorner, JunctionSet};
-use super::RidgeJunction;
+use super::{EndCap, RidgeJunction};
 
 /// Valley / step segment (magenta gizmo line).
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -288,7 +289,47 @@ fn truncate_long_z(
 	}
 }
 
-/// Strip the run's long end to the cap's gable plane; leave cap eaves alone.
+/// After end-caps: walk the run ridge to the cap's hip apex. Eaves stay on the
+/// end-wall plane. Gable keeps the ridge at that wall (barge is cap-only).
+pub(super) fn finish_coaxial_ridge_meets(
+	volumes: &mut [VolumeCandidate],
+	meets: &[CoaxialMeet],
+	end_cap: EndCap,
+	valleys: &mut [ValleySegment],
+) {
+	if !matches!(end_cap, EndCap::Hip) {
+		return;
+	}
+	for meet in meets {
+		// Run max butts cap min (end 0); run min butts cap max (end 1).
+		let cap_end = 1 - meet.run_end;
+		let target = volumes[meet.vol_cap].ridge.end(cap_end);
+		let run = &mut volumes[meet.vol_run];
+		let mut r = run.ridge.end(meet.run_end);
+		match meet.long_axis {
+			LongAxis::X => r.x = target.x,
+			LongAxis::Z => r.z = target.z,
+		}
+		run.ridge.set_end(meet.run_end, r);
+
+		for v in valleys.iter_mut() {
+			if v.vol_a == meet.vol_run && v.vol_b == meet.vol_cap {
+				match meet.long_axis {
+					LongAxis::X => {
+						v.eave_point.x = target.x;
+						v.ridge_point.x = target.x;
+					}
+					LongAxis::Z => {
+						v.eave_point.z = target.z;
+						v.ridge_point.z = target.z;
+					}
+				}
+			}
+		}
+	}
+}
+
+/// Strip the run's long end to the cap's end-wall (massing) plane; leave cap eaves alone.
 fn truncate_coaxial_run(volumes: &mut [VolumeCandidate], meet: &CoaxialMeet) {
 	let plane_long = match meet.long_axis {
 		LongAxis::X => {

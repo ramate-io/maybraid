@@ -27,7 +27,7 @@ use decompose::decompose_volumes;
 use geometry::VolumeCandidate;
 use topology::resolve_junctions;
 pub use valleys::ValleySegment;
-use valleys::apply_valleys;
+use valleys::{apply_valleys, finish_coaxial_ridge_meets};
 
 /// Side-eave overhang policy (also used for gable end projections).
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -353,11 +353,19 @@ fn resolve(params: &RectangularPitchedRoofComplexParams) -> (Vec<PitchedRoof>, V
 		.collect();
 
 	let junctions = resolve_junctions(&mut volumes);
-	let valleys = apply_valleys(&mut volumes, &junctions, params.ridge_junction);
+	let mut valleys = apply_valleys(&mut volumes, &junctions, params.ridge_junction);
 
 	for vol in &mut volumes {
 		vol.apply_end_caps(params.end_cap);
 	}
+	// Hip insets pull the cap ridge off the massing face — walk the lower run
+	// ridge to that apex so it meets the hip (eaves stay on the end wall).
+	finish_coaxial_ridge_meets(
+		&mut volumes,
+		&junctions.coaxial,
+		params.end_cap,
+		&mut valleys,
+	);
 
 	let roofs = volumes
 		.iter()
