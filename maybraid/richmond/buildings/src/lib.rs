@@ -57,8 +57,8 @@ pub use openings::{
 	OpeningLabel, Openings,
 };
 pub use storeys::les_halles::{
-	LesHallesFloorPlan, LesHallesFullStorey, LesHallesParameterized, LesHallesShaftPlacement,
-	SCOPE as LES_HALLES_SCOPE,
+	LesHallesFloorPlan, LesHallesFullStorey, LesHallesParameterized, LesHallesPlacedDoor,
+	LesHallesShaftPlacement, LesHallesStallDoor, SCOPE as LES_HALLES_SCOPE,
 };
 pub use paneling::{
 	fallback_oriented, fit_rectangle, fit_rectangle_corners, orient_rectangle,

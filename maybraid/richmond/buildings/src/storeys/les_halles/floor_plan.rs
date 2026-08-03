@@ -3,7 +3,7 @@
 use bevy_math::bounding::{Aabb2d, Aabb3d};
 use bevy_math::{Vec2, Vec3};
 use lod::gen::LodSceneLevel;
-use procedural_common::NoiseParams;
+use procedural_common::{NoiseConfig, NoiseParams};
 use richmond_building_components::joints::JointNode;
 use richmond_building_components::panels::{PanelNode, PanelStyle};
 use richmond_building_components::{BuildingComponents, Layers};
@@ -19,7 +19,8 @@ use crate::shells::rect_ring_floor::{
 };
 
 use super::parameterized::{
-	footprint_extents, LesHallesParameterized, LesHallesShaftPlacement, SHAFT_SIDE,
+	footprint_extents, LesHallesParameterized, LesHallesShaftPlacement, LesHallesStallDoor,
+	SHAFT_SIDE,
 };
 use super::SCOPE;
 
@@ -58,6 +59,52 @@ pub struct LesHallesFloorPlan {
 }
 
 impl LesHallesFloorPlan {
+	/// Build the stall-door size catalog for [`LesHallesParameterized::doors`].
+	///
+	/// Prefers larger shop openings; noise perturbs widths / jambs slightly.
+	/// [`LesHallesParameterized::fit_doors_on_run`] walks this list in order.
+	pub fn generate_stall_doors(cfg: &NoiseConfig, center: Vec3) -> Vec<LesHallesStallDoor> {
+		// Base catalog: many large stalls, then mid / small fallbacks.
+		let bases: [(f32, f32, f32); 8] = [
+			(4.2, 0.3, 0.4),
+			(3.6, 0.28, 0.35),
+			(3.2, 0.25, 0.3),
+			(2.8, 0.25, 0.3),
+			(2.4, 0.22, 0.25),
+			(2.0, 0.2, 0.25),
+			(1.7, 0.18, 0.2),
+			(1.4, 0.15, 0.2),
+		];
+		bases
+			.into_iter()
+			.enumerate()
+			.map(|(i, (w, j, e))| {
+				let salt = 5.0 + i as f32;
+				let dw = cfg.sample_range_f32_4d(
+					(w - 0.25).max(1.2),
+					w + 0.35,
+					center.x,
+					center.y,
+					center.z,
+					salt,
+				);
+				let jamb = cfg.sample_range_f32_4d(
+					(j - 0.05).max(0.1),
+					j + 0.1,
+					center.x,
+					center.y,
+					center.z,
+					salt + 0.5,
+				);
+				LesHallesStallDoor {
+					door_width: dw,
+					jamb_min: jamb,
+					allowed_error: e,
+				}
+			})
+			.collect()
+	}
+
 	/// Deterministic structure from already-sampled parameters (towering path).
 	///
 	/// Gallery ceiling defaults to [`RectRingFloorSlab::None`].
@@ -99,11 +146,11 @@ impl LesHallesFloorPlan {
 
 		let mut openings = confines.openings.clone();
 		openings.extend(&Self::generated_openings(
+			&params,
 			center_xz,
 			outer,
 			gallery_inner,
 			height,
-			params.opening_density,
 			&shaft_bounds,
 		));
 
@@ -274,30 +321,28 @@ impl LesHallesFloorPlan {
 	/// Gallery facade + balcony-facing openings, plus shaft voids / clears.
 	///
 	/// - **Outer walls:** apertures only (no doors); skipped behind shafts.
-	/// - **Inner walls:** passages and/or apertures, plus floor-to-ceiling shaft clears.
+	/// - **Inner walls:** stall doors only (packed per straight section), plus
+	///   floor-to-ceiling shaft clears.
 	fn generated_openings(
+		params: &LesHallesParameterized,
 		center_xz: Vec3,
 		outer: Vec2,
 		gallery_inner: Vec2,
 		height: f32,
-		opening_density: f32,
 		shaft_bounds: &[Aabb3d],
 	) -> Openings {
 		let mut openings = Openings::new();
 		let door_h = (height * 0.72).clamp(2.0, height.max(2.0));
 		let win_h = (height * 0.4).clamp(1.0, height.max(1.0));
 		let sill = (height * 0.3).clamp(0.7, height * 0.45);
-		let door_w = 1.4;
 		let win_w = 1.4;
-		// Extra outer windows beyond the first on each side (0..=2).
-		let extra_wins = ((opening_density * 3.0).floor() as usize).min(2);
+		let extra_wins = ((params.opening_density * 3.0).floor() as usize).min(2);
 
 		for side in RectRingFloorSide::all() {
 			let slot = side_slot(side);
 			let shaft_spans = Self::shaft_along_spans(center_xz, outer, side, shaft_bounds);
 
 			// Outer facade: apertures only; leave solid wall behind shafts.
-			// Prefer offsets away from mid-side shaft centers (±SHAFT_SIDE).
 			let mut outer_offsets = vec![-2.8_f32, 2.8];
 			for k in 0..extra_wins {
 				outer_offsets.push(2.8 + (k + 1) as f32 * 2.4);
@@ -323,38 +368,56 @@ impl LesHallesFloorPlan {
 				);
 				placed += 1;
 			}
+		}
 
-			// Inner wall: door and/or window (offset so both can land on the strip).
-			let mut inner_door = RectRingFloor::side_passage_opening(
-				side,
-				center_xz,
-				gallery_inner,
-				door_w,
-				door_h,
-			);
-			inner_door.bounds = offset_opening_along_side(inner_door.bounds, side, -1.5);
-			openings.insert(OpeningId::scoped(SCOPE, "inner_passage", slot), inner_door);
+		// Inner stall doors on each straight section between shaft clears.
+		let sections = Self::inner_straight_sections(center_xz, gallery_inner, shaft_bounds);
+		let expected = params.expected_inner_section_count();
+		debug_assert_eq!(
+			sections.len(),
+			expected,
+			"inner straight sections: got {} expected {} ({:?})",
+			sections.len(),
+			expected,
+			params.shaft_placement
+		);
+		assert!(
+			sections.len() == expected,
+			"Les Halles inner wall: expected {expected} straight sections for {:?}, got {}",
+			params.shaft_placement,
+			sections.len()
+		);
 
-			let mut inner_win = RectRingFloor::side_aperture_opening(
-				side,
-				center_xz,
-				gallery_inner,
-				win_w,
-				win_h,
-				sill,
+		for (si, section) in sections.iter().enumerate() {
+			let run = (section.along1 - section.along0).max(0.0);
+			let placed = params.fit_doors_on_run(run);
+			assert!(
+				!placed.is_empty(),
+				"Les Halles inner wall section {si} ({:?}) has no door on run {run:.2}",
+				section.side
 			);
-			inner_win.bounds = offset_opening_along_side(inner_win.bounds, side, 1.5);
-			openings.insert(OpeningId::scoped(SCOPE, "inner_aperture", slot), inner_win);
+			for (di, door) in placed.iter().enumerate() {
+				let along_mid = section.along0 + door.along + door.width * 0.5;
+				let mut opening = RectRingFloor::side_passage_opening(
+					section.side,
+					center_xz,
+					gallery_inner,
+					door.width,
+					door_h,
+				);
+				opening.bounds = offset_opening_along_side(opening.bounds, section.side, along_mid);
+				openings.insert(
+					OpeningId::scoped(SCOPE, "inner_door", format!("{si}_{di}")),
+					opening,
+				);
+			}
 		}
 
 		for (i, shaft) in shaft_bounds.iter().enumerate() {
-			// Slab cut only — AABB is inset from the outer wall so it does not
-			// clear the facade behind the shaft.
 			openings.insert(
 				OpeningId::scoped(SCOPE, "shaft", format!("{i}")),
 				Opening::new(*shaft, OpeningLabel::Shaft),
 			);
-			// Floor-to-ceiling clear on the inner wall(s) the shaft abuts.
 			let smin = Vec3::from(shaft.min);
 			let smax = Vec3::from(shaft.max);
 			for (side, along) in Self::shaft_inner_sides(center_xz, gallery_inner, *shaft) {
@@ -378,6 +441,45 @@ impl LesHallesFloorPlan {
 		}
 
 		openings
+	}
+
+	/// Free inner-wall runs between shaft clears (one section per run).
+	fn inner_straight_sections(
+		center_xz: Vec3,
+		gallery_inner: Vec2,
+		shaft_bounds: &[Aabb3d],
+	) -> Vec<InnerSection> {
+		let mut sections = Vec::new();
+		for side in RectRingFloorSide::all() {
+			let half = match side {
+				OrthoSide::North | OrthoSide::South => gallery_inner.x * 0.5,
+				OrthoSide::East | OrthoSide::West => gallery_inner.y * 0.5,
+			};
+			let mut occupied =
+				Self::shaft_along_spans(center_xz, gallery_inner, side, shaft_bounds);
+			occupied.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
+			let mut cursor = -half;
+			for (lo, hi) in occupied {
+				let lo = lo.clamp(-half, half);
+				let hi = hi.clamp(-half, half);
+				if lo > cursor + 0.4 {
+					sections.push(InnerSection {
+						side,
+						along0: cursor,
+						along1: lo,
+					});
+				}
+				cursor = cursor.max(hi);
+			}
+			if half > cursor + 0.4 {
+				sections.push(InnerSection {
+					side,
+					along0: cursor,
+					along1: half,
+				});
+			}
+		}
+		sections
 	}
 
 	/// Along-wall spans (relative to side midpoint) occupied by shafts on an outer side.
@@ -633,6 +735,14 @@ impl BuildingComponents for LesHallesFloorPlan {
 	}
 }
 
+/// One free straight run on the gallery inner wall (along coords vs side mid).
+#[derive(Debug, Clone, Copy)]
+struct InnerSection {
+	side: OrthoSide,
+	along0: f32,
+	along1: f32,
+}
+
 fn side_slot(side: OrthoSide) -> &'static str {
 	match side {
 		OrthoSide::South => "s",
@@ -747,10 +857,10 @@ mod tests {
 	}
 
 	#[test]
-	fn emits_outer_apertures_and_inner_doors_or_windows() {
+	fn emits_outer_apertures_and_inner_doors_per_section() {
 		let (plan, _) =
 			LesHallesFloorPlan::fit_to_confines(&nominal_confines(), NoiseParams::default()).unwrap();
-		// Outer: apertures only (no facade doors).
+		// Outer: apertures only.
 		assert!(plan
 			.openings
 			.iter()
@@ -761,14 +871,23 @@ mod tests {
 			.iter()
 			.any(|(id, o)| id.as_str().contains("outer_aperture")
 				&& matches!(o.label, OpeningLabel::Aperture)));
+		// Inner: doors only (no shop apertures); at least one per straight section.
 		assert!(plan
 			.openings
-			.get(&OpeningId::scoped(SCOPE, "inner_passage", "n"))
-			.is_some());
-		assert!(plan
+			.iter()
+			.all(|(id, _)| !id.as_str().contains("inner_aperture")));
+		let expected = plan.parameterized.expected_inner_section_count();
+		let section_doors: std::collections::HashSet<usize> = plan
 			.openings
-			.get(&OpeningId::scoped(SCOPE, "inner_aperture", "w"))
-			.is_some());
+			.iter()
+			.filter_map(|(id, _)| {
+				let s = id.as_str();
+				let rest = s.strip_prefix("les_halles_inner_door_")?;
+				let (si, _) = rest.split_once('_')?;
+				si.parse().ok()
+			})
+			.collect();
+		assert_eq!(section_doors.len(), expected);
 		use crate::openings::MapsOpenings;
 		let outer_id = plan
 			.openings
@@ -778,10 +897,6 @@ mod tests {
 			.expect("south outer aperture");
 		assert!(plan.gallery.mapped_opening(&outer_id).is_some());
 		assert!(!plan.shaft_walls.is_empty());
-		assert!(plan
-			.openings
-			.iter()
-			.any(|(id, _)| id.as_str().contains("shaft_clear")));
 	}
 
 	#[test]
