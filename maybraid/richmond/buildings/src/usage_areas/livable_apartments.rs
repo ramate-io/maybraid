@@ -519,26 +519,24 @@ fn shared_edge_span(a: Aabb2d, b: Aabb2d) -> Option<(bool, f32, f32, f32)> {
 	None
 }
 
-/// Canonical plan-edge key so each shared boundary is authored at most once.
+/// Line key for merging collinear wall spans (mid quantized; lo/hi merged later).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-struct WallEdgeKey {
+struct WallLineKey {
 	along_x: bool,
 	mid_mm: i32,
-	lo_mm: i32,
-	hi_mm: i32,
 }
 
-fn wall_edge_key(along_x: bool, lo: f32, hi: f32, mid: f32) -> WallEdgeKey {
-	let (lo, hi) = if lo <= hi { (lo, hi) } else { (hi, lo) };
-	WallEdgeKey {
-		along_x,
-		mid_mm: (mid * 1000.0).round() as i32,
-		lo_mm: (lo * 1000.0).round() as i32,
-		hi_mm: (hi * 1000.0).round() as i32,
-	}
+#[derive(Debug, Clone, Copy)]
+struct WallSpan {
+	lo: f32,
+	hi: f32,
+	outward: Vec2,
 }
 
 /// Single-face strips where apartments meet each other or a hall (no outer shells).
+///
+/// Spans on the same plan line are merged so multi-cell hall frontages draw as
+/// one continuous run instead of gapped short segments.
 fn enclosure_walls(
 	cells: &[PlanCell],
 	halls: &[Aabb2d],
@@ -549,10 +547,26 @@ fn enclosure_walls(
 ) -> Vec<ClippedRectangularStrip> {
 	let thickness = DEFAULT_PANEL_THICKNESS.max(0.12);
 	let height = (y1 - y0).max(2.0);
-	let mut walls = Vec::new();
-	let mut seen: HashMap<WallEdgeKey, ()> = HashMap::new();
+	let mut pending: HashMap<WallLineKey, Vec<WallSpan>> = HashMap::new();
 
-	// Partition walls between different apartment groups.
+	let push_span = |pending: &mut HashMap<WallLineKey, Vec<WallSpan>>,
+	                 along_x: bool,
+	                 lo: f32,
+	                 hi: f32,
+	                 mid: f32,
+	                 outward: Vec2| {
+		let (lo, hi) = if lo <= hi { (lo, hi) } else { (hi, lo) };
+		if hi - lo < EPS {
+			return;
+		}
+		let key = WallLineKey {
+			along_x,
+			mid_mm: (mid * 1000.0).round() as i32,
+		};
+		pending.entry(key).or_default().push(WallSpan { lo, hi, outward });
+	};
+
+	// Partition walls between different apartment groups (or group vs leftover).
 	for i in 0..cells.len() {
 		for j in (i + 1)..cells.len() {
 			let a = &cells[i];
@@ -562,9 +576,13 @@ fn enclosure_walls(
 			}
 			let ga = group_of.get(&a.id).copied();
 			let gb = group_of.get(&b.id).copied();
-			match (ga, gb) {
-				(Some(x), Some(y)) if x != y => {}
-				_ => continue,
+			let seal = match (ga, gb) {
+				(Some(x), Some(y)) => x != y,
+				(Some(_), None) | (None, Some(_)) => true,
+				_ => false,
+			};
+			if !seal {
+				continue;
 			}
 			let Some((along_x, lo, hi, mid)) = shared_edge_span(a.bounds, b.bounds) else {
 				continue;
@@ -574,24 +592,18 @@ fn enclosure_walls(
 				if along_x { 0.5 * (lo + hi) } else { mid },
 				if along_x { mid } else { 0.5 * (lo + hi) },
 			);
-			if let Some(wall) = try_author_wall(
-				&mut seen,
+			push_span(
+				&mut pending,
 				along_x,
 				lo,
 				hi,
 				mid,
 				outward_toward(from, toward, along_x),
-				openings,
-				y0,
-				height,
-				thickness,
-			) {
-				walls.push(wall);
-			}
+			);
 		}
 	}
 
-	// Hall-frontage walls (deduped — adjacent cells may share the same edge key).
+	// Hall-frontage walls for every grouped cell.
 	for cell in cells {
 		if !group_of.contains_key(&cell.id) {
 			continue;
@@ -605,13 +617,27 @@ fn enclosure_walls(
 				if along_x { mid } else { 0.5 * (lo + hi) },
 			);
 			let toward = 0.5 * (hall.min + hall.max);
-			if let Some(wall) = try_author_wall(
-				&mut seen,
+			push_span(
+				&mut pending,
 				along_x,
 				lo,
 				hi,
 				mid,
 				outward_toward(from, toward, along_x),
+			);
+		}
+	}
+
+	let mut walls = Vec::new();
+	for (line, spans) in pending {
+		let mid = line.mid_mm as f32 / 1000.0;
+		for span in merge_wall_spans(spans) {
+			if let Some(wall) = author_wall_span(
+				line.along_x,
+				span.lo,
+				span.hi,
+				mid,
+				span.outward,
 				openings,
 				y0,
 				height,
@@ -621,8 +647,31 @@ fn enclosure_walls(
 			}
 		}
 	}
-
 	walls
+}
+
+fn merge_wall_spans(mut spans: Vec<WallSpan>) -> Vec<WallSpan> {
+	if spans.is_empty() {
+		return spans;
+	}
+	spans.sort_by(|a, b| a.lo.partial_cmp(&b.lo).unwrap_or(std::cmp::Ordering::Equal));
+	let mut out = Vec::new();
+	let mut cur = spans[0];
+	for span in spans.into_iter().skip(1) {
+		if span.lo <= cur.hi + EPS {
+			let cur_len = cur.hi - cur.lo;
+			let span_len = span.hi - span.lo;
+			cur.hi = cur.hi.max(span.hi);
+			if span_len > cur_len {
+				cur.outward = span.outward;
+			}
+		} else {
+			out.push(cur);
+			cur = span;
+		}
+	}
+	out.push(cur);
+	out
 }
 
 fn outward_toward(from: Vec2, toward: Vec2, along_x: bool) -> Vec2 {
@@ -640,8 +689,7 @@ fn outward_toward(from: Vec2, toward: Vec2, along_x: bool) -> Vec2 {
 	}
 }
 
-fn try_author_wall(
-	seen: &mut HashMap<WallEdgeKey, ()>,
+fn author_wall_span(
 	along_x: bool,
 	lo: f32,
 	hi: f32,
@@ -655,12 +703,6 @@ fn try_author_wall(
 	if (hi - lo).abs() < EPS {
 		return None;
 	}
-	let key = wall_edge_key(along_x, lo, hi, mid);
-	if seen.contains_key(&key) {
-		return None;
-	}
-	seen.insert(key, ());
-
 	let (start, end) = if along_x {
 		(Vec3::new(lo, y0, mid), Vec3::new(hi, y0, mid))
 	} else {

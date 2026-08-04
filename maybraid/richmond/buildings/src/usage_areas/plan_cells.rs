@@ -156,24 +156,21 @@ pub fn group_cells_to_apartments(
 /// are skipped. Remaining frontage cells become force-one groups; orphans absorb
 /// into neighboring well-connected groups.
 ///
+/// All input cells are considered (no min-size discard). `min_room_size` is kept
+/// for API stability but currently unused.
+///
 /// Never emits a landlocked group (no hall frontage).
 pub fn pack_apartments_to_targets(
 	cells: &[PlanCell],
 	halls: &[Aabb2d],
-	min_room_size: Vec2,
+	_min_room_size: Vec2,
 	targets: &[f32],
 	min_connectivity: f32,
 ) -> Vec<Vec<u32>> {
-	let min_room = Vec2::new(min_room_size.x.max(EPS), min_room_size.y.max(EPS));
 	let min_conn = min_connectivity.max(EPS);
-	let eligible: Vec<PlanCell> = cells
-		.iter()
-		.copied()
-		.filter(|c| {
-			let s = c.size();
-			s.x + EPS >= min_room.x && s.y + EPS >= min_room.y
-		})
-		.collect();
+	// Keep every residual cell — discarding small scraps left gaps in group
+	// boundaries / wall runs after shaft-clearance carving.
+	let eligible: Vec<PlanCell> = cells.to_vec();
 	if eligible.is_empty() {
 		return Vec::new();
 	}
