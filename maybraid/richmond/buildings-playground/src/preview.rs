@@ -349,6 +349,8 @@ pub enum PreviewSubject {
 		seed: i32,
 		door_side: BitesDoorSide,
 	},
+	/// Side-by-side gallery of bites + sit-down variants (passage boxes as gizmos).
+	BitesExamples,
 	LesHallesFloorPlan {
 		/// Confines size (XZ centered at origin; Y from 0).
 		extent: Vec3,
@@ -771,6 +773,7 @@ impl PreviewConfig {
 					extent.x, extent.y, extent.z
 				)
 			}
+			PreviewSubject::BitesExamples => "preview: bites-examples (gallery)".into(),
 			PreviewSubject::LesHallesFloorPlan {
 				extent,
 				seed,
@@ -819,6 +822,7 @@ impl PreviewConfig {
 			| PreviewSubject::BitesSitdownStall { extent, .. } => {
 				Aabb3d::from_min_max(Vec3::ZERO, *extent)
 			}
+			PreviewSubject::BitesExamples => bites_examples_bounds(),
 			PreviewSubject::LesHallesFloorPlan { extent, .. }
 			| PreviewSubject::LesHallesFullStorey { extent, .. } => {
 				les_halles_confines_bounds(*extent)
@@ -1031,6 +1035,22 @@ pub struct CachedPreview {
 	commercial_stall_strip: Option<CommercialStallStrip>,
 	bites_stall: Option<BitesStall>,
 	bites_sitdown_stall: Option<BitesSitdownStall>,
+	/// Passage AABBs in the active bites preview's local space (single or gallery).
+	bites_passages: Vec<(Aabb3d, Vec3)>,
+	bites_examples: Vec<BitesExampleCell>,
+}
+
+/// One cell in [`PreviewSubject::BitesExamples`].
+#[derive(Clone)]
+enum BitesExampleCell {
+	Stall {
+		offset: Vec3,
+		stall: BitesStall,
+	},
+	Sitdown {
+		offset: Vec3,
+		stall: BitesSitdownStall,
+	},
 }
 
 impl CachedPreview {
@@ -1050,6 +1070,8 @@ impl CachedPreview {
 		self.commercial_stall_strip = None;
 		self.bites_stall = None;
 		self.bites_sitdown_stall = None;
+		self.bites_passages.clear();
+		self.bites_examples.clear();
 		match &config.subject {
 			PreviewSubject::WizardsTower { noise } => {
 				let footprint = CellConstraints::cell_owned(Aabb3d::from_min_max(
@@ -1120,6 +1142,7 @@ impl CachedPreview {
 				door_side,
 			} => {
 				let confines = demo_bites_stall_confines(*extent, *door_side);
+				self.bites_passages = passage_aabbs_at(&confines, Vec3::ZERO);
 				let noise = NoiseParams {
 					seed: *seed,
 					..NoiseParams::default()
@@ -1135,6 +1158,7 @@ impl CachedPreview {
 				door_side,
 			} => {
 				let confines = demo_bites_stall_confines(*extent, *door_side);
+				self.bites_passages = passage_aabbs_at(&confines, Vec3::ZERO);
 				let noise = NoiseParams {
 					seed: *seed,
 					..NoiseParams::default()
@@ -1143,6 +1167,11 @@ impl CachedPreview {
 					Ok((stall, _)) => self.bites_sitdown_stall = Some(stall),
 					Err(err) => bevy::log::error!("bites-sitdown-stall fit failed: {err}"),
 				}
+			}
+			PreviewSubject::BitesExamples => {
+				let (cells, passages) = build_bites_examples();
+				self.bites_examples = cells;
+				self.bites_passages = passages;
 			}
 			PreviewSubject::LesHallesFloorPlan {
 				extent,
@@ -1199,11 +1228,138 @@ impl CachedPreview {
 		if let Some(stall) = self.bites_sitdown_stall.as_ref() {
 			return stall.label_nodes_for_level(LodSceneLevel::High).flatten();
 		}
+		if !self.bites_examples.is_empty() {
+			let mut out = Vec::new();
+			for cell in &self.bites_examples {
+				let (offset, labels) = match cell {
+					BitesExampleCell::Stall { offset, stall } => (
+						*offset,
+						stall.label_nodes_for_level(LodSceneLevel::High).flatten(),
+					),
+					BitesExampleCell::Sitdown { offset, stall } => (
+						*offset,
+						stall.label_nodes_for_level(LodSceneLevel::High).flatten(),
+					),
+				};
+				out.extend(labels.into_iter().map(|mut label| {
+					label.placement.translation += offset;
+					label
+				}));
+			}
+			return out;
+		}
 		if let Some(storey) = self.les_halles_full_storey.as_ref() {
 			return storey.label_nodes_for_level(LodSceneLevel::High).flatten();
 		}
 		Vec::new()
 	}
+}
+
+fn passage_aabbs_at(confines: &Confines, offset: Vec3) -> Vec<(Aabb3d, Vec3)> {
+	confines
+		.openings
+		.iter()
+		.filter(|(_, o)| matches!(o.label, OpeningLabel::Passage))
+		.map(|(_, o)| (o.bounds, offset))
+		.collect()
+}
+
+fn bites_examples_specs() -> Vec<(bool, Vec3, i32, BitesDoorSide)> {
+	// (sitdown?, extent, seed, door_side)
+	vec![
+		// Row 0 — BitesStall
+		(false, Vec3::new(12.0, 3.2, 8.0), 1337, BitesDoorSide::South),
+		(false, Vec3::new(10.0, 3.2, 6.0), 42, BitesDoorSide::South),
+		(false, Vec3::new(5.5, 3.2, 9.0), 7, BitesDoorSide::South),
+		(false, Vec3::new(6.0, 3.2, 14.0), 99, BitesDoorSide::East),
+		(false, Vec3::new(8.0, 3.2, 22.0), 3, BitesDoorSide::South),
+		// Row 1 — BitesSitdownStall
+		(true, Vec3::new(12.0, 3.2, 8.0), 1337, BitesDoorSide::South),
+		(true, Vec3::new(14.0, 3.2, 5.0), 42, BitesDoorSide::South),
+		(true, Vec3::new(10.0, 3.2, 22.0), 11, BitesDoorSide::South),
+		(true, Vec3::new(6.0, 3.2, 14.0), 55, BitesDoorSide::East),
+		(true, Vec3::new(12.0, 3.2, 8.0), 42, BitesDoorSide::North),
+	]
+}
+
+fn bites_examples_bounds() -> Aabb3d {
+	let gap = 2.5_f32;
+	let specs = bites_examples_specs();
+	let cols = 5usize;
+	let mut max = Vec3::ZERO;
+	for (i, (_, extent, _, _)) in specs.iter().enumerate() {
+		let col = i % cols;
+		let row = i / cols;
+		let mut x = 0.0;
+		for c in 0..col {
+			let idx = row * cols + c;
+			x += specs[idx].1.x + gap;
+		}
+		let mut z = 0.0;
+		for r in 0..row {
+			let mut row_depth = 0.0_f32;
+			for c in 0..cols {
+				let idx = r * cols + c;
+				if idx < specs.len() {
+					row_depth = row_depth.max(specs[idx].1.z);
+				}
+			}
+			z += row_depth + gap;
+		}
+		max = max.max(Vec3::new(x + extent.x, extent.y, z + extent.z));
+	}
+	Aabb3d::from_min_max(Vec3::ZERO, max.max(Vec3::splat(1.0)))
+}
+
+fn build_bites_examples() -> (Vec<BitesExampleCell>, Vec<(Aabb3d, Vec3)>) {
+	let gap = 2.5_f32;
+	let specs = bites_examples_specs();
+	let cols = 5usize;
+	let mut cells = Vec::new();
+	let mut passages = Vec::new();
+	for (i, (sitdown, extent, seed, door_side)) in specs.iter().enumerate() {
+		let col = i % cols;
+		let row = i / cols;
+		let mut x = 0.0;
+		for c in 0..col {
+			let idx = row * cols + c;
+			x += specs[idx].1.x + gap;
+		}
+		let mut z = 0.0;
+		for r in 0..row {
+			let mut row_depth = 0.0_f32;
+			for c in 0..cols {
+				let idx = r * cols + c;
+				if idx < specs.len() {
+					row_depth = row_depth.max(specs[idx].1.z);
+				}
+			}
+			z += row_depth + gap;
+		}
+		let offset = Vec3::new(x, 0.0, z);
+		let confines = demo_bites_stall_confines(*extent, *door_side);
+		passages.extend(passage_aabbs_at(&confines, offset));
+		let noise = NoiseParams {
+			seed: *seed,
+			..NoiseParams::default()
+		};
+		if *sitdown {
+			match BitesSitdownStall::fit_to_confines(&confines, noise) {
+				Ok((stall, _)) => cells.push(BitesExampleCell::Sitdown { offset, stall }),
+				Err(err) => bevy::log::error!(
+					"bites-examples sitdown ({extent:?} seed={seed}) failed: {err}"
+				),
+			}
+		} else {
+			match BitesStall::fit_to_confines(&confines, noise) {
+				Ok((stall, _)) => cells.push(BitesExampleCell::Stall { offset, stall }),
+				Err(err) => {
+					bevy::log::error!("bites-examples stall ({extent:?} seed={seed}) failed: {err}")
+				}
+			}
+		}
+	}
+	(cells, passages)
 }
 
 fn les_halles_confines_bounds(extent: Vec3) -> Aabb3d {
@@ -2406,6 +2562,33 @@ pub fn present_preview_lod(
 				);
 			}
 		}
+		PreviewSubject::BitesExamples => {
+			for cell in &cache.bites_examples {
+				let local = match cell {
+					BitesExampleCell::Stall { offset, .. }
+					| BitesExampleCell::Sitdown { offset, .. } => {
+						Transform::from_translation(*offset)
+					}
+				};
+				let tf = transform * local;
+				match cell {
+					BitesExampleCell::Stall { stall, .. } => {
+						spawn_preview(
+							&mut commands,
+							tf,
+							ComponentsOnly(stall).scene_with_lod(&lod_ref),
+						);
+					}
+					BitesExampleCell::Sitdown { stall, .. } => {
+						spawn_preview(
+							&mut commands,
+							tf,
+							ComponentsOnly(stall).scene_with_lod(&lod_ref),
+						);
+					}
+				}
+			}
+		}
 		PreviewSubject::LesHallesFloorPlan { .. } => {
 			if let Some(plan) = cache.les_halles_floor_plan.as_ref() {
 				spawn_preview(
@@ -2810,6 +2993,16 @@ pub fn draw_opening_plan_gizmos(
 					};
 					gizmos.aabb_3d(*shaft, tf, color);
 				}
+			}
+		}
+		PreviewSubject::BitesStall { .. }
+		| PreviewSubject::BitesSitdownStall { .. }
+		| PreviewSubject::BitesExamples => {
+			// Cyan / amber wire Passage voids for bites demos.
+			for (i, (bounds, offset)) in cache.bites_passages.iter().enumerate() {
+				let color = if i % 2 == 0 { cyan } else { amber };
+				let cell_tf = tf * Transform::from_translation(*offset);
+				gizmos.aabb_3d(*bounds, cell_tf, color);
 			}
 		}
 		_ => {}

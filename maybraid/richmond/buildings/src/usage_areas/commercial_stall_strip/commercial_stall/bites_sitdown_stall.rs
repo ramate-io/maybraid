@@ -8,13 +8,10 @@
 //! Soft-fail ([`FitError::TooSmall`]) if any region cannot be reserved.
 
 use lod::gen::LodSceneLevel;
-use procedural_common::{
-	aabb3_to_plan, contacts_opening_face, passage_opening_face, NoiseConfig, NoiseParams, PlanAxes,
-};
+use procedural_common::{NoiseConfig, NoiseParams};
 use richmond_building_components::{BuildingComponents, LabelNode, LabelStyle, Layers};
 
 use crate::fit::{Confines, FillableRegions, Fit, FitError};
-use crate::openings::OpeningLabel;
 
 use super::label_util::label_filling_aabb;
 use super::stall_layout::{
@@ -167,7 +164,10 @@ mod tests {
 	use super::*;
 	use bevy_math::bounding::Aabb3d;
 	use bevy_math::Vec3;
-	use crate::openings::{Opening, OpeningId, Openings};
+	use crate::openings::{Opening, OpeningId, OpeningLabel, Openings};
+	use procedural_common::{
+		aabb3_to_plan, contacts_opening_face, passage_opening_face, PlanAxes,
+	};
 
 	fn roomy_south() -> Confines {
 		let mut openings = Openings::new();

@@ -8,6 +8,7 @@ pub mod arc_sweep;
 pub mod arc_tower;
 pub mod opening;
 pub mod bedroom;
+pub mod bites_examples;
 pub mod bites_sitdown_stall;
 pub mod bites_stall;
 pub mod commercial_stall;
@@ -154,6 +155,8 @@ pub enum Show {
 	BitesStall(bites_stall::BitesStall),
 	/// Bites sit-down (counters + passage-connected seating + kitchen).
 	BitesSitdownStall(bites_sitdown_stall::BitesSitdownStall),
+	/// Gallery of bites + sit-down stalls (passage AABBs drawn as gizmos).
+	BitesExamples(bites_examples::BitesExamples),
 	/// Les Halles floor plan (ring shell + residual within cells).
 	LesHallesFloorPlan(les_halles_floor_plan::LesHallesFloorPlan),
 	/// Les Halles full storey (shell + commercial stall strip fills).
@@ -209,6 +212,7 @@ impl Show {
 			Self::CommercialStallStrip(cmd) => Ok(cmd.into_preview()),
 			Self::BitesStall(cmd) => Ok(cmd.into_preview()),
 			Self::BitesSitdownStall(cmd) => Ok(cmd.into_preview()),
+			Self::BitesExamples(cmd) => Ok(cmd.into_preview()),
 			Self::LesHallesFloorPlan(cmd) => cmd.into_preview(),
 			Self::LesHallesFullStorey(cmd) => cmd.into_preview(),
 		};
