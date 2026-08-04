@@ -868,4 +868,47 @@ mod tests {
 			Err(FitError::TooSmall { .. })
 		));
 	}
+
+	#[test]
+	fn common_bedroom_gallery_like_rooms_place_enclosures() {
+		// Mirrors playground bedroom-examples large / roomy cells.
+		let specs: [(Vec3, i32, f32, f32); 5] = [
+			(Vec3::new(6.5, 3.0, 6.5), 7, 1.2, 0.55),
+			(Vec3::new(8.0, 3.0, 8.0), 42, 1.25, 0.55),
+			(Vec3::new(11.0, 3.2, 10.0), 3, 1.35, 0.5),
+			(Vec3::new(12.0, 3.2, 12.0), 17, 1.4, 0.45),
+			(Vec3::new(14.0, 3.2, 11.0), 33, 1.45, 0.55),
+		];
+		for (extent, seed, space, occ) in specs {
+			let mut openings = Openings::new();
+			openings.insert(
+				OpeningId::new("door_a"),
+				Opening::passage(Aabb3d::from_min_max(
+					Vec3::new(extent.x * 0.35, 0.0, -0.2),
+					Vec3::new(extent.x * 0.65, 2.2, 0.2),
+				)),
+			);
+			let confines = Confines::new(
+				Aabb3d::from_min_max(Vec3::ZERO, extent),
+				0.0,
+				openings,
+			);
+			let mut params = CommonBedroomParameterized::with_fill(space, occ);
+			params.bed_against_wall = true;
+			let (room, _) = CommonBedroom::fit_with_fill(
+				&confines,
+				NoiseParams {
+					seed,
+					..NoiseParams::default()
+				},
+				params,
+			)
+			.unwrap();
+			let enclosure = room.closets.len() + room.walk_in_closets.len() + room.ensuites.len();
+			assert!(
+				enclosure > 0,
+				"expected closet/walk-in/ensuite in {extent:?} seed={seed} (space={space} occ={occ})"
+			);
+		}
+	}
 }

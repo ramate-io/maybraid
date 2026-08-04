@@ -46,6 +46,8 @@ const DOOR_CLEAR_PAD: f32 = 0.3;
 const LARGE_ROOM_AREA: f32 = 70.0;
 /// Soft cap on residual [`Concept::BedroomFurniture`] placements.
 const MAX_BEDROOM_FURNITURE: usize = 1;
+/// Soft cap on shallow closets (walk-in / ensuite are separately unique).
+const MAX_CLOSETS: usize = 2;
 
 /// One closet or ensuite: enclosure panels + authored door + room AABB.
 #[derive(Debug, Clone, PartialEq)]
@@ -112,7 +114,9 @@ enum Placed {
 	Wardrobe(Aabb3d),
 	Dresser(Aabb3d),
 	BedroomFurniture(Aabb3d),
-	Partition(BedroomPartition),
+	Closet(BedroomPartition),
+	WalkIn(BedroomPartition),
+	Ensuite(BedroomPartition),
 }
 
 impl CommonBedroomRegions {
@@ -179,7 +183,7 @@ impl CommonBedroomRegions {
 				| Placed::Wardrobe(a)
 				| Placed::Dresser(a)
 				| Placed::BedroomFurniture(a) => xz_area(a),
-				Placed::Partition(p) => xz_area(&p.bounds),
+				Placed::Closet(p) | Placed::WalkIn(p) | Placed::Ensuite(p) => xz_area(&p.bounds),
 			};
 			if (occupied + add) / room_area > self.occupancy + 1e-3 {
 				continue;
@@ -210,15 +214,20 @@ impl CommonBedroomRegions {
 					clearances.push(aabb3_to_plan(&a, PlanAxes::XZ));
 					packed.bedroom_furniture.push(a);
 				}
-				Placed::Partition(part) => {
+				Placed::Closet(part) => {
 					clearances.push(aabb3_to_plan(&part.bounds, PlanAxes::XZ));
 					clearances.push(inflate_aabb2(part.door_clear, DOOR_CLEAR_PAD));
-					match concept {
-						Concept::Closet => packed.closets.push(part),
-						Concept::WalkInCloset => packed.walk_in_closets.push(part),
-						Concept::Ensuite => packed.ensuites.push(part),
-						_ => unreachable!("non-partition via Partition"),
-					}
+					packed.closets.push(part);
+				}
+				Placed::WalkIn(part) => {
+					clearances.push(aabb3_to_plan(&part.bounds, PlanAxes::XZ));
+					clearances.push(inflate_aabb2(part.door_clear, DOOR_CLEAR_PAD));
+					packed.walk_in_closets.push(part);
+				}
+				Placed::Ensuite(part) => {
+					clearances.push(aabb3_to_plan(&part.bounds, PlanAxes::XZ));
+					clearances.push(inflate_aabb2(part.door_clear, DOOR_CLEAR_PAD));
+					packed.ensuites.push(part);
 				}
 			}
 		}
@@ -299,29 +308,16 @@ impl CommonBedroomRegions {
 				)
 				.map(Placed::BedroomFurniture)
 			}
-			Concept::Closet => {
-				let clears = partition_pack_clearances(clearances, packed);
-				let mins = self.closet_mins();
-				let area_target = (mins.long * mins.short * 1.15).min(aabb2_area(host) * 0.18);
-				self.pack_partition(
-					host3,
-					host,
-					&clears,
-					mins,
-					area_target,
-					self.bedroom_floor_reserve(host),
-					self.closet_along_t,
-					OpeningId::scoped(SCOPE, "closet_door", packed.closets.len().to_string()),
-				)
-				.map(Placed::Partition)
-			}
+			Concept::Closet => self
+				.try_place_closet(host3, host, clearances, packed)
+				.map(Placed::Closet),
 			Concept::WalkInCloset => {
 				if !packed.walk_in_closets.is_empty() {
 					return None;
 				}
 				let clears = partition_pack_clearances(clearances, packed);
 				let mins = self.walk_in_mins();
-				self.pack_partition(
+				if let Some(part) = self.pack_partition(
 					host3,
 					host,
 					&clears,
@@ -330,8 +326,12 @@ impl CommonBedroomRegions {
 					self.bedroom_floor_reserve(host),
 					self.walk_in_along_t,
 					OpeningId::scoped(SCOPE, "walk_in_door", "0"),
-				)
-				.map(Placed::Partition)
+				) {
+					return Some(Placed::WalkIn(part));
+				}
+				// Prefer a shallow closet over failing the enclosure soft-goal.
+				self.try_place_closet(host3, host, clearances, packed)
+					.map(Placed::Closet)
 			}
 			Concept::Ensuite => {
 				if !packed.ensuites.is_empty() {
@@ -339,7 +339,7 @@ impl CommonBedroomRegions {
 				}
 				let clears = partition_pack_clearances(clearances, packed);
 				let mins = self.ensuite_mins();
-				self.pack_partition(
+				if let Some(part) = self.pack_partition(
 					host3,
 					host,
 					&clears,
@@ -349,10 +349,39 @@ impl CommonBedroomRegions {
 						.max(self.bedroom_floor_reserve(host)),
 					self.ensuite_along_t,
 					OpeningId::scoped(SCOPE, "ensuite_door", "0"),
-				)
-				.map(Placed::Partition)
+				) {
+					return Some(Placed::Ensuite(part));
+				}
+				// Keep chasing enclosure: closet still beats empty structure.
+				self.try_place_closet(host3, host, clearances, packed)
+					.map(Placed::Closet)
 			}
 		}
+	}
+
+	fn try_place_closet(
+		&self,
+		host3: &Aabb3d,
+		host: Aabb2d,
+		clearances: &[Aabb2d],
+		packed: &CommonBedroomPacked,
+	) -> Option<BedroomPartition> {
+		if packed.closets.len() >= MAX_CLOSETS {
+			return None;
+		}
+		let clears = partition_pack_clearances(clearances, packed);
+		let mins = self.closet_mins();
+		let area_target = (mins.long * mins.short * 1.15).min(aabb2_area(host) * 0.18);
+		self.pack_partition(
+			host3,
+			host,
+			&clears,
+			mins,
+			area_target,
+			self.bedroom_floor_reserve(host),
+			self.closet_along_t,
+			OpeningId::scoped(SCOPE, "closet_door", packed.closets.len().to_string()),
+		)
 	}
 
 	fn closet_mins(&self) -> EnclosedRoomMins {
@@ -377,8 +406,11 @@ impl CommonBedroomRegions {
 	}
 
 	fn bedroom_floor_reserve(&self, host: Aabb2d) -> f32 {
+		// Open-floor reserve for grow clamping only. Do **not** fold `(1 - occupancy) *
+		// host` here — that starves `area_target` down to `mins` area and fights the
+		// loop occupancy budget (which already caps how much we place).
 		let bed_floor = 2.0 * 1.6 * self.spaciousness * self.spaciousness;
-		bed_floor.max(aabb2_area(host) * (1.0 - self.occupancy))
+		bed_floor.max(aabb2_area(host) * 0.28)
 	}
 
 	fn pack_partition(
@@ -392,7 +424,10 @@ impl CommonBedroomRegions {
 		along_t: f32,
 		door_id: OpeningId,
 	) -> Option<BedroomPartition> {
-		let contact = mins.short.min(mins.long * 0.55).max(0.55);
+		// Seed the **long** wall span. `grow_toward_area` stops near `area_target`
+		// (often ≈ min area); if contact < mins.long the grown rect can hit that
+		// area with the wrong aspect and then fail `mins.ok`.
+		let contact = mins.long.max(0.55);
 		let enclosed = EnclosedRoomParams {
 			mins,
 			contact,
@@ -400,7 +435,7 @@ impl CommonBedroomRegions {
 			along_t,
 			area_target,
 			area_reserve,
-			reserve_cap_frac: 0.85,
+			reserve_cap_frac: 0.72,
 			grow_into: false,
 			shrink_sales_for_door_clear: true,
 			door_width: self.door_width,
@@ -547,15 +582,16 @@ fn pick_concept(noise: &NoiseConfig, step: u32, ctx: PickCtx) -> Concept {
 	let large = ctx.room_area + 1e-3 >= LARGE_ROOM_AREA;
 	let goal = enclosure_soft_goal(&ctx);
 
-	// Enclosure-first while the soft-goal is unmet (not for the whole early loop).
+	// Enclosure-first while the soft-goal is unmet. Bias Closet so large-room
+	// WalkIn/Ensuite attempts do not starve the only size that often fits.
 	if !goal {
-		if !ctx.has_ensuite && t < 0.45 {
+		if !ctx.has_ensuite && t < 0.28 {
 			return Concept::Ensuite;
 		}
-		if large && ctx.walk_in_count == 0 && t < 0.62 {
+		if large && ctx.walk_in_count == 0 && t < 0.42 {
 			return Concept::WalkInCloset;
 		}
-		if t < 0.88 {
+		if t < 0.92 {
 			return Concept::Closet;
 		}
 		if ctx.bed_count == 1 {
