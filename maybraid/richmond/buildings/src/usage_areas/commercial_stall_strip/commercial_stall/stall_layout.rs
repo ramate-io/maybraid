@@ -1,11 +1,12 @@
 //! Shared layout helpers for commercial stall interiors.
 
-use bevy_math::bounding::Aabb3d;
+use bevy_math::bounding::{Aabb2d, Aabb3d};
 use bevy_math::{Vec2, Vec3};
 use procedural_common::{
-	aabb2_area, aabb3_to_plan, clamp_min_size2, grow_aabb2_pair, inflate_aabb2,
-	max_empty_aabb3_plan, max_empty_rect2, max_empty_rect2_by, plan_to_aabb3, touches_aabb2,
-	PlanAxes,
+	aabb2_area, aabb3_to_plan, clamp_min_size2, grow_aabb2_pair_toward_areas, inflate_aabb2,
+	max_empty_aabb3_plan, max_empty_rect2, pack_optional_face_bands, passage_opening_face,
+	plan_to_aabb3, seed_from_free_opening_face, shared_opening_border_len, OptionalFaceBand,
+	PlanAxes, PlanOpeningFace,
 };
 
 use crate::bedroom::shell::face_rectangle;
@@ -26,11 +27,31 @@ pub const BITES_KITCHEN_COUNTER_CLEARANCE: f32 = 1.0;
 /// Kitchen / seating plan minimum (width and depth).
 pub const BITES_REGION_MIN_PLAN: f32 = 1.0;
 
-/// Counters packed on long passages, plus the passages they used.
+/// Counters packed on long passages, plus every eligible passage (for seating faces).
 #[derive(Debug, Clone)]
 pub struct PackedBitesCounters {
 	pub counters: Vec<Aabb3d>,
+	/// All Passage openings that were long enough to host a counter (placed or not).
+	#[allow(dead_code)]
 	pub passages: Vec<Aabb3d>,
+	pub faces: Vec<PlanOpeningFace>,
+}
+
+/// Per-passage counter stylization (parallel to [`eligible_bites_passages`]).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct BitesCounterChoice {
+	pub place: bool,
+	pub along: f32,
+	pub depth: f32,
+	pub along_t: f32,
+}
+
+/// A Passage long enough for a Bites counter, with its opening face into the stall.
+#[derive(Debug, Clone)]
+pub struct EligibleBitesPassage {
+	pub bounds: Aabb3d,
+	pub face: PlanOpeningFace,
+	pub along_len: f32,
 }
 
 /// Plan cardinal used for façade / counter placement.
@@ -154,14 +175,10 @@ pub fn largest_remainder_away_from(
 	max_empty_aabb3_plan(bounds, obstacles, PlanAxes::XZ, clearance)
 }
 
-/// Place BitesCounters on every Passage ≥ [`BITES_LONG_PASSAGE_MIN`], each leaving
-/// ≥ [`BITES_PASSAGE_REMAIN_MIN`] of that passage clear.
-pub fn pack_bites_counters(
-	confines: &Confines,
-	counter_depth: f32,
-) -> Result<PackedBitesCounters, FitError> {
-	let mut counters = Vec::new();
-	let mut passages = Vec::new();
+/// Passages ≥ [`BITES_LONG_PASSAGE_MIN`] with a resolvable opening face into the stall.
+pub fn eligible_bites_passages(confines: &Confines) -> Vec<EligibleBitesPassage> {
+	let host = aabb3_to_plan(&confines.bounds, PlanAxes::XZ);
+	let mut out = Vec::new();
 	for (_id, opening) in confines.openings.iter() {
 		if !matches!(opening.label, OpeningLabel::Passage) {
 			continue;
@@ -169,69 +186,123 @@ pub fn pack_bites_counters(
 		let Some(side) = side_for_opening(&confines.bounds, opening) else {
 			continue;
 		};
-		let passage_len = opening_along_len(opening, side);
-		if passage_len + 1e-3 < BITES_LONG_PASSAGE_MIN {
+		let along_len = opening_along_len(opening, side);
+		if along_len + 1e-3 < BITES_LONG_PASSAGE_MIN {
 			continue;
 		}
-		let along = (passage_len - BITES_PASSAGE_REMAIN_MIN).max(BITES_COUNTER_ALONG_MIN);
-		if along + 1e-3 < BITES_COUNTER_ALONG_MIN
-			|| passage_len - along + 1e-3 < BITES_PASSAGE_REMAIN_MIN
-		{
+		let passage_plan = aabb3_to_plan(&opening.bounds, PlanAxes::XZ);
+		let Some(face) = passage_opening_face(host, passage_plan) else {
+			continue;
+		};
+		if face.along_len() + 1e-3 < BITES_COUNTER_ALONG_MIN {
 			continue;
 		}
-		counters.push(counter_on_opening(
-			&confines.bounds,
-			opening,
-			side,
-			counter_depth,
-			along,
-		));
-		passages.push(opening.bounds);
+		out.push(EligibleBitesPassage {
+			bounds: opening.bounds,
+			face,
+			along_len,
+		});
 	}
-	if counters.is_empty() {
+	out
+}
+
+/// Sample noisy counter choices for `eligible` passages (≥1 forced on).
+pub fn sample_bites_counter_choices(
+	eligible: &[EligibleBitesPassage],
+	cfg: &procedural_common::NoiseConfig,
+	origin: Vec3,
+	salt: f32,
+) -> Vec<BitesCounterChoice> {
+	let mut choices = Vec::with_capacity(eligible.len());
+	for (i, e) in eligible.iter().enumerate() {
+		let k = salt + i as f32 * 17.0;
+		let place_u = cfg.sample_range_f32_4d(0.0, 1.0, origin.x, origin.y, origin.z, k);
+		// ~60% of long passages get a counter; depth/along still vary when placed.
+		let place = place_u < 0.60;
+		let max_along = (e.along_len - BITES_PASSAGE_REMAIN_MIN).max(BITES_COUNTER_ALONG_MIN);
+		let along = cfg.sample_range_f32_4d(
+			BITES_COUNTER_ALONG_MIN,
+			max_along,
+			origin.x,
+			origin.y,
+			origin.z,
+			k + 1.0,
+		);
+		let depth =
+			cfg.sample_range_f32_4d(0.65, 1.0, origin.x, origin.y, origin.z, k + 2.0);
+		// Flush to one end so the clear remain stays one ≥1m face segment
+		// (needed for sit-down seating contact). Interior along_t only when the
+		// counter is short enough to leave ≥1m free on both sides.
+		let remain = (e.along_len - along).max(0.0);
+		let along_t = if remain + 1e-3 >= 2.0 * BITES_PASSAGE_REMAIN_MIN {
+			cfg.sample_range_f32_4d(0.05, 0.95, origin.x, origin.y, origin.z, k + 3.0)
+		} else if cfg.sample_range_f32_4d(0.0, 1.0, origin.x, origin.y, origin.z, k + 3.0) < 0.5
+		{
+			0.0
+		} else {
+			1.0
+		};
+		choices.push(BitesCounterChoice {
+			place,
+			along,
+			depth,
+			along_t,
+		});
+	}
+	if !choices.is_empty() && !choices.iter().any(|c| c.place) {
+		let best = eligible
+			.iter()
+			.enumerate()
+			.max_by(|(_, a), (_, b)| {
+				a.along_len
+					.partial_cmp(&b.along_len)
+					.unwrap_or(std::cmp::Ordering::Equal)
+			})
+			.map(|(i, _)| i)
+			.unwrap_or(0);
+		choices[best].place = true;
+	}
+	choices
+}
+
+/// Place counters from per-passage choices (skips `place: false`).
+pub fn pack_bites_counters_from_choices(
+	confines: &Confines,
+	eligible: &[EligibleBitesPassage],
+	choices: &[BitesCounterChoice],
+) -> Result<PackedBitesCounters, FitError> {
+	if eligible.is_empty() {
 		return Err(FitError::TooSmall {
 			reason: "bites counter passage",
 		});
 	}
+	let host = aabb3_to_plan(&confines.bounds, PlanAxes::XZ);
+	let faces: Vec<PlanOpeningFace> = eligible.iter().map(|e| e.face).collect();
+	let specs: Vec<OptionalFaceBand> = choices
+		.iter()
+		.take(eligible.len())
+		.map(|c| OptionalFaceBand {
+			place: c.place,
+			along: c.along,
+			depth: c.depth,
+			along_t: c.along_t,
+		})
+		.collect();
+	let counters2 = pack_optional_face_bands(host, &faces, &specs);
+	if counters2.is_empty() {
+		return Err(FitError::TooSmall {
+			reason: "bites counter passage",
+		});
+	}
+	let counters: Vec<Aabb3d> = counters2
+		.into_iter()
+		.map(|c| plan_to_aabb3(&confines.bounds, c, PlanAxes::XZ))
+		.collect();
 	Ok(PackedBitesCounters {
 		counters,
-		passages,
+		passages: eligible.iter().map(|e| e.bounds).collect(),
+		faces,
 	})
-}
-
-/// Largest ≥`min_plan` region avoiding `excludes` (no clearance) that **touches**
-/// at least one of `passages` in plan (edge contact counts).
-pub fn pack_passage_connected_region(
-	bounds: &Aabb3d,
-	excludes: &[Aabb3d],
-	passages: &[Aabb3d],
-	min_plan: f32,
-) -> Option<Aabb3d> {
-	if passages.is_empty() {
-		return None;
-	}
-	let host = aabb3_to_plan(bounds, PlanAxes::XZ);
-	let cuts: Vec<_> = excludes
-		.iter()
-		.map(|e| aabb3_to_plan(e, PlanAxes::XZ))
-		.collect();
-	let passage_plans: Vec<_> = passages
-		.iter()
-		.map(|p| aabb3_to_plan(p, PlanAxes::XZ))
-		.collect();
-	let min_plan = min_plan.max(0.0);
-	let region2 = max_empty_rect2_by(host, &cuts, |cand| {
-		let size = cand.max - cand.min;
-		if size.x + 1e-3 < min_plan || size.y + 1e-3 < min_plan {
-			return f32::NEG_INFINITY;
-		}
-		if !passage_plans.iter().any(|p| touches_aabb2(cand, *p)) {
-			return f32::NEG_INFINITY;
-		}
-		aabb2_area(cand)
-	})?;
-	clamp_min_size2(region2, Vec2::splat(min_plan))?;
-	Some(plan_to_aabb3(bounds, region2, PlanAxes::XZ))
 }
 
 /// Kitchen remainder: ≥1m from counters, may abut `extra_excludes` (e.g. seating).
@@ -263,112 +334,138 @@ pub fn pack_bites_kitchen(
 	Some(plan_to_aabb3(bounds, kitchen2, PlanAxes::XZ))
 }
 
-/// Sit-down regions: kitchen seed (clearance from counters) → seating seed
-/// (passage-touching in the remainder) → [`grow_aabb2_pair`] so leftover dead
-/// space is absorbed under each side's hard constraints.
+/// Minimum shared border between seating and a passage's long opening face.
+pub const BITES_SEATING_FACE_CONTACT: f32 = 1.0;
+
+/// Sit-down regions from an algebraic opening-face seed + area-targeted grow.
 ///
-/// Seating-first max-empty often claims the whole free volume and starves the
-/// kitchen; kitchen-first leaves the near-counter / passage band for seating.
+/// 1. Seating seed: ≥[`BITES_SEATING_FACE_CONTACT`] on a passage long face
+///    (preferring free segments beside counters), depth ≥ `min_plan`.
+/// 2. Kitchen seed: max empty with counter clearance.
+/// 3. Grow both toward `seating_area_frac` / remainder of usable plan area, then
+///    absorb scraps.
 pub fn pack_bites_sitdown_regions(
 	bounds: &Aabb3d,
 	counters: &[Aabb3d],
-	passages: &[Aabb3d],
+	faces: &[PlanOpeningFace],
+	seating_area_frac: f32,
+	seating_contact: f32,
+	seating_seed_depth: f32,
+	seating_along_t: f32,
 	min_plan: f32,
 ) -> Option<(Aabb3d, Aabb3d)> {
-	let kitchen_seed = pack_bites_kitchen(bounds, counters, &[], min_plan)?;
-	let mut seating_excludes = counters.to_vec();
-	seating_excludes.push(kitchen_seed);
-	let seating_seed =
-		pack_passage_connected_region(bounds, &seating_excludes, passages, min_plan)?;
-
 	let host = aabb3_to_plan(bounds, PlanAxes::XZ);
 	let counter_plans: Vec<_> = counters
 		.iter()
 		.map(|c| aabb3_to_plan(c, PlanAxes::XZ))
 		.collect();
+	let contact = seating_contact.max(BITES_SEATING_FACE_CONTACT);
+	let depth = seating_seed_depth.max(min_plan);
+
+	let mut seating2 = None;
+	let mut seating_face = None;
+	// Prefer longer faces; try each with the noisy along_t.
+	let mut order: Vec<usize> = (0..faces.len()).collect();
+	order.sort_by(|a, b| {
+		faces[*b]
+			.along_len()
+			.partial_cmp(&faces[*a].along_len())
+			.unwrap_or(std::cmp::Ordering::Equal)
+	});
+	for &i in &order {
+		if let Some(seed) = seed_from_free_opening_face(
+			host,
+			faces[i],
+			&counter_plans,
+			contact,
+			depth,
+			seating_along_t,
+		) {
+			seating2 = Some(seed);
+			seating_face = Some(faces[i]);
+			break;
+		}
+		// Fallback: slide along_t across the free segment.
+		for t in [0.0, 0.25, 0.5, 0.75, 1.0] {
+			if let Some(seed) =
+				seed_from_free_opening_face(host, faces[i], &counter_plans, contact, depth, t)
+			{
+				seating2 = Some(seed);
+				seating_face = Some(faces[i]);
+				break;
+			}
+		}
+		if seating2.is_some() {
+			break;
+		}
+	}
+	let seating2 = seating2?;
+	let seating_face = seating_face?;
+	let seating_aabb = plan_to_aabb3(bounds, seating2, PlanAxes::XZ);
+
+	let kitchen_seed = pack_bites_kitchen(bounds, counters, &[seating_aabb], min_plan)?;
+	let kitchen2 = aabb3_to_plan(&kitchen_seed, PlanAxes::XZ);
+
+	let counter_area: f32 = counter_plans.iter().copied().map(aabb2_area).sum();
+	let usable = (aabb2_area(host) - counter_area).max(0.0);
+	let frac = seating_area_frac.clamp(0.15, 0.75);
+	let target_s = usable * frac;
+	let target_k = usable * (1.0 - frac);
+
 	let kitchen_hard: Vec<_> = counter_plans
 		.iter()
 		.copied()
 		.map(|c| inflate_aabb2(c, BITES_KITCHEN_COUNTER_CLEARANCE))
 		.collect();
-	let seating2 = aabb3_to_plan(&seating_seed, PlanAxes::XZ);
-	let kitchen2 = aabb3_to_plan(&kitchen_seed, PlanAxes::XZ);
-	// Grow seating first so the passage-band claims lateral scraps; kitchen
-	// then expands into whatever remains outside the 1m counter halo.
-	let (seating2, kitchen2) = grow_aabb2_pair(
+	// Block the outward side of the opening face so grow cannot peel seating
+	// off the ≥1m long-face contact.
+	let mut seating_hard = counter_plans.clone();
+	seating_hard.push(outward_face_block(host, seating_face));
+	let (seating2, kitchen2) = grow_aabb2_pair_toward_areas(
 		host,
 		seating2,
 		kitchen2,
-		&counter_plans,
+		&seating_hard,
 		&kitchen_hard,
+		target_s,
+		target_k,
 		8,
 	);
+
 	let seating2 = clamp_min_size2(seating2, Vec2::splat(min_plan))?;
 	let kitchen2 = clamp_min_size2(kitchen2, Vec2::splat(min_plan))?;
+	if shared_opening_border_len(seating2, seating_face) + 1e-3 < contact {
+		return None;
+	}
 	Some((
 		plan_to_aabb3(bounds, seating2, PlanAxes::XZ),
 		plan_to_aabb3(bounds, kitchen2, PlanAxes::XZ),
 	))
 }
 
-/// Counter band on `side` of depth `depth`, covering `along_len` centered in the
-/// opening’s along-span (clamped to `bounds`).
-pub fn counter_on_opening(
-	bounds: &Aabb3d,
-	opening: &Opening,
-	side: StallSide,
-	depth: f32,
-	along_len: f32,
-) -> Aabb3d {
-	let min = Vec3::from(bounds.min);
-	let max = Vec3::from(bounds.max);
-	let omin = Vec3::from(opening.bounds.min);
-	let omax = Vec3::from(opening.bounds.max);
-	let depth = depth
-		.min(match side {
-			StallSide::South | StallSide::North => ((max.z - min.z) * 0.45).max(0.35),
-			StallSide::East | StallSide::West => ((max.x - min.x) * 0.45).max(0.35),
-		})
-		.max(0.35);
-	let along_len = along_len.max(0.2);
-	match side {
-		StallSide::South | StallSide::North => {
-			let span0 = omin.x.clamp(min.x, max.x);
-			let span1 = omax.x.clamp(min.x, max.x).max(span0 + 0.2);
-			let mid = (span0 + span1) * 0.5;
-			let half = (along_len * 0.5).min((span1 - span0) * 0.5);
-			let x0 = (mid - half).clamp(span0, span1);
-			let x1 = (mid + half).clamp(span0, span1).max(x0 + 0.2);
-			if matches!(side, StallSide::South) {
-				Aabb3d::from_min_max(
-					Vec3::new(x0, min.y, min.z),
-					Vec3::new(x1, max.y, min.z + depth),
-				)
-			} else {
-				Aabb3d::from_min_max(
-					Vec3::new(x0, min.y, max.z - depth),
-					Vec3::new(x1, max.y, max.z),
-				)
+/// Slab covering the host on the outward side of `face` (keeps seeds on the face).
+fn outward_face_block(host: Aabb2d, face: PlanOpeningFace) -> Aabb2d {
+	if face.thru_is_x {
+		if face.inward_positive {
+			Aabb2d {
+				min: host.min,
+				max: Vec2::new(face.thru, host.max.y),
+			}
+		} else {
+			Aabb2d {
+				min: Vec2::new(face.thru, host.min.y),
+				max: host.max,
 			}
 		}
-		StallSide::East | StallSide::West => {
-			let span0 = omin.z.clamp(min.z, max.z);
-			let span1 = omax.z.clamp(min.z, max.z).max(span0 + 0.2);
-			let mid = (span0 + span1) * 0.5;
-			let half = (along_len * 0.5).min((span1 - span0) * 0.5);
-			let z0 = (mid - half).clamp(span0, span1);
-			let z1 = (mid + half).clamp(span0, span1).max(z0 + 0.2);
-			if matches!(side, StallSide::East) {
-				Aabb3d::from_min_max(
-					Vec3::new(max.x - depth, min.y, z0),
-					Vec3::new(max.x, max.y, z1),
-				)
-			} else {
-				Aabb3d::from_min_max(
-					Vec3::new(min.x, min.y, z0),
-					Vec3::new(min.x + depth, max.y, z1),
-				)
-			}
+	} else if face.inward_positive {
+		Aabb2d {
+			min: host.min,
+			max: Vec2::new(host.max.x, face.thru),
+		}
+	} else {
+		Aabb2d {
+			min: Vec2::new(host.min.x, face.thru),
+			max: host.max,
 		}
 	}
 }

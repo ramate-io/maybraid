@@ -10,8 +10,8 @@ mod public_restroom;
 mod stall_layout;
 mod supermarket_stall;
 
-pub use bites_sitdown_stall::BitesSitdownStall;
-pub use bites_stall::BitesStall;
+pub use bites_sitdown_stall::{BitesSitdownParameterized, BitesSitdownPlan, BitesSitdownStall};
+pub use bites_stall::{BitesStall, BitesStallParameterized, BitesStallPlan};
 pub use interior::CommercialStallInterior;
 pub use knick_knack_stall::KnickKnackStall;
 pub use parts_stall::PartsStall;

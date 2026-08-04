@@ -1,4 +1,4 @@
-//! Bites stall: BitesCounter(s) on long passages + BitesKitchen in the remainder.
+//! Bites stall: noisy counters on long passages + kitchen in the remainder.
 
 use lod::gen::LodSceneLevel;
 use procedural_common::{NoiseConfig, NoiseParams};
@@ -8,26 +8,49 @@ use crate::fit::{Confines, FillableRegions, Fit, FitError};
 
 use super::label_util::label_filling_aabb;
 use super::stall_layout::{
-	pack_bites_counters, pack_bites_kitchen, BITES_REGION_MIN_PLAN,
+	eligible_bites_passages, pack_bites_counters_from_choices, pack_bites_kitchen,
+	sample_bites_counter_choices, BitesCounterChoice, BITES_REGION_MIN_PLAN,
 };
 
+/// Noise / style knobs for [`BitesStall`] (sampled above; fit below).
 #[derive(Debug, Clone, PartialEq)]
-pub struct BitesStall {
-	/// Higher-order type label covering the whole stall.
-	pub stall_type: LabelNode,
-	pub bites_counters: Vec<LabelNode>,
-	pub bites_kitchen: LabelNode,
+pub struct BitesStallParameterized {
+	pub style: LabelStyle,
+	/// Parallel to [`eligible_bites_passages`].
+	pub counters: Vec<BitesCounterChoice>,
 }
 
-impl Fit for BitesStall {
-	fn fit_to_confines(
-		confines: &Confines,
-		noise: NoiseParams,
-	) -> Result<(Self, FillableRegions), FitError> {
+impl BitesStallParameterized {
+	pub fn sample(confines: &Confines, noise: NoiseParams) -> Result<Self, FitError> {
+		let eligible = eligible_bites_passages(confines);
+		if eligible.is_empty() {
+			return Err(FitError::TooSmall {
+				reason: "bites counter passage",
+			});
+		}
 		let cfg = NoiseConfig::new(noise);
 		let c = confines.center();
-		let counter_depth = cfg.sample_range_f32_4d(0.65, 1.0, c.x, c.y, c.z, 32.0);
-		let packed = pack_bites_counters(confines, counter_depth)?;
+		let counters = sample_bites_counter_choices(&eligible, &cfg, c, 32.0);
+		let style = LabelStyle::from_unit(cfg.sample_range_f32_4d(0.0, 1.0, c.x, c.y, c.z, 33.0));
+		Ok(Self { style, counters })
+	}
+}
+
+/// Geometry resolved from [`BitesStallParameterized`].
+#[derive(Debug, Clone, PartialEq)]
+pub struct BitesStallPlan {
+	pub parameterized: BitesStallParameterized,
+	pub counter_aabbs: Vec<bevy_math::bounding::Aabb3d>,
+	pub kitchen_aabb: bevy_math::bounding::Aabb3d,
+}
+
+impl BitesStallPlan {
+	pub fn from_parameterized(
+		params: BitesStallParameterized,
+		confines: &Confines,
+	) -> Result<Self, FitError> {
+		let eligible = eligible_bites_passages(confines);
+		let packed = pack_bites_counters_from_choices(confines, &eligible, &params.counters)?;
 		let kitchen_aabb = pack_bites_kitchen(
 			&confines.bounds,
 			&packed.counters,
@@ -37,32 +60,56 @@ impl Fit for BitesStall {
 		.ok_or(FitError::TooSmall {
 			reason: "bites kitchen",
 		})?;
+		Ok(Self {
+			parameterized: params,
+			counter_aabbs: packed.counters,
+			kitchen_aabb,
+		})
+	}
+}
 
-		let style = LabelStyle::from_unit(cfg.sample_range_f32_4d(0.0, 1.0, c.x, c.y, c.z, 33.0));
-		let bites_counters = packed
-			.counters
+#[derive(Debug, Clone, PartialEq)]
+pub struct BitesStall {
+	/// Higher-order type label covering the whole stall.
+	pub stall_type: LabelNode,
+	pub bites_counters: Vec<LabelNode>,
+	pub bites_kitchen: LabelNode,
+}
+
+impl BitesStall {
+	pub fn from_plan(plan: BitesStallPlan, confines: &Confines) -> Self {
+		let style = plan.parameterized.style;
+		let bites_counters = plan
+			.counter_aabbs
 			.iter()
 			.map(|aabb| label_filling_aabb(style, "BitesCounter", aabb, confines.roll))
 			.collect();
+		Self {
+			stall_type: label_filling_aabb(
+				LabelStyle::Yellow,
+				"BitesStall",
+				&confines.bounds,
+				confines.roll,
+			),
+			bites_counters,
+			bites_kitchen: label_filling_aabb(
+				LabelStyle::Orange,
+				"BitesKitchen",
+				&plan.kitchen_aabb,
+				confines.roll,
+			),
+		}
+	}
+}
 
-		Ok((
-			Self {
-				stall_type: label_filling_aabb(
-					LabelStyle::Yellow,
-					"BitesStall",
-					&confines.bounds,
-					confines.roll,
-				),
-				bites_counters,
-				bites_kitchen: label_filling_aabb(
-					LabelStyle::Orange,
-					"BitesKitchen",
-					&kitchen_aabb,
-					confines.roll,
-				),
-			},
-			FillableRegions::empty(),
-		))
+impl Fit for BitesStall {
+	fn fit_to_confines(
+		confines: &Confines,
+		noise: NoiseParams,
+	) -> Result<(Self, FillableRegions), FitError> {
+		let params = BitesStallParameterized::sample(confines, noise)?;
+		let plan = BitesStallPlan::from_parameterized(params, confines)?;
+		Ok((Self::from_plan(plan, confines), FillableRegions::empty()))
 	}
 }
 
@@ -105,24 +152,79 @@ mod tests {
 		)
 	}
 
+	fn both_counters() -> BitesStallParameterized {
+		BitesStallParameterized {
+			style: LabelStyle::Cyan,
+			counters: vec![
+				BitesCounterChoice {
+					place: true,
+					along: 1.5,
+					depth: 0.8,
+					along_t: 0.0,
+				},
+				BitesCounterChoice {
+					place: true,
+					along: 1.5,
+					depth: 0.8,
+					along_t: 0.0,
+				},
+			],
+		}
+	}
+
 	#[test]
-	fn long_passages_each_get_a_counter() {
-		let (stall, _) =
-			BitesStall::fit_to_confines(&two_south_doors(), NoiseParams::default()).unwrap();
-		assert_eq!(stall.bites_counters.len(), 2);
+	fn parameterized_places_both_counters() {
+		let confines = two_south_doors();
+		let plan =
+			BitesStallPlan::from_parameterized(both_counters(), &confines).unwrap();
+		assert_eq!(plan.counter_aabbs.len(), 2);
+		let stall = BitesStall::from_plan(plan, &confines);
 		assert_eq!(stall.stall_type.text, "BitesStall");
 		assert_eq!(stall.bites_kitchen.text, "BitesKitchen");
 	}
 
 	#[test]
 	fn kitchen_claims_gap_and_full_behind_counters() {
-		let (stall, _) =
-			BitesStall::fit_to_confines(&two_south_doors(), NoiseParams::default()).unwrap();
+		let confines = two_south_doors();
+		let plan =
+			BitesStallPlan::from_parameterized(both_counters(), &confines).unwrap();
+		let stall = BitesStall::from_plan(plan, &confines);
 		assert!(
 			stall.bites_kitchen.placement.scale.x >= 8.0,
 			"kitchen width {}",
 			stall.bites_kitchen.placement.scale.x
 		);
+	}
+
+	#[test]
+	fn sample_fits_with_at_least_one_counter() {
+		let (stall, _) =
+			BitesStall::fit_to_confines(&two_south_doors(), NoiseParams::default()).unwrap();
+		assert!(!stall.bites_counters.is_empty());
+	}
+
+	#[test]
+	fn sparse_counters_still_fit() {
+		let confines = two_south_doors();
+		let params = BitesStallParameterized {
+			style: LabelStyle::Cyan,
+			counters: vec![
+				BitesCounterChoice {
+					place: true,
+					along: 1.2,
+					depth: 0.7,
+					along_t: 0.2,
+				},
+				BitesCounterChoice {
+					place: false,
+					along: 1.5,
+					depth: 0.8,
+					along_t: 0.0,
+				},
+			],
+		};
+		let plan = BitesStallPlan::from_parameterized(params, &confines).unwrap();
+		assert_eq!(plan.counter_aabbs.len(), 1);
 	}
 
 	#[test]
@@ -169,7 +271,7 @@ mod tests {
 			openings,
 		);
 		let (stall, _) = BitesStall::fit_to_confines(&confines, NoiseParams::default()).unwrap();
-		assert_eq!(stall.bites_counters.len(), 2);
+		assert!(!stall.bites_counters.is_empty());
 	}
 
 	#[test]
@@ -187,8 +289,18 @@ mod tests {
 			0.0,
 			openings,
 		);
+		// Wide/deep counter blocks a side-sliver kitchen in a shallow bay.
+		let params = BitesStallParameterized {
+			style: LabelStyle::Cyan,
+			counters: vec![BitesCounterChoice {
+				place: true,
+				along: 5.0,
+				depth: 1.0,
+				along_t: 0.0,
+			}],
+		};
 		assert!(matches!(
-			BitesStall::fit_to_confines(&confines, NoiseParams::default()),
+			BitesStallPlan::from_parameterized(params, &confines),
 			Err(FitError::TooSmall { .. })
 		));
 	}
