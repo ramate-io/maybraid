@@ -1,102 +1,24 @@
-//! Bites sit-down: counters + opening-face seating + kitchen remainder.
+//! Bites sit-down: composes bites counters + opening-face seating + kitchen.
 //!
 //! Constraints:
-//! - Same counter rules as [`super::bites_stall::BitesStall`] (noisy / sparse).
+//! - Counter rules from [`super::bites_stall::BitesStall`] (via composed parameterized).
 //! - [`BitesSeatingArea`] ≥1×1, may abut counters, must share ≥1m border with
 //!   the **long opening face** of a Passage, and may abut the kitchen.
 //! - Kitchen ≥1×1, ≥1m from counters, may abut seating.
 //! Soft-fail ([`FitError::TooSmall`]) if any region cannot be reserved.
 
+pub mod parameterized;
+
+pub use parameterized::{BitesSitdownParameterized, BitesSitdownPlan};
+
 use lod::gen::LodSceneLevel;
-use procedural_common::{NoiseConfig, NoiseParams};
+use procedural_common::NoiseParams;
 use richmond_building_components::{BuildingComponents, LabelNode, LabelStyle, Layers};
 
 use crate::fit::{Confines, FillableRegions, Fit, FitError};
 
 use super::label_util::label_filling_aabb;
-use super::stall_layout::{
-	eligible_bites_passages, pack_bites_counters_from_choices, pack_bites_sitdown_regions,
-	sample_bites_counter_choices, BitesCounterChoice, BITES_REGION_MIN_PLAN,
-	BITES_SEATING_FACE_CONTACT,
-};
-
-/// Noise / style knobs for [`BitesSitdownStall`].
-#[derive(Debug, Clone, PartialEq)]
-pub struct BitesSitdownParameterized {
-	pub style: LabelStyle,
-	pub counters: Vec<BitesCounterChoice>,
-	/// Fraction of usable plan area targeted for seating (rest → kitchen grow).
-	pub seating_area_frac: f32,
-	/// Inward seed depth from the opening face (≥1m).
-	pub seating_seed_depth: f32,
-	/// 0..1 placement of the ≥1m face contact along the free segment.
-	pub seating_along_t: f32,
-}
-
-impl BitesSitdownParameterized {
-	pub fn sample(confines: &Confines, noise: NoiseParams) -> Result<Self, FitError> {
-		let eligible = eligible_bites_passages(confines);
-		if eligible.is_empty() {
-			return Err(FitError::TooSmall {
-				reason: "bites counter passage",
-			});
-		}
-		let cfg = NoiseConfig::new(noise);
-		let c = confines.center();
-		let counters = sample_bites_counter_choices(&eligible, &cfg, c, 42.0);
-		let style = LabelStyle::from_unit(cfg.sample_range_f32_4d(0.0, 1.0, c.x, c.y, c.z, 43.0));
-		let seating_area_frac =
-			cfg.sample_range_f32_4d(0.28, 0.55, c.x, c.y, c.z, 44.0);
-		let seating_seed_depth =
-			cfg.sample_range_f32_4d(1.0, 1.8, c.x, c.y, c.z, 45.0);
-		let seating_along_t =
-			cfg.sample_range_f32_4d(0.0, 1.0, c.x, c.y, c.z, 46.0);
-		Ok(Self {
-			style,
-			counters,
-			seating_area_frac,
-			seating_seed_depth,
-			seating_along_t,
-		})
-	}
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct BitesSitdownPlan {
-	pub parameterized: BitesSitdownParameterized,
-	pub counter_aabbs: Vec<bevy_math::bounding::Aabb3d>,
-	pub seating_aabb: bevy_math::bounding::Aabb3d,
-	pub kitchen_aabb: bevy_math::bounding::Aabb3d,
-}
-
-impl BitesSitdownPlan {
-	pub fn from_parameterized(
-		params: BitesSitdownParameterized,
-		confines: &Confines,
-	) -> Result<Self, FitError> {
-		let eligible = eligible_bites_passages(confines);
-		let packed = pack_bites_counters_from_choices(confines, &eligible, &params.counters)?;
-		let (seating_aabb, kitchen_aabb) = pack_bites_sitdown_regions(
-			&confines.bounds,
-			&packed.counters,
-			&packed.faces,
-			params.seating_area_frac,
-			BITES_SEATING_FACE_CONTACT,
-			params.seating_seed_depth,
-			params.seating_along_t,
-			BITES_REGION_MIN_PLAN,
-		)
-		.ok_or(FitError::TooSmall {
-			reason: "bites seating/kitchen",
-		})?;
-		Ok(Self {
-			parameterized: params,
-			counter_aabbs: packed.counters,
-			seating_aabb,
-			kitchen_aabb,
-		})
-	}
-}
+use super::stall_layout::BITES_SEATING_FACE_CONTACT;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct BitesSitdownStall {
@@ -108,7 +30,7 @@ pub struct BitesSitdownStall {
 
 impl BitesSitdownStall {
 	pub fn from_plan(plan: BitesSitdownPlan, confines: &Confines) -> Self {
-		let style = plan.parameterized.style;
+		let style = plan.parameterized.style();
 		let bites_counters = plan
 			.counter_aabbs
 			.iter()
@@ -166,8 +88,10 @@ mod tests {
 	use bevy_math::Vec3;
 	use crate::openings::{Opening, OpeningId, OpeningLabel, Openings};
 	use procedural_common::{
-		aabb3_to_plan, contacts_opening_face, passage_opening_face, PlanAxes,
+		aabb2_area, aabb3_to_plan, contacts_opening_face, passage_opening_face, PlanAxes,
 	};
+	use super::super::bites_stall::BitesStallParameterized;
+	use super::super::stall_layout::BitesCounterChoice;
 
 	fn roomy_south() -> Confines {
 		let mut openings = Openings::new();
@@ -192,25 +116,27 @@ mod tests {
 		)
 	}
 
-	fn roomy_params() -> BitesSitdownParameterized {
+	fn roomy_params(seating_area_target: f32) -> BitesSitdownParameterized {
 		BitesSitdownParameterized {
-			style: LabelStyle::Cyan,
-			counters: vec![
-				BitesCounterChoice {
-					place: true,
-					along: 1.5,
-					depth: 0.8,
-					along_t: 0.0,
-				},
-				BitesCounterChoice {
-					place: true,
-					along: 1.5,
-					depth: 0.8,
-					along_t: 0.0,
-				},
-			],
-			seating_area_frac: 0.4,
-			seating_seed_depth: 1.2,
+			base: BitesStallParameterized {
+				style: LabelStyle::Cyan,
+				counters: vec![
+					BitesCounterChoice {
+						place: true,
+						along: 1.5,
+						depth: 0.8,
+						along_t: 0.0,
+					},
+					BitesCounterChoice {
+						place: true,
+						along: 1.5,
+						depth: 0.8,
+						along_t: 0.0,
+					},
+				],
+			},
+			seating_area_target,
+			seating_seed_depth: 1.5,
 			seating_along_t: 0.5,
 		}
 	}
@@ -219,7 +145,7 @@ mod tests {
 	fn sitdown_emits_counters_seating_kitchen() {
 		let confines = roomy_south();
 		let plan =
-			BitesSitdownPlan::from_parameterized(roomy_params(), &confines).unwrap();
+			BitesSitdownPlan::from_parameterized(roomy_params(35.0), &confines).unwrap();
 		let stall = BitesSitdownStall::from_plan(plan, &confines);
 		assert!(!stall.bites_counters.is_empty());
 		assert_eq!(stall.stall_type.text, "BitesSitdownStall");
@@ -234,7 +160,7 @@ mod tests {
 	fn seating_shares_one_meter_opening_face() {
 		let confines = roomy_south();
 		let plan =
-			BitesSitdownPlan::from_parameterized(roomy_params(), &confines).unwrap();
+			BitesSitdownPlan::from_parameterized(roomy_params(35.0), &confines).unwrap();
 		let seating = plan.seating_aabb;
 		let seat2 = aabb3_to_plan(&seating, PlanAxes::XZ);
 		let host = aabb3_to_plan(&confines.bounds, PlanAxes::XZ);
@@ -249,6 +175,25 @@ mod tests {
 			contacts_opening_face(seat2, face, BITES_SEATING_FACE_CONTACT)
 		});
 		assert!(ok, "seating must share ≥1m with a passage long face");
+	}
+
+	#[test]
+	fn seating_grows_toward_area_target() {
+		let confines = roomy_south();
+		let target = 40.0_f32;
+		let plan =
+			BitesSitdownPlan::from_parameterized(roomy_params(target), &confines).unwrap();
+		let seat_area = aabb2_area(aabb3_to_plan(&plan.seating_aabb, PlanAxes::XZ));
+		let kit_area = aabb2_area(aabb3_to_plan(&plan.kitchen_aabb, PlanAxes::XZ));
+		assert!(
+			seat_area + 1.0 >= target.min(30.0),
+			"seating area {seat_area} should approach target {target}"
+		);
+		// Seating should not be a thin leftover beside a dominant kitchen.
+		assert!(
+			seat_area + 1.0 >= kit_area * 0.45,
+			"seating {seat_area} dominated by kitchen {kit_area}"
+		);
 	}
 
 	#[test]

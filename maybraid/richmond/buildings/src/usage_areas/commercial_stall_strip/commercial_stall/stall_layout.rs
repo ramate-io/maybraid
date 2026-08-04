@@ -3,7 +3,7 @@
 use bevy_math::bounding::{Aabb2d, Aabb3d};
 use bevy_math::{Vec2, Vec3};
 use procedural_common::{
-	aabb2_area, aabb3_to_plan, clamp_min_size2, grow_aabb2_pair_toward_areas, inflate_aabb2,
+	aabb2_area, aabb3_to_plan, clamp_min_size2, grow_aabb2, grow_aabb2_toward_area, inflate_aabb2,
 	max_empty_aabb3_plan, max_empty_rect2, pack_optional_face_bands, passage_opening_face,
 	plan_to_aabb3, seed_from_free_opening_face, shared_opening_border_len, OptionalFaceBand,
 	PlanAxes, PlanOpeningFace,
@@ -337,18 +337,15 @@ pub fn pack_bites_kitchen(
 /// Minimum shared border between seating and a passage's long opening face.
 pub const BITES_SEATING_FACE_CONTACT: f32 = 1.0;
 
-/// Sit-down regions from an algebraic opening-face seed + area-targeted grow.
+/// Sit-down regions: face seed → grow seating to `seating_area_target` → kitchen remainder.
 ///
-/// 1. Seating seed: ≥[`BITES_SEATING_FACE_CONTACT`] on a passage long face
-///    (preferring free segments beside counters), depth ≥ `min_plan`.
-/// 2. Kitchen seed: max empty with counter clearance.
-/// 3. Grow both toward `seating_area_frac` / remainder of usable plan area, then
-///    absorb scraps.
+/// Kitchen is packed **after** seating reaches its area target so a max-empty
+/// kitchen seed cannot dominate the free volume.
 pub fn pack_bites_sitdown_regions(
 	bounds: &Aabb3d,
 	counters: &[Aabb3d],
 	faces: &[PlanOpeningFace],
-	seating_area_frac: f32,
+	seating_area_target: f32,
 	seating_contact: f32,
 	seating_seed_depth: f32,
 	seating_along_t: f32,
@@ -364,7 +361,6 @@ pub fn pack_bites_sitdown_regions(
 
 	let mut seating2 = None;
 	let mut seating_face = None;
-	// Prefer longer faces; try each with the noisy along_t.
 	let mut order: Vec<usize> = (0..faces.len()).collect();
 	order.sort_by(|a, b| {
 		faces[*b]
@@ -385,7 +381,6 @@ pub fn pack_bites_sitdown_regions(
 			seating_face = Some(faces[i]);
 			break;
 		}
-		// Fallback: slide along_t across the free segment.
 		for t in [0.0, 0.25, 0.5, 0.75, 1.0] {
 			if let Some(seed) =
 				seed_from_free_opening_face(host, faces[i], &counter_plans, contact, depth, t)
@@ -399,44 +394,42 @@ pub fn pack_bites_sitdown_regions(
 			break;
 		}
 	}
-	let seating2 = seating2?;
+	let seating_seed = seating2?;
 	let seating_face = seating_face?;
-	let seating_aabb = plan_to_aabb3(bounds, seating2, PlanAxes::XZ);
 
-	let kitchen_seed = pack_bites_kitchen(bounds, counters, &[seating_aabb], min_plan)?;
-	let kitchen2 = aabb3_to_plan(&kitchen_seed, PlanAxes::XZ);
-
-	let counter_area: f32 = counter_plans.iter().copied().map(aabb2_area).sum();
-	let usable = (aabb2_area(host) - counter_area).max(0.0);
-	let frac = seating_area_frac.clamp(0.15, 0.75);
-	let target_s = usable * frac;
-	let target_k = usable * (1.0 - frac);
-
-	let kitchen_hard: Vec<_> = counter_plans
-		.iter()
-		.copied()
-		.map(|c| inflate_aabb2(c, BITES_KITCHEN_COUNTER_CLEARANCE))
-		.collect();
 	// Block the outward side of the opening face so grow cannot peel seating
 	// off the ≥1m long-face contact.
 	let mut seating_hard = counter_plans.clone();
 	seating_hard.push(outward_face_block(host, seating_face));
-	let (seating2, kitchen2) = grow_aabb2_pair_toward_areas(
-		host,
-		seating2,
-		kitchen2,
-		&seating_hard,
-		&kitchen_hard,
-		target_s,
-		target_k,
-		8,
-	);
 
+	let counter_area: f32 = counter_plans.iter().copied().map(aabb2_area).sum();
+	let usable = (aabb2_area(host) - counter_area).max(0.0);
+	// Leave at least a 1×1 kitchen opportunity when possible.
+	let kitchen_reserve = (min_plan * min_plan).min(usable * 0.25);
+	let target_s = seating_area_target
+		.max(min_plan * min_plan)
+		.min((usable - kitchen_reserve).max(min_plan * min_plan));
+
+	// Grow seating first (no kitchen seed yet) so the area target is real.
+	let seating2 = grow_aabb2_toward_area(host, seating_seed, &seating_hard, target_s);
 	let seating2 = clamp_min_size2(seating2, Vec2::splat(min_plan))?;
-	let kitchen2 = clamp_min_size2(kitchen2, Vec2::splat(min_plan))?;
 	if shared_opening_border_len(seating2, seating_face) + 1e-3 < contact {
 		return None;
 	}
+	let seating_aabb = plan_to_aabb3(bounds, seating2, PlanAxes::XZ);
+
+	let kitchen_seed = pack_bites_kitchen(bounds, counters, &[seating_aabb], min_plan)?;
+	let kitchen2 = aabb3_to_plan(&kitchen_seed, PlanAxes::XZ);
+	let mut kitchen_hard: Vec<_> = counter_plans
+		.iter()
+		.copied()
+		.map(|c| inflate_aabb2(c, BITES_KITCHEN_COUNTER_CLEARANCE))
+		.collect();
+	kitchen_hard.push(seating2);
+	// Kitchen takes leftover scraps only; do not re-grow seating into them.
+	let kitchen2 = grow_aabb2(host, kitchen2, &kitchen_hard);
+	let kitchen2 = clamp_min_size2(kitchen2, Vec2::splat(min_plan))?;
+
 	Some((
 		plan_to_aabb3(bounds, seating2, PlanAxes::XZ),
 		plan_to_aabb3(bounds, kitchen2, PlanAxes::XZ),
