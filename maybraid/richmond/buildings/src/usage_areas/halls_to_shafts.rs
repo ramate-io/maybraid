@@ -1,8 +1,10 @@
 //! Orthogonal hall network connecting shafts and passages on a rectangular host.
 //!
 //! [`HallsToShafts`] does not author walls. It carves an interior-biased
-//! rectilinear MST on the Hanan grid, then emits [`SpaceKind::Hallway`] bands
-//! and residual [`SpaceKind::InternalSpace`] rectangles.
+//! rectilinear MST on the Hanan grid, rings each shaft with a hall-width
+//! clearance band, then emits [`SpaceKind::Hallway`] bands and residual
+//! [`SpaceKind::InternalSpace`] rectangles (so apartment doors never sit on
+//! the shaft face).
 
 use bevy_math::bounding::{Aabb2d, Aabb3d};
 use bevy_math::{Vec2, Vec3};
@@ -82,11 +84,17 @@ impl HallsToShafts {
 		let beta = cfg.sample_range_f32_4d(1.0, 3.0, c.x, c.y, c.z, 111.0);
 
 		let terminals = collect_terminals(&confines.openings, host);
+		// Hall-width ring around each shaft so residuals never abut the shaft face.
+		let shaft_rings = shaft_clearance_bands(&confines.openings, host, hall_width);
 		let (hall_bands, cuts) = if terminals.len() < 2 {
-			(Vec::new(), shaft_cuts(&confines.openings, host))
+			let bands = merge_collinear_bands(shaft_rings);
+			let mut cuts = bands.clone();
+			cuts.extend(shaft_cuts(&confines.openings, host));
+			(bands, cuts)
 		} else {
 			let paths = connect_terminals(&terminals, host, beta, &cfg, c);
 			let mut bands = thicken_paths(&paths, hall_width, host);
+			bands.extend(shaft_rings);
 			bands = merge_collinear_bands(bands);
 			let mut cuts = bands.clone();
 			cuts.extend(shaft_cuts(&confines.openings, host));
@@ -239,6 +247,39 @@ fn shaft_cuts(openings: &Openings, host: Aabb2d) -> Vec<Aabb2d> {
 		}
 		if let Some(c) = clamp_aabb2(opening_xz(opening), host) {
 			out.push(c);
+		}
+	}
+	out
+}
+
+/// Expand each shaft by `clearance` on all sides and clamp to the host.
+///
+/// These bands are authored as hallways so InternalSpace residuals keep a
+/// corridor ring between living area and the shaft void.
+fn shaft_clearance_bands(openings: &Openings, host: Aabb2d, clearance: f32) -> Vec<Aabb2d> {
+	let clearance = clearance.max(0.0);
+	if clearance <= EPS {
+		return Vec::new();
+	}
+	let pad = Vec2::splat(clearance);
+	let mut out = Vec::new();
+	for (_, opening) in openings.iter() {
+		if opening.label != OpeningLabel::Shaft {
+			continue;
+		}
+		let xz = opening_xz(opening);
+		if !aabb2_intersects(xz, host, -EPS) {
+			continue;
+		}
+		let expanded = Aabb2d {
+			min: xz.min - pad,
+			max: xz.max + pad,
+		};
+		if let Some(c) = clamp_aabb2(expanded, host) {
+			// Degenerate if the shaft already fills the host.
+			if aabb2_area(c) > EPS * EPS {
+				out.push(c);
+			}
 		}
 	}
 	out
@@ -735,7 +776,7 @@ mod tests {
 	}
 
 	#[test]
-	fn single_terminal_emits_host_only() {
+	fn single_shaft_gets_clearance_ring() {
 		let mut openings = Openings::new();
 		let (id, o) = shaft("s0", 0.0, 0.0, 2.0);
 		openings.insert(id, o);
@@ -744,13 +785,79 @@ mod tests {
 			Vec3::new(10.0, 3.0, 10.0),
 			openings,
 		);
-		let (hts, regions) = HallsToShafts::from_confines(&confines, NoiseParams::default()).unwrap();
-		assert!(hts.hall_bands.is_empty());
+		let (hts, regions) = HallsToShafts::from_confines_with(
+			&confines,
+			NoiseParams::default(),
+			HallsToShaftsOptions {
+				hall_width: Some(2.5),
+			},
+		)
+		.unwrap();
+		assert!(!hts.hall_bands.is_empty(), "shaft clearance should be hallway");
 		assert!(regions
 			.within
 			.iter()
-			.all(|r| r.kind == SpaceKind::InternalSpace));
-		assert!(!regions.within.is_empty());
+			.any(|r| r.kind == SpaceKind::Hallway));
+		assert!(regions
+			.within
+			.iter()
+			.any(|r| r.kind == SpaceKind::InternalSpace));
+		assert_residuals_clear_of_shafts(&regions, &confines.openings, 2.5);
+	}
+
+	#[test]
+	fn residuals_keep_clearance_from_shafts() {
+		let mut openings = Openings::new();
+		let (a, oa) = shaft("s0", -6.0, -6.0, 2.0);
+		let (b, ob) = shaft("s1", 6.0, 6.0, 2.0);
+		openings.insert(a, oa);
+		openings.insert(b, ob);
+		let confines = rect_confines(
+			Vec3::new(-12.0, 0.0, -12.0),
+			Vec3::new(12.0, 3.0, 12.0),
+			openings,
+		);
+		let hall_width = 2.5;
+		let (_hts, regions) = HallsToShafts::from_confines_with(
+			&confines,
+			NoiseParams::default(),
+			HallsToShaftsOptions {
+				hall_width: Some(hall_width),
+			},
+		)
+		.unwrap();
+		assert_residuals_clear_of_shafts(&regions, &confines.openings, hall_width);
+	}
+
+	fn assert_residuals_clear_of_shafts(
+		regions: &FillableRegions,
+		openings: &Openings,
+		clearance: f32,
+	) {
+		let pad = Vec2::splat(clearance);
+		for region in &regions.within {
+			if region.kind != SpaceKind::InternalSpace {
+				continue;
+			}
+			let room = host_xz(&region.confines.bounds);
+			for (_, opening) in openings.iter() {
+				if opening.label != OpeningLabel::Shaft {
+					continue;
+				}
+				let shaft = opening_xz(opening);
+				let keepout = Aabb2d {
+					min: shaft.min - pad,
+					max: shaft.max + pad,
+				};
+				// Boundary touch with the clearance ring is fine; forbid interior overlap.
+				assert!(
+					!aabb2_intersects(room, keepout, EPS),
+					"InternalSpace {:?} intersects shaft keepout {:?}",
+					room,
+					keepout
+				);
+			}
+		}
 	}
 
 	#[test]
@@ -890,13 +997,25 @@ mod tests {
 		)
 		.unwrap();
 		assert!((hts.hall_width - 3.5).abs() < 1e-4);
+		let mut corridor_checked = 0usize;
 		for band in &hts.hall_bands {
-			let w = (band.max.x - band.min.x).min(band.max.y - band.min.y);
+			let sx = band.max.x - band.min.x;
+			let sy = band.max.y - band.min.y;
+			// Shaft clearance rings are fat on both axes; skip those.
+			if sx > 3.5 + 1.0 && sy > 3.5 + 1.0 {
+				continue;
+			}
+			let w = sx.min(sy);
 			assert!(
 				(w - 3.5).abs() < 0.05,
 				"expected ~3.5m clear width, got {w}"
 			);
+			corridor_checked += 1;
 		}
+		assert!(
+			corridor_checked > 0,
+			"expected at least one corridor-width hall band"
+		);
 	}
 
 	#[test]
