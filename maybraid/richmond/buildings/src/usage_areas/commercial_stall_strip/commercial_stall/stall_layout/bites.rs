@@ -1,6 +1,8 @@
-//! Bites counter / seating / kitchen packing (plan-face based).
+//! Bites counter / seating / kitchen packing on passage plan faces.
 //!
-//! Opening faces use [`PlanOpeningFace::from_passage`] only — not [`super::StallSide`].
+//! Counters bind to long faces of customer passage openings via
+//! [`PlanOpeningFace`]. Sit-down seating seeds on those faces and grows with a
+//! kitchen area reserve; kitchen is max-empty then `grow_into`.
 
 use bevy_math::bounding::{Aabb2d, Aabb3d};
 use bevy_math::Vec2;

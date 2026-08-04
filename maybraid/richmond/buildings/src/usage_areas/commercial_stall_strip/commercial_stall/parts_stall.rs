@@ -1,4 +1,11 @@
-//! Parts stall: PartsOffice + Parts regions with passage clearances.
+//! Auto / hardware parts counter: small office + parts storage pockets.
+//!
+//! **Semantically:** staff office with a door onto the sales floor; leftover
+//! plan pockets are parts bins / racks.
+//!
+//! **Programmatically:** same clearance → walled office (+door) → grow-into
+//! parts pockets pattern as MiniMart, with smaller mins (office ≥2×2, parts
+//! ≥2×2 / extras ≥1.5×1.5). Office fill region carries the authored door.
 
 pub mod parameterized;
 

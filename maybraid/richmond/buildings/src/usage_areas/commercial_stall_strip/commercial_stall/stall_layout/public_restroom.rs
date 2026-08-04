@@ -1,4 +1,8 @@
-//! Public restroom packing: passage clearances, walled toilet stalls (+door), sinks.
+//! Public restroom plan packer: strip reserve → walled stalls (+door) → sinks.
+//!
+//! Stalls seed against clearances∪door-side strip so they cannot eat the sink
+//! zone; sinks use [`pack_abutting_clearance`] against the stalls-door keep-out.
+//! Door id scope: `public_restroom`.
 
 use bevy_math::bounding::{Aabb2d, Aabb3d};
 use bevy_math::{Vec2, Vec3};

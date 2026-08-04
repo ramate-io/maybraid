@@ -1,4 +1,7 @@
-//! Parts stall packing: passage clearances, office (+door), parts pockets.
+//! Parts plan packer: clearances → office enclosure (+door) → parts pockets.
+//!
+//! Smaller office/parts mins than MiniMart; same enclosure / door-clearance
+//! pattern. Authored door id scope: `parts_stall`.
 
 use bevy_math::bounding::{Aabb2d, Aabb3d};
 use bevy_math::{Vec2, Vec3};

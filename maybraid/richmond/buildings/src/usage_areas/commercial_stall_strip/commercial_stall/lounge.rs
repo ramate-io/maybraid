@@ -1,4 +1,9 @@
-//! Lounge: always-fit fallback interior for a commercial stall bay.
+//! Lounge: always-fit fallback when no catalog interior accepts the bay.
+//!
+//! **Semantically:** soft open sitting / holding space — “we still fill the cell.”
+//!
+//! **Programmatically:** single bay-filling label; never soft-fails (outside the
+//! weighted catalog; last resort in [`super::interior`]).
 
 use lod::gen::LodSceneLevel;
 use procedural_common::NoiseParams;

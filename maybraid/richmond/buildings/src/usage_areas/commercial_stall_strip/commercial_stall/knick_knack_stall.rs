@@ -1,4 +1,11 @@
-//! Knick-knack stall: passage clearances + wall-aligned displays.
+//! Souvenir / trinket stall: keep the entry clear; merchandise on the walls.
+//!
+//! **Semantically:** open floor for browsing with displays only along boundaries
+//! (no free-standing island racks in this placeholder).
+//!
+//! **Programmatically:** passage clearance bands, then sampled + opportunistic
+//! wall bands (`OptionalFaceBand` / free segments). Soft-fail without a
+//! passage or if no display ≥ mins can place.
 
 pub mod parameterized;
 

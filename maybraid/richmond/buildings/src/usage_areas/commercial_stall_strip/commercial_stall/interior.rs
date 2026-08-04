@@ -1,4 +1,11 @@
-//! Interior subtype selection for a commercial stall.
+//! Catalog first-fit for a commercial stall interior.
+//!
+//! **Semantically:** picks what kind of shop occupies the bay (bites, mini-mart,
+//! restroom, …), with Lounge as an always-fit last resort.
+//!
+//! **Programmatically:** noise picks a preferred kind from a weighted
+//! `TypedBucketThrow`; try that kind, then walk first-fit order. Soft-fails
+//! (`FitError::TooSmall`) skip to the next kind; Lounge always succeeds.
 
 use lod::gen::LodSceneLevel;
 use procedural_common::{NoiseParams, NoiseType, TypedBucketThrow};

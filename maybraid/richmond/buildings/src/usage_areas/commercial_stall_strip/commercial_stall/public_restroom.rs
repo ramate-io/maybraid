@@ -1,4 +1,12 @@
-//! Public restroom: walled toilet stalls (+door), sinks, passage clearances.
+//! Public restroom: large walled toilet block + sinks by the stalls door.
+//!
+//! **Semantically:** customer entry → sink strip → door into toilet stalls that
+//! fill most of the bay; stalls enclosure only adds walls on non-boundary sides.
+//!
+//! **Programmatically:** reserve a door-side strip (`2×PASSAGE_CLEARANCE + sink
+//! depth`) while packing stalls ≥2×2; enclose + author stalls door; pack sinks
+//! with [`pack_abutting_clearance`] against the door keep-out. Soft-fail on
+//! undersized bays.
 
 pub mod parameterized;
 

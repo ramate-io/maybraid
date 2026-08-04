@@ -1,4 +1,7 @@
-//! Knick-knack packing: passage clearances + wall-aligned display bands.
+//! Knick-knack plan packer: passage keep-outs + wall display bands only.
+//!
+//! No interior rooms — just clearance bands and opportunistic `PlanOpeningFace`
+//! bands along host walls (including free segments beside passages).
 
 use bevy_math::bounding::Aabb3d;
 use procedural_common::{

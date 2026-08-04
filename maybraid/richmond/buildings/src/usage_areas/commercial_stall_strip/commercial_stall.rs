@@ -1,4 +1,15 @@
-//! Commercial stall: boundary shell + interior subtype fill.
+//! One commercial stall bay: shell walls + catalog interior.
+//!
+//! **Semantically:** a gallery shop cell with punched passages / apertures on the
+//! envelope and a typed interior (food, retail, restroom, …).
+//!
+//! **Programmatically:**
+//! 1. [`CommercialStallParameterized::sample`] → style knobs from noise.
+//! 2. [`CommercialStallPlan::from_parameterized`] builds clipped wall strips from
+//!    confines openings, then fits [`CommercialStallInterior`] on a confines copy
+//!    that forwards only Passage / Aperture openings.
+//! 3. [`CommercialStall`] is the presentable shell + interior; residual
+//!    [`FillableRegions`] come from the interior (e.g. office / stalls rooms).
 
 mod bites_sitdown_stall;
 mod bites_stall;

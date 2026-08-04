@@ -1,5 +1,10 @@
-//! Usage areas describe different spaces in a building.
-//! They are usually concerned with things like subdividing rooms, adding furniture, etc.
+//! Usage areas: fill residual [`crate::fit::Confines`] with program (rooms, shops).
+//!
+//! Higher-order storeys (e.g. Les Halles) emit shell geometry +
+//! [`FillableRegions`]; usage areas consume those confines — packing furniture /
+//! subdivisions / commercial interiors — and may emit nested residuals
+//! (offices, toilet stalls, …). Shared helpers such as [`clearance`] live here
+//! so multiple usage areas can share passage keep-outs.
 
 pub mod clearance;
 pub mod commercial_stall_strip;

@@ -1,4 +1,11 @@
-//! MiniMart stall: passage clearances, office with door, register, aisles, optional shelves.
+//! Convenience grocery: entry clearances, back office, register, aisles, shelves.
+//!
+//! **Semantically:** shoppable floor with a private office and a checkout zone;
+//! shelves hug free walls when space remains.
+//!
+//! **Programmatically:** `PassageClearance` → office (≥2×3) with sales-door
+//! opening + enclosure panels → register ≥2×2 → aisle pockets → optional wall
+//! shelves. Office residual is emitted in [`FillableRegions::within`].
 
 pub mod parameterized;
 

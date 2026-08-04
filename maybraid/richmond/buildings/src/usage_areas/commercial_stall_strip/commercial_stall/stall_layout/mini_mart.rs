@@ -1,4 +1,7 @@
-//! MiniMart packing: passage clearances, office (+door), register, aisles, optional shelves.
+//! MiniMart plan packer: clearances → office enclosure → register → aisles → shelves.
+//!
+//! Owns office-door [`OpeningId`] scope (`mini_mart`) and mins for each stage.
+//! Shelves are optional wall bands on host faces free of customer passages.
 
 use bevy_math::bounding::{Aabb2d, Aabb3d};
 use bevy_math::{Vec2, Vec3};

@@ -1,9 +1,12 @@
 //! Strip of commercial stalls along a gallery band.
 //!
-//! Packing is driven by [`OpeningLabel::Passage`] openings: each stall owns at
-//! least one passage uniquely. Bay spans are voronoi cells along the strip’s
-//! long axis (merged when shorter than the sampled minimum bay width), which
-//! keeps stalls large and door-aligned.
+//! **Semantically:** the Les Halles (or similar) gallery shop front — many bays
+//! along an external strip, each with its own door(s) onto the walkway.
+//!
+//! **Programmatically:** voronoi bays along the strip long axis from
+//! [`OpeningLabel::Passage`] openings (merge undersized cells), subset openings
+//! per bay, then [`CommercialStall::fit_to_confines`] each bay. Soft-fail the
+//! whole strip if it is shorter than the minimum along length.
 
 pub mod commercial_stall;
 

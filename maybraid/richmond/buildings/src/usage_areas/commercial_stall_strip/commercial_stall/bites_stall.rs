@@ -1,4 +1,11 @@
-//! Bites stall: noisy counters on long passages + kitchen in the remainder.
+//! Stand-up food stall: counters on long customer passages + kitchen remainder.
+//!
+//! **Semantically:** quick-service counter facing the gallery door(s), prep space
+//! behind.
+//!
+//! **Programmatically:** parameterized counter choices on passage long faces →
+//! pack counters with clearance → kitchen = max-empty remainder (soft-fail if
+//! either stage cannot meet mins).
 
 pub mod parameterized;
 

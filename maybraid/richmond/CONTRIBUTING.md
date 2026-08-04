@@ -167,6 +167,7 @@ fn emit_internal_features(
 
 - [building-components README](building-components/README.md)
 - [buildings README](buildings/README.md) (urban kit taxonomy for higher-order authorship)
+- [buildings CONTRIBUTING](buildings/CONTRIBUTING.md) (Les Halles parameterized → plan → full / openings / usage areas)
 - [Urban art README](../art/urban/README.md)
 - [`LodScene`](../lod/lib/src/gen/presentation.rs)
 - [Structural LOD collectors](../lod/docs/structural-lod-collectors.md)

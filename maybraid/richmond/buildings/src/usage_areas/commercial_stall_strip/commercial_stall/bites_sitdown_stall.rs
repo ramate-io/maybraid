@@ -1,11 +1,12 @@
-//! Bites sit-down: composes bites counters + opening-face seating + kitchen.
+//! Sit-down food stall: counters + passage-connected seating + kitchen.
 //!
-//! Constraints:
-//! - Counter rules from [`super::bites_stall::BitesStall`] (via composed parameterized).
-//! - [`BitesSeatingArea`] ≥1×1, may abut counters, must share ≥1m border with
-//!   the **long opening face** of a Passage, and may abut the kitchen.
-//! - Kitchen ≥1×1, ≥1m from counters, may abut seating.
-//! Soft-fail ([`FitError::TooSmall`]) if any region cannot be reserved.
+//! **Semantically:** same as bites, plus seating that reads as “at the door”
+//! (shared border with a passage long face).
+//!
+//! **Programmatically:** compose bites counter packing, then staged seating
+//! (seed on passage face → grow with kitchen reserve) → kitchen grow-into.
+//! Soft-fail ([`FitError::TooSmall`]) if any region cannot meet mins
+//! (seating/kitchen ≥1×1; seating ↔ passage contact ≥1 m).
 
 pub mod parameterized;
 
