@@ -15,6 +15,7 @@ pub mod commercial_stall;
 pub mod commercial_stall_strip;
 pub mod knick_knack_examples;
 pub mod knick_knack_stall;
+pub mod livable_apartments_examples;
 pub mod public_restroom;
 pub mod public_restroom_examples;
 pub mod mini_mart;
@@ -52,6 +53,7 @@ pub mod halls_to_shafts;
 pub mod i_apartment_floor_plan;
 pub mod i_apartment_floor_plan_examples;
 pub mod i_apartment_full_storey;
+pub mod i_apartment_full_storey_examples;
 pub mod les_halles_floor_plan;
 pub mod les_halles_full_storey;
 pub mod rect_floor;
@@ -193,8 +195,12 @@ pub enum Show {
 	IApartmentFloorPlan(i_apartment_floor_plan::IApartmentFloorPlan),
 	/// Gallery of I-Apartment floor plans via Fit (varied extents/seeds).
 	IApartmentFloorPlanExamples(i_apartment_floor_plan_examples::IApartmentFloorPlanExamples),
-	/// I-Apartment full storey (plan + LivableApartment per primary rect).
+	/// I-Apartment full storey (plan + LivableApartments per primary rect).
 	IApartmentFullStorey(i_apartment_full_storey::IApartmentFullStorey),
+	/// Gallery of I-Apartment full storeys (halls, groups, partition walls).
+	IApartmentFullStoreyExamples(i_apartment_full_storey_examples::IApartmentFullStoreyExamples),
+	/// Gallery of LivableApartments packs on rectangular hosts.
+	LivableApartmentsExamples(livable_apartments_examples::LivableApartmentsExamples),
 	/// HallsToShafts carve demo (hall / shaft / passage / residual boxes).
 	HallsToShafts(halls_to_shafts::HallsToShafts),
 }
@@ -262,6 +268,8 @@ impl Show {
 			Self::IApartmentFloorPlan(cmd) => cmd.into_preview(),
 			Self::IApartmentFloorPlanExamples(cmd) => Ok(cmd.into_preview()),
 			Self::IApartmentFullStorey(cmd) => cmd.into_preview(),
+			Self::IApartmentFullStoreyExamples(cmd) => Ok(cmd.into_preview()),
+			Self::LivableApartmentsExamples(cmd) => Ok(cmd.into_preview()),
 			Self::HallsToShafts(cmd) => cmd.into_preview(),
 		};
 		match preview {

@@ -110,8 +110,8 @@ and the per-interior galleries (`mini-mart-examples`, `public-restroom-examples`
    [`LivableApartment`](src/usage_areas/livable_apartment.rs) stubs (program fill deferred).
 
 Playground: `/show i-apartment-floor-plan`, `/show i-apartment-floor-plan-examples`,
-`/show i-apartment-full-storey`, `/show halls-to-shafts` (hall / shaft / passage /
-residual AABB gizmos).
+`/show i-apartment-full-storey`, `/show i-apartment-full-storey-examples` (gallery),
+`/show halls-to-shafts` (hall / shaft / passage / residual AABB gizmos).
 
 ### Parameterized → floor plan
 

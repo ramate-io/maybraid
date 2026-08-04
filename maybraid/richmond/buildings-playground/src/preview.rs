@@ -45,7 +45,8 @@ use richmond_buildings::{
 	CirculationRequestStatus, CommercialStall, CommercialStallStrip, Confines, Fit, FitError,
 	IApartmentFloorPlan, 	IApartmentFullStorey, IApartmentParameterized, KnickKnackStall, HallsToShafts as HallsToShaftsFit,
 	FillableRegions, HallsToShaftsOptions, LesHallesFloorPlan, LesHallesFullStorey,
-	LesHallesParameterized, MiniMart, PartsStall, PublicRestroom, SpaceKind,
+	LesHallesParameterized, LivableApartments, LivableApartmentsOptions, MiniMart, PartsStall,
+	PublicRestroom, SpaceKind,
 };
 #[derive(Component)]
 pub struct PreviewRoot;
@@ -415,6 +416,10 @@ pub enum PreviewSubject {
 		/// Inbound openings (`--opening`). Empty ⇒ demo boundary shaft requests.
 		openings: Vec<PreviewOpening>,
 	},
+	/// Side-by-side gallery of `IApartmentFullStorey` (LivableApartments packs).
+	IApartmentFullStoreyExamples,
+	/// Side-by-side gallery of standalone [`LivableApartments`] packs.
+	LivableApartmentsExamples,
 	/// HallsToShafts on a rectangular host (gizmo boxes for halls / openings / residuals).
 	HallsToShafts {
 		extent: Vec3,
@@ -921,6 +926,12 @@ impl PreviewConfig {
 			PreviewSubject::IApartmentFloorPlanExamples => {
 				"preview: i-apartment-floor-plan-examples (gallery)".into()
 			}
+			PreviewSubject::IApartmentFullStoreyExamples => {
+				"preview: i-apartment-full-storey-examples (gallery)".into()
+			}
+			PreviewSubject::LivableApartmentsExamples => {
+				"preview: livable-apartments-examples (gallery)".into()
+			}
 			PreviewSubject::IApartmentFullStorey {
 				extent,
 				seed,
@@ -982,6 +993,10 @@ impl PreviewConfig {
 			PreviewSubject::KnickKnackExamples => knick_knack_examples_bounds(),
 			PreviewSubject::PublicRestroomExamples => public_restroom_examples_bounds(),
 			PreviewSubject::IApartmentFloorPlanExamples => i_apartment_floor_plan_examples_bounds(),
+			PreviewSubject::IApartmentFullStoreyExamples => {
+				i_apartment_full_storey_examples_bounds()
+			}
+			PreviewSubject::LivableApartmentsExamples => livable_apartments_examples_bounds(),
 			PreviewSubject::LesHallesFloorPlan { extent, .. }
 			| PreviewSubject::LesHallesFullStorey { extent, .. }
 			| PreviewSubject::IApartmentFloorPlan { extent, .. }
@@ -1196,6 +1211,8 @@ pub struct CachedPreview {
 	i_apartment_floor_plan: Option<IApartmentFloorPlan>,
 	i_apartment_floor_plan_examples: Vec<IApartmentFloorPlanExampleCell>,
 	i_apartment_full_storey: Option<IApartmentFullStorey>,
+	i_apartment_full_storey_examples: Vec<IApartmentFullStoreyExampleCell>,
+	livable_apartments_examples: Vec<LivableApartmentsExampleCell>,
 	halls_to_shafts: Option<HallsToShaftsPreview>,
 	commercial_stall: Option<CommercialStall>,
 	commercial_stall_strip: Option<CommercialStallStrip>,
@@ -1227,6 +1244,20 @@ struct HallsToShaftsPreview {
 struct IApartmentFloorPlanExampleCell {
 	offset: Vec3,
 	plan: IApartmentFloorPlan,
+}
+
+/// One cell in [`PreviewSubject::IApartmentFullStoreyExamples`].
+#[derive(Clone)]
+struct IApartmentFullStoreyExampleCell {
+	offset: Vec3,
+	storey: IApartmentFullStorey,
+}
+
+/// One cell in [`PreviewSubject::LivableApartmentsExamples`].
+#[derive(Clone)]
+struct LivableApartmentsExampleCell {
+	offset: Vec3,
+	block: LivableApartments,
 }
 
 /// One cell in [`PreviewSubject::PartsExamples`].
@@ -1286,6 +1317,8 @@ impl CachedPreview {
 		self.i_apartment_floor_plan = None;
 		self.i_apartment_floor_plan_examples.clear();
 		self.i_apartment_full_storey = None;
+		self.i_apartment_full_storey_examples.clear();
+		self.livable_apartments_examples.clear();
 		self.halls_to_shafts = None;
 		self.commercial_stall = None;
 		self.commercial_stall_strip = None;
@@ -1539,6 +1572,12 @@ impl CachedPreview {
 			PreviewSubject::IApartmentFloorPlanExamples => {
 				self.i_apartment_floor_plan_examples = build_i_apartment_floor_plan_examples();
 			}
+			PreviewSubject::IApartmentFullStoreyExamples => {
+				self.i_apartment_full_storey_examples = build_i_apartment_full_storey_examples();
+			}
+			PreviewSubject::LivableApartmentsExamples => {
+				self.livable_apartments_examples = build_livable_apartments_examples();
+			}
 			PreviewSubject::IApartmentFullStorey {
 				extent,
 				seed,
@@ -1710,8 +1749,40 @@ impl CachedPreview {
 		if let Some(plan) = self.i_apartment_floor_plan.as_ref() {
 			return plan.label_nodes_for_level(LodSceneLevel::High).flatten();
 		}
+		if !self.i_apartment_full_storey_examples.is_empty() {
+			let mut out = Vec::new();
+			for cell in &self.i_apartment_full_storey_examples {
+				out.extend(
+					cell.storey
+						.label_nodes_for_level(LodSceneLevel::High)
+						.flatten()
+						.into_iter()
+						.map(|mut label| {
+							label.placement.translation += cell.offset;
+							label
+						}),
+				);
+			}
+			return out;
+		}
 		if let Some(storey) = self.i_apartment_full_storey.as_ref() {
 			return storey.label_nodes_for_level(LodSceneLevel::High).flatten();
+		}
+		if !self.livable_apartments_examples.is_empty() {
+			let mut out = Vec::new();
+			for cell in &self.livable_apartments_examples {
+				out.extend(
+					cell.block
+						.label_nodes_for_level(LodSceneLevel::High)
+						.flatten()
+						.into_iter()
+						.map(|mut label| {
+							label.placement.translation += cell.offset;
+							label
+						}),
+				);
+			}
+			return out;
 		}
 		Vec::new()
 	}
@@ -2260,6 +2331,212 @@ fn build_i_apartment_floor_plan_examples() -> Vec<IApartmentFloorPlanExampleCell
 			IApartmentFloorPlanExampleCell { offset, plan }
 		})
 		.collect()
+}
+
+fn i_apartment_full_storey_examples_bounds() -> Aabb3d {
+	let cells = build_i_apartment_full_storey_examples();
+	if cells.is_empty() {
+		return Aabb3d::from_min_max(Vec3::ZERO, Vec3::splat(1.0));
+	}
+	gallery_grid_bounds(
+		|i| i_apartment_plan_footprint_aabb(&cells[i].storey.floor_plan).1,
+		cells.len(),
+		I_APARTMENT_GALLERY_COLS,
+		I_APARTMENT_GALLERY_GAP,
+	)
+}
+
+fn build_i_apartment_full_storey_examples() -> Vec<IApartmentFullStoreyExampleCell> {
+	let specs = i_apartment_floor_plan_examples_specs();
+	let mut fitted = Vec::new();
+	for (extent, seed) in &specs {
+		let bounds = les_halles_confines_bounds(*extent);
+		let empty = Confines::from_bounds(bounds);
+		let noise = NoiseParams {
+			seed: *seed,
+			..NoiseParams::default()
+		};
+		match IApartmentParameterized::sample(&empty, noise).and_then(|params| {
+			let inbound =
+				IApartmentFloorPlan::shaft_requests_for_primary_rects(&params, &empty);
+			let confines = Confines::new(bounds, 0.0, inbound);
+			IApartmentFloorPlan::from_parameterized(params, &confines)
+				.and_then(|(plan, _)| IApartmentFullStorey::from_floor_plan(plan, noise))
+				.map(|(storey, _)| storey)
+		}) {
+			Ok(storey) => fitted.push(storey),
+			Err(err) => {
+				bevy::log::error!(
+					"i-apartment-full-storey-examples ({extent:?} seed={seed}) failed: {err}"
+				);
+			}
+		}
+	}
+	let layout: Vec<(Vec3, Vec3)> = fitted
+		.iter()
+		.map(|s| i_apartment_plan_footprint_aabb(&s.floor_plan))
+		.collect();
+	fitted
+		.into_iter()
+		.enumerate()
+		.map(|(i, storey)| {
+			let (local_min, _) = layout[i];
+			let cell_origin = gallery_grid_offset(
+				|j| layout[j].1,
+				layout.len(),
+				i,
+				I_APARTMENT_GALLERY_COLS,
+				I_APARTMENT_GALLERY_GAP,
+			);
+			let offset = cell_origin - local_min;
+			IApartmentFullStoreyExampleCell { offset, storey }
+		})
+		.collect()
+}
+
+const LIVABLE_APARTMENTS_GALLERY_COLS: usize = 3;
+const LIVABLE_APARTMENTS_GALLERY_GAP: f32 = 8.0;
+
+/// Curated `(extent, seed, hall_width)` hosts for standalone [`LivableApartments`].
+fn livable_apartments_examples_specs() -> Vec<(Vec3, i32, Option<f32>)> {
+	vec![
+		(Vec3::new(24.0, 3.5, 18.0), 1337, Some(2.5)),
+		(Vec3::new(24.0, 3.5, 18.0), 0, None),
+		(Vec3::new(30.0, 3.5, 22.0), 3, Some(3.0)),
+		(Vec3::new(20.0, 3.5, 16.0), 7, Some(2.0)),
+		(Vec3::new(28.0, 3.5, 20.0), 11, None),
+		(Vec3::new(36.0, 3.5, 24.0), 19, Some(3.5)),
+		(Vec3::new(22.0, 3.5, 22.0), 42, Some(2.5)),
+		(Vec3::new(32.0, 3.5, 18.0), 55, None),
+		(Vec3::new(26.0, 3.5, 26.0), 77, Some(2.8)),
+	]
+}
+
+fn livable_apartments_host_footprint(block: &LivableApartments) -> (Vec3, Vec3) {
+	let min = Vec3::from(block.confines.bounds.min);
+	let max = Vec3::from(block.confines.bounds.max);
+	(min, max - min)
+}
+
+fn livable_apartments_examples_bounds() -> Aabb3d {
+	let cells = build_livable_apartments_examples();
+	if cells.is_empty() {
+		return Aabb3d::from_min_max(Vec3::ZERO, Vec3::splat(1.0));
+	}
+	gallery_grid_bounds(
+		|i| livable_apartments_host_footprint(&cells[i].block).1,
+		cells.len(),
+		LIVABLE_APARTMENTS_GALLERY_COLS,
+		LIVABLE_APARTMENTS_GALLERY_GAP,
+	)
+}
+
+fn build_livable_apartments_examples() -> Vec<LivableApartmentsExampleCell> {
+	let specs = livable_apartments_examples_specs();
+	let mut fitted = Vec::new();
+	for (extent, seed, hall_width) in &specs {
+		let host = les_halles_confines_bounds(*extent);
+		let inbound = openings_from_preview(
+			&crate::commands::show::halls_to_shafts::default_demo_openings(*extent),
+		);
+		let confines = Confines::new(host, 0.0, inbound);
+		let noise = NoiseParams {
+			seed: *seed,
+			..NoiseParams::default()
+		};
+		match LivableApartments::from_confines_with(
+			&confines,
+			noise,
+			LivableApartmentsOptions {
+				hall_width: *hall_width,
+			},
+		) {
+			Ok((block, _)) => fitted.push(block),
+			Err(err) => {
+				bevy::log::error!(
+					"livable-apartments-examples ({extent:?} seed={seed}) failed: {err}"
+				);
+			}
+		}
+	}
+	let layout: Vec<(Vec3, Vec3)> = fitted
+		.iter()
+		.map(livable_apartments_host_footprint)
+		.collect();
+	fitted
+		.into_iter()
+		.enumerate()
+		.map(|(i, block)| {
+			let (local_min, _) = layout[i];
+			let cell_origin = gallery_grid_offset(
+				|j| layout[j].1,
+				layout.len(),
+				i,
+				LIVABLE_APARTMENTS_GALLERY_COLS,
+				LIVABLE_APARTMENTS_GALLERY_GAP,
+			);
+			let offset = cell_origin - local_min;
+			LivableApartmentsExampleCell { offset, block }
+		})
+		.collect()
+}
+
+fn draw_livable_apartments_block_gizmos(
+	gizmos: &mut Gizmos,
+	block: &LivableApartments,
+	tf: Transform,
+	cyan: Color,
+	amber: Color,
+	magenta: Color,
+) {
+	let lime = Color::srgb(0.35, 0.95, 0.4);
+	let sky = Color::srgb(0.35, 0.7, 1.0);
+	let host_color = Color::srgb(0.75, 0.75, 0.8);
+
+	gizmos.aabb_3d(block.confines.bounds, tf, host_color);
+
+	for (hi, band) in block.halls.hall_bands.iter().enumerate() {
+		let y0 = Vec3::from(block.confines.bounds.min).y;
+		let y1 = Vec3::from(block.confines.bounds.max).y;
+		let bounds = Aabb3d::from_min_max(
+			Vec3::new(band.min.x, y0, band.min.y),
+			Vec3::new(band.max.x, y1, band.max.y),
+		);
+		let color = if hi % 2 == 0 {
+			lime
+		} else {
+			Color::srgb(0.2, 0.8, 0.55)
+		};
+		gizmos.aabb_3d(bounds, tf, color);
+	}
+
+	for apt in &block.apartments {
+		for part in apt.cells.iter() {
+			gizmos.aabb_3d(part.confines.bounds, tf, sky);
+		}
+	}
+
+	let mut passage_i = 0usize;
+	let mut shaft_i = 0usize;
+	for (_id, opening) in block.confines.openings.iter() {
+		match opening.label {
+			OpeningLabel::Shaft => {
+				let color = if shaft_i % 2 == 0 {
+					magenta
+				} else {
+					Color::srgb(0.75, 0.35, 1.0)
+				};
+				gizmos.aabb_3d(opening.bounds, tf, color);
+				shaft_i += 1;
+			}
+			OpeningLabel::Passage => {
+				let color = if passage_i % 2 == 0 { cyan } else { amber };
+				gizmos.aabb_3d(opening.bounds, tf, color);
+				passage_i += 1;
+			}
+			_ => {}
+		}
+	}
 }
 
 fn draw_i_apartment_primary_rect_gizmos(
@@ -3513,6 +3790,26 @@ pub fn present_preview_lod(
 				);
 			}
 		}
+		PreviewSubject::IApartmentFullStoreyExamples => {
+			for cell in &cache.i_apartment_full_storey_examples {
+				let tf = transform * Transform::from_translation(cell.offset);
+				spawn_preview(
+					&mut commands,
+					tf,
+					ComponentsOnly(&cell.storey).scene_with_lod(&lod_ref),
+				);
+			}
+		}
+		PreviewSubject::LivableApartmentsExamples => {
+			for cell in &cache.livable_apartments_examples {
+				let tf = transform * Transform::from_translation(cell.offset);
+				spawn_preview(
+					&mut commands,
+					tf,
+					ComponentsOnly(&cell.block).scene_with_lod(&lod_ref),
+				);
+			}
+		}
 		PreviewSubject::HallsToShafts { .. } => {
 			// Gizmo-only preview (no BuildingComponents on HallsToShafts).
 		}
@@ -3961,6 +4258,71 @@ pub fn draw_opening_plan_gizmos(
 					};
 					gizmos.aabb_3d(*shaft, cell_tf, color);
 				}
+			}
+		}
+		PreviewSubject::IApartmentFullStoreyExamples => {
+			let lime = Color::srgb(0.35, 0.95, 0.4);
+			let sky = Color::srgb(0.35, 0.7, 1.0);
+			for cell in &cache.i_apartment_full_storey_examples {
+				let cell_tf = tf * Transform::from_translation(cell.offset);
+				draw_i_apartment_primary_rect_gizmos(
+					&mut gizmos,
+					&cell.storey.floor_plan,
+					cell_tf,
+				);
+				for (i, shaft) in cell.storey.floor_plan.shaft_bounds.iter().enumerate() {
+					let color = if i % 2 == 0 {
+						magenta
+					} else {
+						Color::srgb(0.75, 0.35, 1.0)
+					};
+					gizmos.aabb_3d(*shaft, cell_tf, color);
+				}
+				for (pi, (_id, opening)) in cell
+					.storey
+					.floor_plan
+					.openings
+					.iter()
+					.filter(|(_, o)| matches!(o.label, OpeningLabel::Passage))
+					.enumerate()
+				{
+					let color = if pi % 2 == 0 { cyan } else { amber };
+					gizmos.aabb_3d(opening.bounds, cell_tf, color);
+				}
+				for block in &cell.storey.blocks {
+					for (hi, band) in block.halls.hall_bands.iter().enumerate() {
+						let y0 = Vec3::from(block.confines.bounds.min).y;
+						let y1 = Vec3::from(block.confines.bounds.max).y;
+						let bounds = Aabb3d::from_min_max(
+							Vec3::new(band.min.x, y0, band.min.y),
+							Vec3::new(band.max.x, y1, band.max.y),
+						);
+						let color = if hi % 2 == 0 {
+							lime
+						} else {
+							Color::srgb(0.2, 0.8, 0.55)
+						};
+						gizmos.aabb_3d(bounds, cell_tf, color);
+					}
+					for apt in &block.apartments {
+						for part in apt.cells.iter() {
+							gizmos.aabb_3d(part.confines.bounds, cell_tf, sky);
+						}
+					}
+				}
+			}
+		}
+		PreviewSubject::LivableApartmentsExamples => {
+			for cell in &cache.livable_apartments_examples {
+				let cell_tf = tf * Transform::from_translation(cell.offset);
+				draw_livable_apartments_block_gizmos(
+					&mut gizmos,
+					&cell.block,
+					cell_tf,
+					cyan,
+					amber,
+					magenta,
+				);
 			}
 		}
 		PreviewSubject::BitesStall { .. }
