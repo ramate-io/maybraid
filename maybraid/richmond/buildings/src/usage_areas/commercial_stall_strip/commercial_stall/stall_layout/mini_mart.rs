@@ -10,14 +10,16 @@ use procedural_common::{
 use crate::bedroom::shell::{face_rectangle, face_span_rectangle};
 use crate::constraints::FaceKind;
 use crate::fit::{Confines, FitError};
-use crate::openings::{Opening, OpeningId, OpeningLabel};
+use crate::openings::{Opening, OpeningId};
 use crate::paneling::{Rectangle, DEFAULT_PANEL_THICKNESS};
+
+use super::clearance::{PassageClearance, StallPlanHost, STALL_PASSAGE_CLEARANCE};
 
 /// Scope prefix for [`OpeningId::scoped`] openings authored by MiniMart.
 pub const SCOPE: &str = "mini_mart";
 
 /// Inward clearance kept free in front of every customer passage (and office door).
-pub const MINI_MART_PASSAGE_CLEARANCE: f32 = 1.0;
+pub const MINI_MART_PASSAGE_CLEARANCE: f32 = STALL_PASSAGE_CLEARANCE;
 /// Office: longer plan axis must be at least this.
 pub const MINI_MART_OFFICE_LONG_MIN: f32 = 3.0;
 /// Office: shorter plan axis must be at least this.
@@ -103,14 +105,14 @@ impl MiniMartRegions {
 	pub fn pack(&self, confines: &Confines) -> Result<MiniMartPacked, FitError> {
 		let host3 = &confines.bounds;
 		let host = aabb3_to_plan(host3, PlanAxes::XZ);
-		let passage_faces = Self::collect_passage_faces(confines, host);
+		let passage_faces = PassageClearance::collect_faces(confines, host);
 		if passage_faces.is_empty() {
 			return Err(FitError::TooSmall {
 				reason: "mini mart passage",
 			});
 		}
 
-		let mut clearances = Self::passage_clearances(host, &passage_faces);
+		let mut clearances = PassageClearance::bands_std(host, &passage_faces);
 		let (office2, seed_face) = self
 			.pack_office(host, &clearances)
 			.ok_or(FitError::TooSmall {
@@ -160,82 +162,6 @@ impl MiniMartRegions {
 		})
 	}
 
-	fn collect_passage_faces(confines: &Confines, host: Aabb2d) -> Vec<PlanOpeningFace> {
-		let mut out = Vec::new();
-		for (_id, opening) in confines.openings.iter() {
-			if !matches!(opening.label, OpeningLabel::Passage) {
-				continue;
-			}
-			let passage_plan = aabb3_to_plan(&opening.bounds, PlanAxes::XZ);
-			if let Some(face) = PlanOpeningFace::from_passage(host, passage_plan) {
-				out.push(face);
-			}
-		}
-		out
-	}
-
-	/// Four cardinal host faces (XZ plan).
-	pub fn host_faces(host: Aabb2d) -> [PlanOpeningFace; 4] {
-		[
-			PlanOpeningFace {
-				thru_is_x: true,
-				thru: host.min.x,
-				along0: host.min.y,
-				along1: host.max.y,
-				inward_positive: true,
-			},
-			PlanOpeningFace {
-				thru_is_x: true,
-				thru: host.max.x,
-				along0: host.min.y,
-				along1: host.max.y,
-				inward_positive: false,
-			},
-			PlanOpeningFace {
-				thru_is_x: false,
-				thru: host.min.y,
-				along0: host.min.x,
-				along1: host.max.x,
-				inward_positive: true,
-			},
-			PlanOpeningFace {
-				thru_is_x: false,
-				thru: host.max.y,
-				along0: host.min.x,
-				along1: host.max.x,
-				inward_positive: false,
-			},
-		]
-	}
-
-	/// Host walls that do not carry a customer passage face.
-	pub fn free_host_faces(host: Aabb2d, passage_faces: &[PlanOpeningFace]) -> Vec<PlanOpeningFace> {
-		Self::host_faces(host)
-			.into_iter()
-			.filter(|wall| {
-				!passage_faces
-					.iter()
-					.any(|p| Self::same_wall(*wall, *p))
-			})
-			.collect()
-	}
-
-	fn same_wall(a: PlanOpeningFace, b: PlanOpeningFace) -> bool {
-		a.thru_is_x == b.thru_is_x && (a.thru - b.thru).abs() < 0.2
-	}
-
-	fn passage_clearances(host: Aabb2d, faces: &[PlanOpeningFace]) -> Vec<Aabb2d> {
-		let depth = MINI_MART_PASSAGE_CLEARANCE;
-		let mut out = Vec::new();
-		for &face in faces {
-			let along = face.along_len();
-			if let Some(band) = face.band(host, along, depth, 0.5) {
-				out.push(band);
-			}
-		}
-		out
-	}
-
 	fn office_dims_ok(office: Aabb2d) -> bool {
 		let w = office.max.x - office.min.x;
 		let d = office.max.y - office.min.y;
@@ -279,7 +205,7 @@ impl MiniMartRegions {
 		clearances: &[Aabb2d],
 	) -> Option<(Aabb2d, PlanOpeningFace)> {
 		// Prefer walls without a clearance band glued to them, then longer faces.
-		let mut candidates: Vec<PlanOpeningFace> = Self::host_faces(host).into_iter().collect();
+		let mut candidates: Vec<PlanOpeningFace> = StallPlanHost::faces(host).into_iter().collect();
 		candidates.sort_by(|a, b| {
 			let blocked = |wall: PlanOpeningFace| {
 				clearances.iter().any(|c| {
@@ -665,7 +591,7 @@ impl MiniMartRegions {
 			let depth = self
 				.shelves
 				.iter()
-				.find(|s| Self::same_wall(s.face, face))
+				.find(|s| StallPlanHost::same_wall(s.face, face))
 				.map(|s| {
 					s.shelf
 						.depth

@@ -2,14 +2,14 @@
 
 use procedural_common::{
 	aabb2_area, aabb3_to_plan, NoiseConfig, NoiseParams, OptionalFaceBand, PlanAxes,
-	PlanOpeningFace,
 };
 use richmond_building_components::LabelStyle;
 
 use crate::fit::{Confines, FitError};
-use crate::openings::OpeningLabel;
 
-use super::super::stall_layout::{MiniMartPacked, MiniMartRegions, MiniMartShelfSpec};
+use super::super::stall_layout::{
+	MiniMartPacked, MiniMartRegions, MiniMartShelfSpec, PassageClearance, StallPlanHost,
+};
 use super::super::stall_layout::mini_mart::{
 	MINI_MART_AISLES_MIN, MINI_MART_DOOR_HEADER_MIN, MINI_MART_DOOR_HEIGHT_MAX,
 	MINI_MART_DOOR_HEIGHT_MIN, MINI_MART_DOOR_WIDTH_MAX, MINI_MART_DOOR_WIDTH_MIN,
@@ -36,16 +36,7 @@ pub struct MiniMartParameterized {
 impl MiniMartParameterized {
 	pub fn sample(confines: &Confines, noise: NoiseParams) -> Result<Self, FitError> {
 		let host = aabb3_to_plan(&confines.bounds, PlanAxes::XZ);
-		let mut passage_faces = Vec::new();
-		for (_id, opening) in confines.openings.iter() {
-			if !matches!(opening.label, OpeningLabel::Passage) {
-				continue;
-			}
-			let passage_plan = aabb3_to_plan(&opening.bounds, PlanAxes::XZ);
-			if let Some(face) = PlanOpeningFace::from_passage(host, passage_plan) {
-				passage_faces.push(face);
-			}
-		}
+		let passage_faces = PassageClearance::collect_faces(confines, host);
 		if passage_faces.is_empty() {
 			return Err(FitError::TooSmall {
 				reason: "mini mart passage",
@@ -95,7 +86,7 @@ impl MiniMartParameterized {
 		let register_seed_depth = cfg.sample_range_f32_4d(2.0, 2.8, c.x, c.y, c.z, 57.0);
 		let style = LabelStyle::from_unit(cfg.sample_range_f32_4d(0.0, 1.0, c.x, c.y, c.z, 58.0));
 
-		let free_faces = MiniMartRegions::free_host_faces(host, &passage_faces);
+		let free_faces = StallPlanHost::free_faces(host, &passage_faces);
 		let shelves = free_faces
 			.into_iter()
 			.enumerate()

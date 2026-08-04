@@ -195,6 +195,7 @@ impl StallSide {
 	}
 
 	/// Back third of the footprint opposite this side (office residual).
+	#[allow(dead_code)] // kept for remaining façade-band interiors (restroom / knick-knack)
 	pub fn back_third(self, bounds: &Aabb3d) -> Aabb3d {
 		let min = Vec3::from(bounds.min);
 		let max = Vec3::from(bounds.max);
@@ -219,6 +220,7 @@ impl StallSide {
 	}
 
 	/// Thin divider wall between office (back third) and sales floor.
+	#[allow(dead_code)] // kept for remaining façade-band interiors
 	pub fn office_divider_wall(self, bounds: &Aabb3d, office: &Aabb3d) -> Option<Rectangle> {
 		let face = match self {
 			Self::South => FaceKind::Back,
@@ -252,6 +254,7 @@ impl StallSide {
 	}
 
 	/// Sales floor = bounds minus `office` (back third opposite the façade).
+	#[allow(dead_code)] // kept for remaining façade-band interiors
 	pub fn sales_minus_office(self, bounds: &Aabb3d, office: &Aabb3d) -> Aabb3d {
 		let min = Vec3::from(bounds.min);
 		let max = Vec3::from(bounds.max);

@@ -15,6 +15,8 @@ pub mod commercial_stall;
 pub mod commercial_stall_strip;
 pub mod mini_mart;
 pub mod mini_mart_examples;
+pub mod parts_examples;
+pub mod parts_stall;
 pub mod connecting_shells;
 pub mod linear;
 pub mod noisy_rectangular_wall;
@@ -163,6 +165,10 @@ pub enum Show {
 	MiniMart(mini_mart::MiniMart),
 	/// Gallery of MiniMart stalls (passage AABBs drawn as gizmos).
 	MiniMartExamples(mini_mart_examples::MiniMartExamples),
+	/// Parts stall interior (office + parts pockets, passage clearances).
+	PartsStall(parts_stall::PartsStall),
+	/// Gallery of Parts stalls (passage AABBs drawn as gizmos).
+	PartsExamples(parts_examples::PartsExamples),
 	/// Les Halles floor plan (ring shell + residual within cells).
 	LesHallesFloorPlan(les_halles_floor_plan::LesHallesFloorPlan),
 	/// Les Halles full storey (shell + commercial stall strip fills).
@@ -221,6 +227,8 @@ impl Show {
 			Self::BitesExamples(cmd) => Ok(cmd.into_preview()),
 			Self::MiniMart(cmd) => Ok(cmd.into_preview()),
 			Self::MiniMartExamples(cmd) => Ok(cmd.into_preview()),
+			Self::PartsStall(cmd) => Ok(cmd.into_preview()),
+			Self::PartsExamples(cmd) => Ok(cmd.into_preview()),
 			Self::LesHallesFloorPlan(cmd) => cmd.into_preview(),
 			Self::LesHallesFullStorey(cmd) => cmd.into_preview(),
 		};

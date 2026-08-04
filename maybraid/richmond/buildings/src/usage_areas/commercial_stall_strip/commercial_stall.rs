@@ -17,7 +17,7 @@ pub use interior::CommercialStallInterior;
 pub use knick_knack_stall::KnickKnackStall;
 pub use lounge::Lounge;
 pub use mini_mart::{MiniMart, MiniMartParameterized, MiniMartPlan};
-pub use parts_stall::PartsStall;
+pub use parts_stall::{PartsStall, PartsStallParameterized, PartsStallPlan};
 pub use public_restroom::PublicRestroom;
 
 use bevy_math::bounding::Aabb3d;

@@ -43,7 +43,7 @@ use richmond_buildings::wizards_tower::WizardsTower;
 use richmond_buildings::{
 	BedroomFillParams, BitesSitdownStall, BitesStall, CellConstraints, CirculationEntry,
 	CirculationRequestStatus, CommercialStall, CommercialStallStrip, Confines, Fit,
-	LesHallesFloorPlan, LesHallesFullStorey, LesHallesParameterized, MiniMart,
+	LesHallesFloorPlan, LesHallesFullStorey, LesHallesParameterized, MiniMart, PartsStall,
 };
 #[derive(Component)]
 pub struct PreviewRoot;
@@ -358,6 +358,13 @@ pub enum PreviewSubject {
 	},
 	/// Side-by-side gallery of MiniMart variants (passage boxes as gizmos).
 	MiniMartExamples,
+	PartsStall {
+		extent: Vec3,
+		seed: i32,
+		door_side: BitesDoorSide,
+	},
+	/// Side-by-side gallery of Parts variants (passage boxes as gizmos).
+	PartsExamples,
 	LesHallesFloorPlan {
 		/// Confines size (XZ centered at origin; Y from 0).
 		extent: Vec3,
@@ -792,6 +799,17 @@ impl PreviewConfig {
 				)
 			}
 			PreviewSubject::MiniMartExamples => "preview: mini-mart-examples (gallery)".into(),
+			PreviewSubject::PartsStall {
+				extent,
+				seed,
+				door_side,
+			} => {
+				format!(
+					"preview: parts-stall (extent={:.2},{:.2},{:.2} seed={seed} door-side={door_side:?})",
+					extent.x, extent.y, extent.z
+				)
+			}
+			PreviewSubject::PartsExamples => "preview: parts-examples (gallery)".into(),
 			PreviewSubject::LesHallesFloorPlan {
 				extent,
 				seed,
@@ -838,11 +856,13 @@ impl PreviewConfig {
 			| PreviewSubject::CommercialStallStrip { extent, .. }
 			| PreviewSubject::BitesStall { extent, .. }
 			| PreviewSubject::BitesSitdownStall { extent, .. }
-			| PreviewSubject::MiniMart { extent, .. } => {
+			| PreviewSubject::MiniMart { extent, .. }
+			| PreviewSubject::PartsStall { extent, .. } => {
 				Aabb3d::from_min_max(Vec3::ZERO, *extent)
 			}
 			PreviewSubject::BitesExamples => bites_examples_bounds(),
 			PreviewSubject::MiniMartExamples => mini_mart_examples_bounds(),
+			PreviewSubject::PartsExamples => parts_examples_bounds(),
 			PreviewSubject::LesHallesFloorPlan { extent, .. }
 			| PreviewSubject::LesHallesFullStorey { extent, .. } => {
 				les_halles_confines_bounds(*extent)
@@ -1056,10 +1076,19 @@ pub struct CachedPreview {
 	bites_stall: Option<BitesStall>,
 	bites_sitdown_stall: Option<BitesSitdownStall>,
 	mini_mart: Option<MiniMart>,
-	/// Passage AABBs in the active bites / mini-mart preview local space.
+	parts_stall: Option<PartsStall>,
+	/// Passage AABBs in the active bites / mini-mart / parts preview local space.
 	bites_passages: Vec<(Aabb3d, Vec3)>,
 	bites_examples: Vec<BitesExampleCell>,
 	mini_mart_examples: Vec<MiniMartExampleCell>,
+	parts_examples: Vec<PartsExampleCell>,
+}
+
+/// One cell in [`PreviewSubject::PartsExamples`].
+#[derive(Clone)]
+struct PartsExampleCell {
+	offset: Vec3,
+	stall: PartsStall,
 }
 
 /// One cell in [`PreviewSubject::MiniMartExamples`].
@@ -1100,9 +1129,11 @@ impl CachedPreview {
 		self.bites_stall = None;
 		self.bites_sitdown_stall = None;
 		self.mini_mart = None;
+		self.parts_stall = None;
 		self.bites_passages.clear();
 		self.bites_examples.clear();
 		self.mini_mart_examples.clear();
+		self.parts_examples.clear();
 		match &config.subject {
 			PreviewSubject::WizardsTower { noise } => {
 				let footprint = CellConstraints::cell_owned(Aabb3d::from_min_max(
@@ -1225,6 +1256,27 @@ impl CachedPreview {
 				self.mini_mart_examples = cells;
 				self.bites_passages = passages;
 			}
+			PreviewSubject::PartsStall {
+				extent,
+				seed,
+				door_side,
+			} => {
+				let confines = demo_bites_stall_confines(*extent, *door_side);
+				self.bites_passages = passage_aabbs_at(&confines, Vec3::ZERO);
+				let noise = NoiseParams {
+					seed: *seed,
+					..NoiseParams::default()
+				};
+				match PartsStall::fit_to_confines(&confines, noise) {
+					Ok((stall, _)) => self.parts_stall = Some(stall),
+					Err(err) => bevy::log::error!("parts-stall fit failed: {err}"),
+				}
+			}
+			PreviewSubject::PartsExamples => {
+				let (cells, passages) = build_parts_examples();
+				self.parts_examples = cells;
+				self.bites_passages = passages;
+			}
 			PreviewSubject::LesHallesFloorPlan {
 				extent,
 				seed,
@@ -1283,6 +1335,9 @@ impl CachedPreview {
 		if let Some(stall) = self.mini_mart.as_ref() {
 			return stall.label_nodes_for_level(LodSceneLevel::High).flatten();
 		}
+		if let Some(stall) = self.parts_stall.as_ref() {
+			return stall.label_nodes_for_level(LodSceneLevel::High).flatten();
+		}
 		if !self.bites_examples.is_empty() {
 			let mut out = Vec::new();
 			for cell in &self.bites_examples {
@@ -1306,6 +1361,22 @@ impl CachedPreview {
 		if !self.mini_mart_examples.is_empty() {
 			let mut out = Vec::new();
 			for cell in &self.mini_mart_examples {
+				out.extend(
+					cell.stall
+						.label_nodes_for_level(LodSceneLevel::High)
+						.flatten()
+						.into_iter()
+						.map(|mut label| {
+							label.placement.translation += cell.offset;
+							label
+						}),
+				);
+			}
+			return out;
+		}
+		if !self.parts_examples.is_empty() {
+			let mut out = Vec::new();
+			for cell in &self.parts_examples {
 				out.extend(
 					cell.stall
 						.label_nodes_for_level(LodSceneLevel::High)
@@ -1420,6 +1491,88 @@ fn mini_mart_examples_bounds() -> Aabb3d {
 		max = max.max(Vec3::new(x + extent.x, extent.y, z + extent.z));
 	}
 	Aabb3d::from_min_max(Vec3::ZERO, max.max(Vec3::splat(1.0)))
+}
+
+fn parts_examples_specs() -> Vec<(Vec3, i32, BitesDoorSide)> {
+	vec![
+		(Vec3::new(10.0, 3.2, 8.0), 3, BitesDoorSide::South),
+		(Vec3::new(12.0, 3.2, 7.0), 11, BitesDoorSide::South),
+		(Vec3::new(8.0, 3.2, 10.0), 42, BitesDoorSide::East),
+		(Vec3::new(14.0, 3.2, 8.0), 7, BitesDoorSide::South),
+		(Vec3::new(10.0, 3.2, 9.0), 21, BitesDoorSide::North),
+		(Vec3::new(11.0, 3.2, 8.0), 55, BitesDoorSide::South),
+	]
+}
+
+fn parts_examples_bounds() -> Aabb3d {
+	let gap = 2.5_f32;
+	let specs = parts_examples_specs();
+	let cols = 3usize;
+	let mut max = Vec3::ZERO;
+	for (i, (extent, _, _)) in specs.iter().enumerate() {
+		let col = i % cols;
+		let row = i / cols;
+		let mut x = 0.0;
+		for c in 0..col {
+			let idx = row * cols + c;
+			x += specs[idx].0.x + gap;
+		}
+		let mut z = 0.0;
+		for r in 0..row {
+			let mut row_depth = 0.0_f32;
+			for c in 0..cols {
+				let idx = r * cols + c;
+				if idx < specs.len() {
+					row_depth = row_depth.max(specs[idx].0.z);
+				}
+			}
+			z += row_depth + gap;
+		}
+		max = max.max(Vec3::new(x + extent.x, extent.y, z + extent.z));
+	}
+	Aabb3d::from_min_max(Vec3::ZERO, max.max(Vec3::splat(1.0)))
+}
+
+fn build_parts_examples() -> (Vec<PartsExampleCell>, Vec<(Aabb3d, Vec3)>) {
+	let gap = 2.5_f32;
+	let specs = parts_examples_specs();
+	let cols = 3usize;
+	let mut cells = Vec::new();
+	let mut passages = Vec::new();
+	for (i, (extent, seed, door_side)) in specs.iter().enumerate() {
+		let col = i % cols;
+		let row = i / cols;
+		let mut x = 0.0;
+		for c in 0..col {
+			let idx = row * cols + c;
+			x += specs[idx].0.x + gap;
+		}
+		let mut z = 0.0;
+		for r in 0..row {
+			let mut row_depth = 0.0_f32;
+			for c in 0..cols {
+				let idx = r * cols + c;
+				if idx < specs.len() {
+					row_depth = row_depth.max(specs[idx].0.z);
+				}
+			}
+			z += row_depth + gap;
+		}
+		let offset = Vec3::new(x, 0.0, z);
+		let confines = demo_bites_stall_confines(*extent, *door_side);
+		passages.extend(passage_aabbs_at(&confines, offset));
+		let noise = NoiseParams {
+			seed: *seed,
+			..NoiseParams::default()
+		};
+		match PartsStall::fit_to_confines(&confines, noise) {
+			Ok((stall, _)) => cells.push(PartsExampleCell { offset, stall }),
+			Err(err) => {
+				bevy::log::error!("parts-examples ({extent:?} seed={seed}) failed: {err}")
+			}
+		}
+	}
+	(cells, passages)
 }
 
 fn build_mini_mart_examples() -> (Vec<MiniMartExampleCell>, Vec<(Aabb3d, Vec3)>) {
@@ -2734,6 +2887,25 @@ pub fn present_preview_lod(
 				);
 			}
 		}
+		PreviewSubject::PartsStall { .. } => {
+			if let Some(stall) = cache.parts_stall.as_ref() {
+				spawn_preview(
+					&mut commands,
+					transform,
+					ComponentsOnly(stall).scene_with_lod(&lod_ref),
+				);
+			}
+		}
+		PreviewSubject::PartsExamples => {
+			for cell in &cache.parts_examples {
+				let tf = transform * Transform::from_translation(cell.offset);
+				spawn_preview(
+					&mut commands,
+					tf,
+					ComponentsOnly(&cell.stall).scene_with_lod(&lod_ref),
+				);
+			}
+		}
 		PreviewSubject::BitesExamples => {
 			for cell in &cache.bites_examples {
 				let local = match cell {
@@ -3171,8 +3343,10 @@ pub fn draw_opening_plan_gizmos(
 		| PreviewSubject::BitesSitdownStall { .. }
 		| PreviewSubject::BitesExamples
 		| PreviewSubject::MiniMart { .. }
-		| PreviewSubject::MiniMartExamples => {
-			// Cyan / amber wire Passage voids for bites / mini-mart demos.
+		| PreviewSubject::MiniMartExamples
+		| PreviewSubject::PartsStall { .. }
+		| PreviewSubject::PartsExamples => {
+			// Cyan / amber wire Passage voids for bites / mini-mart / parts demos.
 			for (i, (bounds, offset)) in cache.bites_passages.iter().enumerate() {
 				let color = if i % 2 == 0 { cyan } else { amber };
 				let cell_tf = tf * Transform::from_translation(*offset);

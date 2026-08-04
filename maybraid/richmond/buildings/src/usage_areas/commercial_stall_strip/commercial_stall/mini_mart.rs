@@ -134,8 +134,8 @@ mod tests {
 	};
 
 	use super::super::stall_layout::mini_mart::{
-		MiniMartRegions, MINI_MART_AISLES_MIN, MINI_MART_OFFICE_LONG_MIN,
-		MINI_MART_OFFICE_SHORT_MIN, MINI_MART_PASSAGE_CLEARANCE, MINI_MART_REGISTER_MIN, SCOPE,
+		MINI_MART_AISLES_MIN, MINI_MART_OFFICE_LONG_MIN, MINI_MART_OFFICE_SHORT_MIN,
+		MINI_MART_PASSAGE_CLEARANCE, MINI_MART_REGISTER_MIN, SCOPE,
 	};
 
 	fn roomy_south_doors() -> Confines {
@@ -304,7 +304,6 @@ mod tests {
 			}
 		}
 		assert!(packed_areas.len() >= 3);
-		let _ = MiniMartRegions::host_faces(aabb3_to_plan(&confines.bounds, PlanAxes::XZ));
 	}
 
 	#[test]
