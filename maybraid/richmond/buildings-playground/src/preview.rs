@@ -41,11 +41,11 @@ use richmond_buildings::wall_demo::{NoisyRectangularWall, NoisyRectangularWallPa
 use richmond_buildings::wizards_tower::WizardsTower;
 use richmond_buildings::{
 	BitesSitdownStall, BitesStall, CellConstraints, CommercialStall, CommercialStallStrip,
-	CommonBedroom, Confines, DiningRoom, FillableRegions, Fit, FitError, HallsToShafts as HallsToShaftsFit,
-	HallsToShaftsOptions, IApartmentFloorPlan, IApartmentFullStorey, IApartmentParameterized,
-	Kitchen, KnickKnackStall, LesHallesFloorPlan, LesHallesFullStorey, LesHallesParameterized,
-	LivableApartment, LivableApartments, LivableApartmentsOptions, LivingRoom, MiniMart, PartsStall,
-	PublicRestroom,
+	CommonBedroom, Confines, DiningRoom, FillableRegions, FillRegion, Fit, FitError,
+	HallsToShafts as HallsToShaftsFit, HallsToShaftsOptions, IApartmentFloorPlan,
+	IApartmentFullStorey, IApartmentParameterized, Kitchen, KnickKnackStall, LesHallesFloorPlan,
+	LesHallesFullStorey, LesHallesParameterized, LivableApartment, LivableApartments,
+	LivableApartmentsOptions, LivingRoom, MiniMart, MultiConfines, PartsStall, PublicRestroom,
 	ResidentialBathroom, ResidentialHalfBathroom, SittingRoom, SpaceKind, Study,
 };
 #[derive(Component)]
@@ -2987,18 +2987,44 @@ fn build_i_apartment_full_storey_examples() -> Vec<IApartmentFullStoreyExampleCe
 const LIVABLE_APARTMENTS_GALLERY_COLS: usize = 3;
 const LIVABLE_APARTMENTS_GALLERY_GAP: f32 = 8.0;
 
-/// Curated `(extent, seed, hall_width)` hosts for standalone [`LivableApartments`].
-fn livable_apartments_examples_specs() -> Vec<(Vec3, i32, Option<f32>)> {
+/// Curated `(extent, seed, hall_width, targets)` hosts for standalone [`LivableApartments`].
+/// Larger catalog targets encourage multi-cell (L / non-rect) apartment groups.
+fn livable_apartments_examples_specs() -> Vec<(Vec3, i32, Option<f32>, Option<Vec<f32>>)> {
 	vec![
-		(Vec3::new(24.0, 3.5, 18.0), 1337, Some(2.5)),
-		(Vec3::new(24.0, 3.5, 18.0), 0, None),
-		(Vec3::new(30.0, 3.5, 22.0), 3, Some(3.0)),
-		(Vec3::new(20.0, 3.5, 16.0), 7, Some(2.0)),
-		(Vec3::new(28.0, 3.5, 20.0), 11, None),
-		(Vec3::new(36.0, 3.5, 24.0), 19, Some(3.5)),
-		(Vec3::new(22.0, 3.5, 22.0), 42, Some(2.5)),
-		(Vec3::new(32.0, 3.5, 18.0), 55, None),
-		(Vec3::new(26.0, 3.5, 26.0), 77, Some(2.8)),
+		(
+			Vec3::new(24.0, 3.5, 18.0),
+			1337,
+			Some(2.5),
+			Some(vec![55.0, 48.0, 40.0, 30.0]),
+		),
+		(Vec3::new(24.0, 3.5, 18.0), 0, None, None),
+		(
+			Vec3::new(30.0, 3.5, 22.0),
+			3,
+			Some(3.0),
+			Some(vec![55.0, 48.0, 40.0, 30.0]),
+		),
+		(Vec3::new(20.0, 3.5, 16.0), 7, Some(2.0), None),
+		(
+			Vec3::new(28.0, 3.5, 20.0),
+			11,
+			None,
+			Some(vec![60.0, 50.0, 42.0, 35.0, 28.0]),
+		),
+		(Vec3::new(36.0, 3.5, 24.0), 19, Some(3.5), None),
+		(
+			Vec3::new(22.0, 3.5, 22.0),
+			42,
+			Some(2.5),
+			Some(vec![55.0, 48.0, 40.0]),
+		),
+		(Vec3::new(32.0, 3.5, 18.0), 55, None, None),
+		(
+			Vec3::new(26.0, 3.5, 26.0),
+			77,
+			Some(2.8),
+			Some(vec![58.0, 50.0, 42.0, 32.0]),
+		),
 	]
 }
 
@@ -3024,7 +3050,7 @@ fn livable_apartments_examples_bounds() -> Aabb3d {
 fn build_livable_apartments_examples() -> Vec<LivableApartmentsExampleCell> {
 	let specs = livable_apartments_examples_specs();
 	let mut fitted = Vec::new();
-	for (extent, seed, hall_width) in &specs {
+	for (extent, seed, hall_width, targets) in &specs {
 		let host = les_halles_confines_bounds(*extent);
 		let inbound = openings_from_preview(
 			&crate::commands::show::halls_to_shafts::default_demo_openings(*extent),
@@ -3039,10 +3065,18 @@ fn build_livable_apartments_examples() -> Vec<LivableApartmentsExampleCell> {
 			noise,
 			LivableApartmentsOptions {
 				hall_width: *hall_width,
-				targets: None,
+				targets: targets.clone(),
 			},
 		) {
-			Ok((block, _)) => fitted.push(block),
+			Ok((block, _)) => {
+				let multi = block.apartments.iter().filter(|a| a.cells.len() >= 2).count();
+				if multi == 0 {
+					bevy::log::warn!(
+						"livable-apartments-examples ({extent:?} seed={seed}): no multi-cell groups"
+					);
+				}
+				fitted.push(block);
+			}
 			Err(err) => {
 				bevy::log::error!(
 					"livable-apartments-examples ({extent:?} seed={seed}) failed: {err}"
@@ -3075,25 +3109,106 @@ fn build_livable_apartments_examples() -> Vec<LivableApartmentsExampleCell> {
 const LIVABLE_APARTMENT_GALLERY_COLS: usize = 3;
 const LIVABLE_APARTMENT_GALLERY_GAP: f32 = 6.0;
 
-/// Curated `(extent, seed)` hosts for standalone [`LivableApartment`].
-fn livable_apartment_examples_specs() -> Vec<(Vec3, i32)> {
+#[derive(Clone, Copy)]
+enum LivableApartmentExampleShape {
+	/// Single rectangular host with a south hall door.
+	Rect { extent: Vec3 },
+	/// L: stem along +X, bar along +Z (door on stem south).
+	LStem {
+		stem: Vec2,
+		bar: Vec2,
+		height: f32,
+	},
+	/// T: crossbar along +X, stem along +Z from mid (door on stem south tip).
+	TBar {
+		bar: Vec2,
+		stem: Vec2,
+		height: f32,
+	},
+}
+
+/// Curated `(shape, seed)` hosts — mix of rectangular and multi-cell footprints.
+fn livable_apartment_examples_specs() -> Vec<(LivableApartmentExampleShape, i32)> {
 	vec![
-		(Vec3::new(8.0, 3.0, 6.5), 7),
-		(Vec3::new(10.0, 3.0, 8.0), 11),
-		(Vec3::new(12.0, 3.0, 9.0), 21),
-		(Vec3::new(14.0, 3.0, 10.0), 3),
-		(Vec3::new(11.0, 3.0, 11.0), 42),
-		(Vec3::new(16.0, 3.2, 12.0), 55),
-		(Vec3::new(9.0, 3.0, 7.0), 77),
-		(Vec3::new(13.0, 3.0, 8.5), 99),
-		(Vec3::new(18.0, 3.2, 12.0), 1337),
+		(
+			LivableApartmentExampleShape::Rect {
+				extent: Vec3::new(8.0, 3.0, 6.5),
+			},
+			7,
+		),
+		(
+			LivableApartmentExampleShape::LStem {
+				stem: Vec2::new(8.0, 4.5),
+				bar: Vec2::new(4.5, 7.0),
+				height: 3.0,
+			},
+			11,
+		),
+		(
+			LivableApartmentExampleShape::Rect {
+				extent: Vec3::new(12.0, 3.0, 9.0),
+			},
+			21,
+		),
+		(
+			LivableApartmentExampleShape::TBar {
+				bar: Vec2::new(12.0, 4.0),
+				stem: Vec2::new(4.5, 6.5),
+				height: 3.0,
+			},
+			3,
+		),
+		(
+			LivableApartmentExampleShape::LStem {
+				stem: Vec2::new(10.0, 5.0),
+				bar: Vec2::new(5.5, 8.0),
+				height: 3.0,
+			},
+			42,
+		),
+		(
+			LivableApartmentExampleShape::Rect {
+				extent: Vec3::new(16.0, 3.2, 12.0),
+			},
+			55,
+		),
+		(
+			LivableApartmentExampleShape::TBar {
+				bar: Vec2::new(14.0, 4.5),
+				stem: Vec2::new(5.0, 7.0),
+				height: 3.0,
+			},
+			77,
+		),
+		(
+			LivableApartmentExampleShape::LStem {
+				stem: Vec2::new(7.0, 4.0),
+				bar: Vec2::new(4.0, 6.0),
+				height: 3.0,
+			},
+			99,
+		),
+		(
+			LivableApartmentExampleShape::Rect {
+				extent: Vec3::new(18.0, 3.2, 12.0),
+			},
+			1337,
+		),
 	]
 }
 
 fn livable_apartment_host_footprint(apt: &LivableApartment) -> (Vec3, Vec3) {
-	let confines = apt.primary_confines();
-	let min = Vec3::from(confines.bounds.min);
-	let max = Vec3::from(confines.bounds.max);
+	let mut min = Vec3::splat(f32::INFINITY);
+	let mut max = Vec3::splat(f32::NEG_INFINITY);
+	for part in apt.cells.iter() {
+		let pmin = Vec3::from(part.confines.bounds.min);
+		let pmax = Vec3::from(part.confines.bounds.max);
+		min = min.min(pmin);
+		max = max.max(pmax);
+	}
+	if !min.is_finite() {
+		return (Vec3::ZERO, Vec3::splat(1.0));
+	}
 	(min, max - min)
 }
 
@@ -3110,21 +3225,81 @@ fn livable_apartment_examples_bounds() -> Aabb3d {
 	)
 }
 
+fn demo_multi_confines_with_south_door(parts: &[(Vec3, Vec3)], door_part: usize) -> MultiConfines {
+	let mut regions = Vec::new();
+	for (i, (min, max)) in parts.iter().enumerate() {
+		let mut openings = Openings::new();
+		if i == door_part {
+			let w = ((max.x - min.x) * 0.3).clamp(0.8, 1.2);
+			let cx = 0.5 * (min.x + max.x);
+			let door_h = ((max.y - min.y) * 0.72).clamp(2.0, (max.y - min.y).max(2.0));
+			openings.insert(
+				OpeningId::new("demo_apt_door"),
+				Opening::passage(Aabb3d::from_min_max(
+					Vec3::new(cx - w * 0.5, min.y, min.z - 0.2),
+					Vec3::new(cx + w * 0.5, min.y + door_h, min.z + 0.2),
+				)),
+			);
+		}
+		regions.push(FillRegion::new(
+			SpaceKind::InternalSpace,
+			Confines::new(Aabb3d::from_min_max(*min, *max), 0.0, openings),
+		));
+	}
+	MultiConfines::new(regions)
+}
+
+fn livable_apartment_example_multi(shape: LivableApartmentExampleShape) -> MultiConfines {
+	match shape {
+		LivableApartmentExampleShape::Rect { extent } => {
+			MultiConfines::from(demo_common_bedroom_confines(extent, true))
+		}
+		LivableApartmentExampleShape::LStem { stem, bar, height } => {
+			// Stem: [0,stem.x] × [0,stem.y]; bar: [0,bar.x] × [stem.y, stem.y+bar.y] (L).
+			demo_multi_confines_with_south_door(
+				&[
+					(Vec3::ZERO, Vec3::new(stem.x, height, stem.y)),
+					(
+						Vec3::new(0.0, 0.0, stem.y),
+						Vec3::new(bar.x, height, stem.y + bar.y),
+					),
+				],
+				0,
+			)
+		}
+		LivableApartmentExampleShape::TBar { bar, stem, height } => {
+			// Crossbar along X at z=stem.y..stem.y+bar.y; stem centered under it.
+			let stem_x0 = (bar.x - stem.x) * 0.5;
+			demo_multi_confines_with_south_door(
+				&[
+					(
+						Vec3::new(stem_x0, 0.0, 0.0),
+						Vec3::new(stem_x0 + stem.x, height, stem.y),
+					),
+					(
+						Vec3::new(0.0, 0.0, stem.y),
+						Vec3::new(bar.x, height, stem.y + bar.y),
+					),
+				],
+				0,
+			)
+		}
+	}
+}
+
 fn build_livable_apartment_examples() -> Vec<LivableApartmentExampleCell> {
 	let specs = livable_apartment_examples_specs();
 	let mut fitted = Vec::new();
-	for (extent, seed) in &specs {
-		let confines = demo_common_bedroom_confines(*extent, true);
+	for (shape, seed) in &specs {
+		let multi = livable_apartment_example_multi(*shape);
 		let noise = NoiseParams {
 			seed: *seed,
 			..NoiseParams::default()
 		};
-		match LivableApartment::from_confines(0, &confines, noise) {
+		match LivableApartment::from_multi(0, &multi, noise) {
 			Ok((apt, _)) => fitted.push(apt),
 			Err(err) => {
-				bevy::log::error!(
-					"livable-apartment-examples ({extent:?} seed={seed}) failed: {err}"
-				);
+				bevy::log::error!("livable-apartment-examples (seed={seed}) failed: {err}");
 			}
 		}
 	}

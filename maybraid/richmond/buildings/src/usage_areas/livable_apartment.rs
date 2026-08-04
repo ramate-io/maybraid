@@ -29,7 +29,7 @@ use crate::paneling::rect_fit::RectInset;
 use crate::paneling::rectangular_strip::RectangularStripNode;
 use crate::paneling::DEFAULT_PANEL_THICKNESS;
 use crate::shells::ortho::{standing_face_opening, WallEdge};
-use crate::shells::{RectFloor, RectFloorParams, RectFloorSlab};
+use crate::shells::RectFloor;
 use crate::usage_areas::common_bedroom::CommonBedroom;
 use crate::usage_areas::label_util::label_filling_aabb;
 use crate::usage_areas::livable_quarters::{
@@ -219,7 +219,8 @@ impl LivableApartment {
 
 		let mut rooms = Vec::new();
 		let mut residual_within = Vec::new();
-		let mut filled_confines: Vec<Confines> = Vec::new();
+		// `(confines, needs_apartment_walls)` — walls only for bedrooms / baths.
+		let mut filled_confines: Vec<(Confines, bool)> = Vec::new();
 
 		// --- Entryway on the door cell ------------------------------------
 		let (door_ci, mut work_rects) = collect_work_rects(cells);
@@ -240,7 +241,8 @@ impl LivableApartment {
 					),
 					confines: entry_c.clone(),
 				});
-				filled_confines.push(entry_c);
+				// Entryway is open to the common plan — no apartment walls.
+				filled_confines.push((entry_c, false));
 				// Replace door cell in work_rects with carve remainders.
 				work_rects.retain(|r| aabb2_area(*r) > EPS * EPS);
 				// Drop the original door-cell footprint if still present.
@@ -260,14 +262,13 @@ impl LivableApartment {
 					reason: "livable_no_body",
 				});
 			}
-			let shell = cells.parts.first().and_then(|p| try_shell(&p.confines));
 			return Ok((
 				Self {
 					region_id,
 					cells: cells.clone(),
 					rooms,
 					partitions: Vec::new(),
-					shell,
+					shell: None,
 				},
 				FillableRegions {
 					within: residual_within,
@@ -318,21 +319,16 @@ impl LivableApartment {
 			});
 		}
 
-		let filled_cells: Vec<(usize, Confines)> = filled_confines
-			.iter()
-			.enumerate()
-			.map(|(i, c)| (i, c.clone()))
-			.collect();
-		let (partitions, _) = connect_filled_cells(&filled_cells, region_id);
-
-		let shell = cells.parts.first().and_then(|p| try_shell(&p.confines));
+		// Walls only around bedrooms / bathrooms; common rooms + entry stay open-plan.
+		let partitions = enclose_private_rooms(&filled_confines, region_id);
 		Ok((
 			Self {
 				region_id,
 				cells: cells.clone(),
 				rooms,
 				partitions,
-				shell,
+				// Envelope shells are authored by LivableApartments / subtypes — not here.
+				shell: None,
 			},
 			FillableRegions {
 				within: residual_within,
@@ -564,7 +560,7 @@ fn pack_kinds_into_zone(
 	roll: f32,
 	noise: NoiseParams,
 	rooms: &mut Vec<ApartmentRoom>,
-	filled_confines: &mut Vec<Confines>,
+	filled_confines: &mut Vec<(Confines, bool)>,
 	residual_within: &mut Vec<FillRegion>,
 ) -> Result<(), FitError> {
 	for &kind in kinds {
@@ -575,10 +571,11 @@ fn pack_kinds_into_zone(
 		let cell_noise = noise_for_cell(noise, rooms.len() as i32);
 		let slot_id = rooms.len() as u32;
 		let (slot, rem) = take_slot(host, kind);
+		let needs_walls = kind_needs_apartment_walls(kind);
 		match try_pack_slot(slot, y0, y1, roll, cell_noise, kind, slot_id) {
 			Ok((room, confines, nested)) => {
 				rooms.push(room);
-				filled_confines.push(confines);
+				filled_confines.push((confines, needs_walls));
 				residual_within.extend(nested.within);
 				return_remnants(free, rooms, residual_within, filled_confines, rem, y0, y1, roll);
 			}
@@ -587,7 +584,7 @@ fn pack_kinds_into_zone(
 				match try_pack_slot(host, y0, y1, roll, cell_noise, kind, slot_id) {
 					Ok((room, confines, nested)) => {
 						rooms.push(room);
-						filled_confines.push(confines);
+						filled_confines.push((confines, needs_walls));
 						residual_within.extend(nested.within);
 					}
 					Err(FitError::TooSmall { .. }) => free.push(host),
@@ -599,6 +596,13 @@ fn pack_kinds_into_zone(
 		}
 	}
 	Ok(())
+}
+
+fn kind_needs_apartment_walls(kind: QuarterKind) -> bool {
+	matches!(
+		kind,
+		QuarterKind::Bedroom | QuarterKind::Bathroom | QuarterKind::HalfBath
+	)
 }
 
 fn try_pack_slot(
@@ -620,7 +624,7 @@ fn return_remnants(
 	free: &mut Vec<Aabb2d>,
 	rooms: &mut Vec<ApartmentRoom>,
 	residual_within: &mut Vec<FillRegion>,
-	filled_confines: &mut Vec<Confines>,
+	filled_confines: &mut Vec<(Confines, bool)>,
 	rem: Vec<Aabb2d>,
 	y0: f32,
 	y1: f32,
@@ -760,7 +764,7 @@ fn slot_passage_openings(xz: Aabb2d, y0: f32, y1: f32, slot_id: u32) -> Openings
 fn push_leftover(
 	rooms: &mut Vec<ApartmentRoom>,
 	residual_within: &mut Vec<FillRegion>,
-	filled_confines: &mut Vec<Confines>,
+	filled_confines: &mut Vec<(Confines, bool)>,
 	confines: Confines,
 ) {
 	let area = {
@@ -778,7 +782,7 @@ fn push_leftover(
 			),
 			confines: confines.clone(),
 		});
-		filled_confines.push(confines);
+		filled_confines.push((confines, false));
 	} else {
 		residual_within.push(FillRegion::new(SpaceKind::InternalSpace, confines));
 	}
@@ -874,20 +878,29 @@ fn aabb2_near_eq(a: Aabb2d, b: Aabb2d) -> bool {
 		&& (a.max.y - b.max.y).abs() < 0.05
 }
 
-fn connect_filled_cells(
-	filled: &[(usize, Confines)],
+/// Partition walls only for bedrooms / bathrooms (open-plan otherwise).
+///
+/// Shared edges involving a private room get a wall (+ door when possible).
+/// Remaining private perimeter faces (against residual / open plan) are enclosed
+/// the same way; common rooms and the entryway get no apartment walls.
+fn enclose_private_rooms(
+	filled: &[(Confines, bool)],
 	apartment_id: u32,
-) -> (Vec<ClippedRectangularStrip>, Openings) {
+) -> Vec<ClippedRectangularStrip> {
 	let thickness = DEFAULT_PANEL_THICKNESS.max(0.12);
 	let mut partitions = Vec::new();
-	let mut openings = Openings::new();
+	if filled.is_empty() {
+		return partitions;
+	}
+
 	let cells: Vec<PlanCell> = filled
 		.iter()
-		.map(|(ci, c)| {
+		.enumerate()
+		.map(|(ci, (c, _))| {
 			let min = Vec3::from(c.bounds.min);
 			let max = Vec3::from(c.bounds.max);
 			PlanCell::new(
-				*ci as u32,
+				ci as u32,
 				Aabb2d {
 					min: Vec2::new(min.x, min.z),
 					max: Vec2::new(max.x, max.z),
@@ -895,8 +908,20 @@ fn connect_filled_cells(
 			)
 		})
 		.collect();
+	let needs: Vec<bool> = filled.iter().map(|(_, n)| *n).collect();
+	let entry_center = filled.first().map(|(c, _)| {
+		let min = Vec3::from(c.bounds.min);
+		let max = Vec3::from(c.bounds.max);
+		Vec2::new(0.5 * (min.x + max.x), 0.5 * (min.z + max.z))
+	});
 
+	let mut door_for: Vec<bool> = vec![false; cells.len()];
+
+	// Shared edges: wall when a private room is involved.
 	for i in 0..cells.len() {
+		if !needs[i] {
+			continue;
+		}
 		for j in (i + 1)..cells.len() {
 			if !cells_edge_adjacent(&cells[i], &cells[j], EPS) {
 				continue;
@@ -906,37 +931,149 @@ fn connect_filled_cells(
 			else {
 				continue;
 			};
-			let y0 = Vec3::from(filled[i].1.bounds.min).y;
-			let y1 = Vec3::from(filled[i].1.bounds.max).y;
-			let height = (y1 - y0).max(2.0);
-			let door = connecting_passage(
+			let a = cells[i].id;
+			let b = cells[j].id;
+			let y0 = Vec3::from(filled[i].0.bounds.min).y;
+			let y1 = Vec3::from(filled[i].0.bounds.max).y;
+			let want_door = !door_for[i] || (needs[j] && !door_for[j]);
+			let door = if want_door {
+				connecting_passage(along_x, lo, hi, mid, y0, y1, apartment_id, a, b)
+			} else {
+				None
+			};
+			if door.is_some() {
+				door_for[i] = true;
+				if needs[j] {
+					door_for[j] = true;
+				}
+			}
+			push_private_wall(
+				&mut partitions,
 				along_x,
 				lo,
 				hi,
 				mid,
 				y0,
 				y1,
-				apartment_id,
-				cells[i].id,
-				cells[j].id,
+				thickness,
+				door,
 			);
-			if let Some((id, opening)) = door {
-				openings.insert(id.clone(), opening.clone());
-				let mut wall_openings = Openings::new();
-				wall_openings.insert(id, opening);
-				if let Some(wall) =
-					partition_strip(along_x, lo, hi, mid, y0, height, thickness, &wall_openings)
-				{
-					partitions.push(wall);
-				}
-			} else if let Some(wall) =
-				partition_strip(along_x, lo, hi, mid, y0, height, thickness, &Openings::new())
-			{
-				partitions.push(wall);
-			}
 		}
 	}
-	(partitions, openings)
+
+	// Open / residual faces of private rooms.
+	for i in 0..cells.len() {
+		if !needs[i] {
+			continue;
+		}
+		let y0 = Vec3::from(filled[i].0.bounds.min).y;
+		let y1 = Vec3::from(filled[i].0.bounds.max).y;
+		let b = cells[i].bounds;
+		let faces = [
+			(false, b.min.x, b.min.y, b.max.y),
+			(false, b.max.x, b.min.y, b.max.y),
+			(true, b.min.y, b.min.x, b.max.x),
+			(true, b.max.y, b.min.x, b.max.x),
+		];
+
+		let face_touching_filled = |along_x: bool, mid: f32, lo: f32, hi: f32| -> bool {
+			cells.iter().enumerate().any(|(j, other)| {
+				i != j
+					&& shared_edge_span(b, other.bounds).is_some_and(|(ax, flo, fhi, fmid)| {
+						ax == along_x
+							&& (fmid - mid).abs() < 0.08
+							&& flo <= hi + EPS
+							&& fhi >= lo - EPS
+					})
+			})
+		};
+
+		let mut best_door_face: Option<usize> = None;
+		if !door_for[i] {
+			if let Some(target) = entry_center {
+				let mut best_d = f32::INFINITY;
+				for (fi, &(along_x, mid, lo, hi)) in faces.iter().enumerate() {
+					if face_touching_filled(along_x, mid, lo, hi) {
+						continue;
+					}
+					let face_c = if along_x {
+						Vec2::new(0.5 * (lo + hi), mid)
+					} else {
+						Vec2::new(mid, 0.5 * (lo + hi))
+					};
+					let d = face_c.distance_squared(target);
+					if d < best_d {
+						best_d = d;
+						best_door_face = Some(fi);
+					}
+				}
+			}
+		}
+
+		for (fi, &(along_x, mid, lo, hi)) in faces.iter().enumerate() {
+			if hi - lo < EPS || face_touching_filled(along_x, mid, lo, hi) {
+				continue;
+			}
+			let door = if best_door_face == Some(fi) {
+				connecting_passage(
+					along_x,
+					lo,
+					hi,
+					mid,
+					y0,
+					y1,
+					apartment_id,
+					cells[i].id,
+					9000 + fi as u32,
+				)
+			} else {
+				None
+			};
+			if door.is_some() {
+				door_for[i] = true;
+			}
+			push_private_wall(
+				&mut partitions,
+				along_x,
+				lo,
+				hi,
+				mid,
+				y0,
+				y1,
+				thickness,
+				door,
+			);
+		}
+	}
+
+	partitions
+}
+
+fn push_private_wall(
+	partitions: &mut Vec<ClippedRectangularStrip>,
+	along_x: bool,
+	lo: f32,
+	hi: f32,
+	mid: f32,
+	y0: f32,
+	y1: f32,
+	thickness: f32,
+	door: Option<(OpeningId, Opening)>,
+) {
+	let height = (y1 - y0).max(2.0);
+	if let Some((id, opening)) = door {
+		let mut wall_openings = Openings::new();
+		wall_openings.insert(id, opening);
+		if let Some(wall) =
+			partition_strip(along_x, lo, hi, mid, y0, height, thickness, &wall_openings)
+		{
+			partitions.push(wall);
+		}
+	} else if let Some(wall) =
+		partition_strip(along_x, lo, hi, mid, y0, height, thickness, &Openings::new())
+	{
+		partitions.push(wall);
+	}
 }
 
 fn connecting_passage(
@@ -1103,26 +1240,6 @@ fn wall_strip_with_openings(
 		last.position = edge.end;
 	}
 	ClippedRectangularStrip::from_nodes(style, nodes, insets)
-}
-
-fn try_shell(confines: &Confines) -> Option<RectFloor> {
-	let min = Vec3::from(confines.bounds.min);
-	let max = Vec3::from(confines.bounds.max);
-	let footprint = Vec2::new((max.x - min.x).max(0.0), (max.z - min.z).max(0.0));
-	let height = (max.y - min.y).max(0.0);
-	if footprint.x < 1.5 || footprint.y < 1.5 || height < 2.0 {
-		return None;
-	}
-	let center_xz = Vec3::new(0.5 * (min.x + max.x), min.y, 0.5 * (min.z + max.z));
-	Some(RectFloor::new(RectFloorParams {
-		center_xz,
-		footprint,
-		storey_height: height,
-		openings: confines.openings.clone(),
-		floor: RectFloorSlab::Solid,
-		ceiling: RectFloorSlab::None,
-		..RectFloorParams::default()
-	}))
 }
 
 impl Fit for LivableApartment {
