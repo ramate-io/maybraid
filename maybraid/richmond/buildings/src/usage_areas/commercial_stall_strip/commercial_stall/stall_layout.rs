@@ -3,8 +3,9 @@
 use bevy_math::bounding::Aabb3d;
 use bevy_math::{Vec2, Vec3};
 use procedural_common::{
-	aabb2_area, aabb3_to_plan, clamp_min_size2, inflate_aabb2, max_empty_aabb3_plan,
-	max_empty_rect2, max_empty_rect2_by, plan_to_aabb3, touches_aabb2, PlanAxes,
+	aabb2_area, aabb3_to_plan, clamp_min_size2, grow_aabb2_pair, inflate_aabb2,
+	max_empty_aabb3_plan, max_empty_rect2, max_empty_rect2_by, plan_to_aabb3, touches_aabb2,
+	PlanAxes,
 };
 
 use crate::bedroom::shell::face_rectangle;
@@ -260,6 +261,54 @@ pub fn pack_bites_kitchen(
 	let kitchen2 = max_empty_rect2(host, &cuts)?;
 	let kitchen2 = clamp_min_size2(kitchen2, Vec2::splat(min_plan))?;
 	Some(plan_to_aabb3(bounds, kitchen2, PlanAxes::XZ))
+}
+
+/// Sit-down regions: kitchen seed (clearance from counters) → seating seed
+/// (passage-touching in the remainder) → [`grow_aabb2_pair`] so leftover dead
+/// space is absorbed under each side's hard constraints.
+///
+/// Seating-first max-empty often claims the whole free volume and starves the
+/// kitchen; kitchen-first leaves the near-counter / passage band for seating.
+pub fn pack_bites_sitdown_regions(
+	bounds: &Aabb3d,
+	counters: &[Aabb3d],
+	passages: &[Aabb3d],
+	min_plan: f32,
+) -> Option<(Aabb3d, Aabb3d)> {
+	let kitchen_seed = pack_bites_kitchen(bounds, counters, &[], min_plan)?;
+	let mut seating_excludes = counters.to_vec();
+	seating_excludes.push(kitchen_seed);
+	let seating_seed =
+		pack_passage_connected_region(bounds, &seating_excludes, passages, min_plan)?;
+
+	let host = aabb3_to_plan(bounds, PlanAxes::XZ);
+	let counter_plans: Vec<_> = counters
+		.iter()
+		.map(|c| aabb3_to_plan(c, PlanAxes::XZ))
+		.collect();
+	let kitchen_hard: Vec<_> = counter_plans
+		.iter()
+		.copied()
+		.map(|c| inflate_aabb2(c, BITES_KITCHEN_COUNTER_CLEARANCE))
+		.collect();
+	let seating2 = aabb3_to_plan(&seating_seed, PlanAxes::XZ);
+	let kitchen2 = aabb3_to_plan(&kitchen_seed, PlanAxes::XZ);
+	// Grow seating first so the passage-band claims lateral scraps; kitchen
+	// then expands into whatever remains outside the 1m counter halo.
+	let (seating2, kitchen2) = grow_aabb2_pair(
+		host,
+		seating2,
+		kitchen2,
+		&counter_plans,
+		&kitchen_hard,
+		8,
+	);
+	let seating2 = clamp_min_size2(seating2, Vec2::splat(min_plan))?;
+	let kitchen2 = clamp_min_size2(kitchen2, Vec2::splat(min_plan))?;
+	Some((
+		plan_to_aabb3(bounds, seating2, PlanAxes::XZ),
+		plan_to_aabb3(bounds, kitchen2, PlanAxes::XZ),
+	))
 }
 
 /// Counter band on `side` of depth `depth`, covering `along_len` centered in the

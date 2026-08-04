@@ -192,6 +192,104 @@ pub fn max_empty_aabb3_plan(
 	Some(plan_to_aabb3(host, plan, axes))
 }
 
+fn y_overlap_open(a: Aabb2d, b: Aabb2d) -> bool {
+	a.min.y < b.max.y - EPS && b.min.y < a.max.y - EPS
+}
+
+fn x_overlap_open(a: Aabb2d, b: Aabb2d) -> bool {
+	a.min.x < b.max.x - EPS && b.min.x < a.max.x - EPS
+}
+
+/// Expand `seed` inside `host` until blocked by `excludes` or the host rim.
+///
+/// Assumes `seed` ⊂ `host` and does not intersect `excludes`. Result always
+/// contains `seed`. Iterates axis expansions so growing one axis can unlock another.
+pub fn grow_aabb2(host: Aabb2d, seed: Aabb2d, excludes: &[Aabb2d]) -> Aabb2d {
+	let mut r = Aabb2d {
+		min: seed.min.max(host.min),
+		max: seed.max.min(host.max),
+	};
+	if r.max.x - r.min.x < MIN_SPAN || r.max.y - r.min.y < MIN_SPAN {
+		return seed;
+	}
+	for _ in 0..16 {
+		let prev = r;
+		// −X
+		let mut lim = host.min.x;
+		for e in excludes {
+			if y_overlap_open(r, *e) && e.max.x < r.min.x + EPS {
+				lim = lim.max(e.max.x);
+			}
+		}
+		r.min.x = lim.min(r.min.x);
+		// +X
+		lim = host.max.x;
+		for e in excludes {
+			if y_overlap_open(r, *e) && e.min.x > r.max.x - EPS {
+				lim = lim.min(e.min.x);
+			}
+		}
+		r.max.x = lim.max(r.max.x);
+		// −Y
+		lim = host.min.y;
+		for e in excludes {
+			if x_overlap_open(r, *e) && e.max.y < r.min.y + EPS {
+				lim = lim.max(e.max.y);
+			}
+		}
+		r.min.y = lim.min(r.min.y);
+		// +Y
+		lim = host.max.y;
+		for e in excludes {
+			if x_overlap_open(r, *e) && e.min.y > r.max.y - EPS {
+				lim = lim.min(e.min.y);
+			}
+		}
+		r.max.y = lim.max(r.max.y);
+		if (r.min - prev.min).length_squared() < EPS * EPS
+			&& (r.max - prev.max).length_squared() < EPS * EPS
+		{
+			break;
+		}
+	}
+	r
+}
+
+/// Alternate expanding two seeds into free space. Each treats the other as an
+/// exclude; `hard_a` / `hard_b` are permanent obstacles for that side.
+///
+/// Useful after placing seed boxes (max-empty / policy) so leftover dead space
+/// is absorbed without a full guillotine partition.
+pub fn grow_aabb2_pair(
+	host: Aabb2d,
+	a: Aabb2d,
+	b: Aabb2d,
+	hard_a: &[Aabb2d],
+	hard_b: &[Aabb2d],
+	rounds: usize,
+) -> (Aabb2d, Aabb2d) {
+	let mut a = a;
+	let mut b = b;
+	for _ in 0..rounds.max(1) {
+		let mut ex_a: Vec<Aabb2d> = hard_a.to_vec();
+		ex_a.push(b);
+		let a_next = grow_aabb2(host, a, &ex_a);
+		let mut ex_b: Vec<Aabb2d> = hard_b.to_vec();
+		ex_b.push(a_next);
+		let b_next = grow_aabb2(host, b, &ex_b);
+		let stable = (a_next.min - a.min).length_squared() < EPS * EPS
+			&& (a_next.max - a.max).length_squared() < EPS * EPS
+			&& (b_next.min - b.min).length_squared() < EPS * EPS
+			&& (b_next.max - b.max).length_squared() < EPS * EPS;
+		a = a_next;
+		b = b_next;
+		if stable {
+			break;
+		}
+	}
+	(a, b)
+}
+
 #[cfg(test)]
 mod tests {
 	use super::*;
@@ -238,5 +336,46 @@ mod tests {
 			max: Vec2::new(1.0, 1.0),
 		};
 		assert!(inset_aabb2(a, 0.6).is_none());
+	}
+
+	#[test]
+	fn grow_fills_dead_space_beside_seed() {
+		let host = Aabb2d {
+			min: Vec2::ZERO,
+			max: Vec2::new(10.0, 6.0),
+		};
+		let wall = Aabb2d {
+			min: Vec2::new(0.0, 0.0),
+			max: Vec2::new(10.0, 1.0),
+		};
+		let seed = Aabb2d {
+			min: Vec2::new(4.0, 1.0),
+			max: Vec2::new(6.0, 2.0),
+		};
+		let grown = grow_aabb2(host, seed, &[wall]);
+		assert!((grown.min.x - 0.0).abs() < 1e-3);
+		assert!((grown.max.x - 10.0).abs() < 1e-3);
+		assert!((grown.min.y - 1.0).abs() < 1e-3);
+		assert!((grown.max.y - 6.0).abs() < 1e-3);
+	}
+
+	#[test]
+	fn grow_pair_splits_remainder() {
+		let host = Aabb2d {
+			min: Vec2::ZERO,
+			max: Vec2::new(10.0, 6.0),
+		};
+		let a = Aabb2d {
+			min: Vec2::new(0.0, 0.0),
+			max: Vec2::new(2.0, 2.0),
+		};
+		let b = Aabb2d {
+			min: Vec2::new(8.0, 4.0),
+			max: Vec2::new(10.0, 6.0),
+		};
+		let (ga, gb) = grow_aabb2_pair(host, a, b, &[], &[], 8);
+		// Together they should cover the host (axis-aligned pair grow).
+		assert!(aabb2_area(ga) + aabb2_area(gb) >= 10.0 * 6.0 - 1.0);
+		assert!(!intersects_aabb2(ga, gb));
 	}
 }

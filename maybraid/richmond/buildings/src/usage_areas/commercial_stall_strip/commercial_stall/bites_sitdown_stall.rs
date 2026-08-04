@@ -6,6 +6,9 @@
 //!   **touch a Passage**, and may abut the kitchen.
 //! - Kitchen ≥1×1, ≥1m from counters, may abut seating.
 //! Soft-fail ([`FitError::TooSmall`]) if any region cannot be reserved.
+//!
+//! Layout uses kitchen-first seeds then [`super::stall_layout::pack_bites_sitdown_regions`]
+//! grow-into-each-other so neither region leaves large dead AABB scraps.
 
 use lod::gen::LodSceneLevel;
 use procedural_common::{NoiseConfig, NoiseParams};
@@ -14,9 +17,7 @@ use richmond_building_components::{BuildingComponents, LabelNode, LabelStyle, La
 use crate::fit::{Confines, FillableRegions, Fit, FitError};
 
 use super::label_util::label_filling_aabb;
-use super::stall_layout::{
-	pack_bites_counters, pack_bites_kitchen, pack_passage_connected_region, BITES_REGION_MIN_PLAN,
-};
+use super::stall_layout::{pack_bites_counters, pack_bites_sitdown_regions, BITES_REGION_MIN_PLAN};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct BitesSitdownStall {
@@ -36,26 +37,14 @@ impl Fit for BitesSitdownStall {
 		let counter_depth = cfg.sample_range_f32_4d(0.65, 1.0, c.x, c.y, c.z, 42.0);
 		let packed = pack_bites_counters(confines, counter_depth)?;
 
-		// Reserve seating first: passage-touching, may press against counters.
-		let seating = pack_passage_connected_region(
+		let (seating, kitchen) = pack_bites_sitdown_regions(
 			&confines.bounds,
 			&packed.counters,
 			&packed.passages,
 			BITES_REGION_MIN_PLAN,
 		)
 		.ok_or(FitError::TooSmall {
-			reason: "bites seating",
-		})?;
-
-		// Kitchen: 1m from counters, may abut seating.
-		let kitchen = pack_bites_kitchen(
-			&confines.bounds,
-			&packed.counters,
-			&[seating],
-			BITES_REGION_MIN_PLAN,
-		)
-		.ok_or(FitError::TooSmall {
-			reason: "bites kitchen",
+			reason: "bites seating/kitchen",
 		})?;
 
 		let style = LabelStyle::from_unit(cfg.sample_range_f32_4d(0.0, 1.0, c.x, c.y, c.z, 43.0));
