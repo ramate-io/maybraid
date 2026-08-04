@@ -894,6 +894,70 @@ mod tests {
 	}
 
 	#[test]
+	fn common_bedroom_furniture_avoids_partition_door_clear() {
+		use procedural_common::{inflate_aabb2, intersects_aabb2};
+		let confines = Confines::new(
+			Aabb3d::from_min_max(Vec3::ZERO, Vec3::new(12.0, 3.2, 12.0)),
+			0.0,
+			{
+				let mut openings = Openings::new();
+				openings.insert(
+					OpeningId::new("door_a"),
+					Opening::passage(Aabb3d::from_min_max(
+						Vec3::new(5.0, 0.0, -0.2),
+						Vec3::new(7.0, 2.2, 0.2),
+					)),
+				);
+				openings
+			},
+		);
+		let mut saw_partition = false;
+		for seed in 0..48 {
+			let plan = CommonBedroomPlan::from_parameterized(
+				CommonBedroomParameterized::with_fill(1.3, 0.7),
+				&confines,
+				NoiseParams {
+					seed,
+					..NoiseParams::default()
+				},
+			)
+			.unwrap();
+			let parts: Vec<_> = plan
+				.packed
+				.closets
+				.iter()
+				.chain(plan.packed.walk_in_closets.iter())
+				.chain(plan.packed.ensuites.iter())
+				.collect();
+			if parts.is_empty() {
+				continue;
+			}
+			saw_partition = true;
+			let furniture: Vec<_> = plan
+				.packed
+				.beds
+				.iter()
+				.chain(plan.packed.nightstands.iter())
+				.chain(plan.packed.small_bedroom_furniture.iter())
+				.chain(plan.packed.wardrobes.iter())
+				.chain(plan.packed.dressers.iter())
+				.chain(plan.packed.bedroom_furniture.iter())
+				.map(|a| aabb3_to_plan(a, PlanAxes::XZ))
+				.collect();
+			for part in parts {
+				let approach = inflate_aabb2(part.door_clear, 0.5);
+				for furn in &furniture {
+					assert!(
+						!intersects_aabb2(approach, *furn),
+						"furniture intersects partition door approach (seed={seed})"
+					);
+				}
+			}
+		}
+		assert!(saw_partition, "expected some seed to place a partition");
+	}
+
+	#[test]
 	fn common_bedroom_soft_fails_tiny_cell() {
 		let confines = Confines::from_bounds(Aabb3d::from_min_max(
 			Vec3::ZERO,

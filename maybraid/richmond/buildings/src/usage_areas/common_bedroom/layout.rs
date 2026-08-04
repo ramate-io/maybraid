@@ -40,8 +40,8 @@ const PARTITION_SEP: f32 = 1.0;
 const STORAGE_SEP: f32 = 1.0;
 /// Inward door keep-out depth for closet / walk-in / ensuite sales-face doors.
 const PARTITION_DOOR_CLEARANCE: f32 = 1.25;
-/// Extra plan pad around authored door clear bands (lateral breathing room).
-const DOOR_CLEAR_PAD: f32 = 0.3;
+/// Extra plan pad around authored door clear bands (lateral / approach breathing room).
+const DOOR_CLEAR_PAD: f32 = 0.5;
 /// Host floor area (m²) above which walk-ins / bedroom furniture may be considered.
 const LARGE_ROOM_AREA: f32 = 70.0;
 /// Soft cap on residual [`Concept::BedroomFurniture`] placements.

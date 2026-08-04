@@ -6,8 +6,8 @@
 use bevy_math::bounding::{Aabb2d, Aabb3d};
 use bevy_math::{Vec2, Vec3};
 use procedural_common::{
-	aabb2_area, clamp_min_size2, intersects_aabb2, plan_to_aabb3, Aabb2dPack, PlanAxes,
-	PlanOpeningFace,
+	aabb2_area, clamp_min_size2, inflate_aabb2, intersects_aabb2, plan_to_aabb3, Aabb2dPack,
+	PlanAxes, PlanOpeningFace,
 };
 
 use crate::bedroom::shell::{face_rectangle, face_span_rectangle};
@@ -108,6 +108,10 @@ impl EnclosedRoomParams {
 	/// Like [`Self::pack`], but:
 	/// - `face_seed_extra` may add hard excludes per candidate face (`None` skips the face)
 	/// - `accept` may reject a grown room after mins / contact checks (e.g. restroom door-side zone)
+	///
+	/// Each candidate face is finalized (door-clear shrink, axis clamp, host snap, enclose)
+	/// and **rejected** when the door keep-out intersects existing `clearances`, so a blocked
+	/// sales face does not win over a free wall.
 	pub fn pack_filtered(
 		&self,
 		host3: &Aabb3d,
@@ -116,41 +120,59 @@ impl EnclosedRoomParams {
 		mut face_seed_extra: impl FnMut(PlanOpeningFace) -> Option<Vec<Aabb2d>>,
 		accept: impl Fn(Aabb2d, PlanOpeningFace) -> bool,
 	) -> Option<EnclosedRoom> {
-		let (mut room, seed_face) =
-			self.pack_region(host, clearances, &mut face_seed_extra, &accept)?;
-		if self.shrink_sales_for_door_clear {
-			room = shrink_for_door_clearance(
-				host,
+		for (mut room, seed_face) in
+			self.iter_seeded_rooms(host, clearances, &mut face_seed_extra, &accept)
+		{
+			if self.shrink_sales_for_door_clear {
+				let Some(shrunk) = shrink_for_door_clearance(
+					host,
+					room,
+					seed_face,
+					self.door_clearance + 0.05,
+					self.mins,
+					self.contact,
+				) else {
+					continue;
+				};
+				room = shrunk;
+			}
+			if let Some(frac) = self.max_axis_frac {
+				let Some(clamped) =
+					clamp_room_axis_frac(host, room, seed_face, frac, self.mins, self.contact)
+				else {
+					continue;
+				};
+				room = clamped;
+			}
+			// Pull near-host lateral faces flush so we omit thin partition walls in the gap.
+			room = snap_near_host_sides(host, room, seed_face, clearances, HOST_WALL_SNAP);
+			let Some(enclosure) = self.enclose(host3, host, room, seed_face) else {
+				continue;
+			};
+			// Door approach must stay free of beds / furniture / other keep-outs.
+			let approach = inflate_aabb2(enclosure.door_clear, DOOR_APPROACH_PAD);
+			if clearances.iter().any(|c| intersects_aabb2(approach, *c)) {
+				continue;
+			}
+			return Some(EnclosedRoom {
 				room,
 				seed_face,
-				self.door_clearance + 0.05,
-				self.mins,
-				self.contact,
-			)?;
+				walls: enclosure.walls,
+				door_clear: enclosure.door_clear,
+				door_id: self.door_id.clone(),
+				door: enclosure.door,
+			});
 		}
-		if let Some(frac) = self.max_axis_frac {
-			room = clamp_room_axis_frac(host, room, seed_face, frac, self.mins, self.contact)?;
-		}
-		// Pull near-host lateral faces flush so we omit thin partition walls in the gap.
-		room = snap_near_host_sides(host, room, seed_face, clearances, HOST_WALL_SNAP);
-		let enclosure = self.enclose(host3, host, room, seed_face)?;
-		Some(EnclosedRoom {
-			room,
-			seed_face,
-			walls: enclosure.walls,
-			door_clear: enclosure.door_clear,
-			door_id: self.door_id.clone(),
-			door: enclosure.door,
-		})
+		None
 	}
 
-	fn pack_region(
+	fn iter_seeded_rooms(
 		&self,
 		host: Aabb2d,
 		clearances: &[Aabb2d],
 		face_seed_extra: &mut impl FnMut(PlanOpeningFace) -> Option<Vec<Aabb2d>>,
 		accept: &impl Fn(Aabb2d, PlanOpeningFace) -> bool,
-	) -> Option<(Aabb2d, PlanOpeningFace)> {
+	) -> Vec<(Aabb2d, PlanOpeningFace)> {
 		let mut candidates: Vec<PlanOpeningFace> = PlanHost::faces(host).into_iter().collect();
 		candidates.sort_by(|a, b| {
 			let blocked = |wall: PlanOpeningFace| {
@@ -174,6 +196,7 @@ impl EnclosedRoomParams {
 			.max(self.mins.min_area())
 			.min((usable - reserve).max(self.mins.min_area()));
 
+		let mut out = Vec::new();
 		for face in candidates {
 			if face.along_len() + 1e-3 < contact {
 				continue;
@@ -210,9 +233,9 @@ impl EnclosedRoomParams {
 			if !accept(room, face) {
 				continue;
 			}
-			return Some((room, face));
+			out.push((room, face));
 		}
-		None
+		out
 	}
 
 	fn enclose(
@@ -367,6 +390,9 @@ struct EnclosureGeom {
 
 /// Gap below which a partition face should flush to the host (omit the wall).
 const HOST_WALL_SNAP: f32 = 0.45;
+/// Extra pad when testing door keep-outs against existing clearances / furniture.
+/// Keep in sync with bedroom `DOOR_CLEAR_PAD` (lateral approach breathing room).
+const DOOR_APPROACH_PAD: f32 = 0.5;
 
 /// Shrink `room` so each plan axis is ≤ `frac` of the host. Keeps the seed-wall
 /// contact; trims the sales face and centers the along-wall span.
