@@ -5,6 +5,7 @@ mod bites_stall;
 mod interior;
 mod knick_knack_stall;
 mod label_util;
+mod lounge;
 mod parts_stall;
 mod public_restroom;
 mod stall_layout;
@@ -14,6 +15,7 @@ pub use bites_sitdown_stall::{BitesSitdownParameterized, BitesSitdownPlan, Bites
 pub use bites_stall::{BitesStall, BitesStallParameterized, BitesStallPlan};
 pub use interior::CommercialStallInterior;
 pub use knick_knack_stall::KnickKnackStall;
+pub use lounge::Lounge;
 pub use parts_stall::PartsStall;
 pub use public_restroom::PublicRestroom;
 pub use supermarket_stall::SupermarketStall;

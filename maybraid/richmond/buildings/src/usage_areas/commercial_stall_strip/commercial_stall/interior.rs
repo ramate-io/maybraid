@@ -3,14 +3,14 @@
 use lod::gen::LodSceneLevel;
 use procedural_common::{NoiseParams, NoiseType, TypedBucketThrow};
 use richmond_building_components::panels::PanelNode;
-use richmond_building_components::{BuildingComponents, LabelNode, LabelStyle, Layers};
+use richmond_building_components::{BuildingComponents, LabelNode, Layers};
 
 use crate::fit::{Confines, FillableRegions, Fit, FitError};
 
 use super::bites_sitdown_stall::BitesSitdownStall;
 use super::bites_stall::BitesStall;
 use super::knick_knack_stall::KnickKnackStall;
-use super::label_util::label_filling_aabb;
+use super::lounge::Lounge;
 use super::parts_stall::PartsStall;
 use super::public_restroom::PublicRestroom;
 use super::supermarket_stall::SupermarketStall;
@@ -24,7 +24,8 @@ pub enum CommercialStallInterior {
 	KnickKnack(KnickKnackStall),
 	Parts(PartsStall),
 	PublicRestroom(PublicRestroom),
-	Fallback(LabelNode),
+	/// Always-fit last resort when no catalog type accepts the bay.
+	Lounge(Lounge),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -111,15 +112,9 @@ impl Fit for CommercialStallInterior {
 			}
 		}
 
-		Ok((
-			Self::Fallback(label_filling_aabb(
-				LabelStyle::Gray,
-				"commercial stall",
-				&confines.bounds,
-				confines.roll,
-			)),
-			FillableRegions::empty(),
-		))
+		// Lounge always fits — final fallback outside the weighted catalog.
+		Lounge::fit_to_confines(confines, noise)
+			.map(|(s, r)| (CommercialStallInterior::Lounge(s), r))
 	}
 }
 
@@ -140,7 +135,7 @@ impl BuildingComponents for CommercialStallInterior {
 			Self::KnickKnack(s) => s.label_nodes_for_level(level),
 			Self::Parts(s) => s.label_nodes_for_level(level),
 			Self::PublicRestroom(s) => s.label_nodes_for_level(level),
-			Self::Fallback(label) => Layers::from_free(vec![label.clone()]),
+			Self::Lounge(s) => s.label_nodes_for_level(level),
 		}
 	}
 }
@@ -204,5 +199,19 @@ mod tests {
 		};
 		let (interior, _) = CommercialStallInterior::fit_to_confines(&confines, noise).unwrap();
 		assert!(!matches!(interior, CommercialStallInterior::Bites(_)));
+	}
+
+	#[test]
+	fn interior_fit_never_errors() {
+		// Even a degenerate bay must resolve (catalog or Lounge).
+		let confines = Confines::from_bounds(Aabb3d::from_min_max(
+			Vec3::ZERO,
+			Vec3::new(1.0, 2.0, 1.0),
+		));
+		assert!(CommercialStallInterior::fit_to_confines(
+			&confines,
+			NoiseParams::default()
+		)
+		.is_ok());
 	}
 }
