@@ -3493,6 +3493,7 @@ pub fn draw_opening_plan_gizmos(
 					.map(|s| &s.floor_plan)
 			});
 			let red = Color::srgb(0.95, 0.2, 0.2);
+			// Inbound preview openings (accepted → cyan/amber, rejected → red).
 			for (i, opening) in openings.iter().enumerate() {
 				let accepted = plan
 					.map(|p| les_halles_opening_accepted(p, opening))
@@ -3507,6 +3508,17 @@ pub fn draw_opening_plan_gizmos(
 				gizmos.aabb_3d(opening.bounds(), tf, color);
 			}
 			if let Some(plan) = plan {
+				// Authored Passage voids (inner stall doors / shaft clears) — same
+				// cyan/amber wire boxes as the commercial-stall demos.
+				let mut passage_i = 0usize;
+				for (_id, opening) in plan.openings.iter() {
+					if !matches!(opening.label, OpeningLabel::Passage) {
+						continue;
+					}
+					let color = if passage_i % 2 == 0 { cyan } else { amber };
+					gizmos.aabb_3d(opening.bounds, tf, color);
+					passage_i += 1;
+				}
 				for (i, shaft) in plan.shaft_bounds.iter().enumerate() {
 					let color = if i % 2 == 0 {
 						magenta

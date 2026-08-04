@@ -5,8 +5,12 @@
 //!
 //! **Programmatically:** voronoi bays along the strip long axis from
 //! [`OpeningLabel::Passage`] openings (merge undersized cells), subset openings
-//! per bay, then [`CommercialStall::fit_to_confines`] each bay. Soft-fail the
-//! whole strip if it is shorter than the minimum along length.
+//! per bay, then [`CommercialStall::fit_to_confines`] each bay. Every fitted
+//! stall uniquely owns ≥1 passage; runs that cannot host their own stall
+//! (including leading/trailing corner overhangs past the last door, or a
+//! `TooSmall` bay) are absorbed by extending the previous stall’s bounds.
+//! Soft-fail the whole strip if it is shorter than the minimum along length
+//! or has no passages.
 
 pub mod commercial_stall;
 
@@ -94,36 +98,7 @@ impl CommercialStallStripPlan {
 			.bay_width
 			.clamp(MIN_STALL_ALONG, along.max(MIN_STALL_ALONG));
 		let bays = partition_bays_for_passages(&passages, along, min_bay);
-		let mut stalls = Vec::with_capacity(bays.len());
-		for (i, bay) in bays.iter().enumerate() {
-			let (smin, smax) = if along_x {
-				(
-					Vec3::new(min.x + bay.along0, min.y, min.z),
-					Vec3::new(min.x + bay.along1, max.y, max.z),
-				)
-			} else {
-				(
-					Vec3::new(min.x, min.y, min.z + bay.along0),
-					Vec3::new(max.x, max.y, min.z + bay.along1),
-				)
-			};
-			let bay_bounds = Aabb3d::from_min_max(smin, smax);
-			let cell = Confines::new(
-				bay_bounds,
-				confines.roll,
-				openings_for_bay(&confines.openings, &bay_bounds, &bay.passage_ids),
-			);
-			let mut bay_noise = noise;
-			bay_noise.seed = noise.seed.wrapping_add(i as i32 * 17);
-			match CommercialStall::fit_to_confines(&cell, bay_noise) {
-				Ok((stall, _)) => stalls.push(stall),
-				Err(FitError::TooSmall { .. }) => continue,
-				Err(err) => return Err(err),
-			}
-		}
-		if stalls.is_empty() {
-			return Err(FitError::TooSmall { reason: "stalls" });
-		}
+		let stalls = fit_stalls_covering_strip(confines, along_x, min, max, &bays, noise)?;
 		Ok(Self {
 			parameterized: params,
 			stalls,
@@ -143,6 +118,134 @@ struct StallBay {
 	along0: f32,
 	along1: f32,
 	passage_ids: Vec<OpeningId>,
+}
+
+impl StallBay {
+	fn merge_with(&mut self, other: StallBay) {
+		self.along0 = self.along0.min(other.along0);
+		self.along1 = self.along1.max(other.along1);
+		self.passage_ids.extend(other.passage_ids);
+	}
+}
+
+/// Fit each passage bay; never leave an uncovered along-run.
+///
+/// On [`FitError::TooSmall`], absorb the bay into the previous fitted stall
+/// (extend bounds + passages and re-fit). A leading failure is carried into the
+/// next bay. Every returned stall still owns ≥1 passage uniquely.
+fn fit_stalls_covering_strip(
+	confines: &Confines,
+	along_x: bool,
+	strip_min: Vec3,
+	strip_max: Vec3,
+	bays: &[StallBay],
+	noise: NoiseParams,
+) -> Result<Vec<CommercialStall>, FitError> {
+	debug_assert!(!bays.is_empty());
+	debug_assert!(bays.iter().all(|b| !b.passage_ids.is_empty()));
+
+	let mut fitted: Vec<(StallBay, CommercialStall, usize)> = Vec::new();
+	let mut carry: Option<StallBay> = None;
+
+	for (i, bay) in bays.iter().cloned().enumerate() {
+		let bay = match carry.take() {
+			Some(mut pending) => {
+				pending.merge_with(bay);
+				pending
+			}
+			None => bay,
+		};
+		debug_assert!(!bay.passage_ids.is_empty());
+
+		match fit_stall_bay(confines, along_x, strip_min, strip_max, &bay, noise, i) {
+			Ok(stall) => fitted.push((bay, stall, i)),
+			Err(FitError::TooSmall { .. }) => {
+				if let Some((prev_bay, prev_stall, prev_i)) = fitted.last_mut() {
+					// Orphan / failed run: extend the last stall over it.
+					prev_bay.merge_with(bay);
+					*prev_stall = fit_stall_bay(
+						confines,
+						along_x,
+						strip_min,
+						strip_max,
+						prev_bay,
+						noise,
+						*prev_i,
+					)
+					.map_err(|_| FitError::TooSmall {
+						reason: "stalls cover",
+					})?;
+				} else {
+					carry = Some(bay);
+				}
+			}
+			Err(err) => return Err(err),
+		}
+	}
+
+	if let Some(tail) = carry {
+		if let Some((prev_bay, prev_stall, prev_i)) = fitted.last_mut() {
+			prev_bay.merge_with(tail);
+			*prev_stall = fit_stall_bay(
+				confines,
+				along_x,
+				strip_min,
+				strip_max,
+				prev_bay,
+				noise,
+				*prev_i,
+			)
+			.map_err(|_| FitError::TooSmall {
+				reason: "stalls cover",
+			})?;
+		} else {
+			// Single merged bay for the whole strip.
+			let stall = fit_stall_bay(confines, along_x, strip_min, strip_max, &tail, noise, 0)?;
+			fitted.push((tail, stall, 0));
+		}
+	}
+
+	if fitted.is_empty() {
+		return Err(FitError::TooSmall { reason: "stalls" });
+	}
+
+	debug_assert!(fitted.first().unwrap().0.along0.abs() < 1e-2);
+	for w in fitted.windows(2) {
+		debug_assert!((w[0].0.along1 - w[1].0.along0).abs() < 1e-2);
+	}
+
+	Ok(fitted.into_iter().map(|(_, stall, _)| stall).collect())
+}
+
+fn fit_stall_bay(
+	confines: &Confines,
+	along_x: bool,
+	strip_min: Vec3,
+	strip_max: Vec3,
+	bay: &StallBay,
+	noise: NoiseParams,
+	seed_i: usize,
+) -> Result<CommercialStall, FitError> {
+	let (smin, smax) = if along_x {
+		(
+			Vec3::new(strip_min.x + bay.along0, strip_min.y, strip_min.z),
+			Vec3::new(strip_min.x + bay.along1, strip_max.y, strip_max.z),
+		)
+	} else {
+		(
+			Vec3::new(strip_min.x, strip_min.y, strip_min.z + bay.along0),
+			Vec3::new(strip_max.x, strip_max.y, strip_min.z + bay.along1),
+		)
+	};
+	let bay_bounds = Aabb3d::from_min_max(smin, smax);
+	let cell = Confines::new(
+		bay_bounds,
+		confines.roll,
+		openings_for_bay(&confines.openings, &bay_bounds, &bay.passage_ids),
+	);
+	let mut bay_noise = noise;
+	bay_noise.seed = noise.seed.wrapping_add(seed_i as i32 * 17);
+	CommercialStall::fit_to_confines(&cell, bay_noise).map(|(stall, _)| stall)
 }
 
 fn collect_passages_along(
@@ -402,5 +505,53 @@ mod tests {
 		let err = CommercialStallStrip::fit_to_confines(&confines, NoiseParams::default())
 			.unwrap_err();
 		assert!(matches!(err, FitError::TooSmall { reason } if reason.contains("passage")));
+	}
+
+	#[test]
+	fn partition_covers_full_strip_including_corner_overhangs() {
+		// Les Halles-style: doors only on the inner straight run; corner squares
+		// beyond the first/last door still belong to the end bays.
+		let confines = strip_with_doors(&[10.0, 20.0, 30.0], 40.0);
+		let passages = collect_passages_along(&confines.openings, true, Vec3::ZERO, 40.0);
+		let bays = partition_bays_for_passages(&passages, 40.0, 3.5);
+		assert!(bays.first().unwrap().along0.abs() < 1e-3);
+		assert!((bays.last().unwrap().along1 - 40.0).abs() < 1e-3);
+		for bay in &bays {
+			assert!(!bay.passage_ids.is_empty());
+		}
+		for w in bays.windows(2) {
+			assert!((w[0].along1 - w[1].along0).abs() < 1e-3);
+		}
+	}
+
+	#[test]
+	fn covering_fit_claims_every_passage_on_corner_overhang_strip() {
+		let confines = strip_with_doors(&[10.0, 20.0, 30.0], 40.0);
+		let min = Vec3::ZERO;
+		let max = Vec3::new(40.0, 3.5, 5.0);
+		let passages = collect_passages_along(&confines.openings, true, min, 40.0);
+		let bays = partition_bays_for_passages(&passages, 40.0, 3.5);
+		let stalls = fit_stalls_covering_strip(
+			&confines,
+			true,
+			min,
+			max,
+			&bays,
+			NoiseParams::default(),
+		)
+		.unwrap();
+		assert_eq!(stalls.len(), bays.len());
+		let mut seen = std::collections::HashSet::new();
+		for bay in &bays {
+			assert!(!bay.passage_ids.is_empty());
+			for id in &bay.passage_ids {
+				assert!(
+					seen.insert(id.clone()),
+					"passage {} claimed twice",
+					id.as_str()
+				);
+			}
+		}
+		assert_eq!(seen.len(), passages.len());
 	}
 }

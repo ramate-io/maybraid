@@ -122,7 +122,7 @@ confines; Full\* owns program fill.
 | Stage | Behavior |
 |-------|----------|
 | Floor plan | Authors stall doors / façade apertures / shafts with scoped ids; subsets façade openings onto external strips. |
-| Stall strip | Voronoi-assigns **Passage** openings to bays (each bay owns ≥1 passage uniquely); subsets openings into each bay’s confines. |
+| Stall strip | Voronoi-assigns **Passage** openings to bays (each bay owns ≥1 passage uniquely; leading/trailing runs without their own door stay on the end bays). A bay that soft-fails is absorbed by extending the previous stall — never leave an uncovered along-run or a passage-less stall. |
 | Stall shell | Punches Passage / Aperture / Shaft into wall strips; **forwards** only Passage + Aperture into the interior fit. |
 | Interior | Consumes passages for clearance / counters / doors; may **author** nested openings (office door, stalls door) with its own scope (`mini_mart`, `public_restroom`, …) and put them on residual `within` confines. |
 
