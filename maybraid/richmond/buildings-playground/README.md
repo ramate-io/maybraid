@@ -14,6 +14,14 @@ cargo run -p richmond-buildings-playground -- show stacked-rings --floor-count 6
 cargo run -p richmond-buildings-playground -- show bedroom
 cargo run -p richmond-buildings-playground -- show bedroom --extent 6,2.8,4 --noise 0.2 --door
 cargo run -p richmond-buildings-playground -- show bedroom --extent 8,3,8 --occupancy 0.8 --spaciousness 1.2
+cargo run -p richmond-buildings-playground -- show residential-bathroom
+cargo run -p richmond-buildings-playground -- show residential-half-bathroom
+cargo run -p richmond-buildings-playground -- show residential-bathroom-examples
+cargo run -p richmond-buildings-playground -- show kitchen-examples
+cargo run -p richmond-buildings-playground -- show dining-room-examples
+cargo run -p richmond-buildings-playground -- show living-room-examples
+cargo run -p richmond-buildings-playground -- show sitting-room-examples
+cargo run -p richmond-buildings-playground -- show study-examples
 cargo run -p richmond-buildings-playground -- show commercial-stall
 cargo run -p richmond-buildings-playground -- show commercial-stall-strip --extent 14,3.5,5 --seed 42
 cargo run -p richmond-buildings-playground -- show les-halles-floor-plan
@@ -124,6 +132,14 @@ In-game: press `/` for the command console (same clap commands as argv).
 - `show wizards-tower [--noise 0.5]` — authored tower hierarchy (`LodScene` composition)
 - `show stacked-rings [--floor-count N] [--floor-height H] [--radius R]` — circular wall stack (kit scale check)
 - `show bedroom [--extent X,Y,Z] [--noise 0.5] [--spaciousness 1.0] [--occupancy 0.55] [--door]` — hierarchical bedroom; bed-first multi-fill under spaciousness/occupancy; `--door` adds a −Z circulation exclusion
+- `show residential-bathroom [--extent X,Y,Z] [--seed N] [--door]` — full residential bathroom shell (label + passage keep-outs)
+- `show residential-half-bathroom [--extent X,Y,Z] [--seed N] [--door]` — half bathroom shell (label + passage keep-outs)
+- `show residential-bathroom-examples` — gallery of full + half residential bathrooms (passage AABBs drawn as gizmos)
+- `show kitchen-examples` — gallery of Kitchen cells (passage AABBs drawn as gizmos)
+- `show dining-room-examples` — gallery of DiningRoom cells (passage AABBs drawn as gizmos)
+- `show living-room-examples` — gallery of LivingRoom cells (passage AABBs drawn as gizmos)
+- `show sitting-room-examples` — gallery of SittingRoom cells (passage AABBs drawn as gizmos)
+- `show study-examples` — gallery of Study cells (passage AABBs drawn as gizmos)
 - `show commercial-stall [--extent X,Y,Z] [--seed N]` — single commercial stall Label placeholder
 - `show commercial-stall-strip [--extent X,Y,Z] [--seed N]` — packed stall Labels along a band
 - `show les-halles-full-storey` — shell plus gallery `CommercialStallStrip` Label fills (face text via gizmo patch)

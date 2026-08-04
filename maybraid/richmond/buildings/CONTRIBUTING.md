@@ -152,16 +152,37 @@ tests/playgrounds can assert tracked doors.
 
 ### Program tiers (prefer structure, then residual fill)
 
-When a usage area greedily packs many concept kinds into one host, prefer a
-**tiered** sample rather than a flat weight table:
+When a usage area greedily packs many kinds into one host, use the shared
+[`placer`](src/placer.rs) **KindSpec catalog** model rather than ad
+hoc concept enums:
+
+| Piece | Role |
+|-------|------|
+| [`KindSpec`](src/placer/kind.rs) | Tier, weight, caps, propose knobs, predicates, commit effect |
+| [`pick_kind`](src/placer/tiers.rs) | Weighted pick among eligible rows (fillers gated until soft-goal) |
+| [`OccupiedBudget`](src/placer/budget.rs) | Furniture vs structure occupancy caps |
+| [`WalledRoomFill`](src/placer/walled_room.rs) | Presentable partition + door for `FillableRegions::within` |
+
+Tiers:
 
 1. **Enclosure / structure** — rooms with doors (ensuite, closet, office, …)
 2. **Appointed** — primary furniture / counters tied to the program
 3. **Filler** — leftover mid-size boxes (`BedroomFurniture`, extra displays, …)
 
-Gate fillers until an enclosure soft-goal is met (and soft-cap them). Same
-spirit as commercial-stall catalog first-fit, but as in-loop gates. See
-[`common_bedroom/layout.rs`](src/usage_areas/common_bedroom/layout.rs).
+Gate fillers until an enclosure soft-goal is met (and soft-cap them). Partition
+door commits use [`commit_door_clear`](src/usage_areas/clearance.rs) with
+[`PASSAGE_APPROACH_PAD`](src/usage_areas/clearance.rs) for inward approach
+keep-outs. See [`common_bedroom/layout.rs`](src/usage_areas/common_bedroom/layout.rs).
+
+### Livable quarters
+
+[`livable_quarters`](src/usage_areas/livable_quarters/) holds residential program
+rooms (kitchen, dining, sitting, study, living, bathrooms). Each follows
+**parameterized → plan pack → Fit + BuildingComponents**, sharing the placer
+furniture loop in [`livable_quarters/pack.rs`](src/usage_areas/livable_quarters/pack.rs).
+[`CommonBedroom`](src/usage_areas/common_bedroom/) composes
+[`ResidentialBathroom`](src/usage_areas/livable_quarters/residential_bathroom.rs)
+into ensuite `within` residuals when fit succeeds.
 
 ---
 
@@ -197,9 +218,10 @@ rather than inventing new tessellation paths.
 | Closed n-gon tube | [`RectangularNTube`](src/paneling/rectangular_n_tube.rs) |
 | Freeform mesh → panels + crease joints | [`PanelComplex`](src/paneling/panel_complex.rs) |
 
-Shell helpers such as [`bedroom::shell::face_rectangle`](src/bedroom/shell.rs) /
-`face_span_rectangle` build those primitives on AABB faces (office/stall
-enclosures use them via `enclosed_room`).
+Shell helpers in [`enclosure_panels`](src/usage_areas/enclosure_panels.rs)
+(`face_rectangle`, `face_span_rectangle`, …) build those primitives on AABB
+faces; [`enclosed_room`](src/usage_areas/enclosed_room.rs) uses them for
+office/stall/bedroom partitions.
 
 **Higher-order composition** (this crate’s job):
 
@@ -232,6 +254,7 @@ the [buildings README](README.md) and
 - [Richmond CONTRIBUTING](../CONTRIBUTING.md) — IR nodes, LOD, `ParentConfines`
 - [buildings README](README.md) — kit taxonomy + paneling type table
 - [`fit.rs`](src/fit.rs) — `Confines` / `FillableRegions` / `SpaceKind`
+- [`placer`](src/placer.rs) — predicate-based rectangular KindSpec layout trier
 - [`openings.rs`](src/openings.rs) — opening labels and scoped ids
 - [`paneling`](src/paneling.rs) — panel primitives used by shells and enclosures
 - [`enclosed_room`](src/usage_areas/enclosed_room.rs) — shared wall-seeded room + door + panels

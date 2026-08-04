@@ -95,7 +95,11 @@ impl PartsRegions {
 		.ok_or(FitError::TooSmall {
 			reason: "parts office",
 		})?;
-		clearances.push(enclosed.door_clear);
+		crate::usage_areas::clearance::commit_door_clear(
+			&mut clearances,
+			enclosed.door_clear,
+			0.0,
+		);
 
 		let parts = self
 			.pack_parts(host, &clearances, enclosed.room)

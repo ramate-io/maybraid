@@ -1,23 +1,12 @@
-//! AABB face → standing [`Rectangle`] / short return walls (paneling kits).
+//! AABB face → standing [`Rectangle`] panels for enclosed rooms / shells.
+//!
+//! Shared by [`super::enclosed_room`] (and any shell that needs face panels).
 
 use bevy_math::bounding::Aabb3d;
 use bevy_math::Vec3;
-use richmond_building_components::panels::PanelNode;
-use richmond_building_components::{BuildingComponents, Layers};
-use lod::gen::LodSceneLevel;
 
 use crate::constraints::FaceKind;
 use crate::paneling::Rectangle;
-
-/// One solid rectangular wall face (or short return).
-#[derive(Debug, Clone, PartialEq)]
-pub struct ShellWall(pub Rectangle);
-
-impl BuildingComponents for ShellWall {
-	fn panel_nodes_for_level(&self, level: LodSceneLevel) -> Layers<PanelNode> {
-		self.0.panel_nodes_for_level(level)
-	}
-}
 
 /// Full-face wall on `face` when the AABB has positive extent, else [`None`].
 pub fn face_rectangle(aabb: &Aabb3d, face: FaceKind, thickness: f32) -> Option<Rectangle> {

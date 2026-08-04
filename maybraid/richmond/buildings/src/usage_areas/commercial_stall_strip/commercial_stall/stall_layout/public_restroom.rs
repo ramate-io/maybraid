@@ -126,7 +126,11 @@ impl PublicRestroomRegions {
 		.ok_or(FitError::TooSmall {
 			reason: "restroom stalls",
 		})?;
-		clearances.push(enclosed.door_clear);
+		crate::usage_areas::clearance::commit_door_clear(
+			&mut clearances,
+			enclosed.door_clear,
+			0.0,
+		);
 
 		let sinks = self
 			.pack_sinks(

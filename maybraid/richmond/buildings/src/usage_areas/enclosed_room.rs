@@ -6,15 +6,15 @@
 use bevy_math::bounding::{Aabb2d, Aabb3d};
 use bevy_math::{Vec2, Vec3};
 use procedural_common::{
-	aabb2_area, clamp_min_size2, inflate_aabb2, intersects_aabb2, plan_to_aabb3, Aabb2dPack,
-	PlanAxes, PlanOpeningFace,
+	aabb2_area, clamp_min_size2, intersects_aabb2, plan_to_aabb3, Aabb2dPack, PlanAxes,
+	PlanOpeningFace,
 };
 
-use crate::bedroom::shell::{face_rectangle, face_span_rectangle};
 use crate::constraints::FaceKind;
 use crate::openings::{Opening, OpeningId};
 use crate::paneling::{Rectangle, DEFAULT_PANEL_THICKNESS};
-use crate::usage_areas::clearance::PlanHost;
+use crate::usage_areas::clearance::{approach_blocked, PlanHost};
+use crate::usage_areas::enclosure_panels::{face_rectangle, face_span_rectangle};
 
 /// Plan minimums for an enclosed room (long/short axes after packing).
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -150,8 +150,7 @@ impl EnclosedRoomParams {
 				continue;
 			};
 			// Door approach must stay free of beds / furniture / other keep-outs.
-			let approach = inflate_aabb2(enclosure.door_clear, DOOR_APPROACH_PAD);
-			if clearances.iter().any(|c| intersects_aabb2(approach, *c)) {
+			if approach_blocked(enclosure.door_clear, clearances) {
 				continue;
 			}
 			return Some(EnclosedRoom {
@@ -390,9 +389,6 @@ struct EnclosureGeom {
 
 /// Gap below which a partition face should flush to the host (omit the wall).
 const HOST_WALL_SNAP: f32 = 0.45;
-/// Extra pad when testing door keep-outs against existing clearances / furniture.
-/// Keep in sync with bedroom `DOOR_CLEAR_PAD` (lateral approach breathing room).
-const DOOR_APPROACH_PAD: f32 = 0.5;
 
 /// Shrink `room` so each plan axis is ≤ `frac` of the host. Keeps the seed-wall
 /// contact; trims the sales face and centers the along-wall span.
