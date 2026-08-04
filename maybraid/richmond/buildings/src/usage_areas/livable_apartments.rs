@@ -179,6 +179,7 @@ impl LivableApartments {
 				params,
 				halls,
 				hall_width,
+				noise,
 				residual_within,
 			);
 		}
@@ -259,7 +260,7 @@ impl LivableApartments {
 				continue;
 			}
 			let multi = MultiConfines::new(parts);
-			match LivableApartment::from_multi(apt_id, &multi) {
+			match LivableApartment::from_multi(apt_id, &multi, noise) {
 				Ok((mut apt, nested)) => {
 					// Partition / hall walls are authored once here — no per-cell shells.
 					apt.shell = None;
@@ -268,7 +269,13 @@ impl LivableApartments {
 					residual_within.extend(nested.within);
 				}
 				Err(FitError::TooSmall { .. }) => {
-					residual_within.extend(multi.parts);
+					// Group rejected as livable → closet leftovers.
+					for part in multi.parts {
+						residual_within.push(FillRegion::new(
+							SpaceKind::ClosetSpace,
+							part.confines,
+						));
+					}
 				}
 				Err(err) => return Err(err),
 			}
@@ -280,7 +287,7 @@ impl LivableApartments {
 			}
 			let openings = cell_openings.get(&cell.id).cloned().unwrap_or_default();
 			residual_within.push(FillRegion::new(
-				SpaceKind::InternalSpace,
+				SpaceKind::ClosetSpace,
 				Confines::new(aabb2_to_aabb3(cell.bounds, y0, y1), roll, openings),
 			));
 		}
@@ -367,9 +374,10 @@ fn singleton_host(
 	params: LivableApartmentsParameterized,
 	halls: HallsToShafts,
 	hall_width: f32,
+	noise: NoiseParams,
 	mut residual_within: Vec<FillRegion>,
 ) -> Result<(LivableApartments, FillableRegions), FitError> {
-	match LivableApartment::from_confines(0, confines) {
+	match LivableApartment::from_confines(0, confines, noise) {
 		Ok((mut apt, nested)) => {
 			apt.shell = None;
 			residual_within.extend(nested.within);
@@ -390,7 +398,7 @@ fn singleton_host(
 		}
 		Err(FitError::TooSmall { .. }) => {
 			residual_within.push(FillRegion::new(
-				SpaceKind::InternalSpace,
+				SpaceKind::ClosetSpace,
 				confines.clone(),
 			));
 			Ok((

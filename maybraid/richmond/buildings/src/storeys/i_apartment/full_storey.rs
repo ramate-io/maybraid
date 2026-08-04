@@ -7,7 +7,7 @@ use richmond_building_components::labels::LabelNode;
 use richmond_building_components::panels::PanelNode;
 use richmond_building_components::{BuildingComponents, Layers};
 
-use crate::fit::{Confines, FillableRegions, Fit, FitError};
+use crate::fit::{Confines, FillRegion, FillableRegions, Fit, FitError, SpaceKind};
 use crate::usage_areas::{LivableApartments, LivableApartmentsOptions};
 
 use super::floor_plan::IApartmentFloorPlan;
@@ -46,10 +46,14 @@ impl IApartmentFullStorey {
 			match LivableApartments::from_confines_with(&region.confines, noise, opts.clone()) {
 				Ok((block, nested)) => {
 					blocks.push(block);
-					residual_within.extend(nested.within);
+					// Leftover InternalSpace pockets (ungrouped / unfilled) are closets.
+					residual_within.extend(nested.within.into_iter().map(as_closet_if_internal));
 				}
 				Err(FitError::TooSmall { .. }) => {
-					residual_within.push(region);
+					residual_within.push(FillRegion::new(
+						SpaceKind::ClosetSpace,
+						region.confines,
+					));
 				}
 				Err(err) => return Err(err),
 			}
@@ -65,6 +69,13 @@ impl IApartmentFullStorey {
 				atop: regions.atop,
 			},
 		))
+	}
+}
+
+fn as_closet_if_internal(region: FillRegion) -> FillRegion {
+	match region.kind {
+		SpaceKind::InternalSpace => FillRegion::new(SpaceKind::ClosetSpace, region.confines),
+		_ => region,
 	}
 }
 

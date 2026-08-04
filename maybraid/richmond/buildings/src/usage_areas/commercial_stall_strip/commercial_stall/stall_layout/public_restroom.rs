@@ -95,6 +95,7 @@ impl PublicRestroomRegions {
 			area_reserve,
 			reserve_cap_frac: 0.35,
 			grow_into: true,
+			max_axis_frac: None,
 			shrink_sales_for_door_clear: false,
 			door_width: self.door_width,
 			door_width_min: RESTROOM_DOOR_WIDTH_MIN,
@@ -125,7 +126,11 @@ impl PublicRestroomRegions {
 		.ok_or(FitError::TooSmall {
 			reason: "restroom stalls",
 		})?;
-		clearances.push(enclosed.door_clear);
+		crate::usage_areas::clearance::commit_door_clear(
+			&mut clearances,
+			enclosed.door_clear,
+			0.0,
+		);
 
 		let sinks = self
 			.pack_sinks(

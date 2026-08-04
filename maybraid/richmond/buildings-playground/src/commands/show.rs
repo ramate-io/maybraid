@@ -8,6 +8,15 @@ pub mod arc_sweep;
 pub mod arc_tower;
 pub mod opening;
 pub mod bedroom;
+pub mod bedroom_examples;
+pub mod dining_room_examples;
+pub mod kitchen_examples;
+pub mod living_room_examples;
+pub mod residential_bathroom;
+pub mod residential_bathroom_examples;
+pub mod residential_half_bathroom;
+pub mod sitting_room_examples;
+pub mod study_examples;
 pub mod bites_examples;
 pub mod bites_sitdown_stall;
 pub mod bites_stall;
@@ -159,8 +168,26 @@ pub enum Show {
 	WizardsTower(wizards_tower::WizardsTower),
 	/// Stacked circular wall rings (validates kit radius/height scaling).
 	StackedRings(stacked_rings::StackedRings),
-	/// Hierarchical bedroom (closet / bed / nightstand / ensuite placeholders).
+	/// Common bedroom usage area (beds + walled closet / ensuite).
 	Bedroom(bedroom::Bedroom),
+	/// Gallery of CommonBedroom cells (passage AABBs drawn as gizmos).
+	BedroomExamples(bedroom_examples::BedroomExamples),
+	/// Residential full bathroom shell (label + passage keep-outs).
+	ResidentialBathroom(residential_bathroom::ResidentialBathroom),
+	/// Residential half bathroom shell (label + passage keep-outs).
+	ResidentialHalfBathroom(residential_half_bathroom::ResidentialHalfBathroom),
+	/// Gallery of full + half residential bathrooms (passage AABBs drawn as gizmos).
+	ResidentialBathroomExamples(residential_bathroom_examples::ResidentialBathroomExamples),
+	/// Gallery of Kitchen cells (passage AABBs drawn as gizmos).
+	KitchenExamples(kitchen_examples::KitchenExamples),
+	/// Gallery of DiningRoom cells (passage AABBs drawn as gizmos).
+	DiningRoomExamples(dining_room_examples::DiningRoomExamples),
+	/// Gallery of LivingRoom cells (passage AABBs drawn as gizmos).
+	LivingRoomExamples(living_room_examples::LivingRoomExamples),
+	/// Gallery of SittingRoom cells (passage AABBs drawn as gizmos).
+	SittingRoomExamples(sitting_room_examples::SittingRoomExamples),
+	/// Gallery of Study cells (passage AABBs drawn as gizmos).
+	StudyExamples(study_examples::StudyExamples),
 	/// Single commercial stall Label placeholder.
 	CommercialStall(commercial_stall::CommercialStall),
 	/// Commercial stall strip (packed Labels along a band).
@@ -250,6 +277,15 @@ impl Show {
 			Self::WizardsTower(cmd) => Ok(cmd.into_preview()),
 			Self::StackedRings(cmd) => Ok(cmd.into_preview()),
 			Self::Bedroom(cmd) => Ok(cmd.into_preview()),
+			Self::BedroomExamples(cmd) => Ok(cmd.into_preview()),
+			Self::ResidentialBathroom(cmd) => Ok(cmd.into_preview()),
+			Self::ResidentialHalfBathroom(cmd) => Ok(cmd.into_preview()),
+			Self::ResidentialBathroomExamples(cmd) => Ok(cmd.into_preview()),
+			Self::KitchenExamples(cmd) => Ok(cmd.into_preview()),
+			Self::DiningRoomExamples(cmd) => Ok(cmd.into_preview()),
+			Self::LivingRoomExamples(cmd) => Ok(cmd.into_preview()),
+			Self::SittingRoomExamples(cmd) => Ok(cmd.into_preview()),
+			Self::StudyExamples(cmd) => Ok(cmd.into_preview()),
 			Self::CommercialStall(cmd) => Ok(cmd.into_preview()),
 			Self::CommercialStallStrip(cmd) => Ok(cmd.into_preview()),
 			Self::BitesStall(cmd) => Ok(cmd.into_preview()),

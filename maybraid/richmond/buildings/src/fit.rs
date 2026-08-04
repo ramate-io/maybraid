@@ -141,6 +141,8 @@ pub enum SpaceKind {
 	Walkway,
 	/// Linear circulation between spaces.
 	Hallway,
+	/// Storage / leftover pocket (not primary living program).
+	ClosetSpace,
 	/// Author-defined label when none of the above fit.
 	Custom(String),
 }
