@@ -77,6 +77,36 @@ fn cornerish_passage_maps_to_intersecting_side_not_nearest_mid() {
 }
 
 #[test]
+fn corner_depth_nibble_loses_to_true_face_span() {
+	// End-of-run South door also clips an adjacent face via authorship depth.
+	// Prefer the large true-face span over a ~0.4 m corner nibble.
+	let mut door = RectRingFloor::side_passage_opening(
+		OrthoSide::South,
+		Vec3::ZERO,
+		Vec2::new(8.0, 6.0),
+		1.4,
+		2.4,
+	);
+	// Push leaf toward the SE corner of the outer ring.
+	door.bounds = {
+		let min = Vec3::from(door.bounds.min) + Vec3::new(2.6, 0.0, 0.0);
+		let max = Vec3::from(door.bounds.max) + Vec3::new(2.6, 0.0, 0.0);
+		bevy_math::bounding::Aabb3d::from_min_max(min, max)
+	};
+	let r = RectRingFloorParams::default()
+		.openings(Openings::new().with("se_door", door))
+		.build();
+	let mapped = r
+		.mapped_opening(&OpeningId::new("se_door"))
+		.expect("door must map");
+	let cut_w = mapped.face.lower_left.distance(mapped.face.lower_right);
+	assert!(
+		cut_w > 1.0,
+		"expected full leaf span, not corner nibble; cut_w={cut_w}"
+	);
+}
+
+#[test]
 fn passage_wins_overlap_against_aperture() {
 	let mut openings = Openings::new();
 	openings.insert(

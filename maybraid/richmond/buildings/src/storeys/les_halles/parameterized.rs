@@ -31,6 +31,8 @@ pub struct LesHallesPlacedDoor {
 	pub along: f32,
 	/// Leaf width used.
 	pub width: f32,
+	/// Remaining truncate budget for end-of-run / corner fit (from catalog).
+	pub allowed_error: f32,
 }
 
 /// Resolved Les Halles plan knobs.
@@ -242,6 +244,7 @@ impl LesHallesParameterized {
 			placed.push(LesHallesPlacedDoor {
 				along: cursor + jamb,
 				width: door_w,
+				allowed_error: spec.allowed_error,
 			});
 			cursor += pack;
 		}
@@ -273,12 +276,17 @@ impl LesHallesParameterized {
 				return Vec::new();
 			}
 			let jamb = ((run_length - w) * 0.5).max(0.05);
-			return vec![LesHallesPlacedDoor { along: jamb, width: w }];
+			return vec![LesHallesPlacedDoor {
+				along: jamb,
+				width: w,
+				allowed_error: 0.25,
+			}];
 		};
 		if let Some((_pack, door_w, jamb)) = pack_span(spec, run_length) {
 			vec![LesHallesPlacedDoor {
 				along: jamb,
 				width: door_w,
+				allowed_error: spec.allowed_error,
 			}]
 		} else {
 			Vec::new()

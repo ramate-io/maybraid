@@ -7,7 +7,9 @@
 //! hit side / frame band — not centered approximations.
 //!
 //! **Walls:** each connectable opening maps to **exactly one** outer or inner
-//! side (nearest edge; largest face-aligned extent wins on that side). A single
+//! side (largest projected along-span wins, then nearest mid — so a corner
+//! depth-nibble cannot steal a true leaf). Slight span shortfall truncates the
+//! leaf (up to ~0.4 m); larger overruns leave the opening unmapped. A single
 //! AABB that spans half the ring does **not** clear every wall on that half —
 //! open a U / half-ring by authoring one opening per side you want removed. A
 //! wide passage spanning most of one side is the intended way to open that run.

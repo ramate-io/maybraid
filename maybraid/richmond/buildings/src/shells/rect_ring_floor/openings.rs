@@ -1,12 +1,18 @@
 //! Per-side wall openings for [`RectRingFloor`].
 //!
 //! Wide connectable openings author broad omissions along a ring side (no
-//! separate omit-interval API). Assignment is **nearest edge wins** per opening;
+//! separate omit-interval API). Assignment prefers the edge with the **largest
+//! along-span** (true face over a corner depth-nibble), then nearest mid;
 //! **multiple openings may land on the same side** — the wall strip is subdivided
 //! into solid and opening bays along the run. An AABB that overlaps half the ring
-//! still only assigns to that single nearest side; clear multiple sides with
+//! still only assigns to that single chosen side; clear multiple sides with
 //! multiple openings.
+//!
+//! When the projected span is slightly shorter than the authored leaf, the leaf
+//! is truncated to fit (up to [`OPENING_SPAN_TRUNCATE_MAX`]); larger overruns
+//! reject that edge so a better face can win — or the opening goes unmapped.
 
+use bevy_math::bounding::Aabb3d;
 use bevy_math::{Vec2, Vec3};
 
 use crate::openings::{
@@ -18,6 +24,10 @@ use crate::paneling::rectangular_strip::RectangularStripNode;
 use crate::shells::ortho::{edge_score_for_bounds, standing_face_opening, OrthoSide, WallEdge, EPS};
 
 use super::{RectRingFloor, RectRingFloorParams};
+
+/// Max meters a connectable leaf may shrink to fit a wall span before that edge
+/// is rejected (matches Les Halles door `allowed_error` catalog ceiling).
+pub const OPENING_SPAN_TRUNCATE_MAX: f32 = 0.4;
 
 /// Cardinal side of a [`RectRingFloor`] (alias of [`OrthoSide`]).
 pub type RectRingFloorSide = OrthoSide;
@@ -80,10 +90,10 @@ impl RectRingFloorParams {
 			if !opening.label.is_connectable() {
 				continue;
 			}
-			// Only edges that actually project the AABB into a face opening — nearest
-			// edge by midpoint alone can pick a side the void never intersects
-			// (e.g. a SE corner door closer to East mid than South mid).
-			let mut winner: Option<(usize, f32, f32, EdgeOpening)> = None;
+			// Only edges that actually project the AABB into a face opening. Prefer
+			// the largest along-span so a corner depth-clip (~authorship depth) does
+			// not beat the true leaf on the adjacent face via nearer mid.
+			let mut winner: Option<(usize, f32, f32, f32, EdgeOpening)> = None;
 			for (i, edge) in edges.iter().enumerate() {
 				if edge.length() < EPS {
 					continue;
@@ -94,24 +104,41 @@ impl RectRingFloorParams {
 				let len = edge.length();
 				let s_lo = face.inset.bottom.clamp(0.0, len);
 				let s_hi = (len - face.inset.top).clamp(0.0, len);
-				if s_hi - s_lo < EPS {
+				let span = s_hi - s_lo;
+				if span < EPS {
 					continue;
 				}
-				let (dist, score) = edge_score_for_bounds(&opening.bounds, *edge);
+				let intended = opening_along_width(&opening.bounds, *edge);
+				let mut mapped_opening = opening.clone();
+				if span + 1e-3 < intended {
+					let shrink = intended - span;
+					if shrink > OPENING_SPAN_TRUNCATE_MAX + 1e-3 {
+						// Overrun beyond tolerance — reject this edge (may still
+						// map on a better face, or stay unmapped).
+						continue;
+					}
+					mapped_opening =
+						truncate_opening_to_edge_span(mapped_opening, *edge, s_lo, s_hi);
+				}
+				let (dist, score) = edge_score_for_bounds(&mapped_opening.bounds, *edge);
 				let replace = match winner {
 					None => true,
-					Some((_, prev_d, prev_s, _)) => {
-						dist < prev_d - 1e-4 || (dist <= prev_d + 1e-4 && score > prev_s)
+					Some((_, prev_span, prev_d, prev_s, _)) => {
+						span > prev_span + 0.15
+							|| (span + 0.15 >= prev_span
+								&& (dist < prev_d - 1e-4
+									|| (dist <= prev_d + 1e-4 && score > prev_s)))
 					}
 				};
 				if replace {
 					winner = Some((
 						i,
+						span,
 						dist,
 						score,
 						EdgeOpening {
 							id: id.clone(),
-							opening: opening.clone(),
+							opening: mapped_opening,
 							s_lo,
 							s_hi,
 							sill: face.inset.left,
@@ -121,7 +148,7 @@ impl RectRingFloorParams {
 					));
 				}
 			}
-			let Some((idx, _, _, edge_op)) = winner else {
+			let Some((idx, _, _, _, edge_op)) = winner else {
 				continue;
 			};
 			per_edge[idx].push(edge_op);
@@ -176,6 +203,45 @@ fn connectable_priority(label: &OpeningLabel) -> u8 {
 		OpeningLabel::Aperture => 1,
 		_ => 0,
 	}
+}
+
+fn opening_along_width(bounds: &Aabb3d, edge: WallEdge) -> f32 {
+	let e = Vec3::from(bounds.max - bounds.min);
+	let along_x = edge.tangent().x.abs() > edge.tangent().z.abs();
+	let w = if along_x { e.x } else { e.z };
+	w.max(0.0)
+}
+
+/// Rebuild the opening AABB so its along-edge extent matches `[s_lo, s_hi]`.
+fn truncate_opening_to_edge_span(
+	mut opening: Opening,
+	edge: WallEdge,
+	s_lo: f32,
+	s_hi: f32,
+) -> Opening {
+	let omin = Vec3::from(opening.bounds.min);
+	let omax = Vec3::from(opening.bounds.max);
+	let tang = edge.tangent();
+	let along_x = tang.x.abs() > tang.z.abs();
+	let p0 = edge.start + tang * s_lo;
+	let p1 = edge.start + tang * s_hi;
+	let (a0, a1) = if along_x {
+		(p0.x.min(p1.x), p0.x.max(p1.x))
+	} else {
+		(p0.z.min(p1.z), p0.z.max(p1.z))
+	};
+	opening.bounds = if along_x {
+		Aabb3d::from_min_max(
+			Vec3::new(a0, omin.y, omin.z),
+			Vec3::new(a1, omax.y, omax.z),
+		)
+	} else {
+		Aabb3d::from_min_max(
+			Vec3::new(omin.x, omin.y, a0),
+			Vec3::new(omax.x, omax.y, a1),
+		)
+	};
+	opening
 }
 
 fn spans_overlap(a0: f32, a1: f32, b0: f32, b1: f32) -> bool {

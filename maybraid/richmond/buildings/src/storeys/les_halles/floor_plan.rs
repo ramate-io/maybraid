@@ -12,7 +12,7 @@ use crate::fit::{
 	aabb_near_plane, aabb_xz_center, aabb_xz_overlap_area, Confines, FillRegion, FillableRegions,
 	Fit, FitError, SpaceKind, StackRegion,
 };
-use crate::openings::{Opening, OpeningId, OpeningLabel, Openings};
+use crate::openings::{MapsOpenings, Opening, OpeningId, OpeningLabel, Openings};
 use crate::paneling::fitted_rectangle::FittedRectangle;
 use crate::paneling::panel_complex::{PanelPoint, DEFAULT_PANEL_THICKNESS};
 use crate::paneling::rectangle::Rectangle;
@@ -22,9 +22,15 @@ use crate::shells::rect_ring_floor::{
 };
 
 use super::parameterized::{
-	footprint_extents, LesHallesParameterized, LesHallesShaftPlacement, LesHallesStallDoor,
+	footprint_extents, LesHallesParameterized, LesHallesPlacedDoor, LesHallesShaftPlacement,
+	LesHallesStallDoor,
 };
 use super::SCOPE;
+
+/// Pull leaves away from free-run ends so passage AABBs clear adjacent ring walls
+/// (~`standing_face_opening` half-thickness pad). Shrink is charged against each
+/// door’s [`LesHallesPlacedDoor::allowed_error`].
+const INNER_DOOR_END_CLEARANCE: f32 = 0.45;
 
 /// Structural Les Halles plan.
 ///
@@ -223,6 +229,9 @@ impl LesHallesFloorPlan {
 		));
 
 		let gallery = Self::build_gallery(center_xz, outer, gallery_inner, height, ceiling, &openings);
+		// Drop unmapped Passage/Aperture and sync truncated AABBs from the gallery
+		// so commercial strips never see boarded or oversized voids.
+		sync_connectable_openings_from_gallery(&mut openings, &gallery);
 		let balcony_floors = Self::build_balcony_floors(center_xz, gallery_inner, courtyard, y0);
 		let shaft_walls =
 			Self::build_shaft_walls(center_xz, outer, gallery_inner, height, &shaft_bounds);
@@ -688,19 +697,40 @@ impl LesHallesFloorPlan {
 				"Les Halles inner wall section {si} ({:?}) has no door on run {run:.2}",
 				section.side
 			);
+			let mut authored = 0usize;
 			for (di, door) in placed.iter().enumerate() {
-				let along_mid = section.along0 + door.along + door.width * 0.5;
-				let mut opening = RectRingFloor::side_passage_opening(
+				let Some(door) = clamp_placed_door_to_run(*door, run, INNER_DOOR_END_CLEARANCE)
+				else {
+					// Required shrink exceeds allowed_error — omit rather than
+					// author a boarded / wrong-edge void for the stall strip.
+					continue;
+				};
+				Self::insert_inner_door(
+					&mut openings,
+					si,
+					di,
 					section.side,
 					center_xz,
 					gallery_inner,
-					door.width,
+					door,
 					door_h,
+					section.along0,
 				);
-				opening.bounds = offset_opening_along_side(opening.bounds, section.side, along_mid);
-				openings.insert(
-					OpeningId::scoped(SCOPE, "inner_door", format!("{si}_{di}")),
-					opening,
+				authored += 1;
+			}
+			if authored == 0 {
+				// End clearance ate every leaf — keep one unclamped door and let
+				// gallery map-time truncate / drop decide.
+				Self::insert_inner_door(
+					&mut openings,
+					si,
+					0,
+					section.side,
+					center_xz,
+					gallery_inner,
+					placed[0],
+					door_h,
+					section.along0,
 				);
 			}
 		}
@@ -1243,6 +1273,87 @@ fn corner_occupied_spans(
 	occupied
 }
 
+impl LesHallesFloorPlan {
+	fn insert_inner_door(
+		openings: &mut Openings,
+		si: usize,
+		di: usize,
+		side: OrthoSide,
+		center_xz: Vec3,
+		gallery_inner: Vec2,
+		door: LesHallesPlacedDoor,
+		door_h: f32,
+		section_along0: f32,
+	) {
+		let along_mid = section_along0 + door.along + door.width * 0.5;
+		let mut opening = RectRingFloor::side_passage_opening(
+			side,
+			center_xz,
+			gallery_inner,
+			door.width,
+			door_h,
+		);
+		opening.bounds = offset_opening_along_side(opening.bounds, side, along_mid);
+		openings.insert(
+			OpeningId::scoped(SCOPE, "inner_door", format!("{si}_{di}")),
+			opening,
+		);
+	}
+}
+
+/// Shrink a packed leaf so it stays `clearance` inside the free run.
+///
+/// Charges shrink against [`LesHallesPlacedDoor::allowed_error`]. Returns
+/// [`None`] when the required shrink exceeds that budget (or the leaf becomes
+/// unusably narrow).
+fn clamp_placed_door_to_run(
+	mut door: LesHallesPlacedDoor,
+	run: f32,
+	clearance: f32,
+) -> Option<LesHallesPlacedDoor> {
+	let clearance = clearance.clamp(0.0, run * 0.45);
+	let mut budget = door.allowed_error.max(0.0);
+	let lo = clearance;
+	let hi = (run - clearance).max(lo);
+	if hi - lo < 0.5 {
+		// Run too short for end clearance — keep packed placement; map-time
+		// truncate / drop still applies.
+		return Some(door);
+	}
+	if door.along < lo {
+		let shrink = lo - door.along;
+		if shrink > budget + 1e-3 {
+			return None;
+		}
+		door.width = (door.width - shrink).max(0.4);
+		door.along = lo;
+		budget -= shrink;
+	}
+	if door.along + door.width > hi {
+		let shrink = door.along + door.width - hi;
+		if shrink > budget + 1e-3 {
+			return None;
+		}
+		door.width = (door.width - shrink).max(0.4);
+	}
+	if door.width + 1e-3 < 0.4 || door.along + door.width > run + 1e-3 {
+		return None;
+	}
+	door.allowed_error = budget;
+	Some(door)
+}
+
+/// Drop unmapped Passage/Aperture and copy gallery AABBs (post-truncate) onto `openings`.
+fn sync_connectable_openings_from_gallery(openings: &mut Openings, gallery: &RectRingFloor) {
+	openings.openings.retain(|id, opening| match opening.label {
+		OpeningLabel::Passage | OpeningLabel::Aperture => gallery.mapped_opening(id).is_some(),
+		_ => true,
+	});
+	for (id, opening) in gallery.openings().iter() {
+		openings.insert(id.clone(), opening.clone());
+	}
+}
+
 /// Openings whose AABB intersects `bounds` (shaft volumes excluded — those stay
 /// on shaft [`SpaceKind::InternalSpace`] cells). Wall clears remain [`OpeningLabel::Passage`].
 fn subset_openings_intersecting(openings: &Openings, bounds: &Aabb3d) -> Openings {
@@ -1369,7 +1480,7 @@ fn floor_rect(
 mod tests {
 	use super::*;
 	use crate::fit::{aabb_xz_near_eq, Fit};
-	use crate::openings::{Opening, OpeningId, OpeningLabel, Openings};
+	use crate::openings::{MapsOpenings, Opening, OpeningId, OpeningLabel, Openings};
 	use bevy_math::bounding::Aabb3d;
 	use bevy_math::Vec3;
 	use procedural_common::{NoiseConfig, NoiseParams};
@@ -1481,6 +1592,17 @@ mod tests {
 			})
 			.collect();
 		assert_eq!(section_doors.len(), expected);
+		// Every retained Passage/Aperture must be cut into the gallery (no boarded
+		// voids left for commercial strips to seed on).
+		for (id, opening) in plan.openings.iter() {
+			if matches!(opening.label, OpeningLabel::Passage | OpeningLabel::Aperture) {
+				assert!(
+					plan.gallery.mapped_opening(id).is_some(),
+					"unmapped connectable {} survived sync",
+					id.as_str()
+				);
+			}
+		}
 		use crate::openings::MapsOpenings;
 		let outer_id = plan
 			.openings
@@ -1515,6 +1637,44 @@ mod tests {
 		assert_eq!(externals, 4);
 		assert_eq!(walkways, 4);
 		assert_eq!(regions.within.len(), 8); // strips + balcony; no shafts
+	}
+
+	#[test]
+	fn playground_seed_retains_only_mapped_passages() {
+		// `/show les-halles-full-storey --extent 48,4,36 --seed 1337`
+		let confines = Confines::from_bounds(Aabb3d::from_min_max(
+			Vec3::new(-24.0, 0.0, -18.0),
+			Vec3::new(24.0, 4.0, 18.0),
+		));
+		let noise = NoiseParams {
+			seed: 1337,
+			..NoiseParams::default()
+		};
+		let (plan, regions) = LesHallesFloorPlan::fit_to_confines(&confines, noise).unwrap();
+		let mut passage_n = 0usize;
+		for (id, opening) in plan.openings.iter() {
+			if matches!(opening.label, OpeningLabel::Passage) {
+				passage_n += 1;
+				assert!(
+					plan.gallery.mapped_opening(id).is_some(),
+					"boarded passage {} leaked into plan.openings",
+					id.as_str()
+				);
+			}
+		}
+		assert!(passage_n > 0, "expected authored inner doors");
+		// External strips must not see unmapped passages either.
+		for region in regions.within.iter().filter(|r| r.kind == SpaceKind::ExternalSpace) {
+			for (id, opening) in region.confines.openings.iter() {
+				if matches!(opening.label, OpeningLabel::Passage) {
+					assert!(
+						plan.gallery.mapped_opening(id).is_some(),
+						"strip carries unmapped passage {}",
+						id.as_str()
+					);
+				}
+			}
+		}
 	}
 
 	#[test]
