@@ -68,7 +68,7 @@ impl CommercialStallPlan {
 		params: CommercialStallParameterized,
 		confines: &Confines,
 		noise: NoiseParams,
-	) -> Result<Self, FitError> {
+	) -> Result<(Self, FillableRegions), FitError> {
 		let min = Vec3::from(confines.bounds.min);
 		let max = Vec3::from(confines.bounds.max);
 		let extent = (max - min).max(Vec3::splat(1e-4));
@@ -81,13 +81,16 @@ impl CommercialStallPlan {
 			confines.roll,
 			forward_openings(&confines.openings),
 		);
-		let (interior, _) =
+		let (interior, regions) =
 			CommercialStallInterior::fit_to_confines(&interior_confines, noise)?;
-		Ok(Self {
-			parameterized: params,
-			walls,
-			interior,
-		})
+		Ok((
+			Self {
+				parameterized: params,
+				walls,
+				interior,
+			},
+			regions,
+		))
 	}
 }
 
@@ -113,8 +116,9 @@ impl Fit for CommercialStall {
 		noise: NoiseParams,
 	) -> Result<(Self, FillableRegions), FitError> {
 		let params = CommercialStallParameterized::sample(confines, noise);
-		let plan = CommercialStallPlan::from_parameterized(params, confines, noise)?;
-		Ok((Self::from_plan(plan), FillableRegions::empty()))
+		let (plan, regions) =
+			CommercialStallPlan::from_parameterized(params, confines, noise)?;
+		Ok((Self::from_plan(plan), regions))
 	}
 }
 

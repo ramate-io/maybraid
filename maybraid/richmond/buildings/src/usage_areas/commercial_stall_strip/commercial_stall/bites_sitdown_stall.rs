@@ -90,9 +90,8 @@ mod tests {
 		aabb2_area, aabb3_to_plan, OptionalFaceBand, PlanAxes, PlanOpeningFace,
 	};
 	use super::super::bites_stall::BitesStallParameterized;
-	use super::super::stall_layout::{
-		BitesPassageSpec, EligibleBitesPassage, BITES_SEATING_FACE_CONTACT,
-	};
+	use super::super::stall_layout::{BitesPassageSpec, EligibleBitesPassage};
+	use super::super::stall_layout::bites::BITES_SEATING_FACE_CONTACT;
 
 	fn roomy_south() -> Confines {
 		let mut openings = Openings::new();

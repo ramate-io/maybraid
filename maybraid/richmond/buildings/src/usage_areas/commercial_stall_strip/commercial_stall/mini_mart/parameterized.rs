@@ -9,14 +9,12 @@ use richmond_building_components::LabelStyle;
 use crate::fit::{Confines, FitError};
 use crate::openings::OpeningLabel;
 
-use super::super::stall_layout::{
-	MiniMartPacked, MiniMartRegions, MiniMartShelfSpec, MINI_MART_AISLES_MIN,
-	MINI_MART_DOOR_WIDTH_MAX, MINI_MART_DOOR_WIDTH_MIN, MINI_MART_OFFICE_LONG_MIN,
-	MINI_MART_OFFICE_SHORT_MIN, MINI_MART_REGISTER_MIN, MINI_MART_SHELF_DEPTH_MAX,
-	MINI_MART_SHELF_DEPTH_MIN, MINI_MART_SHELF_PLACE_RATE,
-};
+use super::super::stall_layout::{MiniMartPacked, MiniMartRegions, MiniMartShelfSpec};
 use super::super::stall_layout::mini_mart::{
-	MINI_MART_DOOR_HEADER_MIN, MINI_MART_DOOR_HEIGHT_MAX, MINI_MART_DOOR_HEIGHT_MIN,
+	MINI_MART_AISLES_MIN, MINI_MART_DOOR_HEADER_MIN, MINI_MART_DOOR_HEIGHT_MAX,
+	MINI_MART_DOOR_HEIGHT_MIN, MINI_MART_DOOR_WIDTH_MAX, MINI_MART_DOOR_WIDTH_MIN,
+	MINI_MART_OFFICE_LONG_MIN, MINI_MART_OFFICE_SHORT_MIN, MINI_MART_REGISTER_MIN,
+	MINI_MART_SHELF_DEPTH_MAX, MINI_MART_SHELF_DEPTH_MIN, MINI_MART_SHELF_PLACE_RATE,
 };
 
 /// Noise / style knobs for [`super::MiniMart`].

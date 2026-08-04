@@ -10,8 +10,11 @@ use procedural_common::{
 use crate::bedroom::shell::{face_rectangle, face_span_rectangle};
 use crate::constraints::FaceKind;
 use crate::fit::{Confines, FitError};
-use crate::openings::OpeningLabel;
+use crate::openings::{Opening, OpeningId, OpeningLabel};
 use crate::paneling::{Rectangle, DEFAULT_PANEL_THICKNESS};
+
+/// Scope prefix for [`OpeningId::scoped`] openings authored by MiniMart.
+pub const SCOPE: &str = "mini_mart";
 
 /// Inward clearance kept free in front of every customer passage (and office door).
 pub const MINI_MART_PASSAGE_CLEARANCE: f32 = 1.0;
@@ -70,6 +73,19 @@ pub struct MiniMartRegions {
 	pub shelves: Vec<MiniMartShelfSpec>,
 }
 
+/// Authored office-door passage + enclosure panels.
+#[derive(Debug, Clone, PartialEq)]
+pub struct MiniMartOfficeDoor {
+	pub id: OpeningId,
+	pub opening: Opening,
+}
+
+struct OfficeEnclosure {
+	walls: Vec<Rectangle>,
+	door_clear: Aabb2d,
+	office_door: MiniMartOfficeDoor,
+}
+
 /// Geometry produced by [`MiniMartRegions::pack`].
 #[derive(Debug, Clone, PartialEq)]
 pub struct MiniMartPacked {
@@ -79,6 +95,8 @@ pub struct MiniMartPacked {
 	pub aisles: Vec<Aabb3d>,
 	pub shelves: Vec<Aabb3d>,
 	pub office_walls: Vec<Rectangle>,
+	/// Passage through the office sales divider (tracked id + void bounds).
+	pub office_door: MiniMartOfficeDoor,
 }
 
 impl MiniMartRegions {
@@ -105,12 +123,12 @@ impl MiniMartRegions {
 			},
 		)?;
 
-		let (office_walls, _door_face, door_clear) = self
+		let enclosure = self
 			.office_enclosure(host3, host, office2, seed_face)
 			.ok_or(FitError::TooSmall {
 				reason: "mini mart office door",
 			})?;
-		clearances.push(door_clear);
+		clearances.push(enclosure.door_clear);
 
 		let register2 = self
 			.pack_register(host, &passage_faces, &clearances, office2)
@@ -137,7 +155,8 @@ impl MiniMartRegions {
 				.into_iter()
 				.map(|s| plan_to_aabb3(host3, s, PlanAxes::XZ))
 				.collect(),
-			office_walls,
+			office_walls: enclosure.walls,
+			office_door: enclosure.office_door,
 		})
 	}
 
@@ -322,14 +341,14 @@ impl MiniMartRegions {
 	}
 
 	/// Walls on every office side that is not already on the host shell, including a
-	/// sales-face divider with a door that stops below the ceiling (header panel).
+	/// sales-face divider with a tracked [`Opening::passage`] door (below-ceiling).
 	fn office_enclosure(
 		&self,
 		host3: &Aabb3d,
 		host: Aabb2d,
 		office2: Aabb2d,
 		seed_face: PlanOpeningFace,
-	) -> Option<(Vec<Rectangle>, PlanOpeningFace, Aabb2d)> {
+	) -> Option<OfficeEnclosure> {
 		let office3 = plan_to_aabb3(host3, office2, PlanAxes::XZ);
 		let sales_face = Self::sales_face_kind(seed_face);
 		let divider_thru = if seed_face.thru_is_x {
@@ -451,7 +470,50 @@ impl MiniMartRegions {
 		if door_panels == 0 {
 			return None;
 		}
-		Some((walls, door_face, door_clear))
+
+		let door_id = OpeningId::scoped(SCOPE, "office_door", "0");
+		let door_bounds = Self::office_door_bounds(
+			host3,
+			divider_thru,
+			seed_face.thru_is_x,
+			door0,
+			door1,
+			door_h,
+		);
+		Some(OfficeEnclosure {
+			walls,
+			door_clear,
+			office_door: MiniMartOfficeDoor {
+				id: door_id,
+				opening: Opening::passage(door_bounds),
+			},
+		})
+	}
+
+	fn office_door_bounds(
+		host3: &Aabb3d,
+		divider_thru: f32,
+		thru_is_x: bool,
+		door0: f32,
+		door1: f32,
+		door_h: f32,
+	) -> Aabb3d {
+		let y0 = host3.min.y;
+		let y1 = y0 + door_h.max(0.5);
+		let band = (DEFAULT_PANEL_THICKNESS * 0.5 + 0.08).max(0.12);
+		let a0 = door0.min(door1);
+		let a1 = door0.max(door1);
+		if thru_is_x {
+			Aabb3d::from_min_max(
+				Vec3::new(divider_thru - band, y0, a0),
+				Vec3::new(divider_thru + band, y1, a1),
+			)
+		} else {
+			Aabb3d::from_min_max(
+				Vec3::new(a0, y0, divider_thru - band),
+				Vec3::new(a1, y1, divider_thru + band),
+			)
+		}
 	}
 
 	fn sales_face_kind(seed_face: PlanOpeningFace) -> FaceKind {

@@ -3,6 +3,9 @@
 //! - [`facade`] — cardinal [`StallSide`] bands (retail / office / restroom)
 //! - [`bites`] — plan-face bites counters / seating / kitchen
 //! - [`mini_mart`] — MiniMart clearances / office / register / aisles / shelves
+//!
+//! Domain constants live in the submodule that owns them (`bites`, `mini_mart`);
+//! this root re-exports types used across interior modules.
 
 pub mod bites;
 pub mod facade;
@@ -10,16 +13,10 @@ pub mod mini_mart;
 
 pub use bites::{
 	BitesCounterChoice, BitesKitchen, BitesPassageSpec, BitesSitdownRegions, EligibleBitesPassage,
-	PackedBitesCounters, BITES_COUNTER_ALONG_MIN, BITES_COUNTER_PLACE_RATE,
-	BITES_PASSAGE_REMAIN_MIN, BITES_REGION_MIN_PLAN, BITES_SEATING_FACE_CONTACT,
+	PackedBitesCounters,
 };
 pub use facade::{primary_facade, StallSide};
-pub use mini_mart::{
-	MiniMartPacked, MiniMartRegions, MiniMartShelfSpec, MINI_MART_AISLES_MIN,
-	MINI_MART_DOOR_WIDTH_MAX, MINI_MART_DOOR_WIDTH_MIN, MINI_MART_OFFICE_LONG_MIN,
-	MINI_MART_OFFICE_SHORT_MIN, MINI_MART_REGISTER_MIN, MINI_MART_SHELF_DEPTH_MAX,
-	MINI_MART_SHELF_DEPTH_MIN, MINI_MART_SHELF_PLACE_RATE,
-};
+pub use mini_mart::{MiniMartPacked, MiniMartRegions, MiniMartShelfSpec};
 
 use bevy_math::bounding::Aabb3d;
 use crate::paneling::Rectangle;

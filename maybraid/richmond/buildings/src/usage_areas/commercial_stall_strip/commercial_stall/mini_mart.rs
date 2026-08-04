@@ -9,19 +9,29 @@ use procedural_common::NoiseParams;
 use richmond_building_components::panels::PanelNode;
 use richmond_building_components::{BuildingComponents, LabelNode, LabelStyle, Layers};
 
-use crate::fit::{Confines, FillableRegions, Fit, FitError};
+use bevy_math::bounding::Aabb3d;
+
+use crate::fit::{
+	Confines, FillRegion, FillableRegions, Fit, FitError, SpaceKind,
+};
+use crate::openings::{Opening, OpeningId, Openings};
 use crate::paneling::Rectangle;
 
 use super::label_util::label_filling_aabb;
+use super::stall_layout::mini_mart::MiniMartOfficeDoor;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct MiniMart {
 	pub stall_type: LabelNode,
 	pub office_walls: Vec<Rectangle>,
+	pub office_bounds: Aabb3d,
 	pub office: LabelNode,
 	pub stall_aisles: Vec<LabelNode>,
 	pub register: LabelNode,
 	pub grocery_shelves: Vec<LabelNode>,
+	/// Tracked passage through the office sales divider.
+	pub office_door_id: OpeningId,
+	pub office_door: Opening,
 }
 
 impl MiniMart {
@@ -39,6 +49,8 @@ impl MiniMart {
 			.iter()
 			.map(|aabb| label_filling_aabb(LabelStyle::Gray, "GroceryShelves", aabb, confines.roll))
 			.collect();
+		let MiniMartOfficeDoor { id, opening } = plan.packed.office_door.clone();
+		let office_bounds = plan.packed.office;
 		Self {
 			stall_type: label_filling_aabb(
 				LabelStyle::Blue,
@@ -47,10 +59,11 @@ impl MiniMart {
 				confines.roll,
 			),
 			office_walls: plan.packed.office_walls,
+			office_bounds,
 			office: label_filling_aabb(
 				style,
 				"MiniMartOffice",
-				&plan.packed.office,
+				&office_bounds,
 				confines.roll,
 			),
 			stall_aisles,
@@ -61,7 +74,19 @@ impl MiniMart {
 				confines.roll,
 			),
 			grocery_shelves,
+			office_door_id: id,
+			office_door: opening,
 		}
+	}
+
+	/// Office residual with the authored office-door passage on its confines.
+	pub fn office_fill_region(&self, roll: f32) -> FillRegion {
+		let mut openings = Openings::new();
+		openings.insert(self.office_door_id.clone(), self.office_door.clone());
+		FillRegion::new(
+			SpaceKind::InternalSpace,
+			Confines::new(self.office_bounds, roll, openings),
+		)
 	}
 }
 
@@ -72,7 +97,12 @@ impl Fit for MiniMart {
 	) -> Result<(Self, FillableRegions), FitError> {
 		let params = MiniMartParameterized::sample(confines, noise)?;
 		let plan = MiniMartPlan::from_parameterized(params, confines)?;
-		Ok((Self::from_plan(plan, confines), FillableRegions::empty()))
+		let stall = Self::from_plan(plan, confines);
+		let regions = FillableRegions {
+			within: vec![stall.office_fill_region(confines.roll)],
+			atop: Vec::new(),
+		};
+		Ok((stall, regions))
 	}
 }
 
@@ -98,16 +128,15 @@ mod tests {
 	use super::*;
 	use bevy_math::bounding::Aabb3d;
 	use bevy_math::Vec3;
-	use crate::openings::{Opening, OpeningId, Openings};
+	use crate::openings::{Opening, OpeningId, OpeningLabel, Openings};
 	use procedural_common::{
 		aabb2_area, aabb3_to_plan, intersects_aabb2, Aabb2dPack, PlanAxes, PlanOpeningFace,
 	};
 
-	use super::super::stall_layout::{
+	use super::super::stall_layout::mini_mart::{
 		MiniMartRegions, MINI_MART_AISLES_MIN, MINI_MART_OFFICE_LONG_MIN,
-		MINI_MART_OFFICE_SHORT_MIN, MINI_MART_REGISTER_MIN,
+		MINI_MART_OFFICE_SHORT_MIN, MINI_MART_PASSAGE_CLEARANCE, MINI_MART_REGISTER_MIN, SCOPE,
 	};
-	use super::super::stall_layout::mini_mart::MINI_MART_PASSAGE_CLEARANCE;
 
 	fn roomy_south_doors() -> Confines {
 		let mut openings = Openings::new();
@@ -146,7 +175,7 @@ mod tests {
 	#[test]
 	fn mini_mart_fits_roomy_bay() {
 		let confines = roomy_south_doors();
-		let (stall, _) =
+		let (stall, regions) =
 			MiniMart::fit_to_confines(&confines, NoiseParams { seed: 7, ..Default::default() })
 				.unwrap();
 		assert_eq!(stall.stall_type.text.as_str(), "MiniMart");
@@ -156,6 +185,17 @@ mod tests {
 			stall.office_walls.len()
 		);
 		assert!(!stall.stall_aisles.is_empty());
+		assert_eq!(
+			stall.office_door_id,
+			OpeningId::scoped(SCOPE, "office_door", "0")
+		);
+		assert!(matches!(stall.office_door.label, OpeningLabel::Passage));
+		assert_eq!(regions.within.len(), 1);
+		assert!(regions.within[0]
+			.confines
+			.openings
+			.get(&stall.office_door_id)
+			.is_some());
 	}
 
 	#[test]
@@ -177,6 +217,10 @@ mod tests {
 		assert!(!plan.packed.aisles.is_empty());
 		let (aw, ad) = plan_extent(&plan.packed.aisles[0]);
 		assert!(aw + 1e-3 >= MINI_MART_AISLES_MIN && ad + 1e-3 >= MINI_MART_AISLES_MIN);
+		assert!(matches!(
+			plan.packed.office_door.opening.label,
+			OpeningLabel::Passage
+		));
 
 		let host = aabb3_to_plan(&confines.bounds, PlanAxes::XZ);
 		for (_id, opening) in confines.openings.iter() {
@@ -265,7 +309,6 @@ mod tests {
 
 	#[test]
 	fn mini_mart_fits_playground_demo_seeds() {
-		// Matches buildings-playground `demo_bites_stall_confines` for 14×3.2×12 south.
 		let mut openings = Openings::new();
 		openings.insert(
 			OpeningId::new("demo_bites_door_a"),

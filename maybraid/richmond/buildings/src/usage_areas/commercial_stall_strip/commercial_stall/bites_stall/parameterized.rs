@@ -8,6 +8,8 @@ use crate::fit::{Confines, FitError};
 
 use super::super::stall_layout::{
 	BitesCounterChoice, BitesKitchen, BitesPassageSpec, EligibleBitesPassage, PackedBitesCounters,
+};
+use super::super::stall_layout::bites::{
 	BITES_COUNTER_ALONG_MIN, BITES_COUNTER_PLACE_RATE, BITES_PASSAGE_REMAIN_MIN,
 	BITES_REGION_MIN_PLAN,
 };
