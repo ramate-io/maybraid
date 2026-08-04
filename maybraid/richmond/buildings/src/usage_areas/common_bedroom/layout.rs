@@ -1,5 +1,18 @@
 //! Plan packing for [`super::CommonBedroom`]: passage clearances, beds /
 //! nightstands, then wall-seeded closets and ensuites via [`EnclosedRoom`].
+//!
+//! # Program tiers (prefer enclosures over fillers)
+//!
+//! Greedy packing samples a [`Concept`] each step, but concepts sit in tiers:
+//!
+//! 1. **Enclosure** — ensuite, walk-in, closet (private rooms with doors)
+//! 2. **Appointed** — bed, nightstand, wardrobe, dresser
+//! 3. **Filler** — [`Concept::BedroomFurniture`] (and free small boxes)
+//!
+//! Fillers are **gated** until an enclosure soft-goal is met (ensuite and/or at
+//! least one closet-like room), and are capped. That is the same *prefer
+//! structure, then residual fill* idea as commercial-stall first-fit catalogs,
+//! expressed as in-loop gates rather than a separate pass.
 
 use bevy_math::bounding::{Aabb2d, Aabb3d};
 use bevy_math::Vec3;
@@ -11,7 +24,7 @@ use procedural_common::{
 use crate::fit::{Confines, FitError};
 use crate::openings::{Opening, OpeningId};
 use crate::paneling::Rectangle;
-use crate::usage_areas::clearance::{PassageClearance, PASSAGE_CLEARANCE};
+use crate::usage_areas::clearance::PassageClearance;
 use crate::usage_areas::enclosed_room::{EnclosedRoom, EnclosedRoomMins, EnclosedRoomParams};
 
 use super::parameterized::SCOPE;
@@ -25,8 +38,14 @@ const DOOR_HEADER_MIN: f32 = 0.2;
 const PARTITION_SEP: f32 = 1.0;
 /// Plan pad between free-standing storage (wardrobe↔dresser / same-kind pairs).
 const STORAGE_SEP: f32 = 1.0;
-/// Host floor area (m²) above which [`Concept::BedroomFurniture`] may be picked.
+/// Inward door keep-out depth for closet / walk-in / ensuite sales-face doors.
+const PARTITION_DOOR_CLEARANCE: f32 = 1.25;
+/// Extra plan pad around authored door clear bands (lateral breathing room).
+const DOOR_CLEAR_PAD: f32 = 0.3;
+/// Host floor area (m²) above which walk-ins / bedroom furniture may be considered.
 const LARGE_ROOM_AREA: f32 = 70.0;
+/// Soft cap on residual [`Concept::BedroomFurniture`] placements.
+const MAX_BEDROOM_FURNITURE: usize = 1;
 
 /// One closet or ensuite: enclosure panels + authored door + room AABB.
 #[derive(Debug, Clone, PartialEq)]
@@ -141,9 +160,11 @@ impl CommonBedroomRegions {
 				PickCtx {
 					bed_count: packed.beds.len(),
 					has_ensuite: !packed.ensuites.is_empty(),
+					closet_count: packed.closets.len(),
+					walk_in_count: packed.walk_in_closets.len(),
 					wardrobe_count: packed.wardrobes.len(),
 					dresser_count: packed.dressers.len(),
-					walk_in_count: packed.walk_in_closets.len(),
+					bedroom_furniture_count: packed.bedroom_furniture.len(),
 					room_area,
 				},
 			);
@@ -191,7 +212,7 @@ impl CommonBedroomRegions {
 				}
 				Placed::Partition(part) => {
 					clearances.push(aabb3_to_plan(&part.bounds, PlanAxes::XZ));
-					clearances.push(part.door_clear);
+					clearances.push(inflate_aabb2(part.door_clear, DOOR_CLEAR_PAD));
 					match concept {
 						Concept::Closet => packed.closets.push(part),
 						Concept::WalkInCloset => packed.walk_in_closets.push(part),
@@ -262,17 +283,22 @@ impl CommonBedroomRegions {
 				)
 				.map(Placed::Dresser)
 			}
-			Concept::BedroomFurniture => place_free_extent(
-				host3,
-				host,
-				clearances,
-				packed,
-				cfg,
-				salt,
-				base_bedroom_furniture_extent(self.spaciousness),
-				42.0,
-			)
-			.map(Placed::BedroomFurniture),
+			Concept::BedroomFurniture => {
+				if packed.bedroom_furniture.len() >= MAX_BEDROOM_FURNITURE {
+					return None;
+				}
+				place_free_extent(
+					host3,
+					host,
+					clearances,
+					packed,
+					cfg,
+					salt,
+					base_bedroom_furniture_extent(self.spaciousness),
+					42.0,
+				)
+				.map(Placed::BedroomFurniture)
+			}
 			Concept::Closet => {
 				let clears = partition_pack_clearances(clearances, packed);
 				let mins = self.closet_mins();
@@ -385,7 +411,7 @@ impl CommonBedroomRegions {
 			door_height_min: DOOR_HEIGHT_MIN,
 			door_height_max: DOOR_HEIGHT_MAX,
 			door_header_min: DOOR_HEADER_MIN,
-			door_clearance: PASSAGE_CLEARANCE,
+			door_clearance: PARTITION_DOOR_CLEARANCE,
 			door_id: door_id.clone(),
 		}
 		.pack(host3, host, clearances)?;
@@ -499,42 +525,77 @@ fn base_bedroom_furniture_extent(spaciousness: f32) -> Vec3 {
 struct PickCtx {
 	bed_count: usize,
 	has_ensuite: bool,
+	closet_count: usize,
+	walk_in_count: usize,
 	wardrobe_count: usize,
 	dresser_count: usize,
-	walk_in_count: usize,
+	bedroom_furniture_count: usize,
 	room_area: f32,
 }
 
+fn enclosure_soft_goal(ctx: &PickCtx) -> bool {
+	ctx.has_ensuite || ctx.closet_count + ctx.walk_in_count >= 1
+}
+
+/// Sample the next concept under **program tiers** (enclosure → appointed → filler).
+///
+/// See module docs. Fillers stay gated until [`enclosure_soft_goal`] holds so
+/// ensuite / closets claim floor before BedroomFurniture piles up. Appointed
+/// storage still interleaves once the soft-goal is met (or mid-loop).
 fn pick_concept(noise: &NoiseConfig, step: u32, ctx: PickCtx) -> Concept {
 	let t = noise.sample_unit_4d(step as f32, 0.0, 0.0, 10.0);
 	let large = ctx.room_area + 1e-3 >= LARGE_ROOM_AREA;
-	if ctx.bed_count == 1 && t < 0.28 {
-		Concept::Nightstand
-	} else if t < 0.16 {
-		Concept::Bed
-	} else if t < 0.36 {
-		Concept::Nightstand
-	} else if t < 0.44 && ctx.wardrobe_count == 0 {
-		Concept::Wardrobe
-	} else if t < 0.50 && ctx.dresser_count == 0 {
-		Concept::Dresser
-	} else if t < 0.58 && large {
-		Concept::BedroomFurniture
-	} else if t < 0.68 {
-		Concept::Closet
-	} else if t < 0.78 && ctx.walk_in_count == 0 && large {
-		Concept::WalkInCloset
-	} else if t < 0.78 {
-		Concept::Closet
-	} else if ctx.has_ensuite {
-		if large && ctx.walk_in_count == 0 {
-			Concept::WalkInCloset
-		} else {
-			Concept::Closet
+	let goal = enclosure_soft_goal(&ctx);
+
+	// Enclosure-first while the soft-goal is unmet (not for the whole early loop).
+	if !goal {
+		if !ctx.has_ensuite && t < 0.45 {
+			return Concept::Ensuite;
 		}
-	} else {
-		Concept::Ensuite
+		if large && ctx.walk_in_count == 0 && t < 0.62 {
+			return Concept::WalkInCloset;
+		}
+		if t < 0.88 {
+			return Concept::Closet;
+		}
+		if ctx.bed_count == 1 {
+			return Concept::Nightstand;
+		}
+		return Concept::Closet;
 	}
+
+	// Soft-goal met: appointed first, then enclosure top-up, filler last.
+	if ctx.bed_count == 1 && t < 0.28 {
+		return Concept::Nightstand;
+	}
+	if t < 0.14 {
+		return Concept::Bed;
+	}
+	if t < 0.34 {
+		return Concept::Nightstand;
+	}
+	if t < 0.46 && ctx.wardrobe_count == 0 {
+		return Concept::Wardrobe;
+	}
+	if t < 0.56 && ctx.dresser_count == 0 {
+		return Concept::Dresser;
+	}
+	if !ctx.has_ensuite && t < 0.66 {
+		return Concept::Ensuite;
+	}
+	if large && ctx.walk_in_count == 0 && t < 0.76 {
+		return Concept::WalkInCloset;
+	}
+	if t < 0.86 {
+		return Concept::Closet;
+	}
+
+	// Filler: gated + capped; only in large rooms once structure exists.
+	if large && ctx.bedroom_furniture_count < MAX_BEDROOM_FURNITURE && step >= 8 {
+		return Concept::BedroomFurniture;
+	}
+
+	Concept::Closet
 }
 
 fn collides_clearances(candidate: Aabb2d, clearances: &[Aabb2d]) -> bool {

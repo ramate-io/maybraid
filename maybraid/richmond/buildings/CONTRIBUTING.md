@@ -150,6 +150,19 @@ Interiors that introduce private rooms (MiniMart office, restroom stalls) emit
 those rooms as `FillableRegions::within` so a later pass can fill them—or so
 tests/playgrounds can assert tracked doors.
 
+### Program tiers (prefer structure, then residual fill)
+
+When a usage area greedily packs many concept kinds into one host, prefer a
+**tiered** sample rather than a flat weight table:
+
+1. **Enclosure / structure** — rooms with doors (ensuite, closet, office, …)
+2. **Appointed** — primary furniture / counters tied to the program
+3. **Filler** — leftover mid-size boxes (`BedroomFurniture`, extra displays, …)
+
+Gate fillers until an enclosure soft-goal is met (and soft-cap them). Same
+spirit as commercial-stall catalog first-fit, but as in-loop gates. See
+[`common_bedroom/layout.rs`](src/usage_areas/common_bedroom/layout.rs).
+
 ---
 
 ## Adding a new commercial interior

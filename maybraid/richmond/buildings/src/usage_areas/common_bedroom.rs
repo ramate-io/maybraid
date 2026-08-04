@@ -775,7 +775,7 @@ mod tests {
 	}
 
 	#[test]
-	fn common_bedroom_large_room_can_place_bedroom_furniture_or_walk_in() {
+	fn common_bedroom_large_room_prefers_enclosure_before_filler() {
 		let confines = Confines::new(
 			Aabb3d::from_min_max(Vec3::ZERO, Vec3::new(12.0, 3.2, 12.0)),
 			0.0,
@@ -791,8 +791,9 @@ mod tests {
 				openings
 			},
 		);
-		let mut saw = false;
-		for seed in 0..48 {
+		let mut saw_enclosure = false;
+		let mut saw_walk_in_or_furniture = false;
+		for seed in 0..64 {
 			let (room, _) = CommonBedroom::fit_with_fill(
 				&confines,
 				NoiseParams {
@@ -802,14 +803,28 @@ mod tests {
 				CommonBedroomParameterized::with_fill(1.3, 0.7),
 			)
 			.unwrap();
-			if !room.bedroom_furniture.is_empty() || !room.walk_in_closets.is_empty() {
-				saw = true;
-				break;
+			if !room.ensuites.is_empty() || !room.closets.is_empty() || !room.walk_in_closets.is_empty()
+			{
+				saw_enclosure = true;
+			}
+			if !room.walk_in_closets.is_empty() || !room.bedroom_furniture.is_empty() {
+				saw_walk_in_or_furniture = true;
+			}
+			// Filler must not outrun structure: if furniture exists, enclosure exists.
+			if !room.bedroom_furniture.is_empty() {
+				assert!(
+					!room.ensuites.is_empty()
+						|| !room.closets.is_empty()
+						|| !room.walk_in_closets.is_empty(),
+					"BedroomFurniture without enclosure (seed={seed})"
+				);
+				assert!(room.bedroom_furniture.len() <= 1);
 			}
 		}
+		assert!(saw_enclosure, "expected enclosure in a large room");
 		assert!(
-			saw,
-			"expected BedroomFurniture or WalkInCloset in a large room"
+			saw_walk_in_or_furniture,
+			"expected WalkInCloset or BedroomFurniture across seeds"
 		);
 	}
 
