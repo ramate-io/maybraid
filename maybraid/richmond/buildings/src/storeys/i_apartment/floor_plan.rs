@@ -20,6 +20,9 @@ use crate::shells::{IFloor, IFloorParams, IFloorPlanRect, IFloorSlab};
 use super::parameterized::{IApartmentParameterized, MIN_CENTRAL_DEPTH, MIN_STOREY_HEIGHT};
 use super::SCOPE;
 
+/// Keep shaft volumes clear of IFloor wall strips (panel thickness + jamb margin).
+const SHAFT_WALL_CLEARANCE: f32 = 0.75;
+
 /// I-Apartment floor plan: I-frame shell + primary rectangular regions + openings.
 #[derive(Debug, Clone, PartialEq)]
 pub struct IApartmentFloorPlan {
@@ -396,8 +399,14 @@ fn shaft_aabb_at_pocket(pocket: &Aabb2d, y0: f32, height: f32, shaft_side: f32) 
 	let cz = (pocket.min.y + pocket.max.y) * 0.5;
 	let pw = (pocket.max.x - pocket.min.x).max(EPS);
 	let pd = (pocket.max.y - pocket.min.y).max(EPS);
-	let side = shaft_side.max(1.2).min(pw * 0.9).min(pd * 0.9);
-	let half = side * 0.5;
+	// Inset from pocket edges so boundary pockets never sit on / punch outer walls.
+	let clear = SHAFT_WALL_CLEARANCE.min(pw * 0.35).min(pd * 0.35);
+	let max_half_x = ((pw * 0.5) - clear).max(0.35);
+	let max_half_z = ((pd * 0.5) - clear).max(0.35);
+	let half = (shaft_side * 0.5)
+		.max(0.6)
+		.min(max_half_x)
+		.min(max_half_z);
 	Aabb3d::from_min_max(
 		Vec3::new(cx - half, y0, cz - half),
 		Vec3::new(cx + half, y0 + height.max(EPS), cz + half),
@@ -536,7 +545,24 @@ mod tests {
 				(c.x - pc.x).abs() < 1e-2 && (c.y - pc.y).abs() < 1e-2,
 				"shaft center should sit on pocket centroid"
 			);
+			let smin = Vec3::from(shaft.min);
+			let smax = Vec3::from(shaft.max);
+			let gap_x = (smin.x - pocket.min.x).min(pocket.max.x - smax.x);
+			let gap_z = (smin.z - pocket.min.y).min(pocket.max.y - smax.z);
+			assert!(
+				gap_x > 0.25 && gap_z > 0.25,
+				"shaft should stay inset from pocket / wall edges (gaps {gap_x}, {gap_z})"
+			);
 		}
+		// Boundary shafts must not map onto exterior wall strips.
+		assert!(
+			!plan
+				.shell
+				.openings()
+				.iter()
+				.any(|(_, o)| matches!(o.label, OpeningLabel::Shaft)),
+			"shaft should not punch wall openings"
+		);
 	}
 
 	#[test]
