@@ -48,9 +48,10 @@ pub mod connecting_hall;
 pub mod fitted_rectangle;
 pub mod circ_ring_floor;
 pub mod i_floor;
-	pub mod i_apartment_floor_plan;
-	pub mod i_apartment_floor_plan_examples;
-	pub mod i_apartment_full_storey;
+pub mod halls_to_shafts;
+pub mod i_apartment_floor_plan;
+pub mod i_apartment_floor_plan_examples;
+pub mod i_apartment_full_storey;
 pub mod les_halles_floor_plan;
 pub mod les_halles_full_storey;
 pub mod rect_floor;
@@ -194,6 +195,8 @@ pub enum Show {
 	IApartmentFloorPlanExamples(i_apartment_floor_plan_examples::IApartmentFloorPlanExamples),
 	/// I-Apartment full storey (plan + LivableApartment per primary rect).
 	IApartmentFullStorey(i_apartment_full_storey::IApartmentFullStorey),
+	/// HallsToShafts carve demo (hall / shaft / passage / residual boxes).
+	HallsToShafts(halls_to_shafts::HallsToShafts),
 }
 
 impl Show {
@@ -259,6 +262,7 @@ impl Show {
 			Self::IApartmentFloorPlan(cmd) => cmd.into_preview(),
 			Self::IApartmentFloorPlanExamples(cmd) => Ok(cmd.into_preview()),
 			Self::IApartmentFullStorey(cmd) => cmd.into_preview(),
+			Self::HallsToShafts(cmd) => cmd.into_preview(),
 		};
 		match preview {
 			Ok((subject, transform)) => {

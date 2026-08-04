@@ -92,11 +92,14 @@ and the per-interior galleries (`mini-mart-examples`, `public-restroom-examples`
    packs exterior apertures onto outer wall edges, and remaps inbound **shaft**
    openings onto 3×3 (thirds) pocket centroids inside the containing primary rect
    (drop if outside all rects). Mapped + generated openings are stored on the plan.
-3. Full\* allocates each rect as a [`LivableApartment`](src/usage_areas/livable_apartment.rs).
-   Halls and multi-cell packing are follow-on subproblems.
+3. Full\* runs [`HallsToShafts`](src/usage_areas/halls_to_shafts.rs) on each primary
+   rect (interior-biased Hanan MST among Shaft/Passage openings; no walls), then
+   allocates residual `InternalSpace` cells as [`LivableApartment`](src/usage_areas/livable_apartment.rs).
+   Multi-cell apartment grouping remains a follow-on subproblem.
 
 Playground: `/show i-apartment-floor-plan`, `/show i-apartment-floor-plan-examples`,
-`/show i-apartment-full-storey`.
+`/show i-apartment-full-storey`, `/show halls-to-shafts` (hall / shaft / passage /
+residual AABB gizmos).
 
 ### Parameterized → floor plan
 

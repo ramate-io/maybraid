@@ -7,7 +7,8 @@
 //! Pipeline:
 //! - [`IApartmentParameterized::sample`] — I-frame layout + window catalog knobs
 //! - [`IApartmentFloorPlan::from_parameterized`] — shell + openings + primary rects
-//! - [`IApartmentFullStorey::from_floor_plan`] — one [`crate::LivableApartment`] per rect
+//! - [`IApartmentFullStorey::from_floor_plan`] — [`crate::HallsToShafts`] per rect, then
+//!   [`crate::LivableApartment`] on residual `InternalSpace`
 
 pub mod floor_plan;
 pub mod full_storey;

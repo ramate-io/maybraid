@@ -43,9 +43,9 @@ use richmond_buildings::wizards_tower::WizardsTower;
 use richmond_buildings::{
 	BedroomFillParams, BitesSitdownStall, BitesStall, CellConstraints, CirculationEntry,
 	CirculationRequestStatus, CommercialStall, CommercialStallStrip, Confines, Fit, FitError,
-	IApartmentFloorPlan, IApartmentFullStorey, IApartmentParameterized, KnickKnackStall,
-	LesHallesFloorPlan, LesHallesFullStorey, LesHallesParameterized, MiniMart, PartsStall,
-	PublicRestroom,
+	IApartmentFloorPlan, 	IApartmentFullStorey, IApartmentParameterized, KnickKnackStall, HallsToShafts as HallsToShaftsFit,
+	FillableRegions, LesHallesFloorPlan, LesHallesFullStorey, LesHallesParameterized, MiniMart,
+	PartsStall, PublicRestroom, SpaceKind,
 };
 #[derive(Component)]
 pub struct PreviewRoot;
@@ -413,6 +413,12 @@ pub enum PreviewSubject {
 		seed: i32,
 		ceiling: bool,
 		/// Inbound openings (`--opening`). Empty ⇒ demo boundary shaft requests.
+		openings: Vec<PreviewOpening>,
+	},
+	/// HallsToShafts on a rectangular host (gizmo boxes for halls / openings / residuals).
+	HallsToShafts {
+		extent: Vec3,
+		seed: i32,
 		openings: Vec<PreviewOpening>,
 	},
 }
@@ -927,6 +933,19 @@ impl PreviewConfig {
 					openings.len()
 				)
 			}
+			PreviewSubject::HallsToShafts {
+				extent,
+				seed,
+				ref openings,
+			} => {
+				format!(
+					"preview: halls-to-shafts (extent={:.1},{:.1},{:.1} seed={seed} openings={})",
+					extent.x,
+					extent.y,
+					extent.z,
+					openings.len()
+				)
+			}
 		}
 	}
 
@@ -960,7 +979,8 @@ impl PreviewConfig {
 			PreviewSubject::LesHallesFloorPlan { extent, .. }
 			| PreviewSubject::LesHallesFullStorey { extent, .. }
 			| PreviewSubject::IApartmentFloorPlan { extent, .. }
-			| PreviewSubject::IApartmentFullStorey { extent, .. } => {
+			| PreviewSubject::IApartmentFullStorey { extent, .. }
+			| PreviewSubject::HallsToShafts { extent, .. } => {
 				les_halles_confines_bounds(*extent)
 			}
 			PreviewSubject::Pitch { rise, run, length, left, right, .. } => {
@@ -1170,6 +1190,7 @@ pub struct CachedPreview {
 	i_apartment_floor_plan: Option<IApartmentFloorPlan>,
 	i_apartment_floor_plan_examples: Vec<IApartmentFloorPlanExampleCell>,
 	i_apartment_full_storey: Option<IApartmentFullStorey>,
+	halls_to_shafts: Option<HallsToShaftsPreview>,
 	commercial_stall: Option<CommercialStall>,
 	commercial_stall_strip: Option<CommercialStallStrip>,
 	bites_stall: Option<BitesStall>,
@@ -1185,6 +1206,14 @@ pub struct CachedPreview {
 	parts_examples: Vec<PartsExampleCell>,
 	knick_knack_examples: Vec<KnickKnackExampleCell>,
 	public_restroom_examples: Vec<PublicRestroomExampleCell>,
+}
+
+/// Cached [`HallsToShaftsFit`] result for the gizmo-only playground demo.
+#[derive(Clone)]
+struct HallsToShaftsPreview {
+	fit: HallsToShaftsFit,
+	regions: FillableRegions,
+	host: Aabb3d,
 }
 
 /// One cell in [`PreviewSubject::IApartmentFloorPlanExamples`].
@@ -1251,6 +1280,7 @@ impl CachedPreview {
 		self.i_apartment_floor_plan = None;
 		self.i_apartment_floor_plan_examples.clear();
 		self.i_apartment_full_storey = None;
+		self.halls_to_shafts = None;
 		self.commercial_stall = None;
 		self.commercial_stall_strip = None;
 		self.bites_stall = None;
@@ -1527,6 +1557,16 @@ impl CachedPreview {
 					}
 				}
 			}
+			PreviewSubject::HallsToShafts {
+				extent,
+				seed,
+				openings,
+			} => match fit_halls_to_shafts(*extent, *seed, openings) {
+				Ok(preview) => self.halls_to_shafts = Some(preview),
+				Err(err) => {
+					bevy::log::error!("halls-to-shafts fit failed: {err}");
+				}
+			},
 			_ => {}
 		}
 	}
@@ -2083,6 +2123,32 @@ fn fit_i_apartment_floor_plan(
 	};
 	IApartmentFloorPlan::from_parameterized_with_ceiling(params, &confines, ceiling)
 		.map(|(plan, _)| plan)
+}
+
+fn fit_halls_to_shafts(
+	extent: Vec3,
+	seed: i32,
+	openings: &[PreviewOpening],
+) -> Result<HallsToShaftsPreview, richmond_buildings::FitError> {
+	let host = les_halles_confines_bounds(extent);
+	let inbound = if openings.is_empty() {
+		openings_from_preview(&crate::commands::show::halls_to_shafts::default_demo_openings(
+			extent,
+		))
+	} else {
+		openings_from_preview(openings)
+	};
+	let confines = Confines::new(host, 0.0, inbound);
+	let noise = NoiseParams {
+		seed,
+		..NoiseParams::default()
+	};
+	let (fit, regions) = HallsToShaftsFit::fit_to_confines(&confines, noise)?;
+	Ok(HallsToShaftsPreview {
+		fit,
+		regions,
+		host,
+	})
 }
 
 /// Curated (extent, seed) cells: same Fit path as production; seed/aspect vary I / T / L.
@@ -3435,6 +3501,9 @@ pub fn present_preview_lod(
 				);
 			}
 		}
+		PreviewSubject::HallsToShafts { .. } => {
+			// Gizmo-only preview (no BuildingComponents on HallsToShafts).
+		}
 	}
 }
 
@@ -3900,7 +3969,91 @@ pub fn draw_opening_plan_gizmos(
 				gizmos.aabb_3d(*bounds, cell_tf, color);
 			}
 		}
+		PreviewSubject::HallsToShafts { openings, .. } => {
+			draw_halls_to_shafts_gizmos(&mut gizmos, &cache, tf, openings, cyan, amber, magenta);
+		}
 		_ => {}
+	}
+}
+
+/// Halls (lime), shafts (magenta), passages (cyan/amber), residuals (sky).
+fn draw_halls_to_shafts_gizmos(
+	gizmos: &mut Gizmos,
+	cache: &CachedPreview,
+	tf: Transform,
+	openings: &[PreviewOpening],
+	cyan: Color,
+	amber: Color,
+	magenta: Color,
+) {
+	let lime = Color::srgb(0.35, 0.95, 0.4);
+	let sky = Color::srgb(0.35, 0.7, 1.0);
+	let host_color = Color::srgb(0.75, 0.75, 0.8);
+
+	let Some(preview) = cache.halls_to_shafts.as_ref() else {
+		// Fallback: still show authored openings if fit failed.
+		for (i, opening) in openings.iter().enumerate() {
+			let color = match opening.label {
+				OpeningLabel::Shaft => magenta,
+				OpeningLabel::Passage => {
+					if i % 2 == 0 {
+						cyan
+					} else {
+						amber
+					}
+				}
+				_ => Color::srgb(0.9, 0.9, 0.9),
+			};
+			gizmos.aabb_3d(opening.bounds(), tf, color);
+		}
+		return;
+	};
+
+	gizmos.aabb_3d(preview.host, tf, host_color);
+
+	for (i, band) in preview.fit.hall_bands.iter().enumerate() {
+		let y0 = Vec3::from(preview.host.min).y;
+		let y1 = Vec3::from(preview.host.max).y;
+		let bounds = Aabb3d::from_min_max(
+			Vec3::new(band.min.x, y0, band.min.y),
+			Vec3::new(band.max.x, y1, band.max.y),
+		);
+		let color = if i % 2 == 0 {
+			lime
+		} else {
+			Color::srgb(0.2, 0.8, 0.55)
+		};
+		gizmos.aabb_3d(bounds, tf, color);
+	}
+
+	for region in &preview.regions.within {
+		if region.kind != SpaceKind::InternalSpace {
+			continue;
+		}
+		gizmos.aabb_3d(region.confines.bounds, tf, sky);
+	}
+
+	// Prefer fitted openings on the HallsToShafts confines (post-sync AABBs).
+	let mut passage_i = 0usize;
+	let mut shaft_i = 0usize;
+	for (_id, opening) in preview.fit.confines.openings.iter() {
+		match opening.label {
+			OpeningLabel::Shaft => {
+				let color = if shaft_i % 2 == 0 {
+					magenta
+				} else {
+					Color::srgb(0.75, 0.35, 1.0)
+				};
+				gizmos.aabb_3d(opening.bounds, tf, color);
+				shaft_i += 1;
+			}
+			OpeningLabel::Passage => {
+				let color = if passage_i % 2 == 0 { cyan } else { amber };
+				gizmos.aabb_3d(opening.bounds, tf, color);
+				passage_i += 1;
+			}
+			_ => {}
+		}
 	}
 }
 

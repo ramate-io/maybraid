@@ -1,4 +1,4 @@
-//! I-Apartment full storey: floor plan plus one [`LivableApartment`] per primary rect.
+//! I-Apartment full storey: floor plan → [`HallsToShafts`] → livable rooms.
 
 use lod::gen::LodSceneLevel;
 use procedural_common::NoiseParams;
@@ -7,20 +7,21 @@ use richmond_building_components::labels::LabelNode;
 use richmond_building_components::panels::PanelNode;
 use richmond_building_components::{BuildingComponents, Layers};
 
-use crate::fit::{Confines, FillableRegions, Fit, FitError};
-use crate::usage_areas::LivableApartment;
+use crate::fit::{Confines, FillableRegions, Fit, FitError, SpaceKind};
+use crate::usage_areas::{HallsToShafts, LivableApartment};
 
 use super::floor_plan::IApartmentFloorPlan;
 
-/// Full I-Apartment storey: I-frame shell + livable apartments on primary rects.
+/// Full I-Apartment storey: I-frame shell, halls-to-shafts, and livable rooms.
 #[derive(Debug, Clone, PartialEq)]
 pub struct IApartmentFullStorey {
 	pub floor_plan: IApartmentFloorPlan,
+	pub halls: Vec<HallsToShafts>,
 	pub apartments: Vec<LivableApartment>,
 }
 
 impl IApartmentFullStorey {
-	/// Wrap an already-fitted floor plan and allocate livable apartments.
+	/// Wrap an already-fitted floor plan and allocate halls + livable apartments.
 	pub fn from_floor_plan(
 		floor_plan: IApartmentFloorPlan,
 		noise: NoiseParams,
@@ -34,18 +35,53 @@ impl IApartmentFullStorey {
 		regions: FillableRegions,
 		noise: NoiseParams,
 	) -> Result<(Self, FillableRegions), FitError> {
+		let mut halls = Vec::new();
 		let mut apartments = Vec::new();
 		let mut residual_within = Vec::new();
+		let mut next_apt_id = 0u32;
 
-		let _ = noise;
-		for (i, region) in regions.within.into_iter().enumerate() {
-			match LivableApartment::from_confines(i as u32, &region.confines) {
-				Ok((apt, nested)) => {
-					apartments.push(apt);
-					residual_within.extend(nested.within);
+		for region in regions.within {
+			match HallsToShafts::fit_to_confines(&region.confines, noise) {
+				Ok((hts, nested)) => {
+					halls.push(hts);
+					for nested_region in nested.within {
+						match nested_region.kind {
+							SpaceKind::InternalSpace => {
+								match LivableApartment::from_confines(
+									next_apt_id,
+									&nested_region.confines,
+								) {
+									Ok((apt, apt_nested)) => {
+										next_apt_id = next_apt_id.saturating_add(1);
+										apartments.push(apt);
+										residual_within.extend(apt_nested.within);
+									}
+									Err(FitError::TooSmall { .. }) => {
+										residual_within.push(nested_region);
+									}
+									Err(err) => return Err(err),
+								}
+							}
+							SpaceKind::Hallway => {
+								residual_within.push(nested_region);
+							}
+							_ => residual_within.push(nested_region),
+						}
+					}
 				}
 				Err(FitError::TooSmall { .. }) => {
-					residual_within.push(region);
+					// Fall back: treat the whole primary rect as one livable.
+					match LivableApartment::from_confines(next_apt_id, &region.confines) {
+						Ok((apt, nested)) => {
+							next_apt_id = next_apt_id.saturating_add(1);
+							apartments.push(apt);
+							residual_within.extend(nested.within);
+						}
+						Err(FitError::TooSmall { .. }) => {
+							residual_within.push(region);
+						}
+						Err(err) => return Err(err),
+					}
 				}
 				Err(err) => return Err(err),
 			}
@@ -54,6 +90,7 @@ impl IApartmentFullStorey {
 		Ok((
 			Self {
 				floor_plan,
+				halls,
 				apartments,
 			},
 			FillableRegions {
@@ -120,9 +157,54 @@ mod tests {
 		let (plan, _) = IApartmentFloorPlan::from_parameterized(params, &confines).unwrap();
 		let n = plan.primary_rects.len();
 		let (storey, _) = IApartmentFullStorey::from_floor_plan(plan, noise).unwrap();
+		// No shafts/passages → HallsToShafts is a no-op carve; one room per rect.
+		assert_eq!(storey.halls.len(), n);
 		assert_eq!(storey.apartments.len(), n);
 		assert!(!storey
 			.panel_nodes_for_level(LodSceneLevel::High)
 			.is_empty());
+	}
+
+	#[test]
+	fn full_storey_carves_halls_when_shafts_present() {
+		use crate::openings::{Opening, OpeningId, OpeningLabel};
+
+		let bounds = Aabb3d::from_min_max(
+			Vec3::new(-22.0, 0.0, -18.0),
+			Vec3::new(22.0, 3.5, 18.0),
+		);
+		let empty = Confines::from_bounds(bounds);
+		let noise = NoiseParams::default();
+		let params = IApartmentParameterized::sample(&empty, noise).unwrap();
+		let inbound = IApartmentFloorPlan::shaft_requests_for_primary_rects(&params, &empty);
+		let confines = Confines::new(bounds, 0.0, inbound);
+		let (mut plan, _) = IApartmentFloorPlan::from_parameterized(params, &confines).unwrap();
+		// One shaft per rect alone does not form a hall; add a passage so
+		// HallsToShafts has two terminals on the first primary rect.
+		if let Some(rect) = plan.primary_rects.first() {
+			let cx = 0.5 * (rect.min_x + rect.max_x);
+			let cz = rect.max_z - 0.2;
+			plan.openings.insert(
+				OpeningId::new("test_passage"),
+				Opening::new(
+					Aabb3d::from_min_max(
+						Vec3::new(cx - 0.6, 0.0, cz - 0.15),
+						Vec3::new(cx + 0.6, 3.5, cz + 0.15),
+					),
+					OpeningLabel::Passage,
+				),
+			);
+		}
+		let (storey, residual) = IApartmentFullStorey::from_floor_plan(plan, noise).unwrap();
+		assert!(!storey.halls.is_empty());
+		assert!(
+			storey.halls.iter().any(|h| !h.hall_bands.is_empty())
+				|| residual
+					.within
+					.iter()
+					.any(|r| r.kind == SpaceKind::Hallway),
+			"expected at least one carved hallway when shaft+passage present"
+		);
+		assert!(!storey.apartments.is_empty());
 	}
 }

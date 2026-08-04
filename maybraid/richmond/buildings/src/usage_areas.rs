@@ -9,6 +9,7 @@
 pub mod clearance;
 pub mod commercial_stall_strip;
 pub mod common_bedroom;
+pub mod halls_to_shafts;
 pub mod janitorial;
 pub mod livable_apartment;
 pub mod plan_cells;
@@ -26,6 +27,7 @@ pub use commercial_stall_strip::commercial_stall::{
 pub use commercial_stall_strip::{
 	CommercialStallStrip, CommercialStallStripParameterized, CommercialStallStripPlan,
 };
+pub use halls_to_shafts::HallsToShafts;
 pub use janitorial::Janitorial;
 pub use livable_apartment::LivableApartment;
 pub use plan_cells::{

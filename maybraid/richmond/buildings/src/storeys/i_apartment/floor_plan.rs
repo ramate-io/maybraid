@@ -182,10 +182,12 @@ impl IApartmentFloorPlan {
 
 		let mut within = Vec::new();
 		for (i, rect) in self.primary_rects.iter().enumerate() {
-			let bounds = plan_to_aabb3(&host, rect.to_aabb2(), PlanAxes::XZ);
+			let rect2 = rect.to_aabb2();
+			let bounds = plan_to_aabb3(&host, rect2, PlanAxes::XZ);
+			let openings = openings_intersecting_xz(&self.openings, rect2);
 			within.push(FillRegion::new(
 				SpaceKind::Custom(format!("{SCOPE}_rect_{i}")),
-				Confines::new(bounds, self.roll, Openings::new()),
+				Confines::new(bounds, self.roll, openings),
 			));
 		}
 
@@ -468,9 +470,20 @@ fn label_filling_aabb(style: LabelStyle, text: &str, aabb: &Aabb3d, yaw: f32) ->
 	LabelNode::rectangle(style, text, center, extents, yaw)
 }
 
+fn openings_intersecting_xz(openings: &Openings, region: Aabb2d) -> Openings {
+	let mut out = Openings::new();
+	for (id, opening) in openings.iter() {
+		if aabb_xz_overlap_area(&opening.bounds, &region) > EPS {
+			out.insert(id.clone(), opening.clone());
+		}
+	}
+	out
+}
+
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use crate::openings::MapsOpenings;
 	use procedural_common::NoiseParams;
 
 	fn large_confines() -> Confines {
