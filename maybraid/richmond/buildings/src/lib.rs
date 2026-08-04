@@ -58,8 +58,9 @@ pub use fit::{
 	StackRegion,
 };
 pub use openings::{
-	MappedOpening, MappedOpeningQuad, MappedOpenings, MapsOpenings, Opening, OpeningId,
-	OpeningLabel, Openings,
+	fit_bays_on_run, fit_windows_on_run, generate_stall_doors, generate_windows,
+	sync_connectable_openings_from_mapped, BaySpec, MappedOpening, MappedOpeningQuad,
+	MappedOpenings, MapsOpenings, Opening, OpeningId, OpeningLabel, Openings, PlacedBay,
 };
 pub use paneling::{
 	fallback_oriented, fit_rectangle, fit_rectangle_corners, orient_rectangle,

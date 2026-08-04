@@ -13,7 +13,9 @@ use crate::fit::{
 	aabb_xz_center, aabb_xz_extent, aabb_xz_overlap_area, Confines, FillRegion, FillableRegions,
 	Fit, FitError, SpaceKind, StackRegion,
 };
-use crate::openings::{MapsOpenings, Opening, OpeningId, OpeningLabel, Openings};
+use crate::openings::{
+	sync_connectable_openings_from_mapped, Opening, OpeningId, OpeningLabel, Openings,
+};
 use crate::shells::ortho::EPS;
 use crate::shells::{IFloor, IFloorParams, IFloorPlanRect, IFloorSlab};
 
@@ -91,7 +93,7 @@ impl IApartmentFloorPlan {
 
 		ifloor_params.openings = openings.clone();
 		let shell = IFloor::new(ifloor_params);
-		sync_connectable_openings_from_shell(&mut openings, &shell);
+		sync_connectable_openings_from_mapped(&mut openings, &shell);
 
 		let plan = Self {
 			parameterized: params,
@@ -329,16 +331,6 @@ fn generated_facade_apertures(
 		}
 	}
 	openings
-}
-
-fn sync_connectable_openings_from_shell(openings: &mut Openings, shell: &IFloor) {
-	openings.openings.retain(|id, opening| match opening.label {
-		OpeningLabel::Passage | OpeningLabel::Aperture => shell.mapped_opening(id).is_some(),
-		_ => true,
-	});
-	for (id, opening) in shell.openings().iter() {
-		openings.insert(id.clone(), opening.clone());
-	}
 }
 
 /// 3×3 thirds partition of a primary rect (row-major, −Z → +Z, −X → +X).

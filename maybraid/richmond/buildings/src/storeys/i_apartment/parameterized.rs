@@ -4,9 +4,7 @@ use bevy_math::Vec2;
 use procedural_common::{NoiseConfig, NoiseParams};
 
 use crate::fit::{aabb_xz_extent, Confines, FitError};
-use crate::storeys::les_halles::{
-	LesHallesFloorPlan, LesHallesParameterized, LesHallesPlacedDoor, LesHallesStallDoor,
-};
+use crate::openings::{fit_windows_on_run, generate_windows, BaySpec, PlacedBay};
 
 /// Resolved I-frame layout knobs (stem + optional one-sided / two-sided flanges).
 #[derive(Debug, Clone, PartialEq)]
@@ -27,7 +25,7 @@ pub struct IApartmentParameterized {
 	/// How densely to pack exterior apertures (`0…1`).
 	pub opening_density: f32,
 	/// Exterior aperture sizes to pack along outer wall edges (catalog order).
-	pub windows: Vec<LesHallesStallDoor>,
+	pub windows: Vec<BaySpec>,
 	/// Preferred shaft footprint side length (meters), clamped to the 9-pocket.
 	pub shaft_side: f32,
 }
@@ -115,7 +113,7 @@ impl IApartmentParameterized {
 		normalize_bar_shares(&mut bl, &mut br, bot_fill);
 
 		let opening_density = cfg.sample_unit_4d(c.x, c.y, c.z, SALT_OPENINGS);
-		let windows = LesHallesFloorPlan::generate_windows(&cfg, c);
+		let windows = generate_windows(&cfg, c);
 		let short = footprint.x.min(footprint.y);
 		let shaft_hi = (short * 0.12).clamp(MIN_SHAFT_SIDE, MAX_SHAFT_SIDE);
 		let shaft_lo = MIN_SHAFT_SIDE.min(shaft_hi);
@@ -157,17 +155,9 @@ impl IApartmentParameterized {
 		(tl, tr, bl, br)
 	}
 
-	/// Pack exterior windows along a wall run (Les Halles bay catalog policy).
-	pub fn fit_windows_on_run(&self, run_length: f32) -> Vec<LesHallesPlacedDoor> {
-		if self.windows.is_empty() || self.opening_density < 0.08 {
-			return Vec::new();
-		}
-		let n = self.windows.len();
-		let take = ((n as f32) * self.opening_density.clamp(0.15, 1.0))
-			.ceil()
-			.max(1.0) as usize;
-		let take = take.min(n);
-		LesHallesParameterized::fit_bays_on_run(&self.windows[..take], run_length, false)
+	/// Pack exterior windows along a wall run (shared façade bay catalog policy).
+	pub fn fit_windows_on_run(&self, run_length: f32) -> Vec<PlacedBay> {
+		fit_windows_on_run(&self.windows, self.opening_density, run_length)
 	}
 }
 
