@@ -79,7 +79,10 @@ impl IFloorParams {
 		let d = self.central_rectangle.y.max(EPS);
 		let half_w = w * 0.5;
 		let half_d = d * 0.5;
-		let flange_t = w;
+		let flange_t = self
+			.flange_thickness
+			.map(|t| t.max(EPS))
+			.unwrap_or(w);
 
 		let tl = positive_len(self.top_left_length).unwrap_or(0.0);
 		let tr = positive_len(self.top_right_length).unwrap_or(0.0);

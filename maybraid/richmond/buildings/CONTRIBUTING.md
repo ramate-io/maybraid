@@ -86,7 +86,8 @@ and the per-interior galleries (`mini-mart-examples`, `public-restroom-examples`
 
 [`storeys/i_apartment`](src/storeys/i_apartment.rs) starts from the I-frame alone:
 
-1. Sample I-layout knobs from seed; fit an [`IFloor`](src/shells/i_floor.rs) to confines.
+1. Sample I-layout knobs from seed (I/T/L/Z arms; stem may be narrower than the
+   apartment-favoring end bars); fit an [`IFloor`](src/shells/i_floor.rs) to confines.
 2. Floor plan emits the shell’s natural **1–3 primary rectangles** (stem + flanges).
 3. Full\* allocates each rect as a [`LivableApartment`](src/usage_areas/livable_apartment.rs).
    Halls, shafts, and multi-cell packing are follow-on subproblems.

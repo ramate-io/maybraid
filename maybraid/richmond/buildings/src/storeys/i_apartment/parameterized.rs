@@ -5,34 +5,43 @@ use procedural_common::{NoiseConfig, NoiseParams};
 
 use crate::fit::{aabb_xz_extent, Confines, FitError};
 
-/// Resolved I-frame layout knobs (stem + optional flanges).
+/// Resolved I-frame layout knobs (stem + optional one-sided / two-sided flanges).
 #[derive(Debug, Clone, PartialEq)]
 pub struct IApartmentParameterized {
-	/// Stem width as a fraction of the short footprint axis.
-	pub stem_width_frac: f32,
-	/// Whether the top (−Z) flange bar is present.
-	pub has_top_flange: bool,
-	/// Whether the bottom (+Z) flange bar is present.
-	pub has_bottom_flange: bool,
-	/// Left/right flange length share of the leftover X budget (`0…1` each side).
-	/// When a flange is present, lengths are `share * (extent_x - stem_w)`.
-	pub top_left_share: f32,
-	pub top_right_share: f32,
-	pub bottom_left_share: f32,
-	pub bottom_right_share: f32,
+	/// Stem width in meters (X). May be narrower than the end bars.
+	pub stem_width: f32,
+	/// Flange bar depth in meters (Z thickness of end bars); favors apartment scale.
+	pub flange_thickness: f32,
+	/// Left/right flange length weights / fill shares. `None` ⇒ arm absent.
+	///
+	/// When both arms of a bar are present these are relative weights (normalized
+	/// against leftover X). When only one arm is present this is the fraction of
+	/// leftover X that arm takes.
+	pub top_left_share: Option<f32>,
+	pub top_right_share: Option<f32>,
+	pub bottom_left_share: Option<f32>,
+	pub bottom_right_share: Option<f32>,
 }
 
 pub const MIN_STOREY_HEIGHT: f32 = 2.5;
-pub const MIN_STEM_WIDTH: f32 = 4.0;
 pub const MIN_FOOTPRINT: f32 = 12.0;
+/// Stem may run narrower than the end bars, but stays buildable.
+pub const MIN_STEM_WIDTH: f32 = 4.0;
+/// End bars (leaves) stay fairly large for apartment room.
+pub const MIN_FLANGE_THICKNESS: f32 = 7.0;
+pub const MIN_CENTRAL_DEPTH: f32 = 2.5;
 
 const SALT_STEM: f32 = 1.0;
-const SALT_TOP: f32 = 2.0;
-const SALT_BOT: f32 = 3.0;
-const SALT_TL: f32 = 4.0;
-const SALT_TR: f32 = 5.0;
-const SALT_BL: f32 = 6.0;
-const SALT_BR: f32 = 7.0;
+const SALT_FLANGE_T: f32 = 2.0;
+const SALT_SHAPE: f32 = 3.0;
+const SALT_ARM_A: f32 = 4.0;
+const SALT_ARM_B: f32 = 5.0;
+const SALT_SHARE_TL: f32 = 6.0;
+const SALT_SHARE_TR: f32 = 7.0;
+const SALT_SHARE_BL: f32 = 8.0;
+const SALT_SHARE_BR: f32 = 9.0;
+const SALT_FILL_TOP: f32 = 10.0;
+const SALT_FILL_BOT: f32 = 11.0;
 
 impl IApartmentParameterized {
 	/// Sample I-frame knobs at the confines center.
@@ -48,55 +57,151 @@ impl IApartmentParameterized {
 
 		let cfg = NoiseConfig::new(noise);
 		let c = confines.center();
-		let short = footprint.x.min(footprint.y);
 
-		let stem_width_frac = cfg
-			.sample_range_f32_4d(0.20, 0.40, c.x, c.y, c.z, SALT_STEM)
-			.max(MIN_STEM_WIDTH / short.max(1.0))
-			.min(0.55);
+		// Stem: allow a bit narrower; still leaves most X for flange arms.
+		let stem_lo = MIN_STEM_WIDTH.min(footprint.x * 0.2);
+		let stem_hi = (footprint.x * 0.32).max(stem_lo + 0.5);
+		let stem_width = cfg
+			.sample_range_f32_4d(stem_lo, stem_hi, c.x, c.y, c.z, SALT_STEM)
+			.clamp(stem_lo, footprint.x * 0.4);
 
-		// Prefer a full I; occasionally drop a flange → T / L / U-ish.
-		let has_top_flange = cfg.sample_range_f32_4d(0.0, 1.0, c.x, c.y, c.z, SALT_TOP) > 0.18;
-		let has_bottom_flange = cfg.sample_range_f32_4d(0.0, 1.0, c.x, c.y, c.z, SALT_BOT) > 0.18;
-		if !has_top_flange && !has_bottom_flange {
-			// Keep at least a stem rectangle (still 1 primary rect).
-		}
+		// Shape family → which arms exist (L needs a single one-sided flange).
+		let shape_u = cfg.sample_range_f32_4d(0.0, 1.0, c.x, c.y, c.z, SALT_SHAPE);
+		let arm_u = cfg.sample_range_f32_4d(0.0, 1.0, c.x, c.y, c.z, SALT_ARM_A);
+		let arm_v = cfg.sample_range_f32_4d(0.0, 1.0, c.x, c.y, c.z, SALT_ARM_B);
+		let (mut tl, mut tr, mut bl, mut br) = sample_arms(shape_u, arm_u, arm_v);
+
+		let flange_bars =
+			((tl.is_some() || tr.is_some()) as u8) + ((bl.is_some() || br.is_some()) as u8);
+		let max_flange_t = if flange_bars == 0 {
+			footprint.y * 0.4
+		} else {
+			((footprint.y - MIN_CENTRAL_DEPTH) / flange_bars as f32).max(MIN_FLANGE_THICKNESS * 0.5)
+		};
+		// Leaves favor apartment depth within the Z budget.
+		let flange_lo = MIN_FLANGE_THICKNESS.min(max_flange_t);
+		let flange_hi = (max_flange_t * 0.95).max(flange_lo);
+		let flange_thickness = cfg
+			.sample_range_f32_4d(flange_lo, flange_hi, c.x, c.y, c.z, SALT_FLANGE_T)
+			.clamp(flange_lo, max_flange_t);
+
+		let weight = |present: bool, salt: f32| -> Option<f32> {
+			present.then(|| cfg.sample_range_f32_4d(0.35, 0.65, c.x, c.y, c.z, salt))
+		};
+		tl = weight(tl.is_some(), SALT_SHARE_TL);
+		tr = weight(tr.is_some(), SALT_SHARE_TR);
+		bl = weight(bl.is_some(), SALT_SHARE_BL);
+		br = weight(br.is_some(), SALT_SHARE_BR);
+
+		// One-arm bars: store how much of leftover X to take (high).
+		// Two-arm bars: weights stay relative; fill fraction applied in `flange_lengths`.
+		let top_fill = cfg.sample_range_f32_4d(0.75, 0.98, c.x, c.y, c.z, SALT_FILL_TOP);
+		let bot_fill = cfg.sample_range_f32_4d(0.75, 0.98, c.x, c.y, c.z, SALT_FILL_BOT);
+		normalize_bar_shares(&mut tl, &mut tr, top_fill);
+		normalize_bar_shares(&mut bl, &mut br, bot_fill);
 
 		Ok(Self {
-			stem_width_frac,
-			has_top_flange,
-			has_bottom_flange,
-			top_left_share: cfg.sample_range_f32_4d(0.35, 0.65, c.x, c.y, c.z, SALT_TL),
-			top_right_share: cfg.sample_range_f32_4d(0.35, 0.65, c.x, c.y, c.z, SALT_TR),
-			bottom_left_share: cfg.sample_range_f32_4d(0.35, 0.65, c.x, c.y, c.z, SALT_BL),
-			bottom_right_share: cfg.sample_range_f32_4d(0.35, 0.65, c.x, c.y, c.z, SALT_BR),
+			stem_width,
+			flange_thickness,
+			top_left_share: tl,
+			top_right_share: tr,
+			bottom_left_share: bl,
+			bottom_right_share: br,
 		})
 	}
 
+	pub fn has_top_flange(&self) -> bool {
+		self.top_left_share.is_some() || self.top_right_share.is_some()
+	}
+
+	pub fn has_bottom_flange(&self) -> bool {
+		self.bottom_left_share.is_some() || self.bottom_right_share.is_some()
+	}
+
 	/// Resolve concrete flange lengths for a footprint (meters).
+	///
+	/// Lengths never exceed the leftover X budget (`footprint.x - stem_w`).
 	pub fn flange_lengths(
 		&self,
 		footprint: Vec2,
 		stem_w: f32,
 	) -> (Option<f32>, Option<f32>, Option<f32>, Option<f32>) {
 		let leftover = (footprint.x - stem_w).max(0.0);
-		let (tl, tr) = if self.has_top_flange {
-			(
-				Some(leftover * self.top_left_share),
-				Some(leftover * self.top_right_share),
-			)
-		} else {
-			(None, None)
-		};
-		let (bl, br) = if self.has_bottom_flange {
-			(
-				Some(leftover * self.bottom_left_share),
-				Some(leftover * self.bottom_right_share),
-			)
-		} else {
-			(None, None)
-		};
+		let (tl, tr) = pair_length(self.top_left_share, self.top_right_share, leftover);
+		let (bl, br) = pair_length(self.bottom_left_share, self.bottom_right_share, leftover);
 		(tl, tr, bl, br)
+	}
+}
+
+/// For a single bar: one arm ⇒ share is leftover fraction; two arms ⇒ relative weights
+/// already scaled so `left + right == fill` (see [`normalize_bar_shares`]).
+fn pair_length(
+	left: Option<f32>,
+	right: Option<f32>,
+	leftover: f32,
+) -> (Option<f32>, Option<f32>) {
+	match (left, right) {
+		(Some(l), Some(r)) => {
+			let sum = (l + r).max(1e-4);
+			// Shares were normalized to sum ≈ fill ∈ [0,1].
+			let budget = leftover * sum.min(1.0);
+			(Some(budget * l / sum), Some(budget * r / sum))
+		}
+		(Some(l), None) => (Some(leftover * l.clamp(0.0, 1.0)), None),
+		(None, Some(r)) => (None, Some(leftover * r.clamp(0.0, 1.0))),
+		(None, None) => (None, None),
+	}
+}
+
+/// One arm: rewrite share as fill fraction of leftover. Two arms: scale weights to sum to `fill`.
+fn normalize_bar_shares(left: &mut Option<f32>, right: &mut Option<f32>, fill: f32) {
+	let fill = fill.clamp(0.0, 1.0);
+	match (*left, *right) {
+		(Some(l), Some(r)) => {
+			let sum = (l + r).max(1e-4);
+			*left = Some(fill * l / sum);
+			*right = Some(fill * r / sum);
+		}
+		(Some(_), None) => *left = Some(fill),
+		(None, Some(_)) => *right = Some(fill),
+		(None, None) => {}
+	}
+}
+
+/// Map unit noise → arm presence.
+///
+/// Rough mix: I ~40%, T ~22%, L ~25%, Z ~8%, stem ~5%.
+fn sample_arms(
+	shape_u: f32,
+	arm_u: f32,
+	arm_v: f32,
+) -> (Option<f32>, Option<f32>, Option<f32>, Option<f32>) {
+	let on = Some(1.0);
+	if shape_u < 0.40 {
+		(on, on, on, on)
+	} else if shape_u < 0.62 {
+		if arm_u < 0.5 {
+			(on, on, None, None)
+		} else {
+			(None, None, on, on)
+		}
+	} else if shape_u < 0.87 {
+		let top = arm_u < 0.5;
+		let left = arm_v < 0.5;
+		match (top, left) {
+			(true, true) => (on, None, None, None),
+			(true, false) => (None, on, None, None),
+			(false, true) => (None, None, on, None),
+			(false, false) => (None, None, None, on),
+		}
+	} else if shape_u < 0.95 {
+		if arm_u < 0.5 {
+			(on, None, None, on)
+		} else {
+			(None, on, on, None)
+		}
+	} else {
+		(None, None, None, None)
 	}
 }
 
@@ -106,14 +211,18 @@ mod tests {
 	use bevy_math::bounding::Aabb3d;
 	use bevy_math::Vec3;
 
+	fn large_confines() -> Confines {
+		Confines::from_bounds(Aabb3d::from_min_max(
+			Vec3::new(-22.0, 0.0, -18.0),
+			Vec3::new(22.0, 3.5, 18.0),
+		))
+	}
+
 	#[test]
 	fn sample_accepts_large_footprint() {
-		let confines = Confines::from_bounds(Aabb3d::from_min_max(
-			Vec3::new(-20.0, 0.0, -16.0),
-			Vec3::new(20.0, 3.5, 16.0),
-		));
-		let p = IApartmentParameterized::sample(&confines, NoiseParams::default()).unwrap();
-		assert!(p.stem_width_frac > 0.0);
+		let p = IApartmentParameterized::sample(&large_confines(), NoiseParams::default()).unwrap();
+		assert!(p.stem_width >= MIN_STEM_WIDTH * 0.5);
+		assert!(p.flange_thickness >= MIN_FLANGE_THICKNESS * 0.5);
 	}
 
 	#[test]
@@ -127,5 +236,63 @@ mod tests {
 			Err(FitError::TooSmall { .. })
 		));
 	}
-}
 
+	#[test]
+	fn sample_can_produce_l() {
+		let confines = large_confines();
+		let mut saw_l = false;
+		for seed in 0..200 {
+			let p = IApartmentParameterized::sample(
+				&confines,
+				NoiseParams {
+					seed,
+					..NoiseParams::default()
+				},
+			)
+			.unwrap();
+			let arms = [
+				p.top_left_share.is_some(),
+				p.top_right_share.is_some(),
+				p.bottom_left_share.is_some(),
+				p.bottom_right_share.is_some(),
+			]
+			.into_iter()
+			.filter(|&a| a)
+			.count();
+			let one_bar = p.has_top_flange() ^ p.has_bottom_flange();
+			if one_bar && arms == 1 {
+				saw_l = true;
+				break;
+			}
+		}
+		assert!(saw_l, "expected an L among seeds 0..200");
+	}
+
+	#[test]
+	fn flange_lengths_stay_within_leftover() {
+		let confines = large_confines();
+		let footprint = aabb_xz_extent(&confines.bounds);
+		for seed in 0..80 {
+			let p = IApartmentParameterized::sample(
+				&confines,
+				NoiseParams {
+					seed,
+					..NoiseParams::default()
+				},
+			)
+			.unwrap();
+			let leftover = (footprint.x - p.stem_width).max(0.0);
+			let (tl, tr, bl, br) = p.flange_lengths(footprint, p.stem_width);
+			let top = tl.unwrap_or(0.0) + tr.unwrap_or(0.0);
+			let bot = bl.unwrap_or(0.0) + br.unwrap_or(0.0);
+			assert!(
+				top <= leftover + 1e-3,
+				"seed={seed} top {top} > leftover {leftover}"
+			);
+			assert!(
+				bot <= leftover + 1e-3,
+				"seed={seed} bot {bot} > leftover {leftover}"
+			);
+		}
+	}
+}

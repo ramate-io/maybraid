@@ -15,7 +15,7 @@ use crate::fit::{
 use crate::openings::Openings;
 use crate::shells::{IFloor, IFloorParams, IFloorPlanRect, IFloorSlab};
 
-use super::parameterized::{IApartmentParameterized, MIN_STEM_WIDTH, MIN_STOREY_HEIGHT};
+use super::parameterized::{IApartmentParameterized, MIN_CENTRAL_DEPTH, MIN_STOREY_HEIGHT};
 use super::SCOPE;
 
 /// I-Apartment floor plan: I-frame shell + primary rectangular regions.
@@ -185,16 +185,21 @@ fn derive_ifloor_params(
 	ceiling: IFloorSlab,
 ) -> Result<IFloorParams, FitError> {
 	let footprint = aabb_xz_extent(&confines.bounds);
-	let short = footprint.x.min(footprint.y);
-	let stem_w = (short * params.stem_width_frac).max(MIN_STEM_WIDTH);
-	// Flange thickness equals stem width in IFloor geometry.
-	let flange_bars = (params.has_top_flange as u8) + (params.has_bottom_flange as u8);
-	let min_depth = stem_w * flange_bars as f32 + 2.0;
+	let stem_w = params.stem_width.clamp(1.0, footprint.x * 0.9);
+	let flange_bars =
+		(params.has_top_flange() as u8) + (params.has_bottom_flange() as u8);
+	let flange_t = if flange_bars == 0 {
+		params.flange_thickness
+	} else {
+		let max_t = ((footprint.y - MIN_CENTRAL_DEPTH) / flange_bars as f32).max(0.5);
+		params.flange_thickness.min(max_t)
+	};
+	let min_depth = flange_t * flange_bars as f32 + MIN_CENTRAL_DEPTH;
 	if footprint.y < min_depth {
 		return Err(FitError::TooSmall { reason: "stem_depth" });
 	}
-	let central_depth = footprint.y - stem_w * flange_bars as f32;
-	if central_depth < 2.0 {
+	let central_depth = footprint.y - flange_t * flange_bars as f32;
+	if central_depth < MIN_CENTRAL_DEPTH {
 		return Err(FitError::TooSmall { reason: "stem_depth" });
 	}
 	let (tl, tr, bl, br) = params.flange_lengths(footprint, stem_w);
@@ -205,6 +210,7 @@ fn derive_ifloor_params(
 		central_rectangle: Vec2::new(stem_w, central_depth),
 		bottom_left_length: bl,
 		bottom_right_length: br,
+		flange_thickness: Some(flange_t),
 		storey_height: height,
 		openings: Openings::new(),
 		floor: IFloorSlab::Solid,

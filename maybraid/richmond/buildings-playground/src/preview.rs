@@ -2084,29 +2084,53 @@ fn fit_i_apartment_floor_plan(
 		.map(|(plan, _)| plan)
 }
 
-/// Curated (extent, seed) cells: same Fit path as production; seed/aspect vary I / T / stem.
+/// Curated (extent, seed) cells: same Fit path as production; seed/aspect vary I / T / L.
 fn i_apartment_floor_plan_examples_specs() -> Vec<(Vec3, i32)> {
 	vec![
-		(Vec3::new(44.0, 3.5, 36.0), 1337), // I
-		(Vec3::new(44.0, 3.5, 36.0), 55),   // T (top flange)
-		(Vec3::new(44.0, 3.5, 36.0), 2),    // T (bottom flange)
-		(Vec3::new(44.0, 3.5, 36.0), 24),   // stem only
-		(Vec3::new(36.0, 3.5, 44.0), 1),    // I, tall aspect
-		(Vec3::new(48.0, 3.5, 28.0), 11),   // I, wide aspect
-		(Vec3::new(28.0, 3.5, 48.0), 256),  // T, tall aspect
-		(Vec3::new(52.0, 3.5, 32.0), 999),  // Tinv, wide
-		(Vec3::new(40.0, 3.5, 40.0), 128),  // I, square, asymmetric flanges
+		(Vec3::new(44.0, 3.5, 36.0), 3),  // I
+		(Vec3::new(44.0, 3.5, 36.0), 1),  // I, narrower stem
+		(Vec3::new(44.0, 3.5, 36.0), 2),  // L
+		(Vec3::new(44.0, 3.5, 36.0), 14), // T
+		(Vec3::new(44.0, 3.5, 36.0), 6),  // L
+		(Vec3::new(36.0, 3.5, 44.0), 11), // L, tall aspect
+		(Vec3::new(48.0, 3.5, 28.0), 21), // T, wide
+		(Vec3::new(40.0, 3.5, 40.0), 28), // L, square
+		(Vec3::new(52.0, 3.5, 32.0), 5),  // I, wide footprint
 	]
 }
 
 const I_APARTMENT_GALLERY_COLS: usize = 3;
-const I_APARTMENT_GALLERY_GAP: f32 = 6.0;
+const I_APARTMENT_GALLERY_GAP: f32 = 14.0;
+
+/// Plan-space AABB of primary rects (`min_x/z` may be negative / asymmetric).
+fn i_apartment_plan_footprint_aabb(plan: &IApartmentFloorPlan) -> (Vec3, Vec3) {
+	let mut min_x = f32::INFINITY;
+	let mut max_x = f32::NEG_INFINITY;
+	let mut min_z = f32::INFINITY;
+	let mut max_z = f32::NEG_INFINITY;
+	for rect in &plan.primary_rects {
+		min_x = min_x.min(rect.min_x);
+		max_x = max_x.max(rect.max_x);
+		min_z = min_z.min(rect.min_z);
+		max_z = max_z.max(rect.max_z);
+	}
+	let extent = Vec3::new(
+		(max_x - min_x).max(1.0),
+		plan.storey_height.max(1.0),
+		(max_z - min_z).max(1.0),
+	);
+	let min = Vec3::new(min_x, 0.0, min_z);
+	(min, extent)
+}
 
 fn i_apartment_floor_plan_examples_bounds() -> Aabb3d {
-	let specs = i_apartment_floor_plan_examples_specs();
+	let cells = build_i_apartment_floor_plan_examples();
+	if cells.is_empty() {
+		return Aabb3d::from_min_max(Vec3::ZERO, Vec3::splat(1.0));
+	}
 	gallery_grid_bounds(
-		|i| specs[i].0,
-		specs.len(),
+		|i| i_apartment_plan_footprint_aabb(&cells[i].plan).1,
+		cells.len(),
 		I_APARTMENT_GALLERY_COLS,
 		I_APARTMENT_GALLERY_GAP,
 	)
@@ -2114,24 +2138,15 @@ fn i_apartment_floor_plan_examples_bounds() -> Aabb3d {
 
 fn build_i_apartment_floor_plan_examples() -> Vec<IApartmentFloorPlanExampleCell> {
 	let specs = i_apartment_floor_plan_examples_specs();
-	let mut cells = Vec::new();
-	for (i, (extent, seed)) in specs.iter().enumerate() {
-		// Plans are XZ-centered; shift so the footprint min corner sits at the gallery cell origin.
-		let cell_origin = gallery_grid_offset(
-			|j| specs[j].0,
-			specs.len(),
-			i,
-			I_APARTMENT_GALLERY_COLS,
-			I_APARTMENT_GALLERY_GAP,
-		);
-		let offset = cell_origin + Vec3::new(extent.x * 0.5, 0.0, extent.z * 0.5);
+	let mut fitted = Vec::new();
+	for (extent, seed) in &specs {
 		let confines = Confines::from_bounds(les_halles_confines_bounds(*extent));
 		let noise = NoiseParams {
 			seed: *seed,
 			..NoiseParams::default()
 		};
 		match IApartmentFloorPlan::fit_to_confines(&confines, noise) {
-			Ok((plan, _)) => cells.push(IApartmentFloorPlanExampleCell { offset, plan }),
+			Ok((plan, _)) => fitted.push(plan),
 			Err(err) => {
 				bevy::log::error!(
 					"i-apartment-floor-plan-examples ({extent:?} seed={seed}) failed: {err}"
@@ -2139,7 +2154,27 @@ fn build_i_apartment_floor_plan_examples() -> Vec<IApartmentFloorPlanExampleCell
 			}
 		}
 	}
-	cells
+	let layout: Vec<(Vec3, Vec3)> = fitted
+		.iter()
+		.map(i_apartment_plan_footprint_aabb)
+		.collect();
+	fitted
+		.into_iter()
+		.enumerate()
+		.map(|(i, plan)| {
+			let (local_min, _) = layout[i];
+			let cell_origin = gallery_grid_offset(
+				|j| layout[j].1,
+				layout.len(),
+				i,
+				I_APARTMENT_GALLERY_COLS,
+				I_APARTMENT_GALLERY_GAP,
+			);
+			// Map plan-space AABB min → gallery cell origin (handles asymmetric L/Z).
+			let offset = cell_origin - local_min;
+			IApartmentFloorPlanExampleCell { offset, plan }
+		})
+		.collect()
 }
 
 fn draw_i_apartment_primary_rect_gizmos(

@@ -52,6 +52,8 @@ pub struct IFloorParams {
 	pub central_rectangle: Vec2,
 	pub bottom_left_length: Option<f32>,
 	pub bottom_right_length: Option<f32>,
+	/// Flange bar depth along ±Z. `None` ⇒ same as central width (classic I).
+	pub flange_thickness: Option<f32>,
 	pub storey_height: f32,
 	pub openings: Openings,
 	pub floor: IFloorSlab,
@@ -69,6 +71,7 @@ impl Default for IFloorParams {
 			central_rectangle: Vec2::new(2.0, 6.0),
 			bottom_left_length: Some(2.0),
 			bottom_right_length: Some(2.0),
+			flange_thickness: None,
 			storey_height: 3.0,
 			openings: Openings::new(),
 			floor: IFloorSlab::None,
@@ -106,6 +109,11 @@ impl IFloorParams {
 
 	pub fn bottom_right_length(mut self, length: Option<f32>) -> Self {
 		self.bottom_right_length = length;
+		self
+	}
+
+	pub fn flange_thickness(mut self, thickness: Option<f32>) -> Self {
+		self.flange_thickness = thickness;
 		self
 	}
 
