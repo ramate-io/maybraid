@@ -133,17 +133,21 @@ impl BuildingComponents for LivableApartment {
 
 	fn label_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<LabelNode> {
 		let mut out = Layers::new();
-		let confines = self.primary_confines();
-		let center = Vec3::from(confines.bounds.center());
-		let extents =
-			Vec3::from(confines.bounds.max - confines.bounds.min).max(Vec3::splat(1e-4));
-		out.push_free(LabelNode::rectangle(
-			LabelStyle::Blue,
-			&format!("Livable {}", self.region_id + 1),
-			center,
-			extents,
-			confines.roll,
-		));
+		let name = format!("Livable {}", self.region_id + 1);
+		// Label every cell so multi-cell groups read as one apartment.
+		for part in self.cells.iter() {
+			let confines = &part.confines;
+			let center = Vec3::from(confines.bounds.center());
+			let extents =
+				Vec3::from(confines.bounds.max - confines.bounds.min).max(Vec3::splat(1e-4));
+			out.push_free(LabelNode::rectangle(
+				LabelStyle::Blue,
+				&name,
+				center,
+				extents,
+				confines.roll,
+			));
+		}
 		out
 	}
 }

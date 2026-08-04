@@ -4,21 +4,26 @@
 //! → one hall door per group → partition / hall-edge walls → [`LivableApartment`]
 //! stubs (no per-cell shells — avoids double-walling).
 
+use std::collections::HashMap;
+
 use bevy_math::bounding::{Aabb2d, Aabb3d};
 use bevy_math::{Vec2, Vec3};
 use lod::gen::LodSceneLevel;
 use procedural_common::{NoiseConfig, NoiseParams};
 use richmond_building_components::joints::JointNode;
 use richmond_building_components::labels::LabelNode;
-use richmond_building_components::panels::PanelNode;
+use richmond_building_components::panels::{PanelNode, PanelStyle};
 use richmond_building_components::{BuildingComponents, Layers};
 
 use crate::fit::{
 	aabb_xz_extent, Confines, FillRegion, FillableRegions, Fit, FitError, MultiConfines, SpaceKind,
 };
 use crate::openings::{Opening, OpeningId, OpeningLabel, Openings};
+use crate::paneling::clipped_rectangular_strip::ClippedRectangularStrip;
+use crate::paneling::rect_fit::RectInset;
+use crate::paneling::rectangular_strip::RectangularStripNode;
 use crate::paneling::DEFAULT_PANEL_THICKNESS;
-use crate::shells::{RectFloor, RectFloorParams, RectFloorSlab};
+use crate::shells::ortho::{standing_face_opening, WallEdge};
 use crate::usage_areas::halls_to_shafts::{HallsToShafts, HallsToShaftsOptions};
 use crate::usage_areas::livable_apartment::LivableApartment;
 use crate::usage_areas::plan_cells::{
@@ -90,7 +95,8 @@ pub struct LivableApartments {
 	pub parameterized: LivableApartmentsParameterized,
 	pub halls: HallsToShafts,
 	pub apartments: Vec<LivableApartment>,
-	pub walls: Vec<RectFloor>,
+	/// Single-face enclosure strips (partition + hall); keyed/deduped at authorship.
+	pub walls: Vec<ClippedRectangularStrip>,
 	pub hall_width: f32,
 }
 
@@ -507,18 +513,38 @@ fn shared_edge_span(a: Aabb2d, b: Aabb2d) -> Option<(bool, f32, f32, f32)> {
 	None
 }
 
-/// Walls only where apartments meet each other or a hall (no outer / no shells).
+/// Canonical plan-edge key so each shared boundary is authored at most once.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+struct WallEdgeKey {
+	along_x: bool,
+	mid_mm: i32,
+	lo_mm: i32,
+	hi_mm: i32,
+}
+
+fn wall_edge_key(along_x: bool, lo: f32, hi: f32, mid: f32) -> WallEdgeKey {
+	let (lo, hi) = if lo <= hi { (lo, hi) } else { (hi, lo) };
+	WallEdgeKey {
+		along_x,
+		mid_mm: (mid * 1000.0).round() as i32,
+		lo_mm: (lo * 1000.0).round() as i32,
+		hi_mm: (hi * 1000.0).round() as i32,
+	}
+}
+
+/// Single-face strips where apartments meet each other or a hall (no outer shells).
 fn enclosure_walls(
 	cells: &[PlanCell],
 	halls: &[Aabb2d],
-	group_of: &std::collections::HashMap<u32, usize>,
+	group_of: &HashMap<u32, usize>,
 	openings: &Openings,
 	y0: f32,
 	y1: f32,
-) -> Vec<RectFloor> {
+) -> Vec<ClippedRectangularStrip> {
 	let thickness = DEFAULT_PANEL_THICKNESS.max(0.12);
 	let height = (y1 - y0).max(2.0);
 	let mut walls = Vec::new();
+	let mut seen: HashMap<WallEdgeKey, ()> = HashMap::new();
 
 	// Partition walls between different apartment groups.
 	for i in 0..cells.len() {
@@ -534,22 +560,57 @@ fn enclosure_walls(
 				(Some(x), Some(y)) if x != y => {}
 				_ => continue,
 			}
-			if let Some(wall) = wall_on_shared_edge(a.bounds, b.bounds, openings, y0, height, thickness)
-			{
+			let Some((along_x, lo, hi, mid)) = shared_edge_span(a.bounds, b.bounds) else {
+				continue;
+			};
+			let toward = b.center();
+			let from = Vec2::new(
+				if along_x { 0.5 * (lo + hi) } else { mid },
+				if along_x { mid } else { 0.5 * (lo + hi) },
+			);
+			if let Some(wall) = try_author_wall(
+				&mut seen,
+				along_x,
+				lo,
+				hi,
+				mid,
+				outward_toward(from, toward, along_x),
+				openings,
+				y0,
+				height,
+				thickness,
+			) {
 				walls.push(wall);
 			}
 		}
 	}
 
-	// Hall-frontage walls (one wall per cell–hall shared edge).
+	// Hall-frontage walls (deduped — adjacent cells may share the same edge key).
 	for cell in cells {
 		if !group_of.contains_key(&cell.id) {
 			continue;
 		}
 		for hall in halls {
-			if let Some(wall) =
-				wall_on_shared_edge(cell.bounds, *hall, openings, y0, height, thickness)
-			{
+			let Some((along_x, lo, hi, mid)) = shared_edge_span(cell.bounds, *hall) else {
+				continue;
+			};
+			let from = Vec2::new(
+				if along_x { 0.5 * (lo + hi) } else { mid },
+				if along_x { mid } else { 0.5 * (lo + hi) },
+			);
+			let toward = 0.5 * (hall.min + hall.max);
+			if let Some(wall) = try_author_wall(
+				&mut seen,
+				along_x,
+				lo,
+				hi,
+				mid,
+				outward_toward(from, toward, along_x),
+				openings,
+				y0,
+				height,
+				thickness,
+			) {
 				walls.push(wall);
 			}
 		}
@@ -558,66 +619,123 @@ fn enclosure_walls(
 	walls
 }
 
-fn wall_on_shared_edge(
-	a: Aabb2d,
-	b: Aabb2d,
+fn outward_toward(from: Vec2, toward: Vec2, along_x: bool) -> Vec2 {
+	let d = toward - from;
+	if along_x {
+		if d.y >= 0.0 {
+			Vec2::Y
+		} else {
+			-Vec2::Y
+		}
+	} else if d.x >= 0.0 {
+		Vec2::X
+	} else {
+		-Vec2::X
+	}
+}
+
+fn try_author_wall(
+	seen: &mut HashMap<WallEdgeKey, ()>,
+	along_x: bool,
+	lo: f32,
+	hi: f32,
+	mid: f32,
+	outward: Vec2,
 	openings: &Openings,
 	y0: f32,
 	height: f32,
 	thickness: f32,
-) -> Option<RectFloor> {
-	let (along_x, lo, hi, mid) = shared_edge_span(a, b)?;
-	let len = (hi - lo).max(thickness);
-	let center_along = 0.5 * (lo + hi);
-	let (center_xz, footprint) = if along_x {
-		(
-			Vec3::new(center_along, y0, mid),
-			Vec2::new(len, thickness),
-		)
+) -> Option<ClippedRectangularStrip> {
+	if (hi - lo).abs() < EPS {
+		return None;
+	}
+	let key = wall_edge_key(along_x, lo, hi, mid);
+	if seen.contains_key(&key) {
+		return None;
+	}
+	seen.insert(key, ());
+
+	let (start, end) = if along_x {
+		(Vec3::new(lo, y0, mid), Vec3::new(hi, y0, mid))
 	} else {
-		(
-			Vec3::new(mid, y0, center_along),
-			Vec2::new(thickness, len),
-		)
+		(Vec3::new(mid, y0, lo), Vec3::new(mid, y0, hi))
 	};
-	let wall_openings = openings_on_edge(openings, along_x, mid, lo, hi);
-	Some(RectFloor::new(RectFloorParams {
-		center_xz,
-		footprint,
-		storey_height: height,
-		openings: wall_openings,
-		floor: RectFloorSlab::None,
-		ceiling: RectFloorSlab::None,
-		..RectFloorParams::default()
-	}))
+	let edge = WallEdge::new(start, end, height, outward.normalize_or_zero());
+	Some(wall_strip_with_openings(edge, openings, thickness))
 }
 
-fn openings_on_edge(
+fn wall_strip_with_openings(
+	edge: WallEdge,
 	openings: &Openings,
-	along_x: bool,
-	mid: f32,
-	lo: f32,
-	hi: f32,
-) -> Openings {
-	let mut out = Openings::new();
-	for (id, opening) in openings.iter() {
+	thickness: f32,
+) -> ClippedRectangularStrip {
+	let thickness = thickness.max(1e-4);
+	let len = edge.length();
+	let h = edge.height;
+	let tang = edge.tangent();
+	let style = PanelStyle::RoughStonework;
+
+	let mut cuts: Vec<(f32, f32, f32, f32)> = Vec::new();
+	for (_id, opening) in openings.iter() {
 		if !matches!(opening.label, OpeningLabel::Passage) {
 			continue;
 		}
-		let min = Vec3::from(opening.bounds.min);
-		let max = Vec3::from(opening.bounds.max);
-		let cx = 0.5 * (min.x + max.x);
-		let cz = 0.5 * (min.z + max.z);
-		let on_edge = if along_x {
-			(cz - mid).abs() < 0.35 && cx >= lo - EPS && cx <= hi + EPS
-		} else {
-			(cx - mid).abs() < 0.35 && cz >= lo - EPS && cz <= hi + EPS
+		let Some(face) = standing_face_opening(edge, &opening.bounds, thickness) else {
+			continue;
 		};
-		if on_edge {
-			out.insert(id.clone(), opening.clone());
+		let s_lo = face.inset.bottom.clamp(0.0, len);
+		let s_hi = (len - face.inset.top).clamp(0.0, len);
+		if s_hi - s_lo < EPS {
+			continue;
 		}
+		cuts.push((s_lo, s_hi, face.inset.left, face.inset.right));
 	}
-	out
+	cuts.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
+
+	if cuts.is_empty() {
+		return ClippedRectangularStrip::from_nodes(
+			style,
+			[
+				RectangularStripNode::new(edge.start, h, thickness, 0.0),
+				RectangularStripNode::new(edge.end, h, thickness, 0.0),
+			],
+			[None],
+		);
+	}
+
+	let mut nodes = Vec::new();
+	let mut insets: Vec<Option<RectInset>> = Vec::new();
+	nodes.push(RectangularStripNode::new(edge.start, h, thickness, 0.0));
+	let mut cursor = 0.0_f32;
+	for (s_lo, s_hi, sill, header) in cuts {
+		if s_lo > cursor + EPS {
+			nodes.push(RectangularStripNode::new(
+				edge.start + tang * s_lo,
+				h,
+				thickness,
+				0.0,
+			));
+			insets.push(None);
+			cursor = s_lo;
+		}
+		let s_hi = s_hi.max(cursor + EPS);
+		nodes.push(RectangularStripNode::new(
+			edge.start + tang * s_hi,
+			h,
+			thickness,
+			0.0,
+		));
+		let jamb = 0.02_f32.min((s_hi - cursor) * 0.1);
+		insets.push(Some(RectInset::new(sill, header, jamb, jamb)));
+		cursor = s_hi;
+	}
+	if cursor < len - EPS {
+		nodes.push(RectangularStripNode::new(edge.end, h, thickness, 0.0));
+		insets.push(None);
+	} else if let Some(last) = nodes.last_mut() {
+		last.position = edge.end;
+	}
+	ClippedRectangularStrip::from_nodes(style, nodes, insets)
 }
 
 #[cfg(test)]
