@@ -81,23 +81,27 @@ pub use portals::{
 pub use shells::{
 	ArcFloor, ArcFloorParams, ArcFloorSlab, ArcTower, ArcTowerParams, CircRingFloor,
 	CircRingFloorParams, CircRingFloorSlab, ConnectingHall, EndCap, IFloor, IFloorParams,
-	IFloorSlab, Overhang, PitchedRoof, PitchedRoofParams, RectFloor, RectFloorParams,
-	RectFloorSide, RectFloorSlab, RectRingFloor, RectRingFloorParams, RectRingFloorSide,
-	RectRingFloorSlab, RectangularPitchedRoofComplex, RectangularPitchedRoofComplexParams,
-	RidgeJunction, RoofHalf, RoundedRectCorner, RoundedRectFloor, RoundedRectFloorParams,
-	RoundedRectFloorSide, RoundedRectFloorSlab, Trazaloid, TrazaloidParams, TrazaloidSide,
-	TrazaloidSlab, ValleySegment,
+	IFloorPlanRect, IFloorSlab, Overhang, PitchedRoof, PitchedRoofParams, RectFloor,
+	RectFloorParams, RectFloorSide, RectFloorSlab, RectRingFloor, RectRingFloorParams,
+	RectRingFloorSide, RectRingFloorSlab, RectangularPitchedRoofComplex,
+	RectangularPitchedRoofComplexParams, RidgeJunction, RoofHalf, RoundedRectCorner,
+	RoundedRectFloor, RoundedRectFloorParams, RoundedRectFloorSide, RoundedRectFloorSlab,
+	Trazaloid, TrazaloidParams, TrazaloidSide, TrazaloidSlab, ValleySegment,
 };
 pub use stacked_rings::{StackedRing, StackedRings};
+pub use storeys::i_apartment::{
+	ApartmentGroup, IApartmentFloorPlan, IApartmentFullStorey, IApartmentParameterized,
+	SCOPE as I_APARTMENT_SCOPE,
+};
 pub use storeys::les_halles::{
 	LesHallesFloorPlan, LesHallesFullStorey, LesHallesParameterized, LesHallesPlacedDoor,
 	LesHallesShaftPlacement, LesHallesStallDoor, SCOPE as LES_HALLES_SCOPE,
 };
 pub use usage_areas::{
-	BitesSitdownStall, BitesStall, CommercialStall, CommercialStallInterior,
-	CommercialStallParameterized, CommercialStallPlan, CommercialStallStrip,
-	CommercialStallStripParameterized, CommercialStallStripPlan, KnickKnackStall,
-	KnickKnackStallParameterized, KnickKnackStallPlan, MiniMart, PartsStall, PublicRestroom,
-	PublicRestroomParameterized, PublicRestroomPlan,
+	Apartment, ApartmentPiece, BitesSitdownStall, BitesStall, CommercialStall,
+	CommercialStallInterior, CommercialStallParameterized, CommercialStallPlan,
+	CommercialStallStrip, CommercialStallStripParameterized, CommercialStallStripPlan, Janitorial,
+	KnickKnackStall, KnickKnackStallParameterized, KnickKnackStallPlan, MiniMart, PartsStall,
+	PlanCell, PublicRestroom, PublicRestroomParameterized, PublicRestroomPlan,
 };
 pub use wall_demo::{NoisyRectangularWall, NoisyRectangularWallParams};

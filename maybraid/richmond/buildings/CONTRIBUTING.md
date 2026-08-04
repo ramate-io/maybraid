@@ -82,6 +82,21 @@ CommercialStallInterior (catalog first-fit)
 Playground: `/show les-halles-full-storey`, `/show commercial-stall-strip`,
 and the per-interior galleries (`mini-mart-examples`, `public-restroom-examples`, …).
 
+### Multi-cell apartments (I-Apartment)
+
+[`storeys/i_apartment`](src/storeys/i_apartment.rs) is the worked example for
+**hallway spines + cell grouping** (not strip voronoi):
+
+1. Fit an [`IFloor`](src/shells/i_floor.rs) envelope (walls + facade apertures).
+2. Map inbound shafts onto fixed reentrant-corner slots on the I skeleton (≤4).
+3. Carve spine-first halls; floor only the allocated room cells (halls/shafts open).
+4. Split residuals with [`plan_cells`](src/usage_areas/plan_cells.rs); group
+   hall-frontage cells into `Apartment = [ApartmentPiece]` (plan-owned groups).
+5. Full\* fits [`Apartment`](src/usage_areas/apartment.rs) / [`Janitorial`](src/usage_areas/janitorial.rs);
+   apartment interiors / internal walls stay empty for now.
+
+Playground: `/show i-apartment-floor-plan`, `/show i-apartment-full-storey`.
+
 ### Parameterized → floor plan
 
 [`LesHallesParameterized`](src/storeys/les_halles/parameterized.rs) samples knobs

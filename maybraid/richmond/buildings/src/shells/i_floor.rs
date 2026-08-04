@@ -24,6 +24,8 @@ use crate::paneling::panel_complex::DEFAULT_PANEL_THICKNESS;
 
 use crate::shells::ortho::WallEdge;
 
+pub use geometry::PlanAabb as IFloorPlanRect;
+
 /// Horizontal storey slab presentation for towering ownership.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum IFloorSlab {
@@ -135,6 +137,16 @@ impl IFloorParams {
 	pub fn build(self) -> IFloor {
 		IFloor::from_params(self)
 	}
+
+	/// Primary I-plan rectangles (stem + optional flange bars) used for packing.
+	pub fn plan_rects(&self) -> Vec<IFloorPlanRect> {
+		self.resolve_geometry().slab_rects
+	}
+
+	/// Outer wall edges used for packing facade openings before build.
+	pub fn wall_edges(&self) -> Vec<WallEdge> {
+		self.resolve_geometry().edges
+	}
 }
 
 /// One I-plan storey: rectilinear outer walls + multi-rect slabs.
@@ -222,6 +234,11 @@ impl IFloor {
 
 	pub fn has_ceiling(&self) -> bool {
 		!self.ceiling_pieces.is_empty()
+	}
+
+	/// Primary I-plan rectangles (stem + optional flange bars) used for packing.
+	pub fn plan_rects(&self) -> Vec<IFloorPlanRect> {
+		self.params.plan_rects()
 	}
 }
 

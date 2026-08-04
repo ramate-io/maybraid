@@ -43,8 +43,9 @@ use richmond_buildings::wizards_tower::WizardsTower;
 use richmond_buildings::{
 	BedroomFillParams, BitesSitdownStall, BitesStall, CellConstraints, CirculationEntry,
 	CirculationRequestStatus, CommercialStall, CommercialStallStrip, Confines, Fit, FitError,
-	KnickKnackStall, LesHallesFloorPlan, LesHallesFullStorey, LesHallesParameterized, MiniMart,
-	PartsStall, PublicRestroom,
+	IApartmentFloorPlan, IApartmentFullStorey, IApartmentParameterized, KnickKnackStall,
+	LesHallesFloorPlan, LesHallesFullStorey, LesHallesParameterized, MiniMart, PartsStall,
+	PublicRestroom,
 };
 #[derive(Component)]
 pub struct PreviewRoot;
@@ -394,6 +395,22 @@ pub enum PreviewSubject {
 		seed: i32,
 		ceiling: bool,
 		/// Inbound openings (`--opening`). Empty ⇒ demo requests all shaft slots.
+		openings: Vec<PreviewOpening>,
+	},
+	IApartmentFloorPlan {
+		/// Confines size (XZ centered at origin; Y from 0).
+		extent: Vec3,
+		seed: i32,
+		ceiling: bool,
+		/// Inbound openings (`--opening`). Empty ⇒ demo boundary shaft requests.
+		openings: Vec<PreviewOpening>,
+	},
+	IApartmentFullStorey {
+		/// Confines size (XZ centered at origin; Y from 0).
+		extent: Vec3,
+		seed: i32,
+		ceiling: bool,
+		/// Inbound openings (`--opening`). Empty ⇒ demo boundary shaft requests.
 		openings: Vec<PreviewOpening>,
 	},
 }
@@ -877,6 +894,34 @@ impl PreviewConfig {
 					openings.len()
 				)
 			}
+			PreviewSubject::IApartmentFloorPlan {
+				extent,
+				seed,
+				ceiling,
+				ref openings,
+			} => {
+				format!(
+					"preview: i-apartment-floor-plan (extent={:.1},{:.1},{:.1} seed={seed} ceiling={ceiling} openings={})",
+					extent.x,
+					extent.y,
+					extent.z,
+					openings.len()
+				)
+			}
+			PreviewSubject::IApartmentFullStorey {
+				extent,
+				seed,
+				ceiling,
+				ref openings,
+			} => {
+				format!(
+					"preview: i-apartment-full-storey (extent={:.1},{:.1},{:.1} seed={seed} ceiling={ceiling} openings={})",
+					extent.x,
+					extent.y,
+					extent.z,
+					openings.len()
+				)
+			}
 		}
 	}
 
@@ -907,7 +952,9 @@ impl PreviewConfig {
 			PreviewSubject::KnickKnackExamples => knick_knack_examples_bounds(),
 			PreviewSubject::PublicRestroomExamples => public_restroom_examples_bounds(),
 			PreviewSubject::LesHallesFloorPlan { extent, .. }
-			| PreviewSubject::LesHallesFullStorey { extent, .. } => {
+			| PreviewSubject::LesHallesFullStorey { extent, .. }
+			| PreviewSubject::IApartmentFloorPlan { extent, .. }
+			| PreviewSubject::IApartmentFullStorey { extent, .. } => {
 				les_halles_confines_bounds(*extent)
 			}
 			PreviewSubject::Pitch { rise, run, length, left, right, .. } => {
@@ -1114,6 +1161,8 @@ pub struct CachedPreview {
 	noisy_wall: Option<NoisyRectangularWall>,
 	les_halles_floor_plan: Option<LesHallesFloorPlan>,
 	les_halles_full_storey: Option<LesHallesFullStorey>,
+	i_apartment_floor_plan: Option<IApartmentFloorPlan>,
+	i_apartment_full_storey: Option<IApartmentFullStorey>,
 	commercial_stall: Option<CommercialStall>,
 	commercial_stall_strip: Option<CommercialStallStrip>,
 	bites_stall: Option<BitesStall>,
@@ -1185,6 +1234,8 @@ impl CachedPreview {
 		self.noisy_wall = None;
 		self.les_halles_floor_plan = None;
 		self.les_halles_full_storey = None;
+		self.i_apartment_floor_plan = None;
+		self.i_apartment_full_storey = None;
 		self.commercial_stall = None;
 		self.commercial_stall_strip = None;
 		self.bites_stall = None;
@@ -1421,6 +1472,43 @@ impl CachedPreview {
 					}
 				}
 			}
+			PreviewSubject::IApartmentFloorPlan {
+				extent,
+				seed,
+				ceiling,
+				openings,
+			} => {
+				match fit_i_apartment_floor_plan(*extent, *seed, *ceiling, openings) {
+					Ok(plan) => self.i_apartment_floor_plan = Some(plan),
+					Err(err) => {
+						bevy::log::error!("i-apartment-floor-plan fit failed: {err}");
+					}
+				}
+			}
+			PreviewSubject::IApartmentFullStorey {
+				extent,
+				seed,
+				ceiling,
+				openings,
+			} => {
+				match fit_i_apartment_floor_plan(*extent, *seed, *ceiling, openings) {
+					Ok(plan) => {
+						let noise = NoiseParams {
+							seed: *seed,
+							..NoiseParams::default()
+						};
+						match IApartmentFullStorey::from_floor_plan(plan, noise) {
+							Ok((storey, _)) => self.i_apartment_full_storey = Some(storey),
+							Err(err) => {
+								bevy::log::error!("i-apartment-full-storey fill failed: {err}");
+							}
+						}
+					}
+					Err(err) => {
+						bevy::log::error!("i-apartment-full-storey fit failed: {err}");
+					}
+				}
+			}
 			_ => {}
 		}
 	}
@@ -1536,6 +1624,12 @@ impl CachedPreview {
 			return out;
 		}
 		if let Some(storey) = self.les_halles_full_storey.as_ref() {
+			return storey.label_nodes_for_level(LodSceneLevel::High).flatten();
+		}
+		if let Some(plan) = self.i_apartment_floor_plan.as_ref() {
+			return plan.label_nodes_for_level(LodSceneLevel::High).flatten();
+		}
+		if let Some(storey) = self.i_apartment_full_storey.as_ref() {
 			return storey.label_nodes_for_level(LodSceneLevel::High).flatten();
 		}
 		Vec::new()
@@ -1924,6 +2018,35 @@ fn fit_les_halles_floor_plan(
 		RectRingFloorSlab::None
 	};
 	LesHallesFloorPlan::from_parameterized_with_ceiling(params, &confines, ceiling)
+		.map(|(plan, _)| plan)
+}
+
+fn fit_i_apartment_floor_plan(
+	extent: Vec3,
+	seed: i32,
+	ceiling: bool,
+	openings: &[PreviewOpening],
+) -> Result<IApartmentFloorPlan, richmond_buildings::FitError> {
+	use richmond_buildings::IFloorSlab;
+	let bounds = les_halles_confines_bounds(extent);
+	let empty = Confines::from_bounds(bounds);
+	let noise = NoiseParams {
+		seed,
+		..NoiseParams::default()
+	};
+	let params = IApartmentParameterized::sample(&empty, noise)?;
+	let inbound = if openings.is_empty() {
+		IApartmentFloorPlan::shaft_requests_for_all_slots(&params, &empty)
+	} else {
+		openings_from_preview(openings)
+	};
+	let confines = Confines::new(bounds, 0.0, inbound);
+	let ceiling = if ceiling {
+		IFloorSlab::Solid
+	} else {
+		IFloorSlab::None
+	};
+	IApartmentFloorPlan::from_parameterized_with_ceiling(params, &confines, ceiling)
 		.map(|(plan, _)| plan)
 }
 
@@ -3129,6 +3252,24 @@ pub fn present_preview_lod(
 				);
 			}
 		}
+		PreviewSubject::IApartmentFloorPlan { .. } => {
+			if let Some(plan) = cache.i_apartment_floor_plan.as_ref() {
+				spawn_preview(
+					&mut commands,
+					transform,
+					ComponentsOnly(plan).scene_with_lod(&lod_ref),
+				);
+			}
+		}
+		PreviewSubject::IApartmentFullStorey { .. } => {
+			if let Some(storey) = cache.i_apartment_full_storey.as_ref() {
+				spawn_preview(
+					&mut commands,
+					transform,
+					ComponentsOnly(storey).scene_with_lod(&lod_ref),
+				);
+			}
+		}
 	}
 }
 
@@ -3529,6 +3670,56 @@ pub fn draw_opening_plan_gizmos(
 				}
 			}
 		}
+		PreviewSubject::IApartmentFloorPlan { openings, .. }
+		| PreviewSubject::IApartmentFullStorey { openings, .. } => {
+			let plan = cache.i_apartment_floor_plan.as_ref().or_else(|| {
+				cache
+					.i_apartment_full_storey
+					.as_ref()
+					.map(|s| &s.floor_plan)
+			});
+			let red = Color::srgb(0.95, 0.2, 0.2);
+			for (i, opening) in openings.iter().enumerate() {
+				let accepted = plan
+					.map(|p| i_apartment_opening_accepted(p, opening))
+					.unwrap_or(false);
+				let color = if !accepted {
+					red
+				} else if i % 2 == 0 {
+					cyan
+				} else {
+					amber
+				};
+				gizmos.aabb_3d(opening.bounds(), tf, color);
+			}
+			if let Some(plan) = plan {
+				let mut passage_i = 0usize;
+				for (_id, opening) in plan.openings.iter() {
+					if !matches!(opening.label, OpeningLabel::Passage) {
+						continue;
+					}
+					let color = if passage_i % 2 == 0 { cyan } else { amber };
+					gizmos.aabb_3d(opening.bounds, tf, color);
+					passage_i += 1;
+				}
+				for (i, shaft) in plan.shaft_bounds.iter().enumerate() {
+					let color = if i % 2 == 0 {
+						magenta
+					} else {
+						Color::srgb(0.75, 0.35, 1.0)
+					};
+					gizmos.aabb_3d(*shaft, tf, color);
+				}
+				for (i, hall) in plan.hall_bounds.iter().enumerate() {
+					let color = if i % 2 == 0 {
+						Color::srgb(0.2, 0.75, 0.95)
+					} else {
+						Color::srgb(0.35, 0.55, 0.9)
+					};
+					gizmos.aabb_3d(*hall, tf, color);
+				}
+			}
+		}
 		PreviewSubject::BitesStall { .. }
 		| PreviewSubject::BitesSitdownStall { .. }
 		| PreviewSubject::BitesExamples
@@ -3557,6 +3748,15 @@ fn les_halles_opening_accepted(plan: &LesHallesFloorPlan, opening: &PreviewOpeni
 	match opening.label {
 		OpeningLabel::Shaft => plan.shaft_inbound.iter().any(|ids| ids.contains(&id)),
 		_ => plan.gallery.mapped_opening(&id).is_some(),
+	}
+}
+
+/// Whether an inbound I-Apartment opening survived mapping onto the floor plan.
+fn i_apartment_opening_accepted(plan: &IApartmentFloorPlan, opening: &PreviewOpening) -> bool {
+	let id = OpeningId::new(opening.id.clone());
+	match opening.label {
+		OpeningLabel::Shaft => plan.shaft_inbound.iter().any(|ids| ids.contains(&id)),
+		_ => plan.openings.openings.contains_key(&id),
 	}
 }
 

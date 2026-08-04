@@ -48,6 +48,8 @@ pub mod connecting_hall;
 pub mod fitted_rectangle;
 pub mod circ_ring_floor;
 pub mod i_floor;
+pub mod i_apartment_floor_plan;
+pub mod i_apartment_full_storey;
 pub mod les_halles_floor_plan;
 pub mod les_halles_full_storey;
 pub mod rect_floor;
@@ -185,6 +187,10 @@ pub enum Show {
 	LesHallesFloorPlan(les_halles_floor_plan::LesHallesFloorPlan),
 	/// Les Halles full storey (shell + commercial stall strip fills).
 	LesHallesFullStorey(les_halles_full_storey::LesHallesFullStorey),
+	/// I-Apartment floor plan (IFloor + halls + shafts + apartment groups).
+	IApartmentFloorPlan(i_apartment_floor_plan::IApartmentFloorPlan),
+	/// I-Apartment full storey (plan + apartments + janitorial).
+	IApartmentFullStorey(i_apartment_full_storey::IApartmentFullStorey),
 }
 
 impl Show {
@@ -247,6 +253,8 @@ impl Show {
 			Self::PublicRestroomExamples(cmd) => Ok(cmd.into_preview()),
 			Self::LesHallesFloorPlan(cmd) => cmd.into_preview(),
 			Self::LesHallesFullStorey(cmd) => cmd.into_preview(),
+			Self::IApartmentFloorPlan(cmd) => cmd.into_preview(),
+			Self::IApartmentFullStorey(cmd) => cmd.into_preview(),
 		};
 		match preview {
 			Ok((subject, transform)) => {

@@ -33,7 +33,7 @@ Runtime paths are registered in building-components [`assets.rs`](../building-co
 | [`constraints`](src/constraints.rs) | Cell / boundary / circulation IR |
 | [`openings`](src/openings.rs) | Opening plans / shell records / mapped contact geometry |
 | [`shells`](src/shells.rs) | Envelope shells (`ArcFloor`, `Trazaloid`, `ConnectingHall`, …) |
-| [`storeys`](src/storeys.rs) | Storey typologies (e.g. Les Halles floor plan / full storey) |
+| [`storeys`](src/storeys.rs) | Storey typologies (Les Halles, I-Apartment floor plan / full storey) |
 | [`usage_areas`](src/usage_areas.rs) | Program fill for residual confines (commercial stalls, …) |
 | [`fit`](src/fit.rs) | `Confines` / `Fit` / `FillableRegions` |
 
