@@ -44,7 +44,8 @@ use richmond_buildings::{
 	CommonBedroom, Confines, DiningRoom, FillableRegions, Fit, FitError, HallsToShafts as HallsToShaftsFit,
 	HallsToShaftsOptions, IApartmentFloorPlan, IApartmentFullStorey, IApartmentParameterized,
 	Kitchen, KnickKnackStall, LesHallesFloorPlan, LesHallesFullStorey, LesHallesParameterized,
-	LivableApartments, LivableApartmentsOptions, LivingRoom, MiniMart, PartsStall, PublicRestroom,
+	LivableApartment, LivableApartments, LivableApartmentsOptions, LivingRoom, MiniMart, PartsStall,
+	PublicRestroom,
 	ResidentialBathroom, ResidentialHalfBathroom, SittingRoom, SpaceKind, Study,
 };
 #[derive(Component)]
@@ -438,6 +439,8 @@ pub enum PreviewSubject {
 	IApartmentFullStoreyExamples,
 	/// Side-by-side gallery of standalone [`LivableApartments`] packs.
 	LivableApartmentsExamples,
+	/// Side-by-side gallery of standalone [`LivableApartment`] layouts.
+	LivableApartmentExamples,
 	/// HallsToShafts on a rectangular host (gizmo boxes for halls / openings / residuals).
 	HallsToShafts {
 		extent: Vec3,
@@ -971,6 +974,9 @@ impl PreviewConfig {
 			PreviewSubject::LivableApartmentsExamples => {
 				"preview: livable-apartments-examples (gallery)".into()
 			}
+			PreviewSubject::LivableApartmentExamples => {
+				"preview: livable-apartment-examples (gallery)".into()
+			}
 			PreviewSubject::IApartmentFullStorey {
 				extent,
 				seed,
@@ -1047,6 +1053,7 @@ impl PreviewConfig {
 				i_apartment_full_storey_examples_bounds()
 			}
 			PreviewSubject::LivableApartmentsExamples => livable_apartments_examples_bounds(),
+			PreviewSubject::LivableApartmentExamples => livable_apartment_examples_bounds(),
 			PreviewSubject::LesHallesFloorPlan { extent, .. }
 			| PreviewSubject::LesHallesFullStorey { extent, .. }
 			| PreviewSubject::IApartmentFloorPlan { extent, .. }
@@ -1263,6 +1270,7 @@ pub struct CachedPreview {
 	i_apartment_full_storey: Option<IApartmentFullStorey>,
 	i_apartment_full_storey_examples: Vec<IApartmentFullStoreyExampleCell>,
 	livable_apartments_examples: Vec<LivableApartmentsExampleCell>,
+	livable_apartment_examples: Vec<LivableApartmentExampleCell>,
 	halls_to_shafts: Option<HallsToShaftsPreview>,
 	commercial_stall: Option<CommercialStall>,
 	commercial_stall_strip: Option<CommercialStallStrip>,
@@ -1346,6 +1354,13 @@ struct LivableApartmentsExampleCell {
 	block: LivableApartments,
 }
 
+/// One cell in [`PreviewSubject::LivableApartmentExamples`].
+#[derive(Clone)]
+struct LivableApartmentExampleCell {
+	offset: Vec3,
+	apartment: LivableApartment,
+}
+
 /// One cell in [`PreviewSubject::PartsExamples`].
 #[derive(Clone)]
 struct PartsExampleCell {
@@ -1405,6 +1420,7 @@ impl CachedPreview {
 		self.i_apartment_full_storey = None;
 		self.i_apartment_full_storey_examples.clear();
 		self.livable_apartments_examples.clear();
+		self.livable_apartment_examples.clear();
 		self.halls_to_shafts = None;
 		self.commercial_stall = None;
 		self.commercial_stall_strip = None;
@@ -1736,6 +1752,9 @@ impl CachedPreview {
 			PreviewSubject::LivableApartmentsExamples => {
 				self.livable_apartments_examples = build_livable_apartments_examples();
 			}
+			PreviewSubject::LivableApartmentExamples => {
+				self.livable_apartment_examples = build_livable_apartment_examples();
+			}
 			PreviewSubject::IApartmentFullStorey {
 				extent,
 				seed,
@@ -1991,6 +2010,22 @@ impl CachedPreview {
 			for cell in &self.livable_apartments_examples {
 				out.extend(
 					cell.block
+						.label_nodes_for_level(LodSceneLevel::High)
+						.flatten()
+						.into_iter()
+						.map(|mut label| {
+							label.placement.translation += cell.offset;
+							label
+						}),
+				);
+			}
+			return out;
+		}
+		if !self.livable_apartment_examples.is_empty() {
+			let mut out = Vec::new();
+			for cell in &self.livable_apartment_examples {
+				out.extend(
+					cell.apartment
 						.label_nodes_for_level(LodSceneLevel::High)
 						.flatten()
 						.into_iter()
@@ -3035,6 +3070,125 @@ fn build_livable_apartments_examples() -> Vec<LivableApartmentsExampleCell> {
 			LivableApartmentsExampleCell { offset, block }
 		})
 		.collect()
+}
+
+const LIVABLE_APARTMENT_GALLERY_COLS: usize = 3;
+const LIVABLE_APARTMENT_GALLERY_GAP: f32 = 6.0;
+
+/// Curated `(extent, seed)` hosts for standalone [`LivableApartment`].
+fn livable_apartment_examples_specs() -> Vec<(Vec3, i32)> {
+	vec![
+		(Vec3::new(8.0, 3.0, 6.5), 7),
+		(Vec3::new(10.0, 3.0, 8.0), 11),
+		(Vec3::new(12.0, 3.0, 9.0), 21),
+		(Vec3::new(14.0, 3.0, 10.0), 3),
+		(Vec3::new(11.0, 3.0, 11.0), 42),
+		(Vec3::new(16.0, 3.2, 12.0), 55),
+		(Vec3::new(9.0, 3.0, 7.0), 77),
+		(Vec3::new(13.0, 3.0, 8.5), 99),
+		(Vec3::new(18.0, 3.2, 12.0), 1337),
+	]
+}
+
+fn livable_apartment_host_footprint(apt: &LivableApartment) -> (Vec3, Vec3) {
+	let confines = apt.primary_confines();
+	let min = Vec3::from(confines.bounds.min);
+	let max = Vec3::from(confines.bounds.max);
+	(min, max - min)
+}
+
+fn livable_apartment_examples_bounds() -> Aabb3d {
+	let cells = build_livable_apartment_examples();
+	if cells.is_empty() {
+		return Aabb3d::from_min_max(Vec3::ZERO, Vec3::splat(1.0));
+	}
+	gallery_grid_bounds(
+		|i| livable_apartment_host_footprint(&cells[i].apartment).1,
+		cells.len(),
+		LIVABLE_APARTMENT_GALLERY_COLS,
+		LIVABLE_APARTMENT_GALLERY_GAP,
+	)
+}
+
+fn build_livable_apartment_examples() -> Vec<LivableApartmentExampleCell> {
+	let specs = livable_apartment_examples_specs();
+	let mut fitted = Vec::new();
+	for (extent, seed) in &specs {
+		let confines = demo_common_bedroom_confines(*extent, true);
+		let noise = NoiseParams {
+			seed: *seed,
+			..NoiseParams::default()
+		};
+		match LivableApartment::from_confines(0, &confines, noise) {
+			Ok((apt, _)) => fitted.push(apt),
+			Err(err) => {
+				bevy::log::error!(
+					"livable-apartment-examples ({extent:?} seed={seed}) failed: {err}"
+				);
+			}
+		}
+	}
+	let layout: Vec<(Vec3, Vec3)> = fitted
+		.iter()
+		.map(livable_apartment_host_footprint)
+		.collect();
+	fitted
+		.into_iter()
+		.enumerate()
+		.map(|(i, apartment)| {
+			let (local_min, _) = layout[i];
+			let cell_origin = gallery_grid_offset(
+				|j| layout[j].1,
+				layout.len(),
+				i,
+				LIVABLE_APARTMENT_GALLERY_COLS,
+				LIVABLE_APARTMENT_GALLERY_GAP,
+			);
+			let offset = cell_origin - local_min;
+			LivableApartmentExampleCell { offset, apartment }
+		})
+		.collect()
+}
+
+fn draw_livable_apartment_gizmos(gizmos: &mut Gizmos, apt: &LivableApartment, tf: Transform) {
+	use richmond_buildings::usage_areas::livable_apartment::ApartmentRoom;
+	let host = Color::srgb(0.72, 0.72, 0.78);
+	for part in apt.cells.iter() {
+		gizmos.aabb_3d(part.confines.bounds, tf, host);
+	}
+	for room in &apt.rooms {
+		let (bounds, color) = match room {
+			ApartmentRoom::Entryway { confines, .. } => {
+				(confines.bounds, Color::srgb(0.25, 0.88, 0.92))
+			}
+			ApartmentRoom::HouseholdCloset { confines, .. } => {
+				(confines.bounds, Color::srgb(0.55, 0.55, 0.6))
+			}
+			ApartmentRoom::Bedroom(r) => {
+				(label_bounds(&r.room_type), Color::srgb(0.35, 0.55, 0.95))
+			}
+			ApartmentRoom::Living(r) => (label_bounds(&r.room_type), Color::srgb(0.95, 0.55, 0.25)),
+			ApartmentRoom::Kitchen(r) => (label_bounds(&r.room_type), Color::srgb(0.35, 0.9, 0.45)),
+			ApartmentRoom::Dining(r) => (label_bounds(&r.room_type), Color::srgb(0.45, 0.85, 0.35)),
+			ApartmentRoom::Bathroom(r) => {
+				(label_bounds(&r.room_type), Color::srgb(0.55, 0.75, 0.95))
+			}
+			ApartmentRoom::HalfBath(r) => {
+				(label_bounds(&r.room_type), Color::srgb(0.65, 0.8, 0.95))
+			}
+			ApartmentRoom::Sitting(r) => {
+				(label_bounds(&r.room_type), Color::srgb(0.95, 0.65, 0.35))
+			}
+			ApartmentRoom::Study(r) => (label_bounds(&r.room_type), Color::srgb(0.75, 0.45, 0.85)),
+		};
+		gizmos.aabb_3d(bounds, tf, color);
+	}
+}
+
+fn label_bounds(label: &richmond_building_components::LabelNode) -> Aabb3d {
+	let c = label.placement.translation;
+	let e = label.placement.scale.abs() * 0.5;
+	Aabb3d::from_min_max(c - e, c + e)
 }
 
 fn draw_livable_apartments_block_gizmos(
@@ -4446,6 +4600,16 @@ pub fn present_preview_lod(
 				);
 			}
 		}
+		PreviewSubject::LivableApartmentExamples => {
+			for cell in &cache.livable_apartment_examples {
+				let tf = transform * Transform::from_translation(cell.offset);
+				spawn_preview(
+					&mut commands,
+					tf,
+					ComponentsOnly(&cell.apartment).scene_with_lod(&lod_ref),
+				);
+			}
+		}
 		PreviewSubject::HallsToShafts { .. } => {
 			// Gizmo-only preview (no BuildingComponents on HallsToShafts).
 		}
@@ -4975,6 +5139,12 @@ pub fn draw_opening_plan_gizmos(
 					amber,
 					magenta,
 				);
+			}
+		}
+		PreviewSubject::LivableApartmentExamples => {
+			for cell in &cache.livable_apartment_examples {
+				let cell_tf = tf * Transform::from_translation(cell.offset);
+				draw_livable_apartment_gizmos(&mut gizmos, &cell.apartment, cell_tf);
 			}
 		}
 		PreviewSubject::Bedroom { .. }

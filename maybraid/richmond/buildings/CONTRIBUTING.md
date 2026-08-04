@@ -110,14 +110,15 @@ and the per-interior galleries (`mini-mart-examples`, `public-restroom-examples`
    [`HallsToShafts`](src/usage_areas/halls_to_shafts.rs) → split residuals →
    `pack_apartments_to_targets` → **one hall door per group** →
    partition / hall-edge walls (no per-cell shells) →
-   [`LivableApartment`](src/usage_areas/livable_apartment.rs) first-cut
-   living-quarters fill (bedroom / living / kitchen / … catalog) with
-   connecting partitions. Ungrouped / unfilled pockets become
-   [`SpaceKind::ClosetSpace`](src/fit.rs).
+   [`LivableApartment`](src/usage_areas/livable_apartment.rs) layout
+   (entryway → common / private zones → quarters) with connecting partitions.
+   Ungrouped / unfilled pockets stay [`SpaceKind::InternalSpace`](src/fit.rs);
+   Full\* maps those leftovers to [`SpaceKind::ClosetSpace`](src/fit.rs).
 
 Playground: `/show i-apartment-floor-plan`, `/show i-apartment-floor-plan-examples`,
 `/show i-apartment-full-storey`, `/show i-apartment-full-storey-examples` (gallery),
 `/show livable-apartments-examples` (standalone packs),
+`/show livable-apartment-examples` (single-apartment entry/common/private layouts),
 `/show halls-to-shafts` (hall / shaft / passage / residual AABB gizmos).
 
 ### Parameterized → floor plan

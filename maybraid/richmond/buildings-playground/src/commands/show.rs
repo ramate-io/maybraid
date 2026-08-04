@@ -24,7 +24,8 @@ pub mod commercial_stall;
 pub mod commercial_stall_strip;
 pub mod knick_knack_examples;
 pub mod knick_knack_stall;
-pub mod livable_apartments_examples;
+	pub mod livable_apartment_examples;
+	pub mod livable_apartments_examples;
 pub mod public_restroom;
 pub mod public_restroom_examples;
 pub mod mini_mart;
@@ -228,6 +229,8 @@ pub enum Show {
 	IApartmentFullStoreyExamples(i_apartment_full_storey_examples::IApartmentFullStoreyExamples),
 	/// Gallery of LivableApartments packs on rectangular hosts.
 	LivableApartmentsExamples(livable_apartments_examples::LivableApartmentsExamples),
+	/// Gallery of standalone LivableApartment layouts (entry + common/private).
+	LivableApartmentExamples(livable_apartment_examples::LivableApartmentExamples),
 	/// HallsToShafts carve demo (hall / shaft / passage / residual boxes).
 	HallsToShafts(halls_to_shafts::HallsToShafts),
 }
@@ -306,6 +309,7 @@ impl Show {
 			Self::IApartmentFullStorey(cmd) => cmd.into_preview(),
 			Self::IApartmentFullStoreyExamples(cmd) => Ok(cmd.into_preview()),
 			Self::LivableApartmentsExamples(cmd) => Ok(cmd.into_preview()),
+			Self::LivableApartmentExamples(cmd) => Ok(cmd.into_preview()),
 			Self::HallsToShafts(cmd) => cmd.into_preview(),
 		};
 		match preview {

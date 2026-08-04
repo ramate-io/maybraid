@@ -269,13 +269,8 @@ impl LivableApartments {
 					residual_within.extend(nested.within);
 				}
 				Err(FitError::TooSmall { .. }) => {
-					// Group rejected as livable → closet leftovers.
-					for part in multi.parts {
-						residual_within.push(FillRegion::new(
-							SpaceKind::ClosetSpace,
-							part.confines,
-						));
-					}
+					// Soft reject — leave as InternalSpace; Full* may map to closets.
+					residual_within.extend(multi.parts);
 				}
 				Err(err) => return Err(err),
 			}
@@ -287,7 +282,7 @@ impl LivableApartments {
 			}
 			let openings = cell_openings.get(&cell.id).cloned().unwrap_or_default();
 			residual_within.push(FillRegion::new(
-				SpaceKind::ClosetSpace,
+				SpaceKind::InternalSpace,
 				Confines::new(aabb2_to_aabb3(cell.bounds, y0, y1), roll, openings),
 			));
 		}
@@ -398,7 +393,7 @@ fn singleton_host(
 		}
 		Err(FitError::TooSmall { .. }) => {
 			residual_within.push(FillRegion::new(
-				SpaceKind::ClosetSpace,
+				SpaceKind::InternalSpace,
 				confines.clone(),
 			));
 			Ok((
