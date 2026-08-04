@@ -14,7 +14,7 @@ mod stall_layout;
 pub use bites_sitdown_stall::{BitesSitdownParameterized, BitesSitdownPlan, BitesSitdownStall};
 pub use bites_stall::{BitesStall, BitesStallParameterized, BitesStallPlan};
 pub use interior::CommercialStallInterior;
-pub use knick_knack_stall::KnickKnackStall;
+pub use knick_knack_stall::{KnickKnackStall, KnickKnackStallParameterized, KnickKnackStallPlan};
 pub use lounge::Lounge;
 pub use mini_mart::{MiniMart, MiniMartParameterized, MiniMartPlan};
 pub use parts_stall::{PartsStall, PartsStallParameterized, PartsStallPlan};

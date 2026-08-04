@@ -20,8 +20,8 @@ use crate::openings::{OpeningId, OpeningLabel, Openings};
 
 pub use commercial_stall::{
 	BitesSitdownStall, BitesStall, CommercialStall, CommercialStallInterior,
-	CommercialStallParameterized, CommercialStallPlan, KnickKnackStall, MiniMart, PartsStall,
-	PublicRestroom,
+	CommercialStallParameterized, CommercialStallPlan, KnickKnackStall,
+	KnickKnackStallParameterized, KnickKnackStallPlan, MiniMart, PartsStall, PublicRestroom,
 };
 
 /// Prefer larger gallery bays; merge voronoi cells below this when sampled.

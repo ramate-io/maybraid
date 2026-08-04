@@ -8,8 +8,8 @@ pub mod common_bedroom;
 pub use clearance::{PassageClearance, PlanHost, PASSAGE_CLEARANCE};
 pub use commercial_stall_strip::commercial_stall::{
 	BitesSitdownStall, BitesStall, CommercialStall, CommercialStallInterior,
-	CommercialStallParameterized, CommercialStallPlan, KnickKnackStall, Lounge, MiniMart,
-	PartsStall, PublicRestroom,
+	CommercialStallParameterized, CommercialStallPlan, KnickKnackStall,
+	KnickKnackStallParameterized, KnickKnackStallPlan, Lounge, MiniMart, PartsStall, PublicRestroom,
 };
 pub use commercial_stall_strip::{
 	CommercialStallStrip, CommercialStallStripParameterized, CommercialStallStripPlan,

@@ -96,7 +96,7 @@ pub use storeys::les_halles::{
 pub use usage_areas::{
 	BitesSitdownStall, BitesStall, CommercialStall, CommercialStallInterior,
 	CommercialStallParameterized, CommercialStallPlan, CommercialStallStrip,
-	CommercialStallStripParameterized, CommercialStallStripPlan, KnickKnackStall, MiniMart,
-	PartsStall, PublicRestroom,
+	CommercialStallStripParameterized, CommercialStallStripPlan, KnickKnackStall,
+	KnickKnackStallParameterized, KnickKnackStallPlan, MiniMart, PartsStall, PublicRestroom,
 };
 pub use wall_demo::{NoisyRectangularWall, NoisyRectangularWallParams};
