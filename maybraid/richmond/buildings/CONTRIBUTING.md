@@ -100,14 +100,14 @@ and the per-interior galleries (`mini-mart-examples`, `public-restroom-examples`
 
 1. Sample I-layout knobs from seed (I/T/L/Z arms; stem may be narrower than the
    apartment-favoring end bars); fit an [`IFloor`](src/shells/i_floor.rs) to confines.
-2. Floor plan emits the shell’s natural **1–3 primary rectangles** (stem + flanges),
-   packs exterior apertures onto outer wall edges, and remaps inbound **shaft**
-   openings onto 3×3 (thirds) pocket centroids inside the containing primary rect
-   (drop if outside all rects). Mapped + generated openings are stored on the plan.
-3. Full\* runs [`HallsToShafts`](src/usage_areas/halls_to_shafts.rs) on each primary
-   rect (interior-biased Hanan MST among Shaft/Passage openings; no walls), then
-   allocates residual `InternalSpace` cells as [`LivableApartment`](src/usage_areas/livable_apartment.rs).
-   Multi-cell apartment grouping remains a follow-on subproblem.
+2. Floor plan samples a corridor `hall_width`, emits the shell’s natural **1–3
+   primary rectangles**, packs exterior apertures, remaps inbound **shaft**
+   openings onto 3×3 pocket centroids, and authors hall-width **passages** on
+   shared edges between primary rects.
+3. Full\* fills each primary rect with [`LivableApartments`](src/usage_areas/livable_apartments.rs):
+   [`HallsToShafts`](src/usage_areas/halls_to_shafts.rs) → hall-edge doors →
+   `group_cells_to_apartments` → partition walls →
+   [`LivableApartment`](src/usage_areas/livable_apartment.rs) stubs (program fill deferred).
 
 Playground: `/show i-apartment-floor-plan`, `/show i-apartment-floor-plan-examples`,
 `/show i-apartment-full-storey`, `/show halls-to-shafts` (hall / shaft / passage /

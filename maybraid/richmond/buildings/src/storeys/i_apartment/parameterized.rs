@@ -5,6 +5,7 @@ use procedural_common::{NoiseConfig, NoiseParams};
 
 use crate::fit::{aabb_xz_extent, Confines, FitError};
 use crate::openings::{fit_windows_on_run, generate_windows, BaySpec, PlacedBay};
+use crate::usage_areas::{MAX_HALL_WIDTH, MIN_HALL_WIDTH};
 
 /// Resolved I-frame layout knobs (stem + optional one-sided / two-sided flanges).
 #[derive(Debug, Clone, PartialEq)]
@@ -28,6 +29,8 @@ pub struct IApartmentParameterized {
 	pub windows: Vec<BaySpec>,
 	/// Preferred shaft footprint side length (meters), clamped to the 9-pocket.
 	pub shaft_side: f32,
+	/// Corridor clear width (meters) for inter-rect passages and HallsToShafts.
+	pub hall_width: f32,
 }
 
 pub const MIN_STOREY_HEIGHT: f32 = 2.5;
@@ -54,6 +57,7 @@ const SALT_FILL_TOP: f32 = 10.0;
 const SALT_FILL_BOT: f32 = 11.0;
 const SALT_OPENINGS: f32 = 12.0;
 const SALT_SHAFT: f32 = 13.0;
+const SALT_HALL: f32 = 14.0;
 
 impl IApartmentParameterized {
 	/// Sample I-frame knobs at the confines center.
@@ -119,6 +123,14 @@ impl IApartmentParameterized {
 		let shaft_lo = MIN_SHAFT_SIDE.min(shaft_hi);
 		let shaft_side =
 			cfg.sample_range_f32_4d(shaft_lo, shaft_hi, c.x, c.y, c.z, SALT_SHAFT);
+		let hall_width = cfg.sample_range_f32_4d(
+			MIN_HALL_WIDTH,
+			MAX_HALL_WIDTH,
+			c.x,
+			c.y,
+			c.z,
+			SALT_HALL,
+		);
 
 		Ok(Self {
 			stem_width,
@@ -130,6 +142,7 @@ impl IApartmentParameterized {
 			opening_density,
 			windows,
 			shaft_side,
+			hall_width,
 		})
 	}
 

@@ -32,6 +32,8 @@ pub struct IApartmentFloorPlan {
 	pub center_xz: Vec3,
 	pub storey_height: f32,
 	pub roll: f32,
+	/// Corridor clear width used for inter-rect passages and HallsToShafts.
+	pub hall_width: f32,
 	pub shell: IFloor,
 	/// Natural I-frame rectangles (stem + optional flange bars), 1–3.
 	pub primary_rects: Vec<IFloorPlanRect>,
@@ -94,12 +96,20 @@ impl IApartmentFloorPlan {
 		ifloor_params.openings = openings.clone();
 		let shell = IFloor::new(ifloor_params);
 		sync_connectable_openings_from_mapped(&mut openings, &shell);
+		// Interior connectivity: after sync so Passage sync does not drop them.
+		openings.extend(&inter_rect_passages(
+			&primary_rects,
+			params.hall_width,
+			height,
+			y0,
+		));
 
 		let plan = Self {
-			parameterized: params,
+			parameterized: params.clone(),
 			center_xz,
 			storey_height: height,
 			roll: confines.roll,
+			hall_width: params.hall_width,
 			shell,
 			primary_rects,
 			openings,
@@ -480,6 +490,86 @@ fn openings_intersecting_xz(openings: &Openings, region: Aabb2d) -> Openings {
 	out
 }
 
+/// Hall-width passages on shared edges between primary rects (connectivity terminals).
+fn inter_rect_passages(
+	rects: &[IFloorPlanRect],
+	hall_width: f32,
+	height: f32,
+	y0: f32,
+) -> Openings {
+	use crate::paneling::DEFAULT_PANEL_THICKNESS;
+	const JAMB: f32 = 0.35;
+	let depth = (DEFAULT_PANEL_THICKNESS + 0.08).max(0.2);
+	let half_d = depth * 0.5;
+	let mut out = Openings::new();
+	for i in 0..rects.len() {
+		for j in (i + 1)..rects.len() {
+			let a = &rects[i];
+			let b = &rects[j];
+			let Some((along_x, mid, lo, hi)) = shared_edge_span(a, b) else {
+				continue;
+			};
+			let shared_len = (hi - lo).max(0.0);
+			let clear = hall_width.min((shared_len - 2.0 * JAMB).max(0.0));
+			if clear < 0.8 {
+				continue;
+			}
+			let center = 0.5 * (lo + hi);
+			let half_c = clear * 0.5;
+			let door_lo = (center - half_c).max(lo);
+			let door_hi = (center + half_c).min(hi);
+			let bounds = if along_x {
+				// Shared edge runs along X; straddle in Z.
+				Aabb3d::from_min_max(
+					Vec3::new(door_lo, y0, mid - half_d),
+					Vec3::new(door_hi, y0 + height.min(2.4), mid + half_d),
+				)
+			} else {
+				Aabb3d::from_min_max(
+					Vec3::new(mid - half_d, y0, door_lo),
+					Vec3::new(mid + half_d, y0 + height.min(2.4), door_hi),
+				)
+			};
+			out.insert(
+				OpeningId::scoped(SCOPE, "inter_rect", format!("{i}_{j}")),
+				Opening::new(bounds, OpeningLabel::Passage),
+			);
+		}
+	}
+	out
+}
+
+/// Shared edge between two plan rects: `(along_x, mid_perp, lo_along, hi_along)`.
+fn shared_edge_span(a: &IFloorPlanRect, b: &IFloorPlanRect) -> Option<(bool, f32, f32, f32)> {
+	// Vertical joint (shared X plane): overlap in Z.
+	if (a.max_x - b.min_x).abs() <= EPS || (b.max_x - a.min_x).abs() <= EPS {
+		let mid = if (a.max_x - b.min_x).abs() <= EPS {
+			a.max_x
+		} else {
+			b.max_x
+		};
+		let lo = a.min_z.max(b.min_z);
+		let hi = a.max_z.min(b.max_z);
+		if hi - lo > EPS {
+			return Some((false, mid, lo, hi));
+		}
+	}
+	// Horizontal joint (shared Z plane): overlap in X.
+	if (a.max_z - b.min_z).abs() <= EPS || (b.max_z - a.min_z).abs() <= EPS {
+		let mid = if (a.max_z - b.min_z).abs() <= EPS {
+			a.max_z
+		} else {
+			b.max_z
+		};
+		let lo = a.min_x.max(b.min_x);
+		let hi = a.max_x.min(b.max_x);
+		if hi - lo > EPS {
+			return Some((true, mid, lo, hi));
+		}
+	}
+	None
+}
+
 #[cfg(test)]
 mod tests {
 	use super::*;
@@ -500,10 +590,44 @@ mod tests {
 		let (plan, regions) = IApartmentFloorPlan::from_parameterized(params, &confines).unwrap();
 		assert!((1..=3).contains(&plan.primary_rects.len()));
 		assert_eq!(regions.within.len(), plan.primary_rects.len());
+		assert!(plan.hall_width >= crate::usage_areas::MIN_HALL_WIDTH - 1e-3);
 		assert!(!plan
 			.label_nodes_for_level(LodSceneLevel::High)
 			.flatten()
 			.is_empty());
+	}
+
+	#[test]
+	fn multi_rect_authors_inter_rect_passages() {
+		let confines = large_confines();
+		let mut saw = false;
+		for seed in 0..80 {
+			let params = IApartmentParameterized::sample(
+				&confines,
+				NoiseParams {
+					seed,
+					..NoiseParams::default()
+				},
+			)
+			.unwrap();
+			let (plan, _) = IApartmentFloorPlan::from_parameterized(params, &confines).unwrap();
+			if plan.primary_rects.len() < 2 {
+				continue;
+			}
+			let n = plan
+				.openings
+				.iter()
+				.filter(|(id, o)| {
+					id.as_str().contains("inter_rect")
+						&& matches!(o.label, OpeningLabel::Passage)
+				})
+				.count();
+			if n > 0 {
+				saw = true;
+				break;
+			}
+		}
+		assert!(saw, "expected inter_rect passages on a multi-rect plan");
 	}
 
 	#[test]
