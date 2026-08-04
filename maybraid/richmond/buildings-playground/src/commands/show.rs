@@ -8,6 +8,7 @@ pub mod arc_sweep;
 pub mod arc_tower;
 pub mod opening;
 pub mod bedroom;
+pub mod bedroom_examples;
 pub mod bites_examples;
 pub mod bites_sitdown_stall;
 pub mod bites_stall;
@@ -153,8 +154,10 @@ pub enum Show {
 	WizardsTower(wizards_tower::WizardsTower),
 	/// Stacked circular wall rings (validates kit radius/height scaling).
 	StackedRings(stacked_rings::StackedRings),
-	/// Hierarchical bedroom (closet / bed / nightstand / ensuite placeholders).
+	/// Common bedroom usage area (beds + walled closet / ensuite).
 	Bedroom(bedroom::Bedroom),
+	/// Gallery of CommonBedroom cells (passage AABBs drawn as gizmos).
+	BedroomExamples(bedroom_examples::BedroomExamples),
 	/// Single commercial stall Label placeholder.
 	CommercialStall(commercial_stall::CommercialStall),
 	/// Commercial stall strip (packed Labels along a band).
@@ -232,6 +235,7 @@ impl Show {
 			Self::WizardsTower(cmd) => Ok(cmd.into_preview()),
 			Self::StackedRings(cmd) => Ok(cmd.into_preview()),
 			Self::Bedroom(cmd) => Ok(cmd.into_preview()),
+			Self::BedroomExamples(cmd) => Ok(cmd.into_preview()),
 			Self::CommercialStall(cmd) => Ok(cmd.into_preview()),
 			Self::CommercialStallStrip(cmd) => Ok(cmd.into_preview()),
 			Self::BitesStall(cmd) => Ok(cmd.into_preview()),

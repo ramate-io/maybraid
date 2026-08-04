@@ -327,9 +327,11 @@ pub enum PreviewSubject {
 		noise: f32,
 		spaciousness: f32,
 		occupancy: f32,
-		/// When true, add a required −Z door circulation region.
+		/// When true, punch a south (−Z) passage for entry clearance.
 		door: bool,
 	},
+	/// Side-by-side gallery of CommonBedroom variants (passage boxes as gizmos).
+	BedroomExamples,
 	CommercialStall {
 		extent: Vec3,
 		seed: i32,
@@ -768,6 +770,7 @@ impl PreviewConfig {
 					extent.x, extent.y, extent.z
 				)
 			}
+			PreviewSubject::BedroomExamples => "preview: bedroom-examples (gallery)".into(),
 			PreviewSubject::CommercialStall { extent, seed } => {
 				format!(
 					"preview: commercial-stall (extent={:.2},{:.2},{:.2} seed={seed})",
@@ -889,6 +892,7 @@ impl PreviewConfig {
 				Aabb3d::from_min_max(Vec3::new(-4.0, 0.0, -4.0), Vec3::new(4.0, 3.0, 4.0))
 			}
 			PreviewSubject::Bedroom { extent, .. } => Aabb3d::from_min_max(Vec3::ZERO, *extent),
+			PreviewSubject::BedroomExamples => bedroom_examples_bounds(),
 			PreviewSubject::CommercialStall { extent, .. }
 			| PreviewSubject::CommercialStallStrip { extent, .. }
 			| PreviewSubject::BitesStall { extent, .. }
@@ -1127,6 +1131,14 @@ pub struct CachedPreview {
 	parts_examples: Vec<PartsExampleCell>,
 	knick_knack_examples: Vec<KnickKnackExampleCell>,
 	public_restroom_examples: Vec<PublicRestroomExampleCell>,
+	bedroom_examples: Vec<BedroomExampleCell>,
+}
+
+/// One cell in [`PreviewSubject::BedroomExamples`].
+#[derive(Clone)]
+struct BedroomExampleCell {
+	offset: Vec3,
+	room: CommonBedroom,
 }
 
 /// One cell in [`PreviewSubject::PartsExamples`].
@@ -1197,6 +1209,7 @@ impl CachedPreview {
 		self.parts_examples.clear();
 		self.knick_knack_examples.clear();
 		self.public_restroom_examples.clear();
+		self.bedroom_examples.clear();
 		match &config.subject {
 			PreviewSubject::WizardsTower { noise } => {
 				let footprint = CellConstraints::cell_owned(Aabb3d::from_min_max(
@@ -1210,6 +1223,7 @@ impl CachedPreview {
 			}
 			PreviewSubject::Bedroom { extent, noise, spaciousness, occupancy, door } => {
 				let confines = demo_common_bedroom_confines(*extent, *door);
+				self.bites_passages = passage_aabbs_at(&confines, Vec3::ZERO);
 				let seed = NoiseParams {
 					seed: (*noise * 1_000_000.0) as i32,
 					..NoiseParams::default()
@@ -1223,6 +1237,11 @@ impl CachedPreview {
 					Ok((room, _)) => self.bedroom = Some(room),
 					Err(err) => bevy::log::error!("common-bedroom fit failed: {err}"),
 				}
+			}
+			PreviewSubject::BedroomExamples => {
+				let (cells, passages) = build_bedroom_examples();
+				self.bedroom_examples = cells;
+				self.bites_passages = passages;
 			}
 			PreviewSubject::NoisyRectangularWall {
 				distance,
@@ -1449,6 +1468,25 @@ impl CachedPreview {
 		}
 		if let Some(stall) = self.public_restroom.as_ref() {
 			return stall.label_nodes_for_level(LodSceneLevel::High).flatten();
+		}
+		if let Some(room) = self.bedroom.as_ref() {
+			return room.label_nodes_for_level(LodSceneLevel::High).flatten();
+		}
+		if !self.bedroom_examples.is_empty() {
+			let mut out = Vec::new();
+			for cell in &self.bedroom_examples {
+				out.extend(
+					cell.room
+						.label_nodes_for_level(LodSceneLevel::High)
+						.flatten()
+						.into_iter()
+						.map(|mut label| {
+							label.placement.translation += cell.offset;
+							label
+						}),
+				);
+			}
+			return out;
 		}
 		if !self.bites_examples.is_empty() {
 			let mut out = Vec::new();
@@ -1692,6 +1730,49 @@ fn build_parts_examples() -> (Vec<PartsExampleCell>, Vec<(Aabb3d, Vec3)>) {
 			.collect(),
 		passages,
 	)
+}
+
+/// `(extent, seed, spaciousness, occupancy, door)`.
+fn bedroom_examples_specs() -> Vec<(Vec3, i32, f32, f32, bool)> {
+	vec![
+		// Row 0 — nominal / dense / spacious
+		(Vec3::new(6.0, 3.0, 6.0), 7, 1.0, 0.55, true),
+		(Vec3::new(6.0, 3.0, 6.0), 11, 1.0, 0.8, true),
+		(Vec3::new(6.0, 3.0, 6.0), 21, 1.3, 0.45, true),
+		// Row 1 — larger room, narrow cell, no door
+		(Vec3::new(8.0, 3.0, 7.0), 42, 1.0, 0.6, true),
+		(Vec3::new(5.0, 3.0, 7.5), 55, 0.9, 0.55, true),
+		(Vec3::new(6.5, 3.0, 6.5), 99, 1.0, 0.55, false),
+	]
+}
+
+fn bedroom_examples_bounds() -> Aabb3d {
+	let specs = bedroom_examples_specs();
+	gallery_grid_bounds(|i| specs[i].0, specs.len(), 3, STALL_GALLERY_GAP)
+}
+
+fn build_bedroom_examples() -> (Vec<BedroomExampleCell>, Vec<(Aabb3d, Vec3)>) {
+	let specs = bedroom_examples_specs();
+	let cols = 3;
+	let gap = STALL_GALLERY_GAP;
+	let mut cells = Vec::new();
+	let mut passages = Vec::new();
+	for (i, (extent, seed, spaciousness, occupancy, door)) in specs.iter().enumerate() {
+		let offset = gallery_grid_offset(|j| specs[j].0, specs.len(), i, cols, gap);
+		let confines = demo_common_bedroom_confines(*extent, *door);
+		passages.extend(passage_aabbs_at(&confines, offset));
+		let noise = NoiseParams {
+			seed: *seed,
+			..NoiseParams::default()
+		};
+		match CommonBedroom::fit_with_fill(&confines, noise, *spaciousness, *occupancy) {
+			Ok((room, _)) => cells.push(BedroomExampleCell { offset, room }),
+			Err(err) => bevy::log::error!(
+				"bedroom-examples ({extent:?} seed={seed}) failed: {err}"
+			),
+		}
+	}
+	(cells, passages)
 }
 
 fn knick_knack_examples_specs() -> Vec<(Vec3, i32, BitesDoorSide)> {
@@ -2994,6 +3075,16 @@ pub fn present_preview_lod(
 				);
 			}
 		}
+		PreviewSubject::BedroomExamples => {
+			for cell in &cache.bedroom_examples {
+				let tf = transform * Transform::from_translation(cell.offset);
+				spawn_preview(
+					&mut commands,
+					tf,
+					ComponentsOnly(&cell.room).scene_with_lod(&lod_ref),
+				);
+			}
+		}
 		PreviewSubject::CommercialStall { .. } => {
 			if let Some(stall) = cache.commercial_stall.as_ref() {
 				spawn_preview(
@@ -3551,7 +3642,9 @@ pub fn draw_opening_plan_gizmos(
 				}
 			}
 		}
-		PreviewSubject::BitesStall { .. }
+		PreviewSubject::Bedroom { .. }
+		| PreviewSubject::BedroomExamples
+		| PreviewSubject::BitesStall { .. }
 		| PreviewSubject::BitesSitdownStall { .. }
 		| PreviewSubject::BitesExamples
 		| PreviewSubject::MiniMart { .. }
