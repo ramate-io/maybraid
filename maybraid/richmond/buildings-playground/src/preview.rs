@@ -2,7 +2,7 @@
 
 use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, template_value};
-use bevy_math::bounding::{Aabb2d, Aabb3d};
+use bevy_math::bounding::Aabb3d;
 use bevy_math::{Isometry3d, Vec2};
 use lod::gen::LodScene;
 use lod::LodViewerState;
@@ -15,7 +15,6 @@ use richmond_building_components::partitions::{Partition, PartitionNode};
 use richmond_building_components::roofs::{Pitch, RoofGeometry, RoofNode};
 use richmond_building_components::Placement;
 use richmond_building_components::{pose, BuildingComponents, ComponentsOnly, LabelNode};
-use richmond_buildings::bedroom::Bedroom;
 use richmond_buildings::panel_complex::{PanelComplex, PanelComplexJointPolicy, PanelPoint};
 use richmond_buildings::quad_panel::QuadPanel;
 use richmond_buildings::quad_panel_complex::QuadPanelComplex;
@@ -41,10 +40,9 @@ use richmond_buildings::portals::{MustAssignPortal, Portal};
 use richmond_buildings::wall_demo::{NoisyRectangularWall, NoisyRectangularWallParams};
 use richmond_buildings::wizards_tower::WizardsTower;
 use richmond_buildings::{
-	BedroomFillParams, BitesSitdownStall, BitesStall, CellConstraints, CirculationEntry,
-	CirculationRequestStatus, CommercialStall, CommercialStallStrip, Confines, Fit, FitError,
-	KnickKnackStall, LesHallesFloorPlan, LesHallesFullStorey, LesHallesParameterized, MiniMart,
-	PartsStall, PublicRestroom,
+	BitesSitdownStall, BitesStall, CellConstraints, CommercialStall, CommercialStallStrip,
+	CommonBedroom, Confines, Fit, FitError, KnickKnackStall, LesHallesFloorPlan, LesHallesFullStorey,
+	LesHallesParameterized, MiniMart, PartsStall, PublicRestroom,
 };
 #[derive(Component)]
 pub struct PreviewRoot;
@@ -1110,7 +1108,7 @@ pub struct CachedPreview {
 	key: Option<(PreviewSubject, Transform)>,
 	wizards_tower: Option<WizardsTower>,
 	stacked_rings: Option<StackedRings>,
-	bedroom: Option<Bedroom>,
+	bedroom: Option<CommonBedroom>,
 	noisy_wall: Option<NoisyRectangularWall>,
 	les_halles_floor_plan: Option<LesHallesFloorPlan>,
 	les_halles_full_storey: Option<LesHallesFullStorey>,
@@ -1211,19 +1209,20 @@ impl CachedPreview {
 				self.stacked_rings = Some(StackedRings::new(*floor_count, *floor_height, *radius));
 			}
 			PreviewSubject::Bedroom { extent, noise, spaciousness, occupancy, door } => {
-				let mut room =
-					CellConstraints::cell_owned(Aabb3d::from_min_max(Vec3::ZERO, *extent));
-				if *door {
-					room.circulation.front = Some(CirculationEntry(vec![(
-						Aabb2d { min: Vec2::new(0.35, 0.0), max: Vec2::new(0.65, 0.9) },
-						vec![CirculationRequestStatus::Required],
-					)]));
+				let confines = demo_common_bedroom_confines(*extent, *door);
+				let seed = NoiseParams {
+					seed: (*noise * 1_000_000.0) as i32,
+					..NoiseParams::default()
+				};
+				match CommonBedroom::fit_with_fill(
+					&confines,
+					seed,
+					*spaciousness,
+					*occupancy,
+				) {
+					Ok((room, _)) => self.bedroom = Some(room),
+					Err(err) => bevy::log::error!("common-bedroom fit failed: {err}"),
 				}
-				self.bedroom = Some(Bedroom::with_fill(
-					room,
-					*noise,
-					BedroomFillParams { spaciousness: *spaciousness, occupancy: *occupancy },
-				));
 			}
 			PreviewSubject::NoisyRectangularWall {
 				distance,
@@ -1813,6 +1812,29 @@ fn les_halles_confines_bounds(extent: Vec3) -> Aabb3d {
 	let hz = extent.z.max(1e-4) * 0.5;
 	let h = extent.y.max(1e-4);
 	Aabb3d::from_min_max(Vec3::new(-hx, 0.0, -hz), Vec3::new(hx, h, hz))
+}
+
+/// Demo common bedroom confines; optional south (−Z) passage for entry clearance.
+fn demo_common_bedroom_confines(extent: Vec3, door: bool) -> Confines {
+	let extent = extent.max(Vec3::splat(1e-4));
+	let mut openings = Openings::new();
+	if door {
+		let door_w = (extent.x * 0.3).clamp(0.8, 1.2);
+		let cx = extent.x * 0.5;
+		let door_h = (extent.y * 0.72).clamp(2.0, extent.y.max(2.0));
+		openings.insert(
+			OpeningId::new("demo_bedroom_door"),
+			Opening::passage(Aabb3d::from_min_max(
+				Vec3::new(cx - door_w * 0.5, 0.0, -0.2),
+				Vec3::new(cx + door_w * 0.5, door_h, 0.2),
+			)),
+		);
+	}
+	Confines::new(
+		Aabb3d::from_min_max(Vec3::ZERO, extent),
+		0.0,
+		openings,
+	)
 }
 
 /// Demo bites stall with long Passage(s) on the chosen façade.

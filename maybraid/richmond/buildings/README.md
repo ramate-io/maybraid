@@ -27,14 +27,14 @@ Runtime paths are registered in building-components [`assets.rs`](../building-co
 | [`portals`](src/portals.rs) | Portal vocabulary + assignment along unit path \(t\) |
 | [`wall_demo`](src/wall_demo.rs) | Playground joinery demos (e.g. noisy path → rectangle strip) |
 | [`wizards_tower`](src/wizards_tower.rs) | Authored tower hierarchy |
-| [`bedroom`](src/bedroom.rs) | Hierarchical room fill |
+| [`bedroom`](src/bedroom.rs) | Legacy hierarchical room fill (`CellConstraints`) |
 | [`stacked_rings`](src/stacked_rings.rs) | Circular wall stack |
 | [`arc_spire`](src/arc_spire.rs) | Spire / storey binding helpers |
 | [`constraints`](src/constraints.rs) | Cell / boundary / circulation IR |
 | [`openings`](src/openings.rs) | Opening plans / shell records / mapped contact geometry |
 | [`shells`](src/shells.rs) | Envelope shells (`ArcFloor`, `Trazaloid`, `ConnectingHall`, …) |
 | [`storeys`](src/storeys.rs) | Storey typologies (e.g. Les Halles floor plan / full storey) |
-| [`usage_areas`](src/usage_areas.rs) | Program fill for residual confines (commercial stalls, …) |
+| [`usage_areas`](src/usage_areas.rs) | Program fill for residual confines (commercial stalls, [`common_bedroom`](src/usage_areas/common_bedroom/), …) |
 | [`fit`](src/fit.rs) | `Confines` / `Fit` / `FillableRegions` |
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the Les Halles parameterized → plan → full pattern, openings, and usage-area fill.

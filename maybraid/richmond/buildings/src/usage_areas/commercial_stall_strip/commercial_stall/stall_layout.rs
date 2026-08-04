@@ -8,7 +8,7 @@
 //! | Module | Packs |
 //! |--------|--------|
 //! | [`bites`] | Passage-face counters, sit-down seating, kitchen remainder |
-//! | [`enclosed_room`] | Shared wall-seeded room + sales-face door + panels |
+//! | [`enclosed_room`] | Re-export of [`crate::usage_areas::enclosed_room`] |
 //! | [`mini_mart`] | Clearances, office (+door), register, aisles, wall shelves |
 //! | [`parts`] | Clearances, office (+door), parts pockets |
 //! | [`knick_knack`] | Clearances, wall-aligned display bands |

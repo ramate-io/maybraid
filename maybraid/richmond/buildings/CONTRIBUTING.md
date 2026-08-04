@@ -156,8 +156,9 @@ tests/playgrounds can assert tracked doors.
 
 1. Add `stall_layout/<name>.rs` packer (clearances, mins, soft-fails).
    For a wall-seeded private room with a sales-face door + panels, reuse
-   [`stall_layout/enclosed_room.rs`](src/usage_areas/commercial_stall_strip/commercial_stall/stall_layout/enclosed_room.rs)
-   (MiniMart / Parts offices and PublicRestroom stalls already do).
+   [`usage_areas/enclosed_room.rs`](src/usage_areas/enclosed_room.rs)
+   (MiniMart / Parts offices, PublicRestroom stalls, and CommonBedroom
+   closet / ensuite partitions already do).
 2. Add `<name>_stall/{parameterized.rs,..}` — `sample` → `Plan::from_parameterized`.
 3. Implement `Fit` + `BuildingComponents` (labels; panels if you author walls).
 4. Register in [`interior.rs`](src/usage_areas/commercial_stall_strip/commercial_stall/interior.rs)
@@ -220,4 +221,5 @@ the [buildings README](README.md) and
 - [`fit.rs`](src/fit.rs) — `Confines` / `FillableRegions` / `SpaceKind`
 - [`openings.rs`](src/openings.rs) — opening labels and scoped ids
 - [`paneling`](src/paneling.rs) — panel primitives used by shells and enclosures
-- [`enclosed_room`](src/usage_areas/commercial_stall_strip/commercial_stall/stall_layout/enclosed_room.rs) — shared office/stall enclosure packer
+- [`enclosed_room`](src/usage_areas/enclosed_room.rs) — shared wall-seeded room + door + panels
+- [`common_bedroom`](src/usage_areas/common_bedroom/) — residential fill (beds + walled closet / ensuite)

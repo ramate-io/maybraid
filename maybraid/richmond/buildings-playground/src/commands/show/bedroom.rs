@@ -1,4 +1,4 @@
-//! `/show bedroom`
+//! `/show bedroom` — [`richmond_buildings::CommonBedroom`] usage area.
 
 use bevy::prelude::*;
 use clap::Args;
@@ -11,7 +11,7 @@ use crate::preview::PreviewSubject;
 #[command(rename_all = "kebab-case")]
 pub struct Bedroom {
 	/// Cell AABB size `x,y,z` in world units (origin at min corner).
-	#[arg(long, default_value = "4,3,3.5", value_parser = parse_vec3_csv, allow_hyphen_values = true)]
+	#[arg(long, default_value = "6,3,6", value_parser = parse_vec3_csv, allow_hyphen_values = true)]
 	#[arg(value_name = "X,Y,Z")]
 	pub extent: Vec3,
 	/// Unit noise sample in \[0, 1\] for layout fitting.
@@ -23,8 +23,8 @@ pub struct Bedroom {
 	/// Max floor-area fraction to allocate (leave about `1 - occupancy` empty).
 	#[arg(long, default_value_t = 0.55)]
 	pub occupancy: f32,
-	/// Place a required door circulation region on the −Z face (exclusion demo).
-	#[arg(long, default_value_t = false)]
+	/// Punch a south (−Z) passage so entry clearance is reserved.
+	#[arg(long, default_value_t = true)]
 	pub door: bool,
 	#[command(flatten)]
 	pub transform: ShowTransform,
