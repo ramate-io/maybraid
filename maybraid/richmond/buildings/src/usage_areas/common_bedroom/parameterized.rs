@@ -11,13 +11,19 @@ use super::layout::{CommonBedroomPacked, CommonBedroomRegions};
 pub const SCOPE: &str = "common_bedroom";
 
 /// Noise / fill knobs for [`super::CommonBedroom`].
+///
+/// Elevates the old bedroom fill budgets (`spaciousness` / `occupancy`) into the
+/// parameterized → plan path so [`Self::sample`] picks them from spatial noise.
 #[derive(Debug, Clone, PartialEq)]
 pub struct CommonBedroomParameterized {
 	pub style: LabelStyle,
-	/// Multiplier on bed / nightstand / partition base footprints.
+	/// Multiplier on bed / nightstand / small-furniture / partition base footprints
+	/// (`1.0` = nominal). Higher → each concept claims more floor.
 	pub spaciousness: f32,
 	/// Max floor-area fraction to allocate (leave about `1 - occupancy` empty).
 	pub occupancy: f32,
+	/// When true, prioritize placing beds flush against a host wall.
+	pub bed_against_wall: bool,
 	pub closet_along_t: f32,
 	pub ensuite_along_t: f32,
 	pub door_width: f32,
@@ -30,12 +36,15 @@ impl CommonBedroomParameterized {
 		let cfg = NoiseConfig::new(noise);
 		let c = confines.center();
 
+		// Match the old BedroomFillParams spirit: spaciousness around nominal,
+		// occupancy leaving roughly half the floor free on average.
 		let spaciousness = cfg
-			.sample_range_f32_4d(0.85, 1.25, c.x, c.y, c.z, 10.0)
+			.sample_range_f32_4d(0.75, 1.45, c.x, c.y, c.z, 10.0)
 			.clamp(0.5, 2.0);
 		let occupancy = cfg
 			.sample_range_f32_4d(0.35, 0.65, c.x, c.y, c.z, 11.0)
 			.clamp(0.05, 1.0);
+		let bed_against_wall = cfg.sample_unit_4d(c.x, c.y, c.z, 17.0) >= 0.4;
 		let closet_along_t = cfg.sample_range_f32_4d(0.1, 0.9, c.x, c.y, c.z, 12.0);
 		let ensuite_along_t = cfg.sample_range_f32_4d(0.1, 0.9, c.x, c.y, c.z, 13.0);
 		let door_width = cfg.sample_range_f32_4d(0.7, 1.05, c.x, c.y, c.z, 14.0);
@@ -49,6 +58,7 @@ impl CommonBedroomParameterized {
 			style: LabelStyle::Blue,
 			spaciousness,
 			occupancy,
+			bed_against_wall,
 			closet_along_t,
 			ensuite_along_t,
 			door_width,
@@ -57,12 +67,13 @@ impl CommonBedroomParameterized {
 		})
 	}
 
-	/// Explicit fill budgets (playground / tests), style fixed.
+	/// Explicit fill budgets (playground / tests); bed wall preference off by default.
 	pub fn with_fill(spaciousness: f32, occupancy: f32) -> Self {
 		Self {
 			style: LabelStyle::Blue,
 			spaciousness: spaciousness.max(1e-3),
 			occupancy: occupancy.clamp(0.05, 1.0),
+			bed_against_wall: false,
 			closet_along_t: 0.5,
 			ensuite_along_t: 0.5,
 			door_width: 0.85,
@@ -88,6 +99,7 @@ impl CommonBedroomPlan {
 		let regions = CommonBedroomRegions {
 			spaciousness: params.spaciousness,
 			occupancy: params.occupancy,
+			bed_against_wall: params.bed_against_wall,
 			closet_along_t: params.closet_along_t,
 			ensuite_along_t: params.ensuite_along_t,
 			door_width: params.door_width,

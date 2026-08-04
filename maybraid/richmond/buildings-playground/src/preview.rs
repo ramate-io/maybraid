@@ -1231,8 +1231,10 @@ impl CachedPreview {
 				match CommonBedroom::fit_with_fill(
 					&confines,
 					seed,
-					*spaciousness,
-					*occupancy,
+					richmond_buildings::CommonBedroomParameterized::with_fill(
+						*spaciousness,
+						*occupancy,
+					),
 				) {
 					Ok((room, _)) => self.bedroom = Some(room),
 					Err(err) => bevy::log::error!("common-bedroom fit failed: {err}"),
@@ -1732,17 +1734,17 @@ fn build_parts_examples() -> (Vec<PartsExampleCell>, Vec<(Aabb3d, Vec3)>) {
 	)
 }
 
-/// `(extent, seed, spaciousness, occupancy, door)`.
-fn bedroom_examples_specs() -> Vec<(Vec3, i32, f32, f32, bool)> {
+/// `(extent, seed, spaciousness, occupancy, door, bed_against_wall)`.
+fn bedroom_examples_specs() -> Vec<(Vec3, i32, f32, f32, bool, bool)> {
 	vec![
-		// Row 0 — nominal / dense / spacious
-		(Vec3::new(6.0, 3.0, 6.0), 7, 1.0, 0.55, true),
-		(Vec3::new(6.0, 3.0, 6.0), 11, 1.0, 0.8, true),
-		(Vec3::new(6.0, 3.0, 6.0), 21, 1.3, 0.45, true),
-		// Row 1 — larger room, narrow cell, no door
-		(Vec3::new(8.0, 3.0, 7.0), 42, 1.0, 0.6, true),
-		(Vec3::new(5.0, 3.0, 7.5), 55, 0.9, 0.55, true),
-		(Vec3::new(6.5, 3.0, 6.5), 99, 1.0, 0.55, false),
+		// Row 0 — nominal / dense / spacious (wall bed)
+		(Vec3::new(6.0, 3.0, 6.0), 7, 1.0, 0.55, true, true),
+		(Vec3::new(6.0, 3.0, 6.0), 11, 1.0, 0.8, true, true),
+		(Vec3::new(6.0, 3.0, 6.0), 21, 1.3, 0.45, true, false),
+		// Row 1 — larger / narrow / no door
+		(Vec3::new(8.0, 3.0, 7.0), 42, 1.0, 0.6, true, true),
+		(Vec3::new(5.0, 3.0, 7.5), 55, 0.9, 0.55, true, false),
+		(Vec3::new(6.5, 3.0, 6.5), 99, 1.0, 0.55, false, true),
 	]
 }
 
@@ -1757,7 +1759,9 @@ fn build_bedroom_examples() -> (Vec<BedroomExampleCell>, Vec<(Aabb3d, Vec3)>) {
 	let gap = STALL_GALLERY_GAP;
 	let mut cells = Vec::new();
 	let mut passages = Vec::new();
-	for (i, (extent, seed, spaciousness, occupancy, door)) in specs.iter().enumerate() {
+	for (i, (extent, seed, spaciousness, occupancy, door, bed_against_wall)) in
+		specs.iter().enumerate()
+	{
 		let offset = gallery_grid_offset(|j| specs[j].0, specs.len(), i, cols, gap);
 		let confines = demo_common_bedroom_confines(*extent, *door);
 		passages.extend(passage_aabbs_at(&confines, offset));
@@ -1765,7 +1769,10 @@ fn build_bedroom_examples() -> (Vec<BedroomExampleCell>, Vec<(Aabb3d, Vec3)>) {
 			seed: *seed,
 			..NoiseParams::default()
 		};
-		match CommonBedroom::fit_with_fill(&confines, noise, *spaciousness, *occupancy) {
+		let mut params =
+			richmond_buildings::CommonBedroomParameterized::with_fill(*spaciousness, *occupancy);
+		params.bed_against_wall = *bed_against_wall;
+		match CommonBedroom::fit_with_fill(&confines, noise, params) {
 			Ok((room, _)) => cells.push(BedroomExampleCell { offset, room }),
 			Err(err) => bevy::log::error!(
 				"bedroom-examples ({extent:?} seed={seed}) failed: {err}"

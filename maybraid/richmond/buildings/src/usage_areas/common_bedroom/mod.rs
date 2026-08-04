@@ -37,20 +37,41 @@ use layout::BedroomPartition;
 #[derive(Debug, Clone, PartialEq)]
 pub struct CommonBedroom {
 	pub room_type: LabelNode,
-	pub beds: Vec<FurnitureNode>,
-	pub nightstands: Vec<FurnitureNode>,
+	pub beds: Vec<BedFill>,
+	pub nightstands: Vec<NightstandFill>,
+	pub small_bedroom_furniture: Vec<SmallBedroomFurnitureFill>,
 	pub closet_walls: Vec<Rectangle>,
 	pub ensuite_walls: Vec<Rectangle>,
 	pub closets: Vec<ClosetFill>,
 	pub ensuites: Vec<EnsuiteFill>,
 }
 
-/// Closet residual + wardrobe placeholder.
+/// Bed furniture + AABB label.
+#[derive(Debug, Clone, PartialEq)]
+pub struct BedFill {
+	pub label: LabelNode,
+	pub furniture: FurnitureNode,
+}
+
+/// Nightstand furniture + AABB label (bed-adjacent only).
+#[derive(Debug, Clone, PartialEq)]
+pub struct NightstandFill {
+	pub label: LabelNode,
+	pub furniture: FurnitureNode,
+}
+
+/// Free-standing small box (not bed-adjacent).
+#[derive(Debug, Clone, PartialEq)]
+pub struct SmallBedroomFurnitureFill {
+	pub label: LabelNode,
+	pub furniture: FurnitureNode,
+}
+
+/// Closet residual (walled room only — wardrobes / dressers are free-standing).
 #[derive(Debug, Clone, PartialEq)]
 pub struct ClosetFill {
 	pub bounds: Aabb3d,
 	pub label: LabelNode,
-	pub wardrobe: FurnitureNode,
 	pub door_id: OpeningId,
 	pub door: Opening,
 }
@@ -60,6 +81,8 @@ pub struct ClosetFill {
 pub struct EnsuiteFill {
 	pub bounds: Aabb3d,
 	pub label: LabelNode,
+	pub vanity_label: LabelNode,
+	pub toilet_label: LabelNode,
 	pub vanity: FurnitureNode,
 	pub toilet: FurnitureNode,
 	pub door_id: OpeningId,
@@ -73,13 +96,28 @@ impl CommonBedroom {
 			.packed
 			.beds
 			.iter()
-			.map(|aabb| FurnitureNode::bed(placement_filling_aabb(aabb)))
+			.map(|aabb| BedFill {
+				label: label_filling_aabb(style, "Bed", aabb, confines.roll),
+				furniture: FurnitureNode::bed(placement_filling_aabb(aabb)),
+			})
 			.collect();
 		let nightstands = plan
 			.packed
 			.nightstands
 			.iter()
-			.map(|aabb| FurnitureNode::nightstand(placement_filling_aabb(aabb)))
+			.map(|aabb| NightstandFill {
+				label: label_filling_aabb(style, "Nightstand", aabb, confines.roll),
+				furniture: FurnitureNode::nightstand(placement_filling_aabb(aabb)),
+			})
+			.collect();
+		let small_bedroom_furniture = plan
+			.packed
+			.small_bedroom_furniture
+			.iter()
+			.map(|aabb| SmallBedroomFurnitureFill {
+				label: label_filling_aabb(style, "SmallBedroomFurniture", aabb, confines.roll),
+				furniture: FurnitureNode::nightstand(placement_filling_aabb(aabb)),
+			})
 			.collect();
 
 		let mut closet_walls = Vec::new();
@@ -113,6 +151,7 @@ impl CommonBedroom {
 			),
 			beds,
 			nightstands,
+			small_bedroom_furniture,
 			closet_walls,
 			ensuite_walls,
 			closets,
@@ -146,7 +185,6 @@ fn closet_fill(part: &BedroomPartition, style: LabelStyle, roll: f32) -> ClosetF
 	ClosetFill {
 		bounds: part.bounds,
 		label: label_filling_aabb(style, "Closet", &part.bounds, roll),
-		wardrobe: FurnitureNode::wardrobe(placement_filling_aabb(&part.bounds)),
 		door_id: part.door_id.clone(),
 		door: part.door.clone(),
 	}
@@ -170,6 +208,8 @@ fn ensuite_fill(part: &BedroomPartition, style: LabelStyle, roll: f32) -> Ensuit
 	EnsuiteFill {
 		bounds: part.bounds,
 		label: label_filling_aabb(style, "Ensuite", &part.bounds, roll),
+		vanity_label: label_filling_aabb(style, "Vanity", &vanity_aabb, roll),
+		toilet_label: label_filling_aabb(style, "Toilet", &toilet_aabb, roll),
 		vanity: FurnitureNode::vanity(placement_filling_aabb(&vanity_aabb)),
 		toilet: FurnitureNode::toilet(placement_filling_aabb(&toilet_aabb)),
 		door_id: part.door_id.clone(),
@@ -194,14 +234,12 @@ impl Fit for CommonBedroom {
 }
 
 impl CommonBedroom {
-	/// Fit with explicit spaciousness / occupancy (playground `/show bedroom`).
+	/// Fit with explicit parameterized knobs (playground `/show bedroom`).
 	pub fn fit_with_fill(
 		confines: &Confines,
 		noise: NoiseParams,
-		spaciousness: f32,
-		occupancy: f32,
+		params: CommonBedroomParameterized,
 	) -> Result<(Self, FillableRegions), FitError> {
-		let params = CommonBedroomParameterized::with_fill(spaciousness, occupancy);
 		let plan = CommonBedroomPlan::from_parameterized(params, confines, noise)?;
 		let room = Self::from_plan(plan, confines);
 		let regions = FillableRegions {
@@ -226,18 +264,35 @@ impl BuildingComponents for CommonBedroom {
 
 	fn label_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<LabelNode> {
 		let mut labels = vec![self.room_type.clone()];
+		labels.extend(self.beds.iter().map(|b| b.label.clone()));
+		labels.extend(self.nightstands.iter().map(|n| n.label.clone()));
+		labels.extend(self.small_bedroom_furniture.iter().map(|s| s.label.clone()));
 		labels.extend(self.closets.iter().map(|c| c.label.clone()));
-		labels.extend(self.ensuites.iter().map(|e| e.label.clone()));
+		for e in &self.ensuites {
+			labels.push(e.label.clone());
+			labels.push(e.vanity_label.clone());
+			labels.push(e.toilet_label.clone());
+		}
 		Layers::from_free(labels)
 	}
 
 	fn furniture_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<FurnitureNode> {
 		let mut out = Layers::new();
-		out.extend(Layers::from_free(self.beds.clone()));
-		out.extend(Layers::from_free(self.nightstands.clone()));
-		for c in &self.closets {
-			out.extend(Layers::from_free(vec![c.wardrobe.clone()]));
-		}
+		out.extend(Layers::from_free(
+			self.beds.iter().map(|b| b.furniture.clone()).collect::<Vec<_>>(),
+		));
+		out.extend(Layers::from_free(
+			self.nightstands
+				.iter()
+				.map(|n| n.furniture.clone())
+				.collect::<Vec<_>>(),
+		));
+		out.extend(Layers::from_free(
+			self.small_bedroom_furniture
+				.iter()
+				.map(|s| s.furniture.clone())
+				.collect::<Vec<_>>(),
+		));
 		for e in &self.ensuites {
 			out.extend(Layers::from_free(vec![e.vanity.clone(), e.toilet.clone()]));
 		}
@@ -278,26 +333,166 @@ mod tests {
 				seed: 7,
 				..NoiseParams::default()
 			},
-			1.0,
-			0.7,
+			CommonBedroomParameterized::with_fill(1.0, 0.7),
 		)
 		.unwrap();
 		assert_eq!(room.room_type.text.as_str(), "CommonBedroom");
 		assert!(!room.beds.is_empty());
+		assert!(room.beds.iter().all(|b| b.label.text.as_str() == "Bed"));
+		assert!(room
+			.nightstands
+			.iter()
+			.all(|n| n.label.text.as_str() == "Nightstand"));
+		assert!(room
+			.small_bedroom_furniture
+			.iter()
+			.all(|s| s.label.text.as_str() == "SmallBedroomFurniture"));
 		assert_eq!(regions.within.len(), room.closets.len() + room.ensuites.len());
 		for c in &room.closets {
 			assert!(matches!(c.door.label, OpeningLabel::Passage));
 			assert!(c.door_id.0.contains("closet_door"));
 		}
+		assert!(room.ensuites.len() <= 1);
 		for e in &room.ensuites {
 			assert!(matches!(e.door.label, OpeningLabel::Passage));
 			assert!(e.door_id.0.contains("ensuite_door"));
+			assert_eq!(e.vanity_label.text.as_str(), "Vanity");
+			assert_eq!(e.toilet_label.text.as_str(), "Toilet");
 		}
 		if !room.closets.is_empty() {
 			assert!(!room.closet_walls.is_empty());
 		}
 		if !room.ensuites.is_empty() {
 			assert!(!room.ensuite_walls.is_empty());
+		}
+	}
+
+	#[test]
+	fn common_bedroom_at_most_one_ensuite() {
+		let confines = Confines::new(
+			Aabb3d::from_min_max(Vec3::ZERO, Vec3::new(10.0, 3.0, 10.0)),
+			0.0,
+			{
+				let mut openings = Openings::new();
+				openings.insert(
+					OpeningId::new("door_a"),
+					Opening::passage(Aabb3d::from_min_max(
+						Vec3::new(4.0, 0.0, -0.2),
+						Vec3::new(6.0, 2.2, 0.2),
+					)),
+				);
+				openings
+			},
+		);
+		for seed in 0..20 {
+			let (room, _) = CommonBedroom::fit_with_fill(
+				&confines,
+				NoiseParams {
+					seed,
+					..NoiseParams::default()
+				},
+				CommonBedroomParameterized::with_fill(1.0, 0.9),
+			)
+			.unwrap();
+			assert!(
+				room.ensuites.len() <= 1,
+				"seed={seed} placed {} ensuites",
+				room.ensuites.len()
+			);
+		}
+	}
+
+	#[test]
+	fn common_bedroom_nightstands_abut_beds() {
+		use procedural_common::{inflate_aabb2, touches_aabb2};
+		let confines = roomy_south();
+		let params = CommonBedroomParameterized::with_fill(1.0, 0.75);
+		let plan = CommonBedroomPlan::from_parameterized(
+			params,
+			&confines,
+			NoiseParams {
+				seed: 7,
+				..NoiseParams::default()
+			},
+		)
+		.unwrap();
+		for ns in &plan.packed.nightstands {
+			let n = aabb3_to_plan(ns, PlanAxes::XZ);
+			let abuts = plan.packed.beds.iter().any(|bed| {
+				let b = aabb3_to_plan(bed, PlanAxes::XZ);
+				touches_aabb2(n, inflate_aabb2(b, 0.2))
+			});
+			assert!(abuts, "nightstand not adjacent to any bed");
+		}
+	}
+
+	#[test]
+	fn common_bedroom_bed_against_wall_prefers_host_edge() {
+		let confines = roomy_south();
+		let mut params = CommonBedroomParameterized::with_fill(1.0, 0.4);
+		params.bed_against_wall = true;
+		let plan = CommonBedroomPlan::from_parameterized(
+			params,
+			&confines,
+			NoiseParams {
+				seed: 5,
+				..NoiseParams::default()
+			},
+		)
+		.unwrap();
+		let host = aabb3_to_plan(&confines.bounds, PlanAxes::XZ);
+		let bed = aabb3_to_plan(&plan.packed.beds[0], PlanAxes::XZ);
+		const EPS: f32 = 0.08;
+		let against = (bed.min.x - host.min.x).abs() < EPS
+			|| (bed.max.x - host.max.x).abs() < EPS
+			|| (bed.min.y - host.min.y).abs() < EPS
+			|| (bed.max.y - host.max.y).abs() < EPS;
+		assert!(against, "bed_against_wall did not flush bed to a host wall");
+	}
+
+	#[test]
+	fn common_bedroom_partitions_keep_sep_gap() {
+		use procedural_common::inflate_aabb2;
+		let confines = Confines::new(
+			Aabb3d::from_min_max(Vec3::ZERO, Vec3::new(12.0, 3.0, 12.0)),
+			0.0,
+			{
+				let mut openings = Openings::new();
+				openings.insert(
+					OpeningId::new("door_a"),
+					Opening::passage(Aabb3d::from_min_max(
+						Vec3::new(5.0, 0.0, -0.2),
+						Vec3::new(7.0, 2.2, 0.2),
+					)),
+				);
+				openings
+			},
+		);
+		let params = CommonBedroomParameterized::with_fill(1.0, 0.9);
+		let plan = CommonBedroomPlan::from_parameterized(
+			params,
+			&confines,
+			NoiseParams {
+				seed: 3,
+				..NoiseParams::default()
+			},
+		)
+		.unwrap();
+		let parts: Vec<_> = plan
+			.packed
+			.closets
+			.iter()
+			.chain(plan.packed.ensuites.iter())
+			.map(|p| aabb3_to_plan(&p.bounds, PlanAxes::XZ))
+			.collect();
+		for i in 0..parts.len() {
+			for j in (i + 1)..parts.len() {
+				let halo = inflate_aabb2(parts[i], 1.0 - 1e-3);
+				assert!(
+					!procedural_common::intersects_aabb2(halo, parts[j]),
+					"partitions {i} and {j} closer than 1m"
+				);
+			}
 		}
 	}
 

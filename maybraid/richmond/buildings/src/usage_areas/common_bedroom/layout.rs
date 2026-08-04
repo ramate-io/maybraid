@@ -4,7 +4,8 @@
 use bevy_math::bounding::{Aabb2d, Aabb3d};
 use bevy_math::Vec3;
 use procedural_common::{
-	aabb2_area, aabb3_to_plan, intersects_aabb2, plan_to_aabb3, NoiseConfig, NoiseParams, PlanAxes,
+	aabb2_area, aabb3_to_plan, inflate_aabb2, intersects_aabb2, plan_to_aabb3, touches_aabb2,
+	NoiseConfig, NoiseParams, PlanAxes,
 };
 
 use crate::fit::{Confines, FitError};
@@ -20,6 +21,8 @@ const DOOR_WIDTH_MAX: f32 = 1.15;
 const DOOR_HEIGHT_MIN: f32 = 1.8;
 const DOOR_HEIGHT_MAX: f32 = 2.3;
 const DOOR_HEADER_MIN: f32 = 0.2;
+/// Plan pad kept between closet↔closet and closet↔ensuite (avoids thin wall slivers).
+const PARTITION_SEP: f32 = 1.0;
 
 /// One closet or ensuite: enclosure panels + authored door + room AABB.
 #[derive(Debug, Clone, PartialEq)]
@@ -35,7 +38,10 @@ pub struct BedroomPartition {
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct CommonBedroomPacked {
 	pub beds: Vec<Aabb3d>,
+	/// Small boxes placed adjacent to a bed.
 	pub nightstands: Vec<Aabb3d>,
+	/// Same scale as nightstands, but not bed-adjacent (chests / stools / …).
+	pub small_bedroom_furniture: Vec<Aabb3d>,
 	pub closets: Vec<BedroomPartition>,
 	pub ensuites: Vec<BedroomPartition>,
 }
@@ -45,6 +51,7 @@ pub struct CommonBedroomPacked {
 pub struct CommonBedroomRegions {
 	pub spaciousness: f32,
 	pub occupancy: f32,
+	pub bed_against_wall: bool,
 	pub closet_along_t: f32,
 	pub ensuite_along_t: f32,
 	pub door_width: f32,
@@ -62,6 +69,8 @@ enum Concept {
 
 enum Placed {
 	Solid(Aabb3d),
+	Nightstand(Aabb3d),
+	SmallFurniture(Aabb3d),
 	Partition(BedroomPartition),
 }
 
@@ -81,8 +90,16 @@ impl CommonBedroomRegions {
 		let mut packed = CommonBedroomPacked::default();
 		let mut occupied = 0.0_f32;
 
-		if let Some(bed) = place_bed(host3, host, &clearances, &packed, &cfg, 0, self.spaciousness)
-		{
+		if let Some(bed) = place_bed(
+			host3,
+			host,
+			&clearances,
+			&packed,
+			&cfg,
+			0,
+			self.spaciousness,
+			self.bed_against_wall,
+		) {
 			occupied += xz_area(&bed);
 			clearances.push(aabb3_to_plan(&bed, PlanAxes::XZ));
 			packed.beds.push(bed);
@@ -96,13 +113,13 @@ impl CommonBedroomRegions {
 			if occupied / room_area >= self.occupancy {
 				break;
 			}
-			let concept = pick_concept(&cfg, step, packed.beds.len());
+			let concept = pick_concept(&cfg, step, packed.beds.len(), !packed.ensuites.is_empty());
 			let Some(placed) = self.try_place(concept, host3, host, &clearances, &packed, &cfg, step)
 			else {
 				continue;
 			};
 			let add = match &placed {
-				Placed::Solid(a) => xz_area(a),
+				Placed::Solid(a) | Placed::Nightstand(a) | Placed::SmallFurniture(a) => xz_area(a),
 				Placed::Partition(p) => xz_area(&p.bounds),
 			};
 			if (occupied + add) / room_area > self.occupancy + 1e-3 {
@@ -112,11 +129,15 @@ impl CommonBedroomRegions {
 			match placed {
 				Placed::Solid(a) => {
 					clearances.push(aabb3_to_plan(&a, PlanAxes::XZ));
-					match concept {
-						Concept::Bed => packed.beds.push(a),
-						Concept::Nightstand => packed.nightstands.push(a),
-						Concept::Closet | Concept::Ensuite => unreachable!("partition via Solid"),
-					}
+					packed.beds.push(a);
+				}
+				Placed::Nightstand(a) => {
+					clearances.push(aabb3_to_plan(&a, PlanAxes::XZ));
+					packed.nightstands.push(a);
+				}
+				Placed::SmallFurniture(a) => {
+					clearances.push(aabb3_to_plan(&a, PlanAxes::XZ));
+					packed.small_bedroom_furniture.push(a);
 				}
 				Placed::Partition(part) => {
 					clearances.push(aabb3_to_plan(&part.bounds, PlanAxes::XZ));
@@ -144,9 +165,7 @@ impl CommonBedroomRegions {
 		salt: u32,
 	) -> Option<Placed> {
 		match concept {
-			Concept::Bed => place_bed(host3, host, clearances, packed, cfg, salt, self.spaciousness)
-				.map(Placed::Solid),
-			Concept::Nightstand => place_nightstand(
+			Concept::Bed => place_bed(
 				host3,
 				host,
 				clearances,
@@ -154,28 +173,39 @@ impl CommonBedroomRegions {
 				cfg,
 				salt,
 				self.spaciousness,
+				self.bed_against_wall,
 			)
 			.map(Placed::Solid),
-			Concept::Closet => self
-				.pack_partition(
+			Concept::Nightstand => {
+				place_small_box(host3, host, clearances, packed, cfg, salt, self.spaciousness)
+			}
+			Concept::Closet => {
+				let clears = partition_pack_clearances(clearances, packed);
+				self.pack_partition(
 					host3,
 					host,
-					clearances,
+					&clears,
 					self.closet_mins(),
 					self.closet_along_t,
 					OpeningId::scoped(SCOPE, "closet_door", packed.closets.len().to_string()),
 				)
-				.map(Placed::Partition),
-			Concept::Ensuite => self
-				.pack_partition(
+				.map(Placed::Partition)
+			}
+			Concept::Ensuite => {
+				if !packed.ensuites.is_empty() {
+					return None;
+				}
+				let clears = partition_pack_clearances(clearances, packed);
+				self.pack_partition(
 					host3,
 					host,
-					clearances,
+					&clears,
 					self.ensuite_mins(),
 					self.ensuite_along_t,
-					OpeningId::scoped(SCOPE, "ensuite_door", packed.ensuites.len().to_string()),
+					OpeningId::scoped(SCOPE, "ensuite_door", "0"),
 				)
-				.map(Placed::Partition),
+				.map(Placed::Partition)
+			}
 		}
 	}
 
@@ -242,6 +272,19 @@ fn partition_from_enclosed(host3: &Aabb3d, enclosed: EnclosedRoom) -> BedroomPar
 	}
 }
 
+/// Base clearances plus a [`PARTITION_SEP`] halo around existing closets / ensuites.
+fn partition_pack_clearances(
+	clearances: &[Aabb2d],
+	packed: &CommonBedroomPacked,
+) -> Vec<Aabb2d> {
+	let mut out = clearances.to_vec();
+	for part in packed.closets.iter().chain(packed.ensuites.iter()) {
+		let plan = aabb3_to_plan(&part.bounds, PlanAxes::XZ);
+		out.push(inflate_aabb2(plan, PARTITION_SEP));
+	}
+	out
+}
+
 fn xz_area(a: &Aabb3d) -> f32 {
 	let e = a.max - a.min;
 	e.x.max(0.0) * e.z.max(0.0)
@@ -272,7 +315,7 @@ fn base_ensuite_length(spaciousness: f32) -> f32 {
 	(2.0 * spaciousness).clamp(1.2, 5.0)
 }
 
-fn pick_concept(noise: &NoiseConfig, step: u32, bed_count: usize) -> Concept {
+fn pick_concept(noise: &NoiseConfig, step: u32, bed_count: usize, has_ensuite: bool) -> Concept {
 	let t = noise.sample_unit_4d(step as f32, 0.0, 0.0, 10.0);
 	if bed_count == 1 && t < 0.35 {
 		Concept::Nightstand
@@ -281,6 +324,9 @@ fn pick_concept(noise: &NoiseConfig, step: u32, bed_count: usize) -> Concept {
 	} else if t < 0.5 {
 		Concept::Nightstand
 	} else if t < 0.75 {
+		Concept::Closet
+	} else if has_ensuite {
+		// At most one ensuite per bedroom; fall through to another closet.
 		Concept::Closet
 	} else {
 		Concept::Ensuite
@@ -296,6 +342,7 @@ fn collides_solids(candidate: &Aabb3d, packed: &CommonBedroomPacked) -> bool {
 		.beds
 		.iter()
 		.chain(packed.nightstands.iter())
+		.chain(packed.small_bedroom_furniture.iter())
 		.chain(packed.closets.iter().map(|p| &p.bounds))
 		.chain(packed.ensuites.iter().map(|p| &p.bounds))
 		.any(|a| aabb3_intersects(candidate, a))
@@ -349,12 +396,68 @@ fn place_bed(
 	noise: &NoiseConfig,
 	salt: u32,
 	spaciousness: f32,
+	against_wall: bool,
 ) -> Option<Aabb3d> {
 	let extent = base_bed_extent(spaciousness);
 	let size = host3.max - host3.min;
 	if extent.x > size.x + 1e-3 || extent.z > size.z + 1e-3 {
 		return None;
 	}
+	if against_wall {
+		if let Some(bed) =
+			place_bed_against_wall(host3, host, clearances, packed, noise, salt, extent)
+		{
+			return Some(bed);
+		}
+	}
+	place_bed_free(host3, host, clearances, packed, noise, salt, extent)
+}
+
+fn place_bed_against_wall(
+	host3: &Aabb3d,
+	host: Aabb2d,
+	clearances: &[Aabb2d],
+	packed: &CommonBedroomPacked,
+	noise: &NoiseConfig,
+	salt: u32,
+	extent: Vec3,
+) -> Option<Aabb3d> {
+	let size = host3.max - host3.min;
+	let max_u = (size.x - extent.x).max(0.0);
+	let max_v = (size.z - extent.z).max(0.0);
+	// Prefer a noise-picked wall, then rotate through the other three.
+	let start = (noise.sample_unit_4d(salt as f32, 0.0, 0.0, 22.0) * 4.0).floor() as u32 % 4;
+	for k in 0..4u32 {
+		let wall = (start + k) % 4;
+		for attempt in 0..8u32 {
+			let t = noise.sample_unit_4d(salt as f32, attempt as f32, wall as f32, 23.0);
+			let min = match wall {
+				0 => Vec3::new(host3.min.x + t * max_u, host3.min.y, host3.min.z), // −Z
+				1 => Vec3::new(host3.min.x + t * max_u, host3.min.y, host3.max.z - extent.z), // +Z
+				2 => Vec3::new(host3.min.x, host3.min.y, host3.min.z + t * max_v), // −X
+				_ => Vec3::new(host3.max.x - extent.x, host3.min.y, host3.min.z + t * max_v), // +X
+			};
+			let candidate = Aabb3d::from_min_max(min, min + extent);
+			if fits(&candidate, host3, host, clearances, packed)
+				&& abuts_host_wall(aabb3_to_plan(&candidate, PlanAxes::XZ), host)
+			{
+				return Some(candidate);
+			}
+		}
+	}
+	None
+}
+
+fn place_bed_free(
+	host3: &Aabb3d,
+	host: Aabb2d,
+	clearances: &[Aabb2d],
+	packed: &CommonBedroomPacked,
+	noise: &NoiseConfig,
+	salt: u32,
+	extent: Vec3,
+) -> Option<Aabb3d> {
+	let size = host3.max - host3.min;
 	for attempt in 0..12u32 {
 		let u = noise.sample_unit_4d(salt as f32, attempt as f32, 0.0, 20.0);
 		let v = noise.sample_unit_4d(salt as f32, attempt as f32, 0.0, 21.0);
@@ -369,7 +472,16 @@ fn place_bed(
 	None
 }
 
-fn place_nightstand(
+fn abuts_host_wall(plan: Aabb2d, host: Aabb2d) -> bool {
+	const EPS: f32 = 0.06;
+	(plan.min.x - host.min.x).abs() < EPS
+		|| (plan.max.x - host.max.x).abs() < EPS
+		|| (plan.min.y - host.min.y).abs() < EPS
+		|| (plan.max.y - host.max.y).abs() < EPS
+}
+
+/// Place a nightstand-scale box: adjacent to a bed when possible, else free-standing.
+fn place_small_box(
 	host3: &Aabb3d,
 	host: Aabb2d,
 	clearances: &[Aabb2d],
@@ -377,24 +489,55 @@ fn place_nightstand(
 	noise: &NoiseConfig,
 	salt: u32,
 	spaciousness: f32,
-) -> Option<Aabb3d> {
+) -> Option<Placed> {
 	let extent = base_nightstand_extent(spaciousness);
 	let gap = 0.08_f32 * spaciousness;
-	for (bi, bed) in packed.beds.iter().enumerate() {
-		let side = noise.sample_unit_4d(salt as f32, bi as f32, 0.0, 30.0) >= 0.5;
-		let x = if side {
-			bed.max.x + gap
-		} else {
-			bed.min.x - gap - extent.x
-		};
-		let z = bed.min.z + (bed.max.z - bed.min.z) * 0.5 - extent.z * 0.5;
-		let min = Vec3::new(x, host3.min.y, z);
-		let candidate = Aabb3d::from_min_max(min, min + extent);
-		if fits(&candidate, host3, host, clearances, packed) {
-			return Some(candidate);
-		}
+	if let Some(ns) = place_adjacent_to_bed(host3, host, clearances, packed, noise, salt, extent, gap)
+	{
+		return Some(Placed::Nightstand(ns));
 	}
 	place_free_extent(host3, host, clearances, packed, noise, salt, extent, 31.0)
+		.map(Placed::SmallFurniture)
+}
+
+fn place_adjacent_to_bed(
+	host3: &Aabb3d,
+	host: Aabb2d,
+	clearances: &[Aabb2d],
+	packed: &CommonBedroomPacked,
+	noise: &NoiseConfig,
+	salt: u32,
+	extent: Vec3,
+	gap: f32,
+) -> Option<Aabb3d> {
+	for (bi, bed) in packed.beds.iter().enumerate() {
+		let start = (noise.sample_unit_4d(salt as f32, bi as f32, 0.0, 30.0) * 4.0).floor() as u32 % 4;
+		for k in 0..4u32 {
+			let side = (start + k) % 4;
+			let mid_x = bed.min.x + (bed.max.x - bed.min.x) * 0.5 - extent.x * 0.5;
+			let mid_z = bed.min.z + (bed.max.z - bed.min.z) * 0.5 - extent.z * 0.5;
+			let min = match side {
+				0 => Vec3::new(bed.max.x + gap, host3.min.y, mid_z), // +X
+				1 => Vec3::new(bed.min.x - gap - extent.x, host3.min.y, mid_z), // −X
+				2 => Vec3::new(mid_x, host3.min.y, bed.max.z + gap), // +Z
+				_ => Vec3::new(mid_x, host3.min.y, bed.min.z - gap - extent.z), // −Z
+			};
+			let candidate = Aabb3d::from_min_max(min, min + extent);
+			if fits(&candidate, host3, host, clearances, packed)
+				&& abuts_bed(&candidate, bed, gap)
+			{
+				return Some(candidate);
+			}
+		}
+	}
+	None
+}
+
+fn abuts_bed(candidate: &Aabb3d, bed: &Aabb3d, gap: f32) -> bool {
+	let c = aabb3_to_plan(candidate, PlanAxes::XZ);
+	let b = aabb3_to_plan(bed, PlanAxes::XZ);
+	// Close enough to touch after accounting for the authored gap.
+	touches_aabb2(c, inflate_aabb2(b, gap + 0.05)) && !intersects_aabb2(c, b)
 }
 
 fn place_free_extent(
