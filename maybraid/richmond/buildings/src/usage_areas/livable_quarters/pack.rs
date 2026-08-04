@@ -13,7 +13,7 @@ use crate::placer::{
 use crate::placer::{try_free_extent, try_wall_long};
 
 const WALL_EPS: f32 = 0.08;
-const PROPOSE_ATTEMPTS: u32 = 14;
+const PROPOSE_ATTEMPTS: u32 = 22;
 
 /// Host plan + passage keep-outs for a livable-quarter pack.
 pub struct PackHost {

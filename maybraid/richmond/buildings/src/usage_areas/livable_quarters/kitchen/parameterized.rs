@@ -5,7 +5,7 @@ use richmond_building_components::LabelStyle;
 
 use crate::fit::{Confines, FitError};
 
-use super::layout::{KitchenPacked, KitchenRegions};
+use super::layout::{KitchenCounterLayout, KitchenPacked, KitchenRegions};
 
 pub const SCOPE: &str = "kitchen";
 
@@ -14,6 +14,8 @@ pub struct KitchenParameterized {
 	pub style: LabelStyle,
 	pub spaciousness: f32,
 	pub occupancy: f32,
+	/// When set, forces a counter subtype; otherwise noise picks galley / L / peninsula.
+	pub layout: Option<KitchenCounterLayout>,
 }
 
 impl KitchenParameterized {
@@ -30,6 +32,7 @@ impl KitchenParameterized {
 			style: LabelStyle::Yellow,
 			spaciousness,
 			occupancy,
+			layout: None,
 		})
 	}
 
@@ -38,7 +41,13 @@ impl KitchenParameterized {
 			style: LabelStyle::Yellow,
 			spaciousness: spaciousness.max(1e-3),
 			occupancy: occupancy.clamp(0.05, 1.0),
+			layout: None,
 		}
+	}
+
+	pub fn with_layout(mut self, layout: KitchenCounterLayout) -> Self {
+		self.layout = Some(layout);
+		self
 	}
 }
 
@@ -57,6 +66,7 @@ impl KitchenPlan {
 		let regions = KitchenRegions {
 			spaciousness: params.spaciousness,
 			occupancy: params.occupancy,
+			layout: params.layout,
 		};
 		let packed = regions.pack(confines, noise)?;
 		Ok(Self {

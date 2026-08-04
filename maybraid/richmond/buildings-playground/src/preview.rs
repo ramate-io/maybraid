@@ -2035,23 +2035,50 @@ fn kitchen_examples_bounds() -> Aabb3d {
 }
 
 fn build_kitchen_examples() -> (Vec<GalleryExampleCell<Kitchen>>, Vec<(Aabb3d, Vec3)>) {
-	build_livable_quarters_examples(
-		"kitchen-examples",
-		&kitchen_examples_specs(),
-		3,
-		richmond_buildings::KitchenParameterized::with_fill,
-		Kitchen::fit_with_fill,
-	)
+	use richmond_buildings::KitchenCounterLayout;
+	// Force a mix of counter subtypes so galleries show galley / L / peninsula.
+	let layouts = [
+		KitchenCounterLayout::Galley,
+		KitchenCounterLayout::LShape,
+		KitchenCounterLayout::Peninsula,
+		KitchenCounterLayout::LShape,
+		KitchenCounterLayout::Peninsula,
+		KitchenCounterLayout::Galley,
+	];
+	let specs = kitchen_examples_specs();
+	let gap = STALL_GALLERY_GAP;
+	let mut cells = Vec::new();
+	let mut passages = Vec::new();
+	for (i, (extent, seed, spaciousness, occupancy, door)) in specs.iter().enumerate() {
+		let offset = gallery_grid_offset(|j| specs[j].0, specs.len(), i, 3, gap);
+		let confines = demo_common_bedroom_confines(*extent, *door);
+		passages.extend(passage_aabbs_at(&confines, offset));
+		let noise = NoiseParams {
+			seed: *seed,
+			..NoiseParams::default()
+		};
+		let params = richmond_buildings::KitchenParameterized::with_fill(*spaciousness, *occupancy)
+			.with_layout(layouts[i % layouts.len()]);
+		match Kitchen::fit_with_fill(&confines, noise, params) {
+			Ok((room, _)) => cells.push(GalleryExampleCell { offset, room }),
+			Err(err) => bevy::log::error!(
+				"kitchen-examples ({extent:?} seed={seed}) failed: {err}"
+			),
+		}
+	}
+	(cells, passages)
 }
 
 fn dining_room_examples_specs() -> Vec<LivableQuartersExampleSpec> {
 	vec![
+		// Compact / near-square
 		(Vec3::new(4.0, 2.8, 3.0), 7, 1.15, 0.45, true),
 		(Vec3::new(5.0, 2.8, 3.5), 11, 1.2, 0.4, true),
 		(Vec3::new(4.5, 2.8, 4.5), 21, 1.25, 0.5, true),
-		(Vec3::new(6.0, 3.0, 4.0), 42, 1.3, 0.42, true),
-		(Vec3::new(5.5, 3.0, 5.0), 55, 1.35, 0.38, true),
-		(Vec3::new(7.0, 3.0, 5.5), 99, 1.4, 0.45, true),
+		// Longer / thinner halls
+		(Vec3::new(8.0, 3.0, 3.2), 42, 1.2, 0.42, true),
+		(Vec3::new(9.5, 3.0, 3.0), 55, 1.25, 0.4, true),
+		(Vec3::new(11.0, 3.0, 3.4), 99, 1.3, 0.38, true),
 	]
 }
 

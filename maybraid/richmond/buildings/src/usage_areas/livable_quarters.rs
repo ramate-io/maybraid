@@ -1,10 +1,12 @@
 //! Livable quarters: residential wet rooms + social / work usage areas.
 //!
 //! Each room follows the parameterized → plan → Fit pattern shared with
-//! [`super::common_bedroom`], using the shared [`super::placer`] trier for
+//! [`super::common_bedroom`], using the crate-root [`crate::placer`] trier for
 //! furniture rooms and empty shells for bathrooms until fixture packing lands.
 
 pub(crate) mod pack;
+#[cfg(test)]
+mod gallery_smoke;
 
 pub mod dining_room;
 pub mod kitchen;
@@ -17,7 +19,9 @@ pub mod study;
 pub use dining_room::{
 	DiningRoom, DiningRoomParameterized, DiningRoomPlan, SCOPE as DINING_ROOM_SCOPE,
 };
-pub use kitchen::{Kitchen, KitchenParameterized, KitchenPlan, SCOPE as KITCHEN_SCOPE};
+pub use kitchen::{
+	Kitchen, KitchenCounterLayout, KitchenParameterized, KitchenPlan, SCOPE as KITCHEN_SCOPE,
+};
 pub use living_room::{
 	LivingRoom, LivingRoomParameterized, LivingRoomPlan, SCOPE as LIVING_ROOM_SCOPE,
 };

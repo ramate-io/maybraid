@@ -36,8 +36,9 @@ pub use common_bedroom::{
 };
 pub use enclosed_room::{EnclosedRoom, EnclosedRoomMins, EnclosedRoomParams};
 pub use livable_quarters::{
-	DiningRoom, DiningRoomParameterized, DiningRoomPlan, Kitchen, KitchenParameterized, KitchenPlan,
-	LivingRoom, LivingRoomParameterized, LivingRoomPlan, ResidentialBathroom,
+	DiningRoom, DiningRoomParameterized, DiningRoomPlan, Kitchen, KitchenCounterLayout,
+	KitchenParameterized, KitchenPlan, LivingRoom, LivingRoomParameterized, LivingRoomPlan,
+	ResidentialBathroom,
 	ResidentialBathroomParameterized, ResidentialBathroomPlan, ResidentialHalfBathroom,
 	ResidentialHalfBathroomParameterized, ResidentialHalfBathroomPlan, SittingRoom,
 	SittingRoomParameterized, SittingRoomPlan, Study, StudyParameterized, StudyPlan,

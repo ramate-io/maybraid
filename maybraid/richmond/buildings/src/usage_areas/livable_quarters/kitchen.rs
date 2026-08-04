@@ -1,8 +1,9 @@
-//! Kitchen usage area: counter run along wall + optional island.
+//! Kitchen usage area: counter layouts (galley / L / peninsula) + optional island.
 
 mod layout;
 mod parameterized;
 
+pub use layout::KitchenCounterLayout;
 pub use parameterized::{KitchenParameterized, KitchenPlan, SCOPE};
 
 use bevy_math::bounding::Aabb3d;
@@ -12,8 +13,8 @@ use richmond_building_components::furniture::FurnitureNode;
 use richmond_building_components::placed::Placement;
 use richmond_building_components::{BuildingComponents, LabelNode, LabelStyle, Layers};
 
-use crate::usage_areas::furniture_util::placement_filling_aabb;
 use crate::fit::{Confines, FillableRegions, Fit, FitError};
+use crate::usage_areas::furniture_util::placement_filling_aabb;
 use crate::usage_areas::label_util::label_filling_aabb;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -25,7 +26,9 @@ pub struct FurnitureFill {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Kitchen {
 	pub room_type: LabelNode,
+	pub counter_layout: KitchenCounterLayout,
 	pub counter_runs: Vec<FurnitureFill>,
+	pub peninsulas: Vec<FurnitureFill>,
 	pub islands: Vec<FurnitureFill>,
 	pub fillers: Vec<FurnitureFill>,
 }
@@ -33,23 +36,51 @@ pub struct Kitchen {
 impl Kitchen {
 	pub fn from_plan(plan: KitchenPlan, confines: &Confines) -> Self {
 		let style = plan.parameterized.style;
+		let counter_layout = plan
+			.packed
+			.layout
+			.unwrap_or(KitchenCounterLayout::Galley);
 		let counter_runs = plan
 			.packed
 			.counter_runs
 			.iter()
 			.map(|aabb| furniture_fill(style, "CounterRun", aabb, confines.roll, FurnitureNode::dresser))
 			.collect();
+		let peninsulas = plan
+			.packed
+			.peninsulas
+			.iter()
+			.map(|aabb| {
+				furniture_fill(style, "Peninsula", aabb, confines.roll, FurnitureNode::dresser)
+			})
+			.collect();
 		let islands = plan
 			.packed
 			.islands
 			.iter()
-			.map(|aabb| furniture_fill(style, "Island", aabb, confines.roll, FurnitureNode::bedroom_furniture))
+			.map(|aabb| {
+				furniture_fill(
+					style,
+					"Island",
+					aabb,
+					confines.roll,
+					FurnitureNode::bedroom_furniture,
+				)
+			})
 			.collect();
 		let fillers = plan
 			.packed
 			.fillers
 			.iter()
-			.map(|aabb| furniture_fill(style, "KitchenFiller", aabb, confines.roll, FurnitureNode::nightstand))
+			.map(|aabb| {
+				furniture_fill(
+					style,
+					"KitchenFiller",
+					aabb,
+					confines.roll,
+					FurnitureNode::nightstand,
+				)
+			})
 			.collect();
 		Self {
 			room_type: label_filling_aabb(
@@ -58,7 +89,9 @@ impl Kitchen {
 				&confines.bounds,
 				confines.roll,
 			),
+			counter_layout,
 			counter_runs,
+			peninsulas,
 			islands,
 			fillers,
 		}
@@ -106,6 +139,7 @@ impl BuildingComponents for Kitchen {
 	fn label_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<LabelNode> {
 		let mut labels = vec![self.room_type.clone()];
 		labels.extend(self.counter_runs.iter().map(|f| f.label.clone()));
+		labels.extend(self.peninsulas.iter().map(|f| f.label.clone()));
 		labels.extend(self.islands.iter().map(|f| f.label.clone()));
 		labels.extend(self.fillers.iter().map(|f| f.label.clone()));
 		Layers::from_free(labels)
@@ -114,7 +148,16 @@ impl BuildingComponents for Kitchen {
 	fn furniture_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<FurnitureNode> {
 		let mut out = Layers::new();
 		out.extend(Layers::from_free(
-			self.counter_runs.iter().map(|f| f.furniture.clone()).collect(),
+			self.counter_runs
+				.iter()
+				.map(|f| f.furniture.clone())
+				.collect(),
+		));
+		out.extend(Layers::from_free(
+			self.peninsulas
+				.iter()
+				.map(|f| f.furniture.clone())
+				.collect(),
 		));
 		out.extend(Layers::from_free(
 			self.islands.iter().map(|f| f.furniture.clone()).collect(),
