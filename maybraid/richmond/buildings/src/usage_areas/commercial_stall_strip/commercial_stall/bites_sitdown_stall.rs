@@ -87,10 +87,12 @@ mod tests {
 	use bevy_math::Vec3;
 	use crate::openings::{Opening, OpeningId, OpeningLabel, Openings};
 	use procedural_common::{
-		aabb2_area, aabb3_to_plan, contacts_opening_face, passage_opening_face, PlanAxes,
+		aabb2_area, aabb3_to_plan, OptionalFaceBand, PlanAxes, PlanOpeningFace,
 	};
 	use super::super::bites_stall::BitesStallParameterized;
-	use super::super::stall_layout::{BitesCounterChoice, BITES_SEATING_FACE_CONTACT};
+	use super::super::stall_layout::{
+		BitesPassageSpec, EligibleBitesPassage, BITES_SEATING_FACE_CONTACT,
+	};
 
 	fn roomy_south() -> Confines {
 		let mut openings = Openings::new();
@@ -116,25 +118,26 @@ mod tests {
 	}
 
 	fn roomy_params(seating_area_target: f32) -> BitesSitdownParameterized {
+		let confines = roomy_south();
+		let eligible = EligibleBitesPassage::collect(&confines);
 		BitesSitdownParameterized {
 			base: BitesStallParameterized {
 				style: LabelStyle::Cyan,
-				counters: vec![
-					BitesCounterChoice {
-						place: true,
-						along: 1.5,
-						depth: 0.8,
-						along_t: 0.0,
-					},
-					BitesCounterChoice {
-						place: true,
-						along: 1.5,
-						depth: 0.8,
-						along_t: 0.0,
-					},
-				],
+				passages: eligible
+					.into_iter()
+					.map(|passage| BitesPassageSpec {
+						passage,
+						counter: OptionalFaceBand {
+							place: true,
+							along: 1.5,
+							depth: 0.8,
+							along_t: 0.0,
+						},
+					})
+					.collect(),
 			},
 			seating_area_target,
+			kitchen_area_reserve: 12.0,
 			seating_seed_depth: 1.5,
 			seating_along_t: 0.5,
 		}
@@ -167,11 +170,11 @@ mod tests {
 			if !matches!(o.label, OpeningLabel::Passage) {
 				return false;
 			}
-			let Some(face) = passage_opening_face(host, aabb3_to_plan(&o.bounds, PlanAxes::XZ))
+			let Some(face) = PlanOpeningFace::from_passage(host, aabb3_to_plan(&o.bounds, PlanAxes::XZ))
 			else {
 				return false;
 			};
-			contacts_opening_face(seat2, face, BITES_SEATING_FACE_CONTACT)
+			face.contacts(seat2, BITES_SEATING_FACE_CONTACT)
 		});
 		assert!(ok, "seating must share ≥1m with a passage long face");
 	}
@@ -188,7 +191,6 @@ mod tests {
 			seat_area + 1.0 >= target.min(30.0),
 			"seating area {seat_area} should approach target {target}"
 		);
-		// Seating should not be a thin leftover beside a dominant kitchen.
 		assert!(
 			seat_area + 1.0 >= kit_area * 0.45,
 			"seating {seat_area} dominated by kitchen {kit_area}"

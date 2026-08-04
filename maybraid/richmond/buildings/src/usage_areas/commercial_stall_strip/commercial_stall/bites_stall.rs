@@ -72,7 +72,8 @@ mod tests {
 	use bevy_math::bounding::Aabb3d;
 	use bevy_math::Vec3;
 	use crate::openings::{Opening, OpeningId, Openings};
-	use super::super::stall_layout::BitesCounterChoice;
+	use procedural_common::OptionalFaceBand;
+	use super::super::stall_layout::{BitesPassageSpec, EligibleBitesPassage};
 
 	fn two_south_doors() -> Confines {
 		let mut openings = Openings::new();
@@ -98,22 +99,23 @@ mod tests {
 	}
 
 	fn both_counters() -> BitesStallParameterized {
+		let confines = two_south_doors();
+		let eligible = EligibleBitesPassage::collect(&confines);
+		assert_eq!(eligible.len(), 2);
 		BitesStallParameterized {
 			style: LabelStyle::Cyan,
-			counters: vec![
-				BitesCounterChoice {
-					place: true,
-					along: 1.5,
-					depth: 0.8,
-					along_t: 0.0,
-				},
-				BitesCounterChoice {
-					place: true,
-					along: 1.5,
-					depth: 0.8,
-					along_t: 0.0,
-				},
-			],
+			passages: eligible
+				.into_iter()
+				.map(|passage| BitesPassageSpec {
+					passage,
+					counter: OptionalFaceBand {
+						place: true,
+						along: 1.5,
+						depth: 0.8,
+						along_t: 0.0,
+					},
+				})
+				.collect(),
 		}
 	}
 
@@ -149,23 +151,8 @@ mod tests {
 	#[test]
 	fn sparse_counters_still_fit() {
 		let confines = two_south_doors();
-		let params = BitesStallParameterized {
-			style: LabelStyle::Cyan,
-			counters: vec![
-				BitesCounterChoice {
-					place: true,
-					along: 1.2,
-					depth: 0.7,
-					along_t: 0.2,
-				},
-				BitesCounterChoice {
-					place: false,
-					along: 1.5,
-					depth: 0.8,
-					along_t: 0.0,
-				},
-			],
-		};
+		let mut params = both_counters();
+		params.passages[1].counter.place = false;
 		let plan = BitesStallPlan::from_parameterized(params, &confines).unwrap();
 		assert_eq!(plan.counter_aabbs.len(), 1);
 	}
@@ -232,14 +219,21 @@ mod tests {
 			0.0,
 			openings,
 		);
+		let eligible = EligibleBitesPassage::collect(&confines);
 		let params = BitesStallParameterized {
 			style: LabelStyle::Cyan,
-			counters: vec![BitesCounterChoice {
-				place: true,
-				along: 5.0,
-				depth: 1.0,
-				along_t: 0.0,
-			}],
+			passages: eligible
+				.into_iter()
+				.map(|passage| BitesPassageSpec {
+					passage,
+					counter: OptionalFaceBand {
+						place: true,
+						along: 5.0,
+						depth: 1.0,
+						along_t: 0.0,
+					},
+				})
+				.collect(),
 		};
 		assert!(matches!(
 			BitesStallPlan::from_parameterized(params, &confines),
