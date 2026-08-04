@@ -3,8 +3,7 @@
 use bevy_math::bounding::{Aabb2d, Aabb3d};
 use bevy_math::{Vec2, Vec3};
 use procedural_common::{
-	aabb2_area, aabb3_to_plan, clamp_min_size2, intersects_aabb2, max_empty_rect2, plan_to_aabb3,
-	Aabb2dPack, PlanAxes, PlanOpeningFace,
+	aabb2_area, aabb3_to_plan, clamp_min_size2, plan_to_aabb3, Aabb2dPack, PlanAxes, PlanOpeningFace,
 };
 
 use crate::bedroom::shell::{face_rectangle, face_span_rectangle};
@@ -12,7 +11,9 @@ use crate::constraints::FaceKind;
 use crate::fit::{Confines, FitError};
 use crate::openings::{Opening, OpeningId};
 use crate::paneling::{Rectangle, DEFAULT_PANEL_THICKNESS};
-use crate::usage_areas::clearance::{PassageClearance, PlanHost, PASSAGE_CLEARANCE};
+use crate::usage_areas::clearance::{
+	abuts_clearance, pack_abutting_clearance, PassageClearance, PlanHost, PASSAGE_CLEARANCE,
+};
 
 /// Scope prefix for [`OpeningId::scoped`] openings authored by PublicRestroom.
 pub const SCOPE: &str = "public_restroom";
@@ -22,7 +23,6 @@ pub const RESTROOM_STALLS_CONTACT: f32 = 2.0;
 pub const RESTROOM_SINK_MIN: f32 = 0.5;
 pub const RESTROOM_SINK_DEPTH_MIN: f32 = 0.5;
 pub const RESTROOM_SINK_DEPTH_MAX: f32 = 0.9;
-pub const RESTROOM_SINK_ALONG_MIN: f32 = 0.5;
 pub const RESTROOM_DOOR_WIDTH_MIN: f32 = 0.9;
 pub const RESTROOM_DOOR_WIDTH_MAX: f32 = 1.2;
 pub const RESTROOM_DOOR_HEIGHT_MIN: f32 = 2.0;
@@ -40,7 +40,10 @@ pub struct PublicRestroomRegions {
 	pub stalls_area_target: f32,
 	pub stalls_seed_depth: f32,
 	pub stalls_along_t: f32,
+	/// Plan area reserved for sinks when clamping stalls grow (bites kitchen-style).
 	pub sink_area_reserve: f32,
+	/// Grow target for the primary sink pocket after seeding against the door clear.
+	pub sink_area_target: f32,
 	pub door_width: f32,
 	pub door_along_t: f32,
 	pub door_height: f32,
@@ -73,16 +76,18 @@ impl PublicRestroomRegions {
 		}
 
 		let mut clearances = PassageClearance::bands_std(host, &passage_faces);
+		let sink_depth = self
+			.sink_depth
+			.clamp(RESTROOM_SINK_DEPTH_MIN, RESTROOM_SINK_DEPTH_MAX);
+		// Door-side strip toward the entry: stalls-door keep-out + sink pocket + customer
+		// passage keep-out can stack on the same wall, so reserve all three.
+		let free_strip_depth = 2.0 * PASSAGE_CLEARANCE + sink_depth;
+
 		let (stalls2, seed_face) = self
-			.pack_stalls(host, &clearances)
+			.pack_stalls(host, &clearances, free_strip_depth)
 			.ok_or(FitError::TooSmall {
 				reason: "restroom stalls",
 			})?;
-		let stalls2 = Self::shrink_stalls_for_door_clearance(host, stalls2, seed_face).ok_or(
-			FitError::TooSmall {
-				reason: "restroom stalls door",
-			},
-		)?;
 
 		let enclosure = self
 			.stalls_enclosure(host3, host, stalls2, seed_face)
@@ -92,7 +97,7 @@ impl PublicRestroomRegions {
 		clearances.push(enclosure.door_clear);
 
 		let sinks = self
-			.pack_sinks(host, &clearances, stalls2)
+			.pack_sinks(host, &clearances, stalls2, seed_face, enclosure.door_clear)
 			.ok_or(FitError::TooSmall {
 				reason: "restroom sink",
 			})?;
@@ -114,39 +119,75 @@ impl PublicRestroomRegions {
 		w + 1e-3 >= RESTROOM_STALLS_MIN && d + 1e-3 >= RESTROOM_STALLS_MIN
 	}
 
-	fn shrink_stalls_for_door_clearance(
-		host: Aabb2d,
-		mut stalls: Aabb2d,
-		seed_face: PlanOpeningFace,
-	) -> Option<Aabb2d> {
-		let need = PASSAGE_CLEARANCE + 0.05;
-		if seed_face.thru_is_x {
+	/// Free strip on the door side of stalls (between stalls free edge and opposite host wall).
+	fn door_side_zone(host: Aabb2d, stalls2: Aabb2d, seed_face: PlanOpeningFace) -> Option<Aabb2d> {
+		const EPS: f32 = 1e-3;
+		let zone = if seed_face.thru_is_x {
 			if seed_face.inward_positive {
-				stalls.max.x = stalls.max.x.min(host.max.x - need);
+				Aabb2d {
+					min: Vec2::new(stalls2.max.x + EPS, host.min.y),
+					max: Vec2::new(host.max.x, host.max.y),
+				}
 			} else {
-				stalls.min.x = stalls.min.x.max(host.min.x + need);
+				Aabb2d {
+					min: Vec2::new(host.min.x, host.min.y),
+					max: Vec2::new(stalls2.min.x - EPS, host.max.y),
+				}
 			}
 		} else if seed_face.inward_positive {
-			stalls.max.y = stalls.max.y.min(host.max.y - need);
+			Aabb2d {
+				min: Vec2::new(host.min.x, stalls2.max.y + EPS),
+				max: Vec2::new(host.max.x, host.max.y),
+			}
 		} else {
-			stalls.min.y = stalls.min.y.max(host.min.y + need);
-		}
-		if stalls.max.x - stalls.min.x < 1e-3 || stalls.max.y - stalls.min.y < 1e-3 {
+			Aabb2d {
+				min: Vec2::new(host.min.x, host.min.y),
+				max: Vec2::new(host.max.x, stalls2.min.y - EPS),
+			}
+		};
+		if zone.max.x - zone.min.x < RESTROOM_SINK_MIN - 1e-3
+			|| zone.max.y - zone.min.y < RESTROOM_SINK_MIN - 1e-3
+		{
 			return None;
 		}
-		if !Self::stalls_dims_ok(stalls) {
-			return None;
-		}
-		if seed_face.shared_border_len(stalls) + 1e-3 < RESTROOM_STALLS_CONTACT {
-			return None;
-		}
-		Some(stalls)
+		Some(zone)
+	}
+
+	/// Inward band from the host wall opposite `seed_face`, reserved for door clearance + sinks.
+	fn free_strip_block(host: Aabb2d, seed_face: PlanOpeningFace, depth: f32) -> Option<Aabb2d> {
+		let opposite = PlanOpeningFace {
+			thru_is_x: seed_face.thru_is_x,
+			thru: if seed_face.thru_is_x {
+				if seed_face.inward_positive {
+					host.max.x
+				} else {
+					host.min.x
+				}
+			} else if seed_face.inward_positive {
+				host.max.y
+			} else {
+				host.min.y
+			},
+			along0: if seed_face.thru_is_x {
+				host.min.y
+			} else {
+				host.min.x
+			},
+			along1: if seed_face.thru_is_x {
+				host.max.y
+			} else {
+				host.max.x
+			},
+			inward_positive: !seed_face.inward_positive,
+		};
+		opposite.band(host, opposite.along_len(), depth, 0.5)
 	}
 
 	fn pack_stalls(
 		&self,
 		host: Aabb2d,
 		clearances: &[Aabb2d],
+		free_strip_depth: f32,
 	) -> Option<(Aabb2d, PlanOpeningFace)> {
 		let mut candidates: Vec<PlanOpeningFace> = PlanHost::faces(host).into_iter().collect();
 		candidates.sort_by(|a, b| {
@@ -166,10 +207,14 @@ impl PublicRestroomRegions {
 		let contact = RESTROOM_STALLS_CONTACT;
 		let depth = self.stalls_seed_depth.max(RESTROOM_STALLS_MIN);
 		let usable = aabb2_area(host);
+		// Prefer filling most of the bay; only a thin door/sink strip is reserved.
+		let strip_area = free_strip_depth
+			* (host.max.x - host.min.x).max(host.max.y - host.min.y);
 		let reserve = self
 			.sink_area_reserve
 			.max(RESTROOM_SINK_MIN * RESTROOM_SINK_MIN)
-			.min(usable * 0.5);
+			.max(strip_area * 0.5)
+			.min(usable * 0.35);
 		let target = self
 			.stalls_area_target
 			.max(RESTROOM_STALLS_MIN * RESTROOM_STALLS_MIN)
@@ -179,6 +224,9 @@ impl PublicRestroomRegions {
 			if face.along_len() + 1e-3 < contact {
 				continue;
 			}
+			let Some(strip) = Self::free_strip_block(host, face, free_strip_depth) else {
+				continue;
+			};
 			let Some(seed) = face
 				.seed_from_free(host, clearances, contact, depth, self.stalls_along_t)
 				.or_else(|| face.seed_from_free(host, clearances, contact, depth, 0.5))
@@ -187,7 +235,10 @@ impl PublicRestroomRegions {
 			};
 			let mut hard = clearances.to_vec();
 			hard.push(face.outward_block(host));
-			let grown = seed.grow_toward_area(host, &hard, target);
+			hard.push(strip);
+			let grown = seed
+				.grow_toward_area(host, &hard, target)
+				.grow_into(host, &hard);
 			let Some(stalls) = clamp_min_size2(grown, Vec2::splat(RESTROOM_STALLS_MIN)) else {
 				continue;
 			};
@@ -195,6 +246,10 @@ impl PublicRestroomRegions {
 				continue;
 			}
 			if face.shared_border_len(stalls) + 1e-3 < contact {
+				continue;
+			}
+			// Must still leave a door-side zone for sinks.
+			if Self::door_side_zone(host, stalls, face).is_none() {
 				continue;
 			}
 			return Some((stalls, face));
@@ -369,61 +424,38 @@ impl PublicRestroomRegions {
 		}
 	}
 
+	/// Sinks live in the door-side free strip, abutting the stalls-door clearance
+	/// (kitchen-style: seed against keep-out, then grow toward a target).
 	fn pack_sinks(
 		&self,
-		host: Aabb2d,
+		_host: Aabb2d,
 		clearances: &[Aabb2d],
 		stalls2: Aabb2d,
+		seed_face: PlanOpeningFace,
+		door_clear: Aabb2d,
 	) -> Option<Vec<Aabb2d>> {
+		let zone = Self::door_side_zone(_host, stalls2, seed_face)?;
 		let mut hard = clearances.to_vec();
 		hard.push(stalls2);
-		let depth = self
-			.sink_depth
-			.clamp(RESTROOM_SINK_DEPTH_MIN, RESTROOM_SINK_DEPTH_MAX);
-		let mut sinks = Vec::new();
 
-		for face in PlanHost::faces(host) {
-			for _ in 0..6 {
-				let Some((seg0, seg1)) =
-					face.longest_free_segment(&hard, RESTROOM_SINK_ALONG_MIN)
-				else {
-					break;
-				};
-				let avail = (seg1 - seg0).min(face.along_len());
-				let along = avail.max(RESTROOM_SINK_ALONG_MIN);
-				let seg_face = PlanOpeningFace {
-					along0: seg0,
-					along1: seg1,
-					..face
-				};
-				let Some(band) = seg_face.band(host, along, depth, 0.5) else {
-					break;
-				};
-				if !band.is_clear_of(&hard) {
-					break;
-				}
-				let w = band.max.x - band.min.x;
-				let d = band.max.y - band.min.y;
-				if w + 1e-3 < RESTROOM_SINK_MIN || d + 1e-3 < RESTROOM_SINK_MIN {
-					break;
-				}
-				if sinks.iter().any(|s| intersects_aabb2(band, *s)) {
-					break;
-				}
-				sinks.push(band);
-				hard.push(band);
-			}
-		}
+		let min = Vec2::splat(RESTROOM_SINK_MIN);
+		let zone_area = aabb2_area(zone);
+		let target = self
+			.sink_area_target
+			.max(RESTROOM_SINK_MIN * RESTROOM_SINK_MIN)
+			.min(zone_area.max(RESTROOM_SINK_MIN * RESTROOM_SINK_MIN));
 
-		if sinks.is_empty() {
-			// Fallback: largest empty pocket ≥0.5×0.5.
-			let seed = max_empty_rect2(host, &hard)?;
-			let grown = seed.grow_into(host, &hard);
-			let sink = clamp_min_size2(grown, Vec2::splat(RESTROOM_SINK_MIN))?;
-			if !sink.is_clear_of(&hard) {
-				return None;
-			}
-			sinks.push(sink);
+		let primary = pack_abutting_clearance(zone, &hard, door_clear, min, target)?;
+		debug_assert!(abuts_clearance(primary, door_clear));
+		let mut sinks = vec![primary];
+		hard.push(primary);
+
+		// Opportunistic second pocket (same abutting grow) if space remains.
+		let extra_target = (target * 0.55)
+			.max(RESTROOM_SINK_MIN * RESTROOM_SINK_MIN)
+			.min((zone_area - aabb2_area(primary)).max(RESTROOM_SINK_MIN * RESTROOM_SINK_MIN));
+		if let Some(extra) = pack_abutting_clearance(zone, &hard, door_clear, min, extra_target) {
+			sinks.push(extra);
 		}
 
 		Some(sinks)

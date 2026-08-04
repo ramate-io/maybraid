@@ -135,6 +135,10 @@ mod tests {
 
 	#[test]
 	fn restroom_fits_walled_stalls_door_and_sinks() {
+		use procedural_common::{aabb2_area, intersects_aabb2};
+		use bevy_math::bounding::Aabb2d;
+		use bevy_math::Vec2;
+
 		let confines = roomy_south();
 		let (stall, regions) = PublicRestroom::fit_to_confines(
 			&confines,
@@ -159,15 +163,31 @@ mod tests {
 			.get(&stall.stalls_door_id)
 			.is_some());
 
+		let host = aabb3_to_plan(&confines.bounds, PlanAxes::XZ);
 		let stalls = aabb3_to_plan(&stall.stalls_bounds, PlanAxes::XZ);
 		assert!(stalls.max.x - stalls.min.x + 1e-3 >= RESTROOM_STALLS_MIN);
 		assert!(stalls.max.y - stalls.min.y + 1e-3 >= RESTROOM_STALLS_MIN);
+		// Stalls should dominate the plan.
+		assert!(aabb2_area(stalls) / aabb2_area(host).max(1.0) > 0.45);
 
+		let door = aabb3_to_plan(&stall.stalls_door.bounds, PlanAxes::XZ);
+		let door_pad = Aabb2d {
+			min: Vec2::new(door.min.x - 1.05, door.min.y - 1.05),
+			max: Vec2::new(door.max.x + 1.05, door.max.y + 1.05),
+		};
+		let mut sink_near_door = false;
 		for aabb in &stall.sink_bounds {
 			let plan = aabb3_to_plan(aabb, PlanAxes::XZ);
 			assert!(plan.max.x - plan.min.x + 1e-3 >= RESTROOM_SINK_MIN);
 			assert!(plan.max.y - plan.min.y + 1e-3 >= RESTROOM_SINK_MIN);
+			if intersects_aabb2(plan, door_pad) {
+				sink_near_door = true;
+			}
 		}
+		assert!(
+			sink_near_door,
+			"stalls door should connect into the sinks area"
+		);
 	}
 
 	#[test]
@@ -189,5 +209,65 @@ mod tests {
 			PublicRestroom::fit_to_confines(&confines, NoiseParams::default()),
 			Err(FitError::TooSmall { .. })
 		));
+	}
+
+	fn demo_side(extent: Vec3, east: bool) -> Confines {
+		let along = if east { extent.z } else { extent.x };
+		let door_h = (extent.y * 0.72).clamp(2.0, extent.y.max(2.0));
+		let band = 0.25_f32;
+		let mut openings = Openings::new();
+		let mk = |a0: f32, a1: f32| -> Aabb3d {
+			if east {
+				Aabb3d::from_min_max(
+					Vec3::new(extent.x - band, 0.0, a0),
+					Vec3::new(extent.x + band, door_h, a1),
+				)
+			} else {
+				Aabb3d::from_min_max(
+					Vec3::new(a0, 0.0, extent.z - band),
+					Vec3::new(a1, door_h, extent.z + band),
+				)
+			}
+		};
+		if along >= 6.0 {
+			openings.insert(
+				OpeningId::new("demo_bites_door_a"),
+				Opening::passage(mk(0.4, (along * 0.42).max(2.5))),
+			);
+			openings.insert(
+				OpeningId::new("demo_bites_door_b"),
+				Opening::passage(mk(
+					along * 0.58,
+					(along - 0.4).max(along * 0.58 + 2.5),
+				)),
+			);
+		} else {
+			openings.insert(
+				OpeningId::new("demo_bites_door"),
+				Opening::passage(mk(0.3, (along - 0.3).max(2.2))),
+			);
+		}
+		Confines::new(Aabb3d::from_min_max(Vec3::ZERO, extent), 0.0, openings)
+	}
+
+	#[test]
+	fn restroom_fits_gallery_east_and_north_seeds() {
+		// Playground gallery cells that previously soft-failed on sink packing.
+		let cases = [
+			(Vec3::new(8.0, 3.2, 10.0), 42, true),
+			(Vec3::new(10.0, 3.2, 9.0), 21, false),
+		];
+		for (extent, seed, east) in cases {
+			let confines = demo_side(extent, east);
+			let (stall, _) = PublicRestroom::fit_to_confines(
+				&confines,
+				NoiseParams {
+					seed,
+					..Default::default()
+				},
+			)
+			.unwrap_or_else(|e| panic!("gallery ({extent:?} seed={seed}) failed: {e}"));
+			assert!(!stall.sink_bounds.is_empty());
+		}
 	}
 }

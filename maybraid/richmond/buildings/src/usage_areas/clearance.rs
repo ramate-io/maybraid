@@ -2,9 +2,16 @@
 //!
 //! Collect long faces of [`OpeningLabel::Passage`] openings on a plan host and
 //! build inward keep-out bands so furniture / regions stay clear of the entry.
+//!
+//! Also: pack regions that **abut** a clearance band without overlapping it
+//! (walkway stays open; furniture / sinks sit against its edge).
 
 use bevy_math::bounding::Aabb2d;
-use procedural_common::{aabb3_to_plan, PlanAxes, PlanOpeningFace};
+use bevy_math::Vec2;
+use procedural_common::{
+	aabb2_area, aabb3_to_plan, clamp_min_size2, inflate_aabb2, intersects_aabb2,
+	max_empty_rect2_by, touches_aabb2, Aabb2dPack, PlanAxes, PlanOpeningFace,
+};
 
 use crate::fit::Confines;
 use crate::openings::OpeningLabel;
@@ -96,5 +103,119 @@ impl PassageClearance {
 	/// [`Self::bands`] at [`PASSAGE_CLEARANCE`].
 	pub fn bands_std(host: Aabb2d, faces: &[PlanOpeningFace]) -> Vec<Aabb2d> {
 		Self::bands(host, faces, PASSAGE_CLEARANCE)
+	}
+}
+
+/// True when `region` shares an edge with `clearance` but does not open-overlap it.
+///
+/// Typical use: furniture / sink bands sit against a passage keep-out without
+/// eating the walkway (`clearance` should also be in the packer's hard excludes).
+pub fn abuts_clearance(region: Aabb2d, clearance: Aabb2d) -> bool {
+	touches_aabb2(region, clearance) && !intersects_aabb2(region, clearance)
+}
+
+/// Largest empty rect in `host` avoiding `hard`, strongly preferring candidates
+/// that [`abuts_clearance`] `clearance`.
+///
+/// `hard` should already include `clearance`.
+pub fn max_empty_abutting_clearance(
+	host: Aabb2d,
+	hard: &[Aabb2d],
+	clearance: Aabb2d,
+) -> Option<Aabb2d> {
+	max_empty_rect2_by(host, hard, |r| {
+		let area = aabb2_area(r);
+		if abuts_clearance(r, clearance) {
+			return area + 1.0e6;
+		}
+		// Soft pull toward the clearance edge when a perfect abut is unavailable.
+		let near = inflate_aabb2(clearance, 0.35);
+		if touches_aabb2(r, near) {
+			area + 1.0e3
+		} else {
+			area
+		}
+	})
+}
+
+/// Seed + grow a region that stays clear of `hard` (including `clearance`) and
+/// abuts `clearance` — kitchen/sink style fill against a keep-out band.
+pub fn pack_abutting_clearance(
+	host: Aabb2d,
+	hard: &[Aabb2d],
+	clearance: Aabb2d,
+	min_size: Vec2,
+	area_target: f32,
+) -> Option<Aabb2d> {
+	let seed = max_empty_abutting_clearance(host, hard, clearance)?;
+	let seed = clamp_min_size2(seed, min_size)?;
+	let target = area_target.max(min_size.x * min_size.y);
+	let grown = seed
+		.grow_toward_area(host, hard, target)
+		.grow_into(host, hard);
+	let grown = clamp_min_size2(grown, min_size)?;
+	if !grown.is_clear_of(hard) {
+		return None;
+	}
+	if abuts_clearance(grown, clearance) {
+		return Some(grown);
+	}
+	// Growth can pull off the clearance edge; keep the abutting seed if valid.
+	if abuts_clearance(seed, clearance) && seed.is_clear_of(hard) {
+		return Some(seed);
+	}
+	None
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use bevy_math::Vec2;
+
+	#[test]
+	fn abuts_clearance_accepts_edge_contact_only() {
+		let clear = Aabb2d {
+			min: Vec2::new(0.0, 0.0),
+			max: Vec2::new(1.0, 2.0),
+		};
+		let beside = Aabb2d {
+			min: Vec2::new(1.0, 0.0),
+			max: Vec2::new(2.0, 1.0),
+		};
+		let overlap = Aabb2d {
+			min: Vec2::new(0.5, 0.0),
+			max: Vec2::new(1.5, 1.0),
+		};
+		let far = Aabb2d {
+			min: Vec2::new(1.2, 0.0),
+			max: Vec2::new(2.0, 1.0),
+		};
+		assert!(abuts_clearance(beside, clear));
+		assert!(!abuts_clearance(overlap, clear));
+		assert!(!abuts_clearance(far, clear));
+	}
+
+	#[test]
+	fn pack_abutting_clearance_grows_beside_keepout() {
+		let host = Aabb2d {
+			min: Vec2::ZERO,
+			max: Vec2::new(6.0, 4.0),
+		};
+		let clearance = Aabb2d {
+			min: Vec2::new(0.0, 0.0),
+			max: Vec2::new(1.0, 4.0),
+		};
+		let hard = [clearance];
+		let packed = pack_abutting_clearance(
+			host,
+			&hard,
+			clearance,
+			Vec2::splat(0.5),
+			8.0,
+		)
+		.unwrap();
+		assert!(abuts_clearance(packed, clearance));
+		assert!(packed.is_clear_of(&hard));
+		assert!(aabb2_area(packed) + 1e-3 >= 0.5 * 0.5);
 	}
 }

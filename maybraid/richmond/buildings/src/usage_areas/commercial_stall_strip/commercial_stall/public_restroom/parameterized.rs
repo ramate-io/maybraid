@@ -8,8 +8,8 @@ use crate::usage_areas::clearance::PassageClearance;
 
 use super::super::stall_layout::public_restroom::{
 	PublicRestroomPacked, PublicRestroomRegions, RESTROOM_DOOR_HEADER_MIN, RESTROOM_DOOR_HEIGHT_MAX,
-	RESTROOM_DOOR_HEIGHT_MIN, RESTROOM_DOOR_WIDTH_MAX, RESTROOM_DOOR_WIDTH_MIN, RESTROOM_SINK_DEPTH_MAX,
-	RESTROOM_SINK_DEPTH_MIN, RESTROOM_SINK_MIN, RESTROOM_STALLS_MIN,
+	RESTROOM_DOOR_HEIGHT_MIN, RESTROOM_DOOR_WIDTH_MAX, RESTROOM_DOOR_WIDTH_MIN,
+	RESTROOM_SINK_DEPTH_MAX, RESTROOM_SINK_DEPTH_MIN, RESTROOM_SINK_MIN, RESTROOM_STALLS_MIN,
 };
 
 /// Noise / style knobs for [`super::PublicRestroom`].
@@ -20,6 +20,7 @@ pub struct PublicRestroomParameterized {
 	pub stalls_seed_depth: f32,
 	pub stalls_along_t: f32,
 	pub sink_area_reserve: f32,
+	pub sink_area_target: f32,
 	pub door_width: f32,
 	pub door_along_t: f32,
 	pub door_height: f32,
@@ -39,19 +40,32 @@ impl PublicRestroomParameterized {
 		let c = confines.center();
 		let usable = aabb2_area(host).max(1.0);
 		let stalls_min = RESTROOM_STALLS_MIN * RESTROOM_STALLS_MIN;
-		let lo = (usable * 0.18).max(stalls_min).min(usable.max(stalls_min));
-		let hi = (usable * 0.40).max(lo + 0.5);
-		let stalls_area_target = cfg.sample_range_f32_4d(lo, hi, c.x, c.y, c.z, 90.0);
 		let sink_floor = RESTROOM_SINK_MIN * RESTROOM_SINK_MIN;
+
+		// Stalls dominate, but reserve a kitchen-sized sink share so sinks can grow.
 		let sink_area_reserve = cfg.sample_range_f32_4d(
-			sink_floor,
-			(usable * 0.35).max(sink_floor + 0.5),
+			(usable * 0.12).max(sink_floor),
+			(usable * 0.28).max(sink_floor + 0.5),
 			c.x,
 			c.y,
 			c.z,
 			91.0,
 		);
-		let stalls_seed_depth = cfg.sample_range_f32_4d(2.0, 3.0, c.x, c.y, c.z, 92.0);
+		let lo = (usable * 0.50)
+			.max(stalls_min)
+			.min((usable - sink_area_reserve).max(stalls_min));
+		let hi = (usable * 0.78).max(lo + 0.5);
+		let stalls_area_target = cfg.sample_range_f32_4d(lo, hi, c.x, c.y, c.z, 90.0);
+		// Primary sink grow target (within the door-side strip after packing).
+		let sink_area_target = cfg.sample_range_f32_4d(
+			sink_area_reserve * 0.55,
+			sink_area_reserve.max(sink_floor + 0.5),
+			c.x,
+			c.y,
+			c.z,
+			99.0,
+		);
+		let stalls_seed_depth = cfg.sample_range_f32_4d(2.5, 4.5, c.x, c.y, c.z, 92.0);
 		let stalls_along_t = cfg.sample_range_f32_4d(0.0, 1.0, c.x, c.y, c.z, 93.0);
 		let door_width = cfg.sample_range_f32_4d(
 			RESTROOM_DOOR_WIDTH_MIN,
@@ -89,6 +103,7 @@ impl PublicRestroomParameterized {
 			stalls_seed_depth,
 			stalls_along_t,
 			sink_area_reserve,
+			sink_area_target,
 			door_width,
 			door_along_t,
 			door_height,
@@ -102,6 +117,7 @@ impl PublicRestroomParameterized {
 			stalls_seed_depth: self.stalls_seed_depth,
 			stalls_along_t: self.stalls_along_t,
 			sink_area_reserve: self.sink_area_reserve,
+			sink_area_target: self.sink_area_target,
 			door_width: self.door_width,
 			door_along_t: self.door_along_t,
 			door_height: self.door_height,
