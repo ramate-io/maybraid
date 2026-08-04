@@ -28,7 +28,7 @@ use crate::usage_areas::halls_to_shafts::{HallsToShafts, HallsToShaftsOptions};
 use crate::usage_areas::livable_apartment::LivableApartment;
 use crate::usage_areas::plan_cells::{
 	cell_has_hall_frontage, cells_edge_adjacent, pack_apartments_to_targets, split_oversized_cells,
-	split_toward_min_room, PlanCell,
+	split_toward_min_room, PlanCell, MIN_GROUP_CONNECTIVITY,
 };
 
 const EPS: f32 = 1e-3;
@@ -195,7 +195,13 @@ impl LivableApartments {
 		let max_cell_area = (min_target * 0.55).max(min_room.x * min_room.y * 2.0);
 		cells = split_oversized_cells(&cells, max_cell_area, min_room, &mut next_id);
 
-		let mut groups = pack_apartments_to_targets(&cells, &hall_bands, min_room, &params.targets);
+		let mut groups = pack_apartments_to_targets(
+			&cells,
+			&hall_bands,
+			min_room,
+			&params.targets,
+			MIN_GROUP_CONNECTIVITY,
+		);
 		if groups.is_empty() {
 			groups = cells.iter().map(|c| vec![c.id]).collect();
 		}

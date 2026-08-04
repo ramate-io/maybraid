@@ -37,7 +37,7 @@ pub use livable_apartments::{
 	LivableApartments, LivableApartmentsOptions, LivableApartmentsParameterized,
 };
 pub use plan_cells::{
-	cell_has_hall_frontage, cells_edge_adjacent, group_cells_to_apartments,
-	pack_apartments_to_targets, split_oversized_cells, split_toward_min_room, subtract_aabb2,
-	PlanCell,
+	cell_has_hall_frontage, cells_edge_adjacent, cells_well_connected, group_cells_to_apartments,
+	pack_apartments_to_targets, shared_edge_length, split_oversized_cells, split_toward_min_room,
+	subtract_aabb2, PlanCell, MIN_GROUP_CONNECTIVITY,
 };

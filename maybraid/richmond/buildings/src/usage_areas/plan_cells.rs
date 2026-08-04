@@ -9,6 +9,12 @@ use procedural_common::{aabb2_area, Aabb2dPack};
 
 const EPS: f32 = 1e-3;
 
+/// Default minimum shared-edge length (m) for grouping cells into one apartment.
+///
+/// Shorter contacts are treated as pinches — adjacent for walls, but not for
+/// apartment connectivity / grow / absorb.
+pub const MIN_GROUP_CONNECTIVITY: f32 = 1.5;
+
 /// One axis-aligned plan cell (`Aabb2d` uses \(x → X\), \(y → Z\)).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct PlanCell {
@@ -36,17 +42,40 @@ impl PlanCell {
 
 /// True when two cells share an edge (closed contact with positive overlap length).
 pub fn cells_edge_adjacent(a: &PlanCell, b: &PlanCell, eps: f32) -> bool {
-	edge_adjacent_aabb2(a.bounds, b.bounds, eps)
+	shared_edge_length(a.bounds, b.bounds, eps).is_some_and(|len| len > eps)
+}
+
+/// True when two cells share an edge of at least `min_length` (well-connected).
+pub fn cells_well_connected(a: &PlanCell, b: &PlanCell, min_length: f32, eps: f32) -> bool {
+	let min_length = min_length.max(eps);
+	shared_edge_length(a.bounds, b.bounds, eps).is_some_and(|len| len + eps >= min_length)
+}
+
+/// Length of the shared edge between two AABBs, if they touch with positive overlap.
+pub fn shared_edge_length(a: Aabb2d, b: Aabb2d, eps: f32) -> Option<f32> {
+	let touch_x = (a.max.x - b.min.x).abs() <= eps || (b.max.x - a.min.x).abs() <= eps;
+	if touch_x {
+		let lo = a.min.y.max(b.min.y);
+		let hi = a.max.y.min(b.max.y);
+		let len = hi - lo;
+		if len > eps {
+			return Some(len);
+		}
+	}
+	let touch_y = (a.max.y - b.min.y).abs() <= eps || (b.max.y - a.min.y).abs() <= eps;
+	if touch_y {
+		let lo = a.min.x.max(b.min.x);
+		let hi = a.max.x.min(b.max.x);
+		let len = hi - lo;
+		if len > eps {
+			return Some(len);
+		}
+	}
+	None
 }
 
 fn edge_adjacent_aabb2(a: Aabb2d, b: Aabb2d, eps: f32) -> bool {
-	let x_overlap = a.min.x.min(b.max.x) < a.max.x.max(b.min.x) - eps
-		&& (a.max.x.min(b.max.x) - a.min.x.max(b.min.x)) > eps;
-	let y_overlap = a.min.y.min(b.max.y) < a.max.y.max(b.min.y) - eps
-		&& (a.max.y.min(b.max.y) - a.min.y.max(b.min.y)) > eps;
-	let touch_x = (a.max.x - b.min.x).abs() <= eps || (b.max.x - a.min.x).abs() <= eps;
-	let touch_y = (a.max.y - b.min.y).abs() <= eps || (b.max.y - a.min.y).abs() <= eps;
-	(touch_x && y_overlap) || (touch_y && x_overlap)
+	shared_edge_length(a, b, eps).is_some()
 }
 
 /// True when `cell` shares an edge with any hallway band.
@@ -101,7 +130,8 @@ pub fn split_toward_min_room(
 
 /// Group room cells into edge-connected apartments that touch a hallway.
 ///
-/// Convenience wrapper around [`pack_apartments_to_targets`] with one target.
+/// Convenience wrapper around [`pack_apartments_to_targets`] with one target and
+/// [`MIN_GROUP_CONNECTIVITY`].
 pub fn group_cells_to_apartments(
 	cells: &[PlanCell],
 	halls: &[Aabb2d],
@@ -113,15 +143,18 @@ pub fn group_cells_to_apartments(
 		halls,
 		min_room_size,
 		&[target_apartment_area.max(EPS)],
+		MIN_GROUP_CONNECTIVITY,
 	)
 }
 
 /// Pack hall-connected apartments against a target-area catalog (Les Halles door style).
 ///
 /// Walks `targets` in order. Each entry seeds an unassigned hall-frontage cell and
-/// grows by edge-adjacent cells until the group area reaches the target (within
-/// ~15% undershoot). Targets that cannot seed are skipped. Remaining frontage
-/// cells become force-one groups; orphans absorb into neighboring groups.
+/// grows by **well-connected** neighbors (shared edge ≥ `min_connectivity`) until
+/// the group area reaches the target (within ~15% undershoot). Pinch contacts
+/// shorter than `min_connectivity` do not join groups. Targets that cannot seed
+/// are skipped. Remaining frontage cells become force-one groups; orphans absorb
+/// into neighboring well-connected groups.
 ///
 /// Never emits a landlocked group (no hall frontage).
 pub fn pack_apartments_to_targets(
@@ -129,8 +162,10 @@ pub fn pack_apartments_to_targets(
 	halls: &[Aabb2d],
 	min_room_size: Vec2,
 	targets: &[f32],
+	min_connectivity: f32,
 ) -> Vec<Vec<u32>> {
 	let min_room = Vec2::new(min_room_size.x.max(EPS), min_room_size.y.max(EPS));
+	let min_conn = min_connectivity.max(EPS);
 	let eligible: Vec<PlanCell> = cells
 		.iter()
 		.copied()
@@ -162,7 +197,7 @@ pub fn pack_apartments_to_targets(
 		// ~15% undershoot is acceptable (bay `allowed_error` analog).
 		let accept = target * 0.85;
 		while area + EPS < target {
-			let Some(next) = best_grow_candidate(&eligible, &assigned, &group) else {
+			let Some(next) = best_grow_candidate(&eligible, &assigned, &group, min_conn) else {
 				break;
 			};
 			let next_area = eligible[next].area();
@@ -182,7 +217,7 @@ pub fn pack_apartments_to_targets(
 		if assigned[i] {
 			continue;
 		}
-		if let Some(gi) = find_absorb_group(&eligible, &groups, i) {
+		if let Some(gi) = find_absorb_group(&eligible, &groups, i, min_conn) {
 			groups[gi].push(i);
 			assigned[i] = true;
 		}
@@ -288,6 +323,7 @@ fn best_grow_candidate(
 	cells: &[PlanCell],
 	assigned: &[bool],
 	group: &[usize],
+	min_connectivity: f32,
 ) -> Option<usize> {
 	let mut best: Option<(usize, f32)> = None;
 	for (i, cell) in cells.iter().enumerate() {
@@ -296,7 +332,7 @@ fn best_grow_candidate(
 		}
 		let touches = group
 			.iter()
-			.any(|&gi| cells_edge_adjacent(&cells[gi], cell, EPS));
+			.any(|&gi| cells_well_connected(&cells[gi], cell, min_connectivity, EPS));
 		if !touches {
 			continue;
 		}
@@ -310,12 +346,17 @@ fn best_grow_candidate(
 	best.map(|(i, _)| i)
 }
 
-fn find_absorb_group(cells: &[PlanCell], groups: &[Vec<usize>], orphan: usize) -> Option<usize> {
+fn find_absorb_group(
+	cells: &[PlanCell],
+	groups: &[Vec<usize>],
+	orphan: usize,
+	min_connectivity: f32,
+) -> Option<usize> {
 	let mut best: Option<(usize, f32)> = None;
 	for (gi, group) in groups.iter().enumerate() {
-		let touches = group
-			.iter()
-			.any(|&ci| cells_edge_adjacent(&cells[ci], &cells[orphan], EPS));
+		let touches = group.iter().any(|&ci| {
+			cells_well_connected(&cells[ci], &cells[orphan], min_connectivity, EPS)
+		});
 		if !touches {
 			continue;
 		}
@@ -464,11 +505,56 @@ mod tests {
 			&[hall],
 			Vec2::new(2.0, 2.0),
 			&[30.0, 20.0],
+			MIN_GROUP_CONNECTIVITY,
 		);
 		assert!(
 			groups.iter().any(|g| g.len() >= 2),
 			"expected a multi-cell apartment, got {groups:?}"
 		);
+	}
+
+	#[test]
+	fn pinch_contact_does_not_group() {
+		// Full-side neighbor vs pinch (0.4 m shared) — only the wide contact groups.
+		let rooms = vec![
+			cell(0, Vec2::new(0.0, 0.0), Vec2::new(4.0, 4.0)),
+			cell(1, Vec2::new(4.0, 0.0), Vec2::new(8.0, 4.0)), // 4 m shared
+			cell(2, Vec2::new(4.0, 3.6), Vec2::new(8.0, 7.6)), // 0.4 m pinch with cell 0
+		];
+		let hall = Aabb2d {
+			min: Vec2::new(0.0, -2.0),
+			max: Vec2::new(8.0, 0.0),
+		};
+		assert!(cells_edge_adjacent(&rooms[0], &rooms[2], EPS));
+		assert!(!cells_well_connected(
+			&rooms[0],
+			&rooms[2],
+			MIN_GROUP_CONNECTIVITY,
+			EPS
+		));
+		assert!(cells_well_connected(
+			&rooms[0],
+			&rooms[1],
+			MIN_GROUP_CONNECTIVITY,
+			EPS
+		));
+
+		let groups = pack_apartments_to_targets(
+			&rooms,
+			&[hall],
+			Vec2::new(2.0, 2.0),
+			&[40.0],
+			MIN_GROUP_CONNECTIVITY,
+		);
+		// Cell 0+1 may group; cell 2 must not join via the pinch alone.
+		for g in &groups {
+			if g.contains(&2) {
+				assert!(
+					!g.contains(&0),
+					"pinch must not join cell 2 with cell 0: {groups:?}"
+				);
+			}
+		}
 	}
 
 	#[test]
