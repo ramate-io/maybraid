@@ -170,22 +170,22 @@ fn normalize_bar_shares(left: &mut Option<f32>, right: &mut Option<f32>, fill: f
 
 /// Map unit noise → arm presence.
 ///
-/// Rough mix: I ~40%, T ~22%, L ~25%, Z ~8%, stem ~5%.
+/// Rough mix: I ~60%, T ~15%, L ~15%, Z ~5%, stem ~5%.
 fn sample_arms(
 	shape_u: f32,
 	arm_u: f32,
 	arm_v: f32,
 ) -> (Option<f32>, Option<f32>, Option<f32>, Option<f32>) {
 	let on = Some(1.0);
-	if shape_u < 0.40 {
+	if shape_u < 0.60 {
 		(on, on, on, on)
-	} else if shape_u < 0.62 {
+	} else if shape_u < 0.75 {
 		if arm_u < 0.5 {
 			(on, on, None, None)
 		} else {
 			(None, None, on, on)
 		}
-	} else if shape_u < 0.87 {
+	} else if shape_u < 0.90 {
 		let top = arm_u < 0.5;
 		let left = arm_v < 0.5;
 		match (top, left) {

@@ -2088,14 +2088,14 @@ fn fit_i_apartment_floor_plan(
 fn i_apartment_floor_plan_examples_specs() -> Vec<(Vec3, i32)> {
 	vec![
 		(Vec3::new(44.0, 3.5, 36.0), 3),  // I
-		(Vec3::new(44.0, 3.5, 36.0), 1),  // I, narrower stem
-		(Vec3::new(44.0, 3.5, 36.0), 2),  // L
-		(Vec3::new(44.0, 3.5, 36.0), 14), // T
-		(Vec3::new(44.0, 3.5, 36.0), 6),  // L
-		(Vec3::new(36.0, 3.5, 44.0), 11), // L, tall aspect
-		(Vec3::new(48.0, 3.5, 28.0), 21), // T, wide
+		(Vec3::new(44.0, 3.5, 36.0), 0),  // I
+		(Vec3::new(44.0, 3.5, 36.0), 4),  // I
+		(Vec3::new(44.0, 3.5, 36.0), 9),  // I
+		(Vec3::new(36.0, 3.5, 44.0), 1),  // I, tall aspect
+		(Vec3::new(52.0, 3.5, 32.0), 2),  // I, wide
+		(Vec3::new(44.0, 3.5, 36.0), 18), // T
+		(Vec3::new(44.0, 3.5, 36.0), 19), // L
 		(Vec3::new(40.0, 3.5, 40.0), 28), // L, square
-		(Vec3::new(52.0, 3.5, 32.0), 5),  // I, wide footprint
 	]
 }
 
