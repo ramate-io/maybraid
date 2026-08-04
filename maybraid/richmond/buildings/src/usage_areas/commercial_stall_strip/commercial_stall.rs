@@ -426,7 +426,21 @@ mod tests {
 		);
 		let (stall, regions) =
 			CommercialStall::fit_to_confines(&confines, NoiseParams::default()).unwrap();
-		assert!(regions.within.is_empty());
+		// MiniMart / Parts / PublicRestroom leave office/stalls rooms in `within`;
+		// other catalog kinds (and Lounge) do not.
+		match stall.interior() {
+			CommercialStallInterior::MiniMart(_)
+			| CommercialStallInterior::Parts(_)
+			| CommercialStallInterior::PublicRestroom(_) => {
+				assert!(!regions.within.is_empty());
+			}
+			CommercialStallInterior::Bites(_)
+			| CommercialStallInterior::BitesSitdown(_)
+			| CommercialStallInterior::KnickKnack(_)
+			| CommercialStallInterior::Lounge(_) => {
+				assert!(regions.within.is_empty());
+			}
+		}
 		assert_eq!(stall.plan.walls.len(), 4);
 		assert!(!stall
 			.label_nodes_for_level(LodSceneLevel::High)

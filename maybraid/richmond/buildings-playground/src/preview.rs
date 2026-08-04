@@ -42,7 +42,7 @@ use richmond_buildings::wall_demo::{NoisyRectangularWall, NoisyRectangularWallPa
 use richmond_buildings::wizards_tower::WizardsTower;
 use richmond_buildings::{
 	BedroomFillParams, BitesSitdownStall, BitesStall, CellConstraints, CirculationEntry,
-	CirculationRequestStatus, CommercialStall, CommercialStallStrip, Confines, Fit,
+	CirculationRequestStatus, CommercialStall, CommercialStallStrip, Confines, Fit, FitError,
 	KnickKnackStall, LesHallesFloorPlan, LesHallesFullStorey, LesHallesParameterized, MiniMart,
 	PartsStall, PublicRestroom,
 };
@@ -1551,6 +1551,79 @@ fn passage_aabbs_at(confines: &Confines, offset: Vec3) -> Vec<(Aabb3d, Vec3)> {
 		.collect()
 }
 
+const STALL_GALLERY_GAP: f32 = 2.5;
+
+/// World offset for cell `index` in a row-major gallery of `cols` columns.
+fn gallery_grid_offset(
+	extent_at: impl Fn(usize) -> Vec3,
+	len: usize,
+	index: usize,
+	cols: usize,
+	gap: f32,
+) -> Vec3 {
+	let col = index % cols;
+	let row = index / cols;
+	let mut x = 0.0;
+	for c in 0..col {
+		x += extent_at(row * cols + c).x + gap;
+	}
+	let mut z = 0.0;
+	for r in 0..row {
+		let mut row_depth = 0.0_f32;
+		for c in 0..cols {
+			let idx = r * cols + c;
+			if idx < len {
+				row_depth = row_depth.max(extent_at(idx).z);
+			}
+		}
+		z += row_depth + gap;
+	}
+	Vec3::new(x, 0.0, z)
+}
+
+fn gallery_grid_bounds(
+	extent_at: impl Fn(usize) -> Vec3,
+	len: usize,
+	cols: usize,
+	gap: f32,
+) -> Aabb3d {
+	let mut max = Vec3::ZERO;
+	for i in 0..len {
+		let extent = extent_at(i);
+		let offset = gallery_grid_offset(&extent_at, len, i, cols, gap);
+		max = max.max(offset + extent);
+	}
+	Aabb3d::from_min_max(Vec3::ZERO, max.max(Vec3::splat(1.0)))
+}
+
+/// Fit each `(extent, seed, door_side)` cell; collect successes + passage gizmos.
+fn build_fit_gallery<T>(
+	label: &str,
+	specs: &[(Vec3, i32, BitesDoorSide)],
+	cols: usize,
+	mut fit: impl FnMut(&Confines, NoiseParams) -> Result<T, FitError>,
+) -> (Vec<(Vec3, T)>, Vec<(Aabb3d, Vec3)>) {
+	let gap = STALL_GALLERY_GAP;
+	let mut cells = Vec::new();
+	let mut passages = Vec::new();
+	for (i, (extent, seed, door_side)) in specs.iter().enumerate() {
+		let offset = gallery_grid_offset(|j| specs[j].0, specs.len(), i, cols, gap);
+		let confines = demo_bites_stall_confines(*extent, *door_side);
+		passages.extend(passage_aabbs_at(&confines, offset));
+		let noise = NoiseParams {
+			seed: *seed,
+			..NoiseParams::default()
+		};
+		match fit(&confines, noise) {
+			Ok(stall) => cells.push((offset, stall)),
+			Err(err) => {
+				bevy::log::error!("{label} ({extent:?} seed={seed}) failed: {err}")
+			}
+		}
+	}
+	(cells, passages)
+}
+
 fn bites_examples_specs() -> Vec<(bool, Vec3, i32, BitesDoorSide)> {
 	// (sitdown?, extent, seed, door_side)
 	vec![
@@ -1570,32 +1643,8 @@ fn bites_examples_specs() -> Vec<(bool, Vec3, i32, BitesDoorSide)> {
 }
 
 fn bites_examples_bounds() -> Aabb3d {
-	let gap = 2.5_f32;
 	let specs = bites_examples_specs();
-	let cols = 5usize;
-	let mut max = Vec3::ZERO;
-	for (i, (_, extent, _, _)) in specs.iter().enumerate() {
-		let col = i % cols;
-		let row = i / cols;
-		let mut x = 0.0;
-		for c in 0..col {
-			let idx = row * cols + c;
-			x += specs[idx].1.x + gap;
-		}
-		let mut z = 0.0;
-		for r in 0..row {
-			let mut row_depth = 0.0_f32;
-			for c in 0..cols {
-				let idx = r * cols + c;
-				if idx < specs.len() {
-					row_depth = row_depth.max(specs[idx].1.z);
-				}
-			}
-			z += row_depth + gap;
-		}
-		max = max.max(Vec3::new(x + extent.x, extent.y, z + extent.z));
-	}
-	Aabb3d::from_min_max(Vec3::ZERO, max.max(Vec3::splat(1.0)))
+	gallery_grid_bounds(|i| specs[i].1, specs.len(), 5, STALL_GALLERY_GAP)
 }
 
 fn mini_mart_examples_specs() -> Vec<(Vec3, i32, BitesDoorSide)> {
@@ -1610,32 +1659,8 @@ fn mini_mart_examples_specs() -> Vec<(Vec3, i32, BitesDoorSide)> {
 }
 
 fn mini_mart_examples_bounds() -> Aabb3d {
-	let gap = 2.5_f32;
 	let specs = mini_mart_examples_specs();
-	let cols = 3usize;
-	let mut max = Vec3::ZERO;
-	for (i, (extent, _, _)) in specs.iter().enumerate() {
-		let col = i % cols;
-		let row = i / cols;
-		let mut x = 0.0;
-		for c in 0..col {
-			let idx = row * cols + c;
-			x += specs[idx].0.x + gap;
-		}
-		let mut z = 0.0;
-		for r in 0..row {
-			let mut row_depth = 0.0_f32;
-			for c in 0..cols {
-				let idx = r * cols + c;
-				if idx < specs.len() {
-					row_depth = row_depth.max(specs[idx].0.z);
-				}
-			}
-			z += row_depth + gap;
-		}
-		max = max.max(Vec3::new(x + extent.x, extent.y, z + extent.z));
-	}
-	Aabb3d::from_min_max(Vec3::ZERO, max.max(Vec3::splat(1.0)))
+	gallery_grid_bounds(|i| specs[i].0, specs.len(), 3, STALL_GALLERY_GAP)
 }
 
 fn parts_examples_specs() -> Vec<(Vec3, i32, BitesDoorSide)> {
@@ -1650,74 +1675,24 @@ fn parts_examples_specs() -> Vec<(Vec3, i32, BitesDoorSide)> {
 }
 
 fn parts_examples_bounds() -> Aabb3d {
-	let gap = 2.5_f32;
 	let specs = parts_examples_specs();
-	let cols = 3usize;
-	let mut max = Vec3::ZERO;
-	for (i, (extent, _, _)) in specs.iter().enumerate() {
-		let col = i % cols;
-		let row = i / cols;
-		let mut x = 0.0;
-		for c in 0..col {
-			let idx = row * cols + c;
-			x += specs[idx].0.x + gap;
-		}
-		let mut z = 0.0;
-		for r in 0..row {
-			let mut row_depth = 0.0_f32;
-			for c in 0..cols {
-				let idx = r * cols + c;
-				if idx < specs.len() {
-					row_depth = row_depth.max(specs[idx].0.z);
-				}
-			}
-			z += row_depth + gap;
-		}
-		max = max.max(Vec3::new(x + extent.x, extent.y, z + extent.z));
-	}
-	Aabb3d::from_min_max(Vec3::ZERO, max.max(Vec3::splat(1.0)))
+	gallery_grid_bounds(|i| specs[i].0, specs.len(), 3, STALL_GALLERY_GAP)
 }
 
 fn build_parts_examples() -> (Vec<PartsExampleCell>, Vec<(Aabb3d, Vec3)>) {
-	let gap = 2.5_f32;
-	let specs = parts_examples_specs();
-	let cols = 3usize;
-	let mut cells = Vec::new();
-	let mut passages = Vec::new();
-	for (i, (extent, seed, door_side)) in specs.iter().enumerate() {
-		let col = i % cols;
-		let row = i / cols;
-		let mut x = 0.0;
-		for c in 0..col {
-			let idx = row * cols + c;
-			x += specs[idx].0.x + gap;
-		}
-		let mut z = 0.0;
-		for r in 0..row {
-			let mut row_depth = 0.0_f32;
-			for c in 0..cols {
-				let idx = r * cols + c;
-				if idx < specs.len() {
-					row_depth = row_depth.max(specs[idx].0.z);
-				}
-			}
-			z += row_depth + gap;
-		}
-		let offset = Vec3::new(x, 0.0, z);
-		let confines = demo_bites_stall_confines(*extent, *door_side);
-		passages.extend(passage_aabbs_at(&confines, offset));
-		let noise = NoiseParams {
-			seed: *seed,
-			..NoiseParams::default()
-		};
-		match PartsStall::fit_to_confines(&confines, noise) {
-			Ok((stall, _)) => cells.push(PartsExampleCell { offset, stall }),
-			Err(err) => {
-				bevy::log::error!("parts-examples ({extent:?} seed={seed}) failed: {err}")
-			}
-		}
-	}
-	(cells, passages)
+	let (cells, passages) = build_fit_gallery(
+		"parts-examples",
+		&parts_examples_specs(),
+		3,
+		|confines, noise| PartsStall::fit_to_confines(confines, noise).map(|(s, _)| s),
+	);
+	(
+		cells
+			.into_iter()
+			.map(|(offset, stall)| PartsExampleCell { offset, stall })
+			.collect(),
+		passages,
+	)
 }
 
 fn knick_knack_examples_specs() -> Vec<(Vec3, i32, BitesDoorSide)> {
@@ -1732,74 +1707,24 @@ fn knick_knack_examples_specs() -> Vec<(Vec3, i32, BitesDoorSide)> {
 }
 
 fn knick_knack_examples_bounds() -> Aabb3d {
-	let gap = 2.5_f32;
 	let specs = knick_knack_examples_specs();
-	let cols = 3usize;
-	let mut max = Vec3::ZERO;
-	for (i, (extent, _, _)) in specs.iter().enumerate() {
-		let col = i % cols;
-		let row = i / cols;
-		let mut x = 0.0;
-		for c in 0..col {
-			let idx = row * cols + c;
-			x += specs[idx].0.x + gap;
-		}
-		let mut z = 0.0;
-		for r in 0..row {
-			let mut row_depth = 0.0_f32;
-			for c in 0..cols {
-				let idx = r * cols + c;
-				if idx < specs.len() {
-					row_depth = row_depth.max(specs[idx].0.z);
-				}
-			}
-			z += row_depth + gap;
-		}
-		max = max.max(Vec3::new(x + extent.x, extent.y, z + extent.z));
-	}
-	Aabb3d::from_min_max(Vec3::ZERO, max.max(Vec3::splat(1.0)))
+	gallery_grid_bounds(|i| specs[i].0, specs.len(), 3, STALL_GALLERY_GAP)
 }
 
 fn build_knick_knack_examples() -> (Vec<KnickKnackExampleCell>, Vec<(Aabb3d, Vec3)>) {
-	let gap = 2.5_f32;
-	let specs = knick_knack_examples_specs();
-	let cols = 3usize;
-	let mut cells = Vec::new();
-	let mut passages = Vec::new();
-	for (i, (extent, seed, door_side)) in specs.iter().enumerate() {
-		let col = i % cols;
-		let row = i / cols;
-		let mut x = 0.0;
-		for c in 0..col {
-			let idx = row * cols + c;
-			x += specs[idx].0.x + gap;
-		}
-		let mut z = 0.0;
-		for r in 0..row {
-			let mut row_depth = 0.0_f32;
-			for c in 0..cols {
-				let idx = r * cols + c;
-				if idx < specs.len() {
-					row_depth = row_depth.max(specs[idx].0.z);
-				}
-			}
-			z += row_depth + gap;
-		}
-		let offset = Vec3::new(x, 0.0, z);
-		let confines = demo_bites_stall_confines(*extent, *door_side);
-		passages.extend(passage_aabbs_at(&confines, offset));
-		let noise = NoiseParams {
-			seed: *seed,
-			..NoiseParams::default()
-		};
-		match KnickKnackStall::fit_to_confines(&confines, noise) {
-			Ok((stall, _)) => cells.push(KnickKnackExampleCell { offset, stall }),
-			Err(err) => {
-				bevy::log::error!("knick-knack-examples ({extent:?} seed={seed}) failed: {err}")
-			}
-		}
-	}
-	(cells, passages)
+	let (cells, passages) = build_fit_gallery(
+		"knick-knack-examples",
+		&knick_knack_examples_specs(),
+		3,
+		|confines, noise| KnickKnackStall::fit_to_confines(confines, noise).map(|(s, _)| s),
+	);
+	(
+		cells
+			.into_iter()
+			.map(|(offset, stall)| KnickKnackExampleCell { offset, stall })
+			.collect(),
+		passages,
+	)
 }
 
 fn public_restroom_examples_specs() -> Vec<(Vec3, i32, BitesDoorSide)> {
@@ -1814,144 +1739,50 @@ fn public_restroom_examples_specs() -> Vec<(Vec3, i32, BitesDoorSide)> {
 }
 
 fn public_restroom_examples_bounds() -> Aabb3d {
-	let gap = 2.5_f32;
 	let specs = public_restroom_examples_specs();
-	let cols = 3usize;
-	let mut max = Vec3::ZERO;
-	for (i, (extent, _, _)) in specs.iter().enumerate() {
-		let col = i % cols;
-		let row = i / cols;
-		let mut x = 0.0;
-		for c in 0..col {
-			let idx = row * cols + c;
-			x += specs[idx].0.x + gap;
-		}
-		let mut z = 0.0;
-		for r in 0..row {
-			let mut row_depth = 0.0_f32;
-			for c in 0..cols {
-				let idx = r * cols + c;
-				if idx < specs.len() {
-					row_depth = row_depth.max(specs[idx].0.z);
-				}
-			}
-			z += row_depth + gap;
-		}
-		max = max.max(Vec3::new(x + extent.x, extent.y, z + extent.z));
-	}
-	Aabb3d::from_min_max(Vec3::ZERO, max.max(Vec3::splat(1.0)))
+	gallery_grid_bounds(|i| specs[i].0, specs.len(), 3, STALL_GALLERY_GAP)
 }
 
 fn build_public_restroom_examples() -> (Vec<PublicRestroomExampleCell>, Vec<(Aabb3d, Vec3)>) {
-	let gap = 2.5_f32;
-	let specs = public_restroom_examples_specs();
-	let cols = 3usize;
-	let mut cells = Vec::new();
-	let mut passages = Vec::new();
-	for (i, (extent, seed, door_side)) in specs.iter().enumerate() {
-		let col = i % cols;
-		let row = i / cols;
-		let mut x = 0.0;
-		for c in 0..col {
-			let idx = row * cols + c;
-			x += specs[idx].0.x + gap;
-		}
-		let mut z = 0.0;
-		for r in 0..row {
-			let mut row_depth = 0.0_f32;
-			for c in 0..cols {
-				let idx = r * cols + c;
-				if idx < specs.len() {
-					row_depth = row_depth.max(specs[idx].0.z);
-				}
-			}
-			z += row_depth + gap;
-		}
-		let offset = Vec3::new(x, 0.0, z);
-		let confines = demo_bites_stall_confines(*extent, *door_side);
-		passages.extend(passage_aabbs_at(&confines, offset));
-		let noise = NoiseParams {
-			seed: *seed,
-			..NoiseParams::default()
-		};
-		match PublicRestroom::fit_to_confines(&confines, noise) {
-			Ok((stall, _)) => cells.push(PublicRestroomExampleCell { offset, stall }),
-			Err(err) => {
-				bevy::log::error!("public-restroom-examples ({extent:?} seed={seed}) failed: {err}")
-			}
-		}
-	}
-	(cells, passages)
+	let (cells, passages) = build_fit_gallery(
+		"public-restroom-examples",
+		&public_restroom_examples_specs(),
+		3,
+		|confines, noise| PublicRestroom::fit_to_confines(confines, noise).map(|(s, _)| s),
+	);
+	(
+		cells
+			.into_iter()
+			.map(|(offset, stall)| PublicRestroomExampleCell { offset, stall })
+			.collect(),
+		passages,
+	)
 }
 
 fn build_mini_mart_examples() -> (Vec<MiniMartExampleCell>, Vec<(Aabb3d, Vec3)>) {
-	let gap = 2.5_f32;
-	let specs = mini_mart_examples_specs();
-	let cols = 3usize;
-	let mut cells = Vec::new();
-	let mut passages = Vec::new();
-	for (i, (extent, seed, door_side)) in specs.iter().enumerate() {
-		let col = i % cols;
-		let row = i / cols;
-		let mut x = 0.0;
-		for c in 0..col {
-			let idx = row * cols + c;
-			x += specs[idx].0.x + gap;
-		}
-		let mut z = 0.0;
-		for r in 0..row {
-			let mut row_depth = 0.0_f32;
-			for c in 0..cols {
-				let idx = r * cols + c;
-				if idx < specs.len() {
-					row_depth = row_depth.max(specs[idx].0.z);
-				}
-			}
-			z += row_depth + gap;
-		}
-		let offset = Vec3::new(x, 0.0, z);
-		let confines = demo_bites_stall_confines(*extent, *door_side);
-		passages.extend(passage_aabbs_at(&confines, offset));
-		let noise = NoiseParams {
-			seed: *seed,
-			..NoiseParams::default()
-		};
-		match MiniMart::fit_to_confines(&confines, noise) {
-			Ok((stall, _)) => cells.push(MiniMartExampleCell { offset, stall }),
-			Err(err) => {
-				bevy::log::error!("mini-mart-examples ({extent:?} seed={seed}) failed: {err}")
-			}
-		}
-	}
-	(cells, passages)
+	let (cells, passages) = build_fit_gallery(
+		"mini-mart-examples",
+		&mini_mart_examples_specs(),
+		3,
+		|confines, noise| MiniMart::fit_to_confines(confines, noise).map(|(s, _)| s),
+	);
+	(
+		cells
+			.into_iter()
+			.map(|(offset, stall)| MiniMartExampleCell { offset, stall })
+			.collect(),
+		passages,
+	)
 }
 
 fn build_bites_examples() -> (Vec<BitesExampleCell>, Vec<(Aabb3d, Vec3)>) {
-	let gap = 2.5_f32;
+	let gap = STALL_GALLERY_GAP;
 	let specs = bites_examples_specs();
 	let cols = 5usize;
 	let mut cells = Vec::new();
 	let mut passages = Vec::new();
 	for (i, (sitdown, extent, seed, door_side)) in specs.iter().enumerate() {
-		let col = i % cols;
-		let row = i / cols;
-		let mut x = 0.0;
-		for c in 0..col {
-			let idx = row * cols + c;
-			x += specs[idx].1.x + gap;
-		}
-		let mut z = 0.0;
-		for r in 0..row {
-			let mut row_depth = 0.0_f32;
-			for c in 0..cols {
-				let idx = r * cols + c;
-				if idx < specs.len() {
-					row_depth = row_depth.max(specs[idx].1.z);
-				}
-			}
-			z += row_depth + gap;
-		}
-		let offset = Vec3::new(x, 0.0, z);
+		let offset = gallery_grid_offset(|j| specs[j].1, specs.len(), i, cols, gap);
 		let confines = demo_bites_stall_confines(*extent, *door_side);
 		passages.extend(passage_aabbs_at(&confines, offset));
 		let noise = NoiseParams {

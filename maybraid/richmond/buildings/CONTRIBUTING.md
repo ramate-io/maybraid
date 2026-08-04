@@ -154,6 +154,9 @@ tests/playgrounds can assert tracked doors.
 ## Adding a new commercial interior
 
 1. Add `stall_layout/<name>.rs` packer (clearances, mins, soft-fails).
+   For a wall-seeded private room with a sales-face door + panels, reuse
+   [`stall_layout/enclosed_room.rs`](src/usage_areas/commercial_stall_strip/commercial_stall/stall_layout/enclosed_room.rs)
+   (MiniMart / Parts offices and PublicRestroom stalls already do).
 2. Add `<name>_stall/{parameterized.rs,..}` — `sample` → `Plan::from_parameterized`.
 3. Implement `Fit` + `BuildingComponents` (labels; panels if you author walls).
 4. Register in [`interior.rs`](src/usage_areas/commercial_stall_strip/commercial_stall/interior.rs)
@@ -164,9 +167,56 @@ tests/playgrounds can assert tracked doors.
 
 ---
 
+## Paneling primitives and higher-order types
+
+This crate sits **above** kit IR. Prefer composing existing panel / strip helpers
+rather than inventing new tessellation paths.
+
+**Primitives** (in [`paneling`](src/paneling.rs); type table in [README.md](README.md)):
+
+| Need | Reach for |
+|------|-----------|
+| Oriented single bay | [`Rectangle`](src/paneling/rectangle.rs) / [`ClippedRectangle`](src/paneling/rectangle.rs) |
+| Node-chain wall run | [`RectangularStrip`](src/paneling/rectangular_strip.rs) / [`ClippedRectangularStrip`](src/paneling/clipped_rectangular_strip.rs) |
+| Best-fit from skew corners | [`FittedRectangle`](src/paneling/fitted_rectangle.rs) / strip variants |
+| Closed n-gon tube | [`RectangularNTube`](src/paneling/rectangular_n_tube.rs) |
+| Freeform mesh → panels + crease joints | [`PanelComplex`](src/paneling/panel_complex.rs) |
+
+Shell helpers such as [`bedroom::shell::face_rectangle`](src/bedroom/shell.rs) /
+`face_span_rectangle` build those primitives on AABB faces (office/stall
+enclosures use them via `enclosed_room`).
+
+**Higher-order composition** (this crate’s job):
+
+```text
+Fit / Parameterized → Plan
+        │  structure: walls, floors, authored openings
+        │  residuals: FillableRegions (typed confines for children)
+        ▼
+Full* / usage area
+        │  fill residuals with nested Fit types
+        ▼
+BuildingComponents → PanelNode / LabelNode / … (no GLB paths here)
+```
+
+- **Floor plans / shells** own envelope geometry and opening ids.
+- **Usage areas** pack program into residual confines and may emit further
+  `within` rooms (office, restroom stalls).
+- Present with [`ComponentsOnly`](../building-components/src/lib.rs)`<T>` unless
+  the type needs a custom `LodScene`.
+
+Richmond-wide IR / LOD / `ParentConfines` rules stay in
+[../CONTRIBUTING.md](../CONTRIBUTING.md). Kit taxonomy and asset aliases stay in
+the [buildings README](README.md) and
+[building-components README](../building-components/README.md).
+
+---
+
 ## Related
 
 - [Richmond CONTRIBUTING](../CONTRIBUTING.md) — IR nodes, LOD, `ParentConfines`
-- [buildings README](README.md) — kit taxonomy
+- [buildings README](README.md) — kit taxonomy + paneling type table
 - [`fit.rs`](src/fit.rs) — `Confines` / `FillableRegions` / `SpaceKind`
 - [`openings.rs`](src/openings.rs) — opening labels and scoped ids
+- [`paneling`](src/paneling.rs) — panel primitives used by shells and enclosures
+- [`enclosed_room`](src/usage_areas/commercial_stall_strip/commercial_stall/stall_layout/enclosed_room.rs) — shared office/stall enclosure packer
