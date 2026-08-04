@@ -13,7 +13,7 @@ use crate::fit::{Confines, FitError};
 use crate::openings::{Opening, OpeningId};
 use crate::paneling::{Rectangle, DEFAULT_PANEL_THICKNESS};
 
-use super::clearance::{PassageClearance, StallPlanHost, STALL_PASSAGE_CLEARANCE};
+use crate::usage_areas::clearance::{PassageClearance, PlanHost, PASSAGE_CLEARANCE};
 
 /// Scope prefix for [`OpeningId::scoped`] openings authored by Parts.
 pub const SCOPE: &str = "parts_stall";
@@ -117,7 +117,7 @@ impl PartsRegions {
 		mut office: Aabb2d,
 		seed_face: PlanOpeningFace,
 	) -> Option<Aabb2d> {
-		let need = STALL_PASSAGE_CLEARANCE + 0.05;
+		let need = PASSAGE_CLEARANCE + 0.05;
 		if seed_face.thru_is_x {
 			if seed_face.inward_positive {
 				office.max.x = office.max.x.min(host.max.x - need);
@@ -146,7 +146,7 @@ impl PartsRegions {
 		host: Aabb2d,
 		clearances: &[Aabb2d],
 	) -> Option<(Aabb2d, PlanOpeningFace)> {
-		let mut candidates: Vec<PlanOpeningFace> = StallPlanHost::faces(host).into_iter().collect();
+		let mut candidates: Vec<PlanOpeningFace> = PlanHost::faces(host).into_iter().collect();
 		candidates.sort_by(|a, b| {
 			let blocked = |wall: PlanOpeningFace| {
 				clearances.iter().any(|c| {
@@ -255,7 +255,7 @@ impl PartsRegions {
 				else {
 					continue;
 				};
-				if let Some(clear) = door_face.band(host, door_w, STALL_PASSAGE_CLEARANCE, t) {
+				if let Some(clear) = door_face.band(host, door_w, PASSAGE_CLEARANCE, t) {
 					placed = Some((d0, d1, clear));
 					break;
 				}

@@ -1,6 +1,7 @@
 //! Shared layout helpers for commercial stall interiors.
 //!
-//! - [`clearance`] — shared passage-face clearance bands
+//! Passage clearance lives in [`crate::usage_areas::clearance`] (usage-area-wide).
+//!
 //! - [`facade`] — cardinal [`StallSide`] bands (retail / office / restroom)
 //! - [`bites`] — plan-face bites counters / seating / kitchen
 //! - [`mini_mart`] — MiniMart clearances / office / register / aisles / shelves
@@ -10,7 +11,6 @@
 //! types used across interior modules.
 
 pub mod bites;
-pub mod clearance;
 pub mod facade;
 pub mod mini_mart;
 pub mod parts;
@@ -19,7 +19,6 @@ pub use bites::{
 	BitesCounterChoice, BitesKitchen, BitesPassageSpec, BitesSitdownRegions, EligibleBitesPassage,
 	PackedBitesCounters,
 };
-pub use clearance::{PassageClearance, StallPlanHost};
 pub use facade::{primary_facade, StallSide};
 pub use mini_mart::{MiniMartPacked, MiniMartRegions, MiniMartShelfSpec};
 

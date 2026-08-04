@@ -13,13 +13,13 @@ use crate::fit::{Confines, FitError};
 use crate::openings::{Opening, OpeningId};
 use crate::paneling::{Rectangle, DEFAULT_PANEL_THICKNESS};
 
-use super::clearance::{PassageClearance, StallPlanHost, STALL_PASSAGE_CLEARANCE};
+use crate::usage_areas::clearance::{PassageClearance, PlanHost, PASSAGE_CLEARANCE};
 
 /// Scope prefix for [`OpeningId::scoped`] openings authored by MiniMart.
 pub const SCOPE: &str = "mini_mart";
 
 /// Inward clearance kept free in front of every customer passage (and office door).
-pub const MINI_MART_PASSAGE_CLEARANCE: f32 = STALL_PASSAGE_CLEARANCE;
+pub const MINI_MART_PASSAGE_CLEARANCE: f32 = PASSAGE_CLEARANCE;
 /// Office: longer plan axis must be at least this.
 pub const MINI_MART_OFFICE_LONG_MIN: f32 = 3.0;
 /// Office: shorter plan axis must be at least this.
@@ -205,7 +205,7 @@ impl MiniMartRegions {
 		clearances: &[Aabb2d],
 	) -> Option<(Aabb2d, PlanOpeningFace)> {
 		// Prefer walls without a clearance band glued to them, then longer faces.
-		let mut candidates: Vec<PlanOpeningFace> = StallPlanHost::faces(host).into_iter().collect();
+		let mut candidates: Vec<PlanOpeningFace> = PlanHost::faces(host).into_iter().collect();
 		candidates.sort_by(|a, b| {
 			let blocked = |wall: PlanOpeningFace| {
 				clearances.iter().any(|c| {
@@ -591,7 +591,7 @@ impl MiniMartRegions {
 			let depth = self
 				.shelves
 				.iter()
-				.find(|s| StallPlanHost::same_wall(s.face, face))
+				.find(|s| PlanHost::same_wall(s.face, face))
 				.map(|s| {
 					s.shelf
 						.depth

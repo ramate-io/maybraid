@@ -7,9 +7,9 @@ use richmond_building_components::LabelStyle;
 
 use crate::fit::{Confines, FitError};
 
-use super::super::stall_layout::{
-	MiniMartPacked, MiniMartRegions, MiniMartShelfSpec, PassageClearance, StallPlanHost,
-};
+use crate::usage_areas::clearance::{PassageClearance, PlanHost};
+
+use super::super::stall_layout::{MiniMartPacked, MiniMartRegions, MiniMartShelfSpec};
 use super::super::stall_layout::mini_mart::{
 	MINI_MART_AISLES_MIN, MINI_MART_DOOR_HEADER_MIN, MINI_MART_DOOR_HEIGHT_MAX,
 	MINI_MART_DOOR_HEIGHT_MIN, MINI_MART_DOOR_WIDTH_MAX, MINI_MART_DOOR_WIDTH_MIN,
@@ -86,7 +86,7 @@ impl MiniMartParameterized {
 		let register_seed_depth = cfg.sample_range_f32_4d(2.0, 2.8, c.x, c.y, c.z, 57.0);
 		let style = LabelStyle::from_unit(cfg.sample_range_f32_4d(0.0, 1.0, c.x, c.y, c.z, 58.0));
 
-		let free_faces = StallPlanHost::free_faces(host, &passage_faces);
+		let free_faces = PlanHost::free_faces(host, &passage_faces);
 		let shelves = free_faces
 			.into_iter()
 			.enumerate()

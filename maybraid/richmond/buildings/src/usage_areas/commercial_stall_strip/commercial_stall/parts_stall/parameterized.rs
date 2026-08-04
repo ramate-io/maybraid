@@ -5,7 +5,7 @@ use richmond_building_components::LabelStyle;
 
 use crate::fit::{Confines, FitError};
 
-use super::super::stall_layout::clearance::PassageClearance;
+use crate::usage_areas::clearance::PassageClearance;
 use super::super::stall_layout::parts::{
 	PartsPacked, PartsRegions, PARTS_DOOR_HEADER_MIN, PARTS_DOOR_HEIGHT_MAX, PARTS_DOOR_HEIGHT_MIN,
 	PARTS_DOOR_WIDTH_MAX, PARTS_DOOR_WIDTH_MIN, PARTS_OFFICE_MIN, PARTS_REGION_MIN,

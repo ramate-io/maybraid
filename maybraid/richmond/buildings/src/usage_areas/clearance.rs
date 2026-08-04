@@ -1,4 +1,7 @@
-//! Shared passage-face clearance packing for commercial stall interiors.
+//! Passage-face clearance packing for usage areas (stalls, rooms, …).
+//!
+//! Collect long faces of [`OpeningLabel::Passage`] openings on a plan host and
+//! build inward keep-out bands so furniture / regions stay clear of the entry.
 
 use bevy_math::bounding::Aabb2d;
 use procedural_common::{aabb3_to_plan, PlanAxes, PlanOpeningFace};
@@ -6,13 +9,13 @@ use procedural_common::{aabb3_to_plan, PlanAxes, PlanOpeningFace};
 use crate::fit::Confines;
 use crate::openings::OpeningLabel;
 
-/// Default inward clearance kept free in front of customer passages (m).
-pub const STALL_PASSAGE_CLEARANCE: f32 = 1.0;
+/// Default inward clearance kept free in front of passages (m).
+pub const PASSAGE_CLEARANCE: f32 = 1.0;
 
 /// Host / passage face helpers on the XZ plan.
-pub struct StallPlanHost;
+pub struct PlanHost;
 
-impl StallPlanHost {
+impl PlanHost {
 	/// Four cardinal host faces (XZ plan).
 	pub fn faces(host: Aabb2d) -> [PlanOpeningFace; 4] {
 		[
@@ -90,8 +93,8 @@ impl PassageClearance {
 		out
 	}
 
-	/// [`Self::bands`] at [`STALL_PASSAGE_CLEARANCE`].
+	/// [`Self::bands`] at [`PASSAGE_CLEARANCE`].
 	pub fn bands_std(host: Aabb2d, faces: &[PlanOpeningFace]) -> Vec<Aabb2d> {
-		Self::bands(host, faces, STALL_PASSAGE_CLEARANCE)
+		Self::bands(host, faces, PASSAGE_CLEARANCE)
 	}
 }
