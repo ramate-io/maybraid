@@ -18,7 +18,6 @@ use richmond_building_components::{BuildingComponents, LabelNode, LabelStyle, La
 use crate::fit::{Confines, FillableRegions, Fit, FitError};
 
 use super::label_util::label_filling_aabb;
-use super::stall_layout::BITES_SEATING_FACE_CONTACT;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct BitesSitdownStall {
@@ -91,7 +90,7 @@ mod tests {
 		aabb2_area, aabb3_to_plan, contacts_opening_face, passage_opening_face, PlanAxes,
 	};
 	use super::super::bites_stall::BitesStallParameterized;
-	use super::super::stall_layout::BitesCounterChoice;
+	use super::super::stall_layout::{BitesCounterChoice, BITES_SEATING_FACE_CONTACT};
 
 	fn roomy_south() -> Confines {
 		let mut openings = Openings::new();
