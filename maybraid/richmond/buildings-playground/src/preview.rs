@@ -2,7 +2,7 @@
 
 use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, template_value};
-use bevy_math::bounding::{Aabb2d, Aabb3d};
+use bevy_math::bounding::Aabb3d;
 use bevy_math::{Isometry3d, Vec2};
 use lod::gen::LodScene;
 use lod::LodViewerState;
@@ -15,7 +15,6 @@ use richmond_building_components::partitions::{Partition, PartitionNode};
 use richmond_building_components::roofs::{Pitch, RoofGeometry, RoofNode};
 use richmond_building_components::Placement;
 use richmond_building_components::{pose, BuildingComponents, ComponentsOnly, LabelNode};
-use richmond_buildings::bedroom::Bedroom;
 use richmond_buildings::panel_complex::{PanelComplex, PanelComplexJointPolicy, PanelPoint};
 use richmond_buildings::quad_panel::QuadPanel;
 use richmond_buildings::quad_panel_complex::QuadPanelComplex;
@@ -41,11 +40,12 @@ use richmond_buildings::portals::{MustAssignPortal, Portal};
 use richmond_buildings::wall_demo::{NoisyRectangularWall, NoisyRectangularWallParams};
 use richmond_buildings::wizards_tower::WizardsTower;
 use richmond_buildings::{
-	BedroomFillParams, BitesSitdownStall, BitesStall, CellConstraints, CirculationEntry,
-	CirculationRequestStatus, CommercialStall, CommercialStallStrip, Confines, Fit, FitError,
-	KnickKnackStall, LesHallesFloorPlan, LesHallesFullStorey, LesHallesParameterized, MiniMart,
-	PartsStall, PublicRestroom,
+	BitesSitdownStall, BitesStall, CellConstraints, CommercialStall, CommercialStallStrip,
+	CommonBedroom, Confines, DiningRoom, Fit, FitError, Kitchen, KnickKnackStall,
+	LesHallesFloorPlan, LesHallesFullStorey, LesHallesParameterized, LivingRoom, MiniMart,
+	PartsStall, PublicRestroom, ResidentialBathroom, ResidentialHalfBathroom, SittingRoom, Study,
 };
+use richmond_buildings::fit::FillableRegions;
 #[derive(Component)]
 pub struct PreviewRoot;
 
@@ -329,9 +329,28 @@ pub enum PreviewSubject {
 		noise: f32,
 		spaciousness: f32,
 		occupancy: f32,
-		/// When true, add a required −Z door circulation region.
+		/// When true, punch a south (−Z) passage for entry clearance.
 		door: bool,
 	},
+	/// Side-by-side gallery of CommonBedroom variants (passage boxes as gizmos).
+	BedroomExamples,
+	ResidentialBathroom {
+		extent: Vec3,
+		seed: i32,
+		door: bool,
+	},
+	ResidentialHalfBathroom {
+		extent: Vec3,
+		seed: i32,
+		door: bool,
+	},
+	/// Side-by-side gallery of full + half residential bathrooms (passage boxes as gizmos).
+	ResidentialBathroomExamples,
+	KitchenExamples,
+	DiningRoomExamples,
+	LivingRoomExamples,
+	SittingRoomExamples,
+	StudyExamples,
 	CommercialStall {
 		extent: Vec3,
 		seed: i32,
@@ -770,6 +789,27 @@ impl PreviewConfig {
 					extent.x, extent.y, extent.z
 				)
 			}
+			PreviewSubject::BedroomExamples => "preview: bedroom-examples (gallery)".into(),
+			PreviewSubject::ResidentialBathroom { extent, seed, door } => {
+				format!(
+					"preview: residential-bathroom (extent={:.2},{:.2},{:.2} seed={seed} door={door})",
+					extent.x, extent.y, extent.z
+				)
+			}
+			PreviewSubject::ResidentialHalfBathroom { extent, seed, door } => {
+				format!(
+					"preview: residential-half-bathroom (extent={:.2},{:.2},{:.2} seed={seed} door={door})",
+					extent.x, extent.y, extent.z
+				)
+			}
+			PreviewSubject::ResidentialBathroomExamples => {
+				"preview: residential-bathroom-examples (gallery)".into()
+			}
+			PreviewSubject::KitchenExamples => "preview: kitchen-examples (gallery)".into(),
+			PreviewSubject::DiningRoomExamples => "preview: dining-room-examples (gallery)".into(),
+			PreviewSubject::LivingRoomExamples => "preview: living-room-examples (gallery)".into(),
+			PreviewSubject::SittingRoomExamples => "preview: sitting-room-examples (gallery)".into(),
+			PreviewSubject::StudyExamples => "preview: study-examples (gallery)".into(),
 			PreviewSubject::CommercialStall { extent, seed } => {
 				format!(
 					"preview: commercial-stall (extent={:.2},{:.2},{:.2} seed={seed})",
@@ -891,6 +931,17 @@ impl PreviewConfig {
 				Aabb3d::from_min_max(Vec3::new(-4.0, 0.0, -4.0), Vec3::new(4.0, 3.0, 4.0))
 			}
 			PreviewSubject::Bedroom { extent, .. } => Aabb3d::from_min_max(Vec3::ZERO, *extent),
+			PreviewSubject::BedroomExamples => bedroom_examples_bounds(),
+			PreviewSubject::ResidentialBathroom { extent, .. }
+			| PreviewSubject::ResidentialHalfBathroom { extent, .. } => {
+				Aabb3d::from_min_max(Vec3::ZERO, *extent)
+			}
+			PreviewSubject::ResidentialBathroomExamples => residential_bathroom_examples_bounds(),
+			PreviewSubject::KitchenExamples => kitchen_examples_bounds(),
+			PreviewSubject::DiningRoomExamples => dining_room_examples_bounds(),
+			PreviewSubject::LivingRoomExamples => living_room_examples_bounds(),
+			PreviewSubject::SittingRoomExamples => sitting_room_examples_bounds(),
+			PreviewSubject::StudyExamples => study_examples_bounds(),
 			PreviewSubject::CommercialStall { extent, .. }
 			| PreviewSubject::CommercialStallStrip { extent, .. }
 			| PreviewSubject::BitesStall { extent, .. }
@@ -1110,7 +1161,7 @@ pub struct CachedPreview {
 	key: Option<(PreviewSubject, Transform)>,
 	wizards_tower: Option<WizardsTower>,
 	stacked_rings: Option<StackedRings>,
-	bedroom: Option<Bedroom>,
+	bedroom: Option<CommonBedroom>,
 	noisy_wall: Option<NoisyRectangularWall>,
 	les_halles_floor_plan: Option<LesHallesFloorPlan>,
 	les_halles_full_storey: Option<LesHallesFullStorey>,
@@ -1129,6 +1180,42 @@ pub struct CachedPreview {
 	parts_examples: Vec<PartsExampleCell>,
 	knick_knack_examples: Vec<KnickKnackExampleCell>,
 	public_restroom_examples: Vec<PublicRestroomExampleCell>,
+	bedroom_examples: Vec<BedroomExampleCell>,
+	residential_bathroom: Option<ResidentialBathroom>,
+	residential_half_bathroom: Option<ResidentialHalfBathroom>,
+	residential_bathroom_examples: Vec<ResidentialBathroomExampleCell>,
+	kitchen_examples: Vec<GalleryExampleCell<Kitchen>>,
+	dining_room_examples: Vec<GalleryExampleCell<DiningRoom>>,
+	living_room_examples: Vec<GalleryExampleCell<LivingRoom>>,
+	sitting_room_examples: Vec<GalleryExampleCell<SittingRoom>>,
+	study_examples: Vec<GalleryExampleCell<Study>>,
+}
+
+/// One cell in [`PreviewSubject::BedroomExamples`].
+#[derive(Clone)]
+struct BedroomExampleCell {
+	offset: Vec3,
+	room: CommonBedroom,
+}
+
+/// One cell in [`PreviewSubject::ResidentialBathroomExamples`].
+#[derive(Clone)]
+enum ResidentialBathroomExampleCell {
+	Full {
+		offset: Vec3,
+		room: ResidentialBathroom,
+	},
+	Half {
+		offset: Vec3,
+		room: ResidentialHalfBathroom,
+	},
+}
+
+/// One cell in livable-quarters example galleries.
+#[derive(Clone)]
+struct GalleryExampleCell<T> {
+	offset: Vec3,
+	room: T,
 }
 
 /// One cell in [`PreviewSubject::PartsExamples`].
@@ -1199,6 +1286,15 @@ impl CachedPreview {
 		self.parts_examples.clear();
 		self.knick_knack_examples.clear();
 		self.public_restroom_examples.clear();
+		self.bedroom_examples.clear();
+		self.residential_bathroom = None;
+		self.residential_half_bathroom = None;
+		self.residential_bathroom_examples.clear();
+		self.kitchen_examples.clear();
+		self.dining_room_examples.clear();
+		self.living_room_examples.clear();
+		self.sitting_room_examples.clear();
+		self.study_examples.clear();
 		match &config.subject {
 			PreviewSubject::WizardsTower { noise } => {
 				let footprint = CellConstraints::cell_owned(Aabb3d::from_min_max(
@@ -1211,19 +1307,82 @@ impl CachedPreview {
 				self.stacked_rings = Some(StackedRings::new(*floor_count, *floor_height, *radius));
 			}
 			PreviewSubject::Bedroom { extent, noise, spaciousness, occupancy, door } => {
-				let mut room =
-					CellConstraints::cell_owned(Aabb3d::from_min_max(Vec3::ZERO, *extent));
-				if *door {
-					room.circulation.front = Some(CirculationEntry(vec![(
-						Aabb2d { min: Vec2::new(0.35, 0.0), max: Vec2::new(0.65, 0.9) },
-						vec![CirculationRequestStatus::Required],
-					)]));
+				let confines = demo_common_bedroom_confines(*extent, *door);
+				self.bites_passages = passage_aabbs_at(&confines, Vec3::ZERO);
+				let seed = NoiseParams {
+					seed: (*noise * 1_000_000.0) as i32,
+					..NoiseParams::default()
+				};
+				match CommonBedroom::fit_with_fill(
+					&confines,
+					seed,
+					richmond_buildings::CommonBedroomParameterized::with_fill(
+						*spaciousness,
+						*occupancy,
+					),
+				) {
+					Ok((room, _)) => self.bedroom = Some(room),
+					Err(err) => bevy::log::error!("common-bedroom fit failed: {err}"),
 				}
-				self.bedroom = Some(Bedroom::with_fill(
-					room,
-					*noise,
-					BedroomFillParams { spaciousness: *spaciousness, occupancy: *occupancy },
-				));
+			}
+			PreviewSubject::BedroomExamples => {
+				let (cells, passages) = build_bedroom_examples();
+				self.bedroom_examples = cells;
+				self.bites_passages = passages;
+			}
+			PreviewSubject::ResidentialBathroom { extent, seed, door } => {
+				let confines = demo_common_bedroom_confines(*extent, *door);
+				self.bites_passages = passage_aabbs_at(&confines, Vec3::ZERO);
+				let noise = NoiseParams {
+					seed: *seed,
+					..NoiseParams::default()
+				};
+				match ResidentialBathroom::fit_to_confines(&confines, noise) {
+					Ok((room, _)) => self.residential_bathroom = Some(room),
+					Err(err) => bevy::log::error!("residential-bathroom fit failed: {err}"),
+				}
+			}
+			PreviewSubject::ResidentialHalfBathroom { extent, seed, door } => {
+				let confines = demo_common_bedroom_confines(*extent, *door);
+				self.bites_passages = passage_aabbs_at(&confines, Vec3::ZERO);
+				let noise = NoiseParams {
+					seed: *seed,
+					..NoiseParams::default()
+				};
+				match ResidentialHalfBathroom::fit_to_confines(&confines, noise) {
+					Ok((room, _)) => self.residential_half_bathroom = Some(room),
+					Err(err) => bevy::log::error!("residential-half-bathroom fit failed: {err}"),
+				}
+			}
+			PreviewSubject::ResidentialBathroomExamples => {
+				let (cells, passages) = build_residential_bathroom_examples();
+				self.residential_bathroom_examples = cells;
+				self.bites_passages = passages;
+			}
+			PreviewSubject::KitchenExamples => {
+				let (cells, passages) = build_kitchen_examples();
+				self.kitchen_examples = cells;
+				self.bites_passages = passages;
+			}
+			PreviewSubject::DiningRoomExamples => {
+				let (cells, passages) = build_dining_room_examples();
+				self.dining_room_examples = cells;
+				self.bites_passages = passages;
+			}
+			PreviewSubject::LivingRoomExamples => {
+				let (cells, passages) = build_living_room_examples();
+				self.living_room_examples = cells;
+				self.bites_passages = passages;
+			}
+			PreviewSubject::SittingRoomExamples => {
+				let (cells, passages) = build_sitting_room_examples();
+				self.sitting_room_examples = cells;
+				self.bites_passages = passages;
+			}
+			PreviewSubject::StudyExamples => {
+				let (cells, passages) = build_study_examples();
+				self.study_examples = cells;
+				self.bites_passages = passages;
 			}
 			PreviewSubject::NoisyRectangularWall {
 				distance,
@@ -1451,6 +1610,66 @@ impl CachedPreview {
 		if let Some(stall) = self.public_restroom.as_ref() {
 			return stall.label_nodes_for_level(LodSceneLevel::High).flatten();
 		}
+		if let Some(room) = self.bedroom.as_ref() {
+			return room.label_nodes_for_level(LodSceneLevel::High).flatten();
+		}
+		if let Some(room) = self.residential_bathroom.as_ref() {
+			return room.label_nodes_for_level(LodSceneLevel::High).flatten();
+		}
+		if let Some(room) = self.residential_half_bathroom.as_ref() {
+			return room.label_nodes_for_level(LodSceneLevel::High).flatten();
+		}
+		if !self.bedroom_examples.is_empty() {
+			let mut out = Vec::new();
+			for cell in &self.bedroom_examples {
+				out.extend(
+					cell.room
+						.label_nodes_for_level(LodSceneLevel::High)
+						.flatten()
+						.into_iter()
+						.map(|mut label| {
+							label.placement.translation += cell.offset;
+							label
+						}),
+				);
+			}
+			return out;
+		}
+		if !self.residential_bathroom_examples.is_empty() {
+			let mut out = Vec::new();
+			for cell in &self.residential_bathroom_examples {
+				let (offset, labels) = match cell {
+					ResidentialBathroomExampleCell::Full { offset, room } => (
+						*offset,
+						room.label_nodes_for_level(LodSceneLevel::High).flatten(),
+					),
+					ResidentialBathroomExampleCell::Half { offset, room } => (
+						*offset,
+						room.label_nodes_for_level(LodSceneLevel::High).flatten(),
+					),
+				};
+				out.extend(labels.into_iter().map(|mut label| {
+					label.placement.translation += offset;
+					label
+				}));
+			}
+			return out;
+		}
+		if let Some(labels) = gallery_example_labels(&self.kitchen_examples) {
+			return labels;
+		}
+		if let Some(labels) = gallery_example_labels(&self.dining_room_examples) {
+			return labels;
+		}
+		if let Some(labels) = gallery_example_labels(&self.living_room_examples) {
+			return labels;
+		}
+		if let Some(labels) = gallery_example_labels(&self.sitting_room_examples) {
+			return labels;
+		}
+		if let Some(labels) = gallery_example_labels(&self.study_examples) {
+			return labels;
+		}
 		if !self.bites_examples.is_empty() {
 			let mut out = Vec::new();
 			for cell in &self.bites_examples {
@@ -1540,6 +1759,27 @@ impl CachedPreview {
 		}
 		Vec::new()
 	}
+}
+
+fn gallery_example_labels<T: BuildingComponents>(cells: &[GalleryExampleCell<T>]) -> Option<Vec<LabelNode>> {
+	use lod::gen::LodSceneLevel;
+	if cells.is_empty() {
+		return None;
+	}
+	let mut out = Vec::new();
+	for cell in cells {
+		out.extend(
+			cell.room
+				.label_nodes_for_level(LodSceneLevel::High)
+				.flatten()
+				.into_iter()
+				.map(|mut label| {
+					label.placement.translation += cell.offset;
+					label
+				}),
+		);
+	}
+	Some(out)
 }
 
 fn passage_aabbs_at(confines: &Confines, offset: Vec3) -> Vec<(Aabb3d, Vec3)> {
@@ -1695,6 +1935,299 @@ fn build_parts_examples() -> (Vec<PartsExampleCell>, Vec<(Aabb3d, Vec3)>) {
 	)
 }
 
+/// `(extent, seed, spaciousness, occupancy, door, bed_against_wall)`.
+fn bedroom_examples_specs() -> Vec<(Vec3, i32, f32, f32, bool, bool)> {
+	vec![
+		// Row 0 — compact cells, roomier default spaciousness
+		(Vec3::new(6.5, 3.0, 6.5), 7, 1.2, 0.55, true, true),
+		(Vec3::new(7.0, 3.0, 6.0), 11, 1.25, 0.65, true, true),
+		(Vec3::new(6.0, 3.0, 7.0), 21, 1.35, 0.5, true, false),
+		// Row 1 — mid-size
+		(Vec3::new(8.0, 3.0, 8.0), 42, 1.25, 0.55, true, true),
+		(Vec3::new(9.0, 3.2, 7.0), 55, 1.3, 0.5, true, false),
+		(Vec3::new(7.5, 3.0, 9.0), 99, 1.2, 0.6, false, true),
+		// Row 2 — large bedrooms (how fill scales up)
+		(Vec3::new(11.0, 3.2, 10.0), 3, 1.35, 0.5, true, true),
+		(Vec3::new(12.0, 3.2, 12.0), 17, 1.4, 0.45, true, true),
+		(Vec3::new(14.0, 3.2, 11.0), 33, 1.45, 0.55, true, false),
+	]
+}
+
+fn bedroom_examples_bounds() -> Aabb3d {
+	let specs = bedroom_examples_specs();
+	gallery_grid_bounds(|i| specs[i].0, specs.len(), 3, STALL_GALLERY_GAP)
+}
+
+fn build_bedroom_examples() -> (Vec<BedroomExampleCell>, Vec<(Aabb3d, Vec3)>) {
+	let specs = bedroom_examples_specs();
+	let cols = 3;
+	let gap = STALL_GALLERY_GAP;
+	let mut cells = Vec::new();
+	let mut passages = Vec::new();
+	for (i, (extent, seed, spaciousness, occupancy, door, bed_against_wall)) in
+		specs.iter().enumerate()
+	{
+		let offset = gallery_grid_offset(|j| specs[j].0, specs.len(), i, cols, gap);
+		let confines = demo_common_bedroom_confines(*extent, *door);
+		passages.extend(passage_aabbs_at(&confines, offset));
+		let noise = NoiseParams {
+			seed: *seed,
+			..NoiseParams::default()
+		};
+		let mut params =
+			richmond_buildings::CommonBedroomParameterized::with_fill(*spaciousness, *occupancy);
+		params.bed_against_wall = *bed_against_wall;
+		match CommonBedroom::fit_with_fill(&confines, noise, params) {
+			Ok((room, _)) => cells.push(BedroomExampleCell { offset, room }),
+			Err(err) => bevy::log::error!(
+				"bedroom-examples ({extent:?} seed={seed}) failed: {err}"
+			),
+		}
+	}
+	(cells, passages)
+}
+
+type LivableQuartersExampleSpec = (Vec3, i32, f32, f32, bool);
+
+fn build_livable_quarters_examples<T, P>(
+	label: &str,
+	specs: &[LivableQuartersExampleSpec],
+	cols: usize,
+	params: impl Fn(f32, f32) -> P,
+	fit: impl Fn(&Confines, NoiseParams, P) -> Result<(T, FillableRegions), FitError>,
+) -> (Vec<GalleryExampleCell<T>>, Vec<(Aabb3d, Vec3)>) {
+	let gap = STALL_GALLERY_GAP;
+	let mut cells = Vec::new();
+	let mut passages = Vec::new();
+	for (i, (extent, seed, spaciousness, occupancy, door)) in specs.iter().enumerate() {
+		let offset = gallery_grid_offset(|j| specs[j].0, specs.len(), i, cols, gap);
+		let confines = demo_common_bedroom_confines(*extent, *door);
+		passages.extend(passage_aabbs_at(&confines, offset));
+		let noise = NoiseParams {
+			seed: *seed,
+			..NoiseParams::default()
+		};
+		match fit(&confines, noise, params(*spaciousness, *occupancy)) {
+			Ok((room, _)) => cells.push(GalleryExampleCell { offset, room }),
+			Err(err) => bevy::log::error!("{label} ({extent:?} seed={seed}) failed: {err}"),
+		}
+	}
+	(cells, passages)
+}
+
+fn livable_quarters_examples_bounds(specs: &[LivableQuartersExampleSpec], cols: usize) -> Aabb3d {
+	gallery_grid_bounds(|i| specs[i].0, specs.len(), cols, STALL_GALLERY_GAP)
+}
+
+fn kitchen_examples_specs() -> Vec<LivableQuartersExampleSpec> {
+	vec![
+		(Vec3::new(4.0, 2.8, 3.0), 7, 1.1, 0.4, true),
+		(Vec3::new(5.0, 2.8, 3.5), 11, 1.2, 0.35, true),
+		(Vec3::new(4.5, 2.8, 4.0), 21, 1.25, 0.45, true),
+		(Vec3::new(6.0, 3.0, 4.0), 42, 1.3, 0.38, true),
+		(Vec3::new(5.5, 3.0, 5.0), 55, 1.35, 0.42, true),
+		(Vec3::new(7.0, 3.0, 5.5), 99, 1.4, 0.35, true),
+	]
+}
+
+fn kitchen_examples_bounds() -> Aabb3d {
+	livable_quarters_examples_bounds(&kitchen_examples_specs(), 3)
+}
+
+fn build_kitchen_examples() -> (Vec<GalleryExampleCell<Kitchen>>, Vec<(Aabb3d, Vec3)>) {
+	use richmond_buildings::KitchenCounterLayout;
+	// Force a mix of counter subtypes so galleries show galley / L / peninsula.
+	let layouts = [
+		KitchenCounterLayout::Galley,
+		KitchenCounterLayout::LShape,
+		KitchenCounterLayout::Peninsula,
+		KitchenCounterLayout::LShape,
+		KitchenCounterLayout::Peninsula,
+		KitchenCounterLayout::Galley,
+	];
+	let specs = kitchen_examples_specs();
+	let gap = STALL_GALLERY_GAP;
+	let mut cells = Vec::new();
+	let mut passages = Vec::new();
+	for (i, (extent, seed, spaciousness, occupancy, door)) in specs.iter().enumerate() {
+		let offset = gallery_grid_offset(|j| specs[j].0, specs.len(), i, 3, gap);
+		let confines = demo_common_bedroom_confines(*extent, *door);
+		passages.extend(passage_aabbs_at(&confines, offset));
+		let noise = NoiseParams {
+			seed: *seed,
+			..NoiseParams::default()
+		};
+		let params = richmond_buildings::KitchenParameterized::with_fill(*spaciousness, *occupancy)
+			.with_layout(layouts[i % layouts.len()]);
+		match Kitchen::fit_with_fill(&confines, noise, params) {
+			Ok((room, _)) => cells.push(GalleryExampleCell { offset, room }),
+			Err(err) => bevy::log::error!(
+				"kitchen-examples ({extent:?} seed={seed}) failed: {err}"
+			),
+		}
+	}
+	(cells, passages)
+}
+
+fn dining_room_examples_specs() -> Vec<LivableQuartersExampleSpec> {
+	vec![
+		// Compact / near-square
+		(Vec3::new(4.0, 2.8, 3.0), 7, 1.15, 0.45, true),
+		(Vec3::new(5.0, 2.8, 3.5), 11, 1.2, 0.4, true),
+		(Vec3::new(4.5, 2.8, 4.5), 21, 1.25, 0.5, true),
+		// Longer / thinner halls
+		(Vec3::new(8.0, 3.0, 3.2), 42, 1.2, 0.42, true),
+		(Vec3::new(9.5, 3.0, 3.0), 55, 1.25, 0.4, true),
+		(Vec3::new(11.0, 3.0, 3.4), 99, 1.3, 0.38, true),
+	]
+}
+
+fn dining_room_examples_bounds() -> Aabb3d {
+	livable_quarters_examples_bounds(&dining_room_examples_specs(), 3)
+}
+
+fn build_dining_room_examples() -> (Vec<GalleryExampleCell<DiningRoom>>, Vec<(Aabb3d, Vec3)>) {
+	build_livable_quarters_examples(
+		"dining-room-examples",
+		&dining_room_examples_specs(),
+		3,
+		richmond_buildings::DiningRoomParameterized::with_fill,
+		DiningRoom::fit_with_fill,
+	)
+}
+
+fn living_room_examples_specs() -> Vec<LivableQuartersExampleSpec> {
+	vec![
+		(Vec3::new(5.0, 2.8, 4.0), 7, 1.1, 0.35, true),
+		(Vec3::new(6.0, 2.8, 4.5), 11, 1.2, 0.4, true),
+		(Vec3::new(5.5, 2.8, 5.0), 21, 1.25, 0.38, true),
+		(Vec3::new(7.0, 3.0, 5.0), 42, 1.3, 0.42, true),
+		(Vec3::new(8.0, 3.0, 6.0), 55, 1.35, 0.35, true),
+		(Vec3::new(9.0, 3.0, 7.0), 99, 1.4, 0.4, true),
+	]
+}
+
+fn living_room_examples_bounds() -> Aabb3d {
+	livable_quarters_examples_bounds(&living_room_examples_specs(), 3)
+}
+
+fn build_living_room_examples() -> (Vec<GalleryExampleCell<LivingRoom>>, Vec<(Aabb3d, Vec3)>) {
+	build_livable_quarters_examples(
+		"living-room-examples",
+		&living_room_examples_specs(),
+		3,
+		richmond_buildings::LivingRoomParameterized::with_fill,
+		LivingRoom::fit_with_fill,
+	)
+}
+
+fn sitting_room_examples_specs() -> Vec<LivableQuartersExampleSpec> {
+	vec![
+		(Vec3::new(4.0, 2.8, 3.5), 7, 1.1, 0.4, true),
+		(Vec3::new(5.0, 2.8, 4.0), 11, 1.2, 0.38, true),
+		(Vec3::new(4.5, 2.8, 4.5), 21, 1.25, 0.42, true),
+		(Vec3::new(6.0, 3.0, 4.5), 42, 1.3, 0.35, true),
+		(Vec3::new(5.5, 3.0, 5.0), 55, 1.35, 0.4, true),
+		(Vec3::new(7.0, 3.0, 5.5), 99, 1.4, 0.38, true),
+	]
+}
+
+fn sitting_room_examples_bounds() -> Aabb3d {
+	livable_quarters_examples_bounds(&sitting_room_examples_specs(), 3)
+}
+
+fn build_sitting_room_examples() -> (Vec<GalleryExampleCell<SittingRoom>>, Vec<(Aabb3d, Vec3)>) {
+	build_livable_quarters_examples(
+		"sitting-room-examples",
+		&sitting_room_examples_specs(),
+		3,
+		richmond_buildings::SittingRoomParameterized::with_fill,
+		SittingRoom::fit_with_fill,
+	)
+}
+
+fn study_examples_specs() -> Vec<LivableQuartersExampleSpec> {
+	vec![
+		(Vec3::new(4.0, 2.8, 3.0), 7, 1.1, 0.42, true),
+		(Vec3::new(4.5, 2.8, 3.5), 11, 1.2, 0.38, true),
+		(Vec3::new(5.0, 2.8, 4.0), 21, 1.25, 0.45, true),
+		(Vec3::new(5.5, 3.0, 4.5), 42, 1.3, 0.4, true),
+		(Vec3::new(6.0, 3.0, 5.0), 55, 1.35, 0.35, true),
+		(Vec3::new(7.0, 3.0, 5.5), 99, 1.4, 0.42, true),
+	]
+}
+
+fn study_examples_bounds() -> Aabb3d {
+	livable_quarters_examples_bounds(&study_examples_specs(), 3)
+}
+
+fn build_study_examples() -> (Vec<GalleryExampleCell<Study>>, Vec<(Aabb3d, Vec3)>) {
+	build_livable_quarters_examples(
+		"study-examples",
+		&study_examples_specs(),
+		3,
+		richmond_buildings::StudyParameterized::with_fill,
+		Study::fit_with_fill,
+	)
+}
+
+/// `(half?, extent, seed, door)`.
+fn residential_bathroom_examples_specs() -> Vec<(bool, Vec3, i32, bool)> {
+	vec![
+		// Row 0 — full bathrooms
+		(false, Vec3::new(3.0, 2.8, 2.2), 3, true),
+		(false, Vec3::new(3.5, 2.8, 2.5), 11, true),
+		(false, Vec3::new(3.2, 2.8, 2.8), 21, true),
+		// Row 1 — half bathrooms
+		(true, Vec3::new(1.8, 2.8, 1.5), 7, true),
+		(true, Vec3::new(2.0, 2.8, 1.6), 42, true),
+		(true, Vec3::new(1.9, 2.8, 1.7), 55, true),
+	]
+}
+
+fn residential_bathroom_examples_bounds() -> Aabb3d {
+	let specs = residential_bathroom_examples_specs();
+	gallery_grid_bounds(|i| specs[i].1, specs.len(), 3, STALL_GALLERY_GAP)
+}
+
+fn build_residential_bathroom_examples(
+) -> (Vec<ResidentialBathroomExampleCell>, Vec<(Aabb3d, Vec3)>) {
+	let gap = STALL_GALLERY_GAP;
+	let specs = residential_bathroom_examples_specs();
+	let cols = 3usize;
+	let mut cells = Vec::new();
+	let mut passages = Vec::new();
+	for (i, (half, extent, seed, door)) in specs.iter().enumerate() {
+		let offset = gallery_grid_offset(|j| specs[j].1, specs.len(), i, cols, gap);
+		let confines = demo_common_bedroom_confines(*extent, *door);
+		passages.extend(passage_aabbs_at(&confines, offset));
+		let noise = NoiseParams {
+			seed: *seed,
+			..NoiseParams::default()
+		};
+		if *half {
+			match ResidentialHalfBathroom::fit_to_confines(&confines, noise) {
+				Ok((room, _)) => {
+					cells.push(ResidentialBathroomExampleCell::Half { offset, room })
+				}
+				Err(err) => bevy::log::error!(
+					"residential-bathroom-examples half ({extent:?} seed={seed}) failed: {err}"
+				),
+			}
+		} else {
+			match ResidentialBathroom::fit_to_confines(&confines, noise) {
+				Ok((room, _)) => {
+					cells.push(ResidentialBathroomExampleCell::Full { offset, room })
+				}
+				Err(err) => bevy::log::error!(
+					"residential-bathroom-examples full ({extent:?} seed={seed}) failed: {err}"
+				),
+			}
+		}
+	}
+	(cells, passages)
+}
+
 fn knick_knack_examples_specs() -> Vec<(Vec3, i32, BitesDoorSide)> {
 	vec![
 		(Vec3::new(10.0, 3.2, 8.0), 3, BitesDoorSide::South),
@@ -1813,6 +2346,29 @@ fn les_halles_confines_bounds(extent: Vec3) -> Aabb3d {
 	let hz = extent.z.max(1e-4) * 0.5;
 	let h = extent.y.max(1e-4);
 	Aabb3d::from_min_max(Vec3::new(-hx, 0.0, -hz), Vec3::new(hx, h, hz))
+}
+
+/// Demo common bedroom confines; optional south (−Z) passage for entry clearance.
+fn demo_common_bedroom_confines(extent: Vec3, door: bool) -> Confines {
+	let extent = extent.max(Vec3::splat(1e-4));
+	let mut openings = Openings::new();
+	if door {
+		let door_w = (extent.x * 0.3).clamp(0.8, 1.2);
+		let cx = extent.x * 0.5;
+		let door_h = (extent.y * 0.72).clamp(2.0, extent.y.max(2.0));
+		openings.insert(
+			OpeningId::new("demo_bedroom_door"),
+			Opening::passage(Aabb3d::from_min_max(
+				Vec3::new(cx - door_w * 0.5, 0.0, -0.2),
+				Vec3::new(cx + door_w * 0.5, door_h, 0.2),
+			)),
+		);
+	}
+	Confines::new(
+		Aabb3d::from_min_max(Vec3::ZERO, extent),
+		0.0,
+		openings,
+	)
 }
 
 /// Demo bites stall with long Passage(s) on the chosen façade.
@@ -2972,6 +3528,84 @@ pub fn present_preview_lod(
 				);
 			}
 		}
+		PreviewSubject::BedroomExamples => {
+			for cell in &cache.bedroom_examples {
+				let tf = transform * Transform::from_translation(cell.offset);
+				spawn_preview(
+					&mut commands,
+					tf,
+					ComponentsOnly(&cell.room).scene_with_lod(&lod_ref),
+				);
+			}
+		}
+		PreviewSubject::ResidentialBathroom { .. } => {
+			if let Some(room) = cache.residential_bathroom.as_ref() {
+				spawn_preview(
+					&mut commands,
+					transform,
+					ComponentsOnly(room).scene_with_lod(&lod_ref),
+				);
+			}
+		}
+		PreviewSubject::ResidentialHalfBathroom { .. } => {
+			if let Some(room) = cache.residential_half_bathroom.as_ref() {
+				spawn_preview(
+					&mut commands,
+					transform,
+					ComponentsOnly(room).scene_with_lod(&lod_ref),
+				);
+			}
+		}
+		PreviewSubject::ResidentialBathroomExamples => {
+			for cell in &cache.residential_bathroom_examples {
+				let tf = transform * Transform::from_translation(match cell {
+					ResidentialBathroomExampleCell::Full { offset, .. }
+					| ResidentialBathroomExampleCell::Half { offset, .. } => *offset,
+				});
+				match cell {
+					ResidentialBathroomExampleCell::Full { room, .. } => spawn_preview(
+						&mut commands,
+						tf,
+						ComponentsOnly(room).scene_with_lod(&lod_ref),
+					),
+					ResidentialBathroomExampleCell::Half { room, .. } => spawn_preview(
+						&mut commands,
+						tf,
+						ComponentsOnly(room).scene_with_lod(&lod_ref),
+					),
+				}
+			}
+		}
+		PreviewSubject::KitchenExamples => {
+			spawn_livable_quarters_gallery(&mut commands, transform, &cache.kitchen_examples, &lod_ref);
+		}
+		PreviewSubject::DiningRoomExamples => {
+			spawn_livable_quarters_gallery(
+				&mut commands,
+				transform,
+				&cache.dining_room_examples,
+				&lod_ref,
+			);
+		}
+		PreviewSubject::LivingRoomExamples => {
+			spawn_livable_quarters_gallery(
+				&mut commands,
+				transform,
+				&cache.living_room_examples,
+				&lod_ref,
+			);
+		}
+		PreviewSubject::SittingRoomExamples => {
+			spawn_livable_quarters_gallery(
+				&mut commands,
+				transform,
+				&cache.sitting_room_examples,
+				&lod_ref,
+			);
+		}
+		PreviewSubject::StudyExamples => {
+			spawn_livable_quarters_gallery(&mut commands, transform, &cache.study_examples, &lod_ref);
+		}
 		PreviewSubject::CommercialStall { .. } => {
 			if let Some(stall) = cache.commercial_stall.as_ref() {
 				spawn_preview(
@@ -3129,6 +3763,22 @@ pub fn present_preview_lod(
 				);
 			}
 		}
+	}
+}
+
+fn spawn_livable_quarters_gallery<T: BuildingComponents>(
+	commands: &mut Commands,
+	transform: Transform,
+	cells: &[GalleryExampleCell<T>],
+	lod_ref: &lod::lod_ref::LodRef<'_>,
+) {
+	for cell in cells {
+		let tf = transform * Transform::from_translation(cell.offset);
+		spawn_preview(
+			commands,
+			tf,
+			ComponentsOnly(&cell.room).scene_with_lod(lod_ref),
+		);
 	}
 }
 
@@ -3529,7 +4179,17 @@ pub fn draw_opening_plan_gizmos(
 				}
 			}
 		}
-		PreviewSubject::BitesStall { .. }
+		PreviewSubject::Bedroom { .. }
+		| PreviewSubject::BedroomExamples
+		| PreviewSubject::ResidentialBathroom { .. }
+		| PreviewSubject::ResidentialHalfBathroom { .. }
+		| PreviewSubject::ResidentialBathroomExamples
+		| PreviewSubject::KitchenExamples
+		| PreviewSubject::DiningRoomExamples
+		| PreviewSubject::LivingRoomExamples
+		| PreviewSubject::SittingRoomExamples
+		| PreviewSubject::StudyExamples
+		| PreviewSubject::BitesStall { .. }
 		| PreviewSubject::BitesSitdownStall { .. }
 		| PreviewSubject::BitesExamples
 		| PreviewSubject::MiniMart { .. }

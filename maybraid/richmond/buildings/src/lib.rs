@@ -12,12 +12,12 @@
 
 pub mod arc_spire;
 pub mod arcs;
-pub mod bedroom;
 pub mod constraints;
 pub mod demos;
 pub mod fit;
 pub mod openings;
 pub mod paneling;
+pub mod placer;
 pub mod portals;
 pub mod shells;
 pub mod stacked_rings;
@@ -43,9 +43,6 @@ pub use arc_spire::{
 	best_fit_y_bindings, uniform_storey_bindings, ArcSpire, ArcSpireParams, FitTolerance,
 };
 pub use arcs::{portal_ring_wall, ArcSweep, ClippedArcSweep, PortalRingParams, PortalRingWall};
-pub use bedroom::{
-	Bed, Bedroom, BedroomFillParams, Closet, EnsuiteBathroom, Nightstand, ShellWall,
-};
 pub use constraints::{
 	BoundaryOwnershipEntry, BoundaryOwnershipStatus, BoundaryRegionList, BoundaryThicknessEntry,
 	CellBoundaryTable, CellConstraints, CirculationEntry, CirculationRequestStatus, FaceKind,
@@ -75,6 +72,12 @@ pub use paneling::{
 	TubeCrossSectionNode, TubeFaces, TubeFrame, DEFAULT_PANEL_THICKNESS, DEFAULT_SEGMENTS,
 	MIN_SEGMENTS,
 };
+pub use placer::{
+	enclosure_soft_goal_met, init_host, pack_kinds, pick_kind, propose_from_spec,
+	soft_goal_from_placed, try_corner_l, try_free_extent, try_peninsula_from_run, try_wall_long,
+	CommitEffect, FreeExtentKnobs, KindSpec, OccupiedBudget, PackHost, PackKnobs, Predicate,
+	ProgramTier, ProposeKnobs, SoftGoalRole, WallLongKnobs, WalledRoomFill, WALL_EPS,
+};
 pub use portals::{
 	ArcRegion, AssignedPortal, MustAssignPortal, Portal, PortalFootprint, WallRegion, SLICE_Y_FRAC,
 };
@@ -96,8 +99,18 @@ pub use storeys::les_halles::{
 pub use usage_areas::{
 	BitesSitdownStall, BitesStall, CommercialStall, CommercialStallInterior,
 	CommercialStallParameterized, CommercialStallPlan, CommercialStallStrip,
-	CommercialStallStripParameterized, CommercialStallStripPlan, KnickKnackStall,
-	KnickKnackStallParameterized, KnickKnackStallPlan, MiniMart, PartsStall, PublicRestroom,
-	PublicRestroomParameterized, PublicRestroomPlan,
+	CommercialStallStripParameterized, CommercialStallStripPlan, CommonBedroom,
+	CommonBedroomParameterized, CommonBedroomPlan, DiningRoom, DiningRoomParameterized,
+	DiningRoomPlan, EnclosedRoom, EnclosedRoomMins, EnclosedRoomParams, Kitchen,
+	KitchenCounterLayout, KitchenParameterized, KitchenPlan, KnickKnackStall,
+	KnickKnackStallParameterized,
+	KnickKnackStallPlan, LivingRoom, LivingRoomParameterized, LivingRoomPlan, MiniMart, PartsStall,
+	PublicRestroom, PublicRestroomParameterized, PublicRestroomPlan, ResidentialBathroom,
+	ResidentialBathroomParameterized, ResidentialBathroomPlan, ResidentialHalfBathroom,
+	ResidentialHalfBathroomParameterized, ResidentialHalfBathroomPlan, SittingRoom,
+	SittingRoomParameterized, SittingRoomPlan, Study, StudyParameterized, StudyPlan,
+	COMMON_BEDROOM_SCOPE, DINING_ROOM_SCOPE, KITCHEN_SCOPE, LIVING_ROOM_SCOPE,
+	PASSAGE_CLEARANCE, PassageClearance, PlanHost, RESIDENTIAL_BATHROOM_SCOPE,
+	RESIDENTIAL_HALF_BATHROOM_SCOPE, SITTING_ROOM_SCOPE, STUDY_SCOPE,
 };
 pub use wall_demo::{NoisyRectangularWall, NoisyRectangularWallParams};

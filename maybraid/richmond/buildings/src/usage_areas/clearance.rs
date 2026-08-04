@@ -19,6 +19,35 @@ use crate::openings::OpeningLabel;
 /// Default inward clearance kept free in front of passages (m).
 pub const PASSAGE_CLEARANCE: f32 = 1.0;
 
+/// Lateral / approach pad around an authored door keep-out band (m).
+///
+/// Used when rejecting blocked sales-face doors and when committing door clears
+/// so later furniture stays out of the approach.
+pub const PASSAGE_APPROACH_PAD: f32 = 0.5;
+
+/// Inflated approach zone around an authored door keep-out.
+pub fn approach_zone(door_clear: Aabb2d) -> Aabb2d {
+	inflate_aabb2(door_clear, PASSAGE_APPROACH_PAD)
+}
+
+/// True when the padded door approach intersects any existing clearance.
+pub fn approach_blocked(door_clear: Aabb2d, clearances: &[Aabb2d]) -> bool {
+	let zone = approach_zone(door_clear);
+	clearances.iter().any(|c| intersects_aabb2(zone, *c))
+}
+
+/// Push a door keep-out into `clearances`, optionally inflated by `pad`.
+///
+/// Residential packs use [`PASSAGE_APPROACH_PAD`]; commercial stalls typically
+/// pass `0.0` to preserve prior density.
+pub fn commit_door_clear(clearances: &mut Vec<Aabb2d>, door_clear: Aabb2d, pad: f32) {
+	if pad > 1e-6 {
+		clearances.push(inflate_aabb2(door_clear, pad));
+	} else {
+		clearances.push(door_clear);
+	}
+}
+
 /// Host / passage face helpers on the XZ plan.
 pub struct PlanHost;
 

@@ -125,6 +125,7 @@ impl MiniMartRegions {
 			area_reserve: self.aisles_area_reserve.max(sales_floor),
 			reserve_cap_frac: 0.75,
 			grow_into: false,
+			max_axis_frac: None,
 			shrink_sales_for_door_clear: true,
 			door_width: self.door_width,
 			door_width_min: MINI_MART_DOOR_WIDTH_MIN,
@@ -141,7 +142,11 @@ impl MiniMartRegions {
 		.ok_or(FitError::TooSmall {
 			reason: "mini mart office",
 		})?;
-		clearances.push(enclosed.door_clear);
+		crate::usage_areas::clearance::commit_door_clear(
+			&mut clearances,
+			enclosed.door_clear,
+			0.0,
+		);
 		let office2 = enclosed.room;
 
 		let register2 = self

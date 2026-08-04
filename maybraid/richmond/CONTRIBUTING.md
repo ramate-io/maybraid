@@ -63,11 +63,15 @@ Helpers such as [`portal_ring_wall`](buildings/src/arcs/portal_ring.rs) / paneli
 
 ## Allocate cells, fill in children
 
-Higher-order room types (e.g. [`Bedroom`](buildings/src/bedroom.rs)) own **layout**: they `subset` child AABBs from [`CellConstraints`](buildings/src/constraints.rs) and construct lower-order types. Lower-order types own **fill**.
+Higher-order room types own **layout**: they `subset` child AABBs from [`CellConstraints`](buildings/src/constraints.rs) and construct lower-order types. Lower-order types own **fill**.
 
 Constructors take the child's [`CellConstraints`](buildings/src/constraints.rs). Do not pass a parent `&CellConstraints` “for context”.
 
-Room layout is **noise-fitted**: [`BedroomLayout::fit`](buildings/src/bedroom/layout.rs) with [`BedroomFillParams`](buildings/src/bedroom/layout.rs) (`spaciousness`, `occupancy`). Circulation exclusions and internal door-swing rules apply as before.
+Residential program fill now lives under
+[`usage_areas`](buildings/src/usage_areas.rs) (`CommonBedroom`, livable quarters)
+via the Fit / parameterized → plan path and the shared
+[`placer`](buildings/src/placer.rs) KindSpec trier — not hierarchical
+`CellConstraints` bedroom trees.
 
 ## `LodScene` on buildings
 
