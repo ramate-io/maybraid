@@ -33,8 +33,11 @@ pub use halls_to_shafts::{
 };
 pub use janitorial::Janitorial;
 pub use livable_apartment::LivableApartment;
-pub use livable_apartments::{LivableApartments, LivableApartmentsOptions};
+pub use livable_apartments::{
+	LivableApartments, LivableApartmentsOptions, LivableApartmentsParameterized,
+};
 pub use plan_cells::{
-	cell_has_hall_frontage, cells_edge_adjacent, group_cells_to_apartments, split_toward_min_room,
-	subtract_aabb2, PlanCell,
+	cell_has_hall_frontage, cells_edge_adjacent, group_cells_to_apartments,
+	pack_apartments_to_targets, split_oversized_cells, split_toward_min_room, subtract_aabb2,
+	PlanCell,
 };

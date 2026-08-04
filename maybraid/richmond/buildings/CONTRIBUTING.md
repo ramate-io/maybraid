@@ -105,12 +105,16 @@ and the per-interior galleries (`mini-mart-examples`, `public-restroom-examples`
    openings onto 3×3 pocket centroids, and authors hall-width **passages** on
    shared edges between primary rects.
 3. Full\* fills each primary rect with [`LivableApartments`](src/usage_areas/livable_apartments.rs):
-   [`HallsToShafts`](src/usage_areas/halls_to_shafts.rs) → hall-edge doors →
-   `group_cells_to_apartments` → partition walls →
+   sample [`LivableApartmentsParameterized`](src/usage_areas/livable_apartments.rs)
+   (target m² catalog, Les Halles stall-door style) →
+   [`HallsToShafts`](src/usage_areas/halls_to_shafts.rs) → split residuals →
+   `pack_apartments_to_targets` → **one hall door per group** →
+   partition / hall-edge walls (no per-cell shells) →
    [`LivableApartment`](src/usage_areas/livable_apartment.rs) stubs (program fill deferred).
 
 Playground: `/show i-apartment-floor-plan`, `/show i-apartment-floor-plan-examples`,
 `/show i-apartment-full-storey`, `/show i-apartment-full-storey-examples` (gallery),
+`/show livable-apartments-examples` (standalone packs),
 `/show halls-to-shafts` (hall / shaft / passage / residual AABB gizmos).
 
 ### Parameterized → floor plan

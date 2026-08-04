@@ -39,10 +39,11 @@ impl IApartmentFullStorey {
 		let mut residual_within = Vec::new();
 		let opts = LivableApartmentsOptions {
 			hall_width: Some(floor_plan.hall_width),
+			targets: None,
 		};
 
 		for region in regions.within {
-			match LivableApartments::from_confines_with(&region.confines, noise, opts) {
+			match LivableApartments::from_confines_with(&region.confines, noise, opts.clone()) {
 				Ok((block, nested)) => {
 					blocks.push(block);
 					residual_within.extend(nested.within);

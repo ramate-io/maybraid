@@ -101,17 +101,35 @@ pub fn split_toward_min_room(
 
 /// Group room cells into edge-connected apartments that touch a hallway.
 ///
-/// - Seeds from hall-frontage cells.
-/// - Grows by absorbing edge-adjacent cells until `target_apartment_area`.
-/// - Absorbs remaining orphans into a neighboring hall-reaching group when possible.
-/// - Never emits a landlocked group (no hall frontage).
+/// Convenience wrapper around [`pack_apartments_to_targets`] with one target.
 pub fn group_cells_to_apartments(
 	cells: &[PlanCell],
 	halls: &[Aabb2d],
 	min_room_size: Vec2,
 	target_apartment_area: f32,
 ) -> Vec<Vec<u32>> {
-	let target = target_apartment_area.max(EPS);
+	pack_apartments_to_targets(
+		cells,
+		halls,
+		min_room_size,
+		&[target_apartment_area.max(EPS)],
+	)
+}
+
+/// Pack hall-connected apartments against a target-area catalog (Les Halles door style).
+///
+/// Walks `targets` in order. Each entry seeds an unassigned hall-frontage cell and
+/// grows by edge-adjacent cells until the group area reaches the target (within
+/// ~15% undershoot). Targets that cannot seed are skipped. Remaining frontage
+/// cells become force-one groups; orphans absorb into neighboring groups.
+///
+/// Never emits a landlocked group (no hall frontage).
+pub fn pack_apartments_to_targets(
+	cells: &[PlanCell],
+	halls: &[Aabb2d],
+	min_room_size: Vec2,
+	targets: &[f32],
+) -> Vec<Vec<u32>> {
 	let min_room = Vec2::new(min_room_size.x.max(EPS), min_room_size.y.max(EPS));
 	let eligible: Vec<PlanCell> = cells
 		.iter()
@@ -133,29 +151,28 @@ pub fn group_cells_to_apartments(
 	let mut assigned = vec![false; eligible.len()];
 	let mut groups: Vec<Vec<usize>> = Vec::new();
 
-	// Grow from hall-frontage seeds first (largest frontage cell first).
-	let mut seed_order: Vec<usize> = (0..eligible.len()).filter(|&i| frontage[i]).collect();
-	seed_order.sort_by(|&a, &b| {
-		eligible[b]
-			.area()
-			.partial_cmp(&eligible[a].area())
-			.unwrap_or(std::cmp::Ordering::Equal)
-	});
-
-	for seed in seed_order {
-		if assigned[seed] {
+	for &raw_target in targets {
+		let target = raw_target.max(EPS);
+		let Some(seed) = best_seed(&eligible, &assigned, &frontage, target) else {
 			continue;
-		}
+		};
 		let mut group = vec![seed];
 		assigned[seed] = true;
 		let mut area = eligible[seed].area();
+		// ~15% undershoot is acceptable (bay `allowed_error` analog).
+		let accept = target * 0.85;
 		while area + EPS < target {
 			let Some(next) = best_grow_candidate(&eligible, &assigned, &group) else {
 				break;
 			};
+			let next_area = eligible[next].area();
+			// Stop if already in the accept band and the next cell would overshoot hard.
+			if area + EPS >= accept && area + next_area > target * 1.35 {
+				break;
+			}
 			assigned[next] = true;
 			group.push(next);
-			area += eligible[next].area();
+			area += next_area;
 		}
 		groups.push(group);
 	}
@@ -171,7 +188,7 @@ pub fn group_cells_to_apartments(
 		}
 	}
 
-	// Singleton hall-frontage leftovers that never seeded (should be rare).
+	// Force-one: leftover hall-frontage cells that never matched a catalog target.
 	for i in 0..eligible.len() {
 		if assigned[i] {
 			continue;
@@ -187,6 +204,84 @@ pub fn group_cells_to_apartments(
 		.filter(|g| g.iter().any(|&i| frontage[i]))
 		.map(|g| g.into_iter().map(|i| eligible[i].id).collect())
 		.collect()
+}
+
+/// Guillotine-split cells whose area exceeds `max_area`, stopping at `min_room`.
+pub fn split_oversized_cells(
+	cells: &[PlanCell],
+	max_area: f32,
+	min_room: Vec2,
+	next_id: &mut u32,
+) -> Vec<PlanCell> {
+	let max_area = max_area.max(EPS);
+	let min_room = Vec2::new(min_room.x.max(EPS), min_room.y.max(EPS));
+	let mut queue: Vec<PlanCell> = cells.to_vec();
+	let mut out = Vec::new();
+	while let Some(cell) = queue.pop() {
+		if cell.area() <= max_area + EPS {
+			out.push(cell);
+			continue;
+		}
+		let size = cell.size();
+		let can_cut_x = size.x >= 2.0 * min_room.x - EPS;
+		let can_cut_z = size.y >= 2.0 * min_room.y - EPS;
+		if !can_cut_x && !can_cut_z {
+			out.push(cell);
+			continue;
+		}
+		let cut_x = if can_cut_x && can_cut_z {
+			size.x >= size.y
+		} else {
+			can_cut_x
+		};
+		let (a, b) = cell.bounds.bipartition_by_area(cut_x, true, 0.5);
+		let sa = a.max - a.min;
+		let sb = b.max - b.min;
+		if sa.x + EPS < min_room.x
+			|| sa.y + EPS < min_room.y
+			|| sb.x + EPS < min_room.x
+			|| sb.y + EPS < min_room.y
+		{
+			out.push(cell);
+			continue;
+		}
+		let id_a = cell.id;
+		let id_b = *next_id;
+		*next_id = next_id.saturating_add(1);
+		queue.push(PlanCell::new(id_a, a));
+		queue.push(PlanCell::new(id_b, b));
+	}
+	out
+}
+
+fn best_seed(
+	cells: &[PlanCell],
+	assigned: &[bool],
+	frontage: &[bool],
+	target: f32,
+) -> Option<usize> {
+	// Prefer unassigned hall-frontage seeds. Large catalog entries first → start
+	// from smaller seeds that still have room to grow toward the target.
+	let mut best: Option<(usize, f32)> = None;
+	for (i, cell) in cells.iter().enumerate() {
+		if assigned[i] || !frontage[i] {
+			continue;
+		}
+		let area = cell.area();
+		// Score: prefer seeds below the target (room to grow), then larger seeds.
+		let score = if area + EPS < target {
+			area + target // prefer larger under-target seeds
+		} else {
+			// Already oversized for this slot — only use if nothing smaller remains.
+			-area
+		};
+		match best {
+			None => best = Some((i, score)),
+			Some((_, bs)) if score > bs => best = Some((i, score)),
+			_ => {}
+		}
+	}
+	best.map(|(i, _)| i)
 }
 
 fn best_grow_candidate(
@@ -349,6 +444,40 @@ mod tests {
 				cell_has_hall_frontage(c, &[hall], EPS)
 			}));
 		}
+	}
+
+	#[test]
+	fn pack_catalog_builds_multi_cell_group() {
+		// Four 3×3 cells along a hall; one 30 m² target should absorb more than one.
+		let rooms = vec![
+			cell(0, Vec2::new(0.0, 0.0), Vec2::new(3.0, 3.0)),
+			cell(1, Vec2::new(3.0, 0.0), Vec2::new(6.0, 3.0)),
+			cell(2, Vec2::new(6.0, 0.0), Vec2::new(9.0, 3.0)),
+			cell(3, Vec2::new(9.0, 0.0), Vec2::new(12.0, 3.0)),
+		];
+		let hall = Aabb2d {
+			min: Vec2::new(0.0, 3.0),
+			max: Vec2::new(12.0, 5.0),
+		};
+		let groups = pack_apartments_to_targets(
+			&rooms,
+			&[hall],
+			Vec2::new(2.0, 2.0),
+			&[30.0, 20.0],
+		);
+		assert!(
+			groups.iter().any(|g| g.len() >= 2),
+			"expected a multi-cell apartment, got {groups:?}"
+		);
+	}
+
+	#[test]
+	fn split_oversized_respects_max_area() {
+		let mut next = 1;
+		let cells = vec![cell(0, Vec2::new(0.0, 0.0), Vec2::new(10.0, 8.0))];
+		let out = split_oversized_cells(&cells, 20.0, Vec2::new(2.5, 2.5), &mut next);
+		assert!(out.len() >= 2);
+		assert!(out.iter().all(|c| c.area() <= 20.0 + 1.0));
 	}
 
 	#[test]

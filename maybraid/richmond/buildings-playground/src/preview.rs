@@ -2449,6 +2449,7 @@ fn build_livable_apartments_examples() -> Vec<LivableApartmentsExampleCell> {
 			noise,
 			LivableApartmentsOptions {
 				hall_width: *hall_width,
+				targets: None,
 			},
 		) {
 			Ok((block, _)) => fitted.push(block),
@@ -2490,7 +2491,6 @@ fn draw_livable_apartments_block_gizmos(
 	magenta: Color,
 ) {
 	let lime = Color::srgb(0.35, 0.95, 0.4);
-	let sky = Color::srgb(0.35, 0.7, 1.0);
 	let host_color = Color::srgb(0.75, 0.75, 0.8);
 
 	gizmos.aabb_3d(block.confines.bounds, tf, host_color);
@@ -2510,9 +2510,12 @@ fn draw_livable_apartments_block_gizmos(
 		gizmos.aabb_3d(bounds, tf, color);
 	}
 
-	for apt in &block.apartments {
+	for (ai, apt) in block.apartments.iter().enumerate() {
+		// Distinct hue per apartment so multi-cell (non-rect) groups read clearly.
+		let t = (ai as f32 * 0.17) % 1.0;
+		let color = Color::srgb(0.25 + 0.55 * t, 0.55 + 0.35 * (1.0 - t), 0.85);
 		for part in apt.cells.iter() {
-			gizmos.aabb_3d(part.confines.bounds, tf, sky);
+			gizmos.aabb_3d(part.confines.bounds, tf, color);
 		}
 	}
 

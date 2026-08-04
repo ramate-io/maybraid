@@ -103,7 +103,7 @@ pub use usage_areas::{
 	CommercialStallStripParameterized, CommercialStallStripPlan, HallsToShafts,
 	HallsToShaftsOptions, Janitorial, MAX_HALL_WIDTH, MIN_HALL_WIDTH,
 	KnickKnackStall, KnickKnackStallParameterized, KnickKnackStallPlan, LivableApartment,
-	LivableApartments, LivableApartmentsOptions, MiniMart,
+	LivableApartments, LivableApartmentsOptions, LivableApartmentsParameterized, MiniMart,
 	PartsStall,
 	PlanCell, PublicRestroom, PublicRestroomParameterized, PublicRestroomPlan,
 };
