@@ -47,10 +47,6 @@ impl FurnitureNode {
 		Self::placeholder(FurnitureGeometry::BedroomFurniture, placement)
 	}
 
-	pub fn vanity(placement: Placement) -> Self {
-		Self::placeholder(FurnitureGeometry::Vanity, placement)
-	}
-
 	pub fn toilet(placement: Placement) -> Self {
 		Self::placeholder(FurnitureGeometry::Toilet, placement)
 	}

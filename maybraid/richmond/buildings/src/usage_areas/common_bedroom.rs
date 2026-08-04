@@ -16,7 +16,6 @@ mod parameterized;
 pub use parameterized::{CommonBedroomParameterized, CommonBedroomPlan, SCOPE};
 
 use bevy_math::bounding::Aabb3d;
-use bevy_math::Vec3;
 use lod::gen::LodSceneLevel;
 use procedural_common::NoiseParams;
 use richmond_building_components::furniture::FurnitureNode;
@@ -110,15 +109,11 @@ pub struct WalkInClosetFill {
 	pub door: Opening,
 }
 
-/// Ensuite residual + vanity / toilet placeholders.
+/// Ensuite residual (walled room + door); interior filled by a later pass.
 #[derive(Debug, Clone, PartialEq)]
 pub struct EnsuiteFill {
 	pub bounds: Aabb3d,
 	pub label: LabelNode,
-	pub vanity_label: LabelNode,
-	pub toilet_label: LabelNode,
-	pub vanity: FurnitureNode,
-	pub toilet: FurnitureNode,
 	pub door_id: OpeningId,
 	pub door: Opening,
 }
@@ -282,27 +277,9 @@ fn walk_in_fill(part: &BedroomPartition, style: LabelStyle, roll: f32) -> WalkIn
 }
 
 fn ensuite_fill(part: &BedroomPartition, style: LabelStyle, roll: f32) -> EnsuiteFill {
-	let aabb = &part.bounds;
-	let size = aabb.max - aabb.min;
-	let vanity_aabb = Aabb3d::from_min_max(
-		Vec3::new(aabb.min.x + 0.1, aabb.min.y, aabb.min.z + 0.15),
-		Vec3::new(
-			aabb.min.x + size.x * 0.55,
-			aabb.min.y + 0.85,
-			aabb.min.z + 0.55,
-		),
-	);
-	let toilet_aabb = Aabb3d::from_min_max(
-		Vec3::new(aabb.max.x - 0.55, aabb.min.y, aabb.max.z - 0.7),
-		Vec3::new(aabb.max.x - 0.1, aabb.min.y + 0.75, aabb.max.z - 0.15),
-	);
 	EnsuiteFill {
 		bounds: part.bounds,
 		label: label_filling_aabb(style, "Ensuite", &part.bounds, roll),
-		vanity_label: label_filling_aabb(style, "Vanity", &vanity_aabb, roll),
-		toilet_label: label_filling_aabb(style, "Toilet", &toilet_aabb, roll),
-		vanity: FurnitureNode::vanity(placement_filling_aabb(&vanity_aabb)),
-		toilet: FurnitureNode::toilet(placement_filling_aabb(&toilet_aabb)),
 		door_id: part.door_id.clone(),
 		door: part.door.clone(),
 	}
@@ -363,11 +340,7 @@ impl BuildingComponents for CommonBedroom {
 		labels.extend(self.bedroom_furniture.iter().map(|b| b.label.clone()));
 		labels.extend(self.closets.iter().map(|c| c.label.clone()));
 		labels.extend(self.walk_in_closets.iter().map(|c| c.label.clone()));
-		for e in &self.ensuites {
-			labels.push(e.label.clone());
-			labels.push(e.vanity_label.clone());
-			labels.push(e.toilet_label.clone());
-		}
+		labels.extend(self.ensuites.iter().map(|e| e.label.clone()));
 		Layers::from_free(labels)
 	}
 
@@ -406,9 +379,6 @@ impl BuildingComponents for CommonBedroom {
 				.map(|b| b.furniture.clone())
 				.collect::<Vec<_>>(),
 		));
-		for e in &self.ensuites {
-			out.extend(Layers::from_free(vec![e.vanity.clone(), e.toilet.clone()]));
-		}
 		out
 	}
 }
@@ -482,8 +452,6 @@ mod tests {
 		for e in &room.ensuites {
 			assert!(matches!(e.door.label, OpeningLabel::Passage));
 			assert!(e.door_id.0.contains("ensuite_door"));
-			assert_eq!(e.vanity_label.text.as_str(), "Vanity");
-			assert_eq!(e.toilet_label.text.as_str(), "Toilet");
 		}
 		if !room.closets.is_empty() {
 			assert!(!room.closet_walls.is_empty());
