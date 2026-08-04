@@ -6,7 +6,8 @@
 use bevy_math::bounding::{Aabb2d, Aabb3d};
 use bevy_math::{Vec2, Vec3};
 use procedural_common::{
-	aabb2_area, clamp_min_size2, plan_to_aabb3, Aabb2dPack, PlanAxes, PlanOpeningFace,
+	aabb2_area, clamp_min_size2, intersects_aabb2, plan_to_aabb3, Aabb2dPack, PlanAxes,
+	PlanOpeningFace,
 };
 
 use crate::bedroom::shell::{face_rectangle, face_span_rectangle};
@@ -124,6 +125,8 @@ impl EnclosedRoomParams {
 				self.contact,
 			)?;
 		}
+		// Pull near-host lateral faces flush so we omit thin partition walls in the gap.
+		room = snap_near_host_sides(host, room, seed_face, clearances, HOST_WALL_SNAP);
 		let enclosure = self.enclose(host3, host, room, seed_face)?;
 		Some(EnclosedRoom {
 			room,
@@ -356,6 +359,100 @@ struct EnclosureGeom {
 	door: Opening,
 }
 
+/// Gap below which a partition face should flush to the host (omit the wall).
+const HOST_WALL_SNAP: f32 = 0.45;
+
+/// Expand lateral (and seed) faces that sit within `snap` of the host when the
+/// intervening strip is clear. Never snaps the sales face — that keeps door
+/// clearance. Flushed faces then skip enclosure panels via [`side_on_host`].
+fn snap_near_host_sides(
+	host: Aabb2d,
+	mut room: Aabb2d,
+	seed_face: PlanOpeningFace,
+	clearances: &[Aabb2d],
+	snap: f32,
+) -> Aabb2d {
+	let sales = sales_face_kind(seed_face);
+
+	// Seed wall: already meant to ride the host; flush if slightly inset.
+	if seed_face.thru_is_x {
+		if seed_face.inward_positive {
+			try_snap_edge(&mut room, host, FaceKind::Left, clearances, snap);
+		} else {
+			try_snap_edge(&mut room, host, FaceKind::Right, clearances, snap);
+		}
+	} else if seed_face.inward_positive {
+		try_snap_edge(&mut room, host, FaceKind::Front, clearances, snap);
+	} else {
+		try_snap_edge(&mut room, host, FaceKind::Back, clearances, snap);
+	}
+
+	// Lateral faces only (not sales).
+	for face in [
+		FaceKind::Front,
+		FaceKind::Back,
+		FaceKind::Left,
+		FaceKind::Right,
+	] {
+		if face == sales {
+			continue;
+		}
+		try_snap_edge(&mut room, host, face, clearances, snap);
+	}
+	room
+}
+
+fn try_snap_edge(
+	room: &mut Aabb2d,
+	host: Aabb2d,
+	face: FaceKind,
+	clearances: &[Aabb2d],
+	snap: f32,
+) {
+	let gap = match face {
+		FaceKind::Front => room.min.y - host.min.y,
+		FaceKind::Back => host.max.y - room.max.y,
+		FaceKind::Left => room.min.x - host.min.x,
+		FaceKind::Right => host.max.x - room.max.x,
+		FaceKind::Top | FaceKind::Bottom => return,
+	};
+	if gap <= 1e-4 || gap > snap + 1e-4 {
+		return;
+	}
+	let strip = match face {
+		FaceKind::Front => Aabb2d {
+			min: Vec2::new(room.min.x, host.min.y),
+			max: Vec2::new(room.max.x, room.min.y),
+		},
+		FaceKind::Back => Aabb2d {
+			min: Vec2::new(room.min.x, room.max.y),
+			max: Vec2::new(room.max.x, host.max.y),
+		},
+		FaceKind::Left => Aabb2d {
+			min: Vec2::new(host.min.x, room.min.y),
+			max: Vec2::new(room.min.x, room.max.y),
+		},
+		FaceKind::Right => Aabb2d {
+			min: Vec2::new(room.max.x, room.min.y),
+			max: Vec2::new(host.max.x, room.max.y),
+		},
+		FaceKind::Top | FaceKind::Bottom => return,
+	};
+	if strip.max.x - strip.min.x < 1e-4 || strip.max.y - strip.min.y < 1e-4 {
+		return;
+	}
+	if clearances.iter().any(|c| intersects_aabb2(strip, *c)) {
+		return;
+	}
+	match face {
+		FaceKind::Front => room.min.y = host.min.y,
+		FaceKind::Back => room.max.y = host.max.y,
+		FaceKind::Left => room.min.x = host.min.x,
+		FaceKind::Right => room.max.x = host.max.x,
+		FaceKind::Top | FaceKind::Bottom => {}
+	}
+}
+
 fn shrink_for_door_clearance(
 	host: Aabb2d,
 	mut room: Aabb2d,
@@ -397,6 +494,7 @@ fn sales_face_kind(seed_face: PlanOpeningFace) -> FaceKind {
 }
 
 fn side_on_host(room2: Aabb2d, host: Aabb2d, face: FaceKind) -> bool {
+	// After [`snap_near_host_sides`], near-host faces are flush; tolerate float noise.
 	const EPS: f32 = 0.08;
 	match face {
 		FaceKind::Front => (room2.min.y - host.min.y).abs() < EPS,

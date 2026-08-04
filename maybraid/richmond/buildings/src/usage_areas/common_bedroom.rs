@@ -744,9 +744,10 @@ mod tests {
 			},
 		);
 		let mut params = CommonBedroomParameterized::with_fill(1.25, 0.7);
-		params.ensuite_area_target = 18.0;
+		params.ensuite_area_target = 70.0;
 		params.bedroom_area_reserve = 40.0;
 		params.bed_against_wall = true;
+		let host_area = 14.0 * 12.0;
 		let mut found = None;
 		for seed in 0..40 {
 			let plan = CommonBedroomPlan::from_parameterized(
@@ -769,8 +770,12 @@ mod tests {
 			"ensuite area {area} below enlarged mins"
 		);
 		assert!(
-			area + 0.5 >= 12.0,
-			"ensuite area {area} should grow toward target 18 in a large host"
+			area + 0.5 >= host_area * 0.30,
+			"ensuite area {area} should grow toward a large share of host {host_area}"
+		);
+		assert!(
+			area <= host_area * 0.50 + 1.0,
+			"ensuite area {area} should stay within about half the host {host_area}"
 		);
 	}
 

@@ -185,7 +185,15 @@ impl CommonBedroomRegions {
 				| Placed::BedroomFurniture(a) => xz_area(a),
 				Placed::Closet(p) | Placed::WalkIn(p) | Placed::Ensuite(p) => xz_area(&p.bounds),
 			};
-			if (occupied + add) / room_area > self.occupancy + 1e-3 {
+			let is_partition =
+				matches!(placed, Placed::Closet(_) | Placed::WalkIn(_) | Placed::Ensuite(_));
+			// Furniture respects `occupancy`; enclosures may claim more (ensuite ≤ ~½ host).
+			let occ_cap = if is_partition {
+				self.occupancy.max(0.78)
+			} else {
+				self.occupancy
+			};
+			if (occupied + add) / room_area > occ_cap + 1e-3 {
 				continue;
 			}
 			occupied += add;
@@ -339,16 +347,28 @@ impl CommonBedroomRegions {
 				}
 				let clears = partition_pack_clearances(clearances, packed);
 				let mins = self.ensuite_mins();
-				if let Some(part) = self.pack_partition(
+				let usable = aabb2_area(host);
+				// Grow toward as much as half the host; keep a bedroom-floor reserve.
+				let area_target = self
+					.ensuite_area_target
+					.max(mins.long * mins.short)
+					.max(usable * 0.35)
+					.min(usable * 0.50);
+				let area_reserve = self
+					.bedroom_area_reserve
+					.min(usable * 0.55)
+					.max(self.bedroom_floor_reserve(host).min(usable * 0.45));
+				if let Some(part) = self.pack_partition_with(
 					host3,
 					host,
 					&clears,
 					mins,
-					self.ensuite_area_target.max(mins.long * mins.short),
-					self.bedroom_area_reserve
-						.max(self.bedroom_floor_reserve(host)),
+					area_target,
+					area_reserve,
 					self.ensuite_along_t,
 					OpeningId::scoped(SCOPE, "ensuite_door", "0"),
+					0.55,
+					true,
 				) {
 					return Some(Placed::Ensuite(part));
 				}
@@ -424,6 +444,33 @@ impl CommonBedroomRegions {
 		along_t: f32,
 		door_id: OpeningId,
 	) -> Option<BedroomPartition> {
+		self.pack_partition_with(
+			host3,
+			host,
+			clearances,
+			mins,
+			area_target,
+			area_reserve,
+			along_t,
+			door_id,
+			0.72,
+			false,
+		)
+	}
+
+	fn pack_partition_with(
+		&self,
+		host3: &Aabb3d,
+		host: Aabb2d,
+		clearances: &[Aabb2d],
+		mins: EnclosedRoomMins,
+		area_target: f32,
+		area_reserve: f32,
+		along_t: f32,
+		door_id: OpeningId,
+		reserve_cap_frac: f32,
+		grow_into: bool,
+	) -> Option<BedroomPartition> {
 		// Seed the **long** wall span. `grow_toward_area` stops near `area_target`
 		// (often ≈ min area); if contact < mins.long the grown rect can hit that
 		// area with the wrong aspect and then fail `mins.ok`.
@@ -435,8 +482,8 @@ impl CommonBedroomRegions {
 			along_t,
 			area_target,
 			area_reserve,
-			reserve_cap_frac: 0.72,
-			grow_into: false,
+			reserve_cap_frac,
+			grow_into,
 			shrink_sales_for_door_clear: true,
 			door_width: self.door_width,
 			door_width_min: DOOR_WIDTH_MIN,

@@ -55,18 +55,19 @@ impl CommonBedroomParameterized {
 			.clamp(0.05, 1.0);
 		let bed_against_wall = cfg.sample_unit_4d(c.x, c.y, c.z, 17.0) >= 0.4;
 
-		// Ensuite: larger mins (~2.6×1.8), area target scales with host like Bites seating.
+		// Ensuite: may claim a large share of the host (up to ~half) when space allows.
 		let ensuite_min_area = 2.6 * 1.8;
-		let ensuite_lo = (usable * 0.10)
+		let ensuite_lo = (usable * 0.18)
 			.max(ensuite_min_area)
 			.min(usable.max(ensuite_min_area));
-		let ensuite_hi = (usable * 0.22).max(ensuite_lo + 0.5);
+		let ensuite_hi = (usable * 0.50).max(ensuite_lo + 0.5);
 		let ensuite_area_target =
 			cfg.sample_range_f32_4d(ensuite_lo, ensuite_hi, c.x, c.y, c.z, 18.0);
 		let bed_floor = 2.0 * 1.6 * spaciousness * spaciousness;
+		// Leave at least ~half the host for the bedroom program when growing ensuite.
 		let bedroom_area_reserve = cfg.sample_range_f32_4d(
-			(usable * 0.45).max(bed_floor),
-			(usable * 0.72).max(bed_floor + 1.0),
+			(usable * 0.35).max(bed_floor),
+			(usable * 0.55).max(bed_floor + 1.0),
 			c.x,
 			c.y,
 			c.z,
@@ -121,8 +122,9 @@ impl CommonBedroomParameterized {
 			spaciousness,
 			occupancy: occupancy.clamp(0.05, 1.0),
 			bed_against_wall: false,
-			ensuite_area_target: ensuite_min * 1.25,
-			bedroom_area_reserve: 20.0,
+			// Pack clamps to host; bias high so large playground cells grow ensuite.
+			ensuite_area_target: (ensuite_min * 2.5).max(24.0),
+			bedroom_area_reserve: 12.0,
 			walk_in_area_target: walk_in_min * 1.2,
 			closet_along_t: 0.5,
 			walk_in_along_t: 0.5,
