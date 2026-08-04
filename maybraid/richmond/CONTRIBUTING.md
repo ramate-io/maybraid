@@ -8,7 +8,7 @@ and present geometry on top of [`building-components`](building-components/).
 
 | Crate | Role |
 |-------|------|
-| [`building-components`](building-components/) | Domain IR + kit assets. Authoring types are `*Node` values (`FloorNode`, `PartitionNode`, `StairNode`, `DoorNode`, `RoofNode`, `PanelNode`, `FurnitureNode`): **style + geometry + placement** (+ optional [`ParentConfines`](building-components/src/parent_confines.rs)). Each node implements [`LodScene`](../lod/lib/src/gen/presentation.rs). Tessellation into kit pieces is private to the domain. Partition IR is primitive (no portals). |
+| [`building-components`](building-components/) | Domain IR + kit assets. Authoring types are `*Node` values (`FloorNode`, `PartitionNode`, `StairNode`, `DoorNode`, `RoofNode`, `PanelNode`, `FurnitureNode`, `LabelNode`): **style + geometry + placement** (+ optional [`ParentConfines`](building-components/src/parent_confines.rs); labels also carry a debug string). Each node implements [`LodScene`](../lod/lib/src/gen/presentation.rs). Tessellation into kit pieces is private to the domain. Partition IR is primitive (no portals). Labels render as colored wireframes; face text is a playground gizmo pass (scaled/wrapped to each face). |
 | [`buildings`](buildings/) | Building procedures. Compose constraints, layouts, and helpers (`paneling` / `arcs` / `portals`, `ArcSpire`, …) into domain nodes via [`BuildingComponents`](building-components/src/lib.rs). Present component-only buildings as [`ComponentsOnly`](building-components/src/lib.rs)`<T>` for `LodScene`; keep a custom `LodScene` when hosts, silhouettes, or non-node extras are required. Playground joinery demos live under `wall_demo`. |
 | [`buildings-playground`](buildings-playground/) | Preview / CLI. Spawns hosts once; LOD flips update [`LodSceneLevel`](../lod/lib/src/lod_level.rs) in place (no whole-tree despawn). |
 
@@ -167,6 +167,7 @@ fn emit_internal_features(
 
 - [building-components README](building-components/README.md)
 - [buildings README](buildings/README.md) (urban kit taxonomy for higher-order authorship)
+- [buildings CONTRIBUTING](buildings/CONTRIBUTING.md) (Les Halles parameterized → plan → full / openings / usage areas)
 - [Urban art README](../art/urban/README.md)
 - [`LodScene`](../lod/lib/src/gen/presentation.rs)
 - [Structural LOD collectors](../lod/docs/structural-lod-collectors.md)

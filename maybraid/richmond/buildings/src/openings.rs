@@ -3,6 +3,15 @@
 //! An [`Opening`] is a void the receiving type should avoid filling with geometry.
 //! Shells that honor connectable openings (`Passage`, `Aperture`, `Shaft`) record
 //! them and optionally map each id onto contact geometry ([`MappedOpening`]).
+//!
+//! ## Generated ids
+//!
+//! Floor plans that add openings should use [`OpeningId::scoped`] so ids stay
+//! stable across towering when `scope`, `role`, and `slot` match
+//! (`{scope}_{role}_{slot}`, e.g. `les_halles_shaft_nw`). Preserve inbound
+//! confine opening ids unchanged; only generated openings use scoped ids.
+//! Full\* / towers should reuse FloorPlan-emitted shaft ids when lifting
+//! openings storey-to-storey (Y-translate bounds, keep the same id).
 
 use bevy_math::bounding::Aabb3d;
 use bevy_math::{Vec2, Vec3};
@@ -15,6 +24,19 @@ pub struct OpeningId(pub String);
 impl OpeningId {
 	pub fn new(id: impl Into<String>) -> Self {
 		Self(id.into())
+	}
+
+	/// Deterministic generated id: `{scope}_{role}_{slot}`.
+	///
+	/// Use for openings authored by a floor plan / typology. Inbound confine
+	/// openings keep their original ids.
+	pub fn scoped(scope: impl AsRef<str>, role: impl AsRef<str>, slot: impl AsRef<str>) -> Self {
+		Self::new(format!(
+			"{}_{}_{}",
+			scope.as_ref(),
+			role.as_ref(),
+			slot.as_ref()
+		))
 	}
 
 	pub fn as_str(&self) -> &str {
@@ -122,6 +144,20 @@ impl Openings {
 
 	pub fn len(&self) -> usize {
 		self.openings.len()
+	}
+
+	/// Insert all openings from `other`, overwriting on id collision.
+	pub fn extend(&mut self, other: &Openings) {
+		for (id, opening) in other.iter() {
+			self.openings.insert(id.clone(), opening.clone());
+		}
+	}
+
+	/// Copy of `self` with all openings from `other` merged in.
+	pub fn merged_with(&self, other: &Openings) -> Self {
+		let mut out = self.clone();
+		out.extend(other);
+		out
 	}
 }
 

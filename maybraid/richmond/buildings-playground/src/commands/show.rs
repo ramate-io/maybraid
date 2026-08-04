@@ -8,6 +8,19 @@ pub mod arc_sweep;
 pub mod arc_tower;
 pub mod opening;
 pub mod bedroom;
+pub mod bites_examples;
+pub mod bites_sitdown_stall;
+pub mod bites_stall;
+pub mod commercial_stall;
+pub mod commercial_stall_strip;
+pub mod knick_knack_examples;
+pub mod knick_knack_stall;
+pub mod public_restroom;
+pub mod public_restroom_examples;
+pub mod mini_mart;
+pub mod mini_mart_examples;
+pub mod parts_examples;
+pub mod parts_stall;
 pub mod connecting_shells;
 pub mod linear;
 pub mod noisy_rectangular_wall;
@@ -35,6 +48,8 @@ pub mod connecting_hall;
 pub mod fitted_rectangle;
 pub mod circ_ring_floor;
 pub mod i_floor;
+pub mod les_halles_floor_plan;
+pub mod les_halles_full_storey;
 pub mod rect_floor;
 pub mod rect_ring_floor;
 pub mod rounded_rect_floor;
@@ -140,6 +155,36 @@ pub enum Show {
 	StackedRings(stacked_rings::StackedRings),
 	/// Hierarchical bedroom (closet / bed / nightstand / ensuite placeholders).
 	Bedroom(bedroom::Bedroom),
+	/// Single commercial stall Label placeholder.
+	CommercialStall(commercial_stall::CommercialStall),
+	/// Commercial stall strip (packed Labels along a band).
+	CommercialStallStrip(commercial_stall_strip::CommercialStallStrip),
+	/// Bites stall interior (counters on long passages + kitchen remainder).
+	BitesStall(bites_stall::BitesStall),
+	/// Bites sit-down (counters + passage-connected seating + kitchen).
+	BitesSitdownStall(bites_sitdown_stall::BitesSitdownStall),
+	/// Gallery of bites + sit-down stalls (passage AABBs drawn as gizmos).
+	BitesExamples(bites_examples::BitesExamples),
+	/// MiniMart interior (clearances, office+door, register, aisles, shelves).
+	MiniMart(mini_mart::MiniMart),
+	/// Gallery of MiniMart stalls (passage AABBs drawn as gizmos).
+	MiniMartExamples(mini_mart_examples::MiniMartExamples),
+	/// Parts stall interior (office + parts pockets, passage clearances).
+	PartsStall(parts_stall::PartsStall),
+	/// Gallery of Parts stalls (passage AABBs drawn as gizmos).
+	PartsExamples(parts_examples::PartsExamples),
+	/// Knick-knack stall interior (passage clearances + wall displays).
+	KnickKnackStall(knick_knack_stall::KnickKnackStall),
+	/// Gallery of KnickKnack stalls (passage AABBs drawn as gizmos).
+	KnickKnackExamples(knick_knack_examples::KnickKnackExamples),
+	/// Public restroom interior (walled stalls + door, sinks, passage clearances).
+	PublicRestroom(public_restroom::PublicRestroom),
+	/// Gallery of PublicRestroom stalls (passage AABBs drawn as gizmos).
+	PublicRestroomExamples(public_restroom_examples::PublicRestroomExamples),
+	/// Les Halles floor plan (ring shell + residual within cells).
+	LesHallesFloorPlan(les_halles_floor_plan::LesHallesFloorPlan),
+	/// Les Halles full storey (shell + commercial stall strip fills).
+	LesHallesFullStorey(les_halles_full_storey::LesHallesFullStorey),
 }
 
 impl Show {
@@ -187,10 +232,29 @@ impl Show {
 			Self::WizardsTower(cmd) => Ok(cmd.into_preview()),
 			Self::StackedRings(cmd) => Ok(cmd.into_preview()),
 			Self::Bedroom(cmd) => Ok(cmd.into_preview()),
+			Self::CommercialStall(cmd) => Ok(cmd.into_preview()),
+			Self::CommercialStallStrip(cmd) => Ok(cmd.into_preview()),
+			Self::BitesStall(cmd) => Ok(cmd.into_preview()),
+			Self::BitesSitdownStall(cmd) => Ok(cmd.into_preview()),
+			Self::BitesExamples(cmd) => Ok(cmd.into_preview()),
+			Self::MiniMart(cmd) => Ok(cmd.into_preview()),
+			Self::MiniMartExamples(cmd) => Ok(cmd.into_preview()),
+			Self::PartsStall(cmd) => Ok(cmd.into_preview()),
+			Self::PartsExamples(cmd) => Ok(cmd.into_preview()),
+			Self::KnickKnackStall(cmd) => Ok(cmd.into_preview()),
+			Self::KnickKnackExamples(cmd) => Ok(cmd.into_preview()),
+			Self::PublicRestroom(cmd) => Ok(cmd.into_preview()),
+			Self::PublicRestroomExamples(cmd) => Ok(cmd.into_preview()),
+			Self::LesHallesFloorPlan(cmd) => cmd.into_preview(),
+			Self::LesHallesFullStorey(cmd) => cmd.into_preview(),
 		};
 		match preview {
 			Ok((subject, transform)) => {
-				commands.insert_resource(PreviewConfig { subject, transform });
+				commands.insert_resource(PreviewConfig {
+					label_text: true,
+					subject,
+					transform,
+				});
 			}
 			Err(err) => {
 				error!("show failed: {err}");

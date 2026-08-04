@@ -8,6 +8,7 @@ pub mod doors;
 pub mod floors;
 pub mod furniture;
 pub mod joints;
+pub mod labels;
 pub mod layer;
 pub mod lod_band;
 pub mod lod_host;
@@ -25,6 +26,7 @@ pub use doors::DoorNode;
 pub use floors::FloorNode;
 pub use furniture::{FurnitureGeometry, FurnitureNode, FurnitureStyle, FurnitureWireframePlugin};
 pub use joints::{JointGeometry, JointNode, JointStyle};
+pub use labels::{LabelGeometry, LabelNode, LabelStyle, LabelWireframePlugin};
 pub use layer::{Layer, Layers};
 pub use lod_host::{
 	posed_asset_tier, warm_content_host, warm_content_host_hsl, warm_mesh_level_host,
@@ -96,6 +98,10 @@ pub trait BuildingComponents {
 	fn furniture_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<FurnitureNode> {
 		Layers::new()
 	}
+
+	fn label_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<LabelNode> {
+		Layers::new()
+	}
 }
 
 impl<T: BuildingComponents + ?Sized> BuildingComponents for &T {
@@ -129,6 +135,10 @@ impl<T: BuildingComponents + ?Sized> BuildingComponents for &T {
 
 	fn furniture_nodes_for_level(&self, level: LodSceneLevel) -> Layers<FurnitureNode> {
 		(**self).furniture_nodes_for_level(level)
+	}
+
+	fn label_nodes_for_level(&self, level: LodSceneLevel) -> Layers<LabelNode> {
+		(**self).label_nodes_for_level(level)
 	}
 }
 
@@ -203,6 +213,10 @@ impl<T: BuildingComponents> BuildingComponents for ComponentsOnly<T> {
 	fn furniture_nodes_for_level(&self, level: LodSceneLevel) -> Layers<FurnitureNode> {
 		self.0.furniture_nodes_for_level(level)
 	}
+
+	fn label_nodes_for_level(&self, level: LodSceneLevel) -> Layers<LabelNode> {
+		self.0.label_nodes_for_level(level)
+	}
 }
 
 impl<T: BuildingComponents> LodScene for ComponentsOnly<T> {
@@ -247,6 +261,9 @@ pub fn append_component_scenes(
 		children.push(Box::new(node.scene_with_lod(lod_ref)));
 	}
 	for node in building.furniture_nodes_for_level(level).flatten() {
+		children.push(Box::new(node.scene_with_lod(lod_ref)));
+	}
+	for node in building.label_nodes_for_level(level).flatten() {
 		children.push(Box::new(node.scene_with_lod(lod_ref)));
 	}
 }

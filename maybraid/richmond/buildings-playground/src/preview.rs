@@ -14,7 +14,7 @@ use richmond_building_components::partitions::rough_stonework::{
 use richmond_building_components::partitions::{Partition, PartitionNode};
 use richmond_building_components::roofs::{Pitch, RoofGeometry, RoofNode};
 use richmond_building_components::Placement;
-use richmond_building_components::ComponentsOnly;
+use richmond_building_components::{pose, BuildingComponents, ComponentsOnly, LabelNode};
 use richmond_buildings::bedroom::Bedroom;
 use richmond_buildings::panel_complex::{PanelComplex, PanelComplexJointPolicy, PanelPoint};
 use richmond_buildings::quad_panel::QuadPanel;
@@ -25,8 +25,9 @@ use richmond_buildings::{
 	CircRingFloor, CircRingFloorParams, CircRingFloorSlab, ClippedArcSweep, ClippedFittedRectangle,
 	ClippedFittedRectangularStrip, ClippedQuadPanel, ClippedRectangle, ClippedRectangularStrip,
 	ClippedRuledStrip, ClippedTessellatedTriangle, ConnectingHall, ConnectingShells, FittedRectangle,
-	IFloor, IFloorParams, IFloorSlab, MappedOpening, MappedOpeningQuad, MapsOpenings, OpeningId,
-	OpeningLabel, Openings, PitchedRoof, PitchedRoofParams, RectFloor, RectFloorParams, RectFloorSlab,
+	IFloor, IFloorParams, IFloorSlab, MappedOpening, MappedOpeningQuad, MapsOpenings, Opening,
+	OpeningId, OpeningLabel, Openings, PitchedRoof, PitchedRoofParams, RectFloor, RectFloorParams,
+	RectFloorSlab,
 	RectInset, RectRingFloor, RectRingFloorParams, RectRingFloorSlab, Rectangle, RectangularNTube,
 	RectangularNTubeCorner, RectangularNTubeStation, RectangularPitchedRoofComplex,
 	RectangularStripNode, RoundedRectFloor, RoundedRectFloorParams, RoundedRectFloorSlab, RuledPitch,
@@ -40,11 +41,22 @@ use richmond_buildings::portals::{MustAssignPortal, Portal};
 use richmond_buildings::wall_demo::{NoisyRectangularWall, NoisyRectangularWallParams};
 use richmond_buildings::wizards_tower::WizardsTower;
 use richmond_buildings::{
-	BedroomFillParams, CellConstraints, CirculationEntry, CirculationRequestStatus,
+	BedroomFillParams, BitesSitdownStall, BitesStall, CellConstraints, CirculationEntry,
+	CirculationRequestStatus, CommercialStall, CommercialStallStrip, Confines, Fit, FitError,
+	KnickKnackStall, LesHallesFloorPlan, LesHallesFullStorey, LesHallesParameterized, MiniMart,
+	PartsStall, PublicRestroom,
 };
-
 #[derive(Component)]
 pub struct PreviewRoot;
+
+/// Cardinal façade for demo bites-stall passages.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BitesDoorSide {
+	South,
+	North,
+	East,
+	West,
+}
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum PreviewSubject {
@@ -320,6 +332,70 @@ pub enum PreviewSubject {
 		/// When true, add a required −Z door circulation region.
 		door: bool,
 	},
+	CommercialStall {
+		extent: Vec3,
+		seed: i32,
+	},
+	CommercialStallStrip {
+		extent: Vec3,
+		seed: i32,
+	},
+	BitesStall {
+		extent: Vec3,
+		seed: i32,
+		door_side: BitesDoorSide,
+	},
+	BitesSitdownStall {
+		extent: Vec3,
+		seed: i32,
+		door_side: BitesDoorSide,
+	},
+	/// Side-by-side gallery of bites + sit-down variants (passage boxes as gizmos).
+	BitesExamples,
+	MiniMart {
+		extent: Vec3,
+		seed: i32,
+		door_side: BitesDoorSide,
+	},
+	/// Side-by-side gallery of MiniMart variants (passage boxes as gizmos).
+	MiniMartExamples,
+	PartsStall {
+		extent: Vec3,
+		seed: i32,
+		door_side: BitesDoorSide,
+	},
+	/// Side-by-side gallery of Parts variants (passage boxes as gizmos).
+	PartsExamples,
+	KnickKnackStall {
+		extent: Vec3,
+		seed: i32,
+		door_side: BitesDoorSide,
+	},
+	/// Side-by-side gallery of KnickKnack variants (passage boxes as gizmos).
+	KnickKnackExamples,
+	PublicRestroom {
+		extent: Vec3,
+		seed: i32,
+		door_side: BitesDoorSide,
+	},
+	/// Side-by-side gallery of PublicRestroom variants (passage boxes as gizmos).
+	PublicRestroomExamples,
+	LesHallesFloorPlan {
+		/// Confines size (XZ centered at origin; Y from 0).
+		extent: Vec3,
+		seed: i32,
+		ceiling: bool,
+		/// Inbound openings (`--opening`). Empty ⇒ demo requests all shaft slots.
+		openings: Vec<PreviewOpening>,
+	},
+	LesHallesFullStorey {
+		/// Confines size (XZ centered at origin; Y from 0).
+		extent: Vec3,
+		seed: i32,
+		ceiling: bool,
+		/// Inbound openings (`--opening`). Empty ⇒ demo requests all shaft slots.
+		openings: Vec<PreviewOpening>,
+	},
 }
 
 impl Default for PreviewSubject {
@@ -330,13 +406,19 @@ impl Default for PreviewSubject {
 
 #[derive(Resource, Clone, Debug)]
 pub struct PreviewConfig {
+	/// When true, draw face Text3d stroke gizmos for [`LabelNode`]s.
+	pub label_text: bool,
 	pub subject: PreviewSubject,
 	pub transform: Transform,
 }
 
 impl Default for PreviewConfig {
 	fn default() -> Self {
-		Self { subject: PreviewSubject::None, transform: Transform::IDENTITY }
+		Self {
+			label_text: true,
+			subject: PreviewSubject::None,
+			transform: Transform::IDENTITY,
+		}
 	}
 }
 
@@ -688,6 +770,113 @@ impl PreviewConfig {
 					extent.x, extent.y, extent.z
 				)
 			}
+			PreviewSubject::CommercialStall { extent, seed } => {
+				format!(
+					"preview: commercial-stall (extent={:.2},{:.2},{:.2} seed={seed})",
+					extent.x, extent.y, extent.z
+				)
+			}
+			PreviewSubject::CommercialStallStrip { extent, seed } => {
+				format!(
+					"preview: commercial-stall-strip (extent={:.2},{:.2},{:.2} seed={seed})",
+					extent.x, extent.y, extent.z
+				)
+			}
+			PreviewSubject::BitesStall {
+				extent,
+				seed,
+				door_side,
+			} => {
+				format!(
+					"preview: bites-stall (extent={:.2},{:.2},{:.2} seed={seed} door-side={door_side:?})",
+					extent.x, extent.y, extent.z
+				)
+			}
+			PreviewSubject::BitesSitdownStall {
+				extent,
+				seed,
+				door_side,
+			} => {
+				format!(
+					"preview: bites-sitdown-stall (extent={:.2},{:.2},{:.2} seed={seed} door-side={door_side:?})",
+					extent.x, extent.y, extent.z
+				)
+			}
+			PreviewSubject::BitesExamples => "preview: bites-examples (gallery)".into(),
+			PreviewSubject::MiniMart {
+				extent,
+				seed,
+				door_side,
+			} => {
+				format!(
+					"preview: mini-mart (extent={:.2},{:.2},{:.2} seed={seed} door-side={door_side:?})",
+					extent.x, extent.y, extent.z
+				)
+			}
+			PreviewSubject::MiniMartExamples => "preview: mini-mart-examples (gallery)".into(),
+			PreviewSubject::PartsStall {
+				extent,
+				seed,
+				door_side,
+			} => {
+				format!(
+					"preview: parts-stall (extent={:.2},{:.2},{:.2} seed={seed} door-side={door_side:?})",
+					extent.x, extent.y, extent.z
+				)
+			}
+			PreviewSubject::PartsExamples => "preview: parts-examples (gallery)".into(),
+			PreviewSubject::KnickKnackStall {
+				extent,
+				seed,
+				door_side,
+			} => {
+				format!(
+					"preview: knick-knack-stall (extent={:.2},{:.2},{:.2} seed={seed} door-side={door_side:?})",
+					extent.x, extent.y, extent.z
+				)
+			}
+			PreviewSubject::KnickKnackExamples => "preview: knick-knack-examples (gallery)".into(),
+			PreviewSubject::PublicRestroom {
+				extent,
+				seed,
+				door_side,
+			} => {
+				format!(
+					"preview: public-restroom (extent={:.2},{:.2},{:.2} seed={seed} door-side={door_side:?})",
+					extent.x, extent.y, extent.z
+				)
+			}
+			PreviewSubject::PublicRestroomExamples => {
+				"preview: public-restroom-examples (gallery)".into()
+			}
+			PreviewSubject::LesHallesFloorPlan {
+				extent,
+				seed,
+				ceiling,
+				ref openings,
+			} => {
+				format!(
+					"preview: les-halles-floor-plan (extent={:.1},{:.1},{:.1} seed={seed} ceiling={ceiling} openings={})",
+					extent.x,
+					extent.y,
+					extent.z,
+					openings.len()
+				)
+			}
+			PreviewSubject::LesHallesFullStorey {
+				extent,
+				seed,
+				ceiling,
+				ref openings,
+			} => {
+				format!(
+					"preview: les-halles-full-storey (extent={:.1},{:.1},{:.1} seed={seed} ceiling={ceiling} openings={})",
+					extent.x,
+					extent.y,
+					extent.z,
+					openings.len()
+				)
+			}
 		}
 	}
 
@@ -702,6 +891,25 @@ impl PreviewConfig {
 				Aabb3d::from_min_max(Vec3::new(-4.0, 0.0, -4.0), Vec3::new(4.0, 3.0, 4.0))
 			}
 			PreviewSubject::Bedroom { extent, .. } => Aabb3d::from_min_max(Vec3::ZERO, *extent),
+			PreviewSubject::CommercialStall { extent, .. }
+			| PreviewSubject::CommercialStallStrip { extent, .. }
+			| PreviewSubject::BitesStall { extent, .. }
+			| PreviewSubject::BitesSitdownStall { extent, .. }
+			| PreviewSubject::MiniMart { extent, .. }
+			| PreviewSubject::PartsStall { extent, .. }
+			| PreviewSubject::KnickKnackStall { extent, .. }
+			| PreviewSubject::PublicRestroom { extent, .. } => {
+				Aabb3d::from_min_max(Vec3::ZERO, *extent)
+			}
+			PreviewSubject::BitesExamples => bites_examples_bounds(),
+			PreviewSubject::MiniMartExamples => mini_mart_examples_bounds(),
+			PreviewSubject::PartsExamples => parts_examples_bounds(),
+			PreviewSubject::KnickKnackExamples => knick_knack_examples_bounds(),
+			PreviewSubject::PublicRestroomExamples => public_restroom_examples_bounds(),
+			PreviewSubject::LesHallesFloorPlan { extent, .. }
+			| PreviewSubject::LesHallesFullStorey { extent, .. } => {
+				les_halles_confines_bounds(*extent)
+			}
 			PreviewSubject::Pitch { rise, run, length, left, right, .. } => {
 				let left_w = left.map(|b| b.abs()).unwrap_or(0.0);
 				let right_w = right.map(|b| b.abs()).unwrap_or(0.0);
@@ -904,6 +1112,64 @@ pub struct CachedPreview {
 	stacked_rings: Option<StackedRings>,
 	bedroom: Option<Bedroom>,
 	noisy_wall: Option<NoisyRectangularWall>,
+	les_halles_floor_plan: Option<LesHallesFloorPlan>,
+	les_halles_full_storey: Option<LesHallesFullStorey>,
+	commercial_stall: Option<CommercialStall>,
+	commercial_stall_strip: Option<CommercialStallStrip>,
+	bites_stall: Option<BitesStall>,
+	bites_sitdown_stall: Option<BitesSitdownStall>,
+	mini_mart: Option<MiniMart>,
+	parts_stall: Option<PartsStall>,
+	knick_knack_stall: Option<KnickKnackStall>,
+	public_restroom: Option<PublicRestroom>,
+	/// Passage AABBs in the active stall-demo preview local space.
+	bites_passages: Vec<(Aabb3d, Vec3)>,
+	bites_examples: Vec<BitesExampleCell>,
+	mini_mart_examples: Vec<MiniMartExampleCell>,
+	parts_examples: Vec<PartsExampleCell>,
+	knick_knack_examples: Vec<KnickKnackExampleCell>,
+	public_restroom_examples: Vec<PublicRestroomExampleCell>,
+}
+
+/// One cell in [`PreviewSubject::PartsExamples`].
+#[derive(Clone)]
+struct PartsExampleCell {
+	offset: Vec3,
+	stall: PartsStall,
+}
+
+/// One cell in [`PreviewSubject::KnickKnackExamples`].
+#[derive(Clone)]
+struct KnickKnackExampleCell {
+	offset: Vec3,
+	stall: KnickKnackStall,
+}
+
+/// One cell in [`PreviewSubject::PublicRestroomExamples`].
+#[derive(Clone)]
+struct PublicRestroomExampleCell {
+	offset: Vec3,
+	stall: PublicRestroom,
+}
+
+/// One cell in [`PreviewSubject::MiniMartExamples`].
+#[derive(Clone)]
+struct MiniMartExampleCell {
+	offset: Vec3,
+	stall: MiniMart,
+}
+
+/// One cell in [`PreviewSubject::BitesExamples`].
+#[derive(Clone)]
+enum BitesExampleCell {
+	Stall {
+		offset: Vec3,
+		stall: BitesStall,
+	},
+	Sitdown {
+		offset: Vec3,
+		stall: BitesSitdownStall,
+	},
 }
 
 impl CachedPreview {
@@ -917,6 +1183,22 @@ impl CachedPreview {
 		self.stacked_rings = None;
 		self.bedroom = None;
 		self.noisy_wall = None;
+		self.les_halles_floor_plan = None;
+		self.les_halles_full_storey = None;
+		self.commercial_stall = None;
+		self.commercial_stall_strip = None;
+		self.bites_stall = None;
+		self.bites_sitdown_stall = None;
+		self.mini_mart = None;
+		self.parts_stall = None;
+		self.knick_knack_stall = None;
+		self.public_restroom = None;
+		self.bites_passages.clear();
+		self.bites_examples.clear();
+		self.mini_mart_examples.clear();
+		self.parts_examples.clear();
+		self.knick_knack_examples.clear();
+		self.public_restroom_examples.clear();
 		match &config.subject {
 			PreviewSubject::WizardsTower { noise } => {
 				let footprint = CellConstraints::cell_owned(Aabb3d::from_min_max(
@@ -959,9 +1241,690 @@ impl CachedPreview {
 					..NoisyRectangularWallParams::default()
 				}));
 			}
+			PreviewSubject::CommercialStall { extent, seed } => {
+				let confines = Confines::from_bounds(Aabb3d::from_min_max(Vec3::ZERO, *extent));
+				let noise = NoiseParams {
+					seed: *seed,
+					..NoiseParams::default()
+				};
+				match CommercialStall::fit_to_confines(&confines, noise) {
+					Ok((stall, _)) => self.commercial_stall = Some(stall),
+					Err(err) => bevy::log::error!("commercial-stall fit failed: {err}"),
+				}
+			}
+			PreviewSubject::CommercialStallStrip { extent, seed } => {
+				let confines = demo_commercial_stall_strip_confines(*extent, *seed);
+				let noise = NoiseParams {
+					seed: *seed,
+					..NoiseParams::default()
+				};
+				match CommercialStallStrip::fit_to_confines(&confines, noise) {
+					Ok((strip, _)) => self.commercial_stall_strip = Some(strip),
+					Err(err) => bevy::log::error!("commercial-stall-strip fit failed: {err}"),
+				}
+			}
+			PreviewSubject::BitesStall {
+				extent,
+				seed,
+				door_side,
+			} => {
+				let confines = demo_bites_stall_confines(*extent, *door_side);
+				self.bites_passages = passage_aabbs_at(&confines, Vec3::ZERO);
+				let noise = NoiseParams {
+					seed: *seed,
+					..NoiseParams::default()
+				};
+				match BitesStall::fit_to_confines(&confines, noise) {
+					Ok((stall, _)) => self.bites_stall = Some(stall),
+					Err(err) => bevy::log::error!("bites-stall fit failed: {err}"),
+				}
+			}
+			PreviewSubject::BitesSitdownStall {
+				extent,
+				seed,
+				door_side,
+			} => {
+				let confines = demo_bites_stall_confines(*extent, *door_side);
+				self.bites_passages = passage_aabbs_at(&confines, Vec3::ZERO);
+				let noise = NoiseParams {
+					seed: *seed,
+					..NoiseParams::default()
+				};
+				match BitesSitdownStall::fit_to_confines(&confines, noise) {
+					Ok((stall, _)) => self.bites_sitdown_stall = Some(stall),
+					Err(err) => bevy::log::error!("bites-sitdown-stall fit failed: {err}"),
+				}
+			}
+			PreviewSubject::BitesExamples => {
+				let (cells, passages) = build_bites_examples();
+				self.bites_examples = cells;
+				self.bites_passages = passages;
+			}
+			PreviewSubject::MiniMart {
+				extent,
+				seed,
+				door_side,
+			} => {
+				let confines = demo_bites_stall_confines(*extent, *door_side);
+				self.bites_passages = passage_aabbs_at(&confines, Vec3::ZERO);
+				let noise = NoiseParams {
+					seed: *seed,
+					..NoiseParams::default()
+				};
+				match MiniMart::fit_to_confines(&confines, noise) {
+					Ok((stall, _)) => self.mini_mart = Some(stall),
+					Err(err) => bevy::log::error!("mini-mart fit failed: {err}"),
+				}
+			}
+			PreviewSubject::MiniMartExamples => {
+				let (cells, passages) = build_mini_mart_examples();
+				self.mini_mart_examples = cells;
+				self.bites_passages = passages;
+			}
+			PreviewSubject::PartsStall {
+				extent,
+				seed,
+				door_side,
+			} => {
+				let confines = demo_bites_stall_confines(*extent, *door_side);
+				self.bites_passages = passage_aabbs_at(&confines, Vec3::ZERO);
+				let noise = NoiseParams {
+					seed: *seed,
+					..NoiseParams::default()
+				};
+				match PartsStall::fit_to_confines(&confines, noise) {
+					Ok((stall, _)) => self.parts_stall = Some(stall),
+					Err(err) => bevy::log::error!("parts-stall fit failed: {err}"),
+				}
+			}
+			PreviewSubject::PartsExamples => {
+				let (cells, passages) = build_parts_examples();
+				self.parts_examples = cells;
+				self.bites_passages = passages;
+			}
+			PreviewSubject::KnickKnackStall {
+				extent,
+				seed,
+				door_side,
+			} => {
+				let confines = demo_bites_stall_confines(*extent, *door_side);
+				self.bites_passages = passage_aabbs_at(&confines, Vec3::ZERO);
+				let noise = NoiseParams {
+					seed: *seed,
+					..NoiseParams::default()
+				};
+				match KnickKnackStall::fit_to_confines(&confines, noise) {
+					Ok((stall, _)) => self.knick_knack_stall = Some(stall),
+					Err(err) => bevy::log::error!("knick-knack-stall fit failed: {err}"),
+				}
+			}
+			PreviewSubject::KnickKnackExamples => {
+				let (cells, passages) = build_knick_knack_examples();
+				self.knick_knack_examples = cells;
+				self.bites_passages = passages;
+			}
+			PreviewSubject::PublicRestroom {
+				extent,
+				seed,
+				door_side,
+			} => {
+				let confines = demo_bites_stall_confines(*extent, *door_side);
+				self.bites_passages = passage_aabbs_at(&confines, Vec3::ZERO);
+				let noise = NoiseParams {
+					seed: *seed,
+					..NoiseParams::default()
+				};
+				match PublicRestroom::fit_to_confines(&confines, noise) {
+					Ok((stall, _)) => self.public_restroom = Some(stall),
+					Err(err) => bevy::log::error!("public-restroom fit failed: {err}"),
+				}
+			}
+			PreviewSubject::PublicRestroomExamples => {
+				let (cells, passages) = build_public_restroom_examples();
+				self.public_restroom_examples = cells;
+				self.bites_passages = passages;
+			}
+			PreviewSubject::LesHallesFloorPlan {
+				extent,
+				seed,
+				ceiling,
+				openings,
+			} => {
+				match fit_les_halles_floor_plan(*extent, *seed, *ceiling, openings) {
+					Ok(plan) => self.les_halles_floor_plan = Some(plan),
+					Err(err) => {
+						bevy::log::error!("les-halles-floor-plan fit failed: {err}");
+					}
+				}
+			}
+			PreviewSubject::LesHallesFullStorey {
+				extent,
+				seed,
+				ceiling,
+				openings,
+			} => {
+				match fit_les_halles_floor_plan(*extent, *seed, *ceiling, openings) {
+					Ok(plan) => {
+						let noise = NoiseParams {
+							seed: *seed,
+							..NoiseParams::default()
+						};
+						match LesHallesFullStorey::from_floor_plan(plan, noise) {
+							Ok((storey, _)) => self.les_halles_full_storey = Some(storey),
+							Err(err) => {
+								bevy::log::error!("les-halles-full-storey fill failed: {err}");
+							}
+						}
+					}
+					Err(err) => {
+						bevy::log::error!("les-halles-full-storey fit failed: {err}");
+					}
+				}
+			}
 			_ => {}
 		}
 	}
+
+	fn label_nodes(&self) -> Vec<LabelNode> {
+		use lod::gen::LodSceneLevel;
+		if let Some(stall) = self.commercial_stall.as_ref() {
+			return stall.label_nodes_for_level(LodSceneLevel::High).flatten();
+		}
+		if let Some(strip) = self.commercial_stall_strip.as_ref() {
+			return strip.label_nodes_for_level(LodSceneLevel::High).flatten();
+		}
+		if let Some(stall) = self.bites_stall.as_ref() {
+			return stall.label_nodes_for_level(LodSceneLevel::High).flatten();
+		}
+		if let Some(stall) = self.bites_sitdown_stall.as_ref() {
+			return stall.label_nodes_for_level(LodSceneLevel::High).flatten();
+		}
+		if let Some(stall) = self.mini_mart.as_ref() {
+			return stall.label_nodes_for_level(LodSceneLevel::High).flatten();
+		}
+		if let Some(stall) = self.parts_stall.as_ref() {
+			return stall.label_nodes_for_level(LodSceneLevel::High).flatten();
+		}
+		if let Some(stall) = self.knick_knack_stall.as_ref() {
+			return stall.label_nodes_for_level(LodSceneLevel::High).flatten();
+		}
+		if let Some(stall) = self.public_restroom.as_ref() {
+			return stall.label_nodes_for_level(LodSceneLevel::High).flatten();
+		}
+		if !self.bites_examples.is_empty() {
+			let mut out = Vec::new();
+			for cell in &self.bites_examples {
+				let (offset, labels) = match cell {
+					BitesExampleCell::Stall { offset, stall } => (
+						*offset,
+						stall.label_nodes_for_level(LodSceneLevel::High).flatten(),
+					),
+					BitesExampleCell::Sitdown { offset, stall } => (
+						*offset,
+						stall.label_nodes_for_level(LodSceneLevel::High).flatten(),
+					),
+				};
+				out.extend(labels.into_iter().map(|mut label| {
+					label.placement.translation += offset;
+					label
+				}));
+			}
+			return out;
+		}
+		if !self.mini_mart_examples.is_empty() {
+			let mut out = Vec::new();
+			for cell in &self.mini_mart_examples {
+				out.extend(
+					cell.stall
+						.label_nodes_for_level(LodSceneLevel::High)
+						.flatten()
+						.into_iter()
+						.map(|mut label| {
+							label.placement.translation += cell.offset;
+							label
+						}),
+				);
+			}
+			return out;
+		}
+		if !self.parts_examples.is_empty() {
+			let mut out = Vec::new();
+			for cell in &self.parts_examples {
+				out.extend(
+					cell.stall
+						.label_nodes_for_level(LodSceneLevel::High)
+						.flatten()
+						.into_iter()
+						.map(|mut label| {
+							label.placement.translation += cell.offset;
+							label
+						}),
+				);
+			}
+			return out;
+		}
+		if !self.knick_knack_examples.is_empty() {
+			let mut out = Vec::new();
+			for cell in &self.knick_knack_examples {
+				out.extend(
+					cell.stall
+						.label_nodes_for_level(LodSceneLevel::High)
+						.flatten()
+						.into_iter()
+						.map(|mut label| {
+							label.placement.translation += cell.offset;
+							label
+						}),
+				);
+			}
+			return out;
+		}
+		if !self.public_restroom_examples.is_empty() {
+			let mut out = Vec::new();
+			for cell in &self.public_restroom_examples {
+				out.extend(
+					cell.stall
+						.label_nodes_for_level(LodSceneLevel::High)
+						.flatten()
+						.into_iter()
+						.map(|mut label| {
+							label.placement.translation += cell.offset;
+							label
+						}),
+				);
+			}
+			return out;
+		}
+		if let Some(storey) = self.les_halles_full_storey.as_ref() {
+			return storey.label_nodes_for_level(LodSceneLevel::High).flatten();
+		}
+		Vec::new()
+	}
+}
+
+fn passage_aabbs_at(confines: &Confines, offset: Vec3) -> Vec<(Aabb3d, Vec3)> {
+	confines
+		.openings
+		.iter()
+		.filter(|(_, o)| matches!(o.label, OpeningLabel::Passage))
+		.map(|(_, o)| (o.bounds, offset))
+		.collect()
+}
+
+const STALL_GALLERY_GAP: f32 = 2.5;
+
+/// World offset for cell `index` in a row-major gallery of `cols` columns.
+fn gallery_grid_offset(
+	extent_at: impl Fn(usize) -> Vec3,
+	len: usize,
+	index: usize,
+	cols: usize,
+	gap: f32,
+) -> Vec3 {
+	let col = index % cols;
+	let row = index / cols;
+	let mut x = 0.0;
+	for c in 0..col {
+		x += extent_at(row * cols + c).x + gap;
+	}
+	let mut z = 0.0;
+	for r in 0..row {
+		let mut row_depth = 0.0_f32;
+		for c in 0..cols {
+			let idx = r * cols + c;
+			if idx < len {
+				row_depth = row_depth.max(extent_at(idx).z);
+			}
+		}
+		z += row_depth + gap;
+	}
+	Vec3::new(x, 0.0, z)
+}
+
+fn gallery_grid_bounds(
+	extent_at: impl Fn(usize) -> Vec3,
+	len: usize,
+	cols: usize,
+	gap: f32,
+) -> Aabb3d {
+	let mut max = Vec3::ZERO;
+	for i in 0..len {
+		let extent = extent_at(i);
+		let offset = gallery_grid_offset(&extent_at, len, i, cols, gap);
+		max = max.max(offset + extent);
+	}
+	Aabb3d::from_min_max(Vec3::ZERO, max.max(Vec3::splat(1.0)))
+}
+
+/// Fit each `(extent, seed, door_side)` cell; collect successes + passage gizmos.
+fn build_fit_gallery<T>(
+	label: &str,
+	specs: &[(Vec3, i32, BitesDoorSide)],
+	cols: usize,
+	mut fit: impl FnMut(&Confines, NoiseParams) -> Result<T, FitError>,
+) -> (Vec<(Vec3, T)>, Vec<(Aabb3d, Vec3)>) {
+	let gap = STALL_GALLERY_GAP;
+	let mut cells = Vec::new();
+	let mut passages = Vec::new();
+	for (i, (extent, seed, door_side)) in specs.iter().enumerate() {
+		let offset = gallery_grid_offset(|j| specs[j].0, specs.len(), i, cols, gap);
+		let confines = demo_bites_stall_confines(*extent, *door_side);
+		passages.extend(passage_aabbs_at(&confines, offset));
+		let noise = NoiseParams {
+			seed: *seed,
+			..NoiseParams::default()
+		};
+		match fit(&confines, noise) {
+			Ok(stall) => cells.push((offset, stall)),
+			Err(err) => {
+				bevy::log::error!("{label} ({extent:?} seed={seed}) failed: {err}")
+			}
+		}
+	}
+	(cells, passages)
+}
+
+fn bites_examples_specs() -> Vec<(bool, Vec3, i32, BitesDoorSide)> {
+	// (sitdown?, extent, seed, door_side)
+	vec![
+		// Row 0 — BitesStall
+		(false, Vec3::new(12.0, 3.2, 8.0), 1337, BitesDoorSide::South),
+		(false, Vec3::new(10.0, 3.2, 6.0), 42, BitesDoorSide::South),
+		(false, Vec3::new(5.5, 3.2, 9.0), 7, BitesDoorSide::South),
+		(false, Vec3::new(6.0, 3.2, 14.0), 99, BitesDoorSide::East),
+		(false, Vec3::new(8.0, 3.2, 22.0), 3, BitesDoorSide::South),
+		// Row 1 — BitesSitdownStall
+		(true, Vec3::new(12.0, 3.2, 8.0), 1337, BitesDoorSide::South),
+		(true, Vec3::new(14.0, 3.2, 5.0), 42, BitesDoorSide::South),
+		(true, Vec3::new(10.0, 3.2, 22.0), 11, BitesDoorSide::South),
+		(true, Vec3::new(6.0, 3.2, 14.0), 55, BitesDoorSide::East),
+		(true, Vec3::new(12.0, 3.2, 8.0), 42, BitesDoorSide::North),
+	]
+}
+
+fn bites_examples_bounds() -> Aabb3d {
+	let specs = bites_examples_specs();
+	gallery_grid_bounds(|i| specs[i].1, specs.len(), 5, STALL_GALLERY_GAP)
+}
+
+fn mini_mart_examples_specs() -> Vec<(Vec3, i32, BitesDoorSide)> {
+	vec![
+		(Vec3::new(14.0, 3.2, 12.0), 11, BitesDoorSide::South),
+		(Vec3::new(16.0, 3.2, 10.0), 42, BitesDoorSide::South),
+		(Vec3::new(12.0, 3.2, 14.0), 7, BitesDoorSide::South),
+		(Vec3::new(10.0, 3.2, 16.0), 99, BitesDoorSide::East),
+		(Vec3::new(18.0, 3.2, 12.0), 3, BitesDoorSide::North),
+		(Vec3::new(14.0, 3.2, 12.0), 21, BitesDoorSide::South),
+	]
+}
+
+fn mini_mart_examples_bounds() -> Aabb3d {
+	let specs = mini_mart_examples_specs();
+	gallery_grid_bounds(|i| specs[i].0, specs.len(), 3, STALL_GALLERY_GAP)
+}
+
+fn parts_examples_specs() -> Vec<(Vec3, i32, BitesDoorSide)> {
+	vec![
+		(Vec3::new(10.0, 3.2, 8.0), 3, BitesDoorSide::South),
+		(Vec3::new(12.0, 3.2, 7.0), 11, BitesDoorSide::South),
+		(Vec3::new(8.0, 3.2, 10.0), 42, BitesDoorSide::East),
+		(Vec3::new(14.0, 3.2, 8.0), 7, BitesDoorSide::South),
+		(Vec3::new(10.0, 3.2, 9.0), 21, BitesDoorSide::North),
+		(Vec3::new(11.0, 3.2, 8.0), 55, BitesDoorSide::South),
+	]
+}
+
+fn parts_examples_bounds() -> Aabb3d {
+	let specs = parts_examples_specs();
+	gallery_grid_bounds(|i| specs[i].0, specs.len(), 3, STALL_GALLERY_GAP)
+}
+
+fn build_parts_examples() -> (Vec<PartsExampleCell>, Vec<(Aabb3d, Vec3)>) {
+	let (cells, passages) = build_fit_gallery(
+		"parts-examples",
+		&parts_examples_specs(),
+		3,
+		|confines, noise| PartsStall::fit_to_confines(confines, noise).map(|(s, _)| s),
+	);
+	(
+		cells
+			.into_iter()
+			.map(|(offset, stall)| PartsExampleCell { offset, stall })
+			.collect(),
+		passages,
+	)
+}
+
+fn knick_knack_examples_specs() -> Vec<(Vec3, i32, BitesDoorSide)> {
+	vec![
+		(Vec3::new(10.0, 3.2, 8.0), 3, BitesDoorSide::South),
+		(Vec3::new(12.0, 3.2, 7.0), 11, BitesDoorSide::South),
+		(Vec3::new(8.0, 3.2, 10.0), 42, BitesDoorSide::East),
+		(Vec3::new(14.0, 3.2, 8.0), 7, BitesDoorSide::South),
+		(Vec3::new(10.0, 3.2, 9.0), 21, BitesDoorSide::North),
+		(Vec3::new(11.0, 3.2, 8.0), 55, BitesDoorSide::West),
+	]
+}
+
+fn knick_knack_examples_bounds() -> Aabb3d {
+	let specs = knick_knack_examples_specs();
+	gallery_grid_bounds(|i| specs[i].0, specs.len(), 3, STALL_GALLERY_GAP)
+}
+
+fn build_knick_knack_examples() -> (Vec<KnickKnackExampleCell>, Vec<(Aabb3d, Vec3)>) {
+	let (cells, passages) = build_fit_gallery(
+		"knick-knack-examples",
+		&knick_knack_examples_specs(),
+		3,
+		|confines, noise| KnickKnackStall::fit_to_confines(confines, noise).map(|(s, _)| s),
+	);
+	(
+		cells
+			.into_iter()
+			.map(|(offset, stall)| KnickKnackExampleCell { offset, stall })
+			.collect(),
+		passages,
+	)
+}
+
+fn public_restroom_examples_specs() -> Vec<(Vec3, i32, BitesDoorSide)> {
+	vec![
+		(Vec3::new(10.0, 3.2, 8.0), 3, BitesDoorSide::South),
+		(Vec3::new(12.0, 3.2, 7.0), 11, BitesDoorSide::South),
+		(Vec3::new(8.0, 3.2, 10.0), 42, BitesDoorSide::East),
+		(Vec3::new(14.0, 3.2, 8.0), 7, BitesDoorSide::South),
+		(Vec3::new(10.0, 3.2, 9.0), 21, BitesDoorSide::North),
+		(Vec3::new(11.0, 3.2, 8.0), 55, BitesDoorSide::West),
+	]
+}
+
+fn public_restroom_examples_bounds() -> Aabb3d {
+	let specs = public_restroom_examples_specs();
+	gallery_grid_bounds(|i| specs[i].0, specs.len(), 3, STALL_GALLERY_GAP)
+}
+
+fn build_public_restroom_examples() -> (Vec<PublicRestroomExampleCell>, Vec<(Aabb3d, Vec3)>) {
+	let (cells, passages) = build_fit_gallery(
+		"public-restroom-examples",
+		&public_restroom_examples_specs(),
+		3,
+		|confines, noise| PublicRestroom::fit_to_confines(confines, noise).map(|(s, _)| s),
+	);
+	(
+		cells
+			.into_iter()
+			.map(|(offset, stall)| PublicRestroomExampleCell { offset, stall })
+			.collect(),
+		passages,
+	)
+}
+
+fn build_mini_mart_examples() -> (Vec<MiniMartExampleCell>, Vec<(Aabb3d, Vec3)>) {
+	let (cells, passages) = build_fit_gallery(
+		"mini-mart-examples",
+		&mini_mart_examples_specs(),
+		3,
+		|confines, noise| MiniMart::fit_to_confines(confines, noise).map(|(s, _)| s),
+	);
+	(
+		cells
+			.into_iter()
+			.map(|(offset, stall)| MiniMartExampleCell { offset, stall })
+			.collect(),
+		passages,
+	)
+}
+
+fn build_bites_examples() -> (Vec<BitesExampleCell>, Vec<(Aabb3d, Vec3)>) {
+	let gap = STALL_GALLERY_GAP;
+	let specs = bites_examples_specs();
+	let cols = 5usize;
+	let mut cells = Vec::new();
+	let mut passages = Vec::new();
+	for (i, (sitdown, extent, seed, door_side)) in specs.iter().enumerate() {
+		let offset = gallery_grid_offset(|j| specs[j].1, specs.len(), i, cols, gap);
+		let confines = demo_bites_stall_confines(*extent, *door_side);
+		passages.extend(passage_aabbs_at(&confines, offset));
+		let noise = NoiseParams {
+			seed: *seed,
+			..NoiseParams::default()
+		};
+		if *sitdown {
+			match BitesSitdownStall::fit_to_confines(&confines, noise) {
+				Ok((stall, _)) => cells.push(BitesExampleCell::Sitdown { offset, stall }),
+				Err(err) => bevy::log::error!(
+					"bites-examples sitdown ({extent:?} seed={seed}) failed: {err}"
+				),
+			}
+		} else {
+			match BitesStall::fit_to_confines(&confines, noise) {
+				Ok((stall, _)) => cells.push(BitesExampleCell::Stall { offset, stall }),
+				Err(err) => {
+					bevy::log::error!("bites-examples stall ({extent:?} seed={seed}) failed: {err}")
+				}
+			}
+		}
+	}
+	(cells, passages)
+}
+
+fn les_halles_confines_bounds(extent: Vec3) -> Aabb3d {
+	let hx = extent.x.max(1e-4) * 0.5;
+	let hz = extent.z.max(1e-4) * 0.5;
+	let h = extent.y.max(1e-4);
+	Aabb3d::from_min_max(Vec3::new(-hx, 0.0, -hz), Vec3::new(hx, h, hz))
+}
+
+/// Demo bites stall with long Passage(s) on the chosen façade.
+fn demo_bites_stall_confines(extent: Vec3, door_side: BitesDoorSide) -> Confines {
+	let extent = extent.max(Vec3::splat(1e-4));
+	let door_h = (extent.y * 0.72).clamp(2.0, extent.y.max(2.0));
+	let mut openings = Openings::new();
+	let along = match door_side {
+		BitesDoorSide::South | BitesDoorSide::North => extent.x,
+		BitesDoorSide::East | BitesDoorSide::West => extent.z,
+	};
+	let band = 0.25_f32;
+	let mk = |a0: f32, a1: f32| -> Aabb3d {
+		match door_side {
+			BitesDoorSide::South => Aabb3d::from_min_max(
+				Vec3::new(a0, 0.0, -band),
+				Vec3::new(a1, door_h, band),
+			),
+			BitesDoorSide::North => Aabb3d::from_min_max(
+				Vec3::new(a0, 0.0, extent.z - band),
+				Vec3::new(a1, door_h, extent.z + band),
+			),
+			BitesDoorSide::East => Aabb3d::from_min_max(
+				Vec3::new(extent.x - band, 0.0, a0),
+				Vec3::new(extent.x + band, door_h, a1),
+			),
+			BitesDoorSide::West => Aabb3d::from_min_max(
+				Vec3::new(-band, 0.0, a0),
+				Vec3::new(band, door_h, a1),
+			),
+		}
+	};
+	if along >= 6.0 {
+		openings.insert(
+			OpeningId::new("demo_bites_door_a"),
+			Opening::passage(mk(0.4, (along * 0.42).max(2.5))),
+		);
+		openings.insert(
+			OpeningId::new("demo_bites_door_b"),
+			Opening::passage(mk(
+				along * 0.58,
+				(along - 0.4).max(along * 0.58 + 2.5),
+			)),
+		);
+	} else {
+		openings.insert(
+			OpeningId::new("demo_bites_door"),
+			Opening::passage(mk(0.3, (along - 0.3).max(2.2))),
+		);
+	}
+	Confines::new(Aabb3d::from_min_max(Vec3::ZERO, extent), 0.0, openings)
+}
+
+/// Demo strip confines with one Passage per ~preferred bay on the −Z façade.
+fn demo_commercial_stall_strip_confines(extent: Vec3, seed: i32) -> Confines {
+	let extent = extent.max(Vec3::splat(1e-4));
+	let along_x = extent.x >= extent.z;
+	let along = if along_x { extent.x } else { extent.z };
+	let bay = (4.5 + ((seed.rem_euclid(17) as f32) * 0.12)).clamp(3.5, 8.0);
+	let n = ((along / bay).floor() as usize).max(1);
+	let cell = along / n as f32;
+	let mut openings = Openings::new();
+	for i in 0..n {
+		let mid = (i as f32 + 0.5) * cell;
+		let half_w = (1.1_f32).min(cell * 0.35);
+		let door_h = (extent.y * 0.72).clamp(2.0, extent.y.max(2.0));
+		let bounds = if along_x {
+			Aabb3d::from_min_max(
+				Vec3::new(mid - half_w, 0.0, -0.25),
+				Vec3::new(mid + half_w, door_h, 0.25),
+			)
+		} else {
+			Aabb3d::from_min_max(
+				Vec3::new(-0.25, 0.0, mid - half_w),
+				Vec3::new(0.25, door_h, mid + half_w),
+			)
+		};
+		openings.insert(
+			OpeningId::new(format!("demo_door_{i}")),
+			Opening::passage(bounds),
+		);
+	}
+	Confines::new(Aabb3d::from_min_max(Vec3::ZERO, extent), 0.0, openings)
+}
+
+fn fit_les_halles_floor_plan(
+	extent: Vec3,
+	seed: i32,
+	ceiling: bool,
+	openings: &[PreviewOpening],
+) -> Result<LesHallesFloorPlan, richmond_buildings::FitError> {
+	let bounds = les_halles_confines_bounds(extent);
+	let empty = Confines::from_bounds(bounds);
+	let noise = NoiseParams {
+		seed,
+		..NoiseParams::default()
+	};
+	let params = LesHallesParameterized::sample(&empty, noise)?;
+	let inbound = if openings.is_empty() {
+		// Demo default: request all placement slots so shafts remain visible.
+		LesHallesFloorPlan::shaft_requests_for_all_slots(&params, &empty)
+	} else {
+		openings_from_preview(openings)
+	};
+	let confines = Confines::new(bounds, 0.0, inbound);
+	let ceiling = if ceiling {
+		RectRingFloorSlab::Solid
+	} else {
+		RectRingFloorSlab::None
+	};
+	LesHallesFloorPlan::from_parameterized_with_ceiling(params, &confines, ceiling)
+		.map(|(plan, _)| plan)
 }
 
 /// Spawn preview when the subject changes. LOD flips update host levels in-place
@@ -2009,6 +2972,163 @@ pub fn present_preview_lod(
 				);
 			}
 		}
+		PreviewSubject::CommercialStall { .. } => {
+			if let Some(stall) = cache.commercial_stall.as_ref() {
+				spawn_preview(
+					&mut commands,
+					transform,
+					ComponentsOnly(stall).scene_with_lod(&lod_ref),
+				);
+			}
+		}
+		PreviewSubject::CommercialStallStrip { .. } => {
+			if let Some(strip) = cache.commercial_stall_strip.as_ref() {
+				spawn_preview(
+					&mut commands,
+					transform,
+					ComponentsOnly(strip).scene_with_lod(&lod_ref),
+				);
+			}
+		}
+		PreviewSubject::BitesStall { .. } => {
+			if let Some(stall) = cache.bites_stall.as_ref() {
+				spawn_preview(
+					&mut commands,
+					transform,
+					ComponentsOnly(stall).scene_with_lod(&lod_ref),
+				);
+			}
+		}
+		PreviewSubject::BitesSitdownStall { .. } => {
+			if let Some(stall) = cache.bites_sitdown_stall.as_ref() {
+				spawn_preview(
+					&mut commands,
+					transform,
+					ComponentsOnly(stall).scene_with_lod(&lod_ref),
+				);
+			}
+		}
+		PreviewSubject::MiniMart { .. } => {
+			if let Some(stall) = cache.mini_mart.as_ref() {
+				spawn_preview(
+					&mut commands,
+					transform,
+					ComponentsOnly(stall).scene_with_lod(&lod_ref),
+				);
+			}
+		}
+		PreviewSubject::MiniMartExamples => {
+			for cell in &cache.mini_mart_examples {
+				let tf = transform * Transform::from_translation(cell.offset);
+				spawn_preview(
+					&mut commands,
+					tf,
+					ComponentsOnly(&cell.stall).scene_with_lod(&lod_ref),
+				);
+			}
+		}
+		PreviewSubject::PartsStall { .. } => {
+			if let Some(stall) = cache.parts_stall.as_ref() {
+				spawn_preview(
+					&mut commands,
+					transform,
+					ComponentsOnly(stall).scene_with_lod(&lod_ref),
+				);
+			}
+		}
+		PreviewSubject::PartsExamples => {
+			for cell in &cache.parts_examples {
+				let tf = transform * Transform::from_translation(cell.offset);
+				spawn_preview(
+					&mut commands,
+					tf,
+					ComponentsOnly(&cell.stall).scene_with_lod(&lod_ref),
+				);
+			}
+		}
+		PreviewSubject::KnickKnackStall { .. } => {
+			if let Some(stall) = cache.knick_knack_stall.as_ref() {
+				spawn_preview(
+					&mut commands,
+					transform,
+					ComponentsOnly(stall).scene_with_lod(&lod_ref),
+				);
+			}
+		}
+		PreviewSubject::KnickKnackExamples => {
+			for cell in &cache.knick_knack_examples {
+				let tf = transform * Transform::from_translation(cell.offset);
+				spawn_preview(
+					&mut commands,
+					tf,
+					ComponentsOnly(&cell.stall).scene_with_lod(&lod_ref),
+				);
+			}
+		}
+		PreviewSubject::PublicRestroom { .. } => {
+			if let Some(stall) = cache.public_restroom.as_ref() {
+				spawn_preview(
+					&mut commands,
+					transform,
+					ComponentsOnly(stall).scene_with_lod(&lod_ref),
+				);
+			}
+		}
+		PreviewSubject::PublicRestroomExamples => {
+			for cell in &cache.public_restroom_examples {
+				let tf = transform * Transform::from_translation(cell.offset);
+				spawn_preview(
+					&mut commands,
+					tf,
+					ComponentsOnly(&cell.stall).scene_with_lod(&lod_ref),
+				);
+			}
+		}
+		PreviewSubject::BitesExamples => {
+			for cell in &cache.bites_examples {
+				let local = match cell {
+					BitesExampleCell::Stall { offset, .. }
+					| BitesExampleCell::Sitdown { offset, .. } => {
+						Transform::from_translation(*offset)
+					}
+				};
+				let tf = transform * local;
+				match cell {
+					BitesExampleCell::Stall { stall, .. } => {
+						spawn_preview(
+							&mut commands,
+							tf,
+							ComponentsOnly(stall).scene_with_lod(&lod_ref),
+						);
+					}
+					BitesExampleCell::Sitdown { stall, .. } => {
+						spawn_preview(
+							&mut commands,
+							tf,
+							ComponentsOnly(stall).scene_with_lod(&lod_ref),
+						);
+					}
+				}
+			}
+		}
+		PreviewSubject::LesHallesFloorPlan { .. } => {
+			if let Some(plan) = cache.les_halles_floor_plan.as_ref() {
+				spawn_preview(
+					&mut commands,
+					transform,
+					ComponentsOnly(plan).scene_with_lod(&lod_ref),
+				);
+			}
+		}
+		PreviewSubject::LesHallesFullStorey { .. } => {
+			if let Some(storey) = cache.les_halles_full_storey.as_ref() {
+				spawn_preview(
+					&mut commands,
+					transform,
+					ComponentsOnly(storey).scene_with_lod(&lod_ref),
+				);
+			}
+		}
 	}
 }
 
@@ -2051,16 +3171,23 @@ pub fn connecting_hall_demo_endpoints() -> (MappedOpening, MappedOpening) {
 /// Wireframe plan AABBs (+ mapped contact quads) for `--opening` previews.
 ///
 /// Color key:
-/// - cyan / amber: authored plan [`Aabb3d`] voids
+/// - cyan / amber: authored plan [`Aabb3d`] voids (accepted)
+/// - red: authored voids the model intentionally dropped
 /// - lime: mapped outward opening quads (what connectors consume)
 /// - orange arrows: mapped XZ orientation
-pub fn draw_opening_plan_gizmos(mut gizmos: Gizmos, config: Res<PreviewConfig>) {
+/// - magenta: Les Halles fitted shaft volumes after inbound mapping
+pub fn draw_opening_plan_gizmos(
+	mut gizmos: Gizmos,
+	config: Res<PreviewConfig>,
+	cache: Res<CachedPreview>,
+) {
 	let tf = config.transform;
 	let map = |p: Vec3| tf.transform_point(p);
 	let cyan = Color::srgb(0.25, 0.95, 1.0);
 	let amber = Color::srgb(1.0, 0.75, 0.2);
 	let lime = Color::srgb(0.35, 0.95, 0.35);
 	let orange = Color::srgb(1.0, 0.55, 0.15);
+	let magenta = Color::srgb(0.95, 0.25, 0.85);
 
 	match &config.subject {
 		PreviewSubject::ArcFloor {
@@ -2357,8 +3484,223 @@ pub fn draw_opening_plan_gizmos(mut gizmos: Gizmos, config: Res<PreviewConfig>) 
 			});
 			draw_mapped_opening_overlays(&mut gizmos, map, openings, &shell, lime, orange);
 		}
+		PreviewSubject::LesHallesFloorPlan { openings, .. }
+		| PreviewSubject::LesHallesFullStorey { openings, .. } => {
+			let plan = cache.les_halles_floor_plan.as_ref().or_else(|| {
+				cache
+					.les_halles_full_storey
+					.as_ref()
+					.map(|s| &s.floor_plan)
+			});
+			let red = Color::srgb(0.95, 0.2, 0.2);
+			// Inbound preview openings (accepted → cyan/amber, rejected → red).
+			for (i, opening) in openings.iter().enumerate() {
+				let accepted = plan
+					.map(|p| les_halles_opening_accepted(p, opening))
+					.unwrap_or(false);
+				let color = if !accepted {
+					red
+				} else if i % 2 == 0 {
+					cyan
+				} else {
+					amber
+				};
+				gizmos.aabb_3d(opening.bounds(), tf, color);
+			}
+			if let Some(plan) = plan {
+				// Authored Passage voids (inner stall doors / shaft clears) — same
+				// cyan/amber wire boxes as the commercial-stall demos.
+				let mut passage_i = 0usize;
+				for (_id, opening) in plan.openings.iter() {
+					if !matches!(opening.label, OpeningLabel::Passage) {
+						continue;
+					}
+					let color = if passage_i % 2 == 0 { cyan } else { amber };
+					gizmos.aabb_3d(opening.bounds, tf, color);
+					passage_i += 1;
+				}
+				for (i, shaft) in plan.shaft_bounds.iter().enumerate() {
+					let color = if i % 2 == 0 {
+						magenta
+					} else {
+						Color::srgb(0.75, 0.35, 1.0)
+					};
+					gizmos.aabb_3d(*shaft, tf, color);
+				}
+			}
+		}
+		PreviewSubject::BitesStall { .. }
+		| PreviewSubject::BitesSitdownStall { .. }
+		| PreviewSubject::BitesExamples
+		| PreviewSubject::MiniMart { .. }
+		| PreviewSubject::MiniMartExamples
+		| PreviewSubject::PartsStall { .. }
+		| PreviewSubject::PartsExamples
+		| PreviewSubject::KnickKnackStall { .. }
+		| PreviewSubject::KnickKnackExamples
+		| PreviewSubject::PublicRestroom { .. }
+		| PreviewSubject::PublicRestroomExamples => {
+			// Cyan / amber wire Passage voids for stall demos.
+			for (i, (bounds, offset)) in cache.bites_passages.iter().enumerate() {
+				let color = if i % 2 == 0 { cyan } else { amber };
+				let cell_tf = tf * Transform::from_translation(*offset);
+				gizmos.aabb_3d(*bounds, cell_tf, color);
+			}
+		}
 		_ => {}
 	}
+}
+
+/// Whether an inbound Les Halles opening survived mapping onto the floor plan.
+fn les_halles_opening_accepted(plan: &LesHallesFloorPlan, opening: &PreviewOpening) -> bool {
+	let id = OpeningId::new(opening.id.clone());
+	match opening.label {
+		OpeningLabel::Shaft => plan.shaft_inbound.iter().any(|ids| ids.contains(&id)),
+		_ => plan.gallery.mapped_opening(&id).is_some(),
+	}
+}
+
+/// Stroke-font face labels for [`LabelNode`]s (toggle via [`PreviewConfig::label_text`]).
+///
+/// Text is word-wrapped and scaled so the block fits inside each face.
+pub fn draw_label_text_gizmos(
+	mut gizmos: Gizmos,
+	config: Res<PreviewConfig>,
+	cache: Res<CachedPreview>,
+) {
+	if !config.label_text {
+		return;
+	}
+	let labels = cache.label_nodes();
+	if labels.is_empty() {
+		return;
+	}
+	let root = config.transform;
+	for label in &labels {
+		// Placement scale is full extents; face offsets are in unit-cube local space.
+		let local = pose(label.placement);
+		let tf = root * local;
+		let extents = label.geometry.extents();
+		// (local face center, rotation, face width, face height) in world meters.
+		// Local face offset, outward-facing rotation (text reads from outside), face size.
+		// Top/bottom previously used the inward ±X rotations, so top text faced into the volume
+		// (and looked mirrored from above). Flip those so both horizontals face outward.
+		let faces = [
+			(
+				Vec3::new(0.5, 0.0, 0.0),
+				Quat::from_rotation_y(-std::f32::consts::FRAC_PI_2),
+				extents.z,
+				extents.y,
+			),
+			(
+				Vec3::new(-0.5, 0.0, 0.0),
+				Quat::from_rotation_y(std::f32::consts::FRAC_PI_2),
+				extents.z,
+				extents.y,
+			),
+			(
+				Vec3::new(0.0, 0.5, 0.0),
+				Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2)
+					* Quat::from_rotation_z(std::f32::consts::PI),
+				extents.x,
+				extents.z,
+			),
+			(
+				Vec3::new(0.0, -0.5, 0.0),
+				Quat::from_rotation_x(std::f32::consts::FRAC_PI_2),
+				extents.x,
+				extents.z,
+			),
+			(
+				Vec3::new(0.0, 0.0, 0.5),
+				Quat::IDENTITY,
+				extents.x,
+				extents.y,
+			),
+			(
+				Vec3::new(0.0, 0.0, -0.5),
+				Quat::from_rotation_y(std::f32::consts::PI),
+				extents.x,
+				extents.y,
+			),
+		];
+		let color = label.style.color();
+		for (offset, rot, face_w, face_h) in faces {
+			let (wrapped, font_size) = fit_label_face_text(&label.text, face_w, face_h);
+			let world = tf.transform_point(offset * 1.01);
+			let iso = Isometry3d::new(world, tf.rotation * rot);
+			gizmos.text(iso, &wrapped, font_size, Vec2::ZERO, color);
+		}
+	}
+}
+
+/// Word-wrap + shrink stroke font so the block fits inside `face_w` × `face_h` (meters).
+fn fit_label_face_text(text: &str, face_w: f32, face_h: f32) -> (String, f32) {
+	let max_w = (face_w * 0.72).max(0.04);
+	let max_h = (face_h * 0.72).max(0.04);
+	// Stroke font size is in world units (cap height ≈ font_size).
+	// Keep labels compact so multi-word names stay readable inside thin AABBs.
+	let mut font = (face_w.min(face_h) * 0.09).clamp(0.03, 0.22);
+	let mut wrapped = wrap_label_text(text, max_w, font);
+	for _ in 0..16 {
+		wrapped = wrap_label_text(text, max_w, font);
+		let (w, h) = measure_wrapped_label(&wrapped, font);
+		if w <= max_w && h <= max_h {
+			break;
+		}
+		font = (font * 0.82).max(0.025);
+	}
+	(wrapped, font)
+}
+
+fn wrap_label_text(text: &str, max_w: f32, font_size: f32) -> String {
+	let char_w = (font_size * 0.55).max(1e-4);
+	let max_chars = ((max_w / char_w).floor() as usize).max(1);
+	let mut lines = Vec::new();
+	let mut line = String::new();
+	for word in text.split_whitespace() {
+		if word.len() > max_chars {
+			if !line.is_empty() {
+				lines.push(std::mem::take(&mut line));
+			}
+			let mut rest = word;
+			while rest.len() > max_chars {
+				lines.push(rest[..max_chars].to_string());
+				rest = &rest[max_chars..];
+			}
+			line = rest.to_string();
+			continue;
+		}
+		if line.is_empty() {
+			line.push_str(word);
+		} else if line.len() + 1 + word.len() <= max_chars {
+			line.push(' ');
+			line.push_str(word);
+		} else {
+			lines.push(std::mem::take(&mut line));
+			line.push_str(word);
+		}
+	}
+	if !line.is_empty() {
+		lines.push(line);
+	}
+	if lines.is_empty() {
+		text.to_string()
+	} else {
+		lines.join("\n")
+	}
+}
+
+fn measure_wrapped_label(wrapped: &str, font_size: f32) -> (f32, f32) {
+	let char_w = font_size * 0.55;
+	let line_h = font_size * 1.25;
+	let mut width = 0.0_f32;
+	let mut lines = 0usize;
+	for line in wrapped.lines() {
+		width = width.max(line.len() as f32 * char_w);
+		lines += 1;
+	}
+	(width, lines.max(1) as f32 * line_h)
 }
 
 /// Massing AABBs (cyan) + valley segments (magenta) for roof-complex previews.

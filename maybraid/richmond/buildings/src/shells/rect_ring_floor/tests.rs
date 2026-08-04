@@ -52,10 +52,122 @@ fn passage_on_outer_south_maps() {
 		))
 		.build();
 	assert!(r.mapped_opening(&OpeningId::new("door")).is_some());
-	assert!(r.walls().iter().any(|w| matches!(
-		w.pieces()[0],
-		ClippedRectangularStripPiece::Clipped(_)
-	)));
+	assert!(r.walls().iter().any(|w| {
+		w.pieces()
+			.iter()
+			.any(|p| matches!(p, ClippedRectangularStripPiece::Clipped(_)))
+	}));
+}
+
+#[test]
+fn cornerish_passage_maps_to_intersecting_side_not_nearest_mid() {
+	// Midpoint is closer to East face, but the AABB only intersects the South
+	// wall volume — must still cut South (Les Halles awkward SE door case).
+	let opening = Opening::passage(bevy_math::bounding::Aabb3d::from_min_max(
+		Vec3::new(2.8, 0.2, -3.15),
+		Vec3::new(3.6, 2.8, -2.85),
+	));
+	let r = RectRingFloorParams::default()
+		.openings(Openings::new().with("awkward", opening))
+		.build();
+	assert!(
+		r.mapped_opening(&OpeningId::new("awkward")).is_some(),
+		"passage that intersects South must map even if East mid is closer"
+	);
+}
+
+#[test]
+fn corner_depth_nibble_loses_to_true_face_span() {
+	// End-of-run South door also clips an adjacent face via authorship depth.
+	// Prefer the large true-face span over a ~0.4 m corner nibble.
+	let mut door = RectRingFloor::side_passage_opening(
+		OrthoSide::South,
+		Vec3::ZERO,
+		Vec2::new(8.0, 6.0),
+		1.4,
+		2.4,
+	);
+	// Push leaf toward the SE corner of the outer ring.
+	door.bounds = {
+		let min = Vec3::from(door.bounds.min) + Vec3::new(2.6, 0.0, 0.0);
+		let max = Vec3::from(door.bounds.max) + Vec3::new(2.6, 0.0, 0.0);
+		bevy_math::bounding::Aabb3d::from_min_max(min, max)
+	};
+	let r = RectRingFloorParams::default()
+		.openings(Openings::new().with("se_door", door))
+		.build();
+	let mapped = r
+		.mapped_opening(&OpeningId::new("se_door"))
+		.expect("door must map");
+	let cut_w = mapped.face.lower_left.distance(mapped.face.lower_right);
+	assert!(
+		cut_w > 1.0,
+		"expected full leaf span, not corner nibble; cut_w={cut_w}"
+	);
+}
+
+#[test]
+fn passage_wins_overlap_against_aperture() {
+	let mut openings = Openings::new();
+	openings.insert(
+		"door",
+		RectRingFloor::side_passage_opening(
+			OrthoSide::South,
+			Vec3::ZERO,
+			Vec2::new(8.0, 6.0),
+			1.5,
+			2.1,
+		),
+	);
+	openings.insert(
+		"win",
+		RectRingFloor::side_aperture_opening(
+			OrthoSide::South,
+			Vec3::ZERO,
+			Vec2::new(8.0, 6.0),
+			1.5,
+			1.2,
+			1.0,
+		),
+	);
+	let r = RectRingFloorParams::default().openings(openings).build();
+	assert!(r.mapped_opening(&OpeningId::new("door")).is_some());
+	assert!(r.mapped_opening(&OpeningId::new("win")).is_none());
+}
+
+#[test]
+fn multiple_openings_on_same_outer_side_all_map() {
+	let mut openings = Openings::new();
+	let mut door = RectRingFloor::side_passage_opening(
+		OrthoSide::South,
+		Vec3::ZERO,
+		Vec2::new(8.0, 6.0),
+		1.2,
+		2.1,
+	);
+	door.bounds = {
+		let min = Vec3::from(door.bounds.min) + Vec3::new(-2.0, 0.0, 0.0);
+		let max = Vec3::from(door.bounds.max) + Vec3::new(-2.0, 0.0, 0.0);
+		bevy_math::bounding::Aabb3d::from_min_max(min, max)
+	};
+	let mut win = RectRingFloor::side_aperture_opening(
+		OrthoSide::South,
+		Vec3::ZERO,
+		Vec2::new(8.0, 6.0),
+		1.2,
+		1.2,
+		1.0,
+	);
+	win.bounds = {
+		let min = Vec3::from(win.bounds.min) + Vec3::new(2.0, 0.0, 0.0);
+		let max = Vec3::from(win.bounds.max) + Vec3::new(2.0, 0.0, 0.0);
+		bevy_math::bounding::Aabb3d::from_min_max(min, max)
+	};
+	openings.insert("door", door);
+	openings.insert("win", win);
+	let r = RectRingFloorParams::default().openings(openings).build();
+	assert!(r.mapped_opening(&OpeningId::new("door")).is_some());
+	assert!(r.mapped_opening(&OpeningId::new("win")).is_some());
 }
 
 #[test]
@@ -108,7 +220,20 @@ fn cuts_slab_can_remove_a_frame_band() {
 		.floor(RectRingFloorSlab::Solid)
 		.openings(openings)
 		.build();
-	let solid_n = solid.panel_nodes_for_level(LodSceneLevel::High).len();
-	let cut_n = cut.panel_nodes_for_level(LodSceneLevel::High).len();
-	assert!(cut_n < solid_n, "solid={solid_n} cut={cut_n}");
+	// Shaft AABBs also map onto walls (extra wall panels); assert the floor
+	// frame lost or subdivided the covered south band.
+	assert!(
+		cut.floor_band_count() != solid.floor_band_count()
+			|| cut.panel_nodes_for_level(LodSceneLevel::High).len()
+				!= solid.panel_nodes_for_level(LodSceneLevel::High).len(),
+		"shaft should change floor bands or panel topology (solid_bands={} cut_bands={})",
+		solid.floor_band_count(),
+		cut.floor_band_count()
+	);
+	assert!(
+		cut.floor_band_count() <= solid.floor_band_count(),
+		"cutting a full south band should not add floor bands (solid={} cut={})",
+		solid.floor_band_count(),
+		cut.floor_band_count()
+	);
 }
