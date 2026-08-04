@@ -15,6 +15,9 @@ use super::super::stall_layout::{
 	MINI_MART_OFFICE_SHORT_MIN, MINI_MART_REGISTER_MIN, MINI_MART_SHELF_DEPTH_MAX,
 	MINI_MART_SHELF_DEPTH_MIN, MINI_MART_SHELF_PLACE_RATE,
 };
+use super::super::stall_layout::mini_mart::{
+	MINI_MART_DOOR_HEADER_MIN, MINI_MART_DOOR_HEIGHT_MAX, MINI_MART_DOOR_HEIGHT_MIN,
+};
 
 /// Noise / style knobs for [`super::MiniMart`].
 #[derive(Debug, Clone, PartialEq)]
@@ -26,6 +29,7 @@ pub struct MiniMartParameterized {
 	pub aisles_area_reserve: f32,
 	pub door_width: f32,
 	pub door_along_t: f32,
+	pub door_height: f32,
 	pub register_along_t: f32,
 	pub register_seed_depth: f32,
 	pub shelves: Vec<MiniMartShelfSpec>,
@@ -78,6 +82,17 @@ impl MiniMartParameterized {
 			54.0,
 		);
 		let door_along_t = cfg.sample_range_f32_4d(0.15, 0.85, c.x, c.y, c.z, 55.0);
+		let host_h = (confines.bounds.max.y - confines.bounds.min.y).max(1.0);
+		let door_hi = MINI_MART_DOOR_HEIGHT_MAX
+			.min((host_h - MINI_MART_DOOR_HEADER_MIN).max(MINI_MART_DOOR_HEIGHT_MIN));
+		let door_height = cfg.sample_range_f32_4d(
+			MINI_MART_DOOR_HEIGHT_MIN.min(door_hi),
+			door_hi,
+			c.x,
+			c.y,
+			c.z,
+			59.0,
+		);
 		let register_along_t = cfg.sample_range_f32_4d(0.0, 1.0, c.x, c.y, c.z, 56.0);
 		let register_seed_depth = cfg.sample_range_f32_4d(2.0, 2.8, c.x, c.y, c.z, 57.0);
 		let style = LabelStyle::from_unit(cfg.sample_range_f32_4d(0.0, 1.0, c.x, c.y, c.z, 58.0));
@@ -127,6 +142,7 @@ impl MiniMartParameterized {
 			aisles_area_reserve,
 			door_width,
 			door_along_t,
+			door_height,
 			register_along_t,
 			register_seed_depth,
 			shelves,
@@ -141,6 +157,7 @@ impl MiniMartParameterized {
 			aisles_area_reserve: self.aisles_area_reserve,
 			door_width: self.door_width,
 			door_along_t: self.door_along_t,
+			door_height: self.door_height,
 			register_along_t: self.register_along_t,
 			register_seed_depth: self.register_seed_depth,
 			shelves: self.shelves.clone(),

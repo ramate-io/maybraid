@@ -151,8 +151,9 @@ mod tests {
 				.unwrap();
 		assert_eq!(stall.stall_type.text.as_str(), "MiniMart");
 		assert!(
-			stall.office_walls.len() >= 1,
-			"office divider should leave a door gap"
+			stall.office_walls.len() >= 3,
+			"office should enclose open sides (laterals + door jambs/header), got {}",
+			stall.office_walls.len()
 		);
 		assert!(!stall.stall_aisles.is_empty());
 	}

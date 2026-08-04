@@ -7,7 +7,7 @@ use procedural_common::{
 	Aabb2dPack, OptionalFaceBand, PlanAxes, PlanOpeningFace,
 };
 
-use crate::bedroom::shell::face_span_rectangle;
+use crate::bedroom::shell::{face_rectangle, face_span_rectangle};
 use crate::constraints::FaceKind;
 use crate::fit::{Confines, FitError};
 use crate::openings::OpeningLabel;
@@ -35,6 +35,11 @@ pub const MINI_MART_SHELF_PLACE_RATE: f32 = 0.55;
 /// Office door along-width range.
 pub const MINI_MART_DOOR_WIDTH_MIN: f32 = 0.9;
 pub const MINI_MART_DOOR_WIDTH_MAX: f32 = 1.2;
+/// Office door clear opening height (leaves a header to the ceiling when host is taller).
+pub const MINI_MART_DOOR_HEIGHT_MIN: f32 = 2.0;
+pub const MINI_MART_DOOR_HEIGHT_MAX: f32 = 2.4;
+/// Minimum header band above the office door.
+pub const MINI_MART_DOOR_HEADER_MIN: f32 = 0.25;
 /// Minimum office face contact when seeding.
 pub const MINI_MART_OFFICE_CONTACT: f32 = 2.0;
 
@@ -58,6 +63,8 @@ pub struct MiniMartRegions {
 	pub aisles_area_reserve: f32,
 	pub door_width: f32,
 	pub door_along_t: f32,
+	/// Clear opening height for the office door (m); header fills to the stall ceiling.
+	pub door_height: f32,
 	pub register_along_t: f32,
 	pub register_seed_depth: f32,
 	pub shelves: Vec<MiniMartShelfSpec>,
@@ -99,7 +106,7 @@ impl MiniMartRegions {
 		)?;
 
 		let (office_walls, _door_face, door_clear) = self
-			.office_door_wall(host3, host, office2, seed_face)
+			.office_enclosure(host3, host, office2, seed_face)
 			.ok_or(FitError::TooSmall {
 				reason: "mini mart office door",
 			})?;
@@ -314,23 +321,27 @@ impl MiniMartRegions {
 		None
 	}
 
-	fn office_door_wall(
+	/// Walls on every office side that is not already on the host shell, including a
+	/// sales-face divider with a door that stops below the ceiling (header panel).
+	fn office_enclosure(
 		&self,
 		host3: &Aabb3d,
 		host: Aabb2d,
 		office2: Aabb2d,
 		seed_face: PlanOpeningFace,
 	) -> Option<(Vec<Rectangle>, PlanOpeningFace, Aabb2d)> {
-		let (divider_thru, face_kind) = if seed_face.thru_is_x {
+		let office3 = plan_to_aabb3(host3, office2, PlanAxes::XZ);
+		let sales_face = Self::sales_face_kind(seed_face);
+		let divider_thru = if seed_face.thru_is_x {
 			if seed_face.inward_positive {
-				(office2.max.x, FaceKind::Left)
+				office2.max.x
 			} else {
-				(office2.min.x, FaceKind::Right)
+				office2.min.x
 			}
 		} else if seed_face.inward_positive {
-			(office2.max.y, FaceKind::Front)
+			office2.max.y
 		} else {
-			(office2.min.y, FaceKind::Back)
+			office2.min.y
 		};
 
 		let door_face = PlanOpeningFace {
@@ -350,7 +361,6 @@ impl MiniMartRegions {
 		};
 		let door_face = door_face.clip_to_host(host)?;
 		let along_len = door_face.along_len();
-		// Keep ≥0.2m return on each side when the divider is long enough.
 		let max_door = (along_len - 0.4).max(along_len * 0.5);
 		let door_w = self
 			.door_width
@@ -364,11 +374,9 @@ impl MiniMartRegions {
 			return None;
 		}
 
-		let mut door_t = self.door_along_t;
 		let (door0, door1, door_clear) = {
 			let mut placed = None;
-			for &t in &[door_t, 0.5, 0.25, 0.75] {
-				door_t = t;
+			for &t in &[self.door_along_t, 0.5, 0.25, 0.75] {
 				let Some((d0, d1)) = place_along(door_face.along0, door_face.along1, door_w, t)
 				else {
 					continue;
@@ -381,44 +389,89 @@ impl MiniMartRegions {
 			placed?
 		};
 
-		let bmin = Vec3::from(host3.min);
-		let bmax = Vec3::from(host3.max);
-		let thin = 0.05_f32;
-		let divider_aabb = if seed_face.thru_is_x {
-			Aabb3d::from_min_max(
-				Vec3::new(divider_thru - thin, bmin.y, office2.min.y),
-				Vec3::new(divider_thru + thin, bmax.y, office2.max.y),
-			)
-		} else {
-			Aabb3d::from_min_max(
-				Vec3::new(office2.min.x, bmin.y, divider_thru - thin),
-				Vec3::new(office2.max.x, bmax.y, divider_thru + thin),
-			)
-		};
-
+		let host_h = (host3.max.y - host3.min.y).max(1.0);
+		let door_h = self
+			.door_height
+			.clamp(MINI_MART_DOOR_HEIGHT_MIN, MINI_MART_DOOR_HEIGHT_MAX)
+			.min((host_h - MINI_MART_DOOR_HEADER_MIN).max(MINI_MART_DOOR_HEIGHT_MIN));
 		let u0 = ((door0 - door_face.along0) / along_len).clamp(0.0, 1.0);
 		let u1 = ((door1 - door_face.along0) / along_len).clamp(0.0, 1.0);
+
 		let mut walls = Vec::new();
+		// Solid walls on office sides that are not already the host shell.
+		for face in [
+			FaceKind::Front,
+			FaceKind::Back,
+			FaceKind::Left,
+			FaceKind::Right,
+		] {
+			if face == sales_face {
+				continue;
+			}
+			if Self::office_side_on_host(office2, host, face) {
+				continue;
+			}
+			if let Some(r) = face_rectangle(&office3, face, DEFAULT_PANEL_THICKNESS) {
+				walls.push(r);
+			}
+		}
+
+		// Sales divider: full-height jambs + header above a below-ceiling door.
+		let mut door_panels = 0usize;
 		if u0 > 0.02 {
 			if let Some(r) =
-				face_span_rectangle(&divider_aabb, face_kind, 0.0, u0, DEFAULT_PANEL_THICKNESS)
+				face_span_rectangle(&office3, sales_face, 0.0, u0, DEFAULT_PANEL_THICKNESS)
 			{
 				walls.push(r);
+				door_panels += 1;
 			}
 		}
 		if u1 < 0.98 {
 			if let Some(r) =
-				face_span_rectangle(&divider_aabb, face_kind, u1, 1.0, DEFAULT_PANEL_THICKNESS)
+				face_span_rectangle(&office3, sales_face, u1, 1.0, DEFAULT_PANEL_THICKNESS)
 			{
 				walls.push(r);
+				door_panels += 1;
 			}
 		}
-		// Prefer two returns, but accept a single panel if the door sits near an end.
-		if walls.is_empty() {
+		if door_h + MINI_MART_DOOR_HEADER_MIN <= host_h + 1e-3 {
+			let omin = Vec3::from(office3.min);
+			let omax = Vec3::from(office3.max);
+			let header_aabb = Aabb3d::from_min_max(
+				Vec3::new(omin.x, omin.y + door_h, omin.z),
+				omax,
+			);
+			if let Some(r) =
+				face_span_rectangle(&header_aabb, sales_face, u0, u1, DEFAULT_PANEL_THICKNESS)
+			{
+				walls.push(r);
+				door_panels += 1;
+			}
+		}
+		if door_panels == 0 {
 			return None;
 		}
-		let _ = door_t;
 		Some((walls, door_face, door_clear))
+	}
+
+	fn sales_face_kind(seed_face: PlanOpeningFace) -> FaceKind {
+		match (seed_face.thru_is_x, seed_face.inward_positive) {
+			(true, true) => FaceKind::Right,
+			(true, false) => FaceKind::Left,
+			(false, true) => FaceKind::Back,
+			(false, false) => FaceKind::Front,
+		}
+	}
+
+	fn office_side_on_host(office2: Aabb2d, host: Aabb2d, face: FaceKind) -> bool {
+		const EPS: f32 = 0.08;
+		match face {
+			FaceKind::Front => (office2.min.y - host.min.y).abs() < EPS,
+			FaceKind::Back => (office2.max.y - host.max.y).abs() < EPS,
+			FaceKind::Left => (office2.min.x - host.min.x).abs() < EPS,
+			FaceKind::Right => (office2.max.x - host.max.x).abs() < EPS,
+			FaceKind::Top | FaceKind::Bottom => true,
+		}
 	}
 
 	fn pack_register(
