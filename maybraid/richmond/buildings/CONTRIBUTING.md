@@ -159,7 +159,10 @@ hoc concept enums:
 | Piece | Role |
 |-------|------|
 | [`KindSpec`](src/placer/kind.rs) | Tier, weight, caps, propose knobs, predicates, commit effect |
-| [`pick_kind`](src/placer/tiers.rs) | Weighted pick among eligible rows (fillers gated until soft-goal) |
+| [`pick_kind`](src/placer/tiers.rs) / [`pack_kinds`](src/placer/pack.rs) | Weighted pick + propose/predicate/commit loop |
+| [`ProposeKnobs::FreeExtentFrac`](src/placer/kind.rs) | Host-relative free extents (dining tables, …) |
+| [`SoftGoalRole`](src/placer/kind.rs) | Credits soft-goal (`Appointed` / closet / ensuite) to open fillers |
+| [`try_corner_l`](src/placer/composition.rs) / peninsula | Shared L-run / peninsula composition |
 | [`OccupiedBudget`](src/placer/budget.rs) | Furniture vs structure occupancy caps |
 | [`WalledRoomFill`](src/placer/walled_room.rs) | Presentable partition + door for `FillableRegions::within` |
 
@@ -179,7 +182,7 @@ keep-outs. See [`common_bedroom/layout.rs`](src/usage_areas/common_bedroom/layou
 [`livable_quarters`](src/usage_areas/livable_quarters/) holds residential program
 rooms (kitchen, dining, sitting, study, living, bathrooms). Each follows
 **parameterized → plan pack → Fit + BuildingComponents**, sharing the placer
-furniture loop in [`livable_quarters/pack.rs`](src/usage_areas/livable_quarters/pack.rs).
+furniture loop in [`placer::pack`](src/placer/pack.rs).
 [`CommonBedroom`](src/usage_areas/common_bedroom/) composes
 [`ResidentialBathroom`](src/usage_areas/livable_quarters/residential_bathroom.rs)
 into ensuite `within` residuals when fit succeeds.

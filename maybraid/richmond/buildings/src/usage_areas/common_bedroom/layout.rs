@@ -20,8 +20,8 @@ use crate::usage_areas::clearance::{
 };
 use crate::usage_areas::enclosed_room::{EnclosedRoom, EnclosedRoomMins, EnclosedRoomParams};
 use crate::placer::{
-	enclosure_soft_goal_met, pick_kind, try_free_extent, try_wall_long, CommitEffect, FreeExtentKnobs,
-	KindSpec, OccupiedBudget, Predicate, ProgramTier, ProposeKnobs, SoftGoalRole, WallLongKnobs,
+	enclosure_soft_goal_met, pick_kind, propose_from_spec, try_free_extent, CommitEffect,
+	FreeExtentKnobs, KindSpec, OccupiedBudget, Predicate, ProgramTier, ProposeKnobs, SoftGoalRole,
 };
 
 use super::parameterized::SCOPE;
@@ -353,66 +353,39 @@ impl CommonBedroomRegions {
 			BedroomKind::Nightstand => {
 				place_small_box(host3, host, clearances, packed, cfg, salt, self.spaciousness)
 			}
-			BedroomKind::Wardrobe => {
-				if !packed.wardrobes.is_empty() {
-					return None;
-				}
-				let clears = storage_pack_clearances(clearances, packed);
-				try_wall_long(
+			BedroomKind::Wardrobe => self
+				.try_place_catalog_solid(
+					BedroomKind::Wardrobe,
 					host3,
 					host,
-					&clears,
+					&storage_pack_clearances(clearances, packed),
+					packed,
 					cfg,
 					salt,
-					WallLongKnobs {
-						extent: base_wardrobe_extent(self.spaciousness),
-						wall_eps: WALL_EPS,
-						attempts: 8,
-					},
 				)
-				.filter(|c| !collides_solids(c, packed))
-				.map(Placed::Wardrobe)
-			}
-			BedroomKind::Dresser => {
-				if !packed.dressers.is_empty() {
-					return None;
-				}
-				let clears = storage_pack_clearances(clearances, packed);
-				try_wall_long(
+				.map(Placed::Wardrobe),
+			BedroomKind::Dresser => self
+				.try_place_catalog_solid(
+					BedroomKind::Dresser,
 					host3,
 					host,
-					&clears,
+					&storage_pack_clearances(clearances, packed),
+					packed,
 					cfg,
 					salt,
-					WallLongKnobs {
-						extent: base_dresser_extent(self.spaciousness),
-						wall_eps: WALL_EPS,
-						attempts: 8,
-					},
 				)
-				.filter(|c| !collides_solids(c, packed))
-				.map(Placed::Dresser)
-			}
-			BedroomKind::BedroomFurniture => {
-				if packed.bedroom_furniture.len() >= MAX_BEDROOM_FURNITURE {
-					return None;
-				}
-				try_free_extent(
+				.map(Placed::Dresser),
+			BedroomKind::BedroomFurniture => self
+				.try_place_catalog_solid(
+					BedroomKind::BedroomFurniture,
 					host3,
 					host,
 					clearances,
+					packed,
 					cfg,
 					salt,
-					FreeExtentKnobs {
-						extent: base_bedroom_furniture_extent(self.spaciousness),
-						prefer_wall: false,
-						wall_eps: WALL_EPS,
-						attempts: 10,
-					},
 				)
-				.filter(|c| !collides_solids(c, packed))
-				.map(Placed::BedroomFurniture)
-			}
+				.map(Placed::BedroomFurniture),
 			BedroomKind::Closet => self
 				.try_place_closet(host3, host, clearances, packed)
 				.map(Placed::Closet),
@@ -472,6 +445,39 @@ impl CommonBedroomRegions {
 					.map(Placed::Closet)
 			}
 		}
+	}
+
+	/// Wardrobe / dresser / filler solids via catalog [`propose_from_spec`].
+	fn try_place_catalog_solid(
+		&self,
+		kind: BedroomKind,
+		host3: &Aabb3d,
+		host: Aabb2d,
+		clearances: &[Aabb2d],
+		packed: &CommonBedroomPacked,
+		cfg: &NoiseConfig,
+		salt: u32,
+	) -> Option<Aabb3d> {
+		let spec = Self::catalog().iter().find(|s| s.id == kind)?;
+		let center = Vec3::new(
+			(host.min.x + host.max.x) * 0.5,
+			host3.min.y,
+			(host.min.y + host.max.y) * 0.5,
+		);
+		let candidate = propose_from_spec(
+			spec,
+			self.spaciousness,
+			host3,
+			host,
+			clearances,
+			cfg,
+			salt,
+			center,
+		)?;
+		if collides_solids(&candidate, packed) {
+			return None;
+		}
+		Some(candidate)
 	}
 
 	fn try_place_closet(
@@ -743,22 +749,6 @@ fn base_nightstand_extent(spaciousness: f32) -> Vec3 {
 	Vec3::new(s, 0.5 * spaciousness.min(1.2), s)
 }
 
-fn base_wardrobe_extent(spaciousness: f32) -> Vec3 {
-	Vec3::new(
-		(1.1 * spaciousness).clamp(0.8, 2.0),
-		(2.1 * spaciousness.min(1.15)).clamp(1.8, 2.4),
-		(0.6 * spaciousness).clamp(0.45, 1.0),
-	)
-}
-
-fn base_dresser_extent(spaciousness: f32) -> Vec3 {
-	Vec3::new(
-		(1.3 * spaciousness).clamp(0.9, 2.2),
-		(0.9 * spaciousness.min(1.2)).clamp(0.7, 1.2),
-		(0.5 * spaciousness).clamp(0.4, 0.85),
-	)
-}
-
 fn base_closet_depth(spaciousness: f32) -> f32 {
 	(0.75 * spaciousness).clamp(0.45, 2.0)
 }
@@ -781,14 +771,6 @@ fn base_ensuite_depth(spaciousness: f32) -> f32 {
 
 fn base_ensuite_length(spaciousness: f32) -> f32 {
 	(2.6 * spaciousness).clamp(2.2, 5.5)
-}
-
-fn base_bedroom_furniture_extent(spaciousness: f32) -> Vec3 {
-	Vec3::new(
-		(1.5 * spaciousness).clamp(1.1, 2.4),
-		(0.9 * spaciousness.min(1.2)).clamp(0.7, 1.2),
-		(0.85 * spaciousness).clamp(0.65, 1.5),
-	)
 }
 
 fn collides_clearances(candidate: Aabb2d, clearances: &[Aabb2d]) -> bool {

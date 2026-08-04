@@ -4,9 +4,8 @@
 //! [`super::common_bedroom`], using the crate-root [`crate::placer`] trier for
 //! furniture rooms and empty shells for bathrooms until fixture packing lands.
 
-pub(crate) mod pack;
 #[cfg(test)]
-mod gallery_smoke;
+mod tests;
 
 pub mod dining_room;
 pub mod kitchen;

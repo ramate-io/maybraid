@@ -73,9 +73,10 @@ pub use paneling::{
 	MIN_SEGMENTS,
 };
 pub use placer::{
-	enclosure_soft_goal_met, pick_kind, try_free_extent, try_wall_long, CommitEffect,
-	FreeExtentKnobs, KindSpec, OccupiedBudget, Predicate, ProgramTier, ProposeKnobs, SoftGoalRole,
-	WallLongKnobs, WalledRoomFill,
+	enclosure_soft_goal_met, init_host, pack_kinds, pick_kind, propose_from_spec,
+	soft_goal_from_placed, try_corner_l, try_free_extent, try_peninsula_from_run, try_wall_long,
+	CommitEffect, FreeExtentKnobs, KindSpec, OccupiedBudget, PackHost, PackKnobs, Predicate,
+	ProgramTier, ProposeKnobs, SoftGoalRole, WallLongKnobs, WalledRoomFill, WALL_EPS,
 };
 pub use portals::{
 	ArcRegion, AssignedPortal, MustAssignPortal, Portal, PortalFootprint, WallRegion, SLICE_Y_FRAC,

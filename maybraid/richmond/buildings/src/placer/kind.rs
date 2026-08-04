@@ -9,6 +9,8 @@ pub enum SoftGoalRole {
 	None,
 	/// Counts as a closet-like enclosure.
 	ClosetLike,
+	/// Counts as an appointed primary (opens fillers like closet-like).
+	Appointed,
 	/// Counts as an ensuite / wet-room enclosure.
 	Ensuite,
 }
@@ -29,6 +31,25 @@ pub enum ProposeKnobs {
 	WallLong {
 		along_min: f32,
 		along_max: f32,
+		depth_min: f32,
+		depth_max: f32,
+		height: f32,
+	},
+	/// Free extent as fractions of host long/short plan spans.
+	FreeExtentFrac {
+		long_frac_min: f32,
+		long_frac_max: f32,
+		short_frac_min: f32,
+		short_frac_max: f32,
+		height: f32,
+		prefer_wall: bool,
+		/// Align long table axis with host's longer plan span.
+		align_long_to_host: bool,
+	},
+	/// Wall-long run as fractions of the wall's along-span / depth in meters.
+	WallLongFrac {
+		along_frac_min: f32,
+		along_frac_max: f32,
 		depth_min: f32,
 		depth_max: f32,
 		height: f32,

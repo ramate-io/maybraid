@@ -1,4 +1,4 @@
-//! Shared greedy furniture pack loop for livable-quarter rooms.
+//! Shared greedy furniture pack loop for usage-area rooms.
 
 use bevy_math::bounding::{Aabb2d, Aabb3d};
 use bevy_math::Vec3;
@@ -6,16 +6,17 @@ use procedural_common::{aabb2_area, aabb3_to_plan, NoiseConfig, NoiseParams, Pla
 
 use crate::fit::{Confines, FitError};
 use crate::usage_areas::clearance::PassageClearance;
-use crate::placer::predicates::{all_pass, PredicateCtx};
-use crate::placer::{
-	pick_kind, FreeExtentKnobs, KindSpec, OccupiedBudget, ProposeKnobs, WallLongKnobs,
-};
-use crate::placer::{try_free_extent, try_wall_long};
 
-const WALL_EPS: f32 = 0.08;
+use super::predicates::{all_pass, PredicateCtx};
+use super::{
+	pick_kind, try_free_extent, try_wall_long, FreeExtentKnobs, KindSpec, OccupiedBudget,
+	ProposeKnobs, SoftGoalRole, WallLongKnobs,
+};
+
+pub const WALL_EPS: f32 = 0.08;
 const PROPOSE_ATTEMPTS: u32 = 22;
 
-/// Host plan + passage keep-outs for a livable-quarter pack.
+/// Host plan + passage keep-outs for a furniture pack.
 pub struct PackHost {
 	pub host3: Aabb3d,
 	pub host: Aabb2d,
@@ -23,7 +24,15 @@ pub struct PackHost {
 	pub room_area: f32,
 }
 
-/// Knobs shared by livable-quarter furniture loops.
+impl PackHost {
+	/// Push a placed solid's plan footprint into passage keep-outs.
+	pub fn commit_footprint(&mut self, solid: &Aabb3d) {
+		self.clearances
+			.push(aabb3_to_plan(solid, PlanAxes::XZ));
+	}
+}
+
+/// Knobs shared by furniture pack loops.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct PackKnobs {
 	pub spaciousness: f32,
@@ -38,7 +47,7 @@ impl PackKnobs {
 	}
 }
 
-/// Initialize host geometry and passage clearance bands.
+/// Initialize host geometry and passage clearance bands (passage required).
 pub fn init_host(confines: &Confines) -> Result<PackHost, FitError> {
 	let host3 = confines.bounds;
 	let host = aabb3_to_plan(&host3, PlanAxes::XZ);
@@ -64,7 +73,24 @@ pub fn xz_area(aabb: &Aabb3d) -> f32 {
 	e.x.max(0.0) * e.z.max(0.0)
 }
 
-fn propose_candidate<Kind>(
+/// True when any placed kind credits the enclosure soft-goal via its spec role.
+pub fn soft_goal_from_placed<Kind: Copy + PartialEq>(
+	catalog: &[KindSpec<Kind>],
+	placed: &[(Kind, Aabb3d)],
+) -> bool {
+	placed.iter().any(|(kind, _)| {
+		catalog
+			.iter()
+			.find(|s| s.id == *kind)
+			.is_some_and(|s| matches!(
+				s.soft_goal,
+				SoftGoalRole::ClosetLike | SoftGoalRole::Appointed | SoftGoalRole::Ensuite
+			))
+	})
+}
+
+/// Propose a candidate AABB from a kind spec's propose knobs.
+pub fn propose_from_spec<Kind>(
 	spec: &KindSpec<Kind>,
 	spaciousness: f32,
 	host3: &Aabb3d,
@@ -74,6 +100,11 @@ fn propose_candidate<Kind>(
 	salt: u32,
 	center: Vec3,
 ) -> Option<Aabb3d> {
+	let span_x = (host.max.x - host.min.x).max(0.0);
+	let span_z = (host.max.y - host.min.y).max(0.0);
+	let long_span = span_x.max(span_z);
+	let short_span = span_x.min(span_z);
+
 	match spec.propose {
 		ProposeKnobs::FreeExtent {
 			min_x,
@@ -114,6 +145,64 @@ fn propose_candidate<Kind>(
 				},
 			)
 		}
+		ProposeKnobs::FreeExtentFrac {
+			long_frac_min,
+			long_frac_max,
+			short_frac_min,
+			short_frac_max,
+			height,
+			prefer_wall,
+			align_long_to_host,
+		} => {
+			let along_lo = long_span * long_frac_min * spaciousness;
+			let along_hi = (long_span * long_frac_max * spaciousness).min(long_span - 0.35);
+			let depth_lo = short_span * short_frac_min * spaciousness;
+			let depth_hi = (short_span * short_frac_max * spaciousness).min(short_span - 0.35);
+			if along_hi < along_lo + 1e-3 || depth_hi < depth_lo + 1e-3 {
+				return None;
+			}
+			let along = cfg.sample_range_f32_4d(
+				along_lo,
+				along_hi,
+				center.x,
+				center.y,
+				center.z,
+				salt as f32 + 1.0,
+			);
+			let depth = cfg.sample_range_f32_4d(
+				depth_lo,
+				depth_hi,
+				center.x,
+				center.y,
+				center.z,
+				salt as f32 + 2.0,
+			);
+			let h = height * spaciousness.min(1.2);
+			let primary = if !align_long_to_host || span_x >= span_z {
+				Vec3::new(along, h, depth)
+			} else {
+				Vec3::new(depth, h, along)
+			};
+			let secondary = Vec3::new(primary.z, primary.y, primary.x);
+			for (i, extent) in [primary, secondary].into_iter().enumerate() {
+				if let Some(aabb) = try_free_extent(
+					host3,
+					host,
+					clearances,
+					cfg,
+					salt + i as u32,
+					FreeExtentKnobs {
+						extent,
+						prefer_wall,
+						wall_eps: WALL_EPS,
+						attempts: PROPOSE_ATTEMPTS,
+					},
+				) {
+					return Some(aabb);
+				}
+			}
+			None
+		}
 		ProposeKnobs::WallLong {
 			along_min,
 			along_max,
@@ -124,6 +213,44 @@ fn propose_candidate<Kind>(
 			let along = cfg.sample_range_f32_4d(
 				along_min * spaciousness,
 				along_max * spaciousness,
+				center.x,
+				center.y,
+				center.z,
+				salt as f32 + 3.0,
+			);
+			let depth = cfg.sample_range_f32_4d(
+				depth_min * spaciousness,
+				depth_max * spaciousness,
+				center.x,
+				center.y,
+				center.z,
+				salt as f32 + 4.0,
+			);
+			let h = height * spaciousness.min(1.2);
+			try_wall_long(
+				host3,
+				host,
+				clearances,
+				cfg,
+				salt,
+				WallLongKnobs {
+					extent: Vec3::new(along, h, depth),
+					wall_eps: WALL_EPS,
+					attempts: PROPOSE_ATTEMPTS,
+				},
+			)
+		}
+		ProposeKnobs::WallLongFrac {
+			along_frac_min,
+			along_frac_max,
+			depth_min,
+			depth_max,
+			height,
+		} => {
+			let max_along = long_span;
+			let along = cfg.sample_range_f32_4d(
+				along_frac_min * max_along * spaciousness,
+				(along_frac_max * max_along * spaciousness).min(max_along - 0.15),
 				center.x,
 				center.y,
 				center.z,
@@ -166,7 +293,6 @@ pub fn pack_kinds<Kind: Copy + PartialEq>(
 	host: &mut PackHost,
 	confines: &Confines,
 	noise: NoiseParams,
-	soft_goal_met: impl Fn(&[(Kind, Aabb3d)]) -> bool,
 ) -> Result<Vec<(Kind, Aabb3d)>, FitError> {
 	let cfg = NoiseConfig::new(noise);
 	let center = confines.center();
@@ -177,11 +303,12 @@ pub fn pack_kinds<Kind: Copy + PartialEq>(
 		if budget.furniture_full() {
 			break;
 		}
+		let soft_goal_met = soft_goal_from_placed(catalog, &placed);
 		let Some(kind) = pick_kind(
 			catalog,
 			&cfg,
 			step,
-			soft_goal_met(&placed),
+			soft_goal_met,
 			|k| count_kind(&placed, k),
 		) else {
 			break;
@@ -189,7 +316,7 @@ pub fn pack_kinds<Kind: Copy + PartialEq>(
 		let Some(spec) = catalog.iter().find(|s| s.id == kind) else {
 			continue;
 		};
-		let Some(candidate) = propose_candidate(
+		let Some(candidate) = propose_from_spec(
 			spec,
 			knobs.spaciousness,
 			&host.host3,
@@ -217,7 +344,7 @@ pub fn pack_kinds<Kind: Copy + PartialEq>(
 			continue;
 		}
 		budget.commit(add);
-		host.clearances.push(plan);
+		host.commit_footprint(&candidate);
 		placed.push((kind, candidate));
 	}
 

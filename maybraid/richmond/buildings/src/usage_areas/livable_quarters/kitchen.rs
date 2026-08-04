@@ -6,22 +6,14 @@ mod parameterized;
 pub use layout::KitchenCounterLayout;
 pub use parameterized::{KitchenParameterized, KitchenPlan, SCOPE};
 
-use bevy_math::bounding::Aabb3d;
 use lod::gen::LodSceneLevel;
 use procedural_common::NoiseParams;
 use richmond_building_components::furniture::FurnitureNode;
-use richmond_building_components::placed::Placement;
 use richmond_building_components::{BuildingComponents, LabelNode, LabelStyle, Layers};
 
 use crate::fit::{Confines, FillableRegions, Fit, FitError};
-use crate::usage_areas::furniture_util::placement_filling_aabb;
+use crate::usage_areas::furniture_util::{furniture_fill, FurnitureFill};
 use crate::usage_areas::label_util::label_filling_aabb;
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct FurnitureFill {
-	pub label: LabelNode,
-	pub furniture: FurnitureNode,
-}
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Kitchen {
@@ -95,19 +87,6 @@ impl Kitchen {
 			islands,
 			fillers,
 		}
-	}
-}
-
-fn furniture_fill(
-	style: LabelStyle,
-	text: &str,
-	aabb: &Aabb3d,
-	roll: f32,
-	make: fn(Placement) -> FurnitureNode,
-) -> FurnitureFill {
-	FurnitureFill {
-		label: label_filling_aabb(style, text, aabb, roll),
-		furniture: make(placement_filling_aabb(aabb)),
 	}
 }
 

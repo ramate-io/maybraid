@@ -5,10 +5,9 @@ use procedural_common::NoiseParams;
 
 use crate::fit::{Confines, FitError};
 use crate::placer::{
-	CommitEffect, KindSpec, Predicate, ProgramTier, ProposeKnobs, SoftGoalRole,
+	init_host, pack_kinds, CommitEffect, KindSpec, PackKnobs, Predicate, ProgramTier, ProposeKnobs,
+	SoftGoalRole,
 };
-
-use crate::usage_areas::livable_quarters::pack::{init_host, pack_kinds, PackKnobs};
 
 pub const MIN_AREA: f32 = 3.0 * 3.0;
 
@@ -40,11 +39,10 @@ impl LivingRoomRegions {
 				tier: ProgramTier::Appointed,
 				weight: 1.0,
 				max_count: Some(1),
-				soft_goal: SoftGoalRole::None,
-				// Sofa: long face on a wall (more reliable than free+prefer_wall).
-				propose: ProposeKnobs::WallLong {
-					along_min: 1.35,
-					along_max: 2.2,
+				soft_goal: SoftGoalRole::Appointed,
+				propose: ProposeKnobs::WallLongFrac {
+					along_frac_min: 0.27,
+					along_frac_max: 0.44,
 					depth_min: 0.7,
 					depth_max: 0.95,
 					height: 0.85,
@@ -63,9 +61,9 @@ impl LivingRoomRegions {
 				weight: 0.65,
 				max_count: Some(1),
 				soft_goal: SoftGoalRole::None,
-				propose: ProposeKnobs::WallLong {
-					along_min: 0.85,
-					along_max: 1.35,
+				propose: ProposeKnobs::WallLongFrac {
+					along_frac_min: 0.17,
+					along_frac_max: 0.27,
 					depth_min: 0.65,
 					depth_max: 0.9,
 					height: 0.85,
@@ -123,7 +121,6 @@ impl LivingRoomRegions {
 			&mut host,
 			confines,
 			noise,
-			|p| p.iter().any(|(k, _)| *k == LivingKind::PrimarySeating),
 		)?;
 		for (kind, aabb) in placed {
 			match kind {

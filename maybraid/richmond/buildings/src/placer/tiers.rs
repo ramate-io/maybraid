@@ -65,7 +65,7 @@ pub fn pick_kind<Id: Copy>(
 pub fn soft_goal_credit(role: SoftGoalRole) -> (bool, bool) {
 	match role {
 		SoftGoalRole::None => (false, false),
-		SoftGoalRole::ClosetLike => (true, false),
+		SoftGoalRole::ClosetLike | SoftGoalRole::Appointed => (true, false),
 		SoftGoalRole::Ensuite => (false, true),
 	}
 }

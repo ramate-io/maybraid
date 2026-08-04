@@ -5,10 +5,9 @@ use procedural_common::NoiseParams;
 
 use crate::fit::{Confines, FitError};
 use crate::placer::{
-	CommitEffect, KindSpec, Predicate, ProgramTier, ProposeKnobs, SoftGoalRole,
+	init_host, pack_kinds, CommitEffect, KindSpec, PackKnobs, Predicate, ProgramTier, ProposeKnobs,
+	SoftGoalRole,
 };
-
-use crate::usage_areas::livable_quarters::pack::{init_host, pack_kinds, PackKnobs};
 
 pub const MIN_AREA: f32 = 2.2 * 2.2;
 
@@ -40,10 +39,10 @@ impl SittingRoomRegions {
 				tier: ProgramTier::Appointed,
 				weight: 1.0,
 				max_count: Some(1),
-				soft_goal: SoftGoalRole::None,
-				propose: ProposeKnobs::WallLong {
-					along_min: 1.0,
-					along_max: 1.55,
+				soft_goal: SoftGoalRole::Appointed,
+				propose: ProposeKnobs::WallLongFrac {
+					along_frac_min: 0.22,
+					along_frac_max: 0.35,
 					depth_min: 0.6,
 					depth_max: 0.85,
 					height: 0.8,
@@ -62,9 +61,9 @@ impl SittingRoomRegions {
 				weight: 0.5,
 				max_count: Some(1),
 				soft_goal: SoftGoalRole::None,
-				propose: ProposeKnobs::WallLong {
-					along_min: 0.7,
-					along_max: 1.1,
+				propose: ProposeKnobs::WallLongFrac {
+					along_frac_min: 0.14,
+					along_frac_max: 0.22,
 					depth_min: 0.55,
 					depth_max: 0.8,
 					height: 0.8,
@@ -122,7 +121,6 @@ impl SittingRoomRegions {
 			&mut host,
 			confines,
 			noise,
-			|p| p.iter().any(|(k, _)| *k == SittingKind::PrimarySeating),
 		)?;
 		for (kind, aabb) in placed {
 			match kind {
