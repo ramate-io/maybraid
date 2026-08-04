@@ -35,7 +35,7 @@ use crate::paneling::panel_complex::DEFAULT_PANEL_THICKNESS;
 
 use crate::shells::ortho::WallEdge;
 
-pub use openings::RectRingFloorSide;
+pub use openings::{RectRingFloorSide, OPENING_SPAN_TRUNCATE_MAX};
 
 /// Horizontal storey slab presentation for towering ownership.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

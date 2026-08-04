@@ -705,7 +705,7 @@ impl LesHallesFloorPlan {
 					// author a boarded / wrong-edge void for the stall strip.
 					continue;
 				};
-				Self::insert_inner_door(
+				insert_inner_door(
 					&mut openings,
 					si,
 					di,
@@ -721,7 +721,7 @@ impl LesHallesFloorPlan {
 			if authored == 0 {
 				// End clearance ate every leaf — keep one unclamped door and let
 				// gallery map-time truncate / drop decide.
-				Self::insert_inner_door(
+				insert_inner_door(
 					&mut openings,
 					si,
 					0,
@@ -1273,32 +1273,30 @@ fn corner_occupied_spans(
 	occupied
 }
 
-impl LesHallesFloorPlan {
-	fn insert_inner_door(
-		openings: &mut Openings,
-		si: usize,
-		di: usize,
-		side: OrthoSide,
-		center_xz: Vec3,
-		gallery_inner: Vec2,
-		door: LesHallesPlacedDoor,
-		door_h: f32,
-		section_along0: f32,
-	) {
-		let along_mid = section_along0 + door.along + door.width * 0.5;
-		let mut opening = RectRingFloor::side_passage_opening(
-			side,
-			center_xz,
-			gallery_inner,
-			door.width,
-			door_h,
-		);
-		opening.bounds = offset_opening_along_side(opening.bounds, side, along_mid);
-		openings.insert(
-			OpeningId::scoped(SCOPE, "inner_door", format!("{si}_{di}")),
-			opening,
-		);
-	}
+fn insert_inner_door(
+	openings: &mut Openings,
+	si: usize,
+	di: usize,
+	side: OrthoSide,
+	center_xz: Vec3,
+	gallery_inner: Vec2,
+	door: LesHallesPlacedDoor,
+	door_h: f32,
+	section_along0: f32,
+) {
+	let along_mid = section_along0 + door.along + door.width * 0.5;
+	let mut opening = RectRingFloor::side_passage_opening(
+		side,
+		center_xz,
+		gallery_inner,
+		door.width,
+		door_h,
+	);
+	opening.bounds = offset_opening_along_side(opening.bounds, side, along_mid);
+	openings.insert(
+		OpeningId::scoped(SCOPE, "inner_door", format!("{si}_{di}")),
+		opening,
+	);
 }
 
 /// Shrink a packed leaf so it stays `clearance` inside the free run.

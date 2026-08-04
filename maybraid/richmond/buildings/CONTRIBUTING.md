@@ -121,7 +121,7 @@ confines; Full\* owns program fill.
 
 | Stage | Behavior |
 |-------|----------|
-| Floor plan | Authors stall doors / façade apertures / shafts with scoped ids; subsets façade openings onto external strips. |
+| Floor plan | Authors stall doors / façade apertures / shafts with scoped ids. Ring mapping truncates a leaf slightly to fit (or drops it); only **mapped** Passage/Aperture AABBs are kept and subset onto external strips. |
 | Stall strip | Voronoi-assigns **Passage** openings to bays (each bay owns ≥1 passage uniquely; leading/trailing runs without their own door stay on the end bays). A bay that soft-fails is absorbed by extending the previous stall — never leave an uncovered along-run or a passage-less stall. |
 | Stall shell | Punches Passage / Aperture / Shaft into wall strips; **forwards** only Passage + Aperture into the interior fit. |
 | Interior | Consumes passages for clearance / counters / doors; may **author** nested openings (office door, stalls door) with its own scope (`mini_mart`, `public_restroom`, …) and put them on residual `within` confines. |
@@ -130,6 +130,7 @@ Rules of thumb:
 
 - Generated ids → `OpeningId::scoped(SCOPE, role, slot)`.
 - Soft-fail with `TooSmall` when required openings or mins cannot be met.
+- Never forward a boarded / unmapped connectable void into usage-area fill.
 - Keep walkways free with [`usage_areas::clearance`](src/usage_areas/clearance.rs)
   (`PassageClearance`, `pack_abutting_clearance`).
 
