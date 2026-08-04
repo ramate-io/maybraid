@@ -1,78 +1,193 @@
-//! Public restroom: ToiletStalls + sinks Labels.
+//! Public restroom: walled toilet stalls (+door), sinks, passage clearances.
+
+pub mod parameterized;
+
+pub use parameterized::{PublicRestroomParameterized, PublicRestroomPlan};
 
 use bevy_math::bounding::Aabb3d;
-use bevy_math::Vec3;
 use lod::gen::LodSceneLevel;
 use procedural_common::NoiseParams;
+use richmond_building_components::panels::PanelNode;
 use richmond_building_components::{BuildingComponents, LabelNode, LabelStyle, Layers};
 
-use crate::fit::{Confines, FillableRegions, Fit, FitError};
+use crate::fit::{Confines, FillRegion, FillableRegions, Fit, FitError, SpaceKind};
+use crate::openings::{Opening, OpeningId, Openings};
+use crate::paneling::Rectangle;
+
 use super::label_util::label_filling_aabb;
-use super::stall_layout::{facade_band, primary_facade, StallSide};
+use super::stall_layout::public_restroom::RestroomStallsDoor;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct PublicRestroom {
 	pub stall_type: LabelNode,
+	pub stall_walls: Vec<Rectangle>,
+	pub stalls_bounds: Aabb3d,
 	pub toilet_stalls: LabelNode,
-	pub public_restroom_sinks: LabelNode,
+	pub sink_bounds: Vec<Aabb3d>,
+	pub sinks: Vec<LabelNode>,
+	pub stalls_door_id: OpeningId,
+	pub stalls_door: Opening,
+}
+
+impl PublicRestroom {
+	pub fn from_plan(plan: PublicRestroomPlan, confines: &Confines) -> Self {
+		let style = plan.parameterized.style;
+		let sink_bounds = plan.packed.sinks.clone();
+		let sinks = sink_bounds
+			.iter()
+			.map(|aabb| {
+				label_filling_aabb(LabelStyle::Cyan, "PublicRestroomSinks", aabb, confines.roll)
+			})
+			.collect();
+		let RestroomStallsDoor { id, opening } = plan.packed.stalls_door.clone();
+		let stalls_bounds = plan.packed.stalls;
+		Self {
+			stall_type: label_filling_aabb(
+				LabelStyle::Gray,
+				"PublicRestroom",
+				&confines.bounds,
+				confines.roll,
+			),
+			stall_walls: plan.packed.stall_walls,
+			stalls_bounds,
+			toilet_stalls: label_filling_aabb(
+				style,
+				"ToiletStalls",
+				&stalls_bounds,
+				confines.roll,
+			),
+			sink_bounds,
+			sinks,
+			stalls_door_id: id,
+			stalls_door: opening,
+		}
+	}
+
+	pub fn stalls_fill_region(&self, roll: f32) -> FillRegion {
+		let mut openings = Openings::new();
+		openings.insert(self.stalls_door_id.clone(), self.stalls_door.clone());
+		FillRegion::new(
+			SpaceKind::InternalSpace,
+			Confines::new(self.stalls_bounds, roll, openings),
+		)
+	}
 }
 
 impl Fit for PublicRestroom {
 	fn fit_to_confines(
 		confines: &Confines,
-		_noise: NoiseParams,
+		noise: NoiseParams,
 	) -> Result<(Self, FillableRegions), FitError> {
-		let (side, _) = primary_facade(confines);
-		let sinks = facade_band(&confines.bounds, side, 1.0, 0.55);
-		let toilets = toilet_band(&confines.bounds, side);
-		Ok((
-			Self {
-				stall_type: label_filling_aabb(
-					LabelStyle::Gray,
-					"PublicRestroom",
-					&confines.bounds,
-					confines.roll,
-				),
-				toilet_stalls: label_filling_aabb(
-					LabelStyle::Gray,
-					"ToiletStalls",
-					&toilets,
-					confines.roll,
-				),
-				public_restroom_sinks: label_filling_aabb(
-					LabelStyle::Cyan,
-					"PublicRestroomSinks",
-					&sinks,
-					confines.roll,
-				),
-			},
-			FillableRegions::empty(),
-		))
-	}
-}
-
-fn toilet_band(bounds: &Aabb3d, entry: StallSide) -> Aabb3d {
-	let min = Vec3::from(bounds.min);
-	let max = Vec3::from(bounds.max);
-	// Toilets along a side wall adjacent to the entry façade.
-	match entry {
-		StallSide::South | StallSide::North => Aabb3d::from_min_max(
-			Vec3::new(min.x, min.y, min.z + (max.z - min.z) * 0.25),
-			Vec3::new(min.x + (max.x - min.x) * 0.4, max.y, max.z - (max.z - min.z) * 0.15),
-		),
-		StallSide::East | StallSide::West => Aabb3d::from_min_max(
-			Vec3::new(min.x + (max.x - min.x) * 0.2, min.y, min.z),
-			Vec3::new(max.x - (max.x - min.x) * 0.15, max.y, min.z + (max.z - min.z) * 0.4),
-		),
+		let params = PublicRestroomParameterized::sample(confines, noise)?;
+		let plan = PublicRestroomPlan::from_parameterized(params, confines)?;
+		let stall = Self::from_plan(plan, confines);
+		let regions = FillableRegions {
+			within: vec![stall.stalls_fill_region(confines.roll)],
+			atop: Vec::new(),
+		};
+		Ok((stall, regions))
 	}
 }
 
 impl BuildingComponents for PublicRestroom {
+	fn panel_nodes_for_level(&self, level: LodSceneLevel) -> Layers<PanelNode> {
+		let mut out = Layers::new();
+		for wall in &self.stall_walls {
+			out.extend(wall.panel_nodes_for_level(level));
+		}
+		out
+	}
+
 	fn label_nodes_for_level(&self, _level: LodSceneLevel) -> Layers<LabelNode> {
-		Layers::from_free(vec![
-			self.stall_type.clone(),
-			self.toilet_stalls.clone(),
-			self.public_restroom_sinks.clone(),
-		])
+		let mut labels = vec![self.stall_type.clone(), self.toilet_stalls.clone()];
+		labels.extend(self.sinks.iter().cloned());
+		Layers::from_free(labels)
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use bevy_math::Vec3;
+	use procedural_common::{aabb3_to_plan, PlanAxes};
+
+	use crate::openings::{Opening, OpeningId, OpeningLabel, Openings};
+
+	use super::super::stall_layout::public_restroom::{
+		RESTROOM_SINK_MIN, RESTROOM_STALLS_MIN, SCOPE,
+	};
+
+	fn roomy_south() -> Confines {
+		let mut openings = Openings::new();
+		openings.insert(
+			OpeningId::new("door_a"),
+			Opening::passage(Aabb3d::from_min_max(
+				Vec3::new(1.0, 0.0, -0.2),
+				Vec3::new(3.0, 2.2, 0.2),
+			)),
+		);
+		Confines::new(
+			Aabb3d::from_min_max(Vec3::ZERO, Vec3::new(10.0, 3.2, 8.0)),
+			0.0,
+			openings,
+		)
+	}
+
+	#[test]
+	fn restroom_fits_walled_stalls_door_and_sinks() {
+		let confines = roomy_south();
+		let (stall, regions) = PublicRestroom::fit_to_confines(
+			&confines,
+			NoiseParams {
+				seed: 3,
+				..Default::default()
+			},
+		)
+		.unwrap();
+		assert_eq!(stall.stall_type.text.as_str(), "PublicRestroom");
+		assert!(!stall.sinks.is_empty());
+		assert!(!stall.stall_walls.is_empty());
+		assert_eq!(
+			stall.stalls_door_id,
+			OpeningId::scoped(SCOPE, "stalls_door", "0")
+		);
+		assert!(matches!(stall.stalls_door.label, OpeningLabel::Passage));
+		assert_eq!(regions.within.len(), 1);
+		assert!(regions.within[0]
+			.confines
+			.openings
+			.get(&stall.stalls_door_id)
+			.is_some());
+
+		let stalls = aabb3_to_plan(&stall.stalls_bounds, PlanAxes::XZ);
+		assert!(stalls.max.x - stalls.min.x + 1e-3 >= RESTROOM_STALLS_MIN);
+		assert!(stalls.max.y - stalls.min.y + 1e-3 >= RESTROOM_STALLS_MIN);
+
+		for aabb in &stall.sink_bounds {
+			let plan = aabb3_to_plan(aabb, PlanAxes::XZ);
+			assert!(plan.max.x - plan.min.x + 1e-3 >= RESTROOM_SINK_MIN);
+			assert!(plan.max.y - plan.min.y + 1e-3 >= RESTROOM_SINK_MIN);
+		}
+	}
+
+	#[test]
+	fn restroom_soft_fails_tiny_bay() {
+		let mut openings = Openings::new();
+		openings.insert(
+			OpeningId::new("door"),
+			Opening::passage(Aabb3d::from_min_max(
+				Vec3::new(0.4, 0.0, -0.2),
+				Vec3::new(1.4, 2.0, 0.2),
+			)),
+		);
+		let confines = Confines::new(
+			Aabb3d::from_min_max(Vec3::ZERO, Vec3::new(3.5, 3.0, 3.0)),
+			0.0,
+			openings,
+		);
+		assert!(matches!(
+			PublicRestroom::fit_to_confines(&confines, NoiseParams::default()),
+			Err(FitError::TooSmall { .. })
+		));
 	}
 }

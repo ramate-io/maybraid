@@ -123,6 +123,7 @@ impl BuildingComponents for CommercialStallInterior {
 		match self {
 			Self::MiniMart(s) => s.panel_nodes_for_level(level),
 			Self::Parts(s) => s.panel_nodes_for_level(level),
+			Self::PublicRestroom(s) => s.panel_nodes_for_level(level),
 			_ => Layers::new(),
 		}
 	}

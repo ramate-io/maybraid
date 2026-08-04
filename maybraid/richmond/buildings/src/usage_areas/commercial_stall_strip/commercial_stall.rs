@@ -18,7 +18,7 @@ pub use knick_knack_stall::{KnickKnackStall, KnickKnackStallParameterized, Knick
 pub use lounge::Lounge;
 pub use mini_mart::{MiniMart, MiniMartParameterized, MiniMartPlan};
 pub use parts_stall::{PartsStall, PartsStallParameterized, PartsStallPlan};
-pub use public_restroom::PublicRestroom;
+pub use public_restroom::{PublicRestroom, PublicRestroomParameterized, PublicRestroomPlan};
 
 use bevy_math::bounding::Aabb3d;
 use bevy_math::{Vec2, Vec3};

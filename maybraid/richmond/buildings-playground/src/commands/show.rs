@@ -15,6 +15,8 @@ pub mod commercial_stall;
 pub mod commercial_stall_strip;
 pub mod knick_knack_examples;
 pub mod knick_knack_stall;
+pub mod public_restroom;
+pub mod public_restroom_examples;
 pub mod mini_mart;
 pub mod mini_mart_examples;
 pub mod parts_examples;
@@ -175,6 +177,10 @@ pub enum Show {
 	KnickKnackStall(knick_knack_stall::KnickKnackStall),
 	/// Gallery of KnickKnack stalls (passage AABBs drawn as gizmos).
 	KnickKnackExamples(knick_knack_examples::KnickKnackExamples),
+	/// Public restroom interior (walled stalls + door, sinks, passage clearances).
+	PublicRestroom(public_restroom::PublicRestroom),
+	/// Gallery of PublicRestroom stalls (passage AABBs drawn as gizmos).
+	PublicRestroomExamples(public_restroom_examples::PublicRestroomExamples),
 	/// Les Halles floor plan (ring shell + residual within cells).
 	LesHallesFloorPlan(les_halles_floor_plan::LesHallesFloorPlan),
 	/// Les Halles full storey (shell + commercial stall strip fills).
@@ -237,6 +243,8 @@ impl Show {
 			Self::PartsExamples(cmd) => Ok(cmd.into_preview()),
 			Self::KnickKnackStall(cmd) => Ok(cmd.into_preview()),
 			Self::KnickKnackExamples(cmd) => Ok(cmd.into_preview()),
+			Self::PublicRestroom(cmd) => Ok(cmd.into_preview()),
+			Self::PublicRestroomExamples(cmd) => Ok(cmd.into_preview()),
 			Self::LesHallesFloorPlan(cmd) => cmd.into_preview(),
 			Self::LesHallesFullStorey(cmd) => cmd.into_preview(),
 		};

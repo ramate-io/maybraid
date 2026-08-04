@@ -22,6 +22,7 @@ pub use commercial_stall::{
 	BitesSitdownStall, BitesStall, CommercialStall, CommercialStallInterior,
 	CommercialStallParameterized, CommercialStallPlan, KnickKnackStall,
 	KnickKnackStallParameterized, KnickKnackStallPlan, MiniMart, PartsStall, PublicRestroom,
+	PublicRestroomParameterized, PublicRestroomPlan,
 };
 
 /// Prefer larger gallery bays; merge voronoi cells below this when sampled.

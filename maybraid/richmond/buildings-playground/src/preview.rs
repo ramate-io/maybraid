@@ -44,7 +44,7 @@ use richmond_buildings::{
 	BedroomFillParams, BitesSitdownStall, BitesStall, CellConstraints, CirculationEntry,
 	CirculationRequestStatus, CommercialStall, CommercialStallStrip, Confines, Fit,
 	KnickKnackStall, LesHallesFloorPlan, LesHallesFullStorey, LesHallesParameterized, MiniMart,
-	PartsStall,
+	PartsStall, PublicRestroom,
 };
 #[derive(Component)]
 pub struct PreviewRoot;
@@ -373,6 +373,13 @@ pub enum PreviewSubject {
 	},
 	/// Side-by-side gallery of KnickKnack variants (passage boxes as gizmos).
 	KnickKnackExamples,
+	PublicRestroom {
+		extent: Vec3,
+		seed: i32,
+		door_side: BitesDoorSide,
+	},
+	/// Side-by-side gallery of PublicRestroom variants (passage boxes as gizmos).
+	PublicRestroomExamples,
 	LesHallesFloorPlan {
 		/// Confines size (XZ centered at origin; Y from 0).
 		extent: Vec3,
@@ -829,6 +836,19 @@ impl PreviewConfig {
 				)
 			}
 			PreviewSubject::KnickKnackExamples => "preview: knick-knack-examples (gallery)".into(),
+			PreviewSubject::PublicRestroom {
+				extent,
+				seed,
+				door_side,
+			} => {
+				format!(
+					"preview: public-restroom (extent={:.2},{:.2},{:.2} seed={seed} door-side={door_side:?})",
+					extent.x, extent.y, extent.z
+				)
+			}
+			PreviewSubject::PublicRestroomExamples => {
+				"preview: public-restroom-examples (gallery)".into()
+			}
 			PreviewSubject::LesHallesFloorPlan {
 				extent,
 				seed,
@@ -877,13 +897,15 @@ impl PreviewConfig {
 			| PreviewSubject::BitesSitdownStall { extent, .. }
 			| PreviewSubject::MiniMart { extent, .. }
 			| PreviewSubject::PartsStall { extent, .. }
-			| PreviewSubject::KnickKnackStall { extent, .. } => {
+			| PreviewSubject::KnickKnackStall { extent, .. }
+			| PreviewSubject::PublicRestroom { extent, .. } => {
 				Aabb3d::from_min_max(Vec3::ZERO, *extent)
 			}
 			PreviewSubject::BitesExamples => bites_examples_bounds(),
 			PreviewSubject::MiniMartExamples => mini_mart_examples_bounds(),
 			PreviewSubject::PartsExamples => parts_examples_bounds(),
 			PreviewSubject::KnickKnackExamples => knick_knack_examples_bounds(),
+			PreviewSubject::PublicRestroomExamples => public_restroom_examples_bounds(),
 			PreviewSubject::LesHallesFloorPlan { extent, .. }
 			| PreviewSubject::LesHallesFullStorey { extent, .. } => {
 				les_halles_confines_bounds(*extent)
@@ -1099,12 +1121,14 @@ pub struct CachedPreview {
 	mini_mart: Option<MiniMart>,
 	parts_stall: Option<PartsStall>,
 	knick_knack_stall: Option<KnickKnackStall>,
-	/// Passage AABBs in the active bites / mini-mart / parts / knick-knack preview local space.
+	public_restroom: Option<PublicRestroom>,
+	/// Passage AABBs in the active stall-demo preview local space.
 	bites_passages: Vec<(Aabb3d, Vec3)>,
 	bites_examples: Vec<BitesExampleCell>,
 	mini_mart_examples: Vec<MiniMartExampleCell>,
 	parts_examples: Vec<PartsExampleCell>,
 	knick_knack_examples: Vec<KnickKnackExampleCell>,
+	public_restroom_examples: Vec<PublicRestroomExampleCell>,
 }
 
 /// One cell in [`PreviewSubject::PartsExamples`].
@@ -1119,6 +1143,13 @@ struct PartsExampleCell {
 struct KnickKnackExampleCell {
 	offset: Vec3,
 	stall: KnickKnackStall,
+}
+
+/// One cell in [`PreviewSubject::PublicRestroomExamples`].
+#[derive(Clone)]
+struct PublicRestroomExampleCell {
+	offset: Vec3,
+	stall: PublicRestroom,
 }
 
 /// One cell in [`PreviewSubject::MiniMartExamples`].
@@ -1161,11 +1192,13 @@ impl CachedPreview {
 		self.mini_mart = None;
 		self.parts_stall = None;
 		self.knick_knack_stall = None;
+		self.public_restroom = None;
 		self.bites_passages.clear();
 		self.bites_examples.clear();
 		self.mini_mart_examples.clear();
 		self.parts_examples.clear();
 		self.knick_knack_examples.clear();
+		self.public_restroom_examples.clear();
 		match &config.subject {
 			PreviewSubject::WizardsTower { noise } => {
 				let footprint = CellConstraints::cell_owned(Aabb3d::from_min_max(
@@ -1330,6 +1363,27 @@ impl CachedPreview {
 				self.knick_knack_examples = cells;
 				self.bites_passages = passages;
 			}
+			PreviewSubject::PublicRestroom {
+				extent,
+				seed,
+				door_side,
+			} => {
+				let confines = demo_bites_stall_confines(*extent, *door_side);
+				self.bites_passages = passage_aabbs_at(&confines, Vec3::ZERO);
+				let noise = NoiseParams {
+					seed: *seed,
+					..NoiseParams::default()
+				};
+				match PublicRestroom::fit_to_confines(&confines, noise) {
+					Ok((stall, _)) => self.public_restroom = Some(stall),
+					Err(err) => bevy::log::error!("public-restroom fit failed: {err}"),
+				}
+			}
+			PreviewSubject::PublicRestroomExamples => {
+				let (cells, passages) = build_public_restroom_examples();
+				self.public_restroom_examples = cells;
+				self.bites_passages = passages;
+			}
 			PreviewSubject::LesHallesFloorPlan {
 				extent,
 				seed,
@@ -1394,6 +1448,9 @@ impl CachedPreview {
 		if let Some(stall) = self.knick_knack_stall.as_ref() {
 			return stall.label_nodes_for_level(LodSceneLevel::High).flatten();
 		}
+		if let Some(stall) = self.public_restroom.as_ref() {
+			return stall.label_nodes_for_level(LodSceneLevel::High).flatten();
+		}
 		if !self.bites_examples.is_empty() {
 			let mut out = Vec::new();
 			for cell in &self.bites_examples {
@@ -1449,6 +1506,22 @@ impl CachedPreview {
 		if !self.knick_knack_examples.is_empty() {
 			let mut out = Vec::new();
 			for cell in &self.knick_knack_examples {
+				out.extend(
+					cell.stall
+						.label_nodes_for_level(LodSceneLevel::High)
+						.flatten()
+						.into_iter()
+						.map(|mut label| {
+							label.placement.translation += cell.offset;
+							label
+						}),
+				);
+			}
+			return out;
+		}
+		if !self.public_restroom_examples.is_empty() {
+			let mut out = Vec::new();
+			for cell in &self.public_restroom_examples {
 				out.extend(
 					cell.stall
 						.label_nodes_for_level(LodSceneLevel::High)
@@ -1723,6 +1796,88 @@ fn build_knick_knack_examples() -> (Vec<KnickKnackExampleCell>, Vec<(Aabb3d, Vec
 			Ok((stall, _)) => cells.push(KnickKnackExampleCell { offset, stall }),
 			Err(err) => {
 				bevy::log::error!("knick-knack-examples ({extent:?} seed={seed}) failed: {err}")
+			}
+		}
+	}
+	(cells, passages)
+}
+
+fn public_restroom_examples_specs() -> Vec<(Vec3, i32, BitesDoorSide)> {
+	vec![
+		(Vec3::new(10.0, 3.2, 8.0), 3, BitesDoorSide::South),
+		(Vec3::new(12.0, 3.2, 7.0), 11, BitesDoorSide::South),
+		(Vec3::new(8.0, 3.2, 10.0), 42, BitesDoorSide::East),
+		(Vec3::new(14.0, 3.2, 8.0), 7, BitesDoorSide::South),
+		(Vec3::new(10.0, 3.2, 9.0), 21, BitesDoorSide::North),
+		(Vec3::new(11.0, 3.2, 8.0), 55, BitesDoorSide::West),
+	]
+}
+
+fn public_restroom_examples_bounds() -> Aabb3d {
+	let gap = 2.5_f32;
+	let specs = public_restroom_examples_specs();
+	let cols = 3usize;
+	let mut max = Vec3::ZERO;
+	for (i, (extent, _, _)) in specs.iter().enumerate() {
+		let col = i % cols;
+		let row = i / cols;
+		let mut x = 0.0;
+		for c in 0..col {
+			let idx = row * cols + c;
+			x += specs[idx].0.x + gap;
+		}
+		let mut z = 0.0;
+		for r in 0..row {
+			let mut row_depth = 0.0_f32;
+			for c in 0..cols {
+				let idx = r * cols + c;
+				if idx < specs.len() {
+					row_depth = row_depth.max(specs[idx].0.z);
+				}
+			}
+			z += row_depth + gap;
+		}
+		max = max.max(Vec3::new(x + extent.x, extent.y, z + extent.z));
+	}
+	Aabb3d::from_min_max(Vec3::ZERO, max.max(Vec3::splat(1.0)))
+}
+
+fn build_public_restroom_examples() -> (Vec<PublicRestroomExampleCell>, Vec<(Aabb3d, Vec3)>) {
+	let gap = 2.5_f32;
+	let specs = public_restroom_examples_specs();
+	let cols = 3usize;
+	let mut cells = Vec::new();
+	let mut passages = Vec::new();
+	for (i, (extent, seed, door_side)) in specs.iter().enumerate() {
+		let col = i % cols;
+		let row = i / cols;
+		let mut x = 0.0;
+		for c in 0..col {
+			let idx = row * cols + c;
+			x += specs[idx].0.x + gap;
+		}
+		let mut z = 0.0;
+		for r in 0..row {
+			let mut row_depth = 0.0_f32;
+			for c in 0..cols {
+				let idx = r * cols + c;
+				if idx < specs.len() {
+					row_depth = row_depth.max(specs[idx].0.z);
+				}
+			}
+			z += row_depth + gap;
+		}
+		let offset = Vec3::new(x, 0.0, z);
+		let confines = demo_bites_stall_confines(*extent, *door_side);
+		passages.extend(passage_aabbs_at(&confines, offset));
+		let noise = NoiseParams {
+			seed: *seed,
+			..NoiseParams::default()
+		};
+		match PublicRestroom::fit_to_confines(&confines, noise) {
+			Ok((stall, _)) => cells.push(PublicRestroomExampleCell { offset, stall }),
+			Err(err) => {
+				bevy::log::error!("public-restroom-examples ({extent:?} seed={seed}) failed: {err}")
 			}
 		}
 	}
@@ -3079,6 +3234,25 @@ pub fn present_preview_lod(
 				);
 			}
 		}
+		PreviewSubject::PublicRestroom { .. } => {
+			if let Some(stall) = cache.public_restroom.as_ref() {
+				spawn_preview(
+					&mut commands,
+					transform,
+					ComponentsOnly(stall).scene_with_lod(&lod_ref),
+				);
+			}
+		}
+		PreviewSubject::PublicRestroomExamples => {
+			for cell in &cache.public_restroom_examples {
+				let tf = transform * Transform::from_translation(cell.offset);
+				spawn_preview(
+					&mut commands,
+					tf,
+					ComponentsOnly(&cell.stall).scene_with_lod(&lod_ref),
+				);
+			}
+		}
 		PreviewSubject::BitesExamples => {
 			for cell in &cache.bites_examples {
 				let local = match cell {
@@ -3520,7 +3694,9 @@ pub fn draw_opening_plan_gizmos(
 		| PreviewSubject::PartsStall { .. }
 		| PreviewSubject::PartsExamples
 		| PreviewSubject::KnickKnackStall { .. }
-		| PreviewSubject::KnickKnackExamples => {
+		| PreviewSubject::KnickKnackExamples
+		| PreviewSubject::PublicRestroom { .. }
+		| PreviewSubject::PublicRestroomExamples => {
 			// Cyan / amber wire Passage voids for stall demos.
 			for (i, (bounds, offset)) in cache.bites_passages.iter().enumerate() {
 				let color = if i % 2 == 0 { cyan } else { amber };

@@ -98,5 +98,6 @@ pub use usage_areas::{
 	CommercialStallParameterized, CommercialStallPlan, CommercialStallStrip,
 	CommercialStallStripParameterized, CommercialStallStripPlan, KnickKnackStall,
 	KnickKnackStallParameterized, KnickKnackStallPlan, MiniMart, PartsStall, PublicRestroom,
+	PublicRestroomParameterized, PublicRestroomPlan,
 };
 pub use wall_demo::{NoisyRectangularWall, NoisyRectangularWallParams};

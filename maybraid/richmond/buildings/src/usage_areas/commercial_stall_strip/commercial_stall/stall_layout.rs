@@ -7,6 +7,7 @@
 //! - [`mini_mart`] — MiniMart clearances / office / register / aisles / shelves
 //! - [`parts`] — Parts office / parts pockets
 //! - [`knick_knack`] — KnickKnack clearances / wall displays
+//! - [`public_restroom`] — toilet stalls enclosure / sinks
 //!
 //! Domain constants live in the submodule that owns them; this root re-exports
 //! types used across interior modules.
@@ -16,6 +17,7 @@ pub mod facade;
 pub mod knick_knack;
 pub mod mini_mart;
 pub mod parts;
+pub mod public_restroom;
 
 pub use bites::{
 	BitesCounterChoice, BitesKitchen, BitesPassageSpec, BitesSitdownRegions, EligibleBitesPassage,
