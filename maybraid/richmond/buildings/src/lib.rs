@@ -100,7 +100,8 @@ pub use storeys::les_halles::{
 pub use usage_areas::{
 	BitesSitdownStall, BitesStall, CommercialStall, CommercialStallInterior,
 	CommercialStallParameterized, CommercialStallPlan, CommercialStallStrip,
-	CommercialStallStripParameterized, CommercialStallStripPlan, HallsToShafts, Janitorial,
+	CommercialStallStripParameterized, CommercialStallStripPlan, HallsToShafts,
+	HallsToShaftsOptions, Janitorial, MAX_HALL_WIDTH, MIN_HALL_WIDTH,
 	KnickKnackStall, KnickKnackStallParameterized, KnickKnackStallPlan, LivableApartment, MiniMart,
 	PartsStall,
 	PlanCell, PublicRestroom, PublicRestroomParameterized, PublicRestroomPlan,

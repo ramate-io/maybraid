@@ -18,6 +18,9 @@ pub struct HallsToShafts {
 	/// FastNoise seed lane for hall width / bias sampling.
 	#[arg(long, default_value_t = 1337)]
 	pub seed: i32,
+	/// Fixed hall clear width in meters (omit to sample 2–4 m from noise).
+	#[arg(long)]
+	pub hall_width: Option<f32>,
 	/// Inbound openings (repeatable). Prefer AABB specs:
 	/// `id:shaft:minx,miny,minz:maxx,maxy,maxz` or `id:passage:…`.
 	///
@@ -35,6 +38,7 @@ impl HallsToShafts {
 			PreviewSubject::HallsToShafts {
 				extent: self.extent.max(Vec3::splat(1e-4)),
 				seed: self.seed,
+				hall_width: self.hall_width.filter(|w| *w > 1e-3),
 				openings,
 			},
 			self.transform.transform(),

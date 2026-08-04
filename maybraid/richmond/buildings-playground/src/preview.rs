@@ -44,8 +44,8 @@ use richmond_buildings::{
 	BedroomFillParams, BitesSitdownStall, BitesStall, CellConstraints, CirculationEntry,
 	CirculationRequestStatus, CommercialStall, CommercialStallStrip, Confines, Fit, FitError,
 	IApartmentFloorPlan, 	IApartmentFullStorey, IApartmentParameterized, KnickKnackStall, HallsToShafts as HallsToShaftsFit,
-	FillableRegions, LesHallesFloorPlan, LesHallesFullStorey, LesHallesParameterized, MiniMart,
-	PartsStall, PublicRestroom, SpaceKind,
+	FillableRegions, HallsToShaftsOptions, LesHallesFloorPlan, LesHallesFullStorey,
+	LesHallesParameterized, MiniMart, PartsStall, PublicRestroom, SpaceKind,
 };
 #[derive(Component)]
 pub struct PreviewRoot;
@@ -419,6 +419,8 @@ pub enum PreviewSubject {
 	HallsToShafts {
 		extent: Vec3,
 		seed: i32,
+		/// `None` ⇒ sample 2–4 m; `Some` ⇒ fixed clear width.
+		hall_width: Option<f32>,
 		openings: Vec<PreviewOpening>,
 	},
 }
@@ -936,10 +938,14 @@ impl PreviewConfig {
 			PreviewSubject::HallsToShafts {
 				extent,
 				seed,
+				hall_width,
 				ref openings,
 			} => {
+				let width = hall_width
+					.map(|w| format!("width={w:.2}"))
+					.unwrap_or_else(|| "width=noise".into());
 				format!(
-					"preview: halls-to-shafts (extent={:.1},{:.1},{:.1} seed={seed} openings={})",
+					"preview: halls-to-shafts (extent={:.1},{:.1},{:.1} seed={seed} {width} openings={})",
 					extent.x,
 					extent.y,
 					extent.z,
@@ -1560,8 +1566,9 @@ impl CachedPreview {
 			PreviewSubject::HallsToShafts {
 				extent,
 				seed,
+				hall_width,
 				openings,
-			} => match fit_halls_to_shafts(*extent, *seed, openings) {
+			} => match fit_halls_to_shafts(*extent, *seed, *hall_width, openings) {
 				Ok(preview) => self.halls_to_shafts = Some(preview),
 				Err(err) => {
 					bevy::log::error!("halls-to-shafts fit failed: {err}");
@@ -2128,6 +2135,7 @@ fn fit_i_apartment_floor_plan(
 fn fit_halls_to_shafts(
 	extent: Vec3,
 	seed: i32,
+	hall_width: Option<f32>,
 	openings: &[PreviewOpening],
 ) -> Result<HallsToShaftsPreview, richmond_buildings::FitError> {
 	let host = les_halles_confines_bounds(extent);
@@ -2143,7 +2151,11 @@ fn fit_halls_to_shafts(
 		seed,
 		..NoiseParams::default()
 	};
-	let (fit, regions) = HallsToShaftsFit::fit_to_confines(&confines, noise)?;
+	let (fit, regions) = HallsToShaftsFit::from_confines_with(
+		&confines,
+		noise,
+		HallsToShaftsOptions { hall_width },
+	)?;
 	Ok(HallsToShaftsPreview {
 		fit,
 		regions,

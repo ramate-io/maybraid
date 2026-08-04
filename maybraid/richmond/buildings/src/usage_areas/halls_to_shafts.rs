@@ -17,9 +17,22 @@ use crate::openings::{Opening, OpeningLabel, Openings};
 use crate::usage_areas::plan_cells::subtract_aabb2;
 
 const EPS: f32 = 1e-3;
-const MIN_HALL_WIDTH: f32 = 1.1;
-const MAX_HALL_WIDTH: f32 = 1.4;
+/// Default noisy hall-width range (meters).
+pub const MIN_HALL_WIDTH: f32 = 2.0;
+/// Default noisy hall-width range (meters).
+pub const MAX_HALL_WIDTH: f32 = 4.0;
 const MIN_HOST: f32 = 2.0;
+
+/// Optional knobs for [`HallsToShafts::from_confines_with`].
+///
+/// When [`Self::hall_width`] is `None`, width is sampled in
+/// \[[`MIN_HALL_WIDTH`], [`MAX_HALL_WIDTH`]\]. Callers that need a typology-
+/// fixed corridor (e.g. always 3 m) pass `Some(width)`.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct HallsToShaftsOptions {
+	/// Explicit hall clear width in meters (`None` ⇒ sample from noise).
+	pub hall_width: Option<f32>,
+}
 
 /// Fitted orthogonal halls connecting shafts/passages; no wall geometry.
 #[derive(Debug, Clone, PartialEq)]
@@ -35,6 +48,15 @@ impl HallsToShafts {
 		confines: &Confines,
 		noise: NoiseParams,
 	) -> Result<(Self, FillableRegions), FitError> {
+		Self::from_confines_with(confines, noise, HallsToShaftsOptions::default())
+	}
+
+	/// Fit with optional fixed [`HallsToShaftsOptions::hall_width`].
+	pub fn from_confines_with(
+		confines: &Confines,
+		noise: NoiseParams,
+		options: HallsToShaftsOptions,
+	) -> Result<(Self, FillableRegions), FitError> {
 		let footprint = aabb_xz_extent(&confines.bounds);
 		if footprint.x + EPS < MIN_HOST || footprint.y + EPS < MIN_HOST {
 			return Err(FitError::TooSmall {
@@ -47,14 +69,16 @@ impl HallsToShafts {
 		let y1 = Vec3::from(confines.bounds.max).y;
 		let cfg = NoiseConfig::new(noise);
 		let c = confines.center();
-		let hall_width = cfg.sample_range_f32_4d(
-			MIN_HALL_WIDTH,
-			MAX_HALL_WIDTH,
-			c.x,
-			c.y,
-			c.z,
-			110.0,
-		);
+		let hall_width = options.hall_width.unwrap_or_else(|| {
+			cfg.sample_range_f32_4d(
+				MIN_HALL_WIDTH,
+				MAX_HALL_WIDTH,
+				c.x,
+				c.y,
+				c.z,
+				110.0,
+			)
+		}).clamp(MIN_HALL_WIDTH * 0.5, MAX_HALL_WIDTH * 1.5);
 		let beta = cfg.sample_range_f32_4d(1.0, 3.0, c.x, c.y, c.z, 111.0);
 
 		let terminals = collect_terminals(&confines.openings, host);
@@ -72,7 +96,7 @@ impl HallsToShafts {
 		let residuals = if cuts.is_empty() {
 			vec![host]
 		} else {
-			subtract_aabb2(host, &cuts)
+			merge_rect_residuals(subtract_aabb2(host, &cuts))
 		};
 
 		let mut within = Vec::new();
@@ -550,10 +574,12 @@ fn thicken_paths(paths: &[Vec<Segment>], hall_width: f32, host: Aabb2d) -> Vec<A
 			if dx < EPS && dz < EPS {
 				continue;
 			}
+			// Extend each end by `half` so an L/T joint fills the full
+			// perpendicular corridor width (not just the centerline).
 			let band = if dx >= dz {
 				// Horizontal (along X).
-				let x0 = seg.a.x.min(seg.b.x);
-				let x1 = seg.a.x.max(seg.b.x);
+				let x0 = seg.a.x.min(seg.b.x) - half;
+				let x1 = seg.a.x.max(seg.b.x) + half;
 				let z = 0.5 * (seg.a.y + seg.b.y);
 				Aabb2d {
 					min: Vec2::new(x0, z - half),
@@ -561,8 +587,8 @@ fn thicken_paths(paths: &[Vec<Segment>], hall_width: f32, host: Aabb2d) -> Vec<A
 				}
 			} else {
 				// Vertical (along Z).
-				let z0 = seg.a.y.min(seg.b.y);
-				let z1 = seg.a.y.max(seg.b.y);
+				let z0 = seg.a.y.min(seg.b.y) - half;
+				let z1 = seg.a.y.max(seg.b.y) + half;
 				let x = 0.5 * (seg.a.x + seg.b.x);
 				Aabb2d {
 					min: Vec2::new(x - half, z0),
@@ -575,6 +601,47 @@ fn thicken_paths(paths: &[Vec<Segment>], hall_width: f32, host: Aabb2d) -> Vec<A
 		}
 	}
 	bands
+}
+
+/// Merge residual rectangles whose union is still a rectangle (shared full edge).
+fn merge_rect_residuals(mut rects: Vec<Aabb2d>) -> Vec<Aabb2d> {
+	let mut changed = true;
+	while changed {
+		changed = false;
+		'outer: for i in 0..rects.len() {
+			for j in (i + 1)..rects.len() {
+				if let Some(m) = try_merge_rect(rects[i], rects[j]) {
+					rects[i] = m;
+					rects.swap_remove(j);
+					changed = true;
+					break 'outer;
+				}
+			}
+		}
+	}
+	rects
+}
+
+fn try_merge_rect(a: Aabb2d, b: Aabb2d) -> Option<Aabb2d> {
+	// Same Y extent, abutting/overlapping in X → horizontal merge.
+	if (a.min.y - b.min.y).abs() <= EPS && (a.max.y - b.max.y).abs() <= EPS {
+		if a.max.x + EPS >= b.min.x && b.max.x + EPS >= a.min.x {
+			return Some(Aabb2d {
+				min: Vec2::new(a.min.x.min(b.min.x), a.min.y),
+				max: Vec2::new(a.max.x.max(b.max.x), a.max.y),
+			});
+		}
+	}
+	// Same X extent, abutting/overlapping in Y → vertical merge.
+	if (a.min.x - b.min.x).abs() <= EPS && (a.max.x - b.max.x).abs() <= EPS {
+		if a.max.y + EPS >= b.min.y && b.max.y + EPS >= a.min.y {
+			return Some(Aabb2d {
+				min: Vec2::new(a.min.x, a.min.y.min(b.min.y)),
+				max: Vec2::new(a.max.x, a.max.y.max(b.max.y)),
+			});
+		}
+	}
+	None
 }
 
 fn merge_collinear_bands(mut bands: Vec<Aabb2d>) -> Vec<Aabb2d> {
@@ -757,22 +824,103 @@ mod tests {
 	}
 
 	#[test]
-	fn interior_bias_prefers_core_channel() {
-		// Corner terminals: with high β, the L should prefer the more interior bend.
+	fn l_junction_fills_full_corridor_width() {
+		// Two shafts on a clear L: horizontal then vertical through (0,0).
 		let mut openings = Openings::new();
-		let (a, oa) = shaft("s0", -8.0, -8.0, 1.5);
-		let (b, ob) = shaft("s1", 8.0, 8.0, 1.5);
+		let (a, oa) = shaft("s0", -6.0, 0.0, 2.0);
+		let (b, ob) = shaft("s1", 0.0, 6.0, 2.0);
 		openings.insert(a, oa);
 		openings.insert(b, ob);
 		let confines = rect_confines(
-			Vec3::new(-10.0, 0.0, -10.0),
-			Vec3::new(10.0, 3.0, 10.0),
+			Vec3::new(-12.0, 0.0, -12.0),
+			Vec3::new(12.0, 3.0, 12.0),
 			openings,
 		);
-		let (hts, _) = HallsToShafts::from_confines(&confines, NoiseParams::default()).unwrap();
+		let width = 3.0;
+		let (hts, _) = HallsToShafts::from_confines_with(
+			&confines,
+			NoiseParams::default(),
+			HallsToShaftsOptions {
+				hall_width: Some(width),
+			},
+		)
+		.unwrap();
+		assert!((hts.hall_width - width).abs() < 1e-4);
+		let half = width * 0.5;
+		// Corner square of the L must be covered (not a half-width indent).
+		let corner = Aabb2d {
+			min: Vec2::new(-half, -half),
+			max: Vec2::new(half, half),
+		};
+		let covered: f32 = hts
+			.hall_bands
+			.iter()
+			.map(|b| {
+				let x0 = b.min.x.max(corner.min.x);
+				let x1 = b.max.x.min(corner.max.x);
+				let y0 = b.min.y.max(corner.min.y);
+				let y1 = b.max.y.min(corner.max.y);
+				(x1 - x0).max(0.0) * (y1 - y0).max(0.0)
+			})
+			.sum();
+		assert!(
+			covered + 1e-2 >= aabb2_area(corner),
+			"L junction missing corner fill: covered={covered}"
+		);
+	}
+
+	#[test]
+	fn fixed_hall_width_is_honored() {
+		let mut openings = Openings::new();
+		let (a, oa) = shaft("s0", -5.0, 0.0, 2.0);
+		let (b, ob) = shaft("s1", 5.0, 0.0, 2.0);
+		openings.insert(a, oa);
+		openings.insert(b, ob);
+		let confines = rect_confines(
+			Vec3::new(-12.0, 0.0, -8.0),
+			Vec3::new(12.0, 3.0, 8.0),
+			openings,
+		);
+		let (hts, _) = HallsToShafts::from_confines_with(
+			&confines,
+			NoiseParams::default(),
+			HallsToShaftsOptions {
+				hall_width: Some(3.5),
+			},
+		)
+		.unwrap();
+		assert!((hts.hall_width - 3.5).abs() < 1e-4);
+		for band in &hts.hall_bands {
+			let w = (band.max.x - band.min.x).min(band.max.y - band.min.y);
+			assert!(
+				(w - 3.5).abs() < 0.05,
+				"expected ~3.5m clear width, got {w}"
+			);
+		}
+	}
+
+	#[test]
+	fn interior_bias_prefers_core_channel() {
+		// Corner terminals on a roomy host: halls should leave outer SE/NW pockets.
+		let mut openings = Openings::new();
+		let (a, oa) = shaft("s0", -10.0, -10.0, 2.0);
+		let (b, ob) = shaft("s1", 10.0, 10.0, 2.0);
+		openings.insert(a, oa);
+		openings.insert(b, ob);
+		let confines = rect_confines(
+			Vec3::new(-16.0, 0.0, -16.0),
+			Vec3::new(16.0, 3.0, 16.0),
+			openings,
+		);
+		let (hts, regions) = HallsToShafts::from_confines_with(
+			&confines,
+			NoiseParams::default(),
+			HallsToShaftsOptions {
+				hall_width: Some(2.5),
+			},
+		)
+		.unwrap();
 		assert!(!hts.hall_bands.is_empty());
-		// Hall mass should not hug the outer perimeter: centroid of hall area
-		// should be nearer the origin than a pure boundary L would be.
 		let mut area = 0.0;
 		let mut moment = Vec2::ZERO;
 		for b in &hts.hall_bands {
@@ -782,28 +930,30 @@ mod tests {
 		}
 		let centroid = moment / area.max(EPS);
 		assert!(
-			centroid.length() < 8.0,
+			centroid.length() < 10.0,
 			"expected interior-biased halls, centroid={centroid:?}"
 		);
-		// Façade strip near +X outer wall should remain mostly residual.
-		let facade = Aabb2d {
-			min: Vec2::new(8.5, -10.0),
-			max: Vec2::new(10.0, 10.0),
+		// SE façade corner pocket should remain residual (not a perimeter L).
+		let se_pocket = Aabb2d {
+			min: Vec2::new(12.0, -16.0),
+			max: Vec2::new(16.0, -12.0),
 		};
-		let hall_on_facade: f32 = hts
-			.hall_bands
+		let residual_on_se: f32 = regions
+			.within
 			.iter()
-			.map(|b| {
-				let x0 = b.min.x.max(facade.min.x);
-				let x1 = b.max.x.min(facade.max.x);
-				let y0 = b.min.y.max(facade.min.y);
-				let y1 = b.max.y.min(facade.max.y);
+			.filter(|r| r.kind == SpaceKind::InternalSpace)
+			.map(|r| {
+				let b = host_xz(&r.confines.bounds);
+				let x0 = b.min.x.max(se_pocket.min.x);
+				let x1 = b.max.x.min(se_pocket.max.x);
+				let y0 = b.min.y.max(se_pocket.min.y);
+				let y1 = b.max.y.min(se_pocket.max.y);
 				(x1 - x0).max(0.0) * (y1 - y0).max(0.0)
 			})
 			.sum();
 		assert!(
-			hall_on_facade < 4.0,
-			"halls encroached on facade strip: {hall_on_facade}"
+			residual_on_se > 8.0,
+			"expected residual façade pocket, residual_on_se={residual_on_se}"
 		);
 	}
 }

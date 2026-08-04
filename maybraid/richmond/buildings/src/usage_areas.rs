@@ -27,7 +27,9 @@ pub use commercial_stall_strip::commercial_stall::{
 pub use commercial_stall_strip::{
 	CommercialStallStrip, CommercialStallStripParameterized, CommercialStallStripPlan,
 };
-pub use halls_to_shafts::HallsToShafts;
+pub use halls_to_shafts::{
+	HallsToShafts, HallsToShaftsOptions, MAX_HALL_WIDTH, MIN_HALL_WIDTH,
+};
 pub use janitorial::Janitorial;
 pub use livable_apartment::LivableApartment;
 pub use plan_cells::{
