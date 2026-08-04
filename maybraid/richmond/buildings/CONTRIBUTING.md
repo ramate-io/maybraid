@@ -82,20 +82,17 @@ CommercialStallInterior (catalog first-fit)
 Playground: `/show les-halles-full-storey`, `/show commercial-stall-strip`,
 and the per-interior galleries (`mini-mart-examples`, `public-restroom-examples`, …).
 
-### Multi-cell apartments (I-Apartment)
+### I-frame rectangularization (I-Apartment)
 
-[`storeys/i_apartment`](src/storeys/i_apartment.rs) is the worked example for
-**hallway spines + cell grouping** (not strip voronoi):
+[`storeys/i_apartment`](src/storeys/i_apartment.rs) starts from the I-frame alone:
 
-1. Fit an [`IFloor`](src/shells/i_floor.rs) envelope (walls + facade apertures).
-2. Map inbound shafts onto fixed reentrant-corner slots on the I skeleton (≤4).
-3. Carve spine-first halls; floor only the allocated room cells (halls/shafts open).
-4. Split residuals with [`plan_cells`](src/usage_areas/plan_cells.rs); group
-   hall-frontage cells into `Apartment = [ApartmentPiece]` (plan-owned groups).
-5. Full\* fits [`Apartment`](src/usage_areas/apartment.rs) / [`Janitorial`](src/usage_areas/janitorial.rs);
-   apartment interiors / internal walls stay empty for now.
+1. Sample I-layout knobs from seed; fit an [`IFloor`](src/shells/i_floor.rs) to confines.
+2. Floor plan emits the shell’s natural **1–3 primary rectangles** (stem + flanges).
+3. Full\* allocates each rect as a [`LivableApartment`](src/usage_areas/livable_apartment.rs).
+   Halls, shafts, and multi-cell packing are follow-on subproblems.
 
-Playground: `/show i-apartment-floor-plan`, `/show i-apartment-full-storey`.
+Playground: `/show i-apartment-floor-plan`, `/show i-apartment-floor-plan-examples`,
+`/show i-apartment-full-storey`.
 
 ### Parameterized → floor plan
 

@@ -90,18 +90,17 @@ pub use shells::{
 };
 pub use stacked_rings::{StackedRing, StackedRings};
 pub use storeys::i_apartment::{
-	ApartmentGroup, IApartmentFloorPlan, IApartmentFullStorey, IApartmentParameterized,
-	SCOPE as I_APARTMENT_SCOPE,
+	IApartmentFloorPlan, IApartmentFullStorey, IApartmentParameterized, SCOPE as I_APARTMENT_SCOPE,
 };
 pub use storeys::les_halles::{
 	LesHallesFloorPlan, LesHallesFullStorey, LesHallesParameterized, LesHallesPlacedDoor,
 	LesHallesShaftPlacement, LesHallesStallDoor, SCOPE as LES_HALLES_SCOPE,
 };
 pub use usage_areas::{
-	Apartment, ApartmentPiece, BitesSitdownStall, BitesStall, CommercialStall,
-	CommercialStallInterior, CommercialStallParameterized, CommercialStallPlan,
-	CommercialStallStrip, CommercialStallStripParameterized, CommercialStallStripPlan, Janitorial,
-	KnickKnackStall, KnickKnackStallParameterized, KnickKnackStallPlan, MiniMart, PartsStall,
+	BitesSitdownStall, BitesStall, CommercialStall, CommercialStallInterior,
+	CommercialStallParameterized, CommercialStallPlan, CommercialStallStrip,
+	CommercialStallStripParameterized, CommercialStallStripPlan, Janitorial, KnickKnackStall,
+	KnickKnackStallParameterized, KnickKnackStallPlan, LivableApartment, MiniMart, PartsStall,
 	PlanCell, PublicRestroom, PublicRestroomParameterized, PublicRestroomPlan,
 };
 pub use wall_demo::{NoisyRectangularWall, NoisyRectangularWallParams};

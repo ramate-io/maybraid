@@ -405,6 +405,8 @@ pub enum PreviewSubject {
 		/// Inbound openings (`--opening`). Empty ⇒ demo boundary shaft requests.
 		openings: Vec<PreviewOpening>,
 	},
+	/// Side-by-side gallery of `IApartmentFloorPlan::fit_to_confines` variants.
+	IApartmentFloorPlanExamples,
 	IApartmentFullStorey {
 		/// Confines size (XZ centered at origin; Y from 0).
 		extent: Vec3,
@@ -908,6 +910,9 @@ impl PreviewConfig {
 					openings.len()
 				)
 			}
+			PreviewSubject::IApartmentFloorPlanExamples => {
+				"preview: i-apartment-floor-plan-examples (gallery)".into()
+			}
 			PreviewSubject::IApartmentFullStorey {
 				extent,
 				seed,
@@ -951,6 +956,7 @@ impl PreviewConfig {
 			PreviewSubject::PartsExamples => parts_examples_bounds(),
 			PreviewSubject::KnickKnackExamples => knick_knack_examples_bounds(),
 			PreviewSubject::PublicRestroomExamples => public_restroom_examples_bounds(),
+			PreviewSubject::IApartmentFloorPlanExamples => i_apartment_floor_plan_examples_bounds(),
 			PreviewSubject::LesHallesFloorPlan { extent, .. }
 			| PreviewSubject::LesHallesFullStorey { extent, .. }
 			| PreviewSubject::IApartmentFloorPlan { extent, .. }
@@ -1162,6 +1168,7 @@ pub struct CachedPreview {
 	les_halles_floor_plan: Option<LesHallesFloorPlan>,
 	les_halles_full_storey: Option<LesHallesFullStorey>,
 	i_apartment_floor_plan: Option<IApartmentFloorPlan>,
+	i_apartment_floor_plan_examples: Vec<IApartmentFloorPlanExampleCell>,
 	i_apartment_full_storey: Option<IApartmentFullStorey>,
 	commercial_stall: Option<CommercialStall>,
 	commercial_stall_strip: Option<CommercialStallStrip>,
@@ -1178,6 +1185,13 @@ pub struct CachedPreview {
 	parts_examples: Vec<PartsExampleCell>,
 	knick_knack_examples: Vec<KnickKnackExampleCell>,
 	public_restroom_examples: Vec<PublicRestroomExampleCell>,
+}
+
+/// One cell in [`PreviewSubject::IApartmentFloorPlanExamples`].
+#[derive(Clone)]
+struct IApartmentFloorPlanExampleCell {
+	offset: Vec3,
+	plan: IApartmentFloorPlan,
 }
 
 /// One cell in [`PreviewSubject::PartsExamples`].
@@ -1235,6 +1249,7 @@ impl CachedPreview {
 		self.les_halles_floor_plan = None;
 		self.les_halles_full_storey = None;
 		self.i_apartment_floor_plan = None;
+		self.i_apartment_floor_plan_examples.clear();
 		self.i_apartment_full_storey = None;
 		self.commercial_stall = None;
 		self.commercial_stall_strip = None;
@@ -1485,6 +1500,9 @@ impl CachedPreview {
 					}
 				}
 			}
+			PreviewSubject::IApartmentFloorPlanExamples => {
+				self.i_apartment_floor_plan_examples = build_i_apartment_floor_plan_examples();
+			}
 			PreviewSubject::IApartmentFullStorey {
 				extent,
 				seed,
@@ -1625,6 +1643,22 @@ impl CachedPreview {
 		}
 		if let Some(storey) = self.les_halles_full_storey.as_ref() {
 			return storey.label_nodes_for_level(LodSceneLevel::High).flatten();
+		}
+		if !self.i_apartment_floor_plan_examples.is_empty() {
+			let mut out = Vec::new();
+			for cell in &self.i_apartment_floor_plan_examples {
+				out.extend(
+					cell.plan
+						.label_nodes_for_level(LodSceneLevel::High)
+						.flatten()
+						.into_iter()
+						.map(|mut label| {
+							label.placement.translation += cell.offset;
+							label
+						}),
+				);
+			}
+			return out;
 		}
 		if let Some(plan) = self.i_apartment_floor_plan.as_ref() {
 			return plan.label_nodes_for_level(LodSceneLevel::High).flatten();
@@ -2036,7 +2070,7 @@ fn fit_i_apartment_floor_plan(
 	};
 	let params = IApartmentParameterized::sample(&empty, noise)?;
 	let inbound = if openings.is_empty() {
-		IApartmentFloorPlan::shaft_requests_for_all_slots(&params, &empty)
+		Openings::new()
 	} else {
 		openings_from_preview(openings)
 	};
@@ -2048,6 +2082,85 @@ fn fit_i_apartment_floor_plan(
 	};
 	IApartmentFloorPlan::from_parameterized_with_ceiling(params, &confines, ceiling)
 		.map(|(plan, _)| plan)
+}
+
+/// Curated (extent, seed) cells: same Fit path as production; seed/aspect vary I / T / stem.
+fn i_apartment_floor_plan_examples_specs() -> Vec<(Vec3, i32)> {
+	vec![
+		(Vec3::new(44.0, 3.5, 36.0), 1337), // I
+		(Vec3::new(44.0, 3.5, 36.0), 55),   // T (top flange)
+		(Vec3::new(44.0, 3.5, 36.0), 2),    // T (bottom flange)
+		(Vec3::new(44.0, 3.5, 36.0), 24),   // stem only
+		(Vec3::new(36.0, 3.5, 44.0), 1),    // I, tall aspect
+		(Vec3::new(48.0, 3.5, 28.0), 11),   // I, wide aspect
+		(Vec3::new(28.0, 3.5, 48.0), 256),  // T, tall aspect
+		(Vec3::new(52.0, 3.5, 32.0), 999),  // Tinv, wide
+		(Vec3::new(40.0, 3.5, 40.0), 128),  // I, square, asymmetric flanges
+	]
+}
+
+const I_APARTMENT_GALLERY_COLS: usize = 3;
+const I_APARTMENT_GALLERY_GAP: f32 = 6.0;
+
+fn i_apartment_floor_plan_examples_bounds() -> Aabb3d {
+	let specs = i_apartment_floor_plan_examples_specs();
+	gallery_grid_bounds(
+		|i| specs[i].0,
+		specs.len(),
+		I_APARTMENT_GALLERY_COLS,
+		I_APARTMENT_GALLERY_GAP,
+	)
+}
+
+fn build_i_apartment_floor_plan_examples() -> Vec<IApartmentFloorPlanExampleCell> {
+	let specs = i_apartment_floor_plan_examples_specs();
+	let mut cells = Vec::new();
+	for (i, (extent, seed)) in specs.iter().enumerate() {
+		// Plans are XZ-centered; shift so the footprint min corner sits at the gallery cell origin.
+		let cell_origin = gallery_grid_offset(
+			|j| specs[j].0,
+			specs.len(),
+			i,
+			I_APARTMENT_GALLERY_COLS,
+			I_APARTMENT_GALLERY_GAP,
+		);
+		let offset = cell_origin + Vec3::new(extent.x * 0.5, 0.0, extent.z * 0.5);
+		let confines = Confines::from_bounds(les_halles_confines_bounds(*extent));
+		let noise = NoiseParams {
+			seed: *seed,
+			..NoiseParams::default()
+		};
+		match IApartmentFloorPlan::fit_to_confines(&confines, noise) {
+			Ok((plan, _)) => cells.push(IApartmentFloorPlanExampleCell { offset, plan }),
+			Err(err) => {
+				bevy::log::error!(
+					"i-apartment-floor-plan-examples ({extent:?} seed={seed}) failed: {err}"
+				);
+			}
+		}
+	}
+	cells
+}
+
+fn draw_i_apartment_primary_rect_gizmos(
+	gizmos: &mut Gizmos,
+	plan: &IApartmentFloorPlan,
+	tf: Transform,
+) {
+	let y0 = plan.center_xz.y;
+	let y1 = y0 + plan.storey_height;
+	for (i, rect) in plan.primary_rects.iter().enumerate() {
+		let color = if i % 2 == 0 {
+			Color::srgb(0.25, 0.55, 0.95)
+		} else {
+			Color::srgb(0.35, 0.8, 0.55)
+		};
+		let bounds = Aabb3d::from_min_max(
+			Vec3::new(rect.min_x, y0, rect.min_z),
+			Vec3::new(rect.max_x, y1, rect.max_z),
+		);
+		gizmos.aabb_3d(bounds, tf, color);
+	}
 }
 
 /// Spawn preview when the subject changes. LOD flips update host levels in-place
@@ -3261,6 +3374,16 @@ pub fn present_preview_lod(
 				);
 			}
 		}
+		PreviewSubject::IApartmentFloorPlanExamples => {
+			for cell in &cache.i_apartment_floor_plan_examples {
+				let tf = transform * Transform::from_translation(cell.offset);
+				spawn_preview(
+					&mut commands,
+					tf,
+					ComponentsOnly(&cell.plan).scene_with_lod(&lod_ref),
+				);
+			}
+		}
 		PreviewSubject::IApartmentFullStorey { .. } => {
 			if let Some(storey) = cache.i_apartment_full_storey.as_ref() {
 				spawn_preview(
@@ -3678,46 +3801,18 @@ pub fn draw_opening_plan_gizmos(
 					.as_ref()
 					.map(|s| &s.floor_plan)
 			});
-			let red = Color::srgb(0.95, 0.2, 0.2);
 			for (i, opening) in openings.iter().enumerate() {
-				let accepted = plan
-					.map(|p| i_apartment_opening_accepted(p, opening))
-					.unwrap_or(false);
-				let color = if !accepted {
-					red
-				} else if i % 2 == 0 {
-					cyan
-				} else {
-					amber
-				};
+				let color = if i % 2 == 0 { cyan } else { amber };
 				gizmos.aabb_3d(opening.bounds(), tf, color);
 			}
 			if let Some(plan) = plan {
-				let mut passage_i = 0usize;
-				for (_id, opening) in plan.openings.iter() {
-					if !matches!(opening.label, OpeningLabel::Passage) {
-						continue;
-					}
-					let color = if passage_i % 2 == 0 { cyan } else { amber };
-					gizmos.aabb_3d(opening.bounds, tf, color);
-					passage_i += 1;
-				}
-				for (i, shaft) in plan.shaft_bounds.iter().enumerate() {
-					let color = if i % 2 == 0 {
-						magenta
-					} else {
-						Color::srgb(0.75, 0.35, 1.0)
-					};
-					gizmos.aabb_3d(*shaft, tf, color);
-				}
-				for (i, hall) in plan.hall_bounds.iter().enumerate() {
-					let color = if i % 2 == 0 {
-						Color::srgb(0.2, 0.75, 0.95)
-					} else {
-						Color::srgb(0.35, 0.55, 0.9)
-					};
-					gizmos.aabb_3d(*hall, tf, color);
-				}
+				draw_i_apartment_primary_rect_gizmos(&mut gizmos, plan, tf);
+			}
+		}
+		PreviewSubject::IApartmentFloorPlanExamples => {
+			for cell in &cache.i_apartment_floor_plan_examples {
+				let cell_tf = tf * Transform::from_translation(cell.offset);
+				draw_i_apartment_primary_rect_gizmos(&mut gizmos, &cell.plan, cell_tf);
 			}
 		}
 		PreviewSubject::BitesStall { .. }
@@ -3752,14 +3847,6 @@ fn les_halles_opening_accepted(plan: &LesHallesFloorPlan, opening: &PreviewOpeni
 }
 
 /// Whether an inbound I-Apartment opening survived mapping onto the floor plan.
-fn i_apartment_opening_accepted(plan: &IApartmentFloorPlan, opening: &PreviewOpening) -> bool {
-	let id = OpeningId::new(opening.id.clone());
-	match opening.label {
-		OpeningLabel::Shaft => plan.shaft_inbound.iter().any(|ids| ids.contains(&id)),
-		_ => plan.openings.openings.contains_key(&id),
-	}
-}
-
 /// Stroke-font face labels for [`LabelNode`]s (toggle via [`PreviewConfig::label_text`]).
 ///
 /// Text is word-wrapped and scaled so the block fits inside each face.

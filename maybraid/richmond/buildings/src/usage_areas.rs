@@ -6,14 +6,13 @@
 //! (offices, toilet stalls, …). Shared helpers such as [`clearance`] live here
 //! so multiple usage areas can share passage keep-outs.
 
-pub mod apartment;
 pub mod clearance;
 pub mod commercial_stall_strip;
 pub mod common_bedroom;
 pub mod janitorial;
+pub mod livable_apartment;
 pub mod plan_cells;
 
-pub use apartment::{Apartment, ApartmentPiece};
 pub use clearance::{
 	abuts_clearance, max_empty_abutting_clearance, max_empty_abutting_clearance_sized,
 	pack_abutting_clearance, PassageClearance, PlanHost, PASSAGE_CLEARANCE,
@@ -28,6 +27,7 @@ pub use commercial_stall_strip::{
 	CommercialStallStrip, CommercialStallStripParameterized, CommercialStallStripPlan,
 };
 pub use janitorial::Janitorial;
+pub use livable_apartment::LivableApartment;
 pub use plan_cells::{
 	cell_has_hall_frontage, cells_edge_adjacent, group_cells_to_apartments, split_toward_min_room,
 	subtract_aabb2, PlanCell,

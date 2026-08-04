@@ -1,19 +1,18 @@
 //! I-Apartment storey.
 //!
-//! An I / T / U / L / Z envelope ([`crate::IFloor`]) is packed with hallway spines,
-//! boundary shaft pockets, janitorial closets, and multi-cell apartments formed by
-//! grouping residual plan cells that touch a hallway.
+//! Fit an [`crate::IFloor`] I / T / U / L / Z envelope to confines from seed, then
+//! expose the shell’s natural **1–3 primary rectangles** (stem + optional flanges).
 //!
 //! Pipeline:
-//! - [`IApartmentParameterized::sample`] — hall / room / apartment knobs
-//! - [`IApartmentFloorPlan::from_parameterized`] — shell + halls + shafts + groups
-//! - [`IApartmentFullStorey::from_floor_plan`] — [`crate::Apartment`] + [`crate::Janitorial`]
+//! - [`IApartmentParameterized::sample`] — I-frame layout knobs
+//! - [`IApartmentFloorPlan::from_parameterized`] — shell + primary rect regions
+//! - [`IApartmentFullStorey::from_floor_plan`] — one [`crate::LivableApartment`] per rect
 
 pub mod floor_plan;
 pub mod full_storey;
 pub mod parameterized;
 
-pub use floor_plan::{ApartmentGroup, IApartmentFloorPlan};
+pub use floor_plan::IApartmentFloorPlan;
 pub use full_storey::IApartmentFullStorey;
 pub use parameterized::IApartmentParameterized;
 

@@ -1,9 +1,4 @@
-//! I-Apartment full storey: floor plan plus apartments and janitorial fills.
-//!
-//! The IFloor envelope and halls live on [`IApartmentFloorPlan`]. This type fits
-//! that plan, builds [`Apartment`]s from plan-owned groups, and fits
-//! [`Janitorial`] slots. Hallways / shafts remain in residual
-//! [`FillableRegions::within`]. Apartment interiors stay unfilled.
+//! I-Apartment full storey: floor plan plus one [`LivableApartment`] per primary rect.
 
 use lod::gen::LodSceneLevel;
 use procedural_common::NoiseParams;
@@ -12,21 +7,20 @@ use richmond_building_components::labels::LabelNode;
 use richmond_building_components::panels::PanelNode;
 use richmond_building_components::{BuildingComponents, Layers};
 
-use crate::fit::{Confines, FillRegion, FillableRegions, Fit, FitError, SpaceKind};
-use crate::usage_areas::{Apartment, Janitorial};
+use crate::fit::{Confines, FillableRegions, Fit, FitError};
+use crate::usage_areas::LivableApartment;
 
 use super::floor_plan::IApartmentFloorPlan;
 
-/// Full I-Apartment storey: shell on [`Self::floor_plan`] plus units + closets.
+/// Full I-Apartment storey: I-frame shell + livable apartments on primary rects.
 #[derive(Debug, Clone, PartialEq)]
 pub struct IApartmentFullStorey {
 	pub floor_plan: IApartmentFloorPlan,
-	pub apartments: Vec<Apartment>,
-	pub janitorial: Vec<Janitorial>,
+	pub apartments: Vec<LivableApartment>,
 }
 
 impl IApartmentFullStorey {
-	/// Wrap an already-fitted floor plan and fill apartment groups + janitorial.
+	/// Wrap an already-fitted floor plan and allocate livable apartments.
 	pub fn from_floor_plan(
 		floor_plan: IApartmentFloorPlan,
 		noise: NoiseParams,
@@ -43,57 +37,17 @@ impl IApartmentFullStorey {
 		let mut apartments = Vec::new();
 		let mut residual_within = Vec::new();
 
-		// Prefer plan-owned groups (multi-cell source of truth).
-		for group in floor_plan.apartment_groups() {
-			let pieces: Vec<(u32, Confines)> = group
-				.cell_ids
-				.iter()
-				.zip(group.pieces.iter())
-				.map(|(id, c)| (*id, c.clone()))
-				.collect();
-			match Apartment::from_pieces(group.group_id, pieces) {
+		let _ = noise;
+		for (i, region) in regions.within.into_iter().enumerate() {
+			match LivableApartment::from_confines(i as u32, &region.confines) {
 				Ok((apt, nested)) => {
 					apartments.push(apt);
-					// Keep nested piece residuals for later interior fill.
 					residual_within.extend(nested.within);
 				}
 				Err(FitError::TooSmall { .. }) => {
-					for piece in &group.pieces {
-						residual_within.push(FillRegion::new(
-							SpaceKind::Custom(format!("apartment:{}", group.group_id)),
-							piece.clone(),
-						));
-					}
+					residual_within.push(region);
 				}
 				Err(err) => return Err(err),
-			}
-		}
-
-		let mut janitorial = Vec::new();
-		for (i, slot) in floor_plan.janitorial_slots().iter().enumerate() {
-			let mut slot_noise = noise;
-			slot_noise.seed = noise.seed.wrapping_add(i as i32 * 17);
-			match Janitorial::fit_to_confines(slot, slot_noise) {
-				Ok((j, _)) => janitorial.push(j),
-				Err(FitError::TooSmall { .. }) => {
-					residual_within.push(FillRegion::new(
-						SpaceKind::Custom("janitorial".into()),
-						slot.clone(),
-					));
-				}
-				Err(err) => return Err(err),
-			}
-		}
-
-		// Pass through non-apartment / non-janitorial residuals from the plan.
-		for region in regions.within {
-			match &region.kind {
-				SpaceKind::Custom(label)
-					if label.starts_with("apartment:") || label == "janitorial" =>
-				{
-					// Already handled via plan-owned lists.
-				}
-				_ => residual_within.push(region),
 			}
 		}
 
@@ -101,7 +55,6 @@ impl IApartmentFullStorey {
 			Self {
 				floor_plan,
 				apartments,
-				janitorial,
 			},
 			FillableRegions {
 				within: residual_within,
@@ -123,16 +76,28 @@ impl Fit for IApartmentFullStorey {
 
 impl BuildingComponents for IApartmentFullStorey {
 	fn panel_nodes_for_level(&self, level: LodSceneLevel) -> Layers<PanelNode> {
-		// Floor plan already owns envelope + apartment/janitorial shells.
-		self.floor_plan.panel_nodes_for_level(level)
+		// Outer I-frame from the floor plan; apartments add their region shells.
+		let mut out = self.floor_plan.panel_nodes_for_level(level);
+		for apt in &self.apartments {
+			out.extend(apt.panel_nodes_for_level(level));
+		}
+		out
 	}
 
 	fn joint_nodes_for_level(&self, level: LodSceneLevel) -> Layers<JointNode> {
-		self.floor_plan.joint_nodes_for_level(level)
+		let mut out = self.floor_plan.joint_nodes_for_level(level);
+		for apt in &self.apartments {
+			out.extend(apt.joint_nodes_for_level(level));
+		}
+		out
 	}
 
 	fn label_nodes_for_level(&self, level: LodSceneLevel) -> Layers<LabelNode> {
-		self.floor_plan.label_nodes_for_level(level)
+		let mut out = self.floor_plan.label_nodes_for_level(level);
+		for apt in &self.apartments {
+			out.extend(apt.label_nodes_for_level(level));
+		}
+		out
 	}
 }
 
@@ -144,20 +109,18 @@ mod tests {
 	use crate::storeys::i_apartment::{IApartmentFloorPlan, IApartmentParameterized};
 
 	#[test]
-	fn full_storey_builds_apartments() {
+	fn full_storey_allocates_livable_per_rect() {
 		let bounds = Aabb3d::from_min_max(
 			Vec3::new(-22.0, 0.0, -18.0),
 			Vec3::new(22.0, 3.5, 18.0),
 		);
-		let empty = Confines::from_bounds(bounds);
+		let confines = Confines::from_bounds(bounds);
 		let noise = NoiseParams::default();
-		let params = IApartmentParameterized::sample(&empty, noise).unwrap();
-		let openings = IApartmentFloorPlan::shaft_requests_for_all_slots(&params, &empty);
-		let confines = Confines::new(bounds, 0.0, openings);
+		let params = IApartmentParameterized::sample(&confines, noise).unwrap();
 		let (plan, _) = IApartmentFloorPlan::from_parameterized(params, &confines).unwrap();
-		let (storey, regions) = IApartmentFullStorey::from_floor_plan(plan, noise).unwrap();
-		assert!(!storey.apartments.is_empty());
-		assert!(regions.within.iter().any(|r| r.kind == SpaceKind::Hallway));
+		let n = plan.primary_rects.len();
+		let (storey, _) = IApartmentFullStorey::from_floor_plan(plan, noise).unwrap();
+		assert_eq!(storey.apartments.len(), n);
 		assert!(!storey
 			.panel_nodes_for_level(LodSceneLevel::High)
 			.is_empty());
