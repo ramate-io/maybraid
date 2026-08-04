@@ -4,6 +4,9 @@ use bevy_math::Vec2;
 use procedural_common::{NoiseConfig, NoiseParams};
 
 use crate::fit::{aabb_xz_extent, Confines, FitError};
+use crate::storeys::les_halles::{
+	LesHallesFloorPlan, LesHallesParameterized, LesHallesPlacedDoor, LesHallesStallDoor,
+};
 
 /// Resolved I-frame layout knobs (stem + optional one-sided / two-sided flanges).
 #[derive(Debug, Clone, PartialEq)]
@@ -21,6 +24,12 @@ pub struct IApartmentParameterized {
 	pub top_right_share: Option<f32>,
 	pub bottom_left_share: Option<f32>,
 	pub bottom_right_share: Option<f32>,
+	/// How densely to pack exterior apertures (`0…1`).
+	pub opening_density: f32,
+	/// Exterior aperture sizes to pack along outer wall edges (catalog order).
+	pub windows: Vec<LesHallesStallDoor>,
+	/// Preferred shaft footprint side length (meters), clamped to the 9-pocket.
+	pub shaft_side: f32,
 }
 
 pub const MIN_STOREY_HEIGHT: f32 = 2.5;
@@ -30,6 +39,9 @@ pub const MIN_STEM_WIDTH: f32 = 4.0;
 /// End bars (leaves) stay fairly large for apartment room.
 pub const MIN_FLANGE_THICKNESS: f32 = 7.0;
 pub const MIN_CENTRAL_DEPTH: f32 = 2.5;
+
+pub const MIN_SHAFT_SIDE: f32 = 2.0;
+pub const MAX_SHAFT_SIDE: f32 = 5.0;
 
 const SALT_STEM: f32 = 1.0;
 const SALT_FLANGE_T: f32 = 2.0;
@@ -42,6 +54,8 @@ const SALT_SHARE_BL: f32 = 8.0;
 const SALT_SHARE_BR: f32 = 9.0;
 const SALT_FILL_TOP: f32 = 10.0;
 const SALT_FILL_BOT: f32 = 11.0;
+const SALT_OPENINGS: f32 = 12.0;
+const SALT_SHAFT: f32 = 13.0;
 
 impl IApartmentParameterized {
 	/// Sample I-frame knobs at the confines center.
@@ -100,6 +114,14 @@ impl IApartmentParameterized {
 		normalize_bar_shares(&mut tl, &mut tr, top_fill);
 		normalize_bar_shares(&mut bl, &mut br, bot_fill);
 
+		let opening_density = cfg.sample_unit_4d(c.x, c.y, c.z, SALT_OPENINGS);
+		let windows = LesHallesFloorPlan::generate_windows(&cfg, c);
+		let short = footprint.x.min(footprint.y);
+		let shaft_hi = (short * 0.12).clamp(MIN_SHAFT_SIDE, MAX_SHAFT_SIDE);
+		let shaft_lo = MIN_SHAFT_SIDE.min(shaft_hi);
+		let shaft_side =
+			cfg.sample_range_f32_4d(shaft_lo, shaft_hi, c.x, c.y, c.z, SALT_SHAFT);
+
 		Ok(Self {
 			stem_width,
 			flange_thickness,
@@ -107,6 +129,9 @@ impl IApartmentParameterized {
 			top_right_share: tr,
 			bottom_left_share: bl,
 			bottom_right_share: br,
+			opening_density,
+			windows,
+			shaft_side,
 		})
 	}
 
@@ -130,6 +155,19 @@ impl IApartmentParameterized {
 		let (tl, tr) = pair_length(self.top_left_share, self.top_right_share, leftover);
 		let (bl, br) = pair_length(self.bottom_left_share, self.bottom_right_share, leftover);
 		(tl, tr, bl, br)
+	}
+
+	/// Pack exterior windows along a wall run (Les Halles bay catalog policy).
+	pub fn fit_windows_on_run(&self, run_length: f32) -> Vec<LesHallesPlacedDoor> {
+		if self.windows.is_empty() || self.opening_density < 0.08 {
+			return Vec::new();
+		}
+		let n = self.windows.len();
+		let take = ((n as f32) * self.opening_density.clamp(0.15, 1.0))
+			.ceil()
+			.max(1.0) as usize;
+		let take = take.min(n);
+		LesHallesParameterized::fit_bays_on_run(&self.windows[..take], run_length, false)
 	}
 }
 

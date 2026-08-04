@@ -1,11 +1,12 @@
 //! I-Apartment storey.
 //!
 //! Fit an [`crate::IFloor`] I / T / U / L / Z envelope to confines from seed, then
-//! expose the shell’s natural **1–3 primary rectangles** (stem + optional flanges).
+//! expose the shell’s natural **1–3 primary rectangles** (stem + optional flanges),
+//! cut exterior apertures, and remap inbound shafts onto 9-pocket centroids.
 //!
 //! Pipeline:
-//! - [`IApartmentParameterized::sample`] — I-frame layout knobs
-//! - [`IApartmentFloorPlan::from_parameterized`] — shell + primary rect regions
+//! - [`IApartmentParameterized::sample`] — I-frame layout + window catalog knobs
+//! - [`IApartmentFloorPlan::from_parameterized`] — shell + openings + primary rects
 //! - [`IApartmentFullStorey::from_floor_plan`] — one [`crate::LivableApartment`] per rect
 
 pub mod floor_plan;

@@ -21,7 +21,11 @@ pub struct IApartmentFloorPlan {
 	/// Solid IFloor ceiling (off by default).
 	#[arg(long, default_value_t = false)]
 	pub ceiling: bool,
-	/// Inbound openings (repeatable). Optional; forwarded onto the IFloor shell.
+	/// Inbound openings (repeatable). Prefer AABB specs for shafts:
+	/// `id:shaft:minx,miny,minz:maxx,maxy,maxz`.
+	///
+	/// When omitted, the preview requests one shaft per primary rect (mapped via
+	/// 9-pocket centroids). When set, only these openings are passed into the fit.
 	#[arg(long = "opening", value_name = "SPEC", value_parser = parse_opening_arg, action = clap::ArgAction::Append)]
 	pub openings: Vec<OpeningArg>,
 	#[command(flatten)]

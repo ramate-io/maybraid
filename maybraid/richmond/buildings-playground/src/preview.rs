@@ -2070,7 +2070,8 @@ fn fit_i_apartment_floor_plan(
 	};
 	let params = IApartmentParameterized::sample(&empty, noise)?;
 	let inbound = if openings.is_empty() {
-		Openings::new()
+		// Demo default: one shaft request per primary rect (9-pocket mapped).
+		IApartmentFloorPlan::shaft_requests_for_primary_rects(&params, &empty)
 	} else {
 		openings_from_preview(openings)
 	};
@@ -2140,13 +2141,19 @@ fn build_i_apartment_floor_plan_examples() -> Vec<IApartmentFloorPlanExampleCell
 	let specs = i_apartment_floor_plan_examples_specs();
 	let mut fitted = Vec::new();
 	for (extent, seed) in &specs {
-		let confines = Confines::from_bounds(les_halles_confines_bounds(*extent));
+		let bounds = les_halles_confines_bounds(*extent);
+		let empty = Confines::from_bounds(bounds);
 		let noise = NoiseParams {
 			seed: *seed,
 			..NoiseParams::default()
 		};
-		match IApartmentFloorPlan::fit_to_confines(&confines, noise) {
-			Ok((plan, _)) => fitted.push(plan),
+		match IApartmentParameterized::sample(&empty, noise).and_then(|params| {
+			let inbound =
+				IApartmentFloorPlan::shaft_requests_for_primary_rects(&params, &empty);
+			let confines = Confines::new(bounds, 0.0, inbound);
+			IApartmentFloorPlan::from_parameterized(params, &confines).map(|(plan, _)| plan)
+		}) {
+			Ok(plan) => fitted.push(plan),
 			Err(err) => {
 				bevy::log::error!(
 					"i-apartment-floor-plan-examples ({extent:?} seed={seed}) failed: {err}"
@@ -3837,17 +3844,42 @@ pub fn draw_opening_plan_gizmos(
 					.map(|s| &s.floor_plan)
 			});
 			for (i, opening) in openings.iter().enumerate() {
-				let color = if i % 2 == 0 { cyan } else { amber };
+				let accepted = plan
+					.map(|p| i_apartment_opening_accepted(p, opening))
+					.unwrap_or(false);
+				let color = if !accepted {
+					Color::srgb(0.95, 0.2, 0.2)
+				} else if i % 2 == 0 {
+					cyan
+				} else {
+					amber
+				};
 				gizmos.aabb_3d(opening.bounds(), tf, color);
 			}
 			if let Some(plan) = plan {
 				draw_i_apartment_primary_rect_gizmos(&mut gizmos, plan, tf);
+				for (i, shaft) in plan.shaft_bounds.iter().enumerate() {
+					let color = if i % 2 == 0 {
+						magenta
+					} else {
+						Color::srgb(0.75, 0.35, 1.0)
+					};
+					gizmos.aabb_3d(*shaft, tf, color);
+				}
 			}
 		}
 		PreviewSubject::IApartmentFloorPlanExamples => {
 			for cell in &cache.i_apartment_floor_plan_examples {
 				let cell_tf = tf * Transform::from_translation(cell.offset);
 				draw_i_apartment_primary_rect_gizmos(&mut gizmos, &cell.plan, cell_tf);
+				for (i, shaft) in cell.plan.shaft_bounds.iter().enumerate() {
+					let color = if i % 2 == 0 {
+						magenta
+					} else {
+						Color::srgb(0.75, 0.35, 1.0)
+					};
+					gizmos.aabb_3d(*shaft, cell_tf, color);
+				}
 			}
 		}
 		PreviewSubject::BitesStall { .. }
@@ -3882,6 +3914,14 @@ fn les_halles_opening_accepted(plan: &LesHallesFloorPlan, opening: &PreviewOpeni
 }
 
 /// Whether an inbound I-Apartment opening survived mapping onto the floor plan.
+fn i_apartment_opening_accepted(plan: &IApartmentFloorPlan, opening: &PreviewOpening) -> bool {
+	let id = OpeningId::new(opening.id.clone());
+	match opening.label {
+		OpeningLabel::Shaft => plan.shaft_inbound.iter().any(|ids| ids.contains(&id)),
+		_ => plan.shell.mapped_opening(&id).is_some() || plan.openings.get(&id).is_some(),
+	}
+}
+
 /// Stroke-font face labels for [`LabelNode`]s (toggle via [`PreviewConfig::label_text`]).
 ///
 /// Text is word-wrapped and scaled so the block fits inside each face.
