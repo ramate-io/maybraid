@@ -115,7 +115,7 @@ pub fn abuts_clearance(region: Aabb2d, clearance: Aabb2d) -> bool {
 }
 
 /// Largest empty rect in `host` avoiding `hard`, strongly preferring candidates
-/// that [`abuts_clearance`] `clearance`.
+/// that [`abuts_clearance`] `clearance` and meet `min_size` on both axes.
 ///
 /// `hard` should already include `clearance`.
 pub fn max_empty_abutting_clearance(
@@ -123,7 +123,23 @@ pub fn max_empty_abutting_clearance(
 	hard: &[Aabb2d],
 	clearance: Aabb2d,
 ) -> Option<Aabb2d> {
+	max_empty_abutting_clearance_sized(host, hard, clearance, Vec2::ZERO)
+}
+
+/// Like [`max_empty_abutting_clearance`], but ignores candidates smaller than `min_size`.
+pub fn max_empty_abutting_clearance_sized(
+	host: Aabb2d,
+	hard: &[Aabb2d],
+	clearance: Aabb2d,
+	min_size: Vec2,
+) -> Option<Aabb2d> {
+	const EPS: f32 = 1e-3;
 	max_empty_rect2_by(host, hard, |r| {
+		let w = r.max.x - r.min.x;
+		let d = r.max.y - r.min.y;
+		if w + EPS < min_size.x || d + EPS < min_size.y {
+			return f32::NEG_INFINITY;
+		}
 		let area = aabb2_area(r);
 		if abuts_clearance(r, clearance) {
 			return area + 1.0e6;
@@ -136,6 +152,11 @@ pub fn max_empty_abutting_clearance(
 			area
 		}
 	})
+	.filter(|r| {
+		let w = r.max.x - r.min.x;
+		let d = r.max.y - r.min.y;
+		w + EPS >= min_size.x && d + EPS >= min_size.y
+	})
 }
 
 /// Seed + grow a region that stays clear of `hard` (including `clearance`) and
@@ -147,7 +168,7 @@ pub fn pack_abutting_clearance(
 	min_size: Vec2,
 	area_target: f32,
 ) -> Option<Aabb2d> {
-	let seed = max_empty_abutting_clearance(host, hard, clearance)?;
+	let seed = max_empty_abutting_clearance_sized(host, hard, clearance, min_size)?;
 	let seed = clamp_min_size2(seed, min_size)?;
 	let target = area_target.max(min_size.x * min_size.y);
 	let grown = seed

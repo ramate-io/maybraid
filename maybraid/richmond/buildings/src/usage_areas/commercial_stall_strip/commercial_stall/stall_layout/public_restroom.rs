@@ -227,21 +227,27 @@ impl PublicRestroomRegions {
 			let Some(strip) = Self::free_strip_block(host, face, free_strip_depth) else {
 				continue;
 			};
+			// Seed against clearances *and* the door/sink strip so the seed cannot
+			// start inside the reserved zone (grow_* will not shrink an overlap out).
+			let mut seed_hard = clearances.to_vec();
+			seed_hard.push(strip);
 			let Some(seed) = face
-				.seed_from_free(host, clearances, contact, depth, self.stalls_along_t)
-				.or_else(|| face.seed_from_free(host, clearances, contact, depth, 0.5))
+				.seed_from_free(host, &seed_hard, contact, depth, self.stalls_along_t)
+				.or_else(|| face.seed_from_free(host, &seed_hard, contact, depth, 0.5))
 			else {
 				continue;
 			};
-			let mut hard = clearances.to_vec();
+			let mut hard = seed_hard;
 			hard.push(face.outward_block(host));
-			hard.push(strip);
 			let grown = seed
 				.grow_toward_area(host, &hard, target)
 				.grow_into(host, &hard);
 			let Some(stalls) = clamp_min_size2(grown, Vec2::splat(RESTROOM_STALLS_MIN)) else {
 				continue;
 			};
+			if !stalls.is_clear_of(&hard) {
+				continue;
+			}
 			if !Self::stalls_dims_ok(stalls) {
 				continue;
 			}
@@ -249,7 +255,12 @@ impl PublicRestroomRegions {
 				continue;
 			}
 			// Must still leave a door-side zone for sinks.
-			if Self::door_side_zone(host, stalls, face).is_none() {
+			let Some(zone) = Self::door_side_zone(host, stalls, face) else {
+				continue;
+			};
+			// Zone must be deep enough for a min sink on at least one axis after door clear.
+			let zone_short = (zone.max.x - zone.min.x).min(zone.max.y - zone.min.y);
+			if zone_short + 1e-3 < RESTROOM_SINK_MIN {
 				continue;
 			}
 			return Some((stalls, face));

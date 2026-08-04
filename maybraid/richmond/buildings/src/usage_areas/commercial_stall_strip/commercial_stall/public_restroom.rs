@@ -211,22 +211,40 @@ mod tests {
 		));
 	}
 
-	fn demo_side(extent: Vec3, east: bool) -> Confines {
-		let along = if east { extent.z } else { extent.x };
+	#[derive(Clone, Copy)]
+	enum DemoDoor {
+		South,
+		North,
+		East,
+		West,
+	}
+
+	fn demo_doors(extent: Vec3, side: DemoDoor) -> Confines {
+		let along = match side {
+			DemoDoor::South | DemoDoor::North => extent.x,
+			DemoDoor::East | DemoDoor::West => extent.z,
+		};
 		let door_h = (extent.y * 0.72).clamp(2.0, extent.y.max(2.0));
 		let band = 0.25_f32;
 		let mut openings = Openings::new();
 		let mk = |a0: f32, a1: f32| -> Aabb3d {
-			if east {
-				Aabb3d::from_min_max(
-					Vec3::new(extent.x - band, 0.0, a0),
-					Vec3::new(extent.x + band, door_h, a1),
-				)
-			} else {
-				Aabb3d::from_min_max(
+			match side {
+				DemoDoor::South => Aabb3d::from_min_max(
+					Vec3::new(a0, 0.0, -band),
+					Vec3::new(a1, door_h, band),
+				),
+				DemoDoor::North => Aabb3d::from_min_max(
 					Vec3::new(a0, 0.0, extent.z - band),
 					Vec3::new(a1, door_h, extent.z + band),
-				)
+				),
+				DemoDoor::East => Aabb3d::from_min_max(
+					Vec3::new(extent.x - band, 0.0, a0),
+					Vec3::new(extent.x + band, door_h, a1),
+				),
+				DemoDoor::West => Aabb3d::from_min_max(
+					Vec3::new(-band, 0.0, a0),
+					Vec3::new(band, door_h, a1),
+				),
 			}
 		};
 		if along >= 6.0 {
@@ -251,14 +269,18 @@ mod tests {
 	}
 
 	#[test]
-	fn restroom_fits_gallery_east_and_north_seeds() {
-		// Playground gallery cells that previously soft-failed on sink packing.
+	fn restroom_fits_gallery_example_seeds() {
+		// Mirrors playground `public_restroom_examples_specs`.
 		let cases = [
-			(Vec3::new(8.0, 3.2, 10.0), 42, true),
-			(Vec3::new(10.0, 3.2, 9.0), 21, false),
+			(Vec3::new(10.0, 3.2, 8.0), 3, DemoDoor::South),
+			(Vec3::new(12.0, 3.2, 7.0), 11, DemoDoor::South),
+			(Vec3::new(8.0, 3.2, 10.0), 42, DemoDoor::East),
+			(Vec3::new(14.0, 3.2, 8.0), 7, DemoDoor::South),
+			(Vec3::new(10.0, 3.2, 9.0), 21, DemoDoor::North),
+			(Vec3::new(11.0, 3.2, 8.0), 55, DemoDoor::West),
 		];
-		for (extent, seed, east) in cases {
-			let confines = demo_side(extent, east);
+		for (extent, seed, side) in cases {
+			let confines = demo_doors(extent, side);
 			let (stall, _) = PublicRestroom::fit_to_confines(
 				&confines,
 				NoiseParams {
@@ -271,3 +293,4 @@ mod tests {
 		}
 	}
 }
+
