@@ -35,8 +35,16 @@ impl FurnitureNode {
 		Self::placeholder(FurnitureGeometry::Wardrobe, placement)
 	}
 
+	pub fn dresser(placement: Placement) -> Self {
+		Self::placeholder(FurnitureGeometry::Dresser, placement)
+	}
+
 	pub fn nightstand(placement: Placement) -> Self {
 		Self::placeholder(FurnitureGeometry::Nightstand, placement)
+	}
+
+	pub fn bedroom_furniture(placement: Placement) -> Self {
+		Self::placeholder(FurnitureGeometry::BedroomFurniture, placement)
 	}
 
 	pub fn vanity(placement: Placement) -> Self {

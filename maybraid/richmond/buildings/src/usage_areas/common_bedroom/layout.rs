@@ -23,6 +23,10 @@ const DOOR_HEIGHT_MAX: f32 = 2.3;
 const DOOR_HEADER_MIN: f32 = 0.2;
 /// Plan pad kept between closet↔closet and closet↔ensuite (avoids thin wall slivers).
 const PARTITION_SEP: f32 = 1.0;
+/// Plan pad between free-standing storage (wardrobe↔dresser / same-kind pairs).
+const STORAGE_SEP: f32 = 1.0;
+/// Host floor area (m²) above which [`Concept::BedroomFurniture`] may be picked.
+const LARGE_ROOM_AREA: f32 = 70.0;
 
 /// One closet or ensuite: enclosure panels + authored door + room AABB.
 #[derive(Debug, Clone, PartialEq)]
@@ -42,7 +46,14 @@ pub struct CommonBedroomPacked {
 	pub nightstands: Vec<Aabb3d>,
 	/// Same scale as nightstands, but not bed-adjacent (chests / stools / …).
 	pub small_bedroom_furniture: Vec<Aabb3d>,
+	/// Free-standing tall storage (not inside a closet cell).
+	pub wardrobes: Vec<Aabb3d>,
+	/// Free-standing low storage.
+	pub dressers: Vec<Aabb3d>,
+	/// Mid-size free furniture for roomy hosts.
+	pub bedroom_furniture: Vec<Aabb3d>,
 	pub closets: Vec<BedroomPartition>,
+	pub walk_in_closets: Vec<BedroomPartition>,
 	pub ensuites: Vec<BedroomPartition>,
 }
 
@@ -52,7 +63,11 @@ pub struct CommonBedroomRegions {
 	pub spaciousness: f32,
 	pub occupancy: f32,
 	pub bed_against_wall: bool,
+	pub ensuite_area_target: f32,
+	pub bedroom_area_reserve: f32,
+	pub walk_in_area_target: f32,
 	pub closet_along_t: f32,
+	pub walk_in_along_t: f32,
 	pub ensuite_along_t: f32,
 	pub door_width: f32,
 	pub door_along_t: f32,
@@ -63,7 +78,11 @@ pub struct CommonBedroomRegions {
 enum Concept {
 	Bed,
 	Nightstand,
+	Wardrobe,
+	Dresser,
+	BedroomFurniture,
 	Closet,
+	WalkInCloset,
 	Ensuite,
 }
 
@@ -71,6 +90,9 @@ enum Placed {
 	Solid(Aabb3d),
 	Nightstand(Aabb3d),
 	SmallFurniture(Aabb3d),
+	Wardrobe(Aabb3d),
+	Dresser(Aabb3d),
+	BedroomFurniture(Aabb3d),
 	Partition(BedroomPartition),
 }
 
@@ -113,13 +135,29 @@ impl CommonBedroomRegions {
 			if occupied / room_area >= self.occupancy {
 				break;
 			}
-			let concept = pick_concept(&cfg, step, packed.beds.len(), !packed.ensuites.is_empty());
+			let concept = pick_concept(
+				&cfg,
+				step,
+				PickCtx {
+					bed_count: packed.beds.len(),
+					has_ensuite: !packed.ensuites.is_empty(),
+					wardrobe_count: packed.wardrobes.len(),
+					dresser_count: packed.dressers.len(),
+					walk_in_count: packed.walk_in_closets.len(),
+					room_area,
+				},
+			);
 			let Some(placed) = self.try_place(concept, host3, host, &clearances, &packed, &cfg, step)
 			else {
 				continue;
 			};
 			let add = match &placed {
-				Placed::Solid(a) | Placed::Nightstand(a) | Placed::SmallFurniture(a) => xz_area(a),
+				Placed::Solid(a)
+				| Placed::Nightstand(a)
+				| Placed::SmallFurniture(a)
+				| Placed::Wardrobe(a)
+				| Placed::Dresser(a)
+				| Placed::BedroomFurniture(a) => xz_area(a),
 				Placed::Partition(p) => xz_area(&p.bounds),
 			};
 			if (occupied + add) / room_area > self.occupancy + 1e-3 {
@@ -139,13 +177,26 @@ impl CommonBedroomRegions {
 					clearances.push(aabb3_to_plan(&a, PlanAxes::XZ));
 					packed.small_bedroom_furniture.push(a);
 				}
+				Placed::Wardrobe(a) => {
+					clearances.push(aabb3_to_plan(&a, PlanAxes::XZ));
+					packed.wardrobes.push(a);
+				}
+				Placed::Dresser(a) => {
+					clearances.push(aabb3_to_plan(&a, PlanAxes::XZ));
+					packed.dressers.push(a);
+				}
+				Placed::BedroomFurniture(a) => {
+					clearances.push(aabb3_to_plan(&a, PlanAxes::XZ));
+					packed.bedroom_furniture.push(a);
+				}
 				Placed::Partition(part) => {
 					clearances.push(aabb3_to_plan(&part.bounds, PlanAxes::XZ));
 					clearances.push(part.door_clear);
 					match concept {
 						Concept::Closet => packed.closets.push(part),
+						Concept::WalkInCloset => packed.walk_in_closets.push(part),
 						Concept::Ensuite => packed.ensuites.push(part),
-						Concept::Bed | Concept::Nightstand => unreachable!("solid via Partition"),
+						_ => unreachable!("non-partition via Partition"),
 					}
 				}
 			}
@@ -179,15 +230,80 @@ impl CommonBedroomRegions {
 			Concept::Nightstand => {
 				place_small_box(host3, host, clearances, packed, cfg, salt, self.spaciousness)
 			}
+			Concept::Wardrobe => {
+				if !packed.wardrobes.is_empty() {
+					return None;
+				}
+				let clears = storage_pack_clearances(clearances, packed);
+				place_storage_long_on_wall(
+					host3,
+					host,
+					&clears,
+					packed,
+					cfg,
+					salt,
+					base_wardrobe_extent(self.spaciousness),
+				)
+				.map(Placed::Wardrobe)
+			}
+			Concept::Dresser => {
+				if !packed.dressers.is_empty() {
+					return None;
+				}
+				let clears = storage_pack_clearances(clearances, packed);
+				place_storage_long_on_wall(
+					host3,
+					host,
+					&clears,
+					packed,
+					cfg,
+					salt,
+					base_dresser_extent(self.spaciousness),
+				)
+				.map(Placed::Dresser)
+			}
+			Concept::BedroomFurniture => place_free_extent(
+				host3,
+				host,
+				clearances,
+				packed,
+				cfg,
+				salt,
+				base_bedroom_furniture_extent(self.spaciousness),
+				42.0,
+			)
+			.map(Placed::BedroomFurniture),
 			Concept::Closet => {
 				let clears = partition_pack_clearances(clearances, packed);
+				let mins = self.closet_mins();
+				let area_target = (mins.long * mins.short * 1.15).min(aabb2_area(host) * 0.18);
 				self.pack_partition(
 					host3,
 					host,
 					&clears,
-					self.closet_mins(),
+					mins,
+					area_target,
+					self.bedroom_floor_reserve(host),
 					self.closet_along_t,
 					OpeningId::scoped(SCOPE, "closet_door", packed.closets.len().to_string()),
+				)
+				.map(Placed::Partition)
+			}
+			Concept::WalkInCloset => {
+				if !packed.walk_in_closets.is_empty() {
+					return None;
+				}
+				let clears = partition_pack_clearances(clearances, packed);
+				let mins = self.walk_in_mins();
+				self.pack_partition(
+					host3,
+					host,
+					&clears,
+					mins,
+					self.walk_in_area_target.max(mins.long * mins.short),
+					self.bedroom_floor_reserve(host),
+					self.walk_in_along_t,
+					OpeningId::scoped(SCOPE, "walk_in_door", "0"),
 				)
 				.map(Placed::Partition)
 			}
@@ -196,11 +312,15 @@ impl CommonBedroomRegions {
 					return None;
 				}
 				let clears = partition_pack_clearances(clearances, packed);
+				let mins = self.ensuite_mins();
 				self.pack_partition(
 					host3,
 					host,
 					&clears,
-					self.ensuite_mins(),
+					mins,
+					self.ensuite_area_target.max(mins.long * mins.short),
+					self.bedroom_area_reserve
+						.max(self.bedroom_floor_reserve(host)),
 					self.ensuite_along_t,
 					OpeningId::scoped(SCOPE, "ensuite_door", "0"),
 				)
@@ -216,11 +336,23 @@ impl CommonBedroomRegions {
 		}
 	}
 
+	fn walk_in_mins(&self) -> EnclosedRoomMins {
+		EnclosedRoomMins {
+			long: base_walk_in_length(self.spaciousness),
+			short: base_walk_in_depth(self.spaciousness),
+		}
+	}
+
 	fn ensuite_mins(&self) -> EnclosedRoomMins {
 		EnclosedRoomMins {
 			long: base_ensuite_length(self.spaciousness),
 			short: base_ensuite_depth(self.spaciousness),
 		}
+	}
+
+	fn bedroom_floor_reserve(&self, host: Aabb2d) -> f32 {
+		let bed_floor = 2.0 * 1.6 * self.spaciousness * self.spaciousness;
+		bed_floor.max(aabb2_area(host) * (1.0 - self.occupancy))
 	}
 
 	fn pack_partition(
@@ -229,19 +361,19 @@ impl CommonBedroomRegions {
 		host: Aabb2d,
 		clearances: &[Aabb2d],
 		mins: EnclosedRoomMins,
+		area_target: f32,
+		area_reserve: f32,
 		along_t: f32,
 		door_id: OpeningId,
 	) -> Option<BedroomPartition> {
 		let contact = mins.short.min(mins.long * 0.55).max(0.55);
-		let area_target = (mins.long * mins.short * 1.35).min(aabb2_area(host) * 0.35);
-		let bed_floor = 2.0 * 1.6 * self.spaciousness * self.spaciousness;
 		let enclosed = EnclosedRoomParams {
 			mins,
 			contact,
 			seed_depth: mins.short.max(0.6),
 			along_t,
 			area_target,
-			area_reserve: bed_floor.max(aabb2_area(host) * (1.0 - self.occupancy)),
+			area_reserve,
 			reserve_cap_frac: 0.85,
 			grow_into: false,
 			shrink_sales_for_door_clear: true,
@@ -278,9 +410,26 @@ fn partition_pack_clearances(
 	packed: &CommonBedroomPacked,
 ) -> Vec<Aabb2d> {
 	let mut out = clearances.to_vec();
-	for part in packed.closets.iter().chain(packed.ensuites.iter()) {
+	for part in packed
+		.closets
+		.iter()
+		.chain(packed.walk_in_closets.iter())
+		.chain(packed.ensuites.iter())
+	{
 		let plan = aabb3_to_plan(&part.bounds, PlanAxes::XZ);
 		out.push(inflate_aabb2(plan, PARTITION_SEP));
+	}
+	out
+}
+
+/// Base clearances plus a [`STORAGE_SEP`] halo around existing wardrobes / dressers.
+fn storage_pack_clearances(
+	clearances: &[Aabb2d],
+	packed: &CommonBedroomPacked,
+) -> Vec<Aabb2d> {
+	let mut out = clearances.to_vec();
+	for solid in packed.wardrobes.iter().chain(packed.dressers.iter()) {
+		out.push(inflate_aabb2(aabb3_to_plan(solid, PlanAxes::XZ), STORAGE_SEP));
 	}
 	out
 }
@@ -299,6 +448,22 @@ fn base_nightstand_extent(spaciousness: f32) -> Vec3 {
 	Vec3::new(s, 0.5 * spaciousness.min(1.2), s)
 }
 
+fn base_wardrobe_extent(spaciousness: f32) -> Vec3 {
+	Vec3::new(
+		(1.1 * spaciousness).clamp(0.8, 2.0),
+		(2.1 * spaciousness.min(1.15)).clamp(1.8, 2.4),
+		(0.6 * spaciousness).clamp(0.45, 1.0),
+	)
+}
+
+fn base_dresser_extent(spaciousness: f32) -> Vec3 {
+	Vec3::new(
+		(1.3 * spaciousness).clamp(0.9, 2.2),
+		(0.9 * spaciousness.min(1.2)).clamp(0.7, 1.2),
+		(0.5 * spaciousness).clamp(0.4, 0.85),
+	)
+}
+
 fn base_closet_depth(spaciousness: f32) -> f32 {
 	(0.75 * spaciousness).clamp(0.45, 2.0)
 }
@@ -307,27 +472,66 @@ fn base_closet_length(spaciousness: f32) -> f32 {
 	(1.6 * spaciousness).clamp(0.9, 4.0)
 }
 
+fn base_walk_in_depth(spaciousness: f32) -> f32 {
+	(1.5 * spaciousness).clamp(1.2, 3.0)
+}
+
+fn base_walk_in_length(spaciousness: f32) -> f32 {
+	(2.4 * spaciousness).clamp(2.0, 5.0)
+}
+
 fn base_ensuite_depth(spaciousness: f32) -> f32 {
-	(1.1 * spaciousness).clamp(0.7, 2.5)
+	(1.8 * spaciousness).clamp(1.5, 3.2)
 }
 
 fn base_ensuite_length(spaciousness: f32) -> f32 {
-	(2.0 * spaciousness).clamp(1.2, 5.0)
+	(2.6 * spaciousness).clamp(2.2, 5.5)
 }
 
-fn pick_concept(noise: &NoiseConfig, step: u32, bed_count: usize, has_ensuite: bool) -> Concept {
+fn base_bedroom_furniture_extent(spaciousness: f32) -> Vec3 {
+	Vec3::new(
+		(1.5 * spaciousness).clamp(1.1, 2.4),
+		(0.9 * spaciousness.min(1.2)).clamp(0.7, 1.2),
+		(0.85 * spaciousness).clamp(0.65, 1.5),
+	)
+}
+
+struct PickCtx {
+	bed_count: usize,
+	has_ensuite: bool,
+	wardrobe_count: usize,
+	dresser_count: usize,
+	walk_in_count: usize,
+	room_area: f32,
+}
+
+fn pick_concept(noise: &NoiseConfig, step: u32, ctx: PickCtx) -> Concept {
 	let t = noise.sample_unit_4d(step as f32, 0.0, 0.0, 10.0);
-	if bed_count == 1 && t < 0.35 {
+	let large = ctx.room_area + 1e-3 >= LARGE_ROOM_AREA;
+	if ctx.bed_count == 1 && t < 0.28 {
 		Concept::Nightstand
-	} else if t < 0.25 {
+	} else if t < 0.16 {
 		Concept::Bed
-	} else if t < 0.5 {
+	} else if t < 0.36 {
 		Concept::Nightstand
-	} else if t < 0.75 {
+	} else if t < 0.44 && ctx.wardrobe_count == 0 {
+		Concept::Wardrobe
+	} else if t < 0.50 && ctx.dresser_count == 0 {
+		Concept::Dresser
+	} else if t < 0.58 && large {
+		Concept::BedroomFurniture
+	} else if t < 0.68 {
 		Concept::Closet
-	} else if has_ensuite {
-		// At most one ensuite per bedroom; fall through to another closet.
+	} else if t < 0.78 && ctx.walk_in_count == 0 && large {
+		Concept::WalkInCloset
+	} else if t < 0.78 {
 		Concept::Closet
+	} else if ctx.has_ensuite {
+		if large && ctx.walk_in_count == 0 {
+			Concept::WalkInCloset
+		} else {
+			Concept::Closet
+		}
 	} else {
 		Concept::Ensuite
 	}
@@ -343,7 +547,11 @@ fn collides_solids(candidate: &Aabb3d, packed: &CommonBedroomPacked) -> bool {
 		.iter()
 		.chain(packed.nightstands.iter())
 		.chain(packed.small_bedroom_furniture.iter())
+		.chain(packed.wardrobes.iter())
+		.chain(packed.dressers.iter())
+		.chain(packed.bedroom_furniture.iter())
 		.chain(packed.closets.iter().map(|p| &p.bounds))
+		.chain(packed.walk_in_closets.iter().map(|p| &p.bounds))
 		.chain(packed.ensuites.iter().map(|p| &p.bounds))
 		.any(|a| aabb3_intersects(candidate, a))
 }
@@ -478,6 +686,71 @@ fn abuts_host_wall(plan: Aabb2d, host: Aabb2d) -> bool {
 		|| (plan.max.x - host.max.x).abs() < EPS
 		|| (plan.min.y - host.min.y).abs() < EPS
 		|| (plan.max.y - host.max.y).abs() < EPS
+}
+
+/// Free-standing storage with the **long** plan face flush on a host wall.
+///
+/// `extent` is authored as `(long, height, short)` in local furniture space.
+fn place_storage_long_on_wall(
+	host3: &Aabb3d,
+	host: Aabb2d,
+	clearances: &[Aabb2d],
+	packed: &CommonBedroomPacked,
+	noise: &NoiseConfig,
+	salt: u32,
+	extent: Vec3,
+) -> Option<Aabb3d> {
+	let long = extent.x;
+	let short = extent.z;
+	let height = extent.y;
+	let size = host3.max - host3.min;
+	if long.min(short) > size.x.min(size.z) + 1e-3 {
+		return None;
+	}
+
+	let start = (noise.sample_unit_4d(salt as f32, 0.0, 0.0, 40.0) * 4.0).floor() as u32 % 4;
+	for k in 0..4u32 {
+		let wall = (start + k) % 4;
+		// −Z/+Z walls take long along X; −X/+X walls take long along Z.
+		let e = match wall {
+			0 | 1 => Vec3::new(long, height, short),
+			_ => Vec3::new(short, height, long),
+		};
+		if e.x > size.x + 1e-3 || e.z > size.z + 1e-3 {
+			continue;
+		}
+		let max_u = (size.x - e.x).max(0.0);
+		let max_v = (size.z - e.z).max(0.0);
+		for attempt in 0..8u32 {
+			let t = noise.sample_unit_4d(salt as f32, attempt as f32, wall as f32, 41.0);
+			let min = match wall {
+				0 => Vec3::new(host3.min.x + t * max_u, host3.min.y, host3.min.z), // −Z
+				1 => Vec3::new(host3.min.x + t * max_u, host3.min.y, host3.max.z - e.z), // +Z
+				2 => Vec3::new(host3.min.x, host3.min.y, host3.min.z + t * max_v), // −X
+				_ => Vec3::new(host3.max.x - e.x, host3.min.y, host3.min.z + t * max_v), // +X
+			};
+			let candidate = Aabb3d::from_min_max(min, min + e);
+			let plan = aabb3_to_plan(&candidate, PlanAxes::XZ);
+			if fits(&candidate, host3, host, clearances, packed)
+				&& long_face_on_host_wall(plan, host)
+			{
+				return Some(candidate);
+			}
+		}
+	}
+	None
+}
+
+/// True when the longer plan edge of `plan` lies on a host wall.
+fn long_face_on_host_wall(plan: Aabb2d, host: Aabb2d) -> bool {
+	const EPS: f32 = 0.06;
+	let w = plan.max.x - plan.min.x;
+	let d = plan.max.y - plan.min.y;
+	if w + EPS >= d {
+		(plan.min.y - host.min.y).abs() < EPS || (plan.max.y - host.max.y).abs() < EPS
+	} else {
+		(plan.min.x - host.min.x).abs() < EPS || (plan.max.x - host.max.x).abs() < EPS
+	}
 }
 
 /// Place a nightstand-scale box: adjacent to a bed when possible, else free-standing.

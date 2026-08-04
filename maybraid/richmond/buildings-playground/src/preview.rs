@@ -1737,14 +1737,18 @@ fn build_parts_examples() -> (Vec<PartsExampleCell>, Vec<(Aabb3d, Vec3)>) {
 /// `(extent, seed, spaciousness, occupancy, door, bed_against_wall)`.
 fn bedroom_examples_specs() -> Vec<(Vec3, i32, f32, f32, bool, bool)> {
 	vec![
-		// Row 0 — nominal / dense / spacious (wall bed)
-		(Vec3::new(6.0, 3.0, 6.0), 7, 1.0, 0.55, true, true),
-		(Vec3::new(6.0, 3.0, 6.0), 11, 1.0, 0.8, true, true),
-		(Vec3::new(6.0, 3.0, 6.0), 21, 1.3, 0.45, true, false),
-		// Row 1 — larger / narrow / no door
-		(Vec3::new(8.0, 3.0, 7.0), 42, 1.0, 0.6, true, true),
-		(Vec3::new(5.0, 3.0, 7.5), 55, 0.9, 0.55, true, false),
-		(Vec3::new(6.5, 3.0, 6.5), 99, 1.0, 0.55, false, true),
+		// Row 0 — compact cells, roomier default spaciousness
+		(Vec3::new(6.5, 3.0, 6.5), 7, 1.2, 0.55, true, true),
+		(Vec3::new(7.0, 3.0, 6.0), 11, 1.25, 0.65, true, true),
+		(Vec3::new(6.0, 3.0, 7.0), 21, 1.35, 0.5, true, false),
+		// Row 1 — mid-size
+		(Vec3::new(8.0, 3.0, 8.0), 42, 1.25, 0.55, true, true),
+		(Vec3::new(9.0, 3.2, 7.0), 55, 1.3, 0.5, true, false),
+		(Vec3::new(7.5, 3.0, 9.0), 99, 1.2, 0.6, false, true),
+		// Row 2 — large bedrooms (how fill scales up)
+		(Vec3::new(11.0, 3.2, 10.0), 3, 1.35, 0.5, true, true),
+		(Vec3::new(12.0, 3.2, 12.0), 17, 1.4, 0.45, true, true),
+		(Vec3::new(14.0, 3.2, 11.0), 33, 1.45, 0.55, true, false),
 	]
 }
 

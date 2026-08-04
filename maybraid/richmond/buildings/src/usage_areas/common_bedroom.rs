@@ -40,9 +40,13 @@ pub struct CommonBedroom {
 	pub beds: Vec<BedFill>,
 	pub nightstands: Vec<NightstandFill>,
 	pub small_bedroom_furniture: Vec<SmallBedroomFurnitureFill>,
+	pub wardrobes: Vec<WardrobeFill>,
+	pub dressers: Vec<DresserFill>,
+	pub bedroom_furniture: Vec<BedroomFurnitureFill>,
 	pub closet_walls: Vec<Rectangle>,
 	pub ensuite_walls: Vec<Rectangle>,
 	pub closets: Vec<ClosetFill>,
+	pub walk_in_closets: Vec<WalkInClosetFill>,
 	pub ensuites: Vec<EnsuiteFill>,
 }
 
@@ -67,9 +71,39 @@ pub struct SmallBedroomFurnitureFill {
 	pub furniture: FurnitureNode,
 }
 
-/// Closet residual (walled room only — wardrobes / dressers are free-standing).
+/// Free-standing wardrobe (not inside a closet cell).
+#[derive(Debug, Clone, PartialEq)]
+pub struct WardrobeFill {
+	pub label: LabelNode,
+	pub furniture: FurnitureNode,
+}
+
+/// Free-standing dresser.
+#[derive(Debug, Clone, PartialEq)]
+pub struct DresserFill {
+	pub label: LabelNode,
+	pub furniture: FurnitureNode,
+}
+
+/// Mid-size free furniture for roomy hosts.
+#[derive(Debug, Clone, PartialEq)]
+pub struct BedroomFurnitureFill {
+	pub label: LabelNode,
+	pub furniture: FurnitureNode,
+}
+
+/// Shallow closet residual (walled room only — storage furniture is free-standing).
 #[derive(Debug, Clone, PartialEq)]
 pub struct ClosetFill {
+	pub bounds: Aabb3d,
+	pub label: LabelNode,
+	pub door_id: OpeningId,
+	pub door: Opening,
+}
+
+/// Walk-in closet residual (larger mins / area target than [`ClosetFill`]).
+#[derive(Debug, Clone, PartialEq)]
+pub struct WalkInClosetFill {
 	pub bounds: Aabb3d,
 	pub label: LabelNode,
 	pub door_id: OpeningId,
@@ -119,6 +153,33 @@ impl CommonBedroom {
 				furniture: FurnitureNode::nightstand(placement_filling_aabb(aabb)),
 			})
 			.collect();
+		let wardrobes = plan
+			.packed
+			.wardrobes
+			.iter()
+			.map(|aabb| WardrobeFill {
+				label: label_filling_aabb(style, "Wardrobe", aabb, confines.roll),
+				furniture: FurnitureNode::wardrobe(placement_filling_aabb(aabb)),
+			})
+			.collect();
+		let dressers = plan
+			.packed
+			.dressers
+			.iter()
+			.map(|aabb| DresserFill {
+				label: label_filling_aabb(style, "Dresser", aabb, confines.roll),
+				furniture: FurnitureNode::dresser(placement_filling_aabb(aabb)),
+			})
+			.collect();
+		let bedroom_furniture = plan
+			.packed
+			.bedroom_furniture
+			.iter()
+			.map(|aabb| BedroomFurnitureFill {
+				label: label_filling_aabb(style, "BedroomFurniture", aabb, confines.roll),
+				furniture: FurnitureNode::bedroom_furniture(placement_filling_aabb(aabb)),
+			})
+			.collect();
 
 		let mut closet_walls = Vec::new();
 		let closets = plan
@@ -128,6 +189,15 @@ impl CommonBedroom {
 			.map(|p| {
 				closet_walls.extend(p.walls.iter().cloned());
 				closet_fill(p, style, confines.roll)
+			})
+			.collect();
+		let walk_in_closets = plan
+			.packed
+			.walk_in_closets
+			.iter()
+			.map(|p| {
+				closet_walls.extend(p.walls.iter().cloned());
+				walk_in_fill(p, style, confines.roll)
 			})
 			.collect();
 
@@ -152,9 +222,13 @@ impl CommonBedroom {
 			beds,
 			nightstands,
 			small_bedroom_furniture,
+			wardrobes,
+			dressers,
+			bedroom_furniture,
 			closet_walls,
 			ensuite_walls,
 			closets,
+			walk_in_closets,
 			ensuites,
 		}
 	}
@@ -162,6 +236,14 @@ impl CommonBedroom {
 	fn partition_regions(&self, roll: f32) -> Vec<FillRegion> {
 		let mut out = Vec::new();
 		for c in &self.closets {
+			let mut openings = Openings::new();
+			openings.insert(c.door_id.clone(), c.door.clone());
+			out.push(FillRegion::new(
+				SpaceKind::InternalSpace,
+				Confines::new(c.bounds, roll, openings),
+			));
+		}
+		for c in &self.walk_in_closets {
 			let mut openings = Openings::new();
 			openings.insert(c.door_id.clone(), c.door.clone());
 			out.push(FillRegion::new(
@@ -185,6 +267,15 @@ fn closet_fill(part: &BedroomPartition, style: LabelStyle, roll: f32) -> ClosetF
 	ClosetFill {
 		bounds: part.bounds,
 		label: label_filling_aabb(style, "Closet", &part.bounds, roll),
+		door_id: part.door_id.clone(),
+		door: part.door.clone(),
+	}
+}
+
+fn walk_in_fill(part: &BedroomPartition, style: LabelStyle, roll: f32) -> WalkInClosetFill {
+	WalkInClosetFill {
+		bounds: part.bounds,
+		label: label_filling_aabb(style, "WalkInCloset", &part.bounds, roll),
 		door_id: part.door_id.clone(),
 		door: part.door.clone(),
 	}
@@ -267,7 +358,11 @@ impl BuildingComponents for CommonBedroom {
 		labels.extend(self.beds.iter().map(|b| b.label.clone()));
 		labels.extend(self.nightstands.iter().map(|n| n.label.clone()));
 		labels.extend(self.small_bedroom_furniture.iter().map(|s| s.label.clone()));
+		labels.extend(self.wardrobes.iter().map(|w| w.label.clone()));
+		labels.extend(self.dressers.iter().map(|d| d.label.clone()));
+		labels.extend(self.bedroom_furniture.iter().map(|b| b.label.clone()));
 		labels.extend(self.closets.iter().map(|c| c.label.clone()));
+		labels.extend(self.walk_in_closets.iter().map(|c| c.label.clone()));
 		for e in &self.ensuites {
 			labels.push(e.label.clone());
 			labels.push(e.vanity_label.clone());
@@ -291,6 +386,24 @@ impl BuildingComponents for CommonBedroom {
 			self.small_bedroom_furniture
 				.iter()
 				.map(|s| s.furniture.clone())
+				.collect::<Vec<_>>(),
+		));
+		out.extend(Layers::from_free(
+			self.wardrobes
+				.iter()
+				.map(|w| w.furniture.clone())
+				.collect::<Vec<_>>(),
+		));
+		out.extend(Layers::from_free(
+			self.dressers
+				.iter()
+				.map(|d| d.furniture.clone())
+				.collect::<Vec<_>>(),
+		));
+		out.extend(Layers::from_free(
+			self.bedroom_furniture
+				.iter()
+				.map(|b| b.furniture.clone())
 				.collect::<Vec<_>>(),
 		));
 		for e in &self.ensuites {
@@ -347,7 +460,20 @@ mod tests {
 			.small_bedroom_furniture
 			.iter()
 			.all(|s| s.label.text.as_str() == "SmallBedroomFurniture"));
-		assert_eq!(regions.within.len(), room.closets.len() + room.ensuites.len());
+		assert!(room.wardrobes.iter().all(|w| w.label.text.as_str() == "Wardrobe"));
+		assert!(room.dressers.iter().all(|d| d.label.text.as_str() == "Dresser"));
+		assert!(room
+			.bedroom_furniture
+			.iter()
+			.all(|b| b.label.text.as_str() == "BedroomFurniture"));
+		assert!(room
+			.walk_in_closets
+			.iter()
+			.all(|c| c.label.text.as_str() == "WalkInCloset"));
+		assert_eq!(
+			regions.within.len(),
+			room.closets.len() + room.walk_in_closets.len() + room.ensuites.len()
+		);
 		for c in &room.closets {
 			assert!(matches!(c.door.label, OpeningLabel::Passage));
 			assert!(c.door_id.0.contains("closet_door"));
@@ -400,6 +526,108 @@ mod tests {
 				room.ensuites.len()
 			);
 		}
+	}
+
+	#[test]
+	fn common_bedroom_can_place_wardrobe_or_dresser() {
+		let confines = Confines::new(
+			Aabb3d::from_min_max(Vec3::ZERO, Vec3::new(10.0, 3.0, 10.0)),
+			0.0,
+			{
+				let mut openings = Openings::new();
+				openings.insert(
+					OpeningId::new("door_a"),
+					Opening::passage(Aabb3d::from_min_max(
+						Vec3::new(4.0, 0.0, -0.2),
+						Vec3::new(6.0, 2.2, 0.2),
+					)),
+				);
+				openings
+			},
+		);
+		let mut saw_storage = false;
+		for seed in 0..48 {
+			let (room, _) = CommonBedroom::fit_with_fill(
+				&confines,
+				NoiseParams {
+					seed,
+					..NoiseParams::default()
+				},
+				CommonBedroomParameterized::with_fill(1.25, 0.85),
+			)
+			.unwrap();
+			if !room.wardrobes.is_empty() || !room.dressers.is_empty() {
+				saw_storage = true;
+				break;
+			}
+		}
+		assert!(saw_storage, "expected some seed to place a wardrobe or dresser");
+	}
+
+	#[test]
+	fn common_bedroom_storage_long_face_on_wall_and_sep() {
+		use procedural_common::{inflate_aabb2, intersects_aabb2};
+		let confines = Confines::new(
+			Aabb3d::from_min_max(Vec3::ZERO, Vec3::new(12.0, 3.0, 12.0)),
+			0.0,
+			{
+				let mut openings = Openings::new();
+				openings.insert(
+					OpeningId::new("door_a"),
+					Opening::passage(Aabb3d::from_min_max(
+						Vec3::new(5.0, 0.0, -0.2),
+						Vec3::new(7.0, 2.2, 0.2),
+					)),
+				);
+				openings
+			},
+		);
+		let host = aabb3_to_plan(&confines.bounds, PlanAxes::XZ);
+		let mut saw_storage = false;
+		for seed in 0..80 {
+			let plan = CommonBedroomPlan::from_parameterized(
+				CommonBedroomParameterized::with_fill(1.25, 0.85),
+				&confines,
+				NoiseParams {
+					seed,
+					..NoiseParams::default()
+				},
+			)
+			.unwrap();
+			let storage: Vec<_> = plan
+				.packed
+				.wardrobes
+				.iter()
+				.chain(plan.packed.dressers.iter())
+				.cloned()
+				.collect();
+			if !storage.is_empty() {
+				saw_storage = true;
+			}
+			for s in &storage {
+				let p = aabb3_to_plan(s, PlanAxes::XZ);
+				let w = p.max.x - p.min.x;
+				let d = p.max.y - p.min.y;
+				const EPS: f32 = 0.08;
+				let long_on_wall = if w + EPS >= d {
+					(p.min.y - host.min.y).abs() < EPS || (p.max.y - host.max.y).abs() < EPS
+				} else {
+					(p.min.x - host.min.x).abs() < EPS || (p.max.x - host.max.x).abs() < EPS
+				};
+				assert!(long_on_wall, "storage long face not on host wall (seed={seed})");
+			}
+			if storage.len() >= 2 {
+				let a = aabb3_to_plan(&storage[0], PlanAxes::XZ);
+				let b = aabb3_to_plan(&storage[1], PlanAxes::XZ);
+				assert!(
+					!intersects_aabb2(inflate_aabb2(a, 1.0 - 1e-3), b),
+					"storage pieces closer than 1m (seed={seed})"
+				);
+			}
+			assert!(plan.packed.wardrobes.len() <= 1);
+			assert!(plan.packed.dressers.len() <= 1);
+		}
+		assert!(saw_storage, "expected some seed with wardrobe or dresser");
 	}
 
 	#[test]
@@ -482,6 +710,7 @@ mod tests {
 			.packed
 			.closets
 			.iter()
+			.chain(plan.packed.walk_in_closets.iter())
 			.chain(plan.packed.ensuites.iter())
 			.map(|p| aabb3_to_plan(&p.bounds, PlanAxes::XZ))
 			.collect();
@@ -494,6 +723,94 @@ mod tests {
 				);
 			}
 		}
+	}
+
+	#[test]
+	fn common_bedroom_ensuite_grows_toward_area_target() {
+		use procedural_common::aabb2_area;
+		let confines = Confines::new(
+			Aabb3d::from_min_max(Vec3::ZERO, Vec3::new(14.0, 3.2, 12.0)),
+			0.0,
+			{
+				let mut openings = Openings::new();
+				openings.insert(
+					OpeningId::new("door_a"),
+					Opening::passage(Aabb3d::from_min_max(
+						Vec3::new(6.0, 0.0, -0.2),
+						Vec3::new(8.0, 2.2, 0.2),
+					)),
+				);
+				openings
+			},
+		);
+		let mut params = CommonBedroomParameterized::with_fill(1.25, 0.7);
+		params.ensuite_area_target = 18.0;
+		params.bedroom_area_reserve = 40.0;
+		params.bed_against_wall = true;
+		let mut found = None;
+		for seed in 0..40 {
+			let plan = CommonBedroomPlan::from_parameterized(
+				params.clone(),
+				&confines,
+				NoiseParams {
+					seed,
+					..NoiseParams::default()
+				},
+			)
+			.unwrap();
+			if let Some(ensuite) = plan.packed.ensuites.first() {
+				found = Some(aabb2_area(aabb3_to_plan(&ensuite.bounds, PlanAxes::XZ)));
+				break;
+			}
+		}
+		let area = found.expect("expected an ensuite in a large room");
+		assert!(
+			area + 1e-3 >= 2.6 * 1.8,
+			"ensuite area {area} below enlarged mins"
+		);
+		assert!(
+			area + 0.5 >= 12.0,
+			"ensuite area {area} should grow toward target 18 in a large host"
+		);
+	}
+
+	#[test]
+	fn common_bedroom_large_room_can_place_bedroom_furniture_or_walk_in() {
+		let confines = Confines::new(
+			Aabb3d::from_min_max(Vec3::ZERO, Vec3::new(12.0, 3.2, 12.0)),
+			0.0,
+			{
+				let mut openings = Openings::new();
+				openings.insert(
+					OpeningId::new("door_a"),
+					Opening::passage(Aabb3d::from_min_max(
+						Vec3::new(5.0, 0.0, -0.2),
+						Vec3::new(7.0, 2.2, 0.2),
+					)),
+				);
+				openings
+			},
+		);
+		let mut saw = false;
+		for seed in 0..48 {
+			let (room, _) = CommonBedroom::fit_with_fill(
+				&confines,
+				NoiseParams {
+					seed,
+					..NoiseParams::default()
+				},
+				CommonBedroomParameterized::with_fill(1.3, 0.7),
+			)
+			.unwrap();
+			if !room.bedroom_furniture.is_empty() || !room.walk_in_closets.is_empty() {
+				saw = true;
+				break;
+			}
+		}
+		assert!(
+			saw,
+			"expected BedroomFurniture or WalkInCloset in a large room"
+		);
 	}
 
 	#[test]
