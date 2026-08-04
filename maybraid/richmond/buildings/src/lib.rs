@@ -54,8 +54,8 @@ pub use constraints::{
 pub use demos::ConnectingShells;
 pub use fit::{
 	aabb_near_plane, aabb_xz_area, aabb_xz_center, aabb_xz_extent, aabb_xz_near_eq,
-	aabb_xz_overlap_area, Confines, FillRegion, FillableRegions, Fit, FitError, SpaceKind,
-	StackRegion,
+	aabb_xz_overlap_area, Confines, FillRegion, FillableRegions, Fit, FitError, FitTarget,
+	MultiConfines, MultiFit, SpaceKind, StackRegion,
 };
 pub use openings::{
 	fit_bays_on_run, fit_windows_on_run, generate_stall_doors, generate_windows,

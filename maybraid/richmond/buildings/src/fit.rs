@@ -180,6 +180,123 @@ impl FillableRegions {
 	pub fn empty() -> Self {
 		Self::default()
 	}
+
+	/// Append another residual set (`within` then `atop`).
+	pub fn extend(&mut self, other: FillableRegions) {
+		self.within.extend(other.within);
+		self.atop.extend(other.atop);
+	}
+}
+
+/// Several typed rectangular pieces (L / T / grouped cells) offered for filling.
+///
+/// Each part is a [`FillRegion`] so [`SpaceKind`] and openings stay with the
+/// piece. Leaf Fits that only implement [`Fit::fit_to_confines`] still work via
+/// the default [`Fit::fit_to_multi_confines`] map.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct MultiConfines {
+	pub parts: Vec<FillRegion>,
+}
+
+impl MultiConfines {
+	pub fn new(parts: impl IntoIterator<Item = FillRegion>) -> Self {
+		Self {
+			parts: parts.into_iter().collect(),
+		}
+	}
+
+	pub fn empty() -> Self {
+		Self::default()
+	}
+
+	pub fn is_empty(&self) -> bool {
+		self.parts.is_empty()
+	}
+
+	pub fn len(&self) -> usize {
+		self.parts.len()
+	}
+
+	pub fn iter(&self) -> impl Iterator<Item = &FillRegion> {
+		self.parts.iter()
+	}
+
+	/// Build from untyped confines (all [`SpaceKind::InternalSpace`]).
+	pub fn from_confines(parts: impl IntoIterator<Item = Confines>) -> Self {
+		Self::new(
+			parts
+				.into_iter()
+				.map(|c| FillRegion::new(SpaceKind::InternalSpace, c)),
+		)
+	}
+}
+
+impl From<Confines> for MultiConfines {
+	fn from(confines: Confines) -> Self {
+		Self::from_confines([confines])
+	}
+}
+
+impl From<FillRegion> for MultiConfines {
+	fn from(region: FillRegion) -> Self {
+		Self::new([region])
+	}
+}
+
+impl From<Vec<FillRegion>> for MultiConfines {
+	fn from(parts: Vec<FillRegion>) -> Self {
+		Self { parts }
+	}
+}
+
+/// Result of fitting into [`MultiConfines`] (or a single [`Confines`] via [`Fit::fit_to`]).
+///
+/// Soft piece rejects (`TooSmall`) stay in [`Self::residual`] so a higher-order
+/// chooser can try another typology. Nested residuals from successful pieces are
+/// merged into [`Self::residual`] as well.
+#[derive(Debug, Clone, PartialEq)]
+pub struct MultiFit<T> {
+	/// Successfully fitted pieces (order matches successful inputs).
+	pub fitted: Vec<(T, FillableRegions)>,
+	/// Unfilled input pieces plus nested residuals from successes.
+	pub residual: FillableRegions,
+}
+
+impl<T> MultiFit<T> {
+	pub fn empty() -> Self {
+		Self {
+			fitted: Vec::new(),
+			residual: FillableRegions::empty(),
+		}
+	}
+
+	pub fn is_empty(&self) -> bool {
+		self.fitted.is_empty()
+	}
+
+	/// Number of successfully fitted pieces.
+	pub fn fitted_len(&self) -> usize {
+		self.fitted.len()
+	}
+}
+
+/// Single rectangle or multi-rectangle fit target.
+#[derive(Debug, Clone, PartialEq)]
+pub enum FitTarget {
+	Single(Confines),
+	Multi(MultiConfines),
+}
+
+impl From<Confines> for FitTarget {
+	fn from(confines: Confines) -> Self {
+		Self::Single(confines)
+	}
+}
+
+impl From<MultiConfines> for FitTarget {
+	fn from(multi: MultiConfines) -> Self {
+		Self::Multi(multi)
+	}
 }
 
 /// Failure modes for [`Fit::fit_to_confines`].
@@ -215,6 +332,11 @@ impl std::error::Error for FitError {}
 /// Implementors should sample with [`NoiseParams`] → [`procedural_common::NoiseConfig`]
 /// at the confines center (distinct `w` salt lanes per decision). Soft rejects
 /// return [`FitError::TooSmall`].
+///
+/// Only [`Self::fit_to_confines`] is required. [`Self::fit_to_multi_confines`]
+/// defaults to mapping over each [`MultiConfines`] part (partial fill: keep
+/// successes, residualize `TooSmall`). Types that need joint multi-cell layout
+/// can override it.
 pub trait Fit: Sized {
 	/// Fit `Self` to `confines` using spatial `noise`.
 	///
@@ -223,4 +345,142 @@ pub trait Fit: Sized {
 		confines: &Confines,
 		noise: NoiseParams,
 	) -> Result<(Self, FillableRegions), FitError>;
+
+	/// Fit into several typed rectangles (L / grouped cells).
+	///
+	/// **Default:** call [`Self::fit_to_confines`] per part.
+	/// - `Ok` → push onto [`MultiFit::fitted`]; merge nested residuals into
+	///   [`MultiFit::residual`].
+	/// - `Err(TooSmall)` → push the original [`FillRegion`] into residual
+	///   (partial fill).
+	/// - `Err(InvalidConfines)` → fail the whole multi fit.
+	///
+	/// An all-`TooSmall` input still returns `Ok` with empty `fitted` so a
+	/// chooser can try another typology on the residuals.
+	fn fit_to_multi_confines(
+		multi: &MultiConfines,
+		noise: NoiseParams,
+	) -> Result<MultiFit<Self>, FitError> {
+		let mut fitted = Vec::new();
+		let mut residual = FillableRegions::empty();
+		for part in multi.iter() {
+			match Self::fit_to_confines(&part.confines, noise) {
+				Ok((value, nested)) => {
+					residual.extend(nested.clone());
+					fitted.push((value, nested));
+				}
+				Err(FitError::TooSmall { .. }) => {
+					residual.within.push(part.clone());
+				}
+				Err(err) => return Err(err),
+			}
+		}
+		Ok(MultiFit { fitted, residual })
+	}
+
+	/// Dispatch on [`FitTarget`].
+	fn fit_to(target: &FitTarget, noise: NoiseParams) -> Result<MultiFit<Self>, FitError> {
+		match target {
+			FitTarget::Single(confines) => match Self::fit_to_confines(confines, noise) {
+				Ok((value, nested)) => Ok(MultiFit {
+					fitted: vec![(value, nested.clone())],
+					residual: nested,
+				}),
+				Err(FitError::TooSmall { .. }) => Ok(MultiFit {
+					fitted: Vec::new(),
+					residual: FillableRegions {
+						within: vec![FillRegion::new(
+							SpaceKind::InternalSpace,
+							confines.clone(),
+						)],
+						atop: Vec::new(),
+					},
+				}),
+				Err(err) => Err(err),
+			},
+			FitTarget::Multi(multi) => Self::fit_to_multi_confines(multi, noise),
+		}
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use bevy_math::bounding::Aabb3d;
+	use bevy_math::Vec3;
+
+	#[derive(Debug)]
+	struct MinFootprint;
+
+	impl Fit for MinFootprint {
+		fn fit_to_confines(
+			confines: &Confines,
+			_noise: NoiseParams,
+		) -> Result<(Self, FillableRegions), FitError> {
+			let fp = confines.footprint();
+			if fp.x < 4.0 || fp.y < 4.0 {
+				return Err(FitError::TooSmall {
+					reason: "min_footprint",
+				});
+			}
+			Ok((Self, FillableRegions::empty()))
+		}
+	}
+
+	#[derive(Debug)]
+	struct AlwaysInvalid;
+
+	impl Fit for AlwaysInvalid {
+		fn fit_to_confines(
+			_confines: &Confines,
+			_noise: NoiseParams,
+		) -> Result<(Self, FillableRegions), FitError> {
+			Err(FitError::InvalidConfines {
+				reason: "bad",
+			})
+		}
+	}
+
+	fn square(side: f32) -> Confines {
+		Confines::from_bounds(Aabb3d::from_min_max(
+			Vec3::ZERO,
+			Vec3::new(side, 3.0, side),
+		))
+	}
+
+	#[test]
+	fn multi_keeps_successes_and_residuals_soft_fails() {
+		let multi = MultiConfines::new([
+			FillRegion::new(SpaceKind::InternalSpace, square(6.0)),
+			FillRegion::new(SpaceKind::Hallway, square(2.0)),
+			FillRegion::new(SpaceKind::Custom("cell".into()), square(5.0)),
+		]);
+		let out = MinFootprint::fit_to_multi_confines(&multi, NoiseParams::default()).unwrap();
+		assert_eq!(out.fitted_len(), 2);
+		assert_eq!(out.residual.within.len(), 1);
+		assert_eq!(out.residual.within[0].kind, SpaceKind::Hallway);
+	}
+
+	#[test]
+	fn multi_all_soft_fail_is_ok_empty_fitted() {
+		let multi = MultiConfines::from_confines([square(1.0), square(2.0)]);
+		let out = MinFootprint::fit_to_multi_confines(&multi, NoiseParams::default()).unwrap();
+		assert!(out.is_empty());
+		assert_eq!(out.residual.within.len(), 2);
+	}
+
+	#[test]
+	fn multi_hard_fail_aborts() {
+		let multi = MultiConfines::from_confines([square(6.0)]);
+		let err = AlwaysInvalid::fit_to_multi_confines(&multi, NoiseParams::default()).unwrap_err();
+		assert!(matches!(err, FitError::InvalidConfines { .. }));
+	}
+
+	#[test]
+	fn fit_to_single_soft_fail_residualizes() {
+		let target = FitTarget::Single(square(1.0));
+		let out = MinFootprint::fit_to(&target, NoiseParams::default()).unwrap();
+		assert!(out.is_empty());
+		assert_eq!(out.residual.within.len(), 1);
+	}
 }

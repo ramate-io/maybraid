@@ -17,9 +17,21 @@ fn fit_to_confines(
     confines: &Confines,
     noise: NoiseParams,
 ) -> Result<(Self, FillableRegions), FitError>;
+
+// default: map fit_to_confines; keep successes; residualize TooSmall
+fn fit_to_multi_confines(
+    multi: &MultiConfines,
+    noise: NoiseParams,
+) -> Result<MultiFit<Self>, FitError>;
 ```
 
-- **`Confines`** — AABB + roll + [`Openings`](src/openings.rs) the type must honor.
+- **`Confines`** — AABB + roll + [`Openings`](src/openings.rs) the type must honor
+  (openings for a residual live on that region’s confines).
+- **`MultiConfines`** — several typed [`FillRegion`]s (L / grouped cells). Leaf
+  types keep implementing only `fit_to_confines`; joint multi-cell layouts can
+  override `fit_to_multi_confines`.
+- **`MultiFit`** — `fitted: Vec<(Self, FillableRegions)>` plus `residual` for
+  soft rejects and nested leftovers.
 - **`FillableRegions`** — residuals after a successful fit:
   - `within` — typed [`FillRegion`]s (kind + confines) for child fill.
   - `atop` — stack footprints for towering (often ignored when reusing one floor plan).
@@ -236,7 +248,7 @@ the [buildings README](README.md) and
 
 - [Richmond CONTRIBUTING](../CONTRIBUTING.md) — IR nodes, LOD, `ParentConfines`
 - [buildings README](README.md) — kit taxonomy + paneling type table
-- [`fit.rs`](src/fit.rs) — `Confines` / `FillableRegions` / `SpaceKind`
+- [`fit.rs`](src/fit.rs) — `Confines` / `MultiConfines` / `MultiFit` / `FillableRegions` / `SpaceKind`
 - [`openings.rs`](src/openings.rs) — opening labels and scoped ids
 - [`paneling`](src/paneling.rs) — panel primitives used by shells and enclosures
 - [`enclosed_room`](src/usage_areas/commercial_stall_strip/commercial_stall/stall_layout/enclosed_room.rs) — shared office/stall enclosure packer
